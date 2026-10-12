@@ -93,7 +93,8 @@ async def monatsfakten_und_energie(*, anlage, db, investitionen, monatsdaten):
     # Zählerzeilen, die PV aber aus ALLEN Fakten: ein Monat mit Erzeugung ohne Zählerzeile zählte ganz als
     # Eigenverbrauch, die Ersparnis rechnete ihn nicht, und Ersparnis und CO₂ zogen verschiedene Verlustmengen ab
     # (426,8 gegen 513,4 kWh). Die ANZEIGE `pv_erzeugung` und der spezifische Ertrag bleiben über alle Fakten.
-    bilanz_fakten = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv]
+    # N-736: ohne Monate, deren Netzfelder nicht erfasst sind (0 ohne Herkunft, `meta.netz_erfasst`) — wie ohne Zeile.
+    bilanz_fakten = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst and f.meta.erzeuger_aktiv]
     _bilanz_monate = {f.schluessel for f in bilanz_fakten}
     bilanz_monatsdaten = [m for m in monatsdaten if (m.jahr, m.monat) in _bilanz_monate]
     pv_bilanz = sum(f.erzeugung.pv_kwh for f in bilanz_fakten)
@@ -260,13 +261,14 @@ async def finanz_aggregat(*, _preis_messung, _tarif_cache, anlage, db, fakten, s
                 preis_messung=_preis_messung,
             )
             # N-659: dieselbe Menge wie die Bilanz in `monatsfakten_und_energie` und die Ersparnis der Übersicht.
-            for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv
+            # N-736: und erfasste Netzfelder (`meta.netz_erfasst`).
+            for f in fakten if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst and f.meta.erzeuger_aktiv
         ]
         _finanz = berechne_finanz_aggregat(
             finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt,
             erzeuger_erloes_euro=erzeuger_erloes_gesamt
         )
-        _mit_zeile = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv]
+        _mit_zeile = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst and f.meta.erzeuger_aktiv]
         ev_preis_lookup = {f.schluessel: ev_preis_der_zeile(z) for f, z in zip(_mit_zeile, finanz_zeilen)}
         ev_preis_lookup.update(await ev_preis_je_monat(
             db, anlage.id,

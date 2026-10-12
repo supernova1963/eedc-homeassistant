@@ -32,7 +32,7 @@ from backend.services.energie_profil.monats_aus_tagen import TagesMonatsSumme
 from backend.utils.sonstige_positionen import berechne_md_sonstige_summen
 from backend.services.monats_fakten.fakten import BkwFakten, EegFakten, EmobFakten, ErzeugungFakten, MetaFakten, MonatsFakt, MonatsSchluessel, SonstigesFakten, SonstigesGeraetFakten, SpeicherFakten, TAGESWERT_BKW, TAGESWERT_EMOB_ANTEIL, TAGESWERT_PV, TAGESWERT_SPEICHER, TAGESWERT_ZAEHLER, ZaehlerFakten
 from backend.services.monats_fakten.fakten_wp import WpFakten, WpGeraetFakten
-from backend.services.monats_fakten.roh import _RohMonat, _erzeuger_aktiv
+from backend.services.monats_fakten.roh import _RohMonat, _erzeuger_aktiv, netzfeld_ist_erfasst
 from backend.services.monats_fakten.tarif import _lade_tarif, dienstliche_ladekosten_euro
 
 
@@ -69,16 +69,7 @@ async def _baue_fakt(
     # bekommt dadurch seine PV, statt sie still als 0 zu zeichnen.
     tageswert_gruppen: set[str] = set(kanal_gruppen)
 
-    zaehler = ZaehlerFakten(
-        einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) if monatsdaten else 0.0,
-        netzbezug_kwh=(monatsdaten.netzbezug_kwh or 0.0) if monatsdaten else 0.0,
-    )
-    if monatsdaten is None and tages_summe is not None:
-        zaehler = ZaehlerFakten(
-            einspeisung_kwh=tages_summe.einspeisung_kwh,
-            netzbezug_kwh=tages_summe.netzbezug_kwh,
-        )
-        tageswert_gruppen.add(TAGESWERT_ZAEHLER)
+    zaehler, einspeisung_erfasst, netzbezug_erfasst = _zaehler_fakten(monatsdaten, tages_summe, tageswert_gruppen)
 
     # N-627 (Bauplan PV-Achse T4, Zusatz Master): die Monatsregel gilt auch im Tageswert-Rückfall.
     # Ein Balkonkraftwerk, dessen Modul-Kinder in diesem Monat aktiv sind, hat seine Erzeugung an
@@ -427,6 +418,9 @@ async def _baue_fakt(
         meta=MetaFakten(
             monatsdaten=monatsdaten,
             hat_zaehlerzeile=monatsdaten is not None,
+            netzbezug_erfasst=netzbezug_erfasst,
+            einspeisung_erfasst=einspeisung_erfasst,
+            netz_erfasst=netzbezug_erfasst and einspeisung_erfasst,
             erzeuger_aktiv=_erzeuger_aktiv(investitionen, jahr, monat),
             pv_vollstaendig=erzeugung.pv_vollstaendig,
             aktive_investitionen=tuple(
@@ -436,6 +430,41 @@ async def _baue_fakt(
             tageswert_gruppen=frozenset(tageswert_gruppen),
         ),
     )
+
+
+def _zaehler_fakten(
+    monatsdaten: Optional[Monatsdaten], tages_summe: Optional[TagesMonatsSumme], tageswert_gruppen: set[str],
+) -> tuple[ZaehlerFakten, bool, bool]:
+    """Die Zählergruppe des Monats und je Netzfeld, ob es **erfasst** ist: ``(zaehler, einspeisung_erfasst,
+    netzbezug_erfasst)``. Setzt ``TAGESWERT_ZAEHLER`` in ``tageswert_gruppen``, wenn die Tagesebene gefüllt hat.
+
+    * **Ohne Zeile** füllt die Tagesebene beide Felder wie bisher (N-121); die Flags bleiben ``False`` — sie sagen, ob
+      die **Zeile** (ggf. von der Tagesebene ergänzt) das Feld trägt, und ohne Zeile ist das nie so
+      (``netzfeld_ist_erfasst(None, …)``). ``netz_erfasst`` schließt damit ``hat_zaehlerzeile`` ein.
+    * ⭐ **N-736 (12.10.2026), mit Zeile:** ein Netzfeld, das die Zeile nicht erfasst (0 ohne Herkunftseintrag,
+      ``netzfeld_ist_erfasst``, N-734), füllt die Tagesebene — **nur dieses Feld**, und nur, wenn sie es erfasst; das
+      erfasste Feld bleibt. Dieselbe Regel wie *Cockpit → Monat* (``aktueller_monat/quellen_leser.py``), nur ohne die
+      HA-Statistik, die die Schicht nicht kennt. Ohne Tageswert bleibt das Feld nicht erfasst (``0.0`` in der Zahl,
+      ``False`` im Flag) und die Sichten nehmen den Monat aus der Bilanz.
+    """
+    if monatsdaten is None:
+        if tages_summe is None:
+            return ZaehlerFakten(), False, False
+        tageswert_gruppen.add(TAGESWERT_ZAEHLER)
+        return (
+            ZaehlerFakten(einspeisung_kwh=tages_summe.einspeisung_kwh, netzbezug_kwh=tages_summe.netzbezug_kwh),
+            False, False,
+        )
+    werte: dict[str, float] = {}
+    erfasst: dict[str, bool] = {}
+    for feld in ("einspeisung_kwh", "netzbezug_kwh"):
+        werte[feld] = getattr(monatsdaten, feld) or 0.0
+        erfasst[feld] = netzfeld_ist_erfasst(monatsdaten, feld)
+        if not erfasst[feld] and tages_summe is not None and getattr(tages_summe, feld.replace("_kwh", "_erfasst")):
+            werte[feld] = getattr(tages_summe, feld)
+            erfasst[feld] = True
+            tageswert_gruppen.add(TAGESWERT_ZAEHLER)
+    return ZaehlerFakten(**werte), erfasst["einspeisung_kwh"], erfasst["netzbezug_kwh"]
 
 
 def _sonstiges_fakten(roh: _RohMonat, md_summen: Optional[dict], ertraege: float, ausgaben: float) -> SonstigesFakten:

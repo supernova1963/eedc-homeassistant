@@ -26,6 +26,8 @@ from backend.models.investition import InvestitionMonatsdaten
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.services.ust_satz import ust_satz_des_jahres
 from backend.tests.test_netto_ertrag_vier_wege_symmetrie import _anlage_mit_regelbesteuerung
+from backend.tests import factories
+
 
 
 @pytest.mark.asyncio
@@ -151,7 +153,7 @@ async def test_p12_ohne_jeden_abschluss_kein_ust_anteil_aber_ein_grund(db):
 @pytest.mark.asyncio
 async def test_p12_jahr_ohne_pv_hat_satz_null(db):
     anlage, pv = await _regel_anlage(db)
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=1, einspeisung_kwh=0.0, netzbezug_kwh=500.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=1, einspeisung_kwh=0.0, netzbezug_kwh=500.0)))
     db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2026, monat=1, verbrauch_daten={"pv_erzeugung_kwh": 0.0}))
     await db.commit()
     await db.refresh(anlage, ["investitionen"])

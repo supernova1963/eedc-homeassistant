@@ -100,15 +100,16 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const chartData = useMemo(() => {
     let kumuliert = 0
     return zeitreihe.map((z) => {
-      kumuliert += z.netto_ertrag
+      // N-736: `null` = Netzfeld des Monats nicht erfasst — der Monat trägt nichts bei (wie in der Übersicht).
+      kumuliert += z.netto_ertrag ?? 0
       return { ...z, sonderkosten: sonstigeByMonth.get(`${z.jahr}-${z.monat}`)?.ausgaben || 0, kumuliert_ertrag: kumuliert }
     })
   }, [zeitreihe, sonstigeByMonth])
 
   const gesamt = useMemo(() => {
-    const einspeiseErloes = chartData.reduce((s, z) => s + z.einspeise_erloes, 0)
-    const netzbezugKosten = chartData.reduce((s, z) => s + z.netzbezug_kosten, 0)
-    const eigenverbrauchErsparnis = chartData.reduce((s, z) => s + z.ev_ersparnis, 0)
+    const einspeiseErloes = chartData.reduce((s, z) => s + (z.einspeise_erloes ?? 0), 0)
+    const netzbezugKosten = chartData.reduce((s, z) => s + (z.netzbezug_kosten ?? 0), 0)
+    const eigenverbrauchErsparnis = chartData.reduce((s, z) => s + (z.ev_ersparnis ?? 0), 0)
     const sonderkosten = chartData.reduce((s, z) => s + (z.sonderkosten || 0), 0)
     const sonstigeErtraege = chartData.reduce((s, z) => s + (sonstigeByMonth.get(`${z.jahr}-${z.monat}`)?.ertraege || 0), 0)
     // §51 EEG: der Erlös oben ist bereits gekürzt — der Abzug wird am KPI
@@ -124,7 +125,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     const dienstlich = chartData.reduce((s, z) => s + (z.dienstliche_ladekosten || 0), 0)
     // Σ des Felds — es enthält Sonstige Erträge und Sonderkosten schon (A1); `sonstigeErtraege`/`sonderkosten` oben
     // sind nur ihr Ausweis.
-    const nettoErtrag = chartData.reduce((s, z) => s + z.netto_ertrag, 0)
+    const nettoErtrag = chartData.reduce((s, z) => s + (z.netto_ertrag ?? 0), 0)
     // #402 (rilmor-mhrs): Erzeuger mit EIGENEM Vergütungssatz (Mieterstrom,
     // Allgemeinstrom, Nachbarhaus) tragen einen gepflegten Erlös, den eedc
     // nicht nachrechnet. Er steckt NICHT im Einspeise-Erlös (Anlagenzähler × der
@@ -144,8 +145,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     // Spalte „Netto nach Sonderkosten" war dieselbe Zahl und entfällt. „Sonderkosten" bleibt als Ausweis.
     const headers = ['Monat', 'Einspeiseerlös (€)', 'EV-Ersparnis (€)', 'Netzbezug-Kosten (€)',
       'Netto-Ertrag PV inkl. Sonstige (€)', 'davon Sonderkosten (€)', 'Kumulierter Ertrag (€)']
-    const rows = chartData.map((z) => [z.name, z.einspeise_erloes, z.ev_ersparnis, z.netzbezug_kosten,
-      z.netto_ertrag, z.sonderkosten, z.kumuliert_ertrag])
+    // N-736: ein nicht ermittelbarer Wert (`null`) bleibt eine leere Zelle, keine 0.
+    const rows = chartData.map((z) => [z.name, z.einspeise_erloes ?? '', z.ev_ersparnis ?? '', z.netzbezug_kosten ?? '',
+      z.netto_ertrag ?? '', z.sonderkosten, z.kumuliert_ertrag])
     exportToCSV(headers, rows, 'finanzen_export.csv')
   }, [chartData])
 

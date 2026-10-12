@@ -140,6 +140,18 @@ async def monatsdaten(
     return obj
 
 
+def netz_eingetragen(md: Monatsdaten) -> Monatsdaten:
+    """Stempelt Einspeisung und Netzbezug einer frischen Zeile als **eingetragen** (``manual:form``, wie das Formular).
+
+    Seit N-734/N-736 ist eine 0 ohne Herkunftseintrag „nicht erfasst" (``monats_fakten.netzfeld_ist_erfasst``): Cockpit →
+    Monat füllt sie aus HA/Tageswerten, die Fakten-Sichten nehmen den Monat aus der Bilanz. Eine Fixture, die eine
+    gemessene 0 meint (Volleinspeiser, Balkonkraftwerk ohne Einspeisung), sagt es hiermit."""
+    from backend.services.provenance import seed_provenance
+
+    seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
+    return md
+
+
 async def strompreis(
     db: AsyncSession, anlage_id: int, gueltig_ab: date,
     *, netzbezug_arbeitspreis_cent_kwh: float, einspeiseverguetung_cent_kwh: float,

@@ -21,6 +21,8 @@ from backend.api.routes.aussichten import get_finanz_prognose
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.models import Anlage, Investition, Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
+from backend.tests import factories
+
 
 
 async def _anlage_mit_bkw(db) -> int:
@@ -32,11 +34,11 @@ async def _anlage_mit_bkw(db) -> int:
     await db.flush()
 
     # Mai: viel BKW-EV, NIEDRIGER Flexpreis 20 ct
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
-                       netzbezug_kwh=100.0, netzbezug_durchschnittspreis_cent=20.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       netzbezug_kwh=100.0, netzbezug_durchschnittspreis_cent=20.0)))
     # Dez: wenig BKW-EV, HOHER Flexpreis 40 ct
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=12,
-                       netzbezug_kwh=300.0, netzbezug_durchschnittspreis_cent=40.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=12,
+                       netzbezug_kwh=300.0, netzbezug_durchschnittspreis_cent=40.0)))
 
     bkw = Investition(
         anlage_id=anlage.id, typ="balkonkraftwerk", bezeichnung="BKW Süd",
@@ -73,7 +75,7 @@ async def test_bkw_ersparnis_fallback_ohne_flexpreis(db):
     anlage = Anlage(anlagenname="BKW-Fix326", leistung_kwp=0.8)
     db.add(anlage)
     await db.flush()
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5, netzbezug_kwh=100.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5, netzbezug_kwh=100.0)))
     bkw = Investition(
         anlage_id=anlage.id, typ="balkonkraftwerk", bezeichnung="BKW",
         anschaffungsdatum=date(2024, 1, 1), anschaffungskosten_gesamt=600.0,

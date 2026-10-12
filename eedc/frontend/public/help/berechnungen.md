@@ -554,14 +554,18 @@ Balkonkraftwerk-Anlage: 143,75 statt 586,73 kWh/kWp.
 **Achsen-Trennung (bewusst):** PV-**eigene** Kennzahlen (spez. Ertrag, Performance-
 Ratio, SOLL/IST, kWp) nutzen **nur** `PV_Erzeugung`, nicht `Erzeugung_gesamt` — ein
 sonstiger Erzeuger ist energetisch Erzeuger, aber kein PV-Modul. Ebenso bleibt
-**CO₂ und Geräte-Wirtschaftlichkeit quellenspezifisch**: Ein Erzeuger unter *Sonstiges*
-bekommt **keine** PV-artige CO₂-Gutschrift und keine eigene Wirtschaftlichkeit. Der Grund
-gilt für die ganze Kategorie, nicht nur fürs BHKW: **eedc kennt den Vergleichswert nicht.**
-Ein verbrennender Erzeuger emittiert, statt einzusparen; bei einem Windrad oder einer
-Wasserkraftanlage fehlt umgekehrt jede belastbare Grundlage für Anschaffung, Wartung und
-Lebensdauer. Beides steht als „nicht bewertet" da, und der Ertrag wird am Gerät gepflegt.
+**die Geräte-Wirtschaftlichkeit quellenspezifisch**: Ein Erzeuger unter *Sonstiges*
+bekommt keine eigene Wirtschaftlichkeit. Der Grund gilt für die ganze Kategorie, nicht nur
+fürs BHKW: **eedc kennt den Vergleichswert nicht** — bei einem Windrad oder einer
+Wasserkraftanlage fehlt jede belastbare Grundlage für Anschaffung, Wartung und Lebensdauer.
+Das Gerät steht als „nicht bewertet" da, und der Ertrag wird am Gerät gepflegt.
 ⚑ **Sein Strom ist davon unberührt** — er zählt in Menge *und* Geldwert der Anlage voll mit
-(seit 2026-09-03, s. §3.2). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
+(seit 2026-09-03, s. §3.2), und **CO₂ folgt der Geldregel** (DI-2, P15: CO₂ auf den
+Eigenverbrauch): der selbst verbrauchte Strom eines sonstigen Erzeugers gilt wie PV-Strom
+als vermiedener Netzstrom (0,38 kg/kWh). Die Emission des Erzeugers selbst (etwa das Gas
+eines BHKW) zieht eedc **nicht** ab — es kennt sie nicht. Am Hauszähler lässt sich der
+Eigenverbrauch auch nicht in PV- und BHKW-Anteil trennen; wer ein BHKW betreibt, liest die
+CO₂-Gutschrift deshalb als „vermiedener Netzstrom", nicht als Klimabilanz des BHKW (§3.8). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
 fallen nicht unter diese Bilanz — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
 
 **Messpunkt der Sensoren (DC vs. AC):** Die Bilanz rechnet mit den Werten, die die Geräte
@@ -2656,10 +2660,12 @@ CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 > „CO₂ Einsparung", WP-Dashboard und der PDF-Jahresbericht** rufen dieselben Helfer auf und zeigen daher
 > **denselben Wert** (vorher rechneten einzelne Pfade `pv_erzeugung × f_strom` bzw. eigene WP-Formeln →
 > Drift). Die WP- und E-Mob-Komponente werden für die Summe bei 0 geklammert (negative Einzelwerte
-> kürzen die Gesamtbilanz nicht). Erzeuger unter **„Sonstiges"** (BHKW, Windrad, Wasserkraft) erzeugen bewusst **keine**
-> CO₂-Gutschrift — sie zählen in EV/Autarkie und im Geldwert (hinter dem Zähler), aber nicht als
-> vermiedenes CO₂: eedc kennt weder die Emissionen eines verbrennenden Erzeugers noch den
-> Vergleichsmaßstab eines emissionsfreien.
+> kürzen die Gesamtbilanz nicht). Erzeuger unter **„Sonstiges"** (BHKW, Windrad, Wasserkraft) speisen hinter
+> denselben Zähler: ihr selbst verbrauchter Strom steckt im Eigenverbrauch und zählt deshalb — wie im Geldwert
+> (§3.2) — auch im CO₂-PV-Anteil als **vermiedener Netzstrom** (0,38 kg/kWh); CO₂ folgt der Geldregel (P15).
+> Die Emission des Erzeugers selbst (z. B. das Gas eines BHKW) zieht eedc **nicht** ab, weil es sie nicht kennt,
+> und am Hauszähler lässt sich der Eigenverbrauch nicht in PV- und BHKW-Anteil trennen. Für ein BHKW ist die
+> Zahl deshalb „vermiedener Netzstrom", keine Klimabilanz des BHKW.
 
 #### Äquivalente
 

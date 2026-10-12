@@ -153,8 +153,9 @@ export function useAggregierteStats(daten: AggregierteMonatsdaten[]) {
   return {
     // PV-Erzeugung aus InvestitionMonatsdaten (korrekt aggregiert)
     gesamtErzeugung: daten.reduce((sum, m) => sum + (m.pv_erzeugung_kwh || 0), 0),
-    gesamtEinspeisung: daten.reduce((sum, m) => sum + m.einspeisung_kwh, 0),
-    gesamtNetzbezug: daten.reduce((sum, m) => sum + m.netzbezug_kwh, 0),
+    // N-736: `null` = Netzfeld des Monats nicht erfasst — der Monat zählt hier nicht mit (wie in der Übersicht).
+    gesamtEinspeisung: daten.reduce((sum, m) => sum + (m.einspeisung_kwh ?? 0), 0),
+    gesamtNetzbezug: daten.reduce((sum, m) => sum + (m.netzbezug_kwh ?? 0), 0),
     gesamtEigenverbrauch: daten.reduce((sum, m) => sum + (m.eigenverbrauch_kwh || 0), 0),
     gesamtDirektverbrauch: daten.reduce((sum, m) => sum + (m.direktverbrauch_kwh || 0), 0),
     // Speicher

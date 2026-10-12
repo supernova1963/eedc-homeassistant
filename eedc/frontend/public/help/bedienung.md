@@ -483,7 +483,11 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 > **Monate ohne Monatsabschluss.** Hat ein vergangener Monat noch keinen Monatsabschluss, rechnet das Jahr ihn mit den
 > Werten aus Home Assistant (bzw. MQTT oder einem Connector) mit und sagt es über dem Vergleich: „1 Monat ohne
 > Monatsabschluss (Sep), Werte aus Home Assistant — Übersicht und Jahresbericht zählen ihn nicht mit." Die Übersicht,
-> der Jahresbericht und der HA-Sensor rechnen nur mit abgeschlossenen Monaten. Kann ein Monat gar nicht berechnet
+> der Jahresbericht und der HA-Sensor rechnen nur mit abgeschlossenen Monaten — und nur mit solchen, deren Einspeisung
+> und Netzbezug erfasst sind: Hat ein Import die Monatszeile ohne diese Werte angelegt (etwa nur mit Wallbox-Daten),
+> zählen Übersicht, Jahresbericht, HA-Sensor, *Auswertungen → Tabelle* und der Community-Upload den Monat bei
+> Eigenverbrauch, Autarkie und Ersparnis nicht mit (die Tabelle zeigt dort „–"), bis das Feld erfasst ist; der
+> Daten-Checker nennt ihn („Netzbezug nicht erfasst"). Kann ein Monat gar nicht berechnet
 > werden, nennt die Zeile ihn ebenfalls; das Jahresergebnis bleibt dann — wie bei einer fehlenden Stromrechnung — leer
 > („—“) und nennt den Monat als fehlenden Posten.
 > **Ohne Home Assistant** zeigt *Cockpit → Monat* einen solchen Monat erst nach dem Abschluss — MQTT-Zählerstände und

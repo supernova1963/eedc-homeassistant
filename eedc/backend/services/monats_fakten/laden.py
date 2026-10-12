@@ -34,7 +34,7 @@ from backend.services.pv_monatswerte import (
 )
 from backend.services.monats_fakten.bau import _baue_fakt
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
-from backend.services.monats_fakten.roh import _RohMonat, _ein_jahr, _im_fenster, _lade_imd, _lade_monatsdaten
+from backend.services.monats_fakten.roh import NETZFELDER, _RohMonat, _ein_jahr, _im_fenster, _lade_imd, _lade_monatsdaten, netzfeld_ist_erfasst
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -268,8 +268,9 @@ async def lade_monats_fakten(
         # Tageszusammenfassungen — die Quote steht dort. Die **Stunden**ebene
         # braucht nur, wer unten wirklich auf sie zurückfällt, und das sind
         # genau zwei Stellen in `_baue_fakt`: der Zähler-Fallback (`monatsdaten
-        # is None`) und der Speicher-Fallback (keine `speicher`-Zeile im Monat).
-        # PV, BKW und die Quote kommen aus der Tageszusammenfassung.
+        # is None` — seit N-736 auch ein Netzfeld, das die Zeile nicht erfasst,
+        # `bau._zaehler_fakten`) und der Speicher-Fallback (keine `speicher`-Zeile
+        # im Monat). PV, BKW und die Quote kommen aus der Tageszusammenfassung.
         #
         # ⛔ Die Bedingung ist aus `_baue_fakt` abgeleitet, nicht aus einer
         # Beispielanlage: an der produktiven Anlage wäre die Menge leer, und
@@ -284,6 +285,7 @@ async def lade_monats_fakten(
             stunden_nur_fuer = {
                 k for k in im_fenster
                 if k not in monatsdaten_by_ym
+                or not all(netzfeld_ist_erfasst(monatsdaten_by_ym[k], feld) for feld in NETZFELDER)
                 or "speicher" not in roh.get(k, _RohMonat()).typen_mit_zeile
             }
         # HA-Bauform E4a-2 (Umschaltstelle 1): je Monat EINE Quellenwahl der Bilanz-Gruppe — Monate, deren

@@ -65,10 +65,12 @@ def investitionen_im_jahr(investitionen: Iterable, jahr: int) -> list:
 
 
 def grundgesamtheit(fakten: Iterable, jahr: int) -> list:
-    """Die abgeschlossenen Monate des Jahres, in denen die Anlage lief (Zählerzeile + aktiver Erzeuger)."""
+    """Die abgeschlossenen Monate des Jahres, in denen die Anlage lief (Zählerzeile mit erfassten Netzfeldern + aktiver
+    Erzeuger)."""
     return [
         f for f in fakten
-        if f.jahr == jahr and f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv
+        # N-736: ohne Monate mit nicht erfasstem Netzfeld (`meta.netz_erfasst`) — wie Übersicht und HA-Export.
+        if f.jahr == jahr and f.meta.hat_zaehlerzeile and f.meta.netz_erfasst and f.meta.erzeuger_aktiv
     ]
 
 

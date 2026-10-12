@@ -199,7 +199,8 @@ async def lade_finanz_eingaenge(*, anlage, anlage_id, db, stichtag=None):
     eigenverbrauch_pro_monat = {
         f.schluessel: f.kennzahlen.eigenverbrauch_kwh
         for f in fakten
-        if f.meta.hat_zaehlerzeile
+        # N-736: und nur mit erfassten Netzfeldern — eine Einspeisung 0 ohne Herkunft ist dieselbe unbelegte Aussage.
+        if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst
     }
     gesamt_ev = sum(eigenverbrauch_pro_monat.values())
 

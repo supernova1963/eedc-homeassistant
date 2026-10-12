@@ -339,7 +339,8 @@ def bkw_beitrag_im_monat(
     eigene_zeile_traegt = quelle == BKW_ERZEUGUNG_GEMESSEN
     ev_gemessen = zeile_eigenverbrauch_kwh if eigene_zeile_traegt else 0.0
     hinter_zaehler = fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
-    hat_zaehlerzeile = bool(fakt and fakt.meta.hat_zaehlerzeile)
+    # N-736: „bewertbar" erst mit erfassten Netzfeldern — eine Einspeisung 0 ohne Herkunft ist keine Bilanz (wie ohne Zeile).
+    hat_zaehlerzeile = bool(fakt and fakt.meta.hat_zaehlerzeile and fakt.meta.netz_erfasst)
     ev_anlage = fakt.kennzahlen.eigenverbrauch_kwh if fakt else 0.0
     anteil = bkw_eigenverbrauch_anteil(
         bkw_erzeugung_kwh=erzeugung,

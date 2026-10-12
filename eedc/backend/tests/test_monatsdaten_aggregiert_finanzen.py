@@ -33,6 +33,8 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
 )
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.models.strompreis import Strompreis
+from backend.tests import factories
+
 
 
 async def _basis_anlage(db, **anlage_kwargs) -> Anlage:
@@ -231,8 +233,8 @@ async def test_bkw_datenluecke_traegt_ueber_die_bkw_ersparnis(db):
     tauchte in keiner Euro-Zahl auf.
     """
     anlage = await _basis_anlage(db)
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
-                       einspeisung_kwh=0.0, netzbezug_kwh=100.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=0.0, netzbezug_kwh=100.0)))
     bkw = Investition(anlage_id=anlage.id, typ="balkonkraftwerk", bezeichnung="Balkon",
                       anschaffungsdatum=date(2024, 1, 1), leistung_kwp=0.8)
     db.add(bkw)

@@ -31,6 +31,8 @@ import pytest
 from backend.api.routes.aussichten import get_finanz_prognose
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
+from backend.tests import factories
+
 
 
 async def _anlage_gemischte_investitionen(db) -> int:
@@ -47,8 +49,8 @@ async def _anlage_gemischte_investitionen(db) -> int:
         anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
         netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
     ))
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
-                       einspeisung_kwh=600.0, netzbezug_kwh=0.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=600.0, netzbezug_kwh=0.0)))
 
     pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
                      leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
@@ -96,8 +98,8 @@ async def _anlage_pv_only(db, *, anschaffungskosten: float,
         anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
         netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
     ))
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
-                       einspeisung_kwh=einspeisung_kwh, netzbezug_kwh=0.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=einspeisung_kwh, netzbezug_kwh=0.0)))
 
     pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
                      leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
@@ -144,8 +146,8 @@ async def test_ohne_gepflegte_alternativkosten_zaehlen_die_vollkosten(db):
         anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
         netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
     ))
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
-                       einspeisung_kwh=600.0, netzbezug_kwh=0.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=600.0, netzbezug_kwh=0.0)))
     pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
                      leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
                      anschaffungskosten_gesamt=10000.0)

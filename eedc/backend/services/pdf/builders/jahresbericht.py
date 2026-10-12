@@ -605,8 +605,34 @@ async def _monats_tabelle(
             "sonstige_netto_euro": None, "netto_ertrag_euro": None,
         }
 
+    def _zeile_netz_offen(fakt) -> dict:
+        """⭐ N-736 (12.10.2026): ein Monat MIT Zählerzeile, deren Einspeisung oder Netzbezug nicht erfasst ist (0 ohne
+        Herkunft, ``meta.netz_erfasst``). Er fällt aus der Bilanz wie ein Monat ohne Zeile in Übersicht und HA-Sensor:
+        Netz, Eigenverbrauch, Autarkie und die Geldposten der Finanz-Zeile stehen auf ``None`` (Tabelle „–", wie
+        ``_leere_zeile``), keine Finanz-Zeile, kein CO₂-PV, nicht in den Energie-Summen. Bis dahin rechnete die 0 einen
+        Eigenverbrauch = PV und 100 % Autarkie. Die PV bleibt (Anzeige, spezifischer Ertrag) und die Sonstigen
+        Positionen; der Netto-Ertrag der Zeile ist ohne Einspeise-Erlös und EV-Ersparnis nicht ermittelbar (Pflicht-
+        posten der Ergebnis-Leiter, ``berechne_ergebnis``) und steht auf ``None``."""
+        nonlocal pv_gesamt
+        j, m = fakt.schluessel
+        pv = fakt.erzeugung.pv_kwh
+        pv_gesamt += pv
+        return {
+            "jahr": j, "monat": m,
+            "monat_name": f"{MONATSNAMEN[m]} {j}" if ist_gesamtzeitraum else MONATSNAMEN[m],
+            "pv_erzeugung_kwh": pv, "pvgis_prognose_kwh": pvgis_by_month.get(m, 0),
+            "eigenverbrauch_kwh": None, "einspeisung_kwh": None, "netzbezug_kwh": None,
+            "autarkie_prozent": None,
+            "spezifischer_ertrag": spezifischer_ertrag_kwh_kwp(
+                pv, _kwp_im_monat(investitionen, anlage, fakt.jahr, fakt.monat)) or 0.0,
+            "einsp_erloes_euro": None, "ev_ersparnis_euro": None,
+            "sonstige_netto_euro": fakt.sonstiges.netto_euro, "netto_ertrag_euro": None,
+        }
+
     async def _zeile_fuer(fakt) -> dict:
         nonlocal pv_gesamt, erz_bilanz_gesamt, einsp_gesamt, netz_gesamt, ev_gesamt
+        if fakt.meta.hat_zaehlerzeile and not fakt.meta.netz_erfasst:
+            return _zeile_netz_offen(fakt)
         j, m = fakt.schluessel
         pv = fakt.erzeugung.pv_kwh
         einsp = fakt.zaehler.einspeisung_kwh

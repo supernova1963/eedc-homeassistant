@@ -52,7 +52,9 @@ class NachhaltigkeitMonat(BaseModel):
     co2_emob_kg: float
     co2_gesamt_kg: float
     co2_kumuliert_kg: float
-    autarkie_prozent: float
+    #: N-736: ``None`` = der Monat hat eine Zählerzeile, aber Einspeisung oder Netzbezug sind nicht erfasst
+    #: (``meta.netz_erfasst``) — die Autarkie ist dann nicht ermittelbar und zählt nicht in den Durchschnitt.
+    autarkie_prozent: Optional[float]
 
 
 class NachhaltigkeitResponse(BaseModel):
@@ -145,7 +147,8 @@ async def get_nachhaltigkeit(
             eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
                 fakt.kennzahlen.eigenverbrauch_kwh, fakt.erzeugung.wandlungsverluste_kwh,
                 fakt.erzeugung.verluste_grund,
-            ) if fakt.meta.hat_zaehlerzeile and fakt.meta.erzeuger_aktiv else 0.0,
+            # N-736: und nur mit erfassten Netzfeldern (`meta.netz_erfasst`) — eine 0 ohne Herkunft ist keine Einspeisung.
+            ) if fakt.meta.hat_zaehlerzeile and fakt.meta.netz_erfasst and fakt.meta.erzeuger_aktiv else 0.0,
             wp_waerme_kwh=fakt.wp.waerme_kwh,
             wp_strom_kwh=fakt.wp.strom_kwh,
             # #263 K-2 (E-B): Kühlen ersetzt keine Heizung — sein Strom
@@ -176,9 +179,14 @@ async def get_nachhaltigkeit(
         co2_monat = bilanz.co2_gesamt_kg
         co2_kumuliert += co2_monat
 
-        autarkie = fakt.kennzahlen.autarkie_prozent
-        autarkie_summe += autarkie
-        autarkie_count += 1
+        # ⭐ N-736 (12.10.2026): ohne erfasste Netzfelder keine Autarkie — aus einer 0 ohne Herkunft folgten 100 %.
+        autarkie = (
+            None if fakt.meta.hat_zaehlerzeile and not fakt.meta.netz_erfasst
+            else fakt.kennzahlen.autarkie_prozent
+        )
+        if autarkie is not None:
+            autarkie_summe += autarkie
+            autarkie_count += 1
 
         monatswerte.append(NachhaltigkeitMonat(
             jahr=fakt.jahr,
@@ -189,7 +197,7 @@ async def get_nachhaltigkeit(
             co2_emob_kg=round(co2_emob, 1),
             co2_gesamt_kg=round(co2_monat, 1),
             co2_kumuliert_kg=round(co2_kumuliert, 1),
-            autarkie_prozent=round(autarkie, 1),
+            autarkie_prozent=round(autarkie, 1) if autarkie is not None else None,
         ))
 
         co2_pv_total += co2_pv

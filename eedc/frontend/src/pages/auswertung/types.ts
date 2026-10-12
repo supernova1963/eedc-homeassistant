@@ -6,7 +6,7 @@ import type { NachhaltigkeitMonat } from '../../api/cockpit'
 import {
   MONAT_KURZ, TYP_LABELS,
   COLORS, CHART_COLORS, TYP_COLORS,
-  calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
+  calcSpezifischerErtrag,
 } from '../../lib'
 import { speicherWirkungsgrad } from '../../lib/speicherWirkungsgrad'
 
@@ -34,16 +34,17 @@ export interface MonatsZeitreihe {
    * Monatsende. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der Bilanz.
    */
   zaehler_stand?: Record<string, number> | null
-  // Energie
+  // Energie. N-736: `null` = der Monat hat eine Zeile, deren Einspeisung oder Netzbezug nicht erfasst ist — Netz,
+  // Bilanz, Quoten und die Geldfelder der Finanz-Zeile kommen dann als `null` vom Backend und bleiben „–".
   erzeugung: number
-  eigenverbrauch: number
-  einspeisung: number
-  netzbezug: number
-  gesamtverbrauch: number
-  direktverbrauch: number
+  eigenverbrauch: number | null
+  einspeisung: number | null
+  netzbezug: number | null
+  gesamtverbrauch: number | null
+  direktverbrauch: number | null
   // Quoten
-  autarkie: number
-  evQuote: number
+  autarkie: number | null
+  evQuote: number | null
   spezErtrag: number
   // Wetter (Einstrahlungs-Kontext) — null = keine Wetterdaten in dem Monat
   globalstrahlung: number | null
@@ -86,16 +87,16 @@ export interface MonatsZeitreihe {
   // rechnete diese Datei sie selbst — mit eigener Tarif-Stichtags-Auflösung,
   // eigenem §51-Abzug und ohne USt/BKW-Regel (Fund N-22). Wer hier wieder eine
   // Formel einsetzt, baut die zweite Engine neu auf.
-  einspeise_erloes: number
+  einspeise_erloes: number | null
   // §9 Weg 2 — gepflegter Erlös von Erzeugern mit eigenem Vergütungssatz.
   // NICHT in `einspeise_erloes`, aber IN `netto_ertrag` enthalten (s. Vertrag in
   // `api/monatsdaten.ts`); die Sicht nennt ihn in der Netto-Herleitung.
   erzeuger_erloes: number
-  ev_ersparnis: number
-  netzbezug_kosten: number
+  ev_ersparnis: number | null
+  netzbezug_kosten: number | null
   /** Feld der Monatsreihe, Stufe 1 der Ergebnis-Leiter — enthält seit 03.10.2026 auch die Sonstigen Positionen (A1). */
-  netto_ertrag: number
-  netto_bilanz: number
+  netto_ertrag: number | null
+  netto_bilanz: number | null
   /**
    * USt auf Eigenverbrauch (§ 3 Abs. 1b UStG), bereits **in `netto_ertrag`
    * abgezogen**. 0 außerhalb der Regelbesteuerung. Steht als eigene Größe da,
@@ -108,7 +109,7 @@ export interface MonatsZeitreihe {
   /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
   netzbezug_preis_cent: number | null
   /** Durch §51 EEG entgangener Erlös in € (0, wenn die Anlage nicht betroffen ist). */
-  einspeise_nicht_verguetet_euro?: number
+  einspeise_nicht_verguetet_euro?: number | null
   /** Eingespeiste kWh ohne Vergütung (§51-Volumen); null = Anlage unterliegt nicht §51. */
   einspeise_neg_preis_kwh?: number | null
   /**
@@ -163,13 +164,13 @@ export function createMonatsZeitreihe(
     // `??` statt `||`: ein gemessener Monat mit 0 kWh ist eine Aussage, kein
     // fehlender Wert — mit `||` fiel er auf den Ersatzausdruck durch (N-22).
     const erzeugung = md.pv_erzeugung_kwh ?? 0
-    const eigenverbrauch = md.eigenverbrauch_kwh ?? 0
-    const gesamtverbrauch = md.gesamtverbrauch_kwh ?? (eigenverbrauch + md.netzbezug_kwh)
-    const direktverbrauch = md.direktverbrauch_kwh ?? 0
-
-    // Quoten berechnen - direkt aus aggregierten Daten oder berechnet
-    const autarkie = md.autarkie_prozent ?? calcAutarkie(eigenverbrauch, gesamtverbrauch)
-    const evQuote = md.eigenverbrauchsquote_prozent ?? calcEigenverbrauchsquote(eigenverbrauch, erzeugung)
+    // N-736: Bilanz und Quoten kommen fertig aus der Antwort; `null` heißt „Netzfeld des Monats nicht erfasst" und
+    // bleibt `null` — bis dahin stand hier ein Ersatz (`?? 0`, `calcAutarkie(…)`), der daraus wieder 0 kWh / 0 % machte.
+    const eigenverbrauch = md.eigenverbrauch_kwh
+    const gesamtverbrauch = md.gesamtverbrauch_kwh
+    const direktverbrauch = md.direktverbrauch_kwh
+    const autarkie = md.autarkie_prozent
+    const evQuote = md.eigenverbrauchsquote_prozent
     // F-58: der Monats-Nenner kommt vom Backend (Σ der im Monat aktiven
     // Erzeuger MIT Balkonkraftwerk — dieselbe Menge wie `erzeugung`, N-612).
     // `anlage?.leistung_kwp` bleibt Fallback für Antworten ohne
@@ -266,7 +267,7 @@ export function createMonatsZeitreihe(
       abgabe_dritte: md.abgabe_dritte_kwh ?? null,
       einspeise_erloes: md.einspeise_erloes_euro,
       erzeuger_erloes: md.erzeuger_erloes_euro ?? 0,
-      ev_ersparnis: md.ev_ersparnis_euro + md.bkw_ersparnis_euro,
+      ev_ersparnis: md.ev_ersparnis_euro == null ? null : md.ev_ersparnis_euro + (md.bkw_ersparnis_euro ?? 0),
       netzbezug_kosten: md.netzbezug_kosten_euro,
       netto_ertrag: md.netto_ertrag_euro,
       netto_bilanz: md.netto_bilanz_euro,

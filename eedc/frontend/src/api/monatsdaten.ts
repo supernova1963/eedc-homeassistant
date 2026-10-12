@@ -84,9 +84,10 @@ export interface AggregierteMonatsdaten {
    * Monatsende. **Bestandsgröße**: nirgends mitsummiert, nicht Teil der Bilanz.
    */
   zaehler_stand?: Record<string, number> | null
-  // Zählerwerte (aus Monatsdaten)
-  einspeisung_kwh: number
-  netzbezug_kwh: number
+  // Zählerwerte (aus Monatsdaten). N-736: `null`, wenn die Zeile Einspeisung oder Netzbezug nicht erfasst hat (0 ohne
+  // Herkunft) — dann sind auch Eigenverbrauch, Quoten und die Geldfelder der Finanz-Zeile `null` („–"); die Zeile bleibt.
+  einspeisung_kwh: number | null
+  netzbezug_kwh: number | null
   globalstrahlung_kwh_m2: number | null
   sonnenstunden: number | null
   /** Monatsmittel der Außentemperatur (°C) — die zweite Linie des
@@ -171,11 +172,11 @@ export interface AggregierteMonatsdaten {
   wallbox_ladung_kwh: number | null
   wallbox_ladung_pv_kwh: number | null
   // Berechnet
-  direktverbrauch_kwh: number
-  eigenverbrauch_kwh: number
-  gesamtverbrauch_kwh: number
-  autarkie_prozent: number
-  eigenverbrauchsquote_prozent: number
+  direktverbrauch_kwh: number | null
+  eigenverbrauch_kwh: number | null
+  gesamtverbrauch_kwh: number | null
+  autarkie_prozent: number | null
+  eigenverbrauchsquote_prozent: number | null
   // §51-Abzug-Volumen (kWh bei neg. Börsenpreis eingespeist); null = Anlage
   // unterliegt nicht §51 (R17/Verlauf).
   einspeisung_neg_preis_kwh: number | null
@@ -184,10 +185,10 @@ export interface AggregierteMonatsdaten {
   // `berechne_finanz_aggregat`) — derselbe Weg, den die Tages-Granularität
   // derselben Tabelle längst geht. Der Client rechnet hier nichts nach;
   // `createMonatsZeitreihe` tat es bis 2026-08-04 und wich dabei ab.
-  einspeise_erloes_euro: number
+  einspeise_erloes_euro: number | null
   // §51-Diagnose: entgangener Erlös. Der Erlös oben ist bereits gekürzt.
-  einspeise_nicht_verguetet_euro: number
-  ev_ersparnis_euro: number
+  einspeise_nicht_verguetet_euro: number | null
+  ev_ersparnis_euro: number | null
   // Konzept §9 Weg 2: Σ der gepflegten Erlöse von Erzeugern mit EIGENEM
   // Einspeisetarif und der Abgabe an Dritte. Steckt NICHT in `einspeise_erloes_euro`
   // (Anlagenzähler × der eine Satz der Anlage), WOHL ABER in `netto_ertrag_euro`
@@ -195,20 +196,20 @@ export interface AggregierteMonatsdaten {
   // hier, damit die Sicht ihn in der Netto-Herleitung nennen kann (#402).
   erzeuger_erloes_euro: number
   // Nur für BKW-Monate ohne erfasste Erzeugung besetzt (Datenlücke, ADR-002/P9).
-  bkw_ersparnis_euro: number
+  bkw_ersparnis_euro: number | null
   // Bereits in `netto_ertrag_euro` abgezogen; 0 außerhalb der Regelbesteuerung.
   ust_eigenverbrauch_euro: number
   // N-633: dienstliche Ladekosten (Aufwand, positiv), bereits in `netto_ertrag_euro` abgezogen. Optional für
   // Antworten vor diesem Feld.
   dienstliche_ladekosten_euro?: number
   // Arbeitspreis × kWh + Grundpreis des Monats.
-  netzbezug_kosten_euro: number
+  netzbezug_kosten_euro: number | null
   // Stufe 1 der Ergebnis-Leiter: Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen − USt —
   // dieselbe Zahl wie Cockpit → Monat. Seit 03.10.2026 MIT den Sonstigen Positionen (A1); der Client addiert sie
   // nirgends mehr selbst.
-  netto_ertrag_euro: number
+  netto_ertrag_euro: number | null
   // Netto-Ertrag − Netzbezugskosten (eigene Größe der Tabelle; seit A1 über den Netto-Ertrag inkl. Sonstiger).
-  netto_bilanz_euro: number
+  netto_bilanz_euro: number | null
   // Effektiver Arbeitspreis des Monats (Flex-Ø vor Stammdaten-Tarif, P8).
   netzbezug_preis_cent: number
   // Legacy-Marker

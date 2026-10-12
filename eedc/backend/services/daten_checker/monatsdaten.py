@@ -72,10 +72,9 @@ def _netzfelder_nicht_erfasst(
 ) -> list[CheckErgebnis]:
     """Prüfung 0 der Plausibilität: ERROR je Netzfeld ohne erfassten Wert (N-734, ``netzfeld_ist_erfasst``)."""
     ergebnisse: list[CheckErgebnis] = []
-    for erfasst, feld, folge, mit_null in (
-        (einspeisung_erfasst, "Einspeisung", "Eigenverbrauch und Autarkie",
-         "die ganze PV-Erzeugung zählt dort als Eigenverbrauch"),
-        (netzbezug_erfasst, "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten", "Autarkie 100 %"),
+    for erfasst, feld, folge in (
+        (einspeisung_erfasst, "Einspeisung", "Eigenverbrauch und Autarkie"),
+        (netzbezug_erfasst, "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten"),
     ):
         if erfasst:
             continue
@@ -87,9 +86,11 @@ def _netzfelder_nicht_erfasst(
                 f"Für diesen Monat steht keiner in der Monatszeile (etwa nach einem Import, der nur "
                 f"Wallbox- oder PV-Werte enthielt). Cockpit → Monat nimmt ihn dann aus der HA-Statistik, "
                 f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats leer. "
-                # N-739 (c): dieser Satz gilt, solange N-736 offen ist (Monats-Fakten tragen die Default-0 weiter).
-                f"Übersicht, Jahresbericht, HA-Sensoren, Community-Upload und Auswertungen → Tabelle rechnen "
-                f"bis dahin mit 0 ({mit_null}). "
+                # N-736: die Fakten-Sichten nehmen den Monat aus der Bilanz (`meta.netz_erfasst`), statt mit 0 zu rechnen.
+                f"Übersicht, Jahresbericht, HA-Sensoren, Auswertungen → Tabelle und Aussichten → Finanzen "
+                f"lassen den Monat bis dahin aus Eigenverbrauch, Autarkie, Ersparnis und CO₂ heraus (seine "
+                f"PV-Erzeugung zählen sie weiter), der Community-Upload teilt ihn nicht; tragen die Tageswerte "
+                f"des Monats das Feld, können sie es von dort nehmen. "
                 # N-739 (c): zuerst der Weg, der den Messwert holt — der Monatsabschluss zeigt das Feld leer.
                 f"Abhilfe: zuerst den HA-Statistik-Import für diesen Monat (ohne „Überschreiben“ genügt, "
                 f"solange der Monat so gemeldet ist); sonst im Monatsabschluss den gemessenen Wert eintragen "

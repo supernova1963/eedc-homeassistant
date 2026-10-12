@@ -409,7 +409,9 @@ async def get_cockpit_uebersicht(
     # Logik unten ([[feedback_aggregator_symmetrie]]). Der frühere lokale Nachbau
     # `_pv_aktiv_im_monat` ist weg; `meta.erzeuger_aktiv` ist dieselbe Regel an
     # der einen Stelle (ohne registrierten Erzeuger greift sie nicht).
-    md_pv = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.erzeuger_aktiv]
+    # ⭐ N-736 (12.10.2026): und nur Monate, deren Netzfelder erfasst sind (`meta.netz_erfasst`) — eine 0 ohne Herkunft
+    # rechnete sonst Eigenverbrauch = PV und Autarkie 100 % (Cockpit → Monat nennt das Feld seit N-734 „nicht erfasst").
+    md_pv = [f for f in fakten if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst and f.meta.erzeuger_aktiv]
 
     einspeisung = sum(f.zaehler.einspeisung_kwh for f in md_pv)
     netzbezug = sum(f.zaehler.netzbezug_kwh for f in md_pv)

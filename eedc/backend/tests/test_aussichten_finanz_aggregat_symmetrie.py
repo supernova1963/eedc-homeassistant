@@ -34,6 +34,8 @@ from backend.api.routes.aussichten import get_finanz_prognose
 from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
+from backend.tests import factories
+
 
 
 async def _anlage_flex_speicher_sonstige_dienstwagen(db) -> int:
@@ -170,10 +172,10 @@ async def _anlage_mit_tarifwechsel_und_dienstwagen(db) -> int:
         anlage_id=anlage.id, gueltig_ab=date(2026, 1, 1),
         netzbezug_arbeitspreis_cent_kwh=40.0, einspeiseverguetung_cent_kwh=6.0,
     ))
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=6,
-                       einspeisung_kwh=100.0, netzbezug_kwh=0.0))
-    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=6,
-                       einspeisung_kwh=50.0, netzbezug_kwh=0.0))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=6,
+                       einspeisung_kwh=100.0, netzbezug_kwh=0.0)))
+    db.add(factories.netz_eingetragen(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=6,
+                       einspeisung_kwh=50.0, netzbezug_kwh=0.0)))
 
     pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
                      leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),

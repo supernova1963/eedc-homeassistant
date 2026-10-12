@@ -191,7 +191,8 @@ export interface NachhaltigkeitMonat {
   co2_emob_kg: number
   co2_gesamt_kg: number
   co2_kumuliert_kg: number
-  autarkie_prozent: number
+  /** N-736: `null` = Einspeisung oder Netzbezug des Monats nicht erfasst — Autarkie nicht ermittelbar. */
+  autarkie_prozent: number | null
 }
 
 export interface Nachhaltigkeit {

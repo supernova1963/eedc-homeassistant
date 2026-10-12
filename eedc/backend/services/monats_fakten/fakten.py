@@ -494,6 +494,19 @@ class MetaFakten:
 
     monatsdaten: Optional[Monatsdaten] = None
     hat_zaehlerzeile: bool = False
+    #: ⭐ N-736 (12.10.2026): trägt der Monat für Einspeisung bzw. Netzbezug einen **erfassten** Wert? Die Spalten der
+    #: Zählerzeile sind ``NOT NULL`` mit Default 0 — eine Zeile, die ein Import ohne Netzfelder anlegte, steht mit 0,0
+    #: da, und ``ZaehlerFakten`` trägt diese 0 (die Felder bleiben ``float``). Erfasst heißt: die Zeile trägt das Feld
+    #: (``roh.netzfeld_ist_erfasst``, N-734 — Herkunftseintrag oder Wert ≠ 0) **oder** die Tagesebene hat es gefüllt
+    #: (``TAGESWERT_ZAEHLER``, nur wo sie es selbst erfasst). Ohne Zeile immer ``False`` (auch wenn die Tagesebene die
+    #: Zahl gefüllt hat — ``netzfeld_ist_erfasst(None, …)``); ``netz_erfasst`` = beide und schließt damit
+    #: ``hat_zaehlerzeile`` ein. Die Bilanz-Grundmenge der Fakten-Sichten (Muster N-659) ist
+    #: ``hat_zaehlerzeile and netz_erfasst and erzeuger_aktiv`` — ein Monat mit nicht erfasstem Netzfeld fällt aus
+    #: Eigenverbrauch, Autarkie, Ersparnis, USt und CO₂ wie ein Monat ohne Zählerzeile; seine PV bleibt in der Anzeige.
+    #: Default ``False`` wie ``hat_zaehlerzeile`` — ein von Hand gebauter Fakt ohne Zeile bleibt einer ohne Zeile.
+    netzbezug_erfasst: bool = False
+    einspeisung_erfasst: bool = False
+    netz_erfasst: bool = False
     erzeuger_aktiv: bool = True
     pv_vollstaendig: bool = True
     aktive_investitionen: tuple[int, ...] = ()

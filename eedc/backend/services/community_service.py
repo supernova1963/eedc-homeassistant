@@ -394,6 +394,8 @@ def _monatswert(
     - **ohne Zählerzeile nichts** — Einspeisung und Netzbezug wären 0 und die
       Autarkie damit eine Behauptung ohne Messung (P4). Die alte Fassung lief
       über die ``Monatsdaten``-Zeilen und hatte den Filter dadurch implizit.
+      Seit N-736 (12.10.2026) ebenso **ohne erfasste Netzfelder** (``meta.netz_erfasst``): eine Zeile, die ein Import
+      ohne Einspeisung/Netzbezug anlegte, trägt dort 0 ohne Herkunft — dieselbe Behauptung ohne Messung.
     - **ohne PV nichts** — der Benchmark vergleicht PV-Anlagen. Ein Monat vor
       der Inbetriebnahme (oder eine reine BHKW-Anlage) gehört nicht hinein.
     - **kein angefangener Monat** (F-48, neu 2026-08-19) — siehe unten.
@@ -419,7 +421,10 @@ def _monatswert(
     if (fakt.jahr, fakt.monat) >= (heute.year, heute.month):
         return None
 
-    if not fakt.meta.hat_zaehlerzeile:
+    # ⭐ N-736 (12.10.2026): `meta.netz_erfasst` schließt die Zählerzeile ein (ohne Zeile immer False) und schließt
+    # zusätzlich den Monat aus, dessen Einspeisung oder Netzbezug nicht erfasst ist (0 ohne Herkunft) — er trüge sonst
+    # Eigenverbrauch = PV und Autarkie 100 % in den Benchmark. Bis dahin stand hier `hat_zaehlerzeile`.
+    if not fakt.meta.netz_erfasst:
         return None
 
     # Die PV-Achse des Benchmarks: Module (P7-aufgelöst) + BKW — NICHT
@@ -446,11 +451,11 @@ def _monatswert(
     # N-632 (05.10.2026, Regel N-585): eine gemessene 0 bleibt 0 — bis dahin stand hier
     # `round(x, 1) if x else None`, und ein Monat ohne Netzbezug ging als „kein Wert" hinaus,
     # während dieselbe Nutzlast eine Autarkie von 100 % aus genau dieser 0 meldete. „Erfasst" ist
-    # hier die Zählerzeile (`meta.hat_zaehlerzeile`, Filter oben): ihre beiden Spalten sind
-    # `NOT NULL` (`models/monatsdaten.py`), die Schicht trägt also für beide Größen einen Wert,
-    # nie eine Lücke. Der Server nimmt die 0 an (`MonatswertInput`: `ge=0`, `None` erlaubt), der
-    # Benchmark zählt sie über `is not None` als Datenpunkt, die Statistik summiert ohnehin mit
-    # `coalesce(…, 0)` — keine Server-Änderung.
+    # hier die Zählerzeile MIT erfassten Netzfeldern (`meta.netz_erfasst`, Filter oben, N-736): die
+    # Spalten sind `NOT NULL` (`models/monatsdaten.py`), eine 0 ohne Herkunftseintrag ist deshalb
+    # kein Wert, und so ein Monat geht gar nicht erst hinaus. Der Server nimmt die 0 an
+    # (`MonatswertInput`: `ge=0`, `None` erlaubt), der Benchmark zählt sie über `is not None` als
+    # Datenpunkt, die Statistik summiert ohnehin mit `coalesce(…, 0)` — keine Server-Änderung.
     monatswert_data = {
         "jahr": fakt.jahr,
         "monat": fakt.monat,

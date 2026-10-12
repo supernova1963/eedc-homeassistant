@@ -270,7 +270,8 @@ async def get_komponenten_zeitreihe(
         )
         effizienz_monate.append(eff_m)
 
-        if f.meta.hat_zaehlerzeile:
+        # N-736: Netzkosten und Einspeise-Erlös nur mit erfassten Netzfeldern (`meta.netz_erfasst`), sonst wie ohne Zeile.
+        if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst:
             m_netzbezug_kosten = berechne_netzbezug_kosten(
                 f.zaehler.netzbezug_kwh,
                 tarif.netzbezug_preis_cent,

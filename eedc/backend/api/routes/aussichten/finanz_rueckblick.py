@@ -127,7 +127,8 @@ async def finanz_zeilen_und_tarife(
     # E-Auto-Ersparnis unten belastet die PV-Ladung desselben Monats mit genau ihm.
     ev_preis_lookup: dict[tuple[int, int], float] = {}
     for f in fakten:
-        if not f.meta.hat_zaehlerzeile or not f.meta.erzeuger_aktiv:
+        # N-736: ein Monat mit nicht erfasstem Netzfeld (`meta.netz_erfasst`) hat keine Finanz-Zeile — wie ohne Zeile.
+        if not f.meta.hat_zaehlerzeile or not f.meta.netz_erfasst or not f.meta.erzeuger_aktiv:
             continue
         _zeile = await baue_finanz_zeile(
             db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=_tarif_cache,
