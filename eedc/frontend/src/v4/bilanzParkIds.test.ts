@@ -10,7 +10,7 @@
  * `MonatBilanz` gerendert, während sich Monat und Jahr diese Funktion teilen.
  */
 import { describe, it, expect } from 'vitest'
-import { monatBilanzParkIds } from './bilanzParkIds'
+import { monatBilanzParkIds, pvErzeugerNamen } from './bilanzParkIds'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { aktuellerMonat } from '../test/factories'
 
@@ -49,5 +49,17 @@ describe('monatBilanzParkIds', () => {
     expect(monatBilanzParkIds(d())).not.toContain('el:bilanz-verteilung')
     expect(monatBilanzParkIds(d({ eigenverbrauch_kwh: 100, einspeisung_kwh: 50 })))
       .toContain('el:bilanz-verteilung')
+  })
+})
+
+describe('pvErzeugerNamen (Handgriff Nr. 35/46)', () => {
+  it('nennt Strings, Wechselrichter und Balkonkraftwerk', () => {
+    expect(pvErzeugerNamen({ komponenten_geraete: { 'pv-module': ['Süd', 'West'], wechselrichter: ['WR'], balkonkraftwerk: ['Balkon'] } }))
+      .toEqual(['Süd', 'West', 'WR', 'Balkon'])
+  })
+
+  it('ein String und ein Balkonkraftwerk sind zwei Geräte — der Hinweis steht in der Park-Liste', () => {
+    expect(monatBilanzParkIds(d({ komponenten_geraete: { 'pv-module': ['Süd'], balkonkraftwerk: ['Balkon'] } })))
+      .toContain('el:bilanz-geraete')
   })
 })

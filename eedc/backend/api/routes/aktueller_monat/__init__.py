@@ -846,7 +846,7 @@ async def _collect_tagesebene_data(
             feld in ("einspeisung_kwh", "netzbezug_kwh")
             and bool(getattr(summe, feld.replace("_kwh", "_erfasst"), False))
         ):
-            resolved[feld] = (wert, quelle)
+            resolved[feld] = (wert, _feld_quelle_tagesebene(summe, feld, quelle))
 
     # ── Wärme/Klima je Gerät (A-5) ──
     # Die Feldnamen sind die der **Registry**, nicht die der Tagesebene — genau
@@ -878,6 +878,82 @@ async def _collect_tagesebene_data(
 
 #: Die Felder der Tagesebene (``WaermeMonatsMengenJeGeraet``) zu den Registry-Feldern der Quellen-Kaskade.
 _TAGES_WP_FELD = {"stromverbrauch_kwh": "strom_kwh", "waerme_kwh": "waerme_kwh"}
+
+#: N-726: die Basis-Zähler, deren Abdeckung je Feld die Tagesebene kennt (``TagesMonatsSumme.abdeckung_je_feld``),
+#: mit dem Wort für den Hinweis und den Größen, die auf ihnen beruhen.
+_TEILWERT_FELDER = {
+    "netzbezug_kwh": ("netzbezug", "Der Netzbezug", "Gesamtverbrauch und Autarkie"),
+    "einspeisung_kwh": ("einspeisung", "Die Einspeisung", "Eigenverbrauch und Eigenverbrauchsquote"),
+}
+
+
+def _feld_quelle_tagesebene(summe, feld: str, spur: DatenquelleInfo) -> DatenquelleInfo:
+    """N-726: die Quelle eines Basis-Zählers aus der Tagesebene — mit SEINER Abdeckung, wenn sie kürzer ist als die Spur.
+
+    ``*_erfasst`` genügt schon eine Stunde; die Abdeckung der Spur (``spur``) gilt allen Größen zusammen. Trägt ein Zähler
+    nur einen Teil der Tage mit Stundenzeilen (Sensor zugeordnet, HA hat für ihn keine Zeilen mehr — umbenannte oder
+    gelöschte Entity), bekommt das Feld eine eigene ``DatenquelleInfo`` mit dem Zeitraum, den es misst (dieselbe Bauform
+    wie das MQTT-Rückfallfeld in ``_collect_mqtt_inbound_data``), und ``_tagesebene_teilwert_hinweise`` nennt es.
+
+    ⚠ **Ein Tag Spielraum am Ende:** ein Zähler ohne Nachtzeilen (Bauplan HA-Bauform §3b, Nachtrag E3 Punkt 3) trägt
+    den laufenden Tag erst ab der ersten Stunde mit Wert — in der Nacht davor endet er einen Tag vor der Spur, ohne eine
+    Teilsumme zu sein (seine Lückenstunden stecken in der Folgestunde, R7). Am Anfang gibt es keinen Spielraum: beginnt
+    er einen Tag nach der Spur, fehlt dieser Tag (``beginnt_nach_von``, N-678).
+    """
+    abdeckung = getattr(summe, "abdeckung_je_feld", None) or {}
+    name = _TEILWERT_FELDER.get(feld, (None,))[0]
+    gesamt, eigen = abdeckung.get("stunden"), abdeckung.get(name) if name else None
+    if gesamt is None or eigen is None:
+        return spur
+    if eigen[0] <= gesamt[0] and eigen[1] >= gesamt[1] - timedelta(days=1):
+        return spur
+    return DatenquelleInfo(
+        quelle=spur.quelle, konfidenz=spur.konfidenz, zeitpunkt=spur.zeitpunkt,
+        abdeckung_von=datetime.combine(eigen[0], time.min),
+        abdeckung_bis=datetime.combine(eigen[1], time.min) + timedelta(days=1),
+    )
+
+
+def _tage_text(von: datetime, bis: datetime) -> str:
+    """``[von, bis)`` in Tagen als Text — „am 01.07." oder „vom 01.07. bis 03.07."."""
+    letzter = bis - timedelta(days=1)
+    if letzter.date() <= von.date():
+        return f"am {von:%d.%m.}"
+    return f"vom {von:%d.%m.} bis {letzter:%d.%m.}"
+
+
+def _tagesebene_teilwert_hinweise(
+    resolved: dict[str, tuple[float, DatenquelleInfo]],
+    tagesebene: dict[str, tuple[float, DatenquelleInfo]],
+) -> list[str]:
+    """N-726 (ADR-002/P4): der Satz für einen Basis-Zähler, der aus der Tagesebene gewinnt und nur einen Teil der Spur misst.
+
+    **Beschriften, nicht unterdrücken** (Entscheid wie N-678): die Zahl bleibt, die Antwort sagt, worauf sie beruht.
+    Gemessen am Fall vom 04.10.2026 (Form F06, Netz-Sensor ohne HA-Zeilen im Juli): Netzbezug 0,4 kWh und Autarkie
+    99,1 % statt 21,6 und 67,6 % — ohne Kennzeichen. Erkennbar an der eigenen, kürzeren ``DatenquelleInfo`` des Feldes
+    (``_feld_quelle_tagesebene``) gegenüber der Spur aller übrigen Größen.
+    """
+    spur = [info for _, info in tagesebene.values() if info.abdeckung_von and info.abdeckung_bis]
+    if not spur:
+        return []
+    von = min(i.abdeckung_von for i in spur)
+    bis = max(i.abdeckung_bis for i in spur)
+    hinweise = []
+    for feld, (_name, wort, folge) in _TEILWERT_FELDER.items():
+        eintrag = resolved.get(feld)
+        if eintrag is None:
+            continue
+        info = eintrag[1]
+        if info.quelle != "tagesebene" or not info.abdeckung_von or not info.abdeckung_bis:
+            continue
+        if info.abdeckung_von <= von and info.abdeckung_bis >= bis:
+            continue
+        hinweise.append(
+            f"{wort} ist eine Teilsumme: Tageswerte gibt es dafür nur "
+            f"{_tage_text(info.abdeckung_von, info.abdeckung_bis)}, für die übrigen Größen "
+            f"{_tage_text(von, bis)} — {folge} rechnen mit diesem Teilwert."
+        )
+    return hinweise
 
 # =============================================================================
 # Endpoint
@@ -1147,6 +1223,8 @@ async def _berechne_monat(
     if "erzeugung_bilanz" in _out: erzeugung_bilanz = _out["erzeugung_bilanz"]
     if "get_val" in _out: get_val = _out["get_val"]
     if "hinweise" in _out: hinweise = _out["hinweise"]
+    # N-726: ein Basis-Zähler aus der Tagesebene, der nur einen Teil der Tage misst, sagt es (P4).
+    hinweise = [*hinweise, *_tagesebene_teilwert_hinweise(resolved, tagesebene)]
     if "netzbezug" in _out: netzbezug = _out["netzbezug"]
     if "pv" in _out: pv = _out["pv"]
     if "sonstiges_erz_bilanz" in _out: sonstiges_erz_bilanz = _out["sonstiges_erz_bilanz"]

@@ -35,6 +35,7 @@ import { berechnungAus, ergebnisMitLuecken, ergebnisZeile, fehlendHinweis } from
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
+import { pvErzeugerNamen } from './bilanzParkIds'
 
 export interface GleicheMonatStats {
   pv: number | null
@@ -419,11 +420,8 @@ export function MonatBilanz({
     </>
   )
 
-  // Woraus sich die PV-Erzeugung zusammensetzt (Strings + WR) — Aggregations-Hinweis.
-  const pvGeraete = [
-    ...(d.komponenten_geraete?.['pv-module'] ?? []),
-    ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
-  ]
+  // Woraus sich die PV-Erzeugung zusammensetzt (Strings + WR + Balkonkraftwerk) — Aggregations-Hinweis.
+  const pvGeraete = pvErzeugerNamen(d)
 
   // P4/§3: eine PV-Teilsumme bleibt stehen und wird BESCHRIFTET (additive Summe
   // ⇒ richtungssicher zu niedrig). Text kommt aus dem Backend-SoT

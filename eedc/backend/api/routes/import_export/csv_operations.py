@@ -38,6 +38,7 @@ from .helpers import (
     _import_investition_monatsdaten_legacy,
     _distribute_legacy_pv_to_modules,
     _distribute_legacy_battery_to_storages,
+    _speicher_nullen_verteilen,
 )
 
 router = APIRouter()
@@ -496,6 +497,12 @@ async def import_csv(
                         source="manual:csv_backup", writer="csv_backup_restore",
                     )
                     warnungen.extend(migration_warnungen)
+                    # N-722: die als 0 gelieferte Seite kommt ebenfalls an (wie N-718 am Portal); leer bleibt leer.
+                    await _speicher_nullen_verteilen(
+                        db, batterie_ladung_explicit, batterie_entladung_explicit, speicher_list,
+                        jahr, monat, ueberschreiben,
+                        source="manual:csv_backup", writer="csv_backup_restore",
+                    )
                     # Für Legacy-Feld in Monatsdaten (Fallback)
                     batterie_ladung = batterie_ladung_explicit
                     batterie_entladung = batterie_entladung_explicit

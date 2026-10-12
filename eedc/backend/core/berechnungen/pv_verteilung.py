@@ -409,6 +409,11 @@ def wandlungsverluste_prozent(verluste_kwh: Optional[float], strings_kwh: Option
     return verluste_kwh / strings_kwh * 100
 
 
+#: N-732: unter dieser Abnahme ist ein negatives Δ Rundungsrauschen der Gleitkomma-Summe — derselbe Wert wie
+#: `daten_checker/datenquelle/ha_rueckgang.TOLERANZ_KWH` (dort benannt, hier aus der Verteilung genommen).
+RUECKGANG_TOLERANZ_KWH = 1e-6
+
+
 def loese_pv_zeitraum_auf(
     *,
     traeger: list[PvTraeger],
@@ -447,6 +452,15 @@ def loese_pv_zeitraum_auf(
     bkws = [t for t in traeger if t.typ == _BKW]
     bkw_ids = {b.inv_id for b in bkws}
     abgetreten = {m.parent_id for m in module if m.parent_id in bkw_ids}
+    # ⭐ N-732 (12.10.2026, Entscheid Master, Fund P4): ein NEGATIVES Δ eines Geräts (HAs `sum` fiel im Zeitraum, N-639)
+    # ist neben einem Anlagenzähler keine Messung für die Verteilung — das Gerät wird Lücke und bekommt seinen kWp-Anteil
+    # am Rest (Marke `kwp_anteil`), dieselbe Regel wie der Bestandspfad für einen Rücksprung (R4 ⇒ `gesperrt` in
+    # `gemessene_tageswerte`). Bis dahin vergrößerte der negative Wert den Rest, und der landete bei einem anderen Gerät
+    # (gemessen F05, Süd −38 kWh am Tag: Balkon 53 statt 1,76 kWh, Süd fehlte, Σ Geräte 59 ≠ Anlagenzähler 21). Ohne
+    # Anlagenzähler gibt es keinen Rest; dort bleibt das Δ stehen wie in HA (Zählerlücken wie HA). Benannt wird der
+    # Rückgang vom Daten-Checker (`ha_rueckgang`).
+    if anlagenzaehler_kwh is not None:
+        eigen = {i: v for i, v in eigen.items() if v >= -RUECKGANG_TOLERANZ_KWH}
 
     roh: dict[int, float] = {m.inv_id: eigen[m.inv_id] for m in module if m.inv_id in eigen}
     abgeleitet: set[int] = set()

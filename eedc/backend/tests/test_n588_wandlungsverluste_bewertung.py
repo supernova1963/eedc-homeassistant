@@ -274,7 +274,10 @@ async def test_ust_rechnet_auf_dem_eigenverbrauch_ohne_wandlungsverluste():
     assert uebersicht.ust_eigenverbrauch_euro == pytest.approx(soll, abs=0.01)
     assert zeile.ust_eigenverbrauch_euro == pytest.approx(soll, abs=0.01)
     pv = next(b for b in roi_ohne.berechnungen if b.investition_typ == "pv-module").detail_berechnung
-    assert pv["eigenverbrauch_ohne_verluste_kwh_jahr"] == pytest.approx(3888.0)
+    # N-723 (12.10.2026): der Eigenverbrauch der PV-Zeile kommt aus den Monats-Fakten — Anlagen-EV 450 minus der Anteil des
+    # Balkonkraftwerks (450 × 90/630, eigene ROI-Zeile, P9), dann ohne die Verluste 36, hochgerechnet × 12 ⇒ 4 197.
+    # Bis dahin `Module 540 − Einspeisung 180 − 36` = 324 × 12 = 3 888. Geprüft wird hier weiter: OHNE die Verluste.
+    assert pv["eigenverbrauch_ohne_verluste_kwh_jahr"] == pytest.approx(round((450.0 - 450.0 * 90.0 / 630.0 - 36.0) * 12))
     soll_roi = ust_hochrechnung(anlage, invs, 2026, pv["eigenverbrauch_ohne_verluste_kwh_jahr"], pv["erzeugung_kwh_jahr"])
     assert roi_ohne.gesamt_jahres_einsparung - roi_mit.gesamt_jahres_einsparung == pytest.approx(soll_roi, abs=0.02)
 

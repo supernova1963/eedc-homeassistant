@@ -130,6 +130,13 @@ class TagesMonatsSumme:
     #: an; dafür ist der Daten-Checker zuständig, der fehlende Tage meldet.
     erster_tag: Optional[date] = None
     letzter_tag: Optional[date] = None
+    #: N-726: erster und letzter Tag MIT STUNDENZEILEN — ``"stunden"`` über alle Tage, ``"einspeisung"``/``"netzbezug"``
+    #: über die Tage, an denen mindestens eine Stunde dieses Feld trug (auch 0, ``TagesBilanz.*_erfasst``). Sie machen
+    #: aus ``*_erfasst`` („irgendeine Stunde") eine Abdeckung DES FELDES: trägt der Netz-Zähler nur den ersten Tag, die
+    #: übrigen Größen aber drei, misst der Netzbezug eine Teilsumme. Nur aus Stundenzeilen des Bestands — ein Kanal-Monat
+    #: (Pseudo-Zeile ohne Stunden, ``kanal/bilanz_leser.als_monatssumme``) deckt per Quellenwahl voll und trägt nichts.
+    #: Fehlt ein Schlüssel, gab es keine solche Stunde.
+    abdeckung_je_feld: dict[str, tuple[date, date]] = field(default_factory=dict)
     #: HA-Bauform E4a-2 (Weg 2, nur Kanal-Monate): ``max(0, Σ Geräte − Anlagenzähler)``; ``None`` im Bestand und ohne
     #: Anlagenzähler. Bewertet nur unter dem Messpunkt-Vertrag (N-588); ``verluste_grund`` nennt, warum nicht.
     wandlungsverluste_kwh: Optional[float] = None
@@ -365,6 +372,16 @@ def falte_monat(
         if tz.emob_ladung_speicher_abgeleitet_kwh is not None:
             lade_speicher = (lade_speicher or 0.0) + tz.emob_ladung_speicher_abgeleitet_kwh
     tage = {tag for tag, _b, _n in stunden_tage} | {tz.datum for tz in tageszeilen}
+    # N-726: die Abdeckung je Feld — nur Tage mit Stundenzeilen (``n > 0``).
+    abdeckung: dict[str, tuple[date, date]] = {}
+    for name, traegt in (
+        ("stunden", lambda _b: True),
+        ("einspeisung", lambda b: b.einspeisung_erfasst),
+        ("netzbezug", lambda b: b.netzbezug_erfasst),
+    ):
+        mit = [tag for tag, b, n in stunden_tage if n > 0 and traegt(b)]
+        if mit:
+            abdeckung[name] = (min(mit), max(mit))
     return TagesMonatsSumme(
         einspeisung_kwh=bilanz.einspeisung_kwh,
         netzbezug_kwh=bilanz.netzbezug_kwh,
@@ -383,6 +400,7 @@ def falte_monat(
         stunden=sum(n for _tag, _b, n in stunden_tage),
         erster_tag=min(tage) if tage else None,
         letzter_tag=max(tage) if tage else None,
+        abdeckung_je_feld=abdeckung,
     )
 
 

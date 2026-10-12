@@ -1155,7 +1155,7 @@ def waehle_extern_paar(
     Die eine Regel für die externe Ladung (Topf, #260): Extern ist orthogonal zur
     Heimlade-Quelle und kommt geschlossen aus EINER Seite — der Wallbox-Seite (bzw. dem
     Wallbox-Anteil eines Autos) oder den eigenen Zeilen des Autos, je nachdem, welche die
-    höheren Kosten trägt. Bei Gleichstand gewinnt die Wallbox (wie bisher).
+    höheren Kosten trägt. Bei Kosten-Gleichstand die größere Menge (N-728), bei gleicher Menge die Wallbox.
 
     ⚑ N-555 F-5: Bis 25.09.2026 stand diese Regel nur im Topf. Der E-Auto-Hub und die
     T-Konto-Zeile ersetzten im Wallbox-Fall das Extern des Autos durch den Extern-Anteil
@@ -1163,9 +1163,12 @@ def waehle_extern_paar(
     Extern-Feld. Folge: Extern 0 und 0 € externe Kosten, obwohl am Auto erfasst, und eine
     Ersparnis vs. Verbrenner, die um genau diese Kosten zu hoch war.
     """
-    if wallbox_euro >= eauto_euro:
-        return (wallbox_kwh, wallbox_euro)
-    return (eauto_kwh, eauto_euro)
+    if wallbox_euro != eauto_euro:
+        return (wallbox_kwh, wallbox_euro) if wallbox_euro > eauto_euro else (eauto_kwh, eauto_euro)
+    # ⭐ N-728 (12.10.2026, Entscheid Master): bei Kosten-Gleichstand gewinnt die größere Menge — extern am Auto ohne
+    # Euro (0 € gegen 0 € der Wallbox-Seite) zählte sonst in keiner Sicht (gemessen: Kopf 0 statt 80 kWh). Erst bei
+    # gleicher Menge die Wallbox (wie bisher).
+    return (eauto_kwh, eauto_euro) if eauto_kwh > wallbox_kwh else (wallbox_kwh, wallbox_euro)
 
 
 def _traegt_heimladung(pool: "EmobLadungPool") -> bool:

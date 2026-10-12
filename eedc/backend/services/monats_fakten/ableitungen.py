@@ -7,6 +7,7 @@ auf unvollständige PV-Monate (N42) und der PV-Ladeanteil (N-314).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import (
@@ -14,6 +15,8 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     bewertbare_wandlungsverluste_kwh,
 )
+from backend.core.berechnungen.bkw_finanz import BkwEigenverbrauchsAnteil, bkw_eigenverbrauch_anteil
+from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste_kwh
 from backend.services.finanz_zeilen import FinanzZeileEingabe
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
 from backend.services.monats_fakten.laden import lade_monats_fakten
@@ -275,4 +278,94 @@ def pv_unvollstaendig_hinweis(fakten: Iterable[MonatsFakt]) -> Optional[str]:
         "keinen Gesamtwert zum Verteilen. War das Modul in diesem Monat wirklich "
         "außer Betrieb, stimmt die Zahl; sonst fehlt seine Erzeugung — in der "
         "PV-Erzeugung, im spezifischen Ertrag und im daraus gerechneten Ertrag."
+    )
+
+
+#: N-664/N-671 (K4): woher die Erzeugung eines Balkonkraftwerks in einem Monat kommt — aus den Monats-Fakten.
+BKW_ERZEUGUNG_GEMESSEN = "gemessen"        # der eigene Wert des Geräts (``BkwFakten.erzeugung_je_investition``)
+BKW_ERZEUGUNG_KWP_ANTEIL = "kwp_anteil"    # Anteil am Anlagenzähler nach kWp (``bkw_aus_anlagenwert_je_investition``)
+BKW_ERZEUGUNG_ABGETRETEN = "abgetreten"    # an die Modul-Kinder abgetreten (ADR-002/P11) — dort steht sie, hier 0
+
+
+@dataclass(frozen=True)
+class BkwMonatsBeitrag:
+    """Was EIN Balkonkraftwerk in EINEM Monat beiträgt — Erzeugung, Herkunft und die zwei Eigenverbrauchs-Anteile.
+
+    ``anteil`` ist der Anteil an der Hausbilanz (Menge: Eigenverbrauch, Einspeisung, Quote), ``anteil_bewertet``
+    derselbe Anteil am Eigenverbrauch OHNE die bewertbaren Wandlungsverluste (Geld und CO₂, N-588/P15).
+    ``eigene_zeile_traegt`` sagt, ob die gespeicherte Zeile des Geräts gilt (gemessener EV, gespeicherte Einspeisung).
+    """
+
+    erzeugung_kwh: float
+    erzeugung_quelle: str
+    eigenverbrauch_gemessen_kwh: float
+    eigene_zeile_traegt: bool
+    anteil: BkwEigenverbrauchsAnteil
+    anteil_bewertet: BkwEigenverbrauchsAnteil
+
+
+def bkw_beitrag_im_monat(
+    bkw_id: int,
+    fakt: Optional[MonatsFakt],
+    *,
+    zeile_erzeugung_kwh: float,
+    zeile_eigenverbrauch_kwh: float,
+    abgetreten: bool,
+) -> BkwMonatsBeitrag:
+    """Der Beitrag EINES Balkonkraftwerks in EINEM Monat — **eine** Stelle für *Komponenten → Balkonkraftwerk* und die
+    Zeile „Balkon" im T-Konto von *Cockpit → Monat* (N-724).
+
+    Bis 12.10.2026 stand diese Rechnung nur im Hub; das T-Konto setzte daneben die **ganze** Erzeugung als
+    Eigenverbrauch an (``eigenverbrauch_kwh or pv_erzeugung_kwh``) — gemessen 27,00 € gegen 18,82 € im Hub für denselben
+    Monat, und ein an Modul-Kinder abgetretenes Gerät trug dort weiter 27,00 €, obwohl seine Erzeugung schon über die
+    Kinder im Anlagen-Eigenverbrauch steckt.
+
+    Erzeugung (N-664/N-671): abgetreten (ADR-002/P11) ⇒ 0; sonst der eigene Wert aus den Fakten, und wo das Gerät
+    Empfänger des Anlagenwerts ist, sein kWp-Anteil (N-621). Ohne Fakt bleibt der Wert der Zeile. Der gemessene
+    Eigenverbrauch gilt nur, wenn die eigene Zeile trägt (P9-Zusatzregel wie ``roh.py::falte``). Den Anteil am
+    Eigenverbrauch entscheidet ``bkw_eigenverbrauch_anteil`` (ADR-002/P9, ``core/berechnungen/bkw_finanz.py``) — ohne
+    Zählerzeile ist er nicht bewertbar (P4), keine 0 und keine ganze Erzeugung.
+    """
+    if abgetreten:
+        erzeugung, quelle = 0.0, BKW_ERZEUGUNG_ABGETRETEN
+    elif fakt is None:
+        erzeugung, quelle = zeile_erzeugung_kwh, BKW_ERZEUGUNG_GEMESSEN
+    elif bkw_id in fakt.erzeugung.bkw_aus_anlagenwert_je_investition:
+        erzeugung = fakt.erzeugung.bkw_aus_anlagenwert_je_investition[bkw_id]
+        quelle = BKW_ERZEUGUNG_KWP_ANTEIL
+    else:
+        erzeugung = fakt.bkw.erzeugung_je_investition.get(bkw_id, 0.0)
+        quelle = BKW_ERZEUGUNG_GEMESSEN
+    eigene_zeile_traegt = quelle == BKW_ERZEUGUNG_GEMESSEN
+    ev_gemessen = zeile_eigenverbrauch_kwh if eigene_zeile_traegt else 0.0
+    hinter_zaehler = fakt.erzeugung.hinter_zaehler_kwh if fakt else 0.0
+    hat_zaehlerzeile = bool(fakt and fakt.meta.hat_zaehlerzeile)
+    ev_anlage = fakt.kennzahlen.eigenverbrauch_kwh if fakt else 0.0
+    anteil = bkw_eigenverbrauch_anteil(
+        bkw_erzeugung_kwh=erzeugung,
+        bkw_eigenverbrauch_gemessen_kwh=ev_gemessen,
+        erzeugung_hinter_zaehler_kwh=hinter_zaehler,
+        eigenverbrauch_gesamt_kwh=ev_anlage,
+        hat_zaehlerzeile=hat_zaehlerzeile,
+    )
+    # N-588 (Entscheid Master 10.10.2026, F-1 (A)): Ersparnis und CO₂ bewerten den Anteil am Eigenverbrauch OHNE die
+    # Verluste, wenn der Messpunkt-Vertrag hält — sonst sind beide Anteile gleich.
+    anteil_bewertet = bkw_eigenverbrauch_anteil(
+        bkw_erzeugung_kwh=erzeugung,
+        bkw_eigenverbrauch_gemessen_kwh=ev_gemessen,
+        erzeugung_hinter_zaehler_kwh=hinter_zaehler,
+        eigenverbrauch_gesamt_kwh=(
+            eigenverbrauch_ohne_verluste_kwh(
+                ev_anlage, fakt.erzeugung.wandlungsverluste_kwh, fakt.erzeugung.verluste_grund,
+            ) if fakt else 0.0
+        ),
+        hat_zaehlerzeile=hat_zaehlerzeile,
+    )
+    return BkwMonatsBeitrag(
+        erzeugung_kwh=erzeugung,
+        erzeugung_quelle=quelle,
+        eigenverbrauch_gemessen_kwh=ev_gemessen,
+        eigene_zeile_traegt=eigene_zeile_traegt,
+        anteil=anteil,
+        anteil_bewertet=anteil_bewertet,
     )

@@ -49,6 +49,7 @@ import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { JahrVergleich } from '../api/cockpit'
 import { berechnungAus, ergebnisMitLuecken, ergebnisZeile, fehlendHinweis } from '../lib/ergebnisHerleitung'
+import { pvErzeugerNamen } from './bilanzParkIds'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 
@@ -257,10 +258,7 @@ export function JahrBilanz({
     </>
   )
 
-  const pvGeraete = [
-    ...(d.komponenten_geraete?.['pv-module'] ?? []),
-    ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
-  ]
+  const pvGeraete = pvErzeugerNamen(d)
 
   // E11 / P4 (03.10.2026): die Hinweise des Jahres — Monate ohne Monatsabschluss (Werte aus Home Assistant), ein
   // nicht berechenbarer Monat, PV-Teilsummen der Monate — kommen fertig formuliert aus der Jahresroute

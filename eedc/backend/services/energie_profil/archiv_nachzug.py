@@ -391,31 +391,48 @@ async def wetter_nachziehen_bereich(
     invs = list((await db.execute(
         select(Investition).where(Investition.anlage_id == anlage.id)
     )).scalars().all())
-    pv_module = [
-        i for i in invs if i.typ in ("pv-module", "balkonkraftwerk") and (i.aktiv is None or i.aktiv)
-    ]
+    pv_alle = [i for i in invs if i.typ in ("pv-module", "balkonkraftwerk")]
     sonstige_erzeuger_ids = {
         i.id for i in invs
         if i.typ == "sonstiges" and (i.parameter or {}).get("kategorie") == "erzeuger"
     }
 
-    try:
-        # N-690: `streng` — fällt eine Orientierungsgruppe aus, wirft der Abruf,
-        # statt Tage ohne GTI zu liefern. Hier wäre ein fehlendes GTI dauerhaft
-        # (der Altbestand-Marker stünde danach, der Tag käme nie wieder dran);
-        # über den `fehler`-Zweig unten schreibt der Lauf nichts, setzt keinen
-        # Marker, und die nächste Nacht versucht es neu.
-        je_tag = await _fetch_wetter(
-            anlage, ARCHIVE_URL,
-            {"start_date": tage[0].isoformat(), "end_date": tage[-1].isoformat()},
-            pv_module, timeout=timeout, streng=True,
-        )
-    except Exception as e:  # noqa: BLE001 — ein Abruf darf den Job nicht kippen
-        logger.warning(
-            "Wetter-Nachzug Anlage %s (%s–%s): Archiv-Abruf fehlgeschlagen: %s: %s",
-            anlage.id, tage[0], tage[-1], type(e).__name__, e,
-        )
-        return {"status": "fehler", "error": str(e), "tage": 0}
+    # ⭐ N-730 (12.10.2026): die Module JE TAG — dieselbe Menge wie `aggregate_day` (`aktiv_am_tag`, Audit §6.4;
+    # In-Memory `ist_aktiv_an`, am Stilllegungstag noch aktiv). Bis dahin ging der ganze Bereich mit allen
+    # `aktiv`-Modulen an Open-Meteo: ein Zubau mit anderer Ausrichtung gewichtete das GTI auch an den Tagen vor seiner
+    # Anschaffung mit, der kWp-Nenner der PR aber nicht (`anlagen_kwp(…, datum)`) — gemessen Süd 6 kWp + West 4 kWp ab
+    # 10.06.: am 01.06. GTI 800 statt 1 000 Wh/m², PR 1,00 statt 0,80. Ein Abruf je Modulmenge (über die Spanne ihrer
+    # Tage), nicht je Tag — im Regelfall bleibt es bei einem.
+    tage_je_menge: dict[tuple[int, ...], list[date]] = {}
+    module_je_menge: dict[tuple[int, ...], list[Investition]] = {}
+    for datum in tage:
+        module = [i for i in pv_alle if i.ist_aktiv_an(datum)]
+        schluessel = tuple(sorted(i.id for i in module))
+        tage_je_menge.setdefault(schluessel, []).append(datum)
+        module_je_menge[schluessel] = module
+
+    je_tag: dict[date, dict[int, dict]] = {}
+    for schluessel, tage_der_menge in tage_je_menge.items():
+        try:
+            # N-690: `streng` — fällt eine Orientierungsgruppe aus, wirft der Abruf,
+            # statt Tage ohne GTI zu liefern. Hier wäre ein fehlendes GTI dauerhaft
+            # (der Altbestand-Marker stünde danach, der Tag käme nie wieder dran);
+            # über den `fehler`-Zweig unten schreibt der Lauf nichts, setzt keinen
+            # Marker, und die nächste Nacht versucht es neu.
+            antwort = await _fetch_wetter(
+                anlage, ARCHIVE_URL,
+                {"start_date": tage_der_menge[0].isoformat(), "end_date": tage_der_menge[-1].isoformat()},
+                module_je_menge[schluessel], timeout=timeout, streng=True,
+            )
+        except Exception as e:  # noqa: BLE001 — ein Abruf darf den Job nicht kippen
+            logger.warning(
+                "Wetter-Nachzug Anlage %s (%s–%s): Archiv-Abruf fehlgeschlagen: %s: %s",
+                anlage.id, tage[0], tage[-1], type(e).__name__, e,
+            )
+            return {"status": "fehler", "error": str(e), "tage": 0}
+        for datum in tage_der_menge:
+            if datum in antwort:
+                je_tag[datum] = antwort[datum]
 
     geschrieben = 0
     ohne_wetter = 0

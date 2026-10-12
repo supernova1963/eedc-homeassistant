@@ -457,7 +457,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         status: [
           kpi(PV_ANLAGE_KPI.leistung, n1(u.anlagenleistung_kwp), 'kWp'),
           kpi(PV_ANLAGE_KPI.erzeugung, energie(u.pv_erzeugung_kwh).wert, energie(u.pv_erzeugung_kwh).einheit),
-          kpi(PV_ANLAGE_KPI.spezErtrag, n0(u.spezifischer_ertrag_kwh_kwp), 'kWh/kWp'),
+          // Handgriff Nr. 44a (12.10.2026): der Wert ist ein JAHRESwert, saisonal hochgerechnet (`core/berechnungen/
+          // spez_ertrag.py`, BERECHNUNGEN „Spezifischer Ertrag") — neben „Gesamterzeugung" eines einzigen Monats las
+          // er sich sonst als dessen Quotient (648 kWh/kWp bei 630 kWh).
+          { ...kpi(PV_ANLAGE_KPI.spezErtrag, n0(u.spezifischer_ertrag_kwh_kwp), 'kWh/kWp'), subtitle: 'hochgerechnet aufs Jahr' },
           kpi(PV_ANLAGE_KPI.eigenverbrauch, n0(u.eigenverbrauch_quote_prozent), '%'),
         ],
         aufteilung: (ev > 0 || einsp > 0) ? {

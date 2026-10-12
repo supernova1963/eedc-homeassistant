@@ -1134,7 +1134,10 @@ def test_f5_topf_und_leser_nutzen_dieselbe_extern_regel():
 
     assert waehle_extern_paar(0.0, 0.0, 50.0, 25.0) == (50.0, 25.0)
     assert waehle_extern_paar(30.0, 30.0, 50.0, 25.0) == (30.0, 30.0)
-    assert waehle_extern_paar(10.0, 5.0, 20.0, 5.0) == (10.0, 5.0), "Gleichstand: Wallbox"
+    # N-728 (Entscheid Master 12.10.2026): bei Kosten-Gleichstand gewinnt die größere Menge, erst bei gleicher Menge die
+    # Wallbox. Hier stand bis dahin `(10.0, 5.0), "Gleichstand: Wallbox"`.
+    assert waehle_extern_paar(10.0, 5.0, 20.0, 5.0) == (20.0, 5.0), "Kosten-Gleichstand: die größere Menge"
+    assert waehle_extern_paar(20.0, 5.0, 20.0, 5.0) == (20.0, 5.0), "ganz gleich: Wallbox"
     e = entscheide_emob_heimladung(
         eauto_je_inv={7: {"ladung_extern_kwh": 50.0, "ladung_extern_euro": 25.0}},
         wallbox_zeilen=[{"ladung_kwh": 250.0}],

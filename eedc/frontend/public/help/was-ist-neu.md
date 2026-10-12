@@ -120,6 +120,50 @@ noch durch die bis zum 31.12. angeschafften Komponenten — wie der Amortisation
 8,2 ct Einspeisung); eine PVGIS-Prognose mit leerem Monatswert bricht die Finanz-Prognose nicht mehr ab; die Vorschau des
 eigenen Import-Formats zeigt bei zwei Spalten für dasselbe Geräte-Feld nur die, die importiert wird.
 
+**Balkonkraftwerk: eine Ersparnis in T-Konto und Hub:** Die Zeile „Balkon" im T-Konto von *Cockpit → Monat* rechnet jetzt
+mit dem Anteil des Balkonkraftwerks am Eigenverbrauch und demselben Preis wie *Komponenten → Balkonkraftwerk*, nicht
+mehr mit der ganzen Erzeugung (im Beispiel 18,82 statt 27,00 €); im Hub sind Einspeisung und Eigenverbrauchsquote die Summe der Monate
+([Bedienung → Balkonkraftwerk](HANDBUCH_BEDIENUNG.md#37-balkonkraftwerk)).
+
+**E-Auto: externe Ladung aus einer Quelle:** Kopf, Verlauf und Jahresvergleich des E-Auto-Hubs zeigen dieselbe externe
+Ladung, je Monat gewählt wie im Cockpit; eine am Auto ohne Kosten erfasste externe Ladung zählt jetzt überall
+([Bedienung → E-Auto](HANDBUCH_BEDIENUNG.md#35-e-auto)).
+
+**ROI der PV-Anlage wie im Cockpit:** Die Zeile PV-System in *Auswertungen → ROI* nimmt den Eigenverbrauch aus derselben
+Rechnung wie das Cockpit — mit BHKW-Strom, ohne an Dritte abgegebene Kilowattstunden, ohne Speicherverluste und ohne den
+Anteil des Balkonkraftwerks, das seine eigene Zeile hat ([Bedienung → ROI](HANDBUCH_BEDIENUNG.md#42-roi)).
+
+**Cockpit → Tag nach einer Statistik-Korrektur:** Fällt die HA-Summe eines String-Zählers, bekommt der String an dem Tag
+seinen Anteil am Anlagenzähler, statt dass die Differenz bei einem anderen Gerät landet.
+
+**Performance Ratio nach einem Zubau:** Der nächtliche Wetter-Nachzug rechnet die Einstrahlung mit den Dachflächen, die an
+dem Tag in Betrieb waren — eine später zugebaute Fläche mit anderer Ausrichtung verschiebt die Performance Ratio der Tage
+davor nicht mehr.
+
+**Jahresbericht: eine Mehrkosten-Zahl:** Die Zeile „Investition Mehrkosten" nennt den Nenner der Rendite darunter und sagt,
+welche Investitionen er zählt.
+
+**Kleinigkeiten:** „PV-Erzeugung aus" in *Cockpit → Monat/Jahr* und im Monatsbericht nennt auch das Balkonkraftwerk; am
+spezifischen Ertrag im PV-Hub steht „hochgerechnet aufs Jahr".
+
+**Monatsabschluss schlägt eine gemessene 0 vor:** Liefert Home Assistant oder MQTT für einen Monat 0 kWh — Einspeisung,
+Speicher, Wärmepumpe, Wallbox ohne Ladung —, steht im Formular die 0 („0 — kein Zuwachs") statt des Vormonats mit dem
+Abzeichen „geschätzt"; nur PV-Erzeugung und PV-Anteil einer Ladung bleiben ohne 0-Vorschlag
+([Einstellungen → Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)).
+
+**Speicher-0 auch im eigenen Import-Format und im CSV-Import:** Eine Ladung oder Entladung von 0 steht jetzt am Speicher,
+statt dass der Daten-Checker „Entladung nicht erfasst" meldet
+([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+
+**Teilsummen werden gesagt:** *Cockpit → Monat* und *→ Jahr* nennen eine PV-Teilsumme jetzt auch, wenn im Monat eine
+Wallbox-Zeile ohne PV-Anteil steht; und trägt im laufenden Monat der Netzbezugs- oder Einspeisezähler nur einen Teil der
+Tage (etwa nach dem Umbenennen der Entity in Home Assistant), steht ein Hinweis bei den Kacheln — im Beispiel stand
+sonst Autarkie 99,1 % statt 67,6 % ohne Kommentar ([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
+
+**HA-Sensoren Wärmepumpe je Betriebsart:** „Strom Heizbetrieb", „Strom Warmwasserbetrieb" und „Strom Kühlbetrieb" melden
+bei einer Wärmepumpe mit Betriebsart-Sensor ohne Leistungssensor dieselben Werte wie *Cockpit → Übersicht* — bisher nach
+einem HA-Statistik-Import 0; die Sensoren springen nach dem Update einmalig.
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

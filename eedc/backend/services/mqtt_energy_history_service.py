@@ -554,6 +554,10 @@ async def mqtt_monats_mengen(
                 anlage_id, mqtt_key,
             )
             continue
-        if menge is not None and menge.menge_kwh > 0:
+        # N-721: eine 0 mit beiden Rändern ist gemessen („Daten da, kein Zuwachs") und kommt an — bis 12.10.2026
+        # stand hier `> 0`, und die N-555-Ausnahme „Heimlade-0 wird vorgeschlagen" war auf dem MQTT-Weg toter Code.
+        # Ob eine 0 zählt, entscheidet der Leser (Monatsabschluss: `views.null_ist_vorschlag`; Cockpit → Monat
+        # filtert weiter selbst `> 0`).
+        if menge is not None:
             ergebnis[mqtt_key] = replace(menge, menge_kwh=round(menge.menge_kwh, 1))
     return ergebnis

@@ -355,6 +355,9 @@ describe('KOMPONENTEN_ADAPTER', () => {
     const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
     expect(titles(g.status)).toEqual(['Anlagenleistung', 'Gesamterzeugung', 'Spez. Ertrag', 'Eigenverbrauch'])
     expect(g.aufteilung?.segmente.map((s) => [s.label, s.wert])).toEqual([['Eigenverbrauch', 250], ['Einspeisung', 250]])
+    // Handgriff Nr. 44a: der spezifische Ertrag ist ein hochgerechneter Jahreswert und sagt es.
+    const spez = g.status.find((s) => s.title === 'Spez. Ertrag')
+    expect(spez?.subtitle).toBe('hochgerechnet aufs Jahr')
   })
 
   /** Fixture-Muster aus `backend/tests/test_aggregiert_kwp_verteilung.py`:

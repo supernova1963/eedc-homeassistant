@@ -106,14 +106,19 @@ async def _baue_fakt(
     # PV nur, wenn die P7-Auflösung nichts ergab (`None` = kein Modulwert und
     # kein Anlagen-Aggregat). Ein aufgelöster Wert — auch ein teilweise
     # geschätzter — bleibt unangetastet.
+    #
+    # N-725: `pv_vollstaendig` folgt der Vollständigkeit der Module — auch im Tageswert-Rückfall. Bis 12.10.2026 setzte
+    # der Rückfall das Flag auf True: trug der Monat Modulwerte mit einer Lücke (`pv_je_modul` mit einem `fehlt`-Modul,
+    # kein Anlagenwert), lud aber die Tagesebene (eine Wallbox-Zeile ohne PV-Anteil genügt, `laden.py`), war dieselbe
+    # Teilsumme (Form F16: 360) plötzlich „vollständig" — kein Hinweis in Cockpit → Monat/Jahr, der Daten-Checker prüfte
+    # gegen sie. Ohne Modulwert im Monat (`pv_je_modul` leer, der laufende Monat) bleibt es True wie bisher.
+    pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
     pv_aus_tagen = False
     if pv_modul_summe is None and tages_summe is not None and tages_module > 0:
         pv_modul_summe = tages_module
-        pv_vollstaendig = True
         pv_aus_tagen = True
         tageswert_gruppen.add(TAGESWERT_PV)
     else:
-        pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
         # N-626 (Gernot 04.10.2026): fehlt einem Modul der Wert und gibt es keinen Anlagenwert, trägt es
         # nichts bei — die vorhandenen Werte bleiben in der Summe (vorher fiel die ganze Modulsumme weg:
         # 90 statt 450). Reihenfolge: vollständige Summe → Tageswert (oben) → Teilsumme. `pv_vollstaendig`

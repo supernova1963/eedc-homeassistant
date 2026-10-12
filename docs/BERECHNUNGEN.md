@@ -92,7 +92,10 @@ und zum Verständnis der Datenflüsse.
 >    fehlen (ihre Menge steht wie in HA in der Folgestunde). Gemessene Werte werden nie skaliert.
 > 2. **Rest des Anlagenzählers:** `max(0, Δ Anlagenzähler − Σ Δ gemessene Geräte)` geht einmal je Zeitraum nach kWp
 >    auf die Geräte ohne deckenden Kanal (Marke „geschätzt (kWp-Anteil)"). Die Modul-Kinder eines Balkonkraftwerks sind
->    dessen Lücke — am Tag wie im Monat.
+>    dessen Lücke — am Tag wie im Monat. **Ein negatives Δ** (HAs Summe fiel im Zeitraum, N-639) ist neben einem
+>    Anlagenzähler keine Messung für diese Verteilung: das Gerät wird Lücke und bekommt seinen kWp-Anteil, wie im
+>    Bestandspfad ein Rücksprung (N-732, seit 12.10.2026; vorher schob sein negativer Wert den Rest einem anderen Gerät
+>    zu — im Beispiel Balkonkraftwerk 53 statt 1,76 kWh am Tag). Ohne Anlagenzähler bleibt das Δ stehen wie in HA.
 > 3. **PV-Summe:** Σ der Geräte-Werte nach 1 und 2. Der Anlagenzähler ist nur Füller, nie Ersatz der Geräte-Summe.
 >    Liegt Σ Geräte über ihm, wird die Differenz als Wandlungsverluste geführt (`wandlungsverluste_kwh`) und — unter
 >    dem Messpunkt-Vertrag unten — in Geld, USt und CO₂ abgezogen (N-588). Beispiel Volleinspeiser mit DC-String-Zählern:
@@ -966,6 +969,16 @@ durch die Kilometer **aller** Monate — mit einem Verbrauchssensor ab Juli also
 sofort, bei Pflege von Hand ab dem Monatsabschluss); darunter „davon extern … kWh". Eine **eigene** Anzeige-Größe
 (`emob_ladung_gesamt_kwh`): die Heimladung (`emob_ladung_kwh`) behält ihre Bedeutung, der **PV-Anteil** bleibt auf
 die Heimladung bezogen, T-Konto, CO₂ und Community rechnen weiter mit ihr. Extern liegt außerhalb der Hausbilanz.
+
+**Externe Ladung je Monat — eine Quelle (N-728, seit 12.10.2026):** Externe Ladung kann am Auto stehen oder (Altbestand)
+an der Wallbox-Zeile. Welches Paar (kWh, €) zählt, entscheidet die Topf-Regel `waehle_extern_paar` **je Monat** — ist die
+Wallbox im Monat die Heimlade-Quelle, gewinnt das Paar mit den höheren Kosten aus dem km-Anteil am Extern der
+Wallbox-Zeilen und dem Extern des Autos (`emob_extern_im_monat`, dieselbe Funktion wie HA-Export und Aussichten). Der
+E-Auto-Hub summiert diese Monatswerte, und seine Monatszeilen (Verlauf, Tabelle, Jahresvergleich) tragen genau sie. Bis
+dahin wählte der Hub-Kopf das Paar einmal über den ganzen Zeitraum, während der Verlauf das rohe Feld am Auto zeigte
+(Kopf 40 kWh an der Wallbox gegen Verlauf 0; Verlauf 80 kWh am Auto ohne Euro gegen Kopf 0). Bei **Kosten-Gleichstand**
+gewinnt die **größere Menge**, erst bei gleicher Menge die Wallbox (Entscheid Master 12.10.2026) — extern am Auto ohne
+Euro neben einer Wallbox zählt damit in jeder Sicht (bis dahin 0 statt 80 kWh).
 
 **Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In der **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), im **HA-Sensor-Export** und im **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Komponente wenn kein Monatswert vorhanden. Das Formularfeld *Benzinpreis (€/L)* ist seit 27.09.2026 (N-572) nicht mehr vorbelegt: ein geleertes Feld bleibt leer, und die Kette fällt dann auf 1,65 €/L zurück.
 
@@ -2361,7 +2374,7 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Rendite** (`jahres_rendite_prozent`) | Antwortfeld von `/cockpit/uebersicht`; angezeigt nur im Jahresbericht-PDF („Rendite") | Kumul. Ersparnis / Relevante Kosten * 100 (Einzeljahr: Investitionen bis 31.12.) | Wie viel % bereits amortisiert (kumuliert) |
+| **Rendite** (`jahres_rendite_prozent`) | Antwortfeld von `/cockpit/uebersicht`; angezeigt nur im Jahresbericht-PDF („Rendite") | Kumul. Ersparnis / Relevante Kosten * 100 (Einzeljahr: Investitionen bis 31.12., auch vorher stillgelegte; das PDF druckt genau diesen Nenner als Zeile „Investition Mehrkosten", N-731) | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF (Einzeljahr: Stand 31.12.) | Bisherige Erträge / Kapitaleinsatz * 100 | Kumulierter Fortschritt |
 
@@ -3675,6 +3688,17 @@ PV-Einsparung wird proportional nach kWp auf Module verteilt:
     Modul_Einsparung = Gesamt_PV_Einsparung * (Modul_kWp / Gesamt_kWp)
 ```
 
+> **Der Eigenverbrauch der PV-System-Zeile kommt aus den Monats-Fakten (N-723, seit 12.10.2026).** Je Monat der
+> Anlagen-Eigenverbrauch wie im Cockpit (`kennzahlen.eigenverbrauch_kwh`: Erzeugung hinter dem Zähler **inklusive**
+> sonstiger Erzeuger, abzüglich Abgabe an Dritte, Speicher nach der Bilanzformel) **minus** der Anteil der
+> Balkonkraftwerke (`bkw_eigenverbrauch_anteil`, dieselbe Zahl wie im BKW-Hub) — das Balkonkraftwerk hat seine eigene
+> ROI-Zeile (ADR-002/P9). Dann ohne die bewertbaren Wandlungsverluste (P15) und hochgerechnet wie die Mengen. Bis dahin
+> stand hier `Eigenverbrauch = PV-Module − Einspeisung der ganzen Anlage`: mit einem BHKW 1 560 statt 2 640 € (sein
+> eingespeister Strom wurde von der PV abgezogen, sein Eigenverbrauch fehlte — gegen den Vertrag vom 03.09.2026), mit
+> Abgabe an Dritte 1 824 statt 1 464 € (dieselbe kWh zusätzlich als Erlös der Abgabe-Zeile), mit Speicher zählten die
+> Speicherverluste als Eigenverbrauch (im Beispiel 36 € zu viel; jetzt ergibt PV-Zeile + Speicher-Zeile die
+> Cockpit-Ersparnis). ⚑ Nicht abgezogen ist die V2H-Rückspeisung, die zusätzlich parametrisch in der E-Auto-Zeile steht.
+
 ### Hochrechnung bei unvollständigen Jahren
 
 ```
@@ -4038,6 +4062,13 @@ Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abger
 > die gemessene Energie bleibt unangetastet. Das passiert von selbst in der Nacht nach dem Update,
 > je Anlage genau einmal, bis zwei Jahre zurück. Ein Tag, den der nächtliche Nachzug wegen
 > geschrumpfter HA-Historie nicht neu bauen kann, bekommt auf demselben Weg seine Wetterzeile.
+>
+> **Die Einstrahlung je Tag mit den Dachflächen dieses Tages (N-730, seit 12.10.2026).** Auch der Wetter-Nachzug gewichtet
+> die Einstrahlung auf die Modulfläche nur mit den Modulen und Balkonkraftwerken, die **an dem Tag** in Betrieb waren —
+> wie die Tagesaggregation (`aktiv_am_tag`). Bis dahin holte er den ganzen Zeitraum mit allen aktiven Modulen: eine später
+> zugebaute Fläche mit anderer Ausrichtung zog die Einstrahlung der Tage vor ihrer Anschaffung mit, während der kWp-Nenner
+> sie richtig nicht zählte (gemessen Süd 6 kWp + West 4 kWp ab 10.06., Tag 01.06.: Einstrahlung 800 statt 1 000 Wh/m², PR
+> 1,00 statt 0,80). Ein Archiv-Abruf je Modulmenge, nicht je Tag.
 
 > **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
 

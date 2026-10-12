@@ -66,6 +66,19 @@ router = APIRouter()
 #: EINE Zeichenkette für HA-Statistik und MQTT (die Quelle steht ohnehin am Vorschlag).
 NULL_VORSCHLAG_BESCHREIBUNG = "0 — kein Zuwachs"
 
+#: N-721: die Zählerfelder, bei denen eine gemessene **0** aus HA oder MQTT **kein** Vorschlag wird — die PV-Erzeugung
+#: (Module, Wechselrichter, Balkonkraftwerk) und der PV-Anteil der Ladung. Eine eingefrorene Integration ergäbe dort
+#: ebenfalls 0, verdrängte die Verteilung des Anlagenwerts bzw. sperrte die Ableitung des PV-Anteils aus der Tagesebene
+#: (N-555 Regel 4, ``core/field_definitions/heimladung.py``). Jedes andere Zählerfeld liefert mit einer 0 eine Messung:
+#: die Statistik bzw. die Standreihe trägt den Sensor nur, wenn sie im Monat Daten hat — bis 12.10.2026 stand dort statt
+#: der 0 der Vormonat mit dem Abzeichen «geschätzt» (Einspeisung 55, Entladung 40, Heizenergie 900).
+NULL_KEIN_VORSCHLAG_FELDER = frozenset({"pv_erzeugung_kwh", "ladung_pv_kwh"})
+
+
+def null_ist_vorschlag(feld: str) -> bool:
+    """Wird eine gemessene 0 dieses (Zähler-)Feldes vorgeschlagen? (N-721; Innengeräte-Keys über ``basis_feld_key``)."""
+    return basis_feld_key(feld) not in NULL_KEIN_VORSCHLAG_FELDER
+
 
 # =============================================================================
 # Konfidenz der Connector-Vorschläge
@@ -524,26 +537,25 @@ async def lade_mqtt_monatsmengen(
     }
     for mqtt_key, feld_name in basis_map.items():
         val = monats_mengen.get(mqtt_key)
-        if val is not None and val > 0:
+        # N-721: eine 0 mit beiden Rändern ist gemessen (kein Zuwachs).
+        if val is not None and val >= 0:
             mqtt_energy[feld_name] = val
 
     # Investitions-Felder: inv/{inv_id}/{key}
     #
-    # N-555 Regel 4 (E1 eng): bei den **Heimlade-Mengenfeldern** ist eine 0 ein
-    # Wert. `mqtt_monats_deltas` liefert einen Key nur, wenn im Monat beide Ränder
-    # der Zählerreihe stehen — eine 0 hier heißt also „Daten da, kein Zuwachs",
-    # nie „keine Daten" (das fehlt im Ergebnis). Bis 25.09.2026 fraß der `<= 0`-Filter
-    # genau diese 0, der Monatsabschluss blieb leer, und der Fahrverbrauch sprang
-    # als Heimladung ein. Alle anderen Felder bleiben bei `> 0` (PV-Module: eine
-    # eingefrorene Integration ergäbe ebenfalls 0 und verdrängte die Verteilung).
-    _typ_je_inv = {i.id: i.typ for i in (getattr(anlage, "investitionen", None) or ())}
+    # N-555 Regel 4 / N-721: eine 0 ist ein Wert. `mqtt_monats_deltas` liefert einen
+    # Key nur, wenn im Monat beide Ränder der Zählerreihe stehen — eine 0 hier heißt
+    # also „Daten da, kein Zuwachs", nie „keine Daten" (das fehlt im Ergebnis). Bis
+    # 25.09.2026 fraß der `<= 0`-Filter hier die Heimlade-0 (der Fahrverbrauch sprang
+    # als Heimladung ein), bis 12.10.2026 verwarf `mqtt_monats_mengen` jede 0 schon
+    # selbst. Ausgenommen bleiben die PV-Felder (`null_ist_vorschlag`).
     for mqtt_key, val in monats_mengen.items():
         if not mqtt_key.startswith("inv/") or val is None or val < 0:
             continue
         ziel = _mqtt_inv_feld(mqtt_key)
         if not ziel:
             continue
-        if val == 0 and not ist_heimlade_mengen_feld(_typ_je_inv.get(ziel[0]), ziel[1]):
+        if val == 0 and not null_ist_vorschlag(ziel[1]):
             continue
         mqtt_inv_energy.setdefault(ziel[0], {})[ziel[1]] = val
 
@@ -776,15 +788,20 @@ async def baue_basis_feld(
         ctx.anlage_id, feld, ctx.jahr, ctx.monat
     )
 
-    # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen
+    # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen.
+    # N-721: an einem Zählerfeld (Einspeisung, Netzbezug) ist eine 0 gemessen —
+    # `ha_stats_werte` trägt nur Sensoren mit Statistik-Daten im Monat.
     if strategie == "sensor" and sensor_id and sensor_id in ctx.ha_stats_werte:
         stats_wert = ctx.ha_stats_werte[sensor_id]
-        if stats_wert > 0:
+        if stats_wert > 0 or (stats_wert == 0 and ist_zaehler_differenz_feld(feld)):
             vorschlaege.insert(0, Vorschlag(
                 wert=round(stats_wert, 1),
                 quelle=VorschlagQuelle.HA_STATISTICS,
                 konfidenz=92,
-                beschreibung="Aus HA-Statistik (Recorder-DB)",
+                beschreibung=(
+                    "Aus HA-Statistik (Recorder-DB)" if stats_wert > 0
+                    else NULL_VORSCHLAG_BESCHREIBUNG
+                ),
             ))
 
     # Connector-Vorschlag einfügen
@@ -903,7 +920,11 @@ async def _ergaenze_investitions_vorschlaege(
     # Monat Daten hat (`lade_ha_statistik_werte`: `differenz is not None`) — eine 0
     # darin ist gemessen. Ohne sie blieb das Feld leer, und im abgeschlossenen
     # Monat sprang der Fahrverbrauch als Heimladung ein (Johnny_1993, 1.364 kWh).
-    null_ist_wert = ist_heimlade_mengen_feld(getattr(inv, "typ", None), feld)
+    # N-721: dieselbe Regel für jedes Zählerfeld außer den PV-Feldern
+    # (`null_ist_vorschlag`) — Speicher, Wärmepumpe, Kilometer, Sonstiges.
+    null_ist_wert = (
+        ist_heimlade_mengen_feld(getattr(inv, "typ", None), feld) or null_ist_vorschlag(feld)
+    )
     if (
         strategie == "sensor" and sensor_id and sensor_id in ctx.ha_stats_werte
         # N-666: Innengeräte-Keys (`…_kwh-3`) über `basis_feld_key` — wie „Aus HA laden" (N-622).
@@ -964,8 +985,8 @@ async def _ergaenze_investitions_vorschlaege(
     # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
     mqtt_inv_values = ctx.mqtt_inv_energy.get(inv.id, {})
     if feld in mqtt_inv_values:
-        # Eine 0 steht hier nur bei Heimlade-Mengenfeldern (Filter in
-        # `lade_mqtt_monatsmengen`) — und dann mit ihrem eigenen Wortlaut.
+        # Eine 0 steht hier nur bei Feldern, deren 0 ein Wert ist (Filter in
+        # `lade_mqtt_monatsmengen`, N-555/N-721) — und dann mit ihrem eigenen Wortlaut.
         vorschlaege.insert(0, Vorschlag(
             wert=mqtt_inv_values[feld],
             quelle=VorschlagQuelle.MQTT_INBOUND,

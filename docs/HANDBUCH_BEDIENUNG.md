@@ -322,6 +322,8 @@ Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte f
 Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Monat mit Tages-Granularität. Über den Monats-Zeitstrahl navigierst du zu beliebigen Vormonaten.
 
 > **Womit die Sicht aufgeht:** mit dem **laufenden** Monat, solange kein Monatsabschluss offen ist. Fehlt noch ein Abschluss, öffnet sie stattdessen den jüngsten Monat, für den Werte gepflegt sind — dort beginnt der Weg zum offenen Abschluss, und der Knopf „Abschluss starten" steht daneben.
+>
+> **Laufender Monat nach einem Import:** Ein Import des laufenden Monats (Portal, Cloud, eigene Datei) gilt für die importierten Gruppen als Monatsabschluss; Netzbezug und Einspeisung kommen weiter aus der HA-Statistik.
 
 - **Kennzahl-Strip** oben — die wichtigsten Monatswerte mit Δ zum Vormonat
 - **Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug
@@ -365,6 +367,10 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > gemessener Monatswert wird nie verdrängt —, und sie sagt, dass sie es war: am
 > Quellen-Etikett steht dann „Tageswerte". Beginnt deine Tages-Aufzeichnung erst mitten im
 > Monat (frisch eingerichtetes Add-on), steht der Zeitraum daneben: „Tageswerte (05.–14.09.)".
+> Trägt nur **dein Netzbezugs- oder Einspeisezähler** einen Teil dieser Tage — etwa weil Home Assistant für eine
+> umbenannte Entity keine Werte mehr hat —, steht über den Kacheln ein Hinweis: „Der Netzbezug ist eine Teilsumme:
+> Tageswerte gibt es dafür nur am 01.07., für die übrigen Größen vom 01.07. bis 03.07. — Gesamtverbrauch und Autarkie
+> rechnen mit diesem Teilwert." Die Zahl bleibt stehen; korrigiere die Zuordnung, dann rechnet der Monat wieder voll.
 > **Das gilt auch für den Block *Wärme/Klima*** — Strom, Wärme, Kälte, Arbeitszahlen und die
 > Tabelle *Zahlen je Gerät* kommen dann aus demselben Leser, aus dem der Verlauf darunter
 > seine Tage zeichnet; Kachel und Verlauf nennen also dieselbe Zahl.
@@ -753,6 +759,8 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 - **Kostenersparnis** gegenüber Benziner/Diesel — auf Basis echter **monatlicher Benzinpreise** aus dem EU Weekly Oil Bulletin (fehlt ein Monatspreis: der am E-Auto eingetragene *Benzinpreis (€/L)*, sonst 1,65 €/L — das Feld ist nicht vorbelegt, ein geleertes Feld bleibt leer). Abgezogen wird der Strom der **ganzen** Ladung: die Netz-Ladung zu ihrem Preis, die PV-Ladung zu dem Preis, mit dem eedc sie schon als Eigenverbrauch gutschreibt — sonst zählte dieselbe Kilowattstunde zweimal. Der PV-Anteil zeigt, woher der Strom kam; er ist kein eigener Geldbetrag
 - **V2H-Entladung** (wenn aktiviert)
 
+**Externe Ladung:** Kopf, Verlauf, Tabelle und Jahresvergleich zeigen dieselben Werte — je Monat das Paar (kWh, €) mit den höheren Kosten aus dem, was am Auto erfasst ist, und dem Anteil an einer externen Ladung an der Wallbox-Zeile (Altbestand). Haben beide Seiten dieselben Kosten (etwa extern am Auto **ohne** Kosten erfasst), zählt die größere Menge ([Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung)).
+
 In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest der Wallbox bekommt, als eigene Zeile **„aus Wallbox-Rest"** (ohne km) — so ergibt die Tabelle die Kachel „Heimladung". Liegt an „Heim: gesamt" ein Ladezähler je Auto (etwa evccs „Ladevorgänge: Energie [Fzg.]"), steht je Monat **„aus n Ladevorgängen"** dabei, und wie viele davon die Wallbox nicht voll gezählt hat.
 
 > **Wo wird die Heimladung erfasst — Wallbox oder E-Auto?** Beides ist möglich, und es zählt nichts doppelt. Die **Wallbox** misst die **Summe** aller Ladungen an ihr. Hat ein Auto eine **eigene Messung** („Heim: PV", „Heim: Netz" oder „Heim: gesamt", auch 0), trägt es diese — auch neben der Wallbox. Der **Rest der Wallbox** geht nach Kilometern an die privaten Autos ohne eigene Messung; gibt es keines, zählt er nur als Verbrauch (Gäste, Verluste). Ein **Dienstwagen** mit eigener Messung zählt dienstlich und fehlt im Rest. **Ohne Wallbox** (z. B. Schuko-Lader) erfasst du die Heimladung direkt am E-Auto. Km, Verbrauch, externe Ladung und V2H stehen immer am E-Auto. Mehr in [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
@@ -773,7 +781,9 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 - **Einspeisung** (kWh, = Erzeugung − Eigenverbrauch, in der Regel unvergütet)
 - optional: gekoppelte Speicher-Nutzung (Ladung/Entladung)
 
-**Verlauf und Vergleich zeigen dieselbe Rechnung wie die Kennzahlen oben:** Die Monate im Diagramm und in der Tabelle ergeben zusammen die Erzeugung und den Eigenverbrauch der Kacheln, und die Eigenverbrauchsquote im Jahresvergleich entsteht aus denselben Monatswerten.
+**Verlauf und Vergleich zeigen dieselbe Rechnung wie die Kennzahlen oben:** Die Monate im Diagramm und in der Tabelle ergeben zusammen die Erzeugung und den Eigenverbrauch der Kacheln, und die Eigenverbrauchsquote im Jahresvergleich entsteht aus denselben Monatswerten. Auch die **Einspeisung** der Kachel ist die Summe der Monate, und die **Eigenverbrauchsquote** zählt nur Monate, in denen eedc den Eigenverbrauch ableiten kann — ein Monat ohne Zählerdaten der Anlage ist „nicht bewertbar" und geht weder als Einspeisung noch in den Nenner der Quote ein.
+
+**Dieselbe Ersparnis im T-Konto:** *Cockpit → Monat → T-Konto*, Zeile „Balkon — Eigenverbrauch-Ersparnis", rechnet mit demselben Anteil am Eigenverbrauch wie dieser Reiter — nicht mit der ganzen Erzeugung — und beide mit dem Preis der Eigenverbrauchs-Ersparnis des Monats (bei dynamischem Tarif der Ø der Stunden, in denen du selbst verbraucht hast). Trägt ein Balkonkraftwerk PV-Module als Kinder, tragen die Kinder die Erzeugung, und die Balkon-Zeile entfällt.
 
 **Ohne eigenen Zähler ist die Erzeugung geschätzt:** Hat das Balkonkraftwerk keinen eigenen Erzeugungs-Sensor, zeigt der Reiter seinen Anteil am PV-Gesamtzähler der Anlage nach kWp — dieselbe Zahl wie das Cockpit — und kennzeichnet ihn als **„geschätzt (kWp-Anteil)"**. Hängen PV-Module an dem Balkonkraftwerk, steht seine Erzeugung bei diesen Modulen; der Reiter nennt dann 0 und sagt das dazu.
 

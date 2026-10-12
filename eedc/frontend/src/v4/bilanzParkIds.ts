@@ -10,6 +10,19 @@ import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { TagWerte } from '../api/energie_profil'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 
+/** Die Geräte hinter „PV-Erzeugung aus" — Strings, Wechselrichter und Balkonkraftwerke (Handgriff Nr. 35/46, 12.10.2026).
+ *
+ *  Die PV-Erzeugung des Monats/Jahres enthält das Balkonkraftwerk (`ErzeugungFakten.pv_kwh`), und das Backend liefert
+ *  es in `komponenten_geraete['balkonkraftwerk']` — die Liste nannte es bis dahin nicht („Süd · West" neben einer Zahl
+ *  mit Balkon). EINE Stelle für Monat, Jahr und die Park-IDs. */
+export function pvErzeugerNamen(d: Pick<AktuellerMonatResponse, 'komponenten_geraete'>): string[] {
+  return [
+    ...(d.komponenten_geraete?.['pv-module'] ?? []),
+    ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
+    ...(d.komponenten_geraete?.['balkonkraftwerk'] ?? []),
+  ]
+}
+
 /** IDs der tatsächlich gerenderten Teil-Anzeigen des Monats-Bilanz-Blocks.
  *  Auch für Jahr (gleicher `AktuellerMonatResponse`-Aggregat-Shape). */
 export function monatBilanzParkIds(
@@ -23,8 +36,7 @@ export function monatBilanzParkIds(
   const ids = ['el:bilanz-vergleich', 'el:bilanz-grundlast']
   if (sicht === 'monat' && zeigeMonatsprognose(d)) ids.push('el:bilanz-monatsprognose')
   if (d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0) ids.push('el:bilanz-verteilung')
-  const pvGeraete = [...(d.komponenten_geraete?.['pv-module'] ?? []), ...(d.komponenten_geraete?.['wechselrichter'] ?? [])]
-  if (pvGeraete.length >= 2) ids.push('el:bilanz-geraete')
+  if (pvErzeugerNamen(d).length >= 2) ids.push('el:bilanz-geraete')
   return ids
 }
 

@@ -21,6 +21,7 @@ from backend.api.routes.import_export.helpers import (
     _distribute_legacy_battery_to_storages,
     _distribute_legacy_pv_to_modules,
     _import_investition_monatsdaten_v09,
+    _speicher_nullen_verteilen,
     _upsert_investition_monatsdaten,
 )
 from backend.models.anlage import Anlage
@@ -483,6 +484,11 @@ async def _batterie(
             )
             if stand.importiert == 0:
                 stand.warnungen.extend(w)
+        # N-722: die als 0 gelieferte Seite kommt ebenfalls an (wie N-718 am Portal); leer bleibt leer.
+        await _speicher_nullen_verteilen(
+            db, lad, ent, kontext.speicher, jahr, monat, ueberschreiben,
+            source="manual:csv_import", writer="csv_wizard",
+        )
         bat_ladung = lad
         bat_entladung = ent
     return bat_ladung, bat_entladung

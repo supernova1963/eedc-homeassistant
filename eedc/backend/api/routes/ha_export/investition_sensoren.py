@@ -687,11 +687,32 @@ async def _wp_nachtrag(db: AsyncSession, investition: Investition, s: _WpSummen)
     # ⚠ Die Regeln stehen NICHT hier, sondern im gemeinsamen Lader; dieser
     # Pfad faltet je Investition und geht deshalb nicht über die
     # Monats-Fakten (bekannte P10-Restschuld von `ha_export.py`).
+    #
+    # ⭐ N-727 (HA-Bauform E4d, Lesart 1): dieselbe Quelle wie die Monats-Fakten
+    # (`monats_fakten/laden.py::_ergaenze_modus_split_ohne_abschluss`) — Monate,
+    # deren WP-Gruppe die Kanäle decken, aus dem abgeleiteten Kanal „Strom je
+    # Betriebsart" (`kanal_split_ohne_abschluss`), die übrigen unverändert aus der
+    # Tagesebene. Bis 12.10.2026 kam der Split nur aus der Tagesebene; ohne
+    # Leistungssensor kennt sie keinen, und die Sensoren Heizen/Warmwasser
+    # meldeten nach einem Sammelimport 0 / 0, während Übersicht und Hub
+    # 217,8 / 19,8 zeigten (Form M05).
+    from backend.services.energie_profil.modus_split_monat import kanal_split_ohne_abschluss
+    from backend.services.kanal.wp_leser import wp_monate
+
+    _inv_by_id = {investition.id: investition}
+    wp_kanal = await wp_monate(db, investition.anlage_id)
+    gedeckt = frozenset(m for m, z in wp_kanal.items() if z.kanal)
     nachgetragen = await lade_modus_split_ohne_abschluss(
         db, investition.anlage_id,
-        inv_by_id={investition.id: investition},
+        inv_by_id=_inv_by_id,
         gespeichert=s.gespeichert_je_monat,
+        ohne_monate=gedeckt,
     )
+    if gedeckt:
+        for _m, _je in kanal_split_ohne_abschluss(
+            wp_kanal, inv_by_id=_inv_by_id, gespeichert=s.gespeichert_je_monat,
+        ).items():
+            nachgetragen.setdefault(_m, {}).update(_je)
     for _schluessel, _je_inv in nachgetragen.items():
         for _split in _je_inv.values():
             s.kuehl_je_monat[_schluessel] = (

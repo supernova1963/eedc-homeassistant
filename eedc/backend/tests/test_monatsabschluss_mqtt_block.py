@@ -13,15 +13,15 @@ Geprüft wird das, was der Umzug bewegt:
 1. die Zerlegung des Cache-Schlüssels ``inv/{id}/{feld}`` auf die Investition,
 2. dass die Menge (nicht der Stand) mit Konfidenz **91** am Basisfeld **und**
    am Investitionsfeld als Vorschlag steht,
-3. dass ein Zähler, der im Monat nicht weitergelaufen ist, **keinen** Vorschlag
-   liefert (0 kWh ist keine Aussage).
+3. dass ein Zähler, der im Monat nicht weitergelaufen ist, die **gemessene 0**
+   vorschlägt (Wortlaut „0 — kein Zuwachs").
 
-⚠ **Was Punkt 3 NICHT belegt, und das gehört dazu:** Der ``val <= 0``-Filter in
-der Route selbst ist über den echten Weg nicht erreichbar — `mqtt_monats_mengen`
-lässt eine Menge ``<= 0`` gar nicht erst heraus (`menge.menge_kwh > 0`,
-`mqtt_energy_history_service.py`). Die Probe belegt die **Zusage der Route**
-(ein stillstehender Zähler schlägt nichts vor), nicht den Zweig; eine
-Gegenprobe mit gelockertem Filter bleibt deshalb grün. Die Punkte 1 und 2 sind
+⭐ **Punkt 3 ist seit N-721 (12.10.2026) umgekehrt.** Bis dahin sagte er „kein
+Vorschlag — 0 kWh ist keine Aussage", und die Zusage hing an
+`mqtt_monats_mengen` (`menge.menge_kwh > 0`), nicht an der Route. Eine Menge mit
+beiden Rändern IST aber eine Messung („Daten da, kein Zuwachs"); ohne sie belegte
+das Formular das Feld mit dem Vormonat „geschätzt" vor. Ausgenommen bleiben nur
+die PV-Felder (`views.NULL_KEIN_VORSCHLAG_FELDER`). Die Punkte 1 und 2 sind
 scharf (Gegenprobe mit ``konfidenz=45`` meldet beide rot, gemessen 19.09.2026).
 
 ⛔ **Keine echte Uhr.** Der geprüfte Monat liegt fest in der Vergangenheit; die
@@ -151,12 +151,12 @@ async def test_investitionsfeld_bekommt_seine_eigene_menge(db):
     assert v.konfidenz == 91
 
 
-async def test_stillstehender_zaehler_schlaegt_nichts_vor(db):
-    """Differenz 0 ⇒ kein Vorschlag. Eine 0 wäre eine Behauptung, keine Messung.
-
-    Zusage der Route, kein Zweig-Beleg — s. den ⚠-Absatz im Modul-Docstring.
-    """
-    from backend.api.routes.monatsabschluss.views import get_monatsabschluss
+async def test_stillstehender_zaehler_schlaegt_die_gemessene_null_vor(db):
+    """Differenz 0 mit beiden Rändern ⇒ Vorschlag 0 (N-721, vorher: kein Vorschlag)."""
+    from backend.api.routes.monatsabschluss.views import (
+        NULL_VORSCHLAG_BESCHREIBUNG,
+        get_monatsabschluss,
+    )
 
     anlage, speicher = await _anlage_mit_standreihen(db)
 
@@ -164,4 +164,6 @@ async def test_stillstehender_zaehler_schlaegt_nichts_vor(db):
 
     (inv,) = [i for i in status.investitionen if i.id == speicher.id]
     je_feld = {f.feld: f for f in inv.felder}
-    assert _mqtt_vorschlag(je_feld["entladung_kwh"]) is None
+    v = _mqtt_vorschlag(je_feld["entladung_kwh"])
+    assert v is not None
+    assert (v.wert, v.konfidenz, v.beschreibung) == (0.0, 91, NULL_VORSCHLAG_BESCHREIBUNG)

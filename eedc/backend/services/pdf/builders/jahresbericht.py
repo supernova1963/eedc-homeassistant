@@ -29,7 +29,6 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     betriebskosten_im_zeitraum,
     eigenverbrauchsquote_prozent,
-    relevante_kosten_aus_investitionen,
     soll_im_laufmonat,
     spezifischer_ertrag_kwh_kwp,
     speicher_wirkungsgrad,
@@ -185,7 +184,11 @@ async def build_jahresbericht_context(
             "betriebskosten_zeitraum_euro": k.betriebskosten_zeitraum,
             "netto_nach_bk_euro": k.netto_nach_bk,
             "investition_gesamt_euro": k.investition_gesamt,
-            "investition_mehrkosten_euro": k.investition_mehrkosten,
+            # N-731 (12.10.2026, Entscheid Master): die Zeile „Investition Mehrkosten" nennt den Rendite-Nenner — die
+            # Mehrkosten der bis 31.12. angeschafften Investitionen, Stillgelegte eingeschlossen (Cockpit → Übersicht,
+            # N-720) — und ist so beschriftet. Bis dahin zählte sie nur die im Jahr aktiven (`aktiv_im_jahr`), und die
+            # Rendite darunter teilte durch eine andere Zahl (GM Z1 2025: 120 000 gegen 130 000 €).
+            "investition_mehrkosten_euro": rf.rendite_nenner_euro,
             "rendite_prozent": rf.rendite,
             "rendite_nenner_euro": rf.rendite_nenner_euro,
             "rendite_wp_ersparnis_euro": rf.wp_ersparnis_euro,
@@ -702,7 +705,6 @@ class _FinanzKpis:
     einspeise_erloes: float
     ev_ersparnis: float
     investition_gesamt: float
-    investition_mehrkosten: float
     netto_ertrag: float
     betriebskosten_zeitraum: float
     netto_nach_bk: float
@@ -745,19 +747,11 @@ def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenS
     ev_ersparnis = _finanz.ev_ersparnis_euro
 
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-    # N-136: über den Layer-SoT, nicht als eigene Form daneben. Hier stand bis
-    # 2026-08-30 `Σ gesamt − Σ alternativ` — **ungeklemmt und über die ganze
-    # Anlage**. Der SoT klemmt **je Position** (`Σ max(0, gesamt − alternativ)`).
-    # Beide sind gleich, solange keine Alternative teurer ist als die Sache
-    # selbst; sobald **eine** Position eine teurere Alternative trägt (ein
-    # Verbrenner gegen ein E-Auto ist der Regelfall), zog die alte Form deren
-    # Überschuss von den Mehrkosten der **anderen** Positionen ab — Nenner zu
-    # klein, Rendite und Amortisation im PDF zu hoch, und die Zahl widersprach
-    # denselben vier Sichten, die sie längst über den SoT bilden (Cockpit →
-    # Übersicht `uebersicht.py:641` unter demselben Variablennamen, ROI
-    # `investitionen/roi.py::get_roi_dashboard`, Aussichten
-    # `aussichten/finanz_eingaenge.py::investitionen_und_parameter`, Wallbox-Hub).
-    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen)
+    # N-136 → N-731 (12.10.2026): die Mehrkosten-ZEILE des Berichts ist der Rendite-Nenner der Übersicht
+    # (`_rendite_und_fortschritt`, Layer-SoT `relevante_kosten_aus_investitionen` je Position geklemmt, bis 31.12.
+    # angeschafft, Stillgelegte eingeschlossen) — keine zweite Summe hier über die im Jahr aktiven Investitionen.
+    # Bis 2026-08-30 stand hier `Σ gesamt − Σ alternativ` ungeklemmt (N-136), bis 12.10.2026 der SoT über
+    # `aktiv_im_jahr` (zwei „Mehrkosten" im selben PDF bei einer Stilllegung vor dem Jahr).
 
     # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
     # Cockpit und Aussichten ziehen sie seit jeher ab, der Bericht nicht — bei
@@ -802,7 +796,7 @@ def _finanz_kpis(anlage, jahr: Optional[int], investitionen, fakten, s: _FaktenS
         spez_ertrag_jahr=spez_ertrag_jahr, sonstige_netto_gesamt=sonstige_netto_gesamt,
         dienstliche_ladekosten_gesamt=dienstliche_ladekosten_gesamt, finanz=_finanz,
         einspeise_erloes=einspeise_erloes, ev_ersparnis=ev_ersparnis, investition_gesamt=investition_gesamt,
-        investition_mehrkosten=investition_mehrkosten, netto_ertrag=netto_ertrag,
+        netto_ertrag=netto_ertrag,
         betriebskosten_zeitraum=betriebskosten_zeitraum, netto_nach_bk=netto_nach_bk,
     )
 

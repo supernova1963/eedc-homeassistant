@@ -116,6 +116,18 @@ describe('MonatBilanz — PV-Verteilung (O3-Revision: Balken wie IST)', () => {
     expect(screen.getByText(/Süddach · Ostdach · Westdach · Fronius/)).toBeInTheDocument()
   })
 
+  it('PV-Geräte-Hinweis nennt das Balkonkraftwerk (Handgriff Nr. 35/46)', () => {
+    // Die PV-Erzeugung enthält das BKW; das Backend liefert es unter `balkonkraftwerk` — bis 12.10.2026 fehlte es hier.
+    render(<MonatBilanz d={d({ komponenten_geraete: { 'pv-module': ['Süd', 'West'], balkonkraftwerk: ['Balkon'] } })} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.getByText(/Süd · West · Balkon/)).toBeInTheDocument()
+  })
+
+  it('PV-Geräte-Hinweis bei einem String und einem Balkonkraftwerk', () => {
+    render(<MonatBilanz d={d({ komponenten_geraete: { 'pv-module': ['Süd'], balkonkraftwerk: ['Balkon'] } })} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.getByText(/PV-Erzeugung aus:/)).toBeInTheDocument()
+    expect(screen.getByText(/Süd · Balkon/)).toBeInTheDocument()
+  })
+
   it('PV-Geräte-Hinweis aus bei nur einem Gerät', () => {
     render(<MonatBilanz d={d({ komponenten_geraete: { 'pv-module': ['Süddach'] } })} vm={vm} glMonStats={null} monatName="Mai" />)
     expect(screen.queryByText(/PV-Erzeugung aus/)).not.toBeInTheDocument()

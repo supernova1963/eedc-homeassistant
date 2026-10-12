@@ -58,6 +58,8 @@ def _baue_investition_financial(
     emob_entscheid=None,
     ev_p: Optional[float] = None,
     wp_fakt=None,
+    monats_fakt=None,
+    bkw_abgetreten: bool = False,
 ) -> Optional[InvestitionFinancialDetail]:
     """Baut das T-Konto-Detail (InvestitionFinancialDetail) EINER Investition.
 
@@ -77,6 +79,12 @@ def _baue_investition_financial(
     Komponenten-Zeitreihe, auch den nachgetragenen eines Monats ohne Abschluss
     (gemessen 115 gegen 124 €). Ohne Fakten-Eintrag (laufender Monat ohne Zeile,
     Einzelaufruf) rechnet sie aus ``data`` wie bisher.
+
+    ``monats_fakt`` / ``bkw_abgetreten`` (N-724): der Monat aus den Monats-Fakten und ob dieses Balkonkraftwerk an
+    Modul-Kinder abgetreten hat (ADR-002/P11) — die Balkon-Zeile rechnet damit über ``bkw_beitrag_im_monat``, dieselbe
+    Stelle wie *Komponenten → Balkonkraftwerk*. Ohne Fakt (Einzelaufruf) gibt es keine Hausbilanz: der gemessene
+    Eigenverbrauch einer Zeile ohne Erzeugung trägt, eine Erzeugung allein ist nicht bewertbar (P4) — nie mehr die
+    ganze Erzeugung als Eigenverbrauch.
     """
     if not inv.aktiv:
         return None
@@ -102,7 +110,21 @@ def _baue_investition_financial(
     inv_berechnung: Optional[str] = None
 
     if inv.typ == "balkonkraftwerk":
-        ev_kwh = data.get("eigenverbrauch_kwh") or data.get("pv_erzeugung_kwh")
+        # ⛔ N-724 (12.10.2026): hier stand `eigenverbrauch_kwh or pv_erzeugung_kwh` — die GANZE Erzeugung galt als
+        # Eigenverbrauch (27,00 € gegen 18,82 € im BKW-Hub für denselben Monat; ein an Modul-Kinder abgetretenes Gerät
+        # trug weiter 27,00 €). Jetzt der bewertete Anteil an der Hausbilanz aus derselben Stelle wie der Hub
+        # (ADR-002/P9, `bkw_finanz.py::bkw_eigenverbrauch_anteil`, ohne bewertbare Wandlungsverluste, N-588).
+        from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag as _imd_typ_beitrag
+        from backend.services.monats_fakten import bkw_beitrag_im_monat
+
+        _b_bkw = _imd_typ_beitrag(inv, data)
+        _anteil = bkw_beitrag_im_monat(
+            inv.id, monats_fakt,
+            zeile_erzeugung_kwh=_b_bkw.bkw_erzeugung,
+            zeile_eigenverbrauch_kwh=_b_bkw.bkw_eigenverbrauch,
+            abgetreten=bkw_abgetreten,
+        ).anteil_bewertet
+        ev_kwh = _anteil.kwh if _anteil.bewertbar else None
         einsp_kwh = data.get("einspeisung_kwh")
         if ev_kwh:
             # N-607 (A-2): die Zeile ist ein Teil der Eigenverbrauchs-Ersparnis (T-Konto/Tabelle schneiden sie dort
@@ -110,8 +132,9 @@ def _baue_investition_financial(
             _p = ev_p if ev_p is not None else netz_p
             inv_ersparnis = round(ev_kwh * _p / 100, 2)
             inv_label = "Eigenverbrauch-Ersparnis"
-            inv_formel = ("BKW-Eigenverbrauch × Ø-Preis der vermiedenen Stunden" if ev_p is not None and ev_p != netz_p
-                          else "BKW-Eigenverbrauch × Netzbezugspreis")
+            _ev_name = "BKW-Eigenverbrauch" if _anteil.quelle == "gemessen" else "BKW-Anteil am Eigenverbrauch"
+            inv_formel = (f"{_ev_name} × Ø-Preis der vermiedenen Stunden" if ev_p is not None and ev_p != netz_p
+                          else f"{_ev_name} × Netzbezugspreis")
             inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(_p, 2)} ct/kWh"
         if einsp_kwh and einsp_kwh > 0:
             inv_erloes = round(einsp_kwh * einsp_p / 100, 2)

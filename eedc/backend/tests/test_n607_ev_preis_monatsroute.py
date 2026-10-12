@@ -118,5 +118,8 @@ async def test_n607_bkw_zeile_im_t_konto_traegt_den_ev_preis(db):
     m = await get_aktueller_monat(anlage_id=aid, jahr=2025, monat=7, db=db)
     zeile = next(z for z in m.investitionen_financials if z.typ == "balkonkraftwerk")
     assert m.ev_preis_cent == pytest.approx(10.0)
-    assert zeile.ersparnis_euro == pytest.approx(5.0), "50 kWh × 10 ct — mit dem Bezugs-Ø wären es 20,00 €"
+    # N-724 (12.10.2026): die Menge ist der Anteil des BKW an der Hausbilanz (wie im BKW-Hub), nicht mehr die ganze
+    # Erzeugung — EV 1 050 − 600 = 450, Anteil 450 × 50/1 050 = 21,43 kWh. Geprüft wird hier weiter der PREIS.
+    assert zeile.ersparnis_euro == pytest.approx(450.0 * 50.0 / 1050.0 * 0.10, abs=0.01), (
+        "21,43 kWh × 10 ct — mit dem Bezugs-Ø wären es 8,57 €")
     assert "vermiedenen Stunden" in (zeile.formel or "")

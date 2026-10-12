@@ -26,14 +26,12 @@ from backend.services.eauto_wirtschaftlichkeit import (
     ART_REST,
     ART_SCHAETZUNG,
     QUELLE_NULL,
-    attribute_emob_pool_by_km,
     berechne_eauto_ersparnis_periode,
-    compute_emob_pool_attribution,
     dienstliche_ladung_der_zeile,
     eigener_verbrauch_l_100km,
+    emob_extern_im_monat,
     emob_heimladung_im_monat,
     monate_des_autos,
-    waehle_extern_paar,
 )
 from backend.core.wirtschaftlichkeit_defaults import EXTERNE_LADUNG_DEFAULT_EURO_KWH
 from backend.services.emob_kontext import lade_emob_kontext
@@ -100,7 +98,7 @@ async def get_eauto_dashboard(
     Zwei Wirkungen, bewusst getrennt:
 
     1. **Der Pool wird privat gebildet.** Ein Dienstwagen und eine dienstliche
-       Wallbox gehen nicht mehr in ``compute_emob_pool_attribution`` ein — sonst
+       Wallbox gehen nicht mehr in den Topf ein (seit N-728 der Kontext ``lade_emob_kontext``) — sonst
        zieht ihre Ladung die km-anteilige Attribution der privaten Fahrzeuge
        nach oben. Das ist derselbe Schnitt, den die Monats-Fakten-Schicht
        macht (``EmobFakten``: gefiltert, aber als ``dienstlich_*`` getrennt
@@ -158,11 +156,9 @@ async def get_eauto_dashboard(
     for md in all_monatsdaten:
         md_by_inv.setdefault(md.investition_id, []).append(md)
 
-    # F-7: der Pool ist eine PRIVATE Größe. Ein dienstlich geladenes Fahrzeug
-    # gehört nicht hinein — sonst verteilt `attribute_emob_pool_by_km` seine
-    # Ladung anteilig auf die privaten Fahrzeuge und überhöht deren Ersparnis.
-    private_eautos = [e for e in eautos if not ist_dienstlich(e)]
-    private_wallboxen = [w for w in wallboxen if not ist_dienstlich(w)]
+    # F-7: der Pool ist eine PRIVATE Größe. Ein dienstlich geladenes Fahrzeug gehört nicht hinein — sonst verteilt
+    # der km-Anteil seine Ladung auf die privaten Fahrzeuge und überhöht deren Ersparnis. Seit N-728 trägt das der
+    # Kontext unten allein (`lade_emob_kontext` baut den Topf aus den privaten Zeilen).
 
     # F-16 + N-555: der Kontext der einen Funktion (`services/emob_kontext.py`) — die
     # Zeilen mit abgeleitetem PV-Anteil (Phase 5, je Zeile), der Entscheid je Monat mit
@@ -185,21 +181,12 @@ async def get_eauto_dashboard(
             (inv.id, md.jahr, md.monat), md.verbrauch_daten or {}
         )
 
-    # Nur noch für die EXTERNE Ladung (F-5, Topf-Regel `waehle_extern_paar`): der
-    # km-Anteil am Extern der Wallbox-Zeilen. Die Heimladung verteilt seit N-555 Stufe 2
-    # die eine Funktion je Monat (`entscheid.je_auto`).
-    pool_attr = compute_emob_pool_attribution(
-        eauto_imd_data=[
-            _emob_daten_von(e, md)
-            for e in private_eautos for md in md_by_inv.get(e.id, [])
-            if e.ist_aktiv_im_monat(md.jahr, md.monat)
-        ],
-        wallbox_imd_data=[
-            _emob_daten_von(w, md)
-            for w in private_wallboxen for md in md_by_inv.get(w.id, [])
-            if w.ist_aktiv_im_monat(md.jahr, md.monat)
-        ],
-    )
+    # ⭐ N-728 (12.10.2026): die EXTERNE Ladung je Monat über `emob_extern_im_monat` (Topf-Regel
+    # `waehle_extern_paar` mit dem km-Anteil des Monats am Extern der Wallbox-Zeilen) — dieselbe Funktion wie
+    # HA-Export und Aussichten. Bis dahin stand hier ein Pool über den GANZEN Zeitraum
+    # (`compute_emob_pool_attribution`), aus dem der Kopf das Paar EINMAL wählte, während Verlauf, Tabelle und
+    # Jahresvergleich das rohe `ladung_extern_kwh` der Zeilen des Autos lasen (Kopf 0 gegen Σ Reihe 80, Altbestand an
+    # der Wallbox 40 gegen 0). Jetzt trägt jede Zeile das gewählte Paar, und der Kopf ist ihre Summe.
 
     # #260 (NongJoWo): Benzinpreis pro Monat aus Anlage.monatsdaten (EU
     # Weekly Oil Bulletin, seit v3.17.0) — vorher zog dieses Dashboard nur
@@ -261,6 +248,8 @@ async def get_eauto_dashboard(
         # N-634: die Regel-3-Menge des Dienstwagens je Monat — dieselbe Zahl, die die Kachel
         # unten summiert, trägt auch seine Tabellenzeile (``(pv, netz, gemessen)``).
         dienst_je_monat: dict[tuple[int, int], tuple[float, float, bool]] = {}
+        # N-728: das Extern-Paar ``(kWh, €)`` je Monat — Kopf und Zeilen lesen es von hier.
+        extern_je_monat: dict[tuple[int, int], tuple[float, float]] = {}
         for md in monatsdaten:
             # F-16: mit abgeleitetem PV-Anteil, wo keiner gepflegt ist.
             d = _emob_daten_von(eauto, md)
@@ -297,12 +286,20 @@ async def get_eauto_dashboard(
                 netz_pro_monat[(md.jahr, md.monat)] = netz
             if pv and not dienstlich:
                 pv_pro_monat[(md.jahr, md.monat)] = pv_pro_monat.get((md.jahr, md.monat), 0.0) + pv
-            gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
-            gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
+            # N-728: das Extern-Paar DIESES Monats — ein Dienstwagen schöpft nicht aus dem privaten Topf (F-7) und
+            # behält seine Zeile.
+            if dienstlich:
+                ext_kwh = float(d.get('ladung_extern_kwh', 0) or 0)
+                ext_eur = float(d.get('ladung_extern_euro', 0) or 0)
+            else:
+                ext_kwh, ext_eur = emob_extern_im_monat(emob_ctx, km_this, md.jahr, md.monat, d)
+            extern_je_monat[(md.jahr, md.monat)] = (ext_kwh, ext_eur)
+            gesamt_extern_ladung += ext_kwh
+            gesamt_extern_kosten += ext_eur
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
             effizienz_monate.append(eauto_effizienz_100km(
                 d.get('verbrauch_kwh', 0) or 0,
-                pv + netz + (d.get('ladung_extern_kwh', 0) or 0),
+                pv + netz + ext_kwh,
                 km_this,
             ))
 
@@ -329,15 +326,7 @@ async def get_eauto_dashboard(
                 if pv:
                     pv_pro_monat[(_j, _m)] = pv_pro_monat.get((_j, _m), 0.0) + pv
 
-        # N-555 F-5: Extern nach der Topf-Regel — das Paar mit den höheren Kosten aus
-        # dem km-Anteil am Extern der Wallbox-Zeilen und den eigenen Zeilen des Autos.
-        # F-7: ein Dienstwagen schöpft nicht aus dem privaten Topf.
-        share = attribute_emob_pool_by_km(pool_attr, 0 if dienstlich else gesamt_km)
-        if not dienstlich and pool_attr.use_wb_pool and share.netz_kwh + share.pv_kwh > 0:
-            gesamt_extern_ladung, gesamt_extern_kosten = waehle_extern_paar(
-                share.extern_kwh, share.extern_euro,
-                gesamt_extern_ladung, gesamt_extern_kosten,
-            )
+        # N-555 F-5 / N-728: Extern nach der Topf-Regel steht oben je Monat (`extern_je_monat`) — Σ = Kopf.
 
         # ADR-002/P8: Tarif über die Monate der Periode mitteln — gewichtet mit der
         # Netzladung DIESES Autos je Monat (F-18). Seit N-555 Stufe 2 ist das seine
@@ -537,6 +526,12 @@ async def get_eauto_dashboard(
             # F-16: dieselbe Zeile wie die Kacheln oben — die Tabelle zeigt die
             # PV-/Netz-Spalten, sie darf nicht ungeteilt daneben stehen.
             d = dict(_emob_daten_von(eauto, md))
+            # N-728: die Zeile trägt das Extern-Paar, das der Kopf summiert (nicht das rohe Feld des Autos).
+            # Eine Zeile ohne Extern-Feld und ohne Extern-Paar bleibt ohne Feld (keine erfundene 0, P4).
+            _ext = extern_je_monat.get((md.jahr, md.monat))
+            if _ext is not None and (_ext[0] or _ext[1] or 'ladung_extern_kwh' in d or 'ladung_extern_euro' in d):
+                d['ladung_extern_kwh'] = round(_ext[0], 2)
+                d['ladung_extern_euro'] = round(_ext[1], 2)
             if not dienstlich:
                 # N-555: die Zeile zeigt, was der Entscheid des Monats DIESEM Auto gibt
                 # (`je_auto`) — seine Messung, sein Anteil am Rest der Wallbox, die

@@ -511,6 +511,44 @@ async def _distribute_legacy_battery_to_storages(
     return warnungen
 
 
+async def _speicher_nullen_verteilen(
+    db: AsyncSession,
+    batterie_ladung: Optional[float],
+    batterie_entladung: Optional[float],
+    speicher: list[Investition],
+    jahr: int,
+    monat: int,
+    ueberschreiben: bool,
+    *,
+    source: str,
+    writer: str,
+    on_upsert: Optional[Callable[[UpsertResult], None]] = None,
+) -> bool:
+    """N-722: eine gelieferte Speicher-0 ist ein Messwert (Regel N-707/N-711/N-718) — jeder Speicher bekommt sie.
+
+    Der Verteiler darüber schreibt je Seite nur ``> 0`` (seine Aufrufer reichen ``wert or 0`` durch, eine 0 und eine
+    leere Zelle sind dort nicht zu unterscheiden). Diese Funktion schreibt die Seite, die als **0** geliefert wurde,
+    exakt und ohne ``abgeleitet``-Marke (eine 0 ist kein Kapazitätsanteil); ``None`` (Spalte fehlt/leer) bleibt leer.
+    Bis 12.10.2026 standen Custom- und CSV-Import (Alt-Spalten) mit Ladung 50 / Entladung 0 als «Entladung nicht
+    erfasst» im Daten-Checker und «—» im Speicher-Hub; der Portal-Import gleicht dasselbe seit N-718 mit
+    ``data_import._speicher_nullen`` aus. ``True``, wenn etwas geschrieben wurde.
+    """
+    vd = {
+        feld: 0.0
+        for feld, wert in (("ladung_kwh", batterie_ladung), ("entladung_kwh", batterie_entladung))
+        if wert is not None and wert == 0
+    }
+    if not vd or not speicher:
+        return False
+    for inv in speicher:
+        res = await _upsert_investition_monatsdaten(
+            db, inv.id, jahr, monat, dict(vd), ueberschreiben, source=source, writer=writer,
+        )
+        if on_upsert is not None:
+            on_upsert(res)
+    return True
+
+
 async def _import_investition_monatsdaten_legacy(
     db: AsyncSession,
     row: dict,

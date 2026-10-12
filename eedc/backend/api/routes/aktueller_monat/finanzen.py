@@ -33,6 +33,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
 )
 from backend.services.emob_kontext import lade_emob_kontext
 from backend.services.monats_fakten import SonstigesFakten
+from backend.core.berechnungen import abgetretene_bkw_ids
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -369,6 +370,11 @@ async def t_konto_je_investition(*, monats_fakt=None, _zt_cache, allgemein_tarif
             eauto_je_inv={}, wallbox_zeilen=[],
         )
 
+        # N-724: die Balkonkraftwerke rechnen über dieselbe Stelle wie *Komponenten → Balkonkraftwerk*
+        # (`bkw_beitrag_im_monat`, im Builder) — Abtretung an Modul-Kinder (ADR-002/P11) über die im Monat aktiven
+        # Investitionen, wie der Hub.
+        _abgetreten = abgetretene_bkw_ids([i for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)])
+
         for inv in investitionen:
             # Anschaffungs-/Stilllegungsdatum begrenzen die Zeile
             # ([[feedback_anschaffungsdatum_grenze]]). Ohne diesen Filter trug
@@ -408,6 +414,8 @@ async def t_konto_je_investition(*, monats_fakt=None, _zt_cache, allgemein_tarif
                     monats_fakt.wp.je_geraet.get(inv.id)
                     if monats_fakt is not None and inv.typ == "waermepumpe" else None
                 ),
+                monats_fakt=monats_fakt if inv.typ == "balkonkraftwerk" else None,
+                bkw_abgetreten=inv.id in _abgetreten,
             )
             if detail is not None:
                 investitionen_financials.append(detail)

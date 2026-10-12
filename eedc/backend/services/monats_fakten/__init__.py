@@ -112,6 +112,11 @@ from backend.services.monats_fakten.ableitungen import (  # noqa: F401 — Re-Ex
     pv_erzeugungs_monate,
     pv_unvollstaendig_monate,
     pv_unvollstaendig_hinweis,
+    BKW_ERZEUGUNG_ABGETRETEN,
+    BKW_ERZEUGUNG_GEMESSEN,
+    BKW_ERZEUGUNG_KWP_ANTEIL,
+    BkwMonatsBeitrag,
+    bkw_beitrag_im_monat,
 )
 
 __all__ = [
@@ -151,4 +156,9 @@ __all__ = [
     "pv_erzeugungs_monate",
     "pv_unvollstaendig_monate",
     "pv_unvollstaendig_hinweis",
+    "BKW_ERZEUGUNG_ABGETRETEN",
+    "BKW_ERZEUGUNG_GEMESSEN",
+    "BKW_ERZEUGUNG_KWP_ANTEIL",
+    "BkwMonatsBeitrag",
+    "bkw_beitrag_im_monat",
 ]

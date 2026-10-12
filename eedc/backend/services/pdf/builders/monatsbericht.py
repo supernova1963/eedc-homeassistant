@@ -288,9 +288,12 @@ def _abschnitte_energie(d: Any) -> list[Abschnitt]:
                      for lab, v, farbe in gemessen] if summe > 0 else None),
         ))
 
+    # Handgriff Nr. 35/46 (12.10.2026): das Balkonkraftwerk steckt in der PV-Erzeugung — die Liste nennt es mit
+    # (wie Cockpit → Monat/Jahr, `frontend/src/v4/bilanzParkIds.ts::pvErzeugerNamen`).
     pv_geraete = [
         *(d.komponenten_geraete or {}).get("pv-module", []),
         *(d.komponenten_geraete or {}).get("wechselrichter", []),
+        *(d.komponenten_geraete or {}).get("balkonkraftwerk", []),
     ]
     if len(pv_geraete) >= 2:
         # EINE Zeile statt einer Zeile je Gerät: Gerätenamen sind kein Wert, und
