@@ -36,7 +36,7 @@ import { FokusKachel, FokusVollbild } from '../components/blocks'
 import { FokusFehltOverlay } from '../components/blocks/FokusFehlt'
 import { EinbettenKnopf } from '../components/blocks/EinbettenKnopf'
 import { useDeepLinkFokus } from '../hooks/useDeepLinkFokus'
-import { ChartDatenTabelle } from '../components/ui'
+import { Alert, ChartDatenTabelle } from '../components/ui'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { AnlageLeer } from './OnboardingLeer'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
@@ -573,6 +573,14 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
                 <TagesverlaufChart serien={tagesverlauf!.serien} punkte={tagesverlauf!.punkte} uebersprungen={tagesverlauf!.uebersprungen} />
               </FokusKachel>
             </Parkbar>
+          )}
+          {/* Handgriff Triage-4 §3: ohne Kurve fehlte der Block wortlos — die Kurve liest nur die Leistungs-
+              Zuordnung (HA, `live`-Eintrag); eine reine MQTT-Inbound-Anlage erreicht sie nie. Nur nach geladener
+              Antwort und nicht, wenn der Anwender den Block geparkt hat. */}
+          {!hatTagesverlauf && tagesverlauf && !park.istGeparkt('live:tagesverlauf') && (
+            <Alert type="info">
+              Tagesverlauf: braucht eine Leistungs-Zuordnung unter Datenquellen (Home Assistant); mit MQTT-Inbound keine Kurve.
+            </Alert>
           )}
         </div>
         )

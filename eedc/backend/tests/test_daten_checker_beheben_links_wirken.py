@@ -148,3 +148,59 @@ def test_der_helfer_baut_einen_wirksamen_deep_link():
     # ist immer noch besser als einer, der nichts tut.
     for murks in ("", "Mai 2026", "2026-05", None):
         assert link_monat_erfassen(murks) == LINK_MONATSDATEN
+
+
+# ── N-739 (a): `/monatsabschluss/…` öffnet den Monat nicht ──────────────────────────────────────────────────────
+#
+# Der v4-Router fängt die Alt-Route `monatsabschluss/*` mit einem `<Navigate>` auf die Daten-Fläche — ohne
+# `?erfassen=` (`App.tsx`). Ein Checker-Link dorthin landet also auf der Seite, auf der der Checker steht, und der
+# Monat öffnet sich nicht. Der N-734-ERROR «nicht erfasst» und die übrigen Monats-Prüfungen setzten ihn über die
+# Variable `md_link` — die `link=f"…"`-Erhebung oben sieht Variablen nicht, deshalb hier jedes Literal.
+APP_TSX = BACKEND.parent / "frontend" / "src" / "App.tsx"
+
+
+def _monatsabschluss_leitet_auf_die_daten_flaeche() -> bool:
+    quelle = APP_TSX.read_text(encoding="utf-8")
+    treffer = re.search(r'path="monatsabschluss/\*"\s+element=\{<Navigate to="([^"]+)"', quelle)
+    assert treffer, f"Splat-Fänger `monatsabschluss/*` in {APP_TSX.name} nicht gefunden — Format geändert?"
+    pfad, _, query = treffer.group(1).lstrip("/").partition("?")
+    return pfad == f"einstellungen/{EIGENE_KATEGORIE}" and not any(p in query for p in WIRKSAME_PARAMETER)
+
+
+def test_kein_checker_link_auf_den_alten_monatsabschluss():
+    """Kein Literal `/monatsabschluss/…` in den Checker-Quellen, solange der Router es ohne Query umleitet."""
+    if not _monatsabschluss_leitet_auf_die_daten_flaeche():
+        pytest.skip("`monatsabschluss/*` leitet nicht mehr auf die Daten-Fläche ohne Query — Regel neu prüfen")
+    tot = [
+        f"{datei.relative_to(CHECKER_DIR)}:{nr}  {zeile.strip()[:100]}"
+        for datei in _checker_quellen()
+        for nr, zeile in enumerate(datei.read_text(encoding="utf-8").splitlines(), start=1)
+        if re.search(r'f?"/monatsabschluss/', zeile)
+    ]
+    assert not tot, (
+        "Diese Checker-Links öffnen den Monat nicht (Umleitung auf /einstellungen/daten ohne `?erfassen=`):\n  "
+        + "\n  ".join(tot) + "\n\nStatt dessen: link_monat_erfassen(\"MM/YYYY\") aus `daten_checker/kategorien.py`."
+    )
+
+
+async def test_n734_fehler_verlinken_die_erfassung_des_monats(db):
+    """Der ERROR «… nicht erfasst» trägt den Deep-Link `?erfassen=JJJJ-MM` (N-739 a)."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from backend.models import Anlage, Investition, Monatsdaten
+    from backend.services.daten_checker import DatenChecker
+    from backend.tests.test_n734_netzfeld_ohne_herkunft import J, M, _anlage, _import
+
+    a = await _anlage(db)
+    await _import(db, a.id, wallbox_ladung_kwh=150.0)
+    anlage = (await db.execute(
+        select(Anlage).options(selectinload(Anlage.investitionen).selectinload(Investition.monatsdaten))
+        .where(Anlage.id == a.id)
+    )).scalar_one()
+    mds = list((await db.execute(select(Monatsdaten).where(Monatsdaten.anlage_id == a.id))).scalars().all())
+    erg = await DatenChecker(db)._check_monatsdaten_plausibilitaet(anlage, mds)
+    netz = [e for e in erg if "nicht erfasst" in e.meldung]
+
+    assert len(netz) == 2
+    assert {e.link for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}"}

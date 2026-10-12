@@ -39,7 +39,7 @@ from urllib.parse import quote
 
 import httpx
 
-from backend.services.import_parsers.base import ParsedMonthData
+from backend.services.import_parsers.base import ParsedMonthData, monat_hat_wert_ueber_null
 
 from .base import (
     CloudImportProvider,
@@ -144,6 +144,22 @@ def _round(value: Optional[float]) -> Optional[float]:
     if value is None:
         return None
     return round(value, 2)
+
+
+def _erste_zahl(entry: dict, *schluessel: str) -> Optional[float]:
+    """Erster Schlüssel mit einer Zahl — auch 0 (N-737: `a or b` verwarf eine gelieferte 0)."""
+    for key in schluessel:
+        wert = entry.get(key)
+        if isinstance(wert, (int, float)):
+            return wert
+    return None
+
+
+def _kwh(totals: dict, key: str) -> Optional[float]:
+    """Monatssumme in kWh, sobald ein Tag das Feld geliefert hat — auch 0 (N-737); sonst None."""
+    if key not in totals:
+        return None
+    return _round(totals[key] / 1000)
 
 
 @register_provider
@@ -388,42 +404,44 @@ class ViessmannGridBoxProvider(CloudImportProvider):
                 continue
 
             # PV-Erzeugung
-            pv = entry.get("photovoltaic") or entry.get("production")
-            if pv is not None and isinstance(pv, (int, float)):
+            pv = _erste_zahl(entry, "photovoltaic", "production")
+            if pv is not None:
                 totals["pv"] += abs(pv)
 
             # Eigenverbrauch
-            sc = entry.get("selfConsumption") or entry.get("directConsumption")
-            if sc is not None and isinstance(sc, (int, float)):
+            sc = _erste_zahl(entry, "selfConsumption", "directConsumption")
+            if sc is not None:
                 totals["eigenverbrauch"] += abs(sc)
 
             # Grid: positiv = Bezug, negativ = Einspeisung (oder umgekehrt)
             grid = entry.get("grid")
             if grid is not None and isinstance(grid, (int, float)):
-                if grid > 0:
-                    totals["netzbezug"] += grid
-                else:
-                    totals["einspeisung"] += abs(grid)
+                # N-737: ein gelieferter Netto-Wert misst beide Richtungen — die
+                # Gegenrichtung trägt an diesem Tag 0, nicht «fehlt».
+                totals["netzbezug"] += max(grid, 0)
+                totals["einspeisung"] += abs(min(grid, 0))
 
             # Alternative: separate Felder für Einspeisung/Bezug
-            feed_in = entry.get("gridFeedIn") or entry.get("feedIn")
-            if feed_in is not None and isinstance(feed_in, (int, float)):
+            feed_in = _erste_zahl(entry, "gridFeedIn", "feedIn")
+            if feed_in is not None:
                 totals["einspeisung"] += abs(feed_in)
 
-            grid_purchase = entry.get("gridPurchase") or entry.get("purchase")
-            if grid_purchase is not None and isinstance(grid_purchase, (int, float)):
+            grid_purchase = _erste_zahl(entry, "gridPurchase", "purchase")
+            if grid_purchase is not None:
                 totals["netzbezug"] += abs(grid_purchase)
 
             # Batterie
-            bat_charge = entry.get("batteryCharge") or entry.get("charge")
-            if bat_charge is not None and isinstance(bat_charge, (int, float)):
+            bat_charge = _erste_zahl(entry, "batteryCharge", "charge")
+            if bat_charge is not None:
                 totals["bat_ladung"] += abs(bat_charge)
 
-            bat_discharge = entry.get("batteryDischarge") or entry.get("discharge")
-            if bat_discharge is not None and isinstance(bat_discharge, (int, float)):
+            bat_discharge = _erste_zahl(entry, "batteryDischarge", "discharge")
+            if bat_discharge is not None:
                 totals["bat_entladung"] += abs(bat_discharge)
 
-        if not totals:
+        # N-737: ein Monat erscheint nur mit einem Wert > 0 (wie die Portal-Parser,
+        # N-714); innerhalb des Monats ist eine gelieferte 0 ein Wert.
+        if not monat_hat_wert_ueber_null(totals):
             return None
 
         # Werte: Die API liefert bei resolution=1d bereits Wh-Werte,
@@ -431,10 +449,10 @@ class ViessmannGridBoxProvider(CloudImportProvider):
         return ParsedMonthData(
             jahr=year,
             monat=month,
-            pv_erzeugung_kwh=_round(totals.get("pv", 0) / 1000) or None,
-            einspeisung_kwh=_round(totals.get("einspeisung", 0) / 1000) or None,
-            netzbezug_kwh=_round(totals.get("netzbezug", 0) / 1000) or None,
-            eigenverbrauch_kwh=_round(totals.get("eigenverbrauch", 0) / 1000) or None,
-            batterie_ladung_kwh=_round(totals.get("bat_ladung", 0) / 1000) or None,
-            batterie_entladung_kwh=_round(totals.get("bat_entladung", 0) / 1000) or None,
+            pv_erzeugung_kwh=_kwh(totals, "pv"),
+            einspeisung_kwh=_kwh(totals, "einspeisung"),
+            netzbezug_kwh=_kwh(totals, "netzbezug"),
+            eigenverbrauch_kwh=_kwh(totals, "eigenverbrauch"),
+            batterie_ladung_kwh=_kwh(totals, "bat_ladung"),
+            batterie_entladung_kwh=_kwh(totals, "bat_entladung"),
         )

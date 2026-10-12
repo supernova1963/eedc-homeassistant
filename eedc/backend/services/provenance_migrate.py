@@ -152,3 +152,66 @@ async def migrate_3d_p3_initial_provenance_legacy_unknown(
         )
 
     return counts
+
+
+#: Writer des Monatsabschluss-Assistenten (`api/routes/monatsabschluss/wizard.py::_WIZARD_WRITER`, seit `e527bfe8`).
+_WIZARD_WRITER = "monatsabschluss_wizard"
+_NETZFELDER = ("einspeisung_kwh", "netzbezug_kwh")
+
+
+async def migrate_n738_formular_neuanlage_nachstempeln(session: AsyncSession) -> dict[str, int]:
+    """N-738: Formular-Neuanlagen seit 09.05.2026 bekommen ihren verlorenen `manual:form`-Stempel der Netzfelder.
+
+    Bis N-735 verwarf `create_monatsdaten` die geseedete Provenance (`refresh` ohne `flush`, seit `e527bfe8`): solche
+    Zeilen stehen mit `datenquelle IS NULL` und ohne Eintrag für Einspeisung/Netzbezug da — ohne Stufe-1-Schutz, und
+    eine eingetragene 0 gilt seit N-734 als «nicht erfasst». Das Formular verlangt beide Netzfelder (`MonatsdatenBase`),
+    der Wert in der Zeile ist also der gesendete. Jeder Import-Weg setzt `datenquelle`; Altzeilen vor der 3d-Migration
+    tragen `legacy:unknown`.
+
+    ⚠ Ausgenommen sind Zeilen des alten Monatsabschluss-Assistenten (v3-Client 09.05.–23.07.2026, Route ohne Client seit
+    v4.0.0): er legt Zeilen ebenfalls mit `datenquelle IS NULL` an, liefert ein leer gelassenes Netzfeld aber nicht und
+    stempelt jedes Feld, das er liefert. Eine 0 ohne Eintrag ist dort nicht geliefert — erkennbar an einem Eintrag des
+    Writers `monatsabschluss_wizard`; der Daten-Checker nennt den Monat weiter.
+
+    Je fehlendem Netzfeld ein `seed_provenance` (kein Audit-Log), Batch-Commit, intern idempotent (ein gestempeltes Feld
+    hat danach einen Eintrag). Registriert über `_apply_once("n735_formular_neuanlage_nachstempeln", …)`.
+    """
+    from backend.models.monatsdaten import Monatsdaten
+    from backend.services.provenance import seed_provenance
+
+    counts = {"zeilen": 0, "felder": 0, "wizard_ausgenommen": 0}
+    batch_size = 1000
+    letzte_id = 0
+    while True:
+        batch = list((await session.execute(
+            select(Monatsdaten)
+            .where(Monatsdaten.datenquelle.is_(None), Monatsdaten.id > letzte_id)
+            .order_by(Monatsdaten.id).limit(batch_size)
+        )).scalars().all())
+        if not batch:
+            break
+        letzte_id = batch[-1].id
+        geaendert = False
+        for md in batch:
+            prov = md.source_provenance or {}
+            fehlend = [f for f in _NETZFELDER if f not in prov]
+            if not fehlend:
+                continue
+            if any(isinstance(e, dict) and e.get("writer") == _WIZARD_WRITER for e in prov.values()):
+                counts["wizard_ausgenommen"] += 1
+                continue
+            for feld in fehlend:
+                seed_provenance(md, source="manual:form", writer="n735_nachstempel", fields=[feld])
+            counts["zeilen"] += 1
+            counts["felder"] += len(fehlend)
+            geaendert = True
+        if geaendert:
+            await session.commit()
+        if len(batch) < batch_size:
+            break
+
+    logger.info(
+        "N-738 Formular-Neuanlagen nachgestempelt: %d Zeilen, %d Netzfelder (Monatsabschluss-Assistent ausgenommen: %d)",
+        counts["zeilen"], counts["felder"], counts["wizard_ausgenommen"],
+    )
+    return counts

@@ -93,8 +93,9 @@ async def test_fehlender_monat_ist_ein_fehler(db):
     assert fehlend, "ab 02/2024 muessen Monate fehlen"
     assert all(e.schwere == CheckSeverity.ERROR for e in fehlend), \
         [(e.meldung, e.schwere) for e in fehlend]
-    # P-6: jede Meldung nennt den aufloesenden Schritt.
-    assert all(e.link and "/monatsabschluss/" in e.link for e in fehlend)
+    # P-6: jede Meldung nennt den aufloesenden Schritt — die Erfassung genau dieses Monats
+    # (N-739 a: `/monatsabschluss/…` leitete im v4-Frontend ohne `?erfassen=` um, der Monat öffnete sich nicht).
+    assert all(e.link and "/einstellungen/daten?erfassen=" in e.link for e in fehlend)
 
 
 async def test_sammelzeile_ab_dem_13_fehlenden_monat_ist_ebenfalls_fehler(db):

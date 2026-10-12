@@ -72,9 +72,10 @@ def _netzfelder_nicht_erfasst(
 ) -> list[CheckErgebnis]:
     """Prüfung 0 der Plausibilität: ERROR je Netzfeld ohne erfassten Wert (N-734, ``netzfeld_ist_erfasst``)."""
     ergebnisse: list[CheckErgebnis] = []
-    for erfasst, feld, folge in (
-        (einspeisung_erfasst, "Einspeisung", "Eigenverbrauch und Autarkie"),
-        (netzbezug_erfasst, "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten"),
+    for erfasst, feld, folge, mit_null in (
+        (einspeisung_erfasst, "Einspeisung", "Eigenverbrauch und Autarkie",
+         "die ganze PV-Erzeugung zählt dort als Eigenverbrauch"),
+        (netzbezug_erfasst, "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten", "Autarkie 100 %"),
     ):
         if erfasst:
             continue
@@ -86,8 +87,13 @@ def _netzfelder_nicht_erfasst(
                 f"Für diesen Monat steht keiner in der Monatszeile (etwa nach einem Import, der nur "
                 f"Wallbox- oder PV-Werte enthielt). Cockpit → Monat nimmt ihn dann aus der HA-Statistik, "
                 f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats leer. "
-                f"Abhilfe: den Monatsabschluss öffnen, den Wert eintragen (bzw. prüfen) und speichern "
-                f"— oder ihn über den HA-Statistik-Import holen."
+                # N-739 (c): dieser Satz gilt, solange N-736 offen ist (Monats-Fakten tragen die Default-0 weiter).
+                f"Übersicht, Jahresbericht, HA-Sensoren, Community-Upload und Auswertungen → Tabelle rechnen "
+                f"bis dahin mit 0 ({mit_null}). "
+                # N-739 (c): zuerst der Weg, der den Messwert holt — der Monatsabschluss zeigt das Feld leer.
+                f"Abhilfe: zuerst den HA-Statistik-Import für diesen Monat (ohne „Überschreiben“ genügt, "
+                f"solange der Monat so gemeldet ist); sonst im Monatsabschluss den gemessenen Wert eintragen "
+                f"— ein leeres Feld ist keine 0."
             ),
             link=md_link,
         ))
@@ -478,7 +484,8 @@ class MonatsdatenChecks:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{monat:02d}/{jahr} fehlt",
-                    link=f"/monatsabschluss/{anlage.id}/{jahr}/{monat}",
+                    # N-739 (a): Deep-Link öffnet die Erfassung des fehlenden Monats (s. `md_link` unten).
+                    link=link_monat_erfassen(f"{monat:02d}/{jahr}"),
                 ))
             if len(fehlende) > 12:
                 ergebnisse.append(CheckErgebnis(
@@ -610,7 +617,9 @@ class MonatsdatenChecks:
 
         for md in monatsdaten:
             prefix = f"{md.monat:02d}/{md.jahr}"
-            md_link = f"/monatsabschluss/{anlage.id}/{md.jahr}/{md.monat}"
+            # N-739 (a): `/monatsabschluss/…` leitet im v4-Frontend ohne `?erfassen=` auf die Daten-Fläche um
+            # (`App.tsx`, `v3ZuV4Route.ts`) — der Monat öffnete sich nicht; der Deep-Link öffnet seine Erfassung.
+            md_link = link_monat_erfassen(prefix)
 
             # PV-Erzeugung des Monats aus dem Read-time-SoT (Messwerte +
             # Aggregat-Lückenfüllung). `None` heißt „nicht auflösbar", nicht

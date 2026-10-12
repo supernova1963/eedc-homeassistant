@@ -366,7 +366,11 @@ class HoymilesSmilesProvider(CloudImportProvider):
         )
 
         # Einspeisung (falls Smart Meter angeschlossen)
-        feed_in = _safe_float(data.get("grid_eq") or data.get("feed_in_eq"))
+        # N-737: erster lesbarer Schlüssel — `a or b` verwarf eine gelieferte 0.
+        feed_in = next(
+            (v for v in (_safe_float(data.get(k)) for k in ("grid_eq", "feed_in_eq")) if v is not None),
+            None,
+        )
 
         # Eigenverbrauch (falls Smart Meter angeschlossen)
         self_use = _safe_float(data.get("self_eq") or data.get("self_consumption_eq"))

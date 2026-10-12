@@ -209,10 +209,12 @@ async def _lege_zaehlerzeile_an(db: AsyncSession, anlage_id: int, jahr: int, mon
     )
     db.add(md)
     await db.flush()
+    # N-740: gestempelt wird, was geliefert wurde (wie der Update-Zweig) — ein gewähltes Feld ohne Sensorwert
+    # bleibt DB-Default 0 ohne Herkunft, also «nicht erfasst» (N-734), statt als gemessene 0 zu gelten.
     fresh_fields = [
         f for f in ("einspeisung_kwh", "netzbezug_kwh")
-        if (f == "einspeisung_kwh" and basis.import_einspeisung)
-        or (f == "netzbezug_kwh" and basis.import_netzbezug)
+        if (f == "einspeisung_kwh" and basis.import_einspeisung and basis.einspeisung is not None)
+        or (f == "netzbezug_kwh" and basis.import_netzbezug and basis.netzbezug is not None)
     ] + (["pv_erzeugung_kwh"] if basis.pv_gesamt is not None else [])
     if fresh_fields:
         seed_provenance(

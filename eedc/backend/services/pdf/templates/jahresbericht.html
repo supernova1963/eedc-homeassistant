@@ -271,7 +271,8 @@
 <h2>Finanz-Übersicht</h2>
 <table>
   <tbody>
-    <tr><th style="width:45%">Investition gesamt</th><td>{{ fmt_eur(kpis.investition_gesamt_euro) }}</td></tr>
+    {# Handgriff Triage-4 §2: die Zeile sagt, welche Investitionen sie zählt (Builder `_bestand`: im Einzeljahr `aktiv_im_jahr`, im Gesamtzeitraum alle). #}
+    <tr><th style="width:45%">Investition gesamt<br><span class="muted">{% if ist_gesamtzeitraum %}Vollkosten aller Investitionen{% else %}Vollkosten der im Jahr aktiven Investitionen{% endif %}</span></th><td>{{ fmt_eur(kpis.investition_gesamt_euro) }}</td></tr>
     {# N-731: die Zeile nennt den Nenner der Rendite (Cockpit → Übersicht) und sagt, welche Investitionen er zählt. #}
     <tr><th>Investition Mehrkosten (vs. Alternative)<br><span class="muted">{% if ist_gesamtzeitraum %}alle Investitionen, auch stillgelegte{% else %}bis 31.12.{{ jahr }} angeschafft, auch vorher stillgelegte{% endif %} — Nenner der Rendite</span></th><td>{{ fmt_eur(kpis.investition_mehrkosten_euro) }}</td></tr>
     <tr><th>Einspeise-Erlös</th><td>{{ fmt_eur(kpis.einspeise_erloes_euro) }}</td></tr>

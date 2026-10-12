@@ -38,6 +38,7 @@ from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.cloud_import.quellen import lade_quellen
 from backend.services.ha_state_service import get_ha_state_service
+from backend.services.monats_fakten import NETZFELDER, netzfeld_ist_erfasst
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 from backend.services.provenance import (
     ABGELEITET_KAPAZITAET_ANTEIL,
@@ -771,6 +772,10 @@ async def baue_basis_feld(
     """
     feld = feld_config["feld"]
     aktueller_wert = getattr(ctx.monatsdaten, feld, None) if ctx.monatsdaten else None
+    # N-739 (b): eine Netz-0 ohne Herkunft ist nicht erfasst (N-734) — sie erscheint nicht als geliefert
+    # (`aktueller_wert`/`quelle` leer); das Formular belegt sie nicht mit 0 vor, die Vorschläge bleiben.
+    if feld in NETZFELDER and ctx.monatsdaten is not None and not netzfeld_ist_erfasst(ctx.monatsdaten, feld):
+        aktueller_wert = None
 
     # Mapping-Info - verwende mapping_key aus der Konfiguration
     mapping_key = feld_config.get("mapping_key", feld)

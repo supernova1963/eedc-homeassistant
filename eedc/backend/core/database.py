@@ -1201,6 +1201,15 @@ async def _run_data_migrations() -> None:
             migrate_3d_p3_initial_provenance_legacy_unknown,
         )
 
+        # N-738: Formular-Neuanlagen seit 09.05.2026 (N-735) bekommen ihren `manual:form`-Stempel der Netzfelder nach;
+        # Zeilen des alten Monatsabschluss-Assistenten bleiben unberührt. MUSS nach der Initial-Provenance laufen
+        # (sonst sähe sie Altzeilen ohne Stempel als Formularzeilen).
+        from backend.services.provenance_migrate import migrate_n738_formular_neuanlage_nachstempeln
+        await _apply_once(
+            "n735_formular_neuanlage_nachstempeln",
+            migrate_n738_formular_neuanlage_nachstempeln,
+        )
+
         # Etappe 4 (v3.31.0): reset vollbackfill_durchgefuehrt für Anlagen
         # mit HA-Integration, damit der nächste Monatsabschluss einen
         # Auto-Vollbackfill aus HA-LTS auslöst und alte Mix-Source-Aggregate

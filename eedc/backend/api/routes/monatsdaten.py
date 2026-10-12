@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
@@ -55,6 +55,7 @@ from backend.services.monats_fakten import (
     TAGESWERT_SPEICHER,
     finanz_zeile_eingabe,
     lade_monats_fakten,
+    netzfeld_ist_erfasst,
 )
 from backend.services.provenance import (
     gepruefte_ableitungen,
@@ -166,9 +167,23 @@ class MonatsdatenResponse(MonatsdatenBase):
     direktverbrauch_kwh: Optional[float]
     eigenverbrauch_kwh: Optional[float]
     gesamtverbrauch_kwh: Optional[float]
+    # N-739 (b): die Netzspalten sind NOT NULL — eine 0 ohne Herkunft ist nicht erfasst (N-734). Das Formular belegt
+    # das Feld dann leer statt mit 0 vor (ungeprüftes Speichern stempelte die 0 sonst als eingetragen).
+    # Nur aus der ORM-Zeile gesetzt; ohne sie (dict) bleibt `True` = Verhalten wie bisher.
+    einspeisung_erfasst: bool = True
+    netzbezug_erfasst: bool = True
 
     class Config:
         from_attributes = True
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _netzfelder_erfasst(cls, data, handler):
+        antwort = handler(data)
+        if isinstance(data, Monatsdaten):
+            antwort.einspeisung_erfasst = netzfeld_ist_erfasst(data, "einspeisung_kwh")
+            antwort.netzbezug_erfasst = netzfeld_ist_erfasst(data, "netzbezug_kwh")
+        return antwort
 
 
 class MonatsdatenMitKennzahlen(MonatsdatenResponse):

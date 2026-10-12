@@ -187,6 +187,9 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 - Ohne eigenen Sensor greift automatisch der **EPEX-Börsenpreis** (DE/AT via aWATTar-API) → Linie „Börsenpreis (EPEX)"; auch die frühen Morgenstunden vor dem ersten Sensor-Wert werden so aufgefüllt.
 - Ein Klick auf einen Legenden-Eintrag schaltet die jeweilige Serie ein oder aus.
 
+Das Diagramm braucht eine **Leistungs-Zuordnung** unter *Einstellungen → Datenquellen* (Home Assistant); mit MQTT-Inbound gibt
+es keine Kurve — dann steht an seiner Stelle ein Satz, der das sagt (die Tageswerte kommen weiter aus den Zählern).
+
 **Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
 auf einer durchgehenden Zeitachse:
 

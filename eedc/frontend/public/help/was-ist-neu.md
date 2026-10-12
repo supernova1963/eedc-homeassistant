@@ -141,7 +141,8 @@ dem Tag in Betrieb waren — eine später zugebaute Fläche mit anderer Ausricht
 davor nicht mehr.
 
 **Jahresbericht: eine Mehrkosten-Zahl:** Die Zeile „Investition Mehrkosten" nennt den Nenner der Rendite darunter und sagt,
-welche Investitionen er zählt.
+welche Investitionen er zählt; ebenso sagt „Investition gesamt" jetzt, dass sie die Vollkosten der im Jahr aktiven (im
+Gesamtzeitraum: aller) Investitionen zählt.
 
 **Kleinigkeiten:** „PV-Erzeugung aus" in *Cockpit → Monat/Jahr* und im Monatsbericht nennt auch das Balkonkraftwerk; am
 spezifischen Ertrag im PV-Hub steht „hochgerechnet aufs Jahr".
@@ -164,11 +165,13 @@ sonst Autarkie 99,1 % statt 67,6 % ohne Kommentar ([Bedienung → Monat](HANDBUC
 bei einer Wärmepumpe mit Betriebsart-Sensor ohne Leistungssensor dieselben Werte wie *Cockpit → Übersicht* — bisher nach
 einem HA-Statistik-Import 0; die Sensoren springen nach dem Update einmalig.
 
-**Monat ohne erfassten Netzbezug zeigt keine erfundene 0 mehr:** Hat ein Import eine Monatszeile ohne Netzbezug oder Einspeisung angelegt (etwa nur mit Wallbox-Daten), zeigte *Cockpit → Monat* bisher 0 kWh und Autarkie 100 % — und HA-Statistik und Tageswerte kamen nicht mehr zum Zug. Jetzt greifen sie wieder; ohne Quelle bleibt das Feld leer, und der Daten-Checker sagt „Netzbezug nicht erfasst" bzw. „Einspeisung nicht erfasst" samt Handgriff. Eine eingetragene oder importierte 0 bleibt eine 0. Hast du seit Mai 2026 einen Monat neu angelegt und dort 0 eingetragen, meldet der Checker ihn ebenfalls — einmal speichern genügt ([Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
+**Monat ohne erfassten Netzbezug zeigt keine erfundene 0 mehr:** Hat ein Import eine Monatszeile ohne Netzbezug oder Einspeisung angelegt (etwa nur mit Wallbox-Daten), zeigte *Cockpit → Monat* bisher 0 kWh und Autarkie 100 % — und HA-Statistik und Tageswerte kamen nicht mehr zum Zug. Jetzt greifen sie wieder; ohne Quelle bleibt das Feld leer, und der Daten-Checker sagt „Netzbezug nicht erfasst" bzw. „Einspeisung nicht erfasst" samt Handgriff — sein „Beheben"-Link öffnet jetzt den Monat (wie bei allen Monatsdaten-Meldungen), und dort steht das Feld leer statt mit 0; liegt ein Vorschlag aus der HA-Statistik vor, ist er schon eingesetzt. Eine eingetragene oder importierte 0 bleibt eine 0 — auch aus den Cloud-Importern von EcoFlow, Viessmann, Growatt und Hoymiles. Seit Mai 2026 im Formular neu angelegte Monate bekommen ihre Herkunft beim Update nachgetragen — eine dort eingetragene 0 bleibt eine 0, und ein HA-Statistik-Import mit „Überschreiben" ersetzt die Handwerte nicht mehr; Monate aus dem alten Monatsabschluss-Assistenten (Mai bis Juli 2026) mit leer gelassenem Feld nennt der Checker ([Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
 
-**Tagesverlauf nennt Geräte ohne Leistungssensor:** Unter der Überschrift des Tagesverlaufs in *Cockpit → Live* steht
+**Tagesverlauf nennt Geräte ohne Leistungssensor:** Zeigt *Cockpit → Live* den Tagesverlauf, steht unter seiner Überschrift
 jetzt „Nicht dargestellt (kein HA-Leistungssensor): …“ mit den Geräten, denen dafür ein Leistungssensor fehlt —
-der Hinweis war seit seiner Einführung nie angekommen ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+der Hinweis war seit seiner Einführung nie angekommen. Gibt es gar keine Kurve (keine Leistungs-Zuordnung unter
+*Datenquellen*, etwa mit MQTT-Inbound), fehlte der Block bisher wortlos; jetzt sagt ein Satz an seiner Stelle, warum
+([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
 ## v4.1.6 — 11. Oktober 2026
 

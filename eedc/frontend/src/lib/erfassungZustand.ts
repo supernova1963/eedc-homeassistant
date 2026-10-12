@@ -15,6 +15,7 @@
 
 import type { BehalteneAbweichung, FeldStatus, Vorschlag } from '../api/monatsabschluss'
 import type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
+import type { Monatsdaten } from '../types'
 export type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
 
 /** Quellen, die einen GEMESSENEN Wert markieren (Sensor/Import/Connector). */
@@ -231,6 +232,23 @@ export function ermittleZustand(
 export function prefillWert(feld: FeldStatus | undefined): number | null {
   const best = besterVorschlag(feld?.vorschlaege)
   return best ? best.wert : null
+}
+
+/**
+ * Vorbelegung eines Netzfelds (Einspeisung/Netzbezug) aus der gespeicherten Zeile (N-739 b).
+ *
+ * Die Spalten sind NOT NULL — eine 0 ohne Herkunft ist nicht erfasst (N-734, `*_erfasst === false`). Sie wird nicht
+ * als 0 vorbelegt, sondern leer: das Pflichtfeld verlangt eine bewusste Eingabe, der beste Vorschlag füllt es wie
+ * jedes leere Feld ({@link prefillWert}). Ohne Marke (ältere Antwort) gilt der gespeicherte Wert wie bisher.
+ */
+export function gespeicherterNetzwert(
+  monatsdaten: Pick<Monatsdaten, 'einspeisung_kwh' | 'netzbezug_kwh' | 'einspeisung_erfasst' | 'netzbezug_erfasst'> | null | undefined,
+  feld: 'einspeisung_kwh' | 'netzbezug_kwh',
+): string {
+  if (!monatsdaten) return ''
+  const erfasst = feld === 'einspeisung_kwh' ? monatsdaten.einspeisung_erfasst : monatsdaten.netzbezug_erfasst
+  if (erfasst === false) return ''
+  return monatsdaten[feld]?.toString() || ''
 }
 
 // ─── Rollup + Kopf-Ampel-Zählung (§6.2 / §6.7) ──────────────────────────────

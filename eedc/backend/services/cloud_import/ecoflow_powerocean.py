@@ -22,7 +22,11 @@ from typing import Optional
 
 import httpx
 
-from backend.services.import_parsers.base import ParsedMonthData
+from backend.services.import_parsers.base import (
+    ParsedMonthData,
+    monat_hat_wert_ueber_null,
+    monatswert,
+)
 
 from .base import (
     CloudImportProvider,
@@ -473,18 +477,20 @@ class EcoFlowPowerOceanProvider(CloudImportProvider):
                     f"fehlgeschlagen: {e}"
                 )
 
-        if not aggregated:
+        # N-737: ein Monat erscheint nur mit einem Wert > 0 (wie die Portal-Parser,
+        # N-714); innerhalb des Monats ist eine gelieferte 0 ein Wert, kein «fehlt».
+        if not monat_hat_wert_ueber_null(aggregated):
             return None, seen_names
 
         return ParsedMonthData(
             jahr=year,
             monat=month,
-            pv_erzeugung_kwh=round(aggregated.get("pv_erzeugung_kwh", 0), 2) or None,
-            einspeisung_kwh=round(aggregated.get("einspeisung_kwh", 0), 2) or None,
-            netzbezug_kwh=round(aggregated.get("netzbezug_kwh", 0), 2) or None,
-            batterie_ladung_kwh=round(aggregated.get("batterie_ladung_kwh", 0), 2) or None,
-            batterie_entladung_kwh=round(aggregated.get("batterie_entladung_kwh", 0), 2) or None,
-            eigenverbrauch_kwh=round(aggregated.get("eigenverbrauch_kwh", 0), 2) or None,
+            pv_erzeugung_kwh=monatswert(aggregated, "pv_erzeugung_kwh"),
+            einspeisung_kwh=monatswert(aggregated, "einspeisung_kwh"),
+            netzbezug_kwh=monatswert(aggregated, "netzbezug_kwh"),
+            batterie_ladung_kwh=monatswert(aggregated, "batterie_ladung_kwh"),
+            batterie_entladung_kwh=monatswert(aggregated, "batterie_entladung_kwh"),
+            eigenverbrauch_kwh=monatswert(aggregated, "eigenverbrauch_kwh"),
         ), seen_names
 
     async def _fetch_history_block(

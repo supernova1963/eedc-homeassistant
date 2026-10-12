@@ -295,9 +295,7 @@ class GrowattProvider(CloudImportProvider):
 
             for month_idx in range(12):
                 month = month_idx + 1
-                month_data = ParsedMonthData(
-                    jahr=year,
-                    monat=month,
+                werte = dict(
                     pv_erzeugung_kwh=_safe_float(pv_array, month_idx),
                     einspeisung_kwh=_safe_float(grid_export, month_idx),
                     netzbezug_kwh=_safe_float(grid_import, month_idx),
@@ -308,8 +306,11 @@ class GrowattProvider(CloudImportProvider):
                     batterie_ladung_kwh=_safe_float(charge, month_idx),
                     batterie_entladung_kwh=_safe_float(discharge, month_idx),
                 )
-                if month_data.has_data():
-                    results.append(month_data)
+                # N-737: ein Monat erscheint nur mit einem Wert > 0 (wie die Portal-Parser,
+                # N-714) — die Jahres-Arrays tragen 0 auch für Monate ohne Daten; innerhalb
+                # eines gezeigten Monats ist eine gelieferte 0 aber ein Wert (`_safe_float`).
+                if any(v is not None and v > 0 for v in werte.values()):
+                    results.append(ParsedMonthData(jahr=year, monat=month, **werte))
 
         # Variante 2: energyMonth dict mit Monats-Keys
         if not results:
@@ -341,6 +342,7 @@ def _safe_float(
         return None
     try:
         f = float(val)
-        return round(f, 2) if f > 0 else None
+        # N-737: eine gelieferte 0 ist ein Wert (vorher `> 0` ⇒ None); negativ bleibt None.
+        return round(f, 2) if f >= 0 else None
     except (ValueError, TypeError):
         return None

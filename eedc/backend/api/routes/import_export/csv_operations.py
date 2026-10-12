@@ -531,9 +531,12 @@ async def import_csv(
             # bei UPDATE (Hierarchie + Audit-Log greifen), seed_provenance bei
             # frischer INSERT-Row (kein Audit-Spam — Backup-Restore kann hunderte
             # Zeilen × Felder umfassen).
+            # N-740: die Netzfelder mit dem ROHWERT — eine leere Zelle liefert nichts und
+            # bekommt keinen Stempel (die neue Zeile trägt die NOT-NULL-0 ohne Herkunft,
+            # also «nicht erfasst», N-734; eine vorhandene Zeile behält ihren Wert).
             _CSV_BACKUP_FIELDS_TOP = [
-                ("einspeisung_kwh", einspeisung),
-                ("netzbezug_kwh", netzbezug),
+                ("einspeisung_kwh", einspeisung_raw),
+                ("netzbezug_kwh", netzbezug_raw),
                 ("pv_erzeugung_kwh", pv_erzeugung),
                 ("direktverbrauch_kwh", direktverbrauch),
                 ("eigenverbrauch_kwh", eigenverbrauch),
@@ -550,7 +553,7 @@ async def import_csv(
                 # blockiert external:cloud_import:*, gleichauf mit manual:form
                 # (Last-Writer-Wins).
                 for field_name, value in _CSV_BACKUP_FIELDS_TOP:
-                    if value is not None or field_name in ("einspeisung_kwh", "netzbezug_kwh"):
+                    if value is not None:
                         await write_with_provenance(
                             db, existing_md, field_name, value,
                             source="manual:csv_backup", writer="csv_backup_restore",

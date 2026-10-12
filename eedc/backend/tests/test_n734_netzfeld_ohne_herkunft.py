@@ -233,7 +233,11 @@ async def test_checker_meldungstext_nennt_voraussetzung_und_handgriff(db):
     netz = next(e for e in erg if e.meldung.endswith("Netzbezug nicht erfasst"))
     assert "auch 0 ist ein Wert" in netz.details
     assert "Monatsabschluss" in netz.details and "HA-Statistik-Import" in netz.details
-    assert netz.link == f"/monatsabschluss/{a.id}/{J}/{M}"
+    # N-739 (c): erst der Import (holt den Messwert), dann der Monatsabschluss — dort ist das Feld leer, nicht 0.
+    assert netz.details.index("HA-Statistik-Import") < netz.details.index("Monatsabschluss")
+    assert "ein leeres Feld ist keine 0" in netz.details
+    # N-739 (a): `/monatsabschluss/…` öffnete im v4-Frontend den Monat nicht.
+    assert netz.link == f"/einstellungen/daten?erfassen={J}-{M:02d}"
 
 
 # ── Der Helfer selbst ───────────────────────────────────────────────────────────────────────────────────────────

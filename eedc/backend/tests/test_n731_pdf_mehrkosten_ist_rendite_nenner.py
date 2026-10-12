@@ -45,3 +45,27 @@ async def test_ohne_stilllegung_bleibt_die_zahl(db):
     aid = await _seed(db, monate=_m((2024, 2025)))
     k = (await build_jahresbericht_context(db, aid, 2025))["kpis"]
     assert k["investition_mehrkosten_euro"] == pytest.approx(10000.0) == pytest.approx(k["rendite_nenner_euro"])
+
+
+@pytest.mark.asyncio
+async def test_investition_gesamt_sagt_welche_investitionen_sie_zaehlt(db):
+    """Handgriff (Triage-4 §2): „Investition gesamt" zählt im Einzeljahr die im Jahr aktiven Investitionen (Builder
+    `_bestand`, `aktiv_im_jahr`), im Gesamtzeitraum alle — die Zeile sagt es. Die Zahl bleibt (Speicher vor 2025
+    stillgelegt ⇒ 2025 ohne ihn, Gesamtzeitraum mit ihm)."""
+    from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
+    from backend.services.pdf.engine import render_html
+
+    aid = await _seed(db, monate=_m((2024, 2025)), extra=[
+        ("speicher", dict(anschaffungsdatum=date(2024, 1, 1), stilllegungsdatum=date(2024, 12, 31),
+                          anschaffungskosten_gesamt=5000.0, parameter={"kapazitaet_kwh": 5.0}), {}),
+    ])
+    zeilen = {}
+    for jahr in (2025, None):
+        ctx = await build_jahresbericht_context(db, aid, jahr)
+        html = render_html("jahresbericht.html", ctx)
+        z = html[html.index("Investition gesamt"):]
+        zeilen[jahr] = (z[:z.index("</tr>")], ctx["kpis"]["investition_gesamt_euro"])
+
+    assert "Vollkosten der im Jahr aktiven Investitionen" in zeilen[2025][0]
+    assert "Vollkosten aller Investitionen" in zeilen[None][0]
+    assert zeilen[None][1] - zeilen[2025][1] == pytest.approx(5000.0), "die Zahl ist unverändert die des Builders"

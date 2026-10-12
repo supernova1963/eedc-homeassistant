@@ -11,7 +11,7 @@ import type { MonatsabschlussResponse, FeldStatus, BehalteneAbweichung } from '.
 import type { WetterDaten } from '../../api/wetter'
 import type { Monatsdaten, Investition } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert, ABGELEITET_SUMME_ACHSEN, istAutoSummenFeld } from '../../lib/fieldDefinitions'
-import { prefillWert, ermittleZustand, zaehleAmpel, behaltenEintrag, abgeleiteteMarke, type ErfassungZustand } from '../../lib/erfassungZustand'
+import { prefillWert, gespeicherterNetzwert, ermittleZustand, zaehleAmpel, behaltenEintrag, abgeleiteteMarke, type ErfassungZustand } from '../../lib/erfassungZustand'
 import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
@@ -244,8 +244,11 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const [formData, setFormData] = useState({
     jahr: haVorausfuellung?.jahr?.toString() || monatsdaten?.jahr?.toString() || voreingestellterMonat?.jahr?.toString() || currentYear.toString(),
     monat: haVorausfuellung?.monat?.toString() || monatsdaten?.monat?.toString() || voreingestellterMonat?.monat?.toString() || currentMonth.toString(),
-    einspeisung_kwh: getHaBasisWert('einspeisung_kwh') || monatsdaten?.einspeisung_kwh?.toString() || '',
-    netzbezug_kwh: getHaBasisWert('netzbezug_kwh') || monatsdaten?.netzbezug_kwh?.toString() || '',
+    // N-739 (b): eine Netz-0 ohne Herkunft ist nicht erfasst (N-734) — leer statt 0 vorbelegen, damit ungeprüftes
+    // Speichern sie nicht als eingetragen stempelt; das Pflichtfeld verlangt eine bewusste Eingabe, der beste
+    // Vorschlag (HA-Statistik, Tagesebene …) füllt das leere Feld wie jedes andere (Prefill unten).
+    einspeisung_kwh: getHaBasisWert('einspeisung_kwh') || gespeicherterNetzwert(monatsdaten, 'einspeisung_kwh'),
+    netzbezug_kwh: getHaBasisWert('netzbezug_kwh') || gespeicherterNetzwert(monatsdaten, 'netzbezug_kwh'),
     // N-534/N-622: der Anlagen-PV-Zähler aus HA ist das importierte Anlagen-Aggregat (ADR-002/P7).
     // Er steht dann immer in einer eigenen, sichtbaren Zeile (`haPvGesamt` unten).
     pv_erzeugung_kwh: getHaBasisWert('pv_erzeugung_kwh') || monatsdaten?.pv_erzeugung_kwh?.toString() || '',

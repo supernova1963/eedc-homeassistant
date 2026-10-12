@@ -117,6 +117,9 @@ export interface Monatsdaten {
   monat: number
   einspeisung_kwh: number
   netzbezug_kwh: number
+  // N-739 (b): `false` = die Netz-0 der Zeile hat keine Herkunft (nicht erfasst, N-734) — das Formular belegt leer vor.
+  einspeisung_erfasst?: boolean
+  netzbezug_erfasst?: boolean
   pv_erzeugung_kwh?: number
   direktverbrauch_kwh?: number
   eigenverbrauch_kwh?: number
