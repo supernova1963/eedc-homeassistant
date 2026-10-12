@@ -354,6 +354,9 @@ class ZuordnungsPlan:
     #: bekannt, nicht prüfbar.
     wallboxen: Optional[list]
     warnungen: list[str] = field(default_factory=list)
+    #: N-710: Geräte-Spalten, die ihr Feld nur über den Alt-Suffix tragen → die Haupt-Spalten desselben Feldes in der
+    #: Datei. Eine solche Spalte gilt nur, wo keine Haupt-Spalte einen Wert hat (`helpers.ist_alt_spalte`, wie v09).
+    alt_spalten: dict[str, list[str]] = field(default_factory=dict)
 
     def parse_float(self, val: str) -> Optional[float]:
         return _parse_number(val, self.config.dezimalzeichen)
@@ -433,11 +436,27 @@ def plane_zuordnung(
             continue
         geraete_spalten[spalte] = feld
 
+    # N-710: eine Alt-Suffix-Spalte neben der Haupt-Spalte desselben Geräte-Feldes (alte Vorlage + neuer Name).
+    from backend.api.routes.import_export.helpers import ist_alt_spalte
+
+    alt_spalten: dict[str, list[str]] = {}
+    for spalte, feld in geraete_spalten.items():
+        if feld is None or not ist_alt_spalte(spalte, feld):
+            continue
+        inv_id = erkannte[spalte][0]
+        haupt = [
+            s2 for s2, f2 in geraete_spalten.items()
+            if f2 is not None and erkannte[s2][0] == inv_id and f2.get("feld") == feld.get("feld")
+            and not ist_alt_spalte(s2, f2)
+        ]
+        if haupt:
+            alt_spalten[spalte] = haupt
+
     wallboxen = None if investitionen is None else [i for i in investitionen if i.typ == "wallbox"]
     return ZuordnungsPlan(
         config=config, field_map=field_map, invert_map=invert_map, inv_slots=inv_slots,
         geraete_spalten=geraete_spalten, ausgenommen=ausgenommen, wallboxen=wallboxen,
-        warnungen=warnungen,
+        warnungen=warnungen, alt_spalten=alt_spalten,
     )
 
 
@@ -520,6 +539,10 @@ def _lies_zeilenwerte(row: dict[str, str], plan: ZuordnungsPlan, monat: MonatsWe
         if spalte not in plan.geraete_spalten or not raw or not raw.strip():
             continue
         feld = plan.geraete_spalten[spalte]
+        # N-710: die Alt-Suffix-Spalte zählt nicht, wenn die Zeile das Feld unter seinem Haupt-Suffix trägt — wie v09
+        # (`helpers._import_investition_monatsdaten_v09`), auch ungelesen.
+        if any((row.get(h) or "").strip() for h in plan.alt_spalten.get(spalte, ())):
+            continue
         if feld is None:
             # Sonderkosten (`<Bezeichnung>_Sonderkosten_Euro/_Notiz`): v09 schreibt den Betrag, wenn > 0.
             if spalte in monat.geraete_roh:
@@ -621,8 +644,18 @@ def lies_monate(
             eintraege.append(mw)
         _lies_zeilenwerte(row, plan, mw)
     for mw in monate.values():
+        _alt_spalten_im_monat(mw, plan)
         _pruefe_wallbox(mw, plan)
     return eintraege, ungueltig
+
+
+def _alt_spalten_im_monat(monat: MonatsWerte, plan: ZuordnungsPlan) -> None:
+    """N-710 über mehrere Zeilen eines Monats: v09 bekommt die Monatssumme als EINE Zeile (`geraete_zeile`) — trägt
+    sie die Haupt-Spalte, zählt die Alt-Spalte dort nicht. Die Vorschau zeigt dann ebenfalls nur die Haupt-Spalte."""
+    for alt, haupt in plan.alt_spalten.items():
+        if alt in monat.geraete_roh and any(h in monat.geraete_roh for h in haupt):
+            monat.geraete_roh.pop(alt, None)
+            monat.geraete_werte.pop(alt, None)
 
 
 # ─── Temporärer Speicher für Upload-Sessions ─────────────────────────────────

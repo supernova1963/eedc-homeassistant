@@ -172,6 +172,27 @@ async def _upsert_investition_monatsdaten(
     )
 
 
+def _spalte_traegt_suffix(col_name: str, sanitized: str, normalized: str, suffix: str) -> bool:
+    """Trägt die Spalte den Suffix dieser Investition? Dieselben zwei Wege wie das Matching in v09: exakt
+    (`<Bezeichnung>_<Suffix>`) oder über den normalisierten Präfix."""
+    if col_name == f"{sanitized}_{suffix}":
+        return True
+    if not col_name.endswith("_" + suffix):
+        return False
+    prefix = col_name[: -len(suffix) - 1]
+    return prefix == sanitized or _normalize_for_matching(prefix) == normalized
+
+
+def ist_alt_spalte(col_name: str, feld: dict) -> bool:
+    """N-710: trägt die Spalte das Feld nur über seinen Alt-Suffix (`csv_suffix_alt`, z. B. Balkonkraftwerk
+    `<Name>_kWh` neben `<Name>_Erzeugung_kWh`)? Eine solche Spalte gilt nur in einer Zeile, deren Haupt-Spalte leer
+    ist — sonst stünde derselbe Wert zweimal in der Datei. v09 und der Zeilen-Kern des eigenen Formats
+    (`custom_import/_shared.py`) entscheiden mit dieser einen Regel."""
+    alt = feld.get("csv_suffix_alt")
+    haupt = feld.get("csv_suffix")
+    return bool(alt) and col_name.endswith("_" + alt) and not (haupt and col_name.endswith("_" + haupt))
+
+
 async def _import_investition_monatsdaten_v09(
     db: AsyncSession,
     row: dict,
@@ -225,6 +246,16 @@ async def _import_investition_monatsdaten_v09(
             if alt:
                 inv_field_entries.append((inv, feld, sanitized, normalized, alt))
 
+    # N-710: die Spalten einer Zeile, die ein Haupt-Suffix trägt und nicht leer ist — je (Investition, Feld). Eine
+    # Spalte mit dem Alt-Suffix desselben Feldes gilt nur, wenn es keine solche gibt (Regel in `ist_alt_spalte`).
+    belegte_hauptfelder = {
+        (inv.id, feld["feld"])
+        for col_name, value in row.items()
+        if value and value.strip() and col_name not in V09_BASIS_SPALTEN
+        for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries
+        if csv_suffix == feld.get("csv_suffix") and _spalte_traegt_suffix(col_name, sanitized, normalized, csv_suffix)
+    }
+
     # known_suffixes aus Registry — längste zuerst für korrektes Matching
     known_suffixes = sorted(
         {entry[4] for entry in inv_field_entries},
@@ -277,21 +308,27 @@ async def _import_investition_monatsdaten_v09(
 
         # ── Wert parsen ──────────────────────────────────────────────────────
         field_key = matched_feld["feld"]
+        # N-710: eine Alt-Suffix-Spalte zählt nicht, wenn die Zeile das Feld schon unter seinem Haupt-Suffix trägt
+        # (alte Vorlage und neuer Name in einer Datei) — sie wird dann auch nicht gelesen.
+        if (matched_inv.id, field_key) in belegte_hauptfelder and ist_alt_spalte(col_name, matched_feld):
+            continue
         field_value = lies_geraete_wert(value, matched_feld, col_name, parse_float)
         if field_value is None:
             continue
+
+        # ── Für Batch-Speicherung sammeln ────────────────────────────────────
+        if matched_inv.id not in collected_data:
+            collected_data[matched_inv.id] = {}
+        # Bei Duplikat (zwei Spalten für dasselbe Feld): ersten Treffer behalten — und nur ihn ins Aggregat zählen
+        # (N-710: bis 12.10.2026 addierte jede Spalte ihren Wert ins Aggregat, ins Gerät ging nur der erste).
+        if field_key in collected_data[matched_inv.id]:
+            continue
+        collected_data[matched_inv.id][field_key] = field_value
 
         # ── Aggregat-Summe aktualisieren ─────────────────────────────────────
         aggregiert_in = matched_feld.get("aggregiert_in")
         if aggregiert_in and aggregiert_in in summen:
             summen[aggregiert_in] += field_value
-
-        # ── Für Batch-Speicherung sammeln ────────────────────────────────────
-        if matched_inv.id not in collected_data:
-            collected_data[matched_inv.id] = {}
-        # Bei Duplikat (csv_suffix_alt trifft nochmal): ersten Treffer behalten
-        if field_key not in collected_data[matched_inv.id]:
-            collected_data[matched_inv.id][field_key] = field_value
 
     # ── Sonderkosten (Sonderfall: für alle Typen, erzeugen sonstige_positionen)
     for inv in investitionen:

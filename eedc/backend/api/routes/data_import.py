@@ -562,6 +562,17 @@ async def _verteile_ziel_erzeugung(
         if len(ktx.ziel_pv_module) > 1 and bilanz.erste_runde:
             bilanz.warnungen.extend(w)
         etwas_geschrieben = True
+    elif monat_input.pv_erzeugung_kwh == 0 and ktx.ziel_pv_module:
+        # N-711: eine gelieferte 0 ist ein Messwert (N-707) — die Station hat im Monat nichts erzeugt, also jedes
+        # ihrer Module 0. Die Monatszeile bekommt auf diesem Weg keinen PV-Wert (P7); ohne die Modulzeilen galt der
+        # Monat als unvollständig (Checker-WARNING). Eine 0 ist exakt, kein kWp-Anteil — deshalb ohne
+        # `abgeleitet`-Marke. Leer (None) bleibt leer.
+        for inv in ktx.ziel_pv_module:
+            await _upsert_und_merke(
+                bilanz, ktx.db, inv.id, jahr, monat, {"pv_erzeugung_kwh": 0.0}, ktx.ueberschreiben,
+                source=ktx.source, writer=ktx.writer,
+            )
+        etwas_geschrieben = True
 
     bat_lad = monat_input.batterie_ladung_kwh or 0
     bat_ent = monat_input.batterie_entladung_kwh or 0

@@ -66,10 +66,17 @@ ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-C
 **Import aus eigener Datei: Vorschau gleich Import:** Die Vorschau zeigt jetzt genau, was der Import schreibt. Die
 Einheit (Wh/kWh/MWh) gilt nur für Spalten ohne Einheit im Namen — erkannte Geräte-Spalten wie `Sueddach_kWh` tragen ihre
 Einheit selbst und werden nicht umgerechnet (bisher zeigte die Vorschau ein Tausendstel, geschrieben wurde der Dateiwert).
-Tageszeilen werden zum Monat summiert, eine **0 wird als 0 gespeichert** (auch im Portal-Import), Wallbox-Ladung und
+Tageszeilen werden zum Monat summiert, eine **0 wird als 0 gespeichert** (auch bei der Übernahme im Portal-Import), Wallbox-Ladung und
 Wallbox-PV-Ladung kommen auf der Wallbox an, eine Spalte zählt nur einmal, auch wenn sie zusätzlich einem Gerät
 zugeordnet ist, sonstige Geräte lassen sich einzeln zuordnen, und eine Vorlage schreibt nicht mehr in eine andere Anlage.
 Jeder Monat wird ganz oder gar nicht geschrieben ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+
+**Import: eine 0 kommt auch am Wechselrichter an, ein Balkonkraftwerk-Wert zählt einmal:** Ordnest du im Portal- oder
+Cloud-Import eine Quelle einem Wechselrichter zu und meldet sie für einen Monat 0 kWh PV, bekommen seine PV-Module jetzt
+0 — bisher galt der Monat als unvollständig, und der Daten-Checker warnte. Trägt eine CSV-Datei für ein Balkonkraftwerk
+den heutigen Spaltennamen `<Name>_Erzeugung_kWh` und den alten `<Name>_kWh`, gilt der heutige; bisher stand der Wert in
+der Monatssumme doppelt. Die Datei-Leser für SMA Sunny Portal und Fronius Solarweb lesen eine 0 der Exportdatei weiterhin
+als „keine Daten" — das steht jetzt so in der Hilfe ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
 
 ## v4.1.6 — 11. Oktober 2026
 
