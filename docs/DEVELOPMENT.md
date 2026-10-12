@@ -431,6 +431,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   ├── requirements.txt
     │   ├── api/routes/
     │   │   ├── aktueller_monat/         # Cockpit → Monat — Paket seit 18.09.2026: __init__ (Router, Sammler, Endpunkt als Orchestrator, Antwort) · schemas · vergleich · tkonto · aggregation · finanzen · waerme · komponenten
+    │   │   │   └── quellen_leser.py     # Leser der Quellen-Kaskade ohne Uhr und Test-Naht (RF-12): gespeicherter Zweig, Kanal-Leser des Kalendermonats, gemessene 0, Wandlungsverluste
     │   │   ├── anlagen.py               # Anlagen-CRUD + Anlagenfoto
     │   │   ├── aussichten/              # Prognose-Aussichten — Paket seit 18.09.2026 (Vorlage 7)
     │   │   │   ├── __init__.py          # Fassade: Router-Bündel + Re-Export
