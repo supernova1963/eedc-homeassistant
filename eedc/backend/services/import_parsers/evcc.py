@@ -20,7 +20,7 @@ from collections import defaultdict
 from io import StringIO
 from typing import Optional
 
-from .base import PortalExportParser, ParsedMonthData, ParserInfo
+from .base import PortalExportParser, ParsedMonthData, ParserInfo, monatswert
 from .registry import register_parser
 from .sma_sunny_portal import _normalize, _parse_float
 
@@ -188,7 +188,8 @@ class EVCCParser(PortalExportParser):
             if kwh <= 0:
                 continue
 
-            pv_kwh = round(monthly_pv_kwh.get((jahr, monat), 0), 2) or None
+            # N-714: Sonne 0 % / Solarenergie 0 ist ein Wert; ohne Solar-Zelle bleibt es leer.
+            pv_kwh = monatswert(monthly_pv_kwh, (jahr, monat))
 
             # km gefahren = Differenz max - min Kilometerstand im Monat
             km = None

@@ -92,8 +92,9 @@ Jeder Monat wird ganz oder gar nicht geschrieben ([Einstellungen → Import-Assi
 Cloud-Import eine Quelle einem Wechselrichter zu und meldet sie für einen Monat 0 kWh PV, bekommen seine PV-Module jetzt
 0 — bisher galt der Monat als unvollständig, und der Daten-Checker warnte. Trägt eine CSV-Datei für ein Balkonkraftwerk
 den heutigen Spaltennamen `<Name>_Erzeugung_kWh` und den alten `<Name>_kWh`, gilt der heutige; bisher stand der Wert in
-der Monatssumme doppelt. Die Datei-Leser für SMA Sunny Portal und Fronius Solarweb lesen eine 0 der Exportdatei weiterhin
-als „keine Daten" — das steht jetzt so in der Hilfe ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+der Monatssumme doppelt. Auch die Datei-Leser für SMA Sunny Portal, Fronius Solarweb und evcc lesen eine 0 der
+Exportdatei jetzt als Wert (bisher „keine Daten", ein Monat ohne Ertrag stand schon in der Vorschau leer); eine leere
+Zelle oder „-" bleibt eine Lücke ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
 
 **Hubs nehmen die Vergütung des Monats:** Speicher-, E-Auto- (V2H) und Sonstiges-Hub rechnen die Einspeisevergütung
 jetzt wie *Cockpit → Monat* — vor deinem ersten Tarif mit der Vorbelegung 8,2 ct statt der heutigen Vergütung, und eine

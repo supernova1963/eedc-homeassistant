@@ -23,7 +23,7 @@ from collections import defaultdict
 from io import StringIO
 from typing import Optional
 
-from .base import PortalExportParser, ParsedMonthData, ParserInfo
+from .base import PortalExportParser, ParsedMonthData, ParserInfo, monat_hat_wert_ueber_null, monatswert
 from .registry import register_parser
 from .sma_sunny_portal import _normalize, _parse_float
 
@@ -308,33 +308,28 @@ class FroniusSolarwebParser(PortalExportParser):
         result: list[ParsedMonthData] = []
         for (jahr, monat) in sorted(monthly.keys()):
             data = monthly[(jahr, monat)]
-            if not any(v > 0 for v in data.values()):
+            if not monat_hat_wert_ueber_null(data):
                 continue
 
-            # Eigenverbrauch: direkt oder berechnet (Erzeugung - Einspeisung)
-            eigenverbrauch = data.get("eigenverbrauch")
-            if not eigenverbrauch and data.get("pv_erzeugung") and data.get("einspeisung"):
-                eigenverbrauch = data["pv_erzeugung"] - data["einspeisung"]
-                if eigenverbrauch < 0:
-                    eigenverbrauch = None
+            # N-714: eine 0 in der Datei ist ein Wert, nur ein Feld ohne Zelle mit Zahl bleibt leer.
+            # Eigenverbrauch: direkt (auch 0) oder — ohne Zelle — berechnet (Erzeugung - Einspeisung)
+            eigenverbrauch = monatswert(data, "eigenverbrauch")
+            if eigenverbrauch is None and "pv_erzeugung" in data and "einspeisung" in data:
+                differenz = data["pv_erzeugung"] - data["einspeisung"]
+                eigenverbrauch = round(differenz, 2) if differenz >= 0 else None
 
-            # Wattpilot: Gesamt = Netz + Batterie + PV
-            wp_gesamt = (
-                data.get("wattpilot_netz", 0)
-                + data.get("wattpilot_bat", 0)
-                + data.get("wattpilot_pv", 0)
-            )
             result.append(ParsedMonthData(
                 jahr=jahr,
                 monat=monat,
-                pv_erzeugung_kwh=round(data["pv_erzeugung"], 2) if data.get("pv_erzeugung") else None,
-                einspeisung_kwh=round(data["einspeisung"], 2) if data.get("einspeisung") else None,
-                netzbezug_kwh=round(data["netzbezug"], 2) if data.get("netzbezug") else None,
-                eigenverbrauch_kwh=round(eigenverbrauch, 2) if eigenverbrauch else None,
-                batterie_ladung_kwh=round(data["batterie_ladung"], 2) if data.get("batterie_ladung") else None,
-                batterie_entladung_kwh=round(data["batterie_entladung"], 2) if data.get("batterie_entladung") else None,
-                wallbox_ladung_kwh=round(wp_gesamt, 2) if wp_gesamt > 0 else None,
-                wallbox_ladung_pv_kwh=round(data["wattpilot_pv"], 2) if data.get("wattpilot_pv") else None,
+                pv_erzeugung_kwh=monatswert(data, "pv_erzeugung"),
+                einspeisung_kwh=monatswert(data, "einspeisung"),
+                netzbezug_kwh=monatswert(data, "netzbezug"),
+                eigenverbrauch_kwh=eigenverbrauch,
+                batterie_ladung_kwh=monatswert(data, "batterie_ladung"),
+                batterie_entladung_kwh=monatswert(data, "batterie_entladung"),
+                # Wattpilot: Gesamt = Netz + Batterie + PV
+                wallbox_ladung_kwh=monatswert(data, "wattpilot_netz", "wattpilot_bat", "wattpilot_pv"),
+                wallbox_ladung_pv_kwh=monatswert(data, "wattpilot_pv"),
             ))
 
         return result

@@ -6,8 +6,35 @@ Jeder Hersteller-Parser implementiert PortalExportParser und wird
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, asdict
 from typing import Optional
+
+
+def monatswert(summen: Mapping[Hashable, float], *schluessel: Hashable) -> Optional[float]:
+    """Monatswert eines Feldes aus den Monatssummen eines Parsers (N-714).
+
+    Die Parser addieren eine Zelle nur, wenn `_parse_float` eine Zahl liefert —
+    auch `0` oder `0,0`; eine leere Zelle, `-`, `n/a` oder Unlesbares legt
+    keinen Schlüssel an. Der Schlüssel ist deshalb die Anwesenheit: mindestens
+    eine Zelle mit Zahl ⇒ Wert (eine Summe 0,0 ist ein Messwert), keine ⇒ None.
+    Mehrere Schlüssel (z. B. die Wattpilot-Anteile) ergeben ihre Summe, sobald
+    einer vorhanden ist. Nie `or None` / `if wert` — das macht aus 0 ein «fehlt».
+    """
+    teile = [summen[k] for k in schluessel if k in summen]
+    if not teile:
+        return None
+    return round(sum(teile), 2)
+
+
+def monat_hat_wert_ueber_null(summen: Mapping[Hashable, float]) -> bool:
+    """Monats-Tor der Parser: ein Monat erscheint nur mit mindestens einem Wert > 0.
+
+    Ein Monat, dessen Zellen alle 0 sind, steht in keiner Vorschau (wie vor
+    N-714) — innerhalb eines gezeigten Monats ist eine 0 aber ein Wert
+    (`monatswert`).
+    """
+    return any(v > 0 for v in summen.values())
 
 
 @dataclass

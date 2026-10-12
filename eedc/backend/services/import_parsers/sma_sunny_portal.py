@@ -18,7 +18,7 @@ from datetime import datetime
 from io import StringIO
 from typing import Optional
 
-from .base import PortalExportParser, ParsedMonthData, ParserInfo
+from .base import PortalExportParser, ParsedMonthData, ParserInfo, monat_hat_wert_ueber_null, monatswert
 from .registry import register_parser
 
 
@@ -381,18 +381,19 @@ class SMASunnyPortalParser(PortalExportParser):
         result: list[ParsedMonthData] = []
         for (jahr, monat) in sorted(monthly_data.keys()):
             values = monthly_data[(jahr, monat)]
-            if not values:
+            if not monat_hat_wert_ueber_null(values):
                 continue
 
+            # N-714: eine 0 in der Datei ist ein Wert, nur ein Feld ohne Zelle mit Zahl bleibt leer.
             month = ParsedMonthData(
                 jahr=jahr,
                 monat=monat,
-                pv_erzeugung_kwh=round(values.get("pv_erzeugung_kwh", 0), 2) or None,
-                einspeisung_kwh=round(values.get("einspeisung_kwh", 0), 2) or None,
-                netzbezug_kwh=round(values.get("netzbezug_kwh", 0), 2) or None,
-                batterie_ladung_kwh=round(values.get("batterie_ladung_kwh", 0), 2) or None,
-                batterie_entladung_kwh=round(values.get("batterie_entladung_kwh", 0), 2) or None,
-                eigenverbrauch_kwh=round(values.get("eigenverbrauch_kwh", 0), 2) or None,
+                pv_erzeugung_kwh=monatswert(values, "pv_erzeugung_kwh"),
+                einspeisung_kwh=monatswert(values, "einspeisung_kwh"),
+                netzbezug_kwh=monatswert(values, "netzbezug_kwh"),
+                batterie_ladung_kwh=monatswert(values, "batterie_ladung_kwh"),
+                batterie_entladung_kwh=monatswert(values, "batterie_entladung_kwh"),
+                eigenverbrauch_kwh=monatswert(values, "eigenverbrauch_kwh"),
             )
 
             if month.has_data():
