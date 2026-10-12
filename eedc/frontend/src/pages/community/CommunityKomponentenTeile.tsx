@@ -32,7 +32,7 @@ import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
-import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl, jazVergleichAnzeige } from '../../lib'
+import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, LEER_TOKEN, fmtZahl, formatProzent, jazVergleichAnzeige } from '../../lib'
 import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
@@ -257,8 +257,12 @@ export function SpeicherDeepDive({
   // die eigene Zeile mit „(Du)" zu markieren. Vorher standen hier fünf Klassen
   // gegen drei des Servers: Speicher über 15 kWh landeten in „15-20 kWh" bzw.
   // „>20 kWh", die es serverseitig nie gab, und wurden deshalb NIE markiert.
+  // ⚠ Verglichen wird mit dem Label, das `klassenData` aus `von_kwh`/`bis_kwh`
+  // ERZEUGT (der Server sendet sein Label nicht) — für die kleinste Klasse also
+  // „0-5 kWh". Hier stand bis 12.10.2026 „bis 5 kWh" (N-745-Umfeld): Speicher
+  // unter 5 kWh bekamen nie ihr „(Du)".
   const eigeneKlasse = useMemo(() => {
-    if (kapazitaet < 5) return 'bis 5 kWh'
+    if (kapazitaet < 5) return '0-5 kWh'
     if (kapazitaet < 10) return '5-10 kWh'
     if (kapazitaet < 15) return '10-15 kWh'
     return '>15 kWh'
@@ -303,8 +307,11 @@ export function SpeicherDeepDive({
           name: label,
           anzahl: k.anzahl,
           fill: SERIEN_PALETTE[i % SERIEN_PALETTE.length],
-          avg_zyklen: k.durchschnitt_zyklen ?? 0,
-          avg_wirkungsgrad: k.durchschnitt_wirkungsgrad ?? 0,
+          // N-745: `null` heißt «unter drei Werten kein Median» (Server
+          // `components.py::_median`) — es bleibt `null` bis in die Zelle und wird
+          // dort «—». Hier stand `?? 0`: die Tabelle zeigte 0 Zyklen und 0,0 %.
+          avg_zyklen: k.durchschnitt_zyklen,
+          avg_wirkungsgrad: k.durchschnitt_wirkungsgrad,
         }
       })
   }, [communityStats])
@@ -454,7 +461,7 @@ export function SpeicherDeepDive({
                         {k.name === eigeneKlasse && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
                       <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_zyklen, 0)}</td>
-                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_wirkungsgrad, 1)} %</td>
+                      <td className={`${ZELLE} text-right`}>{formatProzent(k.avg_wirkungsgrad).text}</td>
                     </tr>
                   ))}
                 </TableBody>
@@ -809,8 +816,10 @@ export function EAutoDeepDive({
         beschreibung: k.beschreibung,
         anzahl: k.anzahl,
         fill: SERIEN_PALETTE[i % SERIEN_PALETTE.length],
-        avg_pv_anteil: k.durchschnitt_pv_anteil ?? 0,
-        avg_verbrauch: k.durchschnitt_verbrauch_100km ?? 0,
+        // N-745-Klasse: `null` (Klasse ohne bildbaren Wert, Server
+        // `components.py::get_eauto_by_usage`) bleibt `null` und wird «—».
+        avg_pv_anteil: k.durchschnitt_pv_anteil,
+        avg_verbrauch: k.durchschnitt_verbrauch_100km,
       }))
   }, [communityStats])
 
@@ -985,8 +994,8 @@ export function EAutoDeepDive({
                         <span title={k.beschreibung}>{k.name}</span>
                         {k.name.toLowerCase() === eigeneKlasse?.toLowerCase() && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
-                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_verbrauch, 1)} kWh/100km</td>
-                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_pv_anteil, 0)} %</td>
+                      <td className={`${ZELLE} text-right`}>{k.avg_verbrauch == null ? LEER_TOKEN : `${fmtZahl(k.avg_verbrauch, 1)} kWh/100km`}</td>
+                      <td className={`${ZELLE} text-right`}>{k.avg_pv_anteil == null ? LEER_TOKEN : `${fmtZahl(k.avg_pv_anteil, 0)} %`}</td>
                     </tr>
                   ))}
                 </TableBody>

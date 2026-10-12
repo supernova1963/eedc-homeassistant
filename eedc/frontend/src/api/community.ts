@@ -9,7 +9,7 @@ import {
   demoSpeicherByClass, demoWaermepumpeByArt,
   demoWaermepumpeByRegion, demoEAutoByUsage,
   demoRegionalStatistics, demoTrends, demoDegradation,
-  demoGlobalStatistics, demoRanking,
+  demoGlobalStatistics, demoRanking, demoMonatsBenchmark,
 } from './communityDemo'
 
 // =============================================================================
@@ -694,6 +694,7 @@ export const communityApi = {
    * Öffentlicher Monats-Benchmark — kein Hash nötig
    */
   async getMonatsBenchmark(jahr: number, monat: number): Promise<MonatsVergleich> {
+    if (DEMO_DEFAULT) return Promise.resolve(demoMonatsBenchmark(jahr, monat))
     return api.get<MonatsVergleich>(`/community/benchmark/monat/${jahr}/${monat}`)
   },
 }

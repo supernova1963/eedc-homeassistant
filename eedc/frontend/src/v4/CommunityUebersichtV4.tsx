@@ -74,7 +74,7 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
     d.radarData.length >= 3 && !alleGeparkt(UEB_PARK_IDS.profil) ? {
       id: 'profil', title: 'Performance-Profil', icon: BarChart3,
       summary: 'Radar: Du vs. Community', defaultOpen: false,
-      render: () => <PerformanceProfil radarData={d.radarData} />,
+      render: () => <PerformanceProfil radarData={d.radarData} radarMonat={d.radarMonat} />,
     } : null,
     (d.achievements.erreichte.length > 0 || d.achievements.nichtErreichte.length > 0) && !alleGeparkt(achIds) ? {
       id: 'achievements', title: 'Achievements', icon: Sparkles, farbe: 'text-yellow-500',

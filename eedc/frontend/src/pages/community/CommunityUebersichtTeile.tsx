@@ -6,7 +6,7 @@
  * äußere Card/Block-Hülle (die wickelt der Aufrufer: IST = `<Card>`, V4 = BlockShell).
  * Zahlen de-DE (`fmtZahl`); Farben aus der Zentrale (`lib`), kein Inline-Hex.
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Trophy, Battery, Home, Car, Plug, Sun, TrendingUp, TrendingDown, MapPin,
   BarChart3, Award, ThumbsUp, ThumbsDown, Zap, Medal, Flame, Target, Shield, HelpCircle,
@@ -16,11 +16,12 @@ import { Parkbar } from '../../components/park'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
-import type { CommunityBenchmarkResponse, KPIVergleich } from '../../api/community'
+import { communityApi } from '../../api/community'
+import type { CommunityBenchmarkResponse, KPIVergleich, MonatsVergleich } from '../../api/community'
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
 } from 'recharts'
-import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, fmtZahl, jazVergleichAnzeige } from '../../lib'
+import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK, MONAT_NAMEN, fmtZahl, jazVergleichAnzeige } from '../../lib'
 import { hatJahresfenster, jahresfensterHinweis, jahresfensterKennzeichnung, jahresfensterStand } from '../../lib/communityFenster'
 
 // Element-Park (IA-V4, Element-Park-Doktrin Gernot 2026-06-27): JEDE Anzeige
@@ -141,12 +142,95 @@ export function letzteMonate<T extends MonatsZeile>(monatswerte: readonly T[] | 
   return chronologisch(monatswerte).slice(-anzahl)
 }
 
+// ─── Radar «Performance-Profil»: Vergleichsmonat und Achsen (N-742) ──────────
+// Bis 12.10.2026 standen Autarkie und Eigenverbrauch der Anlage gegen die festen
+// Zahlen 65 und 45 (Beispielwerte aus der frühen Endpunkt-Doku, nie Server-Daten),
+// und «du» war der neueste Monat — auch der laufende. Konzeptentscheid Gernot
+// 12.10.2026: Vergleichsbasis ist DERSELBE Monat — der Community-Durchschnitt aus
+// `/benchmark/monat/{jahr}/{monat}` gegen den eigenen Wert dieses Monats; der
+// laufende Monat ist ausgeschlossen (der Server sendet `anlage.monatswerte`
+// ungefiltert, die Wahl trifft der Client). Liefert der Server für den Monat
+// keine Basis, fällt die Achse weg — nichts wird ersatzweise eingesetzt.
+
+/** `basisAnlagen`: nur bei den Monatsachsen — aus wie vielen Anlagen der
+ *  Community-Wert entstand (für den Untertitel; Recharts liest das Feld nicht). */
+export type RadarAchse = { kategorie: string; du: number; community: number; fullMark: number; basisAnlagen?: number }
+
+/** Mindestzahl Anlagen hinter einem Monats-Community-Wert, damit er eine Radar-Achse
+ *  trägt (Entscheid Master 12.10.2026 zu N-742). Dieselbe Schwelle wie der
+ *  Community-Server für Median/Min/Max (`benchmark.py::_make_monats_kpi`) und für
+ *  die Komponenten-Klassen (`components.py::MIN_ANLAGEN_FUER_AGGREGAT`, Entscheid
+ *  11.08.2026 «kein Community-Median aus weniger als drei Anlagen»). Der Server
+ *  bildet `durchschnitt` schon ab EINEM Wert und zählt die eigene Anlage mit — ein
+ *  «Community»-Wert aus ein, zwei Anlagen spiegelt im Grenzfall nur den eigenen
+ *  Wert und ist keine Community. Darunter fällt die Achse weg wie bei `null`. */
+export const RADAR_MIN_ANLAGEN_MONAT = 3
+
+/** Der jüngste abgeschlossene Monat der Anlage — der laufende Monat (`heute`) und
+ *  alles danach zählt nicht. Reihenfolge der Liste egal (F-25). */
+export function radarVergleichsMonat<T extends MonatsZeile>(monatswerte: readonly T[] | undefined, heute: Date): T | undefined {
+  const laufend = heute.getFullYear() * 12 + heute.getMonth()  // getMonth: 0-basiert
+  const abgeschlossen = chronologisch(monatswerte).filter((m) => m.jahr * 12 + (m.monat - 1) < laufend)
+  return abgeschlossen[abgeschlossen.length - 1]
+}
+
+/** Achsen des Radars. Autarkie/Eigenverbrauch nur, wenn `monatsVergleich` GENAU
+ *  den Vergleichsmonat beschreibt (gleiche Zeitbasis beider Serien) und beide
+ *  Werte vorhanden sind (`null` fällt weg, 0 % ist ein Wert). */
+export function baueRadarDaten(
+  benchmark: CommunityBenchmarkResponse,
+  vergleichsMonat: { jahr: number; monat: number; autarkie_prozent?: number | null; eigenverbrauch_prozent?: number | null } | undefined,
+  monatsVergleich: MonatsVergleich | null,
+): RadarAchse[] {
+  const data: RadarAchse[] = []
+  const pvEigen = benchmark.benchmark.spez_ertrag_anlage
+  const pvCommunity = benchmark.benchmark.spez_ertrag_durchschnitt
+  if (pvEigen !== null && pvEigen !== undefined && pvCommunity) {
+    const pvMax = Math.max(pvEigen, pvCommunity) * 1.2
+    data.push({ kategorie: 'PV-Ertrag', du: (pvEigen / pvMax) * 100, community: (pvCommunity / pvMax) * 100, fullMark: 100 })
+  }
+  const basis = vergleichsMonat && monatsVergleich
+    && monatsVergleich.jahr === vergleichsMonat.jahr && monatsVergleich.monat === vergleichsMonat.monat
+    ? monatsVergleich : null
+  const autarkieDu = vergleichsMonat?.autarkie_prozent
+  const autarkieKpi = basis?.autarkie
+  const autarkieCommunity = autarkieKpi && autarkieKpi.anzahl_anlagen >= RADAR_MIN_ANLAGEN_MONAT ? autarkieKpi.durchschnitt : null
+  if (autarkieDu != null && autarkieCommunity != null) data.push({ kategorie: 'Autarkie', du: autarkieDu, community: autarkieCommunity, fullMark: 100, basisAnlagen: autarkieKpi!.anzahl_anlagen })
+  const evDu = vergleichsMonat?.eigenverbrauch_prozent
+  const evKpi = basis?.eigenverbrauch
+  const evCommunity = evKpi && evKpi.anzahl_anlagen >= RADAR_MIN_ANLAGEN_MONAT ? evKpi.durchschnitt : null
+  if (evDu != null && evCommunity != null) data.push({ kategorie: 'Eigenverbrauch', du: evDu, community: evCommunity, fullMark: 100, basisAnlagen: evKpi!.anzahl_anlagen })
+  if (benchmark.benchmark_erweitert?.speicher?.wirkungsgrad?.community_avg) {
+    const sp = benchmark.benchmark_erweitert.speicher
+    data.push({ kategorie: 'Speicher', du: sp.wirkungsgrad!.wert, community: sp.wirkungsgrad!.community_avg!, fullMark: 100 })
+  }
+  {
+    // Dieselbe Bezugsgruppe wie die JAZ-Zeile und die Abweichungs-Liste (N-350):
+    // der Radar verglich bis zum 29.08.2026 gegen den Schnitt ueber ALLE Arten,
+    // waehrend zwei Zeilen weiter oben `jaz_typ` galt.
+    const jazRadar = jazVergleichAnzeige(benchmark.benchmark_erweitert?.waermepumpe, benchmark.anlage.wp_art)
+    if (jazRadar.kpi?.community_avg != null) {
+      const { wert, community_avg } = jazRadar.kpi
+      const jazMax = Math.max(wert, community_avg) * 1.2
+      data.push({ kategorie: 'WP-Effizienz', du: (wert / jazMax) * 100, community: (community_avg / jazMax) * 100, fullMark: 100 })
+    }
+  }
+  if (benchmark.benchmark_erweitert?.eauto?.pv_anteil?.community_avg) {
+    const ea = benchmark.benchmark_erweitert.eauto
+    data.push({ kategorie: 'E-Auto PV', du: ea.pv_anteil!.wert, community: ea.pv_anteil!.community_avg!, fullMark: 100 })
+  }
+  return data
+}
+
 export interface UebersichtDaten {
   rankingBadge: { label: string; color: string; textColor: string } | null
   achievements: { erreichte: Achievement[]; nichtErreichte: Achievement[] }
   staerken: PerformanceMetrik[]
   schwaechen: PerformanceMetrik[]
-  radarData: { kategorie: string; du: number; community: number; fullMark: number }[]
+  radarData: RadarAchse[]
+  /** Monat, aus dem Autarkie/Eigenverbrauch im Radar stammen — `null`, wenn keine
+   *  der beiden Achsen steht. Für den Untertitel («Vergleich: September 2025»). */
+  radarMonat: { jahr: number; monat: number; anlagenVon: number; anlagenBis: number } | null
 }
 
 // ─── Daten-Hook (SoT der Übersicht-Ableitungen) ──────────────────────────────
@@ -274,41 +358,37 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     }
   }, [benchmark])
 
-  const radarData = useMemo(() => {
-    if (!benchmark) return []
-    const data: { kategorie: string; du: number; community: number; fullMark: number }[] = []
-    const pvEigen = benchmark.benchmark.spez_ertrag_anlage
-    const pvCommunity = benchmark.benchmark.spez_ertrag_durchschnitt
-    if (pvEigen !== null && pvEigen !== undefined && pvCommunity) {
-      const pvMax = Math.max(pvEigen, pvCommunity) * 1.2
-      data.push({ kategorie: 'PV-Ertrag', du: (pvEigen / pvMax) * 100, community: (pvCommunity / pvMax) * 100, fullMark: 100 })
-    }
-    const letzterMonat = neuesterMonat(benchmark.anlage.monatswerte)
-    if (letzterMonat?.autarkie_prozent) data.push({ kategorie: 'Autarkie', du: letzterMonat.autarkie_prozent, community: 65, fullMark: 100 })
-    if (letzterMonat?.eigenverbrauch_prozent) data.push({ kategorie: 'Eigenverbrauch', du: letzterMonat.eigenverbrauch_prozent, community: 45, fullMark: 100 })
-    if (benchmark.benchmark_erweitert?.speicher?.wirkungsgrad?.community_avg) {
-      const sp = benchmark.benchmark_erweitert.speicher
-      data.push({ kategorie: 'Speicher', du: sp.wirkungsgrad!.wert, community: sp.wirkungsgrad!.community_avg!, fullMark: 100 })
-    }
-    {
-      // Dieselbe Bezugsgruppe wie die JAZ-Zeile und die Abweichungs-Liste (N-350):
-      // der Radar verglich bis zum 29.08.2026 gegen den Schnitt ueber ALLE Arten,
-      // waehrend zwei Zeilen weiter oben `jaz_typ` galt.
-      const jazRadar = jazVergleichAnzeige(benchmark.benchmark_erweitert?.waermepumpe, benchmark.anlage.wp_art)
-      if (jazRadar.kpi?.community_avg != null) {
-        const { wert, community_avg } = jazRadar.kpi
-        const jazMax = Math.max(wert, community_avg) * 1.2
-        data.push({ kategorie: 'WP-Effizienz', du: (wert / jazMax) * 100, community: (community_avg / jazMax) * 100, fullMark: 100 })
-      }
-    }
-    if (benchmark.benchmark_erweitert?.eauto?.pv_anteil?.community_avg) {
-      const ea = benchmark.benchmark_erweitert.eauto
-      data.push({ kategorie: 'E-Auto PV', du: ea.pv_anteil!.wert, community: ea.pv_anteil!.community_avg!, fullMark: 100 })
-    }
-    return data
-  }, [benchmark])
+  // N-742: Monats-Benchmark für den Vergleichsmonat nachladen — Lade-Muster wie
+  // die übrigen Community-Teile (`useKomponentenDaten`, `usePVErtragDaten`):
+  // eigener Effekt, Abbruch-Flag, fehlende Daten (404 «Keine Daten für den
+  // Monat», Server nicht erreichbar) ⇒ `null` ⇒ die Achse fällt weg.
+  const radarMonat = useMemo(
+    () => (benchmark ? radarVergleichsMonat(benchmark.anlage.monatswerte, new Date()) : undefined),
+    [benchmark],
+  )
+  const radarJahr = radarMonat?.jahr
+  const radarMonatNr = radarMonat?.monat
+  const [monatsVergleich, setMonatsVergleich] = useState<MonatsVergleich | null>(null)
+  useEffect(() => {
+    if (radarJahr === undefined || radarMonatNr === undefined) { setMonatsVergleich(null); return }
+    let ab = false
+    communityApi.getMonatsBenchmark(radarJahr, radarMonatNr)
+      .catch(() => null)
+      .then((d) => { if (!ab) setMonatsVergleich(d) })
+    return () => { ab = true }
+  }, [radarJahr, radarMonatNr])
 
-  return { rankingBadge, achievements, staerken, schwaechen, radarData }
+  const radarData = useMemo(
+    () => (benchmark ? baueRadarDaten(benchmark, radarMonat, monatsVergleich) : []),
+    [benchmark, radarMonat, monatsVergleich],
+  )
+  const radarMonatAnzeige = useMemo(() => {
+    const basen = radarData.flatMap((a) => (a.basisAnlagen !== undefined ? [a.basisAnlagen] : []))
+    if (!radarMonat || basen.length === 0) return null
+    return { jahr: radarMonat.jahr, monat: radarMonat.monat, anlagenVon: Math.min(...basen), anlagenBis: Math.max(...basen) }
+  }, [radarMonat, radarData])
+
+  return { rankingBadge, achievements, staerken, schwaechen, radarData, radarMonat: radarMonatAnzeige }
 }
 
 // ─── Sektion: Ranking + Haupt-KPI ────────────────────────────────────────────
@@ -395,7 +475,7 @@ export function StaerkenSchwaechen({ staerken, schwaechen }: { staerken: Perform
 
 // ─── Sektion: Performance-Profil (Radar) ─────────────────────────────────────
 
-export function PerformanceProfil({ radarData }: { radarData: UebersichtDaten['radarData'] }) {
+export function PerformanceProfil({ radarData, radarMonat }: { radarData: UebersichtDaten['radarData']; radarMonat: UebersichtDaten['radarMonat'] }) {
   const achsen = useChartTheme()
   const legende = useLegendenToggle()
   return (
@@ -412,6 +492,13 @@ export function PerformanceProfil({ radarData }: { radarData: UebersichtDaten['r
           </RadarChart>
         </ResponsiveContainer>
       </div>
+      {radarMonat && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Autarkie und Eigenverbrauch — Vergleich: {MONAT_NAMEN[radarMonat.monat]} {radarMonat.jahr} (Community-Durchschnitt desselben Monats, {radarMonat.anlagenVon === radarMonat.anlagenBis
+            ? fmtZahl(radarMonat.anlagenVon, 0)
+            : `${fmtZahl(radarMonat.anlagenVon, 0)}–${fmtZahl(radarMonat.anlagenBis, 0)}`} Anlagen)
+        </p>
+      )}
     </Parkbar>
   )
 }

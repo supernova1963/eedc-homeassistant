@@ -173,6 +173,22 @@ der Hinweis war seit seiner Einführung nie angekommen. Gibt es gar keine Kurve 
 *Datenquellen*, etwa mit MQTT-Inbound), fehlte der Block bisher wortlos; jetzt sagt ein Satz an seiner Stelle, warum
 ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**Community-Radar vergleicht denselben Monat:** Im *Performance-Profil* (*Community → Übersicht*) standen Autarkie und
+Eigenverbrauch bisher gegen feste Zahlen (65 % und 45 %), nicht gegen die Community, und dein Wert war der neueste Monat,
+auch der laufende. Jetzt steht dein letzter abgeschlossener Monat gegen den Community-Durchschnitt desselben Monats, und
+unter dem Diagramm steht, welcher Monat es ist („Vergleich: September 2026“). Hat der Community-Server für den Monat keinen
+Durchschnitt, fehlt die Achse, statt mit einer erfundenen Zahl zu stehen ([Bedienung → Community](HANDBUCH_BEDIENUNG.md#52-die-community-reiter)).
+
+**JAZ nach Bauart erscheint:** Der Wärmepumpen-Vergleich nach Bauart (Luft-Wasser, Sole-Wasser, Luft-Luft …) unter
+*Community → Komponenten* war seit v4.0.41 angekündigt, kam aber nie an — eedc reichte die Anfrage nicht an den
+Community-Server weiter. Jetzt steht er über dem Regionalbalken ([Bedienung → Community](HANDBUCH_BEDIENUNG.md#52-die-community-reiter)).
+
+**„—“ statt 0 in den Community-Klassentabellen:** Hat eine Speicher-Kapazitätsklasse weniger als drei Werte, liefert der
+Community-Server bewusst keinen Durchschnitt; die Tabelle zeigte dort 0 Zyklen und 0,0 % Wirkungsgrad. Jetzt steht „—“,
+ebenso in der E-Auto-Tabelle nach Nutzungsintensität. Ein Speicher unter 5 kWh ist in seiner Klasse jetzt auch als „(Du)“
+markiert. Die Community-Beschreibung im Handbuch und auf der Website nennt dazu die Kennzahlen und Achievements, die die
+App wirklich zeigt ([Bedienung → Community](HANDBUCH_BEDIENUNG.md#52-die-community-reiter)).
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

@@ -1140,7 +1140,7 @@ Oben wählst du einen **Zeitraum** (letzter Monat, letzte 12 Monate, letztes vol
 
 Der Community-Bereich hat **sechs Reiter**: **Übersicht · PV-Ertrag · Komponenten · Regional · Trends · Statistiken**.
 
-**Übersicht** — Radar-Chart (eigene Performance vs. Community auf mehreren Achsen), **Ranking** (Platz X von Y, gesamt und regional) und **Achievements** (Autarkiemeister, Effizienzwunder, Solarprofi, Speicherheld, Klimaschützer, Frühstarter, Vorreiter).
+**Übersicht** — Radar-Chart (eigene Performance vs. Community auf mehreren Achsen), **Ranking** (Platz X von Y, gesamt und regional) und **Achievements** (Solarprofi, Regionalchampion, Autarkiemeister, Effizienzwunder, Wärmekönig, Grüner Fahrer, Dauerbrenner).
 
 **PV-Ertrag** — dein spezifischer Ertrag (kWh/kWp) vs. Community-Durchschnitt, monatlicher Vergleich und ein Histogramm deiner Einordnung in der Verteilung.
 
@@ -1150,11 +1150,11 @@ Der Community-Bereich hat **sechs Reiter**: **Übersicht · PV-Ertrag · Kompone
 
 | Komponente | Kennzahlen |
 |------------|------------|
-| **Speicher** | Zyklen, Effizienz, Autarkie-Beitrag |
-| **Wärmepumpe** | JAZ vs. Community (typ-spezifisch), PV-Anteil |
-| **E-Auto** | km/Monat, Ø kWh/100 km, PV-Anteil |
-| **Wallbox** | Ladung kWh/Monat, PV-Anteil % |
-| **Balkonkraftwerk** | Ertrag kWh/Monat, Anzahl × Wp pro Modul |
+| **Speicher** | Zyklen/Jahr, Wirkungsgrad, Netzlade-Anteil — ohne Community-Vergleich; dazu die Community-Verteilung nach Kapazitätsklasse |
+| **Wärmepumpe** | JAZ vs. Community (gleiche Bauart, wenn bekannt), Stromverbrauch, Wärmeerzeugung; dazu die Community-JAZ nach Bauart und nach Region |
+| **E-Auto** | PV-Ladeanteil vs. Community, Ladung gesamt, Verbrauch kWh/100 km, gefahrene km, V2H-Entladung (falls vorhanden); dazu die Community nach Nutzungsintensität |
+| **Wallbox** | PV-Ladeanteil vs. Community, Ladung gesamt, Ladevorgänge |
+| **Balkonkraftwerk** | Spezifischer Ertrag vs. Community, Erzeugung, Eigenverbrauch % |
 
 **Regional** — interaktive Deutschlandkarte (Farbkodierung nach spezifischem Ertrag; Hover zeigt Bundesland-Details), Bundesland-Tabelle und regionale Einordnung.
 

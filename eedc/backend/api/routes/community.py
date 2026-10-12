@@ -601,6 +601,27 @@ async def get_waermepumpe_by_region():
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@router.get("/components/waermepumpe/by-art")
+async def get_waermepumpe_by_art():
+    """
+    Wärmepumpen-JAZ nach Bauart (Luft-Wasser, Sole-Wasser, Grundwasser, Luft-Luft).
+
+    N-743 (12.10.2026): Der Client fragt diese Sicht seit v4.0.41 (06.09.2026) an
+    (`communityApi.getWaermepumpeByArt`), der Proxy hatte die Route nie — die
+    Anfrage landete im SPA-Catchall, `response.json()` warf, der Block «JAZ nach
+    Bauart» fehlte stumm. Den Gleichlauf aller Client-Pfade mit den Proxy-Routen
+    hält `tests/test_community_proxy_routen_client.py`.
+    """
+    try:
+        async with community_client(timeout=30.0) as client:
+            response = await client.get(f"{COMMUNITY_SERVER_URL}/api/components/waermepumpe/by-art")
+            if response.status_code == 200:
+                return response.json()
+            raise HTTPException(status_code=response.status_code, detail="Server-Fehler")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.get("/components/eauto/by-usage")
 async def get_eauto_by_usage():
     """

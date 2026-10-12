@@ -11,7 +11,7 @@ import type {
   CommunityBenchmarkResponse, MonatswertOutput, Verteilung, MonatlicheDurchschnitte,
   ZeitraumTyp, SpeicherByClass, WPByRegion, EAutoByUsage, RegionStatistik,
   TrendDaten, DegradationsAnalyse, GlobaleStatistik, Ranking,
-  WPByArt,
+  WPByArt, MonatsVergleich,
 } from './community'
 
 // Saisonale spez.-Ertragskurve (kWh/kWp je Monat) — Summe ≈ 1.075/Jahr.
@@ -75,29 +75,35 @@ export function demoBenchmark(zeitraum: ZeitraumTyp): CommunityBenchmarkResponse
       rang_region: 11,
       anzahl_anlagen_region: 187,
     },
+    // Live-Form (eedc-community `benchmark.py::get_anlage_benchmark`, N-742,
+    // 12.10.2026): einen Community-Vergleich (`community_avg`) sendet der Server
+    // nur für PV-Ertrag, JAZ/JAZ-Typ, E-Auto- und Wallbox-PV-Anteil und
+    // BKW-spez.-Ertrag. Speicher, WP-Strom/Wärme, E-Auto-Ladung/Verbrauch und
+    // Wallbox-Ladung/Ladevorgänge kommen OHNE Vergleich — die Demo zeigt keine
+    // Vergleiche (und keine Radar-Achsen), die live nie entstehen.
     benchmark_erweitert: {
-      pv: { spez_ertrag: { wert: 1075, community_avg: 982, rang: 142 } },
+      pv: { spez_ertrag: { wert: 1075, community_avg: 982, rang: 142, von: 1284 } },
       speicher: {
-        kapazitaet: { wert: 10, community_avg: 9.2 },
-        zyklen_jahr: { wert: 245, community_avg: 210 },
-        wirkungsgrad: { wert: 92, community_avg: 89 },
-        netz_anteil: { wert: 8, community_avg: 15 },
+        kapazitaet: { wert: 10 },
+        zyklen_jahr: { wert: 245 },
+        wirkungsgrad: { wert: 92 },
+        netz_anteil: { wert: 8 },
       },
       waermepumpe: {
         jaz: { wert: 4.2, community_avg: 3.8 },
         jaz_typ: { wert: 4.2, community_avg: 3.9 },
-        stromverbrauch: { wert: 3850, community_avg: 4200 },
-        waermeerzeugung: { wert: 16170, community_avg: 15960 },
+        stromverbrauch: { wert: 3850 },
+        waermeerzeugung: { wert: 16170 },
       },
       eauto: {
-        ladung_gesamt: { wert: 2450, community_avg: 2600 },
+        ladung_gesamt: { wert: 2450 },
         pv_anteil: { wert: 72, community_avg: 58 },
-        verbrauch_100km: { wert: 17, community_avg: 19 },
+        verbrauch_100km: { wert: 17 },
       },
       wallbox: {
-        ladung: { wert: 2450, community_avg: 2300 },
+        ladung: { wert: 2450 },
         pv_anteil: { wert: 65, community_avg: 55 },
-        ladevorgaenge: { wert: 142, community_avg: 130 },
+        ladevorgaenge: { wert: 142 },
       },
       balkonkraftwerk: null,
     },
@@ -119,6 +125,25 @@ export function demoDistribution(): Verteilung {
     einheit: 'kWh/kWp',
     bins,
     statistik: { min: 612, max: 1460, median: 980, durchschnitt: 982, stdabweichung: 142 },
+  }
+}
+
+/** Monats-Benchmark (`/benchmark/monat/{jahr}/{monat}`) in Live-Form — Ø, Median/
+ *  Min/Max (der Server liefert die drei erst ab drei Werten). Werte saisonal. */
+export function demoMonatsBenchmark(jahr: number, monat: number): MonatsVergleich {
+  const spez = SAISON[monat - 1]
+  const kpi = (durchschnitt: number, streuung: number, anzahl: number) => ({
+    durchschnitt, median: Math.round((durchschnitt + streuung / 4) * 10) / 10,
+    min: Math.round((durchschnitt - streuung) * 10) / 10, max: Math.round((durchschnitt + streuung) * 10) / 10,
+    anzahl_anlagen: anzahl,
+  })
+  return {
+    jahr, monat, anzahl_anlagen: 96,
+    spez_ertrag: kpi(Math.round(spez * 0.92), spez * 0.6, 96),
+    autarkie: kpi(Math.min(90, Math.round(32 + spez / 3)), 30, 96),
+    eigenverbrauch: kpi(Math.min(85, Math.round(30 + spez / 5)), 30, 96),
+    einspeisung: null,
+    netzbezug: null,
   }
 }
 

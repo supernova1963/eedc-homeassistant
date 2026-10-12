@@ -53,6 +53,7 @@ GET /api/community/benchmark/monat/{jahr}/{monat}
 GET /api/community/benchmark/{anlage_id}
 GET /api/community/components/eauto/by-usage
 GET /api/community/components/speicher/by-class
+GET /api/community/components/waermepumpe/by-art
 GET /api/community/components/waermepumpe/by-region
 GET /api/community/nachsende-status
 GET /api/community/preview/{anlage_id}
