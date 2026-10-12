@@ -22,9 +22,9 @@ from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_einspeise_preis_cent,
     resolve_einspeiseverguetung_cent,
-    resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
 )
+from backend.services.monats_fakten import tarife_der_monate
 from backend.core.investition_kennwerte import (
     get_speicher_kapazitaet_kwh,
     get_speicher_nutzbare_kapazitaet_kwh,
@@ -141,16 +141,20 @@ async def get_speicher_dashboard(
     # Zeitpunkten. Gewichtet wird sie mit derselben Menge wie der Bezugspreis
     # — der Spread wird auf die Entladung angewendet, für die es hier keine
     # eigene Monatsaufteilung gibt.
+    #
+    # ⭐ N-712 (12.10.2026): der Bezugspreis des Monats kommt aus den Monats-Fakten (`netzbezug_preis_cent`, Entscheid
+    # Gernot: Kanon ist der Monatspreis der Schicht — gepflegt → gemessen → Zeitfenster → Stamm, vor dem ersten Tarif
+    # die Vorbelegung). Bis dahin stand hier `resolve_netzbezug_preis_cent(m, Tarif ODER heutiger Tarif)`: für Monate
+    # vor dem ersten Tarif der HEUTIGE Preis (Fall C: 194,40 statt 185,40 €), und die Stufen „gemessen" und
+    # „Zeitfenster" fehlten. Die Vergütung bleibt bei ihrem bisherigen Weg (nicht Teil des Funds).
+    _monatspreis = await tarife_der_monate(db, anlage_id, list(anlage_md_dict))
     gew_preis_sum = 0.0
     gew_einspeise_sum = 0.0
     for m in anlage_md_dict.values():
         m_tarife = await lade_tarife_fuer_anlage(
             db, anlage_id, target_date=date(m.jahr, m.monat, 1)
         )
-        m_basis = resolve_strompreis_for_komponente(
-            m_tarife, "allgemein", fallback=strompreis_cent
-        )
-        gew_preis_sum += resolve_netzbezug_preis_cent(m, m_basis) * (m.netzbezug_kwh or 0)
+        gew_preis_sum += _monatspreis[(m.jahr, m.monat)].netzbezug_preis_cent * (m.netzbezug_kwh or 0)
         # #392: der Monatssatz der variablen Vergütung schlägt den Stamm-
         # Monatstarif — dieselbe zweite Auflösungsstufe wie beim Bezugspreis
         # eine Zeile darüber.

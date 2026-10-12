@@ -57,6 +57,16 @@ einmaliger Sprung in der HA-Langzeitstatistik der beiden Sensoren ([Sensor-Refer
 Jahresberichts nennt den Allgemeintarif der Berichtsmonate — bei einem Wechsel im Zeitraum beide Abschnitte — statt des
 jüngsten Tarif-Eintrags; die Infothek belegt „Stromvertrag" und „Einspeisevertrag" mit dem heute gültigen Tarif vor.
 
+**Ein Monatspreis für alle Sichten:** Komponenten-Hubs (E-Auto, Wärmepumpe, Speicher, Wallbox, Sonstiges), der
+ROI-Fortschritt in den Aussichten und die HA-Sensoren für Jahresersparnis, ROI, Amortisation und „WP Ersparnis" rechnen
+jetzt mit dem Monatspreis, den auch das Cockpit nimmt: Monate vor deinem ersten Stromtarif mit der Vorbelegung 30 ct
+(bisher mit dem heutigen Tarif), und ein im Monatsabschluss gepflegter Ø-Strompreis gilt ohne eigenen Wärmepumpen-Tarif
+auch für die Wärmepumpe (bisher nur im Cockpit). *Cockpit → Monat und Jahr* zeigen für Monate vor dem ersten Tarif
+jetzt ihre Geldposten — gerechnet mit der Vorbelegung, und unter dem Ø-Preis steht, dass kein Tarif hinterlegt ist —,
+statt „Stromrechnung fehlt". Wer solche Monate oder einen gepflegten Ø ohne eigenen Wärmepumpen-Tarif hat, sieht in HA
+einmalig einen Sprung in der Langzeitstatistik ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise),
+[Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)).
+
 **Einmal gerundet:** „Verbrauch (Monat)" eines sonstigen Verbrauchers und „Überschuss-Prognose heute" wurden doppelt
 gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei allen anderen Sensoren.
 

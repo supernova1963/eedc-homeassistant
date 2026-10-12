@@ -762,7 +762,7 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
           : d.netzbezug_preis_cent != null && (
             d.netzbezug_preis_zeittarif
               ? <span>Netzbezug Ø <span className="text-blue-500 font-medium">{fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span> (HT/NT)</span>
-              : <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>
+              : <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh{d.netzbezug_preis_herkunft === 'vorbelegung' ? ' (Vorbelegung, kein Tarif hinterlegt)' : ''}</span>
           )
         }
         {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}

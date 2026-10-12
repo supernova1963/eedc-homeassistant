@@ -7,16 +7,19 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Iterable, Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    lade_tarife_je_stichtag,
     resolve_tarif_for_komponente,
     resolve_einspeise_preis_cent,
 )
 from backend.services.strompreis_aggregator import (
     PreisMessung,
     aufgeloester_monatspreis,
+    lade_preis_aggregate_je_monat,
     wirksamer_arbeitspreis_cent,
 )
 from backend.core.berechnungen.dienstliche_ladekosten import (
@@ -167,6 +170,49 @@ async def tarif_des_monats(
     mit Flex-Ø) — für eine Sicht, die einen Monat OHNE Fakt rechnet (HA-Bauform E4e: Cockpit → Monat ohne Abschluss,
     dienstliche Ladekosten). Eigene Caches je Aufruf; dieselbe Auflösung wie die Schicht, keine zweite."""
     return await _lade_tarif(db, anlage_id, (jahr, monat), monatsdaten, {}, {})
+
+
+async def tarife_der_monate(
+    db: AsyncSession, anlage_id: int, monate: Iterable[MonatsSchluessel],
+) -> dict[MonatsSchluessel, TarifFakten]:
+    """Der Monatstarif VIELER Monate, wie die Monats-Fakten ihn bilden — je Monat ``_lade_tarif`` (``tarif_des_monats``),
+    mit den geteilten Ladern von ``lade_monats_fakten``: Tarife aller Stichtage in einer Abfrage
+    (``lade_tarife_je_stichtag``), die gemessenen Monats-Ø in einer (``lade_preis_aggregate_je_monat``), die
+    Monatszeilen in einer.
+
+    N-712/N-713 (12.10.2026, Entscheid Gernot: Kanon ist der Monatspreis der Monats-Fakten): Hubs, HA-Export und
+    Aussichten lesen ihren Monatspreis HIER, statt ihn je Sicht aus Tarif und Ersatzpreis zusammenzusetzen. Bis dahin
+    setzte jede Sicht für Monate vor dem ersten Tarif den HEUTIGEN Tarif ein (Fall C: E-Auto-Hub 666,00 statt 675,00 €)
+    und nahm ohne eigenen WP-Tarif den Stammpreis statt der N-663-Kaskade (gepflegter Monats-Ø 24 ct: WP-Hub 346,67
+    statt 490,67 €). Die Sicht wählt das Feld ihrer Verwendung: ``netzbezug_preis_cent`` (Hauszähler),
+    ``wp_preis_cent``, ``wallbox_preis_effektiv_cent``. Keine eigene Kaskade — dieselbe Auflösung wie die Schicht."""
+    _monate = sorted(set(monate))
+    if not _monate:
+        return {}
+    md_je_monat = {
+        (m.jahr, m.monat): m
+        for m in (await db.execute(
+            select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+        )).scalars().all()
+    }
+    tarif_cache: dict[date, dict] = await lade_tarife_je_stichtag(
+        db, anlage_id, [date(j, m, 1) for j, m in _monate]
+    )
+    letzter = _monate[-1]
+    messung = await lade_preis_aggregate_je_monat(
+        db, anlage_id,
+        von=date(_monate[0][0], _monate[0][1], 1),
+        bis=date(letzter[0] + (letzter[1] == 12), (letzter[1] % 12) + 1, 1),
+    )
+    zeittarif_cache: dict = {}
+    preis_cache: dict = {}
+    return {
+        k: await _lade_tarif(
+            db, anlage_id, k, md_je_monat.get(k), tarif_cache, zeittarif_cache,
+            preis_cache=preis_cache, preis_messung=messung,
+        )
+        for k in _monate
+    }
 
 
 def dienstliche_ladekosten_euro(pv_kwh: float, netz_kwh: float, tarif: TarifFakten) -> float:

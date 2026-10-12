@@ -31,19 +31,12 @@ _HELFER = "resolve_netzbezug_preis_cent"
 #: ⚠ Keine davon ist falsch: Der gepflegte Ø erreicht sie alle. Ihnen fehlt
 #: allein die **gemessene** Stufe.
 KASKADE_NOCH_NICHT: dict[str, str] = {
-    # Prognose nach vorn: bewertet künftige Monate, für die es weder einen
-    # Abschluss noch Stundenpreise gibt. Die Messung hätte dort nichts zu
-    # sagen — hier steht sie am ehesten zu Recht aus.
-    # Vorlage 7 (18.09.2026): die Finanz-Prognose zog aus aussichten.py nach aussichten/finanzen.py;
-    # Vorlage 7b: die Stelle (E-Auto-Monatspreis im Rückblick) liegt in der Phase finanz_rueckblick.py.
-    "backend/api/routes/aussichten/finanz_rueckblick.py": "Prognose nach vorn, keine Messdaten künftiger Monate",
+    # N-712/N-713 (12.10.2026): `aussichten/finanz_rueckblick.py` (E-Auto-Monatspreis im Rückblick) und
+    # `investitionen/dashboard_speicher.py` (Speicher-Spread) lesen den Monatspreis jetzt aus den Monats-Fakten
+    # (`tarife_der_monate`, volle Kaskade) — beide Einträge sind gestrichen.
     # Einzelne Monatszeile über `GET /monatsdaten/{id}` — liefert die Rohwerte
     # der Zeile, nicht die aufbereitete Sicht.
     "backend/api/routes/monatsdaten.py": "Rohwert-Route, eigene Bedeutung",
-    # Speicher-Spread über die Lebensdauer; die Netzladung hat mit
-    # `berechne_effektiver_ladepreis` bereits einen eigenen gemessenen Preis.
-    # Vorlage 6 (18.09.2026): das Speicher-Dashboard zog aus dashboards.py nach dashboard_speicher.py.
-    "backend/api/routes/investitionen/dashboard_speicher.py": "Spread über die Lebensdauer, eigener Ladepreis-Pfad",
 }
 
 

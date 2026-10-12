@@ -474,7 +474,9 @@ def falte_posten(monate: Sequence[Mapping[str, Any]], jahr: int) -> ErgebnisEing
     return ErgebnisEingang(**werte, fehlende_posten=tuple(fehlend))
 
 
-_PREIS_HERKUNFT_STUFEN = ("gepflegt", "gemessen", "zeitfenster", "stamm")
+#: N-712: ``vorbelegung`` — Monat ohne Tarif zum Stichtag, gerechnet mit ``NETZBEZUG_DEFAULT_CENT`` (Etikett aus
+#: *Cockpit → Monat*, ``strompreis_aggregator.PREIS_HERKUNFT_VORBELEGUNG``); im Jahr wie jede Stufe einzeln oder ``gemischt``.
+_PREIS_HERKUNFT_STUFEN = ("gepflegt", "gemessen", "zeitfenster", "stamm", "vorbelegung")
 
 
 def _netzbezug_preis_des_monats(m: Mapping[str, Any]) -> Optional[float]:

@@ -11,16 +11,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from datetime import date
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
-from backend.api.routes.strompreise import (
-    lade_tarife_fuer_anlage,
-    resolve_strompreis_for_komponente,
-)
+from backend.services.monats_fakten import tarife_der_monate
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE, abgrenzung_stoerung
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.mitteltemperatur import lade_heizgradtage_je_monat
@@ -81,7 +77,7 @@ class WaermepumpeDashboardResponse(BaseModel):
 @router.get("/dashboard/waermepumpe/{anlage_id}", response_model=list[WaermepumpeDashboardResponse])
 async def get_waermepumpe_dashboard(
     anlage_id: int,
-    strompreis_cent: Optional[float] = Query(None, description="Override: Strompreis (auto aus WP-Tarif wenn leer)"),
+    strompreis_cent: Optional[float] = Query(None, description="Ohne Wirkung seit N-712: der WP-Preis je Monat kommt aus den Monats-Fakten"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -89,11 +85,10 @@ async def get_waermepumpe_dashboard(
 
     Zeigt alle Wärmepumpen mit COP, Heizkosten, Ersparnis vs. alte Heizung.
     """
-    # WP-Tarif laden
-    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
-    wp_tarif = tarife.get("waermepumpe")
-    allgemein_tarif = tarife.get("allgemein")
-    strompreis_cent = strompreis_cent or resolve_strompreis_for_komponente(tarife, "waermepumpe")
+    # N-712/N-713 (12.10.2026): kein Tarif-Lookup mehr hier — der WP-Preis jedes Monats kommt aus den Monats-Fakten
+    # (unten, `tarife_der_monate`). `strompreis_cent` war nur noch der Ersatzpreis für Monate ohne Tarif und bleibt
+    # als Parameter stehen (Signatur, Tests), bestimmt aber keinen Preis mehr — wie `strompreis` bei den
+    # HA-Investitions-Sensoren seit N-693.
 
     inv_result = await db.execute(
         select(Investition)
@@ -299,6 +294,12 @@ async def get_waermepumpe_dashboard(
         # Trägt mindestens ein Monat einen echten Vergleich? Sonst gibt es
         # keine Ersparnis-, Alt-Kosten- und CO₂-Zahl, die etwas behauptet.
         bewertbar = False
+        # ⭐ N-712/N-713 (12.10.2026): der WP-Preis des Monats kommt aus den Monats-Fakten (`wp_preis_cent`, Entscheid
+        # Gernot: Kanon ist der Monatspreis der Schicht). Bis dahin stand hier je Monat
+        # `resolve_strompreis_for_komponente(m_tarife, "waermepumpe", fallback=strompreis_cent)` — für Monate vor dem
+        # ersten Tarif der HEUTIGE WP-Tarif (Fall B: 466,67 statt 418,67 €) und ohne eigenen WP-Tarif der Stammpreis
+        # statt der N-663-Kaskade (gepflegter Monats-Ø 24 ct: 346,67 statt 490,67 €).
+        wp_monatspreis = await tarife_der_monate(db, anlage_id, [(md.jahr, md.monat) for md in monatsdaten])
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             # N-391: kanonisch wie die Zeile oben (D1) — ohne diesen Aufruf
@@ -318,12 +319,7 @@ async def get_waermepumpe_dashboard(
             m_strom = get_wp_strom_kwh(d, wp.parameter)
             if m_waerme <= 0 and m_strom <= 0:
                 continue
-            m_tarife = await lade_tarife_fuer_anlage(
-                db, anlage_id, target_date=date(md.jahr, md.monat, 1)
-            )
-            m_wp_preis = resolve_strompreis_for_komponente(
-                m_tarife, "waermepumpe", fallback=strompreis_cent
-            )
+            m_wp_preis = wp_monatspreis[(md.jahr, md.monat)].wp_preis_cent
             m_anlage_md = wp_anlage_md.get((md.jahr, md.monat))
             m_ergebnis = berechne_wp_ersparnis(
                 wp_waerme_kwh=m_waerme,

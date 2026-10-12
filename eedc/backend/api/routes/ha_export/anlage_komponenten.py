@@ -19,12 +19,8 @@ from backend.core.berechnungen import (
     speicher_wirkungsgrad,
     vollzyklen as berechne_vollzyklen,
 )
-from datetime import date
-from backend.services.strompreis_aggregator import aufgeloester_monatspreis
-from backend.api.routes.strompreise import (
-    lade_tarife_fuer_anlage,
-    resolve_strompreis_for_komponente,
-)
+from backend.api.routes.strompreise import resolve_strompreis_for_komponente
+from backend.services.monats_fakten import tarife_der_monate
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
     jahres_ersparnis_euro,
@@ -34,7 +30,6 @@ from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     eigener_verbrauch_l_100km,
 )
-from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_E_AUTO_DEFAULTS, ist_dienstlich
 from backend.core.calculations import berechne_co2_bilanz
@@ -108,17 +103,19 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
     # ADR-002/P8: JE MONAT auflösen — die WP-Ersparnis summiert über die ganze
     # Historie, ein Einheitstarif hätte einen Tarifwechsel rückwirkend über alle
     # Jahre gezogen (dieselbe Klasse wie der Jahresbericht-Drift, #326).
-    wp_preis_by_periode: dict[tuple[int, int], float] = {}
-    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
-        _periode = (_p_jahr, _p_monat)
-        if _periode in wp_preis_by_periode:
-            continue
-        _p_tarife = await lade_tarife_fuer_anlage(
-            db, anlage.id, target_date=date(_p_jahr, _p_monat, 1)
-        )
-        wp_preis_by_periode[_periode] = resolve_strompreis_for_komponente(
-            _p_tarife, "waermepumpe", fallback=netzbezug_preis_cent
-        )
+    #
+    # ⭐ N-712/N-713 (12.10.2026): WP- und Wallbox-Preis des Monats kommen aus den Monats-Fakten
+    # (`tarife_der_monate`, Entscheid Gernot: Kanon ist der Monatspreis der Schicht). Bis dahin setzten die zwei
+    # Schleifen hier ihn selbst zusammen — mit `fallback=netzbezug_preis_cent`, dem HEUTIGEN Allgemeintarif, für Monate
+    # vor dem ersten Tarif (Fall C: bisherige WP-Ersparnis 343,67 statt 373,67 €, E-Auto 666,00 statt 675,00 €), und
+    # die WP ohne eigenen Tarif mit dem Stammpreis statt der N-663-Kaskade (gepflegter Monats-Ø: 346,67 statt
+    # 490,67 €). Beide Werte gehen über `historischer_netto_ertrag` in ROI und Amortisation ein.
+    _monatspreis = await tarife_der_monate(
+        db, anlage.id, {(_p_jahr, _p_monat) for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten},
+    )
+    wp_preis_by_periode: dict[tuple[int, int], float] = {
+        k: t.wp_preis_cent for k, t in _monatspreis.items()
+    }
 
     # Heutiger WP-Tarif: Fallback für Monate ohne Auflösung und Grundlage der
     # nach vorn gerichteten Sensor-Werte weiter unten. `_tarife` steht seit
@@ -138,29 +135,9 @@ async def historische_komponenten(*, _tarife, anlage, db, investitionen, monatsd
     # dahin las die Schleife allein den Wallbox-Tarif — der **abgerechnete**
     # Monats-Ø kam nie an, während Cockpit → Übersicht ihn für dieselbe
     # Ersparnis längst nahm. Zwei Zahlen für eine Größe, je nach Sicht.
-    _md_result = await db.execute(
-        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
-    )
-    _md_je_monat = {(m.jahr, m.monat): m for m in _md_result.scalars().all()}
-    _preis_cache_wb: dict = {}
-    wallbox_preis_by_periode: dict[tuple[int, int], float] = {}
-    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
-        _periode = (_p_jahr, _p_monat)
-        if _periode in wallbox_preis_by_periode:
-            continue
-        _p_tarife = await lade_tarife_fuer_anlage(
-            db, anlage.id, target_date=date(_p_jahr, _p_monat, 1)
-        )
-        # Der Wallbox-Tarif bleibt Stufe 4 (`stammpreis_override`) — er geht
-        # nicht verloren, nur ein gepflegter oder gemessener Ø schlägt ihn.
-        wallbox_preis_by_periode[_periode] = (await aufgeloester_monatspreis(
-            db, anlage.id, _p_jahr, _p_monat, _md_je_monat.get(_periode),
-            _p_tarife.get("allgemein"),
-            stammpreis_override=resolve_strompreis_for_komponente(
-                _p_tarife, "wallbox", fallback=netzbezug_preis_cent
-            ),
-            cache=_preis_cache_wb,
-        )).cent
+    wallbox_preis_by_periode: dict[tuple[int, int], float] = {
+        k: t.wallbox_preis_effektiv_cent for k, t in _monatspreis.items()
+    }
     wallbox_netzbezug_preis_cent = resolve_strompreis_for_komponente(
         _tarife, "wallbox", fallback=netzbezug_preis_cent
     )

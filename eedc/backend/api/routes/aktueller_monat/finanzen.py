@@ -11,7 +11,11 @@ from typing import Optional
 from sqlalchemy import select
 from backend.models.investition import InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.strompreis_aggregator import aufgeloester_monatspreis
+from backend.services.strompreis_aggregator import (
+    PREIS_HERKUNFT_STAMM,
+    PREIS_HERKUNFT_VORBELEGUNG,
+    aufgeloester_monatspreis,
+)
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_einspeise_preis_cent
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
@@ -92,92 +96,106 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
         # G19-1 K3: jährliche Zählergebühr (Ausweis in der Jahresaufstellung,
         # NICHT verrechnet) — Frontend zeigt sie nur im Jahres-Finanzblock.
         zaehlergebuehr_jahr = allgemein_tarif.zaehlergebuehr_euro_jahr
-    if allgemein_tarif:
-        # N-267: mit Zeitfenstern der gewichtete Preis, sonst die Spalte.
-        netzbezug_preis_cent = await _zeittarif_preis(
-            db, anlage_id, jahr, monat, allgemein_tarif,
-            NETZBEZUG_DEFAULT_CENT, _zt_cache,
-        )
-        einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        # #392: variable Einspeisevergütung — der gepflegte Satz des Monats
-        # schlägt den Stammwert. Anders als beim Netzbezug (der „Verwendeter
-        # Tarif" und Effektiv-Preis getrennt ausliefert) gibt es hier nur EIN
-        # Response-Feld — Erlös, T-Konto und Anzeige tragen dieselbe Zahl.
-        # Laufender Monat ohne gepflegten Wert → Stammwert (Auftrag #392).
-        einspeise_cent = resolve_einspeise_preis_cent(md_for_gas, einspeise_cent)
-        # Der Preis, mit dem GELD gerechnet wird: bei flexiblem Tarif der
-        # verbrauchsgewichtete Monatsdurchschnitt, sonst der Tarif-Arbeitspreis.
-        # `netzbezug_preis_cent` bleibt daneben der ausgelieferte Tarif-Wert
-        # (Response-Feld „Verwendeter Tarif") und wird NICHT überschrieben.
-        #
-        # Bis v4.0.6 versprach hier nur ein Kommentar die Überschreibung — gebaut
-        # war sie nie: Netzbezugskosten, EV-Ersparnis und der WP-Fallback des
-        # laufenden Monats rechneten mit dem Tarifpreis, während der Vorjahres-
-        # Pfad (`_load_vorjahr`) und die per-Investition-Details längst den
-        # Durchschnitt nahmen. Derselbe Monat trug damit je nach Sicht zwei
-        # Beträge, und in Cockpit → Monat passte die Ø-Preis-Kachel nicht zu
-        # ihrer eigenen Kostenzeile (Forum simon42 #89667, Algie).
-        #
-        # Aufgelöst über den SoT-Helper, NICHT über `durchschnitt or tarif`:
-        # ein Monats-Ø von **0,0 ct** ist bei dynamischem Tarif real (viele
-        # Negativpreis-Stunden) und wäre als falsy stillschweigend auf den
-        # Tarifpreis zurückgefallen — die 0-Werte-Falle.
-        # ⭐ **#412 (11.09.2026): die Kaskade hat eine dritte Stufe bekommen** —
-        # gepflegt → **gemessen** → Zeitfenster → Stamm. Zwischen dem
-        # abgerechneten Ø und dem Tarifpreis fehlte die **Messung**: Wer einen
-        # dynamischen Tarif hat, sah im laufenden Monat den festen Tarif,
-        # obwohl eedc die Stundenpreise mitschreibt (OB73-gif).
-        _preis = await aufgeloester_monatspreis(
-            db, anlage_id, jahr, monat, md_for_gas, allgemein_tarif,
-        )
-        netzbezug_preis_effektiv_cent = _preis.cent
-        netzbezug_preis_herkunft = _preis.herkunft
-        netzbezug_preis_abdeckung = _preis.abdeckung
-        # N-607 (03.10.2026, SOLL Flex-Tarife A-2): die Eigenverbrauchs-Ersparnis bewertet VERMIEDENEN Bezug — mit dem
-        # EV-gewichteten Ø der gemessenen Stundenpreise, wenn es ihn gibt, sonst mit dem Bezugspreis. Dieselbe Regel wie
-        # die Monats-Fakten (`finanz_zeilen.py`, `finanz_aggregat.py`), die Übersicht, Monatsreihe, PDF und HA-Export
-        # speisen. Bis dahin nahm diese Route den bezugsgewichteten Ø (Probe: 160,00 € gegen 40,00 €). Die
-        # Stromrechnung bleibt beim Bezugspreis.
-        ev_preis_cent = _preis.ev_cent if _preis.ev_cent is not None else netzbezug_preis_effektiv_cent
-        ev_preis_herkunft = "ev_gemessen" if _preis.ev_cent is not None else netzbezug_preis_herkunft
+    # ⭐ N-712 (12.10.2026, Entscheid Gernot: Kanon ist der Monatspreis der Monats-Fakten): auch OHNE Tarif zum
+    # Stichtag (Monate vor dem ersten Tarif) rechnet dieser Block — mit der Vorbelegung, wie die Monats-Fakten
+    # (`monats_fakten/tarif.py::_lade_tarif`: Stammpreis `NETZBEZUG_DEFAULT_CENT`, Vergütung
+    # `EINSPEISEVERGUETUNG_DEFAULT_CENT`, kein Grundpreis), Cockpit → Übersicht, PDF und HA-Export. Bis dahin stand hier
+    # `if allgemein_tarif:` — der Monat hatte keine Geldposten („fehlende_posten: Stromrechnung"), und Cockpit → Jahr lag
+    # um diese Monate unter der Übersicht (Fall C: E-Auto 495,00 statt 675,00 €). Die Herkunft des Preises sagt es
+    # (`vorbelegung`, P4 — die Zahl steht, der Hinweis sagt, woher sie kommt); der Daten-Checker meldet die Lücke.
+    # N-267: mit Zeitfenstern der gewichtete Preis, sonst die Spalte.
+    netzbezug_preis_cent = await _zeittarif_preis(
+        db, anlage_id, jahr, monat, allgemein_tarif,
+        NETZBEZUG_DEFAULT_CENT, _zt_cache,
+    )
+    einspeise_cent = (
+        allgemein_tarif.einspeiseverguetung_cent_kwh
+        if allgemein_tarif is not None and allgemein_tarif.einspeiseverguetung_cent_kwh is not None
+        else EINSPEISEVERGUETUNG_DEFAULT_CENT
+    )
+    # #392: variable Einspeisevergütung — der gepflegte Satz des Monats
+    # schlägt den Stammwert. Anders als beim Netzbezug (der „Verwendeter
+    # Tarif" und Effektiv-Preis getrennt ausliefert) gibt es hier nur EIN
+    # Response-Feld — Erlös, T-Konto und Anzeige tragen dieselbe Zahl.
+    # Laufender Monat ohne gepflegten Wert → Stammwert (Auftrag #392).
+    einspeise_cent = resolve_einspeise_preis_cent(md_for_gas, einspeise_cent)
+    # Der Preis, mit dem GELD gerechnet wird: bei flexiblem Tarif der
+    # verbrauchsgewichtete Monatsdurchschnitt, sonst der Tarif-Arbeitspreis.
+    # `netzbezug_preis_cent` bleibt daneben der ausgelieferte Tarif-Wert
+    # (Response-Feld „Verwendeter Tarif") und wird NICHT überschrieben.
+    #
+    # Bis v4.0.6 versprach hier nur ein Kommentar die Überschreibung — gebaut
+    # war sie nie: Netzbezugskosten, EV-Ersparnis und der WP-Fallback des
+    # laufenden Monats rechneten mit dem Tarifpreis, während der Vorjahres-
+    # Pfad (`_load_vorjahr`) und die per-Investition-Details längst den
+    # Durchschnitt nahmen. Derselbe Monat trug damit je nach Sicht zwei
+    # Beträge, und in Cockpit → Monat passte die Ø-Preis-Kachel nicht zu
+    # ihrer eigenen Kostenzeile (Forum simon42 #89667, Algie).
+    #
+    # Aufgelöst über den SoT-Helper, NICHT über `durchschnitt or tarif`:
+    # ein Monats-Ø von **0,0 ct** ist bei dynamischem Tarif real (viele
+    # Negativpreis-Stunden) und wäre als falsy stillschweigend auf den
+    # Tarifpreis zurückgefallen — die 0-Werte-Falle.
+    # ⭐ **#412 (11.09.2026): die Kaskade hat eine dritte Stufe bekommen** —
+    # gepflegt → **gemessen** → Zeitfenster → Stamm. Zwischen dem
+    # abgerechneten Ø und dem Tarifpreis fehlte die **Messung**: Wer einen
+    # dynamischen Tarif hat, sah im laufenden Monat den festen Tarif,
+    # obwohl eedc die Stundenpreise mitschreibt (OB73-gif).
+    _preis = await aufgeloester_monatspreis(
+        db, anlage_id, jahr, monat, md_for_gas, allgemein_tarif,
+    )
+    netzbezug_preis_effektiv_cent = _preis.cent
+    netzbezug_preis_herkunft = (
+        PREIS_HERKUNFT_VORBELEGUNG
+        if allgemein_tarif is None and _preis.herkunft == PREIS_HERKUNFT_STAMM
+        else _preis.herkunft
+    )
+    netzbezug_preis_abdeckung = _preis.abdeckung
+    # N-607 (03.10.2026, SOLL Flex-Tarife A-2): die Eigenverbrauchs-Ersparnis bewertet VERMIEDENEN Bezug — mit dem
+    # EV-gewichteten Ø der gemessenen Stundenpreise, wenn es ihn gibt, sonst mit dem Bezugspreis. Dieselbe Regel wie
+    # die Monats-Fakten (`finanz_zeilen.py`, `finanz_aggregat.py`), die Übersicht, Monatsreihe, PDF und HA-Export
+    # speisen. Bis dahin nahm diese Route den bezugsgewichteten Ø (Probe: 160,00 € gegen 40,00 €). Die
+    # Stromrechnung bleibt beim Bezugspreis.
+    ev_preis_cent = _preis.ev_cent if _preis.ev_cent is not None else netzbezug_preis_effektiv_cent
+    ev_preis_herkunft = "ev_gemessen" if _preis.ev_cent is not None else netzbezug_preis_herkunft
 
-        if einspeisung is not None:
-            # §51 EEG: siehe `_load_vorjahr` für Begründung.
-            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
-            m_erloes = einspeise_erloes_euro(
-                einspeisung_kwh=einspeisung,
-                neg_preis_kwh=m_neg,
-                verguetung_ct_kwh=einspeise_cent,
-            )
-            einspeise_erloes = round(m_erloes.erloes_euro, 2)
-            # Den Abzug mitgeben, sonst ist die Kürzung im Erlös unsichtbar.
-            # `m_neg is None` = Anlage nicht §51-pflichtig / keine Mitschrift.
-            if m_neg is not None:
-                einspeisung_neg_preis = round(m_erloes.nicht_verguetete_kwh, 1)
-                nicht_vergueteter_erloes = round(m_erloes.nicht_vergueteter_erloes_euro, 2)
-        if netzbezug is not None:
-            grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
-            netzbezug_kosten = round(
-                berechne_netzbezug_kosten(
-                    netzbezug, netzbezug_preis_effektiv_cent, grundpreis
-                ), 2
-            )
-            # Der reine Arbeitspreis-Anteil OHNE Grundpreis. Reiner Ausweis für
-            # die Ø-Preis-Kachel: dort stehen kWh und € nebeneinander, und wer
-            # sie dividiert, muss auf die Kopfzahl kommen. Mit den Gesamtkosten
-            # ging das nie auf (559 kWh · 210,45 € ⇒ 37,6 ct statt 33 ct —
-            # Forum simon42 #89667, Algie). Kein zweiter Kostenposten.
-            netzbezug_arbeitspreis_kosten = round(
-                netzbezug * netzbezug_preis_effektiv_cent / 100, 2
-            )
-            # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
-            # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
-            grundgebuehr = round(grundpreis, 2)
-        if eigenverbrauch is not None:
-            ev_ersparnis = round(eigenverbrauch * ev_preis_cent / 100, 2)
-        # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
-        # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
-        # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
+    if einspeisung is not None:
+        # §51 EEG: siehe `_load_vorjahr` für Begründung.
+        m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
+        m_erloes = einspeise_erloes_euro(
+            einspeisung_kwh=einspeisung,
+            neg_preis_kwh=m_neg,
+            verguetung_ct_kwh=einspeise_cent,
+        )
+        einspeise_erloes = round(m_erloes.erloes_euro, 2)
+        # Den Abzug mitgeben, sonst ist die Kürzung im Erlös unsichtbar.
+        # `m_neg is None` = Anlage nicht §51-pflichtig / keine Mitschrift.
+        if m_neg is not None:
+            einspeisung_neg_preis = round(m_erloes.nicht_verguetete_kwh, 1)
+            nicht_vergueteter_erloes = round(m_erloes.nicht_vergueteter_erloes_euro, 2)
+    if netzbezug is not None:
+        grundpreis = (allgemein_tarif.grundpreis_euro_monat or 0) if allgemein_tarif is not None else 0
+        netzbezug_kosten = round(
+            berechne_netzbezug_kosten(
+                netzbezug, netzbezug_preis_effektiv_cent, grundpreis
+            ), 2
+        )
+        # Der reine Arbeitspreis-Anteil OHNE Grundpreis. Reiner Ausweis für
+        # die Ø-Preis-Kachel: dort stehen kWh und € nebeneinander, und wer
+        # sie dividiert, muss auf die Kopfzahl kommen. Mit den Gesamtkosten
+        # ging das nie auf (559 kWh · 210,45 € ⇒ 37,6 ct statt 33 ct —
+        # Forum simon42 #89667, Algie). Kein zweiter Kostenposten.
+        netzbezug_arbeitspreis_kosten = round(
+            netzbezug * netzbezug_preis_effektiv_cent / 100, 2
+        )
+        # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
+        # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
+        grundgebuehr = round(grundpreis, 2)
+    if eigenverbrauch is not None:
+        ev_ersparnis = round(eigenverbrauch * ev_preis_cent / 100, 2)
+    # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
+    # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
+    # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
 
@@ -271,18 +289,26 @@ async def t_konto_je_investition(*, monats_fakt=None, _zt_cache, allgemein_tarif
     """
     # ── Per-Investition Finanzdetails (T-Konto) ──
     investitionen_financials: list[InvestitionFinancialDetail] = []
-    if investitionen and allgemein_tarif:
-        netz_p = netzbezug_preis_effektiv_cent or NETZBEZUG_DEFAULT_CENT
+    # N-712: ohne Tarif zum Stichtag (vor dem ersten Tarif) rechnet das T-Konto mit der Vorbelegung wie die
+    # Monats-Fakten — bis dahin `if investitionen and allgemein_tarif:` (keine Zeilen, keine WP-/E-Mob-Ersparnis).
+    if investitionen:
+        # `is not None` statt `or`: ein gepflegter Monats-Ø von 0,0 ct ist ein Wert (dieselbe Regel wie die Vergütung
+        # eine Zeile darunter); oben ist der Preis seit N-712 immer gesetzt, der Rückfall ist nur noch Schutz.
+        netz_p = (
+            netzbezug_preis_effektiv_cent if netzbezug_preis_effektiv_cent is not None else NETZBEZUG_DEFAULT_CENT
+        )
         # `einspeise_cent` ist oben bereits mit `is not None` aufgelöst — ein
         # `or` hätte hier nur noch den gepflegten Wert **0** überschrieben und
         # dem T-Konto eine andere Vergütung gegeben als der Zeile darüber.
         einsp_p = einspeise_cent if einspeise_cent is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        wp_p = await _zeittarif_preis(
-            db, anlage_id, jahr, monat, tarife.get("waermepumpe"), netz_p, _zt_cache,
-        )
-        wb_p = await _zeittarif_preis(
-            db, anlage_id, jahr, monat, tarife.get("wallbox"), netz_p, _zt_cache,
-        )
+        # ⭐ N-713 (12.10.2026): WP- und Wallbox-Preis des Monats aus den Monats-Fakten (`wp_preis_cent`,
+        # `wallbox_preis_effektiv_cent`), dieselben wie Übersicht, Hubs, HA-Export und Aussichten. Bis dahin stand hier
+        # `_zeittarif_preis(tarife.get("waermepumpe"/"wallbox"), …)` — ohne eigenen WP-/Wallbox-Tarif ist das die
+        # Zeile des Allgemeintarifs (`tarife_zum_stichtag`), also dessen Spalte statt des gepflegten bzw. gemessenen
+        # Monats-Ø (gemessen K5a 10/2025: WP 43,33 statt 61,33 €, E-Auto 93,60 statt 99,00 €).
+        _tarif = await monatstarif_der_route(db, anlage_id, jahr, monat, monats_fakt)
+        wp_p = _tarif.wp_preis_cent
+        wb_p = _tarif.wallbox_preis_effektiv_cent
         # WP-Ersparnis pro Investition siehe wp_wirtschaftlichkeit.berechne_wp_ersparnis()
         # — nicht mehr lokal mit hartcodiertem Gaspreis berechnet (Drift-Audit A1).
         # Der monatliche Gaspreis-Override wird oben (md_for_gas) bereits geladen.
@@ -509,6 +535,21 @@ class DienstlicheLadungOhneFakt:
     netz_kwh: float
     tarif: object          # TarifFakten des Monats
     euro: float
+
+
+async def monatstarif_der_route(db, anlage_id: int, jahr: int, monat: int, monats_fakt=None):
+    """Der Monatstarif der Monats-Fakten für *Cockpit → Monat* (N-712/N-713): der des Fakts, wo es ihn gibt, sonst
+    derselbe über ``tarif_des_monats`` (laufender Monat ohne Abschluss, HA-Bauform E4e). Eine Lesetür für T-Konto und
+    WP-Aggregat — keine eigene Auflösung (``monats_fakten/tarif.py::_lade_tarif``)."""
+    tarif = getattr(monats_fakt, "tarif", None)
+    if tarif is not None:
+        return tarif
+    from backend.services.monats_fakten import tarif_des_monats
+
+    md = (await db.execute(select(Monatsdaten).where(
+        Monatsdaten.anlage_id == anlage_id, Monatsdaten.jahr == jahr, Monatsdaten.monat == monat,
+    ))).scalar_one_or_none()
+    return await tarif_des_monats(db, anlage_id, jahr, monat, md)
 
 
 async def dienstliche_ladung_ohne_fakt(*, db, anlage_id, jahr, monat, emob_entscheid):

@@ -24,11 +24,8 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.finanz_zeilen import ev_preis_je_monat
 from datetime import date
-from backend.api.routes.strompreise import (
-    lade_tarife_fuer_anlage,
-    monats_strompreis_lookup,
-    resolve_strompreis_for_komponente,
-)
+from backend.api.routes.strompreise import monats_strompreis_lookup
+from backend.services.monats_fakten import tarife_der_monate
 from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL
 from backend.core.berechnungen.betriebsart_gemessen import (
     ModusStromZeile,
@@ -913,6 +910,14 @@ async def _wp_ersparnis_sensor(
     wp_kosten = 0.0
     kuehl_kosten = 0.0
     bewertbar = False
+    # ⭐ N-713 (12.10.2026): der WP-Preis des Monats kommt aus den Monats-Fakten (`wp_preis_cent`, Entscheid Gernot:
+    # Kanon ist der Monatspreis der Schicht). Bis dahin stand hier je Monat
+    # `resolve_strompreis_for_komponente(m_tarife, "waermepumpe", fallback=netzbezug_preis)` — ohne eigenen WP-Tarif
+    # der Stammpreis statt der N-663-Kaskade (gepflegter Monats-Ø 24 ct, Tarif 30 ct: 346,67 statt 490,67 €). Den
+    # Ersatzpreis vor dem ersten Tarif hatte N-693 schon auf die Vorbelegung gestellt; er steckt jetzt im selben Preis.
+    wp_monatspreis = await tarife_der_monate(
+        db, investition.anlage_id, [(md.jahr, md.monat) for md in monatsdaten],
+    )
     for md in monatsdaten:
         d = md.verbrauch_daten or {}
         m_waerme = waerme_gesamt_kwh(   # N-391 (D1), N-379, N-398
@@ -928,12 +933,7 @@ async def _wp_ersparnis_sensor(
         # 20 kWh × 30 ct: 19 statt 25 €).
         if m_waerme <= 0:
             continue
-        m_tarife = await lade_tarife_fuer_anlage(
-            db, investition.anlage_id, target_date=date(md.jahr, md.monat, 1)
-        )
-        m_preis = resolve_strompreis_for_komponente(
-            m_tarife, "waermepumpe", fallback=netzbezug_preis
-        )
+        m_preis = wp_monatspreis[(md.jahr, md.monat)].wp_preis_cent
         amd = anlage_md_dict.get((md.jahr, md.monat))
         m_erg = berechne_wp_ersparnis(
             wp_waerme_kwh=m_waerme,

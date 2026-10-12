@@ -6,16 +6,10 @@ Monatsdaten-Antwortmodell, das alle Dashboards mitliefern.
 # bisherigen Stelle ein und exportiert die Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
 from typing import Optional, Any, NamedTuple
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from datetime import date
-from backend.models.monatsdaten import Monatsdaten
-from backend.services.strompreis_aggregator import aufgeloester_monatspreis
-from backend.api.routes.strompreise import (
-    resolve_einspeiseverguetung_cent,
-    resolve_strompreis_for_komponente,
-)
+from backend.api.routes.strompreise import resolve_einspeiseverguetung_cent
 
 
 class GewichtetePreise(NamedTuple):
@@ -31,6 +25,18 @@ class GewichtetePreise(NamedTuple):
     bezug_cent: float
     einspeise_cent: float
     bezug_lookup: dict[tuple[int, int], float] = {}
+
+def monatspreis_der_verwendung(tarif, verwendung: str) -> float:
+    """Das Feld des Monatstarifs der Monats-Fakten (``TarifFakten``), das zu einer Verwendung gehört (N-712/N-713):
+    ``wallbox`` → ``wallbox_preis_effektiv_cent`` (Flex-Ø des ganzen Zählers, Wallbox-Tarif Stufe 4), ``waermepumpe``
+    → ``wp_preis_cent`` (ohne eigenen WP-Tarif der Hauszähler, N-663), sonst ``netzbezug_preis_cent``. Eine Auswahl,
+    keine Auflösung — die steht in ``monats_fakten/tarif.py::_lade_tarif``."""
+    if verwendung == "wallbox":
+        return tarif.wallbox_preis_effektiv_cent
+    if verwendung == "waermepumpe":
+        return tarif.wp_preis_cent
+    return tarif.netzbezug_preis_cent
+
 
 async def _gewichtete_monatspreise(
     db: AsyncSession,
@@ -83,44 +89,31 @@ async def _gewichtete_monatspreise(
     # F-18-Klasse, eine Ebene tiefer: Der bestehende Wächter prüft, **dass**
     # ein Lookup übergeben wird, nicht **welcher**.
     #
-    # ⚠ Der Layer sagt es ausdrücklich: *„Der Flex-Ø gilt für den ganzen
-    # Zähler — auch für die Wallbox"* (`monats_fakten._lade_tarif`).
-    md_result = await db.execute(
-        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
-    )
-    md_je_monat = {(m.jahr, m.monat): m for m in md_result.scalars().all()}
-
-    # Dieselbe Bauform wie in `monats_strompreis_lookup`: Tarife und gemessene
-    # Monats-Ø einmal fuer alle Monate, danach rechnet die Schleife nur noch.
+    # ⭐ **N-712 (12.10.2026): der Monatspreis kommt aus den Monats-Fakten**
+    # (`tarife_der_monate`, Entscheid Gernot: Kanon ist der Monatspreis der
+    # Schicht). Bis dahin setzte diese Schleife ihn selbst zusammen — mit
+    # `fallback=fallback_bezug`, also dem HEUTIGEN Tarif, für Monate vor dem
+    # ersten Tarif (Fall C: E-Auto-Hub 666,00 statt 675,00 €). Die Schicht
+    # rechnet dort mit der Vorbelegung `NETZBEZUG_DEFAULT_CENT`, und so jetzt
+    # jeder Hub. `fallback_bezug` gilt nur noch ohne Gewichte (oben).
+    # Die Vergütung bleibt bei ihrem bisherigen Weg (nicht Teil des Funds).
     from backend.api.routes.strompreise import lade_tarife_je_stichtag
-    from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
+    from backend.services.monats_fakten import tarife_der_monate
 
     _monate = [(j, m) for (j, m), g in gewichte.items() if g and g > 0]
     _tarife_je_stichtag = await lade_tarife_je_stichtag(
         db, anlage_id, [date(j, m, 1) for j, m in _monate]
     )
-    _messung = await lade_preis_aggregate_je_monat(db, anlage_id)
+    _monatspreis = await tarife_der_monate(db, anlage_id, _monate)
 
     gewichteter_bezug = 0.0
     gewichtete_einspeisung = 0.0
     bezug_lookup: dict[tuple[int, int], float] = {}
-    preis_cache: dict = {}
     for (jahr, monat), gewicht in gewichte.items():
         if not gewicht or gewicht <= 0:
             continue
         m_tarife = _tarife_je_stichtag[date(jahr, monat, 1)]
-        m_bezug = resolve_strompreis_for_komponente(
-            m_tarife, verwendung, fallback=fallback_bezug
-        )
-        # Die Kaskade schlägt den Komponenten-Tarif, wo sie etwas Besseres
-        # weiß — genau wie `wallbox_preis_effektiv_cent` in den Monats-Fakten.
-        # ⚠ `stammpreis_override`: Der Komponenten-Tarif bleibt Stufe 4, er geht
-        # nicht verloren; nur ein gepflegter oder gemessener Ø schlägt ihn.
-        m_bezug = (await aufgeloester_monatspreis(
-            db, anlage_id, jahr, monat, md_je_monat.get((jahr, monat)),
-            m_tarife.get("allgemein"),
-            stammpreis_override=m_bezug, cache=preis_cache, messung=_messung,
-        )).cent
+        m_bezug = monatspreis_der_verwendung(_monatspreis[(jahr, monat)], verwendung)
         bezug_lookup[(jahr, monat)] = m_bezug
         gewichteter_bezug += m_bezug * gewicht
         gewichtete_einspeisung += resolve_einspeiseverguetung_cent(

@@ -240,6 +240,8 @@ async def get_finanz_prognose(
     # ── alternativkosten_rueckblick (Vorlage 7b: Phase in finanz_rueckblick.py, Schnittstelle 13 ein / 7 aus) ──
     _out = await alternativkosten_rueckblick(
         _tarife_fuer_stichtag=_tarife_fuer_stichtag,
+        anlage_id=anlage_id,
+        db=db,
         e_autos=e_autos,
         eauto_aggregate=eauto_aggregate,
         emob_pool_ctx=emob_pool_ctx,

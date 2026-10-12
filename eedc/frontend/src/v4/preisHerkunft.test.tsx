@@ -70,6 +70,14 @@ describe('Ø-Preis Netz — die Formel nennt die Herkunft', () => {
     expect(k?.formel).toContain('Arbeitspreis aus dem Strompreis-Tarif')
   })
 
+  it('N-712 vorbelegung: nennt den fehlenden Tarif statt einen Tarif-Arbeitspreis', () => {
+    // Monat vor dem ersten Tarif: die Zahl steht (Vorbelegung wie die Monats-Fakten), die Formel sagt, woher sie kommt.
+    const k = preisKachel(basis({ netzbezug_preis_herkunft: 'vorbelegung', netzbezug_preis_cent: 30 }))
+
+    expect(k?.formel).toContain('Vorbelegung')
+    expect(k?.formel).not.toContain('Arbeitspreis aus dem Strompreis-Tarif')
+  })
+
   it('N-655 Jahr: die gefaltete Herkunft „zeitfenster" ergibt dieselbe Formel wie der Monat', () => {
     // Bis 10.10.2026 trug die Jahresantwort kein Herkunftsfeld — die Kachel fiel auf den Tarif-Text zurück.
     const jahr = preisKachel(basis({ netzbezug_preis_herkunft: 'zeitfenster' }))
@@ -80,7 +88,7 @@ describe('Ø-Preis Netz — die Formel nennt die Herkunft', () => {
 
   it('N-655 Jahr: „gemischt" behauptet keine einzelne Stufe', () => {
     const k = preisKachel(basis({ netzbezug_preis_herkunft: 'gemischt' }))
-    for (const einzel of ['gepflegt', 'gemessen', 'zeitfenster', 'stamm'] as const) {
+    for (const einzel of ['gepflegt', 'gemessen', 'zeitfenster', 'stamm', 'vorbelegung'] as const) {
       expect(k?.formel).not.toBe(preisKachel(basis({ netzbezug_preis_herkunft: einzel }))?.formel)
     }
   })

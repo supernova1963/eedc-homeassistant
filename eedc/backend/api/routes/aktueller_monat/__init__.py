@@ -1543,7 +1543,8 @@ async def _berechne_monat(
         betriebskosten_anteilig_jahr_euro=betriebskosten_anteilig_jahr,
         betriebskosten_anteilig_anzahl=betriebskosten_anteilig_anzahl,
         # Tarif-Info
-        netzbezug_preis_cent=netzbezug_preis_cent if allgemein_tarif else None,
+        # N-712: auch ohne Tarif zum Stichtag — dann die Vorbelegung, mit der der Monat rechnet (Herkunft `vorbelegung`).
+        netzbezug_preis_cent=netzbezug_preis_cent,
         # Der Wert zu `_herkunft`/`_abdeckung` — ohne ihn beschreiben die beiden
         # eine Zahl, die die Antwort nicht enthält (SOLL Flex-Tarife H-2).
         netzbezug_preis_effektiv_cent=netzbezug_preis_effektiv_cent,
@@ -1553,7 +1554,7 @@ async def _berechne_monat(
         netzbezug_preis_abdeckung=netzbezug_preis_abdeckung,
         # N-267: sagt der Anzeige, dass der Preis daneben gewichtet ist.
         netzbezug_preis_zeittarif=hat_zeitfenster(allgemein_tarif),
-        einspeise_preis_cent=einspeise_cent if allgemein_tarif else None,
+        einspeise_preis_cent=einspeise_cent,
         netzbezug_durchschnittspreis_cent=netzbezug_durchschnittspreis,
         # N-610: bis dahin nur im Vorjahres-Block — der gepflegte Monatswert (#392), NICHT der aufgelöste Satz
         # `einspeise_preis_cent` (Gegenstück zu `netzbezug_durchschnittspreis_cent` neben `netzbezug_preis_cent`).

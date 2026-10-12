@@ -12,18 +12,14 @@ from backend.core.berechnungen.investitions_jahresertrag import jahresertrag_pos
 from backend.core.berechnungen.kapitalrechnung import jahres_ersparnis_euro
 from backend.core.berechnungen.finanz_aggregat import ev_preis_der_zeile
 from backend.models.investition import ERTRAGSFELD_TYPEN
-from backend.api.routes.strompreise import (
-    lade_tarife_fuer_anlage,
-    resolve_netzbezug_preis_cent,
-    resolve_strompreis_for_komponente,
-)
+from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile, ev_preis_je_monat
-from backend.services.monats_fakten import finanz_zeile_eingabe
+from backend.services.monats_fakten import finanz_zeile_eingabe, tarife_der_monate
 from backend.services.ust_satz import ust_eigenverbrauch_zeitraum
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.field_definitions import get_wp_warmwasser_kwh
@@ -32,9 +28,6 @@ from backend.services.eauto_wirtschaftlichkeit import (
     emob_extern_im_monat,
     emob_heimladung_im_monat,
     monate_des_autos,
-)
-from backend.core.wirtschaftlichkeit_defaults import (
-    NETZBEZUG_DEFAULT_CENT,
 )
 from datetime import date
 
@@ -169,6 +162,8 @@ async def finanz_zeilen_und_tarife(
 async def alternativkosten_rueckblick(
     *,
     _tarife_fuer_stichtag,
+    anlage_id,
+    db,
     e_autos,
     eauto_aggregate,
     emob_pool_ctx,
@@ -199,14 +194,17 @@ async def alternativkosten_rueckblick(
         (md.jahr, md.monat): md.gaspreis_cent_kwh for md in monatsdaten
     }
     # WP-Arbeitspreis je Monat (ADR-002/P8) — deckungsgleich mit dem HA-Export.
-    wp_preis_by_periode: dict[tuple[int, int], float] = {}
-    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
-        _periode = (_p_jahr, _p_monat)
-        if _periode not in wp_preis_by_periode:
-            _p_tarife = await _tarife_fuer_stichtag(_p_jahr, _p_monat)
-            wp_preis_by_periode[_periode] = resolve_strompreis_for_komponente(
-                _p_tarife, "waermepumpe", fallback=netzbezug_preis
-            )
+    # ⭐ N-712/N-713 (12.10.2026): aus den Monats-Fakten (`wp_preis_cent`, Entscheid Gernot: Kanon ist der Monatspreis
+    # der Schicht). Bis dahin `resolve_strompreis_for_komponente(…, "waermepumpe", fallback=netzbezug_preis)` — für Monate
+    # vor dem ersten Tarif der HEUTIGE Allgemeintarif (Fall C: 343,67 statt 373,67 €) und ohne eigenen WP-Tarif der
+    # Stammpreis statt der N-663-Kaskade (gepflegter Monats-Ø: 346,67 statt 490,67 €). Er geht in den
+    # ROI-Fortschritt (bisherige Erträge) ein.
+    wp_preis_by_periode: dict[tuple[int, int], float] = {
+        k: t.wp_preis_cent
+        for k, t in (await tarife_der_monate(
+            db, anlage_id, {(_p_jahr, _p_monat) for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten},
+        )).items()
+    }
     bisherige_wp_ersparnis = berechne_wp_alternativkosten_ersparnis(
         waermepumpen,
         historische_inv_daten,
@@ -261,7 +259,7 @@ async def alternativkosten_rueckblick(
         k: (md.kraftstoffpreis_euro if md.kraftstoffpreis_euro is not None else None)
         for k, md in monatsdaten_dict.items()
     }
-    _strompreis_lookup_aus: dict[tuple[int, int], float] = {}
+    _ea_monate: set[tuple[int, int]] = set()
     for ea in e_autos:
         agg = eauto_aggregate[ea.id]
         inv_id = ea.id
@@ -290,22 +288,16 @@ async def alternativkosten_rueckblick(
                 agg.setdefault("km_monate", []).append((jahr, monat, km))
             if netz > 0:
                 agg.setdefault("netz_monate", []).append((jahr, monat, netz))
-            # ADR-002/P8: Tarif DES MONATS inkl. Flex-Ø, jetzt über den
-            # Wallbox-Tarif (`resolve_strompreis_for_komponente`), damit die
-            # Sicht dieselbe Größe bewertet wie Cockpit und Komponenten-Hub.
-            if (jahr, monat) not in _strompreis_lookup_aus:
-                _m_tarife = await _tarife_fuer_stichtag(jahr, monat)
-                _m_allgemein = _m_tarife.get("allgemein")
-                _m_wallbox = resolve_strompreis_for_komponente(
-                    _m_tarife, "wallbox",
-                    fallback=(
-                        _m_allgemein.netzbezug_arbeitspreis_cent_kwh
-                        if _m_allgemein else NETZBEZUG_DEFAULT_CENT
-                    ),
-                )
-                _strompreis_lookup_aus[(jahr, monat)] = resolve_netzbezug_preis_cent(
-                    monatsdaten_dict.get((jahr, monat)), _m_wallbox
-                )
+            _ea_monate.add((jahr, monat))
+
+    # ADR-002/P8: Tarif DES MONATS inkl. Flex-Ø über den Wallbox-Tarif, damit die Sicht dieselbe Größe bewertet wie
+    # Cockpit und Komponenten-Hub. ⭐ N-712 (12.10.2026): der Preis kommt aus den Monats-Fakten
+    # (`wallbox_preis_effektiv_cent`) statt aus einer eigenen Auflösung hier (`resolve_netzbezug_preis_cent` über dem
+    # Wallbox-Tarif — ohne die Stufen „gemessen" und „Zeitfenster" der Schicht).
+    _strompreis_lookup_aus: dict[tuple[int, int], float] = {
+        k: t.wallbox_preis_effektiv_cent
+        for k, t in (await tarife_der_monate(db, anlage_id, _ea_monate)).items()
+    }
 
     for ea in e_autos:
         agg = eauto_aggregate[ea.id]

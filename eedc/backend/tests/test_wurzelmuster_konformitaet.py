@@ -1679,7 +1679,8 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
     "backend/api/routes/investitionen/dashboard_sonstiges.py::get_sonstiges_dashboard",
     "backend/api/routes/investitionen/dashboard_speicher.py::get_speicher_dashboard",
-    "backend/api/routes/investitionen/dashboard_waermepumpe.py::get_waermepumpe_dashboard",
+    # N-712/N-713 (12.10.2026): `dashboard_waermepumpe.py::get_waermepumpe_dashboard` lädt keinen Tarif mehr ohne
+    # Stichtag — der WP-Preis je Monat kommt aus den Monats-Fakten (`tarife_der_monate`); Eintrag gestrichen.
     "backend/api/routes/investitionen/dashboard_wallbox.py::get_wallbox_dashboard",
     # Heutiger Tarif als Fallback des Perioden-Mappings und für die nach vorn
     # gerichteten Sensor-Werte. Die Historien-Summen daneben lösen je Monat auf

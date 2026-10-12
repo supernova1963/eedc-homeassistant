@@ -738,6 +738,10 @@ PREIS_HERKUNFT_GEPFLEGT = "gepflegt"
 PREIS_HERKUNFT_GEMESSEN = "gemessen"
 PREIS_HERKUNFT_ZEITFENSTER = "zeitfenster"
 PREIS_HERKUNFT_STAMM = "stamm"
+#: ⚑ **Kein Ergebnis dieser Kaskade, sondern ein Etikett der Anzeige** (N-712, 12.10.2026): gilt zum Stichtag kein
+#: Tarif, ist Stufe 4 die Vorbelegung ``NETZBEZUG_DEFAULT_CENT`` (``herkunft = stamm``). *Cockpit → Monat* rechnet
+#: dann mit ihr wie die Monats-Fakten und nennt die Herkunft ``vorbelegung`` statt „Arbeitspreis aus dem Tarif" (P4).
+PREIS_HERKUNFT_VORBELEGUNG = "vorbelegung"
 
 
 @dataclass(frozen=True)
