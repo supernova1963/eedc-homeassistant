@@ -5,8 +5,10 @@ Ausgelagert aus live_power_service.py (Schritt 5 des Refactorings).
 """
 
 import logging
+import operator
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -258,6 +260,529 @@ def _investitionen_des_tages(tage_zurueck: int, tag: date):
     return aktiv_jetzt()
 
 
+@dataclass(frozen=True)
+class _Netz:
+    """Die Netz-Seite eines Tagesverlaufs: welche Netz-Serien es gibt und woraus
+    der Slot sie liest — von beiden Pfaden gefüllt, im Slot einmal gerechnet.
+
+    HA und MQTT beantworten „welcher Netzsensor?" verschieden (HA: Zuordnung,
+    MQTT: Snapshot-Keys). ``kombi`` ist nur gesetzt, wenn der Kombi-Sensor
+    allein steht; sonst liest der Slot ``bezug`` und ``einspeisung`` — ein
+    Schlüssel ohne History liefert keinen Punkt.
+    """
+
+    kombi: Optional[str]
+    bezug: Optional[str]
+    einspeisung: Optional[str]
+    has_netzbezug: bool
+    has_einspeisung: bool
+
+
+@dataclass(frozen=True)
+class _SlotQuellen:
+    """Alles, was die 10-Minuten-Schleife liest — beide Pfade füllen es.
+
+    Zwei gemessene Unterschiede der Pfade (RF-11) stehen hier als Feld, nicht
+    als Weiche im Kern — sie bleiben verschieden:
+
+    * ``ende_erreicht``: der HA-Pfad rastert bis **einschließlich** ``end``
+      (``operator.gt`` — ein Slot, der genau auf ``end`` beginnt, läuft noch
+      mit), der MQTT-Pfad bis **ausschließlich** (``operator.ge``).
+    * ``preis_fortschreiben``: nur der HA-Pfad trägt den letzten Sensor-Preis
+      in einen Slot ohne eigenen Punkt fort (#267); der MQTT-Pfad nimmt dort
+      den Börsenpreis.
+    """
+
+    serien: list[dict]
+    serie_keys: dict[str, list[str]]
+    history: dict[str, list]
+    netz: _Netz
+    bkw_erzeuger: list
+    preis_key: Optional[str]
+    preis_fortschreiben: bool
+    boersenpreis: dict[int, float]
+    ende_erreicht: Callable[[datetime, datetime], bool]
+
+
+# ── Gemeinsamer Kern beider Pfade ────────────────────────────────────────────
+
+
+def _tagesfenster(
+    now: datetime, tage_zurueck: int, mit_vortagsrand: bool,
+) -> tuple[datetime, datetime, datetime]:
+    """``(start, end, abruf_start)`` des betrachteten Tages — beide Pfade gleich.
+
+    ``tage_zurueck <= 0`` (auch negativ) ist „heute bis jetzt".
+    """
+    if tage_zurueck > 0:
+        tag = now - timedelta(days=tage_zurueck)
+        start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+    else:
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
+
+    # Abruf-Fenster ≠ Tagesfenster: für den Backward-Slot 0 braucht der
+    # Aggregator die letzte Stunde des VORTAGS. Statt eines zweiten vollen
+    # Tagesabrufs (der Scheduler-Job „Energie-Profil Heute" läuft alle 15
+    # Minuten — das wäre 96× ein Extra-Tag pro Anlage und Tag) wird das
+    # bestehende Fenster um eine Stunde nach hinten aufgemacht. `start` bleibt
+    # die Tagesgrenze und entscheidet weiter, was „heute" ist.
+    abruf_start = start - timedelta(hours=1) if mit_vortagsrand else start
+    return start, end, abruf_start
+
+
+async def _lade_investitionen(
+    anlage: Anlage, db: AsyncSession, tage_zurueck: int, start: datetime,
+) -> dict:
+    """``{inv_id: Investition}`` des betrachteten Tages (N-565) — beide Pfade."""
+    inv_result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            _investitionen_des_tages(tage_zurueck, start.date()),
+        )
+    )
+    return {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+
+def _pv_gesamt_serie(anlage: Anlage) -> dict:
+    """Die Serie „PV Gesamt" (Basis-Fallback) — dieselbe Form in beiden Pfaden."""
+    gesamt_kwp = anlage.leistung_kwp or 0
+    return {
+        "key": "pv_gesamt",
+        "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
+        "kategorie": "pv",
+        "farbe": "#f59e0b",
+        "seite": "quelle",
+        "bidirektional": False,
+    }
+
+
+def _netz_serien(serien: list[dict], netz: _Netz) -> None:
+    """Netzbezug und Einspeisung als getrennte Serien — beide Pfade."""
+    if netz.has_netzbezug:
+        serien.append({
+            "key": "netzbezug",
+            "label": "Netzbezug",
+            "kategorie": "netz",
+            "farbe": "#b91c1c",
+            "seite": "quelle",
+            "bidirektional": False,
+        })
+    if netz.has_einspeisung:
+        serien.append({
+            "key": "einspeisung",
+            "label": "Einspeisung",
+            "kategorie": "netz",
+            "farbe": "#10b981",
+            "seite": "senke",
+            "bidirektional": False,
+        })
+
+
+def _serien_slot(
+    q: _SlotQuellen, h_start: datetime, h_end: datetime,
+    werte: dict[str, float], raw_values: dict[str, float],
+) -> None:
+    """Investitions- und PV-Gesamt-Serien eines Slots (Netz separat)."""
+    # Investitions-Serien
+    for serie in q.serien:
+        skey = serie["key"]
+        if skey in ("netzbezug", "einspeisung"):
+            continue  # Netz separat behandeln
+
+        entity_ids = q.serie_keys.get(skey, [])
+        serie_sum = 0.0
+        has_data = False
+
+        max_w = serie.get("max_w")
+        for entity_id in entity_ids:
+            points = q.history.get(entity_id, [])
+            h_points = [p[1] for p in points if h_start <= p[0] < h_end]
+            if max_w is not None:
+                h_points = [v for v in h_points if abs(v) <= max_w]
+            if h_points:
+                avg_w = sum(h_points) / len(h_points)
+                serie_sum += avg_w / 1000  # W → kW
+                has_data = True
+
+        if has_data:
+            if serie["bidirektional"]:
+                raw_val = -serie_sum
+            elif serie["seite"] == "senke":
+                raw_val = -abs(serie_sum)
+            else:
+                raw_val = abs(serie_sum)
+            raw_values[skey] = raw_val
+            werte[skey] = round(raw_val, 2)
+
+
+def _netz_kw(q: _SlotQuellen, h_start: datetime, h_end: datetime) -> tuple[float, float]:
+    """``(bezug_kw, einsp_kw)`` eines Slots aus dem Kombi- oder den getrennten Sensoren."""
+    netz = q.netz
+    bezug_kw = 0.0
+    einsp_kw = 0.0
+
+    if netz.kombi:
+        pts = q.history.get(netz.kombi, [])
+        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+        if h_pts:
+            avg_w = sum(h_pts) / len(h_pts)
+            if avg_w >= 0:
+                bezug_kw = avg_w / 1000
+            else:
+                einsp_kw = abs(avg_w) / 1000
+    else:
+        if netz.bezug:
+            pts = q.history.get(netz.bezug, [])
+            h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+            if h_pts:
+                bezug_kw = sum(h_pts) / len(h_pts) / 1000
+
+        if netz.einspeisung:
+            pts = q.history.get(netz.einspeisung, [])
+            h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+            if h_pts:
+                einsp_kw = sum(h_pts) / len(h_pts) / 1000
+    return bezug_kw, einsp_kw
+
+
+def _netz_slot(
+    q: _SlotQuellen, h_start: datetime, h_end: datetime,
+    werte: dict[str, float], raw_values: dict[str, float],
+) -> None:
+    """Netzbezug und Einspeisung eines Slots in ``werte``/``raw_values``."""
+    # Netz: Bezug (positiv/Quelle) und Einspeisung (negativ/Senke)
+    netz = q.netz
+    if netz.has_netzbezug or netz.has_einspeisung:
+        bezug_kw, einsp_kw = _netz_kw(q, h_start, h_end)
+
+        if netz.has_netzbezug and bezug_kw > 0.001:
+            raw_values["netzbezug"] = bezug_kw
+            werte["netzbezug"] = round(bezug_kw, 2)
+        if netz.has_einspeisung and einsp_kw > 0.001:
+            raw_values["einspeisung"] = -einsp_kw
+            werte["einspeisung"] = round(-einsp_kw, 2)
+
+
+def _bkw_kuerzung_slot(
+    q: _SlotQuellen, werte: dict[str, float], raw_values: dict[str, float],
+) -> dict[str, float]:
+    """BKW-Abtretung (N-536) je Slot — gibt die gekürzten Rohwerte zurück."""
+    # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch
+    # den Rest — vor der Haushalts-Bilanz UND in der Kurve, sonst zeigte
+    # das Chart eine Serie, die die Bilanz nicht mehr kennt. Der Rest bleibt
+    # unverteilt (kWp-Gewichtung ist eine Tages-Aussage); bei Rest 0
+    # verschwindet die Serie, weil ihre Energie in den Modul-Serien steht.
+    if q.bkw_erzeuger:
+        gekuerzt = kuerze_bkw_in_werte_map(raw_values, q.bkw_erzeuger)
+        for weg in set(raw_values) - set(gekuerzt):
+            werte.pop(weg, None)
+        for skey_neu, wert_neu in gekuerzt.items():
+            if raw_values.get(skey_neu) != wert_neu:
+                werte[skey_neu] = round(wert_neu, 2)
+        raw_values = gekuerzt
+    return raw_values
+
+
+def _haushalt_slot(werte: dict[str, float], raw_values: dict[str, float]) -> None:
+    """Restverbrauch eines Slots aus den ungerundeten Rohwerten."""
+    # Haushalt aus ungerundeten Rohwerten berechnen
+    quellen_sum = sum(v for v in raw_values.values() if v > 0)
+    senken_sum = sum(v for v in raw_values.values() if v < 0)
+    haushalt = quellen_sum + senken_sum
+    if quellen_sum > 0 and haushalt > 0:
+        werte["haushalt"] = round(-haushalt, 2)
+
+
+def _strompreis_slot(
+    q: _SlotQuellen, werte: dict[str, float], h_start: datetime, h_end: datetime,
+) -> None:
+    """Strompreis eines Slots: Sensor im Slot, (nur HA) fortgeschrieben, sonst Börse."""
+    # Strompreis (optional, wird NICHT in Haushalt-Berechnung einbezogen).
+    # Tibber/aWATTar/EPEX-Sensoren sind Step-Funktionen — der Preis steht
+    # für 15- bzw. 60-Min-Intervalle fest und ändert sich nur an den
+    # Block-Grenzen. HA-History speichert nur State-Changes, daher hat
+    # mancher 10-Min-Slot keinen Punkt INNERHALB des Slots, obwohl der
+    # gültige Preis bekannt ist. #267 rilmor-mhrs: vorher fiel jeder
+    # 10-Min-Slot ohne Tibber-Update auf EPEX-Börsenpreis zurück → das
+    # erzeugte Sprünge zwischen Endkunden-Preis (~35 ct) und Spotmarkt-
+    # Preis (~10 ct). Korrekt: letzten Sensor-Wert vor Slot-Ende als
+    # Carry-Forward nehmen (Step-Funktion).
+    sensor_hat_wert = False
+    if q.preis_key:
+        pts = q.history.get(q.preis_key, [])
+        # Innerhalb des Slots: bevorzugt mitteln (deckt seltenen Fall ab,
+        # dass mehrere Step-Wechsel im selben 10-Min-Slot liegen).
+        h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
+        if h_pts:
+            werte["strompreis"] = round(sum(h_pts) / len(h_pts), 2)
+            sensor_hat_wert = True
+        elif q.preis_fortschreiben:
+            # Carry-Forward: letzter Punkt vor Slot-Ende, falls vorhanden.
+            vorherige = [p[1] for p in pts if p[0] < h_end]
+            if vorherige:
+                werte["strompreis"] = round(vorherige[-1], 2)
+                sensor_hat_wert = True
+    if not sensor_hat_wert and q.boersenpreis:
+        bp = q.boersenpreis.get(h_start.hour)
+        if bp is not None:
+            werte["strompreis"] = bp
+
+
+def _slot_werte(q: _SlotQuellen, h_start: datetime, h_end: datetime) -> dict[str, float]:
+    """Die ``werte`` eines 10-Minuten-Slots — Reihenfolge der Schlüssel wie bisher."""
+    werte: dict[str, float] = {}
+    raw_values: dict[str, float] = {}  # Ungerundet für Haushalt-Berechnung
+    _serien_slot(q, h_start, h_end, werte, raw_values)
+    _netz_slot(q, h_start, h_end, werte, raw_values)
+    raw_values = _bkw_kuerzung_slot(q, werte, raw_values)
+    _haushalt_slot(werte, raw_values)
+    _strompreis_slot(q, werte, h_start, h_end)
+    return werte
+
+
+def _raster(
+    q: _SlotQuellen, start: datetime, end: datetime, mit_vortagsrand: bool,
+) -> tuple[list[dict], list[dict]]:
+    """``(punkte, vortagsrand)`` im 10-Minuten-Raster des Tages."""
+    # 10-Minuten-Mittelwerte berechnen. Bei `mit_vortagsrand` laufen die sechs
+    # Intervalle VOR Mitternacht mit (m = -6 … -1); sie landen unten in einer
+    # eigenen Liste, nicht in `punkte`.
+    punkte: list[dict] = []
+    vortagsrand: list[dict] = []
+    for m in range(-6 if mit_vortagsrand else 0, 144):
+        h_start = start + timedelta(minutes=m * 10)
+        h_end = h_start + timedelta(minutes=10)
+        if q.ende_erreicht(h_start, end):
+            break
+
+        werte = _slot_werte(q, h_start, h_end)
+        ziel = vortagsrand if h_start < start else punkte
+        ziel.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
+    return punkte, vortagsrand
+
+
+def _ergaenze_haushalt_und_preis(
+    serien: list[dict], punkte: list[dict], preis_vom_sensor,
+) -> None:
+    """Haushalt- und Strompreis-Serie, wenn ein Punkt sie trägt — beide Pfade."""
+    # Haushalt-Serie hinzufügen wenn Daten vorhanden
+    if any("haushalt" in p["werte"] for p in punkte):
+        serien.append({
+            "key": "haushalt",
+            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
+            "kategorie": "haushalt",
+            "farbe": "#64748b",
+            "seite": "senke",
+            "bidirektional": False,
+        })
+
+    # Strompreis-Serie hinzufügen wenn Daten vorhanden
+    if any("strompreis" in p["werte"] for p in punkte):
+        label = "Strompreis" if preis_vom_sensor else "Börsenpreis (EPEX)"
+        serien.append({
+            "key": "strompreis",
+            "label": label,
+            "kategorie": "preis",
+            "farbe": "#f472b6",
+            "seite": "overlay",
+            "bidirektional": False,
+            "einheit": "ct/kWh",
+        })
+
+
+# ── HA-Pfad ──────────────────────────────────────────────────────────────────
+
+
+def _ha_serien(
+    inv_live_map: dict, investitionen: dict, start: datetime,
+) -> tuple[list, dict[str, list[str]], list[dict], list]:
+    """Investitions-Serien des HA-Pfads: ``(serien_core, serie_entities, serien, uebersprungen)``."""
+    # Serien-Selektion (inkl. Pool-Dedup) über die geteilte Quelle — identisch
+    # zum Backfill-Pfad (Issue #318, M1). Chart-Metadaten (label/farbe/max_w)
+    # rekonstruieren wir hier aus den Kern-Specs; sie sind Live-spezifisch.
+    # N-555 Stufe 2 (Regel 0/8): „Wallbox in Betrieb" am betrachteten Tag, nicht heute.
+    serien_core, serie_entities = baue_investitions_serien(
+        inv_live_map, investitionen, tag=start.date(),
+    )
+
+    # Wer NICHT gezeichnet wird, und warum — die geteilte Bedingung (N-447).
+    # ⛔ Sie steht bewusst NACH dem Serien-Bau: bis 12.09.2026 lief sie davor und
+    # kannte nur `leistung_w`, meldete also genau die Wärmepumpe als „nicht
+    # dargestellt", die zwölf Zeilen später in zwei Flächen zerlegt wurde.
+    uebersprungen = uebersprungene_investitionen(
+        investitionen,
+        inv_ids_mit_serie(serien_core),
+        lambda inv_id: any(
+            (inv_live_map.get(inv_id) or {}).get(f) for f in LEISTUNGS_FELDER
+        ),
+    )
+    serien: list[dict] = []
+    for spec in serien_core:
+        inv = investitionen[spec.inv_id]
+        config = TV_SERIE_CONFIG.get(inv.typ, {})
+        if spec.suffix:  # WP-Split: eigene Rollenfarbe je Betriebsart, kein max_w
+            label_zusatz, roll_farbe = WP_SPLIT_ANZEIGE.get(spec.suffix, ("", None))
+            farbe = roll_farbe or config.get("farbe")
+            serien.append({
+                "key": spec.key,
+                "label": f"{inv.bezeichnung}{label_zusatz}",
+                "kategorie": spec.kategorie,
+                "farbe": farbe,
+                "seite": spec.seite,
+                "bidirektional": spec.bidirektional,
+            })
+        else:
+            serien.append({
+                "key": spec.key,
+                "label": inv.bezeichnung,
+                "kategorie": spec.kategorie,
+                "farbe": config.get("farbe"),
+                "seite": spec.seite,
+                "bidirektional": spec.bidirektional,
+                "max_w": config.get("max_w"),
+            })
+    return serien_core, serie_entities, serien, uebersprungen
+
+
+def _ha_pv_gesamt(
+    serien: list[dict], serie_entities: dict[str, list[str]], basis_live: dict, anlage: Anlage,
+) -> None:
+    """PV-Gesamt-Serie aus ``basis.live``, wenn kein Erzeuger eine eigene hat."""
+    # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
+    has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
+    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
+        serien.append(_pv_gesamt_serie(anlage))
+        serie_entities["pv_gesamt"] = [basis_live["pv_gesamt_w"]]
+
+
+def _ha_netz(basis_live: dict) -> _Netz:
+    """Netz-Sensoren aus ``basis.live``: Kombi nur ohne getrennte Sensoren."""
+    netz_kombi_eid = basis_live.get("netz_kombi_w")
+    netz_einspeisung_eid = basis_live.get("einspeisung_w")
+    netz_bezug_eid = basis_live.get("netzbezug_w")
+    has_netzbezug = False
+    has_einspeisung = False
+
+    if netz_kombi_eid and not netz_einspeisung_eid and not netz_bezug_eid:
+        # Kombi-Sensor → beide Serien möglich
+        has_netzbezug = True
+        has_einspeisung = True
+    elif netz_einspeisung_eid or netz_bezug_eid:
+        netz_kombi_eid = None  # Getrennte Sensoren → kein Kombi
+        has_netzbezug = bool(netz_bezug_eid)
+        has_einspeisung = bool(netz_einspeisung_eid)
+    return _Netz(
+        netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+        has_netzbezug, has_einspeisung,
+    )
+
+
+def _strompreis_eid(anlage: Anlage) -> Optional[str]:
+    """Entity des Strompreis-Sensors aus ``basis.strompreis`` (oder ``None``)."""
+    # Strompreis-Sensor (optional, für EPEX-Overlay)
+    strompreis_eid = None
+    basis_mapping = (anlage.sensor_mapping or {}).get("basis", {})
+    sp = basis_mapping.get("strompreis")
+    if isinstance(sp, dict) and sp.get("sensor_id"):
+        strompreis_eid = sp["sensor_id"]
+    # Börsenpreis-Fallback immer laden: deckt sowohl "kein Sensor" als auch
+    # Lücken im Sensor-History (z.B. Tibber hat erst ab 01:50 Werte) ab.
+    return strompreis_eid
+
+
+def _ha_abruf_ids(
+    serie_entities: dict[str, list[str]], netz: _Netz, strompreis_eid: Optional[str],
+) -> list[str]:
+    """Alle Entity-IDs für den History-Abruf (Reihenfolge ohne Bedeutung)."""
+    # Alle Entity-IDs für History-Abfrage sammeln
+    all_ids = list(set(
+        eid for eids in serie_entities.values() for eid in eids
+    ))
+    if netz.has_netzbezug or netz.has_einspeisung:
+        if netz.kombi:
+            all_ids.append(netz.kombi)
+        if netz.einspeisung:
+            all_ids.append(netz.einspeisung)
+        if netz.bezug:
+            all_ids.append(netz.bezug)
+    if strompreis_eid:
+        all_ids.append(strompreis_eid)
+    return list(set(all_ids))
+
+
+def _strompreis_in_ct(
+    history: dict[str, list], units: dict[str, str], strompreis_eid: Optional[str],
+) -> None:
+    """Strompreis-History auf ct/kWh (in place)."""
+    # Strompreis-Einheit normalisieren → ct/kWh
+    if strompreis_eid:
+        sp_unit = units.get(strompreis_eid, "")
+        if sp_unit in ("EUR/kWh", "€/kWh"):
+            pts = history.get(strompreis_eid, [])
+            history[strompreis_eid] = [(ts, val * 100) for ts, val in pts]
+        elif sp_unit in ("EUR/MWh", "€/MWh"):
+            pts = history.get(strompreis_eid, [])
+            history[strompreis_eid] = [(ts, val * 0.1) for ts, val in pts]
+
+
+async def _boersenpreis_ha(anlage: Anlage, start: datetime) -> dict[int, float]:
+    """Börsenpreis je Stunde für den HA-Pfad — ein Fehler wird geloggt, nicht geworfen."""
+    # Börsenpreis-Fallback: aWATTar API — immer laden, wird pro Slot als
+    # Fallback genutzt wenn Sensor-History für den Slot leer ist.
+    _boersenpreis_stunden: dict[int, float] = {}
+    try:
+        from backend.services.strompreis_markt_service import get_strompreis_stunden
+        land = getattr(anlage, "standort_land", None)
+        _boersenpreis_stunden = await get_strompreis_stunden(land, start.date())
+    except Exception as e:
+        logger.debug("Börsenpreis-Fallback: %s", e)
+    return _boersenpreis_stunden
+
+
+def _kurven_aus_short_term(
+    anlage: Anlage,
+    serien_core: list,
+    serie_entities: dict[str, list[str]],
+    investitionen: dict,
+    netz: _Netz,
+    abruf_start: datetime,
+    end: datetime,
+    history: dict[str, list],
+    basis_live: dict,
+    basis_invert: dict,
+    inv_live_map: dict,
+    inv_invert_map: dict,
+) -> None:
+    """short_term-Overlays und Vorzeichen-Invertierung in die History (in place)."""
+    # HA-LTS-Konsistenz: Kurve aus statistics_short_term speisen, damit
+    # Kurven-Integral und Heute-kWh-Kacheln (safe_get_tages_kwh) aus derselben
+    # SoT-Familie kommen (#135-Folge). Pro Serie 5-Min-sum-Deltas des kWh-Zählers
+    # bzw. short_term.mean des Power-Sensors; Strompreis bleibt unberührt.
+    pv_gesamt_eid = serie_entities["pv_gesamt"][0] if "pv_gesamt" in serie_entities else None
+    mean_overlay, counter_overlay = _baue_short_term_overlays(
+        anlage, serien_core, serie_entities, investitionen,
+        pv_gesamt_eid, netz.bezug, netz.einspeisung, netz.kombi,
+        abruf_start, end, history,
+    )
+
+    # Mean-Overlay VOR Invert (gleiche Roh-Sensor-Semantik → Invert gilt,
+    # Vorzeichen bleibt erhalten — wichtig für Speicher/Netz-Kombi).
+    for eid, pts in mean_overlay.items():
+        history[eid] = pts
+
+    # Vorzeichen-Invertierung auf History anwenden (#58)
+    apply_invert_to_history(
+        history, basis_live, basis_invert, inv_live_map, inv_invert_map
+    )
+
+    # Counter-Overlay NACH Invert: Zähler-Energie ist vorzeichenlos/positiv,
+    # die Richtung kommt aus serie['seite'] bzw. der Netz-Logik — kein Invert.
+    for eid, pts in counter_overlay.items():
+        history[eid] = pts
+
+
 async def get_tagesverlauf(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
     *, mit_vortagsrand: bool = False,
@@ -323,359 +848,47 @@ async def get_tagesverlauf(
         )
 
     now = datetime.now()
-    if tage_zurueck > 0:
-        tag = now - timedelta(days=tage_zurueck)
-        start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-    else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = now
+    start, end, abruf_start = _tagesfenster(now, tage_zurueck, mit_vortagsrand)
 
     # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id) — die des
     # betrachteten Tages (N-565), heute unverändert die Live-Menge.
-    inv_result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            _investitionen_des_tages(tage_zurueck, start.date()),
-        )
-    )
-    investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
+    investitionen = await _lade_investitionen(anlage, db, tage_zurueck, start)
     # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
     _bkw_erzeuger = list(investitionen.values())
 
-    # Abruf-Fenster ≠ Tagesfenster: für den Backward-Slot 0 braucht der
-    # Aggregator die letzte Stunde des VORTAGS. Statt eines zweiten vollen
-    # Tagesabrufs (der Scheduler-Job „Energie-Profil Heute" läuft alle 15
-    # Minuten — das wäre 96× ein Extra-Tag pro Anlage und Tag) wird das
-    # bestehende Fenster um eine Stunde nach hinten aufgemacht. `start` bleibt
-    # die Tagesgrenze und entscheidet weiter, was „heute" ist.
-    abruf_start = start - timedelta(hours=1) if mit_vortagsrand else start
-
-    # Serien-Selektion (inkl. Pool-Dedup) über die geteilte Quelle — identisch
-    # zum Backfill-Pfad (Issue #318, M1). Chart-Metadaten (label/farbe/max_w)
-    # rekonstruieren wir hier aus den Kern-Specs; sie sind Live-spezifisch.
-    # N-555 Stufe 2 (Regel 0/8): „Wallbox in Betrieb" am betrachteten Tag, nicht heute.
-    serien_core, serie_entities = baue_investitions_serien(
-        inv_live_map, investitionen, tag=start.date(),
+    serien_core, serie_entities, serien, uebersprungen = _ha_serien(
+        inv_live_map, investitionen, start,
     )
-
-    # Wer NICHT gezeichnet wird, und warum — die geteilte Bedingung (N-447).
-    # ⛔ Sie steht bewusst NACH dem Serien-Bau: bis 12.09.2026 lief sie davor und
-    # kannte nur `leistung_w`, meldete also genau die Wärmepumpe als „nicht
-    # dargestellt", die zwölf Zeilen später in zwei Flächen zerlegt wurde.
-    uebersprungen = uebersprungene_investitionen(
-        investitionen,
-        inv_ids_mit_serie(serien_core),
-        lambda inv_id: any(
-            (inv_live_map.get(inv_id) or {}).get(f) for f in LEISTUNGS_FELDER
-        ),
-    )
-    serien: list[dict] = []
-    for spec in serien_core:
-        inv = investitionen[spec.inv_id]
-        config = TV_SERIE_CONFIG.get(inv.typ, {})
-        if spec.suffix:  # WP-Split: eigene Rollenfarbe je Betriebsart, kein max_w
-            label_zusatz, roll_farbe = WP_SPLIT_ANZEIGE.get(spec.suffix, ("", None))
-            farbe = roll_farbe or config.get("farbe")
-            serien.append({
-                "key": spec.key,
-                "label": f"{inv.bezeichnung}{label_zusatz}",
-                "kategorie": spec.kategorie,
-                "farbe": farbe,
-                "seite": spec.seite,
-                "bidirektional": spec.bidirektional,
-            })
-        else:
-            serien.append({
-                "key": spec.key,
-                "label": inv.bezeichnung,
-                "kategorie": spec.kategorie,
-                "farbe": config.get("farbe"),
-                "seite": spec.seite,
-                "bidirektional": spec.bidirektional,
-                "max_w": config.get("max_w"),
-            })
-
-    # PV Gesamt aus Basis als Fallback (wenn kein individueller PV-Sensor)
-    has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
-    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
-        gesamt_kwp = anlage.leistung_kwp or 0
-        serien.append({
-            "key": "pv_gesamt",
-            "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
-            "kategorie": "pv",
-            "farbe": "#f59e0b",
-            "seite": "quelle",
-            "bidirektional": False,
-        })
-        serie_entities["pv_gesamt"] = [basis_live["pv_gesamt_w"]]
+    _ha_pv_gesamt(serien, serie_entities, basis_live, anlage)
 
     # Netz: Netzbezug und Einspeisung als getrennte Serien
-    netz_kombi_eid = basis_live.get("netz_kombi_w")
-    netz_einspeisung_eid = basis_live.get("einspeisung_w")
-    netz_bezug_eid = basis_live.get("netzbezug_w")
-    has_netzbezug = False
-    has_einspeisung = False
+    netz = _ha_netz(basis_live)
+    _netz_serien(serien, netz)
 
-    if netz_kombi_eid and not netz_einspeisung_eid and not netz_bezug_eid:
-        # Kombi-Sensor → beide Serien möglich
-        has_netzbezug = True
-        has_einspeisung = True
-    elif netz_einspeisung_eid or netz_bezug_eid:
-        netz_kombi_eid = None  # Getrennte Sensoren → kein Kombi
-        has_netzbezug = bool(netz_bezug_eid)
-        has_einspeisung = bool(netz_einspeisung_eid)
-
-    if has_netzbezug:
-        serien.append({
-            "key": "netzbezug",
-            "label": "Netzbezug",
-            "kategorie": "netz",
-            "farbe": "#b91c1c",
-            "seite": "quelle",
-            "bidirektional": False,
-        })
-    if has_einspeisung:
-        serien.append({
-            "key": "einspeisung",
-            "label": "Einspeisung",
-            "kategorie": "netz",
-            "farbe": "#10b981",
-            "seite": "senke",
-            "bidirektional": False,
-        })
-
-    # Strompreis-Sensor (optional, für EPEX-Overlay)
-    strompreis_eid = None
-    basis_mapping = (anlage.sensor_mapping or {}).get("basis", {})
-    sp = basis_mapping.get("strompreis")
-    if isinstance(sp, dict) and sp.get("sensor_id"):
-        strompreis_eid = sp["sensor_id"]
-    # Börsenpreis-Fallback immer laden: deckt sowohl "kein Sensor" als auch
-    # Lücken im Sensor-History (z.B. Tibber hat erst ab 01:50 Werte) ab.
-
-    # Alle Entity-IDs für History-Abfrage sammeln
-    all_ids = list(set(
-        eid for eids in serie_entities.values() for eid in eids
-    ))
-    if has_netzbezug or has_einspeisung:
-        if netz_kombi_eid:
-            all_ids.append(netz_kombi_eid)
-        if netz_einspeisung_eid:
-            all_ids.append(netz_einspeisung_eid)
-        if netz_bezug_eid:
-            all_ids.append(netz_bezug_eid)
-    if strompreis_eid:
-        all_ids.append(strompreis_eid)
-    all_ids = list(set(all_ids))
-
+    strompreis_eid = _strompreis_eid(anlage)
+    all_ids = _ha_abruf_ids(serie_entities, netz, strompreis_eid)
     if not all_ids:
         return {"serien": [], "punkte": []}
 
     history, units = await get_history_normalized(all_ids, abruf_start, end)
-
-    # Strompreis-Einheit normalisieren → ct/kWh
-    if strompreis_eid:
-        sp_unit = units.get(strompreis_eid, "")
-        if sp_unit in ("EUR/kWh", "€/kWh"):
-            pts = history.get(strompreis_eid, [])
-            history[strompreis_eid] = [(ts, val * 100) for ts, val in pts]
-        elif sp_unit in ("EUR/MWh", "€/MWh"):
-            pts = history.get(strompreis_eid, [])
-            history[strompreis_eid] = [(ts, val * 0.1) for ts, val in pts]
-
-    # Börsenpreis-Fallback: aWATTar API — immer laden, wird pro Slot als
-    # Fallback genutzt wenn Sensor-History für den Slot leer ist.
-    _boersenpreis_stunden: dict[int, float] = {}
-    try:
-        from backend.services.strompreis_markt_service import get_strompreis_stunden
-        land = getattr(anlage, "standort_land", None)
-        _boersenpreis_stunden = await get_strompreis_stunden(land, start.date())
-    except Exception as e:
-        logger.debug("Börsenpreis-Fallback: %s", e)
-
-    # HA-LTS-Konsistenz: Kurve aus statistics_short_term speisen, damit
-    # Kurven-Integral und Heute-kWh-Kacheln (safe_get_tages_kwh) aus derselben
-    # SoT-Familie kommen (#135-Folge). Pro Serie 5-Min-sum-Deltas des kWh-Zählers
-    # bzw. short_term.mean des Power-Sensors; Strompreis bleibt unberührt.
-    pv_gesamt_eid = serie_entities["pv_gesamt"][0] if "pv_gesamt" in serie_entities else None
-    mean_overlay, counter_overlay = _baue_short_term_overlays(
-        anlage, serien_core, serie_entities, investitionen,
-        pv_gesamt_eid, netz_bezug_eid, netz_einspeisung_eid, netz_kombi_eid,
+    _strompreis_in_ct(history, units, strompreis_eid)
+    _boersenpreis_stunden = await _boersenpreis_ha(anlage, start)
+    _kurven_aus_short_term(
+        anlage, serien_core, serie_entities, investitionen, netz,
         abruf_start, end, history,
+        basis_live, basis_invert, inv_live_map, inv_invert_map,
     )
 
-    # Mean-Overlay VOR Invert (gleiche Roh-Sensor-Semantik → Invert gilt,
-    # Vorzeichen bleibt erhalten — wichtig für Speicher/Netz-Kombi).
-    for eid, pts in mean_overlay.items():
-        history[eid] = pts
-
-    # Vorzeichen-Invertierung auf History anwenden (#58)
-    apply_invert_to_history(
-        history, basis_live, basis_invert, inv_live_map, inv_invert_map
+    punkte, vortagsrand = _raster(
+        _SlotQuellen(
+            serien=serien, serie_keys=serie_entities, history=history, netz=netz,
+            bkw_erzeuger=_bkw_erzeuger, preis_key=strompreis_eid,
+            preis_fortschreiben=True, boersenpreis=_boersenpreis_stunden,
+            ende_erreicht=operator.gt,
+        ),
+        start, end, mit_vortagsrand,
     )
-
-    # Counter-Overlay NACH Invert: Zähler-Energie ist vorzeichenlos/positiv,
-    # die Richtung kommt aus serie['seite'] bzw. der Netz-Logik — kein Invert.
-    for eid, pts in counter_overlay.items():
-        history[eid] = pts
-
-    # 10-Minuten-Mittelwerte berechnen. Bei `mit_vortagsrand` laufen die sechs
-    # Intervalle VOR Mitternacht mit (m = -6 … -1); sie landen unten in einer
-    # eigenen Liste, nicht in `punkte`.
-    punkte: list[dict] = []
-    vortagsrand: list[dict] = []
-    for m in range(-6 if mit_vortagsrand else 0, 144):
-        h_start = start + timedelta(minutes=m * 10)
-        h_end = h_start + timedelta(minutes=10)
-        if h_start > end:
-            break
-
-        werte: dict[str, float] = {}
-        raw_values: dict[str, float] = {}  # Ungerundet für Haushalt-Berechnung
-
-        # Investitions-Serien
-        for serie in serien:
-            skey = serie["key"]
-            if skey in ("netzbezug", "einspeisung"):
-                continue  # Netz separat behandeln
-
-            entity_ids = serie_entities.get(skey, [])
-            serie_sum = 0.0
-            has_data = False
-
-            max_w = serie.get("max_w")
-            for entity_id in entity_ids:
-                points = history.get(entity_id, [])
-                h_points = [p[1] for p in points if h_start <= p[0] < h_end]
-                if max_w is not None:
-                    h_points = [v for v in h_points if abs(v) <= max_w]
-                if h_points:
-                    avg_w = sum(h_points) / len(h_points)
-                    serie_sum += avg_w / 1000  # W → kW
-                    has_data = True
-
-            if has_data:
-                if serie["bidirektional"]:
-                    raw_val = -serie_sum
-                elif serie["seite"] == "senke":
-                    raw_val = -abs(serie_sum)
-                else:
-                    raw_val = abs(serie_sum)
-                raw_values[skey] = raw_val
-                werte[skey] = round(raw_val, 2)
-
-        # Netz: Bezug (positiv/Quelle) und Einspeisung (negativ/Senke)
-        if has_netzbezug or has_einspeisung:
-            bezug_kw = 0.0
-            einsp_kw = 0.0
-
-            if netz_kombi_eid:
-                pts = history.get(netz_kombi_eid, [])
-                h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-                if h_pts:
-                    avg_w = sum(h_pts) / len(h_pts)
-                    if avg_w >= 0:
-                        bezug_kw = avg_w / 1000
-                    else:
-                        einsp_kw = abs(avg_w) / 1000
-            else:
-                if netz_bezug_eid:
-                    pts = history.get(netz_bezug_eid, [])
-                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-                    if h_pts:
-                        bezug_kw = sum(h_pts) / len(h_pts) / 1000
-
-                if netz_einspeisung_eid:
-                    pts = history.get(netz_einspeisung_eid, [])
-                    h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-                    if h_pts:
-                        einsp_kw = sum(h_pts) / len(h_pts) / 1000
-
-            if has_netzbezug and bezug_kw > 0.001:
-                raw_values["netzbezug"] = bezug_kw
-                werte["netzbezug"] = round(bezug_kw, 2)
-            if has_einspeisung and einsp_kw > 0.001:
-                raw_values["einspeisung"] = -einsp_kw
-                werte["einspeisung"] = round(-einsp_kw, 2)
-
-        # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch
-        # den Rest — vor der Haushalts-Bilanz UND in der Kurve, sonst zeigte
-        # das Chart eine Serie, die die Bilanz nicht mehr kennt. Der Rest bleibt
-        # unverteilt (kWp-Gewichtung ist eine Tages-Aussage); bei Rest 0
-        # verschwindet die Serie, weil ihre Energie in den Modul-Serien steht.
-        if _bkw_erzeuger:
-            gekuerzt = kuerze_bkw_in_werte_map(raw_values, _bkw_erzeuger)
-            for weg in set(raw_values) - set(gekuerzt):
-                werte.pop(weg, None)
-            for skey_neu, wert_neu in gekuerzt.items():
-                if raw_values.get(skey_neu) != wert_neu:
-                    werte[skey_neu] = round(wert_neu, 2)
-            raw_values = gekuerzt
-
-        # Haushalt aus ungerundeten Rohwerten berechnen
-        quellen_sum = sum(v for v in raw_values.values() if v > 0)
-        senken_sum = sum(v for v in raw_values.values() if v < 0)
-        haushalt = quellen_sum + senken_sum
-        if quellen_sum > 0 and haushalt > 0:
-            werte["haushalt"] = round(-haushalt, 2)
-
-        # Strompreis (optional, wird NICHT in Haushalt-Berechnung einbezogen).
-        # Tibber/aWATTar/EPEX-Sensoren sind Step-Funktionen — der Preis steht
-        # für 15- bzw. 60-Min-Intervalle fest und ändert sich nur an den
-        # Block-Grenzen. HA-History speichert nur State-Changes, daher hat
-        # mancher 10-Min-Slot keinen Punkt INNERHALB des Slots, obwohl der
-        # gültige Preis bekannt ist. #267 rilmor-mhrs: vorher fiel jeder
-        # 10-Min-Slot ohne Tibber-Update auf EPEX-Börsenpreis zurück → das
-        # erzeugte Sprünge zwischen Endkunden-Preis (~35 ct) und Spotmarkt-
-        # Preis (~10 ct). Korrekt: letzten Sensor-Wert vor Slot-Ende als
-        # Carry-Forward nehmen (Step-Funktion).
-        sensor_hat_wert = False
-        if strompreis_eid:
-            pts = history.get(strompreis_eid, [])
-            # Innerhalb des Slots: bevorzugt mitteln (deckt seltenen Fall ab,
-            # dass mehrere Step-Wechsel im selben 10-Min-Slot liegen).
-            h_pts = [p[1] for p in pts if h_start <= p[0] < h_end]
-            if h_pts:
-                werte["strompreis"] = round(sum(h_pts) / len(h_pts), 2)
-                sensor_hat_wert = True
-            else:
-                # Carry-Forward: letzter Punkt vor Slot-Ende, falls vorhanden.
-                vorherige = [p[1] for p in pts if p[0] < h_end]
-                if vorherige:
-                    werte["strompreis"] = round(vorherige[-1], 2)
-                    sensor_hat_wert = True
-        if not sensor_hat_wert and _boersenpreis_stunden:
-            bp = _boersenpreis_stunden.get(h_start.hour)
-            if bp is not None:
-                werte["strompreis"] = bp
-
-        ziel = vortagsrand if h_start < start else punkte
-        ziel.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
-
-    # Haushalt-Serie hinzufügen wenn Daten vorhanden
-    if any("haushalt" in p["werte"] for p in punkte):
-        serien.append({
-            "key": "haushalt",
-            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
-            "kategorie": "haushalt",
-            "farbe": "#64748b",
-            "seite": "senke",
-            "bidirektional": False,
-        })
-
-    # Strompreis-Serie hinzufügen wenn Daten vorhanden
-    if any("strompreis" in p["werte"] for p in punkte):
-        label = "Strompreis" if strompreis_eid else "Börsenpreis (EPEX)"
-        serien.append({
-            "key": "strompreis",
-            "label": label,
-            "kategorie": "preis",
-            "farbe": "#f472b6",
-            "seite": "overlay",
-            "bidirektional": False,
-            "einheit": "ct/kWh",
-        })
+    _ergaenze_haushalt_und_preis(serien, punkte, strompreis_eid)
 
     # Rückfall auf MQTT, wenn der HA-Weg leer bleibt (F-26, Teil 2).
     #
@@ -705,38 +918,11 @@ async def get_tagesverlauf(
     }
 
 
-async def _get_tagesverlauf_mqtt(
-    anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
-    *, mit_vortagsrand: bool = False,
-) -> dict:
-    """
-    MQTT-Fallback für Tagesverlauf: liest aus MqttLiveSnapshot statt HA-History.
+# ── MQTT-Pfad ────────────────────────────────────────────────────────────────
 
-    Wird aufgerufen, wenn **keine HA-Verbindung** besteht — weder per Supervisor
-    noch per Long-Lived-Token (F-26; bis 2026-08-11 hing die Wahl allein am
-    Supervisor-Token, was jeden Docker-Betrieb mit Token-Anbindung hierher
-    schickte, obwohl er gar kein MQTT nutzt). Zusätzlich als **Rückfall**, wenn
-    der HA-Weg nichts hergibt.
-    Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
 
-    ``mit_vortagsrand`` verhält sich wie im HA-Zweig — beide Wege müssen den
-    Backward-Slot 0 füllen können, sonst hinge die Slot-Konvention davon ab,
-    ob eine Anlage HA oder MQTT nutzt.
-    """
-    from backend.services.mqtt_live_history_service import get_snapshots_for_range
-
-    now = datetime.now()
-    if tage_zurueck > 0:
-        tag = now - timedelta(days=tage_zurueck)
-        start = tag.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-    else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = now
-
-    # s. `get_tagesverlauf`: Abruf-Fenster ≠ Tagesfenster.
-    abruf_start = start - timedelta(hours=1) if mit_vortagsrand else start
-
+async def _boersenpreis_mqtt(anlage: Anlage, start: datetime) -> dict[int, float]:
+    """Börsenpreis je Stunde für den MQTT-Pfad — ein Fehler bleibt still."""
     # Börsenpreis-Fallback holen — per-Slot-Fallback bei Lücken im MQTT-Sensor
     _mqtt_boersenpreis: dict[int, float] = {}
     try:
@@ -745,37 +931,23 @@ async def _get_tagesverlauf_mqtt(
         _mqtt_boersenpreis = await get_strompreis_stunden(land, start.date())
     except Exception:
         pass
+    return _mqtt_boersenpreis
 
-    rows = await get_snapshots_for_range(anlage.id, abruf_start, end, db)
-    if not rows:
-        return {"serien": [], "punkte": []}
 
+def _mqtt_history(rows: list) -> dict[str, list[tuple[datetime, float]]]:
+    """Snapshot-Zeilen als History je Komponenten-Key."""
     # History aufbauen: {component_key: [(timestamp, value_w)]}
     history: dict[str, list[tuple[datetime, float]]] = {}
     for row in rows:
         history.setdefault(row.component_key, []).append((row.timestamp, row.value_w))
+    return history
 
-    available_keys = set(history.keys())
 
-    # Investitionen laden — die des betrachteten Tages (N-565, wie der HA-Zweig).
-    inv_result = await db.execute(
-        select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            _investitionen_des_tages(tage_zurueck, start.date()),
-        )
-    )
-    investitionen = {str(inv.id): inv for inv in inv_result.scalars().all()}
-    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
-    _bkw_erzeuger = list(investitionen.values())
-
-    serien: list[dict] = []
-    serie_comp_keys: dict[str, list[str]] = {}
-    #: Für welche Investition dieser Pfad eine Serie gebaut hat — der Eingang der
-    #: geteilten `uebersprungen`-Bedingung unten (N-447). Der HA-Pfad liest ihn
-    #: aus `baue_investitions_serien`; hier entstehen die Serien als Dicts,
-    #: deshalb wird die Menge beim Bauen mitgeführt statt hinterher geraten.
-    mit_serie: set[str] = set()
-
+def _mqtt_wp_split_serien(
+    investitionen: dict, available_keys: set[str], serien: list[dict],
+    serie_comp_keys: dict[str, list[str]], mit_serie: set[str],
+) -> None:
+    """Wärmepumpen ohne Gesamtleistung: je Betriebsart eine Serie (N-439)."""
     # WP mit getrennter Strommessung
     for inv_id, inv in investitionen.items():
         if inv.typ != "waermepumpe":
@@ -812,6 +984,12 @@ async def _get_tagesverlauf_mqtt(
             serie_comp_keys[serie_key] = [comp]
             mit_serie.add(inv_id)
 
+
+def _mqtt_leistungs_serien(
+    investitionen: dict, available_keys: set[str], serien: list[dict],
+    serie_comp_keys: dict[str, list[str]], mit_serie: set[str],
+) -> None:
+    """Je Investition mit ``leistung_w``-Snapshot eine Serie (WP-Split oben)."""
     # Investitions-Serien (alle außer WP die bereits oben verarbeitet wurden)
     for inv_id, inv in investitionen.items():
         typ = inv.typ
@@ -853,6 +1031,22 @@ async def _get_tagesverlauf_mqtt(
         serie_comp_keys[serie_key] = [comp_key]
         mit_serie.add(inv_id)
 
+
+def _mqtt_investitions_serien(
+    investitionen: dict, available_keys: set[str],
+) -> tuple[list[dict], dict[str, list[str]], list]:
+    """Investitions-Serien des MQTT-Pfads: ``(serien, serie_comp_keys, uebersprungen)``."""
+    serien: list[dict] = []
+    serie_comp_keys: dict[str, list[str]] = {}
+    #: Für welche Investition dieser Pfad eine Serie gebaut hat — der Eingang der
+    #: geteilten `uebersprungen`-Bedingung unten (N-447). Der HA-Pfad liest ihn
+    #: aus `baue_investitions_serien`; hier entstehen die Serien als Dicts,
+    #: deshalb wird die Menge beim Bauen mitgeführt statt hinterher geraten.
+    mit_serie: set[str] = set()
+
+    _mqtt_wp_split_serien(investitionen, available_keys, serien, serie_comp_keys, mit_serie)
+    _mqtt_leistungs_serien(investitionen, available_keys, serien, serie_comp_keys, mit_serie)
+
     # Wer NICHT gezeichnet wird, und warum — dieselbe Bedingung wie im HA-Pfad
     # (N-447). Die Pfade beantworten „hat eine Leistungsquelle?" verschieden
     # (Mapping gegen Snapshot-Keys), die Regel darüber ist eine.
@@ -863,174 +1057,108 @@ async def _get_tagesverlauf_mqtt(
             f"inv:{inv_id}:{f}" in available_keys for f in LEISTUNGS_FELDER
         ),
     )
+    return serien, serie_comp_keys, uebersprungen
 
+
+def _mqtt_pv_gesamt(
+    serien: list[dict], serie_comp_keys: dict[str, list[str]],
+    available_keys: set[str], anlage: Anlage,
+) -> None:
+    """PV-Gesamt-Serie aus dem Snapshot-Key, wenn kein Erzeuger eine eigene hat."""
     # PV Gesamt als Fallback (wenn keine individuellen PV-Sensoren)
     has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
     if not has_individual_pv and "basis:pv_gesamt_w" in available_keys:
-        gesamt_kwp = anlage.leistung_kwp or 0
-        serien.append({
-            "key": "pv_gesamt",
-            "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
-            "kategorie": "pv",
-            "farbe": "#f59e0b",
-            "seite": "quelle",
-            "bidirektional": False,
-        })
+        serien.append(_pv_gesamt_serie(anlage))
         serie_comp_keys["pv_gesamt"] = ["basis:pv_gesamt_w"]
 
-    # Netz: Netzbezug und Einspeisung als getrennte Serien
+
+def _mqtt_netz(available_keys: set[str]) -> _Netz:
+    """Netz-Keys aus den Snapshots: Kombi nur, wenn kein getrennter Key da ist."""
     has_netz_kombi = "basis:netz_kombi_w" in available_keys
     has_einsp = "basis:einspeisung_w" in available_keys
     has_bezug = "basis:netzbezug_w" in available_keys
     has_netzbezug = has_netz_kombi or has_bezug
     has_einspeisung = has_netz_kombi or has_einsp
+    nur_kombi = has_netz_kombi and not has_einsp and not has_bezug
+    return _Netz(
+        "basis:netz_kombi_w" if nur_kombi else None,
+        "basis:netzbezug_w", "basis:einspeisung_w",
+        has_netzbezug, has_einspeisung,
+    )
 
-    if has_netzbezug:
-        serien.append({
-            "key": "netzbezug",
-            "label": "Netzbezug",
-            "kategorie": "netz",
-            "farbe": "#b91c1c",
-            "seite": "quelle",
-            "bidirektional": False,
-        })
-    if has_einspeisung:
-        serien.append({
-            "key": "einspeisung",
-            "label": "Einspeisung",
-            "kategorie": "netz",
-            "farbe": "#10b981",
-            "seite": "senke",
-            "bidirektional": False,
-        })
+
+async def _get_tagesverlauf_mqtt(
+    anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
+    *, mit_vortagsrand: bool = False,
+) -> dict:
+    """
+    MQTT-Fallback für Tagesverlauf: liest aus MqttLiveSnapshot statt HA-History.
+
+    Wird aufgerufen, wenn **keine HA-Verbindung** besteht — weder per Supervisor
+    noch per Long-Lived-Token (F-26; bis 2026-08-11 hing die Wahl allein am
+    Supervisor-Token, was jeden Docker-Betrieb mit Token-Anbindung hierher
+    schickte, obwohl er gar kein MQTT nutzt). Zusätzlich als **Rückfall**, wenn
+    der HA-Weg nichts hergibt.
+    Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
+
+    ``mit_vortagsrand`` verhält sich wie im HA-Zweig — beide Wege müssen den
+    Backward-Slot 0 füllen können, sonst hinge die Slot-Konvention davon ab,
+    ob eine Anlage HA oder MQTT nutzt.
+    """
+    from backend.services.mqtt_live_history_service import get_snapshots_for_range
+
+    now = datetime.now()
+    # s. `get_tagesverlauf`: Abruf-Fenster ≠ Tagesfenster.
+    start, end, abruf_start = _tagesfenster(now, tage_zurueck, mit_vortagsrand)
+
+    _mqtt_boersenpreis = await _boersenpreis_mqtt(anlage, start)
+
+    rows = await get_snapshots_for_range(anlage.id, abruf_start, end, db)
+    if not rows:
+        return {"serien": [], "punkte": []}
+
+    history = _mqtt_history(rows)
+    available_keys = set(history.keys())
+
+    # Investitionen laden — die des betrachteten Tages (N-565, wie der HA-Zweig).
+    investitionen = await _lade_investitionen(anlage, db, tage_zurueck, start)
+    # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
+    _bkw_erzeuger = list(investitionen.values())
+
+    serien, serie_comp_keys, uebersprungen = _mqtt_investitions_serien(
+        investitionen, available_keys,
+    )
+    _mqtt_pv_gesamt(serien, serie_comp_keys, available_keys, anlage)
+
+    # Netz: Netzbezug und Einspeisung als getrennte Serien
+    netz = _mqtt_netz(available_keys)
+    _netz_serien(serien, netz)
 
     if not serien:
         return {"serien": [], "punkte": []}
 
     # 10-Minuten-Mittelwerte berechnen (144 Intervalle pro Tag; bei
     # `mit_vortagsrand` zusätzlich die sechs Intervalle vor Mitternacht)
-    punkte: list[dict] = []
-    vortagsrand: list[dict] = []
-    for m in range(-6 if mit_vortagsrand else 0, 144):
-        h_start = start + timedelta(minutes=m * 10)
-        h_end = h_start + timedelta(minutes=10)
-        if h_start >= end:
-            break
-
-        werte: dict[str, float] = {}
-        raw_values: dict[str, float] = {}
-
-        for serie in serien:
-            skey = serie["key"]
-            if skey in ("netzbezug", "einspeisung"):
-                continue
-            comp_keys = serie_comp_keys.get(skey, [])
-            serie_sum = 0.0
-            has_data = False
-            max_w = serie.get("max_w")
-            for ckey in comp_keys:
-                pts = [v for ts, v in history.get(ckey, []) if h_start <= ts < h_end]
-                if max_w is not None:
-                    pts = [v for v in pts if abs(v) <= max_w]
-                if pts:
-                    serie_sum += sum(pts) / len(pts) / 1000  # W → kW
-                    has_data = True
-            if has_data:
-                if serie["bidirektional"]:
-                    raw_val = -serie_sum
-                elif serie["seite"] == "senke":
-                    raw_val = -abs(serie_sum)
-                else:
-                    raw_val = abs(serie_sum)
-                raw_values[skey] = raw_val
-                werte[skey] = round(raw_val, 2)
-
-        # Netz: Bezug (positiv/Quelle) und Einspeisung (negativ/Senke)
-        if has_netzbezug or has_einspeisung:
-            bezug_kw = 0.0
-            einsp_kw = 0.0
-            if has_netz_kombi and not has_einsp and not has_bezug:
-                pts = [v for ts, v in history.get("basis:netz_kombi_w", []) if h_start <= ts < h_end]
-                if pts:
-                    avg = sum(pts) / len(pts) / 1000
-                    if avg >= 0:
-                        bezug_kw = avg
-                    else:
-                        einsp_kw = abs(avg)
-            else:
-                pts = [v for ts, v in history.get("basis:netzbezug_w", []) if h_start <= ts < h_end]
-                if pts:
-                    bezug_kw = sum(pts) / len(pts) / 1000
-                pts = [v for ts, v in history.get("basis:einspeisung_w", []) if h_start <= ts < h_end]
-                if pts:
-                    einsp_kw = sum(pts) / len(pts) / 1000
-
-            if has_netzbezug and bezug_kw > 0.001:
-                raw_values["netzbezug"] = bezug_kw
-                werte["netzbezug"] = round(bezug_kw, 2)
-            if has_einspeisung and einsp_kw > 0.001:
-                raw_values["einspeisung"] = -einsp_kw
-                werte["einspeisung"] = round(-einsp_kw, 2)
-
-        # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch
-        # den Rest — vor der Haushalts-Bilanz UND in der Kurve, sonst zeigte
-        # das Chart eine Serie, die die Bilanz nicht mehr kennt. Der Rest bleibt
-        # unverteilt (kWp-Gewichtung ist eine Tages-Aussage); bei Rest 0
-        # verschwindet die Serie, weil ihre Energie in den Modul-Serien steht.
-        if _bkw_erzeuger:
-            gekuerzt = kuerze_bkw_in_werte_map(raw_values, _bkw_erzeuger)
-            for weg in set(raw_values) - set(gekuerzt):
-                werte.pop(weg, None)
-            for skey_neu, wert_neu in gekuerzt.items():
-                if raw_values.get(skey_neu) != wert_neu:
-                    werte[skey_neu] = round(wert_neu, 2)
-            raw_values = gekuerzt
-
-        # Haushalt berechnen
-        quellen_sum = sum(v for v in raw_values.values() if v > 0)
-        senken_sum = sum(v for v in raw_values.values() if v < 0)
-        haushalt = quellen_sum + senken_sum
-        if quellen_sum > 0 and haushalt > 0:
-            werte["haushalt"] = round(-haushalt, 2)
-
-        # Strompreis (optional, MQTT-Key: strompreis_ct oder Börsenpreis-Fallback).
-        # Sensor-Wert hat Vorrang, EPEX ist per-Slot-Fallback für Lücken (MQTT
-        # kann nach Nacht-Downtime Daten erst ab 01:50 haben).
-        sp_pts = [v for ts, v in history.get("basis:strompreis_ct", []) if h_start <= ts < h_end]
-        if sp_pts:
-            werte["strompreis"] = round(sum(sp_pts) / len(sp_pts), 2)
-        elif _mqtt_boersenpreis:
-            bp = _mqtt_boersenpreis.get(h_start.hour)
-            if bp is not None:
-                werte["strompreis"] = bp
-
-        ziel = vortagsrand if h_start < start else punkte
-        ziel.append({"zeit": f"{h_start.hour:02d}:{h_start.minute:02d}", "werte": werte})
+    #
+    # Haushalt berechnen
+    #
+    # Strompreis (optional, MQTT-Key: strompreis_ct oder Börsenpreis-Fallback).
+    # Sensor-Wert hat Vorrang, EPEX ist per-Slot-Fallback für Lücken (MQTT
+    # kann nach Nacht-Downtime Daten erst ab 01:50 haben).
+    punkte, vortagsrand = _raster(
+        _SlotQuellen(
+            serien=serien, serie_keys=serie_comp_keys, history=history, netz=netz,
+            bkw_erzeuger=_bkw_erzeuger, preis_key="basis:strompreis_ct",
+            preis_fortschreiben=False, boersenpreis=_mqtt_boersenpreis,
+            ende_erreicht=operator.ge,
+        ),
+        start, end, mit_vortagsrand,
+    )
 
     # Haushalt-Serie ergänzen wenn Daten vorhanden
-    if any("haushalt" in p["werte"] for p in punkte):
-        serien.append({
-            "key": "haushalt",
-            "label": "Restverbrauch",  # N-603 (03.10.2026): Label, der Schlüssel bleibt
-            "kategorie": "haushalt",
-            "farbe": "#64748b",
-            "seite": "senke",
-            "bidirektional": False,
-        })
-
     # Strompreis-Serie ergänzen wenn Daten vorhanden
     has_mqtt_strompreis = "basis:strompreis_ct" in available_keys
-    if any("strompreis" in p["werte"] for p in punkte):
-        label = "Strompreis" if has_mqtt_strompreis else "Börsenpreis (EPEX)"
-        serien.append({
-            "key": "strompreis",
-            "label": label,
-            "kategorie": "preis",
-            "farbe": "#f472b6",
-            "seite": "overlay",
-            "bidirektional": False,
-            "einheit": "ct/kWh",
-        })
+    _ergaenze_haushalt_und_preis(serien, punkte, has_mqtt_strompreis)
 
     return {
         "serien": serien, "punkte": punkte, "uebersprungen": uebersprungen,

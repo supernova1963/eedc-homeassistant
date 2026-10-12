@@ -232,19 +232,19 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     # ── Anlagen-Ebene: Live ──────────────────────────────────────────────────
     (TYP_ANLAGE, "einspeisung_w"): (
         _a(COCKPIT_LIVE, "services/live_power_service.py", "LivePowerService._collect_values"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_ha_netz"),
     ),
     (TYP_ANLAGE, "netzbezug_w"): (
         _a(COCKPIT_LIVE, "services/live_power_service.py", "LivePowerService._collect_values"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_ha_netz"),
     ),
     (TYP_ANLAGE, "netz_kombi_w"): (
         _a(COCKPIT_LIVE, "services/live_power_service.py", "LivePowerService._collect_values"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_ha_netz"),
     ),
     (TYP_ANLAGE, "pv_gesamt_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_pv_gesamt_aus_basis"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "get_tagesverlauf"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_ha_pv_gesamt"),
     ),
     (TYP_ANLAGE, "aussentemperatur_c"): (
         _a(COCKPIT_LIVE, "api/routes/live_wetter_antwort.py", "_ha_aussentemperatur"),
@@ -395,15 +395,15 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     ("waermepumpe", "leistung_heizen_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_mqtt_wp_split_serien"),
     ),
     ("waermepumpe", "leistung_warmwasser_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_mqtt_wp_split_serien"),
     ),
     ("waermepumpe", "leistung_kuehlen_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wp_leistung_und_icon"),
-        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_get_tagesverlauf_mqtt"),
+        _a(COCKPIT_TAG, "services/live_tagesverlauf_service.py", "_mqtt_wp_split_serien"),
     ),
     ("waermepumpe", "warmwasser_temperatur_c"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_warmwasser_temperatur"),
