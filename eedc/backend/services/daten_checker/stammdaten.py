@@ -26,7 +26,7 @@ from backend.core.berechnungen import (
     speicher_effizienz_prozent,
 )
 from backend.core.berechnungen.alternativkosten import ersetzt_keine_heizung
-from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
+from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT, NETZBEZUG_DEFAULT_CENT
 from backend.core.field_definitions import (
     URTEIL_GILT,
     feld_urteil,
@@ -690,10 +690,14 @@ class StammdatenChecks:
                     f"{len(monate_ohne_tarif)} Monat(e) mit Daten liegen vor dem "
                     f"ersten Tarif ({erster_tarif_ab.strftime('%m/%Y')})"
                 ),
+                # Handgriff L3 (12.10.2026): der Satz nennt BEIDE Preisseiten der Vorbelegung — bis dahin nur die
+                # 30 ct, obwohl der Netzbezug mit einem gepflegten Monats-Ø und die Einspeisung mit 8,2 ct rechnet.
                 details=(
                     f"Ab {aeltester[1]:02d}/{aeltester[0]} sind Werte erfasst, aber kein "
-                    f"Strompreis hinterlegt — diese Monate rechnen mit der Vorbelegung "
-                    f"{fmt_zahl(NETZBEZUG_DEFAULT_CENT, 0)} ct/kWh. Beim ältesten Tarif das "
+                    f"Strompreis hinterlegt — diese Monate rechnen mit der Vorbelegung: "
+                    f"Netzbezug {fmt_zahl(NETZBEZUG_DEFAULT_CENT, 0)} ct/kWh (bzw. dem gepflegten "
+                    f"Monats-Ø), Einspeisung {fmt_zahl(EINSPEISEVERGUETUNG_DEFAULT_CENT, 1)} ct/kWh "
+                    f"(bzw. dem gepflegten Monatssatz). Beim ältesten Tarif das "
                     f"Gültig-ab-Datum auf den Beginn der Daten zurücksetzen; die "
                     f"Auswertungen rechnen sofort neu."
                 ),

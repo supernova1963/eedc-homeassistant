@@ -24,7 +24,6 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.finanz_zeilen import ev_preis_je_monat
 from datetime import date
-from backend.api.routes.strompreise import monats_strompreis_lookup
 from backend.services.monats_fakten import tarife_der_monate
 from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL
 from backend.core.berechnungen.betriebsart_gemessen import (
@@ -446,10 +445,14 @@ async def _emob_ersparnis(
     # zwar den ALLGEMEINEN statt des Wallbox-Tarifs.
     e = _emob_ersparnis_eingaenge(investition, emob_ctx, emob_monate)
 
-    preis_lookup_sensor = await monats_strompreis_lookup(
-        db, investition.anlage_id, "wallbox", e.monate_sensor,
-        fallback_bezug=netzbezug_preis,
-    )
+    # N-717 (12.10.2026): der Wallbox-Preis des Monats aus den Monats-Fakten (`wallbox_preis_effektiv_cent`) wie
+    # Cockpit, Hubs, HA-Anlagensensoren und Aussichten — EINE Kaskade. Bis dahin lief dieser Sensor über eine zweite
+    # (`strompreise.monats_strompreis_lookup`); sie rechnete bei HT/NT-Fenstern am Allgemeintarif plus eigenem
+    # Wallbox-Tarif als einzige richtig (772,00 neben 760,00 €), jetzt rechnen alle so.
+    preis_lookup_sensor = {
+        k: t.wallbox_preis_effektiv_cent
+        for k, t in (await tarife_der_monate(db, investition.anlage_id, e.monate_sensor)).items()
+    }
     # N-672: der Preis der Eigenverbrauchs-Ersparnis je Monat — derselbe Builder wie der Anlagen-Sensor.
     ev_preis_lookup_sensor = await ev_preis_je_monat(
         db, investition.anlage_id,

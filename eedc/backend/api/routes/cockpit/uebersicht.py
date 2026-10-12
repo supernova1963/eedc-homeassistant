@@ -810,7 +810,16 @@ async def get_cockpit_uebersicht(
     investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
     # Zugleich die kanonische USt-Bemessungsgrundlage (N-129) — die Formel stand
     # hier als Inline-Kopie, jetzt liegt sie im Layer.
-    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen)
+    # ⭐ N-720 (12.10.2026, Entscheid Master): im EINZELJAHR nur die Investitionen mit Anschaffungsdatum ≤ 31.12. des
+    # Jahres (ohne Datum bleiben sie) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts zum Stichtag (N-699,
+    # `aussichten/finanz_eingaenge.py`). Bis dahin teilte die Rendite eines Jahres auch durch später gekaufte
+    # Investitionen (T2: 2024 6,7 % auf 15 000 € statt 10,1 % auf 10 000 €; das PDF nannte zwei Kapitalsummen für
+    # dasselbe Jahr). Gesamtzeitraum unverändert. `investitionen` selbst bleibt die volle Liste (#123).
+    investitionen_im_nenner = (
+        [i for i in investitionen if i.anschaffungsdatum is None or i.anschaffungsdatum <= date(jahr, 12, 31)]
+        if jahr else investitionen
+    )
+    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen_im_nenner)
 
     # N-137/N-134: Hier stand bis 04.08. eine dritte Summe — PV-System voll +
     # WP-/eAuto-Mehrkosten aus `parameter["alternativ_kosten_euro"]` + Sonstiges

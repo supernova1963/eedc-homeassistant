@@ -133,8 +133,8 @@ Das ist eine bewusste Grenze und keine Lücke, die noch geschlossen wird. Eine F
 Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis jeder Einsparungsberechnung:
 
 - Mehrere Tarife mit **Gültigkeitszeitraum** möglich.
-- **Spezialtarife:** Jeder Tarif kann einer Verwendung zugeordnet werden — Standard, Wärmepumpe oder Wallbox. Ohne Spezialtarif nutzt eedc automatisch den Standard-Tarif für die Komponente — und pflegst du im Monatsabschluss einen **Ø-Strompreis**, gilt dieser Ø dann auch für Wärmepumpe und Wallbox (sie hängen am Hauszähler). Aktive Spezialtarife stehen in der Info-Box oben.
-- **Monate vor deinem ersten Tarif:** Liegen erfasste Monate vor dem „Gültig ab" deines ältesten Tarifs, rechnet eedc sie mit der **Vorbelegung 30 ct/kWh** — überall gleich: Cockpit (Übersicht, Monat, Jahr), Komponenten-Hubs, Aussichten, Jahresbericht und HA-Sensoren. In *Cockpit → Monat* steht dann unter dem Ø-Preis „Kein Strompreis-Tarif für diesen Zeitraum hinterlegt — gerechnet mit der Vorbelegung", und der Daten-Checker meldet die Monate als Fehler. Der Handgriff: beim ältesten Tarif das „Gültig ab" auf den Beginn deiner Daten setzen — alle Sichten rechnen sofort neu.
+- **Spezialtarife:** Jeder Tarif kann einer Verwendung zugeordnet werden — Standard, Wärmepumpe oder Wallbox. Ohne Spezialtarif nutzt eedc automatisch den Standard-Tarif für die Komponente — und pflegst du im Monatsabschluss einen **Ø-Strompreis**, gilt dieser Ø dann auch für Wärmepumpe und Wallbox (sie hängen am Hauszähler). Aktive Spezialtarife stehen in der Info-Box oben. Ein **eigener Wallbox-Tarif** rechnet mit seinem eigenen Arbeitspreis bzw. seinen eigenen Zeitfenstern — die HT/NT-Fenster des Standard-Tarifs gelten für ihn nicht.
+- **Monate vor deinem ersten Tarif:** Liegen erfasste Monate vor dem „Gültig ab" deines ältesten Tarifs, rechnet eedc sie mit der **Vorbelegung** — **30 ct/kWh** für den Netzbezug, **8,2 ct/kWh** für die Einspeisung — überall gleich: Cockpit (Übersicht, Monat, Jahr), Komponenten-Hubs, Aussichten, Jahresbericht und HA-Sensoren. In *Cockpit → Monat* steht dann unter dem Ø-Preis „Kein Strompreis-Tarif für diesen Zeitraum hinterlegt — gerechnet mit der Vorbelegung", und der Daten-Checker meldet die Monate als Fehler. Der Handgriff: beim ältesten Tarif das „Gültig ab" auf den Beginn deiner Daten setzen — alle Sichten rechnen sofort neu.
 - **Zeitfenster (HT/NT):** Jeder Tarif kann Fenster mit abweichendem Arbeitspreis tragen (Uhrzeit, Wochentage, Preis) — siehe den Kasten unten.
 - **Zählergebühr-Tarif:** Neben Grundgebühr lässt sich eine separate Zählergebühr erfassen; Grund- und Zählergebühren werden im Cockpit (Monat/Jahr) getrennt ausgewiesen.
 - **Das Badge „Aktuell"** markiert den Tarif, mit dem eedc **heute** rechnet: gültig am heutigen Tag und — je Verwendung — der jüngste „Gültig ab". Standard- und Spezialtarif können damit gleichzeitig aktuell sein, zwei aufeinander folgende Standardtarife nicht. (Bis v4.0.5 trug es jeder Tarif ohne Enddatum, also auch abgelöste.)
@@ -173,7 +173,8 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 > **Wechselt deine Vergütung monatlich** (z. B. der OeMAG-Marktpreis in Österreich), setze im
 > Tarif das Häkchen **„Einspeisevergütung wechselt monatlich“**. Der Monatsabschluss bietet dann
 > das Feld **„Einspeisevergütung (Monat)“** an: der dort gepflegte Satz gilt für genau diesen
-> Monat und schlägt den Stammwert aus dem Tarif — auch eine **0** ist ein gültiger Wert. Monate
+> Monat und schlägt den Stammwert aus dem Tarif — auch eine **0** ist ein gültiger Wert, und er gilt in jeder Sicht,
+> auch für Speicher, V2H-Rückspeisung und sonstige Erzeuger in den Komponenten-Hubs. Monate
 > ohne Eintrag rechnen mit dem Stammwert; die Prognose nach vorn nimmt immer den Stammwert, denn
 > künftige Monate haben noch keinen Satz. eedc holt die Monatswerte nicht automatisch ab — du
 > trägst sie ein oder importierst sie per CSV (Spalte `Einspeiseverguetung_Cent`).

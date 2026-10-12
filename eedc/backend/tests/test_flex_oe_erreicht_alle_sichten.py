@@ -17,6 +17,10 @@ ihn grün.
 
 ⭐ Der Layer sagt die Regel seit Langem ausdrücklich: *„Der Flex-Ø gilt für den
 ganzen Zähler — auch für die Wallbox"* (`monats_fakten._lade_tarif`).
+
+N-717 (12.10.2026): die zweite Kaskade `strompreise.monats_strompreis_lookup` ist entfernt — ihr letzter Aufrufer (der
+HA-Sensor je E-Auto) liest den Wallbox-Preis der Monats-Fakten. Die Proben unten lesen deshalb dort
+(`tarife_der_monate(...).wallbox_preis_effektiv_cent`); die Zusagen sind dieselben.
 """
 
 from __future__ import annotations
@@ -25,7 +29,6 @@ from datetime import date
 
 import pytest
 
-from backend.api.routes.strompreise import monats_strompreis_lookup
 from backend.models import Anlage, Strompreis
 from backend.models.monatsdaten import Monatsdaten
 
@@ -59,14 +62,18 @@ async def _anlage_mit_gepflegtem_oe(db, *, mit_wallbox_tarif: bool) -> int:
     return anlage.id
 
 
+async def _wallbox_preis(db, anlage_id: int) -> dict:
+    from backend.services.monats_fakten import tarife_der_monate
+
+    return {k: t.wallbox_preis_effektiv_cent for k, t in (await tarife_der_monate(db, anlage_id, [(JAHR, MONAT)])).items()}
+
+
 @pytest.mark.asyncio
 async def test_der_lookup_traegt_den_gepflegten_oe(db):
     """**Der Kern des Befundes.** Bis 11.09.2026 stand hier 34,0 statt 17,5."""
     anlage_id = await _anlage_mit_gepflegtem_oe(db, mit_wallbox_tarif=False)
 
-    lookup = await monats_strompreis_lookup(
-        db, anlage_id, "wallbox", [(JAHR, MONAT)], fallback_bezug=30.0,
-    )
+    lookup = await _wallbox_preis(db, anlage_id)
 
     assert lookup[(JAHR, MONAT)] == pytest.approx(GEPFLEGT)
 
@@ -81,9 +88,7 @@ async def test_der_gepflegte_oe_schlaegt_auch_einen_eigenen_wallbox_tarif(db):
     """
     anlage_id = await _anlage_mit_gepflegtem_oe(db, mit_wallbox_tarif=True)
 
-    lookup = await monats_strompreis_lookup(
-        db, anlage_id, "wallbox", [(JAHR, MONAT)], fallback_bezug=30.0,
-    )
+    lookup = await _wallbox_preis(db, anlage_id)
 
     assert lookup[(JAHR, MONAT)] == pytest.approx(GEPFLEGT)
 
@@ -109,9 +114,7 @@ async def test_ohne_gepflegten_oe_bleibt_der_komponenten_tarif(db):
     ))
     await db.flush()
 
-    lookup = await monats_strompreis_lookup(
-        db, anlage.id, "wallbox", [(JAHR, MONAT)], fallback_bezug=30.0,
-    )
+    lookup = await _wallbox_preis(db, anlage.id)
 
     assert lookup[(JAHR, MONAT)] == pytest.approx(WALLBOX), (
         "der Komponenten-Tarif ist Stufe 4, nicht ersetzt"
@@ -120,13 +123,12 @@ async def test_ohne_gepflegten_oe_bleibt_der_komponenten_tarif(db):
 
 @pytest.mark.asyncio
 async def test_ohne_tarif_gilt_weiterhin_der_fallback(db):
-    """Die Grenze, die vorher galt und weiter gilt."""
+    """Die Grenze, die vorher galt und weiter gilt — seit N-712/N-717 die Vorbelegung ``NETZBEZUG_DEFAULT_CENT``
+    (30 ct) der Monats-Fakten statt eines übergebenen Ersatzpreises."""
     anlage = Anlage(anlagenname="Ohne Tarif", leistung_kwp=10.0)
     db.add(anlage)
     await db.flush()
 
-    lookup = await monats_strompreis_lookup(
-        db, anlage.id, "wallbox", [(JAHR, MONAT)], fallback_bezug=30.0,
-    )
+    lookup = await _wallbox_preis(db, anlage.id)
 
     assert lookup[(JAHR, MONAT)] == pytest.approx(30.0)

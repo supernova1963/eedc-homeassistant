@@ -98,8 +98,14 @@ export interface RoiAnalyseProps {
 export interface AmortisationsFortschrittVM {
   prozent: number
   erreicht: boolean
-  bisherigeErtraege: number
-  relevanteKosten: number
+  /**
+   * N-719: Zähler und Nenner der Quote, wie der Server sie rechnet (F-19) — die bisherigen Erträge ohne beide Seiten
+   * der sonstigen Positionen und der Kapitaleinsatz. Bis 12.10.2026 standen hier die Zeitraum-Bilanz
+   * (`bisherige_ertraege_euro`) und die Mehrkosten (`investition_gesamt_euro`): der Tooltip zeigte
+   * „1.276 € ÷ 10.000 €" neben „= 16,9 %" (die Rechnung ergäbe 12,8 %).
+   */
+  ertraege: number
+  kapitaleinsatz: number
   prognoseJahr: number | null
   /**
    * Konzept §5: die Annahme hinter `prognoseJahr`. Sie gilt **nur** für die
@@ -193,8 +199,8 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
         setFortschritt({
           prozent: p.amortisations_fortschritt_prozent,
           erreicht: p.amortisation_erreicht,
-          bisherigeErtraege: p.bisherige_ertraege_euro,
-          relevanteKosten: p.investition_gesamt_euro,
+          ertraege: p.amortisation_ertraege_euro,
+          kapitaleinsatz: p.kapitaleinsatz_euro,
           prognoseJahr: p.amortisation_prognose_jahr,
           annahme: p.amortisation_annahme,
           ertragJeInvestition: Object.fromEntries(
@@ -337,12 +343,12 @@ export function roiKpiItems(
   // N-137: Die Gegen-Kachel zur Amortisation. Sie beantwortet dieselbe Frage,
   // aber aus der GEMESSENEN Historie statt aus einer hochgerechneten
   // Jahres-Einsparung — „4.800 € von 12.000 € sind drin" neben „laut Rechnung
-  // in 9,2 Jahren". Beide teilen denselben Nenner (relevante Kosten =
-  // Mehrkosten), sonst stünden sie sich in einer Sicht widersprechend
-  // gegenüber. Fehlt die Zahl (Endpoint nicht da), entfällt die Kachel — kein
-  // Platzhalter, der eine Aussage vortäuscht.
+  // in 9,2 Jahren". Beide teilen denselben Nenner (den Kapitaleinsatz, F-19),
+  // sonst stünden sie sich in einer Sicht widersprechend gegenüber. Fehlt die
+  // Zahl (Endpoint nicht da), entfällt die Kachel — kein Platzhalter, der eine
+  // Aussage vortäuscht.
   if (fortschritt) {
-    const rest = Math.max(0, fortschritt.relevanteKosten - fortschritt.bisherigeErtraege)
+    const rest = Math.max(0, fortschritt.kapitaleinsatz - fortschritt.ertraege)
     items.push({
       title: 'Amortisations-Fortschritt',
       value: fmtZahl(fortschritt.prozent, 1), unit: '%',
@@ -358,8 +364,8 @@ export function roiKpiItems(
         fortschritt.prognoseJahr && fortschritt.annahme
           ? ` — das voraussichtliche Jahr rechnet mit der Jahres-Prognose · ${amortisationAnnahmeZeile(fortschritt.annahme)}`
           : ''}`,
-      formel: 'Bisherige Netto-Erträge ÷ Relevante Kosten × 100',
-      berechnung: `${formatGeld(fortschritt.bisherigeErtraege).text} ÷ ${formatGeld(fortschritt.relevanteKosten).text}`,
+      formel: 'Bisherige Erträge ÷ Kapitaleinsatz × 100',
+      berechnung: `${formatGeld(fortschritt.ertraege).text} ÷ ${formatGeld(fortschritt.kapitaleinsatz).text}`,
       ergebnis: `= ${fmtZahl(fortschritt.prozent, 1)} % gedeckt`,
     })
   }

@@ -182,6 +182,11 @@ async def _eauto_ersparnis_ueber_die_route(db) -> float:
     er als `fallback_bezug` in `monats_strompreis_lookup` und als
     `wallbox_strompreis_cent` in die Ersparnis-Formel. Damit der Fallback
     wirklich greift, liegt der gemessene Monat **vor** jedem gepflegten Tarif.
+
+    ⚠ Stand 12.10.2026: seit N-693 liest der Sensor den durchgereichten Preis
+    nicht mehr (Ersatzpreis = Vorbelegung), seit N-717 gibt es
+    `monats_strompreis_lookup` nicht mehr (der Monatspreis kommt aus den
+    Monats-Fakten). Die 81,00 € bleiben das Soll; der Weg oben ist Geschichte.
     """
     anlage = Anlage(anlagenname="N-200 Route", leistung_kwp=10.0)
     db.add(anlage)

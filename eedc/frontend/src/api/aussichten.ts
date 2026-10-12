@@ -219,7 +219,11 @@ export interface FinanzPrognose {
   investition_eauto_mehrkosten_euro: number  // E-Auto minus Verbrenner
   investition_sonstige_euro: number  // Andere Investitionen
   investition_gesamt_euro: number  // Relevante Kosten (inkl. Mehrkosten-Ansatz)
-  bisherige_ertraege_euro: number  // Kumulierte Erträge seit Inbetriebnahme
+  // F-19: der Nenner des Fortschritts (relevante Kosten + sonstige Ausgaben − sonstige Erträge).
+  kapitaleinsatz_euro: number
+  // N-719: der Zähler des Fortschritts (bisherige Erträge ohne beide Seiten der sonstigen Positionen).
+  amortisation_ertraege_euro: number
+  bisherige_ertraege_euro: number  // Kumulierte Erträge seit Inbetriebnahme (Zeitraum-Bilanz)
   amortisations_fortschritt_prozent: number  // Wie viel % bereits amortisiert (kumuliert)
   amortisation_erreicht: boolean
   amortisation_prognose_jahr: number | null

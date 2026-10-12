@@ -154,8 +154,19 @@ async def _lade_tarif(
         # trüge DASSELBE `TarifFakten`-Objekt zwei verschiedene Auflösungen
         # (`netzbezug_preis_cent` mit Messung, die Wallbox ohne).
         # `stammpreis_override`: der Wallbox-Tarif bleibt Stufe 4.
+        # ⭐ N-717 (12.10.2026): die Kaskade läuft über den Tarif DERSELBEN
+        # Verwendung (`resolve_tarif_for_komponente(…, "wallbox")` — ohne eigenen
+        # Wallbox-Tarif der Allgemeintarif). Bis dahin stand hier `allgemein`:
+        # Stufe 3 prüfte dessen HT/NT-Fenster und ersetzte den Wallbox-Tarif durch
+        # ihren Ø (gemessen 26,667 statt 25 ct ⇒ E-Auto-Ersparnis 760,00 statt
+        # 772,00 € in Cockpit, Hubs, HA-Anlagensensoren und Aussichten). N-433:
+        # der Komponenten-Tarif ist Stufe 4 und geht nicht verloren; gepflegt
+        # (Stufe 1) und gemessen (Stufe 2) gelten dem ganzen Zähler und schlagen
+        # ihn weiter. Die zweite Kaskade `strompreise.monats_strompreis_lookup`
+        # (sie übergab schon den Wallbox-Tarif) ist damit entfallen.
         wallbox_preis_effektiv_cent=(await aufgeloester_monatspreis(
-            db, anlage_id, schluessel[0], schluessel[1], monatsdaten, allgemein,
+            db, anlage_id, schluessel[0], schluessel[1], monatsdaten,
+            resolve_tarif_for_komponente(tarife, "wallbox"),
             stammpreis_override=wallbox_cent, messung=preis_messung,
         )).cent,
         kraftstoffpreis_euro=monatsdaten.kraftstoffpreis_euro if monatsdaten else None,

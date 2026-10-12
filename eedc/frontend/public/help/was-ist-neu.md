@@ -95,6 +95,30 @@ den heutigen Spaltennamen `<Name>_Erzeugung_kWh` und den alten `<Name>_kWh`, gil
 der Monatssumme doppelt. Die Datei-Leser für SMA Sunny Portal und Fronius Solarweb lesen eine 0 der Exportdatei weiterhin
 als „keine Daten" — das steht jetzt so in der Hilfe ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
 
+**Hubs nehmen die Vergütung des Monats:** Speicher-, E-Auto- (V2H) und Sonstiges-Hub rechnen die Einspeisevergütung
+jetzt wie *Cockpit → Monat* — vor deinem ersten Tarif mit der Vorbelegung 8,2 ct statt der heutigen Vergütung, und eine
+monatlich gepflegte Vergütung gilt auch für V2H und sonstige Geräte (im Beispiel V2H 108,00 statt 88,00 €)
+([Einstellungen → Strompreise](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+
+**Eigener Wallbox-Tarif und HT/NT:** Trägt dein Standard-Tarif Zeitfenster, rechnet ein eigener Wallbox-Tarif jetzt
+überall mit seinem eigenen Preis, statt vom Zeitfenster-Ø des Standard-Tarifs ersetzt zu werden (im Beispiel 772,00
+statt 760,00 € E-Auto-Ersparnis); die HA-Anlagensensoren für Jahresersparnis, ROI und Amortisation springen bei dieser
+Kombination einmalig ([Einstellungen → Strompreise](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+
+**Speicher-0 im Portal-Import:** Meldet die Quelle für einen Monat 0 kWh Speicher-Ladung oder -Entladung, steht jetzt
+0 am Speicher, statt dass der Daten-Checker den Monat als fehlend meldet
+([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+
+**ROI-Fortschritt: Tooltip und Kachel rechnen gleich:** Der Tooltip der Kachel „Amortisations-Fortschritt" zeigt jetzt
+die Zahlen, aus denen die Prozent entstehen — Erträge ÷ Kapitaleinsatz ([Bedienung → ROI](HANDBUCH_BEDIENUNG.md#42-roi)).
+
+**Jahresbericht eines Jahres: Rendite auf das, was da war:** Die Rendite teilt im Bericht eines einzelnen Jahres nur
+noch durch die bis zum 31.12. angeschafften Komponenten — wie der Amortisations-Fortschritt zwei Zeilen darüber.
+
+**Kleinigkeiten:** Der Daten-Checker nennt bei Monaten vor dem ersten Tarif beide Preise der Vorbelegung (30 ct Bezug,
+8,2 ct Einspeisung); eine PVGIS-Prognose mit leerem Monatswert bricht die Finanz-Prognose nicht mehr ab; die Vorschau des
+eigenen Import-Formats zeigt bei zwei Spalten für dasselbe Geräte-Feld nur die, die importiert wird.
+
 ## v4.1.6 — 11. Oktober 2026
 
 **Kleinere Anzeige-Korrekturen:** Monate ohne Werte zeigen in der Monatsleiste und im Jahresbericht einen Strich statt „0 kWh",

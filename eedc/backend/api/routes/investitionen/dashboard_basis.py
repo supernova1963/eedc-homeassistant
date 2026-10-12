@@ -8,8 +8,6 @@ Monatsdaten-Antwortmodell, das alle Dashboards mitliefern.
 from typing import Optional, Any, NamedTuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from datetime import date
-from backend.api.routes.strompreise import resolve_einspeiseverguetung_cent
 
 
 class GewichtetePreise(NamedTuple):
@@ -96,14 +94,18 @@ async def _gewichtete_monatspreise(
     # ersten Tarif (Fall C: E-Auto-Hub 666,00 statt 675,00 €). Die Schicht
     # rechnet dort mit der Vorbelegung `NETZBEZUG_DEFAULT_CENT`, und so jetzt
     # jeder Hub. `fallback_bezug` gilt nur noch ohne Gewichte (oben).
-    # Die Vergütung bleibt bei ihrem bisherigen Weg (nicht Teil des Funds).
-    from backend.api.routes.strompreise import lade_tarife_je_stichtag
+    #
+    # ⭐ N-715/N-716 (12.10.2026): die VERGÜTUNG kommt aus derselben Quelle
+    # (`TarifFakten.einspeiseverguetung_cent`: #392-Monatssatz → Tarif des
+    # Monats → Vorbelegung 8,2 ct). Bis dahin stand hier
+    # `resolve_einspeiseverguetung_cent(m_tarife, fallback=fallback_einspeise)` —
+    # vor dem ersten Tarif die HEUTIGE Vergütung (V2H 96,00 statt 93,80 €) und
+    # ohne den gepflegten Monatssatz (V2H 88,00 statt 108,00 €, Erlös eines
+    # Sonstiges-Erzeugers 25,60 statt 9,60 €). `fallback_einspeise` gilt wie
+    # `fallback_bezug` nur noch ohne Gewichte.
     from backend.services.monats_fakten import tarife_der_monate
 
     _monate = [(j, m) for (j, m), g in gewichte.items() if g and g > 0]
-    _tarife_je_stichtag = await lade_tarife_je_stichtag(
-        db, anlage_id, [date(j, m, 1) for j, m in _monate]
-    )
     _monatspreis = await tarife_der_monate(db, anlage_id, _monate)
 
     gewichteter_bezug = 0.0
@@ -112,13 +114,11 @@ async def _gewichtete_monatspreise(
     for (jahr, monat), gewicht in gewichte.items():
         if not gewicht or gewicht <= 0:
             continue
-        m_tarife = _tarife_je_stichtag[date(jahr, monat, 1)]
-        m_bezug = monatspreis_der_verwendung(_monatspreis[(jahr, monat)], verwendung)
+        m_tarif = _monatspreis[(jahr, monat)]
+        m_bezug = monatspreis_der_verwendung(m_tarif, verwendung)
         bezug_lookup[(jahr, monat)] = m_bezug
         gewichteter_bezug += m_bezug * gewicht
-        gewichtete_einspeisung += resolve_einspeiseverguetung_cent(
-            m_tarife, fallback=fallback_einspeise
-        ) * gewicht
+        gewichtete_einspeisung += m_tarif.einspeiseverguetung_cent * gewicht
     return GewichtetePreise(
         gewichteter_bezug / summe_gewicht,
         gewichtete_einspeisung / summe_gewicht,

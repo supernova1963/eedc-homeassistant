@@ -51,6 +51,9 @@ vi.mock('../../api/aussichten', () => ({
       // Derselbe Nenner wie `gesamt_relevante_kosten` oben — das ist die
       // Zusicherung, die N-137 überhaupt erst möglich gemacht hat.
       investition_gesamt_euro: 15000,
+      // N-719: Zähler und Nenner der Quote (ohne sonstige Positionen = Bilanz und Mehrkosten).
+      kapitaleinsatz_euro: 15000,
+      amortisation_ertraege_euro: 6000,
       amortisation_prognose_jahr: 2032,
     })),
   },

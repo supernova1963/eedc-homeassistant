@@ -202,12 +202,17 @@ async def test_gesamtzeitraum_pdf_wie_uebersicht_und_roi(db, fall):
 
 
 @pytest.mark.asyncio
-async def test_finanz_prognose_ohne_rechnung_kippt_den_bericht_nicht(db):
-    """Rechnet die ROI-Sicht nicht (gemessen: PVGIS-Prognose mit fehlendem Monatswert ⇒ ``TypeError`` in
-    ``finanz_prognose.py``), steht der Fortschritt als „–" — der Gesamtzeitraum-Bericht entsteht trotzdem, die Rendite
-    der Übersicht steht da. Bis N-699 rechnete der Bericht diese Zeile selbst und brach deshalb dort nicht ab."""
+async def test_finanz_prognose_ohne_rechnung_kippt_den_bericht_nicht(db, monkeypatch):
+    """Rechnet die ROI-Sicht nicht, steht der Fortschritt als „–" — der Gesamtzeitraum-Bericht entsteht trotzdem, die
+    Rendite der Übersicht steht da. Bis N-699 rechnete der Bericht diese Zeile selbst und brach deshalb dort nicht ab.
+
+    Bis 12.10.2026 war die gemessene Lage eine PVGIS-Prognose mit fehlendem Monatswert (``e_m = None`` ⇒
+    ``TypeError`` in ``finanz_prognose.py``). Der Handgriff L6 (``mw.get("e_m") or 0`` in ``finanz_eingaenge.py``)
+    hat sie beseitigt — die Prognose rechnet jetzt (erster Teil). Der Schutz des Berichts gilt jeder Sicht, die
+    wirft; er wird deshalb mit einer gestellten Ausnahme geprüft (zweiter Teil)."""
     from datetime import datetime
 
+    from backend.api.routes.aussichten import finanzen as aussichten_finanzen
     from backend.api.routes.aussichten.finanzen import get_finanz_prognose
     from backend.models.pvgis_prognose import PVGISPrognose
     from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
@@ -220,9 +225,13 @@ async def test_finanz_prognose_ohne_rechnung_kippt_den_bericht_nicht(db):
                          gesamt_leistung_kwp=6.0, monatswerte=mw, ist_aktiv=True,
                          abgerufen_am=datetime(2025, 1, 1, 12, 0)))
     await db.commit()
-    with pytest.raises(TypeError):  # die Lage, gegen die der Bericht sich schützt — fällt sie weg, diese Zeile anpassen
-        await get_finanz_prognose(aid, monate=12, db=db)
+    p = await get_finanz_prognose(aid, monate=12, db=db)  # Handgriff L6: kein TypeError mehr
+    assert p.amortisations_fortschritt_prozent is not None
 
+    async def _wirft(*_a, **_k):
+        raise TypeError("gestellt: die Sicht rechnet nicht")
+
+    monkeypatch.setattr(aussichten_finanzen, "get_finanz_prognose", _wirft)
     k = (await build_jahresbericht_context(db, aid, None))["kpis"]
     assert k["amortisation_prozent"] is None
     assert k["amortisation_kapitaleinsatz_euro"] is None

@@ -210,6 +210,11 @@ class FinanzPrognoseResponse(BaseModel):
     # damit die Zahl nachvollziehbar bleibt UND der Symmetrie-Wächter sie
     # direkt vergleichen kann, statt sie aus Prozentwerten zurückzurechnen.
     kapitaleinsatz_euro: float = 0.0
+    #: N-719 (12.10.2026): der ZÄHLER des Fortschritts — die bisherigen Erträge ohne beide Seiten der sonstigen
+    #: Positionen (F-19, Bauschritt 7: Ausgaben wieder aufgeschlagen, Erträge abgezogen). Die Kachel nennt damit
+    #: Zähler ÷ Nenner der Quote (`amortisation_ertraege_euro ÷ kapitaleinsatz_euro`) statt der Zeitraum-Bilanz
+    #: `bisherige_ertraege_euro` ÷ Mehrkosten (gemessen «1.276 € ÷ 10.000 €» neben 16,9 %; richtig 1.776 ÷ 10.500).
+    amortisation_ertraege_euro: float = 0.0
     bisherige_ertraege_euro: float  # Kumulierte Erträge seit Inbetriebnahme
     amortisations_fortschritt_prozent: float  # Wie viel % bereits amortisiert (kumuliert)
     amortisation_erreicht: bool

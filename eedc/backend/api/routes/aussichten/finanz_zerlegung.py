@@ -432,5 +432,5 @@ def roi_und_fortschritt(
         for _inv_id, _betrag in sorted(_zerlegung.je_investition.items())
     ]
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("_zerlegung", "amortisation_erreicht", "amortisation_prognose_jahr", "fortschritt_je_investition", "kapitaleinsatz", "restlaufzeit_monate", "roi_fortschritt",) if k in _loc}
+    return {k: _loc[k] for k in ("_zerlegung", "amortisation_erreicht", "amortisation_prognose_jahr", "ertraege_fuer_kapitalrechnung", "fortschritt_je_investition", "kapitaleinsatz", "restlaufzeit_monate", "roi_fortschritt",) if k in _loc}
 

@@ -1047,8 +1047,10 @@ async def miss_aussichten(db, aid: int) -> dict:
 
 
 async def miss_preis(db, aid: int) -> dict:
-    """Preis-Aggregat (``lade_preis_aggregate_je_monat``) und Komponenten-Lookup (``monats_strompreis_lookup``)."""
-    from backend.api.routes.strompreise import monats_strompreis_lookup
+    """Preis-Aggregat (``lade_preis_aggregate_je_monat``) und der Monatspreis je Verwendung aus den Monats-Fakten
+    (``tarife_der_monate`` + ``monatspreis_der_verwendung``; bis N-717 die zweite Kaskade ``monats_strompreis_lookup``)."""
+    from backend.api.routes.investitionen.dashboard_basis import monatspreis_der_verwendung
+    from backend.services.monats_fakten import tarife_der_monate
     from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 
     pm = await lade_preis_aggregate_je_monat(db, aid)
@@ -1059,8 +1061,8 @@ async def miss_preis(db, aid: int) -> dict:
     lk = {}
     for verw in ("allgemein", "wallbox", "waermepumpe"):
         try:
-            w = await monats_strompreis_lookup(db, aid, verw, [(JAHR, JUNI), (JAHR, JULI)], STAMM_CENT)
-            lk[verw] = {str(m): _r(v) for (_j, m), v in w.items()}
+            w = await tarife_der_monate(db, aid, [(JAHR, JUNI), (JAHR, JULI)])
+            lk[verw] = {str(m): _r(monatspreis_der_verwendung(t, verw)) for (_j, m), t in w.items()}
         except Exception as e:  # noqa: BLE001
             lk[verw] = {"fehler": f"{type(e).__name__}: {e}"[:200]}
     out["lookup"] = lk

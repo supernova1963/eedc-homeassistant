@@ -317,7 +317,10 @@ async def quoten_und_pvgis(
     pvgis_monatswerte = {}
     if pvgis and pvgis.monatswerte:
         for mw in pvgis.monatswerte:
-            pvgis_monatswerte[mw.get("monat")] = mw.get("e_m", 0)
+            # Handgriff L6 (12.10.2026): `or 0` wie die Nachbarn (`pvgis_soll.py`, Jahresbericht) — ein gespeichertes
+            # `None` (nur aus einer von Hand bearbeiteten Export-Datei) ließ `finanz_prognose.py` (`pv <= 0`,
+            # `sum(...)`) mit `TypeError` abbrechen; `.get(…, 0)` fing nur den fehlenden Schlüssel.
+            pvgis_monatswerte[mw.get("monat")] = mw.get("e_m") or 0
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("anzahl_monate_hist", "avg_hist_ev_quote", "basis_ev_quote", "eauto_pv_monat", "hist_ev_quoten", "pvgis", "pvgis_monatswerte", "speicher_ev_erhohung_monat", "v2h_beitrag_monat", "wp_strom_monat_avg",) if k in _loc}
 

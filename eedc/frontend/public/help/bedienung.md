@@ -890,7 +890,9 @@ Zwei klar getrennte Sichten statt vieler paralleler ROI-Zahlen ohne Bezug:
 | **Amortisations-Fortschritt** | „40,0 % · noch 7.200 € · voraussichtlich 2030" | **Messung** — die Erträge, die deine Anlage seit Inbetriebnahme tatsächlich erwirtschaftet hat |
 
 Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahlen ineinander
-überführen. Welche der beiden du gerade liest, steht im ⓘ-Tooltip der Kachel.
+überführen. Welche der beiden du gerade liest, steht im ⓘ-Tooltip der Kachel. Beim Fortschritt zeigt er die Rechnung
+„bisherige Erträge ÷ Kapitaleinsatz" mit genau den Zahlen, aus denen die Prozent entstehen: sonstige Ausgaben und
+Erträge stehen dabei im Kapitaleinsatz, nicht noch einmal bei den Erträgen.
 
 > **Unter welcher Annahme die Dauer gilt.** Der Fortschritt unterstellt nichts — er zählt, was
 > geflossen ist. Eine **Dauer** dagegen muss etwas über die Zukunft unterstellen, und eedc

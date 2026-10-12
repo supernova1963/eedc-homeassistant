@@ -357,6 +357,10 @@ class ZuordnungsPlan:
     #: N-710: Geräte-Spalten, die ihr Feld nur über den Alt-Suffix tragen → die Haupt-Spalten desselben Feldes in der
     #: Datei. Eine solche Spalte gilt nur, wo keine Haupt-Spalte einen Wert hat (`helpers.ist_alt_spalte`, wie v09).
     alt_spalten: dict[str, list[str]] = field(default_factory=dict)
+    #: Handgriff L8 (12.10.2026): Geräte-Spalte → (Investitions-ID, Feldname). Tragen zwei Spalten dasselbe Feld
+    #: (zwei Schreibweisen desselben Gerätenamens), schreibt v09 nur den ersten Treffer (N-710) — die Vorschau zeigt
+    #: dann auch nur ihn (`_doppelte_spalten_im_monat`).
+    feld_der_spalte: dict[str, tuple[int, str]] = field(default_factory=dict)
 
     def parse_float(self, val: str) -> Optional[float]:
         return _parse_number(val, self.config.dezimalzeichen)
@@ -452,11 +456,17 @@ def plane_zuordnung(
         if haupt:
             alt_spalten[spalte] = haupt
 
+    feld_der_spalte = {
+        spalte: (erkannte[spalte][0], feld.get("feld"))
+        for spalte, feld in geraete_spalten.items()
+        if feld is not None and erkannte[spalte][0] is not None
+    }
+
     wallboxen = None if investitionen is None else [i for i in investitionen if i.typ == "wallbox"]
     return ZuordnungsPlan(
         config=config, field_map=field_map, invert_map=invert_map, inv_slots=inv_slots,
         geraete_spalten=geraete_spalten, ausgenommen=ausgenommen, wallboxen=wallboxen,
-        warnungen=warnungen, alt_spalten=alt_spalten,
+        warnungen=warnungen, alt_spalten=alt_spalten, feld_der_spalte=feld_der_spalte,
     )
 
 
@@ -645,6 +655,7 @@ def lies_monate(
         _lies_zeilenwerte(row, plan, mw)
     for mw in monate.values():
         _alt_spalten_im_monat(mw, plan)
+        _doppelte_spalten_im_monat(mw, plan)
         _pruefe_wallbox(mw, plan)
     return eintraege, ungueltig
 
@@ -656,6 +667,24 @@ def _alt_spalten_im_monat(monat: MonatsWerte, plan: ZuordnungsPlan) -> None:
         if alt in monat.geraete_roh and any(h in monat.geraete_roh for h in haupt):
             monat.geraete_roh.pop(alt, None)
             monat.geraete_werte.pop(alt, None)
+
+
+def _doppelte_spalten_im_monat(monat: MonatsWerte, plan: ZuordnungsPlan) -> None:
+    """Handgriff L8: tragen zwei Geräte-Spalten im Monat dasselbe Feld derselben Investition, schreibt v09 den ersten
+    Treffer in der Reihenfolge der Zeile, die es bekommt (`geraete_zeile`: eine Zeile ⇒ die Datei-Reihenfolge, mehrere
+    ⇒ die Reihenfolge von `geraete_roh`) und verwirft den zweiten (N-710, `helpers._import_investition_monatsdaten_v09`).
+    Die Vorschau zeigt dann ebenfalls nur den ersten. Die Zeile, die v09 bekommt, ändert sich dadurch nicht: bei einer
+    Zeile ist es die Datei-Zeile selbst, bei mehreren fiele die zweite Spalte in v09 ohnehin weg."""
+    belegt: set[tuple[int, str]] = set()
+    for spalte in list(monat.geraete_roh):
+        ziel = plan.feld_der_spalte.get(spalte)
+        if ziel is None:
+            continue
+        if ziel in belegt:
+            monat.geraete_roh.pop(spalte, None)
+            monat.geraete_werte.pop(spalte, None)
+        else:
+            belegt.add(ziel)
 
 
 # ─── Temporärer Speicher für Upload-Sessions ─────────────────────────────────

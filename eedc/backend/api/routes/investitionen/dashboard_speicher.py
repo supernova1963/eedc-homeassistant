@@ -20,7 +20,6 @@ from backend.models.investition import Investition, InvestitionTyp, InvestitionM
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
-    resolve_einspeise_preis_cent,
     resolve_einspeiseverguetung_cent,
     resolve_strompreis_for_komponente,
 )
@@ -146,22 +145,17 @@ async def get_speicher_dashboard(
     # Gernot: Kanon ist der Monatspreis der Schicht — gepflegt → gemessen → Zeitfenster → Stamm, vor dem ersten Tarif
     # die Vorbelegung). Bis dahin stand hier `resolve_netzbezug_preis_cent(m, Tarif ODER heutiger Tarif)`: für Monate
     # vor dem ersten Tarif der HEUTIGE Preis (Fall C: 194,40 statt 185,40 €), und die Stufen „gemessen" und
-    # „Zeitfenster" fehlten. Die Vergütung bleibt bei ihrem bisherigen Weg (nicht Teil des Funds).
+    # „Zeitfenster" fehlten.
+    # ⭐ N-715 (12.10.2026): die Vergütung des Monats aus derselben Quelle (`einspeiseverguetung_cent`: #392-Monatssatz
+    # → Tarif des Monats → Vorbelegung 8,2 ct). Bis dahin `resolve_einspeise_preis_cent(m, Tarif ODER heutige
+    # Vergütung)`: vor dem ersten Tarif die HEUTIGE Vergütung (Ersparnis 192,00 statt 187,60 € = Σ T-Konto).
     _monatspreis = await tarife_der_monate(db, anlage_id, list(anlage_md_dict))
     gew_preis_sum = 0.0
     gew_einspeise_sum = 0.0
     for m in anlage_md_dict.values():
-        m_tarife = await lade_tarife_fuer_anlage(
-            db, anlage_id, target_date=date(m.jahr, m.monat, 1)
-        )
-        gew_preis_sum += _monatspreis[(m.jahr, m.monat)].netzbezug_preis_cent * (m.netzbezug_kwh or 0)
-        # #392: der Monatssatz der variablen Vergütung schlägt den Stamm-
-        # Monatstarif — dieselbe zweite Auflösungsstufe wie beim Bezugspreis
-        # eine Zeile darüber.
-        gew_einspeise_sum += resolve_einspeise_preis_cent(
-            m,
-            resolve_einspeiseverguetung_cent(m_tarife, fallback=einspeiseverguetung_cent),
-        ) * (m.netzbezug_kwh or 0)
+        m_tarif = _monatspreis[(m.jahr, m.monat)]
+        gew_preis_sum += m_tarif.netzbezug_preis_cent * (m.netzbezug_kwh or 0)
+        gew_einspeise_sum += m_tarif.einspeiseverguetung_cent * (m.netzbezug_kwh or 0)
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
     eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent
     eff_einspeise_cent = (

@@ -1847,9 +1847,10 @@ def test_p8_emob_ersparnis_bekommt_die_monatspreise():
         "Periode mit EINEM Skalar — bei einem Tarifwechsel schreibt das die "
         "Historie um (F-18: 41,10 € Drift zwischen Cockpit und Komponenten-Hub "
         "an einer laufenden Box, bei identischer kWh-Basis).\n"
-        "Der Lookup kommt aus `strompreise.monats_strompreis_lookup(...)` oder "
-        "aus den Monats-Fakten (`f.tarif.wallbox_preis_effektiv_cent`, dann "
-        "inklusive Flex-Ø). `monats_strompreis_lookup=None` ist erlaubt, aber "
+        "Der Lookup kommt aus den Monats-Fakten (`f.tarif.wallbox_preis_effektiv_cent` "
+        "bzw. `tarife_der_monate(...)`, inklusive Flex-Ø; die zweite Kaskade "
+        "`strompreise.monats_strompreis_lookup` ist seit N-717 entfernt). "
+        "`monats_strompreis_lookup=None` ist erlaubt, aber "
         "explizit hinzuschreiben — genau wie `monatsdaten=None` bei P8."
     )
 

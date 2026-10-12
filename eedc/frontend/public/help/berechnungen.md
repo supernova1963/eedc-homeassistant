@@ -687,6 +687,7 @@ Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
                        - Betriebskosten_Zeitraum
 
 Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwortfeld jahres_rendite_prozent)
+                      Investition_gesamt im Einzeljahr: nur Investitionen mit Anschaffung ≤ 31.12. (N-720)
 ```
 
 > **Betriebskosten des Zeitraums — die Laufzeit-Regel (N-228), eine Funktion.** Jede Komponente trägt ihre
@@ -702,6 +703,10 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > `/cockpit/uebersicht`; der **Jahresbericht-PDF** druckt sie seit 12.10.2026 als „Rendite" (Berichtsjahr bzw.
 > Gesamtzeitraum, mit ihrem Nenner beschriftet, N-699). Die Rendite einer Anlage steht unter *Auswertungen → ROI*
 > (ROI pro Jahr = jährliche Einsparung ÷ Kapitaleinsatz, s. „ROI & Amortisation“).
+> **Im Einzeljahr** stehen im Nenner nur die Investitionen, die bis zum 31.12. des Jahres angeschafft waren (ohne
+> Anschaffungsdatum: immer) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts „Stand 31.12." (N-720, Entscheid
+> Master 12.10.2026). Bis dahin teilte die Rendite eines Jahres auch durch später gekaufte Komponenten (PV ab 2024,
+> E-Auto ab 2025: Rendite 2024 6,7 % auf 15.000 € statt 10,1 % auf 10.000 €). Der Gesamtzeitraum kennt alle.
 
 > **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
 > `Einspeisevergütung` ist genau der Wert aus dem für den Monat gültigen Tarif
@@ -1078,7 +1083,12 @@ Ersparnis = PV-Anteil   × (Netzbezug − Einspeisevergütung) / 100
 
 **SoT:** `core/berechnungen/speicher_wirtschaftlichkeit.py::berechne_speicher_ersparnis`.
 Aufrufer: T-Konto (`aktueller_monat/tkonto.py::_baue_investition_financial`), Speicher-Dashboard und
-Sonstiges-Speicher (`investitionen/dashboard_sonstiges.py`), Aussichten. Gewächtert von
+Sonstiges-Speicher (`investitionen/dashboard_sonstiges.py`), Aussichten.
+**Beide Preise je Monat aus den Monats-Fakten** (`TarifFakten.netzbezug_preis_cent` und `einspeiseverguetung_cent`:
+#392-Monatssatz → Tarif des Monats → Vorbelegung 8,2 ct), in T-Konto und Hubs dieselben — auch für V2H und den
+Erlös eines sonstigen Erzeugers (`investitionen/dashboard_basis.py::_gewichtete_monatspreise`). Bis 12.10.2026 nahmen
+Speicher-, V2H- und Sonstiges-Hub vor dem ersten Tarif die **heutige** Vergütung und V2H/Sonstiges keinen Monatssatz
+(Speicher-Hub 192,00 statt 187,60 € = Σ T-Konto, V2H 88,00 statt 108,00 €; N-715/N-716). Gewächtert von
 `test_speicher_kanon_symmetrie.py` (drei Achsen, mit **absoluten** Erwartungen — Symmetrie allein
 ließe auch drei gleich falsche Zahlen durch, Lehre aus N-130).
 
@@ -1604,6 +1614,14 @@ Bis 2026-08-08 löste jede Sicht diese eine Größe selbst auf, und zwar auf **v
 Kilowattstunden. Nur wo eine Monatsaufteilung der Netzladung nicht existiert — bei reinem PV-Laden
 — fällt die Mittelung auf die km zurück, den Schlüssel, nach dem der Wallbox-Pool ohnehin
 attribuiert.
+
+> **Der Monatspreis der Netzladung kommt aus den Monats-Fakten** (`TarifFakten.wallbox_preis_effektiv_cent`, seit
+> N-712 in allen Sichten, seit N-717 auch im Fahrzeug-Sensor): gepflegter Monats-Ø → gemessener Ø → Zeitfenster →
+> Arbeitspreis — **Zeitfenster und Arbeitspreis vom Tarif derselben Verwendung** (eigener Wallbox-Tarif, sonst der
+> allgemeine). Bis 12.10.2026 prüfte die Zeitfenster-Stufe die HT/NT-Fenster des **allgemeinen** Tarifs und ersetzte
+> einen eigenen Wallbox-Tarif durch deren Ø (Allgemein 30 ct mit 22–6 Uhr 20 ct, Wallbox-Tarif 25 ct: 26,667 statt
+> 25 ct ⇒ E-Auto-Ersparnis 760,00 statt 772,00 € in Cockpit, Hubs, HA-Anlagensensoren und Aussichten; nur der Fahrzeug-Sensor rechnete über eine zweite,
+> inzwischen entfernte Kaskade richtig). N-433: der Komponenten-Tarif ist Stufe 4 und geht nicht verloren.
 
 > ⚠ **Für eine Anlage ohne Tarifwechsel bewegt sich nichts.** Der mengengewichtete Ø eines
 > einzigen Tarifs *ist* dieser Tarif. Wer den Tarif gewechselt hat, sieht dagegen vier
@@ -2343,7 +2361,7 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Rendite** (`jahres_rendite_prozent`) | Antwortfeld von `/cockpit/uebersicht`; angezeigt nur im Jahresbericht-PDF („Rendite") | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
+| **Rendite** (`jahres_rendite_prozent`) | Antwortfeld von `/cockpit/uebersicht`; angezeigt nur im Jahresbericht-PDF („Rendite") | Kumul. Ersparnis / Relevante Kosten * 100 (Einzeljahr: Investitionen bis 31.12.) | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF (Einzeljahr: Stand 31.12.) | Bisherige Erträge / Kapitaleinsatz * 100 | Kumulierter Fortschritt |
 

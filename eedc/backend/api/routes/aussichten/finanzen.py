@@ -390,7 +390,7 @@ async def get_finanz_prognose(
     if "prog_speicher_netzladung" in _out: prog_speicher_netzladung = _out["prog_speicher_netzladung"]
     if "speicher_lade_preis_cent" in _out: speicher_lade_preis_cent = _out["speicher_lade_preis_cent"]
     if "speicher_wirkungsgrad_avg" in _out: speicher_wirkungsgrad_avg = _out["speicher_wirkungsgrad_avg"]
-    # ── roi_und_fortschritt (Vorlage 7b: Phase in finanz_zerlegung.py, Schnittstelle 17 ein / 7 aus) ──
+    # ── roi_und_fortschritt (Vorlage 7b: Phase in finanz_zerlegung.py, Schnittstelle 17 ein / 8 aus — N-719: + Zähler) ──
     _out = roi_und_fortschritt(
         _finanz=_finanz,
         alle_investitionen=alle_investitionen,
@@ -413,6 +413,7 @@ async def get_finanz_prognose(
     if "_zerlegung" in _out: _zerlegung = _out["_zerlegung"]
     if "amortisation_erreicht" in _out: amortisation_erreicht = _out["amortisation_erreicht"]
     if "amortisation_prognose_jahr" in _out: amortisation_prognose_jahr = _out["amortisation_prognose_jahr"]
+    if "ertraege_fuer_kapitalrechnung" in _out: ertraege_fuer_kapitalrechnung = _out["ertraege_fuer_kapitalrechnung"]
     if "fortschritt_je_investition" in _out: fortschritt_je_investition = _out["fortschritt_je_investition"]
     if "kapitaleinsatz" in _out: kapitaleinsatz = _out["kapitaleinsatz"]
     if "restlaufzeit_monate" in _out: restlaufzeit_monate = _out["restlaufzeit_monate"]
@@ -486,6 +487,7 @@ async def get_finanz_prognose(
         investition_sonstige_euro=round(investition_sonstige, 2),
         investition_gesamt_euro=round(investition_gesamt, 2),  # PV + Mehrkosten + Sonstige
         kapitaleinsatz_euro=round(kapitaleinsatz, 2),
+        amortisation_ertraege_euro=round(ertraege_fuer_kapitalrechnung, 2),
         bisherige_ertraege_euro=round(bisherige_ertraege, 2),
         amortisations_fortschritt_prozent=round(roi_fortschritt, 1),
         amortisation_erreicht=amortisation_erreicht,

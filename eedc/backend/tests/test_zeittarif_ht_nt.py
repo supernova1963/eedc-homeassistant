@@ -317,23 +317,26 @@ async def test_wz1b_der_zweite_bildungsort_ist_ebenfalls_eingehaengt(db):
 
 @pytest.mark.asyncio
 async def test_wz1c_die_emob_preisachse_ist_ebenfalls_eingehaengt(db):
-    """Der DRITTE Bildungsort — ``monats_strompreis_lookup`` (F-18).
+    """Der DRITTE Bildungsort — die E-Mob-Preisachse (F-18).
 
     Ohne ihn stuende in der E-Mob-Ersparnis der Hochtarif, waehrend Cockpit
     daneben den gewichteten Preis nennt. Dieselbe Lehre wie eine Probe hoeher,
     nur an der dritten Stelle: **jede** Bildungsstelle braucht ihre eigene
     Gegenprobe, sonst deckt die Suite die Klasse nur scheinbar ab.
+
+    N-717 (12.10.2026): die eigene Kaskade dieser Achse
+    (``strompreise.monats_strompreis_lookup``) ist entfernt; die Sichten lesen
+    den Wallbox-Preis der Monats-Fakten (``wallbox_preis_effektiv_cent``) —
+    ohne eigenen Wallbox-Tarif der Fenster-Ø des Hauszählers.
     """
-    from backend.api.routes.strompreise import monats_strompreis_lookup
+    from backend.services.monats_fakten import tarife_der_monate
 
     a, _ = await _anlage_mit_tarif(db, ht=30.0, fenster=[_fenster(19, 20, 15.0)])
     await _stunden(db, a.id, [date(2026, 7, d) for d in range(1, 4)],
                    {20: 1.0, 8: 1.0, 12: 1.0, 18: 1.0})
 
-    lookup = await monats_strompreis_lookup(
-        db, a.id, "wallbox", [(2026, 7)], fallback_bezug=99.0
-    )
-    assert lookup[(2026, 7)] == pytest.approx(26.25)
+    tarife = await tarife_der_monate(db, a.id, [(2026, 7)])
+    assert tarife[(2026, 7)].wallbox_preis_effektiv_cent == pytest.approx(26.25)
 
 
 @pytest.mark.asyncio

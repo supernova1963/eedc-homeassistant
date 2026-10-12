@@ -222,8 +222,10 @@ async def test_speicher_hub_bewertet_die_monate_vor_dem_ersten_tarif_wie_die_mon
     hub = (await get_speicher_dashboard(
         anlage.id, strompreis_cent=None, einspeiseverguetung_cent=None, db=db,
     ))[0].zusammenfassung
+    # N-715 (12.10.2026): auch die Vergütung der zwei Monate vor dem ersten Tarif ist die der Monats-Fakten (Vorbelegung
+    # 8,2 ct) — Ø (2 × 8,2 + 6 × 8,0) ÷ 8 = 8,05 ct; bis dahin stand hier die heutige 8,0 (der alte Weg des Hubs).
     soll = berechne_speicher_ersparnis(
-        entladung_kwh=720.0, bezug_preis_cent=33.75, einspeise_verg_cent=8.0,
+        entladung_kwh=720.0, bezug_preis_cent=33.75, einspeise_verg_cent=(2 * 8.2 + 6 * 8.0) / 8,
         ladung_netz_kwh=0.0, wirkungsgrad_prozent=90.0, lade_preis_cent=None,
     ).ersparnis_euro
     assert hub["ersparnis_euro"] == pytest.approx(round(soll, 2), abs=0.005), (hub["ersparnis_euro"], soll)
