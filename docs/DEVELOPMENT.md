@@ -1094,3 +1094,37 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
    Community-Server (`/home/gernot/claude/eedc-community`) nur zusammen mit einem Add-on-Release deployen.
 6. **Nicht tun:** Produktiv-Box `10.100.1.13` schreiben; `eedc/data/eedc.db` anfassen; einen Server gegen die Demo-DB mit Broker starten;
    neue Wächter, Matrix-Formen, Golden-Master-Läufe oder Gegenprüfungs-Sitzungen anlegen; Listen neben dem Register führen.
+
+## Golden Master — Verhaltens-Fixpunkte für Umbauten (seit 12.10.2026)
+
+Ein Golden Master (GM) friert das Verhalten einer Route oder Funktion ein, damit ein Umbau **bitgleich** bleibt. Die Skripte
+liegen außerhalb des Repos unter `~/.claude/plans/skript-golden-master-*.py`; sie fassen `eedc/data/eedc.db` nie an und arbeiten
+nur auf Kopien (`~/.claude/plans/**/devbox-*.db`). Es gibt zwei Bauformen:
+
+| Bauform | Skripte | Aufruf | Was verglichen wird |
+| --- | --- | --- | --- |
+| **Worktree-GM** (alt gegen neu, je Lauf) | `aktueller-monat`, `aussichten`, `daten-checker`, `energie-profil`, `ergebnisgroessen`, `ha-export`, `import`, `investitionen`, `monatsabschluss`, `aggregate-day`, `wetter-monat` | `cd eedc && backend/venv/bin/python ~/.claude/plans/skript-golden-master-<name>.py --alt <ref> [--db <Kopie>]` | API-Sichten (JSON) der Referenz gegen den Arbeitsbaum, teils Schreib-Sequenz + Tabellen |
+| **In-Process-GM mit Ablage** (Aufzeichnung am sauberen HEAD) | `live-komponenten`, `live-tages-kwh`, `live-wetter`, `ha-statistics`, `ha-export-investition`, `jahresbericht`, `custom-import` | `cd eedc && [GM_TMP=<scratch>] backend/venv/bin/python -I -B ~/.claude/plans/skript-golden-master-<name>.py --aufzeichnen \| --vergleichen \| --abdeckung \| --gegenprobe head\|kandidat` | Rohrückgabe/Kontext mit Schlüsselfolge, Float-`repr`, Aufrufprotokoll der Fakes, Log, SQL-Folge; Ablage `~/.claude/plans/golden-master/<name>/` mit Manifest (HEAD-Hash) |
+
+**Regeln, alle gemessen (Serie RF-4…RF-10, Oktober 2026):**
+
+1. **Aufzeichnen nur am sauberen Baum** — das Skript bricht sonst ab. Nach jedem Commit, der die gedeckte Funktion ändert, neu
+   aufzeichnen; vorher `--vergleichen` zeigt, ob nur die gewollten Fälle abweichen (Liste gehört in den Commit-Text).
+2. **Fester Hash-Seed.** Die Parameterfolge eines SQL-`IN (…)` hängt an `PYTHONHASHSEED`; die Skripte starten sich selbst mit
+   festem Seed neu. ⚠ `python -I` wirft Umgebungsvariablen weg — deshalb den Aufruf aus dem Skript-Kopf nehmen, nie
+   `PYTHONHASHSEED=0 python -I …` von Hand (ergab 89/95 und lauter «rote» Sprengsätze, die Rauschen waren).
+3. **Rauschen über zwei getrennte Prozesse messen**, nicht nur im selben Prozess.
+4. **Ein GM ist erst scharf, wenn die Gegenprobe rot kann.** `--gegenprobe` legt je Verzweigungsklasse einen Sprengsatz auf eine
+   Scratch-Kopie; «rot in ≥ 2 Fällen», «0 nicht scharf», Nullprobe grün. Breite allein ist blind: volle Anweisungsabdeckung ließ
+   in RF-4 zwei und in RF-5 sechs Sprengsätze still — erst Entscheidungs-Kombinationen und Nachkommastellen fingen sie.
+5. **Sprengsätze altern mit dem Code.** Nach jedem Schnitt die Gegenprobe auf dem **neuen** Stand fahren; Suchtexte, die nicht
+   mehr vorkommen, melden «NICHT SCHARF» und sind nachzuziehen (zwei Textsätze `head`/`kandidat` im Skript).
+6. **Die Zählung muss diskriminieren**: Nullprobe x/x grün, ein bekannter Sprengsatz < x/x — sonst zählt das Werkzeug nur Fälle.
+7. **Arbeitskopien räumen**: Worktree-GMs legen `/tmp/golden-*`, `/tmp/gm-erg-*` an und räumen nicht (17 GB in acht Tagen, Platte
+   voll am 11.10.) — nach jeder Runde `rm -rf /tmp/golden-* /tmp/gm-erg-*`.
+8. **Was ein GM nicht sieht:** nur das, was ein Fall enthält. Kein Bestand der Kopien trägt eine Tariflücke, einen gepflegten
+   Monats-Ø, Kombi-Sensor + Zähler oder Sonstiges mit Zähler — solche Fälle wurden je Fund synthetisch ergänzt.
+
+Fehlt für eine Route ein GM, ist er **Schritt 0** des Umbaus (Muster: RF-6 für reine Funktionen mit Fakes an den Test-Nähten,
+RF-8/RF-9 für Routen mit SQL-Folge, RF-5 für Schreibpfade mit Tabellenvergleich).
+
