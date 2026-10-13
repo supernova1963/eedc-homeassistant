@@ -2556,7 +2556,8 @@ P10_FALT_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/services/daten_checker/monatsdaten.py::_check_erfassungsort_positionen",
     "backend/services/daten_checker/monatsdaten.py::_check_geraetewerte_ohne_monatszeile",
     "backend/services/daten_checker/monatsdaten.py::_check_investition_monatsdaten",
-    "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_plausibilitaet",
+    # RF-13: die Plausibilität faltet die Speicher-Gerätezeilen in ihrer Phase `_speicher_index`.
+    "backend/services/daten_checker/monatsdaten_plausibilitaet.py::_speicher_index",
     "backend/services/daten_checker/monatsdaten.py::_check_werte_in_nicht_gefuehrten_feldern",
     "backend/services/daten_checker/monatsdaten.py::_check_wp_monatsdaten",
     # N-597: hält die Live-Faltung des Modus-Splits gegen den gepflegten
