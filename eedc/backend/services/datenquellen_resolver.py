@@ -194,7 +194,10 @@ def erwartet_inbound_topic(quellen: dict, field_id: str) -> bool:
     3-Stufen-Auflösung schreibt bei stummem Inbound NICHTS fort
     (`resolve_effektive_quelle` liefert dort `persist_entry=None`) — genau
     der Fall, für den der Check gebaut wurde (#134), bleibt damit drin.
-    Ohne Eintrag gilt wie bisher: Topic wird erwartet.
+    Ohne Eintrag gilt wie bisher: Topic wird erwartet. (Der Daten-Checker
+    stellt seit dem Entscheid vom 13.10.2026 danach noch die Pflicht-Frage —
+    ein optionales Feld ohne Eintrag erwartet er nicht; s.
+    `daten_checker/sensoren.py::_pflicht_ohne_eintrag`.)
 
     **Gateway bleibt ebenfalls drin.** Der Gateway-Service re-publisht auf
     das EEDC-Inbound-Topic (`mqtt_gateway_service.py`), und der Slug-Teil im

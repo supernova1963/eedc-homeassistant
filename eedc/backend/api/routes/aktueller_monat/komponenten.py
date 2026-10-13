@@ -6,7 +6,7 @@ Geraetesicht mit der Tabelle je Geraet und dem einen Kasten (D-Sicht).
 # Parameter und Rueckgabe-Dict; der Endpunkt orchestriert. Kein Verhaltenswechsel — Gate ist
 # `plans/skript-golden-master-aktueller-monat.py` (alte gegen neue Antworten, bitgleich).
 import logging
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 from backend.services.waerme_klima_block import achsen_der_anlage, geraete_zeilen, was_noch_moeglich
 from backend.core.berechnungen.waermepumpe_kennzahl import (
@@ -27,45 +27,8 @@ from backend.api.routes.aktueller_monat.schemas import SonstigesGeraet
 
 logger = logging.getLogger(__name__)
 
-#: Herkunft der Speicher-Netzladung im laufenden Monat, wenn sie aus den Tagen kommt (#427 Punkt 2).
+#: Herkunft der Speicher-Netzladung in einem Monat ohne Speicher-Zeile, wenn sie aus den Tagen kommt (#427 Punkt 2).
 NETZLADUNG_HERKUNFT_TAGE = "tageswerte"
-
-
-async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, monat: int, heute: date) -> Optional[float]:
-    """#427 Punkt 2 (Melder rapahl, Entscheid Gernot 13.10.2026, a): die Netzladung des Speichers im LAUFENDEN Monat
-    als Σ der abgelaufenen Tage — dieselbe Boundary-Differenz wie *Cockpit → Tag* (`get_tagesdetail_kwh`), über den
-    Bereichs-Leser in EINER Standreihe je Zähler.
-
-    * **Feldmenge und Fenster aus den geteilten Tabellen**: `aggregator.TAGESDETAIL_AUSGABE` (`speicher/ladung_netz_kwh`
-      → `speicher_ladung_netz_kwh`) und `boundary_range.TAGESFENSTER_JE_TYP["speicher"]` (rückwärts: je Tag
-      [Vortag 23:00, 23:00) — derselbe Tag wie die Speicher-Ladung der Tagesbilanz).
-    * **Nur abgelaufene Tage** (bis gestern): der heutige Tag hat seinen rechten Rand noch nicht.
-    * **Ein Tag mit Rücksprung oder ohne Rand fehlt** (Bereichs-Leser) — keine 0 als Platzhalter. Ohne zugeordneten
-      Netzlade-Zähler oder ohne einen einzigen Tageswert: ``None`` (die Kachel bleibt aus). Eine gemessene 0 bleibt 0.
-    * Kein neuer Tagesschlüssel, kein Nachfüllen alter Tage; der Monatsabschluss ersetzt den Wert (P8, gespeichert
-      schlägt gerechnet — das Tor in `komponenten_detail`).
-    """
-    from calendar import monthrange
-
-    from backend.services.snapshot.aggregator import TAGESDETAIL_AUSGABE
-    from backend.services.snapshot.bereichs_leser import lade_tageswerte_je_feld
-    from backend.services.snapshot.boundary_range import TAGESFENSTER_JE_TYP
-
-    if anlage is None or not speicher_invs:
-        return None
-    von = date(jahr, monat, 1)
-    bis = min(date(jahr, monat, monthrange(jahr, monat)[1]), heute - timedelta(days=1))
-    if bis < von:
-        return None
-    felder = {k: v for k, v in TAGESDETAIL_AUSGABE.items() if k == ("speicher", "ladung_netz_kwh")}
-    ausgabe_key = felder[("speicher", "ladung_netz_kwh")]
-    tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
-    rueckwaerts = frozenset(tage) if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts" else frozenset()
-    je_tag = await lade_tageswerte_je_feld(
-        db, anlage, {str(i.id): i for i in speicher_invs}, von, bis, felder, rueckwaerts_tage=rueckwaerts,
-    )
-    werte = [w[ausgabe_key] for w in je_tag.values() if ausgabe_key in w]
-    return sum(werte) if werte else None
 
 
 async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_kennzahlen_je_geraet, anlage_id, db, fenster, investitionen, jahr, monat, monats_fakt, wp_fakten=None, speicher_entladung, speicher_ladung, wp_abgrenzung_verletzt, wp_arbeitszahl, wp_waerme_abgeleitet_kwh, anlage=None, ist_aktueller_monat=False, heute=None):
@@ -148,10 +111,19 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
         # Zeile bleibt es None = „keine Daten" und die Kachel aus.
         if mf_speicher is not None and "speicher" in typen_mit_zeile:
             speicher_ladung_netz = round(mf_speicher.netzladung_kwh, 2)
-        elif ist_aktueller_monat and heute is not None:
-            # #427 Punkt 2 (c): das Tor kennt „aus Tagen" — im LAUFENDEN Monat ohne Speicher-Zeile die Σ der
-            # abgelaufenen Tage (dieselbe Zahl wie Cockpit → Tag je Tag). Ein abgeschlossener Monat ohne Zeile bleibt
-            # leer: dort wäre eine Teilmenge der Tage eine stille Untertreibung (Antwort: Monatsabschluss, N-675).
+        elif heute is not None and (speicher_ladung is not None or speicher_entladung is not None):
+            # #427 Punkt 2 (c): das Tor kennt „aus Tagen" — in jedem Monat ohne Speicher-Zeile die Σ der abgelaufenen
+            # Tage (dieselbe Zahl wie Cockpit → Tag je Tag). Entscheid Gernot 13.10.2026: dieselbe Regel wie Ladung/
+            # Entladung im Tageswert-Rückfall der Monats-Fakten — auch ein vergangener Monat ohne Abschluss (bis dahin
+            # nur der laufende). Die Rechenstelle ist die der Schicht (`monats_fakten/netzladung_tage.py`, Option A):
+            # diese Route hat für solche Monate keinen Fakt (Kontext ohne `inkl_nur_tageswerte`) und ruft sie direkt.
+            #
+            # ⛔ Nur, wo dieser Block auch Ladung oder Entladung trägt (Entscheid Master 13.10.2026): wie Ladung und
+            # Entladung; die Fakten (Verlauf, Tabelle, Community) tragen alle drei aus demselben Rückfall. Ein
+            # vergangener Monat ohne Abschluss ohne HA-Monatsweg hat hier keine Ladung/Entladung (N-472/N-677, die
+            # Antwort ist der Monatsabschluss) — eine Netzladung allein wäre dort eine halbe Anzeige.
+            from backend.services.monats_fakten.netzladung_tage import speicher_netzladung_aus_tagen
+
             _aus_tagen = await speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr, monat, heute)
             if _aus_tagen is not None:
                 speicher_ladung_netz = round(_aus_tagen, 2)

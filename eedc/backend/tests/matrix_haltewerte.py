@@ -192,6 +192,9 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M04', 'preis', 'S3', 'I2', 'preis_effektiv:cockpit_monat:vor=nach'): 30.0,
     ('M04', 'speicher', 'S3', 'I2', 'entladung:cockpit_monat:vor=nach'): None,
     ('M04', 'speicher', 'S3', 'I2', 'ladung:cockpit_monat:vor=nach'): None,
+    # Päckchen P (Entscheid Gernot/Master 13.10.2026): Cockpit → Monat nennt die Netzladung aus den Tagen nur, wo ihr
+    # Speicherblock auch Ladung/Entladung trägt — im S3-„vor" (vergangener Juni ohne Abschluss, ohne HA-Monatsweg,
+    # N-472/N-677) fehlen beide, also auch die Netzladung (None). Die Monats-Fakten tragen dort 30,0 (Zelle grün).
     ('M04', 'speicher', 'S3', 'I2', 'netzladung:cockpit_monat:vor=nach'): None,
     ('M05', 'netz', 'S3', 'I2', 'autarkie:cockpit_monat:vor=nach'): None,
     ('M05', 'netz', 'S3', 'I2', 'eigenverbrauch:cockpit_monat:vor=nach'): None,

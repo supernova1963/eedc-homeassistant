@@ -1333,14 +1333,15 @@ URSACHE: dict[str, Ursache] = {
     ),
     "OHNE-ABSCHLUSS": Ursache(
         "Ausgangszustand (Auftrag): ohne Abschluss nicht geführt — seit HA-Bauform E4c für E-Mobilität und Sonstiges, "
-        "seit E4d für die Wärmepumpe mit HA (Kanäle, Wege HA/S1/S2) geheilt; es bleiben Speicher-Netzladung und die "
+        "seit E4d für die Wärmepumpe mit HA (Kanäle, Wege HA/S1/S2), seit Päckchen P (13.10.2026) für die "
+        "Speicher-Netzladung geheilt; es bleiben die "
         "Wege ohne Kanäle (SA/S3, Lesart 1 — dort auch die Wärmepumpe: Monats-Fakten und Jahr-Verlauf ohne Abschluss "
         "ohne WP-Mengen, Cockpit → Monat aus der Tagesebene ohne Betriebsart-Strom, Kälte und Heiz-Nutzenergie des "
         "Klimageräts)",
         "Größen, die im Monat ohne Abschluss nicht aus der Tagesebene gefüllt werden: Wärmepumpen-Mengen und "
-        "-Achsen, Sonstiges, E-Mob-Lademenge, Speicher-Netzladung (Monats-Fakten mit Tageswerten und "
-        "Jahr-Verlauf nennen 0/nichts; Sonstiges auch Cockpit → Monat — die Netzladung dort seit #427 Punkt 2 aus den "
-        "Tagen; E-Mob ohne HA auch Cockpit → Monat). Folge in der Form mit Sonstiges-Erzeuger (M10): Eigenverbrauch, Gesamtverbrauch, Autarkie "
+        "-Achsen, Sonstiges, E-Mob-Lademenge (Monats-Fakten mit Tageswerten und "
+        "Jahr-Verlauf nennen 0/nichts; Sonstiges auch Cockpit → Monat — die Speicher-Netzladung steht seit Päckchen P "
+        "in Fakten, Verlauf und Cockpit → Monat aus den Tagen; E-Mob ohne HA auch Cockpit → Monat). Folge in der Form mit Sonstiges-Erzeuger (M10): Eigenverbrauch, Gesamtverbrauch, Autarkie "
         "und Erzeugung hinter dem Zähler des Monats ohne Abschluss rechnen ohne das BHKW. Cockpit → Monat nennt "
         "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene",
     ),
@@ -1435,26 +1436,14 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'wallbox:fakten:tageswert=gespeichert', 'wallbox:jahr_verlauf:vor=nach',
         ),
         ('M02', 'emob', 'SA', 'I1'): ('heimladung:fakten_tw',),
-        ('M04', 'speicher', 'HA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
-        # #427 Punkt 2 (13.10.2026): Cockpit → Monat (und das Jahr als Σ der Monatsantworten) trägt die Netzladung im
-        # laufenden Monat aus den Tagen — die Zelle `cockpit_monat` ist geheilt. Monats-Fakten mit Tageswerten und der
-        # Verlauf (Lesart 1, N-121) bleiben ohne Abschluss leer; seit Cockpit → Monat den Wert nennt, meldet I6 sie.
-        ('M04', 'speicher', 'HA', 'I3'): ('netzladung:fakten_tw',),
-        ('M04', 'speicher', 'HA', 'I6'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
-        ('M04', 'speicher', 'S1', 'I2'): (
-            'netzladung:cockpit_monat:vor=nach', 'netzladung:fakten:tageswert=gespeichert',
-            'netzladung:jahr_verlauf:vor=nach',
-        ),
-        ('M04', 'speicher', 'S2', 'I2'): (
-            'netzladung:cockpit_monat:vor=nach', 'netzladung:fakten:tageswert=gespeichert',
-            'netzladung:jahr_verlauf:vor=nach',
-        ),
-        ('M04', 'speicher', 'S3', 'I2'): (
-            'netzladung:fakten:tageswert=gespeichert', 'netzladung:jahr_verlauf:vor=nach',
-        ),
-        ('M04', 'speicher', 'SA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
-        ('M04', 'speicher', 'SA', 'I3'): ('netzladung:fakten_tw',),
-        ('M04', 'speicher', 'SA', 'I6'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
+        # Entscheid Gernot 13.10.2026 (Päckchen P, P2): die Speicher-Netzladung steht im Tageswert-Rückfall der
+        # Monats-Fakten (Menge und Preis aus `monats_fakten/netzladung_tage.py`, dieselbe Regel wie Ladung/Entladung:
+        # jeder Monat ohne Speicher-Zeile mit Tagen), und Cockpit → Monat ruft dieselbe Funktion für jeden Monat ohne
+        # Speicher-Zeile (das Tor „nur laufender Monat" ist gefallen). Damit geheilt und hier entfernt (kein stilles
+        # XPASS): M04 HA/SA I1 und I6 `netzladung:fakten_tw` + `netzladung:jahr_verlauf` (Juli = Σ Tage = 3,0 kWh),
+        # I3 `netzladung:fakten_tw`; S1/S2 I2 `netzladung:cockpit_monat:vor=nach`, `netzladung:fakten:tageswert=gespeichert`,
+        # `netzladung:jahr_verlauf:vor=nach` und S3 I2 die beiden letzten — der vergangene Juni vor dem Abschluss trägt
+        # die Σ seiner Tage (30,0 kWh), dieselbe Zahl wie nach dem Abschluss.
         ('M05', 'wp', 'S3', 'I2'): (
             'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
             'waerme:fakten:tageswert=gespeichert',

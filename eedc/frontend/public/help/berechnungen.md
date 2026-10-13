@@ -3816,6 +3816,26 @@ stumm: Greift sie, nennt der Formel-Tooltip der Zeile „Wirkungsverluste" den G
 Monats-, Jahres- und Auswertungssichten sind **nicht** betroffen — sie rechnen aus den Monatsdaten
 bzw. den Monats-Fakten und kennen kein Tagesfenster.
 
+> **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot 13.10.2026).**
+> Ein Monat **ohne Speicher-Zeile** (laufend oder vergangen ohne Abschluss), dessen Tage Speicherwerte tragen, bekommt
+> Ladung und Entladung aus der Tagesebene — und seitdem auch die **Netzladung samt Preis**, als Σ der abgelaufenen
+> Tage im Speicher-Fenster `[Vortag 23:00, 23:00)`, dieselbe Boundary-Differenz wie *Cockpit → Tag*. Die eine
+> Rechenstelle ist `services/monats_fakten/netzladung_tage.py`: `speicher_netzladung_aus_tagen` (Menge über den
+> Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; ein Tag mit Rücksprung oder
+> ohne Rand fehlt, ohne Netzlade-Zähler keine Menge) und `netzladung_aus_tagen` (dazu der TEP-gewichtete Ladepreis
+> über `berechne_effektiver_ladepreis`, nur bei dynamischem Tarif ein Wert). Die Monats-Fakten füllen damit
+> `SpeicherFakten.netzladung_kwh` und `netzladung_preis_summe_cent_kwh`/`netzladung_gewicht_kwh` — dieselbe Bedeutung
+> wie mit Speicher-Zeile („Preis, zu dem die Netzladung gekauft wurde"), andere Quelle (dort der Ø der Handeingabe).
+> Ohne Stundenpreis bleibt das Gewicht 0, jeder Leser fällt dann auf den Bezugspreis (`berechne_netzladung_kosten`),
+> wie am Tag. *Cockpit → Monat* hat für solche Monate keinen Fakt (der Kontext lädt ohne `inkl_nur_tageswerte`,
+> Ladung/Entladung kommen dort aus der Vier-Quellen-Auflösung) und ruft deshalb dieselbe Funktion für jeden Monat
+> ohne Speicher-Zeile, **in dem ihr Speicherblock auch Ladung oder Entladung trägt** (Entscheid Master 13.10.2026: keine
+> halbe Anzeige — ohne HA hat ein vergangener Monat ohne Abschluss dort keine, N-472/N-677; die Fakten tragen alle
+> drei aus demselben Rückfall). Bis dahin ließ der Rückfall die Netzladung aus („eine Preis-Aussage, die die Tagesebene nicht
+> trägt", N-121-Lesart) und *Cockpit → Monat* nannte sie nur im laufenden Monat (#427 Punkt 2) — der Jahr-Verlauf zeigte daneben 0
+> (*Auswertungen → Tabelle* hat keine Netzladungs-Spalte). Eine Speicher-Zeile ersetzt den Wert (P8). Proben: `test_427_netzladung_laufender_monat.py`,
+> Matrix-Form M04 (`test_achsen_matrix.py`).
+
 **Die Konvention endet nicht am Backend (v4.0.6).** Wer eine Stunde *beschriftet* oder einen Messwert
 in eine Chart-Spalte *einsortiert*, folgt derselben Regel — Client-SoT ist
 `frontend/src/lib/stundenSlot.ts` (Spiegel von `core/berechnungen/slot_konvention.py`, Regressionstest

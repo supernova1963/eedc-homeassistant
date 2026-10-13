@@ -12,8 +12,12 @@ zugeordnetes Feld kann im Inbound-Cache nie einen Wert haben (dort schreibt
 ausschließlich `on_message`) und lief in dieselbe Falle.
 
 Was ausdrücklich DRIN bleiben muss:
-- Felder ohne Quellen-Eintrag (der Kernfall aus #134 — Publisher-Automation
-  fehlt). Ein stummes Inbound persistiert nichts, ist also unterscheidbar.
+- Felder ohne Quellen-Eintrag, **die Pflicht sind** (der Kernfall aus #134 —
+  Publisher-Automation fehlt). Ein stummes Inbound persistiert nichts, ist also
+  unterscheidbar. Seit dem Entscheid Gernots vom 13.10.2026 gilt das nur noch
+  für Pflichtfelder (dieselbe Einstufung wie die Datenquellen-Fläche); ein
+  optionales Feld erwartet der Check nur, wenn es auf MQTT-Inbound oder
+  Gateway zugeordnet ist (Abschnitt am Dateiende).
 - Felder auf **Gateway**: der Gateway-Service re-publisht auf das
   EEDC-Inbound-Topic, der Wert landet im selben Cache. Ein stummes
   Gateway-Mapping ist eine echte Lücke.
@@ -377,15 +381,32 @@ def _auto_stumm(auto, *felder_energy, live=()) -> set[tuple]:
     )
 
 
+def _auf_inbound(anlage, match_keys, quelle: str = QUELLE_INBOUND) -> None:
+    """Gespeicherte Quellenwahl MQTT-Inbound (bzw. ``quelle``) für diese Felder.
+
+    Entscheid Gernot 13.10.2026: ein optionales Feld erwartet der Check nur,
+    wenn es belegt ist. Die Proben zur Wallbox-Regel (#425) und zur Gerätefrage
+    (N-746) belegen ihre optionalen Felder deshalb — ohne Eintrag fielen sie
+    schon durch die Pflicht-Stufe heraus, und die Probe prüfte die Regel nicht
+    mehr, um die es ihr geht.
+    """
+    quellen = dict((anlage.sensor_mapping or {}).get("quellen") or {})
+    for mk in match_keys:
+        quellen[feld_id_aus_match_key(mk)] = {"quelle": quelle}
+    anlage.sensor_mapping = {**(anlage.sensor_mapping or {}), "quellen": quellen}
+
+
 @pytest.mark.asyncio
 async def test_wallbox_mit_ladezaehler_nimmt_dem_auto_die_ladefelder(db, monkeypatch):
     """(a) gruaGits Fall: Wallbox misst per MQTT ⇒ Lade-/Verbrauchsfelder am Auto
-    nicht erwartet; Ladestand und km bleiben erwartet."""
+    nicht erwartet — auch wenn sie auf MQTT zugeordnet sind; Ladestand
+    (zugeordnet) und km (Pflicht) bleiben erwartet."""
     anlage, wb, auto = await _anlage_mit_auto(db)
     stumm = _auto_stumm(
         auto, "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh",
         "km_gefahren", live=("soc",),
     )
+    _auf_inbound(anlage, stumm - {("inv_energy", str(auto.id), "km_gefahren")})
     details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, _wb_mqtt(wb))
     pfad = f"/inv/{auto.id}_ID3/"
     assert f"{pfad}km_gefahren" in details
@@ -397,11 +418,12 @@ async def test_wallbox_mit_ladezaehler_nimmt_dem_auto_die_ladefelder(db, monkeyp
 @pytest.mark.asyncio
 async def test_ohne_wallbox_zaehler_bleiben_die_ladefelder_erwartet(db, monkeypatch):
     """(b) Gegenprobe: dieselbe Anlage, aber die Wallbox liefert keinen Zähler ⇒
-    das Auto trägt seine Ladung selbst, die Felder bleiben erwartet."""
+    das Auto trägt seine Ladung selbst, die (zugeordneten) Felder bleiben erwartet."""
     anlage, _wb, auto = await _anlage_mit_auto(db)
     stumm = _auto_stumm(
         auto, "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh",
     )
+    _auf_inbound(anlage, stumm)
     details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, set())
     pfad = f"/inv/{auto.id}_ID3/"
     for feld in ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh"):
@@ -410,10 +432,13 @@ async def test_ohne_wallbox_zaehler_bleiben_die_ladefelder_erwartet(db, monkeypa
 
 @pytest.mark.asyncio
 async def test_v2h_bleibt_neben_der_wallbox_erwartet(db, monkeypatch):
-    """(c) Die Rückspeisung misst keine Wallbox: `v2h_entladung_kwh` ohne
-    gespeicherte Wahl bleibt erwartet, auch wenn die Wallbox die Ladung deckt."""
+    """(c) Die Rückspeisung misst keine Wallbox: ein auf MQTT zugeordnetes
+    `v2h_entladung_kwh` bleibt erwartet, auch wenn die Wallbox die Ladung deckt.
+    (Bis 13.10.2026 „ohne gespeicherte Wahl" — seitdem erwartet der Check ein
+    optionales Feld nur belegt, s. `_auf_inbound`.)"""
     anlage, wb, auto = await _anlage_mit_auto(db, v2h=True)
     stumm = _auto_stumm(auto, "v2h_entladung_kwh", "ladung_kwh")
+    _auf_inbound(anlage, stumm)
     details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, _wb_mqtt(wb))
     pfad = f"/inv/{auto.id}_ID3/"
     assert f"{pfad}v2h_entladung_kwh" in details
@@ -459,15 +484,19 @@ async def test_groesse_ohne_geraet_wird_nicht_erwartet(
     db, monkeypatch, typ, parameter_mit, felder,
 ):
     """Ohne die Eigenschaft gibt es die Größe am Gerät nicht ⇒ kein erwartetes
-    Topic; mit ihr bleibt sie erwartet (Gegenprobe im selben Test)."""
+    Topic, auch nicht mit Eintrag; mit ihr bleibt sie erwartet (Gegenprobe im
+    selben Test). Beide Geräte tragen die Felder belegt (`_auf_inbound`) — sonst
+    nähme die Pflicht-Stufe (13.10.2026) die optionalen schon vorher heraus."""
     anlage_ohne, inv_ohne = await _anlage_mit_geraet(db, typ, {})
     stumm = {("inv_energy", str(inv_ohne.id), f) for f in felder}
+    _auf_inbound(anlage_ohne, stumm)
     details = await _stumm_gemeldet(db, monkeypatch, anlage_ohne, stumm, set())
     for feld in felder:
         assert f"/inv/{inv_ohne.id}_Geraet/{feld}" not in details, feld
 
     anlage_mit, inv_mit = await _anlage_mit_geraet(db, typ, parameter_mit)
     stumm = {("inv_energy", str(inv_mit.id), f) for f in felder}
+    _auf_inbound(anlage_mit, stumm)
     details = await _stumm_gemeldet(db, monkeypatch, anlage_mit, stumm, set())
     for feld in felder:
         assert f"/inv/{inv_mit.id}_Geraet/{feld}" in details, feld
@@ -479,17 +508,27 @@ async def test_geraetefrage_nimmt_genau_diese_topics(
     db, _inbound_laeuft, typ, parameter_mit, felder,
 ):
     """Leerer Cache: der Unterschied zwischen beiden Geräten ist genau die Zahl
-    der Größen, die es nur mit der Eigenschaft gibt — nicht mehr, nicht weniger."""
+    der Größen, die es nur mit der Eigenschaft gibt — nicht mehr, nicht weniger.
+
+    Seit dem Entscheid vom 13.10.2026 mit **allen** Feldern beider Anlagen auf
+    MQTT zugeordnet: so ist die Pflicht-Stufe auf beiden Seiten durch, und der
+    Unterschied misst allein die Gerätefrage (ohne Einträge zählte er bei der
+    getrennten Strommessung zusätzlich das dann nur noch erweiterte
+    `stromverbrauch_kwh`)."""
     anlage_ohne, _ = await _anlage_mit_geraet(db, typ, {})
     anlage_mit, _ = await _anlage_mit_geraet(db, typ, parameter_mit)
+    for a in (anlage_ohne, anlage_mit):
+        _auf_inbound(a, [e["match_key"] for e in await build_expected_topics(db, a)])
     assert await _anzahl(db, anlage_mit) - await _anzahl(db, anlage_ohne) == len(felder)
 
 
 @pytest.mark.asyncio
 async def test_split_klima_erwartet_kein_warmwasser(db, monkeypatch):
     """Dieselbe Regel, gemessene Reichweite: eine Luft-Luft-Anlage hat keinen
-    Warmwasserkreis (N-304) — `warmwasser_kwh` ist dort kein erwartetes Topic."""
+    Warmwasserkreis (N-304) — `warmwasser_kwh` ist dort kein erwartetes Topic,
+    auch zugeordnet nicht."""
     anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {"wp_art": "luft_luft"})
+    _auf_inbound(anlage, [("inv_energy", str(inv.id), "warmwasser_kwh")])
     details = await _stumm_gemeldet(
         db, monkeypatch, anlage, {("inv_energy", str(inv.id), "warmwasser_kwh")}, set(),
     )
@@ -497,16 +536,24 @@ async def test_split_klima_erwartet_kein_warmwasser(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_erweitertes_feld_bleibt_erwartet(db, monkeypatch):
+async def test_erweitertes_feld_nur_zugeordnet_erwartet(db, monkeypatch):
     """Gegenprobe zur weichen Sorte: ein Betriebsart-Feld an einer
-    Nicht-Luft-Luft-WP ist untypisch, nicht unmöglich (URTEIL_ERWEITERT) —
-    es bleibt erwartet."""
+    Nicht-Luft-Luft-WP ist untypisch, nicht unmöglich (URTEIL_ERWEITERT) — die
+    Gerätefrage (N-746) nimmt es NICHT heraus.
+
+    ⚠ Bis zum 13.10.2026 hieß diese Probe „erweitertes Feld bleibt erwartet"
+    und prüfte das Feld OHNE Eintrag. Entscheid Gernot 13.10.2026: ohne Eintrag
+    erwartet der Check nur Pflichtfelder, und ein erweitertes Feld ist nie
+    Pflicht (`get_feld_bedarf`, B2). Die Gerätefrage bleibt trotzdem geprüft:
+    zugeordnet ist das Feld erwartet."""
     anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {})
-    details = await _stumm_gemeldet(
-        db, monkeypatch, anlage,
-        {("inv_energy", str(inv.id), "betriebsart_strom_heizen_kwh")}, set(),
-    )
-    assert f"/inv/{inv.id}_Geraet/betriebsart_strom_heizen_kwh" in details
+    mk = ("inv_energy", str(inv.id), "betriebsart_strom_heizen_kwh")
+    ohne = await _stumm_gemeldet(db, monkeypatch, anlage, {mk}, set())
+    assert f"/inv/{inv.id}_Geraet/betriebsart_strom_heizen_kwh" not in ohne
+
+    _auf_inbound(anlage, [mk])
+    mit = await _stumm_gemeldet(db, monkeypatch, anlage, {mk}, set())
+    assert f"/inv/{inv.id}_Geraet/betriebsart_strom_heizen_kwh" in mit
 
 
 @pytest.mark.asyncio
@@ -520,3 +567,216 @@ async def test_warntext_nennt_den_handgriff_keine(db, _inbound_laeuft):
     assert details, "Gegenprobe: ohne Befund prüft dieser Test nichts"
     assert "Einstellungen → Datenquellen" in details
     assert "„Keine“" in details
+    # Entscheid 13.10.2026: der Text sagt, warum ein optionales Feld fehlt.
+    assert "Optionale Felder erwartet eedc hier nur" in details
+
+
+# ─── Entscheid Gernot 13.10.2026: erwartet wird Pflicht und Belegtes ────────
+#
+# Bis dahin galt „ohne Eintrag ⇒ erwartet" für jedes Feld. Gemessen am HEAD vor
+# dem Entscheid: eine Luft-Wasser-WP ohne Einträge trug 17 Topics als „erwartet,
+# nie empfangen" (12 Energie, davon acht Betriebsart-Felder, + 5 Live), ein
+# E-Auto ohne Wallbox 9. Jetzt erwartet der Check ein Feld ohne gespeicherte
+# Quellenwahl nur, wenn die Datenquellen-Fläche es als Pflicht einstuft
+# (`stufe_bedarf_ein` über `_pflicht_ohne_eintrag`), und jedes Feld, das auf
+# MQTT-Inbound oder Gateway zugeordnet ist. Folge, bewusst mitgenommen: ein
+# optionales, nie zugeordnetes Feld meldet der Check nicht mehr.
+
+from datetime import date  # noqa: E402
+
+
+async def _erwartete_topics(db, monkeypatch, anlage) -> set[str]:
+    """Die vollständige Menge der Topics, die der Check erwartet.
+
+    Je Topic ein Lauf, in dem genau dieses eine stumm ist — so steht es in der
+    „nie empfangen"-Zeile genau dann, wenn der Check es erwartet (die
+    Sechser-Kürzung greift bei einem einzigen Topic nicht)."""
+    erwartet = set()
+    for e in await build_expected_topics(db, anlage):
+        if not e.get("topic"):
+            continue
+        details = await _stumm_gemeldet(
+            db, monkeypatch, anlage, {tuple(e["match_key"])}, set(),
+        )
+        if e["topic"] in details:
+            erwartet.add(e["topic"])
+    return erwartet
+
+
+def _endungen(topics: set[str], marker: str) -> set[str]:
+    """Letztes Pfad-Segment der Topics, die ``marker`` enthalten."""
+    return {t.rsplit("/", 1)[1] for t in topics if marker in t}
+
+
+@pytest.mark.asyncio
+async def test_pflicht_ohne_eintrag_wird_erwartet(db, monkeypatch):
+    """Speicher ohne Einträge: Ladung und Entladung sind Pflicht ⇒ erwartet."""
+    anlage, inv = await _anlage_mit_geraet(db, "speicher", {})
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert _endungen(erwartet, f"/energy/inv/{inv.id}_") == {"ladung_kwh", "entladung_kwh"}
+
+
+@pytest.mark.asyncio
+async def test_optional_ohne_eintrag_wird_nicht_erwartet(db, monkeypatch):
+    """Speicher mit Netzladung, ohne Einträge: `ladung_netz_kwh` (optional, am
+    Gerät vorhanden) und die Live-Felder sind nicht erwartet."""
+    anlage, inv = await _anlage_mit_geraet(db, "speicher", {"laedt_aus_netz": True})
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert "ladung_netz_kwh" not in _endungen(erwartet, f"/inv/{inv.id}_")
+    assert _endungen(erwartet, f"/live/inv/{inv.id}_") == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quelle", [QUELLE_INBOUND, QUELLE_GATEWAY])
+async def test_optional_mit_mqtt_eintrag_wird_erwartet(db, monkeypatch, quelle):
+    """Dasselbe Feld, auf MQTT-Inbound bzw. Gateway zugeordnet ⇒ erwartet —
+    ebenso ein zugeordnetes Live-Feld."""
+    anlage, inv = await _anlage_mit_geraet(db, "speicher", {"laedt_aus_netz": True})
+    _auf_inbound(anlage, [
+        ("inv_energy", str(inv.id), "ladung_netz_kwh"),
+        ("inv_live", str(inv.id), "soc"),
+    ], quelle=quelle)
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert "ladung_netz_kwh" in _endungen(erwartet, f"/energy/inv/{inv.id}_")
+    assert _endungen(erwartet, f"/live/inv/{inv.id}_") == {"soc"}
+
+
+@pytest.mark.asyncio
+async def test_pflicht_auf_keine_wird_nicht_erwartet(db, monkeypatch):
+    """#389 bleibt: ein Pflichtfeld, bewusst auf „Keine" gestellt, ist kein
+    erwartetes Topic — die Pflicht-Stufe holt es nicht zurück."""
+    anlage, inv = await _anlage_mit_geraet(db, "speicher", {})
+    _auf_inbound(anlage, [("inv_energy", str(inv.id), "ladung_kwh")], quelle=QUELLE_KEINE)
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert _endungen(erwartet, f"/energy/inv/{inv.id}_") == {"entladung_kwh"}
+
+
+@pytest.mark.asyncio
+async def test_luft_wasser_wp_ohne_eintraege_nur_pflichtfelder(db, monkeypatch):
+    """Der Ausgangsfall: Luft-Wasser-WP ohne Einträge. Am HEAD vor dem Entscheid
+    17 Topics am Gerät (12 Energie, davon acht Betriebsart-Felder, + 5 Live);
+    jetzt die drei Pflichtfelder — Strom gesamt und die Wärmemenge auf beiden
+    Wegen der ALTERNATIV-Gruppe `wp_waerme` (keiner ist belegt, also zeigt die
+    Fläche beide als offen)."""
+    anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {"wp_art": "luft_wasser"})
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    am_geraet = {t for t in erwartet if f"/inv/{inv.id}_" in t}
+    assert _endungen(am_geraet, "/energy/") == {
+        "stromverbrauch_kwh", "heizenergie_kwh", "waerme_kwh",
+    }
+    assert len(am_geraet) == 3
+
+
+@pytest.mark.asyncio
+async def test_wp_waermemenge_ein_weg_belegt_deckt_den_anderen(db, monkeypatch):
+    """ALTERNATIV-Gruppe wie auf der Fläche (N-391): ist `waerme_kwh` auf MQTT
+    zugeordnet, ist `heizenergie_kwh` keine Pflicht mehr ⇒ nicht erwartet."""
+    anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {"wp_art": "luft_wasser"})
+    _auf_inbound(anlage, [("inv_energy", str(inv.id), "waerme_kwh")])
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert _endungen(erwartet, f"/energy/inv/{inv.id}_") == {
+        "stromverbrauch_kwh", "waerme_kwh",
+    }
+
+
+@pytest.mark.asyncio
+async def test_basis_felder_nach_derselben_regel(db, monkeypatch):
+    """Anlage ohne Geräte, ohne Einträge: die drei Pflicht-Zählerstände sind
+    erwartet, die fünf Live-Felder (optional) nicht; ein zugeordnetes
+    Live-Feld ist erwartet."""
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert _endungen(erwartet, "/energy/") == {
+        "einspeisung_kwh", "netzbezug_kwh", "pv_gesamt_kwh",
+    }
+    assert _endungen(erwartet, "/live/") == set()
+
+    _auf_inbound(anlage, [("basis_live", "netzbezug_w")])
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+    assert _endungen(erwartet, "/live/") == {"netzbezug_w"}
+
+
+@pytest.mark.asyncio
+async def test_basis_pv_gesamt_gedeckt_durch_belegtes_modul(db, monkeypatch):
+    """ALTERNATIV-Gruppe `pv_energie` über die Ebenen (N-456: die Anlagen-Ebene
+    deckt in beide Richtungen): trägt ein PV-Modul seinen Zähler per HA-Sensor,
+    ist `pv_gesamt_kwh` keine Pflicht mehr — wie auf der Fläche."""
+    anlage, inv = await _anlage_mit_geraet(db, "pv-module", {})
+    vorher = await _erwartete_topics(db, monkeypatch, anlage)
+    assert "pv_gesamt_kwh" in _endungen(vorher, "/energy/")
+
+    _auf_inbound(anlage, [("inv_energy", str(inv.id), "pv_erzeugung_kwh")], quelle=QUELLE_HA_APP)
+    nachher = await _erwartete_topics(db, monkeypatch, anlage)
+    assert "pv_gesamt_kwh" not in _endungen(nachher, "/energy/")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("typ, parameter", [
+    pytest.param("waermepumpe", {"wp_art": "luft_wasser"}, id="wp-luft-wasser"),
+    pytest.param(
+        "waermepumpe", {"wp_art": "luft_wasser", "getrennte_strommessung": True},
+        id="wp-getrennte-strommessung",
+    ),
+    pytest.param("waermepumpe", {"wp_art": "luft_luft"}, id="split-klima"),
+    pytest.param("e-auto", {}, id="e-auto"),
+    pytest.param("speicher", {"laedt_aus_netz": True}, id="speicher"),
+    pytest.param("pv-module", {}, id="pv-module"),
+    pytest.param("balkonkraftwerk", {}, id="bkw"),
+    pytest.param("wallbox", {}, id="wallbox"),
+])
+async def test_pflicht_ist_dieselbe_wie_auf_der_flaeche(db, monkeypatch, typ, parameter):
+    """Eine Wahrheit, zwei Leser: ohne Einträge erwartet der Check genau die
+    Felder, die die Datenquellen-Fläche (`get_datenquellen_felder`) als
+    „pflicht" führt — abzüglich der Felder, die es am Gerät nicht gibt (N-746;
+    die Fläche lässt sie nach `ohne_nicht_zuordenbare` gar nicht erst stehen
+    oder führt sie dort, wo nur der Check sie herausnimmt)."""
+    from backend.api.routes.datenquellen import get_datenquellen_felder
+    from backend.core.field_definitions.bedingungen import groesse_gibt_es_am_geraet
+
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+    inv = Investition(
+        anlage_id=anlage.id, typ=typ, bezeichnung="Geraet", parameter=parameter,
+        anschaffungsdatum=date(2024, 1, 1),
+    )
+    db.add(inv)
+    await db.flush()
+
+    topic_je_fid = {
+        feld_id_aus_match_key(e["match_key"]): e
+        for e in await build_expected_topics(db, anlage)
+    }
+    erwartet = await _erwartete_topics(db, monkeypatch, anlage)
+
+    # Die Fläche mit LEEREM Cache lesen: sonst sähe ihre 3-Stufen-Auflösung die
+    # Werte der Ein-Topic-Läufe als „Inbound mit Wert", schriebe sie als Quelle
+    # fest, und die Gruppen-Deckung verschöbe die Pflicht.
+    class _Leer:
+        _running = True
+        cache = _CacheAllesDaAusser(anlage.id, [], set())
+
+    monkeypatch.setattr(
+        "backend.services.mqtt_inbound_service.get_mqtt_inbound_service",
+        lambda: _Leer(),
+    )
+    resp = await get_datenquellen_felder(anlage.id, db)
+    assert not (anlage.sensor_mapping or {}).get("quellen"), (
+        "Gegenprobe: die Fläche darf hier nichts festschreiben — sonst vergleicht "
+        "der Test zwei verschiedene Belegungen"
+    )
+    flaeche_pflicht = set()
+    for g in resp["gruppen"]:
+        for f in g["felder"]:
+            e = topic_je_fid.get(f["id"])
+            if f.get("bedarf") != "pflicht" or e is None or not e.get("topic"):
+                continue
+            if e["match_key"][0] in ("inv_energy", "inv_live") and not groesse_gibt_es_am_geraet(
+                e["typ"], e["feld"], parameter,
+            ):
+                continue
+            flaeche_pflicht.add(e["topic"])
+    assert flaeche_pflicht, "Gegenprobe: ohne Pflichtfeld prüft dieser Test nichts"
+    assert erwartet == flaeche_pflicht

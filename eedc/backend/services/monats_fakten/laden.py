@@ -435,6 +435,38 @@ async def lade_monats_fakten(
             [k for k in kandidaten if _im_fenster(k, von, bis)],
         )
 
+    # Entscheid Gernot 13.10.2026 (#427): die Speicher-Netzladung im Tageswert-Rückfall — dieselbe Regel wie Ladung/
+    # Entladung in `bau._baue_fakt` (Monat ohne Speicher-Zeile, Tage mit Speicherwert), Menge und Preis aus der einen
+    # Rechenstelle `netzladung_tage.netzladung_aus_tagen`, die auch *Cockpit → Monat* ruft. Geladen nur für genau diese
+    # Monate — ohne Tagesebene (kein Flag, kein Ladeanteil) gibt es keinen Rückfall und keine Abfrage.
+    netzladung_tage: dict = {}
+    _nl_monate = [
+        k for k in kandidaten
+        if _im_fenster(k, von, bis)
+        and (s := tages_summen.get(k)) is not None
+        and "speicher" not in roh.get(k, _RohMonat()).typen_mit_zeile
+        and (s.speicher_ladung_kwh > 0 or s.speicher_entladung_kwh > 0)
+        and any(i.typ == "speicher" and i.ist_aktiv_im_monat(*k) for i in investitionen)
+    ]
+    if _nl_monate:
+        from datetime import datetime as _dt
+
+        from backend.models.anlage import Anlage as _Anlage
+        from backend.services.kanal.bilanz_leser import uhr as _uhr
+        from backend.services.monats_fakten.netzladung_tage import netzladung_aus_tagen
+
+        _nl_anlage = await db.get(_Anlage, anlage_id)
+        # Die Uhr der Schicht ist die der Kanal-Leser (eine Stelle, Proben stellen sie dort).
+        _heute = _dt.fromtimestamp(_uhr()).date()
+        for k in _nl_monate:
+            _nl = await netzladung_aus_tagen(
+                db, _nl_anlage,
+                [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_im_monat(*k)],
+                k[0], k[1], _heute,
+            )
+            if _nl is not None:
+                netzladung_tage[k] = _nl
+
     fakten: list[MonatsFakt] = []
     for schluessel in sorted(k for k in kandidaten if _im_fenster(k, von, bis)):
         fakten.append(
@@ -453,6 +485,7 @@ async def lade_monats_fakten(
                 tarif_cache=tarif_cache,
                 zeittarif_cache=zeittarif_cache,
                 tages_summe=tages_summen.get(schluessel),
+                netzladung_tage=netzladung_tage.get(schluessel),
                 preis_cache=preis_cache,
                 preis_messung=preis_messung,
                 heimlade_quellen=_laufend_quellen if schluessel == _laufend else frozenset(),

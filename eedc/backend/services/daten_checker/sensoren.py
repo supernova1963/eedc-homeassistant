@@ -27,6 +27,60 @@ _EAUTO_FELDER_UNTER_WALLBOX: frozenset[str] = frozenset(
 )
 
 
+def _pflicht_ohne_eintrag(
+    eintraege: list[dict], quellen: dict, vorhandene_typen: set,
+) -> set[str]:
+    """Feld-IDs, die die Datenquellen-Fläche heute als „pflicht" einstuft.
+
+    Entscheid Gernot 13.10.2026: der MQTT-Check erwartet ein Feld ohne
+    gespeicherte Quellenwahl nur, wenn es **Pflicht** ist. Die Antwort gibt
+    dieselbe Funktion wie auf der Fläche (`api/routes/datenquellen.py`,
+    §2i-6): `stufe_bedarf_ein` — sie kennt die Basis-Felder, die
+    ALTERNATIV-Gruppen (ein belegtes Geschwister deckt, N-391) und
+    `pflicht_am_geraet` (N-456). Hier steht nur die Eingabe-Zuordnung aus den
+    Einträgen von `build_expected_topics`, dieselben Schlüssel wie dort.
+
+    ⚠ **Ein Unterschied zur Fläche, bewusst:** „belegt" ist hier die
+    GESPEICHERTE Quellenwahl (`sensor_mapping["quellen"]`, wie der Entscheid
+    sie fasst); die Fläche nimmt zusätzlich die 3-Stufen-Auflösung und
+    schreibt deren positive Evidenz beim nächsten Aufruf fest. Bis dahin kann
+    hier ein Alternativ-Feld als Pflicht gelten, das die Fläche schon gedeckt
+    sieht — der Check erwartet dann höchstens, was er vor dem Entscheid auch
+    erwartet hat.
+    """
+    from backend.services.datenquellen_resolver import (
+        QUELLE_KEINE, feld_id_aus_match_key,
+    )
+    from backend.services.datenquellen_validierung import stufe_bedarf_ein
+
+    def _belegt(fid: str) -> bool:
+        eintrag = quellen.get(fid)
+        return (
+            isinstance(eintrag, dict)
+            and eintrag.get("quelle", QUELLE_KEINE) != QUELLE_KEINE
+        )
+
+    eingabe = []
+    for e in eintraege:
+        mk = e["match_key"]
+        fid = feld_id_aus_match_key(mk)
+        eingabe.append({
+            "id": fid,
+            "feld": e.get("feld", ""),
+            "typ": e.get("typ", "basis"),
+            "belegt": _belegt(fid),
+            "bedarf": e.get("bedarf", "optional"),
+            "bedarf_gruppe": e.get("bedarf_gruppe"),
+            "bedingung_anlage": e.get("bedingung_anlage"),
+            "inv_id": str(mk[1]) if str(mk[0]).startswith("inv_") else None,
+            "pflicht_am_geraet": bool(e.get("pflicht_am_geraet")),
+        })
+    return {
+        fid for fid, stufe in stufe_bedarf_ein(eingabe, vorhandene_typen).items()
+        if stufe.get("bedarf") == "pflicht"
+    }
+
+
 class SensorChecks:
     """Prüfungen für Sensor-Mapping-LTS-Verfügbarkeit und MQTT-Topics."""
 
@@ -88,6 +142,10 @@ class SensorChecks:
         empfangen wird oder veraltete Werte trägt, ist die Publisher-Seite
         gegen die Konsumenten-Seite gedriftet.
 
+        Erwartet wird seit dem Entscheid vom 13.10.2026 nur, was belegt (auf
+        MQTT-Inbound oder Gateway zugeordnet) oder ohne Eintrag Pflicht ist —
+        die Filterkette steht unten, eine Stufe je Begründung.
+
         Args:
             mqtt_zaehler: `sensor_key`s mit angekommenen MQTT-Zählerständen
                 (`snapshot/reader.mqtt_zaehler_keys`, Fenster `MQTT_AKTIV_TAGE`)
@@ -101,10 +159,11 @@ class SensorChecks:
             erwartet_inbound_topic, feld_id_aus_match_key,
         )
         from backend.core.field_definitions.bedingungen import (
-            groesse_gibt_es_am_geraet,
+            anlage_typen_mit_kontext, groesse_gibt_es_am_geraet,
         )
         from backend.models.investition import Investition
         from backend.models.settings import Settings as SettingsModel
+        from backend.utils.investition_filter import aktiv_jetzt
 
         kat = CheckKategorie.MQTT_TOPIC_ABDECKUNG
         ergebnisse: list[CheckErgebnis] = []
@@ -188,16 +247,45 @@ class SensorChecks:
         # Topics, auf die niemand publizieren soll. Dieselbe Frage wie der
         # Monatsdaten-Check und die Beitragsschicht: `groesse_gibt_es_am_geraet`,
         # die HARTE Sorte. Erweiterte Felder (untypisch, nicht unmöglich, z. B.
-        # die Betriebsart-Felder an einer Nicht-Luft-Luft-WP) bleiben erwartet.
+        # die Betriebsart-Felder an einer Nicht-Luft-Luft-WP) lässt diese Stufe
+        # stehen; sie sind nie Pflicht und fallen ohne Eintrag in der sechsten.
         # Gestellt für beide Investitions-Listen; die Live-Liste kommt schon
         # gerätegefiltert (`get_live_felder_fuer_investition` wirft
         # URTEIL_NEIN heraus), und der Helfer kennt ihre Keys nicht (fail-open)
         # — dort ist die Frage heute ein No-op.
         inv_parameter = {str(i.id): i.parameter for i in investitionen}
+        #
+        # Und sechstens (Entscheid Gernot 13.10.2026): erwartet wird ein Feld
+        # nur, wenn es BELEGT ist — eine gespeicherte Quellenwahl, die nicht
+        # „Keine"/HA ist (also MQTT-Inbound oder Gateway; die anderen nimmt
+        # schon `erwartet_inbound_topic` heraus) — oder wenn es ohne Eintrag
+        # PFLICHT ist, nach derselben Einstufung wie die Datenquellen-Fläche
+        # (`_pflicht_ohne_eintrag`). Bis dahin galt „ohne Eintrag ⇒ erwartet"
+        # für jedes Feld: eine Luft-Wasser-WP trug die acht Betriebsart-Felder
+        # (erweitert, optional), ein E-Auto ohne Wallbox seine optionalen
+        # Lade-Felder dauerhaft als „erwartet, nie empfangen". Folge, bewusst
+        # mitgenommen: ein optionales, nie zugeordnetes Feld meldet der Check
+        # nicht mehr — der #134-Zweck gilt für Pflicht und Belegtes.
+        # Die Investitionen wie in `build_expected_topics` (`aktiv_jetzt`),
+        # einmal geladen und durchgereicht: dieselbe Liste für die Topics und
+        # für die Typenmenge (`bedingung_anlage`).
+        aktive = list((await self.db.execute(
+            select(Investition).where(
+                Investition.anlage_id == anlage.id, aktiv_jetzt(),
+            )
+        )).scalars().all())
+        topics = await build_expected_topics(self.db, anlage, investitionen=aktive)
+        pflicht = _pflicht_ohne_eintrag(
+            topics, quellen, anlage_typen_mit_kontext(aktive),
+        )
         erwartet = [
-            e for e in await build_expected_topics(self.db, anlage)
+            e for e in topics
             if not e.get("nur_manuell") and not e.get("zustand")
             and erwartet_inbound_topic(quellen, feld_id_aus_match_key(e["match_key"]))
+            and (
+                feld_id_aus_match_key(e["match_key"]) in quellen
+                or feld_id_aus_match_key(e["match_key"]) in pflicht
+            )
             and not (
                 e["match_key"][0] == "inv_energy"
                 and e["match_key"][1] in eauto_ohne_energie
@@ -274,7 +362,9 @@ class SensorChecks:
                     "oder Investitions-IDs nach Re-Import nicht in der Automation "
                     "nachgezogen. Felder, die du nicht über MQTT lieferst, stellst "
                     "du unter Einstellungen → Datenquellen auf „Keine“ — dann "
-                    "erwartet eedc sie hier nicht mehr. "
+                    "erwartet eedc sie hier nicht mehr. Optionale Felder "
+                    "erwartet eedc hier nur, wenn du ihnen dort MQTT oder das "
+                    "Gateway als Quelle zugeordnet hast. "
                     "Wenn du keine Live-Daten via MQTT brauchst, "
                     "kannst du „Daten über MQTT empfangen“ unter "
                     "Einstellungen → Integration abschalten. "

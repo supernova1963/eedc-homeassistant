@@ -52,6 +52,7 @@ async def _baue_fakt(
     tarif_cache: dict[date, dict],
     zeittarif_cache: dict,
     tages_summe: Optional[TagesMonatsSumme] = None,
+    netzladung_tage=None,
     preis_cache: Optional[dict] = None,
     preis_messung: Optional[PreisMessung] = None,
     heimlade_quellen: frozenset = frozenset(),
@@ -360,10 +361,14 @@ async def _baue_fakt(
         netzladung_preis_summe_cent_kwh=roh.speicher_preis_summe,
         netzladung_gewicht_kwh=roh.speicher_preis_gewicht,
     )
-    # Speicher nur ohne eigene IMD-Zeile im Monat. Die Netzladung (Arbitrage)
-    # bleibt dabei ungefüllt: sie ist eine **Preis**-Aussage, und die trägt die
-    # Tagesebene nicht — eine 0 daneben wäre keine Messung, sondern eine
-    # Behauptung über einen nie gepflegten Wert.
+    # Speicher nur ohne eigene IMD-Zeile im Monat. Seit dem Entscheid Gernot vom
+    # 13.10.2026 auch die Netzladung (Arbitrage) samt Preis: hier stand bis dahin,
+    # sie sei eine Preis-Aussage, die die Tagesebene nicht trägt (N-121-Lesart).
+    # Seit #427 trägt der Tag beides — Menge aus dem Bereichs-Leser, Preis
+    # TEP-gewichtet (ohne Stundenpreis: Bezugspreis-Rückfall beim Leser, wie am
+    # Tag). `netzladung_tage` kommt aus der einen Rechenstelle
+    # `netzladung_tage.netzladung_aus_tagen` (`laden.py`), die auch *Cockpit →
+    # Monat* ruft. Ohne Netzlade-Zähler bleibt sie ``None`` ⇒ 0 wie bisher.
     if (
         "speicher" not in roh.typen_mit_zeile
         and tages_summe is not None
@@ -372,6 +377,11 @@ async def _baue_fakt(
         speicher = SpeicherFakten(
             ladung_kwh=tages_summe.speicher_ladung_kwh,
             entladung_kwh=tages_summe.speicher_entladung_kwh,
+            netzladung_kwh=netzladung_tage.kwh if netzladung_tage is not None else 0.0,
+            netzladung_preis_summe_cent_kwh=(
+                netzladung_tage.preis_summe_cent_kwh if netzladung_tage is not None else 0.0
+            ),
+            netzladung_gewicht_kwh=netzladung_tage.gewicht_kwh if netzladung_tage is not None else 0.0,
         )
         tageswert_gruppen.add(TAGESWERT_SPEICHER)
 

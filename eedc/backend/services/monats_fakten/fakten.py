@@ -163,6 +163,13 @@ class SpeicherFakten:
     über Zeilen mit gepflegtem Preis gebildet (Summe + Gewicht getrennt gehalten,
     damit ein Aufrufer über Monate hinweg korrekt weiter gewichten kann statt
     Mittelwerte zu mitteln).
+
+    Bedeutung beider Herkünfte: **der Preis, zu dem die Netzladung gekauft
+    wurde.** Mit Speicher-Zeile ist es der Ø der Handeingabe
+    (``speicher_ladepreis_cent``); im Tageswert-Rückfall (Monat ohne
+    Speicher-Zeile, Entscheid Gernot 13.10.2026) der TEP-gewichtete Preis der
+    Tage wie in *Cockpit → Tag* (`netzladung_tage.netzladung_aus_tagen`) — ohne
+    Stundenpreis bleibt das Gewicht 0 und jeder Leser fällt auf den Bezugspreis.
     """
 
     ladung_kwh: float = 0.0

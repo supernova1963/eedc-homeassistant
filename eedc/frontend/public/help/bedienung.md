@@ -440,13 +440,17 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > **Ohne Home Assistant** gilt dasselbe für Zähler, die eedc über MQTT mitschreibt, ab dem ersten Monat, den diese
 > Mitschrift ganz abdeckt; davor zählen diese Größen erst mit dem Monatsabschluss.
 
-> **Netzladung des Speichers im laufenden Monat.** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, nennt der
-> laufende Monat die Netzladung schon vor dem Abschluss — als **Summe der abgelaufenen Tage**, dieselben Zahlen wie in
-> *Cockpit → Tag* (der heutige Tag kommt morgen dazu). Die Kachel **„Batterieladung Netz"** und die Speicher-Zeile
-> „davon aus dem Netz" sagen das beim Überfahren („Menge aus Tageswerten"); der Ladepreis ist derselbe wie am Tag
-> (gewichtet mit deinen Stundenpreisen, sonst dein Arbeitspreis). Mit dem Monatsabschluss gilt der gespeicherte Wert. Ein
-> **vergangener** Monat ohne Abschluss nennt die Netzladung weiterhin erst mit dem Abschluss — ebenso die V2H-Rückspeisung
-> eines E-Autos.
+> **Netzladung des Speichers vor dem Abschluss.** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, nennt ein
+> Monat ohne Abschluss die Netzladung schon vorher — als **Summe der abgelaufenen Tage**, dieselben Zahlen wie in
+> *Cockpit → Tag* (im laufenden Monat kommt der heutige Tag morgen dazu). Die Kachel **„Batterieladung Netz"** und die
+> Speicher-Zeile „davon aus dem Netz" sagen das beim Überfahren („Menge aus Tageswerten"); der Ladepreis ist derselbe wie
+> am Tag (gewichtet mit deinen Stundenpreisen, sonst dein Arbeitspreis). Das gilt für den laufenden **und** einen
+> **vergangenen** Monat ohne Abschluss: *Cockpit → Monat* zeigt sie dort, wo auch Ladung und Entladung stehen (ohne
+> Home Assistant hat ein vergangener Monat ohne Abschluss dort keine Speicherwerte, also auch keine Netzladung — die
+> Antwort ist der Monatsabschluss); der Verlauf von *Cockpit → Jahr* trägt sie für jeden Monat ohne Speicher-Eintrag mit Tagen, und
+> ein Community-Monatswert, der ohnehin geteilt wird (nur abgeschlossene Monate mit Zählerzeile), nimmt sie wie Ladung
+> und Entladung mit. Mit dem Monatsabschluss gilt der gespeicherte Wert. Die
+> V2H-Rückspeisung eines E-Autos zählt im Monat weiterhin erst mit dem Abschluss.
 
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 

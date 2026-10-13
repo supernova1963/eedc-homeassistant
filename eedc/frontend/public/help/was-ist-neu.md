@@ -9,6 +9,21 @@
 
 ---
 
+## Unreleased
+
+**MQTT-Check erwartet Pflicht und Zugeordnetes:** Der Daten-Checker erwartet ein MQTT-Topic ohne Zuordnung nur noch,
+wenn das Feld Pflicht ist — dieselben Felder, die *Einstellungen → Datenquellen* rot markiert —, und sonst nur Felder,
+denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Eine Luft-Wasser-Wärmepumpe ohne Zuordnungen stand bisher mit
+17 Topics unter „erwartet, nie empfangen“, jetzt mit 3 (Strom und die beiden Wege zur Wärmemenge). Ein optionales Feld,
+das du nie zugeordnet hast, meldet der Check damit nicht mehr
+([Daten-Checker §4.8](HANDBUCH_DATEN_CHECKER.md#48-mqtt-topic-abdeckung)).
+
+**Netzladung vor dem Abschluss überall gleich:** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, zeigt ein
+Monat ohne Abschluss die Netzladung jetzt überall als Summe der abgelaufenen Tage — im Verlauf von *Cockpit → Jahr*
+(bisher 0 kWh) und in *Cockpit → Monat* auch für einen **vergangenen** Monat ohne Abschluss, wo dort Ladung und
+Entladung stehen (bisher erst mit dem Abschluss). Der Ladepreis ist derselbe wie in *Cockpit → Tag*; mit dem Monatsabschluss gilt der gespeicherte Wert
+([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
+
 ## v4.1.7 — 13. Oktober 2026
 
 **MQTT-Check fragt nach deinem Gerät:** Der Daten-Checker erwartet nur noch Topics für Größen, die es an deinem Gerät
