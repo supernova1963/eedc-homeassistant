@@ -1125,6 +1125,10 @@ nur auf Kopien (`~/.claude/plans/**/devbox-*.db`). Es gibt zwei Bauformen:
    voll am 11.10.) — nach jeder Runde `rm -rf /tmp/golden-* /tmp/gm-erg-*`.
 8. **Was ein GM nicht sieht:** nur das, was ein Fall enthält. Kein Bestand der Kopien trägt eine Tariflücke, einen gepflegten
    Monats-Ø, Kombi-Sensor + Zähler oder Sonstiges mit Zähler — solche Fälle wurden je Fund synthetisch ergänzt.
+9. **Fixture-DBs nach jeder neuen Start-Migration einmal migrieren.** Die untracked Kopien `eedc/data/devbox-*.db` laufen sonst bei jedem
+   In-Process-GM-Lauf erneut durch die Migration, die `updated_at` der betroffenen Zeilen neu setzt — der GM rauscht (gemessen 12.10. an der
+   N-738-Migration: fünf Formularzeilen der Prüf-DB). Handgriff: Backup der Kopien in den Scratch, `init_db()` einmal gegen jede Kopie, danach
+   die betroffenen GMs neu aufzeichnen (Regel 1).
 
 Fehlt für eine Route ein GM, ist er **Schritt 0** des Umbaus (Muster: RF-6 für reine Funktionen mit Fakes an den Test-Nähten,
 RF-8/RF-9 für Routen mit SQL-Folge, RF-5 für Schreibpfade mit Tabellenvergleich).

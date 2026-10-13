@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.7] - 2026-10-13 — 62 Korrekturen an Preis, Prognose, Import und Jahresbericht; neu: V2H im Tag, Netzladung im laufenden Monat, „HA-Spiegel jetzt abgleichen"
 
 ### Added
 
