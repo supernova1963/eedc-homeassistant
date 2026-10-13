@@ -112,10 +112,102 @@ async def sensorwerte_erstellen(
 
     Aus `calculate_anlage_sensors` Zeilen 864-1048 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 8b.
     """
+    # RF-15 (Serie „Funktion vor Datei"): die vier Sensor-Gruppen sind Phasen-Funktionen weiter unten in dieser Datei,
+    # ihre Schleifen wortgleich; hier bleiben die zwei Weichen „Speicher vorhanden" und „Monatsdaten vorhanden".
     # Sensor-Werte erstellen
     sensor_values = []
 
     # Energie-Sensoren
+    await _energie_sensoren(
+        sensor_values,
+        anlage=anlage,
+        autarkie=autarkie,
+        co2_ersparnis=co2_ersparnis,
+        db=db,
+        direktverbrauch=direktverbrauch,
+        eigenverbrauch=eigenverbrauch,
+        einspeise_erloes=einspeise_erloes,
+        einspeisung=einspeisung,
+        erzeugung_bilanz=erzeugung_bilanz,
+        ev_ersparnis=ev_ersparnis,
+        ev_quote=ev_quote,
+        ev_wandlungsverluste=ev_wandlungsverluste,
+        gesamtverbrauch=gesamtverbrauch,
+        monatsdaten=monatsdaten,
+        netto_ertrag=netto_ertrag,
+        netto_herleitung=netto_herleitung,
+        netzbezug=netzbezug,
+        pv_erzeugung=pv_erzeugung,
+        spez_ertrag=spez_ertrag,
+        strompreis=strompreis,
+    )
+
+    # Investitions-Sensoren
+    _investitions_sensoren(
+        sensor_values,
+        amortisation_jahre=amortisation_jahre,
+        betriebskosten_ges=betriebskosten_ges,
+        ersparnis_posten=ersparnis_posten,
+        investition_gesamt=investition_gesamt,
+        investitionen=investitionen,
+        jahres_ersparnis=jahres_ersparnis,
+        jahres_ertraege_ges=jahres_ertraege_ges,
+        kapitaleinsatz=kapitaleinsatz,
+        relevante_kosten=relevante_kosten,
+        roi_prozent=roi_prozent,
+        sonstige_ausgaben_gesamt=sonstige_ausgaben_gesamt,
+        sonstige_ertraege_gesamt=sonstige_ertraege_gesamt,
+    )
+
+    # Speicher-Sensoren (nur wenn Speicher vorhanden)
+    if speicher_kapazitaet > 0 or batterie_ladung > 0:
+        _speicher_sensoren(
+            sensor_values,
+            batterie_entladung=batterie_entladung,
+            batterie_ladung=batterie_ladung,
+            speicher_effizienz=speicher_effizienz,
+            speicher_kapazitaet=speicher_kapazitaet,
+            speicher_zyklen=speicher_zyklen,
+        )
+
+    # Letzter Import Sensoren (Status)
+    if monatsdaten:
+        _letzter_import_sensoren(sensor_values, monatsdaten)
+    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
+    return {k: _loc[k] for k in ("sensor_values",) if k in _loc}
+
+
+# ── RF-15: Phasen von `sensorwerte_erstellen` ──────────────────────────────────────────────────────────────────────────
+#
+# Jede Gruppe ist ihre Schleife aus `sensorwerte_erstellen`, wortgleich; nur die Zweige mit eigenem Rechenweg-Text
+# (Netto-Ertrag, Einspeise-Erlös, EV-Ersparnis, Amortisation) sind je eine Funktion `(Wert, Rechenweg)`. Der Wert wird
+# NIE gerundet — die Rundung sitzt an der Export-Grenze (`runde_exportwert`, P-4/N-55, N-694).
+
+async def _energie_sensoren(
+    sensor_values,
+    *,
+    anlage,
+    autarkie,
+    co2_ersparnis,
+    db,
+    direktverbrauch,
+    eigenverbrauch,
+    einspeise_erloes,
+    einspeisung,
+    erzeugung_bilanz,
+    ev_ersparnis,
+    ev_quote,
+    ev_wandlungsverluste,
+    gesamtverbrauch,
+    monatsdaten,
+    netto_ertrag,
+    netto_herleitung,
+    netzbezug,
+    pv_erzeugung,
+    spez_ertrag,
+    strompreis,
+):
+    """Energie-Sensoren (`ANLAGE_SENSOREN`) an `sensor_values` anhängen; die Grundlast über `grundlast_sensorwert`."""
     for sensor in ANLAGE_SENSOREN:
         value = None
         berechnung = None
@@ -151,41 +243,11 @@ async def sensorwerte_erstellen(
                     f"(saisonal gewichtet, wie Cockpit)"
                 )
         elif sensor.key == "netto_ertrag_euro":
-            value = netto_ertrag
-            # Die Herleitung aus der Ergebnis-Leiter (03.10.2026): alle Posten, die etwas beitragen — bis dahin drei
-            # (Einspeise, EV, Sonstiges), während der Wert auch BKW-Rest, Erlös eigener Satz und USt trug.
-            # Das Rechenzeichen folgt dem Betrag (Sonstige Positionen können netto negativ sein); nur bei 0,00 €
-            # entscheidet die Rolle des Postens.
-            def _negativ(w) -> bool:
-                return w.betrag < 0 or (w.betrag == 0 and w.vorzeichen < 0)
-
-            berechnung = " ".join(
-                (("−" if _negativ(w) else "+") + " " if i else ("− " if _negativ(w) else ""))
-                + f"{fmt_zahl(abs(w.betrag), 2)} ({w.name})"
-                for i, w in enumerate(netto_herleitung.eingesetzte_werte)
-            )
+            value, berechnung = _netto_ertrag_sensorwert(netto_ertrag, netto_herleitung)
         elif sensor.key == "einspeise_erloes_euro":
-            value = einspeise_erloes
-            if strompreis and getattr(strompreis, "einspeisung_variabel", False):
-                # #392: der €-Wert daneben ist je Monat mit dem gepflegten
-                # Monatssatz gerechnet — ein einzelner Satz im Text wäre
-                # eine Behauptung, die die Zahl nicht deckt.
-                berechnung = (
-                    f"{fmt_zahl(einspeisung, 0)} kWh × Monatssatz "
-                    f"(variable Vergütung, je Monat aufgelöst)"
-                )
-            elif strompreis:
-                berechnung = f"{fmt_zahl(einspeisung, 0)} × {fmt_zahl(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh"
+            value, berechnung = _einspeise_erloes_sensorwert(einspeise_erloes, einspeisung, strompreis)
         elif sensor.key == "eigenverbrauch_ersparnis_euro":
-            value = ev_ersparnis
-            if strompreis and ev_wandlungsverluste and ev_wandlungsverluste > 0:
-                # N-588: die Ersparnis bewertet den Eigenverbrauch ohne die Wandlungsverluste — der Text nennt beides.
-                berechnung = (
-                    f"({fmt_zahl(eigenverbrauch, 0)} − {fmt_zahl(ev_wandlungsverluste, 0)} Verluste) × "
-                    f"{fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
-                )
-            elif strompreis:
-                berechnung = f"{fmt_zahl(eigenverbrauch, 0)} × {fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
+            value, berechnung = _ev_ersparnis_sensorwert(ev_ersparnis, eigenverbrauch, ev_wandlungsverluste, strompreis)
         elif sensor.key == "co2_ersparnis_kg":
             value = co2_ersparnis
             berechnung = "PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)"
@@ -199,7 +261,74 @@ async def sensorwerte_erstellen(
                 berechnung=berechnung
             ))
 
-    # Investitions-Sensoren
+
+def _netto_ertrag_sensorwert(netto_ertrag, netto_herleitung):
+    """`netto_ertrag_euro`: Wert und Rechenweg aus der Ergebnis-Leiter."""
+    value = netto_ertrag
+    # Die Herleitung aus der Ergebnis-Leiter (03.10.2026): alle Posten, die etwas beitragen — bis dahin drei
+    # (Einspeise, EV, Sonstiges), während der Wert auch BKW-Rest, Erlös eigener Satz und USt trug.
+    # Das Rechenzeichen folgt dem Betrag (Sonstige Positionen können netto negativ sein); nur bei 0,00 €
+    # entscheidet die Rolle des Postens.
+    def _negativ(w) -> bool:
+        return w.betrag < 0 or (w.betrag == 0 and w.vorzeichen < 0)
+
+    berechnung = " ".join(
+        (("−" if _negativ(w) else "+") + " " if i else ("− " if _negativ(w) else ""))
+        + f"{fmt_zahl(abs(w.betrag), 2)} ({w.name})"
+        for i, w in enumerate(netto_herleitung.eingesetzte_werte)
+    )
+    return value, berechnung
+
+
+def _einspeise_erloes_sensorwert(einspeise_erloes, einspeisung, strompreis):
+    """`einspeise_erloes_euro`: Wert und Rechenweg (variable Vergütung #392 oder ein Satz)."""
+    berechnung = None
+    value = einspeise_erloes
+    if strompreis and getattr(strompreis, "einspeisung_variabel", False):
+        # #392: der €-Wert daneben ist je Monat mit dem gepflegten
+        # Monatssatz gerechnet — ein einzelner Satz im Text wäre
+        # eine Behauptung, die die Zahl nicht deckt.
+        berechnung = (
+            f"{fmt_zahl(einspeisung, 0)} kWh × Monatssatz "
+            f"(variable Vergütung, je Monat aufgelöst)"
+        )
+    elif strompreis:
+        berechnung = f"{fmt_zahl(einspeisung, 0)} × {fmt_zahl(strompreis.einspeiseverguetung_cent_kwh, 2)} ct/kWh"
+    return value, berechnung
+
+
+def _ev_ersparnis_sensorwert(ev_ersparnis, eigenverbrauch, ev_wandlungsverluste, strompreis):
+    """`eigenverbrauch_ersparnis_euro`: Wert und Rechenweg (mit Wandlungsverlusten, N-588)."""
+    berechnung = None
+    value = ev_ersparnis
+    if strompreis and ev_wandlungsverluste and ev_wandlungsverluste > 0:
+        # N-588: die Ersparnis bewertet den Eigenverbrauch ohne die Wandlungsverluste — der Text nennt beides.
+        berechnung = (
+            f"({fmt_zahl(eigenverbrauch, 0)} − {fmt_zahl(ev_wandlungsverluste, 0)} Verluste) × "
+            f"{fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
+        )
+    elif strompreis:
+        berechnung = f"{fmt_zahl(eigenverbrauch, 0)} × {fmt_zahl(strompreis.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh"
+    return value, berechnung
+
+
+def _investitions_sensoren(
+    sensor_values,
+    *,
+    amortisation_jahre,
+    betriebskosten_ges,
+    ersparnis_posten,
+    investition_gesamt,
+    investitionen,
+    jahres_ersparnis,
+    jahres_ertraege_ges,
+    kapitaleinsatz,
+    relevante_kosten,
+    roi_prozent,
+    sonstige_ausgaben_gesamt,
+    sonstige_ertraege_gesamt,
+):
+    """Investitions-Sensoren (`INVESTITION_SENSOREN`) an `sensor_values` anhängen."""
     for sensor in INVESTITION_SENSOREN:
         value = None
         berechnung = None
@@ -225,28 +354,15 @@ async def sensorwerte_erstellen(
                 value = roi_prozent
                 berechnung = f"{fmt_zahl(jahres_ersparnis, 2)} ÷ {fmt_zahl(kapitaleinsatz, 2)} × 100"
         elif sensor.key == "amortisation_jahre":
-            if amortisation_jahre is not None:
-                value = amortisation_jahre
-                # F-19: der Nenner ist der Kapitaleinsatz. Er wird ausgeschrieben,
-                # solange sonstige Positionen ihn von den relevanten Kosten
-                # unterscheiden — sonst bliebe die Differenz unerklärt (N-212).
-                if sonstige_ausgaben_gesamt or sonstige_ertraege_gesamt:
-                    _nenner = f"{fmt_zahl(relevante_kosten, 2)}"
-                    if sonstige_ausgaben_gesamt:
-                        _nenner += f" + {fmt_zahl(sonstige_ausgaben_gesamt, 2)} sonstige Ausgaben"
-                    # Bauschritt 7: die Erträge mindern den Nenner und werden
-                    # deshalb genauso ausgeschrieben — sonst bliebe die
-                    # Differenz zum Ergebnis unerklärt (N-212).
-                    if sonstige_ertraege_gesamt:
-                        _nenner += f" − {fmt_zahl(sonstige_ertraege_gesamt, 2)} sonstige Erträge"
-                    berechnung = f"({_nenner}) ÷ {fmt_zahl(jahres_ersparnis, 2)}"
-                else:
-                    berechnung = f"{fmt_zahl(kapitaleinsatz, 2)} ÷ {fmt_zahl(jahres_ersparnis, 2)}"
-                # Konzept §5/§8-6: die Annahme steht im selben Attribut wie der
-                # Rechenweg. Ein HA-Sensor hat keinen Tooltip — wer die Zahl in
-                # ein Dashboard hängt, sieht sonst eine Dauer ohne jede
-                # Voraussetzung.
-                berechnung += f" — {annahme_dauer_text(betriebskosten_jahr_euro=betriebskosten_ges)}"
+            value, berechnung = _amortisation_sensorwert(
+                amortisation_jahre,
+                betriebskosten_ges=betriebskosten_ges,
+                jahres_ersparnis=jahres_ersparnis,
+                kapitaleinsatz=kapitaleinsatz,
+                relevante_kosten=relevante_kosten,
+                sonstige_ausgaben_gesamt=sonstige_ausgaben_gesamt,
+                sonstige_ertraege_gesamt=sonstige_ertraege_gesamt,
+            )
 
         if value is not None:
             sensor_values.append(SensorValue(
@@ -255,66 +371,112 @@ async def sensorwerte_erstellen(
                 berechnung=berechnung
             ))
 
-    # Speicher-Sensoren (nur wenn Speicher vorhanden)
-    if speicher_kapazitaet > 0 or batterie_ladung > 0:
-        for sensor in SPEICHER_SENSOREN:
-            value = None
-            berechnung = None
 
-            if sensor.key == "speicher_zyklen":
-                if speicher_zyklen is not None:
-                    value = speicher_zyklen
-                    berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(speicher_kapazitaet, 1)}"
-            elif sensor.key == "speicher_effizienz_prozent":
-                if speicher_effizienz is not None:
-                    value = speicher_effizienz
-                    berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(batterie_ladung, 0)} × 100"
+def _amortisation_sensorwert(
+    amortisation_jahre,
+    *,
+    betriebskosten_ges,
+    jahres_ersparnis,
+    kapitaleinsatz,
+    relevante_kosten,
+    sonstige_ausgaben_gesamt,
+    sonstige_ertraege_gesamt,
+):
+    """`amortisation_jahre`: Wert und Rechenweg (Nenner Kapitaleinsatz, F-19/N-212) samt Annahme (Konzept §5/§8-6)."""
+    value = None
+    berechnung = None
+    if amortisation_jahre is not None:
+        value = amortisation_jahre
+        # F-19: der Nenner ist der Kapitaleinsatz. Er wird ausgeschrieben,
+        # solange sonstige Positionen ihn von den relevanten Kosten
+        # unterscheiden — sonst bliebe die Differenz unerklärt (N-212).
+        if sonstige_ausgaben_gesamt or sonstige_ertraege_gesamt:
+            _nenner = f"{fmt_zahl(relevante_kosten, 2)}"
+            if sonstige_ausgaben_gesamt:
+                _nenner += f" + {fmt_zahl(sonstige_ausgaben_gesamt, 2)} sonstige Ausgaben"
+            # Bauschritt 7: die Erträge mindern den Nenner und werden
+            # deshalb genauso ausgeschrieben — sonst bliebe die
+            # Differenz zum Ergebnis unerklärt (N-212).
+            if sonstige_ertraege_gesamt:
+                _nenner += f" − {fmt_zahl(sonstige_ertraege_gesamt, 2)} sonstige Erträge"
+            berechnung = f"({_nenner}) ÷ {fmt_zahl(jahres_ersparnis, 2)}"
+        else:
+            berechnung = f"{fmt_zahl(kapitaleinsatz, 2)} ÷ {fmt_zahl(jahres_ersparnis, 2)}"
+        # Konzept §5/§8-6: die Annahme steht im selben Attribut wie der
+        # Rechenweg. Ein HA-Sensor hat keinen Tooltip — wer die Zahl in
+        # ein Dashboard hängt, sieht sonst eine Dauer ohne jede
+        # Voraussetzung.
+        berechnung += f" — {annahme_dauer_text(betriebskosten_jahr_euro=betriebskosten_ges)}"
+    return value, berechnung
 
-            if value is not None:
-                sensor_values.append(SensorValue(
-                    definition=sensor,
-                    value=value,
-                    berechnung=berechnung
-                ))
 
-    # Letzter Import Sensoren (Status)
-    if monatsdaten:
-        # Finde den neuesten Monat (sortiert nach Jahr, dann Monat)
-        sorted_md = sorted(monatsdaten, key=lambda m: (m.jahr, m.monat), reverse=True)
-        letzter = sorted_md[0]
+def _speicher_sensoren(
+    sensor_values,
+    *,
+    batterie_entladung,
+    batterie_ladung,
+    speicher_effizienz,
+    speicher_kapazitaet,
+    speicher_zyklen,
+):
+    """Speicher-Sensoren (`SPEICHER_SENSOREN`) an `sensor_values` anhängen — nur gerufen, wenn ein Speicher vorhanden ist."""
+    for sensor in SPEICHER_SENSOREN:
+        value = None
+        berechnung = None
 
-        # Monatsnamen
-        monatsnamen = [
-            "", "Januar", "Februar", "März", "April", "Mai", "Juni",
-            "Juli", "August", "September", "Oktober", "November", "Dezember"
-        ]
-        monatsname = monatsnamen[letzter.monat] if 1 <= letzter.monat <= 12 else str(letzter.monat)
+        if sensor.key == "speicher_zyklen":
+            if speicher_zyklen is not None:
+                value = speicher_zyklen
+                berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(speicher_kapazitaet, 1)}"
+        elif sensor.key == "speicher_effizienz_prozent":
+            if speicher_effizienz is not None:
+                value = speicher_effizienz
+                berechnung = f"{fmt_zahl(batterie_entladung, 0)} ÷ {fmt_zahl(batterie_ladung, 0)} × 100"
 
-        for sensor in LETZTER_IMPORT_SENSOREN:
-            value = None
-            berechnung = None
+        if value is not None:
+            sensor_values.append(SensorValue(
+                definition=sensor,
+                value=value,
+                berechnung=berechnung
+            ))
 
-            if sensor.key == "letzter_import_jahr":
-                value = letzter.jahr
-                berechnung = f"Neuester Datensatz: {monatsname} {letzter.jahr}"
-            elif sensor.key == "letzter_import_monat":
-                value = letzter.monat
-                berechnung = f"Monat {letzter.monat} ({monatsname})"
-            elif sensor.key == "letzter_import_monat_name":
-                value = f"{monatsname} {letzter.jahr}"
-                berechnung = f"Formatiert aus {letzter.monat}/{letzter.jahr}"
-            elif sensor.key == "anzahl_monate_erfasst":
-                value = len(monatsdaten)
-                berechnung = f"Erfasste Monatsdaten in der Datenbank"
 
-            if value is not None:
-                sensor_values.append(SensorValue(
-                    definition=sensor,
-                    value=value,
-                    berechnung=berechnung
-                ))
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("sensor_values",) if k in _loc}
+def _letzter_import_sensoren(sensor_values, monatsdaten):
+    """Letzter-Import-Sensoren (`LETZTER_IMPORT_SENSOREN`) an `sensor_values` anhängen — nur gerufen mit Monatsdaten."""
+    # Finde den neuesten Monat (sortiert nach Jahr, dann Monat)
+    sorted_md = sorted(monatsdaten, key=lambda m: (m.jahr, m.monat), reverse=True)
+    letzter = sorted_md[0]
+
+    # Monatsnamen
+    monatsnamen = [
+        "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember"
+    ]
+    monatsname = monatsnamen[letzter.monat] if 1 <= letzter.monat <= 12 else str(letzter.monat)
+
+    for sensor in LETZTER_IMPORT_SENSOREN:
+        value = None
+        berechnung = None
+
+        if sensor.key == "letzter_import_jahr":
+            value = letzter.jahr
+            berechnung = f"Neuester Datensatz: {monatsname} {letzter.jahr}"
+        elif sensor.key == "letzter_import_monat":
+            value = letzter.monat
+            berechnung = f"Monat {letzter.monat} ({monatsname})"
+        elif sensor.key == "letzter_import_monat_name":
+            value = f"{monatsname} {letzter.jahr}"
+            berechnung = f"Formatiert aus {letzter.monat}/{letzter.jahr}"
+        elif sensor.key == "anzahl_monate_erfasst":
+            value = len(monatsdaten)
+            berechnung = f"Erfasste Monatsdaten in der Datenbank"
+
+        if value is not None:
+            sensor_values.append(SensorValue(
+                definition=sensor,
+                value=value,
+                berechnung=berechnung
+            ))
 
 
 async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter):
@@ -323,172 +485,229 @@ async def prognose_und_preis_sensoren(*, anlage, db, sensor_values, skip_jitter)
 
     Aus `calculate_anlage_sensors` Zeilen 1049-1171 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 8b.
     """
+    # RF-15: die beiden Sensor-Gruppen sind Phasen-Funktionen weiter unten (Schleife + Dispatch je Schlüssel); hier
+    # bleiben die zwei Abrufe — ihre Namen sind Patch-Ziele der Tests (`anlage_sensorwerte.berechne_*_export`) — und
+    # die zwei Weichen „Ergebnis vorhanden".
     # #150 A: eedc-eigene PV-Prognose (OpenMeteo × Lernfaktor) — anlage-weit,
     # koordinaten-/PV-gated, netzwerk-tolerant (None → Sensoren entfallen).
     # Stundenprofil reist als Attribut mit (kein eigenes Topic).
     # N-531: On-Demand-Wege überspringen den Open-Meteo-Jitter (bis 30 s je Aufruf), der Cron-Job nicht.
     prognose = await berechne_prognose_export(db, anlage, skip_jitter=skip_jitter)
     if prognose:
-        for sensor in PROGNOSE_SENSOREN:
-            value = None
-            zusatz: dict = {}
-            if sensor.key == "eedc_prognose_heute_kwh":
-                value = prognose["heute_kwh"]
-                if prognose.get("stundenprofil_heute"):
-                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_heute"]}
-            elif sensor.key == "eedc_prognose_heute_rollend_kwh":
-                value = prognose["heute_rollend_kwh"]
-            elif sensor.key == "eedc_prognose_rest_today_kwh":
-                value = prognose["rest_today_kwh"]
-            elif sensor.key == "eedc_prognose_day_plus_1_kwh":
-                value = prognose["day_plus_1_kwh"]
-                if prognose.get("stundenprofil_day_plus_1"):
-                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_1"]}
-            elif sensor.key == "eedc_prognose_day_plus_2_kwh":
-                value = prognose["day_plus_2_kwh"]
-                if prognose.get("stundenprofil_day_plus_2"):
-                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_2"]}
-            elif sensor.key == "eedc_prognose_day_plus_3_kwh":
-                value = prognose["day_plus_3_kwh"]
-                if prognose.get("stundenprofil_day_plus_3"):
-                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_3"]}
-            elif sensor.key == "eedc_prognose_heute_vormittag_kwh":
-                value = prognose.get("heute_vormittag_kwh")
-                if prognose.get("solar_noon_heute"):
-                    zusatz = {"solar_noon": prognose["solar_noon_heute"]}
-            elif sensor.key == "eedc_prognose_heute_nachmittag_kwh":
-                value = prognose.get("heute_nachmittag_kwh")
-                if prognose.get("solar_noon_heute"):
-                    zusatz = {"solar_noon": prognose["solar_noon_heute"]}
-            elif sensor.key == "eedc_prognose_morgen_vormittag_kwh":
-                value = prognose.get("morgen_vormittag_kwh")
-                if prognose.get("solar_noon_morgen"):
-                    zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
-            elif sensor.key == "eedc_prognose_morgen_nachmittag_kwh":
-                value = prognose.get("morgen_nachmittag_kwh")
-                if prognose.get("solar_noon_morgen"):
-                    zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
-            elif sensor.key == "eedc_speicher_voll_um":
-                value = prognose["speicher_voll_um"]
-                # Die Verbrauchsannahme der Simulation reist mit (N-392) — ein
-                # ANDERES Modell als beim Nachbarn darunter (8-Wochen-Profil
-                # statt 7-Tage-Profil); das Attribut `profil_typ` sagt es.
-                if value is not None and prognose.get("speicher_verbrauch_profil"):
-                    zusatz = dict(prognose["speicher_verbrauch_profil"])
-                    # V1: dazu die START-Annahme (Slot + Anteil). Der Wert
-                    # verschiebt sich mit ihr um bis zu eine halbe Stunde —
-                    # eine Automation, die auf „HH:MM" schaltet, soll die
-                    # Annahme lesen können statt sie zu raten.
-                    zusatz.update(prognose.get("speicher_sim_annahme") or {})
-            elif sensor.key == "eedc_verbrauchsprognose_heute_kwh":
-                value = prognose.get("verbrauch_heute_kwh")
-                if value is not None:
-                    # Die Grundlage reist mit — dieselben drei Angaben, die der
-                    # Tooltip der Kachel nennt (Profiltyp, Tage, belegte Slots).
-                    zusatz = {
-                        "profil_typ": prognose.get("verbrauch_profil_typ"),
-                        "profil_tage": prognose.get("verbrauch_profil_tage"),
-                        "profil_slots": prognose.get("verbrauch_profil_slots"),
-                    }
-                    # ── S3/P1 (21.09.2026): die Reihe, aus der die Summe wird ──
-                    #
-                    # ⭐ Sie lag intern laengst vor und wurde nur nie exportiert.
-                    # Erst mit ihr ist die **Ueberschuss-Prognose je Stunde**
-                    # rechenbar — die Groesse, die eine Wallbox, eine Waermepumpe
-                    # und eine Speicher-Arbitrage brauchen und keines dieser
-                    # Systeme selbst bilden kann. Slot-Konvention wie bei der
-                    # PV-Reihe daneben (Index = Stunde der Prozesszone).
-                    #
-                    # ⚠ `wp_stundenprofil_kwh` ist eine **Teilmenge** von
-                    # `stundenprofil_kwh`, kein Summand daneben — wer beide
-                    # addiert, zaehlt den Waermepumpenstrom doppelt. Derselbe
-                    # Satz wie bei den Modus-Sensoren der Waermepumpe.
-                    if prognose.get("verbrauch_stundenprofil_kwh"):
-                        zusatz["stundenprofil_kwh"] = prognose["verbrauch_stundenprofil_kwh"]
-                    if prognose.get("verbrauch_wp_stundenprofil_kwh"):
-                        zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_wp_stundenprofil_kwh"]
-            elif sensor.key == "eedc_verbrauchsprognose_morgen_kwh":
-                # N-591: derselbe Aufbau wie `…_heute` darüber, dazu das Datum —
-                # nach Mitternacht muss eine Automation ein stehengebliebenes
-                # „morgen" erkennen können (Präzedenz N-104, `eedc_preis_rang`).
-                value = prognose.get("verbrauch_morgen_kwh")
-                if value is not None:
-                    zusatz = {
-                        "profil_typ": prognose.get("verbrauch_morgen_profil_typ"),
-                        "profil_tage": prognose.get("verbrauch_morgen_profil_tage"),
-                        "profil_slots": prognose.get("verbrauch_morgen_profil_slots"),
-                        "datum": prognose.get("verbrauch_morgen_datum"),
-                    }
-                    if prognose.get("verbrauch_morgen_stundenprofil_kwh"):
-                        zusatz["stundenprofil_kwh"] = prognose["verbrauch_morgen_stundenprofil_kwh"]
-                    # Teilmenge von `stundenprofil_kwh`, kein Summand (wie heute).
-                    if prognose.get("verbrauch_morgen_wp_stundenprofil_kwh"):
-                        zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_morgen_wp_stundenprofil_kwh"]
-
-            if value is not None:
-                sensor_values.append(SensorValue(
-                    definition=sensor, value=value, zusatz_attribute=zusatz
-                ))
+        _prognose_sensoren(prognose, sensor_values)
 
     # #150 B: Börsenpreis-Trigger (Rang je Tag-/Nacht-Fenster) — Rang-Profil als Attribut.
     preis = await berechne_preis_export(db, anlage)
     if preis:
-        for sensor in PREIS_SENSOREN:
-            value = None
-            zusatz = {}
-            if sensor.key == "eedc_preis_rang":
-                value = preis["preis_rang"]
-                if preis.get("rang_profil"):
-                    zusatz = {"rang_profil": preis["rang_profil"]}
-                if preis.get("guenstig_schwelle_cent") is not None:
-                    zusatz["guenstig_schwelle_cent"] = preis["guenstig_schwelle_cent"]
-                # Die Bezugsgröße der Schwelle reist mit: ohne sie ist im
-                # Rang-Profil keine eigene Schwelle rechenbar (#335/N-105).
-                if preis.get("optimierter_durchschnitt_cent") is not None:
-                    zusatz["optimierter_durchschnitt_cent"] = preis["optimierter_durchschnitt_cent"]
-                # Der Kalendertag des Profils (N-104). Ohne ihn ist ein
-                # stehengebliebenes Profil nach Mitternacht nicht von einem
-                # aktuellen zu unterscheiden.
-                if preis.get("datum"):
-                    zusatz["datum"] = preis["datum"]
-                # Morgen — sobald die Day-Ahead-Auktion veröffentlicht hat
-                # (N-104, Melder rapahl). `morgen_verfuegbar` ist immer gesetzt,
-                # damit eine Automation „noch nicht da" von „gibt es nicht"
-                # unterscheiden kann, statt auf ein fehlendes Attribut zu prüfen.
-                zusatz["morgen_verfuegbar"] = bool(preis.get("morgen_verfuegbar"))
-                for schluessel in (
-                    "datum_morgen",
-                    "rang_profil_morgen",
-                    "guenstig_schwelle_cent_morgen",
-                    "optimierter_durchschnitt_cent_morgen",
-                ):
-                    if preis.get(schluessel) is not None:
-                        zusatz[schluessel] = preis[schluessel]
-            elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
-                value = preis["guenstige_stunden_anzahl"]
-            elif sensor.key == "eedc_preis_guenstige_stunden_tag":
-                value = preis["guenstige_stunden_tag"]
-            elif sensor.key == "eedc_preis_guenstige_stunden_nacht":
-                value = preis["guenstige_stunden_nacht"]
-            elif sensor.key == "eedc_preis_aktuell_cent":
-                value = preis["preis_aktuell_cent"]
-            elif sensor.key == "eedc_preis_tages_durchschnitt_cent":
-                value = preis["tages_durchschnitt_cent"]
-            elif sensor.key == "eedc_preis_optimierter_durchschnitt_cent":
-                value = preis["optimierter_durchschnitt_cent"]
-            elif sensor.key == "eedc_preis_abstand_prozent":
-                value = preis["abstand_prozent"]
-            elif sensor.key == "eedc_preis_abstand_cent":
-                value = preis["abstand_cent"]
-
-            if value is not None:
-                sensor_values.append(SensorValue(
-                    definition=sensor, value=value, zusatz_attribute=zusatz
-                ))
+        _preis_sensoren(preis, sensor_values)
     # S2/S3: beide Ergebnisse gehen an die Steuerungs-Phase weiter — sie darf
     # weder Preis noch Prognose ein zweites Mal holen. Ein zweiter Abruf waere
     # nicht nur langsam (Open-Meteo, Markt-API), er waere eine zweite
     # Momentaufnahme: derselbe Sensor und sein Fenster-Attribut stuenden dann
     # auf verschiedenen Staenden desselben Tages.
     return {"prognose": prognose, "preis": preis}
+
+
+# ── RF-15: Phasen von `prognose_und_preis_sensoren` ─────────────────────────────────────────────────────────────────────
+#
+# Schleife + Dispatch je Schlüssel (Muster RF-8). Die Zweige `sensor.key == "…"` bleiben in dieser Form — der Wächter
+# `test_395_verbrauchsprognose_sensor.py::test_jeder_prognose_schluessel_hat_einen_leser_in_der_route` sucht genau sie.
+# Schlüssel, Attribute und Einheiten sind Anwender-Vertrag (Sensor-Referenz §8a/§11); der Wert wird NIE gerundet.
+
+def _prognose_sensoren(prognose, sensor_values):
+    """#150 A: je Sensor der Prognose-Gruppe Wert und Attribute (`_prognose_sensorwert`) an `sensor_values` anhängen."""
+    for sensor in PROGNOSE_SENSOREN:
+        value, zusatz = _prognose_sensorwert(sensor, prognose)
+        if value is not None:
+            sensor_values.append(SensorValue(
+                definition=sensor, value=value, zusatz_attribute=zusatz
+            ))
+
+
+def _prognose_sensorwert(sensor, prognose):
+    """Wert und Zusatz-Attribute eines Prognose-Sensors — `(None, {})` für einen unbekannten Schlüssel."""
+    value = None
+    zusatz: dict = {}
+    if sensor.key == "eedc_prognose_heute_kwh":
+        value = prognose["heute_kwh"]
+        if prognose.get("stundenprofil_heute"):
+            zusatz = {"stundenprofil_kwh": prognose["stundenprofil_heute"]}
+    elif sensor.key == "eedc_prognose_heute_rollend_kwh":
+        value = prognose["heute_rollend_kwh"]
+    elif sensor.key == "eedc_prognose_rest_today_kwh":
+        value = prognose["rest_today_kwh"]
+    elif sensor.key == "eedc_prognose_day_plus_1_kwh":
+        value = prognose["day_plus_1_kwh"]
+        if prognose.get("stundenprofil_day_plus_1"):
+            zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_1"]}
+    elif sensor.key == "eedc_prognose_day_plus_2_kwh":
+        value = prognose["day_plus_2_kwh"]
+        if prognose.get("stundenprofil_day_plus_2"):
+            zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_2"]}
+    elif sensor.key == "eedc_prognose_day_plus_3_kwh":
+        value = prognose["day_plus_3_kwh"]
+        if prognose.get("stundenprofil_day_plus_3"):
+            zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_3"]}
+    elif sensor.key == "eedc_prognose_heute_vormittag_kwh":
+        value = prognose.get("heute_vormittag_kwh")
+        if prognose.get("solar_noon_heute"):
+            zusatz = {"solar_noon": prognose["solar_noon_heute"]}
+    elif sensor.key == "eedc_prognose_heute_nachmittag_kwh":
+        value = prognose.get("heute_nachmittag_kwh")
+        if prognose.get("solar_noon_heute"):
+            zusatz = {"solar_noon": prognose["solar_noon_heute"]}
+    elif sensor.key == "eedc_prognose_morgen_vormittag_kwh":
+        value = prognose.get("morgen_vormittag_kwh")
+        if prognose.get("solar_noon_morgen"):
+            zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
+    elif sensor.key == "eedc_prognose_morgen_nachmittag_kwh":
+        value = prognose.get("morgen_nachmittag_kwh")
+        if prognose.get("solar_noon_morgen"):
+            zusatz = {"solar_noon": prognose["solar_noon_morgen"]}
+    elif sensor.key == "eedc_speicher_voll_um":
+        value, zusatz = _speicher_voll_um_sensorwert(prognose)
+    elif sensor.key == "eedc_verbrauchsprognose_heute_kwh":
+        value, zusatz = _verbrauchsprognose_heute_sensorwert(prognose)
+    elif sensor.key == "eedc_verbrauchsprognose_morgen_kwh":
+        value, zusatz = _verbrauchsprognose_morgen_sensorwert(prognose)
+    return value, zusatz
+
+
+def _speicher_voll_um_sensorwert(prognose):
+    """`eedc_speicher_voll_um`: Wert und die Verbrauchsannahme der Speicher-Simulation (N-392, V1)."""
+    zusatz: dict = {}
+    value = prognose["speicher_voll_um"]
+    # Die Verbrauchsannahme der Simulation reist mit (N-392) — ein
+    # ANDERES Modell als beim Nachbarn darunter (8-Wochen-Profil
+    # statt 7-Tage-Profil); das Attribut `profil_typ` sagt es.
+    if value is not None and prognose.get("speicher_verbrauch_profil"):
+        zusatz = dict(prognose["speicher_verbrauch_profil"])
+        # V1: dazu die START-Annahme (Slot + Anteil). Der Wert
+        # verschiebt sich mit ihr um bis zu eine halbe Stunde —
+        # eine Automation, die auf „HH:MM" schaltet, soll die
+        # Annahme lesen können statt sie zu raten.
+        zusatz.update(prognose.get("speicher_sim_annahme") or {})
+    return value, zusatz
+
+
+def _verbrauchsprognose_heute_sensorwert(prognose):
+    """`eedc_verbrauchsprognose_heute_kwh`: Wert, Profil-Grundlage und Stundenreihen (S3/P1)."""
+    zusatz: dict = {}
+    value = prognose.get("verbrauch_heute_kwh")
+    if value is not None:
+        # Die Grundlage reist mit — dieselben drei Angaben, die der
+        # Tooltip der Kachel nennt (Profiltyp, Tage, belegte Slots).
+        zusatz = {
+            "profil_typ": prognose.get("verbrauch_profil_typ"),
+            "profil_tage": prognose.get("verbrauch_profil_tage"),
+            "profil_slots": prognose.get("verbrauch_profil_slots"),
+        }
+        # ── S3/P1 (21.09.2026): die Reihe, aus der die Summe wird ──
+        #
+        # ⭐ Sie lag intern laengst vor und wurde nur nie exportiert.
+        # Erst mit ihr ist die **Ueberschuss-Prognose je Stunde**
+        # rechenbar — die Groesse, die eine Wallbox, eine Waermepumpe
+        # und eine Speicher-Arbitrage brauchen und keines dieser
+        # Systeme selbst bilden kann. Slot-Konvention wie bei der
+        # PV-Reihe daneben (Index = Stunde der Prozesszone).
+        #
+        # ⚠ `wp_stundenprofil_kwh` ist eine **Teilmenge** von
+        # `stundenprofil_kwh`, kein Summand daneben — wer beide
+        # addiert, zaehlt den Waermepumpenstrom doppelt. Derselbe
+        # Satz wie bei den Modus-Sensoren der Waermepumpe.
+        if prognose.get("verbrauch_stundenprofil_kwh"):
+            zusatz["stundenprofil_kwh"] = prognose["verbrauch_stundenprofil_kwh"]
+        if prognose.get("verbrauch_wp_stundenprofil_kwh"):
+            zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_wp_stundenprofil_kwh"]
+    return value, zusatz
+
+
+def _verbrauchsprognose_morgen_sensorwert(prognose):
+    """`eedc_verbrauchsprognose_morgen_kwh`: wie heute, dazu das Datum (N-591)."""
+    zusatz: dict = {}
+    # N-591: derselbe Aufbau wie `…_heute` darüber, dazu das Datum —
+    # nach Mitternacht muss eine Automation ein stehengebliebenes
+    # „morgen" erkennen können (Präzedenz N-104, `eedc_preis_rang`).
+    value = prognose.get("verbrauch_morgen_kwh")
+    if value is not None:
+        zusatz = {
+            "profil_typ": prognose.get("verbrauch_morgen_profil_typ"),
+            "profil_tage": prognose.get("verbrauch_morgen_profil_tage"),
+            "profil_slots": prognose.get("verbrauch_morgen_profil_slots"),
+            "datum": prognose.get("verbrauch_morgen_datum"),
+        }
+        if prognose.get("verbrauch_morgen_stundenprofil_kwh"):
+            zusatz["stundenprofil_kwh"] = prognose["verbrauch_morgen_stundenprofil_kwh"]
+        # Teilmenge von `stundenprofil_kwh`, kein Summand (wie heute).
+        if prognose.get("verbrauch_morgen_wp_stundenprofil_kwh"):
+            zusatz["wp_stundenprofil_kwh"] = prognose["verbrauch_morgen_wp_stundenprofil_kwh"]
+    return value, zusatz
+
+
+def _preis_sensoren(preis, sensor_values):
+    """#150 B: je Sensor der Börsenpreis-Gruppe Wert und Attribute (`_preis_sensorwert`) an `sensor_values` anhängen."""
+    for sensor in PREIS_SENSOREN:
+        value, zusatz = _preis_sensorwert(sensor, preis)
+        if value is not None:
+            sensor_values.append(SensorValue(
+                definition=sensor, value=value, zusatz_attribute=zusatz
+            ))
+
+
+def _preis_sensorwert(sensor, preis):
+    """Wert und Zusatz-Attribute eines Börsenpreis-Sensors — `(None, {})` für einen unbekannten Schlüssel."""
+    value = None
+    zusatz = {}
+    if sensor.key == "eedc_preis_rang":
+        value, zusatz = _preis_rang_sensorwert(preis)
+    elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
+        value = preis["guenstige_stunden_anzahl"]
+    elif sensor.key == "eedc_preis_guenstige_stunden_tag":
+        value = preis["guenstige_stunden_tag"]
+    elif sensor.key == "eedc_preis_guenstige_stunden_nacht":
+        value = preis["guenstige_stunden_nacht"]
+    elif sensor.key == "eedc_preis_aktuell_cent":
+        value = preis["preis_aktuell_cent"]
+    elif sensor.key == "eedc_preis_tages_durchschnitt_cent":
+        value = preis["tages_durchschnitt_cent"]
+    elif sensor.key == "eedc_preis_optimierter_durchschnitt_cent":
+        value = preis["optimierter_durchschnitt_cent"]
+    elif sensor.key == "eedc_preis_abstand_prozent":
+        value = preis["abstand_prozent"]
+    elif sensor.key == "eedc_preis_abstand_cent":
+        value = preis["abstand_cent"]
+    return value, zusatz
+
+
+def _preis_rang_sensorwert(preis):
+    """`eedc_preis_rang`: Rang der laufenden Stunde, Profil, Schwelle, Datum und der Satz für morgen (N-104, #335/N-105)."""
+    zusatz = {}
+    value = preis["preis_rang"]
+    if preis.get("rang_profil"):
+        zusatz = {"rang_profil": preis["rang_profil"]}
+    if preis.get("guenstig_schwelle_cent") is not None:
+        zusatz["guenstig_schwelle_cent"] = preis["guenstig_schwelle_cent"]
+    # Die Bezugsgröße der Schwelle reist mit: ohne sie ist im
+    # Rang-Profil keine eigene Schwelle rechenbar (#335/N-105).
+    if preis.get("optimierter_durchschnitt_cent") is not None:
+        zusatz["optimierter_durchschnitt_cent"] = preis["optimierter_durchschnitt_cent"]
+    # Der Kalendertag des Profils (N-104). Ohne ihn ist ein
+    # stehengebliebenes Profil nach Mitternacht nicht von einem
+    # aktuellen zu unterscheiden.
+    if preis.get("datum"):
+        zusatz["datum"] = preis["datum"]
+    # Morgen — sobald die Day-Ahead-Auktion veröffentlicht hat
+    # (N-104, Melder rapahl). `morgen_verfuegbar` ist immer gesetzt,
+    # damit eine Automation „noch nicht da" von „gibt es nicht"
+    # unterscheiden kann, statt auf ein fehlendes Attribut zu prüfen.
+    zusatz["morgen_verfuegbar"] = bool(preis.get("morgen_verfuegbar"))
+    for schluessel in (
+        "datum_morgen",
+        "rang_profil_morgen",
+        "guenstig_schwelle_cent_morgen",
+        "optimierter_durchschnitt_cent_morgen",
+    ):
+        if preis.get(schluessel) is not None:
+            zusatz[schluessel] = preis[schluessel]
+    return value, zusatz
 

@@ -251,6 +251,16 @@ def test_produzent_liefert_ungerundet():
                  "_wp_monatsfaltung", "_wp_nachtrag", "_wp_zaehler", "_wp_sensorwert", "_wp_modus_sensor",
                  "_wp_arbeitszahl_sensor", "_wp_ersparnis_sensor"):
         assert "round(" not in inspect.getsource(getattr(investition_sensoren, name)), name
+    # RF-15: die Phasen des Anlagen-Rechners in `anlage_sensorwerte.py` ebenso — seit Vorlage 8b (18.09.2026) lagen
+    # `sensorwerte_erstellen` und `prognose_und_preis_sensoren` ausserhalb dieses Sichtfelds.
+    from backend.api.routes.ha_export import anlage_sensorwerte
+
+    for name in ("sensorwerte_erstellen", "_energie_sensoren", "_netto_ertrag_sensorwert", "_einspeise_erloes_sensorwert",
+                 "_ev_ersparnis_sensorwert", "_investitions_sensoren", "_amortisation_sensorwert", "_speicher_sensoren",
+                 "_letzter_import_sensoren", "prognose_und_preis_sensoren", "_prognose_sensoren", "_prognose_sensorwert",
+                 "_speicher_voll_um_sensorwert", "_verbrauchsprognose_heute_sensorwert",
+                 "_verbrauchsprognose_morgen_sensorwert", "_preis_sensoren", "_preis_sensorwert", "_preis_rang_sensorwert"):
+        assert "round(" not in inspect.getsource(getattr(anlage_sensorwerte, name)), name
 
 
 #: N-694: Hilfsfunktionen, die Sensorwerte UND Attribute bilden. Die Attribute rundet die Grenze nicht, dort ist
