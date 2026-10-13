@@ -100,6 +100,8 @@ export function baueTagKpis(
   const vtTxt = vt && vt.erzeugung != null ? `VT: ${fmtKwh(vt.erzeugung)} kWh` : null
   // N-635: ein Tag mit Speicher-Bewegung zeigt den vollen Rechenweg des Eigenverbrauchs.
   const mitSpeicher = (t.speicher_ladung ?? 0) > 0 || (t.speicher_entladung ?? 0) > 0
+  // #110: V2H-Rückspeisung des Tages (Backend, Zählerpfad) — nur im Rechenweg, wenn > 0.
+  const mitV2h = (t.v2h_entladung ?? 0) > 0
 
   // R15-1: Kosten-Kacheln — nur wenn die Tagesdaten es hergeben. Netzladung-
   // Kosten brauchen den TEP-Tages-Ladepreis (#264); der Tages-Ø-Bezugspreis
@@ -184,17 +186,24 @@ export function baueTagKpis(
       // er `PV − Einspeisung` und hieß deshalb „PV-Eigenverbrauch · inkl.
       // Speicherladung". Ohne Speicher sind beide Formeln gleich; dann bleibt der
       // kürzere Rechenweg stehen statt zweier Null-Glieder.
+      // #110: die V2H-Rückspeisung ist der dritte Summand (wie im Monat) — im
+      // Rechenweg nur, wenn der Tag sie trägt (> 0). Gerechnet wird im Backend.
       title: 'Eigenverbrauch', value: fmtKwh(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
       subtitle: `EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmtKwh(vt.eigenverbrauch)} kWh` : ''}`,
       ...(mitSpeicher
         ? {
-            formel: 'Direktverbrauch + Speicher-Entladung',
-            berechnung: `(${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} − ${fmtKwh(t.speicher_ladung)}) + ${fmtKwh(t.speicher_entladung)} kWh`,
+            formel: mitV2h ? 'Direktverbrauch + Speicher-Entladung + V2H-Rückspeisung' : 'Direktverbrauch + Speicher-Entladung',
+            berechnung: `(${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} − ${fmtKwh(t.speicher_ladung)}) + ${fmtKwh(t.speicher_entladung)}${mitV2h ? ` + ${fmtKwh(t.v2h_entladung)}` : ''} kWh`,
           }
-        : {
-            formel: 'PV-Erzeugung − Einspeisung',
-            berechnung: `${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} kWh`,
-          }),
+        : mitV2h
+          ? {
+              formel: 'Direktverbrauch + V2H-Rückspeisung',
+              berechnung: `(${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)}) + ${fmtKwh(t.v2h_entladung)} kWh`,
+            }
+          : {
+              formel: 'PV-Erzeugung − Einspeisung',
+              berechnung: `${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} kWh`,
+            }),
       ergebnis: `= ${fmtKwh(t.eigenverbrauch)} kWh`,
     },
     {

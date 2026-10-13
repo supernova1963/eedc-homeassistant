@@ -176,6 +176,8 @@ export interface AktuellerMonatResponse {
   speicher_ladung_kwh: number | null
   speicher_entladung_kwh: number | null
   speicher_ladung_netz_kwh: number | null
+  /** #427: `'tageswerte'` = im laufenden Monat ohne Monatsabschluss die Summe der abgelaufenen Tage (Cockpit → Tag). */
+  speicher_ladung_netz_herkunft?: string | null
   speicher_wirkungsgrad_prozent: number | null
   speicher_vollzyklen: number | null
   speicher_kapazitaet_kwh: number | null

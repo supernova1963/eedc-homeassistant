@@ -41,6 +41,11 @@ WAERMEPUMPE_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("waermepumpe_",)
 WALLBOX_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("wallbox_", "eauto_")
 BATTERIE_KOMPONENTEN_PREFIXE: tuple[str, ...] = ("batterie_",)
 SONSTIGES_KOMPONENTEN_PREFIX: str = "sonstige_"
+#: #110 V2H-Tageswert (Konzept §2, E2): die Rückspeisung eines E-Autos ins Haus als **Tagesgröße** im Rollup
+#: `TagesZusammenfassung.komponenten_kwh["v2h_<id>"]` (Beitragsschicht, Ziel-Schlüssel neben `eauto_<id>`, das
+#: weiter nur die Heimladung trägt). Kein Stundenwert, keine Spalte der Stundenzeile — und KEIN Präfix der
+#: Wallbox-/E-Auto-Summe oben: V2H ist Quelle, nicht Ladung.
+V2H_KOMPONENTEN_PREFIX: str = "v2h_"
 
 
 # ─── Σ-Helper ───────────────────────────────────────────────────────────────
@@ -425,6 +430,18 @@ def geraete_spalte_kw(
     if not treffer:
         return None
     return abs(sum(treffer))
+
+
+def summe_v2h_kwh(komponenten_kwh: Optional[dict]) -> Optional[float]:
+    """Tages-Σ der V2H-Rückspeisung (`v2h_<id>`-Keys, #110) — ``None``, wenn die Tageszeile keinen solchen Key trägt.
+
+    ⚠ ``None`` ist nicht 0: ohne Key hat der Tag keine Aussage zu V2H (kein Zähler, Altbestand, Standalone ohne
+    Rollup); ein Key mit 0,0 ist eine gemessene Null und bleibt es."""
+    if not komponenten_kwh:
+        return None
+    werte = [float(v) for k, v in komponenten_kwh.items()
+             if str(k).startswith(V2H_KOMPONENTEN_PREFIX) and isinstance(v, (int, float))]
+    return sum(werte) if werte else None
 
 
 def summe_batterie_netto_kwh(komponenten_kwh: Optional[dict]) -> float:

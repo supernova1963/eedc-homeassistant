@@ -847,7 +847,7 @@ async def _berechne_monat(
     sonstige_ertraege_total = _out["sonstige_ertraege_total"]
     sonstige_netto_total = _out["sonstige_netto_total"]
     # ── komponenten_detail (Vorlage 2: Abschnitt in komponenten.py, Schnittstelle 15 ein / 33 aus) ──
-    _out = await komponenten_detail(_wp_abgrenzung_je_funktion=_wp_abgrenzung_je_funktion, _wp_funktion=_wp_funktion, _wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, anlage_id=anlage_id, db=db, fenster=fenster, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, wp_fakten=_wp_kanal, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, wp_abgrenzung_verletzt=wp_abgrenzung_verletzt, wp_arbeitszahl=wp_arbeitszahl, wp_waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh)
+    _out = await komponenten_detail(_wp_abgrenzung_je_funktion=_wp_abgrenzung_je_funktion, _wp_funktion=_wp_funktion, _wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, anlage_id=anlage_id, db=db, fenster=fenster, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, wp_fakten=_wp_kanal, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, wp_abgrenzung_verletzt=wp_abgrenzung_verletzt, wp_arbeitszahl=wp_arbeitszahl, wp_waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh, anlage=anlage, ist_aktueller_monat=ist_aktueller_monat, heute=now.date())
     mf_bkw = _out["mf_bkw"]
     mf_emob = _out["mf_emob"]
     mf_sonstiges = _out["mf_sonstiges"]
@@ -862,6 +862,7 @@ async def _berechne_monat(
     speicher_imd_ladepreis = _out["speicher_imd_ladepreis"]
     speicher_kapazitaet = _out["speicher_kapazitaet"]
     speicher_ladung_netz = _out["speicher_ladung_netz"]
+    speicher_ladung_netz_herkunft = _out["speicher_ladung_netz_herkunft"]
     speicher_soc_drift_flag = _out["speicher_soc_drift_flag"]
     speicher_vollzyklen = _out["speicher_vollzyklen"]
     speicher_wirkungsgrad = _out["speicher_wirkungsgrad"]
@@ -1007,6 +1008,7 @@ async def _berechne_monat(
         speicher_ladung_kwh=speicher_ladung,
         speicher_entladung_kwh=speicher_entladung,
         speicher_ladung_netz_kwh=speicher_ladung_netz,
+        speicher_ladung_netz_herkunft=speicher_ladung_netz_herkunft,
         speicher_wirkungsgrad_prozent=speicher_wirkungsgrad,
         speicher_wirkungsgrad_quelle=speicher_wirkungsgrad_quelle,
         speicher_vollzyklen=speicher_vollzyklen,

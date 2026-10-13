@@ -90,8 +90,9 @@ export function baueTagAlsMonat(
   // (Rollup leer: `tag.bkw` = 0, `tag.sonstiges_*` = null — der Server fällt
   // selbst schon auf die Stunden zurück, `tage_werte.py`).
   // ⚠ E-Mobilität bleibt hier bewusst auf den Stunden: `TagWerte` trägt keinen
-  // Zählerpfad-Tageswert für sie, und die Heimlade-Zuordnung (Auto vor Wallbox,
-  // N-555) gehört nicht in diese Datei.
+  // Zählerpfad-Tageswert für die Ladung, und die Heimlade-Zuordnung (Auto vor Wallbox,
+  // N-555) gehört nicht in diese Datei. Ausnahme V2H (#110): die Rückspeisung ist eine
+  // Tagesgröße aus dem Zählerpfad (`tag.v2h_entladung`) — keine Stunde trägt sie.
   bkw = tag.bkw > 0 ? tag.bkw : bkw
   sonstErz = tag.sonstiges_erzeugung ?? sonstErz
   sonstVerb = tag.sonstiges_verbrauch ?? sonstVerb
@@ -189,8 +190,10 @@ export function baueTagAlsMonat(
     wp_starts_summe_monat: wpStartsTag > 0 ? wpStartsTag : null,
     wp_betriebsstunden_summe_monat: wpBetriebsstundenTag > 0 ? wpBetriebsstundenTag : null,
     // E-Mobilität / BKW / Sonstiges — Tagessumme aus Stunden; PV-/Netz-Anteil der
-    // Ladung tagesgenau aus tagDetail (nur mit Sensor → sonst null/„—"). km/Verbrauch/
-    // V2H/€ haben keinen Tages-Sensor → bleiben null/„—".
+    // Ladung tagesgenau aus tagDetail (nur mit Sensor → sonst null/„—"). km/Verbrauch/€
+    // haben keinen Tages-Sensor → bleiben null/„—". V2H (#110) kommt als Tagesgröße aus
+    // dem Zählerpfad (TagWerte); ohne V2H-Zähler „—" (geteilte Zeile „V2H-Rückspeisung").
+    emob_v2h_kwh: tag.v2h_entladung ?? null,
     emob_ladung_kwh: pos(emob),
     emob_ladung_pv_kwh: tagDetail?.emob_ladung_pv_kwh ?? null,
     emob_ladung_netz_kwh: tagDetail?.emob_ladung_netz_kwh ?? null,

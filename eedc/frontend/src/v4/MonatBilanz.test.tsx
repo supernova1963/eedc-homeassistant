@@ -186,6 +186,17 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
     expect(k.berechnung).toBeUndefined()
   })
 
+  // #427 (rapahl): im laufenden Monat ohne Abschluss kommt die Menge aus den Tagen — die Kachel nennt es.
+  it('nennt die Herkunft „aus Tageswerten", wenn das Backend sie meldet (#427)', () => {
+    const formel = (herkunft: string | null) => baueMonatKpis(d({
+      speicher_ladung_netz_kwh: 3, speicher_ladung_netz_kosten_euro: 0.75,
+      speicher_ladung_netz_preis_cent: 25, speicher_ladung_netz_preis_quelle: 'tep',
+      speicher_ladung_netz_herkunft: herkunft,
+    }), vm).find((x) => x.title === 'Batterieladung Netz')!.formel
+    expect(formel('tageswerte')).toContain('Menge aus Tageswerten')
+    expect(formel(null)).not.toContain('Tageswerten')
+  })
+
   it('ohne Speicher bleibt die Kachel aus (null ≠ 0)', () => {
     const kpis = baueMonatKpis(d({ speicher_ladung_netz_kwh: null }), vm)
     expect(kpis.find((x) => x.title === 'Batterieladung Netz')).toBeUndefined()

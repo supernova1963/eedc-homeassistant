@@ -134,6 +134,9 @@ export interface TagWerte {
   // Speicher
   speicher_ladung: number | null
   speicher_entladung: number | null
+  /** #110: V2H-Rückspeisung des E-Autos ins Haus (Tagesgröße aus dem Zählerpfad, steckt in Eigen-/Gesamtverbrauch
+   *  und Autarkie). `null` = der Tag hat keinen V2H-Wert. Optional: ältere Server liefern das Feld nicht. */
+  v2h_entladung?: number | null
   /** Vollzyklen des Tages = Entladung ÷ Kapazität (Backend-SoT). */
   speicher_vollzyklen: number | null
   speicher_effizienz: number | null

@@ -11,6 +11,16 @@
 
 ## Unreleased
 
+**V2H am Tag:** Speist dein E-Auto Strom ins Haus zurück (V2H) und ist sein Zähler „V2H Entladung" zugeordnet, zählt
+*Cockpit → Tag* die Rückspeisung jetzt mit — in Eigenverbrauch, Gesamtverbrauch und Autarkie, wie Monat und Jahr es
+schon tun, und als Zeile „V2H-Rückspeisung" im Block E-Mobilität. Die Stundenwerte zeigen sie nicht, der laufende Monat
+zählt sie erst mit dem Abschluss ([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
+
+**Netzladung im laufenden Monat:** Lädt dein Speicher aus dem Netz, zeigt *Cockpit → Monat* die Netzladung jetzt schon
+vor dem Monatsabschluss — als Summe der abgelaufenen Tage, dieselben Zahlen wie *Cockpit → Tag*, samt Ladepreis und
+Kosten. Beim Überfahren steht „Menge aus Tageswerten"; mit dem Abschluss gilt dein gespeicherter Wert
+([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
+
 **HA-Korrektur sofort übernehmen:** Nach einer Korrektur in Home Assistant holt der neue Eintrag **„HA-Spiegel jetzt
 abgleichen"** in der Reparatur-Werkbank den Abgleich sofort, statt bis zur Nacht zu warten (der HA-Spiegel ist eedcs
 Kopie der HA-Statistik) — die Tages-Kennzahlen in *Cockpit → Tag*, die daraus kommen, zeigen danach die korrigierten

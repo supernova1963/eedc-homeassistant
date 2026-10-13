@@ -16,6 +16,7 @@ from backend.services.waerme_klima_block import (
     WpMoeglichZeile,
 )
 
+from backend.core.berechnungen.energie import V2H_KOMPONENTEN_PREFIX
 from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
 from backend.models.investition import Investition
 
@@ -65,6 +66,8 @@ def _key_to_serie_info(
     """Löst einen Komponenten-Key zu Label + Typ auf."""
     if key in _VIRTUAL_SERIEN:
         return {"key": key, **_VIRTUAL_SERIEN[key]}
+    if key.startswith(V2H_KOMPONENTEN_PREFIX):  # Konzept #110 §2.6: V2H-Tagesgröße, keine Serie/Gerätekategorie
+        return None
 
     m = re.match(r'^([a-z]+)_(\d+)(?:_([a-z]+))?$', key)
     if not m:
@@ -587,6 +590,10 @@ class TagWerteResponse(BaseModel):
     # Speicher
     speicher_ladung: Optional[float] = None
     speicher_entladung: Optional[float] = None
+    # #110 V2H-Tageswert: Rückspeisung des E-Autos ins Haus — Tagesgröße aus dem Zählerpfad
+    # (`komponenten_kwh["v2h_<id>"]`), steckt in Eigenverbrauch, Gesamtverbrauch und Autarkie.
+    # `None` = der Tag hat keinen V2H-Wert (kein Zähler, Standalone ohne Rollup); 0 ist gemessen.
+    v2h_entladung: Optional[float] = None
     speicher_effizienz: Optional[float] = None
     # Worauf der η beruht — dasselbe Vokabular wie im Monat
     # (`soc_korrigiert` · `roh-unkorrigiert` · `keine-ladung` ·

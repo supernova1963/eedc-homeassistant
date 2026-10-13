@@ -286,8 +286,14 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > **Entladung**, lag an Ladetagen über dem Gesamtverbrauch und summierte sich nicht zum Monat (Beispiel: PV 18,
 > Einspeisung 6, Ladung 3, Entladung 2 ⇒ 12 statt 11 kWh bei 11 kWh Gesamtverbrauch; drei solche Tage 36 statt 33).
 > Ohne Speicher sind beide Formeln gleich. Mit dem Tages-Eigenverbrauch rechnen EV-Quote, CO₂ (PV) und
-> Eigenverbrauchs-Ersparnis des Tages (die Tagesfinanz bekommt Ladung und Entladung mit); der Tag kennt kein V2H und zieht
-> die Abgabe an Dritte als gemessene Tagesmenge ab. Der Verlauf in Cockpit → Monat stapelt die Erzeugung deshalb als
+> Eigenverbrauchs-Ersparnis des Tages (die Tagesfinanz bekommt Ladung und Entladung mit); der Tag zieht die Abgabe an
+> Dritte als gemessene Tagesmenge ab. **V2H am Tag (#110, Konzept `KONZEPT-110-RESTPUNKTE.md` §2):** Der Tag kennt die
+> V2H-Rückspeisung als Tagesgröße aus dem Zählerpfad (Snapshot/MQTT und HA-Langzeitstatistik über die Beitragsschicht,
+> Tagesschlüssel `komponenten_kwh["v2h_<id>"]`); Stunden tragen sie nicht, einen Kanal hat sie nicht. Sie geht als eigener
+> Summand in Eigenverbrauch und Gesamtverbrauch (`tagesbilanz.mit_v2h_entladung` → `gesamtverbrauch_ha_formel_kwh`,
+> `berechne_verbrauchs_kennzahlen(v2h_entladung_kwh=…)`), an einem Kanal-Tag nach dem Mischen — genau einmal. Beispiel:
+> PV 20, Einspeisung 6, Netzbezug 4, Speicher 3/2, V2H 2 ⇒ Eigenverbrauch 15, Gesamtverbrauch 19, Autarkie 78,9 %.
+> Der laufende Monat aus Tagen trägt V2H nicht (bis zum Abschluss 0, §2.6). Der Verlauf in Cockpit → Monat stapelt die Erzeugung deshalb als
 > **Direktverbrauch + Speicherladung + Einspeisung** (wie die Verwendung im PV-Hub), nicht mehr als Eigenverbrauch +
 > Einspeisung.
 >

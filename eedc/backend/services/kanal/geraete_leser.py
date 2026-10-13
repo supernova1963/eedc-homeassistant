@@ -135,9 +135,15 @@ async def _stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
 
 
 def _emob_felder(inv, hat_feld) -> list[str]:
+    """Die Felder eines E-Mob-Geräts, die die Gruppe verlangt: jedes Zählerfeld mit Zähler, für das der Katalog
+    einen Kanal führt (``katalog.zaehler_art``). #110: ``e-auto/v2h_entladung_kwh`` ist ein Zählerfeld des Tages,
+    hat aber die Katalog-Klasse ``AUSNAHME_TAGESGROESSE`` (kein Kanal) — die Gruppe verlangt es deshalb nicht, ihre
+    Deckung und ihre Zeilen bleiben wie vor #110 (Konzept §2.6: der Monat bleibt)."""
+    from backend.services.kanal.katalog import zaehler_art
     from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER
 
-    return [f for f in KUMULATIVE_ZAEHLER_FELDER.get(inv.typ, ()) if hat_feld(inv, f)]
+    return [f for f in KUMULATIVE_ZAEHLER_FELDER.get(inv.typ, ())
+            if hat_feld(inv, f) and zaehler_art(f"inv:{inv.id}:{f}", inv.typ) is not None]
 
 
 def _sonstiges_gruppe(inv, hat_feld) -> list[str]:

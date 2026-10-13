@@ -1339,8 +1339,8 @@ URSACHE: dict[str, Ursache] = {
         "Klimageräts)",
         "Größen, die im Monat ohne Abschluss nicht aus der Tagesebene gefüllt werden: Wärmepumpen-Mengen und "
         "-Achsen, Sonstiges, E-Mob-Lademenge, Speicher-Netzladung (Monats-Fakten mit Tageswerten und "
-        "Jahr-Verlauf nennen 0/nichts; Sonstiges und Netzladung auch Cockpit → Monat; E-Mob ohne HA auch Cockpit "
-        "→ Monat). Folge in der Form mit Sonstiges-Erzeuger (M10): Eigenverbrauch, Gesamtverbrauch, Autarkie "
+        "Jahr-Verlauf nennen 0/nichts; Sonstiges auch Cockpit → Monat — die Netzladung dort seit #427 Punkt 2 aus den "
+        "Tagen; E-Mob ohne HA auch Cockpit → Monat). Folge in der Form mit Sonstiges-Erzeuger (M10): Eigenverbrauch, Gesamtverbrauch, Autarkie "
         "und Erzeugung hinter dem Zähler des Monats ohne Abschluss rechnen ohne das BHKW. Cockpit → Monat nennt "
         "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene",
     ),
@@ -1436,7 +1436,11 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
         ),
         ('M02', 'emob', 'SA', 'I1'): ('heimladung:fakten_tw',),
         ('M04', 'speicher', 'HA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
-        ('M04', 'speicher', 'HA', 'I3'): ('netzladung:cockpit_monat', 'netzladung:fakten_tw',),
+        # #427 Punkt 2 (13.10.2026): Cockpit → Monat (und das Jahr als Σ der Monatsantworten) trägt die Netzladung im
+        # laufenden Monat aus den Tagen — die Zelle `cockpit_monat` ist geheilt. Monats-Fakten mit Tageswerten und der
+        # Verlauf (Lesart 1, N-121) bleiben ohne Abschluss leer; seit Cockpit → Monat den Wert nennt, meldet I6 sie.
+        ('M04', 'speicher', 'HA', 'I3'): ('netzladung:fakten_tw',),
+        ('M04', 'speicher', 'HA', 'I6'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
         ('M04', 'speicher', 'S1', 'I2'): (
             'netzladung:cockpit_monat:vor=nach', 'netzladung:fakten:tageswert=gespeichert',
             'netzladung:jahr_verlauf:vor=nach',
@@ -1449,7 +1453,8 @@ ROT: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
             'netzladung:fakten:tageswert=gespeichert', 'netzladung:jahr_verlauf:vor=nach',
         ),
         ('M04', 'speicher', 'SA', 'I1'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
-        ('M04', 'speicher', 'SA', 'I3'): ('netzladung:cockpit_monat', 'netzladung:fakten_tw',),
+        ('M04', 'speicher', 'SA', 'I3'): ('netzladung:fakten_tw',),
+        ('M04', 'speicher', 'SA', 'I6'): ('netzladung:fakten_tw', 'netzladung:jahr_verlauf',),
         ('M05', 'wp', 'S3', 'I2'): (
             'strom:fakten:tageswert=gespeichert', 'strom:jahr_verlauf:vor=nach',
             'waerme:fakten:tageswert=gespeichert',

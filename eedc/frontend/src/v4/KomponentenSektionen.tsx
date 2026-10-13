@@ -42,7 +42,7 @@ import type { AchsenName } from './waermeKlimaSicht'
 import {
   KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER, SONSTIGES_ERZEUGER_FARBE, ROLLEN_BG,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
-  SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI,
+  SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI, NETZLADUNG_AUS_TAGEN,
   ersparnisAnzeige,
 } from '../lib'
 import type {
@@ -654,7 +654,11 @@ export function baueKomponentenBloecke(
     // core/field_definitions.py). Ohne das Wort stehen zwei Zeilen untereinander,
     // die man addieren möchte — genau so ist Rainers Doppelzählungs-Verdacht
     // vom 08.08. entstanden (F-22).
-    if (hat(d.speicher_ladung_netz_kwh)) detail.push({ label: 'davon aus dem Netz (Arbitrage)', wert: `${fmt(d.speicher_ladung_netz_kwh)} kWh` })
+    if (hat(d.speicher_ladung_netz_kwh)) detail.push({
+      label: 'davon aus dem Netz (Arbitrage)', wert: `${fmt(d.speicher_ladung_netz_kwh)} kWh`,
+      // #427: Herkunft „aus Tageswerten" im laufenden Monat ohne Abschluss (Backend-Feld, kein Client-Rechnen).
+      titel: d.speicher_ladung_netz_herkunft === 'tageswerte' ? NETZLADUNG_AUS_TAGEN : undefined,
+    })
     if (hat(d.speicher_effektiver_ladepreis_cent)) detail.push({
       label: 'Effektiver Ladepreis (Netz)',
       wert: (
@@ -1153,7 +1157,8 @@ export function baueKomponentenBloecke(
         hinweis: tagHinweis(d.emob_verbrauch_100km != null, 'Folgt aus der Tages-Strecke — kein Tages-Sensor.') },
     ]
     // Lade-Herkunft + V2H als Detailzeilen — Netz-Anteil tagesgenau (tagDetail),
-    // extern/V2H aus dem Monats-Handeintrag (→ nur zeigen wenn vorhanden).
+    // extern aus dem Monats-Handeintrag, V2H im Monat aus dem Abschluss und am Tag
+    // aus dem Zählerpfad (#110, `TagWerte.v2h_entladung`) — nur zeigen wenn vorhanden.
     //
     // ⚑ Das gilt **period-unabhängig** und ist deshalb kein S3-Fall: Ohne
     // Eintrag fehlt die Zeile im Monat genauso. Der Kommentar oben behauptete

@@ -199,6 +199,9 @@ class AktuellerMonatResponse(BaseModel):
     speicher_ladung_kwh: Optional[float] = None
     speicher_entladung_kwh: Optional[float] = None
     speicher_ladung_netz_kwh: Optional[float] = None   # Arbitrage-Ladung vom Netz
+    # #427 Punkt 2: "tageswerte" = im laufenden Monat ohne Speicher-Zeile die Σ der abgelaufenen Tage
+    # (Cockpit → Tag); None = aus der Monatszeile bzw. kein Wert.
+    speicher_ladung_netz_herkunft: Optional[str] = None
     # F-22: SoC-KORRIGIERT (nicht der rohe Quotient) — der Ladestand am
     # Monatsrand ist herausgerechnet und der Wert auf 100 % geklemmt.
     speicher_wirkungsgrad_prozent: Optional[float] = None

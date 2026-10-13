@@ -844,9 +844,11 @@ async def lade_stammdaten(
     # `_sonderschluessel` landet. Ersatzlos gestrichen, statt eine Konvention
     # zu behaupten, die es nicht gibt.
     #
-    # ⚠ Die Tages-Ebene kennt V2H damit weiterhin NICHT — das ist die in #110
-    # geführte, bewusst zurückgestellte Zeile „V2H-Lücken schließen" und wird
-    # hier nicht nebenbei gebaut.
+    # ⚠ Seit #110 (13.10.2026) kennt die Tages-Ebene V2H — aber NUR als Tagesgröße
+    # aus dem Zählerpfad: `komponenten_kwh["v2h_<id>"]` über die Beitragsschicht
+    # (`snapshot/komponenten_beitraege.py`). Der Leistungspfad hier (Serien, Stunden)
+    # bleibt ohne V2H: er zeichnet die Entladung weiter als Senke (Entscheid
+    # 28.09.2026, Konzept `KONZEPT-110-RESTPUNKTE.md` §2.6).
     netz_keys = {s["key"] for s in serien if s["kategorie"] == "netz"}
     wp_keys = {s["key"] for s in serien if s["kategorie"] == "waermepumpe"}
     wallbox_keys = {s["key"] for s in serien

@@ -7,6 +7,8 @@ berechne_verbrauchs_kennzahlen, den ALLE vier Read-Sites nutzen
 (Cockpit, HA-Export, Aussichten, Jahresbericht) → keine Drift mehr.
 
 Hier: Helper-Vertrag + Cockpit-Integration (die zwei zuvor V2H-blinden Pfade).
+
+Schwesterdateien: test_v2h_tageswert.py (V2H am Tag, #110), test_n610_v2h_im_monat_und_vorjahr.py (V2H im Monat).
 """
 
 from __future__ import annotations

@@ -465,7 +465,7 @@ def _categorize_counter(
         "pv", "einspeisung", "netzbezug",
         "ladung_batterie", "entladung_batterie",
         "ladung_wallbox", "verbrauch_wp",
-        "verbrauch_eauto",
+        "verbrauch_eauto", "entladung_v2h",
         "erzeugung_sonstiges", "verbrauch_sonstiges"
     """
     if inv_typ is None:  # basis
@@ -535,6 +535,11 @@ def _categorize_counter(
         "verbrauch_kwh", "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh",
     ):
         return "verbrauch_eauto"
+    # #110 V2H-Tageswert (Konzept §2, E1): die Rückspeisung des Autos ins Haus ist eine eigene Quelle — weder
+    # Ladung noch Speicher-Entladung. Achse `v2h` (`spannen._ACHSE_JE_KATEGORIE`) ohne Spalte der Stundenzeile (E2):
+    # sie trägt nur Spannen und Verworfen; der Wert steht im Tagesschlüssel `v2h_<id>`.
+    if inv_typ == "e-auto" and feld == "v2h_entladung_kwh":
+        return "entladung_v2h"
     if inv_typ == "sonstiges":
         kategorie = (
             parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)

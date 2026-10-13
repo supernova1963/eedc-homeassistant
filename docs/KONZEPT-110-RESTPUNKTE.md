@@ -110,6 +110,14 @@ und Eigenverbrauch, Gesamtverbrauch und Autarkie des Tages lassen die Rückspeis
 | **B9 Doku** | `docs/BERECHNUNGEN.md:289`, `docs/SENSOR-REFERENZ.md:339` (+ «Cockpit → Tag»), `docs/GLOSSAR.md:16` (wird wahr), `docs/HANDBUCH_BEDIENUNG.md` §2.2 Tag (E-Mobilität-Block), Code-Kommentare (`karten.py`, `tages_energie_profil.py:57`, `energie_profil/aggregator.py:846-849`, `tage_werte.py:412-413`), CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, `./scripts/sync-help.sh` | Die Regel in einem Satz: *Der Tag kennt die V2H-Rückspeisung als Tagesgröße aus dem Zählerpfad; Stunden tragen sie nicht.* |
 | **B10 Tests** | `backend/tests/`, `frontend/src/` | (1) Beitragsschicht: E-Auto mit `v2h_faehig` und zugeordnetem Zähler ⇒ Beitrag `v2h_<id>` +1, auch hinter einer Wallbox und bei `wallbox_deckt_ladung=True`; ohne Zuordnung kein Beitrag. (2) Kategorie `entladung_v2h`, Achse `v2h`. (3) `baue_tagestabelle` mit V2H-Slots (Snapshot-Doubles) ⇒ `komponenten_kwh["v2h_<id>"]`, Stunden unverändert; dasselbe über den LTS-Pfad. (4) `bilanz_aus_stundenrows(v2h_entladung_kwh=…)`: Eigenverbrauch, Gesamtverbrauch, Autarkie gleich `berechne_verbrauchs_kennzahlen` mit denselben Zahlen (Muster `test_wk16g_tag_liest_wie_der_monat.py`); Altbestand unverändert. (5) `baue_tage_werte` liefert `v2h_entladung` und eine Finanzzeile mit V2H (Muster `test_n635_eine_eigenverbrauchs_formel.py`). (6) MQTT-Schlüssel wieder einlesbar (Wächter `test_publizierte_mqtt_topics_sind_wieder_einlesbar`). (7) Frontend: `TagKomponenten` setzt `emob_v2h_kwh`, `TagBilanz` nennt die Formel. Bestehende Symmetrie-Tests (`test_tage_werte_symmetrie.py`, `test_batterie_vorzeichen_durchgaengig.py`) müssen grün bleiben. |
 
+**Baunotiz B1 (13.10.2026, Bau-Sitzung):** `_SNAPSHOT_AUSNAHMEN` steuert nicht nur `KUMULATIVE_ZAEHLER_FELDER`, sondern auch den
+Kanal-Katalog (`services/kanal/katalog.py`, Regel A-S) und damit die E-Mob-Kanalgruppe (`kanal/geraete_leser._emob_felder`). Ohne Gegenmaßnahme
+hätte V2H einen `sum`-Kanal bekommen, der laufende Monat hätte V2H über die Gruppe getragen, und bei MQTT-Anlagen wäre die Gruppe im
+Übergangsmonat auf den Bestand gefallen. Gebaut nach **O2**: neue Katalog-Klasse `AUSNAHME_TAGESGROESSE` („Tagesgröße ohne Kanal"), `_emob_felder`
+aus dem Katalog abgeleitet, der Schreiber lässt die Klasse still aus. Verworfen: O1 (Monat hätte sich geändert, gegen §2.6), O3 (Snapshot-Liste
+an der Registry vorbei, gegen die N-259-Bauform). Ebenfalls beim Bau gemessen: an einem **Kanal-Tag** kommt die Tagesbilanz aus der
+Kanal-Komposition — V2H wird deshalb über `tagesbilanz.mit_v2h_entladung` einmal nach dem Mischen angewandt (B5).
+
 Es gibt **keinen Prüfdatensatz mit V2H** (weder im Lab noch beim Maintainer). Der Nachweis läuft über Tests mit Snapshot-Doubles;
 der erste Realbetrieb ist der nächste V2H-Melder — das steht so auch in der Antwort an ihn.
 

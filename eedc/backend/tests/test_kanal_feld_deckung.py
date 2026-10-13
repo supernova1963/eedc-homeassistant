@@ -6,7 +6,7 @@
 (``KUMULATIVE_ZAEHLER_FELDER``, ``KUMULATIVE_COUNTER_FELDER``, ``BASIS_ZAEHLER_FELDER``,
 ``MQTT_STAND_ZAEHLER_FELDER``) ist im Kanal-Katalog (``services/kanal/katalog.py``) einer Art
 (``sum`` · ``mean`` · ``stand``) zugewiesen **oder** steht mit Grund in einer benannten Ausnahme-Klasse
-(``_SNAPSHOT_AUSNAHMEN`` · „Abschluss-Feld ohne Sensor" O1–O6). Baseline 0.
+(``_SNAPSHOT_AUSNAHMEN`` · „Abschluss-Feld ohne Sensor" O1–O6 · „Tagesgröße ohne Kanal", #110). Baseline 0.
 
 **Warum baumweit und nicht je Feld.** Der Katalog ist abgeleitet — ein neues kWh-Feld bekommt seine
 Art durch die Regel, ohne dass jemand es einträgt. Ein Feld, auf das KEINE Regel passt (neue Einheit,
@@ -73,10 +73,36 @@ def test_genau_eine_art_oder_eine_ausnahme_je_feld():
         assert (z.grund or "").strip(), f"{z}: ohne Grund"
 
 
-def test_die_zehn_snapshot_ausnahmen_stehen_als_klasse_im_katalog():
+def test_die_neun_snapshot_ausnahmen_stehen_als_klasse_im_katalog():
+    """Seit #110 (13.10.2026) neun: ``e-auto/v2h_entladung_kwh`` ist gesnapshottet (Tagesgröße) und steht in der
+    eigenen Klasse ``AUSNAHME_TAGESGROESSE`` (Probe darunter)."""
     im_katalog = {(z.typ, z.feld) for z in kat.zuweisungen() if z.ausnahme == kat.AUSNAHME_SNAPSHOT}
     assert im_katalog == set(_SNAPSHOT_AUSNAHMEN)
-    assert len(im_katalog) == 10
+    assert len(im_katalog) == 9
+    assert ("e-auto", "v2h_entladung_kwh") not in im_katalog
+
+
+def test_v2h_ist_tagesgroesse_ohne_kanal():
+    """#110 V2H-Tageswert (Entscheid Master 13.10.2026, O2): der V2H-Zähler steht in ``KUMULATIVE_ZAEHLER_FELDER``
+    (der Tag liest ihn), bekommt aber KEINEN Kanal — in beiden Listen der Katalog-Klasse ``AUSNAHME_TAGESGROESSE``,
+    ``zaehler_art`` ⇒ ``None`` (der Schreiber lässt ihn aus), und die E-Mob-Kanalgruppe verlangt ihn nicht (sonst
+    fiele sie ohne den Kanal auf ``bestand``, und der laufende Monat trüge V2H über sie)."""
+    from backend.services.kanal.geraete_leser import _emob_felder
+
+    assert set(kat.TAGESGROESSE_OHNE_KANAL) == {("e-auto", "v2h_entladung_kwh")}
+    assert "v2h_entladung_kwh" in KUMULATIVE_ZAEHLER_FELDER["e-auto"]
+    klasse = {(z.liste, z.typ, z.feld) for z in kat.zuweisungen() if z.ausnahme == kat.AUSNAHME_TAGESGROESSE}
+    assert klasse == {(kat.L_INV, "e-auto", "v2h_entladung_kwh"), (kat.L_ZAEHLER, "e-auto", "v2h_entladung_kwh")}
+    assert kat.zaehler_art("inv:7:v2h_entladung_kwh", "e-auto") is None
+    assert kat.ist_tagesgroesse_ohne_kanal("inv:7:v2h_entladung_kwh", "e-auto")
+    assert not kat.ist_tagesgroesse_ohne_kanal("inv:7:ladung_kwh", "e-auto")
+
+    class _Auto:
+        id, typ = 7, "e-auto"
+
+    felder = _emob_felder(_Auto(), lambda _inv, _f: True)
+    assert "v2h_entladung_kwh" not in felder
+    assert set(felder) == set(KUMULATIVE_ZAEHLER_FELDER["e-auto"]) - {"v2h_entladung_kwh"}
 
 
 def test_abschluss_ausnahmen_tragen_ihre_o_klasse():
@@ -92,6 +118,11 @@ def test_snapshot_listen_sind_zaehler_kanaele():
     falsch = []
     for typ, felder in {**KUMULATIVE_ZAEHLER_FELDER}.items():
         for feld in felder:
+            if (typ, feld) in kat.TAGESGROESSE_OHNE_KANAL:
+                # #110: Zähler des Tages ohne Kanal — die Art ist hier ausdrücklich KEINE (eigene Probe unten).
+                if kat.zaehler_art(f"inv:1:{feld}", typ) is not None:
+                    falsch.append(f"{typ}/{feld} (Tagesgröße mit Kanal-Art)")
+                continue
             if kat.zaehler_art(f"inv:1:{feld}", typ) not in (ART_SUM, ART_STAND):
                 falsch.append(f"{typ}/{feld}")
     for typ, felder in KUMULATIVE_COUNTER_FELDER.items():

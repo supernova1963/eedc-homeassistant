@@ -16,6 +16,7 @@ Regeln (Bauplan §3, §3a; Reihenfolge = Vorrang):
 Klasse  Regel                                                       Ergebnis
 ======  ==========================================================  ==============================
 A-S     ``(typ, feld)`` in ``_SNAPSHOT_AUSNAHMEN``                   kein Kanal (Grund von dort)
+A-T     ``(typ, feld)`` in ``TAGESGROESSE_OHNE_KANAL``               kein Kanal (Tagesgröße aus dem Zählerpfad)
 O1      Basis-Feld ``gruppe == "wetter"``                           kein Kanal
 O2      bedingtes Basis-Feld, Bedingung Tarif-Pflege                kein Kanal
 O3      bedingtes Basis-Feld, Bedingung Fremdpreis (E-Auto, WP)     kein Kanal
@@ -75,11 +76,27 @@ from backend.services.snapshot.keys import (
 
 # ── Ausnahme-Klassen ────────────────────────────────────────────────────────
 
-#: Die zehn Felder aus ``field_definitions._SNAPSHOT_AUSNAHMEN`` — Abschluss-Felder, Grund dort.
+#: Die Felder aus ``field_definitions._SNAPSHOT_AUSNAHMEN`` (seit #110 neun) — Abschluss-Felder, Grund dort.
 AUSNAHME_SNAPSHOT = "snapshot_ausnahme"
 #: Bauplan §3a O1–O6 — „Abschluss-Feld ohne Sensor".
 AUSNAHME_ABSCHLUSS = "abschluss_ohne_sensor"
-AUSNAHME_KLASSEN: frozenset[str] = frozenset({AUSNAHME_SNAPSHOT, AUSNAHME_ABSCHLUSS})
+#: #110 V2H-Tageswert (13.10.2026): ein Zähler, den der Snapshot-/LTS-Pfad des TAGES liest (er steht in
+#: ``KUMULATIVE_ZAEHLER_FELDER`` und trägt über die Beitragsschicht einen Tagesschlüssel), der aber KEINEN Kanal
+#: bekommt. Ohne die Klasse gäbe ihm die Energie-Regel einen ``sum``-Kanal (Spiegel + Mitschrift, Nachfüllen aus HA)
+#: — und die E-Mob-Kanalgruppe (``geraete_leser._emob_felder``) verlangte ihn als Pflichtfeld: der laufende Monat
+#: hätte V2H über die Gruppe getragen, und im Übergangsmonat einer MQTT-Anlage wäre die ganze Gruppe auf ``bestand``
+#: gefallen (Bericht V2H-TAG, Stand 1). Entscheid Master 13.10.2026 (O2): Kanal, Kanalgruppe und Monat bleiben.
+AUSNAHME_TAGESGROESSE = "tagesgroesse_ohne_kanal"
+AUSNAHME_KLASSEN: frozenset[str] = frozenset({AUSNAHME_SNAPSHOT, AUSNAHME_ABSCHLUSS, AUSNAHME_TAGESGROESSE})
+
+#: (typ, feld) → Grund der Klasse ``AUSNAHME_TAGESGROESSE``. Gilt für beide Listen, in denen das Feld steht
+#: (``INVESTITION_FELDER`` und ``KUMULATIVE_ZAEHLER_FELDER``); der Schreiber lässt es still aus (``zaehler_art``
+#: ⇒ ``None``, ``ist_tagesgroesse_ohne_kanal``), die E-Mob-Gruppe verlangt es nicht.
+TAGESGROESSE_OHNE_KANAL: dict[tuple[str, str], str] = {
+    ("e-auto", "v2h_entladung_kwh"):
+        "Konzept #110 §2 E3/§2.6: V2H ist eine Tagesgröße aus dem Zählerpfad (Snapshot/HA-Langzeitstatistik über die "
+        "Beitragsschicht, Tagesschlüssel v2h_<id>); Kanal, E-Mob-Kanalgruppe und Monat bleiben wie heute",
+}
 
 #: Gründe der Klasse „Abschluss-Feld ohne Sensor" — wörtlich nach Bauplan §3a.
 _GRUND_O: dict[str, str] = {
@@ -205,6 +222,9 @@ def _regel_investition(
     if (typ, feld) in _SNAPSHOT_AUSNAHMEN:
         return _zuweisung(liste, typ, feld, ausnahme=AUSNAHME_SNAPSHOT,
                           grund=_SNAPSHOT_AUSNAHMEN[(typ, feld)], schluessel=sk)
+    if (typ, feld) in TAGESGROESSE_OHNE_KANAL:
+        return _zuweisung(liste, typ, feld, ausnahme=AUSNAHME_TAGESGROESSE,
+                          grund=TAGESGROESSE_OHNE_KANAL[(typ, feld)], schluessel=sk)
     if einheit == "€":
         return _zuweisung(liste, typ, feld, ausnahme=AUSNAHME_ABSCHLUSS, grund=_GRUND_O["O6"], schluessel=sk)
     if eintrag.get("nur_manuell"):
@@ -343,7 +363,10 @@ def kanal_katalog(
     kompat = {(t, f) for t, fs in _SNAPSHOT_KOMPATIBILITAET.items() for f in fs}
     for typ, felder in kumulative_zaehler_felder.items():
         for feld in felder:
-            if (typ, feld) in kompat:
+            if (typ, feld) in TAGESGROESSE_OHNE_KANAL:
+                z = _zuweisung(L_ZAEHLER, typ, feld, ausnahme=AUSNAHME_TAGESGROESSE,
+                               grund=TAGESGROESSE_OHNE_KANAL[(typ, feld)], schluessel=_inv_schluessel(feld))
+            elif (typ, feld) in kompat:
                 z = _zuweisung(L_ZAEHLER, typ, feld, art=ART_SUM, familien=_SPIEGEL_ODER_MITSCHRIFT,
                                grund="Kompatibilitäts-Name aus Altbeständen (_SNAPSHOT_KOMPATIBILITAET) — "
                                      "kWh-Zähler ⇒ sum, Schlüssel wie gemappt",
@@ -437,6 +460,14 @@ def zaehler_art(sensor_key: str, inv_typ: Optional[str]) -> Optional[str]:
             _ART_JE_ZAEHLER.get((None, feld)) if feld in MQTT_STAND_ZAEHLER_FELDER else None
         )
     return None
+
+
+def ist_tagesgroesse_ohne_kanal(sensor_key: str, inv_typ: Optional[str]) -> bool:
+    """Ist dieser Schlüssel (``inv:<id>:<feld>``) ein Zähler der Klasse ``AUSNAHME_TAGESGROESSE``? Der Schreiber
+    fragt es, damit er ihn still auslässt statt jede Stunde „keine Kanal-Art im Katalog" zu melden."""
+    if not sensor_key.startswith("inv:"):
+        return False
+    return (inv_typ, basis_feld_key(sensor_key.split(":", 2)[2])) in TAGESGROESSE_OHNE_KANAL
 
 
 def modus_kanal_key(inv_id: int | str, betriebsart: str) -> str:

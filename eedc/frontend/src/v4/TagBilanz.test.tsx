@@ -98,6 +98,29 @@ describe('baueTagKpis — ein Eigenverbrauch, dieselbe Formel wie Monat und Live
     expect(k.ergebnis).toBe('= 11,0 kWh')
   })
 
+  // #110 V2H-Tageswert: die Rückspeisung ist der dritte Summand — die Zahl kommt vom
+  // Backend (Doubles des Bauberichts: PV 20, Einspeisung 6, Speicher 3/2, V2H 2 ⇒ EV 15).
+  it('nennt die V2H-Rückspeisung im Rechenweg, wenn der Tag sie trägt', () => {
+    const k = kachel(baueTagKpis(tag({
+      erzeugung: 20, einspeisung: 6, speicher_ladung: 3, speicher_entladung: 2, v2h_entladung: 2, eigenverbrauch: 15,
+    }), null), 'Eigenverbrauch')!
+    expect(k.formel).toBe('Direktverbrauch + Speicher-Entladung + V2H-Rückspeisung')
+    expect(k.berechnung).toBe('(20,0 − 6,0 − 3,0) + 2,0 + 2,0 kWh')
+    expect(k.ergebnis).toBe('= 15,0 kWh')
+  })
+
+  it('V2H ohne Speicher: Direktverbrauch + V2H-Rückspeisung; V2H 0 oder null ändert nichts', () => {
+    const k = kachel(baueTagKpis(tag({
+      erzeugung: 20, einspeisung: 6, speicher_ladung: null, speicher_entladung: null, v2h_entladung: 2, eigenverbrauch: 16,
+    }), null), 'Eigenverbrauch')!
+    expect(k.formel).toBe('Direktverbrauch + V2H-Rückspeisung')
+    expect(k.berechnung).toBe('(20,0 − 6,0) + 2,0 kWh')
+    for (const v2h_entladung of [0, null, undefined]) {
+      const ohne = kachel(baueTagKpis(tag({ v2h_entladung }), null), 'Eigenverbrauch')!
+      expect(ohne.formel).toBe('Direktverbrauch + Speicher-Entladung')
+    }
+  })
+
   it('ohne Speicher-Bewegung bleibt der kurze Rechenweg PV − Einspeisung', () => {
     for (const ohne of [{ speicher_ladung: null, speicher_entladung: null }, { speicher_ladung: 0, speicher_entladung: 0 }]) {
       const k = kachel(baueTagKpis(tag({ erzeugung: 7, einspeisung: 5, eigenverbrauch: 2, ...ohne }), null), 'Eigenverbrauch')!

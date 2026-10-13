@@ -60,8 +60,10 @@ from backend.core.berechnungen import (
     erzeuger_kwh_je_investition,
     sonstiges_kwh_je_richtung,
     speicher_wirkungsgrad,
+    mit_v2h_entladung,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
+    summe_v2h_kwh,
     vollzyklen as berechne_vollzyklen,
 )
 from backend.core.calculations import berechne_co2_bilanz
@@ -284,6 +286,14 @@ async def baue_tage_werte(
             bilanz = mische_bilanz(kanal_tag.bilanz, bilanz)
             komp_tag = mische_komponenten(komp_tag, kanal_tag, ziele_je_tag.get(tag, set()))
             verworfen_tag = mische_verworfen(verworfen_tag)
+        # ⭐ #110 V2H-Tageswert (Konzept §2, B5/B6): die Rückspeisung des E-Autos ins Haus aus dem Rollup
+        # (`v2h_<id>`, Σ; `None` ohne Key — eine 0,0 ist gemessen). EINMAL nach dem Mischen: an einem Kanal-Tag
+        # kommen Gesamtverbrauch, Eigenverbrauch und Quoten aus der Kanal-Komposition, und die kennt kein V2H
+        # (Kanal-Klasse „Tagesgröße ohne Kanal", O2). `mische_komponenten` lässt `v2h_<id>` stehen (kein
+        # Bilanz-Schlüssel). Die Funktion rechnet aus den Summen der Bilanz neu — idempotent, ohne Regelmarke
+        # (Altbestand) wirkungslos.
+        v2h_tag = summe_v2h_kwh(komp_tag)
+        bilanz = mit_v2h_entladung(bilanz, v2h_tag)
 
         # Grundlast dieser Nacht (ADR-001: Sourcing hier, Formel im Layer).
         # Der Filter ist WOERTLICH der der Monats-/Jahres-Kachel
@@ -410,9 +420,11 @@ async def baue_tage_werte(
             # N-635: Ladung und Entladung des Tages gehen mit, damit die
             # Finanz-Eigenverbrauchsmenge dieselbe Formel rechnet wie die
             # Energie-Spalte `eigenverbrauch` (Direktverbrauch + Entladung).
-            # V2H/BKW bleiben 0 — die Stunden kennen sie nicht.
+            # #110: V2H aus dem Rollup — dieselbe Menge wie in `bilanz`
+            # (`mit_v2h_entladung`). BKW-Eigenverbrauch bleibt 0 (kein Tageswert).
             speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
             speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+            v2h_entladung_kwh=bilanz.v2h_entladung_kwh,
             monatsdaten=md_pro_monat.get((tag.year, tag.month)),
             # A-2: Die Ersparnis bewertet VERMIEDENEN Bezug — sie wird deshalb
             # mit dem Preis der Slots gewichtet, in denen er vermieden wurde,
@@ -511,6 +523,8 @@ async def baue_tage_werte(
             # Speicher (None wenn kein Lade-/Entlade-Geschehen)
             speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
             speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
+            # #110: `None` ohne V2H-Schlüssel im Rollup; nur mit Regelmarke in der Bilanz (Altbestand: keiner).
+            v2h_entladung=(_r(v2h_tag, 3) if bilanz.regelmarke else None),
             speicher_effizienz=_r(eta.prozent, 1),
             speicher_effizienz_quelle=eta.quelle,
             speicher_vollzyklen=_r(berechne_vollzyklen(

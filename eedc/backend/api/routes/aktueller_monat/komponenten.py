@@ -6,7 +6,7 @@ Geraetesicht mit der Tabelle je Geraet und dem einen Kasten (D-Sicht).
 # Parameter und Rueckgabe-Dict; der Endpunkt orchestriert. Kein Verhaltenswechsel — Gate ist
 # `plans/skript-golden-master-aktueller-monat.py` (alte gegen neue Antworten, bitgleich).
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from backend.services.waerme_klima_block import achsen_der_anlage, geraete_zeilen, was_noch_moeglich
 from backend.core.berechnungen.waermepumpe_kennzahl import (
@@ -27,8 +27,48 @@ from backend.api.routes.aktueller_monat.schemas import SonstigesGeraet
 
 logger = logging.getLogger(__name__)
 
+#: Herkunft der Speicher-Netzladung im laufenden Monat, wenn sie aus den Tagen kommt (#427 Punkt 2).
+NETZLADUNG_HERKUNFT_TAGE = "tageswerte"
 
-async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_kennzahlen_je_geraet, anlage_id, db, fenster, investitionen, jahr, monat, monats_fakt, wp_fakten=None, speicher_entladung, speicher_ladung, wp_abgrenzung_verletzt, wp_arbeitszahl, wp_waerme_abgeleitet_kwh):
+
+async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, monat: int, heute: date) -> Optional[float]:
+    """#427 Punkt 2 (Melder rapahl, Entscheid Gernot 13.10.2026, a): die Netzladung des Speichers im LAUFENDEN Monat
+    als Σ der abgelaufenen Tage — dieselbe Boundary-Differenz wie *Cockpit → Tag* (`get_tagesdetail_kwh`), über den
+    Bereichs-Leser in EINER Standreihe je Zähler.
+
+    * **Feldmenge und Fenster aus den geteilten Tabellen**: `aggregator.TAGESDETAIL_AUSGABE` (`speicher/ladung_netz_kwh`
+      → `speicher_ladung_netz_kwh`) und `boundary_range.TAGESFENSTER_JE_TYP["speicher"]` (rückwärts: je Tag
+      [Vortag 23:00, 23:00) — derselbe Tag wie die Speicher-Ladung der Tagesbilanz).
+    * **Nur abgelaufene Tage** (bis gestern): der heutige Tag hat seinen rechten Rand noch nicht.
+    * **Ein Tag mit Rücksprung oder ohne Rand fehlt** (Bereichs-Leser) — keine 0 als Platzhalter. Ohne zugeordneten
+      Netzlade-Zähler oder ohne einen einzigen Tageswert: ``None`` (die Kachel bleibt aus). Eine gemessene 0 bleibt 0.
+    * Kein neuer Tagesschlüssel, kein Nachfüllen alter Tage; der Monatsabschluss ersetzt den Wert (P8, gespeichert
+      schlägt gerechnet — das Tor in `komponenten_detail`).
+    """
+    from calendar import monthrange
+
+    from backend.services.snapshot.aggregator import TAGESDETAIL_AUSGABE
+    from backend.services.snapshot.bereichs_leser import lade_tageswerte_je_feld
+    from backend.services.snapshot.boundary_range import TAGESFENSTER_JE_TYP
+
+    if anlage is None or not speicher_invs:
+        return None
+    von = date(jahr, monat, 1)
+    bis = min(date(jahr, monat, monthrange(jahr, monat)[1]), heute - timedelta(days=1))
+    if bis < von:
+        return None
+    felder = {k: v for k, v in TAGESDETAIL_AUSGABE.items() if k == ("speicher", "ladung_netz_kwh")}
+    ausgabe_key = felder[("speicher", "ladung_netz_kwh")]
+    tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
+    rueckwaerts = frozenset(tage) if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts" else frozenset()
+    je_tag = await lade_tageswerte_je_feld(
+        db, anlage, {str(i.id): i for i in speicher_invs}, von, bis, felder, rueckwaerts_tage=rueckwaerts,
+    )
+    werte = [w[ausgabe_key] for w in je_tag.values() if ausgabe_key in w]
+    return sum(werte) if werte else None
+
+
+async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_kennzahlen_je_geraet, anlage_id, db, fenster, investitionen, jahr, monat, monats_fakt, wp_fakten=None, speicher_entladung, speicher_ladung, wp_abgrenzung_verletzt, wp_arbeitszahl, wp_waerme_abgeleitet_kwh, anlage=None, ist_aktueller_monat=False, heute=None):
     """Komponenten-Detail aus den Monats-Fakten (ADR-002/P10, C1d): Speicher, Waermepumpe je Modus, BKW, E-Mob, Sonstiges.
 
     Aus `get_aktueller_monat` Zeilen 834-1150 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -62,6 +102,8 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
 
     # Speicher: Kapazität, Arbitrage-Ladung, Wirkungsgrad, Vollzyklen, Auslastung
     speicher_ladung_netz = None
+    #: #427 Punkt 2: woher die Netzladung kommt, wenn nicht aus der Monatszeile (`NETZLADUNG_HERKUNFT_TAGE`).
+    speicher_ladung_netz_herkunft = None
     speicher_wirkungsgrad = None
     speicher_vollzyklen = None
     speicher_kapazitaet = None
@@ -106,6 +148,14 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
         # Zeile bleibt es None = „keine Daten" und die Kachel aus.
         if mf_speicher is not None and "speicher" in typen_mit_zeile:
             speicher_ladung_netz = round(mf_speicher.netzladung_kwh, 2)
+        elif ist_aktueller_monat and heute is not None:
+            # #427 Punkt 2 (c): das Tor kennt „aus Tagen" — im LAUFENDEN Monat ohne Speicher-Zeile die Σ der
+            # abgelaufenen Tage (dieselbe Zahl wie Cockpit → Tag je Tag). Ein abgeschlossener Monat ohne Zeile bleibt
+            # leer: dort wäre eine Teilmenge der Tage eine stille Untertreibung (Antwort: Monatsabschluss, N-675).
+            _aus_tagen = await speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr, monat, heute)
+            if _aus_tagen is not None:
+                speicher_ladung_netz = round(_aus_tagen, 2)
+                speicher_ladung_netz_herkunft = NETZLADUNG_HERKUNFT_TAGE
         speicher_imd_ladepreis = (
             mf_speicher.netzladung_preis_cent if mf_speicher is not None else None
         )
@@ -361,7 +411,7 @@ async def komponenten_detail(*, _wp_abgrenzung_je_funktion, _wp_funktion, _wp_ke
         gesamt=als_arbeitszahl(wp_arbeitszahl),
     )
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("mf_bkw", "mf_emob", "mf_sonstiges", "mf_wp", "speicher_auslastung", "speicher_auslastungs_basis", "speicher_eff_ladepreis", "speicher_eff_ladepreis_quelle", "speicher_ersparnis", "speicher_imd_ladepreis", "speicher_kapazitaet", "speicher_ladung_netz", "speicher_soc_drift_flag", "speicher_vollzyklen", "speicher_wirkungsgrad", "speicher_wirkungsgrad_quelle", "wp_az_funktion", "wp_az_kuehlen", "wp_heizung", "wp_modus_abdeckung", "wp_modus_bezug", "wp_modus_entfeuchten", "wp_modus_gemessen", "wp_modus_heizen", "wp_modus_kuehlen", "wp_modus_lueften", "wp_modus_rest", "wp_modus_warmwasser", "wp_nutz_entfeuchten", "wp_nutz_lueften", "wp_strom_heizen", "wp_strom_warmwasser", "wp_warmwasser",) if k in _loc}
+    return {k: _loc[k] for k in ("mf_bkw", "mf_emob", "mf_sonstiges", "mf_wp", "speicher_auslastung", "speicher_auslastungs_basis", "speicher_eff_ladepreis", "speicher_eff_ladepreis_quelle", "speicher_ersparnis", "speicher_imd_ladepreis", "speicher_kapazitaet", "speicher_ladung_netz", "speicher_ladung_netz_herkunft", "speicher_soc_drift_flag", "speicher_vollzyklen", "speicher_wirkungsgrad", "speicher_wirkungsgrad_quelle", "wp_az_funktion", "wp_az_kuehlen", "wp_heizung", "wp_modus_abdeckung", "wp_modus_bezug", "wp_modus_entfeuchten", "wp_modus_gemessen", "wp_modus_heizen", "wp_modus_kuehlen", "wp_modus_lueften", "wp_modus_rest", "wp_modus_warmwasser", "wp_nutz_entfeuchten", "wp_nutz_lueften", "wp_strom_heizen", "wp_strom_warmwasser", "wp_warmwasser",) if k in _loc}
 
 
 def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, investitionen, mf_bkw, mf_emob, mf_sonstiges, netzbezug_preis_effektiv_cent, speicher_eff_ladepreis, speicher_imd_ladepreis, speicher_ladung_netz, wp_arbeitszahl, wp_az_funktion, wp_az_kuehlen):

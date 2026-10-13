@@ -27,9 +27,12 @@ from typing import Any, Iterable, Mapping, Optional
 
 #: Die Achsen einer Stundenzeile, in der Reihenfolge der Spalten
 #: (`pv_kw` · `einspeisung_kw` · `netzbezug_kw` · `batterie_kw` ·
-#: `waermepumpe_kw` · `wallbox_kw` · `verbrauch_sonstiges`).
+#: `waermepumpe_kw` · `wallbox_kw` · `verbrauch_sonstiges`), dazu `v2h`:
+#: #110 (Konzept §2, E2) — die V2H-Rückspeisung hat **keine** Spalte der
+#: Stundenzeile; ihre Achse trägt nur Spannen und Verworfen (R4), der Wert
+#: steht als Tagesgröße im Rollup (`komponenten_kwh["v2h_<id>"]`).
 ACHSEN: tuple[str, ...] = (
-    "pv", "einspeisung", "netzbezug", "batterie", "waermepumpe", "wallbox", "sonstige",
+    "pv", "einspeisung", "netzbezug", "batterie", "waermepumpe", "wallbox", "sonstige", "v2h",
 )
 
 #: Energiefluss-Kategorie (`snapshot/keys._categorize_counter`) → Achse.
@@ -45,6 +48,7 @@ _ACHSE_JE_KATEGORIE: dict[str, str] = {
     "ladung_wallbox": "wallbox",
     "verbrauch_eauto": "wallbox",
     "verbrauch_sonstiges": "sonstige",
+    "entladung_v2h": "v2h",
 }
 
 #: Die Achsen, die ein Plausibilitäts-Deckel schützt (R3). Alle übrigen haben

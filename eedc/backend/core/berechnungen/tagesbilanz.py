@@ -38,6 +38,7 @@ DB-frei: nimmt eine Iterable beliebiger Objekte mit den Attributen
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Protocol
 
@@ -51,6 +52,7 @@ from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
 def _eigenverbrauch_kwh(
     *, pv_kwh: float, einspeisung_kwh: float, netzbezug_kwh: float,
     speicher_ladung_kwh: float, speicher_entladung_kwh: float,
+    v2h_entladung_kwh: float = 0.0,
 ) -> float:
     """Eigenverbrauch eines Zeitfensters — **die eine Formel** (N-635, 05.10.2026).
 
@@ -64,6 +66,9 @@ def _eigenverbrauch_kwh(
     Eigenverbrauch, der Tag lag dann über seinem Gesamtverbrauch (Matrix-Form
     M02: 12,0 statt 11,0 kWh bei 11,0 kWh Gesamtverbrauch). Ohne Speicher sind
     beide Formeln gleich.
+
+    #110: ``v2h_entladung_kwh`` (Rückspeisung des E-Autos ins Haus) ist der eigene
+    Summand des Monats (`verbrauch.py`: Direktverbrauch + Entladung + V2H) — Default 0.
     """
     return berechne_verbrauchs_kennzahlen(
         pv_erzeugung_kwh=pv_kwh,
@@ -71,6 +76,7 @@ def _eigenverbrauch_kwh(
         netzbezug_kwh=netzbezug_kwh,
         speicher_ladung_kwh=speicher_ladung_kwh,
         speicher_entladung_kwh=speicher_entladung_kwh,
+        v2h_entladung_kwh=v2h_entladung_kwh,
     ).eigenverbrauch_kwh
 
 
@@ -153,6 +159,10 @@ class TagesBilanz:
     regelmarke: bool = False
     #: Die verworfenen Mengen der Tageszeile (R4) — ``{}`` ohne Befund.
     verworfen: dict = field(default_factory=dict)
+    #: #110 V2H-Tageswert (Konzept §2, E1): die Rückspeisung des E-Autos ins Haus, die in Gesamtverbrauch,
+    #: Eigenverbrauch und Autarkie dieser Bilanz steckt (`mit_v2h_entladung`). Tagesgröße aus dem Rollup
+    #: (`komponenten_kwh["v2h_<id>"]`) — keine Stunde trägt sie. 0.0 = keine V2H gezählt.
+    v2h_entladung_kwh: float = 0.0
 
 
 def gesamtverbrauch_ha_formel_kwh(
@@ -162,20 +172,88 @@ def gesamtverbrauch_ha_formel_kwh(
     einspeisung_kwh: float,
     speicher_entladung_kwh: float,
     speicher_ladung_kwh: float,
+    v2h_entladung_kwh: float = 0.0,
 ) -> float:
     """Tages-Hausverbrauch nach der Formel des HA-Energie-Dashboards (R7/G2).
 
-    ``PV + Netzbezug + Entladung − Einspeisung − Ladung``, **einmal** auf ≥ 0
+    ``PV + Netzbezug + Entladung + V2H − Einspeisung − Ladung``, **einmal** auf ≥ 0
     geklemmt (E2: die Stunde klemmt jede Stunde, der Tag rechnet ungeklemmt
     und klemmt einmal). Der Netto-Split je Stunde ist über den Tag algebraisch
-    identisch mit Brutto. Bildbarkeit prüft der Aufrufer.
+    identisch mit Brutto. Bildbarkeit prüft der Aufrufer. V2H (#110) ist eine
+    Quelle ins Haus wie die Speicher-Entladung; Default 0.
     """
-    return max(0.0, pv_kwh + netzbezug_kwh + speicher_entladung_kwh
+    return max(0.0, pv_kwh + netzbezug_kwh + speicher_entladung_kwh + v2h_entladung_kwh
                - einspeisung_kwh - speicher_ladung_kwh)
+
+
+def mit_v2h_entladung(bilanz: "TagesBilanz", v2h_entladung_kwh: Optional[float]) -> "TagesBilanz":
+    """#110 V2H-Tageswert (Konzept §2, B5): die Tagesbilanz MIT der V2H-Rückspeisung des Tages.
+
+    **Warum eine eigene Funktion und nicht nur ein Parameter von `bilanz_aus_stundenrows`.** An einem Kanal-Tag
+    kommen Gesamtverbrauch, Eigenverbrauch und Quoten nicht aus den Stundenzeilen, sondern aus der Kanal-Komposition
+    (`kanal/bilanz_leser.mische_bilanz`) — und die kennt kein V2H (Kanal-Klasse „Tagesgröße ohne Kanal", Entscheid O2).
+    Der Leser (`energie_profil/tage_werte.py`) wendet diese Funktion deshalb EINMAL nach dem Mischen an; für einen
+    Tag ohne Kanal ruft `bilanz_aus_stundenrows(…, v2h_entladung_kwh=…)` sie selbst.
+
+    **Rechnet nichts selbst und nicht additiv:** Gesamtverbrauch über `gesamtverbrauch_ha_formel_kwh`, Eigenverbrauch
+    über `_eigenverbrauch_kwh` → `berechne_verbrauchs_kennzahlen(v2h_entladung_kwh=…)`, Autarkie/EV-Quote über den
+    Kennzahlen-Layer — jeweils aus den **Summen** der Bilanz (Erzeugung, Netzbezug, Einspeisung, Ladung, Entladung).
+    Damit ist sie idempotent (zweimal angewandt = einmal) und mit 0 kWh die Bilanz ohne V2H.
+
+    Dieselben Sperren wie R7 in `bilanz_aus_stundenrows`: Gesamtverbrauch nur ohne Total-Fall (PV, Netzbezug und
+    Einspeisung erfasst), Eigenverbrauch nur mit PV und Einspeisung und ohne ``verworfen`` auf pv/einspeisung,
+    Autarkie nicht bei ``verworfen`` auf pv/netzbezug/einspeisung/batterie. **Altbestand ohne Regelmarke bleibt
+    unverändert** (dort gibt es keinen V2H-Rollup), ``None`` ebenso (der Tag hat keine V2H-Aussage).
+    """
+    if v2h_entladung_kwh is None or not bilanz.regelmarke:
+        return bilanz
+    v2h = float(v2h_entladung_kwh)
+    verw = bilanz.verworfen or {}
+    gesamt: Optional[float] = None
+    if bilanz.pv_erfasst and bilanz.netzbezug_erfasst and bilanz.einspeisung_erfasst:
+        gesamt = gesamtverbrauch_ha_formel_kwh(
+            pv_kwh=bilanz.erzeugung_kwh, netzbezug_kwh=bilanz.netzbezug_kwh,
+            einspeisung_kwh=bilanz.einspeisung_kwh,
+            speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+            speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
+            v2h_entladung_kwh=v2h,
+        )
+    eigen = (
+        _eigenverbrauch_kwh(
+            pv_kwh=bilanz.erzeugung_kwh, einspeisung_kwh=bilanz.einspeisung_kwh,
+            netzbezug_kwh=bilanz.netzbezug_kwh,
+            speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
+            speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+            v2h_entladung_kwh=v2h,
+        )
+        if bilanz.pv_erfasst and bilanz.einspeisung_erfasst
+        and "pv" not in verw and "einspeisung" not in verw
+        else None
+    )
+    autarkie = (
+        autarkie_prozent(gesamt - bilanz.netzbezug_kwh, gesamt)
+        if gesamt is not None and gesamt > 0
+        and not ({"pv", "netzbezug", "einspeisung", "batterie"} & set(verw))
+        else None
+    )
+    ev_quote = (
+        eigenverbrauchsquote_prozent(eigen, bilanz.erzeugung_kwh)
+        if bilanz.pv_erfasst and eigen is not None and bilanz.erzeugung_kwh > 0 else None
+    )
+    return dataclasses.replace(
+        bilanz,
+        gesamtverbrauch_kwh=gesamt if gesamt is not None else 0.0,
+        verbrauch_erfasst=gesamt is not None,
+        eigenverbrauch_kwh=eigen,
+        autarkie_prozent=autarkie,
+        ev_quote_prozent=ev_quote,
+        v2h_entladung_kwh=v2h,
+    )
 
 
 def bilanz_aus_stundenrows(
     rows: Iterable[_StundenRow], *, verworfen: Optional[dict] = None,
+    v2h_entladung_kwh: Optional[float] = None,
 ) -> TagesBilanz:
     """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring).
 
@@ -204,6 +282,9 @@ def bilanz_aus_stundenrows(
 
     Direktverbrauch, Überschuss und Defizit bleiben in beiden Regeln Σ über die
     Stunden mit (R6-)Verbrauchswert — benannte Teilsummen.
+
+    ``v2h_entladung_kwh`` (#110): die V2H-Tagesgröße aus dem Rollup — nur mit
+    Regelmarke wirksam (`mit_v2h_entladung`, dort die Sperren); ``None`` = keine.
     """
     pv_sum = 0.0
     pv_erfasst = False
@@ -383,7 +464,7 @@ def bilanz_aus_stundenrows(
         verbrauch_sum = gesamtverbrauch_ha if gesamtverbrauch_ha is not None else 0.0
         verbrauch_erfasst = gesamtverbrauch_ha is not None
 
-    return TagesBilanz(
+    bilanz = TagesBilanz(
         erzeugung_kwh=pv_sum,
         gesamtverbrauch_kwh=verbrauch_sum,
         einspeisung_kwh=einspeisung_sum,
@@ -413,6 +494,8 @@ def bilanz_aus_stundenrows(
         regelmarke=regelmarke,
         verworfen=verw,
     )
+    # #110: V2H im R7-Zweig über die eine Funktion — ohne Regelmarke unverändert.
+    return mit_v2h_entladung(bilanz, v2h_entladung_kwh) if regelmarke else bilanz
 
 
 

@@ -26,7 +26,7 @@ import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, Monatsprogno
 import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
-import { DATENROLLE, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
+import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -239,7 +239,9 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       // Strompreis-Mitschrift" — auch dort, wo gar keine Mitschrift beteiligt
       // war (Forum simon42 #89667/56, MartyBr). Ein Etikett, das die Quelle
       // falsch benennt, ist schlimmer als keines.
-      formel: `Ø-Ladepreis der Netzladung (${NETZLADUNG_PREIS_HERKUNFT[d.speicher_ladung_netz_preis_quelle ?? ''] ?? 'Herkunft unbekannt'}) · Kosten = Netzladung × Ladepreis`,
+      formel: `Ø-Ladepreis der Netzladung (${NETZLADUNG_PREIS_HERKUNFT[d.speicher_ladung_netz_preis_quelle ?? ''] ?? 'Herkunft unbekannt'}) · Kosten = Netzladung × Ladepreis`
+        // #427: im laufenden Monat ohne Abschluss kommt die Menge aus den Tagen — die Kachel sagt es.
+        + (d.speicher_ladung_netz_herkunft === 'tageswerte' ? ` · ${NETZLADUNG_AUS_TAGEN}` : ''),
       // Ohne Ladepreis (u. a. bei 0 kWh Netzladung) bleibt die Herleitung leer —
       // „0 kWh × — ct/kWh" wäre keine Rechnung, sondern Rauschen.
       berechnung: d.speicher_ladung_netz_preis_cent != null

@@ -49,6 +49,18 @@ function tagMit(detail: Partial<TagDetail> | null) {
   )
 }
 
+describe('Tagessicht — V2H-Rückspeisung als Tagesgröße (#110)', () => {
+  it('reicht `v2h_entladung` als emob_v2h_kwh an die geteilte Zeile „V2H-Rückspeisung" durch', () => {
+    const d = baueTagAlsMonat(tagWerte('2026-08-27', { v2h_entladung: 2, wp_strom: null }), [], [], null)
+    expect(d.emob_v2h_kwh).toBe(2)
+  })
+
+  it('ohne V2H-Wert bleibt das Feld leer („—"), keine erfundene 0', () => {
+    const d = baueTagAlsMonat(tagWerte('2026-08-27', { wp_strom: null }), [], [], null)
+    expect(d.emob_v2h_kwh).toBeNull()
+  })
+})
+
 describe('Tagessicht — die Geräte hinter der Summe', () => {
   it('reicht komponenten_geraete aus dem Tages-Endpoint durch', () => {
     const d = tagMit({ komponenten_geraete: ZWEI_GERAETE })

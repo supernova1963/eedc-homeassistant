@@ -333,10 +333,11 @@ _SNAPSHOT_AUSNAHMEN: dict[tuple[str, str], str] = {
         "Monatswert ohne Snapshot-Erfassung — auswärts geladene Energie fließt "
         "nicht durch den Hauszähler (so auch im Docstring von "
         "ist_zaehler_differenz_feld festgehalten)",
-    ("e-auto", "v2h_entladung_kwh"):
-        "⚠ UNBEWERTET: V2H speist ins Haus zurück und ist damit bilanzrelevant; "
-        "warum das Feld nie im Snapshot-Pfad stand, ist nicht dokumentiert. "
-        "Beim nächsten Eingriff am E-Auto-Pfad bewerten",
+    # ⚑ `("e-auto", "v2h_entladung_kwh")` stand hier bis 13.10.2026 als „⚠ UNBEWERTET". Bewertet mit #110
+    # (V2H-Tageswert, `docs/KONZEPT-110-RESTPUNKTE.md` §2): der Zähler wird gesnapshottet und trägt über die
+    # Beitragsschicht den Tagesschlüssel `v2h_<id>`. Einen Kanal bekommt er NICHT — das entscheidet der
+    # Kanal-Katalog (`services/kanal/katalog.py`, Klasse „Tagesgröße ohne Kanal"), damit Kanal, E-Mob-Kanalgruppe
+    # und Monat bleiben, wie sie sind (§2.6).
     # — Wechselrichter —
     ("wechselrichter", "pv_erzeugung_kwh"):
         "⚠ UNBEWERTET: Der Typ hat keinen Komponenten-Präfix "

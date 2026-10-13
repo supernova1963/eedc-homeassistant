@@ -73,7 +73,12 @@ from backend.models.kanal import (
     KanalQuelle,
     KanalStatistik,
 )
-from backend.services.kanal.katalog import ist_mean_spiegel, modus_kanal_key, zaehler_art
+from backend.services.kanal.katalog import (
+    ist_mean_spiegel,
+    ist_tagesgroesse_ohne_kanal,
+    modus_kanal_key,
+    zaehler_art,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +247,12 @@ def _art_und_einheit(sensor_key: str, invs: dict[str, Any]) -> tuple[Optional[st
     return art, ""
 
 
+def _tagesgroesse(sensor_key: str, invs: dict[str, Any]) -> bool:
+    """Katalog-Klasse „Tagesgröße ohne Kanal" (#110, V2H): kein Kanal ist hier Absicht, keine Lücke im Katalog."""
+    inv = invs.get(sensor_key.split(":")[1]) if sensor_key.startswith("inv:") else None
+    return ist_tagesgroesse_ohne_kanal(sensor_key, getattr(inv, "typ", None))
+
+
 # ── Spiegel (HA) ────────────────────────────────────────────────────────────
 
 
@@ -270,7 +281,8 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
     for sensor_key in k.counter_map:
         art, einheit = _art_und_einheit(sensor_key, k.invs)
         if art is None:
-            logger.warning("Kanal-Spiegel: %s hat keine Kanal-Art im Katalog — übersprungen", sensor_key)
+            if not _tagesgroesse(sensor_key, k.invs):   # #110: bewusst ohne Kanal — still
+                logger.warning("Kanal-Spiegel: %s hat keine Kanal-Art im Katalog — übersprungen", sensor_key)
             continue
         gewuenscht[sensor_key] = (art, einheit)
     if not gewuenscht:
@@ -633,7 +645,8 @@ async def _eigene_summe(db: AsyncSession, k: _Kontext) -> int:
             continue
         art, einheit = _art_und_einheit(sensor_key, k.invs)
         if art is None:
-            logger.warning("Kanal eigene Summe: %s hat keine Kanal-Art im Katalog — übersprungen", sensor_key)
+            if not _tagesgroesse(sensor_key, k.invs):   # #110: bewusst ohne Kanal — still
+                logger.warning("Kanal eigene Summe: %s hat keine Kanal-Art im Katalog — übersprungen", sensor_key)
             continue
         auswahl[sensor_key] = mqtt_key
         gewuenscht[sensor_key] = (art, einheit)

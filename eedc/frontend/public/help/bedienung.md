@@ -284,6 +284,14 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > aus dem Netz, kann die Summe der Tage leicht über dem Monatswert liegen — der Monat verrechnet die
 > Netzladung mit dem PV-Überschuss anderer Tage ([Berechnungsreferenz 3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen)).
 
+> **V2H — das Auto speist ins Haus zurück.** Hast du an einem V2H-fähigen E-Auto den Zähler **„V2H Entladung"** zugeordnet
+> (*Einstellungen → Datenquellen*, das Feld erscheint nur mit „V2H-fähig"), zählt der Tag die Rückspeisung als dritten
+> Summanden: **Eigenverbrauch = Direktverbrauch + Speicher-Entladung + V2H-Rückspeisung**, und sie steckt genauso in
+> Gesamtverbrauch und Autarkie — wie im Monat. Der Rechenweg im Tooltip nennt sie, sobald der Tag eine trägt; im Block
+> **E-Mobilität** steht sie als Zeile **„V2H-Rückspeisung"**. Die Rückspeisung ist eine **Tagesgröße**: die
+> Stundenwerte-Tabelle und der Stunden-Verlauf zeigen sie nicht, die Summe der Stunden liegt deshalb um sie unter dem
+> Gesamtverbrauch des Tages. Im laufenden Monat zählt V2H erst mit dem Monatsabschluss. Ohne Zähler steht dort „—".
+
 > **Wo steht der Speicher?** Nicht im obersten Kennzahlen-Block, sondern weiter unten im
 > eingeklappten Block **Speicher** — seine Kopfzeile nennt schon ohne Aufklappen geladene kWh,
 > Vollzyklen und Wirkungsgrad. Aufgeklappt stehen dort **Ladung**, **Entladung**,
@@ -430,8 +438,15 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > *kein Heizbetrieb in diesem Zeitraum* — die Wärmepumpe lief nicht, es fehlt kein Zähler.
 
 > **Ohne Home Assistant** gilt dasselbe für Zähler, die eedc über MQTT mitschreibt, ab dem ersten Monat, den diese
-> Mitschrift ganz abdeckt; davor — und für die Netzladung deines Speichers auch mit Home Assistant — zählen diese Größen
-> erst mit dem Monatsabschluss.
+> Mitschrift ganz abdeckt; davor zählen diese Größen erst mit dem Monatsabschluss.
+
+> **Netzladung des Speichers im laufenden Monat.** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, nennt der
+> laufende Monat die Netzladung schon vor dem Abschluss — als **Summe der abgelaufenen Tage**, dieselben Zahlen wie in
+> *Cockpit → Tag* (der heutige Tag kommt morgen dazu). Die Kachel **„Batterieladung Netz"** und die Speicher-Zeile
+> „davon aus dem Netz" sagen das beim Überfahren („Menge aus Tageswerten"); der Ladepreis ist derselbe wie am Tag
+> (gewichtet mit deinen Stundenpreisen, sonst dein Arbeitspreis). Mit dem Monatsabschluss gilt der gespeicherte Wert. Ein
+> **vergangener** Monat ohne Abschluss nennt die Netzladung weiterhin erst mit dem Abschluss — ebenso die V2H-Rückspeisung
+> eines E-Autos.
 
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 

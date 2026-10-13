@@ -26,9 +26,11 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     MODI_OHNE_BEWERTETE_NUTZENERGIE,
     betriebsart_strom_felder_belegt,
 )
+from backend.core.berechnungen.energie import V2H_KOMPONENTEN_PREFIX
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
     feine_strom_achsen,
+    groesse_gibt_es_am_geraet,
     sonstiges_feld_reihenfolge,
     wp_strom_stufe,
 )
@@ -344,12 +346,13 @@ def investition_beitraege(
     inv_id_str = str(getattr(inv, "id", ""))
     target_key = f"{prefix}{inv_id_str}"
 
-    def _add(feld: str, vorzeichen: int = +1, fallback_gruppe: Optional[str] = None):
+    def _add(feld: str, vorzeichen: int = +1, fallback_gruppe: Optional[str] = None,
+             ziel: Optional[str] = None):
         if ist_verfuegbar(feld):
             beitraege.append(
                 KomponentenBeitrag(
                     feld=feld,
-                    target_key=target_key,
+                    target_key=ziel or target_key,
                     vorzeichen=vorzeichen,
                     fallback_gruppe=fallback_gruppe,
                 )
@@ -496,11 +499,19 @@ def investition_beitraege(
         _add("ladung_kwh")
 
     elif typ == "e-auto":
+        # ⭐ #110 V2H-Tageswert (Konzept §2, B3): die Rückspeisung ins Haus auf einen EIGENEN Ziel-Schlüssel
+        # `v2h_<id>` (Vorzeichen +1, Quelle) — `eauto_<id>` trägt weiter nur die Heimladung. Sie steht VOR dem
+        # Parent-Skip und vor der Wallbox-Regel: beide Regeln betreffen die LADUNG; die Wallbox hat kein
+        # V2H-Feld, das Auto ist der einzige Träger. Nur, wo die Registry die Größe am Gerät kennt
+        # (`bedingung: v2h_faehig`, über `groesse_gibt_es_am_geraet`) — dieselbe Bedingung, unter der die
+        # Zuordnungs-Fläche das Feld anbietet und der Monatsabschluss es abfragt.
+        if groesse_gibt_es_am_geraet(typ, "v2h_entladung_kwh", getattr(inv, "parameter", None)):
+            _add("v2h_entladung_kwh", ziel=f"{V2H_KOMPONENTEN_PREFIX}{inv_id_str}")
         # Wenn parent_investition_id gesetzt ist, misst die Wallbox bereits
         # die Ladung — wir überspringen das E-Auto, damit nicht doppelt
         # gezählt wird (spiegelt Live-Pfad).
         if getattr(inv, "parent_investition_id", None) is not None:
-            return []
+            return beitraege
         # N-196: dieselbe STRUKTURELLE Regel wie im Leistungspfad
         # (`live_sensor_config.py`, F-14/#356) — trägt eine Wallbox die
         # Ladeenergie, ist sie die Quelle, auch ohne gesetzten Parent.
@@ -517,7 +528,7 @@ def investition_beitraege(
         # Argument für Symmetrie, nicht gegen sie — eine Regel, die nur einer
         # von zwei Pfaden kennt, ist die nächste Drift-Quelle.
         if wallbox_deckt_ladung:
-            return []
+            return beitraege
         # ⭐ N-555 (Konzept Regel 6): die Heimladung DIESES Autos aus seinen
         # Heimlade-Feldern, sein Fahrverbrauch nur, wenn keines davon eine Quelle
         # hat. Gewählt wird nach der QUELLE (`ist_verfuegbar` = `feld_hat_zaehler`),
@@ -672,7 +683,8 @@ def komponenten_key_label(key: str, inv: Any = None) -> str:
         return PV_AGGREGAT_LABEL
     bezeichnung = getattr(inv, "bezeichnung", None) if inv is not None else None
     if bezeichnung:
-        return bezeichnung
+        # #110: `v2h_<id>` und `eauto_<id>` gehören demselben Auto — die Meldung muss sagen, welcher Wert fehlt.
+        return f"{bezeichnung} (V2H)" if key.startswith(V2H_KOMPONENTEN_PREFIX) else bezeichnung
     praefix, _, _rest = key.rpartition("_")
     return praefix or key
 

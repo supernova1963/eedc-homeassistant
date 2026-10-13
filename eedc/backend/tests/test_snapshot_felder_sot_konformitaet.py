@@ -166,6 +166,8 @@ def test_jedes_zaehlerfeld_erzeugt_einen_beitrag_oder_ist_begruendet():
             [{"kategorie": "verbraucher"}, {"kategorie": "erzeuger"}, {"kategorie": "abgabe"}]
             if typ == "sonstiges"
             else [{"getrennte_strommessung": True}, {}] if typ == "waermepumpe"
+            # #110: der V2H-Zähler trägt nur am V2H-fähigen Auto bei (Registry `bedingung: v2h_faehig`).
+            else [{}, {"v2h_faehig": True}] if typ == "e-auto"
             else [{}]
         )
         for feld in felder:

@@ -336,7 +336,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `ladung_extern_euro` | Externe Ladekosten | € | — | Kosten der externen Ladung. Manuell. Optional. | Komponenten → E-Auto · Cockpit → Jahr |
 | `verbrauch_kwh` | Verbrauch gesamt | kWh | Kumulativ oder Tagessensor | Gefahrener Energieverbrauch des E-Autos (reiner **Fahrverbrauch**), für die kWh/100 km-Effizienz mit `km_gefahren` verrechnet und beim Plug-in-Hybrid für den elektrischen Anteil. **Keine Ladung:** Als Heimladung setzt eedc ihn nur als ausdrücklich gekennzeichnete **Schätzung** ein, wenn für die Heimladung weder ein Wert (auch 0) noch — im laufenden Monat — eine Quelle bekannt ist ([Berechnungen, Heimladung und Fahrverbrauch](BERECHNUNGEN.md)). Hat die Wallbox einen Sensor und im Monat 0 kWh geladen, ist die Heimladung 0. Optional — fehlt der Wert, nähert eedc die kWh/100 km aus der geladenen Energie (Heim + Extern) an (inkl. Ladeverluste). | Komponenten → E-Auto · Cockpit → Monat |
 | `km_gefahren` | Gefahrene km | km | Kumulativ oder Tagessensor | Gefahrene Kilometer im Monat. Sensor (Auto-Integration, OBD) oder manuell. Ohne Sensor: im Monatsabschluss den **Tachostand** eintragen — eedc rechnet die Differenz zum Vormonat und schlägt sie hier vor. | Komponenten → E-Auto · Cockpit → Monat · HA-Sensoren |
-| `v2h_entladung_kwh` | V2H Entladung | kWh | Kumulativ oder Tagessensor | Vehicle-to-Home Entladung. Nur bei V2H-fähigem Fahrzeug. Optional. | Komponenten → E-Auto · Cockpit → Jahr · HA-Sensoren |
+| `v2h_entladung_kwh` | V2H Entladung | kWh | Kumulativ oder Tagessensor | Vehicle-to-Home Entladung. Nur bei V2H-fähigem Fahrzeug. Optional. Am Tag eine Tagesgröße (Eigenverbrauch, Gesamtverbrauch, Autarkie), keine Stunde; im Monat ab dem Abschluss. | Cockpit → Tag · Komponenten → E-Auto · Cockpit → Jahr · HA-Sensoren |
 
 ### Live-Dashboard
 
@@ -351,8 +351,8 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 |------------|------|---------|
 | `eedc/.../energy/inv/{inv_id}_{name}/ladung_kwh` | `ladung_kwh` („Heim: gesamt“) | Gesamt-Heimladung dieses Autos, **nicht** PV/Netz-Split — geteilt wird mit dem PV-Anteil der Wallbox. |
 | `eedc/.../energy/inv/{inv_id}_{name}/km_gefahren` | `km_gefahren` | |
-| `eedc/.../energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | `v2h_entladung_kwh` | |
-| ⚠️ `ladung_pv_kwh` / `ladung_netz_kwh` | — | **Kein MQTT-Topic** — Split wird berechnet, nicht gemessen |
+| `eedc/.../energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | `v2h_entladung_kwh` | Seit #110 eingelesen (vorher verworfen): Tageswert in Cockpit → Tag, Vorschlag im Monatsabschluss. |
+| `eedc/.../energy/inv/{inv_id}_{name}/ladung_pv_kwh` / `…/ladung_netz_kwh` | `ladung_pv_kwh` („Heim: PV“) / `ladung_netz_kwh` („Heim: Netz“) | Gemessene Aufteilung der Heimladung dieses Autos — erwartet und eingelesen wie die anderen Felder. |
 
 ---
 

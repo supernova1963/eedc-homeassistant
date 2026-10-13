@@ -238,6 +238,13 @@ export const NETZLADUNG_PREIS_HERKUNFT: Record<string, string> = {
 }
 
 /**
+ * #427 (Melder rapahl): Herkunft der Netzladungs-MENGE im laufenden Monat ohne Monatsabschluss
+ * (Backend `speicher_ladung_netz_herkunft === 'tageswerte'`): die Summe der abgelaufenen Tage,
+ * dieselbe Zahl wie Cockpit → Tag. Der Monatsabschluss ersetzt sie.
+ */
+export const NETZLADUNG_AUS_TAGEN = 'Menge aus Tageswerten: Summe der abgelaufenen Tage (wie Cockpit → Tag), bis zum Monatsabschluss'
+
+/**
  * Die geschätzten Änderungen einer Reparatur-Vorschau (`estimated_changes`).
  *
  * Die Reparatur-Werkbank zeigte bis zum 06.09.2026 die **rohen Schlüssel** des

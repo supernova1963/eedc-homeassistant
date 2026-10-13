@@ -54,7 +54,9 @@ class TagesEnergieProfil(Base):
     verbrauch_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     einspeisung_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     netzbezug_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # batterie_kw: alle Speicher inkl. V2H — positiv=Entladung(Quelle), negativ=Ladung(Senke).
+    # batterie_kw: alle stationären Speicher — positiv=Entladung(Quelle), negativ=Ladung(Senke).
+    # V2H steht NICHT hier (#110, Konzept §2 E1/E2): die Rückspeisung eines E-Autos ist eine eigene
+    # Tagesgröße im Rollup `TagesZusammenfassung.komponenten_kwh["v2h_<id>"]`, keine Stunde trägt sie.
     # Vorzeichen-SoT: core.berechnungen.batterie_kw_spalte (= −Bilanz-Netto). NICHT
     # auf "Ladung positiv" zurückdrehen — alle Consumer (tagesbilanz, Charts,
     # speicher_wirtschaftlichkeit, komponenten[batterie_*]) erwarten Entladung positiv.
