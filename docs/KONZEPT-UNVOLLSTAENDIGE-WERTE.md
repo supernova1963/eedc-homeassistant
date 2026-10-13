@@ -111,7 +111,7 @@ nur nicht als Regel aufgeschrieben und deshalb nicht durchgesetzt.
 | `services/daten_checker/monatsdaten.py:531-544` | Dreifacher `is not None`-Guard, sonst wird die Prüfung übersprungen — „eine Prüfung, die schlicht nicht prüfbar ist" |
 | `api/routes/aktueller_monat/vergleich.py::_load_vorjahr` | **Gestufte** Unterdrückung: ohne Einspeisung kein Eigenverbrauch; ohne Netzbezug zusätzlich kein Gesamtverbrauch und keine Autarkie — aber der Eigenverbrauch **bleibt**. Die feinste Behandlung im Baum |
 | `core/berechnungen/tagesbilanz.py:92-115` | NULL-Stunden zählen nicht als 0; Quoten `None` statt 0, „damit die UI '—' statt '0 %' zeigt" |
-| `api/routes/import_export/csv_operations.py:454-461` | Import setzt `eigenverbrauch = None` vor, rechnet nur im Guard |
+| `api/routes/import_export/csv_operations.py::_bilanz` | Import setzt `eigenverbrauch = None` vor, rechnet nur im Guard |
 | `services/monats_fakten/fakten.py::ErzeugungFakten` | `ErzeugungFakten.pv_module_kwh: Optional[float]` — im Docstring steht die richtige Regel wörtlich: „Wer summiert, behandelt `None` als Lücke, **nie** als 0" |
 
 ### §2.4 Der schärfste Einzelbefund: ein Flag ohne Leser
