@@ -2513,9 +2513,13 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # WK-16c: die Strom-Verteilung JE GERÄT aus der übergebenen Monatszeile.
     "backend/services/waerme_verteilung.py::_eingabe_aus_monatszeile":
         "backend/services/waerme_verteilung.py::_monatszeilen",
+    # RF-17 (Serie „Funktion vor Datei"): Phase des WP-Hubs — Kosten, Ersparnis und CO₂ je Monat aus den Zeilen,
+    # die der Orchestrator `get_waermepumpe_dashboard` lädt (gelistet in `P10_PER_INVESTITION`).
+    "backend/api/routes/investitionen/dashboard_waermepumpe.py::_bewertung":
+        "backend/api/routes/investitionen/dashboard_waermepumpe.py::get_waermepumpe_dashboard",
     # WK-16a: die Mengen JE GERÄT. Zweiter Aufrufer über
-    # `kennzahlen_aus_monatszeilen` ist `dashboard_waermepumpe.py::get_waermepumpe_dashboard`
-    # (ebenfalls gelistet).
+    # `kennzahlen_aus_monatszeilen` ist `dashboard_waermepumpe.py::_dashboard_einer_wp` (RF-17: Phase des
+    # gelisteten Laders `get_waermepumpe_dashboard`).
     "backend/services/waermepumpe_kennzahlen_je_geraet.py::mengen_aus_monatszeilen":
         "backend/services/waermepumpe_kennzahlen_je_geraet.py::lade_kennzahlen_je_geraet",
     # RF-5 (Serie „Funktion vor Datei"): Phasen der HA-Import-Vorschau. Sie vergleichen die vorhandenen
