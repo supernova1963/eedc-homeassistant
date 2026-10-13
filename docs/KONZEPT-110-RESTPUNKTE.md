@@ -145,7 +145,9 @@ zu prüfen und zu benennen, nicht zu bauen.
 
 ### 2.7 Gates und Zeitpunkt
 
-Eigenes Päckchen **nach v4.1.7**, ohne Termin (Wartungsmodus: ohne Vorlage, Gegenprüfung, Nachmessung, Golden Master). Gates wie in
+**Gebaut am 13.10.2026 (Commit `2ce068fa`), ausgeliefert mit v4.1.7** — das Päckchen wurde auf Entscheid Gernots vor das Release gezogen,
+zusammen mit #427 Punkt 2 (Netzladung des Speichers im laufenden Monat). Ursprünglich geplant als eigenes Päckchen nach v4.1.7, ohne Termin
+(Wartungsmodus: ohne Vorlage, Gegenprüfung, Nachmessung, Golden Master). Gates wie in
 `CLAUDE.md`: berührte Backend-Tests plus die Wächter (`test_wurzelmuster_konformitaet.py`, `test_snapshot_felder_sot_konformitaet.py`,
 `test_jedes_feld_hat_eine_auswertung.py`), Frontend `lint`/`tsc`/`test`, `sync-help.sh` und Website-Build, volle Backend-Suite am Ende.
 Kein Fund, keine Fund-ID: der Punkt ist ein Wunsch aus #110; der Commit nennt «#110 V2H-Tageswert».
@@ -155,3 +157,5 @@ Kein Fund, keine Fund-ID: der Punkt ist ein Wunsch aus #110; der Commit nennt «
 - **12.10.2026** — Triage auf Gernots Frage, ob beide Punkte bis zum Release 4.1.7 lösbar sind: nein (Messung §1.3 und §2.2–2.4).
 - **13.10.2026** — Entscheid Gernot: #110 bleibt offen, beide Punkte bleiben «gesammelt» und verweisen auf dieses Dokument;
   «Gesamt» nicht gebaut; V2H-Tageswert wird gebaut mit E1–E3.
+- **13.10.2026 (abends)** — Gernot hält das Release 4.1.7 an und zieht den V2H-Tageswert vor: gebaut nach O2 und B5-a (Baunotiz §2.4),
+  Commit `2ce068fa`; mit v4.1.7 ausgeliefert (Release-Commit `ebe90eb7`). «Gesamt» (§1) bleibt ungebaut.
