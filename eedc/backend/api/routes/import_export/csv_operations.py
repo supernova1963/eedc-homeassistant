@@ -5,6 +5,7 @@ Template-Generierung, CSV-Import und CSV-Export.
 """
 
 import csv
+from collections import Counter
 from dataclasses import dataclass, field
 from io import StringIO
 from typing import Optional
@@ -25,6 +26,7 @@ from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sons
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.field_definitions import (
     basis_feld_key,
+    get_alle_felder_fuer_investition,
     get_felder_fuer_investition,
     innengeraet_id_von_feld,
 )
@@ -33,8 +35,11 @@ from backend.core.berechnungen.preis_reihe import ist_dynamisch
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
+    LEGACY_GERAETE_SPALTEN,
+    V09_BASIS_SPALTEN,
     _sanitize_column_name,
     _normalize_for_matching,
+    _spalte_traegt_suffix,
     _import_investition_monatsdaten_v09,
     _import_investition_monatsdaten_legacy,
     _distribute_legacy_pv_to_modules,
@@ -248,24 +253,29 @@ async def download_csv_template(anlage_id: int, db: AsyncSession = Depends(get_d
 # `_importiere_zeile`; er ruft die Phasen in der Schreib-Reihenfolge des HEAD (je Zeile):
 #   SELECT monatsdaten → Geräte-Spalten v09 (Upserts je Gerät) → PV-Verteilung → Speicher-Verteilung + Speicher-0
 #   → Monatszeile (UPDATE per write_with_provenance in fester Feldfolge bzw. INSERT + seed_provenance)
-#   → Legacy-Gerätespalten (E-Auto, Wallbox, Speicher, WP).
-# ⛔ Kein Rollback je Zeile — was eine Zeile vor ihrer Ausnahme geschrieben hat, bleibt in der Sitzung (Bestand).
+#   → Legacy-Gerätespalten (E-Auto, Wallbox, Speicher, WP) — nur auf das EINE Gerät eines Typs (N-747, `_alt_spalten_ziele`).
+# ⛔ Je Zeile ganz oder gar nicht (N-748): die Schreibphasen laufen in einem SAVEPOINT je Zeile (`_schreibe_zeile`), ein
+#    äußerer SAVEPOINT klammert die Schleife — dieselbe Bauform wie der eigene Import (`custom_import/apply.py`, N-704).
 # ⛔ Die drei Legacy-Spalten (PV, Ladung, Entladung) werden VOR der PV-Verteilung gelesen: eine unlesbare
 #    Batterie-Zelle bricht die Zeile ab, bevor die PV verteilt ist.
 
 
 @dataclass
 class _ImportKontext:
-    """Was jede Zeile des Backup-Imports liest (RF-14): Anlage, Optionen, aktive Investitionen, Spalten-Art."""
+    """Was jede Zeile des Backup-Imports liest (RF-14): Anlage, Optionen, aktive Investitionen, Spalten-Art.
+
+    `inv_by_type` ist das Ziel der Alt-Spalten je Typ, `alt_spalten_gesperrt` die Warnung je Typ ohne Ziel (N-747,
+    beide aus `_alt_spalten_ziele`, sobald die Kopfzeile gelesen ist)."""
     anlage: Anlage
     anlage_id: int
     ueberschreiben: bool
     auto_wetter: bool
     investitionen: list[Investition]
-    inv_by_type: dict[str, Investition]
     pv_module_vorhanden: bool
     speicher_vorhanden: bool
     has_personalized_columns: bool = False
+    inv_by_type: dict[str, Investition] = field(default_factory=dict)
+    alt_spalten_gesperrt: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -322,8 +332,10 @@ async def import_csv(
     reader = await _lies_csv(file)
 
     # Prüfen ob personalisierte Spalten vorhanden
-    kontext.has_personalized_columns = _hat_personalisierte_spalten(
-        kontext.investitionen, reader.fieldnames or []
+    fieldnames = reader.fieldnames or []
+    kontext.has_personalized_columns = _hat_personalisierte_spalten(kontext.investitionen, fieldnames)
+    kontext.inv_by_type, kontext.alt_spalten_gesperrt = _alt_spalten_ziele(
+        kontext.investitionen, fieldnames, kontext.has_personalized_columns,
     )
 
     stand = _ImportStand()
@@ -336,10 +348,14 @@ async def import_csv(
     # „X Felder geschuetzt" lief hier deshalb nie und ist entfernt; er lebt nur
     # im Portal-Import (`data_import.py`, Quelle `external:*`, geraetegebunden).
 
-    for i, row in enumerate(reader, start=2):
-        await _importiere_zeile(db, kontext, stand, i, row)
+    # ⛔ **Äußerer SAVEPOINT — nicht weglassen (N-748).** Jede Zeile schreibt in einem eigenen SAVEPOINT. SQLite beginnt mit
+    # einem SAVEPOINT außerhalb einer Transaktion SELBST die Transaktion, und dessen RELEASE COMMITTET sie (bis hier liefen
+    # nur SELECTs) — ohne diese Klammer wäre jede Zeile sofort dauerhaft. Dieselbe Bauform wie `custom_import/apply.py`.
+    async with db.begin_nested():
+        for i, row in enumerate(reader, start=2):
+            await _importiere_zeile(db, kontext, stand, i, row)
 
-    await db.flush()
+        await db.flush()
 
     return ImportResult(
         erfolg=len(stand.fehler) == 0,
@@ -353,18 +369,12 @@ async def import_csv(
 async def _lade_kontext(
     db: AsyncSession, anlage: Anlage, anlage_id: int, ueberschreiben: bool, auto_wetter: bool,
 ) -> _ImportKontext:
-    """Phase E1 (RF-14): aktive Investitionen, erste aktive je Typ (Legacy-Import), PV-/Speicher-Vorhandensein."""
+    """Phase E1 (RF-14): aktive Investitionen, PV-/Speicher-Vorhandensein (das Ziel der Alt-Spalten: `_alt_spalten_ziele`)."""
     # Investitionen laden
     inv_result = await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id, aktiv_jetzt())
     )
     investitionen = list(inv_result.scalars().all())
-
-    # Investitionen nach Typ gruppieren (erste aktive je Typ) - für Legacy-Import
-    inv_by_type: dict[str, Investition] = {}
-    for inv in investitionen:
-        if inv.typ not in inv_by_type:
-            inv_by_type[inv.typ] = inv
 
     return _ImportKontext(
         anlage=anlage,
@@ -372,7 +382,6 @@ async def _lade_kontext(
         ueberschreiben=ueberschreiben,
         auto_wetter=auto_wetter,
         investitionen=investitionen,
-        inv_by_type=inv_by_type,
         pv_module_vorhanden=any(inv.typ == "pv-module" for inv in investitionen),
         speicher_vorhanden=any(inv.typ == "speicher" for inv in investitionen),
     )
@@ -416,6 +425,75 @@ def _hat_personalisierte_spalten(investitionen: list[Investition], fieldnames: l
     return has_personalized_columns
 
 
+#: N-747: Muster und Mehrzahl der Alt-Spalten je Typ ohne Verteilschlüssel — für die Warnung, wenn sie kein Ziel haben.
+_ALT_SPALTEN_WORTE = {
+    "e-auto": ("EAuto_*", "E-Autos"),
+    "wallbox": ("Wallbox_*", "Wallboxen"),
+    "waermepumpe": ("WP_*", "Wärmepumpen"),
+}
+
+
+def _alt_spalten_ziele(
+    investitionen: list[Investition], fieldnames: list[str], has_personalized_columns: bool,
+) -> tuple[dict[str, Investition], dict[str, str]]:
+    """Phase E4 (N-747): wohin die Alt-Spalten (`LEGACY_GERAETE_SPALTEN`) einer Datei gehen — je Typ ein Ziel oder keins.
+
+    Eine Alt-Spalte trägt den Wert des ganzen Typs. Er geht nur auf ein Gerät, wenn es das **einzige aktive** seines Typs
+    ist und — bei E-Auto, Wallbox, Wärmepumpe — **keine Geräte-Spalte** dieses Typs in der Datei steht. Sonst schreibt der
+    Import ihn nicht und sagt es (zweites Ergebnis: Warnung je Typ). Eine Verteilung gibt es für diese drei Typen nicht
+    (km, Ladevorgänge, Heizenergie haben keinen Anteilsschlüssel wie kWp oder Kapazität) — erfundene Anteile wären
+    Gerätewerte, die niemand gemessen hat.
+
+    Der Speicher hat einen Verteiler (`_batterie`, proportional nach Kapazität): bei mehreren Speichern ist dessen Ergebnis
+    das Ergebnis, der Legacy-Block schreibt nichts darüber (bis 13.10.2026 überschrieb er mit Haken das erste Gerät mit dem
+    vollen Wert). Ob eine Speicher-Geräte-Spalte die Zeile trägt, entscheidet `_batterie` je Zeile
+    (`_alt_spalten_ziele_der_zeile`); seine Warnungen sagen es schon, hier steht für den Speicher keine.
+    """
+    anzahl = Counter(inv.typ for inv in investitionen)
+    mit_geraete_spalte = _typen_mit_geraete_spalte(investitionen, fieldnames) if has_personalized_columns else set()
+
+    ziele: dict[str, Investition] = {}
+    gesperrt: dict[str, str] = {}
+    for typ in LEGACY_GERAETE_SPALTEN:
+        n = anzahl.get(typ, 0)
+        if n == 1 and (typ == "speicher" or typ not in mit_geraete_spalte):
+            ziele[typ] = next(inv for inv in investitionen if inv.typ == typ)
+        elif n >= 1 and typ in _ALT_SPALTEN_WORTE:
+            muster, mehrzahl = _ALT_SPALTEN_WORTE[typ]
+            if n > 1:
+                gesperrt[typ] = (
+                    f"Alt-Spalten {muster} nicht zugeordnet: {n} {mehrzahl} angelegt — "
+                    f"die Werte gehören in die Spalten der einzelnen Geräte (siehe CSV-Vorlage)."
+                )
+            else:
+                gesperrt[typ] = (
+                    f"Alt-Spalten {muster} nicht zugeordnet: Geräte-Spalte vorhanden — es gelten die Werte der Geräte-Spalte."
+                )
+    return ziele, gesperrt
+
+
+def _typen_mit_geraete_spalte(investitionen: list[Investition], fieldnames: list[str]) -> set[str]:
+    """N-747: die Typen, für die die Kopfzeile eine Geräte-Spalte trägt — dieselben Treffer-Wege wie v09
+    (`<Bezeichnung>` allein, `_spalte_traegt_suffix` über Haupt- und Alt-Suffix der Registry). Basis- und Alt-Spalten zählen
+    nie (eine Alt-Spalte ist ein Typ-Sammelwert, auch wenn ein Gerät so heißt, dass v09 sie trifft)."""
+    alt = {s for spalten in LEGACY_GERAETE_SPALTEN.values() for s in spalten}
+    kandidaten = [c for c in fieldnames if c not in V09_BASIS_SPALTEN and c not in alt]
+    typen: set[str] = set()
+    for inv in investitionen:
+        sanitized = _sanitize_column_name(inv.bezeichnung)
+        normalized = _normalize_for_matching(inv.bezeichnung)
+        suffixe = [
+            s for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter)
+            for s in (feld.get("csv_suffix"), feld.get("csv_suffix_alt")) if s
+        ]
+        if suffixe and any(
+            col == sanitized or any(_spalte_traegt_suffix(col, sanitized, normalized, s) for s in suffixe)
+            for col in kandidaten
+        ):
+            typen.add(inv.typ)
+    return typen
+
+
 # Werte parsen
 def _parse_float(val: str) -> Optional[float]:
     if not val or not val.strip():
@@ -435,7 +513,12 @@ async def _importiere_zeile(
     db: AsyncSession, kontext: _ImportKontext, stand: _ImportStand, i: int, row: dict,
 ) -> None:
     """Eine CSV-Zeile = ein Monat (RF-14, der Schleifenkörper am HEAD). `return` steht für das `continue` am HEAD.
-    Ausnahmen werden je Zeile gezählt, nicht zurückgerollt."""
+
+    ⛔ **Ganz oder gar nicht (N-748).** Bis 13.10.2026 blieb, was eine Zeile vor ihrem Fehler geschrieben hatte, in der
+    Sitzung stehen: `Sueddach_kWh` 300 neben `PV_Erzeugung_kWh` «abc» ergab «Zeile 2: Ungültiger Wert», «0 importiert» —
+    und einen Gerätewert 300 ohne Monatszeile, den ein zweiter Import ohne Haken nicht mehr ersetzte. Jetzt schreibt die
+    Zeile in einem eigenen SAVEPOINT (`_schreibe_zeile`); ein Fehler rollt genau diese Zeile zurück und zählt in
+    `stand.fehler` (Antwort unverändert). Dieselbe Bauform wie der eigene Import (`custom_import/apply.py::_importiere_monat`)."""
     try:
         # Pflichtfelder
         jahr = int(row.get("Jahr", "").strip())
@@ -462,34 +545,8 @@ async def _importiere_zeile(
             stand.uebersprungen += 1
             return
 
-        werte = _lies_basiswerte(row, i, stand.warnungen)
-        werte.globalstrahlung, werte.sonnenstunden = await _wetter_nachholen(
-            db, kontext.anlage, kontext.auto_wetter, werte.globalstrahlung, werte.sonnenstunden, jahr, monat,
-        )
-        summen = await _summen_aus_geraete_spalten(db, kontext, row, jahr, monat)
-
-        # Legacy-Spalten Validierung
-        pv_erzeugung_explicit = _parse_float(row.get("PV_Erzeugung_kWh", ""))
-        batterie_ladung_explicit = _parse_float(row.get("Batterie_Ladung_kWh", ""))
-        batterie_entladung_explicit = _parse_float(row.get("Batterie_Entladung_kWh", ""))
-
-        werte.pv_erzeugung = await _pv_erzeugung(
-            db, kontext, stand.warnungen, summen, pv_erzeugung_explicit, jahr, monat,
-        )
-        werte.batterie_ladung, werte.batterie_entladung = await _batterie(
-            db, kontext, stand.warnungen, summen, batterie_ladung_explicit, batterie_entladung_explicit, jahr, monat,
-        )
-        werte.direktverbrauch, werte.eigenverbrauch, werte.gesamtverbrauch = _bilanz(
-            werte.pv_erzeugung, werte.einspeisung, werte.netzbezug,
-            werte.batterie_ladung, werte.batterie_entladung, summen,
-        )
-        await _schreibe_monatszeile(db, kontext.anlage_id, jahr, monat, existing_md, werte)
-
-        # Legacy Investitions-Spalten
-        await _import_investition_monatsdaten_legacy(
-            db, row, _parse_float, kontext.inv_by_type, jahr, monat, kontext.ueberschreiben,
-            source="manual:csv_backup", writer="csv_backup_restore",
-        )
+        async with db.begin_nested():
+            await _schreibe_zeile(db, kontext, stand, i, row, jahr, monat, existing_md)
 
         stand.importiert += 1
 
@@ -497,6 +554,60 @@ async def _importiere_zeile(
         stand.fehler.append(f"Zeile {i}: Ungültiger Wert - {e}")
     except Exception as e:
         stand.fehler.append(f"Zeile {i}: Fehler - {e}")
+
+
+async def _schreibe_zeile(
+    db: AsyncSession,
+    kontext: _ImportKontext,
+    stand: _ImportStand,
+    i: int,
+    row: dict,
+    jahr: int,
+    monat: int,
+    existing_md: Optional[Monatsdaten],
+) -> None:
+    """Die Schreibphasen einer Zeile (Z4–Z11), im SAVEPOINT des Aufrufers — eine Ausnahme verwirft alles davon (N-748)."""
+    werte = _lies_basiswerte(row, i, stand.warnungen)
+    werte.globalstrahlung, werte.sonnenstunden = await _wetter_nachholen(
+        db, kontext.anlage, kontext.auto_wetter, werte.globalstrahlung, werte.sonnenstunden, jahr, monat,
+    )
+    summen = await _summen_aus_geraete_spalten(db, kontext, row, jahr, monat)
+
+    # Legacy-Spalten Validierung
+    pv_erzeugung_explicit = _parse_float(row.get("PV_Erzeugung_kWh", ""))
+    batterie_ladung_explicit = _parse_float(row.get("Batterie_Ladung_kWh", ""))
+    batterie_entladung_explicit = _parse_float(row.get("Batterie_Entladung_kWh", ""))
+
+    werte.pv_erzeugung = await _pv_erzeugung(
+        db, kontext, stand.warnungen, summen, pv_erzeugung_explicit, jahr, monat,
+    )
+    werte.batterie_ladung, werte.batterie_entladung = await _batterie(
+        db, kontext, stand.warnungen, summen, batterie_ladung_explicit, batterie_entladung_explicit, jahr, monat,
+    )
+    werte.direktverbrauch, werte.eigenverbrauch, werte.gesamtverbrauch = _bilanz(
+        werte.pv_erzeugung, werte.einspeisung, werte.netzbezug,
+        werte.batterie_ladung, werte.batterie_entladung, summen,
+    )
+    await _schreibe_monatszeile(db, kontext.anlage_id, jahr, monat, existing_md, werte)
+
+    # Legacy Investitions-Spalten — nur auf das EINE Gerät eines Typs (N-747)
+    ohne_ziel = await _import_investition_monatsdaten_legacy(
+        db, row, _parse_float, _alt_spalten_ziele_der_zeile(kontext, summen), jahr, monat, kontext.ueberschreiben,
+        source="manual:csv_backup", writer="csv_backup_restore",
+    )
+    for typ in ohne_ziel:
+        warnung = kontext.alt_spalten_gesperrt.get(typ)
+        if warnung is not None and warnung not in stand.warnungen:
+            stand.warnungen.append(warnung)
+
+
+def _alt_spalten_ziele_der_zeile(kontext: _ImportKontext, summen: dict) -> dict[str, Investition]:
+    """Phase Z11 (N-747): die Ziele der Datei, ohne den Speicher, wenn die Zeile Speicher-Werte aus Geräte-Spalten trägt —
+    dieselbe Bedingung, unter der `_batterie` «Speicher-Werte werden verwendet» sagt (bis 13.10.2026 schrieb der
+    Legacy-Block dann trotzdem `Batterie_Ladung_kWh` 80 über `Akku_Ladung_kWh` 30)."""
+    if _speicher_werte_aus_geraete_spalten(summen):
+        return {typ: inv for typ, inv in kontext.inv_by_type.items() if typ != "speicher"}
+    return kontext.inv_by_type
 
 
 def _lies_basiswerte(row: dict, i: int, warnungen: list[str]) -> _ZeilenWerte:
@@ -648,7 +759,7 @@ async def _batterie(
     batterie_ladung = None
     batterie_entladung = None
 
-    if summen["batterie_ladung_sum"] > 0 or summen["batterie_entladung_sum"] > 0:
+    if _speicher_werte_aus_geraete_spalten(summen):
         # Individuelle Speicher-Spalten vorhanden
         _batterie_legacy_gegen_speicher_summe(
             warnungen, summen, batterie_ladung_explicit, batterie_entladung_explicit,
@@ -685,6 +796,12 @@ async def _batterie(
                 warnungen.append("Keine Speicher als Investitionen angelegt.")
 
     return batterie_ladung, batterie_entladung
+
+
+def _speicher_werte_aus_geraete_spalten(summen: dict) -> bool:
+    """Trägt die Zeile Speicher-Werte aus Geräte-Spalten (Speicher, BKW-Speicher)? Dann gelten sie, nicht die Alt-Spalten
+    `Batterie_*` — eine Regel für `_batterie` (Monatszeile, Verteiler) und `_alt_spalten_ziele_der_zeile` (N-747)."""
+    return summen["batterie_ladung_sum"] > 0 or summen["batterie_entladung_sum"] > 0
 
 
 def _batterie_legacy_gegen_speicher_summe(

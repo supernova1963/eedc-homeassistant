@@ -24,6 +24,14 @@ Monat ohne Abschluss die Netzladung jetzt überall als Summe der abgelaufenen Ta
 Entladung stehen (bisher erst mit dem Abschluss). Der Ladepreis ist derselbe wie in *Cockpit → Tag*; mit dem Monatsabschluss gilt der gespeicherte Wert
 ([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
 
+**CSV-Import: Alt-Spalten nur noch auf das eine Gerät, jede Zeile ganz oder gar nicht:** Spalten aus dem alten Format
+(`Batterie_Ladung_kWh`, `EAuto_km`, `Wallbox_Ladung_kWh`, `WP_Strom_kWh` …) tragen den Wert der ganzen Komponentenart.
+Bisher landete er mit Haken voll auf dem ersten Gerät — zwei Speicher trugen 50/40 + 15/12 statt 35/28 + 15/12 —, bei
+E-Autos, Wallboxen und Wärmepumpen sogar ohne Haken. Jetzt bleibt die Verteilung der Speicher stehen, eine Spalte des
+Geräts geht immer vor, und bei mehreren E-Autos, Wallboxen oder Wärmepumpen sagt der Import, dass die Alt-Spalte nicht
+zugeordnet wurde. Außerdem lässt eine fehlerhafte Zeile keinen Komponentenwert ohne Monat mehr zurück
+([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
+
 ## v4.1.7 — 13. Oktober 2026
 
 **MQTT-Check fragt nach deinem Gerät:** Der Daten-Checker erwartet nur noch Topics für Größen, die es an deinem Gerät

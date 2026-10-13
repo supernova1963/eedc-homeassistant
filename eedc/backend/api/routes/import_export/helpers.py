@@ -549,6 +549,17 @@ async def _speicher_nullen_verteilen(
     return True
 
 
+#: N-747: die Alt-Spalten je Typ (Format vor v0.9) — dieselben Namen, die `_import_investition_monatsdaten_legacy` liest. Sie
+#: tragen einen Sammelwert des TYPS, keinen Gerätewert; der CSV-Import zählt sie deshalb nie als Geräte-Spalte, auch wenn ein
+#: Gerät zufällig so heißt (Wallbox «Wallbox» ⇒ `Wallbox_Ladung_kWh`).
+LEGACY_GERAETE_SPALTEN: dict[str, tuple[str, ...]] = {
+    "e-auto": ("EAuto_km", "EAuto_Verbrauch_kWh", "EAuto_Ladung_PV_kWh", "EAuto_Ladung_Netz_kWh"),
+    "wallbox": ("Wallbox_Ladung_kWh", "Wallbox_Ladevorgaenge"),
+    "speicher": ("Batterie_Ladung_kWh", "Batterie_Entladung_kWh"),
+    "waermepumpe": ("WP_Strom_kWh", "WP_Heizung_kWh", "WP_Warmwasser_kWh"),
+}
+
+
 async def _import_investition_monatsdaten_legacy(
     db: AsyncSession,
     row: dict,
@@ -561,13 +572,25 @@ async def _import_investition_monatsdaten_legacy(
     source: str,
     writer: str,
     on_upsert: Optional[Callable[[UpsertResult], None]] = None,
-):
+) -> list[str]:
     """
     LEGACY: Importiert Investitions-Monatsdaten aus generischen CSV-Spalten.
 
     Unterstützt alte Spaltenformate wie EAuto_km, Batterie_Ladung_kWh etc.
     Wird für Rückwärtskompatibilität beibehalten.
+
+    ⛔ **`inv_by_type` ist das ZIEL je Typ, nicht «das erste Gerät» (N-747).** Eine Alt-Spalte trägt den Wert des ganzen
+    Typs; er gehört nur dann auf ein Gerät, wenn es das einzige seines Typs ist und keine Geräte-Spalte daneben steht. Bis
+    13.10.2026 bekam der Aufrufer hier das erste aktive Gerät je Typ: zwei Speicher 7/3 kWh mit `Batterie_*` 50/40 und Haken
+    trugen danach Akku 50/40 + Klein 15/12 (der Verteiler hatte 35/28 + 15/12 geschrieben), zwei E-Autos bekamen alle km aufs
+    erste — auch ohne Haken. Welche Typen ein Ziel haben, entscheidet der Aufrufer (`csv_operations._alt_spalten_ziele`).
+
+    Returns:
+        Die Typen (in Lese-Reihenfolge), deren Alt-Spalten in dieser Zeile Werte tragen, die mangels Ziel nicht geschrieben
+        wurden — der Aufrufer sagt es in der Antwort.
     """
+    ohne_ziel: list[str] = []
+
     # E-Auto Daten
     eauto_km = parse_float(row.get("EAuto_km", ""))
     eauto_verbrauch = parse_float(row.get("EAuto_Verbrauch_kWh", ""))
@@ -593,6 +616,8 @@ async def _import_investition_monatsdaten_legacy(
             )
             if on_upsert is not None:
                 on_upsert(res)
+    elif eauto_km or eauto_verbrauch:
+        ohne_ziel.append("e-auto")
 
     # Wallbox Daten
     wallbox_ladung = parse_float(row.get("Wallbox_Ladung_kWh", ""))
@@ -613,6 +638,8 @@ async def _import_investition_monatsdaten_legacy(
             )
             if on_upsert is not None:
                 on_upsert(res)
+    elif wallbox_ladung or wallbox_vorgaenge:
+        ohne_ziel.append("wallbox")
 
     # Speicher Daten (werden bereits in Monatsdaten gespeichert, hier optional zusätzlich)
     batt_ladung = parse_float(row.get("Batterie_Ladung_kWh", ""))
@@ -633,6 +660,8 @@ async def _import_investition_monatsdaten_legacy(
             )
             if on_upsert is not None:
                 on_upsert(res)
+    elif batt_ladung or batt_entladung:
+        ohne_ziel.append("speicher")
 
     # Wärmepumpe Daten
     wp_strom = parse_float(row.get("WP_Strom_kWh", ""))
@@ -656,3 +685,7 @@ async def _import_investition_monatsdaten_legacy(
             )
             if on_upsert is not None:
                 on_upsert(res)
+    elif wp_strom or wp_heizung or wp_warmwasser:
+        ohne_ziel.append("waermepumpe")
+
+    return ohne_ziel
