@@ -12,13 +12,14 @@
 ## Unreleased
 
 **HA-Korrektur sofort übernehmen:** Nach einer Korrektur in Home Assistant holt der neue Eintrag **„HA-Spiegel jetzt
-abgleichen"** in der Reparatur-Werkbank den Abgleich sofort, statt bis zur Nacht zu warten — die Tages-Kennzahlen in
-*Cockpit → Tag* zeigen danach die korrigierten Werte. Der Daten-Checker-Befund zu einem Zählersprung in Home Assistant
-führt mit „Beheben" dorthin ([Energieprofil → Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+abgleichen"** in der Reparatur-Werkbank den Abgleich sofort, statt bis zur Nacht zu warten (der HA-Spiegel ist eedcs
+Kopie der HA-Statistik) — die Tages-Kennzahlen in *Cockpit → Tag*, die daraus kommen, zeigen danach die korrigierten
+Werte. Der Daten-Checker-Befund zu einem Zählersprung in Home Assistant führt mit „Beheben" dorthin
+([Energieprofil → Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
 **Cockpit → Tag mit einer Nachkommastelle:** Kacheln, Energie-Bilanz und Rechenwege zeigen kWh jetzt wie *Cockpit →
 Live* mit einer Nachkommastelle — „0,3 kWh" Netzbezug statt „0 kWh" neben einer Autarkie unter 100 %. Monat und Jahr
-bleiben ganzzahlig.
+bleiben ganzzahlig ([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
 
 **MQTT-Check und Wallbox:** Misst deine Wallbox die Ladung, erwartet der Daten-Checker am E-Auto keine Lade- und
 Verbrauchs-Topics mehr ([Daten-Checker §4.8](HANDBUCH_DATEN_CHECKER.md#48-mqtt-topic-abdeckung)).
@@ -62,35 +63,41 @@ Hinweis. Jetzt holt eedc die Dachflächen neu und zeigt den Hinweis zum unvollst
 einer Stunde, wenn eedc das Wetter vorab im Hintergrund geholt hatte; jetzt holt der Vorababruf dieselben Daten wie die
 Anzeige ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
-**HA-Ersparnis vor dem ersten Tarif wie im Cockpit:** Die HA-Sensoren „Ersparnis vs Benzin" (E-Auto) und „WP Ersparnis"
-rechnen Monate vor deinem ersten eingetragenen Stromtarif jetzt mit derselben Vorbelegung (30 ct) wie Cockpit und Daten-Checker;
-bisher nahm MQTT dafür den jüngsten Tarif-Eintrag (auch einen Wärmepumpen- oder Wallbox-Tarif) und REST den heutigen Tarif —
-einmaliger Sprung in der HA-Langzeitstatistik der beiden Sensoren ([Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)). Der Kopf des
-Jahresberichts nennt den Allgemeintarif der Berichtsmonate — bei einem Wechsel im Zeitraum beide Abschnitte — statt des
-jüngsten Tarif-Eintrags; die Infothek belegt „Stromvertrag" und „Einspeisevertrag" mit dem heute gültigen Tarif vor.
-
 **Ein Monatspreis für alle Sichten:** Komponenten-Hubs (E-Auto, Wärmepumpe, Speicher, Wallbox, Sonstiges), der
-ROI-Fortschritt in den Aussichten und die HA-Sensoren für Jahresersparnis, ROI, Amortisation und „WP Ersparnis" rechnen
-jetzt mit dem Monatspreis, den auch das Cockpit nimmt: Monate vor deinem ersten Stromtarif mit der Vorbelegung 30 ct
-(bisher mit dem heutigen Tarif), und ein im Monatsabschluss gepflegter Ø-Strompreis gilt ohne eigenen Wärmepumpen-Tarif
-auch für die Wärmepumpe (bisher nur im Cockpit). *Cockpit → Monat und Jahr* zeigen für Monate vor dem ersten Tarif
-jetzt ihre Geldposten — gerechnet mit der Vorbelegung, und unter dem Ø-Preis steht, dass kein Tarif hinterlegt ist —,
-statt „Stromrechnung fehlt". Wer solche Monate oder einen gepflegten Ø ohne eigenen Wärmepumpen-Tarif hat, sieht in HA
-einmalig einen Sprung in der Langzeitstatistik ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise),
+ROI-Fortschritt in den Aussichten und die HA-Sensoren „Ersparnis vs Benzin", „WP Ersparnis", Jahresersparnis, ROI und
+Amortisation rechnen jetzt mit dem Monatspreis, den auch Cockpit und Daten-Checker nehmen: Monate vor deinem ersten
+eingetragenen Stromtarif mit der Vorbelegung 30 ct (bisher mit dem heutigen Tarif, über MQTT sogar mit dem jüngsten
+Tarif-Eintrag, auch einem Wärmepumpen- oder Wallbox-Tarif), und ein im Monatsabschluss gepflegter Ø-Strompreis gilt ohne
+eigenen Wärmepumpen-Tarif auch für die Wärmepumpe (bisher nur im Cockpit). *Cockpit → Monat und Jahr* zeigen für Monate
+vor dem ersten Tarif jetzt ihre Geldposten — gerechnet mit der Vorbelegung, und unter dem Ø-Preis steht, dass kein Tarif
+hinterlegt ist —, statt „Stromrechnung fehlt". Wer solche Monate oder einen gepflegten Ø ohne eigenen Wärmepumpen-Tarif
+hat, sieht in HA einmalig einen Sprung in der Langzeitstatistik dieser Sensoren. Dazu nennt der Kopf des Jahresberichts
+den Allgemeintarif der Berichtsmonate — bei einem Wechsel im Zeitraum beide Abschnitte — statt des jüngsten
+Tarif-Eintrags, und die Infothek belegt „Stromvertrag" und „Einspeisevertrag" mit dem heute gültigen Tarif vor
+([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise),
 [Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)).
 
 **Einmal gerundet:** „Verbrauch (Monat)" eines sonstigen Verbrauchers und „Überschuss-Prognose heute" wurden doppelt
-gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei allen anderen Sensoren.
+gerundet (3,46 kWh als 4 statt 3 kWh in HA); jetzt rundet eedc einmal, wie bei allen anderen Sensoren
+([Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)).
 
-**Jahresbericht rechnet die Finanzen wie Cockpit und Auswertungen:** Die Betriebskosten zählen je Komponente nur über ihre
-aktiven Monate wie in *Cockpit → Jahr* (bisher auch vor der Anschaffung, z. B. 120 statt 20 € bei zwei erfassten
+**Jahresbericht rechnet die Finanzen wie Cockpit und Auswertungen:** Die Betriebskosten zählen je Komponente nur über
+ihre aktiven Monate wie in *Cockpit → Jahr* (bisher auch vor der Anschaffung, z. B. 120 statt 20 € bei zwei erfassten
 Monaten). Die „Rendite" ist die von *Cockpit → Übersicht* mit Wärmepumpen- und E-Auto-Ersparnis, der
-„Amortisations-Fortschritt" der von *Auswertungen → ROI*, im Bericht eines einzelnen Jahres zum Stand 31.12. dieses
-Jahres; an beiden Zeilen steht ihr Bezug.
-*Cockpit → Jahr* zeigt die Betriebskosten auf den Cent genau (100,00 statt 99,96 € bei 100 €/Jahr).
+„Amortisations-Fortschritt" der von *Auswertungen → ROI*; im Bericht eines einzelnen Jahres gelten beide zum Stand
+31.12. dieses Jahres und teilen nur durch die bis dahin angeschafften Komponenten (bisher standen in der Rendite auch
+später gekaufte im Nenner). An beiden Zeilen steht ihr Bezug. *Cockpit → Jahr* zeigt die Betriebskosten auf den Cent
+genau (100,00 statt 99,96 € bei 100 €/Jahr)
+([Einstellungen → Berichte & Dokumente](HANDBUCH_EINSTELLUNGEN.md#42-berichte--dokumente)).
 
-**Jahresbericht ohne Speicher-Wirkungsgrad über 100 %:** Passen Lade- und Entlademenge nicht zusammen, steht im Bericht jetzt
-ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-Checker.
+**Jahresbericht: eine Mehrkosten-Zahl:** Die Zeile „Investition Mehrkosten" nennt den Nenner der Rendite darunter und
+sagt, welche Investitionen er zählt; ebenso sagt „Investition gesamt" jetzt, dass sie die Vollkosten der im Jahr aktiven
+(im Gesamtzeitraum: aller) Investitionen zählt
+([Einstellungen → Berichte & Dokumente](HANDBUCH_EINSTELLUNGEN.md#42-berichte--dokumente)).
+
+**Jahresbericht ohne Speicher-Wirkungsgrad über 100 %:** Passen Lade- und Entlademenge nicht zusammen, steht im Bericht
+jetzt ein Strich wie im Cockpit statt z. B. „110,0 %"; die Ursache nennt der Daten-Checker
+([Einstellungen → Berichte & Dokumente](HANDBUCH_EINSTELLUNGEN.md#42-berichte--dokumente)).
 
 **Import aus eigener Datei: Vorschau gleich Import:** Die Vorschau zeigt jetzt genau, was der Import schreibt. Die
 Einheit (Wh/kWh/MWh) gilt nur für Spalten ohne Einheit im Namen — erkannte Geräte-Spalten wie `Sueddach_kWh` tragen ihre
@@ -118,19 +125,13 @@ monatlich gepflegte Vergütung gilt auch für V2H und sonstige Geräte (im Beisp
 statt 760,00 € E-Auto-Ersparnis); die HA-Anlagensensoren für Jahresersparnis, ROI und Amortisation springen bei dieser
 Kombination einmalig ([Einstellungen → Strompreise](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
 
-**Speicher-0 im Portal-Import:** Meldet die Quelle für einen Monat 0 kWh Speicher-Ladung oder -Entladung, steht jetzt
-0 am Speicher, statt dass der Daten-Checker den Monat als fehlend meldet
+**Eine Speicher-0 kommt an:** Meldet die Quelle für einen Monat 0 kWh Speicher-Ladung oder -Entladung, steht jetzt 0 am
+Speicher, statt dass der Daten-Checker den Monat als fehlend meldet („Entladung nicht erfasst") — im Portal- und
+Cloud-Import wie im eigenen Import-Format und im CSV-Import; eine leere Zelle bleibt leer
 ([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
 
 **ROI-Fortschritt: Tooltip und Kachel rechnen gleich:** Der Tooltip der Kachel „Amortisations-Fortschritt" zeigt jetzt
 die Zahlen, aus denen die Prozent entstehen — Erträge ÷ Kapitaleinsatz ([Bedienung → ROI](HANDBUCH_BEDIENUNG.md#42-roi)).
-
-**Jahresbericht eines Jahres: Rendite auf das, was da war:** Die Rendite teilt im Bericht eines einzelnen Jahres nur
-noch durch die bis zum 31.12. angeschafften Komponenten — wie der Amortisations-Fortschritt zwei Zeilen darüber.
-
-**Kleinigkeiten:** Der Daten-Checker nennt bei Monaten vor dem ersten Tarif beide Preise der Vorbelegung (30 ct Bezug,
-8,2 ct Einspeisung); eine PVGIS-Prognose mit leerem Monatswert bricht die Finanz-Prognose nicht mehr ab; die Vorschau des
-eigenen Import-Formats zeigt bei zwei Spalten für dasselbe Geräte-Feld nur die, die importiert wird.
 
 **Balkonkraftwerk: eine Ersparnis in T-Konto und Hub:** Die Zeile „Balkon" im T-Konto von *Cockpit → Monat* rechnet jetzt
 mit dem Anteil des Balkonkraftwerks am Eigenverbrauch und demselben Preis wie *Komponenten → Balkonkraftwerk*, nicht
@@ -146,27 +147,17 @@ Rechnung wie das Cockpit — mit BHKW-Strom, ohne an Dritte abgegebene Kilowatts
 Anteil des Balkonkraftwerks, das seine eigene Zeile hat ([Bedienung → ROI](HANDBUCH_BEDIENUNG.md#42-roi)).
 
 **Cockpit → Tag nach einer Statistik-Korrektur:** Fällt die HA-Summe eines String-Zählers, bekommt der String an dem Tag
-seinen Anteil am Anlagenzähler, statt dass die Differenz bei einem anderen Gerät landet.
+seinen Anteil am Anlagenzähler, statt dass die Differenz bei einem anderen Gerät landet
+([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
 
-**Performance Ratio nach einem Zubau:** Der nächtliche Wetter-Nachzug rechnet die Einstrahlung mit den Dachflächen, die an
-dem Tag in Betrieb waren — eine später zugebaute Fläche mit anderer Ausrichtung verschiebt die Performance Ratio der Tage
-davor nicht mehr.
-
-**Jahresbericht: eine Mehrkosten-Zahl:** Die Zeile „Investition Mehrkosten" nennt den Nenner der Rendite darunter und sagt,
-welche Investitionen er zählt; ebenso sagt „Investition gesamt" jetzt, dass sie die Vollkosten der im Jahr aktiven (im
-Gesamtzeitraum: aller) Investitionen zählt.
-
-**Kleinigkeiten:** „PV-Erzeugung aus" in *Cockpit → Monat/Jahr* und im Monatsbericht nennt auch das Balkonkraftwerk; am
-spezifischen Ertrag im PV-Hub steht „hochgerechnet aufs Jahr".
+**Performance Ratio nach einem Zubau:** Der nächtliche Wetter-Nachzug rechnet die Einstrahlung mit den Dachflächen, die
+an dem Tag in Betrieb waren — eine später zugebaute Fläche mit anderer Ausrichtung verschiebt die Performance Ratio der
+Tage davor nicht mehr ([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
 
 **Monatsabschluss schlägt eine gemessene 0 vor:** Liefert Home Assistant oder MQTT für einen Monat 0 kWh — Einspeisung,
 Speicher, Wärmepumpe, Wallbox ohne Ladung —, steht im Formular die 0 („0 — kein Zuwachs") statt des Vormonats mit dem
 Abzeichen „geschätzt"; nur PV-Erzeugung und PV-Anteil einer Ladung bleiben ohne 0-Vorschlag
 ([Einstellungen → Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)).
-
-**Speicher-0 auch im eigenen Import-Format und im CSV-Import:** Eine Ladung oder Entladung von 0 steht jetzt am Speicher,
-statt dass der Daten-Checker „Entladung nicht erfasst" meldet
-([Einstellungen → Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten)).
 
 **Teilsummen werden gesagt:** *Cockpit → Monat* und *→ Jahr* nennen eine PV-Teilsumme jetzt auch, wenn im Monat eine
 Wallbox-Zeile ohne PV-Anteil steht; und trägt im laufenden Monat der Netzbezugs- oder Einspeisezähler nur einen Teil der
@@ -175,9 +166,32 @@ sonst Autarkie 99,1 % statt 67,6 % ohne Kommentar ([Bedienung → Monat](HANDBUC
 
 **HA-Sensoren Wärmepumpe je Betriebsart:** „Strom Heizbetrieb", „Strom Warmwasserbetrieb" und „Strom Kühlbetrieb" melden
 bei einer Wärmepumpe mit Betriebsart-Sensor ohne Leistungssensor dieselben Werte wie *Cockpit → Übersicht* — bisher nach
-einem HA-Statistik-Import 0; die Sensoren springen nach dem Update einmalig.
+einem HA-Statistik-Import 0; die Sensoren springen nach dem Update einmalig
+([Sensor-Referenz §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha)).
 
-**Monat ohne erfassten Netzbezug zeigt keine erfundene 0 mehr:** Hat ein Import eine Monatszeile ohne Netzbezug oder Einspeisung angelegt (etwa nur mit Wallbox-Daten), zeigte *Cockpit → Monat* bisher 0 kWh und Autarkie 100 % — und HA-Statistik und Tageswerte kamen nicht mehr zum Zug. Jetzt greifen sie wieder; ohne Quelle bleibt das Feld leer, und der Daten-Checker sagt „Netzbezug nicht erfasst" bzw. „Einspeisung nicht erfasst" samt Handgriff — sein „Beheben"-Link öffnet jetzt den Monat (wie bei allen Monatsdaten-Meldungen), und dort steht das Feld leer statt mit 0; liegt ein Vorschlag aus der HA-Statistik vor, ist er schon eingesetzt. Übersicht, Jahresbericht, HA-Sensoren, Community-Upload, *Auswertungen → Tabelle* und *Aussichten → Finanzen* rechneten mit der 0 weiter (Autarkie 100 %, Ersparnis und CO₂ auf die ganze PV-Erzeugung); jetzt lassen sie einen solchen Monat bei Eigenverbrauch, Autarkie, Ersparnis und CO₂ weg, bis die Werte erfasst sind — seine PV-Erzeugung zählt weiter, Tabelle und Jahresbericht zeigen bei ihm „–", der Community-Upload teilt ihn nicht ([Bedienung → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)). Eine eingetragene oder importierte 0 bleibt eine 0 — auch aus den Cloud-Importern von EcoFlow, Viessmann, Growatt und Hoymiles. Seit Mai 2026 im Formular neu angelegte Monate bekommen ihre Herkunft beim Update nachgetragen — eine dort eingetragene 0 bleibt eine 0, und ein HA-Statistik-Import mit „Überschreiben" ersetzt die Handwerte nicht mehr; Monate aus dem alten Monatsabschluss-Assistenten (Mai bis Juli 2026) mit leer gelassenem Feld nennt der Checker ([Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
+**Monat ohne erfassten Netzbezug zeigt keine erfundene 0 mehr:** Hat ein Import eine Monatszeile ohne Netzbezug oder
+Einspeisung angelegt (etwa nur mit Wallbox-Daten), zeigte *Cockpit → Monat* bisher 0 kWh und Autarkie 100 % — und
+HA-Statistik und Tageswerte kamen nicht mehr zum Zug. Jetzt greifen sie wieder; ohne Quelle bleibt das Feld leer, und
+der Daten-Checker sagt „Netzbezug nicht erfasst" bzw. „Einspeisung nicht erfasst" samt Handgriff — sein „Beheben"-Link
+öffnet jetzt den Monat (wie bei allen Monatsdaten-Meldungen), und dort steht das Feld leer statt mit 0; liegt ein
+Vorschlag aus der HA-Statistik vor, ist er schon eingesetzt. Eine eingetragene oder importierte 0 bleibt eine 0 — auch
+aus den Cloud-Importern von EcoFlow, Viessmann, Growatt und Hoymiles
+([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat),
+[Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
+
+**Übersicht, Jahresbericht und HA-Sensoren lassen einen solchen Monat weg:** Übersicht, Jahresbericht, HA-Sensoren,
+Community-Upload, *Auswertungen → Tabelle* und *Aussichten → Finanzen* rechneten bei einem Monat ohne erfassten
+Netzbezug oder Einspeisung mit der 0 weiter (Autarkie 100 %, Ersparnis und CO₂ auf die ganze PV-Erzeugung). Jetzt lassen
+sie ihn bei Eigenverbrauch, Autarkie, Ersparnis und CO₂ weg, bis die Werte erfasst sind — seine PV-Erzeugung zählt
+weiter, Tabelle und Jahresbericht zeigen bei ihm „–", der Community-Upload teilt ihn nicht
+([Bedienung → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)).
+
+**Seit Mai angelegte Monate bekommen ihre Herkunft zurück:** Seit Mai 2026 ging beim ersten Speichern eines neuen Monats
+im Formular die Angabe „im Formular eingetragen" verloren. Diese Monate bekommen sie beim ersten Start nach dem Update
+für Einspeisung und Netzbezug nachgetragen — eine dort eingetragene 0 bleibt eine 0, und ein HA-Statistik-Import mit
+„Überschreiben" ersetzt die Handwerte nicht mehr; Monate aus dem alten Monatsabschluss-Assistenten (Mai bis Juli 2026)
+mit leer gelassenem Feld nennt der Daten-Checker
+([Daten-Checker → Monatsdaten](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
 
 **Tagesverlauf nennt Geräte ohne Leistungssensor:** Zeigt *Cockpit → Live* den Tagesverlauf, steht unter seiner Überschrift
 jetzt „Nicht dargestellt (kein HA-Leistungssensor): …“ mit den Geräten, denen dafür ein Leistungssensor fehlt —
@@ -200,6 +214,12 @@ Community-Server bewusst keinen Durchschnitt; die Tabelle zeigte dort 0 Zyklen u
 ebenso in der E-Auto-Tabelle nach Nutzungsintensität. Ein Speicher unter 5 kWh ist in seiner Klasse jetzt auch als „(Du)“
 markiert. Die Community-Beschreibung im Handbuch und auf der Website nennt dazu die Kennzahlen und Achievements, die die
 App wirklich zeigt ([Bedienung → Community](HANDBUCH_BEDIENUNG.md#52-die-community-reiter)).
+
+**Kleinigkeiten:** Der Daten-Checker nennt bei Monaten vor dem ersten Tarif beide Preise der Vorbelegung (30 ct Bezug,
+8,2 ct Einspeisung); eine PVGIS-Prognose mit leerem Monatswert bricht die Finanz-Prognose nicht mehr ab; die Vorschau
+des eigenen Import-Formats zeigt bei zwei Spalten für dasselbe Geräte-Feld nur die, die importiert wird; „PV-Erzeugung
+aus" in *Cockpit → Monat/Jahr* und im Monatsbericht nennt auch das Balkonkraftwerk; und am spezifischen Ertrag im PV-Hub
+steht „hochgerechnet aufs Jahr".
 
 ## v4.1.6 — 11. Oktober 2026
 
