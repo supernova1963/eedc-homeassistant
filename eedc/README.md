@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Stand 4.1.6</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Stand 4.1.7</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
