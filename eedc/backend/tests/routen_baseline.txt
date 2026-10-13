@@ -220,6 +220,7 @@ POST /api/datenquellen/{anlage_id}/felder/{field_id}/quelle
 POST /api/datenquellen/{anlage_id}/ha/takt-check
 POST /api/diagnostics/resnap-snapshots
 POST /api/energie-profil/reaggregate-heute
+POST /api/energie-profil/{anlage_id}/kanal-abgleich
 POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill
 POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill/monats
 POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill/tages

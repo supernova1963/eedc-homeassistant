@@ -11,6 +11,18 @@
 
 ## Unreleased
 
+**HA-Korrektur sofort übernehmen:** Nach einer Korrektur in Home Assistant holt der neue Eintrag **„HA-Spiegel jetzt
+abgleichen"** in der Reparatur-Werkbank den Abgleich sofort, statt bis zur Nacht zu warten — die Tages-Kennzahlen in
+*Cockpit → Tag* zeigen danach die korrigierten Werte. Der Daten-Checker-Befund zu einem Zählersprung in Home Assistant
+führt mit „Beheben" dorthin ([Energieprofil → Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+
+**Cockpit → Tag mit einer Nachkommastelle:** Kacheln, Energie-Bilanz und Rechenwege zeigen kWh jetzt wie *Cockpit →
+Live* mit einer Nachkommastelle — „0,3 kWh" Netzbezug statt „0 kWh" neben einer Autarkie unter 100 %. Monat und Jahr
+bleiben ganzzahlig.
+
+**MQTT-Check und Wallbox:** Misst deine Wallbox die Ladung, erwartet der Daten-Checker am E-Auto keine Lade- und
+Verbrauchs-Topics mehr ([Daten-Checker §4.8](HANDBUCH_DATEN_CHECKER.md#48-mqtt-topic-abdeckung)).
+
 **Live-Tageswerte aus deinen Zählern:** Hast du Netz-Zähler und einen Kombi-Netzsensor (±) zugeordnet, nimmt
 *Cockpit → Live* Einspeisung, Netzbezug, Eigen- und Gesamtverbrauch für heute und gestern jetzt aus den Zählern —
 dieselbe Zahl wie *Cockpit → Tag*; der Kombi-Sensor bleibt für die Leistung und die Kurve zuständig. Ein sonstiges Gerät

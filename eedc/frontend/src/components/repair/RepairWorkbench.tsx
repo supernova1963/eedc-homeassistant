@@ -25,13 +25,15 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, Trash2, Wrench } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, RefreshCw, Trash2, Wrench } from 'lucide-react'
 
 import { Alert, Button, Card, Input, Select, DatumFeld, Checkbox } from '../ui'
 import {
+  KANAL_ABGLEICH_BESCHREIBUNG,
   OPERATION_META,
   REAGGREGATE_RANGE_MAX_DAYS,
   type FieldDiff,
+  type KanalAbgleichErgebnis,
   type RepairOperationRequest,
   type RepairOperationType,
   type RepairPlan,
@@ -59,7 +61,12 @@ const aenderungLabel = (key: string) => REPARATUR_AENDERUNG_LABELS[key] ?? key
 // Gate (Gernot 2026-07-03): der Eintrag erscheint nur unter /v4 — in V3 bleibt
 // die IST-Lösch-Karte der Energieprofil-Seite zuständig (keine Doppel-UI je Welt).
 const DELETE_ENERGIEPROFIL = 'delete_energieprofil_direkt' as const
-type WorkbenchOp = RepairOperationType | typeof DELETE_ENERGIEPROFIL
+// MartyBr (simon42 #429): „HA-Spiegel jetzt abgleichen" — der Lauf des Nachtjobs 02:45 von Hand,
+// direkter Pfad wie das Löschen (kein Plan/Execute: der Lauf hat keine Vorschau, er übernimmt nur
+// HAs Statistik). Die Werkbank unterscheidet HA- und Standalone-Betrieb nicht; ohne Spiegel sagt
+// es die Antwort des Backends.
+const KANAL_ABGLEICH = 'kanal_abgleich_direkt' as const
+type WorkbenchOp = RepairOperationType | typeof DELETE_ENERGIEPROFIL | typeof KANAL_ABGLEICH
 
 interface Props {
   anlageId: number
@@ -102,6 +109,8 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
   // D14-8: Zustand des direkten Energieprofil-Löschens (kein Plan/Execute).
   const [deleteRunning, setDeleteRunning] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null)
+  const [abgleichRunning, setAbgleichRunning] = useState(false)
+  const [abgleichErgebnis, setAbgleichErgebnis] = useState<KanalAbgleichErgebnis | null>(null)
   const [params, setParams] = useState<OperationParamsState>(DEFAULT_PARAMS)
   const [plan, setPlan] = useState<RepairPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
@@ -155,6 +164,21 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     setExecuteResult(null)
     setError(null)
     setDeleteMessage(null)
+    setAbgleichErgebnis(null)
+  }
+
+  // #429: HA-Spiegel jetzt abgleichen (Endpoint → Ergebniszeile aus der Antwort).
+  const handleKanalAbgleich = async () => {
+    try {
+      setAbgleichRunning(true)
+      setAbgleichErgebnis(null)
+      setError(null)
+      setAbgleichErgebnis(await repairApi.kanalAbgleich(anlageId))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Abgleich fehlgeschlagen')
+    } finally {
+      setAbgleichRunning(false)
+    }
   }
 
   // D14-8: direkter Lösch-Pfad (Bestätigung → Endpoint → Ergebnis-Meldung).
@@ -311,10 +335,14 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
   }
 
   const istDelete = selectedOp === DELETE_ENERGIEPROFIL
-  const opMeta = istDelete ? undefined : OPERATION_META.find((o) => o.type === selectedOp)
+  const istAbgleich = selectedOp === KANAL_ABGLEICH
+  const istDirekt = istDelete || istAbgleich
+  const opMeta = istDirekt ? undefined : OPERATION_META.find((o) => o.type === selectedOp)
   const opBeschreibung = istDelete
     ? ROHDATEN_LOESCH_BESCHREIBUNG
-    : opMeta?.description
+    : istAbgleich
+      ? KANAL_ABGLEICH_BESCHREIBUNG
+      : opMeta?.description
 
   return (
     <Card>
@@ -341,9 +369,11 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
               <Select
                 value={selectedOp}
                 onChange={(e) => handleOpChange(e.target.value as WorkbenchOp)}
-                disabled={planLoading || executeRunning || deleteRunning}
+                disabled={planLoading || executeRunning || deleteRunning || abgleichRunning}
                 options={[
                   ...WORKBENCH_OPERATIONS.map((o) => ({ value: o.type as string, label: o.label })),
+                  // #429: Abgleich des HA-Spiegels als Werkbank-Eintrag (direkter Pfad).
+                  { value: KANAL_ABGLEICH as string, label: 'HA-Spiegel jetzt abgleichen' },
                   // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad).
                   { value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' },
                 ]}
@@ -356,7 +386,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
             </div>
 
             {/* Operation-spezifische Parameter — unter dem Auswahlfeld */}
-            {!istDelete && (
+            {!istDirekt && (
               <OperationParamsEditor
                 operation={selectedOp as RepairOperationType}
                 params={params}
@@ -366,7 +396,14 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
             )}
 
             {/* Plan erstellen bzw. D14-8: direkter Lösch-Pfad (Gefahren-Stil) */}
-            {istDelete ? (
+            {istAbgleich ? (
+              <div className="flex justify-end">
+                <Button size="sm" onClick={handleKanalAbgleich} loading={abgleichRunning}>
+                  {!abgleichRunning && <RefreshCw className="max-sm:hidden w-4 h-4 mr-2" />}
+                  HA-Spiegel jetzt abgleichen
+                </Button>
+              </div>
+            ) : istDelete ? (
               <div className="flex justify-end">
                 <Button
                   variant="danger"
@@ -420,6 +457,14 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
         {deleteMessage && (
           <div className="mt-4">
             <Alert type="success">{deleteMessage}</Alert>
+          </div>
+        )}
+
+        {abgleichErgebnis && (
+          <div className="mt-4">
+            <Alert type={abgleichErgebnis.fehler > 0 ? 'warning' : abgleichErgebnis.hat_spiegel ? 'success' : 'info'}>
+              {abgleichErgebnis.meldung}
+            </Alert>
           </div>
         )}
 

@@ -25,7 +25,7 @@
 >
 > - **Pflicht** (`*`) — Anlage: Einspeisung + Netzbezug (Zählerstand) und die PV-Erzeugung. Je Gerät das jeweilige Kernfeld: Speicher Ladung/Entladung, Wärmepumpe Strom + abgegebene Wärme (*Heizwärme* **oder** *Wärme gesamt* — eines von beiden genügt), Wallbox Ladung gesamt, E-Auto gefahrene km, PV-Modul/Balkonkraftwerk Erzeugung.
 > - **Optional** — alles Übrige, insbesondere **alle Live-Felder (W, %, °C)**: ohne sie bleibt nur das Live-Dashboard leer, Statistik und Wirtschaftlichkeit laufen über die kWh-Zählerstände weiter.
-> - **Nicht hier zu erfassen** — das Feld ist durch einen anderen Weg abgedeckt und wird mit Begründung ausgegraut: die drei Alternativ-Gruppen (unten) sowie die Heimladung am E-Auto, sobald eine Wallbox existiert (die Wallbox ist die maßgebliche Quelle, siehe §5).
+> - **Nicht hier zu erfassen** — das Feld ist durch einen anderen Weg abgedeckt und wird mit Begründung ausgegraut: die drei Alternativ-Gruppen (unten). Die Heimladung am E-Auto (*Heim: PV/Netz/gesamt*) wird seit v4.0.51 auch neben einer Wallbox angeboten: eine Messung am Auto zählt für dieses Auto, die Wallbox trägt den Rest — Pflicht ist sie dort nicht; nur einem Dienstwagen neben einer dienstlichen Wallbox fehlen die Felder (siehe §5).
 >
 > **Alternativ-Gruppen:**
 >

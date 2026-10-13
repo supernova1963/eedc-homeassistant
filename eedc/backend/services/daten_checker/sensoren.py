@@ -10,6 +10,7 @@ from typing import Optional
 
 from sqlalchemy import select
 
+from backend.core.field_definitions.heimladung import HEIMLADE_FELDER
 from backend.models.anlage import Anlage
 
 from .kategorien import (
@@ -18,12 +19,66 @@ from .kategorien import (
 )
 
 
+#: #425: Die Energie-Felder eines E-Autos, die neben einer Wallbox mit Ladezähler
+#: nicht erwartet werden — die Heimlade-Felder (`HEIMLADE_FELDER`, Regel 1) und
+#: der Fahrverbrauch. `v2h_entladung_kwh` gehört bewusst nicht dazu.
+_EAUTO_FELDER_UNTER_WALLBOX: frozenset[str] = frozenset(
+    HEIMLADE_FELDER["e-auto"] + ("verbrauch_kwh",)
+)
+
+
 class SensorChecks:
     """Prüfungen für Sensor-Mapping-LTS-Verfügbarkeit und MQTT-Topics."""
 
+    async def _eautos_unter_wallbox(
+        self, anlage: Anlage, mqtt_zaehler: Optional[set[str]],
+    ) -> set[str]:
+        """IDs (als str, wie im `match_key`) der E-Autos, deren Ladung heute eine
+        Wallbox mit Ladezähler deckt (#425) — leer, wenn keine das tut.
+
+        Die Regel ist anlagenweit (`wallbox_deckt_ladung_ab`): deckt eine Wallbox,
+        gilt das für jedes E-Auto der Anlage, wie im Tages-/Stundenpfad.
+        """
+        from backend.models.investition import Investition
+        from backend.services.snapshot.keys import (
+            extract_quellen_energy, feld_hat_zaehler,
+        )
+        from backend.services.snapshot.komponenten_beitraege import (
+            wallbox_deckt_ladung_ab,
+        )
+        from backend.services.snapshot.reader import (
+            MQTT_AKTIV_TAGE, mqtt_zaehler_keys,
+        )
+
+        investitionen = list((await self.db.execute(
+            select(Investition).where(Investition.anlage_id == anlage.id)
+        )).scalars().all())
+        if not any(i.typ == "e-auto" for i in investitionen):
+            return set()
+        if mqtt_zaehler is None:
+            mqtt_zaehler = await mqtt_zaehler_keys(
+                self.db, anlage.id,
+                seit=datetime.now() - timedelta(days=MQTT_AKTIV_TAGE),
+            )
+        sensor_mapping = anlage.sensor_mapping or {}
+        inv_map = sensor_mapping.get("investitionen", {}) or {}
+        quellen_energy = extract_quellen_energy(anlage)
+        if not wallbox_deckt_ladung_ab(
+            investitionen, sensor_mapping,
+            ist_verfuegbar=lambda inv, feld: feld_hat_zaehler(
+                ((inv_map.get(str(inv.id)) or {}).get("felder") or {}).get(feld),
+                f"inv:{inv.id}:{feld}", quellen_energy, mqtt_zaehler,
+            ),
+            datum=date.today(),
+        ):
+            return set()
+        return {str(i.id) for i in investitionen if i.typ == "e-auto"}
+
     # ─── MQTT-Topic-Abdeckung (Issue #134) ───────────────────────────────
 
-    async def _check_mqtt_topic_abdeckung(self, anlage: Anlage) -> list[CheckErgebnis]:
+    async def _check_mqtt_topic_abdeckung(
+        self, anlage: Anlage, mqtt_zaehler: Optional[set[str]] = None,
+    ) -> list[CheckErgebnis]:
         """
         Prüft ob die erwarteten MQTT-Inbound-Topics tatsächlich ankommen.
 
@@ -32,6 +87,13 @@ class SensorChecks:
         Publisher-Seite (HA-Automationen). Wenn ein Topic erwartet, aber nie
         empfangen wird oder veraltete Werte trägt, ist die Publisher-Seite
         gegen die Konsumenten-Seite gedriftet.
+
+        Args:
+            mqtt_zaehler: `sensor_key`s mit angekommenen MQTT-Zählerständen
+                (`snapshot/reader.mqtt_zaehler_keys`, Fenster `MQTT_AKTIV_TAGE`)
+                — dieselbe Menge, die `_check_energieprofil_abdeckung` bekommt;
+                der Orchestrator erhebt sie einmal. ``None`` ⇒ hier erheben.
+                Gebraucht nur für die Wallbox-Regel (#425).
         """
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
         from backend.services.mqtt_topic_registry import build_expected_topics
@@ -93,10 +155,26 @@ class SensorChecks:
         quellen = (anlage.sensor_mapping or {}).get("quellen") or {}
         if not isinstance(quellen, dict):
             quellen = {}
+        #
+        # Und viertens (#425 gruaGit): die Energie-Felder eines E-Autos, dessen
+        # Ladung eine Wallbox mit Ladezähler in Betrieb deckt. Dort zählt die
+        # Wallbox (Konzept Regel 6, N-555) — der Tages-/Stundenpfad nimmt diese
+        # Felder am Auto gar nicht, und `_check_energieprofil_abdeckung`
+        # überspringt das Auto aus demselben Grund. Dieselbe Regel, dieselbe
+        # Funktion wie die Beitragsschicht (`wallbox_deckt_ladung_ab`), mit
+        # derselben Zählerfrage (`feld_hat_zaehler`: HA-Sensor oder angekommene
+        # MQTT-Stände). `v2h_entladung_kwh` bleibt erwartet: die Rückspeisung
+        # misst keine Wallbox.
+        eauto_ohne_energie = await self._eautos_unter_wallbox(anlage, mqtt_zaehler)
         erwartet = [
             e for e in await build_expected_topics(self.db, anlage)
             if not e.get("nur_manuell") and not e.get("zustand")
             and erwartet_inbound_topic(quellen, feld_id_aus_match_key(e["match_key"]))
+            and not (
+                e["match_key"][0] == "inv_energy"
+                and e["match_key"][1] in eauto_ohne_energie
+                and e["match_key"][2] in _EAUTO_FELDER_UNTER_WALLBOX
+            )
         ]
         if not erwartet:
             return ergebnisse

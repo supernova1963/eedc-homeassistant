@@ -94,8 +94,12 @@ async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):
     assert e.kategorie == CheckKategorie.HA_ZAEHLERSPRUNG.value
     assert "sensor.pv_gesamt" in e.details and "Stunde ab 23:00" in e.details
     assert "Wert anpassen" in e.details and "Monatsabschluss neu" in e.details
-    # Kein „Beheben"-Knopf: die Korrektur liegt in HA, nicht in eedcs Datenquellen (Lab 4.1.3-rc1).
-    assert e.link is None
+    # Der Knopf zeigt nicht auf eedcs Datenquellen (Lab 4.1.3-rc1: dort ist nichts falsch), sondern auf die
+    # Energieprofil-Pflege mit „HA-Spiegel jetzt abgleichen" — dem Schritt nach der Korrektur in HA (#429).
+    from backend.services.daten_checker.kategorien import LINK_DATENQUELLEN, LINK_ENERGIEPROFIL
+    assert e.link == LINK_ENERGIEPROFIL
+    assert e.link != LINK_DATENQUELLEN
+    assert "HA-Spiegel jetzt abgleichen" in e.details
     # Außerhalb des Fensters (30 Tage) kein Befund.
     assert await _Pruefer(db)._check_ha_zaehlersprung(a, jetzt=JETZT + timedelta(days=60)) == []
 

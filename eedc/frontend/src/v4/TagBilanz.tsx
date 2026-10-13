@@ -32,6 +32,12 @@ import type { TagWerte } from '../api/energie_profil'
 export type GleicheWochentagStats = GleicheMonatStats
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
+/** #426 (rapahl): Tages-kWh mit einer Nachkommastelle — an einem Tag sind die
+ *  Mengen klein, und ganzzahlig stand „0 kWh" Netzbezug neben einer Autarkie unter 100 %.
+ *  Nur die Tagesansicht; Monat und Jahr (`MonatBilanz`/`JahrBilanz`) bleiben
+ *  ganzzahlig, % und € unverändert. */
+const KWH_DEC = 1
+const fmtKwh = (v: number | null | undefined) => fmt(v, KWH_DEC)
 
 /** Woher der Preis dieses Tages stammt — als Satz über der Rechnung.
  *
@@ -87,11 +93,11 @@ export function baueTagKpis(
   // wurde (Forum kaba-kakao 2026-08-07).
   const sollTxt = sollPvKwh != null && sollPvKwh > 0
     ? (t.erzeugung != null
-        ? `SOLL ${fmt(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %`
-        : `SOLL ${fmt(sollPvKwh)} kWh`)
+        ? `SOLL ${fmtKwh(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %`
+        : `SOLL ${fmtKwh(sollPvKwh)} kWh`)
     : null
   const spezTxt = t.spezErtrag != null ? `${fmt(t.spezErtrag, 2)} kWh/kWp` : null
-  const vtTxt = vt && vt.erzeugung != null ? `VT: ${fmt(vt.erzeugung)} kWh` : null
+  const vtTxt = vt && vt.erzeugung != null ? `VT: ${fmtKwh(vt.erzeugung)} kWh` : null
   // N-635: ein Tag mit Speicher-Bewegung zeigt den vollen Rechenweg des Eigenverbrauchs.
   const mitSpeicher = (t.speicher_ladung ?? 0) > 0 || (t.speicher_entladung ?? 0) > 0
 
@@ -108,7 +114,7 @@ export function baueTagKpis(
     kostenKpis.push({
       title: 'Batterieladung Netz',
       value: fmtCalc(kosten, 2, '—'), unit: '€', color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
-      subtitle: `${fmt(netzladung.kwh, 1)} kWh${preisTxt}`,
+      subtitle: `${fmtKwh(netzladung.kwh)} kWh${preisTxt}`,
       // N-444/K3: Die beiden Faktoren haben **verschiedene Herkünfte**, und das
       // muss die Formel sagen. Die Menge ist der Boundary-Diff des Zählers
       // `ladung_netz_kwh`; der Preis entsteht in
@@ -119,7 +125,7 @@ export function baueTagKpis(
       // Definitionen gehört zu N-197/N-290 und ist hier bewusst nicht gebaut.
       formel: 'Menge aus dem Netzladungs-Zähler × Ø-Preis aus den Ladestunden',
       berechnung: netzladung.preis_cent != null
-        ? `${fmt(netzladung.kwh, 1)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`
+        ? `${fmtKwh(netzladung.kwh)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`
         : undefined,
       ergebnis: kosten != null ? `= ${fmtCalc(kosten, 2)} €` : undefined,
     })
@@ -140,7 +146,7 @@ export function baueTagKpis(
       value: fmtCalc(ausTarif ? netzbezugPreisCent : (t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'),
       unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
-      subtitle: `${fmt(t.netzbezug, 1)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
+      subtitle: `${fmtKwh(t.netzbezug)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
       // ⛔ Hier stand bis 17.09.2026 „bei flexiblem Tarif der Monats-Ø" — das
       // war wahr und ist es nicht mehr: Seit dem Entscheid „Tage bleiben
       // Messung" rechnet der Tag mit seinen eigenen Slot-Preisen, wo sie
@@ -153,7 +159,7 @@ export function baueTagKpis(
 
   return [
     {
-      title: 'PV-Erzeugung', value: fmt(t.erzeugung), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv,
+      title: 'PV-Erzeugung', value: fmtKwh(t.erzeugung), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv,
       subtitle: [sollTxt, spezTxt, vtTxt].filter(Boolean).join(' · ') || undefined,
     },
     {
@@ -166,7 +172,7 @@ export function baueTagKpis(
       subtitle: vt ? `VT: ${fmt(vt.autarkie)} %` : undefined,
       formel: '(Gesamtverbrauch − Netzbezug) ÷ Gesamtverbrauch × 100',
       berechnung: t.gesamtverbrauch != null && t.gesamtverbrauch > 0
-        ? `(${fmt(t.gesamtverbrauch)} − ${fmt(t.netzbezug)}) ÷ ${fmt(t.gesamtverbrauch)} kWh`
+        ? `(${fmtKwh(t.gesamtverbrauch)} − ${fmtKwh(t.netzbezug)}) ÷ ${fmtKwh(t.gesamtverbrauch)} kWh`
         : undefined,
       ergebnis: t.autarkie != null ? `= ${fmtCalc(t.autarkie, 1)} %` : undefined,
     },
@@ -178,26 +184,26 @@ export function baueTagKpis(
       // er `PV − Einspeisung` und hieß deshalb „PV-Eigenverbrauch · inkl.
       // Speicherladung". Ohne Speicher sind beide Formeln gleich; dann bleibt der
       // kürzere Rechenweg stehen statt zweier Null-Glieder.
-      title: 'Eigenverbrauch', value: fmt(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
-      subtitle: `EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmt(vt.eigenverbrauch)} kWh` : ''}`,
+      title: 'Eigenverbrauch', value: fmtKwh(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
+      subtitle: `EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmtKwh(vt.eigenverbrauch)} kWh` : ''}`,
       ...(mitSpeicher
         ? {
             formel: 'Direktverbrauch + Speicher-Entladung',
-            berechnung: `(${fmt(t.erzeugung)} − ${fmt(t.einspeisung)} − ${fmt(t.speicher_ladung)}) + ${fmt(t.speicher_entladung)} kWh`,
+            berechnung: `(${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} − ${fmtKwh(t.speicher_ladung)}) + ${fmtKwh(t.speicher_entladung)} kWh`,
           }
         : {
             formel: 'PV-Erzeugung − Einspeisung',
-            berechnung: `${fmt(t.erzeugung)} − ${fmt(t.einspeisung)} kWh`,
+            berechnung: `${fmtKwh(t.erzeugung)} − ${fmtKwh(t.einspeisung)} kWh`,
           }),
-      ergebnis: `= ${fmt(t.eigenverbrauch)} kWh`,
+      ergebnis: `= ${fmtKwh(t.eigenverbrauch)} kWh`,
     },
     {
-      title: 'Einspeisung', value: fmt(t.einspeisung), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
-      subtitle: vt ? `VT: ${fmt(vt.einspeisung)} kWh` : undefined,
+      title: 'Einspeisung', value: fmtKwh(t.einspeisung), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
+      subtitle: vt ? `VT: ${fmtKwh(vt.einspeisung)} kWh` : undefined,
     },
     {
-      title: 'Netzbezug', value: fmt(t.netzbezug), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
-      subtitle: vt ? `VT: ${fmt(vt.netzbezug)} kWh` : undefined,
+      title: 'Netzbezug', value: fmtKwh(t.netzbezug), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
+      subtitle: vt ? `VT: ${fmtKwh(vt.netzbezug)} kWh` : undefined,
     },
     {
       title: 'Netto-Ertrag', value: fmtCalc(t.netto_ertrag, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
@@ -248,7 +254,7 @@ export function TagBilanz({
   ]
 
   const dash = <span className="text-gray-300 dark:text-gray-600">—</span>
-  const dec = (row: BilanzRow) => (row.unit === '%' ? 1 : 0)
+  const dec = (row: BilanzRow) => (row.unit === '%' ? 1 : KWH_DEC)
   const wtLabel = `Ø ${wochentagName}`
 
   const vglZellen = (val: number | null | undefined, row: BilanzRow, besser?: boolean) => (

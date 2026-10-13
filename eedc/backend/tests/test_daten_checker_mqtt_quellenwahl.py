@@ -278,3 +278,143 @@ async def test_auch_die_subscriber_info_weist_nach_integration(db, monkeypatch):
         assert "Daten → Einrichtung" not in (b.details or "")
         assert "Einstellungen → Integration" in (b.details or "")
         assert b.link == LINK_INTEGRATION
+
+
+# ─── #425 (gruaGit): die Wallbox-Regel gilt auch für die Topic-Erwartung ────
+#
+# Der Energieprofil-Check überspringt ein E-Auto, dessen Ladung eine Wallbox mit
+# Ladezähler deckt; der MQTT-Check erwartete dessen Energie-Topics trotzdem —
+# seit v4.0.51 auch „Heim: gesamt" (`ladung_kwh`), für das kein Bestand eine
+# gespeicherte Wahl hat. Gemeldet als „erwartet, nie empfangen".
+#
+# ⚠ Die Probe oben (`test_meldung_traegt_den_vollen_topic_pfad`) legt das Auto
+# mit `typ="e_auto"` an — den Registry-Schlüssel gibt es nicht (`e-auto`), sie
+# prüft damit nichts über das Auto. Hier richtig geschrieben.
+
+from datetime import datetime  # noqa: E402
+
+from backend.services.mqtt_topic_registry import build_expected_topics  # noqa: E402
+
+
+class _CacheAllesDaAusser:
+    """Inbound-Cache, in dem jedes erwartete Topic angekommen ist — außer den
+    genannten. So steht in der „nie empfangen"-Zeile genau, was der Check von
+    den stummen Topics noch erwartet (und die Sechser-Grenze greift nicht).
+
+    Ein FESTER Zeitstempel (keine Prozessuhr, N-167): angekommene Topics gelten
+    damit als „veraltet", nie als „nie empfangen" — geprüft wird nur Letzteres."""
+
+    def __init__(self, anlage_id: int, eintraege: list[dict], stumm: set[tuple]):
+        jetzt = datetime(2026, 1, 1, 12, 0)
+        live: dict = {"basis": {}, "inv": {}}
+        energy: dict = {}
+        for e in eintraege:
+            mk = e["match_key"]
+            if tuple(mk) in stumm or not e.get("topic"):
+                continue
+            if mk[0] == "basis_live":
+                live["basis"][mk[1]] = (1.0, jetzt)
+            elif mk[0] == "inv_live":
+                live["inv"].setdefault(mk[1], {})[mk[2]] = (1.0, jetzt)
+            elif mk[0] == "basis_energy":
+                energy[mk[1]] = (1.0, jetzt)
+            elif mk[0] == "inv_energy":
+                energy[f"inv/{mk[1]}/{mk[2]}"] = (1.0, jetzt)
+        self._live = {anlage_id: live}
+        self._energy = {anlage_id: energy}
+
+    def get_all_live_raw(self):
+        return self._live
+
+    def get_all_energy_raw(self):
+        return self._energy
+
+
+async def _stumm_gemeldet(db, monkeypatch, anlage, stumm: set[tuple], mqtt_zaehler: set[str]) -> str:
+    """Die „nie empfangen"-Zeile, wenn nur `stumm` nicht ankommt.
+
+    ``mqtt_zaehler`` reicht die Menge der angekommenen MQTT-Zählerstände durch, wie
+    der Orchestrator (`DatenChecker.check_anlage`) — ohne Zeitfenster der Prozessuhr."""
+    eintraege = await build_expected_topics(db, anlage)
+
+    class _Service:
+        _running = True
+        cache = _CacheAllesDaAusser(anlage.id, eintraege, stumm)
+
+    monkeypatch.setattr(
+        "backend.services.mqtt_inbound_service.get_mqtt_inbound_service",
+        lambda: _Service(),
+    )
+    befunde = await DatenChecker(db=db)._check_mqtt_topic_abdeckung(anlage, mqtt_zaehler)
+    treffer = [b for b in befunde if "nie empfangen" in b.meldung]
+    return treffer[0].details if treffer else ""
+
+
+async def _anlage_mit_auto(db, *, v2h: bool = False):
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+    wb = Investition(anlage_id=anlage.id, typ="wallbox", bezeichnung="WB")
+    auto = Investition(
+        anlage_id=anlage.id, typ="e-auto", bezeichnung="ID3",
+        parameter={"v2h_faehig": True} if v2h else {},
+    )
+    db.add_all([wb, auto])
+    await db.flush()
+    return anlage, wb, auto
+
+
+def _wb_mqtt(wb) -> set[str]:
+    """gruaGits Wallbox: Ladezähler per MQTT, Stände kommen an (`sensor_key` wie
+    `snapshot/reader.mqtt_zaehler_keys`)."""
+    return {f"inv:{wb.id}:ladung_kwh"}
+
+
+def _auto_stumm(auto, *felder_energy, live=()) -> set[tuple]:
+    return (
+        {("inv_energy", str(auto.id), f) for f in felder_energy}
+        | {("inv_live", str(auto.id), f) for f in live}
+    )
+
+
+@pytest.mark.asyncio
+async def test_wallbox_mit_ladezaehler_nimmt_dem_auto_die_ladefelder(db, monkeypatch):
+    """(a) gruaGits Fall: Wallbox misst per MQTT ⇒ Lade-/Verbrauchsfelder am Auto
+    nicht erwartet; Ladestand und km bleiben erwartet."""
+    anlage, wb, auto = await _anlage_mit_auto(db)
+    stumm = _auto_stumm(
+        auto, "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh",
+        "km_gefahren", live=("soc",),
+    )
+    details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, _wb_mqtt(wb))
+    pfad = f"/inv/{auto.id}_ID3/"
+    assert f"{pfad}km_gefahren" in details
+    assert f"{pfad}soc" in details
+    for feld in ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh"):
+        assert f"{pfad}{feld}" not in details, feld
+
+
+@pytest.mark.asyncio
+async def test_ohne_wallbox_zaehler_bleiben_die_ladefelder_erwartet(db, monkeypatch):
+    """(b) Gegenprobe: dieselbe Anlage, aber die Wallbox liefert keinen Zähler ⇒
+    das Auto trägt seine Ladung selbst, die Felder bleiben erwartet."""
+    anlage, _wb, auto = await _anlage_mit_auto(db)
+    stumm = _auto_stumm(
+        auto, "ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh",
+    )
+    details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, set())
+    pfad = f"/inv/{auto.id}_ID3/"
+    for feld in ("ladung_kwh", "ladung_pv_kwh", "ladung_netz_kwh", "verbrauch_kwh"):
+        assert f"{pfad}{feld}" in details, feld
+
+
+@pytest.mark.asyncio
+async def test_v2h_bleibt_neben_der_wallbox_erwartet(db, monkeypatch):
+    """(c) Die Rückspeisung misst keine Wallbox: `v2h_entladung_kwh` ohne
+    gespeicherte Wahl bleibt erwartet, auch wenn die Wallbox die Ladung deckt."""
+    anlage, wb, auto = await _anlage_mit_auto(db, v2h=True)
+    stumm = _auto_stumm(auto, "v2h_entladung_kwh", "ladung_kwh")
+    details = await _stumm_gemeldet(db, monkeypatch, anlage, stumm, _wb_mqtt(wb))
+    pfad = f"/inv/{auto.id}_ID3/"
+    assert f"{pfad}v2h_entladung_kwh" in details
+    assert f"{pfad}ladung_kwh" not in details

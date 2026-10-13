@@ -95,7 +95,8 @@ export const OPERATION_META: OperationMeta[] = [
     type: 'reaggregate_day',
     label: 'Tag neu aggregieren',
     description:
-      'Lädt SensorSnapshots eines Tages frisch aus HA-Statistics und baut Stundenwerte + Tageszusammenfassung neu. Idempotent.',
+      'Lädt SensorSnapshots eines Tages frisch aus HA-Statistics und baut Stundenwerte + Tageszusammenfassung neu. Idempotent. ' +
+      'Die Tages-Kennzahlen aus dem HA-Spiegel gleicht der nächtliche Lauf ab — oder „HA-Spiegel jetzt abgleichen".',
     inWorkbench: true,
   },
   {
@@ -154,6 +155,27 @@ export const OPERATION_META: OperationMeta[] = [
   },
 ]
 
+/** Antwort von `POST /energie-profil/{id}/kanal-abgleich` — der Lauf des Nachtjobs 02:45 für eine Anlage
+ *  (`kanal/konsistenz.konsistenz_anlage`). `meldung` ist der Satz für die Ergebniszeile (Backend-Text). */
+export interface KanalAbgleichErgebnis {
+  anlage_id: number
+  hat_spiegel: boolean
+  kanaele: number
+  abschnitte: number
+  gleich: number
+  korrigiert: { key: string; ab_ts: number; zeilen: number }[]
+  gekuerzt: { key: string; ha_erste_ts: number; behalten: number }[]
+  uebersprungen: Record<string, number>
+  fehler: number
+  meldung: string
+}
+
+/** MartyBr (simon42 #429): ein Satz, wann man den Abgleich braucht. */
+export const KANAL_ABGLEICH_BESCHREIBUNG =
+  'Nach einer Korrektur in Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): ' +
+  'übernimmt sie sofort in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen — ' +
+  'derselbe Abgleich wie nachts um 02:45. Stundenwerte baut er nicht neu.'
+
 export const repairApi = {
   plan: (req: RepairOperationRequest, signal?: AbortSignal): Promise<PlanResponse> =>
     api.post('/repair/plan', req, { signal }),
@@ -166,4 +188,8 @@ export const repairApi = {
 
   discard: (planId: string): Promise<void> =>
     api.delete(`/repair/plans/${planId}`),
+
+  /** HA-Spiegel jetzt abgleichen (direkter Pfad ohne Plan, wie das Löschen). */
+  kanalAbgleich: (anlageId: number): Promise<KanalAbgleichErgebnis> =>
+    api.post(`/energie-profil/${anlageId}/kanal-abgleich`),
 }

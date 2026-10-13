@@ -269,7 +269,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **\[Name\]: Fahrleistung/Verbrauch fehlt** | ℹ️ INFO | Weder `jahresfahrleistung_km` noch `verbrauch_kwh_100km` gesetzt. Einsparungs-Berechnung gegenüber Verbrenner ist nicht möglich. | Komponente öffnen, Jahres-Fahrleistung und/oder Verbrauch eintragen. |
 | **\[Name\]: Alternativkosten (Verbrenner) fehlen** | ⚠️ WARNING | `anschaffungskosten_alternativ` fehlt. ROI gegenüber Verbrenner-Alternative wird ohne diesen Wert nicht berechnet. | Komponente öffnen, geschätzte Anschaffungskosten eines vergleichbaren Verbrenners eintragen. |
-| **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. **Nur bei Fahrzeugen ohne Wallbox:** Mit Wallbox liegt die Heimladung kanonisch dort, das Feld am E-Auto wird gar nicht erst angeboten — dieser Hinweis erscheint dann nicht (bis v4.0.27 erschien er trotzdem und war nicht abstellbar). Dienstwagen sind ebenfalls ausgenommen. | Monatsdaten nachtragen. Wer eine Wallbox hat, erfasst dort (Loadpoint-Sensor), nicht am E-Auto. |
+| **\[Name\]: Ladung PV fehlt in N Monat(en)** | ℹ️ INFO | `ladung_pv_kwh` fehlt — Anteil PV-Ladung am Gesamt-Ladestrom unbekannt. Geringere Severity als andere Pflichtfelder, weil V2H/Wallbox-Aufschlüsselung optional ist. **Nur bei Fahrzeugen ohne Wallbox:** Mit Wallbox trägt sie die Heimladung; das Feld am E-Auto wird seit v4.0.51 zwar angeboten, eine Messung dort ist aber freiwillig (sie zählt für dieses Auto, die Wallbox trägt den Rest) — dieser Hinweis erscheint dann nicht (bis v4.0.27 erschien er trotzdem und war nicht abstellbar). Dienstwagen sind ebenfalls ausgenommen. | Monatsdaten nachtragen. Wer eine Wallbox hat, erfasst die Heimladung dort (Loadpoint-Sensor); ein Zähler am E-Auto ist dann nicht nötig. |
 
 #### 4.3.5 Wallbox
 
@@ -524,7 +524,7 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **MQTT-Import aktiviert, Subscriber läuft jedoch nicht** | ℹ️ INFO | Der Import ist aktiviert, aber der Subscriber konnte nicht starten (z. B. Broker nicht erreichbar, falsche Zugangsdaten). | Einstellungen → Integration → MQTT-Broker-Verbindung öffnen, Broker-Adresse und Zugangsdaten prüfen. Oder den Import-Schalter deaktivieren, wenn keine Live-Daten via MQTT gewünscht. |
-| **N MQTT-Topic(s) erwartet, nie empfangen** | ⚠️ WARNING | Subscriber läuft, aber für die genannten Topics liefert noch keine Quelle Daten. Beispiele werden mit **vollem Topic-Pfad** gelistet (max. 6, Rest aggregiert) — „leistung_w" gibt es an jedem Gerät, erst der Pfad sagt an welchem. **Gemeldet wird nur, was auch über MQTT kommen soll:** Felder, deren Quelle auf **Keine** oder einen **HA-Sensor** steht, tauchen nicht auf. Felder über ein **MQTT-Gateway** schon — dessen Werte laufen durch denselben Kanal. | Mögliche Ursachen: (a) Publisher-Automation noch nicht eingerichtet — siehe [HANDBUCH_EINSTELLUNGEN.md §7.5 MQTT-Topic zuordnen](HANDBUCH_EINSTELLUNGEN.md#75-ein-mqtt-topic-zuordnen). (b) Komponenten-IDs nach Re-Import nicht in der Automation nachgezogen — die Topic-Struktur enthält die eedc-interne ID. (c) Wird ein einzelnes Feld nicht über MQTT versorgt: unter *Einstellungen → Datenquellen* dessen Quelle auf **Keine** stellen. (d) Werden die Topics gar nicht gebraucht: MQTT-Import deaktivieren. |
+| **N MQTT-Topic(s) erwartet, nie empfangen** | ⚠️ WARNING | Subscriber läuft, aber für die genannten Topics liefert noch keine Quelle Daten. Beispiele werden mit **vollem Topic-Pfad** gelistet (max. 6, Rest aggregiert) — „leistung_w" gibt es an jedem Gerät, erst der Pfad sagt an welchem. **Gemeldet wird nur, was auch über MQTT kommen soll:** Felder, deren Quelle auf **Keine** oder einen **HA-Sensor** gespeichert ist, tauchen nicht auf. Das gilt für die **gespeicherte** Wahl: zeigt die Datenquellen-Fläche „Keine“ nur an, weil nichts ankommt, zählt das nicht — einmal „Keine“ anklicken speichert die Wahl. Felder über ein **MQTT-Gateway** schon — dessen Werte laufen durch denselben Kanal. **Neben einer Wallbox mit Ladezähler** erwartet der Check am E-Auto keine Lade- und Verbrauchsfelder (die Wallbox trägt die Ladung, dieselbe Regel wie in der Energieprofil-Abdeckung); Kilometer, Ladestand und V2H-Entladung bleiben erwartet. | Mögliche Ursachen: (a) Publisher-Automation noch nicht eingerichtet — siehe [HANDBUCH_EINSTELLUNGEN.md §7.5 MQTT-Topic zuordnen](HANDBUCH_EINSTELLUNGEN.md#75-ein-mqtt-topic-zuordnen). (b) Komponenten-IDs nach Re-Import nicht in der Automation nachgezogen — die Topic-Struktur enthält die eedc-interne ID. (c) Wird ein einzelnes Feld nicht über MQTT versorgt: unter *Einstellungen → Datenquellen* dessen Quelle auf **Keine** stellen. (d) Werden die Topics gar nicht gebraucht: MQTT-Import deaktivieren. |
 | **N MQTT-Topic(s) mit veralteten Werten** | ⚠️ WARNING | Topics werden grundsätzlich empfangen, aber älter als der Schwellwert. Beispiele zeigen Topic + Alter in Minuten. | Publisher-Automation prüfen: läuft sie noch? Hat sie ihre Quelle verloren (z. B. Wechselrichter offline)? Bei dauerhaft fehlenden Quellen die Automation aufräumen oder die Datenquellen-Zuordnung anpassen. |
 | **Alle N erwarteten MQTT-Topics aktuell empfangen** | ✅ OK | Subscriber läuft, alle erwarteten Topics liefern frische Daten innerhalb der Toleranz. | – |
 
@@ -571,7 +571,8 @@ Helfer, ein neuer Zähler nach einem Tausch), ist kein Befund: dort entsteht kei
 
 **Reparatur in Home Assistant:** *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol „Wert anpassen"
 die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die korrigierte Statistik beim
-nächtlichen Abgleich (02:45) von selbst ab. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
+nächtlichen Abgleich (02:45) von selbst ab — oder sofort: der **„Beheben"**-Knopf des Befunds führt in die
+Energieprofil-Pflege, dort in der Reparatur-Werkbank **„HA-Spiegel jetzt abgleichen"** wählen. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
 Import), übernimm ihn danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von allein.
 
 ---
@@ -1199,6 +1200,8 @@ Nach jedem Schritt: Daten-Checker erneut prüfen.
 3. Bestätigen — der Lauf zieht zuerst die SensorSnapshots des Tages frisch aus HA-Statistics und baut danach Tagesprofil + Tageszusammenfassung neu.
 4. Der Spike ist danach weg, vorausgesetzt der zugrunde liegende kWh-Zähler hat den fraglichen Stundenslot in HA-LTS plausibel.
 
+> **Stundenwerte und Tages-Kennzahlen sind zwei Wege.** „Tag neu aggregieren“ baut Stundenwerte und Tageszeile neu. Die Tages-Kennzahlen der Energiebilanz (Netzbezug, Einspeisung, PV, Speicher) liest eedc, wo er den Tag deckt, aus dem **HA-Spiegel**, einer Kopie der HA-Langzeitstatistik, ohne Deckel wie das HA-Energie-Dashboard. Steht der Sprung in HAs Statistik selbst (§4.8b), hilft das Neu-Aggregieren dort nicht: in HA korrigieren, dann übernimmt der nächtliche Abgleich (02:45) die Korrektur — oder sofort **„HA-Spiegel jetzt abgleichen“** in der Werkbank.
+
 **Vorgehen für mehrere Tage / längere Bereiche:**
 
 1. Dieselbe Reparatur-Werkbank, Operation *„Mehrere Tage neu aggregieren"*.
@@ -1242,6 +1245,7 @@ Diese Werkzeuge laufen über die **Reparatur-Werkbank** unter Einstellungen → 
 | **Lücken aus HA-LTS nachfüllen** | Holt fehlende Tage aus HA-LTS für zugeordnete kWh-Felder (additiv, bestehende Tage bleiben unverändert). | §4.9 OK für betroffene Sensoren |
 | **Mehrere Tage neu aggregieren** | Zieht Snapshots des Bereichs aus HA-LTS frisch (Resnap) **und** baut Tages-/Monats-Aggregate neu. Repariert Counter-Spikes wie aus §4.7. | §4.9 OK |
 | **Tag neu aggregieren** | Wie *Mehrere Tage neu aggregieren*, aber für einen einzelnen Tag. | §4.9 OK |
+| **HA-Spiegel jetzt abgleichen** | Gleicht den HA-Spiegel (Quelle der Tages- und Monats-Kennzahlen der Energiebilanz) sofort mit der HA-Statistik ab — derselbe Lauf wie nachts um 02:45. Nach einer Korrektur in HA (§4.8b). Stundenwerte und Tageszeile baut er nicht neu. | HA-Betrieb |
 | **Kraftstoffpreise nachpflegen** | Holt EU-Oil-Bulletin-Preise für E-Auto- und Verbrenner-Vergleich rückwirkend. | unabhängig von §4.9 |
 
 > **Wichtig:** Wenn §4.9 für einen Sensor WARNING meldet, sind die ersten drei Werkzeuge für diesen Sensor wirkungslos — sie lesen alle aus HA-LTS, die für state_class-lose Sensoren leer ist. Erst §4.9 beheben, dann Reparatur-Werkzeuge laufen lassen.

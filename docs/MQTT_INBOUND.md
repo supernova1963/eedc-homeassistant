@@ -99,7 +99,8 @@ Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern d
 | **Wallbox** | `ladung_kwh` | kWh | Ladung gesamt |
 | **Wallbox** | `ladung_pv_kwh` | kWh | PV-Anteil der Ladung — **auch als Zaehlerstand**, eedc bildet die Monatsdifferenz daraus (s. Kasten unten) |
 | **Wallbox** | `ladevorgaenge` | Anzahl | **Fortlaufender Zaehler** der Ladevorgaenge — eedc bildet die Anzahl im Monat daraus |
-| **E-Auto** | `ladung_pv_kwh` / `ladung_netz_kwh` | kWh | PV-/Netz-Anteil der Ladung (nur ohne Wallbox — mit Wallbox liegt die Heimladung dort) |
+| **E-Auto** | `ladung_pv_kwh` / `ladung_netz_kwh` | kWh | Heimladung PV-/Netz-Anteil für dieses Auto. Neben einer Wallbox freiwillig: zählt für dieses Auto, die Wallbox trägt den Rest |
+| **E-Auto** | `ladung_kwh` | kWh | Heimladung gesamt für dieses Auto (Zähler am Auto, der PV und Netz nicht trennt) — mit `ladung_pv_kwh`/`ladung_netz_kwh` leer lassen. Neben einer Wallbox freiwillig wie oben |
 | **E-Auto** | `ladung_extern_kwh` / `ladung_extern_euro` | kWh / EUR | Externe Ladung (Menge und Kosten) |
 | **Speicher** | `ladung_netz_kwh` | kWh | Netz-Anteil der Ladung (Arbitrage) |
 | **BKW** | `pv_erzeugung_kwh` | kWh | BKW-Erzeugung |

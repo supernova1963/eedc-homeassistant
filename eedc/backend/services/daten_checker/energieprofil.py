@@ -332,11 +332,16 @@ class EnergieprofilChecks:
         # ist ein eigener E-Auto-kWh-Zähler redundant — Phase 2a führt die
         # Ladeenergie kanonisch an der Wallbox. Strukturelle Regel (Wallbox mit
         # Zähler vorhanden?), nicht magnitudenabhängig.
-        wallbox_deckt_eauto_ladung = any(
-            w.typ == "wallbox"
-            and w.ist_aktiv_an(heute)
-            and _inv_zaehler(w.id, "ladung_kwh")
-            for w in anlage.investitionen
+        # #425: über die eine Funktion der Beitragsschicht (verhaltensgleich zur
+        # bisherigen Inline-Fassung: Typ wallbox, in Betrieb am Tag, Zähler über
+        # `_inv_zaehler`) — der MQTT-Topic-Check fragt dieselbe.
+        from backend.services.snapshot.komponenten_beitraege import (
+            wallbox_deckt_ladung_ab,
+        )
+        wallbox_deckt_eauto_ladung = wallbox_deckt_ladung_ab(
+            anlage.investitionen, sensor_mapping,
+            ist_verfuegbar=lambda inv, feld: _inv_zaehler(inv.id, feld),
+            datum=heute,
         )
 
         # F-39 (#384 azywietz-web): Die Menge, gegen die die Abtretung geprüft

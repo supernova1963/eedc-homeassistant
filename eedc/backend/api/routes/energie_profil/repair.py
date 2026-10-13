@@ -17,6 +17,7 @@ Endpunkt-Inventar:
   POST   /api/energie-profil/{anlage_id}/reaggregate-bereich — Reaggregate mehrerer Tage (max 31)
   POST   /api/energie-profil/{anlage_id}/vollbackfill — Lückenfüller HA-LTS (additiv)
   POST   /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill[/tages|/monats]
+  POST   /api/energie-profil/{anlage_id}/kanal-abgleich — HA-Spiegel jetzt abgleichen (Lauf des Nachtjobs 02:45)
 
 DELETE-Endpoints bleiben direkt (Bulk-Delete, kein Plan-Mehrwert; Konzept
 Sektion 5.2: "DELETE bleibt direkt, schreibt aber Audit-Log").
@@ -535,6 +536,105 @@ async def kraftstoffpreis_backfill(
         "tages_aktualisiert": summary.get("tages_aktualisiert", 0),
         "monats_aktualisiert": summary.get("monats_aktualisiert", 0),
         "land": summary.get("land", "DE"),
+    }
+
+
+def _abgleich_meldung(erg) -> str:
+    """Ein Satz für die Ergebniszeile der Werkbank — nur aus dem, was der Lauf zurückgibt."""
+    from datetime import datetime as _dt
+
+    if erg.korrigiert:
+        teile = "; ".join(
+            f"{k['key']} ab {_dt.fromtimestamp(int(k['ab_ts'])).strftime('%d.%m.%Y %H:%M')} "
+            f"({k['zeilen']} Stundenzeile(n))"
+            for k in erg.korrigiert
+        )
+        satz = (f"{len(erg.korrigiert)} von {erg.abschnitte} Abschnitt(en) wichen von der HA-Statistik ab und "
+                f"wurden ab der ersten Abweichung neu gespiegelt: {teile}.")
+    else:
+        satz = (f"Alle {erg.abschnitte} geprüften Abschnitt(e) in {erg.kanaele} Kanal/Kanälen stimmen mit der "
+                "HA-Statistik überein — nichts zu übernehmen.")
+    if erg.gekuerzt:
+        satz += (f" {len(erg.gekuerzt)} Abschnitt(e): HA hält den Anfang nicht mehr, der ältere Spiegel bleibt "
+                 "stehen.")
+    if erg.fehler:
+        satz += (f" {erg.fehler} Abschnitt(e) konnten nicht geprüft werden (Home Assistant unterwegs nicht "
+                 "erreichbar?) — dort wurde nichts geändert.")
+    return satz
+
+
+@router.post("/{anlage_id}/kanal-abgleich")
+async def kanal_abgleich(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """HA-Spiegel jetzt abgleichen — derselbe Lauf wie der Nachtjob 02:45, für EINE Anlage (MartyBr, simon42 #429).
+
+    Der Nachtjob (``scheduler.kanal_konsistenz_job`` → ``kanal/konsistenz.konsistenz_alle``) ruft je Anlage
+    ``konsistenz_anlage``; diese Route ruft genau sie, mit denselben kurzen eigenen Sitzungen (``get_session``),
+    damit kein HA-Abruf in einer offenen Schreib-Transaktion liegt. Wozu: nach einer Korrektur in Home Assistant
+    (Entwicklerwerkzeuge → Statistik → „Wert anpassen") zeigten die Tages-Kennzahlen bis zum nächsten Morgen den
+    alten Spiegel.
+
+    Antwort: die Zähler des Laufs (``kanaele``, ``abschnitte``, ``gleich``, ``korrigiert`` je Kanal mit erster
+    abweichender Stunde und Zeilenzahl, ``gekuerzt``, ``uebersprungen``, ``fehler``) und ein Satz ``meldung``.
+    Ohne Spiegel (Standalone, kein HA-Zähler) ⇒ ``hat_spiegel: false``, kein HA-Aufruf. HA nicht erreichbar ⇒ 503.
+    """
+    from backend.core.database import get_session
+    from backend.models.kanal import ART_STAND, ART_SUM, FAMILIE_SPIEGEL, Kanal, KanalQuelle
+    from backend.services.activity_service import log_activity
+    from backend.services.kanal.konsistenz import konsistenz_anlage
+
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage")
+
+    # Dieselbe Auswahl wie `konsistenz_anlage` (Kanäle der Art sum/stand, Spiegel-Quellen mit Entity).
+    spiegel_quellen = (await db.execute(
+        select(func.count())
+        .select_from(KanalQuelle)
+        .join(Kanal, Kanal.id == KanalQuelle.kanal_id)
+        .where(
+            Kanal.anlage_id == anlage_id,
+            Kanal.art.in_([ART_SUM, ART_STAND]),
+            KanalQuelle.familie == FAMILIE_SPIEGEL,
+            KanalQuelle.statistic_id.is_not(None),
+        )
+    )).scalar_one()
+    if not spiegel_quellen:
+        return {
+            "anlage_id": anlage_id, "hat_spiegel": False, "kanaele": 0, "abschnitte": 0, "gleich": 0,
+            "korrigiert": [], "gekuerzt": [], "uebersprungen": {}, "fehler": 0,
+            "meldung": ("Für diese Anlage führt eedc keinen HA-Spiegel — ohne Zähler aus der "
+                        "Home-Assistant-Statistik gibt es nichts abzugleichen."),
+        }
+
+    erg = await konsistenz_anlage(get_session, anlage_id)
+    if erg.uebersprungen.get("ha_nicht_erreichbar"):
+        raise HTTPException(
+            status_code=503,
+            detail="Home Assistant ist nicht erreichbar — der Abgleich braucht die HA-Langzeitstatistik.",
+        )
+
+    meldung = _abgleich_meldung(erg)
+    await log_activity(
+        kategorie="ha_statistics",
+        aktion=("HA-Spiegel von Hand abgeglichen: unvollständig" if erg.fehler
+                else "HA-Spiegel von Hand abgeglichen: an HA angeglichen" if erg.korrigiert
+                else "HA-Spiegel von Hand abgeglichen: keine Abweichung"),
+        erfolg=erg.fehler == 0,
+        details=meldung,
+        details_json={"korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
+                      "uebersprungen": erg.uebersprungen, "fehler": erg.fehler},
+        anlage_id=anlage_id,
+        db=db,
+    )
+    return {
+        "anlage_id": anlage_id, "hat_spiegel": True,
+        "kanaele": erg.kanaele, "abschnitte": erg.abschnitte, "gleich": erg.gleich,
+        "korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
+        "uebersprungen": erg.uebersprungen, "fehler": erg.fehler,
+        "meldung": meldung,
     }
 
 

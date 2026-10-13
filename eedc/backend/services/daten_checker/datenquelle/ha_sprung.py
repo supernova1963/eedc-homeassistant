@@ -17,7 +17,8 @@ letzten ``FENSTER_TAGE`` — keine HA-Abfrage.
 
 ⛔ **Kein Reparatur-Knopf in eedc.** Die Quelle ist HAs Statistik; korrigiert wird dort (Entwicklerwerkzeuge →
 Statistik → „Wert anpassen"), und eedc zieht über den nächtlichen Konsistenzlauf (``kanal/konsistenz.py``, 02:45)
-selbst nach. Monate, die mit dem Sprung schon gespeichert wurden („Aus HA laden", Sammelimport — Entscheid D3),
+selbst nach — oder sofort über „HA-Spiegel jetzt abgleichen" in der Reparatur-Werkbank (MartyBr, simon42 #429:
+derselbe Lauf, von Hand; er korrigiert nichts in eedc, er übernimmt HAs Korrektur). Monate, die mit dem Sprung schon gespeichert wurden („Aus HA laden", Sammelimport — Entscheid D3),
 bleiben gespeichert, bis der Anwender sie neu übernimmt; der Text sagt es.
 """
 
@@ -32,6 +33,7 @@ from sqlalchemy import text
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.kategorien import (
+    LINK_ENERGIEPROFIL,
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
@@ -143,15 +145,17 @@ class HaZaehlersprungChecks:
                 f"Gefunden in den letzten {FENSTER_TAGE} Tagen: {namen}. "
                 "Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
                 "„Wert anpassen“ die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht "
-                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab. Hast du den Monat schon "
+                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — sofort geht es danach "
+                "unter Einstellungen → Daten → Energieprofil-Pflege → Reparatur-Werkbank mit „HA-Spiegel jetzt "
+                "abgleichen“. Hast du den Monat schon "
                 "mit dem Sprung gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu."
             ),
-            # ⛔ **Kein „Beheben"-Link** (Lab-Durchlauf 4.1.3-rc1, 07.10.2026). Bis dahin zeigte der Knopf auf
-            # die eedc-Datenquellen (`/einstellungen/datenquellen`); die Korrektur liegt aber in Home Assistant
-            # (Entwicklerwerkzeuge → Statistik), und an der Zuordnung ist nichts falsch. Auf HAs Werkzeug kann
-            # der Knopf nicht zeigen — `DatenCheckerTeile.tsx` navigiert nur innerhalb von eedc (`navigate`),
-            # und unter Ingress wie standalone kennt die Meldung HAs Adresse nicht. Der Weg steht im Text.
-            link=None,
+            # Der Knopf zeigt auf die Energieprofil-Pflege (MartyBr, simon42 #429): dort liegt seit Päckchen N
+            # „HA-Spiegel jetzt abgleichen", der zweite Schritt nach der Korrektur in HA. ⛔ Nicht auf die
+            # eedc-Datenquellen — das war bis zum Lab-Durchlauf 4.1.3-rc1 (07.10.2026) so und falsch, an der
+            # Zuordnung ist nichts falsch. Auf HAs Werkzeug selbst kann der Knopf nicht zeigen
+            # (`DatenCheckerTeile.tsx` navigiert nur innerhalb von eedc); der erste Schritt steht im Text.
+            link=LINK_ENERGIEPROFIL,
         )]
 
 

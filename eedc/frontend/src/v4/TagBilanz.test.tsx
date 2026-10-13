@@ -6,7 +6,9 @@
  * (Rainer-PN 2026-07-25); ein fehlender Speicher blendet die Kachel aus.
  */
 import { describe, it, expect } from 'vitest'
-import { baueTagKpis, tagesPreisFormel } from './TagBilanz'
+import { screen } from '@testing-library/react'
+import { baueTagKpis, tagesPreisFormel, TagBilanz } from './TagBilanz'
+import { renderMitProvidern, stubMatchMedia } from '../test/render'
 import type { TagWerte } from '../api/energie_profil'
 import { tagWerte } from '../test/factories'
 
@@ -83,7 +85,7 @@ describe('baueTagKpis — ein Eigenverbrauch, dieselbe Formel wie Monat und Live
     const kpis = baueTagKpis(tag(), null)
     expect(kachel(kpis, 'PV-Eigenverbrauch')).toBeUndefined()
     const k = kachel(kpis, 'Eigenverbrauch')!
-    expect(k.value).toBe('2')
+    expect(k.value).toBe('2,0')
     expect(k.subtitle).not.toContain('Speicherladung')
     expect(k.formel).toBe('Direktverbrauch + Speicher-Entladung')
   })
@@ -92,16 +94,16 @@ describe('baueTagKpis — ein Eigenverbrauch, dieselbe Formel wie Monat und Live
     const k = kachel(baueTagKpis(tag({
       erzeugung: 18, einspeisung: 6, speicher_ladung: 3, speicher_entladung: 2, eigenverbrauch: 11,
     }), null), 'Eigenverbrauch')!
-    expect(k.berechnung).toBe('(18 − 6 − 3) + 2 kWh')
-    expect(k.ergebnis).toBe('= 11 kWh')
+    expect(k.berechnung).toBe('(18,0 − 6,0 − 3,0) + 2,0 kWh')
+    expect(k.ergebnis).toBe('= 11,0 kWh')
   })
 
   it('ohne Speicher-Bewegung bleibt der kurze Rechenweg PV − Einspeisung', () => {
     for (const ohne of [{ speicher_ladung: null, speicher_entladung: null }, { speicher_ladung: 0, speicher_entladung: 0 }]) {
       const k = kachel(baueTagKpis(tag({ erzeugung: 7, einspeisung: 5, eigenverbrauch: 2, ...ohne }), null), 'Eigenverbrauch')!
       expect(k.formel).toBe('PV-Erzeugung − Einspeisung')
-      expect(k.berechnung).toBe('7 − 5 kWh')
-      expect(k.ergebnis).toBe('= 2 kWh')
+      expect(k.berechnung).toBe('7,0 − 5,0 kWh')
+      expect(k.ergebnis).toBe('= 2,0 kWh')
     }
   })
 })
@@ -113,7 +115,7 @@ describe('baueTagKpis — Autarkie-Rechenweg passt zum Prozentwert', () => {
     // an realen Tagen als 111 % — ein Wert, den es nicht geben kann.
     const k = kachel(baueTagKpis(tag({ gesamtverbrauch: 11.3, netzbezug: 0.15, autarkie: 98.7, eigenverbrauch: 12.6 }), null), 'Autarkie')!
     expect(k.formel).toBe('(Gesamtverbrauch − Netzbezug) ÷ Gesamtverbrauch × 100')
-    expect(k.berechnung).toBe('(11 − 0) ÷ 11 kWh')
+    expect(k.berechnung).toBe('(11,3 − 0,2) ÷ 11,3 kWh')
     expect(k.ergebnis).toBe('= 98,7 %')
     // Der Rechenweg darf den angezeigten Wert nicht überschreiten können.
     expect(k.berechnung).not.toContain('13')
@@ -134,12 +136,12 @@ describe('baueTagKpis — ohne erfasste PV wird nichts behauptet', () => {
     expect(kachel(kpis, 'PV-Erzeugung')!.value).toBe('—')
     expect(kachel(kpis, 'Eigenverbrauch')!.value).toBe('—')
     // Die gemessene Einspeisung bleibt sichtbar — sie ist kein Teil der Lücke.
-    expect(kachel(kpis, 'Einspeisung')!.value).toBe('25')
+    expect(kachel(kpis, 'Einspeisung')!.value).toBe('25,0')
   })
 
   it('nennt das SOLL, aber keine Erfüllung in Prozent', () => {
     const k = kachel(baueTagKpis(ohnePv(), null, 40), 'PV-Erzeugung')!
-    expect(k.subtitle).toContain('SOLL 40 kWh')
+    expect(k.subtitle).toContain('SOLL 40,0 kWh')
     expect(k.subtitle).not.toContain('%')
   })
 
@@ -187,5 +189,37 @@ describe('Ø-Preis Netz (Tag) — die Formel nennt die Herkunft', () => {
     const f = preisKachel(undefined).formel!
     expect(f).not.toContain('gemessen')
     expect(f).not.toContain('verteilt')
+  })
+})
+
+// #426 (rapahl): An einem Tag sind die Mengen klein — ganzzahlig stand „0 kWh"
+// Netzbezug neben einer Autarkie unter 100 %. Tages-kWh tragen eine
+// Nachkommastelle; Prozent und € bleiben, wie sie sind.
+describe('Cockpit → Tag — kWh mit einer Nachkommastelle (#426)', () => {
+  const klein = () => tag({ netzbezug: 0.3, gesamtverbrauch: 9.3, autarkie: 96.8, einspeisung: 5.26 })
+
+  it('Kacheln und Vortag-Zeile zeigen eine Nachkommastelle, % bleibt ganzzahlig', () => {
+    const kpis = baueTagKpis(klein(), tag({ netzbezug: 1.24, einspeisung: 4.05 }))
+    expect(kachel(kpis, 'Netzbezug')!.value).toBe('0,3')
+    expect(kachel(kpis, 'Netzbezug')!.subtitle).toBe('VT: 1,2 kWh')
+    expect(kachel(kpis, 'Einspeisung')!.value).toBe('5,3')
+    expect(kachel(kpis, 'Einspeisung')!.subtitle).toBe('VT: 4,1 kWh')
+    expect(kachel(kpis, 'PV-Erzeugung')!.value).toBe('7,0')
+    // Prozent und € unverändert.
+    expect(kachel(kpis, 'Autarkie')!.value).toBe('97')
+    expect(kachel(kpis, 'Netto-Ertrag')!.value).toBe('0,85')
+  })
+
+  it('die Energie-Bilanz-Tabelle zeigt IST und Vortag mit einer Nachkommastelle', () => {
+    stubMatchMedia()
+    renderMitProvidern(
+      <TagBilanz t={klein()} vt={tag({ netzbezug: 1.24 })} wtStats={null} wochentagName="Samstag" />,
+    )
+    // Netzbezug IST 0,3 (vorher „0") und Vortag 1,2; Gesamtverbrauch 9,3.
+    expect(screen.getAllByText('0,3').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1,2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('9,3').length).toBeGreaterThan(0)
+    // Autarkie trägt in der Tabelle wie bisher eine Nachkommastelle.
+    expect(screen.getAllByText('96,8').length).toBeGreaterThan(0)
   })
 })
