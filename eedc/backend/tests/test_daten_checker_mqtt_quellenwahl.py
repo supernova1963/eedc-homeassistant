@@ -418,3 +418,105 @@ async def test_v2h_bleibt_neben_der_wallbox_erwartet(db, monkeypatch):
     pfad = f"/inv/{auto.id}_ID3/"
     assert f"{pfad}v2h_entladung_kwh" in details
     assert f"{pfad}ladung_kwh" not in details
+
+
+# ─── N-746: erwartet wird nur, was es an diesem Gerät gibt ──────────────────
+#
+# Die Erwartungsliste kommt aus `get_alle_felder_fuer_investition` — ohne
+# Bedingungsfilter, weil die Datenquellen-Fläche und die Migrationen alle Felder
+# brauchen. Der Check nahm sie ungefiltert: ein E-Auto ohne „V2H-fähig" trug
+# dauerhaft „…/v2h_entladung_kwh erwartet, nie empfangen", ein Speicher ohne
+# Netzladung `ladung_netz_kwh`, eine Wärmepumpe ohne getrennte Strommessung
+# `strom_heizen_kwh` und `strom_warmwasser_kwh` — Topics, auf die niemand
+# publizieren soll. Die Frage steht jetzt in der Filterkette des Checks
+# (`groesse_gibt_es_am_geraet`, harte Sorte), nicht in der Registry.
+
+async def _anlage_mit_geraet(db, typ: str, parameter: dict):
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+    inv = Investition(
+        anlage_id=anlage.id, typ=typ, bezeichnung="Geraet", parameter=parameter,
+    )
+    db.add(inv)
+    await db.flush()
+    return anlage, inv
+
+
+_GERAETEFRAGE_FAELLE = [
+    pytest.param("e-auto", {"v2h_faehig": True}, ("v2h_entladung_kwh",), id="e-auto-v2h"),
+    pytest.param("speicher", {"laedt_aus_netz": True}, ("ladung_netz_kwh",), id="speicher-netzladung"),
+    pytest.param(
+        "waermepumpe", {"getrennte_strommessung": True},
+        ("strom_heizen_kwh", "strom_warmwasser_kwh"), id="wp-getrennte-strommessung",
+    ),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("typ, parameter_mit, felder", _GERAETEFRAGE_FAELLE)
+async def test_groesse_ohne_geraet_wird_nicht_erwartet(
+    db, monkeypatch, typ, parameter_mit, felder,
+):
+    """Ohne die Eigenschaft gibt es die Größe am Gerät nicht ⇒ kein erwartetes
+    Topic; mit ihr bleibt sie erwartet (Gegenprobe im selben Test)."""
+    anlage_ohne, inv_ohne = await _anlage_mit_geraet(db, typ, {})
+    stumm = {("inv_energy", str(inv_ohne.id), f) for f in felder}
+    details = await _stumm_gemeldet(db, monkeypatch, anlage_ohne, stumm, set())
+    for feld in felder:
+        assert f"/inv/{inv_ohne.id}_Geraet/{feld}" not in details, feld
+
+    anlage_mit, inv_mit = await _anlage_mit_geraet(db, typ, parameter_mit)
+    stumm = {("inv_energy", str(inv_mit.id), f) for f in felder}
+    details = await _stumm_gemeldet(db, monkeypatch, anlage_mit, stumm, set())
+    for feld in felder:
+        assert f"/inv/{inv_mit.id}_Geraet/{feld}" in details, feld
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("typ, parameter_mit, felder", _GERAETEFRAGE_FAELLE)
+async def test_geraetefrage_nimmt_genau_diese_topics(
+    db, _inbound_laeuft, typ, parameter_mit, felder,
+):
+    """Leerer Cache: der Unterschied zwischen beiden Geräten ist genau die Zahl
+    der Größen, die es nur mit der Eigenschaft gibt — nicht mehr, nicht weniger."""
+    anlage_ohne, _ = await _anlage_mit_geraet(db, typ, {})
+    anlage_mit, _ = await _anlage_mit_geraet(db, typ, parameter_mit)
+    assert await _anzahl(db, anlage_mit) - await _anzahl(db, anlage_ohne) == len(felder)
+
+
+@pytest.mark.asyncio
+async def test_split_klima_erwartet_kein_warmwasser(db, monkeypatch):
+    """Dieselbe Regel, gemessene Reichweite: eine Luft-Luft-Anlage hat keinen
+    Warmwasserkreis (N-304) — `warmwasser_kwh` ist dort kein erwartetes Topic."""
+    anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {"wp_art": "luft_luft"})
+    details = await _stumm_gemeldet(
+        db, monkeypatch, anlage, {("inv_energy", str(inv.id), "warmwasser_kwh")}, set(),
+    )
+    assert f"/inv/{inv.id}_Geraet/warmwasser_kwh" not in details
+
+
+@pytest.mark.asyncio
+async def test_erweitertes_feld_bleibt_erwartet(db, monkeypatch):
+    """Gegenprobe zur weichen Sorte: ein Betriebsart-Feld an einer
+    Nicht-Luft-Luft-WP ist untypisch, nicht unmöglich (URTEIL_ERWEITERT) —
+    es bleibt erwartet."""
+    anlage, inv = await _anlage_mit_geraet(db, "waermepumpe", {})
+    details = await _stumm_gemeldet(
+        db, monkeypatch, anlage,
+        {("inv_energy", str(inv.id), "betriebsart_strom_heizen_kwh")}, set(),
+    )
+    assert f"/inv/{inv.id}_Geraet/betriebsart_strom_heizen_kwh" in details
+
+
+@pytest.mark.asyncio
+async def test_warntext_nennt_den_handgriff_keine(db, _inbound_laeuft):
+    """Der Ausweg für ein Feld, das man nicht über MQTT liefert, steht in der
+    Meldung selbst — nicht nur im Handbuch (§4.8)."""
+    anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
+    db.add(anlage)
+    await db.flush()
+    details = await _betroffene(db, anlage)
+    assert details, "Gegenprobe: ohne Befund prüft dieser Test nichts"
+    assert "Einstellungen → Datenquellen" in details
+    assert "„Keine“" in details

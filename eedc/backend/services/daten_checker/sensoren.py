@@ -32,14 +32,17 @@ class SensorChecks:
 
     async def _eautos_unter_wallbox(
         self, anlage: Anlage, mqtt_zaehler: Optional[set[str]],
+        investitionen: list,
     ) -> set[str]:
         """IDs (als str, wie im `match_key`) der E-Autos, deren Ladung heute eine
         Wallbox mit Ladezähler deckt (#425) — leer, wenn keine das tut.
 
         Die Regel ist anlagenweit (`wallbox_deckt_ladung_ab`): deckt eine Wallbox,
         gilt das für jedes E-Auto der Anlage, wie im Tages-/Stundenpfad.
+
+        ``investitionen``: alle Investitionen der Anlage — der Aufrufer lädt sie
+        einmal und liest daraus auch die Gerätefrage (N-746).
         """
-        from backend.models.investition import Investition
         from backend.services.snapshot.keys import (
             extract_quellen_energy, feld_hat_zaehler,
         )
@@ -50,9 +53,6 @@ class SensorChecks:
             MQTT_AKTIV_TAGE, mqtt_zaehler_keys,
         )
 
-        investitionen = list((await self.db.execute(
-            select(Investition).where(Investition.anlage_id == anlage.id)
-        )).scalars().all())
         if not any(i.typ == "e-auto" for i in investitionen):
             return set()
         if mqtt_zaehler is None:
@@ -100,6 +100,10 @@ class SensorChecks:
         from backend.services.datenquellen_resolver import (
             erwartet_inbound_topic, feld_id_aus_match_key,
         )
+        from backend.core.field_definitions.bedingungen import (
+            groesse_gibt_es_am_geraet,
+        )
+        from backend.models.investition import Investition
         from backend.models.settings import Settings as SettingsModel
 
         kat = CheckKategorie.MQTT_TOPIC_ABDECKUNG
@@ -163,9 +167,33 @@ class SensorChecks:
         # überspringt das Auto aus demselben Grund. Dieselbe Regel, dieselbe
         # Funktion wie die Beitragsschicht (`wallbox_deckt_ladung_ab`), mit
         # derselben Zählerfrage (`feld_hat_zaehler`: HA-Sensor oder angekommene
-        # MQTT-Stände). `v2h_entladung_kwh` bleibt erwartet: die Rückspeisung
-        # misst keine Wallbox.
-        eauto_ohne_energie = await self._eautos_unter_wallbox(anlage, mqtt_zaehler)
+        # MQTT-Stände). `v2h_entladung_kwh` bleibt bei einem V2H-fähigen Auto
+        # erwartet: die Rückspeisung misst keine Wallbox. (Ohne `v2h_faehig`
+        # nimmt sie die fünfte Stufe heraus.)
+        investitionen = list((await self.db.execute(
+            select(Investition).where(Investition.anlage_id == anlage.id)
+        )).scalars().all())
+        eauto_ohne_energie = await self._eautos_unter_wallbox(
+            anlage, mqtt_zaehler, investitionen,
+        )
+        #
+        # Und fünftens (N-746): Größen, die es an diesem Gerät nicht gibt. Die
+        # Energie-Liste kommt aus `get_alle_felder_fuer_investition` — bewusst
+        # ohne Bedingungsfilter, weil die Datenquellen-Fläche und die
+        # Migrationen alle Felder brauchen; die Aufrufer werten `bedingung`
+        # selbst aus. Ungefiltert stand hier am E-Auto ohne „V2H-fähig"
+        # `v2h_entladung_kwh`, am Speicher ohne Netzladung `ladung_netz_kwh`,
+        # an der WP ohne getrennte Strommessung `strom_heizen_kwh` und
+        # `strom_warmwasser_kwh` dauerhaft als „erwartet, nie empfangen" —
+        # Topics, auf die niemand publizieren soll. Dieselbe Frage wie der
+        # Monatsdaten-Check und die Beitragsschicht: `groesse_gibt_es_am_geraet`,
+        # die HARTE Sorte. Erweiterte Felder (untypisch, nicht unmöglich, z. B.
+        # die Betriebsart-Felder an einer Nicht-Luft-Luft-WP) bleiben erwartet.
+        # Gestellt für beide Investitions-Listen; die Live-Liste kommt schon
+        # gerätegefiltert (`get_live_felder_fuer_investition` wirft
+        # URTEIL_NEIN heraus), und der Helfer kennt ihre Keys nicht (fail-open)
+        # — dort ist die Frage heute ein No-op.
+        inv_parameter = {str(i.id): i.parameter for i in investitionen}
         erwartet = [
             e for e in await build_expected_topics(self.db, anlage)
             if not e.get("nur_manuell") and not e.get("zustand")
@@ -174,6 +202,12 @@ class SensorChecks:
                 e["match_key"][0] == "inv_energy"
                 and e["match_key"][1] in eauto_ohne_energie
                 and e["match_key"][2] in _EAUTO_FELDER_UNTER_WALLBOX
+            )
+            and not (
+                e["match_key"][0] in ("inv_energy", "inv_live")
+                and not groesse_gibt_es_am_geraet(
+                    e["typ"], e["feld"], inv_parameter.get(e["match_key"][1]),
+                )
             )
         ]
         if not erwartet:
@@ -238,7 +272,10 @@ class SensorChecks:
                     "keine Quelle Daten. Mögliche Ursachen: Publisher-Automation "
                     "(HA-Automation, ioBroker, Node-RED) noch nicht eingerichtet, "
                     "oder Investitions-IDs nach Re-Import nicht in der Automation "
-                    "nachgezogen. Wenn du keine Live-Daten via MQTT brauchst, "
+                    "nachgezogen. Felder, die du nicht über MQTT lieferst, stellst "
+                    "du unter Einstellungen → Datenquellen auf „Keine“ — dann "
+                    "erwartet eedc sie hier nicht mehr. "
+                    "Wenn du keine Live-Daten via MQTT brauchst, "
                     "kannst du „Daten über MQTT empfangen“ unter "
                     "Einstellungen → Integration abschalten. "
                     f"Betroffen: {beispiele}"

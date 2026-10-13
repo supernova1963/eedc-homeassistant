@@ -11,6 +11,13 @@
 
 ## Unreleased
 
+**MQTT-Check fragt nach deinem Gerät:** Der Daten-Checker erwartet nur noch Topics für Größen, die es an deinem Gerät
+gibt. Ein E-Auto ohne „V2H-fähig“, ein Speicher ohne „Lädt aus dem Netz“ oder eine Wärmepumpe ohne getrennte
+Strommessung stand bisher dauerhaft mit einem Topic wie „…/v2h_entladung_kwh“ unter „erwartet, nie empfangen“, obwohl
+es dafür nichts zu senden gibt. Liefert eine vorhandene Größe bewusst niemand über MQTT, nennt die Meldung jetzt den
+Handgriff: unter *Einstellungen → Datenquellen* auf „Keine“ stellen
+([Daten-Checker §4.8](HANDBUCH_DATEN_CHECKER.md#48-mqtt-topic-abdeckung)).
+
 **V2H am Tag:** Speist dein E-Auto Strom ins Haus zurück (V2H) und ist sein Zähler „V2H Entladung" zugeordnet, zählt
 *Cockpit → Tag* die Rückspeisung jetzt mit — in Eigenverbrauch, Gesamtverbrauch und Autarkie, wie Monat und Jahr es
 schon tun, und als Zeile „V2H-Rückspeisung" im Block E-Mobilität. Die Stundenwerte zeigen sie nicht, der laufende Monat
