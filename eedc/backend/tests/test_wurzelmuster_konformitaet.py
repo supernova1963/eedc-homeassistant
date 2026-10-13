@@ -2076,7 +2076,8 @@ P15_CO2_FAKTOR_KLASSIFIZIERT: dict[str, str] = {
         "synthetische BKW-Pauschale ohne Messung (0,9 kWh/Wp, 80 % EV) — Vorlage N-588 §1 „nicht betroffen“",
     "backend/api/routes/investitionen/dashboard_sonstiges.py::get_sonstiges_dashboard":
         "eigene Gerätemessung eines sonstigen Erzeugers (DI-1, Komponenten-Bilanz)",
-    "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard":
+    # RF-16: die CO₂-Zeile steht in der Kopfzahlen-Phase des Orchestrators `get_eauto_dashboard`.
+    "backend/api/routes/investitionen/dashboard_eauto.py::_zusammenfassung":
         "Netzstrom-CO₂ des E-Autos (Verbraucher-Bilanz, DI-1) — keine Eigenverbrauchs-Bewertung",
 }
 

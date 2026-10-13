@@ -740,7 +740,8 @@ N555_VERBRAUCH_LESESTELLEN: dict[str, str] = {
     # RF-8 (Serie „Funktion vor Datei"): `calculate_investition_sensors` ist ein Orchestrator; gelesen wird in zwei Phasen.
     "backend/api/routes/ha_export/investition_sensoren.py::_emob_summen": "kWh/100-km-Sensor",
     "backend/api/routes/ha_export/investition_sensoren.py::_emob_ersparnis_eingaenge": "PHEV (fahrverbrauch_kwh)",
-    "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard": "kWh/100 km, PHEV, CO₂ Strommix",
+    # RF-16 (Serie „Funktion vor Datei"): `get_eauto_dashboard` ist ein Orchestrator; gelesen wird in der Monatsschleife.
+    "backend/api/routes/investitionen/dashboard_eauto.py::_summen_der_monate": "kWh/100 km, PHEV, CO₂ Strommix",
     "backend/services/daten_checker/emob.py::_check_phev_anteil_unbestimmt": "PHEV-Checker",
     # ── Tag und Stunde: die eine Auswahl (Regel 6) ──
     "backend/services/snapshot/komponenten_beitraege.py::eauto_heimlade_felder_nach_quelle":
