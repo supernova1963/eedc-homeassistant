@@ -155,7 +155,7 @@ fi
 # ── 4. pytest ────────────────────────────────────────────────────────────────
 echo -e "${CYAN}[4/4] Akzeptanz-Tests via pytest...${NC}"
 
-if ! "$PYTEST" -q --no-header 2>&1 | tee /tmp/eedc-smoke-pytest.log | tail -3; then
+if ! "$PYTEST" -q --no-header -n 3 -p no:cacheprovider 2>&1 | tee /tmp/eedc-smoke-pytest.log | tail -3; then
     echo -e "${RED}  pytest fehlgeschlagen — Detail in /tmp/eedc-smoke-pytest.log${NC}"
     exit 3
 fi

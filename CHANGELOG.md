@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Intern: `pymodbus` darf wieder auf 3.16.1 — nur 3.16.0 bleibt ausgeschlossen.** Die Obergrenze aus 4.1.6 (`<3.16`) fällt: 3.16.1 importiert ohne das Extra «serial» (gemessen 13.10.2026 in einer frischen Umgebung), 3.16.0 bricht weiter mit `NameError: pyserial`. Der Prod-Paritäts-Check des Release-Skripts bleibt der Wächter. Dazu fährt der Smoke-Check vor einem Release die Backend-Suite jetzt mit drei Workern wie die Entwicklung (rund 20 statt 8 Minuten gespart je Release). Für Anwender ändert sich nichts.
+
 ## [4.1.7] - 2026-10-13 — 62 Korrekturen an Preis, Prognose, Import und Jahresbericht; neu: V2H im Tag, Netzladung im laufenden Monat, „HA-Spiegel jetzt abgleichen"
 
 ### Added
