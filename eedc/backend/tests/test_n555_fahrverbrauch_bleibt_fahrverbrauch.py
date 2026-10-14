@@ -729,7 +729,10 @@ def test_rueckbenennung_laeuft_einmalig_nach_der_initial_provenance():
 #: klassifiziert ist — genau die Klasse, die N-555 hatte (neun Aufrufer, die still ersetzten).
 N555_VERBRAUCH_LESESTELLEN: dict[str, str] = {
     # ── die eine Funktion (Regel 6): die Schätzung aus dem Fahrverbrauch ──
-    "backend/services/eauto_wirtschaftlichkeit.py::entscheide_emob_heimladung": "die eine Funktion",
+    # RF-24 (Serie „Funktion vor Datei"): `entscheide_emob_heimladung` ist ein Orchestrator; gelesen wird in zwei Phasen.
+    "backend/services/emob_heimladung_phasen.py::_dienstwagen_ohne_dienstliche_wallbox":
+        "die eine Funktion, Regel 3: Schätzung des Dienstwagens ohne eigene Messung",
+    "backend/services/emob_heimladung_phasen.py::_schaetzung_ohne_wallbox_wert": "die eine Funktion, Regel 1: Schätzung des privaten Autos",
     "backend/services/eauto_wirtschaftlichkeit.py::dienstliche_ladung_der_zeile":
         "die eine Funktion, Dienstwagen (Stufe 1 unverändert)",
     # ── Fahrverbrauch als FAHRVERBRAUCH: kWh/100 km, PHEV-Anteil, CO₂ Strommix ──

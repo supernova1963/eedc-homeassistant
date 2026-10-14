@@ -44,7 +44,6 @@
 56	services/daten_checker/energieprofil.py::EnergieprofilChecks._check_energieprofil_abdeckung
 77	services/daten_checker/monatsdaten.py::MonatsdatenChecks._check_wp_monatsdaten
 54	services/daten_checker/sensoren.py::SensorChecks._check_sensor_mapping_lts
-110	services/eauto_wirtschaftlichkeit.py::entscheide_emob_heimladung
 60	services/emob_ladebloecke.py::bilde_ladebloecke
 51	services/energie_profil/_helpers.py::_get_betriebsmodus_history
 77	services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts

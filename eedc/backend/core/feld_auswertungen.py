@@ -460,7 +460,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     # Schritt 1), über sie von allen Sichten; am Tag über die Tagesauswahl.
     ("e-auto", "ladung_kwh"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "_zeile_privat"),   # RF-16: Phase des Orchestrators `get_eauto_dashboard`
-        _a(COCKPIT_MONAT, "services/eauto_wirtschaftlichkeit.py", "entscheide_emob_heimladung"),
+        _a(COCKPIT_MONAT, "services/eauto_wirtschaftlichkeit.py", "eigene_messung_des_autos"),   # RF-24: liest „Heim: gesamt“ (Regel 2 Schritt 1); gerufen von den Phasen des Orchestrators `entscheide_emob_heimladung`
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
     ),
     ("e-auto", "ladung_extern_kwh"): (
