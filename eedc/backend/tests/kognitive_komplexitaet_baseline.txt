@@ -12,7 +12,6 @@
 98	api/routes/cockpit/pv_strings.py::get_pv_strings_gesamtlaufzeit
 90	api/routes/cockpit/uebersicht.py::get_cockpit_uebersicht
 60	api/routes/datenquellen.py::get_datenquellen_felder
-107	api/routes/energie_profil/monat.py::get_monatsauswertung
 82	api/routes/energie_profil/prognose.py::get_tagesprognose
 64	api/routes/energie_profil/tag.py::get_tag_detail
 74	api/routes/energie_profil/waerme.py::get_waerme_verlauf_stunden
