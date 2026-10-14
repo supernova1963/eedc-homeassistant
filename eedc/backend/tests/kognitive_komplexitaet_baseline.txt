@@ -64,7 +64,6 @@
 57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 71	services/snapshot/bereichs_leser.py::lade_tageswerte_je_geraet
 112	services/snapshot/reaggregator.py::get_reaggregate_preview
-122	services/snapshot/tages_tabelle.py::baue_tagestabelle
 82	services/solar_forecast_service.py::_build_prognose
 60	services/solcast_service.py::_fetch_solcast_ha_auto
 57	services/vorschlag_service.py::VorschlagService._get_berechnete_werte

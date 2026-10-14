@@ -182,10 +182,12 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         # Cockpit → Monat ihre Summe (`monats_aus_tagen`). Bis dahin standen hier
         # `get_komponenten_tageskwh`/`loese_pv_tageswerte_auf` — seit `8db019d8`
         # (26.09.2026) ohne Produktions-Aufrufer.
+        # RF-22 (Serie „Funktion vor Datei“): die Auflösung ist die Phase
+        # `_pv_aggregat_aufloesen` von `baue_tagestabelle` (dieselbe Datei).
         _a(COCKPIT_TAG, "services/snapshot/tages_tabelle.py",
-           "baue_tagestabelle", "PV_AGGREGAT_BASIS_FELD"),
+           "_pv_aggregat_aufloesen", "PV_AGGREGAT_BASIS_FELD"),
         _a(COCKPIT_MONAT, "services/snapshot/tages_tabelle.py",
-           "baue_tagestabelle", "PV_AGGREGAT_BASIS_FELD"),
+           "_pv_aggregat_aufloesen", "PV_AGGREGAT_BASIS_FELD"),
     ),
     (TYP_ANLAGE, "globalstrahlung_kwh_m2"): (
         _a(COCKPIT_AUSSICHT, "api/routes/aussichten/prognose.py", "get_langfrist_prognose"),
