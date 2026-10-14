@@ -1,7 +1,7 @@
 # Beitragen zu eedc
 
-eedc ist ein Solo-Open-Source-Projekt und seit Oktober 2026 im **Wartungsmodus**: Fehler werden behoben,
-neue Funktionen nicht mehr geplant. Fehlerberichte haben Vorrang und sind willkommen. Wünsche sammelt
+eedc ist ausgereift und wird von einer Person gepflegt. Fehlerberichte sind willkommen und haben Vorrang;
+Korrekturen erscheinen mit dem nächsten Release, in der Regel monatlich. Wünsche sammelt
 [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) ohne Termin.
 
 Sicherheitslücken bitte **nicht** als öffentliches Issue — siehe [SECURITY.md](SECURITY.md).
@@ -35,7 +35,7 @@ Ein Blick dorthin vor dem Melden spart oft eine Rückfrage.
 
 ## Pull Requests
 
-Vor einem Pull Request bitte ein Issue, damit klar ist, ob die Änderung in den Wartungsmodus passt.
+Vor einem Pull Request bitte ein Issue, damit vorher klar ist, ob und in welcher Form die Änderung passt.
 Kleine, abgegrenzte Änderungen mit einem Zweck haben die beste Chance. Was ein Pull Request mitbringen muss:
 
 - **Entwicklungsumgebung** nach [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md); die Code-Regeln dort

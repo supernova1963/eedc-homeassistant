@@ -2,7 +2,7 @@
 
 > Das bisherige, ausführliche CLAUDE.md liegt unter [docs/ARCHIV-CLAUDE-2026-10-10.md](docs/ARCHIV-CLAUDE-2026-10-10.md).
 > Es beschreibt den Prüfprozess (Vorlage → Gegenprüfung → Opus-Bau mit Halten → Nachmessung → Golden Master → Matrix-Form),
-> der am 10.10.2026 **ausgesetzt** wurde (Entscheid Gernot: wirtschaftlich nicht mehr tragbar für ein Solo-Open-Source-Projekt).
+> der am 10.10.2026 **ausgesetzt** wurde (Entscheid Gernot).
 > Die Konsolidierung (10./11.10., 31 Funde, v4.1.6) war der Abschluss der aktiven Phase; seitdem **Wartungsmodus**.
 > Was dort als Regel steht, gilt als **Hintergrundwissen**, nicht als Pflicht — außer den hier genannten Punkten.
 

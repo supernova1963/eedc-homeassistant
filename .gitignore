@@ -95,3 +95,7 @@ eedc/data/*.db.*
 # Entwicklungsrechnern via scripts/sync-claude.sh ausgetauscht werden — nicht
 # nach GitHub. Verbleibende Verbreitung ausschließlich gernot-iMac14-1 ↔ gernot001.
 docs/drafts/
+
+# Abzüge des Community-Servers (Statistik-JSON) gehören nach ~/.claude/plans/community-abzuege/, nicht ins Repo
+community-stats.json
+community-totals.json
