@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import and_, select, func as _sql_func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,14 @@ from backend.services.snapshot.komponenten_beitraege import (
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
 
 logger = logging.getLogger(__name__)
+
+
+# ── RF-23 (Serie „Funktion vor Datei", 14.10.2026): `get_reaggregate_preview` ist ein Orchestrator ─────────────
+# Er reiht die Phasen in der Vertragsreihenfolge: Zähler-Auswahl (`_zaehler_eintraege`, rein), Stunden-Grenzen
+# (`_boundaries`: je Zähler 25 × DB-Stand und HA-Wert), Stunden alt/neu (`_stunden_alt_neu`: gespeicherte Stundenzeilen
+# gegen die Tagestabelle des Laufs) und Counter-Tagesdelta (`_counter_tagesdelta`). Die Reihenfolge der SQL- und
+# HA-Zugriffe ist dieselbe wie vorher; die Rümpfe sind wortgleich umgezogen. Phasen mit HA-Recorder-Aufruf bleiben
+# `async def`, damit der Wächter `test_ha_last_und_index.py` sie weiter zählt.
 
 
 async def get_reaggregate_preview(
@@ -88,15 +96,6 @@ async def get_reaggregate_preview(
     """
     sensor_mapping = anlage.sensor_mapping or {}
 
-    # Counter-Entries sammeln — Feld-Auswahl (Whitelist + Either-Or +
-    # parent-Skip) über DIESELBE Normalisierung wie die beiden Hourly-
-    # Aggregatoren (Issue #298, Audit-§6.2, Pattern-Klasse
-    # [[feedback_aggregator_symmetrie]]). Die Vorschau-Tabelle zeigte vorher für
-    # doppelt gemappte E-Autos (`verbrauch_kwh` + `ladung_kwh`, evcc/#262)
-    # verdoppelte Tagesummen — die Either-Or-Auflösung unten räumt das pro
-    # Spalte (alt/neu) auf, deckungsgleich mit dem späteren Reload-Schreibwert.
-    eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
-    seen_keys: set[str] = set()
     # C2b-Read-Through (HA-only-Pfad): die „neu"-Spalte (HA-Stats-Projektion des
     # Reloads) liest die zugeordnete Entity; MQTT-/keine-zugeordnete Felder haben
     # keine HA-„neu"-Projektion (entity → None). Die „alt"-Spalte (DB-Lookup per
@@ -116,17 +115,53 @@ async def get_reaggregate_preview(
         await mqtt_zaehler_keys(db, anlage.id, seit=cutoff)
     )
 
-    basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(sensor_mapping):
-        cfg = basis.get(he.feld)
-        if isinstance(cfg, dict):
-            eid = cfg.get("sensor_id")
-            if eid:
-                sk = f"basis:{he.feld}"
-                eid_eff, behalten = resolve_energy_ha_eid(quellen_energy, sk, eid)
-                eintraege.append((sk, eid_eff if behalten else None,
-                                  he.kategorie, he.fallback_gruppe))
-                seen_keys.add(sk)
+    eintraege = _zaehler_eintraege(
+        sensor_mapping, investitionen_by_id, datum, quellen_energy, mqtt_sks_alle,
+    )
+
+    ha_svc = get_ha_statistics_service()
+    ha_verfuegbar = ha_svc.is_available
+
+    tag_0 = datetime.combine(datum, datetime.min.time())
+    boundaries = await _boundaries(db, anlage, eintraege, ha_svc, ha_verfuegbar, tag_0)
+
+    slot_deltas, tagesumme_alt, tagesumme_neu = await _stunden_alt_neu(
+        db, anlage, investitionen_by_id, datum, ha_verfuegbar,
+    )
+
+    counter_tagesdelta = await _counter_tagesdelta(
+        db, anlage, investitionen_by_id, sensor_mapping, quellen_energy, mqtt_sks_alle,
+        ha_svc, ha_verfuegbar, tag_0,
+    )
+
+    return {
+        "boundaries": boundaries,
+        "slot_deltas": slot_deltas,
+        "tagesumme_alt": tagesumme_alt,
+        "tagesumme_neu": tagesumme_neu,
+        "ha_verfuegbar": ha_verfuegbar,
+        "counter_tagesdelta": counter_tagesdelta,
+    }
+
+
+def _zaehler_eintraege(
+    sensor_mapping: dict,
+    investitionen_by_id: dict,
+    datum: date,
+    quellen_energy: dict,
+    mqtt_sks_alle: list[str],
+) -> list[tuple[str, Optional[str], str, Optional[str]]]:
+    """Die Zähler der Vorschau als (sensor_key, HA-Entity oder None, Kategorie, Either-Or-Gruppe) — rein, ohne SQL."""
+    # Counter-Entries sammeln — Feld-Auswahl (Whitelist + Either-Or +
+    # parent-Skip) über DIESELBE Normalisierung wie die beiden Hourly-
+    # Aggregatoren (Issue #298, Audit-§6.2, Pattern-Klasse
+    # [[feedback_aggregator_symmetrie]]). Die Vorschau-Tabelle zeigte vorher für
+    # doppelt gemappte E-Autos (`verbrauch_kwh` + `ladung_kwh`, evcc/#262)
+    # verdoppelte Tagesummen — die Either-Or-Auflösung unten räumt das pro
+    # Spalte (alt/neu) auf, deckungsgleich mit dem späteren Reload-Schreibwert.
+    eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
+    seen_keys: set[str] = set()
+    _basis_eintraege(sensor_mapping, quellen_energy, eintraege, seen_keys)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     # N-555 (Konzept Regel 6): dieselbe Auswahl wie der Stunden-Aggregator —
@@ -147,6 +182,56 @@ async def get_reaggregate_preview(
         ist_verfuegbar=lambda inv, feld: _hat_zaehler(str(inv.id), feld),
         datum=datum,
     )
+    _investitions_eintraege(
+        investitionen_map, investitionen_by_id, quellen_energy, _wb_deckt, _auswahl, eintraege, seen_keys,
+    )
+
+    # MQTT-Keys (oben geholt) über DIESELBE Normalisierung wie der HA-Pfad
+    # auflösen (#317), damit die Vorschau-Tabelle ein doppelt per MQTT gemapptes
+    # E-Auto (ladung_kwh + verbrauch_kwh) in der Either-Or-Gruppe auflöst statt
+    # doppelt summiert — deckungsgleich mit dem Snapshot-Hourly-Schreibwert.
+    mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
+    for sk, kat, grp in mqtt_hourly_eintraege(
+        mqtt_sks, investitionen_by_id, investitionen_map,
+        wallbox_deckt_ladung=_wb_deckt, auswahl_je_inv=_auswahl,
+    ):
+        if sk in seen_keys:
+            continue
+        eintraege.append((sk, None, kat, grp))
+        seen_keys.add(sk)
+    return eintraege
+
+
+def _basis_eintraege(
+    sensor_mapping: dict,
+    quellen_energy: dict,
+    eintraege: list,
+    seen_keys: set[str],
+) -> None:
+    """Anlagen-Zähler (`basis:<feld>`) mit zugeordnetem Sensor — hängt an `eintraege`/`seen_keys` an."""
+    basis = sensor_mapping.get("basis", {}) or {}
+    for he in basis_hourly_eintraege(sensor_mapping):
+        cfg = basis.get(he.feld)
+        if isinstance(cfg, dict):
+            eid = cfg.get("sensor_id")
+            if eid:
+                sk = f"basis:{he.feld}"
+                eid_eff, behalten = resolve_energy_ha_eid(quellen_energy, sk, eid)
+                eintraege.append((sk, eid_eff if behalten else None,
+                                  he.kategorie, he.fallback_gruppe))
+                seen_keys.add(sk)
+
+
+def _investitions_eintraege(
+    investitionen_map: dict,
+    investitionen_by_id: dict,
+    quellen_energy: dict,
+    _wb_deckt: bool,
+    _auswahl: Callable[[str], Callable[[str], bool]],
+    eintraege: list,
+    seen_keys: set[str],
+) -> None:
+    """Geräte-Zähler (`inv:<id>:<feld>`) über dieselbe Auswahl wie der Stunden-Aggregator — hängt an."""
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -168,24 +253,16 @@ async def get_reaggregate_preview(
                                       he.kategorie, he.fallback_gruppe))
                     seen_keys.add(sk)
 
-    # MQTT-Keys (oben geholt) über DIESELBE Normalisierung wie der HA-Pfad
-    # auflösen (#317), damit die Vorschau-Tabelle ein doppelt per MQTT gemapptes
-    # E-Auto (ladung_kwh + verbrauch_kwh) in der Either-Or-Gruppe auflöst statt
-    # doppelt summiert — deckungsgleich mit dem Snapshot-Hourly-Schreibwert.
-    mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
-    for sk, kat, grp in mqtt_hourly_eintraege(
-        mqtt_sks, investitionen_by_id, investitionen_map,
-        wallbox_deckt_ladung=_wb_deckt, auswahl_je_inv=_auswahl,
-    ):
-        if sk in seen_keys:
-            continue
-        eintraege.append((sk, None, kat, grp))
-        seen_keys.add(sk)
 
-    ha_svc = get_ha_statistics_service()
-    ha_verfuegbar = ha_svc.is_available
-
-    tag_0 = datetime.combine(datum, datetime.min.time())
+async def _boundaries(
+    db: AsyncSession,
+    anlage,
+    eintraege: list,
+    ha_svc: Any,
+    ha_verfuegbar: bool,
+    tag_0: datetime,
+) -> list[dict]:
+    """Je Zähler die 25 Stunden-Grenzen (Vortag 23:00 … 23:00): `alt` aus der DB (± 5 min), `neu` aus HA (± 10 min)."""
     boundaries: list[dict] = []
 
     # Pro Counter, pro Stunde -1..24: alt aus DB (5min Toleranz), neu aus HA-Stats
@@ -234,6 +311,17 @@ async def get_reaggregate_preview(
                 "neu_kwh": neu,
             })
 
+    return boundaries
+
+
+async def _stunden_alt_neu(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+    ha_verfuegbar: bool,
+) -> tuple[list[dict], dict[str, Optional[float]], dict[str, Optional[float]]]:
+    """Gespeicherte Stundenzeilen („alt") gegen die Tagestabelle des Laufs („neu", R5/Ü7)."""
     # ── Stunden alt/neu (Zählerlücken wie HA, Ü7) ─────────────────────────────
     # ⭐ **„neu" ist, was der Lauf schreiben WÜRDE — über dieselbe Tagestabelle
     # wie der Aggregator** (R5): HA erreichbar ⇒ die HA-Slot-Tabelle
@@ -250,7 +338,6 @@ async def get_reaggregate_preview(
     # Batterie mit deren Vorzeichen (Entladung positiv). `spanne_neu` sagt, wie
     # viele reale Stunden der neue Wert trägt — eine Stunde nach einer Lücke
     # zeigt dort ihre Energie „aus der Lücke".
-    from backend.core.berechnungen import batterie_kw_spalte
     from backend.models.tages_energie_profil import TagesEnergieProfil
     from backend.services.snapshot import aggregator as _snapshot_aggregator
     from backend.services.snapshot import lts_aggregator as _lts_aggregator
@@ -271,6 +358,16 @@ async def get_reaggregate_preview(
             db, anlage, investitionen_by_id, datum,
         )
     stunden_neu = tabelle_neu.stunden if tabelle_neu is not None else {}
+
+    return _stunden_zeilen(tep_alt, stunden_neu)
+
+
+def _stunden_zeilen(
+    tep_alt: dict,
+    stunden_neu: dict,
+) -> tuple[list[dict], dict[str, Optional[float]], dict[str, Optional[float]]]:
+    """Je Stunde und Achse eine Zeile alt/neu samt Tagessummen — rein."""
+    from backend.core.berechnungen import batterie_kw_spalte
 
     _ACHSEN_VORSCHAU = (
         ("pv", "pv_kw", lambda z: z.get("pv")),
@@ -305,6 +402,21 @@ async def get_reaggregate_preview(
             if neu is not None:
                 tagesumme_neu[achse] = (tagesumme_neu.get(achse) or 0.0) + neu
 
+    return slot_deltas, tagesumme_alt, tagesumme_neu
+
+
+async def _counter_tagesdelta(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    sensor_mapping: dict,
+    quellen_energy: dict,
+    mqtt_sks_alle: list[str],
+    ha_svc: Any,
+    ha_verfuegbar: bool,
+    tag_0: datetime,
+) -> list[dict]:
+    """Tageszahl reiner Zähler (`KUMULATIVE_COUNTER_FELDER`) alt/neu, je Feld über alle Geräte summiert."""
     # ── Counter-Tagesdelta (KUMULATIVE_COUNTER_FELDER) ────────────────────────
     # Reine Counter (z. B. wp_starts_anzahl) tauchen in den kWh-Slots/Tagesummen
     # nicht auf — sie haben keine Energiefluss-Kategorie. Damit der Tester vor
@@ -359,26 +471,13 @@ async def get_reaggregate_preview(
                 continue
             entity_id = config.get("sensor_id") if isinstance(config, dict) else None
 
-            alt_start = await _db_snap_at(sensor_key, tag_0)
-            alt_ende = await _db_snap_at(sensor_key, tag_ende)
-            if alt_start is not None and alt_ende is not None:
-                d = alt_ende - alt_start
-                if d >= 0:
-                    counter_alt_per_feld[feld] = counter_alt_per_feld.get(feld, 0) + int(round(d))
-
-            # C2b: „neu"-Projektion liest die zugeordnete HA-Entity; MQTT-/keine-
-            # zugeordnete Counter haben keine HA-„neu"-Projektion.
-            neu_entity, behalten = resolve_energy_ha_eid(quellen_energy, sensor_key, entity_id)
-            if ha_verfuegbar and behalten and neu_entity:
-                _stand = ist_stand_sensor_key(sensor_key)
-                neu_start = ha_svc.get_value_at(
-                    neu_entity, tag_0, toleranz_minuten=10, als_stand=_stand)
-                neu_ende = ha_svc.get_value_at(
-                    neu_entity, tag_ende, toleranz_minuten=10, als_stand=_stand)
-                if neu_start is not None and neu_ende is not None:
-                    d = neu_ende - neu_start
-                    if d >= 0:
-                        counter_neu_per_feld[feld] = counter_neu_per_feld.get(feld, 0) + int(round(d))
+            await _counter_delta_alt(
+                _db_snap_at, sensor_key, feld, tag_0, tag_ende, counter_alt_per_feld,
+            )
+            await _counter_delta_neu(
+                ha_svc, ha_verfuegbar, quellen_energy, sensor_key, entity_id, feld,
+                tag_0, tag_ende, counter_neu_per_feld,
+            )
 
     counter_tagesdelta: list[dict] = []
     for feld in sorted(set(counter_alt_per_feld) | set(counter_neu_per_feld)):
@@ -387,15 +486,54 @@ async def get_reaggregate_preview(
             "alt": counter_alt_per_feld.get(feld),
             "neu": counter_neu_per_feld.get(feld),
         })
+    return counter_tagesdelta
 
-    return {
-        "boundaries": boundaries,
-        "slot_deltas": slot_deltas,
-        "tagesumme_alt": tagesumme_alt,
-        "tagesumme_neu": tagesumme_neu,
-        "ha_verfuegbar": ha_verfuegbar,
-        "counter_tagesdelta": counter_tagesdelta,
-    }
+
+async def _counter_delta_alt(
+    _db_snap_at: Callable,
+    sensor_key: str,
+    feld: str,
+    tag_0: datetime,
+    tag_ende: datetime,
+    counter_alt_per_feld: dict[str, int],
+) -> None:
+    """„alt": Differenz der gespeicherten Stände 00:00 → 00:00, nur wenn beide da und nicht rückwärts."""
+    alt_start = await _db_snap_at(sensor_key, tag_0)
+    alt_ende = await _db_snap_at(sensor_key, tag_ende)
+    if alt_start is not None and alt_ende is not None:
+        d = alt_ende - alt_start
+        if d >= 0:
+            counter_alt_per_feld[feld] = counter_alt_per_feld.get(feld, 0) + int(round(d))
+
+
+async def _counter_delta_neu(
+    ha_svc: Any,
+    ha_verfuegbar: bool,
+    quellen_energy: dict,
+    sensor_key: str,
+    entity_id: Optional[str],
+    feld: str,
+    tag_0: datetime,
+    tag_ende: datetime,
+    counter_neu_per_feld: dict[str, int],
+) -> None:
+    """„neu": dieselbe Differenz aus der HA-Statistik der zugeordneten Entity (C2b; ohne HA-Zuordnung keine).
+
+    Bleibt `async def`, obwohl sie nichts erwartet: der Recorder-Aufruf blockiert den Loop wie vorher, und der
+    Wächter `test_ha_last_und_index.py` zählt nur Aufrufe in `async def`."""
+    # C2b: „neu"-Projektion liest die zugeordnete HA-Entity; MQTT-/keine-
+    # zugeordnete Counter haben keine HA-„neu"-Projektion.
+    neu_entity, behalten = resolve_energy_ha_eid(quellen_energy, sensor_key, entity_id)
+    if ha_verfuegbar and behalten and neu_entity:
+        _stand = ist_stand_sensor_key(sensor_key)
+        neu_start = ha_svc.get_value_at(
+            neu_entity, tag_0, toleranz_minuten=10, als_stand=_stand)
+        neu_ende = ha_svc.get_value_at(
+            neu_entity, tag_ende, toleranz_minuten=10, als_stand=_stand)
+        if neu_start is not None and neu_ende is not None:
+            d = neu_ende - neu_start
+            if d >= 0:
+                counter_neu_per_feld[feld] = counter_neu_per_feld.get(feld, 0) + int(round(d))
 
 
 async def resnap_anlage_range(
