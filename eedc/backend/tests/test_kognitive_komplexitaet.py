@@ -74,7 +74,6 @@ AUSNAHMEN: dict[str, str] = {
 #: Umbau-Fall. Reihenfolge und Bau-Prompts: ~/.claude/plans/opus-berichte/RF-19 … RF-28.
 ABBAU: dict[str, str] = {
     "api/routes/prognosen.py::get_prognosen_vergleich": "RF-28 (kognitiv 133 am 14.10.2026)",
-    "services/daten_checker/datenquelle/klima.py::KlimaChecks._check_klima_modus_sensor": "RF-26 (kognitiv 107 am 14.10.2026)",
     "api/routes/monatsdaten.py::list_monatsdaten_aggregiert": "RF-27 (kognitiv 104 am 14.10.2026)",
 }
 

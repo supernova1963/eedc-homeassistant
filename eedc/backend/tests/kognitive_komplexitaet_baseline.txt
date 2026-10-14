@@ -38,7 +38,6 @@
 151	core/database.py::run_migrations._run_migrations
 91	main.py::lifespan
 58	services/community_service.py::prepare_community_data
-107	services/daten_checker/datenquelle/klima.py::KlimaChecks._check_klima_modus_sensor
 56	services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift
 56	services/daten_checker/energieprofil.py::EnergieprofilChecks._check_energieprofil_abdeckung
 77	services/daten_checker/monatsdaten.py::MonatsdatenChecks._check_wp_monatsdaten

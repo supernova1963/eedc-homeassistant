@@ -2501,6 +2501,10 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # Aufrufer ist `_wp_steuerung_und_plan` (selbst eine Phase, s. o.).
     "backend/services/daten_checker/kuehl_zaehler.py::hat_kuehl_zaehler":
         "backend/services/daten_checker/datenquelle/klima.py::_check_klima_modus_sensor",
+    # RF-26 (Serie „Funktion vor Datei"): Phase des Klima-Checks — WK-06 „Kühlanteil wird geschätzt" befragt die
+    # Zeilen (`modus_strom_zeile`), die der Orchestrator `_check_klima_modus_sensor` lädt; sie bildet keine Monatsgröße.
+    "backend/services/daten_checker/datenquelle/klima.py::_geschaetzter_kuehlanteil":
+        "backend/services/daten_checker/datenquelle/klima.py::_check_klima_modus_sensor",
     # SCHREIBpfad #263/K-2: liest den Gesamtwert der Zeile, in die er schreibt,
     # als Bezugsgröße der Teilmengen-Invariante. Lader ist `_lade_imd` daneben.
     "backend/services/energie_profil/modus_split_schreiben.py::schreibe_modus_split_monat":
