@@ -74,7 +74,6 @@ AUSNAHMEN: dict[str, str] = {
 #: Umbau-Fall. Reihenfolge und Bau-Prompts: ~/.claude/plans/opus-berichte/RF-19 … RF-28.
 ABBAU: dict[str, str] = {
     "api/routes/prognosen.py::get_prognosen_vergleich": "RF-28 (kognitiv 133 am 14.10.2026)",
-    "services/energie_profil/tage_werte.py::baue_tage_werte": "RF-20 (kognitiv 127 am 14.10.2026)",
     "services/prognose_kanon.py::kanon_tagesprognose": "RF-21 (kognitiv 125 am 14.10.2026)",
     "services/snapshot/tages_tabelle.py::baue_tagestabelle": "RF-22 (kognitiv 122 am 14.10.2026)",
     "services/snapshot/reaggregator.py::get_reaggregate_preview": "RF-23 (kognitiv 112 am 14.10.2026)",

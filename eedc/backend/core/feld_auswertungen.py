@@ -471,7 +471,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     ("e-auto", "v2h_entladung_kwh"): (
         # #110 V2H-Tageswert: Tagesgröße aus dem Zählerpfad (`v2h_<id>`), in der Tagesbilanz über `mit_v2h_entladung`.
-        _a(COCKPIT_TAG, "services/energie_profil/tage_werte.py", "baue_tage_werte"),
+        _a(COCKPIT_TAG, "services/energie_profil/tage_werte.py", "_geld_spalten"),   # RF-20: Phase des Orchestrators `baue_tage_werte` (Finanzzeile; die Tagesgröße entsteht in `_tagesbilanz`)
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "_summen_der_monate"),   # RF-16: Phase des Orchestrators `get_eauto_dashboard`
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),

@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -80,6 +81,33 @@ from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 
 logger = logging.getLogger(__name__)
+
+
+# ── RF-20 (Serie „Funktion vor Datei", 13.10.2026): `baue_tage_werte` ist ein Orchestrator ──────────────────────────
+# Er lädt, was alle Tage des Zeitraums teilen (Stundenzeilen samt SoC-Paarung, Tageszeilen, Speicher/Sonstiges/Erzeuger,
+# Monatsdaten, Zählerstände, Kanal-Tage, Tarife und Slot-Kosten — in dieser Reihenfolge, sie ist die SQL-Folge), und
+# baut je Tag die Zeile über `_tageszeile`. Die Phasen darunter sind wortgleich umgezogen; was alle Tage teilen, reist
+# in `_TageKontext`. Die Antwortzeile entsteht aus drei Spaltengruppen (`_energie_spalten`, `_geld_spalten`,
+# `_tagnative_spalten`); die Feldreihenfolge der Antwort bestimmt das Schema `TagWerteResponse`, nicht der Aufruf.
+
+
+@dataclass
+class _TageKontext:
+    """Was alle Tage EINER Anfrage teilen — im Orchestrator geladen, von den Phasen nur gelesen."""
+    db: AsyncSession
+    anlage_id: int
+    tep_pro_tag: dict[date, list[TagesEnergieProfil]]
+    soc_gepaart: dict[tuple[date, int], Optional[float]]
+    tz_pro_tag: dict[date, TagesZusammenfassung]
+    speicher_invs: list[Investition]
+    sonstiges_invs: list[Investition]
+    erzeuger_invs: list[Investition]
+    md_pro_monat: dict[tuple[int, int], Monatsdaten]
+    zaehler_stand_pro_tag: dict[date, dict[str, float]]
+    kanal_je_tag: dict
+    ziele_je_tag: dict
+    tarif_cache: dict[date, dict]
+    slot_kosten_je_tag: dict
 
 
 async def baue_tage_werte(
@@ -212,7 +240,7 @@ async def baue_tage_werte(
     # Eigenverbrauch, Quoten und die Bilanz-Schlüssel aus den Kanälen (Weg 2, kein Deckel); die übrigen Schlüssel
     # der Tageszeile und die stundengepaarten Spalten bleiben (B-3, D4). Ein Tag mit Wahl `bestand` rechnet wie bisher.
     from backend.services.kanal.bilanz_leser import (
-        bilanz_ziele, kanal_tage, mische_bilanz, mische_komponenten, mische_verworfen,
+        bilanz_ziele, kanal_tage,
     )
 
     kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
@@ -268,362 +296,434 @@ async def baue_tage_werte(
         tarif_fuer=_tarif_fuer, abgerechnet_fuer=_abgerechnet_fuer,
     )
 
+    kx = _TageKontext(
+        db=db,
+        anlage_id=anlage_id,
+        tep_pro_tag=tep_pro_tag,
+        soc_gepaart=soc_gepaart,
+        tz_pro_tag=tz_pro_tag,
+        speicher_invs=speicher_invs,
+        sonstiges_invs=sonstiges_invs,
+        erzeuger_invs=erzeuger_invs,
+        md_pro_monat=md_pro_monat,
+        zaehler_stand_pro_tag=zaehler_stand_pro_tag,
+        kanal_je_tag=kanal_je_tag,
+        ziele_je_tag=ziele_je_tag,
+        tarif_cache=tarif_cache,
+        slot_kosten_je_tag=slot_kosten_je_tag,
+    )
+
     zeilen: list[TagWerteResponse] = []
 
     for tag in alle_tage:
-        stunden_rows = tep_pro_tag.get(tag, [])
-        tz = tz_pro_tag.get(tag)
-        # Zählerlücken wie HA (R7/R9): die Tageszeile sagt selbst, nach welcher
-        # Regel sie gerechnet ist — `verworfen` ist die Regelmarke. Ohne Marke
-        # (Altbestand) rechnet der Tag N-92 wie bisher (E6).
-        bilanz = bilanz_aus_stundenrows(
-            stunden_rows, verworfen=(tz.verworfen if tz else None),
-        )
-        komp_tag = tz.komponenten_kwh if tz else None
-        verworfen_tag = tz.verworfen if tz else None
-        kanal_tag = kanal_je_tag.get(tag)
-        if kanal_tag is not None:
-            bilanz = mische_bilanz(kanal_tag.bilanz, bilanz)
-            komp_tag = mische_komponenten(komp_tag, kanal_tag, ziele_je_tag.get(tag, set()))
-            verworfen_tag = mische_verworfen(verworfen_tag)
-        # ⭐ #110 V2H-Tageswert (Konzept §2, B5/B6): die Rückspeisung des E-Autos ins Haus aus dem Rollup
-        # (`v2h_<id>`, Σ; `None` ohne Key — eine 0,0 ist gemessen). EINMAL nach dem Mischen: an einem Kanal-Tag
-        # kommen Gesamtverbrauch, Eigenverbrauch und Quoten aus der Kanal-Komposition, und die kennt kein V2H
-        # (Kanal-Klasse „Tagesgröße ohne Kanal", O2). `mische_komponenten` lässt `v2h_<id>` stehen (kein
-        # Bilanz-Schlüssel). Die Funktion rechnet aus den Summen der Bilanz neu — idempotent, ohne Regelmarke
-        # (Altbestand) wirkungslos.
-        v2h_tag = summe_v2h_kwh(komp_tag)
-        bilanz = mit_v2h_entladung(bilanz, v2h_tag)
-
-        # Grundlast dieser Nacht (ADR-001: Sourcing hier, Formel im Layer).
-        # Der Filter ist WOERTLICH der der Monats-/Jahres-Kachel
-        # (`aktueller_monat._load_grundlast_nacht_kw`): Stunden < 5, nur
-        # `verbrauch_kw` ueber 0. Wer ihn hier „verbessert", erzeugt zwei
-        # Grundlasten, die sich nicht mehr erklaeren lassen.
-        # ⚠ Keine Mindestzahl an Nachtstunden: fehlen sie ganz, liefert
-        # `berechne_grundlast` None und die Spalte zeigt „—" (Total-Fall);
-        # eine Teilabdeckung bleibt stehen, wie ueberall im Baum.
-        # ⚠ Zählerlücken wie HA (§2, Grundlast-Guard): eine Zeile, deren
-        # Verbrauchs-Achsen mehr als eine reale Stunde tragen, ist keine
-        # Stunden-Stichprobe — sie trüge den Verbrauch einer ganzen Lücke als
-        # „Nachtleistung". R6 lässt `verbrauch_kw` bei verschiedenen Spannen
-        # schon leer; bei gleicher Spanne fällt die Zeile hier heraus.
-        nacht_kw = [
-            float(r.verbrauch_kw) for r in stunden_rows
-            if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0
-            and not verbrauch_gebuendelt(r)
-        ]
-        grundlast_kw = berechne_grundlast(
-            nacht_verbrauch_kw=nacht_kw,
-            gesamtverbrauch_kwh=None,   # der Anteil hat hier keinen Leser
-            tage=1,
-        ).grundlast_kw
-
-        # Nenner des spezifischen Tagesertrags (F-58). `mit_bkw=True`, weil der
-        # Zähler `bilanz.erzeugung_kwh` die Kategorie `pv` ist und ein
-        # Balkonkraftwerk dort mitläuft (`live_sensor_config.py`).
-        kwp_tag = anlagen_kwp(
-            erzeuger_invs, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
-        )
-
-        # Erträge je Erzeuger (#350, Rainer): erst der Boundary-Rollup, sonst die
-        # Σ der Stunden-Komponenten. Der Rollup fehlt im Standalone-Betrieb und an
-        # einzelnen Tagen auch im Add-on-Modus — genau deshalb liest die
-        # Tages-Komponenten-Kachel im Client schon länger von den Stunden
-        # (`v4/TagKomponenten.tsx`). Die ID-Normalisierung liegt im Layer, weil
-        # dasselbe Balkonkraftwerk in den beiden Keyspaces `bkw_<id>` bzw.
-        # `pv_<id>` heißt — je Roh-Key gruppiert ergäbe das zwei Spalten für ein
-        # Gerät (s. `erzeuger_kwh_je_investition`).
-        erzeuger_kwh = erzeuger_kwh_je_investition(komp_tag)
-        if not erzeuger_kwh:
-            erzeuger_kwh = erzeuger_kwh_je_investition(
-                aggregiere_tep_komponenten(stunden_rows)
-            )
-
-        # Sonstiges je Richtung — dieselbe Quellen-Präzedenz wie eine Zeile
-        # darüber: erst der Boundary-Rollup, sonst die Σ der Stunden. Die
-        # Kategorien werden **je Tag** gebildet, damit die Laufzeitgrenze des
-        # Geräts gilt und nicht die des Zeitraums.
-        sonstiges_kategorien = {
-            str(i.id): ((i.parameter or {}).get("kategorie") or "")
-            for i in sonstiges_invs if i.ist_aktiv_an(tag)
-        }
-        sonstiges = sonstiges_kwh_je_richtung(
-            komp_tag, sonstiges_kategorien
-        )
-        # §9.2: die Abgabe zählt als dritte Richtung — sonst überschriebe der
-        # Leistungspfad-Fallback einen Tag, der NUR eine Abgabe gemessen hat.
-        if (
-            sonstiges.erzeugung_kwh is None and sonstiges.verbrauch_kwh is None
-            and sonstiges.abgabe_kwh is None
-        ):
-            sonstiges = sonstiges_kwh_je_richtung(
-                aggregiere_tep_komponenten(stunden_rows), sonstiges_kategorien
-            )
-        # ── Speicher-η: derselbe Maßstab wie im Monat (Melder Knallfrosch,
-        # T89667 #163). Der rohe Quotient Entladung ÷ Ladung stand hier ohne
-        # jede Einordnung — an einem Tag, der voll beginnt und leer endet,
-        # ergibt er über 100 %. `Cockpit → Monat` unterdrückt das seit F-22 und
-        # nennt die Quelle; die Tagessicht tat beides nicht. ΔSoC kommt aus den
-        # ohnehin geladenen Stunden-Rows, kostet also keine zusätzliche Abfrage.
-        # §9.2: die Abgabe an Dritte ist kein Eigenverbrauch — dieselbe Regel
-        # wie im Monats-Layer (`berechne_verbrauchs_kennzahlen`). Die Stunden-
-        # Bilanz kennt sie nicht (sie sieht nur den Netzpunkt); der Tag zieht
-        # die gemessene Tagesmenge ab und bildet Autarkie und Quote neu.
-        abgabe_tag = sonstiges.abgabe_kwh or 0.0
-        ev_tag = (
-            None if bilanz.eigenverbrauch_kwh is None
-            else max(0.0, bilanz.eigenverbrauch_kwh - abgabe_tag)
-        )
-        autarkie_tag = bilanz.autarkie_prozent
-        evq_tag = bilanz.ev_quote_prozent
-        if abgabe_tag > 0 and ev_tag is not None:
-            if bilanz.netzbezug_erfasst:
-                autarkie_tag = autarkie_prozent(ev_tag, ev_tag + bilanz.netzbezug_kwh)
-            if bilanz.pv_erfasst:
-                evq_tag = eigenverbrauchsquote_prozent(ev_tag, bilanz.erzeugung_kwh)
-        # ⭐ **N-387: der Ladestand jeder Zeile kommt aus ihrer Vorzeile.** Die
-        # Lade-/Entlademengen daneben stammen aus Σ `batterie_kw` über die
-        # Backward-Slots `[Vortag 23:00, 23:00)`. Der SoC der Zeile 0 beschrieb
-        # forward `[00,01)` (Schwerpunkt 00:30) und lag damit **1½ h** hinter
-        # dem Beginn der Mengenreihe, der SoC der Zeile 23 (`[23,24)`,
-        # Schwerpunkt 23:30) ½ h dahinter — der Rand war unsymmetrisch. Mit der
-        # Vorzeile sind es ½ h auf beiden Seiten (Zeile 0 ← Vortag 23 ⇒ 23:30,
-        # Zeile 23 ← Zeile 22 ⇒ 22:30).
-        soc_delta = delta_soc_kwh(
-            [soc_gepaart.get((r.datum, r.stunde)) for r in stunden_rows],
-            sum(
-                get_speicher_nutzbare_kapazitaet_kwh(i) or 0
-                for i in speicher_invs if i.ist_aktiv_an(tag)
-            ),
-        )
-        eta = speicher_wirkungsgrad(
-            bilanz.speicher_ladung_kwh, bilanz.speicher_entladung_kwh, soc_delta,
-        )
-
-        # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
-        # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
-        # roh und kürzte den Erlös auch ohne §51-Pflicht).
-        neg_preis_kwh = neg_preis_einspeisung_tageswert(
-            anlage, tz.einspeisung_neg_preis_kwh if tz else None
-        )
-
-        # ── Finanzen über den SoT-Helper (je-Monat-Tarif, §51-bereinigt) ──
-        eingabe = FinanzZeileEingabe(
-            jahr=tag.year,
-            monat=tag.month,
-            einspeisung_kwh=bilanz.einspeisung_kwh,
-            netzbezug_kwh=bilanz.netzbezug_kwh,
-            pv_erzeugung_kwh=bilanz.erzeugung_kwh,
-            abgabe_dritte_kwh=abgabe_tag,
-            neg_preis_kwh=neg_preis_kwh,
-            # N-635: Ladung und Entladung des Tages gehen mit, damit die
-            # Finanz-Eigenverbrauchsmenge dieselbe Formel rechnet wie die
-            # Energie-Spalte `eigenverbrauch` (Direktverbrauch + Entladung).
-            # #110: V2H aus dem Rollup — dieselbe Menge wie in `bilanz`
-            # (`mit_v2h_entladung`). BKW-Eigenverbrauch bleibt 0 (kein Tageswert).
-            speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
-            speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
-            v2h_entladung_kwh=bilanz.v2h_entladung_kwh,
-            monatsdaten=md_pro_monat.get((tag.year, tag.month)),
-            # A-2: Die Ersparnis bewertet VERMIEDENEN Bezug — sie wird deshalb
-            # mit dem Preis der Slots gewichtet, in denen er vermieden wurde,
-            # nicht mit dem des tatsächlichen Bezugs. Ohne Slot-Daten bleibt es
-            # beim Bezugspreis (der Helper liefert dann `None`).
-            ev_preis_cent=(
-                slot_kosten_je_tag[tag].ev_mittel_cent
-                if tag in slot_kosten_je_tag else None
-            ),
-            # N-588: an einem Kanal-Tag die Wandlungsverluste des Tages samt Messpunkt-Vertrag — die Ersparnis bewertet
-            # den Eigenverbrauch ohne sie (am Klemmtag des Volleinspeisers 0 statt Cent-Beträgen). Bestand: keine.
-            wandlungsverluste_kwh=kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
-            verluste_grund=kanal_tag.verluste_grund if kanal_tag is not None else None,
-        )
-        finanz_zeile = await baue_finanz_zeile(
-            db, anlage_id, eingabe, tarif_cache=tarif_cache
-        )
-        finanz = berechne_finanz_aggregat([finanz_zeile])
-        # Ein €-Betrag ist nur so belastbar wie die Menge, auf der er steht.
-        # Fehlt die Menge ganz, ist der Betrag keine 0, sondern nicht
-        # bestimmbar — sonst stünde in derselben Zeile „— kWh Netzbezug" neben
-        # „0,00 € Netzbezug-Kosten" (Entscheid Gernot, 15.08.2026, im Zuge von
-        # T89667 #162). Der Finanz-SoT bleibt unangetastet: er rechnet mit den
-        # Mengen, die er bekommt; die Aussage über ihre Herkunft trifft diese
-        # Schicht. Die umfassende Regel dafür ist die Bewertungsgrenze (eigener
-        # Auftrag) — hier stehen nur die zwei Beträge, deren Menge diese Zeile
-        # selbst als fehlend ausweist.
-        # Die Kosten dieses Tages sind die Summe seiner Slot-Kosten (A-3), nicht
-        # Menge × Ø. Fehlen Slot-Zeilen ganz, gibt es keinen Betrag — und keine
-        # 0: `None` ist hier „nicht bestimmbar", genau wie eine Zeile darüber
-        # für die fehlende Menge.
-        _slot = slot_kosten_je_tag.get(tag)
-        netzbezug_kosten = (
-            _slot.kosten_euro
-            if bilanz.netzbezug_erfasst and _slot is not None else None
-        )
-        ev_ersparnis = (
-            finanz.ev_ersparnis_euro if bilanz.eigenverbrauch_kwh is not None else None
-        )
-        # Beide Summen erben die Lücke ihres Summanden. Ohne das wanderte der
-        # Widerspruch nur eine Kachel weiter: „Netto-Ertrag 1,28 €" über einer
-        # Bilanz-Tabelle, in der die EV-Ersparnis mit „—" dasteht.
-        # Stufe 1 der Ergebnis-Leiter (03.10.2026) — ohne USt-Anteil: ein Tag kennt keine Jahresgröße, Σ Tage ≠ Monat
-        # bleibt dokumentiert (BERECHNUNGEN §Tag). Pflichtposten wie im Monat: ohne EV-Ersparnis kein Netto-Ertrag.
-        netto_ertrag = berechne_ergebnis(ErgebnisEingang(
-            einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=ev_ersparnis,
-            bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
-            sonstige_netto=finanz.sonstige_netto_euro,
-        )).netto_ertrag
-        netto_bilanz = (
-            netto_ertrag - netzbezug_kosten
-            if netto_ertrag is not None and netzbezug_kosten is not None else None
-        )
-
-        zeilen.append(TagWerteResponse(
-            datum=tag,
-            stunden_verfuegbar=(tz.stunden_verfuegbar if tz else bilanz.stunden),
-            datenquelle=(tz.datenquelle if tz else None),
-            # Zählerlücken wie HA (R4/R9): Markierung + Regelmarke der Tageszeile.
-            verworfen=verworfen_tag,
-            # N-567: Nachtrag nach Nullstunden — benannt, in den Summen enthalten.
-            nachtrag=(tz.nachtrag if tz else None),
-            # Energie. `erzeugung` ist None, solange keine Stunde einen PV-Wert
-            # trug — eine 0 wäre hier nicht „nichts erzeugt", sondern „nicht
-            # gemessen" (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Betrifft
-            # Anlagen, deren PV nur als Anlagen-Aggregat gepflegt ist: das
-            # versorgt den Monat, nicht die Tagesebene.
-            erzeugung=(round(bilanz.erzeugung_kwh, 3) if bilanz.pv_erfasst else None),
-            # PV/BKW-Split (R17/Verlauf) aus dem Tages-komponenten_kwh-JSON.
-            pv_anlage=round(summe_pv_anlage_kwh(komp_tag) if komp_tag is not None else 0.0, 3),
-            bkw=round(summe_bkw_kwh(komp_tag) if komp_tag is not None else 0.0, 3),
-            eigenverbrauch=_r(ev_tag, 3),
-            # Dieselbe Regel wie bei `erzeugung` darüber, jetzt auf allen vier
-            # Achsen: eine Achse, die an KEINER Stunde des Tages einen Wert
-            # trug, ist nicht 0, sondern nicht gemessen. Strikers Januar zeigte
-            # sonst „— PV · 106 kWh Einspeisung · 0 kWh Netzbezug" in einer
-            # Zeile — die 0 war die einzige Zahl daran, die nichts gemessen
-            # hatte (T89667 #162). Träger, nicht `> 0`: wer einen Tag lang
-            # nichts bezieht, hat eine gemessene 0 und behält sie.
-            einspeisung=(round(bilanz.einspeisung_kwh, 3) if bilanz.einspeisung_erfasst else None),
-            netzbezug=(round(bilanz.netzbezug_kwh, 3) if bilanz.netzbezug_erfasst else None),
-            gesamtverbrauch=(round(bilanz.gesamtverbrauch_kwh, 3) if bilanz.verbrauch_erfasst else None),
-            # Σ min(pv, verbrauch) — braucht beide Achsen, wie die Summe selbst
-            # (der Layer zählt nur Stunden mit beiden Werten).
-            direktverbrauch=(
-                round(bilanz.direktverbrauch_kwh, 3)
-                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
-            ),
-            # Quoten
-            autarkie=_r(autarkie_tag, 1),
-            evQuote=_r(evq_tag, 1),
-            spezErtrag=(
-                round(bilanz.erzeugung_kwh / kwp_tag, 2)
-                if kwp_tag > 0 and bilanz.pv_erfasst else None
-            ),
-            # Speicher (None wenn kein Lade-/Entlade-Geschehen)
-            speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
-            speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
-            # #110: `None` ohne V2H-Schlüssel im Rollup; nur mit Regelmarke in der Bilanz (Altbestand: keiner).
-            v2h_entladung=(_r(v2h_tag, 3) if bilanz.regelmarke else None),
-            speicher_effizienz=_r(eta.prozent, 1),
-            speicher_effizienz_quelle=eta.quelle,
-            speicher_vollzyklen=_r(berechne_vollzyklen(
-                bilanz.speicher_entladung_kwh,
-                sum(
-                    get_speicher_kapazitaet_kwh(i) or 0
-                    for i in speicher_invs if i.ist_aktiv_an(tag)
-                ),
-            ), 2),
-            # E4d (Bauplan §8a, Rest N-585): eine gemessene 0 ist erfasst — 0 statt „—" (`wp_erfasst`).
-            wp_strom=(round(bilanz.wp_strom_kwh, 3) if getattr(bilanz, "wp_erfasst", False) else None),
-            sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
-            sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
-            sonstiges_abgabe=_r(sonstiges.abgabe_kwh, 3),
-            # Finanzen — bewusst UNGERUNDET, wie der Monatspfad
-            # (`aktueller_monat.py`) sie liefert. Bis 15.08.2026 stand hier je
-            # ein `round(…, 2)`, und das erzeugte zwei sichtbare Widersprüche
-            # auf derselben Seite (Melder Knallfrosch, T89667 #163):
-            #   · Die Finanz-Bilanz-Tabelle summiert die gerundeten Summanden
-            #     (7,49 + 8,55 = 16,04), die Netto-Ertrag-Kachel zeigte die
-            #     gerundete Summe (16,05) — Summe der Gerundeten gegen
-            #     gerundete Summe.
-            #   · „Ø-Preis Netz" teilt Kosten ÷ Menge. Bei 0,19 kWh machte der
-            #     auf 2 Stellen gerundete Cent-Betrag daraus 31,6 ct/kWh,
-            #     während dieselbe Seite mit ~29,5 ct rechnete.
-            # Gerundet wird jetzt erst bei der Anzeige (Client, 2 Stellen); die
-            # Σ-Zeile der Werte-Tabelle summiert dadurch ebenfalls exakt.
-            einspeise_erloes=finanz.einspeise_erloes_euro,
-            ev_ersparnis=ev_ersparnis,
-            netzbezug_kosten=netzbezug_kosten,
-            netto_ertrag=netto_ertrag,
-            netto_bilanz=netto_bilanz,
-            # CO₂ — Kanon statt eigener Formel; nur der PV-Anteil ist auf
-            # Tagesebene bestimmbar (s. Modul-Docstring). WP-Strom wird bewusst
-            # NICHT übergeben: ohne die zugehörige Wärmemenge wäre die
-            # WP-Komponente rein negativ und damit eine Falschaussage.
-            # Ohne erfassten Eigenverbrauch gibt es keine CO₂-Aussage — vorher
-            # wurde aus dem negativen Eigenverbrauch eine negative „Einsparung".
-            co2_einsparung=(
-                round(
-                    berechne_co2_bilanz(
-                        # N-588 (P15): dieselbe Menge wie die Ersparnis — ohne Wandlungsverluste des Kanal-Tags.
-                        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
-                            bilanz.eigenverbrauch_kwh,
-                            kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
-                            kanal_tag.verluste_grund if kanal_tag is not None else None,
-                        )
-                    ).co2_pv_kg,
-                    1,
-                )
-                if bilanz.eigenverbrauch_kwh is not None else None
-            ),
-            # Tag-native. Überschuss und Defizit entstehen stundenweise aus
-            # PV **und** Verbrauch — fehlt eine der beiden Achsen ganz, ist die
-            # Summe 0 aus Mangel an Eingabe, nicht aus Ausgeglichenheit.
-            ueberschuss_kwh=(
-                round(bilanz.ueberschuss_kwh, 3)
-                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
-            ),
-            defizit_kwh=(
-                round(bilanz.defizit_kwh, 3)
-                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
-            ),
-            peak_pv_kw=(tz.peak_pv_kw if tz else None),
-            peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
-            grundlast_kw=grundlast_kw,
-            peak_einspeisung_kw=(tz.peak_einspeisung_kw if tz else None),
-            # PR ohne erfasste PV ist keine 0, sondern keine Aussage. Der
-            # Aggregator schreibt sie seit demselben Paket gar nicht mehr;
-            # diese Zeile deckt die Tage, die vorher schon eine 0 gespeichert
-            # haben — es gibt bewusst keinen Migrationslauf.
-            performance_ratio=(
-                tz.performance_ratio if (tz and bilanz.pv_erfasst) else None
-            ),
-            batterie_vollzyklen=(tz.batterie_vollzyklen if tz else None),
-            temperatur_min_c=(tz.temperatur_min_c if tz else None),
-            temperatur_max_c=(tz.temperatur_max_c if tz else None),
-            strahlung_summe_wh_m2=(tz.strahlung_summe_wh_m2 if tz else None),
-            gti_summe_wh_m2=(tz.gti_summe_wh_m2 if tz else None),
-            boersenpreis_avg_cent=(tz.boersenpreis_avg_cent if tz else None),
-            boersenpreis_min_cent=(tz.boersenpreis_min_cent if tz else None),
-            negative_preis_stunden=(tz.negative_preis_stunden if tz else None),
-            # Ausweis-Spalte: dasselbe Gate wie die Rechnung darüber — sonst
-            # nennt die Tagestabelle eine §51-Menge, die die Monatstabelle bei
-            # derselben Anlage verschweigt (`monatsdaten.py`).
-            einspeisung_neg_preis_kwh=neg_preis_kwh,
-            # Leer bleibt leer: ohne eigenen Sensor je Erzeuger gibt es hier
-            # keinen Wert. Auf Tagesebene wird **nicht** nach kWp verteilt
-            # (anders als im Monat) — eine verteilte Tageszahl wäre in der
-            # Spalte „Dach Süd" eine Behauptung über eine Messung, die es nicht
-            # gibt (#352-Klasse).
-            erzeuger_kwh={k: round(v, 3) for k, v in erzeuger_kwh.items()} or None,
-            # #377: der Stand am Ende dieses Tages, je Zähler-Gerät.
-            zaehler_stand={
-                k: round(v, 3) for k, v in zaehler_stand_pro_tag.get(tag, {}).items()
-            } or None,
-        ))
+        zeilen.append(await _tageszeile(kx, anlage, tag))
 
     return zeilen
+
+
+async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteResponse:
+    """Die Werte-Zeile EINES Tages (RF-20: Schleifenrumpf von `baue_tage_werte`, Reihenfolge = HEAD).
+
+    `anlage` reist als eigener Name statt in `kx`: der P3-a-Wächter erlaubt `anlage.leistung_kwp` nur am Namen."""
+    stunden_rows = kx.tep_pro_tag.get(tag, [])
+    tz = kx.tz_pro_tag.get(tag)
+    bilanz, komp_tag, verworfen_tag, kanal_tag, v2h_tag = _tagesbilanz(kx, tag, stunden_rows, tz)
+
+    # Grundlast dieser Nacht (ADR-001: Sourcing hier, Formel im Layer).
+    # Der Filter ist WOERTLICH der der Monats-/Jahres-Kachel
+    # (`aktueller_monat._load_grundlast_nacht_kw`): Stunden < 5, nur
+    # `verbrauch_kw` ueber 0. Wer ihn hier „verbessert", erzeugt zwei
+    # Grundlasten, die sich nicht mehr erklaeren lassen.
+    # ⚠ Keine Mindestzahl an Nachtstunden: fehlen sie ganz, liefert
+    # `berechne_grundlast` None und die Spalte zeigt „—" (Total-Fall);
+    # eine Teilabdeckung bleibt stehen, wie ueberall im Baum.
+    # ⚠ Zählerlücken wie HA (§2, Grundlast-Guard): eine Zeile, deren
+    # Verbrauchs-Achsen mehr als eine reale Stunde tragen, ist keine
+    # Stunden-Stichprobe — sie trüge den Verbrauch einer ganzen Lücke als
+    # „Nachtleistung". R6 lässt `verbrauch_kw` bei verschiedenen Spannen
+    # schon leer; bei gleicher Spanne fällt die Zeile hier heraus.
+    nacht_kw = [
+        float(r.verbrauch_kw) for r in stunden_rows
+        if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0
+        and not verbrauch_gebuendelt(r)
+    ]
+    grundlast_kw = berechne_grundlast(
+        nacht_verbrauch_kw=nacht_kw,
+        gesamtverbrauch_kwh=None,   # der Anteil hat hier keinen Leser
+        tage=1,
+    ).grundlast_kw
+
+    # Nenner des spezifischen Tagesertrags (F-58). `mit_bkw=True`, weil der
+    # Zähler `bilanz.erzeugung_kwh` die Kategorie `pv` ist und ein
+    # Balkonkraftwerk dort mitläuft (`live_sensor_config.py`).
+    kwp_tag = anlagen_kwp(
+        kx.erzeuger_invs, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp,
+    )
+
+    # Erträge je Erzeuger (#350, Rainer): erst der Boundary-Rollup, sonst die
+    # Σ der Stunden-Komponenten. Der Rollup fehlt im Standalone-Betrieb und an
+    # einzelnen Tagen auch im Add-on-Modus — genau deshalb liest die
+    # Tages-Komponenten-Kachel im Client schon länger von den Stunden
+    # (`v4/TagKomponenten.tsx`). Die ID-Normalisierung liegt im Layer, weil
+    # dasselbe Balkonkraftwerk in den beiden Keyspaces `bkw_<id>` bzw.
+    # `pv_<id>` heißt — je Roh-Key gruppiert ergäbe das zwei Spalten für ein
+    # Gerät (s. `erzeuger_kwh_je_investition`).
+    erzeuger_kwh = erzeuger_kwh_je_investition(komp_tag)
+    if not erzeuger_kwh:
+        erzeuger_kwh = erzeuger_kwh_je_investition(
+            aggregiere_tep_komponenten(stunden_rows)
+        )
+
+    # Sonstiges je Richtung — dieselbe Quellen-Präzedenz wie eine Zeile
+    # darüber: erst der Boundary-Rollup, sonst die Σ der Stunden. Die
+    # Kategorien werden **je Tag** gebildet, damit die Laufzeitgrenze des
+    # Geräts gilt und nicht die des Zeitraums.
+    sonstiges_kategorien = {
+        str(i.id): ((i.parameter or {}).get("kategorie") or "")
+        for i in kx.sonstiges_invs if i.ist_aktiv_an(tag)
+    }
+    sonstiges = sonstiges_kwh_je_richtung(
+        komp_tag, sonstiges_kategorien
+    )
+    # §9.2: die Abgabe zählt als dritte Richtung — sonst überschriebe der
+    # Leistungspfad-Fallback einen Tag, der NUR eine Abgabe gemessen hat.
+    if (
+        sonstiges.erzeugung_kwh is None and sonstiges.verbrauch_kwh is None
+        and sonstiges.abgabe_kwh is None
+    ):
+        sonstiges = sonstiges_kwh_je_richtung(
+            aggregiere_tep_komponenten(stunden_rows), sonstiges_kategorien
+        )
+    abgabe_tag, ev_tag, autarkie_tag, evq_tag = _abgabe_und_quoten(bilanz, sonstiges)
+    # ── Speicher-η: derselbe Maßstab wie im Monat (Melder Knallfrosch,
+    # T89667 #163). Der rohe Quotient Entladung ÷ Ladung stand hier ohne
+    # jede Einordnung — an einem Tag, der voll beginnt und leer endet,
+    # ergibt er über 100 %. `Cockpit → Monat` unterdrückt das seit F-22 und
+    # nennt die Quelle; die Tagessicht tat beides nicht. ΔSoC kommt aus den
+    # ohnehin geladenen Stunden-Rows, kostet also keine zusätzliche Abfrage.
+    # ⭐ **N-387: der Ladestand jeder Zeile kommt aus ihrer Vorzeile.** Die
+    # Lade-/Entlademengen daneben stammen aus Σ `batterie_kw` über die
+    # Backward-Slots `[Vortag 23:00, 23:00)`. Der SoC der Zeile 0 beschrieb
+    # forward `[00,01)` (Schwerpunkt 00:30) und lag damit **1½ h** hinter
+    # dem Beginn der Mengenreihe, der SoC der Zeile 23 (`[23,24)`,
+    # Schwerpunkt 23:30) ½ h dahinter — der Rand war unsymmetrisch. Mit der
+    # Vorzeile sind es ½ h auf beiden Seiten (Zeile 0 ← Vortag 23 ⇒ 23:30,
+    # Zeile 23 ← Zeile 22 ⇒ 22:30).
+    soc_delta = delta_soc_kwh(
+        [kx.soc_gepaart.get((r.datum, r.stunde)) for r in stunden_rows],
+        sum(
+            get_speicher_nutzbare_kapazitaet_kwh(i) or 0
+            for i in kx.speicher_invs if i.ist_aktiv_an(tag)
+        ),
+    )
+    eta = speicher_wirkungsgrad(
+        bilanz.speicher_ladung_kwh, bilanz.speicher_entladung_kwh, soc_delta,
+    )
+
+    # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
+    # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
+    # roh und kürzte den Erlös auch ohne §51-Pflicht).
+    neg_preis_kwh = neg_preis_einspeisung_tageswert(
+        anlage, tz.einspeisung_neg_preis_kwh if tz else None
+    )
+    geld = await _geld_spalten(kx, tag, bilanz, abgabe_tag, neg_preis_kwh, kanal_tag)
+
+    return TagWerteResponse(
+        datum=tag,
+        stunden_verfuegbar=(tz.stunden_verfuegbar if tz else bilanz.stunden),
+        datenquelle=(tz.datenquelle if tz else None),
+        # Zählerlücken wie HA (R4/R9): Markierung + Regelmarke der Tageszeile.
+        verworfen=verworfen_tag,
+        # N-567: Nachtrag nach Nullstunden — benannt, in den Summen enthalten.
+        nachtrag=(tz.nachtrag if tz else None),
+        **_energie_spalten(
+            bilanz=bilanz, komp_tag=komp_tag, ev_tag=ev_tag, autarkie_tag=autarkie_tag, evq_tag=evq_tag,
+            kwp_tag=kwp_tag, v2h_tag=v2h_tag, eta=eta, speicher_invs=kx.speicher_invs, tag=tag, sonstiges=sonstiges,
+        ),
+        **geld,
+        **_tagnative_spalten(
+            tag=tag, tz=tz, bilanz=bilanz, grundlast_kw=grundlast_kw, neg_preis_kwh=neg_preis_kwh,
+            erzeuger_kwh=erzeuger_kwh, zaehler_stand_pro_tag=kx.zaehler_stand_pro_tag,
+        ),
+    )
+
+
+def _tagesbilanz(kx: _TageKontext, tag: date, stunden_rows: list, tz: Optional[TagesZusammenfassung]):
+    """Die Tagesbilanz: Stundenzeilen nach der Regelmarke, an einem Kanal-Tag gemischt (E4a-2), danach EINMAL V2H.
+
+    Rückgabe ``(bilanz, komp_tag, verworfen_tag, kanal_tag, v2h_tag)`` — die HEAD-Namen des Schleifenrumpfs."""
+    from backend.services.kanal.bilanz_leser import mische_bilanz, mische_komponenten, mische_verworfen
+
+    # Zählerlücken wie HA (R7/R9): die Tageszeile sagt selbst, nach welcher
+    # Regel sie gerechnet ist — `verworfen` ist die Regelmarke. Ohne Marke
+    # (Altbestand) rechnet der Tag N-92 wie bisher (E6).
+    bilanz = bilanz_aus_stundenrows(
+        stunden_rows, verworfen=(tz.verworfen if tz else None),
+    )
+    komp_tag = tz.komponenten_kwh if tz else None
+    verworfen_tag = tz.verworfen if tz else None
+    kanal_tag = kx.kanal_je_tag.get(tag)
+    if kanal_tag is not None:
+        bilanz = mische_bilanz(kanal_tag.bilanz, bilanz)
+        komp_tag = mische_komponenten(komp_tag, kanal_tag, kx.ziele_je_tag.get(tag, set()))
+        verworfen_tag = mische_verworfen(verworfen_tag)
+    # ⭐ #110 V2H-Tageswert (Konzept §2, B5/B6): die Rückspeisung des E-Autos ins Haus aus dem Rollup
+    # (`v2h_<id>`, Σ; `None` ohne Key — eine 0,0 ist gemessen). EINMAL nach dem Mischen: an einem Kanal-Tag
+    # kommen Gesamtverbrauch, Eigenverbrauch und Quoten aus der Kanal-Komposition, und die kennt kein V2H
+    # (Kanal-Klasse „Tagesgröße ohne Kanal", O2). `mische_komponenten` lässt `v2h_<id>` stehen (kein
+    # Bilanz-Schlüssel). Die Funktion rechnet aus den Summen der Bilanz neu — idempotent, ohne Regelmarke
+    # (Altbestand) wirkungslos.
+    v2h_tag = summe_v2h_kwh(komp_tag)
+    bilanz = mit_v2h_entladung(bilanz, v2h_tag)
+    return bilanz, komp_tag, verworfen_tag, kanal_tag, v2h_tag
+
+
+def _abgabe_und_quoten(bilanz, sonstiges):
+    """Eigenverbrauch, Autarkie und EV-Quote des Tages ohne die Abgabe an Dritte (§9.2).
+
+    Rückgabe ``(abgabe_tag, ev_tag, autarkie_tag, evq_tag)``."""
+    # §9.2: die Abgabe an Dritte ist kein Eigenverbrauch — dieselbe Regel
+    # wie im Monats-Layer (`berechne_verbrauchs_kennzahlen`). Die Stunden-
+    # Bilanz kennt sie nicht (sie sieht nur den Netzpunkt); der Tag zieht
+    # die gemessene Tagesmenge ab und bildet Autarkie und Quote neu.
+    abgabe_tag = sonstiges.abgabe_kwh or 0.0
+    ev_tag = (
+        None if bilanz.eigenverbrauch_kwh is None
+        else max(0.0, bilanz.eigenverbrauch_kwh - abgabe_tag)
+    )
+    autarkie_tag = bilanz.autarkie_prozent
+    evq_tag = bilanz.ev_quote_prozent
+    if abgabe_tag > 0 and ev_tag is not None:
+        if bilanz.netzbezug_erfasst:
+            autarkie_tag = autarkie_prozent(ev_tag, ev_tag + bilanz.netzbezug_kwh)
+        if bilanz.pv_erfasst:
+            evq_tag = eigenverbrauchsquote_prozent(ev_tag, bilanz.erzeugung_kwh)
+    return abgabe_tag, ev_tag, autarkie_tag, evq_tag
+
+
+async def _geld_spalten(kx: _TageKontext, tag: date, bilanz, abgabe_tag, neg_preis_kwh, kanal_tag) -> dict:
+    """Finanzzeile des Tages über den SoT (eine Abfrage-Folge je Tag) und die Geld- und CO₂-Spalten der Antwort."""
+    # ── Finanzen über den SoT-Helper (je-Monat-Tarif, §51-bereinigt) ──
+    eingabe = FinanzZeileEingabe(
+        jahr=tag.year,
+        monat=tag.month,
+        einspeisung_kwh=bilanz.einspeisung_kwh,
+        netzbezug_kwh=bilanz.netzbezug_kwh,
+        pv_erzeugung_kwh=bilanz.erzeugung_kwh,
+        abgabe_dritte_kwh=abgabe_tag,
+        neg_preis_kwh=neg_preis_kwh,
+        # N-635: Ladung und Entladung des Tages gehen mit, damit die
+        # Finanz-Eigenverbrauchsmenge dieselbe Formel rechnet wie die
+        # Energie-Spalte `eigenverbrauch` (Direktverbrauch + Entladung).
+        # #110: V2H aus dem Rollup — dieselbe Menge wie in `bilanz`
+        # (`mit_v2h_entladung`). BKW-Eigenverbrauch bleibt 0 (kein Tageswert).
+        speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
+        speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+        v2h_entladung_kwh=bilanz.v2h_entladung_kwh,
+        monatsdaten=kx.md_pro_monat.get((tag.year, tag.month)),
+        # A-2: Die Ersparnis bewertet VERMIEDENEN Bezug — sie wird deshalb
+        # mit dem Preis der Slots gewichtet, in denen er vermieden wurde,
+        # nicht mit dem des tatsächlichen Bezugs. Ohne Slot-Daten bleibt es
+        # beim Bezugspreis (der Helper liefert dann `None`).
+        ev_preis_cent=(
+            kx.slot_kosten_je_tag[tag].ev_mittel_cent
+            if tag in kx.slot_kosten_je_tag else None
+        ),
+        # N-588: an einem Kanal-Tag die Wandlungsverluste des Tages samt Messpunkt-Vertrag — die Ersparnis bewertet
+        # den Eigenverbrauch ohne sie (am Klemmtag des Volleinspeisers 0 statt Cent-Beträgen). Bestand: keine.
+        wandlungsverluste_kwh=kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
+        verluste_grund=kanal_tag.verluste_grund if kanal_tag is not None else None,
+    )
+    finanz_zeile = await baue_finanz_zeile(
+        kx.db, kx.anlage_id, eingabe, tarif_cache=kx.tarif_cache
+    )
+    finanz = berechne_finanz_aggregat([finanz_zeile])
+    # Ein €-Betrag ist nur so belastbar wie die Menge, auf der er steht.
+    # Fehlt die Menge ganz, ist der Betrag keine 0, sondern nicht
+    # bestimmbar — sonst stünde in derselben Zeile „— kWh Netzbezug" neben
+    # „0,00 € Netzbezug-Kosten" (Entscheid Gernot, 15.08.2026, im Zuge von
+    # T89667 #162). Der Finanz-SoT bleibt unangetastet: er rechnet mit den
+    # Mengen, die er bekommt; die Aussage über ihre Herkunft trifft diese
+    # Schicht. Die umfassende Regel dafür ist die Bewertungsgrenze (eigener
+    # Auftrag) — hier stehen nur die zwei Beträge, deren Menge diese Zeile
+    # selbst als fehlend ausweist.
+    # Die Kosten dieses Tages sind die Summe seiner Slot-Kosten (A-3), nicht
+    # Menge × Ø. Fehlen Slot-Zeilen ganz, gibt es keinen Betrag — und keine
+    # 0: `None` ist hier „nicht bestimmbar", genau wie eine Zeile darüber
+    # für die fehlende Menge.
+    _slot = kx.slot_kosten_je_tag.get(tag)
+    netzbezug_kosten = (
+        _slot.kosten_euro
+        if bilanz.netzbezug_erfasst and _slot is not None else None
+    )
+    ev_ersparnis = (
+        finanz.ev_ersparnis_euro if bilanz.eigenverbrauch_kwh is not None else None
+    )
+    # Beide Summen erben die Lücke ihres Summanden. Ohne das wanderte der
+    # Widerspruch nur eine Kachel weiter: „Netto-Ertrag 1,28 €" über einer
+    # Bilanz-Tabelle, in der die EV-Ersparnis mit „—" dasteht.
+    # Stufe 1 der Ergebnis-Leiter (03.10.2026) — ohne USt-Anteil: ein Tag kennt keine Jahresgröße, Σ Tage ≠ Monat
+    # bleibt dokumentiert (BERECHNUNGEN §Tag). Pflichtposten wie im Monat: ohne EV-Ersparnis kein Netto-Ertrag.
+    netto_ertrag = berechne_ergebnis(ErgebnisEingang(
+        einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=ev_ersparnis,
+        bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
+        sonstige_netto=finanz.sonstige_netto_euro,
+    )).netto_ertrag
+    netto_bilanz = (
+        netto_ertrag - netzbezug_kosten
+        if netto_ertrag is not None and netzbezug_kosten is not None else None
+    )
+
+    return dict(
+        # Finanzen — bewusst UNGERUNDET, wie der Monatspfad
+        # (`aktueller_monat.py`) sie liefert. Bis 15.08.2026 stand hier je
+        # ein `round(…, 2)`, und das erzeugte zwei sichtbare Widersprüche
+        # auf derselben Seite (Melder Knallfrosch, T89667 #163):
+        #   · Die Finanz-Bilanz-Tabelle summiert die gerundeten Summanden
+        #     (7,49 + 8,55 = 16,04), die Netto-Ertrag-Kachel zeigte die
+        #     gerundete Summe (16,05) — Summe der Gerundeten gegen
+        #     gerundete Summe.
+        #   · „Ø-Preis Netz" teilt Kosten ÷ Menge. Bei 0,19 kWh machte der
+        #     auf 2 Stellen gerundete Cent-Betrag daraus 31,6 ct/kWh,
+        #     während dieselbe Seite mit ~29,5 ct rechnete.
+        # Gerundet wird jetzt erst bei der Anzeige (Client, 2 Stellen); die
+        # Σ-Zeile der Werte-Tabelle summiert dadurch ebenfalls exakt.
+        einspeise_erloes=finanz.einspeise_erloes_euro,
+        ev_ersparnis=ev_ersparnis,
+        netzbezug_kosten=netzbezug_kosten,
+        netto_ertrag=netto_ertrag,
+        netto_bilanz=netto_bilanz,
+        # CO₂ — Kanon statt eigener Formel; nur der PV-Anteil ist auf
+        # Tagesebene bestimmbar (s. Modul-Docstring). WP-Strom wird bewusst
+        # NICHT übergeben: ohne die zugehörige Wärmemenge wäre die
+        # WP-Komponente rein negativ und damit eine Falschaussage.
+        # Ohne erfassten Eigenverbrauch gibt es keine CO₂-Aussage — vorher
+        # wurde aus dem negativen Eigenverbrauch eine negative „Einsparung".
+        co2_einsparung=(
+            round(
+                berechne_co2_bilanz(
+                    # N-588 (P15): dieselbe Menge wie die Ersparnis — ohne Wandlungsverluste des Kanal-Tags.
+                    eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_kwh(
+                        bilanz.eigenverbrauch_kwh,
+                        kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
+                        kanal_tag.verluste_grund if kanal_tag is not None else None,
+                    )
+                ).co2_pv_kg,
+                1,
+            )
+            if bilanz.eigenverbrauch_kwh is not None else None
+        ),
+    )
+
+
+def _energie_spalten(
+    *, bilanz, komp_tag, ev_tag, autarkie_tag, evq_tag, kwp_tag, v2h_tag, eta, speicher_invs, tag, sonstiges,
+) -> dict:
+    """Energie-, Quoten-, Speicher-, WP- und Sonstiges-Spalten der Antwortzeile."""
+    return dict(
+        # Energie. `erzeugung` ist None, solange keine Stunde einen PV-Wert
+        # trug — eine 0 wäre hier nicht „nichts erzeugt", sondern „nicht
+        # gemessen" (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Betrifft
+        # Anlagen, deren PV nur als Anlagen-Aggregat gepflegt ist: das
+        # versorgt den Monat, nicht die Tagesebene.
+        erzeugung=(round(bilanz.erzeugung_kwh, 3) if bilanz.pv_erfasst else None),
+        # PV/BKW-Split (R17/Verlauf) aus dem Tages-komponenten_kwh-JSON.
+        pv_anlage=round(summe_pv_anlage_kwh(komp_tag) if komp_tag is not None else 0.0, 3),
+        bkw=round(summe_bkw_kwh(komp_tag) if komp_tag is not None else 0.0, 3),
+        eigenverbrauch=_r(ev_tag, 3),
+        # Dieselbe Regel wie bei `erzeugung` darüber, jetzt auf allen vier
+        # Achsen: eine Achse, die an KEINER Stunde des Tages einen Wert
+        # trug, ist nicht 0, sondern nicht gemessen. Strikers Januar zeigte
+        # sonst „— PV · 106 kWh Einspeisung · 0 kWh Netzbezug" in einer
+        # Zeile — die 0 war die einzige Zahl daran, die nichts gemessen
+        # hatte (T89667 #162). Träger, nicht `> 0`: wer einen Tag lang
+        # nichts bezieht, hat eine gemessene 0 und behält sie.
+        einspeisung=(round(bilanz.einspeisung_kwh, 3) if bilanz.einspeisung_erfasst else None),
+        netzbezug=(round(bilanz.netzbezug_kwh, 3) if bilanz.netzbezug_erfasst else None),
+        gesamtverbrauch=(round(bilanz.gesamtverbrauch_kwh, 3) if bilanz.verbrauch_erfasst else None),
+        # Σ min(pv, verbrauch) — braucht beide Achsen, wie die Summe selbst
+        # (der Layer zählt nur Stunden mit beiden Werten).
+        direktverbrauch=(
+            round(bilanz.direktverbrauch_kwh, 3)
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+        ),
+        # Quoten
+        autarkie=_r(autarkie_tag, 1),
+        evQuote=_r(evq_tag, 1),
+        spezErtrag=(
+            round(bilanz.erzeugung_kwh / kwp_tag, 2)
+            if kwp_tag > 0 and bilanz.pv_erfasst else None
+        ),
+        # Speicher (None wenn kein Lade-/Entlade-Geschehen)
+        speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
+        speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
+        # #110: `None` ohne V2H-Schlüssel im Rollup; nur mit Regelmarke in der Bilanz (Altbestand: keiner).
+        v2h_entladung=(_r(v2h_tag, 3) if bilanz.regelmarke else None),
+        speicher_effizienz=_r(eta.prozent, 1),
+        speicher_effizienz_quelle=eta.quelle,
+        speicher_vollzyklen=_r(berechne_vollzyklen(
+            bilanz.speicher_entladung_kwh,
+            sum(
+                get_speicher_kapazitaet_kwh(i) or 0
+                for i in speicher_invs if i.ist_aktiv_an(tag)
+            ),
+        ), 2),
+        # E4d (Bauplan §8a, Rest N-585): eine gemessene 0 ist erfasst — 0 statt „—" (`wp_erfasst`).
+        wp_strom=(round(bilanz.wp_strom_kwh, 3) if getattr(bilanz, "wp_erfasst", False) else None),
+        sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
+        sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
+        sonstiges_abgabe=_r(sonstiges.abgabe_kwh, 3),
+    )
+
+
+def _tagnative_spalten(*, tag, tz, bilanz, grundlast_kw, neg_preis_kwh, erzeuger_kwh, zaehler_stand_pro_tag) -> dict:
+    """Tag-native Spalten (Überschuss/Defizit, Peaks, Grundlast, PR, Wetter, Börse, §51), Erzeuger und Zählerstände."""
+    return dict(
+        # Tag-native. Überschuss und Defizit entstehen stundenweise aus
+        # PV **und** Verbrauch — fehlt eine der beiden Achsen ganz, ist die
+        # Summe 0 aus Mangel an Eingabe, nicht aus Ausgeglichenheit.
+        ueberschuss_kwh=(
+            round(bilanz.ueberschuss_kwh, 3)
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+        ),
+        defizit_kwh=(
+            round(bilanz.defizit_kwh, 3)
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+        ),
+        peak_pv_kw=(tz.peak_pv_kw if tz else None),
+        peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
+        grundlast_kw=grundlast_kw,
+        peak_einspeisung_kw=(tz.peak_einspeisung_kw if tz else None),
+        # PR ohne erfasste PV ist keine 0, sondern keine Aussage. Der
+        # Aggregator schreibt sie seit demselben Paket gar nicht mehr;
+        # diese Zeile deckt die Tage, die vorher schon eine 0 gespeichert
+        # haben — es gibt bewusst keinen Migrationslauf.
+        performance_ratio=(
+            tz.performance_ratio if (tz and bilanz.pv_erfasst) else None
+        ),
+        batterie_vollzyklen=(tz.batterie_vollzyklen if tz else None),
+        temperatur_min_c=(tz.temperatur_min_c if tz else None),
+        temperatur_max_c=(tz.temperatur_max_c if tz else None),
+        strahlung_summe_wh_m2=(tz.strahlung_summe_wh_m2 if tz else None),
+        gti_summe_wh_m2=(tz.gti_summe_wh_m2 if tz else None),
+        boersenpreis_avg_cent=(tz.boersenpreis_avg_cent if tz else None),
+        boersenpreis_min_cent=(tz.boersenpreis_min_cent if tz else None),
+        negative_preis_stunden=(tz.negative_preis_stunden if tz else None),
+        # Ausweis-Spalte: dasselbe Gate wie die Rechnung darüber — sonst
+        # nennt die Tagestabelle eine §51-Menge, die die Monatstabelle bei
+        # derselben Anlage verschweigt (`monatsdaten.py`).
+        einspeisung_neg_preis_kwh=neg_preis_kwh,
+        # Leer bleibt leer: ohne eigenen Sensor je Erzeuger gibt es hier
+        # keinen Wert. Auf Tagesebene wird **nicht** nach kWp verteilt
+        # (anders als im Monat) — eine verteilte Tageszahl wäre in der
+        # Spalte „Dach Süd" eine Behauptung über eine Messung, die es nicht
+        # gibt (#352-Klasse).
+        erzeuger_kwh={k: round(v, 3) for k, v in erzeuger_kwh.items()} or None,
+        # #377: der Stand am Ende dieses Tages, je Zähler-Gerät.
+        zaehler_stand={
+            k: round(v, 3) for k, v in zaehler_stand_pro_tag.get(tag, {}).items()
+        } or None,
+    )
 
 
 def _r(v: float | None, dec: int) -> float | None:

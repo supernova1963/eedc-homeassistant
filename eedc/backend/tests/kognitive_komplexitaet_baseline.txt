@@ -49,7 +49,6 @@
 51	services/energie_profil/_helpers.py::_get_betriebsmodus_history
 77	services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
-127	services/energie_profil/tage_werte.py::baue_tage_werte
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 70	services/ha_statistics_service.py::HAStatisticsService.get_hourly_slots_for_day
 92	services/import_parsers/fronius_solarweb.py::FroniusSolarwebParser.parse
