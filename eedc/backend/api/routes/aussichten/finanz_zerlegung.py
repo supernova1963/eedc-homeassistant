@@ -70,19 +70,9 @@ async def komponenten_beitraege_zusammenstellen(
     # Wir leiten den historischen Netz-Anteil an der Ladung ab und projizieren
     # ihn auf den prognostizierten Speicher-Beitrag. Ohne IST-Netzladung
     # (z. B. reiner PV-Speicher) bleibt das Verhalten exakt wie bisher.
-    speicher_ladung_hist_total = 0.0
-    speicher_netzladung_hist_total = 0.0
-    if speicher:
-        for sp in speicher:
-            for (inv_id, jhr, mon), daten in historische_inv_daten.items():
-                if inv_id != sp.id or not sp.ist_aktiv_im_monat(jhr, mon):
-                    continue
-                speicher_ladung_hist_total += float(daten.get("ladung_kwh") or 0)
-                speicher_netzladung_hist_total += float(
-                    daten.get("ladung_netz_kwh")
-                    or daten.get("speicher_ladung_netz_kwh")
-                    or 0
-                )
+    speicher_ladung_hist_total, speicher_netzladung_hist_total = _speicher_ladung_historie(
+        speicher=speicher, historische_inv_daten=historische_inv_daten,
+    )
 
     speicher_netz_anteil = (
         speicher_netzladung_hist_total / speicher_ladung_hist_total
@@ -123,6 +113,79 @@ async def komponenten_beitraege_zusammenstellen(
     # Etappe C (#264): stundengranularen effektiven Ladepreis aus TEP
     # vorziehen — Tibber/aWATTar-Setups bekommen den echten gewichteten
     # Mittelwert über die Lade-Stunden statt User-Param-Schätzung.
+    speicher_lade_preis_cent = await _effektiver_ladepreis(
+        db=db, anlage_id=anlage_id, speicher=speicher, arbitrage_speicher=arbitrage_speicher,
+        speicher_lade_preis_cent=speicher_lade_preis_cent,
+    )
+    # Aus Entladung auf Ladung zurückrechnen (η-Verluste), daraus den
+    # projizierten Netz-Anteil-kWh der Prognoseperiode bestimmen.
+    speicher_wirkungsgrad_frac = max(0.5, speicher_wirkungsgrad_avg / 100)
+    prog_speicher_ladung = jahres_speicher_beitrag / speicher_wirkungsgrad_frac
+    prog_speicher_netzladung = prog_speicher_ladung * speicher_netz_anteil
+
+    # Speicher (Drift-Audit D: Spread-Modell statt Voll-Strompreis)
+    if speicher:
+        speicher_ersparnis = berechne_speicher_ersparnis(
+            entladung_kwh=jahres_speicher_beitrag,
+            bezug_preis_cent=netzbezug_preis,
+            einspeise_verg_cent=einspeiseverguetung,
+            ladung_netz_kwh=prog_speicher_netzladung,
+            wirkungsgrad_prozent=speicher_wirkungsgrad_avg,
+            lade_preis_cent=speicher_lade_preis_cent,
+        ).ersparnis_euro
+        for sp in speicher:
+            komponenten_beitraege.append(KomponentenBeitragSchema(
+                typ="speicher",
+                bezeichnung=sp.bezeichnung,
+                beitrag_kwh_jahr=round(jahres_speicher_beitrag, 0),
+                beitrag_euro_jahr=round(speicher_ersparnis, 2),
+                beschreibung="Eigenverbrauchserhöhung durch Zwischenspeicherung",
+            ))
+
+    # E-Auto / V2H (Drift-Audit D: Spread-Modell für V2H analog Speicher)
+    _beitraege_eauto(
+        komponenten_beitraege=komponenten_beitraege, e_autos=e_autos, eauto_aggregate=eauto_aggregate,
+        einspeiseverguetung=einspeiseverguetung, jahres_eauto_pv=jahres_eauto_pv,
+        jahres_v2h_beitrag=jahres_v2h_beitrag, netzbezug_preis=netzbezug_preis,
+    )
+
+    # Wärmepumpe — N-354: je Gerät sein eigener Beitrag, nicht das Anlagen-Aggregat
+    _beitraege_waermepumpe(
+        komponenten_beitraege=komponenten_beitraege, waermepumpen=waermepumpen, netzbezug_preis=netzbezug_preis,
+        wp_ersparnis_je_inv=wp_ersparnis_je_inv, wp_pv_kwh_je_inv=wp_pv_kwh_je_inv,
+    )
+    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
+    return {k: _loc[k] for k in ("komponenten_beitraege", "prog_speicher_netzladung", "speicher_lade_preis_cent", "speicher_wirkungsgrad_avg",) if k in _loc}
+
+
+def _speicher_ladung_historie(*, speicher, historische_inv_daten):
+    """Etappe B (#264): Ladung und Netzladung der Speicher über ihre aktiven Monate der Historie — daraus der
+    Netz-Anteil, den die Phase auf den prognostizierten Speicher-Beitrag projiziert.
+
+    RF-18 (13.10.2026): aus `komponenten_beitraege_zusammenstellen` wortgleich herausgelöst, samt Verzweigungen.
+    """
+    speicher_ladung_hist_total = 0.0
+    speicher_netzladung_hist_total = 0.0
+    if speicher:
+        for sp in speicher:
+            for (inv_id, jhr, mon), daten in historische_inv_daten.items():
+                if inv_id != sp.id or not sp.ist_aktiv_im_monat(jhr, mon):
+                    continue
+                speicher_ladung_hist_total += float(daten.get("ladung_kwh") or 0)
+                speicher_netzladung_hist_total += float(
+                    daten.get("ladung_netz_kwh")
+                    or daten.get("speicher_ladung_netz_kwh")
+                    or 0
+                )
+    return speicher_ladung_hist_total, speicher_netzladung_hist_total
+
+
+async def _effektiver_ladepreis(*, db, anlage_id, speicher, arbitrage_speicher, speicher_lade_preis_cent):
+    """Etappe C (#264): der stundengranulare effektive Ladepreis überstimmt den Param-Mittelwert, wenn seine Quelle
+    belastbar ist (dyn-tarif/boersenpreis); ein Fehler des Helpers lässt den Param-Wert stehen.
+
+    RF-18 (13.10.2026): aus `komponenten_beitraege_zusammenstellen` wortgleich herausgelöst, samt Verzweigungen.
+    """
     if speicher and arbitrage_speicher:
         installs_c = [sp.anschaffungsdatum for sp in speicher if sp.anschaffungsdatum]
         if installs_c:
@@ -150,32 +213,17 @@ async def komponenten_beitraege_zusammenstellen(
                     "aussichten: effektiver-Ladepreis-Lookup fehlgeschlagen "
                     "(anlage=%s): %s", anlage_id, e,
                 )
-    # Aus Entladung auf Ladung zurückrechnen (η-Verluste), daraus den
-    # projizierten Netz-Anteil-kWh der Prognoseperiode bestimmen.
-    speicher_wirkungsgrad_frac = max(0.5, speicher_wirkungsgrad_avg / 100)
-    prog_speicher_ladung = jahres_speicher_beitrag / speicher_wirkungsgrad_frac
-    prog_speicher_netzladung = prog_speicher_ladung * speicher_netz_anteil
+    return speicher_lade_preis_cent
 
-    # Speicher (Drift-Audit D: Spread-Modell statt Voll-Strompreis)
-    if speicher:
-        speicher_ersparnis = berechne_speicher_ersparnis(
-            entladung_kwh=jahres_speicher_beitrag,
-            bezug_preis_cent=netzbezug_preis,
-            einspeise_verg_cent=einspeiseverguetung,
-            ladung_netz_kwh=prog_speicher_netzladung,
-            wirkungsgrad_prozent=speicher_wirkungsgrad_avg,
-            lade_preis_cent=speicher_lade_preis_cent,
-        ).ersparnis_euro
-        for sp in speicher:
-            komponenten_beitraege.append(KomponentenBeitragSchema(
-                typ="speicher",
-                bezeichnung=sp.bezeichnung,
-                beitrag_kwh_jahr=round(jahres_speicher_beitrag, 0),
-                beitrag_euro_jahr=round(speicher_ersparnis, 2),
-                beschreibung="Eigenverbrauchserhöhung durch Zwischenspeicherung",
-            ))
 
-    # E-Auto / V2H (Drift-Audit D: Spread-Modell für V2H analog Speicher)
+def _beitraege_eauto(
+    *, komponenten_beitraege, e_autos, eauto_aggregate, einspeiseverguetung, jahres_eauto_pv, jahres_v2h_beitrag,
+    netzbezug_preis,
+):
+    """Die E-Auto-Zeilen der Komponenten-Beiträge (V2H, Benzin-Vergleich, PV-Ladung) — hängt an die übergebene Liste an.
+
+    RF-18 (13.10.2026): aus `komponenten_beitraege_zusammenstellen` wortgleich herausgelöst, samt Verzweigungen.
+    """
     if e_autos:
         v2h_ersparnis = berechne_v2h_ersparnis(
             v2h_entladung_kwh=jahres_v2h_beitrag,
@@ -218,7 +266,15 @@ async def komponenten_beitraege_zusammenstellen(
                     beschreibung="PV-Ladung — Information, kein eigener Posten (steckt in der Eigenverbrauchs-Ersparnis)",
                 ))
 
-    # Wärmepumpe — N-354: je Gerät sein eigener Beitrag, nicht das Anlagen-Aggregat
+
+def _beitraege_waermepumpe(
+    *, komponenten_beitraege, waermepumpen, netzbezug_preis, wp_ersparnis_je_inv, wp_pv_kwh_je_inv,
+):
+    """Die Wärmepumpen-Zeilen der Komponenten-Beiträge je Gerät (PV-Nutzung, Ersparnis) — hängt an die übergebene
+    Liste an.
+
+    RF-18 (13.10.2026): aus `komponenten_beitraege_zusammenstellen` wortgleich herausgelöst, samt Verzweigungen.
+    """
     if waermepumpen:
         alter_energietraeger = "Gas"
         for wp in waermepumpen:
@@ -245,8 +301,6 @@ async def komponenten_beitraege_zusammenstellen(
                     beitrag_euro_jahr=round(wp_ersparnis, 2),
                     beschreibung=f"Ersparnis gegenüber {alter_energietraeger}heizung",
                 ))
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("komponenten_beitraege", "prog_speicher_netzladung", "speicher_lade_preis_cent", "speicher_wirkungsgrad_avg",) if k in _loc}
 
 
 def roi_und_fortschritt(
