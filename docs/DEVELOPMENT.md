@@ -460,6 +460,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── prognosen.py             # Prognose-Vergleich, Genauigkeits-Tracking
     │   │   ├── cockpit.py + cockpit/    # Übersicht · Komponenten · Nachhaltigkeit · Jahr
     │   │   ├── monatsdaten.py           # Monatsdaten-CRUD + Aggregation
+    │   │   ├── monatsdaten_aggregiert.py  # Phasen der Monatszeile von /aggregiert (RF-27)
     │   │   ├── monatsabschluss/         # Monatsabschluss-Formular + Datenquellen-Status
     │   │   ├── investitionen/           # Komponenten, ROI, Stilllegung, Kennwerte
     │   │   │   ├── crud.py              # CRUD-Routen, Parent-Regel; hängt roi.py ein, re-exportiert (seit 18.09.2026, Vorlage 5)

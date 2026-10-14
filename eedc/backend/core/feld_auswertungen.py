@@ -164,13 +164,13 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     (TYP_ANLAGE, "einspeisung_kwh"): (
         _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
-        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
+        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "_monatszeile"),
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
     ),
     (TYP_ANLAGE, "netzbezug_kwh"): (
         _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_berechne_monat"),
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "get_cockpit_uebersicht"),
-        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
+        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "_monatszeile"),
         _a(HA_SENSOREN, "api/routes/ha_export/anlage_energie.py", "monatsfakten_und_energie"),
     ),
     (TYP_ANLAGE, "pv_gesamt_kwh"): (
@@ -203,7 +203,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         # die Heizgradtage nehmen ihn ausdrücklich nicht (K-2,
         # `lade_heizgradtage_je_monat`).
         _a(KOMP_WP, "services/waerme_verteilung.py", "_monats_temperaturen"),
-        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
+        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "_temperatur_je_monat"),
     ),
 
     # ── Anlagen-Ebene: Preise je Monat (ADR-002/P8) ──────────────────────────
@@ -215,7 +215,7 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     (TYP_ANLAGE, "einspeise_durchschnittspreis_cent"): (
         _a(AUSW_FINANZEN, "api/routes/strompreise.py", "resolve_einspeise_preis_cent"),
-        _a(AUSW_TABELLE, "api/routes/monatsdaten.py", "list_monatsdaten_aggregiert"),
+        _a(AUSW_TABELLE, "api/routes/monatsdaten_aggregiert.py", "_zeile_kopf"),
     ),
     (TYP_ANLAGE, "kraftstoffpreis_euro"): (
         _a(KOMP_EAUTO, "api/routes/investitionen/dashboard_eauto.py", "get_eauto_dashboard"),

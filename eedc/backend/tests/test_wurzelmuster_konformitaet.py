@@ -2969,7 +2969,7 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/main.py::get_database_stats",                 # zählt GERÄTE
     "backend/services/monats_fakten/roh.py::_erzeuger_aktiv",  # „war einer aktiv?"
     "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
-    "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",  # `pv_ziel_aktiv`
+    "backend/api/routes/monatsdaten.py::_legacy_hinweis",  # `pv_ziel_aktiv`
     # N-662 (10.10.2026): keine Σ einer Erzeugung über die Erzeuger-Menge, sondern zwei getrennte ROLLEN je Typ —
     # die String-Zähler als Gegengröße des Anlagenzählers (nur Module OHNE Balkonkraftwerk-Parent) und der Abzug von der Einspeisung (je
     # Balkonkraftwerk sein Kanal ODER, abgetreten ohne eigenen, die Kanäle seiner Kinder — nie beide). Eltern und Kind
@@ -3466,7 +3466,7 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     # Vorlage 2 (18.09.2026): die R2-/SOLL-3.2b-Abgrenzung zog aus dem Endpunkt nach waerme.py.
     "backend/api/routes/aktueller_monat/waerme.py::waerme_klima_monat",
     "backend/api/routes/cockpit/komponenten.py::get_komponenten_zeitreihe",
-    "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",
+    "backend/api/routes/monatsdaten_aggregiert.py::_arbeitszahl_des_monats",
     # B6/Y-2 (05.09.2026): Jahresroute UND PDF-Jahresbericht lesen die Abgrenzung
     # jetzt über EINE Service-Funktion — bis dahin standen beide einzeln hier,
     # mit je eigener Faltung (der Bericht warf den Grund weg).

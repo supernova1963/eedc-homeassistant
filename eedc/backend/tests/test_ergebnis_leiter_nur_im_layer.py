@@ -62,7 +62,7 @@ EIGENE_GROESSE: dict[tuple[str, str], str] = {
     ("services/pdf/builders/jahresbericht.py", "netto_nach_bk"):
         "ROI-Zwischenstufe des Jahresberichts (Netto-Ertrag − Betriebskosten des Zeitraums, ohne Stromrechnung) — "
         "Zähler von Rendite und Amortisation (B5, wie `kumulative_ersparnis`)",
-    ("api/routes/monatsdaten.py", "netto_bilanz_euro"):
+    ("api/routes/monatsdaten_aggregiert.py", "netto_bilanz_euro"):
         "Auswertungen → Tabelle: Netto-Ertrag (seit A1 mit Sonstigem) − Netzbezugskosten OHNE WP-/E-Mob-Ersparnis und Betriebskosten — "
         "eine eigene Größe dieser Tabelle, nicht Stufe 2 der Leiter (B5-Prüfung im Bau, Feld-Docstring)",
     ("services/energie_profil/tage_werte.py", "netto_bilanz"):

@@ -26,17 +26,7 @@ from backend.core.calculations import (
 # Alias: das Response-Feld unten heißt genauso wie die Funktion.
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
 from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
-from backend.core.berechnungen.waermepumpe_kennzahl import (
-    abgrenzungs_grund,
-    arbeitszahl,
-)
-from backend.core.berechnungen import (
-    berechne_finanz_aggregat,
-    berechne_netzbezug_kosten,
-)
-from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, ust_anteil_euro
 from backend.services.ust_satz import grundgesamtheit as ust_grundgesamtheit, ust_satz_des_jahres
-from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.core.field_definitions import basis_feld_key, get_feld_hinweise, groesse_gibt_es_am_geraet
@@ -53,7 +43,6 @@ from backend.services.monats_fakten import (
     TAGESWERT_BKW,
     TAGESWERT_PV,
     TAGESWERT_SPEICHER,
-    finanz_zeile_eingabe,
     lade_monats_fakten,
     netzfeld_ist_erfasst,
 )
@@ -66,6 +55,15 @@ from backend.services.provenance import (
 )
 from backend.services.mitteltemperatur import lade_monatsmittel_temperatur
 from backend.services.zaehlerstaende import lade_zaehlerstaende
+from backend.api.routes.monatsdaten_aggregiert import (
+    _TabellenKontext,
+    _finanzen_des_monats,
+    _arbeitszahl_des_monats,
+    _zeile_kopf,
+    _zeile_erzeugung,
+    _zeile_komponenten,
+    _zeile_bilanz_und_geld,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +460,14 @@ class AggregierteMonatsdatenResponse(BaseModel):
         from_attributes = True
 
 
+# ── RF-27 (Serie „Funktion vor Datei", 14.10.2026): `list_monatsdaten_aggregiert` ist ein Orchestrator ─────────────
+# Er lädt, was alle Monate der Anfrage teilen (Preis-Messung, Monats-Fakten, Anlage, Investitionen, Zählerstände,
+# Außentemperatur — in dieser Reihenfolge, sie ist die SQL-Folge der Route), und baut je Monat die Zeile über
+# `_monatszeile`. Die Phasen darunter sind wortgleich umgezogen; was alle Monate teilen, reist in `_TabellenKontext`.
+# Die Felder der Zeile entstehen in vier Gruppen in der Reihenfolge der Antwort (`_zeile_kopf` … `_zeile_bilanz_und_geld`);
+# sie, die Finanz- und die Arbeitszahl-Phase stehen in `monatsdaten_aggregiert.py` (Datei-Kriterium netto ≤ 900).
+
+
 @router.get("/aggregiert/{anlage_id}", response_model=list[AggregierteMonatsdatenResponse])
 async def list_monatsdaten_aggregiert(
     anlage_id: int,
@@ -577,6 +583,37 @@ async def list_monatsdaten_aggregiert(
 
     # #377 — Zählerstände am Monatsende, **einmal** für alle Monate geladen.
     # Je Monat der letzte bekannte Stand; Monate ohne Messung fehlen einfach.
+    zaehler_stand_je_monat = await _zaehlerstaende_je_monat(db, anlage_id, fakten)
+
+    # Konzept §8 — Monatsmittel der Außentemperatur, **einmal** für alle Monate.
+    # Zwei Abfragen über die Historie statt einer je Monat; eine Hilfslinie darf
+    # die Liste weder verlangsamen noch kippen (deshalb derselbe Schutz wie bei
+    # den Zählerständen darüber).
+    temperatur_je_monat = await _temperatur_je_monat(db, anlage_id, fakten)
+
+    kx = _TabellenKontext(
+        db=db,
+        anlage_id=anlage_id,
+        tarif_cache=tarif_cache,
+        preis_messung=preis_messung,
+        inv_rows=inv_rows,
+        _ust_saetze=_ust_saetze,
+        _ust_monate=_ust_monate,
+        zaehler_stand_je_monat=zaehler_stand_je_monat,
+        temperatur_je_monat=temperatur_je_monat,
+    )
+
+    result = []
+    for f in fakten:
+        result.append(await _monatszeile(kx, f))
+
+    return result
+
+
+async def _zaehlerstaende_je_monat(
+    db: AsyncSession, anlage_id: int, fakten: list,
+) -> dict[tuple[int, int], dict[str, float]]:
+    """#377 — der Zählerstand je Verbrauchszähler am Monatsende, je Monat (Phase von `list_monatsdaten_aggregiert`)."""
     zaehler_stand_je_monat: dict[tuple[int, int], dict[str, float]] = {}
     if fakten:
         try:
@@ -592,11 +629,11 @@ async def list_monatsdaten_aggregiert(
                     ] = _p.stand
         except Exception:  # pragma: no cover - eine Zusatzspalte kippt die Liste nicht
             logger.exception("Zählerstände für die Monats-Tabelle nicht ladbar")
+    return zaehler_stand_je_monat
 
-    # Konzept §8 — Monatsmittel der Außentemperatur, **einmal** für alle Monate.
-    # Zwei Abfragen über die Historie statt einer je Monat; eine Hilfslinie darf
-    # die Liste weder verlangsamen noch kippen (deshalb derselbe Schutz wie bei
-    # den Zählerständen darüber).
+
+async def _temperatur_je_monat(db: AsyncSession, anlage_id: int, fakten: list) -> dict[tuple[int, int], float]:
+    """Konzept §8 — das Monatsmittel der Außentemperatur je Monat (Phase von `list_monatsdaten_aggregiert`)."""
     temperatur_je_monat: dict[tuple[int, int], float] = {}
     if fakten:
         try:
@@ -619,306 +656,115 @@ async def list_monatsdaten_aggregiert(
             )
         except Exception:  # pragma: no cover - eine Zusatzspalte kippt die Liste nicht
             logger.exception("Monatsmittel-Temperatur nicht ladbar")
+    return temperatur_je_monat
 
-    result = []
-    for f in fakten:
-        md = f.meta.monatsdaten
-        typen = f.meta.typen_mit_zeile
 
-        # „Hat dieser Gerätetyp im Monat etwas beigetragen?" — Grundlage für
-        # `None` statt `0` (P4). NICHT `aktive_investitionen`: eine aktive
-        # Wärmepumpe ohne gepflegte Zeile ist aktiv und hat trotzdem nichts
-        # geliefert. Die PV zählt zusätzlich als vorhanden, sobald die
-        # P7-Auflösung einen Wert ergibt (auch ohne eigene Modul-Zeile, z. B.
-        # aus dem Anlagen-Aggregat).
-        # Feldgruppen, die aus der lokalen Tagesebene stammen (N-121). Sie
-        # zählen für die „hat etwas beigetragen?"-Weichen genauso wie eine
-        # IMD-Zeile — sonst käme ein belegter Wert als `None` heraus, und die
-        # Sicht zeichnete wieder nichts.
-        aus_tagen = f.meta.tageswert_gruppen
-        # N-621: auch der Anteil eines Balkonkraftwerks am gespeicherten
-        # Anlagenwert — sonst stünde eine reine BKW-Anlage in einem Monat mit
-        # Anlagenwert und ohne BKW-Zeile als „keine PV" in der Tabelle.
-        # Bewusst NICHT `monats_fakten.pv_erzeugungs_monate` (Nenner des spez.
-        # Ertrags in Übersicht und HA-Sensor): hier geht es je Zeile um „Wert oder
-        # Lücke anzeigen" (P4) — eine BKW-Zeile mit gepflegter 0 und die
-        # Tagesebene zählen hier mit, dort nicht.
-        hat_pv_imd = (
-            "balkonkraftwerk" in typen
-            or f.erzeugung.pv_module_kwh is not None
-            or f.erzeugung.bkw_aus_anlagenwert_kwh > 0
-            or TAGESWERT_PV in aus_tagen
-            or TAGESWERT_BKW in aus_tagen
-        )
-        # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen Akku-Felder
-        # zählen hier in dieselbe anlagenweite Speicher-Summe wie ein echter
-        # Speicher, während `monats_fakten.SpeicherFakten` sie getrennt hält.
-        # Diese Uneinheitlichkeit wird NICHT aufgelöst, sondern durch den Kanon
-        # erledigt: ein BKW-Akku gehört als eigene `speicher`-Investition mit
-        # Parent Balkonkraftwerk erfasst. Hier zu ändern hieße, die Zahlen genau
-        # der Anwender zu bewegen, die noch auf dem alten Weg pflegen; sie
-        # bekommen stattdessen den Migrationshinweis des Daten-Checkers
-        # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
-        hat_speicher_imd = (
-            "speicher" in typen
-            or "balkonkraftwerk" in typen
-            or TAGESWERT_SPEICHER in aus_tagen
-        )
-        speicher_ladung = f.speicher.ladung_kwh + f.bkw.speicher_ladung_kwh
-        speicher_entladung = f.speicher.entladung_kwh + f.bkw.speicher_entladung_kwh
+async def _monatszeile(kx: _TabellenKontext, f) -> AggregierteMonatsdatenResponse:
+    """Eine Zeile der Tabelle: die Weichen „hat dieser Gerätetyp beigetragen?" (P4), Legacy-Hinweis, Finanzen (die
+    einzige SQL je Monat), Arbeitszahl — dann die Felder in vier Gruppen in der Reihenfolge der Antwort."""
+    md = f.meta.monatsdaten
+    typen = f.meta.typen_mit_zeile
 
-        # E-Mob je Quelle getrennt ausweisen (die Response trägt eauto_* und
-        # wallbox_* als eigene Felder) — über denselben SoT-Leser, nicht roh aus
-        # dem Dict. `emob.ladung_kwh` (der Pool) wäre hier falsch: er wählt EINE
-        # Quelle für die Gesamt-Heimladung, diese Sicht zeigt aber beide Seiten.
-        eauto = f.emob.eauto_summe
-        wallbox = f.emob.wallbox_summe
+    # „Hat dieser Gerätetyp im Monat etwas beigetragen?" — Grundlage für
+    # `None` statt `0` (P4). NICHT `aktive_investitionen`: eine aktive
+    # Wärmepumpe ohne gepflegte Zeile ist aktiv und hat trotzdem nichts
+    # geliefert. Die PV zählt zusätzlich als vorhanden, sobald die
+    # P7-Auflösung einen Wert ergibt (auch ohne eigene Modul-Zeile, z. B.
+    # aus dem Anlagen-Aggregat).
+    # Feldgruppen, die aus der lokalen Tagesebene stammen (N-121). Sie
+    # zählen für die „hat etwas beigetragen?"-Weichen genauso wie eine
+    # IMD-Zeile — sonst käme ein belegter Wert als `None` heraus, und die
+    # Sicht zeichnete wieder nichts.
+    aus_tagen = f.meta.tageswert_gruppen
+    # N-621: auch der Anteil eines Balkonkraftwerks am gespeicherten
+    # Anlagenwert — sonst stünde eine reine BKW-Anlage in einem Monat mit
+    # Anlagenwert und ohne BKW-Zeile als „keine PV" in der Tabelle.
+    # Bewusst NICHT `monats_fakten.pv_erzeugungs_monate` (Nenner des spez.
+    # Ertrags in Übersicht und HA-Sensor): hier geht es je Zeile um „Wert oder
+    # Lücke anzeigen" (P4) — eine BKW-Zeile mit gepflegter 0 und die
+    # Tagesebene zählen hier mit, dort nicht.
+    hat_pv_imd = (
+        "balkonkraftwerk" in typen
+        or f.erzeugung.pv_module_kwh is not None
+        or f.erzeugung.bkw_aus_anlagenwert_kwh > 0
+        or TAGESWERT_PV in aus_tagen
+        or TAGESWERT_BKW in aus_tagen
+    )
+    # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen Akku-Felder
+    # zählen hier in dieselbe anlagenweite Speicher-Summe wie ein echter
+    # Speicher, während `monats_fakten.SpeicherFakten` sie getrennt hält.
+    # Diese Uneinheitlichkeit wird NICHT aufgelöst, sondern durch den Kanon
+    # erledigt: ein BKW-Akku gehört als eigene `speicher`-Investition mit
+    # Parent Balkonkraftwerk erfasst. Hier zu ändern hieße, die Zahlen genau
+    # der Anwender zu bewegen, die noch auf dem alten Weg pflegen; sie
+    # bekommen stattdessen den Migrationshinweis des Daten-Checkers
+    # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
+    hat_speicher_imd = (
+        "speicher" in typen
+        or "balkonkraftwerk" in typen
+        or TAGESWERT_SPEICHER in aus_tagen
+    )
+    speicher_ladung = f.speicher.ladung_kwh + f.bkw.speicher_ladung_kwh
+    speicher_entladung = f.speicher.entladung_kwh + f.bkw.speicher_entladung_kwh
 
-        einspeisung = f.zaehler.einspeisung_kwh
-        netzbezug = f.zaehler.netzbezug_kwh
-        _kz = f.kennzahlen
+    einspeisung = f.zaehler.einspeisung_kwh
+    netzbezug = f.zaehler.netzbezug_kwh
 
-        # Legacy-Daten prüfen - nur warnen wenn:
-        # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
-        # 2. UND keine entsprechenden InvestitionMonatsdaten existieren
-        # (d.h. die Daten wären "verloren" wenn wir nur die neuen Quellen nutzen)
-        # Ohne Zählerzeile gibt es auch keine Legacy-Spalten, die zu retten wären.
-        hat_legacy_pv = bool(md is not None and md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0)
-        hat_legacy_speicher = bool(md is not None and (
-            (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
-            (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
-        ))
-        hat_inv_pv = f.erzeugung.pv_kwh > 0
-        hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
-        hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
+    hat_legacy, legacy_ohne_ziel = _legacy_hinweis(f, md, kx.inv_rows, speicher_ladung, speicher_entladung)
+    finanz, netzbezug_kosten, ust_eigenverbrauch, netto_ertrag = await _finanzen_des_monats(kx, f, netzbezug)
+    _wp_az = _arbeitszahl_des_monats(f)
 
-        # F-31: Der Hinweis forderte bisher ausnahmslos „Monat öffnen und
-        # speichern" — ohne zu prüfen, ob es im Monat überhaupt ein Gerät gibt,
-        # dem der Wert gehören könnte. Ist die Anlage ein Bestand, dessen
-        # Komponenten mit einem SPÄTEREN Anschaffungsdatum eingetragen sind,
-        # überspringt die Auflösung den Monat (`pv_monatswerte.py`, #236):
-        # `hat_legacy_*` bleibt wahr, `hat_inv_*` bleibt falsch, und zwar
-        # unabhängig davon, wie oft gespeichert wird. Die Aufforderung konnte
-        # den Zustand also nie verändern und wiederholte sich endlos — gemeldet
-        # von van (13.08.2026), der ihr über 14 Monate gefolgt ist.
-        # Das Flag trennt „Ziel existiert, Migration steht aus" von „es gibt
-        # kein Ziel"; die Sicht nennt dann den GRUND statt einer Handlung.
-        pv_ziel_aktiv = any(
-            i.typ in ("pv-module", "balkonkraftwerk") and i.ist_aktiv_im_monat(f.jahr, f.monat)
-            for i in inv_rows
-        )
-        speicher_ziel_aktiv = any(
-            i.typ == "speicher" and i.ist_aktiv_im_monat(f.jahr, f.monat)
-            for i in inv_rows
-        )
-        legacy_ohne_ziel = (
-            (hat_legacy_pv and not hat_inv_pv and not pv_ziel_aktiv)
-            or (hat_legacy_speicher and not hat_inv_speicher and not speicher_ziel_aktiv)
-        )
+    return _ohne_netz_bilanz(f, AggregierteMonatsdatenResponse(
+        **_zeile_kopf(kx, f, md, einspeisung, netzbezug),
+        **_zeile_erzeugung(f, hat_pv_imd, finanz),
+        **_zeile_komponenten(f, typen, hat_speicher_imd, speicher_ladung, speicher_entladung, _wp_az),
+        **_zeile_bilanz_und_geld(
+            f, finanz, ust_eigenverbrauch=ust_eigenverbrauch, netzbezug_kosten=netzbezug_kosten,
+            netto_ertrag=netto_ertrag, hat_legacy=hat_legacy, legacy_ohne_ziel=legacy_ohne_ziel, aus_tagen=aus_tagen,
+        ),
+    ))
 
-        # ── Finanzen dieses Monats über den SoT (N-22) ───────────────────────
-        # `berechne_finanz_aggregat` über EINE Zeile: derselbe Weg, den der
-        # Tages-Pfad derselben Tabelle längst geht (`tage_werte.py`).
-        finanz_zeile = await baue_finanz_zeile(
-            db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=tarif_cache,
-            preis_messung=preis_messung,
-        )
-        # §9.2 Geldseite (E1, Entscheid 06.09.2026): der gepflegte Erloes eines
-        # Erzeugers mit eigenem Vergütungssatz bzw. eines Geräts der Kategorie
-        # *Abgabe an Dritte* ist der FÜNFTE Summand des Netto-Ertrags
-        # (`finanz_aggregat.py`). Cockpit → Jahr, HA-Sensor, PDF und Aussichten
-        # führen ihn längst; diese Route tat es als einzige nicht — dieselbe
-        # Kachel nannte deshalb in zwei Sichten zwei Zahlen (#402, rilmor-mhrs:
-        # „nicht mehr in den Grafen darüber").
-        # ⛔ Er geht NICHT in `einspeise_erloes_euro`: der bewertet den
-        # Anlagenzähler mit dem EINEN Satz der Anlage, und ein eigener Satz ist
-        # per Definition ein anderer (§8/9).
-        finanz = berechne_finanz_aggregat(
-            [finanz_zeile],
-            erzeuger_erloes_euro=f.sonstiges.einspeise_erloes_euro,
-        )
-        netzbezug_kosten = berechne_netzbezug_kosten(
-            netzbezug, f.tarif.netzbezug_preis_cent, f.tarif.grundpreis_euro_monat
-        )
-        _satz = _ust_saetze.get(f.jahr)
-        _ust = (
-            # N-588 (F4): die USt bemisst die entnommene Menge — der Eigenverbrauch ohne Wandlungsverluste.
-            ust_anteil_euro(finanz.eigenverbrauch_ohne_verluste_kwh, _satz.euro_je_kwh)
-            if _satz is not None and f.schluessel in _ust_monate else None
-        )
-        ust_eigenverbrauch = _ust if _ust is not None else 0.0
-        # Stufe 1 der Ergebnis-Leiter — dieselbe Definition wie Cockpit, Übersicht, PDF und HA-Sensor (GLOSSAR
-        # „Netto-Ertrag (PV)"), seit 03.10.2026 MIT den Sonstigen Positionen des Monats (A1, Entscheid Fable-Master).
-        # Bis dahin fehlten sie hier und *Auswertungen → Finanzen* schlug sie aus der Komponenten-Zeitreihe selbst auf.
-        netto_ertrag = berechne_ergebnis(ErgebnisEingang(
-            einspeise_erloes=finanz.einspeise_erloes_euro, ev_ersparnis=finanz.ev_ersparnis_euro,
-            bkw_rest_ersparnis=finanz.bkw_ersparnis_euro, erzeuger_erloes=finanz.erzeuger_erloes_euro,
-            sonstige_netto=f.sonstiges.netto_euro,
-            # N-633: derselbe Posten wie Cockpit, Übersicht, PDF und HA-Sensor (Monats-Fakten).
-            dienstliche_ladekosten=f.emob.dienstliche_ladekosten_euro, ust_anteil=ust_eigenverbrauch,
-        )).netto_ertrag
 
-        # ADR-002/P12: Die Arbeitszahl dieses Monats — aus dem Layer, mit allen
-        # R2-Sperren, die Cockpit und Hub auch ziehen.
-        #
-        # ⚠ `zeitraum_versetzt` gehört hier **nicht** hinein, und das ist keine
-        # Lücke: Diese Route liest **eine** Quelle (die Monats-Fakten). Q und E
-        # stammen damit aus demselben Zeitraum; die Vier-Quellen-Auflösung, in
-        # der ein Versatz überhaupt entstehen kann, gibt es nur in
-        # `api/routes/aktueller_monat.py`.
-        _wp_az = arbeitszahl(
-            f.wp.waerme_kwh, f.wp.strom_kwh,
-            waerme_abgeleitet_kwh=f.wp.waerme_abgeleitet_kwh,
-            # SOLL-§9-E7/Option A: der **Abzug**, nicht die Menge.
-            strom_funktionsfremd_kwh=f.wp.modus_strom_funktionsfremd_abzug_kwh,
-            abgrenzung_verletzt=abgrenzungs_grund(
-                abgrenzung_stoerung=f.wp.abgrenzung_stoerung,
-                bauarten_gemischt=f.wp.bauarten_gemischt,
-                geraete_ohne_waerme=f.wp.waerme_deckt_nicht_alle_geraete,
-                # N-441: Waerme von einem Geraet, Strom von einem anderen.
-                geraete_verschieden=f.wp.geraete_verschieden,
-            ),
-        )
+def _legacy_hinweis(f, md, inv_rows, speicher_ladung: float, speicher_entladung: float) -> tuple[bool, bool]:
+    """`hat_legacy_daten` und `legacy_ohne_ziel` (F-31) der Zeile — Phase von `_monatszeile`."""
+    # Legacy-Daten prüfen - nur warnen wenn:
+    # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
+    # 2. UND keine entsprechenden InvestitionMonatsdaten existieren
+    # (d.h. die Daten wären "verloren" wenn wir nur die neuen Quellen nutzen)
+    # Ohne Zählerzeile gibt es auch keine Legacy-Spalten, die zu retten wären.
+    hat_legacy_pv = bool(md is not None and md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0)
+    hat_legacy_speicher = bool(md is not None and (
+        (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
+        (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
+    ))
+    hat_inv_pv = f.erzeugung.pv_kwh > 0
+    hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
+    hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
 
-        result.append(_ohne_netz_bilanz(f, AggregierteMonatsdatenResponse(
-            # `md is None` ⇒ Monat ohne Zählerzeile (nur mit
-            # `inkl_ohne_zaehlerzeile=true` in der Antwort). Die Zählerwerte
-            # kommen ohnehin schon aus der Schicht (`f.zaehler`, dort 0,0), die
-            # Spalten daneben existieren nicht — sie bleiben `None` statt still 0
-            # zu werden.
-            id=md.id if md is not None else None,
-            anlage_id=md.anlage_id if md is not None else anlage_id,
-            jahr=f.jahr,
-            monat=f.monat,
-            # #377: Stand am Monatsende je Zähler-Gerät (nie summiert).
-            zaehler_stand={
-                k: round(v, 3)
-                for k, v in zaehler_stand_je_monat.get((f.jahr, f.monat), {}).items()
-            } or None,
-            pv_vollstaendig=f.erzeugung.pv_vollstaendig,
-            einspeisung_kwh=round(einspeisung, 1),
-            netzbezug_kwh=round(netzbezug, 1),
-            # F-58: Nenner des spez. Ertrags je Monat. `mit_bkw=True`, weil
-            # `pv_erzeugung_kwh` dieser Zeile `f.erzeugung.pv_kwh` ist — Module
-            # UND Balkonkraftwerk. ⛔ Bis 03.10.2026 stand hier `mit_bkw=False`
-            # mit der Begründung „die Zeile trägt die Modul-PV": falsch, und die
-            # Spalte „Spez. Ertrag" lag bei 10 kWp + 0,8 kWp BKW um den
-            # BKW-Anteil über Cockpit → Monat (100,0 gegen 92,6 kWh/kWp, N-612).
-            # Derselbe Nenner wie `get_monatsdaten` und Cockpit → Monat; die
-            # Abtretung an Modul-Kinder entscheidet `summe_erzeuger_kwp` je
-            # Stichtag (N-266).
-            anlagen_kwp=(
-                berechne_anlagen_kwp(
-                    inv_rows,
-                    date(f.jahr, f.monat, monthrange(f.jahr, f.monat)[1]),
-                    mit_bkw=True,
-                ) or None
-            ),
-            globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2 if md is not None else None,
-            sonnenstunden=md.sonnenstunden if md is not None else None,
-            durchschnittstemperatur_c=temperatur_je_monat.get((f.jahr, f.monat)),
-            netzbezug_durchschnittspreis_cent=(
-                md.netzbezug_durchschnittspreis_cent if md is not None else None
-            ),
-            einspeise_durchschnittspreis_cent=(
-                md.einspeise_durchschnittspreis_cent if md is not None else None
-            ),
-            # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
-            # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
-            # Sommer 0 kWh Heizung).
-            pv_erzeugung_kwh=round(f.erzeugung.pv_kwh, 1) if hat_pv_imd else None,
-            pv_module_kwh=(
-                round(
-                    f.erzeugung.pv_kwh - f.erzeugung.bkw_kwh
-                    - f.erzeugung.bkw_aus_anlagenwert_kwh, 1,
-                ) if hat_pv_imd else None
-            ),
-            bkw_kwh=(
-                round(f.erzeugung.bkw_kwh + f.erzeugung.bkw_aus_anlagenwert_kwh, 1)
-                if hat_pv_imd else None
-            ),
-            bkw_aus_anlagenwert_kwh=(
-                round(f.erzeugung.bkw_aus_anlagenwert_kwh, 1) if hat_pv_imd else None
-            ),
-            wandlungsverluste_kwh=f.erzeugung.wandlungsverluste_kwh,
-            wandlungsverluste_prozent=wandlungsverluste_prozent(
-                f.erzeugung.wandlungsverluste_kwh, f.erzeugung.wandlungsverluste_bezug_kwh,
-            ),
-            eigenverbrauch_ohne_verluste_kwh=round(finanz.eigenverbrauch_ohne_verluste_kwh, 1),
-            verluste_grund=f.erzeugung.verluste_grund,
-            sonstige_erzeugung_kwh=(
-                round(f.erzeugung.sonstige_erzeuger_kwh, 1)
-                if f.sonstiges.hat_erzeuger_zeile else None
-            ),
-            abgabe_dritte_kwh=(
-                round(f.sonstiges.abgabe_kwh, 1) if f.sonstiges.abgabe_kwh > 0 else None
-            ),
-            sonstige_verbrauch_kwh=(
-                round(f.sonstiges.verbrauch_kwh, 1)
-                if f.sonstiges.hat_verbraucher_zeile else None
-            ),
-            # Dieselbe Zahl, mit der direktverbrauch/eigenverbrauch gerechnet
-            # wurden — nicht neu summiert, sonst driftet die ausgelieferte Größe
-            # von der intern verwendeten ab. `None`, wenn WEDER PV noch ein
-            # sonstiger Erzeuger beigetragen hat.
-            erzeugung_hinter_zaehler_kwh=(
-                round(f.erzeugung.hinter_zaehler_kwh, 1)
-                if (hat_pv_imd or f.sonstiges.hat_erzeuger_zeile) else None
-            ),
-            speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
-            speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
-            speicher_netzladung_kwh=(
-                round(f.speicher.netzladung_kwh, 1) if hat_speicher_imd else None
-            ),
-            wp_strom_kwh=round(f.wp.strom_kwh, 1) if "waermepumpe" in typen else None,
-            wp_strom_heizen_kwh=round(f.wp.strom_heizen_kwh, 1) if f.wp.hat_split else None,
-            wp_strom_warmwasser_kwh=(
-                round(f.wp.strom_warmwasser_kwh, 1) if f.wp.hat_split else None
-            ),
-            # N-673: ohne Messung der Achse „keine Angabe" statt 0 (die Fakten tragen dann `None`).
-            wp_heizung_kwh=(round(f.wp.heizung_kwh, 1)
-                            if "waermepumpe" in typen and f.wp.heizung_kwh is not None else None),
-            wp_warmwasser_kwh=(round(f.wp.warmwasser_kwh, 1)
-                               if "waermepumpe" in typen and f.wp.warmwasser_kwh is not None else None),
-            wp_arbeitszahl=_wp_az.wert if "waermepumpe" in typen else None,
-            wp_arbeitszahl_grund=_wp_az.grund if "waermepumpe" in typen else None,
-            eauto_ladung_kwh=round(eauto.ladung_kwh, 1) if "e-auto" in typen else None,
-            eauto_km=round(f.emob.km, 1) if "e-auto" in typen else None,
-            wallbox_ladung_kwh=round(wallbox.ladung_kwh, 1) if "wallbox" in typen else None,
-            wallbox_ladung_pv_kwh=round(wallbox.pv_kwh, 1) if "wallbox" in typen else None,
-            direktverbrauch_kwh=round(_kz.direktverbrauch_kwh, 1),
-            eigenverbrauch_kwh=round(_kz.eigenverbrauch_kwh, 1),
-            gesamtverbrauch_kwh=round(_kz.gesamtverbrauch_kwh, 1),
-            autarkie_prozent=round(_kz.autarkie_prozent, 1),
-            eigenverbrauchsquote_prozent=round(_kz.eigenverbrauchsquote_prozent, 1),
-            # `None` heißt „nicht §51-pflichtig ODER kein Tages-Aggregat mit
-            # Strompreis-Mitschrift" — eine 0 wäre dort eine Aussage, die
-            # niemand belegen kann (Gate im Erlös-Service).
-            einspeisung_neg_preis_kwh=(
-                round(f.eeg.neg_preis_kwh, 1) if f.eeg.neg_preis_kwh is not None else None
-            ),
-            einspeise_erloes_euro=round(finanz.einspeise_erloes_euro, 2),
-            einspeise_nicht_verguetet_euro=round(finanz.nicht_vergueteter_erloes_euro, 2),
-            ev_ersparnis_euro=round(finanz.ev_ersparnis_euro, 2),
-            # §9 Weg 2 / §9.2 Geldseite — der Betrag steckt seit E1 (06.09.)
-            # IN `netto_ertrag_euro` (oben gereicht) und steht hier zusätzlich
-            # als eigene Größe, damit die Sicht ihn BENENNEN kann („inkl. +X €
-            # Abgabe an Dritte"). Ohne dieses Feld wüsste der Client nicht
-            # einmal, ob es solche Erzeuger gibt.
-            erzeuger_erloes_euro=round(f.sonstiges.einspeise_erloes_euro, 2),
-            bkw_ersparnis_euro=round(finanz.bkw_ersparnis_euro, 2),
-            ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2),
-            dienstliche_ladekosten_euro=round(f.emob.dienstliche_ladekosten_euro, 2),
-            netzbezug_kosten_euro=round(netzbezug_kosten, 2),
-            netto_ertrag_euro=round(netto_ertrag, 2),
-            netto_bilanz_euro=round(netto_ertrag - netzbezug_kosten, 2),
-            netzbezug_preis_cent=round(f.tarif.netzbezug_preis_cent, 2),
-            hat_legacy_daten=hat_legacy,
-            legacy_ohne_ziel=legacy_ohne_ziel,
-            aus_tageswerten=sorted(aus_tagen) or None,
-        )))
-
-    return result
+    # F-31: Der Hinweis forderte bisher ausnahmslos „Monat öffnen und
+    # speichern" — ohne zu prüfen, ob es im Monat überhaupt ein Gerät gibt,
+    # dem der Wert gehören könnte. Ist die Anlage ein Bestand, dessen
+    # Komponenten mit einem SPÄTEREN Anschaffungsdatum eingetragen sind,
+    # überspringt die Auflösung den Monat (`pv_monatswerte.py`, #236):
+    # `hat_legacy_*` bleibt wahr, `hat_inv_*` bleibt falsch, und zwar
+    # unabhängig davon, wie oft gespeichert wird. Die Aufforderung konnte
+    # den Zustand also nie verändern und wiederholte sich endlos — gemeldet
+    # von van (13.08.2026), der ihr über 14 Monate gefolgt ist.
+    # Das Flag trennt „Ziel existiert, Migration steht aus" von „es gibt
+    # kein Ziel"; die Sicht nennt dann den GRUND statt einer Handlung.
+    pv_ziel_aktiv = any(
+        i.typ in ("pv-module", "balkonkraftwerk") and i.ist_aktiv_im_monat(f.jahr, f.monat)
+        for i in inv_rows
+    )
+    speicher_ziel_aktiv = any(
+        i.typ == "speicher" and i.ist_aktiv_im_monat(f.jahr, f.monat)
+        for i in inv_rows
+    )
+    legacy_ohne_ziel = (
+        (hat_legacy_pv and not hat_inv_pv and not pv_ziel_aktiv)
+        or (hat_legacy_speicher and not hat_inv_speicher and not speicher_ziel_aktiv)
+    )
+    return hat_legacy, legacy_ohne_ziel
 
 
 #: N-736: die Felder der Tabellen-Zeile, die aus Einspeisung/Netzbezug folgen — Zählerwerte, Bilanz und die Geldposten

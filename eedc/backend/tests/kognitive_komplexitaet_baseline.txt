@@ -29,7 +29,6 @@
 60	api/routes/investitionen/roi_pv.py::pv_einsparung_und_speicher_ist.berechne_pv_einsparung_aus_monatsdaten
 78	api/routes/investitionen/roi_pv.py::pv_systeme_zeilen
 72	api/routes/investitionen/roi_standalone.py::standalone_zeilen
-104	api/routes/monatsdaten.py::list_monatsdaten_aggregiert
 51	api/routes/prognosen.py::get_prognosen_genauigkeit
 133	api/routes/prognosen.py::get_prognosen_vergleich
 66	core/berechnungen/ergebnis.py::falte_zeitraum
