@@ -61,7 +61,6 @@
 51	services/monats_fakten/bau.py::_baue_fakt
 61	services/monats_fakten/laden.py::lade_monats_fakten
 59	services/monats_fakten/roh.py::_RohMonat.falte
-125	services/prognose_kanon.py::kanon_tagesprognose
 57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 71	services/snapshot/bereichs_leser.py::lade_tageswerte_je_geraet
 112	services/snapshot/reaggregator.py::get_reaggregate_preview

@@ -124,7 +124,7 @@ class KanonTag:
 
         ⭐ **Warum abgeleitet und nicht als eigenes Feld.** `om_kwh` ist Σ der
         **gekappten** Slots, `abregelung_om_kwh` ist Σ(roh − gekappt) über
-        dieselben Slots derselben Schleife (`:515-519`). Ihre Summe ist damit
+        dieselben Slots derselben Schleife (`_gekappte_gruppe`). Ihre Summe ist damit
         exakt Σ roh — eine zweite gespeicherte Zahl könnte nur noch davon
         abdriften. Ohne Kappung ist `abregelung_om_kwh` `None` und `om_kwh`
         bereits die Rohsumme.
@@ -380,6 +380,97 @@ async def kanon_tagesprognose(
     # nicht (Normalfall → Rechnung bleibt bitgleich zu vorher).
     gewichte = _tages_gewichte(invs, gruppen, tagesdaten)
 
+    gruppen = _gruppen_oder_default(gruppen, invs, heute, anlage)
+    if gruppen is None:
+        return None
+
+    by_datum = await _fan_out(db, anlage, gruppen, days, skip_jitter)
+    if by_datum is None:
+        return None
+
+    # Legacy-Skalar (Kaskaden-Miss-Fallback). Function-local Import =
+    # Monkeypatch-fähig (Tests patchen live_wetter._get_lernfaktor).
+    from backend.api.routes.live_wetter import (
+        _get_lernfaktor, _get_lernfaktor_gekappt,
+    )
+    skalar = await _get_lernfaktor(anlage.id, db)
+    # ⭐ **N-551: für die gekappten Slots der zweite Faktor.** `skalar` ist auf
+    # der **rohen** Tagesprognose gelernt (`pv_prognose_kwh`, W1); `om_slots`
+    # unten sind an der AC-/WR-Grenze bereits **gekappt**. Der rohe Faktor
+    # rechnete die Abregelung dort ein zweites Mal heraus (an einer Messkopie
+    # mit 12-kW-Grenze −12,4 %). `None`, solange zu wenige Tage ein
+    # `lern_soll_kwh` tragen — dann bleibt es beim bisherigen Verhalten.
+    skalar_gekappt = await _get_lernfaktor_gekappt(anlage.id, db)
+
+    # #347/#354: AC-Grenze. Sie kann dem Erzeuger selbst gehören (BKW) oder
+    # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
+    # `zuordne_grenzen` auf. Nur wenn überhaupt eine gepflegt ist, wird je
+    # Komponente gerechnet; sonst bleibt der Pfad unverändert.
+    grenzen = zuordne_grenzen(
+        invs, await _wechselrichter(db, anlage), await _speicher(db, anlage)
+    )
+    kappung_aktiv = any(grenze for grenze, _ in grenzen.values())
+
+    kx = _KanonKontext(
+        tagesdaten=tagesdaten, invs=invs, gruppen=gruppen, gewichte=gewichte,
+        by_datum=by_datum, skalar=skalar, skalar_gekappt=skalar_gekappt,
+        grenzen=grenzen, kappung_aktiv=kappung_aktiv,
+    )
+    tage: list[Optional[KanonTag]] = []
+    for offset in range(days):
+        tage.append(await _kanon_tag(db, anlage, kx, offset))
+
+    return await _prognose_mit_heute(db, anlage, heute, tage, skalar)
+
+
+@dataclass
+class _KanonKontext:
+    """Was jeder Prognosetag liest — je Anfrage einmal gebaut, danach nur gelesen.
+
+    Feldnamen = die lokalen Namen von `kanon_tagesprognose` vor RF-21.
+    """
+
+    tagesdaten: list[date]
+    invs: list[Investition]
+    gruppen: list[Orientierungsgruppe]
+    gewichte: Optional[list[list[float]]]
+    by_datum: list[dict]
+    skalar: Optional[float]
+    skalar_gekappt: Optional[float]
+    grenzen: dict
+    kappung_aktiv: bool
+
+
+@dataclass
+class _Einsammlung:
+    """Je Orientierungsgruppe der Rohstand EINES Prognosetags, noch ungekappt."""
+
+    roh_stunden: list[list[float]]
+    roh_tageswert: list[float]
+    roh_gewicht: list[float]
+    vorhanden: list[bool]
+    groups_present: int
+    wetter_bew: Optional[list]
+    wetter_nieder: Optional[list]
+    wetter_code: Optional[list]
+
+
+@dataclass
+class _TagesSlots:
+    """Die über alle Gruppen summierten Slots EINES Prognosetags (veränderlich, je Tag neu)."""
+
+    om_slots: list[float]
+    roh_slots: list[float]
+    abregelung_slots: list[float]
+    grenzen_kw: dict
+    pv_ertrag_sum: float
+    has_hourly: bool
+
+
+def _gruppen_oder_default(
+    gruppen: list[Orientierungsgruppe], invs: list[Investition], heute: date, anlage,
+) -> Optional[list[Orientierungsgruppe]]:
+    """Die Fan-out-Gruppen — ohne gepflegte Orientierung eine Default-Gruppe, ``None`` ohne kWp."""
     if not gruppen:
         # Keine Modul-Orientierung gepflegt → eine Default-Gruppe (Süd/35°),
         # damit Bestandsanlagen ohne Orientierungs-Pflege weiter eine Prognose
@@ -395,7 +486,11 @@ async def kanon_tagesprognose(
         if kwp <= 0:
             return None
         gruppen = [Orientierungsgruppe(neigung=35, ausrichtung=0, kwp=kwp)]
+    return gruppen
 
+
+async def _fan_out(db, anlage, gruppen, days: int, skip_jitter: bool) -> Optional[list[dict]]:
+    """Je Orientierungsgruppe ein OpenMeteo-Abruf → Tag-Index je Gruppe; ``None``, wenn keine Gruppe liefert."""
     system_losses = resolve_system_losses(await lade_aktive_prognose(db, anlage.id))
 
     # A30/N16: das in der Anlage gewählte Wettermodell — in derselben Form wie
@@ -438,249 +533,283 @@ async def kanon_tagesprognose(
             by_datum.append({})
         else:
             by_datum.append({t.datum: t for t in r.tageswerte})
+    return by_datum
 
-    # Legacy-Skalar (Kaskaden-Miss-Fallback). Function-local Import =
-    # Monkeypatch-fähig (Tests patchen live_wetter._get_lernfaktor).
-    from backend.api.routes.live_wetter import (
-        _get_lernfaktor, _get_lernfaktor_gekappt,
+
+async def _kanon_tag(db, anlage, kx: _KanonKontext, offset: int) -> Optional[KanonTag]:
+    """``tage[offset]`` — ``None``, wenn keine Gruppe diesen Tag lieferte."""
+    datum = kx.tagesdaten[offset]
+    datum_iso = datum.isoformat()
+    mitglieder = (
+        _kappungs_mitglieder(kx.invs, kx.gruppen, datum, kx.grenzen)
+        if kx.kappung_aktiv
+        else None
     )
-    skalar = await _get_lernfaktor(anlage.id, db)
-    # ⭐ **N-551: für die gekappten Slots der zweite Faktor.** `skalar` ist auf
-    # der **rohen** Tagesprognose gelernt (`pv_prognose_kwh`, W1); `om_slots`
-    # unten sind an der AC-/WR-Grenze bereits **gekappt**. Der rohe Faktor
-    # rechnete die Abregelung dort ein zweites Mal heraus (an einer Messkopie
-    # mit 12-kW-Grenze −12,4 %). `None`, solange zu wenige Tage ein
-    # `lern_soll_kwh` tragen — dann bleibt es beim bisherigen Verhalten.
-    skalar_gekappt = await _get_lernfaktor_gekappt(anlage.id, db)
+    ein = _einsammeln(kx.gruppen, kx.by_datum, kx.gewichte, offset, datum_iso)
+    kappen, gekappte, kapp_faktoren = _kappen(ein.roh_stunden, kx.gruppen, mitglieder)
+    s = _summiere_slots(kx.gruppen, ein, mitglieder, kappen, gekappte, kapp_faktoren)
 
-    # #347/#354: AC-Grenze. Sie kann dem Erzeuger selbst gehören (BKW) oder
-    # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
-    # `zuordne_grenzen` auf. Nur wenn überhaupt eine gepflegt ist, wird je
-    # Komponente gerechnet; sonst bleibt der Pfad unverändert.
-    grenzen = zuordne_grenzen(
-        invs, await _wechselrichter(db, anlage), await _speicher(db, anlage)
-    )
-    kappung_aktiv = any(grenze for grenze, _ in grenzen.values())
+    # #306: untergewichtet, wenn nicht alle Gruppen den Tag lieferten.
+    om_vollstaendig = ein.groups_present == len(kx.gruppen)
 
-    tage: list[Optional[KanonTag]] = []
-    for offset in range(days):
-        datum = tagesdaten[offset]
-        datum_iso = datum.isoformat()
-        mitglieder = (
-            _kappungs_mitglieder(invs, gruppen, datum, grenzen)
-            if kappung_aktiv
-            else None
+    if ein.groups_present == 0:
+        return None
+
+    if not om_vollstaendig:
+        return _unvollstaendiger_tag(datum_iso, ein.groups_present, kx.gruppen)
+
+    return await _korrigierter_tag(db, anlage, kx, datum, datum_iso, ein, s, kappen, om_vollstaendig)
+
+
+def _einsammeln(gruppen, by_datum: list[dict], gewichte, offset: int, datum_iso: str) -> _Einsammlung:
+    """Je Gruppe den Prognosetag einsammeln — Stunden, Tageswert, kWp-Gewicht, Wetter."""
+    groups_present = 0
+    wetter_bew = wetter_nieder = wetter_code = None
+
+    # Erst einsammeln, dann kappen: die AC-Grenze eines Wechselrichters gilt
+    # für **alle** seine Strings gemeinsam, und die können in verschiedenen
+    # Orientierungsgruppen liegen (#354). Eine Kappung mitten in dieser
+    # Schleife sähe immer nur eine Gruppe und ließe denselben
+    # Wechselrichter mehrfach bis an seine Grenze liefern.
+    roh_stunden: list[list[float]] = [[] for _ in gruppen]
+    roh_tageswert: list[float] = [0.0] * len(gruppen)
+    roh_gewicht: list[float] = [1.0] * len(gruppen)
+    vorhanden: list[bool] = [False] * len(gruppen)
+
+    for grp_idx in range(len(gruppen)):
+        tag = by_datum[grp_idx].get(datum_iso)
+        if tag is None:
+            continue
+        groups_present += 1
+        vorhanden[grp_idx] = True
+        # N31: Anteil der an DIESEM Tag aktiven kWp der Gruppe (1.0, wenn
+        # sich im Horizont nichts ändert). Ein Faktor 0 ist kein fehlender
+        # Tag — die Gruppe hat an diesem Tag legitim keinen Ertrag.
+        roh_gewicht[grp_idx] = (
+            gewichte[offset][grp_idx] if gewichte is not None else 1.0
         )
+        roh_stunden[grp_idx] = list(getattr(tag, "stunden_kw", None) or [])
+        roh_tageswert[grp_idx] = getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0
+        # Wetter ist standort- (nicht orientierungs-)abhängig → erste
+        # liefernde Gruppe genügt für die Kaskaden-Klassifikation.
+        if wetter_bew is None:
+            wetter_bew = getattr(tag, "stunden_bewoelkung", None)
+            wetter_nieder = getattr(tag, "stunden_niederschlag", None)
+            wetter_code = getattr(tag, "stunden_wetter_code", None)
 
-        om_slots = [0.0] * 24
+    return _Einsammlung(
+        roh_stunden=roh_stunden, roh_tageswert=roh_tageswert, roh_gewicht=roh_gewicht,
+        vorhanden=vorhanden, groups_present=groups_present,
+        wetter_bew=wetter_bew, wetter_nieder=wetter_nieder, wetter_code=wetter_code,
+    )
+
+
+def _kappen(
+    roh_stunden: list[list[float]], gruppen, mitglieder: Optional[list[list[Mitglied]]],
+) -> tuple[bool, Optional[list[list[float]]], Optional[list[float]]]:
+    """Stündlich an der AC-Grenze kappen — ``(kappen, gekappte, kapp_faktoren)``."""
+    # #347/#354: gepflegte AC-Grenze ⇒ je Komponente rechnen und stündlich
+    # kappen. Das ersetzt das kWp-Tagesgewicht (`gew`) — die Mitglieder
+    # sind bereits die an DIESEM Tag aktiven, die Gewichtung steckt also in
+    # der Mitgliederliste statt in einem Skalar.
+    #
+    # Gruppen ohne Stundenprofil (OpenMeteo-Schätzpfad) liegen mit einer
+    # leeren Liste dabei und tragen zur Pool-Summe nichts bei. Für sie
+    # bleibt es beim `gew`-Pfad — eine Grenze auf einen Tageswert
+    # anzuwenden, für den es kein Profil gibt, wäre der kWp-Deckel, gegen
+    # den dieses Modul geschrieben ist.
+    kappen = mitglieder is not None and hat_kappung(mitglieder)
+    gekappte: Optional[list[list[float]]] = None
+    # ⚠ **Baufalle, seit S3b entschärft:** diese Variable hiess bis zum
+    # 22.09.2026 `faktoren` — genauso wie die **Korrektur**faktoren, die
+    # weiter unten (`korrekturfaktoren_fuer_tag`) an denselben Namen
+    # gebunden werden. Zwei voellig verschiedene Groessen, ein Name, 70
+    # Zeilen auseinander; wer dazwischen etwas einfuegt, greift leicht die
+    # falsche ab.
+    kapp_faktoren: Optional[list[float]] = None
+    if kappen:
+        gruppen_kwp = [g.kwp for g in gruppen]
+        gekappte = kappe_profile(roh_stunden, gruppen_kwp, mitglieder)
+        kapp_faktoren = kappungs_faktoren(roh_stunden, gruppen_kwp, mitglieder)
+    return kappen, gekappte, kapp_faktoren
+
+
+def _summiere_slots(
+    gruppen, ein: _Einsammlung, mitglieder, kappen: bool, gekappte, kapp_faktoren,
+) -> _TagesSlots:
+    """Die Gruppen slot-weise summieren — gekappt je Komponente oder mit dem kWp-Tagesgewicht."""
+    s = _TagesSlots(
+        om_slots=[0.0] * 24,
         # ⭐ **S3b: die UNGEKAPPTE Rohreihe daneben.** `om_slots` traegt nach
         # der Kappung die gekappten Werte — die Differenz zur Rohprognose ist
         # der Abregelungsverlust, und sie laesst sich danach nicht mehr
         # zurueckrechnen. Sie entsteht deshalb hier mit, im selben Durchgang.
-        roh_slots = [0.0] * 24
-        abregelung_slots = [0.0] * 24
-        grenzen_kw: dict = {}
-        pv_ertrag_sum = 0.0
-        groups_present = 0
-        has_hourly = False
-        wetter_bew = wetter_nieder = wetter_code = None
-
-        # Erst einsammeln, dann kappen: die AC-Grenze eines Wechselrichters gilt
-        # für **alle** seine Strings gemeinsam, und die können in verschiedenen
-        # Orientierungsgruppen liegen (#354). Eine Kappung mitten in dieser
-        # Schleife sähe immer nur eine Gruppe und ließe denselben
-        # Wechselrichter mehrfach bis an seine Grenze liefern.
-        roh_stunden: list[list[float]] = [[] for _ in gruppen]
-        roh_tageswert: list[float] = [0.0] * len(gruppen)
-        roh_gewicht: list[float] = [1.0] * len(gruppen)
-        vorhanden: list[bool] = [False] * len(gruppen)
-
-        for grp_idx in range(len(gruppen)):
-            tag = by_datum[grp_idx].get(datum_iso)
-            if tag is None:
-                continue
-            groups_present += 1
-            vorhanden[grp_idx] = True
-            # N31: Anteil der an DIESEM Tag aktiven kWp der Gruppe (1.0, wenn
-            # sich im Horizont nichts ändert). Ein Faktor 0 ist kein fehlender
-            # Tag — die Gruppe hat an diesem Tag legitim keinen Ertrag.
-            roh_gewicht[grp_idx] = (
-                gewichte[offset][grp_idx] if gewichte is not None else 1.0
-            )
-            roh_stunden[grp_idx] = list(getattr(tag, "stunden_kw", None) or [])
-            roh_tageswert[grp_idx] = getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0
-            # Wetter ist standort- (nicht orientierungs-)abhängig → erste
-            # liefernde Gruppe genügt für die Kaskaden-Klassifikation.
-            if wetter_bew is None:
-                wetter_bew = getattr(tag, "stunden_bewoelkung", None)
-                wetter_nieder = getattr(tag, "stunden_niederschlag", None)
-                wetter_code = getattr(tag, "stunden_wetter_code", None)
-
-        # #347/#354: gepflegte AC-Grenze ⇒ je Komponente rechnen und stündlich
-        # kappen. Das ersetzt das kWp-Tagesgewicht (`gew`) — die Mitglieder
-        # sind bereits die an DIESEM Tag aktiven, die Gewichtung steckt also in
-        # der Mitgliederliste statt in einem Skalar.
-        #
-        # Gruppen ohne Stundenprofil (OpenMeteo-Schätzpfad) liegen mit einer
-        # leeren Liste dabei und tragen zur Pool-Summe nichts bei. Für sie
-        # bleibt es beim `gew`-Pfad — eine Grenze auf einen Tageswert
-        # anzuwenden, für den es kein Profil gibt, wäre der kWp-Deckel, gegen
-        # den dieses Modul geschrieben ist.
-        kappen = mitglieder is not None and hat_kappung(mitglieder)
-        gekappte: Optional[list[list[float]]] = None
-        # ⚠ **Baufalle, seit S3b entschärft:** diese Variable hiess bis zum
-        # 22.09.2026 `faktoren` — genauso wie die **Korrektur**faktoren, die
-        # weiter unten (`korrekturfaktoren_fuer_tag`) an denselben Namen
-        # gebunden werden. Zwei voellig verschiedene Groessen, ein Name, 70
-        # Zeilen auseinander; wer dazwischen etwas einfuegt, greift leicht die
-        # falsche ab.
-        kapp_faktoren: Optional[list[float]] = None
-        if kappen:
-            gruppen_kwp = [g.kwp for g in gruppen]
-            gekappte = kappe_profile(roh_stunden, gruppen_kwp, mitglieder)
-            kapp_faktoren = kappungs_faktoren(roh_stunden, gruppen_kwp, mitglieder)
-
-        for grp_idx in range(len(gruppen)):
-            if not vorhanden[grp_idx]:
-                continue
-            stunden_kw = roh_stunden[grp_idx]
-            tages_kwh = roh_tageswert[grp_idx]
-            gew = roh_gewicht[grp_idx]
-            grp_mitglieder = mitglieder[grp_idx] if mitglieder is not None else None
-
-            if kappen and grp_mitglieder and stunden_kw:
-                werte = gekappte[grp_idx] if gekappte is not None else []
-                pv_ertrag_sum += tages_kwh * (
-                    kapp_faktoren[grp_idx] if kapp_faktoren is not None else 1.0
-                )
-                if any(werte):
-                    has_hourly = True
-                    for h in range(min(24, len(werte))):
-                        om_slots[h] += werte[h]
-                        roh = float(stunden_kw[h] or 0.0) if h < len(stunden_kw) else 0.0
-                        roh_slots[h] += roh
-                        # `max(0, …)` ist keine Vorsicht, sondern die Definition:
-                        # gekappt ist nie mehr als roh.
-                        abregelung_slots[h] += max(0.0, roh - werte[h])
-                for m in grp_mitglieder:
-                    if m.grenze_kw is not None and m.grenze_kw > 0 and m.grenz_id is not None:
-                        grenzen_kw.setdefault(str(m.grenz_id), round(float(m.grenze_kw), 2))
-            else:
-                pv_ertrag_sum += tages_kwh * gew
-                if stunden_kw and any(v for v in stunden_kw):
-                    has_hourly = True
-                    for h in range(min(24, len(stunden_kw))):
-                        gewichtet = (stunden_kw[h] or 0.0) * gew
-                        om_slots[h] += gewichtet
-                        # Ungekappte Gruppe: roh == gekappt, Verlust 0.
-                        roh_slots[h] += gewichtet
-
-        # #306: untergewichtet, wenn nicht alle Gruppen den Tag lieferten.
-        om_vollstaendig = groups_present == len(gruppen)
-
-        if groups_present == 0:
-            tage.append(None)
+        roh_slots=[0.0] * 24,
+        abregelung_slots=[0.0] * 24,
+        grenzen_kw={},
+        pv_ertrag_sum=0.0,
+        has_hourly=False,
+    )
+    for grp_idx in range(len(gruppen)):
+        if not ein.vorhanden[grp_idx]:
             continue
+        stunden_kw = ein.roh_stunden[grp_idx]
+        tages_kwh = ein.roh_tageswert[grp_idx]
+        gew = ein.roh_gewicht[grp_idx]
+        grp_mitglieder = mitglieder[grp_idx] if mitglieder is not None else None
 
-        if not om_vollstaendig:
-            # Ein Teil-Fan-out liefert KEINEN Tageswert — er lieferte bis hier
-            # einen um die fehlenden Gruppen untergewichteten, und der ist keine
-            # kleinere Wahrheit, sondern eine falsche Zahl. Knallfrosch (simon42
-            # T89667 #306, 08.09.2026): PV1 20,24 kWp + PV2 1,74 kWp, der
-            # HA-Sensor „PV-Prognose heute" stand für je eine volle Stunde auf
-            # **7,9 statt 92,3 kWh** — genau dem Anteil der kleinen Anlage,
-            # zweimal an zwei Tagen. Jede Gruppe hat ihren eigenen Cache-Key
-            # (Neigung/Ausrichtung); fällt ein Abruf aus, landet nur SEIN Key im
-            # Negativ-Cache, die übrigen behalten ihren gültigen Eintrag.
-            #
-            # ⛔ Warum hier und nicht bei den Lesern: `om_vollstaendig` gibt es
-            # seit #306, aber von SECHS Konsumenten des Kanons hat es genau
-            # EINER je gelesen — `live_wetter` für die Frage, ob der Tageswert
-            # eingefroren werden darf. Anzeige, MQTT-/HA-Export, Prognosen-
-            # Vergleich, /solar-prognose und die Energieprofil-Tagesprognose
-            # nahmen den kollabierten Wert unbesehen. Eine Invariante, an die
-            # jeder Leser denken muss, ist keine.
-            #
-            # Das Stundenprofil fällt mit: es ist um dieselben Gruppen zu klein,
-            # und die Kanon-Invariante lautet „Tageswert == Σ Export-Slots".
-            # Das Flag bleibt am Tag stehen, damit „unvollständig abgerufen"
-            # vom Fall „gar kein Ergebnis" (`None`) unterscheidbar ist —
-            # `live_wetter` liest genau diesen Unterschied.
-            logger.warning(
-                "Prognose-Fan-out unvollständig für %s: %d von %d "
-                "Orientierungsgruppen geliefert — kein Tageswert für diesen Tag "
-                "(ein untergewichteter wäre eine falsche Zahl, #306)",
-                datum_iso, groups_present, len(gruppen),
-            )
-            tage.append(KanonTag(
-                datum=datum_iso,
-                om_kwh=None,
-                eedc_kwh=None,
-                vm_kwh=None,
-                nm_kwh=None,
-                profil=None,
-                om_stundenprofil_kwh=None,
-                om_vollstaendig=False,
-            ))
-            continue
-
-        if has_hourly:
-            faktoren = await korrekturfaktoren_fuer_tag(
-                db,
-                anlage_id=anlage.id,
-                lat=anlage.latitude,
-                lon=anlage.longitude,
-                datum=datum,
-                stunden_bewoelkung=wetter_bew,
-                stunden_niederschlag=wetter_nieder,
-                stunden_wetter_code=wetter_code,
-            )
-            # N-551: `om_slots` sind die **gekappten** Slots ⇒ der Rückfall für
-            # Stunden ohne Korrekturprofil ist der auf der gekappten Basis
-            # gelernte Faktor (sonst der bisherige Roh-Faktor).
-            profil = korrigiere_tagesprofil(
-                om_slots, faktoren,
-                fallback_faktor=skalar_gekappt if skalar_gekappt is not None else skalar,
-            )
-            eedc_kwh = profil.tageswert_kwh
-            om_kwh = round(sum(om_slots), 1)
-            vm_kwh, nm_kwh = vm_nm_split(
-                profil.stundenprofil_export_kwh, datum_iso, anlage.longitude
-            )
+        if kappen and grp_mitglieder and stunden_kw:
+            _gekappte_gruppe(s, grp_idx, stunden_kw, tages_kwh, grp_mitglieder, gekappte, kapp_faktoren)
         else:
-            # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly): Tages-Ertrag ×
-            # Skalar, kein Profil (bisheriges Verhalten, eedc_prognose_service).
-            profil = None
-            # ⚠ **Hier bleibt der ROHE Faktor** (N-551): `pv_ertrag_sum` ist der
-            # ungekappte OpenMeteo-Tagesertrag — dieselbe Basis, auf der der
-            # Skalar gelernt wurde. Der gekappte Faktor gehört nur dorthin, wo
-            # die Reihe selbst gekappt ist (Stundenpfad oben).
-            eedc_kwh = (
-                round(pv_ertrag_sum * (skalar or 1.0), 1) if pv_ertrag_sum else None
-            )
-            om_kwh = round(pv_ertrag_sum, 1) if pv_ertrag_sum else None
-            vm_kwh = nm_kwh = None
+            _ungekappte_gruppe(s, stunden_kw, tages_kwh, gew)
+    return s
 
-        tage.append(KanonTag(
-            datum=datum_iso,
-            om_kwh=om_kwh,
-            eedc_kwh=eedc_kwh,
-            vm_kwh=vm_kwh,
-            nm_kwh=nm_kwh,
-            profil=profil,
-            om_stundenprofil_kwh=[round(v, 3) for v in om_slots] if has_hourly else None,
-            om_vollstaendig=om_vollstaendig,
-            # S3b: nur wo ueberhaupt gekappt wird — sonst bleibt der Sensor weg
-            # (ADR-002/P4: **0 ist ein Wert**, „nicht gekappt" ist keiner).
-            abregelung_om_kwh=(
-                round(sum(abregelung_slots), 2) if (kappen and has_hourly) else None
-            ),
-            abregelung_om_stundenprofil_kwh=(
-                [round(v, 3) for v in abregelung_slots] if (kappen and has_hourly) else None
-            ),
-            grenzen_kw=(grenzen_kw or None) if kappen else None,
-        ))
 
+def _gekappte_gruppe(
+    s: _TagesSlots, grp_idx: int, stunden_kw: list, tages_kwh: float,
+    grp_mitglieder: list[Mitglied], gekappte, kapp_faktoren,
+) -> None:
+    """Eine Gruppe mit Kappungs-Mitgliedern: gekappte Slots, Rohreihe und Verlust daneben (S3b)."""
+    werte = gekappte[grp_idx] if gekappte is not None else []
+    s.pv_ertrag_sum += tages_kwh * (
+        kapp_faktoren[grp_idx] if kapp_faktoren is not None else 1.0
+    )
+    if any(werte):
+        s.has_hourly = True
+        for h in range(min(24, len(werte))):
+            s.om_slots[h] += werte[h]
+            roh = float(stunden_kw[h] or 0.0) if h < len(stunden_kw) else 0.0
+            s.roh_slots[h] += roh
+            # `max(0, …)` ist keine Vorsicht, sondern die Definition:
+            # gekappt ist nie mehr als roh.
+            s.abregelung_slots[h] += max(0.0, roh - werte[h])
+    for m in grp_mitglieder:
+        if m.grenze_kw is not None and m.grenze_kw > 0 and m.grenz_id is not None:
+            s.grenzen_kw.setdefault(str(m.grenz_id), round(float(m.grenze_kw), 2))
+
+
+def _ungekappte_gruppe(s: _TagesSlots, stunden_kw: list, tages_kwh: float, gew: float) -> None:
+    """Eine Gruppe ohne Kappung: Slots mit dem kWp-Tagesgewicht (N31), roh == gekappt."""
+    s.pv_ertrag_sum += tages_kwh * gew
+    if stunden_kw and any(v for v in stunden_kw):
+        s.has_hourly = True
+        for h in range(min(24, len(stunden_kw))):
+            gewichtet = (stunden_kw[h] or 0.0) * gew
+            s.om_slots[h] += gewichtet
+            # Ungekappte Gruppe: roh == gekappt, Verlust 0.
+            s.roh_slots[h] += gewichtet
+
+
+def _unvollstaendiger_tag(datum_iso: str, groups_present: int, gruppen) -> KanonTag:
+    """Teil-Fan-out (#306): der Tag trägt das Flag, aber keine Zahl."""
+    # Ein Teil-Fan-out liefert KEINEN Tageswert — er lieferte bis hier
+    # einen um die fehlenden Gruppen untergewichteten, und der ist keine
+    # kleinere Wahrheit, sondern eine falsche Zahl. Knallfrosch (simon42
+    # T89667 #306, 08.09.2026): PV1 20,24 kWp + PV2 1,74 kWp, der
+    # HA-Sensor „PV-Prognose heute" stand für je eine volle Stunde auf
+    # **7,9 statt 92,3 kWh** — genau dem Anteil der kleinen Anlage,
+    # zweimal an zwei Tagen. Jede Gruppe hat ihren eigenen Cache-Key
+    # (Neigung/Ausrichtung); fällt ein Abruf aus, landet nur SEIN Key im
+    # Negativ-Cache, die übrigen behalten ihren gültigen Eintrag.
+    #
+    # ⛔ Warum hier und nicht bei den Lesern: `om_vollstaendig` gibt es
+    # seit #306, aber von SECHS Konsumenten des Kanons hat es genau
+    # EINER je gelesen — `live_wetter` für die Frage, ob der Tageswert
+    # eingefroren werden darf. Anzeige, MQTT-/HA-Export, Prognosen-
+    # Vergleich, /solar-prognose und die Energieprofil-Tagesprognose
+    # nahmen den kollabierten Wert unbesehen. Eine Invariante, an die
+    # jeder Leser denken muss, ist keine.
+    #
+    # Das Stundenprofil fällt mit: es ist um dieselben Gruppen zu klein,
+    # und die Kanon-Invariante lautet „Tageswert == Σ Export-Slots".
+    # Das Flag bleibt am Tag stehen, damit „unvollständig abgerufen"
+    # vom Fall „gar kein Ergebnis" (`None`) unterscheidbar ist —
+    # `live_wetter` liest genau diesen Unterschied.
+    logger.warning(
+        "Prognose-Fan-out unvollständig für %s: %d von %d "
+        "Orientierungsgruppen geliefert — kein Tageswert für diesen Tag "
+        "(ein untergewichteter wäre eine falsche Zahl, #306)",
+        datum_iso, groups_present, len(gruppen),
+    )
+    return KanonTag(
+        datum=datum_iso,
+        om_kwh=None,
+        eedc_kwh=None,
+        vm_kwh=None,
+        nm_kwh=None,
+        profil=None,
+        om_stundenprofil_kwh=None,
+        om_vollstaendig=False,
+    )
+
+
+async def _korrigierter_tag(
+    db, anlage, kx: _KanonKontext, datum: date, datum_iso: str,
+    ein: _Einsammlung, s: _TagesSlots, kappen: bool, om_vollstaendig: bool,
+) -> KanonTag:
+    """Ein vollständiger Tag: eedc-Korrektur je Energie-Slot oder OpenMeteo-Schätzpfad."""
+    if s.has_hourly:
+        faktoren = await korrekturfaktoren_fuer_tag(
+            db,
+            anlage_id=anlage.id,
+            lat=anlage.latitude,
+            lon=anlage.longitude,
+            datum=datum,
+            stunden_bewoelkung=ein.wetter_bew,
+            stunden_niederschlag=ein.wetter_nieder,
+            stunden_wetter_code=ein.wetter_code,
+        )
+        # N-551: `om_slots` sind die **gekappten** Slots ⇒ der Rückfall für
+        # Stunden ohne Korrekturprofil ist der auf der gekappten Basis
+        # gelernte Faktor (sonst der bisherige Roh-Faktor).
+        profil = korrigiere_tagesprofil(
+            s.om_slots, faktoren,
+            fallback_faktor=kx.skalar_gekappt if kx.skalar_gekappt is not None else kx.skalar,
+        )
+        eedc_kwh = profil.tageswert_kwh
+        om_kwh = round(sum(s.om_slots), 1)
+        vm_kwh, nm_kwh = vm_nm_split(
+            profil.stundenprofil_export_kwh, datum_iso, anlage.longitude
+        )
+    else:
+        # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly): Tages-Ertrag ×
+        # Skalar, kein Profil (bisheriges Verhalten, eedc_prognose_service).
+        profil = None
+        # ⚠ **Hier bleibt der ROHE Faktor** (N-551): `pv_ertrag_sum` ist der
+        # ungekappte OpenMeteo-Tagesertrag — dieselbe Basis, auf der der
+        # Skalar gelernt wurde. Der gekappte Faktor gehört nur dorthin, wo
+        # die Reihe selbst gekappt ist (Stundenpfad oben).
+        eedc_kwh = (
+            round(s.pv_ertrag_sum * (kx.skalar or 1.0), 1) if s.pv_ertrag_sum else None
+        )
+        om_kwh = round(s.pv_ertrag_sum, 1) if s.pv_ertrag_sum else None
+        vm_kwh = nm_kwh = None
+
+    return KanonTag(
+        datum=datum_iso,
+        om_kwh=om_kwh,
+        eedc_kwh=eedc_kwh,
+        vm_kwh=vm_kwh,
+        nm_kwh=nm_kwh,
+        profil=profil,
+        om_stundenprofil_kwh=[round(v, 3) for v in s.om_slots] if s.has_hourly else None,
+        om_vollstaendig=om_vollstaendig,
+        # S3b: nur wo ueberhaupt gekappt wird — sonst bleibt der Sensor weg
+        # (ADR-002/P4: **0 ist ein Wert**, „nicht gekappt" ist keiner).
+        abregelung_om_kwh=(
+            round(sum(s.abregelung_slots), 2) if (kappen and s.has_hourly) else None
+        ),
+        abregelung_om_stundenprofil_kwh=(
+            [round(v, 3) for v in s.abregelung_slots] if (kappen and s.has_hourly) else None
+        ),
+        grenzen_kw=(s.grenzen_kw or None) if kappen else None,
+    )
+
+
+async def _prognose_mit_heute(
+    db, anlage, heute: date, tage: list[Optional[KanonTag]], skalar: Optional[float],
+) -> KanonPrognose:
+    """Die Tage plus die rollenden „heute"-Größen (IST bisher, Rest, nachgeführt)."""
     # Rollende „heute"-Größen aus den korrigierten Slots + IST.
     rest_heute = ist_bisher = heute_rollend = None
     ist_bis_slot: Optional[int] = None

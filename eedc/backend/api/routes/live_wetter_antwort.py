@@ -643,7 +643,7 @@ def _persistenz_auftrag(
     # erfinden. #306 gilt hier genauso: unvollständiger Fan-out ⇒ nichts
     # einfrieren, auch kein Lern-SOLL.
     # ⛔ **Beide Felder hängen am Stundenprofil, auch das Tages-SOLL.** Im
-    # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly, `prognose_kanon:600-608`)
+    # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly, `prognose_kanon::_korrigierter_tag`, `else`-Zweig)
     # ist `om_kwh` die **ungekappte** Σ der Tageswerte — die Kappung wirkt
     # nur auf Stundenwerte. Als `lern_soll_kwh` wäre das auf einer Anlage
     # mit AC-Grenze eine Zahl, die die Anlage nie erreichen kann, und der
