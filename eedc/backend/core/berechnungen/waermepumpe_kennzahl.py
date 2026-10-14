@@ -45,6 +45,7 @@ from backend.core.tageswert_grund import (
     GRUND_ZAEHLER_RUECKSPRUNG,
     TAGESWERT_GRUND_KURZ,
 )
+from backend.core.zahlenformat import fmt_zahl
 
 #: Unterhalb dieser Arbeitszahl bekommt die Zahl einen erklärenden Satz
 #: (SOLL §2.2.1, Fall **H-B**). Die Grenze ist bewusst großzügig: Eine
@@ -509,7 +510,7 @@ def waerme_herkunft(waerme_abgeleitet: bool, faktor: Optional[float]) -> str:
     if not waerme_abgeleitet:
         return HERKUNFT_GEMESSEN
     if faktor is not None:
-        return f"geschätzt: Strom × JAZ {faktor:.1f}".replace(".", ",")
+        return f"geschätzt: Strom × JAZ {fmt_zahl(faktor, 1)}"
     return "geschätzt: Strom × gepflegte JAZ"
 
 

@@ -71,6 +71,24 @@ async def test_f1_netzladung_ueber_gesamtladung_kumulativ(db):
     assert not [r for r in erg if "Entladung übersteigt Ladung" in r.meldung]
 
 
+async def test_f1_details_schreiben_deutsche_zahlen(db):
+    """Die Details-Zeile nennt die beiden Summen deutsch, ganzzahlig wie die Schwester-Meldung (Entladung > Ladung).
+
+    Bis 14.10.2026 stand hier «1500.000 kWh» — nach deutscher Lesart anderthalb Millionen. Der Text entsteht in
+    ``core/berechnungen/invarianten.py`` und wird vom Checker nur durchgereicht.
+    """
+    anlage = await _anlage_mit(db, "speicher", {"kapazitaet_kwh": 10, "laedt_aus_netz": True}, {
+        1: {"ladung_kwh": 600.0, "ladung_netz_kwh": 750.0, "entladung_kwh": 540.0},
+        2: {"ladung_kwh": 600.0, "ladung_netz_kwh": 750.0, "entladung_kwh": 540.0},
+    })
+    erg = DatenChecker(db)._check_investitionen(anlage, [])
+    (t,) = _treffer(erg, "G (speicher): Netzladung übersteigt Gesamtladung (kumulativ)")
+    assert t.details.startswith(
+        "Kumulierte Netzladung (1.500 kWh) übersteigt die kumulierte Gesamtladung (1.200 kWh) — "
+    ), t.details
+    assert "1500.000" not in t.details and "1200.000" not in t.details, t.details
+
+
 async def test_f1_netzladung_innerhalb_der_gesamtladung_schweigt(db):
     anlage = await _anlage_mit(db, "speicher", {"kapazitaet_kwh": 10, "laedt_aus_netz": True}, {
         1: {"ladung_kwh": 50.0, "ladung_netz_kwh": 60.0, "entladung_kwh": 45.0},

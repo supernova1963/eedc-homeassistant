@@ -49,6 +49,13 @@ BACKEND = Path(__file__).resolve().parents[1]
 #: Verzeichnisse, in denen die Regel heute gilt. Ein Treffer hier ist rot.
 SCHARF = [
     "services/daten_checker",
+    # 2026-10-14: der Checker reicht Texte aus dem Berechnungskern durch
+    # (`invarianten.py::pruefe_speicher_netzladung_kumulativ` → Details der
+    # Warnung «Netzladung übersteigt Gesamtladung (kumulativ)», dort stand
+    # «1500.000 kWh»). Gewächtert wird deshalb auch der Ort, an dem der Text
+    # ENTSTEHT. Ein Verzeichnis, keine Datei — `_sammle` nimmt nur Verzeichnisse.
+    # Beim Scharfschalten 13 Stellen in 3 Dateien umgestellt, danach 0.
+    "core/berechnungen",
 ]
 
 #: Restschuld, gemessen am 2026-09-16 — Zahl darf fallen, nie steigen.

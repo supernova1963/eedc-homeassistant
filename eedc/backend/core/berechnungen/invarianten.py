@@ -32,6 +32,7 @@ from backend.core.berechnungen.energie import (
 )
 
 from backend.core.berechnungen.spannen import zeile_gebuendelt
+from backend.core.zahlenformat import fmt_kwh, fmt_zahl
 
 @dataclass
 class KonsistenzBericht:
@@ -50,9 +51,9 @@ class KonsistenzBericht:
     def __str__(self) -> str:
         status = "✓" if self.konsistent else "✗"
         return (
-            f"{status} {self.name}: erwartet={self.erwartet:.3f} kWh, "
-            f"tatsächlich={self.tatsaechlich:.3f} kWh, "
-            f"Δ={self.abweichung_kwh:.3f} kWh (Toleranz {self.toleranz_kwh:.3f})"
+            f"{status} {self.name}: erwartet={fmt_kwh(self.erwartet, 3)}, "
+            f"tatsächlich={fmt_kwh(self.tatsaechlich, 3)}, "
+            f"Δ={fmt_kwh(self.abweichung_kwh, 3)} (Toleranz {fmt_zahl(self.toleranz_kwh, 3)})"
             f"{' — ' + self.details if self.details else ''}"
         )
 
@@ -489,8 +490,8 @@ def pruefe_speicher_ladung_konsistenz(
     details = ""
     if not konsistent:
         details = (
-            f"Netzladung ({netz:.3f} kWh) übersteigt die Gesamtladung "
-            f"({gesamt:.3f} kWh) — der implizite PV-Anteil "
+            f"Netzladung ({fmt_kwh(netz)}) übersteigt die Gesamtladung "
+            f"({fmt_kwh(gesamt)}) — der implizite PV-Anteil "
             f"(ladung_kwh − ladung_netz_kwh) wäre negativ. Mögliche Ursache: "
             "Netz-Sensor in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` "
             "als reine PV-Ladung statt Gesamtladung gepflegt (Issue #281)."
@@ -559,8 +560,8 @@ def pruefe_speicher_netzladung_kumulativ(
     details = ""
     if not konsistent:
         details = (
-            f"Kumulierte Netzladung ({netz:.3f} kWh) übersteigt die kumulierte "
-            f"Gesamtladung ({gesamt:.3f} kWh) — über die gesamte Historie "
+            f"Kumulierte Netzladung ({fmt_kwh(netz)}) übersteigt die kumulierte "
+            f"Gesamtladung ({fmt_kwh(gesamt)}) — über die gesamte Historie "
             "unmöglich. Ein einzelner Monat darf das (Zähler-Schnappschuss an "
             "der Monatsgrenze), die Summe nicht. Mögliche Ursache: Netz-Sensor "
             "in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` als reine "
@@ -617,8 +618,8 @@ def pruefe_speicher_durchsatz_konsistenz(
     details = ""
     if not konsistent:
         details = (
-            f"Kumulierte Entladung ({gesamt_entladung:.3f} kWh) übersteigt die "
-            f"kumulierte Ladung ({gesamt_ladung:.3f} kWh) — über die gesamte "
+            f"Kumulierte Entladung ({fmt_kwh(gesamt_entladung)}) übersteigt die "
+            f"kumulierte Ladung ({fmt_kwh(gesamt_ladung)}) — über die gesamte "
             "Historie unmöglich. Ein einzelner Monat darf das (SoC-Übertrag), "
             "die Summe nicht. Mögliche Ursache: Lade-/Entlade-Werte fehlerhaft "
             "erfasst oder beim Datenübertrag vertauscht."

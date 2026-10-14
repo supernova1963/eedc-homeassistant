@@ -17,6 +17,7 @@ import pytest
 from backend.core.berechnungen import (
     assert_speicher_ladung_konsistent,
     assert_speicher_netzladung_kumulativ,
+    pruefe_speicher_durchsatz_konsistenz,
     pruefe_speicher_ladung_konsistenz,
     pruefe_speicher_netzladung_kumulativ,
 )
@@ -131,3 +132,20 @@ def test_assert_kumulativ_schweigt_bei_konsistenz():
     assert_speicher_netzladung_kumulativ(
         ladung_kwh_gesamt=10000.0, ladung_netz_kwh_gesamt=3000.0
     )
+
+
+def test_details_und_bericht_schreiben_deutsche_zahlen():
+    """Die drei Speicher-Texte schreiben kWh deutsch (Tausenderpunkt, keine Nachkommastellen),
+    ``str(bericht)`` für Log/AssertionError mit drei Stellen — nie «1500.000 kWh» (Style-Guide C2)."""
+    for bericht, anfang in (
+        (pruefe_speicher_ladung_konsistenz(1200.0, 1500.0),
+         "Netzladung (1.500 kWh) übersteigt die Gesamtladung (1.200 kWh) — "),
+        (pruefe_speicher_netzladung_kumulativ(1200.0, 1500.0),
+         "Kumulierte Netzladung (1.500 kWh) übersteigt die kumulierte Gesamtladung (1.200 kWh) — "),
+        (pruefe_speicher_durchsatz_konsistenz(1200.0, 1500.0),
+         "Kumulierte Entladung (1.500 kWh) übersteigt die kumulierte Ladung (1.200 kWh) — "),
+    ):
+        assert not bericht.konsistent
+        assert bericht.details.startswith(anfang), bericht.details
+        assert "1500.000" not in bericht.details and "1200.000" not in bericht.details
+        assert "erwartet=1.200,000 kWh, tatsächlich=1.500,000 kWh, Δ=300,000 kWh" in str(bericht), str(bericht)

@@ -29,6 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from backend.core.zahlenformat import fmt_zahl
+
 
 # ─── Invariante ───────────────────────────────────────────────────────────────
 
@@ -49,9 +51,9 @@ class CounterKonsistenzBericht:
     def __str__(self) -> str:
         status = "✓" if self.konsistent else "✗"
         return (
-            f"{status} {self.name}: erwartet={self.erwartet:.3f}, "
-            f"tatsächlich={self.tatsaechlich:.3f}, "
-            f"Δ={self.abweichung:.3f} (Toleranz {self.toleranz:.3f})"
+            f"{status} {self.name}: erwartet={fmt_zahl(self.erwartet, 3)}, "
+            f"tatsächlich={fmt_zahl(self.tatsaechlich, 3)}, "
+            f"Δ={fmt_zahl(self.abweichung, 3)} (Toleranz {fmt_zahl(self.toleranz, 3)})"
             f"{' — ' + self.details if self.details else ''}"
         )
 
