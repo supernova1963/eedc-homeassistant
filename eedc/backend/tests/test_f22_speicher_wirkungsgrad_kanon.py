@@ -74,9 +74,10 @@ def test_daten_checker_meldet_entladung_ueber_ladung():
     """
     import inspect
 
-    from backend.services.daten_checker import stammdaten
+    # RF-19: der Prüfer steht in der Speicher-Phase von `_check_investitionen` (Schwestermodul).
+    from backend.services.daten_checker import stammdaten_investitionen
 
-    quelle = inspect.getsource(stammdaten)
+    quelle = inspect.getsource(stammdaten_investitionen)
     assert "Entladung übersteigt Ladung (kumulativ)" in quelle, (
         "Der kumulative η-Prüfer fehlt — ohne ihn ist der entfernte Cap eine "
         "stille Lücke statt einer Diagnose (F-22)."

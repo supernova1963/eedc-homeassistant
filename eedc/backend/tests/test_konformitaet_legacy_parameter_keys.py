@@ -107,7 +107,8 @@ ERLAUBT: dict[str, dict[str, str]] = {
         "nutzt_v2h": "liest `v2h_faehig` ODER `nutzt_v2h` — bewusster Fallback für "
                      "Daten, die die Start-Migration noch nicht gesehen hat",
     },
-    "services/daten_checker/stammdaten.py": {
+    # RF-19: der Wechselrichter-Zweig des Daten-Checkers steht seitdem im Schwestermodul (`_check_typ_wechselrichter`).
+    "services/daten_checker/stammdaten_investitionen.py": {
         "leistung_ac_kw": "Prüfer nimmt Kanon `max_leistung_kw` UND den Alt-Namen — "
                           "bewusster Fallback, beide Seiten stehen im Code",
     },

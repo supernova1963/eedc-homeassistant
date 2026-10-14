@@ -467,8 +467,8 @@ derselben Stelle zweimal hintereinander aufzureißen, hat noch nie gut funktioni
 > **Empfehlung: den Entscheid revidieren — F-41 und F-42 vorziehen, K-2 danach.**
 >
 > **Begründung, und sie ist eine Messung, kein Zeitargument:** Die Prämisse „dieselbe Stelle" hält
-> nach §3 **nicht mehr**. F-41 sitzt in `daten_checker/stammdaten.py` und fragt nach der
-> **Bewertbarkeit** (`alter_energietraeger`, `anschaffungskosten_alternativ`); K-2 sitzt im
+> nach §3 **nicht mehr**. F-41 sitzt in `daten_checker/stammdaten_investitionen.py::_check_typ_waermepumpe`
+> und fragt nach der **Bewertbarkeit** (`alter_energietraeger`, `anschaffungskosten_alternativ`); K-2 sitzt im
 > Snapshot-/Aggregations-Pfad und in der **Messbarkeit** (`betriebsmodus`). Sie berühren sich in
 > **keiner Funktion** — der Daten-Checker-Anteil von K-2 ist eine **neue** Zeile („Modus-Sensor nicht
 > zugeordnet"), nicht eine Änderung an den drei bestehenden. **Ein Präzedenzfall trägt nur so weit

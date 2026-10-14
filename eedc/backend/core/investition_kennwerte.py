@@ -309,9 +309,9 @@ def get_speicher_kapazitaet_kwh(inv: Any) -> Optional[float]:
     Speicher bekam still 10 kWh und daraus eine Jahres-Ersparnis, die es nie
     gab (N127). Freigegeben wurde `None` unter der Bedingung, dass der fehlende
     Wert sichtbar ist — er ist es:
-    `services/daten_checker/stammdaten.py` meldet für jeden Speicher ohne
-    Kapazität WARNING „…: Kapazität (kWh) fehlt" mit Link auf die
-    Investitionspflege.
+    `services/daten_checker/stammdaten_investitionen.py::_check_typ_speicher`
+    meldet für jeden Speicher ohne Kapazität WARNING „…: Kapazität (kWh)
+    fehlt" mit Link auf die Investitionspflege.
 
     **Eine 0 zählt als ungepflegt** und liefert ebenfalls `None`. Das ist die
     hier begründete Ausnahme von der Projektregel „0-Werte mit `is not None`

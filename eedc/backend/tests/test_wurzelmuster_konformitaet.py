@@ -1466,8 +1466,9 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # N-651 (10.10.2026): die BKW-Prüfung des Daten-Checkers fragt je Monat, OB ein Anlagenwert gespeichert ist — mit
     # ihm trägt ein Balkonkraftwerk ohne eigenen Zähler seinen kWp-Anteil (N-621), „PV-Erzeugung fehlt" wäre ein
     # Fehlalarm. Diagnose über das Feld (Vorhandensein, keine Menge), dieselbe Rolle wie `vorbestand`; eigener
-    # Empfängername, damit die Freistellung kein anderes `md` der Datei mitnimmt.
-    "backend/services/daten_checker/stammdaten.py::anlagenzeile",
+    # Empfängername, damit die Freistellung kein anderes `md` der Datei mitnimmt. RF-19: die BKW-Prüfung steht seitdem
+    # im Schwestermodul `stammdaten_investitionen.py` (Phase `_check_typ_balkonkraftwerk`).
+    "backend/services/daten_checker/stammdaten_investitionen.py::anlagenzeile",
     # Drei Rollen in einer Datei, alle drei gedeckt (Granularität ist
     # `modul::empfänger`, feiner geht die Allowlist nicht). **Zeilennummern
     # bewusst weggelassen** — sie standen hier und waren schon vor dem
@@ -2572,7 +2573,8 @@ P10_FALT_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # kumulativ, Wechselrichter-Altbestand (#229).
     "backend/services/daten_checker/stammdaten.py::_check_abgabe_kandidat",
     "backend/services/daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg",
-    "backend/services/daten_checker/stammdaten.py::_check_investitionen",
+    # RF-19: die kumulative Speicher-Faltung steht in der Speicher-Phase von `_check_investitionen`.
+    "backend/services/daten_checker/stammdaten_investitionen.py::_check_typ_speicher",
     "backend/services/daten_checker/stammdaten.py::_check_wechselrichter_pv_altbestand",
     # Wärmepumpe: unplausible Arbeitszahl — prüft dieselben Eingänge wie die
     # Anzeige (Konzept Wärme/Klima 11.5), bildet aber keine Sicht-Größe.

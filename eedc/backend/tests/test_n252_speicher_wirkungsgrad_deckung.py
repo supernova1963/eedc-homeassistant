@@ -53,7 +53,8 @@ BRAUCHT_DEN_SOT = [
 #: Er steht deshalb weder in `BRAUCHT_DEN_SOT` (er darf gerade nicht kappen)
 #: noch in `BEWUSST_ROH` (er rechnet seit N-264 nicht mehr selbst, sondern ruft
 #: `speicher_effizienz_prozent`). Diese Probe hält beides fest.
-DIAGNOSE_VERWENDER = "services/daten_checker/stammdaten.py"
+# RF-19: der kumulative Wirkungsgrad-Prüfer steht in der Speicher-Phase von `_check_investitionen`.
+DIAGNOSE_VERWENDER = "services/daten_checker/stammdaten_investitionen.py"
 
 #: Stellen, die den rohen Quotienten mit voller Absicht behalten — je mit
 #: Grund. Eine Zeile ohne Grund gehört nicht in diese Liste.

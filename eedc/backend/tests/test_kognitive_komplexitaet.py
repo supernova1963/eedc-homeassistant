@@ -79,7 +79,6 @@ ABBAU: dict[str, str] = {
     "services/snapshot/tages_tabelle.py::baue_tagestabelle": "RF-22 (kognitiv 122 am 14.10.2026)",
     "services/snapshot/reaggregator.py::get_reaggregate_preview": "RF-23 (kognitiv 112 am 14.10.2026)",
     "services/eauto_wirtschaftlichkeit.py::entscheide_emob_heimladung": "RF-24 (kognitiv 110 am 14.10.2026)",
-    "services/daten_checker/stammdaten.py::StammdatenChecks._check_investitionen": "RF-19 (kognitiv 110 am 14.10.2026)",
     "services/daten_checker/datenquelle/klima.py::KlimaChecks._check_klima_modus_sensor": "RF-26 (kognitiv 107 am 14.10.2026)",
     "api/routes/energie_profil/monat.py::get_monatsauswertung": "RF-25 (kognitiv 107 am 14.10.2026)",
     "api/routes/monatsdaten.py::list_monatsdaten_aggregiert": "RF-27 (kognitiv 104 am 14.10.2026)",
