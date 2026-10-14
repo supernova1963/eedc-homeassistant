@@ -1414,10 +1414,10 @@ async def schreibe_provenance_und_restore(
     # Provenance trägt die echte Ursprungsquelle statt des Aggregator-Labels.
     # Die Felder sind beim Seed noch None (frische Row → der Seed-Loop überspringt
     # sie), also greift hier kein Hierarchie-Konflikt; der Restore wird angewandt.
-    for field, val in preserved_felder.items():
-        restore_source = preserved_quellen.get(field, "auto:preserve_restore")
+    for feld, val in preserved_felder.items():
+        restore_source = preserved_quellen.get(feld, "auto:preserve_restore")
         ergebnis = await write_with_provenance(
-            db, zusammenfassung, field, val,
+            db, zusammenfassung, feld, val,
             source=restore_source, writer="aggregator-preserve",
         )
         if not ergebnis.applied:
@@ -1425,11 +1425,11 @@ async def schreibe_provenance_und_restore(
             # ginge der gerettete Wert still verloren. Sichtbar machen statt
             # schlucken (feedback_silent_except_logs).
             logger.warning(
-                f"Anlage {anlage.id}, {datum}: Restore von '{field}' "
+                f"Anlage {anlage.id}, {datum}: Restore von '{feld}' "
                 f"nicht angewandt ({ergebnis.decision}: {ergebnis.reason}) — "
                 f"geretteter Wert ginge verloren."
             )
-            setattr(zusammenfassung, field, val)
+            setattr(zusammenfassung, feld, val)
 
 
 

@@ -118,7 +118,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 from backend.core.zahlenformat import fmt_zahl
 

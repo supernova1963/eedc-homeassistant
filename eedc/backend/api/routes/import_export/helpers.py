@@ -7,7 +7,7 @@ Gemeinsame Hilfsfunktionen für CSV und JSON Import/Export.
 import re
 import logging
 from typing import Callable, Optional
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

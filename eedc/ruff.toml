@@ -1,0 +1,23 @@
+# Ruff — Lint-Gate für das Backend (seit 14.10.2026). Aufruf aus eedc/: `ruff check backend`
+# (lokal im Dev-venv, in CI vor pytest; ruff steht in backend/requirements-dev.txt).
+#
+# Absicht: nur, was ein Laufzeitdefekt ist — undefinierte Namen, Syntaxfehler, geschattete
+# Importe, doppelte Argumente (Pyflakes F + E9). Stil-Regeln (E/W, I, UP, B …) sind bewusst
+# KEIN Gate: kein Repo-weiter Reformat im Wartungsmodus (docs/DEVELOPMENT.md → Code-Konventionen).
+# venv/ und node_modules/ schließt Ruff von sich aus aus.
+
+target-version = "py311"
+
+[lint]
+select = ["E9", "F"]
+
+# Baseline am 14.10.2026 (HEAD, backend/ samt tests/, ruff 0.17.0): diese vier Regeln hatten
+# Treffer, die kein Laufzeitdefekt sind, und bleiben aus, statt rund 400 Stellen anzufassen.
+# Wer eine einschalten will, misst erst (`ruff check backend --select F401`) und räumt dann auf;
+# F401 trägt Re-Exporte in __init__-Dateien, deren Entfernen Konsumenten bricht.
+ignore = [
+    "F401",  # unused-import — 330 Treffer (237 außerhalb tests/)
+    "F541",  # f-string ohne Platzhalter — 20
+    "F811",  # redefinition-while-unused — 32 (meist lokale Re-Importe in Endpunkten)
+    "F841",  # unused-variable — 27
+]

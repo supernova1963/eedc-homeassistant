@@ -41,9 +41,17 @@ python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # oder: venv\Scripts\activate  # Windows
 
-# Dependencies installieren
-pip install -r requirements.txt
+# Dependencies installieren — mit dem Lock als Constraints, damit das Dev-venv dieselben
+# Versionen trägt wie die Images (requirements.lock, erzeugt aus requirements.txt)
+pip install -c requirements.lock -r requirements-dev.txt
 ```
+
+> **Abhängigkeiten ändern:** Absicht in `requirements.txt` eintragen (Untergrenze, bekannte Brüche
+> als Kommentar), dann das Lock neu erzeugen — die Anleitung steht im Kopf von `requirements.txt`
+> (`uv pip compile … --universal`, Python 3.11, amd64 + aarch64). Beide Dockerfiles, der
+> Prod-Paritäts-Check in `scripts/smoke.sh` und die CI installieren **nur das Lock**; ein
+> Upstream-Release ändert damit nichts am Image, bis jemand das Lock bewusst neu erzeugt. Das
+> Standalone-Dockerfile liegt im Spiegel-Repo `eedc` und wird vom Release-Skript nicht überschrieben.
 
 ### 3. Frontend einrichten
 
@@ -235,7 +243,10 @@ neue Version — ein Commit auf `main` genügt nicht.
 - Type Hints verwenden; Docstrings für öffentliche Funktionen — und zwar mit dem **Warum**, nicht
   nur dem Was. Die Docstrings sind hier Trägermedium der Regeln (etwa „drei gleichwertige
   Transporte, eine Quelle" in `ha_statistics_service.py`).
-- `black` und `ruff` stehen in `requirements.txt` **auskommentiert** und sind **kein Gate**. Wer
+- **`ruff check backend` ist ein Gate** (seit 14.10.2026, aus `eedc/`, Regeln in `eedc/ruff.toml`, in
+  CI vor pytest): nur Pyflakes und Syntax (`F`, `E9`) — undefinierte Namen, geschattete Importe,
+  Syntaxfehler. Vier Regeln stehen mit Baseline-Zahl als `ignore` in der Datei; wer eine einschaltet,
+  misst erst und räumt dann auf. Stil-Regeln sind bewusst kein Gate, `black` gibt es nicht. Wer
   formatiert, formatiert von Hand im Stil der Umgebung — kein Repo-weiter Reformat-Lauf.
 - Neuer Code liest im Stil der Nachbarschaft: gleiche Kommentar-Dichte, gleiche Benennung.
 
@@ -695,8 +706,11 @@ Warnung „Event loop is closed" (N-414 · N-532). Wer eine Probe mit eigener En
 sie im `finally` — die `db`-Fixture ist das Vorbild.
 
 ```bash
+# 0. Lint (Sekunden; fängt undefinierte Namen, bevor pytest Minuten braucht)
+cd eedc && source backend/venv/bin/activate && ruff check backend
+
 # 1. Backend (bei Backend-Arbeit vollständig)
-cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
+python -m pytest backend/tests -q
 
 # 2. Frontend: Typen ZUERST, dann Unit-Tests
 cd eedc/frontend && npx tsc --noEmit && npm run test

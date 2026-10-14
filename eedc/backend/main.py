@@ -41,7 +41,7 @@ logging.basicConfig(
     force=True,
 )
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -490,7 +490,14 @@ app = FastAPI(
     root_path_in_servers=False,
 )
 
-# CORS Middleware (für Development)
+# CORS: alle Origins, ohne Credentials. Keine Oberfläche von eedc braucht das (gemessen
+# 14.10.2026): im HA-Add-on erreicht der Browser eedc nur über Ingress (gleiche Origin wie HA,
+# eedc-card ebenso), im Standalone-Betrieb liefert das Backend das Frontend selbst, und der
+# Vite-Dev-Server proxyt /api nach 8099. Die Freigabe erlaubt einer fremden Seite im Browser
+# eines Anwenders, Antworten der API zu LESEN — ohne Cookies und Auth-Header
+# (allow_credentials=False); Anfragen senden kann sie ohnehin. Bleibt, weil Dritt-Werkzeuge
+# (eigene Dashboards gegen den freigegebenen Port 8099) darauf aufsetzen können; wer das im
+# Standalone-Betrieb nicht will, stellt eedc hinter einen Reverse-Proxy mit Login (SECURITY.md).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

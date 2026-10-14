@@ -64,7 +64,7 @@ NOCH_NICHT_UMGESTELLT = {
 #: Form: (relativer Pfad, Zeilennummer-unabhängiges Textstück).
 AUSNAHMEN: list[tuple[str, str]] = [
     # Noch keine. Eine Ausnahme braucht eine Begründung in dieser Liste,
-    # nicht ein `# noqa` an der Fundstelle.
+    # nicht ein `noqa` an der Fundstelle.
 ]
 
 # Jede f-String-Formatierung mit fester Nachkommastelle — ``{x:.2f}``,

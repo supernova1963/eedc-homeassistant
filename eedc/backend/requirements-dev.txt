@@ -27,3 +27,9 @@ pytest-xdist>=3.8.0
 # Messlauf: `VIRTUAL_ENV=eedc/backend/venv uv pip install pytest-cov`
 # (die venv hat weder `pip` noch `ensurepip`), dann
 # `python -m pytest backend/tests -q --cov=backend --cov-report=term-missing`.
+
+# Linter — Gate seit 14.10.2026: `ruff check backend` (aus eedc/, Regeln in eedc/ruff.toml),
+# in CI vor pytest. Nur Pyflakes (F) und Syntax (E9) — das, was ein Laufzeitdefekt ist;
+# Stil-Regeln sind bewusst kein Gate (docs/DEVELOPMENT.md → Code-Konventionen).
+# Obergrenze, weil eine neue Minor neue Regeln oder Fixes bringen kann; Anheben = einmal messen.
+ruff>=0.17.0,<0.18

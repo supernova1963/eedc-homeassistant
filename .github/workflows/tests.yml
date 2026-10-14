@@ -80,12 +80,19 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: |
-            eedc/backend/requirements.txt
+            eedc/backend/requirements.lock
             eedc/backend/requirements-dev.txt
 
+      # Das Lock als Constraints: CI testet dieselben Versionen, die beide Dockerfiles
+      # installieren (requirements.lock, erzeugt aus requirements.txt — Anleitung dort).
       - name: Install dependencies
         working-directory: eedc
-        run: pip install -r backend/requirements-dev.txt
+        run: pip install -c backend/requirements.lock -r backend/requirements-dev.txt
+
+      # Lint-Gate (seit 14.10.2026): nur Pyflakes + Syntax, Regeln und Baseline in eedc/ruff.toml.
+      - name: Ruff (F + E9, eedc/ruff.toml)
+        working-directory: eedc
+        run: ruff check backend
 
       # Der Routen-Check stand hier bis zum 23.08.2026 als Inline-Skript mit
       # EXPECTED_ROUTES = 217 und der Pruefung n < EXPECTED_ROUTES. Beides war defekt:

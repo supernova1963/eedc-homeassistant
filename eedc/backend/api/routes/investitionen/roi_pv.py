@@ -30,9 +30,10 @@ from backend.core.investition_parameter import (
     PARAM_SPEICHER_DEFAULTS,
     SPEICHER_KOPPLUNG_DC,
 )
-from backend.core.berechnungen.speicher_wirtschaftlichkeit import aggregiere_speicher_ist
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import SpeicherIstAggregat, aggregiere_speicher_ist
 from backend.services.speicher_wirtschaftlichkeit import (
     EffektiverLadepreisErgebnis,
+    WirkungsgradErgebnis,
     berechne_effektiver_ladepreis,
     berechne_ist_wirkungsgrad,
     wirkungsgrad_ist_fuer_speicher,

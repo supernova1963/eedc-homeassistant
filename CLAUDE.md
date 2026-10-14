@@ -46,6 +46,7 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 cd eedc && source backend/venv/bin/activate          # Python 3.11
 uvicorn backend.main:app --reload --port 8099         # Backend;  Frontend: cd eedc/frontend && npm run dev
 # Gate je Päckchen (lokal):
+ruff check backend                                    # Lint-Gate (F + E9, eedc/ruff.toml), läuft auch in CI
 python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: backend/tests/test_wurzelmuster_konformitaet.py
 cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
 ./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
@@ -69,6 +70,8 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
 - **Design:** keine Hex-Farben außerhalb `lib/colors.ts` (`npm run check:design` = 0); eine Komponenten-Klasse = eine SoT-Komponente;
   Typ-Reihenfolge `INVESTITION_TYP_ORDER`; „eedc" klein; „% " mit Leerzeichen.
 - **Zeitzone:** eedc folgt HA, kein Pin. **Legacy `ha_sensor_*`-Spalten** bleiben im Model.
+- **Abhängigkeiten:** Absicht in `backend/requirements.txt`, ausgeliefert wird `requirements.lock` (Anleitung im Kopf der
+  txt; nach jeder Änderung neu erzeugen). Das Standalone-Dockerfile liegt im Spiegel `eedc` und braucht dieselbe Änderung von Hand.
 
 ## Community
 

@@ -1,4 +1,13 @@
 # EEDC Backend Dependencies
+#
+# Diese Datei nennt die Absicht: Untergrenzen und bekannte Brüche (Kommentare unten).
+# Ausgeliefert wird `requirements.lock` — die daraus aufgelöste, gepinnte Liste
+# (uv pip compile, Python 3.11, plattformübergreifend für amd64 und aarch64). Beide
+# Dockerfiles (HA-Add-on hier, Standalone im Spiegel-Repo eedc), der Prod-Paritäts-Check
+# in scripts/smoke.sh und die CI (als Constraints) installieren das Lock. Ein Upstream-
+# Release ändert damit nichts mehr am Image, bis jemand das Lock bewusst neu erzeugt.
+# Nach jeder Änderung hier:
+#   cd eedc/backend && uv pip compile --python-version 3.11 --universal requirements.txt -o requirements.lock
 
 # Web Framework
 # fastapi <0.137: 0.137.0 hat eine include_router(prefix=...)-Regression — bei
@@ -64,9 +73,7 @@ pillow-heif>=0.16.0  # HEIC/HEIF Support (iPhone-Fotos)
 weasyprint>=62.0
 jinja2>=3.1.0
 
-# Development (optional) — siehe requirements-dev.txt
-# Test-Runner (pytest + pytest-asyncio) leben in requirements-dev.txt, damit
-# der HA-Add-on-Container schlank bleibt. `scripts/smoke.sh` installiert sie
-# bei Bedarf in das Dev-venv.
-# black>=24.1.0
-# ruff>=0.1.0
+# Development — siehe requirements-dev.txt
+# Test-Runner (pytest + pytest-asyncio + pytest-xdist) und der Linter ruff leben in
+# requirements-dev.txt, damit der HA-Add-on-Container schlank bleibt. `scripts/smoke.sh`
+# installiert sie bei Bedarf in das Dev-venv. Kein black (kein Reformat-Gate).

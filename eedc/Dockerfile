@@ -45,9 +45,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Arbeitsverzeichnis
 WORKDIR /app
 
-# Python Dependencies
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Python Dependencies — das Lock, nicht requirements.txt: gepinnte Versionen, erzeugt aus
+# requirements.txt (Anleitung dort), damit ein Upstream-Release das Image nicht verändert.
+COPY backend/requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 # Backend kopieren
 COPY backend/ ./backend/

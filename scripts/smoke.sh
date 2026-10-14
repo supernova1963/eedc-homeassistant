@@ -11,7 +11,7 @@
 #      requirements-dev.txt, falls fehlt)
 #   2. App-Boot in Standalone-Modus (Dev-venv) → erwartete Routen-Anzahl
 #   3. Prod-Paritäts-Check: App-Boot + Routen auf FRISCHEM Python 3.11 mit
-#      frischem `pip install -r requirements.txt` (spiegelt das Add-on-Image;
+#      frischem `pip install -r requirements.lock` (spiegelt das Add-on-Image;
 #      fängt prod-only-Dependency-Skew VOR dem Tag — Lehre v3.45.1)
 #   4. pytest läuft alle Akzeptanz-Tests aus eedc/backend/tests/
 #
@@ -102,8 +102,11 @@ ROUTES_LINE=$(grep "^Routes:" "$APP_BOOT_LOG" || echo "Routes: ?")
 echo -e "${GREEN}  $ROUTES_LINE (>=$EXPECTED_ROUTES erwartet)${NC}"
 
 # ── 3. Prod-Paritäts-Routen-Check (frisches 3.11 + frisches pip install) ──────
-# Das Add-on läuft auf python:3.11-slim mit `pip install -r requirements.txt`
-# (ohne Lockfile). Der Dev-venv-Check (Schritt 2) kann eine prod-only-Regression
+# Das Add-on läuft auf python:3.11-slim mit `pip install -r requirements.lock`
+# (seit 14.10.2026 gepinnt; davor requirements.txt ohne Lock — die Brüche fastapi 0.137,
+# sqlalchemy 2.1, pymodbus 3.16.0 kamen alle so herein). Dieser Schritt installiert
+# dasselbe Lock und fängt damit, was das Lock selbst trägt — etwa ein neu erzeugtes Lock
+# mit einer brechenden Version. Der Dev-venv-Check (Schritt 2) kann eine prod-only-Regression
 # maskieren — andere Python-Minor + gecachte Dependency-Versionen. Beispiel
 # v3.45.1: frisch erschienenes fastapi 0.137.0 brach die Routen NUR auf frischem
 # 3.11; Dev (3.12 + gecachtes 0.136.3) blieb grün → Release ging rot raus.
@@ -127,9 +130,9 @@ else
         sed 's/^/    /' "$PARITY_DIR/setup.log"
         exit 4
     fi
-    echo -e "  frisches 3.11-venv + requirements.txt installieren (~30–60 s)..."
-    if ! uv pip install --python "$PARITY_DIR/venv/bin/python" -q -r "$EEDC_DIR/backend/requirements.txt" >"$PARITY_DIR/pip.log" 2>&1; then
-        echo -e "${RED}  pip install (requirements.txt) auf 3.11 fehlgeschlagen:${NC}"
+    echo -e "  frisches 3.11-venv + requirements.lock installieren (~30–60 s)..."
+    if ! uv pip install --python "$PARITY_DIR/venv/bin/python" -q -r "$EEDC_DIR/backend/requirements.lock" >"$PARITY_DIR/pip.log" 2>&1; then
+        echo -e "${RED}  pip install (requirements.lock) auf 3.11 fehlgeschlagen:${NC}"
         tail -8 "$PARITY_DIR/pip.log" | sed 's/^/    /'
         exit 4
     fi

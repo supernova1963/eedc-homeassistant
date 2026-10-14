@@ -80,7 +80,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 from backend.core import field_definitions as fd
 from backend.core import investition_parameter as ip
