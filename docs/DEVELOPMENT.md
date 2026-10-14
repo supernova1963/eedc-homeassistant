@@ -1084,9 +1084,10 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 
 *Dieses Dokument trägt keine Versionsnummer — siehe Kopf. Stand der letzten Messung: 2026-08-07, Layer- und Service-Listen 2026-08-11.*
 
-## Wartungsmodus — so läuft eine Fix-Sitzung (seit 11.10.2026)
+## Pflege — so läuft eine Fix-Sitzung (seit 11.10.2026)
 
-> eedc wird gepflegt, nicht weiterentwickelt (Entscheid Maintainer 10./11.10.2026; Hintergrund in `ARCHIV-CLAUDE-2026-10-10.md`).
+> eedc ist ausgereift: Fehler haben Vorrang und erscheinen mit dem nächsten Release, in der Regel monatlich; Wünsche gehen nach #110
+> (Entscheid Maintainer 10./11.10.2026; Hintergrund in `ARCHIV-CLAUDE-2026-10-10.md`).
 > Dieser Abschnitt ist der komplette Ablauf, damit eine Sitzung ohne weiteres Vorwissen einen gemeldeten Fehler sauber behebt.
 
 1. **Eingang.** Nur ein Melder-Beitrag (GitHub-Issue, simon42-Thread 89667, photovoltaikforum 258098, community-smarthome 10057, PN) oder
