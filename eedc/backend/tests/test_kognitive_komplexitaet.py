@@ -70,8 +70,9 @@ AUSNAHMEN: dict[str, str] = {
 
 
 #: Bestand über 100 mit vorbereitetem Umbau-Auftrag — befristet, darf nur schrumpfen: landet der Umbau, fliegt die
-#: Zeile (`test_abbau_ist_noch_noetig` wird sonst rot). Neue Einträge gibt es nicht — ein Neuzugang über 100 ist ein
-#: Umbau-Fall. Reihenfolge und Bau-Prompts: ~/.claude/plans/opus-berichte/RF-19 … RF-28.
+#: Zeile (`test_abbau_ist_noch_noetig` wird sonst rot). Seit RF-28 (15.10.2026) leer; die zehn Einträge RF-19 … RF-28
+#: sind gebaut. Ein Neuzugang über 100 ist ein Umbau-Fall, kein Eintrag — die Liste füllt sich nur mit einem
+#: freigegebenen Auftrag samt Nummer.
 ABBAU: dict[str, str] = {
 }
 
