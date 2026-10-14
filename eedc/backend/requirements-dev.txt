@@ -33,3 +33,7 @@ pytest-xdist>=3.8.0
 # Stil-Regeln sind bewusst kein Gate (docs/DEVELOPMENT.md → Code-Konventionen).
 # Obergrenze, weil eine neue Minor neue Regeln oder Fixes bringen kann; Anheben = einmal messen.
 ruff>=0.17.0,<0.18
+
+# Kognitive Komplexität (SonarSource-Metrik) für den Wächter backend/tests/test_kognitive_komplexitaet.py —
+# dieselbe Bibliothek wie das Refactoring-Werkzeug, damit Vorlage, Nachmessung und Gate eine Zahl nennen.
+cognitive-complexity>=1.3.0,<2

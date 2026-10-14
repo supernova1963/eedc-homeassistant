@@ -248,6 +248,13 @@ neue Version — ein Commit auf `main` genügt nicht.
   Syntaxfehler. Vier Regeln stehen mit Baseline-Zahl als `ignore` in der Datei; wer eine einschaltet,
   misst erst und räumt dann auf. Stil-Regeln sind bewusst kein Gate, `black` gibt es nicht. Wer
   formatiert, formatiert von Hand im Stil der Umgebung — kein Repo-weiter Reformat-Lauf.
+- **Kognitive Komplexität je Funktion: Schwelle 50, keine über 100** — gewächtert durch
+  `backend/tests/test_kognitive_komplexitaet.py` mit eingecheckter Baseline, die nur schrumpfen darf
+  (seit 14.10.2026). Die Schwelle ist bewusst 50 statt SonarQubes Voreinstellung 15: eedc wird mit
+  KI-Unterstützung und Golden Masters gepflegt, und 50 ist nach der Refactoring-Serie die Größe, die eine
+  Bau-Sitzung samt Kontext sicher in einem Zug ändert; gemessen am 14.10.2026 steigt die Dichte der
+  Fund-Vermerke je 1 000 Zeilen von 12,7 (≤ 15) über 16,9 (16–50) auf 18,8 (51–100). Ausnahmen über 100
+  (lineare Listen) stehen mit Grund im Wächter; ein Neuzugang über 50 wird aufgeteilt, nicht eingetragen.
 - Neuer Code liest im Stil der Nachbarschaft: gleiche Kommentar-Dichte, gleiche Benennung.
 
 ### TypeScript (Frontend)

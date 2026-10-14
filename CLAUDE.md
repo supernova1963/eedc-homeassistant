@@ -70,6 +70,8 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
 - **Design:** keine Hex-Farben außerhalb `lib/colors.ts` (`npm run check:design` = 0); eine Komponenten-Klasse = eine SoT-Komponente;
   Typ-Reihenfolge `INVESTITION_TYP_ORDER`; „eedc" klein; „% " mit Leerzeichen.
 - **Zeitzone:** eedc folgt HA, kein Pin. **Legacy `ha_sensor_*`-Spalten** bleiben im Model.
+- **Kognitive Komplexität:** Schwelle 50 je Funktion, keine über 100; Wächter `backend/tests/test_kognitive_komplexitaet.py`
+  mit Baseline, die nur schrumpft (Neuschreiben per Befehl im Docstring). Ein Neuzugang über 50 wird aufgeteilt (Bauform RF-1).
 - **Abhängigkeiten:** Absicht in `backend/requirements.txt`, ausgeliefert wird `requirements.lock` (Anleitung im Kopf der
   txt; nach jeder Änderung neu erzeugen). Das Standalone-Dockerfile liegt im Spiegel `eedc` und braucht dieselbe Änderung von Hand.
 
