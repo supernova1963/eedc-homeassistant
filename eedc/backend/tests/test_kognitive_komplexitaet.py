@@ -73,7 +73,6 @@ AUSNAHMEN: dict[str, str] = {
 #: Zeile (`test_abbau_ist_noch_noetig` wird sonst rot). Neue Einträge gibt es nicht — ein Neuzugang über 100 ist ein
 #: Umbau-Fall. Reihenfolge und Bau-Prompts: ~/.claude/plans/opus-berichte/RF-19 … RF-28.
 ABBAU: dict[str, str] = {
-    "api/routes/prognosen.py::get_prognosen_vergleich": "RF-28 (kognitiv 133 am 14.10.2026)",
 }
 
 

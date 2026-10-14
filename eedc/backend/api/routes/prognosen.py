@@ -10,6 +10,7 @@ GET /api/aussichten/prognosen/{anlage_id}/genauigkeit
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime, date, timedelta
 from typing import Optional, List
 from zoneinfo import ZoneInfo
@@ -426,6 +427,80 @@ async def get_prognose_quellen_status():
     return {i: await discovery_status(i) for i in ("sfml", "solcast")}
 
 
+# ── Zwischenstände der Vergleichs-Route (RF-28) ──────────────────────────────
+# Je Spalte EIN Ergebnis-Objekt, gebaut von genau einer Phase. Die Feldnamen
+# sind die lokalen Namen, die bis RF-28 im Rumpf von `get_prognosen_vergleich`
+# standen — `_antwort` liest sie Feld für Feld in der Reihenfolge der Response.
+
+
+@dataclass
+class _KanonSpalten:
+    """OpenMeteo- und eedc-Spalte nach dem Prognose-Kanon (`_kanon_spalten`)."""
+    lf_result: object
+    lernfaktor: Optional[float]
+    openmeteo_heute_kwh: Optional[float]
+    openmeteo_morgen_kwh: Optional[float]
+    openmeteo_uebermorgen_kwh: Optional[float]
+    openmeteo_stundenprofil: list
+    openmeteo_tagesprofile: list
+    eedc_heute_kwh: Optional[float]
+    eedc_morgen_kwh: Optional[float]
+    eedc_uebermorgen_kwh: Optional[float]
+    eedc_stundenprofil: list
+    eedc_tagesprofile: list
+
+
+@dataclass
+class _SfmlSpalte:
+    """SFML-Spalte (`_sfml_spalte`) — Tagesprofile als kWh-Slots und als Schema-Einträge."""
+    sfml_tagesprofile: list
+    sfml_heute_kwh: Optional[float]
+    sfml_morgen_kwh: Optional[float]
+    sfml_uebermorgen_kwh: Optional[float]
+    sfml_verfuegbar: bool
+    sfml_tagesprofile_eintraege: list
+    sfml_stundenprofil: list
+
+
+@dataclass
+class _IstHeute:
+    """IST-Ertrag heute (`_ist_heute`)."""
+    ist_p: StundenProfil
+    ist_stundenprofil: list
+    ist_heute_kwh: float
+    ist_unvollstaendig: bool
+
+
+@dataclass
+class _Verbleibend:
+    """Tagesprojektionen je Quelle und die Gesamtspalte (`_verbleibend`)."""
+    verbleibend_kwh: Optional[float]
+    verbleibend_om_kwh: Optional[float]
+    verbleibend_eedc_kwh: Optional[float]
+    verbleibend_solcast_kwh: Optional[float]
+    verbleibend_sfml_kwh: Optional[float]
+
+
+@dataclass
+class _SolcastSpalte:
+    """Solcast-Spalte ohne die Tageshälften (`_solcast_aufbereiten`)."""
+    solcast_stundenprofil: list
+    solcast_tage: list
+    solcast_morgen_p10: Optional[float]
+    solcast_morgen_p90: Optional[float]
+    solcast_uebermorgen_kwh: Optional[float]
+
+
+@dataclass
+class _Tageshaelften:
+    """Vormittag/Nachmittag je Quelle und Tag (`_tageshaelften`)."""
+    om_ths: list
+    eedc_ths: list
+    sfml_ths: list
+    sc_ths: list
+    ist_th: Optional[TageshaelfteSchema]
+
+
 @router.get("/prognosen/{anlage_id}", response_model=PrognosenVergleichResponse)
 async def get_prognosen_vergleich(
     anlage_id: int,
@@ -437,6 +512,10 @@ async def get_prognosen_vergleich(
     Evaluierungs-Cockpit mit Vormittag/Nachmittag-Split.
     Ziel: Optimales Zusammenspiel beider Quellen erarbeiten.
     """
+    # RF-28 (Serie „Funktion vor Datei"): Orchestrator. Kopf, Bestandssperre und
+    # Solcast-Status stehen hier; jede Spalte rechnet eine Phase darunter, in der
+    # Reihenfolge, in der sie vorher im Rumpf stand (Abrufe, SQL und Log behalten
+    # damit ihre Folge). Der Docstring oben ist die OpenAPI-Beschreibung — bleibt.
     now = datetime.now(ZoneInfo("Europe/Berlin"))
     heute = date.today()
     horizont = [heute + timedelta(days=o) for o in range(VERGLEICH_TAGE)]
@@ -461,39 +540,83 @@ async def get_prognosen_vergleich(
     # (mit Defaults 35°/Süd) für einen eigenen GTI-Abruf — siehe die
     # Roh-Kurve weiter unten (R21-1).
     wetter_modell = anlage.wetter_modell or "auto"
+
+    wetter, solcast, ist_rows = await _parallele_abrufe(db, anlage, anlage_id, heute, wetter_modell)
+    openmeteo_tage, openmeteo_heute_kwh, openmeteo_morgen_kwh, openmeteo_uebermorgen_kwh = (
+        _openmeteo_tageswerte(wetter, anlage, pv_invs, system_losses)
+    )
+    kanon = await _kanon_spalten(
+        db, anlage, anlage_id, heute, openmeteo_tage,
+        openmeteo_heute_kwh, openmeteo_morgen_kwh, openmeteo_uebermorgen_kwh,
+    )
+
+    # ── SFML / Tom-HA: echtes mehrtägiges Stundenprofil (wenn als Quelle gewählt) ──
+    # Einzelquellen-Treue (#110 „A"): bei gewählter SFML-Quelle SFMLs eigene
+    # Kurvenform (evcc `forecast`, 3 Tage stündlich) statt GTI-Schmier. Nur
+    # HA-Add-on; KEIN Cross-Quellen-Genauigkeits-Ranking.
+    pq = resolve_prognose_quelle(anlage)
+    sfml = await _sfml_spalte(pq, heute)
+
+    ist = await _ist_heute(db, anlage_id, heute, now, ist_rows)
+
+    aktuelle_stunde = now.hour
+    verbleibend = _verbleibend(pq, ist.ist_heute_kwh, aktuelle_stunde, kanon, solcast, sfml)
+    sc = _solcast_aufbereiten(solcast, heute)
+    haelften = _tageshaelften(anlage, heute, kanon, sfml, sc.solcast_stundenprofil, solcast, ist.ist_stundenprofil)
+
+    # ── Solcast-Status ermitteln ──
+    sc_status, sc_hinweis = get_solcast_status(anlage)
+    # Wenn Solcast Daten da sind, ist der Status immer "ok"
+    if solcast is not None:
+        sc_status = "ok"
+        sc_hinweis = ""
+
+    return _antwort(
+        openmeteo_tage, kanon, sfml, ist, verbleibend, sc, haelften,
+        solcast, sc_status, sc_hinweis, wetter_modell, aktuelle_stunde,
+    )
+
+
+async def _fetch_wetter_mit_fallback(anlage, model_name, max_days):
+    """Primary-Modell + best_match Fallback parallel abrufen und mergen."""
+    primary, fallback = await asyncio.gather(
+        fetch_open_meteo_forecast(
+            latitude=anlage.latitude, longitude=anlage.longitude,
+            days=max_days, skip_jitter=True, model=model_name,
+        ),
+        fetch_open_meteo_forecast(
+            latitude=anlage.latitude, longitude=anlage.longitude,
+            days=VERGLEICH_TAGE, skip_jitter=True, model=None,
+        ),
+    )
+    if not primary and not fallback:
+        return None
+    if not primary:
+        return fallback
+    if not fallback:
+        return primary
+    # Beide verfügbar → Primary-Tage haben Vorrang, Fallback füllt auf
+    primary_dates = {t["datum"] for t in primary.get("tage", [])}
+    merged_tage = list(primary.get("tage", []))
+    merged_tage.extend(t for t in fallback.get("tage", []) if t["datum"] not in primary_dates)
+    merged_tage.sort(key=lambda t: t["datum"])
+    return {**primary, "tage": merged_tage}
+
+
+async def _parallele_abrufe(db: AsyncSession, anlage: Anlage, anlage_id: int, heute: date, wetter_modell: str):
+    """Wetter (mit Modell-Kaskade), Solcast und die IST-Stunden von heute — parallel.
+
+    Ein fehlgeschlagener Abruf wird geloggt und als ``None`` (IST: leere Liste)
+    weitergereicht; der Endpoint liefert, was verfügbar ist.
+    """
     model_name, max_days = WETTER_MODELLE.get(wetter_modell, (None, 16))
 
     # ── Wetter-Abruf: Kaskade bei Modellen mit kurzem Horizont (z.B. icon_d2 = 2 Tage) ──
     needs_fallback = wetter_modell != "auto" and VERGLEICH_TAGE > max_days
 
-    async def _fetch_wetter_mit_fallback():
-        """Primary-Modell + best_match Fallback parallel abrufen und mergen."""
-        primary, fallback = await asyncio.gather(
-            fetch_open_meteo_forecast(
-                latitude=anlage.latitude, longitude=anlage.longitude,
-                days=max_days, skip_jitter=True, model=model_name,
-            ),
-            fetch_open_meteo_forecast(
-                latitude=anlage.latitude, longitude=anlage.longitude,
-                days=VERGLEICH_TAGE, skip_jitter=True, model=None,
-            ),
-        )
-        if not primary and not fallback:
-            return None
-        if not primary:
-            return fallback
-        if not fallback:
-            return primary
-        # Beide verfügbar → Primary-Tage haben Vorrang, Fallback füllt auf
-        primary_dates = {t["datum"] for t in primary.get("tage", [])}
-        merged_tage = list(primary.get("tage", []))
-        merged_tage.extend(t for t in fallback.get("tage", []) if t["datum"] not in primary_dates)
-        merged_tage.sort(key=lambda t: t["datum"])
-        return {**primary, "tage": merged_tage}
-
     # ── Parallele Datenabrufe (return_exceptions: ein API-Timeout crasht nicht alles) ──
     wetter, solcast, ist_rows = await asyncio.gather(
-        _fetch_wetter_mit_fallback() if needs_fallback else fetch_open_meteo_forecast(
+        _fetch_wetter_mit_fallback(anlage, model_name, max_days) if needs_fallback else fetch_open_meteo_forecast(
             latitude=anlage.latitude, longitude=anlage.longitude,
             days=VERGLEICH_TAGE, skip_jitter=True, model=model_name,
         ),
@@ -517,7 +640,11 @@ async def get_prognosen_vergleich(
         logger.warning(f"IST-Daten Abfrage fehlgeschlagen: {ist_rows}")
         ist_rows = None
     ist_rows = ist_rows.scalars().all() if ist_rows is not None else []
+    return wetter, solcast, ist_rows
 
+
+def _openmeteo_tageswerte(wetter, anlage: Anlage, pv_invs: list[Investition], system_losses):
+    """OpenMeteo-Tageswerte der Wettertabelle und die drei Kopfzahlen — vor der Kanon-Übernahme."""
     # ── OpenMeteo Tageswerte ──
     openmeteo_tage = []
     if wetter:
@@ -552,7 +679,20 @@ async def get_prognosen_vergleich(
     openmeteo_heute_kwh = openmeteo_tage[0].pv_prognose_kwh if len(openmeteo_tage) >= 1 else None
     openmeteo_morgen_kwh = openmeteo_tage[1].pv_prognose_kwh if len(openmeteo_tage) >= 2 else None
     openmeteo_uebermorgen_kwh = openmeteo_tage[2].pv_prognose_kwh if len(openmeteo_tage) >= 3 else None
+    return openmeteo_tage, openmeteo_heute_kwh, openmeteo_morgen_kwh, openmeteo_uebermorgen_kwh
 
+
+async def _kanon_spalten(
+    db: AsyncSession, anlage: Anlage, anlage_id: int, heute: date, openmeteo_tage: list,
+    openmeteo_heute_kwh: Optional[float], openmeteo_morgen_kwh: Optional[float],
+    openmeteo_uebermorgen_kwh: Optional[float],
+) -> _KanonSpalten:
+    """eedc- und OpenMeteo-Spalte aus dem Prognose-Kanon; ohne Kanon der Skalar-Fallback.
+
+    Hängt je Tag den Kanon-Wert in ``openmeteo_tage`` ein (**dieselben**
+    Schema-Objekte, in place) und überschreibt die drei OM-Kopfzahlen, wenn der
+    Kanon den Tag kennt.
+    """
     # ── OpenMeteo-Roh-Stundenprofile (3 Tage) — Quelle: Prognose-Kanon ──
     # Gefüllt wird unten aus `kanon_prog.tage[i].om_stundenprofil_kwh` (Slot-
     # Summe des Multi-String-Fan-outs), NICHT aus einem eigenen GTI-Abruf.
@@ -594,33 +734,8 @@ async def get_prognosen_vergleich(
         kanon_prog = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
     except Exception as e:
         logger.warning(f"eedc-Kaskaden-Prognose fehlgeschlagen: {e}")
-    kanon_by_datum: dict[str, object] = {}
     if kanon_prog:
-        for kt in kanon_prog.tage:
-            if kt is not None:
-                kanon_by_datum[kt.datum] = kt
-        eedc_tagessummen: list[Optional[float]] = [None, None, None]
-        for tag_idx in range(3):
-            tag = kanon_prog.tage[tag_idx] if tag_idx < len(kanon_prog.tage) else None
-            if tag is None:
-                continue
-            eedc_tagessummen[tag_idx] = tag.eedc_kwh
-            if tag.profil is not None:
-                eedc_tagesprofile[tag_idx] = [
-                    StundenProfilEintrag(
-                        stunde=h, kw=tag.profil.stundenprofil_export_kwh[h]
-                    )
-                    for h in range(24)
-                ]
-            # OM-Roh-Kurve aus demselben Kanon-Tag (R21-1). `None` heißt: der
-            # Kanon hatte für diesen Tag keine Stundenbasis (OpenMeteo-Schätz-
-            # pfad ohne hourly) — dann bleibt die Kurve leer, statt hier einen
-            # zweiten Rechenweg ins selbe Chart zu mischen.
-            if tag.om_stundenprofil_kwh is not None:
-                openmeteo_tagesprofile[tag_idx] = [
-                    StundenProfilEintrag(stunde=h, kw=tag.om_stundenprofil_kwh[h])
-                    for h in range(24)
-                ]
+        kanon_by_datum, eedc_tagessummen = _kanon_tage(kanon_prog, eedc_tagesprofile, openmeteo_tagesprofile)
         eedc_stundenprofil = eedc_tagesprofile[0]
         openmeteo_stundenprofil = openmeteo_tagesprofile[0]
         eedc_heute_kwh, eedc_morgen_kwh, eedc_uebermorgen_kwh = eedc_tagessummen
@@ -653,12 +768,61 @@ async def get_prognosen_vergleich(
         eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None else None
         eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None else None
         eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None
+    return _KanonSpalten(
+        lf_result=lf_result,
+        lernfaktor=lernfaktor,
+        openmeteo_heute_kwh=openmeteo_heute_kwh,
+        openmeteo_morgen_kwh=openmeteo_morgen_kwh,
+        openmeteo_uebermorgen_kwh=openmeteo_uebermorgen_kwh,
+        openmeteo_stundenprofil=openmeteo_stundenprofil,
+        openmeteo_tagesprofile=openmeteo_tagesprofile,
+        eedc_heute_kwh=eedc_heute_kwh,
+        eedc_morgen_kwh=eedc_morgen_kwh,
+        eedc_uebermorgen_kwh=eedc_uebermorgen_kwh,
+        eedc_stundenprofil=eedc_stundenprofil,
+        eedc_tagesprofile=eedc_tagesprofile,
+    )
 
-    # ── SFML / Tom-HA: echtes mehrtägiges Stundenprofil (wenn als Quelle gewählt) ──
-    # Einzelquellen-Treue (#110 „A"): bei gewählter SFML-Quelle SFMLs eigene
-    # Kurvenform (evcc `forecast`, 3 Tage stündlich) statt GTI-Schmier. Nur
-    # HA-Add-on; KEIN Cross-Quellen-Genauigkeits-Ranking.
-    pq = resolve_prognose_quelle(anlage)
+
+def _kanon_tage(kanon_prog, eedc_tagesprofile: list, openmeteo_tagesprofile: list):
+    """Kanon-Tage nach Datum, eedc-Tagessummen [heute, morgen, übermorgen] und die
+    Stundenkurven beider Spalten — die zwei Profil-Listen werden **in place**
+    je Tag belegt (ein Tag ohne Kanon-Eintrag oder ohne Stundenbasis bleibt ``[]``)."""
+    kanon_by_datum: dict[str, object] = {}
+    for kt in kanon_prog.tage:
+        if kt is not None:
+            kanon_by_datum[kt.datum] = kt
+    eedc_tagessummen: list[Optional[float]] = [None, None, None]
+    for tag_idx in range(3):
+        tag = kanon_prog.tage[tag_idx] if tag_idx < len(kanon_prog.tage) else None
+        if tag is None:
+            continue
+        eedc_tagessummen[tag_idx] = tag.eedc_kwh
+        if tag.profil is not None:
+            eedc_tagesprofile[tag_idx] = [
+                StundenProfilEintrag(
+                    stunde=h, kw=tag.profil.stundenprofil_export_kwh[h]
+                )
+                for h in range(24)
+            ]
+        # OM-Roh-Kurve aus demselben Kanon-Tag (R21-1). `None` heißt: der
+        # Kanon hatte für diesen Tag keine Stundenbasis (OpenMeteo-Schätz-
+        # pfad ohne hourly) — dann bleibt die Kurve leer, statt hier einen
+        # zweiten Rechenweg ins selbe Chart zu mischen.
+        if tag.om_stundenprofil_kwh is not None:
+            openmeteo_tagesprofile[tag_idx] = [
+                StundenProfilEintrag(stunde=h, kw=tag.om_stundenprofil_kwh[h])
+                for h in range(24)
+            ]
+    return kanon_by_datum, eedc_tagessummen
+
+
+async def _sfml_discovery(pq, heute: date):
+    """SFML-Werte und -Tagesprofile aus der HA-Discovery (nur bei gewählter SFML-Quelle).
+
+    Bricht die Discovery mittendrin ab, bleibt stehen, was bis dahin gesetzt war
+    — derselbe Stand, den der ``except`` vorher im Rumpf der Route hinterließ.
+    """
     sfml_tagesprofile: list[list[float]] = [[], [], []]  # kWh-Slots je Tag (Backward)
     sfml_heute_kwh = None
     sfml_morgen_kwh = None
@@ -680,6 +844,12 @@ async def get_prognosen_vergleich(
                         sfml_tagesprofile = [sfml_stundenprofil_aus_hours(hours_attr), [], []]
         except Exception as e:
             logger.debug(f"SFML-Discovery (Prognosen-Tab) fehlgeschlagen: {e}")
+    return sfml_tagesprofile, sfml_heute_kwh, sfml_morgen_kwh, sfml_uebermorgen_kwh
+
+
+async def _sfml_spalte(pq, heute: date) -> _SfmlSpalte:
+    """SFML-Spalte: Discovery, Tagessummen aus dem Profil, Schema-Einträge je Tag."""
+    sfml_tagesprofile, sfml_heute_kwh, sfml_morgen_kwh, sfml_uebermorgen_kwh = await _sfml_discovery(pq, heute)
     sfml_verfuegbar = bool(sfml_tagesprofile and sfml_tagesprofile[0] and any(sfml_tagesprofile[0]))
     # Tagessummen aus dem Profil ableiten, wenn die State-Skalare fehlen.
     if sfml_verfuegbar and sfml_heute_kwh is None:
@@ -694,7 +864,19 @@ async def get_prognosen_vergleich(
         for i, tag in enumerate(sfml_tagesprofile)
     ]
     sfml_stundenprofil = sfml_tagesprofile_eintraege[0] if sfml_tagesprofile_eintraege else []
+    return _SfmlSpalte(
+        sfml_tagesprofile=sfml_tagesprofile,
+        sfml_heute_kwh=sfml_heute_kwh,
+        sfml_morgen_kwh=sfml_morgen_kwh,
+        sfml_uebermorgen_kwh=sfml_uebermorgen_kwh,
+        sfml_verfuegbar=sfml_verfuegbar,
+        sfml_tagesprofile_eintraege=sfml_tagesprofile_eintraege,
+        sfml_stundenprofil=sfml_stundenprofil,
+    )
 
+
+async def _ist_heute(db: AsyncSession, anlage_id: int, heute: date, now: datetime, ist_rows) -> _IstHeute:
+    """IST-Ertrag heute über den zentralen Adapter (samt verworfener PV der Tageszeile)."""
     # ── IST-Ertrag heute (zentraler Adapter) ──
     # Issue #135: pv_kw kann None sein (kein Zähler gemappt / Datenlücke). None-
     # Stunden fließen NICHT in die Summe ein und bleiben im Profil als Lücke
@@ -713,7 +895,18 @@ async def get_prognosen_vergleich(
     ist_stundenprofil = _profil_zu_eintraegen(ist_p)
     ist_heute_kwh = ist_p.tageswert_kwh  # roh/ungerundet — für verbleibend-Rechnung
     ist_unvollstaendig = ist_p.unvollstaendig
+    return _IstHeute(
+        ist_p=ist_p,
+        ist_stundenprofil=ist_stundenprofil,
+        ist_heute_kwh=ist_heute_kwh,
+        ist_unvollstaendig=ist_unvollstaendig,
+    )
 
+
+def _verbleibend(
+    pq, ist_heute_kwh: float, aktuelle_stunde: int, kanon: _KanonSpalten, solcast, sfml: _SfmlSpalte,
+) -> _Verbleibend:
+    """Verbleibend je Quelle und für die Gesamtspalte (gewählte Quelle mit Fallback-Kaskade)."""
     # ── Verbleibend = Tagesprojektion (IST bisher + Reststunden der Quelle) ──
     # Einheitliches Verfahren für ALLE Spalten (#296 #3/#5/#6):
     #   • #6: nicht mehr „Tagesprognose − IST" je Quelle vs. „IST + Reststunden"
@@ -722,18 +915,16 @@ async def get_prognosen_vergleich(
     #     (pq.quelle), nicht mehr hardcodiert Solcast→OpenMeteo.
     #   • #5: IST + Rest funktioniert auch bei ist_heute_kwh==0 (frühmorgens) —
     #     keine „—"-Lücke mehr in den Pro-Quellen-Spalten.
-    aktuelle_stunde = now.hour
-
     def _projektion(arr: Optional[list[float]]) -> Optional[float]:
         return _tagesprojektion(ist_heute_kwh, arr, aktuelle_stunde)
 
-    om_arr = _eintraege_zu_array(openmeteo_stundenprofil)
-    eedc_arr = _eintraege_zu_array(eedc_stundenprofil)
+    om_arr = _eintraege_zu_array(kanon.openmeteo_stundenprofil)
+    eedc_arr = _eintraege_zu_array(kanon.eedc_stundenprofil)
     sc_arr = list(solcast.hourly_kw) if solcast else None
-    sfml_arr = list(sfml_tagesprofile[0]) if sfml_verfuegbar else None
+    sfml_arr = list(sfml.sfml_tagesprofile[0]) if sfml.sfml_verfuegbar else None
 
-    verbleibend_om_kwh = _projektion(om_arr) if openmeteo_stundenprofil else None
-    verbleibend_eedc_kwh = _projektion(eedc_arr) if eedc_stundenprofil else None
+    verbleibend_om_kwh = _projektion(om_arr) if kanon.openmeteo_stundenprofil else None
+    verbleibend_eedc_kwh = _projektion(eedc_arr) if kanon.eedc_stundenprofil else None
     verbleibend_solcast_kwh = _projektion(sc_arr)
     verbleibend_sfml_kwh = _projektion(sfml_arr)
 
@@ -754,7 +945,17 @@ async def get_prognosen_vergleich(
             if verbleibend_eedc_kwh is not None
             else verbleibend_om_kwh
         )
+    return _Verbleibend(
+        verbleibend_kwh=verbleibend_kwh,
+        verbleibend_om_kwh=verbleibend_om_kwh,
+        verbleibend_eedc_kwh=verbleibend_eedc_kwh,
+        verbleibend_solcast_kwh=verbleibend_solcast_kwh,
+        verbleibend_sfml_kwh=verbleibend_sfml_kwh,
+    )
 
+
+def _solcast_aufbereiten(solcast, heute: date) -> _SolcastSpalte:
+    """Solcast-Spalte: Stundenprofil heute, Tagesliste, Perzentile morgen, Übermorgen."""
     # ── Solcast aufbereiten ──
     solcast_stundenprofil = []
     solcast_tage = []
@@ -774,7 +975,20 @@ async def get_prognosen_vergleich(
                 solcast_morgen_p90 = t["p90"]
             if t["datum"] == uebermorgen_str:
                 solcast_uebermorgen_kwh = t["kwh"]
+    return _SolcastSpalte(
+        solcast_stundenprofil=solcast_stundenprofil,
+        solcast_tage=solcast_tage,
+        solcast_morgen_p10=solcast_morgen_p10,
+        solcast_morgen_p90=solcast_morgen_p90,
+        solcast_uebermorgen_kwh=solcast_uebermorgen_kwh,
+    )
 
+
+def _tageshaelften(
+    anlage: Anlage, heute: date, kanon: _KanonSpalten, sfml: _SfmlSpalte,
+    solcast_stundenprofil: list, solcast, ist_stundenprofil: list,
+) -> _Tageshaelften:
+    """Vormittag/Nachmittag je Quelle (je 3 Einträge: heute, morgen, übermorgen) und IST heute."""
     # ── Tageshälften (je 3 Einträge: heute, morgen, übermorgen) ──
     # Solar Noon pro Tag (Equation of Time) — Split an astronomischer Tagesmitte,
     # nicht an 12:00 Clockzeit. Konsistent zu solar_forecast_service.
@@ -784,20 +998,30 @@ async def get_prognosen_vergleich(
     ]
     om_ths = [
         _berechne_tageshaelfte(p, solar_noons[i]) if p else None
-        for i, p in enumerate(openmeteo_tagesprofile)
+        for i, p in enumerate(kanon.openmeteo_tagesprofile)
     ]
     eedc_ths = [
         _berechne_tageshaelfte(p, solar_noons[i]) if p else None
-        for i, p in enumerate(eedc_tagesprofile)
+        for i, p in enumerate(kanon.eedc_tagesprofile)
     ]
     # SFML VM/NM pro Tag direkt aus dem echten Stundenprofil (kein Schätzen nötig)
     sfml_ths: list[Optional[TageshaelfteSchema]] = [
         _berechne_tageshaelfte(p, solar_noons[i]) if p else None
-        for i, p in enumerate(sfml_tagesprofile_eintraege[:3])
+        for i, p in enumerate(sfml.sfml_tagesprofile_eintraege[:3])
     ]
     while len(sfml_ths) < 3:
         sfml_ths.append(None)
 
+    sc_ths = _solcast_tageshaelften(solcast, heute, solcast_stundenprofil, solar_noons, om_ths)
+
+    ist_th = _berechne_tageshaelfte(ist_stundenprofil, solar_noons[0]) if ist_stundenprofil else None
+    return _Tageshaelften(om_ths=om_ths, eedc_ths=eedc_ths, sfml_ths=sfml_ths, sc_ths=sc_ths, ist_th=ist_th)
+
+
+def _solcast_tageshaelften(
+    solcast, heute: date, solcast_stundenprofil: list, solar_noons: list, om_ths: list,
+) -> list[Optional[TageshaelfteSchema]]:
+    """Solcast-Tageshälften: eigenes Profil je Tag (#357), sonst die OM-Verteilung der Tagesmenge."""
     # Solcast VM/NM pro Tag. Seit #357 hat jeder Tag, für den Solcast ein
     # eigenes Stundenprofil liefert, seine EIGENE Tageshälfte — vorher wurde
     # für Morgen/Übermorgen die OpenMeteo-Verteilung übernommen, die
@@ -828,28 +1052,28 @@ async def get_prognosen_vergleich(
                 vormittag_kwh=round(sc_tag["kwh"] * vm_anteil, 1),
                 nachmittag_kwh=round(sc_tag["kwh"] * (1 - vm_anteil), 1),
             )
+    return sc_ths
 
-    ist_th = _berechne_tageshaelfte(ist_stundenprofil, solar_noons[0]) if ist_stundenprofil else None
 
-    # ── Solcast-Status ermitteln ──
-    sc_status, sc_hinweis = get_solcast_status(anlage)
-    # Wenn Solcast Daten da sind, ist der Status immer "ok"
-    if solcast is not None:
-        sc_status = "ok"
-        sc_hinweis = ""
-
+def _antwort(
+    openmeteo_tage: list, kanon: _KanonSpalten, sfml: _SfmlSpalte, ist: _IstHeute, verbleibend: _Verbleibend,
+    sc: _SolcastSpalte, haelften: _Tageshaelften, solcast, sc_status, sc_hinweis, wetter_modell: str,
+    aktuelle_stunde: int,
+) -> PrognosenVergleichResponse:
+    """Die Response — Feld für Feld in der Reihenfolge, in der sie bis RF-28 im Rumpf der Route stand."""
+    lf_result = kanon.lf_result
     return PrognosenVergleichResponse(
-        openmeteo_heute_kwh=openmeteo_heute_kwh,
-        openmeteo_morgen_kwh=openmeteo_morgen_kwh,
-        openmeteo_uebermorgen_kwh=openmeteo_uebermorgen_kwh,
+        openmeteo_heute_kwh=kanon.openmeteo_heute_kwh,
+        openmeteo_morgen_kwh=kanon.openmeteo_morgen_kwh,
+        openmeteo_uebermorgen_kwh=kanon.openmeteo_uebermorgen_kwh,
         openmeteo_tage=openmeteo_tage,
-        openmeteo_tageshaelften=om_ths,
-        eedc_heute_kwh=eedc_heute_kwh,
-        eedc_morgen_kwh=eedc_morgen_kwh,
-        eedc_uebermorgen_kwh=eedc_uebermorgen_kwh,
-        eedc_stundenprofil=eedc_stundenprofil,
-        eedc_tageshaelften=eedc_ths,
-        eedc_lernfaktor=lernfaktor,
+        openmeteo_tageshaelften=haelften.om_ths,
+        eedc_heute_kwh=kanon.eedc_heute_kwh,
+        eedc_morgen_kwh=kanon.eedc_morgen_kwh,
+        eedc_uebermorgen_kwh=kanon.eedc_uebermorgen_kwh,
+        eedc_stundenprofil=kanon.eedc_stundenprofil,
+        eedc_tageshaelften=haelften.eedc_ths,
+        eedc_lernfaktor=kanon.lernfaktor,
         eedc_lernfaktor_stufe=lf_result.label,
         eedc_lernfaktor_o12=lf_result.faktor_o12,
         eedc_lernfaktor_o12_delta_pct=lf_result.delta_o12_pct,
@@ -865,18 +1089,18 @@ async def get_prognosen_vergleich(
         solcast_p10_kwh=solcast.daily_p10_kwh if solcast else None,
         solcast_p90_kwh=solcast.daily_p90_kwh if solcast else None,
         solcast_morgen_kwh=solcast.tomorrow_kwh if solcast else None,
-        solcast_morgen_p10_kwh=solcast_morgen_p10,
-        solcast_morgen_p90_kwh=solcast_morgen_p90,
-        solcast_uebermorgen_kwh=solcast_uebermorgen_kwh,
-        solcast_stundenprofil=solcast_stundenprofil,
-        solcast_tage=solcast_tage,
-        solcast_tageshaelften=sc_ths,
-        sfml_verfuegbar=sfml_verfuegbar,
-        sfml_heute_kwh=sfml_heute_kwh,
-        sfml_morgen_kwh=sfml_morgen_kwh,
-        sfml_uebermorgen_kwh=sfml_uebermorgen_kwh,
-        sfml_stundenprofil=sfml_stundenprofil,
-        sfml_tageshaelften=sfml_ths,
+        solcast_morgen_p10_kwh=sc.solcast_morgen_p10,
+        solcast_morgen_p90_kwh=sc.solcast_morgen_p90,
+        solcast_uebermorgen_kwh=sc.solcast_uebermorgen_kwh,
+        solcast_stundenprofil=sc.solcast_stundenprofil,
+        solcast_tage=sc.solcast_tage,
+        solcast_tageshaelften=haelften.sc_ths,
+        sfml_verfuegbar=sfml.sfml_verfuegbar,
+        sfml_heute_kwh=sfml.sfml_heute_kwh,
+        sfml_morgen_kwh=sfml.sfml_morgen_kwh,
+        sfml_uebermorgen_kwh=sfml.sfml_uebermorgen_kwh,
+        sfml_stundenprofil=sfml.sfml_stundenprofil,
+        sfml_tageshaelften=haelften.sfml_ths,
         # N-52: `> 0` machte aus einer **gemessenen Null** ein „—" — im Winter,
         # bei Schnee und jede Nacht. Eine gemessene 0 ist eine Aussage
         # (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3, Richtung 2), keine Lücke.
@@ -885,16 +1109,16 @@ async def get_prognosen_vergleich(
         # Anlage ganz ohne PV-Zähler bekäme „0,0 kWh IST" statt „—". Träger ist
         # deshalb `hat_messung` (mindestens ein Slot mit Wert), analog
         # `TagesBilanz.pv_erfasst`.
-        ist_heute_kwh=round(ist_heute_kwh, 1) if ist_p.hat_messung else None,
-        ist_stundenprofil=ist_stundenprofil,
-        ist_tageshaelfte=ist_th,
-        ist_unvollstaendig=ist_unvollstaendig,
-        verbleibend_kwh=verbleibend_kwh,
-        verbleibend_om_kwh=verbleibend_om_kwh,
-        verbleibend_eedc_kwh=verbleibend_eedc_kwh,
-        verbleibend_solcast_kwh=verbleibend_solcast_kwh,
-        verbleibend_sfml_kwh=verbleibend_sfml_kwh,
-        openmeteo_stundenprofil=openmeteo_stundenprofil,
+        ist_heute_kwh=round(ist.ist_heute_kwh, 1) if ist.ist_p.hat_messung else None,
+        ist_stundenprofil=ist.ist_stundenprofil,
+        ist_tageshaelfte=haelften.ist_th,
+        ist_unvollstaendig=ist.ist_unvollstaendig,
+        verbleibend_kwh=verbleibend.verbleibend_kwh,
+        verbleibend_om_kwh=verbleibend.verbleibend_om_kwh,
+        verbleibend_eedc_kwh=verbleibend.verbleibend_eedc_kwh,
+        verbleibend_solcast_kwh=verbleibend.verbleibend_solcast_kwh,
+        verbleibend_sfml_kwh=verbleibend.verbleibend_sfml_kwh,
+        openmeteo_stundenprofil=kanon.openmeteo_stundenprofil,
         solcast_letzter_abruf=datetime.now().isoformat(),
         openmeteo_modell=wetter_modell,
         aktuelle_stunde=aktuelle_stunde,
