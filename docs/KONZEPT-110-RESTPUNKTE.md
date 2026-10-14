@@ -54,7 +54,7 @@ Jahre, die USt-Sätze je Jahr (`ust_eigenverbrauch_zeitraum` existiert), und ob 
 
 ### 1.5 Entscheid
 
-**Nicht gebaut.** Aufwandsklasse: mehrere Tage plus Konzeptentscheid — im Wartungsmodus nur auf einen Melder, der die Gesamtsicht
+**Nicht gebaut.** Aufwandsklasse: mehrere Tage plus Konzeptentscheid — im Pflegebetrieb nur auf einen Melder, der die Gesamtsicht
 braucht. Bis dahin gilt §1.2 als Antwort an Anwender.
 
 ## 2. V2H-Tageswert
@@ -147,7 +147,7 @@ zu prüfen und zu benennen, nicht zu bauen.
 
 **Gebaut am 13.10.2026 (Commit `2ce068fa`), ausgeliefert mit v4.1.7** — das Päckchen wurde auf Entscheid Gernots vor das Release gezogen,
 zusammen mit #427 Punkt 2 (Netzladung des Speichers im laufenden Monat). Ursprünglich geplant als eigenes Päckchen nach v4.1.7, ohne Termin
-(Wartungsmodus: ohne Vorlage, Gegenprüfung, Nachmessung, Golden Master). Gates wie in
+(Pflegebetrieb: ohne Vorlage, Gegenprüfung, Nachmessung, Golden Master). Gates wie in
 `CLAUDE.md`: berührte Backend-Tests plus die Wächter (`test_wurzelmuster_konformitaet.py`, `test_snapshot_felder_sot_konformitaet.py`,
 `test_jedes_feld_hat_eine_auswertung.py`), Frontend `lint`/`tsc`/`test`, `sync-help.sh` und Website-Build, volle Backend-Suite am Ende.
 Kein Fund, keine Fund-ID: der Punkt ist ein Wunsch aus #110; der Commit nennt «#110 V2H-Tageswert».

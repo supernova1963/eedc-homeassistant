@@ -1,9 +1,9 @@
-# CLAUDE.md — eedc (Wartungsmodus seit 11.10.2026)
+# CLAUDE.md — eedc (Pflegebetrieb seit 11.10.2026)
 
 > Das bisherige, ausführliche CLAUDE.md liegt unter [docs/ARCHIV-CLAUDE-2026-10-10.md](docs/ARCHIV-CLAUDE-2026-10-10.md).
 > Es beschreibt den Prüfprozess (Vorlage → Gegenprüfung → Opus-Bau mit Halten → Nachmessung → Golden Master → Matrix-Form),
 > der am 10.10.2026 **ausgesetzt** wurde (Entscheid Gernot).
-> Die Konsolidierung (10./11.10., 31 Funde, v4.1.6) war der Abschluss der aktiven Phase; seitdem **Wartungsmodus**.
+> Die Konsolidierung (10./11.10., 31 Funde, v4.1.6) war der Abschluss der aktiven Phase; seitdem **Pflegebetrieb**.
 > Was dort als Regel steht, gilt als **Hintergrundwissen**, nicht als Pflicht — außer den hier genannten Punkten.
 
 ## Was eedc ist
@@ -19,7 +19,7 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 | **eedc** (`/home/gernot/claude/eedc`) | Standalone-Spiegel, **nur** per `scripts/release.sh` |
 | **eedc-community** (`/home/gernot/claude/eedc-community`) | Community-Server, eigenes Repo; Deploy nur mit einem Add-on-Release |
 
-## Arbeitsmodus Wartung (Entscheid Gernot 10./11.10.2026)
+## Arbeitsmodus Pflege (Entscheid Gernot 10./11.10.2026)
 
 1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN — **Gernot
    liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten**) **und das Fundregister**
