@@ -1,0 +1,207 @@
+"""Die Stunden-Sichten an einem Kanal-Tag (HA-Bauform S3, Etappe E-S3-2; Bauplan §3 «Umhängen», §4 S3-R1/R5/R6).
+
+``/stunden``, ``tage-werte`` (die stundengepaarten Größen) und ``monat`` (Heatmap, Profil, Spitzen) lesen an einem Tag
+mit Kanal-Gruppe die **Mischzeilen** aus ``services/energie_profil/kanal_stunden.py``: die Mengen der Gruppen mit Wahl
+``kanal`` aus dem Kanal-Stundentag (``kanal/stunden_adapter.py``, HAs ``change`` je Stunde), SoC, Wetter, Zählwerke und
+``komponenten`` (der Leistungspfad, H-1 A) aus der Stundenzeile; ``spannen`` je Achse gemischt in der Form der Spalte.
+
+Geprüft an der Achsen-Form M07 (Bilanz, Sonstiges, WP aus Kanälen, HA), Tag 15.06.2026, Uhr der Matrix gestellt
+(keine Probe liest die Uhr): die Route trägt je Stunde die Adapter-Werte (Gegenprobe: eine verfälschte Stundenzeile
+ändert die Kanal-Felder NICHT, wohl aber den Ladestand); ein Tag ohne Stundenzeile bekommt die Mengen, die übrigen Felder
+bleiben leer; ``tage-werte`` rechnet Direktverbrauch/Überschuss/Defizit/WP-Strom aus den Adapter-Zeilen über
+``bilanz_aus_stundenrows``; ``monat`` zeigt in der Heatmap die Adapter-Werte; der Lade-Kontext (zweiter Aufruf liest
+nichts, die Bilanz-Randstände kommen aus ``kanal_tage`` derselben Anfrage). Ohne Kanal-Tag bleibt jede Liste dieselbe.
+
+Schwesterdateien: test_kanal_stunden_gleichheit.py, test_kanal_stunden_summe.py, test_n553_stunden_serie_eine_uhr.py.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+from types import SimpleNamespace
+
+import pytest
+from sqlalchemy import delete, event, update
+
+from backend.core.berechnungen import bilanz_aus_stundenrows
+from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.services.energie_profil.kanal_stunden import (
+    Mischzeile,
+    mische_spannen,
+    mische_stunden,
+    stunden_der_kanal_tage,
+    stundenzeilen_mit_kanaelen,
+)
+from backend.services.kanal import bilanz_leser, lesen
+from backend.services.kanal.lade_kontext import lese_anfrage
+from backend.services.kanal.stunden_adapter import stunden_aus_kanaelen
+from backend.services.kanal.stunden_leser import kanal_stundentag
+from backend.tests import kanal_bilanz_gleichheit as kg
+
+TAG = date(2026, 6, 15)
+_FELDER = ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "ueberschuss_kw", "defizit_kw",
+           "waermepumpe_kw")
+
+
+@pytest.fixture
+def uhr(monkeypatch):
+    """Die Uhr der Leser steht auf der Uhr der Matrix (``kg.JETZT_TS``)."""
+    monkeypatch.setattr(bilanz_leser, "uhr", lambda: kg.JETZT_TS)
+
+
+# ── rein ────────────────────────────────────────────────────────────────────
+
+
+def test_mischzeile_kanal_felder_aus_dem_adapter_alles_uebrige_aus_der_stundenzeile():
+    zeile = SimpleNamespace(stunde=3, pv_kw=9.0, soc_prozent=55.0, komponenten={"pv_6": 1.0}, spannen=None)
+    m = Mischzeile(TAG, 3, {"pv_kw": 1.5}, zeile, None)
+    assert (m.pv_kw, m.soc_prozent, m.komponenten, m.temperatur_c) == (1.5, 55.0, {"pv_6": 1.0}, None)
+    ohne = Mischzeile(TAG, 3, {"pv_kw": 1.5}, None, None)
+    assert (ohne.pv_kw, ohne.soc_prozent, ohne.komponenten) == (1.5, None, None)
+
+
+def test_spannen_je_achse_gemischt_in_der_form_der_spalte():
+    zeile = SimpleNamespace(spannen={"pv": 2, "waermepumpe": 3})
+    bilanz = frozenset({"pv", "einspeisung", "netzbezug", "batterie"})
+    assert mische_spannen(zeile, {"pv": 4, "waermepumpe": 9}, bilanz) == {"waermepumpe": 3, "pv": 4}
+    assert mische_spannen(zeile, None, bilanz) == {"waermepumpe": 3}
+    assert mische_spannen(SimpleNamespace(spannen=None), None, bilanz) is None
+
+
+def test_stunde_ohne_zeile_und_ohne_kanalwert_ist_keine_zeile():
+    k = [SimpleNamespace(stunde=h, pv_kw=(None if h == 5 else 1.0), komponenten=None, spannen=None) for h in range(24)]
+    ks = SimpleNamespace(zeilen=k, felder=frozenset({"pv_kw", "komponenten", "spannen"}))
+    tag = SimpleNamespace(gruppen={"bilanz": None})
+    stunden = [m.stunde for m in mische_stunden(TAG, [], tag, ks)]
+    assert stunden == [h for h in range(24) if h != 5]
+    mit_zeile = mische_stunden(TAG, [SimpleNamespace(stunde=5, pv_kw=7.0, spannen=None)], tag, ks)
+    assert [m.stunde for m in mit_zeile] == list(range(24)) and mit_zeile[5].pv_kw is None
+
+
+def test_ohne_kanal_tag_bleibt_die_liste_dieselbe():
+    zeilen = [SimpleNamespace(datum=TAG, stunde=h) for h in range(24)]
+    assert stundenzeilen_mit_kanaelen(zeilen, {}) == zeilen
+
+
+# ── an einem Datenstand ─────────────────────────────────────────────────────
+
+
+async def _adapter(ds):
+    return stunden_aus_kanaelen(await kanal_stundentag(ds.db, ds.aid, TAG, jetzt=kg.JETZT_TS))
+
+
+async def test_stunden_route_traegt_die_kanal_stunden_und_den_ladestand_der_zeile(uhr):
+    from backend.api.routes.energie_profil.views import get_stundenwerte
+
+    async with kg.datenstand("achsen", "M07", "HA") as ds:
+        ks = await _adapter(ds)
+        assert {"pv_kw", "waermepumpe_kw"} <= ks.felder
+        # Gegenprobe: eine verfälschte Stundenzeile ändert die Kanal-Felder nicht, wohl aber den Ladestand der Zeile.
+        await ds.db.execute(update(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == ds.aid, TagesEnergieProfil.datum == TAG,
+        ).values(pv_kw=TagesEnergieProfil.pv_kw + 1.0, waermepumpe_kw=99.0, soc_prozent=42.0))
+        await ds.db.commit()
+        antwort = await get_stundenwerte(anlage_id=ds.aid, datum=TAG, db=ds.db)
+        komp = {z.stunde: z.komponenten for z in (await ds.db.execute(
+            TagesEnergieProfil.__table__.select().where(TagesEnergieProfil.anlage_id == ds.aid,
+                                                        TagesEnergieProfil.datum == TAG))).all()}
+    assert [s.stunde for s in antwort.stunden] == list(range(24))
+    for s, k in zip(antwort.stunden, ks.zeilen):
+        for f in _FELDER:
+            assert getattr(s, f) == getattr(k, f), (s.stunde, f)
+        assert s.komponenten == komp[s.stunde]                     # Leistungspfad aus der Zeile (H-1 A)
+        assert s.spannen is None or all(isinstance(n, int) and n > 1 for n in s.spannen.values())
+    assert all(s.soc_prozent == 42.0 for s in antwort.stunden[1:])    # N-553: Slot h ← Zeile h−1
+
+
+async def test_tag_ohne_stundenzeile_bekommt_die_mengen_aus_den_kanaelen(uhr):
+    from backend.api.routes.energie_profil.views import get_stundenwerte
+
+    async with kg.datenstand("achsen", "M07", "HA") as ds:
+        ks = await _adapter(ds)
+        await ds.db.execute(delete(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == ds.aid, TagesEnergieProfil.datum == TAG))
+        await ds.db.commit()
+        antwort = await get_stundenwerte(anlage_id=ds.aid, datum=TAG, db=ds.db)
+    assert [s.pv_kw for s in antwort.stunden] == [k.pv_kw for k in ks.zeilen]
+    assert all(s.soc_prozent is None and s.komponenten is None and s.temperatur_c is None for s in antwort.stunden)
+
+
+async def test_tage_werte_stundengepaarte_groessen_aus_den_kanal_stunden(uhr):
+    from backend.api.routes.energie_profil.tage import get_tage_werte
+
+    async with kg.datenstand("achsen", "M07", "HA") as ds:
+        ks = await _adapter(ds)
+        await ds.db.execute(update(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == ds.aid, TagesEnergieProfil.datum == TAG,
+        ).values(pv_kw=TagesEnergieProfil.pv_kw + 1.0, waermepumpe_kw=99.0))
+        await ds.db.commit()
+        zeile = {z.datum: z for z in await get_tage_werte(ds.aid, TAG, TAG, ds.db)}[TAG]
+    soll = bilanz_aus_stundenrows(ks.zeilen)
+    assert zeile.stunden_verfuegbar is not None
+    assert zeile.direktverbrauch == pytest.approx(round(soll.direktverbrauch_kwh, 3))
+    assert zeile.ueberschuss_kwh == pytest.approx(round(soll.ueberschuss_kwh, 3))
+    assert zeile.defizit_kwh == pytest.approx(round(soll.defizit_kwh, 3))
+    assert zeile.wp_strom == pytest.approx(round(soll.wp_strom_kwh, 3))
+
+
+async def test_monat_heatmap_und_spitzen_aus_den_kanal_stunden(uhr):
+    from backend.api.routes.energie_profil.views import get_monatsauswertung
+
+    async with kg.datenstand("achsen", "M07", "HA") as ds:
+        ks = await _adapter(ds)
+        await ds.db.execute(update(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == ds.aid, TagesEnergieProfil.datum == TAG,
+        ).values(pv_kw=TagesEnergieProfil.pv_kw + 1.0))
+        await ds.db.commit()
+        m = await get_monatsauswertung(ds.aid, TAG.year, TAG.month, 10, ds.db)
+    zellen = {z.stunde: z for z in m.heatmap if z.tag == TAG.day}
+    assert sorted(zellen) == list(range(24))
+    for k in ks.zeilen:
+        assert zellen[k.stunde].pv_kw == (round(k.pv_kw, 3) if k.pv_kw is not None else None), k.stunde
+
+
+class _Zaehler:
+    """Zählt die Anweisungen über die Verbindung der Sitzung; ``rand`` die von ``lesen._randstaende``."""
+
+    _RAND = "FROM k CROSS JOIN g"
+
+    def __init__(self, db):
+        self.n = self.rand = 0
+        self._engine = db.bind.sync_engine
+
+    def _hook(self, _conn, _cur, statement, *_a, **_k):
+        self.n += 1
+        self.rand += self._RAND in statement
+
+    def __enter__(self):
+        event.listen(self._engine, "before_cursor_execute", self._hook)
+        return self
+
+    def __exit__(self, *_a):
+        event.remove(self._engine, "before_cursor_execute", self._hook)
+
+
+assert _Zaehler._RAND in lesen._RAND_SQL
+
+
+async def test_lade_kontext_zweiter_aufruf_liest_nichts_und_bilanz_raender_aus_kanal_tage(uhr):
+    """Wie ``tage-werte``: erst ``kanal_tage`` über den Zeitraum, dann die Stunden der Kanal-Tage über den Bereichs-Leser
+    (Nachbau E-S3-2, §10c L-1). Die Bilanz-Tageswahl liest ihre Randstände aus dem Kontext (EINE Randstand-Anweisung
+    weniger als ohne ``kanal_tage`` davor — eine je Bereich, nicht je Tag); der zweite Aufruf derselben Anfrage liest
+    nichts."""
+    tage = [TAG + timedelta(days=i) for i in range(3)]
+    async with kg.datenstand("achsen", "M07", "HA") as ds:
+        with lese_anfrage():
+            with _Zaehler(ds.db) as ohne:
+                await stunden_der_kanal_tage(ds.db, ds.aid, tage, {})
+        with lese_anfrage():
+            kanal = await bilanz_leser.kanal_tage(ds.db, ds.aid, tage[0], tage[-1])
+            with _Zaehler(ds.db) as mit:
+                erst = await stunden_der_kanal_tage(ds.db, ds.aid, kanal, {})
+            with _Zaehler(ds.db) as zweit:
+                wieder = await stunden_der_kanal_tage(ds.db, ds.aid, kanal, {})
+    assert sorted(kanal) == tage and sorted(erst) == tage
+    assert mit.rand == ohne.rand - 1, (ohne.rand, mit.rand)
+    assert zweit.n == 0
+    assert all([(m.stunde, m.pv_kw) for m in erst[t]] == [(m.stunde, m.pv_kw) for m in wieder[t]] for t in tage)

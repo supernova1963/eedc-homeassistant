@@ -189,8 +189,6 @@ async def get_monatsauswertung(
     )
     tag_rows = result.scalars().all()
 
-    st = _stunden_auswerten(stunden_rows)
-
     # HA-Bauform E4a-2 (Umschaltstelle 4): je Tag EINE Quellenwahl der Bilanz-Gruppe — ein Kanal-Tag bringt Mengen,
     # Eigenverbrauch und Quoten aus den Kanälen (Weg 2, kein Deckel), die stundengepaarten Größen aus den Stunden
     # (B-3, D4). Der Monat faltet die Tage über dieselbe Layer-Funktion wie `monats_aus_tagen.falte_monat`.
@@ -198,6 +196,12 @@ async def get_monatsauswertung(
 
     kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
     ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+
+    # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags sind seine Mischzeilen (`kanal_stunden.py`) — Heatmap, Profil,
+    # Spitzen und die stundengepaarten Größen lesen sie wie Stundenzeilen; gebündelte Stunden fallen wie bisher heraus
+    # (`zeile_gebuendelt` auf den Kanal-Spannen). Ohne Kanal-Tag bleibt die Liste dieselbe.
+    stunden_rows = await _stunden_mit_kanaelen(db, anlage_id, stunden_rows, kanal_je_tag)
+    st = _stunden_auswerten(stunden_rows)
 
     mb = _monatsbilanz(stunden_rows, tag_rows, kanal_je_tag)
     kpi = _kpis(mb, st)
@@ -254,6 +258,20 @@ async def get_monatsauswertung(
         einspeisung_neg_preis_kwh=tz.neg_einsp_summe,
         stunden_fehlend_pv=st.stunden_fehlend_pv,
         stunden_fehlend_verbrauch=st.stunden_fehlend_verbrauch,
+    )
+
+
+async def _stunden_mit_kanaelen(db: AsyncSession, anlage_id: int, stunden_rows, kanal_je_tag) -> list:
+    """Die Stundenzeilen des Monats, an jedem Kanal-Tag durch seine Mischzeilen ersetzt (HA-Bauform E-S3-2)."""
+    from backend.services.energie_profil.kanal_stunden import stunden_der_kanal_tage, stundenzeilen_mit_kanaelen
+
+    if not kanal_je_tag:
+        return list(stunden_rows)
+    je_tag: dict[date, list] = defaultdict(list)
+    for r in stunden_rows:
+        je_tag[r.datum].append(r)
+    return stundenzeilen_mit_kanaelen(
+        stunden_rows, await stunden_der_kanal_tage(db, anlage_id, kanal_je_tag, je_tag),
     )
 
 

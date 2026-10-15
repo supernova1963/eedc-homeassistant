@@ -106,6 +106,8 @@ class _TageKontext:
     zaehler_stand_pro_tag: dict[date, dict[str, float]]
     kanal_je_tag: dict
     ziele_je_tag: dict
+    #: HA-Bauform E-S3-2: je Kanal-Tag die Mischzeilen (`kanal_stunden.py`) — der Eingang der stundengepaarten Größen.
+    kanal_stunden_je_tag: dict
     tarif_cache: dict[date, dict]
     slot_kosten_je_tag: dict
 
@@ -245,6 +247,11 @@ async def baue_tage_werte(
 
     kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
     ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+    # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags aus dem Kanal-Stundentag (Mischzeilen) — Direktverbrauch,
+    # Überschuss, Defizit, Zahl der Stunden, WP-Strom über dieselbe Layer-Formel wie die Stundenzeilen (S3-R5).
+    from backend.services.energie_profil.kanal_stunden import stunden_der_kanal_tage
+
+    kanal_stunden_je_tag = await stunden_der_kanal_tage(db, anlage_id, kanal_je_tag, tep_pro_tag)
 
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag) | set(kanal_je_tag))
     tarif_cache: dict[date, dict] = {}
@@ -309,6 +316,7 @@ async def baue_tage_werte(
         zaehler_stand_pro_tag=zaehler_stand_pro_tag,
         kanal_je_tag=kanal_je_tag,
         ziele_je_tag=ziele_je_tag,
+        kanal_stunden_je_tag=kanal_stunden_je_tag,
         tarif_cache=tarif_cache,
         slot_kosten_je_tag=slot_kosten_je_tag,
     )
@@ -457,8 +465,10 @@ def _tagesbilanz(kx: _TageKontext, tag: date, stunden_rows: list, tz: Optional[T
     # Zählerlücken wie HA (R7/R9): die Tageszeile sagt selbst, nach welcher
     # Regel sie gerechnet ist — `verworfen` ist die Regelmarke. Ohne Marke
     # (Altbestand) rechnet der Tag N-92 wie bisher (E6).
+    # HA-Bauform E-S3-2: an einem Kanal-Tag sind die Zeilen die Mischzeilen des Kanal-Stundentags — `mische_bilanz`
+    # nimmt aus ihnen nur die stundengepaarten Größen (D4); Mengen, Ladung/Entladung kommen aus der Komposition (H-2).
     bilanz = bilanz_aus_stundenrows(
-        stunden_rows, verworfen=(tz.verworfen if tz else None),
+        kx.kanal_stunden_je_tag.get(tag, stunden_rows), verworfen=(tz.verworfen if tz else None),
     )
     komp_tag = tz.komponenten_kwh if tz else None
     verworfen_tag = tz.verworfen if tz else None

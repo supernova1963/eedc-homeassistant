@@ -154,10 +154,8 @@ async def get_waerme_verlauf_stunden(
     from backend.core.berechnungen.waermepumpe_kennzahl import (
         geraete_mit_gesamtwaerme,
     )
-    from backend.services.energie_profil import (
-        lade_modus_split_tag,
-        lade_modus_stunden_tag,
-    )
+    from backend.services.energie_profil import lade_modus_split_tag
+    from backend.services.energie_profil.kanal_stunden import wp_strom_je_stunde, wp_stundenformen
     from backend.services.snapshot.aggregator import (
         TAGESDETAIL_AUSGABE,
         WAERME_AUSGABE_KEYS,
@@ -169,7 +167,6 @@ async def get_waerme_verlauf_stunden(
     from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
     from backend.services.snapshot.komponenten_beitraege import investition_beitraege
     from backend.services.snapshot.reader import mqtt_zaehler_keys
-    from backend.services.snapshot.stunden_leser import lade_stundenformen
 
     inv_result = await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
     investitionen_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
@@ -265,7 +262,9 @@ async def get_waerme_verlauf_stunden(
                 z = _zaehler(inv_id, feld)
                 if z:
                     zaehler[z[0]] = z
-    formen_je_key = await lade_stundenformen(db, anlage, datum, list(zaehler.values()))
+    # HA-Bauform E-S3-2 (H-1 → A): an einem WP-Kanal-Tag kommt die Form aus dem Kanal-Stundentag (HAs `change` je
+    # Zähler, Modus-Stunden aus den abgeleiteten Kanälen) — die Verteilung darunter bleibt, Σ Stunden = Balken.
+    formen_je_key, modus_stunden = await wp_stundenformen(db, anlage, datum, zaehler)
 
     def _summe_je_slot(keys: list[str]) -> list:
         reihen = [formen_je_key[k] for k in keys if k in formen_je_key]
@@ -277,7 +276,6 @@ async def get_waerme_verlauf_stunden(
             for h in range(STUNDEN)
         ]
 
-    modus_stunden, _ = await lade_modus_stunden_tag(db, anlage_id, datum)
     formen = StundenFormen(
         felder_je_inv={
             b.inv_id: {
@@ -393,16 +391,8 @@ async def get_waerme_verlauf_stunden(
     )
     funktion_ohne = funk_heizen_ohne + funk_ww_ohne
 
-    # Die Zählerspalte des Slots — ihre Summe ist die Kachel „Strom verbraucht".
-    wp_kw = {
-        r.stunde: r.waermepumpe_kw
-        for r in (await db.execute(
-            select(TagesEnergieProfil.stunde, TagesEnergieProfil.waermepumpe_kw).where(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum == datum,
-            )
-        )).all()
-    }
+    # Die Zählerspalte des Slots — ihre Summe ist die Kachel „Strom verbraucht" (an einem WP-Kanal-Tag der Adapter).
+    wp_kw = await wp_strom_je_stunde(db, anlage_id, datum)
 
     def _r(v: float, hat: bool, stellen: int = 3):
         return round(v, stellen) if hat else None

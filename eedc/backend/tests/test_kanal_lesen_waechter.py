@@ -37,8 +37,14 @@ SCHICHT_MODULE = {f"{PAKET}.{m}" for m in SCHICHT}
 #: Verzeichnisse, die importieren DÜRFEN (Präfix relativ zu ``backend/``).
 ERLAUBT_PRAEFIX = ("services/kanal/", "services/monats_fakten/")
 
-#: Tages-Leser, die in E4 benannt werden (Datei → Grund). Leer in E3.
-BENANNTE_TAGESLESER: dict[str, str] = {}
+#: Tages-Leser, die benannt werden (Datei → Grund). Leer in E3; HA-Bauform S3 (S3-R8): die Aufrufer des
+#: Kanal-Stundentags außerhalb ``services/kanal/`` — nur Adapter, nie Routen.
+BENANNTE_TAGESLESER: dict[str, str] = {
+    "services/energie_profil/kanal_stunden.py": (
+        "E-S3-2: der eine Tages-Leser der Stunden-Sichten (/stunden, tage-werte, monat) — Mischzeilen aus "
+        "kanal/stunden_leser + stunden_adapter und der Stundenzeile; Routen rufen nur ihn"
+    ),
+}
 
 #: Wer heute außerhalb ``services/kanal/`` importiert — Stand E3: niemand.
 IMPORTEURE_STAND: set[str] = set()

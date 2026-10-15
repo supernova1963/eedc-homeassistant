@@ -91,7 +91,8 @@ async def get_stundenwerte(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Gibt die 24 Stundenwerte eines Tages aus TagesEnergieProfil zurück.
+    Gibt die 24 Stundenwerte eines Tages aus TagesEnergieProfil zurück — an einem Tag mit Kanal-Gruppe die Mengen
+    dieser Gruppen aus dem Kanal-Stundentag (HA-Bauform E-S3-2).
 
     Enthält zusätzlich `serien` mit aufgelösten Labels für alle in `komponenten`
     vorkommenden Einträge — damit Sonstiges-Investments (Poolpumpe, Sauna …)
@@ -117,7 +118,13 @@ async def get_stundenwerte(
     alle = result.scalars().all()
     soc_je_zeile = forward_werte_je_backward_zeile(alle, "soc_prozent")
     paare = [(z, soc) for z, soc in zip(alle, soc_je_zeile) if z.datum == datum]
-    rows = [z for z, _ in paare]
+    # HA-Bauform E-S3-2: an einem Tag mit Kanal-Gruppe tragen die Mengen der Kanal-Gruppen HAs `change` je Stunde
+    # (Mischzeilen, `energie_profil/kanal_stunden.py`); SoC (Paarung oben, N-553), Wetter, Zählwerke und
+    # `komponenten` bleiben aus der Stundenzeile (S3-R6). Ohne Kanal-Gruppe: die Stundenzeilen unverändert.
+    from backend.services.energie_profil.kanal_stunden import stunden_des_tages
+
+    soc_je_stunde = {z.stunde: soc for z, soc in paare}
+    rows = await stunden_des_tages(db, anlage_id, datum, [z for z, _ in paare])
 
     # ⭐ **Zwei Fragen, zwei Groessen** (N-553): Die Zeile oben beantwortet
     # „welcher Ladestand gehoert zu DIESER Stunde" — dafuer die Paarung. Die
@@ -185,13 +192,13 @@ async def get_stundenwerte(
             defizit_kw=r.defizit_kw,
             temperatur_c=r.temperatur_c,
             globalstrahlung_wm2=r.globalstrahlung_wm2,
-            soc_prozent=soc,
+            soc_prozent=soc_je_stunde.get(r.stunde),
             komponenten=r.komponenten,
             wp_starts_anzahl=r.wp_starts_anzahl,
             wp_betriebsstunden=r.wp_betriebsstunden,
             spannen=r.spannen or None,
         )
-        for r, soc in paare
+        for r in rows
     ]
 
     return StundenAntwort(
