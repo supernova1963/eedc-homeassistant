@@ -318,8 +318,8 @@ class StammdatenInvestitionenChecks:
                 gesamt_ladung_kwh, gesamt_entladung_kwh
             ) or 0.0
             _hinweis = (
-                f"Über die gesamte Historie stehen {fmt_zahl(gesamt_entladung_kwh, 0)} kWh "
-                f"Entladung gegen {fmt_zahl(gesamt_ladung_kwh, 0)} kWh Ladung "
+                f"Über die gesamte Historie stehen {fmt_zahl(gesamt_entladung_kwh, 1)} kWh "
+                f"Entladung gegen {fmt_zahl(gesamt_ladung_kwh, 1)} kWh Ladung "
                 f"({fmt_zahl(_eta, 0)} %). Ein Speicher kann nicht mehr abgeben, als er "
                 "aufgenommen hat."
             )

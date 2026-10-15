@@ -58,13 +58,13 @@ SCHARF = [
     "core/berechnungen",
 ]
 
-#: Restschuld, gemessen am 2026-09-16 — Zahl darf fallen, nie steigen.
+#: Restschuld, gemessen am 2026-09-16, nachgezogen am 2026-10-15 — Zahl darf fallen, nie steigen.
 #: ⚠ Das sind **Anwendertexte**, keine Logzeilen: Stichprobe ``investitionen/roi.py::get_roi_dashboard``
 #: (``f'{result.km_elektrisch:.0f} km elektrisch'``) steht in der Begründung,
 #: die eine Wärmepumpen-Kachel anzeigt. Die Fläche ist erhoben, aber nicht
 #: beauftragt — wer sie anfasst, zieht die Zahl hier mit herunter.
 NOCH_NICHT_UMGESTELLT = {
-    "api/routes": 79,   # weites Muster, 2026-09-16 (das enge zaehlte 78 — s. MUSTER)
+    "api/routes": 16,   # weites Muster; 2026-09-16: 79 (das enge zaehlte 78 — s. MUSTER), 2026-10-15: 16 (nachgezogen, Entscheid Gernot)
 }
 
 #: Bewusste Ausnahmen, je Stelle begründet (N-234-Präzedenz: Koordinaten).

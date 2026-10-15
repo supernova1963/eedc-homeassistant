@@ -135,15 +135,15 @@ def test_assert_kumulativ_schweigt_bei_konsistenz():
 
 
 def test_details_und_bericht_schreiben_deutsche_zahlen():
-    """Die drei Speicher-Texte schreiben kWh deutsch (Tausenderpunkt, keine Nachkommastellen),
+    """Die drei Speicher-Texte schreiben kWh deutsch (Tausenderpunkt, eine Nachkommastelle — die Toleranzen liegen unter 1 kWh),
     ``str(bericht)`` für Log/AssertionError mit drei Stellen — nie «1500.000 kWh» (Style-Guide C2)."""
     for bericht, anfang in (
         (pruefe_speicher_ladung_konsistenz(1200.0, 1500.0),
-         "Netzladung (1.500 kWh) übersteigt die Gesamtladung (1.200 kWh) — "),
+         "Netzladung (1.500,0 kWh) übersteigt die Gesamtladung (1.200,0 kWh) — "),
         (pruefe_speicher_netzladung_kumulativ(1200.0, 1500.0),
-         "Kumulierte Netzladung (1.500 kWh) übersteigt die kumulierte Gesamtladung (1.200 kWh) — "),
+         "Kumulierte Netzladung (1.500,0 kWh) übersteigt die kumulierte Gesamtladung (1.200,0 kWh) — "),
         (pruefe_speicher_durchsatz_konsistenz(1200.0, 1500.0),
-         "Kumulierte Entladung (1.500 kWh) übersteigt die kumulierte Ladung (1.200 kWh) — "),
+         "Kumulierte Entladung (1.500,0 kWh) übersteigt die kumulierte Ladung (1.200,0 kWh) — "),
     ):
         assert not bericht.konsistent
         assert bericht.details.startswith(anfang), bericht.details

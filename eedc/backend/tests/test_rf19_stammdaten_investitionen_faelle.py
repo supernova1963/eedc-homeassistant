@@ -72,7 +72,10 @@ async def test_f1_netzladung_ueber_gesamtladung_kumulativ(db):
 
 
 async def test_f1_details_schreiben_deutsche_zahlen(db):
-    """Die Details-Zeile nennt die beiden Summen deutsch, ganzzahlig wie die Schwester-Meldung (Entladung > Ladung).
+    """Die Details-Zeile nennt die beiden Summen deutsch mit einer Nachkommastelle, wie die Schwester-Meldung (Entladung > Ladung).
+
+    Eine Stelle, nicht null: die Toleranz (0,1 kWh + 2 %) ist kleiner als 1 kWh, bei ganzen Zahlen könnten zwei
+    verschiedene Summen gleich aussehen (10 kWh / 10 kWh).
 
     Bis 14.10.2026 stand hier «1500.000 kWh» — nach deutscher Lesart anderthalb Millionen. Der Text entsteht in
     ``core/berechnungen/invarianten.py`` und wird vom Checker nur durchgereicht.
@@ -84,7 +87,7 @@ async def test_f1_details_schreiben_deutsche_zahlen(db):
     erg = DatenChecker(db)._check_investitionen(anlage, [])
     (t,) = _treffer(erg, "G (speicher): Netzladung übersteigt Gesamtladung (kumulativ)")
     assert t.details.startswith(
-        "Kumulierte Netzladung (1.500 kWh) übersteigt die kumulierte Gesamtladung (1.200 kWh) — "
+        "Kumulierte Netzladung (1.500,0 kWh) übersteigt die kumulierte Gesamtladung (1.200,0 kWh) — "
     ), t.details
     assert "1500.000" not in t.details and "1200.000" not in t.details, t.details
 
@@ -108,7 +111,7 @@ async def test_f2a_entladung_ueber_ladung_mit_netzladung(db):
     t = treffer[0]
     assert (t.kategorie, t.schwere, t.link) == (CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, _MONATSDATEN_LINK)
     assert t.details == (
-        "Über die gesamte Historie stehen 130 kWh Entladung gegen 100 kWh Ladung (130 %). "
+        "Über die gesamte Historie stehen 130,0 kWh Entladung gegen 100,0 kWh Ladung (130 %). "
         "Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat. "
         "Häufigste Ursache: „Ladung“ enthält nur die PV-Ladung. Dort gehört die GESAMTE Ladung hinein — "
         "die Netzladung ist ein Teil davon, kein zweiter Posten daneben."
@@ -126,7 +129,7 @@ async def test_f2b_entladung_ueber_ladung_ohne_netzladung_summiert_alle_monate(d
     treffer = _treffer(erg, "G (speicher): Entladung übersteigt Ladung (kumulativ)")
     assert len(treffer) == 1, [r.meldung for r in erg]
     assert treffer[0].details == (
-        "Über die gesamte Historie stehen 1.234 kWh Entladung gegen 100 kWh Ladung (1.234 %). "
+        "Über die gesamte Historie stehen 1.234,5 kWh Entladung gegen 100,0 kWh Ladung (1.234 %). "
         "Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat."
     )
 

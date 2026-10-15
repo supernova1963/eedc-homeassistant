@@ -34,7 +34,7 @@ zugeordnet wurde. Außerdem lässt eine fehlerhafte Zeile keinen Komponentenwert
 
 **Daten-Checker: Netzladungs-Warnung mit deutschen Zahlen:** Die Details der Warnung „Netzladung übersteigt
 Gesamtladung (kumulativ)“ nannten die beiden Summen als „1500.000 kWh“ — im Deutschen als anderthalb Millionen lesbar.
-Jetzt steht dort „1.500 kWh“, wie im Rest des Daten-Checkers
+Jetzt steht dort „1.500,0 kWh“, wie im Rest des Daten-Checkers
 ([Daten-Checker §4.3.3](HANDBUCH_DATEN_CHECKER.md#433-speicher)).
 
 ## v4.1.7 — 13. Oktober 2026

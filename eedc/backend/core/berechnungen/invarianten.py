@@ -490,8 +490,8 @@ def pruefe_speicher_ladung_konsistenz(
     details = ""
     if not konsistent:
         details = (
-            f"Netzladung ({fmt_kwh(netz)}) übersteigt die Gesamtladung "
-            f"({fmt_kwh(gesamt)}) — der implizite PV-Anteil "
+            f"Netzladung ({fmt_kwh(netz, 1)}) übersteigt die Gesamtladung "
+            f"({fmt_kwh(gesamt, 1)}) — der implizite PV-Anteil "
             f"(ladung_kwh − ladung_netz_kwh) wäre negativ. Mögliche Ursache: "
             "Netz-Sensor in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` "
             "als reine PV-Ladung statt Gesamtladung gepflegt (Issue #281)."
@@ -560,8 +560,8 @@ def pruefe_speicher_netzladung_kumulativ(
     details = ""
     if not konsistent:
         details = (
-            f"Kumulierte Netzladung ({fmt_kwh(netz)}) übersteigt die kumulierte "
-            f"Gesamtladung ({fmt_kwh(gesamt)}) — über die gesamte Historie "
+            f"Kumulierte Netzladung ({fmt_kwh(netz, 1)}) übersteigt die kumulierte "
+            f"Gesamtladung ({fmt_kwh(gesamt, 1)}) — über die gesamte Historie "
             "unmöglich. Ein einzelner Monat darf das (Zähler-Schnappschuss an "
             "der Monatsgrenze), die Summe nicht. Mögliche Ursache: Netz-Sensor "
             "in den Gesamt-Ladung-Slot gemappt, oder `ladung_kwh` als reine "
@@ -618,8 +618,8 @@ def pruefe_speicher_durchsatz_konsistenz(
     details = ""
     if not konsistent:
         details = (
-            f"Kumulierte Entladung ({fmt_kwh(gesamt_entladung)}) übersteigt die "
-            f"kumulierte Ladung ({fmt_kwh(gesamt_ladung)}) — über die gesamte "
+            f"Kumulierte Entladung ({fmt_kwh(gesamt_entladung, 1)}) übersteigt die "
+            f"kumulierte Ladung ({fmt_kwh(gesamt_ladung, 1)}) — über die gesamte "
             "Historie unmöglich. Ein einzelner Monat darf das (SoC-Übertrag), "
             "die Summe nicht. Mögliche Ursache: Lade-/Entlade-Werte fehlerhaft "
             "erfasst oder beim Datenübertrag vertauscht."
