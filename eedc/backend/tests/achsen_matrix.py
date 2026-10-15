@@ -1162,7 +1162,9 @@ async def messe_sa(form: Form, m: Messung) -> None:
             m.ids = ids
             await seed_snapshots(db, form, aid, ids)
             with umgebung(form, mx._ha_aus()):
+                await mx.fuelle_eigene_summe(engine, aid)   # E-S3-4: Eigene Summe wie im Produkt ohne HA
                 await mx.aggregiere_tage(db, form.pvform, aid, TAGE_JUNI + TAGE_JULI)
+                await mx.baue_abgeleitete_nach_tagen(engine, aid)
                 m.tage["SA"] = await miss_tage(db, aid, ids, TAGE_JUNI + TAGE_JULI)
                 m.laufend["SA"] = await _sichten_laufend(db, aid, ids)
                 m.vor["S3"] = await _sichten_vor(db, aid, ids)

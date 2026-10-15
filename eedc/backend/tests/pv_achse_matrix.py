@@ -721,6 +721,30 @@ async def fuelle_spiegel(engine, anlage_id: int, svc) -> None:
     await baue_abgeleitete(sitzungen, anlage_id)
 
 
+async def fuelle_eigene_summe(engine, anlage_id: int):
+    """HA-Bauform S3, E-S3-4 (wie B-1 für HA): die Eigene Summe aus den gesäten Stundenständen, wie das Produkt sie nach
+    dem Start nachfüllt (``kanal/nachfuellen.nachfuellen_eigene_summe``), danach die abgeleiteten Kanäle wie der
+    Stundenlauf. Nach S3-R9 nur für Zähler OHNE HA-Entity — der SA-Datenstand dieser Matrix ordnet jedem Zähler einen
+    HA-Sensor zu (``seed_anlage``), das Nachfüllen schreibt dort also nichts (gemessen, Bericht E-S3-4 H-1). Ein Seed,
+    kein Soll."""
+    from contextlib import asynccontextmanager
+
+    from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe
+
+    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def sitzungen():
+        async with macher() as s:
+            yield s
+            await s.commit()
+
+    erg = await nachfuellen_eigene_summe(sitzungen, anlage_id, jetzt=JETZT)
+    assert erg.fehler == 0, erg
+    await baue_abgeleitete(sitzungen, anlage_id)
+    return erg
+
+
 async def baue_abgeleitete(sitzungen, anlage_id: int) -> int:
     """HA-Bauform E4c: die abgeleiteten Kanäle (PV-Anteil der Heimladung, ``kanal/abgeleitet.py``) über die ganze
     Reihe — der Zustand eines Produkts, dessen Stundenlauf seit Beginn der Reihe läuft (der Stundenlauf baut NICHT
@@ -1323,7 +1347,9 @@ async def messe_sa(form: Form, m: Messung) -> None:
             aid, ids = await seed_anlage(db, form)
             await seed_snapshots(db, form, aid, ids)
             with _umgebung(_ha_aus()):
+                await fuelle_eigene_summe(engine, aid)   # E-S3-4: Eigene Summe wie im Produkt ohne HA
                 await aggregiere_tage(db, form, aid, TAGE_JUNI + TAGE_JULI)
+                await baue_abgeleitete_nach_tagen(engine, aid)
                 m.tage["SA"] = await miss_tage(db, aid, ids, TAGE_JUNI + TAGE_JULI)
                 m.laufend["SA"] = await _sichten_laufend(db, aid, ids)
                 m.vor["S3"] = await _sichten_vor(db, aid, ids)

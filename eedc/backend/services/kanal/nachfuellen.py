@@ -30,9 +30,31 @@ am Abschnittsende — damit bleibt jedes Δ nach der Naht so, wie HA es nennt.
 wird nie wieder bei HA angefragt; ein später zugeordneter Sensor (neuer Kanal) oder eine neue Entity (neue
 ``kanal_quelle``) hat keine Marke und wird beim nächsten Lauf gefüllt.
 
+**Eigene Summe aus den Stundenständen** (HA-Bauform S3, E-S3-4, Entscheid Gernot S3-E1; ``nachfuellen_eigene_summe``):
+für jeden Zähler **ohne HA-Entity** (S3-R9 «HA-konform bleibt HA-konform»: ein Feld mit HA-Entity bekommt seine
+Vergangenheit NUR aus HAs Langzeitstatistik — die Zuordnung entscheidet, nicht die Spalte ``quelle``) werden die
+stündlichen Zählerstände in ``sensor_snapshots`` VOR der ersten Kanal-Zeile zu Zeilen der Familie Mitschrift — über
+dieselbe Rechenstelle wie der Stundenlauf (``schreiber._eigene_summe_zeilen``: HAs 90-%-Regel, Deckel als Schreibfilter).
+``live_fallback``-Stände (aus der Leistung abgeleitet) und ``unknown``-Stände (Herkunft unklassifiziert) werden nicht
+übernommen (gezählt). Lücken bleiben Lücken
+(die Menge steht in der Folgestunde, wie HA). Kein HA nötig; Marke je Kanal mit der MQTT-Kennung.
+**Nur stündliche Reihen (Entscheid Master E-S3-4, Option B):** Kriterium je Schlüssel: unterer Median der Abstände
+aufeinanderfolgender Stände ≤ ``TAKT_MAX_S`` (3 600 s); innere Lücken einer stündlichen Reihe bleiben Lücken. Eine Reihe mit
+Tagesständen wird übersprungen und gezählt (``tagesstaende``): ein Stand um 00:00 wird die Zeile 23:00 und trifft im
+23-Uhr-Tagesfenster des Bestands weder den Tag (der Tag nennte die Menge des Vortags) noch den Monat (Juni nennte den 31.05.
+statt des 30.06.). Regel (c) der Lese-Schicht fängt das nicht: wörtlich verschärft («≥») bräche sie die auflösbaren
+Monatsablesungen auf der Grenze, die mildere Fassung ließe die Bilanz-Gruppe über die Lückentag-Regel
+(``bilanz_leser._gedeckt``) weiter die Vortagsmenge nennen. Mit R-3 «Kalendertag» (S4) fallen Tagesstand und Fenster
+zusammen — dann nimmt das Nachfüllen Tagesstand-Reihen auf.
+**Zuordnung der Stunde (bestätigt Master E-S3-4):** ein Stand zur vollen Stunde ``Z`` ist der Zählerstand am ENDE von
+``[Z − 1 h, Z)`` und wird die Kanalzeile ``start_ts = Z − 3600`` — so trägt HAs Zeile den Stand am Ende ihrer Stunde
+(Gleichheit Stand für Stand mit der Eigenen Summe aus den Rohständen: ``test_kanal_eigene_summe_gleichheit.py``).
+
 **Auslöser:** ``nachfuellen_nach_dem_start`` (Hintergrund-Aufgabe nach dem Start, alle Zuordnungen) und
-``nachfuellen_anstossen`` (vom Stundenlauf NACH seiner Sitzung, nur schon angelegte Kanäle ohne Marke).
-Fortschritt und Ergebnis als Aktivität in der Schreib-Sitzung (N-532), nur wenn ein Kanal offen war.
+``nachfuellen_anstossen`` (vom Stundenlauf NACH seiner Sitzung, nur schon angelegte Kanäle ohne Marke) — beide für den
+Spiegel UND die Eigene Summe (``nachfuellen_anlage``).
+Fortschritt und Ergebnis als Aktivität in der Schreib-Sitzung (N-532): beim Spiegel, wenn ein Kanal offen war; bei der
+Eigenen Summe EIN Eintrag, nur wenn Zeilen geschrieben wurden oder ein Kanal abbrach.
 
 **Stand E2:** wird geschrieben und nachgefüllt, von keiner Sicht gelesen. Die Familie ``bestand`` bleibt **unbelegt** (Entscheid Gernot 06.10., Bauplan §3b): die bisherigen Stunden- und
 Tageszeilen werden nicht in Kanäle umgewandelt; sie bleiben die Quelle für Zeiträume, die die Kanäle nicht voll decken.
@@ -56,6 +78,7 @@ from backend.models.kanal import (
     ART_MEAN,
     ART_STAND,
     ART_SUM,
+    FAMILIE_MITSCHRIFT,
     FAMILIE_SPIEGEL,
     Kanal,
     KanalNachfuellung,
@@ -72,6 +95,10 @@ Sitzungen = Callable[[], AsyncContextManager[AsyncSession]]
 BLOCK_STUNDEN = 24 * 31
 _STUNDE = 3600
 _TOL = 1e-9
+#: Takt einer Stundenstand-Reihe (HA-Bauform S3, E-S3-4, Entscheid Master «Option B»): nachgefüllt wird ein Schlüssel nur,
+#: wenn der untere Median der Abstände aufeinanderfolgender Stände höchstens eine Stunde ist. Gröbere Reihen (Tagesstände) werden
+#: übersprungen und als ``tagesstaende`` gezählt — ab R-3 «Kalendertag» (S4).
+TAKT_MAX_S = 3600
 
 
 def _unix(dt: datetime) -> int:
@@ -96,6 +123,8 @@ class NachfuellErgebnis:
     uebersprungen: Counter = field(default_factory=Counter)
     fehler: int = 0
     markiert: int = 0
+    #: Seit E-S3-4: das Ergebnis der Eigenen Summe derselben Anlage (``nachfuellen_anlage``), nicht in ``als_dict``.
+    eigene_summe: Optional["NachfuellErgebnis"] = field(default=None, repr=False)
 
     def als_dict(self) -> dict:
         return {"kanaele": self.kanaele, "gefuellt": self.gefuellt, "zeilen": self.zeilen,
@@ -319,6 +348,264 @@ async def nachfuellen_spiegel(
     return erg
 
 
+# ── Nachfüllen Eigene Summe aus den Stundenständen (HA-Bauform S3, E-S3-4) ───
+
+
+@dataclass
+class _ZielES:
+    """Ein Zähler ohne HA-Entity: Kanal-Key, MQTT-Kennung (``statistic_id`` der Mitschrift-Quelle wie im Stundenlauf)."""
+
+    key: str
+    mqtt_key: str
+    art: str
+    einheit: str
+
+
+@dataclass
+class EigeneSummeErgebnis(NachfuellErgebnis):
+    """Wie ``NachfuellErgebnis``, dazu: ausgeschlossene ``live_fallback``-/``unknown``-Stände und vom Deckel verworfene
+    Stunden."""
+
+    live_fallback: int = 0
+    unknown: int = 0
+    deckel_verworfen: int = 0
+
+    def als_dict(self) -> dict:
+        return {**super().als_dict(), "live_fallback": self.live_fallback, "unknown": self.unknown,
+                "deckel_verworfen": self.deckel_verworfen}
+
+
+def _ziel_ohne_ha(key: str, k, ha_keys: set[str], quellen_energy: dict) -> Optional[_ZielES]:
+    """Die Auswahl des Stundenlaufs (``schreiber._eigene_summe``) für einen Schlüssel — strenger nur in S3-R9: eine
+    HA-Entity in der Zuordnung (auch eines stillgelegten Geräts) schließt aus, gleich welche ``quelle`` die Stände tragen."""
+    from backend.services.kanal import schreiber as sch
+    from backend.services.snapshot.keys import (
+        QUELLE_HA_ENERGY,
+        QUELLE_KEINE_ENERGY,
+        _mqtt_key_to_sensor_key,
+        _sensor_key_to_mqtt_key,
+    )
+
+    mqtt_key = _sensor_key_to_mqtt_key(key)
+    if not mqtt_key or _mqtt_key_to_sensor_key(mqtt_key) != key or key in ha_keys:
+        return None
+    zuord = quellen_energy.get(key)
+    if zuord and (zuord[0] in QUELLE_HA_ENERGY or zuord[0] == QUELLE_KEINE_ENERGY):
+        return None
+    art, einheit = sch._art_und_einheit(key, k.invs)
+    return _ZielES(key, mqtt_key, art, einheit) if art in (ART_SUM, ART_STAND) else None
+
+
+async def _ziele_eigene_summe(db: AsyncSession, anlage, jetzt: datetime, *, nur_vorhandene: bool) -> list[_ZielES]:
+    """Startlauf: jeder Schlüssel mit Stundenständen. Anstoß: nur Kanäle, die es schon gibt (ohne Abfrage über die
+    Stände — der Stundenlauf legt den Kanal an, sobald MQTT liefert)."""
+    from backend.models.sensor_snapshot import SensorSnapshot
+    from backend.services.kanal import schreiber as sch
+    from backend.services.snapshot.keys import extract_quellen_energy
+    from backend.services.snapshot.writer import _build_counter_map
+
+    k = await sch._kontext(db, anlage, jetzt)
+    ha_keys = set(k.counter_map) | set(_build_counter_map(anlage, None))
+    if nur_vorhandene:
+        keys = (await db.execute(select(Kanal.key).where(Kanal.anlage_id == anlage.id))).scalars().all()
+    else:
+        keys = (await db.execute(select(SensorSnapshot.sensor_key).where(
+            SensorSnapshot.anlage_id == anlage.id).distinct())).scalars().all()
+    quellen_energy = extract_quellen_energy(anlage)
+    ziele = (_ziel_ohne_ha(key, k, ha_keys, quellen_energy) for key in sorted(keys))
+    return [z for z in ziele if z is not None]
+
+
+async def _rohstaende(db: AsyncSession, anlage_id: int, key: str, bis_ts: int,
+                      erg: "EigeneSummeErgebnis") -> list[tuple[datetime, float]]:
+    """Die Stundenstände eines Schlüssels als ``(Beginn der Stunde, Stand)`` mit ``start_ts < bis_ts``.
+
+    Ein Stand zur vollen Stunde ``Z`` ist der Zählerstand AM ENDE der Stunde ``[Z − 1 h, Z)`` (``snapshot_anlage``: HAs
+    ``get_value_at(Z)`` bzw. der MQTT-Stand nächst ``Z``) — seine Kanalzeile hat ``start_ts = Z − 3600`` (in absoluter Zeit,
+    damit die Umstellungsstunden stimmen). ``live_fallback``-Zeilen (aus der Leistung abgeleitet) und ``unknown``-Zeilen
+    (Herkunft unklassifiziert) sind keine Rohstände: nicht übernommen, gezählt (``erg.live_fallback``, ``erg.unknown``).
+    """
+    from backend.models.sensor_snapshot import SensorSnapshot
+    from backend.services.snapshot.source import SnapshotSource
+
+    staende: list[tuple[datetime, float]] = []
+    for zp, wert, quelle in (await db.execute(
+        select(SensorSnapshot.zeitpunkt, SensorSnapshot.wert_kwh, SensorSnapshot.quelle).where(and_(
+            SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == key,
+            func.strftime("%M:%S", SensorSnapshot.zeitpunkt) == "00:00",
+        )).order_by(SensorSnapshot.zeitpunkt)
+    )).all():
+        start = _unix(zp) - _STUNDE
+        if start >= bis_ts:
+            continue
+        if quelle in (SnapshotSource.LIVE_FALLBACK, SnapshotSource.UNKNOWN):
+            erg.live_fallback += quelle == SnapshotSource.LIVE_FALLBACK
+            erg.unknown += quelle == SnapshotSource.UNKNOWN
+            continue
+        staende.append((datetime.fromtimestamp(start), wert))
+    return staende
+
+
+def _tagesstaende(staende: list[tuple[datetime, float]]) -> bool:
+    """Grober als stündlich: unterer Median der Abstände aufeinanderfolgender Stände über ``TAKT_MAX_S`` (``median_low``:
+    bei gerader Zahl der kleinere der beiden mittleren — drei Stunden mit einer Lücke sind noch stündlich; ein einzelner
+    Stand ist kein Takt und wird genommen)."""
+    from statistics import median_low
+
+    ts = [_unix(t) for t, _ in staende]
+    abstaende = [b - a for a, b in zip(ts, ts[1:])]
+    return bool(abstaende) and median_low(abstaende) > TAKT_MAX_S
+
+
+def _verworfen(zeilen: list[dict]) -> int:
+    """Stunden, deren Zuwachs der Deckel verwarf: die Summe steht, obwohl HAs Regel aus dem Stand der Stunde einen
+    Zuwachs nennt (je Stunde genau ein Stand — ``sensor_snapshots`` ist je Zeitpunkt eindeutig)."""
+    from backend.core.berechnungen.ha_summe import PeriodenSumme, ha_summe_der_periode
+
+    n = 0
+    for vor, z in zip(zeilen, zeilen[1:]):
+        if vor["sum"] is None or z["sum"] is None or abs(z["sum"] - vor["sum"]) > _TOL:
+            continue
+        ha = ha_summe_der_periode(PeriodenSumme(sum=vor["sum"], state=vor["state"]), [z["state"]])
+        n += ha is not None and ha.sum - vor["sum"] > _TOL
+    return n
+
+
+async def _rechne_eigene_summe(db: AsyncSession, anlage, kanal: Kanal, ziel: _ZielES, staende, anker,
+                               erste_q, jetzt: datetime) -> tuple[list[dict], int]:
+    """Die Zeilen vor dem Anker über DIESELBE Rechenstelle wie der Stundenlauf (``schreiber._eigene_summe_zeilen``:
+    HAs 90-%-Regel, Deckel als Schreibfilter). Gibt es eine erste Kanal-Zeile (``anker``), läuft die Rechnung über ihren
+    Stand weiter, und alle Summen werden so verschoben, dass der Kanalwert an der Naht stetig ist und die Naht-Stunde
+    den Zuwachs nach HAs Regel trägt — die Zeilen ab dem Anker bleiben unberührt (dieselbe Quelle, derselbe ``offset``).
+    Ohne Quelle legt die Rechenstelle sie an wie im Stundenlauf (``gueltig_ab`` = erste Stunde, ``offset`` 0)."""
+    from backend.services.kanal import schreiber as sch
+
+    mit_anker = anker is not None and ziel.art == ART_SUM
+    if mit_anker:
+        staende = [*staende, (datetime.fromtimestamp(anker.start_ts), float(anker.state))]
+    k = await sch._kontext(db, anlage, jetzt)
+    zeilen = await sch._eigene_summe_zeilen(db, k, sch._KanalStand(kanal, None, erste_q), ziel.key, ziel.mqtt_key,
+                                            staende)
+    verworfen = _verworfen(zeilen)
+    if not mit_anker:
+        return zeilen, verworfen
+    naht = zeilen.pop() if zeilen and zeilen[-1]["start_ts"] == anker.start_ts else None
+    verschiebung = float(anker.sum) - (naht["sum"] if naht is not None else zeilen[-1]["sum"]) if zeilen else 0.0
+    for z in zeilen:
+        z["sum"] += verschiebung
+    return zeilen, verworfen
+
+
+async def _plan_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES, jetzt: datetime,
+                             erg: EigeneSummeErgebnis) -> tuple[Optional[int], Optional[str], list[dict]]:
+    """Eine Sitzung: Anker, Rohstände, Rechnung; legt einen fehlenden Kanal (und seine Quelle) an wie der Stundenlauf."""
+    from backend.models.anlage import Anlage
+    from backend.services.kanal import schreiber as sch
+
+    async with sitzungen() as db:
+        kanal, erste_ts, erste_q = await _erste(db, anlage_id, ziel.key)
+        kanal_id = kanal.id if kanal is not None else None
+        if erste_q is not None and (erste_q.familie != FAMILIE_MITSCHRIFT or erste_q.statistic_id != ziel.mqtt_key):
+            return kanal_id, "vorgeschichte_andere_quelle", []
+        anker = None
+        if erste_ts is not None:
+            anker = (await db.execute(select(KanalStatistik).where(and_(
+                KanalStatistik.kanal_id == kanal_id, KanalStatistik.start_ts == erste_ts)))).scalar_one()
+            if ziel.art == ART_SUM and (anker.sum is None or anker.state is None):
+                return kanal_id, "anker_ohne_stand", []
+        bis_ts = erste_ts if erste_ts is not None else _unix(jetzt.replace(minute=0, second=0, microsecond=0))
+        staende = await _rohstaende(db, anlage_id, ziel.key, bis_ts, erg)
+        if not staende:
+            return kanal_id, "keine_staende", []
+        if _tagesstaende(staende):
+            return kanal_id, "tagesstaende", []
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+        if kanal is None:
+            kanal = (await sch.kanaele_holen(db, anlage_id, {ziel.key: (ziel.art, ziel.einheit)}))[ziel.key]
+        zeilen, verworfen = await _rechne_eigene_summe(db, anlage, kanal, ziel, staende, anker, erste_q, jetzt)
+        erg.deckel_verworfen += verworfen
+        return kanal.id, None, zeilen
+
+
+async def _fuelle_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES, jetzt: datetime,
+                               erg: EigeneSummeErgebnis, block_stunden: int) -> tuple[Optional[int], Optional[str], int]:
+    """Vorgeschichte EINES Kanals aus den Stundenständen. Rechnung in einer Sitzung, Schreiben blockweise rückwärts
+    (jüngster Block zuerst) in je einer kurzen Sitzung, ``ON CONFLICT DO NOTHING``; jeder Block senkt ``gueltig_ab``
+    der ersten Quelle auf seine erste Stunde. Abgebrochen ⇒ der nächste Lauf rechnet bis zur dann ersten Zeile neu
+    (dieselbe Vorwärtsrechnung, derselbe Anker-Wert ⇒ dieselben Zeilen)."""
+    kanal_id, grund, zeilen = await _plan_eigene_summe(sitzungen, anlage_id, ziel, jetzt, erg)
+    neu = 0
+    for ende in range(len(zeilen), 0, -block_stunden):
+        block = zeilen[max(0, ende - block_stunden):ende]
+        async with sitzungen() as db:
+            neu += await _einfuegen(db, block)
+            await db.execute(update(KanalQuelle).where(and_(
+                KanalQuelle.kanal_id == kanal_id, KanalQuelle.familie == FAMILIE_MITSCHRIFT,
+                KanalQuelle.statistic_id == ziel.mqtt_key, KanalQuelle.gueltig_ab > block[0]["start_ts"],
+                KanalQuelle.gueltig_ab == select(func.min(KanalQuelle.gueltig_ab)).where(
+                    KanalQuelle.kanal_id == kanal_id).scalar_subquery(),
+            )).values(gueltig_ab=block[0]["start_ts"]))
+        erg.bloecke += 1
+    return kanal_id, grund, neu
+
+
+async def nachfuellen_eigene_summe(
+    sitzungen: Sitzungen, anlage_id: int, *, jetzt: datetime, block_stunden: int = BLOCK_STUNDEN,
+    nur_vorhandene: bool = False, beim_beginn=None,
+) -> EigeneSummeErgebnis:
+    """Die Kanäle «Eigene Summe» einer Anlage aus den Stundenständen in ``sensor_snapshots`` füllen — **nur Zähler ohne
+    HA-Entity** (S3-R9, ``_ziel_ohne_ha``), **nur vor der ersten Zeile** des Kanals, **je Kanal einmal** (Marke
+    ``kanal_nachfuellung`` mit der MQTT-Kennung). Kein HA nötig. Der Stundenlauf bleibt, wie er ist: er setzt ab der
+    letzten Zeile fort und füllt keine Lücke aus ``sensor_snapshots`` (Entscheid Master E-S3-4).
+
+    ``jetzt``: Uhr des Laufs; ohne Kanal-Zeile wird bis zur Stunde vor ``jetzt`` gefüllt (wie der Stundenlauf).
+    """
+    from backend.models.anlage import Anlage
+
+    erg = EigeneSummeErgebnis(anlage_id)
+    async with sitzungen() as db:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
+        ziele = await _ziele_eigene_summe(db, anlage, jetzt, nur_vorhandene=nur_vorhandene)
+        marken = await _marken(db, anlage_id)
+    offen = []
+    for ziel in ziele:
+        if marken.get(ziel.key, (None, None))[1] == ziel.mqtt_key:
+            erg.uebersprungen["schon_gefuellt"] += 1
+        else:
+            offen.append(ziel)
+    erg.kanaele = len(offen)
+    if offen and beim_beginn is not None:
+        await beim_beginn(erg)
+    for ziel in offen:
+        await _eigene_summe_kanal_mit_marke(sitzungen, anlage_id, ziel, jetzt, erg, block_stunden)
+    return erg
+
+
+async def _eigene_summe_kanal_mit_marke(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES, jetzt: datetime,
+                                        erg: EigeneSummeErgebnis, block_stunden: int) -> None:
+    """Einen Kanal füllen und markieren; ein Fehler setzt keine Marke (der nächste Lauf setzt fort)."""
+    try:
+        kanal_id, grund, neu = await _fuelle_eigene_summe(sitzungen, anlage_id, ziel, jetzt, erg, block_stunden)
+    except Exception as e:  # noqa: BLE001 — ein Kanal hält die übrigen nicht auf
+        erg.fehler += 1
+        logger.warning("Kanal-Nachfüllen eigene Summe %s (Anlage %s) abgebrochen: %s: %s",
+                       ziel.key, anlage_id, type(e).__name__, e)
+        return
+    if grund:
+        erg.uebersprungen[grund] += 1
+    if neu:
+        erg.gefuellt += 1
+        erg.zeilen += neu
+    if kanal_id is None:
+        return                             # kein Kanal (keine Stände) ⇒ keine Marke; der Stundenlauf legt ihn an
+    async with sitzungen() as db:
+        await db.merge(KanalNachfuellung(
+            kanal_id=kanal_id, statistic_id=ziel.mqtt_key, abgeschlossen_ts=_unix(jetzt),
+            ergebnis={"zeilen": neu, **({"grund": grund} if grund else {})},
+        ))
+    erg.markiert += 1
+
+
 # ── Neu-Laden (Konsistenzlauf) ──────────────────────────────────────────────
 
 
@@ -421,6 +708,54 @@ async def neu_spiegeln(
 
 
 async def nachfuellen_anlage(
+    sitzungen: Sitzungen, anlage_id: int, *, jetzt: datetime, ha_svc=None,
+    block_stunden: int = BLOCK_STUNDEN, nur_vorhandene: bool = False,
+) -> NachfuellErgebnis:
+    """Spiegel aus HA (``_nachfuellen_anlage_spiegel``) und — seit E-S3-4 — die Eigene Summe aus den Stundenständen
+    (``_nachfuellen_eigene_summe_protokolliert``, ohne HA). Rückgabe: das Ergebnis des Spiegels; das der Eigenen Summe
+    steht in ``.eigene_summe`` (``None``, wenn ihr Lauf abbrach — geloggt, der Spiegel bleibt)."""
+    erg = await _nachfuellen_anlage_spiegel(sitzungen, anlage_id, jetzt=jetzt, ha_svc=ha_svc,
+                                            block_stunden=block_stunden, nur_vorhandene=nur_vorhandene)
+    try:
+        erg.eigene_summe = await _nachfuellen_eigene_summe_protokolliert(
+            sitzungen, anlage_id, jetzt=jetzt, block_stunden=block_stunden, nur_vorhandene=nur_vorhandene)
+    except Exception as e:  # noqa: BLE001 — der Spiegel-Teil ist geschrieben; der nächste Lauf setzt fort
+        logger.warning("Kanal-Nachfüllen eigene Summe (Anlage %s) fehlgeschlagen: %s: %s",
+                       anlage_id, type(e).__name__, e)
+    return erg
+
+
+async def _nachfuellen_eigene_summe_protokolliert(
+    sitzungen: Sitzungen, anlage_id: int, *, jetzt: datetime, block_stunden: int, nur_vorhandene: bool,
+) -> EigeneSummeErgebnis:
+    """``nachfuellen_eigene_summe`` mit EINEM Protokolleintrag (N-532) — nur, wenn Zeilen geschrieben wurden oder ein Kanal
+    abbrach (Nachmessung E-S3-4, M-1: Schlüssel ohne Kanal — nur ``live_fallback``, Tagesstände — bekommen keine Marke und
+    werden bei jedem Start neu geprüft; ohne diese Bedingung schrieb jeder Start zwei leere Einträge). Sonst nur ``debug``."""
+    from backend.services.activity_service import log_activity
+
+    erg = await nachfuellen_eigene_summe(sitzungen, anlage_id, jetzt=jetzt, block_stunden=block_stunden,
+                                         nur_vorhandene=nur_vorhandene)
+    if not (erg.gefuellt or erg.fehler):
+        logger.debug("Kanal-Nachfüllen eigene Summe (Anlage %s): nichts geschrieben — %s", anlage_id, erg.als_dict())
+        return erg
+    async with sitzungen() as db:
+        await log_activity(
+            kategorie="scheduler",
+            aktion="Kanalstatistik: Nachfüllen aus den Zählerständen " + ("abgeschlossen" if erg.fehler == 0 else "unvollständig"),
+            erfolg=erg.fehler == 0,
+            details=(f"{erg.gefuellt} von {erg.kanaele} offenen Zählern gefüllt, {erg.zeilen} Stundenzeilen in "
+                     f"{erg.bloecke} Blöcken; {erg.live_fallback} aus der Leistung abgeleitete"
+                     + (f" und {erg.unknown} unklassifizierte" if erg.unknown else "") + " Stände nicht übernommen, "
+                     f"{erg.deckel_verworfen} Stunden vom Plausibilitätsdeckel verworfen"
+                     + (f"; {erg.uebersprungen['tagesstaende']} Reihen mit Tagesständen — ab Kalendertag (S4)"
+                        if erg.uebersprungen.get("tagesstaende") else "")
+                     + (f"; {erg.fehler} Kanäle abgebrochen (nächster Lauf setzt fort)" if erg.fehler else "")),
+            details_json=erg.als_dict(), anlage_id=anlage_id, db=db,
+        )
+    return erg
+
+
+async def _nachfuellen_anlage_spiegel(
     sitzungen: Sitzungen, anlage_id: int, *, jetzt: datetime, ha_svc=None,
     block_stunden: int = BLOCK_STUNDEN, nur_vorhandene: bool = False,
 ) -> NachfuellErgebnis:

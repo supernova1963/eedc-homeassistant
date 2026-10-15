@@ -12,6 +12,9 @@
   nächste Investition mit derselben ID erbte beide; Probe dazu: ``test_n668_investition_loeschen_messreihen.py``).
 * **E2:** dasselbe Bitgleich mit Nachfüllen Spiegel und Konsistenzlauf (samt einer Korrektur in HA)
   zwischen Stundenlauf und Tagesaggregation — beide schreiben nur Kanal-Tabellen.
+* **S3, E-S3-4:** dasselbe Bitgleich mit dem Nachfüllen der Eigenen Summe aus ``sensor_snapshots`` (MQTT-Weg: der
+  Kanal-Schreiber beginnt erst in der Mitte, das Nachfüllen setzt die Stunden davor an) — es liest die Stundenstände
+  und schreibt nur Kanal-Tabellen.
 
 Schwesterdateien: test_kanal_spiegel.py, test_kanal_eigene_summe.py, test_kanal_mitschrift_betriebsart.py, test_kanal_feld_deckung.py; Datenstand: test_achsen_matrix.py.
 """
@@ -82,7 +85,8 @@ def _mqtt_zeilen(form, aid: int, ids: dict) -> list[dict]:
 
 
 async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, stoerung=None,
-                nachfuellen: bool = False, ha_korrektur: bool = False) -> dict:
+                nachfuellen: bool = False, ha_korrektur: bool = False, kanal_ab: int = 1,
+                es_nachfuellen: bool = False) -> dict:
     verz = tempfile.mkdtemp(prefix="eedc-kanal-bestand-")
     try:
         engine, db = await mx._neue_db(f"{verz}/x.db")
@@ -106,11 +110,13 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
                     for h in range(1, STUNDEN + 1):
                         zp = START + timedelta(hours=h)
                         await snapshot_anlage(db, anlage, zeitpunkt=zp)
-                        if mit_kanal:
+                        if mit_kanal and h >= kanal_ab:
                             await schreibe_kanaele_im_stundenlauf(db, anlage, zp)
                         await db.commit()
                     if nachfuellen or ha_korrektur:
                         out_e2 = await _e2_laeufe(engine, svc, aid, kanal=nachfuellen)
+                    if es_nachfuellen:
+                        out_es = await _es_nachfuellen(engine, svc, aid)
                     await mx.aggregiere_tage(db, form.pvform, aid, TAGE)
                 finally:
                     if not mitschrift:
@@ -122,6 +128,8 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
                                  (await db.execute(select(ActivityLog))).scalars().all()]
             if nachfuellen or ha_korrektur:
                 out["e2"] = out_e2
+            if es_nachfuellen:
+                out["es"] = out_es
             return out
         finally:
             await db.close()
@@ -162,6 +170,26 @@ async def _e2_laeufe(engine, svc, aid: int, *, kanal: bool) -> dict:
         return {}
     ko = await konsistenz_anlage(sitzungen, aid, ha_svc=svc)
     return {"nachgefuellt": nf.zeilen, "fehler": nf.fehler + ko.fehler, "korrigiert": len(ko.korrigiert)}
+
+
+async def _es_nachfuellen(engine, svc, aid: int) -> dict:
+    """S3, E-S3-4: der Einstieg des Produkts (``nachfuellen_anlage``: Spiegel + Eigene Summe) über eigene Sitzungen."""
+    from contextlib import asynccontextmanager
+
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from backend.services.kanal.nachfuellen import nachfuellen_anlage
+
+    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    @asynccontextmanager
+    async def sitzungen():
+        async with macher() as s:
+            yield s
+            await s.commit()
+
+    erg = await nachfuellen_anlage(sitzungen, aid, jetzt=START + timedelta(hours=STUNDEN, minutes=5), ha_svc=svc)
+    return {"zeilen": erg.eigene_summe.zeilen, "kanaele": erg.eigene_summe.gefuellt, "fehler": erg.eigene_summe.fehler}
 
 
 class _nichts:
@@ -305,3 +333,18 @@ async def test_bestand_bitgleich_mit_nachfuellen_und_konsistenzlauf(fid):
         assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
         assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
     assert mit["e2"]["nachgefuellt"] > 0 and mit["e2"]["korrigiert"] >= 1 and mit["e2"]["fehler"] == 0, mit["e2"]
+
+
+@pytest.mark.parametrize("fid", ["M02", "M10"])
+async def test_bestand_bitgleich_mit_nachfuellen_der_eigenen_summe(fid):
+    """S3, E-S3-4 (Auftrag Punkt 7): das Nachfüllen der Eigenen Summe aus ``sensor_snapshots`` ändert keine Zeile des
+    Bestands — ``sensor_snapshots`` (es liest sie nur), Stunden- und Tageszeilen. MQTT-Weg; der Kanal-Schreiber beginnt
+    in Stunde 15, das Nachfüllen setzt die 14 Stunden davor an."""
+    form = am.FORMEN[fid]
+    mit = await _lauf(form, ha=False, mit_kanal=True, kanal_ab=15, es_nachfuellen=True)
+    ohne = await _lauf(form, ha=False, mit_kanal=False, mitschrift=False)
+    for t in _BESTAND:
+        assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
+        assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    assert mit["es"]["fehler"] == 0 and mit["es"]["kanaele"] > 0, mit["es"]
+    assert mit["es"]["zeilen"] == 14 * mit["es"]["kanaele"], mit["es"]

@@ -12,6 +12,9 @@ Punkt 4). Die Proben stehen in ``test_kanal_bilanz_gleichheit.py`` (kein ``test`
   Stand nächst der vollen Stunde), Tage über den echten ``aggregate_day`` ohne HA (Snapshot-Pfad). Die Rohstände
   liegen je Stunde um ``H:59`` und tragen den Stand am Ende der Stunde; ein Zähler ohne Nachtzeilen (F08) meldet in
   den Stunden, in denen er schläft, nichts — wie im HA-Datenstand.
+  Mit ``eigene_summe_aus="sensor_snapshots"`` (HA-Bauform S3, E-S3-4) entsteht die eigene Summe statt aus den Rohständen
+  aus den Stundenständen über das Nachfüllen (``kanal/nachfuellen.nachfuellen_eigene_summe``) — derselbe Seed,
+  dieselben Tage; die Art bleibt ``MQTT``.
 
 **Was verglichen wird** (je Tag und Monat des Datenstands, Feld für Feld):
 
@@ -148,11 +151,12 @@ class Datenstand:
 
 
 @asynccontextmanager
-async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional[dict] = None):
+async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional[dict] = None,
+                     eigene_summe_aus: str = "mqtt"):
     """Seed → Kanäle → Tageszeilen; ``yield Datenstand``. Wegwerf-Datei je Lauf. ``ha_abweichung`` (nur PV-Matrix,
-    HA): ``{sensor_id: (Rate | None, ohne_Zeile | None)}`` wie ``pv_achse_matrix.seed_ha``."""
-    from backend.services.kanal.nachfuellen import nachfuellen_spiegel
-    from backend.services.kanal.schreiber import schreibe_eigene_summe
+    HA): ``{sensor_id: (Rate | None, ohne_Zeile | None)}`` wie ``pv_achse_matrix.seed_ha``. ``eigene_summe_aus`` (nur
+    MQTT): ``"mqtt"`` (Stundenlauf über die Rohstände) oder ``"sensor_snapshots"`` (Nachfüllen über die Stundenstände)."""
+    from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe, nachfuellen_spiegel
 
     verz = tempfile.mkdtemp(prefix="eedc-kanal-bilanz-")
     try:
@@ -188,15 +192,11 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                 await _seed_mqtt(db, matrix, form, aid, ids)
                 umgebung = am.umgebung(form, svc) if matrix == "achsen" else mx._umgebung(svc)
                 with umgebung:
-                    laeufe = [mx.REIHE_VON + timedelta(hours=1, minutes=5)]
-                    tag = mx.REIHE_VON.date()
-                    while tag < mx.REIHE_BIS.date():
-                        laeufe.append(datetime.combine(tag, datetime.min.time()) + timedelta(hours=21, minutes=5))
-                        tag += timedelta(days=1)
-                    laeufe.append(mx.REIHE_BIS + timedelta(minutes=5))
-                    for zp in laeufe:
-                        await schreibe_eigene_summe(db, anlage, zp)
-                        await db.commit()
+                    if eigene_summe_aus == "sensor_snapshots":
+                        erg = await nachfuellen_eigene_summe(sitzungen, aid, jetzt=mx.JETZT)
+                        assert erg.fehler == 0 and erg.zeilen > 0, erg
+                    else:
+                        await _eigene_summe_tageslauf(db, anlage)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: aus der eigenen Summe, wie im Stundenlauf
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
@@ -206,6 +206,21 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
             await engine.dispose()
     finally:
         shutil.rmtree(verz, ignore_errors=True)
+
+
+async def _eigene_summe_tageslauf(db: AsyncSession, anlage) -> None:
+    """Der Stundenlauf über die Rohstände: erster Lauf, dann täglich 21:05, am Ende 04.07. 00:05."""
+    from backend.services.kanal.schreiber import schreibe_eigene_summe
+
+    laeufe = [mx.REIHE_VON + timedelta(hours=1, minutes=5)]
+    tag = mx.REIHE_VON.date()
+    while tag < mx.REIHE_BIS.date():
+        laeufe.append(datetime.combine(tag, datetime.min.time()) + timedelta(hours=21, minutes=5))
+        tag += timedelta(days=1)
+    laeufe.append(mx.REIHE_BIS + timedelta(minutes=5))
+    for zp in laeufe:
+        await schreibe_eigene_summe(db, anlage, zp)
+        await db.commit()
 
 
 # ── Bestand (die heutigen Leser) ────────────────────────────────────────────
