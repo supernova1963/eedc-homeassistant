@@ -11,6 +11,13 @@
 
 ## Unreleased
 
+**Werkbank: Werte vor dem Sensorbeginn verwerfen:** Hast du einem Feld einen neuen Sensor zugeordnet und der alte hat
+vorher falsche Werte geliefert, kommst du jetzt an diese Werte heran. Die neue Operation der Reparatur-Werkbank verwirft
+für **ein** Feld die Werte vor dem Beginn des neuen Sensors — im HA-Spiegel und in den Stunden- und Tageswerten, nur
+dieses Feld; Wetter, Prognosen, Preise und andere Geräte bleiben stehen, Monate mit Abschluss bleiben unberührt. Die
+Vorschau nennt vorher Sensor, Zeitraum, Tage und Monate; einen Rückweg gibt es nicht
+([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+
 **MQTT-Check erwartet Pflicht und Zugeordnetes:** Der Daten-Checker erwartet ein MQTT-Topic ohne Zuordnung nur noch,
 wenn das Feld Pflicht ist — dieselben Felder, die *Einstellungen → Datenquellen* rot markiert —, und sonst nur Felder,
 denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Eine Luft-Wasser-Wärmepumpe ohne Zuordnungen stand bisher mit

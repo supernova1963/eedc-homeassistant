@@ -174,6 +174,7 @@ GET /api/pvgis/prognose/{anlage_id}
 GET /api/pvgis/prognose/{anlage_id}/aktiv
 GET /api/pvgis/prognose/{anlage_id}/gespeichert
 GET /api/redoc
+GET /api/repair/kanal-auswahl
 GET /api/repair/plans
 GET /api/scheduler
 GET /api/settings

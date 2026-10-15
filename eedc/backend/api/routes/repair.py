@@ -12,6 +12,9 @@ Drei Endpoints für die zentrale Reparatur-Werkbank:
                                               pending) für die Anlage,
                                               neueste zuerst
   DELETE /api/repair/plans/{plan_id}        → verwirft offenen Plan
+  GET    /api/repair/kanal-auswahl?anlage_id=… → Felder mit Sensortausch für
+                                              «Werte vor dem Sensorbeginn
+                                              verwerfen» (HA-Bauform S3, E-S3-5)
 
 Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 5.
 
@@ -125,6 +128,24 @@ async def list_plans(
     """
     plans = await orch.list_plans(anlage_id, limit=limit)
     return PlansListResponse(plans=plans)
+
+
+class KanalAuswahlResponse(BaseModel):
+    """Auswahl der Werkbank-Operation «Werte vor dem Sensorbeginn verwerfen» (HA-Bauform S3, E-S3-5)."""
+    kanaele: list[dict]
+
+
+@router.get("/kanal-auswahl", response_model=KanalAuswahlResponse)
+async def kanal_auswahl(
+    anlage_id: int = Query(..., description="Anlage-ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Zählerkanäle zugeordneter Felder mit mindestens zwei Quellen (Sensortausch), je Kanal die Quellen
+    (`gueltig_ab`, Familie, `statistic_id`, Marke «verworfen am») und die Vorbelegung des Zeitpunkts (Beginn der
+    jüngsten Quelle). Nur lesend."""
+    from backend.services.verwerfen_vor_quellbeginn import auswahl
+
+    return KanalAuswahlResponse(kanaele=await auswahl(db, anlage_id))
 
 
 @router.delete("/plans/{plan_id}")

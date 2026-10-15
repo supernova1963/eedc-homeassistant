@@ -76,6 +76,9 @@ class RepairOperationType(str, Enum):
     WETTER_BACKFILL = "wetter_backfill"
     DELETE_MONATSDATEN = "delete_monatsdaten"
     RESET_CLOUD_IMPORT = "reset_cloud_import"
+    #: HA-Bauform S3, E-S3-5: Werte eines Feldes vor dem Beginn seines jüngsten Sensors verwerfen (Kanal + Bestand,
+    #: feldgenau) — `services/verwerfen_vor_quellbeginn.py`.
+    VERWERFEN_VOR_QUELLBEGINN = "verwerfen_vor_quellbeginn"
     SOLCAST_REWRITE = "solcast_rewrite"
 
 
@@ -1428,6 +1431,35 @@ async def _execute_reset_cloud_import(
     }
 
 
+# ── Operation: VERWERFEN_VOR_QUELLBEGINN (HA-Bauform S3, E-S3-5) ────────────
+
+
+async def _plan_verwerfen_vor_quellbeginn(
+    req: RepairOperationRequest, db: AsyncSession
+) -> tuple[dict[str, int], list[str], dict[str, Any]]:
+    """params: {kanal: 'basis:<feld>' | 'inv:<id>:<feld>', zeitpunkt: 'YYYY-MM-DDTHH:MM' (volle Stunde, Ortszeit)}
+
+    Vorschau ohne Schreiben (Bauplan S3 §7): ältere Quellen mit `statistic_id` und `gueltig_ab`, ihre Kanalzeilen vor
+    dem Zeitpunkt, die Tage mit Stunden-/Tageswerten dieses Feldes, die Monate mit Abschluss (bleiben unberührt) und die
+    Tage, die danach keinen Wert dieses Feldes mehr haben. Die Sätze baut `verwerfen_vor_quellbeginn.klartext`.
+    """
+    from backend.services import verwerfen_vor_quellbeginn as vq
+
+    if req.anlage_id is None:
+        raise ValueError("VERWERFEN_VOR_QUELLBEGINN benötigt anlage_id")
+    la = await vq.lage(db, req.anlage_id, req.params)
+    return vq.geschaetzt(la), vq.klartext(la), vq.vorschau_daten(la)
+
+
+async def _execute_verwerfen_vor_quellbeginn(
+    req: RepairOperationRequest, db: AsyncSession
+) -> dict[str, Any]:
+    """Zählt frisch und führt aus (wie RESET_CLOUD_IMPORT: kein Arbeiten auf einer veralteten Vorschau)."""
+    from backend.services import verwerfen_vor_quellbeginn as vq
+
+    return await vq.fuehre_aus(db, req.anlage_id, req.params)
+
+
 # ── Operation: SOLCAST_REWRITE (Stub für P6) ────────────────────────────────
 
 
@@ -1470,6 +1502,8 @@ async def plan(req: RepairOperationRequest, db: AsyncSession) -> RepairPlan:
         estimated, warnings, op_preview, diff_preview, diff_total_count = (
             await _plan_reset_cloud_import(req, db)
         )
+    elif req.operation == RepairOperationType.VERWERFEN_VOR_QUELLBEGINN:
+        estimated, warnings, op_preview = await _plan_verwerfen_vor_quellbeginn(req, db)
     elif req.operation == RepairOperationType.SOLCAST_REWRITE:
         await _plan_solcast_rewrite(req, db)
         # Unreachable wegen NotImplementedError, hilft mypy
@@ -1547,6 +1581,8 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         summary = await _execute_delete_monatsdaten(req, db)
     elif req.operation == RepairOperationType.RESET_CLOUD_IMPORT:
         summary = await _execute_reset_cloud_import(req, db)
+    elif req.operation == RepairOperationType.VERWERFEN_VOR_QUELLBEGINN:
+        summary = await _execute_verwerfen_vor_quellbeginn(req, db)
     elif req.operation == RepairOperationType.SOLCAST_REWRITE:
         raise NotImplementedError("SOLCAST_REWRITE ist Päckchen 6")
     else:

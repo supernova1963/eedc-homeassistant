@@ -49,6 +49,7 @@ import {
   ROHDATEN_LOESCH_BESCHREIBUNG,
 } from '../../pages/datenCheckerMeldungen'
 import { mitAnzahl } from '../../lib/plural'
+import { VERWERFEN_LEER, VerwerfenParams, verwerfenParams, type VerwerfenWerte } from './VerwerfenParams'
 
 /** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
  *  bleiben roh stehen, damit ein neuer Zähler nicht still verschwindet. */
@@ -87,6 +88,8 @@ interface OperationParamsState {
   scope: 'tages' | 'monats' | 'beides'
   // reset_cloud_import
   providers: string  // Komma-Liste, leer = alle
+  // verwerfen_vor_quellbeginn (HA-Bauform S3, E-S3-5)
+  verwerfen: VerwerfenWerte
 }
 
 const DEFAULT_PARAMS: OperationParamsState = {
@@ -97,6 +100,7 @@ const DEFAULT_PARAMS: OperationParamsState = {
   range_confirmed: false,
   scope: 'beides',
   providers: '',
+  verwerfen: VERWERFEN_LEER,
 }
 
 const WORKBENCH_OPERATIONS = OPERATION_META.filter((o) => o.inWorkbench)
@@ -154,7 +158,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     setError(null)
   }, [
     params.datum, params.von, params.bis, params.mit_resnap,
-    params.range_confirmed, params.scope, params.providers,
+    params.range_confirmed, params.scope, params.providers, params.verwerfen,
   ])
 
   // Operation-Wechsel: Plan-Vorschau + Result zurücksetzen
@@ -221,6 +225,8 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
           .filter(Boolean)
         return provs.length > 0 ? { providers: provs } : {}
       }
+      case 'verwerfen_vor_quellbeginn':
+        return verwerfenParams(params.verwerfen)
       default:
         return {}
     }
@@ -229,6 +235,9 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
   const validateParams = (): string | null => {
     if (selectedOp === 'reaggregate_day' && !params.datum) {
       return 'Bitte einen Tag auswählen.'
+    }
+    if (selectedOp === 'verwerfen_vor_quellbeginn' && (!params.verwerfen.kanal || !params.verwerfen.datum)) {
+      return 'Bitte ein Feld mit Sensortausch und den Zeitpunkt wählen.'
     }
     if (selectedOp === 'reaggregate_range') {
       if (!params.von || !params.bis) {
@@ -388,6 +397,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
             {/* Operation-spezifische Parameter — unter dem Auswahlfeld */}
             {!istDirekt && (
               <OperationParamsEditor
+                anlageId={anlageId}
                 operation={selectedOp as RepairOperationType}
                 params={params}
                 setParams={setParams}
@@ -503,13 +513,24 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
 
 
 interface ParamsEditorProps {
+  anlageId: number
   operation: RepairOperationType
   params: OperationParamsState
   setParams: React.Dispatch<React.SetStateAction<OperationParamsState>>
   disabled: boolean
 }
 
-function OperationParamsEditor({ operation, params, setParams, disabled }: ParamsEditorProps) {
+function OperationParamsEditor({ anlageId, operation, params, setParams, disabled }: ParamsEditorProps) {
+  if (operation === 'verwerfen_vor_quellbeginn') {
+    return (
+      <VerwerfenParams
+        anlageId={anlageId}
+        werte={params.verwerfen}
+        onChange={(w) => setParams((p) => ({ ...p, verwerfen: w }))}
+        disabled={disabled}
+      />
+    )
+  }
   if (operation === 'reaggregate_day') {
     return (
       <div className="space-y-3">

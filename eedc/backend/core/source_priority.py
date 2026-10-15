@@ -52,6 +52,12 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # Repair (force_override über Repair-Orchestrator, P4-Lieferung)
     "repair": SourcePriority.REPAIR,
 
+    # HA-Bauform S3, E-S3-5: Werkbank «Werte vor dem Sensorbeginn verwerfen» (`services/verwerfen_vor_quellbeginn.py`).
+    # Ein vom Anwender angeordneter Eingriff wie `repair` (Stufe 0) — aber mit eigenem Label, damit die Provenance einer
+    # geleerten Spalte sagt, WARUM sie leer ist (der Wert wurde verworfen, nicht nie gemessen). Geschrieben wird damit nur
+    # `None` (Top-Level-Spalte der Stundenzeile) bzw. ein entfernter Sub-Key (`remove_json_subkey_with_provenance`).
+    "verworfen:werkbank": SourcePriority.REPAIR,
+
     # Manual (User-Eingabe oder User-bestätigte Aktion)
     "manual:form": SourcePriority.MANUAL,
     "manual:csv_import": SourcePriority.MANUAL,

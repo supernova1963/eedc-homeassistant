@@ -130,6 +130,8 @@ class TestVokabularBaseline:
     #: Stand 2026-09-29, aus dem Modul erhoben.
     ERWARTET = {
         "repair": 0,
+        # HA-Bauform S3, E-S3-5: Werkbank «Werte vor dem Sensorbeginn verwerfen» — angeordnet wie `repair`.
+        "verworfen:werkbank": 0,
         "manual:form": 1,
         "manual:csv_import": 1,
         "manual:csv_backup": 1,

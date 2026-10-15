@@ -89,6 +89,11 @@ class KanalQuelle(Base):
     #: Art ``stand``: Der Stand ist immer ``state`` roh — die Zahl auf dem Zähler (F-58); ``offset`` dient
     #: nur der Differenz über eine Quellgrenze, nie als Kanalwert.
     offset: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    #: Marke «verworfen am» (Unix-Sekunden; HA-Bauform S3, E-S3-5): die Werkbank-Operation «Werte vor dem Sensorbeginn
+    #: verwerfen» hat die Kanalzeilen dieser (älteren) Quelle vor dem gewählten Zeitpunkt gelöscht. Die Zeile bleibt als
+    #: Herkunft stehen — ``gueltig_ab``, ``statistic_id`` und ``offset`` unverändert. ``None`` = nie verworfen. Migration:
+    #: ``core/database.py::_migrate_kanal_quelle_verworfen_ts``.
+    verworfen_ts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
 
 class KanalStatistik(Base):

@@ -262,6 +262,18 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   slots_changed: 'Stundenwerte',
   counter_fields_changed: 'Zählerfelder',
   audit_log_count: 'Audit-Einträge',
+  // HA-Bauform S3, E-S3-5: „Werte vor dem Sensorbeginn verwerfen" (Vorschau · Ergebnis)
+  kanalzeilen: 'Kanalzeilen vor dem Zeitpunkt',
+  bestand_tage: 'Tage mit Werten des Feldes',
+  stundenzeilen: 'Stundenzeilen',
+  tageszeilen: 'Tageszeilen',
+  abschluss_monate: 'Monate mit Abschluss (bleiben)',
+  tage_ohne_werte: 'Tage danach ohne Wert',
+  kanalzeilen_geloescht: 'Kanalzeilen gelöscht',
+  quellen_markiert: 'Quellen markiert',
+  stundenzeilen_geleert: 'Stundenzeilen geleert',
+  tageszeilen_geleert: 'Tageszeilen geleert',
+  felder_geleert: 'Werte geleert',
 }
 
 export const WIRKUNGSGRAD_QUELLE_LABELS: Record<string, string> = {

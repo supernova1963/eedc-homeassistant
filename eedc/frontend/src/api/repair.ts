@@ -18,6 +18,7 @@ export type RepairOperationType =
   | 'wetter_backfill'
   | 'delete_monatsdaten'
   | 'reset_cloud_import'
+  | 'verwerfen_vor_quellbeginn'
   | 'solcast_rewrite'
 
 /** Hard-Cap im Backend (REAGGREGATE_RANGE_MAX_DAYS). UI muss vorab gaten. */
@@ -136,6 +137,15 @@ export const OPERATION_META: OperationMeta[] = [
     inWorkbench: true,
   },
   {
+    type: 'verwerfen_vor_quellbeginn',
+    label: 'Werte vor dem Sensorbeginn verwerfen',
+    description:
+      'Nach einem Sensortausch: verwirft für EIN Feld die Werte des alten Sensors vor dem Beginn des neuen — ' +
+      'im HA-Spiegel und in den Stunden- und Tageswerten, nur dieses Feld. Monate mit Abschluss bleiben unberührt. ' +
+      'Kein Rückweg: die Vorschau sagt, was danach weg ist.',
+    inWorkbench: true,
+  },
+  {
     type: 'reaggregate_today',
     label: 'Heutigen Tag neu aggregieren',
     description: 'Triggert sofortige Neu-Aggregation für alle Anlagen.',
@@ -176,6 +186,24 @@ export const KANAL_ABGLEICH_BESCHREIBUNG =
   'übernimmt sie sofort in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen — ' +
   'derselbe Abgleich wie nachts um 02:45. Stundenwerte baut er nicht neu.'
 
+/** Ein Feld mit Sensortausch (`GET /repair/kanal-auswahl`) — Auswahl für „Werte vor dem Sensorbeginn verwerfen".
+ *  `vorbelegung` = Beginn der jüngsten Quelle (`YYYY-MM-DDTHH:MM`, Zeitzone von Home Assistant). */
+export interface KanalQuelleInfo {
+  gueltig_ab: string
+  familie: string
+  statistic_id: string | null
+  verworfen_am: string | null
+}
+
+export interface KanalAuswahlEintrag {
+  key: string
+  label: string
+  investition_id: number | null
+  typ: string | null
+  quellen: KanalQuelleInfo[]
+  vorbelegung: string
+}
+
 export const repairApi = {
   plan: (req: RepairOperationRequest, signal?: AbortSignal): Promise<PlanResponse> =>
     api.post('/repair/plan', req, { signal }),
@@ -188,6 +216,10 @@ export const repairApi = {
 
   discard: (planId: string): Promise<void> =>
     api.delete(`/repair/plans/${planId}`),
+
+  /** Felder mit Sensortausch für „Werte vor dem Sensorbeginn verwerfen" (nur lesend). */
+  kanalAuswahl: (anlageId: number): Promise<{ kanaele: KanalAuswahlEintrag[] }> =>
+    api.get(`/repair/kanal-auswahl?anlage_id=${anlageId}`),
 
   /** HA-Spiegel jetzt abgleichen (direkter Pfad ohne Plan, wie das Löschen). */
   kanalAbgleich: (anlageId: number): Promise<KanalAbgleichErgebnis> =>

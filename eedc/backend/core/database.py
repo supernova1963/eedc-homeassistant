@@ -679,6 +679,26 @@ def _migrate_verbrauch_daten_keys_v326(connection) -> None:
             )
 
 
+def _migrate_kanal_quelle_verworfen_ts(connection) -> None:
+    """HA-Bauform S3, E-S3-5: Marke «verworfen am» an ``kanal_quelle`` (``KanalQuelle.verworfen_ts``, Unix-Sekunden).
+
+    Die Werkbank-Operation «Werte vor dem Sensorbeginn verwerfen» löscht die Kanalzeilen der älteren Quellen vor dem
+    gewählten Zeitpunkt; die ``kanal_quelle``-Zeilen bleiben als Herkunft stehen und tragen hier, wann verworfen wurde.
+    Nullable, ohne Default — ``NULL`` heißt «nie verworfen». Eine frische Installation bekommt die Spalte über
+    ``create_all`` (die Tabelle gibt es vor ihm nicht); eine Installation mit Kanälen (seit v4.1.3) hier. Idempotent.
+    Eigene Funktion statt eines Blocks in ``_run_migrations`` (Bauplan S3 §8: die Baseline-Funktion wächst nicht).
+    """
+    from sqlalchemy import inspect as _inspect
+    from sqlalchemy import text as _text
+
+    inspector = _inspect(connection)
+    if 'kanal_quelle' not in inspector.get_table_names():
+        return
+    if 'verworfen_ts' in {col['name'] for col in inspector.get_columns('kanal_quelle')}:
+        return
+    connection.execute(_text('ALTER TABLE kanal_quelle ADD COLUMN verworfen_ts INTEGER'))
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -1146,6 +1166,9 @@ async def run_migrations(conn):
                 INSERT OR IGNORE INTO infothek_investition (infothek_eintrag_id, investition_id)
                 SELECT id, investition_id FROM infothek_eintraege WHERE investition_id IS NOT NULL
             """))
+
+        # HA-Bauform S3, E-S3-5: `kanal_quelle.verworfen_ts` (Marke «verworfen am» der Werkbank).
+        _migrate_kanal_quelle_verworfen_ts(connection)
 
     await conn.run_sync(_run_migrations)
 
