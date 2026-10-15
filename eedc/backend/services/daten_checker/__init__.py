@@ -106,13 +106,9 @@ class DatenChecker(
         ergebnisse: list[CheckErgebnis] = []
         ergebnisse.extend(self._check_stammdaten(anlage, pvgis_prognose, pr, pr_count))
         # N-267: Gibt es ueberhaupt Stundenwerte? Ein Zeittarif wird ueber sie
-        # gewichtet; ohne sie rechnet eedc mit dem Hochtarif. EINE Abfrage, vom
-        # async Aufrufer erhoben — `_check_strompreise` bleibt synchron.
-        hat_stundenwerte = bool((await self.db.execute(
-            select(TagesEnergieProfil.id)
-            .where(TagesEnergieProfil.anlage_id == anlage.id)
-            .limit(1)
-        )).first())
+        # gewichtet; ohne sie rechnet eedc mit dem Hochtarif. Vom async Aufrufer
+        # erhoben — `_check_strompreise` bleibt synchron.
+        hat_stundenwerte = await self._hat_stundenwerte(anlage)
         ergebnisse.extend(self._check_strompreise(
             anlage, monatsdaten, hat_stundenwerte=hat_stundenwerte
         ))
@@ -194,6 +190,47 @@ class DatenChecker(
             zusammenfassung=zusammenfassung,
             monatsdaten_abdeckung=self._abdeckung,
         )
+
+    async def _hat_stundenwerte(self, anlage: Anlage) -> bool:
+        """N-267: gibt es Stundenwerte, über die ein Zeittarif gewichtet wird? Wahr, wenn die Anlage Stundenzeilen
+        (``TagesEnergieProfil``) ODER Kanal-Stunden der Bilanz-Gruppe hat (HA-Bauform S3, E-S3-3, Bauplan §5: die
+        Gewichte des Zeitfenster-Tarifs kommen seit E4f aus dem Netzbezugs-Kanal, ``kanal/preis_leser.py``).
+
+        Die Stundenzeilen fragt dieselbe Anweisung wie bisher; nur ohne sie EINE weitere: die ``sum``-Kanäle der Anlage,
+        die mindestens eine Zeile tragen (``EXISTS`` über den Primärschlüssel, kein Vollscan). Welcher davon zur
+        Bilanz-Gruppe gehört, entscheidet ``_ist_bilanz_kanal`` ohne weitere Abfrage."""
+        from sqlalchemy import exists
+
+        from backend.models.kanal import ART_SUM, Kanal, KanalStatistik
+
+        if (await self.db.execute(
+            select(TagesEnergieProfil.id).where(TagesEnergieProfil.anlage_id == anlage.id).limit(1)
+        )).first():
+            return True
+        keys = (await self.db.execute(select(Kanal.key).where(
+            Kanal.anlage_id == anlage.id, Kanal.art == ART_SUM, exists().where(KanalStatistik.kanal_id == Kanal.id),
+        ))).scalars().all()
+        invs = {str(i.id): i for i in anlage.investitionen}
+        return any(_ist_bilanz_kanal(k, invs) for k in keys)
+
+
+def _ist_bilanz_kanal(key: str, invs_by_id: dict) -> bool:
+    """Gehört der Kanal ``basis:<feld>`` bzw. ``inv:<id>:<feld>`` zur Bilanz-Gruppe (``bilanz_adapter.BILANZ_ACHSEN``)?
+    Dieselbe Abbildung Feld → Kategorie → Achse wie der Tagespfad (``snapshot/keys._categorize_counter`` →
+    ``spannen.achse_der_kategorie``, wie ``monatswert_deckel.py``). Abgeleitete und Modus-Kanäle gehören nicht dazu."""
+    from backend.core.berechnungen.spannen import achse_der_kategorie
+    from backend.services.kanal.bilanz_adapter import BILANZ_ACHSEN
+    from backend.services.snapshot.keys import _categorize_counter
+
+    teile = key.split(":")
+    if len(teile) == 2 and teile[0] == "basis":
+        kategorie = _categorize_counter(teile[1], None, None)
+    elif len(teile) == 3 and teile[0] == "inv" and teile[1] in invs_by_id:
+        inv = invs_by_id[teile[1]]
+        kategorie = _categorize_counter(teile[2], inv.typ, inv.parameter)
+    else:
+        return False
+    return achse_der_kategorie(kategorie) in BILANZ_ACHSEN
 
 
 __all__ = [

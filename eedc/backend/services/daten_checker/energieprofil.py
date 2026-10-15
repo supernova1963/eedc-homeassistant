@@ -637,25 +637,17 @@ class EnergieprofilChecks:
         falsch (»Verdacht auf PV-Doppelerfassung« samt erfundener Ursache).
         Eine zweite Kopie der Ermittlung wäre die Drift-Klasse gewesen, die
         dieses Projekt mehrfach eingeholt hat; deshalb eine Funktion, zwei Leser.
+
+        **Nur Bestandstage** (HA-Bauform S3, E-S3-3, Entscheid H-1 → A): die Stunden liefert
+        ``_spike_stundenzeilen`` — an einem Kanal-Tag keine (Begründung dort).
         """
         from backend.core.berechnungen.spannen import deckel_fenster_je_slot, spanne
-        from backend.models.tages_energie_profil import TagesEnergieProfil
         from backend.services.snapshot.plausibility import (
             schwelle_pv_einspeisung_stunde_kwh,
         )
 
-        result = await self.db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage.id,
-                TagesEnergieProfil.datum >= von,
-                TagesEnergieProfil.datum <= bis,
-            ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-        )
         spike_tage: dict = {}
-        rows_je_tag: dict = {}
-        for row in result.scalars().all():
-            rows_je_tag.setdefault(row.datum, []).append(row)
-        for tag, rows in rows_je_tag.items():
+        for tag, rows in (await self._spike_stundenzeilen(anlage, von, bis)).items():
             for feld_name, achse in (("pv_kw", "pv"), ("einspeisung_kw", "einspeisung")):
                 # Zählerlücken wie HA (R3, Nachträge II): dieselbe Schwelle wie der
                 # Aggregator — mal dem Fenster „Zeit seit der letzten Änderung"
@@ -676,12 +668,76 @@ class EnergieprofilChecks:
             spike_tage[tag].sort(key=lambda t: (t[0], t[1]))
         return spike_tage
 
+    # ─── Kanal-Tage (HA-Bauform S3, Etappe E-S3-3; Bauplan §5) ────────────
+
+    async def _spike_stundenzeilen(self, anlage: Anlage, von: date, bis: date) -> dict:
+        """Die Stundenzeilen ``{Tag: [Zeilen]}`` für ``_spike_tage`` — nur **Bestandstage** (Weiche HA-Bauform S3, E-S3-3,
+        Entscheid Master H-1 → A). An einem Kanal-Tag (Bilanz-Gruppe Wahl ``kanal``, ``_bilanz_kanal_tage``) kommen
+        ``pv_kw`` und ``einspeisung_kw`` aus HAs Statistik: ein Sprung in HAs ``sum`` ist dort HAs Zahl (S3-R9 «HA-konform
+        bleibt HA-konform», Soll N-586 «Tag = Monat = HA»), keine eigene Spitzen-Erkennung auf HA-Kanälen. Das
+        Reset-Muster (Reset und Rückkehr) meldet die Spiegel-Prüfung «Zählerstände – Sprung in Home Assistant»
+        (``datenquelle/ha_sprung.py``) mit dem Weg in HA — eine Lage, eine Meldung.
+
+        ⚠ **Benannte Grenze:** ein reiner Sprung ohne Reset-Muster (Form N3 der Achsen-Matrix) bekommt an einem Kanal-Tag
+        keinen Befund — wie vor dem Umbau, als der Schreiber die Stunde klemmte und die Stundenzeile leer blieb."""
+        from backend.models.tages_energie_profil import TagesEnergieProfil
+
+        rows_je_tag: dict = {}
+        for row in (await self.db.execute(
+            select(TagesEnergieProfil).where(
+                TagesEnergieProfil.anlage_id == anlage.id,
+                TagesEnergieProfil.datum >= von,
+                TagesEnergieProfil.datum <= bis,
+            ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+        )).scalars().all():
+            rows_je_tag.setdefault(row.datum, []).append(row)
+        kanal = await self._bilanz_kanal_tage(anlage, rows_je_tag)
+        return {t: rows for t, rows in rows_je_tag.items() if t not in kanal}
+
+    async def _bilanz_kanal_tage(self, anlage: Anlage, tage) -> dict:
+        """Die Tage aus ``tage``, deren Bilanz-Gruppe aus den Kanälen kommt (Wahl ``kanal``) — der Tages-Leser
+        ``bilanz_leser.kanal_tage`` (dieselbe Quellenwahl wie Cockpit → Tag), nie die Kanal-Tabelle roh.
+
+        Je Prüflauf und Anlage EIN Aufruf über den weitesten gefragten Bereich (gemerkt am Checker): E7 fragt den
+        Bereich aller Tage mit Stundenzeilen, „Einspeisung über Erzeugung" einen Teil davon. Ergebnis
+        ``{datum: KanalTag}``."""
+        tage = sorted(set(tage))
+        if not tage:
+            return {}
+        vorrat = self.__dict__.setdefault("_kanal_tage_vorrat", {})
+        von, bis, gelesen = vorrat.get(anlage.id, (None, None, {}))
+        if von is None or tage[0] < von or tage[-1] > bis:
+            from backend.services.kanal.bilanz_leser import kanal_tage
+
+            von, bis = min(tage[0], von or tage[0]), max(tage[-1], bis or tage[-1])
+            gelesen = await kanal_tage(self.db, anlage.id, von, bis)
+            vorrat[anlage.id] = (von, bis, gelesen)
+        return {d: gelesen[d] for d in tage if d in gelesen}
+
+    async def _bestandstage_ohne_marke(self, anlage: Anlage, zeilen) -> tuple[list, Optional[int]]:
+        """E7 an Kanal-Tagen (Bauplan §5): ``zeilen`` = ``(datum, ohne_marke)`` je Tag mit Stundenzeilen. Ein Tag, dessen
+        Bilanz-Gruppe aus den Kanälen kommt, rechnet nicht nach N-92 (Cockpit → Tag liest dort die Kanäle) — er wird
+        übersprungen. Rückgabe: die Bestandstage ohne Regelmarke (aufsteigend) und, nur wenn ein Kanal-Tag übersprungen
+        wurde, die Zahl aller Bestandstage mit Stundenzeilen (für «von n Bestandstagen»), sonst ``None``."""
+        ohne_marke = sorted(d for d, ohne in zeilen if ohne)
+        if not ohne_marke:
+            return [], None
+        kanal = await self._bilanz_kanal_tage(anlage, [d for d, _ in zeilen])
+        tage = [d for d in ohne_marke if d not in kanal]
+        if len(tage) == len(ohne_marke):
+            return tage, None
+        return tage, sum(1 for d, _ in zeilen if d not in kanal)
+
     # ─── Energieprofil-Plausibilität (Counter-Spikes) ─────────────────────
 
     async def _check_bestandstage_ohne_regelmarke(self, anlage: Anlage) -> list[CheckErgebnis]:
         """E7 (Zählerlücken wie HA, Vorlage Fassung 7 §5): Tage, die **vor dem
         Umbau** gerechnet wurden — ohne Regelmarke (``TagesZusammenfassung.
         verworfen`` NULL, R9) —, begrenzt auf Tage mit Stundenzeilen.
+
+        **Kanal-Tage zählen nicht** (HA-Bauform S3, E-S3-3, Bauplan §5): an einem Tag, dessen Bilanz-Gruppe aus den
+        Kanälen kommt, rechnet Cockpit → Tag nicht nach N-92. Wurde einer übersprungen, nennt die Zeile die Zahl
+        «k von n Bestandstagen»; sonst bleibt der Wortlaut.
 
         Solche Tage rechnen weiter nach N-92 (E6): fehlt einer Achse eine
         Stunde, zeigt Cockpit → Tag „—" bei EV/Autarkie/Verbrauch, obwohl die
@@ -702,13 +758,12 @@ class EnergieprofilChecks:
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
 
         tz, tep = TagesZusammenfassung, TagesEnergieProfil
-        tage = sorted((await self.db.execute(
-            select(tz.datum).where(
+        tage, n_bestand = await self._bestandstage_ohne_marke(anlage, (await self.db.execute(
+            select(tz.datum, tz.verworfen.is_(None)).where(
                 tz.anlage_id == anlage.id,
-                tz.verworfen.is_(None),
                 exists().where(and_(tep.anlage_id == tz.anlage_id, tep.datum == tz.datum)),
             )
-        )).scalars().all())
+        )).all())
         if not tage:
             return []
 
@@ -748,7 +803,8 @@ class EnergieprofilChecks:
             kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
             schwere=CheckSeverity.INFO,
             meldung=(
-                f"{len(tage)} Tag(e) sind vor dem Umbau gerechnet (keine Regelmarke) "
+                (f"{len(tage)} Tag(e)" if n_bestand is None else f"{len(tage)} von {n_bestand} Bestandstagen")
+                + f" sind vor dem Umbau gerechnet (keine Regelmarke) "
                 f"— {aeltester.isoformat()} … {neuester.isoformat()}"
             ),
             details=details,
@@ -767,6 +823,28 @@ class EnergieprofilChecks:
     #: derselben Stunde heben sich in der Stundenzeile auf).
     EINSPEISUNG_UEBER_ERZEUGUNG_TOLERANZ_KWH = 0.5
 
+    async def _tagesbilanzen(self, anlage: Anlage, marken: dict) -> dict:
+        """Je Tag aus ``marken`` (``{datum: verworfen}``) die Tagesbilanz (``TagesBilanz``) — die Weiche Kanal-Tag/
+        Bestandstag (HA-Bauform S3, E-S3-3, Bauplan §5): an einem Tag, dessen Bilanz-Gruppe aus den Kanälen kommt, die
+        Bilanz des Tages-Lesers (``bilanz_leser.kanal_tage``, Weg 2, kein Deckel); sonst wie bisher aus den
+        Stundenzeilen (``bilanz_aus_stundenrows`` mit der Regelmarke). Ein Bestandstag ohne Stundenzeile fehlt."""
+        from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
+        from backend.models.tages_energie_profil import TagesEnergieProfil
+
+        tep = TagesEnergieProfil
+        kanal = await self._bilanz_kanal_tage(anlage, marken)
+        out: dict = {d: k.bilanz for d, k in kanal.items()}
+        rows_je_tag: dict = {}
+        bestand = [d for d in marken if d not in kanal]
+        if bestand:
+            for r in (await self.db.execute(
+                select(tep).where(tep.anlage_id == anlage.id, tep.datum.in_(bestand))
+            )).scalars().all():
+                rows_je_tag.setdefault(r.datum, []).append(r)
+        for d, rows in rows_je_tag.items():
+            out[d] = bilanz_aus_stundenrows(rows, verworfen=marken[d])
+        return out
+
     async def _check_einspeisung_ueber_erzeugung(self, anlage: Anlage) -> list[CheckErgebnis]:
         """Tage **mit Regelmarke**, an denen mehr eingespeist als erzeugt und aus
         dem Speicher entladen wurde (Zählerlücken wie HA, Vorlage §10 Nachträge II).
@@ -784,13 +862,15 @@ class EnergieprofilChecks:
         umgekehrt. Eine Zeile je Anlage mit Tagesliste; Reparaturweg wie E7
         („Zeitraum neu aggregieren" über das jüngste Fenster), nachdem die
         Zuordnung geprüft ist.
+
+        Die Tageswerte liest ``_tagesbilanzen`` (HA-Bauform S3, E-S3-3): an einem Kanal-Tag die Bilanz des
+        Tages-Lesers (Weg 2, kein Deckel), sonst die Stundenzeilen wie bisher.
         """
         from datetime import timedelta as _td
-        from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
-        from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+        from backend.models.tages_energie_profil import TagesZusammenfassung
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
 
-        tz, tep = TagesZusammenfassung, TagesEnergieProfil
+        tz = TagesZusammenfassung
         marken = {
             d: v for d, v in (await self.db.execute(
                 select(tz.datum, tz.verworfen).where(
@@ -800,15 +880,9 @@ class EnergieprofilChecks:
         }
         if not marken:
             return []
-        rows_je_tag: dict = {}
-        for r in (await self.db.execute(
-            select(tep).where(tep.anlage_id == anlage.id, tep.datum.in_(list(marken)))
-        )).scalars().all():
-            rows_je_tag.setdefault(r.datum, []).append(r)
 
         befunde: list[tuple] = []
-        for d, rows in rows_je_tag.items():
-            b = bilanz_aus_stundenrows(rows, verworfen=marken[d])
+        for d, b in (await self._tagesbilanzen(anlage, marken)).items():
             if not b.einspeisung_erfasst:
                 continue
             quelle = (b.erzeugung_kwh if b.pv_erfasst else 0.0) + b.speicher_entladung_kwh
