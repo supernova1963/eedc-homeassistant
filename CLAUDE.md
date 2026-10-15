@@ -19,19 +19,28 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 | **eedc** (`/home/gernot/claude/eedc`) | Standalone-Spiegel, **nur** per `scripts/release.sh` |
 | **eedc-community** (`/home/gernot/claude/eedc-community`) | Community-Server, eigenes Repo; Deploy nur mit einem Add-on-Release |
 
-## Arbeitsmodus Pflege (Entscheid Gernot 10./11.10.2026)
+## Arbeitsmodus Pflege (Entscheid Gernot 10./11.10.2026, präzisiert 15.10.2026)
+
+> **Was der Modus bezweckt (Gernot 15.10.):** Token sparen an zwei Stellen — die Session verspricht Meldern nicht mehr schnell
+> eedc-Lösungen für externe Probleme, Sonderlocken und Erweiterungswünsche, und Gernot hält sich mit neuen Ideen zurück.
+> **Fehlerbeseitigung läuft weiter. Das Konzept «eedc nach HA-Bauform» (S3–S5) und die 97 xfail-Matrixzellen, die daran hängen,
+> werden weitergeführt** — mit dem Stufen-Apparat des Konzepts (Golden Master über die Kopien, Lab, Nachmessung), weil eine Stufe
+> jede Tages-/Stundenzahl anfasst. Der Modus ist kein Stopp, sondern eine Bremse für Zusagen und Neuvorhaben.
 
 1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN — **Gernot
    liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten**) **und das Fundregister**
    (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 11.10.: 0 offen). Keine zweite Liste neben dem Register. Wünsche
    stehen in #110 «Gesammelt» ohne Termin.
-   Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, kein HA-Bauform-S3, keine Vorhaben aus dem Index.
+   Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, keine neuen Vorhaben aus dem Index.
+   **Ausnahme (15.10.):** die HA-Bauform-Stufen S3–S5 nach `plans/konzept-eedc-nach-ha-bauform.md` §7 — je Stufe ein Bauplan
+   (Fable), Go Gernot, dann Etappen wie E0–E4f.
 2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
    **Die Register-Disziplin gilt unverändert** (Gernot 10.10.): kein Eintrag ohne Analyse am HEAD, drei Tore (gemessen · abgeglichen ·
    Folge nennbar und „schon gedeckt?"), Klassen-Dreifrage, Band, Einwertung durch den Master und Entscheid Gernot — vorher ist es
    `verdacht`. Keine Sammelaufnahme, keine Sammelkategorie, kein Doku-Abschnitt ohne Genehmigung. Reduziert ist nur der Bau-Apparat (Nr. 3).
-3. **Ein Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
-   ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit.
+3. **Ein Fund-Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
+   ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit. **Eine Bauform-Etappe** behält
+   den Apparat des Bauplans (Golden Master, Lab, `nachmesser-fable`).
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
 5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
    10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
