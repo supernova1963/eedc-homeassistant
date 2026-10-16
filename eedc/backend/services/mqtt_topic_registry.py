@@ -50,10 +50,13 @@ _HEUTE_HINWEIS = (
 # (Energie-Sensoren kWh) — das Anzeige-`label` setzt die Einheit wieder in
 # Klammern (rückwärtskompatibel).
 BASIS_ENERGY_TOPICS = [
+    # N-752 (Konzept Gernot 16.10.2026, «PV gesamt = alle Quellen»): der Name bleibt (Frontend-Proben, Hilfe-Anker),
+    # die Beschreibung sagt, was eedc mit dem Zähler tut — in Tag, Monat und Live dieselbe Regel (pv_verteilung, W2).
     ("pv_gesamt_kwh", "PV-Erzeugung Zählerstand", "kWh",
-     "Zählerstand der gesamten PV-Erzeugung. Nur nötig, wenn die PV-Module keine "
-     "eigenen Zähler haben — ist dort einer zugeordnet, wird diese Angabe ignoriert. "
-     + _HEUTE_HINWEIS),
+     "Zählerstand der gesamten PV-Erzeugung — aller Erzeuger, auch des Balkonkraftwerks. Haben alle PV-Module "
+     "und Balkonkraftwerke einen eigenen Zähler, dient er dem Vergleich (Wandlungsverluste); fehlt einem der "
+     "eigene Zähler, verteilt eedc den Rest nach kWp auf ihn — in Tag, Monat und Live gleich. Misst dein Zähler "
+     "nur den Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu. " + _HEUTE_HINWEIS),
     ("einspeisung_kwh", "Einspeisung Zählerstand", "kWh",
      "Zählerstand der ins Netz eingespeisten Energie. Kernwert: ohne ihn lassen sich "
      "Eigenverbrauch und Autarkie nicht berechnen. Ohne Sensor im Monatsabschluss "

@@ -26,6 +26,10 @@ dieses Feld; Wetter, Prognosen, Preise und andere Geräte bleiben stehen, Monate
 Vorschau nennt vorher Sensor, Zeitraum, Tage und Monate; einen Rückweg gibt es nicht
 ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
+**Cockpit → Live „PV heute“ wie Cockpit → Tag:** Hat nur ein Teil deiner PV-Module oder Balkonkraftwerke einen eigenen Zähler und ist der Anlagenzähler „PV gesamt“ zugeordnet, verteilt die Live-Kachel jetzt den Rest des Anlagenzählers auf die Erzeuger ohne Zähler — wie der Tag. Bisher zählte sie nur die Einzelzähler und zeigte zu wenig PV und eine zu kleine Autarkie ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md)).
+
+**Monatsformular speichert die Ø Temperatur:** Die im Formular eingetragene (oder per Auto-Fill geholte) Ø Temperatur fiel beim Speichern bisher still weg; jetzt bleibt sie stehen ([Einstellungen → Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)).
+
 **Cockpit → Monat, wenn Home Assistant gerade nicht antwortet:** Öffnest du den laufenden Monat, während die
 HA-Statistik nicht erreichbar ist (etwa direkt nach einem Neustart von Home Assistant), liest eedc E-Mobilität,
 Sonstiges und Wärmepumpe jetzt trotzdem aus den gespiegelten Zählerständen. Bisher fehlten in diesem Moment der Strom
