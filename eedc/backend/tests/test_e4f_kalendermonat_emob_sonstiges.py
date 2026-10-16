@@ -71,7 +71,6 @@ async def _fuenf_wege(ds, inv_id: int, feld: str, sid: str) -> dict[str, float]:
         import_ha_statistics,
     )
     from backend.api.routes.monatsabschluss.views import lade_ha_statistik_werte
-    from backend.services.monatswert_deckel import deckel_je_sensor
 
     def _inv(antwort) -> float:
         return next(f.differenz for i in antwort.investitionen if i.investition_id == inv_id for f in i.felder
@@ -84,10 +83,9 @@ async def _fuenf_wege(ds, inv_id: int, feld: str, sid: str) -> dict[str, float]:
     vorschau = next(m for m in (await get_import_vorschau(ds.aid, ds.db)).monate if (m.jahr, m.monat) == (2026, 6))
     out["vorschau"] = next(i.ha_werte[FELD_LABELS.get(feld, feld)] for i in vorschau.investitionen or [] if i.investition_id == inv_id)
     anlage = (await ds.db.execute(select(Anlage).where(Anlage.id == ds.aid))).scalar_one()
-    invs = (await ds.db.execute(select(Investition).where(Investition.anlage_id == ds.aid))).scalars().all()
+    # HA-Bauform S4-R-5: der Vorschlag ruft den HA-Leser ohne Deckel (der Parameter ist weg).
     vorschlag = await lade_ha_statistik_werte(
-        anlage.sensor_mapping["basis"], anlage.sensor_mapping["investitionen"], 2026, 6,
-        deckel_je_sensor=deckel_je_sensor(anlage, invs), db=ds.db, anlage_id=ds.aid)
+        anlage.sensor_mapping["basis"], anlage.sensor_mapping["investitionen"], 2026, 6, db=ds.db, anlage_id=ds.aid)
     out["monatsabschluss_vorschlag"] = vorschlag[sid]
     await import_ha_statistics(ds.aid, ImportRequest(monate=[MonatFeldAuswahl(jahr=2026, monat=6)],
                                                       ueberschreiben=True), ds.db)

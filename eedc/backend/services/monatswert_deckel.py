@@ -10,6 +10,17 @@ deckel_je_sensor=…)`. Alle übrigen Felder rechnen ohne Deckel (nur R4).
 
 Die Zuordnung Feld → Achse ist dieselbe wie im Tagespfad:
 `snapshot/keys._categorize_counter` → `core/berechnungen/spannen.achse_der_kategorie`.
+
+⭐ **HA-Bauform S4-R-5 (Bauplan S4 §3/§4, Entscheid S4-E3 A, 16.10.2026): kein Produkt-Aufrufer mehr.** Die fünf
+HA-Monatsleser-Aufrufer (Cockpit → Monat HA-Weg, «Aus HA laden», alle Monatswerte, Import-Vorschau, Sammelimport,
+Monatsabschluss-Vorschlag) rufen `get_monatswerte`/`get_alle_monatswerte` seither OHNE `deckel_je_sensor` — ein
+Monat nennt HAs Zahl wie Tag und Kanal-Monat (N-586-Lesart), einen Phantomsprung benennt der Daten-Checker
+`ha_zaehlersprung`. Der Deckel bleibt nur als **Schreibfilter für MQTT-Rohstände** im Kanal-Schreiber
+(`kanal/schreiber._eigene_summe_zeilen`, Stundenlauf und Nachfüllen) — mit derselben Regel (Achse PV/Einspeisung,
+kWp der Anlage), aber über `schreiber._deckel_achse`, nicht über diese Datei — und im Bestands-Tagespfad
+(`snapshot/tages_tabelle.py`, bis S5). Diese Funktion rufen nur noch die Gleichheitsproben der Fassung (a) «wie
+Bestand» (`tests/kanal_bilanz_gleichheit.zaehler_sensoren`) und ihre eigenen Proben. **Nicht löschen** — S5 nimmt sie
+mit dem Bestands-Tagespfad weg.
 """
 from __future__ import annotations
 

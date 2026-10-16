@@ -581,10 +581,12 @@ def _sensor_ids_aus_mapping(basis_mapping: dict, inv_mappings: dict) -> list[str
 
 async def lade_ha_statistik_werte(
     basis_mapping: dict, inv_mappings: dict, jahr: int, monat: int,
-    deckel_je_sensor: Optional[dict[str, float]] = None,
     *, db=None, anlage_id: Optional[int] = None,
 ) -> dict[str, float]:
     """HA Statistics Service für Sensor-Vorschläge: sensor_id → Monatsdifferenz.
+
+    HA-Bauform S4-R-5: der HA-Monatsleser rechnet ohne Deckel (R4 Rücksprung bleibt) — der Vorschlag nennt HAs Zahl,
+    wie Tag und Kanal-Monat; einen Phantomsprung benennt der Daten-Checker ``ha_zaehlersprung``.
 
     HA-Bauform E4a-2 (Umschaltstelle 3, B-2): mit ``db``/``anlage_id`` gilt für die Bilanz-Sensoren das Kanal-Δ des
     Kalendermonats, wenn ihre Spiegel ihn alle voll decken (``kanal/bilanz_leser.monatswerte_mit_kanaelen``) —
@@ -614,10 +616,9 @@ async def lade_ha_statistik_werte(
         return {}
 
     try:
-        # Zählerlücken wie HA (Vorlage §10): der Monat verwirft, was die
-        # Stunden verwerfen — Rücksprung immer, Deckel für PV/Einspeisung.
+        # Zählerlücken wie HA (Vorlage §10): der Monat verwirft einen Rücksprung (R4); kein Deckel (S4-R-5).
         stats_result = await asyncio.to_thread(
-            ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat, deckel_je_sensor,
+            ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat,
         )
         if db is not None and anlage_id is not None:
             from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
@@ -656,14 +657,8 @@ async def baue_kontext(
     # Bestehende Monatsdaten laden
     monatsdaten = await lade_monatsdaten(db, anlage_id, jahr, monat)
 
-    from backend.models.investition import Investition
-    from backend.services.monatswert_deckel import deckel_je_sensor
-    _invs = (await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id)
-    )).scalars().all()
     ha_stats_werte = await lade_ha_statistik_werte(
-        basis_mapping, inv_mappings, jahr, monat,
-        deckel_je_sensor=deckel_je_sensor(anlage, _invs), db=db, anlage_id=anlage_id,
+        basis_mapping, inv_mappings, jahr, monat, db=db, anlage_id=anlage_id,
     )
 
     alle_basis_felder, preis_messung = await lade_basis_feldliste(

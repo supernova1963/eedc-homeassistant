@@ -719,6 +719,12 @@ class HAStatisticsService:
         und Mehrfach-Resets im Monat). Fallback auf MAX(state) - MIN(state)
         wenn `sum` nicht verfügbar (z.B. measurement-Sensoren ohne has_sum).
 
+        ⚑ **Der `state`-Zweig ist monatsweise** (HA-Bauform S4-R-5, Bauplan S4 §10a H-1 A): Monat ohne eine
+        `sum`-Zeile ⇒ ``MAX(state) − MIN(state)``; eine einzige `sum`-Zeile im Monat genügt für den `sum`-Zweig,
+        Zeilen mit `sum` NULL werden dort ausgelassen, nicht durch `state` ersetzt (keine Mischung je Stunde). Der
+        Deckel wirkte im `state`-Zweig nie (Beleg E-S4-0 `state_zweig.txt`: 1 219 mit und ohne). Den Zweig zu
+        streichen («wie HA», der Spiegel liest nur `sum`) wäre eine eigene Verhaltensänderung — S5-Vormerkung.
+
         ⭐ **Zählerlücken wie HA (R10 + Vorlage §10, W-R10):** der Monatswert ist
         die **Σ der Stundenänderungen ab dem Anker** — der letzten Zeile mit
         `sum` VOR dem Monat (beliebig weit zurück; ohne sie der älteste `sum`
@@ -736,7 +742,12 @@ class HAStatisticsService:
           vorangehende Nullzeilen, Anteil der Nullzeilen bis 24 h;
           `spannen.deckel_fenster_stunden`, Nachträge II), wie am Tag. Ohne
           Parameter kein Deckel — ein Aufwärtssprung zählt dann als Menge
-          (benannt).
+          (benannt). ⭐ **Seit HA-Bauform S4-R-5 ruft keiner der fünf
+          HA-Monatsleser-Aufrufer mit Deckel** (Cockpit → Monat, «Aus HA
+          laden», alle Monatswerte, Import-Vorschau/Sammelimport,
+          Monatsabschluss-Vorschlag): der Monat nennt HAs Zahl wie Tag und
+          Kanal-Monat. Den Parameter nutzt nur noch die Fassung (a) «wie
+          Bestand» der Gleichheitsproben (`kanal/bilanz_adapter`).
 
         Grund auf Kategorie-Ebene: ein Monatswert ist eine Summe von Stunden;
         was die Stunden verwerfen, verwirft der Monat — sonst zeigen

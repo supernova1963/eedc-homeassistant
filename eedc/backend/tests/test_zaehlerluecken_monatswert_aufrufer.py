@@ -1,16 +1,15 @@
-"""Vorlage §10 (W-R10): die Aufrufer des Monatswerts reichen den R3-Deckel mit.
+"""HA-Bauform S4-R-5: die Aufrufer des HA-Monatswerts reichen KEINEN Deckel mehr mit.
 
-Ein Monatswert ist eine Summe von Stunden; was die Stunden verwerfen, verwirft
-der Monat. Der Rücksprung (R4) gilt in `get_sensor_monatswert` immer; den
-Deckel (R3) kennt nur, wer die Anlage kennt — deshalb reichen Monatsabschluss-
-Vorschlag, laufender Monat (Cockpit → Monat) und der HA-Import (Vorschau,
-Import, Monatswerte je Monat und alle Monate) ``deckel_je_sensor`` für Felder
-der Achsen PV/Einspeisung mit, aus der kWp der **Anlage** wie im Tagespfad.
-Netzbezug und Geräte-Felder bleiben ohne Deckel.
+Bis S4 (Vorlage §10, W-R10) reichten Monatsabschluss-Vorschlag, laufender Monat (Cockpit → Monat) und der HA-Import
+(Vorschau, Import, Monatswerte je Monat und alle Monate) ``deckel_je_sensor`` für Felder der Achsen PV/Einspeisung
+mit. Seit S4-R-5 (Bauplan S4 §3/§4, Entscheid S4-E3 A) nennt ein Monat HAs Zahl wie Tag und Kanal-Monat — ohne Deckel
+deckelte ein Lesart-1-Monat, während der Kanal-Monat daneben nicht deckelte (N-586 umgekehrt). Der Rücksprung (R4)
+gilt in `get_sensor_monatswert` weiter; einen Phantomsprung benennt der Daten-Checker ``ha_zaehlersprung``. Die
+Wirkung je Weg mit einem Sprung mittags: test_s4_r5_deckel_lesepfad.py.
 
-Schwesterdateien: test_zaehlerluecken_n563_monatswert.py (die Regel selbst),
-test_n156_ha_wege_ohne_supervisor.py und test_n533_ha_import_anlagen_pv_zaehler.py
-(dieselben Aufrufer, dieselbe Attrappen-Form).
+Schwesterdateien: test_zaehlerluecken_n563_monatswert.py (die Regel selbst, mit Deckel-Parameter),
+test_n156_ha_wege_ohne_supervisor.py und test_n533_ha_import_anlagen_pv_zaehler.py (dieselben Aufrufer, dieselbe
+Attrappen-Form).
 """
 from __future__ import annotations
 
@@ -21,7 +20,8 @@ import pytest
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 
-ERWARTET = {"sensor.einsp": 15.0, "sensor.pv1": 15.0}   # 10 kWp × 1,5
+#: Was die Attrappe als Deckel sieht: nichts (S4-R-5). Bis S4: {"sensor.einsp": 15.0, "sensor.pv1": 15.0} (10 kWp × 1,5).
+ERWARTET = None
 
 
 def _s(sid):
@@ -79,7 +79,7 @@ async def _anlage(db):
 
 
 @pytest.mark.asyncio
-async def test_monatsabschluss_reicht_den_deckel_mit(db, monkeypatch):
+async def test_monatsabschluss_ruft_ohne_deckel(db, monkeypatch):
     from backend.api.routes.monatsabschluss.views import get_monatsabschluss
     a = await _anlage(db)
     rec = _Aufzeichner()
@@ -89,7 +89,7 @@ async def test_monatsabschluss_reicht_den_deckel_mit(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_laufender_monat_reicht_den_deckel_mit(db, monkeypatch):
+async def test_laufender_monat_ruft_ohne_deckel(db, monkeypatch):
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
     from backend.api.routes import aktueller_monat as am
@@ -103,7 +103,7 @@ async def test_laufender_monat_reicht_den_deckel_mit(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ha_import_vorschau_import_und_monatswerte_reichen_den_deckel_mit(db, monkeypatch):
+async def test_ha_import_vorschau_import_und_monatswerte_rufen_ohne_deckel(db, monkeypatch):
     from backend.api.routes import ha_statistics as hs
     a = await _anlage(db)
     rec = _Aufzeichner()

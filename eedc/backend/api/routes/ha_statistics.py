@@ -36,7 +36,6 @@ from backend.services.ha_statistics_service import (
     SensorMonatswert,
 )
 from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte, warnung_pv_gesamt_ohne_zaehlerzeile
-from backend.services.monatswert_deckel import deckel_je_sensor
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.berechnungen.pv_verteilung import QUELLE_GEMESSEN
 from backend.core.field_definitions import get_pv_erzeugung_kwh
@@ -352,10 +351,8 @@ async def get_monatswerte(
 
     # Werte aus HA-DB holen
     try:
-        response = service.get_monatswerte(
-            sensor_ids, jahr, monat,
-            deckel_je_sensor=deckel_je_sensor(anlage, investitionen_db.values()),
-        )
+        # Kein Deckel (HA-Bauform S4-R-5): der Monat nennt HAs Zahl; R4 (Rücksprung) rechnet der Leser.
+        response = service.get_monatswerte(sensor_ids, jahr, monat)
         # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
         # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
         from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
@@ -488,10 +485,8 @@ async def get_alle_monatswerte(
         ab_datum = date(ab_jahr, ab_monat or 1, 1)
 
     try:
-        raw_responses = service.get_alle_monatswerte(
-            sensor_ids, ab_datum,
-            deckel_je_sensor=deckel_je_sensor(anlage, investitionen_db.values()),
-        )
+        # Kein Deckel (HA-Bauform S4-R-5): der Monat nennt HAs Zahl; R4 (Rücksprung) rechnet der Leser.
+        raw_responses = service.get_alle_monatswerte(sensor_ids, ab_datum)
         # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
         # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
         from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
@@ -1002,12 +997,9 @@ async def get_import_vorschau(
         )
 
     # Alle HA-Monatswerte holen — Zählerlücken wie HA (Vorlage §10): der Monat
-    # verwirft, was die Stunden verwerfen (Rücksprung; Deckel für PV/Einspeisung).
-    _deckel = deckel_je_sensor(anlage, (await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id)
-    )).scalars().all())
+    # verwirft einen Rücksprung des HA-`sum` (R4); kein Deckel (HA-Bauform S4-R-5).
     try:
-        ha_monate = service.get_alle_monatswerte(sensor_ids, deckel_je_sensor=_deckel)
+        ha_monate = service.get_alle_monatswerte(sensor_ids)
         # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
         # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
         from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
@@ -1093,10 +1085,7 @@ async def import_ha_statistics(
 
     # Zähler, Fehler und die beiden Warn-Sammellisten (N-240, E4b H-A1) — `ha_statistics_import.py::ImportBilanz`.
     bilanz = ImportBilanz()
-    # Zählerlücken wie HA (Vorlage §10): dieselbe Monatsregel wie die Vorschau.
-    _deckel = deckel_je_sensor(anlage, (await db.execute(
-        select(Investition).where(Investition.anlage_id == anlage_id)
-    )).scalars().all())
+    # Zählerlücken wie HA (Vorlage §10): dieselbe Monatsregel wie die Vorschau (R4, kein Deckel — S4-R-5).
 
     for monat_req in request.monate:
         jahr = monat_req.jahr
@@ -1104,9 +1093,7 @@ async def import_ha_statistics(
 
         try:
             # HA-Werte für diesen Monat holen
-            ha_response = service.get_monatswerte(
-                sensor_ids, jahr, monat, deckel_je_sensor=_deckel,
-            )
+            ha_response = service.get_monatswerte(sensor_ids, jahr, monat)
             # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
             # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
             from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen

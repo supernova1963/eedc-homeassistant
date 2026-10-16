@@ -364,7 +364,6 @@ async def test_kalendermonats_wege_nehmen_das_kanal_delta_ohne_rueckspruch_verwu
     from backend.api.routes.monatsabschluss.views import lade_ha_statistik_werte
     from backend.models.anlage import Anlage
     from backend.models.monatsdaten import Monatsdaten
-    from backend.services.monatswert_deckel import deckel_je_sensor
 
     def _einsp(t):
         return -2.0 if t == _RUECKSPRUNG else (1.0 if t.hour in mx.PROD_STUNDEN else 0.0)
@@ -377,10 +376,10 @@ async def test_kalendermonats_wege_nehmen_das_kanal_delta_ohne_rueckspruch_verwu
                     for r in await get_alle_monatswerte(ds.aid, None, None, ds.db)}
             vorschau = next(m for m in (await get_import_vorschau(ds.aid, ds.db)).monate if (m.jahr, m.monat) == (2026, 6))
             anlage = (await ds.db.execute(select(Anlage).where(Anlage.id == ds.aid))).scalar_one()
-            invs = (await ds.db.execute(select(Investition).where(Investition.anlage_id == ds.aid))).scalars().all()
+            # HA-Bauform S4-R-5: ohne Deckel (der Parameter ist weg).
             vorschlag = await lade_ha_statistik_werte(
                 anlage.sensor_mapping["basis"], anlage.sensor_mapping["investitionen"], 2026, 6,
-                deckel_je_sensor=deckel_je_sensor(anlage, invs), db=ds.db, anlage_id=ds.aid)
+                db=ds.db, anlage_id=ds.aid)
             cockpit = await amr.get_aktueller_monat(anlage_id=ds.aid, jahr=2026, monat=6, db=ds.db)
             await import_ha_statistics(ds.aid, ImportRequest(monate=[MonatFeldAuswahl(jahr=2026, monat=6)]), ds.db)
             await ds.db.commit()
@@ -403,8 +402,9 @@ async def test_kalendermonat_ohne_volle_deckung_bleibt_der_ha_leser():
     async with kg.datenstand("pv", "F08a", "HA") as ds:
         with mx._umgebung(ds.svc):
             route = (await get_monatswerte(ds.aid, 2026, 7, ds.db))
-            sids, deckel = await kg.zaehler_sensoren(ds.db, ds.aid)
-            leser = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, 2026, 7, deckel_je_sensor=deckel).sensoren}
+            sids, _deckel = await kg.zaehler_sensoren(ds.db, ds.aid)
+            # HA-Bauform S4-R-5: die Route ruft den HA-Leser ohne Deckel — die Probe vergleicht mit demselben Aufruf.
+            leser = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, 2026, 7).sensoren}
     for b in route.basis:
         if b.sensor_id in leser:
             assert b.differenz == pytest.approx(leser[b.sensor_id].differenz), b.feld
