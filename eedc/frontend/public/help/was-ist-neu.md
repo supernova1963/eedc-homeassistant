@@ -38,6 +38,8 @@ Eigenverbrauchsquote bzw. Autarkie 100 % und einer Ersparnis auf die ganze Erzeu
 PV-Erzeugung und „–" bei Netzwerten, Eigenverbrauch, Autarkie und Ersparnis — wie der Kopf derselben Seite und
 *Cockpit → Monat*. Der Daten-Checker nennt solche Monate jetzt mit „Einspeisung nicht erfasst (Monat ohne Monatsabschluss)“ und dem Rat, eine Datenquelle zuzuordnen oder den Monat abzuschließen ([Bedienung → Jahr](HANDBUCH_BEDIENUNG.md#24-jahrgesamt), [Daten-Checker §4.5](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
 
+**Daten-Checker: zwei neue Hinweise zu Zählern.** Steht dein Anlagenzähler „PV gesamt“ neben einem Balkonkraftwerk mit eigenem Zähler und einem PV-Modul ohne, sagt eine Info, dass eedc ihn als Zähler der ganzen Erzeugung liest — misst er nur den Wechselrichter, gehört er als Erzeugungszähler an das PV-Modul. Und ein Rückgang in der HA-Statistik, der von einem inzwischen ersetzten Sensor stammt, ist jetzt als „Vorgänger-Sensor“ gekennzeichnet, mit dem Weg über die Werkbank „Werte vor dem Sensorbeginn verwerfen“ ([Daten-Checker §4.8c/§4.8d](HANDBUCH_DATEN_CHECKER.md#48d-pv--messpunkt)).
+
 **MQTT-Check erwartet Pflicht und Zugeordnetes:** Der Daten-Checker erwartet ein MQTT-Topic ohne Zuordnung nur noch,
 wenn das Feld Pflicht ist — dieselben Felder, die *Einstellungen → Datenquellen* rot markiert —, und sonst nur Felder,
 denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Eine Luft-Wasser-Wärmepumpe ohne Zuordnungen stand bisher mit

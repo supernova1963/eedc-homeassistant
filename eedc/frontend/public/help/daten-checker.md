@@ -121,7 +121,7 @@ eedc prüft **33 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die
 | 9a | **Zählerstände – Rücksprung** (§4.8a) | nur wenn MQTT-Import aktiv | nur wenn MQTT-Import aktiv |
 | 9b | **Zählerstände – Sprung in Home Assistant** (§4.8b) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
-| 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
+| 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik); der Hinweis zu „PV gesamt“ neben einem Balkonkraftwerk greift aus der Zuordnung | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** (außer dem Zuordnungs-Hinweis) |
 | 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
 | 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
@@ -613,6 +613,8 @@ allein. Lädst du einen solchen Monat mit „Aus HA laden" in einen Monat, der s
 Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben Weg. eedc verwirft den Rückgang nicht selbst und hat keinen Reparatur-Knopf dafür: die Quelle ist die Statistik in
 Home Assistant.
 
+**Sensor ersetzt?** Stammt ein Rückgang von einem Sensor, den du inzwischen durch einen neuen ersetzt hast, zählen seine Werte weiter, und die Meldung kennzeichnet ihn mit „(Vorgänger-Sensor, zugeordnet bis TT.MM.JJJJ)“. Statt in Home Assistant zu korrigieren, kannst du dann mit der Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen“ seine Werte vor dem Beginn des neuen Sensors entfernen (*Einstellungen → Daten → Energieprofil-Pflege*, [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)); die Meldung verschwindet dann.
+
 ---
 
 ### 4.8d PV – Messpunkt (Anlagenzähler und Strings) <a name="48d-pv--messpunkt"></a>
@@ -635,6 +637,7 @@ Monate, deren PV-Zähler eedc lückenlos kennt.
 | **Der Anlagenzähler misst das Balkonkraftwerk offenbar nicht** | ⚠️ WARNING | Die Differenz ist fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). eedc zieht nichts ab — sonst wäre die Ersparnis des Balkonkraftwerks weg. ⚠ Neben großen Strings kann ein sehr kleines Balkonkraftwerk die Schwelle auch mit echten Verlusten erreichen; eedc zieht dann vorsichtshalber ebenfalls nichts ab. |
 | **Anlagenzähler zählt mehr als die Strings — Messpunkt prüfen** | ℹ️ INFO | Der Anlagenzähler liegt um mehr als 2 % über der Summe der Strings. Nach dem Wechselrichter kann nicht mehr ankommen, als davor erzeugt wird — meist zählt er eine weitere Quelle mit. Wandlungsverluste gibt es in diesen Monaten keine. |
 | **Bei DC-gekoppeltem Speicher misst der AC-Zähler die Batterie mit — Verluste werden angezeigt, nicht bewertet** | ℹ️ INFO | Mit einem DC-Speicher am Wechselrichter enthält die Differenz auch Lade- und Entlademengen. Ist die Kopplung am Speicher nicht eingetragen, nimmt eedc DC an, sobald der Speicher einem Wechselrichter zugeordnet ist — ist dein Speicher **AC-gekoppelt**, trage die Kopplung am Speicher ein, dann rechnet eedc die Ersparnis ohne Wandlungsverluste. |
+| **„PV gesamt“ gilt als Zähler der ganzen Erzeugung einschließlich Balkonkraftwerk** | ℹ️ INFO | Allein aus Stammdaten und Zuordnung, ohne Monatszahlen: dem Anlagenzähler *PV gesamt (kWh)* ist ein Sensor zugeordnet, mindestens ein aktives PV-Modul hat **keinen** eigenen Zähler und mindestens ein Balkonkraftwerk **hat** einen. eedc liest den Anlagenzähler dann als Zähler der ganzen Erzeugung einschließlich Balkonkraftwerk und verteilt seinen Rest nach dem Zähler des Balkonkraftwerks auf die Module ohne Zähler. **Misst er nur den Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu** (*Einstellungen → Datenquellen*); sonst fehlt die Erzeugung der Balkonkraftwerke in PV gesamt (im gemeldeten Fall zeigte der Tag 11,7 statt 14,5 kWh). Ein Modul, das dem Balkonkraftwerk selbst gehört, zählt nicht als Modul ohne Zähler. Die Prüfungen darüber schweigen in dieser Lage, weil der verteilte Rest die Differenz verdeckt. |
 | **Sieht nach Volleinspeisung aus — der AC-Ertragszähler deines Wechselrichters fehlt** | ℹ️ INFO | Kein Anlagenzähler, und in den letzten drei abgeschlossenen Monaten ging fast die ganze Erzeugung ins Netz. Ordne den AC-Ertragszähler deines Wechselrichters (Gesamtertrag nach dem Wechselrichter) als *PV gesamt (kWh)* zu, dann kennt eedc die Wandlungsverluste. Denselben Sensor zusätzlich als Einspeisung zuzuordnen ist **nicht** der Weg — das meldet die Datenquellen-Prüfung zu Recht als Doppelzählung. |
 
 Die Schwellen (10 %, 80 %, 2 %) sind vorsichtig gesetzt und nicht an einer realen Anlage gemessen. Kein Reparatur-Knopf:
