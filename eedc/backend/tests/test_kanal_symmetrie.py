@@ -3,9 +3,10 @@
 Auf den Datenständen beider Abnahme-Matrizen (HA-Langzeitstatistik im echten Recorder-Schema,
 ``achsen_matrix`` und ``pv_achse_matrix``): Spiegel aus HA nachgefüllt (``nachfuellen_spiegel``),
 Tageszeilen über den echten ``aggregate_day``; dann je Anlage, Tag und ``komponenten_kwh``-Schlüssel
-Tageswert gegen Kanal-Δ über das Tagesfenster ``[Vortag 23:00, 23:00)`` — seit E3 über die Lese-Schicht
-(``lesen.zeitraum_stapel``) und die Fenster-Helfer (``fenster.tagesfenster``): Fenster-Helfer == Bestand. Was verglichen wird, welche
-Toleranz und welche Ausnahmeklassen: ``kanal_symmetrie.py``.
+Kanal-Δ über den Kalendertag (``fenster.tagesfenster``, seit HA-Bauform S4 E-S4-1) gegen den Bestand um die
+Randstunde verschoben (Σ Slots 1…23 des Tages + Slot 0 des Folgetags, Slot 0 aus dem Slot-Leser des Bestands) — über
+die Lese-Schicht (``lesen.zeitraum_stapel``). Was verglichen wird, welche Toleranz und welche Ausnahmeklassen:
+``kanal_symmetrie.py``.
 
 **Dauerhaft:** jede Abweichung außerhalb einer benannten Klasse ist rot; jede Klasse ist gezählt und
 festgehalten (``_KLASSEN_SOLL``) — wächst eine, meldet der Wächter das, statt sie still zu schlucken.
@@ -67,7 +68,7 @@ async def _lauf(matrix: str, fid: str, *, stoerung=None):
                 await mx.aggregiere_tage(db, pvform, aid, TAGE)
             if stoerung is not None:
                 await stoerung(sitzungen, aid)
-            return await symmetrie_spiegel(db, aid)
+            return await symmetrie_spiegel(db, aid, svc)
         finally:
             await db.close()
             await engine.dispose()
@@ -141,3 +142,25 @@ async def test_waechter_kann_rot_melden():
     b = await _lauf("achsen", "M01", stoerung=_stoeren)
     assert [(d, k) for d, k, *_ in b.abweichungen] == [(tag, "einspeisung")], b.abweichungen
     assert datetime.fromtimestamp(t).date() == tag
+
+
+async def test_stunde_23_gehoert_zum_kalendertag():
+    """HA-Bauform S4 E-S4-1 (R-3): eine Spiegelzeile ``D 23:00`` um +1 kWh verschoben (nur diese Stunde — die Zeilen
+    danach tragen den Sprung zurück) — der Wächter nennt den Tag ``D`` (Kalendertag ``[D 00:00, D+1 00:00)``), nicht den
+    Folgetag (bis E-S4-1: Tagesfenster ``[D 23:00, D+1 23:00)`` ⇒ D+1)."""
+    from datetime import datetime, timedelta
+
+    tag = mx.TAGE_JUNI[9]
+    t = int(datetime.combine(tag, datetime.min.time()).replace(hour=23).timestamp())
+
+    async def _stoeren(sitzungen, aid):
+        async with sitzungen() as s:
+            k = (await s.execute(select(Kanal).where(Kanal.anlage_id == aid, Kanal.key == "basis:einspeisung"))).scalar_one()
+            await s.execute(update(KanalStatistik).where(KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts == t)
+                            .values(sum=KanalStatistik.sum + 1.0))
+
+    b = await _lauf("achsen", "M01", stoerung=_stoeren)
+    assert sorted((d, k) for d, k, *_ in b.abweichungen) == [(tag, "einspeisung"), (tag + timedelta(days=1),
+                                                                                    "einspeisung")], b.abweichungen
+    heute = next(a for a in b.abweichungen if a[0] == tag)
+    assert heute[3] - heute[2] == pytest.approx(1.0), heute     # Kanal-Tag D trägt die Stunde 23:00 (+1)

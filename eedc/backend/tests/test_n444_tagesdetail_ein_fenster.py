@@ -372,3 +372,15 @@ class TestJederTypHatEinFenster:
         )
         assert rng.boundary_offsets == erwartet_offsets
         assert rng.datum == DATUM
+
+    @pytest.mark.parametrize("typ", ["speicher", "wallbox", "e-auto", "waermepumpe", None])
+    @pytest.mark.parametrize("tz_rueckwaerts", [False, True])
+    def test_kanal_tag_folgt_dem_bezug_in_den_kalendertag(self, typ, tz_rueckwaerts):
+        """HA-Bauform S4 E-S4-1 (Bauplan §10a (1), «N-444 folgt dem Bezug»): an einem **Kanal-Tag** steht der Bezug —
+        Bilanz-Ladung, Wallbox-Ladung, WP-Strom — im Kalendertag ``[00:00, 24:00)`` (``kanal/fenster.py``, R-3). Dieselbe
+        Regel (Teilmenge im Fenster ihres Bezugs) gibt dann für JEDEN Typ ``for_day_total``; Bestandstage bleiben bei der
+        Tabelle (Zeilen oben)."""
+        from backend.services.snapshot.boundary_range import tagesfenster_fuer
+
+        rng = tagesfenster_fuer(typ, DATUM, tageszeile_rueckwaerts=tz_rueckwaerts, kanal_tag=True)
+        assert rng.boundary_offsets == (0, 24) and rng.datum == DATUM

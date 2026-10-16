@@ -13,12 +13,13 @@ import calendar
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import bilanz_aus_stundenrows, monatsbilanz_aus_tagen
+from backend.core.berechnungen.slot_konvention import stundenbeginn_der_zeile
 from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
@@ -166,17 +167,20 @@ async def get_monatsauswertung(
     von = date(jahr, monat, 1)
     bis = date(jahr, monat, tage_im_monat)
 
-    # Stundenwerte des Monats laden
+    # Stundenwerte des Monats laden — und des Ersten des Folgemonats: an einem Kanal-Tag trägt die Zeile 0 des
+    # Folgetags die Backward-Bahnen der Stunde 23 (HA-Bauform S4, S4-R-3b); sie geht nur in die Mischzeilen ein.
     result = await db.execute(
         select(TagesEnergieProfil)
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= von,
-            TagesEnergieProfil.datum <= bis,
+            TagesEnergieProfil.datum <= bis + timedelta(days=1),
         )
         .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
-    stunden_rows = result.scalars().all()
+    alle_rows = result.scalars().all()
+    stunden_rows = [r for r in alle_rows if r.datum <= bis]
+    folgetag_rows = [r for r in alle_rows if r.datum > bis]
 
     # Tageszusammenfassungen (für Batterie-Zyklen + PR)
     result = await db.execute(
@@ -200,7 +204,7 @@ async def get_monatsauswertung(
     # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags sind seine Mischzeilen (`kanal_stunden.py`) — Heatmap, Profil,
     # Spitzen und die stundengepaarten Größen lesen sie wie Stundenzeilen; gebündelte Stunden fallen wie bisher heraus
     # (`zeile_gebuendelt` auf den Kanal-Spannen). Ohne Kanal-Tag bleibt die Liste dieselbe.
-    stunden_rows = await _stunden_mit_kanaelen(db, anlage_id, stunden_rows, kanal_je_tag)
+    stunden_rows = await _stunden_mit_kanaelen(db, anlage_id, stunden_rows, kanal_je_tag, folgetag_rows)
     st = _stunden_auswerten(stunden_rows)
 
     mb = _monatsbilanz(stunden_rows, tag_rows, kanal_je_tag)
@@ -261,14 +265,16 @@ async def get_monatsauswertung(
     )
 
 
-async def _stunden_mit_kanaelen(db: AsyncSession, anlage_id: int, stunden_rows, kanal_je_tag) -> list:
-    """Die Stundenzeilen des Monats, an jedem Kanal-Tag durch seine Mischzeilen ersetzt (HA-Bauform E-S3-2)."""
+async def _stunden_mit_kanaelen(db: AsyncSession, anlage_id: int, stunden_rows, kanal_je_tag,
+                                folgetag_rows=()) -> list:
+    """Die Stundenzeilen des Monats, an jedem Kanal-Tag durch seine Mischzeilen ersetzt (HA-Bauform E-S3-2).
+    ``folgetag_rows``: die Zeilen des Ersten des Folgemonats — nur Eingang der Mischzeilen des Monatsletzten (S4-R-3b)."""
     from backend.services.energie_profil.kanal_stunden import stunden_der_kanal_tage, stundenzeilen_mit_kanaelen
 
     if not kanal_je_tag:
         return list(stunden_rows)
     je_tag: dict[date, list] = defaultdict(list)
-    for r in stunden_rows:
+    for r in (*stunden_rows, *folgetag_rows):
         je_tag[r.datum].append(r)
     return stundenzeilen_mit_kanaelen(
         stunden_rows, await stunden_der_kanal_tage(db, anlage_id, kanal_je_tag, je_tag),
@@ -310,9 +316,10 @@ def _stunde_sammeln(st: _Stunden, r) -> None:
     # sie fällt aus Profil, Grundbedarf und Spitzen (ihre Energie bleibt in
     # jeder Summe).
     if pv is not None and not zeile_gebuendelt(r, "pv"):
-        st.profil_pv[r.stunde].append(pv)
+        st.profil_pv[stundenbeginn_der_zeile(r)].append(pv)
     if verbrauch is not None and not verbrauch_gebuendelt(r):
-        st.profil_verbrauch[r.stunde].append(verbrauch)
+        st.profil_verbrauch[stundenbeginn_der_zeile(r)].append(verbrauch)
+        # Grundbedarf an der Zeilen-Stunde (Bestand Slots 0–4, Mischzeile Stunden 0–4 — wie `tage-werte`, S4 §10a (3)).
         if 0 <= r.stunde < 5:
             st.nacht_verbrauch.append(verbrauch)
 
@@ -321,7 +328,8 @@ def _stunde_sammeln(st: _Stunden, r) -> None:
 
 
 def _heatmap_zelle(r, pv, verbrauch, netzbezug, einspeisung) -> HeatmapZelle:
-    """Die Heatmap-Zelle einer Stunde, Überschuss nur wenn PV und Verbrauch da sind."""
+    """Die Heatmap-Zelle einer Stunde, Überschuss nur wenn PV und Verbrauch da sind. Stunde = Beginn
+    (``stundenbeginn_der_zeile``: Bestandszeile ``s`` ⇒ ``(s−1) mod 24``, Mischzeile ``h`` ⇒ ``h``; HA-Bauform S4)."""
     # Überschuss der Stunde (Heatmap) nur wenn beide Werte da
     ueberschuss: Optional[float] = None
     if pv is not None and verbrauch is not None:
@@ -329,7 +337,7 @@ def _heatmap_zelle(r, pv, verbrauch, netzbezug, einspeisung) -> HeatmapZelle:
 
     return HeatmapZelle(
         tag=r.datum.day,
-        stunde=r.stunde,
+        stunde=stundenbeginn_der_zeile(r),
         pv_kw=round(pv, 3) if pv is not None else None,
         verbrauch_kw=round(verbrauch, 3) if verbrauch is not None else None,
         netzbezug_kw=round(netzbezug, 3) if netzbezug is not None else None,
@@ -339,19 +347,20 @@ def _heatmap_zelle(r, pv, verbrauch, netzbezug, einspeisung) -> HeatmapZelle:
 
 
 def _stunde_spitzen(st: _Stunden, r) -> None:
-    """Spitzen-Kandidaten einer Stunde (Netzbezug, Einspeisung) und die PV-Spitze; gebündelte Zeilen fallen heraus."""
+    """Spitzen-Kandidaten einer Stunde (Netzbezug, Einspeisung) und die PV-Spitze; gebündelte Zeilen fallen heraus.
+    Die Stunde ist die des Beginns (``stundenbeginn_der_zeile``, HA-Bauform S4) — für Bestands- und Mischzeilen."""
     if r.netzbezug_kw is not None and r.netzbezug_kw > 0 and not zeile_gebuendelt(r, "netzbezug"):
         st.netzbezug_kandidaten.append(PeakStunde(
-            datum=r.datum, stunde=r.stunde, wert_kw=round(r.netzbezug_kw, 3),
+            datum=r.datum, stunde=stundenbeginn_der_zeile(r), wert_kw=round(r.netzbezug_kw, 3),
         ))
     if r.einspeisung_kw is not None and r.einspeisung_kw > 0 and not zeile_gebuendelt(r, "einspeisung"):
         st.einspeisung_kandidaten.append(PeakStunde(
-            datum=r.datum, stunde=r.stunde, wert_kw=round(r.einspeisung_kw, 3),
+            datum=r.datum, stunde=stundenbeginn_der_zeile(r), wert_kw=round(r.einspeisung_kw, 3),
         ))
     if r.pv_kw is not None and r.pv_kw > 0 and not zeile_gebuendelt(r, "pv"):
         if st.peak_pv is None or r.pv_kw > st.peak_pv.wert_kw:
             st.peak_pv = PeakStunde(
-                datum=r.datum, stunde=r.stunde, wert_kw=round(r.pv_kw, 3),
+                datum=r.datum, stunde=stundenbeginn_der_zeile(r), wert_kw=round(r.pv_kw, 3),
             )
 
 

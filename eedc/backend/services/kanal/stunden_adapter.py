@@ -26,6 +26,9 @@ Zählwerke), trägt der Adapter NICHT; der Aufrufer (E-S3-2) mischt sie aus der 
   dieser Adapter liefert die Zählerform; welche Form E-S3-2 zeigt, entscheidet der Master.
 * ``spannen`` = je Achse die größte Spanne (in Stunden, nur > 1) der Kanäle, die die Stunde tragen (Form der Spalte).
 
+**Raster (S4-R-3b, seit E-S4-1):** ``stunde`` ist der **Beginn** der Stunde (``[h, h+1)``, HAs ``start_ts``) — jede Zeile
+trägt ``raster = "beginn"`` (``slot_konvention.RASTER_BEGINN``); die Stundenzeile ``TagesEnergieProfil`` bleibt backward.
+
 ``gerundet=True`` rundet wie ``aggregate_day`` beim Schreiben (``aggregator.rund``, drei Stellen); der Wächter
 „Σ Stunden ≡ Tag" liest die ungerundeten Stunden.
 """
@@ -38,6 +41,7 @@ from types import SimpleNamespace
 from typing import Optional, Sequence
 
 from backend.core.berechnungen.energie import batterie_kw_spalte
+from backend.core.berechnungen.slot_konvention import RASTER_BEGINN
 from backend.core.berechnungen.spannen import achse_der_kategorie, verbrauch_spannen_passen
 from backend.core.berechnungen.stundenbilanz import berechne_batterie_netto_kwh, stunden_verbrauch_kwh
 from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
@@ -68,7 +72,7 @@ _KATEGORIE_FELD = {"verbrauch_wp": "waermepumpe_kw", "ladung_wallbox": "wallbox_
 
 @dataclass(frozen=True)
 class KanalStunden:
-    """Die 24 Zeilen eines Kanal-Stundentags in der Form der Stundenzeile."""
+    """Die 24 Zeilen eines Kanal-Stundentags in der Form der Stundenzeile (Stunde = Beginn, ``raster = "beginn"``)."""
 
     datum: date
     zeilen: tuple[SimpleNamespace, ...]
@@ -165,7 +169,7 @@ def stunden_aus_kanaelen(tag: KanalStundentag, *, gerundet: bool = True) -> Kana
         werte.update(_geraete_der_stunde(geraete, h, komponenten))
         zeile = {f: _rund(werte.get(f), gerundet) for f in FELDER if f not in ("komponenten", "spannen")}
         zeilen.append(SimpleNamespace(
-            stunde=h, **zeile, spannen=spannen or None,
+            stunde=h, raster=RASTER_BEGINN, **zeile, spannen=spannen or None,
             komponenten={kk: _rund(v, gerundet) for kk, v in komponenten.items()} or None,
         ))
     return KanalStunden(tag.datum, tuple(zeilen), frozenset(felder), tag.klemm_stunden)

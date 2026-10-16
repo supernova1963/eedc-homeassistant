@@ -143,7 +143,7 @@ async def get_waerme_verlauf_stunden(
     if not anlage:
         raise not_found("Anlage", anlage_id)
 
-    from backend.core.berechnungen import waermepumpe_kwh_je_investition
+    from backend.core.berechnungen.slot_konvention import RASTER_BEGINN, RASTER_ENDE
     from backend.core.berechnungen.tages_stapel import (
         STUNDEN,
         StundenFormen,
@@ -154,16 +154,12 @@ async def get_waerme_verlauf_stunden(
     from backend.core.berechnungen.waermepumpe_kennzahl import (
         geraete_mit_gesamtwaerme,
     )
-    from backend.services.energie_profil import lade_modus_split_tag
-    from backend.services.energie_profil.kanal_stunden import wp_strom_je_stunde, wp_stundenformen
+    from backend.services.energie_profil.kanal_stunden import tages_eingaenge, wp_strom_je_stunde, wp_stundenformen
     from backend.services.snapshot.aggregator import (
         TAGESDETAIL_AUSGABE,
         WAERME_AUSGABE_KEYS,
-        get_betriebsart_strom_tageswerte,
-        get_tagesdetail_kwh,
         get_wp_strom_stufe_je_investition,
     )
-    from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts
     from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
     from backend.services.snapshot.komponenten_beitraege import investition_beitraege
     from backend.services.snapshot.reader import mqtt_zaehler_keys
@@ -172,37 +168,21 @@ async def get_waerme_verlauf_stunden(
     investitionen_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
 
     # ── Der Tag: dieselben Eingänge wie `tag-detail` ─────────────────────────
-    tz_zeile = (await db.execute(
-        select(
-            TagesZusammenfassung.komponenten_kwh,
-            TagesZusammenfassung.source_provenance,
-            TagesZusammenfassung.verworfen,
-        ).where(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum == datum,
-        )
-    )).one_or_none()
-    tz_rueckwaerts = tageszeile_ist_rueckwaerts(
-        tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
-    )
-    wp_kwh_je_inv = waermepumpe_kwh_je_investition((tz_zeile[0] if tz_zeile else None) or {})
-    gemessen_je_inv = await get_betriebsart_strom_tageswerte(
-        db, anlage, investitionen_by_id, datum, rueckwaerts=tz_rueckwaerts,
-    )
+    # HA-Bauform S4 (E-S4-1, §10a (2)): an einem WP-Kanal-Tag die Tagesmengen aus dem Kanal-Stundentag (Σ Stunden ≡
+    # Tag) — derselbe Aufruf wie `tag-detail`; die Normierung der Stundenform trifft dann den Kanal, «ohne Stundenform»
+    # bleibt 0, wo Balken = Kanal.
+    eingaenge = await tages_eingaenge(db, anlage, investitionen_by_id, datum)
+    wp_kwh_je_inv = eingaenge.wp_kwh_je_inv
+    gemessen_je_inv = eingaenge.gemessen_je_inv
     beitraege = beitraege_des_tages(
-        gemessen_je_inv, wp_kwh_je_inv,
-        await lade_modus_split_tag(db, anlage_id, datum),
-        investitionen_by_id, datum,
+        gemessen_je_inv, wp_kwh_je_inv, eingaenge.splits, investitionen_by_id, datum,
         # N-462: dieselbe Stufe wie im Tag-Detail — sonst nennt derselbe Tag
         # zwei verschiedene Abzüge.
         stufe_je_inv=await get_wp_strom_stufe_je_investition(
             db, anlage, investitionen_by_id,
         ),
     )
-    detail = await get_tagesdetail_kwh(
-        db, anlage, investitionen_by_id, datum,
-        tageszeile_rueckwaerts=tz_rueckwaerts,
-    )
+    detail = eingaenge.detail
 
     # ── Die Form: je Zähler die 24 Slots aus derselben Standreihe ───────────
     mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
@@ -454,6 +434,9 @@ async def get_waerme_verlauf_stunden(
     ohne = verteilung.ohne_stundenform_kwh
     return WaermeVerlaufStundenResponse(
         stunden=zeilen,
+        # HA-Bauform S4 (S4-E2 A): an einem WP-Kanal-Tag liegen alle Stunden auf dem Beginn (Kanal-Stunden, Modus aus
+        # den abgeleiteten Kanälen, Snapshot-Formen umgelegt), sonst auf dem Ende (Backward-Slots).
+        raster=RASTER_BEGINN if eingaenge.wp_aus_kanal else RASTER_ENDE,
         ohne_stundenform_kwh=round(ohne, 2) if ohne > 0.005 else None,
         waerme_ohne_stundenform_kwh=round(waerme_ohne, 2) if waerme_ohne > 0.005 else None,
         kaelte_ohne_stundenform_kwh=round(kaelte_ohne, 2) if kaelte_ohne > 0.005 else None,

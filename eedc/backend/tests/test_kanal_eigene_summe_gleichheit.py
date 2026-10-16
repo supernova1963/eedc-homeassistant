@@ -32,7 +32,7 @@ from backend.tests import kanal_bilanz_gleichheit as kg
 from backend.tests import kanal_stunden_gleichheit as ks
 from backend.tests import pv_achse_matrix as mx
 from backend.tests.test_kanal_bilanz_gleichheit import W2_KLASSEN, ZAEHLER_OHNE_NACHTZEILEN
-from backend.tests.test_kanal_stunden_gleichheit import KLASSEN
+from backend.tests.test_kanal_stunden_gleichheit import KLASSEN, LETZTE_STUNDE_FELDER
 
 _FORMEN = [("achsen", f) for f in am.MATRIX_FORMEN] + [("pv", f) for f in mx.MATRIX_FORMEN]
 #: Die Formen, für die die Bilanz-Gleichheit (E4a) Klassen eingefroren hat (``test_kanal_bilanz_gleichheit._FORMEN``).
@@ -103,7 +103,10 @@ async def test_nachgefuellte_eigene_summe_gleich_der_aus_den_rohstaenden(matrix,
     assert abw == [], abw[:5]
     # Kanal-Stundentag ↔ Bestand: dieselben Klassen wie der Datenstand MQTT, `unbenannt` 0.
     klassen = dict(stunden.klassen)
-    assert klassen.pop("komponenten_leistungspfad", 0) == 24 * stunden.tage["bilanz:kanal"]
+    # HA-Bauform S4 E-S4-1: die letzte Kanal-Stunde (03.07. 23:00) hat keine Bestandszeile (``LETZTE_STUNDE_FELDER``).
+    letzte = LETZTE_STUNDE_FELDER.get((matrix, fid), 7)
+    assert klassen.pop("komponenten_leistungspfad", 0) == 24 * stunden.tage["bilanz:kanal"] - (1 if letzte else 0)
+    assert klassen.pop("bestand_ohne_zeile", 0) == letzte, stunden.beispiele.get("bestand_ohne_zeile")
     assert stunden.tage["bilanz:kanal"] >= 32 and "unbenannt" not in klassen, stunden.beispiele.get("unbenannt")
     assert klassen == KLASSEN.get((matrix, fid, "MQTT"), {}), {k: stunden.beispiele.get(k) for k in klassen}
     if bilanz is None:

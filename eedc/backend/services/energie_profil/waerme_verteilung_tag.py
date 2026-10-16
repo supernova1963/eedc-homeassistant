@@ -34,10 +34,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen import waermepumpe_kwh_je_investition
 from backend.core.berechnungen.tages_stapel import (
     STUNDEN,
     StundenFormen,
@@ -58,14 +56,9 @@ from backend.core.berechnungen.waerme_verteilung import (
     GeraetStromEingabe,
     verteile_geraet_strom,
 )
-from backend.models.tages_energie_profil import TagesZusammenfassung
-from backend.services.energie_profil import lade_modus_split_tag
 from backend.services.snapshot.aggregator import (
-    get_betriebsart_strom_tageswerte,
-    get_tagesdetail_kwh,
     get_wp_strom_stufe_je_investition,
 )
-from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts
 from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
 from backend.services.snapshot.komponenten_beitraege import investition_beitraege
 from backend.services.snapshot.reader import mqtt_zaehler_keys
@@ -122,41 +115,24 @@ async def lade_tages_verteilung(
     """
     from backend.services.waerme_verteilung import eingabe_aus_tageswerten
 
-    tz_zeile = (await db.execute(
-        select(
-            TagesZusammenfassung.komponenten_kwh,
-            TagesZusammenfassung.source_provenance,
-            TagesZusammenfassung.verworfen,
-        ).where(
-            TagesZusammenfassung.anlage_id == anlage.id,
-            TagesZusammenfassung.datum == datum,
-        )
-    )).one_or_none()
-    rueckwaerts = tageszeile_ist_rueckwaerts(
-        tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
-    )
-    menge_je_inv = waermepumpe_kwh_je_investition(
-        (tz_zeile[0] if tz_zeile else None) or {},
-    )
+    # HA-Bauform S4 (E-S4-1, §10a (2)): dieselbe Umschaltstelle wie `tag-detail` — an einem WP-Kanal-Tag kommen die
+    # Tagesmengen aus dem Kanal-Stundentag (Σ Stunden ≡ Tag), sonst wie bisher im Fenster der Tageszeile.
+    from backend.services.energie_profil.kanal_stunden import tages_eingaenge
+
+    eingaenge = await tages_eingaenge(db, anlage, investitionen_by_id, datum)
+    menge_je_inv = eingaenge.wp_kwh_je_inv
     if not menge_je_inv:
         return TagesVerteilung()
 
-    gemessen_je_inv = await get_betriebsart_strom_tageswerte(
-        db, anlage, investitionen_by_id, datum, rueckwaerts=rueckwaerts,
-    )
     beitraege = beitraege_des_tages(
-        gemessen_je_inv, menge_je_inv,
-        await lade_modus_split_tag(db, anlage.id, datum),
+        eingaenge.gemessen_je_inv, menge_je_inv, eingaenge.splits,
         investitionen_by_id, datum,
         stufe_je_inv=await get_wp_strom_stufe_je_investition(
             db, anlage, investitionen_by_id,
         ),
     )
     beitrag_je_inv = {b.inv_id: b for b in beitraege}
-    detail = await get_tagesdetail_kwh(
-        db, anlage, investitionen_by_id, datum,
-        tageszeile_rueckwaerts=rueckwaerts,
-    )
+    detail = eingaenge.detail
 
     # ── Die Mengen des Tages je Gerät ────────────────────────────────────
     je_geraet: dict[str, GeraetStromEingabe] = {}

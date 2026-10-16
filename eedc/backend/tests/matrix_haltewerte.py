@@ -205,16 +205,16 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'preis', 'S3', 'I2', 'kosten:cockpit_monat:vor=nach'): None,
     ('M05', 'preis', 'S3', 'I2', 'preis_effektiv:cockpit_monat:vor=nach'): 30.0,
     ('M05', 'wp', 'HA', 'I1', 'modus_heizen:cockpit_jahr'): 19.5,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
-    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:fakten_tw'): 19.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I1', 'modus_heizen:fakten_tw'): 19.5,  # S4 E-S4-1: war 19.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:cockpit_jahr'): 1.8,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I1', 'modus_warmwasser:fakten_tw'): 1.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I3', 'modus_heizen:cockpit_monat'): 19.5,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
-    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:fakten_tw'): 19.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'HA', 'I3', 'modus_heizen:fakten_tw'): 19.5,  # S4 E-S4-1: war 19.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:cockpit_monat'): 1.8,  # E4d: war None (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'HA', 'I3', 'modus_warmwasser:fakten_tw'): 1.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_jahr'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I1', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
-    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:uebersicht'): 217.8,  # E4d: war 0.0 (Kanal-Leser; H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S1', 'I1', 'modus_heizen:uebersicht'): 217.5,  # S4 E-S4-1: war 217.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'S1', 'I1', 'modus_heizen:zeitreihe'): 198.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_jahr'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S1', 'I1', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
@@ -230,7 +230,7 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S1', 'I3', 'modus_warmwasser:fakten'): 18.0,  # E4d: war 0.0 (H-1: Abschluss schreibt den Kanal-Split, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_jahr'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I1', 'modus_heizen:cockpit_monat'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
-    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:uebersicht'): 217.8,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
+    ('M05', 'wp', 'S2', 'I1', 'modus_heizen:uebersicht'): 217.5,  # S4 E-S4-1: war 217.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'S2', 'I1', 'modus_heizen:zeitreihe'): 198.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_jahr'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
     ('M05', 'wp', 'S2', 'I1', 'modus_warmwasser:cockpit_monat'): 18.0,  # E4d: war 0.0 (Kanal-Leser, Bericht HA-BAUFORM-E4D)
@@ -357,14 +357,14 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     # abgeleiteten Kanal und ist > 0 — I6 „nichts verschwindet" misst ihn jetzt). Bericht HA-BAUFORM-E4D.
     ('M05', 'wp', 'HA', 'I6', 'modus_heizen:cockpit_jahr'): 19.5,
     ('M05', 'wp', 'HA', 'I6', 'modus_heizen:cockpit_monat'): 19.5,
-    ('M05', 'wp', 'HA', 'I6', 'modus_heizen:fakten_tw'): 19.8,
+    ('M05', 'wp', 'HA', 'I6', 'modus_heizen:fakten_tw'): 19.5,  # S4 E-S4-1: war 19.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:cockpit_jahr'): 1.8,
     ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:cockpit_monat'): 1.8,
     ('M05', 'wp', 'HA', 'I6', 'modus_warmwasser:fakten_tw'): 1.8,
     ('M05', 'wp', 'S1', 'I6', 'modus_heizen:cockpit_jahr'): 198.0,
     ('M05', 'wp', 'S1', 'I6', 'modus_heizen:cockpit_monat'): 198.0,
     ('M05', 'wp', 'S1', 'I6', 'modus_heizen:fakten'): 198.0,
-    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:uebersicht'): 217.8,
+    ('M05', 'wp', 'S1', 'I6', 'modus_heizen:uebersicht'): 217.5,  # S4 E-S4-1: war 217.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'S1', 'I6', 'modus_heizen:zeitreihe'): 198.0,
     ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:cockpit_jahr'): 18.0,
     ('M05', 'wp', 'S1', 'I6', 'modus_warmwasser:cockpit_monat'): 18.0,
@@ -374,7 +374,7 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M05', 'wp', 'S2', 'I6', 'modus_heizen:cockpit_jahr'): 198.0,
     ('M05', 'wp', 'S2', 'I6', 'modus_heizen:cockpit_monat'): 198.0,
     ('M05', 'wp', 'S2', 'I6', 'modus_heizen:fakten'): 198.0,
-    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:uebersicht'): 217.8,
+    ('M05', 'wp', 'S2', 'I6', 'modus_heizen:uebersicht'): 217.5,  # S4 E-S4-1: war 217.8 — Kalendermonat ohne die Stunde 30.06. 23:00 (Randstunde, Heizen 0,3 kWh)
     ('M05', 'wp', 'S2', 'I6', 'modus_heizen:zeitreihe'): 198.0,
     ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:cockpit_jahr'): 18.0,
     ('M05', 'wp', 'S2', 'I6', 'modus_warmwasser:cockpit_monat'): 18.0,

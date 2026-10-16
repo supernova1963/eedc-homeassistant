@@ -8,7 +8,8 @@ Snapshot-Pfad). Dazu derselbe Vergleich auf der Kanal-Mess-Kopie aus E-S3-0 (Wer
 
 **Was verglichen wird:** je Kanal-Tag und Stunde die Felder der Stundenzeile, die der Adapter trägt
 (``stunden_adapter.FELDER``, nur die der Gruppen mit Wahl ``kanal``), gegen die Zeile, die ``aggregate_day``
-geschrieben hat. **Abweichungen werden klassifiziert, nicht weggerundet** (``klasse``), in dieser Reihenfolge:
+geschrieben hat — seit HA-Bauform S4 (E-S4-1) die Kanal-Stunde ``h`` (Beginn) gegen den Bestands-Slot ``h+1`` (für
+``h = 23`` Slot 0 des Folgetags, ``slot_konvention.bestandszeile_fuer_stundenbeginn``). **Abweichungen werden klassifiziert, nicht weggerundet** (``klasse``), in dieser Reihenfolge:
 
 * ``bestand_ohne_zeile`` — der Bestand hat für die Stunde keine Stundenzeile (Tag ohne Stundenprofil: Retention nach
   730 Tagen; an der Kanal-Kopie die Füllung „Stunde ohne Stundenzeile = Zuwachs 0", Bauplan §10a);
@@ -44,12 +45,13 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Iterable, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn
 from backend.core.berechnungen.spannen import achse_der_kategorie
 from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
 from backend.models.anlage import Anlage
@@ -247,12 +249,15 @@ def felder_des_tags(tag: KanalStundentag) -> list[str]:
     return [f for f in FELDER if f in out]
 
 
-def vergleiche_tag(b: Bericht, kx: _Kontext, bestand: dict[int, Any]) -> None:
-    """Je Stunde und Feld Bestand gegen Adapter (gerundet wie der Schreiber)."""
+def vergleiche_tag(b: Bericht, kx: _Kontext, bestand: dict[date, dict[int, Any]]) -> None:
+    """Je Stunde und Feld Bestand gegen Adapter (gerundet wie der Schreiber). Seit HA-Bauform S4 (E-S4-1, S4-R-3b) ist
+    die Kanal-Stunde ``h`` ihr Beginn ``[h, h+1)``; verglichen wird sie mit der Bestandszeile, die dieselbe Stunde trägt
+    (``slot_konvention.bestandszeile_fuer_stundenbeginn``: Slot ``h+1``, für ``h = 23`` Slot 0 des Folgetags)."""
     zeilen = stunden_aus_kanaelen(kx.tag).zeilen
     felder = felder_des_tags(kx.tag)
     for h in range(SLOTS):
-        r = bestand.get(h)
+        tag_b, slot = bestandszeile_fuer_stundenbeginn(kx.tag.datum, h)
+        r = bestand.get(tag_b, {}).get(slot)
         pv_klasse = None
         for f in felder:
             soll = getattr(r, f, None) if r is not None else None
@@ -275,7 +280,7 @@ async def probe_tage(db: AsyncSession, aid: int, tage: list[date], *, jetzt: int
     b = Bericht()
     anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
     kwp = getattr(anlage, "leistung_kwp", None)
-    bestand = await bestand_zeilen(db, aid, tage)
+    bestand = await bestand_zeilen(db, aid, sorted(set(tage) | {t + timedelta(days=1) for t in tage}))
     verworfen = await bestand_verworfen(db, aid, tage)
     from backend.models.investition import Investition
 
@@ -292,7 +297,7 @@ async def probe_tage(db: AsyncSession, aid: int, tage: list[date], *, jetzt: int
             b.tage["rest_faktor:" + ("nicht_skalierbar" if f is None else "ueber_1" if f > 1 + TOL_GLEICH
                                      else "unter_1" if f < 1 - TOL_GLEICH else "1")] += 1
         inaktiv = frozenset(str(i.id) for i in invs if not i.ist_aktiv_an(d))
-        vergleiche_tag(b, _Kontext(tag, verworfen.get(d, {}), kwp, art, inaktiv), bestand.get(d, {}))
+        vergleiche_tag(b, _Kontext(tag, verworfen.get(d, {}), kwp, art, inaktiv), bestand)
     return b
 
 

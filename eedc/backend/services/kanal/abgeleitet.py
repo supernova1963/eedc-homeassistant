@@ -74,7 +74,9 @@ def _unix(dt: datetime) -> int:
 
 
 def tag_der_stunde(start_ts: int) -> date:
-    """Der Tag, in dessen Tagesfenster ``[Vortag 23:00, 23:00)`` (``fenster.tagesfenster``) die Stunde liegt."""
+    """Der Tag, in dessen Bestands-Tagesfenster ``[Vortag 23:00, 23:00)`` (``slot_konvention.tagesfenster_start_ts``) die
+    Stunde liegt — nicht der Kanal-Tag: der ist seit HA-Bauform S4 (E-S4-1) der Kalendertag
+    (``fenster.kalendertag_der_stunde``)."""
     return (datetime.fromtimestamp(start_ts) + timedelta(hours=1)).date()
 
 

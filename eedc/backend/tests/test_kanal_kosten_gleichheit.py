@@ -247,14 +247,15 @@ async def test_preis_kanal_in_euro_je_kwh():
 
 
 @pytest.mark.asyncio
-async def test_laufender_monat_eine_stunde_aktueller():
-    """Juli (laufend, Uhr 04.07. 00:30): gewichtet und EV-Ø gleich; der Kanal kennt die Stunde 03.07. 23:00 schon
-    (Teiltag — Klasse TEILTAG-ZWEI-MONATSGRENZEN), der Bestand erst mit der Zeile 0 des 04.07."""
+async def test_laufender_monat_kanal_und_bestand_gleich_viele_stunden():
+    """Juli (laufend, Uhr 04.07. 00:30): gewichtet und EV-Ø gleich, und seit HA-Bauform S4 E-S4-1 auch die Zahl der
+    Stunden — der Kanal rechnet den Kalendermonat (01.07. 00:00 … 04.07. 00:00, 72 Zeilen), die Stunde 30.06. 23:00, die
+    das Tagesfenster-Monatsfenster mitzählte (73, Klasse TEILTAG-ZWEI-MONATSGRENZEN), gehört zum Juni."""
     async with kg.datenstand("achsen", "M04", "HA") as ds:
         kanal, bestand = await _beide(ds, "M04")
         k, b = kanal.hole(2026, 7), bestand.hole(2026, 7)
         assert (k.gewichtet_cent, k.ev_gewichtet_cent) == (b.gewichtet_cent, b.ev_gewichtet_cent)
-        assert (k.abgedeckte_stunden, b.abgedeckte_stunden) == (73, 72)
+        assert (k.abgedeckte_stunden, b.abgedeckte_stunden) == (72, 72)
 
 
 @pytest.mark.asyncio

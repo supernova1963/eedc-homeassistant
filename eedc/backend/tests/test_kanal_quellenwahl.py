@@ -142,11 +142,16 @@ async def test_monatsraster_waehlt_wie_der_tag_feld_ohne_kanal_leere_eingabe_mit
 async def test_fenster_treffen_den_bestand_monat_und_stunde(fid):
     """Spiegel aus HA nachgefüllt, Tages- und Stundenzeilen über den echten ``aggregate_day`` (01.06.–03.07.), dann:
 
-    * Δ über das Monatsfenster Juni (Lese-Schicht) == ``lade_monats_summen_aus_tagen`` Juni (Monatssumme der Tageszeilen);
-    * je Tag die belegten Stunden des Tagesfensters (``stunden``) == Slot 0…23 der Stundenzeilen des Bestands
-      (``TagesEnergieProfil``), Stunde für Stunde — das bindet die Lage des Fensters an den Bestand: eine Verschiebung um
-      eine Stunde fiele bei Tages- und Monatssummen dieser Datenstände nicht auf (nachts gleiche Rate), hier schon
-      (Sprengsatz S16 im Bericht E3)."""
+    * Δ über das Monatsfenster Juni (Lese-Schicht, seit HA-Bauform S4 E-S4-1 der Kalendermonat) ==
+      ``lade_monats_summen_aus_tagen`` Juni (Monatssumme der Tageszeilen, Bestands-Fenster) um die Randstunde verschoben:
+      + Slot 0 des 01.07. − Slot 0 des 01.06. (die Stunden 30.06. 23:00 und 31.05. 23:00, aus den Stundenzeilen);
+    * je Tag die belegten Stunden des Kalendertags (``stunden``, Stunde = Beginn) == die Bestandszeile derselben Stunde
+      (``slot_konvention.bestandszeile_fuer_stundenbeginn``: Slot h+1, für h = 23 Slot 0 des Folgetags), Stunde für
+      Stunde — das bindet die Lage des Fensters an den Bestand: eine Verschiebung um eine Stunde fiele bei Tages- und
+      Monatssummen dieser Datenstände nicht auf (nachts gleiche Rate), hier schon (Sprengsatz S16 im Bericht E3)."""
+    from datetime import date
+
+    from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn
     from backend.models.tages_energie_profil import TagesEnergieProfil
     from backend.services.energie_profil.monats_aus_tagen import lade_monats_summen_aus_tagen
     from backend.services.kanal.fenster import tagesfenster
@@ -177,20 +182,24 @@ async def test_fenster_treffen_den_bestand_monat_und_stunde(fid):
             assert set(kanaele) == {"basis:einspeisung", "basis:netzbezug"}
             juni = (await monatsreihe(db, aid, list(kanaele), (2026, 6), (2026, 6), jetzt=JETZT))[0]
             bestand = (await lade_monats_summen_aus_tagen(db, aid, von=(2026, 6), bis=(2026, 6)))[(2026, 6)]
+            zeilen = {(z.datum, z.stunde): z for z in (await db.execute(select(TagesEnergieProfil).where(
+                TagesEnergieProfil.anlage_id == aid))).scalars().all()}
             assert juni.wahl.quelle == QUELLE_KANAL
-            assert juni.werte["basis:einspeisung"].delta == pytest.approx(bestand.einspeisung_kwh, abs=0.005)
-            assert juni.werte["basis:netzbezug"].delta == pytest.approx(bestand.netzbezug_kwh, abs=0.005)
+            for key, spalte, monat in (("basis:einspeisung", "einspeisung_kw", bestand.einspeisung_kwh),
+                                       ("basis:netzbezug", "netzbezug_kw", bestand.netzbezug_kwh)):
+                rand = (getattr(zeilen[(date(2026, 7, 1), 0)], spalte) or 0.0) - (
+                    getattr(zeilen[(date(2026, 6, 1), 0)], spalte) or 0.0)
+                assert juni.werte[key].delta == pytest.approx(monat + rand, abs=0.005), key
             assert bestand.einspeisung_kwh > 0 and bestand.netzbezug_kwh > 0
             verglichen = 0
             for tag in mx.TAGE_JUNI:
                 je = await stunden_stapel(db, list(kanaele.values()), *tagesfenster(tag), jetzt=JETZT)
-                slots = {z.stunde: z for z in (await db.execute(select(TagesEnergieProfil).where(
-                    TagesEnergieProfil.anlage_id == aid, TagesEnergieProfil.datum == tag))).scalars().all()}
                 for key, spalte in (("basis:einspeisung", "einspeisung_kw"), ("basis:netzbezug", "netzbezug_kw")):
                     werte = je[key].werte
                     assert je[key].voll and len(werte) == 24, (tag, key, len(werte))
-                    for slot, w in enumerate(werte):
-                        assert w.change == pytest.approx(getattr(slots[slot], spalte) or 0.0, abs=0.0005), (tag, key, slot)
+                    for h, w in enumerate(werte):
+                        z = zeilen[bestandszeile_fuer_stundenbeginn(tag, h)]
+                        assert w.change == pytest.approx(getattr(z, spalte) or 0.0, abs=0.0005), (tag, key, h)
                         verglichen += 1
             assert verglichen == 2 * 24 * len(mx.TAGE_JUNI)
         finally:

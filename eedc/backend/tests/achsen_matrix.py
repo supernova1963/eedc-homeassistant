@@ -324,12 +324,12 @@ FORMEN_T4: dict[str, Form] = {f.fid: f for f in (
 MATRIX_FORMEN: dict[str, Form] = {**FORMEN, **FORMEN_W2, **FORMEN_T4}
 
 
-def w2_menge(fn: RateFn, ohne: Optional[Callable], tage) -> float:
-    """Weg 2 als Soll: Δ eines Zählers über die Tagesfenster ``tage`` (``[Vortag 23:00, 23:00)``) wie die Lese-Schicht
-    — Stand vor dem Ende minus Stand vor dem Anfang; fehlende Zeilen tragen nichts, ihre Menge steht in der nächsten
-    vorhandenen (Lückentag wie HA). Unabhängig vom Produktcode."""
-    von = datetime.combine(tage[0], datetime.min.time()) - timedelta(hours=1)
-    bis = datetime.combine(tage[-1], datetime.min.time()) + timedelta(hours=23)
+def w2_menge(fn: RateFn, ohne: Optional[Callable], tage, weg: Optional[str] = None) -> float:
+    """Weg 2 als Soll: Δ eines Zählers über die Tagesfenster ``tage`` wie die Lese-Schicht — Stand vor dem Ende minus
+    Stand vor dem Anfang; fehlende Zeilen tragen nichts, ihre Menge steht in der nächsten vorhandenen (Lückentag wie
+    HA). Unabhängig vom Produktcode. Fenster ``pv_achse_matrix._tagesfenster_dt``: für einen Kanal-Weg der Kalendertag
+    (HA-Bauform S4 E-S4-1), sonst ``[Vortag 23:00, 23:00)``."""
+    von, bis = mx._tagesfenster_dt(tage[0], weg)[0], mx._tagesfenster_dt(tage[-1], weg)[1]
     stand, vor_von, vor_bis, t = 0.0, None, None, mx.REIHE_VON
     while t < mx.REIHE_BIS:
         stand += fn(t)

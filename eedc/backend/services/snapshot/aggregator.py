@@ -885,8 +885,11 @@ async def get_betriebsart_strom_tageswerte(
     datum: date,
     *,
     rueckwaerts: bool = False,
+    kanal_tag: bool = False,
 ) -> dict[str, dict[str, float]]:
     """Tages-kWh der **gemessenen** Betriebsart-Zähler, je Wärmepumpe (#263).
+
+    ``kanal_tag``: Kanal-Tag ⇒ Kalendertag (``tagesfenster_fuer``, HA-Bauform S4, Bauplan §10a (1)).
 
     ⛔ **``rueckwaerts`` ist keine Stilfrage (N-434, 11.09.2026).** Diese Werte
     sind **Teilmengen** eines Bezugs, und der Bezug steht in
@@ -929,7 +932,7 @@ async def get_betriebsart_strom_tageswerte(
     # steht EINMAL im Baum. Verhalten bitgleich zur früheren lokalen Weiche —
     # `waermepumpe` ist dort „bedingt", und dieser Aufrufer liest nur Wärmepumpen.
     rng = tagesfenster_fuer(
-        "waermepumpe", datum, tageszeile_rueckwaerts=rueckwaerts
+        "waermepumpe", datum, tageszeile_rueckwaerts=rueckwaerts, kanal_tag=kanal_tag,
     )
     start_off, end_off = rng.boundary_offsets  # (-1, 23) bzw. (0, 24)
     ts_start = rng.boundary_at(start_off)
@@ -1172,6 +1175,7 @@ async def get_tagesdetail_kwh(
     datum: date,
     *,
     tageszeile_rueckwaerts: bool = False,
+    kanal_tag: bool = False,
 ) -> "TagesDetail":
     """Tages-kWh für Felder, die `get_komponenten_tageskwh` bewusst NICHT separat
     ausweist, die aber Cockpit/Tag für die Detailzeilen braucht (D1 „maximal
@@ -1278,8 +1282,9 @@ async def get_tagesdetail_kwh(
         if typ == "e-auto" and _wb_deckt:
             continue
         # Das Fenster hängt am Bezug DIESES Typs, nicht am Aufrufweg (S1a).
+        # HA-Bauform S4 (§10a (1)): an einem Kanal-Tag folgt jeder Typ seinem Bezug in den Kalendertag.
         rng_typ = tagesfenster_fuer(
-            typ, datum, tageszeile_rueckwaerts=tageszeile_rueckwaerts
+            typ, datum, tageszeile_rueckwaerts=tageszeile_rueckwaerts, kanal_tag=kanal_tag,
         )
         felder = inv_data.get("felder", {}) or {}
         kandidaten = zaehler_feld_kandidaten(inv_id_str, felder, mqtt_keys)

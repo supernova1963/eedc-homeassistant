@@ -242,7 +242,7 @@ def _abzug(fid: str, weg: str, tage: tuple) -> float:
     Zählerreihen, `soll_wandlungsverluste`), wenn der Datenstand Kanäle hat (HA, S1, S2) und der Vertrag hält."""
     if weg not in ("HA", "S1", "S2") or VERLUSTE_GRUND_SOLL[fid] is not None:
         return 0.0
-    return mx.soll_wandlungsverluste(mx.MATRIX_FORMEN[fid], tage) or 0.0
+    return mx.soll_wandlungsverluste(mx.MATRIX_FORMEN[fid], tage, weg) or 0.0
 
 
 def _geld_sichten(fid: str, weg: str, nach: dict) -> list[Zelle]:
@@ -381,10 +381,11 @@ def _bkw_hub_zellen(form: mx.Form, nach: dict) -> list[Zelle]:
 
 def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa: C901 — eine Tafel, kein Algorithmus
     form = mx.MATRIX_FORMEN[fid]
-    juni = mx.soll_monat(form, mx.TAGE_JUNI)
-    juli = mx.soll_monat(form, mx.TAGE_JULI)
-    e_juni, n_juni = mx.soll_einspeisung(form, 30), mx.soll_netzbezug(30, form)
-    e_juli, n_juli = mx.soll_einspeisung(form, 3), mx.soll_netzbezug(3, form)
+    # HA-Bauform S4 (E-S4-1): die Soll-Fenster der Kanal-Wege sind Kalendertag und Kalendermonat (`kanal_wege()`).
+    juni = mx.soll_monat(form, mx.TAGE_JUNI, weg=weg)
+    juli = mx.soll_monat(form, mx.TAGE_JULI, weg=weg)
+    e_juni, n_juni = mx.soll_einspeisung(form, 30, weg), mx.soll_netzbezug(30, form)
+    e_juli, n_juli = mx.soll_einspeisung(form, 3, weg), mx.soll_netzbezug(3, form)
     z: list[Zelle] = []
 
     # ── Datenstand: Tag und laufender Monat ──
@@ -406,11 +407,12 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
                   _z("laufend:jahr_verlauf=Σtage", _pv(lf["verlauf"]), juli_std)]
         elif inv == "I3":
             z += [_tage_zellen("tag:stunden", m, weg, tage, lambda d, t: d["stunden_pv"],
-                               lambda t: mx.soll_tag(form, t).summe),
+                               lambda t: mx.soll_tag(form, t, weg).summe),
+                  # die gespeicherte Tageszeile schreibt der Bestand — Soll im Bestands-Fenster
                   _tage_zellen("tag:keys", m, weg, tage, lambda d, t: d["summe_keys"],
                                lambda t: mx.soll_tag(form, t).summe),
                   _tage_zellen("tag:cockpit", m, weg, tage, lambda d, t: d["tw_erzeugung"],
-                               lambda t: mx.soll_tag(form, t).summe),
+                               lambda t: mx.soll_tag(form, t, weg).summe),
                   _z("laufend:cockpit_monat", _pv(lf["monat"]), juli.summe)]
         elif inv == "I4":
             # HA-Bauform E4a-2 (Weg 2, Bauplan §6b): Cockpit → Tag liest im HA-Datenstand die Kanäle — der Tag folgt
@@ -421,7 +423,7 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
                 return mx.soll_tag(form, t)
 
             def soll_kanal_tag(t):
-                return mx.soll_monat(form, (t,)) if (weg == "HA" and not form.w2) else mx.soll_tag(form, t)
+                return mx.soll_monat(form, (t,), weg=weg) if (weg == "HA" and not form.w2) else mx.soll_tag(form, t, weg)
 
             def _soll(t, g, quelle):
                 s = quelle(t)
@@ -533,7 +535,7 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
         if fid in WANDLUNGSVERLUSTE_FORMEN:
             # E4b: die Verluste kommen aus den Kanälen — mit HA (S1/S2) vor UND nach dem Abschluss; ohne HA (S3, keine
             # Kanäle) gibt es keinen Wert (der Bestandspfad liefert keinen).
-            v_soll = mx.soll_wandlungsverluste(form, mx.TAGE_JUNI) if weg in ("S1", "S2") else None
+            v_soll = mx.soll_wandlungsverluste(form, mx.TAGE_JUNI, weg) if weg in ("S1", "S2") else None
             z += [_z("fakten:wandlungsverluste", fk.get("wandlungsverluste"), v_soll),
                   _z("fakten_tw:wandlungsverluste", (vor["fakten_tw"] or {}).get("wandlungsverluste"), v_soll)]
     elif inv == "I4":

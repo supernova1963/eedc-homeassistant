@@ -95,46 +95,21 @@ async def get_tag_detail(
     inv_result = await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
     investitionen_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
 
-    from backend.services.snapshot.aggregator import get_tagesdetail_kwh
     from backend.services.speicher_wirtschaftlichkeit import berechne_effektiver_ladepreis
     from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
     from backend.api.routes.live_wetter import _get_lernfaktor
 
-    from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts
-
     # ⛔ **N-434/N-435: Die Tageszeile wird ZUERST gelesen**, weil ihre Herkunft
-    # das Fenster aller Wärmepumpen-Zähler dieses Tages bestimmt. Im HA-Add-on
-    # steht `komponenten_kwh` als Σ der 24 LTS-Slots [Vortag 23:00, 23:00);
-    # Teilmengen (Betriebsart-Zähler) und Gegenstücke (Wärme der Arbeitszahl)
-    # desselben Geräts müssen im selben Fenster stehen — sonst wird die
-    # Differenz zweier Randstunden zu „nicht aufgeteilt" bzw. zu einer falschen
-    # Arbeitszahl.
-    tz_zeile = (await db.execute(
-        select(
-            TagesZusammenfassung.komponenten_kwh,
-            TagesZusammenfassung.source_provenance,
-            TagesZusammenfassung.verworfen,
-        ).where(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum == datum,
-        )
-    )).one_or_none()
-    tz_komp = tz_zeile[0] if tz_zeile else None
-    # HA-Bauform E4a-2 (Umschaltstelle 4): an einem Kanal-Tag kommen die Bilanz-Schlüssel aus den Kanälen (B-3);
-    # gelesen werden hier heute nur die WP-Schlüssel, die aus der Tageszeile bleiben.
-    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
+    # das Fenster aller Wärmepumpen-Zähler dieses Tages bestimmt (Bestandstag).
+    # HA-Bauform E4a-2 (Umschaltstelle 4): an einem Kanal-Tag kommen die
+    # Bilanz-Schlüssel aus den Kanälen (B-3). HA-Bauform S4 (E-S4-1, §10a (1)/(2)):
+    # an einem Kanal-Tag stehen die Snapshot-Teilmengen im Kalendertag, und die
+    # WP- bzw. E-Mob-Gruppe mit Wahl `kanal` bringt ihre Tageswerte aus dem
+    # Kanal-Stundentag — die EINE Umschaltstelle ist `tages_eingaenge`.
+    from backend.services.energie_profil.kanal_stunden import tages_eingaenge
 
-    _kanal = (await kanal_tage(db, anlage_id, datum, datum)).get(datum)
-    if _kanal is not None:
-        tz_komp = mische_komponenten(tz_komp, _kanal, (await bilanz_ziele(db, anlage_id, [datum]))[datum])
-    tz_rueckwaerts = tageszeile_ist_rueckwaerts(
-        tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None,
-    )
-
-    _tagesdetail = await get_tagesdetail_kwh(
-        db, anlage, investitionen_by_id, datum,
-        tageszeile_rueckwaerts=tz_rueckwaerts,
-    )
+    _eingaenge = await tages_eingaenge(db, anlage, investitionen_by_id, datum)
+    tz_komp, _tagesdetail = _eingaenge.tz_komp, _eingaenge.detail
     detail = _tagesdetail.werte
     # W-18: Warum ein Tageswert fehlt. Der Grund wird **hergeleitet**, nicht
     # geraten — bis zum 26.08.2026 hing der Client an jedes „—" denselben Satz
@@ -234,10 +209,8 @@ async def get_tag_detail(
         GRUND_ZAEHLER_RUECKSPRUNG,
         tages_abdeckung_hinweis, tageswert_grund_kurz, tageswert_grund_text,
     )
-    from backend.services.energie_profil import lade_modus_split_tag
     from backend.services.snapshot.aggregator import (
         WP_STROM_AUSGABE_ZU_FELD as _WP_STROM_AUSGABE_ZU_FELD,
-        get_betriebsart_strom_tageswerte,
         get_wp_strom_stufe_je_investition,
     )
 
@@ -253,9 +226,7 @@ async def get_tag_detail(
     # aus der Stundensumme des Leistungspfads — die weicht ab, und genau daran
     # hängt W-17b (30 kWh Balken unter einer 284-kWh-Kachel). Die Tageszeile
     # und ihr Fenster sind oben schon gelesen (N-434/N-435).
-    gemessen_je_inv = await get_betriebsart_strom_tageswerte(
-        db, anlage, investitionen_by_id, datum, rueckwaerts=tz_rueckwaerts,
-    )
+    gemessen_je_inv = _eingaenge.gemessen_je_inv
 
     # ── R-4/N-482 · N-491: der Tages-Strom je Gerät, aufgelöst ────────────
     #
@@ -305,7 +276,7 @@ async def get_tag_detail(
     # Faltung — die Tages-Kühlzahl fragt, WELCHE Geräte Kühlstrom in den Stapel
     # bringen (R2 beidseitig, s. u.). `falte_tages_stapel` ist genau
     # `_falte(beitraege_des_tages(…))`; beides aus denselben Eingängen ⇒ bitgleich.
-    _splits_tag = await lade_modus_split_tag(db, anlage_id, datum)
+    _splits_tag = _eingaenge.splits
     # N-462: SOLL-§9-E7/Option A fragt „steckt der funktionsfremde Anteil im
     # Nenner?" — und das entscheidet die K3-Stufe des Bezugs, nicht das
     # Kennzeichen. Gemessen: 3,00 statt 3,75 an derselben Anlage.

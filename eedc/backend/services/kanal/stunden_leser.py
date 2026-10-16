@@ -14,10 +14,13 @@ Gleichheitsprobe ``tests/kanal_stunden_gleichheit.py``, Wächter „Σ Stunden �
 
 Wahl ``bestand`` ⇒ die Gruppe fehlt im Ergebnis (``gruppen``); der Aufrufer rechnet sie wie heute aus den Stundenzeilen.
 
-**Stunde = HAs ``change`` im Backward-Raster (S3-R2).** ``lesen.stunden_stapel`` über ``fenster.tagesfenster(D)`` —
-EINE Anweisung je Gruppe; Slot ``h`` = ``change`` der Zeile, deren Stand den Zähler ``h`` setzt
-(``slot_konvention.lts_boundary_index``, dieselbe Abbildung wie ``get_hourly_slots_for_day``: Herbst-Doppelslot trägt
-beide Zeilen, Frühjahr ein leerer Slot). Eine Stunde ohne Zeile ist **keine 0**: der Slot bleibt ``None``, die nächste
+**Stunde = Beginn (S4-R-3b, seit E-S4-1; vorher S3-R2 Backward-Raster).** ``lesen.stunden_stapel`` über
+``fenster.tagesfenster(D)`` = Kalendertag ``[D 00:00, D+1 00:00)`` — EINE Anweisung je Gruppe; Stunde ``h`` = ``change``
+der Zeile mit lokalem Beginn ``h`` (``datetime.fromtimestamp(start_ts).hour`` in der Prozesszone, Tag = Datum des
+Beginns), also ``[h, h+1)`` wie HAs Statistik-Zeile. Umstellungstage: im Herbst trägt Stunde 2 beide Zeilen (Zuwachs und
+Spanne addiert), im Frühjahr bleibt Stunde 2 leer; es bleiben 24 Spalten. Die Bestands-Bahnen (Stundenzeile backward)
+legt ``slot_konvention.bestandszeile_fuer_stundenbeginn`` daneben (``energie_profil/kanal_stunden.py``). Eine Stunde
+ohne Zeile ist **keine 0**: der Slot bleibt ``None``, die nächste
 belegte Stunde trägt den Zuwachs und ihre ``spanne > 3600``. **HA-Kanäle wörtlich (S3-R9):** kein Deckel, keine
 Reset-Regel, keine Lückenfüllung — auch nicht für die eigene Summe eines MQTT-Kanals beim Lesen (sie hat ihre Regeln
 beim Schreiben).
@@ -60,7 +63,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.bilanz_zeitraum import BilanzZeitraum, Eingang, komponiere_bilanz_zeitraum
 from backend.core.berechnungen.pv_verteilung import PvTraeger
-from backend.core.berechnungen.slot_konvention import lts_boundary_index
 from backend.models.kanal import ART_SUM
 from backend.services.kanal import bilanz_leser, geraete_leser, wp_leser
 from backend.services.kanal.bilanz_adapter import zaehler_eintraege
@@ -140,18 +142,26 @@ class KanalStundentag:
 # ── Slots ───────────────────────────────────────────────────────────────────
 
 
+def stunde_des_beginns(start_ts: int, datum: date) -> int:
+    """Die Stunde einer Zeile am Kanal-Tag ``datum`` (S4-R-3b): die lokale Wanduhr-Stunde ihres Beginns — ``-1``, wenn
+    die Zeile an einem anderen Tag beginnt."""
+    beginn = datetime.fromtimestamp(start_ts)
+    return beginn.hour if beginn.date() == datum else -1
+
+
 def slots_der_stunden(datum: date, st: Stunden,
                       slot_je_ts: Optional[dict] = None) -> tuple[tuple[Optional[float], ...], tuple[Optional[int], ...]]:
-    """Die Zeilen eines Kanals im Tagesfenster auf die 24 Backward-Slots (``lts_boundary_index``). Fallen zwei Zeilen
-    auf einen Slot (Herbst-Umstellung), trägt er beide Zuwächse und beide Spannen; ein Slot ohne Zeile bleibt ``None``.
-    ``slot_je_ts``: ein Merkzettel ``start_ts → Slot`` desselben Tages (alle Kanäle einer Gruppe teilen die Stunden)."""
+    """Die Zeilen eines Kanals im Kalendertag auf die 24 Stunden ihres Beginns (``stunde_des_beginns``). Fallen zwei
+    Zeilen auf eine Stunde (Herbst-Umstellung, Wanduhr 02:00 doppelt), trägt sie beide Zuwächse und beide Spannen; eine
+    Stunde ohne Zeile bleibt ``None`` (Frühjahr: Stunde 2). ``slot_je_ts``: ein Merkzettel ``start_ts → Stunde``
+    desselben Tages (alle Kanäle einer Gruppe teilen die Stunden)."""
     menge: list[Optional[float]] = [None] * SLOTS
     spanne: list[Optional[int]] = [None] * SLOTS
     merk = {} if slot_je_ts is None else slot_je_ts
     for w in st.werte:
         h = merk.get(w.start_ts)
         if h is None:
-            h = merk[w.start_ts] = lts_boundary_index(datetime.fromtimestamp(w.start_ts), datum)
+            h = merk[w.start_ts] = stunde_des_beginns(w.start_ts, datum)
         if not 0 <= h < SLOTS or w.change is None:
             continue
         menge[h] = (menge[h] or 0.0) + w.change
@@ -478,7 +488,7 @@ async def _tageszaehler(db: AsyncSession, anlage_id: int, datum: date, tag: dict
 async def modus_strom_stunden(
     db: AsyncSession, anlage_id: int, datum: date, inv_ids, *, jetzt: Optional[int] = None,
 ) -> dict[int, dict[str, tuple[Optional[float], ...]]]:
-    """Je Gerät je Betriebsart (``MODUS_STROM_ERFASST`` und ``rest``) die 24 Slots des abgeleiteten kWh-Kanals
+    """Je Gerät je Betriebsart (``MODUS_STROM_ERFASST`` und ``rest``) die 24 Stunden (Beginn) des abgeleiteten kWh-Kanals
     ``abgeleitet:inv:<id>:modus_strom_<art>_kwh`` (E4d) — HAs ``change`` wie jeder Mengen-Kanal, EINE Anweisung. Die
     WP-Gruppe des Kanal-Stundentags trägt nur Heizen/Warmwasser/Kühlen (die Felder der Monatszeile); die Stundenform des
     Rests und der erfassten Lüften/Entfeuchten braucht alle sechs (Σ = Strom des Geräts, ``modus_strom.py``)."""
@@ -643,6 +653,48 @@ async def _wp_bereich(db: AsyncSession, anlage_id: int, tage: Sequence[date], je
         await _wp_bauen(db, anlage_id, d, wahl, await bereich.tag(bedarfe[d].keys(), d), tags[d])
 
 
+async def geraete_tageswerte(db: AsyncSession, anlage_id: int, tage: Sequence[date], *, gruppe: str,
+                             jetzt: Optional[int] = None) -> dict[date, dict[str, float]]:
+    """Je Tag, an dem die Geräte-Gruppe ``gruppe`` (E-Mob oder Sonstiges) Wahl ``kanal`` hat, die Tages-Δ ihrer Zähler je
+    Ziel-Schlüssel (``komponenten_kwh``-Form, Vorzeichen der Beitragsschicht) — dieselbe Tageswahl wie
+    ``_geraete_bereich`` (``_geraete_bedarf`` + ``_geraete_wahl``), EIN ``reihe_stapel`` über die Tagesgrenzen, **keine
+    Stunden** (HA-Bauform S4 E-S4-1, Bauplan §10a (4): ``tage-werte`` Sonstiges/Abgabe an Kanal-Tagen; L-1b A bleibt)."""
+    jetzt = bilanz_leser.uhr() if jetzt is None else int(jetzt)
+    tage = sorted(tage)
+    if not tage:
+        return {}
+    stamm = await geraete_leser._stamm(db, anlage_id)
+    nur_sonstiges = gruppe == GRUPPE_SONSTIGES
+    bedarfe = {}
+    for d in tage:
+        # Für Sonstiges allein ohne die E-Mob-Geräte (die Lade-Auswahl der E-Mob-Gruppe kostet je Tag Abfragen) —
+        # dieselbe ``_bedarf``-Funktion, nur der Aktiv-Filter enger.
+        emob_b, sonst_b = await geraete_leser._bedarf(
+            db, stamm, (lambda i, d=d: i.ist_aktiv_an(d) and not (nur_sonstiges and i.typ in geraete_leser.EMOB_TYPEN)), d)
+        bedarfe[d] = sonst_b if nur_sonstiges else emob_b
+    z = await _deltas_bereich(db, anlage_id, set().union(*(b.keys() for b in bedarfe.values())), tage, jetzt)
+    out: dict[date, dict[str, float]] = {}
+    zaehler_je_satz: dict[frozenset, list] = {}
+    for d in tage:
+        g = geraete_leser.waehle_gruppe(bedarfe[d], z[d])
+        if not g.kanal:
+            continue
+        keys = {gruppe: _gewaehlte_keys(g, bedarfe[d])}
+        # Die Zähler des Tages hängen nur an den aktiven Geräten (``zaehler_eintraege``: ``datum`` nur für die
+        # Wallbox-Regel über eben diese Geräte) — je Gerätesatz einmal (Laufzeit, Gate B).
+        aktiv = {str(i.id): i for i in stamm.invs if i.ist_aktiv_an(d)}
+        satz = frozenset(aktiv)
+        if satz not in zaehler_je_satz:
+            zaehler_je_satz[satz] = await zaehler_eintraege(db, stamm.anlage, aktiv, d)
+        werte: dict[str, float] = {}
+        for e in _zaehler_der_gruppe(zaehler_je_satz[satz], keys[gruppe]):
+            zr = z[d].get(e.schluessel)
+            if zr is not None and zr.voll and zr.delta is not None:
+                werte[e.target_key] = werte.get(e.target_key, 0.0) + e.vorzeichen * zr.delta
+        out[d] = werte
+    return out
+
+
 # ── Fassade ─────────────────────────────────────────────────────────────────
 
 
@@ -720,6 +772,7 @@ async def _kanal_stundentage(db: AsyncSession, anlage_id: int, von: date, bis: d
 
 __all__ = [
     "Ausschnitt", "BilanzStunden", "GRUPPEN", "GRUPPE_BILANZ", "GRUPPE_EMOB", "GRUPPE_SONSTIGES", "GRUPPE_WP",
-    "GruppenStunden", "KanalStundentag", "SLOTS", "ausschnitt", "kanal_stundentag", "kanal_stundentage",
-    "klemm_der_stunde", "modus_strom_stunden", "slots_der_stunden",
+    "GruppenStunden", "KanalStundentag", "SLOTS", "ausschnitt", "geraete_tageswerte", "kanal_stundentag",
+    "kanal_stundentage",
+    "klemm_der_stunde", "modus_strom_stunden", "slots_der_stunden", "stunde_des_beginns",
 ]

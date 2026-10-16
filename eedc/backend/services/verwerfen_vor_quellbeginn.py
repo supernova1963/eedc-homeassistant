@@ -318,11 +318,14 @@ class Lage:
 
     @property
     def bis_tag(self) -> date:
-        return self.kanal.letzter_ganzer_tag
+        """Der letzte Bestandstag ganz vor ``t`` (Fenster ``[Vortag 23:00, 23:00)``; HA-Bauform S4: Kanal-Tage sind
+        Kalendertage und haben ihre eigene Grenze ``kanal.letzter_ganzer_tag``)."""
+        return self.kanal.letzter_ganzer_bestandstag
 
     def lesart1_ohne_werte(self) -> list[date]:
         """Tage, die danach weder eine Kanalzeile noch einen Bestandswert dieses Feldes haben."""
-        kanal_tage = {d for d in self.kanal.tage if d <= self.bis_tag and not _im_abschluss(d, self.abschluss)}
+        kanal_tage = {d for d in self.kanal.tage
+                      if d <= self.kanal.letzter_ganzer_tag and not _im_abschluss(d, self.abschluss)}
         return sorted(kanal_tage | self.bestand.tage)
 
     def lesart1_mit_bestand(self) -> list[date]:
@@ -355,7 +358,7 @@ async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> Lage
     kanal_v = await kv.vorschau(db, kanal, quellen, t)
     ziele = await bestand_ziele(db, anlage, key)
     abschluss = await abschluss_monate(db, anlage_id)
-    bestand = await zaehle_bestand(db, anlage_id, ziele, kanal_v.letzter_ganzer_tag, abschluss)
+    bestand = await zaehle_bestand(db, anlage_id, ziele, kanal_v.letzter_ganzer_bestandstag, abschluss)
     nur_kanal = await _nur_kanal_tage(db, anlage_id, key, kanal_v)
     return Lage(anlage, key, feld_label(key, await _investitionen(db, anlage_id)), t, kanal_v, ziele, bestand, abschluss,
                 nur_kanal)

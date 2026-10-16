@@ -155,6 +155,29 @@ während alle anderen backward waren → IST erschien im Stundenvergleich
 den Snapshot-Pfad ab und blieb grün — Lehre: jeden Parallelpfad pinnen.
 
 ----------------------------------------------------------------------------
+⭐  Der Kanal-Stundentag liegt auf dem BEGINN — die Umrechnung steht hier (S4)
+----------------------------------------------------------------------------
+Seit HA-Bauform S4 (E-S4-1, Bauplan S4 §4 S4-R-3b; Grundsatz 01.10.2026 «eine
+Stunde ist ihr Beginn als absolute Zeit») trägt ein **Kanal-Tag** den
+Kalendertag ``[00:00, 24:00)`` und seine Stunde ``h`` das Intervall
+``[h, h+1)`` — HAs Statistik-Zeile ``start_ts = h`` (``services/kanal/
+stunden_leser.py``). Die Zeilen dieser Form tragen ``raster = "beginn"``
+(``RASTER_BEGINN``). Der **Bestand** (``TagesEnergieProfil``, Schreiber
+``aggregate_day``, Prognose-Profile, HA-Export) bleibt backward wie oben —
+bewusst nicht in einem Zug umgestellt (Absatz «bewusst NICHT mit N-382»; S5
+nimmt die Spalten weg).
+
+Wo eine backward beschriftete Größe neben eine Kanal-Stunde tritt, holt sie
+der Aufrufer über :func:`bestandszeile_fuer_stundenbeginn` (Stunde ``h`` ⇒
+Bestandszeile ``(D, h+1)``, für ``h = 23`` ``(D+1, 0)``); die Forward-Bahnen
+(``FORWARD_FELDER``) liegen schon am Beginn und kommen zeilengleich.
+:func:`forward_werte_je_backward_zeile` und :func:`zeile_traegt_backward_kw`
+fragen das Attribut ``raster`` und paaren eine Beginn-Zeile zeilengleich.
+:func:`stundenbeginn_der_zeile` nennt für beide Zeilenarten die Stunde des
+Beginns (Monats-Stundensichten). Keine Sicht rechnet die Verschiebung selbst
+(Klasse N-382/N-387).
+
+----------------------------------------------------------------------------
 ⚠️  OpenMeteo wird NICHT verschoben — und das ist KEIN Bug (Issue #297).
 ----------------------------------------------------------------------------
 OpenMeteos stündliche Strahlungsvariablen (``global_tilted_irradiance``,
@@ -179,6 +202,7 @@ gerundet werden — siehe ``backward_slot_aus_period_start`` /
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any, Sequence
 
 
@@ -373,6 +397,70 @@ def leistungspfad_slot(punkt_stunde: int) -> int | None:
 SLOT_PAARUNG_VORZEILE_AB = date(2026, 6, 4)
 
 
+#: Das Raster einer Stundenzeile (Attribut ``raster``): ``"beginn"`` = die Zeile ``h`` trägt ``[h, h+1)`` (Kanal-Tag,
+#: S4-R-3b); ``"ende"`` = Backward-Slot ``h`` = ``[h-1, h)`` (Bestand, #144). Eine Zeile ohne Attribut ist Bestand.
+RASTER_BEGINN = "beginn"
+RASTER_ENDE = "ende"
+
+#: Die Forward-Bahnen der Stundenzeile (Absatz «DREI Bahnen» oben, N-387): sie liegen am Beginn ihrer Stunde und treten
+#: deshalb zeilengleich neben eine Kanal-Stunde. Alle übrigen Bahnen der Zeile (``*_kw``, ``komponenten``, Wetter,
+#: ``wp_starts_anzahl``, ``wp_betriebsstunden``, ``betriebsmodus_je_wp``) liegen backward.
+FORWARD_FELDER = frozenset({"soc_prozent", "soc_je_speicher", "strompreis_cent", "boersenpreis_cent"})
+
+
+#: Je Klasse: kann eine Zeile dieser Klasse ``raster`` tragen? (Laufzeit: ``getattr`` auf einer ORM-/Row-Zeile ohne das
+#: Attribut wirft intern und kostete in ``tage-werte`` über 90 Tage ~90 ms — gemessen E-S4-1, Gate B.)
+_RASTER_TRAEGER: dict[type, bool] = {}
+
+
+def ist_beginn_raster(zeile: Any) -> bool:
+    """Trägt die Zeile das Beginn-Raster (``raster == "beginn"``, Kanal-Tag)? Nur Klassen mit dem Attribut (Mischzeile),
+    ``SimpleNamespace`` (Adapter-Zeilen) und Klassen mit annotiertem Feld ``raster`` können es tragen."""
+    typ = type(zeile)
+    traegt = _RASTER_TRAEGER.get(typ)
+    if traegt is None:
+        traegt = _RASTER_TRAEGER[typ] = (hasattr(typ, "raster") or issubclass(typ, SimpleNamespace)
+                                         or "raster" in getattr(typ, "__annotations__", {}))
+    return traegt and getattr(zeile, "raster", None) == RASTER_BEGINN
+
+
+def bestandszeile_fuer_stundenbeginn(datum: date, stunde: int) -> tuple[date, int]:
+    """Die Bestandszeile (Backward-Slot), die die Stunde ``[stunde, stunde+1)`` des Tages ``datum`` trägt (S4-R-3b).
+
+    ⭐ **Die EINE Umrechnung Beginn → Bestand.** Ein Kanal-Tag beschriftet seine Stunde mit dem Beginn (HAs ``start_ts``),
+    die Stundenzeile ``TagesEnergieProfil`` ihre Backward-Bahnen mit dem Ende: Slot ``s`` = ``[s-1, s)``. Dieselbe Stunde
+    steht also in der Bestandszeile ``(datum, stunde + 1)`` — und für ``stunde = 23`` in Slot 0 des **Folgetags**:
+
+        >>> bestandszeile_fuer_stundenbeginn(date(2026, 7, 2), 11)
+        (datetime.date(2026, 7, 2), 12)
+        >>> bestandszeile_fuer_stundenbeginn(date(2026, 7, 2), 23)
+        (datetime.date(2026, 7, 3), 0)
+
+    Wofür sie gilt — die **Backward-Bahnen** der Stundenzeile: alle ``*_kw``, ``komponenten`` (Leistungspfad, N-382),
+    das Wetter (``temperatur_c``, ``globalstrahlung_wm2``, …; OpenMeteo preceding-hour), ``wp_starts_anzahl``,
+    ``wp_betriebsstunden``, ``betriebsmodus_je_wp`` (N-595) — und ``spannen``. **Nicht** für die Forward-Bahnen
+    (``FORWARD_FELDER``: ``soc_prozent``, ``soc_je_speicher``, ``strompreis_cent``, ``boersenpreis_cent``): die liegen
+    schon am Beginn und kommen zeilengleich aus ``(datum, stunde)``.
+
+    Umstellungstage: dieselbe Wanduhr-Arithmetik wie das übrige Slot-Raster — im Herbst trägt die Stunde 2 (doppelte
+    Wanduhr) beide Zeilen und Slot 3 ebenso, im Frühjahr sind Stunde 2 und Slot 3 leer.
+    """
+    if stunde >= 23:
+        return datum + timedelta(days=1), 0
+    return datum, stunde + 1
+
+
+def stundenbeginn_der_zeile(zeile: Any) -> int:
+    """Die Wanduhr-Stunde, mit der die Zeile BEGINNT — für beide Zeilenarten (Monats-Stundensichten, S4-R-3b).
+
+    * Beginn-Raster (``raster == "beginn"``, Kanal-Tag): ``stunde`` selbst.
+    * Bestandszeile (Backward-Slot ``s`` = ``[s-1, s)``): ``(s − 1) mod 24`` — Slot 0 beginnt um 23:00 (des Vortags).
+    """
+    if ist_beginn_raster(zeile):
+        return zeile.stunde
+    return (zeile.stunde - 1) % 24
+
+
 def forward_werte_je_backward_zeile(
     zeilen: Sequence[Any],
     feld: str,
@@ -408,6 +496,10 @@ def forward_werte_je_backward_zeile(
     Folge) oder ist sie **nicht** die unmittelbar vorhergehende Stunde (Luecke,
     Sprung ueber einen Tag), ist der Eintrag ``None`` — nicht der naechstbeste
     Wert. Ein Preis der uebernaechsten Stunde ist keine Messung dieser Stunde.
+
+    ⭐ **Beginn-Raster (S4-R-3b):** eine Zeile mit ``raster == "beginn"`` (Mischzeile
+    eines Kanal-Tags) traegt ihre Mengen fuer ``[s, s+1)`` — dort ist die Zeilen-
+    Paarung die richtige, wie beim forward-Altbestand (``_traegt_backward_kw``).
 
     ⚠ **DST bleibt unberuehrt.** Die Zeile traegt eine Wanduhr-Stunde
     ``0..23``; die Nachbarschaft wird auf derselben Wanduhr geprueft. Ein
@@ -450,6 +542,8 @@ def zeile_traegt_backward_kw(zeile: Any, ab: date = SLOT_PAARUNG_VORZEILE_AB) ->
     Sizing-Kalibrierung (``speicher_sizing.kalibriere_speicher``) stellt einen
     SoC-Hub gegen **zwei** Stundenmengen und muss dafür wissen, ob die Zeile
     ``[s-1, s)`` (backward) oder ``[s, s+1)`` (forward-Altbestand) meint.
+
+    Eine Zeile im Beginn-Raster (``raster == "beginn"``, Kanal-Tag, S4-R-3b) meint ``[s, s+1)`` ⇒ ``False``.
     """
     return _traegt_backward_kw(zeile, ab)
 
@@ -509,7 +603,9 @@ def betriebsmodus_ziel_slot(zeile: Any) -> tuple[date, int] | None:
 
 
 def _traegt_backward_kw(zeile: Any, ab: date) -> bool:
-    """Liegen die ``*_kw`` dieser Zeile backward? (s. ``SLOT_PAARUNG_VORZEILE_AB``)"""
+    """Liegen die ``*_kw`` dieser Zeile backward? (s. ``SLOT_PAARUNG_VORZEILE_AB``; Beginn-Raster ⇒ nein, S4-R-3b)"""
+    if ist_beginn_raster(zeile):
+        return False
     erzeugt = getattr(zeile, "created_at", None)
     if erzeugt is None:
         # Ohne Schreibzeit bleibt nur das Datum der Zeile — die schlechtere,

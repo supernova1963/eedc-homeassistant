@@ -13,10 +13,12 @@ vor einem Zeitpunkt ``t``:
 * **Gelöscht** werden nur diese ``kanal_statistik``-Zeilen; die ``kanal_quelle``-Zeilen bleiben als Herkunft und
   bekommen die Marke ``verworfen_ts`` (einmal, beim ersten Lauf, der etwas löscht). Ein zweiter Lauf findet keine Zeile
   mehr und ändert nichts.
-* **Tage.** Eine Zeile gehört zu dem Tag, in dessen Tagesfenster ``[Vortag 23:00, 23:00)`` ihre Stunde liegt
-  (``abgeleitet.tag_der_stunde``). Der Tag, in dem ``t`` liegt (``tag_der_stunde(t)``), braucht als Anker die letzte Zeile
-  vor seinem Fenster — sie liegt vor ``t``; er verliert also seine Kanal-Deckung, ist aber nicht ganz vor ``t``.
-  ``letzter_ganzer_tag`` ist der Tag davor: sein Fenster endet spätestens bei ``t``.
+* **Tage.** Eine Zeile gehört zu dem Kalendertag ihres Beginns (``fenster.kalendertag_der_stunde``, seit HA-Bauform S4
+  E-S4-1 — der Kanal-Tag ist der Kalendertag, R-3). Der Tag, in dem ``t`` liegt (``tag_von_t``), braucht als Anker die
+  letzte Zeile vor seinem Fenster — sie liegt vor ``t``; er verliert also seine Kanal-Deckung, ist aber nicht ganz vor
+  ``t``. ``letzter_ganzer_tag`` ist der Tag davor: sein Fenster endet spätestens bei ``t``. Für die **Bestandstage**
+  (Stunden- und Tageszeilen, Fenster ``[Vortag 23:00, 23:00)``) gilt ihr eigenes Fenster: ``tag_von_t_bestand``
+  (``abgeleitet.tag_der_stunde``) und ``letzter_ganzer_bestandstag`` — beide verschieden nur, wenn ``t`` auf 23:00 fällt.
 
 Keine Bestandstabelle wird hier gelesen oder geschrieben (das tut ``services/verwerfen_vor_quellbeginn.py``); kein
 HA-Abruf. Schwesterdateien: ``nachfuellen.py`` (Marke je Kanal), ``konsistenz.py`` (Neu-Laden nur Spiegel-Abschnitte),
@@ -34,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.kanal import ART_STAND, ART_SUM, Kanal, KanalQuelle, KanalStatistik
 from backend.services.kanal.abgeleitet import tag_der_stunde
+from backend.services.kanal.fenster import kalendertag_der_stunde
 
 _STUNDE = 3600
 #: Kanäle, die die Operation anbietet: Zähler eines zugeordneten Feldes (``basis:<feld>``, ``inv:<id>:<feld>``).
@@ -66,14 +69,21 @@ class KanalVorschau:
     zeilen: int
     erste_ts: Optional[int]
     letzte_ts: Optional[int]
-    #: Tage mit Kanalzeilen vor ``t`` (``tag_der_stunde``), aufsteigend.
+    #: Kalendertage mit Kanalzeilen vor ``t`` (``fenster.kalendertag_der_stunde``), aufsteigend.
     tage: tuple[date, ...]
-    #: Der Tag, in dem ``t`` liegt — verliert seinen Anker, ist aber nicht ganz vor ``t``.
+    #: Der Kalendertag, in dem ``t`` liegt — verliert seinen Anker, ist aber nicht ganz vor ``t``.
     tag_von_t: date
+    #: Der Bestandstag (``[Vortag 23:00, 23:00)``), in dem ``t`` liegt (``abgeleitet.tag_der_stunde``).
+    tag_von_t_bestand: Optional[date] = None
 
     @property
     def letzter_ganzer_tag(self) -> date:
         return self.tag_von_t - timedelta(days=1)
+
+    @property
+    def letzter_ganzer_bestandstag(self) -> date:
+        """Der letzte Bestandstag, dessen Fenster ``[Vortag 23:00, 23:00)`` ganz vor ``t`` liegt."""
+        return (self.tag_von_t_bestand or self.tag_von_t) - timedelta(days=1)
 
 
 def ist_verwerfbarer_key(key: str) -> bool:
@@ -160,11 +170,12 @@ async def vorschau(db: AsyncSession, kanal: Kanal, quellen: list[KanalQuelle], t
         select(KanalStatistik.start_ts).where(and_(KanalStatistik.kanal_id == kanal.id, KanalStatistik.start_ts < t))
         .order_by(KanalStatistik.start_ts)
     )).scalars().all())
-    tage = tuple(sorted({tag_der_stunde(int(s)) for s in stunden}))
+    tage = tuple(sorted({kalendertag_der_stunde(int(s)) for s in stunden}))
     return KanalVorschau(
         kanal_id=kanal.id, key=kanal.key, t=t, aeltere=aeltere, juengste=_info(quellen, len(quellen) - 1),
         zeilen=len(stunden), erste_ts=int(stunden[0]) if stunden else None,
-        letzte_ts=int(stunden[-1]) if stunden else None, tage=tage, tag_von_t=tag_der_stunde(t),
+        letzte_ts=int(stunden[-1]) if stunden else None, tage=tage, tag_von_t=kalendertag_der_stunde(t),
+        tag_von_t_bestand=tag_der_stunde(t),
     )
 
 

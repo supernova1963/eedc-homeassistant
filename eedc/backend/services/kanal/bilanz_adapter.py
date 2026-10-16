@@ -12,7 +12,9 @@ Drei Rückgabeformen, je die des Lesers, den der Adapter ersetzt — und dessen 
 
 * ``tage_aus_kanaelen`` → je Tag ``KanalTag``: ``komponenten_kwh`` · ``pv_marken`` · ``verworfen`` wie
   ``TagesZusammenfassung``, dazu die ``TagesBilanz`` wie ``bilanz_aus_stundenrows`` sie für die Tages-Leser
-  (``tage_werte.py``, ``energie_profil/tag.py``/``monat.py``) bildet. Fenster ``fenster.tagesfenster``.
+  (``tage_werte.py``, ``energie_profil/tag.py``/``monat.py``) bildet. Fenster: Fassung (a) das des Bestandstags
+  (``slot_konvention.tagesfenster_start_ts``, ``[Vortag 23:00, 23:00)``), Fassung (b) der Kalendertag
+  ``fenster.tagesfenster`` (HA-Bauform S4, R-3) — (b) − (a) ist je Kanal die Randstunde.
 * ``monats_summen_aus_kanaelen`` → je Monat ``TagesMonatsSumme`` wie ``lade_monats_summen_aus_tagen`` — über
   DIESELBE Faltung (``monats_aus_tagen.falte_monat``), Σ der Tage im Monat = ``fenster.monatsfenster``.
 * ``sensor_monatswerte_aus_kanaelen`` → ``MonatswertResponse`` wie ``HAStatisticsService.get_monatswerte``
@@ -87,6 +89,7 @@ from backend.services.ha_statistics_service import (
     SensorMeta,
     SensorMonatswert,
 )
+from backend.core.berechnungen.slot_konvention import tagesfenster_start_ts
 from backend.services.kanal.fenster import kalendermonatsfenster, monate, tagesfenster
 from backend.services.kanal.lesen import kanaele_laden, soll_ende, stunden_stapel, zeitraum_stapel
 from backend.services.provenance import ABGELEITET_KWP_ANTEIL
@@ -427,7 +430,10 @@ async def _lauf_laden(db: AsyncSession, anlage_id: int, tage: list[date], *, fas
     zeilen: dict[str, list[dict]] = {}
     deltas_je_tag: dict[date, dict[str, Optional[float]]] = {t: {} for t in tage}
     if mengen and tage:
-        von = tagesfenster(tage[0])[0] - _STUNDE   # die Zeile, die Slot 23 des Vortags schließt (Index −1)
+        # Fassung (a) emuliert den Bestandstag und behält dessen Fenster (HA-Bauform S4, Entscheid Master zu E-S4-1
+        # H-2 A): ab der Zeile, die Slot 23 des Vortags schließt (Index −1, `slot_konvention.tagesfenster_start_ts`) —
+        # bis zum Ende des Kalendertags (`fenster.tagesfenster`, Fassung (b)); der HA-Leser nimmt je Tag nur seine Zeilen.
+        von = tagesfenster_start_ts(tage[0])[0]
         bis = tagesfenster(tage[-1])[1]
         zeilen = await _zeilen_laden(db, mengen, von, bis, jetzt=jetzt)
         if fassung == FASSUNG_WIE_HA:

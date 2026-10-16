@@ -14,6 +14,11 @@ Etikett, ohne Leistungssensor) — die Tagesebene kennt dort keinen Split, nur d
 
 Soll: der HA-Export trägt dieselben Mengen wie die Übersicht (217,8 / 19,8 = Juni 198/18 + Juli 19,8/1,8).
 
+**HA-Bauform S4 E-S4-1 (R-3):** der laufende Juli ist der Kalendermonat (01.07. 00:00 …) statt des Tagesfenster-Monats
+(ab 30.06. 23:00) — die Stunde 30.06. 23:00 (Heizen 0,3 kWh, Warmwasser 0) gehört zum Juni. Heizen Juli 19,5 = Cockpit →
+Monat der Matrix (`matrix_haltewerte`: M05 `modus_heizen:cockpit_monat` 19,5) ⇒ Soll 217,5 = 198 + 19,5; Warmwasser
+unverändert 19,8.
+
 Schwesterdateien: test_achsen_matrix.py (M05-Zellen `modus_*:uebersicht`), test_kanal_wp_gleichheit.py.
 """
 
@@ -59,5 +64,5 @@ async def _messe(weg: str) -> dict:
 async def test_ha_sensoren_je_betriebsart_wie_die_uebersicht(weg):
     m = await _messe(weg)
     ha = m["ha"]
-    assert ha.get("wp_strom_heizen_modus_kwh") == pytest.approx(217.8), ha
+    assert ha.get("wp_strom_heizen_modus_kwh") == pytest.approx(198.0 + 19.5), ha   # S4 E-S4-1: war 217,8
     assert ha.get("wp_strom_warmwasser_modus_kwh") == pytest.approx(19.8), ha

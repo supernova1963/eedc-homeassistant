@@ -36,7 +36,8 @@ from backend.tests import pv_achse_matrix as mx
 _FORMEN = [("achsen", f) for f in am.MATRIX_FORMEN] + [("pv", f) for f in mx.MATRIX_FORMEN]
 _FAELLE = [(m, f, art) for art in ("HA", "MQTT") for m, f in _FORMEN]
 
-#: Die benannten Abweichungen je Datenstand (ohne ``komponenten_leistungspfad``), gemessen 15.10.2026 — alle übrigen
+#: Die benannten Abweichungen je Datenstand (ohne ``komponenten_leistungspfad`` und die letzte Stunde
+#: ``LETZTE_STUNDE_FELDER``), gemessen 15.10.2026, nach S4 E-S4-1 unverändert nachgemessen 16.10.2026 — alle übrigen
 #: Datenstände: keine. ``deckel_r3``: M03-Sprungstunden (N-586 — der Kanal trägt HAs ``sum`` wörtlich, der Bestand
 #: deckelt). ``luecke_ha``/``spannen_fuellung``: F08a/F08b (BKW-Zähler ohne Nachtzeilen — die Morgenstunde trägt das
 #: Bündel auf der PV-Achse, R6 lässt den Stunden-Verbrauch leer; der Bestand nimmt am Aggregat-Tag die PV-Achse nur
@@ -59,6 +60,18 @@ KLASSEN: dict[tuple[str, str, str], dict[str, int]] = {
 }
 
 
+#: HA-Bauform S4 E-S4-1 (Kanal-Stunde h ≡ Bestands-Slot h+1, Stunde 23 ≡ Slot 0 des Folgetags): die Stunde 03.07. 23:00
+#: des letzten Kanal-Tags hat keine Bestandszeile (Slot 0 des 04.07. — die Matrix aggregiert bis 03.07.) ⇒ jedes
+#: verglichene Feld mit Kanal-Wert dieser einen Stunde ist ``bestand_ohne_zeile`` (die Bilanz-Felder 7, mit WP-Gruppe 8,
+#: mit WP- und E-Mob-Gruppe 9), ``komponenten`` dort nicht verglichen. Gemessen 16.10.2026 auf allen 86 Datenständen
+#: (Ablage ``e-s4-1/gleichheit_klassen.jsonl``); F08a/F08b: der 03.07. ist Bestandstag (Zähler ohne Nachtzeilen) — keine.
+#: Alle übrigen Klassen (``KLASSEN``) sind dieselben wie vor S4.
+LETZTE_STUNDE_FELDER: dict[tuple[str, str], int] = {
+    ("achsen", "M02"): 9, **{("achsen", f): 8 for f in ("M04", "M05", "M06", "M07", "M08", "M09", "M10")},
+    ("pv", "F08a"): 0, ("pv", "F08b"): 0,
+}
+
+
 @pytest.mark.parametrize("matrix,fid,art", _FAELLE, ids=[f"{a}-{m}-{f}" for m, f, a in _FAELLE])
 async def test_kanal_stundentag_gleich_der_stundenzeile_bis_auf_benannte_klassen(matrix, fid, art):
     async with kg.datenstand(matrix, fid, art) as ds:
@@ -66,7 +79,11 @@ async def test_kanal_stundentag_gleich_der_stundenzeile_bis_auf_benannte_klassen
     kanal_tage = b.tage["bilanz:kanal"]
     assert kanal_tage >= 32 and sum(b.verglichen.values()) > 0, dict(b.tage)
     klassen = dict(b.klassen)
-    assert klassen.pop("komponenten_leistungspfad", 0) == 24 * kanal_tage, b.beispiele.get("komponenten_leistungspfad")
+    letzte = LETZTE_STUNDE_FELDER.get((matrix, fid), 7)
+    assert klassen.pop("komponenten_leistungspfad", 0) == 24 * kanal_tage - (1 if letzte else 0), \
+        b.beispiele.get("komponenten_leistungspfad")
+    assert klassen.pop("bestand_ohne_zeile", 0) == letzte, b.beispiele.get("bestand_ohne_zeile")
+    assert {(t, h) for t, h, *_ in b.beispiele.get("bestand_ohne_zeile", [])} <= {(date(2026, 7, 3), 23)}
     assert "unbenannt" not in klassen, b.beispiele.get("unbenannt")
     assert klassen == KLASSEN.get((matrix, fid, art), {}), {k: b.beispiele.get(k) for k in klassen}
 
@@ -143,10 +160,11 @@ async def test_gegenprobe_eine_verfaelschte_stundenzeile_wird_unbenannt():
         await ds.db.commit()
         b = await ks.probe_tage(ds.db, ds.aid, [tag], jetzt=kg.JETZT_TS, art="HA")
     assert b.klassen["unbenannt"] >= 1
-    assert {(t, h, f) for t, h, f, _s, _i in b.beispiele["unbenannt"]} >= {(tag, 12, "pv_kw")}
+    # S4-R-3b: der Bestands-Slot 12 trägt [11, 12) — die Kanal-Stunde 11.
+    assert {(t, h, f) for t, h, f, _s, _i in b.beispiele["unbenannt"]} >= {(tag, 11, "pv_kw")}
 
 
-# ── Slot-Abbildung (S3-R2) ──────────────────────────────────────────────────
+# ── Stunden-Abbildung (S4-R-3b, vorher S3-R2) ──────────────────────────────────────────────────
 
 
 def _stunden(werte) -> Stunden:
@@ -154,9 +172,10 @@ def _stunden(werte) -> Stunden:
                    groesste_spanne=None, voll=True, grund=None, laufend=False)
 
 
-def test_slots_backward_luecke_und_herbst_doppelslot():
-    """Slot h = Zeile mit Beginn (h−1):00; eine fehlende Zeile lässt den Slot leer (keine 0) und die Folgezeile trägt
-    die Spanne; am Herbst-Umstellungstag (Berlin) fallen zwei Zeilen auf einen Slot und er trägt beide."""
+def test_slots_beginn_luecke_und_herbst_doppelstunde():
+    """S4-R-3b: Stunde h = Zeile mit Beginn h:00 (die Zeile des Vortags 23:00 gehört nicht zum Tag); eine fehlende
+    Zeile lässt die Stunde leer (keine 0) und die Folgezeile trägt die Spanne; am Herbst-Umstellungstag (Berlin) fallen
+    zwei Zeilen (02:00 CEST und 02:00 CET) auf die Stunde 2 und sie trägt beide."""
     tag = date(2026, 6, 15)
 
     def ts(stunde):
@@ -165,7 +184,7 @@ def test_slots_backward_luecke_und_herbst_doppelslot():
     werte = [Stundenwert(ts(-1), 1.0, 1.0, "spiegel", 3600), Stundenwert(ts(0), 2.0, 3.0, "spiegel", 3600),
              Stundenwert(ts(2), 5.0, 8.0, "spiegel", 7200)]
     menge, spanne = slots_der_stunden(tag, _stunden(werte))
-    assert menge[:4] == (1.0, 2.0, None, 5.0) and spanne[:4] == (3600, 3600, None, 7200)
+    assert menge[:4] == (2.0, None, 5.0, None) and spanne[:4] == (3600, None, 7200, None)
     herbst = date(2026, 10, 25)
     if datetime(2026, 10, 25, 4).timestamp() - datetime(2026, 10, 25, 0).timestamp() != 5 * 3600:
         pytest.skip("Prozesszone ohne Herbst-Umstellung am 25.10.2026")
@@ -173,4 +192,4 @@ def test_slots_backward_luecke_und_herbst_doppelslot():
     w = [Stundenwert(a - 3600, 1.0, 1.0, "spiegel", 3600), Stundenwert(a, 1.0, 2.0, "spiegel", 3600),
          Stundenwert(a + 3600, 1.0, 3.0, "spiegel", 3600), Stundenwert(a + 7200, 1.0, 4.0, "spiegel", 3600)]
     menge, spanne = slots_der_stunden(herbst, _stunden(w))
-    assert menge[2:5] == (1.0, 2.0, 1.0) and spanne[3] == 7200
+    assert menge[1:4] == (1.0, 2.0, 1.0) and spanne[2] == 7200

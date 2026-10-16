@@ -3,10 +3,14 @@
 Die Proben stehen in ``test_kanal_symmetrie.py``; dieses Modul ist ihr Baustein (kein ``test``-Präfix,
 dieselbe Regel wie ``ha_lts_helfer.py``).
 
-**Was verglichen wird (Familie Spiegel).** Für jede Tageszeile (``TagesZusammenfassung``) und jeden
-Schlüssel ihres ``komponenten_kwh``: der gespeicherte Tageswert gegen das Δ der Kanäle, aus denen er
-besteht, über das Tagesfenster des Bestands ``[Vortag 23:00, 23:00)``
-(``slot_konvention.tagesfenster_start_ts``, eine Umrechnung an einer Stelle).
+**Was verglichen wird (Familie Spiegel; neu gefasst HA-Bauform S4 E-S4-1).** Für jede Tageszeile
+(``TagesZusammenfassung``) und jeden Schlüssel ihres ``komponenten_kwh``: das Δ der Kanäle, aus denen er besteht,
+über den **Kalendertag** ``[D 00:00, D+1 00:00)`` (``fenster.tagesfenster`` seit R-3) gegen den Bestand **um die
+Randstunde verschoben**: Tageswert (Σ Slots 0…23 des Tages) − Slot 0 des Tages + Slot 0 des Folgetags = Σ Slots 1…23
+des Tages + Slot 0 des Folgetags. Slot 0 je Zähler liest der Wächter beim Slot-Leser des Bestands
+(``HAStatisticsService.get_hourly_slots_for_day``, dieselbe Quelle wie ``aggregate_day``) — nicht aus den Kanälen.
+Je Schlüssel ``Σ vorzeichen × Slot 0`` der beitragenden Zähler (Balkonkraftwerk mit gemessenen Kindern: der Rest,
+``bkw_restwerte``, wie unten).
 
 * **Woraus ein Schlüssel besteht**, sagt DIESELBE Funktion, die der HA-Tagespfad fragt:
   ``lts_aggregator._lts_eintraege`` (Beitragsschicht: Whitelist · Either-Or · Parent · K3 · Wallbox-Regel)
@@ -38,6 +42,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +58,7 @@ from backend.services.kanal.lesen import zeitraum_stapel
 from backend.services.provenance import ABGELEITET_KWP_ANTEIL
 from backend.services.snapshot.komponenten_beitraege import resolve_either_or_eintraege
 from backend.services.snapshot.lts_aggregator import _lts_eintraege
+from backend.services.snapshot.writer import _build_counter_map
 
 #: Halbe Rundungsstufe von ``komponenten_kwh`` (0,01 kWh) plus Rechenrauschen.
 TOLERANZ_KWH = 0.005 + 1e-9
@@ -73,7 +79,27 @@ class Bericht:
     groesste: float = 0.0
 
 
-async def symmetrie_spiegel(db: AsyncSession, anlage_id: int) -> Bericht:
+def _slot0(svc, counter: dict[str, str], datum, sensor_keys) -> dict[str, float]:
+    """Slot 0 (``[Vortag 23:00, 00:00)``) je Zähler am Tag ``datum`` aus dem Slot-Leser des Bestands — ohne Zeile 0
+    (die Energie steht dann in einem späteren Slot, wie HA)."""
+    ids = {sk: counter[sk] for sk in sensor_keys if sk in counter}
+    reihen = svc.get_hourly_slots_for_day(sorted(set(ids.values())), datum) if ids else {}
+    out = {}
+    for sk, eid in ids.items():
+        r = reihen.get(eid)
+        slot = r.slots.get(0) if r is not None else None
+        out[sk] = float(slot.delta) if slot is not None else 0.0
+    return out
+
+
+def _korrektur(beitraege, s0: dict[str, float], rest: dict[str, float]) -> float:
+    """Σ vorzeichen × Slot 0 der Zähler eines Schlüssels (PV-Balkonkraftwerk: sein Rest nach den Kindern)."""
+    return sum(e.vorzeichen * rest.get(e.sensor_key.split(":", 2)[1], s0.get(e.sensor_key, 0.0))
+               if e.kategorie == "pv" and e.sensor_key.startswith("inv:") else e.vorzeichen * s0.get(e.sensor_key, 0.0)
+               for e in beitraege)
+
+
+async def symmetrie_spiegel(db: AsyncSession, anlage_id: int, svc) -> Bericht:
     anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
     invs = {str(i.id): i for i in (await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all()}
@@ -81,6 +107,7 @@ async def symmetrie_spiegel(db: AsyncSession, anlage_id: int) -> Bericht:
         select(Kanal).where(Kanal.anlage_id == anlage_id))).scalars().all()}
     tz_zeilen = (await db.execute(select(TagesZusammenfassung).where(
         TagesZusammenfassung.anlage_id == anlage_id).order_by(TagesZusammenfassung.datum))).scalars().all()
+    counter = _build_counter_map(anlage)
     b = Bericht()
     for tz in tz_zeilen:
         werte = tz.komponenten_kwh or {}
@@ -104,6 +131,13 @@ async def symmetrie_spiegel(db: AsyncSession, anlage_id: int) -> Bericht:
         pv_einzel = {e.sensor_key.split(":", 2)[1]: deltas.get(e.sensor_key) for e in eintraege
                      if e.kategorie == "pv" and e.sensor_key.startswith("inv:")}
         rest = bkw_restwerte(list(invs.values()), {i: d for i, d in pv_einzel.items() if d is not None})
+        # S4 E-S4-1: der Bestand um die Randstunde verschoben — Slot 0 des Tages heraus, Slot 0 des Folgetags hinein.
+        sks = {e.sensor_key for e in eintraege}
+        s0_heute, s0_folge = (_slot0(svc, counter, tz.datum, sks),
+                              _slot0(svc, counter, tz.datum + timedelta(days=1), sks))
+        rest_heute, rest_folge = (bkw_restwerte(list(invs.values()), {sk.split(":", 2)[1]: v for sk, v in x.items()
+                                                                      if sk.startswith("inv:")})
+                                  for x in (s0_heute, s0_folge))
         prov = tz.source_provenance or {}
         for key, ist in sorted(werte.items()):
             beitraege = je_key.get(key, [])
@@ -125,9 +159,11 @@ async def symmetrie_spiegel(db: AsyncSession, anlage_id: int) -> Bericht:
                 if e.kategorie == "pv" and e.sensor_key.startswith("inv:") else e.vorzeichen * deltas[e.sensor_key]
                 for e in beitraege
             )
+            bestand = float(ist) - _korrektur(beitraege, s0_heute, rest_heute) + _korrektur(beitraege, s0_folge,
+                                                                                               rest_folge)
             b.verglichen += 1
-            abw = abs(soll - float(ist))
+            abw = abs(soll - bestand)
             b.groesste = max(b.groesste, abw)
             if abw > TOLERANZ_KWH:
-                b.abweichungen.append((tz.datum, key, float(ist), round(soll, 6)))
+                b.abweichungen.append((tz.datum, key, round(bestand, 6), round(soll, 6)))
     return b

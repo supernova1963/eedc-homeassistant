@@ -7,7 +7,7 @@ Wird von views.py (Read-Endpoints) und repair.py (Repair-Endpoints) genutzt.
 import logging
 import re
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -183,6 +183,11 @@ class StundenWertResponse(BaseModel):
     # im Regelfall. Die Stundentabelle beschriftet die Zeile damit
     # („enthält n Stunden"), statt sie als Spitze zu zeigen.
     spannen: Optional[dict[str, int]] = None
+    # HA-Bauform S4 (S4-E2 A): was ``stunde`` meint — ``"beginn"`` = ``[h, h+1)``
+    # (Kanal-Tag, HAs ``start_ts``), ``"ende"`` = Backward-Slot ``[h−1, h)``
+    # (Bestandstag). Das Frontend beschriftet die Stunde damit als Bereich
+    # (``lib/stundenBereich``), statt ``h:00`` stumm umzudeuten.
+    raster: Literal["beginn", "ende"] = "ende"
 
 
 class StundenAntwort(BaseModel):
@@ -306,6 +311,10 @@ class MonatsAuswertungResponse(BaseModel):
 
     # Heatmap-Matrix
     heatmap: list[HeatmapZelle] = []
+    #: HA-Bauform S4 (S4-R-3b, Punkt 4a): die Stundenachse von Heatmap, Tagesprofil und Spitzen nennt für jede
+    #: Zeilenart die Stunde des BEGINNS (``slot_konvention.stundenbeginn_der_zeile``) — ein Raster je Monat, auch mit
+    #: gemischten Tagesarten. Das Frontend beschriftet mit ``stundenBereich(h, raster)``.
+    raster: Literal["beginn"] = "beginn"
 
     # Börsenpreis / Negativpreis (§51 EEG)
     boersenpreis_avg_cent: Optional[float] = None
@@ -402,7 +411,9 @@ class WaermeVerlaufStundeResponse(BaseModel):
 
     **Dieselben Feldnamen wie die Tageszeile** (``WaermeVerlaufTagResponse``) —
     der Client baut Jahr, Monat und Tag über dieselbe reine Funktion. Statt
-    ``datum`` trägt die Zeile ihren Slot (Rückwärts-Raster, Slot h = [h−1, h)).
+    ``datum`` trägt die Zeile ihre Stunde — Rückwärts-Raster (Slot h = [h−1, h)) an
+    einem Bestandstag, Beginn ([h, h+1)) an einem WP-Kanal-Tag (``raster`` der
+    Antwort, HA-Bauform S4).
 
     ⚠ **Das Tor ist das Tor des Tages:** ``wp_modus_gemessen`` und
     ``wp_modus_abdeckung_h`` stehen in jeder Stunde so, wie sie für den Tag
@@ -450,6 +461,9 @@ class WaermeVerlaufStundenResponse(BaseModel):
     """Die 24 Stunden eines Tages — und was sich keiner Stunde zuordnen ließ."""
 
     stunden: list[WaermeVerlaufStundeResponse]
+    #: HA-Bauform S4 (S4-E2 A): was ``stunde`` meint — ``"beginn"`` an einem WP-Kanal-Tag (``[h, h+1)``, alle
+    #: Stundenformen auf dieses Raster gelegt), sonst ``"ende"`` (Backward-Slot ``[h−1, h)``).
+    raster: Literal["beginn", "ende"] = "ende"
     #: Menge der Aufteilung (**Strom**-Stapel), für die es keine Stundenform
     #: gab (P4: nicht gleichmäßig verteilt, sondern genannt). ``None`` = alles
     #: zugeordnet.

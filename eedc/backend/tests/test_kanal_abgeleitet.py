@@ -259,7 +259,8 @@ async def test_konsistenzlauf_verwirft_den_abgeleiteten_kanal_ab_der_korrektur(d
 
 async def test_update_mitten_im_monat_der_kanal_beginnt_mit_dem_laufenden_monat():
     """H-2 (Entscheid Master 06.10.2026): ein Update am 04.07. (Spiegel nachgefüllt, noch kein abgeleiteter Kanal) — der
-    erste Lauf baut den Kanal ab Beginn des laufenden Monats (eine Stunde vor dem Monatsfenster: 30.06. 22:00).
+    erste Lauf baut den Kanal ab Beginn des laufenden Monats (eine Stunde vor dem Monatsfenster — seit HA-Bauform S4
+    E-S4-1 dem Kalendermonat: 30.06. 23:00; diese Zeile trägt den Stand um 01.07. 00:00, den Stand vor dem Monat).
     Cockpit → Monat nennt den Juli mit der Aufteilung aus dem Kanal (9,0 kWh Sonne), der Juni bleibt beim Bestand."""
     from sqlalchemy import delete
 
@@ -286,7 +287,7 @@ async def test_update_mitten_im_monat_der_kanal_beginnt_mit_dem_laufenden_monat(
             k, z = await _abgeleitet(ds.db, ds.aid, ds.ids["Wallbox"])
             g = await geraete_monate(ds.db, ds.aid, von=(2026, 6), bis=(2026, 7))
             juli = await am.miss_cockpit_monat(ds.db, ds.aid, ds.ids, 7)
-    assert k.aufbaubar_ab == _ts(datetime(2026, 6, 30, 22)) == min(z)
+    assert k.aufbaubar_ab == _ts(datetime(2026, 6, 30, 23)) == min(z)   # S4 E-S4-1: war 22:00 (Tagesfenster-Monat)
     assert g[(2026, 7)].emob.kanal and g[(2026, 7)].emob.quote == pytest.approx(1.0)
     assert g[(2026, 6)].emob.wahl.quelle == QUELLE_BESTAND        # kein abgeschlossener Monat aus dem Kanal
     assert juli["emob_ladung_pv_kwh"] == pytest.approx(9.0)

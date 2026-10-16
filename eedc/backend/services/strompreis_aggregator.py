@@ -518,6 +518,19 @@ async def lade_slot_kosten_je_tag(
     gepaart = await _zeilen_mit_gepaartem_preis(
         db, anlage_id, ab=von, bis_inklusive=bis
     )
+    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
+
+
+def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None) -> dict[date, SlotKosten]:
+    """Die Kaskade P-6 von ``lade_slot_kosten_je_tag`` über schon gepaarte Zeilen ``[(zeile, preis_cent), …]``.
+
+    HA-Bauform S4 (E-S4-1, Bauplan §10a (3)): ``tage-werte`` reicht an einem Kanal-Tag die **Mischzeilen** herein
+    (Menge = HAs ``change`` der Stunde, Preis zeilengleich — ``forward_werte_je_backward_zeile`` paart das Beginn-Raster
+    zeilengleich). Für den abgeleiteten Slot-Preis (Zeitfenster) gilt die Uhr-Stunde der Zeile: eine Zeile im
+    Beginn-Raster wird über ``slot_konvention.bestandszeile_fuer_stundenbeginn`` auf den Backward-Slot gelegt, den
+    ``preis_je_slot`` erwartet — die eine Umrechnung, keine zweite.
+    """
+    from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
 
     roh: dict[date, list[float]] = {}
     for _z, preis_cent in gepaart:
@@ -545,7 +558,9 @@ async def lade_slot_kosten_je_tag(
             if preis is None:
                 tarif = tarif_fuer(datum)
                 if tarif is not None:
-                    preis = preis_je_slot(tarif, datum, int(stunde))
+                    slot_tag, slot = (bestandszeile_fuer_stundenbeginn(datum, int(stunde)) if ist_beginn_raster(_z)
+                                      else (datum, int(stunde)))
+                    preis = preis_je_slot(tarif, slot_tag, slot)
 
         if preis is None:
             continue

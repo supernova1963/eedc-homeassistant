@@ -160,7 +160,9 @@ async def test_vorschau_schreibt_nichts_und_nennt_quellen_tage_und_abschluss(db)
         ("sensor.einsp_alt", "2026-04-01T00:00", stunden)]
     assert vor["letzter_ganzer_tag"] == "2026-04-20" and vor["abschluss_monate"] == ["2026-03"]
     assert vor["tage_ohne_werte"][0] == "2026-04-01" and vor["tage_ohne_werte"][-1] == "2026-04-20"
-    assert vor["tage_mit_bestand"] == ["2026-04-21"]
+    # HA-Bauform S4 E-S4-1: die Kanalzeile 31.03. 23:00 gehört zum Kalendertag 31.03. (bis dahin zum 01.04.) — der
+    # Bestandstag 31.03. (Monat mit Abschluss) verliert sie, sein Bestand bleibt.
+    assert vor["tage_mit_bestand"] == ["2026-03-31", "2026-04-21"]
     text_ = " ".join(p.warnings)
     for teil in ("sensor.einsp_alt", "sensor.einsp_neu", "21.04.2026 00:00", "01.04.2026 00:00", "03/2026",
                  "Kein Rückweg", "Wetter, Prognose, Preise"):
@@ -370,26 +372,41 @@ def test_migration_ohne_tabelle_tut_nichts(tmp_path):
 
 
 def test_tagesgrenzen_aus_dem_zeitpunkt():
-    """Der Tag, in dem t liegt, ist nicht ganz vor t; der Tag davor endet spätestens bei t (Tagesfenster 23:00)."""
+    """Der Kanal-Tag, in dem t liegt, ist nicht ganz vor t; der Tag davor endet spätestens bei t — seit HA-Bauform S4
+    E-S4-1 im Kalendertag (``fenster.kalendertag_der_stunde``/``tagesfenster``). Der Bestandstag von t
+    (``abgeleitet.tag_der_stunde``, Fenster ``[Vortag 23:00, 23:00)``) ist ein anderer, wenn t auf 23:00 fällt."""
+    from backend.core.berechnungen.slot_konvention import tagesfenster_start_ts
     from backend.services.kanal.abgeleitet import tag_der_stunde
-    from backend.services.kanal.fenster import tagesfenster
+    from backend.services.kanal.fenster import kalendertag_der_stunde, tagesfenster
 
     for t in (TW, TW + timedelta(hours=14), TW - timedelta(hours=1)):
-        tag_t = tag_der_stunde(_ts(t))
+        tag_t = kalendertag_der_stunde(_ts(t))
         assert tagesfenster(tag_t)[0] <= _ts(t) < tagesfenster(tag_t)[1]
         assert tagesfenster(tag_t - timedelta(days=1))[1] <= _ts(t)
+        tag_b = tag_der_stunde(_ts(t))
+        von_b, bis_b = (x + 3600 for x in tagesfenster_start_ts(tag_b))
+        assert von_b <= _ts(t) < bis_b
+    assert kalendertag_der_stunde(_ts(TW - timedelta(hours=1))) == (TW - timedelta(hours=1)).date()
+    assert tag_der_stunde(_ts(TW - timedelta(hours=1))) == TW.date()     # TW = 00:00 ⇒ 23:00 des Vortags
 
 
-@pytest.mark.parametrize("zeitpunkt", ["2026-04-21T00:00", "2026-04-20T23:00"])
+#: HA-Bauform S4 E-S4-1 (Kalendertag): je Zeitpunkt der letzte betroffene Tag und der erste, der Kanal-Tag bleibt. Mit
+#: ``t`` = 00:00 verliert der 21.04. nur den Anker (die Zeile 20.04. 23:00); mit ``t`` = 23:00 verliert der 20.04. seine
+#: Zeilen 00…22 und den Anker, der 21.04. behält seinen Anker (die Zeile 20.04. 23:00 liegt nicht vor ``t``).
+_VORSCHAU_GRENZE = {"2026-04-21T00:00": (date(2026, 4, 21), date(2026, 4, 22)),
+                    "2026-04-20T23:00": (date(2026, 4, 20), date(2026, 4, 21))}
+
+
+@pytest.mark.parametrize("zeitpunkt", sorted(_VORSCHAU_GRENZE))
 async def test_tage_der_vorschau_sind_danach_bestandstage_der_lese_schicht(db, zeitpunkt):
     """Was die Vorschau «danach ohne Wert» bzw. «verliert die Kanalzeilen» nennt, ist danach für die Quellenwahl der
-    Bilanz-Gruppe (``bilanz_quellenwahl_tag``, dieselbe Lese-Schicht wie die Sichten) ein Bestandstag; der Tag nach dem
-    Tausch bleibt Kanal-Tag. Mit ``t`` = 23:00 hat der 21.04. keine eigene Zeile vor ``t`` — er verliert nur den Anker
-    (die Zeile 22:00 des Vortags) und muss trotzdem in der Vorschau stehen."""
+    Bilanz-Gruppe (``bilanz_quellenwahl_tag``, dieselbe Lese-Schicht wie die Sichten) ein Bestandstag; der Tag danach
+    bleibt Kanal-Tag (``_VORSCHAU_GRENZE``)."""
     from backend.services.kanal.bilanz_quellenwahl import bilanz_quellenwahl_tag
 
     ids = await _saat(db)
     jetzt = _ts(ENDE)
+    letzter, bleibt = _VORSCHAU_GRENZE[zeitpunkt]
 
     async def wahl(tag: date) -> str:
         return (await bilanz_quellenwahl_tag(db, ids["aid"], tag, jetzt=jetzt)).quelle
@@ -397,14 +414,14 @@ async def test_tage_der_vorschau_sind_danach_bestandstage_der_lese_schicht(db, z
     p = await plan(_req(ids["aid"], zeitpunkt=zeitpunkt), db)
     betroffen = [date.fromisoformat(d) for d in p.operation_preview["tage_ohne_werte"] +
                  p.operation_preview["tage_mit_bestand"]]
-    assert date(2026, 4, 21) in betroffen and date(2026, 4, 22) not in betroffen
+    assert max(betroffen) == letzter and bleibt not in betroffen
     vorher = {d: await wahl(d) for d in betroffen}
-    # Vorher Kanal-Tage — bis auf den 01.04.: der Seed beginnt mit dessen erster Stunde, der Anker davor fehlt.
-    assert vorher.pop(date(2026, 4, 1)) == "bestand" and set(vorher.values()) == {"kanal"}
-    assert await wahl(date(2026, 4, 22)) == "kanal"
+    # Vorher Kanal-Tage — bis auf den 31.03.: er trägt nur die erste Zeile des Seeds (23:00), der Anker davor fehlt.
+    assert vorher.pop(date(2026, 3, 31)) == "bestand" and set(vorher.values()) == {"kanal"}
+    assert await wahl(bleibt) == "kanal"
     await execute(p.plan_id, db)
     gruende = {d: await bilanz_quellenwahl_tag(db, ids["aid"], d, jetzt=jetzt) for d in betroffen}
     assert {g.quelle for g in gruende.values()} == {"bestand"}
     assert all("basis:einspeisung" in g.gruende for g in gruende.values())
-    assert all(set(g.gruende) == {"basis:einspeisung"} for d, g in gruende.items() if d != date(2026, 4, 1))
-    assert await wahl(date(2026, 4, 22)) == "kanal"
+    assert all(set(g.gruende) == {"basis:einspeisung"} for d, g in gruende.items() if d != date(2026, 3, 31))
+    assert await wahl(bleibt) == "kanal"

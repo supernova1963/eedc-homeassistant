@@ -18,7 +18,9 @@ from backend.core.berechnungen import (
     WALLBOX_KOMPONENTEN_PREFIXE,
     geraete_spalte_kw,
 )
-from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
+from backend.core.berechnungen.slot_konvention import (
+    RASTER_BEGINN, RASTER_ENDE, forward_werte_je_backward_zeile, ist_beginn_raster,
+)
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -106,25 +108,30 @@ async def get_stundenwerte(
     # Regel wie in den Rechnungen (N-387, `slot_konvention`). Dafür wird der
     # Vortag mitgeladen: ohne seine Stunde 23 bekäme Slot 0 dieses Tages keinen
     # Wert, und das wäre eine Lücke, die es in den Daten nicht gibt.
+    # HA-Bauform S4 (S4-R-3b): und der Folgetag — an einem Kanal-Tag trägt seine Zeile 0 die Backward-Bahnen der
+    # Stunde 23 (`slot_konvention.bestandszeile_fuer_stundenbeginn`). Eine Abfrage, ein Tag mehr.
     result = await db.execute(
         select(TagesEnergieProfil)
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= datum - timedelta(days=1),
-            TagesEnergieProfil.datum <= datum,
+            TagesEnergieProfil.datum <= datum + timedelta(days=1),
         )
         .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
     alle = result.scalars().all()
-    soc_je_zeile = forward_werte_je_backward_zeile(alle, "soc_prozent")
-    paare = [(z, soc) for z, soc in zip(alle, soc_je_zeile) if z.datum == datum]
+    vortag = [z for z in alle if z.datum < datum]
     # HA-Bauform E-S3-2: an einem Tag mit Kanal-Gruppe tragen die Mengen der Kanal-Gruppen HAs `change` je Stunde
-    # (Mischzeilen, `energie_profil/kanal_stunden.py`); SoC (Paarung oben, N-553), Wetter, Zählwerke und
-    # `komponenten` bleiben aus der Stundenzeile (S3-R6). Ohne Kanal-Gruppe: die Stundenzeilen unverändert.
+    # (Mischzeilen, `energie_profil/kanal_stunden.py`, Stunde = Beginn seit S4); Wetter, Zählwerke und `komponenten`
+    # bleiben aus der Stundenzeile (S3-R6), nach Bahnen gepaart (S4-R-3b). Ohne Kanal-Gruppe: die Stundenzeilen des
+    # Tages unverändert.
     from backend.services.energie_profil.kanal_stunden import stunden_des_tages
 
-    soc_je_stunde = {z.stunde: soc for z, soc in paare}
-    rows = await stunden_des_tages(db, anlage_id, datum, [z for z, _ in paare])
+    rows = await stunden_des_tages(db, anlage_id, datum, [z for z in alle if z.datum >= datum])
+    # SoC je Zeile über die EINE Paarung (N-553/N-387): Bestandszeilen aus der Vorzeile (der Vortag liefert Slot 0),
+    # Mischzeilen (Beginn-Raster) zeilengleich — `forward_werte_je_backward_zeile` fragt das Attribut `raster`.
+    soc_je_zeile = forward_werte_je_backward_zeile([*vortag, *rows], "soc_prozent")[len(vortag):]
+    soc_je_stunde = {z.stunde: soc for z, soc in zip(rows, soc_je_zeile)}
 
     # ⭐ **Zwei Fragen, zwei Groessen** (N-553): Die Zeile oben beantwortet
     # „welcher Ladestand gehoert zu DIESER Stunde" — dafuer die Paarung. Die
@@ -197,6 +204,7 @@ async def get_stundenwerte(
             wp_starts_anzahl=r.wp_starts_anzahl,
             wp_betriebsstunden=r.wp_betriebsstunden,
             spannen=r.spannen or None,
+            raster=RASTER_BEGINN if ist_beginn_raster(r) else RASTER_ENDE,
         )
         for r in rows
     ]

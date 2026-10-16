@@ -180,7 +180,7 @@ TAGESFENSTER_JE_TYP: dict[str, str] = {
 
 
 def tagesfenster_fuer(
-    typ: Optional[str], datum: date, *, tageszeile_rueckwaerts: bool
+    typ: Optional[str], datum: date, *, tageszeile_rueckwaerts: bool, kanal_tag: bool = False,
 ) -> BoundaryRange:
     """Das Tagesfenster, in dem der Tageswert dieses Gerätetyps steht (N-444).
 
@@ -235,7 +235,16 @@ def tagesfenster_fuer(
         datum: der Tag, dessen Fenster gefragt ist.
         tageszeile_rueckwaerts: Ergebnis von {@link tageszeile_ist_rueckwaerts}
             für **dieselbe** Tageszeile, aus der der Aufrufer seinen Bezug nimmt.
+        kanal_tag: der Tag ist ein **Kanal-Tag** (HA-Bauform S4, Bauplan §10a (1)):
+            sein Bezug — Bilanz-Ladung, Wallbox-Ladung, WP-Strom — steht im
+            Kalendertag ``[00:00, 24:00)`` (``services/kanal/fenster.py``, R-3).
+            Dieselbe Regel N-444 (Teilmenge im Fenster ihres Bezugs) gibt dann
+            für **jeden** Typ ``for_day_total``; ``TAGESFENSTER_JE_TYP`` gilt
+            für Bestandstage unverändert. Damit bleibt auch die
+            Speicher-Netzladung (kein Kanal) im Fenster ihrer Ladung.
     """
+    if kanal_tag:
+        return BoundaryRange.for_day_total(datum)
     modus = TAGESFENSTER_JE_TYP.get(typ or "")
     if modus == "rueckwaerts" or (modus == "bedingt" and tageszeile_rueckwaerts):
         return BoundaryRange.for_day_backward(datum)

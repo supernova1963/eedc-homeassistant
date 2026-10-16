@@ -312,4 +312,6 @@ async def test_neuer_kanal_beginnt_mit_dem_laufenden_monat():
         assert k.aufbaubar_ab == monatsfenster(2026, 7)[0] - 3600
         reihe = await _reihe(ds.db, abdeckung_key(wp))
         assert reihe[0][0] == k.aufbaubar_ab and reihe[-1][0] > reihe[0][0] + 24 * 3600
-        assert datetime.fromtimestamp(reihe[0][0]) == datetime(2026, 6, 30, 22) + timedelta(0)
+        # S4 E-S4-1: das Monatsfenster ist der Kalendermonat ⇒ 30.06. 23:00 (vorher 22:00); die Zeile trägt den Stand
+        # um 01.07. 00:00 — Regel (a) «Stand vor dem Zeitraum» gedeckt.
+        assert datetime.fromtimestamp(reihe[0][0]) == datetime(2026, 6, 30, 23) + timedelta(0)

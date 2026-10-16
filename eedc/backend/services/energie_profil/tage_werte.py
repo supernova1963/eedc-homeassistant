@@ -108,6 +108,8 @@ class _TageKontext:
     ziele_je_tag: dict
     #: HA-Bauform E-S3-2: je Kanal-Tag die Mischzeilen (`kanal_stunden.py`) — der Eingang der stundengepaarten Größen.
     kanal_stunden_je_tag: dict
+    #: HA-Bauform S4 (§10a (4)): je Kanal-Tag mit Sonstiges-Wahl `kanal` die Tages-Δ der Sonstiges-Zähler.
+    sonstiges_kanal_je_tag: dict
     tarif_cache: dict[date, dict]
     slot_kosten_je_tag: dict
 
@@ -131,12 +133,15 @@ async def baue_tage_werte(
     # gehört, steht in der Zeile 23 des Vortags. Die Zeilen dieses Zusatztages
     # liefern nur den SoC und landen **nicht** in `tep_pro_tag` — sonst bekäme
     # der Aufrufer eine Zeile für einen Tag, nach dem er nicht gefragt hat.
+    # HA-Bauform S4 (S4-R-3b): **und ein Tag später** — an einem Kanal-Tag trägt die Zeile 0 des Folgetags die
+    # Backward-Bahnen der Stunde 23 (`slot_konvention.bestandszeile_fuer_stundenbeginn`). Auch diese Zeilen landen
+    # nicht in `tep_pro_tag`, nur in den Mischzeilen des letzten Tages.
     tep_result = await db.execute(
         select(TagesEnergieProfil)
         .where(and_(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= von - timedelta(days=1),
-            TagesEnergieProfil.datum <= bis,
+            TagesEnergieProfil.datum <= bis + timedelta(days=1),
         ))
         .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
@@ -148,8 +153,11 @@ async def baue_tage_werte(
         )
     }
     tep_pro_tag: dict[date, list[TagesEnergieProfil]] = defaultdict(list)
+    tep_folgetag: list[TagesEnergieProfil] = []
     for r in alle_tep:
-        if r.datum >= von:
+        if r.datum > bis:
+            tep_folgetag.append(r)
+        elif r.datum >= von:
             tep_pro_tag[r.datum].append(r)
 
     # Tageszusammenfassungen (tag-native Felder)
@@ -249,9 +257,12 @@ async def baue_tage_werte(
     ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
     # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags aus dem Kanal-Stundentag (Mischzeilen) — Direktverbrauch,
     # Überschuss, Defizit, Zahl der Stunden, WP-Strom über dieselbe Layer-Formel wie die Stundenzeilen (S3-R5).
-    from backend.services.energie_profil.kanal_stunden import stunden_der_kanal_tage
+    from backend.services.energie_profil.kanal_stunden import sonstiges_der_kanal_tage, stunden_der_kanal_tage
 
-    kanal_stunden_je_tag = await stunden_der_kanal_tage(db, anlage_id, kanal_je_tag, tep_pro_tag)
+    kanal_stunden_je_tag = await stunden_der_kanal_tage(
+        db, anlage_id, kanal_je_tag, {**tep_pro_tag, bis + timedelta(days=1): tep_folgetag},
+    )
+    sonstiges_kanal_je_tag = await sonstiges_der_kanal_tage(db, anlage_id, kanal_je_tag)
 
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag) | set(kanal_je_tag))
     tarif_cache: dict[date, dict] = {}
@@ -302,6 +313,9 @@ async def baue_tage_werte(
         db, anlage_id, von=von, bis=bis,
         tarif_fuer=_tarif_fuer, abgerechnet_fuer=_abgerechnet_fuer,
     )
+    # HA-Bauform S4 (§10a (3)): an einem Kanal-Tag dieselbe Kaskade über seine Mischzeilen — Kosten und EV-Preis im
+    # Kalendertag wie der Netzbezug daneben (Preis zeilengleich gepaart, Beginn-Raster).
+    slot_kosten_je_tag.update(_slot_kosten_der_kanal_tage(kanal_stunden_je_tag, _tarif_fuer, _abgerechnet_fuer))
 
     kx = _TageKontext(
         db=db,
@@ -317,6 +331,7 @@ async def baue_tage_werte(
         kanal_je_tag=kanal_je_tag,
         ziele_je_tag=ziele_je_tag,
         kanal_stunden_je_tag=kanal_stunden_je_tag,
+        sonstiges_kanal_je_tag=sonstiges_kanal_je_tag,
         tarif_cache=tarif_cache,
         slot_kosten_je_tag=slot_kosten_je_tag,
     )
@@ -327,6 +342,15 @@ async def baue_tage_werte(
         zeilen.append(await _tageszeile(kx, anlage, tag))
 
     return zeilen
+
+
+def _slot_kosten_der_kanal_tage(kanal_stunden_je_tag: dict, tarif_fuer, abgerechnet_fuer) -> dict:
+    """Je Kanal-Tag die Slot-Kosten (Kaskade P-6) aus seinen Mischzeilen (HA-Bauform S4, §10a (3))."""
+    from backend.services.strompreis_aggregator import slot_kosten_aus_zeilen
+
+    gepaart = [(z, preis) for zeilen in kanal_stunden_je_tag.values()
+               for z, preis in zip(zeilen, forward_werte_je_backward_zeile(zeilen, "strompreis_cent"))]
+    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
 
 
 async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteResponse:
@@ -350,8 +374,11 @@ async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteRe
     # Stunden-Stichprobe — sie trüge den Verbrauch einer ganzen Lücke als
     # „Nachtleistung". R6 lässt `verbrauch_kw` bei verschiedenen Spannen
     # schon leer; bei gleicher Spanne fällt die Zeile hier heraus.
+    # HA-Bauform S4 (§10a (3)): an einem Kanal-Tag aus seinen Mischzeilen (Stunden 0–4 = [00:00, 05:00) des
+    # Kalendertags), sonst aus den Stundenzeilen (Slots 0–4).
+    stunden_des_tags = kx.kanal_stunden_je_tag.get(tag, stunden_rows)
     nacht_kw = [
-        float(r.verbrauch_kw) for r in stunden_rows
+        float(r.verbrauch_kw) for r in stunden_des_tags
         if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0
         and not verbrauch_gebuendelt(r)
     ]
@@ -417,8 +444,12 @@ async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteRe
     # Schwerpunkt 23:30) ½ h dahinter — der Rand war unsymmetrisch. Mit der
     # Vorzeile sind es ½ h auf beiden Seiten (Zeile 0 ← Vortag 23 ⇒ 23:30,
     # Zeile 23 ← Zeile 22 ⇒ 22:30).
+    # HA-Bauform S4 (S4-R-3b): an einem Kanal-Tag die Mischzeilen, deren Ladestand zeilengleich gepaart ist.
+    soc_je_zeile = (forward_werte_je_backward_zeile(kx.kanal_stunden_je_tag[tag], "soc_prozent")
+                    if tag in kx.kanal_stunden_je_tag
+                    else [kx.soc_gepaart.get((r.datum, r.stunde)) for r in stunden_rows])
     soc_delta = delta_soc_kwh(
-        [kx.soc_gepaart.get((r.datum, r.stunde)) for r in stunden_rows],
+        soc_je_zeile,
         sum(
             get_speicher_nutzbare_kapazitaet_kwh(i) or 0
             for i in kx.speicher_invs if i.ist_aktiv_an(tag)
@@ -477,6 +508,11 @@ def _tagesbilanz(kx: _TageKontext, tag: date, stunden_rows: list, tz: Optional[T
         bilanz = mische_bilanz(kanal_tag.bilanz, bilanz)
         komp_tag = mische_komponenten(komp_tag, kanal_tag, kx.ziele_je_tag.get(tag, set()))
         verworfen_tag = mische_verworfen(verworfen_tag)
+        # HA-Bauform S4 (§10a (4)): Sonstiges/Abgabe im Kalendertag aus der Sonstiges-Gruppe (Wahl `kanal`), sonst die
+        # Tageszeile. V2H hat keinen Kanal (`katalog.TAGESGROESSE_OHNE_KANAL`) und bleibt aus der Tageszeile (benannt).
+        from backend.services.energie_profil.kanal_stunden import mische_sonstiges
+
+        komp_tag = mische_sonstiges(komp_tag, kx.sonstiges_kanal_je_tag.get(tag))
     # ⭐ #110 V2H-Tageswert (Konzept §2, B5/B6): die Rückspeisung des E-Autos ins Haus aus dem Rollup
     # (`v2h_<id>`, Σ; `None` ohne Key — eine 0,0 ist gemessen). EINMAL nach dem Mischen: an einem Kanal-Tag
     # kommen Gesamtverbrauch, Eigenverbrauch und Quoten aus der Kanal-Komposition, und die kennt kein V2H

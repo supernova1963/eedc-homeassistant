@@ -23,7 +23,7 @@ Schwesterdateien: test_kanal_stunden_gleichheit.py, test_kanal_symmetrie.py.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -52,12 +52,15 @@ async def test_summe_der_stunden_gleich_dem_tag(matrix, fid, art):
 
 
 async def test_gegenprobe_verschobener_slot_wird_rot(monkeypatch):
-    """Die Zeile auf ihren BEGINN abgebildet (Forward) statt auf das Ende ihrer Stunde: die erste Zeile des
-    Tagesfensters fällt aus dem Tag, die des Folgetags fehlt ⇒ Σ Stunden ≠ Tag."""
-    def forward(start_ts_dt: datetime, datum) -> int:
-        return (start_ts_dt.date() - datum).days * 24 + start_ts_dt.hour
+    """Die Zeile auf das ENDE ihrer Stunde abgebildet (das Backward-Raster vor S4) statt auf ihren Beginn: die letzte
+    Zeile des Kalendertags (23:00) fällt aus dem Tag, Stunde 0 bleibt leer ⇒ Σ Stunden ≠ Tag. (Seit HA-Bauform S4
+    E-S4-1 ist die Stunde ihr Beginn, ``stunden_leser.stunde_des_beginns``; die Gegenprobe verschiebt die Abbildung
+    um dieselbe eine Stunde wie vorher — nur in die andere Richtung.)"""
+    def backward(start_ts: int, datum) -> int:
+        ende = datetime.fromtimestamp(start_ts) + timedelta(hours=1)
+        return (ende.date() - datum).days * 24 + ende.hour
 
-    monkeypatch.setattr(stunden_leser, "lts_boundary_index", forward)
+    monkeypatch.setattr(stunden_leser, "stunde_des_beginns", backward)
     async with kg.datenstand("achsen", "M01", "HA") as ds:
         s = await ks.summen_tage(ds.db, ds.aid, kg.TAGE[:3], jetzt=kg.JETZT_TS)
     assert s.abweichungen, "ein verschobener Slot muss den Wächter rot machen"

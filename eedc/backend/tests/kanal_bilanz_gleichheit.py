@@ -445,6 +445,59 @@ def w2_klasse(ds, ebene: str, wann, feld: str) -> str:
     return "neu"
 
 
+#: HA-Bauform S4 E-S4-1: die Kategorie der Zähler je Monatsfeld (für die Randstunde des Monats, ``rand_monat``).
+_FELD_KATEGORIE = {"einspeisung_kwh": "einspeisung", "netzbezug_kwh": "netzbezug", "speicher_ladung_kwh": "ladung_batterie",
+                   "speicher_entladung_kwh": "entladung_batterie", "pv_module_kwh": "pv", "bkw_kwh": "pv"}
+
+
+async def _change(db, kanaele: dict, key: str, ts: int) -> float:
+    """HAs ``change`` der Kanalzeile ``start_ts = ts`` (0 ohne Zeile) — über die Lese-Schicht auf genau dieser Stunde."""
+    from backend.services.kanal.lesen import stunden_stapel
+
+    k = kanaele.get(key)
+    if k is None:
+        return 0.0
+    st = (await stunden_stapel(db, [k], ts, ts + 3600, jetzt=JETZT_TS)).get(key)
+    w = [x for x in (st.werte if st else []) if x.start_ts == ts and x.change is not None]
+    return float(w[0].change) if w else 0.0
+
+
+async def rand_monat(ds, monat: tuple[int, int]) -> dict[str, float]:
+    """S4-R-3d: die Randstunde des Monats je Monatsfeld — Kalendermonat − Tagesfenster-Monat =
+    ``change(letzter Tag 23:00) − change(letzter Tag des Vormonats 23:00)``; im laufenden Monat endet beides am Soll-Ende
+    des Stundenlaufs (erster Term entfällt). Je Feld ``Σ`` über die Zähler seiner Kategorie (Betrag der Mengen; PV nach
+    Gerätetyp Modul/Balkonkraftwerk), Zählerauswahl wie der Tagespfad (``zaehler_eintraege`` des Monatsersten)."""
+    from backend.services.kanal.bilanz_adapter import zaehler_eintraege
+    from backend.services.kanal.lesen import kanaele_laden, soll_ende
+
+    db, aid = ds.db, ds.aid
+    j, m = monat
+    erster = date(j, m, 1)
+    letzter = (date(j + 1, 1, 1) if m == 12 else date(j, m + 1, 1)) - timedelta(days=1)
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
+    invs = {str(i.id): i for i in (await db.execute(select(Investition).where(Investition.anlage_id == aid)))
+            .scalars().all() if i.ist_aktiv_an(erster)}
+    eintraege = await zaehler_eintraege(db, anlage, invs, erster)
+    kanaele = await kanaele_laden(db, aid, {e.schluessel for e in eintraege})
+    ende_ts = int(datetime.combine(letzter, datetime.min.time()).replace(hour=23).timestamp())
+    vor_ts = int(datetime.combine(erster - timedelta(days=1), datetime.min.time()).replace(hour=23).timestamp())
+    laufend = ende_ts + 3600 > soll_ende(JETZT_TS)
+    out = {f: 0.0 for f in _FELD_KATEGORIE}
+    for e in eintraege:
+        for feld, kat in _FELD_KATEGORIE.items():
+            if e.kategorie != kat:
+                continue
+            if kat == "pv":
+                typ = getattr(invs.get(e.sensor_key.split(":", 2)[1]) if e.sensor_key.startswith("inv:") else None,
+                              "typ", None)
+                if (feld == "bkw_kwh") != (typ == "balkonkraftwerk"):
+                    continue
+            rand = (0.0 if laufend else await _change(db, kanaele, e.schluessel, ende_ts)) - await _change(
+                db, kanaele, e.schluessel, vor_ts)
+            out[feld] += rand
+    return out
+
+
 async def probe_w2(ds) -> tuple[list, Counter, Counter]:
     """(Abweichungen von der Referenz, Klassen gegen heute, Zahl der Vergleiche)."""
     from backend.services.kanal import bilanz_leser as bl
@@ -498,9 +551,12 @@ async def probe_w2(ds) -> tuple[list, Counter, Counter]:
         w = bl.als_monatssumme(*m, kz.komposition, jetzt=JETZT_TS)
         r = ref["monate"].get(f"{m[0]}-{m[1]:02d}")
         _v("monat", m, "vorhanden", True, r is not None, 0, "referenz")
+        # HA-Bauform S4 E-S4-1: die Referenz (06.10.) rechnet den Tagesfenster-Monat; der Kanal-Leser den Kalendermonat —
+        # verglichen wird gegen Referenz + Randstunde des Monats (S4-R-3d, ``rand_monat``), nicht angepasst.
+        rand = await rand_monat(ds, m)
         for i, feld in enumerate(MONAT_FELDER):
             if r is not None:
-                _v("monat", m, feld, r[i], getattr(w, feld), W2_TOL, "referenz")
+                _v("monat", m, feld, round(r[i] + rand.get(feld, 0.0), 6), getattr(w, feld), W2_TOL, "referenz")
             if m in ma:
                 _v("monat", m, feld, getattr(ma[m], feld), getattr(w, feld), TOL_B_MONAT, "heute")
         if m in ma:

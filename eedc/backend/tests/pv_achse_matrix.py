@@ -318,7 +318,7 @@ class Soll:
     vollstaendig: bool = True
 
 
-def soll_tag(form: Form, tag: date) -> Soll:
+def soll_tag(form: Form, tag: date, weg: Optional[str] = None) -> Soll:
     """Der gespeicherte Tag nach der Regel (Bauplan N-623 Fassung 2 + E4 + Variante B).
 
     Träger sind die Module ohne Elternteil und jedes Balkonkraftwerk; ein Kind mit eigenem
@@ -329,7 +329,7 @@ def soll_tag(form: Form, tag: date) -> Soll:
     Ohne Anlagenzähler bleibt die Lücke ohne Key.
     """
     if form.w2:
-        return soll_w2(form, *_tagesfenster_dt(tag))
+        return soll_w2(form, *_tagesfenster_dt(tag, weg))
     je: dict[str, float] = {}
     ohne: set[str] = set()
     gemessen = 0.0
@@ -362,7 +362,7 @@ def soll_tag(form: Form, tag: date) -> Soll:
     return Soll(max(g_tag, gemessen), je, frozenset(ohne))
 
 
-def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = True) -> Soll:
+def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = True, weg: Optional[str] = None) -> Soll:
     """Ein Monat nach der Regel (Variante B, N-266/E4 Stufe 2, Abtretung je Monat).
 
     Ein BKW, dessen Kinder im Monat aktiv sind, tritt ab: sein Wert ist das Aggregat seiner
@@ -372,7 +372,7 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
     ``mit_anlagenwert=False``: der Monat kennt den Anlagenzähler nicht (Lücke ⇒ Teilsumme).
     """
     if form.w2:
-        return soll_w2(form, _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1])
+        return soll_w2(form, _tagesfenster_dt(tage[0], weg)[0], _tagesfenster_dt(tage[-1], weg)[1])
     n = len(tage)
     letzter = tage[-1]
     je: dict[str, float] = {}
@@ -416,21 +416,22 @@ def soll_monat(form: Form, tage: tuple[date, ...], *, mit_anlagenwert: bool = Tr
     return Soll(max(g_monat, gemessen), je, frozenset(ohne))
 
 
-def soll_wandlungsverluste(form: Form, tage: tuple[date, ...]) -> Optional[float]:
+def soll_wandlungsverluste(form: Form, tage: tuple[date, ...], weg: Optional[str] = None) -> Optional[float]:
     """HA-Bauform E4b: ``max(0, Σ Geräte − Anlagenzähler)`` des Zeitraums (W2-R3; ``None`` ohne Anlagenzähler) —
     unabhängig nachgerechnet: Σ der Geräte nach der Regel (``soll_monat``) gegen den Zähler über dieselben Zeilen."""
     if form.gesamt is None:
         return None
-    von, bis = _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1]
+    von, bis = _tagesfenster_dt(tage[0], weg)[0], _tagesfenster_dt(tage[-1], weg)[1]
     az = (zaehler_delta(form, "sensor.pv_gesamt", von, bis) if "sensor.pv_gesamt" in form.abweichung
           else tagesmenge(form.gesamt) * len(tage))
-    return max(0.0, sum(soll_monat(form, tage).je_geraet.values()) - az)
+    return max(0.0, sum(soll_monat(form, tage, weg=weg).je_geraet.values()) - az)
 
 
-def soll_einspeisung(form: Form, n_tage: int) -> float:
+def soll_einspeisung(form: Form, n_tage: int, weg: Optional[str] = None) -> float:
     if form.w2 and "sensor.einsp" in form.abweichung and n_tage in (30, 3):
         tage = TAGE_JUNI if n_tage == 30 else TAGE_JULI
-        return zaehler_delta(form, "sensor.einsp", _tagesfenster_dt(tage[0])[0], _tagesfenster_dt(tage[-1])[1])
+        return zaehler_delta(form, "sensor.einsp", _tagesfenster_dt(tage[0], weg)[0],
+                             _tagesfenster_dt(tage[-1], weg)[1])
     return tagesmenge(form.einsp_rate) * n_tage
 
 
@@ -443,9 +444,24 @@ def soll_netzbezug(n_tage: int, form: Optional[Form] = None) -> float:
 # ── Weg 2 als Soll (nur ``FORMEN_W2``) ──────────────────────────────────────
 
 
-def _tagesfenster_dt(tag: date) -> tuple[datetime, datetime]:
-    """Das Tagesfenster des Bestands als Wanduhr ``[Vortag 23:00, 23:00)`` (``kanal/fenster.tagesfenster``)."""
+#: HA-Bauform S4 (E-S4-1): ob der SA-Datenstand Kanäle trägt — erst mit Nachbau 2 (E-S4-3, Patch (a) der Ablage
+#: ``e-s3-4b/``); bis dahin False.
+SA_KANAELE: bool = False
+
+
+def kanal_wege() -> tuple[str, ...]:
+    """Die Wege, deren Datenstand Kanäle trägt (Datenstände und Schreibwege) — Patch (a) aus E-S3-4b; SA/S3 erst mit
+    E-S4-3."""
+    return ("HA", "S1", "S2", "SA", "S3") if SA_KANAELE else ("HA", "S1", "S2")
+
+
+def _tagesfenster_dt(tag: date, weg: Optional[str] = None) -> tuple[datetime, datetime]:
+    """Das Tagesfenster als Wanduhr: für einen Kanal-Weg (``kanal_wege()``) der Kalendertag ``[00:00, 24:00)``
+    (``kanal/fenster.tagesfenster`` seit HA-Bauform S4 E-S4-1, R-3), sonst das Fenster des Bestands
+    ``[Vortag 23:00, 23:00)`` (Stundenzeilen, ``slot_konvention.tagesfenster_start_ts``)."""
     t = datetime.combine(tag, datetime.min.time())
+    if weg in kanal_wege():
+        return t, t + timedelta(hours=24)
     return t - timedelta(hours=1), t + timedelta(hours=23)
 
 
