@@ -167,6 +167,19 @@ async def test_vorschau_schreibt_nichts_und_nennt_quellen_tage_und_abschluss(db)
         assert teil in text_, teil
 
 
+async def test_vorschau_nennt_die_tage_nur_aus_dem_kanal_getrennt(db):
+    """V-H4-4 (Fund-Päckchen N-750/N-751, 16.10.2026): Tage vor ``t``, die die Bilanz-Gruppe nur aus dem Kanal tragen (kein
+    Bestandstag), verlieren nach dem Verwerfen eines Bilanz-Feldes ihre ganze Tagesbilanz (S3-R1) — die Vorschau zählt sie
+    getrennt und sagt es. Seed: Kanal 01.04.–20.04., Bestandstage davor 05.04. und 20.04. ⇒ 18 Tage."""
+    ids = await _saat(db)
+    p = await plan(_req(ids["aid"]), db)
+    erwartet = [d for d in (date(2026, 4, 1) + timedelta(days=i) for i in range(20)) if d not in BESTAND_TAGE]
+    assert p.operation_preview["tage_nur_kanal"] == [d.isoformat() for d in erwartet] and len(erwartet) == 18
+    assert ("An 18 Tagen (01.04.2026 … 19.04.2026), die nur der HA-Spiegel (bzw. die eigene Summe) trägt, zeigt eedc "
+            "danach keine Energiebilanz des Tages mehr") in " ".join(p.warnings)
+    assert "tage_nur_kanal" not in p.estimated_changes      # die Zählung der Vorschau-Kacheln bleibt
+
+
 async def test_ausfuehrung_leert_feldgenau_beide_schichten(db):
     ids = await _saat(db)
     vorher = await _alles(db)

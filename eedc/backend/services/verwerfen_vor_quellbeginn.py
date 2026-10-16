@@ -312,6 +312,9 @@ class Lage:
     ziele: BestandZiele
     bestand: BestandZaehlung
     abschluss: frozenset[tuple[int, int]]
+    #: V-H4-4 (16.10.2026): Tage vor ``t``, die die Bilanz-Gruppe NUR aus dem Kanal tragen (Kanal-Tag ohne Tages- und
+    #: Stundenzeile im Bestand) — unabhängig vom Monatsabschluss; leer, wenn das Feld nicht zur Bilanz-Gruppe gehört.
+    nur_kanal: tuple[date, ...] = ()
 
     @property
     def bis_tag(self) -> date:
@@ -353,7 +356,28 @@ async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> Lage
     ziele = await bestand_ziele(db, anlage, key)
     abschluss = await abschluss_monate(db, anlage_id)
     bestand = await zaehle_bestand(db, anlage_id, ziele, kanal_v.letzter_ganzer_tag, abschluss)
-    return Lage(anlage, key, feld_label(key, await _investitionen(db, anlage_id)), t, kanal_v, ziele, bestand, abschluss)
+    nur_kanal = await _nur_kanal_tage(db, anlage_id, key, kanal_v)
+    return Lage(anlage, key, feld_label(key, await _investitionen(db, anlage_id)), t, kanal_v, ziele, bestand, abschluss,
+                nur_kanal)
+
+
+async def _nur_kanal_tage(db: AsyncSession, anlage_id: int, key: str, kanal_v: kv.KanalVorschau) -> tuple[date, ...]:
+    """V-H4-4: die Kanal-Tage vor ``t``, die im Bestand weder eine Tages- noch eine Stundenzeile haben — dort trägt nur der
+    Kanal die Bilanz-Gruppe. Nach dem Verwerfen ist das Feld dort zugeordnet, aber ohne Kanal ⇒ die Gruppe liest den
+    Bestand (S3-R1: ganz aus dem Kanal oder ganz aus dem Bestand), und der hat nichts: der Tag verliert seine ganze
+    Energiebilanz, nicht nur dieses Feld. Nur für Felder der Bilanz-Gruppe (``bilanz_benoetigte_kanaele``); gezählt
+    unabhängig vom Monatsabschluss (der schützt den Bestand, nicht die Kanal-Deckung des Tages)."""
+    from backend.services.kanal.bilanz_quellenwahl import bilanz_benoetigte_kanaele
+
+    tage = sorted(d for d in kanal_v.tage if d <= kanal_v.letzter_ganzer_tag)
+    if not tage or key not in await bilanz_benoetigte_kanaele(db, anlage_id, tage[-1]):
+        return ()
+    bestand: set[date] = set()
+    for spalte in (TagesZusammenfassung.datum, TagesEnergieProfil.datum):
+        modell = spalte.class_
+        bestand |= set((await db.execute(select(spalte).distinct().where(and_(
+            modell.anlage_id == anlage_id, spalte >= tage[0], spalte <= tage[-1])))).scalars().all())
+    return tuple(d for d in tage if d not in bestand)
 
 
 def _zeit(ts: Optional[int]) -> str:
@@ -414,6 +438,10 @@ def _saetze_danach(la: Lage) -> list[str]:
     if ohne:
         s.append(f"Danach haben {fmt_zahl(len(ohne))} Tage ({_spanne(ohne)}) keinen Wert dieses Feldes mehr: kein "
                  "Kanal, und der Bestand trägt das Feld nicht mehr.")
+    if la.nur_kanal:
+        s.append(f"An {fmt_zahl(len(la.nur_kanal))} Tagen ({_spanne(list(la.nur_kanal))}), die nur der HA-Spiegel (bzw. die "
+                 "eigene Summe) trägt, zeigt eedc danach keine Energiebilanz des Tages mehr (Regel: eine Gruppe ganz aus "
+                 "dem Spiegel oder ganz aus dem Bestand) — auch in Monaten mit Abschluss.")
     mit = la.lesart1_mit_bestand()
     if mit:
         s.append(f"{fmt_zahl(len(mit))} Tag(e) ({_spanne(mit)}) verlieren ihre Kanalzeilen, ihr Bestand bleibt "
@@ -450,6 +478,7 @@ def vorschau_daten(la: Lage) -> dict[str, Any]:
         "abschluss_monate": [f"{j}-{m:02d}" for j, m in la.abschluss_monate_betroffen()],
         "tage_ohne_werte": [d.isoformat() for d in la.lesart1_ohne_werte()],
         "tage_mit_bestand": [d.isoformat() for d in la.lesart1_mit_bestand()],
+        "tage_nur_kanal": [d.isoformat() for d in la.nur_kanal],
         "bestand_ziele": {"spalte": la.ziele.spalte, "spannen": la.ziele.spannen_achse,
                           "komponenten_kwh": sorted(la.ziele.tz_keys), "pv_aggregat": la.ziele.pv_aggregat},
     }
