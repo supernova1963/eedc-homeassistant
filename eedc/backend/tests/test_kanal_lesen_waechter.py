@@ -1,14 +1,15 @@
 """Wächter: wer die Lese-Schicht der Kanalstatistik importieren darf (HA-Bauform E3, Auftrag Punkt 6; Bauplan §5, G7).
 
-**Regel.** Die Lese-Schicht (``services/kanal/lesen.py``, ``fenster.py``, ``quellenwahl.py``, ``monatsraster.py``)
-importieren nur ``services/kanal/`` selbst, ``services/monats_fakten/`` (der eine Aufbereiter, ADR-002/P10) und
+**Regel.** Die Lese-Schicht (``services/kanal/lesen.py``, ``fenster.py``, ``quellenwahl.py``, ``monatsraster.py`` und seit
+HA-Bauform S3 der Kanal-Stundentag ``stunden_leser.py`` mit seinem Adapter ``stunden_adapter.py``) importieren nur ``services/kanal/`` selbst, ``services/monats_fakten/`` (der eine Aufbereiter, ADR-002/P10) und
 ausdrücklich benannte Tages-Leser (``BENANNTE_TAGESLESER``, mit Grund). Keine Route, keine Sicht, kein PDF, kein
 Export greift direkt auf ``zeitraum``/``reihe`` zu — Zeiträume ab Monatslänge laufen über das Monatsraster mit der
 P8-Überlagerung der Monats-Fakten, nie über ein direktes ``zeitraum()`` über Monatsgrenzen (Bauplan §5).
 
 **Stand E3: außerhalb ``services/kanal/`` (und der Proben) importiert sie NIEMAND** — die Schicht ist gebaut und
-geprüft, aber nicht umgehängt. ``IMPORTEURE_STAND`` hält genau das fest (Baseline 0, Gleichheit statt Obergrenze);
-E4 trägt dort die Monats-Fakten und die benannten Tages-Leser ein.
+geprüft, aber nicht umgehängt. ``IMPORTEURE_STAND`` hält genau das fest (Gleichheit statt Obergrenze); wer umhängt,
+trägt den Leser dort ein. **Stand S3 (E-S3-6):** genau ein Importeur außerhalb, der benannte Tages-Leser
+``services/energie_profil/kanal_stunden.py`` (er importiert ``stunden_leser``/``stunden_adapter``; die Sichten rufen ihn).
 
 **Was er findet (AST, baumweit ohne ``tests/``):** ``import backend.services.kanal.lesen``, ``from
 backend.services.kanal.lesen import …``, ``from backend.services.kanal import lesen``, auch in Funktionen; relative
@@ -31,7 +32,7 @@ import ast
 from backend.tests.quellbaum import produktivbaum
 
 PAKET = "backend.services.kanal"
-SCHICHT = ("lesen", "fenster", "quellenwahl", "monatsraster")
+SCHICHT = ("lesen", "fenster", "quellenwahl", "monatsraster", "stunden_leser", "stunden_adapter")
 SCHICHT_MODULE = {f"{PAKET}.{m}" for m in SCHICHT}
 
 #: Verzeichnisse, die importieren DÜRFEN (Präfix relativ zu ``backend/``).
@@ -42,12 +43,15 @@ ERLAUBT_PRAEFIX = ("services/kanal/", "services/monats_fakten/")
 BENANNTE_TAGESLESER: dict[str, str] = {
     "services/energie_profil/kanal_stunden.py": (
         "E-S3-2: der eine Tages-Leser der Stunden-Sichten (/stunden, tage-werte, monat) — Mischzeilen aus "
-        "kanal/stunden_leser + stunden_adapter und der Stundenzeile; Routen rufen nur ihn"
+        "kanal/stunden_leser + stunden_adapter und der Stundenzeile; Routen rufen nur ihn. Die Wärme-Sichten "
+        "(energie_profil/waerme.py, waerme_verteilung_tag.py: Stundenform und WP-Strom eines WP-Kanal-Tags) und "
+        "serien.py, tage_werte.py, monat.py importieren die Schicht nicht selbst, sie rufen kanal_stunden"
     ),
 }
 
-#: Wer heute außerhalb ``services/kanal/`` importiert — Stand E3: niemand.
-IMPORTEURE_STAND: set[str] = set()
+#: Wer heute außerhalb ``services/kanal/`` importiert — Stand E3: niemand; Stand S3 (E-S3-6, ``stunden_*`` in
+#: ``SCHICHT``): nur der benannte Tages-Leser der Stunden-Sichten.
+IMPORTEURE_STAND: set[str] = {"services/energie_profil/kanal_stunden.py"}
 
 
 def _modul_aus_rel(rel: str) -> tuple[str, bool]:
@@ -134,11 +138,11 @@ def test_nur_erlaubte_importeure():
     )
 
 
-def test_stand_e3_ausserhalb_von_services_kanal_importiert_niemand():
+def test_importeure_ausserhalb_von_services_kanal_wie_der_stand():
     ausserhalb = {rel for rel in _importeure() if not rel.startswith("services/kanal/")}
     assert ausserhalb == IMPORTEURE_STAND, (
-        f"Importeure der Lese-Schicht außerhalb services/kanal/: {sorted(ausserhalb)} — Stand E3 ist "
-        f"{sorted(IMPORTEURE_STAND)}. Wer in E4 umhängt, trägt den Leser hier (und ggf. in BENANNTE_TAGESLESER) ein."
+        f"Importeure der Lese-Schicht außerhalb services/kanal/: {sorted(ausserhalb)} — der Stand ist "
+        f"{sorted(IMPORTEURE_STAND)}. Wer umhängt, trägt den Leser hier (und ggf. in BENANNTE_TAGESLESER) ein."
     )
 
 
@@ -161,6 +165,8 @@ GEGENPROBEN = {
     "paket-attribut-alias": "import backend.services.kanal as kk\nx = kk.reihe if False else kk.monatsraster.monatsreihe\n",
     "paket-from-services": "from backend.services import kanal\nx = kanal.lesen.zeitraum\n",
     "paket-from-services-alias": "from backend.services import kanal as kn\nx = kn.quellenwahl.quellenwahl\n",
+    "stunden-leser": "from backend.services.kanal.stunden_leser import kanal_stundentag\n",
+    "stunden-adapter-paket": "from backend.services.kanal import stunden_adapter\n",
 }
 
 #: Relative Importe — (Quelle, Datei relativ zu ``backend/``).
@@ -206,3 +212,18 @@ def test_gegenprobe_eine_route_mit_import_wuerde_rot(monkeypatch):
     assert "api/routes/cockpit/kunst.py" in funde
     verstoesse = {rel for rel in funde if not rel.startswith(ERLAUBT_PRAEFIX) and rel not in BENANNTE_TAGESLESER}
     assert verstoesse == {"api/routes/cockpit/kunst.py"}
+
+
+def test_gegenprobe_eine_route_mit_dem_kanal_stundentag_wuerde_rot(monkeypatch):
+    """HA-Bauform S3 (S3-R8, E-S3-6): eine Route, die den Kanal-Stundentag selbst liest statt über
+    ``energie_profil/kanal_stunden.py`` ⇒ Verstoß und Abweichung vom Stand."""
+    from backend.tests import quellbaum
+
+    echte = produktivbaum()
+    route = quellbaum.Quelldatei(pfad=echte[0].pfad, rel="api/routes/energie_profil/kunst.py", quelle="",
+                                 baum=ast.parse("from backend.services.kanal.stunden_leser import kanal_stundentag\n"))
+    monkeypatch.setattr(f"{__name__}.produktivbaum", lambda: (*echte, route))
+    funde = _importeure()
+    verstoesse = {rel for rel in funde if not rel.startswith(ERLAUBT_PRAEFIX) and rel not in BENANNTE_TAGESLESER}
+    assert verstoesse == {"api/routes/energie_profil/kunst.py"}
+    assert {rel for rel in funde if not rel.startswith("services/kanal/")} != IMPORTEURE_STAND

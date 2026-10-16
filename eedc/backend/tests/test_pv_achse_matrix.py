@@ -641,13 +641,13 @@ URSACHE: dict[str, Ursache] = {
     "W2-SA-BESTAND": Ursache(
         "Lesart 1 (Bauplan §3b) — Standalone ohne Kanäle",
         "Der Standalone-Datenstand der Matrix hat keine Kanäle (Seed nur `sensor_snapshots`): die Quellenwahl nimmt den "
-        "Bestand, der Tag rechnet #406/N-623 (Abgleich bzw. kWp-Anteil), nicht Weg 2. SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf die Analyse E-S3-4b)",
+        "Bestand, der Tag rechnet #406/N-623 (Abgleich bzw. kWp-Anteil), nicht Weg 2. SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf Nachbau 2 (S4 mit R-3; Bauplan S3 §10i; die 14 Zellen der Cockpit-Monat-Sperre sind Fund N-750))",
     ),
     "W2-SA-VOR": Ursache(
         "wie „Soll unklar\" SA vor dem Abschluss (N-472/N-121)",
         "Cockpit → Monat sammelt die Tagesebene nur im laufenden Monat; ein vergangener Monat ohne HA hat vor dem "
         "Abschluss keine PV (dieselbe Lage wie `_U_SA_VOR` der übrigen Formen — dort „Soll unklar\" mit Haltewert). "
-        "SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf die Analyse E-S3-4b). "
+        "SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf Nachbau 2 (S4 mit R-3; Bauplan S3 §10i; die 14 Zellen der Cockpit-Monat-Sperre sind Fund N-750)). "
         "N-472-Sperre hängt am HA-Weg (`quellen_leser.py:95/138/208`, `if not ha_stats`)",
     ),
 }

@@ -22,8 +22,11 @@ belegte Stunde trägt den Zuwachs und ihre ``spanne > 3600``. **HA-Kanäle wört
 Reset-Regel, keine Lückenfüllung — auch nicht für die eigene Summe eines MQTT-Kanals beim Lesen (sie hat ihre Regeln
 beim Schreiben).
 
-**Komposition je Stunde (S3-R3)** — die Bilanz-Gruppe über DIESELBE Funktion wie der Tag,
-``bilanz_leser.waehle_und_komponiere``, je Slot mit dem Zeitraum der Stunde. Vorbereitet werden nur die Eingänge:
+**Komposition je Stunde (S3-R3)** — die Bilanz-Gruppe über DIESELBE Layer-Funktion wie der Tag,
+``komponiere_bilanz_zeitraum`` (W2), je Slot mit den Δ der Stunde. Die Wahl von ``bilanz_leser.waehle_und_komponiere``
+steht in der Stunde fest (jeder belegte Kanal ist voll gedeckt); sie wird je Belegung einmal bestimmt (``_vorlage``,
+E-S3-6 Gate B — die Probe ``test_kanal_stunden_vorlage.py`` hält die Gleichheit zu ``waehle_und_komponiere`` fest).
+Vorbereitet werden nur die Eingänge:
 
 * Entweder-oder: die Wahl des Tages (``resolve_either_or_eintraege`` mit „Kanal deckt den Tag") gilt für jede Stunde —
   ⚑ so verstanden, weil eine je Stunde neu gewählte Ersatzgruppe in der Lücke des ersten Kanals den zweiten nähme und
@@ -55,7 +58,7 @@ from typing import Any, Optional, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.bilanz_zeitraum import BilanzZeitraum
+from backend.core.berechnungen.bilanz_zeitraum import BilanzZeitraum, Eingang, komponiere_bilanz_zeitraum
 from backend.core.berechnungen.pv_verteilung import PvTraeger
 from backend.core.berechnungen.slot_konvention import lts_boundary_index
 from backend.models.kanal import ART_SUM
@@ -190,13 +193,6 @@ def _gruppe_aus(datum: date, gruppe: str, wahl: Quellenwahl, je: dict, eintraege
 # ── Bilanz-Gruppe: Tageswahl, Entweder-oder des Tages, Komposition je Stunde ─
 
 
-def _zeitraum_der_stunde(key: str, von: int, change: float, spanne: Optional[int]) -> Zeitraum:
-    """Ein belegter Slot als voll gedeckter Zeitraum der Stunde — der Eingang von ``waehle_und_komponiere``."""
-    return Zeitraum(key=key, art=ART_SUM, einheit="kWh", von=von, bis=von + _STUNDE, delta=change, teil_delta=None,
-                    gedeckt_von=von, gedeckt_bis=von + _STUNDE, rand_spanne=spanne, voll=True, grund=None,
-                    laufend=False)
-
-
 def _traeger_der_stunde(traeger: Sequence[PvTraeger], eintraege_tag: Sequence[TabellenEintrag],
                         belegt: set[str]) -> list[PvTraeger]:
     """Die Träger der Stunde: ohne die PV-Geräte, deren Kanal den Tag trägt, die aber in der Stunde keine Zeile haben
@@ -233,19 +229,53 @@ def klemm_der_stunde(k: Optional[BilanzZeitraum], traeger: Sequence[PvTraeger]) 
     return bool(empfaenger) and k.pv.geraete_kwh - k.pv.verteilter_rest_kwh > az + _KLEMM_TOL
 
 
-def _komposition_der_stunde(gs: GruppenStunden, h: int, traeger: Sequence[PvTraeger], dc_grund: Optional[str],
-                            von: int, az_abzug: float = 0.0) -> tuple[Optional[BilanzZeitraum], list[PvTraeger]]:
-    """``waehle_und_komponiere`` mit dem Zeitraum der Stunde (S3-R3). ``az_abzug`` mindert das Δ des Anlagenzählers
-    der Stunde — die Tagesrest-Skalierung (S3-R4) als Eingang, nicht als zweite Komposition."""
-    belegt = {key for key, m in gs.mengen.items() if m[h] is not None}
+@dataclass(frozen=True)
+class _Vorlage:
+    """Was an einer Stunde nur von ihrer Belegung (den Kanälen mit Zeile) abhängt, nicht von den Werten: die Eingänge
+    nach dem Entweder-oder in der Reihenfolge von ``waehle_und_komponiere`` (je mit dem Kanal, dessen ``change`` ihr Δ
+    ist) und die Träger der Stunde. Einmal je Belegung und Tag (E-S3-6, Gate B)."""
+
+    eingaenge: tuple[tuple[str, Eingang], ...]
+    traeger: tuple[PvTraeger, ...]
+
+
+def _pv_inv_id(e: TabellenEintrag) -> Optional[int]:
+    """Das PV-Gerät eines Zählers wie ``bilanz_leser.waehle_und_komponiere`` — ``None`` für den Anlagenzähler."""
+    if e.kategorie == "pv" and e.sensor_key != bilanz_leser._AGGREGAT_KEY:
+        return int(e.sensor_key.split(":", 2)[1])
+    return None
+
+
+def _vorlage(gs: GruppenStunden, belegt: frozenset, traeger: Sequence[PvTraeger]) -> _Vorlage:
+    """Die Vorlage einer Belegung. In einer Stunde ist jeder belegte Kanal voll gedeckt (Δ = ``change``), also wählt
+    ``waehle_und_komponiere`` dort immer ``kanal`` und nimmt je Entweder-oder-Gruppe den ersten belegten Zähler —
+    genau das, was ``resolve_either_or_eintraege`` mit „hat Daten" hier tut. Die Probe
+    ``test_kanal_stunden_vorlage.py`` vergleicht die Komposition je Stunde mit ``waehle_und_komponiere``."""
     eintraege_h = [e for e in gs.eintraege if e.schluessel in belegt]
-    ergebnisse = {}
-    for key in belegt:
-        change = gs.mengen[key][h] - (az_abzug if key == bilanz_leser._AGGREGAT_KEY else 0.0)
-        ergebnisse[key] = _zeitraum_der_stunde(key, von + h * _STUNDE, change, gs.spannen[key][h])
-    traeger_h = _traeger_der_stunde(traeger, gs.eintraege, belegt)
-    kz = bilanz_leser.waehle_und_komponiere(eintraege_h, ergebnisse, traeger_h, lueckentag=False, dc_grund=dc_grund)
-    return (kz.komposition if kz.wahl.quelle == QUELLE_KANAL else None), traeger_h
+    gewaehlt = resolve_either_or_eintraege(eintraege_h, gruppe_fn=lambda e: e.gruppe, hat_tagesdaten_fn=lambda e: True)
+    return _Vorlage(
+        tuple((e.schluessel, Eingang(e.kategorie, e.target_key, e.vorzeichen, None, _pv_inv_id(e))) for e in gewaehlt),
+        tuple(_traeger_der_stunde(traeger, gs.eintraege, belegt)),
+    )
+
+
+def _komposition_der_stunde(gs: GruppenStunden, h: int, traeger: Sequence[PvTraeger], dc_grund: Optional[str],
+                            vorlagen: dict, az_abzug: float = 0.0) -> tuple[Optional[BilanzZeitraum], list[PvTraeger]]:
+    """Die Komposition der Stunde (S3-R3) über DIESELBE Layer-Funktion wie der Tag (``komponiere_bilanz_zeitraum``),
+    mit den Eingängen der Belegung (``_vorlage``; ``vorlagen`` merkt sie je Tag). ``az_abzug`` mindert das Δ des
+    Anlagenzählers der Stunde — die Tagesrest-Skalierung (S3-R4) als Eingang, nicht als zweite Komposition. Ohne
+    belegten Zähler ``None`` (wie ``waehle_und_komponiere`` ohne Eingang)."""
+    belegt = frozenset(key for key, m in gs.mengen.items() if m[h] is not None)
+    v = vorlagen.get(belegt)
+    if v is None:
+        v = vorlagen[belegt] = _vorlage(gs, belegt, traeger)
+    traeger_h = list(v.traeger)
+    if not v.eingaenge:
+        return None, traeger_h
+    eingaenge = [Eingang(e.kategorie, e.ziel, e.vorzeichen,
+                         gs.mengen[key][h] - (az_abzug if key == bilanz_leser._AGGREGAT_KEY else 0.0), e.pv_inv_id)
+                 for key, e in v.eingaenge]
+    return komponiere_bilanz_zeitraum(eingaenge, traeger_h, dc_grund=dc_grund), traeger_h
 
 
 def _rest(k: Optional[BilanzZeitraum]) -> float:
@@ -265,19 +295,20 @@ def rest_faktor(rest_stunden: Sequence[float], rest_tag: float) -> Optional[floa
     return rest_tag / summe
 
 
-def _kompositionen(gs: GruppenStunden, traeger: Sequence[PvTraeger], dc_grund: Optional[str], von: int,
+def _kompositionen(gs: GruppenStunden, traeger: Sequence[PvTraeger], dc_grund: Optional[str],
                    tag: BilanzZeitraum) -> tuple[list[Optional[BilanzZeitraum]], list[int], Optional[float]]:
     """Je Slot die Komposition der Stunde (S3-R3), die Klemm-Stunden und — S3-R4 — die Tagesrest-Skalierung: der Rest
     des Anlagenzählers je Stunde wird auf den Rest der Tageskomposition skaliert (``rest_h × Rest_Tag / Σ_h rest_h``),
     indem das Δ des Anlagenzählers der Stunde um ``(1 − Faktor) × rest_h`` sinkt. Gemessene Geräte bleiben ``change``."""
-    roh = [_komposition_der_stunde(gs, h, traeger, dc_grund, von) for h in range(SLOTS)]
+    vorlagen: dict = {}
+    roh = [_komposition_der_stunde(gs, h, traeger, dc_grund, vorlagen) for h in range(SLOTS)]
     reste = [_rest(k) for k, _t in roh]
     faktor = rest_faktor(reste, _rest(tag))
     kompositionen: list[Optional[BilanzZeitraum]] = []
     klemm: list[int] = []
     for h, (k, traeger_h) in enumerate(roh):
         if faktor is not None and reste[h] > 0 and abs(faktor - 1.0) > _KLEMM_TOL:
-            k, traeger_h = _komposition_der_stunde(gs, h, traeger, dc_grund, von, (1.0 - faktor) * reste[h])
+            k, traeger_h = _komposition_der_stunde(gs, h, traeger, dc_grund, vorlagen, (1.0 - faktor) * reste[h])
         kompositionen.append(k)
         if klemm_der_stunde(k, traeger_h):
             klemm.append(h)
@@ -321,7 +352,7 @@ def _bilanz_bauen(plan: _BilanzPlan, je: dict, tag: dict) -> None:
     gs = _gruppe_aus(plan.datum, GRUPPE_BILANZ, plan.kz.wahl, je, plan.gewaehlt)
     traeger = bilanz_leser._traeger(plan.stamm.invs, plan.aktiv)
     kompositionen, klemm, faktor = _kompositionen(gs, traeger, bilanz_leser._dc_grund(plan.stamm.invs, plan.aktiv),
-                                                  tagesfenster(plan.datum)[0], plan.kz.komposition)
+                                                  plan.kz.komposition)
     tag["gruppen"][GRUPPE_BILANZ] = gs
     tag["bilanz"] = BilanzStunden(tuple(kompositionen), plan.kz.komposition, tuple(traeger), tuple(klemm), faktor)
 

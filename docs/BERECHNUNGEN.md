@@ -73,10 +73,15 @@ und zum Verständnis der Datenflüsse.
 >   E-Mobilität und Sonstiges — §3.4, Kasten „E-Mobilität und Sonstiges aus Zeitraum-Differenzen" · Wärmepumpe — §3.5,
 >   Kasten „Strom je Betriebsart aus Zeitraum-Differenzen" und „Kein Betrieb ist eine Messung" · Zeitfenster-Tarif
 >   (HT/NT) — §3.1 (das Gewicht ist der Netzbezug je Wochentag und Uhrstunde aus den Kanälen, eine Abfrage je Seite).
-> * **Was (noch) nicht so rechnet:** Stundenprofile, Kurven, Energieprofil-Stunden, die stundengepaarten Spalten
->   (Direktverbrauch, Überschuss, Defizit), die Tagesebene der E-Mob-Aufteilung, Reparatur-Werkbank und Prognose-Leser
->   bleiben auf den Stunden- und Tageszeilen (nächste Stufe S3). Der Monatsabschluss-Nachlauf rechnet seit E4f nur
->   noch Tage, die fehlen und die HA noch im Verlauf hat (§6b).
+> * **Stunden (zweites Paket S3):** an einem Kanal-Tag kommen auch die **Stunden** aus den Kanälen — der Stunden-Verlauf
+>   von *Cockpit → Tag*, die stundengepaarten Spalten (Direktverbrauch, Überschuss, Defizit, Zahl der Stunden, WP-Strom)
+>   in den Tageswerten und *Energieprofil → Monat* und die Stundenform der Wärme-Sichten; Regeln in §6b, Kasten „Der
+>   Kanal-Stundentag".
+> * **Was (noch) nicht so rechnet:** Spitzen, Vollzyklen und Performance Ratio (Tageszeile), Ladestand, Preise, Wetter,
+>   Zählwerke und die Leistungswerte je Gerät der Stunde, die Kennzahl- und Prognose-Leser auf Stundenwerten
+>   (Speicher-Simulation, Ladepreis, Grundlast, Lern- und Korrekturprofil — Stufe S5), die Tagesebene der
+>   E-Mob-Aufteilung und die Monats-Faltung aus Tagen für Monate ohne Kanäle bleiben auf den Stunden- und Tageszeilen.
+>   Der Monatsabschluss-Nachlauf rechnet seit E4f nur noch Tage, die fehlen und die HA noch im Verlauf hat (§6b).
 
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
@@ -3963,6 +3968,51 @@ durch), und beide Anzeigen — die Legende in *Cockpit → Live* und der Verbrau
 die übrigen 23 aus der Standard-Grundlast"*. Bei voller Abdeckung entfällt der Zusatz; liefert das
 Backend keine Abdeckung, bleibt es bei der Tageszahl, statt eine zu erfinden. Wortlaut-SoT beider
 Anzeigen ist `lib/verbrauchsprofilHerkunft.ts`.
+
+### Der Kanal-Stundentag (HA-Bauform, zweites Paket S3)
+
+Die Stundenzeilen schreibt `aggregate_day` weiter wie bisher (unten). **Gelesen** werden die Stunden eines Tages aber
+dort, wo die Kanäle den Tag decken, aus dem HA-Spiegel bzw. der eigenen Summe (`services/kanal/stunden_leser.py`) —
+nach denselben Regeln wie die Tagessummen:
+
+* **Eine Wahl je Tag und Gruppe** (ADR-002/P14): Bilanz (Netz · PV/Balkonkraftwerk samt Anlagenzähler · Speicher ·
+  Erzeuger hinter dem Zähler), Geräte (E-Mobilität, Sonstiges), Wärmepumpe. Ein Kanal-Tag einer Gruppe liest auch ihre
+  Stunden aus den Kanälen, ein Bestandstag aus den Stundenzeilen; kein Tag halb und halb. ⚑ Die Bilanz-Gruppe hält einen
+  Tag mit einer Lücke über die Tagesgrenze als Kanal-Tag (Lückentag wie HA); die **Geräte- und die WP-Gruppe kennen diese
+  Regel nicht** — ein 25-Stunden-Loch in einem WP-Kanal macht beide berührten Tage zu WP-Bestandstagen. Beide Wege nennen
+  an solchen Tagen dieselbe Zahl aus dem Bestand (Entscheid: so belassen).
+* **Stunde = HAs `change` im Backward-Raster:** Slot `h` ist die Zeile, deren Stand den Zähler `h` setzt
+  (`slot_konvention.lts_boundary_index`, Tagesfenster `[Vortag 23:00, 23:00)`, Herbst-Doppelslot trägt beide Zeilen).
+  Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
+  Stunde ohne Zeile ist **keine 0**. HA-Kanäle wörtlich: kein Deckel, keine Reset-Regel, keine Lückenfüllung.
+* **Weg 2 je Stunde:** die Bilanz-Gruppe komponiert jede Stunde mit derselben Layer-Funktion wie den Tag
+  (`core/berechnungen/bilanz_zeitraum.py::komponiere_bilanz_zeitraum`, W2-R1…R5). Die Entweder-oder-Wahl des Tages gilt
+  für jede Stunde; ein PV-Gerät ohne Zeile in einer Stunde ist in ihr weder gemessen noch Empfänger des Rests (sein
+  Zuwachs steht in der Folgestunde).
+* **Σ Stunden ≡ Tag — per Konstruktion, auch für den Rest:** der Rest des Anlagenzählers je Stunde (für Geräte ohne
+  eigenen Zähler) wird auf den Rest des Tages skaliert, `rest_h′ = rest_h × Rest_Tag / Σ_h rest_h` (ohne Lücke und ohne
+  Klemmung ist der Faktor 1). So zählt die Lückenmenge eines Zählers nicht doppelt, und jedes Gerät, die PV-Summe,
+  Gesamt- und Eigenverbrauch des Tages sind die Summe ihrer Stunden. Wächter `test_kanal_stunden_summe.py` (streng, alle
+  Gruppen, beide Abnahme-Matrizen).
+* **Stundengepaarte Größen** (Direktverbrauch, Überschuss, Defizit, Gesamtverbrauch je Stunde) über dieselben
+  Layer-Formeln (`stundenbilanz.py`, `tagesbilanz.bilanz_aus_stundenrows`), Eingang die Kanal-Stunden; Tageswert = Σ.
+  **Spitzen, Vollzyklen und Performance Ratio bleiben Tageszeile** (nicht additiv).
+* **Mischzeilen** (`services/energie_profil/kanal_stunden.py`, der eine Tages-Leser der Stunden-Sichten): an einem
+  Kanal-Tag kommen die Mengen der Gruppen mit Wahl Kanal (PV, Verbrauch, Einspeisung, Netzbezug, Speicher, Überschuss,
+  Defizit; WP-Strom; Wallbox) aus den Kanälen; **Ladestand, Wetter, Preise, Zählwerke und `komponenten`** (der
+  Leistungspfad — die Aufteilung je Gerät im Verlauf kommt vom Leistungssensor) aus der Stundenzeile derselben Stunde;
+  `spannen` je Achse gemischt. Eine Stunde gibt es, wenn sie eine Stundenzeile oder einen Kanal-Wert hat. Die
+  Tageswerte und *Energieprofil → Monat* fragen nur Bilanz und WP; `/stunden` alle Gruppen.
+* **Wärme je Stunde:** die Wärme-Sichten verteilen weiter den Tageswert (`core/berechnungen/tages_stapel.py`, Σ Stunden =
+  Balken); an einem WP-Kanal-Tag kommt nur die **Form** aus den Kanälen (`change` je Zähler, Betriebsart-Stunden aus
+  `abgeleitet:inv:<id>:modus_strom_<art>_kwh`).
+* **Tage älter als zwei Jahre:** die Stundenzeilen werden nach 730 Tagen gelöscht (`scheduler_jobs.py`); der HA-Spiegel
+  reicht so weit zurück wie HAs Langzeitstatistik. Ein solcher Kanal-Tag zeigt seinen Stunden-Verlauf wieder — Mengen aus
+  den Kanälen, Ladestand und Wetter leer.
+* **Ohne Home Assistant (Standalone/MQTT):** die eigene Summe eines Zählers füllt eedc aus seinen gespeicherten
+  stündlichen Zählerständen (`sensor_snapshots`) nach — nur für Zähler **ohne** HA-Sensor und nur stündliche Reihen
+  (unterer Median der Abstände ≤ 1 h; Stände `live_fallback`/`unknown` nicht), mit derselben Rechenstelle wie der
+  Stundenlauf (90-%-Regel, Deckel als Schreibfilter). Reihen mit einem Stand je Tag warten auf den Kalendertag (S4).
 
 ### Stündliche Berechnung (aggregate_day)
 

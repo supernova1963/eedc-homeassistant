@@ -1343,7 +1343,7 @@ URSACHE: dict[str, Ursache] = {
         "Jahr-Verlauf nennen 0/nichts; Sonstiges auch Cockpit → Monat — die Speicher-Netzladung steht seit Päckchen P "
         "in Fakten, Verlauf und Cockpit → Monat aus den Tagen; E-Mob ohne HA auch Cockpit → Monat). Folge in der Form mit Sonstiges-Erzeuger (M10): Eigenverbrauch, Gesamtverbrauch, Autarkie "
         "und Erzeugung hinter dem Zähler des Monats ohne Abschluss rechnen ohne das BHKW. Cockpit → Monat nennt "
-        "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene. SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf die Analyse E-S3-4b)",
+        "daneben für WP-Strom/-Wärme und (mit HA) die Lademenge den Wert der Tagesebene. SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf Nachbau 2 (S4 mit R-3; Bauplan S3 §10i; die 14 Zellen der Cockpit-Monat-Sperre sind Fund N-750))",
     ),
     "KANDIDAT-EMOB-LAUFEND-NETZ": Ursache(
         "KANDIDAT (nur gezeigt) — N-631, seit HA-Bauform E4c geheilt (eine Aufteilung aus dem abgeleiteten Kanal für "
@@ -1652,7 +1652,7 @@ URSACHE.update({
     "W2-SA-BESTAND": Ursache(
         "Lesart 1 (Bauplan §3b) — Standalone ohne Kanäle",
         "Der Standalone-Datenstand hat keine Kanäle: die Tage rechnet der Bestand (Ersatzgruppe am Ausfalltag B mit "
-        "6,24 statt Weg 2 A 0 / 12,0). SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf die Analyse E-S3-4b)",
+        "6,24 statt Weg 2 A 0 / 12,0). SA-Datenstand ohne Kanäle (das Nachfüllen aus den Stundenständen nimmt in S3 nur Schlüssel ohne HA-Entity und nur stündliche Reihen; die Erweiterung auf HA-Schlüssel ist gemessen — Bericht E-S3-4 Etappe 10, 49 Zellen bewegen sich — und wartet auf Nachbau 2 (S4 mit R-3; Bauplan S3 §10i; die 14 Zellen der Cockpit-Monat-Sperre sind Fund N-750))",
     ),
 })
 URSACHE["E4E-DIENSTLICHE-LADEKOSTEN"] = Ursache(

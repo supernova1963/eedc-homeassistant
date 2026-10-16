@@ -326,7 +326,19 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > aggregieren"** in der Reparatur-Werkbank unter
 > [Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md) holst du sie für einen Zeitraum nach.
 
-Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md).
+> **Woher die Stunden kommen.** Mit Home Assistant spiegelt eedc die Langzeitstatistik deiner Zähler Stunde für Stunde
+> (den **HA-Spiegel**). Deckt der Spiegel einen Tag, kommen nicht nur die Tagessummen, sondern auch die **Stunden** von
+> PV, Einspeisung, Netzbezug, Speicher, Wärmepumpe und Wallbox aus ihm: jede Stunde ist genau der Zuwachs, den Home
+> Assistant für sie nennt (wie im HA-Energie-Dashboard), und die Stunden ergeben zusammen den Tag. Fehlt in Home Assistant
+> eine Stunde, steht ihre Energie in der Stunde danach — die ist in Verlauf und Stundenwerte-Tabelle als **„enthält n
+> Stunden"** beschriftet, die leere Stunde davor ist keine 0. **Ladestand, Temperatur, Strahlung, Preise** und die
+> **Aufteilung je Gerät** (sie kommt vom Leistungssensor) liest eedc weiter aus den eigenen Stundenwerten. Deckt der
+> Spiegel einen Tag nicht (kein HA-Sensor, vor dem Beginn der Statistik), rechnet der Tag
+> wie bisher aus den gespeicherten Zählerständen. **Tage älter als zwei Jahre**, deren Stundenwerte eedc nach der
+> Aufbewahrungsfrist gelöscht hat, zeigen ihren Stunden-Verlauf wieder, soweit der Spiegel zurückreicht — dann ohne
+> Ladestand und Wetter.
+
+Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md). An einem Tag aus dem HA-Spiegel ändert eine Nachberechnung die gespeicherten Stundenwerte, nicht die Zahlen aus dem Spiegel; eine falsche Zahl dort korrigierst du in Home Assistant ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
 ### 2.3 Monat
 

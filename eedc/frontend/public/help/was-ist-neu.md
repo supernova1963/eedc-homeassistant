@@ -11,6 +11,14 @@
 
 ## Unreleased
 
+**Stunden aus Home Assistant:** Deckt der HA-Spiegel einen Tag, kommen jetzt auch die **Stunden** von PV, Einspeisung,
+Netzbezug, Speicher, Wärmepumpe und Wallbox aus ihm — jede Stunde ist der Zuwachs, den Home Assistant nennt, und die
+Stunden ergeben zusammen genau den Tag. Eine in Home Assistant fehlende Stunde bleibt leer, ihre Energie steht in der
+Stunde danach („enthält n Stunden"). Das gilt für den Stunden-Verlauf in *Cockpit → Tag*, für Direktverbrauch,
+Überschuss und Defizit der Tage, für Tagesprofil und Top-Stunden in *Cockpit → Monat* und für die Stundenform der
+Wärme-Sichten. Tage älter als zwei Jahre zeigen ihren Stunden-Verlauf wieder, soweit deine HA-Statistik zurückreicht
+([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag), [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+
 **Werkbank: Werte vor dem Sensorbeginn verwerfen:** Hast du einem Feld einen neuen Sensor zugeordnet und der alte hat
 vorher falsche Werte geliefert, kommst du jetzt an diese Werte heran. Die neue Operation der Reparatur-Werkbank verwirft
 für **ein** Feld die Werte vor dem Beginn des neuen Sensors — im HA-Spiegel und in den Stunden- und Tageswerten, nur

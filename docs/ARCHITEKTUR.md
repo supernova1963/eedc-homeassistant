@@ -536,9 +536,11 @@ Die folgenden Felder (`stamm_*`, `ansprechpartner_*`, `wartung_*`) wurden aus de
 Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-Bauform", Etappen E1–E4f, Bauplan
 `bauplan-ha-bauform-s1-s2`). Seit E4 lesen **alle Tages-, Monats- und Jahressummen** daraus, wo die Kanäle den Zeitraum
 voll decken (je Zeitraum und Gruppe eine Wahl, ADR-002/**P14**); sonst rechnet der bisherige Leser aus Stunden-, Tages-
-und Monatszeilen. Stundenprofile, Kurven, Energieprofil-Stunden, die stundengepaarten Spalten, die Werkbank und die
-Prognose-Leser bleiben bis S3 auf dem Bestand; `TagesEnergieProfil`, `TagesZusammenfassung` und `sensor_snapshots` laufen
-unverändert weiter (bis S5 wird keine Spalte gelöscht, kein Schreiber abgeschaltet).
+und Monatszeilen. Seit dem zweiten Paket (S3) lesen auch die **Stunden** eines Kanal-Tags daraus (Stunden-Verlauf,
+stundengepaarte Spalten, Stundenform der Wärme-Sichten — „Kanal-Stundentag" unter *Energieprofil Service*); die
+Kennzahl- und Prognose-Leser auf Stundenwerten, Spitzen, Vollzyklen, Performance Ratio und die Mittelwerte der Stunde
+(Ladestand, Preise, Wetter) bleiben auf dem Bestand. `TagesEnergieProfil`, `TagesZusammenfassung` und `sensor_snapshots`
+laufen unverändert weiter (bis S5 wird keine Spalte gelöscht, kein Schreiber abgeschaltet).
 
 | Tabelle | Inhalt |
 | --- | --- |
@@ -579,7 +581,10 @@ nächsten Lauf) holt für jeden Spiegel-Kanal die ganze Historie der heutigen HA
 rückwärts vor die erste Kanal-Zeile, in Blöcken von 31 Tagen, je Block eine kurze eigene Schreib-Transaktion; HA wird nur
 zwischen zwei Transaktionen gelesen, der Stundenlauf wartet also nie auf HA. Ein abgebrochener Lauf setzt an der ersten
 vorhandenen Zeile fort, ein zweiter schreibt nichts; fällt HA unterwegs aus, bekommt der Kanal keine Marke. Fortschritt und
-Ergebnis stehen im Aktivitätsprotokoll. **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die
+Ergebnis stehen im Aktivitätsprotokoll. **Ohne HA (S3, E-S3-4):** dieselbe Aufgabe füllt die eigene Summe eines Zählers
+**ohne** HA-Sensor aus seinen gespeicherten stündlichen Zählerständen (`sensor_snapshots`, nur stündliche Reihen, nicht
+`live_fallback`/`unknown`) — dieselbe Rechenstelle wie der Stundenlauf, blockweise, Marke je Kanal; Reihen mit einem Stand
+je Tag werden gezählt und übersprungen (Kalendertag, S4). **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die
 bisherigen Stunden- und Tageszeilen werden nicht in Kanäle umgewandelt — sie bleiben die Quelle für Zeiträume, die die Kanäle
 nicht voll decken (je Tag bzw. Monat EINE Quellenwahl).
 
@@ -613,7 +618,9 @@ Aufruf, gleich wie lang der Zeitraum ist. Ohne volle Abdeckung gibt es keinen We
 Monats), dazu den Kalendermonat des HA-Monatslesers (`[1. 00:00, 1. 00:00)`) für die Leser, die heute mit ihm rechnen; `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
 Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefert je Monat Δ, Abdeckung und diese eine
 Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
-importieren die Schicht nur die Monats-Fakten und benannte Tages-Leser (Wächter `test_kanal_lesen_waechter.py`). Seit E4f
+importieren die Schicht — seit S3 samt Kanal-Stundentag (`stunden_leser.py`, `stunden_adapter.py`) — nur die
+Monats-Fakten und benannte Tages-Leser, heute genau einer: `services/energie_profil/kanal_stunden.py` (Wächter
+`test_kanal_lesen_waechter.py`). Seit E4f
 fasst `zellen_stapel` den Zuwachs mehrerer Zeiträume je (Wochentag, Uhrstunde) in einer Anweisung zusammen — die Gewichte
 eines Zeitfenster-Tarifs.
 
@@ -1484,8 +1491,28 @@ die Fassade, die die öffentlichen Namen re-exportiert), `backend/models/tages_e
 | `aggregations_quelle.py` | Vorbedingung: gibt es überhaupt eine Quelle für diesen Tag? |
 | `rollup.py` | `rollup_month()` — Tageszeilen → `Monatsdaten`-Felder |
 | `_helpers.py` | Wetter-IST, SoC, Betriebsmodus, Strompreis je Stunde |
+| `kanal_stunden.py` | **der eine Tages-Leser der Stunden-Sichten** (HA-Bauform S3): Mischzeilen eines Kanal-Tags für `/stunden`, `tage-werte`, `monat` und die Wärme-Sichten (unten) |
 
 **Funktion:** Langfristige Persistierung stündlicher Energiedaten. HA-History hat nur ~10 Tage Retention — dieser Service sichert die Daten dauerhaft in SQLite.
+
+**Kanal-Stundentag (HA-Bauform, zweites Paket S3).** Die Stunden eines Tages, dessen Gruppe die Kanäle voll decken, liest
+eedc aus den Kanälen — dieselbe Quellenwahl je Tag und Gruppe wie die Tagessummen (ADR-002/P14), dieselbe Komposition
+(Weg 2) je Stunde; die Regeln stehen in [BERECHNUNGEN §6b](BERECHNUNGEN.md#6b-energieprofil-berechnungen-tages-aggregation),
+Kasten „Der Kanal-Stundentag". Die Schreiber bleiben (`aggregate_day` schreibt die Stundenzeilen weiter).
+
+| Modul | Rolle |
+| --- | --- |
+| `services/kanal/stunden_leser.py` | der Kanal-Stundentag je Gruppe (Bilanz, E-Mob, Sonstiges, WP): `kanal_stundentag(tag)` und der Bereichs-Leser `kanal_stundentage(von, bis, gruppen=)` (EIN `stunden_stapel` je Gruppe über den Bereich, je Tag ausgeschnitten); Komposition je Stunde über `komponiere_bilanz_zeitraum` mit den Eingängen je Belegung (`_vorlage`), Tagesrest-Skalierung (Σ Stunden ≡ Tag); `modus_strom_stunden` für die Wärme-Sichten |
+| `services/kanal/stunden_adapter.py` | die 24 Stunden in der Form der Stundenzeile (`pv_kw` … `defizit_kw`, `waermepumpe_kw`, `wallbox_kw`, `spannen`) — nur Layer-Funktionen |
+| `services/energie_profil/kanal_stunden.py` | Mischzeilen: Mengen der Kanal-Gruppen aus dem Adapter, Ladestand/Wetter/Preise/Zählwerke/`komponenten` aus der Stundenzeile; `wp_stundenformen`/`wp_strom_je_stunde` für die Wärme-Sichten |
+| `services/verwerfen_vor_quellbeginn.py`, `services/kanal/verwerfen.py` | Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen" (Vorschau und Ausführung; Kanalzeilen der älteren Quellen vor `t`, im Bestand nur die Schlüssel des Feldes) |
+
+Keine Route ruft `stunden_leser`/`stunden_adapter` selbst (Wächter `test_kanal_lesen_waechter.py`). Proben:
+`test_kanal_stunden_gleichheit.py` (Adapter ↔ Stundenzeile, benannte Klassen), `test_kanal_stunden_summe.py` (Σ Stunden ≡
+Tag), `test_kanal_stundentage_bereich.py` (Bereich ≡ Tag, Abfrage-Budget), `test_kanal_stunden_vorlage.py` (Komposition je
+Stunde ≡ `waehle_und_komponiere`), `test_kanal_stunden_sichten.py`, `test_kanal_stunden_waerme.py`. Laufzeit an der
+Zwölf-Jahres-Kopie (Cockpit → Tag, warm): `tage-werte` über 90 Kanal-Tage ≈ 0,54 s gegen ≈ 0,35 s an einem Bestandstag
+(Werkzeug `plans/ha-bauform-werkzeug/laufzeit-grundlinie.py --tag`).
 
 **Datenmodelle:**
 

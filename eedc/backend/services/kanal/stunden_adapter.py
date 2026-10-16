@@ -79,12 +79,20 @@ class KanalStunden:
     klemm_stunden: tuple[int, ...]
 
 
+_RUND = None
+
+
 def _rund(wert, gerundet: bool):
+    """``aggregator.rund`` auf drei Stellen. Der Import ist spät (das Modul hängt an ``energie_profil``) und wird einmal
+    gemerkt — je Kanal-Tag rundet der Adapter einige hundert Werte (E-S3-6, Gate B)."""
+    global _RUND
     if not gerundet or wert is None:
         return wert
-    from backend.services.energie_profil.aggregator import rund
+    if _RUND is None:
+        from backend.services.energie_profil.aggregator import rund
 
-    return rund(wert, 3)
+        _RUND = rund
+    return _RUND(wert, 3)
 
 
 def _spannen_der_stunde(gruppen: Sequence[GruppenStunden], h: int) -> dict[str, int]:
