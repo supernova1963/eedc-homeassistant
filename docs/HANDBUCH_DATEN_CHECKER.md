@@ -545,6 +545,8 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 
 **Was eedc dann tut:** Es liefert für dieses Feld **keinen Wert** — im Monatsabschluss steht kein Vorschlag, in *Cockpit → Monat* bleibt der gespeicherte Wert stehen. Das ist Absicht: Eine Zahl, die aus zwei unzusammenhängenden Zählerläufen entsteht, sähe aus wie eine Messung und wäre keine.
 
+**Mit Kanälen (eigene Summe).** Führt eedc für das Feld einen Kanal mit eigener Summe aus den MQTT-Ständen, rechnet es den Zähler wie Home Assistant: Ein Stand unter 90 % des vorigen gilt als Neubeginn, die Summe läuft weiter — Tag, Monat und Jahr stimmen dann auch für einen Zähler, der jeden Tag auf null geht. Nicht verlässlich bleiben Live „heute" und „gestern" (sie vergleichen mit dem Stand um Mitternacht) und Geräte-Tageswerte aus der Zeit vor dem Kanal; einen Vorschlag im Monatsabschluss gibt es für so ein Feld weiterhin nicht. Die Meldung nennt dann, welche Felder über die Kanäle rechnen. Die Empfehlung bleibt dieselbe: den fortlaufenden Stand schicken.
+
 > ⚠ **eedc rechnet den fehlenden Teil auch nicht hoch**, obwohl es die Stundenstände hätte. Was zwischen dem letzten mitgeschriebenen Stand und dem Rücksprung verbraucht wird, taucht in keinem Stand mehr auf — eine hochgerechnete Zahl wäre systematisch zu niedrig und im Monatsabschluss per Knopfdruck ein gespeicherter Wert. Diese Entscheidung ist bewusst gefallen.
 
 #### Befunde

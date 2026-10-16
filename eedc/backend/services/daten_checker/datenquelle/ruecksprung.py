@@ -27,6 +27,43 @@ RUECKSPRUNG_FENSTER_TAGE = 30
 #: Wie viele betroffene Felder die Meldung beim Namen nennt.
 RUECKSPRUNG_BEISPIELE = 5
 
+#: Folge für Felder OHNE Kanal (N-341, Wortlaut bis S4 unverändert).
+_FOLGE_OHNE_KANAL = (
+    "Folge: eedc kann für diese Felder keine Tages- oder "
+    "Monatsmenge bilden, denn die Differenz zweier Stände aus "
+    "verschiedenen Zählerläufen ist keine Menge. Sie bleiben im "
+    "Monatsabschluss ohne Vorschlag. "
+)
+#: Folge für Felder MIT Kanal «Eigene Summe» (HA-Bauform S4-R-7, gemessen E-S4-2 Punkt 3): Tag, Monat und Jahr über die
+#: Kanäle wie HA; Live (Mitternachts-Snapshot), der Monatsabschluss-Vorschlag (MQTT-Felder haben keinen Kanal-Weg) und
+#: Geräte-Tageswerte vor dem Kanal (Bestandstag) nicht.
+_FOLGE_MIT_KANAL = (
+    "eedc führt für {wen} einen Kanal mit eigener Summe aus den MQTT-Ständen: "
+    "Tag, Monat und Jahr rechnen darüber wie Home Assistant — ein Zurücksetzen "
+    "gilt als Neubeginn, die Summe läuft weiter. Nicht verlässlich bleiben "
+    "Live „heute“ und „gestern“ sowie Geräte-Tageswerte aus der Zeit vor dem "
+    "Kanal; einen Vorschlag im Monatsabschluss gibt es für diese Felder nicht. "
+)
+
+
+def _texte(betroffen: list, mit_kanal: set[str]) -> tuple[str, str]:
+    """Meldung und Folge-Satz (HA-Bauform S4-R-7): ohne Kanal der Wortlaut von N-341; mit Kanal «Eigene Summe» sagt der
+    Text, was über die Kanäle geht und was nicht; gemischt beides mit Namen. ``betroffen``: ``(name, anzahl, …, key)``."""
+    n = len(betroffen)
+    mit = [b for b in betroffen if b[-1] in mit_kanal]
+    ohne = [b for b in betroffen if b[-1] not in mit_kanal]
+    kopf = f"{n} Zähler-Feld(er) werden zwischendurch zurückgesetzt — "
+    if not mit:
+        return kopf + "daraus entsteht keine Monatsmenge", _FOLGE_OHNE_KANAL
+    if not ohne:
+        return (kopf + "Tag und Monat rechnet eedc über die Kanäle, Live und Monatsabschluss nicht",
+                "Folge: " + _FOLGE_MIT_KANAL.format(wen="diese Felder"))
+    namen_mit = ", ".join(b[0] for b in mit[:RUECKSPRUNG_BEISPIELE])
+    namen_ohne = ", ".join(b[0] for b in ohne[:RUECKSPRUNG_BEISPIELE])
+    return (kopf + f"{len(mit)} davon rechnet eedc über die Kanäle, für {len(ohne)} entsteht keine Monatsmenge",
+            "Folge: " + _FOLGE_MIT_KANAL.format(wen=namen_mit) + "Für " + namen_ohne + " gilt: "
+            + _FOLGE_OHNE_KANAL.removeprefix("Folge: "))
+
 
 class RuecksprungChecks:
     """Prüfung rückspringender Zählerstände."""
@@ -67,12 +104,22 @@ class RuecksprungChecks:
         ([[feedback_daten_checker_kein_akzeptiert]] — melden und erklären,
         nicht nörgeln).
 
+        ⭐ **HA-Bauform S4-R-7 (Bauplan S4 §4, Entscheid S4-E4 A, gemessen E-S4-2 Punkt 3).** Hat der Schlüssel eines
+        betroffenen Felds einen Kanal mit **Eigener Summe** (Familie Mitschrift: HAs 90-%-Regel über die MQTT-Rohstände),
+        rechnen Tag, Monat und Jahr über die Kanäle wie Home Assistant — ein Zurücksetzen gilt als Neubeginn (Probe
+        ``test_s4_r7_tagesreset_zaehler.py``). Der Text sagt dann, was geht und was nicht: Live „heute“/„gestern“
+        (Mitternachts-Snapshot), der Monatsabschluss-Vorschlag (MQTT-Felder haben keinen Kanal-Weg; N-341 lehnt die
+        Standreihe weiter ab) und Geräte-Tageswerte vor dem Kanal nicht. Die Empfehlung an der Quelle bleibt der erste
+        Satz der Lösung, die Schwere WARNING (Live fehlt). Der Kasten in ``snapshot/reader.py`` (Entscheid 28.08.) gilt
+        für Live und Bestand unverändert; ohne Kanal bleibt der Wortlaut von N-341.
+
         Args:
             jetzt: Endzeitpunkt des Prüffensters. Default ist die Uhr; die
                 Naht existiert für die Proben (s. Kommentar im Rumpf).
         """
         from backend.core.field_definitions import FELD_LABELS
         from backend.models.investition import Investition as _Inv
+        from backend.models.kanal import ART_SUM, FAMILIE_MITSCHRIFT, Kanal, KanalQuelle
         from backend.services.snapshot.reader import (
             MQTT_AKTIV_TAGE, finde_zaehler_ruecksprunge, mqtt_zaehler_keys,
         )
@@ -114,7 +161,7 @@ class RuecksprungChecks:
             feld = sensor_key.split(":", 1)[-1]
             return FELD_LABELS.get(feld, FELD_LABELS.get(f"{feld}_kwh", feld))
 
-        betroffen: list[tuple[str, int, datetime, float, float]] = []
+        betroffen: list[tuple[str, int, datetime, float, float, str]] = []
         for sensor_key in sorted(keys):
             spruenge = await finde_zaehler_ruecksprunge(
                 self.db, anlage.id, sensor_key, von, bis,
@@ -122,7 +169,7 @@ class RuecksprungChecks:
             if spruenge:
                 zeitpunkt, vorher, nachher = spruenge[-1]  # der jüngste
                 betroffen.append(
-                    (_feld_name(sensor_key), len(spruenge), zeitpunkt, vorher, nachher)
+                    (_feld_name(sensor_key), len(spruenge), zeitpunkt, vorher, nachher, sensor_key)
                 )
 
         if not betroffen:
@@ -134,28 +181,29 @@ class RuecksprungChecks:
         if len(betroffen) > RUECKSPRUNG_BEISPIELE:
             namen += f" (+{len(betroffen) - RUECKSPRUNG_BEISPIELE} weitere)"
 
-        _name, _anzahl, zeitpunkt, vorher, nachher = betroffen[0]
+        _name, _anzahl, zeitpunkt, vorher, nachher, _key = betroffen[0]
         beleg = (
             f"Zuletzt am {zeitpunkt.strftime('%d.%m.%Y um %H:%M')} bei „{_name}“: "
             f"{fmt_zahl(vorher, 1)} → {fmt_zahl(nachher, 1)}."
         )
+        # S4-R-7: welche Schlüssel einen Kanal mit Eigener Summe haben (eine Abfrage, kein Lese-Schicht-Import).
+        mit_kanal = set((await self.db.execute(
+            select(Kanal.key).join(KanalQuelle, KanalQuelle.kanal_id == Kanal.id).where(
+                Kanal.anlage_id == anlage.id, Kanal.art == ART_SUM, KanalQuelle.familie == FAMILIE_MITSCHRIFT,
+            ).distinct()
+        )).scalars().all())
+        meldung, folge = _texte(betroffen, mit_kanal)
 
         return [CheckErgebnis(
             kategorie=kat,
             schwere=CheckSeverity.WARNING,
-            meldung=(
-                f"{len(betroffen)} Zähler-Feld(er) werden zwischendurch "
-                f"zurückgesetzt — daraus entsteht keine Monatsmenge"
-            ),
+            meldung=meldung,
             details=(
                 f"Ein Zählerstand muss fortlaufend steigen. Bei diesen Feldern "
                 f"fällt er in den letzten {RUECKSPRUNG_FENSTER_TAGE} Tagen "
                 f"wieder auf einen niedrigeren Wert zurück — typisch für ein "
                 f"Feld, das „heute“ oder „diesen Monat“ meint. {beleg} "
-                f"Folge: eedc kann für diese Felder keine Tages- oder "
-                f"Monatsmenge bilden, denn die Differenz zweier Stände aus "
-                f"verschiedenen Zählerläufen ist keine Menge. Sie bleiben im "
-                f"Monatsabschluss ohne Vorschlag. "
+                f"{folge}"
                 f"Lösung: Schicke den fortlaufenden Stand statt des Tageswerts. "
                 f"Kommt der Wert aus einem Home-Assistant-Helfer, steht die "
                 f"Einstellung unter Einstellungen → Geräte & Dienste → Helfer: "
