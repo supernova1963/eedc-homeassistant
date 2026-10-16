@@ -451,6 +451,13 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 
 > **Ohne Home Assistant** gilt dasselbe für Zähler, die eedc über MQTT mitschreibt, ab dem ersten Monat, den diese
 > Mitschrift ganz abdeckt; davor zählen diese Größen erst mit dem Monatsabschluss.
+>
+> **Wenn die HA-Statistik gerade nicht antwortet** (Neustart von Home Assistant, Recorder noch nicht bereit), liest der
+> laufende Monat E-Mobilität, Sonstiges und Wärmepumpe trotzdem aus den gespiegelten Zählerständen — dieselben Zahlen
+> wie der Verlauf in *Cockpit → Jahr*. Bis 4.1.7 fehlten in diesem Moment der Strom eines Erzeugers wie BHKW im
+> Eigenverbrauch, die Heimladung, die dienstlichen Ladekosten und der Strom je Betriebsart; ein erneutes Öffnen, sobald
+> Home Assistant wieder da war, zeigte sie wieder. Ein vergangener Monat ohne Abschluss braucht dafür weiterhin die
+> HA-Statistik (oder den Abschluss).
 
 > **Netzladung des Speichers vor dem Abschluss.** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, nennt ein
 > Monat ohne Abschluss die Netzladung schon vorher — als **Summe der abgelaufenen Tage**, dieselben Zahlen wie in
@@ -518,7 +525,11 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 > und Netzbezug erfasst sind: Hat ein Import die Monatszeile ohne diese Werte angelegt (etwa nur mit Wallbox-Daten),
 > zählen Übersicht, Jahresbericht, HA-Sensor, *Auswertungen → Tabelle* und der Community-Upload den Monat bei
 > Eigenverbrauch, Autarkie und Ersparnis nicht mit (die Tabelle zeigt dort „–"), bis das Feld erfasst ist; der
-> Daten-Checker nennt ihn („Netzbezug nicht erfasst"). Kann ein Monat gar nicht berechnet
+> Daten-Checker nennt ihn („Netzbezug nicht erfasst"). Dasselbe gilt in der Monatsliste und im Verlauf hier für einen
+> Monat **ohne** Monatsabschluss, dessen Einspeisung oder Netzbezug an keinem Tag gemessen wurde (etwa eine Anlage ohne
+> Einspeisungs-Zähler): er zeigt seine PV-Erzeugung, aber „–" bei Netzwerten, Eigenverbrauch, Autarkie und Ersparnis —
+> wie der Kopf darüber und *Cockpit → Monat* —, statt Eigenverbrauchsquote 100 % und eine Ersparnis auf die ganze
+> Erzeugung. Kann ein Monat gar nicht berechnet
 > werden, nennt die Zeile ihn ebenfalls; das Jahresergebnis bleibt dann — wie bei einer fehlenden Stromrechnung — leer
 > („—“) und nennt den Monat als fehlenden Posten.
 > **Ohne Home Assistant** zeigt *Cockpit → Monat* einen solchen Monat erst nach dem Abschluss — MQTT-Zählerstände und

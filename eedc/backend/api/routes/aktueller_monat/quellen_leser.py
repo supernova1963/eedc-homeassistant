@@ -114,14 +114,30 @@ async def _ha_statistik_aus_kanaelen_mit_marke(
     return out, True
 
 
+def _kanal_quelle(
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]], ohne_ha: Optional[DatenquelleInfo],
+) -> Optional[DatenquelleInfo]:
+    """Die Herkunft der Kanal-Gruppen: auf dem HA-Weg die der HA-Statistik (wie bisher), ohne antwortende HA-Statistik
+    die, die der Aufrufer für diesen Fall hereinreicht (N-750, ``ohne_ha``) — ``None``: kein Weg, die Gruppen bleiben
+    aus (der Zustand vor N-750 für jeden Aufrufer, der ``ohne_ha`` nicht setzt). Die Uhr liest der Aufrufer (Modul-
+    Docstring)."""
+    if ha_stats:
+        return next(iter(ha_stats.values()))[1]
+    return ohne_ha
+
+
 async def _geraete_aus_kanaelen(
     db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
     ha_stats: dict[str, tuple[float, DatenquelleInfo]], *, monats_fakt, bilanz_ersetzt: bool,
+    sonstige_erzeuger: Optional[dict] = None, ohne_ha: Optional[DatenquelleInfo] = None,
 ):
     """HA-Bauform E4c (U5/U6): die E-Mob- und die Sonstiges-Gruppe des Kalendermonats aus den Kanälen.
 
-    Nur auf dem HA-Weg (``ha_stats`` geliefert) und nur, wo der Monat für die Gruppe KEINE Zeile trägt (gespeichert
-    schlägt gerechnet, P8). Je Gruppe die Quellenwahl des Lesers (``kanal/geraete_leser.geraete_kalendermonate``):
+    Nur wo der Monat für die Gruppe KEINE Zeile trägt (gespeichert schlägt gerechnet, P8). ⭐ **N-750 (16.10.2026):**
+    nicht mehr nur auf dem HA-Weg — die Weiche ist die Kanal-Deckung der Gruppe, nicht die Antwort der HA-Statistik in
+    dieser Anfrage (ADR-002 P14, wie ``monats_fakten/laden.py``). Ohne HA-Statistik ruft der Aufrufer sie im laufenden
+    Monat mit leerem ``ha_stats`` und der Herkunft ``ohne_ha`` (``_quellen_des_monats``, ``_kanal_quelle``). Je Gruppe
+    die Quellenwahl des Lesers (``kanal/geraete_leser.geraete_kalendermonate``):
 
     * **E-Mob** gedeckt ⇒ die Gerätefelder (``inv_<id>_<feld>``) sind das Kanal-Δ des Kalendermonats (ohne Deckel, ohne
       Rücksprung-Verwurf, wie die Bilanz-Gruppe B-2), und der PV-Anteil der Heimladung ist der des abgeleiteten Kanals
@@ -130,15 +146,17 @@ async def _geraete_aus_kanaelen(
     * **Sonstiges** — Verbraucher aus ihrer Gruppe (Entweder-oder W2-R4), Erzeuger aus den Kanal-Werten der
       Bilanz-Gruppe (nur wenn die Bilanz-Gruppe den Monat aus den Kanälen nahm, ``bilanz_ersetzt``) — als Zeilen durch
       dieselbe Faltung wie der Fakt (``monats_fakten.sonstiges_aus_zeilen``). Vorher führte Cockpit → Monat Sonstiges
-      nur aus dem Monats-Fakt, ohne Abschluss also gar nicht (EV/Autarkie ohne BHKW).
+      nur aus dem Monats-Fakt, ohne Abschluss also gar nicht (EV/Autarkie ohne BHKW). Ohne HA-Statistik trägt die
+      fünfte Quelle die Bilanz (``lade_monats_summen``, Weg 2); die Erzeuger kommen dann aus DERSELBEN Summe
+      (``sonstige_erzeuger``, ``TagesMonatsSumme.sonstige_erzeuger_je_inv`` — leer, wo sie den Bestand liest), wie in
+      den Monats-Fakten (``laden._falte_kanal_gruppen``).
 
     Returns: ``(ha_stats', emob, sonstiges)`` — ``emob`` = ``(gedeckt, quote)``, ``sonstiges`` = ``SonstigesFakten``
     oder ``None``.
     """
-    if not ha_stats:
-        return ha_stats, (False, None), None
+    quelle = _kanal_quelle(ha_stats, ohne_ha)
     typen = {getattr(i, "typ", None) for i in investitionen}
-    if not typen & {"e-auto", "wallbox", "sonstiges"}:
+    if quelle is None or not typen & {"e-auto", "wallbox", "sonstiges"}:
         return ha_stats, (False, None), None
     from backend.services.kanal.geraete_leser import geraete_kalendermonate
     from backend.services.monats_fakten import sonstiges_aus_zeilen
@@ -149,7 +167,6 @@ async def _geraete_aus_kanaelen(
     emob_zeile = monats_fakt is not None and bool(
         monats_fakt.emob.ladedaten_je_inv or monats_fakt.emob.dienstlich_ladedaten_je_inv)
     out = dict(ha_stats)
-    quelle = next(iter(ha_stats.values()))[1]
     typ_je_inv = {str(i.id): i.typ for i in investitionen}
 
     emob = (False, None)
@@ -178,6 +195,9 @@ async def _geraete_aus_kanaelen(
                     key = f"inv_{inv.id}_{feld}"
                     if key in out and _categorize_counter(feld, "sonstiges", params) == "erzeugung_sonstiges":
                         zeilen.setdefault(inv.id, {})[feld] = out[key][0]
+        elif sonstige_erzeuger:
+            for inv_id, kwh in sonstige_erzeuger.items():
+                zeilen.setdefault(int(inv_id), {})["erzeugung_kwh"] = kwh
         if zeilen:
             sonstiges = sonstiges_aus_zeilen(investitionen, (jahr, monat), zeilen)
             for feld, wert in (("sonstiges_erzeugung_kwh", sonstiges.erzeugung_kwh),
@@ -189,12 +209,13 @@ async def _geraete_aus_kanaelen(
 
 async def _wp_aus_kanaelen(
     db: AsyncSession, anlage: Anlage, investitionen, jahr: int, monat: int,
-    ha_stats: dict[str, tuple[float, DatenquelleInfo]], *, monats_fakt,
+    ha_stats: dict[str, tuple[float, DatenquelleInfo]], *, monats_fakt, ohne_ha: Optional[DatenquelleInfo] = None,
 ):
     """HA-Bauform E4d (U4, N-630): die WP-Gruppe des Kalendermonats aus den Kanälen.
 
-    Nur auf dem HA-Weg (``ha_stats`` geliefert) und nur, wo der Monat KEINE WP-Zeile trägt (gespeichert schlägt
-    gerechnet, P8). Deckt die WP-Gruppe den Kalendermonat (``kanal/wp_leser.wp_kalendermonate``):
+    Nur, wo der Monat KEINE WP-Zeile trägt (gespeichert schlägt gerechnet, P8). ⭐ **N-750 (16.10.2026):** nicht mehr nur
+    auf dem HA-Weg — ohne HA-Statistik ruft der Aufrufer sie im laufenden Monat mit leerem ``ha_stats`` und der Herkunft
+    ``ohne_ha`` (Docstring ``_geraete_aus_kanaelen``). Deckt die WP-Gruppe den Kalendermonat (``kanal/wp_leser.wp_kalendermonate``):
 
     * die Gerätefelder (``inv_<id>_<feld>``: Strom, Wärme je Feld, Betriebsart-Strom, Kälte) sind das Kanal-Δ des
       Kalendermonats — ohne Deckel, ohne Rücksprung-Verwurf, wie die Bilanz-Gruppe (B-2); K3/D1 fallen danach wie für
@@ -205,7 +226,8 @@ async def _wp_aus_kanaelen(
 
     Returns: ``(ha_stats', wp, zeilen)`` — ``wp`` = ``WpFakten`` oder ``None``, ``zeilen`` = die Kanal-Zeilen je Gerät.
     """
-    if not ha_stats or not any(getattr(i, "typ", None) == "waermepumpe" for i in investitionen):
+    quelle = _kanal_quelle(ha_stats, ohne_ha)
+    if quelle is None or not any(getattr(i, "typ", None) == "waermepumpe" for i in investitionen):
         return ha_stats, None, {}
     if monats_fakt is not None and "waermepumpe" in monats_fakt.meta.typen_mit_zeile:
         return ha_stats, None, {}
@@ -218,7 +240,6 @@ async def _wp_aus_kanaelen(
         return ha_stats, None, {}
     abgeleitet = set(MODUS_STROM_FELD.values()) | {MODUS_ABDECKUNG_FELD}
     out = dict(ha_stats)
-    quelle = next(iter(ha_stats.values()))[1]
     typ_je_inv = {str(i.id): i.typ for i in investitionen}
     for inv_id, zeile in z.zeilen.items():
         for feld, wert in zeile.items():

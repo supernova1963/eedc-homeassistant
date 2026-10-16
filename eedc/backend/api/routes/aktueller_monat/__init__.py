@@ -424,6 +424,7 @@ async def _collect_tagesebene_data(
     wp_von: Optional[date] = None,
     wp_bis: Optional[date] = None,
     abgetretene_bkw: frozenset = frozenset(),
+    summen: Optional[dict] = None,
 ) -> dict[str, tuple[float, DatenquelleInfo]]:
     """Die **fünfte** Quelle: die lokale Tagesebene (Konfidenz 80 %, N-472).
 
@@ -465,6 +466,9 @@ async def _collect_tagesebene_data(
     ⚠ **Kein HA-Zugriff.** Die Tagesebene liegt lokal; das war die Auflage, unter
     der N-121 entschieden wurde, und sie gilt hier genauso.
 
+    ``summen``: das Ergebnis von ``lade_monats_summen`` für diesen Monat, wenn der Aufrufer es schon geladen hat
+    (N-750: ``_quellen_des_monats`` braucht dieselbe Summe für die Sonstiges-Erzeuger) — sonst lädt die Quelle selbst.
+
     Returns:
         ``{feld: (menge, DatenquelleInfo)}`` — Größen mit ``> 0``; Einspeisung und
         Netzbezug auch mit gemessener 0 (mindestens eine Stunde mit Wert, N-585).
@@ -474,7 +478,8 @@ async def _collect_tagesebene_data(
     # der Bilanz-Gruppe den Monat, kommt er aus den Kanälen (Weg 2), sonst unverändert aus der Tagesebene.
     from backend.services.kanal.bilanz_leser import lade_monats_summen
 
-    summen = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
+    if summen is None:
+        summen = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
     summe = summen.get((jahr, monat))
     wp_mengen = wp_mengen or {}
 
@@ -1253,16 +1258,38 @@ async def _quellen_des_monats(
         if ist_aktueller_monat else {}
     )
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
+    ha_geliefert = bool(ha_stats)
     ha_stats, _bilanz_aus_kanaelen = await _ha_statistik_aus_kanaelen_mit_marke(
         db, anlage, investitionen, jahr, monat, ha_stats)
+    # ⭐ N-750 (16.10.2026): die Kanal-Gruppen hängen an der Kanal-Deckung, nicht an der Antwort der HA-Statistik in
+    # dieser Anfrage (ADR-002 P14, wie die Monats-Fakten). Ohne HA-Statistik tragen sie im LAUFENDEN Monat dieselbe
+    # Präzedenz wie auf dem HA-Weg — sie stehen im Platz der HA-Statistik und überschreiben MQTT und die fünfte Quelle
+    # für ihre Schlüssel (gemessen: MQTT trägt dieselben Schlüssel mit denselben Werten aus derselben Standreihe,
+    # keine Addition; Bericht FUND-N750-N751 Etappe 1); die Herkunft ist die der lokalen Daten, die Marke
+    # `quellen.ha_statistics` bleibt die des HA-Sammlers. Die Bilanz trägt dann die fünfte Quelle (`lade_monats_summen`,
+    # Weg 2), und aus DERSELBEN Summe kommen die Sonstiges-Erzeuger (`sonstige_erzeuger_je_inv`). Abgeschlossene Monate
+    # ohne HA bleiben wie bisher: ohne Abschluss trägt dort keine Quelle die Bilanz (N-472).
+    _summen_laufend = None
+    _ohne_ha = None
+    if ist_aktueller_monat:
+        from backend.services.kanal.bilanz_leser import lade_monats_summen
+
+        _summen_laufend = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
+        if not ha_geliefert:
+            _ohne_ha = DatenquelleInfo(quelle="tagesebene", konfidenz=80, zeitpunkt=datetime.now().isoformat())
+    _erzeuger_ohne_ha = (
+        getattr(_summen_laufend.get((jahr, monat)), "sonstige_erzeuger_je_inv", None)
+        if _ohne_ha is not None else None
+    )
     # HA-Bauform E4c: E-Mob- und Sonstiges-Gruppe des Kalendermonats aus den Kanälen (Docstring dort).
     ha_stats, _emob_kanal, _sonstiges_kanal = await _geraete_aus_kanaelen(
         db, anlage, investitionen, jahr, monat, ha_stats,
         monats_fakt=monats_fakt, bilanz_ersetzt=_bilanz_aus_kanaelen,
+        sonstige_erzeuger=_erzeuger_ohne_ha, ohne_ha=_ohne_ha,
     )
     # HA-Bauform E4d: die WP-Gruppe des Kalendermonats aus den Kanälen (Docstring dort, N-630).
     ha_stats, _wp_kanal, _wp_kanal_zeilen = await _wp_aus_kanaelen(
-        db, anlage, investitionen, jahr, monat, ha_stats, monats_fakt=monats_fakt,
+        db, anlage, investitionen, jahr, monat, ha_stats, monats_fakt=monats_fakt, ohne_ha=_ohne_ha,
     )
     # N-555: welche Heimlade-Felder hat die HA-Statistik in einem ABGESCHLOSSENEN
     # Monat überhaupt (auch mit 0)? Im laufenden Monat genügt die Quelle.
@@ -1303,6 +1330,7 @@ async def _quellen_des_monats(
                 i for i in investitionen
                 if i.typ in ("pv-module", "balkonkraftwerk") and i.ist_aktiv_im_monat(jahr, monat)
             ]),
+            summen=_summen_laufend,
         )
         if ist_aktueller_monat else {}
     )
@@ -1342,7 +1370,8 @@ async def _quellen_des_monats(
     )
     return {
         "kontext": kontext, "monats_fakt": monats_fakt, "saved": saved, "connector": connector,
-        "mqtt_energy": mqtt_energy, "ha_stats": ha_stats, "_emob_kanal": _emob_kanal,
+        # N-750: für die Quellen-Übersicht nur, was die HA-Statistik geliefert hat (ohne sie: die Kanal-Gruppen allein).
+        "mqtt_energy": mqtt_energy, "ha_stats": ha_stats if ha_geliefert else {}, "_emob_kanal": _emob_kanal,
         "_sonstiges_kanal": _sonstiges_kanal, "_wp_kanal": _wp_kanal, "_wp_kanal_zeilen": _wp_kanal_zeilen,
         "ha_felder_mit_daten": ha_felder_mit_daten, "_tages_wp_mengen": _tages_wp_mengen, "tagesebene": tagesebene,
         "resolved": resolved, "teilzeitraum": teilzeitraum,
