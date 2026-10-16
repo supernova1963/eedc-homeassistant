@@ -14,13 +14,17 @@ eigener HA-Zähler `sensor.energy_solar_generation_daily` zeitgleich **7,65**
 zeigte (+31 %). Seine Datenquellen-Seite (Screenshot in #376) zeigt beides:
 `PV-Erzeugung Zählerstand (kWh)` zugeordnet, beide Modulgruppen auf „Keine".
 
-**Die Präzedenz, die der Hilfetext zusagt** — und die hier geprüft wird:
+**Die Präzedenz** — und die hier geprüft wird:
 
-1. Erzeuger-Einzelzähler, sobald **einer** misst („sobald einer gemessen wird,
-   zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist"),
+1. Erzeuger-Einzelzähler, wenn **jeder** Erzeuger misst (hier: das einzige Modul),
 2. sonst der **anlagenweite** PV-Zähler („Über den Anlagen-Zählerstand
    abgedeckt — als Summe der ganzen Anlage, auch für Tag und Stunde"),
 3. sonst Trapez über den Leistungssensor (das bisherige Verhalten).
+
+⚠ Bis N-752 (16.10.2026) stand unter 1. „sobald **einer** misst" mit dem Hilfesatz „sobald einer gemessen wird, zählt
+für Tag und Stunde nur noch, was je Erzeuger gemessen ist" — der Satz wurde mit #406 entfernt. Messen einige Erzeuger
+und andere nicht, verteilt Live seit N-752 wie der Tag den Rest des Anlagenzählers auf die ohne Zähler
+(``test_n752_live_pv_wie_tag.py``).
 
 Drei Proben: der Sprengsatz (2), die Gegenprobe (1 gewinnt) und die
 Positivkontrolle (3 bleibt unverändert, wenn kein Zähler da ist).
@@ -101,6 +105,9 @@ def _lauf(anlage, history, units):
             return await get_tages_kwh(
                 anlage, db=None, tage_zurueck=0,
                 inv_types={"7": "pv-module"},
+                # N-752: die Erzeuger der Anlage (eine Query ohne DB nicht möglich) — das eine Modul, 10 kWp.
+                erzeuger=[SimpleNamespace(id=7, typ="pv-module", parent_investition_id=None, leistung_kwp=10.0,
+                                          parameter={}, aktiv=True)],
             )
 
     return asyncio.run(_inner())
@@ -129,9 +136,9 @@ def test_erzeuger_zaehler_hat_vorrang_vor_anlagen_zaehler():
     )
 
     assert result.get("pv") == pytest.approx(3.2, abs=0.1), (
-        "Die Präzedenz ist umgekehrt zum Anlagen-Zähler: sobald ein Erzeuger "
-        "selbst misst, zählt nur noch das Gemessene (so sagt es der Hilfetext "
-        f"auf der Datenquellen-Fläche). War: {result.get('pv')!r}"
+        "Misst jeder Erzeuger selbst (hier das einzige Modul), zählt das Gemessene — der "
+        "Anlagenzähler füllt nur Erzeuger ohne Zähler (N-752, W2-R3). "
+        f"War: {result.get('pv')!r}"
     )
 
 

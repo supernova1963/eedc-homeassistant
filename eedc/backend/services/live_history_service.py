@@ -13,7 +13,6 @@ Enthält:
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import select
@@ -269,20 +268,44 @@ async def _lade_inv_types(anlage: Anlage, db: AsyncSession) -> dict[str, str]:
 async def _lade_erzeuger(
     anlage: Anlage, db: AsyncSession, inv_types: dict[str, str],
 ) -> list:
-    """Die Elternschaft für die BKW-Abtretung (N-536) — nur, wenn ein BKW gepflegt ist."""
-    if BKW_TYP in (inv_types or {}).values():
-        erz_result = await db.execute(
-            select(
-                Investition.id,
-                Investition.typ,
-                Investition.parent_investition_id,
-            ).where(Investition.anlage_id == anlage.id, aktiv_jetzt())
-        )
-        return [
-            SimpleNamespace(id=r[0], typ=r[1], parent_investition_id=r[2])
-            for r in erz_result.all()
-        ]
-    return []
+    """Die aktiven Erzeuger mit Elternschaft (BKW-Abtretung, N-536) und kWp (N-752: die Live-PV verteilt den Rest des
+    Anlagenzählers wie der Tag, ``live_pv_verteilung``) — eine Query (alle aktiven Investitionen; die Typen filtern die
+    Leser: ``kuerze_bkw_in_werte_map`` und ``bilanz_leser._traeger``).
+    Bis N-752 nur bei vorhandenem Balkonkraftwerk und ohne kWp (``SimpleNamespace(id, typ, parent_investition_id)``)."""
+    if not inv_types:
+        return []
+    return list((await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id, aktiv_jetzt())
+    )).scalars().all())
+
+
+def live_pv_verteilung(erzeuger: list, eigen: dict[int, float], anlagenzaehler_kwh: Optional[float]):
+    """⭐ N-752 (16.10.2026): die PV eines Live-Tages nach der Layer-Regel des Tages (W2,
+    ``pv_verteilung.loese_pv_zeitraum_auf``) — Einzelzähler bleiben, der Rest ``max(0, Anlagenzähler − Σ Einzelzähler)``
+    geht kWp-gewichtet auf die Erzeuger ohne eigenen Zähler (auch auf die Lücken der Kinder eines Balkonkraftwerks).
+    Dieselben Träger wie der Tag (``kanal/bilanz_leser._traeger``: aktive PV-Module und Balkonkraftwerke, kWp-Gewicht
+    ``pv_monatswerte._kwp_gewicht``). ``None`` ohne Anlagenzähler, ohne Einzelzähler oder ohne Träger — dann gilt die
+    alte Kaskade (F-49): Einzelzähler, sonst Anlagenzähler. Gemeinsam für den HA-Pfad (``_pv_zaehler_kwh``) und den
+    MQTT-Zwilling (``mqtt_energy_history_service._compute_deltas``).
+
+    Bis N-752 zählte Live, sobald EIN Erzeuger selbst misst, nur die Einzelzähler — der Anteil der Erzeuger ohne Zähler
+    fehlte (gemessen an der PV-Matrix: F03 3,0 statt 21,0 kWh, F04 12,0 statt 21,0), während Cockpit → Tag ihn seit
+    #406 bzw. der HA-Bauform aus dem Anlagenzähler verteilt."""
+    if anlagenzaehler_kwh is None or not eigen or not erzeuger:
+        return None
+    from datetime import date
+
+    from backend.core.berechnungen.pv_verteilung import loese_pv_zeitraum_auf
+    from backend.services.kanal.bilanz_leser import _traeger
+
+    heute = date.today()
+    traeger = _traeger(erzeuger, lambda i: getattr(i, "aktiv", True) is not False and (
+        not hasattr(i, "ist_aktiv_an") or i.ist_aktiv_an(heute)))
+    # Ein Einzelzähler an einem Gerät, das kein Träger der Tagesregel ist (Wechselrichter mit eigenem Zähler), hätte in
+    # der Verteilung keinen Platz — dann bleibt die alte Kaskade, statt ihn still fallen zu lassen.
+    if not traeger or not set(eigen) <= {t.inv_id for t in traeger}:
+        return None
+    return loese_pv_zeitraum_auf(traeger=traeger, eigen=eigen, anlagenzaehler_kwh=anlagenzaehler_kwh)
 
 
 async def _lade_sonstiges_kategorien(
@@ -374,9 +397,13 @@ def _basis_kwh_sensoren(
     # Stunde stimmte das (Snapshot-Pfad), für die Live-Kachel nicht.
     #
     # Bewusst ein EIGENER Slot statt eines Eintrags in `basis_kwh_sensors`:
-    # dort läge er VOR den Erzeuger-Einzelzählern, und die Präzedenz ist
-    # umgekehrt — derselbe Hilfetext sagt „sobald einer gemessen wird, zählt
-    # für Tag und Stunde nur noch, was je Erzeuger gemessen ist".
+    # dort läge er VOR den Erzeuger-Einzelzählern. ⚠ Der Hilfesatz, der hier
+    # bis N-752 als Begründung stand („sobald einer gemessen wird, zählt für Tag
+    # und Stunde nur noch, was je Erzeuger gemessen ist"), wurde mit #406
+    # entfernt. Seit N-752 (16.10.2026) gilt die Regel des Tages: gemessene
+    # Erzeuger behalten ihren Wert, der Rest des Anlagenzählers geht auf die
+    # Erzeuger ohne Zähler (`live_pv_verteilung`); misst jeder Erzeuger selbst,
+    # bleibt es die Summe der Einzelzähler, misst keiner, der Anlagenzähler.
     basis_pv_kwh_sensor = _eov(
         quellen_energy, "basis:pv_gesamt", _feld_eid(basis_map.get("pv_gesamt", {}))
     )
@@ -616,6 +643,21 @@ def _basis_zaehler_kwh(kwh_eid: str, mess: _Tagesmessung) -> Optional[float]:
     return None
 
 
+def _pv_verteilung_des_tages(quellen: _TagesQuellen, mess: _Tagesmessung, erzeuger: list):
+    """N-752: Einzelzähler-Δ je Erzeuger und das Δ des Anlagenzählers dieses Fensters → ``live_pv_verteilung``."""
+    if not quellen.basis_pv_kwh_sensor or quellen.basis_pv_kwh_sensor not in mess.history:
+        return None
+    eigen: dict[int, float] = {}
+    for comp_key, kwh_eid in quellen.separate_kwh_sensors.items():
+        if not any(comp_key.startswith(p) for p in PV_KOMPONENTEN_PREFIXE) or kwh_eid not in mess.history:
+            continue
+        inv_id = comp_key.rsplit("_", 1)[-1]
+        kwh = mess.delta(kwh_eid)
+        if kwh is not None and inv_id.isdigit():
+            eigen[int(inv_id)] = kwh
+    return live_pv_verteilung(erzeuger, eigen, mess.delta(quellen.basis_pv_kwh_sensor))
+
+
 def _pv_zaehler_kwh(
     quellen: _TagesQuellen, mess: _Tagesmessung, erzeuger: list,
 ) -> Optional[float]:
@@ -640,6 +682,10 @@ def _pv_zaehler_kwh(
                 pv_je_komponente[comp_key] = kwh
                 pv_has_kwh = True
     if pv_has_kwh:
+        # N-752: mit Anlagenzähler die Layer-Verteilung des Tages (Rest auf Erzeuger ohne eigenen Zähler).
+        z = _pv_verteilung_des_tages(quellen, mess, erzeuger)
+        if z is not None and z.bilanz_kwh is not None:
+            return round(z.bilanz_kwh, 1)
         gekuerzt = kuerze_bkw_in_werte_map(pv_je_komponente, erzeuger)
         return round(sum(gekuerzt.values()), 1)
     # F-49: kein Erzeuger misst selbst → der anlagenweite PV-Zähler.
@@ -891,6 +937,12 @@ async def get_tages_kwh(
     result: dict[str, Optional[float]] = {}
     _kategorien_kwh(result, quellen, mess, erzeuger)
     _komponenten_kwh(result, quellen, mess)
+    # N-752: die Werte je Erzeuger (Tooltips) nach derselben Verteilung wie die Summe — Einzelzähler und der verteilte
+    # Rest des Anlagenzählers für die Erzeuger ohne eigenen Zähler.
+    z = _pv_verteilung_des_tages(quellen, mess, erzeuger)
+    if z is not None:
+        for inv_id, kwh in z.werte.items():
+            result[f"pv_{inv_id}"] = round(kwh, 1)
 
     # N-536: Auch die Werte JE KOMPONENTE (Energiefluss-Tooltips) tragen das
     # abtretende Balkonkraftwerk nur noch mit seinem Rest — sonst stünde im

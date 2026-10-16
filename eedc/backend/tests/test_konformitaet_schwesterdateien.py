@@ -258,7 +258,6 @@ _BASELINE: frozenset[str] = frozenset({
     "test_konformitaet_tz_felder.py",
     "test_live_history_kwh_scale.py",
     "test_live_komponenten_builder_emob.py",
-    "test_live_pv_zaehler_f49.py",
     "test_live_tagesverlauf_farben_kanon.py",
     "test_live_tagesverlauf_short_term.py",
     "test_live_tagesverlauf_strompreis_carry_forward.py",

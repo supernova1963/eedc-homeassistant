@@ -354,35 +354,29 @@ def _compute_deltas(
     # (Dirk-PN 2026-05-31). Whitelist via core/berechnungen statt Inline-Summe
     # (ADR-001).
     #
-    # ⛔ **Die Reihenfolge ist die Zusage, nicht der Geschmack** (N-172, 01.09.2026).
-    # Hier stand bis dahin `if result.get("pv") is None:` — das anlagenweite
-    # Basis-Topic gewann, und die je Erzeuger GEMESSENEN Werte zählten nur, wenn
-    # es fehlte. Das ist die Umkehrung dessen, was drei andere Stellen tun und
-    # was das Handbuch dem Anwender zusagt:
-    #
-    #   HANDBUCH_DATEN_CHECKER §„Entweder die Anlagensumme oder die Einzelwerte
-    #   — nie beides. Sobald EIN Erzeuger einen eigenen kWh-Zähler bekommt,
-    #   zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist; der
-    #   Anlagen-Zählerstand ist dort dann aus."
-    #
-    # Der HA-Zwilling baut genau diese Kaskade (`live_history_service`, F-49:
-    # Erzeuger-Einzelzähler → sonst Anlagenzähler → sonst Trapez), und der
-    # Snapshot-Layer stellt dieselbe Frage über den SoT
-    # `snapshot/komponenten_beitraege.pv_je_investition_belegt`. ⚠ Der Kommentar
-    # an dieser Stelle behauptete dabei „analog HA-Pfad" — und tat das Gegenteil.
-    #
-    # ⚠ Die Doppelzählung, gegen die die alte Fassung schützte, ist weiter
-    # ausgeschlossen: es gilt entweder die Komponentensumme ODER das Basis-Delta,
-    # nie beides addiert.
-    #
-    # ⚠ Die in Kauf genommene Folge steht im selben Handbuchsatz („und dann
-    # ALLE"): Wer das Aggregat schickt und nur einen von zwei Wechselrichtern,
-    # bekommt die kleinere Zahl. Genau diese Lücke meldet der Daten-Checker
-    # (Zähler-Abdeckung) — sie wird hier nicht still überdeckt.
+    # ⛔ **Die Reihenfolge** (N-172, 01.09.2026; seit N-752 präzisiert): Einzelwerte vor dem Anlagen-Topic, nie beides
+    # addiert — bis N-172 gewann das Anlagen-Topic und die gemessenen Einzelwerte zählten nur, wenn es fehlte. Der
+    # Handbuchsatz, den diese Stelle bis N-752 zitierte („Sobald EIN Erzeuger einen eigenen kWh-Zähler bekommt, zählt
+    # für Tag und Stunde nur noch, was je Erzeuger gemessen ist"), steht seit #406 nirgends mehr; der Tag verteilt seither
+    # den Rest des Anlagenzählers auf die Erzeuger ohne Zähler. ⭐ N-752 (16.10.2026): dasselbe hier — der Block oben
+    # (`_pv_verteilung_mqtt`) ruft die Layer-Verteilung des Tages, sobald Anlagen-Topic UND Einzelwerte da sind; die
+    # Kaskade hier unten bleibt für die Fälle ohne Anlagen-Topic oder ohne Einzelwert. Der HA-Zwilling
+    # (`live_history_service`) baut genau dasselbe. Doppelzählung bleibt ausgeschlossen.
     # N-536: Ein Balkonkraftwerk mit `pv-module`-Kindern trägt nur noch, was
     # seine Kinder nicht messen — sonst stünde sein Gesamtzähler neben ihren in
     # derselben Whitelist-Summe. Die Kürzung läuft VOR `summe_pv_bkw_kwh`,
     # damit Komponenten-Werte und Kategorie-Summe dieselbe Aussage tragen.
+    # ⭐ N-752 (16.10.2026): mit Anlagenzähler-Topic die Layer-Verteilung des Tages — dieselbe Funktion wie der HA-Pfad
+    # (`live_history_service.live_pv_verteilung`, W2): Einzelwerte bleiben, der Rest des Anlagen-Topics geht kWp-gewichtet
+    # auf die Erzeuger ohne eigenes Topic. Die Kaskade unten (Einzelwerte, sonst Anlagen-Topic) gilt weiter, wenn es
+    # keinen Anlagenzähler, keinen Einzelwert oder keinen Erzeuger ohne eigenes Topic gibt (dann rechnet W2 dasselbe).
+    z = _pv_verteilung_mqtt(result, erzeuger)
+    if z is not None and z.bilanz_kwh is not None:
+        for inv_id, kwh in z.werte.items():
+            result[f"pv_{inv_id}"] = round(kwh, 2)
+        result["pv"] = round(z.bilanz_kwh, 1)
+        return result
+
     result = kuerze_bkw_in_werte_map(result, erzeuger)
 
     pv_summe = summe_pv_bkw_kwh(result)
@@ -390,6 +384,17 @@ def _compute_deltas(
         result["pv"] = round(pv_summe, 1)
 
     return result
+
+
+def _pv_verteilung_mqtt(result: dict, erzeuger: list | None):
+    """N-752: das Anlagen-Topic (``result["pv"]`` aus ``pv_gesamt_kwh``) und die Einzelwerte ``pv_<id>`` → die
+    gemeinsame Live-Verteilung. Zu diesem Zeitpunkt trägt ``result["pv"]`` nur das Anlagen-Topic (die Summe der
+    Einzelwerte wird erst danach eingesetzt)."""
+    from backend.services.live_history_service import live_pv_verteilung
+
+    eigen = {int(k[3:]): v for k, v in result.items()
+             if k.startswith("pv_") and k[3:].isdigit() and v is not None}
+    return live_pv_verteilung(erzeuger or [], eigen, result.get("pv"))
 
 
 # ─── Monatswerte aus den mitgeschriebenen Ständen (F-66) ────────────────────
