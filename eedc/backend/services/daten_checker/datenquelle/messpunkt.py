@@ -22,6 +22,9 @@ mit voller Deckung, kein Rest des Anlagenzählers an ein Gerät ohne eigenen Zä
 * (d) Kein Anlagenzähler, und in jedem der letzten drei abgeschlossenen Kanal-Monate ``Σ Strings − Einspeisung ≤ 10 %
   Σ Strings`` ⇒ INFO „Sieht nach Volleinspeisung aus" mit dem Handgriff AC-Ertragszähler als *PV gesamt (kWh)*
   (Entscheid §7.2, zweite Fassung: kein Sensor in zwei Feldern — ``datenquellen_validierung`` bleibt unverändert).
+* (e) GitHub #428 (16.10.2026), nur Stammdaten und Zuordnung: Anlagenzähler „PV gesamt“, ein aktives PV-Modul ohne eigenen
+  Zähler und ein Balkonkraftwerk mit eigenem Zähler ⇒ INFO (``_messpunkt_pv_gesamt_neben_bkw``) — genau die Lage, in der
+  (a)–(c') wegen des verteilten Rests schweigen.
 
 ⛔ Kein Reparatur-Knopf, keine Schätzung, kein Verlustfaktor (F3). Die Schwellen sind konservativ gesetzt und nicht an
 einer realen Anlage gemessen — die Konstanten stehen im Layer neben dem Vertrag, nicht hier.
@@ -72,12 +75,14 @@ class MesspunktChecks:
         from backend.services.kanal import bilanz_leser
 
         heute = datetime.fromtimestamp(bilanz_leser.uhr()).date()
+        # #428: Stammdaten-Hinweis, unabhängig von Monatszahlen (auch ohne einen einzigen Kanal-Monat).
+        stamm = await self._messpunkt_pv_gesamt_neben_bkw(anlage, heute)
         # Abgeschlossen = vor dem laufenden Monat.
         bis = (heute.year - 1, 12) if heute.month == 1 else (heute.year, heute.month - 1)
         kanal = {m: k for m, k in (await bilanz_leser.kanal_kompositionen(self.db, anlage.id, bis=bis)).items()
                  if k.pv is not None}
         if not kanal:
-            return []
+            return stamm
 
         ueber, bkw_aussen, mehr, dc_gepflegt, dc_angenommen = [], [], [], [], []
         for m, k in kanal.items():
@@ -98,7 +103,7 @@ class MesspunktChecks:
             if verluste > 0 and pv.verluste_grund == VERLUSTE_GRUND_DC_SPEICHER_ANGENOMMEN:
                 dc_angenommen.append(_monat(m))
 
-        out: list[CheckErgebnis] = []
+        out: list[CheckErgebnis] = list(stamm)
         if ueber:
             out.append(CheckErgebnis(
                 kategorie=CheckKategorie.MESSPUNKT.value,
@@ -167,6 +172,54 @@ class MesspunktChecks:
             ))
         out.extend(await self._messpunkt_volleinspeisung(anlage, kanal))
         return out
+
+    async def _messpunkt_pv_gesamt_neben_bkw(self, anlage: Anlage, heute) -> list[CheckErgebnis]:
+        """(e) GitHub #428 (chuck2941, 16.10.2026): Anlagenzähler „PV gesamt“, mindestens ein aktives PV-Modul OHNE eigenen
+        Zähler und mindestens ein Balkonkraftwerk MIT eigenem Zähler ⇒ INFO. eedc liest den Anlagenzähler als Zähler der
+        ganzen Erzeugung einschließlich Balkonkraftwerk und verteilt seinen Rest auf die Module ohne Zähler — sitzt er am
+        Wechselrichter, fehlt das Balkonkraftwerk in „PV gesamt“ (Melder: Tag 11,7 statt 14,5 kWh). Die Regeln (a)–(c')
+        schweigen dort absichtlich (``verteilter_rest_kwh > 0``), und aus den Zahlen ist der Messpunkt nicht zu erkennen;
+        die Stammdaten und die Zuordnung genügen für den Hinweis. Ein Modul, das einem Balkonkraftwerk gehört (N-266),
+        zählt nicht als Modul ohne Zähler — der Zähler des Balkonkraftwerks misst es mit."""
+        from backend.core.berechnungen.erzeuger_traeger import abgetretene_bkw_ids
+        from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
+        from backend.services.snapshot.reader import mqtt_zaehler_keys
+
+        aktiv = [i for i in (getattr(anlage, "investitionen", None) or []) if i.aktiv and i.ist_aktiv_an(heute)]
+        if not {"balkonkraftwerk", "pv-module"} <= {i.typ for i in aktiv}:
+            return []             # ohne beide Typen keine Lage — und keine Abfrage
+        mapping = anlage.sensor_mapping if isinstance(anlage.sensor_mapping, dict) else {}
+        quellen = extract_quellen_energy(anlage)
+        mqtt_keys = await mqtt_zaehler_keys(self.db, anlage.id)
+        if not feld_hat_zaehler((mapping.get("basis") or {}).get("pv_gesamt"), "basis:pv_gesamt", quellen, mqtt_keys):
+            return []
+        inv_map = mapping.get("investitionen") or {}
+
+        def hat_zaehler(inv) -> bool:
+            felder = (inv_map.get(str(inv.id)) or {}).get("felder") or {}
+            return feld_hat_zaehler(felder.get("pv_erzeugung_kwh"), f"inv:{inv.id}:pv_erzeugung_kwh", quellen, mqtt_keys)
+
+        # P11 (N-266): ein Modul-Kind eines Balkonkraftwerks ist kein Modul ohne Zähler — der Zähler des BKW misst es.
+        abgetreten = abgetretene_bkw_ids(aktiv)
+        bkw_mit = [i for i in aktiv if i.typ == "balkonkraftwerk" and hat_zaehler(i)]
+        module_ohne = [i for i in aktiv if i.typ == "pv-module" and i.parent_investition_id not in abgetreten
+                       and not hat_zaehler(i)]
+        if not bkw_mit or not module_ohne:
+            return []
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.MESSPUNKT.value,
+            schwere=CheckSeverity.INFO,
+            meldung="„PV gesamt“ gilt als Zähler der ganzen Erzeugung einschließlich Balkonkraftwerk",
+            details=(
+                "Der Anlagenzähler „PV gesamt“ gilt als Zähler der ganzen Erzeugung einschließlich Balkonkraftwerk "
+                f"({', '.join(sorted(i.bezeichnung or f'#{i.id}' for i in bkw_mit))}); den Rest nach dem Zähler des "
+                "Balkonkraftwerks verteilt eedc auf die PV-Module ohne eigenen Zähler "
+                f"({', '.join(sorted(i.bezeichnung or f'#{i.id}' for i in module_ohne))}). Misst er nur den "
+                "Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu (Einstellungen → Datenquellen); sonst "
+                "fehlt die Erzeugung der Balkonkraftwerke in PV gesamt."
+            ),
+            link="/einstellungen/datenquellen",
+        )]
 
     async def _messpunkt_volleinspeisung(self, anlage: Anlage, kanal: dict) -> list[CheckErgebnis]:
         """(d): ohne Anlagenzähler drei abgeschlossene Kanal-Monate in Folge fast ohne Eigenverbrauch."""
