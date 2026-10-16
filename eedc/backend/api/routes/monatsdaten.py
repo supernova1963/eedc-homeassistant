@@ -54,6 +54,7 @@ from backend.services.provenance import (
     write_with_provenance,
 )
 from backend.services.mitteltemperatur import lade_monatsmittel_temperatur
+from backend.services.wetter.monatswerte import WETTER_MONATSFELDER
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 from backend.api.routes.monatsdaten_aggregiert import (
     _TabellenKontext,
@@ -100,6 +101,9 @@ class MonatsdatenBase(BaseModel):
     gaspreis_cent_kwh: Optional[float] = Field(None, ge=0)
     globalstrahlung_kwh_m2: Optional[float] = Field(None, ge=0)
     sonnenstunden: Optional[float] = Field(None, ge=0)
+    #: N-753 (16.10.2026): das Formular schickt die Ø-Temperatur (°C) seit Juli 2026 — ohne dieses Feld verwarf Pydantic
+    #: sie still. Kein ``ge=0``: Monatsmittel unter null sind im Winter möglich.
+    durchschnittstemperatur: Optional[float] = None
     datenquelle: Optional[str] = Field(None, max_length=50)
     notizen: Optional[str] = Field(None, max_length=1000)
     # G19-1: Strukturierte sonstige Erträge & Ausgaben auf Anlage-Ebene
@@ -136,6 +140,7 @@ class MonatsdatenUpdate(BaseModel):
     gaspreis_cent_kwh: Optional[float] = Field(None, ge=0)
     globalstrahlung_kwh_m2: Optional[float] = Field(None, ge=0)
     sonnenstunden: Optional[float] = Field(None, ge=0)
+    durchschnittstemperatur: Optional[float] = None       # N-753, siehe MonatsdatenBase
     notizen: Optional[str] = Field(None, max_length=1000)
     # G19-1: siehe MonatsdatenBase
     sonstige_positionen: Optional[list[dict]] = None
@@ -1248,6 +1253,12 @@ async def update_monatsdaten(
     # User-Eingaben durch Resolver — manuelle Werte gewinnen gegen alle
     # niedriger priorisierten Quellen (auto/external/fallback/legacy).
     for field, value in update_data.items():
+        # N-753 (16.10.2026): ein leeres WETTERFELD ist keine Eingabe — kein `manual:form` auf `None`. Sonst stünde das Feld
+        # leer MIT der höchsten Marke da, und der tägliche Wetter-Lückenschluss (`services/wetter/luecken.py`, schreibt ohne
+        # Override) prallte für immer daran ab (gemessen: PUT mit `null` ⇒ 0 von 2 Feldern gefüllt). Nur die Wetterfelder:
+        # ein ausdrückliches `null` löscht anderswo bewusst (`pv_erzeugung_kwh`, N-622 Nacharbeit im Formular).
+        if value is None and field in WETTER_MONATSFELDER:
+            continue
         await write_with_provenance(
             db, md, field, value,
             source="manual:form", writer=_MANUAL_WRITER,
