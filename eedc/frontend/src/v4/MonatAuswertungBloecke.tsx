@@ -33,6 +33,7 @@ import {
 } from '../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import type { MonatsAuswertung, PeakStunde, TagesprofilStunde } from '../api/energie_profil'
+import { stundenBereich, type StundenRaster } from '../lib/stundenBereich'
 
 // ─── Bauer: die vier Auswertungs-Blöcke ──────────────────────────────────────
 
@@ -92,7 +93,7 @@ export function baueMonatAuswertungBloecke(
       defaultOpen: false,
       render: () => (
         <Parkbar id="el:tagesprofil" titel="Typisches Tagesprofil">
-          <TagesprofilChart daten={a.typisches_tagesprofil} tageMitDaten={a.tage_mit_daten} />
+          <TagesprofilChart daten={a.typisches_tagesprofil} tageMitDaten={a.tage_mit_daten} raster={a.raster ?? 'ende'} />
         </Parkbar>
       ),
     })
@@ -118,6 +119,7 @@ export function baueMonatAuswertungBloecke(
                 titel="Top Netzbezug-Stunden"
                 hinweis="Spitzenstunden für Tarif-Optimierung"
                 eintraege={a.peak_netzbezug}
+                raster={a.raster ?? 'ende'}
               />
             </Parkbar>
           )}
@@ -127,6 +129,7 @@ export function baueMonatAuswertungBloecke(
                 titel="Top Einspeise-Stunden"
                 hinweis="PV-Spitzen, ggf. Batterie früher laden"
                 eintraege={a.peak_einspeisung}
+                raster={a.raster ?? 'ende'}
               />
             </Parkbar>
           )}
@@ -198,10 +201,12 @@ function negativpreisKpis(a: MonatsAuswertung, nichtVerguetetEuro?: number | nul
   ]
 }
 
-function PeakListe({ titel, hinweis, eintraege }: {
+function PeakListe({ titel, hinweis, eintraege, raster }: {
   titel: string
   hinweis: string
   eintraege: PeakStunde[]
+  /** HA-Bauform S4: die Stunde als Bereich (`stundenBereich`). */
+  raster: StundenRaster
 }) {
   return (
     <div className="space-y-2">
@@ -221,7 +226,7 @@ function PeakListe({ titel, hinweis, eintraege }: {
           {eintraege.map((e, i) => (
             <tr key={`${e.datum}-${e.stunde}-${i}`} /* de-de-allow: React-key, keine Anzeige (Datum via formatTag) */>
               <td className={`${ZELLE} text-gray-700 dark:text-gray-300`}>{formatTag(e.datum)}</td>
-              <td className={`${ZELLE} text-gray-700 dark:text-gray-300 tabular-nums`}>{String(e.stunde).padStart(2, '0')}:00</td>
+              <td className={`${ZELLE} text-gray-700 dark:text-gray-300 tabular-nums`}>{stundenBereich(e.stunde, raster)}</td>
               <td className={`${ZELLE} text-right font-medium text-gray-900 dark:text-white tabular-nums`}>{fmtCalc(e.wert_kw, 1)} kW</td>
             </tr>
           ))}
@@ -231,12 +236,14 @@ function PeakListe({ titel, hinweis, eintraege }: {
   )
 }
 
-function TagesprofilChart({ daten, tageMitDaten }: { daten: TagesprofilStunde[]; tageMitDaten: number }) {
+function TagesprofilChart({ daten, tageMitDaten, raster }: {
+  daten: TagesprofilStunde[]; tageMitDaten: number; raster: StundenRaster
+}) {
   const schmal = useSchmaleAchse()
   // B7: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit). SoT-Hook.
   const legende = useLegendenToggle()
   const chartDaten = daten.map((d) => ({
-    stunde: String(d.stunde).padStart(2, '0'),
+    stunde: stundenBereich(d.stunde, raster),
     pvAvg: d.pv_kw,
     verbrauchAvg: d.verbrauch_kw,
   }))

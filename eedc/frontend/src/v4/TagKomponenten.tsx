@@ -47,6 +47,7 @@ import type {
   WaermeVerlaufStunde, WaermeVerlaufStunden,
 } from '../api/energie_profil'
 import type { WaermeVerlaufPunkt } from './waermeVerlauf'
+import { stundenBereich, type StundenRaster } from '../lib/stundenBereich'
 import type { AktuellerMonatResponse, SonstigesGeraet } from '../api/aktuellerMonat'
 
 /** Tages-Daten → `AktuellerMonatResponse`-Shape (nur die von den Bauern gelesenen
@@ -274,16 +275,18 @@ export function socTagWerte(
  *
  * ⭐ **Keine Rechnung hier.** Die Stundenmengen verteilt das Backend so, dass
  * ihre Summe der Aufteilungs-Balken darunter ist (`tages_stapel.py`, „die
- * Stunde verteilt den Tag"). Dieser Bauer benennt nur um: x-Achse `${h}:00`
- * wie im Stundenverlauf derselben Sicht, Temperatur aus der Stundenantwort
- * (Slot = Zeile), abgeleitete Wärme gibt es am Tag nicht.
+ * Stunde verteilt den Tag"). Dieser Bauer benennt nur um: x-Achse als Bereich
+ * (`stundenBereich`, HA-Bauform S4-E2 A — `raster` der Wärme-Antwort: Beginn an
+ * einem WP-Kanal-Tag, sonst Ende) wie im Stundenverlauf derselben Sicht,
+ * Temperatur aus der Stundenantwort (Slot = Zeile), abgeleitete Wärme gibt es
+ * am Tag nicht.
  */
 export function baueTagWaermeVerlauf(
-  zeilen: WaermeVerlaufStunde[], stunden: StundenWert[],
+  zeilen: WaermeVerlaufStunde[], stunden: StundenWert[], raster: StundenRaster = 'ende',
 ): WaermeVerlaufPunkt[] {
   const temperatur = new Map(stunden.map((s) => [s.stunde, s.temperatur_c]))
   return zeilen.map((z) => ({
-    name: `${z.stunde}:00`,
+    name: stundenBereich(z.stunde, raster),
     temperatur_c: temperatur.get(z.stunde) ?? null,
     wp_strom_kwh: z.wp_strom_kwh,
     wp_waerme_kwh: z.wp_waerme_kwh,
@@ -320,7 +323,9 @@ export function baueTagKomponentenUndFinanz(
 ): Block[] {
   const d = baueTagAlsMonat(tag, stunden, serien, tagDetail)
   const finanz = finanzTeaserBlock(d, park)
-  const wpVerlauf = wpVerlaufStunden ? baueTagWaermeVerlauf(wpVerlaufStunden.stunden, stunden) : null
+  const wpVerlauf = wpVerlaufStunden
+    ? baueTagWaermeVerlauf(wpVerlaufStunden.stunden, stunden, wpVerlaufStunden.raster ?? 'ende')
+    : null
   return [
     ...baueKomponentenBloecke(
       d, park, 'tag', socTagWerte(stunden, socZuletzt), wpVerlauf,

@@ -16,6 +16,7 @@ import { HerkunftZeile } from '../blocks'
 import { unvollstaendigHerkunft } from '../../lib/prognoseHinweise'
 import { fmtZahl } from '../../lib/einheiten'
 import { SimpleTooltip } from '../ui/FormelTooltip'
+import { stundenBereich } from '../../lib/stundenBereich'
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
@@ -364,6 +365,9 @@ export function TagWerteTabelle({
     else { setSortKey(key); setSortDir('desc') }
   }
 
+  // HA-Bauform S4 (S4-E2 A): die Stunde als Bereich nach dem Raster des Tages (Kanal-Tag Beginn, Bestandstag Ende).
+  const tagesRaster = daten.find((d) => d.raster)?.raster ?? 'ende'
+
   // Stunden-Daten (0-23, mit berechneten Feldern)
   const rows = useMemo(() => {
     const all = Array.from({ length: 24 }, (_, h) => {
@@ -435,7 +439,7 @@ export function TagWerteTabelle({
   function handleExport() {
     const headers = ['Stunde', ...allCols.map(c => c.unit ? `${c.label} (${c.unit})` : c.label)]
     const csvRows = rows.map(row => [
-      `${row.h}:00`,
+      stundenBereich(row.h, row.s?.raster ?? tagesRaster),
       ...allCols.map(c => {
         const v = row.vals[c.key]
         return v != null ? v.toFixed(c.decimals) : '' /* de-de-allow: CSV-Zellenwert (maschinenlesbar, kein Display) */
@@ -550,7 +554,7 @@ export function TagWerteTabelle({
             {rows.map(({ h, s, vals }) => (
               <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
                 <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>
-                  {h}:00
+                  {stundenBereich(h, s?.raster ?? tagesRaster)}
                   {/* Zählerlücken wie HA (R2): Zeile trägt n reale Stunden */}
                   {spanneDerZeile(s) > 1 && (
                     <span

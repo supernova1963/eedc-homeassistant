@@ -133,14 +133,31 @@ describe('Tagesverlauf-Chart — gebündelter Balken ist beschriftet', () => {
     pvAufgeschluesselt: false, zeigePvRest: false,
   })
 
+  // HA-Bauform S4 (S4-E2 A): die Achse nennt die Stunde als Bereich — ein Bestandstag (ohne `raster` = Ende) trägt im
+  // Slot 3 die Stunde [2, 3) ⇒ „2–3".
   it('der Tooltip nennt die Spanne des gebündelten Balkens', () => {
-    expect(stundenTooltipLabel('3:00', punkte)).toBe('3:00 · enthält 2 Stunden (Lücke in Home Assistant)')
+    expect(stundenTooltipLabel('2–3', punkte)).toBe('2–3 · enthält 2 Stunden (Lücke in Home Assistant)')
   })
-  it('eine gewöhnliche Stunde bleibt „h:00"', () => {
-    expect(stundenTooltipLabel('4:00', punkte)).toBe('4:00')
+  it('eine gewöhnliche Stunde bleibt der Bereich', () => {
+    expect(stundenTooltipLabel('3–4', punkte)).toBe('3–4')
   })
-  it('die Achse bleibt „h:00" (keine lange Beschriftung am Tick)', () => {
-    expect(punkte[3].stunde).toBe('3:00')
+  it('die Achse trägt den Bereich (keine lange Beschriftung am Tick)', () => {
+    expect(punkte[3].stunde).toBe('2–3')
+  })
+})
+
+describe('Tagesverlauf-Chart — Stunde als Bereich je Raster (HA-Bauform S4, S4-E2 A)', () => {
+  const bau = (raster?: 'beginn' | 'ende') => baueChartDaten({
+    daten: [stunde(11, { pv_kw: 2.0, raster }), stunde(23, { pv_kw: 0, raster })],
+    extraErzeuger: [], extraVerbraucher: [], erzeugerSerien: [], pvAufgeschluesselt: false, zeigePvRest: false,
+  })
+  it('Kanal-Tag (Beginn): Stunde 11 ist „11–12", Stunde 23 „23–24", auch die Stunden ohne Zeile', () => {
+    const p = bau('beginn')
+    expect([p[11].stunde, p[23].stunde, p[0].stunde]).toEqual(['11–12', '23–24', '0–1'])
+  })
+  it('Bestandstag (Ende): Slot 11 ist „10–11", Slot 0 „23–24"', () => {
+    const p = bau('ende')
+    expect([p[11].stunde, p[0].stunde]).toEqual(['10–11', '23–24'])
   })
 })
 

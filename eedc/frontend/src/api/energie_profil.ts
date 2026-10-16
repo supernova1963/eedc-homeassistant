@@ -1,3 +1,4 @@
+import type { StundenRaster } from '../lib/stundenBereich'
 import { api } from './client'
 import type { WpGeraetZeile, WpMoeglichZeile } from './aktuellerMonat'
 
@@ -34,6 +35,9 @@ export interface StundenWert {
    *  bzw. `null` im Regelfall. Achsen: pv · einspeisung · netzbezug · batterie
    *  · waermepumpe · wallbox · sonstige. */
   spannen?: Record<string, number> | null
+  /** HA-Bauform S4 (S4-E2 A): was `stunde` meint — `"beginn"` = `[h, h+1)` (Kanal-Tag),
+   *  `"ende"` = Backward-Slot `[h−1, h)` (Bestandstag). Beschriftung über `stundenBereich`. */
+  raster?: StundenRaster
 }
 
 export interface StundenAntwort {
@@ -428,6 +432,9 @@ export interface MonatsAuswertung {
   peak_einspeisung: PeakStunde[]
   peak_pv: PeakStunde | null
   heatmap: HeatmapZelle[]
+  /** HA-Bauform S4: die Stundenachse von Heatmap, Tagesprofil und Spitzen nennt für jede Zeilenart die Stunde des
+   *  Beginns (`"beginn"`) — Beschriftung über `stundenBereich`. */
+  raster?: StundenRaster
   // Börsenpreis / Negativpreis (§51 EEG)
   boersenpreis_avg_cent: number | null
   negative_preis_stunden: number | null
@@ -717,6 +724,8 @@ export interface WaermeVerlaufStunde {
 
 export interface WaermeVerlaufStunden {
   stunden: WaermeVerlaufStunde[]
+  /** HA-Bauform S4: `"beginn"` an einem WP-Kanal-Tag, sonst `"ende"` (Backward-Slot). */
+  raster?: StundenRaster
   /** Menge der Aufteilung (**Strom**-Stapel) ohne Stundenform — nicht
    *  verteilt, sondern genannt. */
   ohne_stundenform_kwh: number | null

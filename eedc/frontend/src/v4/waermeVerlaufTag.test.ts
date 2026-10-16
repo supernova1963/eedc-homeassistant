@@ -39,11 +39,15 @@ const stunde = (h: number, temperatur_c: number | null): StundenWert => ({
 })
 
 describe('Tag-Verlauf — dieselbe Funktion, 24 Stunden', () => {
-  it('beschriftet die Slots wie der Stundenverlauf derselben Sicht', () => {
+  it('beschriftet die Slots wie der Stundenverlauf derselben Sicht (Bereich, HA-Bauform S4-E2 A)', () => {
+    // Bestandstag (Ende-Raster): Slot 0 = [23, 24) des Vortags, Slot 23 = [22, 23).
     const punkte = baueTagWaermeVerlauf(Array.from({ length: 24 }, (_, h) => zeile(h)), [])
     expect(punkte).toHaveLength(24)
-    expect(punkte[0].name).toBe('0:00')
-    expect(punkte[23].name).toBe('23:00')
+    expect(punkte[0].name).toBe('23–24')
+    expect(punkte[23].name).toBe('22–23')
+    // WP-Kanal-Tag (Beginn-Raster): Stunde 0 = [0, 1), Stunde 23 = [23, 24).
+    const kanal = baueTagWaermeVerlauf(Array.from({ length: 24 }, (_, h) => zeile(h)), [], 'beginn')
+    expect([kanal[0].name, kanal[23].name]).toEqual(['0–1', '23–24'])
   })
 
   it('nimmt die Temperatur aus der Stundenantwort — je Slot, nicht je Position', () => {

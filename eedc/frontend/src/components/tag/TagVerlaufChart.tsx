@@ -17,6 +17,7 @@ import { EXTRA_SERIEN_FARBEN, PV_MODUL_FARBEN, KATEGORIE_FARBEN, CHART_COLORS, C
 import { pvRestKw, pvSplitKw, wpRestKw, wpSplitKw } from '../../lib/erzeugerSpalten'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
+import { stundenBereich } from '../../lib/stundenBereich'
 import { erfassteSenken, spanneDerZeile, type SenkenKey } from './TagWerteTabelle'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -185,6 +186,9 @@ export function baueChartDaten({
 }): Record<string, number | string>[] {
   const erzeugerKeys = erzeugerSerien.map((es) => es.key)
   const wpKeys = wpSerien.map((ws) => ws.key)
+  // HA-Bauform S4 (S4-E2 A): die Achse nennt die Stunde als Bereich nach dem Raster des Tages — eine Stunde ohne Zeile
+  // nimmt das Raster der übrigen (ein Tag hat genau eines).
+  const tagesRaster = daten.find((d) => d.raster)?.raster ?? 'ende'
   return Array.from({ length: 24 }, (_, h) => {
     const s   = daten.find(d => d.stunde === h)
     const bat = s?.batterie_kw ?? 0
@@ -203,10 +207,10 @@ export function baueChartDaten({
     // Zählerlücken wie HA (R2): trägt die Zeile mehr als eine reale Stunde,
     // merkt sich der Punkt die Spanne, und der Tooltip beschriftet den Balken
     // (`stundenTooltipLabel`) — sonst läse man die Energie einer Lücke als
-    // Spitze. Die Achse bleibt `h:00`. `?? 0` bleibt (eine fehlende Stunde ist
-    // im Stapel eine Nulllinie).
+    // Spitze. Die Achse nennt die Stunde als Bereich (`stundenBereich`, S4-E2 A). `?? 0` bleibt (eine fehlende
+    // Stunde ist im Stapel eine Nulllinie).
     const punkt: Record<string, number | string> = {
-      stunde:       `${h}:00`,
+      stunde:       stundenBereich(h, s?.raster ?? tagesRaster),
       spanne:       spanneDerZeile(s),
       pv:           s?.pv_kw ?? 0,
       bat_pos:      Math.max(0, bat),

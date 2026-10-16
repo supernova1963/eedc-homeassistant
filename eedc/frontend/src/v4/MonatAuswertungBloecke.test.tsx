@@ -27,6 +27,7 @@ function a(over: Partial<MonatsAuswertung> = {}): MonatsAuswertung {
     ],
     komponenten: [],
     peak_netzbezug: [{ datum: '2026-05-10', stunde: 19, wert_kw: 4.2 }],
+    raster: 'beginn',
     peak_einspeisung: [{ datum: '2026-05-15', stunde: 12, wert_kw: 6.8 }],
     peak_pv: null,
     heatmap: [],
@@ -109,7 +110,8 @@ describe('baueMonatAuswertungBloecke — Render (jsdom-fähige Blöcke)', () => 
     render1('peaks')
     expect(screen.getByText('Top Netzbezug-Stunden')).toBeInTheDocument()
     expect(screen.getByText('10.05.')).toBeInTheDocument()
-    expect(screen.getByText('19:00')).toBeInTheDocument()
+    // HA-Bauform S4: die Monats-Antwort nennt die Stunde des Beginns (`raster: "beginn"`) ⇒ Stunde 19 ist „19–20".
+    expect(screen.getByText('19–20')).toBeInTheDocument()
     expect(screen.getByText('4,2 kW')).toBeInTheDocument()
   })
 
