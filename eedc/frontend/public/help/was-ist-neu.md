@@ -26,6 +26,18 @@ dieses Feld; Wetter, Prognosen, Preise und andere Geräte bleiben stehen, Monate
 Vorschau nennt vorher Sensor, Zeitraum, Tage und Monate; einen Rückweg gibt es nicht
 ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
+**Cockpit → Monat, wenn Home Assistant gerade nicht antwortet:** Öffnest du den laufenden Monat, während die
+HA-Statistik nicht erreichbar ist (etwa direkt nach einem Neustart von Home Assistant), liest eedc E-Mobilität,
+Sonstiges und Wärmepumpe jetzt trotzdem aus den gespiegelten Zählerständen. Bisher fehlten in diesem Moment der Strom
+eines BHKW im Eigenverbrauch, die Heimladung, die dienstlichen Ladekosten und der Strom je Betriebsart — der Verlauf in
+*Cockpit → Jahr* daneben stimmte ([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
+
+**Cockpit → Jahr ohne Einspeisungs-Zähler:** Ein Monat ohne Monatsabschluss, dessen Einspeisung oder Netzbezug an
+keinem Tag gemessen wurde (typisch beim Balkonkraftwerk ohne Netz-Zähler), stand in Monatsliste und Verlauf mit
+Eigenverbrauchsquote bzw. Autarkie 100 % und einer Ersparnis auf die ganze Erzeugung da. Jetzt zeigt er seine
+PV-Erzeugung und „–" bei Netzwerten, Eigenverbrauch, Autarkie und Ersparnis — wie der Kopf derselben Seite und
+*Cockpit → Monat*. Der Daten-Checker nennt solche Monate jetzt mit „Einspeisung nicht erfasst (Monat ohne Monatsabschluss)“ und dem Rat, eine Datenquelle zuzuordnen oder den Monat abzuschließen ([Bedienung → Jahr](HANDBUCH_BEDIENUNG.md#24-jahrgesamt), [Daten-Checker §4.5](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)).
+
 **MQTT-Check erwartet Pflicht und Zugeordnetes:** Der Daten-Checker erwartet ein MQTT-Topic ohne Zuordnung nur noch,
 wenn das Feld Pflicht ist — dieselben Felder, die *Einstellungen → Datenquellen* rot markiert —, und sonst nur Felder,
 denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Eine Luft-Wasser-Wärmepumpe ohne Zuordnungen stand bisher mit

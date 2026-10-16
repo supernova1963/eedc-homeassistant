@@ -50,6 +50,7 @@ from .monatsdaten_plausibilitaet import (
     _energiebilanz_negativ,
     _negative_werte,
     _netzfelder_nicht_erfasst,
+    _netzfelder_nicht_erfasst_ohne_zeile,
     _pv_ueber_maximum,
     _speicher_entladung_fehlt,
     _speicher_index,
@@ -469,6 +470,17 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 
     # ─── Monatsdaten Plausibilität ───────────────────────────────────────
 
+    async def _monate_mit_stunden(self, anlage_id: int) -> set[tuple[int, int]]:
+        """N-751: Monate mit mindestens einer Tageszeile, die Stunden trägt (``stunden_verfuegbar > 0``) — EINE Abfrage."""
+        from sqlalchemy import select
+
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+
+        tage = (await self.db.execute(select(TagesZusammenfassung.datum).distinct().where(
+            TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.stunden_verfuegbar > 0,
+        ))).scalars().all()
+        return {(d.year, d.month) for d in tage}
+
     async def _check_monatsdaten_plausibilitaet(
         self,
         anlage: Anlage,
@@ -479,8 +491,14 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         pr: float = 1.0,
         pr_count: int = 0,
     ) -> list[CheckErgebnis]:
-        ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.MONATSDATEN_PLAUSIBILITAET
+        # N-751: Prüfung 0 auch für Monate ohne Monatszeile mit Tageswerten — vor dem frühen Ausstieg, denn gerade wer nie
+        # einen Monatsabschluss macht (Balkonkraftwerk ohne Netz-Zähler), hat keine Zeile.
+        from backend.services.monats_fakten import lade_monats_fakten
+
+        ergebnisse: list[CheckErgebnis] = _netzfelder_nicht_erfasst_ohne_zeile(
+            kat, await lade_monats_fakten(self.db, anlage.id, inkl_nur_tageswerte=True),
+            await self._monate_mit_stunden(anlage.id))
 
         if not monatsdaten:
             return ergebnisse

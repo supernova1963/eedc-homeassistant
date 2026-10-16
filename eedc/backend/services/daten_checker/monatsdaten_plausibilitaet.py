@@ -27,37 +27,97 @@ PV_MAX_KWH_PRO_KWP = {
 }
 
 
+#: Prüfung 0 (N-734): je Netzfeld, wofür es gebraucht wird — eine Liste für den Monat mit und ohne Zeile (N-751).
+_NETZFELDER_PRUEFUNG_0 = (
+    ("einspeisung_erfasst", "Einspeisung", "Eigenverbrauch und Autarkie"),
+    ("netzbezug_erfasst", "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten"),
+)
+
+
+def _details_mit_zeile(feld: str, folge: str) -> str:
+    return (
+        f"eedc braucht für jeden Monat einen erfassten Wert für {feld} — auch 0 ist ein Wert. "
+        f"Für diesen Monat steht keiner in der Monatszeile (etwa nach einem Import, der nur "
+        f"Wallbox- oder PV-Werte enthielt). Cockpit → Monat nimmt ihn dann aus der HA-Statistik, "
+        f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats in Cockpit → Monat "
+        f"und Cockpit → Jahr leer. "
+        # N-736: die Fakten-Sichten nehmen den Monat aus der Bilanz (`meta.netz_erfasst`), statt mit 0 zu rechnen.
+        f"Übersicht, Jahresbericht, HA-Sensoren, Auswertungen → Tabelle und Aussichten → Finanzen "
+        f"lassen den Monat bis dahin aus Eigenverbrauch, Autarkie, Ersparnis und CO₂ heraus (seine "
+        f"PV-Erzeugung zählen sie weiter), der Community-Upload teilt ihn nicht; tragen die Tageswerte "
+        f"des Monats das Feld, können sie es von dort nehmen. "
+        # N-739 (c): zuerst der Weg, der den Messwert holt — der Monatsabschluss zeigt das Feld leer.
+        f"Abhilfe: zuerst den HA-Statistik-Import für diesen Monat (ohne „Überschreiben“ genügt, "
+        f"solange der Monat so gemeldet ist); sonst im Monatsabschluss den gemessenen Wert eintragen "
+        f"— ein leeres Feld ist keine 0."
+    )
+
+
+def _details_ohne_zeile(feld: str, folge: str) -> str:
+    return (
+        f"eedc braucht für jeden Monat einen erfassten Wert für {feld} — auch 0 ist ein Wert. Für diesen Monat gibt "
+        f"es keinen Monatsabschluss, und an keinem seiner Tage hat ein Zähler {feld} gemessen; eedc rechnet das Feld "
+        f"deshalb nicht als 0: {folge} des Monats bleiben in Cockpit → Monat und Cockpit → Jahr leer („–“). "
+        f"Abhilfe: Datenquelle zuordnen (Einstellungen → Datenquellen — der Zähler zählt ab dann) oder den Monat im "
+        f"Monatsabschluss pflegen — ein leeres Feld ist keine 0."
+    )
+
+
 def _netzfelder_nicht_erfasst(
-    kat, prefix: str, md_link: str, *, einspeisung_erfasst: bool, netzbezug_erfasst: bool,
+    kat, prefix: str, md_link: str, *, einspeisung_erfasst: bool, netzbezug_erfasst: bool, ohne_zeile: bool = False,
 ) -> list[CheckErgebnis]:
-    """Prüfung 0 der Plausibilität: ERROR je Netzfeld ohne erfassten Wert (N-734, ``netzfeld_ist_erfasst``)."""
+    """Prüfung 0 der Plausibilität: ERROR je Netzfeld ohne erfassten Wert (N-734, ``netzfeld_ist_erfasst``) — die EINE
+    Stelle der Regel. ⭐ N-751 (16.10.2026): ``ohne_zeile`` für den Monat ohne Monatszeile (Feld-Flags der Monats-Fakten
+    aus den Marken der Tagesebene, ``_netzfelder_nicht_erfasst_ohne_zeile``) — eigener Satz und Rat, eigene Meldung."""
+    erfasst = {"einspeisung_erfasst": einspeisung_erfasst, "netzbezug_erfasst": netzbezug_erfasst}
     ergebnisse: list[CheckErgebnis] = []
-    for erfasst, feld, folge in (
-        (einspeisung_erfasst, "Einspeisung", "Eigenverbrauch und Autarkie"),
-        (netzbezug_erfasst, "Netzbezug", "Gesamtverbrauch, Autarkie und Stromkosten"),
-    ):
-        if erfasst:
+    for flag, feld, folge in _NETZFELDER_PRUEFUNG_0:
+        if erfasst[flag]:
             continue
         ergebnisse.append(CheckErgebnis(
             kategorie=kat, schwere=CheckSeverity.ERROR,
-            meldung=f"{prefix}: {feld} nicht erfasst",
-            details=(
-                f"eedc braucht für jeden Monat einen erfassten Wert für {feld} — auch 0 ist ein Wert. "
-                f"Für diesen Monat steht keiner in der Monatszeile (etwa nach einem Import, der nur "
-                f"Wallbox- oder PV-Werte enthielt). Cockpit → Monat nimmt ihn dann aus der HA-Statistik, "
-                f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats leer. "
-                # N-736: die Fakten-Sichten nehmen den Monat aus der Bilanz (`meta.netz_erfasst`), statt mit 0 zu rechnen.
-                f"Übersicht, Jahresbericht, HA-Sensoren, Auswertungen → Tabelle und Aussichten → Finanzen "
-                f"lassen den Monat bis dahin aus Eigenverbrauch, Autarkie, Ersparnis und CO₂ heraus (seine "
-                f"PV-Erzeugung zählen sie weiter), der Community-Upload teilt ihn nicht; tragen die Tageswerte "
-                f"des Monats das Feld, können sie es von dort nehmen. "
-                # N-739 (c): zuerst der Weg, der den Messwert holt — der Monatsabschluss zeigt das Feld leer.
-                f"Abhilfe: zuerst den HA-Statistik-Import für diesen Monat (ohne „Überschreiben“ genügt, "
-                f"solange der Monat so gemeldet ist); sonst im Monatsabschluss den gemessenen Wert eintragen "
-                f"— ein leeres Feld ist keine 0."
-            ),
+            meldung=f"{prefix}: {feld} nicht erfasst" + (" (Monat ohne Monatsabschluss)" if ohne_zeile else ""),
+            details=_details_ohne_zeile(feld, folge) if ohne_zeile else _details_mit_zeile(feld, folge),
             link=md_link,
         ))
+    return ergebnisse
+
+
+def _hat_echte_tage(f, monate_mit_stunden: set[tuple[int, int]]) -> bool:
+    """Trägt der Monat ohne Zeile wirklich Tage? (N-751, Entscheid Master 16.10.) Ja, wenn eine seiner Tageszeilen
+    Stunden hat (``stunden_verfuegbar > 0``) oder die Tagesebene ein Bilanz-Feld erfasst (Netzfeld, PV, BKW, Speicher).
+    Nein für den Stub-Monat, den ein Monatsabschluss des laufenden Monats mit Zukunftstagen anlegt (Tageszeile mit
+    ``stunden_verfuegbar = 0`` und leeren ``komponenten_kwh`` — gemessen 09/2026 auf mess3/skala3/skala3_kanaele)."""
+    from backend.services.monats_fakten import TAGESWERT_BKW, TAGESWERT_PV, TAGESWERT_SPEICHER
+
+    return (
+        (f.jahr, f.monat) in monate_mit_stunden
+        or f.meta.einspeisung_erfasst or f.meta.netzbezug_erfasst
+        or bool(f.meta.tageswert_gruppen & {TAGESWERT_PV, TAGESWERT_BKW, TAGESWERT_SPEICHER})
+    )
+
+
+def _netzfelder_nicht_erfasst_ohne_zeile(kat, fakten, monate_mit_stunden: set[tuple[int, int]]) -> list[CheckErgebnis]:
+    """Prüfung 0 für Monate OHNE Monatszeile (N-751): Monate mit Tageswerten (``TAGESWERT_ZAEHLER``) und echten Tagen
+    (``_hat_echte_tage``), je Netzfeld mit Flag ``False`` (``bau._zaehler_fakten``) — über dieselbe Regel-Stelle wie mit
+    Zeile (``_netzfelder_nicht_erfasst``). Monate MIT Zeile meldet Prüfung 0 im Orchestrator (keine Doppelmeldung).
+
+    ``fakten``: die Monats-Fakten mit ``inkl_nur_tageswerte`` (eigener Aufruf im Orchestrator — die Fakten des Helfers
+    ``_get_pv_erzeugung_map`` laden bewusst ohne das Flag, ``_helpers.py``)."""
+    from backend.services.monats_fakten import TAGESWERT_ZAEHLER
+    from backend.services.daten_checker.kategorien import link_monat_erfassen
+
+    ergebnisse: list[CheckErgebnis] = []
+    for f in fakten:
+        if f.meta.hat_zaehlerzeile or TAGESWERT_ZAEHLER not in f.meta.tageswert_gruppen:
+            continue
+        if not _hat_echte_tage(f, monate_mit_stunden):
+            continue
+        prefix = f"{f.monat:02d}/{f.jahr}"
+        ergebnisse += _netzfelder_nicht_erfasst(
+            kat, prefix, link_monat_erfassen(prefix), einspeisung_erfasst=f.meta.einspeisung_erfasst,
+            netzbezug_erfasst=f.meta.netzbezug_erfasst, ohne_zeile=True,
+        )
     return ergebnisse
 
 

@@ -430,7 +430,7 @@ async def _baue_fakt(
             hat_zaehlerzeile=monatsdaten is not None,
             netzbezug_erfasst=netzbezug_erfasst,
             einspeisung_erfasst=einspeisung_erfasst,
-            netz_erfasst=netzbezug_erfasst and einspeisung_erfasst,
+            netz_erfasst=monatsdaten is not None and netzbezug_erfasst and einspeisung_erfasst,
             erzeuger_aktiv=_erzeuger_aktiv(investitionen, jahr, monat),
             pv_vollstaendig=erzeugung.pv_vollstaendig,
             aktive_investitionen=tuple(
@@ -448,9 +448,12 @@ def _zaehler_fakten(
     """Die Zählergruppe des Monats und je Netzfeld, ob es **erfasst** ist: ``(zaehler, einspeisung_erfasst,
     netzbezug_erfasst)``. Setzt ``TAGESWERT_ZAEHLER`` in ``tageswert_gruppen``, wenn die Tagesebene gefüllt hat.
 
-    * **Ohne Zeile** füllt die Tagesebene beide Felder wie bisher (N-121); die Flags bleiben ``False`` — sie sagen, ob
-      die **Zeile** (ggf. von der Tagesebene ergänzt) das Feld trägt, und ohne Zeile ist das nie so
-      (``netzfeld_ist_erfasst(None, …)``). ``netz_erfasst`` schließt damit ``hat_zaehlerzeile`` ein.
+    * **Ohne Zeile** füllt die Tagesebene beide Felder wie bisher (N-121). ⭐ **N-751 (16.10.2026):** die Flags sind dann
+      die Marken der Tagesebene (``TagesMonatsSumme.einspeisung_erfasst``/``netzbezug_erfasst``, N-585: mindestens eine
+      Stunde mit Wert) — ein Feld, das kein Tag erfasst hat, bleibt ``0.0`` in der Zahl mit Flag ``False``, wie N-736
+      mit Zeile. Bis dahin waren sie ohne Zeile immer ``False``, und die Sichten mit ``inkl_nur_tageswerte`` rechneten
+      die 0 als Messwert (Eigenverbrauch = PV, Quote 100 %). ``meta.netz_erfasst`` bleibt «Zeile UND beide Felder
+      erfasst» (``_baue_fakt``) und schließt damit ``hat_zaehlerzeile`` weiter ein.
     * ⭐ **N-736 (12.10.2026), mit Zeile:** ein Netzfeld, das die Zeile nicht erfasst (0 ohne Herkunftseintrag,
       ``netzfeld_ist_erfasst``, N-734), füllt die Tagesebene — **nur dieses Feld**, und nur, wenn sie es erfasst; das
       erfasste Feld bleibt. Dieselbe Regel wie *Cockpit → Monat* (``aktueller_monat/quellen_leser.py``), nur ohne die
@@ -463,7 +466,7 @@ def _zaehler_fakten(
         tageswert_gruppen.add(TAGESWERT_ZAEHLER)
         return (
             ZaehlerFakten(einspeisung_kwh=tages_summe.einspeisung_kwh, netzbezug_kwh=tages_summe.netzbezug_kwh),
-            False, False,
+            bool(tages_summe.einspeisung_erfasst), bool(tages_summe.netzbezug_erfasst),
         )
     werte: dict[str, float] = {}
     erfasst: dict[str, bool] = {}

@@ -505,9 +505,12 @@ class MetaFakten:
     #: Zählerzeile sind ``NOT NULL`` mit Default 0 — eine Zeile, die ein Import ohne Netzfelder anlegte, steht mit 0,0
     #: da, und ``ZaehlerFakten`` trägt diese 0 (die Felder bleiben ``float``). Erfasst heißt: die Zeile trägt das Feld
     #: (``roh.netzfeld_ist_erfasst``, N-734 — Herkunftseintrag oder Wert ≠ 0) **oder** die Tagesebene hat es gefüllt
-    #: (``TAGESWERT_ZAEHLER``, nur wo sie es selbst erfasst). Ohne Zeile immer ``False`` (auch wenn die Tagesebene die
-    #: Zahl gefüllt hat — ``netzfeld_ist_erfasst(None, …)``); ``netz_erfasst`` = beide und schließt damit
-    #: ``hat_zaehlerzeile`` ein. Die Bilanz-Grundmenge der Fakten-Sichten (Muster N-659) ist
+    #: (``TAGESWERT_ZAEHLER``, nur wo sie es selbst erfasst). ⭐ N-751 (16.10.2026): **ohne Zeile** tragen die beiden
+    #: Feld-Flags die Marken der Tagesebene (``TagesMonatsSumme.*_erfasst``; ohne Tagesebene ``False``) — vorher immer
+    #: ``False``. ``netz_erfasst`` = Zeile **und** beide Felder erfasst — ohne Zeile weiter immer ``False``, es schließt
+    #: ``hat_zaehlerzeile`` also weiter ein (Community-Filter, Bilanz-Grundmengen). Wer einen Monat ohne Zeile beurteilt
+    #: (Monatsliste von Cockpit → Jahr, ``api/routes/monatsdaten.py::_ohne_netz_bilanz``), liest die Feld-Flags.
+    #: Die Bilanz-Grundmenge der Fakten-Sichten (Muster N-659) ist
     #: ``hat_zaehlerzeile and netz_erfasst and erzeuger_aktiv`` — ein Monat mit nicht erfasstem Netzfeld fällt aus
     #: Eigenverbrauch, Autarkie, Ersparnis, USt und CO₂ wie ein Monat ohne Zählerzeile; seine PV bleibt in der Anzeige.
     #: Default ``False`` wie ``hat_zaehlerzeile`` — ein von Hand gebauter Fakt ohne Zeile bleibt einer ohne Zeile.

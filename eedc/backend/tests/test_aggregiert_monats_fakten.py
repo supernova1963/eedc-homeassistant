@@ -106,9 +106,12 @@ async def test_zeile_ohne_zaehlerzeile_behauptet_keine_zaehlerwerte(db):
     """Was es ohne `Monatsdaten`-Datensatz nicht gibt, bleibt `None` — es wird
     nicht still zu 0 (CLAUDE.md „0-Werte prüfen", ADR-002/P4).
 
-    Einspeisung/Netzbezug sind die Ausnahme: sie kommen aus `f.zaehler` und
-    stehen dort auf 0,0. Das ist keine neue Behauptung dieser Route, sondern die
-    der Schicht — hier festgehalten, damit ein späterer Umbau es nicht übersieht.
+    Einspeisung/Netzbezug waren bis N-751 die Ausnahme: sie kamen aus `f.zaehler` und
+    standen dort auf 0,0 — die Behauptung der Schicht, hier festgehalten, «damit ein
+    späterer Umbau es nicht übersieht». ⭐ N-751 (16.10.2026) ist dieser Umbau: ohne Zeile
+    und ohne Tageswert ist ein Netzfeld nicht erfasst (Feld-Flag ``False``), die Zeile
+    nennt es — und was aus ihm folgt — als ``None`` (`_ohne_netz_bilanz`); `f.zaehler`
+    trägt weiter 0,0.
     """
     anlage = await _mai_mit_zeile_juni_ohne(db)
 
@@ -120,8 +123,9 @@ async def test_zeile_ohne_zaehlerzeile_behauptet_keine_zaehlerwerte(db):
     assert juni.sonnenstunden is None
     assert juni.netzbezug_durchschnittspreis_cent is None
     assert juni.hat_legacy_daten is False
-    assert juni.einspeisung_kwh == 0.0
-    assert juni.netzbezug_kwh == 0.0
+    assert juni.einspeisung_kwh is None
+    assert juni.netzbezug_kwh is None
+    assert juni.eigenverbrauch_kwh is None and juni.autarkie_prozent is None
 
 
 async def test_flag_laesst_die_bestehenden_zeilen_unveraendert(db):

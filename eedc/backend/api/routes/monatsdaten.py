@@ -782,9 +782,16 @@ def _ohne_netz_bilanz(fakt, zeile: AggregierteMonatsdatenResponse) -> Aggregiert
     """⭐ N-736 (12.10.2026): eine Zeile, deren Einspeisung oder Netzbezug nicht erfasst ist (``meta.netz_erfasst``, 0 ohne
     Herkunft, N-734), zeigt ihre Netz-, Bilanz- und Geldfelder als ``None`` („–") statt der 0 und dem, was aus ihr folgt
     (Eigenverbrauch = PV, Autarkie 100 %, Ersparnis auf die ganze PV). Die Zeile bleibt in der Liste — sie ist ein
-    Datensatz, den man öffnen und vervollständigen kann. Ein Monat ohne Zeile (``inkl_ohne_zaehlerzeile``) bleibt wie er
-    ist; ein Netzfeld, das die Tagesebene gefüllt hat, gilt als erfasst (``bau._zaehler_fakten``)."""
-    if not fakt.meta.hat_zaehlerzeile or fakt.meta.netz_erfasst:
+    Datensatz, den man öffnen und vervollständigen kann. Ein Netzfeld, das die Tagesebene gefüllt hat, gilt als erfasst
+    (``bau._zaehler_fakten``).
+
+    ⭐ **N-751 (16.10.2026): ebenso ein Monat ohne Zeile** (``inkl_ohne_zaehlerzeile``/``inkl_nur_tageswerte``), dessen
+    Einspeisung oder Netzbezug kein Tag erfasst hat (Feld-Flags aus den Marken der Tagesebene) — bis dahin ließ diese
+    Stelle jeden Monat ohne Zeile durch, und die Monatsliste von *Cockpit → Jahr* zeigte für eine Anlage ohne
+    Einspeisungs-Sensor Quote 100 %, während der Kopf derselben Seite (*Cockpit → Monat*) den Monat als nicht erfasst
+    führte."""
+    m = fakt.meta
+    if m.netz_erfasst or (not m.hat_zaehlerzeile and m.einspeisung_erfasst and m.netzbezug_erfasst):
         return zeile
     return zeile.model_copy(update=dict.fromkeys(_NETZ_ABHAENGIGE_FELDER))
 
