@@ -41,6 +41,12 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 3. **Ein Fund-Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
    ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit. **Eine Bauform-Etappe** behält
    den Apparat des Bauplans (Golden Master, Lab, `nachmesser-fable`).
+   **Gekürzt (Gernot 16.10.2026, nach vier Runden à 0,5–1,5 h):** Punkte **sammeln und in einem Lauf** bauen statt serieller Runden;
+   Melder-Eingänge warten bis zum nächsten Päckchen, außer P1. **Keine Sprengsätze.** Golden Master **nur**, wenn Monats-Fakten oder
+   der Layer (`core/berechnungen/`) berührt sind. **Volle Suite einmal am Ende durch die Bau-Session**; der Master liest die archivierte
+   Summenzeile und fährt sie **nicht** noch einmal. Komplexität prüft der Wächter in der Suite, keine Einzelmessung im Bericht.
+   **Bericht: Kopf · je Punkt drei Zeilen (gemessen · gebaut · Checker) · eine Gate-Zeile · Commit-Paket** — keine Etappen-Prosa,
+   Ablage nur für Messskripte, die ein Register-Eintrag nennt.
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
 5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
    10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
