@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.8] - 2026-10-17 — eedc rechnet wie das HA-Energie-Dashboard: Stunden und Kalendertag aus dem HA-Spiegel, kein Deckel auf HA-Werten; neu: Werkbank „Werte vor dem Sensorbeginn verwerfen"; 15 Korrekturen
 
 ### Added
 

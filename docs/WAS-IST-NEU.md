@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased
+## v4.1.8 — 17. Oktober 2026
 
 **Stunden aus Home Assistant:** Deckt der HA-Spiegel einen Tag, kommen jetzt auch die **Stunden** von PV, Einspeisung,
 Netzbezug, Speicher, Wärmepumpe und Wallbox aus ihm — jede Stunde ist der Zuwachs, den Home Assistant nennt, und die
