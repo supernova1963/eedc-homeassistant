@@ -617,6 +617,9 @@ Home Assistant.
 
 **Sensor ersetzt?** Stammt ein Rückgang von einem Sensor, den du inzwischen durch einen neuen ersetzt hast, zählen seine Werte weiter, und die Meldung kennzeichnet ihn mit „(Vorgänger-Sensor, zugeordnet bis TT.MM.JJJJ)“. Statt in Home Assistant zu korrigieren, kannst du dann mit der Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen“ seine Werte vor dem Beginn des neuen Sensors entfernen (*Einstellungen → Daten → Energieprofil-Pflege*, [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)); die Meldung verschwindet dann.
 
+
+> **Stunden ohne Langzeitstatistik.** Wo die Langzeitstatistik von Home Assistant für eine Stunde nichts hat, nimmt eedc seine eigenen gespeicherten Stundenstände dieses Zählers — aber nur für die Zeit vor dem ersten Wert aus Home Assistant, nicht für Lücken mittendrin, und ein späterer Abgleich mit Home Assistant ersetzt diese Stunden nicht. Liegen von einem Zähler nur Stände um Mitternacht vor, stimmen die Tagesmengen; die Stundenansicht zeigt den Tag als eine Spanne ohne Verteilung auf die Stunden.
+
 ---
 
 ### 4.8d PV – Messpunkt (Anlagenzähler und Strings) <a name="48d-pv--messpunkt"></a>
