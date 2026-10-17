@@ -1,9 +1,9 @@
-"""Proben Nachfüllen «Eigene Summe» aus den Stundenständen (HA-Bauform S3, Etappe E-S3-4, Auftrag Punkte 1, 3, 7).
+"""Proben Nachfüllen aus den Stundenständen (HA-Bauform S3, Etappe E-S3-4; S4, Etappe E-S4-3 «Nachbau 2», S4-R-N2).
 
-Für jeden Zähler **ohne HA-Entity** (S3-R9) werden die stündlichen Zählerstände in ``sensor_snapshots`` vor der ersten
-Kanal-Zeile zu Zeilen der Familie Mitschrift — über dieselbe Rechenstelle wie der Stundenlauf
-(``schreiber._eigene_summe_zeilen``). Ein Stand zur vollen Stunde ``Z`` ist der Stand am Ende von ``[Z−1 h, Z)`` ⇒
-Kanalzeile ``start_ts = Z − 3600``.
+Für **jeden Zähler** (seit E-S4-3 auch mit HA-Entity) werden die stündlichen Zählerstände in ``sensor_snapshots`` vor der
+ersten Kanal-Zeile und vor der ersten Quelle zu Zeilen der Familie Mitschrift — MQTT-Rohstände über dieselbe Rechenstelle
+wie der Stundenlauf (``schreiber._eigene_summe_zeilen``), HAs Stände (``ha_statistics``) wörtlich. Ein Stand zur vollen
+Stunde ``Z`` ist der Stand am Ende von ``[Z−1 h, Z)`` ⇒ Kanalzeile ``start_ts = Z − 3600``.
 
 Gegen eine Datei-Datenbank (``pv_achse_matrix._neue_db``): das Nachfüllen öffnet je Block eine eigene Sitzung. Die
 Referenz der Summenregel ist die Abschrift von HAs Schleife aus ``test_kanal_eigene_summe.py`` (nicht die
@@ -209,11 +209,12 @@ async def test_zweiter_lauf_schreibt_nichts_marke_je_kanal(datei):
 
 
 async def test_start_ohne_neue_zeilen_schreibt_keine_aktivitaet(datei):
-    """Nachmessung E-S3-4 (M-1): Schlüssel ohne Kanal (nur ``live_fallback``, Tagesstände) bekommen keine Marke und werden
-    bei jedem Start neu geprüft — protokolliert wird nur, wenn Zeilen geschrieben wurden oder ein Kanal abbrach."""
+    """Nachmessung E-S3-4 (M-1): Schlüssel ohne Kanal (nur ``live_fallback``- bzw. ``unknown``-Stände) bekommen keine Marke
+    und werden bei jedem Start neu geprüft — protokolliert wird nur, wenn Zeilen geschrieben wurden oder ein Kanal abbrach.
+    (Bis E-S4-3 stand hier eine Tagesstand-Reihe; seit S4-R-3e wird sie gefüllt.)"""
     sitzungen, aid = await datei()
     await _staende(sitzungen, aid, "basis:netzbezug", {0: 5.0, 1: 6.0}, quelle="live_fallback")
-    await _staende(sitzungen, aid, "basis:einspeisung", {i * 24: 100.0 + i for i in range(5)})
+    await _staende(sitzungen, aid, "basis:einspeisung", {i * 24: 100.0 + i for i in range(5)}, quelle="unknown")
     for _ in range(3):
         erg = await nachfuellen_anlage(sitzungen, aid, jetzt=JETZT, ha_svc=mx._ha_aus())
         assert erg.eigene_summe.kanaele == 2 and erg.eigene_summe.zeilen == 0
@@ -221,13 +222,14 @@ async def test_start_ohne_neue_zeilen_schreibt_keine_aktivitaet(datei):
         assert (await s.execute(select(ActivityLog))).scalars().all() == []
 
 
-# ── S3-R9: HA-Entity nie aus sensor_snapshots ───────────────────────────────
+# ── S4-R-N2: jeder Zähler, auch mit HA-Entity ───────────────────────────────
 
 
-async def test_feld_mit_ha_entity_bekommt_nichts_aus_den_stundenstaenden(datei):
-    """S3-R9: die Zuordnung entscheidet, nicht die Spalte ``quelle``. Netzbezug (HA-Sensor), PV-Gesamt (``quellen``:
-    HA), Speicher-Ladung (``quellen``: keine) und ein stillgelegtes Gerät mit HA-Entity bleiben ohne Kanal — auch mit
-    ``mqtt_inbound``-Ständen; die Einspeisung ohne Zuordnung wird gefüllt — auch aus ``ha_statistics``-Ständen."""
+async def test_jeder_zaehler_auch_mit_ha_entity_wird_gefuellt(datei):
+    """S4-R-N2 (S3-R9 berichtigt, Bauplan S3 §10f): Netzbezug (HA-Sensor), PV-Gesamt (``quellen``: HA) und ein
+    stillgelegtes Gerät mit HA-Entity bekommen ihre Stände wie die Einspeisung ohne Zuordnung; nur die Speicher-Ladung mit
+    ``quellen`` «keine» bleibt ohne Kanal. Die Herkunft der Stände entscheidet die Rechnung (``mqtt_inbound`` ⇒ HAs Regel,
+    ``ha_statistics`` ⇒ wörtlich), nicht die Zuordnung."""
     sitzungen, aid = await datei()
     sp = await _investition(sitzungen, aid, "speicher")
     alt = await _investition(sitzungen, aid, "pv-module", leistung_kwp=2.0, stilllegungsdatum=date(2026, 1, 1))
@@ -240,13 +242,22 @@ async def test_feld_mit_ha_entity_bekommt_nichts_aus_den_stundenstaenden(datei):
     for key in ("basis:netzbezug", "basis:pv_gesamt", f"inv:{sp}:ladung_kwh", f"inv:{alt}:pv_erzeugung_kwh"):
         await _staende(sitzungen, aid, key, {h: 10.0 + h for h in range(4)})
     await _staende(sitzungen, aid, "basis:einspeisung", {h: 10.0 + h for h in range(4)}, quelle="ha_statistics")
-    await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
-    assert await _keys(sitzungen, aid) == {"basis:einspeisung"}
+    erg = await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
+    assert await _keys(sitzungen, aid) == {"basis:einspeisung", "basis:netzbezug", "basis:pv_gesamt",
+                                           f"inv:{alt}:pv_erzeugung_kwh"}
+    assert (erg.gefuellt, erg.zeilen) == (4, 16)
+    _, netz, q_netz = await _kanal(sitzungen, aid, "basis:netzbezug")
+    assert [z.sum for z in netz] == [0.0, 1.0, 2.0, 3.0] and [q.statistic_id for q in q_netz] == ["netzbezug_kwh"]
+    _, einsp, q_einsp = await _kanal(sitzungen, aid, "basis:einspeisung")
+    assert [(z.sum, z.state) for z in einsp] == [(10.0 + h, None) for h in range(4)]          # wörtlich, ohne state
+    assert [(q.statistic_id, q.familie, q.offset) for q in q_einsp] == [
+        ("sensor_snapshots:basis:einspeisung", FAMILIE_MITSCHRIFT, 0.0)]
 
 
 async def test_auswahl_wie_der_stundenlauf(datei):
-    """Dieselbe Schlüsselmenge wie der Stundenlauf über die Rohstände (``schreiber._eigene_summe``) — gemischte
-    Zuordnung: HA-Sensor, ``quellen`` keine, MQTT-Gerätezähler, Stand-Zähler, ein Schlüssel ohne Zählerreihe."""
+    """Die Schlüsselmenge des Stundenlaufs über die Rohstände (``schreiber._eigene_summe``) und dazu die Zähler mit
+    HA-Entity (S4-R-N2; der Stundenlauf schreibt sie über den Spiegel) — gemischte Zuordnung: HA-Sensor, ``quellen``
+    keine, MQTT-Gerätezähler, Stand-Zähler, ein Schlüssel ohne Zählerreihe."""
     mapping = {"basis": {"netzbezug": _s("sensor.netz")}, "investitionen": {},
                "quellen": {"basis_energy_einspeisung_kwh": {"quelle": "keine"}}}
     gefunden = []
@@ -270,7 +281,8 @@ async def test_auswahl_wie_der_stundenlauf(datei):
                 await _staende(sitzungen, aid, sk, {1: 5.0})
             await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
         gefunden.append({k.split(":", 2)[-1] if k.startswith("inv:") else k for k in await _keys(sitzungen, aid)})
-    assert gefunden[0] == gefunden[1] == {"basis:pv_gesamt", "pv_erzeugung_kwh", "ladevorgaenge"}
+    assert gefunden[0] == {"basis:pv_gesamt", "pv_erzeugung_kwh", "ladevorgaenge"}
+    assert gefunden[1] == gefunden[0] | {"basis:netzbezug"}
 
 
 # ── live_fallback, Deckel ───────────────────────────────────────────────────
@@ -352,21 +364,62 @@ async def test_naht_an_den_stundenlauf(datei, stand_naht, zuwachs_naht):
     assert all(v == pytest.approx(1.0) for ts, v in zuwachs.items() if ts < vorher[0].start_ts)
 
 
-async def test_erste_quelle_eines_anderen_schluessels_bleibt_unberuehrt(datei):
-    """Die Vorgeschichte DERSELBEN Quelle (wie der Spiegel): beginnt der Kanal mit einer anderen Quelle, nichts."""
-    sitzungen, aid = await datei()
+async def _spiegel_ab(sitzungen, aid: int, key: str, ab_h: int, sums: list[float], *, offset: float = 0.0) -> None:
+    """Ein Kanal, der mit dem Spiegel ``sensor.neu`` ab Stunde ``ab_h`` beginnt (``sum`` je Stunde, ``state`` = sum + 7)."""
     async with sitzungen() as s:
-        k = Kanal(anlage_id=aid, key="basis:netzbezug", art="sum", einheit="kWh")
+        k = Kanal(anlage_id=aid, key=key, art="sum", einheit="kWh")
         s.add(k)
         await s.flush()
-        s.add(KanalQuelle(kanal_id=k.id, gueltig_ab=_ts(T0 + timedelta(hours=5)), familie="spiegel",
-                          statistic_id="sensor.alt", offset=0.0))
-        s.add(KanalStatistik(kanal_id=k.id, start_ts=_ts(T0 + timedelta(hours=5)), sum=1.0, state=1.0,
-                             familie="spiegel"))
-    await _staende(sitzungen, aid, "basis:netzbezug", {h: 10.0 + h for h in range(5)})
+        s.add(KanalQuelle(kanal_id=k.id, gueltig_ab=_ts(T0 + timedelta(hours=ab_h)), familie="spiegel",
+                          statistic_id="sensor.neu", offset=offset))
+        for i, v in enumerate(sums):
+            s.add(KanalStatistik(kanal_id=k.id, start_ts=_ts(T0 + timedelta(hours=ab_h + i)), sum=v, state=v + 7.0,
+                                 familie="spiegel"))
+
+
+@pytest.mark.parametrize("quelle,kennung", [("mqtt_inbound", "netzbezug_kwh"),
+                                            ("ha_statistics", "sensor_snapshots:basis:netzbezug")], ids=["mqtt", "ha"])
+async def test_staende_vor_der_ersten_spiegel_zeile_eigene_quelle_naht_ohne_zuwachs(datei, quelle, kennung):
+    """S4-R-N2: beginnt der Kanal mit dem Spiegel (HAs Statistik ab Stunde 5), füllen die Stände die Stunden DAVOR —
+    eigene Mitschrift-Quelle (MQTT-Kennung bzw. ``sensor_snapshots:<key>``), Spiegel-Zeilen und -Quelle unberührt. Zwei
+    Summen-Systeme haben keinen gemeinsamen Anker: die erste Spiegel-Stunde trägt keinen Zuwachs (wie ein Quellwechsel im
+    Stundenlauf), der Kanalwert ist an der Naht stetig."""
+    sitzungen, aid = await datei()
+    await _spiegel_ab(sitzungen, aid, "basis:netzbezug", 5, [0.0, 2.0, 4.0], offset=100.0)
+    await _staende(sitzungen, aid, "basis:netzbezug", {h: 10.0 + h for h in range(6)}, quelle=quelle)
     erg = await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
-    _, zeilen, _ = await _kanal(sitzungen, aid, "basis:netzbezug")
-    assert len(zeilen) == 1 and erg.uebersprungen["vorgeschichte_andere_quelle"] == 1 and erg.markiert == 1
+    _, zeilen, quellen = await _kanal(sitzungen, aid, "basis:netzbezug")
+    erste_spiegel = _ts(T0 + timedelta(hours=5))
+    assert [z.start_ts for z in zeilen] == [_ts(T0 + timedelta(hours=h)) - _H for h in range(6)] + [
+        erste_spiegel + i * _H for i in (0, 1, 2)]                    # Stand Z=5 ⇒ Zeile 4; ab Zeile 5 der Spiegel
+    assert [(z.sum, z.familie) for z in zeilen if z.start_ts >= erste_spiegel] == [
+        (0.0, "spiegel"), (2.0, "spiegel"), (4.0, "spiegel")]
+    assert [(q.familie, q.statistic_id) for q in quellen] == [("mitschrift", kennung), ("spiegel", "sensor.neu")]
+    assert quellen[1].offset == 100.0 and quellen[0].gueltig_ab == zeilen[0].start_ts
+    zuwachs = _zuwaechse(zeilen, quellen)
+    assert all(v == pytest.approx(1.0) for ts, v in zuwachs.items() if ts < erste_spiegel)
+    assert zuwachs[erste_spiegel] == pytest.approx(0.0) and zuwachs[erste_spiegel + _H] == pytest.approx(2.0)
+    assert (erg.gefuellt, erg.zeilen, erg.markiert) == (1, 6, 1)
+
+
+async def test_ha_staende_woertlich_ohne_reset_regel_und_herkunftswechsel(datei):
+    """HAs Stände von damals (``ha_statistics``) sind HAs Summen: wörtlich — ein Rückgang bleibt ein Rückgang (keine
+    90-%-Regel, kein Deckel). Wechselt die Herkunft (HA → MQTT), beginnt eine zweite Quelle; ihre erste Stunde trägt keinen
+    Zuwachs (der neue Abschnitt setzt am Kanalwert des vorigen an), danach HAs Regel über die MQTT-Rohstände."""
+    sitzungen, aid = await datei()
+    pv = await _investition(sitzungen, aid, "pv-module", leistung_kwp=10.0)
+    key = f"inv:{pv}:pv_erzeugung_kwh"
+    await _staende(sitzungen, aid, key, {0: 500.0, 1: 504.0, 2: 3.0, 3: 900.0}, quelle="ha_statistics")
+    await _staende(sitzungen, aid, key, {4: 50.0, 5: 52.0, 6: 1.0}, quelle="mqtt_inbound")
+    erg = await nachfuellen_eigene_summe(sitzungen, aid, jetzt=JETZT)
+    _, zeilen, quellen = await _kanal(sitzungen, aid, key)
+    assert [(q.statistic_id, q.gueltig_ab) for q in quellen] == [
+        (f"sensor_snapshots:{key}", zeilen[0].start_ts), (f"inv/{pv}/pv_erzeugung_kwh", zeilen[4].start_ts)]
+    assert [z.sum for z in zeilen[:4]] == [500.0, 504.0, 3.0, 900.0]                  # wörtlich (−501, +897 ohne Deckel)
+    w = _werte(zeilen, quellen)
+    assert w[4][1] == pytest.approx(w[3][1])                                          # Quellgrenze ohne Zuwachs
+    assert [b[1] - a[1] for a, b in zip(w[4:], w[5:])] == pytest.approx([2.0, 1.0])   # Reset < 90 % ⇒ der neue Stand
+    assert erg.deckel_verworfen == 0 and (erg.gefuellt, erg.zeilen) == (1, 7)
 
 
 # ── Blockweise, abgebrochen, fortgesetzt ────────────────────────────────────
@@ -410,11 +463,11 @@ async def test_abbruch_nach_einem_block_setzt_beim_naechsten_lauf_fort(datei):
 # ── Ein Stand je Tag (mess3: Tagesgrenzen 00:00 aus der HA-Zeit) ────────────
 
 
-async def test_tagesstand_reihe_wird_nicht_nachgefuellt_sondern_gezaehlt(datei):
-    """Entscheid Master E-S3-4 (Option B): nur stündliche Reihen (Median der Abstände ≤ 3 600 s). Ein Stand je Tag um
-    00:00 würde die Zeile 23:00 und träfe im 23-Uhr-Tagesfenster weder den Tag (Vortagsmenge) noch den Monat (31.05. statt
-    30.06.) — die Reihe bleibt Lesart 1 (kein Kanal), gezählt als ``tagesstaende`` und in der Aktivität genannt. Eine
-    stündliche Reihe mit einer langen inneren Lücke wird dagegen gefüllt (Menge in der Folgestunde)."""
+async def test_tagesstand_reihe_wird_gefuellt_und_gezaehlt(datei):
+    """S4-R-3e (E-S4-3): seit dem Kalendertag (R-3) liegt ein Stand um 00:00 als Zeile 23:00 genau auf der Tagesgrenze —
+    die Reihe wird gefüllt wie jede andere (das Option-B-Kriterium ist entfallen); die Aktivität nennt sie («1 Reihen mit
+    Tagesständen»). Eine stündliche Reihe mit einer langen inneren Lücke zählt nicht dazu (Menge in der Folgestunde).
+    Tag und Stunden aus solchen Reihen: ``test_kanal_tagesstand_reihen.py``."""
     sitzungen, aid = await datei()
     await _staende(sitzungen, aid, "basis:netzbezug", {i * 24: 1000.0 + 10 * i for i in range(45)},
                    ab=T0 - timedelta(days=20))
@@ -422,14 +475,17 @@ async def test_tagesstand_reihe_wird_nicht_nachgefuellt_sondern_gezaehlt(datei):
     await _staende(sitzungen, aid, "basis:einspeisung", luecke)
     erg = await nachfuellen_anlage(sitzungen, aid, jetzt=JETZT + timedelta(days=30), ha_svc=mx._ha_aus())
     es = erg.eigene_summe
-    assert es.uebersprungen["tagesstaende"] == 1 and es.gefuellt == 1 and es.zeilen == 12
-    assert await _keys(sitzungen, aid) == {"basis:einspeisung"}
+    assert (es.tagesstand_reihen, es.gefuellt, es.zeilen) == (1, 2, 12 + 45)
+    assert await _keys(sitzungen, aid) == {"basis:einspeisung", "basis:netzbezug"}
+    _, netz, q_netz = await _kanal(sitzungen, aid, "basis:netzbezug")
+    assert {datetime.fromtimestamp(z.start_ts).hour for z in netz} == {23}
+    assert set(_zuwaechse(netz, q_netz).values()) == {10.0}
     _, einsp, quellen = await _kanal(sitzungen, aid, "basis:einspeisung")
     assert _zuwaechse(einsp, quellen)[_ts(T0 + timedelta(hours=40)) - _H] == pytest.approx(35.0)
     async with sitzungen() as s:
         details = [a.details for a in (await s.execute(select(ActivityLog))).scalars().all()
                    if a.aktion.endswith("abgeschlossen")]
-    assert details and "1 Reihen mit Tagesständen — ab Kalendertag (S4)" in details[0], details
+    assert details and details[0].endswith("; 1 Reihen mit Tagesständen"), details
 
 
 # ── Auslöser: Anstoß aus dem Stundenlauf, Startlauf ─────────────────────────

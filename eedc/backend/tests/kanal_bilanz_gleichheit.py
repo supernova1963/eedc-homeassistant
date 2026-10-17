@@ -148,6 +148,8 @@ class Datenstand:
     aid: int
     ids: dict[str, int]
     svc: Any = None
+    #: Nur MQTT: die Zuordnung der Form vor dem Leeren (HA-Bauform S4, E-S4-3: Gleichheit «auch mit HA-Schlüsseln»).
+    zuordnung: Optional[dict] = None
 
 
 @asynccontextmanager
@@ -186,6 +188,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                 svc = mx._ha_aus()
                 aid, ids = await (am.seed_anlage(db, form) if matrix == "achsen" else mx.seed_anlage(db, form))
                 anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
+                zuordnung = dict(anlage.sensor_mapping or {})
                 anlage.sensor_mapping = {"basis": {}, "investitionen": {}}
                 flag_modified(anlage, "sensor_mapping")
                 await db.commit()
@@ -200,7 +203,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: aus der eigenen Summe, wie im Stundenlauf
                     await mx.aggregiere_tage(db, pf, aid, TAGE)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
-            yield Datenstand(matrix, fid, art, db, aid, ids, svc)
+            yield Datenstand(matrix, fid, art, db, aid, ids, svc, zuordnung if art != "HA" else None)
         finally:
             await db.close()
             await engine.dispose()

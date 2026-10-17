@@ -444,14 +444,15 @@ def soll_netzbezug(n_tage: int, form: Optional[Form] = None) -> float:
 # ── Weg 2 als Soll (nur ``FORMEN_W2``) ──────────────────────────────────────
 
 
-#: HA-Bauform S4 (E-S4-1): ob der SA-Datenstand Kanäle trägt — erst mit Nachbau 2 (E-S4-3, Patch (a) der Ablage
-#: ``e-s3-4b/``); bis dahin False.
-SA_KANAELE: bool = False
+#: Seed-Eigenschaft (HA-Bauform S4, E-S4-3, Patch (a) aus E-S3-4b): der SA-Datenstand trägt Kanäle — seit Nachbau 2
+#: füllt der Seed-Haken ``fuelle_eigene_summe`` wie das Produkt JEDEN Zähler aus den Stundenständen, auch mit HA-Entity
+#: (S4-R-N2); ``fuelle_eigene_summe`` prüft es je Seed. Dann gelten auf SA/S3 die Soll-Regeln, die HA/S1/S2 mit Kanälen tragen
+#: (Kalendertag, BKW-Kinder am Tag, Wandlungsverluste, bewertbare Verluste, Messpunkt).
+SA_KANAELE: bool = True
 
 
 def kanal_wege() -> tuple[str, ...]:
-    """Die Wege, deren Datenstand Kanäle trägt (Datenstände und Schreibwege) — Patch (a) aus E-S3-4b; SA/S3 erst mit
-    E-S4-3."""
+    """Die Wege, deren Datenstand Kanäle trägt (Datenstände und Schreibwege) — Patch (a) aus E-S3-4b."""
     return ("HA", "S1", "S2", "SA", "S3") if SA_KANAELE else ("HA", "S1", "S2")
 
 
@@ -738,11 +739,11 @@ async def fuelle_spiegel(engine, anlage_id: int, svc) -> None:
 
 
 async def fuelle_eigene_summe(engine, anlage_id: int):
-    """HA-Bauform S3, E-S3-4 (wie B-1 für HA): die Eigene Summe aus den gesäten Stundenständen, wie das Produkt sie nach
-    dem Start nachfüllt (``kanal/nachfuellen.nachfuellen_eigene_summe``), danach die abgeleiteten Kanäle wie der
-    Stundenlauf. Nach S3-R9 nur für Zähler OHNE HA-Entity — der SA-Datenstand dieser Matrix ordnet jedem Zähler einen
-    HA-Sensor zu (``seed_anlage``), das Nachfüllen schreibt dort also nichts (gemessen, Bericht E-S3-4 H-1). Ein Seed,
-    kein Soll."""
+    """HA-Bauform S3, E-S3-4 (wie B-1 für HA): die Kanäle aus den gesäten Stundenständen, wie das Produkt sie nach dem Start
+    nachfüllt (``kanal/nachfuellen.nachfuellen_eigene_summe``), danach die abgeleiteten Kanäle wie der Stundenlauf. Seit
+    Nachbau 2 (HA-Bauform S4, E-S4-3, S4-R-N2) für JEDEN Zähler, auch mit HA-Entity — der SA-Datenstand dieser Matrix ordnet
+    jedem Zähler einen HA-Sensor zu (``seed_anlage``), HA antwortet nicht; jeder bekommt seinen Kanal. Die Seed-Eigenschaft
+    ``SA_KANAELE`` wird hier geprüft. Ein Seed, kein Soll."""
     from contextlib import asynccontextmanager
 
     from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe
@@ -756,7 +757,7 @@ async def fuelle_eigene_summe(engine, anlage_id: int):
             await s.commit()
 
     erg = await nachfuellen_eigene_summe(sitzungen, anlage_id, jetzt=JETZT)
-    assert erg.fehler == 0, erg
+    assert erg.fehler == 0 and (erg.gefuellt > 0) == SA_KANAELE, erg
     await baue_abgeleitete(sitzungen, anlage_id)
     return erg
 

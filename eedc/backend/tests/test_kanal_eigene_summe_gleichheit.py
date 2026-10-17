@@ -1,4 +1,4 @@
-"""Gleichheit der nachgefüllten Eigenen Summe (HA-Bauform S3, Etappe E-S3-4, Auftrag Punkt 5).
+"""Gleichheit der nachgefüllten Eigenen Summe (HA-Bauform S3, Etappe E-S3-4, Auftrag Punkt 5; S4, E-S4-3 Punkt 7).
 
 Auf dem Matrix-Datenstand ``MQTT`` (``kanal_bilanz_gleichheit.datenstand``: reine MQTT-Anlage, Rohstände in
 ``mqtt_energy_snapshots``, Stundenstände in ``sensor_snapshots`` wie ``snapshot_anlage`` sie schreibt) entsteht die
@@ -14,6 +14,11 @@ Eigene Summe hier NICHT aus dem Stundenlauf, sondern aus dem Nachfüllen über d
   (E4a: Fassung (a) == Bestand ohne Ausnahme, Weg-2-Klassen ``W2_KLASSEN``, Quellenwahl) und die des Kanal-Stundentags
   (E-S3-1: Klassen ``KLASSEN``, ``unbenannt`` 0) treffen die eingefrorenen Zahlen des Datenstands ``MQTT``.
 
+* **Auch mit HA-Schlüsseln (HA-Bauform S4, E-S4-3, Nachbau 2):** dieselbe Form mit ihrer HA-Zuordnung (jeder Zähler hat eine
+  HA-Entity, HA antwortet nicht — der SA-Datenstand der Matrizen): das Nachfüllen schreibt Zeile für Zeile dieselben Kanäle,
+  Stände und Quellen wie ohne Zuordnung (0 Abweichungen) — die Zuordnung entscheidet nur die Marke (``ergebnis["staende"]``
+  neben der Kennung des Spiegels), nicht die Rechnung.
+
 Keine Probe liest die Uhr. Schwesterdateien: test_kanal_eigene_summe_nachfuellen.py, test_kanal_bilanz_gleichheit.py,
 test_kanal_stunden_gleichheit.py.
 """
@@ -23,8 +28,12 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import delete, select
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
+
 from backend.models.anlage import Anlage
 from backend.models.kanal import FAMILIE_MITSCHRIFT, Kanal, KanalNachfuellung, KanalQuelle, KanalStatistik
+from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe
 from backend.services.kanal.quellenwahl import QUELLE_KANAL
 from backend.services.snapshot.keys import _sensor_key_to_mqtt_key
 from backend.tests import achsen_matrix as am
@@ -118,3 +127,38 @@ async def test_nachgefuellte_eigene_summe_gleich_der_aus_den_rohstaenden(matrix,
     assert dict(w2_klassen) == W2_KLASSEN.get((matrix, fid, "MQTT"), {}), dict(w2_klassen)
     assert {k for k, w in bb.wahl.items() if w != QUELLE_KANAL} == ZAEHLER_OHNE_NACHTZEILEN.get(fid, set()), bb.wahl
     assert bb.abweichungen == [], bb.abweichungen[:5]
+
+
+@pytest.mark.parametrize("matrix,fid", _FORMEN, ids=[f"{m}-{f}" for m, f in _FORMEN])
+async def test_mit_ha_zuordnung_dieselben_zeilen_wie_ohne(matrix, fid):
+    """Nachbau 2 (S4-R-N2): die Zuordnung der Form zurück, alle Kanäle weg, Nachfüllen erneut — dieselben Eigene-Summe-
+    Kanäle Stand für Stand (Toleranz 0), jeder Zähler mit HA-Entity hat seine Marke mit dem Stände-Teil."""
+    from contextlib import asynccontextmanager
+
+    async with kg.datenstand(matrix, fid, "MQTT", eigene_summe_aus="sensor_snapshots") as ds:
+        ohne = await _eigene_summe(ds.db, ds.aid)
+        assert ohne and (ds.zuordnung.get("basis") or ds.zuordnung.get("investitionen")), ds.zuordnung
+        anlage = (await ds.db.execute(select(Anlage).where(Anlage.id == ds.aid))).scalar_one()
+        anlage.sensor_mapping = ds.zuordnung
+        flag_modified(anlage, "sensor_mapping")
+        ids = list((await ds.db.execute(select(Kanal.id).where(Kanal.anlage_id == ds.aid))).scalars().all())
+        for tabelle in (KanalStatistik, KanalQuelle, KanalNachfuellung):
+            await ds.db.execute(delete(tabelle).where(tabelle.kanal_id.in_(ids)))
+        await ds.db.execute(delete(Kanal).where(Kanal.id.in_(ids)))
+        await ds.db.commit()
+        macher = async_sessionmaker(ds.db.bind, class_=AsyncSession, expire_on_commit=False)
+
+        @asynccontextmanager
+        async def sitzungen():
+            async with macher() as s:
+                yield s
+                await s.commit()
+
+        erg = await nachfuellen_eigene_summe(sitzungen, ds.aid, jetzt=mx.JETZT)
+        mit = await _eigene_summe(ds.db, ds.aid)
+        marken = {k: (sid, e) for k, sid, e in (await ds.db.execute(
+            select(Kanal.key, KanalNachfuellung.statistic_id, KanalNachfuellung.ergebnis)
+            .join(KanalNachfuellung, KanalNachfuellung.kanal_id == Kanal.id).where(Kanal.anlage_id == ds.aid))).all()}
+    assert erg.fehler == 0 and mit == ohne, sorted(set(mit) ^ set(ohne))[:5]
+    mit_ha = {k for k, (sid, e) in marken.items() if sid.startswith("sensor_snapshots:")}
+    assert mit_ha and all("staende" in marken[k][1] for k in mit_ha)

@@ -291,7 +291,7 @@ ACHSEN_HALTEWERTE: dict[tuple[str, str, str, str, str], Optional[float]] = {
     ('M06', 'wp', 'S3', 'I2', 'waerme:cockpit_monat:vor=nach'): None,
     ('M06', 'wp', 'S3', 'I2', 'warmwasser:cockpit_monat:vor=nach'): None,
     ('M06', 'wp', 'S3', 'I5', 'cockpit_monat:jaz:Klima'): 3.0,
-    ('M06', 'wp', 'SA', 'I5', 'cockpit_monat:jaz:Klima'): None,
+    ('M06', 'wp', 'SA', 'I5', 'cockpit_monat:jaz:Klima'): 3.0,  # E-S4-3: war None (SA ohne Kanäle); Nachbau 2 ⇒ = HA/S1/S2/S3 (WP-Kanäle, N-750)
     ('M07', 'netz', 'S3', 'I2', 'autarkie:cockpit_monat:vor=nach'): None,
     ('M07', 'netz', 'S3', 'I2', 'eigenverbrauch:cockpit_monat:vor=nach'): None,
     ('M07', 'netz', 'S3', 'I2', 'einspeisung:cockpit_monat:vor=nach'): None,
