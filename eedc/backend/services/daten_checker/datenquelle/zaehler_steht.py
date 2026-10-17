@@ -21,8 +21,8 @@ nichts liefert, ist durch den Abzug der Entladung gedeckt; ohne Entladungs-Kanal
 Einspeisung gar nicht als Gegengröße genommen (sie wäre dann nicht zu erklären).
 
 Gelesen werden die Kanäle (über ``kanal/bilanz_leser.tagesdeltas`` → ``kanal/lesen.reihe_stapel``) der letzten ``STEHT_FENSTER_TAGE`` abgeschlossenen Tage im
-Tagesfenster des Bestands (``kanal/fenster.tagesfenster`` — dasselbe wie Cockpit → Tag); ein Tag zählt nur bei voller
-Abdeckung. ⛔ Kein Reparatur-Knopf: die Antwort liegt am Sensor in Home Assistant bzw. am MQTT-Topic.
+Tagesfenster der Kanal-Schicht (``kanal/fenster.tagesfenster`` — seit HA-Bauform S4 der Kalendertag, dasselbe wie Cockpit → Tag
+an einem Kanal-Tag); ein Tag zählt nur bei voller Abdeckung. ⛔ Kein Reparatur-Knopf: die Antwort liegt am Sensor in Home Assistant bzw. am MQTT-Topic.
 """
 
 from __future__ import annotations

@@ -173,13 +173,15 @@ async def test_je_sensor_und_tag_eine_zeile_groesste_zuerst(db):
             "sensor.einspeisung am 04.06.2025: −39,9 kWh (Stunde ab 09:00)") in e.details
 
 
-async def test_die_stunde_ab_23_uhr_zaehlt_zum_folgetag(db):
-    """Tagesfenster des Bestands ``[Vortag 23:00, 23:00)`` (``kanal/fenster.tagesfenster``): die Zeile 04.06. 23:00
-    steht in Cockpit → Tag am 05.06. — dort nennt sie die Meldung, die Stunde für HA mit vollem Datum."""
+async def test_die_stunde_ab_23_uhr_zaehlt_zum_kalendertag(db):
+    """HA-Bauform S4 (R-3, Nachmessung E-S4-1 M-3): ein Kanal-Tag ist der Kalendertag ``[D 00:00, D+1 00:00)``
+    (``kanal/fenster.tagesfenster``) — die Zeile 04.06. 23:00 steht in Cockpit → Tag am 04.06. als Stunde 23–24 Uhr,
+    also nennt die Meldung den 04.06. (bis E-S4-4: 05.06., Tag des Bestandsfensters)."""
     a = await _anlage(db)
     await _kanal(db, a, "basis:netzbezug", "sensor.netzbezug", _reihe(rueckgaenge={datetime(2025, 6, 4, 23): 12.0}))
     (e,) = await _Pruefer(db)._check_ha_rueckgang(a)
-    assert "sensor.netzbezug am 05.06.2025: −12,0 kWh (Stunde ab 04.06.2025 23:00)" in e.details
+    assert "sensor.netzbezug am 04.06.2025: −12,0 kWh (Stunde ab 23:00)" in e.details
+    assert "05.06.2025" not in e.details
 
 
 def test_gruppiere_und_tag_der_zeile_rein():
@@ -187,7 +189,22 @@ def test_gruppiere_und_tag_der_zeile_rein():
     (r,) = gruppiere([("sensor.x", ts, -1.5), ("sensor.x", ts + 3600, -0.5)])
     assert (r.statistic_id, r.tag.isoformat(), r.menge_kwh, r.groesste_stunde) == ("sensor.x", "2025-06-05", 2.0, ts)
     assert tag_der_zeile(_ts(datetime(2025, 6, 4, 22))).isoformat() == "2025-06-04"
-    assert tag_der_zeile(_ts(datetime(2025, 6, 4, 23))).isoformat() == "2025-06-05"
+    assert tag_der_zeile(_ts(datetime(2025, 6, 4, 23))).isoformat() == "2025-06-04"
+    assert tag_der_zeile(_ts(datetime(2025, 6, 5, 0))).isoformat() == "2025-06-05"
+
+
+def test_tag_der_zeile_ist_der_tag_von_cockpit_tag():
+    """M-3: der Checker rechnet den Tag selbst (die Lese-Schicht darf er nicht importieren, Wächter
+    ``test_kanal_lesen_waechter``) — er muss derselbe sein, in dem Cockpit → Tag die Zeile zeigt: jede Stunde eines Jahres
+    mit beiden Umstellungen liegt in ``fenster.tagesfenster(tag_der_zeile(ts))``, und der Tag ist
+    ``fenster.kalendertag_der_stunde`` (Prozesszone — die Suite läuft in Berlin, UTC und Auckland)."""
+    from backend.services.kanal.fenster import kalendertag_der_stunde, tagesfenster
+
+    beginn = _ts(datetime(2025, 1, 1))
+    for ts in range(beginn, beginn + 366 * 24 * 3600, 3600):
+        tag = tag_der_zeile(ts)
+        von, bis = tagesfenster(tag)
+        assert von <= ts < bis and tag == kalendertag_der_stunde(ts), ts
 
 
 async def test_eine_kleine_abnahme_hat_drei_nachkommastellen(db):

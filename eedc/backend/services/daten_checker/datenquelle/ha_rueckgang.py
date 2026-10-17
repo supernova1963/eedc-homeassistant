@@ -29,9 +29,14 @@ Zeilen unter der Toleranz zurück (Fensterfunktion ``LAG`` in SQLite, über den 
 ``sum + offset`` ebenso). Jede größere Abnahme ist eine Abnahme, die HA gebucht hat und die Tag und Monat zeigen —
 auch eine kleine (ein ``total``-Sensor mit Messrauschen): eedc rechnet sie mit, also benennt der Checker sie.
 
-**Tag** = der Tag, in dem Cockpit → Tag die Menge zeigt: das Tagesfenster des Bestands ist ``[Vortag 23:00, 23:00)``
-(``kanal/fenster.tagesfenster``), eine Zeile ``start_ts = H`` gehört also zum Tag von ``H + 1 h`` (Prozesszone, wie der
-ganze Bestand). Die Stunde für HAs „Wert anpassen" ist der Beginn der Zeile, ``H``.
+**Tag** = der Tag, in dem Cockpit → Tag die Menge zeigt. Die Zeilen, die der Checker liest, sind Kanal-Zeilen, und
+ein Kanal-Tag ist seit HA-Bauform S4 (R-3, E-S4-1) der **Kalendertag** ``[D 00:00, D+1 00:00)`` (``kanal/fenster.tagesfenster``,
+wie das HA-Energie-Dashboard): eine Zeile ``start_ts = H`` gehört zum Tag ihres Beginns ``H`` (Prozesszone), auch die
+Stunde ab 23:00. Bis E-S4-4 nannte der Checker den Tag des Bestandsfensters ``[Vortag 23:00, 23:00)`` (``H + 1 h``) —
+Cockpit → Tag zeigte die Zeile 23:00 dann am Tag D, die Meldung am Tag D+1 (Nachmessung E-S4-1 M-3). Die Rechnung steht
+hier selbst (gleich ``fenster.kalendertag_der_stunde``; ``fenster`` gehört zur Lese-Schicht, deren Importeure
+``test_kanal_lesen_waechter`` festhält — die Probe vergleicht beide). Die Stunde für HAs „Wert anpassen" ist der Beginn
+der Zeile, ``H``.
 
 ⛔ **Kein Reparatur-Knopf, kein Verwerfen in eedc.** Die Quelle ist HAs Statistik; korrigiert wird dort
 (Entwicklerwerkzeuge → Statistik → „Wert anpassen"), und eedc zieht über den nächtlichen Konsistenzlauf
@@ -63,8 +68,6 @@ TOLERANZ_KWH = 1e-6
 #: Wie viele Tage die Meldung beim Namen nennt.
 BEISPIELE = 5
 
-_STUNDE = 3600
-
 
 @dataclass
 class Rueckgang:
@@ -86,8 +89,8 @@ class Rueckgang:
 
 
 def tag_der_zeile(start_ts: int) -> date:
-    """Der Tag, in dem eine Zeile ``start_ts`` zählt — Tagesfenster ``[Vortag 23:00, 23:00)`` (Docstring)."""
-    return datetime.fromtimestamp(start_ts + _STUNDE).date()
+    """Der Tag, in dem eine Zeile ``start_ts`` zählt — der Kalendertag ihres Beginns (Kanal-Tag, S4-R-3a; Docstring)."""
+    return datetime.fromtimestamp(start_ts).date()
 
 
 def gruppiere(zeilen: Iterable[tuple]) -> list[Rueckgang]:
@@ -139,8 +142,8 @@ def _menge(kwh: float) -> str:
 
 
 def _zeile(r: Rueckgang) -> str:
-    stunde = datetime.fromtimestamp(r.groesste_stunde)
-    ab = stunde.strftime("%H:%M") if stunde.date() == r.tag else stunde.strftime("%d.%m.%Y %H:%M")
+    # Die Stunde liegt im Tag der Zeile (Kalendertag ihres Beginns) — die Uhrzeit genügt, auch für 23:00.
+    ab = datetime.fromtimestamp(r.groesste_stunde).strftime("%H:%M")
     wo = f"Stunde ab {ab}" if len(r.stunden) == 1 else f"{len(r.stunden)} Stunden, die größte ab {ab}"
     vorgaenger = ("" if r.zugeordnet_bis is None else
                   f" (Vorgänger-Sensor, zugeordnet bis {datetime.fromtimestamp(r.zugeordnet_bis).strftime('%d.%m.%Y')})")
