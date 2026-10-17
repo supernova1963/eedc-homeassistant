@@ -19,6 +19,32 @@ Stunde danach („enthält n Stunden"). Das gilt für den Stunden-Verlauf in *Co
 Wärme-Sichten. Tage älter als zwei Jahre zeigen ihren Stunden-Verlauf wieder, soweit deine HA-Statistik zurückreicht
 ([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag), [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
+**Der Tag geht von 0 bis 24 Uhr — wie im HA-Energie-Dashboard:** An Tagen aus dem HA-Spiegel ist der Tag jetzt der
+Kalendertag, und eine Stunde beginnt zur vollen Stunde. Bisher reichte der Tag von 23 Uhr des Vortags bis 23 Uhr. Das
+Bild der Folge: was zwischen 23 und 24 Uhr passiert — die Wallbox lädt nachts, der Speicher zieht günstigen Netzstrom —,
+steht jetzt am selben Tag und nicht mehr am nächsten; jede Tageszahl eines solchen Tages ändert sich deshalb einmal um
+diese eine Stunde (bei PV nachts kaum). *Cockpit → Monat* und der Verlauf in *Cockpit → Jahr* nennen im laufenden Monat
+dieselbe Zahl, *Cockpit → Live* „heute" und *Cockpit → Tag* dasselbe Fenster. Die Stunden sind als Bereich beschriftet
+(„11–12"), auch an Tagen aus den eigenen Stundenwerten, die so bleiben, wie sie gespeichert sind — an der Grenze
+zwischen beiden Tagesarten fehlt deshalb eine Stunde oder sie zählt doppelt
+([Bedienung → Tag](HANDBUCH_BEDIENUNG.md#22-tag)).
+
+**Kein Deckel auf Werten aus Home Assistant:** *Cockpit → Monat*, „Aus HA laden", der Import aus der HA-Statistik und
+der Vorschlag im Monatsabschluss nehmen jetzt die Zahl von Home Assistant, ohne eine hohe Stunde von PV oder Einspeisung
+zu kappen — wie die Tage aus dem HA-Spiegel und das Energie-Dashboard. Ein Sprung in der HA-Statistik steht damit in Tag
+und Monat; hat er das typische Muster (der Sensor fällt kurz auf 0 und kehrt zurück), zeigt ihn der Daten-Checker
+„Zählerstände – Sprung in Home Assistant" mit dem Weg zur Korrektur in Home Assistant ([Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)). Ein
+MQTT-Zähler, der jede Nacht auf 0 zurückfällt, ergibt über seine eigene Summe richtige Tage, Monate und Jahre; Live
+„heute" und „gestern", Geräte-Tageswerte aus der Zeit davor und der Vorschlag im Monatsabschluss bleiben für ihn ohne
+verlässlichen Wert — die Meldung im Daten-Checker sagt es, und die Empfehlung bleibt, den fortlaufenden Stand zu schicken.
+
+**Eigene Zählerstände vor der HA-Statistik, Werkbank mit klarer Grenze:** Wo die Langzeitstatistik von Home Assistant
+einen Zähler noch nicht führt, nimmt eedc seine eigenen gespeicherten Stundenstände — für jeden Zähler, nur für die Zeit
+vor dem ersten Wert aus Home Assistant. Liegen nur Stände um Mitternacht vor, stimmen die Tage, die Stundenansicht zeigt
+den Tag als eine Spanne. Und verwirfst du mit der Werkbank „Werte vor dem Sensorbeginn verwerfen" ein Feld, gilt es an
+Tagen, die nur der HA-Spiegel trägt, als nicht erfasst; die übrigen Felder bleiben
+([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+
 **Werkbank: Werte vor dem Sensorbeginn verwerfen:** Hast du einem Feld einen neuen Sensor zugeordnet und der alte hat
 vorher falsche Werte geliefert, kommst du jetzt an diese Werte heran. Die neue Operation der Reparatur-Werkbank verwirft
 für **ein** Feld die Werte vor dem Beginn des neuen Sensors — im HA-Spiegel und in den Stunden- und Tageswerten, nur
