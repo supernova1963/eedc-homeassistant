@@ -48,7 +48,10 @@ async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, mo
 
     * **Feldmenge und Fenster aus den geteilten Tabellen**: `aggregator.TAGESDETAIL_AUSGABE` (`speicher/ladung_netz_kwh`
       → `speicher_ladung_netz_kwh`) und `boundary_range.TAGESFENSTER_JE_TYP["speicher"]` (rückwärts: je Tag
-      [Vortag 23:00, 23:00) — derselbe Tag wie die Speicher-Ladung der Tagesbilanz).
+      [Vortag 23:00, 23:00) — derselbe Tag wie die Speicher-Ladung der Tagesbilanz) — **nur für Bestandstage**.
+    * **Ein Kanal-Tag liegt im Kalendertag** (H-3, HA-Bauform S4 R-3a): Cockpit → Tag nimmt an einem Kanal-Tag
+      (`bilanz_leser.kanal_tage`) `tagesfenster_fuer(…, kanal_tag=True)` = [00:00, 24:00); dieselbe Weiche hier, sonst
+      lägen Monat und Σ der Tage um die Netzladung der Stunde 23–24 Uhr an den Monatsrändern auseinander.
     * **Nur abgelaufene Tage** (bis gestern): der heutige Tag hat seinen rechten Rand noch nicht.
     * **Ein Tag mit Rücksprung oder ohne Rand fehlt** (Bereichs-Leser) — keine 0 als Platzhalter. Ohne zugeordneten
       Netzlade-Zähler oder ohne einen einzigen Tageswert: ``None``. Eine gemessene 0 bleibt 0.
@@ -68,7 +71,11 @@ async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, mo
     felder = {k: v for k, v in TAGESDETAIL_AUSGABE.items() if k == ("speicher", "ladung_netz_kwh")}
     ausgabe_key = felder[("speicher", "ladung_netz_kwh")]
     tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
-    rueckwaerts = frozenset(tage) if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts" else frozenset()
+    rueckwaerts = frozenset()
+    if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts":
+        from backend.services.kanal.bilanz_leser import kanal_tage
+
+        rueckwaerts = frozenset(tage) - frozenset(await kanal_tage(db, anlage.id, von, bis))
     je_tag = await lade_tageswerte_je_feld(
         db, anlage, {str(i.id): i for i in speicher_invs}, von, bis, felder, rueckwaerts_tage=rueckwaerts,
     )

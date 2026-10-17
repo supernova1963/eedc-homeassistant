@@ -3832,11 +3832,10 @@ bzw. den Monats-Fakten und kennen kein Tagesfenster.
 > **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot 13.10.2026).**
 > Ein Monat **ohne Speicher-Zeile** (laufend oder vergangen ohne Abschluss), dessen Tage Speicherwerte tragen, bekommt
 > Ladung und Entladung aus der Tagesebene — und seitdem auch die **Netzladung samt Preis**, als Σ der abgelaufenen
-> Tage im Speicher-Fenster `[Vortag 23:00, 23:00)`, dieselbe Boundary-Differenz wie *Cockpit → Tag* an einem Bestandstag.
-> ⚠ **Grenze seit HA-Bauform S4:** an einem Kanal-Tag nimmt *Cockpit → Tag* die Netzladung im Kalendertag
-> (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`); dieser Rückfall liest `TAGESFENSTER_JE_TYP["speicher"]`
-> direkt und rechnet jeden Tag weiter im Speicher-Fenster des Bestands — an Kanal-Tagen um die Randstunde 23–24 Uhr
-> gegen die Tage versetzt (benannt, nicht gebaut). Die eine
+> Tage, dieselbe Boundary-Differenz und dasselbe Fenster wie *Cockpit → Tag*: ein Bestandstag im Speicher-Fenster
+> `[Vortag 23:00, 23:00)`, ein **Kanal-Tag** (`bilanz_leser.kanal_tage`, HA-Bauform S4) im Kalendertag
+> (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`) — Σ der Tage ≡ Monat (H-3, S4-Nachlauf; bis dahin rechnete
+> der Rückfall auch Kanal-Tage rückwärts und lag um die Randstunde 23–24 Uhr neben den Tagen). Die eine
 > Rechenstelle ist `services/monats_fakten/netzladung_tage.py`: `speicher_netzladung_aus_tagen` (Menge über den
 > Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; ein Tag mit Rücksprung oder
 > ohne Rand fehlt, ohne Netzlade-Zähler keine Menge) und `netzladung_aus_tagen` (dazu der TEP-gewichtete Ladepreis
