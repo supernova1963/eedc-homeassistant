@@ -352,13 +352,12 @@ def _tages_delta(gs) -> dict[str, float]:
     return {k: sum(v for v in m if v is not None) for k, m in gs.mengen.items() if any(v is not None for v in m)}
 
 
-def detail_aus_kanaelen(detail, delta: Mapping[str, float], invs_by_id: Mapping[str, Any], datum: date,
-                        typen: frozenset[str], wallbox_deckt: bool):
-    """``TagesDetail`` mit den Ausgabe-Schlüsseln der Gerätetypen ``typen`` aus den Kanal-Δ ``delta`` — dieselbe
-    Auswahl wie ``get_tagesdetail_kwh`` (``TAGESDETAIL_AUSGABE``, ``geraetefeld_oder_innengeraete``, E-Auto mit Parent
-    bzw. unter einer Wallbox mit Zähler fällt heraus). Ein Schlüssel ohne Kanal-Wert behält den Bestandswert."""
-    import dataclasses
-
+def kanal_werte_je_inv(delta: Mapping[str, float], invs_by_id: Mapping[str, Any], datum: date, typen: frozenset[str],
+                       wallbox_deckt: bool) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, dict[str, float]]]]:
+    """Die Ausgabe-Schlüssel der Gerätetypen ``typen`` je Gerät aus den Kanal-Δ ``delta`` — ``({out: {inv_id: kWh}},
+    {out: {inv_id: {feld: kWh}}})``, dieselbe Auswahl wie ``get_tagesdetail_kwh`` (``TAGESDETAIL_AUSGABE``,
+    ``geraetefeld_oder_innengeraete``, E-Auto mit Parent bzw. unter einer Wallbox mit Zähler fällt heraus). Die eine Stelle
+    für ``detail_aus_kanaelen`` (Tages-Sichten) und ``wp_werte_der_kanal_tage`` (Wärme-Verlauf, N-757)."""
     from backend.core.berechnungen.betriebsart_gemessen import geraetefeld_oder_innengeraete
     from backend.services.snapshot.aggregator import TAGESDETAIL_AUSGABE
     from backend.services.snapshot.keys import innengeraet_felder
@@ -383,6 +382,16 @@ def detail_aus_kanaelen(detail, delta: Mapping[str, float], invs_by_id: Mapping[
                 continue
             neu.setdefault(out, {})[inv_id] = neu.get(out, {}).get(inv_id, 0.0) + d
             felder_neu.setdefault(out, {}).setdefault(inv_id, {}).update(werte_geraet)
+    return neu, felder_neu
+
+
+def detail_aus_kanaelen(detail, delta: Mapping[str, float], invs_by_id: Mapping[str, Any], datum: date,
+                        typen: frozenset[str], wallbox_deckt: bool):
+    """``TagesDetail`` mit den Ausgabe-Schlüsseln der Gerätetypen ``typen`` aus den Kanal-Δ ``delta``
+    (``kanal_werte_je_inv``). Ein Schlüssel ohne Kanal-Wert behält den Bestandswert."""
+    import dataclasses
+
+    neu, felder_neu = kanal_werte_je_inv(delta, invs_by_id, datum, typen, wallbox_deckt)
     if not neu:
         return detail
     werte = {**detail.werte, **{out: sum(v.values()) for out, v in neu.items()}}
@@ -412,6 +421,19 @@ async def wp_komponenten_der_kanal_tage(db: AsyncSession, anlage_id: int, von: d
 
     tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))
     return {d: _wp_komponenten(t.gruppen[GRUPPE_WP], _tages_delta(t.gruppen[GRUPPE_WP]))
+            for d, t in tage.items() if GRUPPE_WP in t.gruppen}
+
+
+async def wp_werte_der_kanal_tage(db: AsyncSession, anlage_id: int, invs_by_id: Mapping[str, Any], von: date,
+                                  bis: date) -> dict[date, dict[str, dict[str, float]]]:
+    """Je Tag ``von`` … ``bis``, an dem die WP-Gruppe Wahl ``kanal`` hat, die WP-Ausgabe-Schlüssel je Gerät aus dem
+    Kanal-Stundentag (``{datum: {out: {inv_id: kWh}}}``, Form des Bereichs-Lesers ``lade_tageswerte_je_geraet``) —
+    dieselben Werte, die ``tages_eingaenge`` an einem WP-Kanal-Tag über ``detail_aus_kanaelen`` legt. N-757: Wärme, Kälte
+    und Funktions-Achsen des Wärme-Verlaufs und der Wärme-Verteilung wie *Cockpit → Tag*. Ein Bereichs-Leser."""
+    from backend.services.kanal.stunden_leser import kanal_stundentage
+
+    tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))
+    return {d: kanal_werte_je_inv(_tages_delta(t.gruppen[GRUPPE_WP]), invs_by_id, d, frozenset({"waermepumpe"}), False)[0]
             for d, t in tage.items() if GRUPPE_WP in t.gruppen}
 
 
@@ -516,7 +538,7 @@ __all__ = [
     "ACHSEN_JE_GRUPPE", "aus_kanal_gruppe", "modus_stunden_mit_rueckfall",
     "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
     "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
-    "wp_komponenten_der_kanal_tage",
+    "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen",
     "wp_strom_je_stunde", "wp_stundenformen",
 ]
