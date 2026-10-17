@@ -96,6 +96,12 @@ Gesamtladung (kumulativ)“ nannten die beiden Summen als „1500.000 kWh“ —
 Jetzt steht dort „1.500,0 kWh“, wie im Rest des Daten-Checkers
 ([Daten-Checker §4.3.3](HANDBUCH_DATEN_CHECKER.md#433-speicher)).
 
+**Aufteilung nach Betriebsart auch ohne Betriebsart-Aufzeichnung:** Trägt deine Wärmepumpe ihre Betriebsart nur in den
+Stundenwerten (die Aufzeichnung „Anteil der Stunde je Betriebsart“ hat für sie nie begonnen), zeigt ein Monat ohne
+Abschluss die Aufteilung in Heizen, Warmwasser und Kühlen jetzt wie seine Tage — in *Cockpit → Monat*, im Jahr, in der
+Übersicht und in den HA-Sensoren je Betriebsart. Bisher fehlte sie dort, sobald der HA-Spiegel den Monat abdeckte
+([Wärme & Klima](HANDBUCH_WAERME_KLIMA.md)).
+
 ## v4.1.7 — 13. Oktober 2026
 
 **MQTT-Check fragt nach deinem Gerät:** Der Daten-Checker erwartet nur noch Topics für Größen, die es an deinem Gerät

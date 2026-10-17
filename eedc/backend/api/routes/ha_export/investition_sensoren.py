@@ -44,7 +44,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     monate_des_autos,
 )
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.energie_profil.modus_split_monat import lade_modus_split_ohne_abschluss
+from backend.services.energie_profil.modus_split_monat import lade_modus_split_mit_kanaelen
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
@@ -696,23 +696,16 @@ async def _wp_nachtrag(db: AsyncSession, investition: Investition, s: _WpSummen)
     # Leistungssensor kennt sie keinen, und die Sensoren Heizen/Warmwasser
     # meldeten nach einem Sammelimport 0 / 0, während Übersicht und Hub
     # 217,8 / 19,8 zeigten (Form M05).
-    from backend.services.energie_profil.modus_split_monat import kanal_split_ohne_abschluss
+    # V-1: dieselbe Weiche wie die Monats-Fakten (`lade_modus_split_mit_kanaelen`) — im gedeckten Monat ein Gerät ohne
+    # abgeleiteten Kanal aus den Stundenzeilen.
     from backend.services.kanal.wp_leser import wp_monate
 
-    _inv_by_id = {investition.id: investition}
-    wp_kanal = await wp_monate(db, investition.anlage_id)
-    gedeckt = frozenset(m for m, z in wp_kanal.items() if z.kanal)
-    nachgetragen = await lade_modus_split_ohne_abschluss(
+    nachgetragen = await lade_modus_split_mit_kanaelen(
         db, investition.anlage_id,
-        inv_by_id=_inv_by_id,
+        wp_kanal=await wp_monate(db, investition.anlage_id),
+        inv_by_id={investition.id: investition},
         gespeichert=s.gespeichert_je_monat,
-        ohne_monate=gedeckt,
     )
-    if gedeckt:
-        for _m, _je in kanal_split_ohne_abschluss(
-            wp_kanal, inv_by_id=_inv_by_id, gespeichert=s.gespeichert_je_monat,
-        ).items():
-            nachgetragen.setdefault(_m, {}).update(_je)
     for _schluessel, _je_inv in nachgetragen.items():
         for _split in _je_inv.values():
             s.kuehl_je_monat[_schluessel] = (

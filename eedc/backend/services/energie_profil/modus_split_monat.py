@@ -529,3 +529,114 @@ def kanal_split_ohne_abschluss(
                 bezug_kwh=float(bezug or 0.0),
             )
     return ergebnis
+
+
+def _monate(ab: MonatsSchluessel, bis: MonatsSchluessel) -> list[MonatsSchluessel]:
+    """``ab`` … ``bis`` (beide inklusive). ⚠ Nicht ``kanal.fenster.monate``: dieses Modul gehört nicht zu den Lesern der
+    Kanal-Schicht (``test_kanal_lesen_waechter``)."""
+    (j, m), out = ab, []
+    while (j, m) <= bis:
+        out.append((j, m))
+        j, m = (j + 1, 1) if m == 12 else (j, m + 1)
+    return out
+
+
+def _im_fenster(m: MonatsSchluessel, von: Optional[MonatsSchluessel], bis: Optional[MonatsSchluessel]) -> bool:
+    return (von is None or m >= von) and (bis is None or m <= bis)
+
+
+async def _tep_split_gedeckter_monate(
+    db: AsyncSession,
+    anlage_id: int,
+    wp_kanal: dict,
+    *,
+    inv_by_id: dict,
+    gespeichert: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
+    von: Optional[MonatsSchluessel],
+    bis: Optional[MonatsSchluessel],
+) -> dict[MonatsSchluessel, dict[str, AngewandterSplit]]:
+    """Der Split der Stundenzeilen für die Geräte eines gedeckten Monats **ohne** abgeleiteten Kanal (V-1).
+
+    Geladen werden nur die gedeckten Monate, in denen eine aktive Wärmepumpe nicht in ``z.abgeleitet`` steht (sonst bleibt
+    der große Posten der Übersicht aus, E4d, ``test_kanal_wp_gleichheit``); die Regeln
+    (P8, Teilmengen-Invariante) sind die von {@link lade_modus_split_ohne_abschluss} — gerufen, nicht nachgebaut."""
+    rueckfall = {
+        m: frozenset(z.abgeleitet) for m, z in wp_kanal.items()
+        if z.kanal and _im_fenster(m, von, bis)
+        and any(i not in z.abgeleitet and getattr(inv, "typ", None) == "waermepumpe" and inv.ist_aktiv_im_monat(*m)
+                for i, inv in inv_by_id.items())
+    }
+    if not rueckfall:
+        return {}
+    ab, vor = min(rueckfall), max(rueckfall)
+    tep = await lade_modus_split_ohne_abschluss(
+        db, anlage_id, inv_by_id=inv_by_id, gespeichert=gespeichert, von=ab, bis=vor,
+        ohne_monate=frozenset(m for m in _monate(ab, vor) if m not in rueckfall),
+    )
+    return {m: je for m, je in ((m, {i: sp for i, sp in je.items() if int(i) not in rueckfall[m]})
+                                for m, je in tep.items()) if je}
+
+
+async def lade_modus_split_mit_kanaelen(
+    db: AsyncSession,
+    anlage_id: int,
+    *,
+    wp_kanal: Optional[dict],
+    inv_by_id: dict,
+    gespeichert: dict[MonatsSchluessel, dict[str, tuple[bool, float]]],
+    von: Optional[MonatsSchluessel] = None,
+    bis: Optional[MonatsSchluessel] = None,
+) -> dict[MonatsSchluessel, dict[str, AngewandterSplit]]:
+    """Der Split der Monate ohne Abschluss mit der WP-Gruppe aus den Kanälen — **die eine Weiche** der zwei Aufrufer
+    (Monats-Fakten ``laden._ergaenze_modus_split_ohne_abschluss``, HA-Export ``investition_sensoren._wp_nachtrag``;
+    N-727: beide nennen dieselbe Aufteilung).
+
+    * Monate, deren WP-Gruppe die Kanäle **nicht** decken: der Split der Stundenzeilen (Lesart 1, wie seit F-52).
+    * Gedeckte Monate (HA-Bauform E4d), **je Gerät** (V-1, das Monats-Gegenstück zu E-S4-3 H-2a
+      ``kanal_stunden.modus_stunden_mit_rueckfall``): ein Gerät mit abgeleitetem Kanal «Strom je Betriebsart»
+      (``z.abgeleitet``) aus dem Kanal (``kanal_split_ohne_abschluss``); ein Gerät ohne — Betriebsart nur in den
+      Stundenzeilen, nie eine Mitschrift — aus den Stundenzeilen (``_tep_split_gedeckter_monate``). Bis V-1 bekam es im
+      gedeckten Monat gar keine Aufteilung, während Cockpit → Tag sie zeigte.
+
+    ⚠ Benannte Grenze: der Split der Stundenzeilen liegt im Bestands-Raster (rückwärts), der Bezug eines gedeckten
+    Monats ist der Kanal-Strom des Kalendermonats — die Teilmengen-Invariante prüft gegen ihn (Randstunde, S4-R-3c).
+    """
+    gedeckt = frozenset(m for m, z in (wp_kanal or {}).items() if z.kanal)
+    angewandt = await lade_modus_split_ohne_abschluss(
+        db, anlage_id, inv_by_id=inv_by_id, gespeichert=gespeichert, von=von, bis=bis, ohne_monate=gedeckt,
+    )
+    if not gedeckt:
+        return angewandt
+    for m, je in kanal_split_ohne_abschluss(wp_kanal, inv_by_id=inv_by_id, gespeichert=gespeichert).items():
+        angewandt.setdefault(m, {}).update(je)
+    for m, je in (await _tep_split_gedeckter_monate(db, anlage_id, wp_kanal, inv_by_id=inv_by_id,
+                                                      gespeichert=gespeichert, von=von, bis=bis)).items():
+        angewandt.setdefault(m, {}).update(je)
+    return angewandt
+
+
+async def zeilen_mit_split_der_stundenzeilen(
+    db: AsyncSession, anlage_id: int, schluessel: MonatsSchluessel, z, *, inv_by_id: dict,
+) -> dict[int, dict]:
+    """Die Kanal-Zeilen eines gedeckten Kalendermonats (``wp_leser.wp_kalendermonate``) — für ein Gerät **ohne**
+    abgeleiteten Kanal mit dem Split der Stundenzeilen in den Feldern, die der abgeleitete Kanal trüge
+    (``MODUS_STROM_FELD``, ``MODUS_ABDECKUNG_FELD``). V-1, Cockpit → Monat (``aktueller_monat.quellen_leser.
+    _wp_aus_kanaelen`` → ``monats_fakten.wp_aus_zeilen``): dieselbe Auswahl und dieselben Regeln wie die Monats-Fakten
+    (``_tep_split_gedeckter_monate``; Bezug der Teilmengen-Invariante = Kanal-Strom der Zeile, P8 über die gemessene
+    Betriebsart der Zeile)."""
+    from backend.core.berechnungen.betriebsart_gemessen import hat_gemessene_betriebsart
+    from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+    from backend.core.field_definitions import get_wp_strom_kwh
+
+    zeilen = {i: dict(zeile) for i, zeile in z.zeilen.items()}
+    gespeichert = {schluessel: {
+        str(i): (hat_gemessene_betriebsart(zeile), get_wp_strom_kwh(zeile, getattr(inv_by_id.get(int(i)), "parameter", None)))
+        for i, zeile in zeilen.items()}}
+    tep = await _tep_split_gedeckter_monate(db, anlage_id, {schluessel: z}, inv_by_id=inv_by_id,
+                                            gespeichert=gespeichert, von=schluessel, bis=schluessel)
+    for inv_id, sp in tep.get(schluessel, {}).items():
+        zeilen.setdefault(int(inv_id), {}).update({
+            MODUS_STROM_FELD[HEIZEN]: sp.heizen_kwh, MODUS_STROM_FELD[KUEHLEN]: sp.kuehlen_kwh,
+            MODUS_STROM_FELD[WARMWASSER]: sp.warmwasser_kwh, MODUS_ABDECKUNG_FELD: sp.abdeckung_h,
+        })
+    return zeilen

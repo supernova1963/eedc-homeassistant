@@ -24,7 +24,7 @@ from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
 from backend.core.field_definitions import get_wp_strom_kwh, nenner_ist_feine_summe
 from backend.models.investition import Investition
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_je_monat
-from backend.services.energie_profil.modus_split_monat import lade_modus_split_ohne_abschluss
+from backend.services.energie_profil.modus_split_monat import lade_modus_split_mit_kanaelen
 from backend.services.energie_profil.monats_aus_tagen import TagesMonatsSumme
 from backend.services.pv_monatswerte import (
     BkwAnteile,
@@ -615,19 +615,12 @@ async def _ergaenze_modus_split_ohne_abschluss(
     Stundenzeilen statt in einer Monatszeile. Das ist nicht die N-121-Falle
     (dort ging es um Monate mit reiner Tagesspur ohne jeden Gerätebezug).
     """
-    # HA-Bauform E4d (Lesart 1): Monate, deren WP-Gruppe die Kanäle decken, aus dem abgeleiteten Kanal — dieselben
-    # zwei Regeln (`kanal_split_ohne_abschluss`); die übrigen unverändert aus der Tagesebene, die gedeckten Monate
-    # lädt der Bestand nicht.
-    gedeckt = frozenset(m for m, z in (wp_kanal or {}).items() if z.kanal)
-    angewandt = await lade_modus_split_ohne_abschluss(
-        db, anlage_id, inv_by_id=inv_by_id, gespeichert=wp_je_monat,
-        von=von, bis=bis, ohne_monate=gedeckt,
+    # HA-Bauform E4d (Lesart 1): Monate, deren WP-Gruppe die Kanäle decken, je Gerät aus dem abgeleiteten Kanal oder —
+    # ohne ihn (V-1) — aus den Stundenzeilen; die übrigen unverändert aus der Tagesebene. Die eine Weiche mit dem
+    # HA-Export (N-727): `lade_modus_split_mit_kanaelen`.
+    angewandt = await lade_modus_split_mit_kanaelen(
+        db, anlage_id, wp_kanal=wp_kanal, inv_by_id=inv_by_id, gespeichert=wp_je_monat, von=von, bis=bis,
     )
-    if gedeckt:
-        from backend.services.energie_profil.modus_split_monat import kanal_split_ohne_abschluss
-
-        for m, je in kanal_split_ohne_abschluss(wp_kanal, inv_by_id=inv_by_id, gespeichert=wp_je_monat).items():
-            angewandt.setdefault(m, {}).update(je)
     for schluessel, je_inv in sorted(angewandt.items()):
         for inv_id, split in je_inv.items():
             r = roh.setdefault(schluessel, _RohMonat())

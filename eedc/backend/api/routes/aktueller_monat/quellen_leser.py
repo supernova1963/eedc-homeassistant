@@ -232,6 +232,7 @@ async def _wp_aus_kanaelen(
     if monats_fakt is not None and "waermepumpe" in monats_fakt.meta.typen_mit_zeile:
         return ha_stats, None, {}
     from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, MODUS_STROM_FELD
+    from backend.services.energie_profil.modus_split_monat import zeilen_mit_split_der_stundenzeilen
     from backend.services.kanal.wp_leser import wp_kalendermonate
     from backend.services.monats_fakten import wp_aus_zeilen
 
@@ -251,7 +252,10 @@ async def _wp_aus_kanaelen(
                 out[key] = (wert, quelle)
             else:
                 out.pop(key, None)
-    return out, wp_aus_zeilen(investitionen, (jahr, monat), z.zeilen), dict(z.zeilen)
+    # V-1: ein Gerät ohne abgeleiteten Kanal trägt den Split der Stundenzeilen (dieselbe Weiche wie die Monats-Fakten).
+    zeilen = await zeilen_mit_split_der_stundenzeilen(db, anlage.id, (jahr, monat), z,
+                                                      inv_by_id={i.id: i for i in investitionen})
+    return out, wp_aus_zeilen(investitionen, (jahr, monat), zeilen), zeilen
 
 
 def _wp_sicht(monats_fakt, wp):
