@@ -456,9 +456,19 @@ async def _zaehlerstrom_je_tag(
     deren Zeile dieses Fenster trägt — die Betriebsart-Zähler desselben Tages
     werden im selben Fenster gelesen.
 
+    ⛔ **H-4 (HA-Bauform S4-Nachlauf): ein Kanal-Tag liegt im Kalendertag** — dieselben Weichen wie
+    *Cockpit → Tag* (``kanal_stunden.tages_eingaenge``): an einem Bilanz-Kanal-Tag (``bilanz_leser.kanal_tage``,
+    auch die Weiche der Netzladung des Monats, H-3) die Bilanz-Schlüssel aus dem Kanal-Tag (``mische_komponenten``,
+    wie die Tagesliste), an einem WP-Kanal-Tag die ``waermepumpe_<id>``-Schlüssel aus dem Kanal-Stundentag
+    (``wp_komponenten_der_kanal_tage``); beide Tage zählen nicht zu den Rückwärts-Tagen — Wärme und
+    Betriebsart-Zähler werden im Kalendertag gelesen. Sonst stünde der Wärme-Verlauf um die Stunde 23–24 Uhr
+    neben Tag und Monat.
+
     Returns:
         ``(je_tag, rueckwaerts_tage)``.
     """
+    from backend.services.energie_profil.kanal_stunden import wp_komponenten_der_kanal_tage
+    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
     from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts
 
     result = await db.execute(
@@ -474,10 +484,17 @@ async def _zaehlerstrom_je_tag(
             TagesZusammenfassung.datum <= bis,
         ))
     )
+    kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
+    ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+    wp_je_tag = await wp_komponenten_der_kanal_tage(db, anlage_id, von, bis)
     je_tag: dict[date, dict[str, float]] = {}
     rueckwaerts_tage: set[date] = set()
     for datum, komponenten, provenance, verworfen in result.all():
-        if tageszeile_ist_rueckwaerts(provenance, verworfen):
+        if datum in kanal_je_tag:
+            komponenten = mische_komponenten(komponenten, kanal_je_tag[datum], ziele_je_tag[datum])
+        if datum in wp_je_tag:
+            komponenten = {**(komponenten or {}), **wp_je_tag[datum]}
+        if datum not in kanal_je_tag and datum not in wp_je_tag and tageszeile_ist_rueckwaerts(provenance, verworfen):
             rueckwaerts_tage.add(datum)
         if komponenten:
             werte = waermepumpe_kwh_je_investition(komponenten)

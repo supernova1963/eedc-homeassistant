@@ -402,6 +402,19 @@ def _wp_komponenten(wp, delta: Mapping[str, float]) -> dict[str, float]:
     return out
 
 
+async def wp_komponenten_der_kanal_tage(db: AsyncSession, anlage_id: int, von: date, bis: date) -> dict[date, dict[str, float]]:
+    """Je Tag ``von`` … ``bis``, an dem die WP-Gruppe Wahl ``kanal`` hat, die ``waermepumpe_<id>``-Schlüssel der Tageszeile
+    aus dem Kanal-Stundentag (Σ der Stunden, Vorzeichen der Beitragsschicht) — dieselben Werte, die ``tages_eingaenge``
+    an einem WP-Kanal-Tag in ``tz_komp`` legt (``_wp_komponenten``). H-4 (HA-Bauform S4-Nachlauf): der Wärme-Verlauf
+    (``waerme_verlauf._zaehlerstrom_je_tag``) liest damit denselben Tagesstrom wie *Cockpit → Tag*. Ein Bereichs-Leser
+    (``kanal_stundentage``, nur die WP-Gruppe)."""
+    from backend.services.kanal.stunden_leser import kanal_stundentage
+
+    tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))
+    return {d: _wp_komponenten(t.gruppen[GRUPPE_WP], _tages_delta(t.gruppen[GRUPPE_WP]))
+            for d, t in tage.items() if GRUPPE_WP in t.gruppen}
+
+
 async def _wp_aus_kanaelen(db: AsyncSession, anlage, invs_by_id, datum: date, wp, e: TagesEingaenge) -> None:
     """Die WP-Tageswerte eines WP-Kanal-Tags: Strom je Gerät, Wärme/Kälte, gemessene Betriebsart, Modus-Split."""
     from backend.core.berechnungen.modus_split import MODUS_STROM_REST, ModusSplit
@@ -503,6 +516,7 @@ __all__ = [
     "ACHSEN_JE_GRUPPE", "aus_kanal_gruppe", "modus_stunden_mit_rueckfall",
     "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
     "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
+    "wp_komponenten_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen",
     "wp_strom_je_stunde", "wp_stundenformen",
 ]
