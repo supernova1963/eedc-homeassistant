@@ -288,7 +288,12 @@ Der **Monatsabschluss** ist ein Formular für die monatliche Datenerfassung:
 
 ## Beitragen
 
-Beiträge sind willkommen! Bitte lies zuerst die [Entwickler-Dokumentation](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/DEVELOPMENT.md).
+Fehlerberichte haben Vorrang — was ein hilfreicher Bericht enthält und was ein Pull Request mitbringen muss, steht in
+[CONTRIBUTING.md](https://github.com/supernova1963/eedc-homeassistant/blob/main/CONTRIBUTING.md); die
+[Entwickler-Dokumentation](https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/DEVELOPMENT.md) beschreibt
+Einrichtung, Gates und Code-Regeln. Sicherheitslücken bitte vertraulich melden, siehe
+[SECURITY.md](https://github.com/supernova1963/eedc-homeassistant/blob/main/SECURITY.md) — dort steht auch, was eedc im
+Add-on-Betrieb (Ingress, HA-Anmeldung) und im Standalone-Betrieb (keine eigene Anmeldung, Heimnetz) voraussetzt.
 
 ---
 
