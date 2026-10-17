@@ -148,7 +148,8 @@ und zum Verständnis der Datenflüsse.
 > mit den unten beschriebenen Regeln (**Bestandspfad**, Übergang bis S5). Nicht umgestellt sind die E-Mobilitäts-
 > Aufteilung derselben Monatszeile und die stundengepaarten Spalten (Direktverbrauch, Überschuss, Defizit) — sie
 > bleiben aus den Stundenzeilen. Der Kalendermonat je Sensor („Aus HA laden", Import, Monatsabschluss-Vorschlag,
-> HA-Weg von *Cockpit → Monat*) nimmt das Kanal-Δ, wenn die Spiegel aller Bilanz-Sensoren den Kalendermonat decken.
+> HA-Weg von *Cockpit → Monat*) nimmt das Kanal-Δ, wenn die Spiegel aller Bilanz-Sensoren den Kalendermonat decken, sonst
+> HAs Monatswert — seit HA-Bauform S4 auch dort ohne Deckel (§6b, „Wo der Plausibilitätsdeckel gilt").
 
 > **Die PV-Achse über Tag, laufenden und abgeschlossenen Monat** (Stand 04.10.2026, Bau der sieben Regelfehler; Richter ist die Abnahme-Matrix `backend/tests/test_pv_achse_matrix.py`):
 >
@@ -3773,7 +3774,10 @@ Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoli
 
 ### Backward-Slot-Konvention (ab v3.20.0, #144)
 
-Alle Stunden-Slots im Energieprofil und in den Prognose-Quellen folgen seit v3.20.0 der **Backward-Konvention**:
+Alle Stundenzeilen des Energieprofils (`TagesEnergieProfil`) und die Prognose-Quellen folgen seit v3.20.0 der
+**Backward-Konvention**. Die Stunden eines **Kanal-Tags** (Tag, den der HA-Spiegel bzw. die eigene Summe für eine Gruppe
+deckt) tragen seit HA-Bauform S4 ihren **Beginn** `[h, h+1)` wie HAs Statistik-Zeile (Kasten „Der Kanal-Stundentag"
+unten); für die gespeicherten Stundenzeilen gilt weiter:
 
 | Konvention | Slot N enthält Energie aus … |
 |---|---|
@@ -3789,15 +3793,19 @@ Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Ti
 
 #### Tageswerte: Zähler und Bezug aus einem Fenster
 
-Aus der Backward-Konvention folgt eine zweite Regel, die **Tages**sichten betrifft: Die Σ der 24 Slots
-deckt `[Vortag 23:00, Heute 23:00)` ab — ein Tagesgesamt per Zähler-Diff dagegen `[00:00, 24:00)`.
+Aus der Backward-Konvention folgt eine zweite Regel, die **Tages**sichten betrifft: An einem **Bestandstag** deckt die
+Σ der 24 Slots `[Vortag 23:00, Heute 23:00)` ab — ein Tagesgesamt per Zähler-Diff dagegen `[00:00, 24:00)`. An einem
+**Kanal-Tag** deckt die Σ der 24 Stunden seit HA-Bauform S4 den Kalendertag `[00:00, 24:00)` — Bezug und Zähler-Diff
+liegen dort im selben Fenster.
 Beide Fenster sind 24 Stunden lang und meinen **verschiedene** 24 Stunden. Wer in *einer* Zeile eine
 Teilmenge (einen Zähler) über einen Bezug stellt, muss beide im **selben** Fenster erheben, sonst ist
 der Anteil keine Messung, sondern eine Rechnung über zwei Tage.
 
 Welches Fenster gilt, entscheidet die **Herkunft des Bezugs** — nicht der Gerätetyp und nicht die
 Gewohnheit. Die Tabelle steht als Code in `services/snapshot/boundary_range.py`
-(`TAGESFENSTER_JE_TYP` / `tagesfenster_fuer`):
+(`TAGESFENSTER_JE_TYP` / `tagesfenster_fuer`); sie gilt für **Bestandstage**. An einem **Kanal-Tag** ist der Bezug
+(Bilanz-Ladung, Wallbox-Ladung, WP-Strom) der Kalendertag, und `tagesfenster_fuer(…, kanal_tag=True)` liefert für jeden
+Typ `[00:00, 24:00)` (`for_day_total`) — dieselbe Regel N-444, angewandt auf den Bezug des Kanal-Tags (HA-Bauform S4):
 
 | Gerätetyp | Bezug der Tageszeile | Fenster |
 |---|---|---|
@@ -3824,7 +3832,11 @@ bzw. den Monats-Fakten und kennen kein Tagesfenster.
 > **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot 13.10.2026).**
 > Ein Monat **ohne Speicher-Zeile** (laufend oder vergangen ohne Abschluss), dessen Tage Speicherwerte tragen, bekommt
 > Ladung und Entladung aus der Tagesebene — und seitdem auch die **Netzladung samt Preis**, als Σ der abgelaufenen
-> Tage im Speicher-Fenster `[Vortag 23:00, 23:00)`, dieselbe Boundary-Differenz wie *Cockpit → Tag*. Die eine
+> Tage im Speicher-Fenster `[Vortag 23:00, 23:00)`, dieselbe Boundary-Differenz wie *Cockpit → Tag* an einem Bestandstag.
+> ⚠ **Grenze seit HA-Bauform S4:** an einem Kanal-Tag nimmt *Cockpit → Tag* die Netzladung im Kalendertag
+> (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`); dieser Rückfall liest `TAGESFENSTER_JE_TYP["speicher"]`
+> direkt und rechnet jeden Tag weiter im Speicher-Fenster des Bestands — an Kanal-Tagen um die Randstunde 23–24 Uhr
+> gegen die Tage versetzt (benannt, nicht gebaut). Die eine
 > Rechenstelle ist `services/monats_fakten/netzladung_tage.py`: `speicher_netzladung_aus_tagen` (Menge über den
 > Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; ein Tag mit Rücksprung oder
 > ohne Rand fehlt, ohne Netzlade-Zähler keine Menge) und `netzladung_aus_tagen` (dazu der TEP-gewichtete Ladepreis
@@ -3981,9 +3993,18 @@ nach denselben Regeln wie die Tagessummen:
   Tag mit einer Lücke über die Tagesgrenze als Kanal-Tag (Lückentag wie HA); die **Geräte- und die WP-Gruppe kennen diese
   Regel nicht** — ein 25-Stunden-Loch in einem WP-Kanal macht beide berührten Tage zu WP-Bestandstagen. Beide Wege nennen
   an solchen Tagen dieselbe Zahl aus dem Bestand (Entscheid: so belassen).
-* **Stunde = HAs `change` im Backward-Raster:** Slot `h` ist die Zeile, deren Stand den Zähler `h` setzt
-  (`slot_konvention.lts_boundary_index`, Tagesfenster `[Vortag 23:00, 23:00)`, Herbst-Doppelslot trägt beide Zeilen).
-  Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
+* **Kalendertag, Stunde = Beginn (seit HA-Bauform S4, R-3):** ein Kanal-Tag ist der Kalendertag `[D 00:00, D+1 00:00)`
+  in der Prozesszone (`services/kanal/fenster.py::tagesfenster`), ein Kanal-Monat der Kalendermonat — Σ Kalendertage ≡
+  Kalendermonat ≡ Jahr per Konstruktion, eine Monatsgrenze für alle Monatsleser. Stunde `h` ist HAs `change` der Zeile mit
+  lokalem Beginn `h`, also `[h, h+1)` (`stunden_leser.stunde_des_beginns`): die Zeile `start_ts = 23:00` trägt den Stand um
+  00:00 und liegt damit genau auf der Tagesgrenze. Umstellungstage: im Herbst trägt Stunde 2 beide Zeilen (Zuwachs und
+  Spanne addiert), im Frühjahr bleibt Stunde 2 leer; es bleiben 24 Spalten. Jede Stunde trägt `raster = "beginn"` (die
+  Stundenzeile eines Bestandstags `raster = "ende"`), das Frontend beschriftet beide als Bereich („11–12",
+  `lib/stundenBereich.ts`). Bis S4 war der Kanal-Tag das Bestands-Fenster `[Vortag 23:00, 23:00)` im Backward-Raster
+  (`lts_boundary_index`); der Unterschied je Kanal und Tag ist die **Randstunde** `change(D 23:00) − change(D−1 23:00)`.
+  **Bestandstage** bleiben, wie sie geschrieben sind (Backward-Slots, Tagesfenster `[Vortag 23:00, 23:00)`); zwischen einem
+  Bestandstag D und einem Kanal-Tag D+1 fehlt die Stunde `[D 23:00, D+1 00:00)`, in umgekehrter Reihenfolge zählt sie
+  doppelt (benannte Naht, verschwindet mit S5). Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
   Stunde ohne Zeile ist **keine 0**. HA-Kanäle wörtlich: kein Deckel, keine Reset-Regel, keine Lückenfüllung.
 * **Weg 2 je Stunde:** die Bilanz-Gruppe komponiert jede Stunde mit derselben Layer-Funktion wie den Tag
   (`core/berechnungen/bilanz_zeitraum.py::komponiere_bilanz_zeitraum`, W2-R1…R5). Die Entweder-oder-Wahl des Tages gilt
@@ -4000,19 +4021,54 @@ nach denselben Regeln wie die Tagessummen:
 * **Mischzeilen** (`services/energie_profil/kanal_stunden.py`, der eine Tages-Leser der Stunden-Sichten): an einem
   Kanal-Tag kommen die Mengen der Gruppen mit Wahl Kanal (PV, Verbrauch, Einspeisung, Netzbezug, Speicher, Überschuss,
   Defizit; WP-Strom; Wallbox) aus den Kanälen; **Ladestand, Wetter, Preise, Zählwerke und `komponenten`** (der
-  Leistungspfad — die Aufteilung je Gerät im Verlauf kommt vom Leistungssensor) aus der Stundenzeile derselben Stunde;
-  `spannen` je Achse gemischt. Eine Stunde gibt es, wenn sie eine Stundenzeile oder einen Kanal-Wert hat. Die
+  Leistungspfad — die Aufteilung je Gerät im Verlauf kommt vom Leistungssensor) aus der Stundenzeile **nach Bahn**
+  (S4-R-3b): die backward-Bahnen (`komponenten`, Wetter, Zählwerke, Betriebsart) aus der Bestandszeile `h+1`, Stunde 23 aus
+  Slot 0 des Folgetags (`slot_konvention.bestandszeile_fuer_stundenbeginn`, die eine Umrechnung); die forward-Bahnen
+  (Ladestand, Preise) zeilengleich. `spannen` je Achse gemischt. Stundengepaarte Größen in `tage-werte` (Grundlast,
+  ΔSoC-Wirkungsgrad, Slot-Kosten) nehmen an Kanal-Tagen die Mischzeilen (`strompreis_aggregator.slot_kosten_aus_zeilen`,
+  dieselbe Kaskade). Leer bleibt eine Kanal-Stunde ohne Zeile auch in den Geräte-Spalten (`serien.geraete_spalte_kw`, #263,
+  fällt nur an Bestandstagen auf den Leistungspfad zurück). Eine Stunde gibt es, wenn sie eine Stundenzeile oder einen Kanal-Wert hat. Die
   Tageswerte und *Energieprofil → Monat* fragen nur Bilanz und WP; `/stunden` alle Gruppen.
 * **Wärme je Stunde:** die Wärme-Sichten verteilen weiter den Tageswert (`core/berechnungen/tages_stapel.py`, Σ Stunden =
   Balken); an einem WP-Kanal-Tag kommt nur die **Form** aus den Kanälen (`change` je Zähler, Betriebsart-Stunden aus
-  `abgeleitet:inv:<id>:modus_strom_<art>_kwh`).
+  `abgeleitet:inv:<id>:modus_strom_<art>_kwh`; hat dieser Kanal am Tag keine Zeile, je Gerät die Modus-Spur der
+  Stundenzeile als backward-Bahn — `kanal_stunden.modus_stunden_mit_rueckfall`). Die Tageswerte von `tag-detail` und der
+  Wärme-Sichten (WP-Strom, Wärme/Kälte, Modus-Stapel, E-Mob-Ladung) kommen an einem Kanal-Tag aus dem Kanal-Stundentag bzw.
+  seinem Tages-Δ (eine Umschaltstelle `kanal_stunden.tages_eingaenge`). Stunden einer Spanne ohne eigene Zeile zeigen
+  Wärme/Kälte 0,0 statt leer (benannte Grenze, S5).
 * **Tage älter als zwei Jahre:** die Stundenzeilen werden nach 730 Tagen gelöscht (`scheduler_jobs.py`); der HA-Spiegel
   reicht so weit zurück wie HAs Langzeitstatistik. Ein solcher Kanal-Tag zeigt seinen Stunden-Verlauf wieder — Mengen aus
   den Kanälen, Ladestand und Wetter leer.
-* **Ohne Home Assistant (Standalone/MQTT):** die eigene Summe eines Zählers füllt eedc aus seinen gespeicherten
-  stündlichen Zählerständen (`sensor_snapshots`) nach — nur für Zähler **ohne** HA-Sensor und nur stündliche Reihen
-  (unterer Median der Abstände ≤ 1 h; Stände `live_fallback`/`unknown` nicht), mit derselben Rechenstelle wie der
-  Stundenlauf (90-%-Regel, Deckel als Schreibfilter). Reihen mit einem Stand je Tag warten auf den Kalendertag (S4).
+* **Eigene Zählerstände vor dem ersten Kanal-Wert (Nachbau 2, HA-Bauform S4):** `nachfuellen_eigene_summe` füllt **jeden**
+  Zähler — auch mit HA-Sensor — aus seinen gespeicherten Stundenständen (`sensor_snapshots`; `live_fallback`/`unknown`
+  gezählt, nicht übernommen), aber nur vor `min(erste Kanal-Zeile, gueltig_ab der ersten Quelle)`: keine inneren Lücken,
+  eine verworfene Zeit bleibt leer, und ein später auftauchender HA-Spiegel ersetzt diese Zeilen nicht. Stände mit Herkunft
+  `ha_statistics` gehen **wörtlich** ein (Mitschrift `sensor_snapshots:<key>`, kein Deckel, keine Reset-Regel), MQTT-Stände
+  über die Eigene Summe des Stundenlaufs (90-%-Regel, Deckel als Schreibfilter). **Tagesstand-Reihen** jeder Taktung: ein
+  Stand um 00:00 ist die Zeile 23:00 und liegt mit dem Kalendertag auf der Tagesgrenze ⇒ das Tages-Δ ist exakt, die
+  Stundenansicht zeigt eine Spanne von 24 Stunden; Paare 23:00/00:00 ergeben Stunde 22 (Tag minus eine Stunde) und Stunde
+  23 (die letzte Stunde), je als Spanne sichtbar.
+* **Wo der Plausibilitätsdeckel gilt (HA-Bauform S4, R-5):**
+
+  | Weg | Deckel |
+  | --- | --- |
+  | Kanal-Tag, Kanal-Monat, Kanal-Stunde (HA-Spiegel, Lese-Schicht) | **nein** — HAs Zahl wörtlich (seit S1/S3) |
+  | HA-Monatsleser `get_sensor_monatswert` an *Cockpit → Monat* (HA-Weg), „Aus HA laden", alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag | **nein** (seit S4; `monatswert_deckel.py` hat keinen Produkt-Aufrufer mehr) |
+  | Kanal-Schreiber, Eigene Summe aus MQTT-Rohständen (Stundenlauf und Nachfüllen) | **ja, als Schreibfilter** (`schreiber._deckel_achse`, Achse PV/Einspeisung, kWp der Anlage) |
+  | Bestands-Tagespfad `snapshot/tages_tabelle.py` (Stundenzeilen, Bestandstage, HA wie MQTT) | **ja** (R3, bis S5) |
+
+  Ein Sprung in HAs Statistik steht damit in Tag und Monat wie im HA-Energie-Dashboard; der Daten-Checker
+  `ha_zaehlersprung` benennt das Phantom-Muster (Reset und Rückkehr).
+* **Stand der HA-Bauform nach S4** (Konzept §5, Regel → Stand):
+
+  | Regel | Stand |
+  | --- | --- |
+  | R-3 Kalendertag, Stunde = Beginn | gebaut für die Kanal-Schicht (Kanal-Tage, -Monate, -Stunden); Bestandstage und Lesart-1-Monate bleiben im Bestands-Raster (S5) |
+  | R-5 kein Deckel auf HA-Werten | gebaut im Lesepfad (Kanäle und die fünf HA-Monatsleser-Aufrufer); Bestands-Tagespfad deckelt bis S5, MQTT-Schreibfilter bleibt |
+  | R-6 HAs Reset-Regel | gebaut am Kanal (Eigene Summe, `core/berechnungen/ha_summe.py`, 90-%-Regel) |
+  | R-7 Tagesreset-Zähler | Kanal ja (Tag, Monat, Jahr); Live, Monatsabschluss-Vorschlag und Geräte-Tageswerte vor dem Kanal nein (S5) — der Daten-Checker sagt es |
+  | R-8 Komposition als Konfiguration | Weg 2 (W2-R1…R5) für Kanal-Zeiträume plus Checker-Hinweis „PV gesamt neben Balkonkraftwerk" (#428), seit S1/S2 |
+  | R-10 Herkunft am Kanal | `kanal_quelle(familie, gueltig_ab, verworfen_ts)` seit S1; `source_provenance` je Zelle bleibt an der Stundenzeile (S5) |
 
 ### Stündliche Berechnung (aggregate_day)
 
@@ -4052,7 +4108,7 @@ komponenten_kwh = Σ derselben Geräte-Slots (R5)
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (seit N-635, 05.10.2026; vorher max(0, ΣPV − ΣEinsp), s. §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).
 - **Regelmarke** (R9): `TagesZusammenfassung.verworfen` ist für jeden neu geschriebenen Tag mindestens `{}`; NULL = Altbestand, der bis zur Neuaggregation N-92 rechnet (Daten-Checker §4.6 nennt ihn).
-- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit derselben Verwerfung (Rücksprung immer, Deckel × Fenster für PV/Einspeisung aus der Anlagen-kWp). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
+- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit Verwerfung des Rücksprungs; den Deckel × Fenster für PV/Einspeisung kennt die Funktion noch (`deckel_je_sensor`), seit HA-Bauform S4 (R-5) übergibt ihn aber kein Aufrufer mehr — der Monat nennt HAs Zahl wie Tag und Kanal-Monat (Tabelle „Wo der Plausibilitätsdeckel gilt" oben). Trägt der Kalendermonat keine `sum`-Zeile, fällt die Funktion monatsweise auf `MAX(state) − MIN(state)` zurück (benannt, S5). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
 - **Stundenzeilen:** jeder Slot mit Zählerwert bekommt eine Zeile, auch ohne Leistungspunkt (dort keine `komponenten`, keine Spitze).
 - **Leser:** Stunde-gegen-Stunde-Auswertungen lassen Zeilen mit `spannen > 1` als Stichprobe aus; Tag-gegen-Tag-Auswertungen (Lernfaktor, Prognose-Genauigkeit, PR-Check) lassen beide Tage um ein Mitternachtsbündel mit Energie aus. Die Energie zählt in jeder Summe. Helfer: `core/berechnungen/spannen.py`.
 - **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge (Lab 24.05.2026: +37 kWh nach drei stillen Stunden). Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp), im Monat bis zur Kappe von 24 Stunden (360 kWh); dazwischen verwirft der Tag, der Monat nimmt (benannte Asymmetrie). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.

@@ -581,10 +581,14 @@ nächsten Lauf) holt für jeden Spiegel-Kanal die ganze Historie der heutigen HA
 rückwärts vor die erste Kanal-Zeile, in Blöcken von 31 Tagen, je Block eine kurze eigene Schreib-Transaktion; HA wird nur
 zwischen zwei Transaktionen gelesen, der Stundenlauf wartet also nie auf HA. Ein abgebrochener Lauf setzt an der ersten
 vorhandenen Zeile fort, ein zweiter schreibt nichts; fällt HA unterwegs aus, bekommt der Kanal keine Marke. Fortschritt und
-Ergebnis stehen im Aktivitätsprotokoll. **Ohne HA (S3, E-S3-4):** dieselbe Aufgabe füllt die eigene Summe eines Zählers
-**ohne** HA-Sensor aus seinen gespeicherten stündlichen Zählerständen (`sensor_snapshots`, nur stündliche Reihen, nicht
-`live_fallback`/`unknown`) — dieselbe Rechenstelle wie der Stundenlauf, blockweise, Marke je Kanal; Reihen mit einem Stand
-je Tag werden gezählt und übersprungen (Kalendertag, S4). **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die
+Ergebnis stehen im Aktivitätsprotokoll. **Aus den gespeicherten Zählerständen (S3 E-S3-4, seit S4 E-S4-3 «Nachbau 2»):**
+dieselbe Aufgabe füllt **jeden** Zähler — auch mit HA-Sensor — aus seinen gespeicherten Stundenständen (`sensor_snapshots`,
+nicht `live_fallback`/`unknown`), aber nur **vor** `min(erste Kanal-Zeile, gueltig_ab der ersten Quelle)` (keine inneren
+Lücken; ein später auftauchender Spiegel ersetzt die Stände-Zeilen nicht, und «HA-Spiegel abgleichen» berührt nur
+Spiegel-Abschnitte). Stände mit Herkunft `ha_statistics` gehen **wörtlich** als Mitschrift `sensor_snapshots:<key>` ein
+(kein Deckel, keine Reset-Regel), MQTT-Stände über dieselbe Rechenstelle wie der Stundenlauf (Eigene Summe, HAs
+90-%-Regel); blockweise, Marke je Kanal. Reihen jeder Taktung: ein Stand um 00:00 ist die Zeile 23:00 und liegt mit dem
+Kalendertag genau auf der Tagesgrenze ⇒ Tages-Δ exakt, die Stunden zeigen eine Spanne (S4-R-3e). **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die
 bisherigen Stunden- und Tageszeilen werden nicht in Kanäle umgewandelt — sie bleiben die Quelle für Zeiträume, die die Kanäle
 nicht voll decken (je Tag bzw. Monat EINE Quellenwahl).
 
@@ -598,10 +602,14 @@ noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA u
 
 **Stunde und Slot.** Eine Stundenzeile des Bestands (Rückwärts-Slot `h` = `[h−1, h)`, #144) wird an genau einer Stelle zu
 `start_ts`: `core/berechnungen/slot_konvention.py::slot_start_ts`, die Umkehrung von `lts_boundary_index` (doppelte
-Herbststunde ⇒ die spätere, fehlende Frühjahrsstunde ⇒ kein `start_ts`); das Tagesfenster `[Vortag 23:00, 23:00)` ist
-`tagesfenster_start_ts`. Auch die Betriebsart-Mitschrift rechnet darüber. Der Wächter `test_kanal_symmetrie.py` prüft auf den Datenständen beider Abnahme-Matrizen je Tag
-Kanal-Δ ≡ `komponenten_kwh` (Toleranz 0,005 kWh, benannte und gezählte Ausnahmeklassen); seit E3 liest er über die
-Lese-Schicht.
+Herbststunde ⇒ die spätere, fehlende Frühjahrsstunde ⇒ kein `start_ts`); das Tagesfenster des **Bestands**
+`[Vortag 23:00, 23:00)` ist `tagesfenster_start_ts` (Schreiber, HA-Leser und Bestandstage, unverändert bis S5). Auch die
+Betriebsart-Mitschrift rechnet darüber. Ein **Kanal-Tag** ist seit S4 der Kalendertag (`fenster.tagesfenster`, unten), seine
+Stunde `h` ist die Zeile mit lokalem Beginn `h` (`stunden_leser.stunde_des_beginns`); dieselbe Stunde steht in der
+Bestandszeile `(D, h+1)`, für `h = 23` in Slot 0 des Folgetags (`slot_konvention.bestandszeile_fuer_stundenbeginn`, die eine
+Umrechnung). Der Wächter `test_kanal_symmetrie.py` prüft auf den Datenständen beider Abnahme-Matrizen je Tag
+Kanal-Δ(Kalendertag) ≡ Tageswert des Bestands − Slot 0(D) + Slot 0(D+1) — die Randstunde (Toleranz 0,005 kWh, benannte
+und gezählte Ausnahmeklassen); seit E3 liest er über die Lese-Schicht.
 
 **Lese-Schicht (E3).** `services/kanal/lesen.py` hat vier Lesefunktionen, je auch als Stapel über viele Kanäle in einem
 Aufruf: `zeitraum` (Δ über `[von, bis)`), `reihe` (dasselbe je Intervall, über n+1 Randstände), `stunden` (Zuwachs je
@@ -614,8 +622,10 @@ Stundenlaufs) und der Zeitraum nicht feiner ist als die Spanne zweier Stände, i
 im Inneren ist keine fehlende Abdeckung — ihre Menge steht in der Folgestunde, wie in HA —; sie nennt `stunden` je Stunde.
 `zeitraum` und `reihe` lesen dafür nur die Randstände: zwei Index-Schritte je Kanal und Grenze, eine SQL-Anweisung je
 Aufruf, gleich wie lang der Zeitraum ist. Ohne volle Abdeckung gibt es keinen Wert, nur eine benannte Teilsumme.
-`fenster.py` bildet Tages- und Monatsfenster so, wie der Bestand sie hat (`[Vortag 23:00, 23:00)`, Monat = Tage des
-Monats), dazu den Kalendermonat des HA-Monatslesers (`[1. 00:00, 1. 00:00)`) für die Leser, die heute mit ihm rechnen; `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
+`fenster.py` bildet Tages- und Monatsfenster der Kanal-Schicht an einer Stelle: seit S4 (R-3) den **Kalendertag**
+`[D 00:00, D+1 00:00)` und den **Kalendermonat** `[1. 00:00, 1. des Folgemonats 00:00)` in der Prozesszone —
+`monatsfenster` und `kalendermonatsfenster` sind ein Körper (beide Namen bleiben bis S5), also dieselbe Grenze wie der
+HA-Monatsleser und per Konstruktion die Σ seiner Kalendertage (eine Monatsgrenze statt zwei); `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
 Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefert je Monat Δ, Abdeckung und diese eine
 Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
 importieren die Schicht — seit S3 samt Kanal-Stundentag (`stunden_leser.py`, `stunden_adapter.py`) — nur die
@@ -624,8 +634,8 @@ Monats-Fakten und benannte Tages-Leser, heute genau einer: `services/energie_pro
 fasst `zellen_stapel` den Zuwachs mehrerer Zeiträume je (Wochentag, Uhrstunde) in einer Anweisung zusammen — die Gewichte
 eines Zeitfenster-Tarifs.
 
-**Quellenwahl je Zeitraum (ADR-002/P14) und die Leser je Gruppe.** Je Tag, Monat (Monatsfenster des Bestands,
-`[Vortag 23:00, letzter Tag 23:00)`) bzw. Kalendermonat (`[1. 00:00, 1. 00:00)`) und Gruppe EINE Wahl: `kanal` nur, wenn
+**Quellenwahl je Zeitraum (ADR-002/P14) und die Leser je Gruppe.** Je Tag (Kalendertag) bzw. Monat (Kalendermonat
+`[1. 00:00, 1. 00:00)`, seit S4 ein Fenster für alle Monatsleser) und Gruppe EINE Wahl: `kanal` nur, wenn
 jeder Eingang der Formel voll deckt (in einer Entweder-oder-Gruppe der erste deckende, W2-R4), sonst `bestand` für den
 ganzen Zeitraum. Die Gruppen sind getrennt — eine kann decken, die andere nicht:
 
@@ -1506,13 +1516,33 @@ Kasten „Der Kanal-Stundentag". Die Schreiber bleiben (`aggregate_day` schreibt
 | `services/kanal/stunden_adapter.py` | die 24 Stunden in der Form der Stundenzeile (`pv_kw` … `defizit_kw`, `waermepumpe_kw`, `wallbox_kw`, `spannen`) — nur Layer-Funktionen |
 | `services/energie_profil/kanal_stunden.py` | Mischzeilen: Mengen der Kanal-Gruppen aus dem Adapter, Ladestand/Wetter/Preise/Zählwerke/`komponenten` aus der Stundenzeile; `wp_stundenformen`/`wp_strom_je_stunde` für die Wärme-Sichten |
 | `services/verwerfen_vor_quellbeginn.py`, `services/kanal/verwerfen.py` | Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen" (Vorschau und Ausführung; Kanalzeilen der älteren Quellen vor `t`, im Bestand nur die Schlüssel des Feldes) |
+| `services/kanal/bilanz_adapter.py::BewusstLeer`/`bewusst_leer` | «verworfen heißt bewusst leer» (V-H4-4, S4 E-S4-3): ein Feld, dessen an D geltende Quellen alle `verworfen_ts` tragen und dessen Kanal vor dem Ende von D keine Zeile hat, zählt an D nicht als benötigt (fehlt wie ein nie zugeordnetes) — gerufen nur am Bedarf der Gruppenwahl (`tage_bilanz`, `_monate_bilanz`, `bilanz_quellenwahl._benoetigt`, `geraete_leser._bedarf`, `wp_leser._bedarf`), einmal je Anfrage im Lade-Kontext; Grenze: Tage vor dem ersten `gueltig_ab` erfasst die Regel nicht |
+
+**Seit S4 (R-3): Kalendertag und Stundenbeginn.** Ein Kanal-Tag ist der Kalendertag, seine Stunde `h` ist `[h, h+1)` (HAs
+`start_ts`); die Mischzeile trägt `raster = "beginn"` und holt die Bahnen der Stundenzeile **nach Bahn**: backward-Bahnen
+(`komponenten`, Wetter, Zählwerke, Betriebsart) aus der Bestandszeile `h+1` (Stunde 23 aus Slot 0 des Folgetags,
+`slot_konvention.bestandszeile_fuer_stundenbeginn`), forward-Bahnen (Ladestand, Preise) zeilengleich;
+`forward_werte_je_backward_zeile` fragt das Attribut. Die Monats-Stundensichten (Heatmap, Profil, Spitzen) legen beide
+Zeilenarten auf die Stunde ihres Beginns (`stundenbeginn_der_zeile`); das Frontend beschriftet jede Stunde als Bereich
+(`lib/stundenBereich.ts`, Feld `raster` der Antwort). **Die eine Umschaltstelle** von `tag-detail`, `waerme-verlauf-stunden`
+und `waerme-verteilung?sicht=tag` ist `kanal_stunden.tages_eingaenge`: an einem Kanal-Tag kommen WP-Strom, Wärme/Kälte,
+Modus-Stapel und E-Mob-Ladung aus dem Kanal-Stundentag bzw. seinem Tages-Δ (je Gruppe deren eigene Wahl), sonst aus der
+Tageszeile mit dem N-444-Fenster (`tagesfenster_fuer(…, kanal_tag)` liefert an einem Kanal-Tag den Kalendertag — das
+Fenster folgt dem Bezug). Die Modus-Stunden eines WP-Kanal-Tags wählt `kanal_stunden.modus_stunden_mit_rueckfall` je
+Gerät: der abgeleitete Kanal „Strom je Betriebsart", wenn er am Tag Zeilen hat, sonst die Modus-Spur der Stundenzeile als
+backward-Bahn (S4 E-S4-3 H-2a). `serien.geraete_spalte_kw` (#263) fällt nur bei Wahl `bestand` auf den Leistungspfad zurück,
+nie für leere Stunden eines Kanal-Tags (H-2b). ⚠ **Benannte Grenzen:** `baueTagWaermeVerlauf` (Frontend) paart die
+Temperatur über `stunde` aus `/stunden` und setzt gleiches Raster von Wärme-Antwort und `/stunden` voraus — ist die
+WP-Gruppe ein Kanal-Tag und die Bilanz ein Bestandstag, stünde die Temperatur eine Stunde versetzt (Nachmessung E-S4-1
+M-4; an den Matrix-Formen nicht vorgekommen); Stunden einer Spanne ohne eigene Zeile zeigen Wärme/Kälte 0,0 statt leer
+(H-2c, S5).
 
 Keine Route ruft `stunden_leser`/`stunden_adapter` selbst (Wächter `test_kanal_lesen_waechter.py`). Proben:
 `test_kanal_stunden_gleichheit.py` (Adapter ↔ Stundenzeile, benannte Klassen), `test_kanal_stunden_summe.py` (Σ Stunden ≡
 Tag), `test_kanal_stundentage_bereich.py` (Bereich ≡ Tag, Abfrage-Budget), `test_kanal_stunden_vorlage.py` (Komposition je
 Stunde ≡ `waehle_und_komponiere`), `test_kanal_stunden_sichten.py`, `test_kanal_stunden_waerme.py`. Laufzeit an der
-Zwölf-Jahres-Kopie (Cockpit → Tag, warm): `tage-werte` über 90 Kanal-Tage ≈ 0,54 s gegen ≈ 0,35 s an einem Bestandstag
-(Werkzeug `plans/ha-bauform-werkzeug/laufzeit-grundlinie.py --tag`).
+Zwölf-Jahres-Kopie (Cockpit → Tag, warm): `tage-werte` über 90 Kanal-Tage ≈ 0,59 s gegen ≈ 0,38 s an einem Bestandstag
+(Stand S4, Werkzeug `plans/ha-bauform-werkzeug/laufzeit-grundlinie.py --tag`).
 
 **Datenmodelle:**
 
@@ -1564,7 +1594,10 @@ Zwölf-Jahres-Kopie (Cockpit → Tag, warm): `tage-werte` über 90 Kanal-Tage �
 
 #### Die Slot-Konvention — welche Uhr-Stunde eine Zeile beschreibt
 
-**SoT: `backend/core/berechnungen/slot_konvention.py`.** Es gilt durchgängig **backward**:
+**SoT: `backend/core/berechnungen/slot_konvention.py`.** Für die Stundenzeilen (`TagesEnergieProfil`), die Prognose-Profile
+und die HA-Export-Stundenreihen gilt durchgängig **backward** — die Stunden eines **Kanal-Tags** tragen seit HA-Bauform S4
+ihren Beginn (`[h, h+1)`, Feld `raster = "beginn"`, Kasten „Kanal-Stundentag" oben); wo beide nebeneinander treten,
+rechnet nur `bestandszeile_fuer_stundenbeginn` um:
 
 > **Slot `h` = Energie im Intervall `[h-1, h)`.**
 > Slot 0 = `[Vortag 23:00, 00:00)` · Slot 23 = `[22:00, 23:00)`.

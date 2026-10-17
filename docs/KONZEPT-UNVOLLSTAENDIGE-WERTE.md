@@ -292,7 +292,8 @@ Prognose-Genauigkeit, PR-Check), lässt **beide** Tage um ein Mitternachtsbünde
 
 **Benannte Abweichungen.** (1) *Live-Tageskacheln* (`live_history_service`) rechnen weiter ihren
 eigenen Tageswert und weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. (2) Das
-Tagesfenster `[Vortag 23:00, 23:00)` bleibt (N-434); HAs Kalendertag weicht darin ab. (3) Ein
+Tagesfenster `[Vortag 23:00, 23:00)` bleibt für **Bestandstage** (N-434); ein **Kanal-Tag** ist seit HA-Bauform S4 (R-3)
+HAs Kalendertag `[00:00, 24:00)`, seine Stunden tragen ihren Beginn. (3) Ein
 eingefrorener HA-Stand (Zeilen mit gleichem `sum`, danach der Nachtrag in **einer** Stunde) ist
 nach R2 keine Lücke (n = 1, die Nullzeilen bleiben Nullstunden, die Menge steht wie in HA in der
 Nachtragsstunde). Der Deckel rechnet dort mit der Zeit, in der der Stand unverändert war (Lab
