@@ -1223,6 +1223,33 @@ async def _kopf_des_monats(
     }
 
 
+def _herkunft_lokal() -> DatenquelleInfo:
+    """Die Herkunft der Kanal-Gruppen ohne antwortende HA-Statistik: die lokalen Daten (N-750, N-758) — dieselbe Marke
+    wie die fünfte Quelle (``tagesebene``, 80 %). Steht hier, weil sie die Uhr liest (Modul-Docstring)."""
+    return DatenquelleInfo(quelle="tagesebene", konfidenz=80, zeitpunkt=datetime.now().isoformat())
+
+
+async def _summen_der_tagesebene(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, *, ist_aktueller_monat: bool, ha_geliefert: bool,
+) -> Optional[dict]:
+    """Gilt die fünfte Quelle (N-472) für diesen Monat — und wenn ja, ihre Summe (``lade_monats_summen``, Weg 2).
+
+    Im **laufenden** Monat immer (N-472, unverändert). ⭐ **N-758 (17.10.2026, Konzept R-11/E6):** in einem
+    **vergangenen** Monat dann, wenn die HA-Statistik in dieser Anfrage nicht geliefert hat UND die Kanäle der
+    Bilanz-Gruppe den Kalendermonat voll decken (``kanal_monate`` nennt ihn) — dieselbe Wahl wie die Monats-Fakten
+    (``monats_fakten/laden.py``), also auch für eine Anlage ohne HA-Zuordnung (Eigene Summe aus MQTT). Die Begründung
+    von N-472 („in einem abgeschlossenen Monat wäre eine Teilmenge der Tage eine stille Untertreibung") trägt dort
+    nicht: ein voll gedeckter Kanal-Monat ist EIN Δ über den ganzen Monat, keine Teilmenge. Ohne Deckung ``None`` —
+    der Monat bleibt, wie er war (Antwort: der Monatsabschluss). Mit HA-Antwort ``None`` — der HA-Weg ersetzt die
+    Bilanz-Gruppe schon aus den Kanälen (E4a-2)."""
+    from backend.services.kanal.bilanz_leser import kanal_monate, lade_monats_summen
+
+    m = (jahr, monat)
+    if not ist_aktueller_monat and (ha_geliefert or m not in await kanal_monate(db, anlage_id, von=m, bis=m)):
+        return None
+    return await lade_monats_summen(db, anlage_id, von=m, bis=m)
+
+
 async def _quellen_des_monats(
     db: AsyncSession, anlage: Anlage, anlage_id: int, investitionen: list[Investition], jahr: int, monat: int,
     ist_aktueller_monat: bool, kontext: Optional[MonatsKontext],
@@ -1266,16 +1293,12 @@ async def _quellen_des_monats(
     # für ihre Schlüssel (gemessen: MQTT trägt dieselben Schlüssel mit denselben Werten aus derselben Standreihe,
     # keine Addition; Bericht FUND-N750-N751 Etappe 1); die Herkunft ist die der lokalen Daten, die Marke
     # `quellen.ha_statistics` bleibt die des HA-Sammlers. Die Bilanz trägt dann die fünfte Quelle (`lade_monats_summen`,
-    # Weg 2), und aus DERSELBEN Summe kommen die Sonstiges-Erzeuger (`sonstige_erzeuger_je_inv`). Abgeschlossene Monate
-    # ohne HA bleiben wie bisher: ohne Abschluss trägt dort keine Quelle die Bilanz (N-472).
-    _summen_laufend = None
-    _ohne_ha = None
-    if ist_aktueller_monat:
-        from backend.services.kanal.bilanz_leser import lade_monats_summen
-
-        _summen_laufend = await lade_monats_summen(db, anlage_id, von=(jahr, monat), bis=(jahr, monat))
-        if not ha_geliefert:
-            _ohne_ha = DatenquelleInfo(quelle="tagesebene", konfidenz=80, zeitpunkt=datetime.now().isoformat())
+    # Weg 2), und aus DERSELBEN Summe kommen die Sonstiges-Erzeuger (`sonstige_erzeuger_je_inv`).
+    # ⭐ N-758 (17.10.2026): dasselbe für einen VERGANGENEN Monat ohne HA-Antwort, dessen Bilanz-Kanäle ihn voll decken
+    # (`_summen_der_tagesebene`, Wahl der Monats-Fakten); ohne Deckung trägt dort weiter keine Quelle die Bilanz.
+    _summen_laufend = await _summen_der_tagesebene(
+        db, anlage_id, jahr, monat, ist_aktueller_monat=ist_aktueller_monat, ha_geliefert=ha_geliefert)
+    _ohne_ha = _herkunft_lokal() if _summen_laufend is not None and not ha_geliefert else None
     _erzeuger_ohne_ha = (
         getattr(_summen_laufend.get((jahr, monat)), "sonstige_erzeuger_je_inv", None)
         if _ohne_ha is not None else None
@@ -1296,7 +1319,8 @@ async def _quellen_des_monats(
         await _ha_heimlade_felder_mit_daten(anlage, investitionen, jahr, monat)
         if not ist_aktueller_monat else set()
     )
-    # Fünfte Quelle (N-472) — nur im laufenden Monat, und das ist eine Aussage
+    # Fünfte Quelle (N-472) — im laufenden Monat (seit N-758 auch im vergangenen voll gedeckten Kanal-Monat ohne
+    # HA-Antwort, `_summen_der_tagesebene`; der Absatz hier begründet den laufenden), und das ist eine Aussage
     # über die Kategorie, nicht über den Aufwand: Im laufenden Monat IST eine
     # Teilmenge der Tage die vollständige Auskunft über das bisher Geschehene,
     # und alle vier Quellen darüber messen dort ebenfalls nur bis jetzt. In
@@ -1331,7 +1355,7 @@ async def _quellen_des_monats(
             ]),
             summen=_summen_laufend,
         )
-        if ist_aktueller_monat else {}
+        if _summen_laufend is not None else {}
     )
 
     # Abdeckung des Connector-Deltas — sie steht in jedem seiner

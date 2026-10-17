@@ -4068,6 +4068,7 @@ nach denselben Regeln wie die Tagessummen:
   | R-7 Tagesreset-Zähler | Kanal ja (Tag, Monat, Jahr); Live, Monatsabschluss-Vorschlag und Geräte-Tageswerte vor dem Kanal nein (S5) — der Daten-Checker sagt es |
   | R-8 Komposition als Konfiguration | Weg 2 (W2-R1…R5) für Kanal-Zeiträume plus Checker-Hinweis „PV gesamt neben Balkonkraftwerk" (#428), seit S1/S2 |
   | R-10 Herkunft am Kanal | `kanal_quelle(familie, gueltig_ab, verworfen_ts)` seit S1; `source_provenance` je Zelle bleibt an der Stundenzeile (S5) |
+  | R-11 jeder Zeitraum gleich billig und gleich vollständig | *Cockpit → Monat*: ein vergangener Monat ohne Abschluss und ohne HA-Antwort nimmt die fünfte Quelle, wenn die Bilanz-Kanäle ihn voll decken (`kanal_monate`, dieselbe Wahl wie die Monats-Fakten; `aktueller_monat._summen_der_tagesebene`) — erledigt mit N-758; ohne volle Deckung bleibt er bis zum Abschluss leer (N-472) |
 
 ### Stündliche Berechnung (aggregate_day)
 

@@ -1377,14 +1377,10 @@ SOLL_UNKLAR_MENGE: dict[tuple[str, str, str], str] = {
 #: ``(Form, Größe, Weg, Invariante, Sicht) → Grund``: die Regel legt das Soll dieser Sicht nicht fest.
 SOLL_UNKLAR: dict[tuple[str, str, str, str, str], str] = {}
 
-#: Wie ``test_pv_achse_matrix._U_SA_VOR``: ohne HA hat ein vergangener Monat vor dem Abschluss in Cockpit →
-#: Monat keine Werte (N-472), Cockpit → Jahr → Verlauf zeigt ihn aus den Tageswerten (N-121) — entschieden (N-677).
-_U_SA_VOR = (
-    "Cockpit → Monat sammelt die Tagesebene NUR im laufenden Monat (aktueller_monat/__init__.py, N-472); ohne HA "
-    "hat ein vergangener Monat vor dem Abschluss dort keine Werte, Cockpit → Jahr → Verlauf zeigt ihn aus den "
-    "Tageswerten (N-121) — entschieden wie in der PV-Matrix (N-677, Gernot 10.10.2026): die Antwort ist der "
-    "Monatsabschluss, das Handbuch sagt es."
-)
+#: Die S3-Vor-Regel ``_U_SA_VOR`` (N-472/N-677: ohne HA hatte ein vergangener Monat vor dem Abschluss in Cockpit →
+#: Monat keine Werte) ist mit N-758 entfallen (17.10.2026, Konzept R-11/E6, Freigabe Master): ein voll gedeckter
+#: Kanal-Monat trägt die Sicht wie die Monats-Fakten — sie hat das Soll der normalen Regel, ihre Haltewerte sind entfallen
+#: (Tabelle alt/neu: ``~/.claude/plans/ha-bauform-werkzeug/fund-n758/haltewerte_alt_neu.md``).
 
 
 def _zerlege(sicht: str) -> tuple[str, str, str]:
@@ -1411,8 +1407,6 @@ def _soll_unklar(fid, groesse, weg, inv, sicht: str) -> Optional[str]:
     menge, s, art = _zerlege(sicht)
     if (fid, groesse, menge) in SOLL_UNKLAR_MENGE:
         return SOLL_UNKLAR_MENGE[(fid, groesse, menge)]
-    if weg == "S3" and art == "vor" and s == "cockpit_monat":
-        return _U_SA_VOR
     if fid == "M06" and groesse == "wp" and sicht.startswith("cockpit_monat:jaz:Klima"):
         return _U_KLIMA_JAZ
     return None

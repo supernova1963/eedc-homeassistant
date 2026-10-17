@@ -466,8 +466,10 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > laufende Monat E-Mobilität, Sonstiges und Wärmepumpe trotzdem aus den gespiegelten Zählerständen — dieselben Zahlen
 > wie der Verlauf in *Cockpit → Jahr*. Bis 4.1.7 fehlten in diesem Moment der Strom eines Erzeugers wie BHKW im
 > Eigenverbrauch, die Heimladung, die dienstlichen Ladekosten und der Strom je Betriebsart; ein erneutes Öffnen, sobald
-> Home Assistant wieder da war, zeigte sie wieder. Ein vergangener Monat ohne Abschluss braucht dafür weiterhin die
-> HA-Statistik (oder den Abschluss).
+> Home Assistant wieder da war, zeigte sie wieder. Ein vergangener Monat ohne Abschluss zeigt sie ebenso — auch ohne
+> Home Assistant, wenn die Kanäle den Monat decken (die Zähler der Bilanz führen den ganzen
+> Kalendermonat im HA-Spiegel oder in der eigenen Summe aus MQTT-Zählerständen); sonst braucht er weiterhin die
+> HA-Statistik oder den Abschluss.
 
 > **Netzladung des Speichers vor dem Abschluss.** Hat dein Speicher einen Zähler für die Ladung aus dem Netz, nennt ein
 > Monat ohne Abschluss die Netzladung schon vorher — als **Summe der abgelaufenen Tage**, dieselben Zahlen wie in
@@ -475,8 +477,8 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 > Speicher-Zeile „davon aus dem Netz" sagen das beim Überfahren („Menge aus Tageswerten"); der Ladepreis ist derselbe wie
 > am Tag (gewichtet mit deinen Stundenpreisen, sonst dein Arbeitspreis). Das gilt für den laufenden **und** einen
 > **vergangenen** Monat ohne Abschluss: *Cockpit → Monat* zeigt sie dort, wo auch Ladung und Entladung stehen (ohne
-> Home Assistant hat ein vergangener Monat ohne Abschluss dort keine Speicherwerte, also auch keine Netzladung — die
-> Antwort ist der Monatsabschluss); der Verlauf von *Cockpit → Jahr* trägt sie für jeden Monat ohne Speicher-Eintrag mit Tagen, und
+> Home Assistant hat ein vergangener Monat ohne Abschluss dort Speicherwerte und Netzladung, wenn die Kanäle den Monat
+> decken; sonst keine — die Antwort ist dann der Monatsabschluss); der Verlauf von *Cockpit → Jahr* trägt sie für jeden Monat ohne Speicher-Eintrag mit Tagen, und
 > ein Community-Monatswert, der ohnehin geteilt wird (nur abgeschlossene Monate mit Zählerzeile), nimmt sie wie Ladung
 > und Entladung mit. Mit dem Monatsabschluss gilt der gespeicherte Wert. Die
 > V2H-Rückspeisung eines E-Autos zählt im Monat weiterhin erst mit dem Abschluss.
@@ -542,9 +544,12 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vo
 > Erzeugung. Kann ein Monat gar nicht berechnet
 > werden, nennt die Zeile ihn ebenfalls; das Jahresergebnis bleibt dann — wie bei einer fehlenden Stromrechnung — leer
 > („—“) und nennt den Monat als fehlenden Posten.
-> **Ohne Home Assistant** zeigt *Cockpit → Monat* einen solchen Monat erst nach dem Abschluss — MQTT-Zählerstände und
-> Tageswerte nimmt die Monatssicht nur für den laufenden Monat, von den übrigen Quellen liefert nur ein Geräte-Connector
-> auch vergangene Monate —, während der Verlauf hier im Jahr ihn schon vorher aus den mitgeschriebenen Werten zeigt.
+> **Ohne Home Assistant** (oder wenn Home Assistant gerade nicht antwortet) zeigt *Cockpit → Monat* einen solchen Monat
+> auch vor dem Abschluss, wenn die Kanäle ihn decken — die Zähler der Bilanz (Netz, PV, Speicher …) führen den ganzen
+> Kalendermonat lückenlos im HA-Spiegel oder in der eigenen Summe aus MQTT-Zählerständen; dann nennt er dieselben Zahlen
+> wie der Verlauf hier im Jahr (Quellen-Etikett „Tageswerte"). Deckt die Mitschrift den Monat nur teilweise (etwa der
+> erste Monat nach der Einrichtung), zeigt *Cockpit → Monat* ihn erst nach dem Abschluss — eine Teilmenge der Tage wäre
+> eine stille Untertreibung —, während der Verlauf hier im Jahr ihn schon vorher aus den mitgeschriebenen Tagen zeigt.
 
 Der Finanzen-Block als Komponenten-Finanz-Tabelle erscheint auch in Jahr/Gesamt.
 

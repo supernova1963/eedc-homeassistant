@@ -99,11 +99,9 @@ async def test_monat_ist_die_summe_der_kanal_tage(weg):
     for monat in (6, 7):
         assert m[monat]["fakten"] == pytest.approx(m[monat]["summe_tage"]), (monat, m[monat])
     assert m[7]["cockpit_monat"] == pytest.approx(m[7]["summe_tage"])
-    if weg == "HA":
-        assert m[6]["cockpit_monat"] == pytest.approx(31.0)
-    else:
-        # N-472/N-677: ohne HA hat der vergangene Juni in Cockpit → Monat keine Ladung/Entladung — keine halbe Anzeige.
-        assert m[6]["cockpit_monat"] is None
+    # Seit N-758 (17.10.2026) auch ohne HA: der vergangene Juni ist ein voll gedeckter Kanal-Monat, Cockpit → Monat nimmt
+    # die fünfte Quelle (Wahl der Monats-Fakten) — bis dahin None (N-472/N-677: keine Ladung/Entladung ohne HA).
+    assert m[6]["cockpit_monat"] == pytest.approx(31.0)
 
 
 async def test_bestandstage_bleiben_rueckwaerts():

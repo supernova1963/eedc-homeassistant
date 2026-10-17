@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- ***Cockpit → Monat* zeigt einen vergangenen Monat ohne Abschluss jetzt auch dann aus dem HA-Spiegel bzw. den eigenen Zählerständen, wenn Home Assistant gerade nicht antwortet oder eedc ohne Home Assistant läuft — wie Jahr-Verlauf und Tabelle es schon taten.** Bisher blieben PV, Einspeisung, Netzbezug, Eigenverbrauch und Autarkie eines solchen Monats leer, bis er abgeschlossen war (die Tageswerte nahm die Monatssicht nur für den laufenden Monat), während der Verlauf in *Cockpit → Jahr* denselben Monat schon zeigte. Jetzt nimmt *Cockpit → Monat* ihn, sobald die Zähler der Bilanz (Netz, PV, Speicher …) den ganzen Kalendermonat lückenlos im HA-Spiegel oder in der eigenen Summe aus MQTT-Zählerständen führen — dieselbe Wahl wie Jahr-Verlauf und Tabelle, also dieselben Zahlen; E-Mobilität, Sonstiges und Wärmepumpe kommen wie im laufenden Monat dazu, und die Jahresansicht, die die Monate zusammenzählt, trägt sie mit. Ein Monat, den die Zähler nicht ganz abdecken (etwa der erste nach der Einrichtung), bleibt bis zum Abschluss leer; ein gespeicherter Abschluss gilt weiter vor den gerechneten Werten. Der laufende Monat ändert sich nicht. Intern: die fünfte Quelle der Route (`aktueller_monat._summen_der_tagesebene`) gilt auch für einen vergangenen Monat ohne HA-Antwort, den `kanal_monate` nennt (HA-Bauform, Konzept R-11); die erwarteten Abweichungen „Soll unklar“ dieser Lage in beiden Abnahme-Matrizen sind entfallen (N-758).
+
 ## [4.1.8] - 2026-10-17 — eedc rechnet wie das HA-Energie-Dashboard: Stunden und Kalendertag aus dem HA-Spiegel, kein Deckel auf HA-Werten; neu: Werkbank „Werte vor dem Sensorbeginn verwerfen"; 15 Korrekturen
 
 ### Added

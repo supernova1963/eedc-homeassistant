@@ -9,6 +9,17 @@
 
 ---
 
+## Unveröffentlicht — kommt mit der nächsten Version
+
+**Vergangene Monate ohne Abschluss auch ohne Home Assistant:** *Cockpit → Monat* zeigt einen vergangenen Monat, den du
+noch nicht abgeschlossen hast, jetzt auch dann mit PV, Netz, Eigenverbrauch und Autarkie, wenn Home Assistant gerade
+nicht antwortet oder eedc ohne Home Assistant läuft — vorausgesetzt, deine Zähler decken den ganzen Monat im HA-Spiegel
+oder in der eigenen Summe aus MQTT-Zählerständen. Es sind dieselben Zahlen wie im Verlauf von *Cockpit → Jahr*. Ein
+Monat, den die Zähler nur teilweise abdecken, bleibt wie bisher bis zum Abschluss leer
+([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
+
+---
+
 ## v4.1.8 — 17. Oktober 2026
 
 **Stunden aus Home Assistant:** Deckt der HA-Spiegel einen Tag, kommen jetzt auch die **Stunden** von PV, Einspeisung,

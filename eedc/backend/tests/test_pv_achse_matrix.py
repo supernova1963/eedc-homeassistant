@@ -652,15 +652,11 @@ URSACHE: dict[str, Ursache] = {
         "Bestand, der Tag rechnete #406/N-623 (Abgleich bzw. kWp-Anteil), nicht Weg 2",
     ),
     "W2-SA-VOR": Ursache(
-        "wie „Soll unklar\" SA vor dem Abschluss (N-472/N-121, N-677)",
-        "Gemessen E-S4-3 (der SA-Datenstand trägt jetzt Kanäle): Cockpit → Monat liest die Bilanz-Kanäle eines "
-        "vergangenen Monats nur auf dem HA-Weg — `aktueller_monat/quellen_leser.py:95` "
-        "(`_ha_statistik_aus_kanaelen_mit_marke`: `if not ha_stats: return`) ersetzt nur HA-Statistik-Werte durch das "
-        "Kanal-Δ; ohne HA-Statistik bleibt der vergangene Juni vor dem Abschluss ohne PV (die Tagesebene sammelt nur den "
-        "laufenden Monat, N-472). Monats-Fakten und Jahr-Verlauf nennen denselben Monat aus den Kanälen. Dieselbe Lage "
-        "wie `_U_SA_VOR` der übrigen Formen (dort „Soll unklar\" mit Haltewert); Entscheid N-677 (Gernot 10.10.2026): "
-        "die Antwort ist der Monatsabschluss. Die Geräte-/WP-Gruppen sind mit N-750 frei (Zeilen 138/208). "
-        "Konzeptfrage R-11/E6 an Gernot — kein Bau in E-S4-3",
+        "wie „Soll unklar\" SA vor dem Abschluss (N-472/N-121, N-677) — seit N-758 geheilt (17.10.2026); keine Zelle mehr",
+        "Cockpit → Monat las die Bilanz-Kanäle eines vergangenen Monats ohne HA nicht (die fünfte Quelle nur im laufenden "
+        "Monat, N-472; der Kanal-Ersatz nur auf dem HA-Weg) — Monats-Fakten und Jahr-Verlauf nannten den Juni aus den "
+        "Kanälen. Seit N-758 (Konzept R-11/E6) nimmt ein voll gedeckter Kanal-Monat ohne HA-Antwort die fünfte Quelle "
+        "(`aktueller_monat._summen_der_tagesebene`, Wahl der Monats-Fakten)",
     ),
 }
 
@@ -686,16 +682,8 @@ ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
     # W2-SA-BESTAND: seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2) — `W2-L-S3-I4` grün, die Tages-Sichten der vier SA-Zellen
     # grün; deren gespeicherte Zeilen stehen oben unter W2-BESTAND-SPEICHER. Keine Zelle mehr.
     'W2-SA-BESTAND': {},
-    'W2-SA-VOR': {
-        ('W2-V', 'S3', 'I2'): ('cockpit_monat:vor=nach',),
-        ('W2-V', 'S3', 'I3'): ('cockpit_monat:vor',),
-        ('W2-V', 'S3', 'I5'): ('cockpit_monat:vor',),
-        ('W2-V', 'S3', 'I6'): ('vor:cockpit_monat',),
-        ('W2-L', 'S3', 'I2'): ('cockpit_monat:vor=nach',),
-        ('W2-L', 'S3', 'I3'): ('cockpit_monat:vor',),
-        ('W2-L', 'S3', 'I5'): ('cockpit_monat:vor',),
-        ('W2-L', 'S3', 'I6'): ('vor:cockpit_monat',),
-    },
+    # W2-SA-VOR: seit N-758 geheilt (17.10.2026) — die acht Zellen W2-V/W2-L S3 I2/I3/I5/I6 grün. Keine Zelle mehr.
+    'W2-SA-VOR': {},
 }
 
 
@@ -723,21 +711,10 @@ BEKANNT: dict[tuple[str, str, str], Mangel] = _baue_bekannt()
 #: ``(Form, Weg, Invariante, Sicht) → Grund``: die Regel legt das Soll dieser Sicht nicht fest.
 SOLL_UNKLAR: dict[tuple[str, str, str, str], str] = {}
 
-_U_SA_VOR = (
-    "Cockpit → Monat sammelt die Tagesebene NUR im laufenden Monat (aktueller_monat/__init__.py:731-738, "
-    "N-472: in einem abgeschlossenen Monat wäre sie „eine stille Untertreibung“, die Antwort ist der "
-    "Monatsabschluss). Ohne HA hat ein vergangener Monat vor dem Abschluss also keine PV — während "
-    "Cockpit → Jahr → Verlauf denselben Monat aus den Tageswerten zeigt (N-121). Ob „nichts verschwindet“ "
-    "hier gilt oder die N-472-Begründung, ist entschieden (N-677, Gernot 10.10.2026): die Antwort ist der "
-    "Monatsabschluss, das Handbuch sagt es (Kasten «Diese Achse rechnet mit abgeschlossenen Monaten»)."
-)
-for _f in ("F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08a", "F08b", "F09a-G", "F09b-G", "F09c-G",
-           "F09a-oG", "F09b-oG", "F09c-oG", "F10", "F11", "F12", "F13a", "F13b", "F14", "F15", "F16",
-           "N640-1", "N640-2", "N640-3", "W2-D", "W2-B", "W2-B7"):
-    SOLL_UNKLAR[(_f, "S3", "I2", "cockpit_monat:vor=nach")] = _U_SA_VOR
-    SOLL_UNKLAR[(_f, "S3", "I3", "cockpit_monat:vor")] = _U_SA_VOR
-    SOLL_UNKLAR[(_f, "S3", "I5", "cockpit_monat:vor")] = _U_SA_VOR
-    SOLL_UNKLAR[(_f, "S3", "I6", "vor:cockpit_monat")] = _U_SA_VOR
+# N-758 (17.10.2026, Konzept R-11/E6, Freigabe Master): die S3-Vor-Regel `_U_SA_VOR` (N-472/N-677 — ohne HA hatte ein
+# vergangener Monat vor dem Abschluss in Cockpit → Monat keine PV, 29 Formen × I2/I3/I5/I6 als „Soll unklar" mit Haltewert)
+# ist entfallen: ein voll gedeckter Kanal-Monat trägt die Sicht wie die Monats-Fakten, sie hat das Soll der normalen Regel
+# (vorher gemessen alt/neu/Fakten: `~/.claude/plans/ha-bauform-werkzeug/fund-n758/haltewerte_alt_neu.md`, 0 rot).
 # N-640 Variante 1 (Frank85): Soll seit dem Entscheid Master 08.10.2026 wie Variante 2 — 540 in allen Sichten, der
 # kWp-Anteil des BKW an den Tagen ist keine zweite Quelle (Bauplan §6b W2-R2, `monats_fakten/bau.py`). Keine Markierung.
 # N-588 (10.10.2026): die 24 Geld-Sichten von F13a haben ein Soll (`_geld_sichten`) — `_U_N588` ist entfallen; mit
