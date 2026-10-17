@@ -125,7 +125,7 @@ async def get_stundenwerte(
     # (Mischzeilen, `energie_profil/kanal_stunden.py`, Stunde = Beginn seit S4); Wetter, Zählwerke und `komponenten`
     # bleiben aus der Stundenzeile (S3-R6), nach Bahnen gepaart (S4-R-3b). Ohne Kanal-Gruppe: die Stundenzeilen des
     # Tages unverändert.
-    from backend.services.energie_profil.kanal_stunden import stunden_des_tages
+    from backend.services.energie_profil.kanal_stunden import aus_kanal_gruppe, stunden_des_tages
 
     rows = await stunden_des_tages(db, anlage_id, datum, [z for z in alle if z.datum >= datum])
     # SoC je Zeile über die EINE Paarung (N-553/N-387): Bestandszeilen aus der Vorzeile (der Vortag liefert Slot 0),
@@ -189,11 +189,14 @@ async def get_stundenwerte(
             einspeisung_kw=r.einspeisung_kw,
             netzbezug_kw=r.netzbezug_kw,
             batterie_kw=r.batterie_kw,
+            # HA-Bauform S4 E-S4-3 (H-2b): der Rückfall auf den Leistungspfad nur, wenn die Gruppe am Tag die Wahl
+            # `bestand` hat — eine leere Stunde eines Kanal-Tags bleibt leer (ihre Menge steht in der Folgestunde).
             waermepumpe_kw=geraete_spalte_kw(
-                r.waermepumpe_kw, r.komponenten, WAERMEPUMPE_KOMPONENTEN_PREFIXE,
+                r.waermepumpe_kw, None if aus_kanal_gruppe(r, "waermepumpe_kw") else r.komponenten,
+                WAERMEPUMPE_KOMPONENTEN_PREFIXE,
             ),
             wallbox_kw=geraete_spalte_kw(
-                r.wallbox_kw, r.komponenten, WALLBOX_KOMPONENTEN_PREFIXE,
+                r.wallbox_kw, None if aus_kanal_gruppe(r, "wallbox_kw") else r.komponenten, WALLBOX_KOMPONENTEN_PREFIXE,
             ),
             ueberschuss_kw=r.ueberschuss_kw,
             defizit_kw=r.defizit_kw,

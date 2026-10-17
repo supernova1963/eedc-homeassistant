@@ -96,16 +96,21 @@ def wp_felder(inv, inv_map: dict, hat_feld) -> list[str]:
     return [f for f in (*basis, *sorted(zugeordnet)) if hat_feld(inv, f)]
 
 
-async def _bedarf(db: AsyncSession, stamm, aktiv) -> _Bedarf:
+async def _bedarf(db: AsyncSession, stamm, aktiv, fenster: Optional[tuple[int, int]] = None) -> _Bedarf:
+    """Der Bedarf der WP-Gruppe. ``fenster`` (``[von, bis)``): ein dort bewusst leeres Feld (vor dem Zeitraum verworfen,
+    ``bilanz_adapter.BewusstLeer``, HA-Bauform S4 E-S4-3, S4-R-V4) ist nicht benötigt."""
+    from backend.services.kanal.bilanz_adapter import bewusst_leer
     from backend.services.kanal.modus_strom import abzuleitende_geraete
 
+    leer = await bewusst_leer(db, stamm.anlage.id)
     b = _Bedarf()
     inv_map = ((stamm.anlage.sensor_mapping or {}).get("investitionen") or {})
     wps = [i for i in stamm.invs if i.typ == WP_TYP and aktiv(i)]
     if not wps:
         return b
     for inv in wps:
-        felder = wp_felder(inv, inv_map, stamm.hat_feld)
+        felder = [f for f in wp_felder(inv, inv_map, stamm.hat_feld)
+                  if fenster is None or not leer.leer(f"inv:{inv.id}:{f}", *fenster)]
         if felder:
             b.direkt[inv.id] = felder
     if stamm.abzuleiten is None:
@@ -178,7 +183,7 @@ async def _je_zeitraum(
 async def _je_zeitraum_rechnen(
     db: AsyncSession, stamm: _WpStamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
 ) -> dict[MonatsSchluessel, WpZeitraum]:
-    bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m)) for m in fenster}
+    bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m), fenster[m]) for m in fenster}
     keys = {k for b in bedarf.values() for k in b.keys()}
     if not keys:
         return {}

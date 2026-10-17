@@ -156,17 +156,27 @@ def _sonstiges_gruppe(inv, hat_feld) -> list[str]:
             if hat_feld(inv, f) and _categorize_counter(f, "sonstiges", params) != "erzeugung_sonstiges"]
 
 
-async def _bedarf(db, stamm: _Stamm, aktiv, stichtag: date) -> tuple[_Bedarf, _Bedarf]:
+async def _bedarf(db, stamm: _Stamm, aktiv, stichtag: date,
+                  fenster: Optional[tuple[int, int]] = None) -> tuple[_Bedarf, _Bedarf]:
+    """Der Bedarf beider Gruppen. ``fenster`` (``[von, bis)`` des Zeitraums): ein dort bewusst leeres Feld (vor dem
+    Zeitraum verworfen, ``bilanz_adapter.BewusstLeer``, HA-Bauform S4 E-S4-3, S4-R-V4) ist nicht benötigt."""
+    from backend.services.kanal.bilanz_adapter import bewusst_leer
+
+    leer = await bewusst_leer(db, stamm.anlage.id)
+
+    def _da(inv_id, f) -> bool:
+        return fenster is None or not leer.leer(f"inv:{inv_id}:{f}", *fenster)
+
     emob, sonst = _Bedarf(), _Bedarf()
     for inv in stamm.invs:
         if not aktiv(inv):
             continue
         if inv.typ in EMOB_TYPEN:
-            felder = _emob_felder(inv, stamm.hat_feld)
+            felder = [f for f in _emob_felder(inv, stamm.hat_feld) if _da(inv.id, f)]
             if felder:
                 emob.direkt[inv.id] = felder
         elif inv.typ == "sonstiges":
-            gruppe = _sonstiges_gruppe(inv, stamm.hat_feld)
+            gruppe = [f for f in _sonstiges_gruppe(inv, stamm.hat_feld) if _da(inv.id, f)]
             if gruppe:
                 sonst.ersatz[inv.id] = [gruppe]
     if emob.direkt:
@@ -257,7 +267,7 @@ async def _je_zeitraum(
 async def _je_zeitraum_rechnen(
     db: AsyncSession, stamm: _Stamm, fenster: dict[MonatsSchluessel, tuple[int, int]], jetzt: int,
 ) -> dict[MonatsSchluessel, GeraeteZeitraum]:
-    bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m), _letzter_tag(*m))
+    bedarf = {m: await _bedarf(db, stamm, lambda i, m=m: i.ist_aktiv_im_monat(*m), _letzter_tag(*m), fenster[m])
               for m in fenster}
     keys = {k for e, s in bedarf.values() for k in e.keys() | s.keys()}
     if not keys:

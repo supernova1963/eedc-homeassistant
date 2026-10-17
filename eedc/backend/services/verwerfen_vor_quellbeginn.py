@@ -366,10 +366,10 @@ async def lage(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> Lage
 
 async def _nur_kanal_tage(db: AsyncSession, anlage_id: int, key: str, kanal_v: kv.KanalVorschau) -> tuple[date, ...]:
     """V-H4-4: die Kanal-Tage vor ``t``, die im Bestand weder eine Tages- noch eine Stundenzeile haben — dort trägt nur der
-    Kanal die Bilanz-Gruppe. Nach dem Verwerfen ist das Feld dort zugeordnet, aber ohne Kanal ⇒ die Gruppe liest den
-    Bestand (S3-R1: ganz aus dem Kanal oder ganz aus dem Bestand), und der hat nichts: der Tag verliert seine ganze
-    Energiebilanz, nicht nur dieses Feld. Nur für Felder der Bilanz-Gruppe (``bilanz_benoetigte_kanaele``); gezählt
-    unabhängig vom Monatsabschluss (der schützt den Bestand, nicht die Kanal-Deckung des Tages)."""
+    Kanal die Bilanz-Gruppe. Nach dem Verwerfen ist das Feld dort «bewusst leer» (HA-Bauform S4 E-S4-3, S4-R-V4,
+    ``bilanz_adapter.BewusstLeer``): die Gruppe bleibt aus den Kanälen, das Feld fehlt wie ein nie zugeordnetes (bis
+    E-S4-3 verlor der Tag seine ganze Energiebilanz). Nur für Felder der Bilanz-Gruppe (``bilanz_benoetigte_kanaele``, vor
+    dem Verwerfen gefragt); gezählt unabhängig vom Monatsabschluss (der schützt den Bestand, nicht die Kanal-Deckung)."""
     from backend.services.kanal.bilanz_quellenwahl import bilanz_benoetigte_kanaele
 
     tage = sorted(d for d in kanal_v.tage if d <= kanal_v.letzter_ganzer_tag)
@@ -443,8 +443,8 @@ def _saetze_danach(la: Lage) -> list[str]:
                  "Kanal, und der Bestand trägt das Feld nicht mehr.")
     if la.nur_kanal:
         s.append(f"An {fmt_zahl(len(la.nur_kanal))} Tagen ({_spanne(list(la.nur_kanal))}), die nur der HA-Spiegel (bzw. die "
-                 "eigene Summe) trägt, zeigt eedc danach keine Energiebilanz des Tages mehr (Regel: eine Gruppe ganz aus "
-                 "dem Spiegel oder ganz aus dem Bestand) — auch in Monaten mit Abschluss.")
+                 "eigene Summe) trägt, gilt das Feld danach als nicht erfasst — die übrigen Felder des Tages bleiben "
+                 "(auch in Monaten mit Abschluss).")
     mit = la.lesart1_mit_bestand()
     if mit:
         s.append(f"{fmt_zahl(len(mit))} Tag(e) ({_spanne(mit)}) verlieren ihre Kanalzeilen, ihr Bestand bleibt "

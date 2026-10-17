@@ -404,7 +404,7 @@ def _zaehler_der_gruppe(eintraege: Sequence[TabellenEintrag], keys: set[str]) ->
 
 async def _geraete_bedarf(db: AsyncSession, anlage_id: int, datum: date):
     stamm = await geraete_leser._stamm(db, anlage_id)
-    return await geraete_leser._bedarf(db, stamm, lambda i: i.ist_aktiv_an(datum), datum)
+    return await geraete_leser._bedarf(db, stamm, lambda i: i.ist_aktiv_an(datum), datum, tagesfenster(datum))
 
 
 def _geraete_wahl(emob_b, sonst_b, z: dict) -> tuple[dict[str, Quellenwahl], dict[str, set[str]]]:
@@ -454,7 +454,7 @@ async def _wp_bedarf(db: AsyncSession, anlage_id: int, datum: date, stamm=None):
     """Der Bedarf der WP-Gruppe am Tag. ``stamm``: derselbe WP-Stamm für viele Tage (die abzuleitenden Geräte hängen
     nicht am Tag — ``wp_leser._stamm`` merkt sie sich je Stamm, ein frischer Stamm fragt die Mitschrift-Kanäle neu)."""
     stamm = stamm if stamm is not None else await wp_leser._stamm(db, anlage_id)
-    return await wp_leser._bedarf(db, stamm, lambda i: i.ist_aktiv_an(datum))
+    return await wp_leser._bedarf(db, stamm, lambda i: i.ist_aktiv_an(datum), tagesfenster(datum))
 
 
 async def _wp_bauen(db: AsyncSession, anlage_id: int, datum: date, wahl: Quellenwahl, je: dict, tag: dict) -> None:
@@ -670,7 +670,8 @@ async def geraete_tageswerte(db: AsyncSession, anlage_id: int, tage: Sequence[da
         # Für Sonstiges allein ohne die E-Mob-Geräte (die Lade-Auswahl der E-Mob-Gruppe kostet je Tag Abfragen) —
         # dieselbe ``_bedarf``-Funktion, nur der Aktiv-Filter enger.
         emob_b, sonst_b = await geraete_leser._bedarf(
-            db, stamm, (lambda i, d=d: i.ist_aktiv_an(d) and not (nur_sonstiges and i.typ in geraete_leser.EMOB_TYPEN)), d)
+            db, stamm, (lambda i, d=d: i.ist_aktiv_an(d) and not (nur_sonstiges and i.typ in geraete_leser.EMOB_TYPEN)), d,
+            tagesfenster(d))
         bedarfe[d] = sonst_b if nur_sonstiges else emob_b
     z = await _deltas_bereich(db, anlage_id, set().union(*(b.keys() for b in bedarfe.values())), tage, jetzt)
     out: dict[date, dict[str, float]] = {}

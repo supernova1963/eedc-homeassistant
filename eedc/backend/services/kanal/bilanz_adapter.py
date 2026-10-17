@@ -60,7 +60,7 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, Iterable, Optional, Sequence
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte, ergaenze_kinder_deckung
@@ -191,6 +191,71 @@ async def zaehler_eintraege(db: AsyncSession, anlage, invs_by_id: dict, datum: d
 def bilanz_eintraege(eintraege: Iterable[TabellenEintrag]) -> list[TabellenEintrag]:
     """Nur die Einträge der Bilanz-Gruppe (``BILANZ_ACHSEN``)."""
     return [e for e in eintraege if achse_der_kategorie(e.kategorie) in BILANZ_ACHSEN]
+
+
+# ── Verworfen heißt bewusst leer (HA-Bauform S4, E-S4-3, S4-R-V4; V-H4-4) ───
+
+
+@dataclass(frozen=True)
+class BewusstLeer:
+    """Die Kanäle einer Anlage mit mindestens einer verworfenen Quelle (Werkbank «Werte vor dem Sensorbeginn
+    verwerfen», ``kanal/verwerfen.py``): je Schlüssel die erste Zeile und die Abschnitte ``(gueltig_ab, bis, verworfen)``.
+
+    **Die Regel (eine Stelle, gerufen am Bedarf jeder Gruppenwahl):** ein zugeordnetes Feld zählt in ``[von, bis)``
+    nicht als benötigt, wenn alle Quellen seines Kanals, die dort gelten (Abschnitt ``[gueltig_ab, nächstes gueltig_ab)``
+    schneidet den Zeitraum), ``verworfen_ts`` tragen UND der Kanal vor ``bis`` keine Zeile hat. ``verworfen_ts`` ist die
+    Wanduhr der Operation, nicht ``t`` — «vor dem Zeitraum verworfen» folgt aus der zweiten Bedingung (die Operation löscht
+    jede Zeile vor ``t``; ein Zeitraum mit Zeilen vor seinem Ende bleibt benötigt). Ohne eine dort geltende Quelle
+    (vor dem ersten ``gueltig_ab``) gilt die Regel nicht — die Zeit vor dem Kanal bleibt, was sie war (S3-R1). Folge:
+    ein Tag, den nur die Kanäle tragen, behält nach dem Verwerfen EINES Felds seine Gruppe; das Feld fehlt dort wie ein
+    nie zugeordnetes (Netz ⇒ N-585/N-734: «nicht erfasst»). Die Schreiber (abgeleitete Kanäle, Kosten) und die Preis-Leser
+    fragen die Regel nicht (Entscheid Master E-S4-3 H-1 B)."""
+
+    kanaele: dict = field(default_factory=dict)
+
+    def leer(self, key: str, von: int, bis: int) -> bool:
+        k = self.kanaele.get(key)
+        if k is None:
+            return False
+        erste, abschnitte = k
+        if erste is not None and erste < bis:
+            return False
+        gelten = [v for ab, b, v in abschnitte if ab < bis and (b is None or b > von)]
+        return bool(gelten) and all(gelten)
+
+    def ohne(self, eintraege: list, von: int, bis: int) -> list:
+        """Die Einträge (``TabellenEintrag``) ohne die in ``[von, bis)`` bewusst leeren Felder."""
+        if not self.kanaele:
+            return eintraege
+        return [e for e in eintraege if not self.leer(e.schluessel, von, bis)]
+
+
+async def bewusst_leer(db: AsyncSession, anlage_id: int) -> BewusstLeer:
+    """``BewusstLeer`` einer Anlage — zwei kleine Abfragen, nur die Kanäle mit verworfener Quelle (meist keine). Im
+    Lade-Kontext einer Anfrage einmal."""
+    from backend.models.kanal import KanalStatistik
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    async def _laden() -> BewusstLeer:
+        ids = list((await db.execute(select(KanalQuelle.kanal_id).join(Kanal, Kanal.id == KanalQuelle.kanal_id).where(
+            and_(Kanal.anlage_id == anlage_id, KanalQuelle.verworfen_ts.is_not(None))).distinct())).scalars().all())
+        if not ids:
+            return BewusstLeer()
+        keys = dict((await db.execute(select(Kanal.id, Kanal.key).where(Kanal.id.in_(ids)))).all())
+        quellen: dict[int, list] = {}
+        for q in (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id.in_(ids))
+                                   .order_by(KanalQuelle.kanal_id, KanalQuelle.gueltig_ab))).scalars().all():
+            quellen.setdefault(q.kanal_id, []).append(q)
+        erste = dict((await db.execute(select(KanalStatistik.kanal_id, func.min(KanalStatistik.start_ts))
+                                       .where(KanalStatistik.kanal_id.in_(ids)).group_by(KanalStatistik.kanal_id))).all())
+        out = {}
+        for kid, qs in quellen.items():
+            abschnitte = tuple((q.gueltig_ab, qs[i + 1].gueltig_ab if i + 1 < len(qs) else None, q.verworfen_ts is not None)
+                               for i, q in enumerate(qs))
+            out[keys[kid]] = (erste.get(kid), abschnitte)
+        return BewusstLeer(out)
+
+    return await gemerkt(db, ("bewusst_leer", anlage_id), _laden)
 
 
 # ── Ergebnisform Tag ────────────────────────────────────────────────────────
@@ -585,7 +650,7 @@ async def sensor_monatswerte_aus_kanaelen(
 
 
 __all__ = [
-    "BILANZ_ACHSEN", "FASSUNGEN", "FASSUNG_WIE_BESTAND", "FASSUNG_WIE_HA", "KanalAlsHaQuelle", "KanalTag",
-    "bilanz_eintraege", "kanal_je_sensor", "monats_summe_aus_tagen", "monats_summen_aus_kanaelen",
+    "BILANZ_ACHSEN", "BewusstLeer", "FASSUNGEN", "FASSUNG_WIE_BESTAND", "FASSUNG_WIE_HA", "KanalAlsHaQuelle", "KanalTag",
+    "bewusst_leer", "bilanz_eintraege", "kanal_je_sensor", "monats_summe_aus_tagen", "monats_summen_aus_kanaelen",
     "sensor_monatswerte_aus_kanaelen", "tage_aus_kanaelen", "zaehler_eintraege",
 ]

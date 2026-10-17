@@ -53,6 +53,7 @@ from backend.services.energie_profil.monats_aus_tagen import (
 from backend.services.kanal.bilanz_adapter import (
     BILANZ_ACHSEN,
     KanalTag,
+    bewusst_leer,
     bilanz_eintraege,
     zaehler_eintraege,
 )
@@ -238,7 +239,9 @@ async def tage_bilanz(
     if not tage:
         return {}
     stamm = await _stamm(db, anlage_id)
-    je_tag = {t: await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t) for t in tage}
+    leer = await bewusst_leer(db, anlage_id)       # S4-R-V4: ein vor dem Tag verworfenes Feld ist nicht benötigt
+    je_tag = {t: leer.ohne(await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t), *tagesfenster(t))
+              for t in tage}
     keys = {e.schluessel for lst in je_tag.values() for e in lst}
     grenzen = [tagesfenster(t)[0] for t in tage] + [tagesfenster(tage[-1])[1]]
     # Tage sind aufeinanderfolgend — die Grenzen stoßen lückenlos aneinander; an einem Umstellungstag bleibt das so.
@@ -281,8 +284,10 @@ async def _monate_bilanz(
     if not faellig:
         return {}
     stamm = await _stamm(db, anlage_id)
-    je_monat = {(j, m): await stamm.eintraege(db, lambda inv, j=j, m=m: inv.ist_aktiv_im_monat(j, m),
-                                              _letzter_tag(j, m)) for j, m in faellig}
+    leer = await bewusst_leer(db, anlage_id)       # S4-R-V4 über das Fenster des Monats
+    fenster = {(j, m): (grenzen[i], grenzen[i + 1]) for i, (j, m) in enumerate(liste)}
+    je_monat = {(j, m): leer.ohne(await stamm.eintraege(db, lambda inv, j=j, m=m: inv.ist_aktiv_im_monat(j, m),
+                                                        _letzter_tag(j, m)), *fenster[(j, m)]) for j, m in faellig}
     keys = {e.schluessel for lst in je_monat.values() for e in lst}
     je = await _ergebnisse(db, anlage_id, keys, grenzen, jetzt)
     out: dict[MonatsSchluessel, KanalZeitraum] = {}

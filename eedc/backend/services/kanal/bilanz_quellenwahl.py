@@ -9,7 +9,8 @@ nur, wenn JEDER benötigte Kanal den Zeitraum voll deckt; sonst ``bestand`` mit 
 (``bilanz_adapter.zaehler_eintraege`` → ``bilanz_eintraege``; Filter aktiv · Anschaffung · Stilllegung je Tag),
 nach der Either-Or-Auflösung: von einer Ersatzgruppe zählt der erste Zähler, der einen Kanal HAT — ein unbenutzter
 Ersatz ohne Kanal macht den Tag nicht ungedeckt. Ein zugeordnetes Feld ohne Kanal (Sensor ohne HA-Statistik) zählt
-als ``kein_kanal`` ⇒ ``bestand``. Monat = Vereinigung der benötigten Zähler seiner Tage.
+als ``kein_kanal`` ⇒ ``bestand`` — außer es ist vor dem Tag verworfen (``bilanz_adapter.BewusstLeer``, HA-Bauform S4
+E-S4-3, S4-R-V4: dann fehlt es an dem Tag wie ein nie zugeordnetes). Monat = Vereinigung der benötigten Zähler seiner Tage.
 
 **Reine Auskunft. Stand E4a-1: von niemandem benutzt** (Umschalten ist E4a-2).
 
@@ -27,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.kanal import Kanal
-from backend.services.kanal.bilanz_adapter import bilanz_eintraege, zaehler_eintraege
+from backend.services.kanal.bilanz_adapter import bewusst_leer, bilanz_eintraege, zaehler_eintraege
 from backend.services.kanal.fenster import monate, tagesfenster
 from backend.services.kanal.monatsraster import monatsreihe
 from backend.services.kanal.quellenwahl import Quellenwahl, quellenwahl
@@ -37,6 +38,7 @@ from backend.services.snapshot.komponenten_beitraege import resolve_either_or_ei
 async def _benoetigt(db: AsyncSession, anlage, invs: list, tag: date, mit_kanal: set[str]) -> list[str]:
     invs_by_id = {str(i.id): i for i in invs if i.ist_aktiv_an(tag)}
     eintraege = bilanz_eintraege(await zaehler_eintraege(db, anlage, invs_by_id, tag))
+    eintraege = (await bewusst_leer(db, anlage.id)).ohne(eintraege, *tagesfenster(tag))   # S4-R-V4
     eintraege = resolve_either_or_eintraege(
         eintraege, gruppe_fn=lambda e: e.gruppe, hat_tagesdaten_fn=lambda e: e.schluessel in mit_kanal,
     )

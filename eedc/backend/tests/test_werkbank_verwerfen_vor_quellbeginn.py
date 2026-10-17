@@ -170,15 +170,17 @@ async def test_vorschau_schreibt_nichts_und_nennt_quellen_tage_und_abschluss(db)
 
 
 async def test_vorschau_nennt_die_tage_nur_aus_dem_kanal_getrennt(db):
-    """V-H4-4 (Fund-Päckchen N-750/N-751, 16.10.2026): Tage vor ``t``, die die Bilanz-Gruppe nur aus dem Kanal tragen (kein
-    Bestandstag), verlieren nach dem Verwerfen eines Bilanz-Feldes ihre ganze Tagesbilanz (S3-R1) — die Vorschau zählt sie
-    getrennt und sagt es. Seed: Kanal 01.04.–20.04., Bestandstage davor 05.04. und 20.04. ⇒ 18 Tage."""
+    """V-H4-4 (Fund-Päckchen N-750/N-751, 16.10.2026; Verhalten HA-Bauform S4 E-S4-3, S4-R-V4): Tage vor ``t``, die die
+    Bilanz-Gruppe nur aus dem Kanal tragen (kein Bestandstag), behalten nach dem Verwerfen eines Bilanz-Feldes ihre
+    Tagesbilanz; das Feld gilt dort als nicht erfasst — die Vorschau zählt sie getrennt und sagt es. Seed: Kanal
+    01.04.–20.04., Bestandstage davor 05.04. und 20.04. ⇒ 18 Tage."""
     ids = await _saat(db)
     p = await plan(_req(ids["aid"]), db)
     erwartet = [d for d in (date(2026, 4, 1) + timedelta(days=i) for i in range(20)) if d not in BESTAND_TAGE]
     assert p.operation_preview["tage_nur_kanal"] == [d.isoformat() for d in erwartet] and len(erwartet) == 18
-    assert ("An 18 Tagen (01.04.2026 … 19.04.2026), die nur der HA-Spiegel (bzw. die eigene Summe) trägt, zeigt eedc "
-            "danach keine Energiebilanz des Tages mehr") in " ".join(p.warnings)
+    assert ("An 18 Tagen (01.04.2026 … 19.04.2026), die nur der HA-Spiegel (bzw. die eigene Summe) trägt, gilt das Feld "
+            "danach als nicht erfasst — die übrigen Felder des Tages bleiben") in " ".join(p.warnings)
+    assert "keine Energiebilanz" not in " ".join(p.warnings)
     assert "tage_nur_kanal" not in p.estimated_changes      # die Zählung der Vorschau-Kacheln bleibt
 
 
@@ -400,8 +402,11 @@ _VORSCHAU_GRENZE = {"2026-04-21T00:00": (date(2026, 4, 21), date(2026, 4, 22)),
 @pytest.mark.parametrize("zeitpunkt", sorted(_VORSCHAU_GRENZE))
 async def test_tage_der_vorschau_sind_danach_bestandstage_der_lese_schicht(db, zeitpunkt):
     """Was die Vorschau «danach ohne Wert» bzw. «verliert die Kanalzeilen» nennt, ist danach für die Quellenwahl der
-    Bilanz-Gruppe (``bilanz_quellenwahl_tag``, dieselbe Lese-Schicht wie die Sichten) ein Bestandstag; der Tag danach
-    bleibt Kanal-Tag (``_VORSCHAU_GRENZE``)."""
+    Bilanz-Gruppe (``bilanz_quellenwahl_tag``, dieselbe Lese-Schicht wie die Sichten): seit HA-Bauform S4 E-S4-3 (S4-R-V4,
+    verworfen heißt bewusst leer) bleiben die Tage GANZ vor ``t`` Kanal-Tage ohne das Feld (es fehlt im Bedarf); nur der
+    Tag mit ``t`` (Zeilen vor seinem Ende, Anker verworfen) wird Bestandstag wegen des Felds; der Tag danach bleibt
+    Kanal-Tag (``_VORSCHAU_GRENZE``)."""
+    from backend.services.kanal.bilanz_quellenwahl import bilanz_benoetigte_kanaele
     from backend.services.kanal.bilanz_quellenwahl import bilanz_quellenwahl_tag
 
     ids = await _saat(db)
@@ -421,7 +426,14 @@ async def test_tage_der_vorschau_sind_danach_bestandstage_der_lese_schicht(db, z
     assert await wahl(bleibt) == "kanal"
     await execute(p.plan_id, db)
     gruende = {d: await bilanz_quellenwahl_tag(db, ids["aid"], d, jetzt=jetzt) for d in betroffen}
-    assert {g.quelle for g in gruende.values()} == {"bestand"}
-    assert all("basis:einspeisung" in g.gruende for g in gruende.values())
-    assert all(set(g.gruende) == {"basis:einspeisung"} for d, g in gruende.items() if d != date(2026, 3, 31))
+    assert gruende[letzter].quelle == "bestand" and set(gruende[letzter].gruende) == {"basis:einspeisung"}
+    assert gruende[date(2026, 3, 31)].quelle == "bestand"                 # weiter ohne Anker der übrigen Kanäle
+    ganz_davor = [d for d in betroffen if d not in (letzter, date(2026, 3, 31))]
+    assert ganz_davor and {gruende[d].quelle for d in ganz_davor} == {"kanal"}
+    for d in ganz_davor:
+        assert "basis:einspeisung" not in await bilanz_benoetigte_kanaele(db, ids["aid"], d)
+    # Benannte Grenze der Regel: der 31.03. liegt vor dem ersten ``gueltig_ab`` (01.04. 00:00) — dort gilt keine Quelle, die
+    # Regel greift nicht (S3-R1 wie vor dem Verwerfen); er war und bleibt Bestandstag.
+    for d in (letzter, date(2026, 3, 31)):
+        assert "basis:einspeisung" in await bilanz_benoetigte_kanaele(db, ids["aid"], d)
     assert await wahl(bleibt) == "kanal"

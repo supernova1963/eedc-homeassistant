@@ -31,6 +31,7 @@ Schwesterdateien: ``services/kanal/stunden_leser.py`` (der Kanal-Stundentag), ``
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -91,6 +92,13 @@ class Mischzeile:
         if name in FORWARD_FELDER:
             return getattr(object.__getattribute__(self, "_vorwaerts"), name, None)
         return getattr(object.__getattribute__(self, "_zeile"), name, None)
+
+
+def aus_kanal_gruppe(zeile: Any, feld: str) -> bool:
+    """Trägt die Zeile ``feld`` aus einer Kanal-Gruppe (Mischzeile, Gruppe mit Wahl ``kanal``)? Dann ist ein leerer Wert
+    eine Stunde ohne Kanal-Zeile — ihre Menge steht nach HAs Lückenregel in der Folgestunde (S3-R2) — und kein Anlass für
+    einen Rückfall auf den Leistungspfad (E-S4-3 H-2b, ``serien.geraete_spalte_kw`` #263 nur bei Wahl ``bestand``)."""
+    return isinstance(zeile, Mischzeile) and feld in object.__getattribute__(zeile, "_kanal")
 
 
 def kanal_achsen(tag: KanalStundentag) -> frozenset[str]:
@@ -225,6 +233,36 @@ def modus_stunden_aus_kanaelen(je_art: Mapping[int, Mapping[str, Sequence[Option
     return out
 
 
+def _mit_zeilen(je_art: Mapping[int, Mapping[str, Sequence[Optional[float]]]]) -> set[int]:
+    """Die Geräte, deren abgeleitete Modus-Kanäle am Tag mindestens eine Zeile haben."""
+    return {inv_id for inv_id, arten in je_art.items() if any(v is not None for w in arten.values() for v in w)}
+
+
+async def modus_stunden_mit_rueckfall(db: AsyncSession, anlage_id: int, datum: date, wp) -> dict[str, list]:
+    """Die Modus-Stunden eines WP-Kanal-Tags je Gerät — **die eine Weiche** (HA-Bauform S4 E-S4-3, Entscheid Master H-2a):
+    hat der abgeleitete Kanal «Strom je Betriebsart» eines Geräts am Tag Zeilen, gewinnt er (wie seit E4d); sonst — ein Tag
+    aus gespeicherten Ständen ohne Betriebsart-Mitschrift (Nachbau 2), HA-Spiegel vor der Mitschrift — die Modus-Spur der
+    Stundenzeilen (``lade_modus_stunden_tag``), eine Backward-Bahn wie ``komponenten`` (S3-R6): Stunde ``h`` (Beginn) aus
+    der Bestandszeile ``bestandszeile_fuer_stundenbeginn(D, h)`` (Stunde 23 aus Slot 0 des Folgetags, S4-R-3b)."""
+    from backend.services.energie_profil.modus_split_monat import lade_modus_stunden_tag
+
+    je_art = await modus_strom_stunden(db, anlage_id, datum, _abgeleitete_geraete(wp))
+    kanal = {inv: arten for inv, arten in je_art.items() if inv in _mit_zeilen(je_art)}
+    out = modus_stunden_aus_kanaelen(kanal)
+    tep = {datum: (await lade_modus_stunden_tag(db, anlage_id, datum))[0],
+           datum + timedelta(days=1): (await lade_modus_stunden_tag(db, anlage_id, datum + timedelta(days=1)))[0]}
+    for inv in set(tep[datum]) | set(tep[datum + timedelta(days=1)]):
+        if inv in out:
+            continue
+        reihe = []
+        for h in range(24):
+            tag, slot = bestandszeile_fuer_stundenbeginn(datum, h)
+            reihe += [dataclasses.replace(m, stunde=h) for m in tep[tag].get(inv, ()) if m.stunde == slot]
+        if reihe:
+            out[inv] = reihe
+    return out
+
+
 async def _stundenformen_im_beginn_raster(db: AsyncSession, anlage, datum: date, zaehler: list) -> dict[str, list]:
     """Die Snapshot-Stundenformen (Backward-Slots) eines Zählers ohne Kanal auf das Beginn-Raster eines WP-Kanal-Tags
     gelegt — Stunde ``h`` aus ``slot_konvention.bestandszeile_fuer_stundenbeginn(D, h)`` (Stunde 23 aus Slot 0 des
@@ -260,11 +298,10 @@ async def wp_stundenformen(db: AsyncSession, anlage, datum: date, zaehler: Mappi
               else await _stundenformen_im_beginn_raster(db, anlage, datum, rest))
     formen.update(kanal)
     if wp is not None:
-        # HA-Bauform S4 (S4-R-3b): an einem WP-Kanal-Tag liegen die Stunden auf dem Beginn — die Modus-Stunden kommen
-        # dann NUR aus den abgeleiteten Kanälen (ein Gerät mit Betriebsart-Mitschrift hat an einem WP-Kanal-Tag seinen
-        # abgeleiteten Kanal, sonst wäre die Wahl `bestand`); die Modus-Spur der Stundenzeilen (backward) bleibt draußen.
-        return formen, modus_stunden_aus_kanaelen(
-            await modus_strom_stunden(db, anlage.id, datum, _abgeleitete_geraete(wp)))
+        # HA-Bauform S4 (S4-R-3b): an einem WP-Kanal-Tag liegen die Stunden auf dem Beginn — die Modus-Stunden aus den
+        # abgeleiteten Kanälen, ohne deren Zeilen (keine Betriebsart-Mitschrift, E-S4-3 H-2a) aus der Modus-Spur der
+        # Stundenzeilen auf das Beginn-Raster gelegt: `modus_stunden_mit_rueckfall`.
+        return formen, await modus_stunden_mit_rueckfall(db, anlage.id, datum, wp)
     modus, _ = await lade_modus_stunden_tag(db, anlage.id, datum)
     return formen, modus
 
@@ -384,8 +421,13 @@ async def _wp_aus_kanaelen(db: AsyncSession, anlage, invs_by_id, datum: date, wp
     # Stunden) und ihrer Abdeckung ``modus_abdeckung_h`` — wie der Kanal-Monat (``kanal_split_ohne_abschluss``); Bezug
     # ist der Kanal-Strom des Geräts.
     je_art = await modus_strom_stunden(db, anlage.id, datum, _abgeleitete_geraete(wp))
-    splits = {}
+    # E-S4-3 H-2a: ein Gerät ohne Zeilen im abgeleiteten Kanal behält den Tages-Split der Stundenzeilen (`e.splits` aus
+    # `lade_modus_split_tag`, dieselbe Modus-Spur wie `modus_stunden_mit_rueckfall`); mit Zeilen gewinnt der Kanal.
+    mit = _mit_zeilen(je_art)
+    splits = {i: sp for i, sp in (e.splits or {}).items() if int(i) not in mit}
     for inv_id, arten in je_art.items():
+        if inv_id not in mit:
+            continue
         splits[str(inv_id)] = ModusSplit(
             kwh_je_modus={art: _summe_stunden(w) for art, w in arten.items()
                           if art != MODUS_STROM_REST and any(v is not None for v in w)},
@@ -458,7 +500,8 @@ async def wp_strom_je_stunde(db: AsyncSession, anlage_id: int, datum: date) -> d
 
 
 __all__ = [
-    "ACHSEN_JE_GRUPPE", "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
+    "ACHSEN_JE_GRUPPE", "aus_kanal_gruppe", "modus_stunden_mit_rueckfall",
+    "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
     "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen",
     "wp_strom_je_stunde", "wp_stundenformen",
