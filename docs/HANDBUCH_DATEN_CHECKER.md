@@ -605,7 +605,7 @@ steigt die Summe.
 
 | Befund | Schwere | Bedeutung |
 | --- | --- | --- |
-| **N Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt; die Stunde ab 23:00 gehört dort zum Folgetag und wird mit vollem Datum genannt. |
+| **N Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt — der Kalendertag, wie im HA-Energie-Dashboard: auch die Stunde ab 23:00 gehört zu ihrem eigenen Tag (in *Cockpit → Tag* die Stunde 23–24 Uhr). |
 
 **Reparatur in Home Assistant:** wie beim Sprung — *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol
 „Wert anpassen" die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht die korrigierte

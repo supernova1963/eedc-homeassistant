@@ -337,8 +337,18 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > wie bisher aus den gespeicherten Zählerständen. **Tage älter als zwei Jahre**, deren Stundenwerte eedc nach der
 > Aufbewahrungsfrist gelöscht hat, zeigen ihren Stunden-Verlauf wieder, soweit der Spiegel zurückreicht — dann ohne
 > Ladestand und Wetter.
+>
+> **Welcher Tag, welche Stunde.** Ein Tag aus dem HA-Spiegel ist der **Kalendertag** von 0 bis 24 Uhr — wie im
+> HA-Energie-Dashboard; was zwischen 23 und 24 Uhr passiert (die Wallbox lädt nachts, der Speicher zieht Netzstrom),
+> steht am selben Tag. Jede Stunde ist als **Bereich** beschriftet: „11–12" ist die Stunde von 11 bis 12 Uhr.
+> Tage aus den eigenen Stundenwerten bleiben, wie sie gespeichert sind: ihr Tag reicht von 23 Uhr des Vortags bis 23 Uhr,
+> die erste Stunde heißt dort „23–24" (vom Vortag). Folgt ein solcher Tag auf einen Tag aus dem Spiegel oder
+> umgekehrt, fehlt an der Grenze eine Stunde oder sie zählt doppelt — das betrifft nur diesen Übergang. Der laufende Tag
+> deckt in *Cockpit → Tag* dasselbe Fenster wie „heute" in *Cockpit → Live*. Liegen von einem Zähler für eine Zeit vor
+> der HA-Statistik nur Stände um Mitternacht vor, stimmen die Tagesmengen, und die Stunden zeigen den Tag als eine
+> Spanne („enthält n Stunden").
 
-Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md). An einem Tag aus dem HA-Spiegel ändert eine Nachberechnung die gespeicherten Stundenwerte, nicht die Zahlen aus dem Spiegel; eine falsche Zahl dort korrigierst du in Home Assistant ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die gespeicherten Stundenwerte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N)), die Stunden eines Tages aus dem HA-Spiegel tragen ihren Beginn — beide sind als Bereich beschriftet. Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md). An einem Tag aus dem HA-Spiegel ändert eine Nachberechnung die gespeicherten Stundenwerte, nicht die Zahlen aus dem Spiegel; eine falsche Zahl dort korrigierst du in Home Assistant ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
 ### 2.3 Monat
 

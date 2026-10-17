@@ -545,6 +545,8 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 
 **Was eedc dann tut:** Es liefert für dieses Feld **keinen Wert** — im Monatsabschluss steht kein Vorschlag, in *Cockpit → Monat* bleibt der gespeicherte Wert stehen. Das ist Absicht: Eine Zahl, die aus zwei unzusammenhängenden Zählerläufen entsteht, sähe aus wie eine Messung und wäre keine.
 
+**Mit Kanälen (eigene Summe).** Führt eedc für das Feld einen Kanal mit eigener Summe aus den MQTT-Ständen, rechnet es den Zähler wie Home Assistant: Ein Stand unter 90 % des vorigen gilt als Neubeginn, die Summe läuft weiter — Tag, Monat und Jahr stimmen dann auch für einen Zähler, der jeden Tag auf null geht. Nicht verlässlich bleiben Live „heute" und „gestern" (sie vergleichen mit dem Stand um Mitternacht) und Geräte-Tageswerte aus der Zeit vor dem Kanal; einen Vorschlag im Monatsabschluss gibt es für so ein Feld weiterhin nicht. Die Meldung nennt dann, welche Felder über die Kanäle rechnen. Die Empfehlung bleibt dieselbe: den fortlaufenden Stand schicken.
+
 > ⚠ **eedc rechnet den fehlenden Teil auch nicht hoch**, obwohl es die Stundenstände hätte. Was zwischen dem letzten mitgeschriebenen Stand und dem Rücksprung verbraucht wird, taucht in keinem Stand mehr auf — eine hochgerechnete Zahl wäre systematisch zu niedrig und im Monatsabschluss per Knopfdruck ein gespeicherter Wert. Diese Entscheidung ist bewusst gefallen.
 
 #### Befunde
@@ -603,7 +605,7 @@ steigt die Summe.
 
 | Befund | Schwere | Bedeutung |
 | --- | --- | --- |
-| **N Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt; die Stunde ab 23:00 gehört dort zum Folgetag und wird mit vollem Datum genannt. |
+| **N Tag(e), an denen ein Zählerstand in der Home-Assistant-Statistik gefallen ist** | ⚠️ WARNING | Je Sensor und Tag die Menge und die Stunde (Beispiel: `sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)`). Der Tag ist der, an dem *Cockpit → Tag* die Menge zeigt — der Kalendertag, wie im HA-Energie-Dashboard: auch die Stunde ab 23:00 gehört zu ihrem eigenen Tag (in *Cockpit → Tag* die Stunde 23–24 Uhr). |
 
 **Reparatur in Home Assistant:** wie beim Sprung — *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol
 „Wert anpassen" die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht die korrigierte
@@ -614,6 +616,9 @@ Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben We
 Home Assistant.
 
 **Sensor ersetzt?** Stammt ein Rückgang von einem Sensor, den du inzwischen durch einen neuen ersetzt hast, zählen seine Werte weiter, und die Meldung kennzeichnet ihn mit „(Vorgänger-Sensor, zugeordnet bis TT.MM.JJJJ)“. Statt in Home Assistant zu korrigieren, kannst du dann mit der Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen“ seine Werte vor dem Beginn des neuen Sensors entfernen (*Einstellungen → Daten → Energieprofil-Pflege*, [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)); die Meldung verschwindet dann.
+
+
+> **Stunden ohne Langzeitstatistik.** Wo die Langzeitstatistik von Home Assistant für eine Stunde nichts hat, nimmt eedc seine eigenen gespeicherten Stundenstände dieses Zählers — aber nur für die Zeit vor dem ersten Wert aus Home Assistant, nicht für Lücken mittendrin, und ein späterer Abgleich mit Home Assistant ersetzt diese Stunden nicht. Liegen von einem Zähler nur Stände um Mitternacht vor, stimmen die Tagesmengen; die Stundenansicht zeigt den Tag als eine Spanne ohne Verteilung auf die Stunden.
 
 ---
 
