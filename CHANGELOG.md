@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Auswertungen (Speicher-Potenzial, Speicher-Sizing, effektiver Ladepreis, Grundlast, Prognose-Genauigkeit und Lernfaktor, Verbrauchsprofil und -prognose, Korrekturprofil, Wochenmuster) lesen an Tagen aus dem HA-Spiegel bzw. den eigenen Zählerständen dieselben Stundenmengen wie *Cockpit → Tag*.** Bisher rechneten sie dort mit den eigenen gespeicherten Stundenwerten weiter, während Tag, Monat und Jahr schon die Werte aus Home Assistant zeigten; an Tagen ohne HA-Spiegel ändert sich nichts. Intern: eine Ladefunktion für alle Stundenleser (`kanal_stunden.stunden_der_tage`, HA-Bauform S5a Teil 1).
+
 ### Fixed
 
 - ***Cockpit → Monat* zeigt einen vergangenen Monat ohne Abschluss jetzt auch dann aus dem HA-Spiegel bzw. den eigenen Zählerständen, wenn Home Assistant gerade nicht antwortet oder eedc ohne Home Assistant läuft — wie Jahr-Verlauf und Tabelle es schon taten.** Bisher blieben PV, Einspeisung, Netzbezug, Eigenverbrauch und Autarkie eines solchen Monats leer, bis er abgeschlossen war (die Tageswerte nahm die Monatssicht nur für den laufenden Monat), während der Verlauf in *Cockpit → Jahr* denselben Monat schon zeigte. Jetzt nimmt *Cockpit → Monat* ihn, sobald die Zähler der Bilanz (Netz, PV, Speicher …) den ganzen Kalendermonat lückenlos im HA-Spiegel oder in der eigenen Summe aus MQTT-Zählerständen führen — dieselbe Wahl wie Jahr-Verlauf und Tabelle, also dieselben Zahlen; E-Mobilität, Sonstiges und Wärmepumpe kommen wie im laufenden Monat dazu, und die Jahresansicht, die die Monate zusammenzählt, trägt sie mit. Ein Monat, den die Zähler nicht ganz abdecken (etwa der erste nach der Einrichtung), bleibt bis zum Abschluss leer; ein gespeicherter Abschluss gilt weiter vor den gerechneten Werten. Der laufende Monat ändert sich nicht. Intern: die fünfte Quelle der Route (`aktueller_monat._summen_der_tagesebene`) gilt auch für einen vergangenen Monat ohne HA-Antwort, den `kanal_monate` nennt (HA-Bauform, Konzept R-11); die erwarteten Abweichungen „Soll unklar“ dieser Lage in beiden Abnahme-Matrizen sind entfallen (N-758).
