@@ -16,10 +16,8 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.tages_energie_profil import TagesEnergieProfil
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +68,12 @@ async def get_verbrauch_prognose(
     von = ziel_datum - timedelta(weeks=wochen_zurueck)
     bis = ziel_datum - timedelta(days=1)  # Gestern als letzter Tag
 
-    result = await db.execute(
-        select(TagesEnergieProfil)
-        .where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= von,
-            TagesEnergieProfil.datum <= bis,
-            TagesEnergieProfil.verbrauch_kw.isnot(None),
-        )
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    rows = result.scalars().all()
+    # HA-Bauform S5 (S5-R1): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Verbrauch wie
+    # Cockpit → Tag, Stunde = Beginn), sonst die Stundenzeile; der Filter `verbrauch_kw IS NOT NULL` steht hier.
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    rows = [r for r in await stunden_der_tage(db, anlage_id, von, bis, felder=("verbrauch_kw",))
+            if r.verbrauch_kw is not None]
 
     if not rows:
         logger.warning("Keine Energieprofil-Daten für Anlage %d im Zeitraum %s–%s",

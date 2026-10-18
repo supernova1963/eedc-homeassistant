@@ -823,13 +823,12 @@ async def _prognose_mit_heute(
         # ausgefallener — dem Anwender eine Zahl mit, die eedc selbst gemessen
         # hat. Das gilt genauso für den OpenMeteo-Schätzpfad (Tageswert ohne
         # Stundenprofil), der den IST-Wert bis hierher ebenfalls verlor.
-        ist_res = await db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage.id,
-                TagesEnergieProfil.datum == heute,
-            ).order_by(TagesEnergieProfil.stunde)
-        )
-        ist_p = ist_profil(ist_res.scalars().all(), jetzt_stunde=now.hour, datum=heute)
+        # HA-Bauform S5 (S5-R1): die IST-Stunden von heute aus `stunden_der_tage` (an einem Kanal-Tag die Mischzeilen,
+        # PV wie Cockpit → Tag) — dieselbe Stelle wie *Prognosen → Vergleich*.
+        from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+        ist_zeilen = await stunden_der_tage(db, anlage.id, heute, heute, felder=("pv_kw",))
+        ist_p = ist_profil(ist_zeilen, jetzt_stunde=now.hour, datum=heute)
         ist_bisher = round(ist_p.tageswert_kwh or 0.0, 1)
         # N-544: bis wohin reicht diese Summe? Der hoechste Slot, der einen
         # Messwert beigesteuert hat — `ist_profil` summiert jede Zeile mit

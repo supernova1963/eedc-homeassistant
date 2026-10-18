@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from backend.core.exceptions import bad_request, not_found
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.api.deps import get_db
-from backend.core.berechnungen import summe_pv_bkw_kwh
+from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag, stunden_der_tage, verworfen_der_tage
 from backend.core.berechnungen.prognose_genauigkeit import (
     mae_prozent,
     mbe_prozent,
@@ -621,12 +621,8 @@ async def _parallele_abrufe(db: AsyncSession, anlage: Anlage, anlage_id: int, he
             days=VERGLEICH_TAGE, skip_jitter=True, model=model_name,
         ),
         get_solcast_forecast(anlage),
-        db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum == heute,
-            ).order_by(TagesEnergieProfil.stunde)
-        ),
+        # HA-Bauform S5 (S5-R1): die IST-Stunden von heute aus `stunden_der_tage` (an einem Kanal-Tag die Mischzeilen).
+        stunden_der_tage(db, anlage_id, heute, heute, felder=("pv_kw",)),
         return_exceptions=True,
     )
     # Exceptions → None/leeres Ergebnis (Endpoint liefert was verfügbar ist)
@@ -639,7 +635,7 @@ async def _parallele_abrufe(db: AsyncSession, anlage: Anlage, anlage_id: int, he
     if isinstance(ist_rows, BaseException):
         logger.warning(f"IST-Daten Abfrage fehlgeschlagen: {ist_rows}")
         ist_rows = None
-    ist_rows = ist_rows.scalars().all() if ist_rows is not None else []
+    ist_rows = ist_rows if ist_rows is not None else []
     return wetter, solcast, ist_rows
 
 
@@ -884,12 +880,11 @@ async def _ist_heute(db: AsyncSession, anlage_id: int, heute: date, now: datetim
     # Mitternachtsbündel mit Energie oder `verworfen.pv` der heutigen
     # Tageszeile; eine gebündelte Stunde fällt aus dem Stundenvergleich, ihre
     # Energie zählt im IST. Logik in prognose_adapter.
-    _tz_heute_verworfen = (await db.execute(
-        select(TagesZusammenfassung.verworfen).where(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum == heute,
-        )
-    )).scalar_one_or_none()
+    # HA-Bauform S5: die Regelmarke wie `tage-werte` (an einem Kanal-Tag ohne die Bilanz-Achsen).
+    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+
+    _kanal = [heute] if any(ist_beginn_raster(r) for r in ist_rows) else []
+    _tz_heute_verworfen = (await verworfen_der_tage(db, anlage_id, heute, heute, kanal=_kanal)).get(heute)
     ist_p = ist_profil(ist_rows, jetzt_stunde=now.hour, datum=heute,
                        verworfen=_tz_heute_verworfen)
     ist_stundenprofil = _profil_zu_eintraegen(ist_p)
@@ -1214,10 +1209,10 @@ async def get_prognosen_genauigkeit(
     # gehören zentral nach `core/berechnungen/energie.py` (ADR-001, BKW-Drift-
     # Klasse 2026-05-19, Rainer-PN). Frontend-Pendant: `PV_KOMPONENTEN_PREFIXE`
     # in `frontend/src/lib/constants.ts`.
+    # HA-Bauform S5 (§3 (A) 11–15): an einem Kanal-Tag aus `kanal_tage` — `pv_ist_je_tag`, die eine Stelle.
+    ist_je_tag = await pv_ist_je_tag(db, anlage_id, tage_daten)
     for tz in tage_daten:
-        ist_kwh = None
-        if tz.komponenten_kwh:
-            ist_kwh = summe_pv_bkw_kwh(tz.komponenten_kwh)
+        ist_kwh = ist_je_tag.get(tz.datum)
 
         # Prognose-Kanon §6: der Tracking-Vergleichswert ist der
         # konvergenz-gefrorene `pv_prognose_final_kwh` (Fallback auf den

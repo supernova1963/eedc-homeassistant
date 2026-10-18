@@ -199,26 +199,30 @@ async def _boersenmittel_monat(
     von = date(jahr, monat, 1)
     bis = date(jahr + (monat == 12), (monat % 12) + 1, 1) - timedelta(days=1)
 
-    res = await db.execute(
-        select(
-            TagesEnergieProfil.datum, TagesEnergieProfil.stunde,
-            TagesEnergieProfil.netzbezug_kw, TagesEnergieProfil.boersenpreis_cent,
-        ).where(
-            TagesEnergieProfil.anlage_id == anlage.id,
-            TagesEnergieProfil.datum >= von,
-            TagesEnergieProfil.datum <= bis,
-        )
-    )
-    zeilen = list(res.all())
+    # HA-Bauform S5 (S5-R1): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Bezug = HAs
+    # `change` der Stunde [h, h+1), Börse derselben Zeile ebenfalls [h, h+1) ⇒ zeilengleich, `raster = "beginn"`), sonst
+    # die Stundenzeile mit der Verschiebung unten. Ein verschobener Bestandspreis fällt nie auf einen Kanal-Tag: dort trägt
+    # jede Stunde ihren eigenen.
+    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    zeilen = await stunden_der_tage(db, anlage.id, von, bis, felder=("netzbezug_kw", "boersenpreis_cent"))
+    kanal_tage = {z.datum for z in zeilen if ist_beginn_raster(z)}
     bezug_je: dict[tuple, float] = {}
     boerse_je: dict[tuple, float] = {}
-    for datum, stunde, netzbezug, boerse in zeilen:
+    for z in zeilen:
+        datum, stunde, netzbezug, boerse = z.datum, z.stunde, z.netzbezug_kw, z.boersenpreis_cent
         if netzbezug is not None:
             bezug_je[(datum, stunde)] = float(netzbezug)
-        if boerse is not None:
-            # forward `h` → backward-Slot `h + 1`; Slot 24 ist Slot 0 des Folgetags.
-            slot = forward_stunde_zu_backward_slot(stunde)
-            ziel_datum, ziel_slot = (datum, slot) if slot < 24 else (datum + timedelta(days=1), 0)
+        if boerse is None:
+            continue
+        if datum in kanal_tage:
+            boerse_je[(datum, stunde)] = float(boerse)
+            continue
+        # forward `h` → backward-Slot `h + 1`; Slot 24 ist Slot 0 des Folgetags.
+        slot = forward_stunde_zu_backward_slot(stunde)
+        ziel_datum, ziel_slot = (datum, slot) if slot < 24 else (datum + timedelta(days=1), 0)
+        if ziel_datum not in kanal_tage:
             boerse_je[(ziel_datum, ziel_slot)] = float(boerse)
 
     mit_bezug = [k for k, v in bezug_je.items() if v > 0]

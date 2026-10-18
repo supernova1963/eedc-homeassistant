@@ -22,7 +22,6 @@ from typing import Optional
 
 from sqlalchemy import select
 
-from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.core.berechnungen.prognose_genauigkeit import (
     mae_prozent,
     relativer_tagesfehler_prozent,
@@ -64,11 +63,16 @@ async def eedc_mae_prozent(
         # Zählerlücken wie HA (§2): D und D+1 um ein Mitternachtsbündel sowie
         # Tage mit verworfener PV sind keine Einzeltage für einen Tagesfehler.
         ohne = await tage_ohne_tagesvergleich(db, anlage_id, "pv", von=von, bis=heute)
+        tageszeilen = res.scalars().all()
+        # HA-Bauform S5 (§3 (A) 11–15): PV-IST an der einen Stelle — an einem Kanal-Tag aus `kanal_tage`.
+        from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag
+
+        ist_je_tag = await pv_ist_je_tag(db, anlage_id, tageszeilen)
         fehler: list[float] = []
-        for tz in res.scalars().all():
+        for tz in tageszeilen:
             if tz.datum in ohne:
                 continue
-            ist = summe_pv_bkw_kwh(tz.komponenten_kwh) if tz.komponenten_kwh else None
+            ist = ist_je_tag.get(tz.datum)
             # Prognose-Kanon §6: der konvergenz-gefrorene Wert hat Vorrang —
             # dieselbe Vorrangregel wie in der Auswertung, damit die Schwelle
             # nicht aus einem Mid-Correction-Snapshot entsteht.

@@ -214,22 +214,16 @@ async def _load_grundlast_nacht_kw(
     Formel liegt im Berechnungs-Layer, hier nur die Query). Leer, wenn die Anlage
     keine Stundenprofile hat (dann fällt die Sicht auf PVGIS-SOLL/IST zurück)."""
     from calendar import monthrange
-    from backend.models.tages_energie_profil import TagesEnergieProfil
 
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     monat_ende = date(jahr, monat, monthrange(jahr, monat)[1])
-    result = await db.execute(
-        select(TagesEnergieProfil.verbrauch_kw, TagesEnergieProfil.spannen).where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= date(jahr, monat, 1),
-            TagesEnergieProfil.datum <= monat_ende,
-            TagesEnergieProfil.stunde < 5,
-            TagesEnergieProfil.verbrauch_kw.is_not(None),
-            TagesEnergieProfil.verbrauch_kw > 0,
-        )
-    )
-    # Zählerlücken wie HA (§2, Ü3): eine Nachtzeile, deren Verbrauchs-Achsen
+    # HA-Bauform S5 (S5-R1): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Stunden 0–4 =
+    # [00:00, 05:00) des Kalendertags, Verbrauch wie Cockpit → Tag), sonst die Stundenzeile (Slots 0–4) — wie
+    # `tage_werte` seit E-S4-1. Zählerlücken wie HA (§2, Ü3): eine Nachtzeile, deren Verbrauchs-Achsen
     # mehr als eine reale Stunde tragen, ist keine Stunden-Leistung — sie
     # fällt aus dem Median (dieselbe Regel wie `tage_werte`).
-    return [float(r.verbrauch_kw) for r in result.all() if not verbrauch_gebuendelt(r)]
+    return [float(r.verbrauch_kw)
+            for r in await stunden_der_tage(db, anlage_id, date(jahr, monat, 1), monat_ende, felder=("verbrauch_kw",))
+            if r.stunde < 5 and r.verbrauch_kw is not None and r.verbrauch_kw > 0 and not verbrauch_gebuendelt(r)]

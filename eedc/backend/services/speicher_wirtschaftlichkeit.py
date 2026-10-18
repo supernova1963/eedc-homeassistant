@@ -57,6 +57,9 @@ logger = logging.getLogger(__name__)
 # Param-Wert mit Hinweis-Badge — kein silentes Ausblenden.
 LADEPREIS_STUNDEN_ABDECKUNG_MIN: float = 0.80
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): die Spalten des effektiven Ladepreises.
+_LADEPREIS_FELDER = ("batterie_kw", "netzbezug_kw", "strompreis_cent", "boersenpreis_cent")
+
 # Mindest-Fenster (Monate) Inv-Monatsdaten für die η-IST-Berechnung über
 # rein quotienten-basierte Aggregation. Unter dieser Schwelle wird die
 # SoC-Korrektur benötigt, sonst ist das Monats-η unzuverlässig.
@@ -204,25 +207,12 @@ async def berechne_effektiver_ladepreis(
     # sein. In SQL gefiltert verschwände ihr Preis still.
     # Das Fenster beginnt einen Tag früher, damit die Zeile 0 des ersten Tages
     # ihren Preis bekommt; diese Vorzeilen zählen selbst nicht mit.
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.batterie_kw,
-            TagesEnergieProfil.netzbezug_kw,
-            TagesEnergieProfil.strompreis_cent,
-            TagesEnergieProfil.boersenpreis_cent,
-            TagesEnergieProfil.created_at,
-            TagesEnergieProfil.spannen,
-        )
-        .where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= von - timedelta(days=1),
-            TagesEnergieProfil.datum <= bis,
-        )
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    alle = result.all()
+    # ⭐ HA-Bauform S5 (S5-R1): die Zeilen aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Kanal-Mengen,
+    # Preis zeilengleich, `raster = "beginn"` ⇒ `forward_werte_je_backward_zeile` paart sie zeilengleich), sonst die
+    # Stundenzeile wie bisher (Spalten-Projektion, keine JSON-Spalte außer `spannen`).
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    alle = await stunden_der_tage(db, anlage_id, von - timedelta(days=1), bis, felder=_LADEPREIS_FELDER)
     strom_gepaart = forward_werte_je_backward_zeile(alle, "strompreis_cent")
     boerse_gepaart = forward_werte_je_backward_zeile(alle, "boersenpreis_cent")
     # Zählerlücken wie HA (§2): eine Zeile, deren Batterie- oder Netzbezug-Menge

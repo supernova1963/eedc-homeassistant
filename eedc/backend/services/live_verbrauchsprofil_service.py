@@ -182,6 +182,10 @@ async def get_verbrauchsprofil(
     return result
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): `waermepumpe_kw` holt die WP-Gruppe dazu.
+_PROFIL_FELDER = ("verbrauch_kw", "waermepumpe_kw", "temperatur_c", "betriebsmodus_je_wp", "komponenten")
+
+
 async def _profil_from_db(
     anlage_id: int, db: AsyncSession
 ) -> Optional[dict]:
@@ -205,28 +209,15 @@ async def _profil_from_db(
     Stunde kommt: ``_wp_teilmengen_der_stunde``. ``_profil_from_ha`` und
     ``_profil_from_mqtt`` trennen nicht (benannte Grenze).
     """
-    from backend.models.tages_energie_profil import TagesEnergieProfil
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     heute = date.today()
     start_date = heute - timedelta(days=TAGE_FENSTER)
 
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.verbrauch_kw,
-            TagesEnergieProfil.waermepumpe_kw,
-            TagesEnergieProfil.temperatur_c,
-            TagesEnergieProfil.spannen,
-            TagesEnergieProfil.betriebsmodus_je_wp,
-            TagesEnergieProfil.komponenten,
-        ).where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= start_date,
-            TagesEnergieProfil.datum < heute,  # Heute ausschließen (noch unvollständig)
-        )
-    )
-    rows = result.all()
+    # HA-Bauform S5 (S5-R1): die Lernstunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Verbrauch und
+    # WP-Strom wie Cockpit → Tag, Stunde = Beginn; Temperatur, Betriebsart und Leistungspfad aus der Bestandszeile der
+    # Stunde, S4-R-3b), sonst die Stundenzeile. Heute bleibt draußen (noch unvollständig).
+    rows = await stunden_der_tage(db, anlage_id, start_date, heute - timedelta(days=1), felder=_PROFIL_FELDER)
 
     if not rows:
         return None
@@ -234,7 +225,7 @@ async def _profil_from_db(
     # Plausibilitätsprüfung: Erkennt falsch gespeicherte Werte (z.B. W statt kW,
     # oder kumulative Wh-Zähler). Typischer Haushalts-Peak: 0.1–20 kW.
     # Median > 100 = unplausibel → None zurückgeben, Fallback auf HA-History.
-    alle_verbrauch = [r[2] for r in rows if r[2] is not None]
+    alle_verbrauch = [r.verbrauch_kw for r in rows if r.verbrauch_kw is not None]
     if alle_verbrauch:
         sorted_v = sorted(alle_verbrauch)
         median_v = sorted_v[len(sorted_v) // 2]
@@ -269,7 +260,8 @@ async def _profil_from_db(
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 
     for row in rows:
-        datum, stunde, verbrauch_kw, waermepumpe_kw, temperatur_c = row[:5]
+        datum, stunde, verbrauch_kw = row.datum, row.stunde, row.verbrauch_kw
+        waermepumpe_kw, temperatur_c = row.waermepumpe_kw, row.temperatur_c
         if verbrauch_kw is None:
             continue
         # Zählerlücken wie HA (§2): eine gebündelte Stunde ist keine Stichprobe

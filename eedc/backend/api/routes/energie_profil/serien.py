@@ -59,15 +59,19 @@ async def get_komponenten_serien(
         raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
     result = await db.execute(
-        select(TagesZusammenfassung.komponenten_kwh)
+        select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_kwh)
         .where(and_(
             TagesZusammenfassung.anlage_id == anlage_id,
             TagesZusammenfassung.datum >= von,
             TagesZusammenfassung.datum <= bis,
         ))
     )
+    # HA-Bauform S5 (§3 (A) 26): an einem Kanal-Tag die Schlüssel wie `tage-werte` (Bilanz aus `kanal_tage`, Sonstiges
+    # aus der Sonstiges-Gruppe) — `komponenten_der_tage`.
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+
     alle_keys: set[str] = set()
-    for (komponenten_kwh,) in result.all():
+    for komponenten_kwh in (await komponenten_der_tage(db, anlage_id, von, bis, dict(result.all()))).values():
         if komponenten_kwh:
             alle_keys.update(komponenten_kwh.keys())
 
@@ -216,6 +220,10 @@ async def get_stundenwerte(
         stunden=stunden, serien=serien, soc_zuletzt_prozent=soc_zuletzt,
     )
 
+#: Die Mengen des Wochenmusters — zugleich Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1).
+_WOCHENMUSTER_FELDER = ("pv_kw", "verbrauch_kw", "netzbezug_kw", "einspeisung_kw", "batterie_kw")
+
+
 @router.get("/{anlage_id}/wochenmuster", response_model=list[WochenmusterPunkt])
 async def get_wochenmuster(
     anlage_id: int,
@@ -237,16 +245,11 @@ async def get_wochenmuster(
     if (bis - von).days > 366:
         raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
-    result = await db.execute(
-        select(TagesEnergieProfil)
-        .where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= von,
-            TagesEnergieProfil.datum <= bis,
-        )
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    rows = result.scalars().all()
+    # HA-Bauform S5 (§3 (A) 25): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Mengen wie
+    # Cockpit → Tag, Stunde = Beginn), sonst die Stundenzeile.
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    rows = await stunden_der_tage(db, anlage_id, von, bis, felder=_WOCHENMUSTER_FELDER)
 
     # Aggregation in Python: {(wochentag, stunde) → {field: [values]}}
     # date.weekday(): 0=Mo, 1=Di, …, 6=So
@@ -259,7 +262,7 @@ async def get_wochenmuster(
         wt = r.datum.weekday()
         key = (wt, r.stunde)
         tage_set[key].add(r.datum)
-        for field in ("pv_kw", "verbrauch_kw", "netzbezug_kw", "einspeisung_kw", "batterie_kw"):
+        for field in _WOCHENMUSTER_FELDER:
             val = getattr(r, field)
             if val is not None:
                 acc[key][field].append(val)

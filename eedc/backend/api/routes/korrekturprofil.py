@@ -252,23 +252,11 @@ async def stratifizierung_endpoint(
             pro_klasse_stunde={},
         )
 
-    # Stündliches IST + Wetter laden für die gleichen Tage
-    tep_query = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.pv_kw,
-            TagesEnergieProfil.bewoelkung_prozent,
-            TagesEnergieProfil.niederschlag_mm,
-            TagesEnergieProfil.wetter_code,
-            TagesEnergieProfil.spannen,
-        ).where(
-            and_(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum.in_(list(prognose_pro_tag.keys())),
-            )
-        )
-    )
+    # Stündliches IST + Wetter laden für die gleichen Tage (HA-Bauform S5: an einem Kanal-Tag die Mischzeilen, auf den
+    # Slot des Day-Ahead-Profils gelegt — `lade_ist_wetter_stunden`, dieselbe Stelle wie das Korrekturprofil)
+    from backend.services.korrekturprofil_aggregator import lade_ist_wetter_stunden
+
+    ist_stunden = await lade_ist_wetter_stunden(db, anlage_id, prognose_pro_tag)
 
     # Rel-Error sammeln pro Klasse und pro (Klasse, Stunde)
     rel_pro_klasse: dict[Wetterklasse, list[float]] = {k: [] for k in WETTERKLASSEN}
@@ -276,7 +264,7 @@ async def stratifizierung_endpoint(
     # Pro-Tag-Tracking für Empty-State-Diagnose
     tage_mit_klassifikation: set[date] = set()
 
-    for tep_datum, stunde, pv_kw, bw, ns, wc, spannen in tep_query.all():
+    for tep_datum, stunde, pv_kw, bw, ns, wc, spannen in ist_stunden:
         if pv_kw is None or pv_kw < 0.05:
             continue  # Nacht / Sensor-Lücke / unter Mess-Schwelle
         if spanne(spannen, "pv") > 1:

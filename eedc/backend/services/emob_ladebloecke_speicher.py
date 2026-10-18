@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen import batterie_kw_spalte
 from backend.core.berechnungen.spannen import spanne
 from backend.models.emob_ladeblock import EmobLadeblock
-from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.emob_ladebloecke import (
     REGEL_SPRUNG_RUECKWAERTS,
     BlockStunde,
@@ -149,22 +148,33 @@ def wallbox_stunden_aus_tabelle(datum: date, stunden: dict) -> list[WallboxStund
     return out
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): `wallbox_kw` holt die E-Mob-Gruppe dazu.
+_WALLBOX_FELDER = ("wallbox_kw", "netzbezug_kw", "einspeisung_kw", "batterie_kw")
+
+
+def _beginn_der_zeile(datum: date, r) -> datetime:
+    """Lokaler Beginn der Stunde einer gespeicherten Zeile: Mischzeile (``raster = "beginn"``) ⇒ ``D + h``, Stundenzeile
+    ⇒ Backward-Slot (``stunden_beginn``)."""
+    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+
+    if ist_beginn_raster(r):
+        return datetime(datum.year, datum.month, datum.day) + timedelta(hours=r.stunde)
+    return stunden_beginn(datum, r.stunde)
+
+
 async def wallbox_stunden_gespeichert(
     db: AsyncSession, anlage_id: int, datum: date,
 ) -> list[WallboxStunde]:
-    """Die Wallbox-Stunden eines gespeicherten Tages (``TagesEnergieProfil``, Spalten-Konvention)."""
-    rows = (await db.execute(
-        select(TagesEnergieProfil).where(and_(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum == datum,
-        ))
-    )).scalars().all()
+    """Die Wallbox-Stunden eines gespeicherten Tages — aus ``stunden_der_tage`` (HA-Bauform S5-R1): an einem Kanal-Tag die
+    Mischzeilen (Mengen wie *Cockpit → Tag*, Stunde = Beginn), sonst die Stundenzeile (Spalten-Konvention)."""
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
     out: list[WallboxStunde] = []
-    for r in sorted(rows, key=lambda r: r.stunde):
+    for r in await stunden_der_tage(db, anlage_id, datum, datum, felder=_WALLBOX_FELDER):
         if r.wallbox_kw is None or r.wallbox_kw <= 0:
             continue
         out.append(_stunde(
-            stunden_beginn(datum, r.stunde), ladung=r.wallbox_kw, netzbezug=r.netzbezug_kw,
+            _beginn_der_zeile(datum, r), ladung=r.wallbox_kw, netzbezug=r.netzbezug_kw,
             einspeisung=r.einspeisung_kw, batterie_spalte=r.batterie_kw, spannen=r.spannen,
         ))
     return out
@@ -239,8 +249,11 @@ async def aktualisiere_ladebloecke_des_tages(
     # Fenster: Stunden von D−1 (gespeichert) und D (Tabelle); der vorige Sprung und die schon
     # vergebene Energie aus den gespeicherten Blöcken, deren Sprung davor liegt.
     fenster_beginn = stunden_beginn(datum - timedelta(days=1), 0)
+    # HA-Bauform S5 (S5-R1): ist D−1 ein Kanal-Tag, endet seine letzte Stunde um D 00:00 — die Stunde [D−1 23:00, D 00:00)
+    # trägt schon die Tabelle von D (Slot 0); sie zählt nur einmal (ohne Kanal-Tag fällt keine Stunde weg).
     stunden = [
-        *await wallbox_stunden_gespeichert(db, anlage.id, datum - timedelta(days=1)),
+        *(s for s in await wallbox_stunden_gespeichert(db, anlage.id, datum - timedelta(days=1))
+          if s.beginn < stunden_beginn(datum, 0)),
         *wallbox_stunden_aus_tabelle(datum, tages_tabelle.stunden),
     ]
     frueher = (await db.execute(

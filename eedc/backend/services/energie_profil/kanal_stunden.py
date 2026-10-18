@@ -151,16 +151,18 @@ async def stunden_des_tages(db: AsyncSession, anlage_id: int, datum: date, zeile
 
 async def stunden_der_kanal_tage(
     db: AsyncSession, anlage_id: int, kanal_tage: Iterable[date], zeilen_je_tag: Mapping[date, Sequence[Any]],
+    *, gruppen: Sequence[str] = SICHTEN_GRUPPEN,
 ) -> dict[date, list]:
     """``tage-werte``/``monat``: je Kanal-Tag der Bilanz (``bilanz_leser.kanal_tage``) die Mischzeilen — der Bereich
     über den Bereichs-Leser (``kanal_stundentage``: EIN Stunden-Stapel je Gruppe, Bauplan §10c L-1), gefragt nur nach
     Bilanz und WP (L-1b → A): diese Sichten lesen aus den Stunden nur die stundengepaarten Größen und den WP-Strom; die
     Felder der Geräte-Gruppe (``wallbox_kw``) kommen hier aus der Stundenzeile und werden nicht gelesen.
-    ``zeilen_je_tag``: die Stundenzeilen je Tag, für den letzten Kanal-Tag auch die des Folgetags (S4-R-3b)."""
+    ``zeilen_je_tag``: die Stundenzeilen je Tag, für den letzten Kanal-Tag auch die des Folgetags (S4-R-3b).
+    ``gruppen``: die gefragten Gruppen — ``stunden_der_tage`` (S5-R1) fragt nach den Gruppen seines Lade-Hinweises."""
     tage = sorted(kanal_tage)
     if not tage:
         return {}
-    alle = await kanal_stundentage(db, anlage_id, tage[0], tage[-1], gruppen=SICHTEN_GRUPPEN)
+    alle = await kanal_stundentage(db, anlage_id, tage[0], tage[-1], gruppen=gruppen)
     out: dict[date, list] = {}
     for d in tage:
         tag = alle.get(d)
@@ -193,6 +195,188 @@ def stundenzeilen_mit_kanaelen(zeilen: Sequence[Any], kanal_stunden_je_tag: Mapp
     bestand = [z for z in zeilen if z.datum not in kanal_stunden_je_tag]
     alle = bestand + [m for ms in kanal_stunden_je_tag.values() for m in ms]
     return sorted(alle, key=lambda z: (z.datum, z.stunde))
+
+
+# ── Die eine Ladefunktion der Stundenleser (HA-Bauform S5, Etappe E-S5-1; Bauplan S5 §3 (A), §4 S5-R1) ──────────────
+#
+# Jeder Leser, der Stundenmengen braucht (Speicher-Simulation, Ladepreis, Ladeblöcke, Verbrauchs-/Korrekturprofil,
+# Preis-Aggregator, Grundlast, Prognose-IST, Wochenmuster …), holt seine Stundenzeilen hier statt mit einem eigenen
+# `select(TagesEnergieProfil)`: an einem Kanal-Tag der Bilanz die Mischzeilen (Kanal-Mengen + Bahnen der Stundenzeile,
+# S4-R-3b), an jedem anderen Tag die Stundenzeile unverändert. Damit rechnet jede Kennzahl an einem Kanal-Tag mit
+# denselben Stunden wie *Cockpit → Tag* (`tage-werte`), und an einem Bestandstag bekommt der Leser dieselbe Zeile wie
+# vorher (Proben `test_s5_stunden_der_tage.py`, Golden Master mess3/skala3).
+
+#: Lade-Hinweis ``felder``: die Gruppe, deren Kanäle ein Feld der Mischzeile füllen. Die Bilanz ist immer dabei — sie
+#: macht den Kanal-Tag (``bilanz_leser.kanal_tage``) und trägt die übrigen Mengen-Felder.
+_GRUPPE_DES_FELDS = {"waermepumpe_kw": GRUPPE_WP, "wallbox_kw": GRUPPE_EMOB}
+#: Ohne Lade-Hinweis: jede Gruppe mit Stundenfeldern (``stunden_adapter.FELDER_JE_GRUPPE``; Sonstiges hat keins).
+_STUNDEN_GRUPPEN = (GRUPPE_BILANZ, GRUPPE_WP, GRUPPE_EMOB)
+#: Spalten jeder Projektion: Ordnung, Paarung (``created_at`` — Bestandsgrenze N-387) und ``spannen`` (Zählerlücken, §2;
+#: ``mische_spannen``).
+_IMMER = ("datum", "stunde", "created_at", "spannen")
+
+
+def gruppen_des_hinweises(felder: Optional[Iterable[str]]) -> tuple[str, ...]:
+    """Die Gruppen, nach denen ``stunden_der_tage`` den Bereichs-Leser fragt (S5-R1, Lade-Hinweis)."""
+    if felder is None:
+        return _STUNDEN_GRUPPEN
+    return (GRUPPE_BILANZ, *sorted({_GRUPPE_DES_FELDS[f] for f in felder if f in _GRUPPE_DES_FELDS}))
+
+
+async def _stundenzeilen(db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date],
+                         felder: Optional[Iterable[str]]) -> list:
+    """Die Stundenzeilen ``von`` … ``bis`` + Folgetag, nach Tag und Stunde — ohne Hinweis volle Zeilen, mit Hinweis die
+    Spalten-Projektion (``_IMMER`` + ``felder``; volle Zeilen deserialisierten je Zeile zwei JSON-Spalten, #333)."""
+    from sqlalchemy import select
+
+    from backend.models.tages_energie_profil import TagesEnergieProfil as TEP
+
+    if felder is None:
+        q = select(TEP)
+    else:
+        q = select(*(getattr(TEP, s) for s in (*_IMMER, *sorted(set(felder) - set(_IMMER)))))
+    q = q.where(TEP.anlage_id == anlage_id)
+    if von is not None:
+        q = q.where(TEP.datum >= von)
+    if bis is not None:
+        q = q.where(TEP.datum <= bis + timedelta(days=1))
+    res = await db.execute(q.order_by(TEP.datum, TEP.stunde))
+    return list(res.scalars().all()) if felder is None else list(res.all())
+
+
+async def _kanal_tage_ab_erstem_stand(db: AsyncSession, anlage_id: int, von: date, bis: date) -> dict:
+    """``bilanz_leser.kanal_tage(von, bis)`` — aber erst ab dem Tag vor der ersten Kanalzeile der Anlage (davor kann kein Tag
+    aus den Kanälen kommen), ohne jede Kanalzeile gar nicht gefragt. Dieselben Tage, ohne die Bestands-Historie Tag für Tag
+    durchzuprüfen (Laufzeit, gemessen E-S5-1: zwölf Jahre ohne Kanal ≈ 0,3 s je Aufruf); im Lade-Kontext einmal je Anfrage."""
+    from datetime import datetime
+
+    from sqlalchemy import text
+
+    from backend.services.kanal.bilanz_leser import kanal_tage
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    async def _frage():
+        return (await db.execute(text(
+            "SELECT MIN((SELECT MIN(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.id)) "
+            "FROM kanal k WHERE k.anlage_id = :a"), {"a": anlage_id})).scalar()
+
+    ts = await gemerkt(db, ("erster_kanal_ts", anlage_id), _frage)
+    if ts is None:
+        return {}
+    von = max(von, datetime.fromtimestamp(int(ts)).date() - timedelta(days=1))
+    return await kanal_tage(db, anlage_id, von, bis) if von <= bis else {}
+
+
+async def stunden_der_tage(
+    db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date], *,
+    felder: Optional[Iterable[str]] = None,
+) -> list:
+    """Die Stundenzeilen ``von`` … ``bis`` (beide inklusive) in Tag/Stunde-Ordnung — **die Lesestelle der Stundenleser**
+    (HA-Bauform S5, Bauplan §4 **S5-R1**).
+
+    An jedem **Kanal-Tag der Bilanz** (Quellenwahl je Tag wie ``bilanz_leser.kanal_tage``, dieselbe Wahl wie
+    ``tage-werte``) stehen statt der Stundenzeilen die Mischzeilen des Tages (``mische_stunden``: Kanal-Mengen der
+    gefragten Gruppen, Backward-Bahnen aus der Bestandszeile ``(D, h+1)``, Forward-Bahnen zeilengleich — **S4-R-3b**; die
+    Zeilen des Folgetags holt die Funktion selbst); an jedem anderen Tag die Stundenzeile unverändert. Der Bereich läuft
+    über den Bereichs-Leser (``kanal_stundentage``: EIN Stunden-Stapel je Gruppe) — dieselbe Mischung wie ``tage-werte``
+    und ``monat`` (``stunden_der_kanal_tage`` + ``stundenzeilen_mit_kanaelen``, keine zweite Mischlogik).
+
+    **Paarung:** jede Mischzeile trägt ``raster = "beginn"`` — wer Menge und Forward-Bahn verrechnet
+    (``slot_konvention.forward_werte_je_backward_zeile``), paart sie damit zeilengleich; die Bestandszeile paart weiter
+    mit der Vorzeile (N-387). Das **Raster-Attribut übernimmt die Paarung**, der Leser schaltet nichts selbst um.
+
+    ``felder`` ist ein **Lade-Hinweis, kein Filter**: welche Attribute der Leser liest. Er bestimmt die gefragten
+    Kanal-Gruppen (Bilanz immer; ``waermepumpe_kw`` ⇒ WP, ``wallbox_kw`` ⇒ E-Mob) und lädt die Stundenzeilen als
+    Spalten-Projektion (``datum``, ``stunde``, ``created_at``, ``spannen`` + ``felder``); ohne Hinweis volle Zeilen und
+    alle Stunden-Gruppen. Ein Feld außerhalb des Hinweises liest auf der Zeile ``None``.
+
+    ``von``/``bis`` ``None``: der Bereich der Stundenzeilen (erste bzw. letzte Zeile) — ein Kanal-Tag außerhalb davon
+    gehört nicht zur Antwort."""
+    from collections import defaultdict
+
+    alle = await _stundenzeilen(db, anlage_id, von, bis, felder)
+    if von is None or bis is None:
+        if not alle:
+            return []
+        von = alle[0].datum if von is None else von
+        bis = alle[-1].datum if bis is None else bis
+    zeilen = [z for z in alle if z.datum <= bis]
+    kanal = await _kanal_tage_ab_erstem_stand(db, anlage_id, von, bis)
+    if not kanal:
+        return zeilen
+    je_tag: dict[date, list] = defaultdict(list)
+    for z in alle:
+        je_tag[z.datum].append(z)
+    return stundenzeilen_mit_kanaelen(zeilen, await stunden_der_kanal_tage(
+        db, anlage_id, kanal, je_tag, gruppen=gruppen_des_hinweises(felder)))
+
+
+# ── Tagesmengen der Tageszeile an Kanal-Tagen (S5 §3 (A) 11–15, 26): dieselbe Mischung wie `tage-werte` ────────────
+
+
+async def _bilanz_gemischt(db: AsyncSession, anlage_id: int, von: date, bis: date,
+                           komponenten_je_tag: Mapping[date, Optional[dict]]) -> dict[date, dict]:
+    """Je Kanal-Tag der Bilanz ``von`` … ``bis``: ``komponenten_kwh`` mit den Bilanz-Schlüsseln aus ``kanal_tage`` (B-3,
+    ``mische_komponenten`` — die Stelle von ``tage_werte._tagesbilanz``)."""
+    from backend.services.kanal.bilanz_leser import bilanz_ziele, mische_komponenten
+
+    kanal = await _kanal_tage_ab_erstem_stand(db, anlage_id, von, bis)
+    if not kanal:
+        return {}
+    ziele = await bilanz_ziele(db, anlage_id, kanal)
+    return {d: mische_komponenten(komponenten_je_tag.get(d), k, ziele[d]) for d, k in kanal.items()}
+
+
+async def pv_ist_je_tag(db: AsyncSession, anlage_id: int, tageszeilen: Sequence[Any]) -> dict[date, Optional[float]]:
+    """**PV-IST je Tag — die eine Stelle der Prognose-Leser** (S5 §3 (A) 11–15: Prognose-Genauigkeit des HA-Exports,
+    *Prognosen → Genauigkeit*, Lernfaktor). ``Σ PV/BKW`` (``summe_pv_bkw_kwh``) über ``komponenten_kwh`` des Tages — an
+    einem Kanal-Tag der Bilanz gemischt wie ``tage-werte`` (PV-Träger aus ``kanal_tage``, B-3), sonst die Tageszeile.
+    ``None``: kein Kanal-Tag und die Tageszeile trägt keine Komponenten. ``tageszeilen``: ``TagesZusammenfassung``-Zeilen
+    (``datum``, ``komponenten_kwh``); die Prognose-Felder liest der Aufrufer weiter aus ihnen."""
+    from backend.core.berechnungen import summe_pv_bkw_kwh
+
+    if not tageszeilen:
+        return {}
+    komp = {z.datum: z.komponenten_kwh for z in tageszeilen}
+    gemischt = await _bilanz_gemischt(db, anlage_id, min(komp), max(komp), komp)
+    return {d: (summe_pv_bkw_kwh(gemischt[d]) if d in gemischt else (summe_pv_bkw_kwh(k) if k else None))
+            for d, k in komp.items()}
+
+
+async def verworfen_der_tage(db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date], *,
+                             kanal: Optional[Iterable[date]] = None) -> dict[date, dict]:
+    """Die Regelmarke ``verworfen`` je Tag ``von`` … ``bis`` (nur Tage mit Marke) wie ``tage-werte``: an einem Kanal-Tag der
+    Bilanz ohne die Bilanz-Achsen (``mische_verworfen`` — der Kanal verwirft nichts), sonst die Tageszeile. ``kanal``:
+    die Kanal-Tage, wenn der Aufrufer sie schon kennt (sonst ``bilanz_leser.kanal_tage``)."""
+    from sqlalchemy import select
+
+    from backend.models.tages_energie_profil import TagesZusammenfassung as TZ
+    from backend.services.kanal.bilanz_leser import mische_verworfen
+
+    q = select(TZ.datum, TZ.verworfen).where(TZ.anlage_id == anlage_id, TZ.verworfen.isnot(None))
+    if von is not None:
+        q = q.where(TZ.datum >= von)
+    if bis is not None:
+        q = q.where(TZ.datum <= bis)
+    marken = {d: v for d, v in (await db.execute(q)).all() if v}
+    if not marken:
+        return {}
+    if kanal is None:
+        kanal = await _kanal_tage_ab_erstem_stand(db, anlage_id, min(marken), max(marken))
+    kanal = set(kanal)
+    return {d: (mische_verworfen(v) if d in kanal else v) for d, v in marken.items()}
+
+
+async def komponenten_der_tage(db: AsyncSession, anlage_id: int, von: date, bis: date,
+                               komponenten_je_tag: Mapping[date, Optional[dict]]) -> dict[date, Optional[dict]]:
+    """``komponenten_kwh`` je Tag ``von`` … ``bis`` wie ``tage-werte``: an einem Kanal-Tag der Bilanz die Bilanz-Schlüssel
+    aus ``kanal_tage`` (B-3) und die Sonstiges-Schlüssel aus der Sonstiges-Gruppe (``sonstiges_der_kanal_tage``,
+    ``mische_sonstiges``), sonst die Tageszeile. Ein Kanal-Tag ohne Tageszeile steht mit seinen Kanal-Schlüsseln drin."""
+    out = dict(komponenten_je_tag)
+    gemischt = await _bilanz_gemischt(db, anlage_id, von, bis, komponenten_je_tag)
+    sonst = await sonstiges_der_kanal_tage(db, anlage_id, gemischt) if gemischt else {}
+    out.update({d: mische_sonstiges(k, sonst.get(d)) for d, k in gemischt.items()})
+    return out
 
 
 # ── Wärme je Stunde (E-S3-2 Nachbau, Bauplan §10c H-1 → A): an einem WP-Kanal-Tag nur die QUELLE der Form ─────────
@@ -539,6 +723,7 @@ __all__ = [
     "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
     "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
     "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
-    "stunden_des_tages", "stundenzeilen_mit_kanaelen",
+    "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
+    "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage",
     "wp_strom_je_stunde", "wp_stundenformen",
 ]

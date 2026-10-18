@@ -13,8 +13,12 @@ Ein 0-Bündel (nachts, mameier) lässt beide Tage drin; ein Bündel innerhalb de
 Tages lässt den Tag drin (seine Energie gehört zu ihm).
 
 DB-Zugriff hier, die Regel im Layer (`core/berechnungen/spannen.py`, ADR-001).
-Gelesen werden **nur** Stundenzeilen mit Spanne — die Spalte ist dünn, der
-Zugriff kostet auch über zwei Jahre Historie wenige Zeilen.
+
+**HA-Bauform S5 (E-S5-1, Bauplan §10a Leser 23):** die Stunden kommen aus `kanal_stunden.stunden_der_tage` — an einem
+Kanal-Tag der Bilanz die Mischzeilen: ob eine Stunde Energie über Mitternacht trägt, sagen dort die Kanal-Stunden
+(HAs `change`, Spanne der Kanal-Zeile) und nicht die gefaltete Stundenzeile; die Regelmarke `verworfen` gilt dort ohne
+die Bilanz-Achsen (`verworfen_der_tage`, wie `tage-werte` — der Kanal verwirft nichts). Ein Kanal-Tag ohne Bündel in
+seinen Kanal-Stunden taugt damit für den Tagesvergleich; ein Bestandstag liest wie bisher.
 """
 
 from __future__ import annotations
@@ -23,20 +27,18 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.spannen import tage_um_mitternachtsbuendel
-from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 #: Achse → Spalte, deren Wert „trägt Energie" beantwortet (wie im Layer).
 _SPALTE = {
-    "pv": TagesEnergieProfil.pv_kw,
-    "einspeisung": TagesEnergieProfil.einspeisung_kw,
-    "netzbezug": TagesEnergieProfil.netzbezug_kw,
-    "batterie": TagesEnergieProfil.batterie_kw,
-    "waermepumpe": TagesEnergieProfil.waermepumpe_kw,
-    "wallbox": TagesEnergieProfil.wallbox_kw,
+    "pv": "pv_kw",
+    "einspeisung": "einspeisung_kw",
+    "netzbezug": "netzbezug_kw",
+    "batterie": "batterie_kw",
+    "waermepumpe": "waermepumpe_kw",
+    "wallbox": "wallbox_kw",
 }
 
 
@@ -53,35 +55,26 @@ async def tage_ohne_tagesvergleich(
     ``{D, D+1}`` um jedes Mitternachtsbündel mit Energie (Ü2) und jeder Tag
     mit ``verworfen[achse]`` (R4). ``von``/``bis`` grenzen das Ergebnis ein
     (beide inklusive); für ``bis`` wird der Folgetag mitgelesen, damit D = bis
-    erkannt wird.
+    erkannt wird. HA-Bauform S5: Stunden und Regelmarke wie *Cockpit → Tag*
+    (Mischzeilen an Kanal-Tagen, Modul-Docstring).
     """
+    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage, verworfen_der_tage
+
     spalte = _SPALTE.get(achse)
-    q = select(
-        TagesEnergieProfil.datum, TagesEnergieProfil.stunde, TagesEnergieProfil.spannen,
-        *( [spalte] if spalte is not None else [] ),
-    ).where(
-        TagesEnergieProfil.anlage_id == anlage_id,
-        TagesEnergieProfil.spannen.isnot(None),
+    zeilen = await stunden_der_tage(
+        db, anlage_id, von, bis + timedelta(days=1) if bis is not None else None,
+        felder=(spalte,) if spalte is not None else (),
     )
-    if von is not None:
-        q = q.where(TagesEnergieProfil.datum >= von)
-    if bis is not None:
-        q = q.where(TagesEnergieProfil.datum <= bis + timedelta(days=1))
     rows_je_tag: dict[date, list] = defaultdict(list)
-    for row in (await db.execute(q)).all():
-        rows_je_tag[row.datum].append(row)
+    for row in zeilen:
+        if row.spannen is not None:
+            rows_je_tag[row.datum].append(row)
     tage = tage_um_mitternachtsbuendel(rows_je_tag, achse)
 
-    tq = select(TagesZusammenfassung.datum, TagesZusammenfassung.verworfen).where(
-        TagesZusammenfassung.anlage_id == anlage_id,
-        TagesZusammenfassung.verworfen.isnot(None),
-    )
-    if von is not None:
-        tq = tq.where(TagesZusammenfassung.datum >= von)
-    if bis is not None:
-        tq = tq.where(TagesZusammenfassung.datum <= bis)
-    for datum, verworfen in (await db.execute(tq)).all():
-        if verworfen and achse in verworfen:
+    kanal = {z.datum for z in zeilen if ist_beginn_raster(z)}
+    for datum, verworfen in (await verworfen_der_tage(db, anlage_id, von, bis, kanal=kanal)).items():
+        if achse in verworfen:
             tage.add(datum)
 
     if von is not None:

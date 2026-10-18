@@ -107,6 +107,10 @@ class PotentialAuswertung:
     bis: Optional[date]
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): die Spalten der Potenzial-Auswertung.
+_POTENTIAL_FELDER = ("einspeisung_kw", "netzbezug_kw", "soc_prozent", "batterie_kw")
+
+
 def _als_speicher_stunde(
     zeile: TagesEnergieProfil, soc_prozent: Optional[float]
 ) -> SpeicherStunde:
@@ -199,17 +203,12 @@ async def lade_potential_auswertung(
     wäre genau die Drift, gegen die dieser Bau steht: der Monatsanteil „leer"
     und die Gesamtaussage stünden dann auf verschiedenen Definitionen.
     """
-    query = (
-        select(TagesEnergieProfil)
-        .where(TagesEnergieProfil.anlage_id == anlage_id)
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    if von is not None:
-        query = query.where(TagesEnergieProfil.datum >= von)
-    if bis is not None:
-        query = query.where(TagesEnergieProfil.datum <= bis)
+    # HA-Bauform S5 (S5-R1): die Stundenzeilen aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Mengen wie
+    # Cockpit → Tag; der Ladestand zeilengleich, `raster = "beginn"` ⇒ die Paarung unten nimmt ihn aus derselben Zeile),
+    # sonst die Stundenzeile. Der Überschuss entsteht weiter aus den Stunden (Layer `berechne_zusatzpotential`).
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
-    zeilen = list((await db.execute(query)).scalars().all())
+    zeilen = await stunden_der_tage(db, anlage_id, von, bis, felder=_POTENTIAL_FELDER)
     if not zeilen:
         return PotentialAuswertung(
             gesamt=berechne_zusatzpotential([], leer_schwelle_prozent),

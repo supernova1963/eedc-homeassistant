@@ -238,6 +238,34 @@ async def _lade_tagesprognose(
     return pro_tag
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): IST und Wetter der Lern- und Diagnose-Stunden.
+_IST_WETTER_FELDER = ("pv_kw", "bewoelkung_prozent", "niederschlag_mm", "wetter_code")
+
+
+async def lade_ist_wetter_stunden(db: AsyncSession, anlage_id: int, tage) -> list[tuple]:
+    """``(datum, slot, pv_kw, bewoelkung_prozent, niederschlag_mm, wetter_code, spannen)`` je Stunde der Tage ``tage`` —
+    die Stunden des Korrekturprofils und seiner Stratifizierung (HA-Bauform S5, Bauplan §3 (A) 9/24).
+
+    Aus ``stunden_der_tage`` (S5-R1): an einem Kanal-Tag die Mischzeilen (PV wie *Cockpit → Tag*, Wetter aus der
+    Bestandszeile der Stunde, S4-R-3b), sonst die Stundenzeile. Gepaart wird mit Reihen im **Backward-Slot** (Lern-SOLL,
+    Day-Ahead-Profil ``Index h = [h-1, h)``, Sonnenstand ``solar_position_lokal`` in Slot-Mitte): eine Mischzeile liegt über
+    ``slot_konvention.bestandszeile_fuer_stundenbeginn`` auf dem Slot ihrer Stunde (Stunde 23 ⇒ Slot 0 des Folgetags) —
+    das Raster übernimmt die Paarung, die eine Umrechnung wie ``strompreis_aggregator.slot_kosten_aus_zeilen``."""
+    from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    tage = set(tage)
+    if not tage:
+        return []
+    out: list[tuple] = []
+    for z in await stunden_der_tage(db, anlage_id, min(tage), max(tage), felder=_IST_WETTER_FELDER):
+        if z.datum not in tage:
+            continue
+        datum, slot = bestandszeile_fuer_stundenbeginn(z.datum, z.stunde) if ist_beginn_raster(z) else (z.datum, z.stunde)
+        out.append((datum, slot, z.pv_kw, z.bewoelkung_prozent, z.niederschlag_mm, z.wetter_code, z.spannen))
+    return out
+
+
 async def _lade_tagesist_skalar(
     db: AsyncSession, anlage_id: int, von: date, bis: date
 ) -> dict[date, tuple[float, float]]:
@@ -275,22 +303,14 @@ async def _lade_tagesist_skalar(
     if not prog_pro_tag:
         return {}
 
-    ist_result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.pv_kw,
-        ).where(
-            and_(
-                TagesEnergieProfil.anlage_id == anlage_id,
-                TagesEnergieProfil.datum.in_(list(prog_pro_tag.keys())),
-                TagesEnergieProfil.pv_kw.isnot(None),
-            )
-        )
-    )
+    # HA-Bauform S5 (S5-R1): das Tages-IST aus `stunden_der_tage` — an einem Kanal-Tag Σ der Mischzeilen (PV wie
+    # Cockpit → Tag, Kalendertag), sonst Σ der Stundenzeilen wie bisher.
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
     ist_pro_tag: dict[date, float] = {}
-    for datum, pv_kw in ist_result.all():
-        if pv_kw is not None and pv_kw > 0:
-            ist_pro_tag[datum] = ist_pro_tag.get(datum, 0.0) + pv_kw
+    for z in await stunden_der_tage(db, anlage_id, min(prog_pro_tag), max(prog_pro_tag), felder=("pv_kw",)):
+        if z.datum in prog_pro_tag and z.pv_kw is not None and z.pv_kw > 0:
+            ist_pro_tag[z.datum] = ist_pro_tag.get(z.datum, 0.0) + z.pv_kw
 
     return {
         datum: (ist_pro_tag[datum], prog_pro_tag[datum])
@@ -536,24 +556,8 @@ async def aggregiere_korrekturprofil_anlage(
         # berechnet, damit der Live-Pfad einen Korrekturfaktor hat.
         tep_rows: list = []
     else:
-        # Stündliches IST + Wetter für die Tage mit Day-Ahead-Snapshot laden
-        tep_result = await db.execute(
-            select(
-                TagesEnergieProfil.datum,
-                TagesEnergieProfil.stunde,
-                TagesEnergieProfil.pv_kw,
-                TagesEnergieProfil.bewoelkung_prozent,
-                TagesEnergieProfil.niederschlag_mm,
-                TagesEnergieProfil.wetter_code,
-                TagesEnergieProfil.spannen,
-            ).where(
-                and_(
-                    TagesEnergieProfil.anlage_id == anlage.id,
-                    TagesEnergieProfil.datum.in_(list(prog_pro_tag.keys())),
-                )
-            )
-        )
-        tep_rows = list(tep_result.all())
+        # Stündliches IST + Wetter für die Tage mit Day-Ahead-Snapshot laden (HA-Bauform S5: `lade_ist_wetter_stunden`)
+        tep_rows = await lade_ist_wetter_stunden(db, anlage.id, prog_pro_tag)
 
     for datum, stunde, pv_kw, bw, ns, wc, spannen in tep_rows:
         if pv_kw is None or pv_kw < MIN_LEISTUNG_KW:

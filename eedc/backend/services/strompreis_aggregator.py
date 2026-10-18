@@ -56,6 +56,17 @@ def monats_fenster(jahr: int, monat: int) -> tuple[date, date]:
 # =============================================================================
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): Mengen und gemessener Preis der Preis-Leser.
+_PREIS_FELDER = ("netzbezug_kw", "pv_kw", "einspeisung_kw", "strompreis_cent")
+
+
+def _letzter_tag_des_fensters(bis_inklusive: Optional[date], bis_exklusive: Optional[date]) -> Optional[date]:
+    """Der letzte Tag eines Fensters mit ``bis_inklusive`` und/oder ``bis_exklusive`` (beide gesetzt: der frühere)."""
+    tage = [t for t in (bis_inklusive, bis_exklusive - timedelta(days=1) if bis_exklusive is not None else None)
+            if t is not None]
+    return min(tage) if tage else None
+
+
 async def _zeilen_mit_gepaartem_preis(
     db: AsyncSession,
     anlage_id: int,
@@ -121,20 +132,15 @@ async def _zeilen_mit_gepaartem_preis(
         if gemessen.first() is None:
             return []
 
-    result = await db.execute(
-        select(
-            TagesEnergieProfil.datum,
-            TagesEnergieProfil.stunde,
-            TagesEnergieProfil.netzbezug_kw,
-            TagesEnergieProfil.pv_kw,
-            TagesEnergieProfil.einspeisung_kw,
-            TagesEnergieProfil.strompreis_cent,
-            TagesEnergieProfil.created_at,
-        )
-        .where(and_(*bedingungen))
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    # HA-Bauform S5 (S5-R1): die Zeilen aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Menge = HAs
+    # `change` der Stunde, Preis zeilengleich: `raster = "beginn"` ⇒ die Paarung unten nimmt ihn aus derselben Zeile),
+    # sonst die Stundenzeile wie bisher. Dasselbe Fenster (Vortag für die Vorzeile, `bis` inklusive/exklusive).
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    zeilen = await stunden_der_tage(
+        db, anlage_id, ab - timedelta(days=1) if ab is not None else None,
+        _letzter_tag_des_fensters(bis_inklusive, bis_exklusive), felder=_PREIS_FELDER,
     )
-    zeilen = result.all()
     preise = forward_werte_je_backward_zeile(zeilen, "strompreis_cent")
     return [
         (z, p) for z, p in zip(zeilen, preise)
@@ -682,21 +688,18 @@ async def wirksamer_arbeitspreis_cent(
     if zellen is not None:
         gewichtet = gewichteter_arbeitspreis_aus_zellen(tarif, zellen)
     else:
+        # HA-Bauform S5 (S5-R1): die Stunden aus `stunden_der_tage` (an einem Kanal-Tag die Mischzeilen); eine Zeile im
+        # Beginn-Raster liegt über `bestandszeile_fuer_stundenbeginn` auf dem Backward-Slot, den `preis_je_slot`
+        # erwartet — die eine Umrechnung, wie `slot_kosten_aus_zeilen`.
+        from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
+        from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
         _von, _bis = monats_fenster(jahr, monat)
-        result = await db.execute(
-            select(
-                TagesEnergieProfil.datum,
-                TagesEnergieProfil.stunde,
-                TagesEnergieProfil.netzbezug_kw,
-            ).where(
-                and_(
-                    TagesEnergieProfil.anlage_id == anlage_id,
-                    TagesEnergieProfil.datum >= _von,
-                    TagesEnergieProfil.datum < _bis,
-                )
-            )
-        )
-        gewichtet = gewichteter_arbeitspreis_cent(tarif, result.all())
+        gewichtet = gewichteter_arbeitspreis_cent(tarif, [
+            (*(bestandszeile_fuer_stundenbeginn(z.datum, z.stunde) if ist_beginn_raster(z) else (z.datum, z.stunde)),
+             z.netzbezug_kw)
+            for z in await stunden_der_tage(db, anlage_id, _von, _bis - timedelta(days=1), felder=("netzbezug_kw",))
+        ])
     preis = stammpreis if gewichtet is None else round(gewichtet, 4)
 
     if cache is not None:

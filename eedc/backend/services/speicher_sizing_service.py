@@ -115,6 +115,11 @@ class SizingAuswertung:
         return self.tage_simuliert >= MIN_TAGE_FUER_AUSSAGE
 
 
+#: Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1): die Spalten der Sizing-Simulation.
+_SIZING_FELDER = ("pv_kw", "verbrauch_kw", "soc_prozent", "batterie_kw", "einspeisung_kw", "netzbezug_kw",
+                  "soc_je_speicher")
+
+
 def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
     """Stundenmittel in kW ⇒ kWh der Stunde: numerisch identisch, anders benannt.
 
@@ -208,16 +213,11 @@ async def lade_sizing_auswertung(
     zu Recht ein Override-Feld, ein Was-wäre-wenn-Preis ist es nicht.
     """
     preis = RICHTPREIS_EUR_JE_KWH if richtpreis_eur_je_kwh is None else richtpreis_eur_je_kwh
-    query = (
-        select(TagesEnergieProfil)
-        .where(TagesEnergieProfil.anlage_id == anlage_id)
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    if von is not None:
-        query = query.where(TagesEnergieProfil.datum >= von)
-    if bis is not None:
-        query = query.where(TagesEnergieProfil.datum <= bis)
-    zeilen = list((await db.execute(query)).scalars().all())
+    # HA-Bauform S5 (S5-R1): die Stundenzeilen aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Mengen wie
+    # Cockpit → Tag, SoC zeilengleich, `raster = "beginn"` ⇒ `zeile_traegt_backward_kw` False), sonst die Stundenzeile.
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    zeilen = await stunden_der_tage(db, anlage_id, von, bis, felder=_SIZING_FELDER)
 
     # ⚠ Nur die HEUTE laufenden Speicher (N-546, Radiocarbonat T89667 #358).
     # Stichtag `date.today()` aus demselben Grund wie der Tarif (Modul-Docstring

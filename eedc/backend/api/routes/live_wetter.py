@@ -715,9 +715,12 @@ def _quartal_fuer_monat(monat: int) -> tuple[int, list[int]]:
     return q, monate
 
 
-def _filtere_tage(tage: list, db_feld: str) -> list[tuple[date, float, float]]:
+def _filtere_tage(tage: list, db_feld: str, ist_je_tag: Optional[dict] = None) -> list[tuple[date, float, float]]:
     """
     Filtert Tage mit gültigem Prognose- und IST-Wert.
+
+    ``ist_je_tag`` (HA-Bauform S5, §3 (A) 11–15): das PV-IST je Tag aus ``kanal_stunden.pv_ist_je_tag`` — an einem
+    Kanal-Tag aus ``kanal_tage``; ohne die Abbildung (reine Aufrufer, Proben) aus ``komponenten_kwh`` der Zeile.
 
     Returns: Liste von (datum, ist_kwh, prognose_kwh).
     Tage mit Prognose ≤ 0.5 kWh oder IST ≤ 0.5 kWh werden ausgeschlossen
@@ -734,8 +737,8 @@ def _filtere_tage(tage: list, db_feld: str) -> list[tuple[date, float, float]]:
         prognose = getattr(tag, db_feld, None)
         if not prognose or prognose <= 0.5:
             continue
-        ist_kwh = summe_pv_bkw_kwh(tag.komponenten_kwh)
-        if ist_kwh > 0.5:
+        ist_kwh = summe_pv_bkw_kwh(tag.komponenten_kwh) if ist_je_tag is None else ist_je_tag.get(tag.datum)
+        if ist_kwh is not None and ist_kwh > 0.5:
             out.append((tag.datum, float(ist_kwh), float(prognose)))
     return out
 
@@ -887,6 +890,9 @@ async def _get_lernfaktor_detail(
     _ohne = await tage_ohne_tagesvergleich(db, anlage_id, "pv", bis=heute)
     if _ohne:
         alle_tage = [t for t in alle_tage if t.datum not in _ohne]
+    # HA-Bauform S5 (§3 (A) 11–15): das PV-IST an der einen Stelle — an einem Kanal-Tag aus `kanal_tage`.
+    from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag
+    ist = await pv_ist_je_tag(db, anlage_id, alle_tage)
 
     # Tage in Pools aufteilen
     aktueller_monat = heute.month
@@ -908,21 +914,21 @@ async def _get_lernfaktor_detail(
     # **derselben** Stufe, damit beide dieselbe Saison beschreiben.
     pool_aktiv: list = []
 
-    daten = _filtere_tage(pool_monat, db_feld)
+    daten = _filtere_tage(pool_monat, db_feld, ist)
     if len(daten) >= 15:
         stufe = "saisonal"
         label = f"saisonal {_MONAT_NAMEN[aktueller_monat]} ({len(daten)} Tage)"
         daten_aktiv = daten
         pool_aktiv = pool_monat
     else:
-        daten = _filtere_tage(pool_quartal, db_feld)
+        daten = _filtere_tage(pool_quartal, db_feld, ist)
         if len(daten) >= 15:
             stufe = "quartal"
             label = f"Quartal Q{q_nr} ({len(daten)} Tage)"
             daten_aktiv = daten
             pool_aktiv = pool_quartal
         else:
-            daten = _filtere_tage(pool_gesamt, db_feld)
+            daten = _filtere_tage(pool_gesamt, db_feld, ist)
             if len(daten) >= 7:
                 stufe = "gesamt"
                 label = f"gesamt ({len(daten)} Tage)"
@@ -938,7 +944,7 @@ async def _get_lernfaktor_detail(
     # über die Tage **dieser Stufe**, die das Feld tragen. Reiner Pool: kein Tag
     # ohne Lern-SOLL mischt sich hinein, sonst stünden in einer Summe zwei
     # verschiedene Nenner-Begriffe nebeneinander.
-    daten_gekappt = _filtere_tage(pool_aktiv, "lern_soll_kwh")
+    daten_gekappt = _filtere_tage(pool_aktiv, "lern_soll_kwh", ist)
 
     raw_legacy, tage_count = _aggregiere_legacy(daten_aktiv)
     if raw_legacy is None:
