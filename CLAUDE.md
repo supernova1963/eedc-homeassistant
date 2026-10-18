@@ -9,7 +9,7 @@
 ## Was eedc ist
 
 **eedc** (Energie Effizienz Data Center) — PV-Analyse als HA-Add-on und Standalone. FastAPI + React + SQLite.
-Detail: [Architektur](docs/ARCHITEKTUR.md) · [Entwicklung](docs/DEVELOPMENT.md) · [Berechnungen](docs/BERECHNUNGEN.md) ·
+Detail: [Architektur](docs/ARCHITEKTUR.md) · [Entwicklung](docs/DEVELOPMENT.md) (mit **Bereichs-Karte**: Bereich → Module → Tests → GM → Handbuch) · [Berechnungen](docs/BERECHNUNGEN.md) ·
 [ADR-001 Layer](docs/ADR-001-BERECHNUNGS-LAYER.md) · [ADR-002 Invarianten](docs/ADR-002-WURZELMUSTER.md) · [Style-Guide](docs/KONZEPT-STYLE-GUIDE.md).
 Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/core/config.py::APP_VERSION`.
 
@@ -20,6 +20,8 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 | **eedc-community** (`/home/gernot/claude/eedc-community`) | Community-Server, eigenes Repo; Deploy nur mit einem Add-on-Release |
 
 ## Arbeitsmodus Pflege (Entscheid Gernot 10./11.10.2026, präzisiert 15.10.2026)
+
+> **Einstieg jeder Sitzung: `~/.claude/plans/STAND.md`** (ein Blatt, wird überschrieben; Stand, laufende Stufe, nächste Etappe, Release-Entscheid).
 
 > **Was der Modus bezweckt (Gernot 15.10.):** Token sparen an zwei Stellen — die Session verspricht Meldern nicht mehr schnell
 > eedc-Lösungen für externe Probleme, Sonderlocken und Erweiterungswünsche, und Gernot hält sich mit neuen Ideen zurück.
