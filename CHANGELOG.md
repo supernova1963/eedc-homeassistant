@@ -11,6 +11,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **Auswertungen über die ganze Historie an Tagen aus dem HA-Spiegel (Speicher-Sizing, Speicher-Potenzial, Speicher-Dashboard, aktueller Monat, HA-Export) sind ab dem zweiten Aufruf wieder so schnell wie zuvor.** Intern: `services/kanal/merken.py` (HA-Bauform S5, E-S5-1c).
 - **Auswertungen (Speicher-Potenzial, Speicher-Sizing, effektiver Ladepreis, Grundlast, Prognose-Genauigkeit und Lernfaktor, Verbrauchsprofil und -prognose, Korrekturprofil, Wochenmuster) lesen an Tagen aus dem HA-Spiegel bzw. den eigenen Zählerständen dieselben Stundenmengen wie *Cockpit → Tag*.** Bisher rechneten sie dort mit den eigenen gespeicherten Stundenwerten weiter, während Tag, Monat und Jahr schon die Werte aus Home Assistant zeigten; an Tagen ohne HA-Spiegel ändert sich nichts. Intern: eine Ladefunktion für alle Stundenleser (`kanal_stunden.stunden_der_tage`, HA-Bauform S5a Teil 1).
 
 ### Fixed

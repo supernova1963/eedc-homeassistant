@@ -669,6 +669,26 @@ Schreibende Routen, Scheduler, Stundenlauf, Nachfüllen und Konsistenzlauf laufe
 Zahlen (`test_e4f_lade_kontext.py`, auch das Abfrage-Budget: Anweisungen gegen `kanal_statistik` je Route konstant über
 Monate und Stunden).
 
+**Speicher der Kanal-Tage je Prozess (HA-Bauform S5, E-S5-1c, S5-R7).** Unter dem Lade-Kontext liegt EIN Speicher je
+Prozess (`services/kanal/merken.py`) für **abgeschlossene** Tage (`tagesfenster(D)[1] ≤ lesen.soll_ende(jetzt)`, also ab
+D+1 00:00 + `SCHREIBVERZUG_S`; der laufende Tag und der Vortag bis dahin nie): `ADAPTER` hält je Anlage, Tag und gefragten
+Gruppen den Gruppensatz und die Adapter-Zeilen (`kanal_stunden.stunden_der_kanal_tage` → `adapter_der_tage`; die Mischzeile
+entsteht je Aufruf neu aus der Stundenzeile), `TAGESWAHL` je Anlage und Tag die Tageswahl der Bilanz (`bilanz_leser.kanal_tage`).
+Fehltage lädt EIN Aufruf (Bereichs-Leser bzw. ein `tage_bilanz`-Bereich); der Bereichs-Leser `kanal_stundentage` selbst merkt
+nicht, ebenso die WP-Leser `wp_*_der_kanal_tage` und der Einzeltag `/stunden`. **Generation je Anlage, beide Speicher
+gemeinsam:** die fünf Schreibstellen von `kanal_statistik` rufen `merken.invalidiere` (Wächter `SCHREIBER_KANAL_STATISTIK` in
+`test_kanal_lesen_waechter.py`; ein Schreiben bei `ts` verwirft ab dem Tag des vorigen Stands, Verwerfen und Investition
+löschen die ganze Anlage); das Sitzungsereignis `after_flush` (an `sqlalchemy.orm.Session`, angemeldet in `core/database.py`)
+zählt die Generation der Anlage hoch, wenn eine `Anlage`, `Investition`, ein `Kanal` oder eine `KanalQuelle` neu, geändert
+oder gelöscht wird; die MQTT-Schlüsselmenge (`snapshot.reader.mqtt_zaehler_keys`) liegt im Eintrag und wird je Anfrage
+verglichen. Jede Invalidierung mit Sitzung gilt beim `commit` noch einmal, und ein Ergebnis, während dessen Berechnung
+invalidiert wurde, wird nicht abgelegt. Grenzen: LRU je Speicher 3 000 Einträge (gemessen ≈ 26 MB bei 716 Kanal-Tagen, ≈ 31 kB je Tag ⇒ im Vollzustand
+≈ 92 MB Adapter-Zeilen + ≤ 6 MB Tageswahl; eine Sicht über mehr Tage als der Speicher hält verdrängt sich selbst und gewinnt nichts), Verfall
+24 h, die Datenbank-Engine gehört zum Schlüssel; nichts Persistentes. **Ein Prozess:** `run.sh` startet einen uvicorn ohne
+`--workers`; mit mehreren Workern hätte jeder seinen Speicher, kohärent nur über Invalidierung im selben Prozess und den
+Verfall — ein Schreiben in einem Worker verwirft den Speicher der anderen nicht. Mit und ohne Speicher dieselben Zahlen
+(`test_s5_merken.py`, Golden Master bitgleich).
+
 **Wächter und Proben.** `test_kanal_lesen_waechter.py` (wer die Schicht importiert), `test_kanal_feld_deckung.py`
 (Katalog ↔ Registry), `test_kanal_symmetrie.py` (Kanal-Δ je Tag ≡ Bestand), die Gleichheitsproben
 `test_kanal_{bilanz,geraete,wp,kosten}_gleichheit.py`, die Wahl-Proben `test_kanal_quellenwahl.py`,
