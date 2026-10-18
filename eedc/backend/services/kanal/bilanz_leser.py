@@ -445,7 +445,22 @@ async def kanal_tage(
     db: AsyncSession, anlage_id: int, von: date, bis: date, *, jetzt: Optional[int] = None,
 ) -> dict[date, KanalTag]:
     """Die Tage ``von`` … ``bis``, deren Bilanz-Gruppe aus den Kanälen kommt (Wahl ``kanal``) — Umschaltstelle der
-    Tages-Leser. Ein Tag mit Wahl ``bestand`` fehlt: der Leser rechnet ihn aus Tages- und Stundenzeilen."""
+    Tages-Leser. Ein Tag mit Wahl ``bestand`` fehlt: der Leser rechnet ihn aus Tages- und Stundenzeilen.
+
+    **Gemerkt je Prozess** (HA-Bauform S5 E-S5-1c, S5-R7a, Entscheid H-1 → A): die Tageswahl je abgeschlossenem Tag
+    (``kanal/merken.py``, Speicher ``TAGESWAHL``); die Fehltage rechnet EIN ``tage_bilanz``-Bereich."""
+    from backend.services.kanal import merken
+
+    jetzt = _jetzt(jetzt)
+
+    async def _laden(fehl: list[date]) -> dict[date, KanalTag]:
+        return await _kanal_tage(db, anlage_id, fehl[0], fehl[-1], jetzt)
+
+    return await merken.je_tag(db, merken.TAGESWAHL, anlage_id, _tage(von, bis), (), jetzt, _laden)
+
+
+async def _kanal_tage(db: AsyncSession, anlage_id: int, von: date, bis: date, jetzt: int) -> dict[date, KanalTag]:
+    """``kanal_tage`` ohne Speicher."""
     return {t: als_kanaltag(t, kz.komposition)
             for t, kz in (await tage_bilanz(db, anlage_id, von, bis, jetzt=jetzt)).items()
             if kz.wahl.quelle == QUELLE_KANAL and kz.komposition is not None}

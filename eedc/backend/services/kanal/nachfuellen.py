@@ -85,6 +85,7 @@ from backend.models.kanal import (
     KanalQuelle,
     KanalStatistik,
 )
+from backend.services.kanal import merken
 
 logger = logging.getLogger(__name__)
 
@@ -838,6 +839,10 @@ async def neu_spiegeln(
                     KanalStatistik.kanal_id == kanal.id, KanalStatistik.familie == FAMILIE_SPIEGEL,
                     KanalStatistik.start_ts > unten, KanalStatistik.start_ts <= ende,
                 )))
+                # HA-Bauform S5 E-S5-1c (S5-R7c i): ab dem Tag des vorigen Stands, offen nach oben (auch der
+                # Offset der späteren Quelle unten).
+                for aid, von in (await merken.tag_des_vorstands(db, [kanal.id], unten + 1)).items():
+                    merken.invalidiere(aid, von=von, db=db)
                 neu += await _einfuegen(db, zeilen)
                 if letzter and kanal.art != ART_MEAN and ab.bis is not None and vorher is not None:
                     nachher = await _wert_am_ende(db, kanal, ab)

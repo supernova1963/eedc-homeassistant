@@ -52,6 +52,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.pv_anteil_ladung import REGEL_EINSPEISE_DECKUNG, pv_der_stunde
 from backend.core.berechnungen.spannen import achse_der_kategorie
 from backend.models.kanal import ART_SUM, FAMILIE_ABGELEITET, Kanal, KanalQuelle, KanalStatistik
+from backend.services.kanal import merken
 
 logger = logging.getLogger(__name__)
 
@@ -300,6 +301,10 @@ async def verwerfe_ab(db: AsyncSession, anlage_id: int, ab_ts: int) -> int:
             KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= grenze,
         )))
         n += res.rowcount or 0
+    if n:
+        # HA-Bauform S5 E-S5-1c (S5-R7c i): gemerkte Kanal-Tage ab dem Tag des vorigen Stands verwerfen.
+        for aid, von in (await merken.tag_des_vorstands(db, [k.id for k in kanaele], int(ab_ts))).items():
+            merken.invalidiere(aid, von=von, db=db)
     return n
 
 

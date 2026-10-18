@@ -533,6 +533,7 @@ async def _entferne_messreihen(db: AsyncSession, anlage_id: int, investition_id:
 
     from backend.models.kanal import Kanal, KanalNachfuellung, KanalQuelle, KanalStatistik
     from backend.models.sensor_snapshot import SensorSnapshot
+    from backend.services.kanal import merken
 
     praefix = f"inv:{int(investition_id)}:"
     snapshots = (await db.execute(delete(SensorSnapshot).where(
@@ -547,6 +548,8 @@ async def _entferne_messreihen(db: AsyncSession, anlage_id: int, investition_id:
         for kind in (KanalStatistik, KanalQuelle, KanalNachfuellung):
             await db.execute(delete(kind).where(kind.kanal_id.in_(kanal_ids)))
         await db.execute(delete(Kanal).where(Kanal.id.in_(kanal_ids)))
+        # HA-Bauform S5 E-S5-1c (S5-R7c i): die gemerkten Kanal-Tage der Anlage verwerfen.
+        merken.invalidiere(anlage_id, db=db)
     return snapshots, len(kanal_ids)
 
 

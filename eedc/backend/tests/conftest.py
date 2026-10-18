@@ -63,6 +63,17 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
 
 
 @pytest.fixture(autouse=True)
+def _kanal_merken_leer():
+    """HA-Bauform S5 E-S5-1c: der Speicher der Kanal-Tage je Prozess (``services/kanal/merken.py``) überlebt keinen Test —
+    ein Worker öffnet viele Datenbanken; die Engine-Marke trennt sie, dies hält zusätzlich jeden Test kalt am Beginn."""
+    from backend.services.kanal import merken
+
+    merken.leeren()
+    yield
+    merken.leeren()
+
+
+@pytest.fixture(autouse=True)
 def _wetter_cache_ohne_l2_persist(monkeypatch):
     """`main.py` setzt beim Lifespan-Start `wetter.cache._loop_running = True`, und
     niemand setzte es zurück — im selben Worker feuerte danach JEDER Prognose-Test

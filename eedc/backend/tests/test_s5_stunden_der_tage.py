@@ -42,7 +42,7 @@ from backend.models.kanal import Kanal, KanalStatistik
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.api.routes import prognosen as _prognosen  # vor jedem Patch geladen: das Modul bindet `stunden_der_tage` beim Import
 from backend.services.energie_profil import kanal_stunden as ks
-from backend.services.kanal import bilanz_leser
+from backend.services.kanal import bilanz_leser, merken
 from backend.tests import kanal_bilanz_gleichheit as kg
 
 TAG = date(2026, 6, 15)
@@ -133,6 +133,7 @@ async def _kanal_loeschen(ds, *, vor: date | None = None) -> None:
         q = q.where(KanalStatistik.start_ts < int(datetime.combine(vor, datetime.min.time()).timestamp()))
     await ds.db.execute(q)
     await ds.db.commit()
+    merken.leeren()     # Schreiben an der Schreibschicht vorbei (Probe) — der Speicher je Prozess sieht es nicht
 
 
 def _gleich(a, b) -> bool:
@@ -290,6 +291,7 @@ async def _pruefe_l23_kandidatenpfad(ds, monkeypatch):
     await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id.in_(ids), KanalStatistik.start_ts >= von_ts,
                                                      KanalStatistik.start_ts < bis_ts))
     await ds.db.commit()
+    merken.leeren()     # Schreiben an der Schreibschicht vorbei (Probe)
     assert {TAG - timedelta(days=1), TAG} <= set(await bilanz_leser.kanal_tage(ds.db, ds.aid, VON, BIS))
     with monkeypatch.context() as m:
         spion = _Spion(m)

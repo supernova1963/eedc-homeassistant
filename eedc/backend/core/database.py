@@ -47,6 +47,14 @@ async_session_maker = async_sessionmaker(
 )
 
 
+# HA-Bauform S5 E-S5-1c (S5-R7c ii): das Merken der Kanal-Stundentage je Prozess hört an den Sitzungen mit — neue,
+# geänderte, gelöschte Anlage/Investition/Kanal/KanalQuelle verwerfen die gemerkten Tage der Anlage
+# (``services/kanal/merken.py``; angemeldet an ``sqlalchemy.orm.Session``, also auch an dieser Fabrik).
+from backend.services.kanal import merken as _kanal_merken  # noqa: E402
+
+_kanal_merken.anmelden()
+
+
 # Base Class für alle Models
 class Base(DeclarativeBase):
     """Basis-Klasse für alle SQLAlchemy Models."""

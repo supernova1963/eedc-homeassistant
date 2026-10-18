@@ -73,6 +73,7 @@ from backend.models.kanal import (
     KanalQuelle,
     KanalStatistik,
 )
+from backend.services.kanal import merken
 from backend.services.kanal.katalog import (
     ist_mean_spiegel,
     ist_tagesgroesse_ohne_kanal,
@@ -207,6 +208,11 @@ async def _zeilen_einfuegen(db: AsyncSession, zeilen: list[dict]) -> int:
         sqlite_insert(KanalStatistik).on_conflict_do_nothing(index_elements=["kanal_id", "start_ts"]),
         zeilen,
     )
+    if res.rowcount:
+        # HA-Bauform S5 E-S5-1c (S5-R7c i): gemerkte Kanal-Tage ab dem Tag des vorigen Stands verwerfen.
+        ab_ts = min(int(z["start_ts"]) for z in zeilen)
+        for anlage_id, von in (await merken.tag_des_vorstands(db, {z["kanal_id"] for z in zeilen}, ab_ts)).items():
+            merken.invalidiere(anlage_id, von=von, db=db)
     return res.rowcount
 
 

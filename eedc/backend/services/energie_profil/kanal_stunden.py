@@ -103,7 +103,12 @@ def aus_kanal_gruppe(zeile: Any, feld: str) -> bool:
 
 def kanal_achsen(tag: KanalStundentag) -> frozenset[str]:
     """Die ``spannen``-Achsen der Gruppen mit Wahl ``kanal``."""
-    return frozenset(a for g in tag.gruppen for a in ACHSEN_JE_GRUPPE.get(g, ()))
+    return achsen_der_gruppen(tag.gruppen)
+
+
+def achsen_der_gruppen(gruppen: Iterable[str]) -> frozenset[str]:
+    """Die ``spannen``-Achsen eines Gruppensatzes (die Gruppen mit Wahl ``kanal``)."""
+    return frozenset(a for g in gruppen for a in ACHSEN_JE_GRUPPE.get(g, ()))
 
 
 def mische_spannen(zeile: Any, kanal_spannen: Optional[dict], achsen: frozenset[str]) -> Optional[dict]:
@@ -116,9 +121,13 @@ def mische_spannen(zeile: Any, kanal_spannen: Optional[dict], achsen: frozenset[
 def mische_stunden(datum: date, zeilen: Sequence[Any], tag: KanalStundentag, ks: KanalStunden) -> list[Mischzeile]:
     """Je Stunde (Beginn) eine Mischzeile — nur Stunden mit einer Stundenzeile oder einem Kanal-Wert. ``zeilen``: die
     Stundenzeilen des Tages UND des Folgetags (Slot 0 trägt die Stunde 23, S4-R-3b); andere Tage stören nicht."""
+    return _mische(datum, zeilen, kanal_achsen(tag), ks)
+
+
+def _mische(datum: date, zeilen: Sequence[Any], achsen: frozenset[str], ks: KanalStunden) -> list[Mischzeile]:
+    """``mische_stunden`` mit den Achsen des Gruppensatzes (``achsen_der_gruppen``) statt des Kanal-Stundentags."""
     je_zeile = {(z.datum, z.stunde): z for z in zeilen}
     felder = sorted(ks.felder - _NICHT_AUS_DEM_ADAPTER)
-    achsen = kanal_achsen(tag)
     out: list[Mischzeile] = []
     for k in ks.zeilen:
         zeile = je_zeile.get(bestandszeile_fuer_stundenbeginn(datum, k.stunde))
@@ -158,18 +167,34 @@ async def stunden_der_kanal_tage(
     Bilanz und WP (L-1b → A): diese Sichten lesen aus den Stunden nur die stundengepaarten Größen und den WP-Strom; die
     Felder der Geräte-Gruppe (``wallbox_kw``) kommen hier aus der Stundenzeile und werden nicht gelesen.
     ``zeilen_je_tag``: die Stundenzeilen je Tag, für den letzten Kanal-Tag auch die des Folgetags (S4-R-3b).
-    ``gruppen``: die gefragten Gruppen — ``stunden_der_tage`` (S5-R1) fragt nach den Gruppen seines Lade-Hinweises."""
+    ``gruppen``: die gefragten Gruppen — ``stunden_der_tage`` (S5-R1) fragt nach den Gruppen seines Lade-Hinweises.
+
+    **Gemerkt je Prozess** (HA-Bauform S5 E-S5-1c, S5-R7): die Adapter-Zeilen je abgeschlossenem Tag
+    (``adapter_der_tage``); die Mischzeile entsteht je Aufruf neu aus der Stundenzeile."""
     tage = sorted(kanal_tage)
     if not tage:
         return {}
-    alle = await kanal_stundentage(db, anlage_id, tage[0], tage[-1], gruppen=gruppen)
     out: dict[date, list] = {}
-    for d in tage:
-        tag = alle.get(d)
-        if tag is not None and tag.gruppen:
-            zeilen = [*zeilen_je_tag.get(d, ()), *zeilen_je_tag.get(d + timedelta(days=1), ())]
-            out[d] = mische_stunden(d, zeilen, tag, stunden_aus_kanaelen(tag))
+    for d, (gruppensatz, ks) in (await adapter_der_tage(db, anlage_id, tage, gruppen)).items():
+        zeilen = [*zeilen_je_tag.get(d, ()), *zeilen_je_tag.get(d + timedelta(days=1), ())]
+        out[d] = _mische(d, zeilen, achsen_der_gruppen(gruppensatz), ks)
     return out
+
+
+async def adapter_der_tage(db: AsyncSession, anlage_id: int, tage: Sequence[date],
+                           gruppen: Sequence[str]) -> dict[date, tuple[frozenset[str], KanalStunden]]:
+    """Je Tag aus ``tage`` mit einer Gruppe mit Wahl ``kanal``: der Gruppensatz und die Adapter-Zeilen
+    (``stunden_aus_kanaelen``) — abgeschlossene Tage aus dem Speicher je Prozess (``kanal/merken.py``, S5-R7a/b), die
+    Fehltage über EINEN Aufruf des Bereichs-Lesers ``kanal_stundentage`` (EIN Stunden-Stapel je Gruppe, wie bisher)."""
+    from backend.services.kanal import merken
+    from backend.services.kanal.bilanz_leser import uhr
+
+    async def _laden(fehl: list[date]) -> dict[date, tuple[frozenset[str], KanalStunden]]:
+        alle = await kanal_stundentage(db, anlage_id, fehl[0], fehl[-1], gruppen=gruppen)
+        return {d: (frozenset(t.gruppen), stunden_aus_kanaelen(t)) for d in fehl
+                if (t := alle.get(d)) is not None and t.gruppen}
+
+    return await merken.je_tag(db, merken.ADAPTER, anlage_id, tage, frozenset(gruppen), uhr(), _laden)
 
 
 async def sonstiges_der_kanal_tage(db: AsyncSession, anlage_id: int, kanal_tage: Iterable[date]) -> dict[date, dict]:
@@ -813,7 +838,7 @@ async def wp_strom_je_stunde(db: AsyncSession, anlage_id: int, datum: date) -> d
 __all__ = [
     "ACHSEN_JE_GRUPPE", "aus_kanal_gruppe", "modus_stunden_mit_rueckfall",
     "Mischzeile", "TagesEingaenge", "detail_aus_kanaelen", "tages_eingaenge", "kanal_achsen", "kanal_stunden", "mische_spannen", "mische_stunden",
-    "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
+    "achsen_der_gruppen", "adapter_der_tage", "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
     "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
     "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage",

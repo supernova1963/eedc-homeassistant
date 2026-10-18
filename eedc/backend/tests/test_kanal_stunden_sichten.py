@@ -36,7 +36,7 @@ from backend.services.energie_profil.kanal_stunden import (
     stunden_der_kanal_tage,
     stundenzeilen_mit_kanaelen,
 )
-from backend.services.kanal import bilanz_leser, lesen
+from backend.services.kanal import bilanz_leser, lesen, merken
 from backend.services.kanal.lade_kontext import lese_anfrage
 from backend.services.kanal.stunden_adapter import stunden_aus_kanaelen
 from backend.services.kanal.stunden_leser import kanal_stundentag
@@ -237,6 +237,9 @@ async def test_lade_kontext_zweiter_aufruf_liest_nichts_und_bilanz_raender_aus_k
         with lese_anfrage():
             with _Zaehler(ds.db) as ohne:
                 await stunden_der_kanal_tage(ds.db, ds.aid, tage, {})
+        # Der Speicher je Prozess (HA-Bauform S5 E-S5-1c, ``kanal/merken.py``) hielte die Tage über die Anfrage hinaus —
+        # diese Probe zählt den Lade-Kontext EINER Anfrage, also kalt.
+        merken.leeren()
         with lese_anfrage():
             kanal = await bilanz_leser.kanal_tage(ds.db, ds.aid, tage[0], tage[-1])
             with _Zaehler(ds.db) as mit:

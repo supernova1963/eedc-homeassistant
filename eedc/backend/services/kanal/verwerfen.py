@@ -35,6 +35,7 @@ from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.kanal import ART_STAND, ART_SUM, Kanal, KanalQuelle, KanalStatistik
+from backend.services.kanal import merken
 from backend.services.kanal.abgeleitet import tag_der_stunde
 from backend.services.kanal.fenster import kalendertag_der_stunde
 
@@ -184,7 +185,16 @@ async def loesche_zeilen(db: AsyncSession, kanal_id: int, t: int) -> int:
     res = await db.execute(delete(KanalStatistik).where(and_(
         KanalStatistik.kanal_id == kanal_id, KanalStatistik.start_ts < t,
     )))
+    if res.rowcount:
+        await _merken_verwerfen(db, kanal_id)
     return int(res.rowcount or 0)
+
+
+async def _merken_verwerfen(db: AsyncSession, kanal_id: int) -> None:
+    """HA-Bauform S5 E-S5-1c (S5-R7c i): die gemerkten Kanal-Tage der Anlage verwerfen — ganz, weil die Marke
+    «verworfen am» (``bewusst_leer``) jeden Tag der Anlage treffen kann."""
+    for anlage_id in await merken.anlage_der_kanaele(db, [kanal_id]):
+        merken.invalidiere(anlage_id, db=db)
 
 
 async def markiere_quellen(db: AsyncSession, kanal_id: int, t: int, jetzt_ts: int) -> int:
@@ -192,6 +202,8 @@ async def markiere_quellen(db: AsyncSession, kanal_id: int, t: int, jetzt_ts: in
     res = await db.execute(update(KanalQuelle).where(and_(
         KanalQuelle.kanal_id == kanal_id, KanalQuelle.gueltig_ab < t, KanalQuelle.verworfen_ts.is_(None),
     )).values(verworfen_ts=jetzt_ts))
+    if res.rowcount:
+        await _merken_verwerfen(db, kanal_id)
     return int(res.rowcount or 0)
 
 

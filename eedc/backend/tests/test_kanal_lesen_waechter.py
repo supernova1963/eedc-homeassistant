@@ -227,3 +227,128 @@ def test_gegenprobe_eine_route_mit_dem_kanal_stundentag_wuerde_rot(monkeypatch):
     verstoesse = {rel for rel in funde if not rel.startswith(ERLAUBT_PRAEFIX) and rel not in BENANNTE_TAGESLESER}
     assert verstoesse == {"api/routes/energie_profil/kunst.py"}
     assert {rel for rel in funde if not rel.startswith("services/kanal/")} != IMPORTEURE_STAND
+
+
+# ── HA-Bauform S5 E-S5-1c (S5-R7c i): wer `kanal_statistik` schreibt, verwirft die gemerkten Kanal-Tage ──────────────
+#
+# Das Merken je Prozess (``services/kanal/merken.py``) hängt an jedem Schreiben von ``kanal_statistik``. Jedes Modul, das
+# dort einfügt, ändert oder löscht, steht in ``SCHREIBER_KANAL_STATISTIK`` **und** ruft ``merken.invalidiere``. Gefunden
+# per AST (baumweit ohne ``tests/``): ``insert``/``sqlite_insert``/``update``/``delete`` mit ``KanalStatistik`` als Argument
+# (auch über eine Schleifenvariable ``for x in (…, KanalStatistik, …)``), ``KanalStatistik(...)`` als Objekt, und rohes SQL
+# (``INSERT [OR …] INTO|UPDATE|DELETE FROM kanal_statistik``) in einer Zeichenkette. Die Liste ist der Stand — sie schrumpft
+# nur oder wächst mit Begründung (wie ``IMPORTEURE_STAND``). Nicht erfasst (benannt): zusammengesetzte Zeichenketten
+# (f-String, Verkettung) mit dem Tabellennamen.
+
+import re as _re
+
+#: Die Schreibstellen von ``kanal_statistik`` (E-S5-1c, Bauplan S5 §10d R7c (i)) — Datei → Stelle.
+SCHREIBER_KANAL_STATISTIK: dict[str, str] = {
+    "services/kanal/schreiber.py": "_zeilen_einfuegen (Spiegel, eigene Summe, Mitschrift, abgeleitet, Kosten, Modus-Strom)",
+    "services/kanal/abgeleitet.py": "verwerfe_ab (Neuaufbau der abgeleiteten Kanäle)",
+    "services/kanal/nachfuellen.py": "neu_spiegeln (Neu-Laden eines Spiegel-Abschnitts)",
+    "services/kanal/verwerfen.py": "loesche_zeilen / markiere_quellen (Werkbank «vor dem Sensorbeginn verwerfen»)",
+    "api/routes/investitionen/crud.py": "_entferne_messreihen (Investition löschen, N-668)",
+}
+
+_SCHREIB_FUNKTIONEN = {"insert", "sqlite_insert", "update", "delete"}
+_SQL_SCHREIBEN = _re.compile(r"\b(INSERT\s+(OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+kanal_statistik\b", _re.IGNORECASE)
+
+
+def _ruft_name(n: ast.Call) -> str | None:
+    f = n.func
+    return f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else None)
+
+
+def _schleifen_namen(baum: ast.AST) -> set[str]:
+    """Namen, die eine Schleife über ein Tupel/eine Liste mit ``KanalStatistik`` bindet."""
+    out = set()
+    for n in ast.walk(baum):
+        if isinstance(n, (ast.For, ast.AsyncFor)) and isinstance(n.target, ast.Name) \
+                and isinstance(n.iter, (ast.Tuple, ast.List)) \
+                and any(isinstance(e, ast.Name) and e.id == "KanalStatistik" for e in n.iter.elts):
+            out.add(n.target.id)
+    return out
+
+
+def schreibt_kanal_statistik(baum: ast.AST) -> list[int]:
+    """Die Zeilen, an denen das Modul ``kanal_statistik`` schreibt."""
+    ziele = {"KanalStatistik"} | _schleifen_namen(baum)
+    out = []
+    for n in ast.walk(baum):
+        if isinstance(n, ast.Call):
+            name = _ruft_name(n)
+            if name in _SCHREIB_FUNKTIONEN and n.args and isinstance(n.args[0], ast.Name) and n.args[0].id in ziele:
+                out.append(n.lineno)
+            elif name == "KanalStatistik":
+                out.append(n.lineno)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and _SQL_SCHREIBEN.search(n.value):
+            out.append(n.lineno)
+    return out
+
+
+def ruft_invalidiere(baum: ast.AST) -> bool:
+    """Ruft das Modul ``merken.invalidiere(...)`` (oder ein importiertes ``invalidiere``)?"""
+    for n in ast.walk(baum):
+        if isinstance(n, ast.Call):
+            f = n.func
+            if isinstance(f, ast.Attribute) and f.attr == "invalidiere" and isinstance(f.value, ast.Name) \
+                    and f.value.id == "merken":
+                return True
+            if isinstance(f, ast.Name) and f.id == "invalidiere":
+                return True
+    return False
+
+
+def _schreiber_kanal_statistik() -> dict[str, list[int]]:
+    out = {}
+    for datei in produktivbaum():
+        if datei.rel.startswith("models/"):
+            continue        # die Modell-Definition selbst
+        z = schreibt_kanal_statistik(datei.baum)
+        if z:
+            out[datei.rel] = z
+    return out
+
+
+def test_schreiber_kanal_statistik_wie_der_stand():
+    funde = _schreiber_kanal_statistik()
+    assert set(funde) == set(SCHREIBER_KANAL_STATISTIK), (
+        f"Module, die kanal_statistik schreiben: {sorted(funde)} — der Stand ist {sorted(SCHREIBER_KANAL_STATISTIK)}. "
+        "Wer eine Schreibstelle hinzufügt, trägt sie in SCHREIBER_KANAL_STATISTIK ein UND ruft dort "
+        "merken.invalidiere (services/kanal/merken.py, Bauplan S5 §10d R7c (i))."
+    )
+
+
+def test_jeder_schreiber_von_kanal_statistik_ruft_invalidiere():
+    ohne = sorted(d.rel for d in produktivbaum() if d.rel in SCHREIBER_KANAL_STATISTIK and not ruft_invalidiere(d.baum))
+    assert not ohne, f"Schreibstellen von kanal_statistik ohne merken.invalidiere: {ohne}"
+
+
+def test_gegenprobe_schreiber_formen():
+    """Jede Form wird gefunden; ein Modul, das nur liest, nicht."""
+    formen = {
+        "sqlite_insert": "sqlite_insert(KanalStatistik).on_conflict_do_nothing()\n",
+        "delete": "await db.execute(delete(KanalStatistik).where(x))\n",
+        "update": "await db.execute(update(KanalStatistik).values(sum=1))\n",
+        "schleife": "for kind in (KanalStatistik, KanalQuelle):\n    delete(kind)\n",
+        "objekt": "db.add(KanalStatistik(kanal_id=1, start_ts=0))\n",
+        "sql": "text('DELETE FROM kanal_statistik WHERE kanal_id = 1')\n",
+        "sql-or": "text('INSERT OR IGNORE INTO kanal_statistik VALUES (1)')\n",
+    }
+    for name, quelle in formen.items():
+        assert schreibt_kanal_statistik(ast.parse(quelle)), name
+    assert not schreibt_kanal_statistik(ast.parse("select(KanalStatistik.sum).where(KanalStatistik.kanal_id == 1)\n"
+                                                  "text('SELECT * FROM kanal_statistik')\n"))
+    assert ruft_invalidiere(ast.parse("merken.invalidiere(1, von=d)\n"))
+    assert not ruft_invalidiere(ast.parse("merken.leeren()\n"))
+
+
+def test_gegenprobe_neuer_schreiber_ohne_invalidiere_wuerde_rot(monkeypatch):
+    """Der ganze Wächter: ein künstliches Modul, das kanal_statistik löscht ⇒ Abweichung vom Stand."""
+    from backend.tests import quellbaum
+
+    echte = produktivbaum()
+    kunst = quellbaum.Quelldatei(pfad=echte[0].pfad, rel="services/kunst.py", quelle="",
+                                 baum=ast.parse("delete(KanalStatistik)\n"))
+    monkeypatch.setattr(f"{__name__}.produktivbaum", lambda: (*echte, kunst))
+    assert "services/kunst.py" in _schreiber_kanal_statistik()
