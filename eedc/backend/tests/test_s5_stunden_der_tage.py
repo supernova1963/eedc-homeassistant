@@ -18,7 +18,9 @@ Proben (Auftrag Punkt 3):
 * **(d) N-593** — ``test_n593_wp_tagesfaktor.py`` (unverändert grün, Teil des Gates).
 * **(e) Tagesvergleich** — ``tage_ohne_tagesvergleich``: ein Kanal-Tag mit Kanal-Mengen ohne Bündel in seinen
   Kanal-Stunden taugt für den Vergleich (die gefaltete Stundenzeile und ``verworfen`` der Bilanz-Achsen zählen dort
-  nicht); ein Bestandstag mit Mitternachtsbündel bleibt draußen.
+  nicht); ein Bestandstag mit Mitternachtsbündel bleibt draußen. E-S5-1b (M04): ein Kanal-Tag mit Spiegel-Lücke über
+  Mitternacht fällt heraus wie in der Fassung über alle Mischzeilen, gerechnet nur am Kandidaten-Tag; ohne Lücke kein
+  Mischzeilen-Aufruf.
 
 Datenstände: Achsen-Formen (``kanal_bilanz_gleichheit.datenstand``, HA, 01.06.–03.07.2026), Uhr der Matrix gestellt.
 Schwesterdateien: test_kanal_stunden_sichten.py, test_s4_kalendertag_sichten.py, test_n593_wp_tagesfaktor.py.
@@ -257,6 +259,47 @@ async def _tarif(ds):
     return (await lade_tarife_fuer_anlage(ds.db, ds.aid, TAG)).get("allgemein")
 
 
+async def _l23_ueber_alle_mischzeilen(db, anlage_id, achse, von, bis):
+    """Die Fassung von E-S5-1 (``0ccff4da``): ``tage_ohne_tagesvergleich`` über ALLE Stunden aus ``stunden_der_tage`` —
+    die Referenz des Kandidaten-Pfads (E-S5-1b)."""
+    from collections import defaultdict
+
+    from backend.core.berechnungen.spannen import tage_um_mitternachtsbuendel
+
+    zeilen = await ks.stunden_der_tage(db, anlage_id, von, bis + timedelta(days=1), felder=(f"{achse}_kw",))
+    je_tag = defaultdict(list)
+    for z in zeilen:
+        if z.spannen is not None:
+            je_tag[z.datum].append(z)
+    tage = tage_um_mitternachtsbuendel(je_tag, achse)
+    kanal = {z.datum for z in zeilen if ist_beginn_raster(z)}
+    tage |= {d for d, v in (await ks.verworfen_der_tage(db, anlage_id, von, bis, kanal=kanal)).items() if achse in v}
+    return {t for t in tage if von <= t <= bis}
+
+
+async def _pruefe_l23_kandidatenpfad(ds, monkeypatch):
+    """L23 (E-S5-1b, H-4 → A): eine Spiegel-Lücke über Mitternacht in den PV-Kanälen (Zeilen ``TAG-1 23:00`` … ``TAG 09:00``
+    gelöscht ⇒ die erste PV-Stunde von TAG trägt 12 h mit Energie) nimmt TAG und den Vortag heraus wie die Fassung über
+    alle Mischzeilen (E-S5-1) — gerechnet werden die Mischzeilen nur am Kandidaten-Tag TAG."""
+    from backend.services.energie_profil.vergleichstage import tage_ohne_tagesvergleich
+
+    keys = await ks.kanaele_der_achse(ds.db, ds.aid, VON, BIS, "pv")
+    ids = select(Kanal.id).where(Kanal.anlage_id == ds.aid, Kanal.key.in_(keys))
+    von_ts = int(datetime.combine(TAG - timedelta(days=1), datetime.min.time()).timestamp()) + 23 * 3600
+    bis_ts = int(datetime.combine(TAG, datetime.min.time()).timestamp()) + 10 * 3600
+    await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id.in_(ids), KanalStatistik.start_ts >= von_ts,
+                                                     KanalStatistik.start_ts < bis_ts))
+    await ds.db.commit()
+    assert {TAG - timedelta(days=1), TAG} <= set(await bilanz_leser.kanal_tage(ds.db, ds.aid, VON, BIS))
+    with monkeypatch.context() as m:
+        spion = _Spion(m)
+        neu = await tage_ohne_tagesvergleich(ds.db, ds.aid, "pv", von=VON, bis=BIS)
+    assert {TAG - timedelta(days=1), TAG} <= neu
+    assert neu == await _l23_ueber_alle_mischzeilen(ds.db, ds.aid, "pv", VON, BIS)
+    assert {z.datum for a in spion.antworten for z in a} == {TAG}
+    assert all(ist_beginn_raster(z) for z in spion.zeilen_am(TAG))
+
+
 async def test_leser_m04_kanal_tag_und_bestand(uhr, monkeypatch):
     """M04: (b) jeder Leser bekommt am Kanal-Tag die Mischzeilen von ``tage-werte`` (Mengen, Raster); (a) nach dem
     Löschen der Kanalzeilen rechnet jeder Leser mit der Ladefunktion dasselbe wie mit dem heutigen Lader."""
@@ -266,8 +309,12 @@ async def test_leser_m04_kanal_tag_und_bestand(uhr, monkeypatch):
         for name, aufruf in _leser_m04(ds, tarif).items():
             with monkeypatch.context() as m:
                 spion = _Spion(m)
-                await aufruf()
-                if name in _UEBER_KOSTEN_KANAL:
+                out = await aufruf()
+                if name.startswith("L23"):
+                    # E-S5-1b (H-4 → A): ein Kanal-Tag ohne Spiegel-Lücke über Mitternacht kann kein Bündel tragen —
+                    # nicht herausgenommen, und L23 rechnet seine Mischzeilen gar nicht.
+                    assert TAG not in out and not spion.zeilen_am(TAG), name
+                elif name in _UEBER_KOSTEN_KANAL:
                     # E4e: den Juni deckt der Kosten-Kanal — das Aggregat kommt aus den Kanal-Δ, keine Stunde nötig.
                     from backend.services.kanal.preis_leser import preis_monate
 
@@ -275,6 +322,8 @@ async def test_leser_m04_kanal_tag_und_bestand(uhr, monkeypatch):
                 elif name.split()[0] in _STUNDEN_LESER:
                     _pruefe_mengen_wie_tage_werte(spion.zeilen_am(TAG), ref,
                                                   felder=("netzbezug_kw",) if name.startswith("L5") else BILANZ)
+
+        await _pruefe_l23_kandidatenpfad(ds, monkeypatch)
 
         await _kanal_loeschen(ds)
         assert not await bilanz_leser.kanal_tage(ds.db, ds.aid, VON, BIS)

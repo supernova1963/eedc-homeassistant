@@ -474,6 +474,25 @@ ORDER BY r.kid, s.start_ts
 """
 
 
+def _stundenwerte(im: Sequence[tuple], vor: Optional[tuple], ist_sum: bool) -> list[Stundenwert]:
+    """Die belegten Stunden aus den Zeilen ``(ts, roh, familie, offset)``: ``change`` = Wert minus voriger Stand (auch
+    ``vor``, der Stand vor dem Bereich), ``spanne`` = Abstand zum vorigen Stand. Je Kanal eine Schleife — die Art und der
+    vorige Stand werden einmal gehalten statt je Zeile neu gelesen (Laufzeit, E-S5-1b; dieselben Werte)."""
+    werte: list[Stundenwert] = []
+    anhaengen = werte.append
+    ohne_vorigen = vor is None
+    v_ts, v_wert = (0, 0.0) if ohne_vorigen else (vor[0], vor[1] + vor[3])
+    for ts, roh, familie, off in im:
+        wert = roh + off
+        if ohne_vorigen:
+            anhaengen(Stundenwert(ts, None, wert if ist_sum else roh, familie, None))
+            ohne_vorigen = False
+        else:
+            anhaengen(Stundenwert(ts, wert - v_wert, wert if ist_sum else roh, familie, ts - v_ts))
+        v_ts, v_wert = ts, wert
+    return werte
+
+
 async def stunden_stapel(
     db: AsyncSession, kanaele: Sequence[Kanal], von: int, bis: int, *, jetzt: Optional[int] = None,
 ) -> dict[str, Stunden]:
@@ -502,13 +521,7 @@ async def stunden_stapel(
         z = zeilen[k.id]
         vor = z[0] if z and z[0][0] < von else None
         im = z[1:] if vor is not None else z
-        werte: list[Stundenwert] = []
-        vorher = vor
-        for ts, roh, familie, off in im:
-            change = (roh + off) - (vorher[1] + vorher[3]) if vorher is not None else None
-            spanne = ts - vorher[0] if vorher is not None else None
-            werte.append(Stundenwert(ts, change, roh + off if k.art == ART_SUM else roh, familie, spanne))
-            vorher = (ts, roh, familie, off)
+        werte = _stundenwerte(im, vor, k.art == ART_SUM)
         laufend = bis > se
         ende = min(bis, se)
         letzte = im[-1][0] if im else (vor[0] if vor else None)

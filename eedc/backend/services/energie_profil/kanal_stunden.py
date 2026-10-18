@@ -267,6 +267,82 @@ async def _kanal_tage_ab_erstem_stand(db: AsyncSession, anlage_id: int, von: dat
     return await kanal_tage(db, anlage_id, von, bis) if von <= bis else {}
 
 
+# ── Mitternachtsbündel in den Kanal-Stunden — Kandidaten-Tage ohne Mischzeilen (HA-Bauform S5, E-S5-1b, §10b H-3/H-4) ──
+#
+# Ob eine Mischzeile eines Kanal-Tags ein Mitternachtsbündel trägt, entscheiden die Spannen ihrer Kanal-Stunden
+# (``stunden_adapter._spannen_der_stunde``: die Einträge mit ``achse_der_kategorie == achse``, ``lesen.stunden_stapel``:
+# Spanne = Abstand zum vorigen Stand). Eine Kanal-Stunde ``h`` von D trägt Energie von vor dem Fensterbeginn (D-1 23:00,
+# ``zeile_traegt_vortagsenergie``) nur, wenn der vorige Stand davor liegt — dann hat der Kanal im Fenster
+# ``[D-1 23:00, D 00:00)`` keine Zeile und in D eine. Das ist eine Frage an die Stände, ohne Komposition: der Tagesvergleich
+# (``vergleichstage``) rechnet die Mischzeilen nur an den Tagen, an denen sie zutrifft.
+
+
+async def kanaele_der_achse(db: AsyncSession, anlage_id: int, von: date, bis: date, achse: str) -> set[str]:
+    """Die Kanal-Schlüssel, deren Spannen die Achse ``achse`` einer Mischzeile tragen können: die Zähler mit
+    ``achse_der_kategorie(kategorie) == achse`` — Bilanz-Achsen aus dem Bilanz-Stamm (``bilanz_leser._stamm``, dieselben
+    Einträge wie ``tage_bilanz``), Geräte-Achsen aus allen Zählern des Tages (``bilanz_adapter.zaehler_eintraege``, wie
+    ``stunden_leser._tageszaehler``) — über jede Menge aktiver Investitionen ``von`` … ``bis`` (eine Obermenge je Tag)."""
+    from backend.core.berechnungen.spannen import achse_der_kategorie
+    from backend.services.kanal.bilanz_adapter import BILANZ_ACHSEN, zaehler_eintraege
+    from backend.services.kanal.bilanz_leser import _stamm
+
+    stamm = await _stamm(db, anlage_id)
+    stichtage = {von} | {t for i in stamm.invs for t in (i.anschaffungsdatum,
+                         i.stilllegungsdatum + timedelta(days=1) if i.stilllegungsdatum else None)
+                         if t is not None and von < t <= bis}
+    out: set[str] = set()
+    for t in sorted(stichtage):
+        aktiv = (lambda inv, t=t: inv.ist_aktiv_an(t))
+        if achse in BILANZ_ACHSEN:
+            eintraege = await stamm.eintraege(db, aktiv, t)
+        else:
+            eintraege = await zaehler_eintraege(db, stamm.anlage, {str(i.id): i for i in stamm.invs if aktiv(i)}, t)
+        out |= {e.schluessel for e in eintraege if achse_der_kategorie(e.kategorie) == achse}
+    return out
+
+
+_LUECKE_SQL = """
+WITH k(kid) AS (SELECT value FROM json_each(:kanaele)), g(j, fb, t, tn) AS (
+    SELECT key, json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]') FROM json_each(:tage)
+)
+SELECT DISTINCT g.j FROM k CROSS JOIN g
+WHERE NOT EXISTS (SELECT 1 FROM kanal_statistik s WHERE s.kanal_id = k.kid AND s.start_ts >= g.fb AND s.start_ts < g.t
+                  AND s.sum IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM kanal_statistik s WHERE s.kanal_id = k.kid AND s.start_ts >= g.t AND s.start_ts < g.tn
+              AND s.sum IS NOT NULL)
+"""
+
+
+async def tage_mit_kanal_luecke_ueber_mitternacht(db: AsyncSession, anlage_id: int, von: date, bis: date,
+                                                  achse: str) -> set[date]:
+    """Die Tage ``von`` … ``bis``, an denen ein Mengen-Kanal der Achse (``kanaele_der_achse``) im Fenster
+    ``[D-1 23:00, D 00:00)`` keine Zeile und in D eine hat — die notwendige Bedingung dafür, dass eine Kanal-Stunde von D
+    ein Mitternachtsbündel trägt (Block oben). Eine Anweisung, keine Komposition; Obermenge, entschieden wird an den
+    Mischzeilen."""
+    import json
+    from datetime import datetime, time
+
+    from sqlalchemy import select, text
+
+    from backend.models.kanal import ART_SUM, Kanal
+
+    if von > bis:
+        return set()
+    keys = await kanaele_der_achse(db, anlage_id, von, bis, achse)
+    if not keys:
+        return set()
+    kids = [k for (k,) in (await db.execute(select(Kanal.id).where(
+        Kanal.anlage_id == anlage_id, Kanal.art == ART_SUM, Kanal.key.in_(keys)))).all()]
+    if not kids:
+        return set()
+    tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
+    grenzen = [[int(datetime.combine(d - timedelta(days=1), time(23, 0)).timestamp()),
+                int(datetime.combine(d, time(0, 0)).timestamp()),
+                int(datetime.combine(d + timedelta(days=1), time(0, 0)).timestamp())] for d in tage]
+    res = await db.execute(text(_LUECKE_SQL), {"kanaele": json.dumps(kids), "tage": json.dumps(grenzen)})
+    return {tage[int(j)] for (j,) in res.all()}
+
+
 async def stunden_der_tage(
     db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date], *,
     felder: Optional[Iterable[str]] = None,
@@ -291,7 +367,23 @@ async def stunden_der_tage(
     alle Stunden-Gruppen. Ein Feld außerhalb des Hinweises liest auf der Zeile ``None``.
 
     ``von``/``bis`` ``None``: der Bereich der Stundenzeilen (erste bzw. letzte Zeile) — ein Kanal-Tag außerhalb davon
-    gehört nicht zur Antwort."""
+    gehört nicht zur Antwort.
+
+    **Im Lade-Kontext einer Anfrage einmal je Bereich und Lade-Hinweis** (``lade_kontext.gemerkt``, E-S5-1b): die
+    Preis-Leser fragen je Tag einer Sicht denselben Monat (``ev_preis_zeitfenster_cent``, ``wirksamer_arbeitspreis_cent``
+    aus ``baue_finanz_zeile``) — gehalten wird die Liste, ausgegeben eine Kopie; Schreiben leert den Kontext."""
+    from backend.services.kanal.bilanz_leser import uhr
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    felder = None if felder is None else tuple(felder)
+    zeilen = await gemerkt(db, ("stunden_der_tage", anlage_id, von, bis, felder, uhr()),
+                           lambda: _stunden_der_tage(db, anlage_id, von, bis, felder))
+    return list(zeilen)
+
+
+async def _stunden_der_tage(db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date],
+                            felder: Optional[tuple[str, ...]]) -> list:
+    """``stunden_der_tage`` ohne Lade-Kontext."""
     from collections import defaultdict
 
     alle = await _stundenzeilen(db, anlage_id, von, bis, felder)
@@ -725,5 +817,6 @@ __all__ = [
     "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
     "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage",
+    "kanaele_der_achse", "tage_mit_kanal_luecke_ueber_mitternacht",
     "wp_strom_je_stunde", "wp_stundenformen",
 ]

@@ -280,7 +280,6 @@ async def baue_tage_werte(
     # leitet den Slot-Preis dort aus dem Vertrag ab, und Σ(Menge_s × Preis) ist
     # identisch zu Tagesmenge × Preis (SOLL §10, Prüfstein 2).
     from backend.api.routes.strompreise import lade_tarife_je_stichtag
-    from backend.services.strompreis_aggregator import lade_slot_kosten_je_tag
 
     _stichtage = sorted({date(t.year, t.month, 1) for t in alle_tage})
     _tarife_je_stichtag = await lade_tarife_je_stichtag(db, anlage_id, _stichtage)
@@ -309,9 +308,8 @@ async def baue_tage_werte(
         _md = md_pro_monat.get((tag.year, tag.month))
         return getattr(_md, "netzbezug_durchschnittspreis_cent", None) if _md else None
 
-    slot_kosten_je_tag = await lade_slot_kosten_je_tag(
-        db, anlage_id, von=von, bis=bis,
-        tarif_fuer=_tarif_fuer, abgerechnet_fuer=_abgerechnet_fuer,
+    slot_kosten_je_tag = _slot_kosten_der_bestandstage(
+        [r for r in alle_tep if r.datum <= bis], kanal_stunden_je_tag, von, _tarif_fuer, _abgerechnet_fuer,
     )
     # HA-Bauform S4 (§10a (3)): an einem Kanal-Tag dieselbe Kaskade über seine Mischzeilen — Kosten und EV-Preis im
     # Kalendertag wie der Netzbezug daneben (Preis zeilengleich gepaart, Beginn-Raster).
@@ -342,6 +340,23 @@ async def baue_tage_werte(
         zeilen.append(await _tageszeile(kx, anlage, tag))
 
     return zeilen
+
+
+def _slot_kosten_der_bestandstage(zeilen: list, kanal_stunden_je_tag: dict, von: date, tarif_fuer,
+                                  abgerechnet_fuer) -> dict:
+    """Je Tag ohne Mischzeilen die Slot-Kosten (Kaskade P-6, ``slot_kosten_aus_zeilen``) aus den schon geladenen
+    Stundenzeilen (``von``-1 … ``bis``) — dieselbe Zeilenfolge und Paarung wie ``lade_slot_kosten_je_tag`` über
+    ``stunden_der_tage`` (Vortag für die Vorzeile, an Kanal-Tagen die Mischzeilen: ``stundenzeilen_mit_kanaelen``), ohne
+    die Kanal-Stunden ein zweites Mal zu rechnen (HA-Bauform S5 E-S5-1b, Gate B). Die Kanal-Tage rechnet
+    ``_slot_kosten_der_kanal_tage``. Die Vorzeile der Stunde 0 eines Tages nach einem Kanal-Tag trägt dort wie hier den
+    Preis der Stundenzeile ``(D-1, 23)`` (Forward-Bahn der Mischzeile, S4-R-3b)."""
+    from backend.services.energie_profil.kanal_stunden import stundenzeilen_mit_kanaelen
+    from backend.services.strompreis_aggregator import slot_kosten_aus_zeilen
+
+    folge = stundenzeilen_mit_kanaelen(zeilen, kanal_stunden_je_tag)
+    gepaart = [(z, preis) for z, preis in zip(folge, forward_werte_je_backward_zeile(folge, "strompreis_cent"))
+               if z.datum >= von and z.datum not in kanal_stunden_je_tag]
+    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
 
 
 def _slot_kosten_der_kanal_tage(kanal_stunden_je_tag: dict, tarif_fuer, abgerechnet_fuer) -> dict:
