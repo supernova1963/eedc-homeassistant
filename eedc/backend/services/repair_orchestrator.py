@@ -475,6 +475,13 @@ async def _komponenten_rueckmeldung(
         anlage.sensor_mapping or {}, invs_by_id, datum,
     )
 
+    # HA-Bauform S5 (E-S5-3, Bauplan §7): an einem Kanal-Tag schreibt der Lauf die Schlüssel der Gruppen mit Wahl
+    # `kanal` absichtlich nicht (`mengen_weiche`, transienter Marker des Laufs) — sie stehen nicht unter „erwartet",
+    # die Rückmeldung nennt die Gruppen (`kanal_gruppen`), statt sie als „ohne Wert" zu melden.
+    weiche = getattr(zusammenfassung, "mengen_weiche", None)
+    if weiche is not None:
+        erwartet = {k: v for k, v in erwartet.items() if not weiche.leerer_schluessel(k)}
+
     # Preserve-Lauf (`komponenten_summen` leer, alte Werte bleiben stehen) hat
     # für KEINE Komponente etwas geschrieben — der Marker kommt aus dem Lauf.
     frisch = getattr(zusammenfassung, "komponenten_frisch", True)
@@ -499,6 +506,8 @@ async def _komponenten_rueckmeldung(
         "komponenten_erwartet": len(komponenten),
         "komponenten_geschrieben": len(komponenten) - len(ohne_wert),
         "komponenten_ohne_wert": ohne_wert,
+        # Die Gruppen, deren Mengen der Lauf an diesem Kanal-Tag leer gelassen hat (der Tag liest sie aus den Kanälen).
+        "kanal_gruppen": [_GRUPPEN_TEXT[g] for g in weiche.gruppen] if weiche is not None else [],
     }
 
 
@@ -559,26 +568,29 @@ _GRUPPEN_TEXT = {"bilanz": "PV, Netz und Speicher", "wp": "die Wärmepumpe", "em
 
 
 async def _kanal_hinweis(db: AsyncSession, anlage_id: Optional[int], von: date, bis: date) -> list[str]:
-    """Werkbank-Vorschau «Tag neu aggregieren» / «Bereich» / «Heute» (HA-Bauform S5a, Bauplan §7, §10f): EINE Zeile,
-    wenn der Tag (bzw. Tage des Bereichs) Gruppen mit Wahl ``kanal`` hat — sie nennt die Gruppen und sagt, dass der Lauf
-    für sie an *Cockpit → Tag/Monat/Jahr* nichts ändert (die Sichten lesen dort die Kanäle). EIN Bereichs-Leser
-    (``kanal_stunden.kanal_gruppen_der_tage``). Ohne Kanal-Gruppe: keine Zeile. S5b passt den Text an, wenn der
-    Schreiber die Mengen an Kanal-Tagen weglässt."""
-    from backend.services.energie_profil.kanal_stunden import kanal_gruppen_der_tage
+    """Werkbank-Vorschau «Tag neu aggregieren» / «Bereich» / «Heute» (HA-Bauform S5, Bauplan §7; E-S5-2 S5a-Fassung,
+    E-S5-3 S5b-Fassung): EINE Zeile, wenn der Tag (bzw. Tage des Bereichs) ein Kanal-Tag ist (Bilanz-Gruppe mit Wahl
+    ``kanal``) — sie nennt die Gruppen mit Wahl ``kanal`` und sagt, dass der Lauf die Stundenzeile ohne deren Mengen
+    schreibt (``aggregate_day``, ``mengen_weiche`` — dieselbe Regel) und an *Cockpit → Tag/Monat/Jahr* nichts ändert (die
+    Sichten lesen dort die Kanäle). EIN Bereichs-Leser (``kanal_stunden.kanal_gruppen_der_tage``). Ohne Kanal-Tag: keine
+    Zeile."""
+    from backend.services.energie_profil.kanal_stunden import GRUPPE_BILANZ, kanal_gruppen_der_tage
 
     if anlage_id is None:
         return []
-    tage = await kanal_gruppen_der_tage(db, anlage_id, von, bis)
+    tage = {d: gs for d, gs in (await kanal_gruppen_der_tage(db, anlage_id, von, bis)).items() if GRUPPE_BILANZ in gs}
     if not tage:
         return []
     gruppen = [_GRUPPEN_TEXT[g] for g in _GRUPPEN_TEXT if any(g in gs for gs in tage.values())]
     aufzaehlung = gruppen[0] if len(gruppen) == 1 else f"{', '.join(gruppen[:-1])} und {gruppen[-1]}"
-    subjekt = ("Dieser Tag liest seine" if von == bis
-               else f"{len(tage)} von {(bis - von).days + 1} Tagen des Bereichs lesen ihre")
+    if von == bis:
+        wo, wer = "dieses Tages", "der Tag liest sie"
+    else:
+        wo, wer = f"an {len(tage)} von {(bis - von).days + 1} Tagen des Bereichs", "diese Tage lesen sie"
     return [
-        f"{subjekt} Mengen für {aufzaehlung} aus dem HA-Spiegel bzw. den eigenen Zählerständen; der Lauf schreibt "
-        "die Stundenzeile neu (Ladestand, Wetter, Preise, Leistungsaufteilung, Zählwerke und die gespeicherten "
-        "Mengen), an Cockpit → Tag/Monat/Jahr ändert er für diese Gruppen nichts."
+        f"Für {aufzaehlung} schreibt der Lauf die Stundenzeile {wo} ohne Mengen (Ladestand, Wetter, Preise, "
+        f"Leistungsaufteilung und Zählwerke schreibt er neu) — {wer} aus dem HA-Spiegel bzw. den eigenen "
+        "Zählerständen; an Cockpit → Tag/Monat/Jahr ändert er nichts."
     ]
 
 

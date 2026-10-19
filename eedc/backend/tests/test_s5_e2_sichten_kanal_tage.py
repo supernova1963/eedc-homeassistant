@@ -46,9 +46,12 @@ async def _anlage(ds) -> Anlage:
 
 
 async def _ohne_kanalzeilen(ds) -> None:
+    """Gegenprobe: kein Kanal trägt eine Zeile — und (seit S5b, E-S5-3 §10h 3) der Tag neu aggregiert, damit die
+    Stunden- und Tageszeilen die Bestandsmengen tragen wie bis E-S5-2."""
     ids = select(Kanal.id).where(Kanal.anlage_id == ds.aid)
     await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id.in_(ids)))
     await ds.db.commit()
+    await kg.neu_aggregieren(ds)
 
 
 # ── HA-Export-Steuerung ──────────────────────────────────────────────────────
@@ -108,11 +111,11 @@ async def test_steuerung_kanal_tag_wie_cockpit_tag(uhr):
 
 async def test_steuerung_gegenprobe_bestandstag_tageszeile_und_backward_beschriftung(uhr):
     async with kg.datenstand("achsen", "M01", "HA") as ds:
+        await _ohne_kanalzeilen(ds)
         await ds.db.execute(update(TagesZusammenfassung).where(
             TagesZusammenfassung.anlage_id == ds.aid, TagesZusammenfassung.datum == TAG,
         ).values(ueberschuss_kwh=11.25, defizit_kwh=3.5, peak_netzbezug_kw=4.2))
         await ds.db.commit()
-        await _ohne_kanalzeilen(ds)
         sv = await _steuerung(ds)
         zeilen = list((await ds.db.execute(select(TagesEnergieProfil).where(
             TagesEnergieProfil.anlage_id == ds.aid, TagesEnergieProfil.datum == TAG,
@@ -275,9 +278,13 @@ async def test_werkbank_vorschau_nennt_die_kanal_gruppen(uhr):
     async with kg.datenstand("achsen", "M05", "HA") as ds:
         (tag,) = await _kanal_hinweis(ds.db, ds.aid, TAG, TAG)
         (bereich,) = await _kanal_hinweis(ds.db, ds.aid, date(2026, 5, 30), date(2026, 6, 3))
-    assert tag.startswith("Dieser Tag liest seine Mengen für PV, Netz und Speicher und die Wärmepumpe aus dem HA-Spiegel")
-    assert "an Cockpit → Tag/Monat/Jahr ändert er für diese Gruppen nichts" in tag
-    assert bereich.startswith("3 von 5 Tagen des Bereichs lesen ihre Mengen für")
+    # HA-Bauform S5b (E-S5-3, Bauplan §7): der Lauf schreibt die Stundenzeile ohne die Mengen der Kanal-Gruppen.
+    assert tag.startswith("Für PV, Netz und Speicher und die Wärmepumpe schreibt der Lauf die Stundenzeile dieses "
+                          "Tages ohne Mengen")
+    assert "der Tag liest sie aus dem HA-Spiegel bzw. den eigenen Zählerständen" in tag
+    assert tag.endswith("an Cockpit → Tag/Monat/Jahr ändert er nichts.")
+    assert bereich.startswith("Für PV, Netz und Speicher und die Wärmepumpe schreibt der Lauf die Stundenzeile an 3 von "
+                              "5 Tagen des Bereichs ohne Mengen")
 
 
 async def test_werkbank_vorschau_bestandstag_keine_zeile(uhr):
@@ -295,4 +302,5 @@ async def test_werkbank_bereichs_vorschau_traegt_die_zeile(uhr):
         req = RepairOperationRequest(operation="reaggregate_range", anlage_id=ds.aid,
                                      params={"von": "2026-06-08", "bis": "2026-06-12"})
         _, warnungen, _ = await _plan_reaggregate_range(req, ds.db)
-    assert warnungen[-1].startswith("5 von 5 Tagen des Bereichs lesen ihre Mengen für PV, Netz und Speicher aus")
+    assert warnungen[-1].startswith("Für PV, Netz und Speicher schreibt der Lauf die Stundenzeile an 5 von 5 Tagen des "
+                                    "Bereichs ohne Mengen")

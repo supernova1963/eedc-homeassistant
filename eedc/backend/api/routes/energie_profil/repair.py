@@ -221,13 +221,21 @@ async def reaggregate_tag(
         "komponenten_erwartet": summary.get("komponenten_erwartet", 0),
         "komponenten_geschrieben": summary.get("komponenten_geschrieben", 0),
         "komponenten_ohne_wert": summary.get("komponenten_ohne_wert", []),
+        # HA-Bauform S5 (E-S5-3): an einem Kanal-Tag die Gruppen, deren Mengen der Lauf leer lässt (der Tag liest sie
+        # aus dem HA-Spiegel bzw. den eigenen Zählerständen).
+        "kanal_gruppen": summary.get("kanal_gruppen", []),
     }
+
+
+#: Die Mengen-Spalten, an denen ``_stunden_mit_messdaten`` eine Stunde «mit Messdaten» erkennt.
+_MENGEN_FELDER = ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "waermepumpe_kw",
+                  "wallbox_kw")
 
 
 async def _stunden_mit_messdaten(
     db: AsyncSession, anlage_id: int, datum: date,
 ) -> int:
-    """Zählt TEP-Stunden des Tages mit mindestens einem nicht-NULL-Leistungswert.
+    """Zählt die Stunden des Tages mit mindestens einem nicht-NULL-Mengenwert.
 
     Im Orchestrator-Refactor 2026-05-10 (Commit 17db2350) ging das Feld
     aus dem alten /reaggregate-tag-Endpoint verloren — das Frontend
@@ -239,24 +247,15 @@ async def _stunden_mit_messdaten(
     `stunden_verfuegbar` aus `TagesZusammenfassung` zählt alle 24 Slots
     auch wenn alle Werte NULL sind (synthetisches MQTT-Energy-Setup) —
     dieser Wert hier ist der ehrlichere Erfolgsindikator.
+
+    HA-Bauform S5 (E-S5-3): die Stunden über die Lesestelle ``kanal_stunden.stunden_der_tage`` — an einem Kanal-Tag die
+    Mischzeilen (der Lauf schreibt dort keine Mengen in die Stundenzeile, der Tag liest sie aus den Kanälen; ohne das
+    meldete die Rückmeldung «0/24 Stunden mit Messdaten»), an einem Bestandstag die Stundenzeilen wie bisher.
     """
-    from sqlalchemy import or_
-    result = await db.execute(
-        select(func.count(TagesEnergieProfil.id)).where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum == datum,
-            or_(
-                TagesEnergieProfil.pv_kw.is_not(None),
-                TagesEnergieProfil.verbrauch_kw.is_not(None),
-                TagesEnergieProfil.einspeisung_kw.is_not(None),
-                TagesEnergieProfil.netzbezug_kw.is_not(None),
-                TagesEnergieProfil.batterie_kw.is_not(None),
-                TagesEnergieProfil.waermepumpe_kw.is_not(None),
-                TagesEnergieProfil.wallbox_kw.is_not(None),
-            ),
-        )
-    )
-    return int(result.scalar_one() or 0)
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    zeilen = await stunden_der_tage(db, anlage_id, datum, datum, felder=_MENGEN_FELDER)
+    return sum(1 for z in zeilen if any(getattr(z, f, None) is not None for f in _MENGEN_FELDER))
 
 
 async def _pv_aus_luecke(
@@ -268,17 +267,13 @@ async def _pv_aus_luecke(
     steht die Energie einer Lücke in der Folgestunde bzw. im Folgetag — das Δ
     der Rückmeldung ist dann keine „Reparatur eines Fehlers", sondern die
     Energie, die HA nachgeliefert hat. ``None``, wenn keine Stunde gebündelt ist.
+    HA-Bauform S5 (E-S5-3): die Stunden über die Lesestelle (an einem Kanal-Tag die Mischzeilen mit den Kanal-Spannen).
     """
     from backend.core.berechnungen.spannen import spanne
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
-    rows = (await db.execute(
-        select(TagesEnergieProfil.pv_kw, TagesEnergieProfil.spannen).where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum == datum,
-            TagesEnergieProfil.spannen.is_not(None),
-        )
-    )).all()
-    summe = sum(pv for pv, sp in rows if pv is not None and spanne(sp, "pv") > 1)
+    zeilen = await stunden_der_tage(db, anlage_id, datum, datum, felder=("pv_kw",))
+    summe = sum(z.pv_kw for z in zeilen if z.pv_kw is not None and spanne(z.spannen, "pv") > 1)
     return round(summe, 2) if summe > 0 else None
 
 
@@ -290,7 +285,13 @@ async def _pv_tagessumme(
 
     Nutzt dieselbe Aggregationslogik wie _check_datenquelle_drift —
     damit ist das Frontend-Δ konsistent mit der Drift-Anzeige.
+
+    HA-Bauform S5 (E-S5-3): über die Lesestelle ``kanal_stunden.pv_ist_je_tag`` — an einem Kanal-Tag die PV aus den
+    Kanälen (der Lauf schreibt dort keine PV-Schlüssel in die Tageszeile; «vorher/nachher» bleibt die Zahl von
+    *Cockpit → Tag*), an einem Bestandstag die Tageszeile wie bisher.
     """
+    from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag
+
     tz_result = await db.execute(
         select(TagesZusammenfassung).where(
             TagesZusammenfassung.anlage_id == anlage_id,
@@ -298,9 +299,10 @@ async def _pv_tagessumme(
         )
     )
     tz = tz_result.scalar_one_or_none()
-    if tz is None or not tz.komponenten_kwh:
+    if tz is None:
         return None
-    return round(summe_pv_bkw_kwh(tz.komponenten_kwh), 2)
+    pv = (await pv_ist_je_tag(db, anlage_id, [tz])).get(datum)
+    return round(pv, 2) if pv is not None else None
 
 
 @router.post("/{anlage_id}/reaggregate-bereich")
