@@ -316,6 +316,7 @@ async def _plan_reaggregate_day(
             "— der Lauf trägt die fehlenden nach, sofern die Zählerstände sie "
             "hergeben. Das ist der übliche Grund, ihn zu starten."
         )
+    warnings.extend(await _kanal_hinweis(db, req.anlage_id, datum, datum))
     return estimated, warnings, {
         "preview": preview,
         "aggregat_stunden_vorhanden": aggregat_stunden,
@@ -552,6 +553,35 @@ async def _execute_reaggregate_day(
 # ── Operation: REAGGREGATE_RANGE ────────────────────────────────────────────
 
 
+#: Die Gruppen der Werkbank-Vorschau in Anwender-Sprache (Schlüssel = ``kanal_stunden.GRUPPE_*``).
+_GRUPPEN_TEXT = {"bilanz": "PV, Netz und Speicher", "wp": "die Wärmepumpe", "emob": "die E-Mobilität",
+                 "sonstiges": "Sonstiges"}
+
+
+async def _kanal_hinweis(db: AsyncSession, anlage_id: Optional[int], von: date, bis: date) -> list[str]:
+    """Werkbank-Vorschau «Tag neu aggregieren» / «Bereich» / «Heute» (HA-Bauform S5a, Bauplan §7, §10f): EINE Zeile,
+    wenn der Tag (bzw. Tage des Bereichs) Gruppen mit Wahl ``kanal`` hat — sie nennt die Gruppen und sagt, dass der Lauf
+    für sie an *Cockpit → Tag/Monat/Jahr* nichts ändert (die Sichten lesen dort die Kanäle). EIN Bereichs-Leser
+    (``kanal_stunden.kanal_gruppen_der_tage``). Ohne Kanal-Gruppe: keine Zeile. S5b passt den Text an, wenn der
+    Schreiber die Mengen an Kanal-Tagen weglässt."""
+    from backend.services.energie_profil.kanal_stunden import kanal_gruppen_der_tage
+
+    if anlage_id is None:
+        return []
+    tage = await kanal_gruppen_der_tage(db, anlage_id, von, bis)
+    if not tage:
+        return []
+    gruppen = [_GRUPPEN_TEXT[g] for g in _GRUPPEN_TEXT if any(g in gs for gs in tage.values())]
+    aufzaehlung = gruppen[0] if len(gruppen) == 1 else f"{', '.join(gruppen[:-1])} und {gruppen[-1]}"
+    subjekt = ("Dieser Tag liest seine" if von == bis
+               else f"{len(tage)} von {(bis - von).days + 1} Tagen des Bereichs lesen ihre")
+    return [
+        f"{subjekt} Mengen für {aufzaehlung} aus dem HA-Spiegel bzw. den eigenen Zählerständen; der Lauf schreibt "
+        "die Stundenzeile neu (Ladestand, Wetter, Preise, Leistungsaufteilung, Zählwerke und die gespeicherten "
+        "Mengen), an Cockpit → Tag/Monat/Jahr ändert er für diese Gruppen nichts."
+    ]
+
+
 async def _plan_reaggregate_range(
     req: RepairOperationRequest, db: AsyncSession
 ) -> tuple[dict[str, int], list[str], dict[str, Any]]:
@@ -611,6 +641,7 @@ async def _plan_reaggregate_range(
         "preserved_prognose-Mechanismus greift pro Tag.",
         "Ohne Support-Anspruch auf Rekonstruktion überschriebener Felder.",
     ]
+    warnings.extend(await _kanal_hinweis(db, anlage.id, von, bis))
     return estimated, warnings, {
         "von": von_str,
         "bis": bis_str,
@@ -721,9 +752,11 @@ async def _execute_reaggregate_range(
 async def _plan_reaggregate_today(
     req: RepairOperationRequest, db: AsyncSession
 ) -> tuple[dict[str, int], list[str], dict[str, Any]]:
+    heute = date.today()
     return (
         {"anlagen_geplant": 0},
-        ["Triggert sofortige Neu-Aggregation des heutigen Tages für alle Anlagen."],
+        ["Triggert sofortige Neu-Aggregation des heutigen Tages für alle Anlagen.",
+         *(await _kanal_hinweis(db, req.anlage_id, heute, heute))],
         {},
     )
 

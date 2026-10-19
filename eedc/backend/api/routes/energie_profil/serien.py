@@ -18,6 +18,7 @@ from backend.core.berechnungen import (
     WALLBOX_KOMPONENTEN_PREFIXE,
     geraete_spalte_kw,
 )
+from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 from backend.core.berechnungen.slot_konvention import (
     RASTER_BEGINN, RASTER_ENDE, forward_werte_je_backward_zeile, ist_beginn_raster,
 )
@@ -58,20 +59,12 @@ async def get_komponenten_serien(
     if (bis - von).days > 366:
         raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
 
-    result = await db.execute(
-        select(TagesZusammenfassung.datum, TagesZusammenfassung.komponenten_kwh)
-        .where(and_(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum >= von,
-            TagesZusammenfassung.datum <= bis,
-        ))
-    )
     # HA-Bauform S5 (§3 (A) 26): an einem Kanal-Tag die Schlüssel wie `tage-werte` (Bilanz aus `kanal_tage`, Sonstiges
-    # aus der Sonstiges-Gruppe) — `komponenten_der_tage`.
+    # aus der Sonstiges-Gruppe) — `komponenten_der_tage`; die Tageszeilen lädt die Lesestelle selbst (E-S5-2, S5-R6).
     from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
 
     alle_keys: set[str] = set()
-    for komponenten_kwh in (await komponenten_der_tage(db, anlage_id, von, bis, dict(result.all()))).values():
+    for komponenten_kwh in (await komponenten_der_tage(db, anlage_id, von, bis)).values():
         if komponenten_kwh:
             alle_keys.update(komponenten_kwh.keys())
 
@@ -222,6 +215,17 @@ async def get_stundenwerte(
 
 #: Die Mengen des Wochenmusters — zugleich Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1).
 _WOCHENMUSTER_FELDER = ("pv_kw", "verbrauch_kw", "netzbezug_kw", "einspeisung_kw", "batterie_kw")
+#: Feld → Achse der Spanne (``spannen._SPALTE_JE_ACHSE`` umgekehrt); ``verbrauch_kw`` über ``verbrauch_gebuendelt``.
+_ACHSE_DES_FELDS = {"pv_kw": "pv", "netzbezug_kw": "netzbezug", "einspeisung_kw": "einspeisung", "batterie_kw": "batterie"}
+
+
+def _gebuendelt(r, feld: str) -> bool:
+    """M-1 (a) (HA-Bauform S5, Bauplan §10c): trägt die Zeile auf der Achse des Felds mehr als eine reale Stunde (Spanne,
+    Zählerlücken wie HA)? Dann ist sie keine Stichprobe dieser Stunde und fällt aus dem Mittel — wie Grundlast,
+    Verbrauchsprofil und Ladepreis (``zeile_gebuendelt``/``verbrauch_gebuendelt``)."""
+    if feld == "verbrauch_kw":
+        return verbrauch_gebuendelt(r)
+    return zeile_gebuendelt(r, _ACHSE_DES_FELDS[feld])
 
 
 @router.get("/{anlage_id}/wochenmuster", response_model=list[WochenmusterPunkt])
@@ -261,11 +265,20 @@ async def get_wochenmuster(
     for r in rows:
         wt = r.datum.weekday()
         key = (wt, r.stunde)
-        tage_set[key].add(r.datum)
+        # M-1 (a): eine gebündelte Zeile (Spanne > 1 auf der Achse des Felds) wertet das Feld nicht; ein Tag zählt in
+        # `anzahl_tage`, wenn die Stunde ein gewertetes Feld trägt — oder gar keins und kein gebündeltes (wie bisher).
+        gewertet = verworfen = False
         for field in _WOCHENMUSTER_FELDER:
             val = getattr(r, field)
-            if val is not None:
-                acc[key][field].append(val)
+            if val is None:
+                continue
+            if _gebuendelt(r, field):
+                verworfen = True
+                continue
+            acc[key][field].append(val)
+            gewertet = True
+        if gewertet or not verworfen:
+            tage_set[key].add(r.datum)
 
     punkte: list[WochenmusterPunkt] = []
     for (wt, stunde) in sorted(acc.keys()):

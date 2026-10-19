@@ -884,7 +884,8 @@ async def _ist_heute(db: AsyncSession, anlage_id: int, heute: date, now: datetim
     from backend.core.berechnungen.slot_konvention import ist_beginn_raster
 
     _kanal = [heute] if any(ist_beginn_raster(r) for r in ist_rows) else []
-    _tz_heute_verworfen = (await verworfen_der_tage(db, anlage_id, heute, heute, kanal=_kanal)).get(heute)
+    # M-1 Hinweis H-1 (E-S5-2): ohne Marke `{}` wie vor S5 (die Lesestelle liefert nur Tage mit Marke).
+    _tz_heute_verworfen = (await verworfen_der_tage(db, anlage_id, heute, heute, kanal=_kanal)).get(heute) or {}
     ist_p = ist_profil(ist_rows, jetzt_stunde=now.hour, datum=heute,
                        verworfen=_tz_heute_verworfen)
     ist_stundenprofil = _profil_zu_eintraegen(ist_p)
