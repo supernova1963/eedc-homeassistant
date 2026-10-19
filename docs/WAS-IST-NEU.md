@@ -18,6 +18,20 @@ oder in der eigenen Summe aus MQTT-Zählerständen. Es sind dieselben Zahlen wie
 Monat, den die Zähler nur teilweise abdecken, bleibt wie bisher bis zum Abschluss leer
 ([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
 
+**Eine Mengenquelle je Tag — auch für Auswertungen, Daten-Checker und Steuerungs-Sensoren:** An Tagen, die der
+HA-Spiegel bzw. deine eigenen Zählerstände decken, rechnen jetzt auch Speicher-Potenzial, Speicher-Sizing, effektiver
+Ladepreis, Grundlast, Verbrauchs- und Korrekturprofil, Prognose-Genauigkeit und Lernfaktor mit denselben Stunden wie
+*Cockpit → Tag* — bisher nahmen sie dort noch die eigenen gespeicherten Stundenwerte. Dasselbe gilt für den
+Daten-Checker (PV-Doppelerfassung, Abweichung zu Home Assistant, Batterie-Vorzeichen, leere Tage, Nachtrag nach
+eingefrorenem Zähler: an solchen Tagen kein Befund mehr, der nur die alte gespeicherte Tageszeile betraf), für die
+HA-Export-Sensoren `eedc_ueberschuss_heute_kwh` und `eedc_ueberschuss_jetzt_kw` samt ihrer Zeitangaben und für die
+Aufteilung nach Betriebsart im Wärme/Klima-Verlauf. Ein neuer Hinweis im Daten-Checker nennt, an wie vielen Tagen die
+Mengen noch aus den gespeicherten Stundenwerten kommen — kein Fehler, nichts zu tun. Stunden ohne eigenen Wert in Home
+Assistant zeigen im Wärme/Klima-Verlauf eine Lücke statt 0. Auswertungen über die ganze Historie sind ab dem zweiten
+Aufruf wieder so schnell wie zuvor; der erste Aufruf nach einem Neustart dauert ein paar Sekunden länger
+([Daten-Checker §4.6](HANDBUCH_DATEN_CHECKER.md#46-energieprofil--zaehler-abdeckung),
+[Wärme & Klima](HANDBUCH_WAERME_KLIMA.md), [Sensor-Referenz](SENSOR-REFERENZ.md)).
+
 ---
 
 ## v4.1.8 — 17. Oktober 2026

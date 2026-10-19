@@ -905,6 +905,18 @@ Bei der CO₂-Einsparung ist das **so vorgesehen**: Der Tageswert trägt nur den
 
 Bei **Wärme/Klima** kann ein zweiter Grund dazukommen, und er ist genau **eine Stunde** groß. An Tagen aus dem **HA-Spiegel** (der Regelfall im Add-on) und aus eigenen Zählerständen ist der Tag der **Kalendertag** von 0 bis 24 Uhr — wie der Monat vom Monatsersten 0 Uhr bis zum Monatsletzten 24 Uhr; die Tagessäulen des Wärme-Verlaufs ergeben dort zusammen den Monat. Tage, die eedc aus seinen **eigenen Stundenwerten** liest (ältere Tage vor dem HA-Spiegel), stehen weiter für das Fenster *Vortag 23 Uhr bis heute 23 Uhr* — dasselbe Fenster, in dem eedc dort die Stunden zählt, damit Strom, Aufteilung, Wärme und Arbeitszahl desselben Tages dieselben 24 Stunden messen. Liegt ein Monat ganz oder teilweise auf solchen Tagen, enthält die Summe ihrer Säulen die letzte Stunde des Vormonats und nicht die letzte Stunde des Monats: **Beide Zahlen sind richtig, sie messen nur nicht dieselben 24 Stunden.** **Zu tun ist nichts.** Dieselbe Fensterfrage stellt sich auch bei Speicher, Wallbox und E-Auto; die Tabelle dazu steht in [Berechnungen & Kennzahlen](BERECHNUNGEN.md).
 
+**„In der Stundenansicht eines Tages fehlen Stunden — und eine Stunde danach ist besonders hoch."**
+Das ist eine Lücke in Home Assistant, kein Fehler in eedc: hat der HA-Spiegel für eine Stunde keinen eigenen Wert (der
+Sensor war kurz nicht erreichbar, oder ein Tageszähler wird nur selten gemeldet), steht deren Menge — wie im
+HA-Energie-Dashboard — in der nächsten Stunde mit Wert. eedc zeigt die Stunden ohne eigenen Wert als **Lücke**, nicht
+als 0 (Wärme, Kälte und die Aufteilung nach Funktion); die Summe des Tages bleibt gleich. **Zu tun ist nichts.**
+
+**„Die Aufteilung nach Betriebsart im Monatsverlauf passt zu *Cockpit → Tag*?"**
+Ja. An Tagen aus dem HA-Spiegel bzw. den eigenen Zählerständen teilt der Wärme/Klima-Verlauf den Strom eines Tages
+genauso auf wie *Cockpit → Tag*: mit dem gemessenen Strom je Betriebsart, wo es ihn gibt, sonst mit der aufgezeichneten
+Betriebsart im Kalendertag. Nur ein Gerät, für das an einem solchen Tag keine Betriebsart-Aufzeichnung vorliegt, nimmt
+den Betriebsmodus aus den gespeicherten Stundenwerten.
+
 **„Der Monatsverlauf zeigt Tagessäulen, im Jahresverlauf fehlt derselbe Monat — oder umgekehrt."**
 Die beiden Verläufe stammen aus zwei Quellen, und das ist der Preis dafür, dass es beide überhaupt gibt. Der **Monats**verlauf zeichnet je Tag, was eedc an diesem Tag selbst mitgeschrieben hat. Der **Jahres**verlauf zeichnet je Monat die **Monatszeile** — also das, was gespeichert, importiert oder aus der Langzeitstatistik ergänzt wurde. Wo beides vorliegt, stimmen sie überein. Auseinander laufen sie in zwei Lagen:
 
