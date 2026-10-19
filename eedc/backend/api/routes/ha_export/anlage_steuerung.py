@@ -34,7 +34,7 @@ from backend.core.berechnungen.fenster import (
     ueberschuss_bloecke,
 )
 from backend.models.investition import Investition
-from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.ha_export_fenster import P5_DAUERN_H, SLOTS_JE_TAG
 from backend.services.ha_sensors_export import STEUERUNG_SENSOREN, SensorValue
 
@@ -159,20 +159,64 @@ async def _laufende_speicher(db, anlage_id: int, heute: date) -> list:
     ]
 
 
+#: Was die Steuerung aus den Stunden von heute liest — Lade-Hinweis für ``stunden_der_tage`` (HA-Bauform S5-R1):
+#: Überschuss/Defizit (E1/E2), Netzbezug (E5), PV/Verbrauch (Σ der Mischzeilen an einem Kanal-Tag, E1), Ladestand (E4).
+_STEUERUNG_FELDER = (
+    "pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "ueberschuss_kw", "defizit_kw",
+    "soc_prozent", "soc_je_speicher",
+)
+
+
 async def _lade_tagesprofil(db, anlage_id: int, heute: date):
-    """Die Stundenzeilen von heute **und** die Tageszeile — ein Query je Tabelle."""
-    stunden_res = await db.execute(
-        select(TagesEnergieProfil)
-        .where(TagesEnergieProfil.anlage_id == anlage_id,
-               TagesEnergieProfil.datum == heute)
-        .order_by(TagesEnergieProfil.stunde)
-    )
+    """Die Stunden von heute **und** die Tageszeile.
+
+    HA-Bauform S5 (E-S5-2, Bauplan §3 (A)): die Stunden über die Lesestelle ``kanal_stunden.stunden_der_tage`` — an
+    einem Kanal-Tag der Bilanz die Mischzeilen (Mengen wie *Cockpit → Tag*, Stunde = Beginn; am laufenden Tag die Wahl
+    bis zur fälligen Stunde, Lese-Schicht), sonst die Stundenzeilen wie bisher. Die Tageszeile bleibt für
+    ``peak_netzbezug_kw`` und — nur an einem Bestandstag — für Überschuss/Defizit (``_ueberschuss_heute``)."""
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    zeilen = await stunden_der_tage(db, anlage_id, heute, heute, felder=_STEUERUNG_FELDER)
     tag_res = await db.execute(
         select(TagesZusammenfassung)
         .where(TagesZusammenfassung.anlage_id == anlage_id,
                TagesZusammenfassung.datum == heute)
     )
-    return list(stunden_res.scalars().all()), tag_res.scalar_one_or_none()
+    return zeilen, tag_res.scalar_one_or_none()
+
+
+def _ueberschuss_heute(zeilen: list, tageszeile) -> tuple[Optional[float], Optional[float]]:
+    """E1: ``(Überschuss, Defizit)`` von heute in kWh — **an einem Kanal-Tag Σ der Mischzeilen** (HA-Bauform S5, E-S5-2):
+    dieselbe Layer-Funktion wie *Cockpit → Tag* (``tagesbilanz.bilanz_aus_stundenrows``, Σ max(0, PV − Verbrauch) je
+    Stunde; ``None`` ohne PV oder Verbrauch, wie ``tage-werte``); an einem Bestandstag die Tageszeile wie bisher.
+    Der Überschuss bleibt ungerundet (N-694: gerundet wird einmal an der Export-Grenze), das Defizit ist Attribut und
+    trägt drei Stellen wie ``tage-werte``."""
+    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+    from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
+
+    if zeilen and ist_beginn_raster(zeilen[0]):
+        b = bilanz_aus_stundenrows(zeilen)
+        if not (b.pv_erfasst and b.verbrauch_erfasst):
+            return None, None
+        return b.ueberschuss_kwh, round(b.defizit_kwh, 3)
+    if tageszeile is None:
+        return None, None
+    return tageszeile.ueberschuss_kwh, tageszeile.defizit_kwh
+
+
+def _beginn(zeile) -> str:
+    """Der **Beginn** der Stunde einer Zeile als „HH:00" — am Raster der Zeile (S4-R-3b): eine Mischzeile (Kanal-Tag)
+    trägt ihren Beginn, eine Bestandszeile ist Backward-Slot ``h`` = ``[h−1, h)`` (``_hhmm_beginn``)."""
+    from backend.core.berechnungen.slot_konvention import stundenbeginn_der_zeile
+
+    return _hhmm(stundenbeginn_der_zeile(zeile))
+
+
+def _ende(zeile) -> str:
+    """Das **Ende** der Stunde einer Zeile als „HH:00" — eine Stunde nach ihrem Beginn (``_beginn``)."""
+    from backend.core.berechnungen.slot_konvention import stundenbeginn_der_zeile
+
+    return _hhmm((stundenbeginn_der_zeile(zeile) + 1) % SLOTS_JE_TAG)
 
 
 def _ueberschuss_jetzt_kw(zeile) -> Optional[float]:
@@ -213,10 +257,11 @@ def _ueberschuss_seit(zeilen: list, bis_index: int) -> Optional[str]:
     for zeile in zeilen[: bis_index + 1]:
         wert = _ueberschuss_jetzt_kw(zeile)
         if wert is not None and wert > 0:
-            start = zeile.stunde if start is None else start
+            start = zeile if start is None else start
         else:
             start = None
-    return _hhmm_beginn(start) if start is not None else None
+    # HA-Bauform S5 (S4-R-3b): der Beginn am Raster der Zeile — an einem Kanal-Tag ist `stunde` schon der Beginn.
+    return _beginn(start) if start is not None else None
 
 
 async def steuerungs_sensoren(
@@ -259,14 +304,16 @@ async def steuerungs_sensoren(
             letzte, letzte_index = zeile, i
 
     # ── E1 · Überschuss heute + letzte volle Stunde ──────────────────────────
-    if tageszeile is not None and tageszeile.ueberschuss_kwh is not None:
+    # HA-Bauform S5 (E-S5-2): an einem Kanal-Tag Σ der Mischzeilen (wie Cockpit → Tag), sonst die Tageszeile.
+    ueberschuss_heute, defizit_heute = _ueberschuss_heute(zeilen, tageszeile)
+    if ueberschuss_heute is not None:
         _anhaengen(
-            sensor_values, "eedc_ueberschuss_heute_kwh", tageszeile.ueberschuss_kwh,
+            sensor_values, "eedc_ueberschuss_heute_kwh", ueberschuss_heute,
             {
-                "defizit_heute_kwh": tageszeile.defizit_kwh,
+                "defizit_heute_kwh": defizit_heute,
                 # End-Angabe: „bis wann ist gerechnet" = Ende des letzten Slots
-                # mit Wert.
-                "stand": _hhmm_ende(letzte.stunde) if letzte is not None else None,
+                # mit Wert (am Raster der Zeile, S4-R-3b).
+                "stand": _ende(letzte) if letzte is not None else None,
             },
             berechnung="Σ der Stundenüberschüsse heute (aus dem 15-Minuten-Takt aggregiert)",
         )
@@ -280,16 +327,16 @@ async def steuerungs_sensoren(
                 # nicht entscheidbar, ob Beginn oder Ende gemeint war. Die
                 # **Entfernung** dieses Attributs ist die einzige des Pakets
                 # (S3b/B5, Golden Master `--erwartete-entfernungen`).
-                "stunde_von": _hhmm_beginn(letzte.stunde),
-                "stunde_bis": _hhmm_ende(letzte.stunde),
+                "stunde_von": _beginn(letzte),
+                "stunde_bis": _ende(letzte),
                 "defizit_kw": letzte.defizit_kw,
             },
             # ⚠ Der Sensor heißt „letzte Stunde" und nicht „jetzt", weil er
             # genau das ist: ein Stundenmittel, bis zu 15 Minuten alt. Einen
             # Live-Überschuss gibt es in eedc als Größe nicht (gemessen 21.09.).
             berechnung=(
-                f"Stundenmittel der Stunde {_hhmm_beginn(letzte.stunde)}–"
-                f"{_hhmm_ende(letzte.stunde)} — kein Live-Wert"
+                f"Stundenmittel der Stunde {_beginn(letzte)}–"
+                f"{_ende(letzte)} — kein Live-Wert"
             ),
         )
         # ── E2 · Überschuss verfügbar ───────────────────────────────────────
@@ -406,7 +453,7 @@ async def steuerungs_sensoren(
 
     # ── E5 · Netzbezugs-Spitze ──────────────────────────────────────────────
     if tageszeile is not None and tageszeile.peak_netzbezug_kw is not None:
-        mittel = [(z.stunde, z.netzbezug_kw) for z in zeilen if z.netzbezug_kw is not None]
+        mittel = [(z, z.netzbezug_kw) for z in zeilen if z.netzbezug_kw is not None]
         grundlast = next(
             (sv.value for sv in sensor_values if sv.definition.key == "eedc_grundlast_kw"),
             None,
@@ -417,7 +464,7 @@ async def steuerungs_sensoren(
                 # ⚠ Andere Größe als der Wert daneben — s. die Definition.
                 # N-544: Beginn-Angabe (die Stunde, in der das Maximum lag).
                 "stunde_max_mittel": (
-                    _hhmm_beginn(max(mittel, key=lambda x: x[1])[0]) if mittel else None
+                    _beginn(max(mittel, key=lambda x: x[1])[0]) if mittel else None
                 ),
                 "max_mittel_kw": round(max(m[1] for m in mittel), 2) if mittel else None,
                 "grundlast_kw": grundlast,
