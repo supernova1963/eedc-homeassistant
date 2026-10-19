@@ -116,6 +116,63 @@ async def get_waerme_verlauf(
         for z in zeilen
     ]
 
+def _verteile_linie(ausgaben, nur_geraete, verteilte_felder: dict, formen_je_key: dict, basis_je_ausgabe: dict,
+                    wp_aus_kanal: bool) -> tuple[list, float, list[bool]]:
+    """Eine Linie des Stunden-Verlaufs über die genannten Ausgabe-Keys — ``(24 Werte, ohne Stundenform, leer je Stunde)``.
+
+    ``nur_geraete`` schränkt **je Ausgabe-Key** auf eine Geräte-Menge ein
+    (fehlt der Key darin, zählen alle Geräte). Die Wärme braucht das, weil
+    D1 je Gerät entscheidet, WELCHE Zähler es zeichnen — s. ``get_waerme_verlauf_stunden``.
+
+    ⭐ **Spannen-Stunden leer statt 0,0 (HA-Bauform S5, S5-R5; S4 §10e H-2c, S3-R2 «eine Stunde ohne Zeile ist keine 0»):**
+    an einem WP-Kanal-Tag (``wp_aus_kanal``, Stunden im Beginn-Raster) trägt eine Stunde, in der KEINER der Zähler der
+    Linie eine Zeile hat (alle Formen ``None`` — HAs Lückenregel legt ihre Menge in die Folgestunde mit der Spanne),
+    ``None`` statt 0,0; die Folgestunde trägt die Energie, Σ der Stunden = Balken bleibt. Bestandstage unverändert.
+    Ohne jede verteilte Menge ``[None] * 24`` wie bisher (S4: keine Linie aus Nullen).
+    """
+    from backend.core.berechnungen.tages_stapel import STUNDEN, verteile_felder_auf_stunden
+
+    summe = [0.0] * STUNDEN
+    ohne_linie = 0.0
+    mit_form = [False] * STUNDEN
+    hat_formen = False
+    for ausgabe in ausgaben:
+        je_inv = verteilte_felder.get(ausgabe) or {}
+        _erlaubt = (nur_geraete or {}).get(ausgabe)
+        if _erlaubt is not None:
+            je_inv = {i: f for i, f in je_inv.items() if i in _erlaubt}
+        formen = {
+            inv_id: {f: formen_je_key.get(f"inv:{inv_id}:{f}", [None] * STUNDEN) for f in felder}
+            for inv_id, felder in je_inv.items()
+        }
+        werte, rest = verteile_felder_auf_stunden(je_inv, formen, basis_je_ausgabe[ausgabe])
+        summe = [summe[h] + werte[h] for h in range(STUNDEN)]
+        ohne_linie += rest
+        for form in (f for je in formen.values() for f in je.values()):
+            hat_formen = True
+            mit_form = [m or form[h] is not None for h, m in enumerate(mit_form)]
+    if sum(summe) <= 1e-9:
+        return [None] * STUNDEN, ohne_linie, [False] * STUNDEN
+    leer = [wp_aus_kanal and hat_formen and not mit_form[h] and summe[h] == 0.0 for h in range(STUNDEN)]
+    return [None if leer[h] else summe[h] for h in range(STUNDEN)], ohne_linie, leer
+
+
+def _stapel_leer(*linien: tuple[list, list[bool]]) -> list[bool]:
+    """Die Stunden des Funktions-Stapels ohne eigene Zeile: mindestens eine Linie ist dort leer (``_verteile_linie``) und
+    jede andere ebenfalls leer oder am ganzen Tag ohne Menge — dann gibt es in dieser Stunde keinen Stapel, keine 0."""
+    return [
+        any(leer[h] for _, leer in linien)
+        and all(leer[h] or all(v is None for v in werte) for werte, leer in linien)
+        for h in range(len(linien[0][1]))
+    ]
+
+
+def _segment(wert: float, leer: bool) -> Optional[float]:
+    """Ein Segment des Funktions-Stapels einer Stunde: ``None`` in einer Stunde ohne eigene Zeile (``_verteile_linie``),
+    sonst der Wert auf drei Stellen."""
+    return None if leer else round(wert, 3)
+
+
 @router.get(
     "/{anlage_id}/waerme-verlauf-stunden",
     response_model=WaermeVerlaufStundenResponse,
@@ -148,7 +205,6 @@ async def get_waerme_verlauf_stunden(
         STUNDEN,
         StundenFormen,
         beitraege_des_tages,
-        verteile_felder_auf_stunden,
         verteile_tages_stapel_auf_stunden,
     )
     from backend.core.berechnungen.waermepumpe_kennzahl import (
@@ -286,34 +342,10 @@ async def get_waerme_verlauf_stunden(
         if t == "waermepumpe"
     }
 
-    def _linie(ausgaben, *, nur_geraete=None) -> tuple[list, float]:
-        """Eine Linie über die genannten Ausgabe-Keys.
-
-        ``nur_geraete`` schränkt **je Ausgabe-Key** auf eine Geräte-Menge ein
-        (fehlt der Key darin, zählen alle Geräte). Die Wärme braucht das, weil
-        D1 je Gerät entscheidet, WELCHE Zähler es zeichnen — s. u.
-        """
-        summe = [0.0] * STUNDEN
-        ohne_linie = 0.0
-        for ausgabe in ausgaben:
-            je_inv = verteilte_felder.get(ausgabe) or {}
-            _erlaubt = (nur_geraete or {}).get(ausgabe)
-            if _erlaubt is not None:
-                je_inv = {i: f for i, f in je_inv.items() if i in _erlaubt}
-            werte, rest = verteile_felder_auf_stunden(
-                je_inv,
-                {
-                    inv_id: {
-                        f: formen_je_key.get(f"inv:{inv_id}:{f}", [None] * STUNDEN)
-                        for f in felder
-                    }
-                    for inv_id, felder in je_inv.items()
-                },
-                basis_je_ausgabe[ausgabe],
-            )
-            summe = [summe[h] + werte[h] for h in range(STUNDEN)]
-            ohne_linie += rest
-        return (summe if sum(summe) > 1e-9 else [None] * STUNDEN), ohne_linie
+    def _linie(ausgaben, *, nur_geraete=None) -> tuple[list, float, list[bool]]:
+        """Eine Linie über die genannten Ausgabe-Keys (``_verteile_linie``)."""
+        return _verteile_linie(ausgaben, nur_geraete, verteilte_felder, formen_je_key, basis_je_ausgabe,
+                               eingaenge.wp_aus_kanal)
 
     # N-391/D1 — **Gesamtwert vor Summanden, auch in der Linie.** Der gemeinsame
     # Wärmemengenzähler steht bewusst NICHT in `WAERME_AUSGABE_KEYS`: die Menge
@@ -337,14 +369,14 @@ async def get_waerme_verlauf_stunden(
         for key in WAERME_AUSGABE_KEYS
         for inv_id in (verteilte_felder.get(key) or {})
     ) - _gesamt_geraete
-    waerme_je_slot, waerme_ohne = _linie(
+    waerme_je_slot, waerme_ohne, _ = _linie(
         (*sorted(WAERME_AUSGABE_KEYS), "wp_waerme_kwh"),
         nur_geraete={
             **{key: _achsen_geraete for key in WAERME_AUSGABE_KEYS},
             "wp_waerme_kwh": _gesamt_geraete,
         },
     )
-    kaelte_je_slot, kaelte_ohne = _linie(("wp_kaelte_kwh",))
+    kaelte_je_slot, kaelte_ohne, _ = _linie(("wp_kaelte_kwh",))
 
     # ── Der Funktions-Stapel (WK-09 B2, SOLL §3.3/S2a) ─────────────────────
     #
@@ -360,8 +392,8 @@ async def get_waerme_verlauf_stunden(
     # ist eine echte 0, keine fehlende Aussage) — die Segmente werden deshalb
     # unten gegen `funktions_stapel_verfuegbar` aufgelöst, wie der
     # Betriebsart-Stapel gegen `hat_split`.
-    funk_heizen, funk_heizen_ohne = _linie(("wp_strom_heizen_kwh",))
-    funk_ww, funk_ww_ohne = _linie(("wp_strom_warmwasser_kwh",))
+    funk_heizen, funk_heizen_ohne, leer_heizen = _linie(("wp_strom_heizen_kwh",))
+    funk_ww, funk_ww_ohne, leer_ww = _linie(("wp_strom_warmwasser_kwh",))
     # „Nach Funktion" gibt es nur, wo Funktions-Zähler gepflegt sind — sonst hat
     # die Sicht nichts zu sagen (S2a). Maßgeblich ist der TAGESWERT, nicht die
     # Stundenform: ein Zähler ohne Form wird unten genannt, nicht verschwiegen.
@@ -370,6 +402,7 @@ async def get_waerme_verlauf_stunden(
         for k in ("wp_strom_heizen_kwh", "wp_strom_warmwasser_kwh")
     )
     funktion_ohne = funk_heizen_ohne + funk_ww_ohne
+    leer_funktion = _stapel_leer((funk_heizen, leer_heizen), (funk_ww, leer_ww))
 
     # Die Zählerspalte des Slots — ihre Summe ist die Kachel „Strom verbraucht" (an einem WP-Kanal-Tag der Adapter).
     wp_kw = await wp_strom_je_stunde(db, anlage_id, datum)
@@ -398,8 +431,9 @@ async def get_waerme_verlauf_stunden(
         warmwasser = funk_ww[h] or 0.0
         gesamt = wp_kw.get(h)
         return {
-            "wp_funktion_strom_heizen_kwh": round(heizen, 3),
-            "wp_funktion_strom_warmwasser_kwh": round(warmwasser, 3),
+            # HA-Bauform S5 (S5-R5): eine Stunde ohne eigene Zeile an einem WP-Kanal-Tag ist leer, keine 0.
+            "wp_funktion_strom_heizen_kwh": _segment(heizen, leer_funktion[h]),
+            "wp_funktion_strom_warmwasser_kwh": _segment(warmwasser, leer_funktion[h]),
             # Ohne Gesamtstrom in diesem Slot gibt es keinen Rest zu benennen —
             # `None` heißt „keine Aussage", nicht 0 (ADR-002/P4).
             "wp_funktion_uebrige_kwh": (
