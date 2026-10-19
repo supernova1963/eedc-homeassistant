@@ -72,6 +72,12 @@ class SpeicherChecks:
         tz_list = list(tz_result.scalars().all())
         if not tz_list:
             return []
+        # HA-Bauform S5 (E-S5-2, Bauplan §5): das gespeicherte Netto über die Lesestelle — an einem Kanal-Tag der Bilanz
+        # das Speicher-Netto des HA-Spiegels bzw. der eigenen Zählerstände (wie Cockpit → Tag; gegen HA kein Befund),
+        # an jedem Bestandstag die Tageszeile.
+        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+
+        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
 
         inv_result = await self.db.execute(
             select(_Inv).where(_Inv.anlage_id == anlage.id)
@@ -85,7 +91,7 @@ class SpeicherChecks:
         hat_batterie = False
         konflikt_tage: list[date] = []
         for tz in tz_list:
-            stored_netto = summe_batterie_netto_kwh(tz.komponenten_kwh or {})
+            stored_netto = summe_batterie_netto_kwh(komp_je_tag.get(tz.datum) or {})
             if abs(stored_netto) < SCHWELLE_KWH:
                 continue  # kein nennenswertes gespeichertes Batterie-Netto
             hat_batterie = True

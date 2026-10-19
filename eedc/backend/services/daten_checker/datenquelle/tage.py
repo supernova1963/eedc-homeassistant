@@ -78,7 +78,7 @@ class TageChecks:
             erwartete_komponenten_keys, komponenten_key_label,
         )
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
-        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
         from backend.models.investition import Investition as _Inv
 
         kat = CheckKategorie.TAGESWERTE_FEHLEN.value
@@ -104,14 +104,12 @@ class TageChecks:
         if von > bis:
             return []
 
-        tz_result = await self.db.execute(
-            select(TagesZusammenfassung).where(
-                TagesZusammenfassung.anlage_id == anlage.id,
-                TagesZusammenfassung.datum >= von,
-                TagesZusammenfassung.datum <= bis,
-            )
-        )
-        tz_by_datum = {tz.datum: tz for tz in tz_result.scalars().all()}
+        # HA-Bauform S5 (E-S5-2, Bauplan §5): die gespeicherte Seite über die Lesestelle — jede Tageszeile, an einem
+        # Kanal-Tag der Bilanz mit PV/BKW, Netz und Speicher aus dem HA-Spiegel bzw. den eigenen Zählerständen (wie
+        # Cockpit → Tag); ein Kanal-Tag ohne Tageszeile steht mit seinen Kanal-Schlüsseln drin. Ein «leerer Tag» mit
+        # Kanal-Deckung ist damit kein Befund (Cockpit → Tag zeigt ihn); Wärmepumpe, Wallbox und Sonstiges ohne Kanal
+        # bleiben die der Tageszeile.
+        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
 
         def _erwartet_am_tag(tag: date) -> set[str]:
             """Welche Keys verspricht die Zuordnung für GENAU diesen Tag?
@@ -146,8 +144,7 @@ class TageChecks:
                 # versprochen, also auch keine Lücke.
                 continue
             etwas_versprochen = True
-            tz = tz_by_datum.get(d)
-            if tz is None:
+            if d not in komp_je_tag:
                 # Zeile fehlt ganz → auch PV zählt, der Drift-Check sieht sie nicht.
                 pruef_keys = set(erwartete_keys)
                 gespeichert: dict = {}
@@ -157,7 +154,7 @@ class TageChecks:
                     k for k in erwartete_keys
                     if not any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
                 }
-                gespeichert = tz.komponenten_kwh or {}
+                gespeichert = komp_je_tag[d] or {}
             leer = {
                 k for k in pruef_keys
                 if not isinstance(gespeichert.get(k), (int, float))

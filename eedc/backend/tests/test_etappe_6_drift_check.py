@@ -60,6 +60,14 @@ def _make_inv(inv_id=3, typ="pv-module", aktiv=True,
     )
 
 
+def _bestand_komponenten(tz_list):
+    """HA-Bauform S5 (E-S5-2): die Regel liest die Komponenten über ``kanal_stunden.komponenten_der_tage`` — diese Probe
+    kennt keine Kanäle, also liefert die Lesestelle an jedem Tag die Tageszeile (Bestandstag)."""
+    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None):
+        return {tz.datum: tz.komponenten_kwh for tz in tz_list}
+    return _komp
+
+
 def _build_checker(tz_list, invs_list, ha_tageskwh_func, ha_available=True):
     """Wickelt eine DB-Mock + Patches die externe Services."""
     db = MagicMock()
@@ -93,6 +101,8 @@ def _build_checker(tz_list, invs_list, ha_tageskwh_func, ha_available=True):
               return_value=ha_svc),
         patch("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
               side_effect=_ha_lts),
+        patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
+              new=_bestand_komponenten(tz_list)),
     ]
     return checker, patches
 

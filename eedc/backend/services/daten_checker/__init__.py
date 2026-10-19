@@ -133,6 +133,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_energieprofil_plausibilitaet(anlage))
         # E7 (Zählerlücken wie HA): Bestandstage ohne Regelmarke + Reparaturweg.
         ergebnisse.extend(await self._check_bestandstage_ohne_regelmarke(anlage))
+        # HA-Bauform S5 (S5-E2 b): Tage ohne Kanal-Deckung — INFO, Lesart 1 sichtbar, kein Handgriff.
+        ergebnisse.extend(await self._check_tage_ohne_kanal_deckung(anlage))
         # Nachträge II: Tage mit mehr Einspeisung als Erzeugung + Entladung.
         ergebnisse.extend(await self._check_einspeisung_ueber_erzeugung(anlage))
         # N-567: Nachtrag nach eingefrorenem Zähler — nur benannt (eedc folgt HA).

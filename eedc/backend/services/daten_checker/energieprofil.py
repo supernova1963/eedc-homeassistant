@@ -32,7 +32,6 @@ from backend.core.berechnungen.erzeuger_traeger import (
     traegt_erzeugungsgroessen_selbst,
 )
 from backend.core.berechnungen import (
-    summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
     klassifiziere_pv_monat,
     PV_STATUS_OK,
     PV_STATUS_VERTEILT,
@@ -99,6 +98,11 @@ def _alternativ_geschwister(typ: str, feld: str, parameter: Optional[dict]) -> l
         return [feld]
     return [f for (t, f), (_bedarf, g) in FELD_BEDARF.items()
             if t == typ and g == gruppe]
+
+
+def _tage_text(n: int) -> str:
+    """«1 Tag» bzw. «n Tage»."""
+    return "1 Tag" if n == 1 else f"{n} Tage"
 
 
 class EnergieprofilChecks:
@@ -679,20 +683,24 @@ class EnergieprofilChecks:
         (``datenquelle/ha_sprung.py``) mit dem Weg in HA — eine Lage, eine Meldung.
 
         ⚠ **Benannte Grenze:** ein reiner Sprung ohne Reset-Muster (Form N3 der Achsen-Matrix) bekommt an einem Kanal-Tag
-        keinen Befund — wie vor dem Umbau, als der Schreiber die Stunde klemmte und die Stundenzeile leer blieb."""
-        from backend.models.tages_energie_profil import TagesEnergieProfil
+        keinen Befund — wie vor dem Umbau, als der Schreiber die Stunde klemmte und die Stundenzeile leer blieb.
+
+        **Über die Lesestelle** (HA-Bauform S5, E-S5-2, Wächter S5-R6): ``kanal_stunden.stunden_der_tage`` (EIN Aufruf);
+        ein Kanal-Tag kommt dort als Mischzeilen im Beginn-Raster und fällt über ``ist_beginn_raster`` heraus — dieselbe
+        Tageswahl wie ``_bilanz_kanal_tage`` (``bilanz_leser.kanal_tage``)."""
+        from backend.core.berechnungen.slot_konvention import ist_beginn_raster
+        from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
         rows_je_tag: dict = {}
-        for row in (await self.db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage.id,
-                TagesEnergieProfil.datum >= von,
-                TagesEnergieProfil.datum <= bis,
-            ).order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-        )).scalars().all():
+        kanal: set = set()
+        for row in await stunden_der_tage(self.db, anlage.id, von, bis, felder=self._SPIKE_FELDER):
+            if ist_beginn_raster(row):
+                kanal.add(row.datum)
             rows_je_tag.setdefault(row.datum, []).append(row)
-        kanal = await self._bilanz_kanal_tage(anlage, rows_je_tag)
         return {t: rows for t, rows in rows_je_tag.items() if t not in kanal}
+
+    #: Die Spalten der Spitzen-Erkennung — Lade-Hinweis für ``stunden_der_tage`` (``spannen`` lädt sie immer).
+    _SPIKE_FELDER = ("pv_kw", "einspeisung_kw")
 
     async def _bilanz_kanal_tage(self, anlage: Anlage, tage) -> dict:
         """Die Tage aus ``tage``, deren Bilanz-Gruppe aus den Kanälen kommt (Wahl ``kanal``) — der Tages-Leser
@@ -818,6 +826,44 @@ class EnergieprofilChecks:
             action_label="Zeitraum neu aggregieren" if reparatur_moeglich else None,
         )]
 
+    async def _check_tage_ohne_kanal_deckung(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """**S5-E2 (b)** (HA-Bauform S5, Bauplan §5, Entscheid Gernot 17.10.2026): die Tage ohne Kanal-Deckung — eine
+        INFO-Zeile je Anlage, die Lesart 1 sichtbar macht, ohne sie zu tadeln (kein Handgriff, kein neuer Enum-Wert).
+
+        Gezählt werden die Tage mit Tageszeile, die Stunden tragen (``stunden_verfuegbar > 0`` oder Stundenzeilen; eine
+        reine Prognose-Zeile zählt nicht), deren Bilanz-Gruppe NICHT aus den Kanälen kommt (``_bilanz_kanal_tage`` —
+        dieselbe Quellenwahl wie Cockpit → Tag; der Vorrat des Prüflaufs, kein zweiter Aufruf). An diesen Tagen liest
+        eedc die Mengen aus den gespeicherten Stunden- und Tageswerten (Lesart 1, S5-R3). Ohne solche Tage: still."""
+        from sqlalchemy import and_, exists, or_
+        from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+
+        tz, tep = TagesZusammenfassung, TagesEnergieProfil
+        tage = [d for (d,) in (await self.db.execute(
+            select(tz.datum).where(
+                tz.anlage_id == anlage.id,
+                or_(tz.stunden_verfuegbar > 0,
+                    exists().where(and_(tep.anlage_id == tz.anlage_id, tep.datum == tz.datum))),
+            ).order_by(tz.datum)
+        )).all()]
+        kanal = await self._bilanz_kanal_tage(anlage, tage)
+        ohne = [d for d in tage if d not in kanal]
+        if not ohne:
+            return []
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
+            schwere=CheckSeverity.INFO,
+            meldung=(
+                f"{_tage_text(len(ohne))} ohne Kanal-Deckung — Mengen aus den gespeicherten Stundenwerten "
+                f"({ohne[0].isoformat()} … {ohne[-1].isoformat()})"
+            ),
+            details=(
+                "An diesen Tagen kommen PV, Netz und Speicher weder aus dem Home-Assistant-Spiegel noch aus den "
+                "eigenen Zählerständen. eedc liest ihre Mengen deshalb aus den gespeicherten Stunden- und Tageswerten — "
+                "so wie vor der Umstellung auf die Kanäle. Das ist kein Fehler und braucht keinen Handgriff; typisch "
+                f"sind Tage vor dem ersten gespeicherten Zählerstand. Mit Kanal-Deckung: {len(kanal)} Tag(e)."
+            ),
+        )]
+
     #: Toleranz der Tagesprüfung „Einspeisung über Erzeugung" (kWh) — Rundung
     #: der Stundenwerte und Netto-Batterie je Stunde (Laden und Entladen in
     #: derselben Stunde heben sich in der Stundenzeile auf).
@@ -867,17 +913,13 @@ class EnergieprofilChecks:
         Tages-Lesers (Weg 2, kein Deckel), sonst die Stundenzeilen wie bisher.
         """
         from datetime import timedelta as _td
-        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.energie_profil.kanal_stunden import verworfen_der_tage
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
 
-        tz = TagesZusammenfassung
-        marken = {
-            d: v for d, v in (await self.db.execute(
-                select(tz.datum, tz.verworfen).where(
-                    tz.anlage_id == anlage.id, tz.verworfen.is_not(None),
-                )
-            )).all()
-        }
+        # HA-Bauform S5 (E-S5-2, Wächter S5-R6): die Regelmarken über die Lesestelle — jede Marke, auch die leere (R9),
+        # ungemischt (``kanal=()``): an einem Kanal-Tag liest ``_tagesbilanzen`` die Bilanz des Tages-Lesers, die Marke
+        # zählt dort nicht; der Kanal-Tag fällt so auch nicht in einen zweiten ``kanal_tage``-Aufruf.
+        marken = await verworfen_der_tage(self.db, anlage.id, None, None, kanal=(), leere_marken=True)
         if not marken:
             return []
 
@@ -968,6 +1010,10 @@ class EnergieprofilChecks:
                 )
             )).all() if n
         ]
+        # HA-Bauform S5 (E-S5-2, Bauplan §10f): Kanal-Tage zählen nicht — an einem Tag, dessen Bilanz-Gruppe aus den
+        # Kanälen kommt, wirkt kein Deckel; Cockpit → Tag nennt dort HAs Zahl (Lesart-1-Regel, Wächter S5-R6 erlaubt).
+        kanal = await self._bilanz_kanal_tage(anlage, [b[0] for b in befunde])
+        befunde = [b for b in befunde if b[0] not in kanal]
         if not befunde:
             return []
         befunde.sort(key=lambda t: t[0], reverse=True)
@@ -1303,7 +1349,7 @@ class EnergieprofilChecks:
         # korrigiert, ohne `Anlage.leistung_kwp` nachzuziehen, bekam hier sonst
         # einen Doppelerfassungs-Verdacht auf Daten, die stimmen — bei ihm mit
         # exakt dem Faktor 2. `mit_bkw=True`, weil der Zähler unten
-        # `_summe_pv_bkw_kwh` ist: Zähler und Nenner müssen dieselbe
+        # `summe_pv_bkw_kwh` ist (``pv_ist_je_tag``): Zähler und Nenner müssen dieselbe
         # Grundgesamtheit haben, sonst ist ein Balkonkraftwerk allein schon der
         # Grund für die Falschmeldung.
         kwp = anlagen_kwp(
@@ -1326,6 +1372,12 @@ class EnergieprofilChecks:
         tz_list = result.scalars().all()
         if not tz_list:
             return ergebnisse
+        # HA-Bauform S5 (E-S5-2, Bauplan §5): die PV-Tagessumme über die Lesestelle — an einem Kanal-Tag der Bilanz die
+        # PV des HA-Spiegels bzw. der eigenen Zählerstände (wie Cockpit → Tag), sonst die Tageszeile. Die Performance
+        # Ratio bleibt die der Tageszeile.
+        from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag
+
+        pv_je_tag = await pv_ist_je_tag(self.db, anlage.id, tz_list)
 
         # F-40 (#385): Tage, an denen ein Counter-Spike steht, sind für den
         # Doppelerfassungs-Verdacht **kein** Beleg — dort ist die Ursache bereits
@@ -1369,7 +1421,7 @@ class EnergieprofilChecks:
                     else:
                         pr_ueberschreitungen.append((tz.datum, tz.performance_ratio))
 
-            tages_pv = _summe_pv_bkw_kwh(tz.komponenten_kwh)
+            tages_pv = pv_je_tag.get(tz.datum) or 0.0
             if tages_pv > 0:
                 spez = tages_pv / kwp
                 if spez > self.SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP:

@@ -62,6 +62,14 @@ def _tz(datum, komponenten):
                            komponenten_kwh=dict(komponenten))
 
 
+def _bestand_komponenten(tz_list):
+    """HA-Bauform S5 (E-S5-2): die Regel liest die Komponenten über ``kanal_stunden.komponenten_der_tage`` — diese Probe
+    kennt keine Kanäle, also liefert die Lesestelle an jedem Tag die Tageszeile (Bestandstag)."""
+    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None):
+        return {tz.datum: tz.komponenten_kwh for tz in tz_list}
+    return _komp
+
+
 async def _run(tz_list, invs, ha_func):
     db = MagicMock()
     ruf = {"n": 0}
@@ -87,6 +95,9 @@ async def _run(tz_list, invs, ha_func):
     ), patch(
         "backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
         side_effect=_lts,
+    ), patch(
+        "backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
+        new=_bestand_komponenten(tz_list),
     ):
         return await DatenChecker(db)._check_datenquelle_drift(_anlage())
 

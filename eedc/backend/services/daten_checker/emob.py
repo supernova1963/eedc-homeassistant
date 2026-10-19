@@ -509,10 +509,17 @@ class EmobChecks:
 
         wb_keys = {f"wallbox_{w.id}" for w in wallboxen}
         ea_keys = {f"eauto_{e.id}" for e in eautos}
+        # HA-Bauform S5 (E-S5-2, Bauplan §5): die Komponenten über die Lesestelle (wie ``tage-werte``). Die Schlüssel
+        # ``wallbox_<id>``/``eauto_<id>`` gehören zu keiner Bilanz-Achse — sie bleiben an jedem Tag die der Tageszeile;
+        # der Befund bleibt damit auch an einem Kanal-Tag (benannt, E-S5-2 H-E → A): die Regel prüft gespeicherte
+        # Altlast, ihr Handgriff wirkt auf die Tageszeile; S5b (Schreiber ohne Mengen an Kanal-Tagen) nimmt ihn dort weg.
+        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+
+        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
 
         befunde: list[tuple[date, float, float]] = []
         for tz in rows:
-            komp = tz.komponenten_kwh or {}
+            komp = komp_je_tag.get(tz.datum) or {}
             # Senken stehen negativ im JSON (Butterfly-Konvention) — der Betrag
             # ist die Energie. Genau diese Vorzeichenfrage hat bei #356 eine
             # Invariante blind gemacht, deshalb hier ausdrücklich `abs`.

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -41,6 +41,14 @@ def _anlage(mit_eauto: bool = True, mit_wallbox: bool = True):
     return SimpleNamespace(id=1, investitionen=invs)
 
 
+def _bestand_komponenten(tz_list):
+    """HA-Bauform S5 (E-S5-2): die Regel liest die Komponenten über ``kanal_stunden.komponenten_der_tage`` — diese Probe
+    kennt keine Kanäle, also liefert die Lesestelle an jedem Tag die Tageszeile (Bestandstag)."""
+    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None):
+        return {tz.datum: tz.komponenten_kwh for tz in tz_list}
+    return _komp
+
+
 async def _run(tz_rows, anlage):
     db = MagicMock()
 
@@ -52,7 +60,9 @@ async def _run(tz_rows, anlage):
         return result
 
     db.execute = _execute
-    return await DatenChecker(db)._check_emob_doppelzaehlung_tage(anlage)
+    with patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
+               new=_bestand_komponenten(tz_rows)):
+        return await DatenChecker(db)._check_emob_doppelzaehlung_tage(anlage)
 
 
 @pytest.mark.asyncio

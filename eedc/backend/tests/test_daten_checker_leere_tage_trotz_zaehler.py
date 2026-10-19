@@ -93,10 +93,19 @@ def _make_tz(datum: date, komponenten: dict):
     return SimpleNamespace(id=1, anlage_id=1, datum=datum, komponenten_kwh=komponenten)
 
 
+def _bestand_komponenten(tz_list):
+    """HA-Bauform S5 (E-S5-2): die Regel liest die gespeicherte Seite über ``kanal_stunden.komponenten_der_tage`` — diese
+    Probe kennt keine Kanäle, also liefert die Lesestelle je Tageszeile ihre Komponenten (Bestandstag); ein Tag ohne
+    Tageszeile fehlt."""
+    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None):
+        return {tz.datum: tz.komponenten_kwh for tz in tz_list if von <= tz.datum <= bis}
+    return _komp
+
+
 async def _run_check(anlage, tz_list, invs_list, ha_func, ha_available=True,
                      mqtt_energie=False):
-    """db.execute-Reihenfolge im SUT: 1) Investition, 2) TagesZusammenfassung,
-    3) MqttEnergySnapshot (nur wenn kein Live-Mapping vorliegt).
+    """db.execute-Reihenfolge im SUT: 1) Investition, 2) MqttEnergySnapshot (nur wenn kein Live-Mapping vorliegt);
+    die Tageszeilen liest seit HA-Bauform S5 (E-S5-2) die Lesestelle ``komponenten_der_tage`` (hier gefälscht).
 
     `mqtt_energie` steuert den dritten Aufruf: im Standalone-Betrieb ersetzt
     MQTT-Energie die Leistungs-Zuordnung als Vorbedingung von `aggregate_day`.
@@ -133,6 +142,8 @@ async def _run_check(anlage, tz_list, invs_list, ha_func, ha_available=True,
               return_value=ha_svc),
         patch("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts",
               side_effect=_ha_lts),
+        patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
+              new=_bestand_komponenten(tz_list)),
     ]
     for p in patches:
         p.start()

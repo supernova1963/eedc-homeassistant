@@ -461,10 +461,14 @@ async def pv_ist_je_tag(db: AsyncSession, anlage_id: int, tageszeilen: Sequence[
 
 
 async def verworfen_der_tage(db: AsyncSession, anlage_id: int, von: Optional[date], bis: Optional[date], *,
-                             kanal: Optional[Iterable[date]] = None) -> dict[date, dict]:
+                             kanal: Optional[Iterable[date]] = None, leere_marken: bool = False) -> dict[date, dict]:
     """Die Regelmarke ``verworfen`` je Tag ``von`` … ``bis`` (nur Tage mit Marke) wie ``tage-werte``: an einem Kanal-Tag der
     Bilanz ohne die Bilanz-Achsen (``mische_verworfen`` — der Kanal verwirft nichts), sonst die Tageszeile. ``kanal``:
-    die Kanal-Tage, wenn der Aufrufer sie schon kennt (sonst ``bilanz_leser.kanal_tage``)."""
+    die Kanal-Tage, wenn der Aufrufer sie schon kennt (sonst ``bilanz_leser.kanal_tage``; ``()`` = ungemischt).
+
+    ``leere_marken`` (HA-Bauform S5, E-S5-2): auch die leere Marke ``{}`` zählt als Marke — die Tage, die nach der neuen
+    Regel gerechnet sind (R9, ``verworfen IS NOT NULL``), nicht nur die mit verworfener Menge. Der Daten-Checker
+    «Einspeisung über Erzeugung» prüft genau diese Tage."""
     from sqlalchemy import select
 
     from backend.models.tages_energie_profil import TagesZusammenfassung as TZ
@@ -475,7 +479,7 @@ async def verworfen_der_tage(db: AsyncSession, anlage_id: int, von: Optional[dat
         q = q.where(TZ.datum >= von)
     if bis is not None:
         q = q.where(TZ.datum <= bis)
-    marken = {d: v for d, v in (await db.execute(q)).all() if v}
+    marken = {d: v for d, v in (await db.execute(q)).all() if leere_marken or v}
     if not marken:
         return {}
     if kanal is None:
@@ -485,15 +489,45 @@ async def verworfen_der_tage(db: AsyncSession, anlage_id: int, von: Optional[dat
 
 
 async def komponenten_der_tage(db: AsyncSession, anlage_id: int, von: date, bis: date,
-                               komponenten_je_tag: Mapping[date, Optional[dict]]) -> dict[date, Optional[dict]]:
+                               komponenten_je_tag: Optional[Mapping[date, Optional[dict]]] = None,
+                               ) -> dict[date, Optional[dict]]:
     """``komponenten_kwh`` je Tag ``von`` … ``bis`` wie ``tage-werte``: an einem Kanal-Tag der Bilanz die Bilanz-Schlüssel
     aus ``kanal_tage`` (B-3) und die Sonstiges-Schlüssel aus der Sonstiges-Gruppe (``sonstiges_der_kanal_tage``,
-    ``mische_sonstiges``), sonst die Tageszeile. Ein Kanal-Tag ohne Tageszeile steht mit seinen Kanal-Schlüsseln drin."""
+    ``mische_sonstiges``), sonst die Tageszeile. Ein Kanal-Tag ohne Tageszeile steht mit seinen Kanal-Schlüsseln drin.
+
+    ``komponenten_je_tag`` ``None`` (HA-Bauform S5, E-S5-2): die Lesestelle lädt die Tageszeilen ``von`` … ``bis``
+    selbst (jede Zeile, auch ohne Komponenten — ``None``), der Aufrufer liest keine Mengen-Spalte (Wächter S5-R6). Die
+    übrigen Schlüssel (Wärmepumpe, E-Mobilität, V2H) bleiben an jedem Tag die der Tageszeile — wie ``tage-werte``."""
+    if komponenten_je_tag is None:
+        komponenten_je_tag = await _komponenten_der_tageszeilen(db, anlage_id, von, bis)
     out = dict(komponenten_je_tag)
     gemischt = await _bilanz_gemischt(db, anlage_id, von, bis, komponenten_je_tag)
     sonst = await sonstiges_der_kanal_tage(db, anlage_id, gemischt) if gemischt else {}
     out.update({d: mische_sonstiges(k, sonst.get(d)) for d, k in gemischt.items()})
     return out
+
+
+async def _komponenten_der_tageszeilen(db: AsyncSession, anlage_id: int, von: date, bis: date) -> dict[date, Optional[dict]]:
+    """``{datum: komponenten_kwh}`` jeder Tageszeile ``von`` … ``bis`` (Reihenfolge der Abfrage, nach Tag)."""
+    from sqlalchemy import select
+
+    from backend.models.tages_energie_profil import TagesZusammenfassung as TZ
+
+    res = await db.execute(select(TZ.datum, TZ.komponenten_kwh).where(
+        TZ.anlage_id == anlage_id, TZ.datum >= von, TZ.datum <= bis).order_by(TZ.datum))
+    return dict(res.all())
+
+
+async def kanal_gruppen_der_tage(db: AsyncSession, anlage_id: int, von: date, bis: date) -> dict[date, tuple[str, ...]]:
+    """Je Tag ``von`` … ``bis`` die Gruppen mit Wahl ``kanal`` (Bilanz, WP, E-Mob, Sonstiges) — EIN Bereichs-Leser
+    (``kanal_stundentage``, dieselbe Wahl je Tag und Gruppe wie ``kanal_stundentag``). Tage ohne Kanal-Gruppe fehlen.
+    Für die Werkbank-Vorschau (HA-Bauform S5, Bauplan §7, E-S5-2): sie nennt, welche Gruppen eines Tages ihre Mengen aus
+    dem HA-Spiegel bzw. den eigenen Zählerständen lesen."""
+    from backend.services.kanal.stunden_leser import kanal_stundentage
+
+    ordnung = (GRUPPE_BILANZ, GRUPPE_WP, GRUPPE_EMOB, GRUPPE_SONSTIGES)
+    tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=ordnung)
+    return {d: tuple(g for g in ordnung if g in t.gruppen) for d, t in sorted(tage.items()) if t.gruppen}
 
 
 # ── Wärme je Stunde (E-S3-2 Nachbau, Bauplan §10c H-1 → A): an einem WP-Kanal-Tag nur die QUELLE der Form ─────────
@@ -738,40 +772,96 @@ async def wp_werte_der_kanal_tage(db: AsyncSession, anlage_id: int, invs_by_id: 
             for d, t in tage.items() if GRUPPE_WP in t.gruppen}
 
 
-async def _wp_aus_kanaelen(db: AsyncSession, anlage, invs_by_id, datum: date, wp, e: TagesEingaenge) -> None:
-    """Die WP-Tageswerte eines WP-Kanal-Tags: Strom je Gerät, Wärme/Kälte, gemessene Betriebsart, Modus-Split."""
-    from backend.core.berechnungen.modus_split import MODUS_STROM_REST, ModusSplit
-    from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD, ist_betriebsart_strom_feld
+def _gemessen_aus_delta(delta: Mapping[str, float]) -> dict[str, dict[str, float]]:
+    """Die gemessenen Betriebsart-Zähler je Gerät (``{inv_id: {feld: kWh}}``) aus den Tages-Δ der WP-Gruppe."""
+    from backend.core.betriebsmodus import ist_betriebsart_strom_feld
 
-    delta = _tages_delta(wp)
-    e.tz_komp = {**(e.tz_komp or {}), **_wp_komponenten(wp, delta)}
-    e.detail = detail_aus_kanaelen(e.detail, delta, invs_by_id, datum, frozenset({"waermepumpe"}), False)
     gemessen: dict[str, dict[str, float]] = {}
     for key, wert in delta.items():
         teile = key.split(":", 2)
         if len(teile) == 3 and teile[0] == "inv" and ist_betriebsart_strom_feld(teile[2]):
             gemessen.setdefault(teile[1], {})[teile[2]] = wert
-    e.gemessen_je_inv = gemessen
-    strom = e.wp_kwh_je_inv
+    return gemessen
+
+
+def _kanal_splits(je_art, delta: Mapping[str, float], strom: Mapping[str, float]) -> dict:
+    """Der Modus-Split je Gerät MIT Zeilen im abgeleiteten Kanal «Strom je Betriebsart» (``{inv_id_str: ModusSplit}``,
+    auch leere): Σ der Stunden je erfasster Betriebsart, Abdeckung ``modus_abdeckung_h`` aus den Tages-Δ, Bezug der
+    Kanal-Strom des Geräts — wie der Kanal-Monat (``kanal_split_ohne_abschluss``). Ein Gerät ohne Zeilen fehlt (sein
+    Split bleibt der der Stundenzeilen, E-S4-3 H-2a)."""
+    from backend.core.berechnungen.modus_split import MODUS_STROM_REST, ModusSplit
+    from backend.core.betriebsmodus import MODUS_ABDECKUNG_FELD
+
+    mit = _mit_zeilen(je_art)
+    return {
+        str(inv_id): ModusSplit(
+            kwh_je_modus={art: _summe_stunden(w) for art, w in arten.items()
+                          if art != MODUS_STROM_REST and any(v is not None for v in w)},
+            abdeckung_h=float(delta.get(f"abgeleitet:inv:{inv_id}:{MODUS_ABDECKUNG_FELD}") or 0.0),
+            bezug_kwh=strom.get(str(inv_id)),
+        )
+        for inv_id, arten in je_art.items() if inv_id in mit
+    }
+
+
+def splits_mit_kanal(splits_der_stundenzeilen: Optional[Mapping], kanal: Mapping) -> dict:
+    """Die Splits eines WP-Kanal-Tags: ein Gerät mit Zeilen im abgeleiteten Kanal aus dem Kanal (``kanal``, auch ein
+    leerer Split verdrängt den der Stundenzeilen), jedes andere aus den Stundenzeilen; leere Splits fallen (P4)."""
+    splits = {i: sp for i, sp in (splits_der_stundenzeilen or {}).items() if i not in kanal}
+    splits.update(kanal)
+    return {i: sp for i, sp in splits.items() if not sp.ist_leer}
+
+
+async def _wp_aus_kanaelen(db: AsyncSession, anlage, invs_by_id, datum: date, wp, e: TagesEingaenge) -> None:
+    """Die WP-Tageswerte eines WP-Kanal-Tags: Strom je Gerät, Wärme/Kälte, gemessene Betriebsart, Modus-Split."""
+    delta = _tages_delta(wp)
+    e.tz_komp = {**(e.tz_komp or {}), **_wp_komponenten(wp, delta)}
+    e.detail = detail_aus_kanaelen(e.detail, delta, invs_by_id, datum, frozenset({"waermepumpe"}), False)
+    e.gemessen_je_inv = _gemessen_aus_delta(delta)
     # Der Modus-Split des Tages aus den abgeleiteten Kanälen «Strom je Betriebsart» (alle erfassten Betriebsarten, Σ der
     # Stunden) und ihrer Abdeckung ``modus_abdeckung_h`` — wie der Kanal-Monat (``kanal_split_ohne_abschluss``); Bezug
     # ist der Kanal-Strom des Geräts.
     je_art = await modus_strom_stunden(db, anlage.id, datum, _abgeleitete_geraete(wp))
     # E-S4-3 H-2a: ein Gerät ohne Zeilen im abgeleiteten Kanal behält den Tages-Split der Stundenzeilen (`e.splits` aus
     # `lade_modus_split_tag`, dieselbe Modus-Spur wie `modus_stunden_mit_rueckfall`); mit Zeilen gewinnt der Kanal.
-    mit = _mit_zeilen(je_art)
-    splits = {i: sp for i, sp in (e.splits or {}).items() if int(i) not in mit}
-    for inv_id, arten in je_art.items():
-        if inv_id not in mit:
-            continue
-        splits[str(inv_id)] = ModusSplit(
-            kwh_je_modus={art: _summe_stunden(w) for art, w in arten.items()
-                          if art != MODUS_STROM_REST and any(v is not None for v in w)},
-            abdeckung_h=float(delta.get(f"abgeleitet:inv:{inv_id}:{MODUS_ABDECKUNG_FELD}") or 0.0),
-            bezug_kwh=strom.get(str(inv_id)),
-        )
-    e.splits = {i: sp for i, sp in splits.items() if not sp.ist_leer}
+    e.splits = splits_mit_kanal(e.splits, _kanal_splits(je_art, delta, e.wp_kwh_je_inv))
     e.wp_aus_kanal = True
+
+
+@dataclass(frozen=True)
+class WpModusTag:
+    """Betriebsart-Eingänge eines WP-Kanal-Tags für die Wärme-Sichten über einen Bereich (``wp_modus_der_kanal_tage``)."""
+
+    #: Die gemessenen Betriebsart-Zähler je Gerät aus den Kanälen (Kalendertag) — ersetzt die Zählerstände des Tages.
+    gemessen_je_inv: dict
+    #: Die Splits der Geräte mit Zeilen im abgeleiteten Kanal (``_kanal_splits``, auch leere) — ``splits_mit_kanal``.
+    splits: dict
+
+
+async def wp_modus_der_kanal_tage(db: AsyncSession, anlage_id: int, von: date, bis: date,
+                                  strom_je_tag: Mapping[date, Mapping[str, float]]) -> dict[date, WpModusTag]:
+    """**W-3 (HA-Bauform S5, S4 §10j, S5-R7):** je Tag ``von`` … ``bis``, an dem die WP-Gruppe Wahl ``kanal`` hat,
+    Betriebsart-Strom und Modus-Split wie *Cockpit → Tag* (``tages_eingaenge`` → ``_wp_aus_kanaelen``): die gemessenen
+    Betriebsart-Zähler aus den Tages-Δ der WP-Gruppe, der Split aus den abgeleiteten Kanälen «Strom je Betriebsart»
+    (``modus_strom_stunden``, dieselbe Quelle wie der Kanal-Monat N-755 und die Stundenform
+    ``modus_stunden_mit_rueckfall``); ``strom_je_tag``: der WP-Strom je Gerät des Tages (Bezug, Kanal-Strom an einem
+    WP-Kanal-Tag). Der Wärme-Verlauf (``waerme_verlauf.lade_waerme_verlauf*``) nimmt sie an diesen Tagen statt der
+    Zählerstände und der Modus-Spur der Stundenzeilen — Rückfall auf die Modus-Spur nur für ein Gerät ohne Zeile im
+    abgeleiteten Kanal (H-2a). Ein Bereichs-Leser für die WP-Gruppe, je WP-Kanal-Tag mit abgeleitetem Kanal eine
+    Anweisung für die Modus-Stunden."""
+    from backend.services.kanal.stunden_leser import kanal_stundentage
+
+    out: dict[date, WpModusTag] = {}
+    for d, t in sorted((await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))).items()):
+        wp = t.gruppen.get(GRUPPE_WP)
+        if wp is None:
+            continue
+        delta = _tages_delta(wp)
+        geraete = _abgeleitete_geraete(wp)
+        je_art = await modus_strom_stunden(db, anlage_id, d, geraete) if geraete else {}
+        out[d] = WpModusTag(gemessen_je_inv=_gemessen_aus_delta(delta),
+                            splits=_kanal_splits(je_art, delta, strom_je_tag.get(d) or {}))
+    return out
 
 
 async def tages_eingaenge(db: AsyncSession, anlage, invs_by_id: Mapping[str, Any], datum: date) -> TagesEingaenge:
@@ -841,7 +931,8 @@ __all__ = [
     "achsen_der_gruppen", "adapter_der_tage", "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
     "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
-    "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage",
+    "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage", "kanal_gruppen_der_tage",
+    "WpModusTag", "splits_mit_kanal", "wp_modus_der_kanal_tage",
     "kanaele_der_achse", "tage_mit_kanal_luecke_ueber_mitternacht",
     "wp_strom_je_stunde", "wp_stundenformen",
 ]

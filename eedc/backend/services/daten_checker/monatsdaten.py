@@ -88,13 +88,17 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         Historie: aufgerufen wird nur, wenn eine der beiden Prüfungen ohnehin
         anschlägt — in aller Regel also gar nicht.
 
+        HA-Bauform S5 (E-S5-2, Bauplan §5): die PV je Tag über die Lesestelle ``kanal_stunden.pv_ist_je_tag`` — an
+        einem Kanal-Tag der Bilanz die PV des HA-Spiegels bzw. der eigenen Zählerstände (wie Cockpit → Tag), sonst die
+        Tageszeile.
+
         Returns:
             Σ kWh, oder ``None`` wenn für den Monat keine Tageszeilen
             existieren (dann gibt es nichts zu vergleichen).
         """
         from sqlalchemy import select, extract
-        from backend.core.berechnungen import summe_pv_bkw_kwh
         from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.energie_profil.kanal_stunden import pv_ist_je_tag
 
         result = await self.db.execute(
             select(TagesZusammenfassung).where(
@@ -106,7 +110,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         zeilen = list(result.scalars().all())
         if not zeilen:
             return None
-        return sum(summe_pv_bkw_kwh(tz.komponenten_kwh or {}) for tz in zeilen)
+        return sum(pv or 0.0 for pv in (await pv_ist_je_tag(self.db, anlage_id, zeilen)).values())
 
     @staticmethod
     def _nachzug_hinweis(tages_pv: Optional[float], monats_pv: Optional[float]) -> Optional[str]:
