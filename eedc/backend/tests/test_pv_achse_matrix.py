@@ -410,9 +410,11 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
         elif inv == "I3":
             z += [_tage_zellen("tag:stunden", m, weg, tage, lambda d, t: d["stunden_pv"],
                                lambda t: mx.soll_tag(form, t, weg).summe),
-                  # die gespeicherte Tageszeile schreibt der Bestand — Soll im Bestands-Fenster
+                  # HA-Bauform S5b (E-S5-3, §10h 7): `tag:keys` liest den Endpunkt (die Tageskomponenten der Tagesliste,
+                  # `miss_tage`) — an einem Kanal-Tag die Kanäle; Soll wie Cockpit → Tag (bis E-S5-2: die gespeicherte
+                  # Zeile im Bestands-Fenster, `soll_tag(form, t)`).
                   _tage_zellen("tag:keys", m, weg, tage, lambda d, t: d["summe_keys"],
-                               lambda t: mx.soll_tag(form, t).summe),
+                               lambda t: mx.soll_tag(form, t, weg).summe),
                   _tage_zellen("tag:cockpit", m, weg, tage, lambda d, t: d["tw_erzeugung"],
                                lambda t: mx.soll_tag(form, t, weg).summe),
                   _z("laufend:cockpit_monat", _pv(lf["monat"]), juli.summe)]
@@ -422,9 +424,6 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
             # Tag wie im Monat; das BKW trägt keinen Schlüssel). Die gespeicherte Tageszeile (`tag:keys`) schreibt
             # weiter der Bestand (Regel E4) — ihr Soll bleibt `soll_tag`. Seit Nachbau 2 trägt auch SA Kanäle (Patch (a) aus
             # E-S3-4b, a-B: Cockpit → Tag liest dann die Kanäle).
-            def soll_gespeichert(t):
-                return mx.soll_tag(form, t)
-
             def soll_kanal_tag(t):
                 kanal = weg == "HA" or (mx.SA_KANAELE and weg == "SA")
                 return mx.soll_monat(form, (t,), weg=weg) if (kanal and not form.w2) else mx.soll_tag(form, t, weg)
@@ -434,9 +433,11 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
                 return s.je_geraet.get(g.name, 0.0 if (g.name in s.ohne_key or not mx._aktiv(g, t)) else None)
 
             for g in form.geraete:
+                # HA-Bauform S5b (E-S5-3, §10h 7): `tag:keys:<Erzeuger>` liest den Endpunkt (Tagesliste) — Soll wie
+                # Cockpit → Tag (`soll_kanal_tag`); bis E-S5-2 die gespeicherte Zeile (`mx.soll_tag(form, t)`).
                 z.append(_tage_zellen(f"tag:keys:{g.name}", m, weg, tage,
                                       lambda d, t, g=g: d["keys"].get(g.name, 0.0),
-                                      lambda t, g=g: _soll(t, g, soll_gespeichert)))
+                                      lambda t, g=g: _soll(t, g, soll_kanal_tag)))
                 z.append(_tage_zellen(f"tag:cockpit:{g.name}", m, weg, tage,
                                       lambda d, t, g=g: d["tw_erzeuger"].get(g.name, 0.0),
                                       lambda t, g=g: _soll(t, g, soll_kanal_tag)))
@@ -640,16 +641,32 @@ class Ursache:
 URSACHE: dict[str, Ursache] = {
     # ── HA-Bauform E4a-2: die neuen Formen nach Weg 2 (Markierung bei NEUEN Formen, Freigabe Master 06.10.2026) ──
     "W2-BESTAND-SPEICHER": Ursache(
-        "HA-Bauform S5 (gespeicherte Tages-/Stundenzeilen)",
-        "Die gespeicherte Tageszeile (`komponenten_kwh`) und die Stundenzeilen schreibt weiter `aggregate_day` nach den "
-        "Regeln des Bestandspfads (#406/N-623, Abgleich, Deckel) — der Kanal ersetzt sie nur beim LESEN (Cockpit → "
-        "Tag, Monat, Fakten, Energieprofil). `tag:keys`/`tag:stunden` lesen die Zeilen roh; Stundenachse bis S3 (D4). "
-        "Gilt auf HA und seit Nachbau 2 (HA-Bauform S4 E-S4-3, der SA-Datenstand trägt Kanäle) ebenso auf SA",
+        "HA-Bauform S5 (gespeicherte Tages-/Stundenzeilen) — seit S5b (E-S5-3) geheilt; keine Zelle mehr",
+        "Seit S5b (E-S5-3) liest die Sicht den Endpunkt; die gespeicherte Zeile trägt an Kanal-Tagen keine Mengen. Bis "
+        "E-S5-2 schrieb `aggregate_day` die Tageszeile (`komponenten_kwh`) und die Stundenzeilen nach den Regeln des "
+        "Bestandspfads (#406/N-623, Abgleich, Deckel), der Kanal ersetzte sie nur beim Lesen, und `tag:keys`/"
+        "`tag:stunden` lasen die Zeilen roh",
     ),
     "W2-SA-BESTAND": Ursache(
         "Lesart 1 (Bauplan §3b) — Standalone ohne Kanäle — seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2); keine Zelle mehr",
         "Der Standalone-Datenstand der Matrix hatte keine Kanäle (Seed nur `sensor_snapshots`): die Quellenwahl nahm den "
         "Bestand, der Tag rechnete #406/N-623 (Abgleich bzw. kWp-Anteil), nicht Weg 2",
+    ),
+    "PV-ACHSE-MONAT-VS-TAGE-VERDACHT": Ursache(
+        "Verdacht (HA-Bauform S5b, E-S5-3, Entscheid Master H-4) — Register-Disziplin: Analyse am HEAD, drei Tore, Einwertung "
+        "Master, Entscheid Gernot ausstehend, vorgesehen mit dem Auftrag E-S5-4",
+        "Kanal-Monat nimmt PV aus dem Anlagenzähler (46,656 = Einspeisung), Σ der Kanal-Tage nimmt Σ der Erzeuger (47,16); "
+        "Δ 0,504 = Wandlungsverluste (N-588-Klasse). Vorbestehend seit 4.1.8 (`tage-werte` las den Kanal, die Matrix verglich "
+        "die gespeicherte Zeile) — kein Naht-Fall (beide Seiten Kanal), sondern eine Kompositions-Differenz Tag ↔ Monat. "
+        "Welche Seite richtig ist, entscheidet die Analyse an N-588 (PV = Σ Strings, Verluste getrennt, oder PV = Anlagenzähler)",
+    ),
+    "ABSCHLUSS-BESTAND-VS-KANAL-TAGE": Ursache(
+        "Benannte Naht S4-R-3c-Klasse (HA-Bauform S5b, E-S5-3, Entscheid Master H-3 → B) — kein Fund",
+        "Der gespeicherte Monatsabschluss stammt aus dem Bestand (Σ der gespeicherten Tageszeilen, Rückwärtsfenster, Deckel), "
+        "die Tage lesen seit S3/S4 die Kanal-Stunden (Beginn-Raster, Mitternachtsbündel des BKW-Zählers im Folgetag); ein "
+        "gespeicherter Abschluss gilt vor gerechneten Werten (Entscheid Gernot) — die Identität Σ Tage = Monat gilt nur für "
+        "Monate, die der Kanal rechnet (laufend/ohne Abschluss). Reichweite: jeder vor 4.1.8 abgeschlossene Monat mit "
+        "Kanal-Tagen; benannte Naht S4-R-3c-Klasse, kein Fund",
     ),
     "W2-SA-VOR": Ursache(
         "wie „Soll unklar\" SA vor dem Abschluss (N-472/N-121, N-677) — seit N-758 geheilt (17.10.2026); keine Zelle mehr",
@@ -666,18 +683,24 @@ ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
     # (06.10.2026): der Sammelimport speichert den Anlagen-PV-Zähler als Anlagenwert wie „Aus HA laden" (N-622).
     # 'N-588' (W2-V HA I5 `tag:volleinspeiser:ev=0`) — GEHEILT mit N-588 (10.10.2026): die Bilanz trägt die Verluste
     # (F2, geprüft von `_folge`), die Geld-Zelle `tag:volleinspeiser:ev_ersparnis=0` ist grün.
-    'W2-BESTAND-SPEICHER': {
-        ('W2-V', 'HA', 'I3'): ('tag:keys', 'tag:stunden',),
-        ('W2-V', 'HA', 'I4'): ('tag:keys:Süd',),
-        ('W2-L', 'HA', 'I3'): ('tag:keys', 'tag:stunden',),
-        ('W2-L', 'HA', 'I4'): ('tag:keys:Balkon', 'tag:keys:Süd',),
-        # HA-Bauform S4 E-S4-3 (Nachbau 2): mit Kanälen trägt SA dieselben roten Sichten wie HA — Cockpit → Tag liest die
-        # Kanäle (geheilt), die gespeicherte Tageszeile und die Stundenzeilen schreibt weiter `aggregate_day` (gemessen:
-        # W2-V `tag:keys` 12,1 statt 12,6 an 11 Tagen, W2-L 21,0 statt 30,0 bzw. Süd 13,24/Balkon 1,76 statt 0/15).
-        ('W2-V', 'SA', 'I3'): ('tag:keys', 'tag:stunden',),
-        ('W2-V', 'SA', 'I4'): ('tag:keys:Süd',),
-        ('W2-L', 'SA', 'I3'): ('tag:keys', 'tag:stunden',),
-        ('W2-L', 'SA', 'I4'): ('tag:keys:Balkon', 'tag:keys:Süd',),
+    # W2-BESTAND-SPEICHER: seit HA-Bauform S5b (E-S5-3, §10h 7, S5-E5 a) geheilt — die acht Zellen W2-V/W2-L HA/SA I3/I4
+    # grün: seit S5b (E-S5-3) liest die Sicht den Endpunkt (`tag:keys`/`tag:keys:<Erzeuger>` die Tageskomponenten der
+    # Tagesliste, `tag:stunden` Σ `/stunden`); die gespeicherte Zeile trägt an Kanal-Tagen keine Mengen. Keine Zelle mehr.
+    'W2-BESTAND-SPEICHER': {},
+    # HA-Bauform S5b (E-S5-3, Entscheid Master H-3 → B, 19.10.2026): der gespeicherte Juni-Abschluss (Bestand) gegen Σ der
+    # Juni-Tage am Endpunkt (Kanal-Stunden; Σ `tage-werte` W2-L 639,0, W2-V 471,6 nachgerechnet) — benannte Naht, kein Fund.
+    # HA-Bauform S5b (E-S5-3, Entscheid Master H-4, 19.10.2026): als Verdacht registriert, nicht gebaut (Auftrag E-S5-4).
+    'PV-ACHSE-MONAT-VS-TAGE-VERDACHT': {
+        ('W2-V', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage'),
+        ('W2-V', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage'),
+    },
+    'ABSCHLUSS-BESTAND-VS-KANAL-TAGE': {
+        ('W2-V', 'S1', 'I2'): ('Σtage_juni=cockpit_monat',),
+        ('W2-V', 'S2', 'I2'): ('Σtage_juni=cockpit_monat',),
+        ('W2-V', 'S3', 'I2'): ('Σtage_juni=cockpit_monat',),
+        ('W2-L', 'S1', 'I2'): ('Σtage_juni=cockpit_monat',),
+        ('W2-L', 'S2', 'I2'): ('Σtage_juni=cockpit_monat',),
+        ('W2-L', 'S3', 'I2'): ('Σtage_juni=cockpit_monat',),
     },
     # W2-SA-BESTAND: seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2) — `W2-L-S3-I4` grün, die Tages-Sichten der vier SA-Zellen
     # grün; deren gespeicherte Zeilen stehen oben unter W2-BESTAND-SPEICHER. Keine Zelle mehr.

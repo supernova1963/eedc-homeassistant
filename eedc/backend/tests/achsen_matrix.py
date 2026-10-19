@@ -594,23 +594,36 @@ def _schluessel_namen(d: Optional[dict], ids: dict[str, int]) -> dict:
 
 
 async def miss_tage(db, aid: int, ids: dict, tage) -> dict:
-    """Tag: Tageszeile (``komponenten_kwh``), Stundenachsen (Σ der Spalten und je Gerät aus ``komponenten``,
-    Etikett-Stunden je Gerät, Preis-Stunden) und Cockpit → Tag (``baue_tage_werte``)."""
+    """Tag: die Tageskomponenten der Tagesliste, Stundenachsen (Σ der Mengen-Spalten von ``/stunden``; je Gerät aus
+    ``komponenten``, Etikett-Stunden je Gerät, Preis-Stunden aus der Stundenzeile — Bahnen) und Cockpit → Tag
+    (``baue_tage_werte``).
+
+    HA-Bauform S5 (E-S5-3, §10h 7, S5-E5 a): seit S5b schreibt ``aggregate_day`` an einem Kanal-Tag keine Mengen in die
+    Tages- und Stundenzeile — ``keys`` liest die Tageskomponenten am Endpunkt (``kanal_stunden.komponenten_der_tage``,
+    dieselbe Mischung wie ``/tage``/``tage-werte``: an einem Kanal-Tag die Gruppen mit Wahl ``kanal`` aus den Kanälen),
+    die Mengen-Spalten Σ der Stunden von ``/stunden`` (``kanal_stunden.stunden_des_tages``). Bis E-S5-2 lasen sie die
+    gespeicherte Zeile roh (Ursache W2-BESTAND-SPEICHER)."""
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage, stunden_des_tages
     from backend.services.energie_profil.tage_werte import baue_tage_werte
 
     rev = _namen(ids)
     anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
     tw = {z.datum: z for z in await baue_tage_werte(db, anlage, tage[0], tage[-1])}
+    komp_je_tag = await komponenten_der_tage(db, aid, tage[0], tage[-1])
     out = {}
     for tag in tage:
         tz = (await db.execute(select(TagesZusammenfassung).where(
             TagesZusammenfassung.anlage_id == aid, TagesZusammenfassung.datum == tag))).scalar_one_or_none()
         teps = (await db.execute(select(TagesEnergieProfil).where(
             TagesEnergieProfil.anlage_id == aid, TagesEnergieProfil.datum == tag))).scalars().all()
+        folgetag = (await db.execute(select(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == aid, TagesEnergieProfil.datum == tag + timedelta(days=1))
+            .order_by(TagesEnergieProfil.stunde))).scalars().all()
+        mengen = await stunden_des_tages(db, aid, tag, sorted(teps, key=lambda r: r.stunde) + list(folgetag))
         spalten = {}
         for sp in ("pv_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "waermepumpe_kw", "wallbox_kw",
                    "verbrauch_kw"):
-            werte = [getattr(r, sp) for r in teps if getattr(r, sp) is not None]
+            werte = [getattr(r, sp) for r in mengen if getattr(r, sp) is not None]
             spalten[sp] = _r(sum(werte)) if werte else None
         komp: dict = {}
         modus: dict = {}
@@ -628,12 +641,12 @@ async def miss_tage(db, aid: int, ids: dict, tage) -> dict:
         z = tw.get(tag)
         out[tag.isoformat()] = {
             "tz": tz is not None,
-            "keys": _schluessel_namen(tz.komponenten_kwh if tz else {}, ids),
+            "keys": _schluessel_namen(komp_je_tag.get(tag) or {}, ids),
             "spalten": spalten,
             "stunden_komp": komp,
             "modus": {k: {str(h): m for h, m in v.items()} for k, v in modus.items()},
             "preis_stunden": {str(h): p for h, p in preis.items()},
-            "netz_je_stunde": {str(r.stunde): _r(r.netzbezug_kw) for r in teps},
+            "netz_je_stunde": {str(r.stunde): _r(r.netzbezug_kw) for r in mengen},
             "tw": _flach(z) if z else {},
             "tw_erzeuger": _schluessel_namen(getattr(z, "erzeuger_kwh", None), ids) if z else {},
         }

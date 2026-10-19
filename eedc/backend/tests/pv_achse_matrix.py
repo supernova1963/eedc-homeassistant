@@ -798,14 +798,27 @@ async def baue_abgeleitete_nach_tagen(engine, anlage_id: int) -> int:
     return await baue_abgeleitete(sitzungen, anlage_id)
 
 
-async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage) -> None:
+async def aggregiere_tage(db: AsyncSession, form: Form, anlage_id: int, tage, *, ohne_weiche: bool = False) -> None:
+    """``aggregate_day`` je Tag wie der Scheduler. ``ohne_weiche`` (HA-Bauform S5b, E-S5-3): die Zeilen des **Bestands-
+    Algorithmus** auch an Kanal-Tagen (die Mengen-Weiche ohne Wirkung, ``mengen_weiche.KEINE_WEICHE``) — für die
+    Gleichheitsproben «Kanal = Bestand», deren Bestandsseite die gespeicherte Zeile ist (wie ein Tag, der vor S5b
+    geschrieben wurde). Ohne den Schalter schreibt der Schreiber wie im Produkt (an Kanal-Tagen ohne Mengen)."""
+    from contextlib import nullcontext
+    from unittest.mock import patch
+
+    from backend.services.energie_profil import aggregator
     from backend.services.energie_profil.aggregator import aggregate_day
+    from backend.services.energie_profil.mengen_weiche import KEINE_WEICHE
     from backend.services.energie_profil.source import Source
 
+    async def _keine(*_a, **_k):
+        return KEINE_WEICHE
+
     anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
-    for tag in tage:
-        await aggregate_day(anlage, tag, db, source=Source.SCHEDULER, prefetched_tagesverlauf=_kurve(form))
-        await db.commit()
+    with patch.object(aggregator, "mengen_weiche", _keine) if ohne_weiche else nullcontext():
+        for tag in tage:
+            await aggregate_day(anlage, tag, db, source=Source.SCHEDULER, prefetched_tagesverlauf=_kurve(form))
+            await db.commit()
 
 
 # ── Schreibwege des abgeschlossenen Monats ──────────────────────────────────
@@ -939,21 +952,31 @@ def _namen(ids: dict[str, int]) -> dict[str, str]:
 
 
 async def miss_tage(db: AsyncSession, anlage_id: int, ids: dict[str, int], tage) -> dict:
-    """Tag: gespeicherte Tageszeile (``komponenten_kwh``, Stundenachse) und Cockpit → Tag
-    (``GET /energie-profil/{id}/tage-werte`` = ``baue_tage_werte``)."""
+    """Tag: die Tageskomponenten und die Stundenachse am **Endpunkt** und Cockpit → Tag
+    (``GET /energie-profil/{id}/tage-werte`` = ``baue_tage_werte``).
+
+    HA-Bauform S5 (E-S5-3, §10h 7, S5-E5 a): seit S5b schreibt ``aggregate_day`` an einem Kanal-Tag keine Mengen in die
+    Tages- und Stundenzeile — die Sichten ``tag:keys``/``tag:keys:<Erzeuger>`` lesen deshalb die Tageskomponenten der
+    Tagesliste (``kanal_stunden.komponenten_der_tage``, dieselbe Mischung wie ``/tage`` und ``tage-werte``), ``tag:stunden``
+    Σ ``pv_kw`` der Stunden von ``/stunden`` (``kanal_stunden.stunden_des_tages``: an einem Kanal-Tag die Mischzeilen, sonst
+    die Stundenzeile). Bis E-S5-2 lasen sie die gespeicherte Zeile roh (Ursache W2-BESTAND-SPEICHER)."""
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage, stunden_des_tages
     from backend.services.energie_profil.tage_werte import baue_tage_werte
 
     rev = _namen(ids)
     anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one()
     tw = {z.datum: z for z in await baue_tage_werte(db, anlage, tage[0], tage[-1])}
+    komp_je_tag = await komponenten_der_tage(db, anlage_id, tage[0], tage[-1])
     out = {}
     for tag in tage:
         tz = (await db.execute(select(TagesZusammenfassung).where(
             TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum == tag))).scalar_one_or_none()
-        teps = (await db.execute(select(TagesEnergieProfil).where(
-            TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum == tag))).scalars().all()
+        roh = (await db.execute(select(TagesEnergieProfil).where(
+            TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum.in_((tag, tag + timedelta(days=1))))
+            .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde))).scalars().all()
+        teps = await stunden_des_tages(db, anlage_id, tag, roh)
         keys = {}
-        for k, v in ((tz.komponenten_kwh or {}) if tz else {}).items():
+        for k, v in (komp_je_tag.get(tag) or {}).items():
             pre, _, i = str(k).rpartition("_")
             if pre in ("pv", "bkw") and i in rev and isinstance(v, (int, float)):
                 keys[rev[i]] = keys.get(rev[i], 0.0) + float(v)

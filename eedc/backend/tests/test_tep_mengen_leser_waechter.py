@@ -26,9 +26,10 @@ Funktion ``<modul>``.
 **Stand nach S5a: leer** (Gleichheit wie ``IMPORTEURE_STAND`` in ``test_kanal_lesen_waechter.py``, Bauplan §10f): außerhalb
 der Liste liest NIEMAND roh. Wer eine Ausnahme braucht, trägt sie mit Grund in ``ERLAUBT`` ein.
 
-**Benannt (E-S5-2 H-E → A):** die Daten-Checker-Regeln lesen über ``komponenten_der_tage`` — deren Mischung trägt nur die
-Bilanz- und Sonstiges-Schlüssel aus den Kanälen; ``wallbox_<id>``/``eauto_<id>``/``waermepumpe_<id>`` bleiben an jedem Tag
-die der Tageszeile (die E-Mob-Doppelzählung prüft gespeicherte Altlast; S5b nimmt den Befund an Kanal-Tagen weg).
+**Seit S5b (E-S5-3, §10h 6):** die Daten-Checker-Regeln lesen über ``komponenten_der_tage`` — deren Mischung trägt an einem
+Kanal-Tag die Schlüssel ALLER Gruppen mit Wahl ``kanal`` aus den Kanälen (Bilanz, Sonstiges, E-Mobilität, Wärmepumpe); der
+Schreiber lässt sie dort in der Tageszeile leer. (E-S5-2 H-E — E-Mob-Doppelzählung als gespeicherte Altlast — ist damit an
+Kanal-Tagen erledigt.)
 
 **Nicht erfasst (benannt):** ``text("SELECT pv_kw …")`` (rohes SQL — es steht im Baum nur in ``erlaubt``-Dateien und
 in ``kanal_stunden._LUECKE_SQL`` über ``kanal_statistik``), zusammengesetzte Spaltennamen (``f"{achse}_kw"``) und eine
@@ -59,7 +60,9 @@ ERLAUBT: dict[str, str] = {
     "services/energie_profil/kanal_stunden.py": "die Lesestelle selbst (S5-R1: stunden_der_tage, pv_ist_je_tag, …)",
     "services/snapshot/": "Bestands-Tagespfad (Lesart 1, Schreiber und Reaggregation; S5b E-S5-4)",
     "services/energie_profil/aggregator.py": "Schreiber aggregate_day (S5b E-S5-3)",
-    "services/energie_profil/monats_aus_tagen.py": "Monats-Faltung Lesart 1 (falte_monat, Bauplan §3 (A))",
+    "services/energie_profil/monats_aus_tagen.py": (
+        "Monats-Faltung Lesart 1 (falte_monat, Bauplan §3 (A)): Bestandstage aus den Zeilen, Kanal-Tage aus der "
+        "Lesestelle (seit S5b, E-S5-3 H-1 → B)"),
     "api/routes/energie_profil/repair.py": "Werkbank-Reparatur (repair*)",
     "api/routes/repair.py": "Werkbank-Reparatur (repair*)",
     "services/repair_orchestrator.py": "Werkbank-Reparatur (repair*)",
@@ -87,9 +90,8 @@ ERLAUBT: dict[str, str] = {
     "services/energie_profil/vergleichstage.py::tage_ohne_tagesvergleich": "Lesart-1-Kandidaten, E-S5-1b H-4",
     "services/korrekturprofil_aggregator.py::_lade_tagesist_skalar": (
         "TZ nur lern_soll_kwh — Prognose-Feld, Mengen aus der Lesestelle; Fehlalarm der Regel"),
-    "api/routes/ha_export/anlage_steuerung.py::_ueberschuss_heute": (
-        "HA-Export-Mischpfad: Bestandstag TZ, Kanal-Tag Σ Mischzeilen; der AST sieht ihn nicht (Abfrage in "
-        "_lade_tagesprofil), die TSV schon — als Dokumentation in der Liste"),
+    # E-S5-3: `anlage_steuerung._ueberschuss_heute` (E-S5-2 als Dokumentation gelistet) liest Überschuss/Defizit seit
+    # S5b über die Lesestelle `kanal_stunden.ueberschuss_defizit_der_tage` — kein Eintrag mehr nötig.
 }
 
 #: Funktionen außerhalb der Liste, die roh lesen — Stand nach S5a: leer (Bauplan §10f; E-S5-2 H-W → A, Entscheid Master).

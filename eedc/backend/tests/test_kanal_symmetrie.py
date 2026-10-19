@@ -65,7 +65,7 @@ async def _lauf(matrix: str, fid: str, *, stoerung=None):
             with umgebung:
                 erg = await nachfuellen_spiegel(sitzungen, aid, jetzt=mx.JETZT, ha_svc=svc)
                 assert erg.fehler == 0 and erg.zeilen > 0
-                await mx.aggregiere_tage(db, pvform, aid, TAGE)
+                await mx.aggregiere_tage(db, pvform, aid, TAGE, ohne_weiche=True)  # Bestand für die Gleichheit (S5b, E-S5-3)
             if stoerung is not None:
                 await stoerung(sitzungen, aid)
             return await symmetrie_spiegel(db, aid, svc)

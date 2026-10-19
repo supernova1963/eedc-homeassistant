@@ -647,6 +647,17 @@ def _ist_null_soll(soll) -> bool:
     return soll is not UNKLAR and soll is not None and abs(float(soll)) < 1e-9
 
 
+def _soll_tag_geraet(form, q: Menge, t, weg, g):
+    """Soll einer Tages-Sicht je Gerät. HA-Bauform S5b (E-S5-3, Entscheid Master H-2′ → A, 19.10.2026): seit S5b (E-S5-3) misst
+    die Sicht den Endpunkt; Soll = W2-Komposition — für einen Sonstiges-Erzeuger einer W2-Form die Ersatzgruppe (`w2_menge`,
+    dieselbe Soll-Definition wie `tw/sonstiges_erzeugung`; am Ausfalltag der Rest des Anlagenzählers, nicht die Gerätemenge,
+    die kein Zähler misst). Berichtigung von H-2: kein Widerspruch Tagesliste ↔ tag-detail, beide 5,75."""
+    if (q.name == "geraet" and form.w2 and (g.parameter or {}).get("kategorie") == "erzeuger"
+            and "erzeugung_kwh" in g.felder):
+        return round(am.w2_menge(g.felder["erzeugung_kwh"], g.ohne.get("erzeugung_kwh"), (t,), weg), 6)
+    return _soll_fuer(form, q, (t,), weg, g)
+
+
 def _soll_fuer(form, menge: Menge, tage, weg, g=None):
     s = menge.soll(form, tage, weg, g.name) if g is not None else menge.soll(form, tage, weg)
     return s
@@ -868,7 +879,7 @@ def _bewerte_geraete(form, groesse, weg, m, wurzeln, datenstand) -> list[Zelle]:
             if datenstand and q.tag is not None:
                 abw = []
                 for t in juni + juli:
-                    s_tag = _soll_fuer(form, q, (t,), weg, g)
+                    s_tag = _soll_tag_geraet(form, q, t, weg, g)
                     ist = q.tag(w_tage[t.isoformat()], g.name)
                     if not _gleich(ist, s_tag):
                         abw.append((t.isoformat(), ist, s_tag))
@@ -1423,10 +1434,11 @@ URSACHE.update({
         "('erzeuger')`), die Sichten führen keinen Verbrauch",
     ),
     "W2-BESTAND-SPEICHER": Ursache(
-        "HA-Bauform S5 (gespeicherte Tageszeilen)",
-        "Die Tageszeile schreibt weiter `aggregate_day` (Bestandspfad, Ersatzgruppe am Ausfalltag B mit 6,24); der "
-        "Kanal ersetzt sie nur beim Lesen der Bilanz-Gruppe. Die Sicht liest den gespeicherten Schlüssel roh — auf HA "
-        "und seit Nachbau 2 (HA-Bauform S4 E-S4-3, der SA-Datenstand trägt Kanäle) ebenso auf SA",
+        "HA-Bauform S5 (gespeicherte Tageszeilen) — seit S5b (E-S5-3) geheilt; keine Zelle mehr",
+        "Seit S5b (E-S5-3) liest die Sicht den Endpunkt; die gespeicherte Zeile trägt an Kanal-Tagen keine Mengen; Soll von "
+        "`geraet:tag:BHKW` = W2-Komposition (Ersatzgruppe, Entscheid Master H-2′ → A — Tagesliste und tag-detail beide 5,75). Bis "
+        "E-S5-2 schrieb `aggregate_day` die Tageszeile nach dem Bestandspfad (Ersatzgruppe am Ausfalltag B mit 6,24), "
+        "der Kanal ersetzte sie nur beim Lesen der Bilanz-Gruppe, und die Sicht las den gespeicherten Schlüssel roh",
     ),
     "W2-SA-BESTAND": Ursache(
         "Lesart 1 (Bauplan §3b) — Standalone ohne Kanäle — seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2); keine Zelle mehr",
@@ -1445,12 +1457,10 @@ URSACHE["E4E-DIENSTLICHE-LADEKOSTEN"] = Ursache(
 _ROT_W2: dict[str, dict[tuple[str, str, str, str], tuple[str, ...]]] = {
     # OHNE-ABSCHLUSS (W2-E): seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2) — keine Zelle mehr.
     'OHNE-ABSCHLUSS': {},
-    'W2-BESTAND-SPEICHER': {
-        ('W2-E', 'sonstiges', 'HA', 'I4'): ('geraet:tag:BHKW',),
-        # HA-Bauform S4 E-S4-3 (Nachbau 2): mit Kanälen dieselbe Sicht wie HA — Cockpit → Monat geheilt, die gespeicherte
-        # Tageszeile (`geraet:tag:BHKW` 6,24 statt 6,0, Ausfalltag B) schreibt weiter der Bestand (gemessen, Matrix-Lauf E-S4-3).
-        ('W2-E', 'sonstiges', 'SA', 'I4'): ('geraet:tag:BHKW',),
-    },
+    # W2-BESTAND-SPEICHER: seit HA-Bauform S5b (E-S5-3, §10h 7, S5-E5 a) geheilt — `geraet:tag:BHKW` (sonstiges HA/SA I4)
+    # grün: seit S5b (E-S5-3) liest die Sicht den Endpunkt (die Tageskomponenten der Tagesliste); die gespeicherte Zeile
+    # trägt an Kanal-Tagen keine Mengen. Keine Zelle mehr.
+    'W2-BESTAND-SPEICHER': {},
     'W2-E-KATALOG': {
     },
     # W2-SA-BESTAND (W2-E): seit HA-Bauform S4 E-S4-3 geheilt (Nachbau 2: der SA-Datenstand trägt Kanäle, die Tage

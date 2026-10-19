@@ -177,7 +177,7 @@ async def test_fenster_treffen_den_bestand_monat_und_stunde(fid):
             aid, _ids = await am.seed_anlage(db, form)
             with am.umgebung(form, svc):
                 await nachfuellen_spiegel(sitzungen, aid, jetzt=mx.JETZT, ha_svc=svc)
-                await mx.aggregiere_tage(db, form.pvform, aid, mx.TAGE_JUNI + mx.TAGE_JULI)
+                await mx.aggregiere_tage(db, form.pvform, aid, mx.TAGE_JUNI + mx.TAGE_JULI, ohne_weiche=True)  # Bestand für die Gleichheit (S5b, E-S5-3)
             kanaele = await kanaele_laden(db, aid, ["basis:einspeisung", "basis:netzbezug"])
             assert set(kanaele) == {"basis:einspeisung", "basis:netzbezug"}
             juni = (await monatsreihe(db, aid, list(kanaele), (2026, 6), (2026, 6), jetzt=JETZT))[0]
