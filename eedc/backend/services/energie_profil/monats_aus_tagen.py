@@ -53,7 +53,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import and_, or_, select
@@ -291,30 +291,63 @@ async def lade_monats_summen_aus_tagen(
     for tz in tz_result.scalars().all():
         tz_je_monat[(tz.datum.year, tz.datum.month)].append(tz)
 
+    kanal = await _kanal_tage_der_monate(db, anlage_id, stunden_je_monat, ab, vor, stunden_nur_fuer)
     summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
-    for schluessel in sorted(set(stunden_je_monat) | set(tz_je_monat)):
-        stunden = stunden_je_monat.get(schluessel, [])
-        stunden_je_tag: dict[date, list] = defaultdict(list)
-        for row in stunden:
-            stunden_je_tag[row.datum].append(row)
-        verworfen_je_tag = {tz.datum: tz.verworfen for tz in tz_je_monat.get(schluessel, [])}
-        summen[schluessel] = falte_monat(
-            stunden_tage=[
-                (tag, bilanz_aus_stundenrows(rows, verworfen=verworfen_je_tag.get(tag)), len(rows))
-                for tag, rows in sorted(stunden_je_tag.items())
-            ],
-            tageszeilen=[
-                TagesZeile(
-                    datum=tz.datum, komponenten_kwh=tz.komponenten_kwh,
-                    source_provenance=tz.source_provenance,
-                    emob_ladung_pv_abgeleitet_kwh=tz.emob_ladung_pv_abgeleitet_kwh,
-                    emob_ladung_netz_abgeleitet_kwh=tz.emob_ladung_netz_abgeleitet_kwh,
-                    emob_ladung_speicher_abgeleitet_kwh=tz.emob_ladung_speicher_abgeleitet_kwh,
-                )
-                for tz in tz_je_monat.get(schluessel, [])
-            ],
-        )
+    for schluessel in sorted(set(stunden_je_monat) | set(tz_je_monat) | {(d.year, d.month) for d in kanal}):
+        summen[schluessel] = _falte_lesart1(stunden_je_monat.get(schluessel, []), tz_je_monat.get(schluessel, []),
+                                            {d: k for d, k in kanal.items() if (d.year, d.month) == schluessel})
     return summen
+
+
+async def _kanal_tage_der_monate(db, anlage_id, stunden_je_monat, ab, vor, stunden_nur_fuer) -> dict:
+    """Die Kanal-Tage (``bilanz_leser.kanal_tage``, ``KanalTag``) der Monate, deren Stunden die Faltung liest — HA-Bauform S5b
+    (E-S5-3, Entscheid Master H-1 → B): seit S5b trägt die Stundenzeile eines Kanal-Tags keine Mengen; ein Monat mit Wahl
+    ``bestand`` (Lesart 1, Rand der Kanal-Deckung oder laufender Monat) liest seine Kanal-Tage deshalb aus der Lesestelle,
+    seine Bestandstage aus den Zeilen. ``stunden_nur_fuer`` leer ⇒ keine Stunden, keine Kanal-Tage."""
+    if stunden_nur_fuer is not None and not stunden_nur_fuer:
+        return {}
+    monate = sorted(stunden_je_monat) if stunden_nur_fuer is None else sorted(stunden_nur_fuer)
+    if not monate:
+        return {}
+    von = max(date(*monate[0], 1), ab) if ab is not None else date(*monate[0], 1)
+    j, m = monate[-1]
+    bis = date(j + (m == 12), m % 12 + 1, 1) - timedelta(days=1)
+    if vor is not None:
+        bis = min(bis, vor - timedelta(days=1))
+    if von > bis:
+        return {}
+    from backend.services.energie_profil.kanal_stunden import _kanal_tage_ab_erstem_stand
+
+    gefragt = set(monate)
+    return {d: k for d, k in (await _kanal_tage_ab_erstem_stand(db, anlage_id, von, bis)).items()
+            if (d.year, d.month) in gefragt}
+
+
+def _falte_lesart1(stunden: list, tageszeilen: list, kanal: dict) -> TagesMonatsSumme:
+    """Ein Monat aus seinen Tagen: Bestandstage aus Stunden- und Tageszeilen (nach ihrer Regelmarke), Kanal-Tage aus der
+    Lesestelle (``KanalTag``: Bilanz, PV/BKW-Schlüssel und Marken wie ``tage-werte``; die Heimladungs-Anteile bleiben die der
+    Tageszeile — sie sind dort an einem Kanal-Tag aus den Kanal-Stunden gerechnet). Dieselbe Faltung ``falte_monat``."""
+    stunden_je_tag: dict[date, list] = defaultdict(list)
+    for row in stunden:
+        if row.datum not in kanal:
+            stunden_je_tag[row.datum].append(row)
+    tz_je_tag = {tz.datum: tz for tz in tageszeilen}
+    stunden_tage = [(tag, bilanz_aus_stundenrows(rows, verworfen=getattr(tz_je_tag.get(tag), "verworfen", None)), len(rows))
+                    for tag, rows in stunden_je_tag.items()]
+    stunden_tage += [(d, k.bilanz, k.stunden) for d, k in kanal.items()]
+    zeilen = [_tageszeile(tz.datum, tz.komponenten_kwh, tz.source_provenance, tz) for tz in tageszeilen if tz.datum not in kanal]
+    zeilen += [_tageszeile(d, k.komponenten_kwh, k.source_provenance, tz_je_tag.get(d)) for d, k in kanal.items()]
+    return falte_monat(stunden_tage=sorted(stunden_tage, key=lambda x: x[0]), tageszeilen=zeilen)
+
+
+def _tageszeile(datum: date, komponenten_kwh, source_provenance, tz) -> "TagesZeile":
+    """Eine ``TagesZeile`` der Faltung; die Heimladungs-Anteile aus der Tageszeile ``tz`` (``None`` ohne Zeile)."""
+    return TagesZeile(
+        datum=datum, komponenten_kwh=komponenten_kwh, source_provenance=source_provenance,
+        emob_ladung_pv_abgeleitet_kwh=getattr(tz, "emob_ladung_pv_abgeleitet_kwh", None),
+        emob_ladung_netz_abgeleitet_kwh=getattr(tz, "emob_ladung_netz_abgeleitet_kwh", None),
+        emob_ladung_speicher_abgeleitet_kwh=getattr(tz, "emob_ladung_speicher_abgeleitet_kwh", None),
+    )
 
 
 @dataclass(frozen=True)

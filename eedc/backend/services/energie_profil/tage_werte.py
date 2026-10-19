@@ -105,11 +105,11 @@ class _TageKontext:
     md_pro_monat: dict[tuple[int, int], Monatsdaten]
     zaehler_stand_pro_tag: dict[date, dict[str, float]]
     kanal_je_tag: dict
-    ziele_je_tag: dict
     #: HA-Bauform E-S3-2: je Kanal-Tag die Mischzeilen (`kanal_stunden.py`) — der Eingang der stundengepaarten Größen.
     kanal_stunden_je_tag: dict
-    #: HA-Bauform S4 (§10a (4)): je Kanal-Tag mit Sonstiges-Wahl `kanal` die Tages-Δ der Sonstiges-Zähler.
-    sonstiges_kanal_je_tag: dict
+    #: HA-Bauform S5 (E-S5-3, §10h 6): `komponenten_kwh` je Tag aus der einen Mischung `kanal_stunden.komponenten_der_tage`
+    #: (an einem Kanal-Tag Bilanz- und Sonstiges-Schlüssel aus den Kanälen — die Gruppen, die diese Sicht liest).
+    komp_je_tag: dict
     tarif_cache: dict[date, dict]
     slot_kosten_je_tag: dict
 
@@ -249,20 +249,21 @@ async def baue_tage_werte(
     # HA-Bauform E4a-2 (Umschaltstelle 4): je Tag EINE Quellenwahl der Bilanz-Gruppe. Ein Kanal-Tag nimmt Mengen,
     # Eigenverbrauch, Quoten und die Bilanz-Schlüssel aus den Kanälen (Weg 2, kein Deckel); die übrigen Schlüssel
     # der Tageszeile und die stundengepaarten Spalten bleiben (B-3, D4). Ein Tag mit Wahl `bestand` rechnet wie bisher.
-    from backend.services.kanal.bilanz_leser import (
-        bilanz_ziele, kanal_tage,
-    )
+    from backend.services.kanal.bilanz_leser import kanal_tage
 
     kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
-    ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
     # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags aus dem Kanal-Stundentag (Mischzeilen) — Direktverbrauch,
     # Überschuss, Defizit, Zahl der Stunden, WP-Strom über dieselbe Layer-Formel wie die Stundenzeilen (S3-R5).
-    from backend.services.energie_profil.kanal_stunden import sonstiges_der_kanal_tage, stunden_der_kanal_tage
+    from backend.services.energie_profil.kanal_stunden import (
+        GRUPPE_BILANZ, GRUPPE_SONSTIGES, komponenten_der_tage, stunden_der_kanal_tage,
+    )
 
     kanal_stunden_je_tag = await stunden_der_kanal_tage(
         db, anlage_id, kanal_je_tag, {**tep_pro_tag, bis + timedelta(days=1): tep_folgetag},
     )
-    sonstiges_kanal_je_tag = await sonstiges_der_kanal_tage(db, anlage_id, kanal_je_tag)
+    # HA-Bauform S5 (E-S5-3, §10h 6): die Tageskomponenten über die eine Mischung — diese Sicht liest aus ihnen nur die
+    # Bilanz- (PV/BKW-Split, Erzeuger) und Sonstiges-Schlüssel (Sonstiges/Abgabe) und V2H (ohne Kanal, Tageszeile).
+    komp_je_tag = await komponenten_der_tage(db, anlage_id, von, bis, gruppen=(GRUPPE_BILANZ, GRUPPE_SONSTIGES))
 
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag) | set(kanal_je_tag))
     tarif_cache: dict[date, dict] = {}
@@ -327,9 +328,8 @@ async def baue_tage_werte(
         md_pro_monat=md_pro_monat,
         zaehler_stand_pro_tag=zaehler_stand_pro_tag,
         kanal_je_tag=kanal_je_tag,
-        ziele_je_tag=ziele_je_tag,
         kanal_stunden_je_tag=kanal_stunden_je_tag,
-        sonstiges_kanal_je_tag=sonstiges_kanal_je_tag,
+        komp_je_tag=komp_je_tag,
         tarif_cache=tarif_cache,
         slot_kosten_je_tag=slot_kosten_je_tag,
     )
@@ -506,7 +506,7 @@ def _tagesbilanz(kx: _TageKontext, tag: date, stunden_rows: list, tz: Optional[T
     """Die Tagesbilanz: Stundenzeilen nach der Regelmarke, an einem Kanal-Tag gemischt (E4a-2), danach EINMAL V2H.
 
     Rückgabe ``(bilanz, komp_tag, verworfen_tag, kanal_tag, v2h_tag)`` — die HEAD-Namen des Schleifenrumpfs."""
-    from backend.services.kanal.bilanz_leser import mische_bilanz, mische_komponenten, mische_verworfen
+    from backend.services.kanal.bilanz_leser import mische_bilanz, mische_verworfen
 
     # Zählerlücken wie HA (R7/R9): die Tageszeile sagt selbst, nach welcher
     # Regel sie gerechnet ist — `verworfen` ist die Regelmarke. Ohne Marke
@@ -516,18 +516,15 @@ def _tagesbilanz(kx: _TageKontext, tag: date, stunden_rows: list, tz: Optional[T
     bilanz = bilanz_aus_stundenrows(
         kx.kanal_stunden_je_tag.get(tag, stunden_rows), verworfen=(tz.verworfen if tz else None),
     )
-    komp_tag = tz.komponenten_kwh if tz else None
+    # HA-Bauform E4a-2/S4 §10a (4)/S5 E-S5-3: an einem Kanal-Tag die Bilanz-Schlüssel und Sonstiges/Abgabe im
+    # Kalendertag aus den Kanälen (`kx.komp_je_tag`, die eine Mischung), sonst die Tageszeile. V2H hat keinen Kanal
+    # (`katalog.TAGESGROESSE_OHNE_KANAL`) und bleibt aus der Tageszeile (benannt).
+    komp_tag = kx.komp_je_tag.get(tag, tz.komponenten_kwh if tz else None)
     verworfen_tag = tz.verworfen if tz else None
     kanal_tag = kx.kanal_je_tag.get(tag)
     if kanal_tag is not None:
         bilanz = mische_bilanz(kanal_tag.bilanz, bilanz)
-        komp_tag = mische_komponenten(komp_tag, kanal_tag, kx.ziele_je_tag.get(tag, set()))
         verworfen_tag = mische_verworfen(verworfen_tag)
-        # HA-Bauform S4 (§10a (4)): Sonstiges/Abgabe im Kalendertag aus der Sonstiges-Gruppe (Wahl `kanal`), sonst die
-        # Tageszeile. V2H hat keinen Kanal (`katalog.TAGESGROESSE_OHNE_KANAL`) und bleibt aus der Tageszeile (benannt).
-        from backend.services.energie_profil.kanal_stunden import mische_sonstiges
-
-        komp_tag = mische_sonstiges(komp_tag, kx.sonstiges_kanal_je_tag.get(tag))
     # ⭐ #110 V2H-Tageswert (Konzept §2, B5/B6): die Rückspeisung des E-Autos ins Haus aus dem Rollup
     # (`v2h_<id>`, Σ; `None` ohne Key — eine 0,0 ist gemessen). EINMAL nach dem Mischen: an einem Kanal-Tag
     # kommen Gesamtverbrauch, Eigenverbrauch und Quoten aus der Kanal-Komposition, und die kennt kein V2H

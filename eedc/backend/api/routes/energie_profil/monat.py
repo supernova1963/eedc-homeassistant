@@ -196,10 +196,9 @@ async def get_monatsauswertung(
     # HA-Bauform E4a-2 (Umschaltstelle 4): je Tag EINE Quellenwahl der Bilanz-Gruppe — ein Kanal-Tag bringt Mengen,
     # Eigenverbrauch und Quoten aus den Kanälen (Weg 2, kein Deckel), die stundengepaarten Größen aus den Stunden
     # (B-3, D4). Der Monat faltet die Tage über dieselbe Layer-Funktion wie `monats_aus_tagen.falte_monat`.
-    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage
+    from backend.services.kanal.bilanz_leser import kanal_tage
 
     kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
-    ziele_je_tag = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
 
     # HA-Bauform E-S3-2: die Stunden eines Kanal-Tags sind seine Mischzeilen (`kanal_stunden.py`) — Heatmap, Profil,
     # Spitzen und die stundengepaarten Größen lesen sie wie Stundenzeilen; gebündelte Stunden fallen wie bisher heraus
@@ -222,7 +221,7 @@ async def get_monatsauswertung(
         inv.id: inv for inv in inv_result.scalars().all()
     }
 
-    komponenten_sum = _komponenten_summen(tag_rows, kanal_je_tag, ziele_je_tag)
+    komponenten_sum = await _komponenten_summen(db, anlage_id, von, bis, tag_rows)
     komponenten_liste, kategorie_sum = _komponenten(komponenten_sum, inv_map, kpi.pv_sum, kpi.verbrauch_sum)
     kategorien_liste = _kategorien(kategorie_sum, kpi.pv_sum, kpi.verbrauch_sum)
 
@@ -498,14 +497,14 @@ def _tages_kennzahlen(anlage, tag_rows) -> _TagesKennzahlen:
     )
 
 
-def _komponenten_summen(tag_rows, kanal_je_tag, ziele_je_tag) -> dict[str, float]:
-    """Σ `komponenten_kwh` je Schlüssel über die Tage; an Kanal-Tagen die Bilanz-Schlüssel aus dem Kanal (B-3)."""
-    from backend.services.kanal.bilanz_leser import mische_komponenten
+async def _komponenten_summen(db: AsyncSession, anlage_id: int, von: date, bis: date, tag_rows) -> dict[str, float]:
+    """Σ `komponenten_kwh` je Schlüssel über die Tage; an Kanal-Tagen die Schlüssel der Gruppen mit Wahl `kanal` aus den
+    Kanälen — die eine Mischung `kanal_stunden.komponenten_der_tage` (B-3; HA-Bauform S5 E-S5-3, §10h 6: seit S5b auch
+    Wärmepumpe, E-Mobilität und Sonstiges, die der Schreiber an Kanal-Tagen nicht mehr in die Tageszeile schreibt)."""
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
 
     komponenten_sum: dict[str, float] = defaultdict(float)
-    _komp_je_tag = {t.datum: t.komponenten_kwh for t in tag_rows}
-    for d, k in kanal_je_tag.items():
-        _komp_je_tag[d] = mische_komponenten(_komp_je_tag.get(d), k, ziele_je_tag.get(d, set()))
+    _komp_je_tag = await komponenten_der_tage(db, anlage_id, von, bis, {t.datum: t.komponenten_kwh for t in tag_rows})
     for _d, _komp in sorted(_komp_je_tag.items()):
         if not _komp:
             continue

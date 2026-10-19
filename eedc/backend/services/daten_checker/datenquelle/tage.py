@@ -78,7 +78,7 @@ class TageChecks:
             erwartete_komponenten_keys, komponenten_key_label,
         )
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
-        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+        from backend.services.energie_profil.kanal_stunden import gruppen_der_schluessel, komponenten_der_tage
         from backend.models.investition import Investition as _Inv
 
         kat = CheckKategorie.TAGESWERTE_FEHLEN.value
@@ -108,8 +108,7 @@ class TageChecks:
         # Kanal-Tag der Bilanz mit PV/BKW, Netz und Speicher aus dem HA-Spiegel bzw. den eigenen Zählerständen (wie
         # Cockpit → Tag); ein Kanal-Tag ohne Tageszeile steht mit seinen Kanal-Schlüsseln drin. Ein «leerer Tag» mit
         # Kanal-Deckung ist damit kein Befund (Cockpit → Tag zeigt ihn); Wärmepumpe, Wallbox und Sonstiges ohne Kanal
-        # bleiben die der Tageszeile.
-        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
+        # bleiben die der Tageszeile. Geladen wird unten, nach den versprochenen Schlüsseln.
 
         def _erwartet_am_tag(tag: date) -> set[str]:
             """Welche Keys verspricht die Zuordnung für GENAU diesen Tag?
@@ -133,12 +132,20 @@ class TageChecks:
                 if not k.startswith("batterie_")
             }
 
+        tage = [bis - _td(days=i) for i in range((bis - von).days + 1)]
+        erwartet_je_tag = {d: _erwartet_am_tag(d) for d in tage}
+        # Die Lesestelle (s. o.) mit Lade-Hinweis (E-S5-3 Nachzug M-1): die Regel liest genau die versprochenen Schlüssel —
+        # die Gruppen dieser Schlüssel (`gruppen_der_schluessel`); an einem Kanal-Tag trägt die Tageszeile sie seit S5b
+        # nicht mehr, ohne die Gruppe wäre ein Kanal-Tag eine Phantom-Lücke.
+        komp_je_tag = await komponenten_der_tage(
+            self.db, anlage.id, von, bis, gruppen=gruppen_der_schluessel(set().union(*erwartet_je_tag.values())))
+
         # Vorfilter aus der DB — teuer ist nur der LTS-Read. Eine gesunde
         # Anlage kommt so ganz ohne HA-Abfrage aus.
         kandidaten: list[tuple[date, set[str]]] = []
         etwas_versprochen = False
-        for d in (bis - _td(days=i) for i in range((bis - von).days + 1)):
-            erwartete_keys = _erwartet_am_tag(d)
+        for d in tage:
+            erwartete_keys = erwartet_je_tag[d]
             if not erwartete_keys:
                 # An diesem Tag war keine zugeordnete Komponente aktiv → nichts
                 # versprochen, also auch keine Lücke.

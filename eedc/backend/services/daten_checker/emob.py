@@ -509,13 +509,15 @@ class EmobChecks:
 
         wb_keys = {f"wallbox_{w.id}" for w in wallboxen}
         ea_keys = {f"eauto_{e.id}" for e in eautos}
-        # HA-Bauform S5 (E-S5-2, Bauplan §5): die Komponenten über die Lesestelle (wie ``tage-werte``). Die Schlüssel
-        # ``wallbox_<id>``/``eauto_<id>`` gehören zu keiner Bilanz-Achse — sie bleiben an jedem Tag die der Tageszeile;
-        # der Befund bleibt damit auch an einem Kanal-Tag (benannt, E-S5-2 H-E → A): die Regel prüft gespeicherte
-        # Altlast, ihr Handgriff wirkt auf die Tageszeile; S5b (Schreiber ohne Mengen an Kanal-Tagen) nimmt ihn dort weg.
-        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+        # HA-Bauform S5 (E-S5-2, Bauplan §5; E-S5-3 §10h 6): die Komponenten über die Lesestelle. An einem Kanal-Tag mit
+        # E-Mob-Wahl `kanal` kommen ``wallbox_<id>``/``eauto_<id>`` aus den Kanälen (die Zähler des Tages, Wallbox-Regel
+        # N-555) — eine gespeicherte Doppelzählung der Tageszeile zählt dort nicht mehr; der Schreiber lässt die Schlüssel
+        # an Kanal-Tagen leer (S5-R2). An Bestandstagen prüft die Regel die Tageszeile wie bisher. Lade-Hinweis (E-S5-3
+        # Nachzug M-1): die Regel liest nur ``wallbox_*``/``eauto_*`` — die E-Mob-Gruppe (und die Bilanz, die immer mischt).
+        from backend.services.energie_profil.kanal_stunden import gruppen_der_schluessel, komponenten_der_tage
 
-        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
+        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis,
+                                                 gruppen=gruppen_der_schluessel(wb_keys | ea_keys))
 
         befunde: list[tuple[date, float, float]] = []
         for tz in rows:

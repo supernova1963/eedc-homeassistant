@@ -86,10 +86,14 @@ async def _anlage(ds) -> Anlage:
 
 
 async def _ohne_kanalzeilen(ds) -> None:
-    """Gegenprobe: dieselben Tages- und Stundenzeilen, kein Kanal trägt eine Zeile ⇒ jeder Tag ist Bestandstag."""
+    """Gegenprobe: kein Kanal trägt eine Zeile ⇒ jeder Tag ist Bestandstag. Seit S5b (E-S5-3) schreibt ``aggregate_day``
+    an einem Kanal-Tag keine Mengen in die Tageszeile — der Tag verliert hier seine Kanal-Deckung und wird neu aggregiert
+    (§10h 3: die nächste Aggregation schreibt wieder Mengen), damit die Tageszeile die Bestandswerte trägt wie bis
+    E-S5-2. Die Gegenproben verfälschen die Tageszeile danach."""
     ids = select(Kanal.id).where(Kanal.anlage_id == ds.aid)
     await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id.in_(ids)))
     await ds.db.commit()
+    await kg.neu_aggregieren(ds)
 
 
 async def _tz_setzen(ds, tage, **werte) -> None:
@@ -99,8 +103,11 @@ async def _tz_setzen(ds, tage, **werte) -> None:
 
 
 async def _komp(ds) -> dict:
-    return {z.datum: dict(z.komponenten_kwh or {}) for z in (await ds.db.execute(
-        select(TagesZusammenfassung).where(TagesZusammenfassung.anlage_id == ds.aid))).scalars()}
+    """Die Tageskomponenten am Endpunkt (``komponenten_der_tage``): an einem Kanal-Tag aus den Kanälen — die
+    gespeicherte Zeile trägt dort seit S5b keine Mengen —, an einem Bestandstag die Tageszeile."""
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+
+    return {d: dict(k or {}) for d, k in (await komponenten_der_tage(ds.db, ds.aid, kg.TAGE[0], kg.TAGE[-1])).items()}
 
 
 def _ha(monkeypatch, werte_je_tag: dict) -> None:
@@ -136,8 +143,8 @@ async def test_pv_ueber_erfassung_kanal_tag_mit_falscher_tageszeile_kein_verdach
 
 async def test_pv_ueber_erfassung_gegenprobe_bestandstag_verdacht_wie_bisher(uhr):
     async with kg.datenstand("achsen", "M01", "HA") as ds:
-        await _pv_vielfach(ds)
         await _ohne_kanalzeilen(ds)
+        await _pv_vielfach(ds)
         a = await _anlage(ds)
         with heute_fest():
             erg = await DatenChecker(ds.db)._check_pv_ueber_erfassung(a)
@@ -155,6 +162,8 @@ async def test_tages_pv_summe_monat_kanal_tage_aus_dem_spiegel_bestand_aus_der_t
         await _pv_vielfach(ds)
         assert await DatenChecker(ds.db)._tages_pv_summe_monat(ds.aid, 2026, 6) == pytest.approx(kanal, abs=1e-9)
         await _ohne_kanalzeilen(ds)
+        komp = await _komp(ds)
+        await _pv_vielfach(ds)
         bestand = await DatenChecker(ds.db)._tages_pv_summe_monat(ds.aid, 2026, 6)
     gespeichert = sum(v for d, k in komp.items() if d.month == 6 for s, v in k.items() if s.startswith("pv_"))
     zuschlag = sum(v * 29 for d in (TAG, date(2026, 6, 11), date(2026, 6, 12))
@@ -180,10 +189,10 @@ async def test_drift_kanal_tag_mit_falscher_tageszeile_kein_befund(uhr, monkeypa
 
 async def test_drift_gegenprobe_bestandstag_befund_wie_bisher(uhr, monkeypatch):
     async with kg.datenstand("achsen", "M01", "HA") as ds:
+        await _ohne_kanalzeilen(ds)
         komp = await _komp(ds)
         _ha(monkeypatch, komp)
         await _tz_setzen(ds, [TAG], komponenten_kwh={k: v / 2 for k, v in komp[TAG].items()})
-        await _ohne_kanalzeilen(ds)
         a = await _anlage(ds)
         with heute_fest():
             erg = await DatenChecker(ds.db)._check_datenquelle_drift(a)
@@ -217,11 +226,11 @@ async def test_vorzeichen_gegenprobe_bestandstag_befund_wie_bisher(uhr, monkeypa
     from backend.core.berechnungen import summe_batterie_netto_kwh
 
     async with kg.datenstand("achsen", "M02", "HA") as ds:
+        await _ohne_kanalzeilen(ds)
         komp = await _komp(ds)
         tage = [d for d, k in komp.items() if abs(summe_batterie_netto_kwh(k)) >= 1.0]
         _ha(monkeypatch, komp)
         await _tz_setzen(ds, tage[:1], komponenten_kwh=_vertauscht(komp[tage[0]]))
-        await _ohne_kanalzeilen(ds)
         a = await _anlage(ds)
         with heute_fest():
             erg = await DatenChecker(ds.db)._check_batterie_vorzeichen_historie(a)
@@ -248,9 +257,9 @@ async def test_leere_tage_kanal_tag_mit_leerer_tageszeile_kein_befund(uhr, monke
 
 async def test_leere_tage_gegenprobe_bestandstag_befund_wie_bisher(uhr, monkeypatch):
     async with kg.datenstand("achsen", "M01", "HA") as ds:
+        await _ohne_kanalzeilen(ds)
         _ha(monkeypatch, await _komp(ds))
         await _tz_setzen(ds, [TAG], komponenten_kwh={})
-        await _ohne_kanalzeilen(ds)
         a = await _anlage(ds)
         with heute_fest():
             erg = await DatenChecker(ds.db)._check_leere_tage_trotz_zaehler(a)
@@ -258,21 +267,31 @@ async def test_leere_tage_gegenprobe_bestandstag_befund_wie_bisher(uhr, monkeypa
         [(e.schwere, e.meldung) for e in erg]
 
 
-# ── E-Mob-Doppelzählung: ⛔ H-E — die E-Mob-Schlüssel bleiben die der Tageszeile ──
+# ── E-Mob-Doppelzählung: seit S5b (E-S5-3, §10h 6) an einem E-Mob-Kanal-Tag die Kanal-Werte (E-S5-2 H-E erledigt) ──
 
 
-async def test_emob_doppelzaehlung_kanal_tag_traegt_die_tageszeile_gemessen(uhr):
-    """⛔ H-E (gemessen, nicht entschieden): ``wallbox_<id>``/``eauto_<id>`` sind keine Bilanz-Schlüssel —
-    ``komponenten_der_tage`` liest sie auch an einem Kanal-Tag aus der Tageszeile; der Befund bleibt dort stehen."""
+async def _emob_doppelt(ds, komp) -> tuple:
+    a = await _anlage(ds)
+    wb = next(i.id for i in a.investitionen if i.typ == "wallbox")
+    ea = next(i.id for i in a.investitionen if i.typ == "e-auto")
+    await _tz_setzen(ds, [TAG], komponenten_kwh={**komp[TAG], f"wallbox_{wb}": -5.0, f"eauto_{ea}": -5.0})
+    a = await _anlage(ds)
+    with heute_fest():
+        return await DatenChecker(ds.db)._check_emob_doppelzaehlung_tage(a)
+
+
+async def test_emob_doppelzaehlung_kanal_tag_liest_die_kanaele(uhr):
+    """Seit S5b mischt ``komponenten_der_tage`` an einem Kanal-Tag auch die E-Mob-Gruppe (Wahl ``kanal``) aus den
+    Kanälen — eine verfälschte (doppelt zählende) Tageszeile ergibt dort keinen Befund (E-S5-2 H-E → S5b)."""
     async with kg.datenstand("achsen", "M08", "HA") as ds:
-        a = await _anlage(ds)
-        wb = next(i.id for i in a.investitionen if i.typ == "wallbox")
-        ea = next(i.id for i in a.investitionen if i.typ == "e-auto")
-        komp = await _komp(ds)
-        await _tz_setzen(ds, [TAG], komponenten_kwh={**komp[TAG], f"wallbox_{wb}": -5.0, f"eauto_{ea}": -5.0})
-        a = await _anlage(ds)
-        with heute_fest():
-            erg = await DatenChecker(ds.db)._check_emob_doppelzaehlung_tage(a)
+        erg = await _emob_doppelt(ds, await _komp(ds))
+    assert not [e for e in erg if e.schwere == "warning"], [e.meldung for e in erg]
+
+
+async def test_emob_doppelzaehlung_gegenprobe_bestandstag_befund_wie_bisher(uhr):
+    async with kg.datenstand("achsen", "M08", "HA") as ds:
+        await _ohne_kanalzeilen(ds)
+        erg = await _emob_doppelt(ds, await _komp(ds))
     (e,) = [e for e in erg if e.schwere == "warning"]
     assert TAG.isoformat() in e.meldung
 
@@ -288,8 +307,8 @@ async def test_nachtrag_kanal_tag_kein_befund(uhr):
 
 async def test_nachtrag_gegenprobe_bestandstag_befund_wie_bisher(uhr):
     async with kg.datenstand("achsen", "M01", "HA") as ds:
-        await _tz_setzen(ds, [TAG], nachtrag={"pv": 12.5})
         await _ohne_kanalzeilen(ds)
+        await _tz_setzen(ds, [TAG], nachtrag={"pv": 12.5})
         (e,) = await DatenChecker(ds.db)._check_nachtrag_nach_eingefrorenem_zaehler(await _anlage(ds))
     assert e.meldung == "1 Tag(e) mit Nachtrag nach eingefrorenem Zähler (2026-06-10 … 2026-06-10)"
 

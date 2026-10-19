@@ -57,21 +57,23 @@ async def get_tages_zusammenfassungen(
         .order_by(TagesZusammenfassung.datum)
     )
     tage = result.scalars().all()
-    # HA-Bauform E4a-2 (Umschaltstelle 4): an Kanal-Tagen die Bilanz-Schlüssel aus den Kanälen (B-3).
-    from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
+    # HA-Bauform E4a-2 (Umschaltstelle 4) / S5 E-S5-3: an Kanal-Tagen kommen die Schlüssel der Gruppen mit Wahl `kanal`
+    # (Bilanz, Sonstiges, E-Mobilität, Wärmepumpe) aus den Kanälen — die eine Mischung `komponenten_der_tage`; Überschuss
+    # und Defizit aus den Mischzeilen (`ueberschuss_defizit_der_tage`, Form der Tageszeile). Seit S5b schreibt der
+    # Aggregator beides an Kanal-Tagen nicht mehr in die Zeile.
+    from backend.services.energie_profil.kanal_stunden import komponenten_der_tage, ueberschuss_defizit_der_tage
 
-    kanal_je_tag = await kanal_tage(db, anlage_id, von, bis)
-    ziele = await bilanz_ziele(db, anlage_id, kanal_je_tag) if kanal_je_tag else {}
+    komp_je_tag = await komponenten_der_tage(db, anlage_id, von, bis, {t.datum: t.komponenten_kwh for t in tage})
+    ud_je_tag = await ueberschuss_defizit_der_tage(db, anlage_id, von, bis, tageszeilen_form=True) if tage else {}
 
     def _komp(t):
-        k = kanal_je_tag.get(t.datum)
-        return t.komponenten_kwh if k is None else mische_komponenten(t.komponenten_kwh, k, ziele[t.datum])
+        return komp_je_tag.get(t.datum)
 
     return [
         TagesZusammenfassungResponse(
             datum=t.datum,
-            ueberschuss_kwh=t.ueberschuss_kwh,
-            defizit_kwh=t.defizit_kwh,
+            ueberschuss_kwh=ud_je_tag.get(t.datum, (None, None))[0],
+            defizit_kwh=ud_je_tag.get(t.datum, (None, None))[1],
             peak_pv_kw=t.peak_pv_kw,
             peak_netzbezug_kw=t.peak_netzbezug_kw,
             peak_einspeisung_kw=t.peak_einspeisung_kw,

@@ -97,7 +97,7 @@ def _bestand_komponenten(tz_list):
     """HA-Bauform S5 (E-S5-2): die Regel liest die gespeicherte Seite über ``kanal_stunden.komponenten_der_tage`` — diese
     Probe kennt keine Kanäle, also liefert die Lesestelle je Tageszeile ihre Komponenten (Bestandstag); ein Tag ohne
     Tageszeile fehlt."""
-    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None):
+    async def _komp(db, anlage_id, von, bis, komponenten_je_tag=None, *, gruppen=None):
         return {tz.datum: tz.komponenten_kwh for tz in tz_list if von <= tz.datum <= bis}
     return _komp
 

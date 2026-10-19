@@ -11,7 +11,7 @@ Source-Tag nach P3-Architektur-Integration `auto:monatsabschluss`.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,8 +78,16 @@ async def rollup_month(
     if not md:
         return False
 
-    ueberschuss_vals = [t.ueberschuss_kwh for t in tage if t.ueberschuss_kwh is not None]
-    defizit_vals = [t.defizit_kwh for t in tage if t.defizit_kwh is not None]
+    # HA-Bauform S5 (E-S5-3): an einem Kanal-Tag schreibt `aggregate_day` Überschuss und Defizit nicht mehr in die
+    # Tageszeile (S5-R2) — die Lesestelle liefert sie dort aus den Mischzeilen (in der Form der Tageszeile), an jedem
+    # anderen Tag die Tageszeile wie bisher.
+    from backend.services.energie_profil.kanal_stunden import ueberschuss_defizit_der_tage
+
+    je_tag = await ueberschuss_defizit_der_tage(
+        db, anlage_id, erster, letzter - timedelta(days=1), tageszeilen_form=True,
+    )
+    ueberschuss_vals = [u for u, _ in je_tag.values() if u is not None]
+    defizit_vals = [d for _, d in je_tag.values() if d is not None]
     zyklen_vals = [t.batterie_vollzyklen for t in tage if t.batterie_vollzyklen is not None]
     pr_vals = [t.performance_ratio for t in tage if t.performance_ratio is not None]
     peak_bezug_vals = [t.peak_netzbezug_kw for t in tage if t.peak_netzbezug_kw is not None]

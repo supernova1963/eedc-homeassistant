@@ -134,6 +134,9 @@ async def _kanal_loeschen(ds, *, vor: date | None = None) -> None:
     await ds.db.execute(q)
     await ds.db.commit()
     merken.leeren()     # Schreiben an der Schreibschicht vorbei (Probe) — der Speicher je Prozess sieht es nicht
+    # HA-Bauform S5b (E-S5-3, §10h 3): an einem Kanal-Tag schreibt `aggregate_day` keine Mengen — ein Tag, der seine
+    # Kanal-Deckung verliert, trägt sie erst nach der nächsten Aggregation wieder (wie der Schreiber im Betrieb).
+    await kg.neu_aggregieren(ds)
 
 
 def _gleich(a, b) -> bool:
@@ -487,7 +490,9 @@ async def test_prognose_leser_pv_ist_am_kanal_tag(uhr, monkeypatch):
         # Gegenprobe: die Tageszeile des Kanal-Tags trägt eine falsche PV — der Kanal-Tag nimmt sie nicht.
         tz_tag = (await ds.db.execute(select(TagesZusammenfassung).where(
             TagesZusammenfassung.anlage_id == ds.aid, TagesZusammenfassung.datum == TAG))).scalar_one()
-        falsch = {k: (v * 3 if k.startswith(("pv_", "bkw_")) else v) for k, v in (tz_tag.komponenten_kwh or {}).items()}
+        # Seit S5b trägt die Tageszeile eines Kanal-Tags keine PV-Schlüssel — die Verfälschung setzt die Tagesliste × 3 ein.
+        basis = (await ks.komponenten_der_tage(ds.db, ds.aid, TAG, TAG))[TAG] or {}
+        falsch = {k: (v * 3 if k.startswith(("pv_", "bkw_")) else v) for k, v in basis.items()}
         await ds.db.execute(update(TagesZusammenfassung).where(TagesZusammenfassung.id == tz_tag.id).values(
             komponenten_kwh=falsch))
         await ds.db.commit()
@@ -503,6 +508,10 @@ async def test_prognose_leser_pv_ist_am_kanal_tag(uhr, monkeypatch):
         mae_kanal = await pg.eedc_mae_prozent(ds.db, ds.aid, heute=heute)
         lf_kanal = await live_wetter._get_lernfaktor_detail(ds.aid, ds.db, heute=heute)
         await _kanal_loeschen(ds)
+        # Der Bestandstag ist neu aggregiert (S5b) — dieselbe verfälschte Tageszeile wieder eingesetzt.
+        await ds.db.execute(update(TagesZusammenfassung).where(
+            TagesZusammenfassung.anlage_id == ds.aid, TagesZusammenfassung.datum == TAG).values(komponenten_kwh=falsch))
+        await ds.db.commit()
         live_wetter._lernfaktor_cache.clear()
         neu = (await pg.eedc_mae_prozent(ds.db, ds.aid, heute=heute),
                (await prognosen.get_prognosen_genauigkeit(anlage_id=ds.aid, tage=30, ausreisser_ausblenden=False,
@@ -641,6 +650,11 @@ async def test_ist_heute_regelmarke_wie_tage_werte(uhr, monkeypatch):
         zeilen = await prognosen.stunden_der_tage(ds.db, ds.aid, heute, heute, felder=("pv_kw",))
         kanal = await prognosen._ist_heute(ds.db, ds.aid, heute, jetzt, zeilen)
         await _kanal_loeschen(ds)
+        # Der Bestandstag ist neu aggregiert (S5b) — dieselbe Marke wieder gesetzt.
+        await ds.db.execute(update(TagesZusammenfassung).where(
+            TagesZusammenfassung.anlage_id == ds.aid, TagesZusammenfassung.datum == heute,
+        ).values(verworfen={"pv": {"grund": "probe"}}))
+        await ds.db.commit()
         zeilen_b = await prognosen.stunden_der_tage(ds.db, ds.aid, heute, heute, felder=("pv_kw",))
         bestand = await prognosen._ist_heute(ds.db, ds.aid, heute, jetzt, zeilen_b)
     assert zeilen and all(ist_beginn_raster(z) for z in zeilen)

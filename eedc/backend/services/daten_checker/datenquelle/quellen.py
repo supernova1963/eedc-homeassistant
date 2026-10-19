@@ -351,10 +351,12 @@ class QuellenChecks:
             return []  # Keine Daten — frische Anlage, kein Vergleich nötig
         # HA-Bauform S5 (E-S5-2, Bauplan §5): die eedc-Seite über die Lesestelle — an einem Kanal-Tag der Bilanz
         # PV/BKW, Netz und Speicher aus dem HA-Spiegel bzw. den eigenen Zählerständen (wie Cockpit → Tag; der Vergleich
-        # mit HA ergibt dort keinen Befund), alle übrigen Schlüssel und jeder Bestandstag aus der Tageszeile.
-        from backend.services.energie_profil.kanal_stunden import komponenten_der_tage
+        # mit HA ergibt dort keinen Befund), alle übrigen Schlüssel und jeder Bestandstag aus der Tageszeile. Lade-Hinweis
+        # (E-S5-3 Nachzug M-1): die zweite Achse liest jeden Geräte-Schlüssel, den HA liefert (Wallbox, E-Auto, Wärmepumpe,
+        # Sonstiges) — alle Gruppen; an einem Kanal-Tag trägt die Tageszeile sie seit S5b nicht mehr.
+        from backend.services.energie_profil.kanal_stunden import KOMPONENTEN_GRUPPEN, komponenten_der_tage
 
-        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis)
+        komp_je_tag = await komponenten_der_tage(self.db, anlage.id, von, bis, gruppen=KOMPONENTEN_GRUPPEN)
 
         inv_result = await self.db.execute(
             select(_Inv).where(_Inv.anlage_id == anlage.id)

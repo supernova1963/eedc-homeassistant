@@ -173,7 +173,7 @@ async def _lade_tagesprofil(db, anlage_id: int, heute: date):
     HA-Bauform S5 (E-S5-2, Bauplan §3 (A)): die Stunden über die Lesestelle ``kanal_stunden.stunden_der_tage`` — an
     einem Kanal-Tag der Bilanz die Mischzeilen (Mengen wie *Cockpit → Tag*, Stunde = Beginn; am laufenden Tag die Wahl
     bis zur fälligen Stunde, Lese-Schicht), sonst die Stundenzeilen wie bisher. Die Tageszeile bleibt für
-    ``peak_netzbezug_kw`` und — nur an einem Bestandstag — für Überschuss/Defizit (``_ueberschuss_heute``)."""
+    ``peak_netzbezug_kw``; Überschuss/Defizit liest ``_ueberschuss_heute`` über die Lesestelle (E-S5-3)."""
     from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     zeilen = await stunden_der_tage(db, anlage_id, heute, heute, felder=_STEUERUNG_FELDER)
@@ -185,23 +185,18 @@ async def _lade_tagesprofil(db, anlage_id: int, heute: date):
     return zeilen, tag_res.scalar_one_or_none()
 
 
-def _ueberschuss_heute(zeilen: list, tageszeile) -> tuple[Optional[float], Optional[float]]:
-    """E1: ``(Überschuss, Defizit)`` von heute in kWh — **an einem Kanal-Tag Σ der Mischzeilen** (HA-Bauform S5, E-S5-2):
-    dieselbe Layer-Funktion wie *Cockpit → Tag* (``tagesbilanz.bilanz_aus_stundenrows``, Σ max(0, PV − Verbrauch) je
-    Stunde; ``None`` ohne PV oder Verbrauch, wie ``tage-werte``); an einem Bestandstag die Tageszeile wie bisher.
-    Der Überschuss bleibt ungerundet (N-694: gerundet wird einmal an der Export-Grenze), das Defizit ist Attribut und
-    trägt drei Stellen wie ``tage-werte``."""
-    from backend.core.berechnungen.slot_konvention import ist_beginn_raster
-    from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
+async def _ueberschuss_heute(db, anlage_id: int, heute: date) -> tuple[Optional[float], Optional[float]]:
+    """E1: ``(Überschuss, Defizit)`` von heute in kWh — über die Lesestelle ``kanal_stunden.ueberschuss_defizit_der_tage``
+    (HA-Bauform S5, E-S5-3; E-S5-2 rechnete hier selbst): an einem Kanal-Tag Σ der Mischzeilen (dieselbe Layer-Funktion
+    wie *Cockpit → Tag*, ``None`` ohne PV oder Verbrauch), an einem Bestandstag die Tageszeile. Seit S5b schreibt der
+    Aggregator die beiden Tageswerte an einem Kanal-Tag nicht mehr. Der Überschuss bleibt ungerundet (N-694: gerundet
+    wird einmal an der Export-Grenze), das Defizit ist Attribut und trägt drei Stellen wie ``tage-werte``. Mit dem
+    Lade-Hinweis der Steuerung — die Stunden kommen aus dem Lade-Kontext von ``_lade_tagesprofil``."""
+    from backend.services.energie_profil.kanal_stunden import ueberschuss_defizit_der_tage
 
-    if zeilen and ist_beginn_raster(zeilen[0]):
-        b = bilanz_aus_stundenrows(zeilen)
-        if not (b.pv_erfasst and b.verbrauch_erfasst):
-            return None, None
-        return b.ueberschuss_kwh, round(b.defizit_kwh, 3)
-    if tageszeile is None:
-        return None, None
-    return tageszeile.ueberschuss_kwh, tageszeile.defizit_kwh
+    u, d = (await ueberschuss_defizit_der_tage(db, anlage_id, heute, heute, felder=_STEUERUNG_FELDER)).get(
+        heute, (None, None))
+    return u, (round(d, 3) if d is not None else None)
 
 
 def _beginn(zeile) -> str:
@@ -304,8 +299,8 @@ async def steuerungs_sensoren(
             letzte, letzte_index = zeile, i
 
     # ── E1 · Überschuss heute + letzte volle Stunde ──────────────────────────
-    # HA-Bauform S5 (E-S5-2): an einem Kanal-Tag Σ der Mischzeilen (wie Cockpit → Tag), sonst die Tageszeile.
-    ueberschuss_heute, defizit_heute = _ueberschuss_heute(zeilen, tageszeile)
+    # HA-Bauform S5 (E-S5-2/E-S5-3): an einem Kanal-Tag Σ der Mischzeilen (wie Cockpit → Tag), sonst die Tageszeile.
+    ueberschuss_heute, defizit_heute = await _ueberschuss_heute(db, anlage.id, heute)
     if ueberschuss_heute is not None:
         _anhaengen(
             sensor_values, "eedc_ueberschuss_heute_kwh", ueberschuss_heute,

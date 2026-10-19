@@ -198,8 +198,15 @@ async def _lade_tages_eingaenge(
         return {}, {}
 
     tz_result = await db.execute(tz_query)
+    komp_je_tag = {datum: k for datum, k in tz_result.all() if datum in je_tag}
+    # HA-Bauform S5 (E-S5-3, §10h 6): an einem Kanal-Tag mit WP-Wahl `kanal` steht der WP-Tagesstrom (der Bezug der
+    # Normierung) seit S5b nicht mehr in der Tageszeile — er kommt dort aus den Kanälen, über die eine Mischung
+    # `komponenten_der_tage` (Lade-Hinweis: nur die WP-Gruppe), wie in *Cockpit → Tag*.
+    from backend.services.energie_profil.kanal_stunden import GRUPPE_WP, komponenten_der_tage
+
+    komp_je_tag = await komponenten_der_tage(db, anlage_id, min(je_tag), max(je_tag), komp_je_tag, gruppen=(GRUPPE_WP,))
     zaehler_je_tag: dict[date, dict[str, float]] = {}
-    for datum, komponenten_kwh in tz_result.all():
+    for datum, komponenten_kwh in komp_je_tag.items():
         if datum in je_tag and komponenten_kwh:
             zaehler_je_tag[datum] = waermepumpe_kwh_je_investition(komponenten_kwh)
 

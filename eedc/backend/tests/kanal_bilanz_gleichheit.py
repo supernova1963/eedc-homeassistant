@@ -155,7 +155,9 @@ class Datenstand:
 @asynccontextmanager
 async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional[dict] = None,
                      eigene_summe_aus: str = "mqtt"):
-    """Seed → Kanäle → Tageszeilen; ``yield Datenstand``. Wegwerf-Datei je Lauf. ``ha_abweichung`` (nur PV-Matrix,
+    """Seed → Kanäle → Tageszeilen; ``yield Datenstand``. Die Tageszeilen schreibt der **Bestands-Algorithmus** (HA-Bauform S5b,
+    E-S5-3: ``aggregiere_tage(ohne_weiche=True)`` — wie ein Tag, der vor S5b geschrieben wurde; die Gleichheitsproben
+    vergleichen die Kanäle mit ihm). Den Schreiber wie im Produkt nimmt ``neu_aggregieren``. Wegwerf-Datei je Lauf. ``ha_abweichung`` (nur PV-Matrix,
     HA): ``{sensor_id: (Rate | None, ohne_Zeile | None)}`` wie ``pv_achse_matrix.seed_ha``. ``eigene_summe_aus`` (nur
     MQTT): ``"mqtt"`` (Stundenlauf über die Rohstände) oder ``"sensor_snapshots"`` (Nachfüllen über die Stundenstände)."""
     from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe, nachfuellen_spiegel
@@ -182,7 +184,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                     erg = await nachfuellen_spiegel(sitzungen, aid, jetzt=mx.JETZT, ha_svc=svc)
                     assert erg.fehler == 0 and erg.zeilen > 0
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: der abgeleitete Kanal wie im Produkt
-                    await mx.aggregiere_tage(db, pf, aid, TAGE)
+                    await mx.aggregiere_tage(db, pf, aid, TAGE, ohne_weiche=True)  # Bestand für die Gleichheit (S5b)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
             else:
                 svc = mx._ha_aus()
@@ -201,7 +203,7 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
                     else:
                         await _eigene_summe_tageslauf(db, anlage)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4c: aus der eigenen Summe, wie im Stundenlauf
-                    await mx.aggregiere_tage(db, pf, aid, TAGE)
+                    await mx.aggregiere_tage(db, pf, aid, TAGE, ohne_weiche=True)  # Bestand für die Gleichheit (S5b)
                     await mx.baue_abgeleitete(sitzungen, aid)     # E4d: Strom je Betriebsart aus der Mitschrift
             yield Datenstand(matrix, fid, art, db, aid, ids, svc, zuordnung if art != "HA" else None)
         finally:
@@ -209,6 +211,20 @@ async def datenstand(matrix: str, fid: str, art: str, *, ha_abweichung: Optional
             await engine.dispose()
     finally:
         shutil.rmtree(verz, ignore_errors=True)
+
+
+async def neu_aggregieren(ds: Datenstand, tage=TAGE) -> None:
+    """HA-Bauform S5 (E-S5-3, §10h 3): die Tage des Datenstands neu aggregieren — in derselben Umgebung wie beim Aufbau.
+    Seit S5b schreibt ``aggregate_day`` an einem Kanal-Tag keine Mengen; eine Gegenprobe «derselbe Tag ohne Kanalzeilen»
+    lässt den Tag seine Kanal-Deckung verlieren und aggregiert ihn danach neu — wie der Schreiber im Betrieb: die nächste
+    Aggregation schreibt wieder Mengen (Bestandstag)."""
+    from backend.services.kanal import merken
+
+    merken.invalidiere(ds.aid)
+    form = _form(ds.matrix, ds.fid)
+    umgebung = am.umgebung(form, ds.svc) if ds.matrix == "achsen" else mx._umgebung(ds.svc)
+    with umgebung:
+        await mx.aggregiere_tage(ds.db, _pvform(ds.matrix, form), ds.aid, tage)
 
 
 async def _eigene_summe_tageslauf(db: AsyncSession, anlage) -> None:
@@ -256,9 +272,18 @@ async def bestand_tage(db: AsyncSession, aid: int) -> dict[date, BestandTag]:
 
 
 async def bestand_monate(db: AsyncSession, aid: int) -> dict:
-    from backend.services.energie_profil.monats_aus_tagen import lade_monats_summen_aus_tagen
+    """Der heutige Leser des **Bestands**: die Faltung der gespeicherten Tages- und Stundenzeilen. Seit S5b (E-S5-3, H-1 → B)
+    nimmt `lade_monats_summen_aus_tagen` Kanal-Tage aus der Lesestelle — für die Gleichheit «Kanal = Bestand» hier
+    ausdrücklich ohne sie (die Bestandsseite ist die gespeicherte Zeile, `aggregiere_tage(ohne_weiche=True)`)."""
+    from unittest.mock import patch
 
-    return await lade_monats_summen_aus_tagen(db, aid, von=MONATE[0], bis=MONATE[-1])
+    from backend.services.energie_profil import monats_aus_tagen
+
+    async def _keine(*_a, **_k):
+        return {}
+
+    with patch.object(monats_aus_tagen, "_kanal_tage_der_monate", _keine):
+        return await monats_aus_tagen.lade_monats_summen_aus_tagen(db, aid, von=MONATE[0], bis=MONATE[-1])
 
 
 async def zaehler_sensoren(db: AsyncSession, aid: int) -> tuple[list[str], dict[str, float]]:
