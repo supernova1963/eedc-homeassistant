@@ -4079,6 +4079,7 @@ nach denselben Regeln wie die Tagessummen:
   | R-11 jeder Zeitraum gleich billig und gleich vollständig | *Cockpit → Monat*: ein vergangener Monat ohne Abschluss und ohne HA-Antwort nimmt die fünfte Quelle, wenn die Bilanz-Kanäle ihn voll decken (`kanal_monate`, dieselbe Wahl wie die Monats-Fakten; `aktueller_monat._summen_der_tagesebene`) — erledigt mit N-758; ohne volle Deckung bleibt er bis zum Abschluss leer (N-472) |
   | S5a (Teil 1, E-S5-1) eine Mengenquelle je Tag für die Stundenleser | gebaut: jede Kennzahl, die Stundenmengen braucht (Speicher-Potenzial, -Sizing, effektiver Ladepreis, Ladeblöcke, Verbrauchsprognose, Verbrauchs- und Korrekturprofil, Preis-Aggregator, Grundlast, Prognose-IST, Wochenmuster, Tagesvergleich), liest die Stunden über `kanal_stunden.stunden_der_tage` — an einem Kanal-Tag die Mischzeilen wie *Cockpit → Tag*, an einem Bestandstag die Stundenzeile; Tagesmengen der Tageszeile (PV-IST, Komponenten, Regelmarke) an Kanal-Tagen aus `kanal_tage`. Daten-Checker, HA-Export-Steuerung (S5a Teil 2) siehe nächste Zeile; der Schreiber folgt in S5b. Laufzeit (E-S5-1c): abgeschlossene Kanal-Tage (Adapter-Zeilen und Tageswahl der Bilanz) merkt eedc je Prozess (`services/kanal/merken.py`, invalidiert beim Schreiben der Kanäle und bei jeder Änderung an Anlage, Investition, Kanal oder Quelle) — Sichten über die ganze Historie (Speicher-Sizing, -Potenzial, -Dashboard, aktueller Monat, HA-Export) brauchen ab dem zweiten Aufruf je Prozess wieder etwa so lange wie vor S5a (an einer Kopie mit 716 Kanal-Tagen ≤ 1,5 × HEAD vor S5a). Benannte Grenze: der **erste** Aufruf je Prozess (nach einem Neustart oder nach einem Schreiben, das die Tage verwirft) rechnet die Kanal-Tage neu, an dieser Kopie 3–4 s; der Speicher hält je Prozess höchstens 3 000 Tage (im Vollzustand ≈ 92 MB); fragt eine Sicht mehr Tage ab, als der Speicher hält, verdrängt sie sich selbst und rechnet jeden Aufruf neu |
   | S5a (Teil 2, E-S5-2) Daten-Checker, HA-Export-Steuerung, Wärme-Sichten, Vormerkungen | gebaut: die Checker-Regeln auf Mengen (PV-Doppelerfassung, Σ PV-Tageswerte des Monats, Drift zu HA, Batterie-Vorzeichen, leere Tage trotz Zähler, E-Mob-Doppelzählung, Einspeisung über Erzeugung, Spitzen) lesen die Lesestelle (`pv_ist_je_tag`, `komponenten_der_tage`, `verworfen_der_tage`, `stunden_der_tage`) — an einem Kanal-Tag ist die eedc-Seite des Vergleichs der Spiegel selbst; «Nachtrag nach eingefrorenem Zähler» nimmt Kanal-Tage aus; neu INFO «n Tage ohne Kanal-Deckung» (Lesart 1 sichtbar, S5-E2 b). HA-Export E1/E2/E5 aus `stunden_der_tage`, Überschuss heute an Kanal-Tagen Σ der Mischzeilen (`tagesbilanz.bilanz_aus_stundenrows`), Zeitangaben am Raster der Zeile. Wärme-Verlauf Modus-Split/Betriebsart aus dem Kanal (W-3), Spannen-Stunden leer statt 0,0 (S5-R5), Wochenmuster ohne gebündelte Zeilen (M-1). Wächter S5-R6 `test_tep_mengen_leser_waechter.py` (Empfänger-Regel). Benannt: die E-Mob-Schlüssel (`wallbox_<id>`/`eauto_<id>`) bleiben an jedem Tag die der Tageszeile; `monatswert_deckel.py` und der `deckel_je_sensor`-Parameter der HA-Monatsleser stehen noch (Kanal-Gleichheitsprobe «wie Bestand», S5b) |
+  | S5b (Teil 1, E-S5-3) der Schreiber lässt Mengen an Kanal-Tagen weg | gebaut: `aggregate_day` gibt die fertig gebauten Zeilen durch die **Mengen-Weiche** (`services/energie_profil/mengen_weiche.py`, EIN Kanal-Stundentag, Uhr der Lese-Schicht): an einem **Kanal-Tag** (Bilanz-Gruppe mit Wahl `kanal`) bleiben je Gruppe mit Wahl `kanal` die TEP-Mengen (`pv_kw` … `defizit_kw` der Bilanz, `waermepumpe_kw`, `wallbox_kw`), ihre `spannen`-Achsen, TZ `ueberschuss/defizit_kwh`, ihre `komponenten_kwh`-Schlüssel (Bilanz wie `mische_komponenten`, Wärmepumpe/Sonstiges die Ziel-Schlüssel ihrer Zähler, E-Mobilität der ganze Präfix `wallbox_*`/`eauto_*`) und ihre `verworfen`/`nachtrag`-Achsen leer (`None`; die Regelmarke `{}` bleibt). Bahnen und Kennzahlen bleiben; PR, §51-Menge und Heimladungs-Anteil an Kanal-Tagen aus den Kanal-Stunden (`kanal_stunden.performance_ratio_des_kanal_tags`, `einspeisung_neg_preis_der_kanal_stunden`, `ladeanteil_der_kanal_stunden`; der Archiv-Nachzug ruft die PR-Stelle). Herkunft `TZ_QUELLE_KANAL` (`auto:kanal_tag`, Gruppen im Eintrag), `tageszeile_ist_rueckwaerts` ⇒ `False`. Richtung beidseitig (die Wahl zum Schreibzeitpunkt). Lesestelle vervollständigt: `komponenten_der_tage` mischt an Kanal-Tagen alle Gruppen (Tagesliste, `tage-werte`, *Energieprofil → Monat*, Modus-Split-Bezug), `ueberschuss_defizit_der_tage` (Tagesliste, Monats-Rollup, HA-Export). Werkbank-Vorschau und -Rückmeldung nennen die leeren Gruppen. **Lesart-1-Monate mit Kanal-Tagen** (Rand der Kanal-Deckung, laufender Monat mit Wahl `bestand`): `monats_aus_tagen.lade_monats_summen_aus_tagen` faltet die Bestandstage aus den Zeilen und die Kanal-Tage aus der Lesestelle (`KanalTag`: Bilanz, PV/BKW-Schlüssel, Marken; Heimladungs-Anteile aus der Tageszeile) — Monat = Σ Tage wie *Cockpit → Tag* (Entscheid Master H-1 → B). In der einen Mischung `komponenten_der_tage` schlägt die Bilanz-Komposition die Sonstiges-Gruppe für jeden Schlüssel, den sie trägt (Sonstiges-Erzeuger hinter dem Anlagenzähler; Entscheid Gernot 19.10. H-2 → B). Benannt: ein vor 4.1.8 gespeicherter Monatsabschluss (Bestand) kann von Σ der Kanal-Tage abweichen (Naht S4-R-3c-Klasse); die Alt/Neu-Tabelle der Reaggregat-Vorschau rechnet weiter den Bestandspfad (E-S5-4) |
 
 ### Stündliche Berechnung (aggregate_day)
 
@@ -4093,6 +4094,15 @@ Verbrauch_kWh     = PV + Netzbezug + Bat_Entladung - Einspeisung - Bat_Ladung
 Überschuss_kWh    = max(0, PV - Verbrauch_kWh - Bat_Ladung)
 Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 ```
+
+> **An einem Kanal-Tag schreibt `aggregate_day` keine Mengen (HA-Bauform S5b, E-S5-3, S5-R2).** Kommt die
+> Bilanz-Gruppe des Tages zum Schreibzeitpunkt aus den Kanälen (HA-Spiegel bzw. eigene Summe; am laufenden Tag die Wahl
+> bis zur fälligen Stunde), gibt der Lauf jede fertig gebaute Stundenzeile vor `db.add` und die Tageszeile vor Provenance
+> und Restore durch die **Mengen-Weiche** (`services/energie_profil/mengen_weiche.py`): die Mengen der Gruppen mit Wahl
+> `kanal` bleiben `NULL` — die Sichten lesen sie aus den Kanälen (Mischzeilen). Gerechnet wird wie bisher (kein Zweig in
+> `verrechne_stunde`/`baue_*`); die Weiche gewinnt auch über die Preserve-Logik. Verliert ein Tag die Kanal-Deckung,
+> schreibt die nächste Aggregation wieder Mengen (Richtung beidseitig). Die Invarianten (Σ Stunden ↔ Tag, Achse 2)
+> bleiben still: beide Seiten sind leer.
 
 **Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt eedc ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
 
@@ -4143,6 +4153,15 @@ Peaks brauchen die Leistungssamples — die kWh-Aggregation läuft separat über
 - **Strompreis (zwei Felder):** `strompreis_cent` (Endpreis aus HA-Sensor) + `boersenpreis_cent` (EPEX, immer befüllt)
 
 ### Tageszusammenfassung (TagesZusammenfassung)
+
+> **Kanal-Tag (S5b, E-S5-3):** `ueberschuss_kwh`/`defizit_kwh` und die `komponenten_kwh`-Schlüssel der Gruppen mit Wahl
+> `kanal` bleiben leer (Lesestellen `kanal_stunden.ueberschuss_defizit_der_tage` und `komponenten_der_tage`); Peaks,
+> Vollzyklen, Wetter und Börse wie unten. **Performance Ratio, `einspeisung_neg_preis_kwh` und
+> `emob_ladung_*_abgeleitet_kwh` bleiben in der Zeile**, an einem Kanal-Tag aus den Kanal-Stunden gerechnet — dieselben
+> Formeln (`berechne_performance_ratio`, `stunde_aus_bilanzwerten`/`leite_pv_anteil_ab`); die §51-Menge paart die
+> Kanal-Stunde `h` (Beginn-Raster) direkt mit dem Börsenpreis `h`, ohne die Vortag-23-Verschiebung des Backward-Slots; die
+> Heimladung nur, wenn auch die E-Mob-Gruppe Wahl `kanal` hat. Die Kennzahl ist ein Stand zum Schreibzeitpunkt (eine
+> spätere Korrektur im Spiegel heilt die nächste Neu-Aggregation). Herkunft `TZ_QUELLE_KANAL` (`auto:kanal_tag`).
 
 ```
 Überschuss_kWh         = Σ(Überschuss_kWh)            alle 24 Stunden
@@ -4278,6 +4297,10 @@ Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:
 | `peak_netzbezug_kw` | max(Tages-Peak) | Maximaler Netzbezug im Monat |
 
 **Auslöser:** Wird beim Monatsabschluss nach `backfill_range()` aufgerufen, um fehlende Tage nachzuberechnen (begrenzt durch HA-History ~10 Tage).
+
+**Überschuss und Defizit an Kanal-Tagen (S5b, E-S5-3):** die Tageszeile trägt sie dort nicht mehr; `rollup_month` liest
+sie je Tag über `kanal_stunden.ueberschuss_defizit_der_tage` (Kanal-Tag: Σ der Mischzeilen in der Form der Tageszeile —
+zwei Stellen, 0 ⇒ leer; sonst die Tageszeile).
 
 > **Was der Monatsabschluss nachrechnet (HA-Bauform E4f, 07.10.2026).** Der Nachlauf nach dem Speichern eines Monats
 > (`services/monatsabschluss_aggregator.py`) rechnet nur noch **Tage ohne Tageszeile**, und nur, solange Home Assistant

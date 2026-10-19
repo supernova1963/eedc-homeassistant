@@ -32,6 +32,14 @@ Aufruf wieder so schnell wie zuvor; der erste Aufruf nach einem Neustart dauert 
 ([Daten-Checker §4.6](HANDBUCH_DATEN_CHECKER.md#46-energieprofil--zaehler-abdeckung),
 [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md), [Sensor-Referenz](SENSOR-REFERENZ.md)).
 
+**Keine doppelten Mengen mehr gespeichert:** An Tagen, die der HA-Spiegel bzw. deine eigenen Zählerstände decken,
+speichert eedc keine eigenen Stunden- und Tagesmengen mehr — alle Sichten lesen sie dort schon seit 4.1.8 aus dem
+Spiegel, an den Zahlen in *Cockpit → Tag, Monat und Jahr* ändert sich nichts. Gespeichert bleiben Ladestand, Wetter,
+Preise, Leistungsaufteilung, Zählwerke, Spitzen und Kennzahlen; Performance Ratio, die Einspeisung bei negativem
+Börsenpreis und die Aufteilung der Heimladung rechnet eedc an solchen Tagen aus den Stunden des Spiegels. Ein Monat, den der Spiegel nur teilweise deckt, rechnet die gedeckten Tage mit den
+Zahlen aus dem Spiegel — wie *Cockpit → Tag*. Sichtbar ist das sonst nur in der Werkbank: „Tag neu aggregieren" nennt in Vorschau und Rückmeldung die Gruppen, für die der Lauf keine
+Mengen schreibt ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+
 ---
 
 ## v4.1.8 — 17. Oktober 2026
