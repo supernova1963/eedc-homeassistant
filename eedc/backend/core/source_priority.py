@@ -165,6 +165,11 @@ SOURCE_LABELS: dict[str, SourcePriority] = {
     # Auto-Aggregation — Monatsabschluss-Roll-up aus Tageswerten
     # (routes/monatsabschluss.py — wird in P3 in Service-Schicht ausgelagert)
     "auto:monatsabschluss":  SourcePriority.AUTO_AGGREGATION,
+    # HA-Bauform S5, E-S5-3 (Bauplan §10h 4): die Tageszeile eines Kanal-Tags (`boundary_range.TZ_QUELLE_KANAL`) —
+    # `aggregate_day` schreibt dort Bahnen und Kennzahlen, die Mengen stehen in den Kanälen. Dieselbe Klasse wie der
+    # Lauf ohne HA-Statistik (`auto:monatsabschluss`): eine Aggregation, die eedc selbst bildet; ein Anwender-Eingriff
+    # (Werkbank, Formular) und jeder externe Schreiber schlagen sie.
+    "auto:kanal_tag":        SourcePriority.AUTO_AGGREGATION,
     # Aggregator-Preserve-Restore (#299): der Delete-and-Recreate-Pfad in
     # `aggregate_day` rettet extern-additiv befüllte TZ-Felder (Prognose +
     # Kraftstoffpreis) und schreibt sie über write_with_provenance zurück.

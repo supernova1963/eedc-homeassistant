@@ -163,6 +163,9 @@ class TestVokabularBaseline:
         "external:cloud_import:sungrow_isolarcloud": 2,
         "external:cloud_import:viessmann_gridbox": 2,
         "auto:monatsabschluss": 3,
+        # HA-Bauform S5, E-S5-3: Tageszeile eines Kanal-Tags (Bahnen + Kennzahlen, Mengen in den Kanälen) — eine
+        # Aggregation wie `auto:monatsabschluss`, dieselbe Klasse.
+        "auto:kanal_tag": 3,
         "auto:preserve_restore": 3,
         "auto:demo_data": 3,
         "fallback:sensor_snapshot": 4,

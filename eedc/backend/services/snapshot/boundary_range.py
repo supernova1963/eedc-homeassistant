@@ -36,8 +36,22 @@ from typing import Any, Optional
 #: das falsche Fenster.
 TZ_QUELLE_LTS: str = "external:ha_statistics:daily"
 
+#: Die Herkunfts-Kennung einer Tageszeile eines **Kanal-Tags** (HA-Bauform S5, E-S5-3, Bauplan §10h 4): seit S5b
+#: schreibt `aggregate_day` an einem Tag, dessen Bilanz-Gruppe aus den Kanälen kommt, keine gefalteten Mengen
+#: (`energie_profil/mengen_weiche.py`); die Zeile trägt Bahnen und Kennzahlen, die geleerten Gruppen stehen im
+#: Provenance-Eintrag (`gruppen`). Eine Konstante für Schreiber und Leser wie `TZ_QUELLE_LTS`; `datenquelle` bleibt
+#: der Trigger. Eine solche Zeile steht im Kalendertag (`tageszeile_ist_rueckwaerts` ⇒ `False`).
+TZ_QUELLE_KANAL: str = "auto:kanal_tag"
+
 #: Präfix der Wärmepumpen-Schlüssel in `komponenten_kwh` bzw. ihrer Provenance.
 _WP_PROVENANCE_PRAEFIX = "komponenten_kwh.waermepumpe_"
+
+
+def _ist_kanal_zeile(source_provenance: Optional[dict[str, Any]]) -> bool:
+    """Trägt die Tageszeile die Herkunft {@link TZ_QUELLE_KANAL} (ein Eintrag genügt — der Schreiber sät sie je Zeile)?"""
+    return isinstance(source_provenance, dict) and any(
+        isinstance(e, dict) and e.get("source") == TZ_QUELLE_KANAL for e in source_provenance.values()
+    )
 
 
 def tageszeile_ist_rueckwaerts(
@@ -63,8 +77,12 @@ def tageszeile_ist_rueckwaerts(
 
     ``False`` sonst — auch ohne Provenance und ohne Marke (Snapshot-Altbestand,
     Fixture): dann gilt das bisherige Tagesfenster [00:00, 24:00). Eine Zeile
-    ohne Angabe wird nicht umgedeutet.
+    ohne Angabe wird nicht umgedeutet. **Und ``False`` für die Zeile eines
+    Kanal-Tags** ({@link TZ_QUELLE_KANAL}, HA-Bauform S5 E-S5-3): sie trägt die
+    Regelmarke, aber ihre Mengen stehen in den Kanälen im Kalendertag.
     """
+    if _ist_kanal_zeile(source_provenance):
+        return False
     if verworfen is not None:
         return True
     if not isinstance(source_provenance, dict):

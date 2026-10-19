@@ -15,6 +15,12 @@
 * **S3, E-S3-4:** dasselbe Bitgleich mit dem Nachfüllen der Eigenen Summe aus ``sensor_snapshots`` (MQTT-Weg: der
   Kanal-Schreiber beginnt erst in der Mitte, das Nachfüllen setzt die Stunden davor an) — es liest die Stundenstände
   und schreibt nur Kanal-Tabellen.
+* **S5b (HA-Bauform E-S5-3, Bauplan §10h 7):** macht das Nachfüllen einen Tag zum **Kanal-Tag** (Bilanz-Gruppe mit Wahl
+  ``kanal``), schreibt ``aggregate_day`` dort keine gefalteten Mengen mehr (S5-R2, ``mengen_weiche``) — das ist an
+  Kanal-Tagen das eigene Soll: die Mengen-Spalten der Stundenzeilen und Überschuss/Defizit der Tageszeile sind leer, die
+  Herkunft ist ``TZ_QUELLE_KANAL``. **Bitgleich bleiben** ``sensor_snapshots``, jeder Bestandstag und an Kanal-Tagen
+  die Bahnen (SoC, Preise, Wetter, Leistungspfad, Zählwerke, Betriebsart) und die Kennzahlen, die nicht aus Mengen
+  abgeleitet sind (Peaks, Vollzyklen, Wetter, Börse).
 
 Schwesterdateien: test_kanal_spiegel.py, test_kanal_eigene_summe.py, test_kanal_mitschrift_betriebsart.py, test_kanal_feld_deckung.py; Datenstand: test_achsen_matrix.py.
 """
@@ -122,6 +128,8 @@ async def _lauf(form, *, ha: bool, mit_kanal: bool, mitschrift: bool = True, sto
                     if not mitschrift:
                         ohne_mitschrift.stop()
             out = {t: await _dump(db, t) for t in _BESTAND}
+            out["zeilen"] = {t: await _zeilen(db, t) for t in _BESTAND[1:]}
+            out["tz_zeilen"] = out["zeilen"]["tages_zusammenfassung"]
             out["kanal"] = await _dump(db, "kanal")
             out["kanal_statistik"] = await _dump(db, "kanal_statistik")
             out["aktivitaet"] = [(a.aktion, a.erfolg, a.details) for a in
@@ -322,16 +330,55 @@ async def test_investition_loeschen_raeumt_kanal_wie_snapshot(db):
     assert await _anzahl(db) == (0, 0, 0, 0)
 
 
+#: S5b: die Spalten, die an einem Kanal-Tag aus den Kanälen kommen bzw. aus ihnen gerechnet sind (Mengen, Mengen-
+#: Ableitungen, Herkunft) — an Kanal-Tagen nicht Teil des Bitgleich; die Mengen-Spalten dort sind ``KANAL_LEER``.
+_KANAL_SPALTEN = {
+    "tages_energie_profil": {"pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "waermepumpe_kw",
+                             "wallbox_kw", "ueberschuss_kw", "defizit_kw", "spannen", "source_provenance"},
+    "tages_zusammenfassung": {"ueberschuss_kwh", "defizit_kwh", "komponenten_kwh", "verworfen", "nachtrag",
+                              "performance_ratio", "einspeisung_neg_preis_kwh", "emob_ladung_pv_abgeleitet_kwh",
+                              "emob_ladung_netz_abgeleitet_kwh", "emob_ladung_speicher_abgeleitet_kwh",
+                              "source_provenance"},
+}
+#: S5b-Soll an einem Kanal-Tag (die Bilanz-Gruppe hat dort immer Wahl ``kanal``).
+_KANAL_LEER = {
+    "tages_energie_profil": ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "ueberschuss_kw",
+                             "defizit_kw"),
+    "tages_zusammenfassung": ("ueberschuss_kwh", "defizit_kwh"),
+}
+
+
+async def _zeilen(db, tabelle: str) -> list[dict]:
+    spalten = [r[1] for r in (await db.execute(text(f"PRAGMA table_info({tabelle})"))).all()
+               if r[1] not in _OHNE_SPALTEN]
+    rows = (await db.execute(text(f"SELECT {', '.join(spalten)} FROM {tabelle} ORDER BY 1"))).all()
+    return [{s: _ohne_uhr(w) for s, w in zip(spalten, r)} for r in rows]
+
+
 @pytest.mark.parametrize("fid", ["M04", "M05", "M06"])
 async def test_bestand_bitgleich_mit_nachfuellen_und_konsistenzlauf(fid):
     """E2 (Auftrag „Bestand bitgleich, um das Nachfüllen erweitert"): Nachfüllen aus HA und ein
-    Konsistenzlauf mit Korrektur ändern keine Zeile des Bestands."""
+    Konsistenzlauf mit Korrektur ändern keine Zeile des Bestands. S5b (E-S5-3): das Nachfüllen macht die Tage zu
+    Kanal-Tagen — dort sind die Mengen leer (eigenes Soll), die Bahnen bitgleich (Modul-Docstring)."""
+    from backend.services.snapshot.boundary_range import TZ_QUELLE_KANAL
+
     form = am.FORMEN[fid]
     mit = await _lauf(form, ha=True, mit_kanal=True, nachfuellen=True)
     ohne = await _lauf(form, ha=True, mit_kanal=False, mitschrift=False, ha_korrektur=True)
-    for t in _BESTAND:
-        assert mit[t] == ohne[t], f"{fid}: {t} weicht ab"
-        assert mit[t], f"{fid}: {t} ist leer — die Probe hätte nichts verglichen"
+    assert mit["sensor_snapshots"] == ohne["sensor_snapshots"], f"{fid}: sensor_snapshots weicht ab"
+    kanal_tage = {z["datum"] for z in mit["tz_zeilen"] if TZ_QUELLE_KANAL in (z["source_provenance"] or "")}
+    assert kanal_tage, f"{fid}: kein Kanal-Tag — die S5b-Probe hätte nichts geprüft"
+    for t in ("tages_energie_profil", "tages_zusammenfassung"):
+        a, b = mit["zeilen"][t], ohne["zeilen"][t]
+        assert len(a) == len(b) and a, f"{fid}: {t}"
+        for za, zb in zip(a, b):
+            if za["datum"] not in kanal_tage:
+                assert za == zb, f"{fid}: {t} Bestandstag {za['datum']} weicht ab"
+                continue
+            weg = _KANAL_SPALTEN[t]
+            assert {k: v for k, v in za.items() if k not in weg} == {k: v for k, v in zb.items() if k not in weg}, \
+                f"{fid}: {t} Bahnen am Kanal-Tag {za['datum']} weichen ab"
+            assert all(za[s] is None for s in _KANAL_LEER[t]), f"{fid}: {t} Kanal-Tag {za['datum']} trägt Mengen"
     assert mit["e2"]["nachgefuellt"] > 0 and mit["e2"]["korrigiert"] >= 1 and mit["e2"]["fehler"] == 0, mit["e2"]
 
 

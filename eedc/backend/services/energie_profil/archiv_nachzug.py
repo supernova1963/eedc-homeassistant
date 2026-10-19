@@ -340,6 +340,13 @@ async def _wetterzeile_schreiben(
         tz.temperatur_max_c = round(max(temp_values), 1) if temp_values else None
         tz.strahlung_summe_wh_m2 = round(strahlung_summe, 0) if strahlung_summe > 0 else None
         tz.gti_summe_wh_m2 = round(gti_summe, 0) if gti_summe > 0 else None
+        kwp = anlagen_kwp(invs, datum, mit_bkw=True, referenzwert=anlage.leistung_kwp)
+        pr_kanal = await _pr_eines_kanal_tags(anlage, datum, gti_summe, kwp, db)
+        if pr_kanal is not None:
+            # HA-Bauform S5 (E-S5-3, §10h 1): an einem Kanal-Tag trägt die Stundenzeile keine PV-Menge mehr — die PR
+            # kommt aus den Kanal-Stunden, an derselben Stelle wie im Aggregator.
+            tz.performance_ratio = pr_kanal[0]
+            return True
         # PR-Zähler wie im Aggregator: PV ohne Sonstiges-Erzeuger (BHKW hat
         # keinen GTI-Bezug). Die Stunden tragen den Abzug nicht mehr — er kommt
         # aus dem Tages-`komponenten_kwh`, s. Modul-Docstring.
@@ -348,11 +355,23 @@ async def _wetterzeile_schreiben(
             v = (tz.komponenten_kwh or {}).get(f"sonstiges_{inv_id}")
             if v is not None and v > 0:
                 sonstige += v
-        kwp = anlagen_kwp(invs, datum, mit_bkw=True, referenzwert=anlage.leistung_kwp)
         tz.performance_ratio = berechne_performance_ratio(
             (pv_ertrag_summe - sonstige) if pv_ertrag_erfasst else None, gti_summe, kwp,
         )
     return True
+
+
+async def _pr_eines_kanal_tags(anlage: Anlage, datum: date, gti_summe: float, kwp, db: AsyncSession):
+    """``(PR,)`` eines Kanal-Tags der Bilanz (``kanal_stunden.performance_ratio_des_kanal_tags`` — dieselbe Stelle wie
+    ``aggregate_day``, HA-Bauform S5 E-S5-3), ``None`` an einem Bestandstag (dort rechnet der Nachzug wie bisher)."""
+    from backend.services.energie_profil.kanal_stunden import (
+        GRUPPE_BILANZ, kanal_stunden, performance_ratio_des_kanal_tags,
+    )
+
+    k = await kanal_stunden(db, anlage.id, datum)
+    if k is None or GRUPPE_BILANZ not in k[0].gruppen:
+        return None
+    return (performance_ratio_des_kanal_tags(*k, gti_summe, kwp),)
 
 
 async def wetter_nachziehen_bereich(

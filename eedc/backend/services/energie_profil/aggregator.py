@@ -36,6 +36,7 @@ from backend.services.energie_profil._provenance_helpers import (
     seed_tep_provenance,
     seed_tz_provenance,
 )
+from backend.services.energie_profil.mengen_weiche import KEINE_WEICHE, Weiche, mengen_weiche
 from backend.services.energie_profil.source import Source
 from backend.services.provenance import write_with_provenance
 from backend.utils.investition_filter import aktiv_am_tag
@@ -180,6 +181,9 @@ class StundenKontext:
     # N-595: je Slot die Felder, die ganz aus der Rettung stammen, mit ihrem ALTEN
     # Provenance-Eintrag (``None`` = keiner verwertbar ⇒ ``auto:preserve_restore``).
     gerettete_herkunft: dict = field(default_factory=dict)
+    # HA-Bauform S5 (E-S5-3, S5-R2): was an diesem Tag leer bleibt — an einem Kanal-Tag die Mengen der Gruppen mit
+    # Wahl ``kanal`` (``mengen_weiche``), an einem Bestandstag nichts.
+    weiche: Weiche = KEINE_WEICHE
 
 
 @dataclass
@@ -495,6 +499,9 @@ def verarbeite_stunde(
         h, werte, zaehler, wetter, ueberschuss, defizit, soc,
         strompreis, boersenpreis, kontext,
     )
+    # HA-Bauform S5 (S5-R2): an einem Kanal-Tag die Mengen der Kanal-Gruppen leer — auf der fertigen Zeile, vor dem
+    # Schreiben und vor dem Provenance-Seed (ein leeres Feld bekommt keine Herkunft).
+    kontext.weiche.stunde(profil)
     db.add(profil)
     seed_tep_provenance(profil, writer=auto_writer, source=kontext.kwh_source_label)
     # N-595 (S4): ein gerettetes Feld behält seine ALTE Herkunft — es wurde nicht in
@@ -1986,6 +1993,13 @@ async def aggregate_day(
     4. Speichert 24 TagesEnergieProfil-Zeilen
     5. Berechnet + speichert TagesZusammenfassung
 
+    **HA-Bauform S5 (E-S5-3, S5-R2): an einem Kanal-Tag keine gefalteten Mengen.** Kommt die Bilanz-Gruppe des Tages
+    aus den Kanälen (Wahl zum Schreibzeitpunkt, ``mengen_weiche``), bleiben die Mengen-Spalten der Gruppen mit Wahl
+    ``kanal`` leer (TEP ``*_kw``, ihre ``spannen``-Achsen; TZ ``ueberschuss/defizit_kwh``, ihre ``komponenten_kwh``-
+    Schlüssel, ihre ``verworfen``/``nachtrag``-Achsen) — die Sichten lesen sie aus den Kanälen. Die Zeilen tragen weiter
+    die Bahnen und die Kennzahlen (PR, §51-Menge und Heimladungs-Anteile aus den Kanal-Stunden). Bestandstage
+    schreiben wie bisher.
+
     Args:
         anlage: Die Anlage
         datum: Tag für den aggregiert wird
@@ -2099,6 +2113,9 @@ async def aggregate_day(
         invs_by_id=invs_by_id,
     )
 
+    # ── HA-Bauform S5 (E-S5-3, S5-R2): die Mengen-Weiche des Tages — EIN Kanal-Stundentag ────
+    weiche = await mengen_weiche(db, anlage, datum)
+
     # ── Stundenwerte berechnen + speichern ────────────────────────────────
     akku = TagesAkkumulator()
     kontext = StundenKontext(
@@ -2117,6 +2134,7 @@ async def aggregate_day(
         wp_starts_pro_stunde=wp_starts_pro_stunde,
         wp_betriebsstunden_pro_stunde=wp_betriebsstunden_pro_stunde,
         gerettete_herkunft=gerettete_herkunft,
+        weiche=weiche,
     )
 
     for punkt in punkte:
@@ -2150,6 +2168,12 @@ async def aggregate_day(
         verworfen=(tages_tabelle.verworfen if tages_tabelle is not None else {}),
         nachtrag=(tages_tabelle.nachtrag if tages_tabelle is not None else None),
     )
+    # S5-R2 auf der fertigen Tageszeile, vor Provenance und Restore (gewinnt über die Preserve-Logik); an einem Kanal-Tag
+    # die Mengen-Ableitungen (PR, §51-Menge, Heimladung) aus den Kanal-Stunden und die Herkunft `TZ_QUELLE_KANAL`.
+    lade_anteil, tz_source_label = weiche.tageszeile(
+        zusammenfassung, anlage=anlage, invs=invs, gti_summe=akku.gti_summe, boerse=strompreis_stunden.boerse,
+        lade_anteil=lade_anteil, tz_source_label=tz_source_label,
+    )
 
     await schreibe_provenance_und_restore(
         anlage, datum, db, zusammenfassung,
@@ -2160,6 +2184,7 @@ async def aggregate_day(
         preserved_felder=preserved_felder,
         preserved_quellen=preserved_quellen,
     )
+    weiche.herkunft(zusammenfassung)
 
     await pruefe_invarianten(anlage, datum, db, zusammenfassung, invs_by_id)
 
@@ -2172,7 +2197,7 @@ async def aggregate_day(
     logger.info(
         f"Anlage {anlage.id}, {datum}: {akku.stunden_count}h aggregiert, "
         f"Überschuss={akku.tages_ueberschuss:.1f}kWh, Defizit={akku.tages_defizit:.1f}kWh, "
-        f"PR={performance_ratio or '-'}"
+        f"PR={zusammenfassung.performance_ratio or '-'}, Mengen aus den Kanälen: {weiche.gruppen}"
     )
 
     return zusammenfassung
