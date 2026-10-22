@@ -12,6 +12,11 @@
   die Tagesgrenze in der Prozesszone (die Datei läuft in Berlin, UTC und Auckland).
 * **MQTT-Schlüsselwechsel** (R7c iii) ⇒ Fehltreffer; **LRU** bei ``OBERGRENZE_TAGE``; **Verfall** 24 h.
 * **Lade-Kontext und Merken doppeln nicht** — innerhalb einer Anfrage hält der Kontext, darunter der Speicher.
+* **Dritter Speicher ``GERAETE``** (HA-Bauform S5, E-S5-4, Bauplan §10j 1): die Tageswerte der Geräte-Gruppen
+  (Wärmepumpe M05, E-Mobilität M08, Sonstiges M10) über ``komponenten_der_tage`` — Treffer bitgleich zum Kaltlauf, nur
+  der offene Tag neu; Schreibstelle (Kanal-Zeilen der Gruppe), ``after_flush`` (Investition der Gruppe stillgelegt),
+  MQTT-Schlüsselwechsel; laufender Tag nie gemerkt; Generation und Bereich wie die beiden anderen, eigene Obergrenze
+  ``OBERGRENZE_GERAETE`` (9 000 Einträge, Nachzug 1).
 
 Datenstand: Achsen-Formen (``kanal_bilanz_gleichheit.datenstand``, HA, Kanal-Tage 01.06.–03.07.2026), Uhr der Matrix
 (04.07.2026 00:30: der 03.07. liegt im Schreibverzug, nicht abgeschlossen). Schwesterdateien: test_s5_stunden_der_tage.py,
@@ -394,3 +399,133 @@ async def test_lade_kontext_und_merken_doppeln_nicht(uhr, monkeypatch):
         with lese_anfrage():
             await ks.stunden_der_tage(ds.db, ds.aid, VON, BIS)
         assert bereiche[1:] == [(BIS, BIS)]
+
+
+# ── E-S5-4: dritter Speicher GERAETE (Tageswerte der Geräte-Gruppen, Bauplan §10j 1) ──────────────────────────────
+
+GERAETE_FORMEN = [("M05", "wp", "waermepumpe"), ("M08", "emob", "wallbox"), ("M10", "sonstiges", "sonstiges")]
+
+
+async def _geraete(ds) -> str:
+    """Die eine Mischung der Tageskomponenten (alle Gruppen) — liest die Geräte-Gruppen über ``GERAETE``."""
+    return repr(await ks.komponenten_der_tage(ds.db, ds.aid, VON, BIS))
+
+
+def _geraete_tage(gruppe: str, *, mit_wert: bool = False) -> set[date]:
+    return {k[2] for k, e in merken.GERAETE._d.items() if k[3] == gruppe and (not mit_wert or e.wert is not merken._KEIN)}
+
+
+async def _geraete_kanal(ds, typ: str) -> Kanal:
+    """Ein Zähler-Kanal eines Geräts des Typs (``inv:<id>:<feld>``) — bei Sonstiges der Verbraucher (der Erzeuger hinter
+    dem Anlagenzähler gehört der Bilanz-Komposition; ohne seine Zeilen wäre der Tag kein Kanal-Tag)."""
+    inv_ids = [i for (i,) in (await ds.db.execute(select(Investition.id).where(
+        Investition.anlage_id == ds.aid, Investition.typ == typ))).all()]
+    kanaele = (await ds.db.execute(select(Kanal).where(Kanal.anlage_id == ds.aid).order_by(Kanal.key))).scalars().all()
+    return next(k for k in kanaele if any(k.key.startswith(f"inv:{i}:") for i in inv_ids)
+                and not k.key.endswith(":erzeugung_kwh"))
+
+
+@pytest.mark.parametrize("fid, gruppe, typ", GERAETE_FORMEN)
+async def test_geraete_treffer_bitgleich_zum_kaltlauf_nur_offener_tag_neu(uhr, monkeypatch, fid, gruppe, typ):
+    async with kg.datenstand("achsen", fid, "HA") as ds:
+        merken.leeren()
+        kalt = await _geraete(ds)
+        abgeschlossen = {VON + timedelta(days=i) for i in range((BIS - VON).days)}
+        assert _geraete_tage(gruppe) == abgeschlossen          # der 03.07. (Schreibverzug) nie gemerkt
+        assert _geraete_tage(gruppe, mit_wert=True)            # die Gruppe trägt Werte (keine leere Probe)
+        bereiche: list = []
+        echt = ks._geraete_tageswerte_des_bereichs
+
+        async def spion(db, aid, von, bis, g):
+            bereiche.append((von, bis, g))
+            return await echt(db, aid, von, bis, g)
+
+        monkeypatch.setattr(ks, "_geraete_tageswerte_des_bereichs", spion)
+        warm = await _geraete(ds)
+        assert warm == kalt
+        assert {(v, b) for v, b, _ in bereiche} == {(BIS, BIS)}     # nur der offene Tag, EIN Bereich je Gruppe
+        assert merken.GERAETE.treffer > 0
+
+
+@pytest.mark.parametrize("fid, gruppe, typ", GERAETE_FORMEN)
+async def test_geraete_schreibstelle_neue_tageswerte(uhr, fid, gruppe, typ):
+    """``schreiber._zeilen_einfuegen`` auf einem Zähler der Gruppe (ab TAG 12:00 um 5 kWh höher) ⇒ der nächste Aufruf
+    liefert die neuen Tageswerte (= Kaltlauf)."""
+    from backend.services.kanal.schreiber import _zeilen_einfuegen
+
+    async with kg.datenstand("achsen", fid, "HA") as ds:
+        k = await _geraete_kanal(ds, typ)
+        alt = (await ds.db.execute(select(KanalStatistik).where(
+            KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(TAG, 12)))).scalars().all()
+        assert alt, k.key
+        zeilen = [{"kanal_id": k.id, "start_ts": z.start_ts, "sum": z.sum + 5.0, "state": z.state, "mean": None,
+                   "min": None, "max": None, "familie": z.familie} for z in alt]
+        await ds.db.execute(delete(KanalStatistik).where(KanalStatistik.kanal_id == k.id,
+                                                         KanalStatistik.start_ts >= _ts(TAG, 12)))
+        await ds.db.commit()
+        merken.leeren()     # an der Schreibschicht vorbei (Vorbereitung)
+        vorher = await _geraete(ds)
+        assert TAG in _geraete_tage(gruppe)
+        assert await _zeilen_einfuegen(ds.db, zeilen) == len(zeilen)
+        await ds.db.commit()
+        assert TAG not in _geraete_tage(gruppe)
+        nachher = await _geraete(ds)
+        merken.leeren()
+        assert nachher == await _geraete(ds) and nachher != vorher
+
+
+@pytest.mark.parametrize("fid, gruppe, typ", GERAETE_FORMEN)
+async def test_geraete_after_flush_investition_stilllegen(uhr, fid, gruppe, typ):
+    async with kg.datenstand("achsen", fid, "HA") as ds:
+        inv = (await ds.db.execute(select(Investition).where(Investition.anlage_id == ds.aid, Investition.typ == typ)
+                                   .order_by(Investition.id))).scalars().first()
+        vorher = await _geraete(ds)
+        inv.stilllegungsdatum = TAG
+        await ds.db.commit()
+        nachher = await _geraete(ds)
+        merken.leeren()
+        assert nachher == await _geraete(ds) and nachher != vorher
+
+
+async def test_geraete_mqtt_schluesselwechsel_ist_fehltreffer(uhr):
+    async with kg.datenstand("achsen", "M05", "HA") as ds:
+        await _geraete(ds)
+        vorher = merken.GERAETE.fehltage
+        ds.db.add(MqttEnergySnapshot(anlage_id=ds.aid, energy_key=MQTT_SCHLUESSEL, value_kwh=1.0,
+                                     timestamp=datetime(2026, 7, 3, 12)))
+        await ds.db.commit()
+        await _geraete(ds)
+        assert merken.GERAETE.fehltage - vorher == vorher      # jeder Tag neu, so viele Fehltage wie im Kaltlauf
+
+
+def test_geraete_im_haushalt_der_speicher():
+    """Derselbe Haushalt: ``leeren``, Generation und Tagesbereich gelten auch für ``GERAETE``."""
+    assert merken.GERAETE in merken.SPEICHER
+    s = merken.GERAETE
+    for d in (date(2026, 6, 1), date(2026, 6, 2)):
+        s.lege((1, 7, d, "wp"), {"waermepumpe_1": 1.0}, frozenset())
+    merken.invalidiere(7, von=date(2026, 6, 2))
+    assert {k[2] for k in s._d} == {date(2026, 6, 1)}
+    merken.invalidiere(7)
+    assert not s.nimm((1, 7, date(2026, 6, 1), "wp"), frozenset())[0]
+    merken.leeren()
+    assert len(s) == 0
+
+
+def test_geraete_obergrenze_9000_die_anderen_3000():
+    """E-S5-4 Nachzug 1 (⛔ H-2 → B): ``GERAETE`` verdrängt erst über ``OBERGRENZE_GERAETE`` (9 000 — drei Gruppen je Tag ⇒
+    3 000 Tage), nicht schon bei ``OBERGRENZE_TAGE``; ``ADAPTER`` und ``TAGESWAHL`` bleiben bei 3 000."""
+    assert (merken.OBERGRENZE_GERAETE, merken.OBERGRENZE_TAGE) == (9000, 3000)
+    tage = [date(2000, 1, 1) + timedelta(days=i) for i in range(merken.OBERGRENZE_GERAETE + 1)]
+    for d in tage[:merken.OBERGRENZE_TAGE + 1]:
+        merken.GERAETE.lege((1, 8, d, "emob"), {}, frozenset())
+        merken.ADAPTER.lege((1, 8, d, ()), d, frozenset())
+        merken.TAGESWAHL.lege((1, 8, d, ()), d, frozenset())
+    assert len(merken.GERAETE) == merken.OBERGRENZE_TAGE + 1                 # bei 3 000 noch keine Verdrängung
+    assert len(merken.ADAPTER) == len(merken.TAGESWAHL) == merken.OBERGRENZE_TAGE
+    assert not merken.ADAPTER.nimm((1, 8, tage[0], ()), frozenset())[0]
+    for d in tage[merken.OBERGRENZE_TAGE + 1:]:
+        merken.GERAETE.lege((1, 8, d, "emob"), {}, frozenset())
+    assert len(merken.GERAETE) == merken.OBERGRENZE_GERAETE                  # bei 9 000 greift die LRU
+    assert not merken.GERAETE.nimm((1, 8, tage[0], "emob"), frozenset())[0]
+    assert merken.GERAETE.nimm((1, 8, tage[1], "emob"), frozenset())[0]

@@ -203,8 +203,41 @@ async def adapter_der_tage(db: AsyncSession, anlage_id: int, tage: Sequence[date
 async def sonstiges_der_kanal_tage(db: AsyncSession, anlage_id: int, kanal_tage: Iterable[date]) -> dict[date, dict]:
     """``tage-werte``: je Kanal-Tag der Bilanz, an dem die Sonstiges-Gruppe Wahl ``kanal`` hat, ihre Tages-Δ je
     Ziel-Schlüssel (``komponenten_kwh``-Form) — Sonstiges und Abgabe im Kalendertag wie die Bilanz daneben (HA-Bauform
-    S4, Bauplan §10a (4)); über den Bereich, keine Stunden."""
-    return await geraete_tageswerte(db, anlage_id, sorted(kanal_tage), gruppe=GRUPPE_SONSTIGES)
+    S4, Bauplan §10a (4)); über den Bereich, keine Stunden. Gemerkt je Prozess (``geraete_tageswerte_gemerkt``)."""
+    return await geraete_tageswerte_gemerkt(db, anlage_id, kanal_tage, GRUPPE_SONSTIGES)
+
+
+async def geraete_tageswerte_gemerkt(db: AsyncSession, anlage_id: int, tage: Iterable[date],
+                                     gruppe: str) -> dict[date, dict[str, float]]:
+    """Je Tag aus ``tage``, an dem die Geräte-Gruppe ``gruppe`` (Wärmepumpe, E-Mobilität, Sonstiges) Wahl ``kanal`` hat,
+    ihre Tageswerte in ``komponenten_kwh``-Form — **gemerkt je Prozess** (HA-Bauform S5, E-S5-4, Bauplan §10j 1,
+    Nachmessung E3 M-1 → B; ``kanal/merken.py`` Speicher ``GERAETE``, Schlüssel (Anlage, Tag, Gruppe)): abgeschlossene
+    Tage aus dem Speicher, die Fehltage über EINEN Bereichs-Leser (``_geraete_tageswerte_des_bereichs``) vom ersten bis
+    zum letzten Fehltag — lückenlos, damit der Wert eines Tages nicht von den übrigen gefragten Tagen abhängt (Treffer =
+    Kaltlauf). Ein Tag ohne Wahl ``kanal`` fehlt (gemerkt als «kein Wert»)."""
+    from backend.services.kanal import merken
+    from backend.services.kanal.bilanz_leser import uhr
+
+    async def _laden(fehl: list[date]) -> dict[date, dict[str, float]]:
+        alle = await _geraete_tageswerte_des_bereichs(db, anlage_id, fehl[0], fehl[-1], gruppe)
+        return {d: alle[d] for d in fehl if d in alle}
+
+    return await merken.je_tag(db, merken.GERAETE, anlage_id, sorted(tage), gruppe, uhr(), _laden)
+
+
+async def _geraete_tageswerte_des_bereichs(db: AsyncSession, anlage_id: int, von: date, bis: date,
+                                           gruppe: str) -> dict[date, dict[str, float]]:
+    """Die Tageswerte einer Geräte-Gruppe über ``von`` … ``bis`` (jeder Tag) — ein Bereichs-Leser: die Wärmepumpe als Σ
+    der Stunden des Kanal-Stundentags (``kanal_stundentage``, nur die WP-Gruppe — dieselben Werte, die
+    ``tages_eingaenge`` in ``tz_komp`` legt), E-Mobilität und Sonstiges als Tages-Δ (``geraete_tageswerte``)."""
+    if gruppe == GRUPPE_WP:
+        from backend.services.kanal.stunden_leser import kanal_stundentage
+
+        tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))
+        return {d: _wp_komponenten(t.gruppen[GRUPPE_WP], _tages_delta(t.gruppen[GRUPPE_WP]))
+                for d, t in tage.items() if GRUPPE_WP in t.gruppen}
+    alle = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
+    return await geraete_tageswerte(db, anlage_id, alle, gruppe=gruppe)
 
 
 def mische_sonstiges(komp_tag: Optional[dict], kanal_werte: Optional[Mapping[str, float]]) -> Optional[dict]:
@@ -585,7 +618,8 @@ async def geraete_komponenten_der_kanal_tage(db: AsyncSession, anlage_id: int, t
     """Je Tag aus ``tage`` die ``komponenten_kwh``-Schlüssel der Geräte-Gruppen ``gruppen`` mit Wahl ``kanal`` aus den
     Kanälen (Ziel-Schlüssel, Vorzeichen der Beitragsschicht): Sonstiges und E-Mobilität über ``geraete_tageswerte``
     (Tages-Δ, keine Stunden — wie ``tage-werte`` seit S4), die Wärmepumpe über ``wp_komponenten_der_kanal_tage`` (Σ der
-    Stunden — dieselben Werte, die *Cockpit → Tag* über ``tages_eingaenge`` liest). Je Gruppe ein Bereichs-Leser.
+    Stunden — dieselben Werte, die *Cockpit → Tag* über ``tages_eingaenge`` liest). Je Gruppe ein Bereichs-Leser für die
+    Tage, die der Speicher je Prozess nicht hält (``geraete_tageswerte_gemerkt``, HA-Bauform S5 E-S5-4).
     Rückgabe ``(werte_je_tag, emob_tage)`` — die Tage mit E-Mob-Wahl ``kanal`` (ihnen gehört der Präfix, ``_ohne_emob``)."""
     out: dict[date, dict] = {}
     emob: set[date] = set()
@@ -596,7 +630,7 @@ async def geraete_komponenten_der_kanal_tage(db: AsyncSession, anlage_id: int, t
         for d, w in (await sonstiges_der_kanal_tage(db, anlage_id, tage)).items():
             out.setdefault(d, {}).update(w)
     if GRUPPE_EMOB in gruppen:
-        for d, w in (await geraete_tageswerte(db, anlage_id, tage, gruppe=GRUPPE_EMOB)).items():
+        for d, w in (await geraete_tageswerte_gemerkt(db, anlage_id, tage, GRUPPE_EMOB)).items():
             out.setdefault(d, {}).update(w)
             emob.add(d)
     if GRUPPE_WP in gruppen:
@@ -857,7 +891,8 @@ async def wp_komponenten_der_kanal_tage(db: AsyncSession, anlage_id: int, von: d
     Nachzug M-1): ein Bereich, den ein in derselben Anfrage schon gelesener umfasst, wird aus diesem geschnitten statt
     neu gelesen — der Daten-Checker fragt über die Modus-Split-Regeln die WP-Tage zweier fast gleicher Bereiche
     (``lade_modus_split_je_monat``), ein Bereichs-Leser je Tag kostet ~2 ms. Der Wert eines Tages hängt nicht vom
-    Bereich ab (je Tag dieselbe Wahl und dieselben Stunden); ausgegeben wird eine Kopie, Schreiben leert den Kontext."""
+    Bereich ab (je Tag dieselbe Wahl und dieselben Stunden); ausgegeben wird eine Kopie, Schreiben leert den Kontext.
+    Darunter merkt der Prozess die abgeschlossenen Tage (Speicher ``GERAETE``, HA-Bauform S5 E-S5-4)."""
     from backend.services.kanal.bilanz_leser import uhr
     from backend.services.kanal.lade_kontext import gemerkt
 
@@ -877,12 +912,10 @@ async def _neue_liste() -> list:
 
 async def _wp_komponenten_des_bereichs(db: AsyncSession, anlage_id: int, von: date,
                                        bis: date) -> dict[date, dict[str, float]]:
-    """``wp_komponenten_der_kanal_tage`` ohne Lade-Kontext."""
-    from backend.services.kanal.stunden_leser import kanal_stundentage
-
-    tage = await kanal_stundentage(db, anlage_id, von, bis, gruppen=(GRUPPE_WP,))
-    return {d: _wp_komponenten(t.gruppen[GRUPPE_WP], _tages_delta(t.gruppen[GRUPPE_WP]))
-            for d, t in tage.items() if GRUPPE_WP in t.gruppen}
+    """``wp_komponenten_der_kanal_tage`` ohne Lade-Kontext — je Tag gemerkt je Prozess (``geraete_tageswerte_gemerkt``,
+    HA-Bauform S5 E-S5-4)."""
+    tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
+    return await geraete_tageswerte_gemerkt(db, anlage_id, tage, GRUPPE_WP)
 
 
 async def wp_werte_der_kanal_tage(db: AsyncSession, anlage_id: int, invs_by_id: Mapping[str, Any], von: date,
