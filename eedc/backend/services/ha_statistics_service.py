@@ -218,6 +218,9 @@ class HAStatisticsService:
         self._ws_client: Optional["HAStatisticsWebsocket"] = None
         self._ws_ersatz_ids: dict[str, int] = {}
         self._ws_status: Optional[tuple[float, bool]] = None
+        # Zeitpunkt (monotonic) der letzten erzwungenen Erneuerung der WS-Liste
+        # nach einem Fehlschlag — None: noch keine (siehe `_ws_meta`, N-762).
+        self._ws_meta_erneuert: Optional[float] = None
 
     def setze_ha_verbindung(self, api_url: Optional[str], token: Optional[str]) -> None:
         """Meldet die aktive HA-Verbindung für den WebSocket-Transport.
@@ -237,6 +240,7 @@ class HAStatisticsService:
             alt.schliessen()
         self._ws_client = None
         self._ws_status = None
+        self._ws_meta_erneuert = None
         self._meta_cache.clear()
         if api_url and token:
             from backend.services.ha_statistics_ws import HAStatisticsWebsocket
@@ -531,16 +535,27 @@ class HAStatisticsService:
         return ergebnis
 
     def _ws_meta(self, sensor_id: str) -> Optional[SensorMeta]:
-        """`SensorMeta` aus den WS-Metadaten — Gegenstück zu `statistics_meta`."""
+        """`SensorMeta` aus den WS-Metadaten — Gegenstück zu `statistics_meta`.
+
+        Fehlt der Sensor in der gecachten Liste, wird sie **einmal je
+        `_META_CACHE_TTL`** frisch geholt und erneut nachgesehen (N-762, #430):
+        ein Sensor, dessen Langzeitstatistik erst nach dem eedc-Start beginnt,
+        wirkt so spätestens nach fünf Minuten — wie im DB-Zweig, der
+        `statistics_meta` je Abfrage liest. Ohne Fehlschlag keine Erneuerung;
+        Treffer bedienen sich unverändert aus der Liste, die auch die Zählung
+        und `erreichbar` lesen (eine Liste im WS-Client, kein zweiter Cache).
+        """
         ws = self._ws
         if ws is None:
             return None
         try:
             alle = ws.metadaten()
+            eintrag = alle.get(sensor_id)
+            if eintrag is None and self._ws_meta_erneuern_faellig():
+                eintrag = ws.metadaten(erneuern=True).get(sensor_id)
         except Exception as e:  # noqa: BLE001
             logger.warning("HA-Statistik-Metadaten nicht abrufbar: %s", e)
             return None
-        eintrag = alle.get(sensor_id)
         if eintrag is None:
             return None
         # `metadata_id` gibt es über die API nicht — die Antwort ist bereits nach
@@ -548,6 +563,21 @@ class HAStatisticsService:
         # bestehenden Rückwärts-Zuordnungen (`meta_id_to_sensor`) am Leben.
         ersatz = self._ws_ersatz_ids.setdefault(sensor_id, len(self._ws_ersatz_ids) + 1)
         return SensorMeta(id=ersatz, unit=eintrag.unit, has_sum=eintrag.has_sum)
+
+    def _ws_meta_erneuern_faellig(self) -> bool:
+        """Darf die WS-Liste nach einem Fehlschlag jetzt erneuert werden?
+
+        Höchstens einmal je `_META_CACHE_TTL`; der Zeitpunkt wird **vor** dem
+        Abruf gesetzt, damit eine nicht antwortende HA nicht je Sensor erneut
+        gefragt wird. Die erste Erneuerung ist sofort fällig: wie alt die Liste
+        des Clients ist, weiß der Service nicht.
+        """
+        jetzt = time.monotonic()
+        letzte = self._ws_meta_erneuert
+        if letzte is not None and (jetzt - letzte) < self._META_CACHE_TTL:
+            return False
+        self._ws_meta_erneuert = jetzt
+        return True
 
     # `_ts_to_datetime` / `_ts_to_date` sind hier bewusst **nicht** mehr
     # vorhanden. Sie erzeugten `FROM_UNIXTIME(start_ts)` bzw.

@@ -234,8 +234,10 @@ class HAStatisticsWebsocket:
 
         Wird gecacht: die Liste kostet zwar nur ~0,07 s, wird aber je Sensor und
         Abfrage gebraucht. `erneuern=True` erzwingt eine frische Abfrage — der
-        aufrufende Service hält seinerseits einen kurzen TTL, damit ein
-        nachgetragenes `state_class` zeitnah wirkt.
+        aufrufende Service (`HAStatisticsService._ws_meta`) ruft sie, wenn ein
+        Sensor fehlt, höchstens einmal je `_META_CACHE_TTL`, damit ein
+        nachgetragenes `state_class` oder eine neu begonnene Statistik zeitnah
+        wirkt (N-762).
         """
         if self._meta_cache is not None and not erneuern:
             return self._meta_cache
