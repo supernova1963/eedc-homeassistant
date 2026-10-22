@@ -127,6 +127,7 @@ async def get_reaggregate_preview(
 
     slot_deltas, tagesumme_alt, tagesumme_neu = await _stunden_alt_neu(
         db, anlage, investitionen_by_id, datum, ha_verfuegbar,
+        ohne_achsen=await _kanal_achsen(db, anlage, datum),
     )
 
     counter_tagesdelta = await _counter_tagesdelta(
@@ -314,14 +315,33 @@ async def _boundaries(
     return boundaries
 
 
+async def _kanal_achsen(db: AsyncSession, anlage, datum: date) -> frozenset[str]:
+    """Die Mengen-Achsen der Gruppen, deren Mengen der Lauf an diesem Tag NICHT schreibt (HA-Bauform S5b, E-S5-4 ⚑ A-6
+    aus E-S5-3): an einem Kanal-Tag die Achsen der Gruppen mit Wahl ``kanal`` — dieselbe Weiche wie ``aggregate_day``
+    (``energie_profil/mengen_weiche``, ``Weiche.achsen``); an einem Bestandstag keine. Eine Anlage ohne Zeile in der
+    Datenbank (Attrappen der Vorschau-Proben) hat keine Kanal-Wahl — dann bleibt die Tabelle wie bisher."""
+    from sqlalchemy.exc import NoResultFound
+
+    from backend.services.energie_profil.mengen_weiche import mengen_weiche
+
+    try:
+        return (await mengen_weiche(db, anlage, datum)).achsen
+    except NoResultFound:
+        return frozenset()
+
+
 async def _stunden_alt_neu(
     db: AsyncSession,
     anlage,
     investitionen_by_id: dict,
     datum: date,
     ha_verfuegbar: bool,
+    *,
+    ohne_achsen: frozenset[str] = frozenset(),
 ) -> tuple[list[dict], dict[str, Optional[float]], dict[str, Optional[float]]]:
-    """Gespeicherte Stundenzeilen („alt") gegen die Tagestabelle des Laufs („neu", R5/Ü7)."""
+    """Gespeicherte Stundenzeilen („alt") gegen die Tagestabelle des Laufs („neu", R5/Ü7). ``ohne_achsen``: die Achsen,
+    deren Mengen der Lauf an einem Kanal-Tag nicht schreibt (``_kanal_achsen``) — sie stehen nicht in der Tabelle; die
+    Vorschau-Zeile der Werkbank nennt die Gruppen (``repair_orchestrator._kanal_hinweis``)."""
     # ── Stunden alt/neu (Zählerlücken wie HA, Ü7) ─────────────────────────────
     # ⭐ **„neu" ist, was der Lauf schreiben WÜRDE — über dieselbe Tagestabelle
     # wie der Aggregator** (R5): HA erreichbar ⇒ die HA-Slot-Tabelle
@@ -359,14 +379,15 @@ async def _stunden_alt_neu(
         )
     stunden_neu = tabelle_neu.stunden if tabelle_neu is not None else {}
 
-    return _stunden_zeilen(tep_alt, stunden_neu)
+    return _stunden_zeilen(tep_alt, stunden_neu, ohne_achsen)
 
 
 def _stunden_zeilen(
     tep_alt: dict,
     stunden_neu: dict,
+    ohne_achsen: frozenset[str] = frozenset(),
 ) -> tuple[list[dict], dict[str, Optional[float]], dict[str, Optional[float]]]:
-    """Je Stunde und Achse eine Zeile alt/neu samt Tagessummen — rein."""
+    """Je Stunde und Achse eine Zeile alt/neu samt Tagessummen — rein. Achsen aus ``ohne_achsen`` fehlen."""
     from backend.core.berechnungen import batterie_kw_spalte
 
     _ACHSEN_VORSCHAU = (
@@ -385,6 +406,8 @@ def _stunden_zeilen(
         zeile_neu = stunden_neu.get(h) or {}
         spannen_neu = zeile_neu.get("spannen") or {}
         for achse, spalte, neu_fn in _ACHSEN_VORSCHAU:
+            if achse in ohne_achsen:
+                continue
             alt = getattr(zeile_alt, spalte, None) if zeile_alt is not None else None
             neu = neu_fn(zeile_neu)
             neu = round(neu, 3) if neu is not None else None

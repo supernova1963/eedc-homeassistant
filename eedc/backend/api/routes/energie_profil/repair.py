@@ -371,7 +371,14 @@ async def achse2_drift_diagnose(
     führen — die Zuordnung dieses Tages nennt die Menge. Vorher meldete ein
     Gerät mit Leistungs-, aber ohne Zählersensor täglich eine „Drift", die
     exakt seine eigene Σ war.
+
+    **HA-Bauform S5b (E-S5-4, ⚑ A-7 aus E-S5-3):** an einem Kanal-Tag trägt die Stundenzeile keine Zähler-Spalten
+    der Gruppen aus dem HA-Spiegel bzw. den eigenen Zählerständen (``aggregate_day``, ``mengen_weiche``) — dort gibt es
+    nichts zu vergleichen. Die Antwort nennt diese Tage (``kanal_tage_ohne_vergleich``, ``hinweis``); der Vergleich
+    selbst bleibt, wie er ist.
     """
+    from backend.services.kanal.bilanz_leser import kanal_tage
+
     result = await db.execute(
         select(TagesEnergieProfil)
         .where(
@@ -425,6 +432,7 @@ async def achse2_drift_diagnose(
         if kategorien:
             tage_out.append({"datum": datum_.isoformat(), "drift": kategorien})
 
+    ohne_vergleich = sorted(d for d in await kanal_tage(db, anlage_id, von, bis) if d in nach_tag)
     return {
         "status": "ok",
         "anlage_id": anlage_id,
@@ -432,6 +440,13 @@ async def achse2_drift_diagnose(
         "bis": bis.isoformat(),
         "tage_mit_drift": len(tage_out),
         "tage": tage_out,
+        "kanal_tage_ohne_vergleich": len(ohne_vergleich),
+        "hinweis": (
+            f"{len(ohne_vergleich)} Tag(e) des Bereichs lesen ihre Mengen aus dem HA-Spiegel bzw. den eigenen "
+            "Zählerständen — die Stundenzeile trägt dort (sobald der Tag ohne Mengen geschrieben ist) keine "
+            "Zähler-Spalten, es gibt nichts zu vergleichen, was eine Sicht zeigt."
+            if ohne_vergleich else None
+        ),
     }
 
 
