@@ -38,7 +38,18 @@ Spiegel, an den Zahlen in *Cockpit → Tag, Monat und Jahr* ändert sich nichts.
 Preise, Leistungsaufteilung, Zählwerke, Spitzen und Kennzahlen; Performance Ratio, die Einspeisung bei negativem
 Börsenpreis und die Aufteilung der Heimladung rechnet eedc an solchen Tagen aus den Stunden des Spiegels. Ein Monat, den der Spiegel nur teilweise deckt, rechnet die gedeckten Tage mit den
 Zahlen aus dem Spiegel — wie *Cockpit → Tag*. Sichtbar ist das sonst nur in der Werkbank: „Tag neu aggregieren" nennt in Vorschau und Rückmeldung die Gruppen, für die der Lauf keine
-Mengen schreibt ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
+Mengen schreibt, und die Alt/Neu-Tabelle der Vorschau zeigt an solchen Tagen nur noch, was der Lauf auch schreibt
+([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Ein Tag, dessen Wärmepumpe der Spiegel deckt, steht im
+Wärme/Klima-Verlauf jetzt auch dann mit seinem Strom, wenn eedc für ihn keine Tageszeile gespeichert hat.
+
+**Performance Ratio mit BHKW richtig nachgezogen:** Hat deine Anlage einen Sonstiges-Erzeuger hinter dem Anlagenzähler
+(etwa ein BHKW), zieht der nächtliche Nachzug des Archiv-Wetters dessen Erzeugung an Tagen ohne HA-Spiegel jetzt von der
+PV ab, wie die tägliche Aggregation — bisher war die Performance Ratio solcher Tage zu hoch und konnte eine Meldung
+„PV-Doppelerfassung" im Daten-Checker auslösen.
+
+**Sensoren ohne Summenstatistik:** Führt Home Assistant für einen Zähler keine Summe (kein `state_class: total` bzw.
+`total_increasing`), bleibt sein Monatswert bei „Aus HA laden", Import und Monatsabschluss-Vorschlag jetzt leer, statt
+aus dem Zustandsverlauf geschätzt zu werden — wie im HA-Energie-Dashboard. Eine 0 erscheint dabei nirgends.
 
 ---
 

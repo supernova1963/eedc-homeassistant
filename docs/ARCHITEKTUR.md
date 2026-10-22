@@ -673,17 +673,21 @@ Monate und Stunden).
 Prozess (`services/kanal/merken.py`) für **abgeschlossene** Tage (`tagesfenster(D)[1] ≤ lesen.soll_ende(jetzt)`, also ab
 D+1 00:00 + `SCHREIBVERZUG_S`; der laufende Tag und der Vortag bis dahin nie): `ADAPTER` hält je Anlage, Tag und gefragten
 Gruppen den Gruppensatz und die Adapter-Zeilen (`kanal_stunden.stunden_der_kanal_tage` → `adapter_der_tage`; die Mischzeile
-entsteht je Aufruf neu aus der Stundenzeile), `TAGESWAHL` je Anlage und Tag die Tageswahl der Bilanz (`bilanz_leser.kanal_tage`).
-Fehltage lädt EIN Aufruf (Bereichs-Leser bzw. ein `tage_bilanz`-Bereich); der Bereichs-Leser `kanal_stundentage` selbst merkt
-nicht, ebenso die WP-Leser `wp_*_der_kanal_tage` und der Einzeltag `/stunden`. **Generation je Anlage, beide Speicher
-gemeinsam:** die fünf Schreibstellen von `kanal_statistik` rufen `merken.invalidiere` (Wächter `SCHREIBER_KANAL_STATISTIK` in
+entsteht je Aufruf neu aus der Stundenzeile), `TAGESWAHL` je Anlage und Tag die Tageswahl der Bilanz (`bilanz_leser.kanal_tage`),
+seit E-S5-4 `GERAETE` je Anlage, Tag und Geräte-Gruppe die Tageswerte von Wärmepumpe, E-Mobilität und Sonstiges in
+`komponenten_kwh`-Form (`kanal_stunden.geraete_tageswerte_gemerkt`, gerufen von `wp_komponenten_der_kanal_tage` und
+`geraete_komponenten_der_kanal_tage` — seit S5b tragen die Tageszeilen diese Schlüssel an Kanal-Tagen nicht mehr, jeder Leser
+von `komponenten_kwh` fragt sie dort aus den Kanälen). Fehltage lädt EIN Aufruf (Bereichs-Leser bzw. ein `tage_bilanz`-Bereich,
+für `GERAETE` lückenlos vom ersten bis zum letzten Fehltag); der Bereichs-Leser `kanal_stundentage` selbst merkt nicht, ebenso
+`wp_werte_der_kanal_tage` und der Einzeltag `/stunden`. **Generation je Anlage, alle Speicher gemeinsam:** die fünf Schreibstellen von `kanal_statistik` rufen `merken.invalidiere` (Wächter `SCHREIBER_KANAL_STATISTIK` in
 `test_kanal_lesen_waechter.py`; ein Schreiben bei `ts` verwirft ab dem Tag des vorigen Stands, Verwerfen und Investition
 löschen die ganze Anlage); das Sitzungsereignis `after_flush` (an `sqlalchemy.orm.Session`, angemeldet in `core/database.py`)
 zählt die Generation der Anlage hoch, wenn eine `Anlage`, `Investition`, ein `Kanal` oder eine `KanalQuelle` neu, geändert
 oder gelöscht wird; die MQTT-Schlüsselmenge (`snapshot.reader.mqtt_zaehler_keys`) liegt im Eintrag und wird je Anfrage
 verglichen. Jede Invalidierung mit Sitzung gilt beim `commit` noch einmal, und ein Ergebnis, während dessen Berechnung
 invalidiert wurde, wird nicht abgelegt. Grenzen: LRU je Speicher 3 000 Einträge (gemessen ≈ 26 MB bei 716 Kanal-Tagen, ≈ 31 kB je Tag ⇒ im Vollzustand
-≈ 92 MB Adapter-Zeilen + ≤ 6 MB Tageswahl; eine Sicht über mehr Tage als der Speicher hält verdrängt sich selbst und gewinnt nichts), Verfall
+≈ 92 MB Adapter-Zeilen + ≤ 6 MB Tageswahl; `GERAETE` eigene Obergrenze 9 000 Einträge (`OBERGRENZE_GERAETE`, bis zu drei je Tag ⇒
+3 000 Tage wie die anderen; gemessen 608–630 B je Eintrag ⇒ im Vollzustand ≈ 5,5–5,7 MB); eine Sicht über mehr Tage als der Speicher hält verdrängt sich selbst und gewinnt nichts), Verfall
 24 h, die Datenbank-Engine gehört zum Schlüssel; nichts Persistentes. **Ein Prozess:** `run.sh` startet einen uvicorn ohne
 `--workers`; mit mehreren Workern hätte jeder seinen Speicher, kohärent nur über Invalidierung im selben Prozess und den
 Verfall — ein Schreiben in einem Worker verwirft den Speicher der anderen nicht. Mit und ohne Speicher dieselben Zahlen
@@ -1660,6 +1664,16 @@ Zehn Mechanismen, jeder mit seinem Anlass. Sie greifen **nacheinander**, nicht a
 | 8 | **Drei Konsistenz-Invarianten** | `aggregator.py` am Ende des Laufs | Achse 1 Stunden- gegen Tagespfad · Achse 2 **Leistungs-JSON gegen Zähler-Spalten** (#315) · Counter-Daily-Drift. Alle drei melden per `warning` — sie **verwerfen keinen Tag** |
 | 9 | **Selbstheilung + Nachlauf** | `energie_profil_aggregation_recovery` (02:15, #136) · `sensor_snapshot_startup_recovery` (letzte 6 h nach Neustart) | Verspätete HA-Statistik und verpasste Läufe nach einem Neustart |
 | 10 | **Archiv-Nachzug der Wetterzeile** | `energie_profil/archiv_nachzug.py` (02:20, N-388) | Die Einstrahlung der letzten fünf Tage ist ein **vorläufiger** Modellwert — das ERA5-Archiv hinkt 2–5 Tage nach. Ohne Nachzug bleibt er für immer stehen; an bewölkten Tagen war er bis Faktor **8,7** zu klein und trieb die Performance Ratio über 1 |
+
+**Seit HA-Bauform S5b (E-S5-3/E-S5-4) gilt die Kette 2–5 für die Mengen nur an Bestandstagen (Lesart 1):** an einem
+Kanal-Tag schreibt `aggregate_day` die Mengen der Kanal-Gruppen nicht (`mengen_weiche`), der Wärme-Verlauf liest die
+Zählerstände nur für Tage ohne WP-Kanal-Wahl, die Netzladung der Monats-Fakten fragt das Fenster je Typ nur für
+Bestandstage, und der HA-Monatsleser kennt weder Deckel noch `state`-Rückfall. **Benannt, nicht geschnitten** (gemessen
+E-S5-4): *Cockpit → Tag* (`kanal_stunden.tages_eingaenge`) fragt `get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte`
+an Kanal-Tagen weiter im Kalendertag — die Gründe der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen
+mit Wahl `bestand` kommen nur von dort; die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird
+an Kanal-Tagen weiter ganz gerechnet (sie trägt die Bestandsgruppen, die Heimladung bei E-Mob-Wahl `bestand` und die
+Zeilen der Stunden ohne Leistungspunkt; ≈ 90 % der Laufzeit von `aggregate_day` auf den Mess-Kopien).
 
 ⭐ **Warum das zusammen genügt und einzelne Ausfälle nichts unterdrücken müssen:** `aggregate_day`
 ist **idempotent** (Delete + Insert) — jeder spätere Lauf korrigiert den früheren. Ein Sensor, der
