@@ -1122,6 +1122,41 @@ def performance_ratio_des_kanal_tags(tag: KanalStundentag, ks: KanalStunden, gti
     return berechne_performance_ratio(pv_ertrag_der_kanal_stunden(tag, ks), gti_summe_wh_m2, kwp)
 
 
+def pv_ertrag_der_stundenzeilen(zeilen: Sequence[Any], komponenten_kwh: Optional[Mapping[str, float]],
+                                sonstige_erzeuger_ids: Iterable[int]) -> Optional[float]:
+    """Der PR-Zähler eines **Bestandstags** aus den gespeicherten Stundenzeilen: Σ ``pv_kw`` (PV + Erzeuger hinter dem
+    Zähler) abzüglich der Tagesmenge jedes Sonstiges-Erzeugers (``komponenten_kwh`` unter dem Schlüssel aus der Konstante
+    ``SONSTIGES_KOMPONENTEN_PREFIX`` + id — kein GTI-Bezug), wie ``aggregator.verrechne_stunde`` beim Schreiben.
+    ``None`` ohne eine Stunde mit PV (keine Aussage, P4). N-759: bis E-S5-4 suchte der Archiv-Nachzug den Erzeuger unter
+    ``sonstiges_<id>`` und zog nie etwas ab."""
+    erfasst = [z.pv_kw for z in zeilen if z.pv_kw is not None]
+    if not erfasst:
+        return None
+    sonstige = 0.0
+    for inv_id in sonstige_erzeuger_ids:
+        v = (komponenten_kwh or {}).get(f"{SONSTIGES_KOMPONENTEN_PREFIX}{inv_id}")
+        if v is not None and v > 0:
+            sonstige += v
+    return sum(erfasst) - sonstige
+
+
+async def performance_ratio_des_tages(db: AsyncSession, anlage, datum: date, gti_summe_wh_m2: Optional[float],
+                                      kwp: Optional[float], *, zeilen: Sequence[Any],
+                                      komponenten_kwh: Optional[Mapping[str, float]],
+                                      sonstige_erzeuger_ids: Iterable[int]) -> Optional[float]:
+    """**Die Performance Ratio eines gespeicherten Tages — eine Stelle für jeden Tag** (Fund N-759, HA-Bauform S5
+    E-S5-4): an einem Kanal-Tag der Bilanz aus den Kanal-Stunden (``performance_ratio_des_kanal_tags``, dieselbe Stelle wie
+    ``aggregate_day``), an einem Bestandstag aus den Stundenzeilen ``zeilen`` mit Abzug der Sonstiges-Erzeuger
+    (``pv_ertrag_der_stundenzeilen``); die Formel ``berechne_performance_ratio``. Der Archiv-Nachzug ruft sie je Tag."""
+    from backend.core.berechnungen.performance_ratio import berechne_performance_ratio
+
+    k = await kanal_stunden(db, anlage.id, datum)
+    if k is not None and GRUPPE_BILANZ in k[0].gruppen:
+        return performance_ratio_des_kanal_tags(*k, gti_summe_wh_m2, kwp)
+    return berechne_performance_ratio(pv_ertrag_der_stundenzeilen(zeilen, komponenten_kwh, sonstige_erzeuger_ids),
+                                      gti_summe_wh_m2, kwp)
+
+
 def einspeisung_neg_preis_der_kanal_stunden(ks: KanalStunden, boerse: Mapping[int, Optional[float]]) -> Optional[float]:
     """§51 EEG an einem Kanal-Tag: Σ ``einspeisung_kw`` der Kanal-Stunden ``h`` mit negativem Börsenpreis ``boerse[h]``
     (Beginn-Raster — Stunde und Preis beschreiben dasselbe Intervall, keine Verschiebung). Form der Tageszeile wie
@@ -1211,8 +1246,9 @@ __all__ = [
     "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
     "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage", "kanal_gruppen_der_tage",
     "WpModusTag", "splits_mit_kanal", "wp_modus_der_kanal_tage",
-    "KOMPONENTEN_GRUPPEN", "gruppen_der_schluessel", "geraete_komponenten_der_kanal_tage", "pv_ertrag_der_kanal_stunden",
-    "performance_ratio_des_kanal_tags", "einspeisung_neg_preis_der_kanal_stunden", "ladeanteil_der_kanal_stunden",
+    "KOMPONENTEN_GRUPPEN", "gruppen_der_schluessel", "geraete_komponenten_der_kanal_tage", "geraete_tageswerte_gemerkt", "pv_ertrag_der_kanal_stunden",
+    "performance_ratio_des_kanal_tags", "performance_ratio_des_tages", "pv_ertrag_der_stundenzeilen",
+    "einspeisung_neg_preis_der_kanal_stunden", "ladeanteil_der_kanal_stunden",
     "UEBERSCHUSS_FELDER", "ueberschuss_defizit_der_tage",
     "kanaele_der_achse", "tage_mit_kanal_luecke_ueber_mitternacht",
     "wp_strom_je_stunde", "wp_stundenformen",

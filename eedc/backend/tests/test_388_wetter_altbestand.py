@@ -101,7 +101,10 @@ async def _anlage_mit_tagen(db, *tage: date, sonstiges_erzeuger_kwh: float | Non
             anlage_id=anlage.id, datum=tag, stunden_verfuegbar=24,
             strahlung_summe_wh_m2=200.0, gti_summe_wh_m2=None, performance_ratio=3.35,
             komponenten_kwh=(
-                {f"sonstiges_{sonst.id}": sonstiges_erzeuger_kwh} if sonst else None
+                # N-759 (HA-Bauform S5, E-S5-4): der Schlüssel der Tageszeile ist `sonstige_<id>`
+                # (`SONSTIGES_KOMPONENTEN_PREFIX`) — bis E-S5-4 legte die Probe denselben falschen Schlüssel
+                # `sonstiges_<id>` an, den der Nachzug suchte, und sah den Defekt deshalb nicht.
+                {f"sonstige_{sonst.id}": sonstiges_erzeuger_kwh} if sonst else None
             ),
         ))
     await db.commit()
