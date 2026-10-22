@@ -17,7 +17,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import SegmentControl from '../ui/SegmentControl'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt, verbrauchsprofilBasis } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt, verbrauchsprofilBasis, pvPrognoseKwDerQuelle } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -36,6 +36,11 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
     case 'thunderstorm': return <CloudLightning className={`${className} text-purple-400`} />
     default: return <Cloud className={`${className} text-gray-400 dark:text-gray-500`} />
   }
+}
+
+/** Anzeigename der gewählten Prognosequelle (Quellenvermerk und Kopfzahl-Titel). */
+function prognoseQuellenName(q: string): string {
+  return q === 'solcast' ? 'Solcast' : q === 'sfml' ? 'Solar Forecast ML' : q
 }
 
 // Verbrauchs-Kategorien für gestapeltes Chart
@@ -64,6 +69,23 @@ export interface IstStundenWerte {
   waermepumpe: number
   sonstige: number
   verbrauch_gesamt: number
+}
+
+/**
+ * Prognose je Slot für das Chart: PV aus der gewählten Quelle
+ * (`pvPrognoseKwDerQuelle`, N-761/#434 — die Kurve trägt dieselbe Quelle wie
+ * Kopfzahl und Quellenvermerk), Verbrauch aus dem Verbrauchsprofil.
+ * Exportiert als Probe der gezeichneten Reihe.
+ */
+export function prognoseStundenSlots(
+  wetter: Pick<LiveWetterResponse, 'verbrauchsprofil' | 'prognose_quelle' | 'prognose_quelle_hat_profil'>,
+): Record<number, { pv: number; verbrauch: number }> {
+  const prognoseMap: Record<number, { pv: number; verbrauch: number }> = {}
+  for (const v of wetter.verbrauchsprofil) {
+    const h = parseInt(v.zeit.replace(':00', ''))
+    prognoseMap[h] = { pv: pvPrognoseKwDerQuelle(wetter, v), verbrauch: v.verbrauch_kw }
+  }
+  return prognoseMap
 }
 
 /**
@@ -257,12 +279,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   const chartData = useMemo(() => {
     if (!wetter?.verfuegbar) return []
 
-    // Prognose-Daten indexieren
-    const prognoseMap: Record<number, { pv: number; verbrauch: number }> = {}
-    for (const v of wetter.verbrauchsprofil) {
-      const h = parseInt(v.zeit.replace(':00', ''))
-      prognoseMap[h] = { pv: v.pv_ertrag_kw, verbrauch: v.verbrauch_kw }
-    }
+    const prognoseMap = prognoseStundenSlots(wetter)
 
     const data: Array<Record<string, number | string | null>> = []
 
@@ -411,7 +428,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
 {/* SA/SU/Noon werden als vertikale Linien im Chart angezeigt */}
           {wetter.pv_prognose_kwh !== null && (
             <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium"
-                 title="eedc PV-Tagesprognose (GTI-basiert)">
+                 title={wetter.prognose_quelle && wetter.prognose_quelle !== 'eedc'
+                   ? `PV-Tagesprognose aus ${prognoseQuellenName(wetter.prognose_quelle)}`
+                   : 'eedc PV-Tagesprognose (GTI-basiert)'}>
               <BatteryCharging className="h-3.5 w-3.5" />
               <span>~{wetter.pv_prognose_kwh} kWh PV</span>
             </div>
@@ -756,7 +775,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
           {/* Quellen-Hinweis (nur wenn nicht eedc-Default) */}
           {wetter.prognose_quelle && wetter.prognose_quelle !== 'eedc' && (
             <p className="text-[10px] text-center text-gray-400 dark:text-gray-500 mt-0.5">
-              Quelle: {wetter.prognose_quelle === 'solcast' ? 'Solcast' : wetter.prognose_quelle === 'sfml' ? 'Solar Forecast ML' : wetter.prognose_quelle}
+              Quelle: {prognoseQuellenName(wetter.prognose_quelle)}
             </p>
           )}
           {wetter.prognose_quelle_hinweis && (

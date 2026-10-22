@@ -14,6 +14,7 @@
  * nächste Zahl, die daneben steht.
  */
 import type { SolarPrognose, SolarPrognoseTag, PrognoseAnzeigeQuelle } from '../api/wetter'
+import type { LiveWetterResponse, VerbrauchsStunde } from '../api/liveDashboard'
 import { PROGNOSE_QUELLE_LABEL } from './constants'
 
 /** Anzuzeigender Tagesertrag: eedc-korrigiert, sonst OpenMeteo roh. */
@@ -53,4 +54,33 @@ export function prognoseQuelle(p: SolarPrognose): PrognoseAnzeigeQuelle {
 /** Kurzer Quellen-Text für Blockkopf/Legende („Quelle: …"). */
 export function prognoseQuelleLabel(p: SolarPrognose): string {
   return PROGNOSE_QUELLE_LABEL[prognoseQuelle(p)]
+}
+
+/**
+ * PV-Prognose (kW) einer Stunde der Live-Wetter-Antwort aus der GEWÄHLTEN
+ * Quelle — die Kurve «Wetter heute» (N-761, #434).
+ *
+ * Bis N-761 zeichnete das Widget immer `pv_ertrag_kw` (eedc), auch wenn
+ * Kopfzahl und Quellenvermerk Solar Forecast ML oder Solcast nannten: Σ Kurve
+ * 36,1 kWh neben 47,75 kWh Kopfzahl. Entscheid #401: ein Block, eine Quelle —
+ * die Kurve wählt, sie rechnet nichts.
+ *
+ * `pv_ml_prognose_kw` ist die Heute-Reihe der effektiven Quelle (SFML oder
+ * Solcast, Backend `live_wetter_antwort.py::_quelle_ins_profil`). Sie gilt nur,
+ * wenn die Antwort ein Stundenprofil der Quelle meldet
+ * (`prognose_quelle_hat_profil`, je Antwort, nicht je Stunde) — ohne Profil
+ * ist die Reihe aus der eedc-Kurvenform geschmiert (SFML-GTI-Rückfall), und
+ * genau diese Vermischung meidet der Block auch beim Rest. Bei eedc als Quelle
+ * (gewählt oder zurückgefallen) gilt die eedc-Reihe; fehlt der Stundenwert,
+ * gilt der eedc-Wert dieser Stunde.
+ */
+export function pvPrognoseKwDerQuelle(
+  wetter: Pick<LiveWetterResponse, 'prognose_quelle' | 'prognose_quelle_hat_profil'>,
+  stunde: VerbrauchsStunde,
+): number {
+  const fremdeQuelle = wetter.prognose_quelle != null && wetter.prognose_quelle !== 'eedc'
+  if (fremdeQuelle && wetter.prognose_quelle_hat_profil && stunde.pv_ml_prognose_kw != null) {
+    return stunde.pv_ml_prognose_kw
+  }
+  return stunde.pv_ertrag_kw
 }

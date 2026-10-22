@@ -121,7 +121,7 @@ export interface VerbrauchsStunde {
   zeit: string
   pv_ertrag_kw: number
   verbrauch_kw: number
-  pv_ml_prognose_kw?: number | null  // Solar Forecast ML (optional)
+  pv_ml_prognose_kw?: number | null  // Heute-Reihe der gewählten Quelle (SFML oder Solcast, N-761); gilt nur mit `prognose_quelle_hat_profil`
 }
 
 export interface LiveWetterResponse {

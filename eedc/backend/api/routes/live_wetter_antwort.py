@@ -355,8 +355,12 @@ def _mqtt_aussentemperatur(anlage, aktuelle_stunde: Optional[dict], ha_temp_foun
 # ── Gewählte Quelle: SFML ────────────────────────────────────────────────────
 
 
-async def _sfml_quelle(pq, profil: list[dict], stand: _QuellenStand) -> None:
-    """SFML-Werte nach ``stand``, SFML-Slots ins Profil — nur bei SFML als Quelle."""
+async def _sfml_quelle(pq, profil: list[dict], stand: _QuellenStand) -> None:  # noqa: ARG001
+    """SFML-Werte nach ``stand`` — nur bei SFML als Quelle.
+
+    ``profil`` liest diese Phase seit N-761 nicht mehr: die Stundenreihe der Quelle schreibt
+    ``_quelle_ins_profil`` erst nach dem Rückfall (``_pq_nach_abruf``), für SFML und Solcast an einer Stelle.
+    """
     # ── SFML per Auto-Discovery (wenn als aktive Quelle gewählt) ──
     if not pq.ist_sfml:
         return
@@ -376,7 +380,6 @@ async def _sfml_quelle(pq, profil: list[dict], stand: _QuellenStand) -> None:
             stand.sfml_uebermorgen = sfml_disc.wert("uebermorgen_kwh")
             stand.sfml_accuracy = sfml_disc.wert("genauigkeit_30d")
             _sfml_stundenprofile(sfml_disc, stand)
-            _sfml_ins_profil(profil, stand)
     except Exception as e:
         logger.debug(f"SFML-Discovery fehlgeschlagen: {e}")
 
@@ -405,16 +408,37 @@ def _sfml_stundenprofile(sfml_disc, stand: _QuellenStand) -> None:
                 stand.sfml_stundenprofil_heute = kandidat
 
 
-def _sfml_ins_profil(profil: list[dict], stand: _QuellenStand) -> None:
-    sfml_kwh = stand.sfml_kwh
-    if stand.sfml_stundenprofil_heute is not None and profil:
+def _quelle_ins_profil(profil: list[dict], pq, stand: _QuellenStand) -> None:
+    """Heute-Stundenreihe der EFFEKTIVEN Quelle als ``pv_ml_prognose_kw`` ins Profil (N-761, #434).
+
+    ``pq`` ist die Quelle nach dem Rückfall (``_pq_nach_abruf``): bei eedc — gewählt oder zurückgefallen —
+    bleibt das Feld leer. SFML trägt wie bisher ``sfml_stundenprofil_heute`` (aus ``stundenprofil`` oder
+    ``prognose_heute.hours``), Solcast seine Heute-Slots (``solcast_stundenprofil`` = ``quelle_tagesprofile[0]``).
+    Der GTI-Schmier bleibt der Rückfall für SFML ohne Stundenattribut. Ob die Kurve die Reihe zeigt, sagt
+    ``prognose_quelle_hat_profil`` (``_rest_der_quelle``) — die Reihe allein ist keine Zusage.
+    """
+    if not profil or pq.ist_eedc:
+        return
+    if pq.ist_sfml:
+        heute = stand.sfml_stundenprofil_heute
+    elif pq.ist_solcast and stand.quelle_tagesprofile:
+        heute = stand.quelle_tagesprofile[0]
+    else:
+        return
+    if heute is not None:
         # profil-Eintrag der Uhr-Stunde h trägt Backward-Slot h
         # (wie pv_ertrag_kw, slot_konvention #297) → 1:1-Mapping.
         for p in profil:
             h = int(p["zeit"].split(":")[0])
-            if 0 <= h < 24:
-                p["pv_ml_prognose_kw"] = round(stand.sfml_stundenprofil_heute[h], 2)
-    elif sfml_kwh is not None and sfml_kwh > 0 and profil:
+            if 0 <= h < len(heute):
+                p["pv_ml_prognose_kw"] = round(heute[h], 2)
+    elif pq.ist_sfml:
+        _sfml_gti_schmier(profil, stand)
+
+
+def _sfml_gti_schmier(profil: list[dict], stand: _QuellenStand) -> None:
+    sfml_kwh = stand.sfml_kwh
+    if sfml_kwh is not None and sfml_kwh > 0:
         # Fallback (kein Stundenattribut): Tages-kWh über
         # GTI-Kurvenform schmieren — alter Pfad, jetzt geloggt.
         logger.debug(
@@ -534,7 +558,9 @@ def _rest_der_quelle(pq, stand: _QuellenStand, zahlen: _PrognoseZahlen, now) -> 
         # wäre genau die Vermischung, die dieser Block loswerden soll.
         zahlen.rest = None
         zahlen.rollend = None
-    return quelle_hat_profil
+    # N-761 ⚑2: nach einem Rückfall auf eedc (SFML/Solcast ohne Tageswert) kann ``quelle_tagesprofile`` noch
+    # das Profil der gewünschten Quelle tragen — die Marke sagt dann trotzdem nein: Kurve und Rest folgen eedc.
+    return quelle_hat_profil and not pq.ist_eedc
 
 
 def _quelle_tageswert(
@@ -686,6 +712,8 @@ def _antwort(
 ) -> dict:
     sunshine_s, sunshine_bisher_s, sunshine_remaining_s = sonne.gesamt_s, sonne.bisher_s, sonne.rest_s
     sfml_kwh, sfml_tomorrow, sfml_accuracy = stand.sfml_kwh, stand.sfml_tomorrow, stand.sfml_accuracy
+    # Die Stundenreihe der effektiven Quelle (nach dem Rückfall) — erst hier, weil ``pq`` erst jetzt feststeht.
+    _quelle_ins_profil(profil, pq, stand)
     return {
         "anlage_id": anlage.id,
         "verfuegbar": len(stunden) > 0,
