@@ -18,34 +18,38 @@ oder in der eigenen Summe aus MQTT-Zählerständen. Es sind dieselben Zahlen wie
 Monat, den die Zähler nur teilweise abdecken, bleibt wie bisher bis zum Abschluss leer
 ([Bedienung → Monat](HANDBUCH_BEDIENUNG.md#23-monat)).
 
-**Eine Mengenquelle je Tag — auch für Auswertungen, Daten-Checker und Steuerungs-Sensoren:** An Tagen, die der
-HA-Spiegel bzw. deine eigenen Zählerstände decken, rechnen jetzt auch Speicher-Potenzial, Speicher-Sizing, effektiver
-Ladepreis, Grundlast, Verbrauchs- und Korrekturprofil, Prognose-Genauigkeit und Lernfaktor mit denselben Stunden wie
-*Cockpit → Tag* — bisher nahmen sie dort noch die eigenen gespeicherten Stundenwerte. Dasselbe gilt für den
-Daten-Checker (PV-Doppelerfassung, Abweichung zu Home Assistant, Batterie-Vorzeichen, leere Tage, Nachtrag nach
-eingefrorenem Zähler: an solchen Tagen kein Befund mehr, der nur die alte gespeicherte Tageszeile betraf), für die
-HA-Export-Sensoren `eedc_ueberschuss_heute_kwh` und `eedc_ueberschuss_jetzt_kw` samt ihrer Zeitangaben und für die
-Aufteilung nach Betriebsart im Wärme/Klima-Verlauf. Ein neuer Hinweis im Daten-Checker nennt, an wie vielen Tagen die
-Mengen noch aus den gespeicherten Stundenwerten kommen — kein Fehler, nichts zu tun. Stunden ohne eigenen Wert in Home
-Assistant zeigen im Wärme/Klima-Verlauf eine Lücke statt 0. Auswertungen über die ganze Historie sind ab dem zweiten
-Aufruf wieder so schnell wie zuvor; der erste Aufruf nach einem Neustart dauert ein paar Sekunden länger
+**Eine Mengenquelle je Tag — gelesen seit 4.1.8, jetzt auch nicht mehr doppelt gespeichert:** An Tagen, die der
+HA-Spiegel bzw. deine eigenen Zählerstände decken, rechnen jetzt alle Sichten mit denselben Stunden- und Tagesmengen
+wie *Cockpit → Tag*. Neu dabei sind Speicher-Potenzial, Speicher-Sizing, effektiver Ladepreis, Grundlast, Verbrauchs-
+und Korrekturprofil, Prognose-Genauigkeit und Lernfaktor, der Daten-Checker (PV-Doppelerfassung, Abweichung zu Home
+Assistant, Batterie-Vorzeichen, leere Tage, Nachtrag nach eingefrorenem Zähler: an solchen Tagen kein Befund mehr, der
+nur die alte gespeicherte Tageszeile betraf), die HA-Export-Sensoren `eedc_ueberschuss_heute_kwh` und
+`eedc_ueberschuss_jetzt_kw` samt ihrer Zeitangaben und die Aufteilung nach Betriebsart im Wärme/Klima-Verlauf — bisher
+nahmen sie dort noch die eigenen gespeicherten Stundenwerte. Gespeichert werden an solchen Tagen keine eigenen Mengen
+mehr, nur noch Ladestand, Wetter, Preise, Leistungsaufteilung, Zählwerke, Spitzen und Kennzahlen; Performance Ratio,
+die Einspeisung bei negativem Börsenpreis und die Aufteilung der Heimladung rechnet eedc dort aus den Stunden des
+Spiegels. An den Zahlen in *Cockpit → Tag, Monat und Jahr* ändert sich nichts. Ein Monat, den der Spiegel nur teilweise
+deckt, rechnet die gedeckten Tage wie *Cockpit → Tag*; ein Tag, dessen Wärmepumpe der Spiegel deckt, steht im
+Wärme/Klima-Verlauf auch ohne gespeicherte Tageszeile mit seinem Strom. Ein neuer Hinweis im Daten-Checker nennt, an
+wie vielen Tagen die Mengen noch aus den gespeicherten Stundenwerten kommen — kein Fehler, nichts zu tun. In der
+Werkbank nennt „Tag neu aggregieren" in Vorschau und Rückmeldung die Gruppen, für die der Lauf keine Mengen schreibt.
+Auswertungen über die ganze Historie sind ab dem zweiten Aufruf wieder etwa so schnell wie zuvor; der erste Aufruf nach
+einem Neustart dauert ein paar Sekunden länger
 ([Daten-Checker §4.6](HANDBUCH_DATEN_CHECKER.md#46-energieprofil--zaehler-abdeckung),
-[Wärme & Klima](HANDBUCH_WAERME_KLIMA.md), [Sensor-Referenz](SENSOR-REFERENZ.md)).
+[Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege), [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md),
+[Sensor-Referenz](SENSOR-REFERENZ.md)).
 
-**Keine doppelten Mengen mehr gespeichert:** An Tagen, die der HA-Spiegel bzw. deine eigenen Zählerstände decken,
-speichert eedc keine eigenen Stunden- und Tagesmengen mehr — alle Sichten lesen sie dort schon seit 4.1.8 aus dem
-Spiegel, an den Zahlen in *Cockpit → Tag, Monat und Jahr* ändert sich nichts. Gespeichert bleiben Ladestand, Wetter,
-Preise, Leistungsaufteilung, Zählwerke, Spitzen und Kennzahlen; Performance Ratio, die Einspeisung bei negativem
-Börsenpreis und die Aufteilung der Heimladung rechnet eedc an solchen Tagen aus den Stunden des Spiegels. Ein Monat, den der Spiegel nur teilweise deckt, rechnet die gedeckten Tage mit den
-Zahlen aus dem Spiegel — wie *Cockpit → Tag*. Sichtbar ist das sonst nur in der Werkbank: „Tag neu aggregieren" nennt in Vorschau und Rückmeldung die Gruppen, für die der Lauf keine
-Mengen schreibt, und die Alt/Neu-Tabelle der Vorschau zeigt an solchen Tagen nur noch, was der Lauf auch schreibt
-([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)). Ein Tag, dessen Wärmepumpe der Spiegel deckt, steht im
-Wärme/Klima-Verlauf jetzt auch dann mit seinem Strom, wenn eedc für ihn keine Tageszeile gespeichert hat.
+**Wärme/Klima-Verlauf mit Lücke statt 0:** Stunden, für die Home Assistant keinen eigenen Wert hat, zeigen im
+Wärme/Klima-Verlauf eine Lücke statt 0; die Summe des Tages bleibt gleich.
 
 **Performance Ratio mit BHKW richtig nachgezogen:** Hat deine Anlage einen Sonstiges-Erzeuger hinter dem Anlagenzähler
 (etwa ein BHKW), zieht der nächtliche Nachzug des Archiv-Wetters dessen Erzeugung an Tagen ohne HA-Spiegel jetzt von der
 PV ab, wie die tägliche Aggregation — bisher war die Performance Ratio solcher Tage zu hoch und konnte eine Meldung
 „PV-Doppelerfassung" im Daten-Checker auslösen.
+
+**Tagesliste ohne Menge vom Nachbartag:** Lag zwischen zwei Tagen aus dem HA-Spiegel ein Tag aus den eigenen
+Zählerständen, zählte die Tagesliste (und *Energieprofil → Monat*) dem Tag davor die E-Mobilitäts- bzw. Sonstiges-Menge
+des Zwischentags dazu. Jetzt rechnet jeder Tag nur seinen eigenen Zählerabstand.
 
 **Sensoren ohne Summenstatistik:** Führt Home Assistant für einen Zähler keine Summe (kein `state_class: total` bzw.
 `total_increasing`), bleibt sein Monatswert bei „Aus HA laden", Import und Monatsabschluss-Vorschlag jetzt leer, statt
