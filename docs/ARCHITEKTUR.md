@@ -537,10 +537,12 @@ Drei Tabellen nach dem Vorbild der HA-Langzeitstatistik (Umbau „eedc nach HA-B
 `bauplan-ha-bauform-s1-s2`). Seit E4 lesen **alle Tages-, Monats- und Jahressummen** daraus, wo die Kanäle den Zeitraum
 voll decken (je Zeitraum und Gruppe eine Wahl, ADR-002/**P14**); sonst rechnet der bisherige Leser aus Stunden-, Tages-
 und Monatszeilen. Seit dem zweiten Paket (S3) lesen auch die **Stunden** eines Kanal-Tags daraus (Stunden-Verlauf,
-stundengepaarte Spalten, Stundenform der Wärme-Sichten — „Kanal-Stundentag" unter *Energieprofil Service*); die
-Kennzahl- und Prognose-Leser auf Stundenwerten, Spitzen, Vollzyklen, Performance Ratio und die Mittelwerte der Stunde
-(Ladestand, Preise, Wetter) bleiben auf dem Bestand. `TagesEnergieProfil`, `TagesZusammenfassung` und `sensor_snapshots`
-laufen unverändert weiter (bis S5 wird keine Spalte gelöscht, kein Schreiber abgeschaltet).
+stundengepaarte Spalten, Stundenform der Wärme-Sichten — „Kanal-Stundentag" unter *Energieprofil Service*); seit dem
+vierten Paket (S5) auch die Kennzahl- und Prognose-Leser auf Stundenwerten, der Daten-Checker und die HA-Export-Steuerung
+(eine Lesestelle `kanal_stunden.stunden_der_tage`), und an einem Kanal-Tag schreibt `aggregate_day` keine Mengen der
+Kanal-Gruppen mehr (Mengen-Weiche). Spitzen, Vollzyklen und die Mittelwerte der Stunde (Ladestand, Preise, Wetter) bleiben
+Bahnen der Stunden- und Tageszeilen. `TagesEnergieProfil`, `TagesZusammenfassung` und `sensor_snapshots` bleiben als
+Tabellen (keine Spalte gelöscht, kein Schreiber abgeschaltet; Lesart-1-Tage lesen weiter aus ihnen).
 
 | Tabelle | Inhalt |
 | --- | --- |
@@ -603,7 +605,7 @@ noch ab einem späteren Zeitpunkt —, bleibt der Spiegel davor stehen; ist HA u
 **Stunde und Slot.** Eine Stundenzeile des Bestands (Rückwärts-Slot `h` = `[h−1, h)`, #144) wird an genau einer Stelle zu
 `start_ts`: `core/berechnungen/slot_konvention.py::slot_start_ts`, die Umkehrung von `lts_boundary_index` (doppelte
 Herbststunde ⇒ die spätere, fehlende Frühjahrsstunde ⇒ kein `start_ts`); das Tagesfenster des **Bestands**
-`[Vortag 23:00, 23:00)` ist `tagesfenster_start_ts` (Schreiber, HA-Leser und Bestandstage, unverändert bis S5). Auch die
+`[Vortag 23:00, 23:00)` ist `tagesfenster_start_ts` (Schreiber, HA-Leser und Bestandstage; bleibt für Lesart 1). Auch die
 Betriebsart-Mitschrift rechnet darüber. Ein **Kanal-Tag** ist seit S4 der Kalendertag (`fenster.tagesfenster`, unten), seine
 Stunde `h` ist die Zeile mit lokalem Beginn `h` (`stunden_leser.stunde_des_beginns`); dieselbe Stunde steht in der
 Bestandszeile `(D, h+1)`, für `h = 23` in Slot 0 des Folgetags (`slot_konvention.bestandszeile_fuer_stundenbeginn`, die eine
@@ -624,7 +626,7 @@ im Inneren ist keine fehlende Abdeckung — ihre Menge steht in der Folgestunde,
 Aufruf, gleich wie lang der Zeitraum ist. Ohne volle Abdeckung gibt es keinen Wert, nur eine benannte Teilsumme.
 `fenster.py` bildet Tages- und Monatsfenster der Kanal-Schicht an einer Stelle: seit S4 (R-3) den **Kalendertag**
 `[D 00:00, D+1 00:00)` und den **Kalendermonat** `[1. 00:00, 1. des Folgemonats 00:00)` in der Prozesszone —
-`monatsfenster` und `kalendermonatsfenster` sind ein Körper (beide Namen bleiben bis S5), also dieselbe Grenze wie der
+`monatsfenster` und `kalendermonatsfenster` sind ein Körper (beide Namen bestehen), also dieselbe Grenze wie der
 HA-Monatsleser und per Konstruktion die Σ seiner Kalendertage (eine Monatsgrenze statt zwei); `quellenwahl.py` sagt je Zeitraum „Kanal" (jeder benötigte
 Kanal deckt voll) oder „Bestand" (mit Grund je Kanal); `monatsraster.py` liefert je Monat Δ, Abdeckung und diese eine
 Wahl — die Überlagerung „gespeichert schlägt gerechnet" bleibt Sache der Monats-Fakten. Außerhalb `services/kanal/`
