@@ -11,6 +11,13 @@ Bis 26.09.2026 stand dort MAX(sum) − MIN(sum) im Fenster: die Zeile
 der Monat verlor so jedes Mal die erste Stunde — und nach einer Recorder-Lücke
 über die Monatsgrenze alles bis zur ersten Zeile.
 
+**HA-Bauform S5 (E-S5-4):** der Monatsleser kennt keinen Deckel mehr und keinen ``state``-Rückfall (Entscheid S5-E7).
+Gefallen sind die Proben, die nur den Deckel prüften — ``test_p13_deckel_verwirft_den_aufwaertssprung`` (Deckel
+15 kWh/h verwarf den evcc-Sprung) und ``test_p13_deckel_nur_fuer_pv_und_einspeisung_mit_anlagen_kwp`` (die Zuordnung
+Feld → Deckel in ``monatswert_deckel.py``, gestrichen; S4 §10d: ohne Produkt-Aufrufer seit S4-R-5) — und der Deckel-Teil
+von ``test_p13_ws_rechnet_dieselbe_regel``. ``test_p13_state_rueckfall_unveraendert`` ist umgedreht: ein Monat ohne
+eine ``sum``-Zeile hat keinen Monatswert (``None``, wie HA); mit einer ``sum``-Zeile rechnet der ``sum``-Zweig.
+
 Schwesterdateien: test_zaehlerluecken_slots.py (derselbe Anker je Stunde, R1),
 test_ha_lts_monatswerte_lookup.py und test_ha_statistics_websocket_transport.py
 (die Bestandsproben desselben Monatswerts, deren Helfer hier genutzt werden).
@@ -99,15 +106,35 @@ def test_p13_einheit_wh_auch_am_anker():
     assert (w.start_wert, w.end_wert, w.differenz) == (1.0, 5.0, 4.0)
 
 
-def test_p13_state_rueckfall_unveraendert():
-    """Sensor ohne `sum`: MAX(state) − MIN(state) im Monat, kein Anker."""
+def test_p13_monat_ohne_sum_zeile_hat_keinen_wert_wie_ha():
+    """HA-Bauform S5 (E-S5-4, S5-E7): ein Kalendermonat ohne eine `sum`-Zeile ⇒ ``None`` (bis E-S5-4: MAX(state) −
+    MIN(state) = 32,0). Der Aufrufer behandelt ihn wie einen Sensor, den HA nicht kennt (er fehlt in der Antwort)."""
     svc = _make_service_with_mock_db()
     mid = _seed_sensor(svc, "sensor.z", "kWh", has_sum=False)
     _seed_row(svc, mid, datetime(2026, 5, 31, 23, 0), state=1.0, sum_val=None)
     _seed_row(svc, mid, datetime(2026, 6, 3, 0, 0), state=10.0, sum_val=None)
     _seed_row(svc, mid, datetime(2026, 6, 20, 0, 0), state=42.0, sum_val=None)
+    assert _sql_wert(svc, "sensor.z") is None
+    sensoren = svc.get_monatswerte(["sensor.z"], 2026, 6).sensoren
+    assert sensoren == []
+    # Konsument «Aus HA laden» / Import-Vorschau / Monatsabschluss-Vorschlag: das Feld fehlt (Anzeige «–»), keine 0.
+    from backend.api.routes.ha_statistics import map_sensor_values_to_fields
+
+    basis, _invs = map_sensor_values_to_fields(
+        {"basis": {"einspeisung": {"strategie": "sensor", "sensor_id": "sensor.z"}}, "investitionen": {}}, sensoren)
+    assert basis == []
+
+
+def test_p13_eine_sum_zeile_im_monat_rechnet_den_sum_zweig():
+    """Eine einzige `sum`-Zeile im Monat genügt für den `sum`-Zweig — Zeilen mit `sum` NULL werden ausgelassen, nicht
+    durch `state` ersetzt (unverändert seit S4-R-5)."""
+    svc = _make_service_with_mock_db()
+    mid = _seed_sensor(svc, "sensor.z", "kWh")
+    _seed_row(svc, mid, datetime(2026, 5, 31, 23, 0), state=1.0, sum_val=100.0)
+    _seed_row(svc, mid, datetime(2026, 6, 3, 0, 0), state=10.0, sum_val=None)
+    _seed_row(svc, mid, datetime(2026, 6, 20, 0, 0), state=42.0, sum_val=130.0)
     w = _sql_wert(svc, "sensor.z")
-    assert (w.start_wert, w.end_wert, w.differenz) == (10.0, 42.0, 32.0)
+    assert (w.start_wert, w.end_wert, w.differenz, w.intervalle) == (100.0, 130.0, 30.0, 1)
 
 
 # ── WebSocket (kein neuer Befehl, W2) ────────────────────────────────────────
@@ -182,23 +209,9 @@ def _evcc_pv_november(svc):
     _seed_row(svc, mid, datetime(2025, 11, 30, 23, 0), sum_val=31761.26)
 
 
-def test_p13_deckel_verwirft_den_aufwaertssprung():
-    """evcc_pv-Form (Lab 11/2025) mit Deckel 15 kWh/h (10 kWp): der Sprung
-    +31 368,25 in einer Stunde ist verworfen; das Bündel +200 über 133 h liegt
-    unter 15 × 133 und zählt (R3 × n)."""
-    svc = _make_service_with_mock_db()
-    _evcc_pv_november(svc)
-    with svc._engine.connect() as conn:
-        meta = svc.get_metadata(conn, "sensor.evcc_pv")
-        w = svc.get_sensor_monatswert(conn, meta, "sensor.evcc_pv", 2025, 11,
-                                      deckel_kwh_je_stunde=15.0)
-    assert w.differenz == 393.01
-    assert w.verworfen_kwh == 31368.25
-
-
 def test_p13_ohne_deckel_zaehlt_der_aufwaertssprung_als_menge_benannt():
-    """Ohne Deckel-Parameter (Feld ohne PV/Einspeisung-Achse oder Anlage ohne
-    kWp) zählt der Aufwärtssprung als Menge — benannte Grenze, wie am Tag."""
+    """Ohne Deckel (seit S4-R-5 für jeden Aufrufer, seit S5 E-S5-4 ohne Parameter) zählt der Aufwärtssprung als
+    Menge — HAs Zahl; einen Phantomsprung benennt der Daten-Checker (`ha_zaehlersprung`)."""
     svc = _make_service_with_mock_db()
     _evcc_pv_november(svc)
     w = _sql_wert(svc, "sensor.evcc_pv", 2025, 11)
@@ -216,31 +229,3 @@ def test_p13_ws_rechnet_dieselbe_regel():
     svc, _ = _service_mit_ws({sid: WsSensorMeta("kWh", True, False)}, zeilen)
     w = svc.get_monatswerte([sid], 2025, 11).sensoren[0]
     assert (w.differenz, w.verworfen_kwh) == (47.08, 1906.5)
-    w2 = svc.get_monatswerte([sid], 2025, 11, deckel_je_sensor={sid: 15.0}).sensoren[0]
-    assert w2.differenz == 47.08                       # 47,08 über 324 h liegt unter dem Deckel
-
-
-# ── Zuordnung Feld → Deckel (dieselbe wie im Tagespfad) ──────────────────────
-
-def test_p13_deckel_nur_fuer_pv_und_einspeisung_mit_anlagen_kwp():
-    from types import SimpleNamespace as NS
-    from backend.services.monatswert_deckel import deckel_je_sensor
-
-    def s(sid):
-        return {"strategie": "sensor", "sensor_id": sid}
-
-    anlage = NS(leistung_kwp=10.0, sensor_mapping={
-        "basis": {"einspeisung": s("sensor.einsp"), "netzbezug": s("sensor.netz"),
-                  "pv_gesamt": s("sensor.pv_ges")},
-        "investitionen": {
-            "1": {"felder": {"pv_erzeugung_kwh": s("sensor.pv1")}},
-            "2": {"felder": {"ladung_kwh": s("sensor.wb")}},
-            "3": {"felder": {"pv_erzeugung_kwh": s("sensor.bkw")}},
-        }})
-    invs = [NS(id=1, typ="pv-module", parameter={}), NS(id=2, typ="wallbox", parameter={}),
-            NS(id=3, typ="balkonkraftwerk", parameter={})]
-    assert deckel_je_sensor(anlage, invs) == {
-        "sensor.einsp": 15.0, "sensor.pv_ges": 15.0, "sensor.pv1": 15.0, "sensor.bkw": 15.0,
-    }
-    # ohne kWp kein Deckel — wie am Tag
-    assert deckel_je_sensor(NS(leistung_kwp=None, sensor_mapping=anlage.sensor_mapping), invs) == {}

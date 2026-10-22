@@ -19,6 +19,11 @@ Sprung (bestehende Regel).
 ``sum`` − 250: das Muster «Reset und Rückkehr», das der Checker sucht (Phantommenge = Zuwachs von ``sum`` minus Zuwachs
 von ``state`` = 250). Die Monatswerte lesen nur ``sum`` (der ``state``-Zweig greift nur ohne ``sum`` im Monat, §10a H-1).
 
+**HA-Bauform S5 (E-S5-4):** der Monatsleser kennt keinen Deckel mehr (``monatswert_deckel.py`` und der Parameter
+``deckel_je_sensor`` sind gestrichen). Die Gegenprobe «mit Deckel 179 / 626,5 — die Probe ist scharf» fällt mit ihm: es
+gibt keinen Lesepfad mehr, der deckeln könnte; die Zahl 179 (E-S4-0 ``deckel_sprung_mittags.txt``) bleibt als Beleg,
+dass der Sprung den früheren Deckel getroffen hätte.
+
 Schwesterdateien: test_zaehlerluecken_monatswert_aufrufer.py (die Aufrufer reichen keinen Deckel), test_kanal_bilanz_
 gleichheit.py (Kalendermonats-Wege mit Rücksprung), test_n586_checker_ha_zaehlersprung.py (der Checker selbst).
 """
@@ -77,7 +82,7 @@ async def _datenstand_sprung(lesart: str):
 
 
 async def _miss_wege(ds) -> dict:
-    """Juni je Weg (Einspeisung, PV-Gesamt wo sichtbar), HA-Leser mit/ohne Deckel, Kanal-Δ, Tag 15.06., Σ Tage, Checker."""
+    """Juni je Weg (Einspeisung, PV-Gesamt wo sichtbar), HA-Leser (ohne Deckel), Kanal-Δ, Tag 15.06., Σ Tage, Checker."""
     from backend.api.routes import aktueller_monat as amr
     from backend.api.routes.ha_statistics import (
         ImportRequest, MonatFeldAuswahl, get_alle_monatswerte, get_import_vorschau, get_monatswerte,
@@ -92,15 +97,12 @@ async def _miss_wege(ds) -> dict:
 
     out: dict = {}
     with mx._umgebung(ds.svc):
-        sids, deckel = await kg.zaehler_sensoren(ds.db, ds.aid)
-        mit = {w.sensor_id: w.differenz for w in ds.svc.get_monatswerte(sids, 2026, 6, deckel_je_sensor=deckel).sensoren}
+        sids = await kg.zaehler_sensoren(ds.db, ds.aid)
         ohne = {w.sensor_id: w.differenz for w in ds.svc.get_monatswerte(sids, 2026, 6).sensoren}
         kanal = {w.sensor_id: w.differenz for w in (await sensor_monatswerte_aus_kanaelen(
             ds.db, ds.aid, list(SPRUNG_SENSOREN), 2026, 6, fassung=FASSUNG_WIE_HA, jetzt=kg.JETZT_TS)).sensoren}
-        out["ha_leser_mit_deckel"] = {s: mit.get(s) for s in SPRUNG_SENSOREN}
         out["ha_leser_ohne_deckel"] = {s: ohne.get(s) for s in SPRUNG_SENSOREN}
         out["kanal_delta"] = {s: kanal.get(s) for s in SPRUNG_SENSOREN}
-        out["deckel_kwh_h"] = {s: deckel.get(s) for s in SPRUNG_SENSOREN}
 
         cockpit = await amr.get_aktueller_monat(anlage_id=ds.aid, jahr=2026, monat=6, db=ds.db)
         out["a_cockpit_monat"] = {"einsp": cockpit.einspeisung_kwh, "pv": cockpit.pv_erzeugung_kwh,
@@ -163,11 +165,11 @@ SOLL = {"sensor.einsp": 180.0 + SPRUNG_KWH, "sensor.pv_gesamt": 630.0 + SPRUNG_K
 
 @pytest.mark.parametrize("lesart", ["voll", "lesart1"])
 async def test_jeder_monatsweg_nennt_has_zahl_und_das_kanal_delta(lesart):
-    """(a)–(f) nennen 430 bzw. 880 = HA-Leser ohne Deckel = Kanal-Δ; der Deckel hätte hier gebissen (179 / 626,5)."""
+    """(a)–(f) nennen 430 bzw. 880 = HA-Leser = Kanal-Δ; der frühere Deckel hätte hier gebissen (179 / 626,5 — seit S5
+    E-S5-4 gibt es ihn nicht mehr, Modul-Docstring)."""
     async with _datenstand_sprung(lesart) as ds:
         m = await _miss_wege(ds)
     einsp, pv = SOLL["sensor.einsp"], SOLL["sensor.pv_gesamt"]
-    assert m["ha_leser_mit_deckel"] == {"sensor.einsp": 179.0, "sensor.pv_gesamt": 626.5}   # die Probe ist scharf
     assert m["ha_leser_ohne_deckel"] == SOLL
     assert m["kanal_delta"] == SOLL
     assert (m["a_cockpit_monat"]["einsp"], m["a_cockpit_monat"]["pv"]) == (einsp, pv)

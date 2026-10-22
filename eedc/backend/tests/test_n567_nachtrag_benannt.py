@@ -7,9 +7,11 @@ nach einer Nacht mit echten Nullen durch, und der wäre nirgends sichtbar (vorhe
 Fenster n in `verworfen`). Fable-Nachmessung des Lücken-Baus, Punkt 4d.
 
 Jetzt merkt sich die Tagestabelle je Achse `nachtrag` (Menge über Schwelle × n, die nur dank des
-Fensters passiert ist), die Tageszeile trägt sie (`TagesZusammenfassung.nachtrag`), der Monatswert
-nennt `nachtrag_kwh`, und der Daten-Checker zeigt die Tage als INFO mit dem Satz „eedc folgt hier
-HA: die Menge stand in HA in derselben Stunde". **Kein Verwerfen, keine Anzeigeregel.**
+Fensters passiert ist), die Tageszeile trägt sie (`TagesZusammenfassung.nachtrag`), und der Daten-Checker
+zeigt die Tage als INFO mit dem Satz „eedc folgt hier HA: die Menge stand in HA in derselben Stunde". **Kein
+Verwerfen, keine Anzeigeregel.** (Der Monatswert nannte bis HA-Bauform S5 E-S5-4 `nachtrag_kwh`; seit S4-R-5 rief
+kein Aufrufer den Monat mit Deckel, das Feld war immer 0 und hatte keinen Leser — es ist mit dem Deckel des
+Monatslesers gestrichen. Die Monats-Probe unten prüft nur noch, dass der Nachtrag ZÄHLT.)
 
 Schwesterdateien: test_zaehlerluecken_deckel_fenster.py (die Fenster-Regel selbst),
 test_zaehlerluecken_tagesregel.py (Aufbau `aggregate_day` über die LTS).
@@ -103,29 +105,20 @@ def _monat_24_05(nachtrag: float):
     return svc
 
 
-@pytest.mark.parametrize("deckel, erwartet", [(18.48, 37.0), (None, 0.0)])
-def test_monat_nachtrag_kwh(deckel, erwartet):
+def test_monat_zaehlt_den_nachtrag_ohne_deckel():
+    """Der Monat nennt HAs Zahl: die eingefrorenen Stunden und der Nachtrag (+37) zählen, nichts verworfen. Die beiden
+    früheren Proben ``test_monat_nachtrag_kwh`` (mit/ohne Deckel) und ``test_monat_ohne_nullstunden_kein_nachtrag``
+    prüften nur den Deckel des Monatslesers und sein Feld ``nachtrag_kwh`` — beide gibt es seit HA-Bauform S5 E-S5-4
+    nicht mehr (``monatswert_deckel.py`` gestrichen, S4 §10d: ohne Produkt-Aufrufer)."""
+    from backend.services.ha_statistics_service import SensorMonatswert
+
     svc = _monat_24_05(37.0)
     with svc._engine.connect() as conn:
         meta = svc.get_metadata(conn, "sensor.sma")
-        w = svc.get_sensor_monatswert(conn, meta, "sensor.sma", 2026, 5, deckel_kwh_je_stunde=deckel)
-    assert w.nachtrag_kwh == erwartet
+        w = svc.get_sensor_monatswert(conn, meta, "sensor.sma", 2026, 5)
     assert w.verworfen_kwh == 0.0
     assert w.differenz == 59.0                        # der Nachtrag ZÄHLT (7 + 8 + 37 + 7)
-
-
-def test_monat_ohne_nullstunden_kein_nachtrag():
-    svc = _make_service_with_mock_db()
-    mid = _seed_sensor(svc, "sensor.sma", "kWh")
-    s = 100.0
-    _seed_row(svc, mid, datetime(2026, 4, 30, 23, 0), sum_val=s)
-    for h in range(8, 18):
-        s += 5.0
-        _seed_row(svc, mid, datetime(2026, 5, 24, h, 0), sum_val=s)
-    with svc._engine.connect() as conn:
-        meta = svc.get_metadata(conn, "sensor.sma")
-        w = svc.get_sensor_monatswert(conn, meta, "sensor.sma", 2026, 5, deckel_kwh_je_stunde=18.48)
-    assert (w.nachtrag_kwh, w.verworfen_kwh, w.differenz) == (0.0, 0.0, 50.0)
+    assert "nachtrag_kwh" not in SensorMonatswert.model_fields
 
 
 # ── Tageszeile, Tagessicht und Daten-Checker (aggregate_day über die LTS) ───

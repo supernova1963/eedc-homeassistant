@@ -580,7 +580,7 @@ async def _kanal_kalendermonate(
         out[m] = {
             sid: SensorMonatswert(
                 sensor_id=sid, start_wert=round(z[key].wert_von, 3), end_wert=round(z[key].wert_bis, 3),
-                differenz=round(z[key].delta, 2), verworfen_kwh=0.0, nachtrag_kwh=0.0,
+                differenz=round(z[key].delta, 2), verworfen_kwh=0.0,
                 intervalle=max(1, round((z[key].gedeckt_bis - z[key].gedeckt_von) / _STUNDE)),
             )
             for sid, key in sensoren.items()

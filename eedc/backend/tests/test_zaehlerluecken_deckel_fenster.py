@@ -7,10 +7,10 @@ Nachtrag von vier Stunden, +37 kWh. Nach R2 hat die Nachtragsstunde n = 1; der
 Deckel × n verwarf echte Energie, die HA zeigt (G1). Jetzt: Schwelle × Stunden
 seit der letzten Zeile desselben Sensors mit Delta ≠ 0 (ab Anker, Anteil der
 Nullzeilen höchstens 24 h, nie unter n). `spannen` bleibt n — die 37 kWh stehen
-wie in HA in der 16-Uhr-Stunde. Gilt für Tag, Monat und Spike-Checker.
+wie in HA in der 16-Uhr-Stunde. Gilt für Tag und Spike-Checker (der Monat deckelt seit HA-Bauform S4 nicht mehr).
 
 Schwesterdateien: test_zaehlerluecken_lts_tabelle.py (P7, Deckel × Spanne),
-test_zaehlerluecken_n563_monatswert.py (Monatsdeckel), test_zaehlerluecken_r3_deckel_spanne.py.
+test_zaehlerluecken_n563_monatswert.py (Monatswert, ohne Deckel), test_zaehlerluecken_r3_deckel_spanne.py.
 """
 from __future__ import annotations
 
@@ -83,31 +83,12 @@ async def test_gegenprobe_echter_sprung_nach_langer_luecke_bleibt_verworfen():
 
 # ── Monat (get_sensor_monatswert mit Deckel) ────────────────────────────────
 
-def test_monat_24_05_nachtrag_zaehlt_mit_deckel():
-    svc = _make_service_with_mock_db()
-    mid = _seed_sensor(svc, "sensor.sma", "kWh")
-    s = 19383.0
-    _seed_row(svc, mid, datetime(2026, 4, 30, 23, 0), sum_val=s)
-    for h, d in ((11, 7.0), (12, 8.0), (13, 0.0), (14, 0.0), (15, 0.0), (16, 37.0), (17, 7.0)):
-        s += d
-        _seed_row(svc, mid, datetime(2026, 5, 24, h, 0), sum_val=s)
-    with svc._engine.connect() as conn:
-        meta = svc.get_metadata(conn, "sensor.sma")
-        w = svc.get_sensor_monatswert(conn, meta, "sensor.sma", 2026, 5, deckel_kwh_je_stunde=18.48)
-    assert w.verworfen_kwh == 0.0
-    assert w.differenz == 59.0                           # 7 + 8 + 0 + 0 + 0 + 37 + 7
-
-
-def test_monat_gegenprobe_sprung_nach_nicht_null_bleibt_verworfen():
-    """Monat 11/2025, evcc_pv-Form: 393,01 mit Deckel, der Sprung bleibt verworfen."""
-    from backend.tests.test_zaehlerluecken_n563_monatswert import _evcc_pv_november
-    svc = _make_service_with_mock_db()
-    _evcc_pv_november(svc)
-    with svc._engine.connect() as conn:
-        meta = svc.get_metadata(conn, "sensor.evcc_pv")
-        w = svc.get_sensor_monatswert(conn, meta, "sensor.evcc_pv", 2025, 11,
-                                      deckel_kwh_je_stunde=15.0)
-    assert (w.differenz, w.verworfen_kwh) == (393.01, 31368.25)
+# ── Monat ────────────────────────────────────────────────────────────────────
+# HA-Bauform S5 (E-S5-4): der Monatsleser kennt keinen Deckel mehr (seit S4-R-5 ohne Aufrufer, seit E-S5-4 ohne
+# Parameter, `monatswert_deckel.py` gestrichen). Gefallen sind `test_monat_24_05_nachtrag_zaehlt_mit_deckel` (der Nachtrag
+# zählt auch ohne Deckel — `test_n567_nachtrag_benannt.test_monat_zaehlt_den_nachtrag_ohne_deckel`, 59,0) und
+# `test_monat_gegenprobe_sprung_nach_nicht_null_bleibt_verworfen` (Deckel 15 kWh/h verwarf den evcc-Sprung — ohne Deckel
+# zählt er, `test_zaehlerluecken_n563_monatswert.test_p13_ohne_deckel_zaehlt_der_aufwaertssprung_als_menge_benannt`).
 
 
 # ── Spike-Checker liest dieselbe Regel ──────────────────────────────────────

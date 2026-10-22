@@ -402,7 +402,7 @@ async def test_kalendermonat_ohne_volle_deckung_bleibt_der_ha_leser():
     async with kg.datenstand("pv", "F08a", "HA") as ds:
         with mx._umgebung(ds.svc):
             route = (await get_monatswerte(ds.aid, 2026, 7, ds.db))
-            sids, _deckel = await kg.zaehler_sensoren(ds.db, ds.aid)
+            sids = await kg.zaehler_sensoren(ds.db, ds.aid)
             # HA-Bauform S4-R-5: die Route ruft den HA-Leser ohne Deckel — die Probe vergleicht mit demselben Aufruf.
             leser = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, 2026, 7).sensoren}
     for b in route.basis:

@@ -22,8 +22,9 @@ Punkt 4). Die Proben stehen in ``test_kanal_bilanz_gleichheit.py`` (kein ``test`
   Lesers (Mengen, Gesamtverbrauch, Eigenverbrauch, Quoten, Erfasst-Marken) — Bestand = Tageszeile + Stundenzeilen
   über ``bilanz_aus_stundenrows`` wie ``tage_werte.py``.
 * Monat: jedes Feld von ``TagesMonatsSumme`` (``lade_monats_summen_aus_tagen``) außer der E-Mob-Aufteilung.
-* Kalendermonat je Sensor (nur HA): jedes Feld von ``SensorMonatswert`` (``get_monatswerte`` mit dem Deckel des
-  Aufrufers, ``monatswert_deckel.deckel_je_sensor``).
+* Kalendermonat je Sensor (nur HA): jedes Feld von ``SensorMonatswert`` (``get_monatswerte`` — ohne Deckel wie jeder
+  Aufrufer seit S4-R-5; seit HA-Bauform S5 E-S5-4 kennt der Monatsleser keinen Deckel mehr, ``monatswert_deckel.py``
+  ist gestrichen).
 
 **Toleranz.** ``komponenten_kwh`` beidseits ``round(v, 2)`` — 0,005 kWh (halbe Stufe, wie im Symmetrie-Wächter).
 Bilanz und Monat entstehen beidseits aus auf 3 Stellen gerundeten Stundenwerten — 1e-6. Fassung (b) gegen (a): (b)
@@ -82,7 +83,7 @@ MONAT_JE_GERAET = ("bkw_gemessen_je_inv", "bkw_je_inv")
 #: Felder der Monatssumme, die NICHT zur Bilanz-Gruppe gehören (E-Mob-Aufteilung, U5/E4c) — gezählt, nie verglichen.
 MONAT_NICHT_GRUPPE = ("emob_ladung_pv_abgeleitet_kwh", "emob_ladung_netz_abgeleitet_kwh",
                       "emob_ladung_speicher_abgeleitet_kwh")
-SENSOR_FELDER = ("start_wert", "end_wert", "differenz", "verworfen_kwh", "nachtrag_kwh", "intervalle")
+SENSOR_FELDER = ("start_wert", "end_wert", "differenz", "verworfen_kwh", "intervalle")
 
 
 # ── Datenstände ─────────────────────────────────────────────────────────────
@@ -286,17 +287,15 @@ async def bestand_monate(db: AsyncSession, aid: int) -> dict:
         return await monats_aus_tagen.lade_monats_summen_aus_tagen(db, aid, von=MONATE[0], bis=MONATE[-1])
 
 
-async def zaehler_sensoren(db: AsyncSession, aid: int) -> tuple[list[str], dict[str, float]]:
-    from backend.services.monatswert_deckel import deckel_je_sensor
-
+async def zaehler_sensoren(db: AsyncSession, aid: int) -> list[str]:
+    """Die HA-Entities der Zuordnung (Basis und Investitionen), ohne Doppel."""
     anlage = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
-    invs = (await db.execute(select(Investition).where(Investition.anlage_id == aid))).scalars().all()
     m = anlage.sensor_mapping or {}
     sids = [c["sensor_id"] for c in (m.get("basis") or {}).values() if isinstance(c, dict) and c.get("sensor_id")]
     for inv in (m.get("investitionen") or {}).values():
         sids += [c["sensor_id"] for c in ((inv or {}).get("felder") or {}).values()
                  if isinstance(c, dict) and c.get("sensor_id")]
-    return list(dict.fromkeys(sids)), deckel_je_sensor(anlage, invs)
+    return list(dict.fromkeys(sids))
 
 
 # ── Vergleich ───────────────────────────────────────────────────────────────
@@ -399,15 +398,13 @@ async def probe(ds: Datenstand) -> tuple[Bericht, Bericht]:
             continue
         vergleiche_monat(bb, "monat", m, ma[m], mb[m], tol=TOL_B_MONAT, mit_belegdichte=False)
     if ds.art == "HA":
-        sids, deckel = await zaehler_sensoren(db, aid)
+        sids = await zaehler_sensoren(db, aid)
         for jahr, monat in MONATE:
-            soll = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, jahr, monat, deckel_je_sensor=deckel).sensoren}
+            soll = {w.sensor_id: w for w in ds.svc.get_monatswerte(sids, jahr, monat).sensoren}
             ia = {w.sensor_id: w for w in (await sensor_monatswerte_aus_kanaelen(
-                db, aid, sids, jahr, monat, deckel_je_sensor=deckel, fassung=FASSUNG_WIE_BESTAND,
-                jetzt=JETZT_TS)).sensoren}
+                db, aid, sids, jahr, monat, fassung=FASSUNG_WIE_BESTAND, jetzt=JETZT_TS)).sensoren}
             ib = {w.sensor_id: w for w in (await sensor_monatswerte_aus_kanaelen(
-                db, aid, sids, jahr, monat, deckel_je_sensor=deckel, fassung=FASSUNG_WIE_HA,
-                jetzt=JETZT_TS)).sensoren}
+                db, aid, sids, jahr, monat, fassung=FASSUNG_WIE_HA, jetzt=JETZT_TS)).sensoren}
             for sid in sorted(set(soll) | set(ia)):
                 if sid not in soll or sid not in ia:
                     ba.abweichungen.append(("sensor", (jahr, monat), sid, sid in soll, sid in ia))

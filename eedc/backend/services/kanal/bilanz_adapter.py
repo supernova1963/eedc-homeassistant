@@ -116,7 +116,7 @@ class KanalAlsHaQuelle(HAStatisticsService):
 
     ``HAStatisticsService`` liest im WebSocket-Zweig (``conn is None``) Zeilen ``{start_ts, sum, state}`` über
     ``_ws_zeilen`` und rechnet daraus Slot-Tabelle (``get_hourly_slots_for_day``: Anker, Index, Spanne n,
-    Herbst/Frühjahr) und Monatswert (``get_sensor_monatswert``: R4, R3 × Fenster, N-567). Diese Klasse gibt ihm
+    Herbst/Frühjahr) und Monatswert (``get_sensor_monatswert``: R4; den Deckel R3 × Fenster und N-567 gibt es dort seit S5 E-S5-4 nicht mehr). Diese Klasse gibt ihm
     die Kanal-Zeilen — „Sensor" ist der Kanal-Schlüssel, Einheit kWh (der Kanal führt kWh), ``sum`` = Kanalwert
     (``sum + offset``). So steht keine Regel ein zweites Mal im Baum. Synchron wie der Leser selbst; die Zeilen
     werden vorher geladen (``_zeilen_laden``).
@@ -609,13 +609,13 @@ async def kanal_je_sensor(db: AsyncSession, anlage_id: int) -> dict[str, str]:
 
 async def sensor_monatswerte_aus_kanaelen(
     db: AsyncSession, anlage_id: int, sensor_ids: Sequence[str], jahr: int, monat: int, *,
-    deckel_je_sensor: Optional[dict[str, float]] = None, fassung: str = FASSUNG_WIE_HA,
-    jetzt: Optional[int] = None,
+    fassung: str = FASSUNG_WIE_HA, jetzt: Optional[int] = None,
 ) -> MonatswertResponse:
     """Wie ``HAStatisticsService.get_monatswerte`` (Kalendermonat ``fenster.kalendermonatsfenster``), aus den
     Spiegel-Kanälen der genannten Entities. Ein Sensor ohne Kanal fehlt im Ergebnis (wie ein Sensor, den HA nicht
-    kennt). (a) ist der unveränderte ``get_sensor_monatswert`` über die Kanal-Zeilen (R4, R3 × Fenster, N-567);
-    (b) ist das Kanal-Δ (``zeitraum``) ohne Regel — nur bei voller Abdeckung."""
+    kennt). (a) ist der unveränderte ``get_sensor_monatswert`` über die Kanal-Zeilen (R4; ohne Deckel seit HA-Bauform S5
+    E-S5-4 — der Monatsleser kennt keinen mehr); (b) ist das Kanal-Δ (``zeitraum``) ohne Regel — nur bei voller
+    Abdeckung."""
     if fassung not in FASSUNGEN:
         raise ValueError(f"unbekannte Fassung {fassung!r}")
     zuordnung = await kanal_je_sensor(db, anlage_id)
@@ -626,11 +626,9 @@ async def sensor_monatswerte_aus_kanaelen(
     if fassung == FASSUNG_WIE_BESTAND:
         zeilen = await _zeilen_laden(db, [kanaele[k] for k in gefragt.values() if k in kanaele], von, bis, jetzt=jetzt)
         quelle = KanalAlsHaQuelle(zeilen)
-        deckel = {gefragt[sid]: d for sid, d in (deckel_je_sensor or {}).items() if sid in gefragt}
         # Wie jeder Aufruf des HA-Lesers aus einer async-Funktion: im Thread (Wächter `test_ha_last_und_index.py`).
         # Hier liest er keine Recorder-Datei, sondern die vorab geladenen Kanal-Zeilen — reine Rechnung.
-        antwort = await asyncio.to_thread(
-            quelle.get_monatswerte, list(gefragt.values()), jahr, monat, deckel_je_sensor=deckel)
+        antwort = await asyncio.to_thread(quelle.get_monatswerte, list(gefragt.values()), jahr, monat)
         zurueck = {key: sid for sid, key in gefragt.items()}
         sensoren = [w.model_copy(update={"sensor_id": zurueck[w.sensor_id]}) for w in antwort.sensoren]
     else:
@@ -641,7 +639,7 @@ async def sensor_monatswerte_aus_kanaelen(
                 continue
             sensoren.append(SensorMonatswert(
                 sensor_id=sid, start_wert=round(z.wert_von, 3), end_wert=round(z.wert_bis, 3),
-                differenz=round(z.delta, 2), verworfen_kwh=0.0, nachtrag_kwh=0.0,
+                differenz=round(z.delta, 2), verworfen_kwh=0.0,
                 # Stunden des gedeckten Zeitraums (≥ 1) — N-585 liest nur „0 = keine Messung" daraus.
                 intervalle=max(1, round((z.gedeckt_bis - z.gedeckt_von) / _STUNDE)),
             ))

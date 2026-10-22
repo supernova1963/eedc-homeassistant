@@ -375,7 +375,7 @@ async def geraete_sensorwerte_kalendermonate(
                         continue
                     werte[sid] = SensorMonatswert(
                         sensor_id=sid, start_wert=round(z.wert_von, 3), end_wert=round(z.wert_bis, 3),
-                        differenz=round(z.delta, 2), verworfen_kwh=0.0, nachtrag_kwh=0.0,
+                        differenz=round(z.delta, 2), verworfen_kwh=0.0,
                         intervalle=max(1, round((z.gedeckt_bis - z.gedeckt_von) / 3600)),
                     )
         if werte:

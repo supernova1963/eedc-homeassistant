@@ -40,7 +40,6 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from backend.core.berechnungen.spannen import deckel_fenster_stunden
 from backend.core.config import settings
 from backend.core.berechnungen.slot_konvention import lts_boundary_index
 
@@ -63,17 +62,13 @@ class SensorMonatswert(BaseModel):
     end_wert: float
     differenz: float
     einheit: str = "kWh"
-    #: Zählerlücken wie HA (R3/R4 für den Monat): verworfene Menge — Rücksprung
-    #: des HA-`sum` oder über dem Deckel. `differenz` enthält sie nicht.
+    #: Zählerlücken wie HA (R4 für den Monat): verworfene Menge — Rücksprung des HA-`sum`. `differenz` enthält sie
+    #: nicht. (Den R3-Deckel des Monats und sein Feld `nachtrag_kwh` gibt es seit HA-Bauform S5 E-S5-4 nicht mehr —
+    #: seit S4-R-5 rief kein Produkt-Aufrufer den Deckel, das Feld war immer 0 und hatte keinen Leser.)
     verworfen_kwh: float = 0.0
-    #: N-567: Menge der Stunden, die der Deckel nur dank seines Fensters durchgelassen
-    #: hat (über Schwelle × n, nicht über Schwelle × Fenster). `differenz` ENTHÄLT sie —
-    #: eedc folgt HA; das Feld benennt sie nur (Gegenstück zu `verworfen_kwh`).
-    nachtrag_kwh: float = 0.0
-    #: N-585: Zahl der Intervalle hinter ``differenz`` — Paare benachbarter Stützstellen (``sum``-Pfad: Anker +
-    #: Zeilen − 1; ``state``-Pfad: Zeilen − 1). **0 heißt: eine einzige Zeile, nichts gemessen** — ihre
-    #: ``differenz`` 0,0 ist dann keine Messung, sondern das Fehlen eines zweiten Standes. Ab 1 ist auch eine 0
-    #: ein Messwert (ein flacher Zähler über den Monat).
+    #: N-585: Zahl der Intervalle hinter ``differenz`` — Paare benachbarter Stützstellen (Anker + Zeilen − 1).
+    #: **0 heißt: eine einzige Zeile, nichts gemessen** — ihre ``differenz`` 0,0 ist dann keine Messung, sondern das
+    #: Fehlen eines zweiten Standes. Ab 1 ist auch eine 0 ein Messwert (ein flacher Zähler über den Monat).
     intervalle: int = 0
 
 
@@ -709,21 +704,16 @@ class HAStatisticsService:
         sensor_id: str,
         jahr: int,
         monat: int,
-        deckel_kwh_je_stunde: Optional[float] = None,
     ) -> Optional[SensorMonatswert]:
         """
-        Ermittelt den Monatswert für einen Sensor.
+        Ermittelt den Monatswert für einen Sensor — aus HAs `sum` (der reset-bereinigten Kumulation für
+        total_increasing-Sensoren; funktioniert auch bei Tagesreset-Zählern und Mehrfach-Resets im Monat).
 
-        Bevorzugt `sum` (HA's eigene reset-bereinigte Kumulation für
-        total_increasing-Sensoren — funktioniert auch bei Tagesreset-Zählern
-        und Mehrfach-Resets im Monat). Fallback auf MAX(state) - MIN(state)
-        wenn `sum` nicht verfügbar (z.B. measurement-Sensoren ohne has_sum).
-
-        ⚑ **Der `state`-Zweig ist monatsweise** (HA-Bauform S4-R-5, Bauplan S4 §10a H-1 A): Monat ohne eine
-        `sum`-Zeile ⇒ ``MAX(state) − MIN(state)``; eine einzige `sum`-Zeile im Monat genügt für den `sum`-Zweig,
-        Zeilen mit `sum` NULL werden dort ausgelassen, nicht durch `state` ersetzt (keine Mischung je Stunde). Der
-        Deckel wirkte im `state`-Zweig nie (Beleg E-S4-0 `state_zweig.txt`: 1 219 mit und ohne). Den Zweig zu
-        streichen («wie HA», der Spiegel liest nur `sum`) wäre eine eigene Verhaltensänderung — S5-Vormerkung.
+        ⭐ **Ein Kalendermonat ohne eine `sum`-Zeile hat keinen Monatswert (``None``) — wie HA** (HA-Bauform S5,
+        E-S5-4, Entscheid S5-E7): bis E-S5-4 fiel der Leser dort monatsweise auf ``MAX(state) − MIN(state)`` zurück (ein
+        Rest des `state`-Rückfalls, Konzept R-5; der Spiegel liest nur `sum`). Eine einzige `sum`-Zeile im Monat genügt;
+        Zeilen mit `sum` NULL werden ausgelassen (keine Mischung je Stunde). Der Aufrufer behandelt ``None`` wie einen
+        Sensor, den HA nicht kennt (er fehlt in ``get_monatswerte``).
 
         ⭐ **Zählerlücken wie HA (R10 + Vorlage §10, W-R10):** der Monatswert ist
         die **Σ der Stundenänderungen ab dem Anker** — der letzten Zeile mit
@@ -734,20 +724,9 @@ class HAStatisticsService:
         * **R4** — eine negative Änderung (Rücksprung des HA-`sum`) ist
           verworfen, nicht abgezogen. Ohne Rücksprung ist das exakt „neuester
           `sum` − Anker" (R10).
-        * **R3** — mit ``deckel_kwh_je_stunde`` (die Schwelle einer Stunde,
-          nur für Felder der Achsen PV/Einspeisung, vom Aufrufer aus
-          `plausibility.schwelle_pv_einspeisung_stunde_kwh(kwp)`) ist eine
-          Änderung verworfen, die größer ist als Schwelle × Fenster —
-          Fenster = Zeit seit der letzten Änderung des Standes (n plus
-          vorangehende Nullzeilen, Anteil der Nullzeilen bis 24 h;
-          `spannen.deckel_fenster_stunden`, Nachträge II), wie am Tag. Ohne
-          Parameter kein Deckel — ein Aufwärtssprung zählt dann als Menge
-          (benannt). ⭐ **Seit HA-Bauform S4-R-5 ruft keiner der fünf
-          HA-Monatsleser-Aufrufer mit Deckel** (Cockpit → Monat, «Aus HA
-          laden», alle Monatswerte, Import-Vorschau/Sammelimport,
-          Monatsabschluss-Vorschlag): der Monat nennt HAs Zahl wie Tag und
-          Kanal-Monat. Den Parameter nutzt nur noch die Fassung (a) «wie
-          Bestand» der Gleichheitsproben (`kanal/bilanz_adapter`).
+        * **Kein Deckel** (HA-Bauform S4-R-5; seit S5 E-S5-4 auch kein Parameter mehr): ein Aufwärtssprung zählt als
+          Menge — der Monat nennt HAs Zahl wie Tag und Kanal-Monat; einen Phantomsprung benennt der Daten-Checker
+          (`ha_zaehlersprung`).
 
         Grund auf Kategorie-Ebene: ein Monatswert ist eine Summe von Stunden;
         was die Stunden verwerfen, verwirft der Monat — sonst zeigen
@@ -758,11 +737,9 @@ class HAStatisticsService:
 
         ``start_wert``/``end_wert`` sind Anker und neuester Stand; ``differenz``
         ist die Summe und weicht von ihrer Differenz genau um
-        ``verworfen_kwh`` ab. ``nachtrag_kwh`` (N-567) benennt die Stunden, die nur
-        dank des Fensters passiert sind — sie stehen IN ``differenz``. Werte werden nach
-        kWh konvertiert (Wh, MWh, …). ``intervalle`` (N-585) sagt, über wie viele
-        Stützstellen-Paare ``differenz`` gebildet ist — 0 bei einer einzigen Zeile ohne
-        Anker: dann ist ``differenz`` 0,0 keine Messung.
+        ``verworfen_kwh`` ab. Werte werden nach kWh konvertiert (Wh, MWh, …). ``intervalle`` (N-585) sagt, über wie
+        viele Stützstellen-Paare ``differenz`` gebildet ist — 0 bei einer einzigen Zeile ohne Anker: dann ist
+        ``differenz`` 0,0 keine Messung.
         """
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
         faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
@@ -772,69 +749,41 @@ class HAStatisticsService:
             # `period=month` taugt hier NICHT: HA liefert dort den Wert am
             # Perioden-**Ende** eines anderen Bezugspunkts.
             zeilen = self._ws_zeilen(
-                [sensor_id], ts_start, ts_ende - 1, types=["sum", "state"],
+                [sensor_id], ts_start, ts_ende - 1, types=["sum"],
             ).get(sensor_id, [])
-            states = [z["state"] for z in zeilen if z["state"] is not None]
             sum_zeilen = sorted(
                 (float(z["start_ts"]), z["sum"]) for z in zeilen if z["sum"] is not None
             )
         else:
             fenster = {"mid": meta.id, "start": ts_start, "end": ts_ende}
-            states = [r[0] for r in conn.execute(text("""
-                SELECT state FROM statistics
-                WHERE metadata_id = :mid AND start_ts >= :start AND start_ts < :end
-                  AND state IS NOT NULL
-            """), fenster)]
             sum_zeilen = [(float(r[0]), r[1]) for r in conn.execute(text("""
                 SELECT start_ts, sum FROM statistics
                 WHERE metadata_id = :mid AND start_ts >= :start AND start_ts < :end
                   AND sum IS NOT NULL
                 ORDER BY start_ts
             """), fenster)]
-        if not states and not sum_zeilen:
+        if not sum_zeilen:
             return None
 
         verworfen = 0.0
-        nachtrag = 0.0
-        if sum_zeilen:
-            anker = self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
-            reihe = ([anker] if anker is not None else []) + sum_zeilen
-            start_wert = reihe[0][1] * faktor
-            end_wert = reihe[-1][1] * faktor
-            differenz = 0.0
-            intervalle = len(reihe) - 1
-            # R3, Nachträge II: Stunden unveränderten Standes vor einer Änderung
-            # (Nullzeilen eines eingefrorenen Zählers) verlängern das Fenster.
-            null_lauf_h = 0.0
-            for (ts_vor, s_vor), (ts_nach, s_nach) in zip(reihe, reihe[1:]):
-                delta = (s_nach - s_vor) * faktor
-                n = max(1, round((ts_nach - ts_vor) / 3600))
-                if abs(delta) <= 1e-9:
-                    null_lauf_h += (ts_nach - ts_vor) / 3600
-                    continue
-                seit = n + null_lauf_h
-                null_lauf_h = 0.0
-                if delta < 0:                                   # R4
-                    verworfen += -delta
-                    continue
-                if deckel_kwh_je_stunde is not None and deckel_kwh_je_stunde > 0:
-                    fenster = deckel_fenster_stunden(n, seit)
-                    if delta > deckel_kwh_je_stunde * fenster:  # R3 (Fenster)
-                        verworfen += delta
-                        continue
-                    if delta > deckel_kwh_je_stunde * n:        # N-567: nur dank Fenster
-                        nachtrag += delta
-                differenz += delta
-            if verworfen:
-                logger.info(
-                    f"Sensor {sensor_id} {jahr}-{monat:02d}: {verworfen:.3f} kWh verworfen "
-                    f"(Rücksprung oder Deckel, wie am Tag)"
-                )
-        else:
-            start_wert = min(states) * faktor
-            end_wert = max(states) * faktor
-            differenz = end_wert - start_wert
-            intervalle = len(states) - 1
+        anker = self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
+        reihe = ([anker] if anker is not None else []) + sum_zeilen
+        start_wert = reihe[0][1] * faktor
+        end_wert = reihe[-1][1] * faktor
+        differenz = 0.0
+        for (_ts_vor, s_vor), (_ts_nach, s_nach) in zip(reihe, reihe[1:]):
+            delta = (s_nach - s_vor) * faktor
+            if abs(delta) <= 1e-9:
+                continue
+            if delta < 0:                                   # R4
+                verworfen += -delta
+                continue
+            differenz += delta
+        if verworfen:
+            logger.info(
+                f"Sensor {sensor_id} {jahr}-{monat:02d}: {verworfen:.3f} kWh verworfen "
+                f"(Rücksprung, wie am Tag)"
+            )
 
         return SensorMonatswert(
             sensor_id=sensor_id,
@@ -842,8 +791,7 @@ class HAStatisticsService:
             end_wert=round(end_wert, 3),
             differenz=round(differenz, 2),
             verworfen_kwh=round(verworfen, 3),
-            nachtrag_kwh=round(nachtrag, 3),
-            intervalle=intervalle,
+            intervalle=len(reihe) - 1,
         )
 
     def get_monatswerte(
@@ -851,14 +799,9 @@ class HAStatisticsService:
         sensor_ids: list[str],
         jahr: int,
         monat: int,
-        deckel_je_sensor: Optional[dict[str, float]] = None,
     ) -> MonatswertResponse:
-        """Holt Monatswerte für mehrere Sensoren.
-
-        ``deckel_je_sensor``: Stunden-Schwelle (kWh) je Sensor-ID für den
-        R3-Deckel (nur PV/Einspeisung, s. `deckel_je_sensor_fuer_anlage`);
-        Sensoren ohne Eintrag rechnen ohne Deckel.
-        """
+        """Holt Monatswerte für mehrere Sensoren (ohne Deckel, HA-Bauform S4-R-5; ein Sensor ohne `sum`-Zeile im
+        Monat fehlt, S5 E-S5-4)."""
         if not self.is_available:
             raise RuntimeError("HA-Datenbank nicht verfügbar")
 
@@ -871,10 +814,7 @@ class HAStatisticsService:
                     logger.warning(f"Sensor {sensor_id} nicht in HA statistics gefunden")
                     continue
 
-                wert = self.get_sensor_monatswert(
-                    conn, meta, sensor_id, jahr, monat,
-                    deckel_kwh_je_stunde=(deckel_je_sensor or {}).get(sensor_id),
-                )
+                wert = self.get_sensor_monatswert(conn, meta, sensor_id, jahr, monat)
                 if wert:
                     sensoren.append(wert)
 
@@ -1045,10 +985,8 @@ class HAStatisticsService:
         self,
         sensor_ids: list[str],
         ab_datum: Optional[date] = None,
-        deckel_je_sensor: Optional[dict[str, float]] = None,
     ) -> list[MonatswertResponse]:
-        """Holt Monatswerte für alle verfügbaren Monate (``deckel_je_sensor``
-        wie bei `get_monatswerte`)."""
+        """Holt Monatswerte für alle verfügbaren Monate (wie `get_monatswerte`)."""
         verfuegbar = self.get_verfuegbare_monate(sensor_ids)
 
         ergebnisse: list[MonatswertResponse] = []
@@ -1058,10 +996,7 @@ class HAStatisticsService:
                 if monat_start < ab_datum:
                     continue
 
-            werte = self.get_monatswerte(
-                sensor_ids, monat_info.jahr, monat_info.monat,
-                deckel_je_sensor=deckel_je_sensor,
-            )
+            werte = self.get_monatswerte(sensor_ids, monat_info.jahr, monat_info.monat)
             if werte.sensoren:
                 ergebnisse.append(werte)
 

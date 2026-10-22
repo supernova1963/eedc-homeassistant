@@ -219,7 +219,7 @@ class DatenChecker(
 def _ist_bilanz_kanal(key: str, invs_by_id: dict) -> bool:
     """Gehört der Kanal ``basis:<feld>`` bzw. ``inv:<id>:<feld>`` zur Bilanz-Gruppe (``bilanz_adapter.BILANZ_ACHSEN``)?
     Dieselbe Abbildung Feld → Kategorie → Achse wie der Tagespfad (``snapshot/keys._categorize_counter`` →
-    ``spannen.achse_der_kategorie``, wie ``monatswert_deckel.py``). Abgeleitete und Modus-Kanäle gehören nicht dazu."""
+    ``spannen.achse_der_kategorie``, wie bis E-S5-4 der Monats-Deckel). Abgeleitete und Modus-Kanäle gehören nicht dazu."""
     from backend.core.berechnungen.spannen import achse_der_kategorie
     from backend.services.kanal.bilanz_adapter import BILANZ_ACHSEN
     from backend.services.snapshot.keys import _categorize_counter

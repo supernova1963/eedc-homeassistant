@@ -7,7 +7,8 @@ deckelte ein Lesart-1-Monat, während der Kanal-Monat daneben nicht deckelte (N-
 gilt in `get_sensor_monatswert` weiter; einen Phantomsprung benennt der Daten-Checker ``ha_zaehlersprung``. Die
 Wirkung je Weg mit einem Sprung mittags: test_s4_r5_deckel_lesepfad.py.
 
-Schwesterdateien: test_zaehlerluecken_n563_monatswert.py (die Regel selbst, mit Deckel-Parameter),
+Schwesterdateien: test_zaehlerluecken_n563_monatswert.py (die Regel selbst; den Deckel-Parameter gibt es seit HA-Bauform S5
+E-S5-4 nicht mehr — die Attrappen hier nehmen ihn weiter an, die Aufrufer reichen ihn nicht),
 test_n156_ha_wege_ohne_supervisor.py und test_n533_ha_import_anlagen_pv_zaehler.py (dieselben Aufrufer, dieselbe
 Attrappen-Form).
 """

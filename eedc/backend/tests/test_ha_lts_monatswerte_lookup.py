@@ -139,7 +139,9 @@ def test_monatswert_sum_bevorzugt_vor_state():
     assert wert.differenz == 100.0  # sum-basiert, nicht state (das wäre 6.0)
 
 
-def test_monatswert_state_fallback_wenn_sum_null():
+def test_monatswert_ohne_sum_ist_none_wie_ha():
+    """HA-Bauform S5 (E-S5-4, S5-E7): der `state`-Rückfall ist gestrichen — ein Monat ohne `sum`-Zeile hat keinen
+    Monatswert (bis E-S5-4: MAX(state) − MIN(state) = 32,0)."""
     svc = _make_service_with_mock_db()
     mid = _seed_sensor(svc, "sensor.zaehler", "kWh", has_sum=False)
     _seed_row(svc, mid, datetime(2026, 5, 3, 0, 0), state=10.0, sum_val=None)
@@ -148,10 +150,7 @@ def test_monatswert_state_fallback_wenn_sum_null():
     with svc._engine.connect() as conn:
         meta = svc.get_metadata(conn, "sensor.zaehler")
         wert = svc.get_sensor_monatswert(conn, meta, "sensor.zaehler", 2026, 5)
-    assert wert is not None
-    assert wert.start_wert == 10.0
-    assert wert.end_wert == 42.0
-    assert wert.differenz == 32.0
+    assert wert is None
 
 
 def test_monatswert_einheit_wh_skaliert_nach_kwh():
