@@ -55,6 +55,20 @@ des Zwischentags dazu. Jetzt rechnet jeder Tag nur seinen eigenen Zählerabstand
 `total_increasing`), bleibt sein Monatswert bei „Aus HA laden", Import und Monatsabschluss-Vorschlag jetzt leer, statt
 aus dem Zustandsverlauf geschätzt zu werden — wie im HA-Energie-Dashboard. Eine 0 erscheint dabei nirgends.
 
+**„Wetter heute“ zeichnet die Kurve der gewählten Quelle:** Hast du SFML oder Solcast als Prognosequelle gewählt und
+liefert die Quelle einen Stundenverlauf, zeigt die gestrichelte PV-Kurve in *Cockpit → Live* jetzt diesen Verlauf —
+passend zur Tageszahl darüber. Bisher war es immer die eedc-Kurve. Ohne Stundenverlauf der Quelle und mit der
+eedc-Prognose bleibt es bei der eedc-Kurve.
+
+**Neue Statistik-Sensoren ohne Neustart:** Liest eedc die HA-Statistik über die WebSocket-Verbindung (ohne Zugriff auf
+die Recorder-Datenbank), wirkt ein Sensor, dessen Statistik erst nach dem Start von eedc beginnt, jetzt spätestens nach
+fünf Minuten — bisher erst nach einem Neustart von eedc ([Sensor-Referenz §10](SENSOR-REFERENZ.md#10-lts-verfügbarkeit-ha-long-term-statistics)).
+
+**Tageszähler sind kein Zählersprung:** Der Daten-Checker meldete einen Zähler, der jede Nacht um Mitternacht auf 0 geht
+(PV-Tagesertrag, Utility-Meter „heute"), nach einem schwachen Tag als „Sprung in Home Assistant" — samt der Anweisung,
+die richtige HA-Statistik zu ändern. Geht ein Sensor an mindestens zwei Tagen um Mitternacht auf 0, ist das jetzt kein
+Befund mehr ([Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)).
+
 ---
 
 ## v4.1.8 — 17. Oktober 2026

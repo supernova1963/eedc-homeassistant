@@ -567,9 +567,13 @@ ohne Obergrenze je Stunde. Meldet ein Sensor kurz 0 (Wechselrichter nachts „ni
 in einer Stunde auf seinen alten Stand zurück, hält Home Assistant das für einen neuen Zähler und bucht beim
 Zurückkehren den ganzen Zählerstand als Zuwachs dieser Stunde. Dieser Sprung steht dann in Tag, Monat und Jahr — in
 eedc wie in Home Assistant, seit dem zweiten Paket der HA-Bauform auch in der Stunde des Tagesverlaufs. Ein Zähler, der
-nach dem Zurücksetzen wieder hochzählt (ein täglich zurückgesetzter Helfer, ein neuer Zähler nach einem Tausch), ist kein
-Befund: dort entsteht kein Sprung. **Grenze:** die Prüfung erkennt nur dieses Muster (Rücksetzen und Rückkehr). Springt
-die HA-Summe ohne Rücksetzen, meldet weder sie noch die Spitzen-Prüfung (§4.7) an einem Tag aus dem HA-Spiegel etwas.
+nach dem Zurücksetzen wieder hochzählt (ein neuer Zähler nach einem Tausch), ist kein Befund: dort entsteht kein Sprung.
+Ein Zähler, der an mehreren Tagen um Mitternacht auf 0 geht (PV-Tagesertrag, Utility-Meter „heute"), ist ein
+Tageszähler und kein Befund — auch wenn seine erste Stunde am Morgen den Vortag schon fast erreicht. Geht er im Prüffenster
+nur an einem einzigen Tag um Mitternacht auf 0, ist er von einem Aussetzer nicht zu unterscheiden und kann noch gemeldet
+werden; ein Aussetzer zu einer anderen Stunde wird auch bei einem Tageszähler gemeldet. **Grenze:** die Prüfung erkennt
+nur dieses Muster (Rücksetzen und Rückkehr). Springt die HA-Summe ohne Rücksetzen, meldet weder sie noch die
+Spitzen-Prüfung (§4.7) an einem Tag aus dem HA-Spiegel etwas.
 
 #### Befunde
 
