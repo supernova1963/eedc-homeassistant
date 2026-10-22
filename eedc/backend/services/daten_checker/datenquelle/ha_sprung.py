@@ -11,7 +11,10 @@ vorigen), danach innerhalb ``RUECKKEHR_STUNDEN`` die Rückkehr auf etwa den alte
 ``RUECKKEHR_ANTEIL``) — und zwar **zwischen zwei benachbarten Zeilen**: die Zeile davor steht noch unten, die Zeile
 selbst wieder oben. HAs Phantom entsteht nur, wenn der Stand in EINER Stunde zurückspringt; ein Zähler, der nach dem
 Reset hochzählt (ein täglich zurückgesetzter Helfer, ein neuer Zähler nach einem Tausch), erzeugt in ``sum`` keinen
-Sprung und ist kein Befund (Nachmessung E4a-2, Punkt 6). Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
+Sprung und ist kein Befund (Nachmessung E4a-2, Punkt 6). Ein **Tageszähler** (PV-Tagesertrag, Utility-Meter „heute")
+ist es auch dann nicht, wenn seine erste helle Stunde nach einem schwachen Vortag den Vortagsstand schon fast erreicht:
+geht derselbe Sensor an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters in der 00:00-Zeile auf 0, sind diese
+Mitternachts-Resets Zyklen (N-764, #436); ein einzelner Tag im Fenster bleibt ununterscheidbar. Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
 selbst zeigt (``state`` vorher → nachher). Gelesen wird der Spiegel (``kanal_statistik``, Familie ``spiegel``) der
 letzten ``FENSTER_TAGE`` — keine HA-Abfrage.
 
@@ -51,6 +54,10 @@ RUECKKEHR_STUNDEN = 72
 MIN_STAND_KWH = 1.0
 #: Wie viele Funde die Meldung beim Namen nennt.
 BEISPIELE = 5
+#: Ab so vielen Tagen im Fenster mit einem Reset in der 00:00-Zeile ist der Sensor ein Tageszähler (N-764, #436):
+#: PV-Tagesertrag, Utility-Meter „heute" gehen jede Nacht um Mitternacht auf 0 — ein nächtlich abgeschalteter
+#: Wechselrichter (das N-586-Muster) fällt zu beliebiger Stunde. Ein einzelner Tag reicht nicht (benannte Grenze).
+TAGESZAEHLER_MIN_TAGE = 2
 
 
 @dataclass(frozen=True)
@@ -63,15 +70,39 @@ class Sprung:
     stand_reset: float
 
 
+def _ist_reset(st0: Optional[float], st: Optional[float], su0: Optional[float]) -> bool:
+    """Fällt der Stand von ``st0`` auf höchstens ``RESET_ANTEIL`` davon?"""
+    return (st0 is not None and st is not None and su0 is not None and st0 >= MIN_STAND_KWH
+            and st <= RESET_ANTEIL * st0)
+
+
+def _mitternachts_reset_tage(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> set:
+    """Kalendertage (Prozess-Zeitzone = HA), an denen der Reset in der Zeile des lokalen Tagesbeginns liegt."""
+    tage = set()
+    for (_ts0, st0, su0), (ts, st, _su) in zip(zeilen, zeilen[1:]):
+        if _ist_reset(st0, st, su0):
+            beginn = datetime.fromtimestamp(ts)
+            if beginn.hour == 0:
+                tage.add(beginn.date())
+    return tage
+
+
 def finde_spruenge(statistic_id: str, zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> list[Sprung]:
-    """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` aufsteigend. Je Reset mit Rückkehr ein ``Sprung``."""
+    """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` aufsteigend. Je Reset mit Rückkehr ein ``Sprung``.
+
+    N-764 (#436): ein Reset in der 00:00-Zeile eines Sensors, der an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des
+    Fensters um Mitternacht zurückgeht, ist der Zyklus eines Tageszählers und kein Befund — auch wenn die erste helle
+    Stunde nach einem schwachen Vortag schon ``RUECKKEHR_ANTEIL`` des Vortagsstands erreicht (dann sähe er sonst
+    wie eine Rückkehr in EINER Stunde aus). Alle anderen Resets wie bisher.
+    """
     out: list[Sprung] = []
+    tageszaehler = len(_mitternachts_reset_tage(zeilen)) >= TAGESZAEHLER_MIN_TAGE
     i = 1
     while i < len(zeilen):
         ts0, st0, su0 = zeilen[i - 1]
         ts, st, _su = zeilen[i]
-        if (st0 is not None and st is not None and su0 is not None and st0 >= MIN_STAND_KWH
-                and st <= RESET_ANTEIL * st0):
+        if (_ist_reset(st0, st, su0)
+                and not (tageszaehler and datetime.fromtimestamp(ts).hour == 0)):
             for j in range(i + 1, len(zeilen)):
                 tsj, stj, suj = zeilen[j]
                 if tsj - ts > RUECKKEHR_STUNDEN * 3600 or stj is None:

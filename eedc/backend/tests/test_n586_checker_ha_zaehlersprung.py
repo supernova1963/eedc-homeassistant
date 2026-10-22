@@ -72,6 +72,65 @@ def test_ein_taeglich_zurueckgesetzter_zaehler_ist_kein_sprung():
     assert finde_spruenge("sensor.helfer_heute", _tagesreset(5)) == []
 
 
+# ── N-764 (#436): Tageszähler mit starkem erstem Zuwachs ─────────────────────────────────────────────────────
+
+
+def _tagesertrag(tageswerte: list[float], *, glitch_tag=None):
+    """PV-Tagesertrag wie HA ihn führt: ``state`` 00:00–08:00 = 0, ab 09:00 der Tageswert (eine helle Stunde
+    bringt ihn ganz); HAs ``sum`` zählt korrekt (Reset = neuer Zyklus, der Sprung 0 → Tageswert ist echte Energie).
+    ``glitch_tag``: an diesem Tag meldet der Sensor um 14:00 kurz 0 und kehrt um 15:00 zurück (echtes Phantom)."""
+    out, summe, zuvor = [], 0.0, 0.0
+    for d, wert in enumerate(tageswerte):
+        for h in range(24):
+            t = T0 + timedelta(days=d, hours=h)
+            st = wert if h >= 9 else 0.0
+            if glitch_tag == d and h == 14:
+                st = 0.0
+            summe += st - zuvor if st >= zuvor else st
+            zuvor = st
+            out.append((int(t.timestamp()), st, summe))
+    return out
+
+
+def test_n764_tageszaehler_nach_schwachem_vortag_ist_kein_sprung():
+    """(a) Vortag 1,5 kWh, Mitternacht 0, erste helle Stunde 2,0 kWh (≥ 90 % des Vortags) — an drei Mitternächten.
+    Bis N-764: drei Phantomfunde, der erste mit der Menge des Vortags (1,5 kWh) und der Anweisung, HAs richtige
+    Statistik zu ändern."""
+    assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0, 2.0, 2.0])) == []
+
+
+def test_n764_ein_einzelner_tag_im_fenster_bleibt_ein_fund():
+    """(b) Benannte Grenze: mit nur einer Mitternacht im Fenster ist der Tageszähler vom Glitch nicht zu trennen."""
+    (s,) = finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0]))
+    assert s.menge_kwh == pytest.approx(1.5)
+
+
+def test_n764_lebenszeit_zaehler_mit_naechtlichem_reset_bleibt_drei_funde():
+    """(c) Das N-586-Muster: Wechselrichter nachts aus (22:00–06:00 meldet er 0), morgens zurück auf den alten
+    Stand — drei Nächte, drei Phantome. Die Reset-Zeile liegt um 22:00, nicht um Mitternacht."""
+    out, stand, summe, zuvor = [], 5000.0, 0.0, 5000.0
+    for h in range(24 * 4):
+        t = T0 + timedelta(hours=h)
+        if 7 <= t.hour < 20:
+            stand += 1.0
+        aus = any(24 * d + 22 <= h < 24 * (d + 1) + 6 for d in range(3))
+        st = 0.0 if aus else stand
+        summe += st - zuvor if st >= zuvor else st
+        zuvor = st
+        out.append((int(t.timestamp()), st, summe))
+    funde = finde_spruenge("sensor.wr_gesamt", out)
+    assert len(funde) == 3
+    assert all(datetime.fromtimestamp(f.rueckkehr_ts).hour == 6 for f in funde)
+
+
+def test_n764_ein_echtes_phantom_am_tageszaehler_bleibt_ein_fund():
+    """Gegenprobe: nur der Mitternachts-Reset gilt als Zyklus — ein Aussetzer am Nachmittag desselben
+    Tageszählers (14:00 → 0, 15:00 zurück) bleibt ein Fund in Höhe des Tagesstands."""
+    (s,) = finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0, 2.0, 2.0], glitch_tag=2))
+    assert datetime.fromtimestamp(s.rueckkehr_ts) == T0 + timedelta(days=2, hours=15)
+    assert s.menge_kwh == pytest.approx(2.0)
+
+
 async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):
     a = Anlage(anlagenname="N-586", leistung_kwp=10.0)
     db.add(a)
