@@ -652,13 +652,12 @@ URSACHE: dict[str, Ursache] = {
         "Der Standalone-Datenstand der Matrix hatte keine Kanäle (Seed nur `sensor_snapshots`): die Quellenwahl nahm den "
         "Bestand, der Tag rechnete #406/N-623 (Abgleich bzw. kWp-Anteil), nicht Weg 2",
     ),
-    "PV-ACHSE-MONAT-VS-TAGE-VERDACHT": Ursache(
-        "Verdacht (HA-Bauform S5b, E-S5-3, Entscheid Master H-4) — Register-Disziplin: Analyse am HEAD, drei Tore, Einwertung "
-        "Master, Entscheid Gernot ausstehend, vorgesehen mit dem Auftrag E-S5-4",
-        "Kanal-Monat nimmt PV aus dem Anlagenzähler (46,656 = Einspeisung), Σ der Kanal-Tage nimmt Σ der Erzeuger (47,16); "
-        "Δ 0,504 = Wandlungsverluste (N-588-Klasse). Vorbestehend seit 4.1.8 (`tage-werte` las den Kanal, die Matrix verglich "
-        "die gespeicherte Zeile) — kein Naht-Fall (beide Seiten Kanal), sondern eine Kompositions-Differenz Tag ↔ Monat. "
-        "Welche Seite richtig ist, entscheidet die Analyse an N-588 (PV = Σ Strings, Verluste getrennt, oder PV = Anlagenzähler)",
+    "W2-R5-KLEMME": Ursache(
+        "Benannte Grenze W2-R5-KLEMME (HA-Bauform S5; N-760 widerlegt, Entscheid Gernot 22.10.2026) — kein Fund",
+        "Untergrenze 0 einmal je Zeitraum (W2-Regel 5) — Σ Tage ≠ Monat in PV-Summe und Wandlungsverlusten an Tagen, an "
+        "denen der Rest des Anlagenzählers für ein Gerät ohne Kanal klemmt (W2-V Juli: Tag 3 Rest 12,096 − 12,6 < 0 ⇒ 0, "
+        "Σ Tage 47,16, Monat 46,656); keine zweite Komposition — Tag und Monat rufen `komponiere_bilanz_zeitraum`; "
+        "Entscheid Gernot 22.10.2026 (N-760 widerlegt, benannte Grenze)",
     ),
     "ABSCHLUSS-BESTAND-VS-KANAL-TAGE": Ursache(
         "Benannte Naht S4-R-3c-Klasse (HA-Bauform S5b, E-S5-3, Entscheid Master H-3 → B) — kein Fund",
@@ -689,8 +688,9 @@ ROT: dict[str, dict[tuple[str, str, str], tuple[str, ...]]] = {
     'W2-BESTAND-SPEICHER': {},
     # HA-Bauform S5b (E-S5-3, Entscheid Master H-3 → B, 19.10.2026): der gespeicherte Juni-Abschluss (Bestand) gegen Σ der
     # Juni-Tage am Endpunkt (Kanal-Stunden; Σ `tage-werte` W2-L 639,0, W2-V 471,6 nachgerechnet) — benannte Naht, kein Fund.
-    # HA-Bauform S5b (E-S5-3, Entscheid Master H-4, 19.10.2026): als Verdacht registriert, nicht gebaut (Auftrag E-S5-4).
-    'PV-ACHSE-MONAT-VS-TAGE-VERDACHT': {
+    # HA-Bauform S5 (N-760, Entscheid Gernot 22.10.2026): als Verdacht registriert (E-S5-3 H-4), in E-S5-4 analysiert und
+    # widerlegt — Tag und Monat komponieren mit derselben Funktion, die Differenz ist die Klemme je Zeitraum (W2-R5).
+    'W2-R5-KLEMME': {
         ('W2-V', 'HA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage'),
         ('W2-V', 'SA', 'I2'): ('laufend:cockpit_monat=Σtage', 'laufend:jahr_verlauf=Σtage'),
     },

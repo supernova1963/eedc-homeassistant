@@ -135,8 +135,14 @@ und zum Verständnis der Datenflüsse.
 >    Verlusten greifen — dann entfällt der Abzug (die vorsichtige Richtung). Die **Prognose** (Aussichten) nimmt ihre
 >    Eigenverbrauchsquote weiter aus der Historie inklusive Verluste.
 > 4. **Entweder-oder:** je Zeitraum der erste Kanal einer Ersatzgruppe mit voller Deckung.
-> 5. **Untergrenze 0 einmal je Zeitraum** — Σ Tage ≠ Monat nur in der Aufteilung je Gerät an Tagen, an denen der
->    Rest klemmt.
+> 5. **Untergrenze 0 einmal je Zeitraum** — Σ Tage ≠ Monat an Tagen, an denen der Rest klemmt: in der Aufteilung je
+>    Gerät, und wenn ein Gerät ohne eigenen Kanal den Rest des Anlagenzählers trägt, auch in der **PV-Summe und den
+>    Wandlungsverlusten**. Tag und Monat rechnen mit derselben Komposition; die Klemme wirkt aber je Zeitraum, nicht je
+>    Tag. Beispiel (Volleinspeiser mit Anlagenzähler, ein String mit Kanal 12,6 kWh/Tag, ein String ohne Kanal): an
+>    einem Tag mit Anlagenzähler 12,096 kWh ist der Rest 12,096 − 12,6 < 0 ⇒ 0 — PV 12,6 kWh, Wandlungsverluste
+>    0,504 kWh; über den Monat ist der Rest positiv, PV = Anlagenzähler 46,656 kWh, Verluste 0. Σ der drei Tage
+>    47,16 kWh liegt damit 0,504 kWh (1,1 %) über dem Monat — genau die am Tag geklemmte Menge. Benannte Grenze, kein
+>    Fehler (N-760).
 >
 > **Kein Deckel, kein Rücksprung-Verwurf:** eedc nimmt je Sensor seine Messung wie das HA-Energie-Dashboard. Ein
 > Zählersprung aus HA steht deshalb in Tag und Monat; der Daten-Checker benennt ihn (Kategorie „Zählerstände – Sprung
