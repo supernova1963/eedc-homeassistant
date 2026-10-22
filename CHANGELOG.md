@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.9] - 2026-10-22 — eine Mengenquelle je Tag: Auswertungen, Daten-Checker und HA-Export rechnen an Tagen aus dem HA-Spiegel wie *Cockpit → Tag*, eedc speichert diese Mengen dort nicht mehr doppelt; neu: Daten-Checker-Hinweis zu Tagen ohne HA-Spiegel; 7 Korrekturen
 
 ### Added
 

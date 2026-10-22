@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Oktober 2026 (v4.1.7)
+> **Stand:** Oktober 2026 (v4.1.9)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unveröffentlicht — kommt mit der nächsten Version
+## v4.1.9 — 22. Oktober 2026
 
 **Vergangene Monate ohne Abschluss auch ohne Home Assistant:** *Cockpit → Monat* zeigt einen vergangenen Monat, den du
 noch nicht abgeschlossen hast, jetzt auch dann mit PV, Netz, Eigenverbrauch und Autarkie, wenn Home Assistant gerade
