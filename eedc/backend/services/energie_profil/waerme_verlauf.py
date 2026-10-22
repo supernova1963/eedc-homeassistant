@@ -33,7 +33,7 @@ kennt der Tag nicht. Ein Tag ohne Wärmemengenzähler trägt hier deshalb **nich
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import and_, select
@@ -478,20 +478,44 @@ async def _tageswerte_je_geraet(
     rueckwaerts_tage: set[date],
 ) -> dict[date, dict[str, dict[str, float]]]:
     """Wärme, Kälte und Funktions-Achsen je Tag und Gerät — **N-757**: an einem WP-Kanal-Tag aus dem Kanal-Stundentag
-    (``kanal_stunden.wp_werte_der_kanal_tage``, dieselben Werte wie *Cockpit → Tag* über ``detail_aus_kanaelen``; ein
-    Schlüssel ohne Kanal-Wert behält den Wert der Zählerstände), sonst aus den Zählerständen (``lade_tageswerte_je_geraet``,
-    Fenster je Tag wie bisher). Bis N-757 lasen Wärme-Verlauf und Wärme-Verteilung auch an Kanal-Tagen die Zählerstände,
-    während *Cockpit → Tag* seit E-S4-1 den Kanal nahm."""
+    (``kanal_stunden.wp_werte_der_kanal_tage``, dieselben Werte wie *Cockpit → Tag* über ``detail_aus_kanaelen``), sonst
+    aus den Zählerständen (``lade_tageswerte_je_geraet``, Fenster je Tag wie bisher). Bis N-757 lasen Wärme-Verlauf und
+    Wärme-Verteilung auch an Kanal-Tagen die Zählerstände, während *Cockpit → Tag* seit E-S4-1 den Kanal nahm.
+
+    **HA-Bauform S5 (E-S5-4, Bauplan §10j 4): der Bestands-Tagespfad nur für Bestandstage** — die Zählerstände werden nur
+    für die Tage ohne WP-Kanal-Wahl gelesen (je Lauf solcher Tage ein Bereichs-Leser). Ein WP-Kanal-Tag trägt nur die
+    Kanal-Werte; bis E-S5-4 behielt dort ein Schlüssel ohne Kanal-Wert den Wert der Zählerstände (gemessen auf den
+    Mess-Kopien: an keinem WP-Kanal-Tag ein solcher Schlüssel — ``e-s5-4/probe_waerme_bestandstage.txt``)."""
     from backend.services.energie_profil.kanal_stunden import wp_werte_der_kanal_tage
 
-    je_tag = await lade_tageswerte_je_geraet(db, anlage, investitionen_by_id, von, bis, felder,
-                                             rueckwaerts_tage=rueckwaerts_tage)
+    kanal_werte = await wp_werte_der_kanal_tage(db, anlage.id, investitionen_by_id, von, bis)
+    je_tag: dict[date, dict[str, dict[str, float]]] = {}
+    for a, b in _laeufe_ohne(von, bis, set(kanal_werte)):
+        je_tag.update(await lade_tageswerte_je_geraet(db, anlage, investitionen_by_id, a, b, felder,
+                                                      rueckwaerts_tage=rueckwaerts_tage))
     keys = set(felder.values())
-    for datum, werte in (await wp_werte_der_kanal_tage(db, anlage.id, investitionen_by_id, von, bis)).items():
+    for datum, werte in kanal_werte.items():
         kanal = {k: v for k, v in werte.items() if k in keys}
         if kanal:
-            je_tag[datum] = {**je_tag.get(datum, {}), **kanal}
+            je_tag[datum] = kanal
     return je_tag
+
+
+def _laeufe_ohne(von: date, bis: date, ausgenommen: set[date]) -> list[tuple[date, date]]:
+    """Die lückenlosen Läufe ``(a, b)`` der Tage ``von`` … ``bis`` ohne die Tage ``ausgenommen``."""
+    laeufe: list[tuple[date, date]] = []
+    tag, start = von, None
+    while tag <= bis:
+        if tag in ausgenommen:
+            if start is not None:
+                laeufe.append((start, tag - timedelta(days=1)))
+                start = None
+        elif start is None:
+            start = tag
+        tag += timedelta(days=1)
+    if start is not None:
+        laeufe.append((start, bis))
+    return laeufe
 
 
 async def _zaehlerstrom_je_tag(
@@ -518,7 +542,7 @@ async def _zaehlerstrom_je_tag(
     wie die Tagesliste), an einem WP-Kanal-Tag die ``waermepumpe_<id>``-Schlüssel aus dem Kanal-Stundentag
     (``wp_komponenten_der_kanal_tage``); beide Tage zählen nicht zu den Rückwärts-Tagen — Wärme und
     Betriebsart-Zähler werden im Kalendertag gelesen. Sonst stünde der Wärme-Verlauf um die Stunde 23–24 Uhr
-    neben Tag und Monat.
+    neben Tag und Monat. Ein Kanal-Tag ohne Tageszeile steht mit seinem Kanal-Bezug drin (A-2, HA-Bauform S5 E-S5-4).
 
     Returns:
         ``(je_tag, rueckwaerts_tage)``.
@@ -545,7 +569,11 @@ async def _zaehlerstrom_je_tag(
     wp_je_tag = await wp_komponenten_der_kanal_tage(db, anlage_id, von, bis)
     je_tag: dict[date, dict[str, float]] = {}
     rueckwaerts_tage: set[date] = set()
-    for datum, komponenten, provenance, verworfen in result.all():
+    zeilen = list(result.all())
+    # A-2 (Nachmessung E2, HA-Bauform S5 E-S5-4): ein Kanal-Tag ohne Tageszeile (``aggregate_day`` schreibt nicht jeden
+    # Tag eine) hat seinen Bezug aus dem Kanal wie in *Cockpit → Tag*.
+    ohne_zeile = (set(kanal_je_tag) | set(wp_je_tag)) - {z[0] for z in zeilen}
+    for datum, komponenten, provenance, verworfen in zeilen + [(d, None, None, None) for d in sorted(ohne_zeile)]:
         if datum in kanal_je_tag:
             komponenten = mische_komponenten(komponenten, kanal_je_tag[datum], ziele_je_tag[datum])
         if datum in wp_je_tag:

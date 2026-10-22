@@ -71,11 +71,12 @@ async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, mo
     felder = {k: v for k, v in TAGESDETAIL_AUSGABE.items() if k == ("speicher", "ladung_netz_kwh")}
     ausgabe_key = felder[("speicher", "ladung_netz_kwh")]
     tage = [von + timedelta(days=i) for i in range((bis - von).days + 1)]
-    rueckwaerts = frozenset()
-    if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts":
-        from backend.services.kanal.bilanz_leser import kanal_tage
+    # HA-Bauform S5 (E-S5-4, Bauplan §10j 4): die Wahl zuerst — ein Kanal-Tag liegt im Kalendertag; nur die Bestandstage
+    # fragen das Fenster ihres Typs (`TAGESFENSTER_JE_TYP`, Lesart 1).
+    from backend.services.kanal.bilanz_leser import kanal_tage
 
-        rueckwaerts = frozenset(tage) - frozenset(await kanal_tage(db, anlage.id, von, bis))
+    bestandstage = frozenset(tage) - frozenset(await kanal_tage(db, anlage.id, von, bis))
+    rueckwaerts = bestandstage if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts" else frozenset()
     je_tag = await lade_tageswerte_je_feld(
         db, anlage, {str(i.id): i for i in speicher_invs}, von, bis, felder, rueckwaerts_tage=rueckwaerts,
     )
