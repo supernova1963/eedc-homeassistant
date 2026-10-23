@@ -28,6 +28,11 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 > **Fehlerbeseitigung läuft weiter. Das Konzept «eedc nach HA-Bauform» (S3–S5) und die 97 xfail-Matrixzellen, die daran hängen,
 > werden weitergeführt** — mit dem Stufen-Apparat des Konzepts (Golden Master über die Kopien, Lab, Nachmessung), weil eine Stufe
 > jede Tages-/Stundenzahl anfasst. Der Modus ist kein Stopp, sondern eine Bremse für Zusagen und Neuvorhaben.
+>
+> **Präzisiert 23.10.2026 (Gernot, bis auf Widerruf): die Bremse gilt nur nach außen** — Zusagen, Melder-Antworten, Sonderlocken,
+> Erweiterungswünsche. Intern entscheidet Gernot je Vorhaben über den Einsatz des Budgets; «keine Refactoring-Serie» (Nr. 1) heißt
+> seitdem «nur nach Gernots Go» (so das Komplexitäts-Paket RF-29 … RF-39 vom 23./24.10.2026 mit dem Apparat der RF-Serie:
+> Golden Master je Funktion, Fable-Nachmessung je Sitzung, Gegenprüfung bei Wächter-Berührung).
 
 1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN — **Gernot
    liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten**) **und das Fundregister**

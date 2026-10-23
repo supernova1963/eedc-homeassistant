@@ -255,6 +255,10 @@ neue Version — ein Commit auf `main` genügt nicht.
   Bau-Sitzung samt Kontext sicher in einem Zug ändert; gemessen am 14.10.2026 steigt die Dichte der
   Fund-Vermerke je 1 000 Zeilen von 12,7 (≤ 15) über 16,9 (16–50) auf 18,8 (51–100). Ausnahmen über 100
   (lineare Listen) stehen mit Grund im Wächter; ein Neuzugang über 50 wird aufgeteilt, nicht eingetragen.
+  Stand nach dem Komplexitäts-Paket RF-29 … RF-39 (23./24.10.2026, Bauform RF-1, je Funktion Golden Master
+  bitgleich): Baseline 60 → 48; über 80 liegen nur noch `main.py::lifespan` (Start-Orchestrierung, bewusst
+  ausgelassen — ihr einziger Prüfstand ist der Lab-Start) und `migrate_emob_canonical_source` (Einmal-Migration)
+  neben den beiden Migrations-Ausnahmen. Nächstes Band, falls je wieder gewollt: 66–80 (15 Funktionen).
 - Neuer Code liest im Stil der Nachbarschaft: gleiche Kommentar-Dichte, gleiche Benennung.
 
 ### TypeScript (Frontend)

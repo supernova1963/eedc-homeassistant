@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Intern, ohne sichtbare Änderung: elf große Rechen- und Routenfunktionen in Phasen zerlegt (RF-29 … RF-39, Komplexitäts-Paket 23./24.10.2026).** ROI-PV, Speicher-Dashboard, PV-Strings-Gesamtlaufzeit, Cockpit-Übersicht, Trend, E-Mob-Heimladung-Pool, Import v09, Fronius-Parser, Tagesprognose, Solar-Prognose-Aufbau und der Kanal-Tag «wie HA» lagen zwischen kognitiv 81 und 98; jetzt liegt jede Route bei höchstens 25 und keine Phase über 50. Jede Funktion wurde gegen einen Golden Master auf drei Datenbank-Kopien bitgleich nachgemessen (drei neue Fixture-Golden-Master: `fronius-parser`, `solar-prognose-build`, PV-Strings-Sichten in `analyse-sichten`), OpenAPI byte-gleich; für Zweige, die kein Golden Master sieht, kamen benannte Proben dazu. Die Komplexitäts-Baseline sinkt von 60 auf 48 Funktionen über 50; über 80 bleiben nur die beiden Migrations-Ausnahmen und eine Einmal-Migration.
+
 ### Fixed
 
 - **Daten-Checker → „Zählerstände – Sprung in Home Assistant“ meldet auch den Tageszähler eines nachts abgeschalteten Wechselrichters nicht mehr.** Schreibt Home Assistant nachts keine Statistikzeile, weil der Wechselrichter keinen Wert liefert, steht das Zurücksetzen des PV-Tagesertrags nicht in der Mitternachtsstunde, sondern in der ersten Stunde mit Werten am Morgen — 4.1.9 erkannte den Tageszähler nur am Zurücksetzen um Mitternacht und meldete nach einem schwachen Vortag weiter einen „Sprung“ mit dem Vortagswert und der Anweisung, die (richtige) HA-Statistik zu ändern. Jetzt gilt die erste Stunde eines Tages als Tagesbeginn, um Mitternacht oder am Morgen. Ein Aussetzer zu einer anderen Stunde und das Muster des nachts abgeschalteten fortlaufenden Zählers werden weiter gemeldet; ein fortlaufender Zähler, dessen erste Morgenstunde an zwei Tagen des Prüffensters eine 0 trägt, gilt dabei ebenfalls als Tageszähler (N-765) (#436 jedema1805)
