@@ -7,6 +7,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Daten-Checker → „Zählerstände – Sprung in Home Assistant“ meldet auch den Tageszähler eines nachts abgeschalteten Wechselrichters nicht mehr.** Schreibt Home Assistant nachts keine Statistikzeile, weil der Wechselrichter keinen Wert liefert, steht das Zurücksetzen des PV-Tagesertrags nicht in der Mitternachtsstunde, sondern in der ersten Stunde mit Werten am Morgen — 4.1.9 erkannte den Tageszähler nur am Zurücksetzen um Mitternacht und meldete nach einem schwachen Vortag weiter einen „Sprung“ mit dem Vortagswert und der Anweisung, die (richtige) HA-Statistik zu ändern. Jetzt gilt die erste Stunde eines Tages als Tagesbeginn, um Mitternacht oder am Morgen. Ein Aussetzer zu einer anderen Stunde und das Muster des nachts abgeschalteten fortlaufenden Zählers werden weiter gemeldet; ein fortlaufender Zähler, dessen erste Morgenstunde an zwei Tagen des Prüffensters eine 0 trägt, gilt dabei ebenfalls als Tageszähler (N-765) (#436 jedema1805)
+
 ## [4.1.9] - 2026-10-22 — eine Mengenquelle je Tag: Auswertungen, Daten-Checker und HA-Export rechnen an Tagen aus dem HA-Spiegel wie *Cockpit → Tag*, eedc speichert diese Mengen dort nicht mehr doppelt; neu: Daten-Checker-Hinweis zu Tagen ohne HA-Spiegel; 7 Korrekturen
 
 ### Added

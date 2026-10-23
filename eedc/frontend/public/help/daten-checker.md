@@ -568,10 +568,13 @@ in einer Stunde auf seinen alten Stand zurück, hält Home Assistant das für ei
 Zurückkehren den ganzen Zählerstand als Zuwachs dieser Stunde. Dieser Sprung steht dann in Tag, Monat und Jahr — in
 eedc wie in Home Assistant, seit dem zweiten Paket der HA-Bauform auch in der Stunde des Tagesverlaufs. Ein Zähler, der
 nach dem Zurücksetzen wieder hochzählt (ein neuer Zähler nach einem Tausch), ist kein Befund: dort entsteht kein Sprung.
-Ein Zähler, der an mehreren Tagen um Mitternacht auf 0 geht (PV-Tagesertrag, Utility-Meter „heute"), ist ein
-Tageszähler und kein Befund — auch wenn seine erste Stunde am Morgen den Vortag schon fast erreicht. Geht er im Prüffenster
-nur an einem einzigen Tag um Mitternacht auf 0, ist er von einem Aussetzer nicht zu unterscheiden und kann noch gemeldet
-werden; ein Aussetzer zu einer anderen Stunde wird auch bei einem Tageszähler gemeldet. **Grenze:** die Prüfung erkennt
+Ein Zähler, der an mehreren Tagen zu Beginn seines Tages auf 0 geht — um Mitternacht oder, bei einem nachts
+abgeschalteten Wechselrichter, in der ersten Stunde mit Werten (PV-Tagesertrag, Utility-Meter „heute") —, ist ein
+Tageszähler und kein Befund, auch wenn seine erste Stunde am Morgen den Vortag schon fast erreicht. Geht er im Prüffenster
+nur an einem einzigen Tag zu Tagesbeginn auf 0, ist er von einem Aussetzer nicht zu unterscheiden und kann noch gemeldet
+werden; ein Aussetzer zu einer anderen Stunde wird auch bei einem Tageszähler gemeldet. Ein fortlaufender Zähler, dessen
+erste Morgenstunde an zwei Tagen des Prüffensters als letzten Stand eine 0 trägt, gilt deshalb ebenfalls als Tageszähler
+und wird an diesen Tagesanfängen nicht mehr gemeldet. **Grenze:** die Prüfung erkennt
 nur dieses Muster (Rücksetzen und Rückkehr). Springt die HA-Summe ohne Rücksetzen, meldet weder sie noch die
 Spitzen-Prüfung (§4.7) an einem Tag aus dem HA-Spiegel etwas.
 

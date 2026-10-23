@@ -9,6 +9,15 @@
 
 ---
 
+## Unveröffentlicht — kommt mit der nächsten Version
+
+**Daten-Checker: kein „Sprung in Home Assistant“ mehr am PV-Tagesertrag eines nachts abgeschalteten Wechselrichters.**
+Liefert dein Wechselrichter nachts keinen Wert, setzt Home Assistant den Tagesertrag erst in der ersten Stunde mit Werten
+am Morgen auf 0 — nicht um Mitternacht. Die Prüfung erkennt den Tageszähler jetzt auch daran und meldet keinen Sprung
+mehr, wenn die erste helle Stunde nach einem schwachen Tag den Vortag schon fast erreicht. Deine HA-Statistik war in
+diesem Fall richtig; ändern musst du nichts
+([Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)).
+
 ## v4.1.9 — 22. Oktober 2026
 
 **Vergangene Monate ohne Abschluss auch ohne Home Assistant:** *Cockpit → Monat* zeigt einen vergangenen Monat, den du
