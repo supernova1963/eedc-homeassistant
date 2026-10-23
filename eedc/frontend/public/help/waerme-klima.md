@@ -599,6 +599,11 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > zu, gilt für dieses Gerät **nur noch** der gemessene Weg — die übrigen Betriebsarten erscheinen
 > dann unter *nicht aufgeteilt*, statt aus dem Modus abgeleitet zu werden. Ordne deshalb entweder
 > alle zu, die du hast, oder verlass dich auf den Modus.
+>
+> ⚑ **Getrennte Zähler für Heizen und Warmwasser zählen dabei mit.** Misst du *Strom Heizen* und
+> *Strom Warmwasser* getrennt (Schritt 2) und ordnest daneben einen Betriebsart-Zähler zu (etwa
+> *Strom Kühlbetrieb*), stehen diese beiden Zähler im Balken *Strom-Aufteilung nach Betriebsart*
+> als **Heizen** und **Warmwasser** — gemessen, in Tag und Monat.
 
 > ### Was dein Anlagenzähler erfassen muss
 >

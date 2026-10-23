@@ -18,6 +18,13 @@ mehr, wenn die erste helle Stunde nach einem schwachen Tag den Vortag schon fast
 diesem Fall richtig; ändern musst du nichts
 ([Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)).
 
+**Wärmepumpe: Heizen und Warmwasser im Balken der Betriebsarten, wenn du sie getrennt misst.** Misst du Strom Heizen
+und Strom Warmwasser getrennt und hast daneben einen Zähler für eine Betriebsart (etwa den Kühlbetrieb) zugeordnet,
+zeigt *Strom-Aufteilung nach Betriebsart* jetzt Heizen und Warmwasser mit deinen gemessenen Werten — bisher stand dort
+Heizen 0 und alles unter „nicht aufgeteilt“. Das gilt für Tag, Monat, Wärme/Klima-Verlauf, Komponenten-Hub,
+Monatsbericht und die HA-Sensoren; deine Arbeitszahlen ändern sich nicht
+([Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#schritt-4--betriebsart-erfassen-optional-aber-lohnend)).
+
 ## v4.1.9 — 22. Oktober 2026
 
 **Vergangene Monate ohne Abschluss auch ohne Home Assistant:** *Cockpit → Monat* zeigt einen vergangenen Monat, den du
