@@ -11,6 +11,7 @@ Module + DC-Speicher) und die Orphan-Module.
 # Energieprofil-Routen.
 
 from typing import Optional, Any
+from dataclasses import dataclass
 from sqlalchemy import select, func
 from datetime import date
 from backend.core.investition_kennwerte import (
@@ -73,252 +74,20 @@ async def pv_einsparung_und_speicher_ist(
 
     Aus `get_roi_dashboard` Zeilen 953-1239 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 5b.
     """
-    # ==========================================================================
-    # Phase 2: Hilfsfunktion für PV-Erzeugungsdaten
-    # ==========================================================================
-
-    async def berechne_pv_einsparung_aus_monatsdaten() -> tuple[float, float, dict]:
-        """
-        Berechnet PV-Einsparung für alle PV-Module gemeinsam.
-
-        Die PV-Erzeugung kommt aus den Monats-Fakten (ADR-002/**P10**), die sie
-        nach **P7** auflösen: gemessene Pro-Modul-Werte, und wo nur das
-        Anlagen-Aggregat (`Monatsdaten.pv_erzeugung_kwh`) gepflegt ist, dessen
-        kWp-Verteilung. Dieser Docstring nannte das Aggregat bis 2026-07-31 ein
-        „Legacy-Feld!" — genau die Annahme, die P7 widerlegt hat: es ist kein
-        Legacy, sondern der einzige Wert bei manueller Pflege und beim Import
-        mit einem Gesamt-PV-Sensor. Die rohe IMD-Summe daneben lieferte dort 0
-        und damit 32,00 € statt 212,00 € Jahres-Einsparung — der ROI-Fortschritt
-        und die Amortisation standen um 85 % zu niedrig (Befund F-5).
-
-        Einspeisung/Netzbezug kommen weiterhin aus Monatsdaten (Zählerwerte).
-        """
-        # 1. PV-Module IDs ermitteln
-        # Issue #123: historische PV-Einsparung — keine aktiv-Filterung, damit
-        # spätere Stilllegung Vergangenheit nicht entfernt.
-        pv_ids_result = await db.execute(
-            select(Investition.id)
-            .where(Investition.anlage_id == anlage_id)
-            .where(Investition.typ == "pv-module")
-        )
-        pv_module_ids = [row[0] for row in pv_ids_result.all()]
-
-        # 2. Einspeisung aus Monatsdaten (Zählerwert)
-        md_query = select(
-            Monatsdaten.monat,
-            Monatsdaten.jahr,
-            func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
-        ).where(Monatsdaten.anlage_id == anlage_id)
-
-        if jahr is not None:
-            md_query = md_query.where(Monatsdaten.jahr == jahr)
-
-        # 3. PV-Erzeugung je Monat über die Monats-Fakten (ADR-002/P10)
-        verluste_je_monat: dict[tuple[int, int], float] = {}
-        # ⭐ N-723 (12.10.2026, Entscheid Master Option A): der Eigenverbrauch DIESER Zeile je Monat aus den Monats-Fakten —
-        # der Anlagen-Eigenverbrauch (`kennzahlen.eigenverbrauch_kwh`: Erzeugung hinter dem Zähler inkl. sonstiger
-        # Erzeuger, abzüglich Abgabe an Dritte, Speicher wie im Cockpit) MINUS der Anteil der Balkonkraftwerke
-        # (`bkw_eigenverbrauch_anteil`, dieselbe Zahl wie im BKW-Hub) — das BKW hat eine eigene ROI-Zeile (P9).
-        ev_je_monat: dict[tuple[int, int], float] = {}
-
-        bkw_invs = [i for i in investitionen if i.typ == InvestitionTyp.BALKONKRAFTWERK.value]
-
-        def _ev_ohne_bkw(f) -> float:
-            """N-723: Anlagen-Eigenverbrauch des Monats ohne den Bilanz-Anteil der Balkonkraftwerke (ADR-002/P9).
-
-            Abgezogen wird nur der Anteil eines BKW, dessen Erzeugung in der Erzeugung hinter dem Zähler steckt
-            (`anteilig`); der gemessene Ersatz-Eigenverbrauch eines BKW ohne Erzeugungswert (P9-Rest) steckt nicht im
-            Anlagen-Eigenverbrauch und wird deshalb auch nicht abgezogen. Ein abgetretenes BKW (P11) trägt 0 — seine
-            Kinder sind Module dieser Zeile."""
-            ev = f.kennzahlen.eigenverbrauch_kwh or 0.0
-            aktiv = [i for i in investitionen if i.ist_aktiv_im_monat(f.jahr, f.monat)]
-            abgetreten = abgetretene_bkw_ids(aktiv)
-            bkw_anteil = 0.0
-            for b in bkw_invs:
-                if not b.ist_aktiv_im_monat(f.jahr, f.monat):
-                    continue
-                anteil = bkw_beitrag_im_monat(
-                    b.id, f, zeile_erzeugung_kwh=0.0, zeile_eigenverbrauch_kwh=0.0, abgetreten=b.id in abgetreten,
-                ).anteil
-                if anteil.quelle == "anteilig":
-                    bkw_anteil += anteil.kwh
-            return max(0.0, ev - bkw_anteil)
-
-        async def get_pv_erzeugung(filter_jahr: Optional[int] = None) -> dict[tuple[int, int], float]:
-            """Modul-PV je Monat, kanonisch aufgelöst (P7).
-
-            `erzeugung.pv_module_kwh` ist bewusst die **Modul**-Summe, nicht
-            `pv_kwh`: das Balkonkraftwerk hat in diesem Dashboard eine eigene
-            ROI-Zeile (`standalone`), seine Erzeugung zählte hier sonst zweimal.
-            `None` heißt: kein Modul hat einen Wert und es gibt kein Aggregat — als 0
-            verrechnet. Fehlt nur EINEM Modul der Wert, trägt `pv_module_kwh` seit
-            N-626 die vorhandenen Werte (Teilsumme, `pv_vollstaendig=False`).
-            """
-            if not pv_module_ids:
-                return {}
-
-            # ⭐ Dieselbe Anlage, dasselbe Fenster, dieselbe Schicht — die Fakten
-            # stehen seit dem Kopf dieser Funktion schon da (`_anlage_fakten`).
-            # Sie ein zweites Mal zu bauen kostete an der produktiven Anlage die
-            # Haelfte der ROI-Laufzeit (gemessen 15.09.2026: 3,9 s gesamt).
-            if filter_jahr == jahr:
-                fakten = _anlage_fakten
-            else:
-                fakten = await lade_monats_fakten(
-                    db, anlage_id,
-                    von=(filter_jahr, 1) if filter_jahr is not None else None,
-                    bis=(filter_jahr, 12) if filter_jahr is not None else None,
-                )
-            nonlocal verluste_je_monat, ev_je_monat
-            ev_je_monat = {f.schluessel: _ev_ohne_bkw(f) for f in fakten}
-            # N-588: die bewertbaren Wandlungsverluste derselben Monate (Messpunkt-Vertrag je Monat) — die
-            # Ersparnis unten bewertet den Eigenverbrauch ohne sie. Die Verluste sind die der Strings (ein
-            # Balkonkraftwerk misst AC am Gerät), sie gehören deshalb in diese Modul-Zeile.
-            verluste_je_monat = {
-                f.schluessel: bewertbare_wandlungsverluste_kwh(
-                    f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund,
-                ) for f in fakten
-            }
-            return {
-                f.schluessel: (f.erzeugung.pv_module_kwh or 0.0) for f in fakten
-            }
-
-        if jahr is None:
-            # Alle Jahre: Jahresdurchschnitt
-            md_count_query = select(
-                func.count().label('total_records'),
-                func.count(func.distinct(Monatsdaten.jahr)).label('anzahl_jahre')
-            ).where(Monatsdaten.anlage_id == anlage_id)
-            count_result = await db.execute(md_count_query)
-            count_row = count_result.one()
-            total_records = count_row.total_records
-            anzahl_jahre = count_row.anzahl_jahre or 1
-
-            md_query = md_query.group_by(Monatsdaten.monat)
-            md_result = await db.execute(md_query)
-            md_by_month = {r.monat: r for r in md_result.all()}
-
-            # PV-Erzeugung aus InvestitionMonatsdaten
-            pv_erzeugung_data = await get_pv_erzeugung()
-            total_erzeugung = sum(pv_erzeugung_data.values())
-
-            total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-            total_verluste = sum(verluste_je_monat.values())
-            total_ev = sum(ev_je_monat.values())
-            anzahl_monate = len(md_by_month)
-
-            if anzahl_monate > 0 and anzahl_jahre > 0:
-                avg_einspeisung = total_einspeisung / anzahl_jahre
-                avg_erzeugung = total_erzeugung / anzahl_jahre
-                avg_verluste = total_verluste / anzahl_jahre
-                avg_ev = total_ev / anzahl_jahre
-                avg_monate_pro_jahr = total_records / anzahl_jahre
-
-                if avg_monate_pro_jahr < 12:
-                    faktor = 12.0 / avg_monate_pro_jahr
-                    methode = 'durchschnitt_hochgerechnet'
-                else:
-                    faktor = 1.0
-                    methode = 'durchschnitt'
-
-                einspeisung_jahr = avg_einspeisung * faktor
-                erzeugung_jahr = avg_erzeugung * faktor
-                verluste_jahr = avg_verluste * faktor
-                # N-723: aus den Monats-Fakten (s. `_ev_ohne_bkw`), hochgerechnet wie die Mengen. Hier stand
-                # `max(0, Erzeugung − Einspeisung)` — Modul-PV gegen die Einspeisung der GANZEN Anlage.
-                eigenverbrauch_jahr = avg_ev * faktor
-                hinweis = f'Jahresdurchschnitt (Ø aus {anzahl_jahre} Jahren)'
-                if methode == 'durchschnitt_hochgerechnet':
-                    hinweis += ', hochgerechnet auf 12 Monate'
-            else:
-                return 0, 0, {'hinweis': 'Keine Monatsdaten vorhanden'}
-        else:
-            # Einzelnes Jahr
-            md_query = md_query.group_by(Monatsdaten.monat)
-            md_result = await db.execute(md_query)
-            md_by_month = {r.monat: r for r in md_result.all()}
-
-            # PV-Erzeugung aus InvestitionMonatsdaten für dieses Jahr
-            pv_erzeugung_data = await get_pv_erzeugung(jahr)
-            total_erzeugung = sum(pv_erzeugung_data.values())
-
-            total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
-            total_verluste = sum(verluste_je_monat.values())
-            total_ev = sum(ev_je_monat.values())
-            anzahl_monate = len(md_by_month)
-            vorhandene_monate = sorted(md_by_month.keys())
-
-            if anzahl_monate > 0:
-                # PVGIS-Hochrechnung versuchen
-                pvgis_prognose = await lade_aktive_prognose(db, anlage_id)
-
-                methode = 'linear'
-                faktor = 12.0 / anzahl_monate
-
-                if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
-                    pvgis_monatswerte = pvgis_prognose.monatswerte
-                    # Gespeicherte Keys sind 'e_m'/'monat' (siehe pvgis.py); zuvor
-                    # las dieser Pfad 'E_m'/'month' → Summe immer 0 → PVGIS-Gewichtung
-                    # griff nie, stiller Fallback auf lineare Hochrechnung.
-                    pvgis_jahres_summe = sum(m.get('e_m', 0) for m in pvgis_monatswerte)
-                    if pvgis_jahres_summe > 0:
-                        pvgis_vorhandene_summe = sum(
-                            m.get('e_m', 0) for m in pvgis_monatswerte
-                            if m.get('monat', 0) in vorhandene_monate
-                        )
-                        if pvgis_vorhandene_summe > 0:
-                            faktor = 1.0 / (pvgis_vorhandene_summe / pvgis_jahres_summe)
-                            methode = 'pvgis'
-
-                einspeisung_jahr = total_einspeisung * faktor
-                erzeugung_jahr = total_erzeugung * faktor
-                verluste_jahr = total_verluste * faktor
-                # N-723: aus den Monats-Fakten (s. `_ev_ohne_bkw`), hochgerechnet wie die Mengen. Hier stand
-                # `max(0, Erzeugung − Einspeisung)` — mit BHKW 3 600 statt 7 200 kWh, mit Abgabe an Dritte 4 800
-                # statt 3 600 kWh (dieselbe kWh zusätzlich als Erlös der Abgabe-Zeile).
-                eigenverbrauch_jahr = total_ev * faktor
-
-                if methode == 'pvgis':
-                    hinweis = f'PVGIS-gewichtete Hochrechnung für {jahr} ({anzahl_monate} Monate)'
-                elif anzahl_monate >= 12:
-                    hinweis = f'Berechnet aus {anzahl_monate} Monaten für {jahr}'
-                else:
-                    hinweis = f'Lineare Hochrechnung für {jahr} aus {anzahl_monate} Monaten'
-            else:
-                return 0, 0, {'hinweis': f'Keine Monatsdaten für {jahr}'}
-
-        # N-723: der Rückfall „Eigenverbrauch = Erzeugung − Einspeisung, wenn 0" entfällt — ein Eigenverbrauch von 0 aus
-        # den Fakten ist ein Wert (alles eingespeist), keine Lücke.
-
-        # Einsparung berechnen. §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh
-        # = None, weil auf Monatsdaten-Aggregat-Ebene keine Negativpreis-Spalte
-        # vorliegt → volle Einspeisung wie zuvor (verhaltensneutral).
-        einspeise_erloes = einspeise_erloes_euro(
-            einspeisung_jahr, None, einspeiseverguetung_cent
-        ).erloes_euro
-        # N-588 (P15): bewertet wird der Eigenverbrauch ohne die bewertbaren Wandlungsverluste — je Monat nach dem
-        # Messpunkt-Vertrag entschieden (`verluste_je_monat`, daher hier „gilt" = None), hochgerechnet wie die Mengen.
-        eigenverbrauch_ohne_verluste_jahr = eigenverbrauch_ohne_verluste_kwh(eigenverbrauch_jahr, verluste_jahr, None)
-        ev_ersparnis = eigenverbrauch_ohne_verluste_jahr * strompreis_cent / 100
-        jahres_einsparung = einspeise_erloes + ev_ersparnis
-        # N-647 (ADR-001/DI-2, P15): CO₂ aus der EINEN Konstruktions-Stelle auf dem Eigenverbrauch ohne Wandlungsverluste —
-        # dieselbe Menge wie die Ersparnis darüber. Bis 10.10.2026 stand hier `erzeugung_jahr × 0,38`: auch die
-        # eingespeiste kWh bekam die volle Netzstrom-Vermeidung gutgeschrieben (bei 40 % Einspeisequote zwei Drittel zu
-        # viel), und Auswertungen → ROI nannte eine andere CO₂-Zahl als Cockpit → Nachhaltigkeit, HA-Export und PDF.
-        # Die Zeile rechnet nur die Module (`pv_module_kwh`; ein Balkonkraftwerk hat seine eigene Zeile).
-        co2 = berechne_co2_bilanz(eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_jahr).co2_pv_kg
-
-        detail = {
-            'einspeisung_kwh_jahr': round(einspeisung_jahr, 0),
-            'eigenverbrauch_kwh_jahr': round(eigenverbrauch_jahr, 0),
-            'eigenverbrauch_ohne_verluste_kwh_jahr': round(eigenverbrauch_ohne_verluste_jahr, 0),
-            'erzeugung_kwh_jahr': round(erzeugung_jahr, 0),
-            'einspeise_erloes_euro': round(einspeise_erloes, 2),
-            'ev_ersparnis_euro': round(ev_ersparnis, 2),
-            'hinweis': hinweis,
-        }
-
-        return jahres_einsparung, co2, detail
+    # RF-29 (23.10.2026, Bauform RF-1): die PV-Einsparung steht als Modulfunktion unter diesem Orchestrator —
+    # `_pv_einsparung_aus_monatsdaten` mit ihren Hochrechnungs-Zweigen `_jahreswerte_durchschnitt` /
+    # `_jahreswerte_einzeljahr`. Der Speicher-Block (Etappe B/C) bleibt HIER: er laedt `InvestitionMonatsdaten`
+    # und ist unter diesem Namen in `P10_PER_INVESTITION` (test_wurzelmuster_konformitaet.py) gefuehrt.
+    # Reihenfolge der Abfragen und Rueckgabe unveraendert.
+    ctx = _PvKontext(
+        anlage_fakten=_anlage_fakten,
+        anlage_id=anlage_id,
+        db=db,
+        einspeiseverguetung_cent=einspeiseverguetung_cent,
+        investitionen=investitionen,
+        jahr=jahr,
+        strompreis_cent=strompreis_cent,
+    )
 
     # ==========================================================================
     # Phase 3: Berechne ROI für PV-Systeme (aggregiert)
@@ -425,9 +194,307 @@ async def pv_einsparung_und_speicher_ist(
                     speicher_eta_by_inv[sp.id] = erg
 
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
-    pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
+    pv_jahres_einsparung, pv_co2, pv_detail = await _pv_einsparung_aus_monatsdaten(ctx)
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("_relevante_kosten", "berechnungen", "gesamt_betriebskosten", "gesamt_co2", "gesamt_einsparung", "gesamt_investition", "gesamt_relevante", "gesamt_sonstige_ausgaben", "gesamt_sonstige_ertraege", "pv_co2", "pv_detail", "pv_jahres_einsparung", "speicher_eta_by_inv", "speicher_invs_alle", "speicher_ist_by_inv", "speicher_ladepreis_anlage",) if k in _loc}
+
+
+@dataclass(frozen=True)
+class _PvKontext:
+    """Die geteilten Eingaenge der PV-Einsparung (RF-29) — nur gelesen."""
+    anlage_fakten: Any
+    anlage_id: int
+    db: Any
+    einspeiseverguetung_cent: Any
+    investitionen: Any
+    jahr: Optional[int]
+    strompreis_cent: Any
+
+
+@dataclass(frozen=True)
+class _Jahreswerte:
+    """Die hochgerechneten Jahresmengen eines Hochrechnungs-Zweigs samt Hinweis (RF-29)."""
+    einspeisung_jahr: float
+    erzeugung_jahr: float
+    verluste_jahr: float
+    eigenverbrauch_jahr: float
+    hinweis: str
+
+
+# ==========================================================================
+# Phase 2: Hilfsfunktion für PV-Erzeugungsdaten
+# ==========================================================================
+
+async def _pv_einsparung_aus_monatsdaten(ctx: _PvKontext) -> tuple[float, float, dict]:
+    """
+    Berechnet PV-Einsparung für alle PV-Module gemeinsam.
+
+    Die PV-Erzeugung kommt aus den Monats-Fakten (ADR-002/**P10**), die sie
+    nach **P7** auflösen: gemessene Pro-Modul-Werte, und wo nur das
+    Anlagen-Aggregat (`Monatsdaten.pv_erzeugung_kwh`) gepflegt ist, dessen
+    kWp-Verteilung. Dieser Docstring nannte das Aggregat bis 2026-07-31 ein
+    „Legacy-Feld!" — genau die Annahme, die P7 widerlegt hat: es ist kein
+    Legacy, sondern der einzige Wert bei manueller Pflege und beim Import
+    mit einem Gesamt-PV-Sensor. Die rohe IMD-Summe daneben lieferte dort 0
+    und damit 32,00 € statt 212,00 € Jahres-Einsparung — der ROI-Fortschritt
+    und die Amortisation standen um 85 % zu niedrig (Befund F-5).
+
+    Einspeisung/Netzbezug kommen weiterhin aus Monatsdaten (Zählerwerte).
+    """
+    # 1. PV-Module IDs ermitteln
+    # Issue #123: historische PV-Einsparung — keine aktiv-Filterung, damit
+    # spätere Stilllegung Vergangenheit nicht entfernt.
+    pv_ids_result = await ctx.db.execute(
+        select(Investition.id)
+        .where(Investition.anlage_id == ctx.anlage_id)
+        .where(Investition.typ == "pv-module")
+    )
+    pv_module_ids = [row[0] for row in pv_ids_result.all()]
+
+    # 2. Einspeisung aus Monatsdaten (Zählerwert)
+    md_query = select(
+        Monatsdaten.monat,
+        Monatsdaten.jahr,
+        func.sum(Monatsdaten.einspeisung_kwh).label('einspeisung'),
+    ).where(Monatsdaten.anlage_id == ctx.anlage_id)
+
+    if ctx.jahr is not None:
+        md_query = md_query.where(Monatsdaten.jahr == ctx.jahr)
+
+    # 3. PV-Erzeugung je Monat über die Monats-Fakten (ADR-002/P10)
+    # RF-29: die Verluste und der Eigenverbrauch derselben Monate kommen aus `_pv_erzeugung_je_monat` mit zurück
+    # (vorher `nonlocal`).
+    bkw_invs = [i for i in ctx.investitionen if i.typ == InvestitionTyp.BALKONKRAFTWERK.value]
+
+    if ctx.jahr is None:
+        werte = await _jahreswerte_durchschnitt(ctx, md_query, pv_module_ids, bkw_invs)
+    else:
+        werte = await _jahreswerte_einzeljahr(ctx, md_query, pv_module_ids, bkw_invs)
+    if isinstance(werte, dict):
+        return 0, 0, werte
+
+    # N-723: der Rückfall „Eigenverbrauch = Erzeugung − Einspeisung, wenn 0" entfällt — ein Eigenverbrauch von 0 aus
+    # den Fakten ist ein Wert (alles eingespeist), keine Lücke.
+
+    # Einsparung berechnen. §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh
+    # = None, weil auf Monatsdaten-Aggregat-Ebene keine Negativpreis-Spalte
+    # vorliegt → volle Einspeisung wie zuvor (verhaltensneutral).
+    einspeise_erloes = einspeise_erloes_euro(
+        werte.einspeisung_jahr, None, ctx.einspeiseverguetung_cent
+    ).erloes_euro
+    # N-588 (P15): bewertet wird der Eigenverbrauch ohne die bewertbaren Wandlungsverluste — je Monat nach dem
+    # Messpunkt-Vertrag entschieden (`verluste_je_monat`, daher hier „gilt" = None), hochgerechnet wie die Mengen.
+    eigenverbrauch_ohne_verluste_jahr = eigenverbrauch_ohne_verluste_kwh(werte.eigenverbrauch_jahr, werte.verluste_jahr, None)
+    ev_ersparnis = eigenverbrauch_ohne_verluste_jahr * ctx.strompreis_cent / 100
+    jahres_einsparung = einspeise_erloes + ev_ersparnis
+    # N-647 (ADR-001/DI-2, P15): CO₂ aus der EINEN Konstruktions-Stelle auf dem Eigenverbrauch ohne Wandlungsverluste —
+    # dieselbe Menge wie die Ersparnis darüber. Bis 10.10.2026 stand hier `erzeugung_jahr × 0,38`: auch die
+    # eingespeiste kWh bekam die volle Netzstrom-Vermeidung gutgeschrieben (bei 40 % Einspeisequote zwei Drittel zu
+    # viel), und Auswertungen → ROI nannte eine andere CO₂-Zahl als Cockpit → Nachhaltigkeit, HA-Export und PDF.
+    # Die Zeile rechnet nur die Module (`pv_module_kwh`; ein Balkonkraftwerk hat seine eigene Zeile).
+    co2 = berechne_co2_bilanz(eigenverbrauch_kwh=eigenverbrauch_ohne_verluste_jahr).co2_pv_kg
+
+    detail = {
+        'einspeisung_kwh_jahr': round(werte.einspeisung_jahr, 0),
+        'eigenverbrauch_kwh_jahr': round(werte.eigenverbrauch_jahr, 0),
+        'eigenverbrauch_ohne_verluste_kwh_jahr': round(eigenverbrauch_ohne_verluste_jahr, 0),
+        'erzeugung_kwh_jahr': round(werte.erzeugung_jahr, 0),
+        'einspeise_erloes_euro': round(einspeise_erloes, 2),
+        'ev_ersparnis_euro': round(ev_ersparnis, 2),
+        'hinweis': werte.hinweis,
+    }
+
+    return jahres_einsparung, co2, detail
+
+
+def _ev_ohne_bkw(f, investitionen, bkw_invs) -> float:
+    """N-723: Anlagen-Eigenverbrauch des Monats ohne den Bilanz-Anteil der Balkonkraftwerke (ADR-002/P9).
+
+    Abgezogen wird nur der Anteil eines BKW, dessen Erzeugung in der Erzeugung hinter dem Zähler steckt
+    (`anteilig`); der gemessene Ersatz-Eigenverbrauch eines BKW ohne Erzeugungswert (P9-Rest) steckt nicht im
+    Anlagen-Eigenverbrauch und wird deshalb auch nicht abgezogen. Ein abgetretenes BKW (P11) trägt 0 — seine
+    Kinder sind Module dieser Zeile."""
+    ev = f.kennzahlen.eigenverbrauch_kwh or 0.0
+    aktiv = [i for i in investitionen if i.ist_aktiv_im_monat(f.jahr, f.monat)]
+    abgetreten = abgetretene_bkw_ids(aktiv)
+    bkw_anteil = 0.0
+    for b in bkw_invs:
+        if not b.ist_aktiv_im_monat(f.jahr, f.monat):
+            continue
+        anteil = bkw_beitrag_im_monat(
+            b.id, f, zeile_erzeugung_kwh=0.0, zeile_eigenverbrauch_kwh=0.0, abgetreten=b.id in abgetreten,
+        ).anteil
+        if anteil.quelle == "anteilig":
+            bkw_anteil += anteil.kwh
+    return max(0.0, ev - bkw_anteil)
+
+
+async def _pv_erzeugung_je_monat(
+    ctx: _PvKontext, pv_module_ids, bkw_invs, filter_jahr: Optional[int] = None,
+) -> tuple[dict[tuple[int, int], float], dict[tuple[int, int], float], dict[tuple[int, int], float]]:
+    """Modul-PV je Monat, kanonisch aufgelöst (P7).
+
+    `erzeugung.pv_module_kwh` ist bewusst die **Modul**-Summe, nicht
+    `pv_kwh`: das Balkonkraftwerk hat in diesem Dashboard eine eigene
+    ROI-Zeile (`standalone`), seine Erzeugung zählte hier sonst zweimal.
+    `None` heißt: kein Modul hat einen Wert und es gibt kein Aggregat — als 0
+    verrechnet. Fehlt nur EINEM Modul der Wert, trägt `pv_module_kwh` seit
+    N-626 die vorhandenen Werte (Teilsumme, `pv_vollstaendig=False`).
+
+    RF-29: Rückgabe ``(pv_je_monat, verluste_je_monat, ev_je_monat)`` — ohne PV-Module drei leere Dicts.
+    """
+    if not pv_module_ids:
+        return {}, {}, {}
+
+    # ⭐ Dieselbe Anlage, dasselbe Fenster, dieselbe Schicht — die Fakten
+    # stehen seit dem Kopf dieser Funktion schon da (`_anlage_fakten`).
+    # Sie ein zweites Mal zu bauen kostete an der produktiven Anlage die
+    # Haelfte der ROI-Laufzeit (gemessen 15.09.2026: 3,9 s gesamt).
+    if filter_jahr == ctx.jahr:
+        fakten = ctx.anlage_fakten
+    else:
+        fakten = await lade_monats_fakten(
+            ctx.db, ctx.anlage_id,
+            von=(filter_jahr, 1) if filter_jahr is not None else None,
+            bis=(filter_jahr, 12) if filter_jahr is not None else None,
+        )
+    # ⭐ N-723 (12.10.2026, Entscheid Master Option A): der Eigenverbrauch DIESER Zeile je Monat aus den Monats-Fakten —
+    # der Anlagen-Eigenverbrauch (`kennzahlen.eigenverbrauch_kwh`: Erzeugung hinter dem Zähler inkl. sonstiger
+    # Erzeuger, abzüglich Abgabe an Dritte, Speicher wie im Cockpit) MINUS der Anteil der Balkonkraftwerke
+    # (`bkw_eigenverbrauch_anteil`, dieselbe Zahl wie im BKW-Hub) — das BKW hat eine eigene ROI-Zeile (P9).
+    ev_je_monat = {f.schluessel: _ev_ohne_bkw(f, ctx.investitionen, bkw_invs) for f in fakten}
+    # N-588: die bewertbaren Wandlungsverluste derselben Monate (Messpunkt-Vertrag je Monat) — die
+    # Ersparnis unten bewertet den Eigenverbrauch ohne sie. Die Verluste sind die der Strings (ein
+    # Balkonkraftwerk misst AC am Gerät), sie gehören deshalb in diese Modul-Zeile.
+    verluste_je_monat = {
+        f.schluessel: bewertbare_wandlungsverluste_kwh(
+            f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund,
+        ) for f in fakten
+    }
+    return {
+        f.schluessel: (f.erzeugung.pv_module_kwh or 0.0) for f in fakten
+    }, verluste_je_monat, ev_je_monat
+
+
+async def _jahreswerte_durchschnitt(ctx: _PvKontext, md_query, pv_module_ids, bkw_invs) -> "_Jahreswerte | dict":
+    """Alle Jahre: Jahresdurchschnitt, unter 12 Monaten je Jahr hochgerechnet (RF-29: Zweig `jahr is None`).
+
+    Ohne Monatsdaten das Hinweis-Dict, das der Aufrufer als ``(0, 0, hinweis)`` zurückgibt.
+    """
+    # Alle Jahre: Jahresdurchschnitt
+    md_count_query = select(
+        func.count().label('total_records'),
+        func.count(func.distinct(Monatsdaten.jahr)).label('anzahl_jahre')
+    ).where(Monatsdaten.anlage_id == ctx.anlage_id)
+    count_result = await ctx.db.execute(md_count_query)
+    count_row = count_result.one()
+    total_records = count_row.total_records
+    anzahl_jahre = count_row.anzahl_jahre or 1
+
+    md_query = md_query.group_by(Monatsdaten.monat)
+    md_result = await ctx.db.execute(md_query)
+    md_by_month = {r.monat: r for r in md_result.all()}
+
+    # PV-Erzeugung aus InvestitionMonatsdaten
+    pv_erzeugung_data, verluste_je_monat, ev_je_monat = await _pv_erzeugung_je_monat(ctx, pv_module_ids, bkw_invs)
+    total_erzeugung = sum(pv_erzeugung_data.values())
+
+    total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+    total_verluste = sum(verluste_je_monat.values())
+    total_ev = sum(ev_je_monat.values())
+    anzahl_monate = len(md_by_month)
+
+    if not (anzahl_monate > 0 and anzahl_jahre > 0):
+        return {'hinweis': 'Keine Monatsdaten vorhanden'}
+    avg_einspeisung = total_einspeisung / anzahl_jahre
+    avg_erzeugung = total_erzeugung / anzahl_jahre
+    avg_verluste = total_verluste / anzahl_jahre
+    avg_ev = total_ev / anzahl_jahre
+    avg_monate_pro_jahr = total_records / anzahl_jahre
+
+    if avg_monate_pro_jahr < 12:
+        faktor = 12.0 / avg_monate_pro_jahr
+        methode = 'durchschnitt_hochgerechnet'
+    else:
+        faktor = 1.0
+        methode = 'durchschnitt'
+
+    hinweis = f'Jahresdurchschnitt (Ø aus {anzahl_jahre} Jahren)'
+    if methode == 'durchschnitt_hochgerechnet':
+        hinweis += ', hochgerechnet auf 12 Monate'
+    return _Jahreswerte(
+        einspeisung_jahr=avg_einspeisung * faktor,
+        erzeugung_jahr=avg_erzeugung * faktor,
+        verluste_jahr=avg_verluste * faktor,
+        # N-723: aus den Monats-Fakten (s. `_ev_ohne_bkw`), hochgerechnet wie die Mengen. Hier stand
+        # `max(0, Erzeugung − Einspeisung)` — Modul-PV gegen die Einspeisung der GANZEN Anlage.
+        eigenverbrauch_jahr=avg_ev * faktor,
+        hinweis=hinweis,
+    )
+
+
+async def _jahreswerte_einzeljahr(ctx: _PvKontext, md_query, pv_module_ids, bkw_invs) -> "_Jahreswerte | dict":
+    """Einzelnes Jahr: linear oder PVGIS-gewichtet hochgerechnet (RF-29: Zweig `jahr` gesetzt).
+
+    Ohne Monatsdaten des Jahres das Hinweis-Dict, das der Aufrufer als ``(0, 0, hinweis)`` zurückgibt.
+    """
+    jahr = ctx.jahr
+    # Einzelnes Jahr
+    md_query = md_query.group_by(Monatsdaten.monat)
+    md_result = await ctx.db.execute(md_query)
+    md_by_month = {r.monat: r for r in md_result.all()}
+
+    # PV-Erzeugung aus InvestitionMonatsdaten für dieses Jahr
+    pv_erzeugung_data, verluste_je_monat, ev_je_monat = await _pv_erzeugung_je_monat(
+        ctx, pv_module_ids, bkw_invs, jahr,
+    )
+    total_erzeugung = sum(pv_erzeugung_data.values())
+
+    total_einspeisung = sum(r.einspeisung or 0 for r in md_by_month.values())
+    total_verluste = sum(verluste_je_monat.values())
+    total_ev = sum(ev_je_monat.values())
+    anzahl_monate = len(md_by_month)
+    vorhandene_monate = sorted(md_by_month.keys())
+
+    if not anzahl_monate > 0:
+        return {'hinweis': f'Keine Monatsdaten für {jahr}'}
+    # PVGIS-Hochrechnung versuchen
+    pvgis_prognose = await lade_aktive_prognose(ctx.db, ctx.anlage_id)
+
+    methode = 'linear'
+    faktor = 12.0 / anzahl_monate
+
+    if pvgis_prognose and pvgis_prognose.monatswerte and anzahl_monate < 12:
+        pvgis_monatswerte = pvgis_prognose.monatswerte
+        # Gespeicherte Keys sind 'e_m'/'monat' (siehe pvgis.py); zuvor
+        # las dieser Pfad 'E_m'/'month' → Summe immer 0 → PVGIS-Gewichtung
+        # griff nie, stiller Fallback auf lineare Hochrechnung.
+        pvgis_jahres_summe = sum(m.get('e_m', 0) for m in pvgis_monatswerte)
+        if pvgis_jahres_summe > 0:
+            pvgis_vorhandene_summe = sum(
+                m.get('e_m', 0) for m in pvgis_monatswerte
+                if m.get('monat', 0) in vorhandene_monate
+            )
+            if pvgis_vorhandene_summe > 0:
+                faktor = 1.0 / (pvgis_vorhandene_summe / pvgis_jahres_summe)
+                methode = 'pvgis'
+
+    if methode == 'pvgis':
+        hinweis = f'PVGIS-gewichtete Hochrechnung für {jahr} ({anzahl_monate} Monate)'
+    elif anzahl_monate >= 12:
+        hinweis = f'Berechnet aus {anzahl_monate} Monaten für {jahr}'
+    else:
+        hinweis = f'Lineare Hochrechnung für {jahr} aus {anzahl_monate} Monaten'
+    return _Jahreswerte(
+        einspeisung_jahr=total_einspeisung * faktor,
+        erzeugung_jahr=total_erzeugung * faktor,
+        verluste_jahr=total_verluste * faktor,
+        # N-723: aus den Monats-Fakten (s. `_ev_ohne_bkw`), hochgerechnet wie die Mengen. Hier stand
+        # `max(0, Erzeugung − Einspeisung)` — mit BHKW 3 600 statt 7 200 kWh, mit Abgabe an Dritte 4 800
+        # statt 3 600 kWh (dieselbe kWh zusätzlich als Erlös der Abgabe-Zeile).
+        eigenverbrauch_jahr=total_ev * faktor,
+        hinweis=hinweis,
+    )
 
 
 def pv_systeme_zeilen(

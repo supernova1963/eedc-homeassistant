@@ -19,6 +19,7 @@ wie stehen sie zu ihrem SOLL" — nicht „welche Investitionen haben den Typ
 ``core/berechnungen/spez_ertrag.py``), nicht eine lokale Typ-Liste.
 """
 
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -402,12 +403,7 @@ async def get_pv_strings(
     selbst_je_monat = {m: selbst_tragende_bkw_ids(alle, jahr, m) for m in range(1, 13)}
     pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
 
-    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
-    wechselrichter_map = {}
-    if wr_ids:
-        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
-        for wr in result.scalars().all():
-            wechselrichter_map[wr.id] = wr.bezeichnung
+    wechselrichter_map = await _wechselrichter_namen(db, pv_module)
 
     # Die AKTIVE Prognose (b2025e0e) über den Auswahl-SoT
     # `services/prognose_auswahl.py` — dort steht die Regel samt Begründung
@@ -415,19 +411,7 @@ async def get_pv_strings(
     prognose = await lade_aktive_prognose(db, anlage_id)
     hat_prognose = prognose is not None
 
-    prognose_monate = {}
-    if prognose and prognose.monatswerte:
-        for mw in prognose.monatswerte:
-            prognose_monate[mw["monat"]] = mw.get("e_m", 0)
-
-    prognose_per_modul: dict[int, dict[int, float]] = {}
-    if prognose and prognose.module_monatswerte:
-        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
-            try:
-                inv_id = int(inv_id_str)
-                prognose_per_modul[inv_id] = {mw["monat"]: mw.get("e_m", 0) for mw in monatsdaten}
-            except (ValueError, TypeError):
-                pass
+    prognose_monate, prognose_per_modul = _prognose_monatswerte(prognose)
 
     # Anlagen-Nenner der heutigen Zuordnung (`anlagen_leistung_kwp`; die Plausibilität
     # vergleicht seit N-684 gegen die HEUTE aktiven Träger, `_heute_aktive_kwp`).
@@ -548,6 +532,10 @@ async def get_pv_strings_gesamtlaufzeit(
     db: AsyncSession = Depends(get_db)
 ):
     """SOLL vs. IST je PV-Erzeuger über die gesamte Laufzeit (s. Modul-Kopf, F-10)."""
+    # RF-31 (23.10.2026, Bauform RF-1): die Phasen stehen als Modulfunktionen unter der Route — `_laufzeit_mengen`
+    # (Monats-Mengen, Nenner, aktive Träger), je String `_string_gesamtlaufzeit` mit `_string_jahreswert` und
+    # `_string_saisonalwerte`, danach `_saisonal_aggregiert`; die mit der Jahressicht wortgleichen Teile stehen in
+    # `_prognose_monatswerte` und `_wechselrichter_namen`. Reihenfolge der Abfragen und Antwortform unverändert.
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -590,19 +578,7 @@ async def get_pv_strings_gesamtlaufzeit(
     prognose = await lade_aktive_prognose(db, anlage_id)
     hat_prognose = prognose is not None
 
-    prognose_monate = {}
-    if prognose and prognose.monatswerte:
-        for mw in prognose.monatswerte:
-            prognose_monate[mw["monat"]] = mw.get("e_m", 0)
-
-    prognose_per_modul: dict[int, dict[int, float]] = {}
-    if prognose and prognose.module_monatswerte:
-        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
-            try:
-                inv_id = int(inv_id_str)
-                prognose_per_modul[inv_id] = {mw["monat"]: mw.get("e_m", 0) for mw in monatsdaten}
-            except (ValueError, TypeError):
-                pass
+    prognose_monate, prognose_per_modul = _prognose_monatswerte(prognose)
 
     gesamt_kwp = verteilungsnenner_kwp(struktur, anlage.leistung_kwp)
 
@@ -616,49 +592,23 @@ async def get_pv_strings_gesamtlaufzeit(
     if not jahre:
         return _empty
 
-    # N-613: Zeilen und Monats-Nenner aus derselben Menge wie die IST-Werte.
-    selbst_je_monat = {
-        (j, m): selbst_tragende_bkw_ids(alle, j, m) for j in jahre for m in range(1, 13)
-    }
-    pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
-    # N-661 (Weg C): je Monat die kWp der aktiven Prognose — wie die Jahressicht
-    # darüber und das PDF; ohne Prognose-kWp der frühere Nenner (N-613).
-    nenner_je_monat = {
-        jm: soll_nenner_kwp(
-            prognose,
-            gesamt_kwp if not selbst
-            else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), anlage.leistung_kwp),
-        )
-        for jm, selbst in selbst_je_monat.items()
-    }
-    # N-683 (Fachentscheid Master, 11.10.2026): das saisonale Mittel zählt je Monat
-    # nur die Träger, die in DIESEM Monat tragen und aktiv sind (Anschaffung,
-    # Stilllegung, `aktiv`) — dieselbe Menge, über die die Jahreswerte darüber ihr
-    # SOLL bilden (`nenner_je_monat`, N-661 Weg C).
-    aktiv_im_monat = {
-        jm: frozenset(i.id for i in traeger_im_monat(alle, struktur, selbst) if i.ist_aktiv_im_monat(*jm))
-        for jm, selbst in selbst_je_monat.items()
-    }
+    pv_module, nenner_je_monat, aktiv_im_monat = _laufzeit_mengen(
+        alle, struktur, jahre, prognose, gesamt_kwp, anlage.leistung_kwp,
+    )
     # Anlagen-SOLL des typischen Monats: je Jahr Σ der in (Jahr, Monat) aktiven
     # Träger, dann über die Jahre gemittelt.
-    saisonal_soll_je_jahr: dict[int, dict[int, float]] = {m: {} for m in range(1, 13)}
+    sammler = _SaisonalSammler(
+        saisonal_soll_je_jahr={m: {} for m in range(1, 13)},
+        saisonal_agg={m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)},
+        saisonal_jahre={m: {} for m in range(1, 13)},
+    )
     # Eine „Familie" für die Jahreszahl des saisonalen Mittels: ein abtretendes
     # BKW und seine Kinder sind EIN Erzeuger, der den Träger gewechselt hat —
     # die Jahre der BKW-Zeile und die der Kinder-Zeilen zählen zusammen, sonst
     # teilte das Mittel zwei Jahre Erzeugung durch eins.
     abgetreten = abgetretene_bkw_ids(alle)
 
-    def _familie(inv: Any) -> Any:
-        if inv.typ == "pv-module" and inv.parent_investition_id in abgetreten:
-            return inv.parent_investition_id
-        return inv.id
-
-    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
-    wechselrichter_map = {}
-    if wr_ids:
-        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
-        for wr in result.scalars().all():
-            wechselrichter_map[wr.id] = wr.bezeichnung
+    wechselrichter_map = await _wechselrichter_namen(db, pv_module)
 
     erstes_jahr = jahre[0]
     letztes_jahr = jahre[-1]
@@ -667,152 +617,22 @@ async def get_pv_strings_gesamtlaufzeit(
     # Provenance zusätzlich die Investitions-ID und würden sonst je Modul zählen.
     anzahl_monate = len({(j, m) for (_, j, m) in ist_quellen})
 
+    ctx = _LaufzeitKontext(
+        jahre=jahre, md_by_inv=md_by_inv, ist_quellen=ist_quellen, prognose_monate=prognose_monate,
+        prognose_per_modul=prognose_per_modul, nenner_je_monat=nenner_je_monat, aktiv_im_monat=aktiv_im_monat,
+        abgetreten=abgetreten, wechselrichter_map=wechselrichter_map,
+    )
     strings_data = []
     prognose_gesamt_total = 0
     ist_gesamt_total = 0
-    saisonal_agg: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
-    saisonal_jahre: dict[int, dict[Any, set]] = {m: {} for m in range(1, 13)}
 
     for modul in pv_module:
-        modul_kwp = get_erzeuger_kwp(modul)
-        params = modul.parameter or {}
-        ausrichtung = modul.ausrichtung or params.get("ausrichtung")
-        neigung = modul.neigung_grad or params.get("neigung_grad")
-        jahreswerte = []
-        prognose_string_gesamt = 0
-        ist_string_gesamt = 0
-        string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
-        modul_prognose = prognose_per_modul.get(modul.id)
-        modul_quellen: list[str] = []
-
-        for jahr in jahre:
-            months_with_data_year = set(md_by_inv.get(modul.id, {}).get(jahr, {}).keys())
-            # F-34: jeder Monat einzeln auf die Laufzeit des Moduls gekürzt,
-            # dann summiert — sonst trüge das Anschaffungsjahr denselben
-            # schiefen Vergleich wie die Monatssicht.
-            if modul_prognose is not None:
-                prognose_jahr = sum(
-                    soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
-                    for m in months_with_data_year
-                )
-            else:
-                # N-613: je Monat der Nenner der Menge, die in diesem Monat trägt.
-                prognose_jahr = sum(
-                    soll_im_laufmonat(
-                        prognose_monate.get(m, 0) * (
-                            modul_kwp / nenner_je_monat[(jahr, m)]
-                            if nenner_je_monat[(jahr, m)] > 0 else 0
-                        ),
-                        modul, jahr, m,
-                    )
-                    for m in months_with_data_year
-                )
-            ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
-            abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
-            perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
-            jahr_quelle = _rollup_quelle(
-                ist_quellen[(modul.id, jahr, m)]
-                for m in sorted(months_with_data_year) if (modul.id, jahr, m) in ist_quellen
-            )
-            jahreswerte.append(PVStringJahreswert(
-                jahr=jahr, prognose_kwh=round(prognose_jahr, 1), ist_kwh=round(ist_jahr, 1),
-                abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
-                performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
-                ist_quelle=jahr_quelle,
-            ))
-            # Jahre ohne PV-Quelle zählen für den Modul-Rollup nicht mit (sonst
-            # zöge ein leeres Jahr die Herkunft der Laufzeit auf „fehlt").
-            if jahr_quelle != PV_QUELLE_FEHLT:
-                modul_quellen.append(jahr_quelle)
-            prognose_string_gesamt += prognose_jahr
-            ist_string_gesamt += ist_jahr
-            for monat in range(1, 13):
-                ist_monat = md_by_inv.get(modul.id, {}).get(jahr, {}).get(monat, 0)
-                if ist_monat > 0 or monat in md_by_inv.get(modul.id, {}).get(jahr, {}):
-                    string_saisonal[monat]["ist_summe"] += ist_monat
-                    string_saisonal[monat]["anzahl"] += 1
-                    saisonal_jahre[monat].setdefault(_familie(modul), set()).add(jahr)
-
-        saisonalwerte = []
-        for monat in range(1, 13):
-            # F-34 gilt hier BEWUSST NICHT: die saisonale Zeile stellt einen
-            # IST-Durchschnitt über mehrere Jahre einem Klimamittel gegenüber
-            # und fragt „wie fällt der Mai typischerweise aus". Ein einzelner
-            # angebrochener Anschaffungsmonat darf dieses Mittel nicht kürzen —
-            # er verzerrt bereits den IST-Durchschnitt (`anzahl` zählt ihn voll
-            # mit), und beide Seiten zu kürzen hieße, ihn doppelt zu bestrafen.
-            #
-            # ⭐ N-683 (Fachentscheid Master, 11.10.2026): das Saisonal-SOLL („wie fällt
-            # der Mai typischerweise aus") ist das Mittel des Monats-SOLL über die
-            # Jahre, in denen der String in diesem Monat aktiv war — mit demselben
-            # Nenner wie seine Jahreswerte (`nenner_je_monat`). ⛔ Bis dahin stand
-            # hier `PVGIS × kWp / gesamt_kwp`, die Σ ALLER je vorhandenen Träger:
-            # nach einer Stilllegung (Ost 5 kWp still, Prognose für 10 kWp) bekam
-            # Süd im Juni 282,7 statt 424,0 kWh, während seine Jahreswerte in
-            # derselben Sicht stimmten. Ein String ohne aktiven Monat hat kein
-            # Saisonal-SOLL (0, wie sein IST-Mittel).
-            soll_je_jahr = {
-                j: (
-                    modul_prognose.get(monat, 0) if modul_prognose is not None
-                    else prognose_monate.get(monat, 0) * (
-                        modul_kwp / nenner_je_monat[(j, monat)] if nenner_je_monat[(j, monat)] > 0 else 0
-                    )
-                )
-                for j in jahre if modul.id in aktiv_im_monat[(j, monat)]
-            }
-            prognose_monat = sum(soll_je_jahr.values()) / len(soll_je_jahr) if soll_je_jahr else 0.0
-            for j, wert in soll_je_jahr.items():
-                saisonal_soll_je_jahr[monat][j] = saisonal_soll_je_jahr[monat].get(j, 0.0) + wert
-            ist_summe = string_saisonal[monat]["ist_summe"]
-            anzahl = string_saisonal[monat]["anzahl"]
-            ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
-            saisonalwerte.append(PVStringSaisonalwert(
-                monat=monat, monat_name=MONATSNAMEN[monat],
-                prognose_kwh=round(prognose_monat, 1),
-                ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
-                ist_summe_kwh=round(ist_summe, 1), anzahl_jahre=anzahl,
-            ))
-            # Das Anlagen-SOLL des typischen Monats steht in `saisonal_soll_je_jahr`
-            # (N-683): je Jahr die in diesem Monat aktiven Träger — ein BKW zählt in
-            # den Monaten, in denen es selbst trägt, seine Kinder in den übrigen
-            # (`traeger_im_monat`), nie beide zugleich.
-            saisonal_agg[monat]["ist_summe"] += ist_summe
-
-        abweichung_gesamt_pct = ((ist_string_gesamt - prognose_string_gesamt) / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
-        perf_ratio_gesamt = (ist_string_gesamt / prognose_string_gesamt) if prognose_string_gesamt > 0 else None
-        spez_ertrag = (ist_string_gesamt / modul_kwp) if modul_kwp > 0 else None
-        strings_data.append(PVStringGesamtlaufzeit(
-            investition_id=modul.id, bezeichnung=modul.bezeichnung,
-            leistung_kwp=modul_kwp, ausrichtung=ausrichtung, neigung_grad=neigung,
-            wechselrichter_name=wechselrichter_map.get(modul.parent_investition_id) if modul.parent_investition_id else None,
-            prognose_gesamt_kwh=round(prognose_string_gesamt, 1),
-            ist_gesamt_kwh=round(ist_string_gesamt, 1),
-            abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
-            performance_ratio_gesamt=round(perf_ratio_gesamt, 3) if perf_ratio_gesamt is not None else None,
-            spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
-            ist_quelle=_rollup_quelle(modul_quellen),
-            jahreswerte=jahreswerte, saisonalwerte=saisonalwerte,
-        ))
+        string_daten, prognose_string_gesamt, ist_string_gesamt = _string_gesamtlaufzeit(ctx, sammler, modul)
+        strings_data.append(string_daten)
         prognose_gesamt_total += prognose_string_gesamt
         ist_gesamt_total += ist_string_gesamt
 
-    saisonal_aggregiert = []
-    for monat in range(1, 13):
-        # N-683: Mittel über die Jahre der Σ der im jeweiligen Monat aktiven Träger —
-        # nach einer Stilllegung nicht mehr der volle PVGIS-Monat samt stillgelegtem String.
-        soll_jahre = saisonal_soll_je_jahr[monat]
-        prognose_s = sum(soll_jahre.values()) / len(soll_jahre) if soll_jahre else 0.0
-        ist_summe = saisonal_agg[monat]["ist_summe"]
-        # Jahre je Erzeuger-Familie, davon das Maximum — ohne abtretendes BKW ist
-        # jede Familie eine Zeile und die Zahl dieselbe wie bisher (max der Zeilen).
-        anzahl = max((len(j) for j in saisonal_jahre[monat].values()), default=0)
-        ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
-        saisonal_aggregiert.append(PVStringSaisonalwert(
-            monat=monat, monat_name=MONATSNAMEN[monat],
-            prognose_kwh=round(prognose_s, 1),
-            ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
-            ist_summe_kwh=round(ist_summe, 1), anzahl_jahre=anzahl,
-        ))
+    saisonal_aggregiert = _saisonal_aggregiert(sammler)
 
     abweichung_gesamt = ist_gesamt_total - prognose_gesamt_total
     abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt_total * 100) if prognose_gesamt_total > 0 else None
@@ -835,3 +655,265 @@ async def get_pv_strings_gesamtlaufzeit(
         ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
         vergleich_hinweis=vergleich_hinweis,
     )
+
+
+@dataclass(frozen=True)
+class _LaufzeitKontext:
+    """Die geteilten, nur gelesenen Eingänge der Gesamtlaufzeit je String (RF-31)."""
+    jahre: list[int]
+    md_by_inv: dict
+    ist_quellen: dict
+    prognose_monate: dict
+    prognose_per_modul: dict
+    nenner_je_monat: dict
+    aktiv_im_monat: dict
+    abgetreten: Any
+    wechselrichter_map: dict
+
+
+@dataclass
+class _SaisonalSammler:
+    """Die über alle Strings laufenden Saisonal-Akkumulatoren (RF-31) — von den String-Phasen fortgeschrieben."""
+    saisonal_soll_je_jahr: dict[int, dict[int, float]]
+    saisonal_agg: dict[int, dict]
+    saisonal_jahre: dict[int, dict[Any, set]]
+
+
+def _prognose_monatswerte(prognose) -> tuple[dict, dict[int, dict[int, float]]]:
+    """PVGIS-Monatswerte der Anlage und je Modul aus der aktiven Prognose (RF-31: in beiden Sichten wortgleich).
+
+    Rückgabe ``(prognose_monate, prognose_per_modul)``.
+    """
+    prognose_monate = {}
+    if prognose and prognose.monatswerte:
+        for mw in prognose.monatswerte:
+            prognose_monate[mw["monat"]] = mw.get("e_m", 0)
+
+    prognose_per_modul: dict[int, dict[int, float]] = {}
+    if prognose and prognose.module_monatswerte:
+        for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
+            try:
+                inv_id = int(inv_id_str)
+                prognose_per_modul[inv_id] = {mw["monat"]: mw.get("e_m", 0) for mw in monatsdaten}
+            except (ValueError, TypeError):
+                pass
+    return prognose_monate, prognose_per_modul
+
+
+async def _wechselrichter_namen(db: AsyncSession, pv_module: list) -> dict:
+    """Bezeichnung der Wechselrichter der Zeilen, ``{wr_id: bezeichnung}`` (RF-31: in beiden Sichten wortgleich)."""
+    wr_ids = [m.parent_investition_id for m in pv_module if m.parent_investition_id]
+    wechselrichter_map = {}
+    if wr_ids:
+        result = await db.execute(select(Investition).where(Investition.id.in_(wr_ids)))
+        for wr in result.scalars().all():
+            wechselrichter_map[wr.id] = wr.bezeichnung
+    return wechselrichter_map
+
+
+def _laufzeit_mengen(alle, struktur, jahre, prognose, gesamt_kwp, leistung_kwp) -> tuple[list, dict, dict]:
+    """Zeilen, SOLL-Nenner und aktive Träger je (Jahr, Monat) der Gesamtlaufzeit (RF-31, aus der Route).
+
+    Rückgabe ``(pv_module, nenner_je_monat, aktiv_im_monat)``.
+    """
+    # N-613: Zeilen und Monats-Nenner aus derselben Menge wie die IST-Werte.
+    selbst_je_monat = {
+        (j, m): selbst_tragende_bkw_ids(alle, j, m) for j in jahre for m in range(1, 13)
+    }
+    pv_module = traeger_zeilen(alle, struktur, frozenset().union(*selbst_je_monat.values()))
+    # N-661 (Weg C): je Monat die kWp der aktiven Prognose — wie die Jahressicht
+    # darüber und das PDF; ohne Prognose-kWp der frühere Nenner (N-613).
+    nenner_je_monat = {
+        jm: soll_nenner_kwp(
+            prognose,
+            gesamt_kwp if not selbst
+            else verteilungsnenner_kwp(traeger_im_monat(alle, struktur, selbst), leistung_kwp),
+        )
+        for jm, selbst in selbst_je_monat.items()
+    }
+    # N-683 (Fachentscheid Master, 11.10.2026): das saisonale Mittel zählt je Monat
+    # nur die Träger, die in DIESEM Monat tragen und aktiv sind (Anschaffung,
+    # Stilllegung, `aktiv`) — dieselbe Menge, über die die Jahreswerte darüber ihr
+    # SOLL bilden (`nenner_je_monat`, N-661 Weg C).
+    aktiv_im_monat = {
+        jm: frozenset(i.id for i in traeger_im_monat(alle, struktur, selbst) if i.ist_aktiv_im_monat(*jm))
+        for jm, selbst in selbst_je_monat.items()
+    }
+    return pv_module, nenner_je_monat, aktiv_im_monat
+
+
+def _familie(inv: Any, abgetreten) -> Any:
+    if inv.typ == "pv-module" and inv.parent_investition_id in abgetreten:
+        return inv.parent_investition_id
+    return inv.id
+
+
+def _string_gesamtlaufzeit(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul):
+    """Die Gesamtlaufzeit-Zeile EINES Strings (RF-31: der Schleifenkörper der Route).
+
+    Rückgabe ``(PVStringGesamtlaufzeit, prognose_string_gesamt, ist_string_gesamt)``; schreibt ``sammler`` fort.
+    """
+    modul_kwp = get_erzeuger_kwp(modul)
+    params = modul.parameter or {}
+    ausrichtung = modul.ausrichtung or params.get("ausrichtung")
+    neigung = modul.neigung_grad or params.get("neigung_grad")
+    jahreswerte = []
+    prognose_string_gesamt = 0
+    ist_string_gesamt = 0
+    string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
+    modul_prognose = ctx.prognose_per_modul.get(modul.id)
+    modul_quellen: list[str] = []
+
+    for jahr in ctx.jahre:
+        jahreswert, prognose_jahr, ist_jahr = _string_jahreswert(
+            ctx, sammler, modul, modul_kwp, modul_prognose, jahr, string_saisonal,
+        )
+        jahreswerte.append(jahreswert)
+        # Jahre ohne PV-Quelle zählen für den Modul-Rollup nicht mit (sonst
+        # zöge ein leeres Jahr die Herkunft der Laufzeit auf „fehlt").
+        if jahreswert.ist_quelle != PV_QUELLE_FEHLT:
+            modul_quellen.append(jahreswert.ist_quelle)
+        prognose_string_gesamt += prognose_jahr
+        ist_string_gesamt += ist_jahr
+
+    saisonalwerte = _string_saisonalwerte(ctx, sammler, modul, modul_kwp, modul_prognose, string_saisonal)
+
+    abweichung_gesamt_pct = ((ist_string_gesamt - prognose_string_gesamt) / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
+    perf_ratio_gesamt = (ist_string_gesamt / prognose_string_gesamt) if prognose_string_gesamt > 0 else None
+    spez_ertrag = (ist_string_gesamt / modul_kwp) if modul_kwp > 0 else None
+    return PVStringGesamtlaufzeit(
+        investition_id=modul.id, bezeichnung=modul.bezeichnung,
+        leistung_kwp=modul_kwp, ausrichtung=ausrichtung, neigung_grad=neigung,
+        wechselrichter_name=ctx.wechselrichter_map.get(modul.parent_investition_id) if modul.parent_investition_id else None,
+        prognose_gesamt_kwh=round(prognose_string_gesamt, 1),
+        ist_gesamt_kwh=round(ist_string_gesamt, 1),
+        abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
+        performance_ratio_gesamt=round(perf_ratio_gesamt, 3) if perf_ratio_gesamt is not None else None,
+        spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
+        ist_quelle=_rollup_quelle(modul_quellen),
+        jahreswerte=jahreswerte, saisonalwerte=saisonalwerte,
+    ), prognose_string_gesamt, ist_string_gesamt
+
+
+def _string_jahreswert(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, modul_kwp, modul_prognose, jahr,
+                       string_saisonal: dict[int, dict]):
+    """Ein Jahr eines Strings: SOLL, IST, Herkunft und die Saisonal-Zählung (RF-31).
+
+    Rückgabe ``(PVStringJahreswert, prognose_jahr, ist_jahr)``; schreibt ``string_saisonal`` und
+    ``sammler.saisonal_jahre`` fort.
+    """
+    md_by_inv, ist_quellen, nenner_je_monat = ctx.md_by_inv, ctx.ist_quellen, ctx.nenner_je_monat
+    months_with_data_year = set(md_by_inv.get(modul.id, {}).get(jahr, {}).keys())
+    # F-34: jeder Monat einzeln auf die Laufzeit des Moduls gekürzt,
+    # dann summiert — sonst trüge das Anschaffungsjahr denselben
+    # schiefen Vergleich wie die Monatssicht.
+    if modul_prognose is not None:
+        prognose_jahr = sum(
+            soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
+            for m in months_with_data_year
+        )
+    else:
+        # N-613: je Monat der Nenner der Menge, die in diesem Monat trägt.
+        prognose_jahr = sum(
+            soll_im_laufmonat(
+                ctx.prognose_monate.get(m, 0) * (
+                    modul_kwp / nenner_je_monat[(jahr, m)]
+                    if nenner_je_monat[(jahr, m)] > 0 else 0
+                ),
+                modul, jahr, m,
+            )
+            for m in months_with_data_year
+        )
+    ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
+    abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
+    perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
+    jahr_quelle = _rollup_quelle(
+        ist_quellen[(modul.id, jahr, m)]
+        for m in sorted(months_with_data_year) if (modul.id, jahr, m) in ist_quellen
+    )
+    jahreswert = PVStringJahreswert(
+        jahr=jahr, prognose_kwh=round(prognose_jahr, 1), ist_kwh=round(ist_jahr, 1),
+        abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
+        performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
+        ist_quelle=jahr_quelle,
+    )
+    for monat in range(1, 13):
+        ist_monat = md_by_inv.get(modul.id, {}).get(jahr, {}).get(monat, 0)
+        if ist_monat > 0 or monat in md_by_inv.get(modul.id, {}).get(jahr, {}):
+            string_saisonal[monat]["ist_summe"] += ist_monat
+            string_saisonal[monat]["anzahl"] += 1
+            sammler.saisonal_jahre[monat].setdefault(_familie(modul, ctx.abgetreten), set()).add(jahr)
+    return jahreswert, prognose_jahr, ist_jahr
+
+
+def _string_saisonalwerte(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, modul_kwp, modul_prognose,
+                          string_saisonal: dict[int, dict]) -> list[PVStringSaisonalwert]:
+    """Die zwölf Saisonal-Zeilen eines Strings (RF-31); schreibt ``sammler.saisonal_soll_je_jahr``/``saisonal_agg`` fort."""
+    nenner_je_monat = ctx.nenner_je_monat
+    saisonalwerte = []
+    for monat in range(1, 13):
+        # F-34 gilt hier BEWUSST NICHT: die saisonale Zeile stellt einen
+        # IST-Durchschnitt über mehrere Jahre einem Klimamittel gegenüber
+        # und fragt „wie fällt der Mai typischerweise aus". Ein einzelner
+        # angebrochener Anschaffungsmonat darf dieses Mittel nicht kürzen —
+        # er verzerrt bereits den IST-Durchschnitt (`anzahl` zählt ihn voll
+        # mit), und beide Seiten zu kürzen hieße, ihn doppelt zu bestrafen.
+        #
+        # ⭐ N-683 (Fachentscheid Master, 11.10.2026): das Saisonal-SOLL („wie fällt
+        # der Mai typischerweise aus") ist das Mittel des Monats-SOLL über die
+        # Jahre, in denen der String in diesem Monat aktiv war — mit demselben
+        # Nenner wie seine Jahreswerte (`nenner_je_monat`). ⛔ Bis dahin stand
+        # hier `PVGIS × kWp / gesamt_kwp`, die Σ ALLER je vorhandenen Träger:
+        # nach einer Stilllegung (Ost 5 kWp still, Prognose für 10 kWp) bekam
+        # Süd im Juni 282,7 statt 424,0 kWh, während seine Jahreswerte in
+        # derselben Sicht stimmten. Ein String ohne aktiven Monat hat kein
+        # Saisonal-SOLL (0, wie sein IST-Mittel).
+        soll_je_jahr = {
+            j: (
+                modul_prognose.get(monat, 0) if modul_prognose is not None
+                else ctx.prognose_monate.get(monat, 0) * (
+                    modul_kwp / nenner_je_monat[(j, monat)] if nenner_je_monat[(j, monat)] > 0 else 0
+                )
+            )
+            for j in ctx.jahre if modul.id in ctx.aktiv_im_monat[(j, monat)]
+        }
+        prognose_monat = sum(soll_je_jahr.values()) / len(soll_je_jahr) if soll_je_jahr else 0.0
+        for j, wert in soll_je_jahr.items():
+            sammler.saisonal_soll_je_jahr[monat][j] = sammler.saisonal_soll_je_jahr[monat].get(j, 0.0) + wert
+        ist_summe = string_saisonal[monat]["ist_summe"]
+        anzahl = string_saisonal[monat]["anzahl"]
+        ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
+        saisonalwerte.append(PVStringSaisonalwert(
+            monat=monat, monat_name=MONATSNAMEN[monat],
+            prognose_kwh=round(prognose_monat, 1),
+            ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
+            ist_summe_kwh=round(ist_summe, 1), anzahl_jahre=anzahl,
+        ))
+        # Das Anlagen-SOLL des typischen Monats steht in `saisonal_soll_je_jahr`
+        # (N-683): je Jahr die in diesem Monat aktiven Träger — ein BKW zählt in
+        # den Monaten, in denen es selbst trägt, seine Kinder in den übrigen
+        # (`traeger_im_monat`), nie beide zugleich.
+        sammler.saisonal_agg[monat]["ist_summe"] += ist_summe
+    return saisonalwerte
+
+
+def _saisonal_aggregiert(sammler: _SaisonalSammler) -> list[PVStringSaisonalwert]:
+    """Die Anlagen-Saisonal-Zeilen über alle Strings (RF-31, aus der Route)."""
+    saisonal_aggregiert = []
+    for monat in range(1, 13):
+        # N-683: Mittel über die Jahre der Σ der im jeweiligen Monat aktiven Träger —
+        # nach einer Stilllegung nicht mehr der volle PVGIS-Monat samt stillgelegtem String.
+        soll_jahre = sammler.saisonal_soll_je_jahr[monat]
+        prognose_s = sum(soll_jahre.values()) / len(soll_jahre) if soll_jahre else 0.0
+        ist_summe = sammler.saisonal_agg[monat]["ist_summe"]
+        # Jahre je Erzeuger-Familie, davon das Maximum — ohne abtretendes BKW ist
+        # jede Familie eine Zeile und die Zahl dieselbe wie bisher (max der Zeilen).
+        anzahl = max((len(j) for j in sammler.saisonal_jahre[monat].values()), default=0)
+        ist_durchschnitt = ist_summe / anzahl if anzahl > 0 else 0
+        saisonal_aggregiert.append(PVStringSaisonalwert(
+            monat=monat, monat_name=MONATSNAMEN[monat],
+            prognose_kwh=round(prognose_s, 1),
+            ist_durchschnitt_kwh=round(ist_durchschnitt, 1),
+            ist_summe_kwh=round(ist_summe, 1), anzahl_jahre=anzahl,
+        ))
+    return saisonal_aggregiert
