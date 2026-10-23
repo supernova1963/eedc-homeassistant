@@ -341,6 +341,27 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
         return None
     alle_invs = list(invs_by_id.values())
     aggregat_key = f"basis:{PV_AGGREGAT_BASIS_FELD}"
+    pv_aggregat, einzel_eintraege = _ha_pv_eintraege(mit, deltas, aggregat_key)
+    pv_quelle = _ha_pv_quelle(quelle, datum, alle_invs, aggregat_key, pv_aggregat, einzel_eintraege)
+    komponenten, kat_summe, eigen_kwh = _ha_komponenten(
+        mit, deltas, aggregat_key, pv_quelle, einzel_eintraege, alle_invs)
+    pv_marken = _ha_aggregat_aufloesen(
+        quelle, datum, alle_invs, aggregat_key, pv_quelle, einzel_eintraege, eigen_kwh, komponenten)
+    zeilen = _ha_bilanz_zeilen(kat_summe)
+    return KanalTag(
+        datum=datum, fassung=FASSUNG_WIE_HA,
+        komponenten_kwh={k: round(v, 2) for k, v in komponenten.items()},
+        pv_marken=pv_marken, verworfen={}, bilanz=bilanz_aus_stundenrows(zeilen, verworfen={}), stunden=0,
+    )
+
+
+# ── Phasen von _tag_wie_ha (RF-39, 23.10.2026) ─────────────────────────────
+# Reiner Umzug in Lesereihenfolge: dieselben Layer-Aufrufe in derselben Reihenfolge, dieselben Additionen und
+# Rundungen, `komponenten` ist dasselbe Objekt (Phase 4 nimmt das Aggregat heraus und setzt die Auflösung ein).
+
+
+def _ha_pv_eintraege(mit: list[TabellenEintrag], deltas: dict[str, Optional[float]], aggregat_key: str):
+    """Phase 1: PV-Einträge des Tages — Σ Anlagenzähler-Δ und die Einzelzähler je Investition (mit Δ)."""
     pv_aggregat: Optional[float] = None
     einzel_eintraege: dict[str, list[tuple[TabellenEintrag, float]]] = {}
     for e in mit:
@@ -350,6 +371,12 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
             pv_aggregat = (pv_aggregat or 0.0) + deltas[e.schluessel]
         else:
             einzel_eintraege.setdefault(e.sensor_key.split(":", 2)[1], []).append((e, deltas[e.schluessel]))
+    return pv_aggregat, einzel_eintraege
+
+
+def _ha_pv_quelle(quelle: KanalAlsHaQuelle, datum: date, alle_invs: list, aggregat_key: str,
+                  pv_aggregat: Optional[float], einzel_eintraege: dict) -> str:
+    """Phase 2: PV-Tages-Präzedenz (Einzel- oder Anlagenzähler) — je Stunde nur mit Aggregat UND Einzelzählern."""
     # ⚑ H1: die PV-Tages-Präzedenz fragt je STUNDE, ob jeder erwartete Erzeuger einen Slot hat
     # (`einzel_deckt_den_tag`). Sie bekommt deshalb die ungefilterten Stunden-Slots derselben Kanäle (kein R3/R4) —
     # nur wenn Aggregat UND Einzelzähler da sind; sonst entscheidet das Vorhandensein allein (dann ist die Wahl
@@ -375,6 +402,13 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
             gedeckte_ids_je_slot={0: ergaenze_kinder_deckung(einzel_eintraege.keys(), alle_invs)},
             aggregat_je_slot={0: pv_aggregat},
         )
+    return pv_quelle
+
+
+def _ha_komponenten(mit: list[TabellenEintrag], deltas: dict[str, Optional[float]], aggregat_key: str,
+                    pv_quelle: str, einzel_eintraege: dict, alle_invs: list):
+    """Phase 3: Komponenten und Kategorie-Summen aus den Δ; BKW-Rest der Einzelzähler (oder ihr Eigenwert für
+    die Aggregat-Auflösung)."""
     komponenten: dict[str, float] = {}
     kat_summe: dict[str, float] = {}
 
@@ -399,7 +433,13 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
                 eigen_kwh[inv_id] = wert
             else:
                 _nimm("pv", lst[0][0].target_key, wert)
+    return komponenten, kat_summe, eigen_kwh
 
+
+def _ha_aggregat_aufloesen(quelle: KanalAlsHaQuelle, datum: date, alle_invs: list, aggregat_key: str,
+                           pv_quelle: str, einzel_eintraege: dict, eigen_kwh: dict[str, float],
+                           komponenten: dict[str, float]) -> dict[str, str]:
+    """Phase 4: Auflösung des Anlagenzählers auf die Erzeuger (N-623) IN ``komponenten``; gibt die #406-Marken."""
     pv_marken: dict[str, str] = {}
     if pv_quelle == QUELLE_AGGREGAT and PV_AGGREGAT_BASIS_FELD in komponenten:
         aggregat = komponenten.pop(PV_AGGREGAT_BASIS_FELD)
@@ -435,7 +475,11 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
                 pv_marken[f"{praefix}{inv_id}"] = ABGELEITET_KWP_ANTEIL
     else:
         komponenten.pop(PV_AGGREGAT_BASIS_FELD, None)
+    return pv_marken
 
+
+def _ha_bilanz_zeilen(kat_summe: dict[str, float]) -> list[SimpleNamespace]:
+    """Phase 5: die Zeilen, aus denen ``bilanz_aus_stundenrows`` die Tagesbilanz bildet."""
     # Die Bilanz: dieselbe Layer-Funktion wie am Tag (Regel R7 — Mengen Σ, Gesamtverbrauch nach der HA-Formel,
     # EV = Direktverbrauch + Entladung). Ladung und Entladung tragen getrennte Zeilen, damit das Vorzeichen je
     # Zeile (``batterie_kw``) sie nicht verrechnet; Stundengrößen (Direktverbrauch, Überschuss, Defizit) bleiben 0
@@ -453,11 +497,7 @@ def _tag_wie_ha(anlage, invs_by_id: dict, datum: date, eintraege: list[TabellenE
     if ladung is not None:
         zeilen.append(SimpleNamespace(pv_kw=None, verbrauch_kw=None, einspeisung_kw=None, netzbezug_kw=None,
                                       batterie_kw=-ladung, waermepumpe_kw=None))
-    return KanalTag(
-        datum=datum, fassung=FASSUNG_WIE_HA,
-        komponenten_kwh={k: round(v, 2) for k, v in komponenten.items()},
-        pv_marken=pv_marken, verworfen={}, bilanz=bilanz_aus_stundenrows(zeilen, verworfen={}), stunden=0,
-    )
+    return zeilen
 
 
 # ── Laden einer Tagesfolge ──────────────────────────────────────────────────

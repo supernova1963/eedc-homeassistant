@@ -8,7 +8,6 @@
 58	api/routes/aktueller_monat/waerme.py::waerme_klima_monat
 53	api/routes/cockpit/pv_strings.py::get_pv_strings
 60	api/routes/datenquellen.py::get_datenquellen_felder
-82	api/routes/energie_profil/prognose.py::get_tagesprognose
 60	api/routes/energie_profil/tag.py::get_tag_detail
 63	api/routes/energie_profil/waerme.py::get_waerme_verlauf_stunden
 79	api/routes/ha_export/anlage_preise_speicher.py::preise_speicher_sensoren
@@ -37,7 +36,6 @@
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 70	services/ha_statistics_service.py::HAStatisticsService.get_hourly_slots_for_day
-81	services/kanal/bilanz_adapter.py::_tag_wie_ha
 72	services/kanal/modus_strom.py::schreibe_modus_strom
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage
 56	services/live_sensor_config.py::baue_investitions_serien
@@ -48,6 +46,5 @@
 59	services/monats_fakten/roh.py::_RohMonat.falte
 57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 71	services/snapshot/bereichs_leser.py::lade_tageswerte_je_geraet
-82	services/solar_forecast_service.py::_build_prognose
 60	services/solcast_service.py::_fetch_solcast_ha_auto
 57	services/vorschlag_service.py::VorschlagService._get_berechnete_werte

@@ -7,6 +7,7 @@ GET /api/energie-profil/{anlage_id}/tagesprognose — kombinierte Tagesprognose 
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
 import asyncio
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -118,6 +119,100 @@ async def get_tagesprognose(
     hinweise: list[str] = []
 
     # ── 1. Verbrauchsprognose ──
+    vp, verbrauch_stunden = await _verbrauchsprognose(anlage_id, datum, db, hinweise)
+
+    # ── 2. PV-Stundenprofil ──
+    stand = _PvStand()
+
+    # Versuche Solcast zuerst (wenn als Quelle gewählt)
+    from backend.services.prognose_router import resolve_prognose_quelle
+    pq = resolve_prognose_quelle(anlage)
+
+    if pq.ist_solcast:
+        await _pv_aus_solcast(anlage, datum, stand, hinweise)
+
+    # Fallback: OpenMeteo GTI — kanonischer Weg zuerst (Multi-String-Fan-out +
+    # Korrektur pro Energie-Slot), damit Chart/Tabelle denselben Tag zeigen wie
+    # Prognosen-Vergleich und HA-/MQTT-Export.
+    kanon_stunden = (
+        await _pv_stunden_aus_kanon(db, anlage, datum)
+        if stand.pv_quelle == "openmeteo" else None
+    )
+    if kanon_stunden is not None:
+        stand.pv_stunden = kanon_stunden
+        stand.pv_profil_vorhanden = True
+    elif stand.pv_quelle == "openmeteo":
+        # Fallback (Kanon ohne Ergebnis: kein OpenMeteo, keine kWp, Zieltag
+        # jenseits des Abrufs): eigener Abruf-Pfad, damit die Prognose nicht
+        # ganz ausfällt. Seit `49954860` (P1/N51) fächert er wie der Kanon je
+        # Orientierungsgruppe auf; was bleibt, ist der flache Legacy-Skalar
+        # (`_get_lernfaktor`) statt der Kaskade pro Energie-Slot — deshalb
+        # kann seine Tagessumme weiter leicht vom Kanon abweichen.
+        try:
+            # Strings für Multi-Ausrichtung laden
+            inv_result = await db.execute(
+                select(Investition).where(
+                    Investition.anlage_id == anlage_id,
+                    Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
+                    Investition.aktiv.is_(True),
+                )
+            )
+            invs = inv_result.scalars().all()
+            await _pv_aus_openmeteo_rueckfall(db, anlage, anlage_id, datum, invs, stand, hinweise)
+        except Exception as e:
+            logger.warning("PV-Prognose für Tagesprognose fehlgeschlagen: %s", e)
+    pv_stunden, pv_quelle, pv_profil_vorhanden = (
+        stand.pv_stunden, stand.pv_quelle, stand.pv_profil_vorhanden
+    )
+
+    # P4 (N78): Bis hierher konnte die Antwort mit der Vorbelegung `[0.0] * 24`
+    # herauskommen — als PV-Prognose „0 kWh", nicht als „keine Prognose". Die
+    # Speicher-Simulation unten rechnet mit diesen Nullen weiter und meldet dann
+    # „Speicher lädt nicht". Die Zahlen bleiben (kein geschätzter Ersatz), aber
+    # die Antwort sagt jetzt, dass sie keine Prognose sind.
+    if not pv_profil_vorhanden:
+        hinweise.append(
+            "Für diesen Tag liegt keine PV-Prognose vor — der Wetterabruf ist "
+            "ausgefallen oder der Tag liegt außerhalb des Prognose-Horizonts. Die "
+            "PV-Werte im Verlauf sind deshalb 0 und bedeuten NICHT, dass die "
+            "Anlage nichts erzeugt; auch die Speicher-Vorschau darunter ist damit "
+            "ohne Aussage."
+        )
+
+    # ── 3. Batterie-Info laden ──
+    speicher_kap, speicher_eta, start_soc = await _speicher_basis(db, anlage_id, datum)
+
+    # ── 4. Stündliche Bilanz + Batterie-Simulation ──
+    # SoC-State-Machine + Bilanz-Rest liegen im Berechnungs-Layer (ADR-001).
+    # Diese deskriptive Ganztags-Vorschau simuliert ab Mitternacht (start_soc =
+    # 7-Tage-Mittel, start_stunde=0) — bewusst anders parametrisiert als der
+    # HA-Export (ab aktuellem SoC), daher kein Symmetrie-Paar.
+    return _bilanz_und_antwort(
+        datum, pv_stunden, verbrauch_stunden, speicher_kap, speicher_eta, start_soc,
+        vp, pv_quelle, hinweise,
+    )
+
+# ── Phasen von get_tagesprognose (RF-37, 23.10.2026) ───────────────────────
+# Reiner Umzug in Lesereihenfolge. Die Uhr (`date.today()`) liest jede Phase
+# über das Modul-Attribut `date` — Proben faken sie dort.
+
+
+@dataclass
+class _PvStand:
+    """PV-Stundenprofil im Aufbau — die PV-Phasen schreiben IN dieses Objekt.
+
+    Veränderlich mit Absicht: läuft der OpenMeteo-Rückfall nach einer ersten
+    Zuweisung in eine Ausnahme (z. B. beim Lernfaktor), bleibt der schon
+    gesetzte Teil stehen — wie vor RF-37, als die drei Namen lokale Variablen
+    der Route waren und das `except` der Route sie unverändert ließ.
+    """
+    pv_stunden: list = field(default_factory=lambda: [0.0] * 24)
+    pv_quelle: str = "openmeteo"
+    pv_profil_vorhanden: bool = False
+
+
+async def _verbrauchsprognose(anlage_id: int, datum: date, db, hinweise: list[str]):
+    """Phase 1: Verbrauchsprognose und ihr Hinweis, wenn die Historie fehlt."""
     from backend.services.verbrauch_prognose_service import get_verbrauch_prognose
 
     vp = await get_verbrauch_prognose(anlage_id, datum, db)
@@ -135,199 +230,161 @@ async def get_tagesprognose(
             "Eigenverbrauch, Autarkie und die Speicher-Vorschau bleiben leer, "
             "bis genug Tage aufgezeichnet sind."
         )
+    return vp, verbrauch_stunden
 
-    # ── 2. PV-Stundenprofil ──
-    pv_stunden = [0.0] * 24
-    pv_quelle = "openmeteo"
-    pv_profil_vorhanden = False
 
-    # Versuche Solcast zuerst (wenn als Quelle gewählt)
-    from backend.services.prognose_router import resolve_prognose_quelle
-    pq = resolve_prognose_quelle(anlage)
-
-    if pq.ist_solcast:
-        try:
-            from backend.services.solcast_service import get_solcast_forecast
-            solcast = await get_solcast_forecast(anlage)
-            # Seit #357 trägt Solcast ein eigenes Stundenprofil je Prognosetag
-            # (HA-Integration: `detailedForecast` am Tages-Sensor; API: 168 h).
-            # Wo es eins gibt, ist der Zieltag echt beantwortet — die Näherung
-            # samt Kennzeichnung bleibt nur für Tage ohne eigenes Profil.
-            tages_profil = solcast.profil_fuer(datum) if solcast else None
-            if tages_profil is not None:
-                pv_stunden = list(tages_profil.p50)
-                pv_quelle = "solcast"
-                pv_profil_vorhanden = True
-            elif solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
-                # `solcast.hourly_kw` ist das Stundenprofil von HEUTE. Für einen
-                # anderen Zieltag ist es eine Näherung — bisher stand das nur als
-                # Code-Kommentar, während die Antwort `pv_quelle = "solcast"`
-                # meldete wie bei einem echten Profil dieses Tages (N79). Der Wert
-                # bleibt (er ist die beste verfügbare Information), aber die
-                # Antwort sagt jetzt, worauf man sieht.
-                pv_stunden = list(solcast.hourly_kw)
-                pv_quelle = "solcast"
-                pv_profil_vorhanden = True
-                if datum != date.today():
-                    hinweise.append(
-                        "Solcast liefert für diesen Tag nur die Tagesmenge, kein "
-                        "eigenes Stundenprofil. Der Tagesverlauf ist deshalb das "
-                        "heutige Profil als Näherung für den "
-                        f"{datum.strftime('%d.%m.%Y')} — die Tagessumme kann "
-                        "abweichen."
-                    )
-        except Exception as e:
-            logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)
-            hinweise.append(
-                "Die Solcast-Prognose war nicht abrufbar; für den PV-Tagesverlauf "
-                "liegt keine Solcast-Quelle vor."
-            )
-
-    # Fallback: OpenMeteo GTI — kanonischer Weg zuerst (Multi-String-Fan-out +
-    # Korrektur pro Energie-Slot), damit Chart/Tabelle denselben Tag zeigen wie
-    # Prognosen-Vergleich und HA-/MQTT-Export.
-    kanon_stunden = (
-        await _pv_stunden_aus_kanon(db, anlage, datum)
-        if pv_quelle == "openmeteo" else None
-    )
-    if kanon_stunden is not None:
-        pv_stunden = kanon_stunden
-        pv_profil_vorhanden = True
-    elif pv_quelle == "openmeteo":
-        # Fallback (Kanon ohne Ergebnis: kein OpenMeteo, keine kWp, Zieltag
-        # jenseits des Abrufs): eigener Abruf-Pfad, damit die Prognose nicht
-        # ganz ausfällt. Seit `49954860` (P1/N51) fächert er wie der Kanon je
-        # Orientierungsgruppe auf; was bleibt, ist der flache Legacy-Skalar
-        # (`_get_lernfaktor`) statt der Kaskade pro Energie-Slot — deshalb
-        # kann seine Tagessumme weiter leicht vom Kanon abweichen.
-        try:
-            from backend.services.solar_forecast_service import get_solar_prognose
-
-            # Strings für Multi-Ausrichtung laden
-            inv_result = await db.execute(
-                select(Investition).where(
-                    Investition.anlage_id == anlage_id,
-                    Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
-                    Investition.aktiv.is_(True),
+async def _pv_aus_solcast(anlage, datum: date, stand: _PvStand, hinweise: list[str]) -> None:
+    """Phase 2a: PV-Stundenprofil aus Solcast (nur wenn Solcast die gewählte Quelle ist)."""
+    try:
+        from backend.services.solcast_service import get_solcast_forecast
+        solcast = await get_solcast_forecast(anlage)
+        # Seit #357 trägt Solcast ein eigenes Stundenprofil je Prognosetag
+        # (HA-Integration: `detailedForecast` am Tages-Sensor; API: 168 h).
+        # Wo es eins gibt, ist der Zieltag echt beantwortet — die Näherung
+        # samt Kennzeichnung bleibt nur für Tage ohne eigenes Profil.
+        tages_profil = solcast.profil_fuer(datum) if solcast else None
+        if tages_profil is not None:
+            stand.pv_stunden = list(tages_profil.p50)
+            stand.pv_quelle = "solcast"
+            stand.pv_profil_vorhanden = True
+        elif solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
+            # `solcast.hourly_kw` ist das Stundenprofil von HEUTE. Für einen
+            # anderen Zieltag ist es eine Näherung — bisher stand das nur als
+            # Code-Kommentar, während die Antwort `pv_quelle = "solcast"`
+            # meldete wie bei einem echten Profil dieses Tages (N79). Der Wert
+            # bleibt (er ist die beste verfügbare Information), aber die
+            # Antwort sagt jetzt, worauf man sieht.
+            stand.pv_stunden = list(solcast.hourly_kw)
+            stand.pv_quelle = "solcast"
+            stand.pv_profil_vorhanden = True
+            if datum != date.today():
+                hinweise.append(
+                    "Solcast liefert für diesen Tag nur die Tagesmenge, kein "
+                    "eigenes Stundenprofil. Der Tagesverlauf ist deshalb das "
+                    "heutige Profil als Näherung für den "
+                    f"{datum.strftime('%d.%m.%Y')} — die Tagessumme kann "
+                    "abweichen."
                 )
-            )
-            invs = inv_result.scalars().all()
-            # Nur die am Zieltag aktiven Investitionen — Anschaffung UND
-            # Stilllegung (`ist_aktiv_an`). Bis 04.10.2026 prüfte dieser Pfad nur
-            # die Stilllegung: ein String mit Anschaffungsdatum nach dem Zieltag
-            # ging schon mit seiner kWp in die Prognose ein (gemessen über
-            # `get_tagesprognose` mit gestellter Wetterprognose: Gruppen 6 + 4
-            # statt 6 kWp, der 4-kWp-String kommt erst in fünf Tagen). Der Kanon
-            # darüber filtert je Tag schon so (`prognose_kanon`).
-            aktive_invs = [inv for inv in invs if inv.ist_aktiv_an(datum)]
-
-            if aktive_invs:
-                # Einheitlich kWp + Neigung + Azimut aus Top-Level-Spalten ODER
-                # parameter-JSON lesen — je nachdem, wo das Formular die Werte
-                # gespeichert hat. Ohne den Helper fallen Prognose-Pfade stumm
-                # auf Neigung=35°/Azimut=0° zurück, wenn die Werte nur in den
-                # Top-Level-Spalten (Investition.neigung_grad, .ausrichtung)
-                # liegen statt im parameter-JSON.
-                from backend.services.pv_orientation import (
-                    orientierungs_gruppen, resolve_system_losses,
-                )
-                from backend.services.prognose_auswahl import lade_aktive_prognose
-
-                # P1 (N51): EIN Abruf je Orientierungsgruppe statt eines Abrufs
-                # über die Gesamt-kWp mit der Orientierung der zufällig ersten
-                # Investition (`aktive_invs[0]`, Query ohne `ORDER BY`). Eine
-                # Ost/West-Anlage bekam so den Tagesgang EINER Himmelsrichtung
-                # auf die volle Leistung gerechnet — bei ausgeglichener
-                # Verteilung ein Fehler in der Summenzeile, der sich NICHT
-                # herausmittelt. Der Kanon-Pfad darüber fächert längst auf; hier
-                # lief der Fallback als einzige Sicht daneben.
-                # Bei genau EINER Gruppe ist der eine Abruf die korrekte Form —
-                # dann ist bewiesen, dass alle Module dieselbe Orientierung
-                # haben (dieselbe Guard-Form wie prefetch_service/solar_prognose).
-                gruppen = orientierungs_gruppen(aktive_invs)
-
-                # system_losses aus aktuellem PVGIS-Eintrag (gleicher Pfad wie
-                # solar_prognose.py und prefetch_service.py). Es gibt KEIN
-                # system_losses-Attribut auf Anlage — der frühere Zugriff
-                # `anlage.system_losses` warf einen AttributeError, der im
-                # try/except geschluckt wurde und pv_stunden auf [0] * 24 ließ.
-                pvgis = await lade_aktive_prognose(db, anlage_id)
-                system_losses = resolve_system_losses(pvgis)
-
-                # Tage bis zum Zieldatum berechnen
-                tage_bis_ziel = (datum - date.today()).days
-                forecast_days = max(tage_bis_ziel + 1, 2)
-
-                ergebnisse = await asyncio.gather(*[
-                    get_solar_prognose(
-                        latitude=anlage.latitude,
-                        longitude=anlage.longitude,
-                        kwp=g.kwp,
-                        neigung=g.neigung,
-                        ausrichtung=g.ausrichtung,
-                        days=forecast_days,
-                        system_losses=system_losses,
-                        # Interaktiver User-Request (Stunden-/Tagesprognose der
-                        # Aussicht): der 1-30s-Random-Jitter gilt nur für
-                        # Hintergrund-Abrufe (R18-13).
-                        skip_jitter=True,
-                    )
-                    for g in gruppen
-                ])
-
-                ziel_str = datum.isoformat()
-                summe = [0.0] * 24
-                geliefert = 0
-                for prognose in ergebnisse:
-                    if not prognose:
-                        continue
-                    for tag in prognose.tageswerte:
-                        if tag.datum == ziel_str and tag.stunden_kw:
-                            for i, v in enumerate(tag.stunden_kw[:24]):
-                                summe[i] += v or 0.0
-                            geliefert += 1
-                            break
-
-                if geliefert:
-                    pv_stunden = [round(v, 3) for v in summe]
-                    pv_profil_vorhanden = True
-
-                    # P4: eine Teilsumme sagt es selbst. Fällt eine
-                    # Orientierungsgruppe aus, fehlt ihr kWp-Anteil im
-                    # Tagesverlauf — der Wert bleibt (beste verfügbare
-                    # Information), aber nicht ungekennzeichnet.
-                    if geliefert < len(gruppen):
-                        hinweise.append(
-                            f"Nur {geliefert} von {len(gruppen)} Dachflächen "
-                            "(Orientierungsgruppen) haben eine Prognose geliefert. "
-                            "Der PV-Tagesverlauf ist deshalb eine Teilsumme und zu "
-                            "niedrig — bitte später erneut laden."
-                        )
-
-                    # Lernfaktor anwenden (MOS-Kaskade)
-                    from backend.api.routes.live_wetter import _get_lernfaktor
-                    lernfaktor = await _get_lernfaktor(anlage_id, db)
-                    if lernfaktor is not None:
-                        pv_stunden = [round(v * lernfaktor, 3) for v in pv_stunden]
-
-        except Exception as e:
-            logger.warning("PV-Prognose für Tagesprognose fehlgeschlagen: %s", e)
-
-    # P4 (N78): Bis hierher konnte die Antwort mit der Vorbelegung `[0.0] * 24`
-    # herauskommen — als PV-Prognose „0 kWh", nicht als „keine Prognose". Die
-    # Speicher-Simulation unten rechnet mit diesen Nullen weiter und meldet dann
-    # „Speicher lädt nicht". Die Zahlen bleiben (kein geschätzter Ersatz), aber
-    # die Antwort sagt jetzt, dass sie keine Prognose sind.
-    if not pv_profil_vorhanden:
+    except Exception as e:
+        logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)
         hinweise.append(
-            "Für diesen Tag liegt keine PV-Prognose vor — der Wetterabruf ist "
-            "ausgefallen oder der Tag liegt außerhalb des Prognose-Horizonts. Die "
-            "PV-Werte im Verlauf sind deshalb 0 und bedeuten NICHT, dass die "
-            "Anlage nichts erzeugt; auch die Speicher-Vorschau darunter ist damit "
-            "ohne Aussage."
+            "Die Solcast-Prognose war nicht abrufbar; für den PV-Tagesverlauf "
+            "liegt keine Solcast-Quelle vor."
         )
 
-    # ── 3. Batterie-Info laden ──
+
+async def _pv_aus_openmeteo_rueckfall(
+    db, anlage, anlage_id: int, datum: date, invs, stand: _PvStand, hinweise: list[str],
+) -> None:
+    """Phase 2b: OpenMeteo-Rückfall je Orientierungsgruppe, wenn der Kanon kein Profil hat.
+
+    Die Investitions-Abfrage (die PV-Erzeuger-Menge) bleibt in der Route — dort führt
+    `P11_AUSNAHMEN` sie (Durchreicher an `orientierungs_gruppen`); hier kommt die Liste an.
+    Eine Ausnahme fängt das `except` der Route, wie vor RF-37.
+    """
+    from backend.services.solar_forecast_service import get_solar_prognose
+
+    # Nur die am Zieltag aktiven Investitionen — Anschaffung UND
+    # Stilllegung (`ist_aktiv_an`). Bis 04.10.2026 prüfte dieser Pfad nur
+    # die Stilllegung: ein String mit Anschaffungsdatum nach dem Zieltag
+    # ging schon mit seiner kWp in die Prognose ein (gemessen über
+    # `get_tagesprognose` mit gestellter Wetterprognose: Gruppen 6 + 4
+    # statt 6 kWp, der 4-kWp-String kommt erst in fünf Tagen). Der Kanon
+    # darüber filtert je Tag schon so (`prognose_kanon`).
+    aktive_invs = [inv for inv in invs if inv.ist_aktiv_an(datum)]
+
+    if aktive_invs:
+        # Einheitlich kWp + Neigung + Azimut aus Top-Level-Spalten ODER
+        # parameter-JSON lesen — je nachdem, wo das Formular die Werte
+        # gespeichert hat. Ohne den Helper fallen Prognose-Pfade stumm
+        # auf Neigung=35°/Azimut=0° zurück, wenn die Werte nur in den
+        # Top-Level-Spalten (Investition.neigung_grad, .ausrichtung)
+        # liegen statt im parameter-JSON.
+        from backend.services.pv_orientation import (
+            orientierungs_gruppen, resolve_system_losses,
+        )
+        from backend.services.prognose_auswahl import lade_aktive_prognose
+
+        # P1 (N51): EIN Abruf je Orientierungsgruppe statt eines Abrufs
+        # über die Gesamt-kWp mit der Orientierung der zufällig ersten
+        # Investition (`aktive_invs[0]`, Query ohne `ORDER BY`). Eine
+        # Ost/West-Anlage bekam so den Tagesgang EINER Himmelsrichtung
+        # auf die volle Leistung gerechnet — bei ausgeglichener
+        # Verteilung ein Fehler in der Summenzeile, der sich NICHT
+        # herausmittelt. Der Kanon-Pfad darüber fächert längst auf; hier
+        # lief der Fallback als einzige Sicht daneben.
+        # Bei genau EINER Gruppe ist der eine Abruf die korrekte Form —
+        # dann ist bewiesen, dass alle Module dieselbe Orientierung
+        # haben (dieselbe Guard-Form wie prefetch_service/solar_prognose).
+        gruppen = orientierungs_gruppen(aktive_invs)
+
+        # system_losses aus aktuellem PVGIS-Eintrag (gleicher Pfad wie
+        # solar_prognose.py und prefetch_service.py). Es gibt KEIN
+        # system_losses-Attribut auf Anlage — der frühere Zugriff
+        # `anlage.system_losses` warf einen AttributeError, der im
+        # try/except geschluckt wurde und pv_stunden auf [0] * 24 ließ.
+        pvgis = await lade_aktive_prognose(db, anlage_id)
+        system_losses = resolve_system_losses(pvgis)
+
+        # Tage bis zum Zieldatum berechnen
+        tage_bis_ziel = (datum - date.today()).days
+        forecast_days = max(tage_bis_ziel + 1, 2)
+
+        ergebnisse = await asyncio.gather(*[
+            get_solar_prognose(
+                latitude=anlage.latitude,
+                longitude=anlage.longitude,
+                kwp=g.kwp,
+                neigung=g.neigung,
+                ausrichtung=g.ausrichtung,
+                days=forecast_days,
+                system_losses=system_losses,
+                # Interaktiver User-Request (Stunden-/Tagesprognose der
+                # Aussicht): der 1-30s-Random-Jitter gilt nur für
+                # Hintergrund-Abrufe (R18-13).
+                skip_jitter=True,
+            )
+            for g in gruppen
+        ])
+
+        ziel_str = datum.isoformat()
+        summe = [0.0] * 24
+        geliefert = 0
+        for prognose in ergebnisse:
+            if not prognose:
+                continue
+            for tag in prognose.tageswerte:
+                if tag.datum == ziel_str and tag.stunden_kw:
+                    for i, v in enumerate(tag.stunden_kw[:24]):
+                        summe[i] += v or 0.0
+                    geliefert += 1
+                    break
+
+        if geliefert:
+            stand.pv_stunden = [round(v, 3) for v in summe]
+            stand.pv_profil_vorhanden = True
+
+            # P4: eine Teilsumme sagt es selbst. Fällt eine
+            # Orientierungsgruppe aus, fehlt ihr kWp-Anteil im
+            # Tagesverlauf — der Wert bleibt (beste verfügbare
+            # Information), aber nicht ungekennzeichnet.
+            if geliefert < len(gruppen):
+                hinweise.append(
+                    f"Nur {geliefert} von {len(gruppen)} Dachflächen "
+                    "(Orientierungsgruppen) haben eine Prognose geliefert. "
+                    "Der PV-Tagesverlauf ist deshalb eine Teilsumme und zu "
+                    "niedrig — bitte später erneut laden."
+                )
+
+            # Lernfaktor anwenden (MOS-Kaskade)
+            from backend.api.routes.live_wetter import _get_lernfaktor
+            lernfaktor = await _get_lernfaktor(anlage_id, db)
+            if lernfaktor is not None:
+                stand.pv_stunden = [round(v * lernfaktor, 3) for v in stand.pv_stunden]
+
+
+async def _speicher_basis(db, anlage_id: int, datum: date):
+    """Phase 3: Netto-Kapazität, Wirkungsgrad und Start-SoC der am Zieltag aktiven Speicher."""
     inv_result = await db.execute(
         select(Investition).where(
             Investition.anlage_id == anlage_id,
@@ -368,12 +425,14 @@ async def get_tagesprognose(
         soc_werte = [r for r in soc_result.scalars().all()]
         if soc_werte:
             start_soc = sum(soc_werte) / len(soc_werte)
+    return speicher_kap, speicher_eta, start_soc
 
-    # ── 4. Stündliche Bilanz + Batterie-Simulation ──
-    # SoC-State-Machine + Bilanz-Rest liegen im Berechnungs-Layer (ADR-001).
-    # Diese deskriptive Ganztags-Vorschau simuliert ab Mitternacht (start_soc =
-    # 7-Tage-Mittel, start_stunde=0) — bewusst anders parametrisiert als der
-    # HA-Export (ab aktuellem SoC), daher kein Symmetrie-Paar.
+
+def _bilanz_und_antwort(
+    datum: date, pv_stunden, verbrauch_stunden, speicher_kap, speicher_eta, start_soc,
+    vp, pv_quelle: str, hinweise: list[str],
+) -> TagesPrognoseResponse:
+    """Phase 4: stündliche Bilanz + Batterie-Simulation und die Antwort."""
     stunden: list[StundenPrognose] = []
     sum_pv = 0.0
     sum_verbrauch: Optional[float] = None

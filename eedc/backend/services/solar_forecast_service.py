@@ -825,164 +825,21 @@ def _build_prognose(
     # weather_code noch nicht → .get-Fallback, Leser tolerieren None.
     code_values = hourly.get("weather_code", [])
     solar_noon_cache: dict[str, float] = {}  # Tag → Solar Noon (Stunde als float)
+    reihen = _StundenReihen(
+        gti_values, ghi_values, temp_values, snow_values,
+        cloud_values, precip_values, code_values,
+    )
 
     for i, timestamp in enumerate(timestamps):
-        tag = timestamp[:10]
-
-        if tag not in daily_data:
-            daily_data[tag] = {
-                "gti_sum_wh": 0,
-                "ghi_sum_wh": 0,
-                "ertrag_sum_kwh": 0,
-                "ertrag_morgens_kwh": 0,
-                "ertrag_nachmittags_kwh": 0,
-                "temp_max": None,
-                "snow_sum": 0,
-                "cloud_values": [],  # Für Durchschnittsberechnung
-                "stunden_kw": [0.0] * 24,  # Stündliche PV-Leistung (kW)
-                # Stündliches Wetter je Slot (für die Korrekturprofil-Kaskade)
-                "stunden_bewoelkung": [None] * 24,
-                "stunden_niederschlag": [None] * 24,
-                "stunden_wetter_code": [None] * 24,
-            }
-            # Solar Noon für diesen Tag berechnen
-            solar_noon_cache[tag] = _solar_noon_hour(tag, longitude)
-
-        day = daily_data[tag]
-
-        # GTI summieren (Werte sind W/m², für 1h = Wh/m²)
-        gti = gti_values[i] if i < len(gti_values) else 0
-        ghi = ghi_values[i] if i < len(ghi_values) else 0
-        temp = temp_values[i] if i < len(temp_values) else None
-        snow = snow_values[i] if i < len(snow_values) else 0
-
-        if gti is not None:
-            day["gti_sum_wh"] += gti
-
-        if ghi is not None:
-            day["ghi_sum_wh"] += ghi
-
-        if snow is not None:
-            day["snow_sum"] += snow
-
-        # Bewölkung sammeln für Tagesdurchschnitt
-        cloud = cloud_values[i] if i < len(cloud_values) else None
-        if cloud is not None:
-            day["cloud_values"].append(cloud)
-
-        # Stündliches Wetter je Backward-Slot (gleiches Slot-Mapping wie GTI,
-        # #297: preceding-hour-Wert@Stunde IST bereits Slot Stunde).
-        w_stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else None
-        if w_stunde is not None and 0 <= w_stunde < 24:
-            w_slot = openmeteo_preceding_hour_slot(w_stunde)
-            day["stunden_bewoelkung"][w_slot] = cloud
-            day["stunden_niederschlag"][w_slot] = (
-                precip_values[i] if i < len(precip_values) else None
-            )
-            day["stunden_wetter_code"][w_slot] = (
-                code_values[i] if i < len(code_values) else None
-            )
-
-        # Stündlichen Ertrag berechnen
-        if gti is not None and gti > 0:
-            stunden_ertrag = berechne_pv_ertrag(
-                gti_wh_m2=gti,
-                kwp=kwp,
-                temperatur_c=temp,
-                system_losses=system_losses,
-                schnee_cm=snow
-            )
-            day["ertrag_sum_kwh"] += stunden_ertrag
-            # Stündliche kW-Werte sammeln.
-            # OpenMeteo-GTI ist preceding-hour-Mittel: Wert@stunde deckt [stunde-1,
-            # stunde) ab = bereits Backward-Slot stunde. KEIN Shift (Issue #297),
-            # siehe core/berechnungen/slot_konvention.py.
-            stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
-            if 0 <= stunde < 24:
-                slot = openmeteo_preceding_hour_slot(stunde)
-                day["stunden_kw"][slot] += stunden_ertrag
-            # Vor-/Nachmittag-Split an Solar Noon (proportional)
-            noon = solar_noon_cache.get(tag, 12.4)
-            noon_hour = int(noon)
-            if stunde < noon_hour:
-                day["ertrag_morgens_kwh"] += stunden_ertrag
-            elif stunde > noon_hour:
-                day["ertrag_nachmittags_kwh"] += stunden_ertrag
-            else:
-                # Stunde enthält Solar Noon — proportional aufteilen
-                frac_vm = noon - noon_hour  # z.B. 0.4 bei 12:24
-                day["ertrag_morgens_kwh"] += stunden_ertrag * frac_vm
-                day["ertrag_nachmittags_kwh"] += stunden_ertrag * (1 - frac_vm)
-
-        # Temperatur-Maximum
-        if temp is not None:
-            if day["temp_max"] is None or temp > day["temp_max"]:
-                day["temp_max"] = temp
+        _stunde_aufnehmen(
+            daily_data, solar_noon_cache, reihen, i, timestamp,
+            kwp, system_losses, longitude,
+        )
 
     # Tageswerte aus daily-Daten ergänzen
-    daily_dates = daily.get("time", [])
-    daily_temp_max = daily.get("temperature_2m_max", [])
-    daily_temp_min = daily.get("temperature_2m_min", [])
-    daily_sunshine = daily.get("sunshine_duration", [])
-    daily_precip = daily.get("precipitation_sum", [])
-    daily_snow = daily.get("snowfall_sum", [])
-    daily_weather_code = daily.get("weather_code", [])
-    daily_radiation = daily.get("shortwave_radiation_sum", [])
-
-    tageswerte = []
-    summe_kwh = 0.0
-
-    for i, datum in enumerate(daily_dates):
-        day = daily_data.get(datum, {})
-
-        gti_kwh = day.get("gti_sum_wh", 0) / 1000
-        ghi_kwh = day.get("ghi_sum_wh", 0) / 1000
-        ertrag = day.get("ertrag_sum_kwh", 0)
-
-        # Falls stündliche Berechnung fehlgeschlagen, aus Tagessumme schätzen
-        if ertrag == 0 and i < len(daily_radiation):
-            rad_mj = daily_radiation[i] or 0
-            ghi_kwh = rad_mj * MJ_TO_KWH
-            # Grobe GTI-Schätzung aus GHI (abhängig von Neigung)
-            gti_kwh = ghi_kwh * 1.1  # ~10% mehr durch optimale Neigung
-            ertrag = gti_kwh * kwp * (1 - system_losses)
-
-        sonnenstunden = 0
-        if i < len(daily_sunshine) and daily_sunshine[i] is not None:
-            sonnenstunden = daily_sunshine[i] * SECONDS_TO_HOURS
-
-        ertrag_morgens = day.get("ertrag_morgens_kwh", 0)
-        ertrag_nachmittags = day.get("ertrag_nachmittags_kwh", 0)
-
-        tageswerte.append(SolarPrognoseTag(
-            datum=datum,
-            pv_ertrag_kwh=round(ertrag, 2),
-            gti_kwh_m2=round(gti_kwh, 2),
-            ghi_kwh_m2=round(ghi_kwh, 2),
-            sonnenstunden=round(sonnenstunden, 1),
-            temperatur_max_c=daily_temp_max[i] if i < len(daily_temp_max) else None,
-            temperatur_min_c=daily_temp_min[i] if i < len(daily_temp_min) else None,
-            bewoelkung_prozent=(
-                round(sum(day.get("cloud_values", [])) / len(day["cloud_values"]))
-                if day.get("cloud_values") else None
-            ),
-            niederschlag_mm=daily_precip[i] if i < len(daily_precip) else None,
-            schnee_cm=daily_snow[i] if i < len(daily_snow) else None,
-            wetter_symbol=wetter_symbol_aus_tag(
-                daily_weather_code[i] if i < len(daily_weather_code) else None,
-                round(sum(day.get("cloud_values", [])) / len(day["cloud_values"])) if day.get("cloud_values") else None,
-                daily_precip[i] if i < len(daily_precip) else None,
-            ),
-            pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
-            pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
-            datenquelle=datenquelle_tag,
-            stunden_kw=[round(v, 3) for v in day.get("stunden_kw", [0.0] * 24)],
-            stunden_bewoelkung=day.get("stunden_bewoelkung"),
-            stunden_niederschlag=day.get("stunden_niederschlag"),
-            stunden_wetter_code=day.get("stunden_wetter_code"),
-        ))
-
-        summe_kwh += ertrag
+    tageswerte, summe_kwh = _tageswerte_bauen(
+        daily, daily_data, kwp, system_losses, datenquelle_tag,
+    )
 
     if not tageswerte:
         return None
@@ -1004,6 +861,251 @@ def _build_prognose(
         datenquelle=MODELL_ANZEIGE.get(datenquelle_tag, datenquelle_tag),
         abgerufen_am=datetime.now().isoformat(),
     )
+
+
+# ── Phasen von _build_prognose (RF-38, 23.10.2026) ──────────────────────────
+# Reiner Umzug: Reihenfolge der Additionen, Rundungen und die
+# `is not None`-Regeln (0 ist ein Wert) stehen wörtlich wie vor dem Schnitt.
+
+
+@dataclass(frozen=True)
+class _StundenReihen:
+    """Die stündlichen Open-Meteo-Reihen einer Antwort — von den Phasen nur gelesen."""
+    gti_values: list
+    ghi_values: list
+    temp_values: list
+    snow_values: list
+    cloud_values: list
+    precip_values: list
+    code_values: list
+
+
+@dataclass(frozen=True)
+class _TagesReihen:
+    """Die täglichen Open-Meteo-Reihen einer Antwort — von den Phasen nur gelesen."""
+    daily_temp_max: list
+    daily_temp_min: list
+    daily_sunshine: list
+    daily_precip: list
+    daily_snow: list
+    daily_weather_code: list
+    daily_radiation: list
+
+
+def _stunde_aufnehmen(
+    daily_data: dict,
+    solar_noon_cache: dict[str, float],
+    reihen: _StundenReihen,
+    i: int,
+    timestamp: str,
+    kwp: float,
+    system_losses: float,
+    longitude: float,
+) -> None:
+    """Eine Stunde der Antwort in ihren Tag aufnehmen (Summen, Wetter je Slot, Ertrag)."""
+    tag = timestamp[:10]
+
+    if tag not in daily_data:
+        daily_data[tag] = {
+            "gti_sum_wh": 0,
+            "ghi_sum_wh": 0,
+            "ertrag_sum_kwh": 0,
+            "ertrag_morgens_kwh": 0,
+            "ertrag_nachmittags_kwh": 0,
+            "temp_max": None,
+            "snow_sum": 0,
+            "cloud_values": [],  # Für Durchschnittsberechnung
+            "stunden_kw": [0.0] * 24,  # Stündliche PV-Leistung (kW)
+            # Stündliches Wetter je Slot (für die Korrekturprofil-Kaskade)
+            "stunden_bewoelkung": [None] * 24,
+            "stunden_niederschlag": [None] * 24,
+            "stunden_wetter_code": [None] * 24,
+        }
+        # Solar Noon für diesen Tag berechnen
+        solar_noon_cache[tag] = _solar_noon_hour(tag, longitude)
+
+    day = daily_data[tag]
+
+    # GTI summieren (Werte sind W/m², für 1h = Wh/m²)
+    gti = reihen.gti_values[i] if i < len(reihen.gti_values) else 0
+    ghi = reihen.ghi_values[i] if i < len(reihen.ghi_values) else 0
+    temp = reihen.temp_values[i] if i < len(reihen.temp_values) else None
+    snow = reihen.snow_values[i] if i < len(reihen.snow_values) else 0
+
+    if gti is not None:
+        day["gti_sum_wh"] += gti
+
+    if ghi is not None:
+        day["ghi_sum_wh"] += ghi
+
+    if snow is not None:
+        day["snow_sum"] += snow
+
+    # Bewölkung sammeln für Tagesdurchschnitt
+    cloud = reihen.cloud_values[i] if i < len(reihen.cloud_values) else None
+    if cloud is not None:
+        day["cloud_values"].append(cloud)
+
+    # Stündliches Wetter je Backward-Slot (gleiches Slot-Mapping wie GTI,
+    # #297: preceding-hour-Wert@Stunde IST bereits Slot Stunde).
+    w_stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else None
+    if w_stunde is not None and 0 <= w_stunde < 24:
+        w_slot = openmeteo_preceding_hour_slot(w_stunde)
+        day["stunden_bewoelkung"][w_slot] = cloud
+        day["stunden_niederschlag"][w_slot] = (
+            reihen.precip_values[i] if i < len(reihen.precip_values) else None
+        )
+        day["stunden_wetter_code"][w_slot] = (
+            reihen.code_values[i] if i < len(reihen.code_values) else None
+        )
+
+    # Stündlichen Ertrag berechnen
+    if gti is not None and gti > 0:
+        _stunden_ertrag_aufnehmen(
+            day, solar_noon_cache, tag, timestamp, gti, temp, snow,
+            kwp, system_losses,
+        )
+
+    # Temperatur-Maximum
+    if temp is not None:
+        if day["temp_max"] is None or temp > day["temp_max"]:
+            day["temp_max"] = temp
+
+
+def _stunden_ertrag_aufnehmen(
+    day: dict,
+    solar_noon_cache: dict[str, float],
+    tag: str,
+    timestamp: str,
+    gti: float,
+    temp: Optional[float],
+    snow: Optional[float],
+    kwp: float,
+    system_losses: float,
+) -> None:
+    """Ertrag einer Stunde mit GTI > 0: Tagessumme, kW-Slot, Vor-/Nachmittag."""
+    stunden_ertrag = berechne_pv_ertrag(
+        gti_wh_m2=gti,
+        kwp=kwp,
+        temperatur_c=temp,
+        system_losses=system_losses,
+        schnee_cm=snow
+    )
+    day["ertrag_sum_kwh"] += stunden_ertrag
+    # Stündliche kW-Werte sammeln.
+    # OpenMeteo-GTI ist preceding-hour-Mittel: Wert@stunde deckt [stunde-1,
+    # stunde) ab = bereits Backward-Slot stunde. KEIN Shift (Issue #297),
+    # siehe core/berechnungen/slot_konvention.py.
+    stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else 12
+    if 0 <= stunde < 24:
+        slot = openmeteo_preceding_hour_slot(stunde)
+        day["stunden_kw"][slot] += stunden_ertrag
+    # Vor-/Nachmittag-Split an Solar Noon (proportional)
+    noon = solar_noon_cache.get(tag, 12.4)
+    noon_hour = int(noon)
+    if stunde < noon_hour:
+        day["ertrag_morgens_kwh"] += stunden_ertrag
+    elif stunde > noon_hour:
+        day["ertrag_nachmittags_kwh"] += stunden_ertrag
+    else:
+        # Stunde enthält Solar Noon — proportional aufteilen
+        frac_vm = noon - noon_hour  # z.B. 0.4 bei 12:24
+        day["ertrag_morgens_kwh"] += stunden_ertrag * frac_vm
+        day["ertrag_nachmittags_kwh"] += stunden_ertrag * (1 - frac_vm)
+
+
+def _tageswerte_bauen(
+    daily: dict,
+    daily_data: dict,
+    kwp: float,
+    system_losses: float,
+    datenquelle_tag: str,
+) -> tuple[list, float]:
+    """Je daily-Tag ein SolarPrognoseTag; dazu die Summe der UNgerundeten Tageserträge."""
+    daily_dates = daily.get("time", [])
+    daily_temp_max = daily.get("temperature_2m_max", [])
+    daily_temp_min = daily.get("temperature_2m_min", [])
+    daily_sunshine = daily.get("sunshine_duration", [])
+    daily_precip = daily.get("precipitation_sum", [])
+    daily_snow = daily.get("snowfall_sum", [])
+    daily_weather_code = daily.get("weather_code", [])
+    daily_radiation = daily.get("shortwave_radiation_sum", [])
+    tr = _TagesReihen(
+        daily_temp_max, daily_temp_min, daily_sunshine, daily_precip,
+        daily_snow, daily_weather_code, daily_radiation,
+    )
+
+    tageswerte = []
+    summe_kwh = 0.0
+
+    for i, datum in enumerate(daily_dates):
+        day = daily_data.get(datum, {})
+        tag_wert, ertrag = _prognose_tag(
+            i, datum, day, tr, kwp, system_losses, datenquelle_tag,
+        )
+        tageswerte.append(tag_wert)
+
+        summe_kwh += ertrag
+
+    return tageswerte, summe_kwh
+
+
+def _prognose_tag(
+    i: int,
+    datum: str,
+    day: dict,
+    tr: _TagesReihen,
+    kwp: float,
+    system_losses: float,
+    datenquelle_tag: str,
+) -> tuple[SolarPrognoseTag, float]:
+    """Ein Prognose-Tag aus seinen Stunden-Summen und der i-ten daily-Zeile (Ertrag ungerundet daneben)."""
+    gti_kwh = day.get("gti_sum_wh", 0) / 1000
+    ghi_kwh = day.get("ghi_sum_wh", 0) / 1000
+    ertrag = day.get("ertrag_sum_kwh", 0)
+
+    # Falls stündliche Berechnung fehlgeschlagen, aus Tagessumme schätzen
+    if ertrag == 0 and i < len(tr.daily_radiation):
+        rad_mj = tr.daily_radiation[i] or 0
+        ghi_kwh = rad_mj * MJ_TO_KWH
+        # Grobe GTI-Schätzung aus GHI (abhängig von Neigung)
+        gti_kwh = ghi_kwh * 1.1  # ~10% mehr durch optimale Neigung
+        ertrag = gti_kwh * kwp * (1 - system_losses)
+
+    sonnenstunden = 0
+    if i < len(tr.daily_sunshine) and tr.daily_sunshine[i] is not None:
+        sonnenstunden = tr.daily_sunshine[i] * SECONDS_TO_HOURS
+
+    ertrag_morgens = day.get("ertrag_morgens_kwh", 0)
+    ertrag_nachmittags = day.get("ertrag_nachmittags_kwh", 0)
+
+    return SolarPrognoseTag(
+        datum=datum,
+        pv_ertrag_kwh=round(ertrag, 2),
+        gti_kwh_m2=round(gti_kwh, 2),
+        ghi_kwh_m2=round(ghi_kwh, 2),
+        sonnenstunden=round(sonnenstunden, 1),
+        temperatur_max_c=tr.daily_temp_max[i] if i < len(tr.daily_temp_max) else None,
+        temperatur_min_c=tr.daily_temp_min[i] if i < len(tr.daily_temp_min) else None,
+        bewoelkung_prozent=(
+            round(sum(day.get("cloud_values", [])) / len(day["cloud_values"]))
+            if day.get("cloud_values") else None
+        ),
+        niederschlag_mm=tr.daily_precip[i] if i < len(tr.daily_precip) else None,
+        schnee_cm=tr.daily_snow[i] if i < len(tr.daily_snow) else None,
+        wetter_symbol=wetter_symbol_aus_tag(
+            tr.daily_weather_code[i] if i < len(tr.daily_weather_code) else None,
+            round(sum(day.get("cloud_values", [])) / len(day["cloud_values"])) if day.get("cloud_values") else None,
+            tr.daily_precip[i] if i < len(tr.daily_precip) else None,
+        ),
+        pv_ertrag_morgens_kwh=round(ertrag_morgens, 2) if ertrag_morgens > 0 else None,
+        pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
+        datenquelle=datenquelle_tag,
+        stunden_kw=[round(v, 3) for v in day.get("stunden_kw", [0.0] * 24)],
+        stunden_bewoelkung=day.get("stunden_bewoelkung"),
+        stunden_niederschlag=day.get("stunden_niederschlag"),
+        stunden_wetter_code=day.get("stunden_wetter_code"),
+    ), ertrag
 
 
 async def get_multi_string_prognose(
