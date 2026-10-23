@@ -13,8 +13,10 @@ selbst wieder oben. HAs Phantom entsteht nur, wenn der Stand in EINER Stunde zur
 Reset hochzählt (ein täglich zurückgesetzter Helfer, ein neuer Zähler nach einem Tausch), erzeugt in ``sum`` keinen
 Sprung und ist kein Befund (Nachmessung E4a-2, Punkt 6). Ein **Tageszähler** (PV-Tagesertrag, Utility-Meter „heute")
 ist es auch dann nicht, wenn seine erste helle Stunde nach einem schwachen Vortag den Vortagsstand schon fast erreicht:
-geht derselbe Sensor an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters in der 00:00-Zeile auf 0, sind diese
-Mitternachts-Resets Zyklen (N-764, #436); ein einzelner Tag im Fenster bleibt ununterscheidbar. Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
+geht derselbe Sensor an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters zu Beginn seines Tages auf 0, sind
+diese Tagesbeginn-Resets Zyklen (N-764, #436); ein einzelner Tag im Fenster bleibt ununterscheidbar. «Tagesbeginn» ist
+die erste Zeile ihres lokalen Kalendertags in der Zeilenfolge — die 00:00-Zeile, oder bei einem nachts abgeschalteten
+Wechselrichter (HA schreibt ohne Zustand keine Statistikzeile) die erste Morgenzeile (N-765, #436). Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
 selbst zeigt (``state`` vorher → nachher). Gelesen wird der Spiegel (``kanal_statistik``, Familie ``spiegel``) der
 letzten ``FENSTER_TAGE`` — keine HA-Abfrage.
 
@@ -54,9 +56,10 @@ RUECKKEHR_STUNDEN = 72
 MIN_STAND_KWH = 1.0
 #: Wie viele Funde die Meldung beim Namen nennt.
 BEISPIELE = 5
-#: Ab so vielen Tagen im Fenster mit einem Reset in der 00:00-Zeile ist der Sensor ein Tageszähler (N-764, #436):
-#: PV-Tagesertrag, Utility-Meter „heute" gehen jede Nacht um Mitternacht auf 0 — ein nächtlich abgeschalteter
-#: Wechselrichter (das N-586-Muster) fällt zu beliebiger Stunde. Ein einzelner Tag reicht nicht (benannte Grenze).
+#: Ab so vielen Tagen im Fenster mit einem Reset in der ersten Zeile des Tages ist der Sensor ein Tageszähler (N-764,
+#: N-765, #436): PV-Tagesertrag, Utility-Meter „heute" gehen zu Beginn jedes Tages auf 0 — um Mitternacht oder, ohne
+#: Nachtzeilen, in der ersten Morgenzeile; ein nächtlich abgeschalteter Lebenszeitzähler (das N-586-Muster) fällt in
+#: der letzten Zeile des Abends. Ein einzelner Tag reicht nicht (benannte Grenze).
 TAGESZAEHLER_MIN_TAGE = 2
 
 
@@ -76,33 +79,38 @@ def _ist_reset(st0: Optional[float], st: Optional[float], su0: Optional[float]) 
             and st <= RESET_ANTEIL * st0)
 
 
-def _mitternachts_reset_tage(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> set:
-    """Kalendertage (Prozess-Zeitzone = HA), an denen der Reset in der Zeile des lokalen Tagesbeginns liegt."""
+def _ist_tagesbeginn(ts0: int, ts: int) -> bool:
+    """Ist die Zeile ``ts`` die erste ihres lokalen Kalendertags (Prozess-Zeitzone = HA) — liegt die Vorzeile ``ts0``
+    an einem anderen Tag? Die 00:00-Zeile ist der Sonderfall; ohne Nachtzeilen ist es die erste Morgenzeile (N-765)."""
+    return datetime.fromtimestamp(ts).date() != datetime.fromtimestamp(ts0).date()
+
+
+def _tagesbeginn_reset_tage(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> set:
+    """Kalendertage (Prozess-Zeitzone = HA), an denen der Reset in der ersten Zeile des Tages liegt."""
     tage = set()
-    for (_ts0, st0, su0), (ts, st, _su) in zip(zeilen, zeilen[1:]):
-        if _ist_reset(st0, st, su0):
-            beginn = datetime.fromtimestamp(ts)
-            if beginn.hour == 0:
-                tage.add(beginn.date())
+    for (ts0, st0, su0), (ts, st, _su) in zip(zeilen, zeilen[1:]):
+        if _ist_reset(st0, st, su0) and _ist_tagesbeginn(ts0, ts):
+            tage.add(datetime.fromtimestamp(ts).date())
     return tage
 
 
 def finde_spruenge(statistic_id: str, zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> list[Sprung]:
     """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` aufsteigend. Je Reset mit Rückkehr ein ``Sprung``.
 
-    N-764 (#436): ein Reset in der 00:00-Zeile eines Sensors, der an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des
-    Fensters um Mitternacht zurückgeht, ist der Zyklus eines Tageszählers und kein Befund — auch wenn die erste helle
-    Stunde nach einem schwachen Vortag schon ``RUECKKEHR_ANTEIL`` des Vortagsstands erreicht (dann sähe er sonst
-    wie eine Rückkehr in EINER Stunde aus). Alle anderen Resets wie bisher.
+    N-764/N-765 (#436): ein Reset in der ersten Zeile eines Tages (00:00, oder ohne Nachtzeilen die erste
+    Morgenzeile) eines Sensors, der an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters zu Tagesbeginn
+    zurückgeht, ist der Zyklus eines Tageszählers und kein Befund — auch wenn die erste helle Stunde nach einem
+    schwachen Vortag schon ``RUECKKEHR_ANTEIL`` des Vortagsstands erreicht (dann sähe er sonst wie eine Rückkehr in
+    EINER Stunde aus). Alle anderen Resets wie bisher.
     """
     out: list[Sprung] = []
-    tageszaehler = len(_mitternachts_reset_tage(zeilen)) >= TAGESZAEHLER_MIN_TAGE
+    tageszaehler = len(_tagesbeginn_reset_tage(zeilen)) >= TAGESZAEHLER_MIN_TAGE
     i = 1
     while i < len(zeilen):
         ts0, st0, su0 = zeilen[i - 1]
         ts, st, _su = zeilen[i]
         if (_ist_reset(st0, st, su0)
-                and not (tageszaehler and datetime.fromtimestamp(ts).hour == 0)):
+                and not (tageszaehler and _ist_tagesbeginn(ts0, ts))):
             for j in range(i + 1, len(zeilen)):
                 tsj, stj, suj = zeilen[j]
                 if tsj - ts > RUECKKEHR_STUNDEN * 3600 or stj is None:

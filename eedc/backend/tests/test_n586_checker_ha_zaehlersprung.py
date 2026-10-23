@@ -131,6 +131,88 @@ def test_n764_ein_echtes_phantom_am_tageszaehler_bleibt_ein_fund():
     assert s.menge_kwh == pytest.approx(2.0)
 
 
+# ── N-765 (#436): Tageszähler ohne Nachtzeilen — der Reset steht in der ersten Morgenzeile ─────────────────────
+
+T765 = datetime(2026, 10, 6, 0)
+
+
+def _tagesertrag_ohne_nacht(tage: int, *, dunkel=(1,), nachtzeilen=False):
+    """PV-Tagesertrag eines nachts abgeschalteten Wechselrichters: HA schreibt nur Zeilen 07–18 (ohne Zustand keine
+    Statistik), der Reset auf den neuen Tag steht in der 07:00-Zeile. Normaltag: 0,1 kWh um 07:00, je Stunde +0,8.
+    ``dunkel``: Tage, die bis 14:00 auf 0,1 stehen und um 15:00 1,3 kWh erreichen (≥ 90 % des Vortags 1,4 kWh).
+    ``nachtzeilen``: dieselbe Reihe mit allen 24 Zeilen (Stand 00–06 = 0, 19–23 = Tagesendstand) — N-764-Form."""
+    out, summe, zuvor = [], 0.0, 0.0
+    for d in range(tage):
+        for h in (range(24) if nachtzeilen else range(7, 19)):
+            hh = min(h, 18)
+            if h < 7:
+                st = 0.0
+            elif d in dunkel:
+                st = 0.1 if hh < 15 else (1.3 if hh == 15 else 1.4)
+            else:
+                st = round(0.1 + (hh - 7) * 0.8, 2)
+            if d == 0 and h >= 7:
+                st = min(st, 1.4)                 # Vortag 1,4 kWh
+            summe += st - zuvor if st >= zuvor else st
+            zuvor = st
+            out.append((int((T765 + timedelta(days=d, hours=h)).timestamp()), st, summe))
+    return out
+
+
+def test_n765_tageszaehler_ohne_nachtzeilen_ist_kein_sprung():
+    """(a) Melder-Reihe: Zeilen nur 07–18 Uhr, Vortag 1,4 kWh, Folgetag bis 14:00 auf 0,1, um 15:00 1,3 kWh —
+    vier Tage, drei Tagesbeginn-Resets in der 07:00-Zeile. Bis N-765: ``[('07.10 15:00', 1.4)]``."""
+    assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(4)) == []
+
+
+def test_n765_dieselbe_reihe_mit_nachtzeilen_bleibt_ohne_fund():
+    """(b) N-764 bleibt: mit 00:00-Zeilen ist die 00:00-Zeile der Tagesbeginn."""
+    assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(4, nachtzeilen=True)) == []
+
+
+def test_n765_ein_einzelner_tagesbeginn_reset_im_fenster_bleibt_ein_fund():
+    """(c) Benannte Grenze: nur der Vortag und der dunkle Tag im Fenster — ein Tagesbeginn-Reset ist vom Glitch nicht
+    zu trennen, der Fund steht wie bisher."""
+    (s,) = finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(2))
+    assert datetime.fromtimestamp(s.rueckkehr_ts) == T765 + timedelta(days=1, hours=15)
+    assert s.menge_kwh == pytest.approx(1.4)
+
+
+def _lebenszeit_ohne_nacht(naechte: int, *, glitch=None):
+    """Lebenszeitzähler eines nachts abgeschalteten Wechselrichters, Zeilen nur 07–22: um 22:00 meldet er 0 (die
+    letzte Zeile des Abends), morgens um 07:00 steht er in EINER Zeile wieder auf dem alten Stand.
+    ``glitch``: statt der Nachtresets ein Aussetzer am Tag 1 — 13:00 auf 0, 14:00 zurück."""
+    out, stand, summe, zuvor = [], 5000.0, 0.0, 5000.0
+    for d in range(naechte + 1):
+        for h in range(7, 23):
+            if h < 20:
+                stand += 1.0
+            if glitch:
+                st = 0.0 if (d == 1 and h == 13) else stand
+            else:
+                st = 0.0 if (h == 22 and d < naechte) else stand
+            summe += st - zuvor if st >= zuvor else st
+            zuvor = st
+            out.append((int((T765 + timedelta(days=d, hours=h)).timestamp()), st, summe))
+    return out
+
+
+def test_n765_lebenszeit_zaehler_mit_abendreset_ohne_nachtzeilen_bleibt_drei_funde():
+    """(d) N-586-Muster ohne Nachtzeilen: der 22:00-Reset ist nicht die erste Zeile seines Tages — drei Nächte,
+    drei Funde, jeweils mit der Rückkehr in der 07:00-Zeile."""
+    funde = finde_spruenge("sensor.wr_gesamt", _lebenszeit_ohne_nacht(3))
+    assert len(funde) == 3
+    assert all(datetime.fromtimestamp(f.rueckkehr_ts).hour == 7 for f in funde)
+
+
+def test_n765_lebenszeit_zaehler_mit_mittagsaussetzer_bleibt_ein_fund():
+    """(e) Reset in der 13:00-Zeile, Rückkehr 14:00 — ein Fund in Höhe des Stands davor."""
+    z = _lebenszeit_ohne_nacht(2, glitch=True)
+    (s,) = finde_spruenge("sensor.wr_gesamt", z)
+    assert datetime.fromtimestamp(s.rueckkehr_ts) == T765 + timedelta(days=1, hours=14)
+    assert s.menge_kwh == pytest.approx(s.stand_vorher)
+
+
 async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):
     a = Anlage(anlagenname="N-586", leistung_kwp=10.0)
     db.add(a)
