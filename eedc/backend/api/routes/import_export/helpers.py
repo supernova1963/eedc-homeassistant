@@ -223,9 +223,53 @@ async def _import_investition_monatsdaten_v09(
     Raises:
         ValueError: Bei negativen Werten in kWh/km/€-Feldern
     """
+    # RF-35 (Komplexitäts-Paket, 23.10.2026): Lookup-Tabelle (`_v09_feld_eintraege`), Spalten-Schleife
+    # (`_v09_spalten_sammeln` mit `_v09_spalte_zuordnen`) und Sonderkosten (`_v09_sonderkosten`) sind Phasen dieser
+    # Datei; hier bleiben die Zeilen-Vorbereitung (N-710, Suffix-Folge) und die Batch-Speicherung.
     summen = {key: 0.0 for key in IMPORT_SUMMEN_KEYS}
     collected_data: dict[int, dict] = {}
 
+    inv_field_entries = _v09_feld_eintraege(investitionen)
+
+    # N-710: die Spalten einer Zeile, die ein Haupt-Suffix trägt und nicht leer ist — je (Investition, Feld). Eine
+    # Spalte mit dem Alt-Suffix desselben Feldes gilt nur, wenn es keine solche gibt (Regel in `ist_alt_spalte`).
+    belegte_hauptfelder = {
+        (inv.id, feld["feld"])
+        for col_name, value in row.items()
+        if value and value.strip() and col_name not in V09_BASIS_SPALTEN
+        for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries
+        if csv_suffix == feld.get("csv_suffix") and _spalte_traegt_suffix(col_name, sanitized, normalized, csv_suffix)
+    }
+
+    # known_suffixes aus Registry — längste zuerst für korrektes Matching
+    known_suffixes = sorted(
+        {entry[4] for entry in inv_field_entries},
+        key=len, reverse=True
+    )
+
+    _v09_spalten_sammeln(
+        row=row, parse_float=parse_float, inv_field_entries=inv_field_entries,
+        belegte_hauptfelder=belegte_hauptfelder, known_suffixes=known_suffixes,
+        summen=summen, collected_data=collected_data,
+    )
+    _v09_sonderkosten(row=row, parse_float=parse_float, investitionen=investitionen, collected_data=collected_data)
+
+    # ── Batch-Speicherung ────────────────────────────────────────────────────
+    for inv_id, verbrauch_daten in collected_data.items():
+        if verbrauch_daten:
+            res = await _upsert_investition_monatsdaten(
+                db, inv_id, jahr, monat, verbrauch_daten, ueberschreiben,
+                source=source, writer=writer,
+            )
+            if on_upsert is not None:
+                on_upsert(res)
+
+    return summen
+
+
+def _v09_feld_eintraege(investitionen: list[Investition]) -> list:
+    """RF-35: die Lookup-Tabelle von ``_import_investition_monatsdaten_v09`` — je (Investition, Feld) ein Eintrag
+    ``(inv, feld, sanitized, normalized, csv_suffix)``, dazu einer je Alt-Suffix."""
     # ── Lookup-Tabelle aus Registry aufbauen ─────────────────────────────────
     # Für jede (Investition, Feld)-Kombination: Namen + csv_suffix vorberechnen
     inv_field_entries = []
@@ -245,23 +289,14 @@ async def _import_investition_monatsdaten_v09(
             alt = feld.get("csv_suffix_alt")
             if alt:
                 inv_field_entries.append((inv, feld, sanitized, normalized, alt))
+    return inv_field_entries
 
-    # N-710: die Spalten einer Zeile, die ein Haupt-Suffix trägt und nicht leer ist — je (Investition, Feld). Eine
-    # Spalte mit dem Alt-Suffix desselben Feldes gilt nur, wenn es keine solche gibt (Regel in `ist_alt_spalte`).
-    belegte_hauptfelder = {
-        (inv.id, feld["feld"])
-        for col_name, value in row.items()
-        if value and value.strip() and col_name not in V09_BASIS_SPALTEN
-        for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries
-        if csv_suffix == feld.get("csv_suffix") and _spalte_traegt_suffix(col_name, sanitized, normalized, csv_suffix)
-    }
 
-    # known_suffixes aus Registry — längste zuerst für korrektes Matching
-    known_suffixes = sorted(
-        {entry[4] for entry in inv_field_entries},
-        key=len, reverse=True
-    )
-
+def _v09_spalten_sammeln(
+    *, row, parse_float, inv_field_entries, belegte_hauptfelder, known_suffixes, summen, collected_data,
+) -> None:
+    """RF-35: die Spalten-Schleife von ``_import_investition_monatsdaten_v09`` — je Spalte Zuordnung, Wert, Sammeln
+    (``collected_data``) und Aggregat (``summen``), beide in place."""
     # ── Spalten matchen und Werte sammeln ────────────────────────────────────
     for col_name, value in row.items():
         if not value or not value.strip():
@@ -269,38 +304,7 @@ async def _import_investition_monatsdaten_v09(
         if col_name in V09_BASIS_SPALTEN:
             continue
 
-        matched_inv = None
-        matched_feld = None
-
-        # Strategie 1: Exaktes Präfix-Match (sanitized name + "_" + suffix)
-        for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries:
-            if col_name == f"{sanitized}_{csv_suffix}" or col_name == sanitized:
-                matched_inv = inv
-                matched_feld = feld
-                logger.debug(
-                    f"S1: col='{col_name}' -> inv='{inv.bezeichnung}' feld='{feld['feld']}'"
-                )
-                break
-
-        # Strategie 2: Suffix-basiertes Matching (Fallback wenn S1 nicht greift)
-        if not matched_inv:
-            for suffix in known_suffixes:
-                if col_name.endswith("_" + suffix):
-                    prefix = col_name[: -len(suffix) - 1]
-                    prefix_norm = _normalize_for_matching(prefix)
-                    for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries:
-                        if csv_suffix == suffix and (
-                            prefix_norm == normalized or prefix == sanitized
-                        ):
-                            matched_inv = inv
-                            matched_feld = feld
-                            logger.debug(
-                                f"S2: col='{col_name}' prefix='{prefix}' "
-                                f"-> inv='{inv.bezeichnung}' feld='{feld['feld']}'"
-                            )
-                            break
-                if matched_inv:
-                    break
+        matched_inv, matched_feld = _v09_spalte_zuordnen(col_name, inv_field_entries, known_suffixes)
 
         if not matched_inv or not matched_feld:
             logger.debug(f"Keine Investition für Spalte: '{col_name}'")
@@ -330,6 +334,47 @@ async def _import_investition_monatsdaten_v09(
         if aggregiert_in and aggregiert_in in summen:
             summen[aggregiert_in] += field_value
 
+
+def _v09_spalte_zuordnen(col_name, inv_field_entries, known_suffixes):
+    """RF-35: die Zuordnung einer Spalte zu (Investition, Feld) — Strategie 1 (exakt), sonst Strategie 2 (Suffix).
+    ``(None, None)``, wenn keine greift."""
+    matched_inv = None
+    matched_feld = None
+
+    # Strategie 1: Exaktes Präfix-Match (sanitized name + "_" + suffix)
+    for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries:
+        if col_name == f"{sanitized}_{csv_suffix}" or col_name == sanitized:
+            matched_inv = inv
+            matched_feld = feld
+            logger.debug(
+                f"S1: col='{col_name}' -> inv='{inv.bezeichnung}' feld='{feld['feld']}'"
+            )
+            break
+
+    # Strategie 2: Suffix-basiertes Matching (Fallback wenn S1 nicht greift)
+    if not matched_inv:
+        for suffix in known_suffixes:
+            if col_name.endswith("_" + suffix):
+                prefix = col_name[: -len(suffix) - 1]
+                prefix_norm = _normalize_for_matching(prefix)
+                for inv, feld, sanitized, normalized, csv_suffix in inv_field_entries:
+                    if csv_suffix == suffix and (
+                        prefix_norm == normalized or prefix == sanitized
+                    ):
+                        matched_inv = inv
+                        matched_feld = feld
+                        logger.debug(
+                            f"S2: col='{col_name}' prefix='{prefix}' "
+                            f"-> inv='{inv.bezeichnung}' feld='{feld['feld']}'"
+                        )
+                        break
+            if matched_inv:
+                break
+    return matched_inv, matched_feld
+
+
+def _v09_sonderkosten(*, row, parse_float, investitionen, collected_data) -> None:
+    """RF-35: die Sonderkosten-Spalten je Investition als ``sonstige_positionen`` in ``collected_data`` (in place)."""
     # ── Sonderkosten (Sonderfall: für alle Typen, erzeugen sonstige_positionen)
     for inv in investitionen:
         sanitized = _sanitize_column_name(inv.bezeichnung)
@@ -344,18 +389,6 @@ async def _import_investition_monatsdaten_v09(
                 "betrag": float(sk_euro),
                 "typ": "ausgabe",
             }]
-
-    # ── Batch-Speicherung ────────────────────────────────────────────────────
-    for inv_id, verbrauch_daten in collected_data.items():
-        if verbrauch_daten:
-            res = await _upsert_investition_monatsdaten(
-                db, inv_id, jahr, monat, verbrauch_daten, ueberschreiben,
-                source=source, writer=writer,
-            )
-            if on_upsert is not None:
-                on_upsert(res)
-
-    return summen
 
 
 async def _distribute_legacy_pv_to_modules(

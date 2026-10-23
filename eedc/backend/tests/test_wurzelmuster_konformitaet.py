@@ -1679,7 +1679,7 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Query-Param-Default + Fallback der `_gewichtete_monatspreise`-Mittelung.
     "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
     "backend/api/routes/investitionen/dashboard_sonstiges.py::get_sonstiges_dashboard",
-    "backend/api/routes/investitionen/dashboard_speicher.py::get_speicher_dashboard",
+    "backend/api/routes/investitionen/dashboard_speicher.py::_effektive_preise",
     # N-712/N-713 (12.10.2026): `dashboard_waermepumpe.py::get_waermepumpe_dashboard` lädt keinen Tarif mehr ohne
     # Stichtag — der WP-Preis je Monat kommt aus den Monats-Fakten (`tarife_der_monate`); Eintrag gestrichen.
     "backend/api/routes/investitionen/dashboard_wallbox.py::get_wallbox_dashboard",
@@ -2316,7 +2316,7 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
     "backend/api/routes/investitionen/roi_pv.py::pv_einsparung_und_speicher_ist",
     "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
     "backend/api/routes/investitionen/dashboard_waermepumpe.py::get_waermepumpe_dashboard",
-    "backend/api/routes/investitionen/dashboard_speicher.py::get_speicher_dashboard",
+    "backend/api/routes/investitionen/dashboard_speicher.py::_monatsdaten_je_speicher",
     "backend/api/routes/investitionen/dashboard_wallbox.py::get_wallbox_dashboard",
     "backend/api/routes/investitionen/dashboard_balkonkraftwerk.py::get_balkonkraftwerk_dashboard",
     "backend/api/routes/investitionen/dashboard_sonstiges.py::get_sonstiges_dashboard",
@@ -2522,6 +2522,12 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # die der Orchestrator `get_waermepumpe_dashboard` lädt (gelistet in `P10_PER_INVESTITION`).
     "backend/api/routes/investitionen/dashboard_waermepumpe.py::_bewertung":
         "backend/api/routes/investitionen/dashboard_waermepumpe.py::get_waermepumpe_dashboard",
+    # RF-30: Phasen des Speicher-Dashboards — Summen/Arbitrage je Speicher und η-IST falten die Zeilen, die
+    # `_monatsdaten_je_speicher` lädt (gelistet in `P10_PER_INVESTITION`).
+    "backend/api/routes/investitionen/dashboard_speicher.py::_speicher_summen":
+        "backend/api/routes/investitionen/dashboard_speicher.py::_monatsdaten_je_speicher",
+    "backend/api/routes/investitionen/dashboard_speicher.py::_eta_ist":
+        "backend/api/routes/investitionen/dashboard_speicher.py::_monatsdaten_je_speicher",
     # WK-16a: die Mengen JE GERÄT. Zweiter Aufrufer über
     # `kennzahlen_aus_monatszeilen` ist `dashboard_waermepumpe.py::_dashboard_einer_wp` (RF-17: Phase des
     # gelisteten Laders `get_waermepumpe_dashboard`).

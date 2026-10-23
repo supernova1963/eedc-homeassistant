@@ -6,6 +6,7 @@ Werte-Extraktion (mit `get_val`) und die berechneten Bilanzwerte.
 # Parameter und Rueckgabe-Dict; der Endpunkt orchestriert. Kein Verhaltenswechsel — Gate ist
 # `plans/skript-golden-master-aktueller-monat.py` (alte gegen neue Antworten, bitgleich).
 from typing import Optional
+from dataclasses import dataclass
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
@@ -488,7 +489,9 @@ def emob_heimladung_pool(
         ``{"emob_entscheid": …}``, wenn hier entschieden wurde — die Geraete-Sicht
         nimmt PV/Netz/Extern dann von dort statt aus der gespeicherten Zeile.
     """
-    from backend.core.field_definitions import HEIMLADE_FELDER
+    # RF-34 (Komplexitäts-Paket, 23.10.2026): die Geräte-Schleife (`_geraete_des_monats` mit `_zeile_des_geraets` und
+    # `_heim_gesamt_regel8`) und das Schreiben des Ergebnisses (`_pool_in_resolved`) sind Phasen dieser Datei; hier
+    # bleiben die Wächter des gespeicherten Entscheids, die Kanal-Anreicherung und der Aufruf der einen Funktion.
     from backend.services.eauto_wirtschaftlichkeit import (
         QUELLE_EAUTO,
         QUELLE_NULL,
@@ -517,77 +520,18 @@ def emob_heimladung_pool(
         dict(gespeichert.dienstlich_ladedaten_je_inv) if gespeichert is not None else {}
     )
     heim_gesamt: set[int] = set(gespeichert.heim_gesamt_ids) if gespeichert is not None else set()
-    eauto_je_inv: dict[int, dict] = {}
-    wallbox_daten: list[dict] = []
-    dienstwagen_je_inv: dict[int, dict] = {}
-    dienstliche_wallbox_je_inv: dict[int, dict] = {}
-    wallbox_ids: set[int] = set()
-    eauto_km = 0.0
-    emob_quelle: Optional[tuple] = None
-    wallbox_in_betrieb = False
-    for inv in investitionen:
-        # #239 detLAN-Folge: HA-Statistics-Werte aus vor-Anschaffungs-
-        # Monaten nicht in den Monatsbericht-Pool aggregieren.
-        if not inv.ist_aktiv_im_monat(jahr, monat):
-            continue
-        if inv.typ not in ("e-auto", "wallbox"):
-            continue
-        dienstlich = ist_dienstlich(inv)
-        praefix = f"inv_{inv.id}_"
-        werte = {k[len(praefix):]: v for k, v in resolved.items() if k.startswith(praefix)}
-        gespeicherte_zeile = (
-            (gespeicherte_dienstlich if dienstlich else gespeicherte_zeilen).get(inv.id) or {}
-        )
-        zeile = dict(gespeicherte_zeile)
-        for feld, eintrag in werte.items():
-            if ist_aktueller_monat:
-                zeile[feld] = eintrag[0]
-            else:
-                zeile.setdefault(feld, eintrag[0])
-        # HA-Statistik mit Daten, aber 0: ein Wert (Regel 1), kein Loch.
-        for feld in HEIMLADE_FELDER[inv.typ]:
-            if f"{praefix}{feld}" in ha_felder_mit_daten:
-                zeile.setdefault(feld, 0.0)
-        # Regel 8: ein `ladung_kwh` am Auto, das aus einer Quelle (HA, MQTT, Live) in die
-        # Zeile kam, ist „Heim: gesamt" — nur der gespeicherte alte Gesamtwert ohne
-        # Herkunft ist es nicht (sein Status steht in `heim_gesamt_ids` der Schicht).
-        if inv.typ == "e-auto":
-            gespeichert_ladung = gespeicherte_zeile.get("ladung_kwh")
-            aus_quelle = (
-                ("ladung_kwh" in werte and (ist_aktueller_monat or gespeichert_ladung is None))
-                or (f"{praefix}ladung_kwh" in ha_felder_mit_daten and gespeichert_ladung is None)
-            )
-            if aus_quelle:
-                heim_gesamt.add(inv.id)
-        if dienstlich:
-            if inv.typ == "e-auto":
-                dienstwagen_je_inv[inv.id] = zeile
-            else:
-                dienstliche_wallbox_je_inv[inv.id] = zeile
-            continue
-        if inv.typ == "e-auto":
-            eauto_je_inv[inv.id] = zeile
-            # N-555: auch „Heim: PV/Netz" und Extern tragen die Herkunft — bis
-            # 25.09.2026 zählten hier nur `ladung_kwh`/`verbrauch_kwh`, und ein
-            # Steckerlader mit PV-/Netz-Sensor bekam im laufenden Monat gar keine
-            # Heimladung ausgewiesen (der Topf rechnete sie, die Herkunft fehlte).
-            for suffix in ("ladung_kwh", "verbrauch_kwh", "ladung_netz_kwh",
-                           "ladung_pv_kwh", "ladung_extern_kwh"):
-                if werte.get(suffix):
-                    emob_quelle = werte[suffix][1]
-                    break
-            km_entry = werte.get("km_gefahren")
-            if km_entry:
-                eauto_km += km_entry[0]
-                emob_quelle = km_entry[1]
-        else:
-            wallbox_in_betrieb = True
-            wallbox_ids.add(inv.id)
-            wallbox_daten.append(zeile)
-            for suffix in ("ladung_kwh", "ladung_pv_kwh"):
-                if werte.get(suffix):
-                    emob_quelle = werte[suffix][1]
-                    break
+    geraete = _geraete_des_monats(
+        investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved,
+        ist_aktueller_monat=ist_aktueller_monat, ha_felder_mit_daten=ha_felder_mit_daten,
+        gespeicherte_zeilen=gespeicherte_zeilen, gespeicherte_dienstlich=gespeicherte_dienstlich,
+        heim_gesamt=heim_gesamt,
+    )
+    eauto_je_inv = geraete.eauto_je_inv
+    wallbox_daten = geraete.wallbox_daten
+    dienstwagen_je_inv = geraete.dienstwagen_je_inv
+    dienstliche_wallbox_je_inv = geraete.dienstliche_wallbox_je_inv
+    wallbox_ids = geraete.wallbox_ids
+    wallbox_in_betrieb = geraete.wallbox_in_betrieb
     # HA-Bauform E4c (N-631): deckt die E-Mob-Gruppe den Monat aus den Kanälen, gilt ihr PV-Anteil — angewandt wie in
     # den Monats-Fakten (`bau.py`): erst auf die Zeilen ohne eigene Aufteilung (`reichere_ladezeilen_an`), dann als
     # Quote der einen Funktion. Sonst die Quote einer gespeicherten Schätzung wie bisher.
@@ -622,6 +566,144 @@ def emob_heimladung_pool(
             else None
         ),
     )
+    _pool_in_resolved(
+        entscheid=entscheid, resolved=resolved, direct_fields=direct_fields,
+        gespeichert_quelle=gespeichert_quelle, gespeicherte_zeilen=gespeicherte_zeilen,
+        emob_quelle=geraete.emob_quelle, eauto_km=geraete.eauto_km,
+    )
+    return {"emob_entscheid": entscheid}
+
+
+@dataclass(frozen=True)
+class _GeraeteDesMonats:
+    """RF-34: Ergebnis der Geräte-Schleife von ``emob_heimladung_pool`` — die Zeilen je Gerät (privat und dienstlich
+    getrennt), die km der E-Autos, die Herkunft (``emob_quelle``) und „Wallbox in Betrieb"."""
+
+    eauto_je_inv: dict[int, dict]
+    wallbox_daten: list[dict]
+    dienstwagen_je_inv: dict[int, dict]
+    dienstliche_wallbox_je_inv: dict[int, dict]
+    wallbox_ids: set[int]
+    eauto_km: float
+    emob_quelle: Optional[tuple]
+    wallbox_in_betrieb: bool
+
+
+def _geraete_des_monats(
+    *, investitionen, jahr, monat, resolved, ist_aktueller_monat, ha_felder_mit_daten,
+    gespeicherte_zeilen, gespeicherte_dienstlich, heim_gesamt,
+) -> _GeraeteDesMonats:
+    """RF-34: die Geräte-Schleife von ``emob_heimladung_pool`` — je E-Auto/Wallbox, das im Monat aktiv ist, die Zeile aus
+    gespeicherter Zeile und Quellen (``_zeile_des_geraets``), einsortiert nach privat/dienstlich. Ergänzt
+    ``heim_gesamt`` in place (Regel 8, ``_heim_gesamt_regel8``)."""
+    eauto_je_inv: dict[int, dict] = {}
+    wallbox_daten: list[dict] = []
+    dienstwagen_je_inv: dict[int, dict] = {}
+    dienstliche_wallbox_je_inv: dict[int, dict] = {}
+    wallbox_ids: set[int] = set()
+    eauto_km = 0.0
+    emob_quelle: Optional[tuple] = None
+    wallbox_in_betrieb = False
+    for inv in investitionen:
+        # #239 detLAN-Folge: HA-Statistics-Werte aus vor-Anschaffungs-
+        # Monaten nicht in den Monatsbericht-Pool aggregieren.
+        if not inv.ist_aktiv_im_monat(jahr, monat):
+            continue
+        if inv.typ not in ("e-auto", "wallbox"):
+            continue
+        dienstlich = ist_dienstlich(inv)
+        praefix = f"inv_{inv.id}_"
+        werte = {k[len(praefix):]: v for k, v in resolved.items() if k.startswith(praefix)}
+        gespeicherte_zeile = (
+            (gespeicherte_dienstlich if dienstlich else gespeicherte_zeilen).get(inv.id) or {}
+        )
+        zeile = _zeile_des_geraets(
+            inv, praefix=praefix, werte=werte, gespeicherte_zeile=gespeicherte_zeile,
+            ist_aktueller_monat=ist_aktueller_monat, ha_felder_mit_daten=ha_felder_mit_daten,
+        )
+        _heim_gesamt_regel8(
+            inv, praefix=praefix, werte=werte, gespeicherte_zeile=gespeicherte_zeile,
+            ist_aktueller_monat=ist_aktueller_monat, ha_felder_mit_daten=ha_felder_mit_daten,
+            heim_gesamt=heim_gesamt,
+        )
+        if dienstlich:
+            if inv.typ == "e-auto":
+                dienstwagen_je_inv[inv.id] = zeile
+            else:
+                dienstliche_wallbox_je_inv[inv.id] = zeile
+            continue
+        if inv.typ == "e-auto":
+            eauto_je_inv[inv.id] = zeile
+            # N-555: auch „Heim: PV/Netz" und Extern tragen die Herkunft — bis
+            # 25.09.2026 zählten hier nur `ladung_kwh`/`verbrauch_kwh`, und ein
+            # Steckerlader mit PV-/Netz-Sensor bekam im laufenden Monat gar keine
+            # Heimladung ausgewiesen (der Topf rechnete sie, die Herkunft fehlte).
+            for suffix in ("ladung_kwh", "verbrauch_kwh", "ladung_netz_kwh",
+                           "ladung_pv_kwh", "ladung_extern_kwh"):
+                if werte.get(suffix):
+                    emob_quelle = werte[suffix][1]
+                    break
+            km_entry = werte.get("km_gefahren")
+            if km_entry:
+                eauto_km += km_entry[0]
+                emob_quelle = km_entry[1]
+        else:
+            wallbox_in_betrieb = True
+            wallbox_ids.add(inv.id)
+            wallbox_daten.append(zeile)
+            for suffix in ("ladung_kwh", "ladung_pv_kwh"):
+                if werte.get(suffix):
+                    emob_quelle = werte[suffix][1]
+                    break
+    return _GeraeteDesMonats(
+        eauto_je_inv=eauto_je_inv, wallbox_daten=wallbox_daten, dienstwagen_je_inv=dienstwagen_je_inv,
+        dienstliche_wallbox_je_inv=dienstliche_wallbox_je_inv, wallbox_ids=wallbox_ids, eauto_km=eauto_km,
+        emob_quelle=emob_quelle, wallbox_in_betrieb=wallbox_in_betrieb,
+    )
+
+
+def _zeile_des_geraets(inv, *, praefix, werte, gespeicherte_zeile, ist_aktueller_monat, ha_felder_mit_daten):
+    """RF-34: die Zeile eines Geräts — die gespeicherte Zeile, ergänzt um die Werte aus ``resolved`` (im laufenden
+    Monat gewinnen sie, im abgeschlossenen füllen sie nur Lücken) und um die HA-Felder mit Daten, aber 0."""
+    from backend.core.field_definitions import HEIMLADE_FELDER
+
+    zeile = dict(gespeicherte_zeile)
+    for feld, eintrag in werte.items():
+        if ist_aktueller_monat:
+            zeile[feld] = eintrag[0]
+        else:
+            zeile.setdefault(feld, eintrag[0])
+    # HA-Statistik mit Daten, aber 0: ein Wert (Regel 1), kein Loch.
+    for feld in HEIMLADE_FELDER[inv.typ]:
+        if f"{praefix}{feld}" in ha_felder_mit_daten:
+            zeile.setdefault(feld, 0.0)
+    return zeile
+
+
+def _heim_gesamt_regel8(
+    inv, *, praefix, werte, gespeicherte_zeile, ist_aktueller_monat, ha_felder_mit_daten, heim_gesamt,
+):
+    """RF-34: Regel 8 der Geräte-Schleife — ergänzt ``heim_gesamt`` in place."""
+    # Regel 8: ein `ladung_kwh` am Auto, das aus einer Quelle (HA, MQTT, Live) in die
+    # Zeile kam, ist „Heim: gesamt" — nur der gespeicherte alte Gesamtwert ohne
+    # Herkunft ist es nicht (sein Status steht in `heim_gesamt_ids` der Schicht).
+    if inv.typ == "e-auto":
+        gespeichert_ladung = gespeicherte_zeile.get("ladung_kwh")
+        aus_quelle = (
+            ("ladung_kwh" in werte and (ist_aktueller_monat or gespeichert_ladung is None))
+            or (f"{praefix}ladung_kwh" in ha_felder_mit_daten and gespeichert_ladung is None)
+        )
+        if aus_quelle:
+            heim_gesamt.add(inv.id)
+
+
+def _pool_in_resolved(
+    *, entscheid, resolved, direct_fields, gespeichert_quelle, gespeicherte_zeilen, emob_quelle, eauto_km,
+):
+    """RF-34: das Ergebnis der einen Funktion in ``resolved`` (in place) — Heimladung, PV-Anteil einer gespeicherten
+    Schätzung, die gemessene 0, km und die externe Ladung (Euro und kWh)."""
+    from backend.services.eauto_wirtschaftlichkeit import QUELLE_NULL, QUELLE_SCHAETZUNG
+
     pool = entscheid.pool
     if gespeichert_quelle == QUELLE_SCHAETZUNG:
         # Die gespeicherte Schaetzung stand als direkter Wert in `resolved` —
@@ -655,7 +737,6 @@ def emob_heimladung_pool(
     if "emob_ladung_extern_kwh" not in direct_fields:
         if pool.extern_kwh > 0 and emob_quelle is not None:
             resolved["emob_ladung_extern_kwh"] = (pool.extern_kwh, emob_quelle)
-    return {"emob_entscheid": entscheid}
 
 
 def _gespeichert_info(resolved):

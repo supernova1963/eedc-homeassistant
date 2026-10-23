@@ -1,7 +1,6 @@
 # Bestand der Funktionen mit kognitiver Komplexität > 50 — darf nur schrumpfen.
 # Neu schreiben: siehe test_kognitive_komplexitaet.py (Docstring). Format: kognitiv<TAB>datei::qualname
 68	api/routes/aktueller_monat/aggregation.py::aggregiere_typen
-92	api/routes/aktueller_monat/aggregation.py::emob_heimladung_pool
 56	api/routes/aktueller_monat/komponenten.py::geraete_sicht
 74	api/routes/aktueller_monat/komponenten.py::komponenten_detail
 55	api/routes/aktueller_monat/quellen_leser.py::_geraete_aus_kanaelen
@@ -17,9 +16,7 @@
 53	api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan
 64	api/routes/import_export/csv_operations.py::export_csv
 65	api/routes/import_export/demo_data.py::create_demo_data
-81	api/routes/import_export/helpers.py::_import_investition_monatsdaten_v09
 51	api/routes/import_export/json_operations.py::import_json
-88	api/routes/investitionen/dashboard_speicher.py::get_speicher_dashboard
 65	api/routes/investitionen/roi.py::get_roi_dashboard
 64	api/routes/investitionen/roi_eingaenge.py::lade_roi_eingaenge
 78	api/routes/investitionen/roi_pv.py::pv_systeme_zeilen
@@ -40,7 +37,6 @@
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 70	services/ha_statistics_service.py::HAStatisticsService.get_hourly_slots_for_day
-92	services/import_parsers/fronius_solarweb.py::FroniusSolarwebParser.parse
 81	services/kanal/bilanz_adapter.py::_tag_wie_ha
 72	services/kanal/modus_strom.py::schreibe_modus_strom
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage

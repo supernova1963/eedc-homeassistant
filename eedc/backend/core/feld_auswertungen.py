@@ -281,10 +281,11 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         # Arbitrage: Netzladung × Ladepreis gegen den Entladewert.
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag",
            "get_speicher_netzladung_kwh"),
-        _a(KOMP_SPEICHER, "api/routes/investitionen/dashboard_speicher.py", "get_speicher_dashboard"),
+        _a(KOMP_SPEICHER, "api/routes/investitionen/dashboard_speicher.py", "_speicher_summen",
+           "get_speicher_netzladung_kwh"),   # RF-30: Phase des Orchestrators `get_speicher_dashboard`
     ),
     ("speicher", "speicher_ladepreis_cent"): (
-        _a(KOMP_SPEICHER, "api/routes/investitionen/dashboard_speicher.py", "get_speicher_dashboard"),
+        _a(KOMP_SPEICHER, "api/routes/investitionen/dashboard_speicher.py", "_speicher_summen"),   # RF-30: Phase des Orchestrators `get_speicher_dashboard`
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
     ),
     ("speicher", "leistung_w"): (
