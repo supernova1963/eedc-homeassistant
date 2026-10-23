@@ -2,6 +2,7 @@
 Cockpit Übersicht — Aggregierte KPI-Übersicht für eine Anlage.
 """
 
+from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -255,6 +256,12 @@ async def get_cockpit_uebersicht(
     - Monatsdaten: NUR für Anlagen-Energiebilanz (einspeisung, netzbezug)
     - InvestitionMonatsdaten: ALLE Komponenten-Details (Speicher, WP, E-Auto, PV-Strings, etc.)
     """
+    # RF-32 (Komplexitäts-Paket RF-29…RF-39, 23.10.2026, Bauform RF-1): die Phasen stehen als Modulfunktionen unter
+    # der Route. Im Orchestrator bleiben (a) der Tarif-Lader ohne Stichtag (`P8_BASELINE_AUSNAHMEN` führt ihn unter
+    # diesem Funktionsnamen) und (b) die Stellen, die `core/feld_auswertungen.py` diesem Symbol als Leser zuschreibt
+    # (Energiebilanz `einspeisung_kwh`/`netzbezug_kwh`/`v2h_entladung_kwh`/`abgabe_kwh`, E-Mob-Pool `ladung_kwh`/
+    # `ladung_pv_kwh`, Benzinpreis `kraftstoffpreis_euro`, Ersparnis-Schleife `ladung_extern_euro`) — Wächter
+    # `test_jedes_feld_hat_eine_auswertung.py` sucht sie im Code genau dieser Funktion.
     # Anlage laden
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
@@ -287,55 +294,8 @@ async def get_cockpit_uebersicht(
     # einmal aus der DB kommt.
     _tarif_cache: dict[date, dict] = {}
 
-    # =====================================================================
-    # MONATSZEILE AUS DEN MONATS-FAKTEN (ADR-002/P10)
-    # =====================================================================
-    # Bis 2026-07-31 hat dieser Endpoint die IMD-Zeilen selbst geladen und
-    # typweise zu Monatswerten gefaltet — knapp 160 Zeilen, die es in
-    # `aussichten/finanzen.py`, `ha_export.py`, `jahresbericht.py` und
-    # `investitionen/crud.py` in leicht abweichenden Fassungen noch einmal gab.
-    # Die Rechnung hier war korrekt (Befund F-5 traf die anderen Sichten, nicht
-    # diese) — genau das ist der Grund für den Umbau: **eine selbst faltende
-    # Sicht ist die nächste Drift-Quelle**, auch wenn sie heute stimmt
-    # (`docs/KONZEPT-MONATS-FAKTEN.md` §11).
-    #
-    # Die Schicht wendet Zeitfilter (#153/#155/#236: aktiv · Anschaffung ·
-    # Stilllegung), Dienstwagen-Filter (#308) und die P7-PV-Auflösung genau
-    # einmal an. Der Jahres-Filter läuft jetzt über `von`/`bis` — vorher filterte
-    # er die IMD- und die Monatsdaten-Query, **nicht** aber `lade_pv_je_monat`:
-    # bei `?jahr=` stand die PV ALLER Jahre in der Erzeugungs-Kachel, im
-    # spezifischen Ertrag und in der Energiebilanz (kein Frontend-Aufrufer
-    # übergibt heute ein Jahr, deshalb hat es niemand gesehen — s. Übergabe N-10).
-    _fenster = ((jahr, 1), (jahr, 12)) if jahr else (None, None)
-    _preis_messung = await lade_preis_aggregate_je_monat(
-        db, anlage_id,
-        von=date(_fenster[0][0], _fenster[0][1], 1) if _fenster[0] else None,
-        bis=date(_fenster[1][0] + 1, 1, 1) if _fenster[1] else None,
-    )
-    fakten = await lade_monats_fakten(
-        db, anlage_id, von=_fenster[0], bis=_fenster[1], tarif_cache=_tarif_cache,
-        preis_messung=_preis_messung,
-    )
-
-    speicher_ladung = sum(f.speicher.ladung_kwh for f in fakten)
-    speicher_entladung = sum(f.speicher.entladung_kwh for f in fakten)
-    wp_waerme = sum(f.wp.waerme_kwh for f in fakten)
-    wp_strom = sum(f.wp.strom_kwh for f in fakten)
-    # #263 K-2 (Konzept §3.5): Wärme, die aus `Strom × JAZ` abgeleitet wurde,
-    # darf nicht wieder durch den Strom geteilt werden — heraus käme exakt die
-    # gepflegte JAZ, also eine Zahl, die nichts misst.
-    wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
-    # N-673: eine ungemessene Achse ist „keine Angabe" — die Summe gibt es nur, wenn ein Monat sie misst.
-    wp_heizung = (sum(f.wp.heizung_kwh or 0.0 for f in fakten)
-                  if any(f.wp.heizung_kwh is not None for f in fakten) else None)
-    wp_warmwasser = (sum(f.wp.warmwasser_kwh or 0.0 for f in fakten)
-                     if any(f.wp.warmwasser_kwh is not None for f in fakten) else None)
-    bkw_erzeugung = sum(f.bkw.erzeugung_kwh for f in fakten)
-    bkw_eigenverbrauch = sum(f.bkw.eigenverbrauch_gemessen_kwh for f in fakten)
-    sonstiges_erzeugung = sum(f.sonstiges.erzeugung_kwh for f in fakten)
-    sonstiges_verbrauch = sum(f.sonstiges.verbrauch_kwh for f in fakten)
-    sonstige_ertraege_gesamt = sum(f.sonstiges.ertraege_euro for f in fakten)
-    sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
+    _fenster, _preis_messung, fakten = await _monats_fakten_des_fensters(db, anlage_id, jahr, _tarif_cache)
+    mengen = _mengen_der_fakten(fakten)
 
     # E-Mobilitäts-Pool: EINE Quelle je Monat liefert die konsistente
     # Heimladungs-Trias (pv + netz == ladung, #262 junky84); externe Lade-Kosten
@@ -362,43 +322,7 @@ async def get_cockpit_uebersicht(
     )
     emob_extern_euro_total = sum(f.emob.extern_euro for f in fakten)
 
-    # G20-2: km PRO FAHRZEUG (inv.id) und pro Monat, damit das eMob-Ersparnis-
-    # Aggregat = Σ der Per-Fahrzeug-Läufe (jeder mit dem Verbrauchs-Parameter
-    # SEINES Fahrzeugs) ist statt EIN Lauf mit dem Referenz-Parameter des ersten
-    # Autos ([[feedback_aggregator_symmetrie]]).
-    eauto_km_by_inv: dict[int, float] = {}
-    eauto_km_pro_monat_by_inv: dict[int, dict[tuple[int, int], float]] = {}
-    # #331: derselbe Schnitt je Fahrzeug für den elektrischen Fahrverbrauch —
-    # der PHEV-Anteil folgt aus DESSEN kWh und DESSEN kWh/100 km.
-    eauto_fahrverbrauch_by_inv: dict[int, float] = {}
-    for f in fakten:
-        for _inv_id, _km in f.emob.km_je_fahrzeug.items():
-            eauto_km_by_inv[_inv_id] = eauto_km_by_inv.get(_inv_id, 0.0) + _km
-            _pm = eauto_km_pro_monat_by_inv.setdefault(_inv_id, {})
-            _pm[f.schluessel] = _pm.get(f.schluessel, 0.0) + _km
-        for _inv_id, _kwh in f.emob.fahrverbrauch_je_fahrzeug.items():
-            eauto_fahrverbrauch_by_inv[_inv_id] = (
-                eauto_fahrverbrauch_by_inv.get(_inv_id, 0.0) + _kwh
-            )
-
-    # Dienstliche Ladekosten über den Layer-SoT (ADR-001) — dieselbe Formel wie
-    # in `aussichten.get_finanz_prognose` und im HA-Export, die sie bis
-    # 2026-07-31 alle drei verschieden (bzw. gar nicht) rechneten.
-    # Beide Preise stammen aus dem Tarif DES MONATS (P8): der Netzanteil aus dem
-    # effektiven Wallbox-Preis (Flex-Ø vor Wallbox-Tarif vor Anlagentarif), der
-    # PV-Anteil aus dem Netzbezugspreis. Letzteres nimmt die EV-Gutschrift
-    # zurück, die `berechne_finanz_aggregat` unten für dieselben kWh
-    # gutschreibt — der frühere Abzug zur Einspeisevergütung tat das nicht und
-    # ließ dem Dienstwagen netto +22 ct je verschenkter kWh (N-18).
-    # Die ENERGIEBILANZ oben bleibt davon unberührt: energetisch ist die Ladung
-    # Eigenverbrauch hinter dem Zähler.
-    # ⭐ N-633 (05.10.2026): der Posten kommt aus den Monats-Fakten (`EmobFakten.dienstliche_ladekosten_euro`, dort
-    # über dieselbe Layer-Formel gebildet) — derselbe Wert, den Cockpit → Monat/Jahr, Tabelle und PDF als eigenen
-    # Posten der Ergebnis-Leiter führen. Diese Sicht faltet ihn wie bisher in die Sonstigen Ausgaben (ihr Antwortfeld
-    # `sonstige_netto_euro` trägt ihn, Bestandsproben `test_dienstliche_ladekosten_drei_sichten.py`,
-    # `test_aussichten_finanz_aggregat_symmetrie.py`); der Netto-Ertrag ist in beiden Formen derselbe.
-    dienstlich_ladekosten_euro = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
-    sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
+    eauto_km_by_inv, eauto_km_pro_monat_by_inv, eauto_fahrverbrauch_by_inv = _km_je_fahrzeug(fakten)
 
     # Anschaffungsdatum-Grenze: Energiebilanz + Erträge nur über Monate, in denen
     # mindestens ein Erzeuger hinter dem Zähler aktiv war (PV-Module ∪
@@ -475,6 +399,433 @@ async def get_cockpit_uebersicht(
 
     # Anlagenleistung aus Investitionen (nur aktive — stillgelegte nicht mitzählen)
     today = date.today()
+    k = _Kontext(
+        anlage_id=anlage_id, investitionen=investitionen, inv_by_id=inv_by_id, today=today, fakten=fakten,
+        fenster=_fenster,
+    )
+    anlagenleistung_kwp, spez_ertrag = await _anlagenleistung_und_spez_ertrag(db, k, anlage, pv_monate, pv_erzeugung)
+
+    # Komponenten-Flags und Berechnungen (nur aktive Investitionen)
+    hat_speicher, speicher_kapazitaet, _eta_speicher, speicher_effizienz, speicher_vollzyklen = _speicher_kennzahlen(
+        k, mengen.speicher_ladung, mengen.speicher_entladung,
+    )
+    wp_ersparnis, wp_felder = await _waermepumpe(db, k, mengen)
+
+    hat_emobilitaet, emob_pv_anteil = _emob_anzeige(k, emob_ladung, emob_pv_ladung)
+    # #260: per-Monat-korrekter Benzinpreis (EU-OB-Monatspreis aus Monatsdaten),
+    # km-gewichtet — derselbe Pfad wie E-Auto-Dashboard + Monatsberichte. Vorher
+    # rief die Übersicht den Skalar-Helper mit dem statischen Inv-Parameter-Preis
+    # (1,80 €-Default) auf → Drift gegen die Monatsberichte (NongJoWo).
+    benzinpreis_lookup = {
+        f.schluessel: f.tarif.kraftstoffpreis_euro
+        for f in fakten
+        if f.meta.hat_zaehlerzeile
+    }
+    # F-18 (ADR-002/P8): dieselbe Behandlung für die STROM-Seite. Bis
+    # 2026-08-08 ging hier `wallbox_preis_cent` hinein — der **heute** gültige
+    # Tarif, angewendet auf die Netzladung der ganzen Historie. Eine
+    # Preiserhöhung bewertete damit rückwirkend jedes Ladejahr neu, und der
+    # Komponenten-Hub (der schon mittelte) wies eine andere Ersparnis aus.
+    # `wallbox_preis_effektiv_cent` ist der Tarif DES MONATS inklusive Flex-Ø —
+    # genau der Wert, den vier Zeilen weiter unten die dienstlichen Ladekosten
+    # (`:295`) längst benutzen. **Kein Zählerzeilen-Filter** wie beim
+    # Benzinpreis: der Tarif kommt aus `lade_tarife_fuer_anlage` und existiert
+    # auch für Monate ohne eigene Zählerzeile.
+    strompreis_lookup = {f.schluessel: f.tarif.wallbox_preis_effektiv_cent for f in fakten}
+    # G20-2 (Gernot 2026-07-20): eMob-Ersparnis = Σ der Per-Fahrzeug-Läufe (jeder
+    # mit dem Verbrauchs-Parameter SEINES Fahrzeugs), statt EIN Lauf über die
+    # Gesamt-km mit dem Referenz-Parameter des ersten E-Autos.
+    # [[feedback_aggregator_symmetrie]]
+    #
+    # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): die Heim-Netzladung JEDES Fahrzeugs ist
+    # Σ Monate seiner Menge aus dem Entscheid (`f.emob.je_auto[inv].netz_kwh`: eigene
+    # Messung, Anteil am Rest, Schätzung). Bis 26.09.2026 stand hier `emob_netz_ladung ×
+    # km-Anteil` mit `if _km_total <= 0: continue` — ein Auto, das geladen hat, aber
+    # nicht gefahren ist, verlor still seine Stromrechnung, und ein Auto mit eigener
+    # Messung bekam den km-Anteil statt seiner Werte. Die Preis-Gewichte sind jetzt die
+    # Netzladung DIESES Fahrzeugs je Monat (F-18, wie im E-Auto-Hub). Extern-Kosten
+    # bleiben nach km-Anteil (die eine Funktion verteilt Extern nicht je Auto).
+    total_eauto_km = sum(eauto_km_by_inv.values())
+    netz_je_inv, netz_pro_monat_je_inv, pv_je_inv, pv_pro_monat_je_inv, _pv_monate = _ladung_je_fahrzeug(fakten)
+    ev_preis_lookup = await ev_preis_je_monat(
+        db, anlage_id, [(j, m, md) for (j, m), md in _pv_monate.items()],
+        tarif_cache=_tarif_cache, preis_messung=_preis_messung,
+    )
+    emob_ersparnis = 0.0
+    benzin_verbrauch = 0.0
+    for _inv_id in sorted(set(eauto_km_by_inv) | set(netz_je_inv) | set(pv_je_inv)):
+        _km_total = eauto_km_by_inv.get(_inv_id, 0.0)
+        _share = _km_total / total_eauto_km if total_eauto_km > 0 else 0.0
+        _car_result = berechne_eauto_ersparnis_periode(
+            km_pro_monat=[
+                (j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv.get(_inv_id, {}).items()
+            ],
+            ladung_netz_kwh_gesamt=netz_je_inv.get(_inv_id, 0.0),
+            ladung_pv_kwh_gesamt=pv_je_inv.get(_inv_id, 0.0),
+            pv_strompreis_cent=netzbezug_preis_cent,
+            monats_ev_preis_lookup=ev_preis_lookup,
+            pv_pro_monat=pv_pro_monat_je_inv.get(_inv_id) or None,
+            ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
+            wallbox_strompreis_cent=wallbox_preis_cent,
+            eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
+            monats_benzinpreis_lookup=benzinpreis_lookup,
+            fahrverbrauch_kwh_gesamt=eauto_fahrverbrauch_by_inv.get(_inv_id) or None,
+            # F-18: der Tarif DES MONATS statt des heutigen, gewichtet mit der
+            # Netzladung dieses Fahrzeugs je Monat.
+            monats_strompreis_lookup=strompreis_lookup,
+            netz_pro_monat=netz_pro_monat_je_inv.get(_inv_id) or None,
+        )
+        emob_ersparnis += _car_result.ersparnis_euro
+        benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
+    emob_ersparnis = round(emob_ersparnis, 2)
+
+    hat_balkonkraftwerk, hat_sonstiges = _hat_bkw_und_sonstiges(k)
+
+    netzbezug_kosten, finanz_zeilen = await _finanz_zeilen_der_monate(
+        db, anlage_id, md_pv, _tarif_cache, _preis_messung,
+    )
+
+    # §51 EEG: nicht vergüteter Erlös + zugehörige kWh kommen aus dem Aggregat;
+    # `hat_neg_preis_daten` bleibt False, wenn KEIN Monat Tages-Aggregate hat,
+    # und signalisiert dem Frontend „keine Strompreis-Mitschrift gepflegt".
+    _finanz = berechne_finanz_aggregat(finanz_zeilen)
+    einspeise_erloes = _finanz.einspeise_erloes_euro
+    # #326: per-Monat summiert (Σ EV_m × flexpreis_m) statt Gesamt-EV × Ø-Preis —
+    # deckungsgleich mit Auswertungen→Finanzen.
+    ev_ersparnis = _finanz.ev_ersparnis_euro
+    nicht_vergueteter_erloes_sum = _finanz.nicht_vergueteter_erloes_euro
+    nicht_verguetete_kwh_sum = _finanz.nicht_verguetete_kwh
+    hat_neg_preis_daten = _finanz.hat_neg_preis_daten
+    # Netto-Kanon (ADR-002/P9): `pv_erzeugung_kwh` der Finanz-Zeile ist
+    # „PV-Module + BKW" — der daraus abgeleitete Eigenverbrauch deckt den
+    # BKW-Anteil also mit ab. `_finanz.bkw_ersparnis_euro` trägt deshalb NUR
+    # noch die BKW-Monate OHNE erfasste Erzeugung (`bkw_finanz_beitrag`, oben);
+    # für alle anderen ist er 0 und die Addition hier folgenlos. Den Term ganz
+    # wegzulassen (Stand 2026-07-31) ließ genau diese Anlagen ihre Ersparnis
+    # verlieren.
+    # Der Netto-Ertrag selbst entsteht seit 03.10.2026 in der Ergebnis-Leiter (`berechne_ergebnis`, Stufe 1) — weiter
+    # unten, sobald USt, Sonstiges und Erzeuger-Erlös feststehen. Hier stand er als vier Inline-Schritte.
+
+    investition_vollkosten, investition_mehrkosten, investition_gesamt = _investitionssummen(investitionen, jahr)
+
+    # N-228: die Jahres-Betriebskosten der HEUTE aktiven Komponenten gingen bis 03.10.2026 hier in die USt ein.
+    # Seit dem einen USt-Eingang (`services/ust_satz.py`) zählt je Kalenderjahr, was in DIESEM Jahr aktiv war — der
+    # Zeitraum-Abzug weiter unten trägt jede Komponente ohnehin über IHRE Laufzeit.
+
+    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
+    # USt auf den Eigenverbrauch — seit 03.10.2026 aus dem EINEN Eingang `services/ust_satz.py` (G1/E9, N-601):
+    # je Kalenderjahr die im Jahr aktiven Investitionen (`ist_aktiv_im_zeitraum`, Regel 05.06.2026) für Bemessung UND
+    # Betriebskosten, die abgeschlossenen Monate mit aktivem Erzeuger, Σ der Monats-Eigenverbräuche. Bis dahin nahm
+    # diese Sicht ALLE Investitionen für die Bemessung (#123 ist eine Regel für Mengen, nicht für Kosten), die HEUTE
+    # aktiven für die Betriebskosten und die Perioden-EV — und nannte für dasselbe Jahr eine andere Zahl als die
+    # Monatsreihe (Probe 03.10.: 20,21 € gegen 35,96 €, ohne die inaktive Wallbox beide 18,90 €).
+    ust_eigenverbrauch = ust_eigenverbrauch_zeitraum(anlage, investitionen, fakten)
+
+    # #326: BKW-Ersparnis ebenfalls per-Monat (Σ BKW-EV_m × flexpreis_m).
+    bkw_ersparnis = _finanz.bkw_ersparnis_euro
+    sonstige_netto = mengen.sonstige_ertraege_gesamt - mengen.sonstige_ausgaben_gesamt
+    # #326 (rilmor-mhrs): Die manuell gepflegten „Sonstige Erträge & Ausgaben"
+    # gehören in den ANGEZEIGTEN Netto-Ertrag — exakt wie Auswertungen→Finanzen
+    # (Einspeiseerlös + EV-Ersparnis + Sonstige-Erträge − Sonstige-Ausgaben).
+    # Bisher floss sonstige_netto nur in kumulative_ersparnis/ROI ein, nicht in
+    # die Netto-Ertrag-Kachel → das Cockpit zeigte eine andere Summe als die
+    # Auswertungen. Aufschlagen NACH dem USt-Abzug (USt betrifft nur den
+    # Eigenverbrauch, nicht die Finanzpositionen).
+
+    # Konzept §9 Weg 2: gepflegte Erlöse einzelner Erzeuger mit **eigenem**
+    # Einspeisetarif. Diese Sicht baut ihren Netto-Ertrag selbst aus den
+    # Einzel-Komponenten zusammen (USt-Abzug dazwischen) — der Posten muss
+    # deshalb hier addiert werden, sonst zeigte das Cockpit eine andere Summe
+    # als Auswertungen und HA-Export. Dieselbe Klasse wie #326 eine Zeile höher.
+    erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
+    # Stufe 1 der Ergebnis-Leiter (GLOSSAR „Netto-Ertrag (PV)") — dieselbe Funktion wie Cockpit → Monat/Jahr.
+    # `bkw_ersparnis_euro` trägt nur die BKW-Monate OHNE erfasste Erzeugung (P9); Sonstiges nach der USt, wie bisher.
+    netto_ertrag = berechne_ergebnis(ErgebnisEingang(
+        einspeise_erloes=einspeise_erloes,
+        ev_ersparnis=ev_ersparnis,
+        bkw_rest_ersparnis=_finanz.bkw_ersparnis_euro,
+        erzeuger_erloes=erzeuger_erloes_gesamt,
+        sonstige_netto=sonstige_netto,
+        ust_anteil=ust_eigenverbrauch,
+    )).netto_ertrag
+
+    # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
+    # N-588 (P15): die Menge hinter der Ersparnis — ohne die bewertbaren Wandlungsverluste der Monate.
+    # N-659: die Verluste derselben Monate wie der Eigenverbrauch (`md_pv`) — wie die Ersparnis.
+    eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
+        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(md_pv), None,
+    )
+    _co2 = berechne_co2_bilanz(
+        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste,
+        wp_waerme_kwh=mengen.wp_waerme,
+        wp_strom_kwh=mengen.wp_strom,
+        # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.
+        wp_strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
+        emob_km=emob_km,
+        emob_netz_ladung_kwh=emob_netz_ladung,
+        # N-672: die PV-Ladung trägt den Strommix wie die Netzladung (eine kWh ist einmal CO₂).
+        emob_pv_ladung_kwh=emob_pv_ladung,
+        benzin_verbrauch_liter=benzin_verbrauch,
+        # #331: derselbe fossile Anteil, den die Ersparnis oben als eigene
+        # Kostenposition trägt — sonst hätten Geld und CO₂ zwei Wahrheiten.
+        fossil_getankt_liter=fossil_getankte_liter(
+            km_je_fahrzeug=eauto_km_by_inv,
+            fahrverbrauch_je_fahrzeug=eauto_fahrverbrauch_by_inv,
+            params_je_fahrzeug={
+                _id: getattr(inv_by_id.get(_id), "parameter", None)
+                for _id in eauto_km_by_inv
+            },
+        ),
+    )
+    co2_pv = _co2.co2_pv_kg
+    co2_wp = _co2.co2_wp_kg
+    co2_emob = _co2.co2_emob_kg
+    co2_gesamt = _co2.co2_gesamt_kg
+
+    alle_monate, zeitraum_von, zeitraum_bis, anzahl_monate = _zeitraum(fakten)
+
+    # N-228, Messseite: jede Komponente mit IHRER Laufzeit statt der
+    # anlagenweiten Jahressumme über den ganzen Zeitraum. Am Dev-Bestand
+    # gemessen: 1.291,67 € gegen 725,00 € bei zwei Komponenten mit gepflegten
+    # Betriebskosten — der ROI-Fortschritt war entsprechend zu niedrig.
+    # N-699 (12.10.2026): die Regel steht seitdem EINMAL im Layer (`core/berechnungen/betriebskosten.py`) — PDF,
+    # Aussichten und Cockpit → Monat/Jahr rufen dieselbe Funktion.
+    betriebskosten_zeitraum = betriebskosten_im_zeitraum(investitionen, alle_monate)
+    # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
+    # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
+    # er ist seit P9 Teil von `netto_ertrag` (und bei mitgeschriebener BKW-
+    # Erzeugung ohnehin 0, weil dann `ev_ersparnis` ihn trägt). Bis 2026-07-31
+    # stand er hier zusätzlich — der ROI-Fortschritt war bei BKW-Besitzern um
+    # die BKW-Ersparnis zu hoch.
+    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis - betriebskosten_zeitraum
+    roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
+
+    # P4/§3 Regel 2: das Flag wird im selben Schritt ausgeliefert, in dem es
+    # gesetzt wird. Grundgesamtheit ist `md_pv` — dieselbe Menge, aus der die
+    # PV-Kopfzahl oben gebildet wurde; ein Monat, der gar nicht in die Summe
+    # eingeht, darf sie auch nicht beschriften.
+    hinweise = [h for h in (pv_unvollstaendig_hinweis(md_pv),) if h]
+
+    return CockpitUebersichtResponse(
+        pv_erzeugung_kwh=round(pv_erzeugung, 1),
+        gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
+        netzbezug_kwh=round(netzbezug, 1),
+        einspeisung_kwh=round(einspeisung, 1),
+        direktverbrauch_kwh=round(direktverbrauch, 1),
+        eigenverbrauch_kwh=round(eigenverbrauch, 1),
+        wandlungsverluste_kwh=_q_verluste.zaehler,
+        wandlungsverluste_bezug_kwh=_q_verluste.nenner,
+        wandlungsverluste_prozent=wandlungsverluste_prozent(_q_verluste.zaehler, _q_verluste.nenner),
+        eigenverbrauch_ohne_verluste_kwh=round(eigenverbrauch_ohne_verluste, 1),
+        verluste_grund=verluste_grund_zeitraum(
+            (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in fakten),
+        autarkie_prozent=round(autarkie, 1),
+        eigenverbrauch_quote_prozent=round(ev_quote, 1),
+        direktverbrauch_quote_prozent=round(dv_quote, 1),
+        spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 1) if spez_ertrag else None,
+        anlagenleistung_kwp=round(anlagenleistung_kwp, 2),
+        speicher_ladung_kwh=round(mengen.speicher_ladung, 1),
+        speicher_entladung_kwh=round(mengen.speicher_entladung, 1),
+        # `is not None`, nicht `if speicher_effizienz`: ein η von exakt 0,0 ist
+        # eine Messung (geladen, nichts entnommen), keine fehlende Angabe.
+        speicher_effizienz_prozent=round(speicher_effizienz, 1) if speicher_effizienz is not None else None,
+        speicher_effizienz_quelle=_eta_speicher.quelle,
+        speicher_vollzyklen=round(speicher_vollzyklen, 1) if speicher_vollzyklen else None,
+        speicher_kapazitaet_kwh=round(speicher_kapazitaet, 1),
+        hat_speicher=hat_speicher,
+        **wp_felder,
+        emob_km=round(emob_km, 0),
+        emob_ladung_kwh=round(emob_ladung, 1),
+        emob_pv_anteil_prozent=round(emob_pv_anteil, 1) if emob_pv_anteil else None,
+        emob_ersparnis_euro=round(emob_ersparnis, 2),
+        emob_verbrauch_100km=round(emob_eff.wert, 1) if emob_eff.wert is not None else None,
+        emob_verbrauch_quelle=emob_eff.quelle,
+        hat_emobilitaet=hat_emobilitaet,
+        bkw_erzeugung_kwh=round(mengen.bkw_erzeugung, 1),
+        bkw_eigenverbrauch_kwh=round(mengen.bkw_eigenverbrauch, 1),
+        hat_balkonkraftwerk=hat_balkonkraftwerk,
+        sonstiges_erzeugung_kwh=round(mengen.sonstiges_erzeugung, 1),
+        sonstiges_verbrauch_kwh=round(mengen.sonstiges_verbrauch, 1),
+        hat_sonstiges=hat_sonstiges,
+        einspeise_erloes_euro=round(einspeise_erloes, 2),
+        einspeise_neg_preis_kwh=(
+            round(nicht_verguetete_kwh_sum, 1) if hat_neg_preis_daten else None
+        ),
+        nicht_vergueteter_erloes_euro=(
+            round(nicht_vergueteter_erloes_sum, 2) if hat_neg_preis_daten else None
+        ),
+        ev_ersparnis_euro=round(ev_ersparnis, 2),
+        netzbezug_kosten_euro=round(netzbezug_kosten, 2),
+        ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
+        netto_ertrag_euro=round(netto_ertrag, 2),
+        bkw_ersparnis_euro=round(bkw_ersparnis, 2),
+        sonstige_netto_euro=round(sonstige_netto, 2),
+        jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
+        investition_gesamt_euro=round(investition_gesamt, 2),
+        investition_vollkosten_euro=round(investition_vollkosten, 2),
+        investition_mehrkosten_euro=round(investition_mehrkosten, 2),
+        steuerliche_behandlung=steuerliche_beh if steuerliche_beh != "keine_ust" else None,
+        co2_pv_kg=round(co2_pv, 1),
+        co2_wp_kg=round(co2_wp, 1),
+        co2_emob_kg=round(co2_emob, 1),
+        co2_gesamt_kg=round(co2_gesamt, 1),
+        anzahl_monate=anzahl_monate,
+        zeitraum_von=zeitraum_von,
+        zeitraum_bis=zeitraum_bis,
+        hinweise=hinweise,
+    )
+
+
+@dataclass(frozen=True)
+class _Kontext:
+    """Geteilte Eingänge der Phasen von `get_cockpit_uebersicht` (RF-32) — nur gelesen."""
+
+    anlage_id: int
+    investitionen: list
+    inv_by_id: dict
+    today: date
+    fakten: list
+    fenster: tuple
+
+
+@dataclass(frozen=True)
+class _Mengen:
+    """Summen der Monats-Fakten über das Fenster (RF-32, Phase `_mengen_der_fakten`)."""
+
+    speicher_ladung: float
+    speicher_entladung: float
+    wp_waerme: float
+    wp_strom: float
+    wp_waerme_abgeleitet: float
+    wp_heizung: Optional[float]
+    wp_warmwasser: Optional[float]
+    bkw_erzeugung: float
+    bkw_eigenverbrauch: float
+    sonstiges_erzeugung: float
+    sonstiges_verbrauch: float
+    sonstige_ertraege_gesamt: float
+    sonstige_ausgaben_gesamt: float
+
+
+async def _monats_fakten_des_fensters(db: AsyncSession, anlage_id: int, jahr: Optional[int], _tarif_cache: dict):
+    """RF-32 Phase: Fenster (`jahr` oder alle), Preis-Messung und die Monats-Fakten (ADR-002/P10)."""
+    # =====================================================================
+    # MONATSZEILE AUS DEN MONATS-FAKTEN (ADR-002/P10)
+    # =====================================================================
+    # Bis 2026-07-31 hat dieser Endpoint die IMD-Zeilen selbst geladen und
+    # typweise zu Monatswerten gefaltet — knapp 160 Zeilen, die es in
+    # `aussichten/finanzen.py`, `ha_export.py`, `jahresbericht.py` und
+    # `investitionen/crud.py` in leicht abweichenden Fassungen noch einmal gab.
+    # Die Rechnung hier war korrekt (Befund F-5 traf die anderen Sichten, nicht
+    # diese) — genau das ist der Grund für den Umbau: **eine selbst faltende
+    # Sicht ist die nächste Drift-Quelle**, auch wenn sie heute stimmt
+    # (`docs/KONZEPT-MONATS-FAKTEN.md` §11).
+    #
+    # Die Schicht wendet Zeitfilter (#153/#155/#236: aktiv · Anschaffung ·
+    # Stilllegung), Dienstwagen-Filter (#308) und die P7-PV-Auflösung genau
+    # einmal an. Der Jahres-Filter läuft jetzt über `von`/`bis` — vorher filterte
+    # er die IMD- und die Monatsdaten-Query, **nicht** aber `lade_pv_je_monat`:
+    # bei `?jahr=` stand die PV ALLER Jahre in der Erzeugungs-Kachel, im
+    # spezifischen Ertrag und in der Energiebilanz (kein Frontend-Aufrufer
+    # übergibt heute ein Jahr, deshalb hat es niemand gesehen — s. Übergabe N-10).
+    _fenster = ((jahr, 1), (jahr, 12)) if jahr else (None, None)
+    _preis_messung = await lade_preis_aggregate_je_monat(
+        db, anlage_id,
+        von=date(_fenster[0][0], _fenster[0][1], 1) if _fenster[0] else None,
+        bis=date(_fenster[1][0] + 1, 1, 1) if _fenster[1] else None,
+    )
+    fakten = await lade_monats_fakten(
+        db, anlage_id, von=_fenster[0], bis=_fenster[1], tarif_cache=_tarif_cache,
+        preis_messung=_preis_messung,
+    )
+    return _fenster, _preis_messung, fakten
+
+
+def _mengen_der_fakten(fakten: list) -> _Mengen:
+    """RF-32 Phase: Speicher-, WP-, BKW- und Sonstiges-Summen der Fakten samt dienstlicher Ladekosten."""
+    speicher_ladung = sum(f.speicher.ladung_kwh for f in fakten)
+    speicher_entladung = sum(f.speicher.entladung_kwh for f in fakten)
+    wp_waerme = sum(f.wp.waerme_kwh for f in fakten)
+    wp_strom = sum(f.wp.strom_kwh for f in fakten)
+    # #263 K-2 (Konzept §3.5): Wärme, die aus `Strom × JAZ` abgeleitet wurde,
+    # darf nicht wieder durch den Strom geteilt werden — heraus käme exakt die
+    # gepflegte JAZ, also eine Zahl, die nichts misst.
+    wp_waerme_abgeleitet = sum(f.wp.waerme_abgeleitet_kwh for f in fakten)
+    # N-673: eine ungemessene Achse ist „keine Angabe" — die Summe gibt es nur, wenn ein Monat sie misst.
+    wp_heizung = (sum(f.wp.heizung_kwh or 0.0 for f in fakten)
+                  if any(f.wp.heizung_kwh is not None for f in fakten) else None)
+    wp_warmwasser = (sum(f.wp.warmwasser_kwh or 0.0 for f in fakten)
+                     if any(f.wp.warmwasser_kwh is not None for f in fakten) else None)
+    bkw_erzeugung = sum(f.bkw.erzeugung_kwh for f in fakten)
+    bkw_eigenverbrauch = sum(f.bkw.eigenverbrauch_gemessen_kwh for f in fakten)
+    sonstiges_erzeugung = sum(f.sonstiges.erzeugung_kwh for f in fakten)
+    sonstiges_verbrauch = sum(f.sonstiges.verbrauch_kwh for f in fakten)
+    sonstige_ertraege_gesamt = sum(f.sonstiges.ertraege_euro for f in fakten)
+    sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
+
+    # Dienstliche Ladekosten über den Layer-SoT (ADR-001) — dieselbe Formel wie
+    # in `aussichten.get_finanz_prognose` und im HA-Export, die sie bis
+    # 2026-07-31 alle drei verschieden (bzw. gar nicht) rechneten.
+    # Beide Preise stammen aus dem Tarif DES MONATS (P8): der Netzanteil aus dem
+    # effektiven Wallbox-Preis (Flex-Ø vor Wallbox-Tarif vor Anlagentarif), der
+    # PV-Anteil aus dem Netzbezugspreis. Letzteres nimmt die EV-Gutschrift
+    # zurück, die `berechne_finanz_aggregat` unten für dieselben kWh
+    # gutschreibt — der frühere Abzug zur Einspeisevergütung tat das nicht und
+    # ließ dem Dienstwagen netto +22 ct je verschenkter kWh (N-18).
+    # Die ENERGIEBILANZ oben bleibt davon unberührt: energetisch ist die Ladung
+    # Eigenverbrauch hinter dem Zähler.
+    # ⭐ N-633 (05.10.2026): der Posten kommt aus den Monats-Fakten (`EmobFakten.dienstliche_ladekosten_euro`, dort
+    # über dieselbe Layer-Formel gebildet) — derselbe Wert, den Cockpit → Monat/Jahr, Tabelle und PDF als eigenen
+    # Posten der Ergebnis-Leiter führen. Diese Sicht faltet ihn wie bisher in die Sonstigen Ausgaben (ihr Antwortfeld
+    # `sonstige_netto_euro` trägt ihn, Bestandsproben `test_dienstliche_ladekosten_drei_sichten.py`,
+    # `test_aussichten_finanz_aggregat_symmetrie.py`); der Netto-Ertrag ist in beiden Formen derselbe.
+    dienstlich_ladekosten_euro = sum(f.emob.dienstliche_ladekosten_euro for f in fakten)
+    sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
+    return _Mengen(
+        speicher_ladung=speicher_ladung,
+        speicher_entladung=speicher_entladung,
+        wp_waerme=wp_waerme,
+        wp_strom=wp_strom,
+        wp_waerme_abgeleitet=wp_waerme_abgeleitet,
+        wp_heizung=wp_heizung,
+        wp_warmwasser=wp_warmwasser,
+        bkw_erzeugung=bkw_erzeugung,
+        bkw_eigenverbrauch=bkw_eigenverbrauch,
+        sonstiges_erzeugung=sonstiges_erzeugung,
+        sonstiges_verbrauch=sonstiges_verbrauch,
+        sonstige_ertraege_gesamt=sonstige_ertraege_gesamt,
+        sonstige_ausgaben_gesamt=sonstige_ausgaben_gesamt,
+    )
+
+
+def _km_je_fahrzeug(fakten: list) -> tuple[dict, dict, dict]:
+    """RF-32 Phase: km und elektrischer Fahrverbrauch je Fahrzeug (G20-2, #331)."""
+    # G20-2: km PRO FAHRZEUG (inv.id) und pro Monat, damit das eMob-Ersparnis-
+    # Aggregat = Σ der Per-Fahrzeug-Läufe (jeder mit dem Verbrauchs-Parameter
+    # SEINES Fahrzeugs) ist statt EIN Lauf mit dem Referenz-Parameter des ersten
+    # Autos ([[feedback_aggregator_symmetrie]]).
+    eauto_km_by_inv: dict[int, float] = {}
+    eauto_km_pro_monat_by_inv: dict[int, dict[tuple[int, int], float]] = {}
+    # #331: derselbe Schnitt je Fahrzeug für den elektrischen Fahrverbrauch —
+    # der PHEV-Anteil folgt aus DESSEN kWh und DESSEN kWh/100 km.
+    eauto_fahrverbrauch_by_inv: dict[int, float] = {}
+    for f in fakten:
+        for _inv_id, _km in f.emob.km_je_fahrzeug.items():
+            eauto_km_by_inv[_inv_id] = eauto_km_by_inv.get(_inv_id, 0.0) + _km
+            _pm = eauto_km_pro_monat_by_inv.setdefault(_inv_id, {})
+            _pm[f.schluessel] = _pm.get(f.schluessel, 0.0) + _km
+        for _inv_id, _kwh in f.emob.fahrverbrauch_je_fahrzeug.items():
+            eauto_fahrverbrauch_by_inv[_inv_id] = (
+                eauto_fahrverbrauch_by_inv.get(_inv_id, 0.0) + _kwh
+            )
+    return eauto_km_by_inv, eauto_km_pro_monat_by_inv, eauto_fahrverbrauch_by_inv
+
+
+async def _anlagenleistung_und_spez_ertrag(
+    db: AsyncSession, k: _Kontext, anlage: Anlage, pv_monate, pv_erzeugung: float,
+):
+    """RF-32 Phase: Anlagenleistung der heute aktiven Erzeuger (P3-a) und spezifischer Ertrag (annualisiert)."""
+    anlage_id, investitionen, today = k.anlage_id, k.investitionen, k.today
     anlagenleistung_kwp = 0.0
     # kWp über den SoT-Dispatcher (ADR-002/P3-a): er kennt für PV-Module
     # Spalte → `parameter` (#229) und für BKW zusätzlich `leistung_wp × anzahl`.
@@ -532,8 +883,12 @@ async def get_cockpit_uebersicht(
         fallback_kwp=anlagenleistung_kwp,
         monatsgewichte=monatsgewichte,
     )
+    return anlagenleistung_kwp, spez_ertrag
 
-    # Komponenten-Flags und Berechnungen (nur aktive Investitionen)
+
+def _speicher_kennzahlen(k: _Kontext, speicher_ladung: float, speicher_entladung: float):
+    """RF-32 Phase: Speicher-Flag, Kapazität, η (N-252) und Vollzyklen."""
+    investitionen, today = k.investitionen, k.today
     speicher_invs = [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_an(today)]
     hat_speicher = len(speicher_invs) > 0
     speicher_kapazitaet = sum(
@@ -556,7 +911,14 @@ async def get_cockpit_uebersicht(
     # von `vollzyklen`. Der Wert hatte hier keinen Client-Leser — mit dem
     # Speicher-Block in Cockpit → Jahr (#358 Phase 1) bekommt er einen.
     speicher_vollzyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
+    return hat_speicher, speicher_kapazitaet, _eta_speicher, speicher_effizienz, speicher_vollzyklen
 
+
+async def _waermepumpe(db: AsyncSession, k: _Kontext, mengen: _Mengen) -> tuple[float, dict]:
+    """RF-32 Phase: der Wärmepumpen-Block — Kennzahlen je Gerät, Jahreskennzahlen, Arbeitszahl (E1b-Schranke),
+    WP-Ersparnis (N-609) und die `wp_*`-Felder der Antwort (gleiche Ausdrücke wie zuvor im Antwort-Aufruf)."""
+    anlage_id, investitionen, today, fakten = k.anlage_id, k.investitionen, k.today, k.fakten
+    inv_by_id, _fenster = k.inv_by_id, k.fenster
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0
     # JAZ/COP nur wenn beide Seiten **gemessen** sind. Zwei Fälle, ein „—":
@@ -658,331 +1020,11 @@ async def get_cockpit_uebersicht(
     # HEUTIGEN Tarif, ohne Monats-Gaspreis: zwei WP 50 statt 110 €, Tarifwechsel 0 statt 25 €, Gaspreis 25 statt
     # 65 €, Zusatzkosten 85 statt 105 €. Die Zahl geht in `kumulative_ersparnis` → `jahres_rendite_prozent`.
     wp_ersparnis = sum(wp_ersparnis_monat(f, inv_by_id) or 0.0 for f in fakten)
-
-    emob_invs = [
-        i for i in investitionen
-        if i.typ in ("e-auto", "wallbox")
-        and i.ist_aktiv_an(today)
-        and not ist_dienstlich(i)
-    ]
-    hat_emobilitaet = len(emob_invs) > 0
-    emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
-    # #260: per-Monat-korrekter Benzinpreis (EU-OB-Monatspreis aus Monatsdaten),
-    # km-gewichtet — derselbe Pfad wie E-Auto-Dashboard + Monatsberichte. Vorher
-    # rief die Übersicht den Skalar-Helper mit dem statischen Inv-Parameter-Preis
-    # (1,80 €-Default) auf → Drift gegen die Monatsberichte (NongJoWo).
-    benzinpreis_lookup = {
-        f.schluessel: f.tarif.kraftstoffpreis_euro
-        for f in fakten
-        if f.meta.hat_zaehlerzeile
-    }
-    # F-18 (ADR-002/P8): dieselbe Behandlung für die STROM-Seite. Bis
-    # 2026-08-08 ging hier `wallbox_preis_cent` hinein — der **heute** gültige
-    # Tarif, angewendet auf die Netzladung der ganzen Historie. Eine
-    # Preiserhöhung bewertete damit rückwirkend jedes Ladejahr neu, und der
-    # Komponenten-Hub (der schon mittelte) wies eine andere Ersparnis aus.
-    # `wallbox_preis_effektiv_cent` ist der Tarif DES MONATS inklusive Flex-Ø —
-    # genau der Wert, den vier Zeilen weiter unten die dienstlichen Ladekosten
-    # (`:295`) längst benutzen. **Kein Zählerzeilen-Filter** wie beim
-    # Benzinpreis: der Tarif kommt aus `lade_tarife_fuer_anlage` und existiert
-    # auch für Monate ohne eigene Zählerzeile.
-    strompreis_lookup = {f.schluessel: f.tarif.wallbox_preis_effektiv_cent for f in fakten}
-    # G20-2 (Gernot 2026-07-20): eMob-Ersparnis = Σ der Per-Fahrzeug-Läufe (jeder
-    # mit dem Verbrauchs-Parameter SEINES Fahrzeugs), statt EIN Lauf über die
-    # Gesamt-km mit dem Referenz-Parameter des ersten E-Autos.
-    # [[feedback_aggregator_symmetrie]]
-    #
-    # ⭐ N-555 Stufe 2 (Konzept Regel 2, E6): die Heim-Netzladung JEDES Fahrzeugs ist
-    # Σ Monate seiner Menge aus dem Entscheid (`f.emob.je_auto[inv].netz_kwh`: eigene
-    # Messung, Anteil am Rest, Schätzung). Bis 26.09.2026 stand hier `emob_netz_ladung ×
-    # km-Anteil` mit `if _km_total <= 0: continue` — ein Auto, das geladen hat, aber
-    # nicht gefahren ist, verlor still seine Stromrechnung, und ein Auto mit eigener
-    # Messung bekam den km-Anteil statt seiner Werte. Die Preis-Gewichte sind jetzt die
-    # Netzladung DIESES Fahrzeugs je Monat (F-18, wie im E-Auto-Hub). Extern-Kosten
-    # bleiben nach km-Anteil (die eine Funktion verteilt Extern nicht je Auto).
-    total_eauto_km = sum(eauto_km_by_inv.values())
-    netz_je_inv: dict[int, float] = {}
-    netz_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
-    # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung jedes Fahrzeugs je Monat — sie trägt den Preis, zu dem die
-    # Eigenverbrauchs-Ersparnis unten (`baue_finanz_zeile`) sie gutschreibt. Bis 11.10.2026 ging nur die Netzladung
-    # hinein, die PV-Ladung war „kostenlos" und stand damit zweimal als Geld im Ergebnis.
-    pv_je_inv: dict[int, float] = {}
-    pv_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
-    _pv_monate: dict[tuple[int, int], object] = {}
-    for f in fakten:
-        for _inv_id, _auto in f.emob.je_auto.items():
-            if _auto.netz_kwh:
-                netz_je_inv[_inv_id] = netz_je_inv.get(_inv_id, 0.0) + _auto.netz_kwh
-                netz_pro_monat_je_inv.setdefault(_inv_id, []).append(
-                    (f.schluessel[0], f.schluessel[1], _auto.netz_kwh)
-                )
-            if _auto.pv_kwh:
-                pv_je_inv[_inv_id] = pv_je_inv.get(_inv_id, 0.0) + _auto.pv_kwh
-                pv_pro_monat_je_inv.setdefault(_inv_id, []).append(
-                    (f.schluessel[0], f.schluessel[1], _auto.pv_kwh)
-                )
-                _pv_monate[f.schluessel] = f.meta.monatsdaten
-    ev_preis_lookup = await ev_preis_je_monat(
-        db, anlage_id, [(j, m, md) for (j, m), md in _pv_monate.items()],
-        tarif_cache=_tarif_cache, preis_messung=_preis_messung,
-    )
-    emob_ersparnis = 0.0
-    benzin_verbrauch = 0.0
-    for _inv_id in sorted(set(eauto_km_by_inv) | set(netz_je_inv) | set(pv_je_inv)):
-        _km_total = eauto_km_by_inv.get(_inv_id, 0.0)
-        _share = _km_total / total_eauto_km if total_eauto_km > 0 else 0.0
-        _car_result = berechne_eauto_ersparnis_periode(
-            km_pro_monat=[
-                (j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv.get(_inv_id, {}).items()
-            ],
-            ladung_netz_kwh_gesamt=netz_je_inv.get(_inv_id, 0.0),
-            ladung_pv_kwh_gesamt=pv_je_inv.get(_inv_id, 0.0),
-            pv_strompreis_cent=netzbezug_preis_cent,
-            monats_ev_preis_lookup=ev_preis_lookup,
-            pv_pro_monat=pv_pro_monat_je_inv.get(_inv_id) or None,
-            ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
-            wallbox_strompreis_cent=wallbox_preis_cent,
-            eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
-            monats_benzinpreis_lookup=benzinpreis_lookup,
-            fahrverbrauch_kwh_gesamt=eauto_fahrverbrauch_by_inv.get(_inv_id) or None,
-            # F-18: der Tarif DES MONATS statt des heutigen, gewichtet mit der
-            # Netzladung dieses Fahrzeugs je Monat.
-            monats_strompreis_lookup=strompreis_lookup,
-            netz_pro_monat=netz_pro_monat_je_inv.get(_inv_id) or None,
-        )
-        emob_ersparnis += _car_result.ersparnis_euro
-        benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
-    emob_ersparnis = round(emob_ersparnis, 2)
-
-    bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
-    hat_balkonkraftwerk = len(bkw_invs) > 0
-
-    sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges" and i.ist_aktiv_an(today)]
-    hat_sonstiges = len(sonstiges_invs) > 0
-
-    # Finanzen — die Zeile entsteht aus dem Monats-Fakt (`finanz_zeile_eingabe`),
-    # nicht mehr aus site-eigenen Maps. Der Tarif je Monat kommt aus demselben
-    # `_tarif_cache`, den auch die Schicht benutzt.
-    netzbezug_kosten = 0.0
-    # #326: Finanz-Aggregation (Einspeise-Erlös §51 + EV-/BKW-Ersparnis) über den
-    # SoT-Helper `berechne_finanz_aggregat` — per-Monat mit dem Monats-Flexpreis
-    # (Σ EV_m × p_m), deckungsgleich mit Jahresbericht-PDF, HA-Export und
-    # Auswertungen→Finanzen. Kein netzbezug-gewichteter Ø-Preis mehr.
-    finanz_zeilen: list[FinanzMonatsZeile] = []
-
-    # PV-Window-gefiltert (md_pv): Einspeise-Erlös, Netzbezugskosten und die
-    # per-Monat-EV-/BKW-Ersparnis zählen nur Monate mit aktiver PV — wie die
-    # Energiebilanz oben und der Amortisations-Pfad in aussichten.
-    for f in md_pv:
-        # Netzbezugskosten: derselbe effektive Preis wie in der Finanz-Zeile
-        # (Flex-Ø vor Monats-Arbeitspreis, P8) plus der Grundpreis des Monats.
-        netzbezug_kosten += berechne_netzbezug_kosten(
-            f.zaehler.netzbezug_kwh,
-            f.tarif.netzbezug_preis_cent,
-            f.tarif.grundpreis_euro_monat,
-        )
-        # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
-        # Konstruktions-Stelle, Wächter).
-        finanz_zeilen.append(await baue_finanz_zeile(
-            db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=_tarif_cache,
-            preis_messung=_preis_messung,
-        ))
-
-    # §51 EEG: nicht vergüteter Erlös + zugehörige kWh kommen aus dem Aggregat;
-    # `hat_neg_preis_daten` bleibt False, wenn KEIN Monat Tages-Aggregate hat,
-    # und signalisiert dem Frontend „keine Strompreis-Mitschrift gepflegt".
-    _finanz = berechne_finanz_aggregat(finanz_zeilen)
-    einspeise_erloes = _finanz.einspeise_erloes_euro
-    # #326: per-Monat summiert (Σ EV_m × flexpreis_m) statt Gesamt-EV × Ø-Preis —
-    # deckungsgleich mit Auswertungen→Finanzen.
-    ev_ersparnis = _finanz.ev_ersparnis_euro
-    nicht_vergueteter_erloes_sum = _finanz.nicht_vergueteter_erloes_euro
-    nicht_verguetete_kwh_sum = _finanz.nicht_verguetete_kwh
-    hat_neg_preis_daten = _finanz.hat_neg_preis_daten
-    # Netto-Kanon (ADR-002/P9): `pv_erzeugung_kwh` der Finanz-Zeile ist
-    # „PV-Module + BKW" — der daraus abgeleitete Eigenverbrauch deckt den
-    # BKW-Anteil also mit ab. `_finanz.bkw_ersparnis_euro` trägt deshalb NUR
-    # noch die BKW-Monate OHNE erfasste Erzeugung (`bkw_finanz_beitrag`, oben);
-    # für alle anderen ist er 0 und die Addition hier folgenlos. Den Term ganz
-    # wegzulassen (Stand 2026-07-31) ließ genau diese Anlagen ihre Ersparnis
-    # verlieren.
-    # Der Netto-Ertrag selbst entsteht seit 03.10.2026 in der Ergebnis-Leiter (`berechne_ergebnis`, Stufe 1) — weiter
-    # unten, sobald USt, Sonstiges und Erzeuger-Erlös feststehen. Hier stand er als vier Inline-Schritte.
-
-    investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-    # Zugleich die kanonische USt-Bemessungsgrundlage (N-129) — die Formel stand
-    # hier als Inline-Kopie, jetzt liegt sie im Layer.
-    # ⭐ N-720 (12.10.2026, Entscheid Master): im EINZELJAHR nur die Investitionen mit Anschaffungsdatum ≤ 31.12. des
-    # Jahres (ohne Datum bleiben sie) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts zum Stichtag (N-699,
-    # `aussichten/finanz_eingaenge.py`). Bis dahin teilte die Rendite eines Jahres auch durch später gekaufte
-    # Investitionen (T2: 2024 6,7 % auf 15 000 € statt 10,1 % auf 10 000 €; das PDF nannte zwei Kapitalsummen für
-    # dasselbe Jahr). Gesamtzeitraum unverändert. `investitionen` selbst bleibt die volle Liste (#123).
-    investitionen_im_nenner = (
-        [i for i in investitionen if i.anschaffungsdatum is None or i.anschaffungsdatum <= date(jahr, 12, 31)]
-        if jahr else investitionen
-    )
-    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen_im_nenner)
-
-    # N-137/N-134: Hier stand bis 04.08. eine dritte Summe — PV-System voll +
-    # WP-/eAuto-Mehrkosten aus `parameter["alternativ_kosten_euro"]` + Sonstiges
-    # voll. Dieser Parameter-Schlüssel hat baumweit KEINEN Schreiber; gepflegt
-    # wird die Spalte `anschaffungskosten_alternativ`, die der Daten-Checker mit
-    # WARNING einfordert. Die Summe rechnete also mit Festannahmen (8.000 /
-    # 35.000 €) an genau dem Feld vorbei, nach dem eedc fragt — und ein Fallback
-    # darunter setzte bei 0 auf die VOLLkosten, also auf eine vierte Lesart.
-    # Wortgleich stand sie ein zweites Mal in `aussichten/finanzen.py`.
-    #
-    # Seit dem Entscheid zu N-137 gibt es EINE Definition relevanter Kosten
-    # (Mehrkosten, Layer-SoT). `investition_gesamt_euro` bleibt als Feld
-    # erhalten — es ist ausgeliefert und typisiert (`api/cockpit.ts`) —, trägt
-    # aber denselben Wert wie `investition_mehrkosten_euro`. Der Fallback
-    # entfällt: sind die relevanten Kosten 0, gibt es nichts zu amortisieren,
-    # und der ROI-Fortschritt sagt das (None), statt gegen die Vollkosten zu
-    # rechnen.
-    investition_gesamt = investition_mehrkosten
-
-    # N-228: die Jahres-Betriebskosten der HEUTE aktiven Komponenten gingen bis 03.10.2026 hier in die USt ein.
-    # Seit dem einen USt-Eingang (`services/ust_satz.py`) zählt je Kalenderjahr, was in DIESEM Jahr aktiv war — der
-    # Zeitraum-Abzug weiter unten trägt jede Komponente ohnehin über IHRE Laufzeit.
-
-    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
-    # USt auf den Eigenverbrauch — seit 03.10.2026 aus dem EINEN Eingang `services/ust_satz.py` (G1/E9, N-601):
-    # je Kalenderjahr die im Jahr aktiven Investitionen (`ist_aktiv_im_zeitraum`, Regel 05.06.2026) für Bemessung UND
-    # Betriebskosten, die abgeschlossenen Monate mit aktivem Erzeuger, Σ der Monats-Eigenverbräuche. Bis dahin nahm
-    # diese Sicht ALLE Investitionen für die Bemessung (#123 ist eine Regel für Mengen, nicht für Kosten), die HEUTE
-    # aktiven für die Betriebskosten und die Perioden-EV — und nannte für dasselbe Jahr eine andere Zahl als die
-    # Monatsreihe (Probe 03.10.: 20,21 € gegen 35,96 €, ohne die inaktive Wallbox beide 18,90 €).
-    ust_eigenverbrauch = ust_eigenverbrauch_zeitraum(anlage, investitionen, fakten)
-
-    # #326: BKW-Ersparnis ebenfalls per-Monat (Σ BKW-EV_m × flexpreis_m).
-    bkw_ersparnis = _finanz.bkw_ersparnis_euro
-    sonstige_netto = sonstige_ertraege_gesamt - sonstige_ausgaben_gesamt
-    # #326 (rilmor-mhrs): Die manuell gepflegten „Sonstige Erträge & Ausgaben"
-    # gehören in den ANGEZEIGTEN Netto-Ertrag — exakt wie Auswertungen→Finanzen
-    # (Einspeiseerlös + EV-Ersparnis + Sonstige-Erträge − Sonstige-Ausgaben).
-    # Bisher floss sonstige_netto nur in kumulative_ersparnis/ROI ein, nicht in
-    # die Netto-Ertrag-Kachel → das Cockpit zeigte eine andere Summe als die
-    # Auswertungen. Aufschlagen NACH dem USt-Abzug (USt betrifft nur den
-    # Eigenverbrauch, nicht die Finanzpositionen).
-
-    # Konzept §9 Weg 2: gepflegte Erlöse einzelner Erzeuger mit **eigenem**
-    # Einspeisetarif. Diese Sicht baut ihren Netto-Ertrag selbst aus den
-    # Einzel-Komponenten zusammen (USt-Abzug dazwischen) — der Posten muss
-    # deshalb hier addiert werden, sonst zeigte das Cockpit eine andere Summe
-    # als Auswertungen und HA-Export. Dieselbe Klasse wie #326 eine Zeile höher.
-    erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
-    # Stufe 1 der Ergebnis-Leiter (GLOSSAR „Netto-Ertrag (PV)") — dieselbe Funktion wie Cockpit → Monat/Jahr.
-    # `bkw_ersparnis_euro` trägt nur die BKW-Monate OHNE erfasste Erzeugung (P9); Sonstiges nach der USt, wie bisher.
-    netto_ertrag = berechne_ergebnis(ErgebnisEingang(
-        einspeise_erloes=einspeise_erloes,
-        ev_ersparnis=ev_ersparnis,
-        bkw_rest_ersparnis=_finanz.bkw_ersparnis_euro,
-        erzeuger_erloes=erzeuger_erloes_gesamt,
-        sonstige_netto=sonstige_netto,
-        ust_anteil=ust_eigenverbrauch,
-    )).netto_ertrag
-
-    # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
-    # N-588 (P15): die Menge hinter der Ersparnis — ohne die bewertbaren Wandlungsverluste der Monate.
-    # N-659: die Verluste derselben Monate wie der Eigenverbrauch (`md_pv`) — wie die Ersparnis.
-    eigenverbrauch_ohne_verluste = eigenverbrauch_ohne_verluste_kwh(
-        eigenverbrauch, bewertbare_wandlungsverluste_aus_fakten(md_pv), None,
-    )
-    _co2 = berechne_co2_bilanz(
-        eigenverbrauch_kwh=eigenverbrauch_ohne_verluste,
-        wp_waerme_kwh=wp_waerme,
-        wp_strom_kwh=wp_strom,
-        # #263 K-2 (E-B): Kühlen ersetzt keine Heizung.
-        wp_strom_kuehlen_kwh=sum(f.wp.modus_strom_kuehlen_kwh for f in fakten),
-        emob_km=emob_km,
-        emob_netz_ladung_kwh=emob_netz_ladung,
-        # N-672: die PV-Ladung trägt den Strommix wie die Netzladung (eine kWh ist einmal CO₂).
-        emob_pv_ladung_kwh=emob_pv_ladung,
-        benzin_verbrauch_liter=benzin_verbrauch,
-        # #331: derselbe fossile Anteil, den die Ersparnis oben als eigene
-        # Kostenposition trägt — sonst hätten Geld und CO₂ zwei Wahrheiten.
-        fossil_getankt_liter=fossil_getankte_liter(
-            km_je_fahrzeug=eauto_km_by_inv,
-            fahrverbrauch_je_fahrzeug=eauto_fahrverbrauch_by_inv,
-            params_je_fahrzeug={
-                _id: getattr(inv_by_id.get(_id), "parameter", None)
-                for _id in eauto_km_by_inv
-            },
-        ),
-    )
-    co2_pv = _co2.co2_pv_kg
-    co2_wp = _co2.co2_wp_kg
-    co2_emob = _co2.co2_emob_kg
-    co2_gesamt = _co2.co2_gesamt_kg
-
-    # Zeitraum — jeder Monat mit einer Spur: Zählerzeile, sichtbare IMD-Zeile
-    # oder aufgelöste PV. Genau das ist die Kandidaten-Menge der Schicht.
-    zeitraum_von = None
-    zeitraum_bis = None
-    anzahl_monate = 0
-    alle_monate: set[tuple[int, int]] = {f.schluessel for f in fakten}
-
-    if alle_monate:
-        sorted_alle = sorted(alle_monate)
-        first = sorted_alle[0]
-        last = sorted_alle[-1]
-        zeitraum_von = f"{first[0]}-{first[1]:02d}"
-        zeitraum_bis = f"{last[0]}-{last[1]:02d}"
-        anzahl_monate = len(alle_monate)
-
-    # N-228, Messseite: jede Komponente mit IHRER Laufzeit statt der
-    # anlagenweiten Jahressumme über den ganzen Zeitraum. Am Dev-Bestand
-    # gemessen: 1.291,67 € gegen 725,00 € bei zwei Komponenten mit gepflegten
-    # Betriebskosten — der ROI-Fortschritt war entsprechend zu niedrig.
-    # N-699 (12.10.2026): die Regel steht seitdem EINMAL im Layer (`core/berechnungen/betriebskosten.py`) — PDF,
-    # Aussichten und Cockpit → Monat/Jahr rufen dieselbe Funktion.
-    betriebskosten_zeitraum = betriebskosten_im_zeitraum(investitionen, alle_monate)
-    # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
-    # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
-    # er ist seit P9 Teil von `netto_ertrag` (und bei mitgeschriebener BKW-
-    # Erzeugung ohnehin 0, weil dann `ev_ersparnis` ihn trägt). Bis 2026-07-31
-    # stand er hier zusätzlich — der ROI-Fortschritt war bei BKW-Besitzern um
-    # die BKW-Ersparnis zu hoch.
-    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis - betriebskosten_zeitraum
-    roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
-
-    # P4/§3 Regel 2: das Flag wird im selben Schritt ausgeliefert, in dem es
-    # gesetzt wird. Grundgesamtheit ist `md_pv` — dieselbe Menge, aus der die
-    # PV-Kopfzahl oben gebildet wurde; ein Monat, der gar nicht in die Summe
-    # eingeht, darf sie auch nicht beschriften.
-    hinweise = [h for h in (pv_unvollstaendig_hinweis(md_pv),) if h]
-
-    return CockpitUebersichtResponse(
-        pv_erzeugung_kwh=round(pv_erzeugung, 1),
-        gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
-        netzbezug_kwh=round(netzbezug, 1),
-        einspeisung_kwh=round(einspeisung, 1),
-        direktverbrauch_kwh=round(direktverbrauch, 1),
-        eigenverbrauch_kwh=round(eigenverbrauch, 1),
-        wandlungsverluste_kwh=_q_verluste.zaehler,
-        wandlungsverluste_bezug_kwh=_q_verluste.nenner,
-        wandlungsverluste_prozent=wandlungsverluste_prozent(_q_verluste.zaehler, _q_verluste.nenner),
-        eigenverbrauch_ohne_verluste_kwh=round(eigenverbrauch_ohne_verluste, 1),
-        verluste_grund=verluste_grund_zeitraum(
-            (f.erzeugung.wandlungsverluste_kwh, f.erzeugung.verluste_grund) for f in fakten),
-        autarkie_prozent=round(autarkie, 1),
-        eigenverbrauch_quote_prozent=round(ev_quote, 1),
-        direktverbrauch_quote_prozent=round(dv_quote, 1),
-        spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 1) if spez_ertrag else None,
-        anlagenleistung_kwp=round(anlagenleistung_kwp, 2),
-        speicher_ladung_kwh=round(speicher_ladung, 1),
-        speicher_entladung_kwh=round(speicher_entladung, 1),
-        # `is not None`, nicht `if speicher_effizienz`: ein η von exakt 0,0 ist
-        # eine Messung (geladen, nichts entnommen), keine fehlende Angabe.
-        speicher_effizienz_prozent=round(speicher_effizienz, 1) if speicher_effizienz is not None else None,
-        speicher_effizienz_quelle=_eta_speicher.quelle,
-        speicher_vollzyklen=round(speicher_vollzyklen, 1) if speicher_vollzyklen else None,
-        speicher_kapazitaet_kwh=round(speicher_kapazitaet, 1),
-        hat_speicher=hat_speicher,
-        wp_waerme_kwh=round(wp_waerme, 1),
-        wp_strom_kwh=round(wp_strom, 1),
-        wp_heizung_kwh=round(wp_heizung, 1) if wp_heizung is not None else None,
-        wp_warmwasser_kwh=round(wp_warmwasser, 1) if wp_warmwasser is not None else None,
+    wp_felder = dict(
+        wp_waerme_kwh=round(mengen.wp_waerme, 1),
+        wp_strom_kwh=round(mengen.wp_strom, 1),
+        wp_heizung_kwh=round(mengen.wp_heizung, 1) if mengen.wp_heizung is not None else None,
+        wp_warmwasser_kwh=round(mengen.wp_warmwasser, 1) if mengen.wp_warmwasser is not None else None,
         wp_cop=round(wp_cop, 2) if wp_cop else None,
         wp_cop_grund=_wp_az.grund,
         wp_ersparnis_euro=round(wp_ersparnis, 2),
@@ -1041,43 +1083,145 @@ async def get_cockpit_uebersicht(
         wp_modus_abdeckung_h=round(_wp_modus["abdeckung"], 1) if _wp_hat_modus else None,
         wp_modus_strom_bezug_kwh=round(_wp_modus["bezug"], 1) if _wp_hat_modus else None,
         wp_modus_gemessen=_wp_modus["gemessen"] if _wp_hat_modus else None,
-        emob_km=round(emob_km, 0),
-        emob_ladung_kwh=round(emob_ladung, 1),
-        emob_pv_anteil_prozent=round(emob_pv_anteil, 1) if emob_pv_anteil else None,
-        emob_ersparnis_euro=round(emob_ersparnis, 2),
-        emob_verbrauch_100km=round(emob_eff.wert, 1) if emob_eff.wert is not None else None,
-        emob_verbrauch_quelle=emob_eff.quelle,
-        hat_emobilitaet=hat_emobilitaet,
-        bkw_erzeugung_kwh=round(bkw_erzeugung, 1),
-        bkw_eigenverbrauch_kwh=round(bkw_eigenverbrauch, 1),
-        hat_balkonkraftwerk=hat_balkonkraftwerk,
-        sonstiges_erzeugung_kwh=round(sonstiges_erzeugung, 1),
-        sonstiges_verbrauch_kwh=round(sonstiges_verbrauch, 1),
-        hat_sonstiges=hat_sonstiges,
-        einspeise_erloes_euro=round(einspeise_erloes, 2),
-        einspeise_neg_preis_kwh=(
-            round(nicht_verguetete_kwh_sum, 1) if hat_neg_preis_daten else None
-        ),
-        nicht_vergueteter_erloes_euro=(
-            round(nicht_vergueteter_erloes_sum, 2) if hat_neg_preis_daten else None
-        ),
-        ev_ersparnis_euro=round(ev_ersparnis, 2),
-        netzbezug_kosten_euro=round(netzbezug_kosten, 2),
-        ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
-        netto_ertrag_euro=round(netto_ertrag, 2),
-        bkw_ersparnis_euro=round(bkw_ersparnis, 2),
-        sonstige_netto_euro=round(sonstige_netto, 2),
-        jahres_rendite_prozent=round(roi_fortschritt, 1) if roi_fortschritt else None,
-        investition_gesamt_euro=round(investition_gesamt, 2),
-        investition_vollkosten_euro=round(investition_vollkosten, 2),
-        investition_mehrkosten_euro=round(investition_mehrkosten, 2),
-        steuerliche_behandlung=steuerliche_beh if steuerliche_beh != "keine_ust" else None,
-        co2_pv_kg=round(co2_pv, 1),
-        co2_wp_kg=round(co2_wp, 1),
-        co2_emob_kg=round(co2_emob, 1),
-        co2_gesamt_kg=round(co2_gesamt, 1),
-        anzahl_monate=anzahl_monate,
-        zeitraum_von=zeitraum_von,
-        zeitraum_bis=zeitraum_bis,
-        hinweise=hinweise,
     )
+    return wp_ersparnis, wp_felder
+
+
+def _emob_anzeige(k: _Kontext, emob_ladung: float, emob_pv_ladung: float):
+    """RF-32 Phase: E-Mobilitäts-Flag (ohne Dienstwagen) und PV-Anteil der Heimladung."""
+    investitionen, today = k.investitionen, k.today
+    emob_invs = [
+        i for i in investitionen
+        if i.typ in ("e-auto", "wallbox")
+        and i.ist_aktiv_an(today)
+        and not ist_dienstlich(i)
+    ]
+    hat_emobilitaet = len(emob_invs) > 0
+    emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
+    return hat_emobilitaet, emob_pv_anteil
+
+
+def _ladung_je_fahrzeug(fakten: list):
+    """RF-32 Phase: Netz- und PV-Heimladung je Fahrzeug und Monat (N-555 Stufe 2, N-672)."""
+    netz_je_inv: dict[int, float] = {}
+    netz_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
+    # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung jedes Fahrzeugs je Monat — sie trägt den Preis, zu dem die
+    # Eigenverbrauchs-Ersparnis unten (`baue_finanz_zeile`) sie gutschreibt. Bis 11.10.2026 ging nur die Netzladung
+    # hinein, die PV-Ladung war „kostenlos" und stand damit zweimal als Geld im Ergebnis.
+    pv_je_inv: dict[int, float] = {}
+    pv_pro_monat_je_inv: dict[int, list[tuple[int, int, float]]] = {}
+    _pv_monate: dict[tuple[int, int], object] = {}
+    for f in fakten:
+        for _inv_id, _auto in f.emob.je_auto.items():
+            if _auto.netz_kwh:
+                netz_je_inv[_inv_id] = netz_je_inv.get(_inv_id, 0.0) + _auto.netz_kwh
+                netz_pro_monat_je_inv.setdefault(_inv_id, []).append(
+                    (f.schluessel[0], f.schluessel[1], _auto.netz_kwh)
+                )
+            if _auto.pv_kwh:
+                pv_je_inv[_inv_id] = pv_je_inv.get(_inv_id, 0.0) + _auto.pv_kwh
+                pv_pro_monat_je_inv.setdefault(_inv_id, []).append(
+                    (f.schluessel[0], f.schluessel[1], _auto.pv_kwh)
+                )
+                _pv_monate[f.schluessel] = f.meta.monatsdaten
+    return netz_je_inv, netz_pro_monat_je_inv, pv_je_inv, pv_pro_monat_je_inv, _pv_monate
+
+
+def _hat_bkw_und_sonstiges(k: _Kontext) -> tuple[bool, bool]:
+    """RF-32 Phase: Flags Balkonkraftwerk und Sonstiges (heute aktiv)."""
+    investitionen, today = k.investitionen, k.today
+    bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
+    hat_balkonkraftwerk = len(bkw_invs) > 0
+
+    sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges" and i.ist_aktiv_an(today)]
+    hat_sonstiges = len(sonstiges_invs) > 0
+    return hat_balkonkraftwerk, hat_sonstiges
+
+
+async def _finanz_zeilen_der_monate(
+    db: AsyncSession, anlage_id: int, md_pv: list, _tarif_cache: dict, _preis_messung,
+) -> tuple[float, list[FinanzMonatsZeile]]:
+    """RF-32 Phase: Netzbezugskosten und Finanz-Zeilen der Monate mit aktivem Erzeuger (`md_pv`)."""
+    # Finanzen — die Zeile entsteht aus dem Monats-Fakt (`finanz_zeile_eingabe`),
+    # nicht mehr aus site-eigenen Maps. Der Tarif je Monat kommt aus demselben
+    # `_tarif_cache`, den auch die Schicht benutzt.
+    netzbezug_kosten = 0.0
+    # #326: Finanz-Aggregation (Einspeise-Erlös §51 + EV-/BKW-Ersparnis) über den
+    # SoT-Helper `berechne_finanz_aggregat` — per-Monat mit dem Monats-Flexpreis
+    # (Σ EV_m × p_m), deckungsgleich mit Jahresbericht-PDF, HA-Export und
+    # Auswertungen→Finanzen. Kein netzbezug-gewichteter Ø-Preis mehr.
+    finanz_zeilen: list[FinanzMonatsZeile] = []
+
+    # PV-Window-gefiltert (md_pv): Einspeise-Erlös, Netzbezugskosten und die
+    # per-Monat-EV-/BKW-Ersparnis zählen nur Monate mit aktiver PV — wie die
+    # Energiebilanz oben und der Amortisations-Pfad in aussichten.
+    for f in md_pv:
+        # Netzbezugskosten: derselbe effektive Preis wie in der Finanz-Zeile
+        # (Flex-Ø vor Monats-Arbeitspreis, P8) plus der Grundpreis des Monats.
+        netzbezug_kosten += berechne_netzbezug_kosten(
+            f.zaehler.netzbezug_kwh,
+            f.tarif.netzbezug_preis_cent,
+            f.tarif.grundpreis_euro_monat,
+        )
+        # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
+        # Konstruktions-Stelle, Wächter).
+        finanz_zeilen.append(await baue_finanz_zeile(
+            db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=_tarif_cache,
+            preis_messung=_preis_messung,
+        ))
+    return netzbezug_kosten, finanz_zeilen
+
+
+def _investitionssummen(investitionen, jahr: Optional[int]) -> tuple[float, float, float]:
+    """RF-32 Phase: Vollkosten, relevante Mehrkosten (Rendite-Nenner, N-720) und `investition_gesamt` (N-137)."""
+    investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
+    # Zugleich die kanonische USt-Bemessungsgrundlage (N-129) — die Formel stand
+    # hier als Inline-Kopie, jetzt liegt sie im Layer.
+    # ⭐ N-720 (12.10.2026, Entscheid Master): im EINZELJAHR nur die Investitionen mit Anschaffungsdatum ≤ 31.12. des
+    # Jahres (ohne Datum bleiben sie) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts zum Stichtag (N-699,
+    # `aussichten/finanz_eingaenge.py`). Bis dahin teilte die Rendite eines Jahres auch durch später gekaufte
+    # Investitionen (T2: 2024 6,7 % auf 15 000 € statt 10,1 % auf 10 000 €; das PDF nannte zwei Kapitalsummen für
+    # dasselbe Jahr). Gesamtzeitraum unverändert. `investitionen` selbst bleibt die volle Liste (#123).
+    investitionen_im_nenner = (
+        [i for i in investitionen if i.anschaffungsdatum is None or i.anschaffungsdatum <= date(jahr, 12, 31)]
+        if jahr else investitionen
+    )
+    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen_im_nenner)
+
+    # N-137/N-134: Hier stand bis 04.08. eine dritte Summe — PV-System voll +
+    # WP-/eAuto-Mehrkosten aus `parameter["alternativ_kosten_euro"]` + Sonstiges
+    # voll. Dieser Parameter-Schlüssel hat baumweit KEINEN Schreiber; gepflegt
+    # wird die Spalte `anschaffungskosten_alternativ`, die der Daten-Checker mit
+    # WARNING einfordert. Die Summe rechnete also mit Festannahmen (8.000 /
+    # 35.000 €) an genau dem Feld vorbei, nach dem eedc fragt — und ein Fallback
+    # darunter setzte bei 0 auf die VOLLkosten, also auf eine vierte Lesart.
+    # Wortgleich stand sie ein zweites Mal in `aussichten/finanzen.py`.
+    #
+    # Seit dem Entscheid zu N-137 gibt es EINE Definition relevanter Kosten
+    # (Mehrkosten, Layer-SoT). `investition_gesamt_euro` bleibt als Feld
+    # erhalten — es ist ausgeliefert und typisiert (`api/cockpit.ts`) —, trägt
+    # aber denselben Wert wie `investition_mehrkosten_euro`. Der Fallback
+    # entfällt: sind die relevanten Kosten 0, gibt es nichts zu amortisieren,
+    # und der ROI-Fortschritt sagt das (None), statt gegen die Vollkosten zu
+    # rechnen.
+    investition_gesamt = investition_mehrkosten
+    return investition_vollkosten, investition_mehrkosten, investition_gesamt
+
+
+def _zeitraum(fakten: list):
+    """RF-32 Phase: Monatsmenge des Zeitraums, erster/letzter Monat und Anzahl."""
+    # Zeitraum — jeder Monat mit einer Spur: Zählerzeile, sichtbare IMD-Zeile
+    # oder aufgelöste PV. Genau das ist die Kandidaten-Menge der Schicht.
+    zeitraum_von = None
+    zeitraum_bis = None
+    anzahl_monate = 0
+    alle_monate: set[tuple[int, int]] = {f.schluessel for f in fakten}
+
+    if alle_monate:
+        sorted_alle = sorted(alle_monate)
+        first = sorted_alle[0]
+        last = sorted_alle[-1]
+        zeitraum_von = f"{first[0]}-{first[1]:02d}"
+        zeitraum_bis = f"{last[0]}-{last[1]:02d}"
+        anzahl_monate = len(alle_monate)
+    return alle_monate, zeitraum_von, zeitraum_bis, anzahl_monate

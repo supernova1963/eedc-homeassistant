@@ -7,9 +7,7 @@
 55	api/routes/aktueller_monat/quellen_leser.py::_geraete_aus_kanaelen
 77	api/routes/aktueller_monat/tkonto.py::_baue_investition_financial
 58	api/routes/aktueller_monat/waerme.py::waerme_klima_monat
-90	api/routes/aussichten/trend.py::get_trend_analyse
 53	api/routes/cockpit/pv_strings.py::get_pv_strings
-90	api/routes/cockpit/uebersicht.py::get_cockpit_uebersicht
 60	api/routes/datenquellen.py::get_datenquellen_felder
 82	api/routes/energie_profil/prognose.py::get_tagesprognose
 60	api/routes/energie_profil/tag.py::get_tag_detail
