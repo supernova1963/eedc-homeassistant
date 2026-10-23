@@ -6,6 +6,8 @@ GET /api/aussichten/trend/{anlage_id} — Jahresvergleich, saisonale Muster, Deg
 # Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `__init__.py` haengt den Router ein und exportiert
 # die Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
@@ -34,7 +36,6 @@ async def get_trend_analyse(
     """
     # RF-33 (Komplexitäts-Paket RF-29…RF-39, 23.10.2026, Bauform RF-1): die Phasen stehen als Modulfunktionen
     # unter der Route; Abfragefolge unverändert (Anlage, PVGIS, Monats-Fakten).
-    from datetime import date
 
     anlage, pv_module, balkonkraftwerke, anlagenleistung_kwp = await _lade_anlage_mit_pv(
         db, anlage_id, require_coords=False

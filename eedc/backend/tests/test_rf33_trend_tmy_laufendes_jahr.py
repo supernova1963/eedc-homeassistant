@@ -12,8 +12,9 @@ füllt die Rechnung Juli…M mit TMY × PR auf und rechnet M+1…12 hoch — zus
 (864 − 960) / 960 = −10,0 %/Jahr. Fehlt die Hochrechnung, stünden im Oktober 720 kWh da (−25 %); fehlt die
 Begrenzung auf «bis heute», 1 008 kWh (+5 %, gekappt auf 0,0).
 
-Vor Juni gibt es im laufenden Jahr keine sechs vergangenen Monate — der Zweig ist dann nur mit Zukunftsdaten
-erreichbar; die Probe überspringt sich (kein Zeit-Fake, Entscheid «freezegun nein»).
+Die Uhr der Route steht fest auf dem 15.09.2026 (``_Heute``, Fake am Modul-Attribut ``trend.date`` wie in den anderen
+Proben, kein freezegun): so trägt das «laufende Jahr» immer sechs vergangene Monate, und die Probe liest nie die echte Uhr
+(Wächter ``test_konformitaet_echte_uhr_in_tests.py``).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from datetime import date, datetime
 import pytest
 
 from backend.api.routes.aussichten import get_trend_analyse
+from backend.api.routes.aussichten import trend as _trend
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose
 
@@ -55,11 +57,19 @@ async def _anlage_mit_zwei_halben_jahren(db, jahr: int) -> Anlage:
     return anlage
 
 
+class _Heute(date):
+    """``date.today()`` der Trend-Route mit eigener Uhr — festgenagelt auf den 15.09.2026, damit das «laufende Jahr»
+    sechs vergangene Monate trägt (Uhr-Wächter `test_konformitaet_echte_uhr_in_tests.py`: keine neue Probe liest die echte Uhr)."""
+
+    @classmethod
+    def today(cls):  # noqa: D401
+        return cls(2026, 9, 15)
+
+
 @pytest.mark.asyncio
-async def test_tmy_zweig_rechnet_das_laufende_jahr_bis_heute_auf_und_den_rest_hoch(db):
-    heute = date.today()
-    if heute.month < 6:
-        pytest.skip("vor Juni trägt das laufende Jahr keine sechs vergangenen Monate (Zweig nur mit Zukunftsdaten)")
+async def test_tmy_zweig_rechnet_das_laufende_jahr_bis_heute_auf_und_den_rest_hoch(db, monkeypatch):
+    monkeypatch.setattr(_trend, "date", _Heute)
+    heute = _Heute.today()
     anlage = await _anlage_mit_zwei_halben_jahren(db, heute.year)
 
     antwort = await get_trend_analyse(anlage_id=anlage.id, jahre=3, db=db)
