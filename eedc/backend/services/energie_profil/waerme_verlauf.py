@@ -44,6 +44,7 @@ from backend.core.berechnungen.tages_stapel import (
     TagesStapel,
     beitraege_des_tages,
     falte_tages_stapel,
+    summanden_aus_tageswerten,
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import waerme_gesamt_je_geraet
 from backend.models.tages_energie_profil import TagesZusammenfassung
@@ -137,9 +138,10 @@ async def lade_waerme_verlauf(
     # N-391b: **je Gerät** geladen, nicht als Anlagensumme — D1 unten ist eine
     # Regel je Gerätezeile, und über den Summen verschlänge der Gesamtzähler
     # EINER Wärmepumpe die Aufteilung aller anderen.
+    # N-766: dazu die Summanden-Achsen — Zweig 1 des Stapels liest sie bei getrennter Strommessung mit (wie im Tag).
     nutzenergie_je_tag = await _tageswerte_je_geraet(
         db, anlage, investitionen_by_id, von, bis,
-        {**_WAERME_FELDER, **_KAELTE_FELDER},
+        {**_WAERME_FELDER, **_KAELTE_FELDER, **_ACHSEN_FELDER},
         rueckwaerts_tage=rueckwaerts_tage,
     )
     temperatur_je_tag = await lade_tagesmittel_temperatur(db, anlage.id, von, bis)
@@ -169,6 +171,7 @@ async def lade_waerme_verlauf(
             db, anlage, investitionen_by_id, tag, rueckwaerts_tage, wp_kanal,
         )
         zaehler = zaehler_je_tag.get(tag, {})
+        werte = nutzenergie_je_tag.get(tag, {})
         stapel = falte_tages_stapel(
             gemessen_je_inv,
             zaehler,
@@ -176,8 +179,8 @@ async def lade_waerme_verlauf(
             investitionen_by_id,
             tag,
             stufe_je_inv=stufe_je_inv,
+            summanden_je_inv=summanden_aus_tageswerten(werte),
         )
-        werte = nutzenergie_je_tag.get(tag, {})
         # ⛔ Nie `sum(werte.values())` — seit 6b steht dort auch die Kälte.
         # N-391/D1: **Gesamtwert vor Summanden.** Trägt der gemeinsame
         # Wärmemengenzähler den Tag, ist er die Wärme; sonst ist sie die Summe
@@ -268,6 +271,7 @@ async def lade_waerme_verlauf_beitraege(
             for b in beitraege_des_tages(
                 gemessen_je_inv, zaehler, splits_je_tag.get(tag, {}),
                 investitionen_by_id, tag, stufe_je_inv=stufe_je_inv,
+                summanden_je_inv=summanden_aus_tageswerten(achsen_je_tag.get(tag, {})),
             )
         }
         achsen = achsen_je_tag.get(tag, {})
@@ -419,6 +423,7 @@ async def lade_waerme_monatsmengen_je_geraet(
         for b in beitraege_des_tages(
             gemessen_je_inv, zaehler_je_tag.get(tag, {}), splits_je_tag.get(tag, {}),
             investitionen_by_id, tag, stufe_je_inv=stufe_je_inv,
+            summanden_je_inv=summanden_aus_tageswerten(werte),
         ):
             _addiere(b.inv_id, "modus_strom_kuehlen_kwh", b.kuehlen_kwh)
             _addiere(b.inv_id, "funktionsfremd_abzug_kwh", beitrag_abzug_kwh(b))

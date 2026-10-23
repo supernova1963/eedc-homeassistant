@@ -51,7 +51,9 @@ des Blocks, und genau daran hing W-17b (dietmar1968: 30 kWh Balken unter einer
   ohne Normierung und für Stunden ohne Modus (die gehen in den Rest).
 * **Zweig 1:** je Feld verteilt, dann ``modus_strom_zeile`` **je Stunde** auf
   dieselbe Schlüsselmenge (explizite 0,0) — die Innengeräte-Regel bleibt an
-  ihrer einen Stelle. Ohne feste Schlüsselmenge wäre sie nicht linear: fehlt
+  ihrer einen Stelle. Die Summanden eines Geräts mit getrennter Strommessung
+  (N-766) gehören zur Schlüsselmenge und bekommen die Form ihres eigenen
+  Zählers. Ohne feste Schlüsselmenge wäre sie nicht linear: fehlt
   das Gerätefeld in einer Stunde, summierte sie die Innengeräte (Probe der
   Gegenprüfung: 5,5 statt 4,0).
 * **Keine Form, aber eine Menge** (z. B. ein Zähler, dessen ganzer Tagesverbrauch
@@ -77,6 +79,7 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     funktionsfremd_abzug_kwh,
     geraetefeld_oder_innengeraete,
     modus_strom_zeile,
+    summanden_gelten,
 )
 from backend.core.betriebsmodus import HEIZEN, KUEHLEN, WARMWASSER
 
@@ -92,6 +95,30 @@ STUNDEN = 24
 #: Die Modi, die Zweig 2 als eigene Teilmenge zählt — alles andere ist Rest.
 #: Dieselbe Menge wie in {@link beitraege_des_tages} (N-336: Warmwasser nur hier).
 _ZWEIG2_MODI = (HEIZEN, KUEHLEN, WARMWASSER)
+
+#: N-766: die Summanden-Felder, die Zweig 1 neben den Betriebsart-Zählern liest,
+#: und ihre Schlüssel in den Tageswerten (``TAGESDETAIL_AUSGABE``).
+SUMMANDEN_AUSGABE: dict[str, str] = {
+    "wp_strom_heizen_kwh": "strom_heizen_kwh",
+    "wp_strom_warmwasser_kwh": "strom_warmwasser_kwh",
+}
+
+
+def summanden_aus_tageswerten(
+    werte_je_ausgabe: Mapping[str, Mapping[str, Optional[float]]],
+) -> dict[str, dict[str, float]]:
+    """``{ausgabe: {inv_id: kWh}}`` der Tageswerte → ``{inv_id: {feld: kWh}}`` der Summanden (N-766).
+
+    Der Eingang ``summanden_je_inv`` von {@link beitraege_des_tages}. Nur Werte
+    ``is not None`` (0,0 ist eine Messung); ob sie Summanden SIND, entscheidet
+    dort das Kennzeichen des Geräts.
+    """
+    out: dict[str, dict[str, float]] = {}
+    for ausgabe, feld in SUMMANDEN_AUSGABE.items():
+        for inv_id, kwh in (werte_je_ausgabe.get(ausgabe) or {}).items():
+            if kwh is not None:
+                out.setdefault(str(inv_id), {})[feld] = float(kwh)
+    return out
 
 
 @dataclass(frozen=True)
@@ -183,7 +210,13 @@ class GeraeteBeitrag:
     abdeckung_h: float = 0.0
     #: Zweig 1: die Tageswerte je Feld, **unverändert samt Innengerät-Suffix** —
     #: die Stunde verteilt sie einzeln und löst danach je Stunde auf.
+    #: ⚠ Nur Betriebsart-Zähler; die Summanden stehen in ``summanden``.
     felder: dict[str, float] = field(default_factory=dict)
+    #: Zweig 1, N-766: die Summanden-Tageswerte (``strom_heizen_kwh``,
+    #: ``strom_warmwasser_kwh``) — nur bei gesetztem Kennzeichen
+    #: ``getrennte_strommessung``. Die Stunde verteilt sie nach der Form ihres
+    #: eigenen Zählers, nicht als Teilmenge eines anderen.
+    summanden: dict[str, float] = field(default_factory=dict)
 
 
 def _nenner_ist_feine_summe(
@@ -214,6 +247,18 @@ def _nenner_ist_feine_summe(
     return bool((getattr(inv, "parameter", None) or {}).get("getrennte_strommessung"))
 
 
+def _summanden_des_geraets(
+    inv, inv_id_str: str, summanden_je_inv: Optional[Mapping[str, Mapping[str, float]]],
+) -> dict[str, float]:
+    """N-766: die Summanden dieses Geräts für Zweig 1 — leer ohne Kennzeichen (s. ``summanden_gelten``)."""
+    if not summanden_je_inv or not summanden_gelten(getattr(inv, "parameter", None)):
+        return {}
+    return {
+        f: float(w) for f, w in (summanden_je_inv.get(inv_id_str) or {}).items()
+        if f in SUMMANDEN_AUSGABE.values() and w is not None
+    }
+
+
 def beitraege_des_tages(
     gemessen_je_inv: dict[str, dict[str, float]],
     zaehler_strom_je_inv: dict[str, float],
@@ -222,6 +267,7 @@ def beitraege_des_tages(
     datum: date,
     *,
     stufe_je_inv: Optional[dict[str, str]] = None,
+    summanden_je_inv: Optional[Mapping[str, Mapping[str, float]]] = None,
 ) -> list[GeraeteBeitrag]:
     """Welches Gerät mit welchem Zweig beiträgt — die eine Auswahl (K2, Zeitfilter, Invariante).
 
@@ -244,6 +290,12 @@ def beitraege_des_tages(
             ``aggregator.get_wp_strom_stufe_je_investition``, weil sie am
             ``sensor_mapping`` hängt. Fehlt sie, gilt das Kennzeichen — das
             bisherige Verhalten (s. {@link _nenner_ist_feine_summe}).
+        summanden_je_inv: N-766 — ``{inv_id: {"strom_heizen_kwh": kWh,
+            "strom_warmwasser_kwh": kWh}}`` (``summanden_aus_tageswerten``),
+            nur in Zweig 1 und nur bei gesetztem Kennzeichen des Geräts
+            gelesen: Heizen und Warmwasser einer Wärmepumpe mit getrennter
+            Strommessung und einem Betriebsart-Zähler (etwa Kühlen) sind
+            gemessen. Fehlt er, wie bisher.
 
     Returns:
         Die Beiträge, Zweig 1 vor Zweig 2 — dieselbe Reihenfolge, in der die
@@ -257,7 +309,10 @@ def beitraege_des_tages(
         inv = investitionen_by_id.get(inv_id_str)
         if inv is None or not inv.ist_aktiv_an(datum):
             continue
-        zeile = modus_strom_zeile(felder)
+        summanden = _summanden_des_geraets(inv, inv_id_str, summanden_je_inv)
+        zeile = modus_strom_zeile(
+            {**felder, **summanden}, summanden_zaehlen=bool(summanden),
+        )
         if not zeile.gemessen:
             continue
         # Ohne Tages-Bezug gibt es nichts, wovon die Teilmenge eine wäre.
@@ -265,7 +320,7 @@ def beitraege_des_tages(
         if geraet_bezug is None:
             continue
         if (
-            zeile.heizen_kwh + zeile.kuehlen_kwh
+            zeile.heizen_kwh + zeile.warmwasser_kwh + zeile.kuehlen_kwh
             > float(geraet_bezug) + TEILMENGEN_TOLERANZ_KWH
         ):
             continue
@@ -276,6 +331,8 @@ def beitraege_des_tages(
             bezug_kwh=float(geraet_bezug),
             hat_split=_nenner_ist_feine_summe(inv, inv_id_str, stufe_je_inv),
             heizen_kwh=zeile.heizen_kwh,
+            # N-766: Warmwasser gemessen aus dem Summanden (nur mit Kennzeichen).
+            warmwasser_kwh=zeile.warmwasser_kwh,
             kuehlen_kwh=zeile.kuehlen_kwh,
             # E4 (Konzept §2.3): Lüften und Entfeuchten sind erfassbar und
             # erscheinen in der Aufteilung — sie bekommen nur keine Kennzahl.
@@ -283,10 +340,11 @@ def beitraege_des_tages(
             entfeuchten_kwh=zeile.entfeuchten_kwh,
             nicht_aufgeteilt_kwh=max(
                 0.0,
-                float(geraet_bezug) - zeile.heizen_kwh - zeile.kuehlen_kwh
-                - zeile.lueften_kwh - zeile.entfeuchten_kwh,
+                float(geraet_bezug) - zeile.heizen_kwh - zeile.warmwasser_kwh
+                - zeile.kuehlen_kwh - zeile.lueften_kwh - zeile.entfeuchten_kwh,
             ),
             felder=dict(felder),
+            summanden=dict(summanden),
         ))
 
     # ── Zweig 2: aus dem Betriebsmodus abgeleitet ──────────────────────────
@@ -308,7 +366,7 @@ def beitraege_des_tages(
             hat_split=_nenner_ist_feine_summe(inv, inv_id_str, stufe_je_inv),
             heizen_kwh=split.teilmenge_kwh(HEIZEN),
             kuehlen_kwh=split.teilmenge_kwh(KUEHLEN),
-            # N-336: nur der abgeleitete Zweig füllt Warmwasser — s. `ModusStromZeile`.
+            # N-336: hier abgeleitet aus dem Modus (Zweig 1: aus dem Summanden, N-766).
             warmwasser_kwh=split.teilmenge_kwh(WARMWASSER),
             nicht_aufgeteilt_kwh=max(
                 0.0,
@@ -394,6 +452,7 @@ def falte_tages_stapel(
     datum: date,
     *,
     stufe_je_inv: Optional[dict[str, str]] = None,
+    summanden_je_inv: Optional[Mapping[str, Mapping[str, float]]] = None,
 ) -> TagesStapel:
     """Faltet beide Zweige eines Tages zu **einem** Stapel.
 
@@ -406,6 +465,7 @@ def falte_tages_stapel(
     return _falte(beitraege_des_tages(
         gemessen_je_inv, zaehler_strom_je_inv, splits_je_inv,
         investitionen_by_id, datum, stufe_je_inv=stufe_je_inv,
+        summanden_je_inv=summanden_je_inv,
     ))
 
 
@@ -564,24 +624,32 @@ def verteile_tages_stapel_auf_stunden(
             formen_felder = formen.felder_je_inv.get(b.inv_id, {})
             verteilt: dict[str, list[float]] = {}
             roh: dict[str, list[float]] = {}
-            for feld, tageswert in b.felder.items():
+            # N-766: die Summanden gehören zur Schlüsselmenge — je mit der Form
+            # ihres eigenen Zählers (der Aufrufer legt sie in `felder_je_inv`).
+            for feld, tageswert in {**b.felder, **b.summanden}.items():
                 form = formen_felder.get(feld, [None] * STUNDEN)
                 verteilt[feld], _ = verteile_menge(float(tageswert or 0.0), form)
                 roh[feld] = [float(v) if v is not None else 0.0 for v in
                              (list(form) + [None] * STUNDEN)[:STUNDEN]]
             rest_form: list[float] = []
             gesamt = gesamt_form(b.inv_id, formen)
+            mit_summanden = bool(b.summanden)
             for h in range(STUNDEN):
-                z = modus_strom_zeile({f: w[h] for f, w in verteilt.items()})
+                z = modus_strom_zeile(
+                    {f: w[h] for f, w in verteilt.items()}, summanden_zaehlen=mit_summanden,
+                )
                 geraet["heizen"][h] = z.heizen_kwh
+                geraet["warmwasser"][h] = z.warmwasser_kwh
                 geraet["kuehlen"][h] = z.kuehlen_kwh
                 geraet["lueften"][h] = z.lueften_kwh
                 geraet["entfeuchten"][h] = z.entfeuchten_kwh
-                z_roh = modus_strom_zeile({f: w[h] for f, w in roh.items()})
+                z_roh = modus_strom_zeile(
+                    {f: w[h] for f, w in roh.items()}, summanden_zaehlen=mit_summanden,
+                )
                 g = gesamt[h] if h < len(gesamt) and gesamt[h] is not None else 0.0
                 rest_form.append(max(
                     0.0,
-                    g - z_roh.heizen_kwh - z_roh.kuehlen_kwh
+                    g - z_roh.heizen_kwh - z_roh.warmwasser_kwh - z_roh.kuehlen_kwh
                     - z_roh.lueften_kwh - z_roh.entfeuchten_kwh,
                 ))
             geraet["rest"], _ = verteile_menge(b.nicht_aufgeteilt_kwh, rest_form)

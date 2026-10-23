@@ -30,6 +30,7 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     ModusStromZeile,
     funktionsfremd_abzug_kwh,
     modus_strom_zeile,
+    summanden_gelten,
 )
 from backend.core.field_definitions import (
     get_emob_pv_netz_kwh,
@@ -627,7 +628,7 @@ def _wp_monatsfaltung(investition: Investition, monatsdaten: list) -> _WpSummen:
         # MODUS_STROM_FELD[…])` plus eine Abdeckungs-Prüfung ohne den
         # Gemessen-Zweig) ließ die beiden Sensoren stumm, während Cockpit
         # und Komponenten-Hub die Aufteilung schon zeigten.
-        _zeile = modus_strom_zeile(d)
+        _zeile = modus_strom_zeile(d, summanden_zaehlen=summanden_gelten(investition.parameter))  # N-766
         kuehl_je_monat[(md.jahr, md.monat)] = _zeile.kuehlen_kwh
         gesamt_modus_heizen += _zeile.heizen_kwh
         gesamt_modus_kuehlen += _zeile.kuehlen_kwh

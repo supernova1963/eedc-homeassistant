@@ -55,6 +55,7 @@ __all__ = [
     "ModusStromZeile",
     "modus_strom_zeile",
     "NutzenergieOhneKennzahl",
+    "summanden_gelten",
     "nutzenergie_ohne_kennzahl_kwh",
 ]
 
@@ -202,9 +203,10 @@ class ModusStromZeile:
 
     * ``lueften_kwh``/``entfeuchten_kwh`` bleiben im abgeleiteten Zweig 0 — ein
       Modus-Signal gibt sie nicht her.
-    * ``warmwasser_kwh`` bleibt im **gemessenen** Zweig 0 — dafür gibt es keinen
-      Betriebsart-Zähler, sondern ``strom_warmwasser_kwh`` aus der
-      Summanden-Familie (Begründung bei ``MESSBARE_MODI``).
+    * ``warmwasser_kwh`` kommt im **gemessenen** Zweig nur aus dem Summanden
+      ``strom_warmwasser_kwh`` — einen Betriebsart-Zähler dafür gibt es nicht
+      (Begründung bei ``MESSBARE_MODI``); ohne getrennte Strommessung bleibt es
+      dort 0 (N-766, s. {@link summanden_gelten}).
 
     **Beides ist keine Lücke, sondern die Aussage:** jeder Weg trägt, was er
     wissen kann. ⚠ Bis zum 27.08.2026 stand hier *„nur Heizen und Kühlen …
@@ -294,16 +296,51 @@ class ModusStromZeile:
     lueften_kwh: float = 0.0
     entfeuchten_kwh: float = 0.0
 
-    #: Nur im **abgeleiteten** Zweig belegt — die Gegenrichtung zu den zwei
-    #: Feldern darüber (N-336). Für Warmwasser gibt es keinen
-    #: Betriebsart-Zähler; wer seinen Warmwasser-Strom getrennt misst, pflegt
-    #: ``strom_warmwasser_kwh`` und bekommt daraus seine *Arbeitszahl
-    #: Warmwasser* — eine andere Familie, eine andere Frage.
+    #: Abgeleitet aus dem Modus (N-336) ODER gemessen aus dem Summanden
+    #: ``strom_warmwasser_kwh`` (N-766, nur bei getrennter Strommessung, s.
+    #: {@link summanden_gelten}). Einen Betriebsart-Zähler für Warmwasser gibt
+    #: es nicht; die *Arbeitszahl Warmwasser* liest ihren Nenner weiter direkt
+    #: aus ``strom_warmwasser_kwh`` — eine andere Frage.
     warmwasser_kwh: float = 0.0
 
 
-def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
+def summanden_gelten(params: Optional[dict]) -> bool:
+    """Sind ``strom_heizen_kwh``/``strom_warmwasser_kwh`` dieses Geräts **Summanden** (N-766)?
+
+    Das Kennzeichen ``getrennte_strommessung`` — dieselbe Frage, die
+    ``field_definitions/wp_strom.py::wp_strom_aufteilung`` vor der K3-Stufe und
+    ``waerme_verteilung.verteile_geraet_strom`` vor der Summanden-Familie stellt.
+    Ohne Kennzeichen sind die Felder keine Summanden (ein alter Wert in der
+    Zeile nach dem Abschalten) und gehen nicht in die Betriebsart-Aufteilung.
+    """
+    return bool((params or {}).get("getrennte_strommessung"))
+
+
+def _summand(daten: dict, feld: str) -> Optional[float]:
+    wert = daten.get(feld)
+    if wert is None:
+        return None
+    try:
+        return float(wert)
+    except (TypeError, ValueError):
+        return None
+
+
+def modus_strom_zeile(
+    daten: Optional[dict], *, summanden_zaehlen: bool = False,
+) -> ModusStromZeile:
     """**Gemessen schlägt abgeleitet** — ganz oder gar nicht je Zeile (F-56).
+
+    ⭐ **N-766 (simon42 MartyBr, 23.10.2026): im gemessenen Zweig zählen die
+    Summanden mit, wenn sie Summanden sind** (``summanden_zaehlen``, das
+    Kennzeichen ``getrennte_strommessung`` des Geräts — {@link
+    summanden_gelten}). Heizen = ``betriebsart_strom_heizen_kwh`` (Gerätefeld,
+    sonst Σ Innengeräte), sonst ``strom_heizen_kwh``; Warmwasser =
+    ``strom_warmwasser_kwh``; jeweils nur ``is not None`` (0,0 ist eine Messung).
+    Alle drei sind Zähler — die Regel «ganz oder gar nicht» (eine Hälfte Zähler,
+    die andere Rechnung) bleibt gewahrt. Bis dahin zeigte eine Wärmepumpe mit
+    Strom Heizen · Strom Warmwasser und einem Kühlzähler Heizen 0 und den ganzen
+    Strom «nicht aufgeteilt». Ohne Kennzeichen wie bisher.
 
     Die Regel steht **nur hier**, obwohl sie an mehreren Flächen gebraucht wird:
     Monats-Fakten (Cockpit, Komponenten-Hub) und HA-/MQTT-Export, der seine
@@ -332,18 +369,26 @@ def modus_strom_zeile(daten: Optional[dict]) -> ModusStromZeile:
         # die zwei, die der abgeleitete Split hergibt. Ein zugeordneter
         # Lüftungs-Zähler ist eine Messung wie jede andere — sie hier zu
         # übergehen hieße, ein Feld anzubieten und seinen Wert wegzuwerfen.
+        heizen = betriebsart_strom_kwh(daten, HEIZEN)
+        warmwasser = None
+        if summanden_zaehlen:
+            if heizen is None:
+                heizen = _summand(daten, "strom_heizen_kwh")
+            warmwasser = _summand(daten, "strom_warmwasser_kwh")
         return ModusStromZeile(
-            heizen_kwh=betriebsart_strom_kwh(daten, HEIZEN) or 0.0,
+            heizen_kwh=heizen or 0.0,
             kuehlen_kwh=betriebsart_strom_kwh(daten, KUEHLEN) or 0.0,
             lueften_kwh=betriebsart_strom_kwh(daten, LUEFTEN) or 0.0,
             entfeuchten_kwh=betriebsart_strom_kwh(daten, ENTFEUCHTEN) or 0.0,
+            warmwasser_kwh=warmwasser or 0.0,
             gemessen=True,
             abdeckung_h=abdeckung,
         )
     return ModusStromZeile(
         heizen_kwh=_zahl(daten.get(MODUS_STROM_FELD[HEIZEN])),
         kuehlen_kwh=_zahl(daten.get(MODUS_STROM_FELD[KUEHLEN])),
-        # N-336: der abgeleitete Zweig kann Warmwasser, der gemessene nicht.
+        # N-336: Warmwasser hier abgeleitet aus dem Modus; im gemessenen Zweig
+        # gemessen aus dem Summanden (N-766, nur mit Kennzeichen).
         # Altmonate tragen das Feld nicht — dort bleibt der Anteil in der
         # Restmenge, und das ist die Wahrheit: eedc hat ihn damals nicht
         # mitgeschrieben. **Kein Nachrechnen der Historie.**

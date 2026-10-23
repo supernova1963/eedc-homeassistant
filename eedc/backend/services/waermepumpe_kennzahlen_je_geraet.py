@@ -54,6 +54,7 @@ from backend.core.berechnungen import (
 )
 from backend.core.berechnungen.betriebsart_gemessen import (
     nutzenergie_ohne_kennzahl_kwh,
+    summanden_gelten,
 )
 from backend.core.berechnungen.modus_split import heizwaerme_ist_abgeleitet
 from backend.core.betriebsmodus import KUEHLEN as BM_KUEHLEN_W5
@@ -344,7 +345,7 @@ def mengen_aus_monatszeilen(
         waerme_gemessen = waerme_gemessen or _b.wp_waerme_gemessen
         # **Gemessen schlägt abgeleitet**, je Monatszeile — über den SoT, nicht
         # über eine nachgebaute Weiche (F-56).
-        _zeile = modus_strom_zeile(d)
+        _zeile = modus_strom_zeile(d, summanden_zaehlen=summanden_gelten(wp.parameter))  # N-766
         modus_gemessen = modus_gemessen or _zeile.gemessen
         modus_heizen += _zeile.heizen_kwh
         modus_kuehlen += _zeile.kuehlen_kwh

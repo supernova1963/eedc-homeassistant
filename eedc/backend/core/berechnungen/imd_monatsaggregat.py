@@ -38,6 +38,7 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     nutzenergie_ohne_kennzahl_kwh,
     funktionsfremd_abzug_kwh,
     modus_strom_zeile,
+    summanden_gelten,
 )
 from backend.core.berechnungen.modus_split import (
     heizwaerme_ist_abgeleitet,
@@ -147,7 +148,7 @@ class ImdTypBeitrag:
     # Genau diese Zweideutigkeit war der Grund für eigene Feldnamen (E-G).
     wp_modus_strom_heizen: float = 0.0
     wp_modus_strom_kuehlen: float = 0.0
-    #: N-336: nur aus dem abgeleiteten Split — s. ``ModusStromZeile``.
+    #: N-336/N-766: abgeleitet aus dem Modus oder gemessen aus dem Summanden — s. ``ModusStromZeile``.
     wp_modus_strom_warmwasser: float = 0.0
     #: E4 (Konzept §2.3): **nur aus gemessenen Zählern.** Der abgeleitete Split
     #: kann sie nicht (``AUFGETEILTE_MODI``, D11) und lässt sie bei 0 — das ist
@@ -362,7 +363,8 @@ def imd_typ_beitrag(
         # F-56: die Weiche liegt im Layer-SoT `modus_strom_zeile` — sie stand
         # bis dahin hier inline und war im HA-Export daneben nachgebaut, ohne
         # den Gemessen-Zweig. Eine Regel, zwei Codestellen, eine Drift.
-        _modus = modus_strom_zeile(data)
+        # N-766: mit getrennter Strommessung zählen die Summanden im gemessenen Zweig mit.
+        _modus = modus_strom_zeile(data, summanden_zaehlen=summanden_gelten(params))
         _gemessen = _modus.gemessen
         _nutz = nutzenergie_ohne_kennzahl_kwh(data)
         # WK-16d: Menge UND Rest kommen aus **einem** Aufruf. Den Rest daneben
@@ -405,7 +407,10 @@ def imd_typ_beitrag(
             # halbwahres Etikett ist schlechter als eine fehlende Zahl
             # (ADR-002/P4). Wer Kühlen misst und Heizen nicht, sieht Heizen
             # deshalb nicht in dieser Zeile — nicht als 0 mit falscher
-            # Herkunft.
+            # Herkunft. ⭐ N-766: gemessene Summanden (`strom_heizen_kwh`,
+            # `strom_warmwasser_kwh` bei getrennter Strommessung) SIND Zähler
+            # und werden im gemessenen Zweig mitgelesen — dann ist der ganze
+            # Balken gemessen, die Regel bleibt gewahrt.
             #
             # Zugleich ist es die Regel, die `monats_fakten` für den
             # *gerechneten* Split ohnehin schon anwendet (`hat_gemessene_

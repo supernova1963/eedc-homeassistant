@@ -181,7 +181,7 @@ async def get_tag_detail(
     #
     from backend.core.berechnungen import waermepumpe_kwh_je_investition
     from backend.core.berechnungen.tages_stapel import (
-        beitrag_abzug_kwh, beitraege_des_tages, falte_tages_stapel,
+        beitrag_abzug_kwh, beitraege_des_tages, falte_tages_stapel, summanden_aus_tageswerten,
     )
     from backend.core.berechnungen.wp_tages_praezedenz import (
         QUELLE_TAGESRAND, loese_wp_tagesstrom_auf,
@@ -283,9 +283,11 @@ async def get_tag_detail(
     _stufe_je_inv = await get_wp_strom_stufe_je_investition(
         db, anlage, investitionen_by_id,
     )
+    # N-766: die Summanden des Tages (Strom Heizen/Warmwasser) — Zweig 1 liest sie bei getrennter Strommessung mit.
+    _summanden_tag = summanden_aus_tageswerten(_tagesdetail.werte_je_inv)
     beitraege_tag = beitraege_des_tages(
         gemessen_je_inv, wp_kwh_je_inv, _splits_tag, investitionen_by_id, datum,
-        stufe_je_inv=_stufe_je_inv,
+        stufe_je_inv=_stufe_je_inv, summanden_je_inv=_summanden_tag,
     )
     stapel = falte_tages_stapel(
         gemessen_je_inv,
@@ -294,6 +296,7 @@ async def get_tag_detail(
         investitionen_by_id,
         datum,
         stufe_je_inv=_stufe_je_inv,
+        summanden_je_inv=_summanden_tag,
     )
     heizen_tag = stapel.heizen_kwh
     kuehlen_tag = stapel.kuehlen_kwh

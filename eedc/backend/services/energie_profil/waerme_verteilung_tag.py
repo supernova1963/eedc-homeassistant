@@ -40,6 +40,7 @@ from backend.core.berechnungen.tages_stapel import (
     STUNDEN,
     StundenFormen,
     beitraege_des_tages,
+    summanden_aus_tageswerten,
     gesamt_form,
     verteile_menge,
     verteile_tages_stapel_auf_stunden,
@@ -130,6 +131,8 @@ async def lade_tages_verteilung(
         stufe_je_inv=await get_wp_strom_stufe_je_investition(
             db, anlage, investitionen_by_id,
         ),
+        # N-766: dieselben Summanden wie im Tag-Detail.
+        summanden_je_inv=summanden_aus_tageswerten(eingaenge.detail.werte_je_inv),
     )
     beitrag_je_inv = {b.inv_id: b for b in beitraege}
     detail = eingaenge.detail
@@ -179,7 +182,7 @@ async def lade_tages_verteilung(
         felder_je_inv={
             b.inv_id: {
                 feld: formen_je_key.get(f"inv:{b.inv_id}:{feld}", [None] * STUNDEN)
-                for feld in b.felder
+                for feld in (*b.felder, *b.summanden)   # N-766: Summanden mit eigener Form
             }
             for b in beitraege if b.gemessen
         },
@@ -253,7 +256,7 @@ def _zaehler_des_tages(
     for b in beitraege:
         if not b.gemessen:
             continue
-        for feld in b.felder:
+        for feld in (*b.felder, *b.summanden):   # N-766: auch die Summanden-Zähler
             z = _zaehler(b.inv_id, feld)
             if z:
                 zaehler[z[0]] = z

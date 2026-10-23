@@ -309,9 +309,16 @@ def wp_strom_aufteilung(
 
     # Lokaler Import: `betriebsart_gemessen` liest `basis_feld_key` aus diesem
     # Modul — ein Import auf Modulebene wäre zirkulär.
-    from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
+    from backend.core.berechnungen.betriebsart_gemessen import (
+        modus_strom_zeile,
+        summanden_gelten,
+    )
 
-    zeile = modus_strom_zeile(d)
+    # N-766: dasselbe Kennzeichen wie die Frage darunter („sind die Achsen
+    # Summanden?"). Die Menge der Stufe «betriebsart» bleibt Σ der
+    # Betriebsart-Zähler: mit Kennzeichen erreicht man sie nur ohne Achsen,
+    # ohne Kennzeichen zählen die Achsen nicht.
+    zeile = modus_strom_zeile(d, summanden_zaehlen=summanden_gelten(params))
 
     if not (params or {}).get("getrennte_strommessung"):
         # ⚠ **Im Nicht-getrennt-Zweig wird NICHTS addiert und nichts

@@ -49,7 +49,7 @@ from typing import Literal, Optional
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile
+from backend.core.berechnungen.betriebsart_gemessen import modus_strom_zeile, summanden_gelten
 from backend.core.berechnungen.tages_stapel import STUNDEN, GeraeteBeitrag
 from backend.core.berechnungen.waerme_verteilung import (
     FUNKTION_LABEL,
@@ -375,7 +375,7 @@ def _eingabe_aus_monatszeile(inv: Investition, daten: dict) -> GeraetStromEingab
     """
     params = inv.parameter or {}
     auf = wp_strom_aufteilung(daten, params)
-    zeile = modus_strom_zeile(daten)
+    zeile = modus_strom_zeile(daten, summanden_zaehlen=summanden_gelten(params))  # N-766
     abdeckung = float(daten.get(MODUS_ABDECKUNG_FELD) or 0.0)
     return GeraetStromEingabe(
         menge_kwh=auf.menge_kwh,

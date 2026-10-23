@@ -997,9 +997,13 @@ export function baueKomponentenBloecke(
       // wurde. Ohne diese Zähler bleibt der eingeführte Wortlaut unverändert.
       id: 'el:wp-modus-split',
       // Bauschnitt 8 / E3 (b): Zeigt die Liste darüber einen getrennt
-      // gemessenen Strom Heizen, stehen zwei verschiedene Mengen „Heizen" im
-      // Block — die Betriebsart „Heizen" enthält den Warmwasser-Strom (IST §888).
-      // Dann sagt der Titel, wonach dieser Balken aufteilt (S2).
+      // gemessenen Strom Heizen, stehen im ABGELEITETEN Zweig zwei verschiedene
+      // Mengen „Heizen" im Block — die Betriebsart „Heizen" aus dem Modus
+      // enthält dort den Warmwasser-Strom (IST §888). Dann sagt der Titel,
+      // wonach dieser Balken aufteilt (S2). Im GEMESSENEN Zweig mit getrennter
+      // Strommessung (N-766) sind Heizen und Warmwasser im Balken die Summanden
+      // der Liste selbst; das Warmwasser-Segment erscheint über `wpWarmwasser`
+      // wie im abgeleiteten Zweig.
       titel: (wpLueften || wpEntfeuchten || wpWarmwasser || zeigtStromJeFunktion(wpFunktionen))
         ? 'Strom-Aufteilung nach Betriebsart'
         : 'Strom-Aufteilung Heizen/Kühlen',
