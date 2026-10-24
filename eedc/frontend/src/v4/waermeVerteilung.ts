@@ -48,6 +48,13 @@ const FARBE: Record<string, { chart: string; bg: string }> = {
 
 const FALLBACK = { chart: CHART_COLORS.modusNichtAufgeteilt, bg: ROLLEN_BG.nicht_aufgeteilt }
 
+/** Chart-Farbe einer Funktion (Kanon-Wert des Betriebsmodus: `heizen` …) —
+ *  exportiert für den Modus-Chip im Hub-Überblick (P-433-2), damit der Chip
+ *  dieselbe Rolle trägt wie das Segment (Regel 0a, eine Farbquelle). */
+export function funktionsFarbe(funktion: string): string {
+  return (FARBE[funktion] ?? FALLBACK).chart
+}
+
 /** Trägt die Antwort mehr als ein Gerät? Nur dann gehört der Gerätename ins
  *  Label — bei einer einzigen Wärmepumpe wäre er in jeder Zeile dasselbe Wort. */
 export function mehrereGeraete(v: VerteilungVerlauf): boolean {

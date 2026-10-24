@@ -7,6 +7,7 @@
 
 import { memo } from 'react'
 import type { BgVariant } from './EnergieFluss'
+import EnergieFlussDefs from './EnergieFlussDefs'
 
 /**
  * Bildformat der Variante „Haus" (Bau B, Regel A): aus dem Seitenverhältnis
@@ -127,8 +128,7 @@ function EnergieFlussBackground({
               <filter id="ef-inner-shadow"><feOffset dx="0" dy="0" /></filter>
               <filter id="ef-ring-glow"><feOffset dx="0" dy="0" /></filter>
               <filter id="ef-line-glow"><feOffset dx="0" dy="0" /></filter>
-              <filter id="ef-icon-glow"><feOffset dx="0" dy="0" /></filter>
-              <filter id="ef-card-shadow"><feOffset dx="0" dy="0" /></filter>
+              <EnergieFlussDefs lite />
               <filter id="ef-haus-glow"><feOffset dx="0" dy="0" /></filter>
             </>
           ) : (
@@ -154,15 +154,8 @@ function EnergieFlussBackground({
                 </feMerge>
               </filter>
 
-              {/* Glow-Filter für Icons */}
-              <filter id="ef-icon-glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
-              </filter>
-
-              {/* Schatten für Knoten-Karten */}
-              <filter id="ef-card-shadow" x="-10%" y="-10%" width="130%" height="140%">
-                <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#000000" floodOpacity="0.15" />
-              </filter>
+              {/* Icon-Schein und Kachel-Schatten: EINMAL definiert (EnergieFlussDefs) */}
+              <EnergieFlussDefs lite={false} />
 
               {/* Glow für Haus-Zentrum */}
               <filter id="ef-haus-glow" x="-60%" y="-60%" width="220%" height="220%">

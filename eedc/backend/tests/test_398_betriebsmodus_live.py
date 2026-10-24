@@ -273,6 +273,8 @@ def test_icons_sind_im_client_registriert():
     Deshalb die Kanon-Namen gegen die `ICON_MAP` des Energiefluss-SVG. Sie ist
     die **einzige** Fläche, auf der der Wechsel stattfindet (Entscheid
     Maintainer 27.08.); `lib/komponentenStyle.ts` bleibt bewusst unberührt.
+    Seit P-433-2 (24.10.2026) steht sie in der Kachel-SoT `EnergieFlussKachel.tsx`
+    (herausgelöst aus `EnergieFluss.tsx`, bitgleich).
     """
     from pathlib import Path
 
@@ -280,7 +282,7 @@ def test_icons_sind_im_client_registriert():
 
     quelle = (
         Path(__file__).resolve().parents[2]
-        / "frontend/src/components/live/EnergieFluss.tsx"
+        / "frontend/src/components/live/EnergieFlussKachel.tsx"
     ).read_text(encoding="utf-8")
     block = quelle.split("const ICON_MAP", 1)[1].split("}", 1)[0]
     for name in BETRIEBSMODUS_ICON.values():

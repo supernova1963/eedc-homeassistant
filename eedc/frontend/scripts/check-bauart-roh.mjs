@@ -63,6 +63,7 @@ const KLASSIFIZIERT = new Map([
   ['src/lib/jazVergleich.ts', '1 · Bezugsgruppe des JAZ-Vergleichs je Bauart (N-350): dieselbe Kennzahl nur gegen dieselbe Bauart'],
   // ── 2 · Vorschlag ────────────────────────────────────────────────────────
   ['src/components/forms/sections/InvestitionTypFelder/WaermepumpeFelder.tsx', '2 · Formular: Auswahl der Bauart, Hinweise und Vorbelegung — schlägt vor, entscheidet nichts (N-88/F2b)'],
+  ['src/components/komponenten/ueberblick/kachelAnker.ts', '2 · Anzeige-Ort nach Bauart: an WELCHEM Objekt des Wärme/Klima-Panoramas die Geräte-Kachel steht (A · C · F · O) — nie, OB ein Wert gezeigt wird (P-433-2, B11)'],
   ['src/components/forms/sections/investitionFormHelpers.ts', '3 · Formular-Defaults: reicht `wp_art` als Formularwert durch — die Bedarfs-Vorbelegung fragt seit WK-15c die Achsen (`hatHeizAchse`), nicht die Bauart'],
   // ── 3 · Stammdatum ───────────────────────────────────────────────────────
   ['src/api/community.ts', '3 · Community-Vertrag: `wp_art` als Anlagen-Attribut'],

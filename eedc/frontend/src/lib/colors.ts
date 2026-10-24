@@ -589,6 +589,12 @@ export const CHART_FLAECHE = {
  *  Deckung 0,4 und nur im hellen Thema (`dark:opacity-0` am Pfad). */
 export const ENERGIEFLUSS_SAUM = '#1e293b' // slate-800
 
+/** Schlagschatten der Energiefluss-Kachel (`ef-card-shadow`, Deckung 0,15) —
+ *  gelesen von `components/live/EnergieFlussDefs.tsx`, das die Kachel-Filter für
+ *  den Energiefluss und den Hub-Block «Überblick» (P-433-2) EINMAL definiert.
+ *  **Infrastruktur wie {@link ENERGIEFLUSS_SAUM}, keine Datenrolle.** */
+export const ENERGIEFLUSS_KACHEL_SCHATTEN = '#000000'
+
 // ─── Komponenten-Identität (Investitionstyp) — kanonische SoT (Regel A) ──────
 /**
  * **Kanonische Komponenten-Identitäts-Farbmap (SoT, Gernot 2026-06-24, Regel A)**

@@ -22,13 +22,14 @@ import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../compo
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { datenquellenApi, type DatenquelleGruppe } from '../api/datenquellen'
-import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, SlidersHorizontal, Zap } from 'lucide-react'
+import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Image as BildIcon, Layers, Network, Paperclip, Radio, Settings, SlidersHorizontal, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenMonatsTabelle } from './KomponentenMonatsTabelle'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import HubLeerGrund from './HubLeerGrund'
+import UeberblickBlock, { UEBERBLICK_PARK_IDS } from '../components/komponenten/ueberblick/UeberblickBlock'
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
 import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
@@ -562,8 +563,14 @@ function WirtschaftlichkeitInhalt({ w, kpis }: {
 
 type MeldeBlock = (block: string, ids: string[]) => void
 
-/** Blöcke eines Geräts — exportiert für Block-Tests (Muster `baueKomponentenBloecke`). */
-export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi, gemeldet: Record<string, string[]>, melde: MeldeBlock): Block[] {
+/** Typen mit Block «Überblick» (Konzept #433 Stufe 2; E-Mobilität folgt mit P-433-2b). */
+export const UEBERBLICK_TYPEN: readonly string[] = ['waermepumpe']
+/** Neue Block-IDs, die vorn in eine gespeicherte Reihenfolge kommen (E-P2-7). */
+export const VORANSTELLEN: string[] = ['ueberblick']
+
+/** Blöcke eines Geräts — exportiert für Block-Tests (Muster `baueKomponentenBloecke`).
+ *  `alleInvs`: alle Geräte des Typs (Kacheln im Überblick, E-P2-2); fehlt er, nur `g.inv`. */
+export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi, gemeldet: Record<string, string[]>, melde: MeldeBlock, alleInvs?: Investition[]): Block[] {
   const analyse = KOMPONENTEN_ANALYSE[typ]
   const istGeparkt = (id: string) => park.istGeparkt(id)
   // Element-Park-Doktrin (Gernot 2026-06-27): JEDE Anzeige im Block einzeln parkbar
@@ -579,6 +586,19 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
     return ids != null && ids.length > 0 && ids.every(istGeparkt)
   }
   const bloecke: Block[] = []
+
+  // Überblick (#433 Stufe 2, P-433-2): oberster Block — Panorama mit den
+  // Energiefluss-Kacheln links, «Auf einen Blick» rechts. Summary statisch: der
+  // Live-Poll lebt im Inhalt und läuft zugeklappt nicht (W10).
+  if (UEBERBLICK_TYPEN.includes(typ) && g.inv.id > 0 && !alleGeparkt([...UEBERBLICK_PARK_IDS])) {
+    const geraete = (alleInvs ?? [g.inv]).filter((inv) => inv.id > 0)
+    bloecke.push({
+      id: 'ueberblick', title: 'Überblick', icon: BildIcon,
+      summary: `Schaubild · ${g.inv.bezeichnung}`,
+      defaultOpen: true,
+      render: () => <UeberblickBlock anlageId={anlageId} geraete={geraete} inv={g.inv} />,
+    })
+  }
 
   // ① Status (Pflicht) — D2-KPIs + Hinweise + Sub-Strips + Aufteilung, je parkbar.
   // B4 (Gernot 2026-07-09): die Sub-Strips (Kennzahlen/Sekundär) sind KEINE atomare
@@ -810,7 +830,8 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   }, [anlageId, adapter, typ, retryKey])
 
   const g = geraete[aktiv]
-  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park, gemeldet, melde) : []), [g, typ, anlageId, park, gemeldet, melde])
+  const alleInvs = useMemo(() => geraete.map((d) => d.inv), [geraete])
+  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park, gemeldet, melde, alleInvs) : []), [g, typ, anlageId, park, gemeldet, melde, alleInvs])
 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />
@@ -861,7 +882,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
       {g && g.monatswerte === 0 && anlageId != null && g.inv.id > 0 && (
         <HubLeerGrund anlageId={anlageId} investitionId={g.inv.id} />
       )}
-      <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar />
+      <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar voranstellen={VORANSTELLEN} />
 
       {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert ohne Provider. */}
       <ParkFuss />

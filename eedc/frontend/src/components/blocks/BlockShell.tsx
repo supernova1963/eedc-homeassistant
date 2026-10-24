@@ -46,6 +46,7 @@ export function BlockShell({
   persistKey,
   fokusKopf,
   oeffneBeimMount,
+  voranstellen,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
@@ -58,6 +59,12 @@ export function BlockShell({
    *  Monatsabschluss öffnet den Monatsdaten-Block, damit dessen Form sichtbar
    *  wird. Ändert sich der Wert, wird erneut aufgeklappt. */
   oeffneBeimMount?: string
+  /** P-433-2 (E-P2-7): Block-IDs, die als NEUE ID **vorn** statt hinten in eine
+   *  gespeicherte Reihenfolge kommen — ein Block, den das Konzept „oberster Block"
+   *  nennt («Überblick»), stünde bei Bestandsanwendern sonst unten (die
+   *  Reihenfolge ist schon beim ersten Besuch persistiert). Wirkt nur beim
+   *  ersten Auftauchen der ID; wer ihn danach verschiebt, behält seine Wahl. */
+  voranstellen?: string[]
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -68,7 +75,9 @@ export function BlockShell({
     // Blöcke eines Lücken-Tags, die zurückkommen) —, nur neue IDs hinten anhängen.
     // Niemals IDs wegwerfen → ein vorübergehend reduziertes `bloecke` kann die
     // Reihenfolge nicht zerstören.
-    return [...gespeichert, ...ids.filter((id) => !gespeichert.includes(id))]
+    const neu = ids.filter((id) => !gespeichert.includes(id))
+    const vorn = neu.filter((id) => voranstellen?.includes(id))
+    return [...vorn, ...gespeichert, ...neu.filter((id) => !vorn.includes(id))]
   })
   const [zu, setZu] = useState<Set<string>>(() => {
     // D14-2: Klapp-Zustand wird überall gemerkt (die A3-Flüchtigkeit der
@@ -126,9 +135,10 @@ export function BlockShell({
   useEffect(() => {
     setOrder((prev) => {
       const neu = ids.filter((id) => !prev.includes(id))
-      return neu.length ? [...prev, ...neu] : prev
+      const vorn = neu.filter((id) => voranstellen?.includes(id))
+      return neu.length ? [...vorn, ...prev, ...neu.filter((id) => !vorn.includes(id))] : prev
     })
-  }, [ids])
+  }, [ids, voranstellen])
 
   // Default-Klappzustand (defaultOpen === false → eingeklappt) für den Reset.
   const defaultZu = useMemo(

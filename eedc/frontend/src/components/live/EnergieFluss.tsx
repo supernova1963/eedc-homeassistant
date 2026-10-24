@@ -8,11 +8,12 @@
  */
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Sparkles, Zap as ZapIcon } from 'lucide-react'
+import { Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveFahrzeug, LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 import { CHART_COLORS, COLORS, ENERGIEFLUSS_SAUM, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
+import EnergieFlussKachel, { IconElement } from './EnergieFlussKachel'
 import {
   RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, layoutEnergieFluss,
   type BuehnenMass, type GezeichneterKnoten, type KachelAuto,
@@ -39,12 +40,19 @@ function detectLiteDefault(): boolean {
   return false
 }
 
+/**
+ * Lite an oder aus — gemerkte Wahl des Schalters, sonst die Geräte-Regel.
+ * Exportiert für den Hub-Block «Überblick» (P-433-2): dieselben Kacheln, dieselbe
+ * Lite-Regel, EIN Leser des Schlüssels (der Schalter bleibt hier).
+ */
+export function liesLiteModus(): boolean {
+  const stored = localStorage.getItem(LITE_STORAGE_KEY)
+  if (stored !== null) return stored === '1'
+  return detectLiteDefault()
+}
+
 function useLiteMode(): [boolean, () => void] {
-  const [lite, setLite] = useState(() => {
-    const stored = localStorage.getItem(LITE_STORAGE_KEY)
-    if (stored !== null) return stored === '1'
-    return detectLiteDefault()
-  })
+  const [lite, setLite] = useState(liesLiteModus)
 
   useEffect(() => {
     localStorage.setItem(LITE_STORAGE_KEY, lite ? '1' : '0')
@@ -98,18 +106,6 @@ function useBgVariant(): [BgVariant, (v: BgVariant) => void] {
 }
 
 // ─── Shared Utilities (aus EnergieBilanz) ───────────────────────────
-
-const ICON_MAP: Record<string, React.ElementType> = {
-  sun: Sun, zap: Zap, battery: Battery, car: Car, plug: Plug,
-  flame: Flame, wrench: Wrench, home: Home, heater: Heater, droplets: Droplets,
-  // #398 Stufe 3: das Symbol wechselt mit dem Betriebsmodus — und AUSSCHLIESSLICH
-  // hier. Der Energiefluss ist die einzige Fläche, die ohnehin „jetzt" meint;
-  // `lib/komponentenStyle.ts` bleibt unberührt (Entscheid Maintainer 27.08.:
-  // in Listen, Kacheln und Auswertungen behauptete ein wechselndes Symbol eine
-  // Momentaktualität, die die Zahl daneben nicht hat).
-  // Die Namen kommen aus dem Backend-Kanon `BETRIEBSMODUS_ICON`.
-  snowflake: Snowflake, fan: Fan, waves: Waves,
-}
 
 const COLOR_MAP = KATEGORIE_FARBEN
 
@@ -218,9 +214,6 @@ interface EnergieFlussProps {
   onGruppen?: (gruppen: GezeichneterKnoten[]) => void
 }
 
-/** Versatz der hinteren Stapel-Rechtecke einer Gruppenkachel (Muster `stack: 7`, detLAN #138). */
-const STAPEL_VERSATZ = 7
-
 /** Tooltip des „Gesamtleistung"-Chips (#341) — bei BHKW-Anlagen die Abgrenzung des Werts. */
 export const TIP_GESAMTLEISTUNG = 'Summe aller PV-Erzeuger (ohne Batterie/Netz)'
 
@@ -228,7 +221,7 @@ export const TIP_GESAMTLEISTUNG = 'Summe aller PV-Erzeuger (ohne Batterie/Netz)'
 export const SATZ_ZUORDNUNG_UNBEKANNT = 'Welches Auto an welcher Wallbox lädt, weiß eedc noch nicht.'
 
 /** Kürzt `name` so, dass `name + suffix` höchstens `max` Zeichen hat — der Suffix (Anzahl, Ladestand) bleibt immer ganz. */
-function kuerzeMitSuffix(name: string, suffix: string, max: number): string {
+export function kuerzeMitSuffix(name: string, suffix: string, max: number): string {
   if (name.length + suffix.length <= max) return name + suffix
   const platz = max - suffix.length
   return platz >= 3 ? name.slice(0, platz - 1) + '…' + suffix : suffix.trimStart()
@@ -244,7 +237,7 @@ function kuerzeMitSuffix(name: string, suffix: string, max: number): string {
  * Gruppentitel ist die Grenze zu eng: „Speicher (4)" (≈ 57 von 80 Einheiten)
  * würde zu „Speich… (4)".
  */
-function zeichenBudget(nodeW: number, fontSize: number): number {
+export function zeichenBudget(nodeW: number, fontSize: number): number {
   return Math.floor((nodeW - 6) / (0.62 * fontSize))
 }
 
@@ -278,13 +271,6 @@ function autoTip(a: LiveFahrzeug): string {
 function flowDuration(kw: number): number {
   if (kw <= 0) return 0
   return Math.max(0.8, 3 - Math.log(1 + kw) * 0.7)
-}
-
-/** Render Lucide Icon als React-Element */
-function IconElement({ name, size, color, className }: { name: string; size: number; color?: string; className?: string }) {
-  const Icon = ICON_MAP[name]
-  if (!Icon) return null
-  return <Icon width={size} height={size} color={color} className={className} />
 }
 
 /** SoC aus gauges extrahieren für einen Komponenten-Key (z.B. "batterie_3" → soc_3).
@@ -395,7 +381,7 @@ export default function EnergieFluss({
   // `maxKw` über die GEZEICHNETEN Knoten (eine Gruppe überschreitet jedes
   // Einzelgerät); die Zeichenfläche W × svgH kommt aus dem Layout.
   const { nodes, dims, W, H: svgH, CX, CY, maxKw, gesamtRahmen } = layout
-  const { nodeW: NODE_W, nodeH: NODE_H, nodeR: NODE_R, hausR: HAUS_R } = dims
+  const { nodeW: NODE_W, hausR: HAUS_R } = dims
   // Alle Autos an allen Wallboxen — bei „geschätzt" (≥ 2 Wallboxen) listet jede
   // Wallbox ALLE, denn die Zuordnung reihum ist nur eine Annahme (Plan §1.4a).
   const alleAutos = [...new Map(
@@ -700,7 +686,8 @@ export default function EnergieFluss({
           // ⭐ Die Frage steht hier EINMAL, weil ihre Antwort an ZWEI Stellen
           // gebraucht wird: für die Zeile selbst und für die Verschiebung des
           // Namens darunter. Genau diese zweite Stelle hat #398 Stufe 2
-          // vergessen (s. Kommentar am Label).
+          // vergessen (s. Kommentar am Label in `EnergieFlussKachel.tsx` —
+          // dort hängen seit P-433-2 beide an derselben Prop `zweiteZeile`).
           const zweite: { text: string; fill: string | null } | null = node.kachelAuto
             ? { text: autoZeile(node.kachelAuto, zeichenBudget(NODE_W, dims.socFontSize)), fill: hasSoc ? socColor(soc) : null }
             : hasSoc
@@ -708,7 +695,6 @@ export default function EnergieFluss({
               : !mitglieder && k.betriebsmodus_label
                 ? { text: k.betriebsmodus_label, fill: isActive ? color : achsen.referenz }
                 : null
-          const zweiteZeile = zweite != null
 
           // PV-Auslastung: Ist-Leistung / installierte kWp (bei der PV-Gruppe
           // Σ kW / Σ kWp — die Summe ist `null`, sobald einem Mitglied die kWp fehlt)
@@ -782,174 +768,41 @@ export default function EnergieFluss({
             ? kuerzeMitSuffix(k.label, ` (${mitglieder.length})`, zeichenBudget(NODE_W, dims.labelFontSize))
             : k.label.length > maxC ? k.label.slice(0, maxC - 2) + '…' : k.label
 
-          const nx = node.x - NODE_W / 2
-          const ny = node.y - NODE_H / 2
-
           // Gruppe = Knopf (§A5). Der Tap hat per `touchstart` schon den
           // Tooltip der Kachel gezeigt — er stünde sonst bis zu 6 s über dem
           // Overlay (`Z_TOOLTIP` > z-50), deshalb vor dem Öffnen wegräumen.
-          const oeffnen = mitglieder && onGruppeKlick
-            ? () => { verbergeTouchTooltip(); onGruppeKlick(k.key) }
+          const knopf = mitglieder && onGruppeKlick
+            ? {
+                key: k.key,
+                ariaLabel: `${k.label} (${mitglieder.length}): Liste öffnen`,
+                onOeffnen: () => { verbergeTouchTooltip(); onGruppeKlick(k.key) },
+              }
             : null
-          const knopf = oeffnen ? {
-            role: 'button',
-            tabIndex: 0,
-            'aria-label': `${k.label} (${mitglieder!.length}): Liste öffnen`,
-            'data-gruppe': k.key,
-            onClick: oeffnen,
-            onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
-              if (e.key !== 'Enter' && e.key !== ' ') return
-              e.preventDefault()
-              oeffnen()
-            },
-          } : {}
+
+          // Pegel: SoC (kräftig) oder PV-Auslastung (gelb/orange) — nie beide.
+          const pegel = hasSoc
+            ? { prozent: soc, fill: socColor(soc), opacity: 0.3 }
+            : auslastungPct !== null
+              ? {
+                  prozent: auslastungPct,
+                  fill: auslastungPct >= 80 ? SOLAR_INTENSITAET[2] : auslastungPct >= 40 ? SOLAR_INTENSITAET[1] : SOLAR_INTENSITAET[0],
+                  opacity: 0.25,
+                }
+              : null
 
           return (
-            <g
+            <EnergieFlussKachel
               key={`node-${k.key}`}
-              className={oeffnen ? 'group cursor-pointer outline-none' : 'cursor-default'}
-              data-title={tip}
-              {...knopf}
-            >
-              <title>{tip}</title>
-
-              {/* Tastatur-Fokus der Gruppenkachel: ein Rahmen, nur bei :focus-visible. */}
-              {oeffnen && (
-                <rect
-                  data-fokusrahmen
-                  x={nx - 3} y={ny - STAPEL_VERSATZ - 3}
-                  width={NODE_W + STAPEL_VERSATZ + 6} height={NODE_H + STAPEL_VERSATZ + 6}
-                  rx={NODE_R + 2}
-                  fill="none"
-                  strokeWidth={1.5}
-                  className="stroke-emerald-500 opacity-0 group-focus-visible:opacity-100"
-                />
-              )}
-
-              {/* Stapel-Optik der Gruppe (detLAN #138, Muster `stack: 7`): zwei
-                  versetzte Rahmen hinter der Kachel — „hier liegen mehrere". */}
-              {mitglieder && [STAPEL_VERSATZ, STAPEL_VERSATZ / 2].map((v, i) => (
-                <rect
-                  key={`stapel-${v}`}
-                  data-stapel={i + 1}
-                  x={nx + v} y={ny - v}
-                  width={NODE_W} height={NODE_H}
-                  rx={NODE_R}
-                  className="fill-white dark:fill-gray-800"
-                  fillOpacity={bgVariant === 'sunset' ? 0.5 : 0.33}
-                  stroke={isActive ? color : achsen.referenz}
-                  strokeWidth={isActive ? 0.8 : 0.5}
-                  strokeOpacity={i === 0 ? 0.35 : 0.5}
-                />
-              ))}
-
-              {/* Knoten-Hintergrund (halbtransparent, Gitter scheint durch).
-                  Filter-Attribut im Lite-Modus weglassen, damit Safari pro Knoten
-                  keinen separaten Compositing-Layer für den (No-Op-)Filter erstellt. */}
-              <rect
-                x={nx} y={ny}
-                width={NODE_W} height={NODE_H}
-                rx={NODE_R}
-                className="fill-white dark:fill-gray-800"
-                fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.6}
-                stroke={isActive ? color : achsen.referenz}
-                strokeWidth={isActive ? 1 : 0.5}
-                strokeOpacity={isActive ? 0.7 : 0.3}
-                filter={lite ? undefined : "url(#ef-card-shadow)"}
-              />
-
-              {/* SoC-Pegel (Füllung von unten, kräftig sichtbar) */}
-              {hasSoc && (
-                <rect
-                  x={nx + 1.5} y={ny + 1.5 + (NODE_H - 3) * (1 - soc / 100)}
-                  width={NODE_W - 3}
-                  height={(NODE_H - 3) * (soc / 100)}
-                  rx={NODE_R - 1}
-                  fill={socColor(soc)}
-                  fillOpacity={0.3}
-                />
-              )}
-
-              {/* PV-Auslastungs-Pegel (Füllung von unten, gelb/orange) */}
-              {auslastungPct !== null && (
-                <rect
-                  x={nx + 1.5} y={ny + 1.5 + (NODE_H - 3) * (1 - auslastungPct / 100)}
-                  width={NODE_W - 3}
-                  height={(NODE_H - 3) * (auslastungPct / 100)}
-                  rx={NODE_R - 1}
-                  fill={auslastungPct >= 80 ? SOLAR_INTENSITAET[2] : auslastungPct >= 40 ? SOLAR_INTENSITAET[1] : SOLAR_INTENSITAET[0]}
-                  fillOpacity={0.25}
-                />
-              )}
-
-              {/* Icon-Glow (farbiger Schein hinter dem Icon) — nur im Effekt-Modus */}
-              {isActive && !lite && (
-                <circle
-                  cx={node.x} cy={node.y - NODE_H / 2 + 6 + dims.iconSize / 2}
-                  r={dims.iconSize * 0.6}
-                  fill={color}
-                  fillOpacity={0.15}
-                  filter="url(#ef-icon-glow)"
-                />
-              )}
-              {/* Icon */}
-              <foreignObject x={node.x - dims.iconSize / 2} y={node.y - NODE_H / 2 + 6} width={dims.iconSize} height={dims.iconSize}>
-                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : achsen.referenz} />
-              </foreignObject>
-
-              {/* kW-Wert */}
-              <text
-                x={node.x} y={node.y + 1}
-                textAnchor="middle"
-                style={{ fontSize: `${dims.kwFontSize}px` }}
-                className="font-bold fill-gray-900 dark:fill-white"
-              >
-                {formatPower(kw)}
-              </text>
-
-              {/* Zweite Zeile: SoC · Betriebsmodus im Klartext (#398 Stufe 2) ·
-                  Auto der Wallbox (Bau A, Plan §1.4a — „ID.4 52 %", bei V2H
-                  „· entlädt"; lädt keins eindeutig: „64 · 81 %" ohne Füllstand).
-                  ⭐ Bewusst in DERSELBEN Zeile statt in einer vierten: ein
-                  Speicher hat einen SoC und keinen Betriebsmodus, eine
-                  Wärmepumpe umgekehrt, eine Wallbox nur ihr Auto — der Platz ist
-                  also frei, und der Knoten wächst nicht. Ein Tooltip allein wäre
-                  auf dem Handy unerreichbar gewesen; die Frage des Melders war
-                  „sieht man, was das Gerät gerade tut?", und Hovern ist dort
-                  keine Antwort. */}
-              {zweite && (
-                <text
-                  x={node.x} y={node.y + dims.kwFontSize + 2}
-                  textAnchor="middle"
-                  style={{ fontSize: `${dims.socFontSize}px` }}
-                  className={zweite.fill ? 'font-semibold' : 'font-semibold fill-gray-500 dark:fill-gray-400'}
-                  fill={zweite.fill ?? undefined}
-                >
-                  {zweite.text}
-                </text>
-              )}
-
-              {/* Label
-                  ⛔ **Die Bedingung ist `zweiteZeile`, nicht `hasSoc`** — und
-                  genau das war der Fehler, den MartyBr am Tag der Auslieferung
-                  von v4.0.30 fotografiert hat (T89667 #230): „Unbestimmt" lag
-                  quer über „Vitocal 33…". Der Modus-Text hat sich die
-                  **Position** des SoC geliehen (`kwFontSize + 2`), die
-                  zugehörige **Verschiebung des Namens** stand aber in einem
-                  Ternär, das nur den SoC kannte. Vier Pixel Abstand bei neun
-                  Pixel Schriftgröße.
-                  ⭐ Deshalb steht die Frage jetzt EINMAL oben (`zweiteZeile`)
-                  statt zweimal hier: Wer eine dritte Zeilenart ergänzt, ändert
-                  eine Stelle — nicht zwei, von denen er die zweite übersieht. */}
-              <text
-                x={node.x} y={node.y + (zweiteZeile ? NODE_H / 2 - 4 : dims.kwFontSize + 6)}
-                textAnchor="middle"
-                style={{ fontSize: `${dims.labelFontSize}px` }}
-                className="fill-gray-500 dark:fill-gray-400"
-              >
-                {shortLabel}
-              </text>
-            </g>
+              x={node.x} y={node.y} dims={dims}
+              label={shortLabel} icon={k.icon} color={color} isActive={isActive}
+              wertText={formatPower(kw)}
+              zweiteZeile={zweite}
+              pegel={pegel}
+              tip={tip}
+              mitglieder={mitglieder?.length}
+              knopf={knopf}
+              lite={lite} bgVariant={bgVariant}
+            />
           )
         })}
 
