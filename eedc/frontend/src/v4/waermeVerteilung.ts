@@ -11,7 +11,8 @@
  * Farbe, Beschriftung und Reihenfolge. Ein Anteil, den der Client selbst bildet,
  * wäre die zweite Stelle — die Klasse, aus der W-3 und F-56 entstanden sind.
  */
-import { CHART_COLORS, ROLLEN_BG } from '../lib'
+import { CHART_COLORS } from '../lib'
+import { funktionsFarben } from '../lib/funktionsFarben'
 import type { VerteilungSegment, VerteilungVerlauf } from '../api/energie_profil'
 import type { VerlaufStapel, VerlaufLinie, WaermeVerlaufRow } from './WaermeVerlaufChart'
 
@@ -22,9 +23,10 @@ export const FUNKTIONS_ORDER = [
   'heizen', 'warmwasser', 'kuehlen', 'lueften', 'entfeuchten', 'system', 'ohne_modus',
 ] as const
 
-/**
+/*
  * Eine Datenrolle, eine Farbe (Regel 0a) — und die Rolle ist die **Funktion**,
- * nicht das Gerät.
+ * nicht das Gerät. Die Tabelle steht seit P-433-2 S2 in `lib/funktionsFarben.ts`
+ * (SoT; der Modus-Chip liest dieselbe).
  *
  * ⚠ **Das ist eine bewusste Wahl mit einem Preis:** Tragen zwei Geräte dieselbe
  * Funktion bei („Wärmepumpe Heizen" und „Klimaanlage Heizen"), haben ihre
@@ -35,25 +37,6 @@ export const FUNKTIONS_ORDER = [
  * Gerätenamen. Zwei Rot-Töne für dasselbe Heizen wären die Alternative gewesen;
  * sie hätte die Farbe zur Geräte-Identität gemacht und die Rolle verloren.
  */
-const FARBE: Record<string, { chart: string; bg: string }> = {
-  heizen: { chart: CHART_COLORS.wpWaerme, bg: ROLLEN_BG.heizung },
-  warmwasser: { chart: CHART_COLORS.wpWarmwasser, bg: ROLLEN_BG.warmwasser },
-  kuehlen: { chart: CHART_COLORS.modusKuehlen, bg: ROLLEN_BG.kuehlung },
-  lueften: { chart: CHART_COLORS.modusLueften, bg: ROLLEN_BG.lueftung },
-  entfeuchten: { chart: CHART_COLORS.modusEntfeuchten, bg: ROLLEN_BG.entfeuchtung },
-  // Die **zwei** Reste — getrennt benannt und getrennt gefärbt (Konzept Kap. 3).
-  system: { chart: CHART_COLORS.systemRest, bg: ROLLEN_BG.system_rest },
-  ohne_modus: { chart: CHART_COLORS.modusNichtAufgeteilt, bg: ROLLEN_BG.nicht_aufgeteilt },
-}
-
-const FALLBACK = { chart: CHART_COLORS.modusNichtAufgeteilt, bg: ROLLEN_BG.nicht_aufgeteilt }
-
-/** Chart-Farbe einer Funktion (Kanon-Wert des Betriebsmodus: `heizen` …) —
- *  exportiert für den Modus-Chip im Hub-Überblick (P-433-2), damit der Chip
- *  dieselbe Rolle trägt wie das Segment (Regel 0a, eine Farbquelle). */
-export function funktionsFarbe(funktion: string): string {
-  return (FARBE[funktion] ?? FALLBACK).chart
-}
 
 /** Trägt die Antwort mehr als ein Gerät? Nur dann gehört der Gerätename ins
  *  Label — bei einer einzigen Wärmepumpe wäre er in jeder Zeile dasselbe Wort. */
@@ -66,7 +49,7 @@ export function segmentLabel(s: VerteilungSegment, mitGeraet: boolean): string {
   return mitGeraet ? `${s.geraet} · ${s.funktion_label}` : s.funktion_label
 }
 
-/** Reihenfolge im Stapel und im Balken: **Funktion vor Gerät** (s. `FARBE`). */
+/** Reihenfolge im Stapel und im Balken: **Funktion vor Gerät** (s. `lib/funktionsFarben.ts`). */
 function sortiert(segmente: VerteilungSegment[]): VerteilungSegment[] {
   const rang = (f: string) => {
     const i = (FUNKTIONS_ORDER as readonly string[]).indexOf(f)
@@ -99,7 +82,7 @@ export function balkenSegmente(v: VerteilungVerlauf): BalkenSegment[] {
   return sortiert(v.segmente.filter((s) => s.kwh > 0)).map((s) => ({
     label: segmentLabel(s, mitGeraet),
     wert: s.kwh,
-    farbe: (FARBE[s.funktion] ?? FALLBACK).bg,
+    farbe: funktionsFarben(s.funktion).bg,
   }))
 }
 
@@ -176,7 +159,7 @@ export function verteilungVerlaufDaten(v: VerteilungVerlauf): VerteilungVerlaufD
     stapel: aktiv.map((s) => ({
       key: s.schluessel,
       label: segmentLabel(s, mitGeraet),
-      farbe: (FARBE[s.funktion] ?? FALLBACK).chart,
+      farbe: funktionsFarben(s.funktion).chart,
     })),
     linien: hatTemperatur
       ? [{

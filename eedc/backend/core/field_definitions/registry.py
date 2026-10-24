@@ -157,6 +157,25 @@ _BETRIEBSART_HINWEIS_NUTZ = (
     "eedc rechnet ihn nicht herbei."
 )
 
+#: P-433-2 (Lehre pipp086, T89667 #438, 24.10.2026): der Betriebsart-Zähler Heizen steht seit Variante C im
+#: Block «Heizen» neben dem Summanden „Strom Heizen“. Misst er dasselbe, zählt eedc nur ihn
+#: (`core/berechnungen/betriebsart_gemessen.py`) — der Satz steht deshalb vorn im Hinweis dieses einen Felds.
+_BETRIEBSART_HINWEIS_VORRANG_HEIZEN = (
+    "Betriebsart-Zähler; hat Vorrang vor „Strom Heizen“. Wer getrennt misst, lässt dieses Feld leer. "
+)
+
+#: P-433-2 (Datenquellen Variante C, #431): **die Betriebsart, zu der ein Wärmepumpen-Feld gehört** —
+#: Registry-Attribut `betriebsart` an jedem Feld von `INVESTITION_FELDER["waermepumpe"]` und
+#: `LIVE_FELDER_INV["waermepumpe"]`. Die Zuordnungs-Fläche bündelt danach ihre Blöcke; welche Blöcke ein
+#: Gerät zeigt, entscheidet weiter allein `bedingung`/`weich` (→ `erweitert`), nie die Bauart im Client.
+#: Die Werte sind die Kanon-Wörter (`core/betriebsmodus.py`) plus `geraet` für Felder, die das ganze Gerät
+#: messen (Gesamtstrom, Wärme gesamt, Leistung gesamt, Betriebsmodus, Raumtemperaturen). Wächter:
+#: `test_p433_2_datenquellen_betriebsart.py` (jedes WP-Feld genau eine Betriebsart aus dieser Liste).
+WP_BETRIEBSART_GERAET = "geraet"
+WP_BETRIEBSARTEN: tuple[str, ...] = (
+    WP_BETRIEBSART_GERAET, "heizen", "warmwasser", "kuehlen", "lueften", "entfeuchten",
+)
+
 #: CSV-Spaltenteil je Betriebsart — **ohne Umlaute**, wie jede bestehende
 #: CSV-Spalte dieses Projekts (`Strom_Heizen_kWh`, `Ladung_PV_kWh`). Ein „ü" im
 #: Spaltennamen überlebt die Runde durch Tabellenkalkulation und
@@ -174,20 +193,28 @@ def _betriebsart_felder() -> list[dict]:
         BETRIEBSART_LABEL,
         BETRIEBSART_NUTZENERGIE_FELD,
         BETRIEBSART_STROM_FELD,
+        HEIZEN,
+        KUEHLEN,
         MESSBARE_MODI,
     )
     out: list[dict] = []
+    # P-433-2 (H1): die Kühl-Achse folgt der Funktion `kuehlt` (Klimagerät oder Stammdatum
+    # `kuehlung_art`), die übrigen Betriebsarten weiter der Geräteklasse Luft-Luft. Beides weich.
+    bedingung_je_modus = {modus: "kuehlt" if modus == KUEHLEN else "luft_luft" for modus in MESSBARE_MODI}
+
     for modus in MESSBARE_MODI:
         label = BETRIEBSART_LABEL[modus]
         out.append({
             "feld": BETRIEBSART_STROM_FELD[modus],
             "label": f"Strom {label}",
             "einheit": "kWh",
-            "bedingung": "luft_luft",
-            "weich": ("luft_luft",),
+            "bedingung": bedingung_je_modus[modus],
+            "weich": (bedingung_je_modus[modus],),
             "je_innengeraet": True,
             "csv_suffix": f"Strom_{_BETRIEBSART_CSV[modus]}_kWh",
-            "hinweis": _BETRIEBSART_HINWEIS_STROM.format(label=label),
+            "betriebsart": modus,
+            "hinweis": (_BETRIEBSART_HINWEIS_VORRANG_HEIZEN if modus == HEIZEN else "")
+            + _BETRIEBSART_HINWEIS_STROM.format(label=label),
         })
     for modus in MESSBARE_MODI:
         label = BETRIEBSART_LABEL[modus]
@@ -195,10 +222,11 @@ def _betriebsart_felder() -> list[dict]:
             "feld": BETRIEBSART_NUTZENERGIE_FELD[modus],
             "label": f"Nutzenergie {label}",
             "einheit": "kWh",
-            "bedingung": "luft_luft",
-            "weich": ("luft_luft",),
+            "bedingung": bedingung_je_modus[modus],
+            "weich": (bedingung_je_modus[modus],),
             "je_innengeraet": True,
             "csv_suffix": f"Nutzenergie_{_BETRIEBSART_CSV[modus]}_kWh",
+            "betriebsart": modus,
             "hinweis": _BETRIEBSART_HINWEIS_NUTZ.format(label=label),
         })
     return out
@@ -334,6 +362,7 @@ INVESTITION_FELDER: dict = {
         # Default-Modus (getrennte_strommessung=false):
         {
             "feld": "stromverbrauch_kwh", "label": "Stromverbrauch", "einheit": "kWh",
+            "betriebsart": WP_BETRIEBSART_GERAET,
             # **Weich seit dem 26.08.2026 (K3).** Ein gesetztes Kennzeichen darf
             # einen vorhandenen Gesamtzähler niemals entwerten — genau daran
             # verschwand bei OB73-gif der ganze Block *Wärme/Klima* (#263). Die
@@ -356,6 +385,7 @@ INVESTITION_FELDER: dict = {
         # Getrennte-Strommessung-Modus (getrennte_strommessung=true):
         {
             "feld": "strom_heizen_kwh", "label": "Strom Heizen", "einheit": "kWh",
+            "betriebsart": "heizen",
             # ⚠ **Zwei Bedingungen verschiedener Härte** — der Fall, für den
             # `weich` die Schlüssel nennt statt ein Bool zu sein:
             # `getrennte_strommessung` ist **hart** (ohne Kennzeichen gibt es
@@ -369,6 +399,7 @@ INVESTITION_FELDER: dict = {
         },
         {
             "feld": "strom_warmwasser_kwh", "label": "Strom Warmwasser", "einheit": "kWh",
+            "betriebsart": "warmwasser",
             # B5 (Entscheid Gernot 2026-08-22) — **die zweite Hälfte von N-304.**
             # Dort bekam `warmwasser_kwh` sein `!luft_luft`, weil eine
             # Split-Klimaanlage keinen Warmwasserkreis hat. Für den zugehörigen
@@ -396,6 +427,7 @@ INVESTITION_FELDER: dict = {
         # CSV-Suffix bleibt fuer Backwards-Kompat unveraendert.
         {
             "feld": "heizenergie_kwh", "label": "Heizwärme", "einheit": "kWh",
+            "betriebsart": "heizen",
             # Eine Brauchwasser-WP gibt keine Heizwärme ab (SOLL §2.1/A6).
             # **Weich, nicht hart:** die Bauart ist eine Anwender-Angabe, und
             # ein Gerät, das doch beides kann, soll seinen Zähler behalten
@@ -416,6 +448,7 @@ INVESTITION_FELDER: dict = {
             # "Heizwaerme" daneben ist ihm das nicht passiert.
             # CSV-Suffix bleibt unveraendert — wie bei #120.
             "feld": "warmwasser_kwh", "label": "Warmwasser-Wärme", "einheit": "kWh",
+            "betriebsart": "warmwasser",
             "csv_suffix": "Warmwasser_kWh",
             # N-304: **eine Split-Klimaanlage hat keinen Warmwasserkreis.** Das
             # Feld war dort nicht nur überflüssig, sondern schädlich: es fließt
@@ -474,6 +507,7 @@ INVESTITION_FELDER: dict = {
             # erklärt es nicht (Standby, Steuerung, Umwälzpumpen). Die beiden
             # Seiten sagen jetzt denselben Satz.
             "feld": "waerme_kwh", "label": "Wärme gesamt", "einheit": "kWh",
+            "betriebsart": WP_BETRIEBSART_GERAET,
             "csv_suffix": "Waerme_Gesamt_kWh",
             "hinweis": "Abgegebene Wärme GESAMT (thermisch, NICHT Strom!) in kWh, kumulativ oder Tagessensor — für EINEN Wärmemengenzähler, der Heizung und Warmwasser zusammen misst. Wer getrennte Zähler hat, lässt das Feld leer. Trägt hier ein Wert, gilt er als die Wärme des Geräts; Heizwärme und Warmwasser-Wärme stehen dann nur noch als Aufteilung daneben.",
         },
@@ -871,6 +905,7 @@ LIVE_FELDER_INV: dict = {
     ],
     "waermepumpe": [
         {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W",
+         "betriebsart": WP_BETRIEBSART_GERAET,
          # #263: mit Innengeräte-Liste gibt es ihn zusätzlich je Innengerät —
          # das Gerätefeld bleibt der Anlagenwert, die Kopien sind die Aufschlüsselung.
          "je_innengeraet": True,
@@ -878,9 +913,17 @@ LIVE_FELDER_INV: dict = {
          "hinweis": "Momentane elektrische Leistungsaufnahme der Wärmepumpe in W "
                     "(nicht die abgegebene Wärmeleistung)."},
         {"key": "leistung_heizen_w",       "label": "Leistung Heizen",      "einheit": "W",
+         "betriebsart": "heizen",
+         # P-433-2 (H1): dieselbe weiche Bedingung wie `heizenergie_kwh` — an einer Brauchwasser-WP
+         # untypisch, steht dort unter „Weitere Größen erfassen".
+         "bedingung": "!brauchwasser", "weich": ("brauchwasser",),
          "hinweis": "Elektrische Leistungsaufnahme im Heizbetrieb in W. Nur sinnvoll, wenn "
                     "Heizen und Warmwasser getrennt gemessen werden."},
         {"key": "leistung_warmwasser_w",   "label": "Leistung Warmwasser",  "einheit": "W",
+         "betriebsart": "warmwasser",
+         # P-433-2 (H1): an einer Split-Klimaanlage untypisch — weich, nicht hart wie `warmwasser_kwh`:
+         # eine bestehende Live-Zuordnung bleibt sichtbar und erreichbar.
+         "bedingung": "!luft_luft", "weich": ("luft_luft",),
          "hinweis": "Elektrische Leistungsaufnahme der Warmwasserbereitung in W. Nur "
                     "sinnvoll bei getrennter Messung."},
         # ⭐ **W-13 (26.08.2026) — die dritte Leistung, die es bis dahin nicht gab.**
@@ -899,8 +942,8 @@ LIVE_FELDER_INV: dict = {
         # Luft-Luft-Gerät stünden dann `leistung_heizen_w` und
         # `betriebsart_leistung_heizen_w` nebeneinander — dieselbe Zweideutigkeit
         # zweier Familien, an der ein Tester schon einmal zwei Felder addiert hat
-        # (#89667/62). Eine Zeile in der bestehenden Familie, ohne Bedingung wie
-        # ihre beiden Nachbarn.
+        # (#89667/62). Eine Zeile in der bestehenden Familie — seit P-433-2 (H1,
+        # 24.10.2026) wie ihre beiden Nachbarn mit einer weichen Bedingung (`kuehlt`).
         # ⭐ **Der Anzeigepfad kam am 13.09.2026 nach** (N-439, Entscheid Gernot
         # Tor G-K). Das Feld war seit W-13 zuordenbar und wurde an keiner
         # Station gelesen — „Live-Wert" stand als Zusage in WAS-IST-NEU, ohne
@@ -910,17 +953,25 @@ LIVE_FELDER_INV: dict = {
         # gültig:** aus diesem Feld entsteht keine kWh, keine Integration und
         # keine Kennzahl — die Mengen kommen aus dem Zähler (E4).
         {"key": "leistung_kuehlen_w",      "label": "Leistung Kühlen",      "einheit": "W",
+         "betriebsart": "kuehlen",
+         # P-433-2 (H1): weich an der Funktion `kuehlt` (Klimagerät oder `kuehlung_art`) — wie die
+         # Kühl-Zähler. MartyBrs Fall (Kühl-Leistung an einer Luft-Wasser-WP ohne Stammdatum) bleibt
+         # erreichbar: zugeordnet steht das Feld oben, sonst unter „Weitere Größen erfassen".
+         "bedingung": "kuehlt", "weich": ("kuehlt",),
          "hinweis": "Elektrische Leistungsaufnahme im Kühlbetrieb in W. Nur sinnvoll, "
                     "wenn der Kühlbetrieb getrennt gemessen wird — reine Anzeige: "
                     "erscheint im Live-Bild und als eigene Fläche im Tagesverlauf, "
                     "die Mengen kommen aus dem kWh-Zähler."},
         {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C",
+         "betriebsart": "warmwasser",
+         "bedingung": "!luft_luft", "weich": ("luft_luft",),  # P-433-2 (H1), wie Leistung Warmwasser
          "hinweis": "Temperatur im Warmwasserspeicher in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},
         # #263 K-2: der erste Wert in eedc, der ein ZUSTAND ist statt einer Zahl.
         # `zustand: True` ist keine Kosmetik, sondern die Weiche — siehe
         # ZUSTAND_LIVE_FELDER unter der Tabelle.
         {"key": "betriebsmodus", "label": "Betriebsmodus", "einheit": "",
+         "betriebsart": WP_BETRIEBSART_GERAET,
          "zustand": True,
          "hinweis": "Die `climate`-Entität der Klimaanlage/Wärmepumpe (z. B. "
                     "`climate.wohnzimmer`) — sie meldet Heizen, Kühlen, Entfeuchten "
@@ -933,10 +984,12 @@ LIVE_FELDER_INV: dict = {
         # Bewertung ein, sondern stehen im Live-Block, weil sie da sind
         # (Entscheid Gernots, 2026-08-21). Mit Innengeräte-Liste je Gerät.
         {"key": "soll_temperatur_c", "label": "Soll-Temperatur", "einheit": "°C",
+         "betriebsart": WP_BETRIEBSART_GERAET,
          "bedingung": "luft_luft", "je_innengeraet": True,
          "hinweis": "Eingestellte Zieltemperatur in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},
         {"key": "ist_temperatur_c", "label": "Raumtemperatur", "einheit": "°C",
+         "betriebsart": WP_BETRIEBSART_GERAET,
          "bedingung": "luft_luft", "je_innengeraet": True,
          "hinweis": "Gemessene Raumtemperatur in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},

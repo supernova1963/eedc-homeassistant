@@ -47,9 +47,9 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 | **Cockpit → Jahr** | Jahressummen, dieselben Kennzahlen wie im Monat — Arbeitszahl mit Grund und Heizstab-Satz, je Funktion, Kühlen, Aufteilung nach Betriebsart mit Restmenge — über das Jahr **neu gerechnet** (nicht gemittelt), ein **Verlauf je Monat** (Strom, gemessene Wärme und Kälte), Block *CO₂-Bilanz* |
 | **PDF-Jahresbericht** | dieselben Kennzahlen wie *Cockpit → Jahr* aus derselben Rechnung — Arbeitszahl mit Grund, je Funktion, Kühlen, Herkunft einer geschätzten Wärme, Vorbehalt an der CO₂-Zeile (seit 05.09.2026; vorher stand dort eine Arbeitszahl ohne Grund und nichts je Funktion) |
 | **Auswertungen → CO₂ · Cockpit → Jahr (CO₂-Bilanz) · PDF-Monatsbericht** | die CO₂-Einsparung der Wärmepumpe trägt denselben Vorbehalt wie die Ersparnis, wenn die Wärme geschätzt ist oder ein zweiter Erzeuger am Wärmezähler hängt; der Monatsbericht nennt die Herkunft einer geschätzten Wärme mit denselben Worten wie der Hub (seit 05.09.2026) |
-| **Komponenten → Wärmepumpe** | je Gerät einzeln: Status, Verlauf, Monats-/Saisonvergleich, Kostenvergleich gegen Gas/Öl |
+| **Komponenten → Wärmepumpe** | zuoberst der Block **„Überblick"** — das [Schaubild](#schaubild) mit den Live-Kacheln deiner Geräte und „Auf einen Blick"; darunter je Gerät einzeln: Kennzahlen, Verlauf, Monats-/Saisonvergleich, Kostenvergleich gegen Gas/Öl |
 | **Auswertungen → CO₂** | Einsparung inkl. Wärmepumpen-Anteil |
-| **Einstellungen → Datenquellen** | die Zuordnung der Zähler ([§5](#5-sensoren-zuordnen-schritt-für-schritt)) |
+| **Einstellungen → Datenquellen** | die Zuordnung der Zähler ([§5](#5-sensoren-zuordnen-schritt-für-schritt)), je Wärmepumpe in Blöcken nach Betriebsart mit Status im Kopf ([Einstellungen §7.2](HANDBUCH_EINSTELLUNGEN.md#72-die-fläche)) |
 
 > **Im Verlauf steht nur gemessene Wärme.** Ist die Wärme aus Strom × Arbeitszahl geschätzt, hätte
 > ihre Linie genau die Form der Stromfläche darunter — sie sähe aus wie eine zweite Messung und
@@ -70,6 +70,24 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 > Kälte je Funktion mit.
 
 > **Der Block *Wärme/Klima* im Cockpit fasst alle Geräte zusammen**, der Komponenten-Hub zeigt sie **einzeln**. Das ist kein Widerspruch, sondern der wichtigste Unterschied auf dieser Fläche — siehe [§8](#8-häufige-missverständnisse).
+
+### Schaubild
+
+*Komponenten → Wärmepumpe*, Block **„Überblick"**: ein Bild einer Wärme/Klima-Anlage — Luft-Wasser-Außeneinheit, Wärmepumpen-Schrank mit Erdsonden, Puffer- und Warmwasserspeicher, Warmwasser-Wärmepumpe, Split-Klimaanlage mit Innengeräten, Zählerreihe. **Das Bild zeigt immer alle Gerätearten, deine Anlage zeigen die Kacheln.** Eine Kachel steht an dem Objekt, das ihr Gerät im Bild darstellt, und hat eine kurze Linie dorthin:
+
+| Wert | steht am Objekt |
+|------|-----------------|
+| Leistung und Modus einer Luft-Wasser-Wärmepumpe | Außengerät |
+| … einer Sole- oder Grundwasser-Wärmepumpe | Wärmepumpen-Schrank im Technikraum |
+| … einer Brauchwasser-Wärmepumpe | Warmwasser-Wärmepumpe auf dem Speicher |
+| … einer Split-Klimaanlage | Klima-Außeneinheit an der Hauswand; ihre Innengeräte an den Innengeräten im Bild (ab dem vierten als Gruppe „Innengeräte (n)") |
+| Warmwasser-Temperatur | Warmwasserspeicher |
+| Strom heute | Stromzähler |
+| Außentemperatur (Wetterdienst) | Himmel |
+
+Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss); kühlt das Gerät passiv, steht dort „Kühlen (passiv)". Vorlauf, Rücklauf und Heizstab haben im Bild schon ihren Platz, aber noch keine Werte.
+
+> **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie ist ein Wert der ganzen Anlage: bei mehreren Wärmepumpen die der ersten mit Sensor. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte.
 
 ---
 
@@ -369,9 +387,9 @@ Alles läuft über **Einstellungen → Datenquellen**. Dort steht je Gerät eine
 
 | Art | Felder oben | Nicht angeboten (aber erreichbar) |
 |-----|-------------|-----------------------------------|
-| **Luft-Wasser / Sole-Wasser / Grundwasser** | Stromverbrauch, Heizwärme, Warmwasser, Wärme gesamt | Betriebsart-Zähler (Kühlen, Lüften, Entfeuchten) |
-| **Luft-Luft (Klimaanlage)** | Stromverbrauch, Wärme gesamt, Betriebsart-Zähler | Warmwasser — den Kreis gibt es dort nicht |
-| **Brauchwasser (nur Warmwasser)** | Stromverbrauch, Warmwasser, Wärme gesamt | Heizwärme, Strom Heizen |
+| **Luft-Wasser / Sole-Wasser / Grundwasser** | Stromverbrauch, Heizwärme, Warmwasser, Wärme gesamt; **kühlt** das Gerät (am Gerät *Kühlung* aktiv oder passiv eingetragen), dazu *Strom Kühlbetrieb*, *Nutzenergie Kühlbetrieb* und *Leistung Kühlen* | Betriebsart-Zähler Lüften, Entfeuchten, Heizen; ohne eingetragene Kühlung auch die drei Kühl-Felder |
+| **Luft-Luft (Klimaanlage)** | Stromverbrauch, Wärme gesamt, Betriebsart-Zähler, Leistung Kühlen | Warmwasser — den Kreis gibt es dort nicht; *Leistung Warmwasser* und *Warmwasser-Temperatur* liegen unter „Weitere Größen erfassen" |
+| **Brauchwasser (nur Warmwasser)** | Stromverbrauch, Warmwasser, Wärme gesamt | Heizwärme, Strom Heizen, Leistung Heizen; ohne eingetragene Kühlung die Kühl-Felder |
 
 > ⚑ ***Wärme gesamt* ist der Platz für EINEN gemeinsamen Wärmemengenzähler** und steht deshalb bei jeder Bauart — welche Zähler es gibt, sagt deine Anlage, nicht die Bauart. Mit **getrennten** Zählern lässt du das Feld leer und trägst *Heizwärme* und *Warmwasser-Wärme* ein; mit **einem** Zähler ist es umgekehrt.
 

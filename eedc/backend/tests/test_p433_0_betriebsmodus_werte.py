@@ -8,6 +8,8 @@ Prioritäts-Slugs `heating`, `standby`, `pool`), fällt die Stunde still auf `un
 aufgeteilt“. ``_check_klima_modus_sensor`` meldet nur den fehlenden Sensor; ``_check_klima_modus_wert`` nennt
 den unbekannten Wert. Proben: still ohne Auslöser · still im Grenzfall · Meldung mit richtigem Inhalt.
 Der HA-Zugriff ist der einzige gemockte Teil.
+
+Schwesterdateien: test_p433_2_datenquellen_betriebsart.py (Betriebsart je Feld derselben Route).
 """
 
 from __future__ import annotations

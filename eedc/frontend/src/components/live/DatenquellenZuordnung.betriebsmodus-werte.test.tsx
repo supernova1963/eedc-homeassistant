@@ -6,6 +6,9 @@
  * Kanon `core/betriebsmodus.py`); die Fixture spiegelt deshalb die Antwortform,
  * nicht eine zweite Tabelle. Gegenprobe: ein Feld ohne `zulaessige_werte` zeigt
  * die Zeile nicht.
+ *
+ * P-433-2 S2 (Variante C): die Wärmepumpe ist nach Betriebsart gegliedert — der Betriebsmodus gehört
+ * zum Block «Gerät gesamt» (`betriebsart: 'geraet'` aus der Registry); die Zeile steht dort.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -18,7 +21,7 @@ vi.mock('../../api/datenquellen', () => {
     label: 'Betriebsmodus', einheit: '', kategorie: 'live',
     hinweis: '', standard_topic: '', quelle: 'ha_app', gateway_topic: null,
     ha_entity: 'sensor.wp_prioritaet', ha_name: 'WP Priorität', zustand: true,
-    invertieren: false, wert: null, wert_text: 'heating', wert_klartext: 'Unbestimmt',
+    invertieren: false, wert: null, wert_text: 'heating', wert_klartext: 'Unbestimmt', betriebsart: 'geraet',
     wert_zeit: null, probleme: [],
     zulaessige_werte: [
       { kanon: 'heizen', label: 'Heizen', werte: ['heat', 'heizen'] },
@@ -31,7 +34,7 @@ vi.mock('../../api/datenquellen', () => {
     label: 'Leistung gesamt', einheit: 'W', kategorie: 'live',
     hinweis: '', standard_topic: '', quelle: 'ha_app', gateway_topic: null,
     ha_entity: 'sensor.wp_gesamt', ha_name: 'WP gesamt',
-    invertieren: false, wert: 800, wert_zeit: null, probleme: [], zulaessige_werte: null,
+    invertieren: false, wert: 800, wert_zeit: null, probleme: [], zulaessige_werte: null, betriebsart: 'geraet',
   }
   return {
     VERBINDUNG_GEAENDERT_EVENT: 'eedc:verbindung-geaendert',
@@ -72,6 +75,12 @@ describe('P-433-0 — zulässige Werte am Feld „Betriebsmodus“', () => {
     await oeffneWpBlock()
     const link = await screen.findByRole('link', { name: /Werte-Tabelle im Handbuch/ })
     expect(link.getAttribute('href')).toBe('/hilfe?doc=waerme-klima#welchen-sensor-eedc-lesen-kann')
+  })
+
+  it('steht im Block «Gerät gesamt» der Wärmepumpe (Variante C)', async () => {
+    await oeffneWpBlock()
+    const zeile = await screen.findByText(/eedc versteht:/)
+    expect(zeile.closest('[data-betriebsart]')?.getAttribute('data-betriebsart')).toBe('geraet')
   })
 
   it('Gegenprobe: ein Feld ohne Werte-Liste trägt die Zeile nicht', async () => {

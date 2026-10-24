@@ -9,6 +9,11 @@
  * mit einer Feld-Tabelle in 3 Abschnitten nach Einheit: Energie (kWh) · Leistung
  * (W) · Sonstige.
  *
+ * **Wärmepumpe: Blöcke nach Betriebsart** (P-433-2 S2, Variante C #431): statt der Abschnitte nach
+ * Einheit je ein Block «Gerät gesamt» · «Heizen» · «Warmwasser» · «Kühlen» · «Lüften» · «Entfeuchten»
+ * mit Status im Kopf; Blockbildung und Status stehen als reine Funktionen in
+ * `datenquellenBetriebsart.ts`. Die Feld-Zeile und «Weitere Größen erfassen» bleiben dieselben.
+ *
  * Pro Feld genau EINE Quelle (§2d). Drei Quellen-Buttons ersetzen das alte Select:
  * HA-Sensor (Supervisor ODER Remote-Token, transparent — Schritt B) · MQTT-Gateway
  * (vorhandener Picker) · MQTT-Inbound (Standard-Topic, direkt). Aktiver Button =
@@ -41,6 +46,7 @@ import { STATUS_ICONS } from '../../lib/komponentenStyle'
 import { formatDatum } from '../../lib/datum'
 import { plural, mitAnzahl } from '../../lib/plural'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
+import { betriebsartBloecke, blockStatus, statusAufschluesselung, statusKontext } from './datenquellenBetriebsart'
 import {
   datenquellenApi,
   VERBINDUNG_GEAENDERT_EVENT,
@@ -115,6 +121,9 @@ const ERWEITERT_HINWEIS =
   'Diese Größen gibt es an diesem Gerätetyp selten — eedc erwartet sie nicht. '
   + 'Wer einen passenden Zähler hat, ordnet ihn hier zu; ab dann steht die Größe '
   + 'oben bei den anderen.'
+/** Typ, dessen Geräte nach Betriebsart statt nach Einheit gegliedert werden (Variante C). */
+const TYP_NACH_BETRIEBSART = 'waermepumpe'
+
 function abschnittVon(einheit: string): Abschnitt {
   if (einheit === 'kWh') return 'kwh'
   if (einheit === 'W') return 'w'
@@ -522,26 +531,12 @@ export default function DatenquellenZuordnung() {
     )
   }
 
-  // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen. Danach die
-  // vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL).
-  const abschnitte = (gruppeId: string, felder: DatenquelleFeld[]) => {
-    const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], sonstige: [] }
-    const erweitert: DatenquelleFeld[] = []
-    for (const f of felder) {
-      if (f.erweitert) erweitert.push(f)
-      else buckets[abschnittVon(f.einheit)].push(f)
-    }
+  // Die vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL) — dieselbe für
+  // Einheiten-Abschnitte und Betriebsart-Blöcke.
+  const erweiterung = (gruppeId: string, erweitert: DatenquelleFeld[]) => {
     const offen = offeneErweiterung.has(gruppeId)
     return (
       <>
-        {ABSCHNITT_ORDER.filter((k) => buckets[k].length > 0).map((k) => (
-          <div key={k}>
-            <div className="pt-2 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-              {ABSCHNITT_TITEL[k]}
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
-          </div>
-        ))}
         {erweitert.length > 0 && (
           <div>
             <Button
@@ -563,6 +558,61 @@ export default function DatenquellenZuordnung() {
             )}
           </div>
         )}
+      </>
+    )
+  }
+
+  // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen. Danach die
+  // vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL).
+  const abschnitte = (gruppeId: string, felder: DatenquelleFeld[]) => {
+    const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], sonstige: [] }
+    const erweitert: DatenquelleFeld[] = []
+    for (const f of felder) {
+      if (f.erweitert) erweitert.push(f)
+      else buckets[abschnittVon(f.einheit)].push(f)
+    }
+    return (
+      <>
+        {ABSCHNITT_ORDER.filter((k) => buckets[k].length > 0).map((k) => (
+          <div key={k}>
+            <div className="pt-2 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              {ABSCHNITT_TITEL[k]}
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
+          </div>
+        ))}
+        {erweiterung(gruppeId, erweitert)}
+      </>
+    )
+  }
+
+  // P-433-2 (Variante C, #431): eine Wärmepumpe nach Betriebsart — Block je Betriebsart mit Status im
+  // Kopf, darin dieselbe Feld-Zeile; erweiterte Felder bleiben in „Weitere Größen erfassen".
+  const betriebsartAbschnitte = (g: DatenquelleGruppe) => {
+    const ctx = statusKontext(g)
+    return (
+      <>
+        {betriebsartBloecke(g).map((b) => {
+          const st = blockStatus(b, ctx)
+          return (
+            <div key={b.betriebsart} data-betriebsart={b.betriebsart}>
+              <div className="flex items-baseline justify-between gap-2 pt-3 pb-0.5">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{b.titel}</span>
+                {st && (
+                  <span
+                    className={`text-xs ${st.zeichen === '●' ? STATUS_TEXT_CLASS.ok : 'text-gray-500 dark:text-gray-400'}`}
+                    title={statusAufschluesselung(b.alleFelder.filter((f) => f.menge != null && !f.erweitert))}
+                    data-blockstatus
+                  >
+                    {st.zeichen ? `${st.zeichen} ` : ''}{st.text}
+                  </span>
+                )}
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">{b.felder.map(feldZeile)}</div>
+            </div>
+          )
+        })}
+        {erweiterung(g.id, g.felder.filter((f) => f.erweitert))}
       </>
     )
   }
@@ -625,7 +675,7 @@ export default function DatenquellenZuordnung() {
                   defaultOpen={tc.geraete.length === 1}
                   statusSlot={geraetBadge(g)}
                 >
-                  {abschnitte(g.id, g.felder)}
+                  {g.typ === TYP_NACH_BETRIEBSART ? betriebsartAbschnitte(g) : abschnitte(g.id, g.felder)}
                 </FormSection>
               ))}
             </div>

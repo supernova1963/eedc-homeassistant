@@ -505,6 +505,17 @@ def kuehlt_passiv(inv_or_parameter) -> bool:
     ) == KUEHLUNG_PASSIV
 
 
+def kuehlung_art(inv_or_parameter) -> str:
+    """Das Stammdatum `kuehlung_art` — ``keine`` · ``passiv`` · ``aktiv``; unbekannt oder leer ⇒ ``keine``.
+
+    P-433-2 (Datenquellen Variante C): die Zuordnungs-Fläche reicht es je Wärmepumpe durch, damit der
+    Block «Kühlen» auch ohne Kühlzähler erscheint, wenn das Gerät kühlt (passiv ⇒ Kopf «passiv»).
+    Eine Markierung wie bei `kuehlt_passiv`, keine Menge.
+    """
+    wert = _wp_param_text(inv_or_parameter, PARAM_WAERMEPUMPE["KUEHLUNG_ART"])
+    return wert if wert in (KUEHLUNG_PASSIV, KUEHLUNG_AKTIV) else KUEHLUNG_KEINE
+
+
 # ── Innengeräte einer Split-Klimaanlage (#263) ───────────────────────────────
 #
 # **Warum eine Liste im Parameter und keine eigene Investition.** Die Werte je

@@ -31,6 +31,8 @@ export interface DatenquelleFeld {
   standard_topic: string
   /** Nur als HA-Sensor lesbar (Preis-Felder): Gateway/Inbound entfallen. */
   nur_ha?: boolean
+  /** #263 K-2: Zustand statt Zahl (Betriebsmodus) — vom Backend schon immer geliefert, hier nachgetragen (P-433-2). */
+  zustand?: boolean
   /** Aktive Quelle. */
   quelle: string
   /** Zugeordnetes Gateway-Quell-Topic (nur bei quelle==='mqtt_gateway'). */
@@ -104,6 +106,14 @@ export interface DatenquelleFeld {
    * statt eines Satzes, der nichts nennt.
    */
   ausgewertet_in?: string[]
+  /**
+   * P-433-2 (Variante C, #431): die Betriebsart, zu der ein **Wärmepumpen**-Feld gehört
+   * (`heizen` · `warmwasser` · `kuehlen` · `lueften` · `entfeuchten` · `geraet`) — Registry-Attribut,
+   * vom Backend durchgereicht; an anderen Typen `null`.
+   */
+  betriebsart?: string | null
+  /** P-433-2: `strom` oder `waerme` an kWh-Feldern der Wärmepumpe (Thermisch-SoT des Backends), sonst `null`. */
+  menge?: 'strom' | 'waerme' | null
 }
 
 /** Diagnostisches Zuordnungs-Problem (§2i) — rein informativ, keine Sperre. */
@@ -159,6 +169,10 @@ export interface DatenquelleGruppe {
   titel: string
   typ: string
   felder: DatenquelleFeld[]
+  /** P-433-2, nur Wärmepumpe: Stammdatum `kuehlung_art` (`keine` · `passiv` · `aktiv`). */
+  kuehlung_art?: string
+  /** P-433-2, nur Wärmepumpe: Betriebsarten, die eedc aus einem Betriebsmodus-Sensor ableitet (Kanon). */
+  modus_ableitbar?: string[]
 }
 
 /** Verfügbarkeit der Quell-Achsen (Schritt B Gating). */

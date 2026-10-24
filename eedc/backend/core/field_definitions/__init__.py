@@ -48,6 +48,11 @@ Feld-Attribute:
                   nur nicht mehr zuordenbar. Erster Fall:
                   `wechselrichter/pv_erzeugung_kwh` (Gernot 24.08.2026 — der
                   Wechselrichter ist kein PV-Erzeuger, Begruendung dort).
+  betriebsart   — nur Wärmepumpe (P-433-2, Variante C #431): die Betriebsart, zu der das
+                  Feld gehört (`heizen` · `warmwasser` · `kuehlen` · `lueften` ·
+                  `entfeuchten` · `geraet`, s. `registry.WP_BETRIEBSARTEN`). Die
+                  Datenquellen-Fläche bündelt danach ihre Blöcke; sichtbar macht
+                  ein Feld weiter nur `bedingung`/`weich`.
   nur_manuell   — True: das Feld bleibt in Monatsabschluss, CSV-Import und
                   Export **erfassbar**, verschwindet aber als **zuordenbare
                   Quelle**. Markiert statt gefiltert: `build_expected_topics`
@@ -93,6 +98,8 @@ from backend.core.field_definitions.registry import (  # noqa: F401 — Re-Expor
     BASIS_PREIS_FELDER,
     LEGACY_FELDNAMEN,
     IMPORT_SUMMEN_KEYS,
+    WP_BETRIEBSART_GERAET,
+    WP_BETRIEBSARTEN,
 )
 from backend.core.field_definitions.bedingungen import (  # noqa: F401 — Re-Export
     FELD_BEDARF,
@@ -148,6 +155,11 @@ from backend.core.field_definitions.karten import (  # noqa: F401 — Re-Export
     WETTER_FELDER,
     ist_stand_feld,
     ist_wetter_feld,
+    WP_BETRIEBSART_JE_FELD,
+    WP_MENGE_STROM,
+    WP_MENGE_WAERME,
+    wp_betriebsart,
+    wp_menge,
 )
 from backend.core.field_definitions.auswahl import (  # noqa: F401 — Re-Export
     get_feld_hinweise,

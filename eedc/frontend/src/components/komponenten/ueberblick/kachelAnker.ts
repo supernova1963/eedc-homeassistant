@@ -22,7 +22,7 @@
 import type { LiveDashboardResponse, LiveInnengeraet, LiveKomponente, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { Investition } from '../../../types'
 import { CHART_COLORS, KATEGORIE_FARBEN, fmtZahl } from '../../../lib'
-import { PARAM_WAERMEPUMPE, istBrauchwasser, istLuftLuft } from '../../../lib/investitionParameter'
+import { PARAM_WAERMEPUMPE, istBrauchwasser, istKuehlungPassiv, istLuftLuft } from '../../../lib/investitionParameter'
 import { formatPower, getNodeColor } from '../../live/EnergieFluss'
 import { modusMitPassiv } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
@@ -86,7 +86,7 @@ export function geraeteAnker(inv: Investition): AnkerId {
 
 /** Kühlt dieses Gerät passiv (Stammdatum `kuehlung_art`, B6)? */
 export function kuehltPassiv(inv: Investition | undefined): boolean {
-  return inv?.parameter?.[PARAM_WAERMEPUMPE.KUEHLUNG_ART] === 'passiv'
+  return istKuehlungPassiv(inv?.parameter?.[PARAM_WAERMEPUMPE.KUEHLUNG_ART] as string | undefined)
 }
 
 /** Modus im Klartext — Label vom Backend-Kanon; bei passiver Kühlung «Kühlen (passiv)». */

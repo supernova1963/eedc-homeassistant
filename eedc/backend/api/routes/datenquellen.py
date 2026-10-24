@@ -37,12 +37,20 @@ from backend.services.datenquellen_historie import (
     vermerk_lesen,
 )
 from backend.core.betriebsmodus import (
+    AUFGETEILTE_MODI,
     MODUS_FELD_KEY,
     betriebsmodus_klartext,
     betriebsmodus_werte_je_betriebsart,
 )
 from backend.core.feld_auswertungen import sichten_fuer
-from backend.core.field_definitions import anlage_typen_mit_kontext, basis_feld_key, ist_zustand_feld
+from backend.core.field_definitions import (
+    anlage_typen_mit_kontext,
+    basis_feld_key,
+    ist_zustand_feld,
+    wp_betriebsart,
+    wp_menge,
+)
+from backend.core.investition_parameter import kuehlung_art
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import (
     entferne_legacy_invert,
@@ -551,6 +559,34 @@ def _zulaessige_werte(eintrag: dict) -> list[dict] | None:
     if eintrag.get("zustand") and basis_feld_key(eintrag.get("feld", "")) == MODUS_FELD_KEY:
         return betriebsmodus_werte_je_betriebsart()
     return None
+
+
+_TYP_WP = "waermepumpe"
+
+
+def _wp_feld_zusatz(eintrag: dict) -> dict:
+    """P-433-2 (Variante C, #431): Betriebsart und Mengenart je Feld — nur an Wärmepumpen-Feldern gefüllt.
+
+    Beide kommen aus der Registry (`betriebsart`) bzw. ihrer Ableitung (`wp_menge`, thermisch ⇔ Wärme);
+    die Fläche bündelt danach ihre Blöcke und bildet den Status im Blockkopf, ohne eigene Feldtabelle.
+    """
+    if eintrag.get("typ") != _TYP_WP:
+        return {"betriebsart": None, "menge": None}
+    feld = eintrag.get("feld", "")
+    return {"betriebsart": wp_betriebsart(feld), "menge": wp_menge(feld)}
+
+
+def _wp_gruppen_zusatz(typ: str, inv: Investition | None) -> dict:
+    """P-433-2: je Wärmepumpe das Stammdatum `kuehlung_art` (P13 Gruppe 3: reist als Eigenschaft) und die
+    Betriebsarten, die eedc aus einem Betriebsmodus-Sensor ableiten kann (Kanon `AUFGETEILTE_MODI`).
+
+    Mit beidem entscheidet die Fläche, ob der Block «Kühlen» ohne Kühlzähler erscheint (gekühlt wird
+    trotzdem) und wann ihr Kopf «aus Betriebsmodus abgeleitet» sagt — ohne zweite Tabelle im Client.
+    Andere Typen bekommen nichts (Antwort für sie unverändert).
+    """
+    if typ != _TYP_WP:
+        return {}
+    return {"kuehlung_art": kuehlung_art(inv), "modus_ableitbar": sorted(AUFGETEILTE_MODI)}
 
 
 def _quelle_klartext(eintrag: dict | None, topic: str | None = None) -> str:
@@ -1182,6 +1218,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     # Pass 2 — Reihenfolge-erhaltend nach gruppe_id gruppieren + Response bauen.
     gruppen: list[dict] = []
     index: dict[str, dict] = {}
+    inv_je_gruppe = {f"inv:{i.id}": i for i in invs}
     for e in eintraege:
         gid = e.get("gruppe_id", "basis")
         gruppe = index.get(gid)
@@ -1191,6 +1228,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
                 "titel": e.get("gruppe_titel", "—"),
                 "typ": e.get("typ", "basis"),
                 "felder": [],
+                **_wp_gruppen_zusatz(e.get("typ", "basis"), inv_je_gruppe.get(gid)),
             }
             index[gid] = gruppe
             gruppen.append(gruppe)
@@ -1276,6 +1314,8 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # (`core/betriebsmodus.py`), nicht im Client getippt; nur am
             # Betriebsmodus-Feld (mit Innengeräte-Suffix), sonst ``None``.
             "zulaessige_werte": _zulaessige_werte(e),
+            # P-433-2 (Variante C, #431): Betriebsart + Mengenart je WP-Feld (sonst ``None``).
+            **_wp_feld_zusatz(e),
             "wert_zeit": wert_zeit,
             # §2i: diagnostische Zuordnungs-Probleme (Einheit/state_class/Redundanz/
             # Doppelmapping) — leere Liste, wenn alles sauber.

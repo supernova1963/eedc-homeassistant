@@ -422,6 +422,39 @@ _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG.update({
     },
 })
 
+# P-433-2 (Datenquellen Variante C, #431, 24.10.2026) — Betriebsart und Mengenart je Wärmepumpen-Feld.
+#
+# **Betriebsart** ist das Registry-Attribut `betriebsart` (s. `registry.WP_BETRIEBSARTEN`), hier nur zur
+# Karte gefaltet. **Mengenart** trennt die zwei Sorten kWh einer Wärmepumpe — Strom, den sie verbraucht,
+# und Wärme/Kälte, die sie abgibt — und wird NICHT neu getippt: thermisch ist ein Feld genau dann, wenn
+# `_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG` es mit diesem Grund führt (dieselbe Lesart wie
+# `test_thermische_felder_benennen_ihre_groesse.py`). Beides liest die Zuordnungs-Fläche für den Status
+# im Blockkopf («vollständig» · «fehlt: Strom, Wärme»); der Client hält keine eigene Feldtabelle.
+_WP_TYP = "waermepumpe"
+
+WP_BETRIEBSART_JE_FELD: dict[str, Optional[str]] = {
+    **{f["feld"]: f.get("betriebsart") for f in INVESTITION_FELDER[_WP_TYP]},
+    **{f["key"]: f.get("betriebsart") for f in LIVE_FELDER_INV[_WP_TYP]},
+}
+
+WP_MENGE_STROM: Final[str] = "strom"
+WP_MENGE_WAERME: Final[str] = "waerme"
+
+
+def wp_betriebsart(feld: str) -> Optional[str]:
+    """Betriebsart eines Wärmepumpen-Felds (auch mit Innengeräte-Suffix), sonst ``None``."""
+    return WP_BETRIEBSART_JE_FELD.get(basis_feld_key(feld or ""))
+
+
+def wp_menge(feld: str) -> Optional[str]:
+    """``strom`` oder ``waerme`` für ein kWh-Feld der Wärmepumpe; ``None`` für Leistung, Temperatur, Zustand."""
+    basis = basis_feld_key(feld or "")
+    if not any(f["feld"] == basis for f in INVESTITION_FELDER[_WP_TYP]):
+        return None
+    grund = _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG.get((_WP_TYP, basis), "")
+    return WP_MENGE_WAERME if "thermisch" in grund.lower() else WP_MENGE_STROM
+
+
 def kumulative_zaehler_felder_je_typ() -> dict[str, tuple[str, ...]]:
     """Je Investitionstyp die kWh-Felder, die als **kumulativer Zähler**
     stündlich gesnapshottet werden — abgeleitet aus `INVESTITION_FELDER`.

@@ -1022,3 +1022,82 @@ async def test_bilanz_bitgleich_bis_auf_die_neuen_felder(db, abruf, name):
     a, basis, werte, live_map, namen = await KONSTELLATIONEN[name](db)
     res = await abruf(a, basis, werte, live_map)
     assert _normiert(res, namen) == _VORHER[name]
+
+
+def test_demo_waermepumpe_traegt_modus_und_warmwasser_temperatur():
+    """P-433-2 (E-P2-9): die Demo-WP zeigt im Hub-Überblick den Zielzustand — Modus aus dem Kanon
+    (Wert + Klartext wie der Builder) und die anlagenweite Warmwasser-Temperatur; beides überlebt das
+    Response-Modell."""
+    from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL, HEIZEN
+
+    daten = live_dashboard.LiveDashboardResponse(
+        **live_dashboard._generate_demo_data(1, "Demo"),
+    ).model_dump()
+    (wp,) = [k for k in daten["komponenten"] if k["key"] == "waermepumpe_5"]
+    assert (wp["betriebsmodus"], wp["betriebsmodus_label"]) == (HEIZEN, BETRIEBSMODUS_LABEL[HEIZEN])
+    assert 40.0 <= daten["warmwasser_temperatur_c"] <= 55.0
+    assert daten["innengeraete"] is None
+
+
+# ── P-433-2 (H2): Demo-Knoten tragen die IDs der Anlage ──────────────────────
+
+async def _demo_anlage(db, investitionen: list[tuple[str, str]]):
+    from backend.models.anlage import Anlage
+    from backend.models.investition import Investition
+
+    anlage = Anlage(anlagenname="Demo-H2", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    for typ, name in investitionen:
+        db.add(Investition(anlage_id=anlage.id, typ=typ, bezeichnung=name, aktiv=True))
+    await db.flush()
+    return anlage
+
+
+def _schluessel(daten: dict) -> set[str]:
+    return {k["key"] for k in daten["komponenten"]} | {g["key"] for g in daten["gauges"]} | set(
+        daten["heute_kwh_pro_komponente"]
+    )
+
+
+async def test_demo_knoten_nehmen_die_ids_der_anlage(db):
+    """Gemessener Anlass: `create_demo_data` legt die WP als ID 4 an, die Demo nannte sie `waermepumpe_5` —
+    der Hub-Überblick fand das Gerät nicht. Jetzt trägt die Demo die IDs der aktiven Investitionen."""
+    from backend.api.routes.live_dashboard import get_live_data, get_tagesverlauf
+    from backend.models.investition import Investition
+    from sqlalchemy import select
+
+    anlage = await _demo_anlage(db, [
+        ("wechselrichter", "WR"), ("speicher", "Akku"), ("e-auto", "Auto"),
+        ("waermepumpe", "WP"), ("wallbox", "WB"),
+    ])
+    ids = {i.typ: i.id for i in (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id))).scalars()}
+    daten = live_dashboard.LiveDashboardResponse.model_validate(
+        await get_live_data(anlage.id, demo=True, db=db)).model_dump()
+    keys = _schluessel(daten)
+    assert f"waermepumpe_{ids['waermepumpe']}" in keys, ids
+    assert ids["waermepumpe"] != 5, "Probe braucht eine WP-ID ≠ 5 (wie create_demo_data: 4)"
+    assert "waermepumpe_5" not in keys
+    assert f"batterie_{ids['speicher']}" in keys and f"soc_{ids['speicher']}" in keys
+    assert f"eauto_{ids['e-auto']}" in keys and f"wallbox_{ids['wallbox']}" in keys
+    (wb,) = [k for k in daten["komponenten"] if k["key"] == f"wallbox_{ids['wallbox']}"]
+    assert wb["fahrzeuge"][0]["investition_id"] == ids["e-auto"]
+    (auto,) = [k for k in daten["komponenten"] if k["key"] == f"eauto_{ids['e-auto']}"]
+    assert auto["parent_key"] == f"wallbox_{ids['wallbox']}"
+    assert {k.get("traeger_id") for k in daten["komponenten"] if k["key"].startswith("pv_")} >= {ids["wechselrichter"]}
+    assert len(daten["komponenten"]) == len({k["key"] for k in daten["komponenten"]}), "kein Key doppelt"
+    # Der Tagesverlauf derselben Demo nennt dieselben Knoten.
+    tv = await get_tagesverlauf(anlage.id, demo=True, db=db)
+    tv = tv if isinstance(tv, dict) else tv.model_dump()
+    assert f"waermepumpe_{ids['waermepumpe']}" in {s["key"] for s in tv["serien"]}
+
+
+async def test_demo_ohne_investitionen_behaelt_die_festen_keys(db):
+    from backend.api.routes.live_dashboard import get_live_data
+
+    anlage = await _demo_anlage(db, [])
+    neu = _schluessel(await get_live_data(anlage.id, demo=True, db=db))
+    alt = _schluessel(live_dashboard._generate_demo_data(anlage.id, "Demo"))
+    assert neu == alt
+    assert {"waermepumpe_5", "batterie_3", "eauto_4", "wallbox_6", "wallbox_11", "soc_12"} <= neu

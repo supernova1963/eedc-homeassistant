@@ -11,6 +11,24 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
+**Komponenten → Wärmepumpe: neuer Block „Überblick" mit Schaubild und Live-Kacheln.** Ganz oben steht jetzt ein Bild
+einer Wärme/Klima-Anlage, darauf dieselben Kacheln wie im Energiefluss von *Cockpit → Live* — für jeden Wert, dem du einen
+Sensor zugeordnet hast: Leistung und Modus jedes Geräts, Warmwasser-Temperatur, Strom heute, Innengeräte einer Klimaanlage,
+Außentemperatur. Das Bild zeigt immer alle Gerätearten; welche deine Anlage hat, zeigen die Kacheln, und was ohne Sensor ist,
+nennt die Zeile darunter. Rechts fasst „Auf einen Blick" das gewählte Gerät zusammen — Modus, Leistung, Temperaturen, heute
+Strom, Wärme und Arbeitszahl — und zeigt den Eigenverbrauch der ganzen Anlage. Solange der Block aufgeklappt ist, aktualisiert
+er sich alle 5 Sekunden ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe),
+[Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).
+
+**Einstellungen → Datenquellen: die Wärmepumpe nach Betriebsart.** Die Felder einer Wärmepumpe oder Klimaanlage stehen jetzt
+in Blöcken *Gerät gesamt · Heizen · Warmwasser · Kühlen* (bei Klimaanlagen auch *Lüften · Entfeuchten*), jeder mit einem
+Status im Kopf: „vollständig", „fehlt: Strom, Wärme", „aus Betriebsmodus abgeleitet" oder „passiv". So siehst du auf einen
+Blick, welche Betriebsart eedc vollständig misst. Die Blöcke folgen deinem Gerät: eine Brauchwasser-Wärmepumpe hat kein
+*Heizen*, eine Klimaanlage kein *Warmwasser*, und *Kühlen* steht da, wenn dein Gerät kühlt — bei einer Wärmepumpe, sobald
+an ihr die Kühlung (aktiv oder passiv) eingetragen ist, auch ohne Kühlzähler. Was selten vorkommt, bleibt unter „Weitere
+Größen erfassen" erreichbar. Am Zähler „Strom Heizbetrieb" steht jetzt dazu, dass er Vorrang vor „Strom Heizen" hat — wer getrennt misst,
+lässt ihn leer. Andere Gerätetypen sehen aus wie bisher ([Einstellungen §7.2](HANDBUCH_EINSTELLUNGEN.md#72-die-fläche)).
+
 **Komponenten: „Aktueller Status" heißt jetzt „Kennzahlen (gesamte Laufzeit)".** Der Block zeigt Kennzahlen über die
 ganze Laufzeit deiner Komponente, keine Live-Werte — der neue Name sagt das. Deine Reihenfolge, Fokus und geparkte
 Anzeigen bleiben ([Bedienung §3.1](HANDBUCH_BEDIENUNG.md#31-gemeinsamer-aufbau-je-komponente)).

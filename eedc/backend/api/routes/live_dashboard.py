@@ -7,6 +7,7 @@ GET /api/live/{anlage_id}/tagesverlauf — Stündlicher Leistungsverlauf.
 
 import logging
 import random
+import re
 from datetime import date, datetime
 from typing import Literal, Optional
 
@@ -15,10 +16,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL, HEIZEN
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil
+from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_power_service import get_live_power_service
 
 logger = logging.getLogger(__name__)
@@ -258,6 +262,84 @@ _DEMO_POOL = (13, "Poolpumpe")
 _DEMO_SAUNA = (14, "Sauna")
 
 
+#: P-433-2 (H2, Master 24.10.2026): die festen Demo-IDs je Investitionstyp, in Knoten-Reihenfolge.
+#: Der Hub ordnet Live-Knoten über `<typ>_<investition.id>` zu — mit festen IDs fand die Demo dort
+#: kein Gerät (gemessen: `create_demo_data` legt die WP als ID 4 an, die Demo nannte sie 5).
+_DEMO_SLOTS: dict[str, tuple[int, ...]] = {
+    "pv-module": tuple(s[0] for s in _DEMO_PV_STRINGS),
+    "speicher": (3,),
+    "e-auto": (4, 12),
+    "waermepumpe": (5,),
+    "wallbox": (6, 11),
+    "sonstiges": (_DEMO_POOL[0], _DEMO_SAUNA[0]),
+    "wechselrichter": tuple(_DEMO_WECHSELRICHTER),
+}
+
+#: Knoten-, Gauge- und Heute-Schlüssel der Demo, die eine Investitions-ID tragen.
+_DEMO_KEY = re.compile(r"^(pv|batterie|eauto|wallbox|waermepumpe|sonstige|soc)_(\d+)(.*)$")
+
+
+def _demo_id_karte(ids_je_typ: dict[str, list[int]]) -> dict[int, int]:
+    """Feste Demo-ID → ID der Anlage: der n-te Demo-Knoten eines Typs nimmt die n-te aktive Investition
+    dieses Typs. Ohne passende Investition bleibt die feste ID (Rückfall auf die bisherigen Keys); nur
+    wenn sie schon eine echte Investition trägt, bekommt der Knoten eine freie ID, damit kein Key doppelt
+    vorkommt (`soc_<id>` teilen sich Speicher und E-Auto)."""
+    karte = {
+        slot: inv_id
+        for typ, slots in _DEMO_SLOTS.items()
+        for slot, inv_id in zip(slots, ids_je_typ.get(typ, []))
+    }
+    belegt = set(karte.values())
+    frei = max([*belegt, *(s for slots in _DEMO_SLOTS.values() for s in slots)]) + 1
+    for slot in (s for slots in _DEMO_SLOTS.values() for s in slots if s not in karte):
+        if slot in belegt:
+            karte[slot], frei = frei, frei + 1
+        else:
+            karte[slot] = slot
+        belegt.add(karte[slot])
+    return karte
+
+
+def _demo_key(key: str, karte: dict[int, int]) -> str:
+    m = _DEMO_KEY.match(key)
+    return f"{m[1]}_{karte.get(int(m[2]), int(m[2]))}{m[3]}" if m else key
+
+
+def _demo_auf_anlage(daten: dict, karte: dict[int, int]) -> dict:
+    """Schreibt die IDs einer Demo-Antwort (Live oder Tagesverlauf) auf die Investitionen der Anlage um."""
+    for k in daten.get("komponenten", []):
+        k["key"] = _demo_key(k["key"], karte)
+        if k.get("parent_key"):
+            k["parent_key"] = _demo_key(k["parent_key"], karte)
+        if k.get("traeger_id") is not None:
+            k["traeger_id"] = karte.get(k["traeger_id"], k["traeger_id"])
+        for f in k.get("fahrzeuge") or []:
+            f["investition_id"] = karte.get(f["investition_id"], f["investition_id"])
+    for gruppe in ("gauges", "serien"):
+        for g in daten.get(gruppe, []):
+            g["key"] = _demo_key(g["key"], karte)
+    if daten.get("heute_kwh_pro_komponente"):
+        daten["heute_kwh_pro_komponente"] = {
+            _demo_key(k, karte): v for k, v in daten["heute_kwh_pro_komponente"].items()
+        }
+    for punkt in daten.get("punkte", []):
+        punkt["werte"] = {_demo_key(k, karte): v for k, v in punkt["werte"].items()}
+    return daten
+
+
+async def _demo_karte_der_anlage(db: AsyncSession, anlage_id: int) -> dict[int, int]:
+    """Die ID-Karte der Demo für diese Anlage — aktive Investitionen je Typ, nach ID sortiert."""
+    invs = (await db.execute(
+        select(Investition.typ, Investition.id)
+        .where(Investition.anlage_id == anlage_id, aktiv_jetzt())
+        .order_by(Investition.id)
+    )).all()
+    ids_je_typ: dict[str, list[int]] = {}
+    for typ, inv_id in invs:
+        ids_je_typ.setdefault(typ, []).append(inv_id)
+    return _demo_id_karte(ids_je_typ)
+
+
 def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     """Simulierte Live-Daten der Demo-Anlage (Bestand s. `_DEMO_PV_STRINGS`).
 
@@ -359,8 +441,11 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "fahrzeuge": [{"investition_id": 12, "label": "Renault Zoe", "soc": zoe_soc,
                         "kw": None, "v2h": False}],
          "fahrzeuge_zuordnung": "geschaetzt"},
+        # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
+        # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).
         {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "icon": "flame",
-         "erzeugung_kw": None, "verbrauch_kw": wp_kw, "typ": "waermepumpe"},
+         "erzeugung_kw": None, "verbrauch_kw": wp_kw, "typ": "waermepumpe",
+         "betriebsmodus": HEIZEN, "betriebsmodus_label": BETRIEBSMODUS_LABEL[HEIZEN]},
         {"key": f"sonstige_{_DEMO_POOL[0]}", "label": _DEMO_POOL[1], "icon": "wrench",
          "erzeugung_kw": None, "verbrauch_kw": pool_kw,
          "typ": "sonstiges", "kategorie": "verbraucher"},
@@ -422,6 +507,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "gestern_netzbezug_kwh": round(4.2 + random.uniform(-0.5, 0.5), 1),
         "gestern_eigenverbrauch_kwh": round(32.4 + random.uniform(-1, 1), 1),
         "heute_kwh_pro_komponente": heute_pro_komp,
+        # P-433-2 (E-P2-9): anlagenweit wie im Builder (erste WP mit Zuordnung).
+        "warmwasser_temperatur_c": round(48.0 + random.uniform(-1.5, 1.5), 1),
     }
 
 
@@ -440,7 +527,10 @@ async def get_live_data(
         raise not_found("Anlage")
 
     if demo:
-        return _generate_demo_data(anlage.id, anlage.anlagenname)
+        # P-433-2 (H2): Knoten-Keys auf die Investitionen der Anlage, damit der Hub sie zuordnet.
+        return _demo_auf_anlage(
+            _generate_demo_data(anlage.id, anlage.anlagenname), await _demo_karte_der_anlage(db, anlage.id),
+        )
 
     service = get_live_power_service()
     return await service.get_live_data(anlage, db)
@@ -587,7 +677,8 @@ async def get_tagesverlauf(
         raise not_found("Anlage")
 
     if demo:
-        return _generate_demo_tagesverlauf(anlage.id)
+        # P-433-2 (H2): dieselben Schlüssel wie die Live-Demo derselben Anlage.
+        return _demo_auf_anlage(_generate_demo_tagesverlauf(anlage.id), await _demo_karte_der_anlage(db, anlage.id))
 
     service = get_live_power_service()
     tv_data = await service.get_tagesverlauf(anlage, db)

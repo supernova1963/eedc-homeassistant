@@ -12,6 +12,9 @@
  *
  * ⚠ Geprüft wird die **Zusammenfassung in der Blockkopfzeile**, nicht der Text
  * im aufgeklappten Block — dort entsteht die Zeichenkette (`summary`).
+ *
+ * P-433-2 S2 (Variante C): die Felder tragen ihre Betriebsart wie die Route; die Zählung der
+ * Zusammenfassung läuft über alle Felder des Geräts, unabhängig von der Gliederung darunter.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -30,6 +33,7 @@ vi.mock('../../api/datenquellen', () => {
     bedarf: 'pflicht',
     gateway_topic: null, ha_entity: offen ? null : 'sensor.x', ha_name: null,
     invertieren: false, wert: null, wert_zeit: null, probleme: [],
+    betriebsart: n < 2 ? 'geraet' : 'heizen',
   })
   return {
     VERBINDUNG_GEAENDERT_EVENT: 'eedc:verbindung-geaendert',

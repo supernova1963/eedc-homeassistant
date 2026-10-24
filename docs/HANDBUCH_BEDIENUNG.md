@@ -645,6 +645,7 @@ Jede Komponenten-Sicht bezieht sich auf den **Gesamtzeitraum** (kein Datums-Sele
 
 | Block | Inhalt |
 |-------|--------|
+| **Überblick** | nur **Wärmepumpe** (weitere Typen folgen): ein Schaubild des Gerätetyps mit den Live-Kacheln deiner Geräte und daneben „Auf einen Blick" — die einzige Live-Fläche im Hub, siehe [§3.4](#34-wärmepumpe) |
 | **Kennzahlen (gesamte Laufzeit)** | die Kernkennzahlen des Typs über die gesamte Laufzeit — keine Live-Werte (immer offen) |
 | **System-Struktur / Zuordnung** | Aufbau und Kopplung (z. B. Wechselrichter → Module/Speicher) bzw. Herkunft der Werte — sofern für den Typ sinnvoll |
 | **Sub-Komponente** | untergeordnete Kennzahlen (z. B. gekoppelter Speicher) — sofern vorhanden |
@@ -799,6 +800,21 @@ Angezeigt werden:
 > **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt (Lastverschiebung). Sie ist damit belastbarer als ein generisches Sizing-Tool, weil sie deine Saisonalität trägt, aber sie ist **keine Vorhersage**. Dieser Hinweis steht immer neben der Zahl. Unter etwa **180 Tagen** Historie sagt eedc zusätzlich, dass die Aussage noch nicht trägt — ein halbes Jahr deckt Sommer und Winter ab, und genau dazwischen liegt der Nutzen eines Speichers.
 
 ### 3.4 Wärmepumpe
+
+#### Block „Überblick" — das Schaubild mit den Live-Kacheln
+
+Ganz oben steht der Block **„Überblick"**: links ein Bild einer Wärme/Klima-Anlage, darauf **dieselben Kacheln wie im Energiefluss** von *Cockpit → Live* (Symbol, Wert, Modus-Zeile, Name), rechts die Karte **„Auf einen Blick"**. Das Bild zeigt immer alle Gerätearten — welche deine Anlage hat, zeigen die Kacheln ([Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).
+
+- **Nur Werte mit Sensor haben eine Kachel:** Leistung und Modus jedes Geräts, Warmwasser-Temperatur, Strom heute, Innengeräte einer Klimaanlage, dazu die Außentemperatur aus dem Wetterdienst. Was ohne Sensor ist, nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Link zu *Einstellungen → Datenquellen*.
+- **Kacheln aller Geräte, Karte des gewählten:** Hast du mehrere Wärmepumpen, stehen alle im Bild — zwei Geräte derselben Art am selben Bildobjekt als Gruppe „Wärmepumpen (2)" mit der Summe der Leistung; die Karte rechts gehört zum Gerät, das du im Geräte-Selektor gewählt hast.
+- **„Auf einen Blick"** zeigt Modus, Leistung jetzt, Warmwasser- und Außentemperatur, heute Strom, Wärme und Arbeitszahl (je Betriebsart nur mit Zahl) und den Ring **„Eigenverbrauch jetzt x % (Anlage)"** — dieselbe Zahl wie im Cockpit, für die ganze Anlage, nicht für die Wärmepumpe. Eine Zeile ohne Wert entfällt; Kosten und CO₂ stehen in den Blöcken darunter.
+- **Tooltip:** Antippen oder Überfahren einer Kachel nennt Name, Leistung, Modus, heute kWh und die Herkunft („Live-Snapshot", „HA-LTS (Tageszähler)", „Wetterdienst").
+- **Am Handy** haben Kacheln und Schrift dieselbe Größe wie im Energiefluss bei gleicher Breite; passt eine Reihe nicht, werden Kacheln gruppiert („Innengeräte (3)", „Weitere (2)") — Antippen öffnet die Liste unter dem Bild. Die Karte steht unter dem Bild.
+- Der Block steht auch dann zuoberst, wenn du die Reihenfolge der Blöcke früher geändert hast; danach kannst du ihn wie jeden Block verschieben, zuklappen oder seine zwei Teile parken.
+
+> **Benannte Grenzen.** Solange der Block **aufgeklappt** und der Tab **sichtbar** ist, fragt er die Live-Werte alle **5 Sekunden** ab (Wetter und Tageswerte alle 5 Minuten) — ein zweiter Abfrage-Pfad neben *Cockpit → Live*. Zugeklappt, ganz geparkt oder im Hintergrund fragt er nichts. Der Tooltip nennt die **Entität** des Sensors nicht; welche zugeordnet ist, steht im Block „Einstellungen" und unter *Einstellungen → Datenquellen*. Im **Demo-Modus** stammen die Heute-Werte (Wärme, Arbeitszahl) vom echten Tag.
+
+#### Kennzahlen
 
 Kennzahl-Reihenfolge (durchgängig gleich über Cockpit, diesen Reiter und die Auswertungen):
 

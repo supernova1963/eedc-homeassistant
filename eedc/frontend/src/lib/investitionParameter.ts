@@ -225,6 +225,10 @@ export function istLuftLuft(params: Record<string, unknown> | null | undefined):
 export function istBrauchwasser(params: Record<string, unknown> | null | undefined): boolean {
   return (params?.[PARAM_WAERMEPUMPE.WP_ART] ?? '') === 'brauchwasser'
 }
+/** Kühlt dieses Gerät passiv (nur Umwälzpumpen)? Eine Markierung, keine Menge (SOLL §4.1/§7 A5). */
+export function istKuehlungPassiv(art: string | null | undefined): boolean {
+  return art === 'passiv'
+}
 export type WPVorlauftemperatur = '35' | '55'
 // 'nichts' = es gab keine Vorgängerheizung (Neubau, oder ein Gerät, das nur
 // kühlt). Ohne diesen Wert unterstellte eedc jeder Wärmepumpe einen Gaskessel

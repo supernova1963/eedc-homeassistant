@@ -13,7 +13,7 @@
  * - **«(passiv)»** hängt die EINE Funktion {@link modusMitPassiv} an — dieselbe,
  *   die die Kachel im Schaubild nutzt.
  */
-import { funktionsFarbe } from '../../v4/waermeVerteilung'
+import { funktionsFarbe } from '../../lib/funktionsFarben'
 
 /** Klartext eines Modus mit dem Zusatz «(passiv)» — eine Regel für Chip und Kachel. */
 export function modusMitPassiv(label: string, passiv: boolean): string {

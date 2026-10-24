@@ -226,6 +226,21 @@ const ANSICHTEN = [
     titel: 'Komponenten → Speicher',
   },
   {
+    // P-433-2: der Block «Überblick» (Panorama mit Kacheln + «Auf einen Blick») steht zuoberst und
+    // pollt die Live-Antwort — im Demo-Bundle mit `?demo=true`. Die Demo trägt seit S2 Modus «Heizen»
+    // und eine Warmwasser-Temperatur, und ihre Knoten nehmen die IDs der aktiven Investitionen der
+    // Anlage (n-te Demo-WP = n-te WP der DB, `live_dashboard.py::_demo_auf_anlage`) — die erste
+    // Wärmepumpe der Demo-DB hat damit Kachel und Modus-Chip; «Leistung jetzt» steht, wenn sie im
+    // Selektor vorn steht (Vorwahl = erstes Gerät, Reihenfolge nicht gemessen).
+    // Ausführen nur auf Gernots Nachfrage.
+    name: 'komponenten_waermepumpe',
+    demo: true,
+    route: '#/komponenten/waermepumpe',
+    hoehe: 'auto',
+    pflicht: ['Überblick', 'Leistung jetzt'],
+    titel: 'Komponenten → Wärmepumpe mit dem Block „Überblick"',
+  },
+  {
     name: 'auswertungen_roi',
     route: '#/auswertungen/roi',
     hoehe: 'auto',

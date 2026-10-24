@@ -11,6 +11,9 @@
  *
  * ⭐ **`info` ist blau und trägt das Info-Symbol**, beides aus der Stil-SoT: Es
  * liegt kein Fehler vor. Amber steht auf dieser Fläche für Zuordnungs-Probleme.
+ *
+ * P-433-2 S2 (Variante C): «Leistung gesamt» steht im Block «Gerät gesamt», «Leistung Heizen» im
+ * Block «Heizen» — der Hinweis hängt weiter am verdrängten Feld, also im Block Heizen.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -37,14 +40,14 @@ vi.mock('../../api/datenquellen', () => {
     label: 'Leistung gesamt', einheit: 'W', kategorie: 'live',
     hinweis: '', standard_topic: '', quelle: 'ha_app', gateway_topic: null,
     ha_entity: 'sensor.wp_gesamt', ha_name: 'WP gesamt',
-    invertieren: false, wert: 800, wert_zeit: null, probleme: [],
+    invertieren: false, wert: 800, wert_zeit: null, probleme: [], betriebsart: 'geraet',
   }
   const heizen = {
     id: 'inv_live_7_leistung_heizen_w', feld: 'leistung_heizen_w', typ: 'waermepumpe',
     label: 'Leistung Heizen', einheit: 'W', kategorie: 'live',
     hinweis: '', standard_topic: '', quelle: 'ha_app', gateway_topic: null,
     ha_entity: 'sensor.wp_heizen', ha_name: 'WP Heizen',
-    invertieren: false, wert: 600, wert_zeit: null,
+    invertieren: false, wert: 600, wert_zeit: null, betriebsart: 'heizen',
     probleme: [{
       art: 'gesamtleistung_verdraengt', schwere: 'info', grund: 'gesamtleistung',
       wirksame_felder: ['inv_live_7_leistung_w'], text: HINWEIS,
@@ -99,6 +102,13 @@ describe('Bauschnitt 7 — Hinweis an der verdrängten Zuordnung', () => {
   it('zeigt den Satz am Feld „Leistung Heizen"', async () => {
     await oeffneWpBlock()
     expect(await hinweisKnoten()).toBeInTheDocument()
+  })
+
+  it('steht im Block «Heizen» (Variante C), die Gesamtleistung im Block «Gerät gesamt»', async () => {
+    await oeffneWpBlock()
+    const knoten = await hinweisKnoten()
+    expect(knoten.closest('[data-betriebsart]')?.getAttribute('data-betriebsart')).toBe('heizen')
+    expect(screen.getByText('Leistung gesamt (W)').closest('[data-betriebsart]')?.getAttribute('data-betriebsart')).toBe('geraet')
   })
 
   it('DER KERN: keine Schaltfläche, die das falsche Feld leeren würde', async () => {

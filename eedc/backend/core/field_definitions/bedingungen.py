@@ -7,9 +7,12 @@
 
 from typing import Final, Optional
 from backend.core.investition_parameter import (
+    KUEHLUNG_AKTIV,
+    KUEHLUNG_PASSIV,
     ist_brauchwasser_waermepumpe,
     ist_dienstlich,
     ist_luft_luft_waermepumpe,
+    kuehlung_art,
 )
 from backend.core.betriebsmodus import (
     HEIZEN as BM_HEIZEN,
@@ -337,6 +340,13 @@ def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
         # R1/A6: ein Gerät mit ausschließlich Warmwasser-Achse. Steuert die
         # WEICHE Herabstufung von Heizen — nie deren Entfernung.
         "brauchwasser": ist_brauchwasser_waermepumpe(params),
+        # P-433-2 (H1, Master 24.10.2026): **kühlt das Gerät?** — ein Funktions-Stammdatum, keine
+        # Bauart: eine Split-Klimaanlage kühlt immer, jede andere Wärmepumpe, wenn ihre Stammdaten
+        # aktive oder passive Kühlung nennen (`kuehlung_art`). Steuert NUR die weiche Herabstufung der
+        # Kühl-Felder (Leistung Kühlen, Strom/Nutzenergie Kühlbetrieb) — nie deren Entfernung; an
+        # einer Luft-Luft-Anlage bleibt alles, wie es mit `luft_luft` war.
+        "kuehlt": ist_luft_luft_waermepumpe(params)
+        or kuehlung_art(params) in (KUEHLUNG_PASSIV, KUEHLUNG_AKTIV),
         "getrennte_strommessung": bool(params.get("getrennte_strommessung")),
         "arbitrage_faehig": arbitrage_faehig,
         # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
