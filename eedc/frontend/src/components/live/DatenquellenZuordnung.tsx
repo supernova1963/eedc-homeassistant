@@ -22,6 +22,7 @@
  * fälschlich amber (§2b1).
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
 import { Alert, Button } from '../ui'
@@ -45,12 +46,38 @@ import {
   VERBINDUNG_GEAENDERT_EVENT,
   type DatenquelleGruppe,
   type DatenquelleFeld,
+  type BetriebsmodusWerteGruppe,
   type DatenquellenVerfuegbarkeit,
   type GatewayQuelleConfig,
   type HistorieHinweis,
 } from '../../api/datenquellen'
 
 const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quelle: null, mqtt: false }
+
+/** Ziel der Werte-Tabelle des Betriebsmodus (Handbuch Wärme & Klima, Schritt 4, Weg B). */
+const HANDBUCH_BETRIEBSMODUS_WERTE = '/hilfe?doc=waerme-klima#welchen-sensor-eedc-lesen-kann'
+
+/**
+ * P-433-0 (Konzept #433 E12): die Werte, die eedc am Feld „Betriebsmodus“
+ * versteht — **sichtbar am Feld**, nicht hinter dem Info-Knopf, weil der
+ * Anwender seinen Template-Sensor danach baut. Die Liste kommt fertig aus dem
+ * Backend (Kanon `core/betriebsmodus.py`); hier wird nur gesetzt.
+ */
+function ZulaessigeWerte({ gruppen }: { gruppen: BetriebsmodusWerteGruppe[] }) {
+  const verstanden = gruppen.filter((g) => g.kanon !== 'unbestimmt')
+  const unbestimmt = gruppen.find((g) => g.kanon === 'unbestimmt')
+  return (
+    <p className="mt-1 max-w-prose text-xs text-gray-500 dark:text-gray-400">
+      <span className="font-medium">eedc versteht:</span>{' '}
+      {verstanden.map((g) => `${g.label} (${g.werte.join(', ')})`).join(' · ')}
+      {unbestimmt && `; als unbestimmt gezählt: ${unbestimmt.werte.join(', ')}`}
+      {'. Andere Werte zählen als unbestimmt — '}
+      <Link to={HANDBUCH_BETRIEBSMODUS_WERTE} className="text-primary-700 dark:text-primary-300 hover:underline">
+        Werte-Tabelle im Handbuch
+      </Link>
+    </p>
+  )
+}
 
 // Quell-Kennungen (SoT backend datenquellen.py). HA-Sensor deckt beide HA-Wege
 // (ha_app = Supervisor, ha_connector = Remote-Token) → EINE Spalte (§2b1).
@@ -370,6 +397,7 @@ export default function DatenquellenZuordnung() {
           }`}>
             {istText}
           </div>
+          {f.zulaessige_werte && f.zulaessige_werte.length > 0 && <ZulaessigeWerte gruppen={f.zulaessige_werte} />}
           {hinweisOffen && f.hinweis && (
             <p className={`mt-1 max-w-prose text-xs ${offenePflicht ? STATUS_TEXT_CLASS.kritisch : 'text-gray-500 dark:text-gray-400'}`}>
               {f.hinweis}

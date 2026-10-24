@@ -36,9 +36,13 @@ from backend.services.datenquellen_historie import (
     vermerk_leeren,
     vermerk_lesen,
 )
-from backend.core.betriebsmodus import betriebsmodus_klartext
+from backend.core.betriebsmodus import (
+    MODUS_FELD_KEY,
+    betriebsmodus_klartext,
+    betriebsmodus_werte_je_betriebsart,
+)
 from backend.core.feld_auswertungen import sichten_fuer
-from backend.core.field_definitions import anlage_typen_mit_kontext, ist_zustand_feld
+from backend.core.field_definitions import anlage_typen_mit_kontext, basis_feld_key, ist_zustand_feld
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import (
     entferne_legacy_invert,
@@ -537,6 +541,16 @@ async def _feld_labels(db: AsyncSession, anlage: Anlage) -> dict[str, str]:
         # erster Treffer gewinnt — dieselbe Reihenfolge wie die frühere Schleife
         labels.setdefault(fid, str(e.get("label") or e.get("feld_label") or fid))
     return labels
+
+
+def _zulaessige_werte(eintrag: dict) -> list[dict] | None:
+    """P-433-0 (Konzept #433 E12): die Werte-Tabelle des Kanons am Feld „Betriebsmodus“ (auch `betriebsmodus-3`).
+
+    Nur dort — ein anderes Zustandsfeld hätte eine andere Tabelle; ``None`` für jedes übrige Feld.
+    """
+    if eintrag.get("zustand") and basis_feld_key(eintrag.get("feld", "")) == MODUS_FELD_KEY:
+        return betriebsmodus_werte_je_betriebsart()
+    return None
 
 
 def _quelle_klartext(eintrag: dict | None, topic: str | None = None) -> str:
@@ -1256,6 +1270,12 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # werden. Der Kanon-SoT ist `core/betriebsmodus.py`, nicht der Client.
             "wert_text": wert_text,
             "wert_klartext": betriebsmodus_klartext(wert_text) if wert_text else None,
+            # P-433-0 (Konzept #433 E12): die Werte, die eedc an diesem Feld
+            # versteht — sichtbar am Feld, damit der Anwender seinen
+            # Template-Sensor danach bauen kann. **Aus dem Kanon abgeleitet**
+            # (`core/betriebsmodus.py`), nicht im Client getippt; nur am
+            # Betriebsmodus-Feld (mit Innengeräte-Suffix), sonst ``None``.
+            "zulaessige_werte": _zulaessige_werte(e),
             "wert_zeit": wert_zeit,
             # §2i: diagnostische Zuordnungs-Probleme (Einheit/state_class/Redundanz/
             # Doppelmapping) — leere Liste, wenn alles sauber.

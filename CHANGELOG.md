@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Einstellungen → Datenquellen: am Feld „Betriebsmodus" (Wärmepumpe/Klimaanlage) steht, welche Werte eedc versteht** — je Betriebsart die Home-Assistant- und die deutschen Schreibweisen, dazu die bewusst unbestimmten `auto`, `heat_cool`, `automatik`, mit Link auf die Werte-Tabelle im Handbuch Wärme & Klima. Die Liste kommt aus dem Kanon (`core/betriebsmodus.py`, neues Antwortfeld `zulaessige_werte` der Datenquellen-Fläche), nicht aus einem zweiten Text. (Konzept #433 E12, Mathek)
+- **Daten-Checker → neue Kategorie „Betriebsmodus – unbekannter Wert" (INFO):** liefert der zugeordnete Betriebsmodus-Sensor einen Wert, der nicht in der Werte-Tabelle steht (etwa `heating`, `standby`, `pool` aus einem eigenen Prioritäts-Sensor), nennt eedc den Sensor, den Wert und die verstandenen Werte. Bisher zählten solche Stunden still als unbestimmt, ihr Strom stand unter „nicht aufgeteilt". Gelesen wird der aktuelle Zustand aus Home Assistant; ohne HA, bei `unknown`/`unavailable`, bei den bewusst unbestimmten Werten und bei mehreren verschiedenen Modus-Quellen schweigt die Prüfung. Intern: `DatenChecker._check_klima_modus_wert`, Kategorie `klima_modus_wert`. (Konzept #433 E12, Mathek)
+- **Daten-Checker → neue Kategorie „Strompreise – eigener Wärmepumpen-Tarif" (INFO), benannte Grenze (N-767):** gilt ein Tarif mit Verwendung *Wärmepumpe*, dessen Arbeitspreis vom Standard-Tarif abweicht, und hat die Wärmepumpe in den letzten zwölf abgeschlossenen Monaten Strom verbraucht, nennt eedc die Obergrenze, um die die Ersparnis dadurch abweichen kann (WP-Strom × Tarifdifferenz). Die Eigenverbrauchs-Ersparnis bewertet jede selbst genutzte kWh zum Haushaltstarif, auch den unbekannten PV-Anteil der Wärmepumpe; **keine Zahl ändert sich**. Herleitung und Vorzeichen je Messpunkt in BERECHNUNGEN (Kasten „Der WP-Strom trägt den vollen Netztarif"), Handbuch Einstellungen §2.2. Intern: `services/daten_checker/wp_tarif.py`, Kategorie `wp_eigener_tarif`, Preise über `monats_fakten.tarif_des_monats`, WP-Strom über die Monats-Fakten.
+
+### Changed
+
+- **Komponenten-Hub: der Block „Aktueller Status" heißt jetzt „Kennzahlen (gesamte Laufzeit)" — bei allen Komponententypen.** Er zeigt Kennzahlen über die gesamte Laufzeit, und der alte Name wurde als Live-Sicht gelesen. Fokus, Reihenfolge und geparkte Anzeigen bleiben erhalten (die Block-ID `status` ist unverändert). (Konzept #433 E11, Mathek)
+
+---
+
 ## [4.1.10] - 2026-10-24 — Daten-Checker erkennt den PV-Tageszähler auch am Morgen-Reset (kein falscher „Sprung in Home Assistant“ mehr); Wärmepumpe mit getrennter Strommessung zeigt Heizen und Warmwasser neben dem Betriebsart-Zähler; intern: elf große Funktionen in Phasen zerlegt (Komplexitäts-Baseline 60 → 48), Testsuite ohne Skips, xfail und Warnungen; 2 Korrekturen
 
 ### Changed

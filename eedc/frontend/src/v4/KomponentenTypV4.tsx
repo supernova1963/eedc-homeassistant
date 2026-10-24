@@ -598,7 +598,7 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
     ...parkIdsVon(sekundaerKpis),
   ]
   if (!alleGeparkt(statusIds)) bloecke.push({
-    id: 'status', title: 'Aktueller Status', ...BLOCK_IDENTITAET.kennzahlen,
+    id: 'status', title: 'Kennzahlen (gesamte Laufzeit)', ...BLOCK_IDENTITAET.kennzahlen,
     summary: g.status.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
     defaultOpen: true,
     render: () => (

@@ -229,6 +229,20 @@ class CheckKategorie(str, Enum):
     # die sie nicht hat. Wer trotzdem eine Kühlfunktion hat, findet das Feld
     # auf der Zuordnungs-Fläche.
     KLIMA_MODUS_SENSOR = "klima_modus_sensor"
+    # P-433-0 (Konzept #433 E12 b, 24.10.2026): der zugeordnete Betriebsmodus-Sensor liefert einen Wert, der nicht in
+    # der Werte-Tabelle steht (`core/betriebsmodus.py::_ZUSTAND_ZU_KANON`) — etwa die Slugs eines eigenen
+    # Prioritäts-Template-Sensors (`heating`, `standby`, `pool`). eedc zählt diese Stunden still als `unbestimmt`, ihr
+    # Strom steht unter „nicht aufgeteilt“. KLIMA_MODUS_SENSOR meldet nur den FEHLENDEN Sensor; dieser Fall war
+    # ungedeckt. INFO, je Gerät, mit der Werte-Liste aus dem Kanon. Gelesen wird der aktuelle HA-State (Muster
+    # `_check_sensor_mapping_einheit`); ohne HA, bei `unknown`/`unavailable` und für die bewusst unbestimmten Zustände
+    # (`auto`, `heat_cool`, `automatik`) keine Meldung. Kein Reparatur-Knopf — der Weg ist ein Template-Sensor in HA.
+    KLIMA_MODUS_WERT = "klima_modus_wert"
+    # N-767 (24.10.2026): ein eigener Wärmepumpen-Tarif, dessen Arbeitspreis vom allgemeinen abweicht. eedc bewertet
+    # jede Eigenverbrauchs-kWh zum Haushaltstarif — auch die, die die Wärmepumpe verbraucht hat; ihr PV-Anteil ist
+    # unbekannt. Benannte Grenze (BERECHNUNGEN, Kasten „Der WP-Strom trägt den vollen Netztarif"), keine Zahl wird
+    # geändert. INFO mit der Obergrenze (WP-Strom der letzten 12 abgeschlossenen Monate × Tarifdifferenz) — nur, wenn
+    # WP-Strom gemessen ist. Kein Reparatur-Knopf: es gibt nichts zu reparieren.
+    WP_EIGENER_TARIF = "wp_eigener_tarif"
     # #377 / N-294 (D3, 22.08.2026): Ein Zählerstand ist eine BESTANDSgröße und
     # läuft nicht rückwärts. Fällt er doch, ist nicht die Menge negativ — die
     # **Reihe** ist gebrochen: Zähler getauscht ohne Stilllegung, Sensor

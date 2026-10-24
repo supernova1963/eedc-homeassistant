@@ -439,6 +439,77 @@ _AKTION_OHNE_RICHTUNG: Final[frozenset[str]] = frozenset({"idle"})
 _KEIN_ZUSTAND: Final[frozenset[str]] = frozenset({"unknown", "unavailable", "none", ""})
 
 
+# ── Die Werte-Tabelle nach außen (P-433-0, Konzept #433 E12, 24.10.2026) ─────
+#
+# Der Kanon ist eine **feste Vorgabe**: das Mapping von Herstellerwörtern auf
+# diese Texte baut der Anwender in Home Assistant (Template-Sensor, Handbuch
+# Wärme & Klima, Weg B) — eedc pflegt keine Synonyme nach (Gernot 24.10.:
+# Herstellerwörter sind nicht einholbar). Damit die Vorgabe sichtbar ist, zeigt
+# die Zuordnungs-Fläche sie am Feld, und der Daten-Checker nennt sie, wenn ein
+# zugeordneter Sensor etwas anderes liefert.
+#
+# ⛔ **Beide Leser bekommen die Liste von HIER, abgeleitet aus
+# `_ZUSTAND_ZU_KANON`** — eine getippte zweite Liste im Client oder im
+# Meldungstext wäre die Drift, gegen die dieser Kanon gebaut ist (P4-Klasse).
+
+#: Die Zustände, die eedc kennt und **bewusst** auf `unbestimmt` legt (`auto`,
+#: `heat_cool`, `automatik` — das Gerät entscheidet selbst, D1/D2). Sie sind
+#: kein unbekannter Wert: wer sie liefert, bekommt keinen Checker-Hinweis.
+UNBESTIMMT_ZUSTAENDE: Final[frozenset[str]] = frozenset(
+    roh for roh, kanon in _ZUSTAND_ZU_KANON.items() if kanon == UNBESTIMMT
+)
+
+
+def ist_bekannter_betriebsmodus_wert(zustand: Optional[str]) -> bool:
+    """Steht dieser rohe State in der Werte-Tabelle (`_ZUSTAND_ZU_KANON`)?
+
+    Groß-/Kleinschreibung und Randleerzeichen sind egal — dieselbe Aufbereitung
+    wie in `normalisiere_betriebsmodus`. Die bewusst unbestimmten Zustände
+    (`UNBESTIMMT_ZUSTAENDE`) zählen als bekannt. ``None`` und die Nicht-Zustände
+    (`unknown`, `unavailable`, leer) sind **kein** Wert und damit auch kein
+    unbekannter: die Frage stellt sich für sie nicht (Aufrufer prüfen vorher).
+    """
+    if zustand is None:
+        return False
+    return str(zustand).strip().lower() in _ZUSTAND_ZU_KANON
+
+
+def betriebsmodus_werte_je_betriebsart() -> list[dict]:
+    """Die Werte-Tabelle, gruppiert nach Betriebsart — in Kanon-Reihenfolge.
+
+    Returns:
+        ``[{"kanon": "heizen", "label": "Heizen", "werte": ["heat", "heizen"]}, …]``;
+        `unbestimmt` steht zuletzt (die Zustände, die eedc kennt, aber keiner
+        Seite zuschlägt). Die Werte stehen in der Reihenfolge der Tabelle
+        (erst die HA-Schreibweise, dann die deutschen).
+    """
+    gruppen: dict[str, list[str]] = {k: [] for k in BETRIEBSMODUS_KANON}
+    for roh, kanon in _ZUSTAND_ZU_KANON.items():
+        gruppen[kanon].append(roh)
+    return [
+        {"kanon": k, "label": BETRIEBSMODUS_LABEL[k], "werte": werte}
+        for k, werte in gruppen.items() if werte
+    ]
+
+
+def betriebsmodus_werte_klartext() -> str:
+    """Die Werte-Tabelle als ein Satz für Meldungstexte (Daten-Checker).
+
+    Beispiel: ``„Heizen (heat, heizen) · … · Aus (off, aus); als unbestimmt
+    gezählt: auto, heat_cool, automatik"``.
+    """
+    teile, unbestimmt = [], []
+    for g in betriebsmodus_werte_je_betriebsart():
+        if g["kanon"] == UNBESTIMMT:
+            unbestimmt = g["werte"]
+        else:
+            teile.append(f"{g['label']} ({', '.join(g['werte'])})")
+    satz = " · ".join(teile)
+    if unbestimmt:
+        satz += f"; als unbestimmt gezählt: {', '.join(unbestimmt)}"
+    return satz
+
+
 def normalisiere_betriebsmodus(
     zustand: Optional[str],
     hvac_action: Optional[str] = None,

@@ -47,7 +47,7 @@ Ganz oben rechts findest du außerdem einen **Theme-Umschalter** (Hell/Dunkel/Sy
 
 ### 1.3 Das Block-Modell: klappen, fokussieren, umsortieren, parken
 
-Fast alle Sichten sind aus **Blöcken** aufgebaut — abgegrenzte Karten wie „Aktueller Status", „Verlauf" oder „Finanzen". Diese Blöcke kannst du an deine Arbeitsweise anpassen:
+Fast alle Sichten sind aus **Blöcken** aufgebaut — abgegrenzte Karten wie „Kennzahlen (gesamte Laufzeit)", „Verlauf" oder „Finanzen". Diese Blöcke kannst du an deine Arbeitsweise anpassen:
 
 - **Ein-/Ausklappen:** Klick auf den Block-Kopf klappt ihn zu oder auf. Zwei Sammelknöpfe klappen alle Blöcke einer Sicht auf einmal auf bzw. zu.
 - **Fokus / Vollbild (⤢):** Über das Vergrößern-Symbol öffnet sich ein Block als konzentrierte Vollbild-Ansicht — nützlich für ein Diagramm oder eine dichte Tabelle. Die Datums-/Zeit-Navigation der Sicht läuft im Fokus oben mit.
@@ -645,7 +645,7 @@ Jede Komponenten-Sicht bezieht sich auf den **Gesamtzeitraum** (kein Datums-Sele
 
 | Block | Inhalt |
 |-------|--------|
-| **Aktueller Status** | die Kernkennzahlen des Typs (immer offen) |
+| **Kennzahlen (gesamte Laufzeit)** | die Kernkennzahlen des Typs über die gesamte Laufzeit — keine Live-Werte (immer offen) |
 | **System-Struktur / Zuordnung** | Aufbau und Kopplung (z. B. Wechselrichter → Module/Speicher) bzw. Herkunft der Werte — sofern für den Typ sinnvoll |
 | **Sub-Komponente** | untergeordnete Kennzahlen (z. B. gekoppelter Speicher) — sofern vorhanden |
 | **Verlauf (gesamte Historie)** | Zeitreihe über die komplette Laufzeit, oft mit Verteilungen und Monats-Detailtabelle |

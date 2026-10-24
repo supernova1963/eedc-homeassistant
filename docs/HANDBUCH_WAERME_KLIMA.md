@@ -487,7 +487,7 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > | `off` | `aus` | Aus |
 > | `auto` · `heat_cool` | `automatik` | *unbestimmt* — das Gerät lief, die Seite ist nicht zuordenbar |
 >
-> Groß-/Kleinschreibung ist egal.
+> Groß-/Kleinschreibung ist egal. Dieselbe Liste steht in *Einstellungen → Datenquellen* direkt am Feld „Betriebsmodus". **Liefert dein zugeordneter Sensor einen Wert, der hier nicht steht** (etwa `heating`, `standby` oder `pool` aus einem eigenen Prioritäts-Sensor), **meldet der Daten-Checker ihn** — mit dem Wert und dieser Liste.
 >
 > ⚑ **Warmwasser kennt Home Assistant nicht als Betriebsmodus** — es führt die Trinkwassererwärmung in einer eigenen Gerätegruppe. Eine `climate`-Entität allein sagt dir also meist nur *heizen/kühlen*. Wenn deine Wärmepumpe Warmwasser macht, ist der Template-Sensor unten der Weg dorthin.
 >

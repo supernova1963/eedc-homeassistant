@@ -13,6 +13,12 @@
 from typing import Optional
 from sqlalchemy import select
 from backend.core.betriebsmodus import ist_betriebsart_strom_feld, modus_quelle
+from backend.core.betriebsmodus import (
+    UNBESTIMMT,
+    betriebsmodus_werte_klartext,
+    ist_bekannter_betriebsmodus_wert,
+    normalisiere_betriebsmodus,
+)
 from backend.core.field_definitions import basis_feld_key
 from backend.models.anlage import Anlage
 from backend.models.investition import InvestitionMonatsdaten
@@ -170,6 +176,88 @@ class KlimaChecks:
             + _meldungen_mehrdeutig(kat, mehrdeutig)
             + _meldungen_gar_nicht(kat, gar_nicht)
         )
+
+
+    async def _check_klima_modus_wert(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """P-433-0 (Konzept #433 E12 b): der zugeordnete Betriebsmodus-Sensor liefert einen Wert, den eedc nicht kennt.
+
+        ``_check_klima_modus_sensor`` meldet nur den **fehlenden** Sensor. Liefert ein zugeordneter einen Wert außerhalb
+        der Werte-Tabelle (`core/betriebsmodus.py::_ZUSTAND_ZU_KANON`), fällt die Stunde still auf `unbestimmt`
+        (`normalisiere_betriebsmodus`), ihr Strom steht unter „nicht aufgeteilt“ — und niemand sagt es dem Anwender.
+        Der Kanon bleibt die feste Vorgabe (Gernot 24.10.: Herstellerwörter sind nicht einholbar); der Hinweis nennt
+        sie und den Weg (Template-Sensor in HA, Handbuch Wärme & Klima, Weg B).
+
+        **Eng gefasst (P-6):** nur Geräte mit **genau einer** Modus-Quelle (`modus_quelle`, N-340 — bei mehreren
+        verschiedenen wird der Wert ohnehin nicht verwendet, das meldet der Nachbar); nur ein **Wert** (HA erreichbar,
+        nicht `unknown`/`unavailable`/leer); nur wenn der Wert **nicht** in der Tabelle steht — die bewusst
+        unbestimmten `auto`/`heat_cool`/`automatik` sind bekannt — **und** die Stunde dadurch wirklich `unbestimmt`
+        wird (ein `hvac_action` mit Richtung schlägt den Zustand, dann ist der Wert unschädlich).
+
+        **Gelesen wird der aktuelle State**, einmal je Prüfung über ``ha_state_service`` — dasselbe Muster wie
+        ``_check_sensor_mapping_einheit`` (Einheit aus HA). Benannte Grenze: ein Sensor, der den unbekannten Wert nur
+        zeitweise liefert, fällt nur auf, wenn er ihn beim Prüfen meldet; der Rohwert der Historie wird nach dem
+        Mapping verworfen und ist nirgends gespeichert.
+        """
+        kat = CheckKategorie.KLIMA_MODUS_WERT.value
+        heute = date.today()
+        mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
+        invs = (await self.db.execute(
+            select(_Inv).where(_Inv.anlage_id == anlage.id, _Inv.typ == "waermepumpe")
+        )).scalars().all()
+        je_quelle: dict[str, list] = {}
+        for inv in invs:
+            if not inv.ist_aktiv_an(heute):
+                continue
+            quelle = _quelle(inv.id, mapping)
+            if quelle:
+                je_quelle.setdefault(quelle, []).append(inv)
+        if not je_quelle:
+            return []
+
+        from backend.services.ha_state_service import get_ha_state_service
+
+        ha = get_ha_state_service()
+        if not ha.is_available:
+            return []
+        try:
+            zustaende = await ha.get_zustand_states_batch(list(je_quelle))
+        except Exception:  # noqa: BLE001 — HA nicht lesbar: keine Meldung statt einer, die niemand auflösen kann
+            return []
+
+        ergebnisse: list[CheckErgebnis] = []
+        for entity, geraete in je_quelle.items():
+            roh = zustaende.get(entity)
+            if not roh:
+                continue
+            zustand, aktion = roh
+            if ist_bekannter_betriebsmodus_wert(zustand):
+                continue
+            if normalisiere_betriebsmodus(zustand, aktion) != UNBESTIMMT:
+                continue
+            ergebnisse.extend(_meldung_unbekannter_wert(kat, inv, entity, zustand) for inv in geraete)
+        return ergebnisse
+
+
+def _meldung_unbekannter_wert(kat: str, inv, entity: str, zustand: str) -> CheckErgebnis:
+    """Das INFO je Gerät — die Werte-Liste kommt aus dem Kanon, nicht aus diesem Text."""
+    return CheckErgebnis(
+        kategorie=kat, schwere=CheckSeverity.INFO.value,
+        meldung=(
+            f"„{inv.bezeichnung}“: Betriebsmodus-Sensor liefert „{zustand}“ — "
+            f"diesen Wert kennt eedc nicht"
+        ),
+        details=(
+            f"Der Betriebsmodus-Sensor {entity} liefert gerade „{zustand}“. Diesen Wert kennt "
+            f"eedc nicht und zählt die Stunden als unbestimmt — ihr Strom steht unter „nicht "
+            f"aufgeteilt“. Verstanden werden: {betriebsmodus_werte_klartext()}. "
+            f"Groß-/Kleinschreibung ist egal. Der Weg: in Home Assistant einen Template-Sensor "
+            f"anlegen, der aus deinen Werten einen dieser Texte macht, und ihn hier zuordnen "
+            f"(Vorlage und Werte-Tabelle im Handbuch „Wärme & Klima“, Schritt 4, Weg B). Die "
+            f"Aufteilung beginnt mit dem neuen Sensor; Stunden davor bleiben, wie sie sind."
+        ),
+        link=LINK_DATENQUELLEN,
+        investition_id=inv.id,
+    )
 
 
 def _hat_kuehl_spur(

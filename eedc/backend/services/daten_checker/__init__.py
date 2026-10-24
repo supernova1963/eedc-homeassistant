@@ -42,6 +42,7 @@ from .emob import EmobChecks
 from .waermepumpe import WaermepumpeChecks
 from .zaehler import ZaehlerChecks
 from .datenquelle import DatenquelleChecks
+from .wp_tarif import WpTarifChecks
 
 
 # ─── Service ─────────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ class DatenChecker(
     WaermepumpeChecks,
     ZaehlerChecks,
     DatenquelleChecks,
+    WpTarifChecks,
     _CheckHelpers,
 ):
     """Prüft alle Daten einer Anlage auf Vollständigkeit und Plausibilität."""
@@ -112,6 +114,8 @@ class DatenChecker(
         ergebnisse.extend(self._check_strompreise(
             anlage, monatsdaten, hat_stundenwerte=hat_stundenwerte
         ))
+        # N-767: eigener Wärmepumpen-Tarif — der PV-Anteil der WP wird zum Haushaltstarif bewertet (benannte Grenze).
+        ergebnisse.extend(await self._check_wp_eigener_tarif(anlage))
         ergebnisse.extend(self._check_investitionen(anlage, monatsdaten))
         # N-597: Aufteilung nach Betriebsart, die der Abschluss nicht speichern kann.
         ergebnisse.extend(await self._check_modus_split_nicht_gespeichert(anlage))
@@ -155,6 +159,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_batterie_vorzeichen_historie(anlage))
         ergebnisse.extend(await self._check_soc_nur_ein_speicher(anlage))
         ergebnisse.extend(await self._check_klima_modus_sensor(anlage))
+        # P-433-0 (Konzept #433 E12 b): der zugeordnete Modus-Sensor liefert einen Wert außerhalb der Werte-Tabelle.
+        ergebnisse.extend(await self._check_klima_modus_wert(anlage))
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         # N-588 F5: Messpunkt-Vertrag der Wandlungsverluste (Anlagenzähler gegen String-Zähler).

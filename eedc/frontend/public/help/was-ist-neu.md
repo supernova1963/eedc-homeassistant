@@ -9,6 +9,25 @@
 
 ---
 
+## Unveröffentlicht — kommt mit der nächsten Version
+
+**Komponenten: „Aktueller Status" heißt jetzt „Kennzahlen (gesamte Laufzeit)".** Der Block zeigt Kennzahlen über die
+ganze Laufzeit deiner Komponente, keine Live-Werte — der neue Name sagt das. Deine Reihenfolge, Fokus und geparkte
+Anzeigen bleiben ([Bedienung §3.1](HANDBUCH_BEDIENUNG.md#31-gemeinsamer-aufbau-je-komponente)).
+
+**Betriebsmodus: eedc sagt, welche Werte es versteht — und meldet, wenn dein Sensor etwas anderes liefert.** Am Feld
+„Betriebsmodus" unter *Einstellungen → Datenquellen* steht jetzt die Liste der Texte, die eedc kennt (etwa `heat`/`heizen`,
+`cool`/`kuehlen`, `warmwasser`, `off`/`aus`). Liefert dein zugeordneter Sensor einen anderen Wert, zum Beispiel `heating`
+oder `standby` aus einem eigenen Template-Sensor, nennt der Daten-Checker ihn — solche Stunden zählt eedc als unbestimmt,
+ihr Strom steht unter „nicht aufgeteilt". Der Weg ist ein Template-Sensor in Home Assistant, der deine Werte in die
+Texte der Liste übersetzt ([Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#welchen-sensor-eedc-lesen-kann)).
+
+**Eigener Wärmepumpen-Tarif: der Daten-Checker nennt eine Grenze der Rechnung.** Mit dem Wärmepumpen-Tarif rechnet eedc
+die Stromkosten der Wärmepumpe; die Ersparnis der PV-Anlage bewertet den Strom, den die Wärmepumpe aus deiner PV bezieht,
+aber weiter zum Haushaltstarif — wie groß dieser Anteil ist, weiß eedc nicht. Weichen beide Preise ab, nennt der
+Daten-Checker, um wie viel die Ersparnis höchstens abweichen kann. Deine Zahlen ändern sich nicht
+([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+
 ## v4.1.10 — 24. Oktober 2026
 
 **Daten-Checker: kein „Sprung in Home Assistant“ mehr am PV-Tagesertrag eines nachts abgeschalteten Wechselrichters.**

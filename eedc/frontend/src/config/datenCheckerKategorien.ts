@@ -55,6 +55,10 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   batterie_vorzeichen_historie: 'Batterie – Vorzeichen-Historie',
   soc_nur_ein_speicher: 'Speicher – Ladestand nur eines Geräts',
   klima_modus_sensor: 'Klimaanlage – Betriebsmodus',
+  // P-433-0 (Konzept #433 E12 b): der zugeordnete Modus-Sensor liefert einen Wert, den eedc nicht kennt.
+  klima_modus_wert: 'Betriebsmodus – unbekannter Wert',
+  // N-767: eigener Wärmepumpen-Tarif — der PV-Anteil der Wärmepumpe wird zum Haushaltstarif bewertet.
+  wp_eigener_tarif: 'Strompreise – eigener Wärmepumpen-Tarif',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   // N-588 (F5): Anlagenzähler gegen String-Zähler — ob eedc die Wandlungsverluste bewerten darf, und warum nicht.
   messpunkt: 'PV – Messpunkt (Anlagenzähler und Strings)',
@@ -86,6 +90,7 @@ export const KATEGORIE_LABELS: Record<string, string> = {
 export const KATEGORIE_REIHENFOLGE: string[] = [
   'stammdaten',
   'strompreise',
+  'wp_eigener_tarif',
   'investitionen',
   'monatsdaten_vollstaendigkeit',
   'monatsdaten_plausibilitaet',
@@ -106,6 +111,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'batterie_vorzeichen_historie',
   'soc_nur_ein_speicher',
   'klima_modus_sensor',
+  'klima_modus_wert',
   'pv_ueber_erfassung',
   'messpunkt',
   'pv_zaehler_steht',

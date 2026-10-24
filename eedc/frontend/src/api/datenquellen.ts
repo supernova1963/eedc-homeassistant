@@ -7,6 +7,16 @@
  */
 import { api } from './client'
 
+/** Eine Betriebsart des Kanons mit den rohen States, die eedc ihr zuordnet. */
+export interface BetriebsmodusWerteGruppe {
+  /** Kanon-Wert, z. B. `'heizen'` — `'unbestimmt'` für auto/heat_cool/automatik. */
+  kanon: string
+  /** Klartext der Betriebsart, z. B. `'Heizen'`. */
+  label: string
+  /** Rohe States, z. B. `['heat', 'heizen']`. */
+  werte: string[]
+}
+
 export interface DatenquelleFeld {
   /** Stabile Feld-Kennung (späterer Zuordnungs-Schlüssel). */
   id: string
@@ -47,6 +57,13 @@ export interface DatenquelleFeld {
    * Backend** (`core/betriebsmodus.py`): eine zweite Tabelle hier wäre Drift.
    */
   wert_klartext?: string | null
+  /**
+   * P-433-0 (Konzept #433 E12): die Werte, die eedc an diesem Feld versteht —
+   * nur am Feld „Betriebsmodus“, sonst `null`. **Kommt aus dem Backend**
+   * (`core/betriebsmodus.py::betriebsmodus_werte_je_betriebsart`), abgeleitet
+   * aus der Werte-Tabelle des Kanons: eine getippte Liste hier wäre Drift.
+   */
+  zulaessige_werte?: BetriebsmodusWerteGruppe[] | null
   /** ISO-Zeit des letzten Cache-Werts (null = keiner). */
   wert_zeit: string | null
   /** §2i: diagnostische Zuordnungs-Probleme (leer = sauber). */

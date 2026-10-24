@@ -14,6 +14,7 @@
 4. [Kategorien im Detail](#4-kategorien-im-detail)
    1. [Stammdaten](#41-stammdaten)
    2. [Strompreise](#42-strompreise)
+   2a. [Strompreise – eigener Wärmepumpen-Tarif](#42a-eigener-waermepumpen-tarif)
    3. [Investitionen](#43-investitionen)
    4. [Monatsdaten – Vollständigkeit](#44-monatsdaten--vollstaendigkeit)
    5. [Monatsdaten – Plausibilität](#45-monatsdaten--plausibilitaet)
@@ -31,6 +32,7 @@
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
    13. [Sonstige Positionen – der Erfassungsort](#413-sonstige-positionen--der-erfassungsort)
    14. [Klimaanlage – Betriebsmodus](#414-klimaanlage--betriebsmodus)
+   14a. [Betriebsmodus – unbekannter Wert](#414a-betriebsmodus--unbekannter-wert)
    15. [Sensor-Zuordnung – Leistung ↔ Energie verwechselt](#415-sensor-zuordnung--leistung--energie)
    16. [Quellen-Konflikte](#416-quellen-konflikte)
    17. [Datenquellen-Drift zu Home Assistant](#417-datenquellen-drift)
@@ -105,12 +107,13 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **33 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen; die 33. ist *PV – Zähler steht*). Die meisten greifen in jeder Installation identisch; **zehn** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
+eedc prüft **35 Kategorien** (Stand 24.10.2026; dazugekommen sind *Strompreise – eigener Wärmepumpen-Tarif* und *Betriebsmodus – unbekannter Wert*; am 10.10.2026 waren es 33, davor stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **elf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
 | 1 | Stammdaten (§4.1) | greift | greift |
 | 2 | Strompreise (§4.2) | greift | greift |
+| 2a | Strompreise – eigener Wärmepumpen-Tarif (§4.2a) | greift | greift |
 | 3 | Investitionen (§4.3) | greift | greift |
 | 4 | Monatsdaten – Vollständigkeit (§4.4) | greift | greift |
 | 5 | Messwerte ohne Monatszeile (§4.4a) | greift | greift |
@@ -130,6 +133,7 @@ eedc prüft **33 Kategorien** (Stand 10.10.2026; bis dahin stand hier 26 — die
 | 14 | Sonstige Positionen – wiederkehrend (§4.13) | greift | greift |
 | 15 | Sonstige Positionen – Doppelerfassung (§4.13) | greift | greift |
 | 16 | Klimaanlage – Betriebsmodus (§4.14) | greift | greift |
+| 16a | **Betriebsmodus – unbekannter Wert** (§4.14a) | greift | **wird übersprungen** (der Wert kommt aus HA) |
 | 17 | **Sensor-Zuordnung – Leistung ↔ Energie** (§4.15) | greift | **wird übersprungen** (Einheit kommt aus HA) |
 | 18 | Quellen-Konflikte (§4.16) | greift | greift |
 | 19 | **Datenquellen-Drift zu HA** (§4.17) | greift | **wird übersprungen** (keine Vergleichsseite) |
@@ -201,6 +205,18 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **Einspeisevergütung ungewöhnlich: X,X ct/kWh (Tarifname)** | ⚠️ WARNING | Wert außerhalb 0–30 ct/kWh. Negative Werte oder zweistellige Vergütungen sind seit den 2010er Jahren untypisch. | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Vergütung prüfen. Bei dynamischen Vergütungsmodellen (Direktvermarktung) eine sinnvolle Schätzung eintragen. |
 | **N Tarif(e) rechnen die Einspeisung mit 0 ct/kWh** | ℹ️ INFO | Mindestens ein Tarif trägt **0 ct/kWh**, und in seinem Gültigkeitszeitraum ist Einspeisung erfasst — der Einspeise-Erlös dieser Monate bleibt damit 0 € (Cockpit, ROI, Jahresbericht). Der Fall entsteht regelmäßig, weil ein neuer Tarif seit v4.0.10 mit 0 startet: eedc rät den EEG-Satz bewusst nicht. **Die Zeile fordert nichts** — sie sagt, womit gerechnet wird; was du einträgst, wird gerechnet. **Ab 50 kWh/Jahr** erfasster Einspeisung; darunter (Nulleinspeisungs-Systeme mit reiner Regelungstoleranz) schweigt sie ganz. | Wer eine Vergütung bekommt: Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Satz aus dem Vergütungsbescheid eintragen; bei gestaffelter Vergütung den nach kWp gewichteten **Mischsatz** (eedc rechnet flat, siehe [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)). **Ist deine Einspeisung tatsächlich unvergütet** (Nulleinspeisung, Volleinspeisung ohne Vergütung, ausgelaufene EEG-Förderung), **ist 0 richtig und nichts zu tun**. |
 | **N Strompreis-Tarif(e) vorhanden** | ✅ OK | Mindestens ein allgemeiner Tarif vorhanden — Anzahl ist informativ. | – |
+
+---
+
+### 4.2a Strompreise – eigener Wärmepumpen-Tarif <a name="42a-eigener-waermepumpen-tarif"></a>
+
+**Was wird geprüft:** Gilt im laufenden Monat ein Tarif mit Verwendung *Wärmepumpe*, dessen Arbeitspreis vom Standard-Tarif abweicht — und hat die Wärmepumpe in den letzten zwölf abgeschlossenen Monaten Strom verbraucht?
+
+**Warum das zählt:** Mit dem Wärmepumpen-Tarif rechnet eedc die Stromkosten der Wärmepumpe. Die Eigenverbrauchs-Ersparnis der PV-Anlage bewertet dagegen jede selbst genutzte kWh zum Haushaltstarif — auch den Teil, den die Wärmepumpe aus der eigenen PV bezogen hat, denn wie groß dieser Teil ist, weiß eedc nicht. Bei zwei verschiedenen Preisen steht die Ersparnis deshalb um *PV-Anteil der Wärmepumpe × Tarifdifferenz* verschoben; ob nach oben oder unten, hängt davon ab, wo Netzbezug und Einspeisung gemessen werden ([Berechnungen, „Mit eigenem Wärmepumpen-Tarif"](BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--eine-benannte-grenze-n-767)).
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Eigener Wärmepumpen-Tarif (x ct gegen y ct): die Ersparnis der letzten 12 Monate kann um bis zu Z € abweichen** | ℹ️ INFO | Z ist die **Obergrenze**: WP-Strom der letzten zwölf abgeschlossenen Monate × Tarifdifferenz — so viel wäre es, wenn die Wärmepumpe nur PV-Strom bezogen hätte. Real ist es der PV-Anteil davon. Verglichen werden die Arbeitspreise des Monats so, wie eedc sie rechnet (mit HT/NT-Fenstern gewichtet). | **Nichts zu tun** — eedc ändert dafür keine Zahl, und es gibt nichts zu reparieren; die Meldung sagt, wo die Rechnung eine Grenze hat. Ohne eigenen Wärmepumpen-Tarif (oder mit gleichem Preis) erscheint sie nicht. |
 
 ---
 
@@ -849,6 +865,20 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 > stimmt. ⚠ **Deine Energiebilanz ist davon nicht betroffen:** dort zählt immer der Gesamtwert.
 
 Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
+
+---
+
+### 4.14a Betriebsmodus – unbekannter Wert <a name="414a-betriebsmodus--unbekannter-wert"></a>
+
+**Was wird geprüft:** Liefert der zugeordnete Betriebsmodus-Sensor einer Wärmepumpe oder Klimaanlage gerade einen Wert, den eedc kennt?
+
+**Warum das zählt:** eedc versteht eine feste Liste von Texten (Werte-Tabelle im Handbuch [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#welchen-sensor-eedc-lesen-kann); dieselbe Liste steht in *Einstellungen → Datenquellen* am Feld „Betriebsmodus"). Ein anderer Wert — etwa `heating`, `standby` oder `pool` aus einem eigenen Prioritäts-Sensor — zählt als *unbestimmt*: Der Strom dieser Stunden steht unter „nicht aufgeteilt", ohne dass es sonst jemand sagt.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **„\[Gerät\]": Betriebsmodus-Sensor liefert „wert" — diesen Wert kennt eedc nicht** | ℹ️ INFO | Der Sensor meldet beim Prüfen diesen Wert; die Meldung nennt den Sensor und die Liste der Werte, die eedc versteht. | In Home Assistant einen **Template-Sensor** anlegen, der aus deinen Werten einen der Texte der Tabelle macht (Vorlage im Handbuch Wärme & Klima, Schritt 4, Weg B), und ihn unter *Einstellungen → Datenquellen* zuordnen. Die Aufteilung beginnt mit dem neuen Sensor; Stunden davor bleiben, wie sie sind. |
+
+> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn der Sensor gerade `unknown` oder `unavailable` meldet (kein Wert ist kein falscher Wert), bei `auto`, `heat_cool` und `automatik` (eedc kennt sie und zählt sie bewusst als unbestimmt — das Gerät entscheidet dort selbst) und wenn das Gerät mehrere verschiedene Modus-Quellen hat (dann nennt §4.14 den Fall). Geprüft wird der Wert, den der Sensor **jetzt** meldet: Ein Wert, der nur zeitweise auftaucht, fällt auf, wenn er beim Prüfen ansteht.
 
 ---
 

@@ -1842,6 +1842,39 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > (`api/routes/aussichten/finanz_prognose.py`) und diese Planungsformel hier. Die CO₂-Zeile trifft sich
 > dabei mit dem gemessenen Pfad `co2_wp_ersparnis_kg`, der schon immer den vollen Strom
 > belastete (ADR-001/DI-1).
+>
+> #### Mit eigenem Wärmepumpen-Tarif — eine benannte Grenze (N-767)
+>
+> Die Regel oben setzt voraus, dass PV-Seite und Geräteseite **denselben** Preis tragen.
+> Mit einem Tarif *Verwendung Wärmepumpe*, dessen Arbeitspreis vom allgemeinen abweicht,
+> tun sie das nicht mehr: die Eigenverbrauchs-Ersparnis bewertet **jede** selbst genutzte
+> kWh zum Haushaltstarif — auch die, die die Wärmepumpe verbraucht hat —, die Wärmepumpe
+> selbst rechnet mit ihrem Tarif. Je PV-kWh in der Wärmepumpe steht in der Anlagensumme
+>
+> ```
+> Abweichung je PV-kWh in der WP = Haushaltstarif − WP-Tarif          (ct/kWh)
+> Abweichung gesamt              = PV-kWh in der WP × (Haushaltstarif − WP-Tarif) / 100
+> Obergrenze                     = WP-Strom × |Haushaltstarif − WP-Tarif| / 100
+> ```
+>
+> **Das Vorzeichen hängt am Messpunkt.** Sitzt die Wärmepumpe hinter dem Messpunkt, an dem
+> eedc Netzbezug und Einspeisung liest (Netzanschluss), zählt ihr PV-Strom als
+> Eigenverbrauch — die Ersparnis steht **zu hoch**. Liest eedc Netzbezug und Einspeisung
+> am Hauszähler einer Zählerkaskade, steckt der PV-Anteil der Wärmepumpe in der
+> „Einspeisung" und wird mit der Einspeisevergütung bewertet — die Ersparnis steht **zu
+> niedrig**.
+>
+> **Warum eedc es nicht rechnet:** es kennt weder die Zähler-Topologie noch den PV-Anteil
+> der Wärmepumpe. Eine Zuteilung (etwa WP-Strom × Eigenverbrauchsquote) wäre eine erfundene
+> Genauigkeit — dieselbe Begründung, mit der die Zeitfenster des WP-Tarifs über den
+> Netzbezug des **Hauses** gewichtet werden (`monats_fakten/tarif.py::_komponenten_preis`).
+> Die Herkunft des Verbrauchsstroms je Gerät ist als Vorhaben nicht geplant (Konzept #433,
+> 24.10.2026). Ohne eigenen Wärmepumpen-Tarif tritt die Grenze nicht auf. Der
+> **Daten-Checker** nennt sie, sobald ein solcher Tarif gilt und WP-Strom gemessen ist, mit
+> der Obergrenze für die letzten zwölf abgeschlossenen Monate (Kategorie *Strompreise –
+> eigener Wärmepumpen-Tarif*). Eine Wallbox mit eigenem Tarif ist **nicht** betroffen: dort
+> kennt eedc den PV-Anteil der Heimladung und bewertet ihn zum Preis der
+> Eigenverbrauchs-Ersparnis (N-672, Abschnitt „E-Mob-Ersparnis im Cockpit“).
 
 > **Wirkungsgrad der Altanlage (η_alt):** `Gesamtwärmebedarf` ist **abgegebene Wärme**, nicht Brennstoff — das Eingabefeld heißt „Heizwärmebedarf (kWh/Jahr) — aus Energieausweis", und derselbe Wert wird oben durch die JAZ geteilt (JAZ = Wärme/Strom). Ein Kessel muss dafür `Wärme / η` verfeuern; `Alter_Preis` ist der Preis je kWh **Brennstoff** (so steht er auf der Rechnung). Die Umrechnung macht der Layer-SoT `gas_kosten_altanlage`, die η-Wahl der Resolver `alter_wirkungsgrad` — beide in `core/berechnungen/alternativkosten.py`.
 >
