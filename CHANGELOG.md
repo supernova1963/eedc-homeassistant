@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.1.10] - 2026-10-24 — Daten-Checker erkennt den PV-Tageszähler auch am Morgen-Reset (kein falscher „Sprung in Home Assistant“ mehr); Wärmepumpe mit getrennter Strommessung zeigt Heizen und Warmwasser neben dem Betriebsart-Zähler; intern: elf große Funktionen in Phasen zerlegt (Komplexitäts-Baseline 60 → 48), Testsuite ohne Skips, xfail und Warnungen; 2 Korrekturen
 
 ### Changed
 
