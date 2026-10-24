@@ -17,7 +17,11 @@ test_kanal_bilanz_gleichheit.py.
 
 from __future__ import annotations
 
+import os
+import time as _time
+from contextlib import contextmanager
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import event, update
@@ -172,10 +176,32 @@ def _stunden(werte) -> Stunden:
                    groesste_spanne=None, voll=True, grund=None, laufend=False)
 
 
+@contextmanager
+def _prozesszone(zone: str):
+    """Die Prozesszone für die Dauer des Blocks auf ``zone`` (``TZ`` + ``time.tzset``), danach zurück — der Produktcode
+    liest die Stunde in der Prozesszone (``stunde_des_beginns``: ``datetime.fromtimestamp``; eedc folgt HA, kein Pin).
+    Dasselbe Muster wie die ``berlin``-Fixture in test_zaehlerluecken_slots.py."""
+    alt = os.environ.get("TZ")
+    os.environ["TZ"] = zone
+    _time.tzset()
+    try:
+        yield
+    finally:
+        if alt is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = alt
+        _time.tzset()
+
+
 def test_slots_beginn_luecke_und_herbst_doppelstunde():
     """S4-R-3b: Stunde h = Zeile mit Beginn h:00 (die Zeile des Vortags 23:00 gehört nicht zum Tag); eine fehlende
     Zeile lässt die Stunde leer (keine 0) und die Folgezeile trägt die Spanne; am Herbst-Umstellungstag (Berlin) fallen
-    zwei Zeilen (02:00 CEST und 02:00 CET) auf die Stunde 2 und sie trägt beide."""
+    zwei Zeilen (02:00 CEST und 02:00 CET) auf die Stunde 2 und sie trägt beide.
+
+    Der Juni-Teil läuft in der Prozesszone des Laufs (Berlin · UTC · Auckland). Der Herbst-Teil stellt die Prozesszone
+    auf Europe/Berlin und bildet die Zeitstempel mit ``ZoneInfo("Europe/Berlin")`` — er misst in jeder Zone des Laufs
+    dieselbe Umstellung (bis 24.10.2026: Skip in jeder Zone ohne Umstellung am 25.10., also auf beiden CI-Runnern)."""
     tag = date(2026, 6, 15)
 
     def ts(stunde):
@@ -186,10 +212,13 @@ def test_slots_beginn_luecke_und_herbst_doppelstunde():
     menge, spanne = slots_der_stunden(tag, _stunden(werte))
     assert menge[:4] == (2.0, None, 5.0, None) and spanne[:4] == (3600, None, 7200, None)
     herbst = date(2026, 10, 25)
-    if datetime(2026, 10, 25, 4).timestamp() - datetime(2026, 10, 25, 0).timestamp() != 5 * 3600:
-        pytest.skip("Prozesszone ohne Herbst-Umstellung am 25.10.2026")
-    a = int(datetime(2026, 10, 25, 2, fold=0).timestamp())       # 02:00 CEST
+    berlin = ZoneInfo("Europe/Berlin")
+    a = int(datetime(2026, 10, 25, 2, fold=0, tzinfo=berlin).timestamp())       # 02:00 CEST
+    assert int(datetime(2026, 10, 25, 2, fold=1, tzinfo=berlin).timestamp()) == a + 3600   # 02:00 CET
     w = [Stundenwert(a - 3600, 1.0, 1.0, "spiegel", 3600), Stundenwert(a, 1.0, 2.0, "spiegel", 3600),
          Stundenwert(a + 3600, 1.0, 3.0, "spiegel", 3600), Stundenwert(a + 7200, 1.0, 4.0, "spiegel", 3600)]
-    menge, spanne = slots_der_stunden(herbst, _stunden(w))
+    with _prozesszone("Europe/Berlin"):
+        # Der Umschalter wirkt: die Prozesszone hat am 25.10.2026 zwischen 00:00 und 04:00 fünf Stunden.
+        assert datetime(2026, 10, 25, 4).timestamp() - datetime(2026, 10, 25, 0).timestamp() == 5 * 3600
+        menge, spanne = slots_der_stunden(herbst, _stunden(w))
     assert menge[1:4] == (1.0, 2.0, 1.0) and spanne[2] == 7200

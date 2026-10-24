@@ -714,6 +714,9 @@ und „geheilt (Markierung entfernen)" bleiben Fehler. Das Register steht in der
 `backend/tests/test_pv_achse_matrix.py::URSACHE`/`ROT` (heute `ABSCHLUSS-BESTAND-VS-KANAL-TAGE`, `W2-R5-KLEMME`) und
 `backend/tests/test_achsen_matrix.py::URSACHE`/`ROT` (leer). Die Testzelle schreibt dann eine Zeile
 „benannte Grenze <Ursache>" in ihre Ausgabe (`pytest -rP` bzw. `-rA` zeigt sie unter «PASSES»).
+Die Regel gilt auch für die CI-Jobs `backend-tests (UTC)` und `backend-tests (Pacific/Auckland)`; die
+Runner-Bibliotheken, die eine Warnung verhindern (heute `libharfbuzz-subset0` für WeasyPrint), stehen in
+`.github/workflows/tests.yml`.
 
 **Reihenfolge ist nicht beliebig:** `tsc --noEmit` kommt **vor** dem ersten vollen Vitest-Lauf. Ein
 vergessener Import fällt dort in Sekunden auf, im Vitest-Lauf erst nach Minuten und mit

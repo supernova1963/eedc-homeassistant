@@ -83,6 +83,15 @@ jobs:
             eedc/backend/requirements.lock
             eedc/backend/requirements-dev.txt
 
+      # WeasyPrint 70 laedt libharfbuzz-subset0 optional und warnt ohne sie
+      # («HarfBuzz-Subset will be required …», weasyprint/text/ffi.py) — zwei Warnungen
+      # in der Summenzeile beider Zonen-Jobs bis v4.1.10. Dieselbe Bibliothek wie im
+      # Dockerfile eedc/Dockerfile. Pango/Cairo bringt das Runner-Image mit (der PDF-Test
+      # lief ohne apt-Schritt, die Warnung kommt erst nach dem Laden von Pango).
+      # Summenzeile = `N passed` und sonst nichts, auch hier (CLAUDE.md, Gates).
+      - name: System-Bibliothek fuer WeasyPrint (libharfbuzz-subset0)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libharfbuzz-subset0
+
       # Das Lock als Constraints: CI testet dieselben Versionen, die beide Dockerfiles
       # installieren (requirements.lock, erzeugt aus requirements.txt — Anleitung dort).
       - name: Install dependencies

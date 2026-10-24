@@ -28,21 +28,51 @@ def test_produktivbaum_enthaelt_keinen_fremdcode():
     assert not verstoesse, f"Fremde Dateien im Produktivbaum: {verstoesse[:10]}"
 
 
-def test_die_gegenprobe_haette_anschlagen_koennen():
-    """Trefferzähler: es GIBT Fremdcode unter `backend/venv/`, er ist nur gefiltert.
+def test_die_gegenprobe_haette_anschlagen_koennen(tmp_path, monkeypatch):
+    """Der Filter tut etwas: gepflanzter Fremdcode wird gefunden UND ausgeschlossen.
 
     Ohne diese Zusicherung wäre der Test darüber wertlos — er würde auch dann
     grün melden, wenn es gar kein virtualenv gäbe und der Filter nichts tut.
-    """
-    venv = qb.BACKEND / "venv"
-    if not venv.is_dir():  # pragma: no cover — CI-Runner ohne eingecheckte venv
-        import pytest
 
-        pytest.skip("kein backend/venv/ vorhanden — Gegenprobe nicht durchführbar")
-    fremde = sum(1 for _ in venv.rglob("*.py"))
-    assert fremde > 100, (
-        f"Nur {fremde} .py unter backend/venv/ — die Gegenprobe misst nichts."
-    )
+    Bis 24.10.2026 zählte die Probe nur `.py` unter dem echten `backend/venv/`
+    und skippte ohne es (beide CI-Runner installieren nach `site-packages`).
+    Jetzt pflanzt sie einen eigenen Baum unter `tmp_path` — `venv/` und
+    `__pycache__/` samt Produkt- und Testdatei — und fragt `_sammle` (die
+    Filterfunktion hinter `produktivbaum()`/`probenbaum()`, ungecacht: der
+    Cache der echten Bäume bleibt unberührt). Gibt es das echte `backend/venv/`
+    (Dev-Box), läuft die alte Zählung zusätzlich.
+    """
+    echtes_venv = qb.BACKEND / "venv"
+    if echtes_venv.is_dir():
+        fremde = sum(1 for _ in echtes_venv.rglob("*.py"))
+        assert fremde > 100, (
+            f"Nur {fremde} .py unter backend/venv/ — die Gegenprobe misst nichts."
+        )
+
+    wurzel = tmp_path / "backend"
+    for rel in (
+        "main.py",
+        "core/modul.py",
+        "venv/lib/python3.11/site-packages/fremd/fremd.py",
+        "core/__pycache__/modul.py",
+        "tests/test_probe.py",
+        "tests/venv/fremd_im_testbaum.py",
+    ):
+        datei = wurzel / rel
+        datei.parent.mkdir(parents=True, exist_ok=True)
+        datei.write_text("X = 1\n")
+    monkeypatch.setattr(qb, "BACKEND", wurzel)
+
+    # Gegenprobe: ohne Filter läge der Fremdcode in der Prüfmenge.
+    alle = {p.relative_to(wurzel).as_posix() for p in wurzel.rglob("*.py")}
+    assert "venv/lib/python3.11/site-packages/fremd/fremd.py" in alle
+    assert "core/__pycache__/modul.py" in alle
+
+    produktiv, kaputt_p = qb._sammle(tests=False)
+    proben, kaputt_t = qb._sammle(tests=True)
+    assert [d.rel for d in produktiv] == ["core/modul.py", "main.py"]
+    assert [d.rel for d in proben] == ["tests/test_probe.py"]
+    assert kaputt_p == () and kaputt_t == ()
 
 
 def test_probenbaum_enthaelt_nur_tests():
