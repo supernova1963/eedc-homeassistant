@@ -73,6 +73,8 @@ python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: back
 cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
 ./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
 # Volle Backend-Suite (≈ 9 min, -n 3) am Ende jedes Päckchens, Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
+# Summenzeile = `N passed` und sonst nichts — skipped/xfailed/warnings sind Arbeitsvorrat, kein Normalstand (Gernot 24.10.2026);
+# benannte Matrix-Grenzen zählen grün und stehen im Register der Matrixdatei (test_pv_achse_matrix.py::URSACHE/ROT).
 ```
 
 Vor einem Release: Kandidat ins HAOS-Lab (`bash ~/.claude/plans/lab-werkzeug/lab-rc.sh <rc> <version>`, Lab `10.100.1.167`),

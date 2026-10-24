@@ -705,6 +705,16 @@ aus `core/database.py::_run_data_migrations` **einmalig** gefahren. Regeln dafü
 **nicht** hier — sie ändern sich mit jedem Paket. Wer wissen will, ob ein Lauf vollständig war, liest
 die **Summenzeile**, nicht die letzte grüne Zeile.
 
+**Summenzeile = `N passed` und sonst nichts** (Entscheid Gernot 24.10.2026). `skipped`, `xfailed`, `xpassed` und
+`warnings` sind kein Normalstand, sondern Arbeitsvorrat: Eine Zahl neben `passed` wird nach dem dritten Lauf zum Rauschen,
+und ein Agent liest sie als Soll („2 skipped, 8 xfailed wie immer") statt als Befund. Taucht ein Skip, ein xfail oder
+eine Warnung auf, ist das ein Päckchen-Punkt (Ursache beheben, nicht filtern). **Benannte Grenzen** — gemessene rote
+Sichten, die bewusst bestehen bleiben — zählen grün, wenn ihre roten Sichten *exakt* dem Register entsprechen; „neu rot"
+und „geheilt (Markierung entfernen)" bleiben Fehler. Das Register steht in der Matrixdatei selbst:
+`backend/tests/test_pv_achse_matrix.py::URSACHE`/`ROT` (heute `ABSCHLUSS-BESTAND-VS-KANAL-TAGE`, `W2-R5-KLEMME`) und
+`backend/tests/test_achsen_matrix.py::URSACHE`/`ROT` (leer). Die Testzelle schreibt dann eine Zeile
+„benannte Grenze <Ursache>" in ihre Ausgabe (`pytest -rP` bzw. `-rA` zeigt sie unter «PASSES»).
+
 **Reihenfolge ist nicht beliebig:** `tsc --noEmit` kommt **vor** dem ersten vollen Vitest-Lauf. Ein
 vergessener Import fällt dort in Sekunden auf, im Vitest-Lauf erst nach Minuten und mit
 irreführender Fehlermeldung.
@@ -1163,7 +1173,7 @@ Ein `*` ist ein Glob; jedes Muster trifft mindestens eine Datei. Verzeichnisse e
 | Wetter | (Anzeige in Cockpit Live/Tag/Aussicht; Einstellung `/einstellungen/stammdaten`) | `R/wetter.py`, `R/live_wetter.py`, `R/live_wetter_antwort.py` | `S/wetter/` (`open_meteo.py`, `orchestrator.py`, `luecken.py`, `monatswerte.py`), `S/wetter_service.py`, `S/wetter_backfill_service.py`, `S/brightsky_service.py`, `S/prefetch_service.py` | `T/test_wetter_*.py`, `T/test_live_wetter_*.py`, `T/test_388_wetter_altbestand.py`, `T/test_archiv_nachzug_wetter.py`, `T/test_n69[5-8]_*.py`, `T/test_n689_live_wetter_antwortmodell.py`, `T/test_n697_grenztag_ohne_gti.py` | `wetter-monat`, `live-wetter` | `D/HANDBUCH_PROGNOSEN.md` §4 · `D/HANDBUCH_EINSTELLUNGEN.md` §2.1a |
 | Strompreise / Tarife | `/einstellungen/stammdaten` · `F/pages/StrompreiseTeile.tsx` | `R/strompreise.py` | `S/strompreis_aggregator.py`, `S/strompreis_markt_service.py`, `S/preis_tag.py`, `B/preis_reihe.py`, `B/preis_rang.py`, `B/zeittarif.py`, `B/netzbezug_kosten.py`, `B/einspeise_erloes.py`, `S/einspeise_erloes_service.py` | `T/test_preis_*.py`, `T/test_zeittarif_ht_nt.py`, `T/test_einspeise_*.py`, `T/test_netzbezug_*.py`, `T/test_n663_wp_preis_flex_monatsdurchschnitt.py`, `T/test_n712_n713_symmetrie_monatspreis.py`, `T/test_n715_n716_verguetung_je_monat.py` | — | `D/HANDBUCH_EINSTELLUNGEN.md` §2.2 · `D/KONZEPT-FLEX-TARIFE.md` |
 | Einstellungen (Stammdaten, System, Sperre, Infothek, Backup) | `/einstellungen/:kategorie` (`stammdaten`, `komponenten`, `infothek`, `daten`, `integration`, `datenquellen`, `system`) · `F/v4/EinstellungenV4.tsx`, `F/config/einstellungenKatalog.tsx`, `F/pages/AnlagenTeile.tsx`, `BackupTeile.tsx`, `ProtokolleTeile.tsx`, `PVGISSettingsTeile.tsx`, `InfothekTeile.tsx` | `R/anlagen.py`, `R/sperre.py`, `R/infothek.py`, `R/system_logs.py`, `R/diagnostics.py`, `R/pvgis.py`, `R/import_export/demo_data.py` | `S/infothek_datei_service.py`, `S/infothek_migration.py`, `S/activity_service.py`, `S/scheduler.py`, `S/provenance.py` | `T/test_einstellungs_sperre_*.py`, `T/test_scheduler_*.py`, `T/test_provenance*.py`, `T/test_n53[0-2]_*.py`, `T/test_n73[4-8]_*.py`, `T/test_migrations_round_trip.py` | — | `D/HANDBUCH_EINSTELLUNGEN.md` · `D/HANDBUCH_INFOTHEK.md` · `D/HANDBUCH_INSTALLATION.md` |
-| Rechenkern-Wächter (bereichsübergreifend) | — | — | `B/invarianten.py`, `services/monats_fakten/`, `core/berechnungen/` | `T/test_wurzelmuster_*.py`, `T/test_berechnungs_layer_konformitaet.py`, `T/test_kognitive_komplexitaet.py`, `T/test_konformitaet_*.py`, `T/test_achsen_matrix.py`, `T/test_pv_achse_matrix.py`, `T/test_quellbaum.py`, `T/test_routen_baseline.py` | `ergebnisgroessen` | `D/ADR-001-BERECHNUNGS-LAYER.md`, `D/ADR-002-WURZELMUSTER.md`, `D/BERECHNUNGEN.md` |
+| Rechenkern-Wächter (bereichsübergreifend) | — | — | `B/invarianten.py`, `services/monats_fakten/`, `core/berechnungen/` | `T/test_wurzelmuster_*.py`, `T/test_berechnungs_layer_konformitaet.py`, `T/test_kognitive_komplexitaet.py`, `T/test_konformitaet_*.py`, `T/test_achsen_matrix.py`, `T/test_pv_achse_matrix.py` (Register der benannten Grenzen: `URSACHE`/`ROT` in der Matrixdatei, zählen grün — [Summenzeile](#tests--gates)), `T/test_quellbaum.py`, `T/test_routen_baseline.py` | `ergebnisgroessen` | `D/ADR-001-BERECHNUNGS-LAYER.md`, `D/ADR-002-WURZELMUSTER.md`, `D/BERECHNUNGEN.md` |
 
 ### Nicht zugeordnet
 

@@ -9,15 +9,17 @@ abgeschlossenen Monats — ``S1`` „Aus HA laden", ``S2`` HA-Statistik-Sammelim
 Handeingabe ohne HA. Jede Zelle prüft ALLE Sichten ihrer Invariante; was sie zählt, steht in
 ``bewerte``.
 
-**Rote Zellen** stehen in ``BEKANNT`` — mit der Menge der roten Sichten, dem Grund und der
-Zuordnung (seit dem Bau der PV-Achse, 04.10.2026, nur noch der Sammelimport, HA-Bauform S1, als
-benannte Erwartung mit Verweis; der Sammelimport ist seit HA-Bauform E4b geheilt). Die Zelle läuft dann
-als ``xfail(strict=True, raises=BekannterMangel)``: Sie ist nur „erwartet rot", wenn GENAU diese
-Sichten rot sind. Heilt ein Bau eine davon, wird die Zelle ROT (XPASS strict bzw. eine
-``AssertionError``, die nicht ``BekannterMangel`` ist) und zwingt die Markierung weg; kippt eine
-weitere Sicht, ebenso. **„Soll unklar"** (``SOLL_UNKLAR``) heißt: die Regel legt das Soll dieser
-Sicht in dieser Form nicht eindeutig fest — die Sicht wird gemessen und gezeigt, aber nicht
-bewertet; ``test_soll_unklar_ist_noch_eine_messung`` hält die Liste ehrlich.
+**Rote Zellen** stehen im Register ``URSACHE``/``ROT`` (zusammengeführt in ``BEKANNT``) — mit der Menge
+der roten Sichten, dem Grund und der Zuordnung. Heute sind es nur noch **benannte Grenzen**, die bewusst
+bestehen bleiben (``ABSCHLUSS-BESTAND-VS-KANAL-TAGE``, 6 Zellen; ``W2-R5-KLEMME``, 2 Zellen). Eine Zelle,
+deren rote Sichten **exakt** dem Register entsprechen, zählt **grün** und schreibt die Zeile
+„benannte Grenze <Ursache>" (sichtbar mit ``pytest -rP``/``-rA``). Jede Abweichung ist rot: eine weitere
+Sicht kippt („neu rot"), oder ein Bau heilt eine registrierte Sicht („geheilt (Markierung entfernen)") —
+dann ist der Register-Eintrag zu streichen. Seit dem Päckchen «Summenzeile sauber» (24.10.2026) gibt es
+kein ``xfail`` mehr: die Summenzeile der Suite nennt nur ``N passed`` (``docs/DEVELOPMENT.md`` → Tests &
+Gates). **„Soll unklar"** (``SOLL_UNKLAR``) heißt: die Regel legt das Soll dieser Sicht in dieser Form
+nicht eindeutig fest — die Sicht wird gemessen und gezeigt, aber nicht bewertet;
+``test_soll_unklar_ist_noch_eine_messung`` hält die Liste ehrlich (leer = Zielzustand, die Probe ist grün).
 
 **Schwesterdateien** — die Einzelproben, die diese Matrix nicht ersetzt, sondern umfasst:
 ``test_n587_pv_strings_vor_anlagenzaehler.py`` (laufender Monat, ohne Tageszeilen),
@@ -614,15 +616,12 @@ def bewerte(fid: str, weg: str, inv: str, m: mx.Messung) -> list[Zelle]:  # noqa
 # ── Register: rote Zellen gegen HEAD und „Soll unklar" ─────────────────────
 
 
-class BekannterMangel(AssertionError):
-    """Die Zelle ist rot, und zwar genau mit den Sichten, die ``BEKANNT`` für sie nennt."""
-
-
 @dataclass(frozen=True)
 class Mangel:
     sichten: frozenset[str]
     zuordnung: str   # Klartext der Ursache (`URSACHE[…].zuordnung`)
     grund: str
+    ursachen: tuple[str, ...]   # Kennungen aus ``ROT`` (für die Zeile „benannte Grenze …")
 
 
 @dataclass(frozen=True)
@@ -723,6 +722,7 @@ def _baue_bekannt() -> dict[tuple[str, str, str], Mangel]:
             frozenset(sichten[zelle]),
             " + ".join(URSACHE[k].zuordnung for k in kennungen[zelle]),
             " ‖ ".join(URSACHE[k].grund for k in kennungen[zelle]),
+            tuple(kennungen[zelle]),
         )
         for zelle in sichten
     }
@@ -758,12 +758,7 @@ def _zellen_params():
     for fid in mx.MATRIX_FORMEN:
         for weg in WEGE:
             for inv in INVARIANTEN:
-                mangel = BEKANNT.get((fid, weg, inv))
-                marks = ()
-                if mangel is not None:
-                    marks = (pytest.mark.xfail(strict=True, raises=BekannterMangel,
-                                               reason=f"{mangel.zuordnung}: {mangel.grund}"),)
-                yield pytest.param(fid, weg, inv, marks=marks, id=f"{fid}-{weg}-{inv}")
+                yield pytest.param(fid, weg, inv, id=f"{fid}-{weg}-{inv}")
 
 
 def _rot(fid, weg, inv, zellen: list[Zelle]) -> dict[str, Zelle]:
@@ -783,6 +778,9 @@ def _bericht(zellen) -> str:
 
 @pytest.mark.parametrize("fid,weg,inv", list(_zellen_params()))
 async def test_zelle(fid, weg, inv, _matrix_ordner):
+    """Grün, wenn die roten Sichten der Zelle **exakt** dem Register entsprechen — keine (der Normalfall) oder
+    genau die einer benannten Grenze (dann eine Zeile „benannte Grenze <Ursache>" in der Ausgabe). Rot bei jeder
+    Abweichung: „neu rot" (eine weitere Sicht kippt) oder „geheilt (Markierung entfernen)" (Register zu streichen)."""
     m = await _messung(fid, _teil(weg), _matrix_ordner)
     zellen = bewerte(fid, weg, inv, m)
     assert zellen, "Eine Zelle ohne Prüfung misst nichts."
@@ -797,15 +795,22 @@ async def test_zelle(fid, weg, inv, _matrix_ordner):
             f" neu rot: {neu}\n geheilt (Markierung entfernen): {geheilt}\n" + _bericht(rot)
         )
     if rot:
-        raise BekannterMangel(f"{mangel.zuordnung} — {mangel.grund}\n" + _bericht(rot))
+        print(f"benannte Grenze {' + '.join(mangel.ursachen)}: {fid} {weg} {inv} — rote Sichten exakt wie im "
+              f"Register ({mangel.zuordnung})\n" + _bericht(rot))
 
 
-@pytest.mark.parametrize("schluessel", sorted(SOLL_UNKLAR), ids=lambda s: "-".join(s))
-async def test_soll_unklar_ist_noch_eine_messung(schluessel, _matrix_ordner):
-    """Eine „Soll unklar"-Sicht muss es in ihrer Zelle noch geben — sonst ist der Eintrag tot."""
-    fid, weg, inv, sicht = schluessel
-    m = await _messung(fid, _teil(weg), _matrix_ordner)
-    assert sicht in {x.sicht for x in bewerte(fid, weg, inv, m)}, f"{schluessel} misst nichts mehr"
+async def test_soll_unklar_ist_noch_eine_messung(_matrix_ordner):
+    """Jede „Soll unklar"-Sicht muss es in ihrer Zelle noch geben — sonst ist der Eintrag tot.
+
+    Leer = kein Soll-unklar-Eintrag, das ist der Zielzustand (seit N-758, 17.10.2026); die Probe ist dann grün. Bis zum
+    24.10.2026 war sie über ``SOLL_UNKLAR`` parametrisiert und meldete bei leerer Liste «got empty parameter set» als Skip."""
+    tot = []
+    for schluessel in sorted(SOLL_UNKLAR):
+        fid, weg, inv, sicht = schluessel
+        m = await _messung(fid, _teil(weg), _matrix_ordner)
+        if sicht not in {x.sicht for x in bewerte(fid, weg, inv, m)}:
+            tot.append(schluessel)
+    assert not tot, f"„Soll unklar“-Einträge messen nichts mehr: {tot}"
 
 
 def _haltewert_gleich(ist, gehalten) -> bool:
@@ -814,16 +819,22 @@ def _haltewert_gleich(ist, gehalten) -> bool:
     return abs(float(ist) - float(gehalten)) <= 1e-6
 
 
-@pytest.mark.parametrize("schluessel", sorted(SOLL_UNKLAR), ids=lambda s: "-".join(s))
-async def test_soll_unklar_haltewert(schluessel, _matrix_ordner):
-    """Haltewert (HA-Bauform E0): eine „Soll unklar"-Sicht misst, was am 05.10.2026 gemessen wurde
-    (``matrix_haltewerte.PV_HALTEWERTE``) — der Umbau ändert sie nicht still. Kein Soll, ein Festwert."""
-    assert schluessel in PV_HALTEWERTE, f"{schluessel}: „Soll unklar“ ohne Haltewert"
-    fid, weg, inv, sicht = schluessel
-    m = await _messung(fid, _teil(weg), _matrix_ordner)
-    ist = {x.sicht: x.ist for x in bewerte(fid, weg, inv, m)}.get(sicht)
-    assert _haltewert_gleich(ist, PV_HALTEWERTE[schluessel]), (
-        f"{schluessel}: gemessen {ist}, festgehalten {PV_HALTEWERTE[schluessel]}")
+async def test_soll_unklar_haltewert(_matrix_ordner):
+    """Haltewert (HA-Bauform E0): jede „Soll unklar"-Sicht misst, was am 05.10.2026 gemessen wurde
+    (``matrix_haltewerte.PV_HALTEWERTE``) — der Umbau ändert sie nicht still. Kein Soll, ein Festwert.
+
+    Leer = kein Soll-unklar-Eintrag, das ist der Zielzustand; die Probe ist dann grün (bis 24.10.2026 ein Skip
+    «got empty parameter set», wie ``test_soll_unklar_ist_noch_eine_messung``)."""
+    ohne = [k for k in sorted(SOLL_UNKLAR) if k not in PV_HALTEWERTE]
+    assert not ohne, f"„Soll unklar“ ohne Haltewert: {ohne}"
+    abweichend = []
+    for schluessel in sorted(SOLL_UNKLAR):
+        fid, weg, inv, sicht = schluessel
+        m = await _messung(fid, _teil(weg), _matrix_ordner)
+        ist = {x.sicht: x.ist for x in bewerte(fid, weg, inv, m)}.get(sicht)
+        if not _haltewert_gleich(ist, PV_HALTEWERTE[schluessel]):
+            abweichend.append(f"{schluessel}: gemessen {ist}, festgehalten {PV_HALTEWERTE[schluessel]}")
+    assert not abweichend, "\n".join(abweichend)
 
 
 def test_haltewerte_nur_fuer_soll_unklar():

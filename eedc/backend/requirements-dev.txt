@@ -14,6 +14,12 @@
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 
+# Starlette ≥ 1.7 TestClient — `starlette.testclient` (über `fastapi.testclient`) lädt zuerst `httpx2` und
+# fällt sonst mit einer StarletteDeprecationWarning auf `httpx` zurück (je xdist-Prozess eine Warnung in der
+# Summenzeile). Untergrenze wie Starlettes eigenes Extra `full` (`httpx2>=2.0.0`). Nur Testseite: das Produkt
+# nutzt weiter `httpx` aus requirements.txt; nicht im Lock (das Lock löst nur requirements.txt auf).
+httpx2>=2.0.0,<3
+
 # Parallelisierung — der Gate-Befehl in CLAUDE.md ruft `-n 3` auf, damit MUSS das
 # Plugin hier stehen: ein Werkzeug, das im dokumentierten Gate vorkommt, gehört in
 # die Datei, auf die das Gate zum Installieren verweist (sonst bricht es auf einem

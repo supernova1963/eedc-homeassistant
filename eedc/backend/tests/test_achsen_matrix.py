@@ -18,7 +18,10 @@ gemessene 0 bleibt 0) · I6 nichts verschwindet.
 
 **Drei Arten nicht-grüner Sichten**, alle benannt, keine still ausgelassen:
 
-* ``ROT`` — rot gegen HEAD, ``xfail(strict=True, raises=BekannterMangel)`` mit genau diesen Sichten.
+* ``ROT`` — rot gegen HEAD mit genau diesen Sichten (heute leer). Eine Zelle, deren rote Sichten **exakt** dem
+  Register entsprechen, zählt grün und schreibt „benannte Grenze <Ursache>"; jede Abweichung („neu rot",
+  „geheilt (Markierung entfernen)") ist rot. Bis zum 24.10.2026 lief eine solche Zelle als
+  ``xfail(strict=True)`` — seit dem Päckchen «Summenzeile sauber» nennt die Suite nur ``N passed``.
   Ursachen: ``N-586`` · ``N-585-REST`` · ``OHNE-ABSCHLUSS`` · ``KANDIDAT-<Kurzname>`` (nur gezeigt);
   ``SAMMELIMPORT`` kommt auf diesen Achsen nicht vor (gemessen: keine Sicht ist nur auf S2 rot).
   ``OHNE-ABSCHLUSS`` ist der Ausgangszustand des Auftrags — eine Größe, die im Monat ohne Abschluss nicht aus
@@ -1271,10 +1274,6 @@ def _bewerte_hub(fid: str, groesse: str, weg: str, inv: str, m: am.Messung) -> l
 # ── Register: rote Zellen, ohne Abschluss nicht geführt, Soll unklar ───────
 
 
-class BekannterMangel(AssertionError):
-    """Die Zelle ist rot, und zwar genau mit den Sichten, die ``BEKANNT`` für sie nennt."""
-
-
 @dataclass(frozen=True)
 class Ursache:
     zuordnung: str
@@ -1526,11 +1525,7 @@ def _zellen():
 
 def _zellen_params():
     for fid, groesse, weg, inv in _zellen():
-        b = BEKANNT.get((fid, groesse, weg, inv))
-        marks = ()
-        if b is not None:
-            marks = (pytest.mark.xfail(strict=True, raises=BekannterMangel, reason=f"{b[1]}: {b[2]}"),)
-        yield pytest.param(fid, groesse, weg, inv, marks=marks, id=f"{fid}-{groesse}-{weg}-{inv}")
+        yield pytest.param(fid, groesse, weg, inv, id=f"{fid}-{groesse}-{weg}-{inv}")
 
 
 def _rot(fid, groesse, weg, inv, zellen: list[Zelle]) -> dict[str, Zelle]:
@@ -1545,6 +1540,8 @@ def _bericht(zellen) -> str:
 
 @pytest.mark.parametrize("fid,groesse,weg,inv", list(_zellen_params()))
 async def test_zelle(fid, groesse, weg, inv, _matrix_ordner):
+    """Grün, wenn die roten Sichten der Zelle **exakt** dem Register entsprechen (Bauform der PV-Matrix); rot bei
+    „neu rot" oder „geheilt (Markierung entfernen)"."""
     m = await _messung(fid, _teil(weg), _matrix_ordner)
     zellen = bewerte(fid, groesse, weg, inv, m)
     assert zellen, "Eine Zelle ohne Prüfung misst nichts."
@@ -1557,7 +1554,8 @@ async def test_zelle(fid, groesse, weg, inv, _matrix_ordner):
             f" neu rot: {sorted(set(rot) - erwartet)}\n geheilt (Markierung entfernen): {sorted(erwartet - set(rot))}\n"
             + _bericht(rot))
     if rot:
-        raise BekannterMangel(f"{b[1]} — {b[2]}\n" + _bericht(rot))
+        print(f"benannte Grenze {b[1]}: {fid} {groesse} {weg} {inv} — rote Sichten exakt wie im Register\n"
+              + _bericht(rot))
 
 
 async def test_jede_regel_trifft_noch(_matrix_ordner):

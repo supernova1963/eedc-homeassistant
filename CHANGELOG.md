@@ -11,6 +11,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **Intern: die Backend-Testsuite soll nur noch `N passed` melden — keine Skips, kein xfail, keine Warnungen (Päckchen «Summenzeile sauber», 24.10.2026).** Die zwei benannten Grenzen der PV-Achsen-Matrix (`ABSCHLUSS-BESTAND-VS-KANAL-TAGE`, `W2-R5-KLEMME`) zählen grün, solange ihre roten Sichten exakt dem Register der Matrixdatei entsprechen (neu rot und geheilt bleiben Fehler); die leeren «Soll unklar»-Proben sind grün statt übersprungen; die Testseite nutzt `httpx2` für den Starlette-TestClient. Im Image (HA-Add-on und Standalone) liegt zusätzlich `libharfbuzz-subset0`, das WeasyPrint künftig verlangt; die WeasyPrint-Warnung der PDF-Tests verschwindet überall, wo diese Bibliothek installiert ist.
+
 - **Intern, ohne sichtbare Änderung: elf große Rechen- und Routenfunktionen in Phasen zerlegt (RF-29 … RF-39, Komplexitäts-Paket 23./24.10.2026).** ROI-PV, Speicher-Dashboard, PV-Strings-Gesamtlaufzeit, Cockpit-Übersicht, Trend, E-Mob-Heimladung-Pool, Import v09, Fronius-Parser, Tagesprognose, Solar-Prognose-Aufbau und der Kanal-Tag «wie HA» lagen zwischen kognitiv 81 und 98; jetzt liegt jede Route bei höchstens 25 und keine Phase über 50. Jede Funktion wurde gegen einen Golden Master auf drei Datenbank-Kopien bitgleich nachgemessen (drei neue Fixture-Golden-Master: `fronius-parser`, `solar-prognose-build`, PV-Strings-Sichten in `analyse-sichten`), OpenAPI byte-gleich; für Zweige, die kein Golden Master sieht, kamen benannte Proben dazu. Die Komplexitäts-Baseline sinkt von 60 auf 48 Funktionen über 50; über 80 bleiben nur die beiden Migrations-Ausnahmen und eine Einmal-Migration.
 
 ### Fixed

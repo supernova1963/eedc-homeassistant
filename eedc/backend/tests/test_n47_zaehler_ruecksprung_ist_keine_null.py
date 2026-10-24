@@ -41,8 +41,6 @@ from backend.models.anlage import Anlage
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 import backend.services.live_verbrauchsprofil_service as svc
 
-pytestmark = pytest.mark.asyncio
-
 TAGE = 7
 #: Uhrzeit, zu der der Zähler auf 0 zurückspringt.
 RUECKSPRUNG_STUNDE = 10
