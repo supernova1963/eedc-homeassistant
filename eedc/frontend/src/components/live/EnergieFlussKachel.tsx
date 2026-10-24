@@ -12,7 +12,8 @@
  * gibt (Wert, zweite Zeile, Pegel, Tooltip, gekürzter Name). Tooltip-Text,
  * Label-Kürzung und die Frage „SoC, Modus oder Auto?" bleiben beim Aufrufer —
  * sie hängen an der Live-Antwort, nicht am Bild. Die zweite Zeile ist der EINE
- * Ort für den späteren Leerlauf-Chip (B10, P-433-1).
+ * Ort für den Modus-Chip mit Leerlauf (B10, P-433-1): {@link modusZeile} baut
+ * ihn für Energiefluss UND Überblick, die Kachel zeichnet ihn.
  *
  * Koordinaten in Einheiten der Zeichenfläche des Aufrufers; `x`/`y` ist die
  * Kachelmitte. Ein Aufrufer mit anderem Maßstab (Panorama 1312 breit) skaliert
@@ -21,6 +22,9 @@
 import type React from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Thermometer } from 'lucide-react'
 import { useChartTheme } from '../../context/ThemeContext'
+import type { LiveKomponente } from '../../api/liveDashboard'
+import { funktionsFarbe } from '../../lib/funktionsFarben'
+import { modusMitPassiv } from '../ui/ModusChip'
 import type { LayoutDims } from './energieFlussLayout'
 import type { BgVariant } from './EnergieFluss'
 
@@ -49,6 +53,44 @@ export function IconElement({ name, size, color, className }: { name: string; si
   return <Icon width={size} height={size} color={color} className={className} />
 }
 
+/**
+ * Die zweite Kachelzeile. `chip` gesetzt ⇒ Modus-Chip (P-433-1 S1-4): abgerundetes Rechteck in der
+ * Funktionsfarbe hinter dem Text; `gedaempft` bei gemessener Ruhe oder 0 W. SoC-, Auto- und
+ * Netz-Zeile bleiben Text (kein `chip`).
+ */
+export interface ZweiteZeile {
+  text: string
+  /** `null` ⇒ graue Klasse statt Farbe. */
+  fill: string | null
+  chip?: { farbe: string; gedaempft: boolean } | null
+}
+
+/**
+ * Die Modus-Zeile einer Wärme/Klima-Kachel als Chip — EINE Regel für den Live-Energiefluss und den
+ * Hub-Überblick (Konzept #433 E6). Farbe = Funktion (`funktionsFarbe`, dieselbe Quelle wie der
+ * HTML-`ModusChip`); bei gemessener Ruhe steht in der Kachel nur «Leerlauf» — das Symbol der Kachel
+ * zeigt den Modus schon, «Heizen · Leerlauf» passt nicht in die Kachelbreite (Bericht P-433-1, H2);
+ * der Tooltip trägt den ganzen Text (`modusKlartext`). `null` ohne Klartext.
+ *
+ * @param referenz Referenzfarbe des Themas — gedämpfter Text wie bisher die inaktive Modus-Zeile.
+ */
+export function modusZeile(
+  k: Pick<LiveKomponente, 'betriebsmodus' | 'betriebsmodus_label' | 'betriebsmodus_aktion' | 'betriebsmodus_aktion_label'>,
+  isActive: boolean,
+  referenz: string,
+  passiv = false,
+): ZweiteZeile | null {
+  if (!k.betriebsmodus_label) return null
+  const farbe = funktionsFarbe(k.betriebsmodus ?? '')
+  const ruht = k.betriebsmodus_aktion != null && k.betriebsmodus_aktion_label != null
+  const gedaempft = ruht || !isActive
+  return {
+    text: ruht ? k.betriebsmodus_aktion_label! : modusMitPassiv(k.betriebsmodus_label, passiv),
+    fill: gedaempft ? referenz : farbe,
+    chip: { farbe, gedaempft },
+  }
+}
+
 /** Gruppenkachel als Knopf (§A5): Key für `data-gruppe`, Beschriftung, Aktion. */
 export interface KachelKnopf {
   key: string
@@ -68,8 +110,8 @@ export interface EnergieFlussKachelProps {
   color: string
   isActive: boolean
   wertText: string
-  /** SoC · Betriebsmodus · Auto-Zeile — `fill: null` ⇒ graue Klasse statt Farbe. */
-  zweiteZeile?: { text: string; fill: string | null } | null
+  /** SoC · Betriebsmodus (Chip) · Auto- · Netz-Zeile — `fill: null` ⇒ graue Klasse statt Farbe. */
+  zweiteZeile?: ZweiteZeile | null
   /** Füllung von unten (SoC oder PV-Auslastung — nie beide an einem Gerät). */
   pegel?: { prozent: number; fill: string; opacity: number } | null
   tip: string
@@ -203,6 +245,28 @@ export default function EnergieFlussKachel({
           auf dem Handy unerreichbar gewesen; die Frage des Melders war
           „sieht man, was das Gerät gerade tut?", und Hovern ist dort
           keine Antwort. */}
+      {/* Modus-Chip (P-433-1 S1-4, B17: abgerundet, Tönung, keine Versalien): das Rechteck HINTER
+          dem Text; Text und Lage bleiben die der Zeile. Breite geschätzt: 0,72 em je Zeichen (halbfett,
+          DejaVu Sans; gemessen «Warmwasser» 0,724 em, 24.10.2026) plus Innenrand, nie breiter als die Kachel. */}
+      {zweiteZeile?.chip && (() => {
+        const r2 = (v: number) => Math.round(v * 100) / 100
+        const font = dims.socFontSize
+        const breite = r2(Math.min(NODE_W - 6, zweiteZeile.text.length * 0.72 * font + 8))
+        const hoehe = r2(font * 1.15)
+        return (
+          <rect
+            data-modus-chip={zweiteZeile.chip.gedaempft ? 'gedaempft' : 'aktiv'}
+            x={r2(x - breite / 2)} y={r2(y + dims.kwFontSize + 2 - font * 0.92)}
+            width={breite} height={hoehe}
+            rx={r2(hoehe / 2)}
+            fill={zweiteZeile.chip.farbe}
+            fillOpacity={zweiteZeile.chip.gedaempft ? 0.06 : 0.15}
+            stroke={zweiteZeile.chip.farbe}
+            strokeOpacity={zweiteZeile.chip.gedaempft ? 0.25 : 0.5}
+            strokeWidth={0.6}
+          />
+        )
+      })()}
       {zweiteZeile && (
         <text
           x={x} y={y + dims.kwFontSize + 2}

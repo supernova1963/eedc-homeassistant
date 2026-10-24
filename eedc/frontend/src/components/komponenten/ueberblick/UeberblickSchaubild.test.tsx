@@ -84,6 +84,20 @@ describe('Anker nach Bauart (Gruppe 2: Anzeige-Ort)', () => {
 })
 
 describe('Nur zugeordnete Werte haben Kacheln (B2)', () => {
+  it('P-433-1: die WP-Kachel trägt denselben Modus-Chip wie der Energiefluss; Leerlauf ⇒ «Leerlauf», Tooltip ganz', () => {
+    const ruht = liveAntwort({ komponenten: [knoten(7, 0.008, {
+      betriebsmodus: 'heizen', betriebsmodus_label: 'Heizen', betriebsmodus_aktion: 'leerlauf', betriebsmodus_aktion_label: 'Leerlauf',
+    })] })
+    const { kacheln: k } = baueUeberblickKacheln({ geraete: [MATHEK], live: ruht, wetter: null, referenz: 'referenz' })
+    const wp = k.find((x) => x.art === 'geraet')!
+    expect(wp.zweiteZeile).toMatchObject({ text: 'Leerlauf', fill: 'referenz', chip: { gedaempft: true } })
+    expect(wp.tip).toContain('Betrieb: Heizen · Leerlauf')
+    const { container } = zeichne([MATHEK], ruht, null)
+    expect(container.querySelector('rect[data-modus-chip="gedaempft"]')).not.toBeNull()
+    expect(modusText({ betriebsmodus: 'kuehlen', betriebsmodus_label: 'Kühlen', betriebsmodus_aktion_label: 'Leerlauf' }, MATHEK))
+      .toBe('Kühlen (passiv) · Leerlauf')
+  })
+
   it('Mathek: vier Kacheln (WP, Warmwasser, Strom heute, Außen), alle in der oberen Reihe, keine Zeile „ohne Sensor"', () => {
     const { container } = zeichne([MATHEK], matheksLive(), wetterMit(7.4))
     expect(ersteZeilen(container)).toHaveLength(4)

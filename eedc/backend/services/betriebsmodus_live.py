@@ -47,7 +47,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.betriebsmodus import modus_quelle, normalisiere_betriebsmodus
+from backend.core.betriebsmodus import betriebsmodus_aktion, modus_quelle, normalisiere_betriebsmodus
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 
@@ -80,10 +80,11 @@ logger = logging.getLogger(__name__)
 # 5-Sekunden-Abrufliste. Der Ausschluss dort war richtig und bleibt.
 _TAKT_SEKUNDEN = 60.0
 
-#: ``anlage_id → (monotone Zeit, Ergebnis)``. Bewusst HIER und nicht beim
-#: Aufrufer: ein Caller, der den Takt selbst wählen müsste, wählt ihn früher
-#: oder später falsch — und dann ist der Entscheid oben wieder offen.
-_cache: dict[int, tuple[float, dict[int, str]]] = {}
+#: ``anlage_id → (monotone Zeit, Kanon je Gerät, Aktion je Gerät)``. Bewusst HIER
+#: und nicht beim Aufrufer: ein Caller, der den Takt selbst wählen müsste, wählt
+#: ihn früher oder später falsch — und dann ist der Entscheid oben wieder offen.
+#: Die Aktion (P-433-1, «Leerlauf») kommt aus DEMSELBEN Abruf: kein zweiter Takt.
+_cache: dict[int, tuple[float, dict[int, str], dict[int, str]]] = {}
 
 
 def cache_leeren() -> None:
@@ -143,17 +144,35 @@ async def lade_betriebsmodus_live(
     Returns:
         ``{investition_id: Kanon-Wert}`` aus `BETRIEBSMODUS_KANON`.
     """
+    return (await _im_takt(db, anlage))[0]
+
+
+async def lade_betriebsmodus_aktion_live(
+    db: AsyncSession, anlage
+) -> dict[int, str]:
+    """Die gemessene Aktion je Gerät neben dem Kanon-Wert — ``{investition_id: "leerlauf"}``.
+
+    P-433-1 (Konzept #433 E6): `idle` lässt den Kanon-Wert stehen (#399) und
+    erscheint in den Live-Sichten als Zusatz «· Leerlauf». ⛔ **Nur für die
+    Anzeige** — HA-Sensor und MQTT-Topic lesen `lade_betriebsmodus_live` und
+    sehen den Kanon-Wert unverändert. Derselbe Abruf, derselbe 60-s-Takt.
+    """
+    return (await _im_takt(db, anlage))[1]
+
+
+async def _im_takt(db: AsyncSession, anlage) -> tuple[dict[int, str], dict[int, str]]:
+    """Kanon und Aktion je Gerät aus dem Takt-Cache, sonst frisch erhoben."""
     jetzt = time.monotonic()
     treffer = _cache.get(anlage.id)
     if treffer is not None and (jetzt - treffer[0]) < _TAKT_SEKUNDEN:
-        return treffer[1]
+        return treffer[1], treffer[2]
 
-    ergebnis = await _erhebe(db, anlage)
-    _cache[anlage.id] = (jetzt, ergebnis)
-    return ergebnis
+    modi, aktionen = await _erhebe(db, anlage)
+    _cache[anlage.id] = (jetzt, modi, aktionen)
+    return modi, aktionen
 
 
-async def _erhebe(db: AsyncSession, anlage) -> dict[int, str]:
+async def _erhebe(db: AsyncSession, anlage) -> tuple[dict[int, str], dict[int, str]]:
     """Die eigentliche Erhebung — ohne Takt, damit der Takt eine Stelle hat."""
     result = await db.execute(
         select(Investition.id).where(
@@ -164,25 +183,26 @@ async def _erhebe(db: AsyncSession, anlage) -> dict[int, str]:
     )
     inv_ids = set(result.scalars().all())
     if not inv_ids:
-        return {}
+        return {}, {}
 
     entity_map = _entity_zu_investitionen(anlage.sensor_mapping, inv_ids)
     if not entity_map:
-        return {}
+        return {}, {}
 
     from backend.services.ha_state_service import get_ha_state_service
 
     ha_service = get_ha_state_service()
     if not ha_service.is_available:
-        return {}
+        return {}, {}
 
     try:
         zustaende = await ha_service.get_zustand_states_batch(list(entity_map))
     except Exception as e:  # pragma: no cover — Soft-fail, die Sicht bleibt ohne Modus
         logger.warning("Betriebsmodus (live) nicht lesbar: %s", e)
-        return {}
+        return {}, {}
 
     ergebnis: dict[int, str] = {}
+    aktionen: dict[int, str] = {}
     for entity, ids in entity_map.items():
         roh = zustaende.get(entity)
         if not roh:
@@ -190,6 +210,9 @@ async def _erhebe(db: AsyncSession, anlage) -> dict[int, str]:
         modus = normalisiere_betriebsmodus(*roh)
         if modus is None:
             continue
+        aktion = betriebsmodus_aktion(modus, roh[1])
         for inv_id in ids:
             ergebnis[inv_id] = modus
-    return ergebnis
+            if aktion is not None:
+                aktionen[inv_id] = aktion
+    return ergebnis, aktionen

@@ -11,6 +11,16 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
+**Cockpit → Live: der Energiefluss sagt mehr, ohne größer zu werden.** Im Haus-Kreis steht unter der Zahl jetzt **„Rest"** —
+die Zahl war schon immer der Verbrauch, den eedc keinem einzeln gezeigten Gerät zuordnen kann. Direkt darunter steht
+**„gesamt …"**: was dein Haus gerade insgesamt verbraucht (nachts also Netzbezug minus das, was der Speicher aus dem Netz
+lädt); ohne Netz-Sensor fehlt die Zeile. Die Netz-Kachel nennt ihre Richtung als Wort („Bezug", „Einspeisung", „Balance"),
+im Lite-Modus zeigt eine kleine Pfeilspitze am Haus, wohin jede Linie fließt, und der Modus einer Wärmepumpe steht als
+farbiger Chip. Meldet Home Assistant, dass deine Wärmepumpe gerade **Leerlauf** hat (Modus Heizen, Verdichter pausiert),
+wird der Chip blass und heißt „Leerlauf" — im Tooltip und im Block „Überblick" steht „Heizen · Leerlauf". eedc leitet
+Ruhe nicht aus einer niedrigen Leistung ab: ohne diese Meldung bleibt es bei „Heizen"
+([Bedienung §2.1](HANDBUCH_BEDIENUNG.md#21-live), [Wärme & Klima → Schritt 4](HANDBUCH_WAERME_KLIMA.md#schritt-4--betriebsart-erfassen-optional-aber-lohnend)).
+
 **Komponenten → Wärmepumpe: neuer Block „Überblick" mit Schaubild und Live-Kacheln.** Ganz oben steht jetzt ein Bild
 einer Wärme/Klima-Anlage, darauf dieselben Kacheln wie im Energiefluss von *Cockpit → Live* — für jeden Wert, dem du einen
 Sensor zugeordnet hast: Leistung und Modus jedes Geräts, Warmwasser-Temperatur, Strom heute, Innengeräte einer Klimaanlage,

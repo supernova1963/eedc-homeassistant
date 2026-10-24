@@ -20,6 +20,13 @@ export interface LiveKomponente {
    */
   betriebsmodus?: string | null
   betriebsmodus_label?: string | null
+  /**
+   * P-433-1 (Konzept #433 E6): die gemessene Aktion NEBEN dem Kanon-Wert — heute nur
+   * `leerlauf` aus `hvac_action: idle`. Der Kanon-Wert bleibt (`heizen` bleibt `heizen`);
+   * der Klartext kommt wie beim Modus vom Backend. Anzeige: `ui/ModusChip.tsx::modusKlartext`.
+   */
+  betriebsmodus_aktion?: 'leerlauf' | null
+  betriebsmodus_aktion_label?: string | null
   // ── #341/#348: Merkmale für die Gruppierung im Energiefluss (Bau A) ──
   // Reine Anreicherung, alle optional: fehlen sie (älteres Backend), fällt die
   // Gruppierung auf ihre letzte Stufe. Leser: `components/live/energieFlussLayout.ts`.
@@ -83,6 +90,11 @@ export interface LiveDashboardResponse {
   summe_erzeugung_kw: number
   summe_verbrauch_kw: number
   summe_pv_kw: number
+  /**
+   * P-433-1 (Konzept #433 E7 a): was das Haus jetzt verbraucht — Σ Quellen − Einspeisung
+   * − Σ Speicherladung − Abgabe. `null`/fehlend ohne Netzwert (oder älteres Backend).
+   */
+  verbrauch_gesamt_kw?: number | null
 
   gauges: LiveGauge[]
 

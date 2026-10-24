@@ -73,6 +73,14 @@ describe('UeberblickKarte', () => {
     expect(aktiv.container.querySelector('[data-modus-chip]')!.textContent).toBe('Kühlen')
   })
 
+  it('P-433-1: gemessene Ruhe ⇒ Chip «Heizen · Leerlauf», gedämpft — aus der Live-Antwort, ohne Kopie', () => {
+    const k = knoten(7, 0.008, { betriebsmodus: 'heizen', betriebsmodus_label: 'Heizen', betriebsmodus_aktion: 'leerlauf', betriebsmodus_aktion_label: 'Leerlauf' })
+    const chip = render(<UeberblickKarte inv={wpInv(7)} live={live({ komponenten: [k] })} wetter={null} tag={null} mehrereGeraete={false} />)
+      .container.querySelector('[data-modus-chip]')!
+    expect(chip.textContent).toBe('Heizen · Leerlauf')
+    expect(chip.hasAttribute('data-modus-aktion')).toBe(true)
+  })
+
   it('Anlagen-Ring = Gauge `eigenverbrauch`, beschriftet «Eigenverbrauch jetzt x % (Anlage)» — nur, wenn geliefert', () => {
     const mit = render(<UeberblickKarte inv={wpInv(7)} live={live({ gauges: [EV] })} wetter={null} tag={null} mehrereGeraete={false} />)
     expect(mit.container.querySelector('[data-anlagen-ring]')!.textContent).toContain('Eigenverbrauch jetzt 83 % (Anlage)')

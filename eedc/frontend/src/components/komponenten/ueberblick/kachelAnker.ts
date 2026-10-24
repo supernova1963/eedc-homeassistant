@@ -24,7 +24,8 @@ import type { Investition } from '../../../types'
 import { CHART_COLORS, KATEGORIE_FARBEN, fmtZahl } from '../../../lib'
 import { PARAM_WAERMEPUMPE, istBrauchwasser, istKuehlungPassiv, istLuftLuft } from '../../../lib/investitionParameter'
 import { formatPower, getNodeColor } from '../../live/EnergieFluss'
-import { modusMitPassiv } from '../../ui/ModusChip'
+import { modusZeile, type ZweiteZeile } from '../../live/EnergieFlussKachel'
+import { modusKlartext } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
 
 /** Art einer Kachel — bestimmt Gruppierung und Rang im Layout. */
@@ -42,7 +43,7 @@ export interface UeberblickKachel {
   color: string
   isActive: boolean
   wertText: string
-  zweiteZeile: { text: string; fill: string | null } | null
+  zweiteZeile: ZweiteZeile | null
   tip: string
   /** Investition, zu der die Kachel gehört (Wert „Außentemperatur": keine). */
   investitionId: number | null
@@ -89,10 +90,13 @@ export function kuehltPassiv(inv: Investition | undefined): boolean {
   return istKuehlungPassiv(inv?.parameter?.[PARAM_WAERMEPUMPE.KUEHLUNG_ART] as string | undefined)
 }
 
-/** Modus im Klartext — Label vom Backend-Kanon; bei passiver Kühlung «Kühlen (passiv)». */
-export function modusText(k: Pick<LiveKomponente, 'betriebsmodus' | 'betriebsmodus_label'>, inv: Investition | undefined): string | null {
-  if (!k.betriebsmodus_label) return null
-  return modusMitPassiv(k.betriebsmodus_label, istPassivGekuehlt(k, inv))
+/** Modus im Klartext — Label vom Backend-Kanon; bei passiver Kühlung «Kühlen (passiv)»; bei gemessener
+ *  Ruhe «· Leerlauf» (P-433-1, dieselbe Funktion `modusKlartext` wie Energiefluss und Chip). */
+export function modusText(
+  k: Pick<LiveKomponente, 'betriebsmodus' | 'betriebsmodus_label' | 'betriebsmodus_aktion_label'>,
+  inv: Investition | undefined,
+): string | null {
+  return modusKlartext(k, istPassivGekuehlt(k, inv))
 }
 
 /** «(passiv)» gilt nur im Modus Kühlen eines passiv kühlenden Geräts. */
@@ -132,7 +136,8 @@ function geraeteKachel(inv: Investition, k: LiveKomponente, heute: number | null
     id: `geraet-${inv.id}`, art: 'geraet', anker: geraeteAnker(inv),
     label: inv.bezeichnung, icon: k.icon, color, isActive,
     wertText: formatPower(kw),
-    zweiteZeile: modus ? { text: modus, fill: isActive ? color : referenz } : null,
+    // P-433-1 S1-4: dieselbe Modus-Zeile (Chip) wie im Live-Energiefluss.
+    zweiteZeile: modusZeile(k, isActive, referenz, istPassivGekuehlt(k, inv)),
     tip, investitionId: inv.id, leistungKw: k.verbrauch_kw ?? 0,
   }
 }

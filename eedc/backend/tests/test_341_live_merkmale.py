@@ -56,6 +56,12 @@ NEUE_FELDER = (
     "kapazitaet_kwh", "fahrzeuge", "fahrzeuge_zuordnung",
 )
 
+#: P-433-1 (24.10.2026): die Anzeige-Zusätze danach — am Knoten die gemessene Ruhe neben dem
+#: Kanon-Wert, an der Antwort der Gesamtverbrauch. Beide ändern keine Summe (`test_p433_1_kompakt.py`);
+#: der Abzug unten bleibt dafür bitgleich.
+P433_1_KNOTEN_FELDER = ("betriebsmodus_aktion", "betriebsmodus_aktion_label")
+P433_1_ANTWORT_FELDER = ("verbrauch_gesamt_kw",)
+
 
 # ── Prüfstand: der echte Router, gestellte Service-Grenze ────────────────────
 
@@ -661,9 +667,9 @@ def _normiert(res: dict, namen: dict[int, str]) -> dict:
         m = re.fullmatch(r"(.*)_(\d+)", k)
         return f"{m.group(1)}_{namen[int(m.group(2))]}" if m and int(m.group(2)) in namen else k
 
-    out = {k: v for k, v in res.items() if k != "zeitpunkt"}
+    out = {k: v for k, v in res.items() if k != "zeitpunkt" and k not in P433_1_ANTWORT_FELDER}
     out["komponenten"] = [
-        {**{f: w for f, w in knoten.items() if f not in NEUE_FELDER},
+        {**{f: w for f, w in knoten.items() if f not in NEUE_FELDER + P433_1_KNOTEN_FELDER},
          "key": _key(knoten["key"]), "parent_key": _key(knoten.get("parent_key"))}
         for knoten in res["komponenten"]
     ]

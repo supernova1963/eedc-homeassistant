@@ -23,6 +23,7 @@ import EnergieFluss from './EnergieFluss'
 import { ThemeProvider } from '../../context/ThemeContext'
 import { stubMatchMedia } from '../../test/render'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
+import { CHART_COLORS } from '../../lib'
 
 beforeEach(() => {
   // Der Energiefluss zieht seine Achsenfarben aus dem Theme; der Provider
@@ -117,5 +118,52 @@ describe('EnergieFluss — Betriebsmodus und Gerätename', () => {
     expect(
       [...container.querySelectorAll('text')].some(t => /unbestimmt/i.test(t.textContent ?? '')),
     ).toBe(false)
+  })
+})
+
+/**
+ * P-433-1 S1-4 (Konzept #433 E6): die Modus-Zeile ist ein Chip in der Funktionsfarbe, und die
+ * gemessene Ruhe (`hvac_action: idle` ⇒ `betriebsmodus_aktion`) dämpft ihn. In der Kachel steht dann
+ * «Leerlauf» (das Symbol zeigt den Modus, «Heizen · Leerlauf» passt nicht in die Kachelbreite — Halt
+ * H2 im Bericht), im Tooltip der ganze Text aus `modusKlartext`. SoC-Zeile bleibt Text.
+ */
+describe('EnergieFluss — Modus-Chip und Leerlauf (P-433-1)', () => {
+  const tip = (c: HTMLElement, name: string) =>
+    [...c.querySelectorAll('g[data-title]')].map(g => g.getAttribute('data-title') ?? '').find(t => t.startsWith(name)) ?? ''
+
+  it('zeichnet den Modus als Chip in der Funktionsfarbe — ohne Aktion wie bisher «Heizen»', () => {
+    const { container } = zeichne([wp({ betriebsmodus: 'heizen', betriebsmodus_label: 'Heizen' })])
+    const chip = container.querySelector('rect[data-modus-chip]')!
+    expect(chip.getAttribute('data-modus-chip')).toBe('aktiv')
+    expect(chip.getAttribute('fill')).toBe(CHART_COLORS.wpWaerme)
+    expect(textY(container, 'Heizen')).toBeGreaterThan(0)
+    expect(tip(container, 'Vitocal')).toContain('Betrieb: Heizen')
+    expect(tip(container, 'Vitocal')).not.toContain('Leerlauf')
+  })
+
+  it('gemessene Ruhe: Chip gedämpft, Kachel «Leerlauf», Tooltip «Heizen · Leerlauf»', () => {
+    const { container } = zeichne([wp({
+      verbrauch_kw: 0.008, betriebsmodus: 'heizen', betriebsmodus_label: 'Heizen',
+      betriebsmodus_aktion: 'leerlauf', betriebsmodus_aktion_label: 'Leerlauf',
+    })])
+    expect(container.querySelector('rect[data-modus-chip]')!.getAttribute('data-modus-chip')).toBe('gedaempft')
+    expect(textY(container, 'Leerlauf')).toBeGreaterThan(0)
+    expect(tip(container, 'Vitocal')).toContain('Betrieb: Heizen · Leerlauf')
+  })
+
+  it('Kühlen trägt die Kühl-Farbe; 0 W ohne Aktion dämpft ebenfalls', () => {
+    const { container } = zeichne([wp({ verbrauch_kw: 0, betriebsmodus: 'kuehlen', betriebsmodus_label: 'Kühlen' })])
+    const chip = container.querySelector('rect[data-modus-chip]')!
+    expect(chip.getAttribute('fill')).toBe(CHART_COLORS.modusKuehlen)
+    expect(chip.getAttribute('data-modus-chip')).toBe('gedaempft')
+  })
+
+  it('SoC-Zeile und Kachel ohne Modus bekommen keinen Chip', () => {
+    const { container } = zeichne(
+      [speicher(), wp()],
+      [{ key: 'soc_3', label: 'SoC', wert: 64, min_wert: 0, max_wert: 100, einheit: '%' }],
+    )
+    expect(textY(container, '64 %')).toBeGreaterThan(0)
+    expect(container.querySelector('rect[data-modus-chip]')).toBeNull()
   })
 })

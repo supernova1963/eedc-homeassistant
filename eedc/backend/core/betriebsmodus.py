@@ -567,6 +567,49 @@ def normalisiere_betriebsmodus(
     return _ZUSTAND_ZU_KANON.get(roh, UNBESTIMMT)
 
 
+# ── Die gemessene Ruhe (P-433-1 S1-4, Konzept #433 E6, 24.10.2026) ─────────
+#
+# `idle` verfeinert den Kanon-Wert nicht (#399, oben) — der bleibt «heizen»,
+# wenn das Gerät auf Heizen steht und der Verdichter pausiert. Was `idle` aber
+# **misst**, ist eine Aussage über den Augenblick: «läuft gerade nicht». Die
+# Live-Sichten zeigen sie als **Zusatz** neben dem Kanon-Wert («Heizen ·
+# Leerlauf»), nie an seiner Stelle: HA-Sensor, MQTT-Topic und Aufteilung lesen
+# weiter allein den Kanon-Wert (`lade_betriebsmodus_live`).
+#
+# ⛔ **Keine Schwelle** (E6, Konzept §3): eine 8-W-Wärmepumpe ohne `idle` bleibt
+# «Heizen». Ruhe aus der Leistung abzuleiten erfände sie aus dem Rauschen.
+
+#: Die Aktion «gerade in Ruhe» — der einzige Wert, den die Live-Sichten heute kennen.
+LEERLAUF: Final[str] = "leerlauf"
+
+#: Aktion → Klartext, aus demselben Grund hier wie `BETRIEBSMODUS_LABEL`.
+BETRIEBSMODUS_AKTION_LABEL: Final[dict[str, str]] = {LEERLAUF: "Leerlauf"}
+
+#: Kanon-Werte, neben denen ein «Leerlauf» nichts sagt: «Aus» sagt es schon,
+#: und `unbestimmt` hat im Live-Bild keinen Klartext (`BETRIEBSMODUS_LIVE_OHNE_KLARTEXT`).
+_OHNE_AKTION: Final[frozenset[str]] = frozenset({AUS, UNBESTIMMT})
+
+
+def betriebsmodus_aktion(kanon: Optional[str], hvac_action: Optional[str]) -> Optional[str]:
+    """Die gemessene Aktion neben dem Kanon-Wert — heute nur ``LEERLAUF`` aus ``idle``.
+
+    Args:
+        kanon: das Ergebnis von `normalisiere_betriebsmodus` für dasselbe Paar.
+        hvac_action: der rohe Ist-Betrieb (Attribut ``hvac_action``).
+
+    Returns:
+        ``LEERLAUF``, wenn der Ist-Betrieb eine Aktion **ohne Richtung** meldet
+        (`_AKTION_OHNE_RICHTUNG`) und der Kanon-Wert eine Betriebsart ist; sonst
+        ``None``. Andere Aktionen werden nicht erfunden: ``heating`` & Co. sind
+        schon im Kanon-Wert enthalten.
+    """
+    if hvac_action is None or kanon is None or kanon in _OHNE_AKTION:
+        return None
+    if str(hvac_action).strip().lower() in _AKTION_OHNE_RICHTUNG:
+        return LEERLAUF
+    return None
+
+
 def betriebsmodus_klartext(zustand: Optional[str]) -> Optional[str]:
     """Roher HA-State → deutscher Klartext für die Zuordnungs-Fläche (F-53).
 

@@ -36,6 +36,7 @@ import { FokusVollbild } from '../blocks'
 import { SONSTIGES_KATEGORIE_LABELS, fmtZahl } from '../../lib'
 import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower, getNodeColor, getSoc, heuteKwhVon, nennleistungKwp } from './EnergieFluss'
 import { praefix, wallboxFahrzeuge, type GezeichneterKnoten } from './energieFlussLayout'
+import { modusKlartext } from '../ui/ModusChip'
 
 interface Props {
   /** Die offene Gruppe, wie das AKTUELLE Layout sie zeichnet (Mitglieder, Name, Ladestand). */
@@ -140,7 +141,8 @@ export default function GruppenListeOverlay({ gruppe, komponenten, gauges, tages
       if (soc != null) zusatz.push(`Ladestand ${soc} %`)
       if ((m.erzeugung_kw ?? 0) > 0) zusatz.push('gibt ab (V2H)')
     } else if (p === 'waermepumpe') {
-      if (m.betriebsmodus_label) zusatz.push(m.betriebsmodus_label)
+      const betrieb = modusKlartext(m)
+      if (betrieb) zusatz.push(betrieb)
     } else if (p === 'sonstige') {
       if (m.kategorie) zusatz.push(SONSTIGES_KATEGORIE_LABELS[m.kategorie] ?? m.kategorie)
     }

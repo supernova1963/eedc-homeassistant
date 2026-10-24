@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import ModusChip, { modusMitPassiv } from './ModusChip'
+import ModusChip, { modusKlartext, modusMitPassiv } from './ModusChip'
 import { CHART_COLORS } from '../../lib'
 
 const farbeVon = (c: HTMLElement) => (c.querySelector('[data-modus-farbe]') as HTMLElement).style.backgroundColor
@@ -40,5 +40,23 @@ describe('ModusChip', () => {
     expect(klassen).toContain('rounded-full')
     expect(klassen).toContain('text-xs')
     expect(klassen).not.toContain('uppercase')
+  })
+
+  it('P-433-1: gemessene Ruhe ⇒ «Heizen · Leerlauf», gedämpft (Text grau, Punkt halb)', () => {
+    const chip = render(<ModusChip modus="heizen" label="Heizen" aktion="Leerlauf" />).container.querySelector('[data-modus-chip]')!
+    expect(chip.textContent).toBe('Heizen · Leerlauf')
+    expect(chip.hasAttribute('data-modus-aktion')).toBe(true)
+    expect(chip.getAttribute('class')).toContain('text-gray-500')
+    expect(chip.querySelector('[data-modus-farbe]')!.getAttribute('class')).toContain('opacity-50')
+    const ohne = render(<ModusChip modus="heizen" label="Heizen" />).container.querySelector('[data-modus-chip]')!
+    expect(ohne.hasAttribute('data-modus-aktion')).toBe(false)
+    expect(ohne.getAttribute('class')).toContain('text-gray-700')
+  })
+
+  it('P-433-1: modusKlartext ist die EINE Regel — passiv vor der Aktion, ohne Label nichts', () => {
+    expect(modusKlartext({ betriebsmodus_label: 'Heizen', betriebsmodus_aktion_label: 'Leerlauf' })).toBe('Heizen · Leerlauf')
+    expect(modusKlartext({ betriebsmodus_label: 'Kühlen', betriebsmodus_aktion_label: 'Leerlauf' }, true)).toBe('Kühlen (passiv) · Leerlauf')
+    expect(modusKlartext({ betriebsmodus_label: 'Heizen' })).toBe('Heizen')
+    expect(modusKlartext({ betriebsmodus_label: null, betriebsmodus_aktion_label: 'Leerlauf' })).toBeNull()
   })
 })

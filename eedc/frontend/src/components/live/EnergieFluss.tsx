@@ -13,9 +13,10 @@ import type { LiveFahrzeug, LiveKomponente, LiveGauge } from '../../api/liveDash
 import { CHART_COLORS, COLORS, ENERGIEFLUSS_SAUM, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
-import EnergieFlussKachel, { IconElement } from './EnergieFlussKachel'
+import EnergieFlussKachel, { IconElement, modusZeile, type ZweiteZeile } from './EnergieFlussKachel'
+import { modusKlartext } from '../ui/ModusChip'
 import {
-  RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, layoutEnergieFluss,
+  RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, layoutEnergieFluss, pfeilspitze,
   type BuehnenMass, type GezeichneterKnoten, type KachelAuto,
 } from './energieFlussLayout'
 import { verbergeTouchTooltip } from '../../hooks/useTouchTitleTooltip'
@@ -119,15 +120,32 @@ function getColor(key: string): string {
   return COLOR_MAP[basis] || KATEGORIE_FARBEN.sonstige
 }
 
-/** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug
+/** Richtung am Netz — EINE Regel für Farbe und Text der Netz-Kachel (P-433-1 S1-3). */
+export type NetzRichtung = 'bezug' | 'einspeisung' | 'balance'
+
+/** Text der zweiten Zeile der Netz-Kachel (Konzept #433 K3, E5: Richtungstext ja). */
+export const NETZ_RICHTUNG_TEXT: Record<NetzRichtung, string> = {
+  bezug: 'Bezug',
+  einspeisung: 'Einspeisung',
+  balance: 'Balance',
+}
+
+/** Flussrichtung am Netz: Balance innerhalb `netz_puffer_w`, sonst Einspeisung oder Bezug.
  *  Backend-Semantik: erzeugung_kw = Netzbezug (Netz liefert ans Haus),
  *                    verbrauch_kw = Einspeisung (Netz nimmt vom Haus) */
-function getNetzColor(komp: LiveKomponente, pufferW: number): string {
+export function netzRichtung(komp: LiveKomponente, pufferW: number): NetzRichtung {
   const einspeisungKw = komp.verbrauch_kw ?? 0
   const bezugKw = komp.erzeugung_kw ?? 0
   const nettoW = (bezugKw - einspeisungKw) * 1000
-  if (Math.abs(nettoW) <= pufferW) return STATUS_COLORS.ok // grün — Balance
-  if (nettoW < 0) return COLORS.solar                       // amber — Einspeisung (PV-Überschuss)
+  if (Math.abs(nettoW) <= pufferW) return 'balance'
+  return nettoW < 0 ? 'einspeisung' : 'bezug'
+}
+
+/** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug */
+function getNetzColor(komp: LiveKomponente, pufferW: number): string {
+  const richtung = netzRichtung(komp, pufferW)
+  if (richtung === 'balance') return STATUS_COLORS.ok      // grün — Balance
+  if (richtung === 'einspeisung') return COLORS.solar      // amber — Einspeisung (PV-Überschuss)
   return COLORS.grid                                        // dunkelrot — Netzbezug (F2)
 }
 
@@ -180,6 +198,11 @@ interface EnergieFlussProps {
   summeErzeugung: number
   summeVerbrauch: number
   summePv: number
+  /**
+   * P-433-1 S1-2: was das Haus jetzt verbraucht (`verbrauch_gesamt_kw`, Konzept #433 E7 a) —
+   * Zeile «gesamt …» am Haus-Kreis. `null`/fehlend ⇒ keine Zeile (kein Netzwert, älteres Backend).
+   */
+  verbrauchGesamt?: number | null
   tagesWerte?: Record<string, number | null>
   gauges?: LiveGauge[]
   pvSollKw?: number | null
@@ -306,7 +329,7 @@ function socColor(pct: number): string {
 // ─── Component ──────────────────────────────────────────────────────
 
 export default function EnergieFluss({
-  komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
+  komponenten, summeErzeugung, summeVerbrauch, summePv, verbrauchGesamt = null, tagesWerte, gauges, pvSollKw,
   netzPufferW = 100, kopfAktion, vollbild = false, onGruppeKlick, onGruppen,
 }: EnergieFlussProps) {
   const achsen = useChartTheme()
@@ -421,6 +444,11 @@ export default function EnergieFluss({
     `Aktuell: ${haushalt ? fmtZahl(haushalt.verbrauch_kw ?? 0, 2) : '—'} kW`,
     'Restverbrauch = Gesamtverbrauch − separat erfasste Verbraucher (z. B. Wallbox, Wärmepumpe);',
     'enthält auch nicht einzeln gemessene Verbraucher',
+    // P-433-1 S1-2: beide Formeln — der Rest im Kreis, der Gesamtverbrauch in der Zeile darunter.
+    'Rest = Quellen − Senken (gezeigte Verbraucher, Speicherladung, Einspeisung)',
+    ...(verbrauchGesamt != null
+      ? [`Gesamtverbrauch: ${fmtZahl(verbrauchGesamt, 2)} kW`,
+         'Gesamtverbrauch = Quellen − Einspeisung − Speicherladung − Abgabe'] : []),
     `Verbrauchsseite (Bilanz): ${fmtZahl(summeVerbrauch, 2)} kW`,
     `Quellen: ${fmtZahl(summeErzeugung, 2)} kW`,
     ...(tagesWerte?.haushalt != null
@@ -557,6 +585,20 @@ export default function EnergieFluss({
                   style={lite ? { ['--flow-duration' as string]: `${duration}s` } : undefined}
                 />
               )}
+              {/* Pfeilspitze am Hausende (P-433-1 S1-5, Konzept #433 E5): nur Lite — dort läuft
+                  nur der Dash, der Effekt-Modus hat die Partikel. Farbe = Linienfarbe; Quellen
+                  zeigen ins Haus, Senken hinaus. Dicke bleibt logarithmisch. */}
+              {isActive && lite && (() => {
+                const kern = Math.max(thickness * 0.4, 1.5)
+                return (
+                  <polygon
+                    data-pfeil={isSource ? 'zum-haus' : 'vom-haus'}
+                    points={pfeilspitze(node.x, node.y, CX, CY, HAUS_R + 2, 4 + kern * 1.5, 2 + kern, isSource)}
+                    fill={color}
+                    fillOpacity={0.85}
+                  />
+                )
+              })()}
               {/* Animierte Partikel (Elektronen) auf dem Pfad — im Lite-Modus aus.
                   SMIL-Animationen (animateMotion + animate) sind auf Mobile-Safari/iPad
                   GPU-intensiv und der Hauptgrund für Ruckler im Lite-Modus. */}
@@ -634,6 +676,49 @@ export default function EnergieFluss({
           >
             {formatPower(nettoHausverbrauch)}
           </text>
+          {/* P-433-1 S1-1: das Wort «Rest» unter der Zahl — die nackte Zahl wurde als «Verbrauch»
+              gelesen (#433, Mathek); der Tooltip sagt weiter, was der Rest ist. */}
+          <text
+            data-haus-rest
+            x={CX} y={CY + dims.hausIconSize * 0.7 + dims.socFontSize + 1}
+            textAnchor="middle"
+            style={{ fontSize: `${dims.socFontSize}px` }}
+            className="fill-gray-500 dark:fill-gray-400"
+          >
+            Rest
+          </text>
+          {/* P-433-1 S1-2: «gesamt …» direkt UNTER dem Kreis, als Gegenstück zum «Solar Soll» darüber —
+              im Kreis ist neben Symbol, Zahl und «Rest» kein Platz (gemessen, Bericht P-433-1 H1).
+              Chip-Form (wie «Gesamtleistung»), damit die Zeile auf jedem Hintergrund lesbar bleibt. */}
+          {verbrauchGesamt != null && (() => {
+            const text = `gesamt ${formatPower(verbrauchGesamt)}`
+            const font = dims.socFontSize - 1
+            const breite = text.length * 0.62 * font + 10
+            const hoehe = font + 5
+            const oben = CY + HAUS_R + 4
+            return (
+              <g data-haus-gesamt>
+                <rect
+                  x={CX - breite / 2} y={oben}
+                  width={breite} height={hoehe}
+                  rx={hoehe / 2}
+                  className="fill-white dark:fill-gray-800"
+                  fillOpacity={0.92}
+                  stroke={KATEGORIE_FARBEN.haushalt}
+                  strokeOpacity={0.5}
+                  strokeWidth={1}
+                />
+                <text
+                  x={CX} y={oben + hoehe / 2 + font * 0.35}
+                  textAnchor="middle"
+                  style={{ fontSize: `${font}px` }}
+                  className="font-semibold fill-gray-700 dark:fill-gray-200"
+                >
+                  {text}
+                </text>
+              </g>
+            )
+          })()}
         </g>
 
         {/* PV-Soll — oberhalb des Hauses. Bis Bau A §A6 stand darüber noch
@@ -688,13 +773,17 @@ export default function EnergieFluss({
           // Namens darunter. Genau diese zweite Stelle hat #398 Stufe 2
           // vergessen (s. Kommentar am Label in `EnergieFlussKachel.tsx` —
           // dort hängen seit P-433-2 beide an derselben Prop `zweiteZeile`).
-          const zweite: { text: string; fill: string | null } | null = node.kachelAuto
+          // P-433-1: die Netz-Kachel trägt ihre Richtung als Text (S1-3, Farbe = Netz-Farbe), die
+          // Modus-Zeile ist ein Chip (S1-4, `modusZeile` — dieselbe Regel wie im Hub-Überblick).
+          const zweite: ZweiteZeile | null = node.kachelAuto
             ? { text: autoZeile(node.kachelAuto, zeichenBudget(NODE_W, dims.socFontSize)), fill: hasSoc ? socColor(soc) : null }
             : hasSoc
               ? { text: `${soc} %`, fill: socColor(soc) }
-              : !mitglieder && k.betriebsmodus_label
-                ? { text: k.betriebsmodus_label, fill: isActive ? color : achsen.referenz }
-                : null
+              : k.key === 'netz'
+                ? { text: NETZ_RICHTUNG_TEXT[netzRichtung(k, netzPufferW)], fill: isActive ? color : achsen.referenz }
+                : !mitglieder
+                  ? modusZeile(k, isActive, achsen.referenz)
+                  : null
 
           // PV-Auslastung: Ist-Leistung / installierte kWp (bei der PV-Gruppe
           // Σ kW / Σ kWp — die Summe ist `null`, sobald einem Mitglied die kWp fehlt)
@@ -723,7 +812,8 @@ export default function EnergieFluss({
           // zweite Zeile im Knoten" — der Kommentar beschrieb einen früheren
           // Entwurf und wurde beim Umbau nicht mitgezogen. Dieselbe Klasse wie
           // der 13-Uhr-Kommentar in `prognosen.py` (N-331).
-          if (k.betriebsmodus_label) tipParts.push(`Betrieb: ${k.betriebsmodus_label}`)
+          const betrieb = modusKlartext(k)
+          if (betrieb) tipParts.push(`Betrieb: ${betrieb}`)
           if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${fmtZahl(k.leistung_kwp, 1)} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
@@ -744,7 +834,7 @@ export default function EnergieFluss({
               const mSoc = m.key.startsWith('batterie_') ? getSoc(m.key, gauges) : null
               const zusatz = [
                 mSoc != null ? `${mSoc} %` : null,
-                m.betriebsmodus_label ?? null,
+                modusKlartext(m),
                 node.gegenlaeufig?.includes(m) ? ((m.erzeugung_kw ?? 0) > 0 ? 'gegenläufig: gibt ab' : 'gegenläufig: nimmt auf') : null,
               ].filter(Boolean).join(', ')
               tipParts.push(`• ${m.label}: ${mKw > 0 ? `${fmtZahl(mKw, 2)} kW` : '0 kW'}${zusatz ? ` (${zusatz})` : ''}`)

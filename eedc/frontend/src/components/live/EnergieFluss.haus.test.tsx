@@ -20,7 +20,7 @@
  * die sich der Bestand seit dem Foto-Schleier verlässt.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, cleanup as cleanupAll } from '@testing-library/react'
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import EnergieFluss from './EnergieFluss'
@@ -435,5 +435,74 @@ describe('Bau B — Auswahl und Persistenz über den Bestand', () => {
       </ThemeProvider>,
     )
     expect(auswahl(c.container).value).toBe('default')
+  })
+})
+
+/**
+ * P-433-1 S1-1/S1-2 (Konzept #433 K4): der Haus-Kreis trägt das Wort «Rest» unter der Zahl — in
+ * jeder Breite, Lite und Effekt; mit `verbrauchGesamt` steht «gesamt …» direkt unter dem Kreis
+ * (im Kreis ist kein Platz — Halt H1 im Bericht), und der Tooltip nennt beide Formeln.
+ */
+describe('Haus-Kreis — «Rest» und «gesamt» (P-433-1)', () => {
+  function zeichneHaus(breite: number, lite: boolean, verbrauchGesamt: number | null, vollbildHoehe: number | null = null) {
+    localStorage.setItem(LITE_KEY, lite ? '1' : '0')
+    mitMass(breite, vollbildHoehe ?? 500)
+    const komp = bestandD()
+    const summePv = komp.filter(k => k.key.startsWith('pv_')).reduce((s, k) => s + (k.erzeugung_kw ?? 0), 0)
+    return render(
+      <ThemeProvider>
+        <EnergieFluss
+          komponenten={komp} summeErzeugung={summePv} summeVerbrauch={summePv} summePv={summePv}
+          verbrauchGesamt={verbrauchGesamt} gauges={[]} vollbild={vollbildHoehe != null}
+        />
+      </ThemeProvider>,
+    )
+  }
+  const hausGruppe = (c: HTMLElement) =>
+    [...c.querySelectorAll('g[data-title]')].find(g => g.getAttribute('data-title')!.startsWith('Restverbrauch'))!
+
+  it.each([360, 450, 600, 1150])('«Rest» steht im Kreis unter der Zahl (Breite %i, Lite und Effekt)', (breite) => {
+    for (const lite of [false, true]) {
+      const { container, unmount } = zeichneHaus(breite, lite, null)
+      const haus = hausGruppe(container)
+      const rest = haus.querySelector('text[data-haus-rest]')!
+      expect(rest.textContent).toBe('Rest')
+      const zahl = [...haus.querySelectorAll('text')].find(t => t.textContent === '600 W')!
+      expect(Number(rest.getAttribute('y'))).toBeGreaterThan(Number(zahl.getAttribute('y')))
+      // im Kreis: Unterkante der Schrift oberhalb des Kreisrands
+      const kreis = [...haus.querySelectorAll('circle')].find(k => k.getAttribute('stroke-width') === '2')!
+      const unterkante = Number(kreis.getAttribute('cy')) + Number(kreis.getAttribute('r'))
+      expect(Number(rest.getAttribute('y'))).toBeLessThan(unterkante)
+      unmount()
+    }
+  })
+
+  it('«gesamt» nur mit Wert, im Format von formatPower, unter dem Kreis', () => {
+    const ohne = zeichneHaus(1150, true, null)
+    expect(hausGruppe(ohne.container).querySelector('[data-haus-gesamt]')).toBeNull()
+    ohne.unmount()
+    const { container } = zeichneHaus(1150, true, 2.345)
+    const zeile = hausGruppe(container).querySelector('[data-haus-gesamt]')!
+    expect(zeile.textContent).toBe('gesamt 2.345 W')
+    const kreis = [...hausGruppe(container).querySelectorAll('circle')].find(k => k.getAttribute('stroke-width') === '2')!
+    expect(Number(zeile.querySelector('rect')!.getAttribute('y')))
+      .toBeGreaterThan(Number(kreis.getAttribute('cy')) + Number(kreis.getAttribute('r')))
+  })
+
+  it('auch im Vollbild (eedc-card bettet es ein) und mit 0 W — die 0 ist gemessen', () => {
+    const { container } = zeichneHaus(1280, false, 0, 700)
+    expect(hausGruppe(container).querySelector('[data-haus-gesamt]')!.textContent).toBe('gesamt 0 W')
+  })
+
+  it('der Tooltip nennt beide Formeln; ohne Wert nur die des Rests', () => {
+    const mit = hausGruppe(zeichneHaus(600, false, 3.1).container).getAttribute('data-title')!
+    expect(mit).toContain('Restverbrauch = Gesamtverbrauch − separat erfasste Verbraucher')
+    expect(mit).toContain('Rest = Quellen − Senken')
+    expect(mit).toContain('Gesamtverbrauch: 3,10 kW')
+    expect(mit).toContain('Gesamtverbrauch = Quellen − Einspeisung − Speicherladung − Abgabe')
+    cleanupAll()
+    const ohne = hausGruppe(zeichneHaus(600, false, null).container).getAttribute('data-title')!
+    expect(ohne).toContain('Rest = Quellen − Senken')
+    expect(ohne).not.toContain('Gesamtverbrauch:')
   })
 })

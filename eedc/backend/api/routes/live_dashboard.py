@@ -64,6 +64,12 @@ class LiveKomponente(BaseModel):
     # zweite Übersetzungstabelle führt.
     betriebsmodus: Optional[str] = None
     betriebsmodus_label: Optional[str] = None
+    #: P-433-1 (Konzept #433 E6): die gemessene Aktion NEBEN dem Kanon-Wert —
+    #: heute nur ``leerlauf`` aus ``hvac_action: idle``. Der Kanon-Wert bleibt
+    #: (`heizen` bleibt `heizen`, #399); `None` heißt «keine Aktion gemeldet».
+    #: Der Klartext kommt wie beim Modus vom Kanon (`BETRIEBSMODUS_AKTION_LABEL`).
+    betriebsmodus_aktion: Optional[Literal["leerlauf"]] = None
+    betriebsmodus_aktion_label: Optional[str] = None
     # ── #341/#348: Merkmale für die Gruppierung im Energiefluss ─────────────
     # Reine Anreicherung (keine Summe, kein Residual liest sie); alle optional,
     # damit ein neuer Client mit einem alten Backend definiert auf die letzte
@@ -128,6 +134,10 @@ class LiveDashboardResponse(BaseModel):
     summe_erzeugung_kw: float
     summe_verbrauch_kw: float
     summe_pv_kw: float = 0
+    #: P-433-1 (Konzept #433 E7 a): was das Haus jetzt verbraucht —
+    #: Σ Quellen − Einspeisung − Σ Speicherladung − Abgabe (Builder
+    #: `_verbrauch_gesamt`). `None`, solange kein Netzwert vorliegt.
+    verbrauch_gesamt_kw: Optional[float] = None
 
     gauges: list[LiveGauge]
 
@@ -480,6 +490,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "komponenten": komponenten,
         "summe_erzeugung_kw": round(summe_erz, 2),
         "summe_verbrauch_kw": round(summe_vrb, 2),
+        # P-433-1: wie im Builder — Quellen − Einspeisung − Speicherladung (keine Abgabe in der Demo).
+        "verbrauch_gesamt_kw": round(summe_erz - einsp_kw - batt_ladung, 2),
         "summe_pv_kw": round(pv_kw, 2),
         "gauges": [
             {"key": "netz", "label": "Netz", "wert": netto_w,

@@ -18,6 +18,7 @@ from backend.core.investition_parameter import PARAM_E_AUTO
 from datetime import date
 
 from backend.core.betriebsmodus import (
+    BETRIEBSMODUS_AKTION_LABEL,
     BETRIEBSMODUS_ICON,
     BETRIEBSMODUS_LABEL,
     BETRIEBSMODUS_LIVE_OHNE_KLARTEXT,
@@ -48,9 +49,14 @@ def build_komponenten(
     investitionen: dict[str, Investition],
     inv_live_map: dict[str, dict[str, str]],
     modus_map: Optional[dict[int, str]] = None,
+    aktion_map: Optional[dict[int, str]] = None,
 ) -> dict:
     """
     Baut Komponenten-Liste, Gauges und Summen aus Live-Werten.
+
+    ``aktion_map`` (P-433-1): die gemessene Aktion je Gerät neben dem Kanon-Wert
+    (`betriebsmodus_live.lade_betriebsmodus_aktion_live`, heute nur «leerlauf») —
+    reine Anzeige, keine Summe liest sie.
 
     Returns:
         {
@@ -58,6 +64,7 @@ def build_komponenten(
             "gauges": [...],
             "summe_erzeugung_kw": float,
             "summe_verbrauch_kw": float,
+            "verbrauch_gesamt_kw": float | None,
             "pv_total_w": float,
             "warmwasser_temperatur_c": float | None,
             "innengeraete": [ {investition_id, innengeraet_id, bezeichnung,
@@ -69,7 +76,7 @@ def build_komponenten(
 
     # Per-Investition Komponenten
     for inv_id, values in inv_values.items():
-        _verbuche_investition(b, topo, inv_id, values, investitionen, inv_live_map, modus_map)
+        _verbuche_investition(b, topo, inv_id, values, investitionen, inv_live_map, modus_map, aktion_map)
 
     # ⚠ Die Reihenfolge der Phasen ist tragend (RF-4): die Fahrzeug-Zuordnung
     # setzt `parent_key` vor dem Restverbrauch; PV gesamt erhöht `pv_total_w`
@@ -107,6 +114,9 @@ def build_komponenten(
         "gauges": b.gauges,
         "summe_erzeugung_kw": round(b.summe_erzeugung, 3),
         "summe_verbrauch_kw": round(b.summe_verbrauch, 3),
+        "verbrauch_gesamt_kw": (
+            round(b.verbrauch_gesamt_kw, 3) if b.verbrauch_gesamt_kw is not None else None
+        ),
         "pv_total_w": b.pv_total_w,
         "warmwasser_temperatur_c": warmwasser_temperatur_c,
         "innengeraete": innengeraete_live,
@@ -144,6 +154,9 @@ class _LiveBilanz:
     sonstige_erzeugung_w: float = 0.0
     # §9.2: Leistung, die das Haus an Dritte abgibt — kein Eigenverbrauch.
     abgabe_w: float = 0.0
+    # P-433-1 (Konzept #433 E7 a): was das Haus verbraucht — gesetzt von
+    # `_restverbrauch`, `None` ohne Netzwert (keine erfundene 0, P4).
+    verbrauch_gesamt_kw: Optional[float] = None
     # Die Schlüssel der Komponenten, die eine Batterie-Rolle spielen: Speicher
     # UND das V2H-fähige E-Auto (`ist_bidirektional` unten). Nur sie dürfen in
     # `bat_ladung_kw`/`bat_entladung_kw` der Netzpunkt-Bilanz einfließen.
@@ -282,6 +295,7 @@ def _verbuche_investition(
     investitionen: dict[str, Investition],
     inv_live_map: dict[str, dict[str, str]],
     modus_map: Optional[dict[int, str]],
+    aktion_map: Optional[dict[int, str]] = None,
 ) -> None:
     """Eine Investition in die Bilanz buchen: Knoten, Summen, Batterie-Rolle, SoC-Gauge."""
     inv = investitionen.get(inv_id)
@@ -338,7 +352,8 @@ def _verbuche_investition(
         _buche_bidirektional(b, inv, inv_id, typ, val_w, ist_v2h, topo)
     else:
         modus = (modus_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
-        _buche_verbraucher(b, inv, inv_id, typ, val_w, wp_icon, modus, topo)
+        aktion = (aktion_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
+        _buche_verbraucher(b, inv, inv_id, typ, val_w, wp_icon, modus, topo, aktion)
 
     # SoC-Gauge pro Investition
     _soc_gauge(b, inv_id, inv, typ, values)
@@ -645,6 +660,7 @@ def _buche_verbraucher(
     wp_icon: Optional[str],
     modus: Optional[str],
     topo: _Topologie,
+    aktion: Optional[str] = None,
 ) -> None:
     """Alle übrigen Geräte: Verbraucher-Knoten, Betriebsmodus-Klartext, Wallbox als V2H-Quelle (N-575 R2/R3)."""
     kw = abs(val_w) / 1000
@@ -687,6 +703,12 @@ def _buche_verbraucher(
         ),
         "typ": typ,
     }
+    # P-433-1 (E6): die gemessene Ruhe («Leerlauf») als Zusatz neben dem
+    # Kanon-Wert — nur, wo ein Klartext steht; der Kanon-Wert bleibt, wie er ist.
+    # Die Schlüssel stehen nur am Gerät, das eine Aktion meldet.
+    if aktion is not None and komp_sonst["betriebsmodus_label"]:
+        komp_sonst["betriebsmodus_aktion"] = aktion
+        komp_sonst["betriebsmodus_aktion_label"] = BETRIEBSMODUS_AKTION_LABEL[aktion]
     # Vierter Sonstiges-Zweig (Verbraucher, Zähler, fehlende oder
     # unbekannte Kategorie) — dieselbe Kategorie-Quelle wie oben.
     if typ == "sonstiges":
@@ -822,7 +844,10 @@ def _restverbrauch(
         k.get("verbrauch_kw") or 0 for k in b.komponenten
         if not k.get("parent_key")
     )
-    if gesamt_quellen > 0 and (einspeisung_w is not None or netzbezug_w is not None):
+    hat_netzwert = einspeisung_w is not None or netzbezug_w is not None
+    if hat_netzwert:
+        b.verbrauch_gesamt_kw = _verbrauch_gesamt(b, gesamt_quellen, einspeisung_w)
+    if gesamt_quellen > 0 and hat_netzwert:
         haushalt_kw = max(0, gesamt_quellen - gesamt_senken)
         b.komponenten.append({
             "key": "haushalt",
@@ -832,6 +857,30 @@ def _restverbrauch(
             "verbrauch_kw": round(haushalt_kw, 3),
         })
         b.summe_verbrauch += haushalt_kw
+
+
+def _verbrauch_gesamt(
+    b: _LiveBilanz, gesamt_quellen: float, einspeisung_w: Optional[float],
+) -> float:
+    """Was das Haus jetzt verbraucht (P-433-1, Konzept #433 E7 a), in kW.
+
+    ``Σ Quellen − Einspeisung − Σ Speicherladung − Abgabe`` aus denselben Summen
+    wie der Restverbrauch: Quellen sind dieselben wie dort, die Speicherladung
+    ist die der Knoten mit Batterie-Rolle (`bidirektionale_keys`, dieselbe Menge
+    wie in `_autarkie_gauges`), die Abgabe `abgabe_w`. Nachts (Erzeugung 0) ist
+    das Bezug − Netzladung des Speichers.
+
+    ⚠ **Nicht** der Autarkie-Nenner (`_autarkie_gauges`, EV + Bezug): der steht
+    hinter ``erzeugung_w > 0`` und zwei Klemmen. Ohne Klemme sind beide gleich.
+    Die eine Klemme hier ist die des Restverbrauchs (`max(0, …)`): ein negativer
+    Hausverbrauch entsteht nur aus Messversatz zwischen den Sensoren.
+    """
+    speicherladung_kw = sum(
+        k.get("verbrauch_kw") or 0 for k in b.komponenten
+        if k["key"] in b.bidirektionale_keys
+    )
+    einspeisung_kw = (einspeisung_w or 0) / 1000 if (einspeisung_w or 0) > 0 else 0.0
+    return max(0.0, gesamt_quellen - einspeisung_kw - speicherladung_kw - b.abgabe_w / 1000)
 
 
 def _netz_gauge(

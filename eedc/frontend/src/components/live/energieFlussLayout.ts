@@ -149,14 +149,61 @@ export function layoutNodes(komponenten: LiveKomponente[], W: number = W_DEFAULT
 
 /** Quadratic Bezier Pfad von Knoten zu Zielpunkt */
 export function flowPath(nx: number, ny: number, tx: number, ty: number): string {
+  const [qx, qy] = flowKontrollpunkt(nx, ny, tx, ty)
+  return `M ${nx} ${ny} Q ${qx} ${qy} ${tx} ${ty}`
+}
+
+/** Kontrollpunkt der Fluss-Kurve: Mitte, 25 Einheiten quer versetzt — EINE Quelle für Linie und Pfeil. */
+function flowKontrollpunkt(nx: number, ny: number, tx: number, ty: number): [number, number] {
   const mx = (nx + tx) / 2
   const my = (ny + ty) / 2
   const dx = tx - nx
   const dy = ty - ny
   const len = Math.sqrt(dx * dx + dy * dy) || 1
-  const perpX = -dy / len * 25
-  const perpY = dx / len * 25
-  return `M ${nx} ${ny} Q ${mx + perpX} ${my + perpY} ${tx} ${ty}`
+  return [mx - dy / len * 25, my + dx / len * 25]
+}
+
+/**
+ * Pfeilspitze am Hausende einer Fluss-Linie (P-433-1 S1-5, Konzept #433 E5 — nur Lite, der
+ * Effekt-Modus hat die Partikel): ein Dreieck auf der Kurve von `flowPath`, `abstand` Einheiten vor
+ * dem Ziel (außerhalb des Haus-Kreises), in Flussrichtung — `zumZiel` (Quelle) zeigt ins Haus,
+ * sonst (Senke) aus dem Haus hinaus. Rückgabe: `points` eines `<polygon>`.
+ */
+export function pfeilspitze(
+  nx: number, ny: number, tx: number, ty: number,
+  abstand: number, laenge: number, halbeBreite: number, zumZiel: boolean,
+): string {
+  const [qx, qy] = flowKontrollpunkt(nx, ny, tx, ty)
+  const punkt = (t: number): [number, number] => {
+    const u = 1 - t
+    return [u * u * nx + 2 * u * t * qx + t * t * tx, u * u * ny + 2 * u * t * qy + t * t * ty]
+  }
+  // t, an dem die Kurve `abstand` vom Ziel entfernt ist (Abstand fällt zum Ende hin) — Bisektion.
+  const mitte = abstand + laenge / 2
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 40; i++) {
+    const t = (lo + hi) / 2
+    const [px, py] = punkt(t)
+    if (Math.hypot(px - tx, py - ty) > mitte) lo = t
+    else hi = t
+  }
+  const t = (lo + hi) / 2
+  const [cx, cy] = punkt(t)
+  // Tangente B'(t) in Richtung des Ziels, normiert.
+  const gx = 2 * (1 - t) * (qx - nx) + 2 * t * (tx - qx)
+  const gy = 2 * (1 - t) * (qy - ny) + 2 * t * (ty - qy)
+  const gl = Math.hypot(gx, gy) || 1
+  const rx = (zumZiel ? gx : -gx) / gl
+  const ry = (zumZiel ? gy : -gy) / gl
+  const spitze = [cx + rx * laenge / 2, cy + ry * laenge / 2]
+  const basis = [cx - rx * laenge / 2, cy - ry * laenge / 2]
+  const r = (v: number) => Math.round(v * 100) / 100
+  return [
+    [spitze[0], spitze[1]],
+    [basis[0] - ry * halbeBreite, basis[1] + rx * halbeBreite],
+    [basis[0] + ry * halbeBreite, basis[1] - rx * halbeBreite],
+  ].map(([a, b]) => `${r(a)},${r(b)}`).join(' ')
 }
 
 // ═══════════════════════════════════════════════════════════════════

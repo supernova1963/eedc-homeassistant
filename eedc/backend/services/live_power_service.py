@@ -295,14 +295,19 @@ class LivePowerService:
         # Service — dieser Aufruf kostet nicht je Live-Poll einen HA-Abruf; die
         # Begründung steht in `betriebsmodus_live.py`. Ohne Klimagerät bzw. ohne
         # Zuordnung ist er ein DB-Zugriff und liefert {}.
-        from backend.services.betriebsmodus_live import lade_betriebsmodus_live
+        from backend.services.betriebsmodus_live import (
+            lade_betriebsmodus_aktion_live,
+            lade_betriebsmodus_live,
+        )
         modus_map = await lade_betriebsmodus_live(db, anlage)
+        # P-433-1 (E6): die gemessene Ruhe aus demselben Abruf — nur Anzeige.
+        aktion_map = await lade_betriebsmodus_aktion_live(db, anlage)
 
         # Komponenten + Gauges aufbauen
         from backend.services.live_komponenten_builder import build_komponenten
         build_result = build_komponenten(
             anlage, basis_values, inv_values, investitionen, inv_live_map,
-            modus_map=modus_map,
+            modus_map=modus_map, aktion_map=aktion_map,
         )
         komponenten = build_result["komponenten"]
         gauges = build_result["gauges"]
@@ -364,6 +369,7 @@ class LivePowerService:
             "komponenten": komponenten,
             "summe_erzeugung_kw": build_result["summe_erzeugung_kw"],
             "summe_verbrauch_kw": build_result["summe_verbrauch_kw"],
+            "verbrauch_gesamt_kw": build_result["verbrauch_gesamt_kw"],
             "summe_pv_kw": round(pv_total_w / 1000, 3),
             "gauges": gauges,
             "heute_pv_kwh": heute_pv,
@@ -392,6 +398,8 @@ class LivePowerService:
             "komponenten": [],
             "summe_erzeugung_kw": 0,
             "summe_verbrauch_kw": 0,
+            # P-433-1: ohne Sensoren kein Gesamtverbrauch — `None`, keine 0 (P4).
+            "verbrauch_gesamt_kw": None,
             "summe_pv_kw": 0,
             "gauges": [],
             "heute_pv_kwh": None,

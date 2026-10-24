@@ -132,13 +132,13 @@ Live zeigt **Echtzeit-Leistungsdaten** deiner gesamten Anlage und aktualisiert s
 
 **Energiefluss-Diagramm** — das zentrale, animierte Element (ähnlich dem HA Energy Dashboard):
 
-- **Haus** in der Mitte als Senke — die Zahl darin ist der **Restverbrauch** (= Gesamtverbrauch − separat erfasste Verbraucher wie Wallbox oder Wärmepumpe); der Tooltip nennt die Formel und darunter den Gesamtverbrauch des Tages
+- **Haus** in der Mitte als Senke — die Zahl darin ist der **Restverbrauch**, darunter steht deshalb das Wort **„Rest"** (= Gesamtverbrauch − separat erfasste Verbraucher wie Wallbox oder Wärmepumpe). Direkt unter dem Kreis steht **„gesamt …"**: was das Haus gerade insgesamt verbraucht (Quellen − Einspeisung − Speicherladung − Abgabe an Dritte; nachts also Netzbezug minus das, was der Speicher aus dem Netz lädt). Ohne Netz-Sensor fehlt diese Zeile, weil die Bilanz dann offen ist. Der Tooltip nennt beide Formeln und darunter den Gesamtverbrauch des Tages
 - **Erzeuger** (PV-Module, Balkonkraftwerk) oben
-- **Netz** links (bidirektional: Bezug / Einspeisung)
+- **Netz** links (bidirektional) — die Kachel nennt die Richtung als Wort: **„Bezug"**, **„Einspeisung"** oder **„Balance"** (innerhalb der Netz-Toleranz aus den Stammdaten)
 - **Speicher** rechts (bidirektional: Laden / Entladen)
 - **Verbraucher** (Wärmepumpe, Wallbox, E-Auto ohne Wallbox, Sonstige — auch ein BHKW) unten
 
-Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Animationsgeschwindigkeit steigen mit der Leistung, Farbcodierung nach Komponententyp. Die **Netz-Farbe** wechselt dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug). Bei Speichern, bei der Wallbox (Ladestand ihres Autos) und bei E-Autos ohne Wallbox wird der **Ladezustand (SoC)** als Pegel im Knoten dargestellt (rot < 20 %, gelb 20–50 %, grün > 50 %).
+Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Animationsgeschwindigkeit steigen mit der Leistung, Farbcodierung nach Komponententyp. Im **Lite-Modus** trägt jede Linie am Haus eine kleine **Pfeilspitze** in ihrer Farbe — ins Haus bei Quellen, hinaus bei Verbrauchern (im Effekt-Modus zeigen die laufenden Punkte die Richtung). Die **Netz-Farbe** wechselt dynamisch: grün (Balance), orange (Einspeisung), rot (Netzbezug). Bei einer **Wärmepumpe oder Klimaanlage** steht der Betriebsmodus als **Chip** in der Farbe der Funktion (Heizen rot, Warmwasser blau, Kühlen hellblau …); meldet Home Assistant **„Leerlauf"** (Gerät steht auf Heizen, der Verdichter pausiert), wird der Chip blass und heißt „Leerlauf", der Tooltip nennt „Heizen · Leerlauf" ([Wärme & Klima → Schritt 4, „Leerlauf behält deinen Modus"](HANDBUCH_WAERME_KLIMA.md#schritt-4--betriebsart-erfassen-optional-aber-lohnend)). Bei Speichern, bei der Wallbox (Ladestand ihres Autos) und bei E-Autos ohne Wallbox wird der **Ladezustand (SoC)** als Pegel im Knoten dargestellt (rot < 20 %, gelb 20–50 %, grün > 50 %).
 
 **Eine Reihe je Bereich.** Erzeuger, Verbraucher und Speicher stehen jeweils in **einer** Reihe (die Speicher in einer Spalte), jede Linie endet am Haus — keine Linie kreuzt eine andere. Die Karte wird dabei **nie höher**, egal wie viele Geräte deine Anlage hat:
 

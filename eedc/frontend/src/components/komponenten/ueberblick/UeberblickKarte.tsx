@@ -65,7 +65,10 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{inv.bezeichnung}</span>
         {k?.betriebsmodus && k.betriebsmodus_label && (
-          <ModusChip modus={k.betriebsmodus} label={k.betriebsmodus_label} passiv={istPassivGekuehlt(k, inv)} />
+          <ModusChip
+            modus={k.betriebsmodus} label={k.betriebsmodus_label} passiv={istPassivGekuehlt(k, inv)}
+            aktion={k.betriebsmodus_aktion_label}
+          />
         )}
       </div>
 

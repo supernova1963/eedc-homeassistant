@@ -85,7 +85,7 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 | Strom heute | Stromzähler |
 | Außentemperatur (Wetterdienst) | Himmel |
 
-Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss); kühlt das Gerät passiv, steht dort „Kühlen (passiv)". Vorlauf, Rücklauf und Heizstab haben im Bild schon ihren Platz, aber noch keine Werte.
+Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss, als Chip in der Farbe der Funktion); kühlt das Gerät passiv, steht dort „Kühlen (passiv)", meldet es „Leerlauf", steht „Heizen · Leerlauf" (siehe *„Leerlauf behält deinen Modus"*). Vorlauf, Rücklauf und Heizstab haben im Bild schon ihren Platz, aber noch keine Werte.
 
 > **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie ist ein Wert der ganzen Anlage: bei mehreren Wärmepumpen die der ersten mit Sensor. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte.
 
@@ -605,6 +605,14 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > **Was weiterhin *nicht aufgeteilt* bleibt:** Leerlauf, während **keine** Richtung eingestellt
 > ist — also bei *Automatik* (`heat_cool`) oder wenn dein Gerät gar keinen Modus meldet. Dann
 > gibt es nichts, worauf eedc zurückfallen könnte, und geraten wird nicht.
+>
+> **Im Live-Bild sichtbar:** Meldet die Aktuelle Aktion **Leerlauf**, zeigen der Energiefluss
+> (*Cockpit → Live*) und der Block „Überblick" der Wärmepumpe den Modus-Chip blass — in der Kachel
+> steht „Leerlauf" (das Symbol zeigt den Modus weiter), im Tooltip und in „Auf einen Blick"
+> „Heizen · Leerlauf". Der Modus selbst bleibt „Heizen", auch im HA-Sensor und im MQTT-Topic des
+> Betriebsmodus. ⚠ **eedc leitet keine Ruhe aus der Leistung ab:** Meldet deine Integration keine
+> Aktuelle Aktion, bleibt eine Wärmepumpe mit 8 W im Modus „Heizen" — eine Schwelle würde Ruhe aus
+> dem Messrauschen erfinden.
 
 > ### Zähler schlagen den Betriebsmodus
 >

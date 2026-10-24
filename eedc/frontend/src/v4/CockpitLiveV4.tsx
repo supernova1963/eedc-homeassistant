@@ -463,6 +463,8 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           summeErzeugung: data.summe_erzeugung_kw,
           summeVerbrauch: data.summe_verbrauch_kw,
           summePv: data.summe_pv_kw,
+          // P-433-1 S1-2: Zeile «gesamt …» am Haus-Kreis (auch im Vollbild, das eedc-card einbettet).
+          verbrauchGesamt: data.verbrauch_gesamt_kw ?? null,
           tagesWerte: data.heute_kwh_pro_komponente ?? undefined,
           gauges: data.gauges,
           netzPufferW: selectedAnlage?.netz_puffer_w ?? 100,
