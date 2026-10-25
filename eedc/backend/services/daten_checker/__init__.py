@@ -151,6 +151,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_ha_rueckgang(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
+        # P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.
+        ergebnisse.extend(await self._check_sensor_ohne_langzeitstatistik(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_zeitzone_ha(anlage))

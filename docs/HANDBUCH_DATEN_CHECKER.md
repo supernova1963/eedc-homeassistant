@@ -34,6 +34,7 @@
    14. [Klimaanlage – Betriebsmodus](#414-klimaanlage--betriebsmodus)
    14a. [Betriebsmodus – unbekannter Wert](#414a-betriebsmodus--unbekannter-wert)
    15. [Sensor-Zuordnung – Leistung ↔ Energie verwechselt](#415-sensor-zuordnung--leistung--energie)
+   15a. [Sensor ohne Langzeitstatistik](#415a-sensor-ohne-langzeitstatistik)
    16. [Quellen-Konflikte](#416-quellen-konflikte)
    17. [Datenquellen-Drift zu Home Assistant](#417-datenquellen-drift)
    18. [PV-Doppelerfassung (Verdacht)](#418-pv-doppelerfassung)
@@ -107,7 +108,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **35 Kategorien** (Stand 24.10.2026; dazugekommen sind *Strompreise – eigener Wärmepumpen-Tarif* und *Betriebsmodus – unbekannter Wert*; am 10.10.2026 waren es 33, davor stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **elf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
+eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne Langzeitstatistik*, am 24.10.2026 *Strompreise – eigener Wärmepumpen-Tarif* und *Betriebsmodus – unbekannter Wert*; am 10.10.2026 waren es 33, davor stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **zwölf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -135,6 +136,7 @@ eedc prüft **35 Kategorien** (Stand 24.10.2026; dazugekommen sind *Strompreise 
 | 16 | Klimaanlage – Betriebsmodus (§4.14) | greift | greift |
 | 16a | **Betriebsmodus – unbekannter Wert** (§4.14a) | greift | **wird übersprungen** (der Wert kommt aus HA) |
 | 17 | **Sensor-Zuordnung – Leistung ↔ Energie** (§4.15) | greift | **wird übersprungen** (Einheit kommt aus HA) |
+| 17a | **Sensor ohne Langzeitstatistik** (§4.15a) | greift | **wird übersprungen** (`state_class` kommt aus HA; über MQTT gibt es keine Langzeitstatistik) |
 | 18 | Quellen-Konflikte (§4.16) | greift | greift |
 | 19 | **Datenquellen-Drift zu HA** (§4.17) | greift | **wird übersprungen** (keine Vergleichsseite) |
 | 20 | PV-Doppelerfassung (§4.18) | greift | greift |
@@ -896,6 +898,20 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 | **Energie-Slot „\[Feld\]" trägt einen Leistungssensor (Einheit W)** | ⚠️ WARNING | Ein Leistungssensor steht in einem kWh-Feld. eedc fällt auf eine Näherung zurück (Integration über die Zeit) — ungenauer und anfällig für Lücken. | *Einstellungen → Datenquellen*, einen kumulativen kWh-Zähler wählen. |
 
 > **Nur diese eine Verwechslung wird gemeldet.** Ladestand (%), Temperatur (°C), Preis (ct/kWh) und Kilometer bleiben ungeprüft: Dort sind mehrere Einheiten legitim, und eine Meldung wäre öfter falsch als richtig. **Ohne HA-Verbindung** wird die Kategorie still übersprungen — die Einheit kommt aus Home Assistant.
+
+---
+
+### 4.15a Sensor ohne Langzeitstatistik <a name="415a-sensor-ohne-langzeitstatistik"></a>
+
+**Was wird geprüft:** Trägt ein zugeordneter **Vorlauf-**, **Rücklauf-** oder **Zusatzheizungs-Sensor** einer Wärmepumpe in Home Assistant `state_class: measurement`? Gelesen wird der aktuelle Zustand des Sensors, je aktiver Wärmepumpe.
+
+**Warum das zählt:** Den aktuellen Wert zeigt eedc aus dem Sensor-Zustand — live und im Überblick des Wärmepumpen-Hubs. **Stündliche Mittelwerte** übernimmt eedc dagegen aus der Langzeitstatistik von Home Assistant (rückwirkend, so weit sie zurückreicht), und die führt HA nur für Sensoren mit `state_class: measurement`. Ohne sie bleibt der Tagesverlauf dieser Werte leer, ohne dass es sonst jemand sagt.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **„\[Gerät\]": n Sensor(en) ohne Langzeitstatistik — Live ja, Tagesverlauf nein** | ℹ️ INFO | Die Meldung nennt je Sensor das Feld und die Entität. | In Home Assistant `state_class: measurement` ergänzen (per `customize`, HA-Neustart nötig) oder einen Template-Sensor anlegen, der es mitbringt, und ihn unter *Einstellungen → Datenquellen* zuordnen. Ab dann übernimmt eedc die Stundenmittel aus der Statistik; Stunden, für die HA keine geführt hat, bleiben leer. |
+
+> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn HA den Sensor gerade nicht liefert, an stillgelegten Geräten und für Felder, deren Quelle MQTT ist — über MQTT entstehen ohnehin keine Stundenmittel (benannte Grenze, [Wärme & Klima, Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)). Die Warmwasser-Temperatur prüft diese Kategorie nicht.
 
 ---
 

@@ -131,6 +131,14 @@ class CheckKategorie(str, Enum):
     # eindeutig gefährliche Leistung/Energie-Verwechslung; %/°C/Preis/km bewusst
     # ausgenommen (legitime Einheiten-Varianten → Fehlalarm-Risiko).
     SENSOR_MAPPING_EINHEIT = "sensor_mapping_einheit"
+    # P-433-3 S1 (#432, Konzept #433 Stufe 3, Ü6 der Gegenprüfung): ein zugeordneter Vorlauf-, Rücklauf- oder
+    # Zusatzheizungs-Sensor einer Wärmepumpe trägt in HA kein `state_class: measurement`. Live zeigt eedc den Wert
+    # trotzdem; die Stundenmittel (Mittelwert-Kanal, `kanal/katalog.py::_regel_mean`) entstehen aber nur aus HAs
+    # Langzeitstatistik — ohne sie bleibt der Tagesverlauf leer, still. INFO je Gerät, «Live ja, Tagesverlauf nein».
+    # Gelesen wird der aktuelle HA-State (`state_class` aus den Attributen, derselbe Abruf `fetch_selected_states`
+    # wie die Einheit im Nachbar `SENSOR_MAPPING_EINHEIT`); ohne HA keine Meldung. Kein Reparatur-Knopf — der Weg
+    # liegt in HA (`customize` oder ein Template-Sensor mit `state_class`).
+    SENSOR_OHNE_LANGZEITSTATISTIK = "sensor_ohne_langzeitstatistik"
     # N-426-Nachtrag (13.09.2026): **die erste Kategorie für Wetterfelder.**
     # `Monatsdaten.durchschnittstemperatur` wurde mit dem V4-Flip vom
     # Auto-Fill abgehängt und ist seit dem 25.07.2026 in jedem abgeschlossenen

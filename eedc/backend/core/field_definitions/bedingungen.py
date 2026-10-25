@@ -111,6 +111,10 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "leistung_warmwasser_w"): ("optional", None),
     ("waermepumpe", "leistung_kuehlen_w"): ("optional", None),
     ("waermepumpe", "warmwasser_temperatur_c"): ("optional", None),
+    # P-433-3 S1: reine Anzeige wie die Warmwasser-Temperatur — ohne sie fehlt nur die Kachel.
+    ("waermepumpe", "vorlauf_temperatur_c"): ("optional", None),
+    ("waermepumpe", "ruecklauf_temperatur_c"): ("optional", None),
+    ("waermepumpe", "heizstab_leistung_w"): ("optional", None),
     # #263 K-2 (Konzept §7 E-E): JEDER Wärmepumpe angeboten, nicht nur
     # `wp_art = luft_luft`. Der Grund ist gemessen, nicht vorsorglich:
     # azywietz-webs zwei Klimaanlagen laufen als `luft_wasser`, weil das Feld

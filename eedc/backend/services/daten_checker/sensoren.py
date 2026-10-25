@@ -27,6 +27,56 @@ _EAUTO_FELDER_UNTER_WALLBOX: frozenset[str] = frozenset(
 )
 
 
+#: P-433-3 S1: Live-Felder der Wärmepumpe, deren Stundenmittel aus HAs Langzeitstatistik entstehen sollen
+#: (Temperatur-Verlauf). Die Warmwasser-Temperatur gehört nicht dazu (Bauplan S1-5: Vorlauf, Rücklauf, Zusatzheizung).
+_LTS_MITTEL_FELDER: tuple[str, ...] = ("vorlauf_temperatur_c", "ruecklauf_temperatur_c", "heizstab_leistung_w")
+
+
+def _ha_live_entities(anlage: Anlage) -> dict[str, dict[str, str]]:
+    """``{inv_id: {live_key: entity}}`` so, wie der Mittelwert-Kanal sie aus HA liest (`kanal/schreiber._mean_zuordnung`).
+
+    Grundlage ist die `live`-Zuordnung; eine `quellen`-Zuordnung auf HA ersetzt die Entität, eine auf MQTT oder
+    „keine" nimmt das Feld heraus — für dieses Feld gibt es dann keine HA-Langzeitstatistik, nach der zu fragen wäre.
+    """
+    from backend.services.live_sensor_config import extract_live_config, extract_quellen_live
+    from backend.services.snapshot.keys import QUELLE_HA_ENERGY
+
+    _, inv_live_map, _, _ = extract_live_config(anlage)
+    _, quellen_inv, _ = extract_quellen_live(anlage)
+    out = {inv_id: dict(live) for inv_id, live in inv_live_map.items()}
+    for inv_id, keys in quellen_inv.items():
+        for key, tup in keys.items():
+            quelle, eid = tup[0], tup[1]
+            if quelle in QUELLE_HA_ENERGY and eid:
+                out.setdefault(inv_id, {})[key] = eid
+            else:
+                out.get(inv_id, {}).pop(key, None)
+    return out
+
+
+def _meldung_ohne_langzeitstatistik(kat: str, inv, betroffen: list[str]) -> CheckErgebnis:
+    """Das INFO je Gerät: welche Sensoren, was fehlt, der Weg in HA."""
+    return CheckErgebnis(
+        kategorie=kat, schwere=CheckSeverity.INFO.value,
+        meldung=(
+            f"„{inv.bezeichnung}“: {len(betroffen)} Sensor(en) ohne Langzeitstatistik — "
+            "Live ja, Tagesverlauf nein"
+        ),
+        details=(
+            "Diese Sensoren tragen in Home Assistant kein `state_class: measurement`: "
+            f"{'; '.join(betroffen)}. Den aktuellen Wert zeigt eedc trotzdem (Live, Überblick). "
+            "Stündliche Mittelwerte für den Tagesverlauf entstehen aber nur aus der "
+            "Langzeitstatistik von Home Assistant, und die führt HA nur mit diesem `state_class`. "
+            "Der Weg: in Home Assistant `state_class: measurement` ergänzen (per `customize`, "
+            "HA-Neustart nötig) oder einen Template-Sensor anlegen, der es mitbringt, und ihn hier "
+            "zuordnen. Ab dann füllt eedc die Stundenmittel aus der Statistik nach, so weit sie "
+            "zurückreicht — Stunden, für die HA keine Statistik geführt hat, bleiben leer."
+        ),
+        link=LINK_DATENQUELLEN,
+        investition_id=inv.id,
+    )
+
+
 def _pflicht_ohne_eintrag(
     eintraege: list[dict], quellen: dict, vorhandene_typen: set,
 ) -> set[str]:
@@ -787,6 +837,57 @@ class SensorChecks:
             ))
 
         return ergebnisse
+
+    # ─── Sensor ohne Langzeitstatistik: Vorlauf/Rücklauf/Zusatzheizung (P-433-3 S1) ────
+
+    async def _check_sensor_ohne_langzeitstatistik(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Vorlauf-, Rücklauf- oder Zusatzheizungs-Sensor einer Wärmepumpe ohne `state_class: measurement`.
+
+        Live zeigt eedc diese Werte aus dem Sensor-Zustand. Die **Stundenmittel** — der spätere Tagesverlauf der
+        Temperaturen — entstehen aber nur aus HAs Langzeitstatistik (Mittelwert-Kanal, rückwirkend nachgefüllt,
+        `kanal/nachfuellen.py`), und die führt HA nur für Sensoren mit `state_class: measurement`. Ohne sie bleibt der
+        Verlauf leer, ohne dass sonst etwas darauf hinweist (Ü6 der Gegenprüfung P-433-3).
+
+        Eng gefasst: nur aktive Wärmepumpen, nur HA-Zuordnungen (MQTT-Werte haben keine Langzeitstatistik — benannte
+        Grenze im Handbuch Wärme & Klima), nur Sensoren, deren State HA liefert. Ohne HA (Standalone) keine Meldung.
+        Gelesen wird `state_class` aus dem aktuellen State, derselbe Abruf wie die Einheit im Nachbarn
+        `_check_sensor_mapping_einheit`.
+        """
+        from backend.core.field_definitions import FELD_LABELS
+        from backend.models.investition import Investition
+        from backend.services.ha_state_service import get_ha_state_service
+
+        kat = CheckKategorie.SENSOR_OHNE_LANGZEITSTATISTIK.value
+        heute = date.today()
+        inv_live_map = _ha_live_entities(anlage)
+        if not inv_live_map:
+            return []
+        wps = (await self.db.execute(
+            select(Investition).where(Investition.anlage_id == anlage.id, Investition.typ == "waermepumpe")
+        )).scalars().all()
+        slots: list[tuple[object, str, str]] = []
+        for inv in wps:
+            if not inv.ist_aktiv_an(heute):
+                continue
+            live = inv_live_map.get(str(inv.id)) or {}
+            slots.extend((inv, feld, live[feld]) for feld in _LTS_MITTEL_FELDER if live.get(feld))
+        if not slots:
+            return []
+
+        ha = get_ha_state_service()
+        if not ha.is_available:
+            return []
+        try:
+            klassen = await ha.get_sensor_state_classes([eid for _, _, eid in slots])
+        except Exception:  # noqa: BLE001 — HA nicht lesbar: keine Meldung statt einer, die niemand auflösen kann
+            return []
+
+        je_geraet: dict[int, tuple[object, list[str]]] = {}
+        for inv, feld, eid in slots:
+            if eid not in klassen or klassen[eid] == "measurement":
+                continue
+            je_geraet.setdefault(inv.id, (inv, []))[1].append(f"{FELD_LABELS.get(feld, feld)} ({eid})")
+        return [_meldung_ohne_langzeitstatistik(kat, inv, betroffen) for inv, betroffen in je_geraet.values()]
 
     # ─── Sensor-Mapping-Einheit: Leistung ↔ Energie (#674 + #200) ────────
 

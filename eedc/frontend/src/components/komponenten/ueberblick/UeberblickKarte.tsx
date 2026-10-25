@@ -14,19 +14,22 @@
  * - **Anlagen-Ring = Gauge `eigenverbrauch`** (B9, E-P2-8): die EV-Quote der
  *   Anlage inklusive Speicher-Entladung — dieselbe Zahl wie im Cockpit, kein
  *   Wert je Gerät. Nur wenn die Live-Antwort sie liefert (Erzeugung > 0).
- * - **Gestrichen (W7):** Zusatzheizung, Betriebsstunden, Kompressor-Starts —
- *   dafür gibt es kein Feld; der Heizstab kommt mit P-433-3. Keine Kosten-,
- *   CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).
+ * - **Gestrichen (W7):** Betriebsstunden, Kompressor-Starts — dafür gibt es kein
+ *   Live-Feld. Keine Kosten-, CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).
+ * - **P-433-3 S1:** Vorlauf, Rücklauf, Spreizung (vom Backend, `spreizung_k`) und Zusatzheizung
+ *   je Gerät aus dem Knoten (`vorlauf_c` …); Warmwasser je Gerät (`warmwasserC`).
+ *   Läuft die Zusatzheizung (> 0 W), steht neben dem Modus der gedämpfte Chip
+ *   «Zusatzheizung aktiv» (`ui/ModusChip::ZusatzChip`).
  */
 import type { ReactNode } from 'react'
 import RingGauge from '../../charts/RingGauge'
 import { CHART_COLORS, fmtZahl } from '../../../lib'
 import { formatPower } from '../../live/EnergieFluss'
-import ModusChip from '../../ui/ModusChip'
+import ModusChip, { ZusatzChip } from '../../ui/ModusChip'
 import type { LiveDashboardResponse, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
-import { istPassivGekuehlt, stromHeute, wpKnoten } from './kachelAnker'
+import { istPassivGekuehlt, stromHeute, warmwasserC, wpKnoten, zusatzheizungAktiv } from './kachelAnker'
 
 export interface UeberblickKarteProps {
   inv: Investition
@@ -49,7 +52,8 @@ function Zeile({ label, children, data }: { label: string; children: ReactNode; 
 export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete }: UeberblickKarteProps) {
   const k = wpKnoten(live, inv.id)
   const leistungKw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
-  const ww = live?.warmwasser_temperatur_c ?? null
+  const ww = warmwasserC(live, inv.id)
+  const spreizung = k?.spreizung_k ?? null
   const aussen = wetter?.aktuell?.temperatur_c ?? null
   const strom = stromHeute(live, inv.id, mehrereGeraete)
   const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
@@ -64,17 +68,26 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
     <div className="space-y-3" data-ueberblick-karte>
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{inv.bezeichnung}</span>
-        {k?.betriebsmodus && k.betriebsmodus_label && (
-          <ModusChip
-            modus={k.betriebsmodus} label={k.betriebsmodus_label} passiv={istPassivGekuehlt(k, inv)}
-            aktion={k.betriebsmodus_aktion_label}
-          />
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {k?.betriebsmodus && k.betriebsmodus_label && (
+            <ModusChip
+              modus={k.betriebsmodus} label={k.betriebsmodus_label} passiv={istPassivGekuehlt(k, inv)}
+              aktion={k.betriebsmodus_aktion_label}
+            />
+          )}
+          {zusatzheizungAktiv(k) && <ZusatzChip text="Zusatzheizung aktiv" />}
+        </div>
       </div>
 
       <div className="space-y-1">
         {leistungKw != null && <Zeile label="Leistung jetzt" data="leistung">{formatPower(leistungKw)}</Zeile>}
         {ww != null && <Zeile label="Warmwasser" data="warmwasser">{fmtZahl(ww, 1)} °C</Zeile>}
+        {k?.vorlauf_c != null && <Zeile label="Vorlauf" data="vorlauf">{fmtZahl(k.vorlauf_c, 1)} °C</Zeile>}
+        {k?.ruecklauf_c != null && <Zeile label="Rücklauf" data="ruecklauf">{fmtZahl(k.ruecklauf_c, 1)} °C</Zeile>}
+        {spreizung != null && <Zeile label="Spreizung" data="spreizung">{fmtZahl(spreizung, 1)} K</Zeile>}
+        {k?.heizstab_w != null && (
+          <Zeile label="Zusatzheizung" data="zusatzheizung">{formatPower(k.heizstab_w / 1000)}</Zeile>
+        )}
         {aussen != null && <Zeile label="Außentemperatur" data="aussen">{fmtZahl(aussen, 1)} °C</Zeile>}
       </div>
 

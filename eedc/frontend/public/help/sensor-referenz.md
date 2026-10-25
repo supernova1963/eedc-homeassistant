@@ -196,7 +196,10 @@ eigene Speicher-Investition erfasst und publiziert unter deren ID auf
 | `leistung_heizen_w` | Leistung Heizen | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Heizbetrieb. Optional. ⚠️ Wird **nicht** ausgewertet, solange `leistung_w` zugeordnet ist — siehe Kasten unter der Tabelle. | Cockpit → Live · Cockpit → Tag |
 | `leistung_warmwasser_w` | Leistung Warmwasser | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Warmwasser. Optional. ⚠️ Wird **nicht** ausgewertet, solange `leistung_w` zugeordnet ist — siehe Kasten unter der Tabelle. | Cockpit → Live · Cockpit → Tag |
 | `leistung_kuehlen_w` | Leistung Kühlen | W | Momentan | Nur bei getrennter Messung: Leistungsaufnahme Kühlbetrieb. Optional, reine Anzeige — die Mengen kommen aus dem kWh-Zähler. ⚠️ Wird **nicht** ausgewertet, solange `leistung_w` zugeordnet ist — siehe Kasten unter der Tabelle. | Cockpit → Live · Cockpit → Tag |
-| `warmwasser_temperatur_c` | Warmwassertemperatur | °C | Momentan | Aktuelle Warmwassertemperatur. Optional, wird als Gauge angezeigt. | Cockpit → Live |
+| `warmwasser_temperatur_c` | Warmwassertemperatur | °C | Momentan | Aktuelle Warmwassertemperatur. Optional, wird als Gauge angezeigt; im Überblick des Wärmepumpen-Hubs je Gerät. | Cockpit → Live · Komponenten → Wärmepumpe |
+| `vorlauf_temperatur_c` | Vorlauf | °C | Momentan | Vorlauftemperatur des Heizkreises. Optional, reine Anzeige (Kachel und Karte im Überblick, je Gerät). Mit `state_class: measurement` in Home Assistant entstehen daraus stündliche Mittelwerte — rückwirkend, so weit HAs Langzeitstatistik reicht; über MQTT nur live. | Komponenten → Wärmepumpe |
+| `ruecklauf_temperatur_c` | Rücklauf | °C | Momentan | Rücklauftemperatur des Heizkreises. Optional, reine Anzeige wie der Vorlauf; mit beiden steht die Spreizung in der Karte. | Komponenten → Wärmepumpe |
+| `heizstab_leistung_w` | Leistung Zusatzheizung | W | Momentan | Leistung der Zusatzheizung (Heizstab). Optional, reine Anzeige: **keine** kWh, **keine** Summe — aus einer Leistung rechnet eedc keine Menge hoch. Über 0 W steht in der Karte „Zusatzheizung aktiv". | Komponenten → Wärmepumpe |
 
 > ⚠️ **`leistung_w` verdrängt `leistung_heizen_w`, `leistung_warmwasser_w` und
 > `leistung_kuehlen_w`.** Ist die Gesamtleistung zugeordnet, wertet eedc die drei

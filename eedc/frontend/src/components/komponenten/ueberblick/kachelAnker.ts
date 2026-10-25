@@ -9,8 +9,11 @@
  * **Zuordnung (Bauplan §3 E1):** Leistung + Modus der Wärmepumpe nach Bauart —
  * Luft/Wasser → A · Sole/Grundwasser → C · Brauchwasser → F · Luft/Luft → O;
  * Innengeräte (`innengeraete[]` je Investition) → L, M, N in Listenreihenfolge,
- * ab dem vierten an N (das Layout gruppiert sie); Warmwasser-Temperatur → E;
- * Strom heute je Gerät → I; Außentemperatur → Himmel.
+ * ab dem vierten an N (das Layout gruppiert sie); Warmwasser-Temperatur je Gerät → E;
+ * Strom heute je Gerät → I; Außentemperatur → Himmel; seit P-433-3 S1 je Gerät
+ * «Vorlauf · Rücklauf» → {@link ANKER_VORLAUF} und «Zusatzheizung» → {@link ANKER_ZUSATZHEIZUNG}
+ * (eine Regel für alle Bauarten). Die neuen Wert-Kacheln stehen **nicht** in der
+ * «Ohne Sensor»-Zeile (G7/E-P3-13): sie sind Zusatzangaben, kein Grundbestand.
  *
  * ⚠ **P13 (ADR-002), Gruppe 2 «Anzeige-Ort nach Bauart»:** die Bauart wählt
  * hier nur, AN WELCHEM OBJEKT eine Kachel steht — nie, OB ein Wert gezeigt
@@ -69,6 +72,12 @@ export interface KachelErgebnis {
   ohneSensor: string[]
 }
 
+/** P-433-3 S1: Objekt der Kachel «Vorlauf · Rücklauf» — das Hydraulikmodul an der Rückwand, wo Vor- und
+ *  Rücklauf aus der Wärmepumpe austreten (Master 25.10., H1 Option a; O ist die Klima-Außeneinheit). */
+export const ANKER_VORLAUF: AnkerId = 'G'
+/** P-433-3 S1 (Bauplan S1-3): Objekt der Kachel «Zusatzheizung» — Pufferspeicher mit Heizstab. */
+export const ANKER_ZUSATZHEIZUNG: AnkerId = 'D'
+
 /** Sole- und Grundwasser-Wärmepumpen stehen im Bild am Schrank (C). */
 const SCHRANK_BAUARTEN: readonly string[] = ['sole_wasser', 'grundwasser']
 
@@ -118,6 +127,27 @@ export function stromHeute(live: LiveDashboardResponse | null, invId: number, me
   const werte = live?.heute_kwh_pro_komponente
   if (!werte) return null
   return werte[`waermepumpe_${invId}`] ?? (mehrere ? null : werte['waermepumpe'] ?? null)
+}
+
+/**
+ * Warmwasser-Temperatur eines Geräts (P-433-3 S1, E-P3-7): der Wert am Knoten `waermepumpe_<id>`.
+ * Nur wenn **kein** Wärmepumpen-Knoten einen eigenen Wert trägt (älteres Backend, oder die Wärmepumpe
+ * hat keinen Leistungssensor und damit keinen Knoten), gilt der Anlagenwert `warmwasser_temperatur_c`
+ * (erste Wärmepumpe mit Wert) — so wie vor P-433-3. Eine Regel für Kachel und Karte.
+ */
+export function warmwasserC(live: LiveDashboardResponse | null, invId: number): number | null {
+  if (!live) return null
+  if (hatGeraeteWarmwasser(live)) return wpKnoten(live, invId)?.warmwasser_c ?? null
+  return live.warmwasser_temperatur_c ?? null
+}
+
+function hatGeraeteWarmwasser(live: LiveDashboardResponse): boolean {
+  return live.komponenten.some((k) => k.key.startsWith('waermepumpe_') && k.warmwasser_c != null)
+}
+
+/** Zusatzheizung läuft (Leistung > 0) — für den Chip-Zusatz der Karte. */
+export function zusatzheizungAktiv(k: Pick<LiveKomponente, 'heizstab_w'> | undefined): boolean {
+  return (k?.heizstab_w ?? 0) > 0
 }
 
 function geraeteKachel(inv: Investition, k: LiveKomponente, heute: number | null, referenz: string): UeberblickKachel {
@@ -178,6 +208,36 @@ function wertKachel(id: string, anker: AnkerId, label: string, icon: string, col
   return { id, art: 'wert', anker, label, icon, color, isActive: true, wertText, zweiteZeile: null, tip, investitionId }
 }
 
+/** «Vorlauf · Rücklauf» eines Geräts (P-433-3 S1) — `null` ohne beide Werte. */
+function vorlaufKachel(inv: Investition, k: LiveKomponente, label: (was: string) => string): UeberblickKachel | null {
+  const v = k.vorlauf_c ?? null
+  const r = k.ruecklauf_c ?? null
+  if (v == null && r == null) return null
+  const beide = v != null && r != null
+  const was = beide ? 'Vorlauf · Rücklauf' : v != null ? 'Vorlauf' : 'Rücklauf'
+  const wert = beide ? `${fmtZahl(v, 1)} → ${fmtZahl(r, 1)} °C` : `${fmtZahl((v ?? r) as number, 1)} °C`
+  // Die Spreizung rechnet das Backend (`spreizung_k`, Layer) — der Client zeigt sie nur.
+  const spreizung = k.spreizung_k ?? null
+  const tip = [
+    inv.bezeichnung,
+    ...(v != null ? [`Vorlauf: ${fmtZahl(v, 1)} °C`] : []),
+    ...(r != null ? [`Rücklauf: ${fmtZahl(r, 1)} °C`] : []),
+    ...(spreizung != null ? [`Spreizung: ${fmtZahl(spreizung, 1)} K`] : []),
+    'Quelle: Live-Snapshot',
+  ].join('\n')
+  return wertKachel(`wert-vorlauf-${inv.id}`, ANKER_VORLAUF, label(was), 'thermometer', CHART_COLORS.wpWaerme,
+    wert, tip, inv.id)
+}
+
+/** «Zusatzheizung» eines Geräts (P-433-3 S1) — nur mit Wert, auch bei 0 W (der Sensor meldet: steht). */
+function zusatzheizungKachel(inv: Investition, k: LiveKomponente, label: (was: string) => string): UeberblickKachel | null {
+  if (k.heizstab_w == null) return null
+  const w = k.heizstab_w
+  return wertKachel(`wert-zusatzheizung-${inv.id}`, ANKER_ZUSATZHEIZUNG, label('Zusatzheizung'), 'heater',
+    CHART_COLORS.wpStrom, formatPower(w / 1000),
+    `${inv.bezeichnung}\nZusatzheizung: ${fmtZahl(w, 0)} W\nQuelle: Live-Snapshot`, inv.id)
+}
+
 const hatInnenWert = (g: LiveInnengeraet) =>
   g.leistung_w != null || g.ist_temperatur_c != null || g.soll_temperatur_c != null
 
@@ -205,14 +265,22 @@ export function baueUeberblickKacheln({ geraete, live, wetter, referenz }: Kache
     }
   }
 
-  // Warmwasser-Temperatur: die Live-Antwort trägt EINEN Wert (erste Wärmepumpe
-  // mit Zuordnung, Builder) — deshalb eine Kachel, nicht je Gerät. Fehlt er,
-  // steht er in der Zeile — unabhängig von der Bauart (P13: was ein Gerät
+  // Warmwasser-Temperatur je Gerät (P-433-3 S1, E-P3-7): eine Kachel je Wärmepumpe mit eigenem Wert
+  // (`warmwasser_c` am Knoten). Trägt kein Knoten einen, steht wie bisher EINE Kachel mit dem Anlagenwert
+  // (`warmwasserC`). Fehlt beides, steht er in der Zeile — unabhängig von der Bauart (P13: was ein Gerät
   // liefern kann, sagt die Zuordnung; das Bild zeigt den Speicher ohnehin).
-  if (live?.warmwasser_temperatur_c != null) {
+  const wwTip = (t: number, wer: string) => `${wer}\nAktuell: ${fmtZahl(t, 1)} °C\nQuelle: Live-Snapshot`
+  if (live && hatGeraeteWarmwasser(live)) {
+    for (const inv of geraete) {
+      const t = warmwasserC(live, inv.id)
+      if (t == null) continue
+      kacheln.push(wertKachel(`wert-warmwasser-${inv.id}`, 'E', name(inv, 'Warmwasser'), 'droplets',
+        CHART_COLORS.wpWarmwasser, `${fmtZahl(t, 1)} °C`, wwTip(t, name(inv, 'Warmwasser-Temperatur')), inv.id))
+    }
+  } else if (live?.warmwasser_temperatur_c != null) {
     const t = live.warmwasser_temperatur_c
     kacheln.push(wertKachel('wert-warmwasser', 'E', 'Warmwasser', 'droplets', CHART_COLORS.wpWarmwasser,
-      `${fmtZahl(t, 1)} °C`, `Warmwasser-Temperatur\nAktuell: ${fmtZahl(t, 1)} °C\nQuelle: Live-Snapshot`, null))
+      `${fmtZahl(t, 1)} °C`, wwTip(t, 'Warmwasser-Temperatur'), null))
   } else {
     ohneSensor.push('Warmwasser-Temperatur')
   }
@@ -226,6 +294,17 @@ export function baueUeberblickKacheln({ geraete, live, wetter, referenz }: Kache
     } else {
       ohneSensor.push(name(inv, 'Strom heute'))
     }
+  }
+
+  // P-433-3 S1: Vorlauf/Rücklauf und Zusatzheizung je Gerät — nur mit Wert, nie in der «Ohne Sensor»-Zeile (G7).
+  for (const inv of geraete) {
+    const k = wpKnoten(live, inv.id)
+    if (!k) continue
+    const label = (was: string) => name(inv, was)
+    const vorlauf = vorlaufKachel(inv, k, label)
+    if (vorlauf) kacheln.push(vorlauf)
+    const zusatz = zusatzheizungKachel(inv, k, label)
+    if (zusatz) kacheln.push(zusatz)
   }
 
   const aussen = wetter?.aktuell?.temperatur_c

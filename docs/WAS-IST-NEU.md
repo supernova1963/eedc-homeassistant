@@ -30,6 +30,16 @@ Strom, Wärme und Arbeitszahl — und zeigt den Eigenverbrauch der ganzen Anlage
 er sich alle 5 Sekunden ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe),
 [Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).
 
+**Wärmepumpe: Vorlauf, Rücklauf und Zusatzheizung im Überblick.** Unter *Einstellungen → Datenquellen* kannst du jeder
+Wärmepumpe jetzt einen Sensor für **Vorlauf**, **Rücklauf** und die **Leistung der Zusatzheizung** (Heizstab) zuordnen —
+im Block *Gerät gesamt*, gleich welche Bauart. Im Block „Überblick" erscheinen sie als Kacheln („34,2 → 29,1 °C",
+„Zusatzheizung 1.500 W"), „Auf einen Blick" nennt dazu die Spreizung und zeigt „Zusatzheizung aktiv", solange der Heizstab
+läuft. Auch die Warmwasser-Temperatur steht jetzt je Gerät. Die Werte sind reine Anzeige: aus der Heizstab-Leistung rechnet
+eedc keine Menge. Trägt der Sensor in Home Assistant `state_class: measurement`, übernimmt eedc seine Stundenmittel aus der
+Langzeitstatistik — rückwirkend, so weit sie zurückreicht; fehlt das, sagt es der Daten-Checker („Sensor ohne
+Langzeitstatistik"). Über MQTT gibt es diese Werte nur live ([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional),
+[Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)).
+
 **Einstellungen → Datenquellen: die Wärmepumpe nach Betriebsart.** Die Felder einer Wärmepumpe oder Klimaanlage stehen jetzt
 in Blöcken *Gerät gesamt · Heizen · Warmwasser · Kühlen* (bei Klimaanlagen auch *Lüften · Entfeuchten*), jeder mit einem
 Status im Kopf: „vollständig", „fehlt: Strom, Wärme", „aus Betriebsmodus abgeleitet" oder „passiv". So siehst du auf einen

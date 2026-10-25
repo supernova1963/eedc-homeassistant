@@ -967,6 +967,29 @@ LIVE_FELDER_INV: dict = {
          "bedingung": "!luft_luft", "weich": ("luft_luft",),  # P-433-2 (H1), wie Leistung Warmwasser
          "hinweis": "Temperatur im Warmwasserspeicher in °C — reine Anzeige, geht in keine "
                     "Berechnung ein."},
+        # P-433-3 S1 (#432/#433 Stufe 3, Mathek): Vorlauf, Rücklauf und die Leistung der Zusatzheizung — Live-Felder
+        # des GERÄTS (`geraet`), **ohne Bedingung** (P13: an jeder Wärmepumpe zuordenbar, der Zähler entscheidet, nicht
+        # die Bauart). Reine Anzeige im Live-Pfad je Gerät (`live_komponenten_builder._wp_geraete_werte` → Hub-Überblick).
+        # Der Kanal legt sie als Mittelwert-Kanal an (`kanal/katalog.py::_regel_mean`, °C/W) und füllt ihn aus HAs
+        # Langzeitstatistik nach — Voraussetzung `state_class: measurement` (Daten-Checker «Sensor ohne
+        # Langzeitstatistik»). ⛔ Aus der Heizstab-Leistung entsteht keine kWh (WK §2.2, B2): die Menge kommt mit dem
+        # eigenen Zähler (P-433-3 S2), nie aus einer Hochrechnung dieses Felds.
+        {"key": "vorlauf_temperatur_c", "label": "Vorlauf", "einheit": "°C",
+         "betriebsart": WP_BETRIEBSART_GERAET,
+         "hinweis": "Vorlauftemperatur des Heizkreises in °C — reine Anzeige, geht in keine Berechnung ein. "
+                    "Stündliche Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
+                    "(`state_class: measurement`)."},
+        {"key": "ruecklauf_temperatur_c", "label": "Rücklauf", "einheit": "°C",
+         "betriebsart": WP_BETRIEBSART_GERAET,
+         "hinweis": "Rücklauftemperatur des Heizkreises in °C — reine Anzeige, geht in keine Berechnung ein. "
+                    "Stündliche Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
+                    "(`state_class: measurement`)."},
+        {"key": "heizstab_leistung_w", "label": "Leistung Zusatzheizung", "einheit": "W",
+         "betriebsart": WP_BETRIEBSART_GERAET,
+         "hinweis": "Momentane elektrische Leistung der Zusatzheizung (Heizstab) in W — reine Anzeige: "
+                    "aus diesem Feld entsteht keine kWh, und es geht in keine Summe ein. Stündliche "
+                    "Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
+                    "(`state_class: measurement`)."},
         # #263 K-2: der erste Wert in eedc, der ein ZUSTAND ist statt einer Zahl.
         # `zustand: True` ist keine Kosmetik, sondern die Weiche — siehe
         # ZUSTAND_LIVE_FELDER unter der Tabelle.

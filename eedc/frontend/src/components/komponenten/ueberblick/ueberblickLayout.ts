@@ -18,7 +18,9 @@
  *      und jedes weitere Innengerät («Innengeräte (n−3)» an N);
  *   2. passt die Reihe nicht: alle Innengeräte der Reihe in «Innengeräte (n)»;
  *   3. passt sie dann noch nicht: der Rest nach Rang in «Weitere (n)» (Geräte
- *      vor Innengeräten vor Werten; Werte: Warmwasser, Strom, Außen).
+ *      vor Innengeräten vor Werten; Werte: Warmwasser, Strom heute, Vorlauf · Rücklauf,
+ *      Zusatzheizung, Außen — in «Weitere» wandern zuerst Außen, dann Zusatzheizung,
+ *      dann Vorlauf · Rücklauf; P-433-3 S1).
  * Wert-Kacheln bilden nie eine eigene Gruppe (Ü6) — sie können nur in
  * «Weitere» landen.
  *
@@ -31,7 +33,7 @@
 import { ABSTAND_REIHE, computeDims, kapazitaet, type LayoutDims } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
 import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, type AnkerId } from './waermePanoramaAnker'
-import type { KachelArt } from './kachelAnker'
+import { ANKER_VORLAUF, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
 
 /** Was das Layout von einer Kachel wissen muss. */
 export interface LayoutKachel {
@@ -76,7 +78,9 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
 }
 
 /** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen. */
-const WERT_RANG: Record<string, number> = { E: 0, I: 1, HIMMEL: 2 }
+const WERT_RANG: Record<string, number> = {
+  E: 0, I: 1, [ANKER_VORLAUF]: 2, [ANKER_ZUSATZHEIZUNG]: 3, HIMMEL: 4,
+}
 function rang(p: Platz): number {
   if (p.gruppe === 'geraete' || p.mitglieder[0].art === 'geraet') return 0
   if (p.gruppe === 'innengeraete' || p.mitglieder[0].art === 'innengeraet') return 1

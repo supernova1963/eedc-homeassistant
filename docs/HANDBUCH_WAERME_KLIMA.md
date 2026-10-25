@@ -81,13 +81,15 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 | … einer Sole- oder Grundwasser-Wärmepumpe | Wärmepumpen-Schrank im Technikraum |
 | … einer Brauchwasser-Wärmepumpe | Warmwasser-Wärmepumpe auf dem Speicher |
 | … einer Split-Klimaanlage | Klima-Außeneinheit an der Hauswand; ihre Innengeräte an den Innengeräten im Bild (ab dem vierten als Gruppe „Innengeräte (n)") |
-| Warmwasser-Temperatur | Warmwasserspeicher |
+| Warmwasser-Temperatur (je Gerät) | Warmwasserspeicher |
+| Vorlauf · Rücklauf (je Gerät) | Hydraulikmodul an der Rückwand |
+| Zusatzheizung (Heizstab, je Gerät) | Pufferspeicher mit Heizstab |
 | Strom heute | Stromzähler |
 | Außentemperatur (Wetterdienst) | Himmel |
 
-Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss, als Chip in der Farbe der Funktion); kühlt das Gerät passiv, steht dort „Kühlen (passiv)", meldet es „Leerlauf", steht „Heizen · Leerlauf" (siehe *„Leerlauf behält deinen Modus"*). Vorlauf, Rücklauf und Heizstab haben im Bild schon ihren Platz, aber noch keine Werte.
+Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss, als Chip in der Farbe der Funktion); kühlt das Gerät passiv, steht dort „Kühlen (passiv)", meldet es „Leerlauf", steht „Heizen · Leerlauf" (siehe *„Leerlauf behält deinen Modus"*). **Vorlauf, Rücklauf und Zusatzheizung** haben eine Kachel, sobald ihr Sensor zugeordnet ist („34,2 → 29,1 °C", „Zusatzheizung 1.500 W"); fehlt er, steht dafür nichts in der Zeile „Ohne Sensor …" — sie sind Zusatzangaben, die viele Geräte nicht liefern. Die Karte „Auf einen Blick" nennt dazu die **Spreizung** (Vorlauf − Rücklauf in K) und zeigt neben dem Modus „Zusatzheizung aktiv", solange der Heizstab mehr als 0 W meldet.
 
-> **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie ist ein Wert der ganzen Anlage: bei mehreren Wärmepumpen die der ersten mit Sensor. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte.
+> **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie steht je Gerät; nur eine Wärmepumpe **ohne Leistungssensor** hat keinen eigenen Live-Wert — dann zeigt der Überblick, wie bisher, die Warmwasser-Temperatur der ersten Wärmepumpe mit Sensor, solange kein Gerät eine eigene liefert. Dasselbe gilt für Vorlauf, Rücklauf und Zusatzheizung: ohne Leistungssensor des Geräts erscheinen sie nicht. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte.
 
 ---
 
@@ -656,7 +658,11 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 
 ### Schritt 6 — Live-Werte (optional)
 
-*Leistung gesamt*, *Leistung Heizen*, *Leistung Warmwasser*, *Leistung Kühlen* (alle in W), *Warmwasser-Temperatur*, *Betriebsmodus*, *Soll-* und *Raumtemperatur*.
+*Leistung gesamt*, *Leistung Heizen*, *Leistung Warmwasser*, *Leistung Kühlen* (alle in W), *Warmwasser-Temperatur*, *Vorlauf*, *Rücklauf*, *Leistung Zusatzheizung* (W), *Betriebsmodus*, *Soll-* und *Raumtemperatur*.
+
+**Vorlauf, Rücklauf und Zusatzheizung** (im Block *Gerät gesamt*, an jeder Bauart) erscheinen im Überblick des Hubs *Komponenten → Wärmepumpe* je Gerät. Sie sind reine Anzeige: Aus der Zusatzheizungs-Leistung entsteht **keine** Menge, und sie wird zu keiner Summe addiert — sie ist ein Teil der Geräteleistung. **Stündliche Mittelwerte:** Trägt der Sensor in Home Assistant `state_class: measurement`, übernimmt eedc seine Stundenmittel aus der Langzeitstatistik von Home Assistant — **rückwirkend, so weit diese Statistik zurückreicht**, nicht erst ab der Zuordnung. Fehlt das `state_class`, sagt es der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#415a-sensor-ohne-langzeitstatistik) („Live ja, Tagesverlauf nein").
+
+> **Benannte Grenze — MQTT und Standalone.** Kommen diese Werte über MQTT (Standalone ohne Home Assistant), zeigt eedc sie **live**, führt aber **keine Stundenmittel**: Die entstehen nur aus der Langzeitstatistik von Home Assistant.
 
 Die Leistungsfelder erscheinen in *Cockpit → Live*: Unter dem Gerät steht *Leistung gesamt*, und wo du sie nicht misst, die Summe der Betriebsarten — das Symbol wechselt dann mit der stärksten von ihnen. Im Tagesverlauf bekommt jede gemessene Betriebsart ihre eigene Fläche. **Mengen entstehen daraus nicht** — Stromverbrauch, Wärme, Kälte und alle Arbeitszahlen kommen aus den kWh-Zählern.
 

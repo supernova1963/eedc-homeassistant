@@ -46,6 +46,19 @@ export interface LiveKomponente {
   fahrzeuge?: LiveFahrzeug[] | null
   /** Nur `wallbox_*`: „eindeutig" bei genau einer live liefernden Wallbox, sonst „geschaetzt". */
   fahrzeuge_zuordnung?: 'eindeutig' | 'geschaetzt' | null
+  // ── P-433-3 S1 (#432): Gerätewerte einer Wärmepumpe — reine Anzeige (Hub-Überblick) ──
+  // Nur `waermepumpe_*`, `null`/fehlend ohne Zuordnung. Das anlagenweite
+  // `warmwasser_temperatur_c` der Antwort bleibt daneben (erste WP mit Wert).
+  /** Vorlauftemperatur in °C. */
+  vorlauf_c?: number | null
+  /** Rücklauftemperatur in °C. */
+  ruecklauf_c?: number | null
+  /** Spreizung Vorlauf − Rücklauf in K — vom Backend gerechnet (Layer `temperatur.spreizung_k`), der Client zeigt sie nur. */
+  spreizung_k?: number | null
+  /** Warmwasser-Temperatur DIESES Geräts in °C. */
+  warmwasser_c?: number | null
+  /** Leistung der Zusatzheizung (Heizstab) in W — ein Teil von `verbrauch_kw`, nie dazu addiert. */
+  heizstab_w?: number | null
 }
 
 /**

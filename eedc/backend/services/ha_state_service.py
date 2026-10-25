@@ -473,6 +473,26 @@ class HAStateService:
             if self._unit_cache.get(eid, (0.0, ""))[1]
         }
 
+    async def get_sensor_state_classes(self, entity_ids: list[str]) -> dict[str, str]:
+        """`state_class` mehrerer Entities aus ihrem aktuellen State (P-433-3 S1, Daten-Checker).
+
+        Schwester von `get_sensor_units`: derselbe Abruf `fetch_selected_states` (derselbe TTL-Cache, dieselbe
+        gebündelte Verbindung, kein Voll-Dump), nur ein anderes Attribut. Ob HA für einen Sensor stündliche
+        Mittelwerte führt, hängt an `state_class: measurement` — der Mittelwert-Kanal liest genau die.
+
+        Returns:
+            entity_id → `state_class` (leerer Text, wenn die Entity keines trägt). Nicht gefundene oder nicht
+            erreichbare Entities fehlen — der Aufrufer unterscheidet „ohne `state_class`“ von „nicht gelesen“.
+        """
+        if not self.is_available or not entity_ids:
+            return {}
+        roh = await fetch_selected_states(self.api_url, self.token, entity_ids)
+        return {
+            eid: str((daten.get("attributes") or {}).get("state_class") or "")
+            for eid, daten in roh.items()
+            if daten is not None
+        }
+
     async def get_sensor_history(
         self,
         entity_ids: list[str],

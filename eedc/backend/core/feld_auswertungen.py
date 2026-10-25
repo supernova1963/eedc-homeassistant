@@ -410,6 +410,18 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     ("waermepumpe", "warmwasser_temperatur_c"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_warmwasser_temperatur"),
+        # P-433-3 S1 (E-P3-7): je Gerät am Wärmepumpen-Knoten — Kachel «Warmwasser» des Hub-Überblicks.
+        _a(KOMP_WP, "services/live_komponenten_builder.py", "_wp_geraete_werte"),
+    ),
+    # P-433-3 S1 (#432): Live je Gerät → Hub-Überblick (Kacheln «Vorlauf · Rücklauf», «Zusatzheizung», Karte).
+    ("waermepumpe", "vorlauf_temperatur_c"): (
+        _a(KOMP_WP, "services/live_komponenten_builder.py", "_wp_geraete_werte"),
+    ),
+    ("waermepumpe", "ruecklauf_temperatur_c"): (
+        _a(KOMP_WP, "services/live_komponenten_builder.py", "_wp_geraete_werte"),
+    ),
+    ("waermepumpe", "heizstab_leistung_w"): (
+        _a(KOMP_WP, "services/live_komponenten_builder.py", "_wp_geraete_werte"),
     ),
     ("waermepumpe", "soll_temperatur_c"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_innengeraete_live"),

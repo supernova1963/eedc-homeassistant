@@ -28,6 +28,7 @@ from backend.core.betriebsmodus import (
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte
+from backend.core.berechnungen.temperatur import spreizung_k
 from backend.services.pv_orientation import ausrichtung_label
 from backend.services.live_sensor_config import (
     TYP_ICON,
@@ -353,7 +354,9 @@ def _verbuche_investition(
     else:
         modus = (modus_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
         aktion = (aktion_map or {}).get(inv_id_int) if typ == "waermepumpe" else None
-        _buche_verbraucher(b, inv, inv_id, typ, val_w, wp_icon, modus, topo, aktion)
+        knoten = _buche_verbraucher(b, inv, inv_id, typ, val_w, wp_icon, modus, topo, aktion)
+        if typ == "waermepumpe":
+            knoten.update(_wp_geraete_werte(values))
 
     # SoC-Gauge pro Investition
     _soc_gauge(b, inv_id, inv, typ, values)
@@ -661,8 +664,11 @@ def _buche_verbraucher(
     modus: Optional[str],
     topo: _Topologie,
     aktion: Optional[str] = None,
-) -> None:
-    """Alle übrigen Geräte: Verbraucher-Knoten, Betriebsmodus-Klartext, Wallbox als V2H-Quelle (N-575 R2/R3)."""
+) -> dict:
+    """Alle übrigen Geräte: Verbraucher-Knoten, Betriebsmodus-Klartext, Wallbox als V2H-Quelle (N-575 R2/R3).
+
+    Gibt den gebuchten Knoten zurück (P-433-3 S1: der Aufrufer hängt die Gerätewerte einer Wärmepumpe an).
+    """
     kw = abs(val_w) / 1000
     prefix = LIVE_KEY_PREFIX.get(typ, TAGESVERLAUF_KATEGORIE.get(typ, typ))
     komp_key = f"{prefix}_{inv_id}"
@@ -726,6 +732,34 @@ def _buche_verbraucher(
     # das nur parent_key-Kinder ausschließt) — #314-Folge.
     elif not (typ == "e-auto" and topo.hat_wallbox):
         b.summe_verbrauch += kw
+    return komp_sonst
+
+
+def _wp_geraete_werte(values: dict[str, float]) -> dict:
+    """Vorlauf, Rücklauf, Spreizung, Warmwasser-Temperatur und Heizstab-Leistung **dieses** Geräts (P-433-3 S1).
+
+    Reine Anzeige für den Hub-Überblick: kein Wert fließt in eine Summe, ein Residual oder eine Gauge — die
+    Heizstab-Leistung ist ein Teil der Geräteleistung, die der Knoten schon trägt. Die Schlüssel stehen nur, wo
+    ein Wert kommt (Muster `betriebsmodus_aktion`); ohne Zuordnung liefert das Response-Modell `None` (P4).
+    °C laufen durch `normalize_to_w` unverändert (keine Leistungs-Einheit), W sind dort schon W.
+
+    ⚠ Das anlagenweite `warmwasser_temperatur_c` (`_warmwasser_temperatur`, erste WP mit Wert) bleibt daneben
+    bestehen — es speist «Auf einen Blick» in Cockpit Live (E-P3-7).
+    """
+    # Registry-Feld → Schlüssel am Knoten (`LiveKomponente`), Nachkommastellen. Die Feldnamen stehen hier im Code,
+    # nicht in einer Tabelle daneben — der Wächter `test_jedes_feld_hat_eine_auswertung` liest genau diesen Körper.
+    vorlauf, ruecklauf = values.get("vorlauf_temperatur_c"), values.get("ruecklauf_temperatur_c")
+    rund = (lambda w: None if w is None else round(w, 1))
+    roh = {
+        "vorlauf_c": (vorlauf, 1),
+        "ruecklauf_c": (ruecklauf, 1),
+        # Spreizung aus dem Layer (eine Formel, ein Ort) — aus den ANGEZEIGTEN Werten: neben «34,2 → 29,1 °C»
+        # steht 5,1 K, nicht 5,2 K aus 34,23 − 29,07 (Abweichung ≤ 0,1 K, für eine Augenblicksanzeige ohne Belang).
+        "spreizung_k": (spreizung_k(rund(vorlauf), rund(ruecklauf)), 1),
+        "warmwasser_c": (values.get("warmwasser_temperatur_c"), 1),
+        "heizstab_w": (values.get("heizstab_leistung_w"), 0),
+    }
+    return {schluessel: round(wert, stellen) for schluessel, (wert, stellen) in roh.items() if wert is not None}
 
 
 # ── Nach der Schleife: Zuordnung, Basis, Netz, Restverbrauch, Gauges ─────────

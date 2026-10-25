@@ -16,6 +16,8 @@
  *   `hvac_action: idle` steht NEBEN dem Kanon-Wert; der Chip wird gedämpft. Den
  *   Text baut die EINE Funktion {@link modusKlartext} — dieselbe für Chip,
  *   Kachel-Tooltips (Energiefluss, Überblick) und die Gruppen-Liste.
+ * - **{@link ZusatzChip}** (P-433-3 S1): derselbe Chip ohne Modus-Punkt, immer gedämpft —
+ *   ein Zusatz neben dem Modus («Zusatzheizung aktiv»), keine eigene Funktion mit Farbe.
  */
 import type { LiveKomponente } from '../../api/liveDashboard'
 import { funktionsFarbe } from '../../lib/funktionsFarben'
@@ -50,12 +52,20 @@ export interface ModusChipProps {
   aktion?: string | null
 }
 
+/** Form des Chips (B17) — eine Stelle für {@link ModusChip} und {@link ZusatzChip}. */
+const CHIP_FORM = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-gray-50 dark:bg-gray-700 whitespace-nowrap'
+const CHIP_TEXT_GEDAEMPFT = 'text-gray-500 dark:text-gray-400'
+
+/** Ein gedämpfter Zusatz neben dem Modus-Chip (P-433-3 S1: «Zusatzheizung aktiv»). */
+export function ZusatzChip({ text }: { text: string }) {
+  return <span className={`${CHIP_FORM} ${CHIP_TEXT_GEDAEMPFT}`} data-zusatz-chip>{text}</span>
+}
+
 export default function ModusChip({ modus, label, passiv = false, aktion = null }: ModusChipProps) {
   const gedaempft = aktion != null
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-gray-50 dark:bg-gray-700 whitespace-nowrap ${
-        gedaempft ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}
+      className={`${CHIP_FORM} ${gedaempft ? CHIP_TEXT_GEDAEMPFT : 'text-gray-700 dark:text-gray-300'}`}
       data-modus-chip={modus}
       data-modus-aktion={gedaempft ? '' : undefined}
     >

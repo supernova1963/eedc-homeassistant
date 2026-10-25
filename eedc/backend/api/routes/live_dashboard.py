@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL, HEIZEN
+from backend.core.berechnungen.temperatur import spreizung_k
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -97,6 +98,20 @@ class LiveKomponente(BaseModel):
     fahrzeuge: Optional[list[LiveFahrzeug]] = None
     #: Nur `wallbox_*`: „eindeutig" bei genau einer live liefernden Wallbox, sonst „geschaetzt".
     fahrzeuge_zuordnung: Optional[Literal["eindeutig", "geschaetzt"]] = None
+    # ── P-433-3 S1 (#432, Konzept #433 Stufe 3): Gerätewerte einer Wärmepumpe ──
+    # Reine Anzeige für den Hub-Überblick (Builder `_wp_geraete_werte`): keine Summe, kein Residual liest sie.
+    # Nur `waermepumpe_*`; `None` ohne Zuordnung (P4). Das anlagenweite `warmwasser_temperatur_c` der Antwort
+    # bleibt daneben (erste WP mit Wert, E-P3-7).
+    #: Vorlauftemperatur in °C.
+    vorlauf_c: Optional[float] = None
+    #: Rücklauftemperatur in °C.
+    ruecklauf_c: Optional[float] = None
+    #: Spreizung Vorlauf − Rücklauf in K (Layer `core/berechnungen/temperatur.spreizung_k`); `None` ohne beide.
+    spreizung_k: Optional[float] = None
+    #: Warmwasser-Temperatur DIESES Geräts in °C.
+    warmwasser_c: Optional[float] = None
+    #: Momentane Leistung der Zusatzheizung (Heizstab) in W — ein Teil von `verbrauch_kw`, nie dazu addiert.
+    heizstab_w: Optional[float] = None
 
 
 class LiveGauge(BaseModel):
@@ -373,6 +388,10 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     eauto_kw = round(wallbox_kw * random.uniform(0.85, 0.95), 2) if wallbox_kw > 0 else 0
     wallbox2_kw = jitter(3.7) if random.random() > 0.7 else 0
     wp_kw = jitter(1.8)
+    # P-433-3 S1: Gerätewerte der Demo-Wärmepumpe (Spreizung um 5 K, Warmwasser wie bisher um 48 °C).
+    vorlauf_c = round(34.2 + random.uniform(-0.8, 0.8), 1)
+    ruecklauf_c = round(vorlauf_c - 5.0 + random.uniform(-0.3, 0.3), 1)
+    warmwasser_c = round(48.0 + random.uniform(-1.5, 1.5), 1)
     pool_kw = jitter(0.8)
     sauna_kw = jitter(6.0) if random.random() > 0.8 else 0
     haushalt_kw = jitter(0.6)
@@ -453,9 +472,14 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "fahrzeuge_zuordnung": "geschaetzt"},
         # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
         # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).
+        # P-433-3 S1: Gerätewerte wie vom Builder (`_wp_geraete_werte`) — Vorlauf/Rücklauf, dieselbe
+        # Warmwasser-Temperatur wie anlagenweit, die Zusatzheizung steht (0 W).
         {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "icon": "flame",
          "erzeugung_kw": None, "verbrauch_kw": wp_kw, "typ": "waermepumpe",
-         "betriebsmodus": HEIZEN, "betriebsmodus_label": BETRIEBSMODUS_LABEL[HEIZEN]},
+         "betriebsmodus": HEIZEN, "betriebsmodus_label": BETRIEBSMODUS_LABEL[HEIZEN],
+         "vorlauf_c": vorlauf_c, "ruecklauf_c": ruecklauf_c,
+         "spreizung_k": round(spreizung_k(vorlauf_c, ruecklauf_c), 1),
+         "warmwasser_c": warmwasser_c, "heizstab_w": 0.0},
         {"key": f"sonstige_{_DEMO_POOL[0]}", "label": _DEMO_POOL[1], "icon": "wrench",
          "erzeugung_kw": None, "verbrauch_kw": pool_kw,
          "typ": "sonstiges", "kategorie": "verbraucher"},
@@ -520,7 +544,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "gestern_eigenverbrauch_kwh": round(32.4 + random.uniform(-1, 1), 1),
         "heute_kwh_pro_komponente": heute_pro_komp,
         # P-433-2 (E-P2-9): anlagenweit wie im Builder (erste WP mit Zuordnung).
-        "warmwasser_temperatur_c": round(48.0 + random.uniform(-1.5, 1.5), 1),
+        "warmwasser_temperatur_c": warmwasser_c,
     }
 
 

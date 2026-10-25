@@ -10,8 +10,9 @@
  *
  * **Das Bild zeigt immer alle Gerätearten, deine Anlage zeigen die Kacheln**
  * (B2): welcher Wert an welchem Objekt hängt, entscheidet `kachelAnker.ts`.
- * D, G und O tragen in Stufe 2 keine Werte (Heizstab, Vor-/Rücklauf kommen mit
- * P-433-3); H, J, K, P, Q, R sind Raumkontext ohne Pin.
+ * Seit P-433-3 S1 trägt D die Zusatzheizung und G «Vorlauf · Rücklauf» (Konstanten
+ * `ANKER_ZUSATZHEIZUNG`/`ANKER_VORLAUF` in `kachelAnker.ts`); O bleibt die Luft/Luft-Außeneinheit;
+ * H, J, K, P, Q, R sind Raumkontext ohne Pin.
  */
 
 export const PANORAMA_BREITE = 1312

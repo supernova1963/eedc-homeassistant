@@ -61,6 +61,9 @@ NEUE_FELDER = (
 #: der Abzug unten bleibt dafür bitgleich.
 P433_1_KNOTEN_FELDER = ("betriebsmodus_aktion", "betriebsmodus_aktion_label")
 P433_1_ANTWORT_FELDER = ("verbrauch_gesamt_kw",)
+#: P-433-3 S1 (25.10.2026): die Gerätewerte einer Wärmepumpe am Knoten — reine Anzeige, keine Summe liest sie
+#: (`test_p433_3_s1_live_temperaturen.py`); der Abzug unten bleibt dafür bitgleich.
+P433_3_KNOTEN_FELDER = ("vorlauf_c", "ruecklauf_c", "spreizung_k", "warmwasser_c", "heizstab_w")
 
 
 # ── Prüfstand: der echte Router, gestellte Service-Grenze ────────────────────
@@ -669,7 +672,7 @@ def _normiert(res: dict, namen: dict[int, str]) -> dict:
 
     out = {k: v for k, v in res.items() if k != "zeitpunkt" and k not in P433_1_ANTWORT_FELDER}
     out["komponenten"] = [
-        {**{f: w for f, w in knoten.items() if f not in NEUE_FELDER + P433_1_KNOTEN_FELDER},
+        {**{f: w for f, w in knoten.items() if f not in NEUE_FELDER + P433_1_KNOTEN_FELDER + P433_3_KNOTEN_FELDER},
          "key": _key(knoten["key"]), "parent_key": _key(knoten.get("parent_key"))}
         for knoten in res["komponenten"]
     ]

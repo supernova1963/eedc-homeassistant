@@ -48,6 +48,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   ha_zaehler_rueckgang: 'Zählerstände – Rückgang in Home Assistant',
   sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
   sensor_mapping_einheit: 'Sensor-Mapping – Einheiten (Leistung/Energie)',
+  // P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.
+  sensor_ohne_langzeitstatistik: 'Sensor ohne Langzeitstatistik',
   provenance_conflict: 'Daten-Quellen – Konflikte',
   datenquelle_status: 'Datenquelle – aktiver Pfad',
   datenquelle_drift: 'Datenquelle – Drift zu HA-Statistics',
@@ -104,6 +106,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'ha_zaehler_rueckgang',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
+  'sensor_ohne_langzeitstatistik',
   'provenance_conflict',
   'datenquelle_status',
   'datenquelle_drift',
