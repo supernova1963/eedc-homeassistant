@@ -30,7 +30,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
-import { Alert, Button } from '../ui'
+import { Alert, Button, Card } from '../ui'
 import FormSection from '../ui/FormSection'
 import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
@@ -46,7 +46,10 @@ import { STATUS_ICONS } from '../../lib/komponentenStyle'
 import { formatDatum } from '../../lib/datum'
 import { plural, mitAnzahl } from '../../lib/plural'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
-import { betriebsartBloecke, blockStatus, statusAufschluesselung, statusKontext } from './datenquellenBetriebsart'
+import {
+  betriebsartBloecke, blockStatus, investitionIdDerGruppe, statusAufschluesselung, statusKontext,
+} from './datenquellenBetriebsart'
+import { funktionsKopf } from '../../lib/funktionsFarben'
 import {
   datenquellenApi,
   VERBINDUNG_GEAENDERT_EVENT,
@@ -588,15 +591,23 @@ export default function DatenquellenZuordnung() {
 
   // P-433-2 (Variante C, #431): eine Wärmepumpe nach Betriebsart — Block je Betriebsart mit Status im
   // Kopf, darin dieselbe Feld-Zeile; erweiterte Felder bleiben in „Weitere Größen erfassen".
+  // P-433-2c C-6 (Mockup «Datenquellen Wärmepumpe Variante C»): jeder Block ist eine Karte mit getönter Kopfzeile in
+  // der Farbe seiner Betriebsart (`funktionsKopf`, «Gerät gesamt» neutral); Feld-Zeile und Status unverändert. Unter den
+  // Karten sagt eine Zeile, woher die Betriebsarten kommen — mit dem Weg zur Investition.
   const betriebsartAbschnitte = (g: DatenquelleGruppe) => {
     const ctx = statusKontext(g)
+    const invId = investitionIdDerGruppe(g)
     return (
-      <>
+      <div className="space-y-3 pt-2">
         {betriebsartBloecke(g).map((b) => {
           const st = blockStatus(b, ctx)
           return (
-            <div key={b.betriebsart} data-betriebsart={b.betriebsart}>
-              <div className="flex items-baseline justify-between gap-2 pt-3 pb-0.5">
+            <Card key={b.betriebsart} padding="none" className="overflow-hidden">
+            <div data-betriebsart={b.betriebsart} data-block={b.betriebsart}>
+              <div
+                className={`flex items-baseline justify-between gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700 ${funktionsKopf(b.betriebsart)}`}
+                data-block-kopf
+              >
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{b.titel}</span>
                 {st && (
                   <span
@@ -608,12 +619,21 @@ export default function DatenquellenZuordnung() {
                   </span>
                 )}
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">{b.felder.map(feldZeile)}</div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 px-3">{b.felder.map(feldZeile)}</div>
             </div>
+            </Card>
           )
         })}
+        <p className="text-xs text-gray-500 dark:text-gray-400" data-betriebsart-fusszeile>
+          Welche Betriebsarten ein Gerät hat (Heizen, Warmwasser, Kühlen, Lüften …), folgt aus der Investition: Art und
+          Funktionen unter{' '}
+          {invId != null
+            // Hash-Link wie `EditLink` im Hub (`#/einstellungen/komponenten`), Deep-Link `?bearbeiten=` öffnet das Gerät.
+            ? <a href={`#/einstellungen/komponenten?bearbeiten=${invId}`} className="text-primary-700 dark:text-primary-300 hover:underline">Investition bearbeiten</a>
+            : 'Investition bearbeiten'}. Hier werden nur Sensoren zugeordnet.
+        </p>
         {erweiterung(g.id, g.felder.filter((f) => f.erweitert))}
-      </>
+      </div>
     )
   }
 

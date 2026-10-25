@@ -107,6 +107,24 @@ def _herleitung_je_funktion(az_funktion, az_kuehlen) -> dict:
     }
 
 
+async def _mit_betrieb_stunden(db, anlage, investitionen_by_id, datum, zeilen: list) -> list:
+    """P-433-2c (Karte «Betrieb heute»): die Gerätezeilen des Tages mit ``betrieb_stunden`` — Stunden je Betriebsart aus
+    der Betriebsart-Mitschrift (Tagesleser ``kanal_stunden.wp_betriebsart_anteile_je_stunde``, Formel
+    ``core/berechnungen/betriebsstunden.stunden_je_betriebsart``). Eigene Phase, damit ``get_tag_detail`` nicht wächst;
+    nur der Tag setzt das Feld (Monat/Jahr ``None``). Ein Gerät ohne Mitschrift behält ``None``."""
+    from backend.core.berechnungen.betriebsstunden import stunden_je_betriebsart
+    from backend.services.energie_profil.kanal_stunden import wp_betriebsart_anteile_je_stunde
+
+    if not zeilen:
+        return zeilen
+    anteile = await wp_betriebsart_anteile_je_stunde(db, anlage, investitionen_by_id, datum)
+    return [
+        z.model_copy(update={"betrieb_stunden": stunden_je_betriebsart(anteile[str(z.investition_id)])})
+        if str(z.investition_id) in anteile else z
+        for z in zeilen
+    ]
+
+
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
 async def get_tag_detail(
     anlage_id: int,
@@ -848,7 +866,10 @@ async def get_tag_detail(
     # dieselben Zeilen (R-4). Zwei Aufrufe nebeneinander wären zwei Wahrheiten
     # über dieselbe Frage, und die Dedup-Regel des Kastens hinge dann an einer
     # zweiten Liste.
-    _wp_block_geraete = geraete_zeilen(_wp_kennzahlen_je_geraet)
+    # P-433-2c: am Tag tragen die Zeilen zusätzlich die Stunden je Betriebsart (Phase, nicht im Block-Bauer).
+    _wp_block_geraete = await _mit_betrieb_stunden(
+        db, anlage, investitionen_by_id, datum, geraete_zeilen(_wp_kennzahlen_je_geraet),
+    )
 
     # ── Aktive Geräte je Typ (Namen) für die „aggregiert aus …"-Hinweise ──
     #

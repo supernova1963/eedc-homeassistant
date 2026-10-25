@@ -1199,6 +1199,41 @@ async def wp_temperaturen_je_stunde(db: AsyncSession, anlage, invs_by_id: Mappin
     return WpTemperaturTag(raster=raster, geraete=geraete, ohne_kanal={i: f for i, f in ohne.items() if f})
 
 
+async def wp_betriebsart_anteile_je_stunde(db: AsyncSession, anlage, invs_by_id: Mapping[str, Any],
+                                           datum: date) -> dict[str, dict[int, dict[str, float]]]:
+    """Die Betriebsart-Mitschrift je Wärmepumpe eines Tages (P-433-2c, Karte «Betrieb heute»):
+    ``{inv_id: {start_ts: {modus: anteil}}}`` aus den Mittelwert-Kanälen ``modus:inv:<id>:<modus>`` (HA-Bauform E1),
+    gelesen über ``lesen.stundenmittel_stapel`` (eine Anweisung für alle Geräte, ``MITTELWERT_LESER_STAND``).
+
+    **Tag und Raster wie** ``wp_temperaturen_je_stunde``: WP-Kanal-Tag ⇒ ``[D 00:00, D+1 00:00)``, Bestandstag ⇒ eine
+    Stunde früher (die Zeile 23:00 des Vortags ist Slot 0, ``_slot_der_mittelzeile``). Schlüssel ist der ``start_ts`` der
+    Zeile, damit in der Herbst-Doppelstunde **beide** Zeilen zählen (Summe, kein Mittel — die Stunden sind Zeit). Nur
+    aktive Wärmepumpen; ein Gerät ohne eine Zeile fehlt. Nur HA mit Betriebsmodus-Sensor schreibt eine Mitschrift."""
+    from backend.core.betriebsmodus import BETRIEBSMODUS_KANON
+    from backend.models.kanal import ART_MEAN
+    from backend.services.kanal.fenster import tagesfenster
+    from backend.services.kanal.katalog import modus_kanal_key
+    from backend.services.kanal.lesen import kanaele_laden, stundenmittel_stapel
+
+    wps = [i for i, inv in invs_by_id.items()
+           if getattr(inv, "typ", None) == "waermepumpe" and inv.ist_aktiv_an(datum)]
+    keys = {modus_kanal_key(i, m): (i, m) for i in wps for m in BETRIEBSMODUS_KANON}
+    kanaele = [k for k in (await kanaele_laden(db, anlage.id, keys)).values() if k.art == ART_MEAN]
+    if not kanaele:
+        return {}
+    raster = RASTER_BEGINN if GRUPPE_WP in (await kanal_stundentag(db, anlage.id, datum)).gruppen else RASTER_ENDE
+    von, bis = tagesfenster(datum)
+    if raster != RASTER_BEGINN:
+        von, bis = von - 3600, bis - 3600
+    out: dict[str, dict[int, dict[str, float]]] = {}
+    for key, sm in (await stundenmittel_stapel(db, kanaele, von, bis)).items():
+        inv_id, modus = keys[key]
+        for ts, (mean, _mi, _ma) in sm.werte.items():
+            if 0 <= _slot_der_mittelzeile(ts, datum, raster) < 24:
+                out.setdefault(inv_id, {}).setdefault(int(ts), {})[modus] = mean
+    return out
+
+
 # ── Tageskennzahlen und Tagesmengen aus den Kanal-Stunden (HA-Bauform S5, E-S5-3, Bauplan §10h 1/§4 S5-R2) ─────────
 #
 # Seit S5b schreibt `aggregate_day` an einem Kanal-Tag keine gefalteten Mengen mehr (`mengen_weiche`). Die Kennzahlen,

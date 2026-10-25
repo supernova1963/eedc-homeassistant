@@ -15,6 +15,8 @@
  * `vorlauftemperatur`: Fußbodenheizung K · Heizkörper J · sonst Hydraulikmodul G) und «Zusatzheizung» →
  * {@link ANKER_ZUSATZHEIZUNG} (eine Regel für alle Bauarten). Die neuen Wert-Kacheln stehen **nicht** in der
  * «Ohne Sensor»-Zeile (G7/E-P3-13): sie sind Zusatzangaben, kein Grundbestand.
+ * Seit P-433-2c je Gerät «Wärme heute» aus dem Tag-Detail (`wp_geraete[].waerme_kwh`) am selben Heizkreis-Objekt wie
+ * «Vorlauf · Rücklauf» — ebenfalls nur mit Wert und nicht in der «Ohne Sensor»-Zeile.
  *
  * ⚠ **P13 (ADR-002), Gruppe 2 «Anzeige-Ort nach Bauart» bzw. nach Stammdatum (`vorlauftemperatur`, S2-8):** die Bauart wählt
  * hier nur, AN WELCHEM OBJEKT eine Kachel steht — nie, OB ein Wert gezeigt
@@ -24,6 +26,7 @@
  * `scripts/check-bauart-roh.mjs::KLASSIFIZIERT`.
  */
 import type { LiveDashboardResponse, LiveInnengeraet, LiveKomponente, LiveWetterResponse } from '../../../api/liveDashboard'
+import type { TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { CHART_COLORS, KATEGORIE_FARBEN, fmtZahl } from '../../../lib'
 import {
@@ -71,6 +74,8 @@ export interface KachelEingaben {
   wetter: LiveWetterResponse | null
   /** Referenzfarbe des Themas für inaktive Zeilen (`useChartTheme().referenz`). */
   referenz: string
+  /** P-433-2c: Tag-Detail heute (`wp_geraete[].waerme_kwh` für die Kachel «Wärme heute»); fehlt es, keine Kachel. */
+  tag?: TagDetail | null
 }
 
 export interface KachelErgebnis {
@@ -294,6 +299,17 @@ function zusatzheizungKachel(inv: Investition, k: LiveKomponente, label: (was: s
     `${inv.bezeichnung}\nZusatzheizung: ${fmtZahl(w, 0)} W\nQuelle: Live-Snapshot`, inv.id)
 }
 
+/** «Wärme heute» eines Geräts (P-433-2c) — aus dem Tag-Detail (`wp_geraete[].waerme_kwh`, Rechenstelle des
+ *  Wärme/Klima-Blocks), am Heizkreis-Objekt wie «Vorlauf · Rücklauf» ({@link vorlaufAnker}); `null` ohne Wert.
+ *  Eine Zweitzeile «Heizen · WW» gibt es nicht: die Gerätezeile liefert Wärme je Funktion nicht. */
+function waermeKachel(inv: Investition, tag: TagDetail | null | undefined, label: string): UeberblickKachel | null {
+  const kwh = tag?.wp_geraete?.find((z) => z.investition_id === inv.id)?.waerme_kwh ?? null
+  if (kwh == null) return null
+  return wertKachel(`wert-waerme-${inv.id}`, vorlaufAnker(inv), label, 'flame', CHART_COLORS.wpWaerme,
+    `${fmtZahl(kwh, 1)} kWh`, `${inv.bezeichnung}\nWärme heute: ${fmtZahl(kwh, 1)} kWh\nQuelle: Tag-Detail (Wärmemengenzähler)`,
+    inv.id)
+}
+
 const hatInnenWert = (g: LiveInnengeraet) =>
   g.leistung_w != null || g.ist_temperatur_c != null || g.soll_temperatur_c != null
 
@@ -301,7 +317,7 @@ const hatInnenWert = (g: LiveInnengeraet) =>
  * Die Kacheln des Überblicks und die Liste dessen, was ohne Kachel bleibt.
  * Reine Funktion — kein Hook, kein Abruf.
  */
-export function baueUeberblickKacheln({ geraete, live, wetter, referenz }: KachelEingaben): KachelErgebnis {
+export function baueUeberblickKacheln({ geraete, live, wetter, referenz, tag }: KachelEingaben): KachelErgebnis {
   const kacheln: UeberblickKachel[] = []
   const ohneSensor: string[] = []
   const mehrere = geraete.length > 1
@@ -361,6 +377,13 @@ export function baueUeberblickKacheln({ geraete, live, wetter, referenz }: Kache
     if (vorlauf) kacheln.push(vorlauf)
     const zusatz = zusatzheizungKachel(inv, k, label)
     if (zusatz) kacheln.push(zusatz)
+  }
+
+  // P-433-2c: «Wärme heute» je Gerät aus dem Tag-Detail — nur mit Wert, nie in der «Ohne Sensor»-Zeile (G7: die
+  // Zeile nennt nur Live-Sensoren). Kein Live-Knoten nötig: die Menge kommt aus den Tageszählern.
+  for (const inv of geraete) {
+    const waerme = waermeKachel(inv, tag, mehrere ? `Wärme ${inv.bezeichnung}` : 'Wärme heute')
+    if (waerme) kacheln.push(waerme)
   }
 
   const aussen = wetter?.aktuell?.temperatur_c

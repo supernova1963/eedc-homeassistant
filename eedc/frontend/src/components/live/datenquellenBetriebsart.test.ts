@@ -9,7 +9,9 @@
 import { describe, it, expect } from 'vitest'
 import type { DatenquelleFeld, DatenquelleGruppe } from '../../api/datenquellen'
 import { WP_FAELLE, gruppeAusFall, type WpFall } from '../../test/datenquellenWpFaelle'
-import { betriebsartBloecke, blockSichtbar, blockStatus, feldZeichen, statusKontext } from './datenquellenBetriebsart'
+import {
+  GERAET_REIHENFOLGE, betriebsartBloecke, blockSichtbar, blockStatus, feldZeichen, investitionIdDerGruppe, statusKontext,
+} from './datenquellenBetriebsart'
 
 type Fall = WpFall
 
@@ -73,14 +75,42 @@ describe('Blöcke je Bauart — über die Route', () => {
     })
   })
 
-  it('jeder Block ordnet kWh vor W vor Sonstigen, ohne erweiterte Felder', () => {
+  it('jeder Block ordnet kWh vor W vor Sonstigen, ohne erweiterte Felder — «Gerät gesamt» nach dem Mockup (P-433-2c C-6)', () => {
     for (const name of WP_FAELLE) {
       for (const b of betriebsartBloecke(gruppeAusFall(name))) {
         expect(b.felder.every((f) => !f.erweitert)).toBe(true)
-        const rang = b.felder.map((f) => (f.einheit === 'kWh' ? 0 : f.einheit === 'W' ? 1 : 2))
+        const ohneListe = b.betriebsart === 'geraet' ? b.felder.filter((f) => !GERAET_REIHENFOLGE.includes(f.feld)) : b.felder
+        const rang = ohneListe.map((f) => (f.einheit === 'kWh' ? 0 : f.einheit === 'W' ? 1 : 2))
         expect(rang).toEqual([...rang].sort())
       }
     }
+  })
+
+  it('P-433-2c C-6: «Gerät gesamt» zuerst in der Mockup-Reihenfolge, dann die übrigen; Warmwasser-Temperatur bleibt im Block Warmwasser', () => {
+    for (const name of WP_FAELLE) {
+      const bloecke = betriebsartBloecke(gruppeAusFall(name))
+      const geraet = bloecke.find((b) => b.betriebsart === 'geraet')
+      if (!geraet) continue
+      const keys = geraet.felder.map((f) => f.feld)
+      const gelistet = keys.filter((k) => GERAET_REIHENFOLGE.includes(k))
+      expect(keys.slice(0, gelistet.length), name).toEqual(gelistet)
+      expect(gelistet, name).toEqual([...gelistet].sort((a, z) => GERAET_REIHENFOLGE.indexOf(a) - GERAET_REIHENFOLGE.indexOf(z)))
+      expect(keys, name).not.toContain('warmwasser_temperatur_c')
+    }
+    const g = { id: 'inv:7', titel: 'X', typ: 'waermepumpe', felder: [
+      feld({ feld: 'stromverbrauch_kwh', betriebsart: 'geraet' }), feld({ feld: 'waerme_kwh', betriebsart: 'geraet' }),
+      feld({ feld: 'heizstab_strom_kwh', betriebsart: 'geraet' }), feld({ feld: 'leistung_w', einheit: 'W', betriebsart: 'geraet' }),
+      feld({ feld: 'ist_temperatur_c', einheit: '°C', betriebsart: 'geraet' }), feld({ feld: 'heizstab_leistung_w', einheit: 'W', betriebsart: 'geraet' }),
+      feld({ feld: 'ruecklauf_temperatur_c', einheit: '°C', betriebsart: 'geraet' }), feld({ feld: 'vorlauf_temperatur_c', einheit: '°C', betriebsart: 'geraet' }),
+      feld({ feld: 'betriebsmodus', einheit: '', betriebsart: 'geraet' }),
+      feld({ feld: 'heizenergie_kwh', betriebsart: 'heizen' }), feld({ feld: 'leistung_heizen_w', einheit: 'W', betriebsart: 'heizen' }),
+    ] }
+    const [geraet, heizen] = betriebsartBloecke(g)
+    expect(geraet.felder.map((f) => f.feld)).toEqual([
+      'leistung_w', 'betriebsmodus', 'vorlauf_temperatur_c', 'ruecklauf_temperatur_c', 'heizstab_leistung_w',
+      'heizstab_strom_kwh', 'waerme_kwh', 'stromverbrauch_kwh', 'ist_temperatur_c'])
+    expect(heizen.felder.map((f) => f.feld)).toEqual(['heizenergie_kwh', 'leistung_heizen_w'])
+    expect([investitionIdDerGruppe(g), investitionIdDerGruppe({ id: 'basis' })]).toEqual([7, null])
   })
 })
 

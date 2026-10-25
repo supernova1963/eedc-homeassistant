@@ -35,6 +35,12 @@ const TITEL: Record<string, string> = {
   entfeuchten: 'Entfeuchten',
 }
 
+/** Klartext einer Betriebsart (Kanon-Wert ⇒ «Heizen» …) — dieselbe Tabelle für die Blocktitel hier und die Karte
+ *  «Betrieb heute» im Hub-Überblick (P-433-2c); unbekannt ⇒ der Wert selbst. */
+export function betriebsartTitel(betriebsart: string): string {
+  return TITEL[betriebsart] ?? betriebsart
+}
+
 const GERAET = 'geraet'
 const KUEHLEN = 'kuehlen'
 
@@ -59,6 +65,27 @@ function rang(f: DatenquelleFeld): number {
   if (f.einheit === 'kWh') return 0
   if (f.einheit === 'W') return 1
   return 2
+}
+
+/** P-433-2c C-6 (Mockup «Datenquellen Wärmepumpe Variante C»): Reihenfolge im Block «Gerät gesamt» — Leistung gesamt ·
+ *  Betriebsmodus · Warmwasser-Temperatur · Vorlauf · Rücklauf · Leistung Zusatzheizung · Strom Zusatzheizung · Wärme
+ *  gesamt, danach die übrigen in kWh → W → Sonstige. Die Warmwasser-Temperatur trägt in der Registry die Betriebsart
+ *  `warmwasser` und steht deshalb im Block Warmwasser (die Zuordnung der Registry gewinnt); der Eintrag hier greift nur,
+ *  falls sie je «Gerät» wird. Die anderen Blöcke behalten kWh → W → Sonstige. */
+export const GERAET_REIHENFOLGE: readonly string[] = [
+  'leistung_w', 'betriebsmodus', 'warmwasser_temperatur_c', 'vorlauf_temperatur_c', 'ruecklauf_temperatur_c',
+  'heizstab_leistung_w', 'heizstab_strom_kwh', 'waerme_kwh',
+]
+
+function geraetRang(f: DatenquelleFeld): number {
+  const i = GERAET_REIHENFOLGE.indexOf(f.feld)
+  return i < 0 ? GERAET_REIHENFOLGE.length : i
+}
+
+/** Die Investition einer Geräte-Gruppe (`inv:<id>`) — für den Link «Investition bearbeiten»; sonst `null`. */
+export function investitionIdDerGruppe(g: Pick<DatenquelleGruppe, 'id'>): number | null {
+  const m = /^inv:(\d+)$/.exec(g.id)
+  return m ? Number(m[1]) : null
 }
 
 /** Betriebsart eines Felds; ohne Angabe (älteres Backend) zählt es zum Gerät. */
@@ -86,8 +113,10 @@ export function betriebsartBloecke(g: DatenquelleGruppe): BetriebsartBlock[] {
     const erste = alle.filter((f) => !f.erweitert)
     out.push({
       betriebsart: b,
-      titel: TITEL[b] ?? b,
-      felder: erste.map((f, i) => ({ f, i })).sort((a, z) => rang(a.f) - rang(z.f) || a.i - z.i).map(({ f }) => f),
+      titel: betriebsartTitel(b),
+      felder: erste.map((f, i) => ({ f, i }))
+        .sort((a, z) => (b === GERAET ? geraetRang(a.f) - geraetRang(z.f) : 0) || rang(a.f) - rang(z.f) || a.i - z.i)
+        .map(({ f }) => f),
       alleFelder: alle,
     })
   }

@@ -1,35 +1,49 @@
 /**
- * UeberblickKarte — «Auf einen Blick» neben dem Schaubild (P-433-2 E2,
- * Gegenentwurf W7/W8).
+ * UeberblickKarte — «Auf einen Blick» neben dem Schaubild (P-433-2 E2, Gegenentwurf W7/W8; Gestalt nach dem
+ * Mockup Version 25 seit P-433-2c).
  *
- * Eine Karte für das **gewählte** Gerät (E-P2-2): Kopf mit Name und Modus-Chip,
- * darunter nur Zeilen, die einen Wert haben (`!= null` — keine Zeile ohne Wert,
- * keine 0 für „nicht gemessen"), und der Anlagen-Ring.
+ * Bis zu drei Karten für das **gewählte** Gerät (E-P2-2), jede nur mit Wert (`!= null` — keine Zeile ohne Wert,
+ * keine 0 für „nicht gemessen"):
  *
- * - **Heute** kommt aus zwei Quellen: Strom aus `heute_kwh_pro_komponente` der
- *   Live-Antwort (derselbe Tageswert wie der Energiefluss-Tooltip), Wärme und
- *   Arbeitszahl je Gerät aus dem Tag-Detail (`wp_geraete`, Rechenstelle des
- *   Wärme/Klima-Blocks). **Benannte Grenze:** ein Gerät ohne Strom-Beitrag heute
- *   hat dort keine Zeile — dann fehlen Wärme und AZ heute.
- * - **Anlagen-Ring = Gauge `eigenverbrauch`** (B9, E-P2-8): die EV-Quote der
- *   Anlage inklusive Speicher-Entladung — dieselbe Zahl wie im Cockpit, kein
- *   Wert je Gerät. Nur wenn die Live-Antwort sie liefert (Erzeugung > 0).
- * - **Gestrichen (W7):** Betriebsstunden, Kompressor-Starts — dafür gibt es kein
- *   Live-Feld. Keine Kosten-, CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).
- * - **P-433-3 S1:** Vorlauf, Rücklauf, Spreizung (vom Backend, `spreizung_k`) und Zusatzheizung
- *   je Gerät aus dem Knoten (`vorlauf_c` …); Warmwasser je Gerät (`warmwasserC`).
- *   Läuft die Zusatzheizung (> 0 W), steht neben dem Modus der gedämpfte Chip
- *   «Zusatzheizung aktiv» (`ui/ModusChip::ZusatzChip`).
+ * 1. **Gerätekarte** (`data-karte="geraet"`, immer): Kopf mit Name, Modus-Chip und «Zusatzheizung aktiv»; die
+ *    **Leistung groß** (Schriftgrad der Cockpit-KPI-Kachel, `KPI_WERT_SCHRIFT`); rechts daneben der **Anlagen-Ring**
+ *    = Gauge `eigenverbrauch` (B9, E-P2-8: EV-Quote der Anlage inkl. Speicher-Entladung, dieselbe Zahl wie Cockpit →
+ *    Live, **kein Wert je Gerät**), beschriftet «Eigenverbrauch (Anlage)», nur wenn die Live-Antwort sie liefert;
+ *    darunter Warmwasser · Zusatzheizung · Vorlauf · Rücklauf · Spreizung · Außentemperatur, zweispaltig ab `sm`.
+ *    Fußzeile nur, wenn Vorlauf **und** Rücklauf fehlen.
+ * 2. **«AZ heute»** (`data-karte="az-heute"`): die Arbeitszahl des Geräts aus dem Tag-Detail (`wp_geraete`,
+ *    Rechenstelle des Wärme/Klima-Blocks) groß, darunter die Herleitung aus Zähler/Nenner des Backends
+ *    (`herleitungMengen`, eine Formatierungsstelle) und je Funktion die Arbeitszahl; dazu die Zeilen Strom heute
+ *    (`heute_kwh_pro_komponente` der Live-Antwort, derselbe Tageswert wie der Energiefluss-Tooltip) und Wärme heute.
+ *    Ohne Arbeitszahl heißt die Karte «Heute» und trägt nur die Mengen (der Grund steht als Tooltip am Kopf);
+ *    ohne jeden Heute-Wert entfällt sie. **Benannte Grenze:** ein Gerät ohne Strom-Beitrag heute hat im Tag-Detail
+ *    keine Zeile — dann fehlen Wärme und AZ heute.
+ * 3. **«Betrieb heute»** (`data-karte="betrieb-heute"`): Stunden je Betriebsart aus `betrieb_stunden` (Backend, aus der
+ *    Mitschrift des Modus-Sensors, nur HA), Lese-Reihenfolge Heizen · Warmwasser · Kühlen · Lüften · Entfeuchten,
+ *    nur Betriebsarten > 0; ein passiv kühlendes Gerät (Stammdatum) nennt «Kühlen passiv». Ohne Feld entfällt sie.
+ *    **Kein Leerlauf** — er wird nicht mitgeschrieben.
+ *
+ * **Gestrichen:** PV-Anteil je Gerät (Entscheid Gernot 24.10.: nicht geplant), Kompressor-Starts, «seit hh:mm» —
+ * dafür gibt es kein Feld. Keine Kosten-, CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).
+ * ⛔ **Der Client rechnet nichts** (ADR-002/P12): jede Zahl kommt fertig aus Backend-Feldern.
  */
 import type { ReactNode } from 'react'
 import RingGauge from '../../charts/RingGauge'
+import { Card } from '../../ui'
+import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
 import { CHART_COLORS, fmtZahl } from '../../../lib'
+import { funktionsFarbe } from '../../../lib/funktionsFarben'
 import { formatPower } from '../../live/EnergieFluss'
+import { betriebsartTitel } from '../../live/datenquellenBetriebsart'
 import ModusChip, { ZusatzChip } from '../../ui/ModusChip'
+import { herleitungMengen } from '../../../v4/wpFunktionsGruppen'
 import type { LiveDashboardResponse, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
+import type { WpGeraetZeile } from '../../../api/aktuellerMonat'
 import type { Investition } from '../../../types'
-import { istPassivGekuehlt, stromHeute, vorlaufBeschriftung, warmwasserC, wpKnoten, zusatzheizungAktiv } from './kachelAnker'
+import {
+  istPassivGekuehlt, kuehltPassiv, stromHeute, vorlaufBeschriftung, warmwasserC, wpKnoten, zusatzheizungAktiv,
+} from './kachelAnker'
 
 export interface UeberblickKarteProps {
   inv: Investition
@@ -40,6 +54,16 @@ export interface UeberblickKarteProps {
   mehrereGeraete: boolean
 }
 
+/** Tooltip des Anlagen-Rings — die Zahl gehört der Anlage, nicht dem Gerät. */
+export const RING_TOOLTIP = 'EV-Quote der Anlage inkl. Speicher-Entladung, dieselbe Zahl wie Cockpit → Live; kein Wert je Gerät'
+/** Tooltip der Karte «Betrieb heute». */
+export const BETRIEB_TOOLTIP = 'Stunden mit dieser Betriebsart laut Mitschrift des Modus-Sensors (HA); Leerlauf wird nicht mitgeschrieben'
+/** Fußzeile der Gerätekarte ohne Vorlauf und Rücklauf (A7-Vokabular: «zugeordnet»). */
+export const FUSSZEILE_OHNE_VORLAUF = 'Vorlauf und Rücklauf erscheinen hier, sobald zugeordnet'
+
+/** Lese-Reihenfolge der Betriebsarten in «Betrieb heute» — die Reihenfolge des Backend-Layers. */
+const BETRIEBSARTEN = ['heizen', 'warmwasser', 'kuehlen', 'lueften', 'entfeuchten'] as const
+
 function Zeile({ label, children, data }: { label: string; children: ReactNode; data: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 text-sm" data-zeile={data}>
@@ -49,23 +73,35 @@ function Zeile({ label, children, data }: { label: string; children: ReactNode; 
   )
 }
 
-export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete }: UeberblickKarteProps) {
+function Karte({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <Card padding="sm">
+      {/* `div`, nicht `section`: `section` ist im Hub das Gehäuse eines Blocks (BlockShell). */}
+      <div data-karte={name} className="space-y-2">{children}</div>
+    </Card>
+  )
+}
+
+function KartenKopf({ text, tip }: { text: string; tip?: string | null }) {
+  return (
+    <div className={`text-xs font-semibold text-gray-500 dark:text-gray-400${tip ? ' cursor-help' : ''}`} title={tip ?? undefined}>
+      {text}
+    </div>
+  )
+}
+
+function GeraeteKarte({ inv, live, wetter }: Pick<UeberblickKarteProps, 'inv' | 'live' | 'wetter'>) {
   const k = wpKnoten(live, inv.id)
   const leistungKw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
   const ww = warmwasserC(live, inv.id)
   const spreizung = k?.spreizung_k ?? null
   const aussen = wetter?.aktuell?.temperatur_c ?? null
-  const strom = stromHeute(live, inv.id, mehrereGeraete)
-  const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
-  const azJe = zeile
-    ? ([['Heizen', zeile.jaz_heizen], ['Warmwasser', zeile.jaz_warmwasser], ['Kühlen', zeile.jaz_kuehlen]] as const)
-        .filter(([, v]) => v != null) as [string, number][]
-    : []
   const ev = live?.gauges?.find((g) => g.key === 'eigenverbrauch') ?? null
-  const hatHeute = strom != null || zeile?.waerme_kwh != null || zeile?.jaz != null || azJe.length > 0
+  // Vor der ersten Live-Antwort fehlt nichts, es ist nur noch nicht geladen (dieselbe Regel wie die «Ohne Sensor»-Zeile).
+  const ohneVorlauf = live != null && k?.vorlauf_c == null && k?.ruecklauf_c == null
 
   return (
-    <div className="space-y-3" data-ueberblick-karte>
+    <Karte name="geraet">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{inv.bezeichnung}</span>
         <div className="flex items-center gap-1 shrink-0">
@@ -79,39 +115,117 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
         </div>
       </div>
 
-      <div className="space-y-1">
-        {leistungKw != null && <Zeile label="Leistung jetzt" data="leistung">{formatPower(leistungKw)}</Zeile>}
+      {(leistungKw != null || ev) && (
+        <div className="flex items-center justify-between gap-3">
+          {leistungKw != null && (
+            <div data-zeile="leistung" className="min-w-0">
+              <div className="text-xs text-gray-500 dark:text-gray-400">Leistung jetzt</div>
+              <div className={`${KPI_WERT_SCHRIFT} font-bold text-gray-900 dark:text-white whitespace-nowrap`}>
+                {formatPower(leistungKw)}
+              </div>
+            </div>
+          )}
+          {ev && (
+            <div className="flex items-center gap-2 ml-auto cursor-help" title={RING_TOOLTIP} data-anlagen-ring>
+              <RingGauge value={ev.wert} color={CHART_COLORS.eigenverbrauch} size={56} label={`${fmtZahl(ev.wert, 0)} %`} />
+              <span className="text-xs text-gray-600 dark:text-gray-400">Eigenverbrauch (Anlage)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
         {ww != null && <Zeile label="Warmwasser" data="warmwasser">{fmtZahl(ww, 1)} °C</Zeile>}
+        {k?.heizstab_w != null && (
+          <Zeile label="Zusatzheizung" data="zusatzheizung">{formatPower(k.heizstab_w / 1000)}</Zeile>
+        )}
         {/* S2-8: die Zeile nennt die Heizflächen aus dem Stammdatum — dieselbe Regel wie der Anker der Kachel. */}
         {k?.vorlauf_c != null && <Zeile label={vorlaufBeschriftung(inv)} data="vorlauf">{fmtZahl(k.vorlauf_c, 1)} °C</Zeile>}
         {k?.ruecklauf_c != null && <Zeile label="Rücklauf" data="ruecklauf">{fmtZahl(k.ruecklauf_c, 1)} °C</Zeile>}
         {spreizung != null && <Zeile label="Spreizung" data="spreizung">{fmtZahl(spreizung, 1)} K</Zeile>}
-        {k?.heizstab_w != null && (
-          <Zeile label="Zusatzheizung" data="zusatzheizung">{formatPower(k.heizstab_w / 1000)}</Zeile>
-        )}
         {aussen != null && <Zeile label="Außentemperatur" data="aussen">{fmtZahl(aussen, 1)} °C</Zeile>}
       </div>
 
-      {hatHeute && (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400">Heute</div>
-          {strom != null && <Zeile label="Strom" data="strom-heute">{fmtZahl(strom, 1)} kWh</Zeile>}
-          {zeile?.waerme_kwh != null && <Zeile label="Wärme" data="waerme-heute">{fmtZahl(zeile.waerme_kwh, 1)} kWh</Zeile>}
-          {zeile?.jaz != null && <Zeile label="Arbeitszahl" data="az-heute">{fmtZahl(zeile.jaz, 2)}</Zeile>}
-          {azJe.map(([name, v]) => (
-            <Zeile key={name} label={`Arbeitszahl ${name}`} data={`az-${name.toLowerCase()}`}>{fmtZahl(v, 2)}</Zeile>
-          ))}
-        </div>
+      {ohneVorlauf && (
+        <p className="text-xs text-gray-400 dark:text-gray-500" data-fusszeile>{FUSSZEILE_OHNE_VORLAUF}</p>
       )}
+    </Karte>
+  )
+}
 
-      {ev && (
-        <div className="flex items-center gap-3 pt-1" data-anlagen-ring>
-          <RingGauge value={ev.wert} color={CHART_COLORS.eigenverbrauch} size={56} label={`${fmtZahl(ev.wert, 0)}`} />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            Eigenverbrauch jetzt {fmtZahl(ev.wert, 0)} % (Anlage)
-          </span>
+function HeuteKarte({ strom, zeile }: { strom: number | null; zeile: WpGeraetZeile | null }) {
+  const azJe = zeile
+    ? ([['Heizen', zeile.jaz_heizen], ['Warmwasser', zeile.jaz_warmwasser], ['Kühlen', zeile.jaz_kuehlen]] as const)
+        .filter(([, v]) => v != null) as [string, number][]
+    : []
+  const jaz = zeile?.jaz ?? null
+  if (jaz == null && strom == null && zeile?.waerme_kwh == null) return null
+  const herleitung = herleitungMengen(zeile?.jaz_zaehler_kwh, zeile?.jaz_nenner_kwh)
+
+  return (
+    <Karte name="az-heute">
+      {jaz != null ? (
+        <div>
+          <KartenKopf text="AZ heute" />
+          <div className={`${KPI_WERT_SCHRIFT} font-bold text-gray-900 dark:text-white`} data-zeile="az-heute">{fmtZahl(jaz, 2)}</div>
+          {(herleitung || azJe.length > 0) && (
+            <div className="text-xs text-gray-500 dark:text-gray-400" data-herleitung>
+              {[
+                ...(herleitung ? [<span key="h">{herleitung}</span>] : []),
+                ...azJe.map(([name, v]) => (
+                  <span key={name} data-zeile={`az-${name.toLowerCase()}`}>{name} {fmtZahl(v, 2)}</span>
+                )),
+              ].flatMap((el, i) => (i === 0 ? [el] : [<span key={`t${i}`}> · </span>, el]))}
+            </div>
+          )}
         </div>
+      ) : (
+        <KartenKopf text="Heute" tip={zeile?.jaz_grund} />
       )}
+      <div className="space-y-1">
+        {strom != null && <Zeile label="Strom heute" data="strom-heute">{fmtZahl(strom, 1)} kWh</Zeile>}
+        {zeile?.waerme_kwh != null && <Zeile label="Wärme heute" data="waerme-heute">{fmtZahl(zeile.waerme_kwh, 1)} kWh</Zeile>}
+      </div>
+    </Karte>
+  )
+}
+
+function BetriebKarte({ inv, stunden }: { inv: Investition; stunden: Record<string, number> }) {
+  const passiv = kuehltPassiv(inv)
+  const arten = BETRIEBSARTEN.filter((m) => (stunden[m] ?? 0) > 0)
+  const kuehlenOhneBetrieb = passiv && !arten.includes('kuehlen')
+
+  return (
+    <Karte name="betrieb-heute">
+      <KartenKopf text="Betrieb heute" tip={BETRIEB_TOOLTIP} />
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {arten.map((m) => (
+          <span key={m} className="inline-flex items-center gap-1.5" data-zeile={`betrieb-${m}`}>
+            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: funktionsFarbe(m) }} data-betrieb-farbe={m} />
+            <span className="text-gray-500 dark:text-gray-400">{m === 'kuehlen' && passiv ? 'Kühlen passiv' : betriebsartTitel(m)}</span>
+            <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtZahl(stunden[m], 1)} h</span>
+          </span>
+        ))}
+      </div>
+      {/* Eine gemessene 0 ist eine Auskunft (P4): die Mitschrift lief, das Gerät stand. */}
+      {(arten.length === 0 || kuehlenOhneBetrieb) && (
+        <p className="text-xs text-gray-500 dark:text-gray-400" data-betrieb-ohne>
+          {arten.length === 0 ? 'Heute kein Betrieb' : 'Kühlen passiv, heute kein Betrieb'}
+        </p>
+      )}
+    </Karte>
+  )
+}
+
+export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete }: UeberblickKarteProps) {
+  const strom = stromHeute(live, inv.id, mehrereGeraete)
+  const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
+
+  return (
+    <div className="space-y-3" data-ueberblick-karte>
+      <GeraeteKarte inv={inv} live={live} wetter={wetter} />
+      <HeuteKarte strom={strom} zeile={zeile} />
+      {zeile?.betrieb_stunden != null && <BetriebKarte inv={inv} stunden={zeile.betrieb_stunden} />}
     </div>
   )
 }

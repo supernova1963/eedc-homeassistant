@@ -28,6 +28,10 @@ import FormelTooltip, { SimpleTooltip } from './FormelTooltip'
 import { LEER_TOKEN } from '../../lib/einheiten'
 import { COLOR_CLASSES, type KomponentenColor } from '../../lib/komponentenStyle'
 
+/** Schriftgrad des Werts der Standard-Kachel (`size` md, Cockpit-KPI-Strip) — exportiert, damit eine große Zahl
+ *  außerhalb der Kachel (Hub-Überblick «Auf einen Blick», P-433-2c) denselben Grad trägt statt eines neuen. */
+export const KPI_WERT_SCHRIFT = 'text-xl sm:text-2xl'
+
 export interface KPICardProps {
   title: string
   value: string | number
@@ -123,7 +127,7 @@ export function KPICard({
   // ── Standard-/Prominent-Kachel (md/lg) mit farbiger Icon-Box ──────────────────
   const colors = COLOR_CLASSES[color ?? 'blue']
   const dims = {
-    md: { value: 'text-xl sm:text-2xl', icon: 'h-5 w-5 sm:h-6 sm:w-6', box: 'p-2 sm:p-3' },
+    md: { value: KPI_WERT_SCHRIFT, icon: 'h-5 w-5 sm:h-6 sm:w-6', box: 'p-2 sm:p-3' },
     lg: { value: 'text-2xl sm:text-3xl', icon: 'h-6 w-6 sm:h-7 sm:w-7', box: 'p-3' },
   }[size]
 

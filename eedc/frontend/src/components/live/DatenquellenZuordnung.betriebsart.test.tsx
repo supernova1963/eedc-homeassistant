@@ -11,6 +11,7 @@ import { MemoryRouter } from 'react-router-dom'
 import DatenquellenZuordnung from './DatenquellenZuordnung'
 import { gruppeAusFall, type WpFall } from '../../test/datenquellenWpFaelle'
 import type { DatenquelleGruppe } from '../../api/datenquellen'
+import { funktionsKopf } from '../../lib/funktionsFarben'
 
 const lage = vi.hoisted(() => ({ gruppen: [] as unknown[] }))
 
@@ -117,5 +118,37 @@ describe('P-433-2 S2 — Wärmepumpe nach Betriebsart', () => {
     expect(block(r2.container, 'warmwasser')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Weitere Größen erfassen/ }))
     expect(screen.getByText('Warmwasser-Temperatur (°C)')).toBeInTheDocument()
+  })
+})
+
+describe('P-433-2c C-6 — Gestalt nach Mockup «Datenquellen Wärmepumpe Variante C»', () => {
+  beforeEach(() => { lage.gruppen = [] })
+
+  it('jeder Block ist eine Karte mit getönter Kopfzeile in der Farbe seiner Betriebsart; «Gerät gesamt» neutral', async () => {
+    const { container } = await zeige('mathek')
+    const kopf = (b: string) => block(container, b)!.querySelector('[data-block-kopf]')!
+    expect(block(container, 'heizen')!.getAttribute('data-block')).toBe('heizen')
+    expect(kopf('geraet').className).toContain(funktionsKopf('geraet'))
+    expect(funktionsKopf('geraet')).toMatch(/bg-gray-50/)
+    for (const b of ['heizen', 'warmwasser', 'kuehlen']) {
+      expect(kopf(b).className, b).toContain(funktionsKopf(b))
+      expect(funktionsKopf(b), b).not.toBe(funktionsKopf('geraet'))
+    }
+    // Die Karte ist die Card-SoT (Rahmen), Titel links, Status rechts im Kopf.
+    expect(block(container, 'heizen')!.parentElement!.className).toContain('rounded-xl')
+    expect(kopf('heizen').querySelector('[data-blockstatus]')!.textContent).toBe('● vollständig')
+    expect(kopf('kuehlen').querySelector('[data-blockstatus]')!.textContent).toBe('passiv')
+  })
+
+  it('Fußzeile unter den Blöcken mit dem Weg zur Investition, vor «Weitere Größen erfassen»', async () => {
+    const { container } = await zeige('mathek')
+    const fuss = container.querySelector('[data-betriebsart-fusszeile]')!
+    expect(fuss.textContent).toBe('Welche Betriebsarten ein Gerät hat (Heizen, Warmwasser, Kühlen, Lüften …), folgt aus der Investition: '
+      + 'Art und Funktionen unter Investition bearbeiten. Hier werden nur Sensoren zugeordnet.')
+    expect(fuss.querySelector('a')!.getAttribute('href')).toBe('#/einstellungen/komponenten?bearbeiten=5')
+    const letzterBlock = [...container.querySelectorAll('[data-block]')].at(-1)!
+    expect(letzterBlock.compareDocumentPosition(fuss) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const weitere = screen.queryByText(/Weitere Größen erfassen/)
+    if (weitere) expect(fuss.compareDocumentPosition(weitere) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

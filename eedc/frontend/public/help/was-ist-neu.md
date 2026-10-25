@@ -39,6 +39,20 @@ Strom, Wärme und Arbeitszahl — und zeigt den Eigenverbrauch der ganzen Anlage
 er sich alle 5 Sekunden ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe),
 [Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).
 
+**Wärmepumpe: „Auf einen Blick" in Karten — mit „Betrieb heute" und der Kachel „Wärme heute".** Rechts neben dem
+Schaubild stehen jetzt Karten statt einer Liste: oben das Gerät mit seiner Leistung groß und daneben der Ring
+„Eigenverbrauch (Anlage)" — eine Zahl der ganzen Anlage, nicht der Wärmepumpe —, darunter Warmwasser, Zusatzheizung,
+Vorlauf, Rücklauf, Spreizung und Außentemperatur. Die Karte „AZ heute" zeigt die Arbeitszahl des Tages groß und darunter,
+womit sie gerechnet ist („23,0 kWh Wärme ÷ 3,3 kWh Strom"), dazu Heizen und Warmwasser einzeln. Neu ist **„Betrieb heute"**:
+wie viele Stunden die Wärmepumpe heute geheizt, Warmwasser bereitet oder gekühlt hat — aus der Mitschrift deines
+Betriebsmodus-Sensors in Home Assistant; Leerlauf zählt dabei zum Modus. Im Bild steht je Gerät die **Wärme heute** am
+Heizkreis, sobald ein Wärmemengenzähler zugeordnet ist. Die Zahlen sind dieselben wie bisher
+([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe), [Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).
+Auch *Einstellungen → Datenquellen* zeigt eine Wärmepumpe jetzt in Karten je Betriebsart — Heizen, Warmwasser, Kühlen mit
+farbiger Kopfzeile, «Gerät gesamt» mit Leistung, Betriebsmodus, Vorlauf und Rücklauf vorn; darunter der Hinweis, dass die
+Betriebsarten aus der Investition folgen, mit dem Link zum Bearbeiten
+([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#72-die-fläche)).
+
 **Wärmepumpe: Vorlauf, Rücklauf und Zusatzheizung im Überblick.** Unter *Einstellungen → Datenquellen* kannst du jeder
 Wärmepumpe jetzt einen Sensor für **Vorlauf**, **Rücklauf** und die **Leistung der Zusatzheizung** (Heizstab) zuordnen —
 im Block *Gerät gesamt*, gleich welche Bauart. Im Block „Überblick" erscheinen sie als Kacheln („34,2 → 29,1 °C",
@@ -221,7 +235,7 @@ dieses Feld; Wetter, Prognosen, Preise und andere Geräte bleiben stehen, Monate
 Vorschau nennt vorher Sensor, Zeitraum, Tage und Monate; einen Rückweg gibt es nicht
 ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
-**Cockpit → Live „PV heute“ wie Cockpit → Tag:** Hat nur ein Teil deiner PV-Module oder Balkonkraftwerke einen eigenen Zähler und ist der Anlagenzähler „PV gesamt“ zugeordnet, verteilt die Live-Kachel jetzt den Rest des Anlagenzählers auf die Erzeuger ohne Zähler — wie der Tag. Bisher zählte sie nur die Einzelzähler und zeigte zu wenig PV und eine zu kleine Autarkie ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md)).
+**Cockpit → Live „PV heute“ wie Cockpit → Tag:** Hat nur ein Teil deiner PV-Module oder Balkonkraftwerke einen eigenen Zähler und ist der Anlagenzähler „PV gesamt“ zugeordnet, verteilt die Live-Kachel jetzt den Rest des Anlagenzählers auf die Erzeuger ohne Zähler — wie der Tag. Bisher zählte sie nur die Einzelzähler und zeigte zu wenig PV und eine zu kleine Autarkie ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#72-die-fläche)).
 
 **Monatsformular speichert die Ø Temperatur:** Die im Formular eingetragene (oder per Auto-Fill geholte) Ø Temperatur fiel beim Speichern bisher still weg; jetzt bleibt sie stehen ([Einstellungen → Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)).
 

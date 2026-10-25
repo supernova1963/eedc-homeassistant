@@ -147,7 +147,8 @@ describe('Karte «Auf einen Blick»', () => {
   it('Matheks Fall: Vorlauf, Rücklauf, Spreizung, Zusatzheizung; Chip «Zusatzheizung aktiv» neben dem Modus', () => {
     const { container } = render(
       <UeberblickKarte inv={MATHEK} live={matheksLive()} wetter={null} tag={null} mehrereGeraete={false} />)
-    expect(zeilen(container)).toEqual(['leistung', 'warmwasser', 'vorlauf', 'ruecklauf', 'spreizung', 'zusatzheizung', 'strom-heute'])
+    // P-433-2c: Reihenfolge der Gerätekarte nach Mockup — Warmwasser · Zusatzheizung · Vorlauf · Rücklauf · Spreizung.
+    expect(zeilen(container)).toEqual(['leistung', 'warmwasser', 'zusatzheizung', 'vorlauf', 'ruecklauf', 'spreizung', 'strom-heute'])
     expect(container.textContent).toContain('34,2 °C')
     expect(container.textContent).toContain('29,1 °C')
     expect(container.textContent).toContain('5,1 K')
@@ -161,7 +162,7 @@ describe('Karte «Auf einen Blick»', () => {
   it('Zusatzheizung steht (0 W): Zeile ja, Chip nein; ohne Rücklauf keine Spreizung', () => {
     const { container } = render(
       <UeberblickKarte inv={MATHEK} live={matheksLive({ heizstab_w: 0, ruecklauf_c: null, spreizung_k: null })} wetter={null} tag={null} mehrereGeraete={false} />)
-    expect(zeilen(container)).toEqual(['leistung', 'warmwasser', 'vorlauf', 'zusatzheizung', 'strom-heute'])
+    expect(zeilen(container)).toEqual(['leistung', 'warmwasser', 'zusatzheizung', 'vorlauf', 'strom-heute'])
     expect(container.querySelector('[data-zusatz-chip]')).toBeNull()
   })
 

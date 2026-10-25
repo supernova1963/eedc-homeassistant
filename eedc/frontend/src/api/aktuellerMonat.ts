@@ -74,6 +74,10 @@ export interface WpGeraetZeile {
   waerme_grund?: string | null
   jaz?: number | null
   jaz_grund?: string | null
+  /** P-433-2c: Zähler und Nenner, aus denen das Backend `jaz` gebildet hat (ungerundet, nur mit Zahl) — für die
+   *  Herleitung über `herleitungMengen`; der Client teilt nicht. */
+  jaz_zaehler_kwh?: number | null
+  jaz_nenner_kwh?: number | null
   jaz_heizen?: number | null
   jaz_heizen_grund?: string | null
   jaz_warmwasser?: number | null
@@ -88,6 +92,9 @@ export interface WpGeraetZeile {
    *  Tooltip — „gilt nicht" ist kein Mangel); gilt sie, steht dort „—" mit
    *  dem Grund als Tooltip. */
   achsen?: string[] | null
+  /** P-433-2c: Stunden je Betriebsart **dieses Tages** aus der Betriebsart-Mitschrift (`{heizen: 9.4, …}`) — nur
+   *  das Tag-Detail liefert es; Monat/Jahr und Geräte ohne HA-Modus-Sensor `null`. Kein Leerlauf. */
+  betrieb_stunden?: Record<string, number> | null
 }
 
 /** Eine Zeile des Kastens „Was noch möglich wäre" (D-Sicht 1) — **eine je

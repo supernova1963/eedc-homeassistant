@@ -40,8 +40,8 @@ export default function UeberblickBlock({ anlageId, geraete, inv }: UeberblickBl
   const achsen = useChartTheme()
   const park = usePark()
   const { kacheln, ohneSensor } = useMemo(
-    () => baueUeberblickKacheln({ geraete, live, wetter, referenz: achsen.referenz }),
-    [geraete, live, wetter, achsen.referenz],
+    () => baueUeberblickKacheln({ geraete, live, wetter, referenz: achsen.referenz, tag }),
+    [geraete, live, wetter, achsen.referenz, tag],
   )
   const beide = !UEBERBLICK_PARK_IDS.some((id) => park.istGeparkt(id))
 
