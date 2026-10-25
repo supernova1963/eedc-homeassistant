@@ -293,6 +293,14 @@ export interface TagDetail {
   /** Der EINE Satz unter der Schranke: „Klimaanlage: Strom ohne Wärmemessung
    *  enthalten". Fertig formuliert aus dem Layer. */
   wp_jaz_schranke_hinweis?: string | null
+  /** P-433-3 S2 (#432): Heizstab-Strom des Tages und «AZ ohne Zusatzheizung» aus dem Layer (Systemarbeitszahl des
+   *  Tages als Eingang) — Wert ODER Grund, Zähler/Nenner, Herkunfts-Satz. Alle `null` ohne Heizstab-Zähler. */
+  wp_heizstab_kwh?: number | null
+  wp_jaz_ohne_zusatzheizung?: number | null
+  wp_jaz_ohne_zusatzheizung_grund?: string | null
+  wp_jaz_ohne_zusatzheizung_hinweis?: string | null
+  wp_jaz_ohne_zusatzheizung_zaehler_kwh?: number | null
+  wp_jaz_ohne_zusatzheizung_nenner_kwh?: number | null
   /** D-Sicht 3: die Kennzahlen **je Gerät**, im Block selbst. */
   wp_geraete?: WpGeraetZeile[] | null
   /** D-Sicht 1: was die Ausstattung nicht hergibt — **einmal je Sicht**, mit

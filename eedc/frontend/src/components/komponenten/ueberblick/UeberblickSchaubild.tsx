@@ -29,7 +29,7 @@ import LiveInnengeraete from '../../live/LiveInnengeraete'
 import { formatPower, kuerzeMitSuffix, liesLiteModus, zeichenBudget } from '../../live/EnergieFluss'
 import type { LiveInnengeraet } from '../../../api/liveDashboard'
 import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_PANORAMA } from './waermePanoramaAnker'
-import type { UeberblickKachel } from './kachelAnker'
+import { kachelWertText, type UeberblickKachel } from './kachelAnker'
 import { layoutUeberblick, type Platz, type UeberblickLayout } from './ueberblickLayout'
 
 /** Startbreite bis zur ersten Messung (Desktop-Spalte); jsdom misst nie. */
@@ -184,7 +184,7 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickS
                 icon={einzeln?.icon ?? g!.icon}
                 color={einzeln?.color ?? g!.color}
                 isActive={einzeln?.isActive ?? g!.isActive}
-                wertText={einzeln?.wertText ?? g!.wertText}
+                wertText={einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
                 zweiteZeile={einzeln?.zweiteZeile ?? null}
                 tip={einzeln?.tip ?? g!.tip}
                 mitglieder={g ? p.mitglieder.length : undefined}

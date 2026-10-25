@@ -96,8 +96,11 @@ def test_betriebsart_felder_folgen_dem_kanon():
 
 
 def test_mengenart_folgt_dem_thermisch_sot():
+    from backend.core.field_definitions.karten import WP_TEILMENGE_OHNE_MENGENART
+
     for k, f in _wp_felder():
-        if f.get("einheit") != "kWh":
+        # P-433-3 S2: der Heizstab-Zähler deckt den Gerätestrom nicht — keine Mengenart (Probe in der S2-Datei).
+        if f.get("einheit") != "kWh" or k in WP_TEILMENGE_OHNE_MENGENART:
             assert wp_menge(k) is None, k
             continue
         thermisch = "thermisch" in _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG.get(("waermepumpe", k), "").lower()
@@ -201,7 +204,10 @@ async def test_jedes_wp_feld_der_route_traegt_betriebsart_und_menge(db, monkeypa
     for name, (param, belegt) in FAELLE.items():
         g = _wp_gruppe(await _route_fuer(db, monkeypatch, param, belegt))
         assert all(f["betriebsart"] in WP_BETRIEBSARTEN for f in g["felder"]), name
-        assert all((f["menge"] is not None) == (f["einheit"] == "kWh") for f in g["felder"]), name
+        # P-433-3 S2: der Heizstab-Zähler (kWh) trägt bewusst keine Mengenart (`WP_TEILMENGE_OHNE_MENGENART`).
+        from backend.core.field_definitions.karten import WP_TEILMENGE_OHNE_MENGENART
+        assert all((f["menge"] is not None) == (f["einheit"] == "kWh" and f["feld"] not in WP_TEILMENGE_OHNE_MENGENART)
+                   for f in g["felder"]), name
         assert g["modus_ableitbar"] == sorted(AUFGETEILTE_MODI)
 
 

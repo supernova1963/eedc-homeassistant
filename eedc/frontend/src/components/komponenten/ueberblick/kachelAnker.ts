@@ -11,11 +11,12 @@
  * Innengeräte (`innengeraete[]` je Investition) → L, M, N in Listenreihenfolge,
  * ab dem vierten an N (das Layout gruppiert sie); Warmwasser-Temperatur je Gerät → E;
  * Strom heute je Gerät → I; Außentemperatur → Himmel; seit P-433-3 S1 je Gerät
- * «Vorlauf · Rücklauf» → {@link ANKER_VORLAUF} und «Zusatzheizung» → {@link ANKER_ZUSATZHEIZUNG}
- * (eine Regel für alle Bauarten). Die neuen Wert-Kacheln stehen **nicht** in der
+ * «Vorlauf · Rücklauf» → {@link vorlaufAnker} (seit S2-8 am Heizkreis-Objekt nach dem Stammdatum
+ * `vorlauftemperatur`: Fußbodenheizung K · Heizkörper J · sonst Hydraulikmodul G) und «Zusatzheizung» →
+ * {@link ANKER_ZUSATZHEIZUNG} (eine Regel für alle Bauarten). Die neuen Wert-Kacheln stehen **nicht** in der
  * «Ohne Sensor»-Zeile (G7/E-P3-13): sie sind Zusatzangaben, kein Grundbestand.
  *
- * ⚠ **P13 (ADR-002), Gruppe 2 «Anzeige-Ort nach Bauart»:** die Bauart wählt
+ * ⚠ **P13 (ADR-002), Gruppe 2 «Anzeige-Ort nach Bauart» bzw. nach Stammdatum (`vorlauftemperatur`, S2-8):** die Bauart wählt
  * hier nur, AN WELCHEM OBJEKT eine Kachel steht — nie, OB ein Wert gezeigt
  * wird (das entscheidet allein, ob er geliefert wird). Gelesen über die
  * Client-SoT `lib/investitionParameter.ts` (`istLuftLuft`, `istBrauchwasser`,
@@ -25,8 +26,11 @@
 import type { LiveDashboardResponse, LiveInnengeraet, LiveKomponente, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { Investition } from '../../../types'
 import { CHART_COLORS, KATEGORIE_FARBEN, fmtZahl } from '../../../lib'
-import { PARAM_WAERMEPUMPE, istBrauchwasser, istKuehlungPassiv, istLuftLuft } from '../../../lib/investitionParameter'
+import {
+  PARAM_WAERMEPUMPE, heizkreisArt, istBrauchwasser, istKuehlungPassiv, istLuftLuft, type HeizkreisArt,
+} from '../../../lib/investitionParameter'
 import { formatPower, getNodeColor } from '../../live/EnergieFluss'
+import { computeDims, type LayoutDims } from '../../live/energieFlussLayout'
 import { modusZeile, type ZweiteZeile } from '../../live/EnergieFlussKachel'
 import { modusKlartext } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
@@ -55,6 +59,9 @@ export interface UeberblickKachel {
   leistungKw?: number | null
   /** Nur Innengeräte: der Live-Datensatz (für die Liste bei Gruppen). */
   innengeraet?: LiveInnengeraet
+  /** P-433-3 S2-6: Werttext in den kompakten Dims (ab 5 Kacheln je Reihe, nodeW 80) — fehlt er, gilt `wertText`.
+   *  Gewählt wird er an EINER Stelle, {@link kachelWertText}. */
+  wertTextKompakt?: string
 }
 
 export interface KachelEingaben {
@@ -72,9 +79,50 @@ export interface KachelErgebnis {
   ohneSensor: string[]
 }
 
-/** P-433-3 S1: Objekt der Kachel «Vorlauf · Rücklauf» — das Hydraulikmodul an der Rückwand, wo Vor- und
- *  Rücklauf aus der Wärmepumpe austreten (Master 25.10., H1 Option a; O ist die Klima-Außeneinheit). */
+/** P-433-3 S1: Objekt der Kachel «Vorlauf · Rücklauf», wenn das Stammdatum keine Heizflächen nennt — das
+ *  Hydraulikmodul an der Rückwand, wo Vor- und Rücklauf aus der Wärmepumpe austreten (Master 25.10., H1 Option a;
+ *  O ist die Klima-Außeneinheit). */
 export const ANKER_VORLAUF: AnkerId = 'G'
+/** P-433-3 S2-8 (Gernot 25.10.): Stammdatum `vorlauftemperatur` '35' ⇒ Fußbodenheizung im Wohnbereich (K). */
+export const ANKER_VORLAUF_FUSSBODENHEIZUNG: AnkerId = 'K'
+/** P-433-3 S2-8: Stammdatum `vorlauftemperatur` '55' ⇒ Heizkörper im Schlafzimmer (J). */
+export const ANKER_VORLAUF_HEIZKOERPER: AnkerId = 'J'
+/** Alle Objekte, an denen «Vorlauf · Rücklauf» stehen kann — für den Rang im Layout. */
+export const ANKER_VORLAUF_ALLE: readonly AnkerId[] = [ANKER_VORLAUF, ANKER_VORLAUF_FUSSBODENHEIZUNG, ANKER_VORLAUF_HEIZKOERPER]
+
+const VORLAUF_ANKER_JE_HEIZKREIS: Record<HeizkreisArt, AnkerId> = {
+  fussbodenheizung: ANKER_VORLAUF_FUSSBODENHEIZUNG,
+  heizkoerper: ANKER_VORLAUF_HEIZKOERPER,
+}
+const HEIZKREIS_NAME: Record<HeizkreisArt, string> = {
+  fussbodenheizung: 'Fußbodenheizung',
+  heizkoerper: 'Heizkörper',
+}
+
+/**
+ * Objekt der Kachel «Vorlauf · Rücklauf» (P-433-3 S2-8, Entscheid Gernot 25.10.2026): der eine Gerätewert sagt im
+ * Bild, welche Heizflächen das Haus hat (Fußbodenheizung 30–35 °C, Heizkörper 50–70 °C) — gelesen aus dem Stammdatum
+ * `vorlauftemperatur` über die Client-SoT ({@link heizkreisArt}); ohne Angabe das Hydraulikmodul. Heizkreise je Raum
+ * sind ein späteres Konzept. P13 Gruppe 2: das Stammdatum wählt den ORT, nie OB der Wert erscheint.
+ */
+export function vorlaufAnker(inv: Investition): AnkerId {
+  const art = heizkreisArt(inv.parameter)
+  return art ? VORLAUF_ANKER_JE_HEIZKREIS[art] : ANKER_VORLAUF
+}
+
+/** Beschriftung der Karten-Zeile Vorlauf: «Vorlauf (Fußbodenheizung)» · «Vorlauf (Heizkörper)» · «Vorlauf». */
+export function vorlaufBeschriftung(inv: Investition): string {
+  const art = heizkreisArt(inv.parameter)
+  return art ? `Vorlauf (${HEIZKREIS_NAME[art]})` : 'Vorlauf'
+}
+
+/** nodeW der kompakten Dims — aus der Layout-SoT, nicht getippt. */
+const KOMPAKT_NODE_W = computeDims(5).nodeW
+
+/** Der Werttext einer Kachel für diese Dims (P-433-3 S2-6): in den kompakten Dims der kurze, sonst der volle. */
+export function kachelWertText(kachel: Pick<UeberblickKachel, 'wertText' | 'wertTextKompakt'>, dims: Pick<LayoutDims, 'nodeW'>): string {
+  return dims.nodeW <= KOMPAKT_NODE_W && kachel.wertTextKompakt ? kachel.wertTextKompakt : kachel.wertText
+}
 /** P-433-3 S1 (Bauplan S1-3): Objekt der Kachel «Zusatzheizung» — Pufferspeicher mit Heizstab. */
 export const ANKER_ZUSATZHEIZUNG: AnkerId = 'D'
 
@@ -216,6 +264,9 @@ function vorlaufKachel(inv: Investition, k: LiveKomponente, label: (was: string)
   const beide = v != null && r != null
   const was = beide ? 'Vorlauf · Rücklauf' : v != null ? 'Vorlauf' : 'Rücklauf'
   const wert = beide ? `${fmtZahl(v, 1)} → ${fmtZahl(r, 1)} °C` : `${fmtZahl((v ?? r) as number, 1)} °C`
+  // S2-6 (Lab-Sichtprobe 25.10.): «33,9 → 28,8 °C» füllt die kompakte Kachel (nodeW 80) randlos — dort ganze Grad.
+  // Nur Anzeige-Rundung; Tooltip und Karte behalten eine Nachkommastelle.
+  const kompakt = beide ? `${fmtZahl(v, 0)} → ${fmtZahl(r, 0)} °C` : undefined
   // Die Spreizung rechnet das Backend (`spreizung_k`, Layer) — der Client zeigt sie nur.
   const spreizung = k.spreizung_k ?? null
   const tip = [
@@ -223,10 +274,15 @@ function vorlaufKachel(inv: Investition, k: LiveKomponente, label: (was: string)
     ...(v != null ? [`Vorlauf: ${fmtZahl(v, 1)} °C`] : []),
     ...(r != null ? [`Rücklauf: ${fmtZahl(r, 1)} °C`] : []),
     ...(spreizung != null ? [`Spreizung: ${fmtZahl(spreizung, 1)} K`] : []),
+    // S2-8: die Kachel steht am Heizkreis des Hauses — gemessen wird am Gerät.
+    'Vorlauf der Wärmepumpe am Gerät gemessen',
     'Quelle: Live-Snapshot',
   ].join('\n')
-  return wertKachel(`wert-vorlauf-${inv.id}`, ANKER_VORLAUF, label(was), 'thermometer', CHART_COLORS.wpWaerme,
-    wert, tip, inv.id)
+  return {
+    ...wertKachel(`wert-vorlauf-${inv.id}`, vorlaufAnker(inv), label(was), 'thermometer', CHART_COLORS.wpWaerme,
+      wert, tip, inv.id),
+    ...(kompakt ? { wertTextKompakt: kompakt } : {}),
+  }
 }
 
 /** «Zusatzheizung» eines Geräts (P-433-3 S1) — nur mit Wert, auch bei 0 W (der Sensor meldet: steht). */

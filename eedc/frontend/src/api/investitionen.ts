@@ -323,6 +323,13 @@ export interface WaermepumpeDashboardResponse {
        *  bei getrennter Strommessung steht er NICHT in `stromverbrauch_kwh`. Optional,
        *  weil eine ältere Antwort ihn nicht trägt; dann liest der Client die Rohspalte. */
       strom_kwh?: number
+      /** P-433-3 S2 (E-P3-5): nur in Zeilen mit Heizstab-Zähler — Heizstab-Strom und «AZ ohne Zusatzheizung»
+       *  der Zeile aus dem Layer (Wert oder Grund, Zähler/Nenner). */
+      heizstab_kwh?: number
+      ohne_zusatzheizung_wert?: number | null
+      ohne_zusatzheizung_grund?: string | null
+      ohne_zusatzheizung_zaehler_kwh?: number | null
+      ohne_zusatzheizung_nenner_kwh?: number | null
     }[]
     /**
      * Heizgradtage je Monat für den wetternormierten Vergleich (SOLL §4.1).
@@ -348,6 +355,14 @@ export interface WaermepumpeDashboardResponse {
      *  bis zum 26.08.2026 nur im Cockpit, obwohl die Melder-Antwort ihn für den
      *  Komponenten-Hub zusagt. */
     durchschnitt_cop_hinweis?: string | null
+    /** P-433-3 S2 (#432, E-P3-5): nur mit Heizstab-Zähler — Heizstab-Strom und die Ausweis-Zahl «AZ ohne
+     *  Zusatzheizung» neben der JAZ (H-B bleibt die Hauptzahl), mit Zähler/Nenner (A6) und Herkunfts-Satz. */
+    gesamt_heizstab_kwh?: number
+    jaz_ohne_zusatzheizung?: number | null
+    jaz_ohne_zusatzheizung_grund?: string | null
+    jaz_ohne_zusatzheizung_hinweis?: string | null
+    jaz_ohne_zusatzheizung_zaehler_kwh?: number | null
+    jaz_ohne_zusatzheizung_nenner_kwh?: number | null
     jaz_heizen?: number | null
     jaz_heizen_grund?: string | null
     jaz_warmwasser?: number | null

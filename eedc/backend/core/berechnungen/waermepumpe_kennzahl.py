@@ -1260,6 +1260,70 @@ def systemarbeitszahl(
     )
 
 
+#: P-433-3 S2 (#432): der Heizstab-Zähler ist größer als (oder gleich) der Strom, mit dem die Arbeitszahl
+#: rechnet — er kann dann nicht hinter dem WP-Zähler hängen (H-B), oder er ist falsch zugeordnet. Der grobe Fall
+#: der Fehlzuordnung H-A (eigener Zähler am Hausnetz) landet hier; der feine bleibt ungedeckt (Bauplan §5).
+GRUND_ZUSATZHEIZUNG_GROESSER_ALS_STROM = "Zusatzheizung größer als der Gerätestrom"
+#: P-433-3 S2: nach Abzug der Heizstab-Wärme (Wirkungsgrad 1) bleibt keine Wärme der Wärmepumpe übrig.
+GRUND_WAERME_NICHT_GROESSER_ALS_ZUSATZHEIZUNG = "Wärme nicht größer als die Zusatzheizung"
+#: Die Herkunft der zweiten Zahl — dieselbe Bauform wie {@link waerme_herkunft} („geschätzt: …"): sie steht
+#: neben der Zahl, damit niemand sie für eine gemessene hält. Ein Heizstab wandelt Strom 1 : 1 in Wärme; mehr
+#: weiß eedc über ihn nicht.
+HINWEIS_OHNE_ZUSATZHEIZUNG = "gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen"
+#: P-433-3 S2 Nacharbeit (Master 25.10.): die anlagenweite Zahl (Tag, Monat, Jahr) mischt Geräte — trägt nicht JEDE
+#: Wärmepumpe mit Strom-Beitrag einen Heizstab-Zähler, stünde der Strom eines Heizstabs ohne Zähler im Nenner, und der
+#: Abzug wäre unvollständig. Dieselbe Bauform wie {@link GRUND_GERAETE_OHNE_WAERME}; der Hub je Gerät kennt den Fall nicht.
+GRUND_GERAETE_OHNE_ZUSATZHEIZUNG = "nicht alle Geräte melden Zusatzheizung"
+
+
+def arbeitszahl_ohne_zusatzheizung(
+    system: "Systemarbeitszahl | Arbeitszahl", heizstab_kwh: float, *, nicht_alle_geraete: bool = False,
+) -> Arbeitszahl:
+    """Die Arbeitszahl **ohne die Zusatzheizung** — eine Ausweis-Zahl NEBEN der Hauptzahl (P-433-3 S2, #432).
+
+    Konvention **H-B** (Konzept Wärme/Klima §5.7, unverändert): der Heizstab hängt hinter dem WP-Zähler, die
+    Hauptzahl enthält ihn — und bleibt die Zahl, die eedc zeigt und bewertet. Wer seinen Heizstab-Strom
+    zusätzlich misst (Feld *Strom Zusatzheizung*), bekommt daneben die Frage beantwortet *„wie gut arbeitet
+    der Verdichter allein?"*:
+
+        Zähler = Wärme der Hauptzahl − Heizstab-Strom   (Heizstab mit Wirkungsgrad 1)
+        Nenner = Nenner der Hauptzahl − Heizstab-Strom
+
+    ⭐ **Der Eingang ist die fertige Hauptzahl, nicht Rohstrom und Rohwärme** (Gegenprüfung Ü9/G6). Ihr Nenner
+    ist schon um den Strom gekürzt, der in eine Funktion ohne bewertete Nutzenergie ging (Kühlen · Lüften ·
+    Entfeuchten, E7/Option A), und ihre Sperren sind schon entschieden. Beides wird so **geerbt**: ohne Wert der
+    Hauptzahl gibt es auch diese Zahl nicht, mit demselben Grund. Die Tagessicht reicht die
+    {@link Systemarbeitszahl} herein, der Komponenten-Hub die {@link Arbeitszahl} des Geräts — beide tragen
+    ``wert``/``grund``/``zaehler_kwh``/``nenner_kwh`` in derselben Bedeutung.
+
+    ⛔ **Eine untere Schranke wird keine Ausweis-Zahl.** Steht im Nenner der Hauptzahl Strom ohne gemessene
+    Wärme (``ist_schranke``), bliebe auch die Differenz nur eine Schranke; eine {@link Arbeitszahl} hat dafür
+    kein Zeichen — dieselbe Regel wie {@link als_arbeitszahl} (ADR-002/P4). Die Zahl entfällt dann mit dem
+    Satz der Schranke als Grund.
+
+    ``nicht_alle_geraete`` (anlagenweite Aufrufer): nicht jede Wärmepumpe mit Strom-Beitrag trägt einen
+    Heizstab-Zähler ⇒ {@link GRUND_GERAETE_OHNE_ZUSATZHEIZUNG}. Ob das so ist, weiß nur der Aufrufer (Geräte-Mengen).
+
+    ``heizstab_kwh`` wird wie ``kuehlstrom_kwh`` in {@link systemarbeitszahl} nach unten auf 0 geklemmt.
+    ``HEIZSTAB_HINWEIS`` (der Satz unter einer Hauptzahl nahe 1) gilt dieser Zahl nicht — sie trägt stattdessen
+    {@link HINWEIS_OHNE_ZUSATZHEIZUNG}.
+    """
+    if system.wert is None:
+        return Arbeitszahl(None, system.grund)
+    if getattr(system, "ist_schranke", False):
+        return Arbeitszahl(None, getattr(system, "schranke_hinweis", None) or schranke_hinweis(()))
+    if nicht_alle_geraete:
+        return Arbeitszahl(None, GRUND_GERAETE_OHNE_ZUSATZHEIZUNG)
+    h = max(float(heizstab_kwh or 0.0), 0.0)
+    q = float(system.zaehler_kwh or 0.0) - h
+    e = float(system.nenner_kwh or 0.0) - h
+    if e <= 0:
+        return Arbeitszahl(None, GRUND_ZUSATZHEIZUNG_GROESSER_ALS_STROM)
+    if q <= 0:
+        return Arbeitszahl(None, GRUND_WAERME_NICHT_GROESSER_ALS_ZUSATZHEIZUNG)
+    return Arbeitszahl(q / e, hinweis=HINWEIS_OHNE_ZUSATZHEIZUNG, zaehler_kwh=q, nenner_kwh=e)
+
+
 #: Grund, wenn der Strom nicht je Funktion vorliegt — die häufigste Lage.
 #: **Kurz und mit Ausweg**, wie jeder Sperrgrund (S3): Er sagt nicht nur, dass
 #: die Zahl fehlt, sondern woran es liegt.
@@ -1770,6 +1834,10 @@ GRUND_KLASSE: dict[str, str] = {
     GRUND_GERAETE_VERSCHIEDENE_MONATE: GRUND_KLASSE_AUSSTATTUNG,
     GRUND_FUNKTION_NICHT_DECKUNGSGLEICH: GRUND_KLASSE_AUSSTATTUNG,
     GRUND_FUNKTION_VERSCHIEDENE_MONATE: GRUND_KLASSE_AUSSTATTUNG,
+    # P-433-3 S2: beide sagen „die Zuordnung des Heizstab-Zählers passt nicht" — es gibt einen Handgriff.
+    GRUND_ZUSATZHEIZUNG_GROESSER_ALS_STROM: GRUND_KLASSE_AUSSTATTUNG,
+    GRUND_WAERME_NICHT_GROESSER_ALS_ZUSATZHEIZUNG: GRUND_KLASSE_AUSSTATTUNG,
+    GRUND_GERAETE_OHNE_ZUSATZHEIZUNG: GRUND_KLASSE_AUSSTATTUNG,
 }
 
 #: Der **Handgriff** je Ausstattungs-Grund — was der Anwender tun kann, damit
@@ -1813,6 +1881,16 @@ HANDGRIFF_JE_GRUND: dict[str, str] = {
     ),
     GRUND_GERAETE_VERSCHIEDENE_MONATE: "Die fehlenden Monatswerte nachpflegen",
     GRUND_FUNKTION_VERSCHIEDENE_MONATE: "Die fehlenden Monatswerte nachpflegen",
+    GRUND_ZUSATZHEIZUNG_GROESSER_ALS_STROM: (
+        "Zuordnung „Strom Zusatzheizung“ prüfen — ein Heizstab mit eigenem Zähler am Hausnetz "
+        "gehört unter Sonstiges"
+    ),
+    GRUND_WAERME_NICHT_GROESSER_ALS_ZUSATZHEIZUNG: (
+        "Zuordnung „Strom Zusatzheizung“ und Wärmemengenzähler prüfen"
+    ),
+    GRUND_GERAETE_OHNE_ZUSATZHEIZUNG: (
+        "„Strom Zusatzheizung“ an jeder Wärmepumpe zuordnen — oder jedes Gerät im Komponenten-Hub ansehen"
+    ),
 }
 
 

@@ -163,6 +163,26 @@ export interface JazMonat {
   /** B3/H-1b: Stromverbrauch des Monats nach dem SoT — bei getrennter Strommessung
    *  steht er nicht in der Rohspalte. Fehlt er (ältere Antwort), gilt die Rohspalte. */
   strom_kwh?: number | null
+  /** P-433-3 S2 (E-P3-5): nur in Zeilen mit Heizstab-Zähler — «AZ ohne Zusatzheizung» der Zeile aus dem Layer. */
+  heizstab_kwh?: number
+  ohne_zusatzheizung_wert?: number | null
+  ohne_zusatzheizung_grund?: string | null
+  ohne_zusatzheizung_zaehler_kwh?: number | null
+  ohne_zusatzheizung_nenner_kwh?: number | null
+}
+
+/** P-433-3 S2: Zelle «AZ ohne Zusatzheizung» — Zahl aus dem Layer, sonst „—" mit Grund; leer in Zeilen ohne
+ *  Heizstab-Zähler (die Größe gibt es dort nicht). Herleitung beim Überfahren. */
+function ohneZusatzheizungZelle(jaz: JazMonat | undefined): { text: string; titel?: string } {
+  if (jaz?.heizstab_kwh == null) return { text: '' }
+  if (jaz.ohne_zusatzheizung_wert == null) return { text: '—', titel: jaz.ohne_zusatzheizung_grund ?? undefined }
+  const herleitung = jaz.ohne_zusatzheizung_zaehler_kwh != null && jaz.ohne_zusatzheizung_nenner_kwh != null
+    ? `${fmtZahl(jaz.ohne_zusatzheizung_zaehler_kwh, 0)} ÷ ${fmtZahl(jaz.ohne_zusatzheizung_nenner_kwh, 0)} kWh` : null
+  return {
+    text: fmtZahl(jaz.ohne_zusatzheizung_wert, 2),
+    // Der Satz zur Herkunft steht an der Kennzahl des Hubs (`jaz_ohne_zusatzheizung_hinweis`), nicht als Kopie hier.
+    titel: [`Zusatzheizung ${fmtZahl(jaz.heizstab_kwh, 0)} kWh`, herleitung].filter(Boolean).join(' · '),
+  }
 }
 
 /** kWh in dieser Tabelle: ganzzahlig, wie die drei Mengen-Spalten daneben.
@@ -263,6 +283,8 @@ export function WaermepumpeMonatsTabelle(
     return { md, strom, heiz, ww, jaz, herleitung }
   })
   const zeigtHerleitung = zeilen.some((z) => z.herleitung !== null)
+  // P-433-3 S2 (E-P3-5): die Spalte «AZ ohne Zusatzheizung» nur, wenn eine Zeile einen Heizstab-Zähler trägt.
+  const zeigtOhneZusatzheizung = zeilen.some((z) => z.jaz?.heizstab_kwh != null)
   // N-374: die Gründe zu einem gesperrten „—", SICHTBAR statt nur im `title=`.
   // Dieselbe Bauform wie die Herleitung darunter und aus demselben Grund — „ein
   // Tooltip ist auf dem Telefon keine Auskunft" (`waermepumpe_kennzahl.
@@ -285,6 +307,9 @@ export function WaermepumpeMonatsTabelle(
             <th className={`${KOPF_ZELLE} text-right`}>Warmwasser (kWh)</th>
           )}
           <th className={`${KOPF_ZELLE} text-right`}>JAZ</th>
+          {zeigtOhneZusatzheizung && (
+            <th className={`${KOPF_ZELLE} text-right`}>AZ ohne Zusatzheizung</th>
+          )}
         </tr>
       </TableHead>
       <TableBody>
@@ -303,6 +328,14 @@ export function WaermepumpeMonatsTabelle(
                 <div className="text-xs font-normal text-gray-500 dark:text-gray-400">{herleitung}</div>
               )}
             </td>
+            {zeigtOhneZusatzheizung && (() => {
+              const zelle = ohneZusatzheizungZelle(jaz)
+              return (
+                <td className={`${ZELLE} text-right text-orange-600`} title={zelle.titel} data-spalte="ohne-zusatzheizung">
+                  {zelle.text}
+                </td>
+              )
+            })()}
           </tr>
         ))}
       </TableBody>

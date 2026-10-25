@@ -315,6 +315,7 @@ async def _dashboard_einer_wp(db: AsyncSession, kx: _HubKontext, wp) -> Waermepu
     _waerme_kennzeichnung(zusammenfassung, wp, _mengen)
     _jaz_kuehlen(zusammenfassung, _kz, _mengen, _faltung)
     _jaz_je_funktion(zusammenfassung, _kz, _mengen)
+    _ohne_zusatzheizung(zusammenfassung, _kz)
 
     return WaermepumpeDashboardResponse(
         investition=wp,
@@ -804,3 +805,26 @@ def _jaz_je_funktion(zusammenfassung: dict[str, Any], _kz, _mengen) -> None:
             zusammenfassung[f'jaz_{_fn}_nenner_kwh'] = (
                 round(_az.nenner_kwh, 1) if _az.nenner_kwh is not None else None
             )
+
+
+def _ohne_zusatzheizung(zusammenfassung: dict[str, Any], _kz) -> None:
+    """P-433-3 S2 (#432, E-P3-5): die Ausweis-Zahl „AZ ohne Zusatzheizung" neben der JAZ — mit Herleitung (A6).
+
+    Nur mit gemessenem Heizstab-Zähler (B2); ohne ihn entsteht kein Schlüssel, die Antwort bleibt bitgleich. Die
+    Zahl kommt aus dem Dienst (``GeraetKennzahlen.ohne_zusatzheizung``, Layer ``arbeitszahl_ohne_zusatzheizung``
+    mit der Geräte-JAZ als Eingang). ⛔ Ersparnis, CO₂ und Kosten darüber lesen sie nicht — H-B bleibt die
+    Hauptzahl (Konzept Wärme/Klima §5.7).
+    """
+    _az = _kz.ohne_zusatzheizung
+    if _az is None:
+        return
+    zusammenfassung['gesamt_heizstab_kwh'] = round(_kz.mengen.heizstab_kwh or 0.0, 1)
+    zusammenfassung['jaz_ohne_zusatzheizung'] = round(_az.wert, 2) if _az.wert is not None else None
+    zusammenfassung['jaz_ohne_zusatzheizung_grund'] = _az.grund
+    zusammenfassung['jaz_ohne_zusatzheizung_hinweis'] = _az.hinweis
+    zusammenfassung['jaz_ohne_zusatzheizung_zaehler_kwh'] = (
+        round(_az.zaehler_kwh, 1) if _az.zaehler_kwh is not None else None
+    )
+    zusammenfassung['jaz_ohne_zusatzheizung_nenner_kwh'] = (
+        round(_az.nenner_kwh, 1) if _az.nenner_kwh is not None else None
+    )

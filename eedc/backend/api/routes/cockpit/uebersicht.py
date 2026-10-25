@@ -152,6 +152,14 @@ class CockpitUebersichtResponse(BaseModel):
     #: (``AktuellerMonatResponse.wp_jaz_ist_schranke``).
     wp_cop_ist_schranke: bool = False
     wp_cop_schranke_hinweis: Optional[str] = None
+    #: P-433-3 S2: Heizstab-Strom des Zeitraums (Σ ``WpFakten.heizstab_kwh``) und „AZ ohne Zusatzheizung" mit der
+    #: Systemarbeitszahl des Zeitraums als Eingang — dieselben Namen wie im Monat und Tag; ``None`` ohne Zähler.
+    wp_heizstab_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_grund: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_hinweis: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_zaehler_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_nenner_kwh: Optional[float] = None
     #: **D-Sicht 3:** die Kennzahlen je Gerät — aus derselben Rechenstelle wie
     #: der Komponenten-Hub (``services/waermepumpe_kennzahlen_je_geraet.py``).
     wp_geraete: list[WpGeraetZeile] = Field(default_factory=list)
@@ -1083,8 +1091,24 @@ async def _waermepumpe(db: AsyncSession, k: _Kontext, mengen: _Mengen) -> tuple[
         wp_modus_abdeckung_h=round(_wp_modus["abdeckung"], 1) if _wp_hat_modus else None,
         wp_modus_strom_bezug_kwh=round(_wp_modus["bezug"], 1) if _wp_hat_modus else None,
         wp_modus_gemessen=_wp_modus["gemessen"] if _wp_hat_modus else None,
+        # P-433-3 S2 (E-P3-5): die Ausweis-Zahl des Zeitraums — Σ der Monate, Geräte-Regel über die Vereinigung.
+        **_ohne_zusatzheizung_zeitraum(fakten, _wp_az),
     )
     return wp_ersparnis, wp_felder
+
+
+def _ohne_zusatzheizung_zeitraum(fakten, wp_az) -> dict:
+    """P-433-3 S2: Heizstab-Strom = Σ der Monate mit Zähler (``None``, wenn keiner einen trägt); die Geräte-Regel über
+    die Vereinigung der Geräte je Seite (Strom-Beitrag bzw. Heizstab-Zähler) des Zeitraums. Die Zahl entsteht in
+    ``waerme_klima_block.ohne_zusatzheizung_felder`` (Layer) mit der Systemarbeitszahl des Zeitraums."""
+    from backend.services.waerme_klima_block import ohne_zusatzheizung_felder
+
+    gemessen = [f.wp.heizstab_kwh for f in fakten if f.wp.heizstab_kwh is not None]
+    return ohne_zusatzheizung_felder(
+        sum(gemessen) if gemessen else None, wp_az,
+        geraete_mit_strom=set().union(*(f.wp.geraete_mit_strom for f in fakten)),
+        geraete_mit_heizstab=set().union(*(f.wp.geraete_mit_heizstab for f in fakten)),
+    )
 
 
 def _emob_anzeige(k: _Kontext, emob_ladung: float, emob_pv_ladung: float):

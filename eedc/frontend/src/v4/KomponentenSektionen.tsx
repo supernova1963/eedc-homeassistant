@@ -196,6 +196,18 @@ function DetailListe({ rows }: { rows: DetailZeile[] }) {
 /** Bauschnitt 8 — die Detail-Liste je Funktion. Überschrift in der Bauform von
  *  `GeraeteSektionen`, darunter dieselbe `DetailListe` (Regel 0a: keine zweite
  *  Listen-Komponente). Funktionen ohne Menge folgen als Einzelzeilen. */
+/** P-433-3 S2: «davon Zusatzheizung 0,4 kWh · AZ ohne Zusatzheizung 4,57 (gerechnet)» — Zahl, Zähler und Nenner
+ *  kommen aus dem Layer; der Satz zur Herkunft und die Herleitung stehen beim Überfahren, ein Sperrgrund ebenso. */
+function zusatzheizungDetail(z: NonNullable<FunktionsGruppen['zusatzheizung']>): DetailZeile {
+  const herleitung = z.zaehlerKwh != null && z.nennerKwh != null
+    ? `${fmt(z.zaehlerKwh, 1)} kWh Wärme ÷ ${fmt(z.nennerKwh, 1)} kWh Strom` : null
+  return {
+    label: 'davon Zusatzheizung',
+    wert: `${fmt(z.kwh, 1)} kWh · AZ ohne Zusatzheizung ${fmtCalc(z.az, 2, '—')}${z.az != null ? ' (gerechnet)' : ''}`,
+    titel: z.az != null ? [z.hinweis, herleitung].filter(Boolean).join(' · ') : (z.grund ?? undefined),
+  }
+}
+
 function FunktionsGruppenListe({ fg }: { fg: FunktionsGruppen }) {
   const zeile = (z: FunktionsZeile): DetailZeile => ({
     label: z.label,
@@ -214,6 +226,7 @@ function FunktionsGruppenListe({ fg }: { fg: FunktionsGruppen }) {
           <DetailListe rows={g.zeilen.map(zeile)} />
         </div>
       ))}
+      {fg.zusatzheizung && <DetailListe rows={[zusatzheizungDetail(fg.zusatzheizung)]} />}
     </div>
   )
 }
@@ -956,7 +969,8 @@ export function baueKomponentenBloecke(
     //
     // Die ID bleibt `el:wp-detail`, damit ein geparktes Element geparkt bleibt;
     // es versteckt ab jetzt auch Wärme und Kälte je Funktion (Handbuch).
-    if (wpFunktionen.gruppen.length > 0) wpEls.push({
+    // P-433-3 S2: auch die Zusatzheizung-Zeile allein trägt das Element (sie gehört keiner Funktion).
+    if (wpFunktionen.gruppen.length > 0 || wpFunktionen.zusatzheizung) wpEls.push({
       id: 'el:wp-detail', titel: 'Je Funktion', node: <FunktionsGruppenListe fg={wpFunktionen} />,
     })
     // #263 K-2 (S4): Aufteilung Heizen/Kühlen — nur mit erfasstem Modus.

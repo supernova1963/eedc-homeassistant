@@ -410,8 +410,11 @@ def test_i5_brauchwasser_waermepumpe_traegt_nur_die_warmwasser_achse():
     # bekommt sein Feld ohne Rücksicht auf die Bauart (R1, „keine Bedingung",
     # Entscheid 14.09.). Die Aussage der Probe bleibt: **keine Heiz-Achse in
     # der ersten Reihe.**
+    # P-433-3 S2 (25.10.2026): `heizstab_strom_kwh` («Strom Zusatzheizung») ebenso — ohne Bedingung an jedem
+    # Gerät (P13), auch eine Brauchwasser-WP hat einen Heizstab. Er ist keine Heiz-Achse, sondern eine Teilmenge
+    # des Gerätestroms.
     assert _pflegbar(p) == {"strom_warmwasser_kwh", "warmwasser_kwh",
-                            "waerme_kwh"}
+                            "waerme_kwh", "heizstab_strom_kwh"}
 
     # Zuordenbar bleibt beides — die Heiz-Achse als erweiterte Größe.
     flaeche = _zuordenbar(p)

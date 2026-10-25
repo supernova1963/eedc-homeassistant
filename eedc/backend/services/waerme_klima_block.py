@@ -51,6 +51,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     GRUND_KEIN_STROM,
     GRUND_ZEITRAUM,
     HANDGRIFF_JE_GRUND,
+    arbeitszahl_ohne_zusatzheizung,
     deckung_aus_geraeten,
     ist_ausstattungs_grund,
 )
@@ -706,3 +707,30 @@ def funktions_eingaenge_der_anlage(
         geraete_q_warmwasser=frozenset(q_w),
         geraete_e_warmwasser=frozenset(e_w),
     )
+
+
+def ohne_zusatzheizung_felder(
+    heizstab_kwh: Optional[float], hauptzahl, *,
+    geraete_mit_strom: Iterable, geraete_mit_heizstab: Iterable,
+) -> dict:
+    """Die Antwortfelder der Ausweis-Zahl „AZ ohne Zusatzheizung" einer ANLAGENWEITEN Sicht (Tag, Monat, Jahr) —
+    P-433-3 S2, eine Stelle für drei Routen. Leer ohne Heizstab-Zähler (B2/B10: fehlt die Größe, fehlt die Zeile).
+
+    Die Zahl entsteht im Layer (``arbeitszahl_ohne_zusatzheizung``) mit der Systemarbeitszahl der Sicht als Eingang.
+    **Geräte-Regel** (Master 25.10.): trägt nicht jede Wärmepumpe mit Strom-Beitrag (``geraete_mit_strom``) einen
+    Heizstab-Zähler (``geraete_mit_heizstab``), gibt es keine Zahl, sondern den Grund «nicht alle Geräte melden
+    Zusatzheizung» — wie bei der Wärme (``GRUND_GERAETE_OHNE_WAERME``). ``wp_heizstab_kwh`` bleibt die Summe der
+    gemessenen. Der Komponenten-Hub rechnet je Gerät und braucht die Regel nicht.
+    """
+    if heizstab_kwh is None:
+        return {}
+    fehlt = {str(i) for i in geraete_mit_strom} - {str(i) for i in geraete_mit_heizstab}
+    az = arbeitszahl_ohne_zusatzheizung(hauptzahl, heizstab_kwh, nicht_alle_geraete=bool(fehlt))
+    return {
+        "wp_heizstab_kwh": round(heizstab_kwh, 2),
+        "wp_jaz_ohne_zusatzheizung": az.wert,
+        "wp_jaz_ohne_zusatzheizung_grund": az.grund,
+        "wp_jaz_ohne_zusatzheizung_hinweis": az.hinweis,
+        "wp_jaz_ohne_zusatzheizung_zaehler_kwh": az.zaehler_kwh,
+        "wp_jaz_ohne_zusatzheizung_nenner_kwh": az.nenner_kwh,
+    }

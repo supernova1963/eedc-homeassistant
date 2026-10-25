@@ -67,6 +67,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     arbeitszahl,
     arbeitszahl_je_funktion,
     arbeitszahl_kuehlen,
+    arbeitszahl_ohne_zusatzheizung,
     heizwaerme_kwh,
     kein_betrieb_grund_der_achsen,
     waerme_gesamt_kwh,
@@ -144,6 +145,9 @@ class GeraetMengen:
     #: mit 0-Default — erst diese Marken trennen „kein Betrieb im Zeitraum" (beide gemessen 0) von „kein Zähler".
     strom_gemessen: bool = False
     waerme_gemessen: bool = False
+    #: P-433-3 S2 (#432): Σ gemessener Heizstab-Strom (Teilmenge des Gerätestroms, H-B). ``None`` = keine Zeile
+    #: misst ihn — dann gibt es die Ausweis-Zahl „AZ ohne Zusatzheizung" nicht (B2: nur mit Zähler).
+    heizstab_kwh: Optional[float] = None
 
     @property
     def kein_betrieb(self) -> bool:
@@ -176,6 +180,8 @@ class GeraetKennzahlen:
     gesamt: Arbeitszahl
     je_funktion: ArbeitszahlJeFunktion
     kuehlen: Arbeitszahl
+    #: P-433-3 S2: die Ausweis-Zahl neben ``gesamt`` — nur mit gemessenem Heizstab-Zähler, sonst ``None``.
+    ohne_zusatzheizung: Optional[Arbeitszahl] = None
 
     @property
     def inv_id(self) -> int:
@@ -275,7 +281,27 @@ def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
     )
     return GeraetKennzahlen(
         mengen=m, gesamt=gesamt, je_funktion=je_funktion, kuehlen=kuehlen,
+        # P-433-3 S2: dieselbe Hauptzahl als Eingang — Abzug des funktionsfremden Stroms und Sperren geerbt.
+        ohne_zusatzheizung=(
+            arbeitszahl_ohne_zusatzheizung(gesamt, m.heizstab_kwh) if m.heizstab_kwh is not None else None
+        ),
     )
+
+
+def _ohne_zusatzheizung_je_monat(md_az: Arbeitszahl, b: Any) -> dict[str, Any]:
+    """Die Schlüssel der Ausweis-Zahl „AZ ohne Zusatzheizung" einer Monatszeile (P-433-3 S2, E-P3-5) — leer ohne
+    gemessenen Heizstab-Zähler, damit Zeilen ohne ihn bitgleich bleiben. Die Zahl entsteht im Layer aus der
+    Arbeitszahl derselben Zeile ({@link arbeitszahl_ohne_zusatzheizung}); hier wird nur gerundet wie ``wert``."""
+    if not b.wp_heizstab_gemessen:
+        return {}
+    az = arbeitszahl_ohne_zusatzheizung(md_az, b.wp_heizstab)
+    return {
+        'heizstab_kwh': b.wp_heizstab,
+        'ohne_zusatzheizung_wert': round(az.wert, 2) if az.wert is not None else None,
+        'ohne_zusatzheizung_grund': az.grund,
+        'ohne_zusatzheizung_zaehler_kwh': az.zaehler_kwh,
+        'ohne_zusatzheizung_nenner_kwh': az.nenner_kwh,
+    }
 
 
 def mengen_aus_monatszeilen(
@@ -337,12 +363,16 @@ def mengen_aus_monatszeilen(
     zeilen: list[tuple[float, float]] = []
 
     strom_gemessen = waerme_gemessen = False
+    heizstab: Optional[float] = None
     for md in monatsdaten:
         d = md.verbrauch_daten or {}
         # E4d: Strom/Wärme gemessen — dieselbe Frage wie `imd_typ_beitrag` (die eine Lesetür).
         _b = imd_typ_beitrag(wp, d, md.source_provenance)
         strom_gemessen = strom_gemessen or _b.wp_strom_gemessen
         waerme_gemessen = waerme_gemessen or _b.wp_waerme_gemessen
+        # P-433-3 S2: der Heizstab-Strom aus derselben Lesetür — nur Zeilen, die ihn messen.
+        if _b.wp_heizstab_gemessen:
+            heizstab = (heizstab or 0.0) + _b.wp_heizstab
         # **Gemessen schlägt abgeleitet**, je Monatszeile — über den SoT, nicht
         # über eine nachgebaute Weiche (F-56).
         _zeile = modus_strom_zeile(d, summanden_zaehlen=summanden_gelten(wp.parameter))  # N-766
@@ -449,6 +479,8 @@ def mengen_aus_monatszeilen(
             'heizen_nenner_kwh': _md_az_funktion.heizen.nenner_kwh,
             # B3/H-1b: der Stromverbrauch des Monats nach dem SoT.
             'strom_kwh': round(_zeilen_strom, 1),
+            # P-433-3 S2 (E-P3-5): die Ausweis-Zahl je Monat — Schlüssel nur in Zeilen mit Heizstab-Zähler.
+            **_ohne_zusatzheizung_je_monat(_md_az, _b),
         })
         # ⚠ `strom_heizen_kwh` heißt hier **getrennte Strommessung** (zwei
         # physische Zähler), NICHT der Modus-Split von #263 K-2.
@@ -492,6 +524,7 @@ def mengen_aus_monatszeilen(
         waerme_achsen=_achsen,
         strom_gemessen=strom_gemessen,
         waerme_gemessen=waerme_gemessen,
+        heizstab_kwh=heizstab,
     )
     f = GeraetFaltung(
         modus_heizen_kwh=modus_heizen,

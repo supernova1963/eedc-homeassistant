@@ -693,6 +693,22 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           sek.push(unbewertet({ title: label, icon, color: farbe }, grund))
         }
       }
+      // P-433-3 S2 (#432, E-P3-5): «AZ ohne Zusatzheizung» — die Ausweis-Zahl NEBEN der JAZ, nur mit Heizstab-Zähler
+      // (B2). Wert ODER Grund, Zähler/Nenner und der Herkunfts-Satz kommen fertig aus dem Layer (H-B bleibt die
+      // Hauptzahl, Ersparnis und CO₂ lesen sie nicht).
+      if (z.gesamt_heizstab_kwh != null) {
+        if (z.jaz_ohne_zusatzheizung != null) {
+          sek.push(k('AZ ohne Zusatzheizung', formatEffizienz(z.jaz_ohne_zusatzheizung).wert, undefined, 'orange', WP_KPI.jaz.icon, {
+            subtitle: z.jaz_ohne_zusatzheizung_hinweis ?? undefined,
+            formel: '(Wärme − Heizstab-Strom) ÷ (Strom − Heizstab-Strom)',
+            berechnung: (z.jaz_ohne_zusatzheizung_zaehler_kwh != null && z.jaz_ohne_zusatzheizung_nenner_kwh != null)
+              ? `${n1(z.jaz_ohne_zusatzheizung_zaehler_kwh)} kWh ÷ ${n1(z.jaz_ohne_zusatzheizung_nenner_kwh)} kWh`
+              : undefined,
+          }))
+        } else if (z.jaz_ohne_zusatzheizung_grund) {
+          sek.push(unbewertet({ title: 'AZ ohne Zusatzheizung', icon: WP_KPI.jaz.icon, color: 'orange' }, z.jaz_ohne_zusatzheizung_grund))
+        }
+      }
       jazJeFunktion(z.jaz_heizen, z.jaz_heizen_grund, 'JAZ Heizen', 'orange', Flame, 'Heizwärme ÷ Strom Heizen',
         z.jaz_heizen_zaehler_kwh, z.jaz_heizen_nenner_kwh)
       jazJeFunktion(z.jaz_warmwasser, z.jaz_warmwasser_grund, 'JAZ Warmwasser', 'cyan', Droplet, 'Warmwasser ÷ Strom Warmwasser',

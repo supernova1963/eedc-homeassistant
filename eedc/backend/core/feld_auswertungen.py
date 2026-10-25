@@ -314,6 +314,16 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_TAG, "services/energie_profil/waerme_verlauf.py", "lade_waerme_verlauf_beitraege"),
         _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag"),
     ),
+    # P-433-3 S2 (#432): der Heizstab-Zähler (Teilmenge, H-B) — trägt allein die Ausweis-Zahl „AZ ohne
+    # Zusatzheizung": im Hub über die eine Lesetür `imd_typ_beitrag` (Feld `wp_heizstab`), im Tag über die
+    # Ausgabe `wp_heizstab_kwh` der Tagesdetail-Tabelle (Phase `_ohne_zusatzheizung_tag`).
+    ("waermepumpe", "heizstab_strom_kwh"): (
+        _a(KOMP_WP, "services/waermepumpe_kennzahlen_je_geraet.py", "mengen_aus_monatszeilen", "wp_heizstab"),
+        _a(COCKPIT_TAG, "api/routes/energie_profil/tag.py", "_ohne_zusatzheizung_tag", "wp_heizstab_kwh"),
+        # Nacharbeit (Master 25.10.): Monat und Jahr lesen den Monats-Fakt `WpFakten.heizstab_kwh`.
+        _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_ohne_zusatzheizung_monat", "heizstab_kwh"),
+        _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "_ohne_zusatzheizung_zeitraum", "heizstab_kwh"),
+    ),
 
     # ── Wärmepumpe / Klima: Wärme (D1) ───────────────────────────────────────
     ("waermepumpe", "waerme_kwh"): (

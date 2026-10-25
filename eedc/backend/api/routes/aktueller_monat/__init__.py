@@ -1069,6 +1069,9 @@ async def _berechne_monat(
         wp_jaz_kuehlen_grund=wp_az_kuehlen.grund,
         wp_jaz_ist_schranke=wp_arbeitszahl.ist_schranke,
         wp_jaz_schranke_hinweis=wp_arbeitszahl.schranke_hinweis,
+        # P-433-3 S2: Heizstab-Strom und „AZ ohne Zusatzheizung" aus den Monats-Fakten (bzw. der Kanal-Faltung) — nur
+        # mit Zähler; Geräte-Regel über dieselben Geräte-Mengen wie die Wärme.
+        **_ohne_zusatzheizung_monat(mf_wp, wp_arbeitszahl),
         wp_geraete=wp_block_geraete,
         wp_moeglich=wp_block_moeglich,
         wp_kaelte_kwh=(
@@ -1185,6 +1188,18 @@ async def _berechne_monat(
         komponenten_geraete=komponenten_geraete,
         # Quellen
         feld_quellen=feld_quellen,
+    )
+
+
+def _ohne_zusatzheizung_monat(mf_wp, wp_arbeitszahl) -> dict:
+    """P-433-3 S2: die Felder der Ausweis-Zahl „AZ ohne Zusatzheizung" des Monats — leer ohne Monats-Fakt."""
+    from backend.services.waerme_klima_block import ohne_zusatzheizung_felder
+
+    if mf_wp is None:
+        return {}
+    return ohne_zusatzheizung_felder(
+        mf_wp.heizstab_kwh, wp_arbeitszahl,
+        geraete_mit_strom=mf_wp.geraete_mit_strom, geraete_mit_heizstab=mf_wp.geraete_mit_heizstab,
     )
 
 

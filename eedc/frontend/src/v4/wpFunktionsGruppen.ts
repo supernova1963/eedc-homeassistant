@@ -44,8 +44,23 @@ export interface FunktionsGruppe {
   zeilen: FunktionsZeile[]
 }
 
+/** P-433-3 S2 (#432, Tag/Monat/Jahr): die Zeile «davon Zusatzheizung x kWh · AZ ohne Zusatzheizung y (gerechnet)» unter
+ *  den Gruppen — nur mit Heizstab-Zähler (B2). Sie gehört keiner Funktion: der Heizstab-Strom ist eine Teilmenge des
+ *  Gerätestroms (H-B), die Zahl die Hauptzahl ohne ihn. Wert ODER Grund kommen fertig aus dem Layer. */
+export interface ZusatzheizungZeile {
+  kwh: number
+  /** «AZ ohne Zusatzheizung» — `null` heißt gesperrt, der Grund steht dann in `grund`. */
+  az: number | null
+  grund: string | null
+  /** Herkunft («gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen») und Herleitung — beim Überfahren. */
+  hinweis: string | null
+  zaehlerKwh: number | null
+  nennerKwh: number | null
+}
+
 export interface FunktionsGruppen {
   gruppen: FunktionsGruppe[]
+  zusatzheizung?: ZusatzheizungZeile
 }
 
 type Zahl = number | null | undefined
@@ -142,7 +157,21 @@ export function wpFunktionsGruppen(d: AktuellerMonatResponse): FunktionsGruppen 
     if (az) zeilen.push(az)
     gruppen.push({ funktion: def.funktion, titel: def.titel, zeilen })
   }
-  return { gruppen }
+  const zusatzheizung = zusatzheizungZeile(d)
+  return zusatzheizung ? { gruppen, zusatzheizung } : { gruppen }
+}
+
+/** S2: die Zusatzheizung-Zeile aus der Tagesantwort — `undefined` ohne Heizstab-Zähler. */
+function zusatzheizungZeile(d: AktuellerMonatResponse): ZusatzheizungZeile | undefined {
+  if (d.wp_heizstab_kwh == null) return undefined
+  return {
+    kwh: d.wp_heizstab_kwh,
+    az: d.wp_jaz_ohne_zusatzheizung ?? null,
+    grund: d.wp_jaz_ohne_zusatzheizung_grund ?? null,
+    hinweis: d.wp_jaz_ohne_zusatzheizung_hinweis ?? null,
+    zaehlerKwh: d.wp_jaz_ohne_zusatzheizung_zaehler_kwh ?? null,
+    nennerKwh: d.wp_jaz_ohne_zusatzheizung_nenner_kwh ?? null,
+  }
 }
 
 /** E3 (b): Zeigen die Gruppen einen **getrennt gemessenen** Strom (F5), stehen im

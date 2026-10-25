@@ -172,9 +172,10 @@ def test_luft_wasser_stellt_die_betriebsarten_hintan():
     # an jedem Gerät) und steht deshalb wie die beiden Achsen in der ersten
     # Reihe. Die Aussage der Probe bleibt: die BETRIEBSART-Felder stehen in der
     # zweiten.
+    # P-433-3 S2 (25.10.2026): `heizstab_strom_kwh` aus demselben Grund (keine Bedingung, P13).
     assert erste_reihe == {"stromverbrauch_kwh", "strom_heizen_kwh",
                            "strom_warmwasser_kwh", "heizenergie_kwh",
-                           "warmwasser_kwh", "waerme_kwh"}
+                           "warmwasser_kwh", "waerme_kwh", "heizstab_strom_kwh"}
     # Und alle acht Betriebsart-Felder liegen dahinter, keines davor.
     betriebsart = {f for f in energie if f.startswith("betriebsart_")}
     assert len(betriebsart) == 8

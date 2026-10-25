@@ -33,7 +33,7 @@
 import { ABSTAND_REIHE, computeDims, kapazitaet, type LayoutDims } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
 import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, type AnkerId } from './waermePanoramaAnker'
-import { ANKER_VORLAUF, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
+import { ANKER_VORLAUF_ALLE, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
 
 /** Was das Layout von einer Kachel wissen muss. */
 export interface LayoutKachel {
@@ -77,9 +77,12 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
   schriftPx: number
 }
 
-/** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen. */
+/** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen.
+ *  ⚠ Der Rang entscheidet NUR, wer zuerst nach «Weitere» wandert — die Reihenfolge in der Reihe ist Anker-x
+ *  mit Nachbartausch ({@link verteileX}, {@link entkreuze}). «Vorlauf · Rücklauf» hat seit S2-8 drei mögliche
+ *  Objekte (G · K · J), alle mit demselben Rang. */
 const WERT_RANG: Record<string, number> = {
-  E: 0, I: 1, [ANKER_VORLAUF]: 2, [ANKER_ZUSATZHEIZUNG]: 3, HIMMEL: 4,
+  E: 0, I: 1, ...Object.fromEntries(ANKER_VORLAUF_ALLE.map((a) => [a, 2])), [ANKER_ZUSATZHEIZUNG]: 3, HIMMEL: 4,
 }
 function rang(p: Platz): number {
   if (p.gruppe === 'geraete' || p.mitglieder[0].art === 'geraet') return 0

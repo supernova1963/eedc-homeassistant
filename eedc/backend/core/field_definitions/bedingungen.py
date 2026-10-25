@@ -115,6 +115,8 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "vorlauf_temperatur_c"): ("optional", None),
     ("waermepumpe", "ruecklauf_temperatur_c"): ("optional", None),
     ("waermepumpe", "heizstab_leistung_w"): ("optional", None),
+    # P-433-3 S2: der Heizstab-Zähler trägt nur die Ausweis-Zahl „AZ ohne Zusatzheizung" — ohne ihn fehlt sie.
+    ("waermepumpe", "heizstab_strom_kwh"): ("optional", None),
     # #263 K-2 (Konzept §7 E-E): JEDER Wärmepumpe angeboten, nicht nur
     # `wp_art = luft_luft`. Der Grund ist gemessen, nicht vorsorglich:
     # azywietz-webs zwei Klimaanlagen laufen als `luft_wasser`, weil das Feld

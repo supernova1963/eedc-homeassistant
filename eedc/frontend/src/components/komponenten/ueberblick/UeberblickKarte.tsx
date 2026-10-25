@@ -29,7 +29,7 @@ import ModusChip, { ZusatzChip } from '../../ui/ModusChip'
 import type { LiveDashboardResponse, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
-import { istPassivGekuehlt, stromHeute, warmwasserC, wpKnoten, zusatzheizungAktiv } from './kachelAnker'
+import { istPassivGekuehlt, stromHeute, vorlaufBeschriftung, warmwasserC, wpKnoten, zusatzheizungAktiv } from './kachelAnker'
 
 export interface UeberblickKarteProps {
   inv: Investition
@@ -82,7 +82,8 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
       <div className="space-y-1">
         {leistungKw != null && <Zeile label="Leistung jetzt" data="leistung">{formatPower(leistungKw)}</Zeile>}
         {ww != null && <Zeile label="Warmwasser" data="warmwasser">{fmtZahl(ww, 1)} °C</Zeile>}
-        {k?.vorlauf_c != null && <Zeile label="Vorlauf" data="vorlauf">{fmtZahl(k.vorlauf_c, 1)} °C</Zeile>}
+        {/* S2-8: die Zeile nennt die Heizflächen aus dem Stammdatum — dieselbe Regel wie der Anker der Kachel. */}
+        {k?.vorlauf_c != null && <Zeile label={vorlaufBeschriftung(inv)} data="vorlauf">{fmtZahl(k.vorlauf_c, 1)} °C</Zeile>}
         {k?.ruecklauf_c != null && <Zeile label="Rücklauf" data="ruecklauf">{fmtZahl(k.ruecklauf_c, 1)} °C</Zeile>}
         {spreizung != null && <Zeile label="Spreizung" data="spreizung">{fmtZahl(spreizung, 1)} K</Zeile>}
         {k?.heizstab_w != null && (

@@ -119,6 +119,7 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
         "stromverbrauch_kwh":     "Stromverbrauch {bez} (kWh)",
         "strom_heizen_kwh":       "Strom Heizen {bez} (kWh)",
         "strom_warmwasser_kwh":   "Strom Warmwasser {bez} (kWh)",
+        "heizstab_strom_kwh":     "Strom Zusatzheizung {bez} (kWh)",
         "heizenergie_kwh":        "Heizenergie {bez} (kWh)",
         "warmwasser_kwh":         "Warmwasser {bez} (kWh)",
         "km_gefahren":            "Gefahrene km {bez}",

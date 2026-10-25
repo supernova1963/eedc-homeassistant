@@ -349,6 +349,16 @@ class AktuellerMonatResponse(BaseModel):
     #: Der EINE Satz unter der Schranke: *„Klimaanlage: Strom ohne Wärmemessung
     #: enthalten"*. Er nennt die Ursache, er bewertet nicht.
     wp_jaz_schranke_hinweis: Optional[str] = None
+    #: P-433-3 S2 (#432, E-P3-5 «eine Regel für alle Perioden»): Heizstab-Strom des Monats (Monats-Fakten
+    #: ``WpFakten.heizstab_kwh``) und die Ausweis-Zahl „AZ ohne Zusatzheizung" (Layer, Systemarbeitszahl des Monats
+    #: als Eingang, Geräte-Regel ``waerme_klima_block.ohne_zusatzheizung_felder``). Alle ``None`` ohne Heizstab-Zähler.
+    #: Cockpit → Tag trägt dieselben Namen (``TagDetailResponse``), Cockpit → Jahr im Kopf.
+    wp_heizstab_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_grund: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_hinweis: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_zaehler_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_nenner_kwh: Optional[float] = None
     #: **D-Sicht 3: die Kennzahlen JE GERÄT stehen im Block selbst.** Bis
     #: 14.09.2026 gab es sie nur im Komponenten-Hub, und der Block verwies mit
     #: einem Link dorthin — bei gemischter Ausstattung blieb der Anwender damit

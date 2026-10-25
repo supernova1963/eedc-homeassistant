@@ -10,9 +10,9 @@
  *
  * **Das Bild zeigt immer alle Gerätearten, deine Anlage zeigen die Kacheln**
  * (B2): welcher Wert an welchem Objekt hängt, entscheidet `kachelAnker.ts`.
- * Seit P-433-3 S1 trägt D die Zusatzheizung und G «Vorlauf · Rücklauf» (Konstanten
- * `ANKER_ZUSATZHEIZUNG`/`ANKER_VORLAUF` in `kachelAnker.ts`); O bleibt die Luft/Luft-Außeneinheit;
- * H, J, K, P, Q, R sind Raumkontext ohne Pin.
+ * Seit P-433-3 S1 trägt D die Zusatzheizung (`ANKER_ZUSATZHEIZUNG`); «Vorlauf · Rücklauf» steht seit S2-8 am
+ * Heizkreis nach dem Stammdatum `vorlauftemperatur` — K Fußbodenheizung, J Heizkörper, sonst G Hydraulikmodul
+ * (`vorlaufAnker` in `kachelAnker.ts`); O bleibt die Luft/Luft-Außeneinheit; H, P, Q, R sind Raumkontext ohne Pin.
  */
 
 export const PANORAMA_BREITE = 1312

@@ -2069,6 +2069,33 @@ derselbe wie dort — **E7/Option A**, also der **Abzug** und nicht die Menge.
 > meinen. Die Systemzahl ist eine dritte Größe mit eigenem Namen, und im Block
 > steht die Zahl **je Gerät** direkt daneben.
 
+#### 3.5b-H Die **Arbeitszahl ohne Zusatzheizung** — Ausweis-Zahl neben der Hauptzahl (P-433-3, 25.10.2026)
+
+Wer den Heizstab-Strom als kumulativen Zähler erfasst (*Strom Zusatzheizung*, `heizstab_strom_kwh`; Fall **H-B**:
+Heizstab hinter dem WP-Zähler), bekommt neben der Arbeitszahl eine zweite, gerechnete Zahl:
+
+```text
+AZ ohne Zusatzheizung = (Zähler der Hauptzahl − Heizstab-Strom)
+                      ÷ (Nenner der Hauptzahl − Heizstab-Strom)      Heizstab mit Wirkungsgrad 1
+```
+
+SoT: `core/berechnungen/waermepumpe_kennzahl.py::arbeitszahl_ohne_zusatzheizung(system, heizstab_kwh)`. Eingang ist
+die **fertige Hauptzahl** der Sicht — am Tag die Systemarbeitszahl, im Komponenten-Hub und je Monatszeile die
+Arbeitszahl des Geräts. Damit sind der Kühlstrom-Abzug (E7/Option A) und die Sperren **geerbt**: ohne Hauptzahl
+keine zweite, mit demselben Grund; eine Schranke (≥) wird keine zweite Zahl. Eigene Gründe: *„Zusatzheizung größer
+als der Gerätestrom"* (Nenner ≤ 0), *„Wärme nicht größer als die Zusatzheizung"* (Zähler ≤ 0); Herkunft
+*„gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen"*. Mengen: Tag `TAGESDETAIL_AUSGABE` → `wp_heizstab_kwh`;
+Monat `imd_typ_beitrag` (`wp_heizstab`) → Hub und `WpFakten.heizstab_kwh` → Cockpit → Monat; Jahr = Σ der Monate
+(Übersicht → Jahreskopf). **Geräte-Regel der anlagenweiten Sichten** (Tag, Monat, Jahr;
+`waerme_klima_block.ohne_zusatzheizung_felder`): die Zahl nur, wenn jede Wärmepumpe mit Strom-Beitrag einen
+Heizstab-Zähler trägt (`WpFakten.geraete_mit_strom ⊆ geraete_mit_heizstab`, im Jahr die Vereinigung über die Monate),
+sonst *„nicht alle Geräte melden Zusatzheizung"*; der Hub rechnet je Gerät.
+
+> ⛔ **Keine Wirkung auf Mengen, Ersparnis, CO₂, Community oder HA-Sensoren.** Der Heizstab-Strom ist eine Teilmenge
+> des Gerätestroms (kein Komponenten-Beitrag, keine Bilanz-Kategorie); die Hauptzahl bleibt die Zahl, die eedc
+> bewertet. Beispiel (#432): Wärme 26 kWh, Strom 6 kWh, davon 0,4 kWh Heizstab ⇒ Hauptzahl 4,33, ohne
+> Zusatzheizung 25,6 ÷ 5,6 = **4,57**; mit 1 kWh Kühlstrom im Strom ⇒ 25,6 ÷ 4,6.
+
 #### 3.5b-A Die **Achsen des Geräts** entscheiden über die Funktions-Arbeitszahl (WK-16h, 15.09.2026)
 
 **Die Frage:** *„Für welche Funktion darf es überhaupt eine eigene Arbeitszahl geben?"*

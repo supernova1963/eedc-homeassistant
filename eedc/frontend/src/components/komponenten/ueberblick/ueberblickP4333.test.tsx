@@ -55,7 +55,9 @@ describe('Kacheln Vorlauf · Rücklauf und Zusatzheizung', () => {
     expect([v.anker, v.label, v.wertText, v.art, v.investitionId]).toEqual(
       [ANKER_VORLAUF, 'Vorlauf · Rücklauf', '34,2 → 29,1 °C', 'wert', 7])
     expect(v.tip.split('\n')).toEqual(
-      ['Nibe S1255', 'Vorlauf: 34,2 °C', 'Rücklauf: 29,1 °C', 'Spreizung: 5,1 K', 'Quelle: Live-Snapshot'])
+      // S2-8: die Zeile «am Gerät gemessen» — die Kachel steht am Heizkreis, gemessen wird an der Wärmepumpe.
+      ['Nibe S1255', 'Vorlauf: 34,2 °C', 'Rücklauf: 29,1 °C', 'Spreizung: 5,1 K',
+        'Vorlauf der Wärmepumpe am Gerät gemessen', 'Quelle: Live-Snapshot'])
     const z = kacheln.find((k) => k.id === 'wert-zusatzheizung-7')!
     expect([z.anker, z.label, z.wertText, z.art]).toEqual([ANKER_ZUSATZHEIZUNG, 'Zusatzheizung', '1.500 W', 'wert'])
     expect([ANKER_VORLAUF, ANKER_ZUSATZHEIZUNG]).toEqual(['G', 'D'])

@@ -142,6 +142,13 @@ Aus ihnen entsteht keine Kilowattstunde und keine Kennzahl — Mengen kommen aus
 kWh-Zählern. Sie erscheinen im Live-Bild und im Tagesverlauf, und die **Gesamtleistung verdrängt
 die feinen Felder** ([Kapitel 9](#9-datenquellen-fläche-und-daten-checker)).
 
+**Nachtrag P-433-3 (25.10.2026) — der Heizstab-Strom als Teilmenge, keine vierzehnte Größe.** Das Feld
+*Strom Zusatzheizung* (`heizstab_strom_kwh`, kumulativer Zähler, an jeder Wärmepumpe zuordenbar) misst den Strom
+des Heizstabs **hinter** dem WP-Zähler (Fall H-B, [5.7](#57-der-heizstab--drei-fälle-und-nur-einer-ist-ein-fehler)).
+Er ist eine **Teilmenge von E_ges** wie die Betriebsart-Zähler: kein Bilanzbeitrag, kein Summand, nie zu E
+addiert. Er trägt allein die Ausweis-Zahl „AZ ohne Zusatzheizung" (5.7). Die Matrix oben bleibt, wie sie ist.
+Dazu die Live-Größen Vorlauf, Rücklauf (°C) und Leistung Zusatzheizung (W) — Form, keine Menge.
+
 ⚠ **E und Q tragen dieselbe Einheit und meinen Verschiedenes.** Eine Wärmepumpe führt zwei Sorten
 Kilowattstunden nebeneinander — **elektrisch** (was sie aufnimmt) und **thermisch** (was sie
 abgibt). Wer die beiden verwechselt, bekommt eine Arbeitszahl, die um genau den Faktor der
@@ -748,6 +755,29 @@ keine Bewertung des Anwenders, sondern die Auskunft, die die Zahl lesbar macht.
 **zu hohe** Zahl und wird von ihr nie gefangen — dafür gibt es die Anwender-Angabe
 *„zweiter Erzeuger am Wärmezähler"*, und ihr Text nennt den elektrischen Heizstab ausdrücklich
 mit: Bei Daikin und Nibe ist genau das der Regelfall.
+
+#### 5.7a · Nachtrag P-433-3 (25.10.2026, #432): H-B mit Ausweis — „AZ ohne Zusatzheizung"
+
+**H-B bleibt die Hauptzahl.** Wer den Strom seines Heizstabs zusätzlich als kumulativen Zähler erfasst
+(*Strom Zusatzheizung*), bekommt **daneben** eine zweite Zahl — in Cockpit → Tag, Monat und Jahr («Je Funktion»), als
+Kennzahl im Komponenten-Hub und als Spalte der Monatstabelle (eine Regel für alle Perioden):
+
+    AZ ohne Zusatzheizung = (Q − E_heizstab) ÷ (E_Nenner − E_heizstab)
+
+Q und E_Nenner sind **Zähler und Nenner der Hauptzahl** — der Nenner also schon ohne den Strom für Kühlen, Lüften
+und Entfeuchten (5.3); die Sperren der Hauptzahl gelten mit (ohne Hauptzahl keine zweite, mit demselben Grund).
+Der Heizstab geht mit **Wirkungsgrad 1** ab — er wandelt Strom 1 : 1 in Wärme, mehr weiß eedc über ihn nicht.
+Deshalb steht neben der Zahl *„gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen"*. Eine untere Schranke (≥) wird
+keine zweite Zahl; ist der Heizstab-Strom nicht kleiner als der Nenner, heißt der Grund *„Zusatzheizung größer als
+der Gerätestrom"*, bleibt keine Wärme übrig, *„Wärme nicht größer als die Zusatzheizung"*. Anlagenweit (Cockpit) gilt
+die Regel wie bei der Wärme: trägt nicht jede Wärmepumpe mit Strom-Beitrag einen Heizstab-Zähler, *„nicht alle Geräte
+melden Zusatzheizung"*.
+
+⛔ **Was sie nicht tut:** Ersparnis, CO₂, Kosten, Community und HA-Sensoren lesen weiter die Hauptzahl bzw. die
+Mengen — der Heizstab-Strom ist eine Teilmenge von E und ändert keine davon. **Nur mit Zähler:** aus der
+Live-Leistung (W) rechnet eedc keine Menge hoch (2.2). Bei H-A (eigener Zähler am Hausnetz, *Sonstiges*) gehört
+das Feld leer; den groben Fehlgriff fängt der erste Grund, den feinen nicht. Der Satz zu H-B darüber bleibt
+wörtlich, wie er ist.
 
 ---
 

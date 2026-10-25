@@ -83,9 +83,12 @@ def test_an_jeder_bauart_in_der_ersten_reihe(wp_art):
 
 
 def test_kein_kwh_feld_in_s1():
-    """G1: der Heizstab-Zähler kommt in der Sitzung seines Lesers (S2) — S1 legt keine Menge an."""
+    """G1: der Heizstab-Zähler kommt in der Sitzung seines Lesers (S2) — S1 legt keine Menge an.
+
+    Seit S2 steht genau EIN solches Feld da, ``heizstab_strom_kwh`` (Proben ``test_p433_3_s2_heizstab_zusatzheizung.py``).
+    """
     namen = {f["feld"] for f in INVESTITION_FELDER["waermepumpe"]}
-    assert not {n for n in namen if "heizstab" in n or "zusatzheizung" in n}
+    assert {n for n in namen if "heizstab" in n or "zusatzheizung" in n} == {"heizstab_strom_kwh"}
 
 
 def test_jedes_neue_feld_hat_einen_leser_im_komponenten_hub():

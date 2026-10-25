@@ -39,6 +39,17 @@ eedc keine Menge. Trägt der Sensor in Home Assistant `state_class: measurement`
 Langzeitstatistik — rückwirkend, so weit sie zurückreicht; fehlt das, sagt es der Daten-Checker („Sensor ohne
 Langzeitstatistik"). Über MQTT gibt es diese Werte nur live ([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional),
 [Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)).
+Die Kachel „Vorlauf · Rücklauf" steht am Heizkreis deines Hauses — an der Fußbodenheizung oder am Heizkörper, je nachdem,
+was du am Gerät unter *Vorlauftemperatur* eingetragen hast (ohne Angabe am Hydraulikmodul); stehen viele Kacheln in einer
+Reihe, zeigt sie ganze Grad.
+
+**Wärmepumpe: „AZ ohne Zusatzheizung" neben der Arbeitszahl.** Hat deine Wärmepumpe einen Heizstab und misst du seinen
+Strom als kWh-Zähler, ordne ihn unter *Einstellungen → Datenquellen* dem neuen Feld **Strom Zusatzheizung** zu (Block
+*Gerät gesamt*). eedc zeigt dann neben der Arbeitszahl eine zweite Zahl: dieselbe Rechnung ohne den Heizstab, der Strom
+1 : 1 in Wärme wandelt — in *Cockpit → Tag*, *Monat* und *Jahr* unter „Je Funktion", im Komponenten-Hub als Kennzahl und in der
+Monatstabelle als Spalte. Die Arbeitszahl mit Heizstab bleibt die Hauptzahl; Stromverbrauch, Kosten, Ersparnis und CO₂
+ändern sich nicht. Ohne Zähler erscheint nichts — aus der Heizstab-Leistung rechnet eedc keine Menge hoch
+([Wärme & Klima → Schritt 6a](HANDBUCH_WAERME_KLIMA.md#schritt-6a--strom-zusatzheizung-optional)).
 
 **Einstellungen → Datenquellen: die Wärmepumpe nach Betriebsart.** Die Felder einer Wärmepumpe oder Klimaanlage stehen jetzt
 in Blöcken *Gerät gesamt · Heizen · Warmwasser · Kühlen* (bei Klimaanlagen auch *Lüften · Entfeuchten*), jeder mit einem

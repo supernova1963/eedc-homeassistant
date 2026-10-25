@@ -153,6 +153,13 @@ export function baueTagAlsMonat(
     // melden Wärme".
     wp_jaz_ist_schranke: tagDetail?.wp_jaz_ist_schranke ?? false,
     wp_jaz_schranke_hinweis: tagDetail?.wp_jaz_schranke_hinweis ?? null,
+    // P-433-3 S2: Heizstab-Strom und «AZ ohne Zusatzheizung» — Tag, Monat und Jahr liefern sie (Zeile in «Je Funktion»).
+    wp_heizstab_kwh: tagDetail?.wp_heizstab_kwh ?? null,
+    wp_jaz_ohne_zusatzheizung: tagDetail?.wp_jaz_ohne_zusatzheizung ?? null,
+    wp_jaz_ohne_zusatzheizung_grund: tagDetail?.wp_jaz_ohne_zusatzheizung_grund ?? null,
+    wp_jaz_ohne_zusatzheizung_hinweis: tagDetail?.wp_jaz_ohne_zusatzheizung_hinweis ?? null,
+    wp_jaz_ohne_zusatzheizung_zaehler_kwh: tagDetail?.wp_jaz_ohne_zusatzheizung_zaehler_kwh ?? null,
+    wp_jaz_ohne_zusatzheizung_nenner_kwh: tagDetail?.wp_jaz_ohne_zusatzheizung_nenner_kwh ?? null,
     wp_geraete: tagDetail?.wp_geraete ?? [],
     wp_moeglich: tagDetail?.wp_moeglich ?? [],
     // Bauschnitt 8: die Zeile „Kälte" der Gruppe Kühlen — der Zähler der

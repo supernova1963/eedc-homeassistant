@@ -225,6 +225,12 @@ class ImdTypBeitrag:
     # Geräts für verschiedene Dinge stehen — die Mengen bleiben, die Kennzahl
     # entfällt (SOLL §4.2: „die Mengen und den Grund, nie den Quotienten").
     wp_abgrenzung: Optional[str] = None
+    #: P-433-3 S2 (#432): der gemessene **Heizstab-Strom** dieser Zeile (Feld ``heizstab_strom_kwh``) — eine
+    #: **Teilmenge** des Gerätestroms (H-B), nie dazu zu addieren. Er trägt allein die Ausweis-Zahl
+    #: „AZ ohne Zusatzheizung" ({@link waermepumpe_kennzahl.arbeitszahl_ohne_zusatzheizung}); Strom, Wärme,
+    #: Ersparnis und CO₂ lesen ihn nicht. ``wp_heizstab_gemessen`` trennt eine gemessene 0 von „kein Zähler".
+    wp_heizstab: float = 0.0
+    wp_heizstab_gemessen: bool = False
 
     # E-Mobilität (Skalar-Summen; Heimladungs-Pool bleibt separat)
     eauto_km: float = 0.0
@@ -464,6 +470,8 @@ def imd_typ_beitrag(
                 + (warmwasser if warmwasser_ist_abgeleitet(source_provenance) else 0.0)
             ),
             wp_abgrenzung=abgrenzung_stoerung(params),
+            wp_heizstab=_f(data, "heizstab_strom_kwh"),
+            wp_heizstab_gemessen=_hat(data, "heizstab_strom_kwh"),
         )
 
     if typ == "e-auto":

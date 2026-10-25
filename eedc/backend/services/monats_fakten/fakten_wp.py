@@ -60,6 +60,11 @@ class WpFakten:
     warmwasser_kwh: Optional[float] = None
     strom_heizen_kwh: float = 0.0
     strom_warmwasser_kwh: float = 0.0
+    #: P-433-3 S2 (#432): Σ gemessener **Heizstab-Strom** der aktiven Geräte (Feld ``heizstab_strom_kwh``) —
+    #: eine **Teilmenge** von ``strom_kwh`` (Konvention H-B: der Heizstab hängt hinter dem WP-Zähler), nie
+    #: dazu zu addieren. ``None`` = kein Gerät misst ihn. Kein Leser von Ersparnis, CO₂, Community oder
+    #: HA-Sensoren liest dieses Feld (B8); es trägt allein die Ausweis-Zahl „AZ ohne Zusatzheizung".
+    heizstab_kwh: Optional[float] = None
     #: **N-479 — „gemessen" je Funktion.** Hat mindestens ein aktives Gerät des
     #: Zeitraums die Größe gemessen, auch wenn dabei 0 herauskam? Die Summen
     #: oben können das nicht sagen: Eine gemessene Null und ein fehlender Zähler
@@ -177,6 +182,9 @@ class WpFakten:
     #: {@link geraete_luft_wasser} bleiben bewusst bei „Strom > 0": sie zählen
     #: Stammdaten, nicht den Nenner.
     geraete_mit_strom: frozenset[int] = frozenset()
+    #: P-433-3 S2 Nacharbeit: die Geräte, die ihren Heizstab-Strom messen ({@link heizstab_kwh}). Die anlagenweite
+    #: „AZ ohne Zusatzheizung" gibt es nur, wenn jedes Gerät aus {@link geraete_mit_strom} darin steht.
+    geraete_mit_heizstab: frozenset[int] = frozenset()
     #: … und **welche** steuern **Wärme** bei? Ist das eine echte Teilmenge,
     #: mischt der Block den Strom mehrerer Geräte mit der Wärme von weniger
     #: ({@link waerme_deckt_nicht_alle_geraete}); liegt ein Gerät **außerhalb**,

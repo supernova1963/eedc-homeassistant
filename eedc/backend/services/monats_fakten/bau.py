@@ -533,6 +533,8 @@ def _wp_fakten(roh: _RohMonat) -> WpFakten:
         warmwasser_kwh=roh.wp_warmwasser if (roh.wp_warmwasser_gemessen or roh.wp_warmwasser > 0) else None,
         strom_heizen_kwh=roh.wp_strom_heizen,
         strom_warmwasser_kwh=roh.wp_strom_warmwasser,
+        # P-433-3 S2: ohne gemessenen Heizstab-Zähler keine Angabe (None), eine gemessene 0 bleibt 0 (N-673-Bauform).
+        heizstab_kwh=roh.wp_heizstab if roh.wp_heizstab_gemessen else None,
         heizung_gemessen=roh.wp_heizung_gemessen,
         warmwasser_gemessen=roh.wp_warmwasser_gemessen,
         strom_heizen_gemessen=roh.wp_strom_heizen_gemessen,
@@ -560,6 +562,7 @@ def _wp_fakten(roh: _RohMonat) -> WpFakten:
         # `WpFakten` ist `frozen=True` — die Mengen frieren beim Übergang
         # mit ein, damit ein Leser sie nicht versehentlich fortschreibt.
         geraete_mit_strom=frozenset(roh.wp_geraete_mit_strom),
+        geraete_mit_heizstab=frozenset(roh.wp_geraete_mit_heizstab),
         geraete_mit_waerme=frozenset(roh.wp_geraete_mit_waerme),
         geraete_e_heizen=frozenset(roh.wp_geraete_e_heizen),
         geraete_q_heizen=frozenset(roh.wp_geraete_q_heizen),

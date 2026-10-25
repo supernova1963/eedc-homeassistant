@@ -815,6 +815,17 @@ class TagDetailResponse(BaseModel):
     #: statt eines Strichs.
     wp_jaz_ist_schranke: bool = False
     wp_jaz_schranke_hinweis: Optional[str] = None
+    #: P-433-3 S2 (#432, E-P3-5): der gemessene **Heizstab-Strom** des Tages (``TAGESDETAIL_AUSGABE`` →
+    #: ``wp_heizstab_kwh``, Teilmenge des Gerätestroms, H-B) und daneben die Ausweis-Zahl **„AZ ohne
+    #: Zusatzheizung"** aus dem Layer (``arbeitszahl_ohne_zusatzheizung`` mit der Systemarbeitszahl des Tages
+    #: als Eingang — Kühlstrom-Abzug und Sperren geerbt). Alle ``None`` ohne Heizstab-Zähler (B2). Zähler und
+    #: Nenner wie bei ``wp_jaz_zaehler_kwh`` — der Client rechnet nichts nach.
+    wp_heizstab_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_grund: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_hinweis: Optional[str] = None
+    wp_jaz_ohne_zusatzheizung_zaehler_kwh: Optional[float] = None
+    wp_jaz_ohne_zusatzheizung_nenner_kwh: Optional[float] = None
     #: **D-Sicht 3:** die Kennzahlen je Gerät — aus derselben Rechenstelle wie
     #: Hub, Monat und Jahr (``services/waermepumpe_kennzahlen_je_geraet.py``),
     #: nur mit der Tages-Herkunft der Mengen.

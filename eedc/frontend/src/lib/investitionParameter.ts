@@ -230,6 +230,26 @@ export function istKuehlungPassiv(art: string | null | undefined): boolean {
   return art === 'passiv'
 }
 export type WPVorlauftemperatur = '35' | '55'
+
+/** Das Stammdatum `vorlauftemperatur` (EU-Label des SCOP) — die zwei Werte des Formulars. */
+export const VORLAUF_FUSSBODENHEIZUNG: WPVorlauftemperatur = '35'
+export const VORLAUF_HEIZKOERPER: WPVorlauftemperatur = '55'
+/** Art der Heizflächen im Haus, wie das Stammdatum sie nennt. */
+export type HeizkreisArt = 'fussbodenheizung' | 'heizkoerper'
+
+/**
+ * Welche Heizflächen hat das Haus laut Stammdatum `vorlauftemperatur`? — `'35'` Fußbodenheizung, `'55'`
+ * Heizkörper, jeder andere oder fehlende Wert `null` (P-433-3 S2-8, Entscheid Gernot 25.10.2026).
+ *
+ * ⚠ **Kein Vorbelegungs-Rückfall:** das Formular belegt `'35'` vor, ein gespeichertes Gerät ohne die Angabe
+ * (Altbestand, Import) hat aber keine Aussage über sein Haus getroffen — dann `null`, nicht Fußbodenheizung.
+ */
+export function heizkreisArt(params: Record<string, unknown> | null | undefined): HeizkreisArt | null {
+  const v = String(params?.[PARAM_WAERMEPUMPE.VORLAUFTEMPERATUR] ?? '')
+  if (v === VORLAUF_FUSSBODENHEIZUNG) return 'fussbodenheizung'
+  if (v === VORLAUF_HEIZKOERPER) return 'heizkoerper'
+  return null
+}
 // 'nichts' = es gab keine Vorgängerheizung (Neubau, oder ein Gerät, das nur
 // kühlt). Ohne diesen Wert unterstellte eedc jeder Wärmepumpe einen Gaskessel
 // — der Default ist 'gas' (N-88/F2b). Backend-SoT:

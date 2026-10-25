@@ -511,6 +511,29 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Waerme_Gesamt_kWh",
             "hinweis": "Abgegebene Wärme GESAMT (thermisch, NICHT Strom!) in kWh, kumulativ oder Tagessensor — für EINEN Wärmemengenzähler, der Heizung und Warmwasser zusammen misst. Wer getrennte Zähler hat, lässt das Feld leer. Trägt hier ein Wert, gilt er als die Wärme des Geräts; Heizwärme und Warmwasser-Wärme stehen dann nur noch als Aufteilung daneben.",
         },
+        {
+            # P-433-3 S2 (#432, E-P3-4): der **Heizstab-Zähler** — Strom, den die Zusatz-/Notheizung des Geräts
+            # verbraucht hat. Konvention **H-B** (Konzept Wärme/Klima §5.7): der Heizstab hängt HINTER dem
+            # WP-Zähler, sein Strom steckt also schon in „Stromverbrauch" und seine Wärme im Wärmemengenzähler.
+            # Dieses Feld ist deshalb eine **Teilmenge** des Gerätestroms und kein Summand — es trägt keinen
+            # Bilanzbeitrag (`_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG`, kein `_categorize_counter`) und ändert weder
+            # Stromverbrauch noch Ersparnis, CO₂, Community oder HA-Sensoren. Gelesen wird es allein für die
+            # Ausweis-Zahl „AZ ohne Zusatzheizung" neben der Arbeitszahl (B2: nur mit Zähler, nie aus der
+            # Leistung hochgerechnet). Keine Bedingung: an jeder Wärmepumpe zuordenbar (B1/P13).
+            "feld": "heizstab_strom_kwh", "label": "Strom Zusatzheizung", "einheit": "kWh",
+            "betriebsart": WP_BETRIEBSART_GERAET,
+            "csv_suffix": "Strom_Zusatzheizung_kWh",
+            "hinweis": (
+                "Strom, den der Heizstab bzw. die Zusatz- oder Notheizung dieses Geräts verbraucht hat (kWh, "
+                "kumulativer Zähler). Optional. Gemeint ist ein Heizstab HINTER dem Stromzähler der Wärmepumpe: "
+                "sein Strom steckt schon im Stromverbrauch und wird nie dazugezählt. eedc zeigt damit neben der "
+                "Arbeitszahl eine zweite Zahl „AZ ohne Zusatzheizung“ (Heizstab mit Wirkungsgrad 1 aus Wärme und "
+                "Strom herausgerechnet). Hat der Heizstab einen eigenen Zähler am Hausnetz, gehört er als "
+                "Sonstiger Verbraucher erfasst, nicht hierher. Liefert das Gerät nur eine Leistung (W), bildet in "
+                "Home Assistant der Helfer „Integral“ (Riemann-Summe) daraus einen Zähler; ein Tageszähler "
+                "(Utility Meter mit täglichem Reset) ist kein kumulativer Zähler."
+            ),
+        },
         # #263 — GEMESSENER Verbrauch je Betriebsart (Split-Klimaanlage).
         # Erzeugt aus dem Kanon (`core/betriebsmodus.py`), siehe
         # `_betriebsart_felder` unter dieser Tabelle.

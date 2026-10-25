@@ -143,6 +143,9 @@ class _RohMonat:
         #: #263 — mindestens ein Gerät bringt die Aufteilung GEMESSEN mit.
         self.wp_modus_gemessen = False
         self.wp_modus_strom_bezug = 0.0
+        #: P-433-3 S2: der gemessene Heizstab-Strom (Teilmenge, H-B) und ob ein Gerät ihn gemessen hat (auch 0).
+        self.wp_heizstab = 0.0
+        self.wp_heizstab_gemessen = False
         self.wp_waerme_abgeleitet = 0.0
         # ── R2/Gerät: Zählt der Block Geräte, die keine Wärme melden? ───────
         #
@@ -164,6 +167,9 @@ class _RohMonat:
         # damit „deckungsgleich": **3,0 ohne Grund**, als belastbar an die
         # Community.
         self.wp_geraete_mit_strom: set[int] = set()
+        #: P-433-3 S2 Nacharbeit: welche Geräte messen ihren Heizstab-Strom (auch 0)? Gegenstück zu
+        #: ``wp_geraete_mit_strom`` für die Geräte-Regel der Ausweis-Zahl „AZ ohne Zusatzheizung".
+        self.wp_geraete_mit_heizstab: set[int] = set()
         self.wp_geraete_mit_waerme: set[int] = set()
         # R2/Bauart (SOLL §5): Wie viele der stromtragenden Geräte sind
         # Split-Klimaanlagen (Luft-Luft), wie viele klassische Wärmepumpen?
@@ -262,6 +268,14 @@ class _RohMonat:
         return not hat_gepflegten_pv_anteil(
             self.eauto_ladedaten, self.wallbox_ladedaten
         ) or braucht_tages_quote(self.eauto_ladedaten, self.wallbox_ladedaten)
+
+    def _falte_heizstab(self, inv, b) -> None:
+        """P-433-3 S2: Heizstab-Strom (Teilmenge, H-B) und die Geräte, die ihn messen — eigene Phase, damit
+        ``falte`` nicht wächst (Komplexitäts-Wächter)."""
+        self.wp_heizstab += b.wp_heizstab
+        if b.wp_heizstab_gemessen:
+            self.wp_heizstab_gemessen = True
+            self.wp_geraete_mit_heizstab.add(inv.id)
 
     def falte(
         self,
@@ -395,6 +409,7 @@ class _RohMonat:
             self.wp_warmwasser += b.wp_warmwasser
             self.wp_strom_heizen += b.wp_strom_heizen
             self.wp_strom_warmwasser += b.wp_strom_warmwasser
+            self._falte_heizstab(inv, b)
             # N-479: ODER über die Geräte — ein einziges gemessenes Gerät macht
             # die Funktion für diesen Monat „gemessen". Dieselbe Bauform wie
             # ``wp_hat_split`` darunter.

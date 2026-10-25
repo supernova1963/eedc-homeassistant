@@ -734,6 +734,12 @@ def falte_zeitraum(
         "wp_jaz_kuehlen_grund": kz("wp_jaz_kuehlen_grund"),
         "wp_jaz_ist_schranke": kz("wp_cop_ist_schranke", False),
         "wp_jaz_schranke_hinweis": kz("wp_cop_schranke_hinweis"),
+        # P-433-3 S2: die Ausweis-Zahl des Jahres kommt wie die JAZ aus der Übersicht (Σ Monate, eine Rechnung).
+        **{feld: kz(feld) for feld in (
+            "wp_heizstab_kwh", "wp_jaz_ohne_zusatzheizung", "wp_jaz_ohne_zusatzheizung_grund",
+            "wp_jaz_ohne_zusatzheizung_hinweis", "wp_jaz_ohne_zusatzheizung_zaehler_kwh",
+            "wp_jaz_ohne_zusatzheizung_nenner_kwh",
+        )},
         "wp_geraete": kz("wp_geraete", []),
         "wp_moeglich": kz("wp_moeglich", []),
         "wp_kaelte_kwh": (k.get("wp_kaelte_kwh") if k is not None else summe(f("wp_kaelte_kwh"))),

@@ -1140,6 +1140,10 @@ TAGESDETAIL_AUSGABE: dict[tuple[str, str], str] = {
     # gibt es auch je Innengerät; `get_tagesdetail_kwh` und der Bereichs-Leser
     # lösen den Suffix mit `geraetefeld_oder_innengeraete` auf.
     ("waermepumpe", BETRIEBSART_NUTZENERGIE_FELD[KUEHLEN]): "wp_kaelte_kwh",
+    # P-433-3 S2 (G2): der Heizstab-Zähler — eine **Teilmenge** des Gerätestroms (H-B), deshalb weder in
+    # `WAERME_AUSGABE_KEYS` noch in `WP_STROM_AUSGABE_ZU_FELD` (K3 entscheidet ohne ihn). Er trägt nur die
+    # Ausweis-Zahl „AZ ohne Zusatzheizung" des Tages (`tag-detail`).
+    ("waermepumpe", "heizstab_strom_kwh"): "wp_heizstab_kwh",
     ("speicher", "ladung_netz_kwh"): "speicher_ladung_netz_kwh",
     ("wallbox", "ladung_pv_kwh"): "emob_ladung_pv_kwh",
     ("wallbox", "ladung_netz_kwh"): "emob_ladung_netz_kwh",

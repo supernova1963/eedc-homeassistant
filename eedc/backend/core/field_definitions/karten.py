@@ -385,6 +385,12 @@ _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG: dict[tuple[str, str], str] = {
     # Achsen. Er ist zusätzlich der Gesamtwert ÜBER ihnen (D1); stünde er in der
     # Energiebilanz, zählte dieselbe Wärme zweimal.
     ("waermepumpe", "waerme_kwh"): "thermisch, s. heizenergie_kwh",
+    # P-433-3 S2 (Konvention H-B): der Heizstab hängt hinter dem WP-Zähler — sein Strom steckt in
+    # `stromverbrauch_kwh` bzw. den Summanden. Als eigener Beitrag stünde er in Tages- und Stundenbilanz doppelt.
+    # ⚠ Wortlaut ohne „thermisch": `wp_menge` liest ihn als Strom-Menge.
+    ("waermepumpe", "heizstab_strom_kwh"):
+        "Teilmenge des Gerätestroms (Heizstab hinter dem WP-Zähler, H-B) — als eigener Beitrag "
+        "stünde derselbe Strom in der Tagesbilanz doppelt",
 }
 
 # #263 — die gemessenen Betriebsart-Zähler, aus zwei verschiedenen Gründen:
@@ -446,10 +452,18 @@ def wp_betriebsart(feld: str) -> Optional[str]:
     return WP_BETRIEBSART_JE_FELD.get(basis_feld_key(feld or ""))
 
 
+#: P-433-3 S2: kWh-Felder, die eine **Teilmenge des Gerätestroms** messen, ohne ihn zu decken — der Heizstab-Zähler
+#: (H-B). Sie tragen keine Mengenart: der Status im Datenquellen-Block «Gerät gesamt» fragt «ist der Strom des Geräts
+#: gedeckt?», und ein zugeordneter Heizstab-Zähler deckt ihn nicht (gemessen 25.10.: ohne diese Ausnahme sagte der
+#: Block einer Wärmepumpe mit getrennter Strommessung «fehlt: Strom» statt «vollständig»).
+WP_TEILMENGE_OHNE_MENGENART: frozenset[str] = frozenset({"heizstab_strom_kwh"})
+
+
 def wp_menge(feld: str) -> Optional[str]:
-    """``strom`` oder ``waerme`` für ein kWh-Feld der Wärmepumpe; ``None`` für Leistung, Temperatur, Zustand."""
+    """``strom`` oder ``waerme`` für ein kWh-Feld der Wärmepumpe; ``None`` für Leistung, Temperatur, Zustand —
+    und für eine Teilmenge ohne Deckung ({@link WP_TEILMENGE_OHNE_MENGENART})."""
     basis = basis_feld_key(feld or "")
-    if not any(f["feld"] == basis for f in INVESTITION_FELDER[_WP_TYP]):
+    if not any(f["feld"] == basis for f in INVESTITION_FELDER[_WP_TYP]) or basis in WP_TEILMENGE_OHNE_MENGENART:
         return None
     grund = _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG.get((_WP_TYP, basis), "")
     return WP_MENGE_WAERME if "thermisch" in grund.lower() else WP_MENGE_STROM

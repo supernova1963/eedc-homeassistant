@@ -73,6 +73,19 @@ def _tageswert_grund_kombiniert(
     key, grund = gewinner
     return tageswert_grund_text(grund, key)
 
+
+def _ohne_zusatzheizung_tag(detail, werte_je_inv, wp_strom_je_inv, wp_jaz_tag) -> dict:
+    """P-433-3 S2: die Felder der Ausweis-Zahl „AZ ohne Zusatzheizung" des Tages — eigene Phase, damit
+    ``get_tag_detail`` nicht wächst. Geräte mit Strom-Beitrag des Tages gegen Geräte mit Heizstab-Tageswert."""
+    from backend.services.waerme_klima_block import ohne_zusatzheizung_felder
+
+    return ohne_zusatzheizung_felder(
+        detail.get("wp_heizstab_kwh"), wp_jaz_tag,
+        geraete_mit_strom=[i for i, kwh in wp_strom_je_inv.items() if kwh],
+        geraete_mit_heizstab=werte_je_inv.get("wp_heizstab_kwh") or {},
+    )
+
+
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
 async def get_tag_detail(
     anlage_id: int,
@@ -890,6 +903,9 @@ async def get_tag_detail(
         wp_jaz_kuehlen_grund=wp_az_kuehlen_tag.grund,
         wp_jaz_ist_schranke=wp_jaz_tag.ist_schranke,
         wp_jaz_schranke_hinweis=wp_jaz_tag.schranke_hinweis,
+        # P-433-3 S2: Heizstab-Strom und „AZ ohne Zusatzheizung" — nur mit Zähler (B2); Geräte-Regel: jede
+        # Wärmepumpe mit Strom-Beitrag des Tages trägt einen Heizstab-Zähler (sonst Grund).
+        **_ohne_zusatzheizung_tag(detail, _tagesdetail.werte_je_inv, wp_strom_je_inv, wp_jaz_tag),
         wp_geraete=_wp_block_geraete,
         # D-Sicht 1: Der Tag kennt einen Grund mehr als Monat und Jahr — den
         # der **Wärme** (W-18: „für diesen Tag keine Zählerstände"). Er gehört
