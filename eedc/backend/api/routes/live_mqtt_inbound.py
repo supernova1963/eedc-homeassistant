@@ -282,7 +282,11 @@ async def save_mqtt_settings(
 
         if started:
             topics_resp = await get_mqtt_topics(db=db, anlage_id=None)
-            topic_list = [t["topic"] for t in topics_resp.get("topics", [])]
+            # ⛔ Ohne Zustandsfelder (HA-Bauform §9, S1-3): ein retained «0» auf dem Modus-Topic hieße
+            # «Aus» (Zahlencode 0) — eedc erfände dann für jede Wärmepumpe ohne Publisher einen
+            # Betriebsmodus, den Chip, Mitschrift und HA-Export weitertrügen. Bei Zahlen ist «0» ein
+            # neutraler Startwert, bei einem Zustand eine Aussage.
+            topic_list = [t["topic"] for t in topics_resp.get("topics", []) if not t.get("zustand")]
             if topic_list:
                 published = await _publish_initial_values(
                     host, port, username or None, live_password, topic_list,
@@ -321,12 +325,12 @@ async def get_mqtt_topics(
     for anlage in anlagen:
         aname = anlage.anlagenname or f"Anlage {anlage.id}"
         for entry in await build_expected_topics(db, anlage):
-            if entry.get("nur_manuell") or entry.get("zustand"):
+            if entry.get("nur_manuell"):
                 # Nicht zuordenbar ⇒ auch kein Topic, auf das jemand publizieren
                 # soll: der Wert würde von keinem Konsumenten aufgesammelt.
-                # `zustand` aus demselben Grund, nur eine Stufe härter (#263
-                # K-2): der Inbound-Parser ist `float(payload)`, ein
-                # Modus-String käme nicht einmal durch die Tür.
+                # (Zustandsfelder standen bis HA-Bauform §9 ebenfalls hier — der
+                # Inbound-Parser war `float(payload)`; seit S1-3 hält er ihren
+                # rohen String, und das Modus-Topic gehört in die Liste.)
                 continue
             # Endpoint-Konvention: energy-Topics führen typ="energy",
             # live-Topics behalten "basis" oder den Investitions-Typ.
@@ -337,6 +341,9 @@ async def get_mqtt_topics(
                 "beschreibung": entry.get("beschreibung"),
                 "anlage": aname,
                 "typ": api_typ,
+                # HA-Bauform §9 (S1-3): Zustand statt Zahl — der Initialwert «0» beim Speichern
+                # der Einstellungen gilt nur Zahlen-Topics (s. `save_mqtt_settings`).
+                "zustand": bool(entry.get("zustand")),
             })
 
     return {"topics": topics}

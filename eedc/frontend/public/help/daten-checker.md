@@ -846,7 +846,7 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 
 > **Der Hinweis erscheint nur bei Wärmepumpenart *Luft-Luft*.** Ob ein Gerät überhaupt kühlen kann, hängt an seiner Bauart — eine Luft-Wasser-Wärmepumpe bekäme sonst einen Hinweis auf eine Aufteilung, die es bei ihr nicht gibt. **Das Feld selbst bietet eedc trotzdem jeder Wärmepumpe an**: Es gibt Luft-Wasser-Geräte mit Kühlfunktion, und wer eines hat, findet den Betriebsmodus auf der Datenquellen-Fläche.
 
-> **Der Betriebsmodus ist nur als HA-Sensor zuordenbar, nicht über MQTT.** Er ist ein Zustand, kein Messwert — der MQTT-Weg von eedc nimmt ausschließlich Zahlen entgegen. Die Fläche blendet die MQTT-Optionen für dieses eine Feld deshalb aus, statt eine Quelle anzubieten, die nichts liefern könnte.
+> **Der Betriebsmodus geht auch über MQTT — als Inbound, nicht über das Gateway.** Er ist ein Zustand, kein Messwert: eedc nimmt am Modus-Topic ein Wort oder einen Zahlencode (0–5) entgegen ([Wärme & Klima, „Ohne Home Assistant: der Modus über MQTT"](HANDBUCH_WAERME_KLIMA.md#ohne-home-assistant-der-modus-über-mqtt)). Das Gateway reicht nur Zahlen weiter und steht an diesem Feld nicht zur Wahl. Bis Oktober 2026 war der Modus nur als HA-Sensor zuordenbar. Über MQTT beginnt die Aufteilung mit dem ersten empfangenen Wert — auch hier nicht rückwirkend.
 
 
 > **Was du nach der Zuordnung siehst** (seit 2026-08-19): Unter *Komponenten → Wärme/Klima* steht

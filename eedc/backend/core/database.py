@@ -707,6 +707,25 @@ def _migrate_kanal_quelle_verworfen_ts(connection) -> None:
     connection.execute(_text('ALTER TABLE kanal_quelle ADD COLUMN verworfen_ts INTEGER'))
 
 
+def _migrate_mqtt_live_snapshot_ts_unix(connection) -> None:
+    """HA-Bauform §9, E-SG-8 (Standalone-Gleichstand S1): Spalte ``ts_unix`` an ``mqtt_live_snapshots``.
+
+    Unix-Sekunden des Snapshots — die Stundenverdichtung der MQTT-Mitschrift rechnet nur damit, weil
+    ``timestamp`` naive Ortszeit ohne ``fold`` ist. Nullable, ohne Default: Bestandszeilen tragen ``NULL`` und
+    werden nicht verdichtet (nicht rückwirkend, E-SG-7). Eine frische Installation bekommt die Spalte über
+    ``create_all``. Idempotent; eigene Funktion nach dem Muster ``_migrate_kanal_quelle_verworfen_ts``.
+    """
+    from sqlalchemy import inspect as _inspect
+    from sqlalchemy import text as _text
+
+    inspector = _inspect(connection)
+    if 'mqtt_live_snapshots' not in inspector.get_table_names():
+        return
+    if 'ts_unix' in {col['name'] for col in inspector.get_columns('mqtt_live_snapshots')}:
+        return
+    connection.execute(_text('ALTER TABLE mqtt_live_snapshots ADD COLUMN ts_unix INTEGER'))
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -1177,6 +1196,9 @@ async def run_migrations(conn):
 
         # HA-Bauform S3, E-S3-5: `kanal_quelle.verworfen_ts` (Marke «verworfen am» der Werkbank).
         _migrate_kanal_quelle_verworfen_ts(connection)
+
+        # HA-Bauform §9, E-SG-8: `mqtt_live_snapshots.ts_unix` (Zeitachse der MQTT-Mitschrift).
+        _migrate_mqtt_live_snapshot_ts_unix(connection)
 
     await conn.run_sync(_run_migrations)
 

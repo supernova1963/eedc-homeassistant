@@ -114,6 +114,17 @@ aber weiter zum Haushaltstarif — wie groß dieser Anteil ist, weiß eedc nicht
 Daten-Checker, um wie viel die Ersparnis höchstens abweichen kann. Deine Zahlen ändern sich nicht
 ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
 
+**Wärmepumpe ohne Home Assistant: der Betriebsmodus kommt jetzt auch über MQTT.** Wer eedc ohne Home Assistant betreibt
+oder den Modus aus einer anderen Steuerung bekommt, schickt ihn an das eedc-Topic seiner Wärmepumpe
+(`…/live/inv/<gerät>/betriebsmodus`) — als Wort (`heizen`, `warmwasser`, `kuehlen` …) oder als Zahl: **0** Aus, **1** Heizen,
+**2** Warmwasser, **3** Kühlen, **4** Lüften, **5** Entfeuchten. eedc zeigt den Modus dann wie mit einem HA-Sensor im
+Energiefluss und im Wärmepumpen-Hub und schreibt ihn stündlich mit; daraus entstehen „Strom nach Betriebsart" und
+„Betrieb heute". Die Mitschrift beginnt mit dem ersten empfangenen Wert, frühere Tage bleiben ohne Aufteilung; „Leerlauf"
+gibt es nur über Home Assistant. Unter *Einstellungen → Datenquellen* wählst du am Feld „Betriebsmodus" die Quelle
+**Inbound** und siehst dort, was ankommt und wie eedc es versteht. Die Zahlen 0 bis 5 gelten nur über MQTT; an einem
+HA-Sensor bleibt eine Zahl wie bisher „unbestimmt" — sie ist dort ein Rohwert deines Geräts
+([Wärme & Klima → Modus über MQTT](HANDBUCH_WAERME_KLIMA.md#ohne-home-assistant-der-modus-über-mqtt)).
+
 ## v4.1.10 — 24. Oktober 2026
 
 **Daten-Checker: kein „Sprung in Home Assistant“ mehr am PV-Tagesertrag eines nachts abgeschalteten Wechselrichters.**

@@ -31,7 +31,8 @@ export interface DatenquelleFeld {
   standard_topic: string
   /** Nur als HA-Sensor lesbar (Preis-Felder): Gateway/Inbound entfallen. */
   nur_ha?: boolean
-  /** #263 K-2: Zustand statt Zahl (Betriebsmodus) — vom Backend schon immer geliefert, hier nachgetragen (P-433-2). */
+  /** #263 K-2: Zustand statt Zahl (Betriebsmodus) — vom Backend schon immer geliefert, hier nachgetragen (P-433-2).
+   *  Seit HA-Bauform §9 auch über das Inbound-Topic; das Gateway (float-only) entfällt an diesem Feld. */
   zustand?: boolean
   /** Aktive Quelle. */
   quelle: string
@@ -44,11 +45,12 @@ export interface DatenquelleFeld {
   /** Invert-Modell: Vorzeichen der Zuordnung umkehren (HA/Inbound; am Read
    *  angewendet). Bei Gateway steckt der Sign im Transform-Modal. */
   invertieren: boolean
-  /** Aktueller Wert aus dem MQTT-Inbound-Cache (null = nichts empfangen). */
+  /** Aktueller Wert aus dem MQTT-Inbound-Cache (null = nichts empfangen). Immer eine Zahl:
+   *  ein Zustandsfeld trägt seinen Wert in `wert_text`, auch über MQTT (HA-Bauform §9). */
   wert: number | null
   /**
    * F-53: Roher State eines **Zustandsfelds** (`zustand === true`), z. B.
-   * `'cool'`. Bei Zahlenfeldern immer `null` — dort gilt `wert`.
+   * `'cool'` aus HA oder `'2'` vom MQTT-Topic. Bei Zahlenfeldern immer `null` — dort gilt `wert`.
    * Ein Zustand ist nie numerisch; `wert` bleibt für ihn `null`, und ohne
    * dieses Feld sah eine funktionierende Zuordnung wie ein Ausfall aus (#263).
    */

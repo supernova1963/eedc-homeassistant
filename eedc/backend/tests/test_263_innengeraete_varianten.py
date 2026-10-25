@@ -333,11 +333,14 @@ async def test_datenquellen_flaeche_zeigt_dieselben_felder(db, name):
 
 
 @pytest.mark.parametrize("name", list(VARIANTEN))
-async def test_ein_zustandsfeld_bekommt_nie_ein_mqtt_topic(db, name):
-    """Quer über alle Varianten: kein `climate`-Feld wird als Topic angeboten.
+async def test_ein_zustandsfeld_bekommt_ein_inbound_topic_und_keinen_gateway_knopf(db, name):
+    """Quer über alle Varianten: der Betriebsmodus hat sein Inbound-Topic und ist ein Zustand.
 
-    Ein Topic dafür wäre eine Lücke, die niemand schließen kann — der
-    MQTT-Parser ist `float(payload)`.
+    ⛔ **Bis zum 25.10.2026 stand hier das Gegenteil** (`…_bekommt_nie_ein_mqtt_topic`): der
+    MQTT-Parser war `float(payload)`, ein Modus-String kam nie an. Seit HA-Bauform §9
+    (Standalone-Gleichstand S1) hält der Inbound für Zustandsfelder den rohen String, und
+    `normalisiere_betriebsmodus` versteht Kanon-Wort und Zahlencode. ``nur_ha`` ist damit falsch —
+    nur das **Gateway** bleibt aus (float-only); diese Weiche trägt ``zustand`` im Client.
     """
     from backend.api.routes.datenquellen import get_datenquellen_felder
 
@@ -348,8 +351,11 @@ async def test_ein_zustandsfeld_bekommt_nie_ein_mqtt_topic(db, name):
 
     for f in gruppe["felder"]:
         if f["feld"].startswith("betriebsmodus"):
-            assert not f.get("standard_topic"), f"{name}: {f['feld']} hat ein Topic"
-            assert f.get("nur_ha") is True, f"{name}: {f['feld']} ist nicht HA-only"
+            topic = f.get("standard_topic") or ""
+            assert f"/live/inv/{inv.id}_" in topic and topic.endswith(f"/{f['feld']}"), (
+                f"{name}: {f['feld']} ohne Inbound-Topic: {topic!r}")
+            assert f.get("nur_ha") is False, f"{name}: {f['feld']} gilt noch als HA-only"
+            assert f.get("zustand") is True, f"{name}: {f['feld']} gilt nicht als Zustand (Gateway-Weiche)"
         if f["feld"].startswith("betriebsart_"):
             assert f.get("standard_topic"), (
                 f"{name}: {f['feld']} ist eine Zahl und braucht ein Topic")

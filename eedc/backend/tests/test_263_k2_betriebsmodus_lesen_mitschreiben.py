@@ -307,13 +307,16 @@ async def test_s1_der_picker_laesst_climate_zu_und_sonst_nichts():
     assert _ha_sensor_relevant(klima, False, zustand=False) is False
 
 
-def test_s1_der_modus_bekommt_kein_mqtt_topic():
-    """Der Inbound-Parser ist `float(payload)` — ein Modus käme nie an.
+def test_s1_der_modus_hinweis_nennt_die_mqtt_codes():
+    """Der Modus kommt seit HA-Bauform §9 auch über MQTT — der Hinweis nennt die Codes.
 
-    Ein Topic anzubieten, auf das niemand publizieren kann, ist dieselbe
-    Klasse wie ein Daten-Checker-Hinweis, den niemand auflösen kann (P-6).
-    Deshalb bleibt `topic` leer und `nur_ha` greift auf der Fläche.
+    ⛔ **Bis zum 25.10.2026 hieß diese Probe `test_s1_der_modus_bekommt_kein_mqtt_topic`**: der
+    Inbound-Parser war `float(payload)`, der Hinweis sagte «nur als HA-Sensor». Seit dem
+    Zustands-Zweig des Inbound (Standalone-Gleichstand S1) gilt das Gegenteil, und der Hinweis
+    sagt dem Anwender, was er publizieren darf — **aus der Werte-Tabelle abgeleitet**
+    (`betriebsmodus_codes_klartext`), nicht als zweite Liste getippt.
     """
+    from backend.core.betriebsmodus import betriebsmodus_codes_klartext
     from backend.core.field_definitions import get_live_felder_fuer_investition
 
     modus = next(
@@ -321,8 +324,11 @@ def test_s1_der_modus_bekommt_kein_mqtt_topic():
         if f["key"] == "betriebsmodus"
     )
     assert modus.get("zustand") is True
-    # Und der Hinweis sagt es dem Anwender, statt ihn suchen zu lassen.
     assert "MQTT" in modus["hinweis"]
+    assert betriebsmodus_codes_klartext() in modus["hinweis"]
+    assert betriebsmodus_codes_klartext() == (
+        "0 Aus · 1 Heizen · 2 Warmwasser · 3 Kühlen · 4 Lüften · 5 Entfeuchten")
+    assert "Gateway" in modus["hinweis"] and "Leerlauf" in modus["hinweis"]
 
 
 # ============================================================================

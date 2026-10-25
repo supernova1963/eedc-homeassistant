@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.energie import SONSTIGES_KOMPONENTEN_PREFIX
 from backend.core.config import HA_INTEGRATION_AVAILABLE
+from backend.core.field_definitions import ist_zustand_feld
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -99,7 +100,15 @@ class LivePowerService:
             mqtt_basis = mqtt_svc.cache.get_live_basis(anlage.id)
             basis_values.update(mqtt_basis)
 
-            mqtt_inv = mqtt_svc.cache.get_all_live_inv(anlage.id)
+            # HA-Bauform §9 (S1-2, Ü8): Zustandsfelder (Betriebsmodus) trägt der Cache als rohen
+            # String — sie gehören nicht in die Leistungswerte (Annotation `float` bleibt wahr). Der
+            # Modus erreicht die Sichten über `betriebsmodus_live`, nicht über diesen Pfad; ohne den
+            # Filter legte auch ein `quellen`-Eintrag (B8-Stempel) den String über
+            # `_apply_quellen_overrides` in `inv_values`.
+            mqtt_inv = {
+                inv_id: {k: v for k, v in values.items() if not ist_zustand_feld(k)}
+                for inv_id, values in mqtt_svc.cache.get_all_live_inv(anlage.id).items()
+            }
             for inv_id, values in mqtt_inv.items():
                 if inv_id not in inv_values:
                     inv_values[inv_id] = {}

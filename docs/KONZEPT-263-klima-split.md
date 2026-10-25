@@ -324,7 +324,9 @@ beide Hälften nur die Kosten.
 5. ⛔ **Keine Aufteilung je Innengerät** (D5) — K-3 bleibt zu.
 6. ⚠ **Geräte, die nur kühlen** (D7), tragen `heizen` nie. Das ist kein Fehler und muss als
    „gibt es hier nicht" erscheinen, nicht als 0.
-7. ⛔ **Der Modus ist nur als HA-Sensor zuordenbar, nicht über MQTT** (gemessen bei S1). Der
+7. ⛔ **Überholt durch HA-Bauform §9 (Standalone-Gleichstand S1, 25.10.2026):** der Inbound hat einen Zustands-Zweig,
+   der Modus kommt auch über das Topic `…/betriebsmodus` (Wort oder Code 0–5); nur das Gateway bleibt aus. Der
+   ursprüngliche Punkt: **Der Modus ist nur als HA-Sensor zuordenbar, nicht über MQTT** (gemessen bei S1). Der
    Inbound-Parser ist `float(payload)` (`mqtt_inbound_service:74`) — ein Modus-String käme dort
    nicht an. Die Fläche blendet die MQTT-Optionen für dieses Feld deshalb aus (`nur_ha`), und es
    bekommt kein Standard-Topic; sonst stünde im MQTT-Abdeckungs-Check ein Dauer-Hinweis auf ein

@@ -25,16 +25,19 @@ SOC_TYPEN: frozenset[str] = frozenset(
 #   1. `live_power_service._states_zu_w` → `normalize_to_w(float(state))` — läuft
 #      über JEDE Live-Zuordnung, alle 5 Sekunden. Ein `climate`-State ergibt dort
 #      garantiert `None`; es wäre ein Dauerabruf ohne Ergebnis.
-#   2. `mqtt_inbound_service` → `float(payload)`. Ein Modus über MQTT ist damit
-#      nicht empfangbar — also wird er auch nicht als Topic **angeboten**, statt
-#      dem Anwender eine Quelle hinzustellen, die nichts liefert (die P-6-Falle:
-#      ein Hinweis bzw. hier ein Angebot, das niemand einlösen kann).
+#   2. `mqtt_inbound_service` war `float(payload)`. Seit HA-Bauform §9
+#      (Standalone-Gleichstand S1, 25.10.2026) hat der Inbound einen
+#      Zustands-Zweig: ein Zustandsfeld landet als roher String im Cache, wird
+#      als Topic angeboten (`…/live/inv/<id>/betriebsmodus`) und erst im Kanon
+#      gedeutet. Das Gateway (float-only) bleibt für Zustandsfelder aus — die
+#      Fläche liest dafür `zustand`.
 #   3. `daten_checker/sensoren.py` prüft Einheiten (kW≠kWh) — ein Feld ohne
 #      Einheit hat dort nichts zu suchen.
 #
 # Statt an jeder dieser Stellen `if key == "betriebsmodus"` zu schreiben, steht
 # die Eigenschaft **am Feld** und wird von hier gelesen. Ein zweites
-# Zustandsfeld erbt damit alle drei Weichen, ohne dass jemand sie sucht.
+# Zustandsfeld erbt damit alle Weichen, ohne dass jemand sie sucht (seit §9
+# auch die des Inbound und des Gateway-Knopfs).
 #
 # ⚠ Die Umkehrung gilt ausdrücklich: was hier NICHT steht, ist eine Zahl. Wer
 # ein Feld ohne `einheit` einträgt, hat damit noch kein Zustandsfeld gebaut.
@@ -96,8 +99,8 @@ def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
     # #263: Der Key kann eine Innengeräte-Adresse tragen
     # (`betriebsmodus-3`). Die Zustands-Eigenschaft hängt am Feld, nicht am
     # Innengerät — ohne Auflösung liefe eine `climate`-Entität in den
-    # 5-Sekunden-Poller und in ein MQTT-Topic, das `float(payload)` nie
-    # annehmen kann.
+    # 5-Sekunden-Poller, und der MQTT-Inbound (HA-Bauform §9) verwürfe den
+    # Modus-String eines Suffix-Topics als ungültige Zahl.
     basis = basis_feld_key(feld)
     if typ is not None:
         return (typ, basis) in ZUSTAND_LIVE_FELDER

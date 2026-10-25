@@ -551,13 +551,44 @@ async def _feld_labels(db: AsyncSession, anlage: Anlage) -> dict[str, str]:
     return labels
 
 
-def _zulaessige_werte(eintrag: dict) -> list[dict] | None:
+def _feld_wert(
+    q: str, eintrag: dict, zustand: bool, ha_werte: dict, ha_texte: dict, cache: tuple,
+) -> tuple:
+    """``(wert, wert_zeit, wert_text)`` der TATSÄCHLICH aufgelösten Quelle eines Feldes (§2d).
+
+    HA → REST-Batch, Inbound/Gateway → Cache (Gateway republisht nach C2a-Fix über das Standard-Topic in denselben
+    Inbound-Cache), keine → keiner. Amber = Ausfall sichtbar.
+
+    F-53: Zustandsfelder tragen ihre Aussage im Text, nicht in `wert` — nur für sie wird ``wert_text`` gefüllt (bei
+    einem Zahlenfeld stünde sonst dieselbe Zahl zweimal in der Antwort). HA-Bauform §9 (S1-3, Ü1): über MQTT trägt
+    der Cache den rohen String; er gehört in ``wert_text`` wie im HA-Zweig, ``wert`` bleibt eine Zahl oder ``None``
+    (die Fläche rundet ``wert`` — ein String ergäbe dort «NaN»).
+    """
+    if q in QUELLEN_HA:
+        entity = eintrag.get("entity_id")
+        return ha_werte.get(entity), None, (ha_texte.get(entity) if zustand else None)
+    if q in (QUELLE_STANDARD, QUELLE_GATEWAY):
+        wert, wert_zeit = cache
+        if zustand:
+            return None, wert_zeit, (str(wert) if wert is not None else None)
+        return wert, wert_zeit, None
+    return None, None, None  # keine
+
+
+def _ist_mqtt_quelle(quelle: str) -> bool:
+    """Liest das Feld aus dem MQTT-Inbound-Cache (Inbound oder Gateway)? — dort gelten die Modus-Codes (§9)."""
+    return quelle in (QUELLE_STANDARD, QUELLE_GATEWAY)
+
+
+def _zulaessige_werte(eintrag: dict, quelle: str = QUELLE_KEINE) -> list[dict] | None:
     """P-433-0 (Konzept #433 E12): die Werte-Tabelle des Kanons am Feld „Betriebsmodus“ (auch `betriebsmodus-3`).
 
-    Nur dort — ein anderes Zustandsfeld hätte eine andere Tabelle; ``None`` für jedes übrige Feld.
+    Nur dort — ein anderes Zustandsfeld hätte eine andere Tabelle; ``None`` für jedes übrige Feld. Die MQTT-Zahlencodes
+    (HA-Bauform §9) nur, wenn das Feld über MQTT liest (Inbound/Gateway): am HA-Feld bleibt eine Ziffer ein unbekannter
+    Wert (Entscheid H1 = A). Dieselbe Tabelle, ein Parameter — keine zweite Liste.
     """
     if eintrag.get("zustand") and basis_feld_key(eintrag.get("feld", "")) == MODUS_FELD_KEY:
-        return betriebsmodus_werte_je_betriebsart()
+        return betriebsmodus_werte_je_betriebsart(codes=_ist_mqtt_quelle(quelle))
     return None
 
 
@@ -1235,21 +1266,9 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         fid = _feld_id(e["match_key"])
         eintrag = effektiv.get(fid) or {}
         q = eintrag.get("quelle", QUELLE_KEINE)
-        # Wert der TATSÄCHLICH aufgelösten Quelle lesen: HA → REST-Batch, Inbound/
-        # Gateway → Cache (Gateway republisht nach C2a-Fix über das Standard-Topic
-        # in denselben Inbound-Cache), keine → keiner. Amber = Ausfall sichtbar §2d.
-        wert_text = None
-        if q in QUELLEN_HA:
-            wert, wert_zeit = ha_werte.get(eintrag.get("entity_id")), None
-            # F-53: Zustandsfelder tragen ihre Aussage im Text, nicht in `wert`.
-            # Nur für sie wird er gefüllt — bei einem Zahlenfeld stünde sonst
-            # dieselbe Zahl zweimal in der Antwort.
-            if e.get("zustand"):
-                wert_text = ha_texte.get(eintrag.get("entity_id"))
-        elif q in (QUELLE_STANDARD, QUELLE_GATEWAY):
-            wert, wert_zeit = cache_wert.get(fid, (None, None))
-        else:  # keine
-            wert, wert_zeit = None, None
+        wert, wert_zeit, wert_text = _feld_wert(
+            q, eintrag, bool(e.get("zustand")), ha_werte, ha_texte, cache_wert.get(fid, (None, None)),
+        )
         gruppe["felder"].append({
             "id": fid,
             "feld": e.get("feld", ""),
@@ -1262,14 +1281,15 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             "hinweis": e.get("hinweis", ""),
             "standard_topic": e["topic"],
             # HA-only-Feld: die Fläche blendet Gateway/Inbound aus, statt
-            # Quellen anzubieten, die kein Leser abfragt. Zwei Fälle, dieselbe
-            # Begründung — Preis-Slots (kommen nur über HA herein) und
-            # Zustandsfelder (#263 K-2: der MQTT-Inbound-Parser ist
-            # `float(payload)`, ein Modus-String käme dort nie an).
-            "nur_ha": bool(e.get("nur_ha")) or bool(e.get("zustand")),
+            # Quellen anzubieten, die kein Leser abfragt — die Preis-Slots
+            # (kommen nur über HA herein). Zustandsfelder sind es seit
+            # HA-Bauform §9 (S1-3) nicht mehr: der Inbound hält ihren rohen
+            # String; nur das Gateway (float-only) blendet die Fläche an
+            # `zustand` aus.
+            "nur_ha": bool(e.get("nur_ha")),
             # Zustand statt Zahl (#263 K-2): steuert den Entity-Picker — für
             # diese Felder ist auch die `climate.`-Domain zulässig, und der
-            # Energie-Filter greift nicht.
+            # Energie-Filter greift nicht; seit §9 auch: kein Gateway-Knopf.
             "zustand": bool(e.get("zustand")),
             "quelle": q,
             # Gateway-Quell-Topic (falls zugeordnet) für die UI-Anzeige.
@@ -1307,13 +1327,14 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # später in „nicht aufgeteilt", statt einer Seite zugeschlagen zu
             # werden. Der Kanon-SoT ist `core/betriebsmodus.py`, nicht der Client.
             "wert_text": wert_text,
-            "wert_klartext": betriebsmodus_klartext(wert_text) if wert_text else None,
+            # HA-Bauform §9 (Entscheid H1 = A): die Zahlencodes gelten nur für einen Wert über MQTT.
+            "wert_klartext": betriebsmodus_klartext(wert_text, codes=_ist_mqtt_quelle(q)) if wert_text else None,
             # P-433-0 (Konzept #433 E12): die Werte, die eedc an diesem Feld
             # versteht — sichtbar am Feld, damit der Anwender seinen
             # Template-Sensor danach bauen kann. **Aus dem Kanon abgeleitet**
             # (`core/betriebsmodus.py`), nicht im Client getippt; nur am
             # Betriebsmodus-Feld (mit Innengeräte-Suffix), sonst ``None``.
-            "zulaessige_werte": _zulaessige_werte(e),
+            "zulaessige_werte": _zulaessige_werte(e, q),
             # P-433-2 (Variante C, #431): Betriebsart + Mengenart je WP-Feld (sonst ``None``).
             **_wp_feld_zusatz(e),
             "wert_zeit": wert_zeit,

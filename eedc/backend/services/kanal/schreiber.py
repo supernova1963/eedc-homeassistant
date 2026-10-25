@@ -27,7 +27,10 @@ den auch die Mitschrift nach ihrem Schreiben fortschreibt; seit E4e ``kosten.py`
 * **Mitschrift Betriebsart** — „Anteil der Stunde je Betriebsart" aus dem, was die
   Tagesaggregation ohnehin liest (``energie_profil/_helpers._get_betriebsmodus_history``). Die Quelle
   liegt nur dort vor, deshalb wird dort mitgeschrieben (``aggregator.aggregate_day``). Eine
-  geschriebene Stunde wird nie überschrieben oder geleert.
+  geschriebene Stunde wird nie überschrieben oder geleert. Seit HA-Bauform §9 (Standalone-Gleichstand S1)
+  zusätzlich für Wärmepumpen ohne HA-Modus aus den 5-Minuten-Snapshots des MQTT-Inbound
+  (``_betriebsart_mitschrift_mqtt`` im Stundenlauf, ``statistic_id`` = MQTT-Schlüssel); beide Wege rufen
+  denselben Kern ``_schreibe_betriebsart_anteile`` (E-SG-6).
 
 **Isolation vom Bestand.** Beide Einstiege (``schreibe_kanaele_im_stundenlauf``,
 ``schreibe_betriebsart_mitschrift_sicher``) laufen NACH dem heutigen Schreiben in derselben Sitzung,
@@ -518,6 +521,17 @@ def _stunde_von(ts: datetime) -> datetime:
     return ts.replace(minute=0, second=0, microsecond=0)
 
 
+def _stunden_start_ts(zeit: datetime) -> int:
+    """``start_ts`` der lokalen vollen Stunde, die ``zeit`` enthält — **die eine Stundenregel der MQTT-Familien**.
+
+    Gerufen von der eigenen Summe (Rohstände) und der Betriebsart-Mitschrift aus MQTT (HA-Bauform §9), damit Strom und
+    Modus derselben Stunde denselben ``start_ts`` tragen — keine zweite Rechnung ``ts − ts % 3600``. ``fold`` bleibt
+    erhalten (``replace``), eine aus Unix-Sekunden gebildete Zeit (``datetime.fromtimestamp``) trennt deshalb die
+    Herbst-Doppelstunde.
+    """
+    return _unix(_stunde_von(zeit))
+
+
 def _deckel_achse(inv, feld: str) -> bool:
     """Liegt das Feld auf einer gedeckelten Achse? Zuordnung wie Tagespfad und Monatswert:
     ``_categorize_counter`` → ``achse_der_kategorie`` ∈ ``ACHSEN_MIT_DECKEL``."""
@@ -576,7 +590,7 @@ async def _eigene_summe_zeilen(
 
     zeilen: list[dict] = []
     for stunde in sorted(je_stunde):
-        start_ts = _unix(stunde)
+        start_ts = _stunden_start_ts(stunde)
         werte = je_stunde[stunde]
         if art == ART_STAND:
             gueltig = [float(w) for w in werte if w is not None and float(w) >= 0]
@@ -743,6 +757,26 @@ async def schreibe_betriebsart_mitschrift(
             continue
         for inv_id, je_modus in geraete.items():
             je_geraet.setdefault(int(inv_id), []).append((start_ts, je_modus))
+    return await _schreibe_betriebsart_anteile(db, anlage, je_geraet, entitaeten, jetzt_ts=jetzt_ts)
+
+
+async def _schreibe_betriebsart_anteile(
+    db: AsyncSession, anlage, je_geraet: dict[int, list[tuple[int, dict]]], entitaeten: dict, *, jetzt_ts: int,
+) -> int:
+    """Der **Kern** der Betriebsart-Mitschrift — Stunden als Unix-``start_ts``, gleich für HA und MQTT (E-SG-6).
+
+    ``je_geraet`` ``{inv_id: [(start_ts, {modus: anteil})]}``, ``entitaeten`` ``{inv_id: statistic_id}`` der
+    Quelle (HA: die `climate`-Entität; MQTT: ``mqtt_modus_statistic_id``). Geschrieben wird nur eine Stunde, deren
+    Ende spätestens ``jetzt_ts`` liegt; je Stunde und Gerät eine Zeile in JEDEM Kanon-Modus (0 = gemessen nicht in
+    diesem Modus); eine schon geschriebene Stunde wird nie überschrieben (``schon`` + ``ON CONFLICT DO NOTHING``).
+    Die Hüllen: ``schreibe_betriebsart_mitschrift`` (HA, Slot-Form des Tages) und ``_betriebsart_mitschrift_mqtt``.
+    """
+    # Die Hülle des HA-Pfads filtert schon selbst (Reihenfolge der Kanal-Anlage bleibt byte-gleich); hier für jede Hülle.
+    je_geraet = {
+        inv_id: [(ts, je_modus) for ts, je_modus in slots if ts + _STUNDE <= jetzt_ts]
+        for inv_id, slots in je_geraet.items()
+    }
+    je_geraet = {inv_id: slots for inv_id, slots in je_geraet.items() if slots}
     if not je_geraet:
         return 0
     gewuenscht = {modus_kanal_key(i, m): (ART_MEAN, EINHEIT_ANTEIL) for i in je_geraet for m in BETRIEBSMODUS_KANON}
@@ -772,6 +806,104 @@ async def schreibe_betriebsart_mitschrift(
                           for ts, je_modus in slots if (kanal.id, ts) not in schon)
     await db.flush()
     return await _zeilen_einfuegen(db, zeilen)
+
+
+# ── Mitschrift Betriebsart aus MQTT (HA-Bauform §9, Standalone-Gleichstand S1) ──
+
+
+def mqtt_modus_statistic_id(inv_id: int | str) -> str:
+    """``kanal_quelle.statistic_id`` der MQTT-Modus-Mitschrift — der MQTT-Schlüssel des Geräts (E-SG-4/E-SG-6)."""
+    return f"mqtt:inv/{inv_id}/betriebsmodus"
+
+
+#: ``component_key`` der Modus-Zeilen in ``mqtt_live_snapshots`` (``inv:<id>:betriebsmodus:<modus>``).
+_MODUS_SNAPSHOT_MUSTER = "inv:%:betriebsmodus:%"
+
+
+def _mqtt_modus_wps(k: _Kontext) -> set[int]:
+    """Die Wärmepumpen dieses Laufs, deren Modus aus MQTT kommt — nicht stillgelegt, ohne HA-Modus (eine Regel mit Live)."""
+    from backend.services.betriebsmodus_live import mqtt_modus_geraete
+
+    wps = {int(i) for i, inv in k.invs.items()
+           if getattr(inv, "typ", None) == "waermepumpe" and i not in k.stillgelegt}
+    return mqtt_modus_geraete(k.anlage, wps) if wps else set()
+
+
+async def _modus_snapshot_zeilen(db: AsyncSession, anlage_id: int, geraete: set[int], *, von: int, bis: int) -> list:
+    """Die Modus-Zeilen ``[ts_unix, component_key, anteil]`` der Geräte in ``[von, bis)`` — nur Zeilen mit ``ts_unix``."""
+    from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+
+    rows = (await db.execute(
+        select(MqttLiveSnapshot.ts_unix, MqttLiveSnapshot.component_key, MqttLiveSnapshot.value_w).where(and_(
+            MqttLiveSnapshot.anlage_id == anlage_id,
+            MqttLiveSnapshot.ts_unix.is_not(None),
+            MqttLiveSnapshot.ts_unix >= von, MqttLiveSnapshot.ts_unix < bis,
+            MqttLiveSnapshot.component_key.like(_MODUS_SNAPSHOT_MUSTER),
+        ))
+    )).all()
+    return [r for r in rows if _modus_zeile_geraet(r[1]) in geraete]
+
+
+def _modus_zeile_geraet(component_key: str) -> Optional[int]:
+    teile = component_key.split(":")
+    return int(teile[1]) if len(teile) == 4 and teile[1].isdigit() else None
+
+
+def modus_anteile_je_stunde(zeilen) -> dict[int, list[tuple[int, dict[str, float]]]]:
+    """5-Minuten-Zeilen → ``{inv_id: [(start_ts, {modus: anteil})]}`` je Stunde (rein, E-SG-8).
+
+    Stunde = die lokale volle Stunde über ``_stunden_start_ts`` — dieselbe Regel wie die eigene Summe des MQTT-Stroms;
+    gebildet aus ``ts_unix`` über ``datetime.fromtimestamp`` (mit ``fold``), nie aus der naiven ``timestamp``-Spalte
+    (Herbst: zwei verschiedene ``start_ts``).
+    Anteil je Modus = Mittel über die Fenster der Stunde, die das Gerät gemeldet hat (Fenster = eine
+    ``ts_unix``); ein Modus ohne Zeile in einem Fenster zählt dort 0. Fenster ohne Zeile (kein Zustand,
+    Broker weg, Neustart) zählen nicht — die Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9).
+    """
+    fenster: dict[int, dict[int, dict[int, dict[str, float]]]] = {}
+    for ts, key, anteil in zeilen:
+        inv_id = _modus_zeile_geraet(key)
+        if inv_id is None:
+            continue
+        ts = int(ts)
+        stunde = _stunden_start_ts(datetime.fromtimestamp(ts))
+        fenster.setdefault(inv_id, {}).setdefault(stunde, {}).setdefault(ts, {})[key.rpartition(":")[2]] = float(anteil)
+    out: dict[int, list[tuple[int, dict[str, float]]]] = {}
+    for inv_id, stunden in fenster.items():
+        for stunde in sorted(stunden):
+            je_fenster = stunden[stunde].values()
+            n = len(je_fenster)
+            summe: dict[str, float] = {}
+            for je_modus in je_fenster:
+                for modus, anteil in je_modus.items():
+                    summe[modus] = summe.get(modus, 0.0) + anteil
+            out.setdefault(inv_id, []).append((stunde, {m: v / n for m, v in summe.items()}))
+    return out
+
+
+async def _betriebsart_mitschrift_mqtt(db: AsyncSession, k: _Kontext) -> int:
+    """Phase des Stundenlaufs: Betriebsart-Mitschrift der MQTT-Wärmepumpen aus den 5-Minuten-Snapshots.
+
+    Nur abgeschlossene Stunden (``bis`` = Beginn der laufenden), nur Zeilen der letzten ``_NAH_STUNDEN`` (die
+    ``schon``-Sicherung des Kerns macht Wiederholungen billig), ``statistic_id`` = MQTT-Schlüssel. Danach baut
+    ``modus_strom`` im selben Lauf den abgeleiteten Kanal «Strom je Betriebsart» daraus.
+    """
+    geraete = _mqtt_modus_wps(k)
+    if not geraete:
+        return 0
+    bis = _stunden_start_ts(k.zeitpunkt)          # Beginn der laufenden Stunde — dieselbe Regel wie die Zeilen
+    zeilen = await _modus_snapshot_zeilen(db, k.anlage.id, geraete, von=bis - _NAH_STUNDEN * _STUNDE, bis=bis)
+    je_geraet = modus_anteile_je_stunde(zeilen)
+    if not je_geraet:
+        return 0
+    entitaeten = {inv_id: mqtt_modus_statistic_id(inv_id) for inv_id in je_geraet}
+    return await _schreibe_betriebsart_anteile(db, k.anlage, je_geraet, entitaeten, jetzt_ts=bis)
+
+
+async def schreibe_betriebsart_mitschrift_mqtt(
+    db: AsyncSession, anlage, zeitpunkt: datetime, *, kontext: Optional[_Kontext] = None,
+) -> int:
+    """Die Betriebsart-Mitschrift aus MQTT für eine Anlage (Einstieg für Proben; im Betrieb ruft der Stundenlauf die Phase)."""
+    return await _betriebsart_mitschrift_mqtt(db, kontext or await _kontext(db, anlage, zeitpunkt))
 
 
 # ── Einstiege mit Isolation ─────────────────────────────────────────────────
@@ -809,6 +941,9 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
             from backend.services.kanal.abgeleitet import schreibe_abgeleitete
 
             n += await schreibe_abgeleitete(db, anlage, zeitpunkt, invs=list(k.invs.values()))
+            # HA-Bauform §9 (Standalone-Gleichstand S1): Betriebsart-Mitschrift der MQTT-Wärmepumpen aus den
+            # 5-Minuten-Snapshots — VOR «Strom je Betriebsart», der sie im selben Lauf liest.
+            n += await _betriebsart_mitschrift_mqtt(db, k)
             # HA-Bauform E4d: Strom je Betriebsart der Wärmepumpe — NACH Spiegel und eigener Summe (die Strom-Kanäle
             # der Stunde) und aus der Mitschrift, soweit sie schon geschrieben ist (``modus_strom.py``).
             from backend.services.kanal.modus_strom import schreibe_modus_strom

@@ -22,6 +22,7 @@ import backend.services.ha_state_service as hss
 from backend.api.routes import datenquellen as dq_modul
 from backend.api.routes.datenquellen import get_datenquellen_felder
 from backend.core.betriebsmodus import (
+    MQTT_CODES,
     _ZUSTAND_ZU_KANON,
     UNBESTIMMT,
     UNBESTIMMT_ZUSTAENDE,
@@ -45,7 +46,10 @@ def test_werte_je_betriebsart_deckt_die_tabelle_vollstaendig():
     """Jeder Tabellen-Wert steht genau einmal in der Ausgabe, unter seiner Betriebsart — keine zweite Liste."""
     gruppen = betriebsmodus_werte_je_betriebsart()
     flach = [(w, g["kanon"]) for g in gruppen for w in g["werte"]]
-    assert sorted(flach) == sorted(_ZUSTAND_ZU_KANON.items())
+    # HA-Bauform §9 (Entscheid H1 = A): die MQTT-Zahlencodes nur mit `codes=True`, nie am HA-Feld.
+    assert sorted(flach) == sorted((w, k) for w, k in _ZUSTAND_ZU_KANON.items() if w not in MQTT_CODES)
+    mit_codes = [(w, g["kanon"]) for g in betriebsmodus_werte_je_betriebsart(codes=True) for w in g["werte"]]
+    assert sorted(mit_codes) == sorted(_ZUSTAND_ZU_KANON.items())
     assert gruppen[0] == {"kanon": "heizen", "label": "Heizen", "werte": ["heat", "heizen"]}
     assert gruppen[-1]["kanon"] == UNBESTIMMT
 
@@ -61,7 +65,9 @@ def test_unbestimmte_zustaende_und_bekannt_pruefung():
 def test_klartext_nennt_alle_werte():
     satz = betriebsmodus_werte_klartext()
     for roh in _ZUSTAND_ZU_KANON:
-        assert roh in satz, roh
+        if roh not in MQTT_CODES:          # die Codes nennt nur der MQTT-Weg (`codes=True`, HA-Bauform §9)
+            assert roh in satz, roh
+    assert "(heat, heizen)" in satz and "(heat, heizen, 1)" in betriebsmodus_werte_klartext(codes=True)
     assert satz.endswith("als unbestimmt gezählt: auto, heat_cool, automatik")
 
 

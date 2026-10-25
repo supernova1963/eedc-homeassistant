@@ -492,7 +492,9 @@ export default function DatenquellenZuordnung() {
             neu wählbar (ohne Verbindung sinnlos); umschaltbar bleibt „Keine".
             Zusätzlich feldbezogen: `nur_ha` (Preis-Felder) blendet MQTT aus —
             eedc liest sie ausschließlich als HA-Sensor, ein Gateway-Eintrag
-            wäre ein Versprechen ohne Leser (Backend riegelt gleichlautend ab). */}
+            wäre ein Versprechen ohne Leser (Backend riegelt gleichlautend ab).
+            `zustand` (Betriebsmodus, HA-Bauform §9) blendet nur das Gateway aus:
+            es reicht Zahlen weiter, kein Zustandswort — Inbound bleibt. */}
         <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:flex-shrink-0">
           {verfuegbarkeit.ha && (
             <QuelleButton
@@ -503,7 +505,7 @@ export default function DatenquellenZuordnung() {
               onClick={() => waehleHa(f)}
             />
           )}
-          {verfuegbarkeit.mqtt && !f.nur_ha && (
+          {verfuegbarkeit.mqtt && !f.nur_ha && !f.zustand && (
             <QuelleButton
               icon={Waypoints}
               label="Gateway"

@@ -6,9 +6,18 @@ um den Tagesverlauf-Chart im Standalone-MQTT-Modus zu ermöglichen.
 
 Snapshots: alle 5 Minuten via Scheduler.
 Retention: 15 Tage.
+
+**Betriebsmodus (HA-Bauform §9, Standalone-Gleichstand S1, 25.10.2026).** Zusätzlich je Gerät mit
+MQTT-Modus eine Zeile je Kanon-Modus des Fensters, ``inv:<id>:betriebsmodus:<modus>``, Wert = Anteil des
+Fensters (0–1) aus der Haltezeit im Inbound-Cache (``MqttInboundCache.modus_anteile_abschliessen``) — kein
+Punktwert. **Nur bei lebender Verbindung** (``cache.verbunden``, E-SG-9): ein toter Broker liefert keine
+Zeile statt eines eingefrorenen Modus. Jede Zeile trägt ``ts_unix`` (E-SG-8); daraus verdichtet der
+Stundenlauf die Betriebsart-Mitschrift (``kanal/schreiber._betriebsart_mitschrift_mqtt``). Der Tagesverlauf
+liest nur benannte Leistungs-Keys und sieht die Modus-Zeilen nicht.
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -46,6 +55,30 @@ _INV_POWER_KEYS = {
 }
 
 
+def modus_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -> list[MqttLiveSnapshot]:
+    """Die Modus-Zeilen dieses Snapshots: je Gerät und Kanon-Modus der Anteil des abgeschlossenen Fensters.
+
+    Ohne Verbindung (``cache.verbunden`` False) keine Zeile und kein Abschluss — die Fenster hat der
+    Verbindungsverlust schon geleert, beim Reconnect beginnen sie neu (E-SG-9).
+    """
+    if not getattr(cache, "verbunden", False):
+        return []
+    rows: list[MqttLiveSnapshot] = []
+    for anlage_id, geraete in cache.modus_anteile_abschliessen(jetzt_unix).items():
+        if anlage_id not in valid_ids:
+            continue
+        for inv_id, anteile in geraete.items():
+            for modus, anteil in sorted(anteile.items()):
+                rows.append(MqttLiveSnapshot(
+                    anlage_id=anlage_id,
+                    timestamp=now,
+                    component_key=f"inv:{inv_id}:betriebsmodus:{modus}",
+                    value_w=float(anteil),
+                    ts_unix=int(jetzt_unix),
+                ))
+    return rows
+
+
 async def snapshot_live_cache() -> int:
     """
     Snapshots aktuelle MQTT Live-W-Werte in die DB.
@@ -67,6 +100,8 @@ async def snapshot_live_cache() -> int:
         valid_ids = {row[0] for row in result.all()}
 
     now = datetime.now()
+    jetzt_unix = time.time()
+    ts_unix = int(jetzt_unix)
     count = 0
     rows = []
 
@@ -83,9 +118,10 @@ async def snapshot_live_cache() -> int:
                     timestamp=now,
                     component_key=f"basis:{key}",
                     value_w=value,
+                    ts_unix=ts_unix,
                 ))
 
-        # Investitions-Werte
+        # Investitions-Werte (nur benannte Leistungs-Keys — ein Zustandsfeld kommt nur über den Modus-Pfad unten)
         for inv_id, inv_data in cache.get("inv", {}).items():
             for key, (value, _ts) in inv_data.items():
                 if key in _INV_POWER_KEYS:
@@ -94,7 +130,10 @@ async def snapshot_live_cache() -> int:
                         timestamp=now,
                         component_key=f"inv:{inv_id}:{key}",
                         value_w=value,
+                        ts_unix=ts_unix,
                     ))
+
+    rows.extend(modus_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
 
     if not rows:
         return 0

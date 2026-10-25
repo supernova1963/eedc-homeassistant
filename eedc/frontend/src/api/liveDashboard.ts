@@ -270,6 +270,8 @@ export interface MqttTopic {
   beschreibung?: string | null
   anlage: string
   typ: string
+  /** Zustand statt Zahl (Betriebsmodus, HA-Bauform §9). */
+  zustand?: boolean
 }
 
 export interface MqttTopicsResponse {
@@ -278,7 +280,8 @@ export interface MqttTopicsResponse {
 
 export interface MqttCacheWert {
   topic: string
-  wert: number
+  /** Zahl; ein Zustandsfeld (Betriebsmodus) trägt den rohen Text (HA-Bauform §9). */
+  wert: number | string
   zeitpunkt: string
   kategorie: 'live' | 'energy'
 }

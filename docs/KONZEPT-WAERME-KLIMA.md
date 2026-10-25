@@ -158,6 +158,16 @@ ohne Stundenmittel. Daraus entstehen zwei Tageszahlen im Layer (`core/berechnung
 Betriebsmodus (≠ aus/unbestimmt), ohne Modus aus dem Strom über dem Tagesminimum. **Nicht je Funktion:** die Stunden
 sind gemischt, ein «Vorlauf beim Heizen» wäre eine abgeleitete Größe neben gemessenen Zählern.
 
+**Nachtrag Standalone-Gleichstand S1 (25.10.2026, HA-Bauform §9) — der Betriebsmodus über MQTT.** Der Betriebsmodus
+kommt auch über das eedc-Topic `…/live/inv/<id>/betriebsmodus` (Kanon-Wort oder Zahlencode 0 aus · 1 Heizen ·
+2 Warmwasser · 3 Kühlen · 4 Lüften · 5 Entfeuchten, aus derselben Werte-Tabelle wie der HA-Sensor; die Codes gelten nur
+über MQTT — an einem HA-Sensor bleibt eine Zahl ein Hersteller-Rohwert und damit unbestimmt, Entscheid 25.10.2026). Ein Gerät mit
+HA-Modus-Entität bleibt beim HA-Sensor. Aus dem Topic schreibt eedc dieselbe Betriebsart-Mitschrift (Anteil der Stunde
+je Modus, aus 5-Minuten-Fenstern mit Haltezeit je Nachricht), ab der Zuordnung und nicht rückwirkend; «Strom nach
+Betriebsart», «Betrieb heute» und die Betriebsstunden-Regel oben lesen sie wie die HA-Mitschrift. Über MQTT gibt es
+keinen Leerlauf (eine gemessene HA-Aktion, kein Modus). Die Stundenmittel von Vorlauf und Rücklauf aus MQTT folgen mit
+Sitzung 2 des Vorhabens; bis dahin gilt der Satz oben.
+
 ⚠ **E und Q tragen dieselbe Einheit und meinen Verschiedenes.** Eine Wärmepumpe führt zwei Sorten
 Kilowattstunden nebeneinander — **elektrisch** (was sie aufnimmt) und **thermisch** (was sie
 abgibt). Wer die beiden verwechselt, bekommt eine Arbeitszahl, die um genau den Faktor der

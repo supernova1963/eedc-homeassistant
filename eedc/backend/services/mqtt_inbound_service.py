@@ -14,16 +14,33 @@ Topic-Struktur (mit sprechenden Namen):
   eedc/{id}_{anlagename}/energy/einspeisung_kwh
   eedc/{id}_{anlagename}/energy/inv/{id}_{name}/{key}
 
+  eedc/{id}_{anlagename}/live/inv/{id}_{name}/betriebsmodus   (Zustand: Kanon-Wort oder Code 0…5)
+
   Beispiel: eedc/1_Meine_PV_Anlage/live/inv/3_BYD_HVS/leistung_w
   Die numerische ID am Anfang jedes Segments ist die DB-ID, der Name ist optional.
+
+**Zustandsfelder (HA-Bauform §9, Standalone-Gleichstand S1, 25.10.2026).** Ein Live-Feld, das
+die Registry als Zustand führt (`ist_zustand_feld`, heute der Betriebsmodus samt Innengeräte-Suffix),
+landet als **roher, getrimmter String** im Cache — gedeutet wird er erst im Kanon
+(`core/betriebsmodus.normalisiere_betriebsmodus`), nie hier. Jedes andere Feld bleibt `float(payload)`;
+ein String darauf wird verworfen wie bisher. Dazu führt der Cache je Gerät die **Haltezeit je
+Kanon-Modus** seit dem letzten Abschluss (`ZustandsFenster`, Halteregel je Nachricht wie HA für
+on-change-Publisher); der 5-Minuten-Snapshot schließt das Fenster ab (`modus_anteile_abschliessen`).
+Ein Verbindungskennzeichen (`verbunden`) sagt dem Snapshot, ob der Broker gerade lebt: ohne
+Verbindung entsteht keine Modus-Zeile (die Stunde bleibt Lücke statt eines eingefrorenen Werts),
+beim Reconnect beginnen die Fenster neu.
 """
 
 import asyncio
 import logging
 import re
+import time
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
+from backend.core.betriebsmodus import MODUS_FELD_KEY, modus_aus_zustaenden
+from backend.core.field_definitions import basis_feld_key, ist_zustand_feld
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -43,14 +60,83 @@ _TOPIC_RE = re.compile(
 )
 
 
+#: Ein Live-Wert im Cache: eine Zahl, oder bei einem Zustandsfeld der rohe String (HA-Bauform §9).
+LiveWert = Union[float, str]
+
+
+@dataclass
+class ZustandsFenster:
+    """Haltezeit je Kanon-Modus **eines Geräts** seit dem letzten Abschluss (HA-Bauform §9, E-SG-3 für Zustände).
+
+    Halteregel je Nachricht: ein Modus gilt bis zur nächsten Nachricht — HAs Semantik für einen
+    on-change-Publisher. ``modus is None`` (kein verwertbarer Zustand, widersprüchliche Suffix-Topics)
+    zählt keine Zeit: der Anteil bezieht sich auf die Fensterlänge, das Ungesehene bleibt offen — wie
+    der HA-Verlauf (`_get_betriebsmodus_history`: Verweildauer ÷ Stundenlänge).
+
+    ⚑ **Für Sitzung 2 vorbereitet:** dieselbe Form (Beginn, laufender Wert, seit) trägt dort das
+    Integral, Minimum und Maximum eines Zahlenfelds; hier wird nur die Zustandsseite geschrieben.
+    """
+
+    beginn: float
+    seit: float
+    modus: Optional[str] = None
+    haltezeit: dict[str, float] = field(default_factory=dict)
+
+    def _halten(self, jetzt: float) -> None:
+        if self.modus is not None and jetzt > self.seit:
+            self.haltezeit[self.modus] = self.haltezeit.get(self.modus, 0.0) + (jetzt - self.seit)
+        self.seit = max(self.seit, jetzt)
+
+    def neuer_modus(self, modus: Optional[str], jetzt: float) -> None:
+        """Der bisherige Modus hielt bis ``jetzt``; ab hier gilt ``modus``."""
+        self._halten(jetzt)
+        self.modus = modus
+
+    def abschliessen(self, jetzt: float) -> dict[str, float]:
+        """Anteil je Modus am Fenster ``[beginn, jetzt)`` (0–1); danach beginnt das nächste Fenster bei ``jetzt``."""
+        self._halten(jetzt)
+        laenge = jetzt - self.beginn
+        anteile = (
+            {m: min(1.0, s / laenge) for m, s in self.haltezeit.items() if s > 0}
+            if laenge > 0 else {}
+        )
+        self.haltezeit = {}
+        self.beginn = jetzt
+        return anteile
+
+
+def _adresse(topic: str) -> Optional[tuple[int, str, Optional[str], str]]:
+    """Topic → ``(anlage_id, kategorie, inv_id, key)`` oder ``None`` für ein fremdes Topic."""
+    m = _TOPIC_RE.match(topic)
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2), m.group(3), m.group(4)
+
+
+def _wert_aus_payload(ist_zustand: bool, payload, topic: str) -> Optional[LiveWert]:
+    """Payload → Cache-Wert: roher getrimmter String bei einem Zustandsfeld, sonst ``float``.
+
+    ``None`` heißt verwerfen — ein leerer Zustand (gelöschter retained-Wert) wie eine Zahl, die keine ist.
+    """
+    if ist_zustand:
+        roh = str(payload).strip() if payload is not None else ""
+        return roh or None
+    try:
+        return float(payload)
+    except (ValueError, TypeError):
+        logger.debug("MQTT-Inbound: ungültiger Payload '%s' auf %s", payload, topic)
+        return None
+
+
 class MqttInboundCache:
     """
     In-Memory-Cache für empfangene MQTT-Werte.
 
     Struktur:
       _live[anlage_id]["basis"][key] = (wert, timestamp)
-      _live[anlage_id]["inv"][inv_id][key] = (wert, timestamp)
+      _live[anlage_id]["inv"][inv_id][key] = (wert, timestamp)   # wert: float, bei Zustand der rohe String
       _energy[anlage_id][key] = (wert, timestamp)
+      _modus_fenster[(anlage_id, inv_id)] = ZustandsFenster       # Haltezeit je Modus (HA-Bauform §9)
     """
 
     def __init__(self):
@@ -58,22 +144,23 @@ class MqttInboundCache:
         self._energy: dict[int, dict[str, tuple[float, datetime]]] = {}
         self._message_count = 0
         self._last_message_at: Optional[datetime] = None
+        self._modus_fenster: dict[tuple[int, str], ZustandsFenster] = {}
+        #: Lebt die Verbindung zum Broker? True nach dem Subscribe, False nach einem Verbindungsverlust
+        #: (E-SG-9). Ohne Verbindung schreibt der Snapshot keine Modus-Zeile.
+        self.verbunden: bool = False
 
-    def on_message(self, topic: str, payload: str) -> None:
-        """Verarbeitet eine eingehende MQTT-Nachricht."""
-        m = _TOPIC_RE.match(topic)
-        if not m:
+    def on_message(self, topic: str, payload: str, *, jetzt: Optional[float] = None) -> None:
+        """Verarbeitet eine eingehende MQTT-Nachricht.
+
+        ``jetzt`` (Unix-Sekunden) nur für Proben — sonst die Uhr beim Empfang.
+        """
+        adresse = _adresse(topic)
+        if adresse is None:
             return
-
-        anlage_id = int(m.group(1))
-        category = m.group(2)  # "live" oder "energy"
-        inv_id = m.group(3)    # None oder Investition-ID
-        key = m.group(4)
-
-        try:
-            wert = float(payload)
-        except (ValueError, TypeError):
-            logger.debug("MQTT-Inbound: ungültiger Payload '%s' auf %s", payload, topic)
+        anlage_id, category, inv_id, key = adresse
+        ist_zustand = category == "live" and bool(inv_id) and ist_zustand_feld(key)
+        wert = _wert_aus_payload(ist_zustand, payload, topic)
+        if wert is None:
             return
 
         now = datetime.now()
@@ -81,21 +168,54 @@ class MqttInboundCache:
         self._last_message_at = now
 
         if category == "live":
-            if anlage_id not in self._live:
-                self._live[anlage_id] = {"basis": {}, "inv": {}}
-            cache = self._live[anlage_id]
-
-            if inv_id:
-                if inv_id not in cache["inv"]:
-                    cache["inv"][inv_id] = {}
-                cache["inv"][inv_id][key] = (wert, now)
-            else:
-                cache["basis"][key] = (wert, now)
-
+            self._live_ablegen(anlage_id, inv_id, key, wert, now)
+            if ist_zustand and basis_feld_key(key) == MODUS_FELD_KEY:
+                self._modus_fortschreiben(anlage_id, inv_id, time.time() if jetzt is None else jetzt)
         elif category == "energy":
             if anlage_id not in self._energy:
                 self._energy[anlage_id] = {}
             self._energy[anlage_id][f"inv/{inv_id}/{key}" if inv_id else key] = (wert, now)
+
+    def _live_ablegen(self, anlage_id: int, inv_id: Optional[str], key: str, wert: LiveWert, now: datetime) -> None:
+        cache = self._live.setdefault(anlage_id, {"basis": {}, "inv": {}})
+        if inv_id:
+            cache["inv"].setdefault(inv_id, {})[key] = (wert, now)
+        else:
+            cache["basis"][key] = (wert, now)
+
+    def _modus_fortschreiben(self, anlage_id: int, inv_id: str, jetzt: float) -> None:
+        """Der Modus des Geräts nach dieser Nachricht — über ALLE seine Modus-Keys (N-340, `modus_aus_zustaenden`)."""
+        werte = self.get_live_inv(anlage_id, inv_id)
+        modus = modus_aus_zustaenden(werte)
+        fenster = self._modus_fenster.get((anlage_id, inv_id))
+        if fenster is None:
+            self._modus_fenster[(anlage_id, inv_id)] = ZustandsFenster(beginn=jetzt, seit=jetzt, modus=modus)
+        else:
+            fenster.neuer_modus(modus, jetzt)
+
+    def modus_anteile_abschliessen(self, jetzt: Optional[float] = None) -> dict[int, dict[str, dict[str, float]]]:
+        """Schließt jedes Modus-Fenster bei ``jetzt`` ab: ``{anlage_id: {inv_id: {modus: anteil}}}``.
+
+        Der Aufrufer ist der 5-Minuten-Snapshot (`mqtt_live_history_service`); ohne Verbindung fragt er
+        nicht. Ein Fenster ohne gezählte Zeit (kein verwertbarer Zustand) fehlt in der Rückgabe.
+        """
+        t = time.time() if jetzt is None else jetzt
+        out: dict[int, dict[str, dict[str, float]]] = {}
+        for (anlage_id, inv_id), fenster in self._modus_fenster.items():
+            anteile = fenster.abschliessen(t)
+            if anteile:
+                out.setdefault(anlage_id, {})[inv_id] = anteile
+        return out
+
+    def verbinden(self) -> None:
+        """Nach dem Subscribe: Verbindung lebt; die Modus-Fenster beginnen neu (E-SG-9)."""
+        self._modus_fenster.clear()
+        self.verbunden = True
+
+    def trennen(self) -> None:
+        """Nach einem Verbindungsverlust oder Stopp: keine Modus-Zeilen, bis die Verbindung zurück ist."""
+        self.verbunden = False
+        self._modus_fenster.clear()
 
     def get_live_basis(self, anlage_id: int) -> dict[str, float]:
         """Gibt Basis-Live-Werte zurück (einspeisung_w, netzbezug_w)."""
@@ -103,14 +223,14 @@ class MqttInboundCache:
         basis = cache.get("basis", {})
         return {k: v[0] for k, v in basis.items()}
 
-    def get_live_inv(self, anlage_id: int, inv_id: str) -> dict[str, float]:
-        """Gibt Live-Werte für eine Investition zurück (leistung_w, soc)."""
+    def get_live_inv(self, anlage_id: int, inv_id: str) -> dict[str, LiveWert]:
+        """Gibt Live-Werte für eine Investition zurück (leistung_w, soc; Zustandsfelder als roher String)."""
         cache = self._live.get(anlage_id, {})
         inv_data = cache.get("inv", {}).get(inv_id, {})
         return {k: v[0] for k, v in inv_data.items()}
 
-    def get_all_live_inv(self, anlage_id: int) -> dict[str, dict[str, float]]:
-        """Gibt Live-Werte für alle Investitionen zurück."""
+    def get_all_live_inv(self, anlage_id: int) -> dict[str, dict[str, LiveWert]]:
+        """Gibt Live-Werte für alle Investitionen zurück (Zustandsfelder als roher String, HA-Bauform §9)."""
         cache = self._live.get(anlage_id, {})
         inv_data = cache.get("inv", {})
         return {
@@ -143,6 +263,8 @@ class MqttInboundCache:
         """Löscht Cache-Daten. Gibt Anzahl gelöschter Einträge zurück."""
         if anlage_id is not None:
             count = 0
+            for schluessel in [s for s in self._modus_fenster if s[0] == anlage_id]:
+                del self._modus_fenster[schluessel]
             if anlage_id in self._live:
                 live = self._live.pop(anlage_id)
                 count += len(live.get("basis", {}))
@@ -159,6 +281,7 @@ class MqttInboundCache:
             count += len(data)
         self._live.clear()
         self._energy.clear()
+        self._modus_fenster.clear()
         self._message_count = 0
         self._last_message_at = None
         return count
@@ -219,6 +342,7 @@ class MqttInboundService:
     async def stop(self) -> None:
         """Stoppt den MQTT-Subscriber."""
         self._running = False
+        self.cache.trennen()
         if self._task:
             self._task.cancel()
             try:
@@ -241,6 +365,7 @@ class MqttInboundService:
                     await client.subscribe("eedc/+/live/#")
                     await client.subscribe("eedc/+/energy/#")
                     logger.info("MQTT-Inbound: Subscribed auf eedc/+/live/# und eedc/+/energy/#")
+                    self.cache.verbinden()
 
                     async for message in client.messages:
                         if not self._running:
@@ -250,8 +375,10 @@ class MqttInboundService:
                         self.cache.on_message(topic, payload)
 
             except asyncio.CancelledError:
+                self.cache.trennen()
                 break
             except Exception as e:
+                self.cache.trennen()
                 if self._running:
                     logger.warning("MQTT-Inbound: Verbindung verloren (%s), Reconnect in 10s...", e)
                     await log_activity(

@@ -188,6 +188,13 @@ _BETRIEBSART_CSV: dict[str, str] = {
     "entfeuchten": "Entfeuchtung",
 }
 
+def _modus_codes() -> str:
+    """Die MQTT-Zahlencodes des Betriebsmodus für den Registry-Hinweis — aus der Werte-Tabelle des Kanons."""
+    from backend.core.betriebsmodus import betriebsmodus_codes_klartext
+
+    return betriebsmodus_codes_klartext()
+
+
 def _betriebsart_felder() -> list[dict]:
     from backend.core.betriebsmodus import (
         BETRIEBSART_LABEL,
@@ -1016,6 +1023,11 @@ LIVE_FELDER_INV: dict = {
         # #263 K-2: der erste Wert in eedc, der ein ZUSTAND ist statt einer Zahl.
         # `zustand: True` ist keine Kosmetik, sondern die Weiche — siehe
         # ZUSTAND_LIVE_FELDER unter der Tabelle.
+        # HA-Bauform §9 (Standalone-Gleichstand S1, 25.10.2026): seit dem Zustands-Zweig des
+        # MQTT-Inbound (roher String statt `float(payload)`) auch über das eedc-Topic
+        # `…/live/inv/<id>/betriebsmodus` — Kanon-Wort oder Zahlencode. Die Codes im Hinweis kommen
+        # aus der Werte-Tabelle (`_modus_codes`), nicht aus einer zweiten Liste; das Gateway bleibt
+        # für dieses Feld aus (float-only, eigenes Vorhaben).
         {"key": "betriebsmodus", "label": "Betriebsmodus", "einheit": "",
          "betriebsart": WP_BETRIEBSART_GERAET,
          "zustand": True,
@@ -1024,7 +1036,9 @@ LIVE_FELDER_INV: dict = {
                     "oder Aus. Optional: ohne sie zählt eedc den Stromverbrauch wie "
                     "bisher als eine Zahl, mit ihr kann es sagen, welcher Teil davon "
                     "ins Heizen und welcher ins Kühlen ging. Ein Zustand, kein "
-                    "Messwert — deshalb nur als HA-Sensor zuordenbar, nicht über MQTT."},
+                    "Messwert. Über MQTT (Inbound-Topic, nicht über das Gateway) "
+                    "versteht eedc dieselben Wörter oder einen Zahlencode: "
+                    f"{_modus_codes()}. Leerlauf gibt es nur über Home Assistant."},
         # #263 — Raumtemperaturen einer Split-Klimaanlage. Bewusst **ohne
         # Auswertung**: sie gehen in keine Bilanz, keine Effizienz und keine
         # Bewertung ein, sondern stehen im Live-Block, weil sie da sind

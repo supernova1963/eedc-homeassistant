@@ -181,14 +181,15 @@ async def build_expected_topics(
         gruppe_titel = inv.bezeichnung
 
         for live_feld in get_live_felder_fuer_investition(inv.typ, inv.parameter):
-            # #263 K-2: Ein Zustandsfeld bekommt KEIN Standard-Topic. Der
-            # MQTT-Inbound-Parser ist `float(payload)`
-            # (`mqtt_inbound_service:74`) — ein Modus-String käme dort nie an.
-            # Wie beim Preis-Slot (`_basis_preis_eintraege`) bleibt `topic`
-            # deshalb leer: als erwartetes Topic gelistet wäre es eine Lücke,
-            # die niemand schließen kann, und der Abdeckungs-Check (#134)
-            # meldete sie dauerhaft. Das Feld selbst bleibt in der Liste —
-            # die Zuordnungs-Fläche liest sie und bietet HA an.
+            # #263 K-2 → HA-Bauform §9 (Standalone-Gleichstand S1, 25.10.2026): Ein
+            # Zustandsfeld bekommt sein Standard-Topic wie jedes Live-Feld. Bis dahin
+            # blieb `topic` leer, weil der Inbound-Parser `float(payload)` war; seit
+            # dem Zustands-Zweig (`mqtt_inbound_service._wert_aus_payload`) hält der
+            # Cache den rohen String, und `normalisiere_betriebsmodus` versteht
+            # Kanon-Wort und Zahlencode. `zustand` bleibt die Weiche für die Leser:
+            # die Fläche blendet das Gateway aus (float-only), der Abdeckungs-Check
+            # (#134, `daten_checker/sensoren.py`) überwacht das Topic weiter nicht
+            # (ein on-change-Modus wäre nach 2 min dauernd «veraltet»).
             ist_zustand = bool(live_feld.get("zustand"))
             # N-299: Ein Zustandsfeld hat KEINE Einheit, und das ist Absicht
             # (`betriebsmodus`: Heizen/Kuehlen/Aus ist kein Messwert). Die
@@ -199,7 +200,7 @@ async def build_expected_topics(
                 f" ({live_feld['einheit']})" if live_feld.get("einheit") else ""
             )
             topics.append({
-                "topic": "" if ist_zustand else f"{inv_live_prefix}/{live_feld['key']}",
+                "topic": f"{inv_live_prefix}/{live_feld['key']}",
                 "zustand": ist_zustand,
                 "label": f"{inv.bezeichnung} – {live_feld['label']}{einheit_str}",
                 "kategorie": "live",

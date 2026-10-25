@@ -25,6 +25,7 @@ Wo sie vorhanden ist, **verfeinert** sie — deshalb der optionale zweite
 Parameter, nie eine Bedingung.
 """
 
+import re
 from typing import Final, Optional
 
 # ── Kanon ────────────────────────────────────────────────────────────────────
@@ -383,7 +384,50 @@ _ZUSTAND_ZU_KANON: Final[dict[str, str]] = {
     "dhw": WARMWASSER,
     "hot_water": WARMWASSER,
     "water_heating": WARMWASSER,
+    # MQTT-Code, HA-Bauform §9 (Vorhaben «Standalone-Gleichstand», E-SG-1, 25.10.2026): Steuerungen
+    # liefern den Modus über MQTT oft nur als Zahl. Die Codes stehen als Zeichenketten in DIESER
+    # Tabelle — keine zweite Liste —, gelten aber **nur, wo ein Leser `codes=True` setzt: der
+    # MQTT-Weg** (Entscheid des Masters 25.10.2026, H1 der Bau-Session S1). Eine Ziffer aus einem
+    # HA-Sensor ist ein Hersteller-Rohcode (Viessmann `…_hk1_mode_raw` = `1`), dessen Bedeutung nur
+    # das Gerät kennt; sie bleibt `unbestimmt`, und der Daten-Checker nennt sie — eedc rät nicht.
+    # «1.0» (Gateway, `str(round(wert, 2))`) wird in `_aufbereitet` zu «1» — an einer Stelle.
+    # Leerlauf hat keinen Code (E-SG-2: eine HA-Aktion).
+    "0": AUS,
+    "1": HEIZEN,
+    "2": WARMWASSER,
+    "3": KUEHLEN,
+    "4": LUEFTEN,
+    "5": ENTFEUCHTEN,
 }
+
+#: Ganzzahl als Gleitkomma-Text («1.0», «2.00») — die Form, in der das MQTT-Gateway Zahlen
+#: weiterreicht. Nur ganze Werte: «1.5» ist kein Code und bleibt, wie er ist (⇒ unbestimmt).
+_GANZZAHL_ALS_FLOAT: Final = re.compile(r"^(\d+)\.0+$")
+
+
+#: Die Schlüssel der Werte-Tabelle, die MQTT-Codes sind — abgeleitet, keine zweite Liste.
+MQTT_CODES: Final[frozenset[str]] = frozenset(roh for roh in _ZUSTAND_ZU_KANON if roh.isdigit())
+
+
+def _aufbereitet(zustand, codes: bool = False) -> str:
+    """Roher Zustand → Schlüssel der Werte-Tabelle: getrimmt, klein; mit ``codes`` zusätzlich «1.0» → «1».
+
+    ⛔ **Die eine Aufbereitung** für `normalisiere_betriebsmodus` und
+    `ist_bekannter_betriebsmodus_wert` — zwei getrennte Fassungen würden einen Wert, den
+    die eine versteht, bei der anderen als unbekannt melden (Checker gegen Aufteilung).
+    """
+    roh = str(zustand).strip().lower()
+    if not codes:
+        return roh
+    ganz = _GANZZAHL_ALS_FLOAT.match(roh)
+    return str(int(ganz.group(1))) if ganz else roh
+
+
+def _kanon_aus_tabelle(roh: str, codes: bool) -> Optional[str]:
+    """Der Tabellen-Eintrag eines aufbereiteten Werts — ein Code nur mit ``codes`` (MQTT-Weg)."""
+    if roh in MQTT_CODES and not codes:
+        return None
+    return _ZUSTAND_ZU_KANON.get(roh)
 
 # `HVACAction` (HA-Core) — nur wo die Integration sie überhaupt liefert.
 # Sie beschreibt den **Ist**-Betrieb und **verfeinert** damit den eingestellten
@@ -460,22 +504,26 @@ UNBESTIMMT_ZUSTAENDE: Final[frozenset[str]] = frozenset(
 )
 
 
-def ist_bekannter_betriebsmodus_wert(zustand: Optional[str]) -> bool:
+def ist_bekannter_betriebsmodus_wert(zustand: Optional[str], *, codes: bool = False) -> bool:
     """Steht dieser rohe State in der Werte-Tabelle (`_ZUSTAND_ZU_KANON`)?
 
     Groß-/Kleinschreibung und Randleerzeichen sind egal — dieselbe Aufbereitung
     wie in `normalisiere_betriebsmodus`. Die bewusst unbestimmten Zustände
     (`UNBESTIMMT_ZUSTAENDE`) zählen als bekannt. ``None`` und die Nicht-Zustände
     (`unknown`, `unavailable`, leer) sind **kein** Wert und damit auch kein
-    unbekannter: die Frage stellt sich für sie nicht (Aufrufer prüfen vorher).
+    unbekannter: die Frage stellt sich für sie nicht (Aufrufer prüfen vorher). Die MQTT-Codes
+    zählen nur mit ``codes=True`` (MQTT-Weg) — eine Ziffer aus einem HA-Sensor bleibt unbekannt.
     """
     if zustand is None:
         return False
-    return str(zustand).strip().lower() in _ZUSTAND_ZU_KANON
+    return _kanon_aus_tabelle(_aufbereitet(zustand, codes), codes) is not None
 
 
-def betriebsmodus_werte_je_betriebsart() -> list[dict]:
+def betriebsmodus_werte_je_betriebsart(*, codes: bool = False) -> list[dict]:
     """Die Werte-Tabelle, gruppiert nach Betriebsart — in Kanon-Reihenfolge.
+
+    ``codes`` (MQTT-Weg, HA-Bauform §9): die Zahlencodes als letzter Wert je Gruppe; ohne den Schalter
+    fehlen sie — am HA-Feld wären sie ein Versprechen, das der HA-Pfad nicht einlöst.
 
     Returns:
         ``[{"kanon": "heizen", "label": "Heizen", "werte": ["heat", "heizen"]}, …]``;
@@ -485,6 +533,8 @@ def betriebsmodus_werte_je_betriebsart() -> list[dict]:
     """
     gruppen: dict[str, list[str]] = {k: [] for k in BETRIEBSMODUS_KANON}
     for roh, kanon in _ZUSTAND_ZU_KANON.items():
+        if roh in MQTT_CODES and not codes:
+            continue
         gruppen[kanon].append(roh)
     return [
         {"kanon": k, "label": BETRIEBSMODUS_LABEL[k], "werte": werte}
@@ -492,14 +542,14 @@ def betriebsmodus_werte_je_betriebsart() -> list[dict]:
     ]
 
 
-def betriebsmodus_werte_klartext() -> str:
+def betriebsmodus_werte_klartext(*, codes: bool = False) -> str:
     """Die Werte-Tabelle als ein Satz für Meldungstexte (Daten-Checker).
 
     Beispiel: ``„Heizen (heat, heizen) · … · Aus (off, aus); als unbestimmt
     gezählt: auto, heat_cool, automatik"``.
     """
     teile, unbestimmt = [], []
-    for g in betriebsmodus_werte_je_betriebsart():
+    for g in betriebsmodus_werte_je_betriebsart(codes=codes):
         if g["kanon"] == UNBESTIMMT:
             unbestimmt = g["werte"]
         else:
@@ -510,15 +560,31 @@ def betriebsmodus_werte_klartext() -> str:
     return satz
 
 
+def betriebsmodus_codes_klartext() -> str:
+    """Die Zahlencodes der Werte-Tabelle als ein Satz (Registry-Hinweis am MQTT-Topic, HA-Bauform §9).
+
+    Beispiel: ``„0 Aus · 1 Heizen · 2 Warmwasser · 3 Kühlen · 4 Lüften · 5 Entfeuchten"``. Aus
+    `_ZUSTAND_ZU_KANON` abgeleitet (die Schlüssel, die eine Ganzzahl sind) — keine zweite Liste.
+    """
+    codes = sorted((int(roh), kanon) for roh, kanon in _ZUSTAND_ZU_KANON.items() if roh.isdigit())
+    return " · ".join(f"{code} {BETRIEBSMODUS_LABEL[kanon]}" for code, kanon in codes)
+
+
 def normalisiere_betriebsmodus(
     zustand: Optional[str],
     hvac_action: Optional[str] = None,
+    *,
+    codes: bool = False,
 ) -> Optional[str]:
     """Roher HA-State → Kanon-Wert, oder ``None`` wenn es keinen Modus gibt.
 
     Args:
         zustand: der State der `climate`-Entität (bzw. eines Template-Sensors),
-            z. B. ``"heat"``. Groß-/Kleinschreibung und Randleerzeichen sind egal.
+            z. B. ``"heat"``, oder der Payload eines MQTT-Modus-Topics.
+            Groß-/Kleinschreibung und Randleerzeichen sind egal.
+        codes: nur der MQTT-Weg setzt ihn (HA-Bauform §9) — dann gelten die Zahlencodes
+            ``"0"`` … ``"5"`` (auch als ``"1.0"``). Ohne ihn ist eine Ziffer ein unbekannter
+            Wert (⇒ ``unbestimmt``): ein HA-Sensor mit «1» ist ein Hersteller-Rohcode.
         hvac_action: optional der Ist-Betrieb (Attribut ``hvac_action``). Er
             wird nie verlangt (D2) und **verfeinert**, wo er da ist: Nennt er
             eine **Richtung** (heating/cooling/drying/fan) oder ``off``,
@@ -557,14 +623,14 @@ def normalisiere_betriebsmodus(
         # sonst verlöre die Abdeckungs-Kennzahl genau die Stunden, die sie
         # zählen soll.
         return UNBESTIMMT if ohne_richtung else None
-    roh = str(zustand).strip().lower()
+    roh = _aufbereitet(zustand, codes)
     if roh in _KEIN_ZUSTAND:
         return UNBESTIMMT if ohne_richtung else None
 
     # Unbekannter, aber vorhandener Wert: das Gerät hat etwas gemeldet, eedc
     # kann es nur nicht einordnen. Das ist `unbestimmt`, nicht `None` — sonst
     # sähe die Abdeckungs-Kennzahl aus wie ein Sensor-Ausfall.
-    return _ZUSTAND_ZU_KANON.get(roh, UNBESTIMMT)
+    return _kanon_aus_tabelle(roh, codes) or UNBESTIMMT
 
 
 # ── Die gemessene Ruhe (P-433-1 S1-4, Konzept #433 E6, 24.10.2026) ─────────
@@ -610,7 +676,7 @@ def betriebsmodus_aktion(kanon: Optional[str], hvac_action: Optional[str]) -> Op
     return None
 
 
-def betriebsmodus_klartext(zustand: Optional[str]) -> Optional[str]:
+def betriebsmodus_klartext(zustand: Optional[str], *, codes: bool = False) -> Optional[str]:
     """Roher HA-State → deutscher Klartext für die Zuordnungs-Fläche (F-53).
 
     Args:
@@ -631,7 +697,7 @@ def betriebsmodus_klartext(zustand: Optional[str]) -> Optional[str]:
     zugeordnet ist. Die Verfeinerung durch den Ist-Betrieb passiert im
     Aggregator, nicht in der Anzeige.
     """
-    kanon = normalisiere_betriebsmodus(zustand)
+    kanon = normalisiere_betriebsmodus(zustand, codes=codes)
     if kanon is None:
         return None
     # ⚑ **Direkt indiziert, kein `.get(..., fallback)`.** Der erste Entwurf
@@ -697,3 +763,32 @@ def modus_quelle(live: Optional[dict]) -> Optional[str]:
         if entity and basis_feld_key(str(feld)) == MODUS_FELD_KEY
     }
     return quellen.pop() if len(quellen) == 1 else None
+
+
+def modus_aus_zustaenden(werte: Optional[dict]) -> Optional[str]:
+    """Der **eine** Modus eines Geräts aus seinen MQTT-Werten — oder ``None`` (HA-Bauform §9, S1-4).
+
+    Args:
+        werte: die Live-Werte **eines** Geräts aus dem MQTT-Inbound-Cache (``{key: roh}``); gelesen
+            werden nur die Modus-Keys (``betriebsmodus``, ``betriebsmodus-3`` …).
+
+    Returns:
+        Den Kanon-Wert, wenn alle Modus-Keys mit verwertbarem Zustand **denselben** Kanon-Wert
+        melden; ``None`` ohne verwertbaren Zustand oder bei **verschiedenen** Kanon-Werten.
+
+    ⚠ **Dieselbe Regel wie `modus_quelle` (N-340), auf Werte statt Entitäten:** Ein MQTT-Topic hat
+    keine Entität, mehrere Topics desselben Geräts (Innengeräte-Suffix) sind gleichberechtigt. Sagen
+    sie dasselbe, ist es eine Aussage; widersprechen sie sich, rät eedc nicht (ADR-002/P4) — das
+    Gerät fehlt, wie ein HA-Gerät mit zwei verschiedenen `climate`-Entitäten. Verglichen wird der
+    Kanon-Wert: «1» und «heizen» sind derselbe Modus. Der MQTT-Weg: die Zahlencodes gelten (``codes=True``).
+    """
+    if not isinstance(werte, dict):
+        return None
+    from backend.core.field_definitions import basis_feld_key
+
+    modi = {
+        normalisiere_betriebsmodus(roh, codes=True)
+        for key, roh in werte.items()
+        if basis_feld_key(str(key)) == MODUS_FELD_KEY
+    } - {None}
+    return modi.pop() if len(modi) == 1 else None

@@ -1208,7 +1208,8 @@ async def wp_betriebsart_anteile_je_stunde(db: AsyncSession, anlage, invs_by_id:
     **Tag und Raster wie** ``wp_temperaturen_je_stunde``: WP-Kanal-Tag ⇒ ``[D 00:00, D+1 00:00)``, Bestandstag ⇒ eine
     Stunde früher (die Zeile 23:00 des Vortags ist Slot 0, ``_slot_der_mittelzeile``). Schlüssel ist der ``start_ts`` der
     Zeile, damit in der Herbst-Doppelstunde **beide** Zeilen zählen (Summe, kein Mittel — die Stunden sind Zeit). Nur
-    aktive Wärmepumpen; ein Gerät ohne eine Zeile fehlt. Nur HA mit Betriebsmodus-Sensor schreibt eine Mitschrift."""
+    aktive Wärmepumpen; ein Gerät ohne eine Zeile fehlt. Die Mitschrift schreibt HA mit Betriebsmodus-Sensor und, seit
+    HA-Bauform §9 (Standalone-Gleichstand S1), das MQTT-Modus-Topic über den Stundenlauf (ab Zuordnung, nicht rückwirkend)."""
     from backend.core.betriebsmodus import BETRIEBSMODUS_KANON
     from backend.models.kanal import ART_MEAN
     from backend.services.kanal.fenster import tagesfenster

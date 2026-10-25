@@ -90,7 +90,7 @@ Das hat einen Preis, den du kennen solltest: **eedc kann nicht wissen, ob dein G
 
 Welche Bauart dein Gerät hat, entscheidet hier **nur den Ort** der Kachel — ob es eine Kachel gibt, entscheidet allein der zugeordnete Sensor. Werte ohne Sensor nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: …") mit dem Weg zu *Einstellungen → Datenquellen*. Der Modus kommt vom Betriebsmodus-Sensor (dieselben Wörter wie im Energiefluss, als Chip in der Farbe der Funktion); kühlt das Gerät passiv, steht dort „Kühlen (passiv)", meldet es „Leerlauf", steht „Heizen · Leerlauf" (siehe *„Leerlauf behält deinen Modus"*). **Vorlauf, Rücklauf und Zusatzheizung** haben eine Kachel, sobald ihr Sensor zugeordnet ist („34,2 → 29,1 °C", „Zusatzheizung 1.500 W"); fehlt er, steht dafür nichts in der Zeile „Ohne Sensor …" — sie sind Zusatzangaben, die viele Geräte nicht liefern. Rechts daneben steht **„Auf einen Blick"** mit bis zu drei Karten: die **Gerätekarte** (Leistung jetzt groß, daneben der Ring „Eigenverbrauch (Anlage)" — eine Zahl der ganzen Anlage, keine der Wärmepumpe — und darunter Warmwasser, Zusatzheizung, Vorlauf, Rücklauf, **Spreizung** in K und Außentemperatur; neben dem Modus „Zusatzheizung aktiv", solange der Heizstab mehr als 0 W meldet), **„AZ heute"** (die Arbeitszahl des Tages mit „x kWh Wärme ÷ y kWh Strom" und je Funktion) und **„Betrieb heute"** (Stunden je Betriebsart aus der Mitschrift des Betriebsmodus-Sensors). Die Kachel **„Wärme heute“** braucht einen Wärmemengenzähler und steht, wie Vorlauf, nicht in der Zeile „Ohne Sensor …“. Gemessen werden Vorlauf und Rücklauf an der Wärmepumpe; die Kachel steht am Heizkreis, damit das Bild sagt, welche Heizflächen dein Haus hat (Fußbodenheizung typisch 30–35 °C, Heizkörper 50–70 °C) — die Karte nennt sie mit („Vorlauf (Fußbodenheizung)“). Stehen fünf oder mehr Kacheln in einer Reihe, werden die Kacheln schmaler; dann zeigt „Vorlauf · Rücklauf“ ganze Grad („34 → 29 °C“), Tooltip und Karte behalten die Nachkommastelle.
 
-> **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie steht je Gerät; nur eine Wärmepumpe **ohne Leistungssensor** hat keinen eigenen Live-Wert — dann zeigt der Überblick, wie bisher, die Warmwasser-Temperatur der ersten Wärmepumpe mit Sensor, solange kein Gerät eine eigene liefert. Dasselbe gilt für Vorlauf, Rücklauf und Zusatzheizung: ohne Leistungssensor des Geräts erscheinen sie nicht. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte — bis auf „Vorlauf · Rücklauf“ an der Fußbodenheizung, die unten im Wohnbereich liegt. Heizkreise je Raum kennt eedc nicht; die Angabe am Gerät gilt für das ganze Haus. **„Betrieb heute“** gibt es nur mit einem Betriebsmodus-Sensor aus Home Assistant (nicht über MQTT) und erst ab Beginn der Mitschrift; Leerlauf-Stunden nennt eedc nicht — die Mitschrift zählt eine Stunde „Heizen · Leerlauf“ als Heizen.
+> **Benannte Grenzen.** Die **Warmwasser-Temperatur** steht in der Zeile „Ohne Sensor …" unabhängig von der Bauart — auch an einer Klimaanlage ohne Warmwasser, solange ihr kein Sensor zugeordnet ist. Sie steht je Gerät; nur eine Wärmepumpe **ohne Leistungssensor** hat keinen eigenen Live-Wert — dann zeigt der Überblick, wie bisher, die Warmwasser-Temperatur der ersten Wärmepumpe mit Sensor, solange kein Gerät eine eigene liefert. Dasselbe gilt für Vorlauf, Rücklauf und Zusatzheizung: ohne Leistungssensor des Geräts erscheinen sie nicht. Eine Klimaanlage sieht im Bild auch Erdsonden und Speicher (ein Bild je Gerätetyp); Sole-, Brauchwasser- und Klimaanlagen haben alle Kacheln in der oberen Bildhälfte — bis auf „Vorlauf · Rücklauf“ an der Fußbodenheizung, die unten im Wohnbereich liegt. Heizkreise je Raum kennt eedc nicht; die Angabe am Gerät gilt für das ganze Haus. **„Betrieb heute“** gibt es nur mit einem Betriebsmodus-Sensor aus Home Assistant oder dem Betriebsmodus über MQTT (siehe [Schritt 4](#schritt-4--betriebsart-erfassen-optional-aber-lohnend)) und erst ab Beginn der Mitschrift; Leerlauf-Stunden nennt eedc nicht — die Mitschrift zählt eine Stunde „Heizen · Leerlauf“ als Heizen.
 
 ---
 
@@ -501,21 +501,21 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 >
 > Ein gewöhnlicher `sensor.` geht genauso, er muss aber einen dieser **Texte** liefern:
 >
-> | Home-Assistant-Schreibweise | deutsch | eedc versteht es als |
-> |---|---|---|
-> | `heat` | `heizen` | Heizen |
-> | `dhw` · `hot_water` · `water_heating` | `warmwasser` · `brauchwasser` · `trinkwasser` | Warmwasser |
-> | `cool` | `kuehlen` · `kühlen` | Kühlen |
-> | `dry` | `entfeuchten` | Entfeuchten |
-> | `fan_only` | `lueften` · `lüften` | Lüften |
-> | `off` | `aus` | Aus |
-> | `auto` · `heat_cool` | `automatik` | *unbestimmt* — das Gerät lief, die Seite ist nicht zuordenbar |
+> | Home-Assistant-Schreibweise | deutsch | Zahlencode (nur über MQTT) | eedc versteht es als |
+> |---|---|---|---|
+> | `heat` | `heizen` | `1` | Heizen |
+> | `dhw` · `hot_water` · `water_heating` | `warmwasser` · `brauchwasser` · `trinkwasser` | `2` | Warmwasser |
+> | `cool` | `kuehlen` · `kühlen` | `3` | Kühlen |
+> | `dry` | `entfeuchten` | `5` | Entfeuchten |
+> | `fan_only` | `lueften` · `lüften` | `4` | Lüften |
+> | `off` | `aus` | `0` | Aus |
+> | `auto` · `heat_cool` | `automatik` | — | *unbestimmt* — das Gerät lief, die Seite ist nicht zuordenbar |
 >
-> Groß-/Kleinschreibung ist egal. Dieselbe Liste steht in *Einstellungen → Datenquellen* direkt am Feld „Betriebsmodus". **Liefert dein zugeordneter Sensor einen Wert, der hier nicht steht** (etwa `heating`, `standby` oder `pool` aus einem eigenen Prioritäts-Sensor), **meldet der Daten-Checker ihn** — mit dem Wert und dieser Liste.
+> Groß-/Kleinschreibung ist egal. Die **Zahlencodes** gelten **nur über MQTT** — für Steuerungen, die den Modus dort nur als Zahl schicken (siehe *„Ohne Home Assistant: der Modus über MQTT"* unten); über MQTT darf ein Code auch als `1.0` kommen. An einem Home-Assistant-Sensor ist eine Zahl kein Code (siehe unten). Dieselbe Liste steht in *Einstellungen → Datenquellen* direkt am Feld „Betriebsmodus". **Liefert dein zugeordneter Sensor einen Wert, der hier nicht steht** (etwa `heating`, `standby` oder `pool` aus einem eigenen Prioritäts-Sensor), **meldet der Daten-Checker ihn** — mit dem Wert und dieser Liste.
 >
 > ⚑ **Warmwasser kennt Home Assistant nicht als Betriebsmodus** — es führt die Trinkwassererwärmung in einer eigenen Gerätegruppe. Eine `climate`-Entität allein sagt dir also meist nur *heizen/kühlen*. Wenn deine Wärmepumpe Warmwasser macht, ist der Template-Sensor unten der Weg dorthin.
 >
-> ⛔ **Eine Zahl reicht nicht.** Manche Integrationen liefern den Modus als **Rohwert** — Viessmann zum Beispiel als `sensor.…_hk1_mode_raw` mit dem Wert `1`. Was `1` bedeutet, weiß nur dein Gerät; eedc rät es nicht und zeigt deshalb **„Unbestimmt"**. Dasselbe gilt für jeden anderen Text, den die Tabelle nicht kennt.
+> ⛔ **Eine Zahl reicht nicht.** Manche Integrationen liefern den Modus als **Rohwert** — Viessmann zum Beispiel als `sensor.…_hk1_mode_raw` mit dem Wert `1`. Was `1` bedeutet, weiß nur dein Gerät; eedc rät es nicht und zeigt deshalb **„Unbestimmt"**. Dasselbe gilt für jeden anderen Text, den die Tabelle nicht kennt. Die Zahlencodes der Tabelle gelten nur über MQTT — an einem Home-Assistant-Sensor bleibt eine Zahl ein Rohwert.
 >
 > **Der Ausweg ist ein Template-Sensor in Home Assistant**, der aus dem, was du hast, einen der Texte oben macht. Hast du **Leistungssensoren je Funktion**, brauchst du die Codierung deines Geräts gar nicht:
 >
@@ -544,6 +544,32 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > ⚠ **Das ist etwas anderes als das Feld *Strom Warmwasser***, auch wenn beide dieselbe Energie meinen können. *Strom Warmwasser* ist ein **eigener Zähler** und ein Summand: Heizen + Warmwasser ergeben zusammen deinen Gesamtverbrauch. Die Zeile im Balken ist eine **Teilmenge** des Gesamtverbrauchs, aus mitgeschriebenen Stunden. **Addiere sie nie.**
 >
 > ⚠ **Weg B wirkt nur ab jetzt.** Die Aufteilung entsteht aus mitgeschriebenen Stunden — **rückwirkend gibt es sie nicht**. Deshalb steht unter dem Balken, wie viele Stunden eedc tatsächlich mitgelesen hat.
+
+> ### Ohne Home Assistant: der Modus über MQTT
+>
+> Läuft eedc ohne Home Assistant (Standalone) oder kommt der Modus aus einer anderen Steuerung, schickst du ihn an das
+> eedc-Topic deiner Wärmepumpe:
+>
+> ```
+> eedc/<anlage-id>_<anlage>/live/inv/<geräte-id>_<gerät>/betriebsmodus  →  2
+> ```
+>
+> Als Wert gehen die Wörter **oder** die Zahlencodes aus der Tabelle oben (`0` Aus · `1` Heizen · `2` Warmwasser ·
+> `3` Kühlen · `4` Lüften · `5` Entfeuchten). Das genaue Topic steht in *Einstellungen → Datenquellen* (Liste „MQTT-Topics"
+> und am Feld „Betriebsmodus", Quelle **Inbound**). Senden bei jeder Änderung genügt — eedc hält den letzten Wert, bis ein
+> neuer kommt (retained ist empfohlen, dann kennt eedc den Modus auch gleich nach einem Neustart).
+>
+> eedc macht daraus dasselbe wie aus einem HA-Sensor: den Modus im Live-Bild, den Modus-Sensor für Home Assistant, und
+> **je abgeschlossener Stunde die Mitschrift** (Anteil der Stunde je Modus, aus 5-Minuten-Fenstern) — daraus „Strom nach
+> Betriebsart" und „Betrieb heute".
+>
+> **Benannte Grenzen:**
+> - **Nicht rückwirkend:** Die Mitschrift beginnt mit dem ersten empfangenen Wert. Home Assistant kennt die Vergangenheit, MQTT nicht.
+> - **Kein „Leerlauf":** Leerlauf ist eine Messung von Home Assistant (die *Aktuelle Aktion*), kein Modus — über MQTT gibt es ihn nicht.
+> - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Lücke. Verstummt nur dein Absender, während der Broker läuft, hält eedc seinen letzten Wert (wie Home Assistant ohne Verfügbarkeits-Meldung).
+> - **Kein Gateway:** Das MQTT-Gateway (ein fremdes Topic umschreiben) reicht nur Zahlen weiter und steht an diesem Feld nicht zur Wahl — publiziere direkt auf das eedc-Topic.
+> - **Keine Topic-Überwachung:** Die Prüfung „Topic sendet nicht" im Daten-Checker lässt das Modus-Topic aus — ein Modus, der sich stundenlang nicht ändert, ist kein Ausfall.
+> - **HA-Sensor geht vor:** Ist dem Gerät ein Betriebsmodus-Sensor aus Home Assistant zugeordnet, liest eedc nur ihn — und dort gelten die Zahlencodes nicht (siehe *„Eine Zahl reicht nicht"*).
 
 > ### Mehrere Innengeräte — eedc braucht **eine** Aussage über die Anlage
 >
@@ -616,7 +642,8 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > (*Cockpit → Live*) und der Block „Überblick" der Wärmepumpe den Modus-Chip blass — in der Kachel
 > steht „Leerlauf" (das Symbol zeigt den Modus weiter), im Tooltip und in „Auf einen Blick"
 > „Heizen · Leerlauf". Der Modus selbst bleibt „Heizen", auch im HA-Sensor und im MQTT-Topic des
-> Betriebsmodus. ⚠ **eedc leitet keine Ruhe aus der Leistung ab:** Meldet deine Integration keine
+> Betriebsmodus. Kommt der Modus über MQTT herein, gibt es keinen Leerlauf — er ist eine Messung von
+> Home Assistant. ⚠ **eedc leitet keine Ruhe aus der Leistung ab:** Meldet deine Integration keine
 > Aktuelle Aktion, bleibt eine Wärmepumpe mit 8 W im Modus „Heizen" — eine Schwelle würde Ruhe aus
 > dem Messrauschen erfinden.
 
