@@ -99,10 +99,10 @@ def test_n764_tageszaehler_nach_schwachem_vortag_ist_kein_sprung():
     assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0, 2.0, 2.0])) == []
 
 
-def test_n764_ein_einzelner_tag_im_fenster_bleibt_ein_fund():
-    """(b) Benannte Grenze: mit nur einer Mitternacht im Fenster ist der Tageszähler vom Glitch nicht zu trennen."""
-    (s,) = finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0]))
-    assert s.menge_kwh == pytest.approx(1.5)
+def test_n764_ein_einzelner_tag_im_fenster_ist_seit_n768_kein_fund():
+    """(b) Bis N-768 benannte Grenze («mit nur einer Mitternacht im Fenster ist der Tageszähler vom Glitch nicht zu
+    trennen», Fund 1,5 kWh). Merkmal (B) trennt ihn: Stand 1,5 ≤ 3 × größter Tageszuwachs 1,5 (Tag 0)."""
+    assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag([1.5, 2.0])) == []
 
 
 def test_n764_lebenszeit_zaehler_mit_naechtlichem_reset_bleibt_drei_funde():
@@ -170,12 +170,10 @@ def test_n765_dieselbe_reihe_mit_nachtzeilen_bleibt_ohne_fund():
     assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(4, nachtzeilen=True)) == []
 
 
-def test_n765_ein_einzelner_tagesbeginn_reset_im_fenster_bleibt_ein_fund():
-    """(c) Benannte Grenze: nur der Vortag und der dunkle Tag im Fenster — ein Tagesbeginn-Reset ist vom Glitch nicht
-    zu trennen, der Fund steht wie bisher."""
-    (s,) = finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(2))
-    assert datetime.fromtimestamp(s.rueckkehr_ts) == T765 + timedelta(days=1, hours=15)
-    assert s.menge_kwh == pytest.approx(1.4)
+def test_n765_ein_einzelner_tagesbeginn_reset_im_fenster_ist_seit_n768_kein_fund():
+    """(c) Bis N-768 benannte Grenze (nur Vortag und dunkler Tag im Fenster ⇒ Fund 1,4 kWh um 15:00). Merkmal (B):
+    Stand 1,4 ≤ 3 × größter Tageszuwachs 1,3 (Tag 0, 07–18 Uhr)."""
+    assert finde_spruenge("sensor.pv_tagesertrag", _tagesertrag_ohne_nacht(2)) == []
 
 
 def _lebenszeit_ohne_nacht(naechte: int, *, glitch=None):
@@ -211,6 +209,168 @@ def test_n765_lebenszeit_zaehler_mit_mittagsaussetzer_bleibt_ein_fund():
     (s,) = finde_spruenge("sensor.wr_gesamt", z)
     assert datetime.fromtimestamp(s.rueckkehr_ts) == T765 + timedelta(days=1, hours=14)
     assert s.menge_kwh == pytest.approx(s.stand_vorher)
+
+# ── N-768 (#436): Tageszähler an der Größe erkennen — gleich wo die 0 in der Zeilenfolge steht ───────────────────
+
+T768 = datetime(2026, 10, 5, 0)
+
+
+def _ha_summe(zeilen_state: list[tuple[datetime, float]], start_summe: float = 0.0):
+    """HAs ``sum`` nach HAs Regel aus ``state``: Zuwachs = neuer − alter Stand, nach einem Rückgang = der neue Stand."""
+    out, summe, zuvor = [], start_summe, None
+    for t, st in zeilen_state:
+        if zuvor is not None:
+            summe += st - zuvor if st >= zuvor else st
+        zuvor = st
+        out.append((int(t.timestamp()), st, round(summe, 6)))
+    return out
+
+
+def _melder_436() -> list[tuple[int, float, float]]:
+    """Die echten Stundenzeilen von jedema1805 (#436, 25.10.2026), ``sensor.wandpv_sud_yieldday``, Wh → kWh. Stunden, die
+    der Melder nicht genannt hat, fehlen als Zeile (wie bei HA ohne Zustand). Tag 05.10. 06–11 Uhr und 07.10. aus seinen
+    Kommentaren vom 24.10., 05.10. 15 Uhr bis 06.10. 07 Uhr aus der Tabelle vom 25.10. (dort mit HAs ``sum``: 339941 …
+    340032 Wh). Lage: Nachtzeile 01:00 trägt noch den Vortagswert, Reset erst in der 06:00-Zeile — kein Tagesbeginn."""
+    st = [(T768 + timedelta(hours=h), v) for h, v in
+          [(6, 0.0), (7, 0.009), (8, 0.025), (9, 0.049), (10, 0.094), (11, 0.154),
+           (15, 1.213), (16, 1.256), (17, 1.285), (18, 1.294), (19, 1.294), (22, 1.294), (23, 1.294)]]
+    st += [(T768 + timedelta(days=1, hours=h), v) for h, v in
+           [(1, 1.294), (6, 0.0), (7, 0.010), (8, 0.026), (9, 0.049), (14, 0.071), (15, 1.385)]]
+    st += [(T768 + timedelta(days=2, hours=h), v) for h, v in
+           [(6, 0.0), (7, 0.008), (8, 0.025), (9, 0.049), (14, 0.068), (15, 1.425)]]
+    return _ha_summe(st, start_summe=339.941 - 1.213)
+
+
+def test_n768_melder_zeilen_436_sind_kein_fund():
+    """(a) Die Melder-Reihe am HEAD vor N-768: ``[('06.10 15:00', 1.294)]`` — die Warnzeile des Melders «am 06.10.2026,
+    Stunde ab 15:00: +1,3 kWh (Stand 1,3 → 0,0 → zurück)». Jetzt: Stand 1,294 ≤ 3 × Tageszuwachs 1,294 ⇒ Tageszähler,
+    keine 0 mit Rückkehr in der nächsten Zeile ⇒ kein Fund."""
+    z = _melder_436()
+    je_ts = {ts: su for ts, _st, su in z}
+    # Unser HA-Modell trifft HAs echte Summen der Tabelle (Wh → kWh): 06.10. 01:00 / 06:00 / 07:00.
+    assert je_ts[int((T768 + timedelta(days=1, hours=1)).timestamp())] == pytest.approx(340.022)
+    assert je_ts[int((T768 + timedelta(days=1, hours=6)).timestamp())] == pytest.approx(340.022)
+    assert je_ts[int((T768 + timedelta(days=1, hours=7)).timestamp())] == pytest.approx(340.032)
+    assert finde_spruenge("sensor.wandpv_sud_yieldday", z) == []
+
+
+def _tagesertrag_lage(tage: int, *, abend_null=(), weckwert=(), nachtzeile=()):
+    """PV-Tagesertrag, Zeilen 07–18, Normaltag je Stunde +0,13 bis 1,3 kWh; Tag 3 dunkel (0,01 … 0,07) und um 15:00 1,385.
+    ``abend_null``: Tage, deren 18:00-Zeile 0 trägt · ``weckwert``: Tage, deren 07:00-Zeile noch den Vortagsstand trägt ·
+    ``nachtzeile``: Tage mit einer 01:00-Zeile, die den Vortagsstand trägt (Melder-Lage)."""
+    st, zuvor = [], 0.0
+    for d in range(tage):
+        if d in nachtzeile and d > 0:
+            st.append((T768 + timedelta(days=d, hours=1), zuvor))
+        for h in range(7, 19):
+            if d == 3:
+                v = round(0.01 * (h - 6), 3) if h < 15 else (1.385 if h == 15 else 1.45)
+            else:
+                v = min(round((h - 7) * 0.13, 3), 1.3)
+            if h == 7 and d in weckwert and d > 0:
+                v = zuvor
+            if h == 18 and d in abend_null:
+                v = 0.0
+            st.append((T768 + timedelta(days=d, hours=h), v))
+            zuvor = v
+    return _ha_summe(st)
+
+
+@pytest.mark.parametrize("lage", [
+    dict(abend_null=(2,)), dict(weckwert=(3,)), dict(nachtzeile=(3,)),
+    dict(abend_null=(0, 1, 2, 3, 4)),           # jeden Abend 0: Merkmal (A) greift nie, (B) trägt allein
+])
+def test_n768_drei_zeilenlagen_der_null_am_tageszaehler_sind_kein_fund(lage):
+    """(b) Bis N-768 je ``[('08.10 15:00', 1.3)]``: Abend-Null, Weckwert und Nachtzeile sind kein Tagesbeginn. Merkmal (B):
+    Stand 1,3 ≤ 3 × Tageszuwachs 1,3."""
+    assert finde_spruenge("sensor.pv_tag", _tagesertrag_lage(5, **lage)) == []
+
+
+def test_n768_tageszaehler_ohne_lage_bleibt_ohne_fund():
+    assert finde_spruenge("sensor.pv_tag", _tagesertrag_lage(5)) == []
+
+
+def _gesamtzaehler_eingefroren(stand: float = 10714.0, null_zeilen: int = 1):
+    """Die Lab-Form: Gesamtzähler ohne Zuwachs (PV-Prüfanlage, eingefroren), eine Stunde 0, dann der alte Stand —
+    HA bucht beim Zurückkehren den ganzen Stand (Phantom = ``stand``)."""
+    st = [(T768 + timedelta(hours=h), stand) for h in range(30)]
+    st += [(T768 + timedelta(hours=30 + k), 0.0) for k in range(null_zeilen)]
+    st += [(T768 + timedelta(hours=30 + null_zeilen + h), stand) for h in range(6)]
+    return _ha_summe(st, start_summe=498.0)
+
+
+def test_n768_gesamtzaehler_ohne_tageszuwachs_bleibt_ein_fund_in_hoehe_des_stands():
+    """(c) Merkmal (B) am Gesamtzähler: größter Tageszuwachs 0 (ohne die Rückkehr-Zeile), Stand 10 714 ⇒ kein
+    Tageszähler, Fund in Höhe des Stands — und zwar bei jeder Dauer der 0 (1 Zeile = Aussetzer, 3 Zeilen = Lücke)."""
+    for null_zeilen in (1, 3):
+        (s,) = finde_spruenge("sensor.eedc_lab_pv_gesamt", _gesamtzaehler_eingefroren(null_zeilen=null_zeilen))
+        assert s.menge_kwh == pytest.approx(10714.0)
+        assert s.stand_vorher == 10714.0 and s.stand_reset == 0.0
+
+
+def test_n768_aussetzer_am_tageszaehler_in_jeder_lage_bleibt_ein_fund():
+    """(d) Gegenprobe: ein Tageszähler (Merkmal A und B erfüllt), der mittags eine Zeile 0 meldet und in der nächsten
+    Zeile zurück ist — HA bucht den Tag doppelt, der Fund bleibt (Höhe = Tagesstand bis dahin)."""
+    z = _tagesertrag_lage(5)
+    # Tag 1, 17:00 → 0 (Stand davor 1,17 ≥ MIN_STAND_KWH), 18:00 zurück auf 1,3
+    idx = {ts: k for k, (ts, _s, _u) in enumerate(z)}
+    k = idx[int((T768 + timedelta(days=1, hours=17)).timestamp())]
+    st = [(datetime.fromtimestamp(ts), s) for ts, s, _u in z]
+    st[k] = (st[k][0], 0.0)
+    (s,) = finde_spruenge("sensor.pv_tag", _ha_summe(st))
+    assert datetime.fromtimestamp(s.rueckkehr_ts) == T768 + timedelta(days=1, hours=18)
+    assert s.stand_vorher == pytest.approx(1.17) and s.menge_kwh == pytest.approx(1.17)
+
+
+def test_n768_benannte_grenze_aussetzer_ueber_zwei_zeilen_am_tageszaehler():
+    """(e) Benannte Grenze (Handbuch §4.8b): bleibt ein Tageszähler ZWEI Zeilen auf 0 und kehrt dann zurück, ist das
+    von einem Tagesbeginn nach einer Lücke nicht zu trennen — kein Fund, obwohl HA den Tag doppelt bucht (Phantom
+    ≤ ein Tagesstand)."""
+    z = _tagesertrag_lage(5)
+    st = [(datetime.fromtimestamp(ts), s) for ts, s, _u in z]
+    idx = {t: k for k, (t, _s) in enumerate(st)}
+    for h in (16, 17):
+        k = idx[T768 + timedelta(days=1, hours=h)]
+        st[k] = (st[k][0], 0.0)
+    assert finde_spruenge("sensor.pv_tag", _ha_summe(st)) == []
+
+
+def test_n768_benannte_grenze_junger_gesamtzaehler_mit_nachtnullen():
+    """(f) Benannte Grenze: ein Gesamtzähler mit zwei Tagen Historie (Stand 26 ≤ 3 × Tageszuwachs 13), dessen
+    Nachtzeilen 22–05 Uhr 0 tragen — die Rückkehr um 06:00 folgt nicht unmittelbar auf den Reset ⇒ kein Fund
+    (Phantom ≤ drei Tage). Derselbe Zähler mit 5 000 kWh Stand: Fund (N-764-Probe c)."""
+    st, stand = [], 0.0
+    for h in range(24 * 3):
+        t = T768 + timedelta(hours=h)
+        if 7 <= t.hour < 20:
+            stand += 1.0
+        aus = 22 <= t.hour or t.hour < 6
+        st.append((t, 0.0 if aus and h > 20 else stand))
+    assert finde_spruenge("sensor.wr_jung", _ha_summe(st)) == []
+
+
+
+#: Echte HA-Stundenzeilen aus dem HAOS-Lab (25.10.2026, `sensor.eedc_lab_pv_gesamt`, Gesamtzähler eingefroren bei 10 714 kWh):
+#: 13:04 per MQTT auf 0 gesetzt, 14:05 zurück (`lab-werkzeug/ha-sprung/sprung_lab.py`). HA bucht beim Zurückkehren den
+#: ganzen Stand: ``sum`` 498 → 11 212. Epoch-Sekunden, damit die Probe in jeder Prozesszeitzone dieselben Zeilen liest.
+LAB_DOPPELBUCHUNG = [
+    (1792908000, 10714.0, 498.0), (1792911600, 10714.0, 498.0), (1792915200, 10714.0, 498.0),
+    (1792918800, 10714.0, 498.0), (1792922400, 10714.0, 498.0), (1792926000, 10714.0, 498.0),
+    (1792929600, 0.0, 498.0), (1792933200, 10714.0, 11212.0),
+]
+
+
+def test_n768_echte_ha_doppelbuchung_aus_dem_lab_bleibt_ein_fund():
+    """(g) Die Gegenseite mit echten HA-Zeilen: HAs ``sum`` springt in der Rückkehr-Zeile um den ganzen Stand (10 714 kWh,
+    nicht nachgestellt, sondern vom Recorder des Lab-HA geschrieben). Größter Tageszuwachs 0 ⇒ Gesamtzähler ⇒ Fund in
+    Höhe des Stands, Rückkehr-Zeile = die 14:00-Zeile."""
+    (s,) = finde_spruenge("sensor.eedc_lab_pv_gesamt", LAB_DOPPELBUCHUNG)
+    assert s.rueckkehr_ts == 1792933200
+    assert s.menge_kwh == pytest.approx(10714.0)
+    assert s.stand_vorher == 10714.0 and s.stand_reset == 0.0
+    # Unser HA-Modell (``_ha_summe``) liefert für dieselben Stände dieselbe Summe wie der echte Recorder.
+    modell = _ha_summe([(datetime.fromtimestamp(ts), st) for ts, st, _su in LAB_DOPPELBUCHUNG], start_summe=498.0)
+    assert [su for _ts, _st, su in modell] == [su for _ts, _st, su in LAB_DOPPELBUCHUNG]
 
 
 async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):

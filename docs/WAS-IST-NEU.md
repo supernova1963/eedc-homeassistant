@@ -11,6 +11,15 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
+**Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
+schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
+erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter
+die 0 schon am Abend, stand die Warnung mit der Anweisung, die HA-Statistik zu ändern, weiter da. Jetzt erkennt eedc den
+Tageszähler an seiner Größe: sein Stand kommt nie über einen Tag hinaus, ein Gesamtzähler liegt weit darüber. Deine
+HA-Statistik war in diesen Fällen richtig, nichts musste korrigiert werden. Einen echten Aussetzer (kurz 0, nächste Stunde
+wieder der alte Stand) meldet die Prüfung weiter, am Tageszähler wie am Gesamtzähler
+([Daten-Checker §4.8b](HANDBUCH_DATEN_CHECKER.md#48b-zaehlerstaende--sprung-in-home-assistant)).
+
 **Cockpit → Live: der Energiefluss sagt mehr, ohne größer zu werden.** Im Haus-Kreis steht unter der Zahl jetzt **„Rest"** —
 die Zahl war schon immer der Verbrauch, den eedc keinem einzeln gezeigten Gerät zuordnen kann. Direkt darunter steht
 **„gesamt …"**: was dein Haus gerade insgesamt verbraucht (nachts also Netzbezug minus das, was der Speicher aus dem Netz

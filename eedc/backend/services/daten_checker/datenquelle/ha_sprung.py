@@ -12,11 +12,14 @@ vorigen), danach innerhalb ``RUECKKEHR_STUNDEN`` die Rückkehr auf etwa den alte
 selbst wieder oben. HAs Phantom entsteht nur, wenn der Stand in EINER Stunde zurückspringt; ein Zähler, der nach dem
 Reset hochzählt (ein täglich zurückgesetzter Helfer, ein neuer Zähler nach einem Tausch), erzeugt in ``sum`` keinen
 Sprung und ist kein Befund (Nachmessung E4a-2, Punkt 6). Ein **Tageszähler** (PV-Tagesertrag, Utility-Meter „heute")
-ist es auch dann nicht, wenn seine erste helle Stunde nach einem schwachen Vortag den Vortagsstand schon fast erreicht:
-geht derselbe Sensor an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters zu Beginn seines Tages auf 0, sind
-diese Tagesbeginn-Resets Zyklen (N-764, #436); ein einzelner Tag im Fenster bleibt ununterscheidbar. «Tagesbeginn» ist
-die erste Zeile ihres lokalen Kalendertags in der Zeilenfolge — die 00:00-Zeile, oder bei einem nachts abgeschalteten
-Wechselrichter (HA schreibt ohne Zustand keine Statistikzeile) die erste Morgenzeile (N-765, #436). Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
+ist es auch dann nicht, wenn seine erste helle Stunde nach einem schwachen Vortag den Vortagsstand schon fast erreicht.
+Tageszähler erkennt die Regel an zwei Merkmalen (eines genügt): (A) der Sensor geht an mindestens ``TAGESZAEHLER_MIN_TAGE``
+Tagen des Fensters in der ersten Zeile seines lokalen Kalendertags auf 0 (N-764/N-765, #436 — die 00:00-Zeile, oder bei
+einem nachts abgeschalteten Wechselrichter die erste Morgenzeile); (B) sein Stand vor dem Reset ist höchstens
+``TAGESZAEHLER_FAKTOR`` × sein größter Tageszuwachs im Fenster (N-768, #436) — ein Tageszähler kommt nie über einen Tag
+hinaus, ein Gesamtzähler liegt weit darüber, gleich wo seine 0 in der Zeilenfolge steht (Abendzeile, Nachtzeile 01:00,
+Weckwert). An einem Tageszähler ist nur noch der **Aussetzer** ein Befund: eine 0 mitten im Tag, auf die der alte Stand in
+der unmittelbar nächsten Zeile zurückkommt (HA bucht den Tag doppelt); jede andere 0 ist sein Zyklus. Die Phantommenge ist der Zuwachs von ``sum`` über die Strecke abzüglich dessen, was der Zähler
 selbst zeigt (``state`` vorher → nachher). Gelesen wird der Spiegel (``kanal_statistik``, Familie ``spiegel``) der
 letzten ``FENSTER_TAGE`` — keine HA-Abfrage.
 
@@ -56,11 +59,15 @@ RUECKKEHR_STUNDEN = 72
 MIN_STAND_KWH = 1.0
 #: Wie viele Funde die Meldung beim Namen nennt.
 BEISPIELE = 5
-#: Ab so vielen Tagen im Fenster mit einem Reset in der ersten Zeile des Tages ist der Sensor ein Tageszähler (N-764,
-#: N-765, #436): PV-Tagesertrag, Utility-Meter „heute" gehen zu Beginn jedes Tages auf 0 — um Mitternacht oder, ohne
-#: Nachtzeilen, in der ersten Morgenzeile; ein nächtlich abgeschalteter Lebenszeitzähler (das N-586-Muster) fällt in
-#: der letzten Zeile des Abends. Ein einzelner Tag reicht nicht (benannte Grenze).
+#: Merkmal (A) eines Tageszählers (N-764, N-765, #436): an so vielen Tagen des Fensters steht ein Reset in der ersten
+#: Zeile des Tages — um Mitternacht oder, ohne Nachtzeilen, in der ersten Morgenzeile. Ein nächtlich abgeschalteter
+#: Gesamtzähler (N-586-Muster) fällt in der letzten Zeile des Abends und erfüllt (A) nicht.
 TAGESZAEHLER_MIN_TAGE = 2
+#: Merkmal (B) eines Tageszählers (N-768, #436): sein Stand vor dem Reset ist höchstens dieses Vielfache seines größten
+#: Tageszuwachses im Fenster (Zuwachs des ``state`` je Kalendertag, ohne die Rückkehr-Zeilen der Kandidaten). Ein
+#: Tageszähler liegt bei ≈ 1, ein Gesamtzähler bei Hunderten. Benannte Grenze: ein Gesamtzähler mit weniger als drei Tagen
+#: eigener Historie (oder ein Monatszähler in seinen ersten drei Tagen) gilt als Tageszähler; sein Phantom wäre entsprechend klein.
+TAGESZAEHLER_FAKTOR = 3.0
 
 
 @dataclass(frozen=True)
@@ -86,7 +93,7 @@ def _ist_tagesbeginn(ts0: int, ts: int) -> bool:
 
 
 def _tagesbeginn_reset_tage(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> set:
-    """Kalendertage (Prozess-Zeitzone = HA), an denen der Reset in der ersten Zeile des Tages liegt."""
+    """Kalendertage (Prozess-Zeitzone = HA), an denen der Reset in der ersten Zeile des Tages liegt (Merkmal A)."""
     tage = set()
     for (ts0, st0, su0), (ts, st, _su) in zip(zeilen, zeilen[1:]):
         if _ist_reset(st0, st, su0) and _ist_tagesbeginn(ts0, ts):
@@ -94,38 +101,73 @@ def _tagesbeginn_reset_tage(zeilen: Sequence[tuple[int, Optional[float], Optiona
     return tage
 
 
-def finde_spruenge(statistic_id: str, zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> list[Sprung]:
-    """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` aufsteigend. Je Reset mit Rückkehr ein ``Sprung``.
+def _kandidaten(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> list[tuple[int, int, float]]:
+    """Das N-586-Muster, roh: je Reset mit Rückkehr in EINER Zeile ``(reset_i, rueckkehr_j, menge_kwh)``.
 
-    N-764/N-765 (#436): ein Reset in der ersten Zeile eines Tages (00:00, oder ohne Nachtzeilen die erste
-    Morgenzeile) eines Sensors, der an mindestens ``TAGESZAEHLER_MIN_TAGE`` Tagen des Fensters zu Tagesbeginn
-    zurückgeht, ist der Zyklus eines Tageszählers und kein Befund — auch wenn die erste helle Stunde nach einem
-    schwachen Vortag schon ``RUECKKEHR_ANTEIL`` des Vortagsstands erreicht (dann sähe er sonst wie eine Rückkehr in
-    EINER Stunde aus). Alle anderen Resets wie bisher.
-    """
-    out: list[Sprung] = []
-    tageszaehler = len(_tagesbeginn_reset_tage(zeilen)) >= TAGESZAEHLER_MIN_TAGE
+    Die erste Zeile über dem Reset-Band entscheidet: springt sie (von der unteren Nachbarzeile) auf mindestens
+    ``RUECKKEHR_ANTEIL`` des alten Stands, ist das die Rückkehr; sonst zählt der Zähler hoch (Tagesreset, Tausch) und
+    die Suche endet dort."""
+    out: list[tuple[int, int, float]] = []
     i = 1
     while i < len(zeilen):
-        ts0, st0, su0 = zeilen[i - 1]
+        _ts0, st0, su0 = zeilen[i - 1]
         ts, st, _su = zeilen[i]
-        if (_ist_reset(st0, st, su0)
-                and not (tageszaehler and _ist_tagesbeginn(ts0, ts))):
+        if _ist_reset(st0, st, su0):
             for j in range(i + 1, len(zeilen)):
                 tsj, stj, suj = zeilen[j]
                 if tsj - ts > RUECKKEHR_STUNDEN * 3600 or stj is None:
                     break
                 if stj <= RESET_ANTEIL * st0:
                     continue                      # noch unten
-                # Die erste Zeile über dem Reset-Band: Rückkehr nur, wenn sie in EINER Stunde (von der unteren
-                # Nachbarzeile) auf den alten Stand springt — sonst zählt der Zähler hoch (Tagesreset, Tausch).
                 if stj >= RUECKKEHR_ANTEIL * st0 and suj is not None:
                     menge = (suj - su0) - (stj - st0)
                     if menge > 0:
-                        out.append(Sprung(statistic_id, int(tsj), menge, st0, st))
+                        out.append((i, j, menge))
                 i = j
                 break
         i += 1
+    return out
+
+
+def _groesster_tageszuwachs(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]], ohne: set) -> float:
+    """Größter Zuwachs des Stands (``state``) je lokalem Kalendertag — ohne die Rückkehr-Zeilen ``ohne`` (Indizes),
+    deren Zuwachs beim Gesamtzähler das Phantom selbst wäre. Rückgänge (Resets) zählen nicht."""
+    je_tag: dict = {}
+    for k in range(1, len(zeilen)):
+        if k in ohne:
+            continue
+        st0, st = zeilen[k - 1][1], zeilen[k][1]
+        if st0 is None or st is None or st < st0:
+            continue
+        tag = datetime.fromtimestamp(zeilen[k][0]).date()
+        je_tag[tag] = je_tag.get(tag, 0.0) + (st - st0)
+    return max(je_tag.values(), default=0.0)
+
+
+def finde_spruenge(statistic_id: str, zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> list[Sprung]:
+    """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` aufsteigend. Je Reset mit Rückkehr ein ``Sprung``.
+
+    Kandidaten liefert ``_kandidaten`` (N-586-Form). Ein Kandidat ist der Zyklus eines **Tageszählers** und kein Befund,
+    wenn der Sensor Merkmal (A) erfüllt (``_tagesbeginn_reset_tage`` ≥ ``TAGESZAEHLER_MIN_TAGE``, N-764/N-765) oder sein
+    Stand vor dem Reset Merkmal (B) erfüllt (≤ ``TAGESZAEHLER_FAKTOR`` × größter Tageszuwachs, N-768) — es sei denn, es
+    ist ein **Aussetzer**: die 0 steht nicht in der ersten Zeile ihres Tages UND der alte Stand kommt in der unmittelbar
+    nächsten Zeile zurück (HA bucht den Tag doppelt, N-764-Gegenprobe). Ein Gesamtzähler (weder A noch B) wird wie bisher
+    bei jeder Rückkehr gemeldet.
+    """
+    kandidaten = _kandidaten(zeilen)
+    if not kandidaten:
+        return []
+    tagesform_a = len(_tagesbeginn_reset_tage(zeilen)) >= TAGESZAEHLER_MIN_TAGE
+    tageszuwachs = _groesster_tageszuwachs(zeilen, {j for _i, j, _m in kandidaten})
+    out: list[Sprung] = []
+    for i, j, menge in kandidaten:
+        ts0, st0, _su0 = zeilen[i - 1]
+        ts, st, _su = zeilen[i]
+        tagesform = tagesform_a or st0 <= TAGESZAEHLER_FAKTOR * tageszuwachs
+        aussetzer = not _ist_tagesbeginn(ts0, ts) and j == i + 1
+        if tagesform and not aussetzer:
+            continue
+        out.append(Sprung(statistic_id, int(zeilen[j][0]), menge, st0, st))
     return out
 
 
@@ -198,4 +240,5 @@ class HaZaehlersprungChecks:
         )]
 
 
-__all__ = ["BEISPIELE", "FENSTER_TAGE", "HaZaehlersprungChecks", "Sprung", "finde_spruenge"]
+__all__ = ["BEISPIELE", "FENSTER_TAGE", "TAGESZAEHLER_FAKTOR", "TAGESZAEHLER_MIN_TAGE", "HaZaehlersprungChecks",
+           "Sprung", "finde_spruenge"]
