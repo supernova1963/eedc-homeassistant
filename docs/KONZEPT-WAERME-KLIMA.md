@@ -152,8 +152,8 @@ Dazu die Live-Größen Vorlauf, Rücklauf (°C) und Leistung Zusatzheizung (W) �
 **Nachtrag P-433-3 S3 (25.10.2026) — Vorlauf und Rücklauf als Größen der Tagessicht.** Vorlauf und Rücklauf (°C, je
 Gerät) bleiben **Begleitgrößen ohne Menge**: aus ihnen entsteht keine Kilowattstunde und keine Arbeitszahl. Ihre
 **Stundenmittel** kommen aus dem Mittelwert-Kanal, den eedc aus der HA-Langzeitstatistik des Sensors spiegelt (und
-rückwirkend nachfüllt) — nur dort, wo der Sensor `state_class: measurement` trägt; MQTT/Standalone zeigt sie live, aber
-ohne Stundenmittel. Daraus entstehen zwei Tageszahlen im Layer (`core/berechnungen/temperatur_tagesmittel.py`):
+rückwirkend nachfüllt) — nur dort, wo der Sensor `state_class: measurement` trägt; über MQTT/Standalone seit
+Standalone-Gleichstand S2 aus der eigenen 5-Minuten-Mitschrift (Nachtrag unten). Daraus entstehen zwei Tageszahlen im Layer (`core/berechnungen/temperatur_tagesmittel.py`):
 **Ø Vorlauf** und **Ø Spreizung** (Vorlauf − Rücklauf) über die **Stunden mit Betrieb** — Betrieb aus dem
 Betriebsmodus (≠ aus/unbestimmt), ohne Modus aus dem Strom über dem Tagesminimum. **Nicht je Funktion:** die Stunden
 sind gemischt, ein «Vorlauf beim Heizen» wäre eine abgeleitete Größe neben gemessenen Zählern.
@@ -165,8 +165,16 @@ kommt auch über das eedc-Topic `…/live/inv/<id>/betriebsmodus` (Kanon-Wort od
 HA-Modus-Entität bleibt beim HA-Sensor. Aus dem Topic schreibt eedc dieselbe Betriebsart-Mitschrift (Anteil der Stunde
 je Modus, aus 5-Minuten-Fenstern mit Haltezeit je Nachricht), ab der Zuordnung und nicht rückwirkend; «Strom nach
 Betriebsart», «Betrieb heute» und die Betriebsstunden-Regel oben lesen sie wie die HA-Mitschrift. Über MQTT gibt es
-keinen Leerlauf (eine gemessene HA-Aktion, kein Modus). Die Stundenmittel von Vorlauf und Rücklauf aus MQTT folgen mit
-Sitzung 2 des Vorhabens; bis dahin gilt der Satz oben.
+keinen Leerlauf (eine gemessene HA-Aktion, kein Modus).
+
+**Nachtrag Standalone-Gleichstand S2 (25.10.2026, HA-Bauform §9) — die Stundenmittel über MQTT.** Für jedes
+Mittelwert-Live-Feld (Vorlauf, Rücklauf, Warmwasser-Temperatur, Leistungen, Zusatzheizung, Ladestand) ohne HA-Zuordnung
+schreibt eedc die Stundenmittel aus dem MQTT-Inbound selbst: ein Integrator je Topic (ein Wert gilt bis zur nächsten
+Nachricht), alle 5 Minuten das zeitgewichtete Fenster-Mittel mit Minimum/Maximum, je abgeschlossener Stunde
+längengewichtet verdichtet in denselben Mittelwert-Kanal (Familie `mitschrift`) — was HA aus seinen 5-Minuten-Statistiken
+macht. Ein Feld mit HA-Entität bleibt beim HA-Spiegel (auch ohne Langzeitstatistik; nie zwei Quellen in einem Kanal).
+Grenzen: ab der Zuordnung, nicht rückwirkend; Auflösung 5 Minuten; Broker-Ausfall ⇒ Lücke; der Preis nicht (Stundenpreis
+und Kosten nur aus einem HA-Preissensor).
 
 ⚠ **E und Q tragen dieselbe Einheit und meinen Verschiedenes.** Eine Wärmepumpe führt zwei Sorten
 Kilowattstunden nebeneinander — **elektrisch** (was sie aufnimmt) und **thermisch** (was sie
@@ -1119,9 +1127,10 @@ dort kein Eingang ([5.6](#56-wetternormierung--kwh-je-heizgradtag)).
   Betriebsstunden (2.1-Nachtrag), die Legende nennt die Werte der letzten Stunde. Dieselbe Hülle wie der Verlauf
   (Regel 0/0a), dasselbe Stunden-Raster wie der Verlauf desselben Tages (Beginn an einem WP-Kanal-Tag, sonst Ende).
   Die Außentemperatur bleibt im Verlauf.
-* **Grenze HA-LTS:** Stundenmittel gibt es nur aus der HA-Langzeitstatistik des Sensors (rückwirkend, so weit sie
-  reicht); ein zugeordneter Sensor ohne sie (MQTT/Standalone, `state_class` fehlt) steht unter dem Diagramm als
-  «keine Stundenwerte», der Daten-Checker nennt ihn («Sensor ohne Langzeitstatistik»).
+* **Grenze HA-LTS:** Stundenmittel eines HA-Sensors gibt es nur aus seiner HA-Langzeitstatistik (rückwirkend, so weit
+  sie reicht); ein zugeordneter HA-Sensor ohne sie (`state_class` fehlt) steht unter dem Diagramm als «keine
+  Stundenwerte», der Daten-Checker nennt ihn («Sensor ohne Langzeitstatistik»). Über MQTT kommen die Stundenmittel seit
+  Standalone-Gleichstand S2 aus der eigenen 5-Minuten-Mitschrift (ab der Zuordnung, nicht rückwirkend; §2.1-Nachtrag).
 * **«AZ heute»** heißt die Arbeitszahl-Kachel am Tag (A3a: eine Sicht, eine Periode); je Funktion steht die Herleitung
   aus Zähler und Nenner des Layers beim Überfahren.
 

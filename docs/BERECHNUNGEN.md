@@ -83,7 +83,8 @@ und zum Verständnis der Datenflüsse.
 >   Kanal-Stunden, und die Stunden- und Tageszeilen tragen an Kanal-Tagen keine Mengen der Kanal-Gruppen mehr (§6b,
 >   Tabelle „Stand der HA-Bauform").
 > * **Was nicht so rechnet (bleibt):** Spitzen und Vollzyklen (Tageszeile), Ladestand, Preise, Wetter, Zählwerke und die
->   Leistungswerte je Gerät der Stunde bleiben Bahnen der Stunden- und Tageszeilen (keine Mittelwert-Mitschrift); Tage und
+>   Leistungswerte je Gerät der Stunde bleiben Bahnen der Stunden- und Tageszeilen (die Mittelwert-Kanäle — HA-Spiegel, seit
+>   HA-Bauform §9 auch die MQTT-Mitschrift — lesen heute nur der Temperatur-Verlauf der Wärmepumpe und der Stundenpreis); Tage und
 >   Monate ohne volle Kanal-Deckung (Lesart 1) rechnen weiter aus den Stunden- und Tageszeilen.
 >   Der Monatsabschluss-Nachlauf rechnet seit E4f nur noch Tage, die fehlen und die HA noch im Verlauf hat (§6b).
 

@@ -189,6 +189,10 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 
 Das Diagramm braucht eine **Leistungs-Zuordnung** unter *Einstellungen → Datenquellen* (Home Assistant); mit MQTT-Inbound gibt
 es keine Kurve — dann steht an seiner Stelle ein Satz, der das sagt (die Tageswerte kommen weiter aus den Zählern).
+Ist Home Assistant bei zugeordneten Leistungen nicht erreichbar oder liefert es für den Tag nichts, zeichnet eedc die
+Kurve aus seinen eigenen MQTT-Aufzeichnungen (alle 5 Minuten) — seit dem Standalone-Gleichstand als **zeitgewichtetes
+5-Minuten-Mittel** statt eines einzelnen Momentanwerts: eine taktende Wärmepumpe erscheint als ihr mittlerer Verbrauch,
+nicht als zufällige Spitze oder Lücke.
 
 **Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
 auf einer durchgehenden Zeitachse:

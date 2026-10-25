@@ -556,13 +556,19 @@ Tabellen (keine Spalte gelöscht, kein Schreiber abgeschaltet; Lesart-1-Tage les
 (`core/berechnungen/ha_summe.py`, der Deckel bleibt dort Schreibfilter); `abgeleitet` = aus anderen Kanälen je Stunde
 gerechnet, mit `aufbaubar_ab`. **Die Familie `bestand` bleibt unbelegt** (Entscheid 06.10., Bauplan §3b): die bisherigen
 Stunden- und Tageszeilen werden nicht umgewandelt — sie bleiben die Quelle für Zeiträume, die die Kanäle nicht voll
-decken (*Lesart 1*). Mittelwerte ohne Langzeitstatistik bekommen keinen Kanal und keine Mitschrift (Entscheid 06.10.).
+decken (*Lesart 1*). Mittelwerte eines HA-Sensors ohne Langzeitstatistik bekommen keinen Kanal und keine Mitschrift
+(Entscheid 06.10.); **für MQTT-Quellen ist er seit HA-Bauform §9 umgekehrt** (Standalone-Gleichstand S2, 25.10.2026):
+ein Mittelwert-Feld ohne HA-Zuordnung bekommt seine Stundenzeilen als `mitschrift` aus den 5-Minuten-Snapshots des
+MQTT-Inbound (`mqtt_live_snapshots`: zeitgewichtetes Fenster-Mittel aus einem Integrator im Cache, `min`/`max`,
+`ts_unix`) — `schreiber._mean_mitschrift`, längengewichtet je Stunde, `statistic_id` = MQTT-Schlüssel, ab der Zuordnung
+und nicht rückwirkend; ein Feld mit HA-Entität bleibt beim Spiegel (nie zwei Familien in einem Kanal). Der Preis bleibt
+HA-only.
 Welche Art und Familie ein Feld bekommt, leitet `services/kanal/katalog.py` aus der Feld-Registry ab (Wächter
 `test_kanal_feld_deckung.py`, Baseline 0).
 
 **Schreiber.** Stündlich :05 nach `snapshot_anlage` (`services/kanal/schreiber.py::schreibe_kanaele_im_stundenlauf`, in
-derselben Sitzung, eigener SAVEPOINT — ein Fehler dort berührt den Bestand nicht): Spiegel fortschreiben, ohne HA die
-eigene Summe, dann die abgeleiteten Kanäle in dieser Reihenfolge —
+derselben Sitzung, eigener SAVEPOINT — ein Fehler dort berührt den Bestand nicht): Spiegel fortschreiben, die
+Mittelwert-Mitschrift aus MQTT (§9), ohne HA die eigene Summe, dann die abgeleiteten Kanäle in dieser Reihenfolge —
 * **PV-Anteil der Heimladung** je Wallbox/E-Auto ohne gemessene Aufteilung (`abgeleitet.py`, `abgeleitet:inv:<id>:
   ladung_pv_kwh`, Regel der Stunde `core/berechnungen/pv_anteil_ladung.py`: was nicht aus dem Netz kam; E4c);
 * **Strom je Betriebsart** der Wärmepumpe (`modus_strom.py`, `abgeleitet:inv:<id>:modus_strom_<betriebsart>_kwh` und

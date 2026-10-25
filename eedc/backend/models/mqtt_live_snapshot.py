@@ -17,12 +17,20 @@ component_key Format:
   "inv:14:leistung_warmwasser_w" — WP Warmwasser separat
   "inv:14:leistung_kuehlen_w"  — WP Kühlbetrieb separat
   "inv:14:betriebsmodus:heizen" — Anteil des 5-Minuten-Fensters im Modus (0–1, HA-Bauform §9)
+  "inv:14:vorlauf_temperatur_c" — jedes Mittelwert-Live-Feld (°C, %, W; seit S2)
+  "basis:strompreis_ct"       — Momentanpreis, nur für den Tagesverlauf
 
 ``ts_unix`` (HA-Bauform §9, E-SG-8, Standalone-Gleichstand S1): Unix-Sekunden des Snapshots. Die
 Stundenverdichtung rechnet nur damit (``schreiber._stunden_start_ts``: lokale volle Stunde aus
 ``fromtimestamp(ts_unix)``, dieselbe Regel wie die eigene Summe) — ``timestamp`` ist naive Ortszeit
 ohne ``fold`` und ließe die Herbst-Doppelstunde in eine fallen; er bleibt für den Tagesverlauf.
 Zeilen von vor der Spalte tragen ``NULL`` und werden von der Stundenverdichtung nicht gelesen.
+
+``value_w`` / ``min`` / ``max`` (HA-Bauform §9, Standalone-Gleichstand S2, G3): seit S2 ist ``value_w`` das
+**zeitgewichtete Mittel des 5-Minuten-Fensters** (Integrator im Inbound-Cache), ``min``/``max`` dessen Extrema —
+für jedes Mittelwert-Live-Feld (W · °C · %, ``kanal/katalog.mittelwert_live_keys``), der Spaltenname ``value_w``
+ist geblieben. ``basis:strompreis_ct`` ist ein Momentanwert ohne ``min``/``max``, Modus-Zeilen tragen den Anteil.
+Zeilen von vor der Spalte tragen ``NULL``; der Stundenlauf nimmt dann das Mittel als Extremum.
 """
 
 from datetime import datetime
@@ -45,6 +53,8 @@ class MqttLiveSnapshot(Base):
     component_key: Mapped[str] = mapped_column(String(120), nullable=False)
     value_w: Mapped[float] = mapped_column(Float, nullable=False)
     ts_unix: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
         Index("ix_mqtt_live_snapshot_lookup", "anlage_id", "timestamp"),

@@ -357,27 +357,29 @@ async def test_tages_kwh_fuehrt_die_kuehl_komponente(db):
 
 @pytest.mark.asyncio
 async def test_snapshot_schreibt_den_kuehl_key(db):
-    """Ohne diesen Key gäbe es im Standalone-Betrieb keine Kühl-Kurve."""
+    """Ohne diesen Key gäbe es im Standalone-Betrieb keine Kühl-Kurve.
+
+    ⭐ **Angepasst in HA-Bauform §9 (Standalone-Gleichstand S2, 25.10.2026), klassifiziert:** (1) der Snapshot liest
+    die Fenster des Integrators im echten Inbound-Cache (``mittel_abschliessen``) statt eines Momentanwerts, nur bei
+    lebender Verbindung und nur für Geräte der DB (die Keys je Typ aus ``mittelwert_live_keys``) — deshalb ein echter
+    Cache und eine echte Wärmepumpe statt des Platzhalters; (2) die Warmwasser-Temperatur wird jetzt **mitgeschrieben**
+    (Mittelwert-Mitschrift aus MQTT, S2-1) — bis S2 stand hier ``not in rows``. Die Kühl-Zusage bleibt wörtlich.
+    """
+    import time
     from contextlib import asynccontextmanager
 
     from backend.services import mqtt_live_history_service as mlh
+    from backend.services.mqtt_inbound_service import MqttInboundCache
 
     anlage = await factories.anlage(db, anlagenname="Snapshot-Probe")
+    wp = await factories.investition(db, anlage.id, "waermepumpe", bezeichnung="WP")
     await db.flush()
 
-    cache = SimpleNamespace(get_all_live_raw=lambda: {
-        anlage.id: {
-            "basis": {},
-            "inv": {
-                "7": {
-                    HEIZEN: (0.0, None),
-                    KUEHLEN: (2000.0, None),
-                    # Kein Leistungswert — muss ausgefiltert bleiben.
-                    "warmwasser_temperatur_c": (48.0, None),
-                },
-            },
-        },
-    })
+    cache = MqttInboundCache()
+    cache.verbinden()
+    t = time.time() - 120
+    for key, wert in ((HEIZEN, "0"), (KUEHLEN, "2000"), ("warmwasser_temperatur_c", "48")):
+        cache.on_message(f"eedc/{anlage.id}_P/live/inv/{wp.id}_WP/{key}", wert, jetzt=t)
 
     @asynccontextmanager
     async def _session():
@@ -388,7 +390,7 @@ async def test_snapshot_schreibt_den_kuehl_key(db):
          patch.object(mlh, "get_session", _session):
         geschrieben = await mlh.snapshot_live_cache()
 
-    assert geschrieben == 2
+    assert geschrieben == 3
     rows = {
         r.component_key: r.value_w
         # Weites Fenster um die geteilte Ablesung: `snapshot_live_cache`
@@ -398,9 +400,9 @@ async def test_snapshot_schreibt_den_kuehl_key(db):
             anlage.id, _JETZT - timedelta(days=1), _JETZT + timedelta(days=1), db,
         )
     }
-    assert rows["inv:7:leistung_kuehlen_w"] == 2000.0
-    assert rows["inv:7:leistung_heizen_w"] == 0.0
-    assert "inv:7:warmwasser_temperatur_c" not in rows
+    assert rows[f"inv:{wp.id}:leistung_kuehlen_w"] == 2000.0
+    assert rows[f"inv:{wp.id}:leistung_heizen_w"] == 0.0
+    assert rows[f"inv:{wp.id}:warmwasser_temperatur_c"] == 48.0, "seit S2 mitgeschrieben (Mittelwert-Mitschrift)"
 
 
 # ── K3d · Die Zuordnungs-Fläche sagt es auch am dritten Feld ────────────────

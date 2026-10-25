@@ -60,7 +60,7 @@ im Block *Gerät gesamt*, gleich welche Bauart. Im Block „Überblick" erschein
 läuft. Auch die Warmwasser-Temperatur steht jetzt je Gerät. Die Werte sind reine Anzeige: aus der Heizstab-Leistung rechnet
 eedc keine Menge. Trägt der Sensor in Home Assistant `state_class: measurement`, übernimmt eedc seine Stundenmittel aus der
 Langzeitstatistik — rückwirkend, so weit sie zurückreicht; fehlt das, sagt es der Daten-Checker („Sensor ohne
-Langzeitstatistik"). Über MQTT gibt es diese Werte nur live ([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional),
+Langzeitstatistik"). Über MQTT schreibt eedc die Stundenmittel selbst mit (siehe unten) ([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional),
 [Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)).
 Die Kachel „Vorlauf · Rücklauf" steht am Heizkreis deines Hauses — an der Fußbodenheizung oder am Heizkörper, je nachdem,
 was du am Gerät unter *Vorlauftemperatur* eingetragen hast (ohne Angabe am Hydraulikmodul); stehen viele Kacheln in einer
@@ -124,6 +124,17 @@ gibt es nur über Home Assistant. Unter *Einstellungen → Datenquellen* wählst
 **Inbound** und siehst dort, was ankommt und wie eedc es versteht. Die Zahlen 0 bis 5 gelten nur über MQTT; an einem
 HA-Sensor bleibt eine Zahl wie bisher „unbestimmt" — sie ist dort ein Rohwert deines Geräts
 ([Wärme & Klima → Modus über MQTT](HANDBUCH_WAERME_KLIMA.md#ohne-home-assistant-der-modus-über-mqtt)).
+
+**Ohne Home Assistant: Stundenwerte für Temperaturen, Leistungen und Ladestand aus MQTT.** Was Home Assistant aus seiner
+Langzeitstatistik liefert, schreibt eedc für MQTT jetzt selbst mit: alle 5 Minuten das zeitgewichtete Mittel jedes
+Live-Werts (Vorlauf, Rücklauf, Warmwasser-Temperatur, Leistungen, Zusatzheizung, Ladestand), daraus je Stunde Mittel,
+Minimum und Maximum. Damit bekommst du auch ohne Home Assistant in *Cockpit → Tag* das Temperatur-Diagramm mit Ø Vorlauf
+und Ø Spreizung. Senden bei jeder Änderung genügt — ein Wert gilt, bis der nächste kommt; eine Wärmepumpe, die alle paar
+Minuten an- und ausgeht, ergibt ihren mittleren Verbrauch. Die Stundenwerte beginnen mit der Zuordnung, frühere Tage bleiben
+leer; fällt der Broker aus, bleibt die Zeit eine Lücke. Ist einem Feld ein Home-Assistant-Sensor zugeordnet, gilt weiter
+der; Stundenpreise und Kosten kommen nur aus einem Home-Assistant-Preissensor. Der **Tagesverlauf** aus MQTT zeigt jetzt
+ebenfalls diese 5-Minuten-Mittel statt einzelner Momentanwerte
+([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)).
 
 ## v4.1.10 — 24. Oktober 2026
 

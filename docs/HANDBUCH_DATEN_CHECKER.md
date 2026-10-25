@@ -136,7 +136,7 @@ eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne L
 | 16 | Klimaanlage – Betriebsmodus (§4.14) | greift | greift |
 | 16a | **Betriebsmodus – unbekannter Wert** (§4.14a) | greift | **wird übersprungen** (der Wert kommt aus HA) |
 | 17 | **Sensor-Zuordnung – Leistung ↔ Energie** (§4.15) | greift | **wird übersprungen** (Einheit kommt aus HA) |
-| 17a | **Sensor ohne Langzeitstatistik** (§4.15a) | greift | **wird übersprungen** (`state_class` kommt aus HA; über MQTT gibt es keine Langzeitstatistik) |
+| 17a | **Sensor ohne Langzeitstatistik** (§4.15a) | greift | **wird übersprungen** (`state_class` kommt aus HA; über MQTT schreibt eedc die Stundenmittel selbst mit) |
 | 18 | Quellen-Konflikte (§4.16) | greift | greift |
 | 19 | **Datenquellen-Drift zu HA** (§4.17) | greift | **wird übersprungen** (keine Vergleichsseite) |
 | 20 | PV-Doppelerfassung (§4.18) | greift | greift |
@@ -913,9 +913,9 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **„\[Gerät\]": n Sensor(en) ohne Langzeitstatistik — Live ja, Tagesverlauf nein** | ℹ️ INFO | Die Meldung nennt je Sensor das Feld und die Entität. | In Home Assistant `state_class: measurement` ergänzen (per `customize`, HA-Neustart nötig) oder einen Template-Sensor anlegen, der es mitbringt, und ihn unter *Einstellungen → Datenquellen* zuordnen. Ab dann übernimmt eedc die Stundenmittel aus der Statistik; Stunden, für die HA keine geführt hat, bleiben leer. |
+| **„\[Gerät\]": n Sensor(en) ohne Langzeitstatistik — Live ja, Tagesverlauf nein** | ℹ️ INFO | Die Meldung nennt je Sensor das Feld und die Entität. | In Home Assistant `state_class: measurement` ergänzen (per `customize`, HA-Neustart nötig) oder einen Template-Sensor anlegen, der es mitbringt, und ihn unter *Einstellungen → Datenquellen* zuordnen. Ab dann übernimmt eedc die Stundenmittel aus der Statistik; Stunden, für die HA keine geführt hat, bleiben leer. Oder: den Wert über MQTT liefern (Quelle **Inbound** statt des HA-Sensors) — dann entstehen die Stundenmittel aus der 5-Minuten-Mitschrift von eedc, ab der Zuordnung, nicht rückwirkend. |
 
-> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn HA den Sensor gerade nicht liefert, an stillgelegten Geräten und für Felder, deren Quelle MQTT ist — über MQTT entstehen ohnehin keine Stundenmittel (benannte Grenze, [Wärme & Klima, Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)). Die Warmwasser-Temperatur prüft diese Kategorie nicht.
+> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn HA den Sensor gerade nicht liefert, an stillgelegten Geräten und für Felder, deren Quelle MQTT ist — dort schreibt eedc die Stundenmittel selbst aus seiner 5-Minuten-Mitschrift, eine Langzeitstatistik braucht es nicht ([Wärme & Klima, Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)). Ist einem Feld ein HA-Sensor **und** dasselbe MQTT-Topic zugeordnet, gilt der HA-Sensor — fehlt ihm die Langzeitstatistik, bleibt die Meldung, und eedc schreibt das Topic nicht stattdessen mit. Die Warmwasser-Temperatur prüft diese Kategorie nicht.
 
 ---
 

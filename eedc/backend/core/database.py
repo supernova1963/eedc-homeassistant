@@ -726,6 +726,26 @@ def _migrate_mqtt_live_snapshot_ts_unix(connection) -> None:
     connection.execute(_text('ALTER TABLE mqtt_live_snapshots ADD COLUMN ts_unix INTEGER'))
 
 
+def _migrate_mqtt_live_snapshot_min_max(connection) -> None:
+    """HA-Bauform §9, G3 (Standalone-Gleichstand S2): Spalten ``min``/``max`` an ``mqtt_live_snapshots``.
+
+    Extrema des 5-Minuten-Fensters neben dem zeitgewichteten Mittel (``value_w``). Nullable, ohne Default:
+    Bestandszeilen tragen ``NULL``. Jede Spalte wird einzeln geprüft (eine Installation mit ``ts_unix`` aus S1
+    bekommt beide nach). Eine frische Installation bekommt sie über ``create_all``. Idempotent; Muster
+    ``_migrate_mqtt_live_snapshot_ts_unix``.
+    """
+    from sqlalchemy import inspect as _inspect
+    from sqlalchemy import text as _text
+
+    inspector = _inspect(connection)
+    if 'mqtt_live_snapshots' not in inspector.get_table_names():
+        return
+    vorhanden = {col['name'] for col in inspector.get_columns('mqtt_live_snapshots')}
+    for spalte in ('min', 'max'):
+        if spalte not in vorhanden:
+            connection.execute(_text(f'ALTER TABLE mqtt_live_snapshots ADD COLUMN "{spalte}" FLOAT'))
+
+
 async def run_migrations(conn):
     """
     Führt einfache Migrationen durch.
@@ -1199,6 +1219,7 @@ async def run_migrations(conn):
 
         # HA-Bauform §9, E-SG-8: `mqtt_live_snapshots.ts_unix` (Zeitachse der MQTT-Mitschrift).
         _migrate_mqtt_live_snapshot_ts_unix(connection)
+        _migrate_mqtt_live_snapshot_min_max(connection)
 
     await conn.run_sync(_run_migrations)
 

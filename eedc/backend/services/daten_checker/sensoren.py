@@ -65,12 +65,15 @@ def _meldung_ohne_langzeitstatistik(kat: str, inv, betroffen: list[str]) -> Chec
         details=(
             "Diese Sensoren tragen in Home Assistant kein `state_class: measurement`: "
             f"{'; '.join(betroffen)}. Den aktuellen Wert zeigt eedc trotzdem (Live, Überblick). "
-            "Stündliche Mittelwerte für den Tagesverlauf entstehen aber nur aus der "
-            "Langzeitstatistik von Home Assistant, und die führt HA nur mit diesem `state_class`. "
+            "Stündliche Mittelwerte für den Tagesverlauf entstehen bei einem Home-Assistant-Sensor aber "
+            "nur aus seiner Langzeitstatistik, und die führt HA nur mit diesem `state_class`. "
             "Der Weg: in Home Assistant `state_class: measurement` ergänzen (per `customize`, "
             "HA-Neustart nötig) oder einen Template-Sensor anlegen, der es mitbringt, und ihn hier "
             "zuordnen. Ab dann füllt eedc die Stundenmittel aus der Statistik nach, so weit sie "
-            "zurückreicht — Stunden, für die HA keine Statistik geführt hat, bleiben leer."
+            "zurückreicht — Stunden, für die HA keine Statistik geführt hat, bleiben leer. "
+            "Kommt der Wert stattdessen über MQTT (Datenquelle „Inbound“ statt des HA-Sensors), "
+            "entstehen die Stundenmittel aus der 5-Minuten-Mitschrift von eedc — ab der Zuordnung, "
+            "nicht rückwirkend."
         ),
         link=LINK_DATENQUELLEN,
         investition_id=inv.id,

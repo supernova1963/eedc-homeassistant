@@ -17,7 +17,13 @@ den auch die Mitschrift nach ihrem Schreiben fortschreibt; seit E4e ``kosten.py`
   Anlegen; meldet der Sensor später eine andere, wird **nicht** geschrieben und einmal je Kanal und Tag
   geloggt. **Keine Umrechnung** — die Normierung auf die Registry-Einheit ist Sache des Lesers (E3); die
   Regel „unbekannte Einheit ÷ 1000" aus ``get_hourly_sensor_data`` gilt hier ausdrücklich nicht.
-  Mittelwerte von Sensoren OHNE Langzeitstatistik bekommen in E1 keine Zeile (Mitschrift: Quelle offen).
+  Mittelwerte von HA-Sensoren OHNE Langzeitstatistik bekommen keine Zeile (Daten-Checker «Sensor ohne
+  Langzeitstatistik»).
+* **Mitschrift ``mean`` (MQTT, HA-Bauform §9, Standalone-Gleichstand S2)** — je Mittelwert-Feld ohne HA-Zuordnung
+  (``_mean_mitschrift_zuordnung``, G1) aus den 5-Minuten-Snapshots des Inbound (``mqtt_live_snapshots``: Fenster-Mittel
+  aus dem Integrator, ``min``/``max``): je abgeschlossener Stunde ``mean`` längengewichtet, ``min``/``max`` Extrema
+  (``mittel_je_stunde``), Kanal-Einheit = Registry-Einheit, ``statistic_id`` = MQTT-Schlüssel
+  (``mqtt_live_statistic_id``). Erster Lauf nur die abgeschlossene Stunde, nicht rückwirkend (E2/E-SG-7).
 * **Eigene Summe (MQTT/ohne HA)** — aus den Rohständen in ``mqtt_energy_snapshots`` mit HAs Regel
   (``core/berechnungen/ha_summe.py``). Der heutige Deckel (R3) bleibt hier als **Schreibfilter**:
   dieselbe Schwelle (``plausibility.schwelle_pv_einspeisung_stunde_kwh`` ×
@@ -78,7 +84,7 @@ from backend.models.kanal import (
 )
 from backend.services.kanal import merken
 from backend.services.kanal.katalog import (
-    ist_mean_spiegel,
+    ist_mean_kanal,
     ist_tagesgroesse_ohne_kanal,
     modus_kanal_key,
     zaehler_art,
@@ -444,8 +450,8 @@ def _mean_zuordnung(k: _Kontext) -> dict[str, str]:
             inv_id = sk.split(":")[1]
             if inv_id in k.stillgelegt:
                 return False
-            return ist_mean_spiegel(sk, getattr(k.invs.get(inv_id), "typ", None))
-        return ist_mean_spiegel(sk, None)
+            return ist_mean_kanal(sk, getattr(k.invs.get(inv_id), "typ", None))
+        return ist_mean_kanal(sk, None)
 
     return {sk: eid for sk, eid in out.items() if _gilt(sk)}
 
@@ -477,7 +483,7 @@ async def _mean_spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
     tag = k.zeitpunkt.date()
     for sk, eid in sorted(zuordnung.items()):
         if eid not in gelesen:
-            continue                      # keine Langzeitstatistik ⇒ kein Spiegel (Mitschrift: Quelle offen)
+            continue                      # keine Langzeitstatistik ⇒ kein Spiegel (eine HA-Entität sperrt die MQTT-Mitschrift, G1)
         meta, roh = gelesen[eid]
         roh = [z for z in roh if z["start_ts"] > ts_nach[sk] and z["mean"] is not None]
         if not roh:
@@ -512,6 +518,200 @@ async def _mean_spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
     if zeilen:
         await db.flush()
     return await _zeilen_einfuegen(db, zeilen)
+
+
+# ── Mittelwert-Mitschrift (MQTT, HA-Bauform §9, Standalone-Gleichstand S2) ───
+
+#: Länge eines Snapshot-Fensters (``mqtt_live_history_service``, ``IntervalTrigger(minutes=5)``) — die Obergrenze des
+#: Gewichts einer 5-Minuten-Zeile: eine Lücke davor (Broker weg, Neustart) zählt nicht als gemessene Zeit.
+_SNAPSHOT_FENSTER = 300
+
+
+def mqtt_live_statistic_id(kanal_key: str) -> str:
+    """``kanal_quelle.statistic_id`` einer MQTT-Live-Mitschrift — der MQTT-Schlüssel nach dem Topic-Pfad
+    (``inv:7:vorlauf_temperatur_c`` → ``mqtt:inv/7/vorlauf_temperatur_c``, ``basis:netzbezug_w`` → ``mqtt:netzbezug_w``;
+    E-SG-4). Dieselbe Form wie ``mqtt_modus_statistic_id``."""
+    teile = kanal_key.split(":")
+    return "mqtt:" + "/".join(teile[1:] if teile[0] == "basis" else teile)
+
+
+def _mitschrift_feld(sk: str, k: _Kontext) -> Optional[tuple[Optional[str], str, Optional[str], Optional[dict]]]:
+    """Snapshot-Key → ``(inv_id | None, feld, typ, parameter)``; ``None`` für einen Key ohne Gerät oder mit
+    stillgelegtem Gerät (Gerät aktiv, G1 (4) — dieselbe Grenze wie ``_mean_zuordnung``)."""
+    teile = sk.split(":")
+    if teile[0] == "basis" and len(teile) == 2:
+        return None, teile[1], None, None
+    if teile[0] != "inv" or len(teile) != 3:
+        return None            # Modus-Zeile (``inv:<id>:betriebsmodus:<modus>``) oder fremd
+    inv = k.invs.get(teile[1])
+    if inv is None or teile[1] in k.stillgelegt:
+        return None
+    parameter = getattr(inv, "parameter", None)
+    return teile[1], teile[2], getattr(inv, "typ", None), parameter if isinstance(parameter, dict) else None
+
+
+def _mean_mitschrift_zuordnung(k: _Kontext, keys) -> dict[str, str]:
+    """``{kanal_key: Registry-Einheit}`` der Snapshot-Keys, die eine Mitschrift-Zeile bekommen (G1, Zähler-Regel):
+
+    (1) der Key hat Zeilen (der Aufrufer reicht nur solche) — «Wert entscheidet»; (2) er liegt **nicht** in
+    ``_mean_zuordnung(k)`` — jede HA-Entität in ``live``/``quellen``-HA macht ihn zum HA-Feld, auch ohne
+    Langzeitstatistik (dort bleibt die Checker-INFO; nie zwei Familien im Kanal); (3) seine ``quellen``-Wahl ist keine
+    andere als Inbound/Gateway (HA oder «keine» schließen aus — dieselbe Regel wie ``mqtt_modus_geraete``); (4) das Gerät
+    ist aktiv. Dazu muss er ein Mittelwert-Feld sein (``mittelwert_live_keys``: kein Preis, kein Modus).
+    """
+    from backend.services.kanal.katalog import mittelwert_live_keys
+    from backend.services.live_sensor_config import extract_quellen_live
+    from backend.services.snapshot.keys import QUELLE_MQTT_ENERGY
+
+    ha_felder = set(_mean_zuordnung(k))
+    quellen_basis, quellen_inv, _ha = extract_quellen_live(k.anlage)
+    out: dict[str, str] = {}
+    for sk in sorted(keys):
+        feld = _mitschrift_feld(sk, k) if sk not in ha_felder else None
+        if feld is None:
+            continue
+        inv_id, key, typ, parameter = feld
+        wahl = (quellen_basis if inv_id is None else quellen_inv.get(inv_id) or {}).get(key)
+        if wahl is not None and wahl[0] not in QUELLE_MQTT_ENERGY:
+            continue
+        einheit = mittelwert_live_keys(typ, parameter).get(key)
+        if einheit is not None:
+            out[sk] = einheit
+    return out
+
+
+async def _mittel_snapshot_keys(db: AsyncSession, anlage_id: int, *, von: int, bis: int) -> list[str]:
+    """Die Snapshot-Keys mit Zeilen in ``[von, bis)`` (nur Zeilen mit ``ts_unix``; Modus-Zeilen fallen später heraus)."""
+    from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+
+    return list((await db.execute(
+        select(MqttLiveSnapshot.component_key).where(and_(
+            MqttLiveSnapshot.anlage_id == anlage_id,
+            MqttLiveSnapshot.ts_unix.is_not(None),
+            MqttLiveSnapshot.ts_unix >= von, MqttLiveSnapshot.ts_unix < bis,
+        )).distinct()
+    )).scalars().all())
+
+
+async def _mittel_snapshot_zeilen(db: AsyncSession, anlage_id: int, keys: list[str], *, von: int,
+                                  bis: int) -> dict[str, list[tuple[int, float, Optional[float], Optional[float]]]]:
+    """Die 5-Minuten-Zeilen ``{key: [(ts_unix, mittel, min, max)]}`` in ``[von, bis)``, nach Zeit."""
+    from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+
+    out: dict[str, list[tuple[int, float, Optional[float], Optional[float]]]] = {}
+    for key, ts, wert, lo, hi in (await db.execute(
+        select(MqttLiveSnapshot.component_key, MqttLiveSnapshot.ts_unix, MqttLiveSnapshot.value_w,
+               MqttLiveSnapshot.min, MqttLiveSnapshot.max).where(and_(
+            MqttLiveSnapshot.anlage_id == anlage_id,
+            MqttLiveSnapshot.component_key.in_(keys),
+            MqttLiveSnapshot.ts_unix.is_not(None),
+            MqttLiveSnapshot.ts_unix >= von, MqttLiveSnapshot.ts_unix < bis,
+        )).order_by(MqttLiveSnapshot.ts_unix)
+    )).all():
+        out.setdefault(key, []).append((int(ts), float(wert), lo, hi))
+    return out
+
+
+def mittel_je_stunde(zeilen) -> list[tuple[int, float, float, float]]:
+    """5-Minuten-Zeilen eines Keys → ``[(start_ts, mean, min, max)]`` je Stunde (rein, HA-Bauform §9, E-SG-8).
+
+    Stunde = die lokale volle Stunde über ``_stunden_start_ts`` aus ``ts_unix`` (mit ``fold``: Herbst zwei Stunden) —
+    dieselbe Regel wie Modus-Mitschrift und eigene Summe; eine Zeile gehört zur Stunde ihres Abschlusses.
+    **Längengewichtet** über die ``ts_unix``-Differenzen: das Gewicht einer Zeile ist der Abstand zur vorigen, höchstens
+    ein Snapshot-Fenster (``_SNAPSHOT_FENSTER``; ohne Vorgänger ein Fenster) — eine Lücke (Broker weg, Neustart) zählt
+    nicht als gemessene Zeit, die Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9). ``min``/``max`` = Extrema der
+    Fenster (ohne Spalte: das Fenster-Mittel). Eine Stunde ohne Zeilen fehlt.
+    """
+    je_stunde: dict[int, list[float]] = {}     # start_ts → [Σ Gewicht·Mittel, Σ Gewicht, min, max]
+    vorher: Optional[int] = None
+    for ts, mittel, lo, hi in sorted(zeilen, key=lambda z: z[0]):
+        gewicht = _SNAPSHOT_FENSTER if vorher is None else min(_SNAPSHOT_FENSTER, ts - vorher)
+        vorher = ts
+        if gewicht <= 0:
+            continue                          # zwei Zeilen in derselben Sekunde: die erste zählt
+        lo = mittel if lo is None else float(lo)
+        hi = mittel if hi is None else float(hi)
+        stunde = _stunden_start_ts(datetime.fromtimestamp(ts))
+        acc = je_stunde.get(stunde)
+        if acc is None:
+            je_stunde[stunde] = [gewicht * mittel, gewicht, lo, hi]
+        else:
+            acc[0] += gewicht * mittel
+            acc[1] += gewicht
+            acc[2] = min(acc[2], lo)
+            acc[3] = max(acc[3], hi)
+    return [(stunde, acc[0] / acc[1], acc[2], acc[3]) for stunde, acc in sorted(je_stunde.items())]
+
+
+def _mitschrift_ab(st: Optional[_KanalStand], sid: str, bis: int) -> int:
+    """Erste Stunde, die die Mitschrift für diesen Kanal schreiben darf: nach der letzten Zeile des Kanals; bei neuer
+    Quelle (kein Kanal, Spiegel davor, anderer Schlüssel) nur die eben abgeschlossene Stunde (E2, nicht rückwirkend)."""
+    neu = st is None or st.quelle is None or st.quelle.familie != FAMILIE_MITSCHRIFT or st.quelle.statistic_id != sid
+    letzte = st.letzte.start_ts + _STUNDE if st is not None and st.letzte is not None else None
+    ab = bis - _STUNDE if neu or letzte is None else max(letzte, bis - _NAH_STUNDEN * _STUNDE)
+    return max(ab, letzte) if letzte is not None else ab
+
+
+async def _mean_mitschrift_zeilen(db: AsyncSession, k: _Kontext, st: Optional[_KanalStand], sk: str, einheit: str,
+                                  stunden: list[tuple[int, float, float, float]]) -> list[dict]:
+    """Kanal (Registry-Einheit) und Quelle (``mitschrift``/MQTT-Schlüssel, Offset 0) — dann die Zeilen der Stunden."""
+    sid = mqtt_live_statistic_id(sk)
+    if st is None:
+        kanal = (await kanaele_holen(db, k.anlage.id, {sk: (ART_MEAN, einheit)}))[sk]
+        st = _KanalStand(kanal, None, None)
+    elif st.kanal.einheit != einheit:
+        schl = (k.anlage.id, sk)
+        if _EINHEIT_GEWARNT.get(schl) != k.zeitpunkt.date():
+            _EINHEIT_GEWARNT[schl] = k.zeitpunkt.date()
+            logger.warning("Kanal-Mitschrift mean %s: die Registry führt „%s“, der Kanal „%s“ — nicht geschrieben "
+                           "(keine Umrechnung im Schreiber)", sk, einheit, st.kanal.einheit)
+        return []
+    if st.quelle is None or st.quelle.familie != FAMILIE_MITSCHRIFT or st.quelle.statistic_id != sid:
+        # Quellenwechsel wie «Eigene Summe»: die neue Quelle gilt ab ihrer ersten Stunde.
+        db.add(KanalQuelle(kanal_id=st.kanal.id, gueltig_ab=stunden[0][0], familie=FAMILIE_MITSCHRIFT,
+                           statistic_id=sid, offset=0.0))
+        await db.flush()
+    return [{"kanal_id": st.kanal.id, "start_ts": start, "sum": None, "state": None, "mean": mittel,
+             "min": lo, "max": hi, "familie": FAMILIE_MITSCHRIFT} for start, mittel, lo, hi in stunden]
+
+
+async def _mean_mitschrift(db: AsyncSession, k: _Kontext) -> int:
+    """Phase des Stundenlaufs: Mittelwert-Mitschrift aus den 5-Minuten-Snapshots des MQTT-Inbound (HA-Bauform §9, S2-2).
+
+    Zuordnung (G1) · 5-Minuten-Zeilen lesen · Stunde verdichten (``mittel_je_stunde``) · Zeilen bauen. Nur
+    abgeschlossene Stunden (``bis`` = Beginn der laufenden), eine schon geschriebene Stunde nie neu (``ON CONFLICT DO
+    NOTHING``). Unabhängig davon, ob HA erreichbar ist — der Spiegel davor fragt HA, diese Phase nicht.
+    """
+    bis = _stunden_start_ts(k.zeitpunkt)
+    auswahl = _mean_mitschrift_zuordnung(k, await _mittel_snapshot_keys(db, k.anlage.id, von=bis - _STUNDE, bis=bis))
+    if not auswahl:
+        return 0
+    da = {kn.key: kn for kn in (await db.execute(
+        select(Kanal).where(and_(Kanal.anlage_id == k.anlage.id, Kanal.key.in_(list(auswahl))))
+    )).scalars().all()}
+    ids = [kn.id for kn in da.values()]
+    letzte = await letzte_zeilen(db, ids, nah_ab=bis - _NAH_STUNDEN * _STUNDE)
+    quellen = await aktuelle_quellen(db, ids)
+    staende = {sk: _KanalStand(kn, letzte.get(kn.id), quellen.get(kn.id)) for sk, kn in da.items()}
+    ab_je = {sk: _mitschrift_ab(staende.get(sk), mqtt_live_statistic_id(sk), bis) for sk in auswahl}
+    offen = [sk for sk, ab in ab_je.items() if ab < bis]
+    if not offen:
+        return 0
+    roh = await _mittel_snapshot_zeilen(db, k.anlage.id, offen, von=min(ab_je[sk] for sk in offen) - _SNAPSHOT_FENSTER,
+                                        bis=bis)
+    zeilen: list[dict] = []
+    for sk in offen:
+        stunden = [z for z in mittel_je_stunde(roh.get(sk, ())) if ab_je[sk] <= z[0] and z[0] + _STUNDE <= bis]
+        if stunden:
+            zeilen.extend(await _mean_mitschrift_zeilen(db, k, staende.get(sk), sk, auswahl[sk], stunden))
+    return await _zeilen_einfuegen(db, zeilen)
+
+
+async def schreibe_mean_mitschrift(
+    db: AsyncSession, anlage, zeitpunkt: datetime, *, kontext: Optional[_Kontext] = None,
+) -> int:
+    """Die Mittelwert-Mitschrift aus MQTT für eine Anlage (Einstieg für Proben; im Betrieb ruft der Stundenlauf die Phase)."""
+    return await _mean_mitschrift(db, kontext or await _kontext(db, anlage, zeitpunkt))
 
 
 # ── Eigene Summe (MQTT-Rohstände) ───────────────────────────────────────────
@@ -813,7 +1013,7 @@ async def _schreibe_betriebsart_anteile(
 
 def mqtt_modus_statistic_id(inv_id: int | str) -> str:
     """``kanal_quelle.statistic_id`` der MQTT-Modus-Mitschrift — der MQTT-Schlüssel des Geräts (E-SG-4/E-SG-6)."""
-    return f"mqtt:inv/{inv_id}/betriebsmodus"
+    return mqtt_live_statistic_id(f"inv:{inv_id}:betriebsmodus")
 
 
 #: ``component_key`` der Modus-Zeilen in ``mqtt_live_snapshots`` (``inv:<id>:betriebsmodus:<modus>``).
@@ -935,6 +1135,10 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
         async with db.begin_nested():
             k = await _kontext(db, anlage, zeitpunkt)
             n = await schreibe_spiegel(db, anlage, zeitpunkt, kontext=k)
+            # HA-Bauform §9 (Standalone-Gleichstand S2): Mittelwert-Mitschrift aus den MQTT-5-Minuten-Snapshots — NACH
+            # dem Spiegel (der die HA-Felder führt; sie bleiben ausgeschlossen, G1) und ohne HA (der Spiegel kehrt ohne
+            # HA vorher zurück, diese Phase nicht).
+            n += await _mean_mitschrift(db, k)
             n += await schreibe_eigene_summe(db, anlage, zeitpunkt, kontext=k)
             # HA-Bauform E4c: der abgeleitete PV-Anteil der Heimladung — NACH den Roh-Familien, aus deren Zeilen er
             # die Stunde rechnet (``abgeleitet.py``).

@@ -43,7 +43,7 @@ from backend.models.mqtt_gateway_mapping import MqttGatewayMapping  # noqa: F401
 from backend.services import ha_state_service as hss
 from backend.services.daten_checker import DatenChecker
 from backend.services.daten_checker.kategorien import CheckKategorie, CheckSeverity, LINK_DATENQUELLEN
-from backend.services.kanal.katalog import ist_mean_spiegel
+from backend.services.kanal.katalog import ist_mean_kanal
 from backend.services.live_komponenten_builder import build_komponenten
 from backend.services.live_power_service import LivePowerService
 
@@ -100,7 +100,7 @@ def test_jedes_neue_feld_hat_einen_leser_im_komponenten_hub():
 def test_mittelwert_kanal_im_katalog():
     """B7: kein neuer Datenpfad — der Kanal legt °C/W-Live-Felder als Mittelwert-Spiegel an."""
     for key in NEU:
-        assert ist_mean_spiegel(f"inv:7:{key}", "waermepumpe"), key
+        assert ist_mean_kanal(f"inv:7:{key}", "waermepumpe"), key
 
 
 # ═══ S1-2 Live je Gerät ══════════════════════════════════════════════════════

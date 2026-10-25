@@ -32,12 +32,14 @@ O9      Feld in ``KUMULATIVE_COUNTER_FELDER``                       ``stand`` ·
 —       Live-/Preis-Feld mit Einheit W · kW · % · °C · ct/kWh       ``mean`` · Spiegel/Mitschrift
 ======  ==========================================================  ==============================
 
-**Stand E1 — was geschrieben wird** (``e1_schreiber``): ``sum`` und ``stand`` als Spiegel (HA) und
-als eigene Summe aus MQTT-Rohständen; ``mean`` als Spiegel, wo der Sensor eine HA-Langzeitstatistik hat
-(``mean/min/max`` wörtlich, Kanal-Einheit = HAs Einheit beim Anlegen); die Betriebsart-Mitschrift.
-**Nicht** geschrieben: die Mittelwert-**Mitschrift** (``mitschrift_offen``: Sensoren ohne
-Langzeitstatistik — die Quelle je Feld ist offen, eigener Punkt vor E3; Entscheid Master 05.10.) und die
-abgeleiteten Kanäle (``ABGELEITETE_KANAELE``, im Auftrag E1 ausgeschlossen).
+**Was geschrieben wird** (``e1_schreiber``): ``sum`` und ``stand`` als Spiegel (HA) und als eigene Summe aus
+MQTT-Rohständen; ``mean`` (``mittelwert_kanal``) als Spiegel, wo eine HA-Entität zugeordnet ist und der Sensor eine
+Langzeitstatistik hat (``mean/min/max`` wörtlich, Kanal-Einheit = HAs Einheit beim Anlegen), sonst seit HA-Bauform §9
+(Standalone-Gleichstand S2, 25.10.2026) als **MQTT-Mitschrift** aus den 5-Minuten-Snapshots des Inbound
+(``schreiber._mean_mitschrift``, Kanal-Einheit = Registry-Einheit; welche Live-Keys der Snapshot dafür mitschreibt,
+sagt ``mittelwert_live_keys`` — ohne den Preis, G7); die Betriebsart-Mitschrift; die abgeleiteten Kanäle, soweit
+``ABGELEITETE_KANAELE`` sie „(geschrieben)" nennt. Bis S2 hieß ``mittelwert_kanal`` ``mitschrift_offen`` (Quelle der
+Mitschrift offen, Entscheid Master 05.10.).
 """
 
 from __future__ import annotations
@@ -58,6 +60,7 @@ from backend.core.field_definitions import (
     _SNAPSHOT_KOMPATIBILITAET,
     basis_feld_key,
     einheit_klasse,
+    get_live_felder_fuer_investition,
 )
 from backend.models.kanal import (
     ART_MEAN,
@@ -190,16 +193,17 @@ class KanalZuweisung:
     schluessel: str
     #: Schreibt E1 diesen Kanal?
     e1_schreiber: bool
-    #: ``mean`` ohne Langzeitstatistik: Mitschrift vorgesehen, Quelle noch nicht festgelegt (vor E3).
-    mitschrift_offen: bool = False
+    #: ``mean`` eines Live-/Preis-Felds: Spiegel bei HA-Entität, sonst MQTT-Mitschrift (HA-Bauform §9). Bis S2
+    #: ``mitschrift_offen`` (Quelle der Mitschrift offen).
+    mittelwert_kanal: bool = False
 
 
 def _zuweisung(
     liste: str, typ: Optional[str], feld: str, *, art: Optional[str] = None,
     familien: tuple[str, ...] = (), ausnahme: Optional[str] = None, grund: str,
-    schluessel: str, e1: bool = False, mitschrift_offen: bool = False,
+    schluessel: str, e1: bool = False, mittelwert_kanal: bool = False,
 ) -> KanalZuweisung:
-    return KanalZuweisung(liste, typ, feld, art, familien, ausnahme, grund, schluessel, e1, mitschrift_offen)
+    return KanalZuweisung(liste, typ, feld, art, familien, ausnahme, grund, schluessel, e1, mittelwert_kanal)
 
 
 _SPIEGEL_ODER_MITSCHRIFT = (FAMILIE_SPIEGEL, FAMILIE_MITSCHRIFT)
@@ -260,10 +264,9 @@ def _regel_counter(liste: str, typ: Optional[str], feld: str) -> KanalZuweisung:
 def _regel_mean(liste: str, typ: Optional[str], feld: str, einheit: str, schluessel: str) -> Optional[KanalZuweisung]:
     if einheit in _MEAN_EINHEITEN:
         return _zuweisung(liste, typ, feld, art=ART_MEAN, familien=_SPIEGEL_ODER_MITSCHRIFT,
-                          grund="Leistung/Ladestand/Temperatur/Preis ⇒ mean (§3): Spiegel bei "
-                                "Langzeitstatistik (E1: mean/min/max wörtlich, Einheit = HA); ohne "
-                                "Langzeitstatistik Mitschrift — Quelle offen (vor E3)",
-                          schluessel=schluessel, e1=True, mitschrift_offen=True)
+                          grund="Leistung/Ladestand/Temperatur/Preis ⇒ mean (§3): Spiegel bei HA-Entität, "
+                                "sonst MQTT-Mitschrift (§9)",
+                          schluessel=schluessel, e1=True, mittelwert_kanal=True)
     return None
 
 
@@ -419,21 +422,43 @@ for _z in _ZUWEISUNGEN:
         _ART_JE_ZAEHLER.setdefault((None, _z.feld), _z.art)
 
 
-#: (typ, feld) der Mittelwert-Kanäle mit Spiegel. Anlagen-Ebene (Live-Basis, Preis): typ ``None``.
-_MEAN_SPIEGEL: frozenset[tuple[Optional[str], str]] = frozenset(
+#: (typ, feld) der Mittelwert-Kanäle (Spiegel bei HA-Entität, sonst MQTT-Mitschrift). Anlagen-Ebene (Live-Basis,
+#: Preis): typ ``None``.
+_MEAN_KANAL: frozenset[tuple[Optional[str], str]] = frozenset(
     (_z.typ, _z.feld) for _z in _ZUWEISUNGEN
-    if _z.art == ART_MEAN and _z.liste in (L_LIVE_INV, L_LIVE_BASIS, L_PREIS) and _z.mitschrift_offen
+    if _z.art == ART_MEAN and _z.liste in (L_LIVE_INV, L_LIVE_BASIS, L_PREIS) and _z.mittelwert_kanal
+)
+
+#: Die Teilmenge, die eine MQTT-Mitschrift bekommen kann: die Live-Felder (Gerät und Anlage) — **ohne den Preis**
+#: (G7: der Stundenpreis und die Kosten kommen nur aus einem HA-Preissensor; der MQTT-Key ``strompreis_ct`` ist kein
+#: Registry-Feld und bleibt im Snapshot nur für den Tagesverlauf).
+_MEAN_LIVE: frozenset[tuple[Optional[str], str]] = frozenset(
+    (_z.typ, _z.feld) for _z in _ZUWEISUNGEN
+    if _z.art == ART_MEAN and _z.liste in (L_LIVE_INV, L_LIVE_BASIS) and _z.mittelwert_kanal
 )
 
 
-def ist_mean_spiegel(sensor_key: str, inv_typ: Optional[str]) -> bool:
-    """Ist dieser Schlüssel (``basis:<key>`` / ``inv:<id>:<key>``) ein Mittelwert-Kanal mit Spiegel?
+def ist_mean_kanal(sensor_key: str, inv_typ: Optional[str]) -> bool:
+    """Ist dieser Schlüssel (``basis:<key>`` / ``inv:<id>:<key>``) ein Mittelwert-Kanal (Spiegel oder MQTT-Mitschrift)?
     Innengerät-Suffixe (``leistung_w-3``) tragen die Art ihres Basis-Felds."""
     if sensor_key.startswith("basis:"):
-        return (None, sensor_key.split(":", 1)[1]) in _MEAN_SPIEGEL
+        return (None, sensor_key.split(":", 1)[1]) in _MEAN_KANAL
     if sensor_key.startswith("inv:"):
-        return (inv_typ, basis_feld_key(sensor_key.split(":", 2)[2])) in _MEAN_SPIEGEL
+        return (inv_typ, basis_feld_key(sensor_key.split(":", 2)[2])) in _MEAN_KANAL
     return False
+
+
+def mittelwert_live_keys(typ: Optional[str], parameter: Optional[dict] = None) -> dict[str, str]:
+    """``{live_key: Registry-Einheit}`` der Live-Felder, deren 5-Minuten-Mittel der MQTT-Snapshot mitschreibt und aus
+    denen der Stundenlauf die Mittelwert-Mitschrift bildet (HA-Bauform §9, Standalone-Gleichstand S2, G3).
+
+    ``typ`` ``None`` = Anlagen-Ebene (``BASIS_LIVE_FELDER``); sonst die Live-Felder des Geräts nach
+    ``get_live_felder_fuer_investition`` (Bedingungen aus ``parameter``, Innengeräte-Kopien ``leistung_w-3`` mit der
+    Einheit ihres Basis-Felds). Die Auswahl ist die des Katalogs (``_MEAN_LIVE`` über ``basis_feld_key``): Leistung,
+    Ladestand, Temperatur — kein Zustandsfeld (der Modus hat seinen eigenen Pfad) und **kein Preis** (G7).
+    """
+    felder = BASIS_LIVE_FELDER if typ is None else get_live_felder_fuer_investition(typ, parameter)
+    return {f["key"]: f.get("einheit", "") for f in felder if (typ, basis_feld_key(f["key"])) in _MEAN_LIVE}
 
 
 def zuweisungen() -> list[KanalZuweisung]:

@@ -26,12 +26,13 @@ EEDC generiert die Topics automatisch aus den angelegten Anlagen und Investition
 
 ```
 eedc/{anlage_id}_{name}/
-├── live/                              # Echtzeit-Leistung (Watt)
+├── live/                              # Momentanwerte (W, °C, %) und der Betriebsmodus
 │   ├── einspeisung_w                  → 1100
 │   ├── netzbezug_w                    → 0
 │   └── inv/{inv_id}_{name}/
 │       ├── leistung_w                 → 4200
 │       ├── soc                        → 72       (nur Speicher/E-Auto)
+│       ├── vorlauf_temperatur_c       → 34.5     (nur Waermepumpe; ebenso ruecklauf_/warmwasser_temperatur_c)
 │       └── betriebsmodus              → 1        (nur Waermepumpe: Wort oder Code, siehe unten)
 │
 └── energy/                            # ZAEHLERSTAENDE (kWh, kumuliert)
@@ -122,6 +123,34 @@ Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern d
 **Nicht per MQTT lieferbar** (werden im Monatsabschluss manuell eingegeben oder berechnet):
 - Wetterdaten (`globalstrahlung`, `sonnenstunden`, `temperatur`)
 - `sonderkosten_euro`, `notizen`
+
+### Live-Mittelwerte: was eedc aus den Live-Topics mitschreibt
+
+Jedes Live-Topic mit einer Zahl ist ein Momentanwert — senden bei jeder Aenderung genuegt (ein Wert gilt bis zur
+naechsten Nachricht, wie in Home Assistant). Alle 5 Minuten haelt eedc daraus das **zeitgewichtete Mittel** des
+Fensters fest (mit Minimum und Maximum) und bildet je abgeschlossener Stunde **Stundenmittel** — dasselbe, was Home
+Assistant aus seinen 5-Minuten-Statistiken macht (seit Standalone-Gleichstand S2). Mitgeschrieben werden alle
+Live-Felder in W, °C und %:
+
+| Ebene | Topics (`live/…`) |
+|---|---|
+| Anlage | `einspeisung_w`, `netzbezug_w`, `netz_kombi_w`, `pv_gesamt_w`, `aussentemperatur_c` |
+| PV-Module, Wechselrichter, Balkonkraftwerk, Wallbox, Sonstiges | `inv/…/leistung_w` |
+| Speicher, E-Auto | `inv/…/leistung_w`, `inv/…/soc` |
+| Waermepumpe | `inv/…/leistung_w`, `leistung_heizen_w`, `leistung_warmwasser_w`, `leistung_kuehlen_w`, `vorlauf_temperatur_c`, `ruecklauf_temperatur_c`, `warmwasser_temperatur_c`, `heizstab_leistung_w` |
+| Klimaanlage mit Innengeraeten | zusaetzlich `soll_temperatur_c`, `ist_temperatur_c`; je Innengeraet `leistung_w-<n>`, `soll_temperatur_c-<n>`, `ist_temperatur_c-<n>` |
+| Betriebsmodus | `inv/…/betriebsmodus` — als Anteil je Modus (siehe naechster Abschnitt) |
+
+Daraus entstehen ohne Home Assistant u. a. das Temperatur-Diagramm, Ø Vorlauf und Ø Spreizung der Waermepumpe. Der
+**Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte.
+
+- **Nicht rueckwirkend:** Die Stundenmittel beginnen mit der Zuordnung (dem ersten empfangenen Wert).
+- **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Luecke; die Stunde ist das Mittel der uebrigen Minuten.
+  Ein Absender, der verstummt, waehrend der Broker laeuft, behaelt seinen letzten Wert.
+- **HA-Sensor geht vor:** Ist einem Feld ein HA-Sensor zugeordnet, gilt er — auch ohne Langzeitstatistik (der
+  Daten-Checker nennt ihn dann); das MQTT-Topic wird fuer die Stundenmittel nicht gelesen.
+- **Strompreis:** `strompreis_ct` zeigt eedc nur im Tagesverlauf; Stundenpreise und Kosten entstehen nur aus einem
+  HA-Preissensor.
 
 ### Betriebsmodus der Waermepumpe (Zustand statt Zahl)
 

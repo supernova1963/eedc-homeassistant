@@ -14,45 +14,42 @@ Punktwert. **Nur bei lebender Verbindung** (``cache.verbunden``, E-SG-9): ein to
 Zeile statt eines eingefrorenen Modus. Jede Zeile trägt ``ts_unix`` (E-SG-8); daraus verdichtet der
 Stundenlauf die Betriebsart-Mitschrift (``kanal/schreiber._betriebsart_mitschrift_mqtt``). Der Tagesverlauf
 liest nur benannte Leistungs-Keys und sieht die Modus-Zeilen nicht.
+
+**Mittelwerte (HA-Bauform §9, Standalone-Gleichstand S2, G3).** Je Gerät die Live-Keys aus
+``kanal/katalog.mittelwert_live_keys(typ, parameter)`` (W · °C · %, Innengeräte-Kopien; ohne Preis), auf
+Anlagen-Ebene die Basis-Live-Felder: eine Zeile je Key mit ``value_w`` = **zeitgewichtetes Mittel des
+5-Minuten-Fensters** aus dem Integrator des Inbound-Cache (``MqttInboundCache.mittel_abschliessen``), ``min``/``max``
+= Extrema des Fensters — kein Punktwert mehr. Daraus verdichtet der Stundenlauf die Mittelwert-Mitschrift
+(``kanal/schreiber._mean_mitschrift``); der Tagesverlauf zeigt damit 5-Minuten-Mittel statt Momentanwerten.
+``strompreis_ct`` bleibt als Momentanwert im Snapshot, **nur** für den Tagesverlauf — kein Kanal (G7). Wie die
+Modus-Zeilen entstehen alle Zeilen **nur bei lebender Verbindung** (E-SG-9).
 """
 
 import logging
 import time
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_session
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+from backend.services.kanal.katalog import mittelwert_live_keys
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 
 logger = logging.getLogger(__name__)
 
-# Basis-Keys die als Live-Leistungswerte (W) interpretiert werden
-_BASIS_POWER_KEYS = {
-    "einspeisung_w",
-    "netzbezug_w",
-    "pv_gesamt_w",
-    "netz_kombi_w",
-}
-
-# Zusätzliche Basis-Keys die gesnapshoted werden (kein Leistungswert)
+# Basis-Keys, die als Momentanwert gesnapshoted werden — nur für den Tagesverlauf, kein Mitschrift-Kanal (G7).
 _BASIS_EXTRA_KEYS = {
     "strompreis_ct",  # Dynamischer Strompreis in ct/kWh
 }
-
-# Investment-Keys die als Live-Leistungswerte (W) interpretiert werden
-# ⭐ `leistung_kuehlen_w` kam am 13.09.2026 dazu (N-439). Ohne den Key gab es im
-# MQTT-Standalone-Betrieb keine Kühl-Kurve — die Serie im Tagesverlauf entsteht
-# aus genau diesen Snapshots (`live_tagesverlauf_service`, MQTT-Zweig).
-_INV_POWER_KEYS = {
-    "leistung_w",
-    "leistung_heizen_w",
-    "leistung_warmwasser_w",
-    "leistung_kuehlen_w",
-}
+# ⭐ Die Leistungs-Keys (`einspeisung_w` … `leistung_kuehlen_w`, N-439) standen bis S2 hier als zwei feste Mengen;
+# seit HA-Bauform §9 kommen sie mit den übrigen Mittelwert-Feldern aus EINER Katalog-Funktion
+# (`mittelwert_live_keys`) — die vier WP-Leistungen, die PV-, Speicher-, Wallbox- und E-Auto-Leistung und die
+# Basis-Leistungen sind darin enthalten (Probe `test_standalone_s2_mittelwert_mitschrift.py`).
 
 
 def modus_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -> list[MqttLiveSnapshot]:
@@ -79,9 +76,70 @@ def modus_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -
     return rows
 
 
+def _zeile(anlage_id: int, now: datetime, component_key: str, wert: float, ts_unix: int,
+           minimum: Optional[float] = None, maximum: Optional[float] = None) -> MqttLiveSnapshot:
+    return MqttLiveSnapshot(anlage_id=anlage_id, timestamp=now, component_key=component_key, value_w=wert,
+                            ts_unix=ts_unix, min=minimum, max=maximum)
+
+
+def mittel_zeilen(cache, geraete: dict[int, dict[str, dict[str, str]]], now: datetime,
+                  jetzt_unix: float) -> list[MqttLiveSnapshot]:
+    """Die Mittelwert-Zeilen dieses Snapshots (G3): je Mittelwert-Key das Mittel des abgeschlossenen Fensters.
+
+    ``geraete`` = ``{anlage_id: {inv_id: mittelwert_live_keys(typ, parameter)}}`` der Anlagen in der DB; die
+    Basis-Keys kommen aus ``mittelwert_live_keys(None)``. Ein Key außerhalb davon (fremdes Topic, unbekanntes Gerät,
+    Preis) bekommt hier keine Zeile. Ohne Verbindung keine Zeile und kein Abschluss (E-SG-9).
+    """
+    if not getattr(cache, "verbunden", False):
+        return []
+    basis_keys = mittelwert_live_keys(None)
+    ts_unix = int(jetzt_unix)
+    rows: list[MqttLiveSnapshot] = []
+    for anlage_id, fenster in cache.mittel_abschliessen(jetzt_unix).items():
+        inv_keys = geraete.get(anlage_id)
+        if inv_keys is None:
+            continue
+        for key, (mittel, lo, hi) in sorted(fenster["basis"].items()):
+            if key in basis_keys:
+                rows.append(_zeile(anlage_id, now, f"basis:{key}", mittel, ts_unix, lo, hi))
+        for inv_id, werte in sorted(fenster["inv"].items()):
+            erlaubt = inv_keys.get(inv_id) or {}
+            for key, (mittel, lo, hi) in sorted(werte.items()):
+                if key in erlaubt:
+                    rows.append(_zeile(anlage_id, now, f"inv:{inv_id}:{key}", mittel, ts_unix, lo, hi))
+    return rows
+
+
+def preis_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -> list[MqttLiveSnapshot]:
+    """``strompreis_ct`` als Momentanwert — nur für den Tagesverlauf, kein Mitschrift-Kanal (G7); nur bei Verbindung."""
+    if not getattr(cache, "verbunden", False):
+        return []
+    rows: list[MqttLiveSnapshot] = []
+    for anlage_id, daten in cache.get_all_live_raw().items():
+        if anlage_id not in valid_ids:
+            continue
+        for key, (value, _ts) in daten.get("basis", {}).items():
+            if key in _BASIS_EXTRA_KEYS:
+                rows.append(_zeile(anlage_id, now, f"basis:{key}", value, int(jetzt_unix)))
+    return rows
+
+
+async def _geraete_keys() -> dict[int, dict[str, dict[str, str]]]:
+    """``{anlage_id: {inv_id: {key: einheit}}}`` aller Anlagen in der DB (verhindert FK-Fehler und fremde Keys)."""
+    async with get_session() as session:
+        anlagen = {row[0] for row in (await session.execute(select(Anlage.id))).all()}
+        invs = (await session.execute(
+            select(Investition.id, Investition.anlage_id, Investition.typ, Investition.parameter))).all()
+    out: dict[int, dict[str, dict[str, str]]] = {aid: {} for aid in anlagen}
+    for inv_id, anlage_id, typ, parameter in invs:
+        if anlage_id in out:
+            out[anlage_id][str(inv_id)] = mittelwert_live_keys(typ, parameter if isinstance(parameter, dict) else None)
+    return out
+
+
 async def snapshot_live_cache() -> int:
     """
-    Snapshots aktuelle MQTT Live-W-Werte in die DB.
+    Snapshots der MQTT-Live-Werte in die DB: Mittelwerte des 5-Minuten-Fensters, Modus-Anteile, Preis.
 
     Returns:
         Anzahl geschriebener Snapshot-Einträge.
@@ -90,49 +148,17 @@ async def snapshot_live_cache() -> int:
     if not mqtt_svc:
         return 0
 
-    all_live = mqtt_svc.cache.get_all_live_raw()
-    if not all_live:
+    if not mqtt_svc.cache.get_all_live_raw():
         return 0
 
-    # Gültige Anlage-IDs aus DB holen (verhindert FK-Fehler)
-    async with get_session() as session:
-        result = await session.execute(select(Anlage.id))
-        valid_ids = {row[0] for row in result.all()}
+    geraete = await _geraete_keys()
+    valid_ids = set(geraete)
 
     now = datetime.now()
     jetzt_unix = time.time()
-    ts_unix = int(jetzt_unix)
     count = 0
-    rows = []
-
-    for anlage_id, cache in all_live.items():
-        if anlage_id not in valid_ids:
-            logger.debug("MQTT Live Snapshot: anlage_id=%d unbekannt, übersprungen", anlage_id)
-            continue
-
-        # Basis-Werte
-        for key, (value, _ts) in cache.get("basis", {}).items():
-            if key in _BASIS_POWER_KEYS or key in _BASIS_EXTRA_KEYS:
-                rows.append(MqttLiveSnapshot(
-                    anlage_id=anlage_id,
-                    timestamp=now,
-                    component_key=f"basis:{key}",
-                    value_w=value,
-                    ts_unix=ts_unix,
-                ))
-
-        # Investitions-Werte (nur benannte Leistungs-Keys — ein Zustandsfeld kommt nur über den Modus-Pfad unten)
-        for inv_id, inv_data in cache.get("inv", {}).items():
-            for key, (value, _ts) in inv_data.items():
-                if key in _INV_POWER_KEYS:
-                    rows.append(MqttLiveSnapshot(
-                        anlage_id=anlage_id,
-                        timestamp=now,
-                        component_key=f"inv:{inv_id}:{key}",
-                        value_w=value,
-                        ts_unix=ts_unix,
-                    ))
-
+    rows = mittel_zeilen(mqtt_svc.cache, geraete, now, jetzt_unix)
+    rows.extend(preis_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
     rows.extend(modus_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
 
     if not rows:

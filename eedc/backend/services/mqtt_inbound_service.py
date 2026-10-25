@@ -27,8 +27,16 @@ ein String darauf wird verworfen wie bisher. Dazu führt der Cache je Gerät die
 Kanon-Modus** seit dem letzten Abschluss (`ZustandsFenster`, Halteregel je Nachricht wie HA für
 on-change-Publisher); der 5-Minuten-Snapshot schließt das Fenster ab (`modus_anteile_abschliessen`).
 Ein Verbindungskennzeichen (`verbunden`) sagt dem Snapshot, ob der Broker gerade lebt: ohne
-Verbindung entsteht keine Modus-Zeile (die Stunde bleibt Lücke statt eines eingefrorenen Werts),
+Verbindung entsteht keine Snapshot-Zeile (die Stunde bleibt Lücke statt eines eingefrorenen Werts),
 beim Reconnect beginnen die Fenster neu.
+
+**Integrator für Zahlenfelder (HA-Bauform §9, Standalone-Gleichstand S2, G3).** Je Live-Key führt der
+Cache ein `MittelFenster` (Integral, Beginn, Minimum, Maximum): jede Nachricht addiert
+`wert_alt × (jetzt − seit)` — dieselbe Halteregel je Nachricht wie beim Modus und wie HA für einen
+on-change-Publisher. Der 5-Minuten-Snapshot schließt die Fenster ab (`mittel_abschliessen`) und
+schreibt je Key das zeitgewichtete Mittel mit Minimum und Maximum; eine taktende Wärmepumpe
+(3 min 2000 W, 3 min 0 W) ergibt so 1000 W statt einer Punktprobe 0 oder 2000. Der Momentanwert
+im Cache (`_live`) bleibt, wie er ist — Live-Bild und Live-Leistung lesen ihn, nicht das Fenster.
 """
 
 import asyncio
@@ -73,8 +81,7 @@ class ZustandsFenster:
     zählt keine Zeit: der Anteil bezieht sich auf die Fensterlänge, das Ungesehene bleibt offen — wie
     der HA-Verlauf (`_get_betriebsmodus_history`: Verweildauer ÷ Stundenlänge).
 
-    ⚑ **Für Sitzung 2 vorbereitet:** dieselbe Form (Beginn, laufender Wert, seit) trägt dort das
-    Integral, Minimum und Maximum eines Zahlenfelds; hier wird nur die Zustandsseite geschrieben.
+    Die Zahlenseite derselben Form ist `MittelFenster` (Standalone-Gleichstand S2).
     """
 
     beginn: float
@@ -103,6 +110,53 @@ class ZustandsFenster:
         self.haltezeit = {}
         self.beginn = jetzt
         return anteile
+
+
+@dataclass
+class MittelFenster:
+    """Integral, Minimum und Maximum **eines Live-Zahlenwerts** seit dem letzten Abschluss (HA-Bauform §9, G3).
+
+    Halteregel je Nachricht: ein Wert gilt bis zur nächsten Nachricht — dieselbe Form wie `ZustandsFenster`.
+    Über einen Abschluss hinweg hält der letzte Wert weiter (ein on-change-Publisher, der um 22:00 einmal
+    «0» schickt, ergibt jede Stunde der Nacht 0); erst ein Verbindungsverlust leert die Fenster.
+    """
+
+    beginn: float
+    seit: float
+    wert: float
+    integral: float = 0.0
+    minimum: float = field(init=False)
+    maximum: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.minimum = self.maximum = self.wert
+
+    def _halten(self, jetzt: float) -> None:
+        if jetzt > self.seit:
+            self.integral += self.wert * (jetzt - self.seit)
+            self.seit = jetzt
+
+    def neuer_wert(self, wert: float, jetzt: float) -> None:
+        """Der bisherige Wert hielt bis ``jetzt``; ab hier gilt ``wert``."""
+        self._halten(jetzt)
+        self.wert = wert
+        self.minimum = min(self.minimum, wert)
+        self.maximum = max(self.maximum, wert)
+
+    def abschliessen(self, jetzt: float) -> Optional[tuple[float, float, float]]:
+        """``(mittel, minimum, maximum)`` des Fensters ``[beginn, jetzt)``; danach beginnt das nächste bei ``jetzt``
+        mit dem gehaltenen Wert. ``None``, wenn das Fenster keine Länge hat (Nachricht im selben Augenblick)."""
+        self._halten(jetzt)
+        laenge = jetzt - self.beginn
+        ergebnis = None
+        if laenge > 0:
+            # Ein Fenster mit einem einzigen Wert liefert ihn wörtlich (keine Rundung aus Σ w·Δt / Δt).
+            mittel = self.wert if self.minimum == self.maximum else self.integral / laenge
+            ergebnis = (mittel, self.minimum, self.maximum)
+        self.beginn = self.seit = jetzt
+        self.integral = 0.0
+        self.minimum = self.maximum = self.wert
+        return ergebnis
 
 
 def _adresse(topic: str) -> Optional[tuple[int, str, Optional[str], str]]:
@@ -137,6 +191,7 @@ class MqttInboundCache:
       _live[anlage_id]["inv"][inv_id][key] = (wert, timestamp)   # wert: float, bei Zustand der rohe String
       _energy[anlage_id][key] = (wert, timestamp)
       _modus_fenster[(anlage_id, inv_id)] = ZustandsFenster       # Haltezeit je Modus (HA-Bauform §9)
+      _mittel_fenster[(anlage_id, inv_id|None, key)] = MittelFenster # Integral je Zahlen-Key (HA-Bauform §9, G3)
     """
 
     def __init__(self):
@@ -145,8 +200,9 @@ class MqttInboundCache:
         self._message_count = 0
         self._last_message_at: Optional[datetime] = None
         self._modus_fenster: dict[tuple[int, str], ZustandsFenster] = {}
+        self._mittel_fenster: dict[tuple[int, Optional[str], str], MittelFenster] = {}
         #: Lebt die Verbindung zum Broker? True nach dem Subscribe, False nach einem Verbindungsverlust
-        #: (E-SG-9). Ohne Verbindung schreibt der Snapshot keine Modus-Zeile.
+        #: (E-SG-9). Ohne Verbindung schreibt der Snapshot keine Zeile.
         self.verbunden: bool = False
 
     def on_message(self, topic: str, payload: str, *, jetzt: Optional[float] = None) -> None:
@@ -169,8 +225,11 @@ class MqttInboundCache:
 
         if category == "live":
             self._live_ablegen(anlage_id, inv_id, key, wert, now)
-            if ist_zustand and basis_feld_key(key) == MODUS_FELD_KEY:
-                self._modus_fortschreiben(anlage_id, inv_id, time.time() if jetzt is None else jetzt)
+            t = time.time() if jetzt is None else jetzt
+            if not ist_zustand:
+                self._mittel_fortschreiben(anlage_id, inv_id, key, float(wert), t)
+            elif basis_feld_key(key) == MODUS_FELD_KEY:
+                self._modus_fortschreiben(anlage_id, inv_id, t)
         elif category == "energy":
             if anlage_id not in self._energy:
                 self._energy[anlage_id] = {}
@@ -193,6 +252,34 @@ class MqttInboundCache:
         else:
             fenster.neuer_modus(modus, jetzt)
 
+    def _mittel_fortschreiben(self, anlage_id: int, inv_id: Optional[str], key: str, wert: float, jetzt: float) -> None:
+        """Das Integral dieses Keys: der alte Wert hielt bis ``jetzt``, ab hier gilt ``wert`` (G3)."""
+        schluessel = (anlage_id, inv_id or None, key)
+        fenster = self._mittel_fenster.get(schluessel)
+        if fenster is None:
+            self._mittel_fenster[schluessel] = MittelFenster(beginn=jetzt, seit=jetzt, wert=wert)
+        else:
+            fenster.neuer_wert(wert, jetzt)
+
+    def mittel_abschliessen(self, jetzt: Optional[float] = None) -> dict[int, dict]:
+        """Schließt jedes Zahlen-Fenster bei ``jetzt`` ab:
+        ``{anlage_id: {"basis": {key: (mittel, min, max)}, "inv": {inv_id: {key: (mittel, min, max)}}}}``.
+
+        Der Aufrufer ist der 5-Minuten-Snapshot; ohne Verbindung fragt er nicht. Ein Fenster ohne Länge fehlt.
+        """
+        t = time.time() if jetzt is None else jetzt
+        out: dict[int, dict] = {}
+        for (anlage_id, inv_id, key), fenster in self._mittel_fenster.items():
+            ergebnis = fenster.abschliessen(t)
+            if ergebnis is None:
+                continue
+            ziel = out.setdefault(anlage_id, {"basis": {}, "inv": {}})
+            if inv_id is None:
+                ziel["basis"][key] = ergebnis
+            else:
+                ziel["inv"].setdefault(inv_id, {})[key] = ergebnis
+        return out
+
     def modus_anteile_abschliessen(self, jetzt: Optional[float] = None) -> dict[int, dict[str, dict[str, float]]]:
         """Schließt jedes Modus-Fenster bei ``jetzt`` ab: ``{anlage_id: {inv_id: {modus: anteil}}}``.
 
@@ -208,14 +295,16 @@ class MqttInboundCache:
         return out
 
     def verbinden(self) -> None:
-        """Nach dem Subscribe: Verbindung lebt; die Modus-Fenster beginnen neu (E-SG-9)."""
+        """Nach dem Subscribe: Verbindung lebt; Modus- und Zahlen-Fenster beginnen neu (E-SG-9)."""
         self._modus_fenster.clear()
+        self._mittel_fenster.clear()
         self.verbunden = True
 
     def trennen(self) -> None:
-        """Nach einem Verbindungsverlust oder Stopp: keine Modus-Zeilen, bis die Verbindung zurück ist."""
+        """Nach einem Verbindungsverlust oder Stopp: keine Snapshot-Zeilen, bis die Verbindung zurück ist."""
         self.verbunden = False
         self._modus_fenster.clear()
+        self._mittel_fenster.clear()
 
     def get_live_basis(self, anlage_id: int) -> dict[str, float]:
         """Gibt Basis-Live-Werte zurück (einspeisung_w, netzbezug_w)."""
@@ -265,6 +354,8 @@ class MqttInboundCache:
             count = 0
             for schluessel in [s for s in self._modus_fenster if s[0] == anlage_id]:
                 del self._modus_fenster[schluessel]
+            for schluessel in [s for s in self._mittel_fenster if s[0] == anlage_id]:
+                del self._mittel_fenster[schluessel]
             if anlage_id in self._live:
                 live = self._live.pop(anlage_id)
                 count += len(live.get("basis", {}))
@@ -282,6 +373,7 @@ class MqttInboundCache:
         self._live.clear()
         self._energy.clear()
         self._modus_fenster.clear()
+        self._mittel_fenster.clear()
         self._message_count = 0
         self._last_message_at = None
         return count

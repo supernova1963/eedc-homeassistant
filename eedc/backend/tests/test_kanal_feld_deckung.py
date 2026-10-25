@@ -169,22 +169,41 @@ def test_staende_o7_o9_sind_stand():
     assert arten[("sonstiges", "zaehlerstand")] == ART_STAND
 
 
-def test_mean_hat_spiegel_und_eine_offene_mitschrift_abgeleitetes_nur_benannt():
-    """Stand E1 (Entscheid Master 05.10.): jeder ``mean`` außer der Betriebsart wird gespiegelt, seine
-    Mitschrift (Sensor ohne Langzeitstatistik) ist als „Quelle offen" geführt; abgeleitete Kanäle sind
-    nur als geplant benannt."""
+def test_mean_ist_mittelwert_kanal_spiegel_oder_mqtt_mitschrift_abgeleitetes_nur_benannt():
+    """Seit HA-Bauform §9 (Standalone-Gleichstand S2): jeder ``mean`` außer der Betriebsart ist ein Mittelwert-Kanal —
+    Spiegel bei HA-Entität, sonst MQTT-Mitschrift (bis S2: „Mitschrift, Quelle offen", ``mitschrift_offen``); die
+    Betriebsart hat ihre eigene Mitschrift; abgeleitete Kanäle sind benannt."""
     for z in kat.zuweisungen():
         if z.art == ART_MEAN and z.feld != "betriebsmodus":
-            assert z.e1_schreiber and z.mitschrift_offen, z
+            assert z.e1_schreiber and z.mittelwert_kanal, z
+            assert "sonst MQTT-Mitschrift (§9)" in z.grund, z
         elif z.art == ART_MEAN:
-            assert z.e1_schreiber and not z.mitschrift_offen, z
+            assert z.e1_schreiber and not z.mittelwert_kanal, z
         else:
-            assert not z.mitschrift_offen, z
-    assert kat.ist_mean_spiegel("basis:strompreis", None)
-    assert kat.ist_mean_spiegel("inv:3:leistung_w-2", "waermepumpe")
-    assert not kat.ist_mean_spiegel("inv:3:betriebsmodus", "waermepumpe")
-    assert not kat.ist_mean_spiegel("inv:3:ladung_kwh", "speicher")
+            assert not z.mittelwert_kanal, z
+    assert kat.ist_mean_kanal("basis:strompreis", None)
+    assert kat.ist_mean_kanal("inv:3:leistung_w-2", "waermepumpe")
+    assert not kat.ist_mean_kanal("inv:3:betriebsmodus", "waermepumpe")
+    assert not kat.ist_mean_kanal("inv:3:ladung_kwh", "speicher")
     assert set(kat.ABGELEITETE_KANAELE) >= {"kosten:*", "ueberschuss", "defizit"}
+
+
+def test_mittelwert_live_keys_ohne_preis_und_ohne_zustand():
+    """S2-1 (G3, G7): die Live-Keys der MQTT-Mitschrift — W · °C · %, Innengeräte-Kopien, kein Modus, kein Preis."""
+    assert kat.mittelwert_live_keys(None) == {
+        "einspeisung_w": "W", "netzbezug_w": "W", "netz_kombi_w": "W", "pv_gesamt_w": "W", "aussentemperatur_c": "°C"}
+    assert "strompreis" not in kat.mittelwert_live_keys(None) and "strompreis_ct" not in kat.mittelwert_live_keys(None)
+    wp = kat.mittelwert_live_keys("waermepumpe", {"wp_art": "luft_wasser"})
+    assert {"leistung_w", "vorlauf_temperatur_c", "ruecklauf_temperatur_c", "heizstab_leistung_w",
+            "warmwasser_temperatur_c"} <= set(wp)
+    assert "betriebsmodus" not in wp and wp["vorlauf_temperatur_c"] == "°C"
+    split = kat.mittelwert_live_keys("waermepumpe", {"wp_art": "luft_luft",
+                                                     "innengeraete": [{"id": 3, "bezeichnung": "Büro"}]})
+    assert split["leistung_w-3"] == "W" and split["ist_temperatur_c-3"] == "°C"
+    assert kat.mittelwert_live_keys("e-auto") == {"leistung_w": "W", "soc": "%"}
+    assert kat.mittelwert_live_keys("speicher") == {"leistung_w": "W", "soc": "%"}
+    for pv in ("pv-module", "balkonkraftwerk", "wechselrichter"):
+        assert kat.mittelwert_live_keys(pv) == {"leistung_w": "W"}
 
 
 # ── 2. Gegenprobe: der Prüfer KANN rot melden ───────────────────────────────
