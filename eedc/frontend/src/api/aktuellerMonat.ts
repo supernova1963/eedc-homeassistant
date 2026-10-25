@@ -284,6 +284,13 @@ export interface AktuellerMonatResponse {
    *  Quotient über einen Zeitraum. */
   wp_jaz_kuehlen?: number | null
   wp_jaz_kuehlen_grund?: string | null
+  /** P-433-3 S3: Zähler/Nenner je Funktion — nur der Tag liefert sie (`tag-detail`, über `baueTagAlsMonat`). */
+  wp_jaz_heizen_zaehler_kwh?: number | null
+  wp_jaz_heizen_nenner_kwh?: number | null
+  wp_jaz_warmwasser_zaehler_kwh?: number | null
+  wp_jaz_warmwasser_nenner_kwh?: number | null
+  wp_jaz_kuehlen_zaehler_kwh?: number | null
+  wp_jaz_kuehlen_nenner_kwh?: number | null
   /** E1b — siehe {@link WpGeraetZeile}. */
   wp_jaz_ist_schranke?: boolean | null
   /** Der EINE Satz unter der Schranke: „Klimaanlage: Strom ohne Wärmemessung

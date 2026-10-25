@@ -6,6 +6,7 @@ GET /api/energie-profil/{anlage_id}/tage-werte — Tages-Werte-Zeilen (Bilanz + 
 
 GET /api/energie-profil/{anlage_id}/waerme-verlauf         — Tagesreihe des Verlaufs (Cockpit → Monat)
 GET /api/energie-profil/{anlage_id}/waerme-verlauf-stunden — 24 Stunden eines Tages (Cockpit → Tag)
+GET /api/energie-profil/{anlage_id}/waerme-temperaturen-stunden — Temperaturen je Gerät und Stunde (Cockpit → Tag)
 GET /api/energie-profil/{anlage_id}/waerme-verteilung      — Verteilung des Waerme/Klima-Stroms (Tag · Monat · Jahr)
 
 GET /api/energie-profil/{anlage_id}/tag-detail — snapshot-teure Tages-Detailwerte (Cockpit → Tag)
@@ -41,6 +42,7 @@ from backend.api.routes.energie_profil.tage import (  # noqa: F401 — Re-Export
 )
 from backend.api.routes.energie_profil.waerme import (  # noqa: F401 — Re-Export
     router as _waerme_router,
+    get_waerme_temperaturen_stunden,
     get_waerme_verlauf,
     get_waerme_verlauf_stunden,
     get_waerme_verteilung,

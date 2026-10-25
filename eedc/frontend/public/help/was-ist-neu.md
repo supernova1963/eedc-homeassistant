@@ -51,6 +51,20 @@ Monatstabelle als Spalte. Die Arbeitszahl mit Heizstab bleibt die Hauptzahl; Str
 ändern sich nicht. Ohne Zähler erscheint nichts — aus der Heizstab-Leistung rechnet eedc keine Menge hoch
 ([Wärme & Klima → Schritt 6a](HANDBUCH_WAERME_KLIMA.md#schritt-6a--strom-zusatzheizung-optional)).
 
+**Cockpit → Tag: Vorlauf und Rücklauf über den Tag, die Wärme nach Funktion.** Hast du deiner Wärmepumpe Vorlauf und
+Rücklauf zugeordnet, zeigt der Block *Wärme/Klima* jetzt das Element **Temperaturen**: Vorlauf und Rücklauf je Stunde mit
+der Spreizung als Fläche dazwischen, dazu die Warmwasser-Temperatur. Darüber steht **Ø Vorlauf und Ø Spreizung der
+Stunden, in denen die Wärmepumpe lief** — die Stillstandsstunden zählen nicht mit. Bei mehreren Wärmepumpen wählst du das
+Gerät über dem Diagramm. Die Stundenwerte holt eedc aus der Langzeitstatistik deiner Sensoren in Home Assistant, auch für
+zurückliegende Tage. Misst du die Wärme getrennt für Heizen und Warmwasser, stapelt der Verlauf in der Sicht „nach Funktion"
+jetzt auch die **Wärme** neben dem Strom — mit einem eigenen Stück „Wärme nicht je Funktion gemessen" für das, was ein
+gemeinsamer Wärmezähler misst. Die Arbeitszahl-Kachel heißt am Tag **„AZ heute"**, und unter „Je Funktion" zeigt jede
+Arbeitszahl beim Überfahren ihre Rechnung. Mit nur einer Wärmepumpe entfällt die Tabelle „Zahlen je Gerät" — sie hätte nur
+die Kacheln wiederholt; der Link in den Komponenten-Hub bleibt
+([Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#wo-die-fläche-in-der-app-erscheint), [Bedienung §2.2](HANDBUCH_BEDIENUNG.md#22-tag)).
+„AZ ohne Zusatzheizung" folgt jetzt im Tag derselben Regel wie im Monat: eine Klimaanlage, die nur gekühlt hat, sperrt die
+Zahl nicht mehr.
+
 **Einstellungen → Datenquellen: die Wärmepumpe nach Betriebsart.** Die Felder einer Wärmepumpe oder Klimaanlage stehen jetzt
 in Blöcken *Gerät gesamt · Heizen · Warmwasser · Kühlen* (bei Klimaanlagen auch *Lüften · Entfeuchten*), jeder mit einem
 Status im Kopf: „vollständig", „fehlt: Strom, Wärme", „aus Betriebsmodus abgeleitet" oder „passiv". So siehst du auf einen

@@ -822,9 +822,8 @@ def _ohne_zusatzheizung(zusammenfassung: dict[str, Any], _kz) -> None:
     zusammenfassung['jaz_ohne_zusatzheizung'] = round(_az.wert, 2) if _az.wert is not None else None
     zusammenfassung['jaz_ohne_zusatzheizung_grund'] = _az.grund
     zusammenfassung['jaz_ohne_zusatzheizung_hinweis'] = _az.hinweis
-    zusammenfassung['jaz_ohne_zusatzheizung_zaehler_kwh'] = (
-        round(_az.zaehler_kwh, 1) if _az.zaehler_kwh is not None else None
-    )
-    zusammenfassung['jaz_ohne_zusatzheizung_nenner_kwh'] = (
-        round(_az.nenner_kwh, 1) if _az.nenner_kwh is not None else None
-    )
+    # P-433-3 S3-9 (Master 25.10.2026): Zähler und Nenner UNGERUNDET wie im Tag, Monat und Jahr
+    # (`ohne_zusatzheizung_felder`, `tag-detail` `wp_jaz_zaehler_kwh`) — der Client formatiert die Herleitung an
+    # EINER Stelle mit einer Nachkommastelle (`wpFunktionsGruppen.herleitungMengen`), Hub und Tag zeichengleich.
+    zusammenfassung['jaz_ohne_zusatzheizung_zaehler_kwh'] = _az.zaehler_kwh
+    zusammenfassung['jaz_ohne_zusatzheizung_nenner_kwh'] = _az.nenner_kwh

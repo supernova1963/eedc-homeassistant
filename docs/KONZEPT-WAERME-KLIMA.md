@@ -149,6 +149,15 @@ Er ist eine **Teilmenge von E_ges** wie die Betriebsart-Zähler: kein Bilanzbeit
 addiert. Er trägt allein die Ausweis-Zahl „AZ ohne Zusatzheizung" (5.7). Die Matrix oben bleibt, wie sie ist.
 Dazu die Live-Größen Vorlauf, Rücklauf (°C) und Leistung Zusatzheizung (W) — Form, keine Menge.
 
+**Nachtrag P-433-3 S3 (25.10.2026) — Vorlauf und Rücklauf als Größen der Tagessicht.** Vorlauf und Rücklauf (°C, je
+Gerät) bleiben **Begleitgrößen ohne Menge**: aus ihnen entsteht keine Kilowattstunde und keine Arbeitszahl. Ihre
+**Stundenmittel** kommen aus dem Mittelwert-Kanal, den eedc aus der HA-Langzeitstatistik des Sensors spiegelt (und
+rückwirkend nachfüllt) — nur dort, wo der Sensor `state_class: measurement` trägt; MQTT/Standalone zeigt sie live, aber
+ohne Stundenmittel. Daraus entstehen zwei Tageszahlen im Layer (`core/berechnungen/temperatur_tagesmittel.py`):
+**Ø Vorlauf** und **Ø Spreizung** (Vorlauf − Rücklauf) über die **Stunden mit Betrieb** — Betrieb aus dem
+Betriebsmodus (≠ aus/unbestimmt), ohne Modus aus dem Strom über dem Tagesminimum. **Nicht je Funktion:** die Stunden
+sind gemischt, ein «Vorlauf beim Heizen» wäre eine abgeleitete Größe neben gemessenen Zählern.
+
 ⚠ **E und Q tragen dieselbe Einheit und meinen Verschiedenes.** Eine Wärmepumpe führt zwei Sorten
 Kilowattstunden nebeneinander — **elektrisch** (was sie aufnimmt) und **thermisch** (was sie
 abgibt). Wer die beiden verwechselt, bekommt eine Arbeitszahl, die um genau den Faktor der
@@ -1085,6 +1094,26 @@ zuletzt, weil die gemessenen Reihen der Anlage näher sind als ein Wert aus eine
 Netzabruf für eine Hilfslinie.** ⚠ **Ø und Kd sind zwei Größen aus derselben Tagesreihe, nicht
 dieselbe:** Für die **Heizgradtage** gelten nur die Stufen 1 und 2 — ein gepflegter Monats-Ø ist
 dort kein Eingang ([5.6](#56-wetternormierung--kwh-je-heizgradtag)).
+
+**Nachtrag P-433-3 S3 (25.10.2026, #432) — die Tagessicht.**
+
+* **Wärme nach Funktion als Stapel mit Rest-Segment** (Sicht *nach Funktion*, neben dem Strom-Stapel): Heizen und
+  Warmwasser aus den Summanden-Zählern der Geräte, die D1 nicht über den gemeinsamen Wärmemengenzähler auflöst; darüber
+  der Rest **„Wärme nicht je Funktion gemessen"** = Wärme-Linie − Heizen − Warmwasser (≥ 0). Die Stapelhöhe ist damit
+  per Konstruktion die gemessene Wärme, auch an Mischanlagen. ⭐ **Gemessene Wärme bleibt die einzige Quelle** — die
+  Tabelle oben («Wärme als Linie») hatte nur den S4-Grund (keine abgeleitete Wärme), und der gilt weiter; nur die Form
+  ändert sich. In der Sicht *nach Betriebsart* und an Tagen ohne Summanden-Form bleibt die Wärme die Linie. Die Sicht
+  *nach Funktion* gibt es weiterhin nur mit getrennten Strom-Zählern Heizen/Warmwasser (S2a).
+* **Temperatur-Diagramm je Gerät** (eigene Route, Fehlerisolation wie der Verlauf): Vorlauf und Rücklauf als Linien,
+  die Spreizung als Fläche dazwischen, die Warmwasser-Temperatur, °C-Achse; im Kopf Ø Vorlauf und Ø Spreizung über die
+  Betriebsstunden (2.1-Nachtrag), die Legende nennt die Werte der letzten Stunde. Dieselbe Hülle wie der Verlauf
+  (Regel 0/0a), dasselbe Stunden-Raster wie der Verlauf desselben Tages (Beginn an einem WP-Kanal-Tag, sonst Ende).
+  Die Außentemperatur bleibt im Verlauf.
+* **Grenze HA-LTS:** Stundenmittel gibt es nur aus der HA-Langzeitstatistik des Sensors (rückwirkend, so weit sie
+  reicht); ein zugeordneter Sensor ohne sie (MQTT/Standalone, `state_class` fehlt) steht unter dem Diagramm als
+  «keine Stundenwerte», der Daten-Checker nennt ihn («Sensor ohne Langzeitstatistik»).
+* **«AZ heute»** heißt die Arbeitszahl-Kachel am Tag (A3a: eine Sicht, eine Periode); je Funktion steht die Herleitung
+  aus Zähler und Nenner des Layers beim Überfahren.
 
 ### 6.2b Die Verteilung — wohin der Strom gegangen ist (WK-16c, 14.09.2026)
 

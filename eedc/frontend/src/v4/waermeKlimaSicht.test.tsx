@@ -58,6 +58,12 @@ const MELDER: Partial<AktuellerMonatResponse> = {
   ],
 }
 
+/** P-433-3 S3: ein einzelnes Gerät für die Probe «bei einem Gerät keine Tabelle». */
+const ZWEITGERAET_EINZELN = {
+  investition_id: 98, name: 'Einzelgerät', strom_kwh: 10, waerme_kwh: 30, jaz: 3,
+  jaz_heizen: null, jaz_heizen_grund: null, jaz_warmwasser: null, jaz_warmwasser_grund: null,
+}
+
 describe('waermeKlimaSicht — die reinen Regeln', () => {
   it('jazAnzeige setzt „≥" nur vor eine Schranke', () => {
     expect(jazAnzeige(3.25, true, '3,25')).toBe('≥ 3,25')
@@ -277,6 +283,12 @@ describe('D-Sicht 3 — die Tabelle „Zahlen je Gerät" steht im Block', () => 
     rendere({ ...MELDER, wp_geraete: [] })
     expect(screen.queryByText('Zahlen je Gerät')).toBeNull()
   })
+
+  it('P-433-3 S3 (E-P3-6): bei EINEM Gerät gibt es die Tabelle nicht — der Link in den Hub bleibt', () => {
+    rendere({ ...MELDER, wp_geraete: [{ ...ZWEITGERAET_EINZELN }] })
+    expect(screen.queryByText('Zahlen je Gerät')).toBeNull()
+    expect(screen.getByText(/im Komponenten-Hub/)).toBeInTheDocument()
+  })
 })
 
 /**
@@ -288,6 +300,13 @@ describe('D-Sicht 3 — die Tabelle „Zahlen je Gerät" steht im Block', () => 
  * Alternative"* stand in *Cockpit → Tag* an jedem geprüften Tag als „—": Der
  * Tag rechnet keine Ersparnis, das Feld gibt es in `tag-detail` gar nicht.
  */
+/** P-433-3 S3 (E-P3-6): die Tabelle «Zahlen je Gerät» erscheint erst ab ZWEI Geräten — die Zellen-Proben unten
+ *  tragen deshalb ein zweites, unauffälliges Gerät mit; ihre Aussagen über die Zellen sind unverändert. */
+const ZWEITGERAET = {
+  investition_id: 99, name: 'Zweitgerät', strom_kwh: 10, waerme_kwh: 30, jaz: 3,
+  jaz_heizen: null, jaz_heizen_grund: null, jaz_warmwasser: null, jaz_warmwasser_grund: null,
+}
+
 describe('WK-16h — die Zelle der Tabelle', () => {
   it('geraetZelle: Zahl ohne title, Strich mit Grund, fehlende Achse leer', () => {
     const bosch = {
@@ -316,7 +335,7 @@ describe('WK-16h — die Zelle der Tabelle', () => {
         jaz_warmwasser: null, jaz_warmwasser_grund: null,
         jaz_kuehlen: null, jaz_kuehlen_grund: 'kein Kältemengenzähler zugeordnet',
         achsen: ['heizen'],
-      }],
+      }, ZWEITGERAET],
     })
     const zeile = screen.getByText('Bosch Multisplit').closest('tr')!
     const zellen = [...zeile.querySelectorAll('td')]
@@ -344,7 +363,7 @@ describe('WK-16h — die Zelle der Tabelle', () => {
         jaz_heizen_grund: 'kein Heizbetrieb in diesem Zeitraum',
         jaz_warmwasser: null, jaz_warmwasser_grund: null,
         achsen: ['heizen', 'warmwasser'],
-      }],
+      }, ZWEITGERAET],
     })
     const zellen = [...screen.getByText('Daikin').closest('tr')!.querySelectorAll('td')]
     expect(zellen[4].textContent).toBe('—')
@@ -361,7 +380,7 @@ describe('WK-16h — die Zelle der Tabelle', () => {
         investition_id: 1, name: 'Altbestand', strom_kwh: 800, waerme_kwh: 3000,
         jaz: 3.75, jaz_warmwasser: null,
         jaz_warmwasser_grund: 'Wärme nicht je Funktion gemessen',
-      }],
+      }, ZWEITGERAET],
     })
     const zellen = [...screen.getByText('Altbestand').closest('tr')!.querySelectorAll('td')]
     expect(zellen[5].textContent).toBe('—')

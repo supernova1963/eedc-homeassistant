@@ -1276,6 +1276,20 @@ HINWEIS_OHNE_ZUSATZHEIZUNG = "gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen"
 GRUND_GERAETE_OHNE_ZUSATZHEIZUNG = "nicht alle Geräte melden Zusatzheizung"
 
 
+def zaehlt_fuer_geraete_regel(strom_kwh: Optional[float], funktionsfremd_kwh: float = 0.0) -> bool:
+    """Zählt ein Gerät für die **Geräte-Regel** einer anlagenweiten Ausweis-Zahl («AZ ohne Zusatzheizung»: jedes
+    zählende Gerät muss einen Heizstab-Zähler tragen)? Ja, wenn sein Strom **nach Abzug** des funktionsfremden Stroms
+    (Kühlen, Lüften, Entfeuchten — die Mengen) größer als 0 ist: nur dann steht es mit Heiz- oder Warmwasserstrom im
+    Nenner der Systemarbeitszahl, und nur dann ist sein fehlender Heizstab-Zähler eine Lücke in der Zahl. Eine
+    Klimaanlage, die nur gekühlt hat, sperrt die Zahl nicht.
+
+    P-433-3 S3-8 (Master 25.10.2026): die eine Stelle für Tag (``tag._ohne_zusatzheizung_tag``, Mengen des Tages-
+    Stapels je Gerät) und Monat (``monats_fakten/roh.py`` → ``WpFakten.geraete_mit_strom``; das Jahr vereinigt die
+    Monate). Vorher fragte der Tag «jeder Strom-Beitrag», der Monat «Strom nach Abzug» — dieselbe Anlage, zwei
+    Antworten."""
+    return (strom_kwh or 0.0) - (funktionsfremd_kwh or 0.0) > 0
+
+
 def arbeitszahl_ohne_zusatzheizung(
     system: "Systemarbeitszahl | Arbeitszahl", heizstab_kwh: float, *, nicht_alle_geraete: bool = False,
 ) -> Arbeitszahl:

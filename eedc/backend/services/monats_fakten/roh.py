@@ -16,6 +16,7 @@ from backend.core.berechnungen import (
     ersetzt_keine_heizung,
     imd_typ_beitrag,
 )
+from backend.core.berechnungen.waermepumpe_kennzahl import zaehlt_fuer_geraete_regel
 from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     ist_dienstlich,
@@ -474,11 +475,11 @@ class _RohMonat:
                     self.wp_geraete_luft_luft += 1
                 else:
                     self.wp_geraete_luft_wasser += 1
-            if b.wp_strom - (
-                b.wp_modus_strom_kuehlen
-                + b.wp_modus_strom_lueften
-                + b.wp_modus_strom_entfeuchten
-            ) > 0:
+            # P-433-3 S3-8: das Kriterium steht im Layer (`zaehlt_fuer_geraete_regel`), der Tag ruft dasselbe.
+            if zaehlt_fuer_geraete_regel(
+                b.wp_strom,
+                b.wp_modus_strom_kuehlen + b.wp_modus_strom_lueften + b.wp_modus_strom_entfeuchten,
+            ):
                 self.wp_geraete_mit_strom.add(inv.id)
             if b.wp_waerme > 0:
                 self.wp_geraete_mit_waerme.add(inv.id)

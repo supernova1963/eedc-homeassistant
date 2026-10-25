@@ -42,7 +42,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.energie import (
     SONSTIGES_KOMPONENTEN_PREFIX, WAERMEPUMPE_KOMPONENTEN_PREFIXE, WALLBOX_KOMPONENTEN_PREFIXE,
 )
-from backend.core.berechnungen.slot_konvention import FORWARD_FELDER, RASTER_BEGINN, bestandszeile_fuer_stundenbeginn
+from backend.core.berechnungen.slot_konvention import (
+    FORWARD_FELDER, RASTER_BEGINN, RASTER_ENDE, bestandszeile_fuer_stundenbeginn,
+)
 
 from backend.services.kanal.stunden_adapter import FELDER_JE_GRUPPE, KanalStunden, stunden_aus_kanaelen
 from backend.services.kanal.stunden_leser import (
@@ -1082,6 +1084,119 @@ async def wp_strom_je_stunde(db: AsyncSession, anlage_id: int, datum: date) -> d
         select(TagesEnergieProfil.stunde, TagesEnergieProfil.waermepumpe_kw).where(
             TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum == datum,
         ))).all()}
+
+
+# ── Temperaturen je Stunde und Gerät (P-433-3 S3, #432; Bauplan B7/B11/B12) ─────────────────────────────────────────
+#
+# Vorlauf, Rücklauf und Warmwasser einer Wärmepumpe sind Live-Felder (°C); der Kanal spiegelt sie als Mittelwert-Kanal
+# ``inv:<id>:<feld>`` aus der HA-Langzeitstatistik (``katalog._regel_mean``) und füllt rückwirkend nach
+# (``nachfuellen.py``). Hier steht der eine Tagesleser der Sichten — die Route ``waerme-temperaturen-stunden`` ruft ihn,
+# nie die Lese-Schicht selbst (``test_kanal_lesen_waechter.IMPORTEURE_STAND``).
+
+@dataclass(frozen=True)
+class WpTemperaturGeraet:
+    """Die 24 Stunden eines Geräts: je Antwort-Name (``vorlauf_c`` …) die Stundenmittel im Raster des Tages."""
+
+    inv_id: str
+    #: ``{"vorlauf_c": [24 × °C|None], …}`` — nur die Felder mit Mittelwert-Kanal; eine Stunde ohne Zeile ist ``None``.
+    reihen: dict[str, list[Optional[float]]]
+    #: Stunden mit mindestens einem Wert.
+    abdeckung_h: int
+
+
+@dataclass(frozen=True)
+class WpTemperaturTag:
+    """``wp_temperaturen_je_stunde``: Raster des Tages, Geräte mit Temperatur-Kanal, Geräte mit Zuordnung ohne Kanal."""
+
+    raster: str
+    geraete: list[WpTemperaturGeraet]
+    #: ``{inv_id: [feld, …]}`` — zugeordnete Temperatur-Felder ohne Mittelwert-Kanal (MQTT/Standalone, Sensor ohne
+    #: Langzeitstatistik): Live ja, Stundenmittel nein (Bauplan §5, benannte Grenze).
+    ohne_kanal: dict[str, list[str]]
+
+
+def _slot_der_mittelzeile(start_ts: int, datum: date, raster: str) -> int:
+    """Die Stunde einer Mittelwert-Zeile (``[H, H+1)``) im Raster des Tages (B12): Beginn ⇒ ihre Beginn-Stunde
+    (``stunde_des_beginns``); Ende (Bestandstag, Backward-Slot ``[h-1, h)``) ⇒ der Slot ihres Endes
+    (``slot_konvention.backward_slot_aus_period_start``: Zeile 23:00 des Vortags ⇒ Slot 0, Zeile 23:00 des Tages ⇒ Slot 0
+    des Folgetags, fällt hier heraus). ``-1``: gehört nicht zu diesem Tag."""
+    from datetime import datetime
+
+    from backend.core.berechnungen.slot_konvention import backward_slot_aus_period_start
+    from backend.services.kanal.stunden_leser import stunde_des_beginns
+
+    if raster == RASTER_BEGINN:
+        return stunde_des_beginns(start_ts, datum)
+    tag, slot = backward_slot_aus_period_start(datetime.fromtimestamp(start_ts))
+    return slot if tag == datum else -1
+
+
+def _reihe_der_mittel(werte: Mapping[int, tuple], datum: date, raster: str) -> list[Optional[float]]:
+    """24 Stundenmittel aus ``{start_ts: (mean, min, max)}``; zwei Zeilen auf einer Wanduhr-Stunde (Herbst) ⇒ ihr Mittel."""
+    je_slot: dict[int, list[float]] = {}
+    for ts, (mean, _mi, _ma) in werte.items():
+        h = _slot_der_mittelzeile(ts, datum, raster)
+        if 0 <= h < 24:
+            je_slot.setdefault(h, []).append(mean)
+    return [sum(je_slot[h]) / len(je_slot[h]) if h in je_slot else None for h in range(24)]
+
+
+def _temperatur_zuordnungen(anlage, inv_ids: Iterable[str], felder_je_name: Iterable[str]) -> dict[str, list[str]]:
+    """Je Gerät die zugeordneten Temperatur-Felder (Live-Zuordnung oder ausdrückliche Quelle außer «keine»)."""
+    from backend.services.live_sensor_config import extract_live_config, extract_quellen_live
+
+    _b, inv_live, _bi, _ii = extract_live_config(anlage)
+    _qb, quellen_inv, _ha = extract_quellen_live(anlage)
+    out: dict[str, list[str]] = {}
+    for inv_id in inv_ids:
+        live = inv_live.get(inv_id) or {}
+        quellen = quellen_inv.get(inv_id) or {}
+        felder = [f for f in felder_je_name
+                  if live.get(f) or (f in quellen and quellen[f][0] not in (None, "keine"))]
+        if felder:
+            out[inv_id] = felder
+    return out
+
+
+async def wp_temperaturen_je_stunde(db: AsyncSession, anlage, invs_by_id: Mapping[str, Any],
+                                    datum: date) -> WpTemperaturTag:
+    """Vorlauf, Rücklauf und Warmwasser je Wärmepumpe und Stunde eines Tages — die Stundenmittel ihrer
+    Mittelwert-Kanäle (``lesen.stundenmittel_stapel``, eine Anweisung für alle Geräte), °C wörtlich, keine
+    Interpolation.
+
+    **Raster (B12):** dasselbe wie der Wärme-Verlauf desselben Tages — hat die WP-Gruppe Wahl ``kanal``
+    (``kanal_stundentag``), liegen die Stunden auf dem Beginn (``[h, h+1)``, die Mittelwert-Zeile ``(D, h)``); sonst
+    (Bestandstag) auf dem Ende (Slot ``h`` = ``[h-1, h)`` ⇒ die Zeile, die um ``h`` endet; Slot 0 aus der Zeile 23:00 des
+    Vortags). Gelesen wird deshalb ``[D 00:00, D+1 00:00)`` bzw. eine Stunde früher."""
+    from backend.services.kanal.fenster import tagesfenster
+    from backend.models.kanal import ART_MEAN
+    from backend.services.kanal.lesen import kanaele_laden, stundenmittel_stapel
+
+    # Die Temperatur-Felder einer Wärmepumpe → Name in der Tagesantwort (Leser im Sinn von `feld_auswertungen`).
+    felder = {"vorlauf_temperatur_c": "vorlauf_c", "ruecklauf_temperatur_c": "ruecklauf_c",
+              "warmwasser_temperatur_c": "warmwasser_c"}
+    raster = RASTER_BEGINN if GRUPPE_WP in (await kanal_stundentag(db, anlage.id, datum)).gruppen else RASTER_ENDE
+    wps = [i for i, inv in invs_by_id.items()
+           if getattr(inv, "typ", None) == "waermepumpe" and inv.ist_aktiv_an(datum)]
+    keys = {f"inv:{i}:{feld}": (i, name) for i in wps for feld, name in felder.items()}
+    kanaele = [k for k in (await kanaele_laden(db, anlage.id, keys)).values() if k.art == ART_MEAN]
+    von, bis = tagesfenster(datum)
+    if raster != RASTER_BEGINN:
+        von, bis = von - 3600, bis - 3600
+    je_kanal = await stundenmittel_stapel(db, kanaele, von, bis) if kanaele else {}
+    reihen: dict[str, dict[str, list[Optional[float]]]] = {}
+    for key, sm in je_kanal.items():
+        inv_id, name = keys[key]
+        reihen.setdefault(inv_id, {})[name] = _reihe_der_mittel(sm.werte, datum, raster)
+    geraete = [
+        WpTemperaturGeraet(inv_id=i, reihen=reihen[i],
+                           abdeckung_h=sum(1 for h in range(24) if any(r[h] is not None for r in reihen[i].values())))
+        for i in wps if i in reihen
+    ]
+    mit_kanal = {keys[k.key] for k in kanaele}
+    ohne = {i: [f for f in zugeordnet if (i, felder[f]) not in mit_kanal]
+            for i, zugeordnet in _temperatur_zuordnungen(anlage, wps, felder).items()}
+    return WpTemperaturTag(raster=raster, geraete=geraete, ohne_kanal={i: f for i, f in ohne.items() if f})
 
 
 # ── Tageskennzahlen und Tagesmengen aus den Kanal-Stunden (HA-Bauform S5, E-S5-3, Bauplan §10h 1/§4 S5-R2) ─────────

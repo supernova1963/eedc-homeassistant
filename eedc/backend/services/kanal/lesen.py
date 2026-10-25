@@ -1,4 +1,5 @@
-"""Lese-Schicht der Kanalstatistik — vier Lesefunktionen, jede mit Abdeckungs-Auskunft (HA-Bauform E3, Bauplan §5).
+"""Lese-Schicht der Kanalstatistik — fünf Lesefunktionen, jede mit Abdeckungs-Auskunft (HA-Bauform E3, Bauplan §5;
+P-433-3 S3: ``stundenmittel``).
 
 **Stand E3: gebaut und geprüft, von keiner Sicht, Route oder den Monats-Fakten benutzt** (Umhängen ist E4; der
 Wächter ``test_kanal_lesen_waechter.py`` hält fest, dass außerhalb ``services/kanal/`` niemand importiert). Die
@@ -13,7 +14,12 @@ nicht Kanäle × Abfragen):
 * ``stunden(_stapel)`` — Zuwachs je Stunde (HAs ``change``): fehlt eine Zeile, steht ihre Menge in der nächsten
   belegten Stunde, und die Stunde trägt ihre Spanne;
 * ``mittel(_stapel)`` — mean/min/max wie HAs ``_get_max_mean_min_statistic`` (Mittel der Stundenmittel, Minimum
-  der Minima, Maximum der Maxima), mit der Einheit des Kanals (keine Umrechnung in der Schicht).
+  der Minima, Maximum der Maxima), mit der Einheit des Kanals (keine Umrechnung in der Schicht);
+* ``stundenmittel_stapel`` (P-433-3 S3, Bauplan B7/W6) — mean/min/max eines Mittelwert-Kanals **je Stunde** (eine Zeile =
+  ihre Stunde ``[H, H+1)``), in der Einheit des Kanals; eine Stunde ohne Zeile fehlt (keine Interpolation, kein
+  Vortragen). Abdeckung (a)/(b) wie ``mittel``, dazu die Zahl der fehlenden Stunden bis zum Ende der Messung. Der eine
+  Stundenleser für Mittelwerte — der Kosten-Kanal (``kosten._preise``) und der Tagesleser der Temperaturen
+  (``energie_profil/kanal_stunden.wp_temperaturen_je_stunde``) lesen hier, nicht selbst.
 
 **Zeit.** Grenzen sind Parameter in absoluter Zeit (Unix-Sekunden); die Schicht kennt keine Tages- oder
 Monatsdefinition (die steht in ``fenster.py``). Eine Zeile ``start_ts = H`` trägt den Stand am ENDE ihrer Stunde
@@ -684,9 +690,96 @@ async def mittel(db: AsyncSession, kanal: Kanal, von: int, bis: int, *, jetzt: O
     return (await mittel_stapel(db, [kanal], von, bis, jetzt=jetzt))[kanal.key]
 
 
+# ── stundenmittel ───────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Stundenmittel:
+    """Ein Mittelwert-Kanal je Stunde über ``[von, bis)`` — wörtlich, in der Einheit des Kanals."""
+
+    key: str
+    einheit: str
+    von: int
+    bis: int
+    #: ``start_ts → (mean, min, max)`` je belegter Stunde. Eine Stunde ohne Zeile fehlt — keine Interpolation, kein
+    #: Vortragen des letzten Werts (P4: eine Lücke ist eine Aussage).
+    werte: dict[int, tuple[float, Optional[float], Optional[float]]]
+    #: Zahl der belegten Stunden.
+    stunden: int
+    #: Zahl der Stunden ohne Zeile in ``[von, min(bis, Soll-Ende))`` — die Lücken im Inneren und an den Rändern.
+    fehlende_stunden: int
+    gedeckt_von: Optional[int]
+    gedeckt_bis: Optional[int]
+    #: (a)/(b) wie ``mittel``: eine Zeile bei oder vor ``von`` und eine, die das Ende erreicht.
+    voll: bool
+    grund: Optional[str]
+    laufend: bool
+
+
+_STUNDENMITTEL_SQL = f"""
+WITH k(kid) AS (SELECT value FROM json_each(:kanaele))
+SELECT k.kid, s.start_ts, s.mean, s.min, s.max,
+    {_naechste('<', ':von', 'DESC')}, {_naechste('>=', ':bis', 'ASC')}
+FROM k LEFT JOIN kanal_statistik s ON s.kanal_id = k.kid AND s.start_ts >= :von AND s.start_ts < :bis
+    AND s.mean IS NOT NULL
+ORDER BY k.kid, s.start_ts
+"""
+
+
+def _stundenmittel_aus(k: Kanal, von: int, bis: int, zeilen: list, vor_ts, nach_ts, jetzt: int) -> Stundenmittel:
+    se = soll_ende(jetzt)
+    ende = min(bis, se)
+    werte = {int(ts): (float(m), mi, ma) for ts, m, mi, ma in zeilen}
+    erste = min(werte) if werte else None
+    letzte = max(werte) if werte else None
+    beginnt = (erste is not None and erste <= von) or vor_ts is not None
+    letzte_bekannt = max(x for x in (letzte, vor_ts, -1) if x is not None)
+    erreicht = letzte_bekannt >= ende - _STUNDE or nach_ts is not None
+    if not beginnt:
+        grund = GRUND_KEINE_ZEILE if nach_ts is None and not werte else GRUND_BEGINNT_NACH_VON
+    elif not erreicht:
+        grund = GRUND_ENDET_VOR_BIS
+    else:
+        grund = None
+    soll = max(0, (ende - von + _STUNDE - 1) // _STUNDE) if ende > von else 0
+    belegt_bis_ende = sum(1 for ts in werte if ts < ende)
+    return Stundenmittel(
+        key=k.key, einheit=k.einheit, von=von, bis=bis, werte=werte, stunden=len(werte),
+        fehlende_stunden=max(0, soll - belegt_bis_ende),
+        gedeckt_von=erste, gedeckt_bis=letzte + _STUNDE if letzte is not None else None,
+        voll=grund is None, grund=grund, laufend=bis > se,
+    )
+
+
+async def stundenmittel_stapel(
+    db: AsyncSession, kanaele: Sequence[Kanal], von: int, bis: int, *, jetzt: Optional[int] = None,
+) -> dict[str, Stundenmittel]:
+    """mean/min/max je Stunde in ``[von, bis)`` für mehrere Mittelwert-Kanäle — EINE Anweisung (die Zeilen des
+    Index-Bereichs, dazu die Nachbarzeilen an den Rändern). Wörtlich in ``kanal.einheit``; keine Umrechnung, keine
+    Interpolation. Abdeckung (a)/(b) wie ``mittel_stapel``."""
+    for k in kanaele:
+        if k.art != ART_MEAN:
+            raise ValueError(f"Kanal {k.key}: Art {k.art} — stundenmittel() gilt nur für Mittelwert-Kanäle")
+    if not kanaele:
+        return {}
+    if bis <= von:
+        raise ValueError(f"leerer Zeitraum: [{von}, {bis})")
+    jetzt = _jetzt(jetzt)
+    zeilen: dict[int, list] = {k.id: [] for k in kanaele}
+    rand: dict[int, tuple] = {}
+    for kid, ts, m, mi, ma, vor_ts, nach_ts in (await db.execute(text(_STUNDENMITTEL_SQL), {
+        "kanaele": json.dumps([k.id for k in kanaele]), "von": von, "bis": bis,
+    })).all():
+        rand[kid] = (vor_ts, nach_ts)
+        if ts is not None:
+            zeilen[kid].append((ts, m, mi, ma))
+    return {k.key: _stundenmittel_aus(k, von, bis, zeilen[k.id], *rand.get(k.id, (None, None)), jetzt)
+            for k in kanaele}
+
+
 __all__ = [
     "GRUND_BEGINNT_NACH_VON", "GRUND_ENDET_VOR_BIS", "GRUND_FEINER_ALS_SPANNE", "GRUND_KEIN_KANAL",
-    "GRUND_KEINE_ZEILE", "Mittel", "SCHREIBVERZUG_S", "Stunden", "Stundenwert", "Zeitraum", "kanaele_laden",
-    "mittel", "mittel_stapel", "reihe", "reihe_stapel", "soll_ende", "stunden", "stunden_stapel", "zeitraum",
-    "zeitraum_stapel", "zellen_stapel",
+    "GRUND_KEINE_ZEILE", "Mittel", "SCHREIBVERZUG_S", "Stunden", "Stundenmittel", "Stundenwert", "Zeitraum",
+    "kanaele_laden", "mittel", "mittel_stapel", "reihe", "reihe_stapel", "soll_ende", "stunden", "stunden_stapel",
+    "stundenmittel_stapel", "zeitraum", "zeitraum_stapel", "zellen_stapel",
 ]

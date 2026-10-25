@@ -131,7 +131,8 @@ describe('Hub: Kennzahl «AZ ohne Zusatzheizung» neben der JAZ', () => {
     const kpi = g.sekundaer!.kpis.find((x) => x.title === 'AZ ohne Zusatzheizung')!
     expect(kpi.value).toBe('4,57')
     expect(kpi.subtitle).toBe('gerechnet: Heizstab mit Wirkungsgrad 1 abgezogen')
-    expect(kpi.berechnung).toBe('2.560,0 kWh ÷ 560,0 kWh')
+    // P-433-3 S3-9: dieselbe Herleitung wie am Tag (`herleitungMengen`, eine Stelle, eine Nachkommastelle).
+    expect(kpi.berechnung).toBe('2.560,0 kWh Wärme ÷ 560,0 kWh Strom')
   })
 
   it('gesperrt: «—» mit Grund; ohne Zähler keine Kachel', async () => {

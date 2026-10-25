@@ -455,6 +455,67 @@ class WaermeVerlaufStundeResponse(BaseModel):
     #: gehört (Standby, Geräte ohne Funktions-Zähler). Er hält die Stapelhöhe
     #: auf dem Gesamtstrom (K1) und heißt, was er ist.
     wp_funktion_uebrige_kwh: Optional[float] = None
+    # ── Der Wärme-Stapel nach Funktion (P-433-3 S3, G3/E-P3-10) ──────────
+    #
+    # Dieselbe gemessene Wärme wie ``wp_waerme_kwh``, nur als Stapel: Heizen und
+    # Warmwasser aus den Summanden-Zählern der Geräte ohne gemeinsamen
+    # Wärmemengenzähler, der Rest «Wärme nicht je Funktion gemessen» füllt bis
+    # ``wp_waerme_kwh`` auf (Σ der drei = ``wp_waerme_kwh`` je Slot). Alle drei
+    # ``None`` ohne Summanden-Form an diesem Tag
+    # (``waerme_funktions_stapel_verfuegbar``) oder in einer Stunde ohne Wert.
+    wp_waerme_heizen_kwh: Optional[float] = None
+    wp_waerme_warmwasser_kwh: Optional[float] = None
+    wp_waerme_uebrige_kwh: Optional[float] = None
+
+
+class WaermeTemperaturStundeResponse(BaseModel):
+    """Eine Stunde des Temperatur-Diagramms (P-433-3 S3) — Stundenmittel des Mittelwert-Kanals in °C, ``None`` ohne
+    Zeile (keine Interpolation). ``stunde`` im ``raster`` der Antwort, wie der Wärme-Verlauf desselben Tages."""
+
+    stunde: int
+    vorlauf_c: Optional[float] = None
+    ruecklauf_c: Optional[float] = None
+    warmwasser_c: Optional[float] = None
+    #: Vorlauf − Rücklauf der Stunde in K (``core/berechnungen/temperatur.spreizung_k`` auf den gezeigten, auf 0,1
+    #: gerundeten Werten — wie live), ``None`` ohne einen der beiden. Der Client rechnet sie nicht nach.
+    spreizung_k: Optional[float] = None
+
+
+class WaermeTemperaturGeraetResponse(BaseModel):
+    """Ein Gerät mit Temperatur-Kanal: 24 Stunden, Abdeckung und der Kopf des Diagramms (Ø über die Betriebsstunden,
+    ``core/berechnungen/temperatur_tagesmittel.py``)."""
+
+    investition_id: int
+    bezeichnung: str
+    stunden: list[WaermeTemperaturStundeResponse]
+    #: Stunden mit mindestens einem Wert.
+    abdeckung_h: int
+    #: Ø Vorlauf (°C) und Ø Spreizung (K) über die Stunden mit Betrieb — ``None`` ohne erkennbare Betriebsstunde.
+    vorlauf_mittel_c: Optional[float] = None
+    spreizung_mittel_k: Optional[float] = None
+    #: Zahl der Betriebsstunden, über die ``vorlauf_mittel_c`` gemittelt ist.
+    betriebsstunden: int = 0
+    #: Woran die Betriebsstunden erkannt wurden: ``"modus"`` · ``"strom"`` · ``None``.
+    betrieb_aus: Optional[str] = None
+
+
+class WaermeTemperaturOhneKanalResponse(BaseModel):
+    """Ein Gerät mit zugeordnetem Temperatur-Feld, aber ohne Mittelwert-Kanal (MQTT/Standalone oder Sensor ohne
+    HA-Langzeitstatistik): live ja, Stundenmittel nein."""
+
+    investition_id: int
+    bezeichnung: str
+    felder: list[str]
+
+
+class WaermeTemperaturStundenResponse(BaseModel):
+    """``GET /{anlage_id}/waerme-temperaturen-stunden`` — Vorlauf, Rücklauf und Warmwasser je Wärmepumpe und Stunde
+    eines Tages (P-433-3 S3, #432). Eigene Route neben dem Wärme-Verlauf (Fehlerisolation, Entscheid 11.09.2026):
+    bleibt sie aus, fehlt nur das Temperatur-Diagramm."""
+
+    raster: Literal["beginn", "ende"] = "ende"
+    geraete: list[WaermeTemperaturGeraetResponse] = Field(default_factory=list)
+    ohne_kanal: list[WaermeTemperaturOhneKanalResponse] = Field(default_factory=list)
 
 
 class WaermeVerlaufStundenResponse(BaseModel):
@@ -478,6 +539,9 @@ class WaermeVerlaufStundenResponse(BaseModel):
     funktions_stapel_verfuegbar: bool = False
     #: Menge der **Funktions**-Zähler ohne Stundenform (P4, wie oben).
     funktion_ohne_stundenform_kwh: Optional[float] = None
+    #: P-433-3 S3: trägt ein Gerät Summanden-Formen der Wärme (Heizen/Warmwasser)? Nur dann setzt jede Stunde die
+    #: drei Felder des Wärme-Stapels; sonst bleibt die Wärme die Linie.
+    waerme_funktions_stapel_verfuegbar: bool = False
 
 
 # ── Verteilung & Verlauf (WK-16c) ────────────────────────────────────────────
@@ -808,6 +872,15 @@ class TagDetailResponse(BaseModel):
     #: Tag selbst, weil er beide Seiten je Gerät kennt.
     wp_jaz_kuehlen: Optional[float] = None
     wp_jaz_kuehlen_grund: Optional[str] = None
+    #: P-433-3 S3 (#432): Zähler und Nenner je Funktion — die Zahlen, aus denen die drei Arbeitszahlen darüber
+    #: **tatsächlich** entstanden sind (``Arbeitszahl.zaehler_kwh/nenner_kwh``, nur mit Wert), für die Herleitung in
+    #: «Je Funktion». Bedeutung wie ``wp_jaz_zaehler_kwh``/``wp_jaz_nenner_kwh``.
+    wp_jaz_heizen_zaehler_kwh: Optional[float] = None
+    wp_jaz_heizen_nenner_kwh: Optional[float] = None
+    wp_jaz_warmwasser_zaehler_kwh: Optional[float] = None
+    wp_jaz_warmwasser_nenner_kwh: Optional[float] = None
+    wp_jaz_kuehlen_zaehler_kwh: Optional[float] = None
+    wp_jaz_kuehlen_nenner_kwh: Optional[float] = None
     #: **E1b:** ``wp_jaz`` ist eine untere **Schranke** („≥ 3,0") — im Nenner
     #: steht Strom ohne gemessene Wärme. Gleiche Bedeutung und gleiche Quelle
     #: wie im Monat (``AktuellerMonatResponse.wp_jaz_ist_schranke``); der Tages-

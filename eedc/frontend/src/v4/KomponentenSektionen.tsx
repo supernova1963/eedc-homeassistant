@@ -29,7 +29,7 @@ import {
   type VerlaufRest, type VerlaufSicht, type WaermeVerlaufPunkt,
 } from './waermeVerlauf'
 import {
-  wpFunktionsGruppen, zeigtStromJeFunktion, type FunktionsGruppen, type FunktionsZeile,
+  herleitungMengen, wpFunktionsGruppen, zeigtStromJeFunktion, type FunktionsGruppen, type FunktionsZeile,
 } from './wpFunktionsGruppen'
 import {
   balkenSegmente, kostenZeilen, verteilungHinweise, verteilungTitel,
@@ -48,7 +48,8 @@ import {
 import type {
   AktuellerMonatResponse, SonstigesGeraet, WpGeraetZeile, WpMoeglichZeile,
 } from '../api/aktuellerMonat'
-import type { VerteilungVerlauf } from '../api/energie_profil'
+import type { VerteilungVerlauf, WaermeTemperaturStunden } from '../api/energie_profil'
+import { baueTemperaturDiagramm, geraeteMitTemperaturen, ohneKanalZeilen } from './waermeTemperaturen'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 const hat = (v: number | null | undefined) => v != null
@@ -199,8 +200,7 @@ function DetailListe({ rows }: { rows: DetailZeile[] }) {
 /** P-433-3 S2: «davon Zusatzheizung 0,4 kWh · AZ ohne Zusatzheizung 4,57 (gerechnet)» — Zahl, Zähler und Nenner
  *  kommen aus dem Layer; der Satz zur Herkunft und die Herleitung stehen beim Überfahren, ein Sperrgrund ebenso. */
 function zusatzheizungDetail(z: NonNullable<FunktionsGruppen['zusatzheizung']>): DetailZeile {
-  const herleitung = z.zaehlerKwh != null && z.nennerKwh != null
-    ? `${fmt(z.zaehlerKwh, 1)} kWh Wärme ÷ ${fmt(z.nennerKwh, 1)} kWh Strom` : null
+  const herleitung = herleitungMengen(z.zaehlerKwh, z.nennerKwh)
   return {
     label: 'davon Zusatzheizung',
     wert: `${fmt(z.kwh, 1)} kWh · AZ ohne Zusatzheizung ${fmtCalc(z.az, 2, '—')}${z.az != null ? ' (gerechnet)' : ''}`,
@@ -215,8 +215,9 @@ function FunktionsGruppenListe({ fg }: { fg: FunktionsGruppen }) {
       ? fmtCalc(z.wert, 2, '—')
       : `${fmt(z.kwh)} kWh`,
     // Nur der Strich einer Arbeitszahl trägt eine Erklärung — eine Menge
-    // erklärt sich selbst.
-    titel: z.art === 'arbeitszahl' ? z.tooltip : undefined,
+    // erklärt sich selbst. P-433-3 S3: eine Arbeitszahl MIT Wert trägt ihre
+    // Herleitung (Zähler ÷ Nenner des Layers) beim Überfahren.
+    titel: z.art === 'arbeitszahl' ? (z.herleitung ?? z.tooltip) : undefined,
   })
   return (
     <div className="space-y-4">
@@ -505,6 +506,39 @@ function WaermeVerlaufElement({ punkte, rest }: {
 }
 
 /**
+ * P-433-3 S3 (#432) — **Temperaturen je Gerät**: Vorlauf und Rücklauf mit der Spreizung als Fläche dazwischen, die
+ * Warmwasser-Temperatur, °C-Achse; im Kopf Ø Vorlauf und Ø Spreizung über die Betriebsstunden (Layer), die Legende
+ * nennt die Werte der letzten Stunde. Gerätewahl über die Segment-SoT (B15), nur ab zwei Geräten mit Temperatur-
+ * Stunden; ein Gerät ⇒ ohne Umschalter. Die Zeichnung ist die Hülle {@link WaermeVerlaufChart} (Regel 0/0a).
+ */
+function WpTemperaturElement({ t }: { t: WaermeTemperaturStunden }) {
+  const geraete = geraeteMitTemperaturen(t)
+  const [gewaehlt, setGewaehlt] = useState<string>(String(geraete[0]?.investition_id ?? ''))
+  const g = geraete.find((x) => String(x.investition_id) === gewaehlt) ?? geraete[0]
+  if (!g) return null
+  const dia = baueTemperaturDiagramm(g, t.raster ?? 'ende')
+  const ohne = ohneKanalZeilen(t)
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <ElementTitel>{geraete.length >= 2 ? 'Temperaturen' : `Temperaturen · ${g.bezeichnung}`}</ElementTitel>
+        {geraete.length >= 2 && (
+          <SegmentControl
+            ariaLabel="Wärmepumpe wählen"
+            optionen={geraete.map((x) => ({ key: String(x.investition_id), label: x.bezeichnung }))}
+            value={String(g.investition_id)} onChange={setGewaehlt}
+          />
+        )}
+      </div>
+      {dia.kopf && <p className="text-sm text-gray-600 dark:text-gray-300 tabular-nums">{dia.kopf}</p>}
+      <WaermeVerlaufChart rows={dia.rows} stapel={[]} linien={dia.linien} flaechen={dia.flaechen}
+        einheit="°C" legendeZusatz={dia.legendeZusatz} />
+      {ohne.length > 0 && <DetailListe rows={ohne} />}
+    </div>
+  )
+}
+
+/**
  * **Verteilung & Verlauf** — der Blockteil aus WK-16c.
  *
  * Drei Teile, eine Antwort: die **Verteilung** des Zeitraums (Strom je Gerät und
@@ -600,6 +634,9 @@ export function baueKomponentenBloecke(
    *  den sich nichts ändert: Bleibt der Abruf aus, fehlt genau dieser Blockteil
    *  und sonst nichts. */
   wpVerteilung?: VerteilungVerlauf | null,
+  /** P-433-3 S3: nur der Tag — Vorlauf/Rücklauf/Warmwasser je Gerät und Stunde (eigene Route). Bleibt der Abruf aus,
+   *  fehlt genau das Temperatur-Diagramm. */
+  wpTemperaturen?: WaermeTemperaturStunden | null,
 ): Block[] {
   const istTag = periode === 'tag'
   const bloecke: Block[] = []
@@ -924,7 +961,11 @@ export function baueKomponentenBloecke(
     // Zahlenwand. Seit Bauschnitt 8 je Funktion gruppiert: Strom · Nutzenergie ·
     // Arbeitszahl (`wpFunktionsGruppen.ts`, dort die Regeln).
     const wpFunktionen = wpFunktionsGruppen(d)
-    const wpKpis = mitParkId('wp', kpis)
+    // P-433-3 S3 (B4/A3a): eine Sicht zeigt eine Periode — am Tag heißt die Kachel «AZ heute» (Override auf den SoT
+    // `WP_KPI.jaz`, wie `komponentenStyle.ts` es vorsieht); Monat und Jahr behalten «JAZ». ⚠ Erst NACH `mitParkId`:
+    // die Park-ID bleibt `kpi:wp-jaz` — eine am Tag geparkte Kachel bleibt geparkt.
+    const jazTitel = istTag ? 'AZ heute' : WP_KPI.jaz.title
+    const wpKpis = mitParkId('wp', kpis).map((k) => (k.title === WP_KPI.jaz.title ? { ...k, title: jazTitel } : k))
     // Verlauf + Liste je Funktion + Betriebsart-Balken + Geräte-Hinweis — je ein
     // parkbares Element.
     const wpEls: SektionElement[] = []
@@ -950,6 +991,11 @@ export function baueKomponentenBloecke(
       titel: verlaufTitel(verlauf),
       titelImNode: true,
       node: <WaermeVerlaufElement punkte={wpVerlauf} rest={wpVerlaufRest} />,
+    })
+    // ── P-433-3 S3: Temperaturen je Gerät — nur am Tag und nur mit Temperatur-Stunden (B10) ──
+    if (istTag && wpTemperaturen && geraeteMitTemperaturen(wpTemperaturen).length > 0) wpEls.push({
+      id: 'el:wp-temperaturen', titel: 'Temperaturen', titelImNode: true,
+      node: <WpTemperaturElement t={wpTemperaturen} />,
     })
     // ── WK-16c: Verteilung & Verlauf — ein weiterer parkbarer Blockteil ───
     //
@@ -1074,7 +1120,9 @@ export function baueKomponentenBloecke(
     if (wpGeraete.length >= 2) wpEls.push({ id: 'el:wp-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={wpGeraete} /> })
     // ── D-Sicht 3: Zahlen je Gerät, im Block statt nur im Hub ─────────────
     const wpGeraeteZeilen = d.wp_geraete ?? []
-    if (wpGeraeteZeilen.length > 0) wpEls.push({
+    // P-433-3 S3 (E-P3-6): bei EINEM Gerät wiederholt die Tabelle nur die Kacheln und «Je Funktion» — sie entfällt
+    // (wie «Was noch möglich wäre» ohne Inhalt); der Link in den Hub darunter bleibt. Eine Regel für alle Perioden.
+    if (wpGeraeteZeilen.length >= 2) wpEls.push({
       id: 'el:wp-geraete-zahlen', titel: 'Zahlen je Gerät',
       node: <GeraeteKennzahlen zeilen={wpGeraeteZeilen} istSchranke={d.wp_jaz_ist_schranke} />,
     })
@@ -1121,7 +1169,8 @@ export function baueKomponentenBloecke(
       // sonst Strom — Tag ohne WMZ). Period-agnostisch, kein Sonderpfad.
       summary: hat(d.wp_waerme_kwh)
         // W-10, zweite Stelle: dieselbe Klasse wie in der Kachel, ohne Melder.
-        ? `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${wpSummaryErsparnis ? ` · ${wpSummaryErsparnis.betrag} € vs. Alternative` : ''}`
+        // P-433-3 S3: derselbe Name wie die Kachel («AZ heute» am Tag).
+        ? `${jaz != null ? `${jazTitel} ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${wpSummaryErsparnis ? ` · ${wpSummaryErsparnis.betrag} € vs. Alternative` : ''}`
         : `${fmt(d.wp_strom_kwh)} kWh Strom${hat(d.wp_starts_summe_monat) ? ` · ${d.wp_starts_summe_monat!.toLocaleString('de-DE')} Starts` : ''}`,
       render: () => <Sektion kpis={wpKpis} elemente={wpEls} />,
     })

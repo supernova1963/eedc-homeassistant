@@ -288,6 +288,13 @@ export interface TagDetail {
   //  die Kälte (bis dahin im Tag immer `null`). Wert ODER Grund, wie oben.
   wp_jaz_kuehlen: number | null
   wp_jaz_kuehlen_grund: string | null
+  /** P-433-3 S3: Zähler und Nenner je Funktion aus dem Layer (nur mit Wert) — für die Herleitung in «Je Funktion». */
+  wp_jaz_heizen_zaehler_kwh?: number | null
+  wp_jaz_heizen_nenner_kwh?: number | null
+  wp_jaz_warmwasser_zaehler_kwh?: number | null
+  wp_jaz_warmwasser_nenner_kwh?: number | null
+  wp_jaz_kuehlen_zaehler_kwh?: number | null
+  wp_jaz_kuehlen_nenner_kwh?: number | null
   /** E1b — siehe {@link WpGeraetZeile}. */
   wp_jaz_ist_schranke?: boolean | null
   /** Der EINE Satz unter der Schranke: „Klimaanlage: Strom ohne Wärmemessung
@@ -728,6 +735,12 @@ export interface WaermeVerlaufStunde {
   wp_funktion_strom_heizen_kwh?: number | null
   wp_funktion_strom_warmwasser_kwh?: number | null
   wp_funktion_uebrige_kwh?: number | null
+  /** P-433-3 S3 — der **Wärme**-Stapel nach Funktion (dieselbe gemessene Wärme wie `wp_waerme_kwh`): Heizen und
+   *  Warmwasser aus den Summanden-Zählern, der Rest «Wärme nicht je Funktion gemessen» füllt bis `wp_waerme_kwh`
+   *  auf. `null` ohne Summanden-Form an diesem Tag (`waerme_funktions_stapel_verfuegbar`). */
+  wp_waerme_heizen_kwh?: number | null
+  wp_waerme_warmwasser_kwh?: number | null
+  wp_waerme_uebrige_kwh?: number | null
 }
 
 export interface WaermeVerlaufStunden {
@@ -745,6 +758,43 @@ export interface WaermeVerlaufStunden {
   funktions_stapel_verfuegbar?: boolean
   /** Dasselbe für die Funktions-Zähler (P4). */
   funktion_ohne_stundenform_kwh?: number | null
+  /** P-433-3 S3: trägt ein Gerät Summanden-Formen der Wärme? Nur dann stehen die drei `wp_waerme_*`-Felder. */
+  waerme_funktions_stapel_verfuegbar?: boolean
+}
+
+/** P-433-3 S3 (#432): eine Stunde des Temperatur-Diagramms — Stundenmittel in °C, `null` ohne Messung. `stunde` im
+ *  `raster` der Antwort; `spreizung_k` = Vorlauf − Rücklauf aus dem Backend (`core/berechnungen/temperatur.py`). */
+export interface WaermeTemperaturStunde {
+  stunde: number
+  vorlauf_c?: number | null
+  ruecklauf_c?: number | null
+  warmwasser_c?: number | null
+  spreizung_k?: number | null
+}
+
+export interface WaermeTemperaturGeraet {
+  investition_id: number
+  bezeichnung: string
+  stunden: WaermeTemperaturStunde[]
+  abdeckung_h: number
+  /** Ø Vorlauf und Ø Spreizung über die Betriebsstunden (Layer `temperatur_tagesmittel`). */
+  vorlauf_mittel_c?: number | null
+  spreizung_mittel_k?: number | null
+  betriebsstunden: number
+  betrieb_aus?: 'modus' | 'strom' | null
+}
+
+export interface WaermeTemperaturOhneKanal {
+  investition_id: number
+  bezeichnung: string
+  felder: string[]
+}
+
+/** `GET /energie-profil/{id}/waerme-temperaturen-stunden` — eigene Route, bleibt sie aus, fehlt nur das Diagramm. */
+export interface WaermeTemperaturStunden {
+  raster?: StundenRaster
+  geraete: WaermeTemperaturGeraet[]
+  ohne_kanal: WaermeTemperaturOhneKanal[]
 }
 
 export const energieProfilApi = {
@@ -787,6 +837,10 @@ export const energieProfilApi = {
   /** Die 24 Stunden des Wärme/Klima-Verlaufs eines Tages. */
   getWaermeVerlaufStunden: (anlageId: number, datum: string): Promise<WaermeVerlaufStunden> =>
     api.get(`/energie-profil/${anlageId}/waerme-verlauf-stunden?datum=${datum}`),
+
+  /** P-433-3 S3: Vorlauf, Rücklauf und Warmwasser je Wärmepumpe und Stunde eines Tages. */
+  getWaermeTemperaturenStunden: (anlageId: number, datum: string): Promise<WaermeTemperaturStunden> =>
+    api.get(`/energie-profil/${anlageId}/waerme-temperaturen-stunden?datum=${datum}`),
 
   getTagDetail: (anlageId: number, datum: string): Promise<TagDetail> =>
     api.get(`/energie-profil/${anlageId}/tag-detail?datum=${datum}`),

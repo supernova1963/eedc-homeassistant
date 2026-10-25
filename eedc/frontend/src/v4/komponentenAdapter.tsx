@@ -46,6 +46,7 @@ import type { KpiStripItem } from '../components/blocks'
 import type { VerteilungSegment, WertHerkunft } from '../components/blocks'
 import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
 import type { Investition } from '../types'
+import { herleitungMengen } from './wpFunktionsGruppen'
 
 /** Datenrollen→bg-Klassen für Aufteilungs-Segmente — SoT in `lib/colors.ts`. */
 const SEG = ROLLEN_BG
@@ -701,9 +702,9 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           sek.push(k('AZ ohne Zusatzheizung', formatEffizienz(z.jaz_ohne_zusatzheizung).wert, undefined, 'orange', WP_KPI.jaz.icon, {
             subtitle: z.jaz_ohne_zusatzheizung_hinweis ?? undefined,
             formel: '(Wärme − Heizstab-Strom) ÷ (Strom − Heizstab-Strom)',
-            berechnung: (z.jaz_ohne_zusatzheizung_zaehler_kwh != null && z.jaz_ohne_zusatzheizung_nenner_kwh != null)
-              ? `${n1(z.jaz_ohne_zusatzheizung_zaehler_kwh)} kWh ÷ ${n1(z.jaz_ohne_zusatzheizung_nenner_kwh)} kWh`
-              : undefined,
+            // P-433-3 S3-9: dieselbe Herleitung wie am Tag («Je Funktion»), eine Formatierungsstelle.
+            berechnung: herleitungMengen(z.jaz_ohne_zusatzheizung_zaehler_kwh, z.jaz_ohne_zusatzheizung_nenner_kwh)
+              ?? undefined,
           }))
         } else if (z.jaz_ohne_zusatzheizung_grund) {
           sek.push(unbewertet({ title: 'AZ ohne Zusatzheizung', icon: WP_KPI.jaz.icon, color: 'orange' }, z.jaz_ohne_zusatzheizung_grund))

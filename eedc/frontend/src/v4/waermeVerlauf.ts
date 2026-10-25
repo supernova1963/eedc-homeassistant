@@ -9,6 +9,7 @@
  * Tag liefert Stunden. Es gibt nur eine Regel-Sammlung, nicht drei.
  */
 import { CHART_COLORS } from '../lib'
+import { funktionsFarbe } from '../lib/funktionsFarben'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { WaermeVerlaufTag } from '../api/energie_profil'
 import type { VerlaufStapel, VerlaufLinie, WaermeVerlaufRow } from './WaermeVerlaufChart'
@@ -36,6 +37,11 @@ export interface WaermeVerlaufPunkt {
   wp_funktion_strom_heizen_kwh?: number | null
   wp_funktion_strom_warmwasser_kwh?: number | null
   wp_funktion_uebrige_kwh?: number | null
+  /** P-433-3 S3 — die **Wärme** derselben Stunde nach Funktion (Summanden-Zähler, Rest «nicht je Funktion
+   *  gemessen»; Σ = `wp_waerme_kwh`). `null`/fehlend: dann bleibt die Wärme die Linie. Nur der Tag trägt sie. */
+  wp_waerme_heizen_kwh?: number | null
+  wp_waerme_warmwasser_kwh?: number | null
+  wp_waerme_uebrige_kwh?: number | null
   /** Monatsmittel der Außentemperatur (°C) — zweite Achse, per Legende
    *  ausblendbar. Fehlt sie, fehlt auch die Linie: Ein kalter Monat ohne
    *  Messreihe ist kein 0-°C-Monat. */
@@ -59,6 +65,9 @@ export interface WaermeVerlaufDaten {
   hatFunktionsStapel: boolean
   /** Gibt es mindestens eine Periode mit GEMESSENER Wärme? */
   hatGemesseneWaerme: boolean
+  /** P-433-3 S3: liegt die Wärme gerade als **Stapel** nach Funktion im Bild (nur Sicht „nach Funktion")? Dann
+   *  entfällt die Wärme-Linie — dieselbe Menge zweimal wäre eine Doppelaussage. */
+  waermeGestapelt: boolean
   /** Gibt es mindestens eine Periode mit gemessener Kälte? (Bauschnitt 6b) */
   hatGemesseneKaelte: boolean
   /** Gibt es überhaupt Außentemperatur-Werte? */
@@ -128,6 +137,23 @@ const hatFunktion = (p: WaermeVerlaufPunkt): boolean =>
   p.wp_funktion_strom_heizen_kwh != null || p.wp_funktion_strom_warmwasser_kwh != null
 
 /**
+ * P-433-3 S3 (Bauplan S3-4/S3-6, E-P3-1/E-P3-10): die **Wärme** nach Funktion — Heizen und Warmwasser aus den
+ * Summanden-Zählern, darüber der Rest **„Wärme nicht je Funktion gemessen"** (gemeinsamer Wärmemengenzähler, Geräte
+ * ohne Aufteilung). Die Stapelhöhe ist die gemessene Wärme (`wp_waerme_kwh`) — das Backend bildet den Rest, der Client
+ * stapelt nur. Eine eigene Gruppe (`waerme`): sie steht in der Sicht „nach Funktion" **neben** dem Strom-Stapel, nie
+ * darauf (andere Größe). Farben aus `lib/funktionsFarben.ts`; der Rest im Ton von „nicht aufgeteilt".
+ */
+const WAERME_SEGMENTE: Segment[] = [
+  { key: 'w_heizen', feld: 'wp_waerme_heizen_kwh', label: 'Wärme Heizen', farbe: funktionsFarbe('heizen') },
+  { key: 'w_warmwasser', feld: 'wp_waerme_warmwasser_kwh', label: 'Wärme Warmwasser', farbe: funktionsFarbe('warmwasser') },
+  { key: 'w_uebrige', feld: 'wp_waerme_uebrige_kwh', label: 'Wärme nicht je Funktion gemessen', farbe: funktionsFarbe('ohne_modus') },
+]
+
+/** Trägt diese Periode den Wärme-Stapel? Das Backend setzt die drei Felder genau dann (`waerme_funktions_stapel_verfuegbar`). */
+const hatWaermeFunktion = (p: WaermeVerlaufPunkt): boolean =>
+  p.wp_waerme_heizen_kwh != null || p.wp_waerme_warmwasser_kwh != null || p.wp_waerme_uebrige_kwh != null
+
+/**
  * Baut Zeilen und Serien. Serien erscheinen nur, wenn sie etwas zu sagen haben:
  * Warmwasser/Lüften/Entfeuchten nur bei eigenem Zähler (E4, Konzept §2.3
  * *„Wer sie nicht erfasst, sieht sie nicht"*), die Wärmelinie nur mit
@@ -176,6 +202,11 @@ export function baueWaermeVerlauf(
   const hatGemesseneWaerme = punkte.some((p) => gemesseneWaerme(p) != null)
   const hatGemesseneKaelte = punkte.some((p) => gemesseneKaelte(p) != null)
   const hatTemperatur = punkte.some((p) => p.temperatur_c != null)
+  // P-433-3 S3: Wärme als Stapel nur in der Sicht „nach Funktion" — sonst die Linie wie bisher.
+  const waermeGestapelt = istFunktion && hatGemesseneWaerme && punkte.some(hatWaermeFunktion)
+  const waermeSegmente = waermeGestapelt
+    ? WAERME_SEGMENTE.filter((s) => s.key === 'w_uebrige' || punkte.some((p) => z(p[s.feld] as number | null | undefined) > 0))
+    : []
 
   const rows: WaermeVerlaufRow[] = punkte.map((p) => {
     const row: WaermeVerlaufRow = { name: p.name }
@@ -186,7 +217,10 @@ export function baueWaermeVerlauf(
       // während die Kachel Strom zeigt.
       row[s.key] = split ? eineStelle(z(p[s.feld] as number | null | undefined)) : null
     }
-    if (hatGemesseneWaerme) row.waerme = gemesseneWaerme(p)
+    if (hatGemesseneWaerme && !waermeGestapelt) row.waerme = gemesseneWaerme(p)
+    for (const s of waermeSegmente) {
+      row[s.key] = hatWaermeFunktion(p) ? eineStelle(z(p[s.feld] as number | null | undefined)) : null
+    }
     if (hatGemesseneKaelte) row.kaelte = gemesseneKaelte(p)
     // ⚠ `null` statt 0, wo kein Wert vorliegt — sonst zöge die Linie den
     // Monat auf den Gefrierpunkt.
@@ -194,11 +228,12 @@ export function baueWaermeVerlauf(
     return row
   })
 
-  const stapel: VerlaufStapel[] = hatStapel
-    ? aktiveSegmente.map((s) => ({ key: s.key, label: s.label, farbe: s.farbe }))
-    : []
+  const stapel: VerlaufStapel[] = [
+    ...(hatStapel ? aktiveSegmente.map((s) => ({ key: s.key, label: s.label, farbe: s.farbe })) : []),
+    ...waermeSegmente.map((s) => ({ key: s.key, label: s.label, farbe: s.farbe, gruppe: 'waerme' })),
+  ]
   const linien: VerlaufLinie[] = [
-    ...(hatGemesseneWaerme
+    ...(hatGemesseneWaerme && !waermeGestapelt
       ? [{ key: 'waerme', label: 'Wärme (gemessen)', farbe: CHART_COLORS.waermeGemessen, dezimalen: 1 }]
       : []),
     // Bauschnitt 6b: eigene Linie, eigene Farbe (Konzept §8) — NIE mit der
@@ -228,6 +263,7 @@ export function baueWaermeVerlauf(
     sicht: aktiv,
     hatFunktionsStapel,
     hatGemesseneWaerme,
+    waermeGestapelt,
     hatGemesseneKaelte,
     hatTemperatur,
   }
@@ -276,7 +312,13 @@ export function verlaufTitel(v: WaermeVerlaufDaten): string {
       : v.hatGemesseneKaelte ? 'gemessene Kälte' : null
   // S2a: der Titel nennt die **Familie**, die gerade gestapelt ist — sonst
   // trügen zwei verschiedene Größen unbeschriftet denselben Platz.
-  const stapel = v.sicht === 'funktion' ? 'Strom nach Funktion' : 'Strom nach Betriebsart'
+  const stapel = v.sicht === 'funktion'
+    ? (v.waermeGestapelt ? 'Strom und Wärme nach Funktion' : 'Strom nach Funktion')
+    : 'Strom nach Betriebsart'
+  // P-433-3 S3: die gestapelte Wärme steht schon im Stapel-Teil des Titels.
+  if (v.waermeGestapelt && v.hatStapel) {
+    return v.hatGemesseneKaelte ? `Verlauf · ${stapel} und gemessene Kälte` : `Verlauf · ${stapel}`
+  }
   if (v.hatStapel && gemessen) {
     return `Verlauf · ${stapel}${gemessen.includes(' und ') ? ', ' : ' und '}${gemessen}`
   }

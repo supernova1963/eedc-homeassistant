@@ -274,6 +274,12 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
   (= Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige erfasste Verbraucher); die Formel steht im Tooltip des Spaltenkopfs
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
+- Im Block **Wärme/Klima** heißt die Arbeitszahl-Kachel am Tag **„AZ heute"**; mit zugeordnetem Vorlauf/Rücklauf
+  steht dort das Element **„Temperaturen"** (Vorlauf, Rücklauf, Spreizung und Warmwasser je Stunde, darüber Ø Vorlauf
+  und Ø Spreizung der Betriebsstunden, Gerätewahl ab zwei Wärmepumpen) — einzeln parkbar wie jedes Element
+  ([§1.3](#13-das-block-modell-klappen-fokussieren-umsortieren-parken)); geparkt bleibt es auch, wenn du den Tag wechselst.
+  Die Tabelle **„Zahlen je Gerät"** erscheint erst ab zwei Wärmepumpen
+  ([Wärme & Klima](HANDBUCH_WAERME_KLIMA.md#wo-die-fläche-in-der-app-erscheint))
 
 > **Eigenverbrauch des Tages = derselbe wie in Monat, Jahr und Live.** Die Kachel rechnet
 > **Direktverbrauch + Speicher-Entladung** — was das Haus direkt von der PV und aus dem Speicher

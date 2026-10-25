@@ -93,6 +93,7 @@ GET /api/energie-profil/{anlage_id}/tage
 GET /api/energie-profil/{anlage_id}/tage-werte
 GET /api/energie-profil/{anlage_id}/tagesprognose
 GET /api/energie-profil/{anlage_id}/verfuegbare-monate
+GET /api/energie-profil/{anlage_id}/waerme-temperaturen-stunden
 GET /api/energie-profil/{anlage_id}/waerme-verlauf
 GET /api/energie-profil/{anlage_id}/waerme-verlauf-stunden
 GET /api/energie-profil/{anlage_id}/waerme-verteilung

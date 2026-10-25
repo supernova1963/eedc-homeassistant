@@ -10,6 +10,10 @@ P8-Überlagerung der Monats-Fakten, nie über ein direktes ``zeitraum()`` über 
 geprüft, aber nicht umgehängt. ``IMPORTEURE_STAND`` hält genau das fest (Gleichheit statt Obergrenze); wer umhängt,
 trägt den Leser dort ein. **Stand S3 (E-S3-6):** genau ein Importeur außerhalb, der benannte Tages-Leser
 ``services/energie_profil/kanal_stunden.py`` (er importiert ``stunden_leser``/``stunden_adapter``; die Sichten rufen ihn).
+**Stand P-433-3 S3 (Bauplan B11):** derselbe eine Importeur — er liest seither auch ``lesen.stundenmittel_stapel`` für
+die Temperaturen je Gerät (``wp_temperaturen_je_stunde``); die Route ``waerme-temperaturen-stunden`` ruft ihn, nie die
+Schicht. Dazu der zweite Wächter unten: **Mittelwerte je Stunde liest nur ``lesen.py``** (``KanalStatistik.mean/min/max``
+außerhalb nur mit Grund in ``MITTELWERT_LESER_STAND``).
 
 **Was er findet (AST, baumweit ohne ``tests/``):** ``import backend.services.kanal.lesen``, ``from
 backend.services.kanal.lesen import …``, ``from backend.services.kanal import lesen``, auch in Funktionen; relative
@@ -45,7 +49,9 @@ BENANNTE_TAGESLESER: dict[str, str] = {
         "E-S3-2: der eine Tages-Leser der Stunden-Sichten (/stunden, tage-werte, monat) — Mischzeilen aus "
         "kanal/stunden_leser + stunden_adapter und der Stundenzeile; Routen rufen nur ihn. Die Wärme-Sichten "
         "(energie_profil/waerme.py, waerme_verteilung_tag.py: Stundenform und WP-Strom eines WP-Kanal-Tags) und "
-        "serien.py, tage_werte.py, monat.py importieren die Schicht nicht selbst, sie rufen kanal_stunden"
+        "serien.py, tage_werte.py, monat.py importieren die Schicht nicht selbst, sie rufen kanal_stunden. "
+        "P-433-3 S3: dazu lesen.stundenmittel_stapel für Vorlauf/Rücklauf/Warmwasser je Gerät "
+        "(wp_temperaturen_je_stunde; Route waerme-temperaturen-stunden ruft nur ihn)"
     ),
 }
 
@@ -352,3 +358,77 @@ def test_gegenprobe_neuer_schreiber_ohne_invalidiere_wuerde_rot(monkeypatch):
                                  baum=ast.parse("delete(KanalStatistik)\n"))
     monkeypatch.setattr(f"{__name__}.produktivbaum", lambda: (*echte, kunst))
     assert "services/kunst.py" in _schreiber_kanal_statistik()
+
+
+# ── P-433-3 S3 (Bauplan B7/W6, F-56-Klasse): Mittelwerte je Stunde liest nur `lesen.py` ──────────────────────────────
+#
+# ``lesen.stundenmittel_stapel`` ist der eine Stundenleser für Mittelwert-Kanäle (mean/min/max je Stunde, Abdeckung).
+# Bis P-433-3 S3 las ``kosten._preise`` ``KanalStatistik.mean`` selbst — ein zweiter, roher Leser derselben Zeilen ohne
+# Abdeckung. Der Wächter findet jeden Attributzugriff ``KanalStatistik.mean``/``.min``/``.max`` (AST, baumweit ohne
+# ``tests/``) außerhalb von ``lesen.py``; der Bestand steht mit Grund in ``MITTELWERT_LESER_STAND`` (Gleichheit — er
+# schrumpft nur oder wächst mit Begründung). Nicht erfasst (benannt): rohes SQL mit ``mean`` als Zeichenkette (das liest
+# heute nur ``lesen.py``; ``ha_statistics_service`` liest HAs Tabelle ``statistics``, nicht ``kanal_statistik``).
+
+_MITTEL_SPALTEN = {"mean", "min", "max"}
+
+#: Wer außerhalb ``lesen.py`` die Mittelwert-Spalten von ``kanal_statistik`` anfasst — Datei → Grund.
+MITTELWERT_LESER_STAND: dict[str, str] = {
+    "services/kanal/kosten.py": "_letzter_preis: nur der Fortschritt des Preis-Spiegels (letzte Zeile mit Mittel), "
+                                "kein Wert — die Preise je Stunde liest _preise über lesen.stundenmittel_stapel",
+    "services/kanal/modus_strom.py": "_mitschrift_anteile: Anteile der Betriebsart-Mitschrift je Stunde (vorbestehend, "
+                                     "Schreiber-intern; Umhängen auf stundenmittel_stapel nicht beauftragt)",
+}
+
+
+def liest_mittelwert_spalten(baum: ast.AST) -> list[int]:
+    """Zeilen mit ``KanalStatistik.mean``/``.min``/``.max``."""
+    return [n.lineno for n in ast.walk(baum)
+            if isinstance(n, ast.Attribute) and n.attr in _MITTEL_SPALTEN
+            and isinstance(n.value, ast.Name) and n.value.id == "KanalStatistik"]
+
+
+def _mittelwert_leser() -> dict[str, list[int]]:
+    out = {}
+    for datei in produktivbaum():
+        if datei.rel in ("services/kanal/lesen.py",) or datei.rel.startswith("models/"):
+            continue
+        z = liest_mittelwert_spalten(datei.baum)
+        if z:
+            out[datei.rel] = z
+    return out
+
+
+def test_mittelwerte_je_stunde_liest_nur_lesen_py():
+    funde = _mittelwert_leser()
+    assert set(funde) == set(MITTELWERT_LESER_STAND), (
+        f"KanalStatistik.mean/min/max außerhalb lesen.py: {sorted(funde)} — der Stand ist "
+        f"{sorted(MITTELWERT_LESER_STAND)}. Mittelwerte je Stunde über lesen.stundenmittel_stapel lesen."
+    )
+
+
+def test_kosten_preise_lesen_ueber_stundenmittel_stapel():
+    """W6: ``kosten._preise`` ruft den Stundenleser der Schicht (Positivkontrolle — ohne ihn wäre der Stand oben leer
+    erfüllbar, indem jemand die Spalte über einen Alias liest)."""
+    import inspect
+
+    from backend.services.kanal import kosten
+
+    import textwrap
+
+    baum = ast.parse(textwrap.dedent(inspect.getsource(kosten._preise)))
+    gerufen = {n.func.id for n in ast.walk(baum) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "stundenmittel_stapel" in gerufen
+    assert not liest_mittelwert_spalten(baum)
+
+
+def test_gegenprobe_mittelwert_leser(monkeypatch):
+    from backend.tests import quellbaum
+
+    assert liest_mittelwert_spalten(ast.parse("select(KanalStatistik.start_ts, KanalStatistik.mean)\n")) == [1]
+    assert liest_mittelwert_spalten(ast.parse("x = KanalStatistik.min\ny = KanalStatistik.max\n")) == [1, 2]
+    assert not liest_mittelwert_spalten(ast.parse("select(KanalStatistik.sum)\nm = sm.mean\n"))
+    echte = produktivbaum()
+    kunst = quellbaum.Quelldatei(pfad=echte[0].pfad, rel="api/routes/kunst.py", quelle="",
+                                 baum=ast.parse("select(KanalStatistik.mean)\n"))
+    monkeypatch.setattr(f"{__name__}.produktivbaum", lambda: (*echte, kunst))
+    assert "api/routes/kunst.py" in _mittelwert_leser()

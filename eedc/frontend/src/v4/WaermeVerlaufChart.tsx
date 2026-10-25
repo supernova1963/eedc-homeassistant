@@ -15,6 +15,12 @@
  * `Curve`. Das graue Hover-Band des Hubs (`CHART_HOVER_CURSOR`, nur `fill`)
  * würde dabei zur dünnen Linie. Gemessen 10.09.2026, kein Gate misst es.
  *
+ * ⭐ **P-433-3 S3: auch das Temperatur-Diagramm ist diese Hülle** (Regel 0/0a, Style-Guide B7) — keine zweite
+ * Chart-Komponente. Dafür zwei Zugaben, ohne die sich für die bestehenden Aufrufer nichts ändert: `flaechen`
+ * (eine Fläche zwischen zwei Werten je Zeile, `[unten, oben]` — die Spreizung zwischen Rücklauf und Vorlauf) und
+ * `legendeZusatz` (ein Text je Serie hinter dem Legenden-Namen — die Werte der letzten Stunde). Ein Stapel kann eine
+ * eigene `gruppe` tragen: zwei Gruppen stehen nebeneinander (Strom und Wärme nach Funktion, S3-4/S3-6).
+ *
  * ⚑ Die Komposition ist bewusst je Chart, der **SoT sind die Primitive**:
  * `xAchse`/`yAchse`/`achsenEinheit`/`achsenTick`, `useLegendenToggle`,
  * `ChartLegende`, `eedcTooltipProps`, `CHART_COLORS`. Vorbild ist
@@ -23,16 +29,26 @@
  */
 import { useMemo } from 'react'
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Area, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ChartLegende, eedcTooltipProps } from '../components/ui'
 import { WetterIcon } from '../components/aussicht'
-import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
+import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, CHART_LABELS } from '../lib'
 import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 
 /** Eine gestapelte Mengen-Serie (kWh) — Farbe aus `lib/colors`. */
 export interface VerlaufStapel {
+  key: string
+  label: string
+  farbe: string
+  /** Stapel-Gruppe (Default `menge`): zwei Gruppen stehen je Zeile nebeneinander (P-433-3 S3). */
+  gruppe?: string
+}
+
+/** P-433-3 S3: eine Fläche zwischen zwei Werten derselben Zeile — die Zeile trägt `[unten, oben]` unter `key`.
+ *  Liegt auf der linken Achse; im Tooltip steht sie nicht (die Linien darüber nennen beide Werte). */
+export interface VerlaufFlaeche {
   key: string
   label: string
   farbe: string
@@ -51,7 +67,7 @@ export interface VerlaufLinie {
 
 export interface WaermeVerlaufRow {
   name: string
-  [serie: string]: number | string | null
+  [serie: string]: number | string | null | [number, number]
 }
 
 /**
@@ -88,13 +104,19 @@ function WetterTick({ x, y, payload, symbole }: {
  *  `= []` im Parameter wäre je Render neu und liefe in die Memo-Abhängigkeit von
  *  `einheitJeLabel` (dieselbe Bauform wie `TagWerteTabelle`/`TagVerlaufChart`). */
 const KEINE_LINIEN: VerlaufLinie[] = []
+const KEINE_FLAECHEN: VerlaufFlaeche[] = []
 
 export function WaermeVerlaufChart({
-  rows, stapel, linien = KEINE_LINIEN, einheit = 'kWh', rechteEinheit, tall, wetterSymbole,
+  rows, stapel, linien = KEINE_LINIEN, flaechen = KEINE_FLAECHEN, einheit = 'kWh', rechteEinheit, tall,
+  wetterSymbole, legendeZusatz,
 }: {
   rows: WaermeVerlaufRow[]
   stapel: VerlaufStapel[]
   linien?: VerlaufLinie[]
+  /** P-433-3 S3: Flächen zwischen zwei Werten (Spreizung). */
+  flaechen?: VerlaufFlaeche[]
+  /** P-433-3 S3: `{Serien-Label: Text}` hinter dem Namen in der Legende (Werte der letzten Stunde). */
+  legendeZusatz?: Record<string, string>
   einheit?: string
   /** Einheit der zweiten Achse — nur nötig, wenn eine Linie `achse: 'rechts'` trägt. */
   rechteEinheit?: string
@@ -105,7 +127,7 @@ export function WaermeVerlaufChart({
   const schmal = useSchmaleAchse()
   // B7-Standard: Serien per Legenden-Klick aus-/einblenden. Reset, wenn sich
   // der Serien-Satz ändert (andere Periode, andere Betriebsarten).
-  const legende = useLegendenToggle([...stapel, ...linien].map((s) => s.key).join('|'))
+  const legende = useLegendenToggle([...stapel, ...flaechen, ...linien].map((s) => s.key).join('|'))
   // Einheit je Serie für den Tooltip — die zweite Achse trägt eine andere
   // (°C, %), und ein gemeinsamer `unit` würde sie mit kWh beschriften.
   const einheitJeLabel = useMemo(() => {
@@ -160,11 +182,25 @@ export function WaermeVerlaufChart({
               return `${fmtZahl(value, e?.dezimalen ?? 0)}${e?.einheit ? ` ${e.einheit}` : ''}`
             },
           })} />
-          <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={legende.onItemClick} />} />
+          <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={legende.onItemClick}
+            formatter={legendeZusatz
+              ? (v: string) => {
+                  const text = CHART_LABELS[v] ?? v
+                  return legendeZusatz[v] ? `${text} · ${legendeZusatz[v]}` : text
+                }
+              : undefined} />} />
+          {flaechen.map((f) => (
+            // `tooltipType="none"`: die Fläche trägt `[unten, oben]` — beide Werte nennen die Linien daneben.
+            <Area
+              key={f.key} yAxisId="menge" dataKey={f.key} name={f.label} type="monotone"
+              stroke="none" fill={f.farbe} fillOpacity={0.35} tooltipType="none"
+              isAnimationActive={false} hide={legende.istVersteckt(f.key)}
+            />
+          ))}
           {stapel.map((b) => (
             <Bar
               key={b.key} yAxisId="menge" dataKey={b.key} name={b.label}
-              stackId="menge" fill={b.farbe} hide={legende.istVersteckt(b.key)}
+              stackId={b.gruppe ?? 'menge'} fill={b.farbe} hide={legende.istVersteckt(b.key)}
             />
           ))}
           {linien.map((l) => (

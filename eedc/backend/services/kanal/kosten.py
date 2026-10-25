@@ -188,14 +188,15 @@ def mengen_der_stunde(auswahl: _TagesAuswahl, deltas: dict[str, float]) -> tuple
 # ── Schreiben ───────────────────────────────────────────────────────────────
 
 
-async def _preise(db: AsyncSession, kanal: Kanal, von: int, bis_inkl: int) -> dict[int, float]:
-    """Stundenmittel des Preis-Kanals ``start_ts ∈ [von, bis_inkl]`` in ct/kWh."""
+async def _preise(db: AsyncSession, kanal: Kanal, von: int, bis_inkl: int, *, jetzt: int) -> dict[int, float]:
+    """Stundenmittel des Preis-Kanals ``start_ts ∈ [von, bis_inkl]`` in ct/kWh — über den einen Stundenleser für
+    Mittelwerte der Lese-Schicht (``lesen.stundenmittel_stapel``, P-433-3 S3/W6; bis dahin las diese Funktion
+    ``KanalStatistik.mean`` selbst, die F-56-Klasse). Eine Stunde ohne Zeile fehlt (A-3: nicht bewertet)."""
+    from backend.services.kanal.lesen import stundenmittel_stapel
+
     faktor = preis_faktor(kanal.einheit)
-    zeilen = (await db.execute(select(KanalStatistik.start_ts, KanalStatistik.mean).where(and_(
-        KanalStatistik.kanal_id == kanal.id, KanalStatistik.start_ts >= von, KanalStatistik.start_ts <= bis_inkl,
-        KanalStatistik.mean.isnot(None),
-    )))).all()
-    return {int(ts): float(m) * faktor for ts, m in zeilen}
+    sm = (await stundenmittel_stapel(db, [kanal], von, bis_inkl + _STUNDE, jetzt=jetzt))[kanal.key]
+    return {ts: m * faktor for ts, (m, _mi, _ma) in sm.werte.items()}
 
 
 async def _letzter_preis(db: AsyncSession, kanal: Kanal) -> Optional[int]:
@@ -256,7 +257,7 @@ async def schreibe_kosten(
     je = await stunden_stapel(db, mengen, start, ts_bis + _STUNDE, jetzt=_unix(zeitpunkt) + _STUNDE)
     werte = {key: {w.start_ts: w for w in st.werte} for key, st in je.items()}
     erreicht = {key: max(w) if w else None for key, w in werte.items()}
-    preise = await _preise(db, preis_kanal, start, ts_bis)
+    preise = await _preise(db, preis_kanal, start, ts_bis, jetzt=_unix(zeitpunkt) + _STUNDE)
 
     neue: dict[str, list[tuple[int, float]]] = {}
     begonnen: dict[str, int] = {}
