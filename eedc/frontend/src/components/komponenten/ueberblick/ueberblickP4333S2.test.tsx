@@ -122,10 +122,11 @@ describe('S2-7: keine Kreuzung in Matheks Reihe', () => {
     expect(l.unten.map(name)).toEqual(['vorlauf'])
   })
 
-  it('J: 6 oben, Vorlauf ganz rechts am Heizkörper', () => {
+  it('J: 5 oben / 1 unten, Vorlauf am Heizkörper unten (P-433-2d «Räume unten»)', () => {
     const l = layoutUeberblick(matheksReihe(ANKER_VORLAUF_HEIZKOERPER), 1440)
-    expect(l.oben.map(name)).toEqual(['aussen', 'wp', 'zusatz', 'ww', 'strom', 'vorlauf'])
-    expect(l.unten).toEqual([])
+    expect(l.oben.map(name)).toEqual(['aussen', 'wp', 'zusatz', 'ww', 'strom'])
+    expect(l.unten.map(name)).toEqual(['vorlauf'])
+    expect(l.reihenwechsel).toEqual([])
   })
 })
 

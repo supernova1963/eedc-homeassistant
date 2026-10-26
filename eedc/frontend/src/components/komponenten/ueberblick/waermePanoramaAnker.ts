@@ -13,6 +13,10 @@
  * Seit P-433-3 S1 trägt D die Zusatzheizung (`ANKER_ZUSATZHEIZUNG`); «Vorlauf · Rücklauf» steht seit S2-8 am
  * Heizkreis nach dem Stammdatum `vorlauftemperatur` — K Fußbodenheizung, J Heizkörper, sonst G Hydraulikmodul
  * (`vorlaufAnker` in `kachelAnker.ts`); O bleibt die Luft/Luft-Außeneinheit; H, P, Q, R sind Raumkontext ohne Pin.
+ *
+ * **Reihe je Anker (P-433-2d, Gernot 26.10.2026): Technik oben, Räume unten** — {@link ANKER_REIHE} neben der Karte,
+ * gelesen über {@link ankerReihe}; die Bildlage (y < 50 %, {@link bildReihe}) gilt für Anker ohne Eintrag und als Ziel
+ * des Reihenwechsels bei Kreuzung (`ueberblickLayout.ts`).
  */
 
 export const PANORAMA_BREITE = 1312
@@ -56,4 +60,35 @@ export const WAERME_ANKER: Record<AnkerId, Anker> = {
   R: { x: 77.7, y: 45.3, objekt: 'Bett' },
   // Fester Anker für die Außentemperatur (Bauplan P-433-2 E1): freier Himmel links oben.
   HIMMEL: { x: 14, y: 8, objekt: 'Himmel' },
+}
+
+/** Kachelreihe im Bild: oben (über dem Himmel) oder unten (Vorplatz). */
+export type Reihe = 'oben' | 'unten'
+
+/**
+ * In welcher Reihe die Kacheln eines Ankers stehen (P-433-2d, Gernot 26.10.2026): **Technik oben, Räume unten** —
+ * nach der Art des Objekts, nicht nach seiner Lage im Bild.
+ *  - oben (Technik): Himmel (Außentemperatur), die Geräte-Objekte A/B/C/F/O, Pufferspeicher mit Heizstab D
+ *    (Zusatzheizung), Warmwasserspeicher E, Hydraulikmodul G (dort «Vorlauf · Rücklauf»/«Wärme heute» ohne
+ *    Stammdatum — Entscheid Gernot 26.10. zu H1), Zählerreihe I (Strom heute);
+ *  - unten (Räume): die Heizkreis-Objekte K (Fußbodenheizung) und J (Heizkörper) — dort stehen «Vorlauf · Rücklauf»
+ *    und «Wärme heute», wenn das Stammdatum `vorlauftemperatur` die Heizflächen nennt —, und die Klima-Innengeräte
+ *    L/M/N samt Gruppe «Innengeräte (n)».
+ * H, P, Q, R tragen keine Kachel und haben keinen Eintrag; für sie (und jeden künftigen Anker ohne Eintrag) gilt die
+ * Bildlage, siehe {@link ankerReihe}.
+ */
+export const ANKER_REIHE: Partial<Record<AnkerId, Reihe>> = {
+  HIMMEL: 'oben', A: 'oben', B: 'oben', C: 'oben', D: 'oben', E: 'oben', F: 'oben', G: 'oben', I: 'oben', O: 'oben',
+  J: 'unten', K: 'unten', L: 'unten', M: 'unten', N: 'unten',
+}
+
+/** Reihe nach der Bildlage: Anker-y < 50 % ⇒ oben. Liegen alle Kacheln so, kreuzt keine Linie der oberen eine der
+ *  unteren Reihe (obere Linien enden über, untere unter der Bildmitte) — das Ziel des Reihenwechsels. */
+export function bildReihe(id: AnkerId): Reihe {
+  return WAERME_ANKER[id].y < 50 ? 'oben' : 'unten'
+}
+
+/** Reihe eines Ankers — aus {@link ANKER_REIHE}; ohne Eintrag nach der Bildlage ({@link bildReihe}, Rückfall). */
+export function ankerReihe(id: AnkerId): Reihe {
+  return ANKER_REIHE[id] ?? bildReihe(id)
 }

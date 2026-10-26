@@ -194,11 +194,14 @@ describe('Gruppen (Ü6)', () => {
   })
 
   it('«Weitere (n)» hat keinen Wert (gemischte Einheiten)', () => {
+    // P-433-2d: Innengeräte stehen unten — oben braucht es vier Kacheln (Klima, Strom, Außen, Warmwasser) für
+    // «Weitere (2)» bei 360 px, unten vier Innengeräte für «Innengeräte (4)».
     const klima = wpInv(9, 'Split', { wp_art: 'luft_luft' })
     const live = liveAntwort({
       komponenten: [knoten(9, 0.9)],
       heute_kwh_pro_komponente: { waermepumpe_9: 3.1 },
-      innengeraete: [ig(9, 1, 'Wohnen', 24.5, 400), ig(9, 2, 'Küche', 25, 200), ig(9, 3, 'Schlafen', 22, 300)],
+      warmwasser_temperatur_c: 48,
+      innengeraete: [ig(9, 1, 'Wohnen', 24.5, 400), ig(9, 2, 'Küche', 25, 200), ig(9, 3, 'Schlafen', 22, 200), ig(9, 4, 'Bad', 23, 100)],
     })
     const { container } = zeichne([klima], live, wetterMit(29), 360)
     const weitere = container.querySelector('g[data-gruppe="grp-weitere"]')!

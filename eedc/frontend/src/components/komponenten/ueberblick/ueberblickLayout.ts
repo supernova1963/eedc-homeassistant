@@ -8,9 +8,21 @@
  * Damit sind Kachel und Schrift bei gleicher Spalte **pixelgleich** mit dem
  * Energiefluss — „Handy 1:1" heißt dieselbe Pixelgröße, nicht dieselbe Zahl.
  *
- * **Reihen:** Anker-y < 50 % ⇒ obere Reihe (über dem Himmel), sonst untere
- * (Vorplatz). Reihen-y aus der Geometrie — Stapel-Optik und Fokusrahmen einer
- * Gruppe dürfen nicht über den Bildrand (Ü3).
+ * **Reihen (P-433-2d): Technik oben, Räume unten** — die Reihe kommt aus der
+ * Zuordnung Anker ⇒ Reihe neben der Anker-Karte (`ankerReihe`, `ANKER_REIHE`):
+ * oben Himmel, Geräte, Speicher, Zählerreihe; unten Heizkreise (Vorlauf · Rücklauf,
+ * Wärme heute an K/J) und Innengeräte. Nur ein Anker ohne Eintrag fällt auf die
+ * Bildlage zurück (Anker-y < 50 % ⇒ oben). Reihen-y aus der Geometrie — Stapel-Optik
+ * und Fokusrahmen einer Gruppe dürfen nicht über den Bildrand (Ü3).
+ *
+ * **Reihenwechsel bei Kreuzung (Entscheid Gernot 26.10.2026, H1):** kreuzt nach der
+ * Entkreuzung je Reihe eine Linie der oberen Reihe eine der unteren, wechselt eine
+ * beteiligte Kachel, deren Reihe nicht ihrer Bildlage entspricht, in die Reihe ihrer
+ * Bildlage, und das Layout wird neu gerechnet (Kapazität, «Weitere» inklusive).
+ * Gewählt wird der Platz mit dem größten Abstand Anker-y ↔ Reihen-y, bei Gleichstand
+ * der kleinere Schlüssel. Jeder Wechsel ist endgültig, also höchstens n Läufe; im
+ * schlimmsten Fall steht jede Kachel in der Reihe ihrer Bildlage, und dort kreuzt
+ * keine Linie die andere Reihe (obere Linien enden über, untere unter der Bildmitte).
  *
  * **Kapazität je Reihe:** `kapazitaet(W, nodeW)` aus dem Energiefluss-Layout,
  * `dims = computeDims(max(oben, unten))`. Gruppiert wird in dieser Reihenfolge:
@@ -32,7 +44,7 @@
  */
 import { ABSTAND_REIHE, computeDims, kapazitaet, type LayoutDims } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
-import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, type AnkerId } from './waermePanoramaAnker'
+import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, ankerReihe, bildReihe, type AnkerId, type Reihe } from './waermePanoramaAnker'
 import { ANKER_VORLAUF_ALLE, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
 
 /** Was das Layout von einer Kachel wissen muss. */
@@ -75,6 +87,8 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
   unten: Platz<T>[]
   /** Beschriftung am Bildschirm in px (Probe gegen die Energiefluss-Mindestschrift). */
   schriftPx: number
+  /** Kachel-IDs, die wegen einer Kreuzung in die Reihe ihrer Bildlage gewechselt sind (in Wechsel-Reihenfolge). */
+  reihenwechsel: string[]
 }
 
 /** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen.
@@ -209,6 +223,22 @@ export function hatKreuzung(plaetze: Platz[]): boolean {
   return false
 }
 
+/**
+ * Kreuzen sich die Linien zweier Plätze aus verschiedenen Reihen (Reihenwechsel, H1)? Geprüft werden die gezeichnete
+ * Linie (Kachelkante → Anker) und die Strecke Kachelmitte → Anker — so läuft auch keine Linie unter der Kachel der
+ * anderen Reihe hindurch. Nur Plätze mit Linie zählen.
+ */
+function kreuzenZwischen(a: Platz, b: Platz): boolean {
+  if (!a.linie || !b.linie) return false
+  const mitte = (p: Platz): Segment => ({ x1: p.x, y1: p.y, x2: p.ax, y2: p.ay })
+  return schneiden(a.linie, b.linie) || schneiden(mitte(a), mitte(b))
+}
+
+/** Gibt es eine Kreuzung zwischen einer Linie der oberen und einer der unteren Reihe? */
+export function hatKreuzungZwischen(oben: Platz[], unten: Platz[]): boolean {
+  return oben.some((a) => unten.some((b) => kreuzenZwischen(a, b)))
+}
+
 /** Kreuzungsprobe mit Nachbartausch (W1): höchstens n Durchläufe. */
 function entkreuze(plaetze: Platz[], dims: LayoutDims, k: number): void {
   for (let lauf = 0; lauf < plaetze.length; lauf++) {
@@ -233,9 +263,26 @@ function entkreuze(plaetze: Platz[], dims: LayoutDims, k: number): void {
 export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: number): UeberblickLayout<T> {
   const W = zeichenbreite(ctr)
   const k = PANORAMA_BREITE / W
-  const istOben = (t: T) => WAERME_ANKER[t.anker].y < 50
-  const oben = aufKapazitaet(grundgruppen(kacheln.filter(istOben), 'oben'), W, 'oben')
-  const unten = aufKapazitaet(grundgruppen(kacheln.filter((t) => !istOben(t)), 'unten'), W, 'unten')
+  const gewechselt = new Set<string>()
+  const reiheVon = (t: T): Reihe => (gewechselt.has(t.id) ? bildReihe(t.anker) : ankerReihe(t.anker))
+  // Höchstens n + 1 Läufe: jeder weitere Lauf hat mindestens eine Kachel endgültig gewechselt.
+  for (let lauf = 0; ; lauf++) {
+    const l = reihenLayout(kacheln, W, k, reiheVon)
+    const platz = lauf <= kacheln.length ? wechselKandidat(l.oben, l.unten, reiheVon) : null
+    if (!platz) {
+      return {
+        W, k, dims: l.dims, geraet: ctr < 500 ? 'handy' : 'desktop', oben: l.oben, unten: l.unten,
+        schriftPx: l.dims.labelFontSize * ctr / W, reihenwechsel: [...gewechselt],
+      }
+    }
+    for (const m of platz.mitglieder) if (reiheVon(m) !== bildReihe(m.anker)) gewechselt.add(m.id)
+  }
+}
+
+/** Ein Lauf: Reihen nach `reiheVon`, Kapazität, x-Lage, Linien, Entkreuzung je Reihe. */
+function reihenLayout<T extends LayoutKachel>(kacheln: T[], W: number, k: number, reiheVon: (t: T) => Reihe) {
+  const oben = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'oben'), 'oben'), W, 'oben')
+  const unten = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'unten'), 'unten'), W, 'unten')
   const dims = computeDims(Math.max(oben.length, unten.length, 1))
   const ry = reihenY(dims, k)
   for (const [reihe, y] of [[oben, ry.oben], [unten, ry.unten]] as const) {
@@ -243,8 +290,21 @@ export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: numb
     reihe.forEach((p) => { p.y = y; setzeLinie(p, dims, k) })
     entkreuze(reihe, dims, k)
   }
-  return {
-    W, k, dims, geraet: ctr < 500 ? 'handy' : 'desktop', oben, unten,
-    schriftPx: dims.labelFontSize * ctr / W,
+  return { oben, unten, dims }
+}
+
+/**
+ * Der Platz, der wegen einer Kreuzung zwischen den Reihen wechselt ({@link kreuzenZwischen}) — oder `null`, wenn
+ * keine Linie der oberen eine der unteren Reihe schneidet. Kandidat ist nur ein Platz an einer Kreuzung mit mindestens einem Mitglied außerhalb
+ * der Reihe seiner Bildlage (zwei Plätze in ihrer Bildlage kreuzen sich nie); davon der mit dem größten Abstand
+ * Anker-y ↔ Reihen-y, bei Gleichstand der kleinere Schlüssel.
+ */
+function wechselKandidat<T extends LayoutKachel>(oben: Platz<T>[], unten: Platz<T>[], reiheVon: (t: T) => Reihe): Platz<T> | null {
+  const beteiligt = new Set<Platz<T>>()
+  for (const a of oben) for (const b of unten) {
+    if (kreuzenZwischen(a, b)) { beteiligt.add(a); beteiligt.add(b) }
   }
+  const kandidaten = [...beteiligt].filter((p) => p.mitglieder.some((m) => reiheVon(m) !== bildReihe(m.anker)))
+  kandidaten.sort((a, b) => Math.abs(b.ay - b.y) - Math.abs(a.ay - a.y) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+  return kandidaten[0] ?? null
 }
