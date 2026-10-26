@@ -10,6 +10,9 @@
  * - **Hell/dunkel:** beide Panoramen liegen gestapelt, das Thema wählt per
  *   `dark:`-Opacity-Paar — dieselbe Bauform wie `EnergieFlussBackground`
  *   (Regel B), kein Theme-Hook, kein Nachlade-Blitz.
+ * - **Plätze** (P-433-2e): zwei Reihen und am Desktop die zwei Einzelplätze neben
+ *   dem Haus (`layout.links`/`layout.rechts`) — gerendert wie jeder Reihenplatz;
+ *   die Geometrie steht nur in `ueberblickLayout.ts`.
  * - **Linien** Kachelkante → Objekt mit Saum (Bau B Regel C, `ENERGIEFLUSS_SAUM`,
  *   nur hell); keine Partikel.
  * - **Tooltip** über `data-title` an der Kachel; der Touch-Hook ist einmal in
@@ -72,11 +75,16 @@ function gruppenKachel(p: Platz<UeberblickKachel>) {
   }
 }
 
+/** Alle Plätze des Layouts: die zwei Reihen und die zwei Einzelplätze neben dem Haus (P-433-2e). */
+function allePlaetze(layout: UeberblickLayout<UeberblickKachel>): Platz<UeberblickKachel>[] {
+  return [...layout.oben, ...layout.unten, ...(layout.links ? [layout.links] : []), ...(layout.rechts ? [layout.rechts] : [])]
+}
+
 function Linien({ layout }: { layout: UeberblickLayout<UeberblickKachel> }) {
   const k = layout.k
   return (
     <g pointerEvents="none">
-      {[...layout.oben, ...layout.unten].map((p) => p.linie && (
+      {allePlaetze(layout).map((p) => p.linie && (
         <g key={`linie-${p.key}`} data-linie={p.key}>
           <path
             data-saum
@@ -146,7 +154,7 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickS
 
   const layout = layoutUeberblick(kacheln, breite)
   const { dims, k } = layout
-  const plaetze = [...layout.oben, ...layout.unten]
+  const plaetze = allePlaetze(layout)
   const offenerPlatz = offen != null ? plaetze.find((p) => p.key === offen) ?? null : null
 
   return (

@@ -17,6 +17,10 @@
  * **Reihe je Anker (P-433-2d, Gernot 26.10.2026): Technik oben, Räume unten** — {@link ANKER_REIHE} neben der Karte,
  * gelesen über {@link ankerReihe}; die Bildlage (y < 50 %, {@link bildReihe}) gilt für Anker ohne Eintrag und als Ziel
  * des Reihenwechsels bei Kreuzung (`ueberblickLayout.ts`).
+ *
+ * **Zwei Plätze wie Netz und Speicher (P-433-2e, Gernot 26.10.2026):** {@link PLATZ_ANKER} nennt die Anker, deren
+ * Gerätekachel am Desktop neben dem Haus steht statt in einer Reihe — links die Wärmepumpe, rechts die
+ * Klima-Außeneinheit. Die Lage der Plätze ist am Bild v4 gemessen (siehe dort); neues Bild = neue Messung.
  */
 
 export const PANORAMA_BREITE = 1312
@@ -91,4 +95,23 @@ export function bildReihe(id: AnkerId): Reihe {
 /** Reihe eines Ankers — aus {@link ANKER_REIHE}; ohne Eintrag nach der Bildlage ({@link bildReihe}, Rückfall). */
 export function ankerReihe(id: AnkerId): Reihe {
   return ANKER_REIHE[id] ?? bildReihe(id)
+}
+
+/**
+ * Anker der zwei Einzelplätze neben dem Haus (P-433-2e, Gernot 26.10.2026) — wie Netz (links) und Speicher (rechts)
+ * im Energiefluss, nur am Desktop:
+ *  - **links** die Gerätekachel der Wärmepumpe an der Außeneinheit A, am WP-Schrank C oder an der Warmwasser-WP F —
+ *    **die Reihenfolge der Liste ist die Rangfolge** der Kandidaten (A vor C vor F, Entscheid Master 26.10.2026);
+ *  - **rechts** die Gerätekachel an der Klima-Außeneinheit O.
+ *
+ * ⚠ **Lage gemessen am Bild v4 (Rasterkarte 2 %, Gegenprüfung 26.10.2026); neues Bild = neue Messung.** Das Haus
+ * reicht über x 14–92 %, y 9–78 %. Links ist das Bild frei für x < 14 % bis y 44 % (die Wandecke des Technikraums
+ * läuft diagonal von (14 %, 34 %) nach (32 %, 22 %) — die Kachel überdeckt sie, 14–18 % Objektpixel, durchscheinend
+ * wie im Energiefluss); der Platz endet bei 45 % der Bildhöhe, über der Außeneinheit A (y 50–66 %). Rechts ist das
+ * Bild frei für x > 92 % bis y 54 % und ab y 60 % für x > 80 %; der Platz beginnt bei 58 % der Bildhöhe, unter der
+ * Klima-Außeneinheit O (y 45–50 %). Die Zahlen 45 % und 58 % stehen in `ueberblickLayout.ts` (Geometrie dort).
+ */
+export const PLATZ_ANKER: Readonly<Record<'links' | 'rechts', readonly AnkerId[]>> = {
+  links: ['A', 'C', 'F'],
+  rechts: ['O'],
 }

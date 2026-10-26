@@ -36,7 +36,9 @@ Sensor zugeordnet hast: Leistung und Modus jedes Geräts, Warmwasser-Temperatur,
 Außentemperatur. Das Bild zeigt immer alle Gerätearten; welche deine Anlage hat, zeigen die Kacheln, und was ohne Sensor ist,
 nennt die Zeile darunter. Die Technik steht oben, die Räume unten: Geräte, Warmwasser, Strom und Außentemperatur in der oberen
 Reihe, Vorlauf · Rücklauf und Wärme heute an Fußbodenheizung oder Heizkörper und die Innengeräte einer Klimaanlage in der
-unteren — würde eine Linie dabei eine andere kreuzen, wechselt die Kachel die Reihe. Rechts fasst „Auf einen Blick" das gewählte Gerät zusammen — Modus, Leistung, Temperaturen, heute
+unteren — würde eine Linie dabei eine andere kreuzen, wechselt die Kachel die Reihe. Am Desktop steht die Wärmepumpe links
+neben dem Technikraum und die Klima-Außeneinheit rechts unter ihrem Objekt, wie Netz und Speicher im Energiefluss, wenn der
+Platz frei bleibt; sonst in ihrer Reihe. Rechts fasst „Auf einen Blick" das gewählte Gerät zusammen — Modus, Leistung, Temperaturen, heute
 Strom, Wärme und Arbeitszahl — und zeigt den Eigenverbrauch der ganzen Anlage. Solange der Block aufgeklappt ist, aktualisiert
 er sich alle 5 Sekunden ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe),
 [Wärme & Klima → Schaubild](HANDBUCH_WAERME_KLIMA.md#schaubild)).

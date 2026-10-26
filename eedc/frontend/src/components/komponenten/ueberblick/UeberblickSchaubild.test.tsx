@@ -231,3 +231,27 @@ describe('Gruppen (Ü6)', () => {
     expect(container.querySelectorAll('[role="button"]')).toHaveLength(0)
   })
 })
+
+describe('Zwei Plätze wie Netz und Speicher (P-433-2e)', () => {
+  const KLIMA = wpInv(9, 'Multisplit', { wp_art: 'luft_luft' })
+  const live = () => liveAntwort({ komponenten: [knoten(7, 1.2), knoten(9, 0.4)] })
+  const transform = (c: HTMLElement, key: string) => c.querySelector(`g[data-platz="${key}"]`)?.getAttribute('transform') ?? ''
+  const mitteX = (t: string) => Number(/translate\(([\d.]+) /.exec(t)?.[1])
+
+  it('Desktop: die Wärmepumpe steht links, die Klima-Außeneinheit rechts — beide mit Linie zum Objekt', () => {
+    const { container } = zeichne([MATHEK, KLIMA], live(), null, 900)
+    const wp = transform(container, 'geraet-7')
+    const klima = transform(container, 'geraet-9')
+    expect(mitteX(wp)).toBeLessThan(0.15 * 1312)
+    expect(mitteX(klima)).toBeGreaterThan(0.85 * 1312)
+    expect(container.querySelector('[data-linie="geraet-7"]')).not.toBeNull()
+    expect(container.querySelector('[data-linie="geraet-9"]')).not.toBeNull()
+  })
+
+  it('Handy 390 px: keine Plätze — beide Geräte in der oberen Reihe', () => {
+    const { container } = zeichne([MATHEK, KLIMA], live(), null, 390)
+    const y = (key: string) => Number(/translate\([\d.]+ ([\d.]+)\)/.exec(transform(container, key))?.[1])
+    expect(y('geraet-7')).toBeCloseTo(y('geraet-9'), 6)
+    expect(y('geraet-7')).toBeLessThan(0.2 * 816)
+  })
+})

@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import UeberblickKarte from './UeberblickKarte'
 import UeberblickSchaubild from './UeberblickSchaubild'
-import { layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { layoutReihen, layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
 import {
   ANKER_VORLAUF, ANKER_ZUSATZHEIZUNG, baueUeberblickKacheln, warmwasserC, zusatzheizungAktiv,
 } from './kachelAnker'
@@ -207,26 +207,31 @@ describe('Rang der neuen Wert-Kacheln (Leistung · Warmwasser · Strom · Vorlau
     wert('vorlauf', ANKER_VORLAUF), wert('zusatz', ANKER_ZUSATZHEIZUNG), wert('aussen', 'HIMMEL'),
   ]
 
-  it('Matheks Reihe mit 6 Kacheln: Desktop-Kapazität 6 ⇒ alle einzeln, oben', () => {
+  it('Matheks Reihe mit 6 Kacheln: Desktop-Kapazität 6 ⇒ alle einzeln, oben (seit P-433-2e die WP im linken Platz)', () => {
     const { kacheln } = baueUeberblickKacheln({
       geraete: [MATHEK], live: matheksLive(),
       wetter: { aktuell: { zeit: '12:00', temperatur_c: 7.4 } } as unknown as Parameters<typeof baueUeberblickKacheln>[0]['wetter'],
       referenz: 'referenz',
     })
     expect(kacheln).toHaveLength(6)
+    const r = layoutReihen(kacheln, 900)   // die zwei Reihen ohne Plätze
+    expect([r.oben.length, r.unten.length]).toEqual([6, 0])
+    expect(r.oben.every((p) => p.gruppe == null)).toBe(true)
     const l = layoutUeberblick(kacheln, 900)
-    expect([l.oben.length, l.unten.length]).toEqual([6, 0])
+    expect(l.links?.mitglieder[0].art).toBe('geraet')
+    expect([l.oben.length, l.unten.length]).toEqual([5, 0])
     expect(l.oben.every((p) => p.gruppe == null)).toBe(true)
   })
 
   it('volle Reihe: zuerst Außen, dann Zusatzheizung, dann Vorlauf/Rücklauf nach «Weitere»', () => {
-    // Desktop (W 600, ab 5 Kacheln nodeW 80) fasst 6 Plätze: 7 Kacheln ⇒ 5 einzeln + «Weitere (2)».
+    // Desktop (W 600, ab 5 Kacheln nodeW 80) fasst 6 Plätze: 7 Kacheln ⇒ 5 einzeln + «Weitere (2)». Der Rang gilt der
+    // Reihe — geprüft an den zwei Reihen ohne Plätze (`layoutReihen`; am Desktop nähmen die Plätze die Geräte heraus).
     const sieben = [...sechs, { id: 'wp2', art: 'geraet' as const, anker: 'F' as const }]
-    const weitere7 = layoutUeberblick(sieben, 900).oben.find((p) => p.gruppe === 'weitere')
+    const weitere7 = layoutReihen(sieben, 900).oben.find((p) => p.gruppe === 'weitere')
     expect(weitere7 && platzName(weitere7)).toBe('weitere(zusatz,aussen)')
     // 8 Kacheln ⇒ 5 einzeln + «Weitere (3)»: jetzt wandert auch Vorlauf/Rücklauf.
     const acht = [...sieben, { id: 'klima', art: 'geraet' as const, anker: 'O' as const }]
-    const weitere8 = layoutUeberblick(acht, 900).oben.find((p) => p.gruppe === 'weitere')
+    const weitere8 = layoutReihen(acht, 900).oben.find((p) => p.gruppe === 'weitere')
     expect(weitere8 && platzName(weitere8)).toBe('weitere(vorlauf,zusatz,aussen)')
     // Handy 390 px (W 450, 4 Plätze): Gerät, Warmwasser, Strom bleiben; Vorlauf, Zusatz, Außen gehen.
     const handy = layoutUeberblick(sechs, 390).oben

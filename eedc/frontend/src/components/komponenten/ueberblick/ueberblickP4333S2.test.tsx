@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import UeberblickKarte from './UeberblickKarte'
 import UeberblickSchaubild from './UeberblickSchaubild'
-import { hatKreuzung, layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { hatKreuzung, layoutReihen, layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
 import {
   ANKER_VORLAUF, ANKER_VORLAUF_FUSSBODENHEIZUNG, ANKER_VORLAUF_HEIZKOERPER, ANKER_ZUSATZHEIZUNG,
   baueUeberblickKacheln, kachelWertText, vorlaufAnker, vorlaufBeschriftung,
@@ -107,26 +107,42 @@ describe('S2-7: keine Kreuzung in Matheks Reihe', () => {
     }
   })
 
+  // Seit P-433-2e steht die Wärmepumpe am Desktop im linken Platz; die Reihen-Aussagen gelten für die zwei Reihen
+  // ohne Plätze (`layoutReihen`, wie am Handy), die Desktop-Belegung steht je Fall darunter.
   it('G: die Reihe folgt Anker-x mit Nachbartausch — Vorlauf (G) vor Zusatzheizung (D), weil sich die Linien in reiner x-Folge schneiden', () => {
-    const l = layoutUeberblick(matheksReihe(ANKER_VORLAUF), 1440)
+    const l = layoutReihen(matheksReihe(ANKER_VORLAUF), 1440)
     // Gemessen 25.10.: in reiner Anker-x-Folge (D 25,8 % vor G 29,0 %) schneidet die Linie D→Pufferspeicher (tief)
     // die Linie G→Hydraulikmodul (hoch); die Kreuzungsprobe tauscht die Nachbarn. Rang-Folge (Gerät, Warmwasser,
     // Strom, Vorlauf, Zusatz, Außen) stünde hier ganz anders.
     expect(l.oben.map(name)).toEqual(['aussen', 'wp', 'vorlauf', 'zusatz', 'ww', 'strom'])
     expect(l.oben.every((p, i) => i === 0 || p.x > l.oben[i - 1].x)).toBe(true)
+    // Desktop mit Plätzen: WP links, die übrigen fünf in reiner Anker-x-Folge — ohne die WP-Kachel kreuzen sich D und G nicht.
+    const d = layoutUeberblick(matheksReihe(ANKER_VORLAUF), 1440)
+    expect(d.links && name(d.links)).toBe('wp')
+    expect(d.oben.map(name)).toEqual(['aussen', 'zusatz', 'vorlauf', 'ww', 'strom'])
+    expect(hatKreuzung(d.oben)).toBe(false)
   })
 
   it('K: 5 oben / 1 unten, die Reihen in Anker-x-Folge', () => {
-    const l = layoutUeberblick(matheksReihe(ANKER_VORLAUF_FUSSBODENHEIZUNG), 1440)
+    const l = layoutReihen(matheksReihe(ANKER_VORLAUF_FUSSBODENHEIZUNG), 1440)
     expect(l.oben.map(name)).toEqual(['aussen', 'wp', 'zusatz', 'ww', 'strom'])
     expect(l.unten.map(name)).toEqual(['vorlauf'])
+    const d = layoutUeberblick(matheksReihe(ANKER_VORLAUF_FUSSBODENHEIZUNG), 1440)
+    expect(d.links && name(d.links)).toBe('wp')
+    expect(d.oben.map(name)).toEqual(['aussen', 'zusatz', 'ww', 'strom'])
+    expect(d.unten.map(name)).toEqual(['vorlauf'])
   })
 
   it('J: 5 oben / 1 unten, Vorlauf am Heizkörper unten (P-433-2d «Räume unten»)', () => {
-    const l = layoutUeberblick(matheksReihe(ANKER_VORLAUF_HEIZKOERPER), 1440)
+    const l = layoutReihen(matheksReihe(ANKER_VORLAUF_HEIZKOERPER), 1440)
     expect(l.oben.map(name)).toEqual(['aussen', 'wp', 'zusatz', 'ww', 'strom'])
     expect(l.unten.map(name)).toEqual(['vorlauf'])
     expect(l.reihenwechsel).toEqual([])
+    const d = layoutUeberblick(matheksReihe(ANKER_VORLAUF_HEIZKOERPER), 1440)
+    expect(d.links && name(d.links)).toBe('wp')
+    expect(d.oben.map(name)).toEqual(['aussen', 'zusatz', 'ww', 'strom'])
+    expect(d.unten.map(name)).toEqual(['vorlauf'])
+    expect(d.reihenwechsel).toEqual([])
   })
 })
 

@@ -41,10 +41,30 @@
  * `ABSTAND_REIHE·k` hält — wie `ueberlappungsfrei` im Energiefluss, kein
  * Gleichverteilen. Danach die **Kreuzungsprobe**: schneiden sich zwei Linien
  * einer Reihe, tauschen die beiden Nachbarn ihre Plätze (höchstens n Durchläufe).
+ *
+ * **Zwei Plätze wie Netz und Speicher (P-433-2e, Gernot 26.10.2026), nur Desktop:**
+ * neben den zwei Reihen stehen zwei feste Einzelplätze — links die Gerätekachel der
+ * Wärmepumpe am ersten belegten Anker in der Rangfolge A → C → F (weitere Geräte am
+ * selben Anker mit ihr als «Wärmepumpen (n)»), rechts die Gerätekachel an der Klima-Außeneinheit O
+ * (`PLATZ_ANKER`). Die Plätze werden **vor** den Reihen aus der Kachelliste genommen;
+ * die Reihen rechnet derselbe 2d-Lauf ({@link layoutReihen}), `dims` aus den Reihen
+ * (die Plätze zählen nicht). Lage: x am Bildrand wie die äußerste Reihenkachel, y =
+ * Anker-y geklemmt — links zwischen Unterkante der oberen Reihe + Abstand und 45 %
+ * der Bildhöhe, rechts zwischen 58 % und Oberkante der unteren Reihe − Abstand.
+ * Ist der rechte Platz belegt, endet die untere Reihe eine Kachelbreite früher
+ * (Kapazität − 1). Die Linie läuft von der dem Anker nächsten Kante (Anker unter der
+ * Kachel ⇒ Unterkante, über ihr ⇒ Oberkante, sonst die zugewandte Seitenkante; Anker
+ * in der Kachel ⇒ keine Linie). **Rückfall:** schneidet die Linie eines Platzes eine
+ * Reihenlinie (gezeichnet oder Mitte → Anker, wie beim Reihenwechsel) oder trifft eine
+ * Reihenlinie bzw. Mitte → Anker-Strecke das Platz-Rechteck, bleibt die Kachel in
+ * ihrer Reihe und die Reihen werden neu gerechnet; links wird dann der nächste
+ * Anker-Rang versucht (höchstens drei Versuche, je ein Reihenlauf), bevor der Platz
+ * leer bleibt — ohne Platz ist es das 2d-Layout. Handy (< 500 px): keine Plätze, das
+ * Layout ist das 2d-Layout.
  */
 import { ABSTAND_REIHE, computeDims, kapazitaet, type LayoutDims } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
-import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, ankerReihe, bildReihe, type AnkerId, type Reihe } from './waermePanoramaAnker'
+import { PANORAMA_BREITE, PANORAMA_HOEHE, PLATZ_ANKER, WAERME_ANKER, ankerReihe, bildReihe, type AnkerId, type Reihe } from './waermePanoramaAnker'
 import { ANKER_VORLAUF_ALLE, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
 
 /** Was das Layout von einer Kachel wissen muss. */
@@ -56,7 +76,10 @@ export interface LayoutKachel {
 
 export type GruppenArt = 'geraete' | 'innengeraete' | 'weitere'
 
-/** Ein Platz in einer Reihe: eine Kachel oder eine Gruppe. */
+/** Wo ein Platz steht: in einer der zwei Reihen oder in einem der zwei Einzelplätze neben dem Haus (P-433-2e). */
+export type Seite = Reihe | 'links' | 'rechts'
+
+/** Ein Platz in einer Reihe oder neben dem Haus: eine Kachel oder eine Gruppe. */
 export interface Platz<T extends LayoutKachel = LayoutKachel> {
   /** Stabiler Schlüssel: Kachel-ID oder `grp-…`. */
   key: string
@@ -71,7 +94,7 @@ export interface Platz<T extends LayoutKachel = LayoutKachel> {
   /** Kachelmitte in Bildeinheiten. */
   x: number
   y: number
-  reihe: 'oben' | 'unten'
+  seite: Seite
   /** Linie Kachelkante → Objekt; `null`, wenn der Anker in der Kachel liegt oder es keinen gibt. */
   linie: { x1: number; y1: number; x2: number; y2: number } | null
 }
@@ -85,10 +108,16 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
   geraet: 'desktop' | 'handy'
   oben: Platz<T>[]
   unten: Platz<T>[]
+  /** Einzelplatz links neben dem Haus (Wärmepumpe an A/C/F) — `null` am Handy, ohne solches Gerät oder nach Rückfall. */
+  links: Platz<T> | null
+  /** Einzelplatz rechts unter der Klima-Außeneinheit (Gerät an O) — `null` am Handy, ohne solches Gerät oder nach Rückfall. */
+  rechts: Platz<T> | null
   /** Beschriftung am Bildschirm in px (Probe gegen die Energiefluss-Mindestschrift). */
   schriftPx: number
   /** Kachel-IDs, die wegen einer Kreuzung in die Reihe ihrer Bildlage gewechselt sind (in Wechsel-Reihenfolge). */
   reihenwechsel: string[]
+  /** Kachel-IDs, die ihren Einzelplatz wegen einer Kreuzung verloren haben und in ihrer Reihe stehen (je Lauf links vor rechts). */
+  rueckfall: string[]
 }
 
 /** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen.
@@ -115,12 +144,12 @@ function ankerPunkt(id: AnkerId): { ax: number; ay: number } {
   return { ax: (a.x / 100) * PANORAMA_BREITE, ay: (a.y / 100) * PANORAMA_HOEHE }
 }
 
-function platzAus<T extends LayoutKachel>(mitglieder: T[], gruppe: GruppenArt | null, anker: AnkerId | null, reihe: 'oben' | 'unten', key: string): Platz<T> {
+function platzAus<T extends LayoutKachel>(mitglieder: T[], gruppe: GruppenArt | null, anker: AnkerId | null, seite: Seite, key: string): Platz<T> {
   const punkte = mitglieder.map((m) => ankerPunkt(m.anker))
   const { ax, ay } = anker
     ? ankerPunkt(anker)
     : { ax: punkte.reduce((s, p) => s + p.ax, 0) / punkte.length, ay: punkte.reduce((s, p) => s + p.ay, 0) / punkte.length }
-  return { key, mitglieder, gruppe, anker, ax, ay, x: ax, y: 0, reihe, linie: null }
+  return { key, mitglieder, gruppe, anker, ax, ay, x: ax, y: 0, seite, linie: null }
 }
 
 /** Schritt 1: immer gruppieren — gleiche Geräte-Anker, Innengeräte ab dem vierten. */
@@ -144,14 +173,17 @@ function grundgruppen<T extends LayoutKachel>(kacheln: T[], reihe: 'oben' | 'unt
   return plaetze
 }
 
-/** Passt eine Reihe mit `n` Kacheln in die Zeichenbreite `W` (Größe nach `computeDims(n)`)? */
-function passt(W: number, n: number): boolean {
-  return n <= kapazitaet(W, computeDims(n).nodeW)
+/** Passt eine Reihe mit `n` Kacheln in die Zeichenbreite `W` (Größe nach `computeDims(n)`)? `gekuerzt`: die Reihe
+ *  endet eine Kachelbreite früher (belegter rechter Platz, P-433-2e) — Kapazität − 1. */
+function passtIn(W: number, n: number, gekuerzt = false): boolean {
+  const nodeW = computeDims(n).nodeW
+  return n <= kapazitaet(gekuerzt ? W - (nodeW + ABSTAND_REIHE) : W, nodeW)
 }
 
 /** Schritte 2 und 3: bis die Reihe in `W` passt. */
-function aufKapazitaet<T extends LayoutKachel>(plaetze: Platz<T>[], W: number, reihe: 'oben' | 'unten'): Platz<T>[] {
-  if (passt(W, plaetze.length)) return plaetze
+function aufKapazitaet<T extends LayoutKachel>(plaetze: Platz<T>[], W: number, reihe: 'oben' | 'unten', gekuerzt = false): Platz<T>[] {
+  const passt = (n: number) => passtIn(W, n, gekuerzt)
+  if (passt(plaetze.length)) return plaetze
   // 2. alle Innengeräte der Reihe in eine Gruppe.
   const innen = plaetze.filter((p) => p.gruppe === 'innengeraete' || p.mitglieder[0].art === 'innengeraet')
   let cur = plaetze
@@ -162,24 +194,25 @@ function aufKapazitaet<T extends LayoutKachel>(plaetze: Platz<T>[], W: number, r
       platzAus(mitglieder, 'innengeraete', mitglieder[0].anker, reihe, 'grp-innengeraete'),
     ]
   }
-  if (passt(W, cur.length)) return cur
+  if (passt(cur.length)) return cur
   // 3. Rest nach Rang in «Weitere (n)».
   let ziel = cur.length - 1
-  while (ziel > 1 && !passt(W, ziel)) ziel--
+  while (ziel > 1 && !passt(ziel)) ziel--
   const geordnet = [...cur].sort((a, b) => rang(a) - rang(b) || a.ax - b.ax)
   const bleibt = geordnet.slice(0, ziel - 1)
   const rest = geordnet.slice(ziel - 1).flatMap((p) => p.mitglieder)
   return [...bleibt, platzAus(rest, 'weitere', null, reihe, 'grp-weitere')]
 }
 
-/** x-Lage: Anker-x, geklemmt, 1-D-Schub auf Mindestabstand (W1). */
-function verteileX(plaetze: Platz[], dims: LayoutDims, k: number): void {
+/** x-Lage: Anker-x, geklemmt, 1-D-Schub auf Mindestabstand (W1). `gekuerzt`: die Reihe endet eine Kachelbreite
+ *  früher (belegter rechter Platz, P-433-2e). */
+function verteileX(plaetze: Platz[], dims: LayoutDims, k: number, gekuerzt = false): void {
   if (plaetze.length === 0) return
   plaetze.sort((a, b) => a.ax - b.ax)
   const rand = (dims.nodeW / 2 + 15) * k
-  const lo = rand
-  const hi = PANORAMA_BREITE - rand
   const schritt = (dims.nodeW + ABSTAND_REIHE) * k
+  const lo = rand
+  const hi = PANORAMA_BREITE - rand - (gekuerzt ? schritt : 0)
   plaetze.forEach((p) => { p.x = Math.min(Math.max(p.ax, lo), hi) })
   for (let i = 1; i < plaetze.length; i++) plaetze[i].x = Math.max(plaetze[i].x, plaetze[i - 1].x + schritt)
   const n = plaetze.length
@@ -198,8 +231,8 @@ export function reihenY(dims: LayoutDims, k: number): { oben: number; unten: num
 function setzeLinie(p: Platz, dims: LayoutDims, k: number): void {
   if (!p.anker) { p.linie = null; return }
   const halbH = (dims.nodeH / 2) * k
-  const kante = p.reihe === 'oben' ? p.y + halbH : p.y - halbH
-  const zeigtWeg = p.reihe === 'oben' ? p.ay > kante : p.ay < kante
+  const kante = p.seite === 'oben' ? p.y + halbH : p.y - halbH
+  const zeigtWeg = p.seite === 'oben' ? p.ay > kante : p.ay < kante
   p.linie = zeigtWeg ? { x1: p.x, y1: kante, x2: p.ax, y2: p.ay } : null
 }
 
@@ -258,16 +291,139 @@ function entkreuze(plaetze: Platz[], dims: LayoutDims, k: number): void {
 }
 
 /**
- * Das Layout für eine Spaltenbreite `ctr` (px).
+ * Das Layout für eine Spaltenbreite `ctr` (px): zwei Reihen und — am Desktop — die zwei Einzelplätze (P-433-2e).
  */
 export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: number): UeberblickLayout<T> {
+  if (ctr < 500) return { ...layoutReihen(kacheln, ctr), links: null, rechts: null, rueckfall: [] }
+  const kandidatenLinks = platzKandidaten(kacheln, PLATZ_ANKER.links)
+  const kandidatenRechts = platzKandidaten(kacheln, PLATZ_ANKER.rechts)
+  let links = kandidatenLinks.shift() ?? []
+  let rechts = kandidatenRechts.shift() ?? []
+  const rueckfall: string[] = []
+  // Jeder weitere Lauf hat mindestens einen Kandidaten endgültig aufgegeben (links höchstens drei Anker-Ränge, rechts
+  // einer); ohne Platz ist es das 2d-Layout, und dort gibt es nichts zu prüfen.
+  for (;;) {
+    const imPlatz = new Set<T>([...links, ...rechts])
+    const reihen = layoutReihen(kacheln.filter((t) => !imPlatz.has(t)), ctr, rechts.length > 0)
+    const zeilen = [...reihen.oben, ...reihen.unten]
+    const L = links.length ? platzGeometrie(links, 'links', reihen.dims, reihen.k) : null
+    const R = rechts.length ? platzGeometrie(rechts, 'rechts', reihen.dims, reihen.k) : null
+    const fallL = L != null && platzKollidiert(L, zeilen, reihen.dims, reihen.k)
+    const fallR = R != null && platzKollidiert(R, zeilen, reihen.dims, reihen.k)
+    if (!fallL && !fallR) return { ...reihen, links: L, rechts: R, rueckfall }
+    if (fallL) { rueckfall.push(...links.map((t) => t.id)); links = kandidatenLinks.shift() ?? [] }
+    if (fallR) { rueckfall.push(...rechts.map((t) => t.id)); rechts = kandidatenRechts.shift() ?? [] }
+  }
+}
+
+/**
+ * Die Kandidaten eines Einzelplatzes in **fester Anker-Rangfolge** (Reihenfolge von `anker`, links A → C → F;
+ * Entscheid Master 26.10.2026 — die Platzwahl hängt nicht von der Listenreihenfolge der Geräte ab): je Anker alle
+ * Geräte daran in Listenreihenfolge (mehrere bilden «Wärmepumpen (n)», wie in der Reihe). Fällt ein Kandidat zurück,
+ * wird der nächste Rang versucht, bevor der Platz leer bleibt; Geräte, die nicht im Platz stehen, stehen in der Reihe.
+ */
+function platzKandidaten<T extends LayoutKachel>(kacheln: T[], anker: readonly AnkerId[]): T[][] {
+  return anker
+    .map((a) => kacheln.filter((t) => t.art === 'geraet' && t.anker === a))
+    .filter((gruppe) => gruppe.length > 0)
+}
+
+/** Unterkante des linken Platzes in Bildhöhe: über der Außeneinheit A (gemessen am Bild v4, siehe `PLATZ_ANKER`). */
+const PLATZ_LINKS_BIS = 0.45
+/** Oberkante des rechten Platzes in Bildhöhe: unter der Klima-Außeneinheit O (gemessen am Bild v4, siehe `PLATZ_ANKER`). */
+const PLATZ_RECHTS_AB = 0.58
+
+/**
+ * Lage und Linie eines Einzelplatzes (P-433-2e): x am Bildrand wie die äußerste Reihenkachel
+ * (`(nodeW/2 + 15)·k` vom Rand), y = Anker-y geklemmt — links auf [Unterkante obere Reihe + 12k + nodeH·k/2,
+ * 45 % − nodeH·k/2], rechts auf [58 % + nodeH·k/2, Oberkante untere Reihe − 12k − nodeH·k/2].
+ */
+export function platzGeometrie<T extends LayoutKachel>(mitglieder: T[], seite: 'links' | 'rechts', dims: LayoutDims, k: number): Platz<T> {
+  const anker = mitglieder[0].anker
+  const p = platzAus(mitglieder, mitglieder.length > 1 ? 'geraete' : null, anker, seite, mitglieder.length > 1 ? `grp-geraete-${anker}` : mitglieder[0].id)
+  const ry = reihenY(dims, k)
+  const halbH = (dims.nodeH / 2) * k
+  const rand = (dims.nodeW / 2 + 15) * k
+  const abstand = ABSTAND_REIHE * k
+  const [lo, hi] = seite === 'links'
+    ? [ry.oben + halbH + abstand + halbH, PLATZ_LINKS_BIS * PANORAMA_HOEHE - halbH]
+    : [PLATZ_RECHTS_AB * PANORAMA_HOEHE + halbH, ry.unten - halbH - abstand - halbH]
+  p.x = seite === 'links' ? rand : PANORAMA_BREITE - rand
+  p.y = Math.min(Math.max(p.ay, lo), hi)
+  setzePlatzLinie(p, dims, k)
+  return p
+}
+
+/** Linie eines Einzelplatzes von der dem Anker nächsten Kante: Anker unter der Kachel ⇒ Unterkante, über ihr ⇒
+ *  Oberkante, sonst die zugewandte Seitenkante (am linken Platz die innere, rechte); Anker in der Kachel ⇒ keine Linie. */
+function setzePlatzLinie(p: Platz, dims: LayoutDims, k: number): void {
+  const halbW = (dims.nodeW / 2) * k
+  const halbH = (dims.nodeH / 2) * k
+  const ende = { x2: p.ax, y2: p.ay }
+  if (!p.anker) p.linie = null
+  else if (p.ay > p.y + halbH) p.linie = { x1: p.x, y1: p.y + halbH, ...ende }
+  else if (p.ay < p.y - halbH) p.linie = { x1: p.x, y1: p.y - halbH, ...ende }
+  else if (p.ax > p.x + halbW) p.linie = { x1: p.x + halbW, y1: p.y, ...ende }
+  else if (p.ax < p.x - halbW) p.linie = { x1: p.x - halbW, y1: p.y, ...ende }
+  else p.linie = null
+}
+
+/** Das Rechteck einer Kachel in Bildeinheiten. */
+export function kachelRechteck(p: Platz, dims: LayoutDims, k: number): { x0: number; y0: number; x1: number; y1: number } {
+  const halbW = (dims.nodeW / 2) * k
+  const halbH = (dims.nodeH / 2) * k
+  return { x0: p.x - halbW, y0: p.y - halbH, x1: p.x + halbW, y1: p.y + halbH }
+}
+
+/** Läuft die Strecke durch das Innere des Rechtecks (Liang–Barsky; Berührung von Kante oder Ecke zählt nicht)? */
+export function trifftRechteck(s: Segment, r: { x0: number; y0: number; x1: number; y1: number }): boolean {
+  const dx = s.x2 - s.x1
+  const dy = s.y2 - s.y1
+  let t0 = 0
+  let t1 = 1
+  for (const [q, d] of [[s.x1 - r.x0, -dx], [r.x1 - s.x1, dx], [s.y1 - r.y0, -dy], [r.y1 - s.y1, dy]] as const) {
+    if (d === 0) { if (q < 0) return false; continue }
+    const t = q / d
+    if (d < 0) t0 = Math.max(t0, t)
+    else t1 = Math.min(t1, t)
+    if (t0 > t1) return false
+  }
+  if (t0 >= t1) return false
+  const tm = (t0 + t1) / 2
+  const x = s.x1 + tm * dx
+  const y = s.y1 + tm * dy
+  return x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1
+}
+
+/** Mitte → Anker eines Platzes (die Strecke, die auch unter der Kachel verläuft). */
+function mitteAnker(p: Platz): Segment {
+  return { x1: p.x, y1: p.y, x2: p.ax, y2: p.ay }
+}
+
+/**
+ * Probe eines Einzelplatzes gegen die Reihen (P-433-2e, E-2e-4): (i) seine Linie schneidet eine Reihenlinie — beide
+ * Strecken wie beim Reihenwechsel ({@link kreuzenZwischen}); (ii) eine Reihenlinie oder deren Strecke Mitte → Anker
+ * läuft durch das Platz-Rechteck. Nur Reihenplätze mit Linie zählen.
+ */
+export function platzKollidiert(p: Platz, reihen: Platz[], dims: LayoutDims, k: number): boolean {
+  const r = kachelRechteck(p, dims, k)
+  return reihen.some((q) => q.linie != null
+    && (kreuzenZwischen(p, q) || trifftRechteck(q.linie, r) || trifftRechteck(mitteAnker(q), r)))
+}
+
+/**
+ * Die zwei Reihen ohne Einzelplätze — das Layout von P-433-2d (Reihenregel, Reihenwechsel bei Kreuzung), unverändert;
+ * am Handy ist es das ganze Layout. `untenGekuerzt`: die untere Reihe endet eine Kachelbreite früher (belegter
+ * rechter Platz, P-433-2e).
+ */
+export function layoutReihen<T extends LayoutKachel>(kacheln: T[], ctr: number, untenGekuerzt = false): Omit<UeberblickLayout<T>, 'links' | 'rechts' | 'rueckfall'> {
   const W = zeichenbreite(ctr)
   const k = PANORAMA_BREITE / W
   const gewechselt = new Set<string>()
   const reiheVon = (t: T): Reihe => (gewechselt.has(t.id) ? bildReihe(t.anker) : ankerReihe(t.anker))
   // Höchstens n + 1 Läufe: jeder weitere Lauf hat mindestens eine Kachel endgültig gewechselt.
   for (let lauf = 0; ; lauf++) {
-    const l = reihenLayout(kacheln, W, k, reiheVon)
+    const l = reihenLayout(kacheln, W, k, reiheVon, untenGekuerzt)
     const platz = lauf <= kacheln.length ? wechselKandidat(l.oben, l.unten, reiheVon) : null
     if (!platz) {
       return {
@@ -280,13 +436,13 @@ export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: numb
 }
 
 /** Ein Lauf: Reihen nach `reiheVon`, Kapazität, x-Lage, Linien, Entkreuzung je Reihe. */
-function reihenLayout<T extends LayoutKachel>(kacheln: T[], W: number, k: number, reiheVon: (t: T) => Reihe) {
+function reihenLayout<T extends LayoutKachel>(kacheln: T[], W: number, k: number, reiheVon: (t: T) => Reihe, untenGekuerzt: boolean) {
   const oben = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'oben'), 'oben'), W, 'oben')
-  const unten = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'unten'), 'unten'), W, 'unten')
+  const unten = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'unten'), 'unten'), W, 'unten', untenGekuerzt)
   const dims = computeDims(Math.max(oben.length, unten.length, 1))
   const ry = reihenY(dims, k)
-  for (const [reihe, y] of [[oben, ry.oben], [unten, ry.unten]] as const) {
-    verteileX(reihe, dims, k)
+  for (const [reihe, y, gekuerzt] of [[oben, ry.oben, false], [unten, ry.unten, untenGekuerzt]] as const) {
+    verteileX(reihe, dims, k, gekuerzt)
     reihe.forEach((p) => { p.y = y; setzeLinie(p, dims, k) })
     entkreuze(reihe, dims, k)
   }
