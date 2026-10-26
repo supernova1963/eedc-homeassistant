@@ -569,6 +569,7 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 >
 > **Benannte Grenzen:**
 > - **Nicht rückwirkend:** Die Mitschrift beginnt mit dem ersten empfangenen Wert. Home Assistant kennt die Vergangenheit, MQTT nicht.
+> - **Ab dem ersten vollen Tag:** *Cockpit → Tag* liest die Betriebsart-Aufteilung („Strom nach Betriebsart") nur aus der Mitschrift, wenn sie den ganzen Tag deckt — am Tag der Zuordnung zeigt die Tagessicht sie deshalb noch nicht, ab dem Folgetag schon. „Betrieb heute" im Hub-Überblick zählt dagegen jede mitgeschriebene Stunde sofort.
 > - **Kein „Leerlauf":** Leerlauf ist eine Messung von Home Assistant (die *Aktuelle Aktion*), kein Modus — über MQTT gibt es ihn nicht.
 > - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Lücke. Verstummt nur dein Absender, während der Broker läuft, hält eedc seinen letzten Wert (wie Home Assistant ohne Verfügbarkeits-Meldung).
 > - **Kein Gateway:** Das MQTT-Gateway (ein fremdes Topic umschreiben) reicht nur Zahlen weiter und steht an diesem Feld nicht zur Wahl — publiziere direkt auf das eedc-Topic.
@@ -701,6 +702,7 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 >
 > **Benannte Grenzen:**
 > - **Nicht rückwirkend:** Die Mitschrift beginnt mit der Zuordnung (dem ersten empfangenen Wert); Tage davor bleiben ohne Stundenmittel. Home Assistant kennt die Vergangenheit, MQTT nicht.
+> - **Ab dem ersten vollen Tag:** Ø Vorlauf und Ø Spreizung im Kopf des Temperatur-Diagramms brauchen die Betriebsstunden aus Zähler und Mitschrift des ganzen Tages — am Tag der Zuordnung bleiben sie leer, die Stundenwerte des Diagramms stehen ab der ersten vollen Stunde.
 > - **Auflösung 5 Minuten:** Jede 5-Minuten-Zeile gehört zu der Stunde, in der sie endet.
 > - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Lücke — die Stunde ist dann das Mittel der übrigen Minuten, nichts wird aufgefüllt. Verstummt nur dein Absender, während der Broker läuft, hält eedc seinen letzten Wert.
 > - **HA-Sensor geht vor:** Ist dem Feld ein Sensor aus Home Assistant zugeordnet, gilt nur er — auch wenn er keine Langzeitstatistik hat und dasselbe Topic über MQTT kommt (dann meldet der Daten-Checker ihn). Ein Kanal bekommt nie Werte aus zwei Quellen zugleich.
