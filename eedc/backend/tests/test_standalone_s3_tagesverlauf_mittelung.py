@@ -3,7 +3,8 @@
 * **S3-1 Tagesverlauf ohne ``live``-Zuordnung:** ``get_tagesverlauf`` fragt zuerst «HA-Verbindung da?» und erst im
   HA-Zweig nach der Zuordnung. Ohne HA-Token geht jede Anlage in den MQTT-Zweig — auch eine reine MQTT-Inbound-Anlage,
   deren Werte nur über die Inbound-Topics kommen; der Zweig liest nur ``mqtt_live_snapshots`` und liefert leer, wenn
-  keine da sind. Mit HA-Token und leerer Zuordnung bleibt es leer wie bisher (kein MQTT-Abruf, kein HA-Abruf).
+  keine da sind. Mit HA-Token und leerer Zuordnung blieb es in S3 leer (kein MQTT-Abruf, kein HA-Abruf); seit S4
+  (Mischform) geht auch dieser Fall in den MQTT-Zweig, HA bleibt unbefragt.
   Konsument ``aggregate_day``: die reine MQTT-Anlage wird jetzt wie die Standalone-Anlage mit ``live``-Zuordnung
   aggregiert (dieselben Stundenzeilen aus derselben Kurve).
 * **S3-2 eine Gewichtung:** ``schreiber.fenster_gewicht`` ist die eine Regel für die Stunden-Verdichtung der
@@ -151,8 +152,12 @@ async def test_reine_mqtt_anlage_ohne_snapshots_bleibt_leer(db, ha_verbindung):
 
 
 @pytest.mark.asyncio
-async def test_mit_ha_token_und_leerer_zuordnung_leer_wie_bisher(db, ha_verbindung, monkeypatch):
-    """Mit HA-Verbindung entscheidet weiter die Zuordnung: leer ⇒ leer, weder MQTT- noch HA-Abruf — auch mit Snapshots."""
+async def test_mit_ha_token_und_leerer_zuordnung_mqtt_zweig_ohne_ha_abruf(db, ha_verbindung, monkeypatch):
+    """Mit HA-Verbindung und leerer Zuordnung: der MQTT-Zweig, kein HA-Abruf.
+
+    ⭐ Standalone-Gleichstand S4 (26.10.2026, Mischform) dreht diese Probe: bis dahin stand hier «leer ⇒ leer, weder
+    MQTT- noch HA-Abruf — auch mit Snapshots» (die benannte Grenze von S3). Die Werte prüft
+    ``test_standalone_s4_mischform.py``; hier bleibt die Weggabelung."""
     ha_verbindung("langlebiger-token")
     a, pv = await _anlage_pv(db, {})
     _leistung_snaps(db, a.id, pv.id, TAG)
@@ -171,7 +176,7 @@ async def test_mit_ha_token_und_leerer_zuordnung_leer_wie_bisher(db, ha_verbindu
     monkeypatch.setattr(ltv, "get_history_normalized", ha)
 
     assert await ltv.get_tagesverlauf(a, db, _tage_zurueck(TAG), mit_vortagsrand=True) == {"serien": [], "punkte": []}
-    assert (merker.mqtt, merker.ha) == (0, 0)
+    assert (merker.mqtt, merker.ha) == (1, 0)
 
 
 def _nebenquellen_leer():

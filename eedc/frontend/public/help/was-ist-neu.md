@@ -144,7 +144,14 @@ ebenfalls diese 5-Minuten-Mittel statt einzelner Momentanwerte
 deiner Geräte nur an die eedc-Topics, ohne unter *Einstellungen → Datenquellen* etwas zuzuordnen, blieb das Diagramm
 „Tagesverlauf" in *Cockpit → Live* bisher leer. Jetzt zeichnet eedc es aus seinen eigenen 5-Minuten-Aufzeichnungen —
 ab der ersten Aufzeichnung, frühere Stunden bleiben leer. Auch die Stundenwerte je Gerät des Tages entstehen daraus,
-wie bei einer Anlage mit Zuordnung. Mit Home Assistant braucht der Tagesverlauf weiter eine Leistungs-Zuordnung
+wie bei einer Anlage mit Zuordnung ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
+**Mit Home Assistant: der Tagesverlauf auch für Geräte, die nur über MQTT liefern.** Läuft eedc als Home-Assistant-App,
+deine Geräte schicken ihre Leistung aber an die eedc-MQTT-Topics statt über einen Home-Assistant-Sensor, blieb das
+Diagramm „Tagesverlauf" in *Cockpit → Live* leer, und die Stundenwerte des Tages hatten keine Werte je Gerät. Jetzt
+zeichnet eedc diese Geräte aus seinen 5-Minuten-Aufzeichnungen — auch gemischt: Geräte mit Home-Assistant-Sensor kommen
+weiter aus Home Assistant, die übrigen aus MQTT, Netz und Gesamt-PV aus Home Assistant, wenn du sie dort zugeordnet hast.
+Die Kurve beginnt mit der ersten Aufzeichnung; frühere Stunden bleiben leer
 ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
 ## v4.1.10 — 24. Oktober 2026

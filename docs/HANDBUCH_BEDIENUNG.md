@@ -187,18 +187,25 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 - Ohne eigenen Sensor greift automatisch der **EPEX-Börsenpreis** (DE/AT via aWATTar-API) → Linie „Börsenpreis (EPEX)"; auch die frühen Morgenstunden vor dem ersten Sensor-Wert werden so aufgefüllt.
 - Ein Klick auf einen Legenden-Eintrag schaltet die jeweilige Serie ein oder aus.
 
-Woher die Kurve kommt:
+Woher die Kurve kommt — drei Wege:
 
-- **Mit Home Assistant** aus den Leistungen, die du unter *Einstellungen → Datenquellen* zugeordnet hast. Ohne
-  Leistungs-Zuordnung gibt es keine Kurve — dann steht an ihrer Stelle ein Satz, der das sagt (die Tageswerte kommen
-  weiter aus den Zählern).
-- **Ohne Home Assistant (MQTT-Inbound)** aus eedcs eigenen MQTT-Aufzeichnungen der Leistungen, die über die
-  Inbound-Topics ankommen — auch ohne jede Zuordnung unter *Datenquellen*. Das Diagramm zeigt den Verlauf des laufenden
-  Tages ab der ersten Aufzeichnung (alle 5 Minuten); eine Historie von vor dem Einrichten gibt es nicht. Jeder Punkt
-  ist ein **zeitgewichtetes 5-Minuten-Mittel** statt eines einzelnen Momentanwerts: eine taktende Wärmepumpe erscheint
-  als ihr mittlerer Verbrauch, nicht als zufällige Spitze oder Lücke.
-- Ist Home Assistant bei zugeordneten Leistungen nicht erreichbar oder liefert es für den Tag nichts, zeichnet eedc die
-  Kurve ebenfalls aus diesen MQTT-Aufzeichnungen, sofern es welche gibt.
+- **Mit Home Assistant und Zuordnung** aus den Leistungen, die du unter *Einstellungen → Datenquellen* einem
+  Home-Assistant-Sensor zugeordnet hast — rückwirkend, so weit der Verlauf in Home Assistant reicht.
+- **Mit Home Assistant, Geräte über MQTT (Mischform)**: Liefert ein Gerät seine Leistung nur über die
+  MQTT-Inbound-Topics (kein Home-Assistant-Sensor zugeordnet), zeichnet eedc es aus seinen eigenen MQTT-Aufzeichnungen —
+  neben den Geräten aus Home Assistant im selben Diagramm. Netz, Gesamt-PV und Preis kommen dabei aus Home Assistant,
+  wenn sie dort zugeordnet sind; ist dort gar nichts für Leistung, Netz oder Preis zugeordnet, kommt die ganze Kurve aus
+  MQTT. Ein Gerät mit Home-Assistant-Sensor bleibt bei Home Assistant, auch wenn es zusätzlich über MQTT sendet. Das gilt,
+  solange unter *Einstellungen → Integration → MQTT-Broker* „Daten über MQTT empfangen (Import)" an ist.
+- **Ohne Home Assistant (Standalone, MQTT-Inbound)** aus denselben MQTT-Aufzeichnungen — auch ohne jede Zuordnung unter
+  *Datenquellen*.
+
+Die MQTT-Aufzeichnungen zeigen den Verlauf ab der ersten Aufzeichnung (alle 5 Minuten, 15 Tage aufbewahrt); eine
+Historie von vor dem Einrichten gibt es nicht. Jeder Punkt ist ein **zeitgewichtetes 5-Minuten-Mittel** statt eines
+einzelnen Momentanwerts: eine taktende Wärmepumpe erscheint als ihr mittlerer Verbrauch, nicht als zufällige Spitze oder
+Lücke. Ist Home Assistant bei zugeordneten Leistungen nicht erreichbar oder liefert es für den Tag nichts, zeichnet eedc
+die Kurve ebenfalls aus diesen MQTT-Aufzeichnungen, sofern es welche gibt. Gibt es weder eine Zuordnung noch
+MQTT-Aufzeichnungen, steht an der Stelle der Kurve ein Satz, der das sagt (die Tageswerte kommen weiter aus den Zählern).
 
 **Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
 auf einer durchgehenden Zeitachse:

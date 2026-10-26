@@ -6,7 +6,7 @@ Ausgelagert aus live_power_service.py (Schritt 5 des Refactorings).
 
 import logging
 import operator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
@@ -597,8 +597,14 @@ def _ergaenze_haushalt_und_preis(
 
 def _ha_serien(
     inv_live_map: dict, investitionen: dict, start: datetime,
+    mqtt_geraete: Optional["_MqttGeraete"] = None,
 ) -> tuple[list, dict[str, list[str]], list[dict], list]:
-    """Investitions-Serien des HA-Pfads: ``(serien_core, serie_entities, serien, uebersprungen)``."""
+    """Investitions-Serien des HA-Pfads: ``(serien_core, serie_entities, serien, uebersprungen)``.
+
+    ``mqtt_geraete`` (S4, Mischform): Geräte ohne HA-Leistungs-Entität mit MQTT-Leistung — sie zählen für
+    ``uebersprungen`` als gezeichnet bzw. als Gerät mit Leistungsquelle (dieselbe geteilte Bedingung, ein Aufruf).
+    """
+    mqtt = mqtt_geraete or _MqttGeraete(eingerichtet=False)
     # Serien-Selektion (inkl. Pool-Dedup) über die geteilte Quelle — identisch
     # zum Backfill-Pfad (Issue #318, M1). Chart-Metadaten (label/farbe/max_w)
     # rekonstruieren wir hier aus den Kern-Specs; sie sind Live-spezifisch.
@@ -613,10 +619,8 @@ def _ha_serien(
     # dargestellt", die zwölf Zeilen später in zwei Flächen zerlegt wurde.
     uebersprungen = uebersprungene_investitionen(
         investitionen,
-        inv_ids_mit_serie(serien_core),
-        lambda inv_id: any(
-            (inv_live_map.get(inv_id) or {}).get(f) for f in LEISTUNGS_FELDER
-        ),
+        inv_ids_mit_serie(serien_core) | mqtt.mit_serie,
+        lambda inv_id: _hat_ha_leistung(inv_live_map, inv_id) or mqtt.hat_leistung(inv_id),
     )
     serien: list[dict] = []
     for spec in serien_core:
@@ -783,6 +787,108 @@ def _kurven_aus_short_term(
         history[eid] = pts
 
 
+# ── Mischform: HA-Pfad mit MQTT-Geräten (Standalone-Gleichstand S4) ──────────
+
+
+def _hat_ha_leistung(inv_live_map: dict, inv_id: str) -> bool:
+    """Trägt die `live`-Zuordnung des Geräts eine HA-Leistungs-Entität? — dieselbe Frage wie ``_ha_serien``."""
+    return any((inv_live_map.get(inv_id) or {}).get(f) for f in LEISTUNGS_FELDER)
+
+
+@dataclass(frozen=True)
+class _MqttGeraete:
+    """Die Geräte eines HA-Tagesverlaufs, die keine HA-Leistungs-Entität haben und ihre Leistung über MQTT-Inbound
+    liefern (Mischform, S4) — Serien, Schlüssel und Punkte in der Form des MQTT-Zweigs.
+
+    ``eingerichtet``: MQTT-Inbound läuft (Dienst initialisiert, ``mqtt.enabled``). Nur dann fragt der HA-Zweig die
+    Snapshots — ein HA-Anwender ohne MQTT-Inbound bekommt keine zusätzliche Query und dieselbe Antwort wie vorher.
+    ``verfuegbar``: die Snapshot-Keys des Abruf-Fensters (leer ⇒ es bleibt beim HA-Ergebnis, auch ``uebersprungen``).
+    ``mit_serie``: die Geräte, für die der MQTT-Baustein eine Serie gebaut hat.
+    """
+
+    eingerichtet: bool
+    serien: list = field(default_factory=list)
+    keys: dict = field(default_factory=dict)
+    history: dict = field(default_factory=dict)
+    verfuegbar: frozenset = frozenset()
+    mit_serie: frozenset = frozenset()
+
+    def hat_leistung(self, inv_id: str) -> bool:
+        """Liefert MQTT für das Gerät einen Leistungs-Key? — die MQTT-Hälfte der ``uebersprungen``-Frage (N-447)."""
+        return any(f"inv:{inv_id}:{f}" in self.verfuegbar for f in LEISTUNGS_FELDER)
+
+
+async def _mqtt_geraete_ohne_ha(
+    anlage: Anlage, db: AsyncSession, abruf_start: datetime, end: datetime,
+    investitionen: dict, inv_live_map: dict,
+) -> _MqttGeraete:
+    """MQTT-Serien der Geräte ohne HA-Leistungs-Entität (Mischform, S4).
+
+    Ein Gerät mit HA-Leistungs-Entität bleibt beim HA-Zweig, auch wenn sein Verlauf leer ist (sonst zwei Quellen in
+    einer Serie); eins ohne bekommt seine Serie aus den 5-Minuten-Snapshots — mit den Bausteinen des MQTT-Zweigs
+    (``_mqtt_history``, ``_mqtt_investitions_serien``), damit beide Wege dieselbe Serie bauen. Basis-Felder (Netz,
+    PV gesamt, Preis) bleiben beim HA-Zweig.
+    """
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+
+    if get_mqtt_inbound_service() is None:
+        return _MqttGeraete(eingerichtet=False)
+    ohne_ha = {
+        inv_id: inv for inv_id, inv in investitionen.items()
+        if not _hat_ha_leistung(inv_live_map, inv_id)
+        and inv.typ in TV_SERIE_CONFIG and inv.typ not in SKIP_TYPEN
+    }
+    if not ohne_ha:
+        return _MqttGeraete(eingerichtet=True)
+
+    from backend.services.mqtt_live_history_service import get_snapshots_for_range
+
+    history = _mqtt_history(await get_snapshots_for_range(anlage.id, abruf_start, end, db))
+    verfuegbar = frozenset(history)
+    serien, keys, _ = _mqtt_investitions_serien(ohne_ha, set(verfuegbar))
+    benutzt = {k for ks in keys.values() for k in ks}
+    return _MqttGeraete(
+        eingerichtet=True, serien=serien, keys=keys,
+        history={k: history[k] for k in benutzt}, verfuegbar=verfuegbar,
+        # Komponenten-Key `inv:<id>:<feld>` ⇒ das Gerät, für das der MQTT-Baustein eine Serie gebaut hat.
+        mit_serie=frozenset(k.split(":")[1] for k in benutzt),
+    )
+
+
+async def _ohne_ha_leistungs_entitaet(
+    anlage: Anlage, db: AsyncSession, tage_zurueck: int, mit_vortagsrand: bool, mqtt_geraete: _MqttGeraete,
+) -> dict:
+    """Die Zuordnung trägt keine HA-Entität für Leistung, Netz oder Preis (z. B. nur SoC oder Temperaturen aus HA).
+
+    Mit MQTT-Inbound (S4): der MQTT-Zweig — er zeichnet alles, was über MQTT kommt, auch Netz und PV gesamt; ohne
+    Snapshots leer. Ohne MQTT-Inbound leer wie bisher, ohne Abfrage.
+    """
+    if mqtt_geraete.eingerichtet:
+        return await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand)
+    return {"serien": [], "punkte": []}
+
+
+def _ha_anteil_traegt_leistung(
+    punkte: list[dict], vortagsrand: list[dict], serien: list[dict], mqtt_geraete: _MqttGeraete,
+) -> bool:
+    """Trägt der HA-Anteil der Kurve Leistung? (N-598-Regel für den F-26-Rückfall, S4: ohne die MQTT-Geräte).
+
+    Ohne gemischte Geräte genau ``kurve_traegt_leistung`` der ganzen Kurve. Mit ihnen fallen ihre Schlüssel und
+    ``haushalt`` (der Rest kann aus einem MQTT-Erzeuger allein entstehen) aus der Frage; jeder andere Schlüssel eines
+    Punkts stammt aus einer HA-Entität.
+    """
+    from backend.services.energie_profil.aggregator import kurve_traegt_leistung
+
+    if not mqtt_geraete.keys:
+        return kurve_traegt_leistung(punkte, vortagsrand, serien)
+    fremd = set(mqtt_geraete.keys) | {"haushalt"}
+
+    def nur_ha(liste: list[dict]) -> list[dict]:
+        return [{"werte": {k: v for k, v in (p.get("werte") or {}).items() if k not in fremd}} for p in liste]
+
+    return kurve_traegt_leistung(nur_ha(punkte), nur_ha(vortagsrand), serien)
+
+
 async def get_tagesverlauf(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
     *, mit_vortagsrand: bool = False,
@@ -842,17 +948,19 @@ async def get_tagesverlauf(
     # kehrte `get_tagesverlauf` bei leerer Zuordnung zuerst um — eine reine MQTT-Inbound-Anlage (Werte nur über die
     # Inbound-Topics, keine HA-Entität) erreichte den MQTT-Zweig nie und hatte keinen Tagesverlauf, obwohl ihre
     # 5-Minuten-Snapshots da waren. Der MQTT-Zweig braucht die Zuordnung nicht (er liest nur `mqtt_live_snapshots`)
-    # und liefert selbst leer, wenn keine Snapshots da sind. Mit HA-Verbindung bleibt es wie bisher: leere Zuordnung
-    # ⇒ leer (darunter).
+    # und liefert selbst leer, wenn keine Snapshots da sind.
+    #
+    # ⭐ Standalone-Gleichstand S4 (26.10.2026, Mischform): auch MIT HA-Verbindung führt eine leere `live`-Zuordnung
+    # (weder Basis noch Gerät) in den MQTT-Zweig. Bis dahin kehrte der Lauf hier leer um — ein HA-Add-on, dessen Geräte
+    # ihre Leistung nur über MQTT-Inbound liefern (B8-Stempel `mqtt_inbound_standard`, keine HA-Entität), hatte Live,
+    # Mitschrift und Hub-Karte, aber keine Kurve, und `aggregate_day` schrieb Stundenzeilen ohne Gerätewerte. HA wird
+    # ohne Zuordnung weiter nicht befragt; ohne Snapshots ist die Antwort leer wie vorher (eine Query).
     from backend.services.ha_state_service import get_ha_state_service
 
-    if not get_ha_state_service().is_available:
+    if not get_ha_state_service().is_available or (not basis_live and not inv_live_map):
         return await _get_tagesverlauf_mqtt(
             anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
         )
-
-    if not basis_live and not inv_live_map:
-        return {"serien": [], "punkte": []}
 
     now = datetime.now()
     start, end, abruf_start = _tagesfenster(now, tage_zurueck, mit_vortagsrand)
@@ -863,9 +971,14 @@ async def get_tagesverlauf(
     # N-536: die Menge für die BKW-Abtretung (leer ⇒ nichts zu kürzen).
     _bkw_erzeuger = list(investitionen.values())
 
+    # S4 (Mischform): Geräte ohne HA-Leistungs-Entität mit MQTT-Leistung — ihre Serien stehen hinter denen aus HA und
+    # VOR „PV Gesamt", damit ein MQTT-Erzeuger die Basis-Gesamtleistung genauso ersetzt wie ein HA-Erzeuger (eine
+    # Regel, keine Doppelzählung).
+    mqtt_geraete = await _mqtt_geraete_ohne_ha(anlage, db, abruf_start, end, investitionen, inv_live_map)
     serien_core, serie_entities, serien, uebersprungen = _ha_serien(
-        inv_live_map, investitionen, start,
+        inv_live_map, investitionen, start, mqtt_geraete,
     )
+    serien.extend(mqtt_geraete.serien)
     _ha_pv_gesamt(serien, serie_entities, basis_live, anlage)
 
     # Netz: Netzbezug und Einspeisung als getrennte Serien
@@ -875,7 +988,9 @@ async def get_tagesverlauf(
     strompreis_eid = _strompreis_eid(anlage)
     all_ids = _ha_abruf_ids(serie_entities, netz, strompreis_eid)
     if not all_ids:
-        return {"serien": [], "punkte": []}
+        return await _ohne_ha_leistungs_entitaet(
+            anlage, db, tage_zurueck, mit_vortagsrand, mqtt_geraete,
+        )
 
     history, units = await get_history_normalized(all_ids, abruf_start, end)
     _strompreis_in_ct(history, units, strompreis_eid)
@@ -885,10 +1000,13 @@ async def get_tagesverlauf(
         abruf_start, end, history,
         basis_live, basis_invert, inv_live_map, inv_invert_map,
     )
+    # Nach Overlay und Invert: die MQTT-Punkte tragen eigene Schlüssel (`inv:<id>:<feld>`, nie eine Entity-ID) und
+    # werden wie im MQTT-Zweig gelesen — ohne short_term-Overlay und ohne Invert.
+    history.update(mqtt_geraete.history)
 
     punkte, vortagsrand = _raster(
         _SlotQuellen(
-            serien=serien, serie_keys=serie_entities, history=history, netz=netz,
+            serien=serien, serie_keys={**serie_entities, **mqtt_geraete.keys}, history=history, netz=netz,
             bkw_erzeuger=_bkw_erzeuger, preis_key=strompreis_eid,
             preis_fortschreiben=True, boersenpreis=_boersenpreis_stunden,
             ende_erreicht=operator.gt,
@@ -910,9 +1028,11 @@ async def get_tagesverlauf(
     # ⛔ N-598 (03.10.2026): gefragt wird, ob die Kurve LEISTUNG trägt, nicht ob sie Punkte hat. Der HA-Zweig liefert
     # für einen Tag ohne HA-Verlauf trotzdem das volle Raster (144 Punkte + 6 Vortagsrand, nur Börsenpreis-Overlay) —
     # mit `if not punkte` griff der Rückfall deshalb nie. Dieselbe Regel wie `aggregator.kurve_traegt_leistung` (N-596).
-    from backend.services.energie_profil.aggregator import kurve_traegt_leistung
-
-    if not kurve_traegt_leistung(punkte, vortagsrand, serien):
+    #
+    # S4 (Mischform): gefragt wird der HA-ANTEIL — die gemischten MQTT-Geräte zählen nicht mit. Sonst nähme eine
+    # Kurve, deren HA-Zuordnung ins Leere zeigt, den Rückfall nicht mehr, sobald ein MQTT-Gerät Leistung trägt, und
+    # der Anwender verlöre Netz und PV aus MQTT, die der Rückfall ihm gibt.
+    if not _ha_anteil_traegt_leistung(punkte, vortagsrand, serien, mqtt_geraete):
         mqtt = await _get_tagesverlauf_mqtt(
             anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
         )
@@ -1105,8 +1225,10 @@ async def _get_tagesverlauf_mqtt(
     noch per Long-Lived-Token (F-26; bis 2026-08-11 hing die Wahl allein am
     Supervisor-Token, was jeden Docker-Betrieb mit Token-Anbindung hierher
     schickte, obwohl er gar kein MQTT nutzt) —, seit dem Standalone-Gleichstand S3
-    auch **ohne `live`-Zuordnung** (reine MQTT-Inbound-Anlage). Zusätzlich als
-    **Rückfall**, wenn der HA-Weg nichts hergibt.
+    auch **ohne `live`-Zuordnung** (reine MQTT-Inbound-Anlage), seit S4 auch **mit**
+    HA-Verbindung ohne `live`-Zuordnung oder ohne HA-Leistungs-Entität (Mischform:
+    HA-Add-on, Geräte nur über MQTT-Inbound). Zusätzlich als **Rückfall**, wenn der
+    HA-Anteil des HA-Wegs keine Leistung trägt.
     Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
 
     ``mit_vortagsrand`` verhält sich wie im HA-Zweig — beide Wege müssen den

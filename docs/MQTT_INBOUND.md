@@ -142,9 +142,14 @@ Live-Felder in W, °C und %:
 | Betriebsmodus | `inv/…/betriebsmodus` — als Anteil je Modus (siehe naechster Abschnitt) |
 
 Daraus entstehen ohne Home Assistant u. a. das Temperatur-Diagramm, Ø Vorlauf und Ø Spreizung der Waermepumpe. Der
-**Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte — ohne
-Home Assistant auch ohne jede Zuordnung unter *Datenquellen* (reine Inbound-Anlage), ab der ersten Aufzeichnung; mit
-Home Assistant braucht er weiter eine Leistungs-Zuordnung.
+**Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte, ab der
+ersten Aufzeichnung — ohne Home Assistant auch ohne jede Zuordnung unter *Datenquellen* (reine Inbound-Anlage).
+
+**Add-on mit MQTT-Geraeten (Mischform).** Laeuft eedc mit Home Assistant, liefern aber einzelne oder alle Geraete ihre
+Leistung nur ueber diese Topics (kein HA-Sensor zugeordnet), zeichnet der Tagesverlauf auch sie aus den 5-Minuten-
+Aufzeichnungen: ohne jede `live`-Zuordnung die ganze Kurve aus MQTT, sonst die Geraete ohne HA-Leistungssensor aus MQTT
+neben den Geraeten aus HA — Netz, PV gesamt und Preis bleiben dann bei HA. Ein Geraet mit HA-Sensor bleibt bei HA. Die
+Tagesaggregation liest dieselbe Kurve (Geraetewerte je Stunde). Voraussetzung: „Daten ueber MQTT empfangen (Import)" an.
 
 - **Nicht rueckwirkend:** Die Stundenmittel beginnen mit der Zuordnung (dem ersten empfangenen Wert).
 - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Luecke; die Stunde ist das Mittel der uebrigen Minuten.

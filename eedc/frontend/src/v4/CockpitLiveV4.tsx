@@ -576,13 +576,13 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
               </FokusKachel>
             </Parkbar>
           )}
-          {/* Handgriff Triage-4 §3: ohne Kurve fehlte der Block wortlos. Die Kurve kommt mit Home Assistant aus der
-              Leistungs-Zuordnung (`live`-Eintrag), ohne Home Assistant aus den 5-Minuten-Aufzeichnungen der Inbound-
-              Leistungen (Standalone-Gleichstand S3: auch ohne `live`-Zuordnung). Nur nach geladener Antwort und nicht,
-              wenn der Anwender den Block geparkt hat. */}
+          {/* Handgriff Triage-4 §3: ohne Kurve fehlte der Block wortlos. Die Kurve kommt aus der HA-Leistungs-Zuordnung
+              (`live`-Eintrag) oder aus den 5-Minuten-Aufzeichnungen der Inbound-Leistungen — ohne Home Assistant
+              (Standalone-Gleichstand S3), mit Home Assistant ohne Zuordnung und für Geräte ohne HA-Entität (S4,
+              Mischform). Nur nach geladener Antwort und nicht, wenn der Anwender den Block geparkt hat. */}
           {!hatTagesverlauf && tagesverlauf && !park.istGeparkt('live:tagesverlauf') && (
             <Alert type="info">
-              Tagesverlauf: braucht eine Leistungs-Zuordnung unter Datenquellen (Home Assistant) — ohne Home Assistant Leistungswerte über MQTT-Inbound; die Kurve beginnt mit der ersten Aufzeichnung.
+              Tagesverlauf: braucht eine Leistungs-Zuordnung unter Datenquellen (Home Assistant) oder Leistungswerte über MQTT-Inbound; die MQTT-Kurve beginnt mit der ersten Aufzeichnung.
             </Alert>
           )}
         </div>

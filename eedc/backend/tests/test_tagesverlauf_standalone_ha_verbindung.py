@@ -158,23 +158,35 @@ async def test_leerer_ha_weg_faellt_auf_mqtt_zurueck(db, monkeypatch, ha_verbind
 
 
 @pytest.mark.asyncio
-async def test_ohne_zuordnung_wird_gar_kein_weg_gegangen(db, monkeypatch, ha_verbindung):
-    """Keine Live-Zuordnung ⇒ leer, ohne eine einzige Abfrage.
+async def test_ohne_zuordnung_wird_ha_nicht_befragt(db, monkeypatch, ha_verbindung):
+    """Keine Live-Zuordnung ⇒ keine HA-Abfrage; die Antwort kommt aus dem MQTT-Zweig.
 
     Die Wegwahl darf nicht dazu führen, dass eine Anlage ohne Zuordnung
-    plötzlich HA befragt.
+    plötzlich HA befragt. ⭐ Standalone-Gleichstand S4 (26.10.2026, Mischform): bis dahin
+    kehrte der Lauf hier ohne jede Abfrage leer um — ein HA-Add-on, dessen Geräte nur über
+    MQTT-Inbound liefern, hatte damit keine Kurve. Jetzt geht er in den MQTT-Zweig (der ohne
+    Snapshots leer liefert); HA bleibt unbefragt. Proben der Mischform:
+    ``test_standalone_s4_mischform.py``.
     """
     ha_verbindung("langlebiger-token")
     merker = _Merker()
     monkeypatch.setattr(ltv, "_get_tagesverlauf_mqtt", merker.mqtt)
+    ha_gerufen = []
+
+    async def ha(ids, start, end):
+        ha_gerufen.append(ids)
+        return {}, {}
+
+    monkeypatch.setattr(ltv, "get_history_normalized", ha)
 
     leer = Anlage(id=2, anlagenname="ohne Zuordnung")
     leer.sensor_mapping = {}
 
     ergebnis = await ltv.get_tagesverlauf(leer, db)
 
-    assert ergebnis == {"serien": [], "punkte": []}
-    assert merker.mqtt_gerufen == 0
+    assert ergebnis == {"serien": [], "punkte": [], "vortagsrand": []}, "die Antwort des MQTT-Zweigs"
+    assert merker.mqtt_gerufen == 1
+    assert ha_gerufen == []
 
 
 @pytest.mark.asyncio
