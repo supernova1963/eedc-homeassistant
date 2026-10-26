@@ -187,12 +187,18 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 - Ohne eigenen Sensor greift automatisch der **EPEX-Börsenpreis** (DE/AT via aWATTar-API) → Linie „Börsenpreis (EPEX)"; auch die frühen Morgenstunden vor dem ersten Sensor-Wert werden so aufgefüllt.
 - Ein Klick auf einen Legenden-Eintrag schaltet die jeweilige Serie ein oder aus.
 
-Das Diagramm braucht eine **Leistungs-Zuordnung** unter *Einstellungen → Datenquellen* (Home Assistant); mit MQTT-Inbound gibt
-es keine Kurve — dann steht an seiner Stelle ein Satz, der das sagt (die Tageswerte kommen weiter aus den Zählern).
-Ist Home Assistant bei zugeordneten Leistungen nicht erreichbar oder liefert es für den Tag nichts, zeichnet eedc die
-Kurve aus seinen eigenen MQTT-Aufzeichnungen (alle 5 Minuten) — seit dem Standalone-Gleichstand als **zeitgewichtetes
-5-Minuten-Mittel** statt eines einzelnen Momentanwerts: eine taktende Wärmepumpe erscheint als ihr mittlerer Verbrauch,
-nicht als zufällige Spitze oder Lücke.
+Woher die Kurve kommt:
+
+- **Mit Home Assistant** aus den Leistungen, die du unter *Einstellungen → Datenquellen* zugeordnet hast. Ohne
+  Leistungs-Zuordnung gibt es keine Kurve — dann steht an ihrer Stelle ein Satz, der das sagt (die Tageswerte kommen
+  weiter aus den Zählern).
+- **Ohne Home Assistant (MQTT-Inbound)** aus eedcs eigenen MQTT-Aufzeichnungen der Leistungen, die über die
+  Inbound-Topics ankommen — auch ohne jede Zuordnung unter *Datenquellen*. Das Diagramm zeigt den Verlauf des laufenden
+  Tages ab der ersten Aufzeichnung (alle 5 Minuten); eine Historie von vor dem Einrichten gibt es nicht. Jeder Punkt
+  ist ein **zeitgewichtetes 5-Minuten-Mittel** statt eines einzelnen Momentanwerts: eine taktende Wärmepumpe erscheint
+  als ihr mittlerer Verbrauch, nicht als zufällige Spitze oder Lücke.
+- Ist Home Assistant bei zugeordneten Leistungen nicht erreichbar oder liefert es für den Tag nichts, zeichnet eedc die
+  Kurve ebenfalls aus diesen MQTT-Aufzeichnungen, sofern es welche gibt.
 
 **Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
 auf einer durchgehenden Zeitachse:

@@ -142,7 +142,9 @@ Live-Felder in W, °C und %:
 | Betriebsmodus | `inv/…/betriebsmodus` — als Anteil je Modus (siehe naechster Abschnitt) |
 
 Daraus entstehen ohne Home Assistant u. a. das Temperatur-Diagramm, Ø Vorlauf und Ø Spreizung der Waermepumpe. Der
-**Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte.
+**Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte — ohne
+Home Assistant auch ohne jede Zuordnung unter *Datenquellen* (reine Inbound-Anlage), ab der ersten Aufzeichnung; mit
+Home Assistant braucht er weiter eine Leistungs-Zuordnung.
 
 - **Nicht rueckwirkend:** Die Stundenmittel beginnen mit der Zuordnung (dem ersten empfangenen Wert).
 - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Luecke; die Stunde ist das Mittel der uebrigen Minuten.

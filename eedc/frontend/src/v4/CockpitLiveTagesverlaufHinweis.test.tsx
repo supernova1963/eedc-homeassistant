@@ -1,10 +1,12 @@
 /**
  * Cockpit → Live: ohne Kurve sagt die Seite, warum der Tagesverlauf fehlt (Handgriff Triage-4 §3).
  *
- * Der Block «Tagesverlauf» erscheint nur mit Punkten und Serien (`hatTagesverlauf`). Die Kurve liest allein die
- * Leistungs-Zuordnung unter Datenquellen (Home Assistant, `live`-Eintrag); eine reine MQTT-Inbound-Anlage erreicht sie
- * nie (`live_tagesverlauf_service.py`, Tor vor der HA/MQTT-Wahl). Bis hierher fehlte der Block dann wortlos — der
- * Hinweis «Nicht dargestellt …» steht nur IM Chart. Jetzt: ein Satz an der Stelle des Blocks.
+ * Der Block «Tagesverlauf» erscheint nur mit Punkten und Serien (`hatTagesverlauf`). Die Kurve kommt mit Home
+ * Assistant aus der Leistungs-Zuordnung unter Datenquellen (`live`-Eintrag), ohne Home Assistant aus den MQTT-Snapshots
+ * der Inbound-Leistungen — seit dem Standalone-Gleichstand S3 auch ohne `live`-Zuordnung (`live_tagesverlauf_service.py`:
+ * erst die HA/MQTT-Wahl, dann die Zuordnung). Leer bleibt sie mit Home Assistant ohne Zuordnung und ohne Home Assistant
+ * bis zur ersten Aufzeichnung. Bis hierher fehlte der Block dann wortlos — der Hinweis «Nicht dargestellt …» steht nur
+ * IM Chart. Jetzt: ein Satz an der Stelle des Blocks, der beide Wege nennt.
  * Schwester: `CockpitLiveSolarSoll.test.tsx` (dieselbe Render-Probe über die echte Sicht).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -63,7 +65,7 @@ import { _clearSwrCacheForTests } from '../hooks/useApiData'
 
 const URSPRUNG = window.location.hash
 const tick = () => new Promise(r => setTimeout(r, 0))
-const SATZ = 'Tagesverlauf: braucht eine Leistungs-Zuordnung unter Datenquellen (Home Assistant); mit MQTT-Inbound keine Kurve.'
+const SATZ = 'Tagesverlauf: braucht eine Leistungs-Zuordnung unter Datenquellen (Home Assistant) — ohne Home Assistant Leistungswerte über MQTT-Inbound; die Kurve beginnt mit der ersten Aufzeichnung.'
 
 async function sichtGeladen() {
   await waitFor(() => expect(document.body.querySelector('svg.flex-1')).not.toBeNull())
@@ -86,7 +88,7 @@ describe('Cockpit → Live: Tagesverlauf ohne Kurve sagt warum', () => {
     vi.unstubAllGlobals()
   })
 
-  it('leere Antwort (keine Zuordnung, MQTT-Inbound): der Satz steht an der Stelle des Blocks', async () => {
+  it('leere Antwort (HA ohne Zuordnung oder MQTT noch ohne Aufzeichnung): der Satz steht an der Stelle des Blocks', async () => {
     renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
     await sichtGeladen()
     await waitFor(() => expect(document.body.textContent).toContain(SATZ))

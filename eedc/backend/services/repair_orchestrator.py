@@ -418,9 +418,10 @@ async def _reparatur_aggregat(
         lts_grund = verlauf.grund if verlauf.grund != "ok" else "keine_daten"
         # Stufe 3 (N-596): ohne Leistungskurve — Zähler, sofern der Tag keine
         # Gerätewerte zu verlieren hat. Nur, wenn Stufe 1 überhaupt an einer Kurve
-        # ohne Leistungswert ausgestiegen sein KANN: ohne Live-Zuordnung liefert
-        # `get_tagesverlauf` gar keine Kurve (dieselbe Bedingung, :292), Stufe 1
-        # ist dann am F-26-Ausstieg gescheitert und Stufe 3 wäre derselbe Lauf.
+        # ohne Leistungswert ausgestiegen sein KANN: ohne Live-Zuordnung ist Stufe 1
+        # am F-26-Ausstieg gescheitert (keine MQTT-Energie) oder lief als MQTT-Energie
+        # an der N-596-Prüfung vorbei (`hole_tagesverlauf`; seit Standalone-Gleichstand
+        # S3 kann die Kurve dort aus MQTT kommen) — Stufe 3 wäre derselbe Lauf.
         from backend.services.live_sensor_config import extract_live_config
 
         basis_live, inv_live_map, _, _ = extract_live_config(anlage)

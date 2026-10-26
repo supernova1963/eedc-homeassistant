@@ -136,6 +136,13 @@ der; Stundenpreise und Kosten kommen nur aus einem Home-Assistant-Preissensor. D
 ebenfalls diese 5-Minuten-Mittel statt einzelner Momentanwerte
 ([Wärme & Klima → Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)).
 
+**Ohne Home Assistant: der Tagesverlauf auch, wenn deine Werte nur über MQTT kommen.** Schickst du die Leistungen
+deiner Geräte nur an die eedc-Topics, ohne unter *Einstellungen → Datenquellen* etwas zuzuordnen, blieb das Diagramm
+„Tagesverlauf" in *Cockpit → Live* bisher leer. Jetzt zeichnet eedc es aus seinen eigenen 5-Minuten-Aufzeichnungen —
+ab der ersten Aufzeichnung, frühere Stunden bleiben leer. Auch die Stundenwerte je Gerät des Tages entstehen daraus,
+wie bei einer Anlage mit Zuordnung. Mit Home Assistant braucht der Tagesverlauf weiter eine Leistungs-Zuordnung
+([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
+
 ## v4.1.10 — 24. Oktober 2026
 
 **Daten-Checker: kein „Sprung in Home Assistant“ mehr am PV-Tagesertrag eines nachts abgeschalteten Wechselrichters.**

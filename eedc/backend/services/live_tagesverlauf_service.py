@@ -815,9 +815,6 @@ async def get_tagesverlauf(
     """
     basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
 
-    if not basis_live and not inv_live_map:
-        return {"serien": [], "punkte": []}
-
     # ── Welcher Weg? Die ZUORDNUNG entscheidet, nicht die Umgebung (F-26) ──
     #
     # Bis 2026-08-11 stand hier `if not HA_INTEGRATION_AVAILABLE` — also allein
@@ -840,12 +837,22 @@ async def get_tagesverlauf(
     # `is_available` ist `bool(token)` und deckt **beide** Wege ab: Supervisor
     # im Add-on, Long-Lived-Token im Standalone. Ein reiner MQTT-Betrieb hat
     # keinen Token ⇒ er geht unverändert in den MQTT-Zweig.
+    #
+    # ⭐ Standalone-Gleichstand S3 (26.10.2026): die Weiche steht VOR der Frage nach der `live`-Zuordnung. Bis dahin
+    # kehrte `get_tagesverlauf` bei leerer Zuordnung zuerst um — eine reine MQTT-Inbound-Anlage (Werte nur über die
+    # Inbound-Topics, keine HA-Entität) erreichte den MQTT-Zweig nie und hatte keinen Tagesverlauf, obwohl ihre
+    # 5-Minuten-Snapshots da waren. Der MQTT-Zweig braucht die Zuordnung nicht (er liest nur `mqtt_live_snapshots`)
+    # und liefert selbst leer, wenn keine Snapshots da sind. Mit HA-Verbindung bleibt es wie bisher: leere Zuordnung
+    # ⇒ leer (darunter).
     from backend.services.ha_state_service import get_ha_state_service
 
     if not get_ha_state_service().is_available:
         return await _get_tagesverlauf_mqtt(
             anlage, db, tage_zurueck, mit_vortagsrand=mit_vortagsrand,
         )
+
+    if not basis_live and not inv_live_map:
+        return {"serien": [], "punkte": []}
 
     now = datetime.now()
     start, end, abruf_start = _tagesfenster(now, tage_zurueck, mit_vortagsrand)
@@ -1097,8 +1104,9 @@ async def _get_tagesverlauf_mqtt(
     Wird aufgerufen, wenn **keine HA-Verbindung** besteht — weder per Supervisor
     noch per Long-Lived-Token (F-26; bis 2026-08-11 hing die Wahl allein am
     Supervisor-Token, was jeden Docker-Betrieb mit Token-Anbindung hierher
-    schickte, obwohl er gar kein MQTT nutzt). Zusätzlich als **Rückfall**, wenn
-    der HA-Weg nichts hergibt.
+    schickte, obwohl er gar kein MQTT nutzt) —, seit dem Standalone-Gleichstand S3
+    auch **ohne `live`-Zuordnung** (reine MQTT-Inbound-Anlage). Zusätzlich als
+    **Rückfall**, wenn der HA-Weg nichts hergibt.
     Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
 
     ``mit_vortagsrand`` verhält sich wie im HA-Zweig — beide Wege müssen den

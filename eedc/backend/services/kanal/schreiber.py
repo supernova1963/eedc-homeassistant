@@ -36,7 +36,9 @@ den auch die Mitschrift nach ihrem Schreiben fortschreibt; seit E4e ``kosten.py`
   geschriebene Stunde wird nie überschrieben oder geleert. Seit HA-Bauform §9 (Standalone-Gleichstand S1)
   zusätzlich für Wärmepumpen ohne HA-Modus aus den 5-Minuten-Snapshots des MQTT-Inbound
   (``_betriebsart_mitschrift_mqtt`` im Stundenlauf, ``statistic_id`` = MQTT-Schlüssel); beide Wege rufen
-  denselben Kern ``_schreibe_betriebsart_anteile`` (E-SG-6).
+  denselben Kern ``_schreibe_betriebsart_anteile`` (E-SG-6). Die Stunde aus den 5-Minuten-Zeilen verdichtet
+  ``modus_anteile_je_stunde`` längengewichtet mit derselben Gewichtung wie die Mittelwerte (``fenster_gewicht``,
+  Standalone-Gleichstand S3 — eine Mittelungsregel im MQTT-Pfad).
 
 **Isolation vom Bestand.** Beide Einstiege (``schreibe_kanaele_im_stundenlauf``,
 ``schreibe_betriebsart_mitschrift_sicher``) laufen NACH dem heutigen Schreiben in derselben Sitzung,
@@ -527,6 +529,21 @@ async def _mean_spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
 _SNAPSHOT_FENSTER = 300
 
 
+def fenster_gewicht(ts: int, vorher: Optional[int]) -> float:
+    """Gewicht einer 5-Minuten-Zeile in ihrer Stunde — **die eine Mittelungsregel des MQTT-Pfads** (Standalone-Gleichstand S3).
+
+    Gerufen von ``mittel_je_stunde`` (Mittelwerte, je Key) und ``modus_anteile_je_stunde`` (Betriebsart-Anteile, je
+    Gerät). Gewicht = Abstand ``ts − vorher`` zur vorigen Zeile derselben Reihe als Anteil eines Snapshot-Fensters,
+    höchstens 1 (``_SNAPSHOT_FENSTER``): eine Lücke davor (Broker weg, Neustart) zählt nicht als gemessene Zeit, die
+    Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9). Ohne Vorgänger 1. ``≤ 0`` (zwei Zeilen in derselben
+    Sekunde) ⇒ die Zeile zählt nicht. Bei regelmäßigem Takt ist jedes Gewicht genau ``1.0`` — das gewichtete Mittel
+    ist dann das einfache, auch im letzten Bit (``1.0 · x`` und ``Σ 1.0`` sind exakt).
+    """
+    if vorher is None:
+        return 1.0
+    return min(_SNAPSHOT_FENSTER, ts - vorher) / _SNAPSHOT_FENSTER
+
+
 def mqtt_live_statistic_id(kanal_key: str) -> str:
     """``kanal_quelle.statistic_id`` einer MQTT-Live-Mitschrift — der MQTT-Schlüssel nach dem Topic-Pfad
     (``inv:7:vorlauf_temperatur_c`` → ``mqtt:inv/7/vorlauf_temperatur_c``, ``basis:netzbezug_w`` → ``mqtt:netzbezug_w``;
@@ -617,15 +634,15 @@ def mittel_je_stunde(zeilen) -> list[tuple[int, float, float, float]]:
 
     Stunde = die lokale volle Stunde über ``_stunden_start_ts`` aus ``ts_unix`` (mit ``fold``: Herbst zwei Stunden) —
     dieselbe Regel wie Modus-Mitschrift und eigene Summe; eine Zeile gehört zur Stunde ihres Abschlusses.
-    **Längengewichtet** über die ``ts_unix``-Differenzen: das Gewicht einer Zeile ist der Abstand zur vorigen, höchstens
-    ein Snapshot-Fenster (``_SNAPSHOT_FENSTER``; ohne Vorgänger ein Fenster) — eine Lücke (Broker weg, Neustart) zählt
-    nicht als gemessene Zeit, die Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9). ``min``/``max`` = Extrema der
-    Fenster (ohne Spalte: das Fenster-Mittel). Eine Stunde ohne Zeilen fehlt.
+    **Längengewichtet** über die ``ts_unix``-Differenzen mit ``fenster_gewicht`` (derselben Regel wie die
+    Betriebsart-Anteile): Abstand zur vorigen Zeile, höchstens ein Snapshot-Fenster, ohne Vorgänger ein Fenster — eine
+    Lücke (Broker weg, Neustart) zählt nicht als gemessene Zeit, die Stunde ist das Mittel der vorhandenen Zeilen
+    (E-SG-9). ``min``/``max`` = Extrema der Fenster (ohne Spalte: das Fenster-Mittel). Eine Stunde ohne Zeilen fehlt.
     """
     je_stunde: dict[int, list[float]] = {}     # start_ts → [Σ Gewicht·Mittel, Σ Gewicht, min, max]
     vorher: Optional[int] = None
     for ts, mittel, lo, hi in sorted(zeilen, key=lambda z: z[0]):
-        gewicht = _SNAPSHOT_FENSTER if vorher is None else min(_SNAPSHOT_FENSTER, ts - vorher)
+        gewicht = fenster_gewicht(ts, vorher)
         vorher = ts
         if gewicht <= 0:
             continue                          # zwei Zeilen in derselben Sekunde: die erste zählt
@@ -1055,28 +1072,31 @@ def modus_anteile_je_stunde(zeilen) -> dict[int, list[tuple[int, dict[str, float
     Stunde = die lokale volle Stunde über ``_stunden_start_ts`` — dieselbe Regel wie die eigene Summe des MQTT-Stroms;
     gebildet aus ``ts_unix`` über ``datetime.fromtimestamp`` (mit ``fold``), nie aus der naiven ``timestamp``-Spalte
     (Herbst: zwei verschiedene ``start_ts``).
-    Anteil je Modus = Mittel über die Fenster der Stunde, die das Gerät gemeldet hat (Fenster = eine
-    ``ts_unix``); ein Modus ohne Zeile in einem Fenster zählt dort 0. Fenster ohne Zeile (kein Zustand,
-    Broker weg, Neustart) zählen nicht — die Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9).
+    Anteil je Modus = **längengewichtetes** Mittel über die Fenster der Stunde, die das Gerät gemeldet hat (Fenster =
+    eine ``ts_unix``), Gewicht aus ``fenster_gewicht`` über die Fensterfolge des Geräts — dieselbe Regel wie die
+    Mittelwerte (``mittel_je_stunde``, Standalone-Gleichstand S3; bis dahin das einfache Mittel, bei regelmäßigem Takt
+    gleich). Ein Modus ohne Zeile in einem Fenster zählt dort 0. Fenster ohne Zeile (kein Zustand, Broker weg,
+    Neustart) zählen nicht — die Stunde ist das Mittel der vorhandenen Zeilen (E-SG-9).
     """
-    fenster: dict[int, dict[int, dict[int, dict[str, float]]]] = {}
+    fenster: dict[int, dict[int, dict[str, float]]] = {}       # inv_id → ts_unix → {modus: anteil}
     for ts, key, anteil in zeilen:
         inv_id = _modus_zeile_geraet(key)
         if inv_id is None:
             continue
-        ts = int(ts)
-        stunde = _stunden_start_ts(datetime.fromtimestamp(ts))
-        fenster.setdefault(inv_id, {}).setdefault(stunde, {}).setdefault(ts, {})[key.rpartition(":")[2]] = float(anteil)
+        fenster.setdefault(inv_id, {}).setdefault(int(ts), {})[key.rpartition(":")[2]] = float(anteil)
     out: dict[int, list[tuple[int, dict[str, float]]]] = {}
-    for inv_id, stunden in fenster.items():
-        for stunde in sorted(stunden):
-            je_fenster = stunden[stunde].values()
-            n = len(je_fenster)
-            summe: dict[str, float] = {}
-            for je_modus in je_fenster:
-                for modus, anteil in je_modus.items():
-                    summe[modus] = summe.get(modus, 0.0) + anteil
-            out.setdefault(inv_id, []).append((stunde, {m: v / n for m, v in summe.items()}))
+    for inv_id, je_ts in fenster.items():
+        je_stunde: dict[int, tuple[list[float], dict[str, float]]] = {}   # start_ts → ([Σ Gewicht], {modus: Σ Gewicht·Anteil})
+        vorher: Optional[int] = None
+        for ts in sorted(je_ts):
+            gewicht = fenster_gewicht(ts, vorher)
+            vorher = ts
+            gesamt, summe = je_stunde.setdefault(_stunden_start_ts(datetime.fromtimestamp(ts)), ([0.0], {}))
+            gesamt[0] += gewicht
+            for modus, anteil in je_ts[ts].items():
+                summe[modus] = summe.get(modus, 0.0) + gewicht * anteil
+        out[inv_id] = [(stunde, {m: v / gesamt[0] for m, v in summe.items()})
+                       for stunde, (gesamt, summe) in sorted(je_stunde.items())]
     return out
 
 
