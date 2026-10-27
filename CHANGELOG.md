@@ -9,6 +9,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.1.11] - 2026-10-27 — Wärme/Klima nach Konzept #433: Hub-Überblick mit Panorama, Live-Kacheln und „Auf einen Blick", Datenquellen nach Betriebsart (#431), Vorlauf/Rücklauf/Zusatzheizung live und als Tagessicht (#432), „AZ ohne Zusatzheizung", Energiefluss mit „Rest", Netzrichtung und Modus-Chip; Standalone-Gleichstand: Betriebsmodus und Stundenmittel über MQTT, Tagesverlauf für reine MQTT-Anlagen und für HA-Add-ons mit MQTT-Geräten; 2 Korrekturen
+
 ### Added
 
 - **Komponenten → Wärmepumpe: Block „Überblick" zuoberst — Wärme/Klima-Panorama mit den Live-Kacheln und „Auf einen Blick" (Konzept #433 Stufe 2, P-433-2, Mathek).** Die Kachel des Live-Energieflusses ist als eigene Komponente herausgelöst (`components/live/EnergieFlussKachel.tsx`, Snapshot-Wächter über 18 Zellen: der Energiefluss bleibt bitgleich) und steht auf einem Panorama (hell/dunkel bildgleich, Anker-Karte je Bildobjekt) — nur für Werte mit Sensor, Maßstab wie im Energiefluss (k = 1312/W), zwei Reihen im Bild ohne kreuzende Linien, Gruppen bei Platzmangel, Zeile „Ohne Sensor, deshalb ohne Kachel: …". „Auf einen Blick" zeigt das gewählte Gerät (Modus-Chip als neue UI-Komponente `ui/ModusChip`, Leistung, Warmwasser- und Außentemperatur, heute Strom/Wärme/Arbeitszahl) und den Gauge „Eigenverbrauch jetzt x % (Anlage)". Live-Abruf im Blockinhalt (5 s, Wetter und Tageswerte 5 min, nur bei sichtbarem Tab und aufgeklapptem Block); der Block steht auch bei gespeicherter Reihenfolge vorn (`BlockShell` `voranstellen`), neue Fokus-ID `ueberblick`. Kein neues Backend-Feld. Konzept: `docs/KONZEPT-433-UEBERBLICK.md`.
