@@ -120,7 +120,18 @@ class LiveKomponente(BaseModel):
     #: Nur `wallbox_*`: die zugeordneten Autos (dieselbe Zuordnung wie `parent_key`).
     fahrzeuge: Optional[list[LiveFahrzeug]] = None
     #: Nur `wallbox_*`: „eindeutig" bei genau einer live liefernden Wallbox, sonst „geschaetzt".
+    #: Seit P-433-2b K2a auch „eindeutig", wenn die Steuerung am Ladepunkt etwas über das Fahrzeug sagt
+    #: (`fahrzeuge_quelle`), und an der einzigen Wallbox ohne solche Aussage (D1). Kein drittes Wort (K2-6).
     fahrzeuge_zuordnung: Optional[Literal["eindeutig", "geschaetzt"]] = None
+    # ── P-433-2b K2a (Bauplan K2 E3): was die Steuerung über das Fahrzeug am Ladepunkt sagt ──
+    # Builder `_fahrzeug_anzeige_zuordnung`; reine Anzeige, `parent_key` und Summen bleiben unberührt (K2-5).
+    #: „steuerung", wenn `fahrzeuge` (oder Gast/unbekannt) aus dem Textfeld `fahrzeug_am_ladepunkt` kommt.
+    fahrzeuge_quelle: Optional[Literal["steuerung"]] = None
+    #: Die Steuerung kennt kein Fahrzeug (leerer Text), aber eines hängt dran — «Gastfahrzeug» (K2-2).
+    gast: bool = False
+    #: Die Steuerung nennt ein Fahrzeug, das kein E-Auto als Kennung trägt — «Fahrzeug der Steuerung unbekannt»
+    #: (K2-10, D2: der Name selbst steht im Daten-Checker, nicht hier).
+    fahrzeug_unbekannt: bool = False
     # ── P-433-3 S1 (#432, Konzept #433 Stufe 3): Gerätewerte einer Wärmepumpe ──
     # Reine Anzeige für den Hub-Überblick (Builder `_wp_geraete_werte`): keine Summe, kein Residual liest sie.
     # Nur `waermepumpe_*`; `None` ohne Zuordnung (P4). Das anlagenweite `warmwasser_temperatur_c` der Antwort
@@ -217,6 +228,8 @@ class LiveDashboardResponse(BaseModel):
 
     #: P-433-2b K1 (Blatt §4): die Autos, die an **keiner** live liefernden Wallbox stehen (keine Wallbox liefert,
     #: oder die Anlage hat keine) — Träger der Hub-Karte E-Auto. Autos an einer Wallbox stehen in deren `fahrzeuge`.
+    #: Seit P-433-2b K2a auch die Autos, die an keiner Wallbox zugeordnet sind, weil jede live liefernde Wallbox eine
+    #: Steuerungs-Aussage trägt (Treffer eines anderen Autos, Gast, unbekanntes Fahrzeug).
     fahrzeuge_ohne_wallbox: Optional[list[LiveFahrzeug]] = None
 
 
@@ -426,6 +439,11 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     Formel. Die Auto-Zuordnung folgt `_fahrzeug_zuordnung` (Wallboxen 6, 11 ·
     Autos 4, 12 nach ID reihum ⇒ ID.4 → go-eCharger, Zoe → Carport), und bei
     zwei Wallboxen heißt sie „geschaetzt".
+
+    P-433-2b K2a (Bauplan K2 E3, D1): die Steuerung des go-eCharger meldet das Fahrzeug «id4» — die Kennung des
+    ID.4 —, also steht der ID.4 dort «eindeutig» mit Quelle Steuerung (`_fahrzeug_anzeige_zuordnung`); der Carport
+    ist die einzige Wallbox ohne Steuerungs-Aussage und trägt die Zoe ebenfalls «eindeutig». Die Kennung selbst steht
+    nicht in der Antwort (P8), sie ist ein Stammdatum.
     """
     def jitter(base: float, pct: float = 0.1) -> float:
         return round(base * (1 + random.uniform(-pct, pct)), 2)
@@ -517,7 +535,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "sitzung": {"kwh": 9.8, "dauer_s": 7800.0}, "ladestrom_a": 16.0, "phasen_aktiv": 3.0,
          "fahrzeuge": [{"investition_id": 4, "label": "VW ID.4", "soc": eauto_soc,
                         "kw": eauto_kw, "v2h": False, "reichweite_km": 312.0, "ziel_prozent": 80.0}],
-         "fahrzeuge_zuordnung": "geschaetzt"},
+         "fahrzeuge_zuordnung": "eindeutig", "fahrzeuge_quelle": "steuerung"},
         {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
          "erzeugung_kw": None, "verbrauch_kw": eauto_kw,
          "parent_key": "wallbox_6", "typ": "e-auto"},
@@ -528,7 +546,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          **_demo_ladepunkt(LAEDT if wallbox2_kw > 0 else VERBUNDEN, None),
          "fahrzeuge": [{"investition_id": 12, "label": "Renault Zoe", "soc": zoe_soc,
                         "kw": None, "v2h": False, "reichweite_km": 140.0}],
-         "fahrzeuge_zuordnung": "geschaetzt"},
+         "fahrzeuge_zuordnung": "eindeutig"},
         # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
         # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).
         # P-433-3 S1: Gerätewerte wie vom Builder (`_wp_geraete_werte`) — Vorlauf/Rücklauf, dieselbe

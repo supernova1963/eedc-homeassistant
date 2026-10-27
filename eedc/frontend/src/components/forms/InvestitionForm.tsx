@@ -189,7 +189,8 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       // Parameter konvertieren
       const dateFields: string[] = []
       // P-433-2b K1 (K-10): Text-Parameter — nie über `parseFloat` (aus „192.168.1.5:7070" würde sonst 192.168).
-      const textFelder: string[] = ['oberflaeche_url']
+      // P-433-2b K2a (K2-4): die Kennung in der Steuerung ebenso (aus „4711" würde sonst die Zahl 4711).
+      const textFelder: string[] = ['oberflaeche_url', 'kennung_in_steuerung']
       const convertedParams: Record<string, unknown> = {}
       Object.entries(paramData).forEach(([key, value]) => {
         // #263 — strukturierte Werte (Innengeräte-Liste) gehen unverändert

@@ -9,7 +9,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import DatenquellenZuordnung, { zustandsChipStatus } from './DatenquellenZuordnung'
+import DatenquellenZuordnung, { TEXT_LEER, zustandsChipStatus } from './DatenquellenZuordnung'
 import type { DatenquelleFeld } from '../../api/datenquellen'
 
 vi.mock('../../api/datenquellen', () => {
@@ -30,6 +30,10 @@ vi.mock('../../api/datenquellen', () => {
         ...zs, zustand: true, quelle: 'ha_app', ha_entity: 'sensor.wallbox_status_ladevorgang',
         wert_text: 'active_mode', wert_klartext: 'Lädt',
         zulaessige_werte: [{ kanon: 'laedt', label: 'Lädt', werte: ['laedt', 'active_mode'] }],
+      }),
+      // P-433-2b K2a: das Textfeld — leer über MQTT angekommen («die Steuerung kennt kein Fahrzeug»).
+      feld('inv4', 'fahrzeug_am_ladepunkt', 'Fahrzeug am Ladepunkt', '', {
+        ...zs, zustand: true, quelle: 'mqtt_inbound_standard', wert_text: '', wert_klartext: null, zulaessige_werte: null,
       }),
       feld('inv4', 'sitzung_kwh', 'Energie dieser Sitzung', 'kWh', { ...zs, quelle: 'ha_app', ha_entity: 'sensor.s', wert: 9.8 }),
       feld('inv4', 'ladestrom_a', 'Ladestrom', 'A', { ...zs, erweitert: true }),
@@ -74,6 +78,14 @@ describe('P-433-2b K1 — Datenquellen «Zustand & Sitzung»', () => {
     expect(link.getAttribute('href')).toContain('doc=einstellungen')
     // R1: das unzugeordnete Feld wartet hinter «Weitere Größen erfassen».
     expect(screen.getAllByRole('button', { name: /Weitere Größen erfassen/ }).length).toBe(2)
+  })
+
+  it('P-433-2b K2a: ein leer angekommener Text heißt «(leer)», keine leere grüne Zelle; der Kopf bleibt beim Ladezustand', async () => {
+    localStorage.clear()
+    const { container } = render(<MemoryRouter><DatenquellenZuordnung /></MemoryRouter>)
+    fireEvent.click(await screen.findByText(/alle aufklappen/))
+    expect(container.textContent).toContain(TEXT_LEER)
+    expect([...container.querySelectorAll('[data-zustand-status]')].map((s) => s.textContent)[0]).toBe('Zustands-Chip: zugeordnet')
   })
 
   it('zustandsChipStatus: ohne Zustandsfeld nichts', () => {

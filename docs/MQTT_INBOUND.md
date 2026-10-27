@@ -202,6 +202,7 @@ Wallbox und E-Auto haben eigene Live-Topics fuer den Ueberblick im Komponenten-H
 |---|---|---|
 | Wallbox | `ladezustand` | Zustand: `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler` (go-e-Code `0`…`5` geht auch) |
 | Wallbox | `lademodus` | Zustand: `aus` · `pv` · `smart` · `schnell` · `plan` · `eco` (go-e `lmo` `3`/`4`/`5` geht auch) |
+| Wallbox | `fahrzeug_am_ladepunkt` | Text: der Fahrzeugname der Steuerung (evcc `vehicleName`); **leer ist ein Wert** (kein bzw. unbekanntes Fahrzeug) |
 | Wallbox | `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (kWh, s, A, Anzahl, %, min) |
 | E-Auto | `ladezustand_fahrzeug` | Zustand: `nicht_verbunden` · `verbunden` · `laedt` · `laedt_dc` · `fertig` · `fehler` |
 | E-Auto | `zu_hause` | Zustand: `zu_hause` · `unterwegs` |
@@ -221,6 +222,20 @@ eedc/1_Meine_PV/live/inv/5_Smart_1/reichweite_km     → 312
 - Der Zustand ist bis zu 60 s alt (derselbe Takt wie der Betriebsmodus). Das Gateway reicht nur Zahlen weiter; fuer die
   Zustaende steht es nicht zur Wahl. Ein evcc-Preset (`evcc/loadpoints/<n>/…`) gibt es in dieser Version nicht.
 - **Hat das Geraet in eedc einen HA-Sensor fuer das Feld, gilt der HA-Sensor**; das Topic wird dann nicht gelesen.
+- **`fahrzeug_am_ladepunkt` — leer ist ein Wert.** Anders als bei einem Zustand legt eedc hier einen **leeren Payload** als
+  Wert ab („die Steuerung kennt kein Fahrzeug") — evcc schreibt `nil` als leeren String. Haengt dann ein Fahrzeug dran
+  (`ladezustand` verbunden · wartet · laedt · fertig), zeigt die Wallbox-Karte „Gastfahrzeug"; ein Name, der mit der
+  „Kennung in der Steuerung" eines E-Autos uebereinstimmt (Gross/Klein egal), nennt genau dieses Auto. `null`, `none` und
+  `-` gelten ebenfalls als leer, `unknown`/`unavailable` als keine Antwort; laenger als 80 Zeichen wird abgeschnitten. Nur
+  dieses Textfeld hat die Weiche — ein leerer Betriebsmodus oder Ladezustand wird weiter verworfen.
+  ⚠ Ein leerer **retained** Payload loescht die retained Nachricht am Broker: nach einem Neustart von eedc kommt bis zur
+  naechsten Meldung der Steuerung keine Antwort an (dann gibt es keinen Gast, die Karte zeigt die Regel ohne Steuerung).
+  Kein Startwert „0" fuer dieses Topic (es ist kein Zahlenfeld).
+
+```
+eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/fahrzeug_am_ladepunkt → Smart
+eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/fahrzeug_am_ladepunkt → (leer)   # Gast, wenn ein Fahrzeug dranhaengt
+```
 
 ### Beispiel
 

@@ -52,6 +52,23 @@ ZUSTAND_LIVE_FELDER: frozenset[tuple[str, str]] = frozenset(
 # (der Live-Poller sieht `{inv_id: {key: entity}}` ohne Typ-Kontext).
 ZUSTAND_FELD_KEYS: frozenset[str] = frozenset(key for _, key in ZUSTAND_LIVE_FELDER)
 
+# P-433-2b K2a (Bauplan K2 §1 K2-3, Gegenprüfung G1): die Feldart **Text** — ein Zustandsfeld (`zustand: True`, es
+# erbt alle Weichen oben) ohne Kanon, das einen freien Text trägt (`text: True`): heute der Fahrzeugname, den die
+# Steuerung am Ladepunkt meldet. Dieselbe Bauform wie `ZUSTAND_LIVE_FELDER` — Eigenschaft am Feld, abgeleitete Menge,
+# ein Leser (`ist_text_feld`) —, **keine getippte Liste daneben**. Ein Text ist nie ohne `zustand`: sonst liefe er in
+# den 5-s-Poller (`float(state)`) und der Inbound verwürfe ihn als ungültige Zahl (Wächter in
+# `test_p433_2b_k2a_fahrzeug.py`). Was ein Textfeld anders macht als ein Kanon-Zustand: kein Kanon, keine
+# Werte-Tabelle, kein Checker «fremder Wert», und **leer ist ein Wert** (Inbound-Weiche `_wert_aus_payload`).
+TEXT_LIVE_FELDER: frozenset[tuple[str, str]] = frozenset(
+    (typ, f["key"])
+    for typ, felder in LIVE_FELDER_INV.items()
+    for f in felder
+    if f.get("zustand") and f.get("text")
+)
+
+#: Nur die Feld-Keys der Textfelder — für die Pfade ohne Typ-Kontext (MQTT-Inbound).
+TEXT_FELD_KEYS: frozenset[str] = frozenset(key for _, key in TEXT_LIVE_FELDER)
+
 def einheit_fuer(feld: str, investition=None) -> str:
     """Die Einheit, die neben diesem Wert stehen soll — **der eine Leser** (#377).
 
@@ -105,6 +122,17 @@ def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
     if typ is not None:
         return (typ, basis) in ZUSTAND_LIVE_FELDER
     return basis in ZUSTAND_FELD_KEYS
+
+def ist_text_feld(feld: str, typ: Optional[str] = None) -> bool:
+    """Ist dieses Live-Feld ein **Text** (Zustandsfeld ohne Kanon)? — siehe `TEXT_LIVE_FELDER`.
+
+    Bauform `ist_zustand_feld`: der Innengeräte-Suffix wird aufgelöst, `typ` schärft die Antwort, wo der Aufrufer ihn
+    hat (der MQTT-Inbound kennt nur den Feld-Key).
+    """
+    basis = basis_feld_key(feld)
+    if typ is not None:
+        return (typ, basis) in TEXT_LIVE_FELDER
+    return basis in TEXT_FELD_KEYS
 
 def build_feld_labels() -> dict[str, str]:
     """

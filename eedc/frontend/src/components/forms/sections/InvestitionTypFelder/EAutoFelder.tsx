@@ -39,6 +39,16 @@ export function EAutoFelder({ paramData, onInputChange, setParam }: TypFelderPro
             placeholder="gemessen, sonst 60"
             hint="Anteil der Ladung aus PV-Strom. Leer lassen: eedc nimmt den gemessenen Anteil aus deinen Monatsdaten, ohne Messung 60 %."
           />
+          {/* P-433-2b K2a (K2-4): ein Name, keine Zahl — `InvestitionForm` speichert ihn als Text (`textFelder`). */}
+          <Input
+            label="Kennung in der Steuerung (evcc vehicleName, openWB Fahrzeug)"
+            name="param_kennung_in_steuerung"
+            type="text"
+            maxLength={80}
+            value={(paramData.kennung_in_steuerung as string) ?? ''}
+            onChange={onInputChange}
+            hint="Optional: der Name, unter dem deine Wallbox-Steuerung dieses Auto meldet. Dann sagt die Wallbox-Karte im Komponenten-Hub, welches Auto gerade angeschlossen ist — auch bei mehreren Wallboxen. Groß-/Kleinschreibung ist egal."
+          />
         </div>
       </FormSection>
 

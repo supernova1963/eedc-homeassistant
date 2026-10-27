@@ -61,7 +61,7 @@ from backend.core.betriebsmodus import (
     modus_quelle,
     normalisiere_betriebsmodus,
 )
-from backend.core.field_definitions import ZUSTAND_LIVE_FELDER, basis_feld_key
+from backend.core.field_definitions import ZUSTAND_LIVE_FELDER, basis_feld_key, ist_text_feld
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 
@@ -105,11 +105,29 @@ _cache: dict[int, tuple[float, dict[int, str], dict[int, str], dict[tuple[int, s
 #: P-433-2b K1 (Bauplan E2): die Typen, die ein Zustandsfeld haben — abgeleitet aus der Registry
 #: (`ZUSTAND_LIVE_FELDER`), nicht getippt. Bis K1 stand an der Abfrage `typ == "waermepumpe"`.
 _ZUSTAND_TYPEN: frozenset[str] = frozenset(typ for typ, _feld in ZUSTAND_LIVE_FELDER)
-#: Die Zustandsfelder der E-Mobilität je Typ — alle außer dem Betriebsmodus (der hat seinen eigenen Pfad oben).
+#: Die Zustandsfelder der E-Mobilität je Typ — alle außer dem Betriebsmodus (der hat seinen eigenen Pfad oben): die
+#: Kanon-Felder (`zustands_kanon.ZUSTANDS_FELDER`) und seit P-433-2b K2a die Textfelder (`ist_text_feld`, heute
+#: `fahrzeug_am_ladepunkt`) — derselbe Takt, derselbe gebündelte HA-Abruf, dieselbe Quellen-Regel.
 _EMOB_ZUSTAENDE: dict[str, tuple[str, ...]] = {
-    typ: tuple(sorted(feld for t, feld in ZUSTAND_LIVE_FELDER if t == typ and feld in zustands_kanon.ZUSTANDS_FELDER))
+    typ: tuple(sorted(
+        feld for t, feld in ZUSTAND_LIVE_FELDER
+        if t == typ and (feld in zustands_kanon.ZUSTANDS_FELDER or ist_text_feld(feld, typ))
+    ))
     for typ in _ZUSTAND_TYPEN
 }
+
+
+def _emob_wert(feld: str, typ_text: bool, roh, *, codes: bool) -> Optional[str]:
+    """Ein Rohwert der E-Mobilität → Kanon-Wert (Kanon-Feld) bzw. Text (Textfeld, ``""`` = leer), sonst ``None``.
+
+    P-433-2b K2a (Bauplan K2 E2, W1): ein Textfeld bekommt ``""`` nur aus einer **Antwort** — der Aufrufer reicht
+    ``None`` durch, wenn keine Quelle geantwortet hat (HA-State fehlt/``unavailable``, kein MQTT-Cache-Eintrag), und
+    ``zustands_kanon.text(None)`` bleibt ``None``. Der Zuordnungs-Default «ohne HA-Entität ⇒ MQTT» erfindet so keinen
+    leeren Text und damit keinen Gast.
+    """
+    if typ_text:
+        return zustands_kanon.text(feld, roh)
+    return zustands_kanon.normalisiere(feld, roh, codes=codes)
 
 
 def cache_leeren() -> None:
@@ -194,6 +212,10 @@ async def lade_zustaende_live(db: AsyncSession, anlage) -> dict[tuple[int, str],
     Ein fremder Wert, ``unknown``/``unavailable`` oder ein Gerät ohne Zuordnung **fehlt** (kein Chip, nie geraten).
     Derselbe 60-s-Takt wie der Modus, ein gebündelter HA-Abruf für alle E-Mob-Felder (benannte Grenze: der Chip ist
     bis zu 60 s alt).
+
+    P-433-2b K2a: dazu das Textfeld Wallbox ``fahrzeug_am_ladepunkt`` als **Text** (getrimmt, ≤ 80 Zeichen;
+    ``""`` heißt «die Steuerung hat geantwortet und kennt kein Fahrzeug», nie «keine Quelle»). Ohne Antwort fehlt
+    der Eintrag.
     """
     return (await _im_takt(db, anlage))[2]
 
@@ -302,9 +324,9 @@ async def _erhebe_emob_ha(ha: dict[str, list[tuple[int, str]]]) -> dict[tuple[in
     for entity, ziele in ha.items():
         roh = zustaende.get(entity)
         for inv_id, feld in ziele:
-            kanon = zustands_kanon.normalisiere(feld, roh[0] if roh else None)
-            if kanon is not None:
-                ergebnis[(inv_id, feld)] = kanon
+            wert = _emob_wert(feld, ist_text_feld(feld), roh[0] if roh else None, codes=False)
+            if wert is not None:
+                ergebnis[(inv_id, feld)] = wert
     return ergebnis
 
 
@@ -320,9 +342,10 @@ def _erhebe_emob_mqtt(anlage, ziele: list[tuple[int, str]]) -> dict[tuple[int, s
     werte = svc.cache.get_all_live_inv(anlage.id)
     ergebnis: dict[tuple[int, str], str] = {}
     for inv_id, feld in ziele:
-        kanon = zustands_kanon.normalisiere(feld, (werte.get(str(inv_id)) or {}).get(feld), codes=True)
-        if kanon is not None:
-            ergebnis[(inv_id, feld)] = kanon
+        # Ein fehlender Cache-Eintrag ist ``None`` (keine Antwort), ein abgelegter leerer Text ``""`` (Antwort leer).
+        wert = _emob_wert(feld, ist_text_feld(feld), (werte.get(str(inv_id)) or {}).get(feld), codes=True)
+        if wert is not None:
+            ergebnis[(inv_id, feld)] = wert
     return ergebnis
 
 

@@ -70,6 +70,8 @@ P433_3_KNOTEN_FELDER = ("vorlauf_c", "ruecklauf_c", "spreizung_k", "warmwasser_c
 P433_2B_KNOTEN_FELDER = (
     "ladezustand", "ladezustand_label", "lademodus", "lademodus_label", "sitzung", "ladestrom_a", "phasen_aktiv",
     "ziel_prozent", "restzeit_min",
+    # P-433-2b K2a (Bauplan K2 E3): was die Steuerung über das Fahrzeug am Ladepunkt sagt — reine Anzeige, Zuwachs.
+    "fahrzeuge_quelle", "gast", "fahrzeug_unbekannt",
 )
 P433_2B_ANTWORT_FELDER = ("fahrzeuge_ohne_wallbox",)
 P433_2B_FAHRZEUG_LEER = {

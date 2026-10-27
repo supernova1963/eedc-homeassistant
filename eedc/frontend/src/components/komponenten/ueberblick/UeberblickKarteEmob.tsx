@@ -22,6 +22,13 @@
  * (K-2); welches Auto nur aus der Zuordnung des Backends (`fahrzeuge_zuordnung`), bei «geschätzt» alle Autos mit
  * `SATZ_ZUORDNUNG_UNBEKANNT` (K-5); keine Netz-Ladung, keine Kosten, kein CO₂ (B9). ⛔ Der Client rechnet nichts
  * (P12): jede Zahl kommt fertig aus dem Backend, hier wird nur formatiert.
+ *
+ * **P-433-2b K2a (Bauplan K2 E4):** meldet die Steuerung das Fahrzeug (`fahrzeuge_quelle: 'steuerung'`), nennt die
+ * Wallbox-Karte genau das gemeldete Auto (Tooltip «gemeldet von der Steuerung», bei einem Dienstwagen «Dienstwagen
+ * ‹Name›»), «Gastfahrzeug lädt/verbunden» (`gast`) oder «Fahrzeug der Steuerung unbekannt» (`fahrzeug_unbekannt`;
+ * D2: der gemeldete Name steht nicht hier, sondern im Daten-Checker). «Alle Autos» bei «geschätzt» sind nur die der
+ * «geschätzt»-Wallboxen — ein von der Steuerung gemeldetes Auto steht dort nicht noch einmal (W4). Keine Farbe für
+ * den Gast, keine Rahmenfarbe (K2-11).
  */
 import type { ReactNode } from 'react'
 import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
@@ -56,6 +63,17 @@ export const LADUNG_TOOLTIP = 'Tageswert dieses Geräts (HA-Langzeitstatistik bz
 
 /** Ein Ladezustand «kein Fahrzeug» — dann sagt die Sitzung «letzte Sitzung» (Blatt §1a). */
 const KEIN_FAHRZEUG = 'kein_fahrzeug'
+/** Der Ladezustand «lädt» — Gast-Zeile «lädt» statt «verbunden». */
+const LAEDT = 'laedt'
+
+/** P-433-2b K2a (K2-2): die Steuerung kennt kein Fahrzeug, aber eines lädt bzw. hängt dran. */
+export const GAST_LAEDT = 'Gastfahrzeug lädt'
+export const GAST_VERBUNDEN = 'Gastfahrzeug verbunden'
+/** P-433-2b K2a (K2-10, D2): die Steuerung nennt ein Fahrzeug, das kein E-Auto als Kennung trägt — ohne den Namen. */
+export const FAHRZEUG_UNBEKANNT = 'Fahrzeug der Steuerung unbekannt'
+export const FUSSZEILE_UNBEKANNT = 'Kennung am E-Auto eintragen — Daten-Checker'
+/** Tooltip an der Fahrzeugzeile, wenn die Steuerung das Fahrzeug gemeldet hat. */
+export const TOOLTIP_STEUERUNG = 'gemeldet von der Steuerung'
 
 // ── Lesehilfen (rein, exportiert für Proben) ─────────────────────────────────
 
@@ -79,11 +97,13 @@ export function fahrzeugImLive(
   return frei ? { fahrzeug: frei, wallbox: null, zuordnung: null } : null
 }
 
-/** Alle Autos aller Wallbox-Knoten (für «geschätzt»: die Karte nennt alle, nicht eines). */
-function alleAutosAnWallboxen(live: LiveDashboardResponse | null): LiveFahrzeug[] {
+/** Alle Autos der «geschätzt»-Wallboxen (die Karte nennt alle, nicht eines). Seit K2a nur diese (W4): ein von der
+ * Steuerung gemeldetes Auto steht an seiner Wallbox «eindeutig» und nicht noch einmal in der Liste der anderen. */
+export function alleAutosAnWallboxen(live: LiveDashboardResponse | null): LiveFahrzeug[] {
   const gesehen = new Set<number>()
   const out: LiveFahrzeug[] = []
   for (const k of live?.komponenten ?? []) {
+    if (k.fahrzeuge_zuordnung !== 'geschaetzt') continue
     for (const f of k.fahrzeuge ?? []) {
       if (!gesehen.has(f.investition_id)) { gesehen.add(f.investition_id); out.push(f) }
     }
@@ -152,17 +172,18 @@ function Fusszeile({ children }: { children: ReactNode }) {
   return <p className="text-xs text-gray-400 dark:text-gray-500" data-fusszeile>{children}</p>
 }
 
-/** Eine Fahrzeugzeile der Wallbox-Karte: «Smart #1 · 62 % · 312 km · Verbunden» und die Leiste mit Zielmarke. */
-function FahrzeugZeile({ f, zielWallbox }: { f: LiveFahrzeug; zielWallbox: number | null }) {
+/** Eine Fahrzeugzeile der Wallbox-Karte: «Smart #1 · 62 % · 312 km · Verbunden» und die Leiste mit Zielmarke.
+ * `steuerung` (K2a): die Steuerung hat das Auto gemeldet — Tooltip, bei einem Dienstwagen «Dienstwagen ‹Name›». */
+function FahrzeugZeile({ f, zielWallbox, steuerung = false }: { f: LiveFahrzeug; zielWallbox: number | null; steuerung?: boolean }) {
   const teile = [
-    f.label,
+    steuerung && f.dienstwagen ? `Dienstwagen ${f.label}` : f.label,
     f.soc != null ? `${fmtZahl(f.soc, 0)} %` : null,
     f.reichweite_km != null ? `${fmtZahl(f.reichweite_km, 0)} km` : null,
     f.ladezustand_label ?? null,
   ].filter((t): t is string => t != null)
   return (
     <div className="space-y-1" data-fahrzeug={f.investition_id}>
-      <div className="text-sm text-gray-700 dark:text-gray-300" data-zeile="fahrzeug">{teile.join(' · ')}</div>
+      <div className="text-sm text-gray-700 dark:text-gray-300" data-zeile="fahrzeug" title={steuerung ? TOOLTIP_STEUERUNG : undefined}>{teile.join(' · ')}</div>
       {f.soc != null && <LadestandLeiste soc={f.soc} ziel={f.ziel_prozent ?? zielWallbox} />}
     </div>
   )
@@ -211,11 +232,27 @@ function WallboxFahrzeuge({ live, k }: { live: LiveDashboardResponse | null; k: 
       </div>
     )
   }
+  const steuerung = k.fahrzeuge_quelle === 'steuerung'
+  if (k.gast) {
+    return (
+      <div className="text-sm text-gray-700 dark:text-gray-300" data-fahrzeuge="gast" data-zeile="fahrzeug" title={TOOLTIP_STEUERUNG}>
+        {k.ladezustand === LAEDT ? GAST_LAEDT : GAST_VERBUNDEN}
+      </div>
+    )
+  }
+  if (k.fahrzeug_unbekannt) {
+    return (
+      <div className="space-y-1" data-fahrzeuge="unbekannt">
+        <div className="text-sm text-gray-700 dark:text-gray-300" data-zeile="fahrzeug" title={TOOLTIP_STEUERUNG}>{FAHRZEUG_UNBEKANNT}</div>
+        <Fusszeile>{FUSSZEILE_UNBEKANNT}</Fusszeile>
+      </div>
+    )
+  }
   const autos = k.fahrzeuge ?? []
   if (autos.length === 0) return null
   return (
     <div className="space-y-2" data-fahrzeuge="eindeutig">
-      {autos.map((f) => <FahrzeugZeile key={f.investition_id} f={f} zielWallbox={k.ziel_prozent ?? null} />)}
+      {autos.map((f) => <FahrzeugZeile key={f.investition_id} f={f} zielWallbox={k.ziel_prozent ?? null} steuerung={steuerung} />)}
     </div>
   )
 }

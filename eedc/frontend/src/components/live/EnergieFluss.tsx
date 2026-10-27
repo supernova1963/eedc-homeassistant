@@ -407,8 +407,11 @@ export default function EnergieFluss({
   const { nodeW: NODE_W, hausR: HAUS_R } = dims
   // Alle Autos an allen Wallboxen — bei „geschätzt" (≥ 2 Wallboxen) listet jede
   // Wallbox ALLE, denn die Zuordnung reihum ist nur eine Annahme (Plan §1.4a).
+  // P-433-2b K2a (W4): nur die Autos der „geschätzt"-Kacheln — ein von der Steuerung gemeldetes Auto steht an
+  // seiner Wallbox „eindeutig" und nicht noch einmal in der Liste der anderen.
   const alleAutos = [...new Map(
-    nodes.flatMap(n => n.fahrzeuge ?? []).map(f => [f.investition_id, f] as const),
+    nodes.filter(n => n.fahrzeugeZuordnung === 'geschaetzt')
+      .flatMap(n => n.fahrzeuge ?? []).map(f => [f.investition_id, f] as const),
   ).values()].sort((a, b) => a.investition_id - b.investition_id)
   const haushalt = komponenten.find(k => k.key === 'haushalt')
   // PV-Knoten-Anzahl: bei nur einem PV-String ist die Summe redundant

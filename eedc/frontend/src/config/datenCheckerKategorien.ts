@@ -61,6 +61,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   klima_modus_wert: 'Betriebsmodus – unbekannter Wert',
   // P-433-2b K1 (E12-Muster): Ladezustand, Lademodus, Fahrzeug-Ladezustand oder Standort mit unbekanntem Wert.
   emob_zustand_wert: 'E-Mobilität – unbekannter Zustand',
+  // P-433-2b K2a (K2-10): die Steuerung meldet ein Fahrzeug, dessen Kennung kein E-Auto trägt.
+  emob_kennung_unbekannt: 'E-Mobilität – Fahrzeug der Steuerung unbekannt',
   // N-767: eigener Wärmepumpen-Tarif — der PV-Anteil der Wärmepumpe wird zum Haushaltstarif bewertet.
   wp_eigener_tarif: 'Strompreise – eigener Wärmepumpen-Tarif',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
@@ -118,6 +120,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'klima_modus_sensor',
   'klima_modus_wert',
   'emob_zustand_wert',
+  'emob_kennung_unbekannt',
   'pv_ueber_erfassung',
   'messpunkt',
   'pv_zaehler_steht',

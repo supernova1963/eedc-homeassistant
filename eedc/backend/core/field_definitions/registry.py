@@ -928,6 +928,17 @@ _EMOB_LIVE_WALLBOX: list[dict] = [
                 "und «Wartet». Verstanden werden die Kanon-Wörter, evcc (`select.evcc_…_mode`) und der SMA EV "
                 "Charger; über MQTT auch die go-eCharger-Codes. Eine Angabe der Steuerung, eedc bewertet sie nicht. "
                 + _WEG_B},
+    # P-433-2b K2a (Bauplan K2 §1 K2-3): die erste Feldart **Text** — `zustand: True` (alle Zustands-Weichen: kein
+    # 5-s-Poller, Inbound-Zustands-Zweig, kein Gateway-Knopf, kein Kanal) plus `text: True` (`TEXT_LIVE_FELDER`): kein
+    # Kanon, keine Werte-Tabelle, kein Checker «fremder Wert»; ein leerer Text ist ein Wert (Gast), kein fehlender.
+    {"key": "fahrzeug_am_ladepunkt", "label": "Fahrzeug am Ladepunkt", "einheit": "", "zustand": True, "text": True,
+     "ha_domaenen": ("select", "sensor", "input_text"), **_EMOB_LIVE_BASIS,
+     "hinweis": "Name des Fahrzeugs, das die Steuerung am Ladepunkt erkennt (evcc `select.evcc_…_vehicle_name`, "
+                "openWB «Angeschlossenes Fahrzeug») — ein Text, kein Messwert. Stimmt er mit der «Kennung in der "
+                "Steuerung» eines E-Autos überein, nennt die Wallbox-Karte genau dieses Auto, auch bei mehreren "
+                "Wallboxen. Leer heißt Gast, fehlend heißt nichts: meldet die Steuerung kein Fahrzeug (evcc `null`), "
+                "während ein Auto verbunden ist oder lädt, zeigt die Karte «Gastfahrzeug». Ein leerer `input_text` "
+                "in Home Assistant ist von «nicht verfügbar» nicht zu unterscheiden und gilt nicht als Gast."},
     {"key": "sitzung_kwh", "label": "Energie dieser Sitzung", "einheit": "kWh", **_EMOB_LIVE_BASIS,
      "hinweis": "Seit dem Anstecken geladene Energie in kWh (evcc `session_energy`, SMA `energie_ladevorgang`, "
                 "go-e `wh`). Reine Anzeige im Überblick — keine Monatsmenge, kein Zähler der Bilanz. ⚠ SMA, go-e "

@@ -548,6 +548,13 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
     ),
+    # P-433-2b K2a (Bauplan K2 E1, Blatt §4): der Fahrzeugname der Steuerung — welches Auto an DIESER Wallbox steht
+    # (Treffer mit der Kennung), Gast, «Fahrzeug der Steuerung unbekannt». Hub-Überblick Wallbox und Wallbox-Kachel im
+    # Energiefluss (dieselbe `fahrzeuge`-Liste). Reine Anzeige, `parent_key` und Summen bleiben unberührt (K2-5).
+    ("wallbox", "fahrzeug_am_ladepunkt"): (
+        _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_fahrzeug_anzeige_zuordnung"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_fahrzeug_anzeige_zuordnung"),
+    ),
     ("wallbox", "sitzung_kwh"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
     ("wallbox", "sitzung_dauer_s"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
     ("wallbox", "ladestrom_a"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),

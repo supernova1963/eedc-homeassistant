@@ -46,6 +46,15 @@ export interface LiveKomponente {
   fahrzeuge?: LiveFahrzeug[] | null
   /** Nur `wallbox_*`: „eindeutig" bei genau einer live liefernden Wallbox, sonst „geschaetzt". */
   fahrzeuge_zuordnung?: 'eindeutig' | 'geschaetzt' | null
+  // ── P-433-2b K2a: was die Steuerung über das Fahrzeug am Ladepunkt sagt (Textfeld `fahrzeug_am_ladepunkt`) ──
+  // Reine Anzeige; kein drittes Zuordnungswort (K2-6) — ein Treffer, ein Gast und ein unbekanntes Fahrzeug heißen
+  // «eindeutig» mit `fahrzeuge_quelle: 'steuerung'`.
+  /** `'steuerung'`, wenn `fahrzeuge` (bzw. Gast/unbekannt) aus der Fahrzeugerkennung der Steuerung kommt. */
+  fahrzeuge_quelle?: 'steuerung' | null
+  /** Die Steuerung kennt kein Fahrzeug, aber eines hängt dran — «Gastfahrzeug». */
+  gast?: boolean
+  /** Die Steuerung nennt ein Fahrzeug, das kein E-Auto als Kennung trägt (Name im Daten-Checker, nicht hier). */
+  fahrzeug_unbekannt?: boolean
   // ── P-433-3 S1 (#432): Gerätewerte einer Wärmepumpe — reine Anzeige (Hub-Überblick) ──
   // Nur `waermepumpe_*`, `null`/fehlend ohne Zuordnung. Das anlagenweite
   // `warmwasser_temperatur_c` der Antwort bleibt daneben (erste WP mit Wert).

@@ -47,6 +47,7 @@ from backend.core.feld_auswertungen import sichten_fuer
 from backend.core.field_definitions import (
     anlage_typen_mit_kontext,
     basis_feld_key,
+    ist_text_feld,
     ist_zustand_feld,
     wp_betriebsart,
     wp_menge,
@@ -598,6 +599,7 @@ def _zulaessige_werte(eintrag: dict, quelle: str = QUELLE_KEINE) -> list[dict] |
     # P-433-2b K1: die Zustandsfelder der E-Mobilität tragen ihre Tabelle aus `core/zustands_kanon.py` (dieselbe Form).
     if eintrag.get("zustand") and eintrag.get("feld") in zustands_kanon.ZUSTANDS_FELDER:
         return zustands_kanon.werte_je_kanon(eintrag["feld"], codes=_ist_mqtt_quelle(quelle))
+    # P-433-2b K2a: ein Textfeld (Fahrzeug am Ladepunkt) hat keinen Kanon und damit keine Werte-Tabelle.
     return None
 
 
@@ -606,10 +608,13 @@ def _wert_klartext(eintrag: dict, wert_text: str | None, quelle: str) -> str | N
 
     Ein E-Mob-Wert, den eedc nicht kennt, hat keinen Klartext (``None`` — kein «Unbestimmt» wie beim Modus); die
     Fläche zeigt dann den Rohwert allein.
+
+    P-433-2b K2a: ein **Textfeld** (`ist_text_feld`, Fahrzeug am Ladepunkt) hat keinen Kanon und damit keine Deutung
+    — ``None``; die Fläche zeigt den Text selbst (leer als «(leer)»).
     """
-    if not wert_text:
-        return None
     feld = eintrag.get("feld", "")
+    if not wert_text or ist_text_feld(feld):
+        return None
     if feld in zustands_kanon.ZUSTANDS_FELDER:
         return zustands_kanon.klartext_roh(feld, wert_text, codes=_ist_mqtt_quelle(quelle))
     return betriebsmodus_klartext(wert_text, codes=_ist_mqtt_quelle(quelle))

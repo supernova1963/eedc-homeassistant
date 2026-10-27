@@ -46,6 +46,9 @@ export const PARAM_E_AUTO = {
   V2H_ENTLADUNG_KWH_JAHR: 'v2h_entladung_kwh_jahr',
   IST_DIENSTLICH: 'ist_dienstlich',
   ALTERNATIV_KOSTEN_EURO: 'alternativ_kosten_euro',
+  // P-433-2b K2a (K2-4): der Name des Autos in der Steuerung (evcc vehicleName, openWB Fahrzeug) — Text, kein
+  // Default; Treffer mit `fahrzeug_am_ladepunkt` der Wallbox (Backend `kennung_in_steuerung`). Nicht in der Karte (P8).
+  KENNUNG_IN_STEUERUNG: 'kennung_in_steuerung',
 } as const
 
 export const PARAM_E_AUTO_DEFAULTS = {
@@ -73,6 +76,7 @@ export interface EAutoParameter {
   v2h_entladung_kwh_jahr?: number
   ist_dienstlich?: boolean
   alternativ_kosten_euro?: number
+  kennung_in_steuerung?: string
 }
 
 // ============================================================================

@@ -45,6 +45,12 @@ WISSENSBASIS: list[dict] = [
                         "muster": ["select.evcc_*_mode"],
                         "hinweis": "Lademodus des Ladepunkts (off · pv · minpv · now · smart).",
                     },
+                    # P-433-2b K2a (Bauplan K2 E1, Erhebung :19): das erkannte Fahrzeug als `select` — Option `null` =
+                    # kein bzw. unbekanntes Fahrzeug (Gast, wenn verbunden).
+                    "fahrzeug_am_ladepunkt": {
+                        "muster": ["select.evcc_*_vehicle_name"],
+                        "hinweis": "Erkanntes Fahrzeug am Ladepunkt — der Name muss der «Kennung in der Steuerung» am E-Auto entsprechen; «null» heißt kein bzw. unbekanntes Fahrzeug.",
+                    },
                     "sitzung_kwh": {
                         "muster": ["sensor.evcc_*_session_energy"],
                         "hinweis": "Energie der laufenden Sitzung.",

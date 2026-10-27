@@ -48,7 +48,7 @@ from datetime import datetime
 from typing import Optional, Union
 
 from backend.core.betriebsmodus import MODUS_FELD_KEY, modus_aus_zustaenden
-from backend.core.field_definitions import basis_feld_key, ist_zustand_feld
+from backend.core.field_definitions import basis_feld_key, ist_text_feld, ist_zustand_feld
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -167,14 +167,20 @@ def _adresse(topic: str) -> Optional[tuple[int, str, Optional[str], str]]:
     return int(m.group(1)), m.group(2), m.group(3), m.group(4)
 
 
-def _wert_aus_payload(ist_zustand: bool, payload, topic: str) -> Optional[LiveWert]:
+def _wert_aus_payload(ist_zustand: bool, payload, topic: str, ist_text: bool = False) -> Optional[LiveWert]:
     """Payload → Cache-Wert: roher getrimmter String bei einem Zustandsfeld, sonst ``float``.
 
     ``None`` heißt verwerfen — ein leerer Zustand (gelöschter retained-Wert) wie eine Zahl, die keine ist.
+
+    P-433-2b K2a (Bauplan K2 E2, Gegenprüfung G2): **die eine Weiche «leer ist ein Wert»** — nur für ein Textfeld
+    (`ist_text_feld`, heute `fahrzeug_am_ladepunkt`). Dort heißt ein leerer Payload «die Steuerung kennt kein
+    Fahrzeug» (evcc publiziert `nil` als leeren String) und wird als ``""`` abgelegt — sonst bliebe der letzte Name
+    im Cache stehen (ohne TTL) und ein Gast wäre über MQTT nie zu erkennen. Der Modus-Pfad bleibt unverändert: ein
+    leerer Betriebsmodus wird weiter verworfen (`test_standalone_s1_betriebsmodus_mqtt.py`).
     """
     if ist_zustand:
         roh = str(payload).strip() if payload is not None else ""
-        return roh or None
+        return roh if (roh or ist_text) else None
     try:
         return float(payload)
     except (ValueError, TypeError):
@@ -215,7 +221,7 @@ class MqttInboundCache:
             return
         anlage_id, category, inv_id, key = adresse
         ist_zustand = category == "live" and bool(inv_id) and ist_zustand_feld(key)
-        wert = _wert_aus_payload(ist_zustand, payload, topic)
+        wert = _wert_aus_payload(ist_zustand, payload, topic, ist_text=ist_zustand and ist_text_feld(key))
         if wert is None:
             return
 

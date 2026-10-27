@@ -24,6 +24,17 @@ Template-Sensor anbindest, steht am Feld und im Handbuch. Derselbe Chip erschein
 wenn sie nicht lädt ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
 [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
 
+**Wallbox: welches Auto angeschlossen ist — auch bei mehreren Wallboxen — und „Gastfahrzeug".** Meldet deine
+Ladesteuerung, welches Fahrzeug am Ladepunkt hängt (evcc, openWB), ordnest du das in *Einstellungen → Datenquellen* dem
+neuen Feld **„Fahrzeug am Ladepunkt"** zu und trägst am E-Auto (*Einstellungen → Investitionen*) die **„Kennung in der
+Steuerung"** ein — den Namen, unter dem die Steuerung dein Auto führt. Dann nennt die Wallbox-Karte genau dieses Auto, auch
+wenn zwei Wallboxen gleichzeitig laden, und ein Firmenwagen heißt dort „Dienstwagen ‹Name›". Meldet die Steuerung kein
+Fahrzeug, obwohl eines angesteckt ist, steht dort „Gastfahrzeug lädt". Einen Namen, den keines deiner Autos trägt, zeigt
+die Karte als „Fahrzeug der Steuerung unbekannt" — der Daten-Checker nennt den Namen und sagt, wo du ihn einträgst. Ohne
+Fahrzeugerkennung (go-eCharger, SMA, Easee) bleibt alles wie bisher; erraten wird nichts
+([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
+[Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
 erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter

@@ -165,6 +165,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_klima_modus_wert(anlage))
         # P-433-2b K1 (E12-Muster): ein E-Mob-Zustand liefert einen Wert außerhalb der Werte-Tabelle.
         ergebnisse.extend(await self._check_emob_zustand_wert(anlage))
+        # P-433-2b K2a (K2-10): die Steuerung meldet ein Fahrzeug, dessen Kennung kein E-Auto trägt.
+        ergebnisse.extend(await self._check_emob_kennung_unbekannt(anlage))
         ergebnisse.extend(await self._check_leere_tage_trotz_zaehler(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         # N-588 F5: Messpunkt-Vertrag der Wandlungsverluste (Anlagenzähler gegen String-Zähler).

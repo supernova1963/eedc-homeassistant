@@ -355,8 +355,10 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `restzeit_min` | Restzeit | min | Momentan | Verbleibende Ladezeit laut Fahrzeug. *Ab der nächsten Version.* | Komponenten → E-Auto |
 | `zu_hause` | Zu Hause | — (Zustand) | Zustand | `device_tracker` des Autos: `home` ⇒ zu Hause, `not_home` ⇒ unterwegs; nur die Zone. *Ab der nächsten Version.* | Komponenten → E-Auto |
 
-> Die fünf Zustands- und Sitzungsfelder (und die acht an der Wallbox) sind **reine Anzeige**: eedc liest sie live, speichert
-> sie nicht und rechnet nicht mit ihnen (kein Kanal, keine Monatsmenge). Keine Einheiten-Umrechnung.
+> Die fünf Zustands- und Sitzungsfelder (und die neun an der Wallbox, darunter das Textfeld „Fahrzeug am Ladepunkt") sind
+> **reine Anzeige**: eedc liest sie live, speichert sie nicht und rechnet nicht mit ihnen (kein Kanal, keine Monatsmenge).
+> Keine Einheiten-Umrechnung. Das Gegenstück zum Textfeld der Wallbox ist kein Sensor, sondern das Stammdatum
+> **„Kennung in der Steuerung"** am E-Auto (Einstellungen → Investitionen).
 
 ### MQTT Energy Topics
 
@@ -388,6 +390,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `leistung_w` | Ladeleistung | W | Momentan | Aktuelle Wallbox-Ladeleistung. Muss ≥ 0 sein. | Cockpit → Live |
 | `ladezustand` | Ladezustand | — (Zustand) | Zustand | `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler`; SMA `smaev`-Werte, über MQTT die go-e-Codes 0–5 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Chip im Überblick und an der Energiefluss-Kachel. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
 | `lademodus` | Lademodus | — (Zustand) | Zustand | `aus` · `pv` · `smart` · `schnell` · `plan` · `eco`; evcc `select.…_mode`, SMA. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `fahrzeug_am_ladepunkt` | Fahrzeug am Ladepunkt | — (Text) | Text | Fahrzeugname der Steuerung (evcc `select.…_vehicle_name`, openWB). Treffer mit der „Kennung in der Steuerung" eines E-Autos ⇒ genau dieses Auto; leer bei angestecktem Fahrzeug ⇒ „Gastfahrzeug"; fremder Name ⇒ „Fahrzeug der Steuerung unbekannt" + Daten-Checker ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Kein Kanon, keine Werte-Tabelle. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
 | `sitzung_kwh` | Energie dieser Sitzung | kWh | Momentan | Seit dem Anstecken geladen. ⚠ SMA/go-e/evcc-MQTT liefern Wh — eedc rechnet nicht um. *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `sitzung_dauer_s` | Dauer dieser Sitzung | s | Momentan | Ladedauer der laufenden Sitzung. *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `ladestrom_a` | Ladestrom | A | Momentan | *Ab der nächsten Version.* | Komponenten → Wallbox |

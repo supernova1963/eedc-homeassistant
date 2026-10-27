@@ -211,6 +211,8 @@ export function getInitialParamData(
         v2h_faehig: (params.v2h_faehig as boolean) ?? PARAM_E_AUTO_DEFAULTS.v2h_faehig,
         v2h_entladeleistung_kw: paramStr(params.v2h_entladeleistung_kw),
         ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_E_AUTO_DEFAULTS.ist_dienstlich,
+        // P-433-2b K2a (K2-4): Name des Autos in der Steuerung — Text, ohne Default.
+        kennung_in_steuerung: paramStr(params.kennung_in_steuerung),
       }
     case 'speicher': {
       const arbitrage = (params.arbitrage_faehig as boolean) ?? PARAM_SPEICHER_DEFAULTS.arbitrage_faehig

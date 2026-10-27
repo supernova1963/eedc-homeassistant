@@ -14,7 +14,7 @@ from backend.core.investition_kennwerte import (
     get_erzeuger_kwp,
     get_speicher_nutzbare_kapazitaet_kwh,
 )
-from backend.core.investition_parameter import PARAM_E_AUTO, ist_dienstlich
+from backend.core.investition_parameter import PARAM_E_AUTO, ist_dienstlich, kennung_in_steuerung
 from datetime import date
 
 from backend.core.betriebsmodus import (
@@ -842,6 +842,10 @@ def _ordne_fahrzeuge_zu(
 
     P-433-2b K1: ohne live liefernde Wallbox stehen die Autos mit Werten in `fahrzeuge_ohne_wallbox` (Hub-Karte
     E-Auto, Blatt §4) — dieselbe Form `LiveFahrzeug`, keine Zuordnung, keine Summe.
+
+    P-433-2b K2a (Bauplan K2 §1 K2-5/K2-6): zwei Schritte. **Schritt 1** — `parent_key` reihum — bleibt unverändert;
+    **Schritt 2** (`_fahrzeug_anzeige_zuordnung`) ändert nur die Anzeige (`fahrzeuge` und ihre Kennzeichen), wenn die
+    Steuerung am Ladepunkt etwas über das Fahrzeug sagt. Ohne jede Steuerungs-Aussage ist das Ergebnis das von K1.
     """
     # E-Auto → Wallbox Zuordnung — EINE Quelle für `parent_key` (Layout +
     # Residual) und `fahrzeuge` (Wallbox-Kachel, #341/#348), auf
@@ -864,21 +868,96 @@ def _ordne_fahrzeuge_zu(
         ]
         return
     zuordnung = _fahrzeug_zuordnung(list(b.wallbox_knoten), autos)
-    # Eindeutig nur bei genau EINER live liefernden Wallbox. Bekannte
-    # Grenze: eine zweite, gerade offline Wallbox macht die Zuordnung
-    # scheinbar eindeutig (Vorlage Bau A §A1).
-    zuordnung_art = "eindeutig" if len(b.wallbox_knoten) == 1 else "geschaetzt"
-    for wb_komp in b.wallbox_knoten.values():
-        wb_komp["fahrzeuge"] = []
-        wb_komp["fahrzeuge_zuordnung"] = zuordnung_art
+    # Schritt 1 — `parent_key` (Layout + Residual), reihum, unverändert seit #341/#348. ⛔ Schritt 2 fasst ihn nicht
+    # an (K2-5): welcher Wallbox ein Auto-Knoten im Bild zugeordnet ist, ändert keine Summe; ein Treffer der Steuerung
+    # verschiebt ihn nicht (Golden Master live-komponenten, Sprengsatz S5).
     for auto_id in sorted(autos, key=_id_rang):
-        wb_komp = b.wallbox_knoten[zuordnung[auto_id]]
         auto_komp = komp_nach_key.get(f"eauto_{auto_id}")
         if auto_komp is not None:
-            auto_komp["parent_key"] = wb_komp["key"]
-        wb_komp["fahrzeuge"].append(
-            _fahrzeug(investitionen[auto_id], inv_values[auto_id], auto_komp, zustand_map)
+            auto_komp["parent_key"] = b.wallbox_knoten[zuordnung[auto_id]]["key"]
+    # Schritt 2 — welches Auto die Kachel und die Karte nennen.
+    _fahrzeug_anzeige_zuordnung(b, zustand_map, autos, investitionen, inv_values, komp_nach_key)
+
+
+def _fahrzeug_anzeige_zuordnung(
+    b: _LiveBilanz,
+    zustand_map: dict[tuple[int, str], str],
+    autos: list[str],
+    investitionen: dict[str, Investition],
+    inv_values: dict[str, dict[str, float]],
+    komp_nach_key: dict[str, dict],
+) -> None:
+    """Schritt 2 der Fahrzeug-Zuordnung: `fahrzeuge` je Wallbox — nach Blatt §4, nur Anzeige (P-433-2b K2a).
+
+    Je Wallbox-Knoten liest diese Funktion das Textfeld `fahrzeug_am_ladepunkt` (``None`` = keine Antwort, ``""`` =
+    die Steuerung kennt kein Fahrzeug, sonst der Name) und macht daraus eine **Steuerungs-Aussage**:
+
+    * **Treffer** (der Name ist die `kennung_in_steuerung` eines Autos, getrimmt, ohne Groß/Klein) ⇒ genau dieses Auto,
+      «eindeutig», `fahrzeuge_quelle = "steuerung"` — auch bei mehreren Wallboxen (K2-1).
+    * **Gast** (leerer Text **und** ein Fahrzeug hängt dran: `ladezustand` ∈ verbunden · wartet · lädt · fertig) ⇒
+      kein Auto, `gast = True`, «eindeutig», Quelle Steuerung (K2-2). Leerer Text ohne solchen Zustand ⇒ wie keine
+      Antwort.
+    * **Name ohne Treffer** ⇒ kein Auto, `fahrzeug_unbekannt = True`, «eindeutig», Quelle Steuerung (K2-10, D2).
+
+    Die übrigen Autos verteilen sich auf die Wallboxen **ohne** Aussage: genau eine ⇒ alle dort, «eindeutig» (D1,
+    dieselbe Schlussform wie K1); mehrere ⇒ reihum, «geschaetzt»; keine ⇒ `fahrzeuge_ohne_wallbox` («an keiner Wallbox
+    zugeordnet»). ⛔ Kein drittes Zuordnungswort (K2-6), keine Korrelation aus zwei «verbunden» (Blatt §4 «Nie»), kein
+    `parent_key` (K2-5). Ohne jede Aussage ist das Ergebnis das von K1: eine Wallbox «eindeutig», sonst «geschaetzt».
+    """
+    auto_ids = sorted(autos, key=_id_rang)
+    aussagen: dict[str, tuple[str, Optional[str]]] = {}
+    vergeben: set[str] = set()
+    for wb_id in sorted(b.wallbox_knoten, key=_id_rang):
+        iid = _inv_id_int(wb_id)
+        text = zustand_map.get((iid, "fahrzeug_am_ladepunkt"))
+        if text is None:
+            continue
+        if text == "":
+            if zustand_map.get((iid, "ladezustand")) in zustands_kanon.LADEZUSTAENDE_MIT_FAHRZEUG:
+                aussagen[wb_id] = (_AUSSAGE_GAST, None)
+            continue
+        schluessel = zustands_kanon.text_schluessel(text)
+        treffer = next(
+            (a for a in auto_ids if a not in vergeben and kennung_in_steuerung(investitionen[a]) == schluessel), None,
         )
+        if treffer is None:
+            aussagen[wb_id] = (_AUSSAGE_UNBEKANNT, None)
+        else:
+            aussagen[wb_id] = (_AUSSAGE_TREFFER, treffer)
+            vergeben.add(treffer)
+
+    def fz(auto_id: str) -> dict:
+        return _fahrzeug(investitionen[auto_id], inv_values[auto_id], komp_nach_key.get(f"eauto_{auto_id}"), zustand_map)
+
+    rest_wb = [w for w in sorted(b.wallbox_knoten, key=_id_rang) if w not in aussagen]
+    rest_autos = [a for a in auto_ids if a not in vergeben]
+    # Eindeutig nur bei genau EINER Wallbox ohne Steuerungs-Aussage (ohne jede Aussage: genau einer live liefernden).
+    # Bekannte Grenze: eine zweite, gerade offline Wallbox macht die Zuordnung scheinbar eindeutig (Vorlage Bau A §A1).
+    rest_art = "eindeutig" if len(rest_wb) == 1 else "geschaetzt"
+    for wb_id, wb_komp in b.wallbox_knoten.items():
+        wb_komp["fahrzeuge"] = []
+        wb_komp["fahrzeuge_zuordnung"] = "eindeutig" if wb_id in aussagen else rest_art
+    for wb_id, (art, auto_id) in aussagen.items():
+        wb_komp = b.wallbox_knoten[wb_id]
+        wb_komp["fahrzeuge_quelle"] = "steuerung"
+        if art == _AUSSAGE_TREFFER:
+            wb_komp["fahrzeuge"].append(fz(auto_id))
+        elif art == _AUSSAGE_GAST:
+            wb_komp["gast"] = True
+        else:
+            wb_komp["fahrzeug_unbekannt"] = True
+    if not rest_wb:
+        b.fahrzeuge_ohne_wallbox = [fz(a) for a in rest_autos]
+        return
+    rest_zuordnung = _fahrzeug_zuordnung(rest_wb, rest_autos)
+    for auto_id in rest_autos:
+        b.wallbox_knoten[rest_zuordnung[auto_id]]["fahrzeuge"].append(fz(auto_id))
+
+
+#: Die drei Steuerungs-Aussagen am Ladepunkt (`_fahrzeug_anzeige_zuordnung`) — interne Marken, keine Antwort-Wörter.
+_AUSSAGE_TREFFER = "treffer"
+_AUSSAGE_GAST = "gast"
+_AUSSAGE_UNBEKANNT = "unbekannt"
 
 
 def _ist_pv_komponente(k) -> bool:

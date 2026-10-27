@@ -140,6 +140,9 @@ function abschnittVon(einheit: string, abschnitt?: string | null): Abschnitt {
   return 'sonstige'
 }
 
+/** P-433-2b K2a: Anzeige eines leer angekommenen Texts (Textfeld «Fahrzeug am Ladepunkt»). */
+export const TEXT_LEER = '(leer)'
+
 /**
  * P-433-2b K1 (#431-Prinzip): der Kopf des Abschnitts «Zustand & Sitzung» sagt, was die Zuordnung ermöglicht —
  * «Zustands-Chip: zugeordnet» oder «Zustands-Chip: fehlt». Maßgeblich ist das **erste** Zustandsfeld des Abschnitts
@@ -377,7 +380,10 @@ export default function DatenquellenZuordnung() {
       // Deckungsgleich (deutscher Template-Sensor) ⇒ nur einmal.
       const roh = f.wert_text
       const klar = f.wert_klartext
-      wertText = klar && klar.toLowerCase() !== roh.toLowerCase() ? `${klar} (${roh})` : (klar ?? roh)
+      // P-433-2b K2a: ein Textfeld (Fahrzeug am Ladepunkt) kann leer ANKOMMEN — «die Steuerung kennt kein Fahrzeug».
+      // Eine leere grüne Zelle sähe aus wie ein Darstellungsfehler; sie heißt «(leer)».
+      wertText = roh === '' ? TEXT_LEER
+        : klar && klar.toLowerCase() !== roh.toLowerCase() ? `${klar} (${roh})` : (klar ?? roh)
       wertTone = 'text-green-700 dark:text-green-400'
     } else if (wertQuelleLiest && f.wert != null) {
       // Auf 2 Nachkommastellen runden (HA-Rohstates haben oft viele Stellen).

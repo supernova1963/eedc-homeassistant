@@ -68,6 +68,10 @@ PARAM_E_AUTO: Final[dict[str, str]] = {
     "V2H_ENTLADUNG_KWH_JAHR": "v2h_entladung_kwh_jahr",
     "IST_DIENSTLICH": "ist_dienstlich",
     "ALTERNATIV_KOSTEN_EURO": "alternativ_kosten_euro",
+    # P-433-2b K2a (Bauplan K2 §1 K2-4, Blatt §5b): der Name, unter dem die Steuerung (evcc `vehicleName`, openWB
+    # Fahrzeugprofil) dieses Auto meldet — Text, optional, kein Default. Gelesen nur über `kennung_in_steuerung`;
+    # nicht in der Karte (P8), nur in den Einstellungen.
+    "KENNUNG_IN_STEUERUNG": "kennung_in_steuerung",
 }
 
 PARAM_E_AUTO_DEFAULTS: Final[dict[str, object]] = {
@@ -379,6 +383,20 @@ LEGACY_PARAM_KEYS: Final[dict[str, str]] = {
 # ============================================================================
 # Robuste Flag-Lesehilfen
 # ============================================================================
+
+def kennung_in_steuerung(inv) -> Optional[str]:
+    """Die Kennung des E-Autos in der Steuerung in Vergleichsform (getrimmt, ≤ 80 Zeichen, klein) — oder ``None``.
+
+    P-433-2b K2a (K2-4, E-K2-1): eine Form für beide Seiten des Treffers (`zustands_kanon.text_schluessel`). Kein
+    String, leer oder nur Leerzeichen ⇒ ``None`` (keine Kennung gepflegt).
+    """
+    from backend.core.zustands_kanon import text_schluessel
+
+    params = getattr(inv, "parameter", None)
+    if not isinstance(params, dict):
+        return None
+    return text_schluessel(params.get(PARAM_E_AUTO["KENNUNG_IN_STEUERUNG"]))
+
 
 def ist_dienstlich(inv_or_parameter) -> bool:
     """Truthy-Check für `ist_dienstlich` mit String-Drift-Schutz.

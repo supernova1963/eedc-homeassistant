@@ -60,6 +60,10 @@ KANON: Final[dict[str, tuple[str, ...]]] = {
     ZU_HAUSE: (ZU_HAUSE, UNTERWEGS),
 }
 
+#: Ladezustände, bei denen ein Fahrzeug am Ladepunkt hängt — Bedingung für «Gast» (P-433-2b K2a, K2-2): meldet die
+#: Steuerung dann kein Fahrzeug (leerer Text), ist es eines, das sie nicht kennt.
+LADEZUSTAENDE_MIT_FAHRZEUG: Final[frozenset[str]] = frozenset({VERBUNDEN, WARTET, LAEDT, FERTIG})
+
 #: Die Felder dieses Kanons — der Datenquellen-Fläche und dem Leser bekannt.
 ZUSTANDS_FELDER: Final[frozenset[str]] = frozenset(KANON)
 
@@ -192,6 +196,54 @@ def ist_bekannter_wert(feld: str, roh: Optional[object], *, codes: bool = False)
 def ist_kein_zustand(roh: Optional[object]) -> bool:
     """``None``, leer, ``unknown``, ``unavailable`` — «nicht hingesehen», keine Frage an den Checker."""
     return roh is None or str(roh).strip().lower() in _KEIN_ZUSTAND
+
+
+# ── Feldart Text (P-433-2b K2a, Bauplan K2 §1 K2-3, E-K2-1/E-K2-2) ───────────────────────────────────────────────
+#
+# Ein Textfeld (`ist_text_feld`, heute `fahrzeug_am_ladepunkt`) hat **keinen Kanon** — der Wert ist ein Name, den die
+# Steuerung meldet. Es steht hier, weil es dieselben Leser hat wie die Kanon-Felder (`betriebsmodus_live`), aber es
+# gehört **nicht** zu `ZUSTANDS_FELDER` (keine Werte-Tabelle, kein Checker «fremder Wert»).
+#
+# ⚠ **Leer ist ein Wert.** Anders als bei einem Kanon-Zustand heißt «leer» hier «die Steuerung hat geantwortet und
+# kennt kein Fahrzeug» (evcc `vehicleName` = `null` bzw. leerer Payload: «nil should erase the value») — die Grundlage
+# für «Gast» (K2-2). «Keine Antwort» (``None``, ``unknown``, ``unavailable``) ist etwas anderes: dann sagt eedc nichts.
+
+#: Höchstlänge eines gemeldeten Texts und einer Kennung (E-K2-1) — länger wird abgeschnitten.
+TEXT_MAX_ZEICHEN: Final[int] = 80
+#: «Keine Antwort» — kein Text, kein leerer Text.
+_TEXT_KEINE_ANTWORT: Final[frozenset[str]] = frozenset({"unknown", "unavailable"})
+#: «Geantwortet, aber leer» (E-K2-2) — evcc schreibt `null`, andere `none` oder `-`.
+_TEXT_LEER: Final[frozenset[str]] = frozenset({"", "null", "none", "-"})
+
+
+def text(feld: str, roh: Optional[object]) -> Optional[str]:
+    """Roher State/Payload eines **Textfelds** → der Text (getrimmt, ≤ 80 Zeichen), ``""`` für «leer», ``None`` für
+    «keine Antwort».
+
+    ``feld`` steht in der Signatur wie bei `normalisiere` (eine Leser-Form für alle Zustandsfelder); der Text hängt
+    heute an keinem Feld-Kanon.
+    """
+    del feld  # keine Tabelle je Feld — die Form bleibt die der Kanon-Leser
+    if roh is None:
+        return None
+    roh_text = str(roh).strip()
+    if roh_text.lower() in _TEXT_KEINE_ANTWORT:
+        return None
+    if roh_text.lower() in _TEXT_LEER:
+        return ""
+    return roh_text[:TEXT_MAX_ZEICHEN].strip()
+
+
+def text_schluessel(wert: Optional[object]) -> Optional[str]:
+    """Vergleichsform eines Texts oder einer Kennung (E-K2-1): getrimmt, ≤ 80 Zeichen, klein; ``None`` ohne Inhalt.
+
+    Eine Form für beide Seiten des Treffers `fahrzeug_am_ladepunkt` ↔ `kennung_in_steuerung` — keine weitere
+    Normalisierung (kein Entfernen von Leerzeichen im Wort, keine Umlaut-Regel).
+    """
+    if not isinstance(wert, str):
+        return None
+    schluessel = wert.strip()[:TEXT_MAX_ZEICHEN].strip().lower()
+    return schluessel or None
 
 
 def label(feld: str, kanon: Optional[str]) -> Optional[str]:

@@ -14,7 +14,12 @@ from .kategorien import (
     CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN, LINK_ENERGIEPROFIL,
 )
 from backend.core import zustands_kanon
+from backend.core.field_definitions import ist_text_feld
+from backend.core.investition_parameter import kennung_in_steuerung
 from backend.core.zahlenformat import fmt_zahl
+
+#: Ziel des Handgriffs «Kennung am E-Auto eintragen» (P-433-2b K2a) — die Stammdaten der Investitionen.
+LINK_INVESTITIONEN = "/einstellungen/investitionen"
 
 
 class EmobChecks:
@@ -27,6 +32,10 @@ class EmobChecks:
         Feld mit HA-Entität über ``ha_state_service`` (ohne Zahlencodes), sonst der MQTT-Inbound-Cache (mit Codes).
         Keine Meldung ohne Wert, bei ``unknown``/``unavailable`` und für bekannte Werte ohne Aussage. Benannte Grenze
         wie beim Betriebsmodus: ein Wert, der nur zeitweise fremd ist, fällt nur auf, wenn er beim Prüfen ansteht.
+
+        P-433-2b K2a: ein **Textfeld** (`ist_text_feld`, Fahrzeug am Ladepunkt) hat keinen Kanon und damit keinen
+        «fremden Wert» — es ist hier ausgenommen; einen Namen ohne passende Kennung meldet
+        `_check_emob_kennung_unbekannt`.
         """
         from backend.models.investition import Investition
         from backend.services.betriebsmodus_live import _EMOB_ZUSTAENDE, _emob_quellen
@@ -65,6 +74,8 @@ class EmobChecks:
         for entity, ziele in ha.items():
             roh = (zustaende.get(entity) or (None,))[0]
             for inv_id, feld in ziele:
+                if ist_text_feld(feld):
+                    continue
                 if not zustands_kanon.ist_kein_zustand(roh) and not zustands_kanon.ist_bekannter_wert(feld, roh):
                     out.append((inv_id, feld, str(roh), f"Der Sensor {entity}"))
         return out
@@ -82,9 +93,44 @@ class EmobChecks:
         werte = svc.cache.get_all_live_inv(anlage.id)
         out = []
         for inv_id, feld in mqtt:
+            if ist_text_feld(feld):
+                continue
             roh = (werte.get(str(inv_id)) or {}).get(feld)
             if not zustands_kanon.ist_kein_zustand(roh) and not zustands_kanon.ist_bekannter_wert(feld, roh, codes=True):
                 out.append((inv_id, feld, str(roh), "Das MQTT-Topic"))
+        return out
+
+    async def _check_emob_kennung_unbekannt(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """P-433-2b K2a (Bauplan K2 K2-10, P8): die Steuerung meldet am Ladepunkt einen Fahrzeugnamen, den kein E-Auto
+        der Anlage als «Kennung in der Steuerung» trägt.
+
+        Die Wallbox-Karte sagt dann nur «Fahrzeug der Steuerung unbekannt» (D2: der Rohtext steht nicht auf der Karte) —
+        der Rohtext und der Handgriff stehen hier. Gelesen wird der **aktuelle** Wert über denselben Weg wie der
+        Live-Leser (`betriebsmodus_live._erhebe_emob`, ohne Takt): HA-Entität, sonst MQTT-Inbound-Cache. Keine Meldung
+        ohne Antwort und für einen leeren Text (das ist der Gast, kein Pflegefehler). Vergleich getrimmt und ohne
+        Groß/Klein (`zustands_kanon.text_schluessel`).
+        """
+        from backend.models.investition import Investition
+        from backend.services.betriebsmodus_live import _erhebe_emob
+
+        heute = date.today()
+        invs = (await self.db.execute(
+            select(Investition).where(
+                Investition.anlage_id == anlage.id, Investition.typ.in_(("wallbox", "e-auto")),
+            )
+        )).scalars().all()
+        aktiv = [inv for inv in invs if inv.ist_aktiv_an(heute)]
+        wallboxen = {inv.id: inv for inv in aktiv if inv.typ == "wallbox"}
+        if not wallboxen:
+            return []
+        kennungen = {k for inv in aktiv if inv.typ == "e-auto" and (k := kennung_in_steuerung(inv)) is not None}
+        werte = await _erhebe_emob(anlage, {inv_id: "wallbox" for inv_id in wallboxen})
+        out: list[CheckErgebnis] = []
+        for (inv_id, feld), text in sorted(werte.items()):
+            if not ist_text_feld(feld, "wallbox") or text == "":
+                continue
+            if zustands_kanon.text_schluessel(text) not in kennungen:
+                out.append(_meldung_emob_kennung_unbekannt(wallboxen[inv_id].bezeichnung, inv_id, text))
         return out
 
     # ⭐ N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch 7.2, Regel 7): die Pflegeprüfung
@@ -770,5 +816,22 @@ def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft:
             f"macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Bedienung“, Abschnitt E-Mobilität)."
         ),
         link=LINK_DATENQUELLEN,
+        investition_id=inv_id,
+    )
+
+
+def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str) -> CheckErgebnis:
+    """Das INFO je Wallbox (P-433-2b K2a, K2-10): Rohtext der Steuerung + Handgriff «Kennung am E-Auto eintragen»."""
+    return CheckErgebnis(
+        kategorie=CheckKategorie.EMOB_KENNUNG_UNBEKANNT.value, schwere=CheckSeverity.INFO.value,
+        meldung=f"„{name}“: die Steuerung meldet „{text}“ — kein E-Auto trägt diese Kennung",
+        details=(
+            f"Die Steuerung an „{name}“ meldet gerade das Fahrzeug „{text}“. Kein E-Auto dieser Anlage trägt diesen "
+            f"Namen als „Kennung in der Steuerung“, deshalb zeigt die Wallbox-Karte nur „Fahrzeug der Steuerung "
+            f"unbekannt“. Der Weg: beim passenden E-Auto unter Einstellungen → Investitionen die „Kennung in der "
+            f"Steuerung“ genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist egal). "
+            f"Ist es ein fremdes Fahrzeug, ist nichts zu tun."
+        ),
+        link=LINK_INVESTITIONEN,
         investition_id=inv_id,
     )

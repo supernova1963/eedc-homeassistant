@@ -139,8 +139,11 @@ def test_kein_kanal_und_kein_snapshot_mittel():
     from backend.services.kanal import katalog as kat
 
     nur_live = {(z.typ, z.feld) for z in kat.zuweisungen() if z.ausnahme == kat.AUSNAHME_NUR_LIVE}
-    assert nur_live == {("wallbox", f) for f in WALLBOX_FELDER} | {("e-auto", f) for f in EAUTO_FELDER}
-    assert not set(kat.mittelwert_live_keys("wallbox", {})) & set(WALLBOX_FELDER)
+    # P-433-2b K2a (Bauplan K2 E1): das Textfeld «Fahrzeug am Ladepunkt» — `nur_live` greift vor `zustand`
+    # (`katalog.py`), also kein Kanal und keine Mitschrift wie beim Betriebsmodus.
+    assert nur_live == ({("wallbox", f) for f in WALLBOX_FELDER} | {("e-auto", f) for f in EAUTO_FELDER}
+                        | {("wallbox", "fahrzeug_am_ladepunkt")})
+    assert not set(kat.mittelwert_live_keys("wallbox", {})) & (set(WALLBOX_FELDER) | {"fahrzeug_am_ladepunkt"})
     assert not set(kat.mittelwert_live_keys("e-auto", {})) & set(EAUTO_FELDER)
     assert "soc" in kat.mittelwert_live_keys("e-auto", {}), "der Bestand bleibt"
     assert not kat.ist_mean_kanal("inv:7:ziel_ladestand_prozent", "wallbox")

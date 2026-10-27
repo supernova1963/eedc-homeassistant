@@ -923,6 +923,7 @@ was die Zuordnung ermöglicht: **„Zustands-Chip: zugeordnet"** oder **„Zusta
 | --- | --- | --- | --- |
 | Wallbox | Ladezustand | Zustand | Chip „Lädt · Wartet · Verbunden · Fertig · Kein Fahrzeug · Gesperrt · Fehler" |
 | Wallbox | Lademodus | Zustand | steht im Chip hinter „Lädt"/„Wartet" (PV · Smart · Schnell · Plan · Eco · Aus) |
+| Wallbox | Fahrzeug am Ladepunkt | Text | welches Auto angeschlossen ist (Treffer mit der Kennung am E-Auto), „Gastfahrzeug", „Fahrzeug der Steuerung unbekannt" |
 | Wallbox | Energie dieser Sitzung · Dauer dieser Sitzung | kWh · s | Fußzeile „9,8 kWh in dieser Sitzung · 2 h 10 min" |
 | Wallbox | Ladestrom · Aktive Phasen | A · Anzahl | Fußzeile „3 Phasen · 16 A" |
 | Wallbox, E-Auto | Ladeziel · Restzeit | % · min | Zielmarke an der Ladestand-Leiste, „Ziel 90 % · noch 1 h 20 min" |
@@ -996,6 +997,26 @@ template:
 Für openWB, Easee, Wallbox, Tesla Wall Connector, Alfen, Zaptec, Keba und Heidelberg sowie die Fahrzeug-Integrationen von
 Tesla, VW/Skoda, Renault, Kia und Toyota gilt derselbe Weg; welche Rohwerte sie melden, steht in ihrer Integrations-Doku. Ein
 Standort-Sensor mit eigenen Zonennamen („Arbeit") braucht ebenfalls einen Template-Sensor (`zu_hause` · `unterwegs`).
+
+**Fahrzeug am Ladepunkt — ein Text, kein Kanon (seit der nächsten Version).** Das Feld nimmt den Namen, den deine Steuerung
+für das angeschlossene Fahrzeug meldet: bei **evcc** `select.evcc_<ladepunkt>_vehicle_name` (die Option `null` heißt „kein
+oder unbekanntes Fahrzeug"; der HA-Picker schlägt den Sensor vor), bei **openWB** das „Angeschlossene Fahrzeug", über MQTT
+das Topic `…/live/inv/<id>_<wallbox>/fahrzeug_am_ladepunkt`. Am E-Auto trägst du unter *Investitionen* die **„Kennung in der
+Steuerung"** ein — genau den Namen, den die Steuerung für dieses Auto meldet (höchstens 80 Zeichen; Groß-/Kleinschreibung und
+Randleerzeichen sind egal, sonst keine Umdeutung). Dann gilt:
+
+| Die Steuerung meldet … | die Wallbox-Karte zeigt |
+| --- | --- |
+| den Namen, den ein E-Auto als Kennung trägt | genau dieses Auto, auch bei mehreren Wallboxen (Tooltip „gemeldet von der Steuerung") |
+| nichts (evcc `null`, leerer Text) und ein Fahrzeug ist verbunden, wartet, lädt oder ist fertig | „Gastfahrzeug lädt" bzw. „Gastfahrzeug verbunden" |
+| nichts, und kein Fahrzeug hängt dran (oder kein Ladezustand zugeordnet) | wie ohne dieses Feld |
+| einen Namen, den kein E-Auto trägt | „Fahrzeug der Steuerung unbekannt"; der Daten-Checker nennt den Namen („E-Mobilität – Fahrzeug der Steuerung unbekannt") |
+| gar keine Antwort (Sensor nicht verfügbar, MQTT-Topic nie empfangen) | wie ohne dieses Feld |
+
+In der Zuordnung steht der empfangene Text als Wert; kommt er leer an, steht dort „(leer)". Es gibt **keine Werte-Tabelle**
+und keinen Hinweis „unbekannter Zustand" — ein Name ist kein Zustand. **Benannte Grenzen:** einen Gast gibt es nur mit einer
+Steuerung, die Fahrzeuge erkennt; ein leerer `input_text` in Home Assistant ist von „nicht verfügbar" nicht zu
+unterscheiden und gilt nicht als Gast; nichts davon wird gespeichert, eine Gast-Ladung erscheint nicht als eigene Menge.
 
 ---
 

@@ -160,6 +160,7 @@ Eine Gruppenkachel erkennst du an den zwei versetzten Rahmen dahinter („hier l
 
 - **Eine Wallbox:** Die Kachel nennt das Auto mit Ladestand („ID.4 52 %"), der Pegel ist sein Ladestand. Hängen mehrere Autos an dieser Wallbox, zeigt sie das eine, das gerade lädt; lädt keines (oder mehr als eines), stehen die Ladestände nebeneinander („64 · 81 %"), ohne Pegel.
 - **Zwei oder mehr Wallboxen** (die gerade Werte liefern): Die Kacheln zeigen kein Auto. Der Tooltip und die Liste nennen alle Autos mit Ladestand und sagen dazu: „Welches Auto an welcher Wallbox lädt, weiß eedc noch nicht."
+- **Die Steuerung meldet das Fahrzeug** (Feld „Fahrzeug am Ladepunkt", z. B. evcc): Dann zeigt die Kachel dieser Wallbox genau das gemeldete Auto, auch bei mehreren Wallboxen — wie bei einer einzigen Wallbox. Die anderen Wallboxen nennen dieses Auto nicht mehr; bleibt genau eine ohne Meldung, gilt die Zuordnung dort ebenfalls als eindeutig ([§3.6](#36-wallbox)).
 - **V2H:** Gibt ein Auto Strom ins Haus ab, nennt der Tooltip die Leistung („entlädt 2,00 kW (V2H)"); hängt es allein an der einzigen Wallbox, steht in der Kachel zusätzlich „· entlädt".
 - **Ohne Wallbox** (keine erfasst oder keine liefert gerade Werte) behält jedes E-Auto seine eigene Kachel; mehrere bündelt eedc bei Platzmangel als „E-Autos".
 
@@ -882,7 +883,10 @@ vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen B
 > **Welches Auto an welcher Wallbox?** Liefert genau **eine** Wallbox live, ist die Zuordnung eindeutig (das ladende Auto,
 > sonst das einzige). Liefern **zwei**, kennt eedc sie nicht — die Karten sagen das („Welches Auto an welcher Wallbox lädt,
 > weiß eedc noch nicht") und nennen keinen Ort. eedc schließt nicht aus „Auto verbunden" und „Wallbox verbunden" auf eine
-> Verbindung. **Benannte Grenzen:** kein Kilometerstand, keine gefahrenen km und kein Fahrverbrauch heute in der Karte; ein
+> Verbindung. **Meldet die Steuerung das Fahrzeug** (evcc, openWB — Feld „Fahrzeug am Ladepunkt" an der Wallbox) und trägt
+> das Auto dieselbe **„Kennung in der Steuerung"** (Stammdaten, Groß/Klein egal), steht es eindeutig „an ‹Wallbox›", auch
+> bei mehreren Wallboxen. Steht an der einzigen Wallbox ein Gast oder ein fremdes Fahrzeug, hat das Auto keinen Ort und
+> trägt seinen eigenen Zustands-Chip. Die Kennung selbst erscheint nicht in der Karte, nur in den Einstellungen. **Benannte Grenzen:** kein Kilometerstand, keine gefahrenen km und kein Fahrverbrauch heute in der Karte; ein
 > Auto, das nur einen Zustand und keine Zahl meldet, erscheint erst mit einem Zahlwert (Ladestand, Reichweite …). Die Werte der
 > Fahrzeug-Integrationen kommen je nach Hersteller alle 10–30 min.
 
@@ -916,6 +920,23 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 - **Zustand nur gemessen:** ohne zugeordneten Ladezustand gibt es keinen Chip — eedc schließt nie aus der Leistung auf „lädt".
   Ohne jedes der neuen Felder sagt die Fußzeile „Zustand, Sitzung und Ladestrom erscheinen hier, sobald zugeordnet"
   ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
+**Welches Auto hängt dran — die Steuerung meldet es (seit der nächsten Version).** Ordnest du das Feld **„Fahrzeug am
+Ladepunkt"** zu (evcc `select.evcc_…_vehicle_name`, openWB „Angeschlossenes Fahrzeug") und trägst am E-Auto die
+**„Kennung in der Steuerung"** ein, nennt die Karte genau das gemeldete Auto — auch bei mehreren Wallboxen, mit dem Tooltip
+„gemeldet von der Steuerung" und bei einem Firmenwagen als „Dienstwagen ‹Name›". Daneben gibt es zwei weitere Zeilen:
+
+- **„Gastfahrzeug lädt" / „Gastfahrzeug verbunden"** — die Steuerung meldet **kein** Fahrzeug (evcc `null`), während eines
+  verbunden ist, wartet, lädt oder fertig ist. Kein Auto deiner Anlage steht dann an dieser Wallbox; die Monatsrechnung ändert
+  sich dadurch nicht (die Ladung bleibt Verbrauch der Wallbox ohne Ersparnis, wie bisher).
+- **„Fahrzeug der Steuerung unbekannt"** — die Steuerung meldet einen Namen, den keines deiner Autos als Kennung trägt. Die
+  Fußzeile sagt „Kennung am E-Auto eintragen — Daten-Checker"; der Daten-Checker nennt den gemeldeten Namen.
+
+Die übrigen Autos verteilen sich auf die Wallboxen **ohne** solche Meldung: bleibt genau eine, steht dort „eindeutig" ihr
+Auto; bleiben mehrere, sagt die Karte wie bisher „weiß eedc noch nicht". **Benannte Grenzen:** einen Gast erkennt eedc nur
+mit einer Steuerung, die Fahrzeuge erkennt (evcc, openWB) — go-eCharger, SMA und Easee melden keinen Namen, dann gibt es
+weder Gast noch Hinweis; ein **leerer `input_text`** in Home Assistant ist von „nicht verfügbar" nicht zu unterscheiden und
+gilt nicht als Gast (evcc liefert das Wort `null`); eine falsch gepflegte Kennung zeigt „unbekannt", nie ein anderes Auto.
 
 Derselbe Chip steht in *Cockpit → Live* an der Wallbox-Kachel, wenn sie **nicht** lädt („Wartet · PV", „Verbunden", gedämpft bei
 „Kein Fahrzeug" und „Fertig"); lädt sie, zeigt die Kachel wie bisher ihr Auto, und der Tooltip nennt „Zustand: Lädt · PV".

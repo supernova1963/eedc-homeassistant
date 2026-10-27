@@ -74,6 +74,32 @@ Park-ID `el:ueberblick-karte` (das Schaubild wird nicht gerendert), Summary «Au
 | **Energiefluss** | Wallbox-Kachel: gemessener Zustand ≠ «lädt» ⇒ zweite Zeile als Chip (gedämpft bei «Kein Fahrzeug»/«Fertig»), «lädt» ⇒ Auto-Zeile wie bisher; Tooltip «Zustand: …». Kachel-Komponente unverändert. |
 | **Welches Auto** | nur aus der Zuordnung des Builders (eine live liefernde Wallbox ⇒ eindeutig; zwei ⇒ «geschätzt», alle Autos + Satz). Keine Korrelation aus «verbunden». |
 
+### 2b-K2a. Fahrzeug am Ladepunkt, Gast, Zuordnung (gebaut 27.10.2026, unveröffentlicht)
+
+Grundlage: Bauplan K2 Fassung 2 (intern, nach Gegenprüfung), Sitzung K2a; Entscheide Gernot 27.10.2026 **D1** (bleibt genau
+eine Wallbox ohne Steuerungs-Aussage, ist sie «eindeutig») und **D2** (der Rohtext der Steuerung steht nicht auf der Karte).
+
+| Nr. | Entscheid |
+| --- | --- |
+| K2-1 | **Zuordnung nur nach Blatt §4:** eine Wallbox ⇒ heutige Regel; mehrere ⇒ nur über den Treffer `fahrzeug_am_ladepunkt` ↔ `kennung_in_steuerung`; nie Korrelation aus zwei «verbunden». |
+| K2-2 | **Gast** = das Textfeld hat **geantwortet** und ist leer (HA: State vorhanden, Text leer — evcc `null`; MQTT: Cache-Eintrag «») **und** `ladezustand` ∈ verbunden · wartet · lädt · fertig. «Leer» entsteht nie aus der Zuordnungs-Konfiguration; ohne Antwort kein Gast. |
+| K2-3 | **Feldart Text** = Registry-Feld `zustand: True, text: True` ohne Kanon; abgeleitete Menge `TEXT_LIVE_FELDER`/`ist_text_feld` (`core/field_definitions/karten.py`), keine getippte Liste. Inbound: eine Weiche «leer ist ein Wert» nur für Textfelder; kein Kanon, kein Checker «fremder Wert», keine Werte-Tabelle, kein Kanal (`nur_live`). |
+| K2-4 | **Stammdatum** `kennung_in_steuerung` am E-Auto (Text, optional, ≤ 80 Zeichen; Vergleich getrimmt, ohne Groß/Klein), Backend `PARAM_E_AUTO` + Client-SoT, Formular als Text. |
+| K2-5 | **`parent_key`, Summen, Residual und der Layoutcode des Energieflusses bleiben unverändert** — der Treffer ändert nur `fahrzeuge` und die Kennzeichen. Golden Master live-komponenten: Bestand bitgleich. |
+| K2-6 | **Kein drittes Zuordnungswort:** `fahrzeuge_zuordnung` bleibt `eindeutig`/`geschaetzt`; Treffer, Gast und unbekannt heißen «eindeutig» mit `fahrzeuge_quelle = "steuerung"` (dazu `gast` bzw. `fahrzeug_unbekannt`). «Alle Autos» bei «geschätzt» sammeln nur aus «geschätzt»-Knoten. |
+| K2-10 | Ein gemeldeter Name **ohne Treffer**: Karte «Fahrzeug der Steuerung unbekannt» (D2), Daten-Checker INFO `emob_kennung_unbekannt` mit Rohtext und Handgriff «Kennung am E-Auto eintragen». |
+| K2-11 | Farbe = Rolle, kein Gast-Farbton, keine Rahmenfarbe; «Gastfahrzeug» ist Text. Der Client rechnet nichts; keine Monatsrechnung, keine Gast-kWh. |
+| K2-12 | **Schnitt:** K2a = Text, Stammdatum, Zuordnung, Gast, Checker, Karte, Datenquellen; K2b = evcc-Ladezustand aus drei Binär-Sensoren (Option A), Gateway-Text, Preset «evcc Ladepunkt» — folgt. |
+
+**Zuordnung in zwei Schritten** (`live_komponenten_builder._ordne_fahrzeuge_zu`): Schritt 1 setzt `parent_key` reihum wie bisher;
+Schritt 2 (`_fahrzeug_anzeige_zuordnung`) liest je Wallbox-Knoten das Textfeld und verteilt die übrigen Autos auf die Wallboxen
+ohne Aussage — genau eine ⇒ «eindeutig» (D1), mehrere ⇒ reihum «geschätzt», keine ⇒ `fahrzeuge_ohne_wallbox`. **Benannte
+Grenzen:** Gast nur mit Fahrzeugerkennung (evcc, openWB); ein leerer `input_text` in HA gilt nicht als Gast; ein leerer
+retained MQTT-Payload löscht die Nachricht am Broker (nach einem Neustart keine Antwort bis zur nächsten Meldung). Der
+`parent_key` eines Auto-Knotens (eigener Leistungssensor) bleibt der aus Schritt 1, auch wenn die Steuerung das Auto an einer
+anderen Wallbox meldet (K2-5): er entscheidet nur, dass der Auto-Knoten im Energiefluss keine eigene Kachel bekommt und aus
+dem Restverbrauch fällt; welches Auto eine Kachel und eine Karte nennen, kommt aus `fahrzeuge`.
+
 **Release-Regel (Gernot 27.10.2026):** kein Release der E-Mobilitäts-Änderungen ohne Panorama — K1 bis K3 sammeln sich
 ungepusht, das Panorama schließt das Paket. **K2** (Textfeld «Fahrzeug am Ladepunkt», Gast, evcc-Preset) und **K3**
 («Betrieb heute» aus einer typoffenen Mitschrift) folgen. **Offen aus K1:** der evcc-Ladezustand aus drei Binär-Sensoren

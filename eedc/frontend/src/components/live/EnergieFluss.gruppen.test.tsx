@@ -299,6 +299,29 @@ describe('EnergieFluss §A4 — das Auto steckt in der Wallbox-Kachel (Plan §1.
       expect(w.tip).toContain('• Enyaq: 81 %')
     }
   })
+
+  it('P-433-2b K2a (W4): ein von der Steuerung gemeldetes Auto steht nur an seiner Wallbox — nicht in der Liste der anderen', () => {
+    // Drei Wallboxen: Garage meldet ID.4 (eindeutig, Quelle Steuerung), Carport und Hof teilen den Rest reihum (geschätzt).
+    mitBreite(1150)
+    const komp = [
+      pv(1, 'Dach Süd', 'Süd', 6.2),
+      { ...wb(41, 'Wallbox Garage', 7.4, [fz(51, 'ID.4', 64, null)], 'eindeutig'), fahrzeuge_quelle: 'steuerung' as const },
+      wb(42, 'Wallbox Carport', 3.6, [fz(52, 'Zoe', 38, null)], 'geschaetzt'),
+      wb(43, 'Wallbox Hof', 0, [fz(53, 'Enyaq', 81, null)], 'geschaetzt'),
+      NETZ, HAUS,
+    ]
+    const { container } = zeichne(komp)
+    const garage = kachel(container, 'Wallbox Garage')
+    expect(garage.texte).toContain('ID.4 64 %')
+    expect(garage.tip).not.toContain(SATZ_ZUORDNUNG_UNBEKANNT)
+    for (const name of ['Wallbox Carport', 'Wallbox Hof']) {
+      const w = kachel(container, name)
+      expect(w.tip).toContain(SATZ_ZUORDNUNG_UNBEKANNT)
+      expect(w.tip).toContain('• Zoe: 38 %')
+      expect(w.tip).toContain('• Enyaq: 81 %')
+      expect(w.tip).not.toContain('ID.4')
+    }
+  })
 })
 
 describe('EnergieFluss §A4 — Maßstab in der Karte und im Vollbild', () => {
