@@ -13,6 +13,9 @@
  */
 
 import type { LiveFahrzeug, LiveGauge, LiveKomponente } from '../../api/liveDashboard'
+import { funktionsFarbe } from '../../lib/funktionsFarben'
+import { ladezustandKlartext } from '../ui/ModusChip'
+import type { ZweiteZeile } from './EnergieFlussKachel'
 import { SONSTIGES_KATEGORIE_LABELS, compareTyp } from '../../lib/constants'
 
 export interface NodePosition {
@@ -583,6 +586,29 @@ export function wallboxKachelAuto(
   const fokus = laedt.length === 1 ? laedt[0] : fahrzeuge.length === 1 ? fahrzeuge[0] : null
   if (fokus) return { kachelAuto: { art: 'auto', auto: fokus }, ladestand: fokus.soc }
   return { kachelAuto: { art: 'ladestaende', autos: fahrzeuge }, ladestand: null }
+}
+
+/** Der Ladezustand, bei dem die Wallbox-Kachel weiter ihr Auto zeigt (K-12). */
+export const LADEZUSTAND_LAEDT = 'laedt'
+/** Ruhezustände: der Chip steht gedämpft (graue Kachel bei «Kein Fahrzeug», Blatt §3). */
+const LADEZUSTAND_GEDAEMPFT = new Set(['kein_fahrzeug', 'fertig'])
+
+/**
+ * P-433-2b K1 (K-12, S1-4): die zweite Zeile der Wallbox-Kachel als **Zustands-Chip**, wenn ein gemessener
+ * Ladezustand vorliegt und er nicht «lädt» ist — «Wartet · PV», «Verbunden», «Kein Fahrzeug». Lädt die Wallbox,
+ * bleibt die Auto-Zeile (`wallboxKachelAuto`), wie bisher. Ohne Ladezustand `null` — die Kachel bleibt bitgleich.
+ * Farbe = Funktion (`funktionsFarbe`), keine Rahmenfarbe (K-3); dieselbe Chip-Form wie `modusZeile`.
+ */
+export function ladezustandZeile(
+  k: Pick<LiveKomponente, 'ladezustand' | 'ladezustand_label' | 'lademodus_label'>,
+  referenz: string,
+): ZweiteZeile | null {
+  if (!k.ladezustand || k.ladezustand === LADEZUSTAND_LAEDT) return null
+  const text = ladezustandKlartext(k)
+  if (!text) return null
+  const farbe = funktionsFarbe(k.ladezustand)
+  const gedaempft = LADEZUSTAND_GEDAEMPFT.has(k.ladezustand)
+  return { text, fill: gedaempft ? referenz : farbe, chip: { farbe, gedaempft } }
 }
 
 // ─── Kaskaden ───────────────────────────────────────────────────────

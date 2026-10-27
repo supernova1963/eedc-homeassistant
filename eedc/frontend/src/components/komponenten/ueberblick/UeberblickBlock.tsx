@@ -20,11 +20,16 @@ import { useDemoMode } from '../../../v4/status/AppStatusContext'
 import type { Investition } from '../../../types'
 import { baueUeberblickKacheln } from './kachelAnker'
 import UeberblickKarte from './UeberblickKarte'
+import UeberblickKarteEmob from './UeberblickKarteEmob'
 import UeberblickSchaubild from './UeberblickSchaubild'
 import { useLiveUeberblick } from './useLiveUeberblick'
 
 /** Park-IDs der zwei Elemente des Blocks. */
 export const UEBERBLICK_PARK_IDS = ['el:ueberblick-schaubild', 'el:ueberblick-karte'] as const
+/** P-433-2b K1: der Block der E-Mobilität trägt vorerst nur «Auf einen Blick» (kein Schaubild, P1 «Panorama später»). */
+export const UEBERBLICK_EMOB_PARK_IDS = ['el:ueberblick-karte'] as const
+/** Typen, deren Überblick (noch) ohne Schaubild steht — die Karten in voller Breite. */
+export const UEBERBLICK_OHNE_SCHAUBILD: readonly string[] = ['wallbox', 'e-auto']
 
 export interface UeberblickBlockProps {
   anlageId: number
@@ -52,6 +57,24 @@ export default function UeberblickBlock({ anlageId, geraete, inv }: UeberblickBl
       </Parkbar>
       <Parkbar id="el:ueberblick-karte" titel="Auf einen Blick">
         <UeberblickKarte inv={inv} live={live} wetter={wetter} tag={tag} mehrereGeraete={geraete.length > 1} />
+      </Parkbar>
+    </div>
+  )
+}
+
+/**
+ * P-433-2b K1 (Bauplan E4): der Block «Überblick» der Typ-Seiten Wallbox und E-Auto — **ohne Schaubild** (Panorama
+ * später, Blatt P1), «Auf einen Blick» in voller Breite (innen bis zu drei Karten nebeneinander, Handy gestapelt).
+ * Derselbe Live-Hook wie Wärme/Klima (Poll nur, solange der Inhalt montiert und die Seite sichtbar ist); die Park-ID
+ * `el:ueberblick-karte` ist dieselbe, ein Schaubild wird nicht gerendert.
+ */
+export function UeberblickBlockEmob({ anlageId, geraete, inv }: UeberblickBlockProps) {
+  const { demoMode } = useDemoMode()
+  const { live, tag } = useLiveUeberblick(anlageId, demoMode)
+  return (
+    <div className="grid grid-cols-1 gap-4" data-ueberblick-block>
+      <Parkbar id="el:ueberblick-karte" titel="Auf einen Blick">
+        <UeberblickKarteEmob inv={inv} live={live} tag={tag} mehrereGeraete={geraete.length > 1} />
       </Parkbar>
     </div>
   )

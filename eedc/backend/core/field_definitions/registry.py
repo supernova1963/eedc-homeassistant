@@ -899,6 +899,75 @@ INVESTITION_FELDER: dict = {
 # "bedingung" — optional, gleiche Semantik wie in INVESTITION_FELDER
 # =============================================================================
 
+# P-433-2b K1 (Überblick E-Mobilität, Bauplan E1): die Live-Felder für Zustand und Sitzung am Ladepunkt und am Fahrzeug.
+# Gemeinsame Eigenschaften (`_EMOB_LIVE_BASIS`):
+#   * `nur_live`   — K-1: der Wert wird live gelesen und **nicht gespeichert**; der Kanal-Katalog legt keinen Kanal an
+#                    (Ausnahme-Klasse `nur_live_anzeige`), der MQTT-Snapshot schreibt kein Mittel mit.
+#   * `erweitert`  — an keinem Gerät erwartet; die Datenquellen-Fläche stellt sie hinter «Weitere Größen erfassen», bis
+#                    eine Quelle zugeordnet ist (R1).
+#   * `abschnitt`  — Datenquellen-Abschnitt «Zustand & Sitzung» statt der Einheiten-Abschnitte (eine kWh der Sitzung
+#                    ist kein Zähler der Energiebilanz).
+# Ein Zustandsfeld trägt `zustand: True` (Weiche aller Live-Pfade, `ZUSTAND_LIVE_FELDER`) und `kanon` (Tabelle in
+# `core/zustands_kanon.py`); `ha_domaenen` öffnet den HA-Picker für die Domains, in denen die belegten Integrationen
+# den Zustand führen (evcc-Lademodus ist ein `select`, der Standort ein `device_tracker`).
+_EMOB_LIVE_BASIS: dict = {"nur_live": True, "erweitert": True, "abschnitt": "zustand"}
+
+_WEG_B = ("Andere Integrationen über einen Template-Sensor in Home Assistant, der genau diese Wörter liefert "
+          "(Werte-Tabelle am Feld und im Handbuch).")
+
+_EMOB_LIVE_WALLBOX: list[dict] = [
+    {"key": "ladezustand", "label": "Ladezustand", "einheit": "", "zustand": True, "kanon": "ladezustand",
+     "ha_domaenen": ("sensor", "select", "input_select"), **_EMOB_LIVE_BASIS,
+     "hinweis": "Was am Ladepunkt gerade geschieht: kein Fahrzeug · verbunden · wartet · lädt · fertig · gesperrt · "
+                "Fehler — ein Zustand, kein Messwert. Erscheint als Chip an der Wallbox im Überblick und an der "
+                "Kachel im Energiefluss. Verstanden werden die Kanon-Wörter und die Werte des SMA EV Charger; über "
+                "MQTT auch die go-eCharger-Codes 0–5. " + _WEG_B},
+    {"key": "lademodus", "label": "Lademodus", "einheit": "", "zustand": True, "kanon": "lademodus",
+     "ha_domaenen": ("sensor", "select", "input_select"), **_EMOB_LIVE_BASIS,
+     "hinweis": "Lademodus der Steuerung: aus · PV · Smart · Schnell · Plan · Eco — steht im Chip hinter «Lädt» "
+                "und «Wartet». Verstanden werden die Kanon-Wörter, evcc (`select.evcc_…_mode`) und der SMA EV "
+                "Charger; über MQTT auch die go-eCharger-Codes. Eine Angabe der Steuerung, eedc bewertet sie nicht. "
+                + _WEG_B},
+    {"key": "sitzung_kwh", "label": "Energie dieser Sitzung", "einheit": "kWh", **_EMOB_LIVE_BASIS,
+     "hinweis": "Seit dem Anstecken geladene Energie in kWh (evcc `session_energy`, SMA `energie_ladevorgang`, "
+                "go-e `wh`). Reine Anzeige im Überblick — keine Monatsmenge, kein Zähler der Bilanz. ⚠ SMA, go-e "
+                "und evcc über MQTT liefern Wh: eedc rechnet die Einheit hier nicht um — einen kWh-Sensor wählen "
+                "oder in Home Assistant die Anzeigeeinheit auf kWh stellen."},
+    {"key": "sitzung_dauer_s", "label": "Dauer dieser Sitzung", "einheit": "s", **_EMOB_LIVE_BASIS,
+     "hinweis": "Ladedauer der laufenden Sitzung in Sekunden (evcc `charge_duration`). Reine Anzeige."},
+    {"key": "ladestrom_a", "label": "Ladestrom", "einheit": "A", **_EMOB_LIVE_BASIS,
+     "hinweis": "Ladestrom in A (evcc `charge_current`, go-e `amp`). Reine Anzeige."},
+    {"key": "phasen_aktiv", "label": "Aktive Phasen", "einheit": "", **_EMOB_LIVE_BASIS,
+     "hinweis": "Anzahl der Phasen, über die gerade geladen wird (evcc `phases_active`, go-e `pnp`). Reine Anzeige."},
+    {"key": "ziel_ladestand_prozent", "label": "Ladeziel", "einheit": "%", **_EMOB_LIVE_BASIS,
+     "hinweis": "Ladeziel der Steuerung in % (evcc `effective_limit_soc`) — die Zielmarke an der Ladestand-Leiste. "
+                "Reine Anzeige."},
+    {"key": "restzeit_min", "label": "Restzeit", "einheit": "min", **_EMOB_LIVE_BASIS,
+     "hinweis": "Verbleibende Ladezeit in Minuten. Reine Anzeige. ⚠ evcc liefert Sekunden "
+                "(`charge_remaining_duration`): eedc rechnet nicht um — Sensor in Minuten wählen."},
+]
+
+_EMOB_LIVE_EAUTO: list[dict] = [
+    {"key": "ladezustand_fahrzeug", "label": "Ladezustand (Fahrzeug)", "einheit": "", "zustand": True,
+     "kanon": "ladezustand_fahrzeug", "ha_domaenen": ("sensor", "input_select"), **_EMOB_LIVE_BASIS,
+     "hinweis": "Was das Auto selbst meldet: nicht verbunden · verbunden · lädt · lädt DC · fertig · Fehler. "
+                "Erscheint als Chip an der Auto-Karte, wenn das Auto keiner Wallbox zugeordnet ist (an der Wallbox "
+                "sagt es deren Chip). Verstanden werden die Kanon-Wörter und die Werte der Smart-Integration "
+                "(`sensor.smart_ladesanschluss` oder `sensor.smart_ladezustand`). " + _WEG_B},
+    {"key": "reichweite_km", "label": "Reichweite", "einheit": "km", **_EMOB_LIVE_BASIS,
+     "hinweis": "Restreichweite in km. Reine Anzeige. ⚠ evcc meldet sie nur, solange das Auto am Ladepunkt hängt "
+                "(danach 0 — dann lieber den Sensor der Fahrzeug-Integration)."},
+    {"key": "ziel_ladestand_prozent", "label": "Ladeziel", "einheit": "%", **_EMOB_LIVE_BASIS,
+     "hinweis": "Ladeziel des Fahrzeugs in % — die Zielmarke an der Ladestand-Leiste. Reine Anzeige."},
+    {"key": "restzeit_min", "label": "Restzeit", "einheit": "min", **_EMOB_LIVE_BASIS,
+     "hinweis": "Verbleibende Ladezeit laut Fahrzeug in Minuten. Reine Anzeige."},
+    {"key": "zu_hause", "label": "Zu Hause", "einheit": "", "zustand": True, "kanon": "zu_hause",
+     "ha_domaenen": ("device_tracker", "sensor", "input_select"), **_EMOB_LIVE_BASIS,
+     "hinweis": "Ist das Auto zu Hause? Der `device_tracker` des Fahrzeugs (Zone `home`/`not_home`) — nur die "
+                "Zone, nie eine Position. Andere Zonennamen versteht eedc nicht (Template-Sensor: zu_hause · "
+                "unterwegs)."},
+]
+
 LIVE_FELDER_INV: dict = {
     # Live-Felder speisen ausschließlich das Live-Dashboard (Momentanwerte in W/%).
     # Für Monatswerte, Statistik und Wirtschaftlichkeit zählen die kWh-Felder oben —
@@ -928,10 +997,19 @@ LIVE_FELDER_INV: dict = {
                     "zuordnen, sonst zählt die Live-Bilanz ihn doppelt."},
         {"key": "soc",        "label": "Ladestand",    "einheit": "%",
          "hinweis": "Ladestand der Fahrzeugbatterie in Prozent (0–100)."},
+        # P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — Felder des Hub-Überblicks E-Auto.
+        # Leitsatz K-1: Registry-Feld = Vertrag, Wert live aus der Integration, **nichts gespeichert**
+        # (`nur_live` ⇒ kein Kanal, `kanal/katalog.py`). Alle `erweitert` (hinter «Weitere Größen erfassen»), alle im
+        # Datenquellen-Abschnitt «Zustand & Sitzung» (`abschnitt`). Die Kanon-Tabellen der Zustände stehen in
+        # `core/zustands_kanon.py`.
+        *_EMOB_LIVE_EAUTO,
     ],
     "wallbox": [
         {"key": "leistung_w", "label": "Leistung", "einheit": "W",
          "hinweis": "Momentane Ladeleistung der Wallbox in W."},
+        # P-433-2b K1 (Blatt §1/§5a): Zustand und Sitzung am Ladepunkt — Felder des Hub-Überblicks Wallbox und des
+        # Zustands-Chips an der Energiefluss-Kachel (K-12). Bauform wie am E-Auto oben.
+        *_EMOB_LIVE_WALLBOX,
     ],
     "waermepumpe": [
         {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W",

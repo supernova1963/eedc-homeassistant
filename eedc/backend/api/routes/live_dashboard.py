@@ -16,7 +16,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core import zustands_kanon
 from backend.core.betriebsmodus import BETRIEBSMODUS_LABEL, HEIZEN
+from backend.core.zustands_kanon import LAEDT, VERBUNDEN, WARTET
 from backend.core.berechnungen.temperatur import spreizung_k
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
@@ -48,6 +50,27 @@ class LiveFahrzeug(BaseModel):
     #: es, negativ gibt es ab (V2H). `None`, wenn sie nicht getrennt gemessen ist.
     kw: Optional[float] = None
     v2h: bool = False
+    # ── P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — reine Anzeige, nichts gespeichert ──
+    # Builder `_fahrzeug_emob`; jeder Wert einzeln optional (P4).
+    #: Restreichweite in km.
+    reichweite_km: Optional[float] = None
+    #: Ladezustand des **Fahrzeugs** (Kanon `core/zustands_kanon.py`, Feld `ladezustand_fahrzeug`) und sein Klartext.
+    ladezustand: Optional[str] = None
+    ladezustand_label: Optional[str] = None
+    #: Ladeziel des Fahrzeugs in % (Zielmarke der Ladestand-Leiste).
+    ziel_prozent: Optional[float] = None
+    #: Restzeit laut Fahrzeug in Minuten.
+    restzeit_min: Optional[float] = None
+    #: Zone des Fahrzeugs: `True` zu Hause, `False` unterwegs, `None` ohne Zuordnung — nie eine Position.
+    zu_hause: Optional[bool] = None
+    #: Stammdatum `ist_dienstlich` (P3-a) — Chip «Dienstwagen» an der Auto-Karte.
+    dienstwagen: bool = False
+
+
+class LiveSitzung(BaseModel):
+    """Die laufende (oder letzte) Ladesitzung am Ladepunkt (P-433-2b K1) — reine Anzeige, Werte der Steuerung."""
+    kwh: Optional[float] = None
+    dauer_s: Optional[float] = None
 
 
 class LiveKomponente(BaseModel):
@@ -112,6 +135,22 @@ class LiveKomponente(BaseModel):
     warmwasser_c: Optional[float] = None
     #: Momentane Leistung der Zusatzheizung (Heizstab) in W — ein Teil von `verbrauch_kw`, nie dazu addiert.
     heizstab_w: Optional[float] = None
+    # ── P-433-2b K1 (Konzept #433, Blatt §1/§5a): Zustand und Sitzung am Ladepunkt ──
+    # Reine Anzeige (Builder `_wallbox_emob_werte`), nur `wallbox_*`, `None` ohne Zuordnung (P4). Der Zustand ist
+    # gemessen, nie aus der Leistung abgeleitet (K-2). Klartexte aus dem Kanon `core/zustands_kanon.py`.
+    ladezustand: Optional[str] = None
+    ladezustand_label: Optional[str] = None
+    lademodus: Optional[str] = None
+    lademodus_label: Optional[str] = None
+    sitzung: Optional[LiveSitzung] = None
+    #: Ladestrom in A.
+    ladestrom_a: Optional[float] = None
+    #: Anzahl aktiver Phasen.
+    phasen_aktiv: Optional[float] = None
+    #: Ladeziel der Steuerung in %.
+    ziel_prozent: Optional[float] = None
+    #: Restzeit der Steuerung in Minuten.
+    restzeit_min: Optional[float] = None
 
 
 class LiveGauge(BaseModel):
@@ -175,6 +214,10 @@ class LiveDashboardResponse(BaseModel):
     #: eines Innengeräts ist eine Teilmenge der Geräteleistung, die als
     #: Komponente schon zählt. `None`, solange kein einziger Wert ankommt.
     innengeraete: Optional[list[LiveInnengeraet]] = None
+
+    #: P-433-2b K1 (Blatt §4): die Autos, die an **keiner** live liefernden Wallbox stehen (keine Wallbox liefert,
+    #: oder die Anlage hat keine) — Träger der Hub-Karte E-Auto. Autos an einer Wallbox stehen in deren `fahrzeuge`.
+    fahrzeuge_ohne_wallbox: Optional[list[LiveFahrzeug]] = None
 
 
 class TagesverlaufSerie(BaseModel):
@@ -340,6 +383,8 @@ def _demo_auf_anlage(daten: dict, karte: dict[int, int]) -> dict:
             k["traeger_id"] = karte.get(k["traeger_id"], k["traeger_id"])
         for f in k.get("fahrzeuge") or []:
             f["investition_id"] = karte.get(f["investition_id"], f["investition_id"])
+    for f in daten.get("fahrzeuge_ohne_wallbox") or []:
+        f["investition_id"] = karte.get(f["investition_id"], f["investition_id"])
     for gruppe in ("gauges", "serien"):
         for g in daten.get(gruppe, []):
             g["key"] = _demo_key(g["key"], karte)
@@ -363,6 +408,14 @@ async def _demo_karte_der_anlage(db: AsyncSession, anlage_id: int) -> dict[int, 
     for typ, inv_id in invs:
         ids_je_typ.setdefault(typ, []).append(inv_id)
     return _demo_id_karte(ids_je_typ)
+
+
+def _demo_ladepunkt(ladezustand: str, lademodus: Optional[str]) -> dict:
+    """Zustand und Lademodus eines Demo-Ladepunkts mit Klartext aus dem Kanon — die Form von `_wallbox_zustand`."""
+    out = {"ladezustand": ladezustand, "ladezustand_label": zustands_kanon.label("ladezustand", ladezustand)}
+    if lademodus is not None:
+        out.update(lademodus=lademodus, lademodus_label=zustands_kanon.label("lademodus", lademodus))
+    return out
 
 
 def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
@@ -455,10 +508,15 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "erzeugung_kw": batt_kw if not ist_ladung else None,
          "verbrauch_kw": batt_kw if ist_ladung else None,
          "typ": "speicher", "kapazitaet_kwh": 10.2},
+        # P-433-2b K1 (Bauplan E3): Zustand und Sitzung wie vom Builder (`_wallbox_emob_werte`), Fahrzeugwerte wie
+        # `_fahrzeug_emob`. Der Demo-Zustand folgt der Demo-Leistung (lädt nur mit Leistung) — das ist Demo-Synthese,
+        # keine Regel: der echte Pfad leitet keinen Zustand aus kW ab (K-2).
         {"key": "wallbox_6", "label": "go-eCharger", "icon": "plug",
          "erzeugung_kw": None, "verbrauch_kw": wallbox_kw, "typ": "wallbox",
+         **_demo_ladepunkt(LAEDT if wallbox_kw > 0 else WARTET, "pv"),
+         "sitzung": {"kwh": 9.8, "dauer_s": 7800.0}, "ladestrom_a": 16.0, "phasen_aktiv": 3.0,
          "fahrzeuge": [{"investition_id": 4, "label": "VW ID.4", "soc": eauto_soc,
-                        "kw": eauto_kw, "v2h": False}],
+                        "kw": eauto_kw, "v2h": False, "reichweite_km": 312.0, "ziel_prozent": 80.0}],
          "fahrzeuge_zuordnung": "geschaetzt"},
         {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
          "erzeugung_kw": None, "verbrauch_kw": eauto_kw,
@@ -467,8 +525,9 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         # Builder), sie steht allein in `fahrzeuge` der Carport-Wallbox.
         {"key": "wallbox_11", "label": "Wallbox Carport", "icon": "plug",
          "erzeugung_kw": None, "verbrauch_kw": wallbox2_kw, "typ": "wallbox",
+         **_demo_ladepunkt(LAEDT if wallbox2_kw > 0 else VERBUNDEN, None),
          "fahrzeuge": [{"investition_id": 12, "label": "Renault Zoe", "soc": zoe_soc,
-                        "kw": None, "v2h": False}],
+                        "kw": None, "v2h": False, "reichweite_km": 140.0}],
          "fahrzeuge_zuordnung": "geschaetzt"},
         # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
         # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).

@@ -513,6 +513,15 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ("e-auto", "soc"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_soc_gauge"),
     ),
+    # P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — Hub-Überblick E-Auto (und die Fahrzeugzeile der
+    # Wallbox-Karte). Reine Anzeige, nichts gespeichert (K-1).
+    ("e-auto", "ladezustand_fahrzeug"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
+    ("e-auto", "reichweite_km"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
+    ("e-auto", "ziel_ladestand_prozent"): (
+        _a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),
+    ),
+    ("e-auto", "restzeit_min"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
+    ("e-auto", "zu_hause"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
 
     # ── Wallbox ──────────────────────────────────────────────────────────────
     ("wallbox", "ladung_kwh"): (
@@ -529,6 +538,24 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ("wallbox", "leistung_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),
     ),
+    # P-433-2b K1 (Blatt §1/§5a): Zustand und Sitzung am Ladepunkt — Hub-Überblick Wallbox; der Ladezustand auch als
+    # Chip an der Energiefluss-Kachel (K-12). Reine Anzeige, nichts gespeichert (K-1).
+    ("wallbox", "ladezustand"): (
+        _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
+    ),
+    ("wallbox", "lademodus"): (
+        _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
+        _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
+    ),
+    ("wallbox", "sitzung_kwh"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
+    ("wallbox", "sitzung_dauer_s"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
+    ("wallbox", "ladestrom_a"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
+    ("wallbox", "phasen_aktiv"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
+    ("wallbox", "ziel_ladestand_prozent"): (
+        _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),
+    ),
+    ("wallbox", "restzeit_min"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
 
     # ── Balkonkraftwerk ──────────────────────────────────────────────────────
     ("balkonkraftwerk", "pv_erzeugung_kwh"): (

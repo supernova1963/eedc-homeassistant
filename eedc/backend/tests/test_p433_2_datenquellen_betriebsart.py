@@ -300,9 +300,12 @@ async def test_andere_typen_unveraendert(db, monkeypatch):
         neu = {"kuehlung_art", "modus_ableitbar"} if g["typ"] == "waermepumpe" else set()
         assert set(g) == _GRUPPEN_SCHLUESSEL_VORHER | neu, g["typ"]
         for f in g["felder"]:
-            assert set(f) == _FELD_SCHLUESSEL_VORHER | {"betriebsart", "menge"}, f["feld"]
+            # P-433-2b K1: `abschnitt` (Registry, «zustand» ⇒ «Zustand & Sitzung») an jedem Feld, sonst `None`.
+            assert set(f) == _FELD_SCHLUESSEL_VORHER | {"betriebsart", "menge", "abschnitt"}, f["feld"]
             if g["typ"] != "waermepumpe":
                 assert f["betriebsart"] is None and f["menge"] is None, f["feld"]
+            if f["abschnitt"] is not None:
+                assert g["typ"] in ("wallbox", "e-auto") and f["abschnitt"] == "zustand", f["feld"]
 
 
 async def test_fixture_der_client_probe_ist_aktuell(db, monkeypatch):

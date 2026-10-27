@@ -204,6 +204,9 @@ PARAM_WALLBOX: Final[dict[str, str]] = {
     "BIDIREKTIONAL": "bidirektional",
     "PV_OPTIMIERT": "pv_optimiert",
     "IST_DIENSTLICH": "ist_dienstlich",
+    # P-433-2b K1 (K-10, Blatt §5c): Adresse der Hersteller-Oberfläche (z. B. evcc) — ein Link im Hub-Überblick
+    # Wallbox, Text, kein Default (gelesen nur vom Client).
+    "OBERFLAECHE_URL": "oberflaeche_url",
 }
 
 PARAM_WALLBOX_DEFAULTS: Final[dict[str, object]] = {

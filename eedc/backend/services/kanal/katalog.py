@@ -27,6 +27,7 @@ O5      Investitionsfeld ``nur_manuell``                            kein Kanal
 O7      Feld in ``MQTT_STAND_ZAEHLER_FELDER``                       ``stand`` · Mitschrift
 O9      Feld in ``KUMULATIVE_COUNTER_FELDER``                       ``stand`` · Spiegel/Mitschrift
 —       Energie-Einheit (kWh, Wh, MWh)                              ``sum`` · Spiegel/Mitschrift
+A-L     Live-Feld ``nur_live`` (Zustand/Sitzung E-Mobilität, K1)   kein Kanal (reine Anzeige, K-1)
 —       Live-Feld ``zustand`` (Betriebsart)                         ``mean`` „Anteil der Stunde je
                                                                     Betriebsart" · Mitschrift
 —       Live-/Preis-Feld mit Einheit W · kW · % · °C · ct/kWh       ``mean`` · Spiegel/Mitschrift
@@ -90,7 +91,15 @@ AUSNAHME_ABSCHLUSS = "abschluss_ohne_sensor"
 #: hätte V2H über die Gruppe getragen, und im Übergangsmonat einer MQTT-Anlage wäre die ganze Gruppe auf ``bestand``
 #: gefallen (Bericht V2H-TAG, Stand 1). Entscheid Master 13.10.2026 (O2): Kanal, Kanalgruppe und Monat bleiben.
 AUSNAHME_TAGESGROESSE = "tagesgroesse_ohne_kanal"
-AUSNAHME_KLASSEN: frozenset[str] = frozenset({AUSNAHME_SNAPSHOT, AUSNAHME_ABSCHLUSS, AUSNAHME_TAGESGROESSE})
+#: P-433-2b K1 (Bauplan E1, Leitsatz K-1 «Registry-Feld = Vertrag, Wert live, nichts gespeichert»): ein Live-Feld mit
+#: ``nur_live`` (Zustand und Sitzung an Wallbox und E-Auto) ist reine Anzeige im Überblick — kein Kanal, keine
+#: Mitschrift, kein Mittel im MQTT-Snapshot. Ohne die Klasse gäbe die Mittelwert-Regel dem Ladeziel (``%``) einen
+#: ``mean``-Kanal und die Zustands-Regel dem Ladezustand eine Betriebsart-Mitschrift, die es für E-Mobilität nicht gibt
+#: (sie kommt mit K3); die Sitzungs-kWh, Sekunden, Ampere und Minuten fielen durch jede Regel.
+AUSNAHME_NUR_LIVE = "nur_live_anzeige"
+AUSNAHME_KLASSEN: frozenset[str] = frozenset({
+    AUSNAHME_SNAPSHOT, AUSNAHME_ABSCHLUSS, AUSNAHME_TAGESGROESSE, AUSNAHME_NUR_LIVE,
+})
 
 #: (typ, feld) → Grund der Klasse ``AUSNAHME_TAGESGROESSE``. Gilt für beide Listen, in denen das Feld steht
 #: (``INVESTITION_FELDER`` und ``KUMULATIVE_ZAEHLER_FELDER``); der Schreiber lässt es still aus (``zaehler_art``
@@ -345,7 +354,11 @@ def kanal_katalog(
     for typ, felder in live_felder_inv.items():
         for f in felder:
             key = f["key"]
-            if f.get("zustand"):
+            if f.get("nur_live"):
+                z = _zuweisung(L_LIVE_INV, typ, key, ausnahme=AUSNAHME_NUR_LIVE,
+                               grund="P-433-2b K1 (K-1): Wert live aus der Integration, nichts gespeichert — reine "
+                                     "Anzeige im Hub-Überblick", schluessel=f"inv:{{id}}:{key}")
+            elif f.get("zustand"):
                 z = _zuweisung(L_LIVE_INV, typ, key, art=ART_MEAN, familien=(FAMILIE_MITSCHRIFT,),
                                grund="Betriebsart ⇒ Mitschrift „Anteil der Stunde je Betriebsart“ "
                                      "(climate hat keine Langzeitstatistik, W2)",

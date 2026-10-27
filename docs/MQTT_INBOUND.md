@@ -161,8 +161,8 @@ Tagesaggregation liest dieselbe Kurve (Geraetewerte je Stunde). Voraussetzung: �
 
 ### Betriebsmodus der Waermepumpe (Zustand statt Zahl)
 
-Der Betriebsmodus ist das einzige Live-Topic, das **keine Zahl im physikalischen Sinn** traegt, sondern einen
-Zustand. eedc versteht dieselben Woerter wie bei einem HA-Sensor und zusaetzlich — nur hier, ueber MQTT — einen **Zahlencode**:
+Der Betriebsmodus traegt **keine Zahl im physikalischen Sinn**, sondern einen Zustand (wie die Zustaende der
+E-Mobilitaet weiter unten). eedc versteht dieselben Woerter wie bei einem HA-Sensor und zusaetzlich — nur hier, ueber MQTT — einen **Zahlencode**:
 
 | Code | Wort (Beispiele) | eedc versteht es als |
 |---|---|---|
@@ -192,6 +192,35 @@ eedc/1_Meine_PV/live/inv/7_Vitocal/betriebsmodus → 2
   im Daten-Checker ueberwacht das Modus-Topic nicht (ein Modus, der sich stundenlang nicht aendert, ist kein Ausfall).
 - **Hat das Geraet in eedc einen HA-Sensor fuer den Modus, gilt der HA-Sensor**; das MQTT-Topic wird dann nicht
   gelesen.
+
+### Zustand und Sitzung der E-Mobilitaet (ab der naechsten Version)
+
+Wallbox und E-Auto haben eigene Live-Topics fuer den Ueberblick im Komponenten-Hub — Topic = Registry-Feld unter
+`…/live/inv/{id}_{name}/`:
+
+| Geraet | Topic-Suffix | Payload |
+|---|---|---|
+| Wallbox | `ladezustand` | Zustand: `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler` (go-e-Code `0`…`5` geht auch) |
+| Wallbox | `lademodus` | Zustand: `aus` · `pv` · `smart` · `schnell` · `plan` · `eco` (go-e `lmo` `3`/`4`/`5` geht auch) |
+| Wallbox | `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (kWh, s, A, Anzahl, %, min) |
+| E-Auto | `ladezustand_fahrzeug` | Zustand: `nicht_verbunden` · `verbunden` · `laedt` · `laedt_dc` · `fertig` · `fehler` |
+| E-Auto | `zu_hause` | Zustand: `zu_hause` · `unterwegs` |
+| E-Auto | `reichweite_km`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (km, %, min) |
+
+```
+eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/ladezustand → laedt
+eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/sitzung_kwh → 9.8
+eedc/1_Meine_PV/live/inv/5_Smart_1/reichweite_km     → 312
+```
+
+- Zustaende wie der Betriebsmodus: bei jeder Aenderung senden (retained empfohlen); die volle Werte-Tabelle steht im
+  Handbuch Einstellungen §7.10 und am Feld in *Einstellungen → Datenquellen*. Ein fremder Wert ergibt keinen Chip; der
+  Daten-Checker nennt ihn („E-Mobilitaet – unbekannter Zustand").
+- **Reine Anzeige:** eedc speichert diese Werte nicht (keine Mitschrift, kein Stundenmittel, kein Kanal) und rechnet keine
+  Einheit um — die Sitzung in **kWh** senden (nicht Wh), die Restzeit in **Minuten**.
+- Der Zustand ist bis zu 60 s alt (derselbe Takt wie der Betriebsmodus). Das Gateway reicht nur Zahlen weiter; fuer die
+  Zustaende steht es nicht zur Wahl. Ein evcc-Preset (`evcc/loadpoints/<n>/…`) gibt es in dieser Version nicht.
+- **Hat das Geraet in eedc einen HA-Sensor fuer das Feld, gilt der HA-Sensor**; das Topic wird dann nicht gelesen.
 
 ### Beispiel
 

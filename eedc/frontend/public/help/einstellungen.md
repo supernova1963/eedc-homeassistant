@@ -911,6 +911,92 @@ Damit HA-Sensoren bzw. MQTT-Topics überhaupt wählbar sind, muss die jeweilige 
 
 Bestehende Zuordnungen wurden **verlustfrei** übernommen (HA-first: hatte ein Feld einen HA-Sensor, wurde HA die Quelle; ein etwaiges paralleles MQTT-Mapping wurde nur deaktiviert, nicht gelöscht).
 
+### 7.10 Zustand und Sitzung (E-Mobilität)
+
+*Seit der nächsten Version.* An **Wallbox** und **E-Auto** gibt es einen eigenen Abschnitt **„Zustand & Sitzung"**. Er füllt
+den Block „Überblick" im Komponenten-Hub ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto),
+[§3.6](HANDBUCH_BEDIENUNG.md#36-wallbox)) und den Zustands-Chip an der Wallbox-Kachel im Energiefluss. Alle Felder sind
+optional und stehen zunächst unter „Weitere Größen erfassen"; mit einer Quelle rücken sie in den Abschnitt. Sein Kopf sagt,
+was die Zuordnung ermöglicht: **„Zustands-Chip: zugeordnet"** oder **„Zustands-Chip: fehlt"**.
+
+| Gerät | Feld | Art | Wofür |
+| --- | --- | --- | --- |
+| Wallbox | Ladezustand | Zustand | Chip „Lädt · Wartet · Verbunden · Fertig · Kein Fahrzeug · Gesperrt · Fehler" |
+| Wallbox | Lademodus | Zustand | steht im Chip hinter „Lädt"/„Wartet" (PV · Smart · Schnell · Plan · Eco · Aus) |
+| Wallbox | Energie dieser Sitzung · Dauer dieser Sitzung | kWh · s | Fußzeile „9,8 kWh in dieser Sitzung · 2 h 10 min" |
+| Wallbox | Ladestrom · Aktive Phasen | A · Anzahl | Fußzeile „3 Phasen · 16 A" |
+| Wallbox, E-Auto | Ladeziel · Restzeit | % · min | Zielmarke an der Ladestand-Leiste, „Ziel 90 % · noch 1 h 20 min" |
+| E-Auto | Ladezustand (Fahrzeug) | Zustand | eigener Chip, wenn das Auto an keiner Wallbox steht |
+| E-Auto | Reichweite | km | neben dem Ladestand |
+| E-Auto | Zu Hause | Zustand | „Zu Hause" / „Unterwegs" (Zone, nie eine Position) |
+
+**Nichts davon wird gespeichert und nichts gerechnet:** eedc liest die Werte live aus deiner Integration (Home Assistant oder
+MQTT), zeigt sie und vergisst sie wieder. Keine Monatsmenge, keine Kosten, kein Kanal. ⚠ **Einheiten:** eedc rechnet hier nicht
+um. SMA und go-e melden die Sitzung in **Wh**, evcc die Restzeit in **Sekunden** — stelle in Home Assistant die Anzeigeeinheit
+des Sensors auf kWh bzw. Minuten (Sensor → Einstellungen → Einheit).
+
+**Die Zustände sind ein fester Kanon.** Am Feld steht, welche Werte eedc versteht; ein anderer Wert ergibt **keinen Chip** (eedc
+rät nicht), und der Daten-Checker nennt ihn („E-Mobilität – unbekannter Zustand"). Groß-/Kleinschreibung ist egal; die
+Zahlencodes (go-eCharger) gelten nur über MQTT.
+
+| Ladezustand (Wallbox) | versteht eedc |
+| --- | --- |
+| Kein Fahrzeug | `kein_fahrzeug`, `not_connected` · MQTT `1` |
+| Verbunden | `verbunden`, `sleep_mode` |
+| Wartet | `wartet` · MQTT `3` |
+| Lädt | `laedt`, `active_mode` · MQTT `2` |
+| Fertig | `fertig` · MQTT `4` |
+| Gesperrt | `gesperrt`, `station_locked` |
+| Fehler | `fehler`, `station_fault` · MQTT `0`, `5` |
+
+| Lademodus (Wallbox) | versteht eedc |
+| --- | --- |
+| Aus | `aus`, `off`, `charge_stop` |
+| PV | `pv`, `smart_charging` |
+| Smart | `smart`, `minpv` |
+| Schnell | `schnell`, `now`, `boost_charging` · MQTT `3` |
+| Plan | `plan` · MQTT `5` |
+| Eco | `eco` · MQTT `4` |
+
+| Ladezustand (Fahrzeug) | versteht eedc |
+| --- | --- |
+| Nicht verbunden | `nicht_verbunden`, `not_connected` |
+| Verbunden | `verbunden`, `plugged_not_charging`, `plugged_in`, `waiting_for_charging` |
+| Lädt | `laedt`, `charging` |
+| Lädt DC | `laedt_dc`, `dc_connected`, `dc_charging` |
+| Fertig | `fertig`, `complete`, `fully_charged`, `finished_fully_charged`, `finished_not_full`, `target_reached` |
+| Fehler | `fehler`, `error` |
+
+| Zu Hause (E-Auto) | versteht eedc |
+| --- | --- |
+| Zu Hause | `zu_hause`, `home` |
+| Unterwegs | `unterwegs`, `not_home` |
+
+Belegt sind die Werte an **SMA EV Charger** (`smaev`: `sensor.…_status_ladevorgang`, Drehschalter, Betriebsart), **evcc**
+(`select.evcc_…_mode`, Sitzung, Strom, Phasen, Ladelimit, Restzeit, Reichweite), **Smart #1** (`smarthashtag`:
+`sensor.smart_ladesanschluss` oder `sensor.smart_ladezustand`, Reichweite, Ladeziel, `device_tracker.smart_…`) und
+**go-eCharger** (`car`, `wh`, `amp`, `pnp`); der HA-Picker schlägt diese Sensoren vor. Bekannte Werte ohne Aussage (Smart
+`not_charging`, `default`, `invalid`) ergeben keinen Chip und keinen Hinweis.
+
+**Weg B — jede andere Integration:** ein Template-Sensor in Home Assistant, der genau eines der Kanon-Wörter liefert. Für
+**evcc** ist das in dieser Version auch der Weg zum Ladezustand: evcc meldet ihn in drei Binär-Sensoren
+(`binary_sensor.evcc_…_connected`, `…_charging`, `…_enabled`):
+
+```yaml
+template:
+  - sensor:
+      - name: "Carport Ladezustand"
+        state: >
+          {% if is_state('binary_sensor.evcc_carport_connected', 'off') %}kein_fahrzeug
+          {% elif is_state('binary_sensor.evcc_carport_charging', 'on') %}laedt
+          {% elif is_state('binary_sensor.evcc_carport_enabled', 'off') %}wartet
+          {% else %}verbunden{% endif %}
+```
+
+Für openWB, Easee, Wallbox, Tesla Wall Connector, Alfen, Zaptec, Keba und Heidelberg sowie die Fahrzeug-Integrationen von
+Tesla, VW/Skoda, Renault, Kia und Toyota gilt derselbe Weg; welche Rohwerte sie melden, steht in ihrer Integrations-Doku. Ein
+Standort-Sensor mit eigenen Zonennamen („Arbeit") braucht ebenfalls einen Template-Sensor (`zu_hause` · `unterwegs`).
+
 ---
 
 ## 8. System

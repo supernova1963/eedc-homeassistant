@@ -9,7 +9,7 @@
  * ⚠ **Die Rolle ist die Funktion, nicht das Gerät** — bewusst, mit einem Preis: tragen zwei Geräte
  * dieselbe Funktion bei, haben ihre Segmente denselben Ton (Begründung bei `waermeVerteilung.ts`).
  */
-import { CHART_COLORS, ROLLEN_BG } from './colors'
+import { AMPEL_BG_CLASS, CHART_COLORS, KOMPONENTEN_FARBEN, ROLLEN_BG, STATUS_COLORS } from './colors'
 
 export interface FunktionsFarbe {
   /** Chart-Farbe (Linie, Segment, Farbpunkt des Chips). */
@@ -33,6 +33,14 @@ const FARBE: Record<string, FunktionsFarbe> = {
   // Die **zwei** Reste — getrennt benannt und getrennt gefärbt (Konzept Kap. 3).
   system: { chart: CHART_COLORS.systemRest, bg: ROLLEN_BG.system_rest, kopf: NEUTRAL_KOPF },
   ohne_modus: { chart: CHART_COLORS.modusNichtAufgeteilt, bg: ROLLEN_BG.nicht_aufgeteilt, kopf: NEUTRAL_KOPF },
+  // ── P-433-2b K1 (E-Mobilität, Bauplan E5): die Zustände am Ladepunkt und am Fahrzeug (Kanon `core/zustands_kanon.py`).
+  // **Keine neue Farbe:** «lädt» trägt die Rolle der Wallbox (dieselbe wie `KOMPONENTEN_FARBEN.wallbox`), «wartet» das
+  // Gelb der Status-Achse, «Fehler» ihr Signal-Rot. Alles andere (kein Fahrzeug, verbunden, fertig, gesperrt, aus) fällt
+  // auf das neutrale Grau des Rückfalls — ein Ruhezustand ist keine Funktion mit eigenem Ton.
+  laedt: { chart: KOMPONENTEN_FARBEN.wallbox.hex, bg: KOMPONENTEN_FARBEN.wallbox.bg, kopf: KOMPONENTEN_FARBEN.wallbox.tint },
+  laedt_dc: { chart: KOMPONENTEN_FARBEN.wallbox.hex, bg: KOMPONENTEN_FARBEN.wallbox.bg, kopf: KOMPONENTEN_FARBEN.wallbox.tint },
+  wartet: { chart: STATUS_COLORS.warnung, bg: AMPEL_BG_CLASS.maessig, kopf: NEUTRAL_KOPF },
+  fehler: { chart: STATUS_COLORS.kritisch, bg: AMPEL_BG_CLASS.kritisch, kopf: NEUTRAL_KOPF },
 }
 
 const FALLBACK: FunktionsFarbe = { chart: CHART_COLORS.modusNichtAufgeteilt, bg: ROLLEN_BG.nicht_aufgeteilt, kopf: NEUTRAL_KOPF }

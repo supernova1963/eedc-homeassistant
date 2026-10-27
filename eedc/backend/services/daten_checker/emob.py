@@ -11,13 +11,81 @@ from sqlalchemy import select
 from backend.models.anlage import Anlage
 
 from .kategorien import (
-    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_ENERGIEPROFIL,
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN, LINK_ENERGIEPROFIL,
 )
+from backend.core import zustands_kanon
 from backend.core.zahlenformat import fmt_zahl
 
 
 class EmobChecks:
     """Diagnose für parallel gepflegte Wallbox-/E-Auto-Investitionen."""
+
+    async def _check_emob_zustand_wert(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """P-433-2b K1 (E12-Muster): ein zugeordneter E-Mob-Zustand liefert einen Wert, den eedc nicht kennt.
+
+        Gelesen wird der **aktuelle** Wert — derselbe Weg wie der Live-Leser (`betriebsmodus_live._emob_quellen`): ein
+        Feld mit HA-Entität über ``ha_state_service`` (ohne Zahlencodes), sonst der MQTT-Inbound-Cache (mit Codes).
+        Keine Meldung ohne Wert, bei ``unknown``/``unavailable`` und für bekannte Werte ohne Aussage. Benannte Grenze
+        wie beim Betriebsmodus: ein Wert, der nur zeitweise fremd ist, fällt nur auf, wenn er beim Prüfen ansteht.
+        """
+        from backend.models.investition import Investition
+        from backend.services.betriebsmodus_live import _EMOB_ZUSTAENDE, _emob_quellen
+
+        heute = date.today()
+        invs = (await self.db.execute(
+            select(Investition).where(
+                Investition.anlage_id == anlage.id, Investition.typ.in_(sorted(_EMOB_ZUSTAENDE)),
+            )
+        )).scalars().all()
+        aktiv = [inv for inv in invs if _EMOB_ZUSTAENDE.get(inv.typ) and inv.ist_aktiv_an(heute)]
+        if not aktiv:
+            return []
+        ha, mqtt = _emob_quellen(anlage, {inv.id: inv.typ for inv in aktiv})
+        funde: list[tuple[int, str, str, str]] = []   # (inv_id, feld, roh, herkunft)
+        funde += await self._emob_zustand_ha_fremd(ha)
+        funde += self._emob_zustand_mqtt_fremd(anlage, mqtt)
+        name = {inv.id: inv.bezeichnung for inv in aktiv}
+        return [_meldung_emob_zustand(name[i], i, feld, roh, herkunft) for i, feld, roh, herkunft in funde]
+
+    @staticmethod
+    async def _emob_zustand_ha_fremd(ha: dict) -> list[tuple[int, str, str, str]]:
+        """Fremde Werte der HA-Entitäten — ohne erreichbares HA keine Meldung."""
+        if not ha:
+            return []
+        from backend.services.ha_state_service import get_ha_state_service
+
+        svc = get_ha_state_service()
+        if not svc.is_available:
+            return []
+        try:
+            zustaende = await svc.get_zustand_states_batch(list(ha))
+        except Exception:  # noqa: BLE001 — HA nicht lesbar: keine Meldung statt einer, die niemand auflösen kann
+            return []
+        out = []
+        for entity, ziele in ha.items():
+            roh = (zustaende.get(entity) or (None,))[0]
+            for inv_id, feld in ziele:
+                if not zustands_kanon.ist_kein_zustand(roh) and not zustands_kanon.ist_bekannter_wert(feld, roh):
+                    out.append((inv_id, feld, str(roh), f"Der Sensor {entity}"))
+        return out
+
+    @staticmethod
+    def _emob_zustand_mqtt_fremd(anlage: Anlage, mqtt: list) -> list[tuple[int, str, str, str]]:
+        """Fremde Werte aus dem MQTT-Inbound-Cache (Kanon-Wort oder Zahlencode gelten)."""
+        if not mqtt:
+            return []
+        from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+
+        svc = get_mqtt_inbound_service()
+        if svc is None:
+            return []
+        werte = svc.cache.get_all_live_inv(anlage.id)
+        out = []
+        for inv_id, feld in mqtt:
+            roh = (werte.get(str(inv_id)) or {}).get(feld)
+            if not zustands_kanon.ist_kein_zustand(roh) and not zustands_kanon.ist_bekannter_wert(feld, roh, codes=True):
+                out.append((inv_id, feld, str(roh), "Das MQTT-Topic"))
+        return out
 
     # ⭐ N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch 7.2, Regel 7): die Pflegeprüfung
     # der E-Mobilität fragt nicht mehr „tragen Wallbox UND Auto Heimladung?" — nach
@@ -685,3 +753,22 @@ class EmobChecks:
             action_params={"anlage_id": anlage.id},
             action_label="Vergleichspreise nachpflegen",
         )]
+
+
+def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft: str) -> CheckErgebnis:
+    """Das INFO je Gerät und Feld — die Werte-Liste kommt aus dem Kanon (`werte_klartext`), nicht aus diesem Text."""
+    from backend.core.field_definitions import FELD_LABELS
+
+    feld_label = FELD_LABELS.get(feld, feld)
+    return CheckErgebnis(
+        kategorie=CheckKategorie.EMOB_ZUSTAND_WERT.value, schwere=CheckSeverity.INFO.value,
+        meldung=f"„{name}“: {feld_label} liefert „{roh}“ — diesen Wert kennt eedc nicht",
+        details=(
+            f"{herkunft} für „{feld_label}“ liefert gerade „{roh}“. Diesen Wert kennt eedc nicht und zeigt deshalb "
+            f"keinen Zustand an. Verstanden werden: {zustands_kanon.werte_klartext(feld)}. Groß-/Kleinschreibung ist "
+            f"egal. Der Weg: in Home Assistant einen Template-Sensor anlegen, der aus deinen Werten eines dieser Wörter "
+            f"macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Bedienung“, Abschnitt E-Mobilität)."
+        ),
+        link=LINK_DATENQUELLEN,
+        investition_id=inv_id,
+    )

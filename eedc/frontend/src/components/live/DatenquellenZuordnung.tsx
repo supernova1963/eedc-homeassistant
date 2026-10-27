@@ -65,6 +65,8 @@ const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quell
 
 /** Ziel der Werte-Tabelle des Betriebsmodus (Handbuch Wärme & Klima, Schritt 4, Weg B). */
 const HANDBUCH_BETRIEBSMODUS_WERTE = '/hilfe?doc=waerme-klima#welchen-sensor-eedc-lesen-kann'
+/** P-433-2b K1: Ziel der Werte-Tabellen der E-Mobilität (Handbuch Einstellungen §7.10, Weg B). */
+const HANDBUCH_EMOB_WERTE = '/hilfe?doc=einstellungen#710-zustand-und-sitzung-e-mobilität'
 
 /**
  * P-433-0 (Konzept #433 E12): die Werte, die eedc am Feld „Betriebsmodus“
@@ -72,7 +74,7 @@ const HANDBUCH_BETRIEBSMODUS_WERTE = '/hilfe?doc=waerme-klima#welchen-sensor-eed
  * Anwender seinen Template-Sensor danach baut. Die Liste kommt fertig aus dem
  * Backend (Kanon `core/betriebsmodus.py`); hier wird nur gesetzt.
  */
-function ZulaessigeWerte({ gruppen }: { gruppen: BetriebsmodusWerteGruppe[] }) {
+function ZulaessigeWerte({ gruppen, emob = false }: { gruppen: BetriebsmodusWerteGruppe[]; emob?: boolean }) {
   const verstanden = gruppen.filter((g) => g.kanon !== 'unbestimmt')
   const unbestimmt = gruppen.find((g) => g.kanon === 'unbestimmt')
   return (
@@ -80,8 +82,9 @@ function ZulaessigeWerte({ gruppen }: { gruppen: BetriebsmodusWerteGruppe[] }) {
       <span className="font-medium">eedc versteht:</span>{' '}
       {verstanden.map((g) => `${g.label} (${g.werte.join(', ')})`).join(' · ')}
       {unbestimmt && `; als unbestimmt gezählt: ${unbestimmt.werte.join(', ')}`}
-      {'. Andere Werte zählen als unbestimmt — '}
-      <Link to={HANDBUCH_BETRIEBSMODUS_WERTE} className="text-primary-700 dark:text-primary-300 hover:underline">
+      {/* P-433-2b K1: ein fremder Zustand der E-Mobilität wird nicht gezählt, sondern nicht angezeigt (kein Chip). */}
+      {emob ? '. Andere Werte zeigt eedc nicht an — ' : '. Andere Werte zählen als unbestimmt — '}
+      <Link to={emob ? HANDBUCH_EMOB_WERTE : HANDBUCH_BETRIEBSMODUS_WERTE} className="text-primary-700 dark:text-primary-300 hover:underline">
         Werte-Tabelle im Handbuch
       </Link>
     </p>
@@ -95,14 +98,17 @@ const Q_GATEWAY = 'mqtt_gateway'
 const Q_KEINE = 'keine'
 const Q_HA = new Set(['ha_app', 'ha_connector'])
 
-// Feld-Abschnitte nach Einheit (§2b1): kWh · W · Rest.
-type Abschnitt = 'kwh' | 'w' | 'sonstige'
+// Feld-Abschnitte nach Einheit (§2b1): kWh · W · Rest — seit P-433-2b K1 dazu «Zustand & Sitzung» (Registry-Attribut
+// `abschnitt`, nicht aus der Einheit geraten: die kWh einer Ladesitzung ist kein Zähler der Energiebilanz).
+type Abschnitt = 'kwh' | 'w' | 'zustand' | 'sonstige'
+const ABSCHNITT_ZUSTAND = 'zustand'
 const ABSCHNITT_TITEL: Record<Abschnitt, string> = {
   kwh: 'Energie-Sensoren (kWh)',
   w: 'Leistung-Sensoren (W)',
+  zustand: 'Zustand & Sitzung',
   sonstige: 'Sonstige Sensoren',
 }
-const ABSCHNITT_ORDER: Abschnitt[] = ['kwh', 'w', 'sonstige']
+const ABSCHNITT_ORDER: Abschnitt[] = ['kwh', 'w', 'zustand', 'sonstige']
 
 // R1 (SOLL Wärme/Klima §3.2a) — die vierte Stufe unter den drei Einheiten-
 // Abschnitten. Hier stehen Größen, die es an dieser Bauart **geben kann, aber
@@ -127,10 +133,23 @@ const ERWEITERT_HINWEIS =
 /** Typ, dessen Geräte nach Betriebsart statt nach Einheit gegliedert werden (Variante C). */
 const TYP_NACH_BETRIEBSART = 'waermepumpe'
 
-function abschnittVon(einheit: string): Abschnitt {
+function abschnittVon(einheit: string, abschnitt?: string | null): Abschnitt {
+  if (abschnitt === ABSCHNITT_ZUSTAND) return 'zustand'
   if (einheit === 'kWh') return 'kwh'
   if (einheit === 'W') return 'w'
   return 'sonstige'
+}
+
+/**
+ * P-433-2b K1 (#431-Prinzip): der Kopf des Abschnitts «Zustand & Sitzung» sagt, was die Zuordnung ermöglicht —
+ * «Zustands-Chip: zugeordnet» oder «Zustands-Chip: fehlt». Maßgeblich ist das **erste** Zustandsfeld des Abschnitts
+ * in Registry-Reihenfolge (Wallbox: Ladezustand, E-Auto: Ladezustand des Fahrzeugs); auch ein noch erweitertes Feld
+ * zählt mit. `null` ohne Zustandsfeld.
+ */
+export function zustandsChipStatus(felder: DatenquelleFeld[]): string | null {
+  const chipFeld = felder.find((f) => f.abschnitt === ABSCHNITT_ZUSTAND && f.zustand)
+  if (!chipFeld) return null
+  return chipFeld.quelle !== Q_KEINE ? 'Zustands-Chip: zugeordnet' : 'Zustands-Chip: fehlt'
 }
 
 // Mehr geänderte Felder werden im Historie-Hinweis nicht einzeln benannt; darüber
@@ -409,7 +428,9 @@ export default function DatenquellenZuordnung() {
           }`}>
             {istText}
           </div>
-          {f.zulaessige_werte && f.zulaessige_werte.length > 0 && <ZulaessigeWerte gruppen={f.zulaessige_werte} />}
+          {f.zulaessige_werte && f.zulaessige_werte.length > 0 && (
+            <ZulaessigeWerte gruppen={f.zulaessige_werte} emob={f.abschnitt === ABSCHNITT_ZUSTAND} />
+          )}
           {hinweisOffen && f.hinweis && (
             <p className={`mt-1 max-w-prose text-xs ${offenePflicht ? STATUS_TEXT_CLASS.kritisch : 'text-gray-500 dark:text-gray-400'}`}>
               {f.hinweis}
@@ -570,18 +591,22 @@ export default function DatenquellenZuordnung() {
   // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen. Danach die
   // vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL).
   const abschnitte = (gruppeId: string, felder: DatenquelleFeld[]) => {
-    const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], sonstige: [] }
+    const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], zustand: [], sonstige: [] }
     const erweitert: DatenquelleFeld[] = []
     for (const f of felder) {
       if (f.erweitert) erweitert.push(f)
-      else buckets[abschnittVon(f.einheit)].push(f)
+      else buckets[abschnittVon(f.einheit, f.abschnitt)].push(f)
     }
+    const chipStatus = zustandsChipStatus(felder)
     return (
       <>
         {ABSCHNITT_ORDER.filter((k) => buckets[k].length > 0).map((k) => (
           <div key={k}>
             <div className="pt-2 pb-0.5 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
               {ABSCHNITT_TITEL[k]}
+              {k === 'zustand' && chipStatus && (
+                <span className="ml-2 normal-case tracking-normal" data-zustand-status>{chipStatus}</span>
+              )}
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
           </div>

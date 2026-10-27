@@ -14,7 +14,7 @@ from backend.core.investition_kennwerte import (
     get_erzeuger_kwp,
     get_speicher_nutzbare_kapazitaet_kwh,
 )
-from backend.core.investition_parameter import PARAM_E_AUTO
+from backend.core.investition_parameter import PARAM_E_AUTO, ist_dienstlich
 from datetime import date
 
 from backend.core.betriebsmodus import (
@@ -25,6 +25,7 @@ from backend.core.betriebsmodus import (
     HEIZEN,
     KUEHLEN,
 )
+from backend.core import zustands_kanon
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte
@@ -51,6 +52,7 @@ def build_komponenten(
     inv_live_map: dict[str, dict[str, str]],
     modus_map: Optional[dict[int, str]] = None,
     aktion_map: Optional[dict[int, str]] = None,
+    zustand_map: Optional[dict[tuple[int, str], str]] = None,
 ) -> dict:
     """
     Baut Komponenten-Liste, Gauges und Summen aus Live-Werten.
@@ -58,6 +60,10 @@ def build_komponenten(
     ``aktion_map`` (P-433-1): die gemessene Aktion je Gerät neben dem Kanon-Wert
     (`betriebsmodus_live.lade_betriebsmodus_aktion_live`, heute nur «leerlauf») —
     reine Anzeige, keine Summe liest sie.
+
+    ``zustand_map`` (P-433-2b K1): die Zustände der E-Mobilität je ``(investition_id, feld)`` als Kanon-Wert
+    (`betriebsmodus_live.lade_zustaende_live`, Kanon `core/zustands_kanon.py`) — reine Anzeige an Wallbox-Knoten und
+    Fahrzeugen, keine Summe liest sie.
 
     Returns:
         {
@@ -70,6 +76,7 @@ def build_komponenten(
             "warmwasser_temperatur_c": float | None,
             "innengeraete": [ {investition_id, innengeraet_id, bezeichnung,
                                leistung_w, soll_temperatur_c, ist_temperatur_c} ],
+            "fahrzeuge_ohne_wallbox": [ {LiveFahrzeug} ]   # nur, wenn keine Wallbox live liefert und Autos Werte haben
         }
     """
     b = _LiveBilanz()
@@ -84,7 +91,8 @@ def build_komponenten(
     # vor PV-Gauge und Autarkie; der Netz-Knoten zählt im Restverbrauch als
     # Quelle/Senke; die Netz-Gauge stellt sich per `insert(0, …)` vor die
     # SoC-Gauges der Schleife.
-    _ordne_fahrzeuge_zu(b, inv_values, investitionen)
+    _wallbox_emob_werte(b, inv_values, zustand_map or {})
+    _ordne_fahrzeuge_zu(b, inv_values, investitionen, zustand_map or {})
     _pv_gesamt_aus_basis(b, anlage, basis_values)
 
     einspeisung_w = basis_values.get("einspeisung_w")
@@ -110,7 +118,7 @@ def build_komponenten(
     # Bauform wie `warmwasser_temperatur_c` darüber, seit v3.24).
     innengeraete_live = _innengeraete_live(inv_values, investitionen)
 
-    return {
+    ergebnis = {
         "komponenten": b.komponenten,
         "gauges": b.gauges,
         "summe_erzeugung_kw": round(b.summe_erzeugung, 3),
@@ -122,6 +130,12 @@ def build_komponenten(
         "warmwasser_temperatur_c": warmwasser_temperatur_c,
         "innengeraete": innengeraete_live,
     }
+    # P-433-2b K1 (Blatt §4 «Keine Wallbox liefert» / «Anlage ohne Wallbox»): die Autos, die an keiner live
+    # liefernden Wallbox stehen — sonst hätte die Auto-Karte im Hub keinen Träger für Ladestand und Fahrzeugwerte
+    # (ein Auto ohne eigenen Leistungssensor hat keinen Knoten). Der Schlüssel steht nur, wenn es solche Autos gibt.
+    if b.fahrzeuge_ohne_wallbox:
+        ergebnis["fahrzeuge_ohne_wallbox"] = b.fahrzeuge_ohne_wallbox
+    return ergebnis
 
 
 # ── Die zwei Träger ──────────────────────────────────────────────────────────
@@ -175,6 +189,8 @@ class _LiveBilanz:
     # Wallbox-Knoten (Investitions-ID → Komponente) für die E-Auto → Wallbox
     # Zuordnung nach der Schleife (`_fahrzeug_zuordnung`).
     wallbox_knoten: dict[str, dict] = field(default_factory=dict)
+    # P-433-2b K1: Autos ohne live liefernde Wallbox (`_ordne_fahrzeuge_zu`), Form `LiveFahrzeug`.
+    fahrzeuge_ohne_wallbox: list[dict] = field(default_factory=list)
 
 
 # ── Topologie (einmal je Poll) ───────────────────────────────────────────────
@@ -765,12 +781,68 @@ def _wp_geraete_werte(values: dict[str, float]) -> dict:
 # ── Nach der Schleife: Zuordnung, Basis, Netz, Restverbrauch, Gauges ─────────
 
 
+def _wallbox_emob_werte(
+    b: _LiveBilanz,
+    inv_values: dict[str, dict[str, float]],
+    zustand_map: dict[tuple[int, str], str],
+) -> None:
+    """Zustand und Sitzung an jedem Wallbox-Knoten (P-433-2b K1, Bauplan E3) — reine Anzeige, keine Summe liest sie.
+
+    Nur Wallboxen mit Knoten (Leistungssensor): ohne Knoten gibt es keine Kachel und keinen Träger (benannte Grenze).
+    Die Schlüssel stehen nur, wo ein Wert kommt (Muster `_wp_geraete_werte`); ohne Zuordnung liefert das
+    Response-Modell `None` (P4).
+    """
+    for inv_id, knoten in b.wallbox_knoten.items():
+        iid = _inv_id_int(inv_id)
+        knoten.update(_wallbox_zustand(zustand_map.get((iid, "ladezustand")), zustand_map.get((iid, "lademodus"))))
+        knoten.update(_wallbox_sitzung(inv_values.get(inv_id) or {}))
+
+
+def _wallbox_zustand(ladezustand: Optional[str], lademodus: Optional[str]) -> dict:
+    """Kanon-Wert und Klartext von `ladezustand` und `lademodus` — der Klartext kommt aus dem Kanon, nicht vom Client."""
+    out: dict = {}
+    if ladezustand is not None:
+        out["ladezustand"] = ladezustand
+        out["ladezustand_label"] = zustands_kanon.label("ladezustand", ladezustand)
+    if lademodus is not None:
+        out["lademodus"] = lademodus
+        out["lademodus_label"] = zustands_kanon.label("lademodus", lademodus)
+    return out
+
+
+def _wallbox_sitzung(values: dict[str, float]) -> dict:
+    """Sitzung, Strom, Phasen, Ziel und Restzeit am Ladepunkt — Registry-Feld → Schlüssel am Knoten, gerundet.
+
+    Die Feldnamen stehen hier im Code, nicht in einer Tabelle daneben — der Wächter `test_jedes_feld_hat_eine_auswertung`
+    liest genau diesen Körper. Keine Einheiten-Umrechnung (Registry-Hinweis: Wh-Sensoren in kWh anzeigen lassen).
+    """
+    roh = {
+        "ladestrom_a": (values.get("ladestrom_a"), 1),
+        "phasen_aktiv": (values.get("phasen_aktiv"), 0),
+        "ziel_prozent": (values.get("ziel_ladestand_prozent"), 0),
+        "restzeit_min": (values.get("restzeit_min"), 0),
+    }
+    out = {schluessel: round(wert, stellen) for schluessel, (wert, stellen) in roh.items() if wert is not None}
+    kwh, dauer = values.get("sitzung_kwh"), values.get("sitzung_dauer_s")
+    if kwh is not None or dauer is not None:
+        out["sitzung"] = {
+            "kwh": round(kwh, 2) if kwh is not None else None,
+            "dauer_s": round(dauer, 0) if dauer is not None else None,
+        }
+    return out
+
+
 def _ordne_fahrzeuge_zu(
     b: _LiveBilanz,
     inv_values: dict[str, dict[str, float]],
     investitionen: dict[str, Investition],
+    zustand_map: Optional[dict[tuple[int, str], str]] = None,
 ) -> None:
-    """E-Autos ihren Wallboxen zuordnen: `parent_key` am Auto-Knoten, `fahrzeuge` an der Wallbox."""
+    """E-Autos ihren Wallboxen zuordnen: `parent_key` am Auto-Knoten, `fahrzeuge` an der Wallbox.
+
+    P-433-2b K1: ohne live liefernde Wallbox stehen die Autos mit Werten in `fahrzeuge_ohne_wallbox` (Hub-Karte
+    E-Auto, Blatt §4) — dieselbe Form `LiveFahrzeug`, keine Zuordnung, keine Summe.
+    """
     # E-Auto → Wallbox Zuordnung — EINE Quelle für `parent_key` (Layout +
     # Residual) und `fahrzeuge` (Wallbox-Kachel, #341/#348), auf
     # Investitions-Ebene statt über die Knotenliste: sie enthält auch die Autos
@@ -778,14 +850,19 @@ def _ordne_fahrzeuge_zu(
     # geteilt). `parent_key` bekommt weiterhin genau jeder `eauto_`-Knoten,
     # sobald eine Wallbox live liefert — welcher Wallbox er zugeordnet ist,
     # ändert keine Summe und kein Residual (beide schließen JEDES Kind aus).
-    if not b.wallbox_knoten:
-        return
+    zustand_map = zustand_map or {}
     komp_nach_key = {k["key"]: k for k in b.komponenten}
     autos = [
         iid for iid in inv_values
         if investitionen.get(iid) is not None
         and investitionen[iid].typ == "e-auto"
     ]
+    if not b.wallbox_knoten:
+        b.fahrzeuge_ohne_wallbox = [
+            _fahrzeug(investitionen[a], inv_values[a], komp_nach_key.get(f"eauto_{a}"), zustand_map)
+            for a in sorted(autos, key=_id_rang)
+        ]
+        return
     zuordnung = _fahrzeug_zuordnung(list(b.wallbox_knoten), autos)
     # Eindeutig nur bei genau EINER live liefernden Wallbox. Bekannte
     # Grenze: eine zweite, gerade offline Wallbox macht die Zuordnung
@@ -800,7 +877,7 @@ def _ordne_fahrzeuge_zu(
         if auto_komp is not None:
             auto_komp["parent_key"] = wb_komp["key"]
         wb_komp["fahrzeuge"].append(
-            _fahrzeug(investitionen[auto_id], inv_values[auto_id], auto_komp)
+            _fahrzeug(investitionen[auto_id], inv_values[auto_id], auto_komp, zustand_map)
         )
 
 
@@ -1069,8 +1146,12 @@ def _fahrzeug_zuordnung(wallbox_ids: list[str], auto_ids: list[str]) -> dict[str
     }
 
 
-def _fahrzeug(inv: Investition, werte: dict[str, float], knoten: Optional[dict]) -> dict:
-    """Ein Auto in der Wallbox-Kachel: Name, Ladestand, Leistung, V2H.
+def _fahrzeug(
+    inv: Investition, werte: dict[str, float], knoten: Optional[dict],
+    zustand_map: Optional[dict[tuple[int, str], str]] = None,
+) -> dict:
+    """Ein Auto in der Wallbox-Kachel: Name, Ladestand, Leistung, V2H — seit P-433-2b K1 dazu die Fahrzeugwerte
+    (`_fahrzeug_emob`, nur mit Wert).
 
     ``kw`` ist **vorzeichenbehaftet** — positiv lädt das Auto, negativ gibt es
     ab (V2H) — und kommt aus seinem eigenen Knoten. Ohne Knoten (nur Ladestand;
@@ -1094,7 +1175,33 @@ def _fahrzeug(inv: Investition, werte: dict[str, float], knoten: Optional[dict])
             isinstance(inv.parameter, dict)
             and inv.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"])
         ),
+        **_fahrzeug_emob(inv, werte, zustand_map or {}),
     }
+
+
+def _fahrzeug_emob(inv: Investition, werte: dict[str, float], zustand_map: dict[tuple[int, str], str]) -> dict:
+    """Reichweite, Ladeziel, Restzeit, Ladezustand und Standort des Autos, Dienstwagen (P-433-2b K1, Bauplan E3).
+
+    Reine Anzeige; die Schlüssel stehen nur mit Wert (Bestand der Wallbox-Kachel bleibt bitgleich). Der Ladezustand ist
+    der des **Fahrzeugs** (`ladezustand_fahrzeug`, Kanon `core/zustands_kanon.py`), der Standort die Zone (`zu_hause`).
+    Dienstwagen aus dem Stammdatum (`ist_dienstlich`, P3-a) — die Bauart entscheidet nie das Ob (P13), sie ändert Text.
+    """
+    roh = {
+        "reichweite_km": (werte.get("reichweite_km"), 0),
+        "ziel_prozent": (werte.get("ziel_ladestand_prozent"), 0),
+        "restzeit_min": (werte.get("restzeit_min"), 0),
+    }
+    out: dict = {k: round(w, n) for k, (w, n) in roh.items() if w is not None}
+    zustand = zustand_map.get((inv.id, "ladezustand_fahrzeug"))
+    if zustand is not None:
+        out["ladezustand"] = zustand
+        out["ladezustand_label"] = zustands_kanon.label("ladezustand_fahrzeug", zustand)
+    ort = zustand_map.get((inv.id, "zu_hause"))
+    if ort is not None:
+        out["zu_hause"] = ort == zustands_kanon.ZU_HAUSE
+    if ist_dienstlich(inv):
+        out["dienstwagen"] = True
+    return out
 
 
 def _sonstiges_kategorie(inv: Investition) -> Optional[str]:

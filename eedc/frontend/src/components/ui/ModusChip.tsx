@@ -41,6 +41,23 @@ export function modusKlartext(
   return k.betriebsmodus_aktion_label ? `${basis} · ${k.betriebsmodus_aktion_label}` : basis
 }
 
+/** Kanon-Werte des Ladezustands, hinter denen der Lademodus steht («Lädt · PV», «Wartet · PV»; Blatt §1a, K-3). */
+const LADEZUSTAND_MIT_MODUS = new Set(['laedt', 'wartet'])
+
+/**
+ * P-433-2b K1 (K-3): der Ladezustand einer Wallbox im Klartext, der Lademodus dahinter — **ein** kombinierter Chip
+ * wie in Matheks Verbraucher-Karte (#433): «Lädt · PV», «Wartet · PV», «Verbunden», «Kein Fahrzeug». Der Lademodus
+ * nur bei «lädt»/«wartet» und nur mit Feld. Beide Texte kommen vom Backend-Kanon (`core/zustands_kanon.py`); hier
+ * wird nur gefügt. `null` ohne Zustand.
+ */
+export function ladezustandKlartext(
+  k: Pick<LiveKomponente, 'ladezustand' | 'ladezustand_label' | 'lademodus_label'>,
+): string | null {
+  if (!k.ladezustand_label) return null
+  const mitModus = k.lademodus_label && LADEZUSTAND_MIT_MODUS.has(k.ladezustand ?? '')
+  return mitModus ? `${k.ladezustand_label} · ${k.lademodus_label}` : k.ladezustand_label
+}
+
 export interface ModusChipProps {
   /** Kanon-Wert (`heizen` · `warmwasser` · `kuehlen` · `lueften` · `entfeuchten` …). */
   modus: string

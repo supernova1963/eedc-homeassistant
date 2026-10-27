@@ -14,9 +14,9 @@ import { CHART_COLORS, COLORS, ENERGIEFLUSS_SAUM, KATEGORIE_FARBEN, SOLAR_INTENS
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 import EnergieFlussKachel, { IconElement, modusZeile, type ZweiteZeile } from './EnergieFlussKachel'
-import { modusKlartext } from '../ui/ModusChip'
+import { ladezustandKlartext, modusKlartext } from '../ui/ModusChip'
 import {
-  RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, layoutEnergieFluss, pfeilspitze,
+  RAHMEN_CHIP_HOEHE, W_DEFAULT, flowPath, ladezustandZeile, layoutEnergieFluss, pfeilspitze,
   type BuehnenMass, type GezeichneterKnoten, type KachelAuto,
 } from './energieFlussLayout'
 import { verbergeTouchTooltip } from '../../hooks/useTouchTitleTooltip'
@@ -775,7 +775,12 @@ export default function EnergieFluss({
           // dort hängen seit P-433-2 beide an derselben Prop `zweiteZeile`).
           // P-433-1: die Netz-Kachel trägt ihre Richtung als Text (S1-3, Farbe = Netz-Farbe), die
           // Modus-Zeile ist ein Chip (S1-4, `modusZeile` — dieselbe Regel wie im Hub-Überblick).
-          const zweite: ZweiteZeile | null = node.kachelAuto
+          // P-433-2b K1 (K-12): ein gemessener Ladezustand ≠ «lädt» steht als Chip an der Wallbox-Kachel; lädt sie,
+          // bleibt die Auto-Zeile. Ohne Ladezustand ist `zustandsChip` `null` und die Kachel bitgleich.
+          const zustandsChip = !mitglieder ? ladezustandZeile(k, achsen.referenz) : null
+          const zweite: ZweiteZeile | null = zustandsChip
+            ? zustandsChip
+            : node.kachelAuto
             ? { text: autoZeile(node.kachelAuto, zeichenBudget(NODE_W, dims.socFontSize)), fill: hasSoc ? socColor(soc) : null }
             : hasSoc
               ? { text: `${soc} %`, fill: socColor(soc) }
@@ -814,6 +819,9 @@ export default function EnergieFluss({
           // der 13-Uhr-Kommentar in `prognosen.py` (N-331).
           const betrieb = modusKlartext(k)
           if (betrieb) tipParts.push(`Betrieb: ${betrieb}`)
+          // P-433-2b K1: der gemessene Ladezustand der Wallbox (mit Lademodus) — auch bei «lädt», wo die Zeile das Auto zeigt.
+          const ladezustand = ladezustandKlartext(k)
+          if (ladezustand) tipParts.push(`Zustand: ${ladezustand}`)
           if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${fmtZahl(k.leistung_kwp, 1)} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {

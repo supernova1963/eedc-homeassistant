@@ -29,7 +29,9 @@ import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenMonatsTabelle } from './KomponentenMonatsTabelle'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import HubLeerGrund from './HubLeerGrund'
-import UeberblickBlock, { UEBERBLICK_PARK_IDS } from '../components/komponenten/ueberblick/UeberblickBlock'
+import UeberblickBlock, {
+  UEBERBLICK_EMOB_PARK_IDS, UEBERBLICK_OHNE_SCHAUBILD, UEBERBLICK_PARK_IDS, UeberblickBlockEmob,
+} from '../components/komponenten/ueberblick/UeberblickBlock'
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
 import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
@@ -563,8 +565,8 @@ function WirtschaftlichkeitInhalt({ w, kpis }: {
 
 type MeldeBlock = (block: string, ids: string[]) => void
 
-/** Typen mit Block «Überblick» (Konzept #433 Stufe 2; E-Mobilität folgt mit P-433-2b). */
-export const UEBERBLICK_TYPEN: readonly string[] = ['waermepumpe']
+/** Typen mit Block «Überblick» (Konzept #433 Stufe 2; E-Mobilität seit P-433-2b K1 — vorerst ohne Schaubild). */
+export const UEBERBLICK_TYPEN: readonly string[] = ['waermepumpe', 'wallbox', 'e-auto']
 /** Neue Block-IDs, die vorn in eine gespeicherte Reihenfolge kommen (E-P2-7). */
 export const VORANSTELLEN: string[] = ['ueberblick']
 
@@ -590,13 +592,18 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
   // Überblick (#433 Stufe 2, P-433-2): oberster Block — Panorama mit den
   // Energiefluss-Kacheln links, «Auf einen Blick» rechts. Summary statisch: der
   // Live-Poll lebt im Inhalt und läuft zugeklappt nicht (W10).
-  if (UEBERBLICK_TYPEN.includes(typ) && g.inv.id > 0 && !alleGeparkt([...UEBERBLICK_PARK_IDS])) {
+  // P-433-2b K1: Wallbox und E-Auto tragen vorerst nur «Auf einen Blick» (Schaubild kommt mit dem Panorama, P1).
+  const ohneSchaubild = UEBERBLICK_OHNE_SCHAUBILD.includes(typ)
+  const ueberblickIds = ohneSchaubild ? [...UEBERBLICK_EMOB_PARK_IDS] : [...UEBERBLICK_PARK_IDS]
+  if (UEBERBLICK_TYPEN.includes(typ) && g.inv.id > 0 && !alleGeparkt(ueberblickIds)) {
     const geraete = (alleInvs ?? [g.inv]).filter((inv) => inv.id > 0)
     bloecke.push({
       id: 'ueberblick', title: 'Überblick', icon: BildIcon,
-      summary: `Schaubild · ${g.inv.bezeichnung}`,
+      summary: `${ohneSchaubild ? 'Auf einen Blick' : 'Schaubild'} · ${g.inv.bezeichnung}`,
       defaultOpen: true,
-      render: () => <UeberblickBlock anlageId={anlageId} geraete={geraete} inv={g.inv} />,
+      render: () => ohneSchaubild
+        ? <UeberblickBlockEmob anlageId={anlageId} geraete={geraete} inv={g.inv} />
+        : <UeberblickBlock anlageId={anlageId} geraete={geraete} inv={g.inv} />,
     })
   }
 

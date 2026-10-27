@@ -34,6 +34,8 @@ export interface DatenquelleFeld {
   /** #263 K-2: Zustand statt Zahl (Betriebsmodus) — vom Backend schon immer geliefert, hier nachgetragen (P-433-2).
    *  Seit HA-Bauform §9 auch über das Inbound-Topic; das Gateway (float-only) entfällt an diesem Feld. */
   zustand?: boolean
+  /** P-433-2b K1: Datenquellen-Abschnitt aus der Registry — `'zustand'` ⇒ «Zustand & Sitzung», sonst nach Einheit. */
+  abschnitt?: string | null
   /** Aktive Quelle. */
   quelle: string
   /** Zugeordnetes Gateway-Quell-Topic (nur bei quelle==='mqtt_gateway'). */

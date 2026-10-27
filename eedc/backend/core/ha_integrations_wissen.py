@@ -26,7 +26,8 @@ WISSENSBASIS: list[dict] = [
     {
         "integration": "evcc",
         "label": "evcc",
-        "erkennung": ["sensor.evcc_*"],
+        # P-433-2b K1: der Lademodus ist ein `select` — ohne ihn in der Erkennung fände der Picker ihn nicht.
+        "erkennung": ["sensor.evcc_*", "select.evcc_*"],
         "typen": {
             "wallbox": {
                 "felder": {
@@ -38,6 +39,36 @@ WISSENSBASIS: list[dict] = [
                         "muster": ["sensor.evcc_*solar*"],
                         "hinweis": "PV-Anteil der Ladung — einen kWh-Sensor wählen (kein %-Wert).",
                     },
+                    # P-433-2b K1 (K-8, belegt an der Produktiv-HA 26.10.2026, Erhebung A1). Der Ladezustand aus
+                    # connected/charging/enabled bleibt in K1 Weg B (Template-Sensor) — siehe `core/zustands_kanon.py`.
+                    "lademodus": {
+                        "muster": ["select.evcc_*_mode"],
+                        "hinweis": "Lademodus des Ladepunkts (off · pv · minpv · now · smart).",
+                    },
+                    "sitzung_kwh": {
+                        "muster": ["sensor.evcc_*_session_energy"],
+                        "hinweis": "Energie der laufenden Sitzung.",
+                    },
+                    "sitzung_dauer_s": {
+                        "muster": ["sensor.evcc_*_charge_duration"],
+                        "hinweis": "Ladedauer der Sitzung in Sekunden.",
+                    },
+                    "ladestrom_a": {
+                        "muster": ["sensor.evcc_*_charge_current"],
+                        "hinweis": "Ladestrom gesamt in A.",
+                    },
+                    "phasen_aktiv": {
+                        "muster": ["sensor.evcc_*_phases_active"],
+                        "hinweis": "Phasen in Verwendung.",
+                    },
+                    "ziel_ladestand_prozent": {
+                        "muster": ["sensor.evcc_*_effective_limit_soc"],
+                        "hinweis": "Wirksames Ladelimit in %.",
+                    },
+                    "restzeit_min": {
+                        "muster": ["sensor.evcc_*_charge_remaining_duration"],
+                        "hinweis": "Laderestzeit — evcc meldet Sekunden: in Home Assistant die Anzeigeeinheit des Sensors auf Minuten stellen.",
+                    },
                 },
             },
             "e-auto": {
@@ -45,6 +76,10 @@ WISSENSBASIS: list[dict] = [
                     "km_gefahren": {
                         "muster": ["sensor.evcc_*odometer*"],
                         "hinweis": "Kilometerstand des Fahrzeugs (kumulativ).",
+                    },
+                    "reichweite_km": {
+                        "muster": ["sensor.evcc_*_vehicle_range"],
+                        "hinweis": "Reichweite — evcc meldet sie nur, solange das Auto am Ladepunkt hängt.",
                     },
                 },
             },
@@ -56,12 +91,95 @@ WISSENSBASIS: list[dict] = [
             },
         ],
     },
-    # Nur-Erkennung (Feld-Muster noch unbelegt — Basis wächst kuratiert):
+    # P-433-2b K1 (K-8): SMA EV Charger über die HACS-Integration `smaev` (belegt an der Produktiv-HA, Erhebung A2).
+    # Die Entitäts-IDs folgen dem Gerätenamen und der HA-Sprache — erkannt wird über die Sensor-Bezeichnung.
+    {
+        "integration": "smaev",
+        "label": "SMA EV Charger",
+        "erkennung": [
+            "sensor.*_status_ladevorgang", "select.*_betriebsart_des_ladevorgangs",
+            "sensor.*_schalterstellung_drehschalter", "sensor.*_energie_ladevorgang",
+        ],
+        "typen": {
+            "wallbox": {
+                "felder": {
+                    "ladezustand": {
+                        "muster": ["sensor.*_status_ladevorgang"],
+                        "hinweis": "Status des Ladevorgangs (not_connected · sleep_mode · active_mode · station_locked · station_fault).",
+                    },
+                    "lademodus": {
+                        "muster": ["sensor.*_schalterstellung_drehschalter", "select.*_betriebsart_des_ladevorgangs"],
+                        "hinweis": "Drehschalter (smart_charging · boost_charging) oder Betriebsart (boost_charging · charge_stop).",
+                    },
+                    "sitzung_kwh": {
+                        "muster": ["sensor.*_energie_ladevorgang"],
+                        "hinweis": "Energie des Ladevorgangs — der Sensor meldet Wh: in Home Assistant die Anzeigeeinheit auf kWh stellen.",
+                    },
+                },
+            },
+        },
+        "warnungen": [],
+    },
+    # P-433-2b K1 (K-8): Smart #1/#3/#5 über die HACS-Integration `smarthashtag` (belegt, Erhebung A3).
+    {
+        "integration": "smarthashtag",
+        "label": "Smart",
+        "erkennung": [
+            "sensor.smart_ladezustand*", "sensor.smart_ladesanschluss*", "sensor.smart_reichweite*",
+            "sensor.smart_ladeziel*", "device_tracker.smart_*",
+        ],
+        "typen": {
+            "e-auto": {
+                "felder": {
+                    "ladezustand_fahrzeug": {
+                        "muster": ["sensor.smart_ladesanschluss*", "sensor.smart_ladezustand*"],
+                        "hinweis": "Ladeanschluss (verbunden · lädt · DC) oder Ladezustand des Fahrzeugs.",
+                    },
+                    "reichweite_km": {
+                        "muster": ["sensor.smart_reichweite"],
+                        "hinweis": "Aktuelle Reichweite (nicht «bei voller Ladung»).",
+                    },
+                    "ziel_ladestand_prozent": {
+                        "muster": ["sensor.smart_ladeziel*"],
+                        "hinweis": "Ladeziel des Fahrzeugs in %.",
+                    },
+                    "zu_hause": {
+                        "muster": ["device_tracker.smart_*"],
+                        "hinweis": "Standort als Zone (home · not_home).",
+                    },
+                },
+            },
+        },
+        "warnungen": [],
+    },
+    # P-433-2b K1 (K-8): go-eCharger (HACS marq24/ha-goecharger-api2) — API-Schlüssel belegt (Erhebung B2.1); die
+    # Entitäts-IDs tragen die Seriennummer, deshalb ein Muster auf den Schlüssel.
     {
         "integration": "go_echarger",
         "label": "go-eCharger",
         "erkennung": ["sensor.go_echarger*", "sensor.go_e_*", "sensor.goe_*"],
-        "typen": {},
+        "typen": {
+            "wallbox": {
+                "felder": {
+                    "ladezustand": {
+                        "muster": ["sensor.go*_car*"],
+                        "hinweis": "Fahrzeugstatus `car` — die Codes 0–5 versteht eedc über MQTT; liefert der Sensor in Home Assistant Text, einen Template-Sensor auf die eedc-Wörter bauen.",
+                    },
+                    "sitzung_kwh": {
+                        "muster": ["sensor.go*_wh*"],
+                        "hinweis": "Energie seit dem Anstecken (`wh`) — meldet Wh: in Home Assistant die Anzeigeeinheit auf kWh stellen.",
+                    },
+                    "ladestrom_a": {
+                        "muster": ["sensor.go*_amp*"],
+                        "hinweis": "Ladestrom (`amp`).",
+                    },
+                    "phasen_aktiv": {
+                        "muster": ["sensor.go*_pnp*"],
+                        "hinweis": "Anzahl der Phasen (`pnp`).",
+                    },
+                },
+            },
+        },
         "warnungen": [],
     },
     {

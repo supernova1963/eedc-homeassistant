@@ -292,6 +292,8 @@ export const PARAM_WALLBOX = {
   BIDIREKTIONAL: 'bidirektional',
   PV_OPTIMIERT: 'pv_optimiert',
   IST_DIENSTLICH: 'ist_dienstlich',
+  // P-433-2b K1 (K-10): Adresse der Hersteller-Oberfläche (z. B. evcc) — ein Link im Hub-Überblick, kein Default.
+  OBERFLAECHE_URL: 'oberflaeche_url',
 } as const
 
 export const PARAM_WALLBOX_DEFAULTS = {
@@ -306,6 +308,7 @@ export interface WallboxParameter {
   bidirektional?: boolean
   pv_optimiert?: boolean
   ist_dienstlich?: boolean
+  oberflaeche_url?: string
 }
 
 // ============================================================================

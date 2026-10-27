@@ -42,6 +42,7 @@ from backend.core.betriebsmodus import (
     betriebsmodus_klartext,
     betriebsmodus_werte_je_betriebsart,
 )
+from backend.core import zustands_kanon
 from backend.core.feld_auswertungen import sichten_fuer
 from backend.core.field_definitions import (
     anlage_typen_mit_kontext,
@@ -186,7 +187,9 @@ _HA_UNITS = {
 _HA_DEVICE_CLASSES = {"energy", "power", "battery", "temperature", "distance", "monetary"}
 
 
-def _ha_sensor_relevant(state: dict, filter_energy: bool, zustand: bool = False) -> bool:
+def _ha_sensor_relevant(
+    state: dict, filter_energy: bool, zustand: bool = False, domaenen: tuple[str, ...] | None = None,
+) -> bool:
     """Gehört diese HA-Entity in den Picker für dieses Feld?
 
     ⚠ **`zustand=True` ist keine Bequemlichkeit, sondern die Bedingung dafür,
@@ -205,7 +208,10 @@ def _ha_sensor_relevant(state: dict, filter_energy: bool, zustand: bool = False)
     if zustand:
         # Zustandsfelder: `climate.` UND `sensor.`, und der Energie-Filter
         # greift nicht — ein Modus hat weder Einheit noch device_class.
-        return eid.startswith("climate.") or eid.startswith("sensor.")
+        # P-433-2b K1: ein Feld mit `ha_domaenen` (Registry) nennt seine Domains selbst — der evcc-Lademodus ist ein
+        # `select`, der Standort ein `device_tracker`.
+        erlaubt = domaenen or ("climate", "sensor")
+        return any(eid.startswith(f"{d}.") for d in erlaubt)
     if not eid.startswith("sensor."):
         return False
     if not filter_energy:
@@ -589,7 +595,24 @@ def _zulaessige_werte(eintrag: dict, quelle: str = QUELLE_KEINE) -> list[dict] |
     """
     if eintrag.get("zustand") and basis_feld_key(eintrag.get("feld", "")) == MODUS_FELD_KEY:
         return betriebsmodus_werte_je_betriebsart(codes=_ist_mqtt_quelle(quelle))
+    # P-433-2b K1: die Zustandsfelder der E-Mobilität tragen ihre Tabelle aus `core/zustands_kanon.py` (dieselbe Form).
+    if eintrag.get("zustand") and eintrag.get("feld") in zustands_kanon.ZUSTANDS_FELDER:
+        return zustands_kanon.werte_je_kanon(eintrag["feld"], codes=_ist_mqtt_quelle(quelle))
     return None
+
+
+def _wert_klartext(eintrag: dict, wert_text: str | None, quelle: str) -> str | None:
+    """F-53: die Deutung des rohen Zustands im Kanon **seines** Felds — Betriebsmodus oder E-Mobilität (K1).
+
+    Ein E-Mob-Wert, den eedc nicht kennt, hat keinen Klartext (``None`` — kein «Unbestimmt» wie beim Modus); die
+    Fläche zeigt dann den Rohwert allein.
+    """
+    if not wert_text:
+        return None
+    feld = eintrag.get("feld", "")
+    if feld in zustands_kanon.ZUSTANDS_FELDER:
+        return zustands_kanon.klartext_roh(feld, wert_text, codes=_ist_mqtt_quelle(quelle))
+    return betriebsmodus_klartext(wert_text, codes=_ist_mqtt_quelle(quelle))
 
 
 _TYP_WP = "waermepumpe"
@@ -889,9 +912,10 @@ async def get_ha_sensoren(
     # nirgendwo anders. Der Typ schärft die Antwort, wo er mitkommt; ohne ihn
     # entscheidet der Feld-Key allein (s. `ist_zustand_feld`).
     ist_zustand = bool(feld) and ist_zustand_feld(feld, inv_typ or None)
+    domaenen = _ha_domaenen(feld, inv_typ) if ist_zustand else None
     sensoren: list[HaSensor] = []
     for st in resp.json():
-        if not _ha_sensor_relevant(st, filter_energy, zustand=ist_zustand):
+        if not _ha_sensor_relevant(st, filter_energy, zustand=ist_zustand, domaenen=domaenen):
             continue
         attrs = st.get("attributes", {}) or {}
         sensoren.append(HaSensor(
@@ -910,6 +934,19 @@ async def get_ha_sensoren(
         vorschlaege=[HaVorschlag(**v) for v in assistenz["vorschlaege"]],
         warnungen=assistenz["warnungen"],
     )
+
+
+def _ha_domaenen(feld: str | None, inv_typ: str | None) -> tuple[str, ...] | None:
+    """Die HA-Domains eines Zustandsfelds aus der Registry (`ha_domaenen`, P-433-2b K1) — ``None`` ⇒ Standard."""
+    from backend.core.field_definitions import LIVE_FELDER_INV
+
+    basis = basis_feld_key(feld or "")
+    typen = [inv_typ] if inv_typ else list(LIVE_FELDER_INV)
+    for typ in typen:
+        for f in LIVE_FELDER_INV.get(typ or "", []):
+            if f["key"] == basis and f.get("ha_domaenen"):
+                return tuple(f["ha_domaenen"])
+    return None
 
 
 # --- Takt-Check beim Waehlen (#343 Baustein B, D2) ---------------------------
@@ -1291,6 +1328,8 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # diese Felder ist auch die `climate.`-Domain zulässig, und der
             # Energie-Filter greift nicht; seit §9 auch: kein Gateway-Knopf.
             "zustand": bool(e.get("zustand")),
+            # P-433-2b K1: Datenquellen-Abschnitt aus der Registry («zustand» ⇒ «Zustand & Sitzung»), sonst nach Einheit.
+            "abschnitt": e.get("abschnitt"),
             "quelle": q,
             # Gateway-Quell-Topic (falls zugeordnet) für die UI-Anzeige.
             "gateway_topic": gateway_topics.get(eintrag.get("mapping_id")),
@@ -1328,7 +1367,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # werden. Der Kanon-SoT ist `core/betriebsmodus.py`, nicht der Client.
             "wert_text": wert_text,
             # HA-Bauform §9 (Entscheid H1 = A): die Zahlencodes gelten nur für einen Wert über MQTT.
-            "wert_klartext": betriebsmodus_klartext(wert_text, codes=_ist_mqtt_quelle(q)) if wert_text else None,
+            "wert_klartext": _wert_klartext(e, wert_text, q),
             # P-433-0 (Konzept #433 E12): die Werte, die eedc an diesem Feld
             # versteht — sichtbar am Feld, damit der Anwender seinen
             # Template-Sensor danach bauen kann. **Aus dem Kanon abgeleitet**

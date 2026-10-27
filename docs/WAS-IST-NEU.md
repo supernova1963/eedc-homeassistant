@@ -11,6 +11,19 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
+**Komponenten → Wallbox und E-Auto: neuer Block „Überblick" — was am Ladepunkt gerade geschieht.** Ganz oben steht jetzt
+„Auf einen Blick" (das Schaubild der E-Mobilität folgt). An der Wallbox sagt **ein Chip**, was los ist — „Lädt · PV",
+„Wartet · PV", „Verbunden", „Kein Fahrzeug" —, darunter die Ladeleistung, dein Auto mit Ladestand, Reichweite und einer
+Leiste mit Zielmarke, und eine Zeile „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min". Am E-Auto steht der
+Ladestand groß mit Ziel und Reichweite, wo es steht („an ‹Wallbox›", „Zu Hause"/„Unterwegs") und, wenn du es als
+Dienstwagen führst, ein Chip. Dafür gibt es in *Einstellungen → Datenquellen* den neuen Abschnitt **„Zustand & Sitzung"**:
+Ladezustand, Lademodus, Sitzung, Ladestrom, Phasen, Ladeziel, Restzeit, Reichweite, Standort — alles optional, alles nur
+angezeigt, nichts gespeichert. Den Zustand zeigt eedc nur, wenn ein Sensor ihn meldet; aus der Leistung schließt es nie auf
+„lädt". Welche Werte eedc versteht (SMA EV Charger, evcc, Smart, go-eCharger) und wie du jede andere Integration mit einem
+Template-Sensor anbindest, steht am Feld und im Handbuch. Derselbe Chip erscheint in *Cockpit → Live* an der Wallbox-Kachel,
+wenn sie nicht lädt ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
+[Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
 erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter

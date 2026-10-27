@@ -213,6 +213,8 @@ async def build_expected_topics(
                 "bedarf": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[0],
                 "bedarf_gruppe": get_feld_bedarf(inv.typ, live_feld["key"], inv.parameter)[1],
                 "erweitert": bool(live_feld.get("erweitert")),
+                # P-433-2b K1: Datenquellen-Abschnitt aus der Registry («zustand» ⇒ «Zustand & Sitzung»).
+                "abschnitt": live_feld.get("abschnitt"),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })

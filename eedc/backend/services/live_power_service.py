@@ -307,16 +307,19 @@ class LivePowerService:
         from backend.services.betriebsmodus_live import (
             lade_betriebsmodus_aktion_live,
             lade_betriebsmodus_live,
+            lade_zustaende_live,
         )
         modus_map = await lade_betriebsmodus_live(db, anlage)
         # P-433-1 (E6): die gemessene Ruhe aus demselben Abruf — nur Anzeige.
         aktion_map = await lade_betriebsmodus_aktion_live(db, anlage)
+        # P-433-2b K1: Ladezustand, Lademodus, Fahrzeug-Ladezustand, Standort — derselbe Takt wie der Modus.
+        zustand_map = await lade_zustaende_live(db, anlage)
 
         # Komponenten + Gauges aufbauen
         from backend.services.live_komponenten_builder import build_komponenten
         build_result = build_komponenten(
             anlage, basis_values, inv_values, investitionen, inv_live_map,
-            modus_map=modus_map, aktion_map=aktion_map,
+            modus_map=modus_map, aktion_map=aktion_map, zustand_map=zustand_map,
         )
         komponenten = build_result["komponenten"]
         gauges = build_result["gauges"]
@@ -395,6 +398,8 @@ class LivePowerService:
             # leerer Liste, wo nichts ankommt: die Fläche zeigt den Block dann
             # gar nicht, statt leere Zeilen zu stellen.
             "innengeraete": build_result.get("innengeraete") or None,
+            # P-433-2b K1: Autos ohne live liefernde Wallbox (Hub-Karte E-Auto); `None` ohne solche Autos.
+            "fahrzeuge_ohne_wallbox": build_result.get("fahrzeuge_ohne_wallbox") or None,
         }
 
     def _empty_response(self, anlage: Anlage) -> dict:

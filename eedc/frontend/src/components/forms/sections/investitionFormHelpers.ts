@@ -312,6 +312,8 @@ export function getInitialParamData(
         bidirektional: (params.bidirektional as boolean) ?? PARAM_WALLBOX_DEFAULTS.bidirektional,
         pv_optimiert: (params.pv_optimiert as boolean) ?? PARAM_WALLBOX_DEFAULTS.pv_optimiert,
         ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_WALLBOX_DEFAULTS.ist_dienstlich,
+        // P-433-2b K1 (K-10): Adresse der Hersteller-Oberfläche — Text, ohne Default.
+        oberflaeche_url: paramStr(params.oberflaeche_url),
       }
     case 'wechselrichter':
       // N-175/N-231: `wirkungsgrad_prozent` und `hybrid` sind entfallen — sie

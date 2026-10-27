@@ -59,6 +59,27 @@ export interface LiveKomponente {
   warmwasser_c?: number | null
   /** Leistung der Zusatzheizung (Heizstab) in W — ein Teil von `verbrauch_kw`, nie dazu addiert. */
   heizstab_w?: number | null
+  // ── P-433-2b K1 (Konzept #433, E-Mobilität): Zustand und Sitzung am Ladepunkt — reine Anzeige ──
+  // Nur `wallbox_*`, `null`/fehlend ohne Zuordnung. Gemessen, nie aus kW abgeleitet (K-2); die Klartexte kommen vom
+  // Backend-Kanon (`core/zustands_kanon.py`), der Client führt keine zweite Tabelle.
+  ladezustand?: string | null
+  ladezustand_label?: string | null
+  lademodus?: string | null
+  lademodus_label?: string | null
+  /** Laufende (oder letzte) Sitzung: kWh und Dauer in s — Werte der Steuerung. */
+  sitzung?: LiveSitzung | null
+  ladestrom_a?: number | null
+  phasen_aktiv?: number | null
+  /** Ladeziel der Steuerung in %. */
+  ziel_prozent?: number | null
+  /** Restzeit der Steuerung in min. */
+  restzeit_min?: number | null
+}
+
+/** Die Sitzung am Ladepunkt (P-433-2b K1). */
+export interface LiveSitzung {
+  kwh: number | null
+  dauer_s: number | null
 }
 
 /**
@@ -72,6 +93,17 @@ export interface LiveFahrzeug {
   /** kW, vorzeichenbehaftet: positiv lädt, negativ gibt ab (V2H); `null` = nicht getrennt gemessen. */
   kw: number | null
   v2h: boolean
+  // ── P-433-2b K1: was das Fahrzeug selbst meldet (Builder `_fahrzeug_emob`), jeder Wert einzeln optional ──
+  reichweite_km?: number | null
+  /** Ladezustand des Fahrzeugs (Kanon `ladezustand_fahrzeug`) und Klartext. */
+  ladezustand?: string | null
+  ladezustand_label?: string | null
+  ziel_prozent?: number | null
+  restzeit_min?: number | null
+  /** Zone: `true` zu Hause, `false` unterwegs, `null` ohne Zuordnung. */
+  zu_hause?: boolean | null
+  /** Stammdatum `ist_dienstlich`. */
+  dienstwagen?: boolean
 }
 
 export interface LiveGauge {
@@ -130,6 +162,8 @@ export interface LiveDashboardResponse {
    * Wert ankommt.
    */
   innengeraete?: LiveInnengeraet[] | null
+  /** P-433-2b K1: Autos an keiner live liefernden Wallbox (Hub-Karte E-Auto); Autos an einer Wallbox stehen dort. */
+  fahrzeuge_ohne_wallbox?: LiveFahrzeug[] | null
 }
 
 export interface WetterStunde {

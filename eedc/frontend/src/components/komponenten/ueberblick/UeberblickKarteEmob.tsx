@@ -1,0 +1,344 @@
+/**
+ * UeberblickKarteEmob — «Auf einen Blick» der Hub-Typ-Seiten **Wallbox** und **E-Auto** (P-433-2b K1, Bauplan E4;
+ * Definitions-Blatt Fassung 3 §1/§2/§4). Ein Modul, zwei Zweige nach `inv.typ`; Gestalt wie die Wärme-Karte
+ * (`UeberblickKarte`: `Card`, `data-karte`, `KPI_WERT_SCHRIFT`, Anlagen-Ring, `Zeile`) und im Stil von Matheks
+ * Verbraucher-Karte (#433: Kopfzeile mit **einem** Chip, Leistungszeile, Detailblock).
+ *
+ * Bis zu drei Karten wie bei der Wärmepumpe — in K1 zwei:
+ * 1. **Gerätekarte** (`data-karte="geraet"`): Wallbox — Name, Chip «Lädt · PV» (gemessener Ladezustand + Lademodus,
+ *    `ladezustandKlartext`; Farbe der Funktion, **keine Rahmenfarbe**, K-3), Ladeleistung groß (bei Abgabe «Abgabe ins
+ *    Haus»), Anlagen-Ring, Fahrzeugzeile(n) mit Ladestand-Leiste und Zielmarke, Ziel · Restzeit, eine Fußzeile
+ *    «3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min», Link «Hersteller-Oberfläche öffnen» (K-10).
+ *    E-Auto — Name, eigener Zustands-Chip **nur**, wenn das Auto an keiner Wallbox steht (Leitsatz 8), Chip
+ *    «Dienstwagen», Ladestand groß mit Leiste und Ziel, Reichweite, Ring, Ort und Standort (Zone), Ladeleistung nur mit
+ *    eigenem Knoten (W3).
+ * 2. **«Heute»** (`data-karte="heute"`): Ladung heute (Live-Tageswert; am Auto nur mit eigenem Knoten, K-6) und
+ *    PV-Ladung heute «(Anlage)» aus dem Tag-Detail. **Ohne Kopfzahl PV-Anteil** (K-7): das Tag-Detail trägt keine
+ *    Wallbox-kWh (`TagDetail` hat `emob_ladung_pv_kwh`/`emob_ladung_netz_kwh`, keine `komponenten_kwh`, gemessen
+ *    27.10.2026) — der Quotient bräuchte zwei Pfade (Ü5); E-K1-5: keine zweite Route in K1.
+ * 3. «Betrieb heute» kommt mit K3 (Mitschrift).
+ *
+ * **Regeln:** Zeilen und Karten nur mit Wert (kein «–», Mathek-Regel); Zustand nur gemessen — ohne Feld kein Chip
+ * (K-2); welches Auto nur aus der Zuordnung des Backends (`fahrzeuge_zuordnung`), bei «geschätzt» alle Autos mit
+ * `SATZ_ZUORDNUNG_UNBEKANNT` (K-5); keine Netz-Ladung, keine Kosten, kein CO₂ (B9). ⛔ Der Client rechnet nichts
+ * (P12): jede Zahl kommt fertig aus dem Backend, hier wird nur formatiert.
+ */
+import type { ReactNode } from 'react'
+import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
+import LadestandLeiste from '../../ui/LadestandLeiste'
+import ModusChip, { ZusatzChip, ladezustandKlartext } from '../../ui/ModusChip'
+import { fmtDauer, fmtZahl } from '../../../lib'
+import { PARAM_WALLBOX } from '../../../lib/investitionParameter'
+import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower } from '../../live/EnergieFluss'
+import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../../api/liveDashboard'
+import type { TagDetail } from '../../../api/energie_profil'
+import type { Investition } from '../../../types'
+import { AnlagenRing, Karte, KartenKopf, Zeile } from './UeberblickKarte'
+
+export interface UeberblickKarteEmobProps {
+  inv: Investition
+  live: LiveDashboardResponse | null
+  tag: TagDetail | null
+  /** Mehr als ein Gerät des Typs? Dann zählt nur der exakte Tages-Key (wie `stromHeute`). */
+  mehrereGeraete: boolean
+}
+
+/** Fußzeile der Wallbox-Karte ohne jedes K1-Feld (A7-Vokabular: «zugeordnet»). */
+export const FUSSZEILE_WALLBOX = 'Zustand, Sitzung und Ladestrom erscheinen hier, sobald zugeordnet'
+/** Fußzeile der Auto-Karte ohne jedes K1-Feld. */
+export const FUSSZEILE_EAUTO = 'Zustand, Reichweite und Ziel erscheinen hier, sobald zugeordnet'
+/** Text des Links zur Hersteller-Oberfläche (K-10: fester Text, kein Hostname). */
+export const OBERFLAECHE_TEXT = 'Hersteller-Oberfläche öffnen'
+/** Tooltip der PV-Ladung heute — ein Anlagenwert aus dem Tag-Detail, kann der Live-Ladung vorlaufen (Ü5). */
+export const PV_LADUNG_TOOLTIP = 'PV-Anteil aller Ladungen der Anlage heute (Tag-Detail, Stand des letzten Zähler-Snapshots) — kein Wert je Gerät'
+/** Tooltip der Ladung heute — derselbe Tageswert wie der Energiefluss-Tooltip. */
+export const LADUNG_TOOLTIP = 'Tageswert dieses Geräts (HA-Langzeitstatistik bzw. Tageszähler), derselbe wie im Energiefluss'
+
+/** Ein Ladezustand «kein Fahrzeug» — dann sagt die Sitzung «letzte Sitzung» (Blatt §1a). */
+const KEIN_FAHRZEUG = 'kein_fahrzeug'
+
+// ── Lesehilfen (rein, exportiert für Proben) ─────────────────────────────────
+
+export function wallboxKnoten(live: LiveDashboardResponse | null, invId: number): LiveKomponente | undefined {
+  return live?.komponenten.find((k) => k.key === `wallbox_${invId}`)
+}
+
+export function eautoKnoten(live: LiveDashboardResponse | null, invId: number): LiveKomponente | undefined {
+  return live?.komponenten.find((k) => k.key === `eauto_${invId}`)
+}
+
+/** Wo steht das Auto in der Live-Antwort? An einer Wallbox (mit deren Zuordnung) oder in `fahrzeuge_ohne_wallbox`. */
+export function fahrzeugImLive(
+  live: LiveDashboardResponse | null, invId: number,
+): { fahrzeug: LiveFahrzeug; wallbox: LiveKomponente | null; zuordnung: 'eindeutig' | 'geschaetzt' | null } | null {
+  for (const k of live?.komponenten ?? []) {
+    const f = k.fahrzeuge?.find((x) => x.investition_id === invId)
+    if (f) return { fahrzeug: f, wallbox: k, zuordnung: k.fahrzeuge_zuordnung ?? null }
+  }
+  const frei = live?.fahrzeuge_ohne_wallbox?.find((x) => x.investition_id === invId)
+  return frei ? { fahrzeug: frei, wallbox: null, zuordnung: null } : null
+}
+
+/** Alle Autos aller Wallbox-Knoten (für «geschätzt»: die Karte nennt alle, nicht eines). */
+function alleAutosAnWallboxen(live: LiveDashboardResponse | null): LiveFahrzeug[] {
+  const gesehen = new Set<number>()
+  const out: LiveFahrzeug[] = []
+  for (const k of live?.komponenten ?? []) {
+    for (const f of k.fahrzeuge ?? []) {
+      if (!gesehen.has(f.investition_id)) { gesehen.add(f.investition_id); out.push(f) }
+    }
+  }
+  return out
+}
+
+/** «3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min» — jeder Teil nur mit Feld; ohne Fahrzeug «letzte Sitzung». */
+export function sitzungsTeile(k: LiveKomponente | undefined): string[] {
+  if (!k) return []
+  const kwh = k.sitzung?.kwh ?? null
+  if (k.ladezustand === KEIN_FAHRZEUG) return kwh != null ? [`letzte Sitzung ${fmtZahl(kwh, 1)} kWh`] : []
+  const teile: string[] = []
+  if (k.phasen_aktiv != null) teile.push(`${fmtZahl(k.phasen_aktiv, 0)} ${k.phasen_aktiv === 1 ? 'Phase' : 'Phasen'}`)
+  if (k.ladestrom_a != null) teile.push(`${fmtZahl(k.ladestrom_a, 0)} A`)
+  if (kwh != null) teile.push(`${fmtZahl(kwh, 1)} kWh in dieser Sitzung`)
+  if (k.sitzung?.dauer_s != null) teile.push(fmtDauer(k.sitzung.dauer_s))
+  return teile
+}
+
+/** «90 % · noch 1 h 20 min» — Ziel und Restzeit der Steuerung bzw. des Autos, jeder Teil nur mit Wert. */
+export function zielText(ziel: number | null | undefined, restzeitMin: number | null | undefined): string | null {
+  const teile = [
+    ziel != null ? `${fmtZahl(ziel, 0)} %` : null,
+    restzeitMin != null ? `noch ${fmtDauer(restzeitMin * 60)}` : null,
+  ].filter((t): t is string => t != null)
+  return teile.length > 0 ? teile.join(' · ') : null
+}
+
+/** Die Adresse der Hersteller-Oberfläche (Stammdatum, K-10) — nur `http(s)`, sonst kein Link. */
+export function oberflaecheUrl(inv: Investition): string | null {
+  const roh = (inv.parameter as Record<string, unknown> | null | undefined)?.[PARAM_WALLBOX.OBERFLAECHE_URL]
+  if (typeof roh !== 'string') return null
+  const url = roh.trim()
+  return /^https?:\/\//i.test(url) ? url : null
+}
+
+/** Ladung heute aus `heute_kwh_pro_komponente` — der exakte Key; der Typ-Key nur beim einzigen Gerät. */
+function ladungHeute(live: LiveDashboardResponse | null, key: string, typKey: string, mehrere: boolean): number | null {
+  const werte = live?.heute_kwh_pro_komponente
+  if (!werte) return null
+  return werte[key] ?? (mehrere ? null : werte[typKey] ?? null)
+}
+
+// ── Bausteine ────────────────────────────────────────────────────────────────
+
+function Kopf({ name, children }: { name: string; children?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{name}</span>
+      <div className="flex items-center gap-1 shrink-0">{children}</div>
+    </div>
+  )
+}
+
+function GrosseZahl({ titel, wert, data }: { titel: string; wert: string; data: string }) {
+  return (
+    <div data-zeile={data} className="min-w-0">
+      <div className="text-xs text-gray-500 dark:text-gray-400">{titel}</div>
+      <div className={`${KPI_WERT_SCHRIFT} font-bold text-gray-900 dark:text-white whitespace-nowrap`}>{wert}</div>
+    </div>
+  )
+}
+
+function Fusszeile({ children }: { children: ReactNode }) {
+  return <p className="text-xs text-gray-400 dark:text-gray-500" data-fusszeile>{children}</p>
+}
+
+/** Eine Fahrzeugzeile der Wallbox-Karte: «Smart #1 · 62 % · 312 km · Verbunden» und die Leiste mit Zielmarke. */
+function FahrzeugZeile({ f, zielWallbox }: { f: LiveFahrzeug; zielWallbox: number | null }) {
+  const teile = [
+    f.label,
+    f.soc != null ? `${fmtZahl(f.soc, 0)} %` : null,
+    f.reichweite_km != null ? `${fmtZahl(f.reichweite_km, 0)} km` : null,
+    f.ladezustand_label ?? null,
+  ].filter((t): t is string => t != null)
+  return (
+    <div className="space-y-1" data-fahrzeug={f.investition_id}>
+      <div className="text-sm text-gray-700 dark:text-gray-300" data-zeile="fahrzeug">{teile.join(' · ')}</div>
+      {f.soc != null && <LadestandLeiste soc={f.soc} ziel={f.ziel_prozent ?? zielWallbox} />}
+    </div>
+  )
+}
+
+function OberflaecheLink({ url }: { url: string }) {
+  // K-10: ein Link ohne Rahmen (keine Schaltfläche) — eedc wirkt nicht nach außen, es öffnet nur die Seite.
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-700 dark:text-primary-300 hover:underline" data-oberflaeche-link>
+      {OBERFLAECHE_TEXT}
+    </a>
+  )
+}
+
+function HeuteKarte({ ladung, pvLadung }: { ladung: number | null; pvLadung: number | null }) {
+  if (ladung == null && pvLadung == null) return null
+  return (
+    <Karte name="heute">
+      <KartenKopf text="Heute" />
+      <div className="space-y-1">
+        {ladung != null && (
+          <div title={LADUNG_TOOLTIP} className="cursor-help">
+            <Zeile label="Ladung heute" data="ladung-heute">{fmtZahl(ladung, 1)} kWh</Zeile>
+          </div>
+        )}
+        {pvLadung != null && (
+          <div title={PV_LADUNG_TOOLTIP} className="cursor-help">
+            <Zeile label="PV-Ladung heute" data="pv-ladung-heute">{fmtZahl(pvLadung, 1)} kWh (Anlage)</Zeile>
+          </div>
+        )}
+      </div>
+    </Karte>
+  )
+}
+
+// ── Wallbox ──────────────────────────────────────────────────────────────────
+
+function WallboxFahrzeuge({ live, k }: { live: LiveDashboardResponse | null; k: LiveKomponente }) {
+  if (k.fahrzeuge_zuordnung === 'geschaetzt') {
+    const alle = alleAutosAnWallboxen(live)
+    if (alle.length === 0) return null
+    return (
+      <div className="space-y-1" data-fahrzeuge="geschaetzt">
+        {alle.map((f) => <FahrzeugZeile key={f.investition_id} f={f} zielWallbox={null} />)}
+        <Fusszeile>{SATZ_ZUORDNUNG_UNBEKANNT}</Fusszeile>
+      </div>
+    )
+  }
+  const autos = k.fahrzeuge ?? []
+  if (autos.length === 0) return null
+  return (
+    <div className="space-y-2" data-fahrzeuge="eindeutig">
+      {autos.map((f) => <FahrzeugZeile key={f.investition_id} f={f} zielWallbox={k.ziel_prozent ?? null} />)}
+    </div>
+  )
+}
+
+function WallboxGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' | 'live'>) {
+  const k = wallboxKnoten(live, inv.id)
+  const abgabe = (k?.erzeugung_kw ?? 0) > 0
+  const kw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
+  const chip = k ? ladezustandKlartext(k) : null
+  const ev = live?.gauges?.find((g) => g.key === 'eigenverbrauch') ?? null
+  const sitzung = sitzungsTeile(k)
+  const ziel = zielText(k?.ziel_prozent, k?.restzeit_min)
+  // Vor der ersten Live-Antwort fehlt nichts, es ist nur noch nicht geladen (Regel der Wärme-Karte).
+  const ohneFelder = live != null && !chip && sitzung.length === 0 && ziel == null
+  const url = oberflaecheUrl(inv)
+
+  return (
+    <Karte name="geraet">
+      <Kopf name={inv.bezeichnung}>
+        {k?.ladezustand && chip && <ModusChip modus={k.ladezustand} label={chip} />}
+      </Kopf>
+      {(kw != null || ev) && (
+        <div className="flex items-center justify-between gap-3">
+          {kw != null && <GrosseZahl titel={abgabe ? 'Abgabe ins Haus' : 'Ladeleistung jetzt'} wert={formatPower(kw)} data="leistung" />}
+          {ev && <AnlagenRing wert={ev.wert} />}
+        </div>
+      )}
+      {k && <WallboxFahrzeuge live={live} k={k} />}
+      {ziel != null && <Zeile label="Ziel" data="ziel">{ziel}</Zeile>}
+      {sitzung.length > 0 && <p className="text-xs text-gray-600 dark:text-gray-400" data-zeile="sitzung">{sitzung.join(' · ')}</p>}
+      {ohneFelder && <Fusszeile>{FUSSZEILE_WALLBOX}</Fusszeile>}
+      {url && <OberflaecheLink url={url} />}
+    </Karte>
+  )
+}
+
+function WallboxKarten({ inv, live, tag, mehrereGeraete }: UeberblickKarteEmobProps) {
+  return (
+    <>
+      <WallboxGeraeteKarte inv={inv} live={live} />
+      <HeuteKarte
+        ladung={ladungHeute(live, `wallbox_${inv.id}`, 'wallbox', mehrereGeraete)}
+        pvLadung={tag?.emob_ladung_pv_kwh ?? null}
+      />
+    </>
+  )
+}
+
+// ── E-Auto ───────────────────────────────────────────────────────────────────
+
+/** Ort des Autos aus der Zuordnung des Backends — eedc rät nicht (K-5, Blatt §4). */
+function ortText(info: ReturnType<typeof fahrzeugImLive>): string | null {
+  if (!info?.wallbox) return null
+  return info.zuordnung === 'eindeutig' ? `an ${info.wallbox.label}` : null
+}
+
+function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' | 'live'>) {
+  const info = fahrzeugImLive(live, inv.id)
+  const f = info?.fahrzeug ?? null
+  const k = eautoKnoten(live, inv.id)
+  const ev = live?.gauges?.find((g) => g.key === 'eigenverbrauch') ?? null
+  // Leitsatz 8: der Zustand steht an der Wallbox-Karte; die Auto-Karte trägt ihn nur ohne Wallbox-Zuordnung.
+  const eigenerChip = f && !info?.wallbox && f.ladezustand && f.ladezustand_label ? f : null
+  const ort = ortText(info)
+  const entlaedt = (k?.erzeugung_kw ?? 0) > 0
+  const kw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
+  const ziel = zielText(f?.ziel_prozent, f?.restzeit_min)
+  const ohneFelder = live != null
+    && f?.reichweite_km == null && f?.ladezustand == null && ziel == null && f?.zu_hause == null
+
+  return (
+    <Karte name="geraet">
+      <Kopf name={inv.bezeichnung}>
+        {eigenerChip && <ModusChip modus={eigenerChip.ladezustand!} label={eigenerChip.ladezustand_label!} />}
+        {f?.dienstwagen && <ZusatzChip text="Dienstwagen" />}
+      </Kopf>
+      {(f?.soc != null || ev) && (
+        <div className="flex items-center justify-between gap-3">
+          {f?.soc != null && (
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-baseline gap-3">
+                <GrosseZahl titel="Ladestand" wert={`${fmtZahl(f.soc, 0)} %`} data="ladestand" />
+                {f.reichweite_km != null && (
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap" data-zeile="reichweite">
+                    {fmtZahl(f.reichweite_km, 0)} km
+                  </span>
+                )}
+              </div>
+              <LadestandLeiste soc={f.soc} ziel={f.ziel_prozent ?? null} />
+            </div>
+          )}
+          {ev && <AnlagenRing wert={ev.wert} />}
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+        {ort && <Zeile label="Ort" data="ort">{ort}</Zeile>}
+        {f?.zu_hause != null && <Zeile label="Standort" data="standort">{f.zu_hause ? 'Zu Hause' : 'Unterwegs'}</Zeile>}
+        {/* W3: Ladeleistung nur mit eigenem Knoten (ein geteilter Sensor hat keinen); V2H als Abgabe. */}
+        {kw != null && <Zeile label={entlaedt ? 'Entlädt ins Haus (V2H)' : 'Ladeleistung'} data="ladeleistung">{formatPower(kw)}</Zeile>}
+        {ziel != null && <Zeile label="Ziel" data="ziel">{ziel}</Zeile>}
+      </div>
+      {info?.zuordnung === 'geschaetzt' && <Fusszeile>{SATZ_ZUORDNUNG_UNBEKANNT}</Fusszeile>}
+      {ohneFelder && <Fusszeile>{FUSSZEILE_EAUTO}</Fusszeile>}
+    </Karte>
+  )
+}
+
+function EAutoKarten({ inv, live, tag }: UeberblickKarteEmobProps) {
+  // K-6/W3: Ladung heute am Auto nur mit eigenem Knoten — sonst stünde die Wallbox-Energie zweimal da.
+  const k = eautoKnoten(live, inv.id)
+  const ladung = k ? ladungHeute(live, `eauto_${inv.id}`, 'eauto', true) : null
+  return (
+    <>
+      <EAutoGeraeteKarte inv={inv} live={live} />
+      <HeuteKarte ladung={ladung} pvLadung={tag?.emob_ladung_pv_kwh ?? null} />
+    </>
+  )
+}
+
+export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start" data-ueberblick-karte data-ueberblick-emob={props.inv.typ}>
+      {props.inv.typ === 'wallbox' ? <WallboxKarten {...props} /> : <EAutoKarten {...props} />}
+    </div>
+  )
+}

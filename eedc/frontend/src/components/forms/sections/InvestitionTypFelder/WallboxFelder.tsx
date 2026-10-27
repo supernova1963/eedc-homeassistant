@@ -15,6 +15,15 @@ export function WallboxFelder({ paramData, onInputChange, setParam }: TypFelderP
             onChange={onInputChange}
             hint="Typisch 11 kW oder 22 kW"
           />
+          {/* P-433-2b K1 (K-10): ein Link im Hub-Überblick, keine Zahl — `InvestitionForm` speichert ihn als Text. */}
+          <Input
+            label="Adresse der Hersteller-Oberfläche (optional)"
+            name="param_oberflaeche_url"
+            type="url"
+            value={(paramData.oberflaeche_url as string) ?? ''}
+            onChange={onInputChange}
+            hint="z. B. http://evcc.local:7070 — erscheint im Komponenten-Hub als Link „Hersteller-Oberfläche öffnen“"
+          />
         </div>
       </FormSection>
 

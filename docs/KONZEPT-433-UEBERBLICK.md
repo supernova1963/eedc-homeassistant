@@ -28,7 +28,7 @@ der Geräte auf einem Panorama). Kacheln nur für Werte mit Sensor; keine Kachel
 
 | Teil | Form |
 | --- | --- |
-| **Block** | oberster Block der Hub-Typ-Seite (zuerst nur Wärmepumpe; E-Mobilität folgt), auch bei gespeicherter Block-Reihenfolge vorn (`voranstellen`). Desktop: Schaubild 2/3, «Auf einen Blick» 1/3; Handy gestapelt. Summary statisch «Schaubild · ‹Gerät›». |
+| **Block** | oberster Block der Hub-Typ-Seite (Wärmepumpe; Wallbox und E-Auto seit P-433-2b K1 ohne Schaubild, §2b), auch bei gespeicherter Block-Reihenfolge vorn (`voranstellen`). Desktop: Schaubild 2/3, «Auf einen Blick» 1/3; Handy gestapelt. Summary statisch «Schaubild · ‹Gerät›». |
 | **Panorama** | ein Bild je Typ, 1312 × 816, hell und dunkel bildgleich (beide gestapelt, Umschaltung über das Farbschema). **Das Bild zeigt immer alle Gerätearten, deine Anlage zeigen die Kacheln.** Eine **Anker-Karte** (Objekt → x/y % des Bildes) liegt als Tabelle neben dem Code; neues Bild = neue Karte. |
 | **Kacheln** | Maße wie im Energiefluss (`computeDims`), **Maßstab wie im Energiefluss**: k = 1312 / W mit W = 360 · 450 · 600 nach Containerbreite — Kachel und Schrift sind bei gleicher Breite pixelgleich mit dem Energiefluss. **Zwei Reihen im Bild, Reihe nach Anker-Art** (P-433-2d, Gernot 26.10.2026: **Technik oben, Räume unten** — oben Himmel, Geräte A/B/C/F/O, Speicher D/E, Hydraulikmodul G (Vorlauf · Rücklauf und Wärme heute ohne Stammdatum), Zählerreihe I; unten die Heizkreise J/K mit Vorlauf · Rücklauf und Wärme heute und die Innengeräte L/M/N; Tabelle `ANKER_REIHE` neben der Anker-Karte, Bildlage y < 50 % als Rückfall für Anker ohne Eintrag), Kachel-x = Anker-x mit 1-D-Schub, Linie zum Objekt mit Saum, **keine kreuzenden Linien** — innerhalb einer Reihe Probe + Nachbartausch, zwischen den Reihen **Reihenwechsel bei Kreuzung** (Entscheid Gernot 26.10.2026): kreuzt eine Linie der oberen eine der unteren Reihe (gezeichnete Linie oder Strecke Kachelmitte → Anker), wechselt die beteiligte Kachel, die nicht in der Reihe ihrer Bildlage steht (größter Abstand Anker-y ↔ Reihe zuerst), in die Reihe ihrer Bildlage, und das Layout wird neu gerechnet (Kapazität und «Weitere» inklusive); höchstens n Wechsel, im schlimmsten Fall steht jede Kachel in ihrer Bildlage, und dort kreuzt keine Linie die andere Reihe. **Zwei Plätze wie Netz und Speicher** (P-433-2e, Gernot 26.10.2026, nur Desktop ab 500 px): links die Gerätekachel der Wärmepumpe am ersten belegten Anker in fester Rangfolge A → C → F (Entscheid Master 26.10.2026: unabhängig von der Listenreihenfolge; weitere Geräte am selben Anker mit ihr als «Wärmepumpen (n)»; fällt ein Rang zurück, wird der nächste versucht), rechts die an O (`PLATZ_ANKER` neben der Anker-Karte, Lage gemessen am Bild v4); x am Bildrand wie die äußerste Reihenkachel, y = Anker-y geklemmt — links zwischen Unterkante obere Reihe + 12k und 45 % der Bildhöhe, rechts zwischen 58 % und Oberkante untere Reihe − 12k; Linie von der dem Anker nächsten Kante. Die Plätze werden vor den Reihen aus der Kachelliste genommen (Reihen = der 2d-Lauf, `dims` aus den Reihen); ein belegter rechter Platz kürzt die untere Reihe um eine Kachelbreite. Schneidet die Platz-Linie eine Reihenlinie (gezeichnet oder Mitte → Anker) oder läuft eine Reihenlinie durch das Platz-Rechteck, **Rückfall** in die Reihe (links höchstens drei Versuche, je ein Reihenlauf). Am Handy keine Plätze. Reihenkapazität wie im Energiefluss; der Rest wird gruppiert («Innengeräte (n)», «Wärmepumpen (n)» mit Σ Leistung, «Weitere (n)»), Tipp auf eine Gruppe öffnet die Liste unter dem Bild. Wert-Kacheln (Temperatur, Strom heute) tragen immer die Rollenfarbe. |
 | **Objekt-Zuordnung Wärme/Klima** | Leistung + Modus des Geräts: Luft-Wasser → Außengerät · Sole/Grundwasser → Technik-Schrank · Brauchwasser → Speicher · Luft-Luft → Klima-Außengerät; Innengeräte → die drei Innengeräte im Bild, ab dem vierten gruppiert; Warmwasser-Temperatur → Speicher; Strom heute → Zähler; Außentemperatur (Wetterdienst) → Himmel. Vorlauf/Rücklauf/Heizstab haben Anker, aber erst mit Stufe 3 Werte. Seit P-433-2c je Gerät **«Wärme heute»** (aus dem Tag-Detail) am selben Heizkreis-Objekt wie Vorlauf · Rücklauf; nur mit Wert, nicht in der «Ohne Sensor»-Zeile. |
@@ -55,6 +55,30 @@ bleibt die aller Typen, andere Typen behalten die Abschnitte nach Einheit.
 - **Kein «+ Betriebsart»** in der Zuordnung — die Betriebsarten folgen der Investition.
 - **Der Betriebsart-Zähler Heizen** sagt im Hinweis, dass er Vorrang vor «Strom Heizen» hat; wer getrennt misst, lässt ihn leer.
 
+## 2b. E-Mobilität — Kern K1 (gebaut 27.10.2026, unveröffentlicht)
+
+Grundlage: Definitions-Blatt «Überblick E-Mobilität» Fassung 3 und Bauplan K1 (intern). Die Hub-Typ-Seiten **Wallbox** und
+**E-Auto** tragen den Block «Überblick» **vorerst ohne Schaubild** (Panorama später, P1) — «Auf einen Blick» in voller Breite,
+Park-ID `el:ueberblick-karte` (das Schaubild wird nicht gerendert), Summary «Auf einen Blick · ‹Gerät›», Fokus-ID `ueberblick`.
+
+| Teil | Form |
+| --- | --- |
+| **Leitsatz** | Registry-Feld = Vertrag, Wert live aus der Integration, **nichts gespeichert** (nur die Zuordnung). Die Felder tragen `nur_live` ⇒ Kanal-Katalog-Ausnahme `nur_live_anzeige` (kein Kanal, keine Mitschrift, kein Mittel im MQTT-Snapshot). |
+| **Felder** | Wallbox `ladezustand`, `lademodus` (Zustand), `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min`; E-Auto `ladezustand_fahrzeug`, `zu_hause` (Zustand), `reichweite_km`, `ziel_ladestand_prozent`, `restzeit_min`. Alle `erweitert`, Datenquellen-Abschnitt «Zustand & Sitzung» (`abschnitt`), Kopf «Zustands-Chip: zugeordnet / fehlt». Keine Einheiten-Umrechnung. |
+| **Kanon** | `core/zustands_kanon.py`, tabellengetrieben (je Feld Kanon + Werte-Tabelle + Normalisierer + Klartext); belegt: SMA EV Charger, evcc (Lademodus), Smart #1, go-e (Codes nur MQTT), HA-Zone. Fremder Wert ⇒ kein Chip + Daten-Checker-INFO (E12-Muster); `core/betriebsmodus.py` unberührt. |
+| **Leser** | `betriebsmodus_live.lade_zustaende_live` — die Abfrage nimmt jeden Typ mit Zustandsfeld (statt nur Wärmepumpe); derselbe 60-s-Takt wie der Modus, ein gebündelter HA-Abruf für alle E-Mob-Felder; HA über die `live`-Entität, sonst MQTT, «keine» schließt MQTT aus. |
+| **Builder** | Wallbox-Knoten `ladezustand(_label)`, `lademodus(_label)`, `sitzung{kwh,dauer_s}`, `ladestrom_a`, `phasen_aktiv`, `ziel_prozent`, `restzeit_min`; `LiveFahrzeug` `reichweite_km`, `ladezustand(_label)` (des Fahrzeugs), `ziel_prozent`, `restzeit_min`, `zu_hause`, `dienstwagen`; Antwort `fahrzeuge_ohne_wallbox` (Autos an keiner live liefernden Wallbox). Alles nur mit Wert, keine Summe liest es. |
+| **Gerätekarte Wallbox** | **ein** Chip «Lädt · PV» (Zustand + Lademodus, Lademodus nur bei Lädt/Wartet), Farbe der Funktion (Lädt = Wallbox-Rolle, Wartet = Status-Gelb, Fehler = Signal-Rot, sonst Grau), **keine Rahmenfarbe**; Ladeleistung groß, Anlagen-Ring, Fahrzeugzeile(n) mit Ladestand-Leiste und Zielmarke (`ui/LadestandLeiste`), Ziel · Restzeit, Fußzeile «3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min», Link «Hersteller-Oberfläche öffnen» (Stammdatum `oberflaeche_url`, nur http/https). |
+| **Gerätekarte E-Auto** | Ladestand groß mit Leiste, Reichweite, Ring, Ort «an ‹Wallbox›» (nur eindeutig), Standort (Zone), Ladeleistung nur mit eigenem Knoten, Ziel · Restzeit; eigener Zustands-Chip nur ohne Wallbox-Zuordnung (eine Aussage je Fläche); Chip «Dienstwagen». |
+| **«Heute»** | Ladung heute (Live-Tageswert; am Auto nur mit eigenem Knoten) und PV-Ladung heute «(Anlage)» aus dem Tag-Detail. **Keine Kopfzahl PV-Anteil**: das Tag-Detail trägt keine Wallbox-Menge — die Kopfzahl käme nur aus zwei Pfaden (gemessen 27.10.2026). |
+| **Energiefluss** | Wallbox-Kachel: gemessener Zustand ≠ «lädt» ⇒ zweite Zeile als Chip (gedämpft bei «Kein Fahrzeug»/«Fertig»), «lädt» ⇒ Auto-Zeile wie bisher; Tooltip «Zustand: …». Kachel-Komponente unverändert. |
+| **Welches Auto** | nur aus der Zuordnung des Builders (eine live liefernde Wallbox ⇒ eindeutig; zwei ⇒ «geschätzt», alle Autos + Satz). Keine Korrelation aus «verbunden». |
+
+**Release-Regel (Gernot 27.10.2026):** kein Release der E-Mobilitäts-Änderungen ohne Panorama — K1 bis K3 sammeln sich
+ungepusht, das Panorama schließt das Paket. **K2** (Textfeld «Fahrzeug am Ladepunkt», Gast, evcc-Preset) und **K3**
+(«Betrieb heute» aus einer typoffenen Mitschrift) folgen. **Offen aus K1:** der evcc-Ladezustand aus drei Binär-Sensoren
+(Mehrfach-Sensor-Leser) — die Zuordnungsform trägt je Live-Feld eine Entität; bis dahin Weg B (Template-Sensor).
+
 ## 3. Entscheide
 
 | # | Frage | Entscheid |
@@ -70,7 +94,8 @@ bleibt die aller Typen, andere Typen behalten die Abschnitte nach Einheit.
 | — | Datenquellen-Blockkopf | Status-Wörter, keine Arbeitszahl. |
 | — | Poll-Hook teilen | nein, eigener Hook; Zusammenführung mit dem Cockpit später mit eigenem Go. |
 | — | Demo-Daten | die Demo-Wärmepumpe trägt Modus «Heizen» und die Antwort eine Warmwasser-Temperatur; die Demo-Knoten nehmen die IDs der aktiven Investitionen der Anlage (n-ter Demo-Knoten eines Typs = n-te Investition), sonst ihre festen IDs. |
-| — | Panorama E-Mobilität | wartet, bis Wärme/Klima mit dem Melder geklärt ist. |
+| — | Panorama E-Mobilität | später (P1, Gernot 27.10.2026): erst die Karten (K1), das Panorama schließt das E-Mobilitäts-Paket; kein Release vorher. |
+| B6 | Wallbox-Zustand | **«Zustand nur gemessen»** (P9, 27.10.2026; vorher «gibt es nicht»): ein Zustand nur aus einem zugeordneten Feld, nie aus der Leistung, keine Schwelle. |
 
 ## 4. Grenzen (benannt)
 

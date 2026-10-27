@@ -1,5 +1,5 @@
 /**
- * Hub-Block «Überblick» (P-433-2 E1): nur auf der Typ-Seite Wärmepumpe, als
+ * Hub-Block «Überblick» (P-433-2 E1): auf der Typ-Seite Wärmepumpe (seit P-433-2b K1 auch Wallbox und E-Auto), als
  * oberster Block (auch bei gespeicherter Reihenfolge, `voranstellen`), Summary
  * statisch, Park-IDs `el:ueberblick-schaubild`/`el:ueberblick-karte` (beide
  * geparkt ⇒ Block weg), Fokus-ID `ueberblick` (Snapshot-Zuwachs).
@@ -36,16 +36,35 @@ const geraet = (id: number, typ: string): KompGeraet => ({
 beforeEach(() => { localStorage.clear(); stubMatchMedia() })
 
 describe('Block «Überblick» im Komponenten-Hub', () => {
-  it('nur für den Typ Wärmepumpe — und dort als erster Block', () => {
-    expect(UEBERBLICK_TYPEN).toEqual(['waermepumpe'])
+  it('für Wärmepumpe, Wallbox und E-Auto — und dort als erster Block', () => {
+    // Ü7 (P-433-2b K1, erwartet): die E-Mobilität bekommt den Block, vorerst ohne Schaubild.
+    expect(UEBERBLICK_TYPEN).toEqual(['waermepumpe', 'wallbox', 'e-auto'])
     const wp = geraetBloecke(geraet(7, 'waermepumpe'), 'waermepumpe', 1, park(), {}, () => {})
     expect(wp[0].id).toBe('ueberblick')
     expect(wp[0].title).toBe('Überblick')
     expect(wp[0].defaultOpen).toBe(true)
     expect(wp[0].summary).toBe('Schaubild · Gerät 7')
-    for (const typ of ['speicher', 'wallbox', 'e-auto', 'pv-module', 'sonstiges', 'balkonkraftwerk']) {
+    for (const typ of ['wallbox', 'e-auto']) {
+      const b = geraetBloecke(geraet(7, typ), typ, 1, park(), {}, () => {})
+      expect(b[0].id).toBe('ueberblick')
+      expect(b[0].summary).toBe('Auf einen Blick · Gerät 7')
+    }
+    for (const typ of ['speicher', 'pv-module', 'sonstiges', 'balkonkraftwerk']) {
       expect(geraetBloecke(geraet(7, typ), typ, 1, park(), {}, () => {}).map((b) => b.id)).not.toContain('ueberblick')
     }
+  })
+
+  it('E-Mobilität: nur «Auf einen Blick» (kein Schaubild); Karte geparkt ⇒ Block weg', () => {
+    const ids = (typ: string, g: string[]) => geraetBloecke(geraet(7, typ), typ, 1, park(g), {}, () => {}).map((b) => b.id)
+    for (const typ of ['wallbox', 'e-auto']) {
+      expect(ids(typ, ['el:ueberblick-schaubild'])).toContain('ueberblick')
+      expect(ids(typ, ['el:ueberblick-karte'])).not.toContain('ueberblick')
+    }
+    const bloecke = geraetBloecke(geraet(7, 'wallbox'), 'wallbox', 1, park(), {}, () => {})
+    renderMitProvidern(<BlockShell persistKey="v4-komponenten-wallbox" bloecke={bloecke} sortierbar voranstellen={VORANSTELLEN} />)
+    expect(document.querySelector('[data-ueberblick-schaubild]')).toBeNull()
+    expect(document.querySelector('[data-ueberblick-karte]')).not.toBeNull()
+    expect(document.querySelector('[data-ueberblick-emob="wallbox"]')).not.toBeNull()
   })
 
   it('Aggregat ohne eigene Investition (id ≤ 0) bekommt keinen Überblick', () => {

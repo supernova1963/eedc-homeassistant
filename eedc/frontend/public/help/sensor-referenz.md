@@ -349,6 +349,14 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 |------|-------|---------|-----------|-------------|-----------------|
 | `leistung_w` | Ladeleistung | W | Momentan | Aktuelle Ladeleistung. ≥ 0 (Laden) oder bidirektional bei V2H (negativ = Entladung ins Haus). ⚠️ Wenn gleicher Sensor wie Wallbox: wird automatisch dedupliziert. | Cockpit → Live |
 | `soc` | Ladezustand | % | Momentan | State of Charge des Fahrzeugakkus. 0–100%. | Cockpit → Live |
+| `ladezustand_fahrzeug` | Ladezustand (Fahrzeug) | — (Zustand) | Zustand | Was das Auto meldet: `nicht_verbunden` · `verbunden` · `laedt` · `laedt_dc` · `fertig` · `fehler` (Werte-Tabelle: [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Chip an der Auto-Karte, nur ohne Wallbox-Zuordnung. *Ab der nächsten Version.* | Komponenten → E-Auto |
+| `reichweite_km` | Reichweite | km | Momentan | Restreichweite. evcc nur, solange das Auto am Ladepunkt hängt. *Ab der nächsten Version.* | Komponenten → E-Auto |
+| `ziel_ladestand_prozent` | Ladeziel | % | Momentan | Zielmarke der Ladestand-Leiste. *Ab der nächsten Version.* | Komponenten → E-Auto |
+| `restzeit_min` | Restzeit | min | Momentan | Verbleibende Ladezeit laut Fahrzeug. *Ab der nächsten Version.* | Komponenten → E-Auto |
+| `zu_hause` | Zu Hause | — (Zustand) | Zustand | `device_tracker` des Autos: `home` ⇒ zu Hause, `not_home` ⇒ unterwegs; nur die Zone. *Ab der nächsten Version.* | Komponenten → E-Auto |
+
+> Die fünf Zustands- und Sitzungsfelder (und die acht an der Wallbox) sind **reine Anzeige**: eedc liest sie live, speichert
+> sie nicht und rechnet nicht mit ihnen (kein Kanal, keine Monatsmenge). Keine Einheiten-Umrechnung.
 
 ### MQTT Energy Topics
 
@@ -378,6 +386,14 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | Feld | Label | Einheit | Sensortyp | Beschreibung | Ausgewertet in |
 |------|-------|---------|-----------|-------------|-----------------|
 | `leistung_w` | Ladeleistung | W | Momentan | Aktuelle Wallbox-Ladeleistung. Muss ≥ 0 sein. | Cockpit → Live |
+| `ladezustand` | Ladezustand | — (Zustand) | Zustand | `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler`; SMA `smaev`-Werte, über MQTT die go-e-Codes 0–5 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Chip im Überblick und an der Energiefluss-Kachel. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `lademodus` | Lademodus | — (Zustand) | Zustand | `aus` · `pv` · `smart` · `schnell` · `plan` · `eco`; evcc `select.…_mode`, SMA. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `sitzung_kwh` | Energie dieser Sitzung | kWh | Momentan | Seit dem Anstecken geladen. ⚠ SMA/go-e/evcc-MQTT liefern Wh — eedc rechnet nicht um. *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `sitzung_dauer_s` | Dauer dieser Sitzung | s | Momentan | Ladedauer der laufenden Sitzung. *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `ladestrom_a` | Ladestrom | A | Momentan | *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `phasen_aktiv` | Aktive Phasen | Anzahl | Momentan | *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `ziel_ladestand_prozent` | Ladeziel | % | Momentan | Ladelimit der Steuerung (evcc `effective_limit_soc`). *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `restzeit_min` | Restzeit | min | Momentan | ⚠ evcc meldet Sekunden — Anzeigeeinheit in HA auf Minuten stellen. *Ab der nächsten Version.* | Komponenten → Wallbox |
 
 ### MQTT Energy Topics
 

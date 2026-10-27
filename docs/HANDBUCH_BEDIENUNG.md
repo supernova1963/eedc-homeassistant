@@ -864,6 +864,28 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 
 ### 3.5 E-Auto
 
+**Überblick (oberster Block, seit der nächsten Version).** Wie bei der Wärmepumpe steht ganz oben der Block „Überblick" —
+vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen Blick" für das gewählte Auto in voller Breite:
+
+- **Gerätekarte:** der **Ladestand groß** mit einer Leiste und der **Zielmarke** („Ziel 80 %"), daneben die **Reichweite**;
+  rechts der Ring „Eigenverbrauch (Anlage)" (die Zahl gehört der Anlage, nicht dem Auto). Darunter **Ort** („an ‹Wallbox›",
+  nur wenn eedc die Zuordnung kennt, siehe unten), **Standort** („Zu Hause" / „Unterwegs" — nur die Zone aus Home Assistant,
+  nie eine Position), **Ladeleistung** (nur mit eigenem Leistungssensor am Auto; bei V2H „Entlädt ins Haus") und
+  **Ziel · Restzeit** („90 % · noch 1 h 20 min"). Ein **Zustands-Chip** („Lädt", „Verbunden", „Nicht verbunden", „Lädt DC",
+  „Fertig", „Fehler") steht **nur, wenn das Auto an keiner Wallbox steht** — an der Wallbox sagt es deren Chip, eine Aussage
+  je Fläche. Ein Dienstwagen (Stammdatum) trägt den Chip „Dienstwagen".
+- **„Heute":** Ladung heute (nur mit eigenem Leistungssensor am Auto — sonst stünde die Wallbox-Energie zweimal da) und
+  PV-Ladung heute „(Anlage)" (der PV-Anteil aller Ladungen der Anlage aus den Tageswerten).
+- Fehlt jedes der neuen Felder, sagt die Fußzeile „Zustand, Reichweite und Ziel erscheinen hier, sobald zugeordnet"
+  ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
+> **Welches Auto an welcher Wallbox?** Liefert genau **eine** Wallbox live, ist die Zuordnung eindeutig (das ladende Auto,
+> sonst das einzige). Liefern **zwei**, kennt eedc sie nicht — die Karten sagen das („Welches Auto an welcher Wallbox lädt,
+> weiß eedc noch nicht") und nennen keinen Ort. eedc schließt nicht aus „Auto verbunden" und „Wallbox verbunden" auf eine
+> Verbindung. **Benannte Grenzen:** kein Kilometerstand, keine gefahrenen km und kein Fahrverbrauch heute in der Karte; ein
+> Auto, das nur einen Zustand und keine Zahl meldet, erscheint erst mit einem Zahlwert (Ladestand, Reichweite …). Die Werte der
+> Fahrzeug-Integrationen kommen je nach Hersteller alle 10–30 min.
+
 - **Gefahrene Kilometer** im Zeitraum
 - **Verbrauch** (kWh)
 - **Ladequellen-Aufteilung** — PV-Ladung, Netz-Ladung (zu Hause), externe Ladung (unterwegs); unter dem PV-Anteil steht **„davon aus dem Speicher"**, wenn ein Speicherzähler existiert (Strom aus dem Hausakku zählt als eigener Strom, ist aber kein Direktverbrauch aus der PV)
@@ -877,6 +899,29 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 > **Wo wird die Heimladung erfasst — Wallbox oder E-Auto?** Beides ist möglich, und es zählt nichts doppelt. Die **Wallbox** misst die **Summe** aller Ladungen an ihr. Hat ein Auto eine **eigene Messung** („Heim: PV", „Heim: Netz" oder „Heim: gesamt", auch 0), trägt es diese — auch neben der Wallbox. Der **Rest der Wallbox** geht nach Kilometern an die privaten Autos ohne eigene Messung; gibt es keines, zählt er nur als Verbrauch (Gäste, Verluste). Ein **Dienstwagen** mit eigener Messung zählt dienstlich und fehlt im Rest. **Ohne Wallbox** (z. B. Schuko-Lader) erfasst du die Heimladung direkt am E-Auto. Km, Verbrauch, externe Ladung und V2H stehen immer am E-Auto. Mehr in [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
 
 ### 3.6 Wallbox
+
+**Überblick (oberster Block, seit der nächsten Version).** Vorerst ohne Schaubild, „Auf einen Blick" in voller Breite:
+
+- **Gerätekarte:** Name und **ein Chip** mit dem gemessenen Zustand und dem Lademodus dahinter — „Lädt · PV", „Wartet · PV",
+  „Verbunden", „Fertig", „Kein Fahrzeug", „Gesperrt", „Fehler" (der Lademodus nur bei „Lädt"/„Wartet"). Die Farbe des Punkts
+  ist die der Funktion (Lädt in der Wallbox-Farbe, Wartet gelb, Fehler rot, sonst grau); die Karte selbst wechselt ihre Farbe
+  nie. Darunter die **Ladeleistung groß** (bei Rückspeisung „Abgabe ins Haus"), der Ring „Eigenverbrauch (Anlage)", je Auto eine
+  **Fahrzeugzeile** „Smart #1 · 62 % · 312 km · Lädt" mit Ladestand-Leiste und Zielmarke, **Ziel · Restzeit** und eine Fußzeile
+  „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min" (jeder Teil nur mit Feld; bei „Kein Fahrzeug" „letzte Sitzung
+  12,4 kWh", solange der Sensor den Wert hält). Ist an der Wallbox eine **Adresse der Hersteller-Oberfläche** eingetragen
+  (Stammdaten, z. B. evcc), steht der Link „Hersteller-Oberfläche öffnen" darunter — eedc öffnet nur die Seite, es schaltet nichts.
+- **„Heute":** Ladung heute (derselbe Tageswert wie im Energiefluss) und PV-Ladung heute „(Anlage)". **Ohne Kopfzahl
+  „PV-Anteil heute"**: dafür bräuchte eedc Wallbox-Menge und PV-Menge aus **einem** Pfad, und die Tageswerte tragen die
+  Wallbox-Menge heute nicht — zwei verschiedene Quellen gegeneinander zu teilen, wäre eine Zahl, die nicht aufgeht.
+- **Zustand nur gemessen:** ohne zugeordneten Ladezustand gibt es keinen Chip — eedc schließt nie aus der Leistung auf „lädt".
+  Ohne jedes der neuen Felder sagt die Fußzeile „Zustand, Sitzung und Ladestrom erscheinen hier, sobald zugeordnet"
+  ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
+Derselbe Chip steht in *Cockpit → Live* an der Wallbox-Kachel, wenn sie **nicht** lädt („Wartet · PV", „Verbunden", gedämpft bei
+„Kein Fahrzeug" und „Fertig"); lädt sie, zeigt die Kachel wie bisher ihr Auto, und der Tooltip nennt „Zustand: Lädt · PV".
+**Benannte Grenzen:** Zustand und Lademodus sind bis zu 60 s alt (derselbe Takt wie der Modus einer Wärmepumpe); Zustand und
+Sitzung erscheinen nur an einer Wallbox mit Leistungssensor; Lademodus und Ziel sind Angaben der Steuerung — eedc zeigt sie
+und bewertet sie nicht; der Solaranteil, den evcc je Sitzung rechnet, ist kein eedc-PV-Anteil und erscheint nicht.
 
 - **Geladene Energie** (kWh) — die **Messung dieser Wallbox**, also alles, was an ihr geladen wurde (auch Gäste und Dienstwagen)
 - **Ladevorgänge** (Anzahl)

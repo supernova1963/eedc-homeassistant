@@ -64,7 +64,8 @@ export const FUSSZEILE_OHNE_VORLAUF = 'Vorlauf und Rücklauf erscheinen hier, so
 /** Lese-Reihenfolge der Betriebsarten in «Betrieb heute» — die Reihenfolge des Backend-Layers. */
 const BETRIEBSARTEN = ['heizen', 'warmwasser', 'kuehlen', 'lueften', 'entfeuchten'] as const
 
-function Zeile({ label, children, data }: { label: string; children: ReactNode; data: string }) {
+/** Bausteine der Karten — exportiert für «Auf einen Blick» der E-Mobilität (P-433-2b K1, `UeberblickKarteEmob`). */
+export function Zeile({ label, children, data }: { label: string; children: ReactNode; data: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 text-sm" data-zeile={data}>
       <span className="text-gray-500 dark:text-gray-400">{label}</span>
@@ -73,7 +74,7 @@ function Zeile({ label, children, data }: { label: string; children: ReactNode; 
   )
 }
 
-function Karte({ name, children }: { name: string; children: ReactNode }) {
+export function Karte({ name, children }: { name: string; children: ReactNode }) {
   return (
     <Card padding="sm">
       {/* `div`, nicht `section`: `section` ist im Hub das Gehäuse eines Blocks (BlockShell). */}
@@ -82,7 +83,7 @@ function Karte({ name, children }: { name: string; children: ReactNode }) {
   )
 }
 
-function KartenKopf({ text, tip }: { text: string; tip?: string | null }) {
+export function KartenKopf({ text, tip }: { text: string; tip?: string | null }) {
   return (
     <div className={`text-xs font-semibold text-gray-500 dark:text-gray-400${tip ? ' cursor-help' : ''}`} title={tip ?? undefined}>
       {text}
@@ -125,12 +126,7 @@ function GeraeteKarte({ inv, live, wetter }: Pick<UeberblickKarteProps, 'inv' | 
               </div>
             </div>
           )}
-          {ev && (
-            <div className="flex items-center gap-2 ml-auto cursor-help" title={RING_TOOLTIP} data-anlagen-ring>
-              <RingGauge value={ev.wert} color={CHART_COLORS.eigenverbrauch} size={56} label={`${fmtZahl(ev.wert, 0)} %`} />
-              <span className="text-xs text-gray-600 dark:text-gray-400">Eigenverbrauch (Anlage)</span>
-            </div>
-          )}
+          {ev && <AnlagenRing wert={ev.wert} />}
         </div>
       )}
 
@@ -150,6 +146,16 @@ function GeraeteKarte({ inv, live, wetter }: Pick<UeberblickKarteProps, 'inv' | 
         <p className="text-xs text-gray-400 dark:text-gray-500" data-fusszeile>{FUSSZEILE_OHNE_VORLAUF}</p>
       )}
     </Karte>
+  )
+}
+
+/** Der Anlagen-Ring «Eigenverbrauch (Anlage)» (B9, E-P2-8) — eine Stelle für Wärme/Klima und E-Mobilität. */
+export function AnlagenRing({ wert }: { wert: number }) {
+  return (
+    <div className="flex items-center gap-2 ml-auto cursor-help" title={RING_TOOLTIP} data-anlagen-ring>
+      <RingGauge value={wert} color={CHART_COLORS.eigenverbrauch} size={56} label={`${fmtZahl(wert, 0)} %`} />
+      <span className="text-xs text-gray-600 dark:text-gray-400">Eigenverbrauch (Anlage)</span>
+    </div>
   )
 }
 

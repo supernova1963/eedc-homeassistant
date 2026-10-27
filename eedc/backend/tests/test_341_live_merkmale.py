@@ -64,6 +64,18 @@ P433_1_ANTWORT_FELDER = ("verbrauch_gesamt_kw",)
 #: P-433-3 S1 (25.10.2026): die Gerätewerte einer Wärmepumpe am Knoten — reine Anzeige, keine Summe liest sie
 #: (`test_p433_3_s1_live_temperaturen.py`); der Abzug unten bleibt dafür bitgleich.
 P433_3_KNOTEN_FELDER = ("vorlauf_c", "ruecklauf_c", "spreizung_k", "warmwasser_c", "heizstab_w")
+#: P-433-2b K1 (27.10.2026): Zustand und Sitzung am Wallbox-Knoten, die Fahrzeugwerte in `LiveFahrzeug` und die Autos
+#: ohne Wallbox an der Antwort — reine Anzeige, keine Summe liest sie (`test_p433_2b_k1_emob.py`). Ohne Zuordnung stehen
+#: sie leer in der Antwort; der Abzug unten bleibt dafür bitgleich.
+P433_2B_KNOTEN_FELDER = (
+    "ladezustand", "ladezustand_label", "lademodus", "lademodus_label", "sitzung", "ladestrom_a", "phasen_aktiv",
+    "ziel_prozent", "restzeit_min",
+)
+P433_2B_ANTWORT_FELDER = ("fahrzeuge_ohne_wallbox",)
+P433_2B_FAHRZEUG_LEER = {
+    "reichweite_km": None, "ladezustand": None, "ladezustand_label": None, "ziel_prozent": None,
+    "restzeit_min": None, "zu_hause": None, "dienstwagen": False,
+}
 
 
 # ── Prüfstand: der echte Router, gestellte Service-Grenze ────────────────────
@@ -287,9 +299,9 @@ async def test_eine_wallbox_eindeutig_mit_beiden_knotenlosen_autoklassen(db, abr
     wallbox = k[f"wallbox_{wb.id}"]
     assert wallbox["fahrzeuge_zuordnung"] == "eindeutig"
     assert wallbox["fahrzeuge"] == [
-        {"investition_id": mit.id, "label": "ID.4", "soc": 52.0, "kw": 3.0, "v2h": False},
-        {"investition_id": soc.id, "label": "Zoe", "soc": 81.0, "kw": None, "v2h": False},
-        {"investition_id": dup.id, "label": "Model 3", "soc": 40.0, "kw": None, "v2h": False},
+        {"investition_id": mit.id, "label": "ID.4", "soc": 52.0, "kw": 3.0, "v2h": False, **P433_2B_FAHRZEUG_LEER},
+        {"investition_id": soc.id, "label": "Zoe", "soc": 81.0, "kw": None, "v2h": False, **P433_2B_FAHRZEUG_LEER},
+        {"investition_id": dup.id, "label": "Model 3", "soc": 40.0, "kw": None, "v2h": False, **P433_2B_FAHRZEUG_LEER},
     ]
     assert k[f"eauto_{mit.id}"]["parent_key"] == f"wallbox_{wb.id}"
     assert f"eauto_{soc.id}" not in k and f"eauto_{dup.id}" not in k
@@ -343,7 +355,7 @@ async def test_v2h_auto_hinter_wallbox_meldet_richtung_ueber_das_vorzeichen(db, 
     })
     fz = _knoten(res)[f"wallbox_{wb.id}"]["fahrzeuge"]
     assert fz == [{"investition_id": auto.id, "label": "Ioniq 5", "soc": 70.0,
-                   "kw": -3.0, "v2h": True}]
+                   "kw": -3.0, "v2h": True, **P433_2B_FAHRZEUG_LEER}]
 
 
 async def test_ohne_live_wallbox_keine_fahrzeuge_und_kein_parent(db, abruf):
@@ -670,9 +682,11 @@ def _normiert(res: dict, namen: dict[int, str]) -> dict:
         m = re.fullmatch(r"(.*)_(\d+)", k)
         return f"{m.group(1)}_{namen[int(m.group(2))]}" if m and int(m.group(2)) in namen else k
 
-    out = {k: v for k, v in res.items() if k != "zeitpunkt" and k not in P433_1_ANTWORT_FELDER}
+    out = {k: v for k, v in res.items()
+           if k != "zeitpunkt" and k not in P433_1_ANTWORT_FELDER + P433_2B_ANTWORT_FELDER}
     out["komponenten"] = [
-        {**{f: w for f, w in knoten.items() if f not in NEUE_FELDER + P433_1_KNOTEN_FELDER + P433_3_KNOTEN_FELDER},
+        {**{f: w for f, w in knoten.items()
+            if f not in NEUE_FELDER + P433_1_KNOTEN_FELDER + P433_3_KNOTEN_FELDER + P433_2B_KNOTEN_FELDER},
          "key": _key(knoten["key"]), "parent_key": _key(knoten.get("parent_key"))}
         for knoten in res["komponenten"]
     ]
