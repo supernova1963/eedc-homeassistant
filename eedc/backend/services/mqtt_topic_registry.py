@@ -187,7 +187,8 @@ async def build_expected_topics(
             # dem Zustands-Zweig (`mqtt_inbound_service._wert_aus_payload`) hält der
             # Cache den rohen String, und `normalisiere_betriebsmodus` versteht
             # Kanon-Wort und Zahlencode. `zustand` bleibt die Weiche für die Leser:
-            # die Fläche blendet das Gateway aus (float-only), der Abdeckungs-Check
+            # die Fläche blendet am Betriebsmodus das Gateway aus (D3; an den übrigen
+            # Zustandsfeldern reicht es seit P-433-2b K2b den Text weiter), der Abdeckungs-Check
             # (#134, `daten_checker/sensoren.py`) überwacht das Topic weiter nicht
             # (ein on-change-Modus wäre nach 2 min dauernd «veraltet»).
             ist_zustand = bool(live_feld.get("zustand"))

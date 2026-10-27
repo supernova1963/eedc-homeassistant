@@ -27,6 +27,7 @@ class PresetVariableResponse(BaseModel):
     label: str
     placeholder: str
     hinweis: str
+    vorgabe: str = ""
 
 
 class PresetMappingResponse(BaseModel):
@@ -82,7 +83,7 @@ async def get_presets():
             variablen=[
                 PresetVariableResponse(
                     key=v.key, label=v.label,
-                    placeholder=v.placeholder, hinweis=v.hinweis,
+                    placeholder=v.placeholder, hinweis=v.hinweis, vorgabe=v.vorgabe,
                 ) for v in p.variablen
             ],
             mappings=[

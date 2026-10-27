@@ -27,7 +27,8 @@ WISSENSBASIS: list[dict] = [
         "integration": "evcc",
         "label": "evcc",
         # P-433-2b K1: der Lademodus ist ein `select` — ohne ihn in der Erkennung fände der Picker ihn nicht.
-        "erkennung": ["sensor.evcc_*", "select.evcc_*"],
+        # P-433-2b K2b (Option A): connected/charging/enabled sind `binary_sensor` (Erhebung A1 :15–17).
+        "erkennung": ["sensor.evcc_*", "select.evcc_*", "binary_sensor.evcc_*"],
         "typen": {
             "wallbox": {
                 "felder": {
@@ -40,7 +41,19 @@ WISSENSBASIS: list[dict] = [
                         "hinweis": "PV-Anteil der Ladung — einen kWh-Sensor wählen (kein %-Wert).",
                     },
                     # P-433-2b K1 (K-8, belegt an der Produktiv-HA 26.10.2026, Erhebung A1). Der Ladezustand aus
-                    # connected/charging/enabled bleibt in K1 Weg B (Template-Sensor) — siehe `core/zustands_kanon.py`.
+                    # connected/charging/enabled seit K2b über Option A (drei Rollen-Felder, `core/zustands_kanon.py`).
+                    "evcc_verbunden": {
+                        "muster": ["binary_sensor.evcc_*_connected"],
+                        "hinweis": "Fahrzeug angesteckt (on/off) — nur nötig ohne Ladezustand-Sensor; zusammen mit «lädt» und «freigegeben» ergibt sich der Ladezustand-Chip.",
+                    },
+                    "evcc_laedt": {
+                        "muster": ["binary_sensor.evcc_*_charging"],
+                        "hinweis": "Lädt gerade (on/off) — Teil von Option A (Ladezustand aus drei Binär-Sensoren).",
+                    },
+                    "evcc_freigegeben": {
+                        "muster": ["binary_sensor.evcc_*_enabled"],
+                        "hinweis": "Laden freigegeben (on/off) — verbunden, aber nicht freigegeben ergibt «wartet».",
+                    },
                     "lademodus": {
                         "muster": ["select.evcc_*_mode"],
                         "hinweis": "Lademodus des Ladepunkts (off · pv · minpv · now · smart).",

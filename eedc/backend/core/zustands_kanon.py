@@ -21,9 +21,12 @@ echten Anlagen belegten Rohwerte — SMA EV Charger (`smaev`), evcc (`evcc_intg`
 und die Zone eines HA-``device_tracker`` (``home``/``not_home``). Quelle: Erhebung 26.10.2026 Teil A/B2/D. Weitere
 Integrationen stehen als Hinweis im Handbuch, nicht hier (keine gepflegte Synonym-Liste, Entscheid 24.10.2026).
 
-⚠ **evcc-Ladezustand aus drei Binär-Sensoren** (connected/charging/enabled, Blatt P4, Bauplan K-9) ist in K1 **nicht**
-gebaut: die Zuordnungsform der Live-Felder trägt je Feld genau eine Entität (``investitionen[id].live[key] = entity``,
-`api/routes/sensor_mapping.py::InvestitionFelder.live`). Bis dahin gilt für evcc Weg B (Template-Sensor auf den Kanon).
+**evcc-Ladezustand aus drei Binär-Sensoren** (connected/charging/enabled, Blatt P4) — seit P-433-2b K2b **Option A**
+(Bauplan K2 §1 K2-7): statt eines Mehrfach-Sensor-Lesers (die Zuordnungsform trägt je Feld genau eine Entität,
+`api/routes/sensor_mapping.py::InvestitionFelder.live`) drei eigene Rollen-Felder `evcc_verbunden` · `evcc_laedt` ·
+`evcc_freigegeben` mit dem Kanon ``an``/``aus``. Der Leser setzt daraus den Ladezustand zusammen, **nur wenn kein
+gemessener `ladezustand` vorliegt** (`services/betriebsmodus_live.py::_kombiniere_option_a`). Die Ziffern ``1``/``0``
+gelten nur über MQTT (`_CODES`) — eine Ziffer aus einem HA-Sensor bleibt ein Rohcode (W7/G5).
 """
 
 from __future__ import annotations
@@ -36,6 +39,12 @@ LADEZUSTAND: Final[str] = "ladezustand"
 LADEMODUS: Final[str] = "lademodus"
 LADEZUSTAND_FAHRZEUG: Final[str] = "ladezustand_fahrzeug"
 ZU_HAUSE: Final[str] = "zu_hause"
+#: P-433-2b K2b Option A (K2-7): die drei Rollen-Felder der evcc-Binär-Sensoren (connected · charging · enabled).
+EVCC_VERBUNDEN: Final[str] = "evcc_verbunden"
+EVCC_LAEDT: Final[str] = "evcc_laedt"
+EVCC_FREIGEGEBEN: Final[str] = "evcc_freigegeben"
+#: Die Rollen-Felder in Lese-Reihenfolge (eine Quelle für Leser, Werte-Tabelle und Proben).
+OPTION_A_FELDER: Final[tuple[str, ...]] = (EVCC_VERBUNDEN, EVCC_LAEDT, EVCC_FREIGEGEBEN)
 
 # ── Kanon-Werte (die Reihenfolge ist die Lese-Reihenfolge der Werte-Tabelle) ──
 
@@ -52,12 +61,18 @@ NICHT_VERBUNDEN: Final[str] = "nicht_verbunden"
 LAEDT_DC: Final[str] = "laedt_dc"
 #: Standort als Zone (nie eine Position).
 UNTERWEGS: Final[str] = "unterwegs"
+#: Option A: ein Binär-Sensor ist an oder aus.
+AN: Final[str] = "an"
+AUS: Final[str] = "aus"
 
 KANON: Final[dict[str, tuple[str, ...]]] = {
     LADEZUSTAND: (KEIN_FAHRZEUG, VERBUNDEN, WARTET, LAEDT, FERTIG, GESPERRT, FEHLER),
     LADEMODUS: ("aus", "pv", "smart", "schnell", "plan", "eco"),
     LADEZUSTAND_FAHRZEUG: (NICHT_VERBUNDEN, VERBUNDEN, LAEDT, LAEDT_DC, FERTIG, FEHLER),
     ZU_HAUSE: (ZU_HAUSE, UNTERWEGS),
+    EVCC_VERBUNDEN: (AN, AUS),
+    EVCC_LAEDT: (AN, AUS),
+    EVCC_FREIGEGEBEN: (AN, AUS),
 }
 
 #: Ladezustände, bei denen ein Fahrzeug am Ladepunkt hängt — Bedingung für «Gast» (P-433-2b K2a, K2-2): meldet die
@@ -79,6 +94,9 @@ LABEL: Final[dict[str, dict[str, str]]] = {
         FERTIG: "Fertig", FEHLER: "Fehler",
     },
     ZU_HAUSE: {ZU_HAUSE: "Zu Hause", UNTERWEGS: "Unterwegs"},
+    EVCC_VERBUNDEN: {AN: "Verbunden", AUS: "Nicht verbunden"},
+    EVCC_LAEDT: {AN: "Lädt", AUS: "Lädt nicht"},
+    EVCC_FREIGEGEBEN: {AN: "Freigegeben", AUS: "Nicht freigegeben"},
 }
 
 # ── Die Werte-Tabellen: Rohwert (klein, getrimmt) → Kanon ─────────────────────
@@ -128,12 +146,17 @@ _ROH: Final[dict[str, dict[str, str]]] = {
         "home": ZU_HAUSE,
         "not_home": UNTERWEGS,
     },
+    # Option A (K2b): HA `binary_sensor`/`input_boolean` ⇒ `on`/`off`; evcc über MQTT ⇒ `true`/`false`
+    # (`server/mqtt.go encode()`: Bool als `%v`). ⛔ Keine Ziffern hier — `1`/`0` nur in `_CODES` (MQTT).
+    **{feld: {"on": AN, "true": AN, "off": AUS, "false": AUS} for feld in OPTION_A_FELDER},
 }
 
 #: Zahlencodes (nur MQTT, ``codes=True``): go-eCharger `car` und `lmo` (Erhebung B2.1).
 _CODES: Final[dict[str, dict[str, str]]] = {
     LADEZUSTAND: {"0": FEHLER, "1": KEIN_FAHRZEUG, "2": LAEDT, "3": WARTET, "4": FERTIG, "5": FEHLER},
     LADEMODUS: {"3": "schnell", "4": "eco", "5": "plan"},
+    # Option A (K2b, G5): `1`/`0` nur über MQTT — eine Ziffer aus einem HA-Sensor bleibt ein unbekannter Rohcode.
+    **{feld: {"1": AN, "0": AUS} for feld in OPTION_A_FELDER},
 }
 
 #: Rohwerte, die eedc **kennt**, die aber keinen Zustand aussagen (Smart `not_charging` — angesteckt oder nicht?,

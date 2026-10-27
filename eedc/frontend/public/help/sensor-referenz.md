@@ -379,7 +379,7 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung | Ausgewertet in |
 |------|-------|---------|-----------|-------------|-----------------|
-| `ladung_kwh` | Ladung gesamt | kWh | Kumulativ oder Tagessensor | Gesamte von der Wallbox abgegebene Ladeenergie im Monat. | Komponenten → Wallbox · Cockpit → Monat |
+| `ladung_kwh` | Ladung gesamt | kWh | Kumulativ oder Tagessensor | Gesamte von der Wallbox abgegebene Ladeenergie im Monat. evcc über MQTT: das Gateway-Preset „evcc Ladepunkt" legt `chargeTotalImport` (kWh-Zählerstand, nur mit Lademeter) unter `energy/` ab ([MQTT-Inbound](MQTT_INBOUND.md)). *Preset ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Monat |
 | `ladung_pv_kwh` | Ladung PV | kWh | Kumulativ oder Tagessensor | Anteil aus PV. Optional — manche Wallboxen messen das separat. | Komponenten → Wallbox · Cockpit → Monat |
 | `ladevorgaenge` | Ladevorgänge | Anzahl | Kumulativ oder Tagessensor | Anzahl der Ladevorgänge. Optional. | Komponenten → Wallbox |
 
@@ -391,12 +391,15 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 | `ladezustand` | Ladezustand | — (Zustand) | Zustand | `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler`; SMA `smaev`-Werte, über MQTT die go-e-Codes 0–5 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Chip im Überblick und an der Energiefluss-Kachel. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
 | `lademodus` | Lademodus | — (Zustand) | Zustand | `aus` · `pv` · `smart` · `schnell` · `plan` · `eco`; evcc `select.…_mode`, SMA. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
 | `fahrzeug_am_ladepunkt` | Fahrzeug am Ladepunkt | — (Text) | Text | Fahrzeugname der Steuerung (evcc `select.…_vehicle_name`, openWB). Treffer mit der „Kennung in der Steuerung" eines E-Autos ⇒ genau dieses Auto; leer bei angestecktem Fahrzeug ⇒ „Gastfahrzeug"; fremder Name ⇒ „Fahrzeug der Steuerung unbekannt" + Daten-Checker ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Kein Kanon, keine Werte-Tabelle. *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
-| `sitzung_kwh` | Energie dieser Sitzung | kWh | Momentan | Seit dem Anstecken geladen. ⚠ SMA/go-e/evcc-MQTT liefern Wh — eedc rechnet nicht um. *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `evcc_verbunden` | evcc: Fahrzeug verbunden | — (Zustand) | Zustand | `an` · `aus` (HA `binary_sensor.evcc_…_connected` on/off, MQTT `connected` true/false, über MQTT auch 1/0). Nur nötig ohne Ladezustand-Sensor: mit „evcc: lädt" und „evcc: Laden freigegeben" setzt eedc den Ladezustand zusammen; ein gemessener Ladezustand geht vor ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `evcc_laedt` | evcc: lädt | — (Zustand) | Zustand | `an` · `aus` (HA `binary_sensor.evcc_…_charging`, MQTT `charging`). Teil von Option A — ohne dieses Feld nie „Lädt". *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `evcc_freigegeben` | evcc: Laden freigegeben | — (Zustand) | Zustand | `an` · `aus` (HA `binary_sensor.evcc_…_enabled`, MQTT `enabled`). Verbunden, aber nicht freigegeben ⇒ „Wartet"; ohne dieses Feld nie „Wartet". *Ab der nächsten Version.* | Komponenten → Wallbox · Cockpit → Live |
+| `sitzung_kwh` | Energie dieser Sitzung | kWh | Momentan | Seit dem Anstecken geladen. ⚠ SMA/go-e/evcc-MQTT liefern Wh — eedc rechnet nicht um (das Gateway-Preset „evcc Ladepunkt" setzt Faktor 0,001, [MQTT-Inbound](MQTT_INBOUND.md)). *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `sitzung_dauer_s` | Dauer dieser Sitzung | s | Momentan | Ladedauer der laufenden Sitzung. *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `ladestrom_a` | Ladestrom | A | Momentan | *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `phasen_aktiv` | Aktive Phasen | Anzahl | Momentan | *Ab der nächsten Version.* | Komponenten → Wallbox |
 | `ziel_ladestand_prozent` | Ladeziel | % | Momentan | Ladelimit der Steuerung (evcc `effective_limit_soc`). *Ab der nächsten Version.* | Komponenten → Wallbox |
-| `restzeit_min` | Restzeit | min | Momentan | ⚠ evcc meldet Sekunden — Anzeigeeinheit in HA auf Minuten stellen. *Ab der nächsten Version.* | Komponenten → Wallbox |
+| `restzeit_min` | Restzeit | min | Momentan | ⚠ evcc meldet Sekunden — Anzeigeeinheit in HA auf Minuten stellen (das Gateway-Preset „evcc Ladepunkt" setzt Faktor 1/60). *Ab der nächsten Version.* | Komponenten → Wallbox |
 
 ### MQTT Energy Topics
 

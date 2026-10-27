@@ -828,7 +828,7 @@ Der Zähler im Block-Kopf („2 Felder noch ohne Quelle") zählt **nur die offen
 
 **Quellen-Wahl (Buttons):** Je Feld ist immer genau eine Quelle aktiv (gefüllter Button):
 
-- **HA-Sensor**, **Gateway**, **Inbound** — erscheinen nur, wenn die zugehörige Verbindung besteht (ohne HA-Verbindung kein HA-Button; ohne MQTT-Broker keine Gateway-/Inbound-Buttons). Eine bestehende Zuordnung bleibt sichtbar, auch wenn die Verbindung gerade fehlt. Am Feld **„Betriebsmodus"** gibt es **Inbound**, aber kein **Gateway**: Das Gateway reicht nur Zahlen weiter, der Modus ist ein Wort oder ein Code ([Wärme & Klima, „Ohne Home Assistant: der Modus über MQTT"](HANDBUCH_WAERME_KLIMA.md#ohne-home-assistant-der-modus-über-mqtt)). Über Inbound zeigt die Wert-Spalte, was ankommt und wie eedc es versteht — etwa „Warmwasser (2)".
+- **HA-Sensor**, **Gateway**, **Inbound** — erscheinen nur, wenn die zugehörige Verbindung besteht (ohne HA-Verbindung kein HA-Button; ohne MQTT-Broker keine Gateway-/Inbound-Buttons). Eine bestehende Zuordnung bleibt sichtbar, auch wenn die Verbindung gerade fehlt. Am Feld **„Betriebsmodus"** gibt es **Inbound**, aber kein **Gateway**: Der Modus kommt als Wort oder Code über das eedc-eigene Topic (an den Zustandsfeldern der E-Mobilität reicht das Gateway seit der nächsten Version den Text weiter, [§7.10](#710-zustand-und-sitzung-e-mobilität)) ([Wärme & Klima, „Ohne Home Assistant: der Modus über MQTT"](HANDBUCH_WAERME_KLIMA.md#ohne-home-assistant-der-modus-über-mqtt)). Über Inbound zeigt die Wert-Spalte, was ankommt und wie eedc es versteht — etwa „Warmwasser (2)".
 - **Keine** — der **einzige** Weg, eine Zuordnung wieder zu entfernen.
 
 > **Ein Klick auf die aktive Quelle löscht sie nicht.** Er öffnet die Zuordnung — den Picker mit dem bereits hinterlegten Sensor als Vorauswahl. Bis v4.0.0 bedeutete derselbe Knopf zweierlei (bei inaktiver Quelle „auswählen", bei aktiver „Zuordnung verwerfen", ohne Rückfrage); wer nur nachsehen wollte, welcher Sensor hinterlegt ist, verlor ihn. Entfernt wird ausschließlich über **Keine**.
@@ -917,13 +917,16 @@ Bestehende Zuordnungen wurden **verlustfrei** übernommen (HA-first: hatte ein F
 den Block „Überblick" im Komponenten-Hub ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto),
 [§3.6](HANDBUCH_BEDIENUNG.md#36-wallbox)) und den Zustands-Chip an der Wallbox-Kachel im Energiefluss. Alle Felder sind
 optional und stehen zunächst unter „Weitere Größen erfassen"; mit einer Quelle rücken sie in den Abschnitt. Sein Kopf sagt,
-was die Zuordnung ermöglicht: **„Zustands-Chip: zugeordnet"** oder **„Zustands-Chip: fehlt"**.
+was die Zuordnung ermöglicht: **„Zustands-Chip: zugeordnet"** oder **„Zustands-Chip: fehlt"** — an der Wallbox auch
+**„Zustands-Chip: zugeordnet (aus connected/charging/enabled)"**, wenn statt eines Ladezustands „evcc: Fahrzeug verbunden"
+eine Quelle hat.
 
 | Gerät | Feld | Art | Wofür |
 | --- | --- | --- | --- |
 | Wallbox | Ladezustand | Zustand | Chip „Lädt · Wartet · Verbunden · Fertig · Kein Fahrzeug · Gesperrt · Fehler" |
 | Wallbox | Lademodus | Zustand | steht im Chip hinter „Lädt"/„Wartet" (PV · Smart · Schnell · Plan · Eco · Aus) |
 | Wallbox | Fahrzeug am Ladepunkt | Text | welches Auto angeschlossen ist (Treffer mit der Kennung am E-Auto), „Gastfahrzeug", „Fahrzeug der Steuerung unbekannt" |
+| Wallbox | evcc: Fahrzeug verbunden · evcc: lädt · evcc: Laden freigegeben | Zustand (an/aus) | nur ohne Ladezustand-Sensor: eedc setzt daraus den Ladezustand-Chip zusammen (siehe unten, „evcc: Ladezustand aus drei Binär-Sensoren") |
 | Wallbox | Energie dieser Sitzung · Dauer dieser Sitzung | kWh · s | Fußzeile „9,8 kWh in dieser Sitzung · 2 h 10 min" |
 | Wallbox | Ladestrom · Aktive Phasen | A · Anzahl | Fußzeile „3 Phasen · 16 A" |
 | Wallbox, E-Auto | Ladeziel · Restzeit | % · min | Zielmarke an der Ladestand-Leiste, „Ziel 90 % · noch 1 h 20 min" |
@@ -934,7 +937,8 @@ was die Zuordnung ermöglicht: **„Zustands-Chip: zugeordnet"** oder **„Zusta
 **Nichts davon wird gespeichert und nichts gerechnet:** eedc liest die Werte live aus deiner Integration (Home Assistant oder
 MQTT), zeigt sie und vergisst sie wieder. Keine Monatsmenge, keine Kosten, kein Kanal. ⚠ **Einheiten:** eedc rechnet hier nicht
 um. SMA und go-e melden die Sitzung in **Wh**, evcc die Restzeit in **Sekunden** — stelle in Home Assistant die Anzeigeeinheit
-des Sensors auf kWh bzw. Minuten (Sensor → Einstellungen → Einheit).
+des Sensors auf kWh bzw. Minuten (Sensor → Einstellungen → Einheit). Über das MQTT-Gateway rechnet der Faktor um (das Preset
+„evcc Ladepunkt" setzt ihn, siehe unten).
 
 **Die Zustände sind ein fester Kanon.** Am Feld steht, welche Werte eedc versteht; ein anderer Wert ergibt **keinen Chip** (eedc
 rät nicht), und der Daten-Checker nennt ihn („E-Mobilität – unbekannter Zustand"). Groß-/Kleinschreibung ist egal; die
@@ -973,15 +977,38 @@ Zahlencodes (go-eCharger) gelten nur über MQTT.
 | Zu Hause | `zu_hause`, `home` |
 | Unterwegs | `unterwegs`, `not_home` |
 
+| evcc: Fahrzeug verbunden · evcc: lädt · evcc: Laden freigegeben (Wallbox) | versteht eedc |
+| --- | --- |
+| an (Verbunden · Lädt · Freigegeben) | `an`, `on`, `true` · MQTT `1` |
+| aus (Nicht verbunden · Lädt nicht · Nicht freigegeben) | `aus`, `off`, `false` · MQTT `0` |
+
 Belegt sind die Werte an **SMA EV Charger** (`smaev`: `sensor.…_status_ladevorgang`, Drehschalter, Betriebsart), **evcc**
 (`select.evcc_…_mode`, Sitzung, Strom, Phasen, Ladelimit, Restzeit, Reichweite), **Smart #1** (`smarthashtag`:
 `sensor.smart_ladesanschluss` oder `sensor.smart_ladezustand`, Reichweite, Ladeziel, `device_tracker.smart_…`) und
 **go-eCharger** (`car`, `wh`, `amp`, `pnp`); der HA-Picker schlägt diese Sensoren vor. Bekannte Werte ohne Aussage (Smart
 `not_charging`, `default`, `invalid`) ergeben keinen Chip und keinen Hinweis.
 
-**Weg B — jede andere Integration:** ein Template-Sensor in Home Assistant, der genau eines der Kanon-Wörter liefert. Für
-**evcc** ist das in dieser Version auch der Weg zum Ladezustand: evcc meldet ihn in drei Binär-Sensoren
-(`binary_sensor.evcc_…_connected`, `…_charging`, `…_enabled`):
+**evcc: Ladezustand aus drei Binär-Sensoren (seit der nächsten Version).** evcc meldet den Ladezustand nicht in einem
+Sensor, sondern in dreien (`binary_sensor.evcc_<ladepunkt>_connected`, `…_charging`, `…_enabled`; über MQTT
+`evcc/loadpoints/<n>/connected`, `…/charging`, `…/enabled` mit `true`/`false`). Ordne sie den drei Feldern „evcc: Fahrzeug
+verbunden", „evcc: lädt" und „evcc: Laden freigegeben" zu (der HA-Picker schlägt sie vor) und lass den **Ladezustand leer** —
+eedc setzt den Chip daraus zusammen:
+
+| verbunden | lädt | freigegeben | Chip |
+| --- | --- | --- | --- |
+| aus | – | – | Kein Fahrzeug |
+| an | an | – | Lädt |
+| an | aus oder fehlt | aus | Wartet |
+| an | aus oder fehlt | an oder fehlt | Verbunden |
+
+Ein zugeordneter Ladezustand, der einen Wert liefert, **geht immer vor** — die drei Felder sind nur für Anlagen ohne
+Ladezustand-Sensor. Ohne „verbunden" gibt es keinen Chip; ohne „lädt" nie „Lädt", ohne „freigegeben" nie „Wartet"; „Fertig"
+kennen die drei Sensoren nicht. Die Ziffern `1`/`0` gelten nur über MQTT — eine Ziffer aus einem HA-Sensor ist ein unbekannter
+Wert (Daten-Checker).
+
+**Weg B — jede andere Integration:** ein Template-Sensor in Home Assistant, der genau eines der Kanon-Wörter liefert. So lässt
+sich auch eine Steuerung abbilden, die wie evcc mehrere Binär-Sensoren meldet (Beispiel; für evcc selbst reichen die drei
+Felder oben):
 
 ```yaml
 template:
@@ -993,6 +1020,14 @@ template:
           {% elif is_state('binary_sensor.evcc_carport_enabled', 'off') %}wartet
           {% else %}verbunden{% endif %}
 ```
+
+**Ohne Home Assistant: evcc über MQTT (seit der nächsten Version).** Das MQTT-Gateway reicht an die Zustandsfelder der
+E-Mobilität (Ladezustand, Lademodus, Fahrzeug am Ladepunkt, die drei evcc-Felder) den Text unverändert weiter — im
+Gateway-Picker entfallen dort Faktor und Offset, die Vorschau zeigt den Text. Ein Wort auf einem Zahlenfeld bleibt ein
+Transform-Fehler. Für einen evcc-Ladepunkt gibt es das Preset **„evcc Ladepunkt"** mit allen Zeilen auf einmal (auch den Zählerstand der Wallbox als Grundlage der Monatsmenge, nur mit Lademeter) — die
+Oberfläche bietet Presets derzeit nicht an, angelegt wird es über die Programmierschnittstelle (Topics, Faktoren, Aufruf und
+Grenzen: [MQTT-Inbound](MQTT_INBOUND.md#zustand-und-sitzung-der-e-mobilitaet-ab-der-naechsten-version)). Am
+Feld „Betriebsmodus" bleibt das Gateway aus.
 
 Für openWB, Easee, Wallbox, Tesla Wall Connector, Alfen, Zaptec, Keba und Heidelberg sowie die Fahrzeug-Integrationen von
 Tesla, VW/Skoda, Renault, Kia und Toyota gilt derselbe Weg; welche Rohwerte sie melden, steht in ihrer Integrations-Doku. Ein

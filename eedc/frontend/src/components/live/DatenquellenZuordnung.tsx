@@ -140,19 +140,35 @@ function abschnittVon(einheit: string, abschnitt?: string | null): Abschnitt {
   return 'sonstige'
 }
 
+/** Der Feld-Key des Betriebsmodus — Spiegel von `core/betriebsmodus.py::MODUS_FELD_KEY` (auch `betriebsmodus-3`). */
+const MODUS_FELD_KEY = 'betriebsmodus'
+/** P-433-2b K2b (D3): am Betriebsmodus gibt es keinen Gateway-Knopf; jedes andere Feld, auch ein Zustand, hat ihn. */
+export function istModusFeld(feld: string): boolean {
+  return feld.replace(/-\d+$/, '') === MODUS_FELD_KEY
+}
+
 /** P-433-2b K2a: Anzeige eines leer angekommenen Texts (Textfeld «Fahrzeug am Ladepunkt»). */
 export const TEXT_LEER = '(leer)'
+
+/** P-433-2b K2b: das Rollen-Feld, ohne das Option A keinen Ladezustand ergibt (Registry `evcc_verbunden`). */
+const OPTION_A_CHIP_FELD = 'evcc_verbunden'
 
 /**
  * P-433-2b K1 (#431-Prinzip): der Kopf des Abschnitts «Zustand & Sitzung» sagt, was die Zuordnung ermöglicht —
  * «Zustands-Chip: zugeordnet» oder «Zustands-Chip: fehlt». Maßgeblich ist das **erste** Zustandsfeld des Abschnitts
  * in Registry-Reihenfolge (Wallbox: Ladezustand, E-Auto: Ladezustand des Fahrzeugs); auch ein noch erweitertes Feld
- * zählt mit. `null` ohne Zustandsfeld.
+ * zählt mit. `null` ohne Zustandsfeld. P-433-2b K2b (Option A): ohne Ladezustand-Quelle reicht an der Wallbox
+ * «evcc: Fahrzeug verbunden» — dann «Zustands-Chip: zugeordnet (aus connected/charging/enabled)».
  */
 export function zustandsChipStatus(felder: DatenquelleFeld[]): string | null {
   const chipFeld = felder.find((f) => f.abschnitt === ABSCHNITT_ZUSTAND && f.zustand)
   if (!chipFeld) return null
-  return chipFeld.quelle !== Q_KEINE ? 'Zustands-Chip: zugeordnet' : 'Zustands-Chip: fehlt'
+  // P-433-2b K2b (Option A): der Chip entsteht auch aus «evcc: Fahrzeug verbunden» (+ lädt/freigegeben), wenn kein
+  // Ladezustand zugeordnet ist — das Backend setzt ihn dann zusammen (`_kombiniere_option_a`); ein Ladezustand geht vor.
+  if (chipFeld.quelle !== Q_KEINE) return 'Zustands-Chip: zugeordnet'
+  const optionA = felder.find((f) => f.feld === OPTION_A_CHIP_FELD)
+  if (optionA != null && optionA.quelle !== Q_KEINE) return 'Zustands-Chip: zugeordnet (aus connected/charging/enabled)'
+  return 'Zustands-Chip: fehlt'
 }
 
 // Mehr geänderte Felder werden im Historie-Hinweis nicht einzeln benannt; darüber
@@ -520,8 +536,9 @@ export default function DatenquellenZuordnung() {
             Zusätzlich feldbezogen: `nur_ha` (Preis-Felder) blendet MQTT aus —
             eedc liest sie ausschließlich als HA-Sensor, ein Gateway-Eintrag
             wäre ein Versprechen ohne Leser (Backend riegelt gleichlautend ab).
-            `zustand` (Betriebsmodus, HA-Bauform §9) blendet nur das Gateway aus:
-            es reicht Zahlen weiter, kein Zustandswort — Inbound bleibt. */}
+            Das Gateway reicht seit P-433-2b K2b an ein Zustandsfeld den Text weiter
+            (Weiche am Zielfeld im Backend); nur am Betriebsmodus bleibt der Knopf aus
+            (D3, Gernot 27.10.2026: Modus über MQTT nur als Inbound-Topic, HA-Bauform §9). */}
         <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:flex-shrink-0">
           {verfuegbarkeit.ha && (
             <QuelleButton
@@ -532,7 +549,7 @@ export default function DatenquellenZuordnung() {
               onClick={() => waehleHa(f)}
             />
           )}
-          {verfuegbarkeit.mqtt && !f.nur_ha && !f.zustand && (
+          {verfuegbarkeit.mqtt && !f.nur_ha && !istModusFeld(f.feld) && (
             <QuelleButton
               icon={Waypoints}
               label="Gateway"
@@ -782,6 +799,7 @@ export default function DatenquellenZuordnung() {
           anlageId={selectedAnlageId}
           feldLabel={gatewayFeld.einheit ? `${gatewayFeld.label} (${gatewayFeld.einheit})` : gatewayFeld.label}
           initialTopic={gatewayFeld.gateway_topic}
+          zustand={gatewayFeld.zustand}
           onClose={() => setGatewayFeld(null)}
           onSpeichern={speichereGateway}
         />

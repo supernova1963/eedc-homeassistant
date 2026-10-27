@@ -1326,12 +1326,13 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # Quellen anzubieten, die kein Leser abfragt — die Preis-Slots
             # (kommen nur über HA herein). Zustandsfelder sind es seit
             # HA-Bauform §9 (S1-3) nicht mehr: der Inbound hält ihren rohen
-            # String; nur das Gateway (float-only) blendet die Fläche an
-            # `zustand` aus.
+            # String; das Gateway blendet die Fläche nur am Betriebsmodus aus
+            # (D3) — an den übrigen Zustandsfeldern reicht es seit P-433-2b K2b
+            # den Text weiter (`mqtt_gateway_service._als_text`).
             "nur_ha": bool(e.get("nur_ha")),
             # Zustand statt Zahl (#263 K-2): steuert den Entity-Picker — für
             # diese Felder ist auch die `climate.`-Domain zulässig, und der
-            # Energie-Filter greift nicht; seit §9 auch: kein Gateway-Knopf.
+            # Energie-Filter greift nicht; am Betriebsmodus kein Gateway-Knopf (D3).
             "zustand": bool(e.get("zustand")),
             # P-433-2b K1: Datenquellen-Abschnitt aus der Registry («zustand» ⇒ «Zustand & Sitzung»), sonst nach Einheit.
             "abschnitt": e.get("abschnitt"),

@@ -555,6 +555,12 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_fahrzeug_anzeige_zuordnung"),
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_fahrzeug_anzeige_zuordnung"),
     ),
+    # P-433-2b K2b Option A (Bauplan K2 K2-7): die drei evcc-Rollen-Felder ergeben den Ladezustand der Wallbox, wenn
+    # kein Ladezustand-Sensor zugeordnet ist — Chip im Hub-Überblick und an der Energiefluss-Kachel (wie `ladezustand`).
+    **{("wallbox", _feld): (
+        _a(KOMP_WALLBOX, "services/betriebsmodus_live.py", "_kombiniere_option_a"),
+        _a(COCKPIT_LIVE, "services/betriebsmodus_live.py", "_kombiniere_option_a"),
+    ) for _feld in ("evcc_verbunden", "evcc_laedt", "evcc_freigegeben")},
     ("wallbox", "sitzung_kwh"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
     ("wallbox", "sitzung_dauer_s"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),
     ("wallbox", "ladestrom_a"): (_a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_sitzung"),),

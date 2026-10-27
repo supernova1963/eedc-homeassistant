@@ -216,6 +216,9 @@ async def lade_zustaende_live(db: AsyncSession, anlage) -> dict[tuple[int, str],
     P-433-2b K2a: dazu das Textfeld Wallbox ``fahrzeug_am_ladepunkt`` als **Text** (getrimmt, ≤ 80 Zeichen;
     ``""`` heißt «die Steuerung hat geantwortet und kennt kein Fahrzeug», nie «keine Quelle»). Ohne Antwort fehlt
     der Eintrag.
+
+    P-433-2b K2b (Option A): eine Wallbox ohne gemessenen ``ladezustand`` bekommt ihn aus den evcc-Rollen-Feldern
+    ``evcc_verbunden``/``evcc_laedt``/``evcc_freigegeben`` (`_kombiniere_option_a`); ein gemessener geht vor.
     """
     return (await _im_takt(db, anlage))[2]
 
@@ -303,6 +306,37 @@ async def _erhebe_emob(anlage, emob: dict[int, str]) -> dict[tuple[int, str], st
     ha, mqtt = _emob_quellen(anlage, emob)
     ergebnis = await _erhebe_emob_ha(ha)
     ergebnis.update(_erhebe_emob_mqtt(anlage, mqtt))
+    return _kombiniere_option_a(ergebnis)
+
+
+def _kombiniere_option_a(ergebnis: dict[tuple[int, str], str]) -> dict[tuple[int, str], str]:
+    """Option A (P-433-2b K2b, Bauplan K2 §1 K2-7): der Ladezustand einer Wallbox aus den drei evcc-Rollen-Feldern.
+
+    Je Wallbox mit ``evcc_verbunden`` und **ohne** gemessenen ``ladezustand`` (``(inv, "ladezustand")`` fehlt — nicht
+    zugeordnet, keine Antwort, ``unknown`` oder fremder Wert):
+
+    * ``evcc_verbunden`` aus ⇒ ``kein_fahrzeug``
+    * verbunden ∧ ``evcc_laedt`` an ⇒ ``laedt``
+    * verbunden ∧ ``evcc_freigegeben`` aus ⇒ ``wartet``
+    * sonst verbunden ⇒ ``verbunden``
+
+    ⛔ **Ein gemessener Ladezustand geht immer vor** (Sprengsatz S7) — Option A ersetzt den Template-Sensor (Weg B),
+    sie überstimmt keinen Sensor. Fehlt ``evcc_laedt`` bzw. ``evcc_freigegeben``, gibt es kein «lädt» bzw. kein
+    «wartet» (benannte Grenze); ohne ``evcc_verbunden`` gibt es keinen Ladezustand, nie geraten. «Fertig» kennt Option A
+    nicht. Die drei Rollen-Werte bleiben im Ergebnis (die Datenquellen-Fläche und der Checker lesen sie selbst).
+    """
+    for inv_id in [i for i, feld in ergebnis if feld == "evcc_verbunden"]:
+        if (inv_id, zustands_kanon.LADEZUSTAND) in ergebnis:
+            continue
+        if ergebnis[(inv_id, "evcc_verbunden")] == zustands_kanon.AUS:
+            zustand = zustands_kanon.KEIN_FAHRZEUG
+        elif ergebnis.get((inv_id, "evcc_laedt")) == zustands_kanon.AN:
+            zustand = zustands_kanon.LAEDT
+        elif ergebnis.get((inv_id, "evcc_freigegeben")) == zustands_kanon.AUS:
+            zustand = zustands_kanon.WARTET
+        else:
+            zustand = zustands_kanon.VERBUNDEN
+        ergebnis[(inv_id, zustands_kanon.LADEZUSTAND)] = zustand
     return ergebnis
 
 

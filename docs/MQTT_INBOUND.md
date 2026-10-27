@@ -188,7 +188,8 @@ eedc/1_Meine_PV/live/inv/7_Vitocal/betriebsmodus → 2
 - **Grenzen:** Die Mitschrift beginnt mit dem ersten empfangenen Wert und ist **nicht rueckwirkend**. Faellt der
   Broker aus, bleibt die Zeit ohne Verbindung eine Luecke; ein Publisher, der verstummt, waehrend der Broker laeuft,
   behaelt seinen letzten Wert. **Leerlauf** (die HA-Aktion `idle`) gibt es ueber MQTT nicht. Das **Gateway**
-  (Fremd-Topic umschreiben) reicht nur Zahlen weiter und steht fuer dieses Feld nicht zur Wahl. Die Topic-Abdeckung
+  (Fremd-Topic umschreiben) steht fuer dieses Feld nicht zur Wahl (es reicht am Modus nur Zahlen weiter; den Text gibt es
+  seit der naechsten Version nur an den Zustandsfeldern der E-Mobilitaet). Die Topic-Abdeckung
   im Daten-Checker ueberwacht das Modus-Topic nicht (ein Modus, der sich stundenlang nicht aendert, ist kein Ausfall).
 - **Hat das Geraet in eedc einen HA-Sensor fuer den Modus, gilt der HA-Sensor**; das MQTT-Topic wird dann nicht
   gelesen.
@@ -203,6 +204,7 @@ Wallbox und E-Auto haben eigene Live-Topics fuer den Ueberblick im Komponenten-H
 | Wallbox | `ladezustand` | Zustand: `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler` (go-e-Code `0`…`5` geht auch) |
 | Wallbox | `lademodus` | Zustand: `aus` · `pv` · `smart` · `schnell` · `plan` · `eco` (go-e `lmo` `3`/`4`/`5` geht auch) |
 | Wallbox | `fahrzeug_am_ladepunkt` | Text: der Fahrzeugname der Steuerung (evcc `vehicleName`); **leer ist ein Wert** (kein bzw. unbekanntes Fahrzeug) |
+| Wallbox | `evcc_verbunden`, `evcc_laedt`, `evcc_freigegeben` | Zustand: `an` · `aus` (`true`/`false`, `on`/`off`, `1`/`0` gehen auch) — nur ohne `ladezustand` noetig, eedc setzt daraus den Ladezustand zusammen |
 | Wallbox | `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (kWh, s, A, Anzahl, %, min) |
 | E-Auto | `ladezustand_fahrzeug` | Zustand: `nicht_verbunden` · `verbunden` · `laedt` · `laedt_dc` · `fertig` · `fehler` |
 | E-Auto | `zu_hause` | Zustand: `zu_hause` · `unterwegs` |
@@ -219,8 +221,17 @@ eedc/1_Meine_PV/live/inv/5_Smart_1/reichweite_km     → 312
   Daten-Checker nennt ihn („E-Mobilitaet – unbekannter Zustand").
 - **Reine Anzeige:** eedc speichert diese Werte nicht (keine Mitschrift, kein Stundenmittel, kein Kanal) und rechnet keine
   Einheit um — die Sitzung in **kWh** senden (nicht Wh), die Restzeit in **Minuten**.
-- Der Zustand ist bis zu 60 s alt (derselbe Takt wie der Betriebsmodus). Das Gateway reicht nur Zahlen weiter; fuer die
-  Zustaende steht es nicht zur Wahl. Ein evcc-Preset (`evcc/loadpoints/<n>/…`) gibt es in dieser Version nicht.
+- Der Zustand ist bis zu 60 s alt (derselbe Takt wie der Betriebsmodus).
+- **Ladezustand aus drei Binaer-Werten (Option A):** liefert `ladezustand` keinen Wert (nicht gesendet, `unknown`, fremder
+  Wert), setzt eedc ihn aus `evcc_verbunden`/`evcc_laedt`/`evcc_freigegeben` zusammen: verbunden `aus` ⇒ `kein_fahrzeug`;
+  verbunden `an` und laedt `an` ⇒ `laedt`; verbunden `an` und freigegeben `aus` ⇒ `wartet`; sonst `verbunden`. Ein
+  gesendeter Ladezustand geht immer vor. ⚠ Der Cache hat keine Ablaufzeit: wer von `ladezustand` auf die drei Werte
+  wechselt, sendet einmal `unknown` auf `ladezustand` (ein geloeschter retained-Wert erreicht eedc nicht).
+- **Gateway an Zustandsfeldern (seit der naechsten Version):** an `ladezustand`, `lademodus`, `fahrzeug_am_ladepunkt`,
+  `ladezustand_fahrzeug`, `zu_hause` und den drei `evcc_…`-Feldern reicht das Gateway den Text **unveraendert** weiter
+  (`plain`: der getrimmte Payload, auch leer; `json`/`json_array`: der Wert am Pfad als Text). Faktor und Offset gelten dort
+  nicht. Ein Wort auf einem Zahlenfeld bleibt ein Transform-Fehler (Zaehler `transform_fehler`, kein Republish). Am
+  Betriebsmodus bleibt das Gateway aus — der Modus kommt ueber das Inbound-Topic.
 - **Hat das Geraet in eedc einen HA-Sensor fuer das Feld, gilt der HA-Sensor**; das Topic wird dann nicht gelesen.
 - **`fahrzeug_am_ladepunkt` — leer ist ein Wert.** Anders als bei einem Zustand legt eedc hier einen **leeren Payload** als
   Wert ab („die Steuerung kennt kein Fahrzeug") — evcc schreibt `nil` als leeren String. Haengt dann ein Fahrzeug dran
@@ -236,6 +247,42 @@ eedc/1_Meine_PV/live/inv/5_Smart_1/reichweite_km     → 312
 eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/fahrzeug_am_ladepunkt → Smart
 eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/fahrzeug_am_ladepunkt → (leer)   # Gast, wenn ein Fahrzeug dranhaengt
 ```
+
+#### Preset „evcc Ladepunkt" (seit der naechsten Version)
+
+Ein Gateway-Preset legt fuer **einen** evcc-Ladepunkt alle Zeilen auf einmal an (Wallbox-Investition waehlen). Variablen:
+`prefix` (Wurzel-Topic aus `evcc.yaml` → `mqtt: topic`, Vorgabe `evcc`) und `loadpoint` (Nummer in evcc, der erste ist `1`,
+Vorgabe `1`). Die Einheiten stammen aus der evcc-Quelle (`server/mqtt.go`: Kommazahlen mit hoechstens drei Nachkommastellen,
+Dauern als ganze Sekunden, `true`/`false`, kein Wert als leerer Payload; retained):
+
+| evcc-Topic `<prefix>/loadpoints/<n>/…` | eedc-Feld | Einheit bei evcc | Faktor |
+|---|---|---|---|
+| `chargePower` | `leistung_w` | W | 1 |
+| `sessionEnergy` | `sitzung_kwh` | Wh | 0,001 |
+| `chargeDuration` | `sitzung_dauer_s` | s | 1 |
+| `chargeRemainingDuration` | `restzeit_min` | s | 1/60 |
+| `phasesActive` | `phasen_aktiv` | Anzahl | 1 |
+| `chargeTotalImport` | `ladung_kwh` unter **`energy/`** (`eedc/<anlage>/energy/inv/<id>/ladung_kwh`) | kWh, Zaehlerstand (nur mit Lademeter) | 1 |
+| `mode` | `lademodus` | Text (`off` · `now` · `smart`) | — |
+| `connected` | `evcc_verbunden` | `true`/`false` | — |
+| `charging` | `evcc_laedt` | `true`/`false` | — |
+| `enabled` | `evcc_freigegeben` | `true`/`false` | — |
+| `vehicleName` | `fahrzeug_am_ladepunkt` | Text, leer = kein bzw. unbekanntes Fahrzeug | — |
+
+- **Nicht im Preset:** Ladestand und Reichweite (`vehicleSoc`, `vehicleRange` — Werte des Autos, das Preset legt die Zeilen
+  einer Wallbox; am E-Auto einzeln ueber das Gateway zuordnen) und `chargeCurrent`/`effectiveLimitSoc` (in der evcc-Doku
+  nicht beschrieben).
+- **`chargeTotalImport` ist ein fortlaufender Zaehlerstand** (kWh, nur mit Lademeter in evcc): das Preset legt ihn unter
+  `energy/` ab, eedc bildet daraus Tag und Monat selbst (siehe oben, „Publiziere den fortlaufenden Stand"). Ohne Lademeter
+  publiziert evcc das Topic nicht — die Zeile bleibt dann stumm.
+- **Anlegen:** die Oberflaeche bietet Presets derzeit nicht an. Aufruf ueber die Programmierschnittstelle (Swagger unter
+  `/api/docs`, Abschnitt „MQTT Gateway Presets"):
+  `POST /api/live/mqtt/gateway/presets/apply` mit
+  `{"preset_id": "evcc_ladepunkt", "anlage_id": 1, "investition_id": 4, "variablen": {"prefix": "evcc", "loadpoint": "1"}}`
+  — leere Variablen bekommen die Vorgabe. Das Gateway schreibt dann auf `eedc/<anlage>/live/inv/<id>/<feld>`; in
+  *Einstellungen → Datenquellen* erscheinen die Felder mit der Quelle „Inbound" und dem ankommenden Wert (wie bei jedem
+  Preset — die Preset-Zeilen tragen das Topic ohne Namensteil).
+- evcc rundet Kommazahlen auf drei Nachkommastellen; das Gateway gibt Zahlen auf zwei Nachkommastellen weiter.
 
 ### Beispiel
 

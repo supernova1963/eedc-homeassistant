@@ -141,9 +141,12 @@ def test_kein_kanal_und_kein_snapshot_mittel():
     nur_live = {(z.typ, z.feld) for z in kat.zuweisungen() if z.ausnahme == kat.AUSNAHME_NUR_LIVE}
     # P-433-2b K2a (Bauplan K2 E1): das Textfeld «Fahrzeug am Ladepunkt» — `nur_live` greift vor `zustand`
     # (`katalog.py`), also kein Kanal und keine Mitschrift wie beim Betriebsmodus.
+    # P-433-2b K2b (Option A): die drei evcc-Rollen-Felder ebenso.
+    option_a = {"evcc_verbunden", "evcc_laedt", "evcc_freigegeben"}
     assert nur_live == ({("wallbox", f) for f in WALLBOX_FELDER} | {("e-auto", f) for f in EAUTO_FELDER}
-                        | {("wallbox", "fahrzeug_am_ladepunkt")})
-    assert not set(kat.mittelwert_live_keys("wallbox", {})) & (set(WALLBOX_FELDER) | {"fahrzeug_am_ladepunkt"})
+                        | {("wallbox", "fahrzeug_am_ladepunkt")} | {("wallbox", f) for f in option_a})
+    assert not set(kat.mittelwert_live_keys("wallbox", {})) & (
+        set(WALLBOX_FELDER) | {"fahrzeug_am_ladepunkt"} | option_a)
     assert not set(kat.mittelwert_live_keys("e-auto", {})) & set(EAUTO_FELDER)
     assert "soc" in kat.mittelwert_live_keys("e-auto", {}), "der Bestand bleibt"
     assert not kat.ist_mean_kanal("inv:7:ziel_ladestand_prozent", "wallbox")

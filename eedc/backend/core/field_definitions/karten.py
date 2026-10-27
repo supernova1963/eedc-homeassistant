@@ -29,8 +29,9 @@ SOC_TYPEN: frozenset[str] = frozenset(
 #      (Standalone-Gleichstand S1, 25.10.2026) hat der Inbound einen
 #      Zustands-Zweig: ein Zustandsfeld landet als roher String im Cache, wird
 #      als Topic angeboten (`…/live/inv/<id>/betriebsmodus`) und erst im Kanon
-#      gedeutet. Das Gateway (float-only) bleibt für Zustandsfelder aus — die
-#      Fläche liest dafür `zustand`.
+#      gedeutet. Das Gateway reicht seit P-433-2b K2b an ein Zustandsfeld den
+#      Text unverändert weiter (`mqtt_gateway_service._als_text`), außer am
+#      Betriebsmodus (D3) — die Fläche liest dafür `zustand`.
 #   3. `daten_checker/sensoren.py` prüft Einheiten (kW≠kWh) — ein Feld ohne
 #      Einheit hat dort nichts zu suchen.
 #

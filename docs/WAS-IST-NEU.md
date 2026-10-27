@@ -35,6 +35,15 @@ Fahrzeugerkennung (go-eCharger, SMA, Easee) bleibt alles wie bisher; erraten wir
 ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
 [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
 
+**evcc: der Ladezustand-Chip ohne Template-Sensor.** evcc meldet den Zustand am Ladepunkt in drei Schaltern — verbunden,
+lädt, freigegeben. Die ordnest du jetzt direkt den drei neuen Feldern **„evcc: Fahrzeug verbunden"**, **„evcc: lädt"** und
+**„evcc: Laden freigegeben"** zu (der Sensor-Vorschlag findet sie), und eedc zeigt daraus „Lädt", „Wartet", „Verbunden"
+oder „Kein Fahrzeug" — der Umweg über einen eigenen Template-Sensor entfällt. Hast du schon einen Ladezustand-Sensor, gilt
+weiter er. Ohne Home Assistant reicht das MQTT-Gateway an diese Felder (und an Lademodus und Fahrzeugname) jetzt den Text
+weiter; für einen evcc-Ladepunkt gibt es dafür das Preset „evcc Ladepunkt", das Leistung, Sitzung, Restzeit, Phasen,
+Lademodus, Zustand, Fahrzeugname und den Zählerstand der Wallbox mit den richtigen Einheiten anlegt (vorerst über die Programmierschnittstelle)
+([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
+
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
 erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter

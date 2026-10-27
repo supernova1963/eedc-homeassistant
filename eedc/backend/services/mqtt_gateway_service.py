@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from backend.core.betriebsmodus import MODUS_FELD_KEY
+from backend.core.field_definitions import basis_feld_key, ist_zustand_feld
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,29 @@ except ImportError:
 
 # ─── Payload Transformation ──────────────────────────────────────────
 
+#: «Nichts extrahiert» (fehlender Pfad/Index, unbekannter Typ) — verschieden von einem JSON-``null`` am Pfad.
+_NICHTS = object()
+
+
+def _extrahiere(payload: str, payload_typ: str, json_pfad: str | None, array_index: int | None):
+    """Rohwert → der Wert an der konfigurierten Stelle (ungewandelt), sonst `_NICHTS`. Wirft bei kaputtem Payload."""
+    if payload_typ == "plain":
+        return payload.strip()
+    if payload_typ == "json":
+        data = json.loads(payload)
+        if not json_pfad:
+            return _NICHTS
+        for key in json_pfad.split("."):
+            data = data[int(key)] if isinstance(data, list) else data[key]
+        return data
+    if payload_typ == "json_array":
+        data = json.loads(payload)
+        if array_index is None:
+            return _NICHTS
+        return data[array_index]
+    return _NICHTS
+
+
 def transform_payload(
     payload: str,
     payload_typ: str,
@@ -37,8 +62,10 @@ def transform_payload(
     faktor: float,
     offset: float,
     invertieren: bool = False,
-) -> float | None:
-    """Transformiert einen MQTT-Payload in einen Float-Wert.
+    *,
+    als_text: bool = False,
+) -> float | str | None:
+    """Transformiert einen MQTT-Payload in einen Float-Wert — oder, mit ``als_text``, in einen Text.
 
     Pipeline: Rohwert → JSON-Extraktion → × Faktor → + Offset [→ × (-1 wenn invertieren)].
 
@@ -47,38 +74,38 @@ def transform_payload(
     angewendet (kein Republish-Invert mehr → kein Doppel-Invert). Der Runtime-
     Republish übergibt es nicht mehr; Default False. Param bleibt nur für die
     (mit B7 entfallende) Alt-Wizard-Vorschau signaturkompatibel.
+
+    P-433-2b K2b (Bauplan K2 §1 K2-8, Gegenprüfung G4): ``als_text`` — **nur als Schlüsselwort** (positionale Aufrufer
+    mit ``invertieren`` an siebter Stelle bleiben unberührt) — ist die Weiche für ein **Zustandsfeld** am Ziel
+    (`_als_text`): ``plain`` ⇒ der getrimmte Rohstring (auch leer — «leer ist ein Wert» entscheidet der Inbound je
+    Feld), ``json``/``json_array`` ⇒ ``str(…)`` des Werts am Pfad/Index. Faktor, Offset und Invertieren gelten für
+    Text nicht. Kein neuer ``payload_typ``: der Text folgt aus dem Zielfeld, nicht aus der Quelle.
     """
     try:
-        if payload_typ == "plain":
-            raw = float(payload.strip())
-
-        elif payload_typ == "json":
-            data = json.loads(payload)
-            if not json_pfad:
-                return None
-            for key in json_pfad.split("."):
-                if isinstance(data, list):
-                    data = data[int(key)]
-                else:
-                    data = data[key]
-            raw = float(data)
-
-        elif payload_typ == "json_array":
-            data = json.loads(payload)
-            if array_index is None:
-                return None
-            raw = float(data[array_index])
-
-        else:
+        roh = _extrahiere(payload, payload_typ, json_pfad, array_index)
+        if roh is _NICHTS:
             return None
-
-        result = raw * faktor + offset
+        if als_text:
+            return str(roh)
+        result = float(roh) * faktor + offset
         if invertieren:
             result = -result
         return result
 
     except (ValueError, KeyError, IndexError, TypeError, json.JSONDecodeError):
         return None
+
+
+def _als_text(ziel_key: str) -> bool:
+    """Reicht das Gateway an dieses Ziel einen **Text** weiter? — ja für jedes Zustandsfeld außer dem Betriebsmodus.
+
+    P-433-2b K2b (K2-8): die Eigenschaft hängt am Zielfeld (`ist_zustand_feld`, Innengeräte-Suffix aufgelöst), nicht
+    an der Quelle. ⛔ **Der Betriebsmodus bleibt beim Zahlen-Weg** (D3, Gernot 27.10.2026; HA-Bauform §9: Modus über
+    MQTT nur über das Inbound-Topic) — sein Pfad bleibt damit bitgleich, auch für eine von Hand angelegte Zeile.
+    Ein Zahlenfeld bekommt nie Text: ein Wort dort ist ein Transform-Fehler wie bisher (Sprengsatz S9).
+    """
+    basis = basis_feld_key(ziel_key.rsplit("/", 1)[-1])
+    return basis != MODUS_FELD_KEY and ist_zustand_feld(basis)
 
 
 # ─── Mapping Dataclass (leichtgewichtig, aus DB geladen) ─────────────
@@ -231,13 +258,15 @@ class MqttGatewayService:
                 mapping.array_index,
                 mapping.faktor,
                 mapping.offset,
+                als_text=_als_text(mapping.ziel_key),
             )
             if wert is None:
                 self._stats.transform_fehler += 1
                 continue
 
             ziel_topic = f"eedc/{mapping.anlage_id}/{mapping.ziel_key}"
-            await client.publish(ziel_topic, str(round(wert, 2)))
+            # Ein Text (Zustandsfeld, K2b) geht unverändert hinaus, eine Zahl gerundet wie bisher.
+            await client.publish(ziel_topic, wert if isinstance(wert, str) else str(round(wert, 2)))
             self._stats.weitergeleitet += 1
 
     def get_status(self) -> dict:

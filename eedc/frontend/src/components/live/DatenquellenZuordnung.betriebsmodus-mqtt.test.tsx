@@ -4,7 +4,7 @@
  * Das Backend liefert für ein Zustandsfeld über Inbound `wert: null` und den rohen Text in `wert_text`
  * (`api/routes/datenquellen.py`, Ü1). Die Fläche zeigt dann Klartext und Rohwert — keine Zahl. Läge der String in
  * `wert`, rundete die Fläche ihn (`Math.round(f.wert * 100) / 100`) und zeigte «NaN»: diese Probe wird dann rot.
- * Dazu: der Inbound-Knopf steht am Feld, der Gateway-Knopf nicht (das Gateway reicht nur Zahlen weiter).
+ * Dazu: der Inbound-Knopf steht am Feld, der Gateway-Knopf nicht (D3, P-433-2b K2b: am Modus bleibt das Gateway aus).
  * Die Fixture spiegelt die Antwortform des Backends, keine zweite Tabelle.
  */
 import { describe, it, expect, vi } from 'vitest'

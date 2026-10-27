@@ -96,6 +96,8 @@ class TransformTestRequest(BaseModel):
     faktor: float = 1.0
     offset: float = 0.0
     invertieren: bool = False
+    # P-433-2b K2b (K2-8): Vorschau für ein Zustandsfeld — der Text wie im Republish, ohne Faktor/Offset.
+    als_text: bool = False
 
 
 # ─── Helper ──────────────────────────────────────────────────────────
@@ -398,13 +400,17 @@ async def test_transform(data: TransformTestRequest):
         data.array_index,
         data.faktor,
         data.offset,
-        data.invertieren,
+        invertieren=data.invertieren,
+        als_text=data.als_text,
     )
     if wert is None:
         return {
             "erfolg": False,
             "fehler": "Transformation fehlgeschlagen — Payload konnte nicht extrahiert/konvertiert werden",
         }
+    if isinstance(wert, str):
+        # Zustandsfeld: der Text geht unverändert hinaus (wie `_handle_message`), keine Zahl, kein Runden.
+        return {"erfolg": True, "wert_text": wert, "ziel_payload": wert}
     return {
         "erfolg": True,
         "wert": round(wert, 4),

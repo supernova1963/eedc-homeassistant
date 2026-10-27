@@ -13,6 +13,10 @@
  *
  * Nicht-retained/fehlende Topics: manuelle Volltext-Eingabe + Live-Test. Ebenen
  * werden gecacht; „Aktualisieren" lädt die aktuelle Ebene neu (Gernot 2026-07-14).
+ *
+ * P-433-2b K2b (K2-8): an einem **Zustandsfeld** (`zustand`) reicht das Gateway den Text unverändert weiter —
+ * Faktor und Offset entfallen, die Vorschau zeigt den Text (`wert_text`). Die Weiche liegt im Backend am Zielfeld
+ * (`mqtt_gateway_service._als_text`); der Betriebsmodus bekommt den Picker gar nicht (D3).
  */
 import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
 import { Search, Loader2, ChevronRight, CornerDownRight, RefreshCw } from 'lucide-react'
@@ -32,6 +36,8 @@ interface Props {
   anlageId: number
   /** Aktuell zugeordnetes Topic (Vorauswahl beim Öffnen), falls vorhanden. */
   initialTopic?: string | null
+  /** P-433-2b K2b: Zielfeld ist ein Zustand (Wort/Text statt Zahl) — ohne Faktor/Offset, Vorschau als Text. */
+  zustand?: boolean
   onClose: () => void
   onSpeichern: (config: GatewayQuelleConfig) => void
 }
@@ -41,6 +47,10 @@ const PAYLOAD_OPTIONEN = [
   { value: 'json', label: 'JSON-Objekt' },
   { value: 'json_array', label: 'JSON-Array' },
 ]
+/** An einem Zustandsfeld ist der plain-Payload ein Wort, keine Zahl (K2b). */
+const PAYLOAD_OPTIONEN_TEXT = PAYLOAD_OPTIONEN.map((o) => (o.value === 'plain' ? { ...o, label: 'Text (plain)' } : o))
+/** Anzeige eines leeren Texts in der Vorschau — dieselbe Schreibweise wie `TEXT_LEER` der Zuordnungs-Fläche. */
+const VORSCHAU_LEER = '(leer)'
 
 /** Gecachte Baum-Ebene. */
 interface Ebene {
@@ -52,7 +62,7 @@ interface Ebene {
 const LEVEL_SEITE = 50
 
 export default function DatenquellenGatewayPicker({
-  isOpen, feldLabel, anlageId, initialTopic, onClose, onSpeichern,
+  isOpen, feldLabel, anlageId, initialTopic, zustand = false, onClose, onSpeichern,
 }: Props) {
   const [laden, setLaden] = useState(false)
   const [scanFehler, setScanFehler] = useState<string | null>(null)
@@ -74,7 +84,7 @@ export default function DatenquellenGatewayPicker({
   // Vorzeichen-Umkehr ist NICHT mehr Teil der Gateway-Transform (Datenquellen-V4):
   // sie ist quellen-unabhängig am Feld (± an der Wert-Spalte, /invert-Endpoint).
 
-  const [vorschau, setVorschau] = useState<{ wert?: number; fehler?: string } | null>(null)
+  const [vorschau, setVorschau] = useState<{ wert?: number; wert_text?: string; fehler?: string } | null>(null)
   const [testLauft, setTestLauft] = useState(false)
   const [testHinweis, setTestHinweis] = useState<string | null>(null)
 
@@ -203,10 +213,11 @@ export default function DatenquellenGatewayPicker({
       json_pfad: jsonPfad || null,
       faktor: Number(faktor) || 0,
       offset: Number(offset) || 0,
+      als_text: zustand,
     })
-      .then((r) => setVorschau(r.erfolg ? { wert: r.wert } : { fehler: r.fehler }))
+      .then((r) => setVorschau(r.erfolg ? { wert: r.wert, wert_text: r.wert_text } : { fehler: r.fehler }))
       .catch((e) => setVorschau({ fehler: e instanceof Error ? e.message : 'Test fehlgeschlagen' }))
-  }, [gewaehlt, payloadTyp, jsonPfad, faktor, offset])
+  }, [gewaehlt, payloadTyp, jsonPfad, faktor, offset, zustand])
 
   const speichern = useCallback(() => {
     if (!gewaehlt) return
@@ -214,10 +225,11 @@ export default function DatenquellenGatewayPicker({
       quell_topic: gewaehlt.topic,
       payload_typ: payloadTyp as GatewayQuelleConfig['payload_typ'],
       json_pfad: jsonPfad || null,
-      faktor: Number(faktor) || 0,
-      offset: Number(offset) || 0,
+      // Am Zustandsfeld gelten Faktor/Offset nicht (Backend wendet sie bei Text nicht an) — neutral speichern.
+      faktor: zustand ? 1 : Number(faktor) || 0,
+      offset: zustand ? 0 : Number(offset) || 0,
     })
-  }, [gewaehlt, payloadTyp, jsonPfad, faktor, offset, onSpeichern])
+  }, [gewaehlt, payloadTyp, jsonPfad, faktor, offset, zustand, onSpeichern])
 
   const manuellText = manuellEingabe.trim()
   const manuellWildcard = /[#+]/.test(manuellText)
@@ -378,7 +390,7 @@ export default function DatenquellenGatewayPicker({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Select
                 label="Payload-Typ"
-                options={PAYLOAD_OPTIONEN}
+                options={zustand ? PAYLOAD_OPTIONEN_TEXT : PAYLOAD_OPTIONEN}
                 value={payloadTyp}
                 onChange={(e) => setPayloadTyp(e.target.value)}
               />
@@ -390,14 +402,18 @@ export default function DatenquellenGatewayPicker({
                   placeholder="z. B. emeter.0.power"
                 />
               )}
-              <Input
-                label="Faktor" type="number" step="any"
-                value={faktor} onChange={(e) => setFaktor(e.target.value)}
-              />
-              <Input
-                label="Offset" type="number" step="any"
-                value={offset} onChange={(e) => setOffset(e.target.value)}
-              />
+              {!zustand && (
+                <>
+                  <Input
+                    label="Faktor" type="number" step="any"
+                    value={faktor} onChange={(e) => setFaktor(e.target.value)}
+                  />
+                  <Input
+                    label="Offset" type="number" step="any"
+                    value={offset} onChange={(e) => setOffset(e.target.value)}
+                  />
+                </>
+              )}
             </div>
             {payloadTyp === 'json' && jsonKeys.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -429,6 +445,11 @@ export default function DatenquellenGatewayPicker({
               {vorschau?.wert != null && (
                 <span className="text-sm text-green-700 dark:text-green-400">
                   Ergebnis: <span className="font-semibold">{vorschau.wert}</span>
+                </span>
+              )}
+              {vorschau?.wert_text != null && (
+                <span className="text-sm text-green-700 dark:text-green-400" data-vorschau-text>
+                  Ergebnis: <span className="font-semibold">{vorschau.wert_text === '' ? VORSCHAU_LEER : vorschau.wert_text}</span>
                 </span>
               )}
               {vorschau?.fehler && (

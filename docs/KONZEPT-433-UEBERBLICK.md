@@ -89,7 +89,7 @@ eine Wallbox ohne Steuerungs-Aussage, ist sie «eindeutig») und **D2** (der Roh
 | K2-6 | **Kein drittes Zuordnungswort:** `fahrzeuge_zuordnung` bleibt `eindeutig`/`geschaetzt`; Treffer, Gast und unbekannt heißen «eindeutig» mit `fahrzeuge_quelle = "steuerung"` (dazu `gast` bzw. `fahrzeug_unbekannt`). «Alle Autos» bei «geschätzt» sammeln nur aus «geschätzt»-Knoten. |
 | K2-10 | Ein gemeldeter Name **ohne Treffer**: Karte «Fahrzeug der Steuerung unbekannt» (D2), Daten-Checker INFO `emob_kennung_unbekannt` mit Rohtext und Handgriff «Kennung am E-Auto eintragen». |
 | K2-11 | Farbe = Rolle, kein Gast-Farbton, keine Rahmenfarbe; «Gastfahrzeug» ist Text. Der Client rechnet nichts; keine Monatsrechnung, keine Gast-kWh. |
-| K2-12 | **Schnitt:** K2a = Text, Stammdatum, Zuordnung, Gast, Checker, Karte, Datenquellen; K2b = evcc-Ladezustand aus drei Binär-Sensoren (Option A), Gateway-Text, Preset «evcc Ladepunkt» — folgt. |
+| K2-12 | **Schnitt:** K2a = Text, Stammdatum, Zuordnung, Gast, Checker, Karte, Datenquellen; K2b = evcc-Ladezustand aus drei Binär-Sensoren (Option A), Gateway-Text, Preset «evcc Ladepunkt» (§2b-K2b). |
 
 **Zuordnung in zwei Schritten** (`live_komponenten_builder._ordne_fahrzeuge_zu`): Schritt 1 setzt `parent_key` reihum wie bisher;
 Schritt 2 (`_fahrzeug_anzeige_zuordnung`) liest je Wallbox-Knoten das Textfeld und verteilt die übrigen Autos auf die Wallboxen
@@ -100,10 +100,20 @@ retained MQTT-Payload löscht die Nachricht am Broker (nach einem Neustart keine
 anderen Wallbox meldet (K2-5): er entscheidet nur, dass der Auto-Knoten im Energiefluss keine eigene Kachel bekommt und aus
 dem Restverbrauch fällt; welches Auto eine Kachel und eine Karte nennen, kommt aus `fahrzeuge`.
 
+### 2b-K2b. Option A, Gateway-Text, Preset evcc (gebaut 27.10.2026, unveröffentlicht)
+
+Grundlage: Bauplan K2 Fassung 2, Sitzung K2b; Entscheid Gernot 27.10.2026 **D3** (am Betriebsmodus bleibt der Gateway-Knopf aus).
+
+| Nr. | Entscheid |
+| --- | --- |
+| K2-7 | **Option A** statt eines Mehrfach-Sensor-Lesers (K1 HALT K-9): drei Rollen-Felder `evcc_verbunden` · `evcc_laedt` · `evcc_freigegeben` (Zustand, Kanon `an`/`aus`; `on`/`true` ⇒ an, `off`/`false` ⇒ aus; `1`/`0` **nur** über MQTT). Der Leser (`betriebsmodus_live._kombiniere_option_a`) setzt den Ladezustand zusammen, **nur wenn kein gemessener vorliegt**: ¬verbunden ⇒ kein Fahrzeug · verbunden ∧ lädt ⇒ lädt · verbunden ∧ ¬freigegeben ⇒ wartet · sonst verbunden. Ohne «lädt»/«freigegeben» nie «lädt»/«wartet», «fertig» kennt Option A nicht. Builder und Energiefluss unverändert (sie lesen `ladezustand`). |
+| K2-8 | **Gateway-Text als Weiche am Zielfeld:** `transform_payload(…, *, als_text)` liefert an ein Zustandsfeld den getrimmten Rohstring (`plain`) bzw. den Wert am Pfad als Text (`json`/`json_array`), ohne Faktor/Offset; Republish unverändert. Ein Wort auf ein Zahlenfeld bleibt `transform_fehler` ohne Republish. Kein neuer `payload_typ`, keine 400-Regel. **Am Betriebsmodus** bleibt das Gateway beim Zahlen-Weg und die Fläche zeigt keinen Knopf (D3). |
+| K2-9 | **Preset «evcc Ladepunkt»** nur mit belegten Einheiten (evcc `server/mqtt.go encode()`: Floats `%.3f`, `time.Duration` als ganze Sekunden, Bools `true`/`false`, `nil` als leerer String): `chargePower` W · `sessionEnergy` Wh ×0,001 · `chargeDuration` s · `chargeRemainingDuration` s ×1/60 · `phasesActive` · `chargeTotalImport` kWh ×1 als Zählerstand unter `energy/` (die Bauplan-Annahme Wh war falsch, Quelle `api.MeterEnergy`) · `mode` · `connected`/`charging`/`enabled` · `vehicleName`. Nicht im Preset: Auto-Werte (`vehicleSoc`/`vehicleRange`), undokumentierte Topics. Presets bietet die Oberfläche derzeit nicht an (Aufruf über die API). |
+
 **Release-Regel (Gernot 27.10.2026):** kein Release der E-Mobilitäts-Änderungen ohne Panorama — K1 bis K3 sammeln sich
-ungepusht, das Panorama schließt das Paket. **K2** (Textfeld «Fahrzeug am Ladepunkt», Gast, evcc-Preset) und **K3**
-(«Betrieb heute» aus einer typoffenen Mitschrift) folgen. **Offen aus K1:** der evcc-Ladezustand aus drei Binär-Sensoren
-(Mehrfach-Sensor-Leser) — die Zuordnungsform trägt je Live-Feld eine Entität; bis dahin Weg B (Template-Sensor).
+ungepusht, das Panorama schließt das Paket. **K3** («Betrieb heute» aus einer typoffenen Mitschrift) folgt. Der
+evcc-Ladezustand aus drei Binär-Sensoren (offen aus K1) ist mit Option A (K2-7) gelöst; Weg B (Template-Sensor) bleibt für
+andere Integrationen.
 
 ## 3. Entscheide
 

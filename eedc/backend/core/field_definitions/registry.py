@@ -929,8 +929,9 @@ _EMOB_LIVE_WALLBOX: list[dict] = [
                 "Charger; über MQTT auch die go-eCharger-Codes. Eine Angabe der Steuerung, eedc bewertet sie nicht. "
                 + _WEG_B},
     # P-433-2b K2a (Bauplan K2 §1 K2-3): die erste Feldart **Text** — `zustand: True` (alle Zustands-Weichen: kein
-    # 5-s-Poller, Inbound-Zustands-Zweig, kein Gateway-Knopf, kein Kanal) plus `text: True` (`TEXT_LIVE_FELDER`): kein
-    # Kanon, keine Werte-Tabelle, kein Checker «fremder Wert»; ein leerer Text ist ein Wert (Gast), kein fehlender.
+    # 5-s-Poller, Inbound-Zustands-Zweig, Gateway reicht Text weiter (K2b), kein Kanal) plus `text: True`
+    # (`TEXT_LIVE_FELDER`): kein Kanon, keine Werte-Tabelle, kein Checker «fremder Wert»; ein leerer Text ist ein Wert
+    # (Gast), kein fehlender.
     {"key": "fahrzeug_am_ladepunkt", "label": "Fahrzeug am Ladepunkt", "einheit": "", "zustand": True, "text": True,
      "ha_domaenen": ("select", "sensor", "input_text"), **_EMOB_LIVE_BASIS,
      "hinweis": "Name des Fahrzeugs, das die Steuerung am Ladepunkt erkennt (evcc `select.evcc_…_vehicle_name`, "
@@ -939,13 +940,33 @@ _EMOB_LIVE_WALLBOX: list[dict] = [
                 "Wallboxen. Leer heißt Gast, fehlend heißt nichts: meldet die Steuerung kein Fahrzeug (evcc `null`), "
                 "während ein Auto verbunden ist oder lädt, zeigt die Karte «Gastfahrzeug». Ein leerer `input_text` "
                 "in Home Assistant ist von «nicht verfügbar» nicht zu unterscheiden und gilt nicht als Gast."},
+    # P-433-2b K2b Option A (Bauplan K2 §1 K2-7): evcc meldet den Ladepunkt in drei Binär-Sensoren statt in einem
+    # Zustand. Drei Rollen-Felder mit dem Kanon an/aus (`core/zustands_kanon.py`); der Leser setzt daraus den
+    # Ladezustand zusammen, **nur wenn kein gemessener `ladezustand` vorliegt** (`_kombiniere_option_a`).
+    *({"key": _key, "label": _label, "einheit": "", "zustand": True, "kanon": _key,
+       "ha_domaenen": ("binary_sensor", "sensor", "input_boolean"), **_EMOB_LIVE_BASIS,
+       "hinweis": f"{_satz} Nur nötig ohne Ladezustand-Sensor: eedc setzt aus «verbunden», «lädt» und «freigegeben» "
+                  "den Ladezustand-Chip zusammen (kein Fahrzeug · verbunden · wartet · lädt); ein zugeordneter "
+                  "Ladezustand geht immer vor. Verstanden werden on/off (Home Assistant) und true/false (evcc über "
+                  "MQTT); über MQTT auch 1/0."}
+      for _key, _label, _satz in (
+          ("evcc_verbunden", "evcc: Fahrzeug verbunden",
+           "Ob ein Fahrzeug am Ladepunkt angesteckt ist (evcc `binary_sensor.evcc_…_connected`, MQTT `connected`)."),
+          ("evcc_laedt", "evcc: lädt",
+           "Ob gerade geladen wird (evcc `binary_sensor.evcc_…_charging`, MQTT `charging`)."),
+          ("evcc_freigegeben", "evcc: Laden freigegeben",
+           "Ob die Steuerung das Laden freigegeben hat (evcc `binary_sensor.evcc_…_enabled`, MQTT `enabled`) — "
+           "verbunden, aber nicht freigegeben heißt «wartet»."),
+      )),
     {"key": "sitzung_kwh", "label": "Energie dieser Sitzung", "einheit": "kWh", **_EMOB_LIVE_BASIS,
      "hinweis": "Seit dem Anstecken geladene Energie in kWh (evcc `session_energy`, SMA `energie_ladevorgang`, "
                 "go-e `wh`). Reine Anzeige im Überblick — keine Monatsmenge, kein Zähler der Bilanz. ⚠ SMA, go-e "
                 "und evcc über MQTT liefern Wh: eedc rechnet die Einheit hier nicht um — einen kWh-Sensor wählen "
-                "oder in Home Assistant die Anzeigeeinheit auf kWh stellen."},
+                "oder in Home Assistant die Anzeigeeinheit auf kWh stellen (das MQTT-Preset «evcc Ladepunkt» "
+                "rechnet `sessionEnergy` mit Faktor 0,001 um)."},
     {"key": "sitzung_dauer_s", "label": "Dauer dieser Sitzung", "einheit": "s", **_EMOB_LIVE_BASIS,
-     "hinweis": "Ladedauer der laufenden Sitzung in Sekunden (evcc `charge_duration`). Reine Anzeige."},
+     "hinweis": "Ladedauer der laufenden Sitzung in Sekunden (evcc `charge_duration`, MQTT `chargeDuration`). "
+                "Reine Anzeige."},
     {"key": "ladestrom_a", "label": "Ladestrom", "einheit": "A", **_EMOB_LIVE_BASIS,
      "hinweis": "Ladestrom in A (evcc `charge_current`, go-e `amp`). Reine Anzeige."},
     {"key": "phasen_aktiv", "label": "Aktive Phasen", "einheit": "", **_EMOB_LIVE_BASIS,
@@ -955,7 +976,8 @@ _EMOB_LIVE_WALLBOX: list[dict] = [
                 "Reine Anzeige."},
     {"key": "restzeit_min", "label": "Restzeit", "einheit": "min", **_EMOB_LIVE_BASIS,
      "hinweis": "Verbleibende Ladezeit in Minuten. Reine Anzeige. ⚠ evcc liefert Sekunden "
-                "(`charge_remaining_duration`): eedc rechnet nicht um — Sensor in Minuten wählen."},
+                "(`charge_remaining_duration`): eedc rechnet nicht um — Sensor in Minuten wählen (das MQTT-Preset "
+                "«evcc Ladepunkt» rechnet `chargeRemainingDuration` mit Faktor 1/60 um)."},
 ]
 
 _EMOB_LIVE_EAUTO: list[dict] = [
@@ -1115,8 +1137,10 @@ LIVE_FELDER_INV: dict = {
         # HA-Bauform §9 (Standalone-Gleichstand S1, 25.10.2026): seit dem Zustands-Zweig des
         # MQTT-Inbound (roher String statt `float(payload)`) auch über das eedc-Topic
         # `…/live/inv/<id>/betriebsmodus` — Kanon-Wort oder Zahlencode. Die Codes im Hinweis kommen
-        # aus der Werte-Tabelle (`_modus_codes`), nicht aus einer zweiten Liste; das Gateway bleibt
-        # für dieses Feld aus (float-only, eigenes Vorhaben).
+        # aus der Werte-Tabelle (`_modus_codes`), nicht aus einer zweiten Liste. Das Gateway bleibt
+        # für dieses Feld aus (D3, Gernot 27.10.2026): seit P-433-2b K2b reicht es an jedes andere
+        # Zustandsfeld den Text weiter (`mqtt_gateway_service._als_text`), am Modus bleibt es beim Zahlen-Weg
+        # und die Fläche bietet den Knopf nicht an.
         {"key": "betriebsmodus", "label": "Betriebsmodus", "einheit": "",
          "betriebsart": WP_BETRIEBSART_GERAET,
          "zustand": True,

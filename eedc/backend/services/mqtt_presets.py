@@ -16,6 +16,7 @@ class PresetVariable:
     label: str                  # z.B. "Device-ID"
     placeholder: str = ""       # z.B. "shellyem3-AABBCC"
     hinweis: str = ""           # z.B. "Steht auf dem Gerät oder in der Shelly-App"
+    vorgabe: str = ""           # P-433-2b K2b: gilt, wenn der User nichts einträgt (z.B. evcc-Prefix "evcc")
 
 
 @dataclass
@@ -84,8 +85,11 @@ def generate_mappings(
     if preset.erfordert_investition and investition_id is None:
         raise ValueError("Dieses Preset erfordert die Auswahl einer Investition")
 
-    # Prüfe ob alle Variablen ausgefüllt sind
+    # Prüfe ob alle Variablen ausgefüllt sind — eine leere Variable mit Vorgabe bekommt die Vorgabe (K2b)
+    variablen = dict(variablen)
     for var in preset.variablen:
+        if (var.key not in variablen or not variablen[var.key].strip()) and var.vorgabe:
+            variablen[var.key] = var.vorgabe
         if var.key not in variablen or not variablen[var.key].strip():
             raise ValueError(f"Variable '{var.label}' ({var.key}) fehlt")
 
@@ -372,6 +376,104 @@ _register(MqttPreset(
             beschreibung="Ladeleistung gesamt (nrg[11] = Total Power W)",
             payload_typ="json_array",
             array_index=11,
+        ),
+    ],
+))
+
+# P-433-2b K2b (Bauplan K2 §1 K2-9, §3b E3): evcc-Ladepunkt über MQTT — für den Standalone ohne Home Assistant.
+# ⛔ Nur Topics mit BELEGTER Einheit (Quelle evcc `server/mqtt.go encode()` + Publish-Stellen, Beleg im Bau-Bericht
+# K2b): Floats `%.3f`, `time.Duration` als ganze Sekunden, Bool `true`/`false`, `nil` als leerer String; Ladepunkt
+# 1-basiert, retained. Zustandsfelder (Modus, connected/charging/enabled, Fahrzeugname) reicht das Gateway als Text
+# weiter (`mqtt_gateway_service._als_text`) — ohne Faktor. Nicht im Preset: `vehicleSoc`/`vehicleRange` (Werte des
+# Autos, ein Preset legt die Zeilen einer Investition an), `chargeCurrent`/`effectiveLimitSoc` (nicht dokumentiert,
+# P7). `chargeTotalImport` ist ein fortlaufender Zählerstand in kWh (`api.MeterEnergy`, Quelle) — Faktor 1, Ziel
+# `energy/` (eedc bildet die Differenzen selbst, MQTT_INBOUND); die Bauplan-Annahme Wh war falsch (Entscheid Master K2b).
+_EVCC_LP = "{prefix}/loadpoints/{loadpoint}"
+
+_register(MqttPreset(
+    id="evcc_ladepunkt",
+    name="evcc Ladepunkt",
+    hersteller="evcc",
+    gruppe="Wallbox",
+    beschreibung="Ein Ladepunkt aus evcc (MQTT): Ladeleistung, Sitzung, Restzeit, Phasen, Lademodus, Ladezustand aus "
+                 "verbunden/lädt/freigegeben und der Fahrzeugname der Steuerung.",
+    anleitung="In evcc MQTT aktivieren (evcc.yaml `mqtt:` mit `topic`, Vorgabe «evcc»). Ladepunkt-Nummer wie in evcc "
+              "(der erste ist 1). Bitte die zugehörige Wallbox-Investition auswählen. Ladestand und Reichweite des "
+              "Autos gehören an das E-Auto und sind nicht Teil dieses Presets.",
+    erfordert_investition=True,
+    variablen=[
+        PresetVariable(
+            key="prefix",
+            label="evcc-Topic",
+            placeholder="evcc",
+            hinweis="Wurzel-Topic aus evcc.yaml (mqtt → topic); leer lassen für «evcc»",
+            vorgabe="evcc",
+        ),
+        PresetVariable(
+            key="loadpoint",
+            label="Ladepunkt",
+            placeholder="1",
+            hinweis="Nummer des Ladepunkts in evcc, der erste ist 1",
+            vorgabe="1",
+        ),
+    ],
+    mappings=[
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/chargePower",
+            ziel_key="live/inv/{inv_id}/leistung_w",
+            beschreibung="Ladeleistung in W",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/sessionEnergy",
+            ziel_key="live/inv/{inv_id}/sitzung_kwh",
+            beschreibung="Energie dieser Sitzung — evcc meldet Wh, Faktor 0,001 ⇒ kWh",
+            faktor=0.001,
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/chargeDuration",
+            ziel_key="live/inv/{inv_id}/sitzung_dauer_s",
+            beschreibung="Ladedauer dieser Sitzung in Sekunden",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/chargeRemainingDuration",
+            ziel_key="live/inv/{inv_id}/restzeit_min",
+            beschreibung="Restzeit — evcc meldet Sekunden, Faktor 1/60 ⇒ Minuten",
+            faktor=1 / 60,
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/phasesActive",
+            ziel_key="live/inv/{inv_id}/phasen_aktiv",
+            beschreibung="Aktive Phasen",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/chargeTotalImport",
+            ziel_key="energy/inv/{inv_id}/ladung_kwh",
+            beschreibung="Zählerstand der Wallbox in kWh (nur mit Lademeter) — eedc bildet daraus die Monatsdifferenz",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/mode",
+            ziel_key="live/inv/{inv_id}/lademodus",
+            beschreibung="Lademodus (off · now · smart) — Text",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/connected",
+            ziel_key="live/inv/{inv_id}/evcc_verbunden",
+            beschreibung="Fahrzeug verbunden (true/false) — Text",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/charging",
+            ziel_key="live/inv/{inv_id}/evcc_laedt",
+            beschreibung="Lädt (true/false) — Text",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/enabled",
+            ziel_key="live/inv/{inv_id}/evcc_freigegeben",
+            beschreibung="Laden freigegeben (true/false) — Text",
+        ),
+        PresetMapping(
+            topic_template=f"{_EVCC_LP}/vehicleName",
+            ziel_key="live/inv/{inv_id}/fahrzeug_am_ladepunkt",
+            beschreibung="Fahrzeugname der Steuerung — Text, leer heißt kein bzw. unbekanntes Fahrzeug",
         ),
     ],
 ))

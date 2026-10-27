@@ -572,7 +572,7 @@ Es gibt **zwei Wege**, und **gemessen schlägt abgeleitet**:
 > - **Ab dem ersten vollen Tag:** *Cockpit → Tag* liest die Betriebsart-Aufteilung („Strom nach Betriebsart") nur aus der Mitschrift, wenn sie den ganzen Tag deckt — am Tag der Zuordnung zeigt die Tagessicht sie deshalb noch nicht, ab dem Folgetag schon. „Betrieb heute" im Hub-Überblick zählt dagegen jede mitgeschriebene Stunde sofort.
 > - **Kein „Leerlauf":** Leerlauf ist eine Messung von Home Assistant (die *Aktuelle Aktion*), kein Modus — über MQTT gibt es ihn nicht.
 > - **Broker-Ausfall:** Die Zeit ohne Verbindung bleibt eine Lücke. Verstummt nur dein Absender, während der Broker läuft, hält eedc seinen letzten Wert (wie Home Assistant ohne Verfügbarkeits-Meldung).
-> - **Kein Gateway:** Das MQTT-Gateway (ein fremdes Topic umschreiben) reicht nur Zahlen weiter und steht an diesem Feld nicht zur Wahl — publiziere direkt auf das eedc-Topic.
+> - **Kein Gateway:** Das MQTT-Gateway (ein fremdes Topic umschreiben) steht an diesem Feld nicht zur Wahl — publiziere direkt auf das eedc-Topic. (Den Text eines Fremd-Topics reicht es nur an die Zustandsfelder der E-Mobilität weiter.)
 > - **Keine Topic-Überwachung:** Die Prüfung „Topic sendet nicht" im Daten-Checker lässt das Modus-Topic aus — ein Modus, der sich stundenlang nicht ändert, ist kein Ausfall.
 > - **HA-Sensor geht vor:** Ist dem Gerät ein Betriebsmodus-Sensor aus Home Assistant zugeordnet, liest eedc nur ihn — und dort gelten die Zahlencodes nicht (siehe *„Eine Zahl reicht nicht"*).
 

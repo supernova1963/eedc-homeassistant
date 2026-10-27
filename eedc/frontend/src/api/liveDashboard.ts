@@ -359,6 +359,8 @@ export interface PresetVariable {
   label: string
   placeholder: string
   hinweis: string
+  /** P-433-2b K2b: gilt, wenn die Variable leer bleibt (z. B. evcc-Prefix «evcc»). */
+  vorgabe?: string
 }
 
 export interface PresetMappingInfo {
@@ -435,6 +437,8 @@ export interface TestTopicResult {
 export interface TransformTestResult {
   erfolg: boolean
   wert?: number
+  /** P-433-2b K2b: Text bei einem Zustandsfeld (`als_text`) — unverändert, ohne Faktor/Offset. */
+  wert_text?: string
   ziel_payload?: string
   fehler?: string
 }
@@ -560,7 +564,7 @@ export const liveDashboardApi = {
 
   testGatewayTransform: (data: {
     payload: string; payload_typ?: string; json_pfad?: string | null;
-    array_index?: number | null; faktor?: number; offset?: number; invertieren?: boolean
+    array_index?: number | null; faktor?: number; offset?: number; invertieren?: boolean; als_text?: boolean
   }) =>
     api.post<TransformTestResult>('/live/mqtt/gateway/test-transform', data),
 
