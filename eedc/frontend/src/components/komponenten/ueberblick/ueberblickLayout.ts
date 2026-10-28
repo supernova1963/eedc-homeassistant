@@ -2,6 +2,11 @@
  * Layout der Kacheln auf dem Panorama (P-433-2 E1, Gegenentwurf W1–W3/Ü3/Ü4) —
  * reine Funktion, ohne React.
  *
+ * **Bildunabhängig (P-433-2b S1a, E0):** alles, was zum Bild gehört — Anker-Karte, Reihe je Anker, die Anker der
+ * zwei Plätze und ihre Grenzen, der Wert-Rang, der Anker der Restgruppe —, kommt aus dem Panorama-Deskriptor
+ * (`panorama.ts`, Parameter `panorama`); die Namen unten (Wärmepumpe, A/C/F, O, N, 45 %/58 %) sind die Werte des
+ * Wärme/Klima-Deskriptors `WAERME_PANORAMA_DEF`.
+ *
  * **Maßstab (E-P2-6): wie im Energiefluss.** Das Bild ist 1312 Einheiten breit;
  * die Kachel wird mit `k = 1312 / W` gezeichnet, `W` die Zeichenbreite, die der
  * Energiefluss bei derselben Spaltenbreite hätte (Handy 360/450, sonst 600).
@@ -9,7 +14,7 @@
  * Energiefluss — „Handy 1:1" heißt dieselbe Pixelgröße, nicht dieselbe Zahl.
  *
  * **Reihen (P-433-2d): Technik oben, Räume unten** — die Reihe kommt aus der
- * Zuordnung Anker ⇒ Reihe neben der Anker-Karte (`ankerReihe`, `ANKER_REIHE`):
+ * Zuordnung Anker ⇒ Reihe neben der Anker-Karte (`ankerReihe`, `reihe` des Deskriptors; Wärme `ANKER_REIHE`):
  * oben Himmel, Geräte, Speicher, Zählerreihe; unten Heizkreise (Vorlauf · Rücklauf,
  * Wärme heute an K/J) und Innengeräte. Nur ein Anker ohne Eintrag fällt auf die
  * Bildlage zurück (Anker-y < 50 % ⇒ oben). Reihen-y aus der Geometrie — Stapel-Optik
@@ -46,7 +51,7 @@
  * neben den zwei Reihen stehen zwei feste Einzelplätze — links die Gerätekachel der
  * Wärmepumpe am ersten belegten Anker in der Rangfolge A → C → F (weitere Geräte am
  * selben Anker mit ihr als «Wärmepumpen (n)»), rechts die Gerätekachel an der Klima-Außeneinheit O
- * (`PLATZ_ANKER`). Die Plätze werden **vor** den Reihen aus der Kachelliste genommen;
+ * (`plaetze` des Deskriptors; Wärme `PLATZ_ANKER`). Die Plätze werden **vor** den Reihen aus der Kachelliste genommen;
  * die Reihen rechnet derselbe 2d-Lauf ({@link layoutReihen}), `dims` aus den Reihen
  * (die Plätze zählen nicht). Lage: x am Bildrand wie die äußerste Reihenkachel, y =
  * Anker-y geklemmt — links zwischen Unterkante der oberen Reihe + Abstand und 45 %
@@ -64,8 +69,12 @@
  */
 import { ABSTAND_REIHE, computeDims, kapazitaet, type LayoutDims } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
-import { PANORAMA_BREITE, PANORAMA_HOEHE, PLATZ_ANKER, WAERME_ANKER, ankerReihe, bildReihe, type AnkerId, type Reihe } from './waermePanoramaAnker'
-import { ANKER_VORLAUF_ALLE, ANKER_ZUSATZHEIZUNG, type KachelArt } from './kachelAnker'
+import {
+  PANORAMA_BREITE, PANORAMA_HOEHE, ankerReihe, bildReihe,
+  type AnkerId, type GruppenArt, type KachelArt, type PanoramaDef, type Reihe,
+} from './panorama'
+
+export type { GruppenArt } from './panorama'
 
 /** Was das Layout von einer Kachel wissen muss. */
 export interface LayoutKachel {
@@ -73,8 +82,6 @@ export interface LayoutKachel {
   art: KachelArt
   anker: AnkerId
 }
-
-export type GruppenArt = 'geraete' | 'innengeraete' | 'weitere'
 
 /** Wo ein Platz steht: in einer der zwei Reihen oder in einem der zwei Einzelplätze neben dem Haus (P-433-2e). */
 export type Seite = Reihe | 'links' | 'rechts'
@@ -122,15 +129,12 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
 
 /** Rang innerhalb einer Reihe: kleiner = bleibt zuletzt als Einzelkachel stehen.
  *  ⚠ Der Rang entscheidet NUR, wer zuerst nach «Weitere» wandert — die Reihenfolge in der Reihe ist Anker-x
- *  mit Nachbartausch ({@link verteileX}, {@link entkreuze}). «Vorlauf · Rücklauf» hat seit S2-8 drei mögliche
- *  Objekte (G · K · J), alle mit demselben Rang. */
-const WERT_RANG: Record<string, number> = {
-  E: 0, I: 1, ...Object.fromEntries(ANKER_VORLAUF_ALLE.map((a) => [a, 2])), [ANKER_ZUSATZHEIZUNG]: 3, HIMMEL: 4,
-}
-function rang(p: Platz): number {
+ *  mit Nachbartausch ({@link verteileX}, {@link entkreuze}). Der Wert-Rang je Anker steht im Deskriptor
+ *  (`wertRang`; Wärme: «Vorlauf · Rücklauf» hat seit S2-8 drei mögliche Objekte G · K · J, alle mit demselben Rang). */
+function rang(p: Platz, panorama: PanoramaDef): number {
   if (p.gruppe === 'geraete' || p.mitglieder[0].art === 'geraet') return 0
   if (p.gruppe === 'innengeraete' || p.mitglieder[0].art === 'innengeraet') return 1
-  return 2 + (WERT_RANG[p.anker ?? ''] ?? 9) / 10
+  return 2 + (panorama.wertRang[p.anker ?? ''] ?? 9) / 10
 }
 
 /** Energiefluss-Zeichenbreite für die Spalte (E-P2-6). */
@@ -139,37 +143,41 @@ export function zeichenbreite(ctr: number): number {
   return 600
 }
 
-function ankerPunkt(id: AnkerId): { ax: number; ay: number } {
-  const a = WAERME_ANKER[id]
+function ankerPunkt(panorama: PanoramaDef, id: AnkerId): { ax: number; ay: number } {
+  const a = panorama.anker[id]
   return { ax: (a.x / 100) * PANORAMA_BREITE, ay: (a.y / 100) * PANORAMA_HOEHE }
 }
 
-function platzAus<T extends LayoutKachel>(mitglieder: T[], gruppe: GruppenArt | null, anker: AnkerId | null, seite: Seite, key: string): Platz<T> {
-  const punkte = mitglieder.map((m) => ankerPunkt(m.anker))
+function platzAus<T extends LayoutKachel>(panorama: PanoramaDef, mitglieder: T[], gruppe: GruppenArt | null, anker: AnkerId | null, seite: Seite, key: string): Platz<T> {
+  const punkte = mitglieder.map((m) => ankerPunkt(panorama, m.anker))
   const { ax, ay } = anker
-    ? ankerPunkt(anker)
+    ? ankerPunkt(panorama, anker)
     : { ax: punkte.reduce((s, p) => s + p.ax, 0) / punkte.length, ay: punkte.reduce((s, p) => s + p.ay, 0) / punkte.length }
   return { key, mitglieder, gruppe, anker, ax, ay, x: ax, y: 0, seite, linie: null }
 }
 
-/** Schritt 1: immer gruppieren — gleiche Geräte-Anker, Innengeräte ab dem vierten. */
-function grundgruppen<T extends LayoutKachel>(kacheln: T[], reihe: 'oben' | 'unten'): Platz<T>[] {
+/** Schritt 1: immer gruppieren — gleiche Geräte-Anker, Innengeräte ab dem vierten (Restgruppe am `ankerRestgruppe`
+ *  des Deskriptors, ohne Eintrag am Anker des vierten Innengeräts; Halt H1 der S1a). */
+function grundgruppen<T extends LayoutKachel>(panorama: PanoramaDef, kacheln: T[], reihe: 'oben' | 'unten'): Platz<T>[] {
   const plaetze: Platz<T>[] = []
   const geraeteJeAnker = new Map<AnkerId, T[]>()
   const innen: T[] = []
   for (const k of kacheln) {
     if (k.art === 'geraet') geraeteJeAnker.set(k.anker, [...(geraeteJeAnker.get(k.anker) ?? []), k])
     else if (k.art === 'innengeraet') innen.push(k)
-    else plaetze.push(platzAus([k], null, k.anker, reihe, k.id))
+    else plaetze.push(platzAus(panorama, [k], null, k.anker, reihe, k.id))
   }
   for (const [anker, gs] of geraeteJeAnker) {
     plaetze.push(gs.length > 1
-      ? platzAus(gs, 'geraete', anker, reihe, `grp-geraete-${anker}`)
-      : platzAus(gs, null, anker, reihe, gs[0].id))
+      ? platzAus(panorama, gs, 'geraete', anker, reihe, `grp-geraete-${anker}`)
+      : platzAus(panorama, gs, null, anker, reihe, gs[0].id))
   }
   const einzeln = innen.slice(0, 3)
-  einzeln.forEach((k) => plaetze.push(platzAus([k], null, k.anker, reihe, k.id)))
-  if (innen.length > 3) plaetze.push(platzAus(innen.slice(3), 'innengeraete', 'N', reihe, 'grp-innengeraete-rest'))
+  einzeln.forEach((k) => plaetze.push(platzAus(panorama, [k], null, k.anker, reihe, k.id)))
+  if (innen.length > 3) {
+    const anker = panorama.ankerRestgruppe ?? innen[3].anker
+    plaetze.push(platzAus(panorama, innen.slice(3), 'innengeraete', anker, reihe, 'grp-innengeraete-rest'))
+  }
   return plaetze
 }
 
@@ -181,7 +189,7 @@ function passtIn(W: number, n: number, gekuerzt = false): boolean {
 }
 
 /** Schritte 2 und 3: bis die Reihe in `W` passt. */
-function aufKapazitaet<T extends LayoutKachel>(plaetze: Platz<T>[], W: number, reihe: 'oben' | 'unten', gekuerzt = false): Platz<T>[] {
+function aufKapazitaet<T extends LayoutKachel>(panorama: PanoramaDef, plaetze: Platz<T>[], W: number, reihe: 'oben' | 'unten', gekuerzt = false): Platz<T>[] {
   const passt = (n: number) => passtIn(W, n, gekuerzt)
   if (passt(plaetze.length)) return plaetze
   // 2. alle Innengeräte der Reihe in eine Gruppe.
@@ -191,17 +199,17 @@ function aufKapazitaet<T extends LayoutKachel>(plaetze: Platz<T>[], W: number, r
     const mitglieder = innen.flatMap((p) => p.mitglieder)
     cur = [
       ...plaetze.filter((p) => !innen.includes(p)),
-      platzAus(mitglieder, 'innengeraete', mitglieder[0].anker, reihe, 'grp-innengeraete'),
+      platzAus(panorama, mitglieder, 'innengeraete', mitglieder[0].anker, reihe, 'grp-innengeraete'),
     ]
   }
   if (passt(cur.length)) return cur
   // 3. Rest nach Rang in «Weitere (n)».
   let ziel = cur.length - 1
   while (ziel > 1 && !passt(ziel)) ziel--
-  const geordnet = [...cur].sort((a, b) => rang(a) - rang(b) || a.ax - b.ax)
+  const geordnet = [...cur].sort((a, b) => rang(a, panorama) - rang(b, panorama) || a.ax - b.ax)
   const bleibt = geordnet.slice(0, ziel - 1)
   const rest = geordnet.slice(ziel - 1).flatMap((p) => p.mitglieder)
-  return [...bleibt, platzAus(rest, 'weitere', null, reihe, 'grp-weitere')]
+  return [...bleibt, platzAus(panorama, rest, 'weitere', null, reihe, 'grp-weitere')]
 }
 
 /** x-Lage: Anker-x, geklemmt, 1-D-Schub auf Mindestabstand (W1). `gekuerzt`: die Reihe endet eine Kachelbreite
@@ -291,12 +299,13 @@ function entkreuze(plaetze: Platz[], dims: LayoutDims, k: number): void {
 }
 
 /**
- * Das Layout für eine Spaltenbreite `ctr` (px): zwei Reihen und — am Desktop — die zwei Einzelplätze (P-433-2e).
+ * Das Layout für eine Spaltenbreite `ctr` (px) auf dem Bild `panorama`: zwei Reihen und — am Desktop — die zwei
+ * Einzelplätze (P-433-2e).
  */
-export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: number): UeberblickLayout<T> {
-  if (ctr < 500) return { ...layoutReihen(kacheln, ctr), links: null, rechts: null, rueckfall: [] }
-  const kandidatenLinks = platzKandidaten(kacheln, PLATZ_ANKER.links)
-  const kandidatenRechts = platzKandidaten(kacheln, PLATZ_ANKER.rechts)
+export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: number, panorama: PanoramaDef): UeberblickLayout<T> {
+  if (ctr < 500) return { ...layoutReihen(kacheln, ctr, panorama), links: null, rechts: null, rueckfall: [] }
+  const kandidatenLinks = platzKandidaten(kacheln, panorama.plaetze.links)
+  const kandidatenRechts = platzKandidaten(kacheln, panorama.plaetze.rechts)
   let links = kandidatenLinks.shift() ?? []
   let rechts = kandidatenRechts.shift() ?? []
   const rueckfall: string[] = []
@@ -304,10 +313,10 @@ export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: numb
   // einer); ohne Platz ist es das 2d-Layout, und dort gibt es nichts zu prüfen.
   for (;;) {
     const imPlatz = new Set<T>([...links, ...rechts])
-    const reihen = layoutReihen(kacheln.filter((t) => !imPlatz.has(t)), ctr, rechts.length > 0)
+    const reihen = layoutReihen(kacheln.filter((t) => !imPlatz.has(t)), ctr, panorama, rechts.length > 0)
     const zeilen = [...reihen.oben, ...reihen.unten]
-    const L = links.length ? platzGeometrie(links, 'links', reihen.dims, reihen.k) : null
-    const R = rechts.length ? platzGeometrie(rechts, 'rechts', reihen.dims, reihen.k) : null
+    const L = links.length ? platzGeometrie(links, 'links', reihen.dims, reihen.k, panorama) : null
+    const R = rechts.length ? platzGeometrie(rechts, 'rechts', reihen.dims, reihen.k, panorama) : null
     const fallL = L != null && platzKollidiert(L, zeilen, reihen.dims, reihen.k)
     const fallR = R != null && platzKollidiert(R, zeilen, reihen.dims, reihen.k)
     if (!fallL && !fallR) return { ...reihen, links: L, rechts: R, rueckfall }
@@ -317,7 +326,8 @@ export function layoutUeberblick<T extends LayoutKachel>(kacheln: T[], ctr: numb
 }
 
 /**
- * Die Kandidaten eines Einzelplatzes in **fester Anker-Rangfolge** (Reihenfolge von `anker`, links A → C → F;
+ * Die Kandidaten eines Einzelplatzes in **fester Anker-Rangfolge** (Reihenfolge von `anker` = `plaetze` des
+ * Deskriptors, Wärme links A → C → F;
  * Entscheid Master 26.10.2026 — die Platzwahl hängt nicht von der Listenreihenfolge der Geräte ab): je Anker alle
  * Geräte daran in Listenreihenfolge (mehrere bilden «Wärmepumpen (n)», wie in der Reihe). Fällt ein Kandidat zurück,
  * wird der nächste Rang versucht, bevor der Platz leer bleibt; Geräte, die nicht im Platz stehen, stehen in der Reihe.
@@ -328,26 +338,22 @@ function platzKandidaten<T extends LayoutKachel>(kacheln: T[], anker: readonly A
     .filter((gruppe) => gruppe.length > 0)
 }
 
-/** Unterkante des linken Platzes in Bildhöhe: über der Außeneinheit A (gemessen am Bild v4, siehe `PLATZ_ANKER`). */
-const PLATZ_LINKS_BIS = 0.45
-/** Oberkante des rechten Platzes in Bildhöhe: unter der Klima-Außeneinheit O (gemessen am Bild v4, siehe `PLATZ_ANKER`). */
-const PLATZ_RECHTS_AB = 0.58
-
 /**
  * Lage und Linie eines Einzelplatzes (P-433-2e): x am Bildrand wie die äußerste Reihenkachel
  * (`(nodeW/2 + 15)·k` vom Rand), y = Anker-y geklemmt — links auf [Unterkante obere Reihe + 12k + nodeH·k/2,
- * 45 % − nodeH·k/2], rechts auf [58 % + nodeH·k/2, Oberkante untere Reihe − 12k − nodeH·k/2].
+ * `platzLinksBis` − nodeH·k/2], rechts auf [`platzRechtsAb` + nodeH·k/2, Oberkante untere Reihe − 12k − nodeH·k/2]
+ * (Grenzen aus dem Deskriptor; Wärme 45 % / 58 % der Bildhöhe, gemessen am Bild v4).
  */
-export function platzGeometrie<T extends LayoutKachel>(mitglieder: T[], seite: 'links' | 'rechts', dims: LayoutDims, k: number): Platz<T> {
+export function platzGeometrie<T extends LayoutKachel>(mitglieder: T[], seite: 'links' | 'rechts', dims: LayoutDims, k: number, panorama: PanoramaDef): Platz<T> {
   const anker = mitglieder[0].anker
-  const p = platzAus(mitglieder, mitglieder.length > 1 ? 'geraete' : null, anker, seite, mitglieder.length > 1 ? `grp-geraete-${anker}` : mitglieder[0].id)
+  const p = platzAus(panorama, mitglieder, mitglieder.length > 1 ? 'geraete' : null, anker, seite, mitglieder.length > 1 ? `grp-geraete-${anker}` : mitglieder[0].id)
   const ry = reihenY(dims, k)
   const halbH = (dims.nodeH / 2) * k
   const rand = (dims.nodeW / 2 + 15) * k
   const abstand = ABSTAND_REIHE * k
   const [lo, hi] = seite === 'links'
-    ? [ry.oben + halbH + abstand + halbH, PLATZ_LINKS_BIS * PANORAMA_HOEHE - halbH]
-    : [PLATZ_RECHTS_AB * PANORAMA_HOEHE + halbH, ry.unten - halbH - abstand - halbH]
+    ? [ry.oben + halbH + abstand + halbH, panorama.platzLinksBis * PANORAMA_HOEHE - halbH]
+    : [panorama.platzRechtsAb * PANORAMA_HOEHE + halbH, ry.unten - halbH - abstand - halbH]
   p.x = seite === 'links' ? rand : PANORAMA_BREITE - rand
   p.y = Math.min(Math.max(p.ay, lo), hi)
   setzePlatzLinie(p, dims, k)
@@ -416,29 +422,29 @@ export function platzKollidiert(p: Platz, reihen: Platz[], dims: LayoutDims, k: 
  * am Handy ist es das ganze Layout. `untenGekuerzt`: die untere Reihe endet eine Kachelbreite früher (belegter
  * rechter Platz, P-433-2e).
  */
-export function layoutReihen<T extends LayoutKachel>(kacheln: T[], ctr: number, untenGekuerzt = false): Omit<UeberblickLayout<T>, 'links' | 'rechts' | 'rueckfall'> {
+export function layoutReihen<T extends LayoutKachel>(kacheln: T[], ctr: number, panorama: PanoramaDef, untenGekuerzt = false): Omit<UeberblickLayout<T>, 'links' | 'rechts' | 'rueckfall'> {
   const W = zeichenbreite(ctr)
   const k = PANORAMA_BREITE / W
   const gewechselt = new Set<string>()
-  const reiheVon = (t: T): Reihe => (gewechselt.has(t.id) ? bildReihe(t.anker) : ankerReihe(t.anker))
+  const reiheVon = (t: T): Reihe => (gewechselt.has(t.id) ? bildReihe(panorama, t.anker) : ankerReihe(panorama, t.anker))
   // Höchstens n + 1 Läufe: jeder weitere Lauf hat mindestens eine Kachel endgültig gewechselt.
   for (let lauf = 0; ; lauf++) {
-    const l = reihenLayout(kacheln, W, k, reiheVon, untenGekuerzt)
-    const platz = lauf <= kacheln.length ? wechselKandidat(l.oben, l.unten, reiheVon) : null
+    const l = reihenLayout(panorama, kacheln, W, k, reiheVon, untenGekuerzt)
+    const platz = lauf <= kacheln.length ? wechselKandidat(panorama, l.oben, l.unten, reiheVon) : null
     if (!platz) {
       return {
         W, k, dims: l.dims, geraet: ctr < 500 ? 'handy' : 'desktop', oben: l.oben, unten: l.unten,
         schriftPx: l.dims.labelFontSize * ctr / W, reihenwechsel: [...gewechselt],
       }
     }
-    for (const m of platz.mitglieder) if (reiheVon(m) !== bildReihe(m.anker)) gewechselt.add(m.id)
+    for (const m of platz.mitglieder) if (reiheVon(m) !== bildReihe(panorama, m.anker)) gewechselt.add(m.id)
   }
 }
 
 /** Ein Lauf: Reihen nach `reiheVon`, Kapazität, x-Lage, Linien, Entkreuzung je Reihe. */
-function reihenLayout<T extends LayoutKachel>(kacheln: T[], W: number, k: number, reiheVon: (t: T) => Reihe, untenGekuerzt: boolean) {
-  const oben = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'oben'), 'oben'), W, 'oben')
-  const unten = aufKapazitaet(grundgruppen(kacheln.filter((t) => reiheVon(t) === 'unten'), 'unten'), W, 'unten', untenGekuerzt)
+function reihenLayout<T extends LayoutKachel>(panorama: PanoramaDef, kacheln: T[], W: number, k: number, reiheVon: (t: T) => Reihe, untenGekuerzt: boolean) {
+  const oben = aufKapazitaet(panorama, grundgruppen(panorama, kacheln.filter((t) => reiheVon(t) === 'oben'), 'oben'), W, 'oben')
+  const unten = aufKapazitaet(panorama, grundgruppen(panorama, kacheln.filter((t) => reiheVon(t) === 'unten'), 'unten'), W, 'unten', untenGekuerzt)
   const dims = computeDims(Math.max(oben.length, unten.length, 1))
   const ry = reihenY(dims, k)
   for (const [reihe, y, gekuerzt] of [[oben, ry.oben, false], [unten, ry.unten, untenGekuerzt]] as const) {
@@ -455,12 +461,12 @@ function reihenLayout<T extends LayoutKachel>(kacheln: T[], W: number, k: number
  * der Reihe seiner Bildlage (zwei Plätze in ihrer Bildlage kreuzen sich nie); davon der mit dem größten Abstand
  * Anker-y ↔ Reihen-y, bei Gleichstand der kleinere Schlüssel.
  */
-function wechselKandidat<T extends LayoutKachel>(oben: Platz<T>[], unten: Platz<T>[], reiheVon: (t: T) => Reihe): Platz<T> | null {
+function wechselKandidat<T extends LayoutKachel>(panorama: PanoramaDef, oben: Platz<T>[], unten: Platz<T>[], reiheVon: (t: T) => Reihe): Platz<T> | null {
   const beteiligt = new Set<Platz<T>>()
   for (const a of oben) for (const b of unten) {
     if (kreuzenZwischen(a, b)) { beteiligt.add(a); beteiligt.add(b) }
   }
-  const kandidaten = [...beteiligt].filter((p) => p.mitglieder.some((m) => reiheVon(m) !== bildReihe(m.anker)))
+  const kandidaten = [...beteiligt].filter((p) => p.mitglieder.some((m) => reiheVon(m) !== bildReihe(panorama, m.anker)))
   kandidaten.sort((a, b) => Math.abs(b.ay - b.y) - Math.abs(a.ay - a.y) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
   return kandidaten[0] ?? null
 }

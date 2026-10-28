@@ -21,27 +21,29 @@
  * **Zwei Plätze wie Netz und Speicher (P-433-2e, Gernot 26.10.2026):** {@link PLATZ_ANKER} nennt die Anker, deren
  * Gerätekachel am Desktop neben dem Haus steht statt in einer Reihe — links die Wärmepumpe, rechts die
  * Klima-Außeneinheit. Die Lage der Plätze ist am Bild v4 gemessen (siehe dort); neues Bild = neue Messung.
+ *
+ * **Panorama-Deskriptor (P-433-2b S1a, E0):** {@link WAERME_PANORAMA_DEF} fasst Bild, Anker-Karte, Reihen, Plätze,
+ * Platzgrenzen, Wert-Rang, Gruppennamen und die Farbe «Weitere» dieses Bildes zusammen (Vertrag in `panorama.ts`);
+ * Layout und Schaubild lesen nur ihn. Die Werte sind exakt die vor E0 im Layout und im Schaubild getippten.
  */
+import { KATEGORIE_FARBEN } from '../../../lib'
+import { ANKER_VORLAUF_ALLE, ANKER_ZUSATZHEIZUNG } from './kachelAnker'
+import {
+  bildReihe as bildReiheIn, type Anker, type GruppenArt, type PanoramaDef, type Reihe,
+} from './panorama'
 
-export const PANORAMA_BREITE = 1312
-export const PANORAMA_HOEHE = 816
+// Bildmaß, Anker- und Reihentyp sind allen Panoramen gemeinsam (`panorama.ts`); hier für die Wärme-Leser weitergereicht.
+export { PANORAMA_BREITE, PANORAMA_HOEHE, type Anker, type Reihe } from './panorama'
 
 export const WAERME_PANORAMA = {
   tag: './backgrounds/waerme-panorama-tag.webp',
   nacht: './backgrounds/waerme-panorama-nacht.webp',
 } as const
 
+/** Die Anker-IDs dieses Bildes (eingeengt; der Deskriptor-Vertrag kennt nur `string`, `panorama.ts`). */
 export type AnkerId =
   | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O'
   | 'P' | 'Q' | 'R' | 'HIMMEL'
-
-export interface Anker {
-  /** Prozent der Bildbreite. */
-  x: number
-  /** Prozent der Bildhöhe. */
-  y: number
-  objekt: string
-}
 
 export const WAERME_ANKER: Record<AnkerId, Anker> = {
   A: { x: 14.1, y: 57.6, objekt: 'Außeneinheit Luft/Wasser (Rasen)' },
@@ -66,9 +68,6 @@ export const WAERME_ANKER: Record<AnkerId, Anker> = {
   HIMMEL: { x: 14, y: 8, objekt: 'Himmel' },
 }
 
-/** Kachelreihe im Bild: oben (über dem Himmel) oder unten (Vorplatz). */
-export type Reihe = 'oben' | 'unten'
-
 /**
  * In welcher Reihe die Kacheln eines Ankers stehen (P-433-2d, Gernot 26.10.2026): **Technik oben, Räume unten** —
  * nach der Art des Objekts, nicht nach seiner Lage im Bild.
@@ -89,7 +88,7 @@ export const ANKER_REIHE: Partial<Record<AnkerId, Reihe>> = {
 /** Reihe nach der Bildlage: Anker-y < 50 % ⇒ oben. Liegen alle Kacheln so, kreuzt keine Linie der oberen eine der
  *  unteren Reihe (obere Linien enden über, untere unter der Bildmitte) — das Ziel des Reihenwechsels. */
 export function bildReihe(id: AnkerId): Reihe {
-  return WAERME_ANKER[id].y < 50 ? 'oben' : 'unten'
+  return bildReiheIn({ anker: WAERME_ANKER }, id)
 }
 
 /** Reihe eines Ankers — aus {@link ANKER_REIHE}; ohne Eintrag nach der Bildlage ({@link bildReihe}, Rückfall). */
@@ -109,9 +108,44 @@ export function ankerReihe(id: AnkerId): Reihe {
  * läuft diagonal von (14 %, 34 %) nach (32 %, 22 %) — die Kachel überdeckt sie, 14–18 % Objektpixel, durchscheinend
  * wie im Energiefluss); der Platz endet bei 45 % der Bildhöhe, über der Außeneinheit A (y 50–66 %). Rechts ist das
  * Bild frei für x > 92 % bis y 54 % und ab y 60 % für x > 80 %; der Platz beginnt bei 58 % der Bildhöhe, unter der
- * Klima-Außeneinheit O (y 45–50 %). Die Zahlen 45 % und 58 % stehen in `ueberblickLayout.ts` (Geometrie dort).
+ * Klima-Außeneinheit O (y 45–50 %). Die Zahlen 45 % und 58 % stehen im Deskriptor ({@link WAERME_PANORAMA_DEF},
+ * `platzLinksBis`/`platzRechtsAb`); die Geometrie rechnet `ueberblickLayout.ts`.
  */
 export const PLATZ_ANKER: Readonly<Record<'links' | 'rechts', readonly AnkerId[]>> = {
   links: ['A', 'C', 'F'],
   rechts: ['O'],
+}
+
+/** Gruppennamen dieses Bildes: jede Geräte-Gruppe steht an einem Wärmepumpen-Objekt (A · C · F · O) und heißt
+ *  «Wärmepumpen»; die Restgruppe der Klima-Innengeräte «Innengeräte»; die gemischte «Weitere». */
+const WAERME_GRUPPEN_NAME: Readonly<Record<GruppenArt, string>> = {
+  geraete: 'Wärmepumpen',
+  innengeraete: 'Innengeräte',
+  weitere: 'Weitere',
+}
+
+/**
+ * Der Deskriptor des Wärme/Klima-Panoramas (Vertrag `panorama.ts`, P-433-2b S1a E0) — dieselben Objekte wie die
+ * Einzel-Exporte oben (`anker` IST {@link WAERME_ANKER}, `reihe` IST {@link ANKER_REIHE}, `plaetze` IST
+ * {@link PLATZ_ANKER}), keine Kopie.
+ *  - Platzgrenzen 45 % / 58 % der Bildhöhe (gemessen am Bild v4, siehe {@link PLATZ_ANKER});
+ *  - Wert-Rang für «Weitere (n)»: Warmwasser E 0 · Strom heute I 1 · «Vorlauf · Rücklauf»/«Wärme heute» G/K/J 2 ·
+ *    Zusatzheizung D 3 · Außen HIMMEL 4 (in «Weitere» wandern zuerst Außen, dann Zusatzheizung, dann Vorlauf);
+ *  - Restgruppe der Innengeräte ab dem vierten an N (Halt H1: mit zwei Klima-Geräten trägt das vierte Innengerät der
+ *    Reihe L oder M — die Gruppe hängt trotzdem am Schlafzimmer-Gerät N, wie vor E0).
+ */
+export const WAERME_PANORAMA_DEF: PanoramaDef = {
+  bilder: WAERME_PANORAMA,
+  aria: 'Schaubild Wärme/Klima',
+  anker: WAERME_ANKER,
+  reihe: ANKER_REIHE,
+  plaetze: PLATZ_ANKER,
+  platzLinksBis: 0.45,
+  platzRechtsAb: 0.58,
+  wertRang: {
+    E: 0, I: 1, ...Object.fromEntries(ANKER_VORLAUF_ALLE.map((a) => [a, 2])), [ANKER_ZUSATZHEIZUNG]: 3, HIMMEL: 4,
+  },
+  gruppenName: (gruppe) => WAERME_GRUPPEN_NAME[gruppe],
+  farbeWeitere: KATEGORIE_FARBEN.waermepumpe,
+  ankerRestgruppe: 'N',
 }

@@ -23,6 +23,7 @@ import UeberblickKarte from './UeberblickKarte'
 import UeberblickKarteEmob from './UeberblickKarteEmob'
 import UeberblickSchaubild from './UeberblickSchaubild'
 import { useLiveUeberblick } from './useLiveUeberblick'
+import { WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 
 /** Park-IDs der zwei Elemente des Blocks. */
 export const UEBERBLICK_PARK_IDS = ['el:ueberblick-schaubild', 'el:ueberblick-karte'] as const
@@ -53,7 +54,7 @@ export default function UeberblickBlock({ anlageId, geraete, inv }: UeberblickBl
   return (
     <div className={`grid grid-cols-1 gap-4${beide ? ' xl:grid-cols-3' : ''}`} data-ueberblick-block>
       <Parkbar id="el:ueberblick-schaubild" titel="Schaubild" className={beide ? 'xl:col-span-2' : undefined}>
-        <UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} />
+        <UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} />
       </Parkbar>
       <Parkbar id="el:ueberblick-karte" titel="Auf einen Blick">
         <UeberblickKarte inv={inv} live={live} wetter={wetter} tag={tag} mehrereGeraete={geraete.length > 1} />

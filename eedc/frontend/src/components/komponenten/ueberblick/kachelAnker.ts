@@ -34,18 +34,20 @@ import {
 } from '../../../lib/investitionParameter'
 import { formatPower, getNodeColor } from '../../live/EnergieFluss'
 import { computeDims, type LayoutDims } from '../../live/energieFlussLayout'
-import { modusZeile, type ZweiteZeile } from '../../live/EnergieFlussKachel'
+import { modusZeile, type EnergieFlussKachelProps, type ZweiteZeile } from '../../live/EnergieFlussKachel'
 import { modusKlartext } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
+import type { AnkerId as PanoramaAnkerId, KachelArt } from './panorama'
 
-/** Art einer Kachel — bestimmt Gruppierung und Rang im Layout. */
-export type KachelArt = 'geraet' | 'innengeraet' | 'wert'
+// Seit P-433-2b S1a (E0) steht die Kachel-Art im Panorama-Vertrag (`panorama.ts`); hier für bestehende Leser weitergereicht.
+export type { KachelArt } from './panorama'
 
 export interface UeberblickKachel {
   /** Stabiler Schlüssel (React-Key, Gruppen-Key). */
   id: string
   art: KachelArt
-  anker: AnkerId
+  /** Objekt im Bild — eine Anker-ID des Panorama-Deskriptors (Wärme/Klima: {@link AnkerId}). */
+  anker: PanoramaAnkerId
   /** Ungekürzter Name (die Kürzung macht die Zeichnung nach `labelMaxChars`). */
   label: string
   icon: string
@@ -65,6 +67,9 @@ export interface UeberblickKachel {
   /** P-433-3 S2-6: Werttext in den kompakten Dims (ab 5 Kacheln je Reihe, nodeW 80) — fehlt er, gilt `wertText`.
    *  Gewählt wird er an EINER Stelle, {@link kachelWertText}. */
   wertTextKompakt?: string
+  /** P-433-2b S1a (Ü1): Pegel der Kachel (Füllung von unten, wie der SoC-Pegel im Energiefluss) — Wärme/Klima setzt
+   *  keinen (`undefined`), das Schaubild reicht ihn an `EnergieFlussKachel` durch. */
+  pegel?: EnergieFlussKachelProps['pegel']
 }
 
 export interface KachelEingaben {

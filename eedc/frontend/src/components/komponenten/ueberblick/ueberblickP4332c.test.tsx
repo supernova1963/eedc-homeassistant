@@ -11,6 +11,7 @@ import { hatKreuzung, layoutUeberblick } from './ueberblickLayout'
 import {
   ANKER_VORLAUF, ANKER_VORLAUF_FUSSBODENHEIZUNG, ANKER_VORLAUF_HEIZKOERPER, baueUeberblickKacheln,
 } from './kachelAnker'
+import { WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import { stubMatchMedia } from '../../../test/render'
 import { CHART_COLORS } from '../../../lib'
@@ -67,7 +68,7 @@ describe('Kachel «Wärme heute» (P-433-2c)', () => {
     const inv = wpInv(7, 'Nibe', { ...SOLE, vorlauftemperatur: '35' })
     const { kacheln } = baue([inv], tag([{ investition_id: 7, waerme_kwh: 23 }]), [knoten(7, { vorlauf_c: 34.2, ruecklauf_c: 29.1 })])
     for (const ctr of [1150, 600, 390, 360]) {
-      const l = layoutUeberblick(kacheln, ctr)
+      const l = layoutUeberblick(kacheln, ctr, WAERME_PANORAMA_DEF)
       for (const reihe of [l.oben, l.unten]) expect(hatKreuzung(reihe), `${ctr}`).toBe(false)
       const reiheVon = (id: string) => ([l.oben, l.unten].find((r) => r.some((p) => p.mitglieder.some((m) => m.id === id))))
       expect(reiheVon('wert-waerme-7'), `${ctr}`).toBe(reiheVon('wert-vorlauf-7'))
@@ -88,7 +89,7 @@ describe('Kachel «Wärme heute» (P-433-2c)', () => {
 
   it('das Schaubild zeichnet die Kachel mit Tooltip', () => {
     const { kacheln, ohneSensor } = baue([wpInv(7, 'Nibe', SOLE)], tag([{ investition_id: 7, waerme_kwh: 23 }]))
-    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} /></ThemeProvider>)
+    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} /></ThemeProvider>)
     const titel = [...container.querySelectorAll('svg g[data-title]')].map((g) => g.getAttribute('data-title') ?? '')
     expect(titel.some((t) => t.includes('Wärme heute: 23,0 kWh'))).toBe(true)
   })

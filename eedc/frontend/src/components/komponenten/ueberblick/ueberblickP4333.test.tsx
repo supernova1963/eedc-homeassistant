@@ -13,7 +13,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import UeberblickKarte from './UeberblickKarte'
 import UeberblickSchaubild from './UeberblickSchaubild'
-import { layoutReihen, layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { layoutReihen as layoutReihenMit, layoutUeberblick as layoutUeberblickMit, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 import {
   ANKER_VORLAUF, ANKER_ZUSATZHEIZUNG, baueUeberblickKacheln, warmwasserC, zusatzheizungAktiv,
 } from './kachelAnker'
@@ -21,6 +22,10 @@ import { ThemeProvider } from '../../../context/ThemeContext'
 import { stubMatchMedia } from '../../../test/render'
 import type { LiveDashboardResponse, LiveKomponente } from '../../../api/liveDashboard'
 import type { Investition } from '../../../types'
+
+// P-433-2b S1a (E0): das Layout nimmt den Panorama-Deskriptor — die Proben laufen unverändert gegen Wärme/Klima.
+const layoutUeberblick = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutUeberblickMit(kacheln, ctr, WAERME_PANORAMA_DEF)
+const layoutReihen = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutReihenMit(kacheln, ctr, WAERME_PANORAMA_DEF)
 
 beforeEach(() => { stubMatchMedia(); localStorage.clear() })
 
@@ -99,7 +104,7 @@ describe('Kacheln Vorlauf · Rücklauf und Zusatzheizung', () => {
 
   it('Schaubild zeichnet die neuen Kacheln mit Tooltip (Desktop)', () => {
     const { kacheln, ohneSensor } = baue([MATHEK], matheksLive())
-    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} /></ThemeProvider>)
+    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} /></ThemeProvider>)
     const titel = [...container.querySelectorAll('svg g[data-title]')].map((g) => g.getAttribute('data-title') ?? '')
     expect(titel.some((t) => t.includes('Vorlauf: 34,2 °C'))).toBe(true)
     expect(titel.some((t) => t.includes('Zusatzheizung: 1.500 W'))).toBe(true)

@@ -21,9 +21,12 @@
  *   Innengeräte-Abschnitt (`LiveInnengeraete`) unter dem Bild, auf
  *   «Wärmepumpen (n)» oder «Weitere (n)» eine einfache Liste — nicht das
  *   Energiefluss-Overlay (es kennt nur Live-Knoten).
+ * - **Bild aus dem Deskriptor** (P-433-2b S1a, E0): Panoramen, aria, Gruppenname und Farbe der Gruppe «Weitere»
+ *   kommen aus `panorama` (`panorama.ts`; Wärme/Klima `WAERME_PANORAMA_DEF`), das Layout ebenso. Der Pegel einer
+ *   Kachel (`pegel`) geht unverändert an `EnergieFlussKachel` (Wärme: keiner).
  */
 import { useEffect, useRef, useState } from 'react'
-import { ENERGIEFLUSS_SAUM, KATEGORIE_FARBEN } from '../../../lib'
+import { ENERGIEFLUSS_SAUM } from '../../../lib'
 import { verbergeTouchTooltip } from '../../../hooks/useTouchTitleTooltip'
 import { Button } from '../../ui'
 import EnergieFlussKachel from '../../live/EnergieFlussKachel'
@@ -31,17 +34,16 @@ import EnergieFlussDefs from '../../live/EnergieFlussDefs'
 import LiveInnengeraete from '../../live/LiveInnengeraete'
 import { formatPower, kuerzeMitSuffix, liesLiteModus, zeichenBudget } from '../../live/EnergieFluss'
 import type { LiveInnengeraet } from '../../../api/liveDashboard'
-import { PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_PANORAMA } from './waermePanoramaAnker'
+import { PANORAMA_BREITE, PANORAMA_HOEHE, type PanoramaDef } from './panorama'
 import { kachelWertText, type UeberblickKachel } from './kachelAnker'
 import { layoutUeberblick, type Platz, type UeberblickLayout } from './ueberblickLayout'
 
 /** Startbreite bis zur ersten Messung (Desktop-Spalte); jsdom misst nie. */
 const START_BREITE = 900
 
-const GRUPPEN_NAME: Record<string, string> = {
-  geraete: 'Wärmepumpen',
-  innengeraete: 'Innengeräte',
-  weitere: 'Weitere',
+/** Name einer Gruppenkachel aus dem Deskriptor (je Gruppen-Art und Anker; «Weitere» ohne Anker). */
+function gruppenName(p: Platz<UeberblickKachel>, panorama: PanoramaDef): string {
+  return panorama.gruppenName(p.gruppe ?? 'weitere', p.anker)
 }
 
 /**
@@ -59,16 +61,16 @@ function gruppenWert(p: Platz<UeberblickKachel>): { text: string; kw: number | n
 }
 
 /** Was eine Gruppenkachel zeigt. */
-function gruppenKachel(p: Platz<UeberblickKachel>) {
+function gruppenKachel(p: Platz<UeberblickKachel>, panorama: PanoramaDef) {
   const n = p.mitglieder.length
-  const name = GRUPPEN_NAME[p.gruppe ?? 'weitere']
+  const name = gruppenName(p, panorama)
   const tip = [`${name} (${n})`, ...p.mitglieder.map((m) => `• ${m.label}: ${m.wertText}${m.zweiteZeile ? ` (${m.zweiteZeile.text})` : ''}`)].join('\n')
   const erste = p.mitglieder[0]
   const wert = gruppenWert(p)
   return {
     name,
     icon: p.gruppe === 'weitere' ? 'wrench' : erste.icon,
-    color: p.gruppe === 'weitere' ? KATEGORIE_FARBEN.waermepumpe : erste.color,
+    color: p.gruppe === 'weitere' ? panorama.farbeWeitere : erste.color,
     isActive: wert.kw != null ? wert.kw > 0 : p.mitglieder.some((m) => m.isActive),
     wertText: wert.text,
     tip,
@@ -80,7 +82,7 @@ function allePlaetze(layout: UeberblickLayout<UeberblickKachel>): Platz<Ueberbli
   return [...layout.oben, ...layout.unten, ...(layout.links ? [layout.links] : []), ...(layout.rechts ? [layout.rechts] : [])]
 }
 
-function Linien({ layout }: { layout: UeberblickLayout<UeberblickKachel> }) {
+function Linien({ layout, panorama }: { layout: UeberblickLayout<UeberblickKachel>; panorama: PanoramaDef }) {
   const k = layout.k
   return (
     <g pointerEvents="none">
@@ -94,7 +96,7 @@ function Linien({ layout }: { layout: UeberblickLayout<UeberblickKachel> }) {
           />
           <path
             d={`M ${p.linie.x1} ${p.linie.y1} L ${p.linie.x2} ${p.linie.y2}`}
-            fill="none" stroke={p.gruppe === 'weitere' ? KATEGORIE_FARBEN.waermepumpe : p.mitglieder[0].color}
+            fill="none" stroke={p.gruppe === 'weitere' ? panorama.farbeWeitere : p.mitglieder[0].color}
             strokeWidth={1.5 * k} strokeOpacity={0.85} strokeLinecap="round"
           />
           <circle cx={p.linie.x2} cy={p.linie.y2} r={3 * k} fill={p.mitglieder[0].color} fillOpacity={0.85} />
@@ -104,8 +106,8 @@ function Linien({ layout }: { layout: UeberblickLayout<UeberblickKachel> }) {
   )
 }
 
-function GruppenListe({ platz, onSchliessen }: { platz: Platz<UeberblickKachel>; onSchliessen: () => void }) {
-  const titel = `${GRUPPEN_NAME[platz.gruppe ?? 'weitere']} (${platz.mitglieder.length})`
+function GruppenListe({ platz, panorama, onSchliessen }: { platz: Platz<UeberblickKachel>; panorama: PanoramaDef; onSchliessen: () => void }) {
+  const titel = `${gruppenName(platz, panorama)} (${platz.mitglieder.length})`
   const innen = platz.gruppe === 'innengeraete'
     ? platz.mitglieder.map((m) => m.innengeraet).filter((g): g is LiveInnengeraet => g != null)
     : null
@@ -134,9 +136,11 @@ function GruppenListe({ platz, onSchliessen }: { platz: Platz<UeberblickKachel>;
 export interface UeberblickSchaubildProps {
   kacheln: UeberblickKachel[]
   ohneSensor: string[]
+  /** Das Bild mit Anker-Karte und Regeln (P-433-2b S1a) — Wärme/Klima: `WAERME_PANORAMA_DEF`. */
+  panorama: PanoramaDef
 }
 
-export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickSchaubildProps) {
+export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: UeberblickSchaubildProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [breite, setBreite] = useState(START_BREITE)
   const [lite] = useState(liesLiteModus)
@@ -152,29 +156,29 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickS
     return () => ro.disconnect()
   }, [])
 
-  const layout = layoutUeberblick(kacheln, breite)
+  const layout = layoutUeberblick(kacheln, breite, panorama)
   const { dims, k } = layout
   const plaetze = allePlaetze(layout)
   const offenerPlatz = offen != null ? plaetze.find((p) => p.key === offen) ?? null : null
 
   return (
     <div ref={ref} className="w-full" data-ueberblick-schaubild>
-      <svg viewBox={`0 0 ${PANORAMA_BREITE} ${PANORAMA_HOEHE}`} className="w-full h-auto block rounded-lg" role="img" aria-label="Schaubild Wärme/Klima">
+      <svg viewBox={`0 0 ${PANORAMA_BREITE} ${PANORAMA_HOEHE}`} className="w-full h-auto block rounded-lg" role="img" aria-label={panorama.aria}>
         <defs><EnergieFlussDefs lite={lite} /></defs>
         <image
-          data-panorama="tag" href={WAERME_PANORAMA.tag}
+          data-panorama="tag" href={panorama.bilder.tag}
           x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
           className="opacity-100 dark:opacity-0"
         />
         <image
-          data-panorama="nacht" href={WAERME_PANORAMA.nacht}
+          data-panorama="nacht" href={panorama.bilder.nacht}
           x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
           className="opacity-0 dark:opacity-100"
         />
-        <Linien layout={layout} />
+        <Linien layout={layout} panorama={panorama} />
         {plaetze.map((p) => {
           const einzeln = p.gruppe == null ? p.mitglieder[0] : null
-          const g = einzeln ? null : gruppenKachel(p)
+          const g = einzeln ? null : gruppenKachel(p, panorama)
           const maxC = dims.labelMaxChars
           const label = einzeln
             ? (einzeln.label.length > maxC ? einzeln.label.slice(0, maxC - 2) + '…' : einzeln.label)
@@ -194,6 +198,7 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickS
                 isActive={einzeln?.isActive ?? g!.isActive}
                 wertText={einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
                 zweiteZeile={einzeln?.zweiteZeile ?? null}
+                pegel={einzeln?.pegel}
                 tip={einzeln?.tip ?? g!.tip}
                 mitglieder={g ? p.mitglieder.length : undefined}
                 knopf={knopf}
@@ -203,7 +208,7 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor }: UeberblickS
           )
         })}
       </svg>
-      {offenerPlatz && <GruppenListe platz={offenerPlatz} onSchliessen={() => setOffen(null)} />}
+      {offenerPlatz && <GruppenListe platz={offenerPlatz} panorama={panorama} onSchliessen={() => setOffen(null)} />}
       {ohneSensor.length > 0 && (
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" data-ohne-sensor>
           Ohne Sensor, deshalb ohne Kachel: {ohneSensor.join(' · ')} →{' '}

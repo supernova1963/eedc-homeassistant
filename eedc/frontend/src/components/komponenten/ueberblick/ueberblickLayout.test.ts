@@ -6,12 +6,23 @@
  * Bauplans tragen die neuen Reihen (Erwartung angepasst, nicht die Aussage). Seit P-433-2e (Gernot 26.10.2026)
  * stehen am Desktop die Wärmepumpe (A/C/F) links und die Klima-Außeneinheit (O) rechts neben dem Haus statt in
  * einer Reihe — die Fälle tragen die Plätze (Erwartung angepasst), die Proben der Plätze stehen am Ende (S1–S7).
+ * Seit P-433-2b S1a (E0) nimmt das Layout den Panorama-Deskriptor; alle Proben laufen unverändert gegen
+ * `WAERME_PANORAMA_DEF` (die drei Wrapper unten reichen ihn durch — sonst keine Änderung).
  */
 import { describe, it, expect } from 'vitest'
 import { computeDims, kapazitaet } from '../../live/energieFlussLayout'
 import { STAPEL_VERSATZ } from '../../live/EnergieFlussKachel'
-import { ANKER_REIHE, PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, ankerReihe, bildReihe, type AnkerId } from './waermePanoramaAnker'
-import { hatKreuzung, hatKreuzungZwischen, layoutReihen, layoutUeberblick, platzGeometrie, reihenY, schneiden, trifftRechteck, zeichenbreite, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { ANKER_REIHE, PANORAMA_BREITE, PANORAMA_HOEHE, WAERME_ANKER, WAERME_PANORAMA_DEF, ankerReihe, bildReihe, type AnkerId } from './waermePanoramaAnker'
+import {
+  hatKreuzung, hatKreuzungZwischen, layoutReihen as layoutReihenMit, layoutUeberblick as layoutUeberblickMit,
+  platzGeometrie as platzGeometrieMit, reihenY, schneiden, trifftRechteck, zeichenbreite, type LayoutKachel, type Platz,
+} from './ueberblickLayout'
+import type { LayoutDims } from '../../live/energieFlussLayout'
+
+const layoutUeberblick = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutUeberblickMit(kacheln, ctr, WAERME_PANORAMA_DEF)
+const layoutReihen = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutReihenMit(kacheln, ctr, WAERME_PANORAMA_DEF)
+const platzGeometrie = <T extends LayoutKachel>(m: T[], seite: 'links' | 'rechts', dims: LayoutDims, k: number) =>
+  platzGeometrieMit(m, seite, dims, k, WAERME_PANORAMA_DEF)
 
 const geraet = (id: string, anker: AnkerId): LayoutKachel => ({ id, art: 'geraet', anker })
 const wert = (id: string, anker: AnkerId): LayoutKachel => ({ id, art: 'wert', anker })
@@ -317,9 +328,9 @@ describe('Reihenwechsel bei Kreuzung (Entscheid Gernot 26.10.2026 zu H1)', () =>
         expect(hatKreuzungZwischen(l.oben, l.unten), was).toBe(false)   // auch Kachelmitte → Anker
         expect(l.reihenwechsel.length, was).toBeLessThanOrEqual(fall.length)
         for (const id of l.reihenwechsel) {
-          const t = fall.find((f) => f.id === id)!
-          expect(ankerReihe(t.anker), was).not.toBe(bildReihe(t.anker))   // nur wer nicht in seiner Bildlage stand
-          expect(inReihe(bildReihe(t.anker) === 'oben' ? l.oben : l.unten, id), was).toBe(true)
+          const a = fall.find((f) => f.id === id)!.anker as AnkerId   // S1a: LayoutKachel.anker ist seit E0 `string`
+          expect(ankerReihe(a), was).not.toBe(bildReihe(a))   // nur wer nicht in seiner Bildlage stand
+          expect(inReihe(bildReihe(a) === 'oben' ? l.oben : l.unten, id), was).toBe(true)
         }
         gezaehlt++
       }

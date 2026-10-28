@@ -15,7 +15,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import UeberblickKarte from './UeberblickKarte'
 import UeberblickSchaubild from './UeberblickSchaubild'
-import { hatKreuzung, layoutReihen, layoutUeberblick, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { hatKreuzung, layoutReihen as layoutReihenMit, layoutUeberblick as layoutUeberblickMit, type LayoutKachel, type Platz } from './ueberblickLayout'
+import { WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 import {
   ANKER_VORLAUF, ANKER_VORLAUF_FUSSBODENHEIZUNG, ANKER_VORLAUF_HEIZKOERPER, ANKER_ZUSATZHEIZUNG,
   baueUeberblickKacheln, kachelWertText, vorlaufAnker, vorlaufBeschriftung,
@@ -26,6 +27,10 @@ import { ThemeProvider } from '../../../context/ThemeContext'
 import { stubMatchMedia } from '../../../test/render'
 import type { LiveDashboardResponse, LiveKomponente } from '../../../api/liveDashboard'
 import type { Investition } from '../../../types'
+
+// P-433-2b S1a (E0): das Layout nimmt den Panorama-Deskriptor — die Proben laufen unverändert gegen Wärme/Klima.
+const layoutUeberblick = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutUeberblickMit(kacheln, ctr, WAERME_PANORAMA_DEF)
+const layoutReihen = <T extends LayoutKachel>(kacheln: T[], ctr: number) => layoutReihenMit(kacheln, ctr, WAERME_PANORAMA_DEF)
 
 beforeEach(() => { stubMatchMedia(); localStorage.clear() })
 
@@ -74,7 +79,7 @@ describe('S2-6: Werttext «Vorlauf · Rücklauf» je Dims', () => {
   it('das Schaubild zeichnet in Matheks 6er-Reihe die Kurzform', () => {
     const { kacheln, ohneSensor } = baue(SOLE)
     expect(kacheln).toHaveLength(6)
-    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} /></ThemeProvider>)
+    const { container } = render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} /></ThemeProvider>)
     const texte = [...container.querySelectorAll('svg text')].map((t) => t.textContent ?? '')
     expect(texte).toContain('34 → 29 °C')
     expect(texte).not.toContain('33,9 → 28,8 °C')

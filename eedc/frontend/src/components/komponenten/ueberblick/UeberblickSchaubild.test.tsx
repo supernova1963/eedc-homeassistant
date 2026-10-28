@@ -10,7 +10,7 @@ import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import UeberblickSchaubild from './UeberblickSchaubild'
 import { baueUeberblickKacheln, geraeteAnker, modusText } from './kachelAnker'
-import { WAERME_PANORAMA } from './waermePanoramaAnker'
+import { WAERME_PANORAMA, WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 import { ThemeProvider } from '../../../context/ThemeContext'
 import { stubMatchMedia } from '../../../test/render'
 import type { LiveDashboardResponse, LiveInnengeraet, LiveKomponente, LiveWetterResponse } from '../../../api/liveDashboard'
@@ -59,7 +59,7 @@ const matheksLive = () => liveAntwort({
 function zeichne(geraete: Investition[], live: LiveDashboardResponse | null, wetter: LiveWetterResponse | null, breite = 900) {
   mitBreite(breite)
   const { kacheln, ohneSensor } = baueUeberblickKacheln({ geraete, live, wetter, referenz: 'referenz' })
-  return render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} /></ThemeProvider>)
+  return render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} /></ThemeProvider>)
 }
 const kacheln = (c: HTMLElement) => [...c.querySelectorAll('svg g[data-title]')]
 const ersteZeilen = (c: HTMLElement) => kacheln(c).map((g) => g.getAttribute('data-title')!.split('\n')[0])
