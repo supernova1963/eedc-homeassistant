@@ -1031,10 +1031,19 @@ template:
 **Ohne Home Assistant: evcc über MQTT (seit der nächsten Version).** Das MQTT-Gateway reicht an die Zustandsfelder der
 E-Mobilität (Ladezustand, Lademodus, Fahrzeug am Ladepunkt, die drei evcc-Felder) den Text unverändert weiter — im
 Gateway-Picker entfallen dort Faktor und Offset, die Vorschau zeigt den Text. Ein Wort auf einem Zahlenfeld bleibt ein
-Transform-Fehler. Für einen evcc-Ladepunkt gibt es das Preset **„evcc Ladepunkt"** mit allen Zeilen auf einmal (auch den Zählerstand der Wallbox als Grundlage der Monatsmenge, nur mit Lademeter) — die
-Oberfläche bietet Presets derzeit nicht an, angelegt wird es über die Programmierschnittstelle (Topics, Faktoren, Aufruf und
-Grenzen: [MQTT-Inbound](MQTT_INBOUND.md#zustand-und-sitzung-der-e-mobilitaet-ab-der-naechsten-version)). Am
-Feld „Betriebsmodus" bleibt das Gateway aus.
+Transform-Fehler. Für einen evcc-Ladepunkt gibt es das Preset **„evcc Ladepunkt"** mit allen Zeilen auf einmal (auch den Zählerstand der Wallbox als Grundlage der Monatsmenge, nur mit Lademeter).
+Am Feld „Betriebsmodus" bleibt das Gateway aus.
+
+**„Preset anwenden …" (seit der nächsten Version).** Unter *Einstellungen → Datenquellen* steht an jedem Gerät, für das es
+ein Geräte-Preset gibt, der Knopf **„Preset anwenden …"** (an der Wallbox „evcc Ladepunkt" und „go-eCharger", am Speicher
+„sonnenBatterie", an einem sonstigen Verbraucher die Steckdosen von Shelly, Tasmota und Zigbee2MQTT); an „Anlage / Zähler"
+stehen die Presets ohne Gerät (Shelly 3EM, OpenDTU, Victron …). Der Dialog zeigt Name, Hersteller, Beschreibung und Anleitung,
+die Variablen mit ihrer Vorgabe (beim evcc-Preset Prefix „evcc" und Ladepunkt „1") und die Zeilen, die angelegt werden
+(Topic → Inhalt). **„Anwenden"** legt die Gateway-Zuordnungen an und stellt die Felder auf **„Gateway"** mit dem Topic.
+⚠ Vorhandene Gateway-Zuordnungen **derselben Felder** ersetzt das Preset — der Dialog sagt es vorher; andere Felder bleiben,
+wie sie sind. Ein Preset legt nur an; eine einzelne Zeile änderst du danach wie gewohnt im Gateway-Picker des Feldes (Topics,
+Faktoren und Grenzen: [MQTT-Inbound](MQTT_INBOUND.md#zustand-und-sitzung-der-e-mobilitaet-ab-der-naechsten-version)). Ohne
+MQTT-Broker gibt es keinen Knopf.
 
 Für openWB, Easee, Wallbox, Tesla Wall Connector, Alfen, Zaptec, Keba und Heidelberg sowie die Fahrzeug-Integrationen von
 Tesla, VW/Skoda, Renault, Kia und Toyota gilt derselbe Weg; welche Rohwerte sie melden, steht in ihrer Integrations-Doku. Ein

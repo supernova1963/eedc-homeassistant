@@ -45,6 +45,10 @@ class MqttPreset:
     mappings: list[PresetMapping]
     anleitung: str = ""         # Hilfetext für den User
     erfordert_investition: bool = False  # True wenn Investitions-ID für ziel_key benötigt wird
+    #: P-433-2b K4 (K4-7): die Investitionstypen, an deren Gerät die Datenquellen-Fläche den Knopf «Preset anwenden…»
+    #: zeigt (nur mit ``erfordert_investition``). Die Zuordnung steht HIER, der Client liest sie aus der Antwort und führt
+    #: keine zweite Tabelle. Leer ⇒ Anlagen-Preset (Basis-Block) bzw. ohne Knopf.
+    typen: tuple[str, ...] = ()
 
 
 # ─── Preset-Registry ──────────────────────────────────────────────
@@ -211,6 +215,7 @@ _register(MqttPreset(
     beschreibung="Shelly Gen2 Steckdose oder PM Mini zur Leistungsmessung eines einzelnen Verbrauchers (z.B. Wärmepumpe, Klimaanlage).",
     anleitung="MQTT in der Shelly-App aktivieren. Die Device-ID findet sich unter Settings → Device Info. Bitte die zugehörige Investition auswählen.",
     erfordert_investition=True,
+    typen=("sonstiges",),
     variablen=[
         PresetVariable(
             key="device_id",
@@ -325,6 +330,7 @@ _register(MqttPreset(
     beschreibung="sonnenBatterie Heimspeicher mit lokalem MQTT-Interface. Publiziert Lade-/Entladeleistung und Ladestand.",
     anleitung="Lokales MQTT auf der sonnenBatterie aktivieren (Softwareintegration → MQTT). Die Seriennummer steht auf dem Gerät oder im sonnen-Portal.",
     erfordert_investition=True,
+    typen=("speicher",),
     variablen=[
         PresetVariable(
             key="serial",
@@ -361,6 +367,7 @@ _register(MqttPreset(
     beschreibung="go-eCharger Wallbox. Publiziert Energiedaten als JSON-Array (nrg-Topic).",
     anleitung="MQTT in der go-eCharger App aktivieren. Die Seriennummer steht auf dem Gerät oder in der App unter Einstellungen. Bitte die zugehörige Wallbox-Investition auswählen.",
     erfordert_investition=True,
+    typen=("wallbox",),
     variablen=[
         PresetVariable(
             key="serial",
@@ -401,6 +408,7 @@ _register(MqttPreset(
               "(der erste ist 1). Bitte die zugehörige Wallbox-Investition auswählen. Ladestand und Reichweite des "
               "Autos gehören an das E-Auto und sind nicht Teil dieses Presets.",
     erfordert_investition=True,
+    typen=("wallbox",),
     variablen=[
         PresetVariable(
             key="prefix",
@@ -520,6 +528,7 @@ _register(MqttPreset(
     beschreibung="Tasmota-Gerät zur Leistungsmessung eines einzelnen Verbrauchers (Steckdose, Schalter mit Messung).",
     anleitung="MQTT in Tasmota konfigurieren (Configuration → MQTT). Bitte die zugehörige Investition auswählen.",
     erfordert_investition=True,
+    typen=("sonstiges",),
     variablen=[
         PresetVariable(
             key="device_id",
@@ -547,6 +556,7 @@ _register(MqttPreset(
     beschreibung="Zigbee-Steckdose mit Leistungsmessung über Zigbee2MQTT (z.B. IKEA INSPELNING, Shelly Plug E, Sonoff S40).",
     anleitung="Zigbee2MQTT muss konfiguriert und aktiv sein. Der Gerätename entspricht dem Namen in der Zigbee2MQTT-Oberfläche. Bitte die zugehörige Investition auswählen.",
     erfordert_investition=True,
+    typen=("sonstiges",),
     variablen=[
         PresetVariable(
             key="device_name",

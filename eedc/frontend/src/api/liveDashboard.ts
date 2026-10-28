@@ -113,6 +113,8 @@ export interface LiveFahrzeug {
   zu_hause?: boolean | null
   /** Stammdatum `ist_dienstlich`. */
   dienstwagen?: boolean
+  /** P-433-2b K4: Kilometerstand des zugeordneten km-Zählers (ganze km), nur mit Wert. */
+  km_stand?: number | null
 }
 
 export interface LiveGauge {
@@ -381,8 +383,20 @@ export interface MqttPreset {
   beschreibung: string
   anleitung: string
   erfordert_investition: boolean
+  /** P-433-2b K4: Investitionstypen, an deren Gerät die Datenquellen-Fläche den Knopf zeigt (Backend `MqttPreset.typen`). */
+  typen?: string[]
   variablen: PresetVariable[]
   mappings: PresetMappingInfo[]
+}
+
+/** Antwort von «Preset anwenden» (P-433-2b K4-8: ersetzt je `ziel_key`, setzt die Quelle Gateway). */
+export interface PresetApplyResponse {
+  preset_id: string
+  erstellt: number
+  mappings: Record<string, unknown>[]
+  ersetzt?: number
+  quelle_gesetzt?: number
+  ohne_feld?: string[]
 }
 
 export interface GatewayMappingCreate {
@@ -574,7 +588,7 @@ export const liveDashboardApi = {
     api.get<MqttPreset[]>('/live/mqtt/gateway/presets'),
 
   applyGatewayPreset: (data: { preset_id: string; anlage_id: number; variablen: Record<string, string>; investition_id?: number }) =>
-    api.post<{ preset_id: string; erstellt: number; mappings: Record<string, unknown>[] }>(
+    api.post<PresetApplyResponse>(
       '/live/mqtt/gateway/presets/apply', data,
     ),
 }

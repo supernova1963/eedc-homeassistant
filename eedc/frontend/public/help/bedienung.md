@@ -872,11 +872,15 @@ vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen B
   rechts der Ring „Eigenverbrauch (Anlage)" (die Zahl gehört der Anlage, nicht dem Auto). Darunter **Ort** („an ‹Wallbox›",
   nur wenn eedc die Zuordnung kennt, siehe unten), **Standort** („Zu Hause" / „Unterwegs" — nur die Zone aus Home Assistant,
   nie eine Position), **Ladeleistung** (nur mit eigenem Leistungssensor am Auto; bei V2H „Entlädt ins Haus") und
-  **Ziel · Restzeit** („90 % · noch 1 h 20 min"). Ein **Zustands-Chip** („Lädt", „Verbunden", „Nicht verbunden", „Lädt DC",
+  **Ziel · Restzeit** („90 % · noch 1 h 20 min") und der **Kilometerstand** („23.037 km" — der Stand des zugeordneten
+  km-Zählers, siehe unten). Ein **Zustands-Chip** („Lädt", „Verbunden", „Nicht verbunden", „Lädt DC",
   „Fertig", „Fehler") steht **nur, wenn das Auto an keiner Wallbox steht** — an der Wallbox sagt es deren Chip, eine Aussage
   je Fläche. Ein Dienstwagen (Stammdatum) trägt den Chip „Dienstwagen".
-- **„Heute":** Ladung heute (nur mit eigenem Leistungssensor am Auto — sonst stünde die Wallbox-Energie zweimal da) und
-  PV-Ladung heute „(Anlage)" (der PV-Anteil aller Ladungen der Anlage aus den Tageswerten).
+- **„Heute":** Ladung heute (nur mit eigenem Zähler bzw. Leistungssensor am Auto und ohne Wallbox, die die Ladung schon
+  zählt — sonst stünde die Wallbox-Energie zweimal da), PV-Ladung heute „(Anlage)" (der PV-Anteil aller Ladungen der Anlage
+  aus den Tageswerten), **„Gefahren heute"** (km) und **„Fahrverbrauch heute"** (kWh) — der Zuwachs von km-Zähler bzw.
+  Fahrverbrauch-Zähler über die abgeschlossenen Stunden des Tages. Keine Kopfzahl: kWh je 100 km eines einzelnen Tages wären
+  Rauschen, die Effizienz steht im Block „Kennzahlen".
 - **„Betrieb heute":** wie viele Stunden das Auto heute **geladen** hat („Lädt", „Lädt DC") oder **verbunden** stand, und wie
   lange es **zu Hause** bzw. **unterwegs** war — aus der stündlichen Mitschrift von „Ladezustand (Fahrzeug)" und „Zu Hause".
   Nur Werte mit Stunden; „Nicht verbunden", „Fertig" und „Fehler" sind kein Betrieb. Die Karte fehlt, solange keines der
@@ -890,9 +894,18 @@ vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen B
 > Verbindung. **Meldet die Steuerung das Fahrzeug** (evcc, openWB — Feld „Fahrzeug am Ladepunkt" an der Wallbox) und trägt
 > das Auto dieselbe **„Kennung in der Steuerung"** (Stammdaten, Groß/Klein egal), steht es eindeutig „an ‹Wallbox›", auch
 > bei mehreren Wallboxen. Steht an der einzigen Wallbox ein Gast oder ein fremdes Fahrzeug, hat das Auto keinen Ort und
-> trägt seinen eigenen Zustands-Chip. Die Kennung selbst erscheint nicht in der Karte, nur in den Einstellungen. **Benannte Grenzen:** kein Kilometerstand, keine gefahrenen km und kein Fahrverbrauch heute in der Karte; ein
+> trägt seinen eigenen Zustands-Chip. Die Kennung selbst erscheint nicht in der Karte, nur in den Einstellungen. **Benannte Grenzen:** ein
 > Auto, das nur einen Zustand und keine Zahl meldet, erscheint erst mit einem Zahlwert (Ladestand, Reichweite …). Die Werte der
 > Fahrzeug-Integrationen kommen je nach Hersteller alle 10–30 min.
+
+> **Kilometerstand und Fahrt heute — benannte Grenzen.** Der **Kilometerstand** kommt nur vom zugeordneten **km-Zähler**
+> (Feld „Gefahrene km", Auto-Integration oder OBD; aus Home Assistant oder per MQTT), nie aus dem von Hand eingetragenen
+> Tachostand der Monatsdaten, und ist bis zu 60 s alt. **„Gefahren heute"** und **„Fahrverbrauch heute"** zählen nur
+> **abgeschlossene Stunden** (die laufende fehlt) und beginnen mit dem ersten stündlichen Lauf nach der Zuordnung, nicht
+> rückwirkend; die erste Stunde eines neuen Zählers zählt 0 (ihr Stand ist ein Tachostand, keine Tagesmenge). Ein Zähler, der
+> selten meldet (manche Integrationen stündlich oder nur bei Zündung), zeigt die Fahrt erst, wenn der Stand springt. Aus Home
+> Assistant liest eedc den Zähler über die Zuordnung unter *Einstellungen → Datenquellen*; eine ältere Zuordnung, die nur im
+> Sensor-Mapping steht, zählt bis zum erneuten Zuordnen nicht.
 
 - **Gefahrene Kilometer** im Zeitraum
 - **Verbrauch** (kWh)
@@ -918,9 +931,13 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
   „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min" (jeder Teil nur mit Feld; bei „Kein Fahrzeug" „letzte Sitzung
   12,4 kWh", solange der Sensor den Wert hält). Ist an der Wallbox eine **Adresse der Hersteller-Oberfläche** eingetragen
   (Stammdaten, z. B. evcc), steht der Link „Hersteller-Oberfläche öffnen" darunter — eedc öffnet nur die Seite, es schaltet nichts.
-- **„Heute":** Ladung heute (derselbe Tageswert wie im Energiefluss) und PV-Ladung heute „(Anlage)". **Ohne Kopfzahl
-  „PV-Anteil heute"**: dafür bräuchte eedc Wallbox-Menge und PV-Menge aus **einem** Pfad, und die Tageswerte tragen die
-  Wallbox-Menge heute nicht — zwei verschiedene Quellen gegeneinander zu teilen, wäre eine Zahl, die nicht aufgeht.
+- **„PV-Anteil heute" / „Heute":** misst deine Wallbox die geladene Menge **und** den PV-Anteil davon (ein eigener
+  PV-Ladezähler, etwa beim SMA eCharger), steht oben groß der **PV-Anteil heute** („67 %") mit der Herleitung
+  („9,8 kWh PV ÷ 14,7 kWh") — beide Zahlen aus den Tageswerten dieser Wallbox, nichts geschätzt. Darunter Ladung heute
+  (Tageswert aus dem Zähler; ohne ihn derselbe Wert wie im Energiefluss) und PV-Ladung heute „(Anlage)". Fehlt eine der
+  beiden Mengen oder ist der PV-Wert größer als die Ladung (Zähler-Drift), heißt die Karte „Heute" und hat keine Kopfzahl.
+  evcc liefert keinen PV-Ladezähler — seinen Solaranteil zeigt eedc nicht. Misst die Wallbox „Heim: PV" und „Heim: Netz"
+  getrennt, aber keinen Gesamtzähler, gibt es keinen Tageswert der Wallbox und damit keine Kopfzahl.
 - **„Betrieb heute":** wie viele Stunden die Wallbox heute **geladen** hat, **verbunden** war, **gewartet** hat oder **fertig**
   stand („Lädt 3,2 h · Verbunden 5,7 h · Wartet 0,5 h") und darunter **„Ladevorgänge heute: n"** — die Wechsel nach „Lädt"
   aus einem anderen bekannten Zustand. Grundlage ist die **stündliche Mitschrift** des Ladezustands (Anteil jeder Stunde je

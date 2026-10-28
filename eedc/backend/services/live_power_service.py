@@ -307,6 +307,7 @@ class LivePowerService:
         from backend.services.betriebsmodus_live import (
             lade_betriebsmodus_aktion_live,
             lade_betriebsmodus_live,
+            lade_staende_live,
             lade_zustaende_live,
         )
         modus_map = await lade_betriebsmodus_live(db, anlage)
@@ -314,12 +315,14 @@ class LivePowerService:
         aktion_map = await lade_betriebsmodus_aktion_live(db, anlage)
         # P-433-2b K1: Ladezustand, Lademodus, Fahrzeug-Ladezustand, Standort — derselbe Takt wie der Modus.
         zustand_map = await lade_zustaende_live(db, anlage)
+        # P-433-2b K4: Kilometerstand je E-Auto — derselbe Takt.
+        stand_map = await lade_staende_live(db, anlage)
 
         # Komponenten + Gauges aufbauen
         from backend.services.live_komponenten_builder import build_komponenten
         build_result = build_komponenten(
             anlage, basis_values, inv_values, investitionen, inv_live_map,
-            modus_map=modus_map, aktion_map=aktion_map, zustand_map=zustand_map,
+            modus_map=modus_map, aktion_map=aktion_map, zustand_map=zustand_map, stand_map=stand_map,
         )
         komponenten = build_result["komponenten"]
         gauges = build_result["gauges"]

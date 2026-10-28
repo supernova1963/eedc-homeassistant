@@ -36,6 +36,8 @@ import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
 import DatenquellenGatewayPicker from './DatenquellenGatewayPicker'
 import DatenquellenHaPicker from './DatenquellenHaPicker'
+import DatenquellenPresetDialog, { presetsFuerAnlage, presetsFuerTyp } from './DatenquellenPresetDialog'
+import { liveDashboardApi, type MqttPreset } from '../../api/liveDashboard'
 import DatenquellenTopicListe from './DatenquellenTopicListe'
 import { useSelectedAnlage } from '../../hooks'
 import { TYP_LABELS } from '../../lib/constants'
@@ -203,6 +205,9 @@ export default function DatenquellenZuordnung() {
   // Server (Vermerk in `sensor_mapping`) und überlebt damit einen Reload — der
   // Anwender ändert eine Zuordnung und kommt Tage später wieder.
   const [historieHinweis, setHistorieHinweis] = useState<HistorieHinweis | null>(null)
+  // P-433-2b K4 (K4-7): die Geräte-Presets des Gateways (nur mit MQTT) und der offene «Preset anwenden…»-Dialog.
+  const [presets, setPresets] = useState<MqttPreset[]>([])
+  const [presetZiel, setPresetZiel] = useState<{ investitionId: number | null; titel: string; liste: MqttPreset[] } | null>(null)
   // Aufgeklappte „Weitere Größen erfassen"-Abschnitte, je Gerät (R1).
   // **Zugeklappt als Default:** die Fläche soll kurz bleiben — der Sinn der
   // vierten Stufe ist, dass ein untypisches Feld erreichbar ist, nicht dass es
@@ -264,6 +269,25 @@ export default function DatenquellenZuordnung() {
       })
       .catch(() => {})
   }, [selectedAnlageId])
+
+  // P-433-2b K4: Presets nur mit MQTT-Broker (ohne ihn gibt es kein Gateway). Ein Fehler lässt die Knöpfe weg.
+  useEffect(() => {
+    if (!verfuegbarkeit.mqtt) { setPresets([]); return }
+    liveDashboardApi.getGatewayPresets().then(setPresets).catch(() => setPresets([]))
+  }, [verfuegbarkeit.mqtt])
+
+  // «Preset anwenden…» — ein Knopf je Gerät mit passendem Preset bzw. an der Anlage (Basis-Block). Nicht im Kopf
+  // der FormSection: deren `statusSlot` sitzt im Klapp-Knopf, ein Knopf im Knopf wäre ungültiges HTML.
+  const presetKnopf = (liste: MqttPreset[], investitionId: number | null, titel: string) => (
+    liste.length > 0 && (
+      <div className="mb-2 flex justify-end">
+        <Button type="button" variant="ghost" size="sm" data-preset-knopf={investitionId ?? 'anlage'}
+          onClick={() => setPresetZiel({ investitionId, titel, liste })}>
+          Preset anwenden …
+        </Button>
+      </div>
+    )
+  )
 
   // MQTT-Broker- oder HA-Verbindungs-Block gespeichert → Verfügbarkeit neu laden,
   // damit HA-/Gateway-/Inbound-Optionen ohne F5 ein-/ausblenden.
@@ -733,7 +757,7 @@ export default function DatenquellenZuordnung() {
       defaultOpen: istBasis,
       render: () => (
         istBasis
-          ? <div>{abschnitte(tc.geraete[0].id, tc.geraete[0].felder)}</div>
+          ? <div>{presetKnopf(presetsFuerAnlage(presets), null, tc.label)}{abschnitte(tc.geraete[0].id, tc.geraete[0].felder)}</div>
           : (
             <div className="space-y-2">
               {tc.geraete.map((g) => (
@@ -745,6 +769,7 @@ export default function DatenquellenZuordnung() {
                   defaultOpen={tc.geraete.length === 1}
                   statusSlot={geraetBadge(g)}
                 >
+                  {presetKnopf(presetsFuerTyp(presets, g.typ), investitionIdDerGruppe(g), g.titel)}
                   {g.typ === TYP_NACH_BETRIEBSART ? betriebsartAbschnitte(g) : abschnitte(g.id, g.felder)}
                 </FormSection>
               ))}
@@ -754,8 +779,8 @@ export default function DatenquellenZuordnung() {
     }
     // ⛔ JEDER Zustand, den `render` liest, MUSS hier stehen — sonst friert die
     // render-Closure ihn ein (BlockShell rendert die memoisierten Blöcke). Das
-    // sind heute drei: `verfuegbarkeit` (Button-Gating), `offeneHinweise` (Q3)
-    // und `offeneErweiterung` (R1, über `abschnitte`).
+    // sind heute vier: `verfuegbarkeit` (Button-Gating), `offeneHinweise` (Q3),
+    // `offeneErweiterung` (R1, über `abschnitte`) und seit P-433-2b K4 `presets` (Knopf «Preset anwenden …»).
     //
     // ⚠ Die Liste kann sich NICHT selbst prüfen: `exhaustive-deps` verlangt hier
     // `abschnitte` und `geraetBadge` — bei jedem Render neu gebaute Funktionen,
@@ -768,7 +793,7 @@ export default function DatenquellenZuordnung() {
     // Verhaltenstest `DatenquellenZuordnung.erweiterung.test.tsx` hält das Auf-
     // klappen fest, wenn die Erinnerung wieder nicht reicht.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung])
+  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung, presets])
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400">wird geladen …</p>
   if (fehler) return <p className="text-sm text-red-600 dark:text-red-400">{fehler}</p>
@@ -802,6 +827,18 @@ export default function DatenquellenZuordnung() {
           zustand={gatewayFeld.zustand}
           onClose={() => setGatewayFeld(null)}
           onSpeichern={speichereGateway}
+        />
+      )}
+
+      {presetZiel && selectedAnlageId != null && (
+        <DatenquellenPresetDialog
+          isOpen
+          anlageId={selectedAnlageId}
+          investitionId={presetZiel.investitionId}
+          titel={presetZiel.titel}
+          presets={presetZiel.liste}
+          onClose={() => setPresetZiel(null)}
+          onAngewendet={() => { setPresetZiel(null); neuLaden() }}
         />
       )}
 

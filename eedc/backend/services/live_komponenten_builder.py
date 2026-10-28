@@ -53,9 +53,13 @@ def build_komponenten(
     modus_map: Optional[dict[int, str]] = None,
     aktion_map: Optional[dict[int, str]] = None,
     zustand_map: Optional[dict[tuple[int, str], str]] = None,
+    stand_map: Optional[dict[int, float]] = None,
 ) -> dict:
     """
     Baut Komponenten-Liste, Gauges und Summen aus Live-Werten.
+
+    ``stand_map`` (P-433-2b K4): der Kilometerstand je E-Auto (`betriebsmodus_live.lade_staende_live`) — reine Anzeige
+    am Fahrzeug (`km_stand`), keine Summe liest ihn; ohne Map bleibt das Ergebnis bitgleich.
 
     ``aktion_map`` (P-433-1): die gemessene Aktion je Gerät neben dem Kanon-Wert
     (`betriebsmodus_live.lade_betriebsmodus_aktion_live`, heute nur «leerlauf») —
@@ -93,6 +97,7 @@ def build_komponenten(
     # SoC-Gauges der Schleife.
     _wallbox_emob_werte(b, inv_values, zustand_map or {})
     _ordne_fahrzeuge_zu(b, inv_values, investitionen, zustand_map or {})
+    _fahrzeug_staende(b, stand_map or {})
     _pv_gesamt_aus_basis(b, anlage, basis_values)
 
     einspeisung_w = basis_values.get("einspeisung_w")
@@ -1256,6 +1261,18 @@ def _fahrzeug(
         ),
         **_fahrzeug_emob(inv, werte, zustand_map or {}),
     }
+
+
+def _fahrzeug_staende(b: _LiveBilanz, stand_map: dict[int, float]) -> None:
+    """Kilometerstand an jedes Fahrzeug der Wallbox-Knoten und an `fahrzeuge_ohne_wallbox` (P-433-2b K4, K4-1) — nur
+    mit Wert, gerundet auf ganze km. Eine eigene Phase NACH der Zuordnung: sie ändert kein Zuordnungs-Ergebnis."""
+    if not stand_map:
+        return
+    fahrzeuge = [f for k in b.komponenten for f in (k.get("fahrzeuge") or ())] + list(b.fahrzeuge_ohne_wallbox or ())
+    for f in fahrzeuge:
+        km = stand_map.get(f.get("investition_id"))
+        if km is not None:
+            f["km_stand"] = round(km, 0)
 
 
 def _fahrzeug_emob(inv: Investition, werte: dict[str, float], zustand_map: dict[tuple[int, str], str]) -> dict:

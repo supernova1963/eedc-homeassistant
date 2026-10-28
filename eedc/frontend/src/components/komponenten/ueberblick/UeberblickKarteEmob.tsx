@@ -12,10 +12,12 @@
  *    E-Auto — Name, eigener Zustands-Chip **nur**, wenn das Auto an keiner Wallbox steht (Leitsatz 8), Chip
  *    «Dienstwagen», Ladestand groß mit Leiste und Ziel, Reichweite, Ring, Ort und Standort (Zone), Ladeleistung nur mit
  *    eigenem Knoten (W3).
- * 2. **«Heute»** (`data-karte="heute"`): Ladung heute (Live-Tageswert; am Auto nur mit eigenem Knoten, K-6) und
- *    PV-Ladung heute «(Anlage)» aus dem Tag-Detail. **Ohne Kopfzahl PV-Anteil** (K-7): das Tag-Detail trägt keine
- *    Wallbox-kWh (`TagDetail` hat `emob_ladung_pv_kwh`/`emob_ladung_netz_kwh`, keine `komponenten_kwh`, gemessen
- *    27.10.2026) — der Quotient bräuchte zwei Pfade (Ü5); E-K1-5: keine zweite Route in K1.
+ * 2. **«Heute»** (`data-karte="heute"`): Ladung heute und PV-Ladung heute «(Anlage)» aus dem Tag-Detail. Seit
+ *    P-433-2b K4 trägt das Tag-Detail die Tagesmengen je Gerät (`emob_heute`): die Ladung kommt von dort (Live-Tageswert
+ *    nur Rückfall, D-K4-2; am Auto nur mit eigenem Knoten, K-6), die Wallbox bekommt die **Kopfzahl «PV-Anteil heute»**
+ *    mit Herleitung «9,8 kWh PV ÷ 14,7 kWh» (nur gemessen, beide Mengen aus dem Tag-Detail, Layer
+ *    `pv_anteil_gemessen_prozent`; ohne sie heißt die Karte «Heute»), das E-Auto die Zeilen «Gefahren heute» und
+ *    «Fahrverbrauch heute» (Tages-Δ der Kanal-Stunden). Die Gerätekarte E-Auto zeigt den «Kilometerstand».
  * 3. **«Betrieb heute»** (`data-karte="betrieb-heute"`, P-433-2b K3): Stunden je Zustand des Tages aus der
  *    Zustands-Mitschrift (`TagDetail.emob_betrieb`) — Wallbox «Lädt · Verbunden · Wartet · Fertig» und «Ladevorgänge
  *    heute», E-Auto Laden (lädt · lädt DC · verbunden) und Standort (zu Hause · unterwegs). Zeile nur mit Stunden > 0,
@@ -43,7 +45,7 @@ import { funktionsFarbe } from '../../../lib/funktionsFarben'
 import { PARAM_WALLBOX } from '../../../lib/investitionParameter'
 import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower } from '../../live/EnergieFluss'
 import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../../api/liveDashboard'
-import type { EmobBetriebZeile, TagDetail } from '../../../api/energie_profil'
+import type { EmobBetriebZeile, EmobHeuteZeile, TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { AnlagenRing, Karte, KartenKopf, Zeile } from './UeberblickKarte'
 
@@ -65,6 +67,10 @@ export const OBERFLAECHE_TEXT = 'Hersteller-Oberfläche öffnen'
 export const PV_LADUNG_TOOLTIP = 'PV-Anteil aller Ladungen der Anlage heute (Tag-Detail, Stand des letzten Zähler-Snapshots) — kein Wert je Gerät'
 /** Tooltip der Ladung heute — derselbe Tageswert wie der Energiefluss-Tooltip. */
 export const LADUNG_TOOLTIP = 'Tageswert dieses Geräts (HA-Langzeitstatistik bzw. Tageszähler), derselbe wie im Energiefluss'
+/** P-433-2b K4 (K4-6): Tooltip der Ladung heute, wenn die Zahl aus dem Tag-Detail kommt (Vorrang vor dem Live-Pfad). */
+export const LADUNG_TAG_TOOLTIP = 'Tageswert aus Zähler'
+/** P-433-2b K4: Tooltip der Kopfzahl — nur gemessen, beide Mengen aus dem Tag-Detail (Blatt P2). */
+export const PV_ANTEIL_TOOLTIP = 'Gemessener PV-Ladezähler ÷ Ladezähler dieser Wallbox heute (nur abgeschlossene Zählerstände)'
 
 /** Ein Ladezustand «kein Fahrzeug» — dann sagt die Sitzung «letzte Sitzung» (Blatt §1a). */
 const KEIN_FAHRZEUG = 'kein_fahrzeug'
@@ -153,7 +159,19 @@ export function oberflaecheUrl(inv: Investition): string | null {
   return /^https?:\/\//i.test(url) ? url : null
 }
 
-/** Ladung heute aus `heute_kwh_pro_komponente` — der exakte Key; der Typ-Key nur beim einzigen Gerät. */
+/** P-433-2b K4: die Tag-Detail-Zeile dieses Geräts (`emob_heute`), sonst `null`. */
+export function heuteZeile(tag: TagDetail | null, invId: number): EmobHeuteZeile | null {
+  return (tag?.emob_heute ?? []).find((z) => z.investition_id === invId) ?? null
+}
+
+/** Herleitung der Kopfzahl «9,8 kWh PV ÷ 14,7 kWh» — aus denselben zwei Zahlen des Backends, nur formatiert. */
+export function herleitungPvAnteil(pvKwh: number | null | undefined, ladungKwh: number | null | undefined): string | null {
+  if (pvKwh == null || ladungKwh == null) return null
+  return `${fmtZahl(pvKwh, 1)} kWh PV ÷ ${fmtZahl(ladungKwh, 1)} kWh`
+}
+
+/** Ladung heute aus `heute_kwh_pro_komponente` — der exakte Key; der Typ-Key nur beim einzigen Gerät. Seit K4 nur der
+ *  **Rückfall** ohne Tageswert im Tag-Detail (`emob_heute`, ein Pfad je Karte, D-K4-2). */
 function ladungHeute(live: LiveDashboardResponse | null, key: string, typKey: string, mehrere: boolean): number | null {
   const werte = live?.heute_kwh_pro_komponente
   if (!werte) return null
@@ -210,15 +228,30 @@ function OberflaecheLink({ url }: { url: string }) {
   )
 }
 
-function HeuteKarte({ ladung, pvLadung }: { ladung: number | null; pvLadung: number | null }) {
-  if (ladung == null && pvLadung == null) return null
+function HeuteKarte({ ladung, pvLadung, zeile }: { ladung: number | null; pvLadung: number | null; zeile: EmobHeuteZeile | null }) {
+  // K4-6 (D-K4-2): trägt das Tag-Detail die Ladung, zeigt die Karte diese Zahl; der Live-Wert ist nur Rückfall.
+  const ausTag = zeile?.ladung_kwh != null
+  const ladungAnzeige = ausTag ? zeile!.ladung_kwh! : ladung
+  const anteil = zeile?.pv_anteil_prozent ?? null
+  const km = zeile?.km ?? null
+  const fahrverbrauch = zeile?.fahrverbrauch_kwh ?? null
+  if (ladungAnzeige == null && pvLadung == null && anteil == null && km == null && fahrverbrauch == null) return null
+  const herleitung = anteil != null ? herleitungPvAnteil(zeile?.ladung_pv_kwh, zeile?.ladung_kwh) : null
   return (
     <Karte name="heute">
-      <KartenKopf text="Heute" />
+      {anteil != null ? (
+        <div title={PV_ANTEIL_TOOLTIP} className="cursor-help">
+          <KartenKopf text="PV-Anteil heute" />
+          <div className={`${KPI_WERT_SCHRIFT} font-bold text-gray-900 dark:text-white`} data-zeile="pv-anteil-heute">{fmtZahl(anteil, 0)} %</div>
+          {herleitung && <div className="text-xs text-gray-500 dark:text-gray-400" data-herleitung>{herleitung}</div>}
+        </div>
+      ) : (
+        <KartenKopf text="Heute" />
+      )}
       <div className="space-y-1">
-        {ladung != null && (
-          <div title={LADUNG_TOOLTIP} className="cursor-help">
-            <Zeile label="Ladung heute" data="ladung-heute">{fmtZahl(ladung, 1)} kWh</Zeile>
+        {ladungAnzeige != null && (
+          <div title={ausTag ? LADUNG_TAG_TOOLTIP : LADUNG_TOOLTIP} className="cursor-help">
+            <Zeile label="Ladung heute" data="ladung-heute">{fmtZahl(ladungAnzeige, 1)} kWh</Zeile>
           </div>
         )}
         {pvLadung != null && (
@@ -226,6 +259,8 @@ function HeuteKarte({ ladung, pvLadung }: { ladung: number | null; pvLadung: num
             <Zeile label="PV-Ladung heute" data="pv-ladung-heute">{fmtZahl(pvLadung, 1)} kWh (Anlage)</Zeile>
           </div>
         )}
+        {km != null && <Zeile label="Gefahren heute" data="gefahren-heute">{fmtZahl(km, 0)} km</Zeile>}
+        {fahrverbrauch != null && <Zeile label="Fahrverbrauch heute" data="fahrverbrauch-heute">{fmtZahl(fahrverbrauch, 1)} kWh</Zeile>}
       </div>
     </Karte>
   )
@@ -308,6 +343,7 @@ function WallboxKarten({ inv, live, tag, mehrereGeraete }: UeberblickKarteEmobPr
       <HeuteKarte
         ladung={ladungHeute(live, `wallbox_${inv.id}`, 'wallbox', mehrereGeraete)}
         pvLadung={tag?.emob_ladung_pv_kwh ?? null}
+        zeile={heuteZeile(tag, inv.id)}
       />
       <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
     </>
@@ -372,7 +408,7 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
   const kw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
   const ziel = zielText(f?.ziel_prozent, f?.restzeit_min)
   const ohneFelder = live != null
-    && f?.reichweite_km == null && f?.ladezustand == null && ziel == null && f?.zu_hause == null
+    && f?.reichweite_km == null && f?.ladezustand == null && ziel == null && f?.zu_hause == null && f?.km_stand == null
 
   return (
     <Karte name="geraet">
@@ -404,6 +440,7 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
         {/* W3: Ladeleistung nur mit eigenem Knoten (ein geteilter Sensor hat keinen); V2H als Abgabe. */}
         {kw != null && <Zeile label={entlaedt ? 'Entlädt ins Haus (V2H)' : 'Ladeleistung'} data="ladeleistung">{formatPower(kw)}</Zeile>}
         {ziel != null && <Zeile label="Ziel" data="ziel">{ziel}</Zeile>}
+        {f?.km_stand != null && <Zeile label="Kilometerstand" data="kilometerstand">{fmtZahl(f.km_stand, 0)} km</Zeile>}
       </div>
       {info?.zuordnung === 'geschaetzt' && <Fusszeile>{SATZ_ZUORDNUNG_UNBEKANNT}</Fusszeile>}
       {ohneFelder && <Fusszeile>{FUSSZEILE_EAUTO}</Fusszeile>}
@@ -418,7 +455,7 @@ function EAutoKarten({ inv, live, tag }: UeberblickKarteEmobProps) {
   return (
     <>
       <EAutoGeraeteKarte inv={inv} live={live} />
-      <HeuteKarte ladung={ladung} pvLadung={tag?.emob_ladung_pv_kwh ?? null} />
+      <HeuteKarte ladung={ladung} pvLadung={tag?.emob_ladung_pv_kwh ?? null} zeile={heuteZeile(tag, inv.id)} />
       <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
     </>
   )

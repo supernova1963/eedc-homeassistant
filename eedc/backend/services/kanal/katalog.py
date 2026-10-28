@@ -24,7 +24,7 @@ O4      ``OPTIONALE_FELDER``                                        kein Kanal
 O6      Investitionsfeld mit Einheit ``€``                          kein Kanal
 O5      Investitionsfeld ``nur_manuell``                            kein Kanal
 —       Stand-Feld (``stand: True``)                                ``stand`` · Spiegel/Mitschrift
-O7      Feld in ``MQTT_STAND_ZAEHLER_FELDER``                       ``stand`` · Mitschrift
+O7      Feld in ``MQTT_STAND_ZAEHLER_FELDER``                       ``stand`` · Spiegel/Mitschrift
 O9      Feld in ``KUMULATIVE_COUNTER_FELDER``                       ``stand`` · Spiegel/Mitschrift
 —       Energie-Einheit (kWh, Wh, MWh)                              ``sum`` · Spiegel/Mitschrift
 A-L     Live-Feld ``nur_live`` (Zustand/Sitzung E-Mobilität, K1)   kein Kanal (reine Anzeige, K-1)
@@ -256,9 +256,12 @@ def _regel_investition(
                           grund="Stand-Feld (F-58) ⇒ stand: Δ des Standes, ohne Reset-Regel",
                           schluessel=sk, e1=True)
     if feld in stand_mqtt:
-        return _zuweisung(liste, typ, feld, art=ART_STAND, familien=(FAMILIE_MITSCHRIFT,),
-                          grund="O7: kommt heute nur über MQTT; ein späterer HA-Sensor ist ein "
-                                "Spiegel desselben Kanals", schluessel=sk, e1=True)
+        # P-433-2b K4 (K4-3, Halt H2): Katalog-Korrektur — der Spiegel liest die Familien nicht, er folgt der
+        # `counter_map` (`snapshot/writer._build_counter_map`); ein Zähler mit `quellen`-Wahl HA wurde schon vorher
+        # gespiegelt. Benannte Grenze (vorbestehend, alle Zähler): eine Zuordnung nur über `felder` ohne `quellen`
+        # steht nicht in der `counter_map` und wird nicht gespiegelt.
+        return _zuweisung(liste, typ, feld, art=ART_STAND, familien=_SPIEGEL_ODER_MITSCHRIFT,
+                          grund="O7: Spiegel bei HA-Entität, sonst MQTT-Mitschrift", schluessel=sk, e1=True)
     if feld in counter.get(typ, ()):
         return _regel_counter(liste, typ, feld)
     if einheit_klasse(einheit) == "energie":

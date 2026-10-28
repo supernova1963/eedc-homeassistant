@@ -4415,6 +4415,51 @@ und `::_mit_emob_betrieb` (`emob_betrieb[]` mit `stunden`, `labels`, `wechsel`);
 `services/energie_profil/kanal_stunden.py::zustand_anteile_je_stunde` (die WP-Fassung `wp_betriebsart_anteile_je_stunde` ist
 seine Hülle); Schreiber `services/kanal/schreiber.py` (Kern `_schreibe_betriebsart_anteile`, Hüllen HA/MQTT).
 
+### PV-Anteil heute
+
+*Kopfzahl der Wallbox-Karte «Heute» (P-433-2b K4) — eine Quote zweier gemessener Mengen, keine Schätzung.*
+
+```
+pv_anteil_prozent = round( ladung_pv_kwh ÷ ladung_kwh × 100 )      (core/berechnungen/pv_anteil_ladung.pv_anteil_gemessen_prozent)
+```
+
+**Eingänge, beide aus den Tageswerten derselben Wallbox (ein Pfad, Ü5):** `ladung_kwh` = Tageswert `wallbox_<id>` aus
+`kanal_stunden.komponenten_der_tage` (die eine Mischung der Tageskomponenten, E-Mob-Gruppe: Kanal schlägt Tageszeile);
+`ladung_pv_kwh` = Tagesdetail `werte_je_inv["emob_ladung_pv_kwh"][<id>]` (Boundary-Diff des PV-Ladezählers bzw. Kanal-Δ),
+**nur**, wenn `grund_je_feld` für `emob_ladung_pv_kwh` leer ist — ein Wert mit Grund (geschätzt, teilweise) trägt keine
+Kopfzahl. Nie der Live-Tageswert (`heute_kwh_pro_komponente`) gegen das Tag-Detail.
+
+**Kein Wert** („keine Aussage", nie 0 %): ohne eine der beiden Mengen, bei `ladung_kwh ≤ 0`, bei negativem PV-Wert und bei
+`ladung_pv_kwh > ladung_kwh` (Zähler-Drift; keine Kopfzahl, kein eigener Checker-Hinweis — der Rücksprung-Checker deckt die
+Zähler). Die Herleitung „9,8 kWh PV ÷ 14,7 kWh" steht aus denselben zwei Zahlen darunter.
+
+**Abgrenzung.** `leite_pv_anteil_ab` (§3.4) **schätzt** den PV-Teil einer Ladung aus Netzbezug und Einspeisung je Stunde
+(Einspeise-Deckung) und bleibt der Weg für Wallboxen ohne PV-Ladezähler; die Kopfzahl zeigt ihn nicht. Dieselbe Quote
+gemessener Mengen steht für den Zeitraum in `monats_fakten/ableitungen.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung) und im
+Wallbox-Dashboard (`wb_pv_anteil`). Die Gleichheit zur Layer-Funktion ist nur für `ist_pv_ladeanteil_prozent` belegt (Probe
+`test_p433_2b_k4_fahrt_pvanteil.py`, gerundet); `wb_pv_anteil` liefert bei einer Ladung von 0 kWh eine 0, die Layer-Funktion
+«keine Aussage» — die Zusammenführung beider Stellen in den Layer ist ein eigenes Päckchen.
+
+### Fahrt heute
+
+*«Gefahren heute» und «Fahrverbrauch heute» der E-Auto-Karte «Heute» (P-433-2b K4).*
+
+```
+km_heute            = Σ change der Stunden des Tages im Kanal inv:<id>:km_gefahren   (stand, Tachostand)
+fahrverbrauch_heute = Σ change der Stunden des Tages im Kanal inv:<id>:verbrauch_kwh (sum)
+```
+
+`change` ist der Zuwachs einer Stundenzeile gegen den vorigen Stand (auch über Mitternacht, `lesen.stunden_stapel`); das
+Tagesfenster ist das der E-Mob-Gruppe (`_tag_raster`, wie «Stunden je Zustand»). ⛔ **Eine Zeile ohne Vorstand** (die erste
+eines Kanals) **zählt 0** — ihr Wert ist ein Tachostand bzw. Zählerstand, keine Tagesmenge. Leser
+`services/energie_profil/kanal_stunden.py::fahrt_je_tag`, Tag-Detail `emob_heute[]` (`km`, `fahrverbrauch_kwh`).
+
+**Grenzen.** Nur abgeschlossene Stunden (die laufende fehlt); ab dem ersten Spiegel- bzw. Mitschrift-Lauf nach der
+Zuordnung, nicht rückwirkend; ein Zähler, der selten meldet, zeigt die Fahrt mit dem nächsten Stand (in der Stunde des
+Sprungs). Der Kanal entsteht aus HA (Spiegel der Langzeitstatistik, mit Datenquellen-Wahl HA) oder aus MQTT (Mitschrift des
+Stands); eine Zuordnung nur im Sensor-Mapping ohne Datenquellen-Wahl wird nicht gespiegelt (vorbestehend, alle Zähler).
+Anzeige, keine Menge der Monats-Fakten: die Monatskilometer kommen weiter aus dem Monatsabschluss.
+
 ### Monats-Rollup (rollup_month)
 
 Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:

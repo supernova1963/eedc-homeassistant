@@ -41,7 +41,7 @@ lädt, freigegeben. Die ordnest du jetzt direkt den drei neuen Feldern **„evcc
 oder „Kein Fahrzeug" — der Umweg über einen eigenen Template-Sensor entfällt. Hast du schon einen Ladezustand-Sensor, gilt
 weiter er. Ohne Home Assistant reicht das MQTT-Gateway an diese Felder (und an Lademodus und Fahrzeugname) jetzt den Text
 weiter; für einen evcc-Ladepunkt gibt es dafür das Preset „evcc Ladepunkt", das Leistung, Sitzung, Restzeit, Phasen,
-Lademodus, Zustand, Fahrzeugname und den Zählerstand der Wallbox mit den richtigen Einheiten anlegt (vorerst über die Programmierschnittstelle)
+Lademodus, Zustand, Fahrzeugname und den Zählerstand der Wallbox mit den richtigen Einheiten anlegt (in den Datenquellen über „Preset anwenden …")
 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
 
 **Wallbox und E-Auto: „Betrieb heute".** Die dritte Karte in „Auf einen Blick" sagt, wie viele Stunden die Wallbox heute
@@ -51,6 +51,17 @@ Hause und unterwegs war. Dafür schreibt eedc ab jetzt für Ladezustand, Ladezus
 Anteil jeder Stunde welcher Zustand hatte — aus Home Assistant und ebenso über MQTT, auch für evcc mit den drei Schaltern.
 Die Karte beginnt mit dem Tag der Zuordnung, nicht rückwirkend ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
 [Berechnungen → Stunden je Zustand](BERECHNUNGEN.md#stunden-je-zustand)).
+
+**Wallbox und E-Auto: Kilometerstand, Fahrt heute und PV-Anteil heute.** Hast du am E-Auto einen Kilometerzähler
+zugeordnet (Auto-Integration oder OBD), zeigt die Gerätekarte den **Kilometerstand**, und die Karte „Heute" sagt, wie weit
+das Auto heute **gefahren** ist und wie viel Strom es dafür **verbraucht** hat (Fahrverbrauch-Zähler) — aus den
+abgeschlossenen Stunden des Tages. An der Wallbox trägt die Karte „Heute" jetzt groß den **PV-Anteil heute** mit der
+Herleitung („9,8 kWh PV ÷ 14,7 kWh") — nur, wenn deine Wallbox beides misst: die geladene Menge und den PV-Anteil davon.
+Geschätzt wird hier nichts. **Presets wieder in der Oberfläche:** unter *Einstellungen → Datenquellen* gibt es an der
+Wallbox (und an Speicher und Steckdosen) den Knopf „Preset anwenden …" — etwa „evcc Ladepunkt": Variablen prüfen,
+anwenden, und die Felder stehen auf „Gateway". Vorhandene Gateway-Zuordnungen derselben Felder ersetzt das Preset
+([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto), [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität),
+[Berechnungen → PV-Anteil heute](BERECHNUNGEN.md#pv-anteil-heute)).
 
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann

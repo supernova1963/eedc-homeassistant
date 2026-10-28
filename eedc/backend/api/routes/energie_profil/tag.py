@@ -21,7 +21,7 @@ from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.monats_fakten import lade_monats_fakten
-from ._shared import EmobBetriebZeile, TagDetailResponse, TagStatusResponse
+from ._shared import EmobBetriebZeile, EmobHeuteZeile, TagDetailResponse, TagStatusResponse
 
 router = APIRouter()
 
@@ -160,6 +160,61 @@ async def _mit_emob_betrieb(db, anlage, investitionen_by_id, datum) -> list:
                 labels={w: label(w) for w in stunden}, wechsel=wechsel.get(inv_id)))
     return zeilen
 
+
+
+def _gerundet(wert: Optional[float]) -> Optional[float]:
+    return round(wert, 1) if wert is not None else None
+
+
+def _emob_heute_wallbox(inv_id: str, komp: dict, pv_je_inv: dict) -> EmobHeuteZeile:
+    """Die Wallbox-Zeile von ``emob_heute`` (K4-4): Tagesladung, gemessene PV-Ladung und ihr Anteil über die eine
+    Layer-Formel ``pv_anteil_gemessen_prozent`` — beide Mengen aus dem Tag-Detail, nie aus dem Live-Pfad (Ü5)."""
+    from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_gemessen_prozent
+
+    ladung = komp.get(f"wallbox_{inv_id}")
+    pv = pv_je_inv.get(inv_id)
+    return EmobHeuteZeile(
+        investition_id=int(inv_id), typ="wallbox", ladung_kwh=_gerundet(ladung), ladung_pv_kwh=_gerundet(pv),
+        pv_anteil_prozent=pv_anteil_gemessen_prozent(pv, ladung))
+
+
+def _emob_heute_eauto(inv_id: str, komp: dict, fahrt: dict, wallbox_deckt: bool) -> EmobHeuteZeile:
+    """Die E-Auto-Zeile von ``emob_heute`` (K4-2): Gefahren/Fahrverbrauch heute aus den Kanal-Stunden, die Ladung
+    ``eauto_<id>`` nur ohne deckende Wallbox (sonst zählte die Wallbox-Energie zweimal, W3/N-555)."""
+    werte = fahrt.get(inv_id) or {}
+    return EmobHeuteZeile(
+        investition_id=int(inv_id), typ="e-auto", km=_gerundet(werte.get("km")),
+        fahrverbrauch_kwh=_gerundet(werte.get("verbrauch_kwh")),
+        ladung_kwh=None if wallbox_deckt else _gerundet(komp.get(f"eauto_{inv_id}")))
+
+
+async def _mit_emob_heute(db, anlage, investitionen_by_id, datum, tagesdetail) -> list:
+    """P-433-2b K4 (K4-5, Karten «Heute» E-Mobilität): je aktiver Wallbox/E-Auto die Tagesmengen — Wallbox-Ladung aus
+    ``komponenten_der_tage`` (die eine Mischung, E-Mob-Gruppe), gemessene PV-Ladung aus ``werte_je_inv`` (nur, wenn
+    ``grund_je_feld`` für ``emob_ladung_pv_kwh`` leer ist: «nur gemessen», P2), Fahrt aus ``fahrt_je_tag``. Eigene
+    Phase wie ``_mit_emob_betrieb``; eine Zeile nur mit mindestens einem Wert."""
+    # Die Gruppe über den benannten Tagesleser, nicht aus der Lese-Schicht (Wächter `test_kanal_lesen_waechter.py`).
+    from backend.services.energie_profil.kanal_stunden import GRUPPE_EMOB, fahrt_je_tag, komponenten_der_tage
+    from backend.services.snapshot.komponenten_beitraege import wallbox_deckt_ladung_ab
+
+    geraete = sorted((i for i, inv in investitionen_by_id.items()
+                      if inv.typ in ("wallbox", "e-auto") and inv.ist_aktiv_an(datum)), key=int)
+    if not geraete:
+        return []
+    komp = (await komponenten_der_tage(db, anlage.id, datum, datum, gruppen=(GRUPPE_EMOB,))).get(datum) or {}
+    pv_je_inv = ({} if tagesdetail.grund_je_feld.get("emob_ladung_pv_kwh")
+                 else tagesdetail.werte_je_inv.get("emob_ladung_pv_kwh") or {})
+    fahrt = await fahrt_je_tag(db, anlage, investitionen_by_id, datum)
+    deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), anlage.sensor_mapping, datum=datum,
+        ist_verfuegbar=lambda i, _f: f"wallbox_{i.id}" in komp,
+    ) or wallbox_deckt_ladung_ab(investitionen_by_id.values(), anlage.sensor_mapping, datum=datum)
+    zeilen = [
+        _emob_heute_wallbox(i, komp, pv_je_inv) if investitionen_by_id[i].typ == "wallbox"
+        else _emob_heute_eauto(i, komp, fahrt, deckt)
+        for i in geraete
+    ]
+    return [z for z in zeilen if z.model_dump(exclude={"investition_id", "typ"}, exclude_none=True)]
 
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
 async def get_tag_detail(
@@ -1019,6 +1074,8 @@ async def get_tag_detail(
         emob_ladung_netz_kwh=detail.get("emob_ladung_netz_kwh"),
         # P-433-2b K3: «Betrieb heute» der E-Mobilität (Phase, nicht im Block-Bauer).
         emob_betrieb=await _mit_emob_betrieb(db, anlage, investitionen_by_id, datum),
+        # P-433-2b K4: Tagesmengen der Karten «Heute» (Kopfzahl PV-Anteil, Gefahren/Fahrverbrauch heute).
+        emob_heute=await _mit_emob_heute(db, anlage, investitionen_by_id, datum, _tagesdetail),
         # W-18, dieselbe Klasse an der E-Mobilität: Der PV-Anteil trug denselben
         # fest verdrahteten „Sensor zuordnen"-Satz. Er wird ebenfalls über
         # denselben Weg erhoben und hat deshalb dieselben drei Zustände.

@@ -18,6 +18,7 @@ ehrliche Ergebnis eines stummen Inbound-Topics:
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from backend.services.snapshot.keys import _energy_field_id_to_sensor_key
@@ -34,6 +35,16 @@ def topic_suffix(topic: str) -> Optional[str]:
     """`eedc/{aid}_{slug}/{suffix}` → suffix (= Gateway-ziel_key nach C2a-Fix)."""
     parts = topic.split("/", 2)
     return parts[2] if len(parts) == 3 else None
+
+
+_INV_SEGMENT = re.compile(r"^(live|energy)/inv/(\d+)_[^/]*/")
+
+
+def ziel_key_ohne_namen(ziel_key: str) -> str:
+    """Ein Gateway-``ziel_key`` in ID-Form: ``live/inv/4_SMA_eCharger/leistung_w`` → ``live/inv/4/leistung_w``
+    (P-433-2b K4-8). Der Picker schreibt das Standard-Topic-Suffix mit Namensteil, Presets die ID-Form ohne Namen; der
+    Inbound liest beide als dasselbe Gerät. Die Investitions-ID ist eindeutig — so treffen sich beide Formen."""
+    return _INV_SEGMENT.sub(r"\1/inv/\2/", ziel_key or "", count=1)
 
 
 def ha_entity_fuer_feld(

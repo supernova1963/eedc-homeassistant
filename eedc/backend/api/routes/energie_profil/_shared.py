@@ -805,6 +805,24 @@ class EmobBetriebZeile(BaseModel):
     wechsel: Optional[int] = None
 
 
+
+class EmobHeuteZeile(BaseModel):
+    """P-433-2b K4 (K4-5, Karten «Heute» E-Mobilität): die Tagesmengen eines Geräts — jeder Wert nur mit Wert (P4).
+
+    Wallbox: ``ladung_kwh`` (Tageswert ``wallbox_<id>`` aus ``komponenten_der_tage``), ``ladung_pv_kwh`` (gemessener
+    PV-Ladezähler, nur ohne Grund), ``pv_anteil_prozent`` (Layer ``pv_anteil_gemessen_prozent``, nur mit beiden Mengen).
+    E-Auto: ``km`` / ``fahrverbrauch_kwh`` (Σ Zuwachs der Kanal-Stunden ``inv:<id>:km_gefahren`` / ``verbrauch_kwh``,
+    ``kanal_stunden.fahrt_je_tag``), ``ladung_kwh`` aus ``eauto_<id>`` nur ohne deckende Wallbox. Mengen auf 0,1
+    gerundet, Anteil ganzzahlig. Der Client rechnet nichts."""
+    investition_id: int
+    typ: str
+    ladung_kwh: Optional[float] = None
+    ladung_pv_kwh: Optional[float] = None
+    pv_anteil_prozent: Optional[int] = None
+    km: Optional[float] = None
+    fahrverbrauch_kwh: Optional[float] = None
+
+
 class TagDetailResponse(BaseModel):
     """Tages-Detail-Werte für Cockpit/Tag, die NICHT in der Tages-Bilanz/
     `TagWerteResponse` stehen, aber aus Snapshots/TEP tagesgenau erhebbar sind
@@ -936,6 +954,9 @@ class TagDetailResponse(BaseModel):
     #: P-433-2b K3: «Betrieb heute» der Wallboxen und E-Autos — je Gerät und Mitschrift-Feld eine Zeile, nur Geräte mit
     #: mindestens einer Zeile der Mitschrift (nur der Tag; Monat/Jahr kennen das Feld nicht).
     emob_betrieb: list[EmobBetriebZeile] = Field(default_factory=list)
+    #: P-433-2b K4: Tagesmengen je Wallbox/E-Auto für die Karten «Heute» (Kopfzahl PV-Anteil, Gefahren/Fahrverbrauch
+    #: heute) — eine Zeile nur mit mindestens einem Wert (nur der Tag).
+    emob_heute: list[EmobHeuteZeile] = Field(default_factory=list)
     # Aufteilung Heizen/Kühlen des Tages (#263/T2) — anlagenweite Σ über alle
     # Wärmepumpen, wie die übrigen WP-Felder hier. `None` heißt „kein
     # Modus-Signal an diesem Tag": der Block erscheint dann gar nicht, statt

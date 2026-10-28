@@ -738,6 +738,9 @@ N555_VERBRAUCH_LESESTELLEN: dict[str, str] = {
     # ── Fahrverbrauch als FAHRVERBRAUCH: kWh/100 km, PHEV-Anteil, CO₂ Strommix ──
     "backend/core/berechnungen/imd_monatsaggregat.py::imd_typ_beitrag": "Fahrverbrauch → EmobFakten.fahrverbrauch_kwh",
     "backend/api/routes/aktueller_monat/tkonto.py::_baue_investition_financial": "PHEV (fahrverbrauch_kwh)",
+    # P-433-2b K4 (K4-2): «Fahrverbrauch heute» der E-Auto-Karte — Σ Zuwachs des Kanals `inv:<id>:verbrauch_kwh`
+    # (`kanal_stunden.fahrt_je_tag`), als Fahrverbrauch ausgewiesen, nie als Ladung (die Ladung kommt aus `eauto_<id>`).
+    "backend/api/routes/energie_profil/tag.py::_emob_heute_eauto": "Fahrverbrauch heute (Anzeige)",
     "backend/api/routes/aussichten/finanz_rueckblick.py::alternativkosten_rueckblick": "PHEV (fahrverbrauch_kwh)",
     "backend/api/routes/ha_export/anlage_komponenten.py::alternativkosten_und_co2": "PHEV (fahrverbrauch_kwh)",
     # RF-8 (Serie „Funktion vor Datei"): `calculate_investition_sensors` ist ein Orchestrator; gelesen wird in zwei Phasen.

@@ -65,6 +65,9 @@ class LiveFahrzeug(BaseModel):
     zu_hause: Optional[bool] = None
     #: Stammdatum `ist_dienstlich` (P3-a) — Chip «Dienstwagen» an der Auto-Karte.
     dienstwagen: bool = False
+    #: P-433-2b K4 (K4-1): Kilometerstand des zugeordneten km-Zählers (`km_gefahren`), Rohwert gerundet auf ganze km —
+    #: nur mit Wert, nie aus der Handeingabe `km_stand` (`betriebsmodus_live.lade_staende_live`).
+    km_stand: Optional[float] = None
 
 
 class LiveSitzung(BaseModel):
@@ -534,7 +537,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          **_demo_ladepunkt(LAEDT if wallbox_kw > 0 else WARTET, "pv"),
          "sitzung": {"kwh": 9.8, "dauer_s": 7800.0}, "ladestrom_a": 16.0, "phasen_aktiv": 3.0,
          "fahrzeuge": [{"investition_id": 4, "label": "VW ID.4", "soc": eauto_soc,
-                        "kw": eauto_kw, "v2h": False, "reichweite_km": 312.0, "ziel_prozent": 80.0}],
+                        "kw": eauto_kw, "v2h": False, "reichweite_km": 312.0, "ziel_prozent": 80.0,
+                        "km_stand": 23037.0}],
          "fahrzeuge_zuordnung": "eindeutig", "fahrzeuge_quelle": "steuerung"},
         {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
          "erzeugung_kw": None, "verbrauch_kw": eauto_kw,
@@ -545,7 +549,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "erzeugung_kw": None, "verbrauch_kw": wallbox2_kw, "typ": "wallbox",
          **_demo_ladepunkt(LAEDT if wallbox2_kw > 0 else VERBUNDEN, None),
          "fahrzeuge": [{"investition_id": 12, "label": "Renault Zoe", "soc": zoe_soc,
-                        "kw": None, "v2h": False, "reichweite_km": 140.0}],
+                        "kw": None, "v2h": False, "reichweite_km": 140.0, "km_stand": 61420.0}],
          "fahrzeuge_zuordnung": "eindeutig"},
         # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
         # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).

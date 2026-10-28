@@ -247,6 +247,7 @@ from backend.core.berechnungen.pv_anteil_ladung import (
     REGEL_EINSPEISE_DECKUNG,
     AbgeleiteterLadeAnteil,
     leite_pv_anteil_ab,
+    pv_anteil_gemessen_prozent,
 )
 from backend.core.berechnungen.pv_verteilung import (
     QUELLE_FEHLT as PV_QUELLE_FEHLT,
@@ -426,6 +427,7 @@ __all__ = [
     "einspeise_erloes_euro",
     "AbgeleiteterLadeAnteil",
     "leite_pv_anteil_ab",
+    "pv_anteil_gemessen_prozent",
     "REGEL_EINSPEISE_DECKUNG",
     "FinanzAggregat",
     "FinanzMonatsZeile",

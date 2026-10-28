@@ -85,6 +85,12 @@ eedc/{anlage_id}_{name}/
 > trug von Hand ein — obwohl derselbe Feld-Hinweis ihm den „kumulativen km-Zaehler
 > (Auto-Integration/OBD)" als Quelle anbot (Discussion #396). Jetzt schreibt eedc auch
 > diese beiden Staende mit. **Schick den Tachostand, nicht die gefahrenen Kilometer.**
+>
+> **Seit P-433-2b K4** zeigt das E-Auto den Stand von `km_gefahren` live als **Kilometerstand** (aus dem Energie-Cache des
+> Inbound, `inv/<id>/km_gefahren`, bis 60 s alt) und die Karte „Heute" den Zuwachs der abgeschlossenen Stunden als
+> **„Gefahren heute"** (dazu `verbrauch_kwh` als **„Fahrverbrauch heute"**). Der Kanal-Katalog fuehrt `km_gefahren` und
+> `ladevorgaenge` am Geraet als Spiegel/Mitschrift: mit HA-Entitaet (Datenquellen-Wahl HA) spiegelt eedc den Stand aus der
+> Langzeitstatistik, sonst schreibt es den MQTT-Stand mit.
 
 Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern der jeweiligen Investition. EEDC erkennt alle Felder automatisch — es muss kein Mapping konfiguriert werden.
 
@@ -285,13 +291,19 @@ Dauern als ganze Sekunden, `true`/`false`, kein Wert als leerer Payload; retaine
 - **`chargeTotalImport` ist ein fortlaufender Zaehlerstand** (kWh, nur mit Lademeter in evcc): das Preset legt ihn unter
   `energy/` ab, eedc bildet daraus Tag und Monat selbst (siehe oben, „Publiziere den fortlaufenden Stand"). Ohne Lademeter
   publiziert evcc das Topic nicht — die Zeile bleibt dann stumm.
-- **Anlegen:** die Oberflaeche bietet Presets derzeit nicht an. Aufruf ueber die Programmierschnittstelle (Swagger unter
-  `/api/docs`, Abschnitt „MQTT Gateway Presets"):
-  `POST /api/live/mqtt/gateway/presets/apply` mit
+- **Anlegen (seit der naechsten Version in der Oberflaeche):** *Einstellungen → Datenquellen* → Wallbox → **„Preset
+  anwenden …"** → „evcc Ladepunkt" (Vorgaben pruefen) → „Anwenden". Welche Presets an welchem Geraet stehen, sagt das Preset
+  selbst (`typen`, z. B. `wallbox`); Presets ohne Geraet stehen an „Anlage / Zaehler". Weiterhin moeglich ueber die
+  Programmierschnittstelle (`POST /api/live/mqtt/gateway/presets/apply` mit
   `{"preset_id": "evcc_ladepunkt", "anlage_id": 1, "investition_id": 4, "variablen": {"prefix": "evcc", "loadpoint": "1"}}`
-  — leere Variablen bekommen die Vorgabe. Das Gateway schreibt dann auf `eedc/<anlage>/live/inv/<id>/<feld>`; in
-  *Einstellungen → Datenquellen* erscheinen die Felder mit der Quelle „Inbound" und dem ankommenden Wert (wie bei jedem
-  Preset — die Preset-Zeilen tragen das Topic ohne Namensteil).
+  — leere Variablen bekommen die Vorgabe).
+- **Ersetzen statt Doppeln:** vor dem Anlegen loescht eedc die **aktiven** Gateway-Zeilen derselben Felder (auch eine im
+  Gateway-Picker angelegte Zeile mit Namensteil `live/inv/<id>_<name>/<feld>` — ueber die Investitions-ID ist es dasselbe
+  Feld); die Antwort nennt sie (`ersetzt`). Andere Felder bleiben unberuehrt.
+- **Quelle „Gateway":** danach stellt eedc jedes gemappte Feld in den Datenquellen auf **„Gateway"** mit dem Topic (bis dahin
+  zeigten Preset-Felder „Inbound", weil die Preset-Zeilen das Topic ohne Namensteil tragen). Eine Zeile, deren Ziel kein
+  Feld der Flaeche ist, bleibt angelegt, ihre Quelle unveraendert (Antwort `ohne_feld`). Das Gateway schreibt weiter auf
+  `eedc/<anlage>/live/inv/<id>/<feld>`.
 - evcc rundet Kommazahlen auf drei Nachkommastellen; das Gateway gibt Zahlen auf zwei Nachkommastellen weiter.
 
 ### Beispiel

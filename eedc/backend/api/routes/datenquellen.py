@@ -727,6 +727,53 @@ async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str
     return None
 
 
+
+async def setze_gateway_quellen(db: AsyncSession, anlage: Anlage, zeilen) -> tuple[int, list[str]]:
+    """Setzt für frisch angelegte Gateway-Zeilen (Preset-Apply, P-433-2b K4-8) die Quelle ihres Feldes auf
+    ``mqtt_gateway`` — dieselbe Schreibform wie ``set_feld_quelle`` (``quellen[field_id] = {quelle, mapping_id}`` +
+    ``uebernehme_quelle_ins_mapping`` + Historie-Vermerk bei echter Änderung), damit die Fläche «Gateway» mit Topic zeigt
+    statt «Inbound».
+
+    Die Feld-ID kommt **rückwärts** aus der Topic-Registry (dieselbe Quelle wie ``_standard_topic_suffix``): das Feld,
+    dessen Standard-Topic-Suffix in ID-Form (``ziel_key_ohne_namen`` — der Suffix trägt den Namensteil ``{id}_{name}``,
+    das Preset nicht) gleich dem ``ziel_key`` der Zeile ist (``live/inv/{id}/<feld>`` → ``inv_live_{id}_…``,
+    ``energy/inv/{id}/<feld>`` → ``inv_energy_{id}_…``). Eine Zeile ohne passendes Feld behält ihre Zeile, die Quelle
+    bleibt unverändert; ihr ``ziel_key`` steht in der Rückgabe.
+
+    Returns:
+        ``(gesetzte Felder, ziel_keys ohne Feld)``. ``flag_modified``/Commit macht der Aufrufer.
+    """
+    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
+    from backend.services.datenquellen_resolver import ziel_key_ohne_namen
+
+    invs = sort_investitionen_nach_typ((await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id, aktiv_am_tag(date.today()))
+    )).scalars().all())
+    feld_je_suffix: dict[str, str] = {}
+    for e in await build_expected_topics(db, anlage, investitionen=invs):
+        parts = e["topic"].split("/", 2)
+        if len(parts) == 3:
+            feld_je_suffix.setdefault(ziel_key_ohne_namen(parts[2]), _feld_id(e["match_key"]))
+    mapping = dict(anlage.sensor_mapping or {})
+    quellen = dict(mapping.get(QUELLEN_KEY) or {})
+    gesetzt, ohne, geaendert = 0, [], []
+    for row in zeilen:
+        field_id = feld_je_suffix.get(ziel_key_ohne_namen(row.ziel_key))
+        if field_id is None:
+            ohne.append(row.ziel_key)
+            continue
+        neu = {"quelle": QUELLE_GATEWAY, "mapping_id": row.id}
+        if ist_echte_aenderung(quellen.get(field_id), neu):
+            geaendert.append(field_id)
+        quellen[field_id] = neu
+        uebernehme_quelle_ins_mapping(mapping, field_id, QUELLE_GATEWAY, None)
+        gesetzt += 1
+    mapping[QUELLEN_KEY] = quellen
+    for field_id in geaendert:
+        await _historie_vermerken(db, anlage, mapping, field_id)
+    anlage.sensor_mapping = mapping
+    return gesetzt, ohne
+
 async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]:
     """Preis-Slots der Anlage im Eintrags-Shape der Fläche — HA-only.
 

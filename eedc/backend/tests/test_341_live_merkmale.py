@@ -77,6 +77,8 @@ P433_2B_ANTWORT_FELDER = ("fahrzeuge_ohne_wallbox",)
 P433_2B_FAHRZEUG_LEER = {
     "reichweite_km": None, "ladezustand": None, "ladezustand_label": None, "ziel_prozent": None,
     "restzeit_min": None, "zu_hause": None, "dienstwagen": False,
+    # P-433-2b K4 (K4-1): Kilometerstand des zugeordneten km-Zählers — Zuwachs, ohne Zähler `None`.
+    "km_stand": None,
 }
 
 

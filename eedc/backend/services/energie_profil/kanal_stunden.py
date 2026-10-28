@@ -1293,6 +1293,37 @@ async def zustand_wechsel_je_tag(
     return out
 
 
+
+#: P-433-2b K4 (K4-2): die Fahrt-Felder des E-Autos und ihr Ausgabe-Name — `km_gefahren` (Kanal-Art `stand`,
+#: Tachostand) und `verbrauch_kwh` (`sum`, Fahrverbrauch-Zähler).
+_FAHRT_FELDER: dict[str, str] = {"km_gefahren": "km", "verbrauch_kwh": "verbrauch_kwh"}
+
+
+async def fahrt_je_tag(db: AsyncSession, anlage, invs_by_id: Mapping[str, Any],
+                       datum: date) -> dict[str, dict[str, float]]:
+    """Gefahrene km und Fahrverbrauch je aktivem E-Auto eines Tages (P-433-2b K4, K4-2):
+    ``{inv_id: {"km": …, "verbrauch_kwh": …}}`` als Σ Zuwachs der Stunden des Tages aus ``inv:<id>:km_gefahren`` bzw.
+    ``inv:<id>:verbrauch_kwh`` über ``lesen.stunden_stapel`` (Tagesfenster und Raster der E-Mob-Gruppe wie
+    ``zustand_wechsel_je_tag``). ⛔ **Anders als der Wechsel-Zähler zählt eine Zeile ohne Vorstand (``change is None``,
+    erste Zeile des Kanals) 0** — ihr ``wert`` ist ein Tachostand bzw. Zählerstand, keine Tagesmenge (E-K4-4). Nur
+    abgeschlossene Stunden (die laufende hat noch keine Zeile). Ein Feld ohne Zeile am Tag fehlt (keine Aussage)."""
+    from backend.services.kanal.lesen import kanaele_laden, stunden_stapel
+
+    geraete = [i for i, inv in invs_by_id.items()
+               if getattr(inv, "typ", None) == "e-auto" and inv.ist_aktiv_an(datum)]
+    keys = {f"inv:{i}:{feld}": (i, name) for i in geraete for feld, name in _FAHRT_FELDER.items()}
+    kanaele = list((await kanaele_laden(db, anlage.id, keys)).values())
+    if not kanaele:
+        return {}
+    raster, von, bis = await _tag_raster(db, anlage, datum, "e-auto")
+    out: dict[str, dict[str, float]] = {}
+    for k, st in (await stunden_stapel(db, kanaele, von, bis)).items():
+        tag = [w for w in st.werte if 0 <= _slot_der_mittelzeile(w.start_ts, datum, raster) < 24]
+        if tag:
+            inv_id, name = keys[k]
+            out.setdefault(inv_id, {})[name] = sum(w.change for w in tag if w.change is not None)
+    return out
+
 # ── Tageskennzahlen und Tagesmengen aus den Kanal-Stunden (HA-Bauform S5, E-S5-3, Bauplan §10h 1/§4 S5-R2) ─────────
 #
 # Seit S5b schreibt `aggregate_day` an einem Kanal-Tag keine gefalteten Mengen mehr (`mengen_weiche`). Die Kennzahlen,

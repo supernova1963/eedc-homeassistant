@@ -267,3 +267,21 @@ def leite_pv_anteil_ab(
         stunden_mit_ladung=mit_ladung,
         speicher_kwh=round(speicher_summe, 3) if speicher_gesehen else None,
     )
+
+
+def pv_anteil_gemessen_prozent(pv_kwh: Optional[float], ladung_kwh: Optional[float]) -> Optional[int]:
+    """PV-Anteil einer Ladung aus **zwei gemessenen Mengen** in ganzen Prozent (P-433-2b K4, K4-4, Halt H1).
+
+    Die Quote ``PV-Ladezähler ÷ Ladezähler`` — anders als ``leite_pv_anteil_ab`` (Schätzung aus der Netzbilanz je
+    Stunde) keine Ableitung. Leser: Tag-Detail ``emob_heute`` (Kopfzahl «PV-Anteil heute» der Wallbox-Karte).
+
+    ``None`` («keine Aussage», nie 0 %): ``ladung_kwh`` fehlt oder ist ≤ 0, ``pv_kwh`` fehlt oder ist negativ, oder
+    ``pv_kwh > ladung_kwh`` (Zähler-Drift; keine Kopfzahl, kein Checker — E-K4-5). Sonst ``round(pv ÷ ladung × 100)``.
+
+    ⚠ Zwei weitere Quoten gemessener Mengen stehen (noch) außerhalb des Layers: ``monats_fakten/ableitungen.
+    ist_pv_ladeanteil_prozent`` (Σ PV ÷ Σ Ladung, ungerundet) und ``api/routes/investitionen/dashboard_wallbox.py``
+    (``wb_pv_anteil``). Sie bleiben in K4 unberührt (Nebenfund; Konsolidierung ist ein eigenes Päckchen).
+    """
+    if ladung_kwh is None or ladung_kwh <= 0 or pv_kwh is None or pv_kwh < 0 or pv_kwh > ladung_kwh:
+        return None
+    return int(round(pv_kwh / ladung_kwh * 100))

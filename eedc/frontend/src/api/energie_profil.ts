@@ -256,6 +256,23 @@ export interface EmobBetriebZeile {
   wechsel: number | null
 }
 
+/** P-433-2b K4: die Tagesmengen eines Geräts für die Karten «Heute» — fertig aus dem Backend (Kopfzahl über den Layer
+ *  `pv_anteil_gemessen_prozent`, Fahrt aus den Kanal-Stunden); jeder Wert nur mit Wert, der Client rechnet nichts. */
+export interface EmobHeuteZeile {
+  investition_id: number
+  typ: string
+  /** Wallbox: Tageswert des Ladezählers · E-Auto: nur ohne deckende Wallbox. */
+  ladung_kwh?: number | null
+  /** Wallbox: gemessener PV-Ladezähler des Tages. */
+  ladung_pv_kwh?: number | null
+  /** Wallbox: Kopfzahl «PV-Anteil heute», nur mit beiden gemessenen Mengen. */
+  pv_anteil_prozent?: number | null
+  /** E-Auto: Gefahren heute (km). */
+  km?: number | null
+  /** E-Auto: Fahrverbrauch heute (kWh). */
+  fahrverbrauch_kwh?: number | null
+}
+
 export interface TagDetail {
   datum: string
   wp_strom_heizen_kwh: number | null
@@ -348,6 +365,9 @@ export interface TagDetail {
   /** P-433-2b K3 — «Betrieb heute» der Wallboxen und E-Autos: je Gerät und mitgeschriebenem Zustandsfeld eine Zeile
    *  (nur Tag). Fehlt bei älteren Backends. */
   emob_betrieb?: EmobBetriebZeile[]
+  /** P-433-2b K4 — Tagesmengen je Wallbox/E-Auto (Kopfzahl PV-Anteil, Gefahren/Fahrverbrauch heute). Fehlt bei
+   *  älteren Backends. */
+  emob_heute?: EmobHeuteZeile[]
   /** #263/T2 — Aufteilung Heizen/Kühlen DIESES Tages, anlagenweite Σ.
    *  `null` heißt „kein Modus-Signal an diesem Tag" ⇒ der Block fehlt ganz,
    *  statt drei Nullen zu zeigen (ADR-002/P4). Der Rest kommt aus dem

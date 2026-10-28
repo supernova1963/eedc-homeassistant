@@ -108,12 +108,12 @@ Grundlage: Bauplan K2 Fassung 2, Sitzung K2b; Entscheid Gernot 27.10.2026 **D3**
 | --- | --- |
 | K2-7 | **Option A** statt eines Mehrfach-Sensor-Lesers (K1 HALT K-9): drei Rollen-Felder `evcc_verbunden` · `evcc_laedt` · `evcc_freigegeben` (Zustand, Kanon `an`/`aus`; `on`/`true` ⇒ an, `off`/`false` ⇒ aus; `1`/`0` **nur** über MQTT). Der Leser (`betriebsmodus_live._kombiniere_option_a`) setzt den Ladezustand zusammen, **nur wenn kein gemessener vorliegt**: ¬verbunden ⇒ kein Fahrzeug · verbunden ∧ lädt ⇒ lädt · verbunden ∧ ¬freigegeben ⇒ wartet · sonst verbunden. Ohne «lädt»/«freigegeben» nie «lädt»/«wartet», «fertig» kennt Option A nicht. Builder und Energiefluss unverändert (sie lesen `ladezustand`). |
 | K2-8 | **Gateway-Text als Weiche am Zielfeld:** `transform_payload(…, *, als_text)` liefert an ein Zustandsfeld den getrimmten Rohstring (`plain`) bzw. den Wert am Pfad als Text (`json`/`json_array`), ohne Faktor/Offset; Republish unverändert. Ein Wort auf ein Zahlenfeld bleibt `transform_fehler` ohne Republish. Kein neuer `payload_typ`, keine 400-Regel. **Am Betriebsmodus** bleibt das Gateway beim Zahlen-Weg und die Fläche zeigt keinen Knopf (D3). |
-| K2-9 | **Preset «evcc Ladepunkt»** nur mit belegten Einheiten (evcc `server/mqtt.go encode()`: Floats `%.3f`, `time.Duration` als ganze Sekunden, Bools `true`/`false`, `nil` als leerer String): `chargePower` W · `sessionEnergy` Wh ×0,001 · `chargeDuration` s · `chargeRemainingDuration` s ×1/60 · `phasesActive` · `chargeTotalImport` kWh ×1 als Zählerstand unter `energy/` (die Bauplan-Annahme Wh war falsch, Quelle `api.MeterEnergy`) · `mode` · `connected`/`charging`/`enabled` · `vehicleName`. Nicht im Preset: Auto-Werte (`vehicleSoc`/`vehicleRange`), undokumentierte Topics. Presets bietet die Oberfläche derzeit nicht an (Aufruf über die API). |
+| K2-9 | **Preset «evcc Ladepunkt»** nur mit belegten Einheiten (evcc `server/mqtt.go encode()`: Floats `%.3f`, `time.Duration` als ganze Sekunden, Bools `true`/`false`, `nil` als leerer String): `chargePower` W · `sessionEnergy` Wh ×0,001 · `chargeDuration` s · `chargeRemainingDuration` s ×1/60 · `phasesActive` · `chargeTotalImport` kWh ×1 als Zählerstand unter `energy/` (die Bauplan-Annahme Wh war falsch, Quelle `api.MeterEnergy`) · `mode` · `connected`/`charging`/`enabled` · `vehicleName`. Nicht im Preset: Auto-Werte (`vehicleSoc`/`vehicleRange`), undokumentierte Topics. Seit K4 in der Oberfläche («Preset anwenden …», §2b-K4). |
 
 **Release-Regel (Gernot 27.10.2026):** kein Release der E-Mobilitäts-Änderungen ohne Panorama — K1 bis K3 sammeln sich
 ungepusht, das Panorama schließt das Paket. **K3** («Betrieb heute» aus einer typoffenen Mitschrift) ist gebaut (§2b-K3). Der
 evcc-Ladezustand aus drei Binär-Sensoren (offen aus K1) ist mit Option A (K2-7) gelöst; Weg B (Template-Sensor) bleibt für
-andere Integrationen.
+andere Integrationen. **K4** (Kilometerstand, Fahrt heute, Kopfzahl PV-Anteil, Preset-Wahl) ist gebaut (§2b-K4).
 
 ### 2b-K3. Zustands-Mitschrift typoffen, Karte «Betrieb heute» (gebaut 28.10.2026, unveröffentlicht)
 
@@ -130,6 +130,23 @@ Wechsel-Zähler: ja) · **D5** (Standort mitschreiben: ja) · **D6** (Option A a
 | K3-5 | HA typoffen (`_get_zustand_history`), Option A über HA als verschränkte Zeitlinie der drei Verläufe; ein gemessener Ladezustand geht vor. |
 | K3-6/7 | Leser `zustand_anteile_je_stunde`, Layer `stunden_je_zustand` (WP-Fassungen sind Hüllen, bitgleich); Tag-Detail `emob_betrieb` (nur Tag). |
 | K3-8 | Karte «Betrieb heute» (`BetriebKarteEmob`): Wallbox Lädt · Verbunden · Wartet · Fertig + «Ladevorgänge heute»; E-Auto Laden (Lädt · Lädt DC · Verbunden) und Standort (Zu Hause · Unterwegs); `kein_fahrzeug`/`gesperrt`/`fehler`/`nicht_verbunden` kein Betrieb; Farbe = Funktion, keine Rahmenfarbe; «Heute kein Betrieb» bei gemessener 0. |
+
+### 2b-K4. Kilometerstand, Fahrt heute, Kopfzahl PV-Anteil, Preset-Wahl (gebaut 28.10.2026, unveröffentlicht)
+
+Grundlage: Definitions-Blatt §1 (P2) und §2 (Kilometerstand, Gefahren/Fahrverbrauch heute), K2b-Hinweis H4 (Presets ohne
+Oberfläche seit 13.08.2026); Bauplan K4 (intern) mit Entscheiden **E-K4-1** (Katalog für `km_gefahren` und `ladevorgaenge`) ·
+**E-K4-2** (Tag-Detail vor Live) · **E-K4-3** (Preset ersetzt) · **E-K4-4** (erste Kanalzeile zählt 0) · **E-K4-5** (keine
+Kopfzahl bei `pv > ladung`), nach den Halten H1/H2 (Master 28.10.2026).
+
+| Nr. | Entscheid |
+| --- | --- |
+| K4-1 | **Kilometerstand** = Rohwert des am E-Auto auf `km_gefahren` zugeordneten Zählers (HA-Entität vor MQTT-Energie-Cache, `quellen` entscheidet), 60-s-Takt (`lade_staende_live`), `LiveFahrzeug.km_stand`; nie aus der Handeingabe `km_stand`. |
+| K4-2 | **Gefahren/Fahrverbrauch heute** = Σ Zuwachs der Kanal-Stunden `inv:<id>:km_gefahren` / `inv:<id>:verbrauch_kwh`; erste Zeile ohne Vorstand zählt 0 (`fahrt_je_tag`). |
+| K4-3 | **Katalog-Korrektur O7:** `km_gefahren`/`ladevorgaenge` am Gerät Spiegel/Mitschrift. Der Spiegel folgt der `counter_map` (Datenquellen-Wahl HA ⇒ gespiegelt, schon vorher); keine Kanaländerung (H2). |
+| K4-4 | **Kopfzahl «PV-Anteil heute»** nur mit gemessenem PV-Ladezähler (ohne Grund) und Wallbox-Tageswert, `pv ≤ ladung`; neue Layer-Funktion `pv_anteil_gemessen_prozent` — `leite_pv_anteil_ab` ist die Schätzung aus der Netzbilanz und passt nicht (H1). |
+| K4-5 | Tag-Detail `emob_heute` (`ladung_kwh`, `ladung_pv_kwh`, `pv_anteil_prozent`, `km`, `fahrverbrauch_kwh`), E-Auto-Ladung nur ohne deckende Wallbox. |
+| K4-6 | Karte «Heute»: Ladung aus dem Tag-Detail (Live nur Rückfall), Kopfzahl mit Herleitung «9,8 kWh PV ÷ 14,7 kWh»; E-Auto «Gefahren heute», «Fahrverbrauch heute», Gerätekarte «Kilometerstand». |
+| K4-7/8 | **«Preset anwenden …»** je Gerät (`MqttPreset.typen`) und an der Anlage; Apply **ersetzt** aktive Gateway-Zeilen desselben Felds (beide Schreibweisen des Ziels) und setzt die Quelle «Gateway». |
 
 ## 3. Entscheide
 
