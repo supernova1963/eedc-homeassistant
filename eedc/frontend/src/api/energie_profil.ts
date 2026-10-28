@@ -208,6 +208,20 @@ export interface TagWerte {
    * Bilanz. Fehlt ein Eintrag, wurde an dem Tag nichts abgelesen.
    */
   zaehler_stand?: Record<string, number> | null
+  /** §9.2 — an Dritte abgegebene kWh des Tages (Backend `sonstiges_abgabe`); `null` = keine Abgabe gemessen. */
+  sonstiges_abgabe?: number | null
+  // ── Tabellen-Spalten (28.10.2026, Backend `tage_werte_zusatz.py`) — private, am Tag aktive Geräte; `null` = an dem
+  // Tag kein Wert. Optional: ältere Server liefern die Felder nicht.
+  /** Σ Wallbox-Ladung (Betrag), dieselbe Mischung wie die Karte «Heute» im Hub. */
+  wallbox_ladung?: number | null
+  /** Σ gefahrene km — am Tag der Rückkehr nach einer Zählerlücke trägt der Wert den Sprung (Lückenregel). */
+  eauto_km?: number | null
+  eauto_fahrverbrauch?: number | null
+  /** Σ Ladevorgänge (Übergänge nach «lädt») an den Wallboxen. */
+  ladevorgaenge?: number | null
+  /** Wärmepumpen-Starts und Betriebszeit in ganzen Minuten (Tagessumme wie Cockpit → Monat). */
+  wp_starts?: number | null
+  wp_betriebszeit_min?: number | null
 }
 
 /**

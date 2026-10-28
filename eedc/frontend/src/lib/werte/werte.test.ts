@@ -59,9 +59,11 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 49 Metriken (37 Monat + 12 Tag-native), jede mit gültiger Gruppe + granular', () => {
+  it('hat 72 Metriken (55 Monat, 44 Tag, davon 27 beides), jede mit gültiger Gruppe + granular', () => {
     // 37 seit 05.09.2026: `abgabe_dritte` (Konzept §9.2, dritter Weg der Verwendung).
-    expect(WERTE_METRIKEN).toHaveLength(49)
+    // 72 seit 28.10.2026 (Tabellen-Spalten E-Mobilität, Wärme/Klima, Speicher, Wetter): +23 Spalten.
+    expect(WERTE_METRIKEN).toHaveLength(72)
+    expect(WERTE_METRIKEN.filter((m) => m.granular.length === 2)).toHaveLength(27)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -85,9 +87,9 @@ describe('W1-Registry', () => {
 })
 
 describe('metrikenFuer (Granularität)', () => {
-  it('Monat = 37 Registry-Metriken, kein Tag-natives Feld', () => {
+  it('Monat = 55 Registry-Metriken, kein Tag-natives Feld', () => {
     const m = metrikenFuer('monat')
-    expect(m).toHaveLength(37)
+    expect(m).toHaveLength(55)
     expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
     expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
     // Vollständigkeits-Spalten (Gernot 2026-06-26): verfügbare Felder als wählbare Spalten.
@@ -95,8 +97,9 @@ describe('metrikenFuer (Granularität)', () => {
     expect(m.find((x) => x.key === 'wallbox_pv_anteil')).toBeDefined()
     expect(m.find((x) => x.key === 'netzbezug_preis_cent')).toBeDefined()
   })
-  it('Tag = ohne WP-Wärme/COP/E-Auto, mit Tag-nativen', () => {
+  it('Tag = ohne WP-Wärme/JAZ/Wallbox-PV-Anteil, mit E-Auto-Fahrt und Tag-nativen', () => {
     const keys = metrikenFuer('tag').map((x) => x.key)
+    expect(keys).toHaveLength(44)
     expect(keys).toContain('peak_pv_kw')
     expect(keys).toContain('ueberschuss_kwh')
     expect(keys).toContain('erzeugung')
@@ -110,7 +113,81 @@ describe('metrikenFuer (Granularität)', () => {
     // eine Zahl, die keine Grundlast ist.
     expect(METRIK_BY_KEY['grundlast_kw'].aggregation).toBe('none')
     expect(keys).not.toContain('wp_waerme')
-    expect(keys).not.toContain('eauto_km')
+    // Seit 28.10.2026 (Tabellen-Spalten): km, Fahrverbrauch, Wallbox-Ladung, V2H und Ladevorgänge haben einen
+    // gebündelten Tages-Leser; Arbeitszahlen und der gemessene PV-Anteil des Tages nicht (nur Cockpit → Tag).
+    expect(keys).toContain('eauto_km')
+    for (const k of ['eauto_fahrverbrauch', 'wallbox_ladung', 'v2h_entladung', 'ladevorgaenge', 'wp_starts',
+      'wp_betriebszeit_min', 'speicher_vollzyklen', 'temperatur_min_c', 'boersenpreis_min_cent', 'abgabe_dritte']) {
+      expect(keys).toContain(k)
+    }
+    for (const k of ['wp_cop', 'wp_jaz_heizen', 'wp_jaz_warmwasser', 'wp_jaz_kuehlen', 'wallbox_pv_anteil',
+      'wallbox_pv_ladung', 'eauto_kwh_100km', 'wp_kaelte', 'wp_strom_kuehlen', 'wp_heizstab']) {
+      expect(keys).not.toContain(k)
+    }
+  })
+})
+
+describe('Tabellen-Spalten 28.10.2026 (E-Mobilität, Wärme/Klima, Speicher, Wetter)', () => {
+  it('neue Spalten sind nie vorgewählt', () => {
+    const neu = ['eauto_fahrverbrauch', 'eauto_kwh_100km', 'emob_extern_kwh', 'emob_extern_euro', 'v2h_entladung',
+      'ladevorgaenge', 'dienstliche_ladekosten', 'wp_jaz_heizen', 'wp_jaz_warmwasser', 'wp_jaz_kuehlen',
+      'wp_strom_kuehlen', 'wp_strom_lueften', 'wp_strom_entfeuchten', 'wp_strom_nicht_aufgeteilt', 'wp_kaelte',
+      'wp_heizstab', 'wp_starts', 'wp_betriebszeit_min', 'speicher_netzladung', 'speicher_vollzyklen',
+      'temperatur_avg_c', 'temperatur_min_c', 'boersenpreis_min_cent']
+    for (const k of neu) expect(METRIK_BY_KEY[k]?.defaultVisible, k).toBe(false)
+  })
+  it('Vollzyklen der Entladung tragen einen anderen Namen als die SoC-Hübe', () => {
+    expect(METRIK_BY_KEY['speicher_vollzyklen'].label).not.toBe(METRIK_BY_KEY['batterie_vollzyklen'].label)
+  })
+  it('Arbeitszahlen je Funktion werden im Fuß nicht gemittelt, die Betriebszeit ist in ganzen Minuten', () => {
+    for (const k of ['wp_jaz_heizen', 'wp_jaz_warmwasser', 'wp_jaz_kuehlen']) {
+      expect(METRIK_BY_KEY[k].aggregation).toBe('none')
+    }
+    expect(METRIK_BY_KEY['wp_betriebszeit_min'].unit).toBe('min')
+    expect(METRIK_BY_KEY['wp_betriebszeit_min'].decimals).toBe(0)
+  })
+  it('getMonatWert reicht E-Mob- und WP-Felder der Zeile durch', () => {
+    const r = mz(7, 2026, { eauto_fahrverbrauch: 210.4, eauto_kwh_100km: 17.5, wp_jaz_heizen: 4.2, wp_strom_kuehlen: 31,
+      speicher_netzladung: 12, temperatur_avg_c: 18.3, dienstliche_ladekosten: 9.5 })
+    expect(getMonatWert(r, 'eauto_fahrverbrauch')).toBe(210.4)
+    expect(getMonatWert(r, 'eauto_kwh_100km')).toBe(17.5)
+    expect(getMonatWert(r, 'wp_jaz_heizen')).toBe(4.2)
+    expect(getMonatWert(r, 'wp_strom_kuehlen')).toBe(31)
+    expect(getMonatWert(r, 'speicher_netzladung')).toBe(12)
+    expect(getMonatWert(r, 'temperatur_avg_c')).toBe(18.3)
+    expect(getMonatWert(r, 'dienstliche_ladekosten')).toBe(9.5)
+  })
+  it('getTagWert reicht die Tagesfelder durch; Abgabe an Dritte liest `sonstiges_abgabe`', () => {
+    const r = tw('2026-06-10', { wallbox_ladung: 11.2, eauto_km: 42, eauto_fahrverbrauch: 7.5, ladevorgaenge: 2,
+      wp_starts: 7, wp_betriebszeit_min: 192, sonstiges_abgabe: 3.4, speicher_vollzyklen: 0.8, temperatur_min_c: 4.1 })
+    expect(getTagWert(r, 'wallbox_ladung')).toBe(11.2)
+    expect(getTagWert(r, 'eauto_km')).toBe(42)
+    expect(getTagWert(r, 'eauto_fahrverbrauch')).toBe(7.5)
+    expect(getTagWert(r, 'ladevorgaenge')).toBe(2)
+    expect(getTagWert(r, 'wp_starts')).toBe(7)
+    expect(getTagWert(r, 'wp_betriebszeit_min')).toBe(192)
+    expect(getTagWert(r, 'abgabe_dritte')).toBe(3.4)
+    expect(getTagWert(r, 'speicher_vollzyklen')).toBe(0.8)
+    expect(getTagWert(r, 'temperatur_min_c')).toBe(4.1)
+  })
+  it('null bleibt null (Anzeige „—"), eine 0 bleibt 0', () => {
+    const r = tw('2026-06-10', { wallbox_ladung: null, ladevorgaenge: 0 })
+    expect(getTagWert(r, 'wallbox_ladung')).toBeNull()
+    expect(getTagWert(r, 'eauto_km')).toBeNull()
+    expect(getTagWert(r, 'ladevorgaenge')).toBe(0)
+    expect(getMonatWert(mz(7, 2026, { wp_jaz_kuehlen: null }), 'wp_jaz_kuehlen')).toBeNull()
+    expect(fmtWert(getTagWert(r, 'wallbox_ladung'), METRIK_BY_KEY['wallbox_ladung'].decimals)).toBe('—')
+    expect(fmtWert(getTagWert(r, 'ladevorgaenge'), METRIK_BY_KEY['ladevorgaenge'].decimals)).toBe('0')
+  })
+  it('Fuß kWh/100 km = Σ (Quote × km) ÷ Σ km der Monate mit Quote — wie der Layer (Σ Menge ÷ Σ km)', () => {
+    // Juni: 180 kWh auf 1000 km (18,0), Juli: 340 kWh auf 2000 km (17,0), August: 500 km ohne Energiemenge (keine Quote).
+    const rows = [
+      monatsZeile(mz(6, 2026, { eauto_km: 1000, eauto_kwh_100km: 18 })),
+      monatsZeile(mz(7, 2026, { eauto_km: 2000, eauto_kwh_100km: 17 })),
+      monatsZeile(mz(8, 2026, { eauto_km: 500, eauto_kwh_100km: null })),
+    ]
+    const fuss = aggregiere(rows, [METRIK_BY_KEY['eauto_kwh_100km']])['eauto_kwh_100km']
+    expect(fuss).toBeCloseTo((180 + 340) / 3000 * 100, 9)
   })
 })
 

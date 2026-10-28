@@ -133,3 +133,27 @@ describe('Sonstiges-Spalten (Melder rapahl, 2026-08-14)', () => {
     expect(ohne.sonstiges_verbrauch).toBeNull()
   })
 })
+
+describe('Tabellen-Spalten 28.10.2026 — durchgereicht, nicht gerechnet', () => {
+  it('reicht E-Mobilität, Wärme/Klima, Speicher-Netzladung und Außentemperatur durch', () => {
+    const [z] = createMonatsZeitreihe([md({
+      eauto_fahrverbrauch_kwh: 210.4, eauto_verbrauch_kwh_100km: 17.53, eauto_v2h_entladung_kwh: 12.2,
+      emob_ladung_extern_kwh: 40, emob_ladung_extern_euro: 22.8, emob_ladevorgaenge: 14,
+      wp_strom_kuehlen_kwh: 31, wp_strom_lueften_kwh: 4, wp_strom_entfeuchten_kwh: 2, wp_strom_nicht_aufgeteilt_kwh: 9,
+      wp_kaelte_kwh: 95, wp_heizstab_kwh: 6, wp_jaz_heizen: 4.2, wp_jaz_warmwasser: 3.1, wp_jaz_kuehlen: 3.06,
+      speicher_netzladung_kwh: 12, durchschnittstemperatur_c: 18.3,
+    })])
+    expect([z.eauto_fahrverbrauch, z.eauto_kwh_100km, z.v2h_entladung, z.emob_extern_kwh, z.emob_extern_euro,
+      z.ladevorgaenge]).toEqual([210.4, 17.53, 12.2, 40, 22.8, 14])
+    expect([z.wp_strom_kuehlen, z.wp_strom_lueften, z.wp_strom_entfeuchten, z.wp_strom_nicht_aufgeteilt, z.wp_kaelte,
+      z.wp_heizstab, z.wp_jaz_heizen, z.wp_jaz_warmwasser, z.wp_jaz_kuehlen]).toEqual([31, 4, 2, 9, 95, 6, 4.2, 3.1, 3.06])
+    expect([z.speicher_netzladung, z.temperatur_avg_c]).toEqual([12, 18.3])
+  })
+  it('ohne Feld bleibt die Zelle leer — auch die dienstlichen Ladekosten (kein `?? 0` mehr)', () => {
+    const [z] = createMonatsZeitreihe([md()])
+    expect(z.eauto_kwh_100km).toBeNull()
+    expect(z.wp_jaz_heizen).toBeNull()
+    expect(z.dienstliche_ladekosten).toBeNull()
+    expect(createMonatsZeitreihe([md({ dienstliche_ladekosten_euro: 0 })])[0].dienstliche_ladekosten).toBe(0)
+  })
+})

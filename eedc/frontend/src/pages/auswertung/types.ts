@@ -104,8 +104,10 @@ export interface MonatsZeitreihe {
    * beim ausgewiesenen §51-Abzug.
    */
   ust_eigenverbrauch: number
-  /** N-633: dienstliche Ladekosten, bereits **in `netto_ertrag` abgezogen** — einzeln, damit der Rechenweg aufgeht. */
-  dienstliche_ladekosten?: number
+  /** N-633: dienstliche Ladekosten, bereits **in `netto_ertrag` abgezogen** — einzeln, damit der Rechenweg aufgeht.
+   *  Seit 28.10.2026 (Tabellen-Spalte) ohne `?? 0`: `null` bleibt „—". Einziger Leser daneben ist die Finanz-Kachel
+   *  (`AuswertungenFinanzenV4`, `|| 0` in der Summe). */
+  dienstliche_ladekosten?: number | null
   /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
   netzbezug_preis_cent: number | null
   /** Durch §51 EEG entgangener Erlös in € (0, wenn die Anlage nicht betroffen ist). */
@@ -129,6 +131,28 @@ export interface MonatsZeitreihe {
    * E-Mob) zeigen Cockpit → Jahr und Auswertungen → CO₂.
    */
   co2_einsparung: number | null
+  // ── Tabellen-Spalten (28.10.2026) — durchgereicht, nicht gerechnet. `null` = «—». ──────────────────────────────
+  /** Speicher-Netzladung (Teilmenge der Ladung). */
+  speicher_netzladung?: number | null
+  /** Ø Außentemperatur des Monats (Backend `durchschnittstemperatur_c`). */
+  temperatur_avg_c?: number | null
+  eauto_fahrverbrauch?: number | null
+  /** kWh/100 km aus dem Layer (`eauto_effizienz_100km`); Fuß mengengewichtet mit den km. */
+  eauto_kwh_100km?: number | null
+  /** V2H-Rückspeisung — gleicher Schlüssel wie die Tagesspalte. */
+  v2h_entladung?: number | null
+  emob_extern_kwh?: number | null
+  emob_extern_euro?: number | null
+  ladevorgaenge?: number | null
+  wp_strom_kuehlen?: number | null
+  wp_strom_lueften?: number | null
+  wp_strom_entfeuchten?: number | null
+  wp_strom_nicht_aufgeteilt?: number | null
+  wp_kaelte?: number | null
+  wp_heizstab?: number | null
+  wp_jaz_heizen?: number | null
+  wp_jaz_warmwasser?: number | null
+  wp_jaz_kuehlen?: number | null
 }
 
 // Helper-Funktion zum Erstellen der Monatszeitreihen
@@ -272,11 +296,29 @@ export function createMonatsZeitreihe(
       netto_ertrag: md.netto_ertrag_euro,
       netto_bilanz: md.netto_bilanz_euro,
       ust_eigenverbrauch: md.ust_eigenverbrauch_euro,
-      dienstliche_ladekosten: md.dienstliche_ladekosten_euro ?? 0,
+      dienstliche_ladekosten: md.dienstliche_ladekosten_euro ?? null,
       netzbezug_preis_cent: md.netzbezug_preis_cent,
       einspeise_nicht_verguetet_euro: md.einspeise_nicht_verguetet_euro,
       einspeise_neg_preis_kwh: md.einspeisung_neg_preis_kwh,
       co2_einsparung,
+      // Tabellen-Spalten (28.10.2026): fertig aus der Antwort, `?? null` nur für ältere Server ohne das Feld.
+      speicher_netzladung: md.speicher_netzladung_kwh ?? null,
+      temperatur_avg_c: md.durchschnittstemperatur_c ?? null,
+      eauto_fahrverbrauch: md.eauto_fahrverbrauch_kwh ?? null,
+      eauto_kwh_100km: md.eauto_verbrauch_kwh_100km ?? null,
+      v2h_entladung: md.eauto_v2h_entladung_kwh ?? null,
+      emob_extern_kwh: md.emob_ladung_extern_kwh ?? null,
+      emob_extern_euro: md.emob_ladung_extern_euro ?? null,
+      ladevorgaenge: md.emob_ladevorgaenge ?? null,
+      wp_strom_kuehlen: md.wp_strom_kuehlen_kwh ?? null,
+      wp_strom_lueften: md.wp_strom_lueften_kwh ?? null,
+      wp_strom_entfeuchten: md.wp_strom_entfeuchten_kwh ?? null,
+      wp_strom_nicht_aufgeteilt: md.wp_strom_nicht_aufgeteilt_kwh ?? null,
+      wp_kaelte: md.wp_kaelte_kwh ?? null,
+      wp_heizstab: md.wp_heizstab_kwh ?? null,
+      wp_jaz_heizen: md.wp_jaz_heizen ?? null,
+      wp_jaz_warmwasser: md.wp_jaz_warmwasser ?? null,
+      wp_jaz_kuehlen: md.wp_jaz_kuehlen ?? null,
     }
   })
 }

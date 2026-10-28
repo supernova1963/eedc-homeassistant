@@ -70,6 +70,16 @@ so wie das Formular — „Max. Ladeleistung (kW)" statt „max ladeleistung kw"
 **Zeiten als Stunden und Minuten.** „Betrieb heute" an Wärmepumpe, Wallbox und E-Auto, die Betriebsstunden eines Tages,
 „Ø Laufzeit/Start" und die Sonnenstunden in *Cockpit → Live* zeigen eine Dauer jetzt als „2 h 36 min" statt „2,6 h".
 
+**Auswertungen → Tabelle: neue Spalten für E-Mobilität und Wärme/Klima.** Im Spalten-Picker findest du jetzt im Monat
+den **Fahrverbrauch**, den **Verbrauch in kWh/100 km** (in der Summenzeile über alle km gerechnet), die **Ladung extern**
+(kWh und €), **V2H**, die **Ladevorgänge**, die **Arbeitszahlen Heizen, Warmwasser und Kühlen**, den Strom **nach
+Betriebsart** (Kühlen, Lüften, Entfeuchten, nicht aufgeteilt), die **Kälte**, die **Zusatzheizung**, die
+**Speicher-Netzladung**, die **Ø Außentemperatur** und die **dienstlichen Ladekosten**. Am Tag kommen **Gefahren (km)**,
+**Fahrverbrauch**, **Wallbox-Ladung**, **Ladevorgänge**, **V2H**, die **Starts** und die **Betriebszeit** der Wärmepumpe
+(in Minuten), die **Vollzyklen** des Speichers, **Temperatur min**, **Börsenpreis min** und die **Abgabe an Dritte** dazu.
+Alles ist abwählbar und nicht voreingestellt; jede Zahl ist dieselbe wie in Cockpit und Hub. Die Arbeitszahlen und die
+Wärme eines einzelnen Tages stehen weiterhin in *Cockpit → Tag* ([Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank)).
+
 ## v4.1.11 — 27. Oktober 2026
 
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0

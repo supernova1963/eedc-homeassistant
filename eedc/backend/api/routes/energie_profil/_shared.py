@@ -767,6 +767,19 @@ class TagWerteResponse(BaseModel):
     # ⚠ Er wird in dieser Zeile **nirgends mitsummiert** und geht in keine
     # Bilanzgröße ein — die Spalten tragen `aggregation: 'none'`.
     zaehler_stand: Optional[dict[str, float]] = None
+    # ── Tabellen-Spalten (28.10.2026, `services/energie_profil/tage_werte_zusatz.py`) — private, am Tag aktive Geräte;
+    # ``None`` ⇒ an dem Tag kein Wert. Gleiche Schlüssel wie die Monatsspalten gleicher Bedeutung.
+    #: Σ Wallbox-Ladung (Betrag), dieselbe Mischung wie ``emob_heute`` im Tag-Detail.
+    wallbox_ladung: Optional[float] = None
+    #: Σ gefahrene km / Fahrverbrauch der E-Autos (``kanal_stunden.fahrt_der_tage``) — am Tag der Rückkehr nach einer
+    #: Zählerlücke trägt «Gefahren» den Sprung (Lückenregel, K4-N1).
+    eauto_km: Optional[float] = None
+    eauto_fahrverbrauch: Optional[float] = None
+    #: Σ Übergänge nach «lädt» an den Wallboxen (``kanal_stunden.zustand_wechsel_der_tage``).
+    ladevorgaenge: Optional[float] = None
+    #: Wärmepumpen-Starts und Betriebszeit (ganze Minuten) des Tages — Tagessumme wie *Cockpit → Monat*.
+    wp_starts: Optional[int] = None
+    wp_betriebszeit_min: Optional[int] = None
 
 
 class TagStatusResponse(BaseModel):

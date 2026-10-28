@@ -171,6 +171,28 @@ export interface AggregierteMonatsdaten {
   eauto_km: number | null
   wallbox_ladung_kwh: number | null
   wallbox_ladung_pv_kwh: number | null
+  // ── Tabellen-Spalten (28.10.2026) — fertig aus dem Backend (`monatsdaten_aggregiert._zeile_emob_zusatz`/
+  // `_zeile_wp_zusatz`). Mengen ohne Gemessen-Marke «nur mit Wert» wie Cockpit → Monat; `null` = «—».
+  // Optional: ältere Server liefern die Felder nicht.
+  eauto_fahrverbrauch_kwh?: number | null
+  /** Layer `eauto_effizienz_100km` (gemessener Fahrverbrauch vor Heim + Extern). */
+  eauto_verbrauch_kwh_100km?: number | null
+  eauto_v2h_entladung_kwh?: number | null
+  emob_ladung_extern_kwh?: number | null
+  emob_ladung_extern_euro?: number | null
+  emob_ladevorgaenge?: number | null
+  /** Betriebsart-Strom — Teilmengen von `wp_strom_kwh`, nur mit Aufteilung. */
+  wp_strom_kuehlen_kwh?: number | null
+  wp_strom_lueften_kwh?: number | null
+  wp_strom_entfeuchten_kwh?: number | null
+  wp_strom_nicht_aufgeteilt_kwh?: number | null
+  wp_kaelte_kwh?: number | null
+  /** Zusatzheizung (Heizstab) — Teilmenge von `wp_strom_kwh`, nur gemessen. */
+  wp_heizstab_kwh?: number | null
+  /** Arbeitszahl je Funktion des Monats (dieselbe Faltung wie Cockpit → Jahr, gleich Cockpit → Monat). */
+  wp_jaz_heizen?: number | null
+  wp_jaz_warmwasser?: number | null
+  wp_jaz_kuehlen?: number | null
   // Berechnet
   direktverbrauch_kwh: number | null
   eigenverbrauch_kwh: number | null

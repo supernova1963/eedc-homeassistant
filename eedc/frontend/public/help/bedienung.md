@@ -1325,6 +1325,39 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > Gerät nur **eine** Zahl, und die ist bei einem Speicher ein Saldo aus Laden und Entladen — sie
 > ließe sich weder der Erzeugung noch dem Verbrauch zuschlagen.
 
+> **E-Mobilität und Wärme/Klima als Spalten (seit Oktober 2026).** Der Spalten-Picker führt dazu weitere Spalten,
+> alle **nicht voreingestellt**. Jede Zahl ist dieselbe, die eedc an anderer Stelle schon zeigt — die Tabelle rechnet
+> nichts selbst.
+>
+> | Gruppe | Monatsansicht | Tagesansicht |
+> | --- | --- | --- |
+> | **E-Auto** | Gefahren (km), **Fahrverbrauch**, **Verbrauch (kWh/100 km)**, E-Auto-Ladung, **Ladung extern** (kWh und €), **V2H-Entladung**, **Ladevorgänge**, Wallbox-Ladung, Wallbox-PV-Ladung, Wallbox-PV-Anteil | Gefahren (km), **Fahrverbrauch**, **V2H-Entladung**, **Ladevorgänge**, **Wallbox-Ladung** |
+> | **Wärmepumpe** | Strom, Strom Heizen/WW, Wärme (gesamt/Heizen/WW), JAZ, **JAZ Heizen**, **JAZ WW**, **JAZ Kühlen**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung** | Strom, **Starts**, **Betriebszeit (min)** |
+> | **Speicher** | Ladung, Entladung, Effizienz, **Netzladung** | Ladung, Entladung, Effizienz, **Vollzyklen (Entladung)** |
+> | Weitere | **Ø Außentemperatur**, **Dienstliche Ladekosten** (Finanzen), Abgabe an Dritte | **Temperatur min**, **Börsenpreis min**, **Abgabe an Dritte** |
+>
+> - **Verbrauch (kWh/100 km)** ist dieselbe Kennzahl wie im E-Auto-Hub: gemessener Fahrverbrauch, sonst die Ladung
+>   (zu Hause + extern) je Kilometer. Die Summenzeile ist **Σ Menge ÷ Σ km** — kein Durchschnitt der Monatswerte;
+>   ein Monat mit Kilometern, aber ohne Energiemenge, zählt dabei nicht mit.
+> - **Fahrverbrauch, V2H, Ladung extern, Ladevorgänge und Kälte** stehen im Monat **nur mit Wert** wie in
+>   *Cockpit → Monat*: ein Monat mit 0 zeigt „—". Der Betriebsart-Strom (Kühlen, Lüften, Entfeuchten, nicht
+>   aufgeteilt) steht nur, wenn deine Wärmepumpe ihn aufteilt (Betriebsart-Zähler oder Betriebsmodus-Signal), die
+>   **Zusatzheizung** nur mit einem Heizstab-Zähler. Die Arbeitszahlen je Funktion sind dieselben wie in
+>   *Cockpit → Monat*; wie bei der JAZ gibt es darunter **keine Summenzeile** — ein Quotient wird nicht gemittelt.
+> - **Am Tag zählen nur private Geräte** — ein Dienstwagen und eine dienstliche Wallbox stehen nicht in der Summe,
+>   genau wie im Monat. Die Tageswerte von E-Auto und Wallbox kommen aus der Mitschrift (Kilometerstand,
+>   Fahrverbrauch, Ladezustand); ohne sie steht „—". ⚠ **Nach einer Lücke im Kilometerstand** trägt der Tag der
+>   Rückkehr den ganzen Sprung — dieselbe Regel wie die Karte „Heute" im E-Mobilitäts-Hub.
+> - **Starts und Betriebszeit** sind die Tageszähler deines Herstellers, summiert über die Wärmepumpen wie in
+>   *Cockpit → Monat*; die Betriebszeit steht in ganzen Minuten. Eine Monatsspalte gibt es dafür nicht — die
+>   Summe über den Monat steht in *Cockpit → Monat*.
+> - **„Vollzyklen (Entladung)"** ist Entladung ÷ Kapazität des Tages — nicht dasselbe wie die **SoC-Hübe** unter
+>   „Tagesdetail" (Hub des Ladestands).
+> - **Nur in der Tagesansicht (*Cockpit → Tag*)** stehen die Arbeitszahlen des Tages (gesamt und je Funktion), die
+>   Wärme nach Funktion, der Strom nach Betriebsart, die Kälte, die Zusatzheizung sowie die gemessene PV-Ladung und
+>   der PV-Anteil der Wallbox des Tages. Sie entstehen dort aus Lesern für **einen** Tag; über ein ganzes Jahr gelesen
+>   wäre die Tabelle zu langsam bzw. bräuchte einen zweiten Rechenweg neben der Tagesansicht.
+
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 
 > **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre Bezugsgrößen (erzeugte Wärme, gefahrene Kilometer) erfasst eedc nur monatlich. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).

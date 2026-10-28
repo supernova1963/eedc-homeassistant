@@ -78,6 +78,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
+from backend.services.energie_profil.tage_werte_zusatz import lade_tabellen_zusatz
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ class _TageKontext:
     komp_je_tag: dict
     tarif_cache: dict[date, dict]
     slot_kosten_je_tag: dict
+    #: Tabellen-Spalten (28.10.2026): je Tag E-Mobilität und WP-Zähler, gebündelt geladen (`tage_werte_zusatz.py`).
+    zusatz_je_tag: dict
 
 
 async def baue_tage_werte(
@@ -332,6 +335,8 @@ async def baue_tage_werte(
         komp_je_tag=komp_je_tag,
         tarif_cache=tarif_cache,
         slot_kosten_je_tag=slot_kosten_je_tag,
+        # Tabellen-Spalten (28.10.2026): je Größe ein Bereichs-Leser über das Fenster, kein Aufruf je Tag.
+        zusatz_je_tag=await lade_tabellen_zusatz(db, anlage, tz_pro_tag, von, bis),
     )
 
     zeilen: list[TagWerteResponse] = []
@@ -499,6 +504,7 @@ async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteRe
             tag=tag, tz=tz, bilanz=bilanz, grundlast_kw=grundlast_kw, neg_preis_kwh=neg_preis_kwh,
             erzeuger_kwh=erzeuger_kwh, zaehler_stand_pro_tag=kx.zaehler_stand_pro_tag,
         ),
+        **kx.zusatz_je_tag.get(tag, {}),
     )
 
 

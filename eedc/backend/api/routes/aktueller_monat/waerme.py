@@ -429,22 +429,16 @@ async def flags_und_wp_counter(*, anlage_id, db, investitionen, jahr, monat):
             .where(TagesZusammenfassung.komponenten_starts.is_not(None))
         )
 
-        def _tagessumme(komp: dict | None, feld: str) -> float:
-            """Summe eines Counter-Felds über alle aktiven WP-Investitionen an einem Tag."""
-            feld_map = (komp or {}).get(feld) or {}
-            tag_sum = 0.0
-            for inv_id_str, wert in feld_map.items():
-                if inv_id_str in wp_inv_id_strs and isinstance(wert, (int, float)) and wert > 0:
-                    tag_sum += float(wert)
-            return tag_sum
+        # Die Tagessumme steht seit 28.10.2026 an EINER Stelle — die Tages-Tabelle liest sie je Tag (Tabellen-Spalten).
+        from backend.services.energie_profil.tage_werte_zusatz import wp_zaehler_tagessumme
 
         starts_tagessummen: list[int] = []
         stunden_tagessummen: list[float] = []
         for (komp_starts,) in tz_result.all():
-            s = _tagessumme(komp_starts, "wp_starts_anzahl")
+            s = wp_zaehler_tagessumme(komp_starts, "wp_starts_anzahl", wp_inv_id_strs)
             if s > 0:
                 starts_tagessummen.append(int(s))
-            h = _tagessumme(komp_starts, "wp_betriebsstunden")
+            h = wp_zaehler_tagessumme(komp_starts, "wp_betriebsstunden", wp_inv_id_strs)
             if h > 0:
                 stunden_tagessummen.append(h)
         if starts_tagessummen:

@@ -54,9 +54,15 @@ const NUR_TAG: Granularitaet[] = ['tag']
 
 // Reihenfolge + Werte 1:1 aus TabelleTab.COLUMNS (verhaltensgleich).
 // `granular`: Monat+Tag, wenn das Backend den Wert pro Tag sauber liefert
-// (Tages-Werte-Endpoint, Σ stündl. TEP); nur-Monat bei fehlendem Tages-Wert
-// (WP-Wärme/COP, E-Auto). Tag-native Metriken (Peaks/PR/Börsenpreis) stehen im
-// Block `tagdetail` und erscheinen nur in Tagessichten.
+// (Tages-Werte-Endpoint, gebündelt über das Fenster); nur-Monat, wenn es keinen
+// gebündelten Tages-Leser gibt (WP-Wärme/Arbeitszahlen, Betriebsart-Strom, Kälte,
+// Zusatzheizung, Wallbox-PV-Anteil — die stehen nur in der Tagesansicht, Cockpit → Tag)
+// oder die Größe nur monatlich gepflegt wird (Ladung extern, Heimladung je Auto).
+// Nur-Tag: Größen ohne Monatswert in den Monats-Fakten (WP-Starts/Betriebszeit,
+// Vollzyklen der Entladung) und die Tag-nativen Metriken (Peaks/PR/Börsenpreis) im
+// Block `tagdetail`.
+// Tabellen-Spalten 28.10.2026: neue Spalten nie `defaultVisible`; gleicher Schlüssel
+// für Monat und Tag nur bei gleicher Bedeutung.
 export const WERTE_METRIKEN: WerteMetrik[] = [
   // Energie
   { key: 'erzeugung',          label: 'PV-Erzeugung',      unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
@@ -66,7 +72,8 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'gesamtverbrauch',    label: 'Gesamtverbrauch',   unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'direktverbrauch',    label: 'Direktverbrauch',   unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   // §9.2 — der dritte Weg der Verwendung; nur mit Zähler an der Übergabestelle.
-  { key: 'abgabe_dritte',      label: 'Abgabe an Dritte',  unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  // Tag seit 28.10.2026 aus dem Backend-Feld `sonstiges_abgabe` (gleiche Bedeutung, s. `TAG_FELD`).
+  { key: 'abgabe_dritte',      label: 'Abgabe an Dritte',  unit: 'kWh',     gruppe: 'basis',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   // Quoten
   { key: 'autarkie',           label: 'Autarkie',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'evQuote',            label: 'EV-Quote',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
@@ -74,10 +81,15 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // Wetter (Einstrahlungs-Kontext, verfügbar wenn Wetterdaten erfasst)
   { key: 'globalstrahlung',    label: 'Globalstrahlung',   unit: 'kWh/m²',  gruppe: 'wetter',      decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'sonnenstunden',      label: 'Sonnenstunden',     unit: 'h',       gruppe: 'wetter',      decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'temperatur_avg_c',   label: 'Ø Außentemp.',      unit: '°C',      gruppe: 'wetter',      decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   // Speicher
   { key: 'speicher_ladung',    label: 'Speicher Ladung',    unit: 'kWh',    gruppe: 'speicher',    decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'speicher_entladung', label: 'Speicher Entladung', unit: 'kWh',    gruppe: 'speicher',    decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'speicher_effizienz', label: 'Speicher Effizienz', unit: '%',      gruppe: 'speicher',    decimals: 1, aggregation: 'avg', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  { key: 'speicher_netzladung', label: 'Speicher Netzladung', unit: 'kWh',  gruppe: 'speicher',    decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  // Entladung ÷ Kapazität des Tages (Backend-SoT) — NICHT die „SoC-Hübe" (`batterie_vollzyklen`, Ladestand-Hub) im
+  // Block Tagesdetail; der Name sagt deshalb, woraus er entsteht.
+  { key: 'speicher_vollzyklen', label: 'Vollzyklen (Entladung)', unit: '', gruppe: 'speicher',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   // Wärmepumpe — nur Strom pro Tag ableitbar; Wärme/COP bleiben monat-only
   { key: 'wp_strom',           label: 'WP Strom',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'wp_strom_heizen',    label: 'WP Strom Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
@@ -92,10 +104,38 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // zwei Wahrheiten in einer Tabelle. Dieselbe Entscheidung wie bei der
   // Grundlast-Spalte (01.09.), aus demselben Grund.
   { key: 'wp_cop',             label: 'WP JAZ',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
-  // E-Auto — kein sauberer Tages-Wert (km/Lade-Split) → monat-only
-  { key: 'eauto_km',           label: 'E-Auto',            unit: 'km',      gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  // Tabellen-Spalten 28.10.2026 — je Funktion dieselbe Faltung wie Cockpit → Jahr (gleich Cockpit → Monat); `none`
+  // aus demselben Grund wie `wp_cop`: ein Quotient wird nicht gemittelt.
+  { key: 'wp_jaz_heizen',      label: 'WP JAZ Heizen',     unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_jaz_warmwasser',  label: 'WP JAZ WW',         unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_jaz_kuehlen',     label: 'JAZ Kühlen',        unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  // Betriebsart-Strom: Teilmengen von „WP Strom", nur mit Aufteilung (Betriebsart-Zähler oder Modus-Signal).
+  { key: 'wp_strom_kuehlen',   label: 'Strom Kühlen',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wp_strom_lueften',   label: 'Strom Lüften',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wp_strom_entfeuchten', label: 'Strom Entfeuchten', unit: 'kWh',   gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wp_strom_nicht_aufgeteilt', label: 'Strom nicht aufgeteilt', unit: 'kWh', gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wp_kaelte',          label: 'Kälte',             unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  // Heizstab-Strom (Teilmenge von „WP Strom"), nur mit Heizstab-Zähler.
+  { key: 'wp_heizstab',        label: 'WP Zusatzheizung',  unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
+  // Tageszähler des Herstellers (Starts, Betriebsstunden) — Tagessumme wie Cockpit → Monat. Die Betriebszeit in
+  // ganzen Minuten (Style-Guide C3: Dauern nie dezimal). Die Monats-Fakten tragen beide nicht ⇒ nur Tag.
+  { key: 'wp_starts',          label: 'WP Starts',         unit: '',        gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  { key: 'wp_betriebszeit_min', label: 'WP Betriebszeit',  unit: 'min',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  // E-Auto. Seit 28.10.2026 tragen km, Fahrverbrauch, Wallbox-Ladung, V2H und Ladevorgänge auch einen Tageswert
+  // (gebündelte Leser der Mitschrift, private Geräte). Die Heimladung je Auto (Lade-Split) und der Wallbox-PV-Anteil
+  // bleiben Monat: der gemessene PV-Anteil des Tages hat keinen Fensterleser (nur Cockpit → Tag).
+  // ⚠ km am Tag: am Tag der Rückkehr nach einer Zählerlücke trägt der Wert den Sprung (Lückenregel).
+  { key: 'eauto_km',           label: 'E-Auto',            unit: 'km',      gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
+  { key: 'eauto_fahrverbrauch', label: 'Fahrverbrauch',    unit: 'kWh',     gruppe: 'eauto',       decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: false },
+  // Layer-Quote (gemessener Fahrverbrauch vor Heim + Extern); der Fuß ist Σ Menge ÷ Σ km wie im Layer
+  // (`eauto_effizienz_zeitraum`) — mengengewichtet mit den km, Monate ohne Quote zählen nicht.
+  { key: 'eauto_kwh_100km',    label: 'Verbrauch',         unit: 'kWh/100 km', gruppe: 'eauto',    decimals: 1, aggregation: 'gewichtet', gewicht: 'eauto_km', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   { key: 'eauto_ladung',       label: 'E-Auto Ladung',     unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wallbox_ladung',     label: 'Wallbox Ladung',    unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'emob_extern_kwh',    label: 'Ladung extern',     unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'emob_extern_euro',   label: 'Ladung extern',     unit: '€',       gruppe: 'eauto',       decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
+  { key: 'v2h_entladung',      label: 'V2H-Entladung',     unit: 'kWh',     gruppe: 'eauto',       decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
+  { key: 'ladevorgaenge',      label: 'Ladevorgänge',      unit: '',        gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
+  { key: 'wallbox_ladung',     label: 'Wallbox Ladung',    unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'wallbox_pv_ladung',  label: 'Wallbox PV-Ladung', unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wallbox_pv_anteil',  label: 'Wallbox PV-Anteil', unit: '%',       gruppe: 'eauto',       decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // Sonstiges (BHKW, Heizstab, Pool …) — Melder rapahl, 2026-08-14: ohne diese
@@ -129,6 +169,8 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // Σ Tage ≠ Monat, wie bei der CO₂-Spalte. Die Spalte daneben macht es sichtbar.
   { key: 'netto_ertrag',       label: 'Netto-Ertrag (PV)', unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   { key: 'ust_eigenverbrauch', label: 'USt Eigenverbrauch', unit: '€',      gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
+  // N-633 — wie die USt bereits im Netto-Ertrag abgezogen; einzeln, damit der Rechenweg aufgeht.
+  { key: 'dienstliche_ladekosten', label: 'Dienstl. Ladekosten', unit: '€',  gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   { key: 'netto_bilanz',       label: 'Netto-Bilanz',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   // A-1 (18.09.2026): der Fuß ist der mengengewichtete Ø über den Netzbezug — bis dahin ein
   // arithmetisches Mittel der Monats-Ø, das §8 des Flex-Konzepts wörtlich verbietet.
@@ -165,6 +207,9 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'negative_preis_stunden', label: 'Neg. Preisstd.', unit: 'h',      gruppe: 'tagdetail',   decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'einspeisung_neg_preis_kwh', label: 'Einsp. neg. Preis', unit: 'kWh', gruppe: 'tagdetail', decimals: 1, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'temperatur_max_c',       label: 'Temp. max',      unit: '°C',     gruppe: 'tagdetail',   decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  { key: 'temperatur_min_c',       label: 'Temp. min',      unit: '°C',     gruppe: 'tagdetail',   decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  // `none`: ein Minimum summiert und mittelt sich nicht.
+  { key: 'boersenpreis_min_cent',  label: 'Börsenpreis min', unit: 'ct/kWh', gruppe: 'tagdetail',  decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
 ]
 
 export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'sonstiges', 'finanzen', 'co2', 'tagdetail', 'erzeuger', 'zaehler']
@@ -291,6 +336,11 @@ export function getMonatWert(row: MonatsZeitreihe, key: string): number | null {
  * Zeile (Backend-Tages-Werte-Endpoint). Die Feldnamen sind deckungsgleich mit
  * den Registry-keys (analog `getMonatWert`).
  */
+/** Registry-Schlüssel, deren Tageswert unter einem anderen Feldnamen der `TagWerte`-Zeile steht (gleiche Bedeutung). */
+const TAG_FELD: Record<string, string> = {
+  abgabe_dritte: 'sonstiges_abgabe',
+}
+
 export function getTagWert(row: TagWerte, key: string): number | null {
   if (key.startsWith(ZAEHLER_METRIK_PREFIX)) {
     // #377 — s. `getMonatWert`: Stand statt Menge, `null` statt 0.
@@ -305,6 +355,6 @@ export function getTagWert(row: TagWerte, key: string): number | null {
     const v = row.erzeuger_kwh?.[key.slice(ERZEUGER_METRIK_PREFIX.length)]
     return v == null ? null : v
   }
-  const v = (row as unknown as Record<string, number | null | undefined>)[key]
+  const v = (row as unknown as Record<string, number | null | undefined>)[TAG_FELD[key] ?? key]
   return v == null ? null : v
 }

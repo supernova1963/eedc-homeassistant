@@ -64,6 +64,9 @@ from backend.api.routes.monatsdaten_aggregiert import (
     _zeile_erzeugung,
     _zeile_komponenten,
     _zeile_bilanz_und_geld,
+    _zeile_emob_zusatz,
+    _zeile_wp_zusatz,
+    wp_funktionen_des_monats,
 )
 
 logger = logging.getLogger(__name__)
@@ -460,6 +463,26 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # `aggregation: 'none'`. Er steht in dieser Antwort nur, damit die
     # Tabellen-Sicht ihn als eigene Spalte zeigen kann.
     zaehler_stand: Optional[dict[str, float]] = None
+    # ── Tabellen-Spalten (28.10.2026, `monatsdaten_aggregiert._zeile_emob_zusatz`/`_zeile_wp_zusatz`) ──
+    # Mengen ohne Gemessen-Marke «nur mit Wert» wie Cockpit → Monat; ``None`` ⇒ «—».
+    eauto_fahrverbrauch_kwh: Optional[float] = None
+    #: Layer ``eauto_effizienz_100km`` (gemessener Fahrverbrauch vor Heim + Extern), ``None`` ohne Basis.
+    eauto_verbrauch_kwh_100km: Optional[float] = None
+    eauto_v2h_entladung_kwh: Optional[float] = None
+    emob_ladung_extern_kwh: Optional[float] = None
+    emob_ladung_extern_euro: Optional[float] = None
+    emob_ladevorgaenge: Optional[float] = None
+    #: Betriebsart-Strom — Teilmengen von ``wp_strom_kwh``, nur mit Aufteilung (``hat_modus_split``).
+    wp_strom_kuehlen_kwh: Optional[float] = None
+    wp_strom_lueften_kwh: Optional[float] = None
+    wp_strom_entfeuchten_kwh: Optional[float] = None
+    wp_strom_nicht_aufgeteilt_kwh: Optional[float] = None
+    wp_kaelte_kwh: Optional[float] = None
+    #: Zusatzheizung (Heizstab) — Teilmenge von ``wp_strom_kwh``, nur gemessen.
+    wp_heizstab_kwh: Optional[float] = None
+    wp_jaz_heizen: Optional[float] = None
+    wp_jaz_warmwasser: Optional[float] = None
+    wp_jaz_kuehlen: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -718,6 +741,7 @@ async def _monatszeile(kx: _TabellenKontext, f) -> AggregierteMonatsdatenRespons
     hat_legacy, legacy_ohne_ziel = _legacy_hinweis(f, md, kx.inv_rows, speicher_ladung, speicher_entladung)
     finanz, netzbezug_kosten, ust_eigenverbrauch, netto_ertrag = await _finanzen_des_monats(kx, f, netzbezug)
     _wp_az = _arbeitszahl_des_monats(f)
+    _wp_funktionen = await wp_funktionen_des_monats(kx, f, typen)
 
     return _ohne_netz_bilanz(f, AggregierteMonatsdatenResponse(
         **_zeile_kopf(kx, f, md, einspeisung, netzbezug),
@@ -727,6 +751,8 @@ async def _monatszeile(kx: _TabellenKontext, f) -> AggregierteMonatsdatenRespons
             f, finanz, ust_eigenverbrauch=ust_eigenverbrauch, netzbezug_kosten=netzbezug_kosten,
             netto_ertrag=netto_ertrag, hat_legacy=hat_legacy, legacy_ohne_ziel=legacy_ohne_ziel, aus_tagen=aus_tagen,
         ),
+        **_zeile_emob_zusatz(f, typen),
+        **_zeile_wp_zusatz(f, typen, _wp_funktionen),
     ))
 
 
