@@ -44,6 +44,14 @@ weiter; für einen evcc-Ladepunkt gibt es dafür das Preset „evcc Ladepunkt", 
 Lademodus, Zustand, Fahrzeugname und den Zählerstand der Wallbox mit den richtigen Einheiten anlegt (vorerst über die Programmierschnittstelle)
 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
 
+**Wallbox und E-Auto: „Betrieb heute".** Die dritte Karte in „Auf einen Blick" sagt, wie viele Stunden die Wallbox heute
+geladen hat, verbunden war, gewartet hat oder fertig stand — und wie oft heute ein Ladevorgang begann („Ladevorgänge
+heute: 2"). Am E-Auto stehen die Stunden „Lädt" und „Verbunden" und, wenn du den Standort zugeordnet hast, wie lange es zu
+Hause und unterwegs war. Dafür schreibt eedc ab jetzt für Ladezustand, Ladezustand des Fahrzeugs und Standort mit, welchen
+Anteil jeder Stunde welcher Zustand hatte — aus Home Assistant und ebenso über MQTT, auch für evcc mit den drei Schaltern.
+Die Karte beginnt mit dem Tag der Zuordnung, nicht rückwirkend ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox),
+[Berechnungen → Stunden je Zustand](BERECHNUNGEN.md#stunden-je-zustand)).
+
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
 erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter

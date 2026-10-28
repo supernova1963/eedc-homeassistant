@@ -23,6 +23,12 @@ Anlagen-Ebene die Basis-Live-Felder: eine Zeile je Key mit ``value_w`` = **zeitg
 (``kanal/schreiber._mean_mitschrift``); der Tagesverlauf zeigt damit 5-Minuten-Mittel statt Momentanwerten.
 ``strompreis_ct`` bleibt als Momentanwert im Snapshot, **nur** für den Tagesverlauf — kein Kanal (G7). Wie die
 Modus-Zeilen entstehen alle Zeilen **nur bei lebender Verbindung** (E-SG-9).
+
+**Zustände der E-Mobilität (P-433-2b K3, Bauplan K3-3).** Dieselbe Form wie der Modus, je Gerät und **Feld** mit
+Mitschrift (Wallbox ``ladezustand``, E-Auto ``ladezustand_fahrzeug`` und ``zu_hause``): ``inv:<id>:<feld>:<wert>`` =
+Anteil des Fensters (0–1) aus ``MqttInboundCache.zustand_anteile_abschliessen``, dazu beim Wechsel-Zähler (D4,
+``zustands_kanon.WECHSEL_FELDER``) ``inv:<id>:<feld>:wechsel_<wert>`` = Zahl der Übergänge nach ``<wert>`` im Fenster
+(nur > 0). Daraus schreibt der Stundenlauf die Kanäle ``zustand:``/``wechsel:`` (``schreiber._zustands_mitschrift_mqtt``).
 """
 
 import logging
@@ -37,6 +43,7 @@ from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+from backend.core.zustands_kanon import WECHSEL_FELDER
 from backend.services.kanal.katalog import mittelwert_live_keys
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 
@@ -73,6 +80,30 @@ def modus_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -
                     value_w=float(anteil),
                     ts_unix=int(jetzt_unix),
                 ))
+    return rows
+
+
+#: Feld-Key → der Wert, dessen Übergänge der Snapshot zählt (aus ``WECHSEL_FELDER``, ohne Typ — der Cache kennt nur Keys).
+_WECHSEL_JE_FELD: dict[str, str] = {feld: wert for (_typ, feld), wert in WECHSEL_FELDER.items()}
+
+
+def zustand_zeilen(cache, valid_ids: set[int], now: datetime, jetzt_unix: float) -> list[MqttLiveSnapshot]:
+    """Die Zustands-Zeilen dieses Snapshots (P-433-2b K3): je Gerät, Feld und Kanon-Wert der Anteil des Fensters, dazu
+    beim Wechsel-Feld die Zahl der Übergänge (nur > 0). Ohne Verbindung keine Zeile und kein Abschluss (E-SG-9)."""
+    if not getattr(cache, "verbunden", False):
+        return []
+    rows: list[MqttLiveSnapshot] = []
+    for anlage_id, geraete in cache.zustand_anteile_abschliessen(jetzt_unix).items():
+        if anlage_id not in valid_ids:
+            continue
+        for inv_id, felder in geraete.items():
+            for feld, (anteile, wechsel) in sorted(felder.items()):
+                for wert, anteil in sorted(anteile.items()):
+                    rows.append(_zeile(anlage_id, now, f"inv:{inv_id}:{feld}:{wert}", float(anteil), int(jetzt_unix)))
+                ziel = _WECHSEL_JE_FELD.get(feld)
+                if ziel is not None and wechsel.get(ziel, 0) > 0:
+                    rows.append(_zeile(anlage_id, now, f"inv:{inv_id}:{feld}:wechsel_{ziel}", float(wechsel[ziel]),
+                                       int(jetzt_unix)))
     return rows
 
 
@@ -139,7 +170,7 @@ async def _geraete_keys() -> dict[int, dict[str, dict[str, str]]]:
 
 async def snapshot_live_cache() -> int:
     """
-    Snapshots der MQTT-Live-Werte in die DB: Mittelwerte des 5-Minuten-Fensters, Modus-Anteile, Preis.
+    Snapshots der MQTT-Live-Werte in die DB: Mittelwerte des 5-Minuten-Fensters, Modus- und Zustands-Anteile, Preis.
 
     Returns:
         Anzahl geschriebener Snapshot-Einträge.
@@ -160,6 +191,7 @@ async def snapshot_live_cache() -> int:
     rows = mittel_zeilen(mqtt_svc.cache, geraete, now, jetzt_unix)
     rows.extend(preis_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
     rows.extend(modus_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
+    rows.extend(zustand_zeilen(mqtt_svc.cache, valid_ids, now, jetzt_unix))
 
     if not rows:
         return 0

@@ -923,19 +923,26 @@ eine Quelle hat.
 
 | Gerät | Feld | Art | Wofür |
 | --- | --- | --- | --- |
-| Wallbox | Ladezustand | Zustand | Chip „Lädt · Wartet · Verbunden · Fertig · Kein Fahrzeug · Gesperrt · Fehler" |
+| Wallbox | Ladezustand | Zustand, **mitgeschrieben** | Chip „Lädt · Wartet · Verbunden · Fertig · Kein Fahrzeug · Gesperrt · Fehler"; Karte „Betrieb heute" mit „Ladevorgänge heute" |
 | Wallbox | Lademodus | Zustand | steht im Chip hinter „Lädt"/„Wartet" (PV · Smart · Schnell · Plan · Eco · Aus) |
 | Wallbox | Fahrzeug am Ladepunkt | Text | welches Auto angeschlossen ist (Treffer mit der Kennung am E-Auto), „Gastfahrzeug", „Fahrzeug der Steuerung unbekannt" |
 | Wallbox | evcc: Fahrzeug verbunden · evcc: lädt · evcc: Laden freigegeben | Zustand (an/aus) | nur ohne Ladezustand-Sensor: eedc setzt daraus den Ladezustand-Chip zusammen (siehe unten, „evcc: Ladezustand aus drei Binär-Sensoren") |
 | Wallbox | Energie dieser Sitzung · Dauer dieser Sitzung | kWh · s | Fußzeile „9,8 kWh in dieser Sitzung · 2 h 10 min" |
 | Wallbox | Ladestrom · Aktive Phasen | A · Anzahl | Fußzeile „3 Phasen · 16 A" |
 | Wallbox, E-Auto | Ladeziel · Restzeit | % · min | Zielmarke an der Ladestand-Leiste, „Ziel 90 % · noch 1 h 20 min" |
-| E-Auto | Ladezustand (Fahrzeug) | Zustand | eigener Chip, wenn das Auto an keiner Wallbox steht |
+| E-Auto | Ladezustand (Fahrzeug) | Zustand, **mitgeschrieben** | eigener Chip, wenn das Auto an keiner Wallbox steht; Karte „Betrieb heute" (Laden) |
 | E-Auto | Reichweite | km | neben dem Ladestand |
-| E-Auto | Zu Hause | Zustand | „Zu Hause" / „Unterwegs" (Zone, nie eine Position) |
+| E-Auto | Zu Hause | Zustand, **mitgeschrieben** | „Zu Hause" / „Unterwegs" (Zone, nie eine Position); Karte „Betrieb heute" (Standort) |
 
-**Nichts davon wird gespeichert und nichts gerechnet:** eedc liest die Werte live aus deiner Integration (Home Assistant oder
-MQTT), zeigt sie und vergisst sie wieder. Keine Monatsmenge, keine Kosten, kein Kanal. ⚠ **Einheiten:** eedc rechnet hier nicht
+**Gespeichert wird kein Momentwert und nichts gerechnet:** eedc liest die Werte live aus deiner Integration (Home Assistant oder
+MQTT), zeigt sie und vergisst sie wieder. Keine Monatsmenge, keine Kosten. **Ausnahme — die Mitschrift** (seit der nächsten
+Version): für **Ladezustand**, **Ladezustand (Fahrzeug)** und **Zu Hause** schreibt eedc ab der Zuordnung je abgeschlossener
+Stunde mit, **welchen Anteil der Stunde** der Zustand welchen Wert hatte — dieselbe Mitschrift wie beim Betriebsmodus einer
+Wärmepumpe. Daraus entsteht die Karte „Betrieb heute" ([Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox)). Aus Home
+Assistant liest eedc dafür die State-History der Entität; über MQTT die 5-Minuten-Fenster des eedc-Topics. **Option A**
+(evcc über drei Binär-Sensoren) ist in beiden Wegen enthalten: ohne Ladezustand-Entität verschränkt eedc die drei Verläufe zu
+einem Ladezustand; ein zugeordneter Ladezustand geht vor. Nicht rückwirkend — die Mitschrift beginnt mit der Zuordnung.
+Lademodus, Fahrzeug am Ladepunkt und die evcc-Felder selbst werden nicht mitgeschrieben. ⚠ **Einheiten:** eedc rechnet hier nicht
 um. SMA und go-e melden die Sitzung in **Wh**, evcc die Restzeit in **Sekunden** — stelle in Home Assistant die Anzeigeeinheit
 des Sensors auf kWh bzw. Minuten (Sensor → Einstellungen → Einheit). Über das MQTT-Gateway rechnet der Faktor um (das Preset
 „evcc Ladepunkt" setzt ihn, siehe unten).

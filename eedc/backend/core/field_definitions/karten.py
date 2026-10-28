@@ -70,6 +70,28 @@ TEXT_LIVE_FELDER: frozenset[tuple[str, str]] = frozenset(
 #: Nur die Feld-Keys der Textfelder — für die Pfade ohne Typ-Kontext (MQTT-Inbound).
 TEXT_FELD_KEYS: frozenset[str] = frozenset(key for _, key in TEXT_LIVE_FELDER)
 
+# P-433-2b K3 (Bauplan K3 §1 K3-1): **die eine Regel der Zustands-Mitschrift** — jedes Zustandsfeld mit Kanon, das die
+# Registry als `mitschrift: True` ausweist, bekommt die Betriebsart-Mitschrift («Anteil der Stunde je Kanon-Wert»,
+# Kanal `zustand:inv:<id>:<feld>:<wert>`). Dieselbe Bauform wie `TEXT_LIVE_FELDER` — Eigenschaft am Feld, abgeleitete
+# Menge, **keine getippte Liste daneben**. Der Betriebsmodus trägt die Mitschrift implizit über seinen eigenen,
+# byte-gleichen Pfad (`modus:inv:<id>:<betriebsart>`) und steht deshalb nicht hier. Ein `mitschrift`-Feld ohne
+# `zustand` oder ohne `kanon` fällt heraus (und der Wächter in `test_p433_2b_k3_mitschrift.py` meldet es): ohne Kanon
+# gibt es keine Werte, deren Anteil man zählen könnte (das Textfeld bleibt deshalb `nur_live`).
+def mitschrift_live_felder(live_felder_inv) -> frozenset[tuple[str, str]]:
+    """Die Ableitung selbst — eine Funktion, damit der Wächter sie auf einer Registry-Kopie mit Probefeld fährt."""
+    return frozenset(
+        (typ, f["key"])
+        for typ, felder in live_felder_inv.items()
+        for f in felder
+        if f.get("mitschrift") and f.get("zustand") and f.get("kanon")
+    )
+
+
+MITSCHRIFT_LIVE_FELDER: frozenset[tuple[str, str]] = mitschrift_live_felder(LIVE_FELDER_INV)
+
+#: Nur die Feld-Keys der Mitschrift-Felder — für die Pfade ohne Typ-Kontext (MQTT-Inbound, 5-Minuten-Snapshot).
+MITSCHRIFT_FELD_KEYS: frozenset[str] = frozenset(key for _, key in MITSCHRIFT_LIVE_FELDER)
+
 def einheit_fuer(feld: str, investition=None) -> str:
     """Die Einheit, die neben diesem Wert stehen soll — **der eine Leser** (#377).
 
@@ -123,6 +145,13 @@ def ist_zustand_feld(feld: str, typ: Optional[str] = None) -> bool:
     if typ is not None:
         return (typ, basis) in ZUSTAND_LIVE_FELDER
     return basis in ZUSTAND_FELD_KEYS
+
+def ist_mitschrift_feld(feld: str, typ: Optional[str] = None) -> bool:
+    """Wird dieses Zustandsfeld mitgeschrieben (P-433-2b K3)? — siehe `MITSCHRIFT_LIVE_FELDER`; Bauform `ist_text_feld`."""
+    basis = basis_feld_key(feld)
+    if typ is not None:
+        return (typ, basis) in MITSCHRIFT_LIVE_FELDER
+    return basis in MITSCHRIFT_FELD_KEYS
 
 def ist_text_feld(feld: str, typ: Optional[str] = None) -> bool:
     """Ist dieses Live-Feld ein **Text** (Zustandsfeld ohne Kanon)? — siehe `TEXT_LIVE_FELDER`.

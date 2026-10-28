@@ -324,19 +324,17 @@ def _kombiniere_option_a(ergebnis: dict[tuple[int, str], str]) -> dict[tuple[int
     sie überstimmt keinen Sensor. Fehlt ``evcc_laedt`` bzw. ``evcc_freigegeben``, gibt es kein «lädt» bzw. kein
     «wartet» (benannte Grenze); ohne ``evcc_verbunden`` gibt es keinen Ladezustand, nie geraten. «Fertig» kennt Option A
     nicht. Die drei Rollen-Werte bleiben im Ergebnis (die Datenquellen-Fläche und der Checker lesen sie selbst).
+
+    P-433-2b K3 (Bauplan K3-4): die Regel selbst steht an **einem** Ort, ``zustands_kanon.ladezustand_aus_werten`` —
+    dieselbe Funktion rechnet das Fenster der MQTT-Mitschrift und die Verschränkung des HA-Verlaufs.
     """
     for inv_id in [i for i, feld in ergebnis if feld == "evcc_verbunden"]:
         if (inv_id, zustands_kanon.LADEZUSTAND) in ergebnis:
             continue
-        if ergebnis[(inv_id, "evcc_verbunden")] == zustands_kanon.AUS:
-            zustand = zustands_kanon.KEIN_FAHRZEUG
-        elif ergebnis.get((inv_id, "evcc_laedt")) == zustands_kanon.AN:
-            zustand = zustands_kanon.LAEDT
-        elif ergebnis.get((inv_id, "evcc_freigegeben")) == zustands_kanon.AUS:
-            zustand = zustands_kanon.WARTET
-        else:
-            zustand = zustands_kanon.VERBUNDEN
-        ergebnis[(inv_id, zustands_kanon.LADEZUSTAND)] = zustand
+        werte = {feld: ergebnis.get((inv_id, feld)) for feld in ("evcc_verbunden", "evcc_laedt", "evcc_freigegeben")}
+        zustand = zustands_kanon.ladezustand_aus_werten(werte)
+        if zustand is not None:
+            ergebnis[(inv_id, zustands_kanon.LADEZUSTAND)] = zustand
     return ergebnis
 
 

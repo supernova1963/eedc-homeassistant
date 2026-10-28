@@ -400,19 +400,105 @@ async def _get_betriebsmodus_history(
         ``{stunde: {investition_id: modus}}`` mit Kanon-Werten aus
         `core.betriebsmodus`. Stunden ohne Signal fehlen; Geräte ohne
         zugeordneten Sensor fehlen.
-    """
-    from backend.core.betriebsmodus import modus_quelle, normalisiere_betriebsmodus
-    from backend.models.investition import Investition
 
-    inv_result = await db.execute(
-        select(Investition.id).where(
-            Investition.anlage_id == anlage.id,
-            Investition.typ == "waermepumpe",
-        )
+    **Seit P-433-2b K3 eine Hülle** (Bauplan K3-5): der Körper steht typoffen in
+    `_get_zustand_history`; die Wärmepumpe ruft ihn mit ``("waermepumpe",
+    "betriebsmodus", normalisiere_betriebsmodus)`` — Abruf, Verweildauer-Schleife
+    (`_verweildauer_der_stunde`), Gewinner und Rückgabe bitgleich (Proben
+    `test_263_*`, `test_kanal_mitschrift_betriebsart`, Kanal-Dump `modus:`).
+    """
+    from backend.core.betriebsmodus import MODUS_FELD_KEY, normalisiere_betriebsmodus
+
+    return await _get_zustand_history(
+        anlage, sensor_mapping, datum, db,
+        typ="waermepumpe", feld=MODUS_FELD_KEY, normalisiere=normalisiere_betriebsmodus,
     )
-    wp_ids = {str(row) for row in inv_result.scalars().all()}
-    if not wp_ids:
-        return {}
+
+
+def _verweildauer_der_stunde(punkte: list, h_start: datetime, h_end: datetime, normalisiere) -> Optional[dict]:
+    """Verweildauer (Sekunden) je Kanon-Wert in ``[h_start, h_end)`` — der Körper der Stunden-Schleife, unverändert aus
+    `_get_betriebsmodus_history` gezogen (P-433-2b K3), damit Wärmepumpe und E-Mobilität **denselben** Code fahren.
+    ``None`` = weder Vorgänger noch Punkt («nicht hingesehen») bzw. kein verwertbarer Wert."""
+    # Zustand zu Beginn der Stunde = letzter Punkt davor.
+    # ⚠ Zustand UND Aktion wandern als Paar mit: `hvac_action` ist
+    # der Ist-Betrieb und verfeinert den eingestellten Modus (sie
+    # schlägt ihn, wo sie eine Richtung nennt; `idle` nicht, #399)
+    # — aber nur, wenn sie `normalisiere_betriebsmodus` als
+    # **zweites** Argument erreicht. Wer sie vorher in den Zustand faltet,
+    # verliert sie (s. `get_zustand_history`).
+    laufend: Optional[tuple[str, Optional[str]]] = None
+    for ts, roh, akt in punkte:
+        if ts < h_start:
+            laufend = (roh, akt)
+        else:
+            break
+
+    in_stunde = [
+        (ts, roh, akt) for ts, roh, akt in punkte if h_start <= ts < h_end
+    ]
+    if laufend is None and not in_stunde:
+        return None   # weder Vorgänger noch Punkt: nicht hingesehen.
+
+    # Verweildauer je Kanon-Modus aufsummieren. Die Intervalle
+    # laufen jeweils bis zum nächsten Wechsel, das letzte bis zum
+    # Stundenende.
+    dauer: dict[str, float] = {}
+    cursor = h_start
+    aktuell = laufend
+    for ts, roh, akt in in_stunde:
+        modus = normalisiere(*aktuell) if aktuell else None
+        if modus is not None:
+            dauer[modus] = dauer.get(modus, 0.0) + (ts - cursor).total_seconds()
+        cursor, aktuell = ts, (roh, akt)
+    modus = normalisiere(*aktuell) if aktuell else None
+    if modus is not None:
+        dauer[modus] = dauer.get(modus, 0.0) + (h_end - cursor).total_seconds()
+    return dauer or None
+
+
+def _wechsel_der_stunde(punkte: list, h_start: datetime, h_end: datetime, normalisiere, ziel: str) -> int:
+    """Übergänge **nach** ``ziel`` in ``[h_start, h_end)`` (P-433-2b K3, D4): ein Punkt mit Wert ``ziel``, dessen
+    Vorgänger einen **anderen, bekannten** Wert hatte (E-K3-1: ohne Vorgänger oder nach einem Wert ohne Kanon zählt
+    nichts — sonst zählte jeder Neustart einen Ladevorgang). Der Vorgänger darf vor der Stunde liegen (Vortag inklusive)."""
+    n = 0
+    vorher: Optional[str] = None
+    for ts, roh, akt in punkte:
+        if ts >= h_end:
+            break
+        wert = normalisiere(roh, akt)
+        if ts >= h_start and wert == ziel and vorher is not None and vorher != ziel:
+            n += 1
+        vorher = wert
+    return n
+
+
+def _verschraenke(historien: dict[str, list]) -> list[tuple[datetime, Optional[str], None]]:
+    """Option A über HA (P-433-2b K3, D6): bis zu drei `binary_sensor`-Verläufe (``{feld: [(ts, roh, akt)]}``, Felder aus
+    ``zustands_kanon.OPTION_A_FELDER``) → **eine** Zeitlinie des Ladezustands. Wechselpunkte vereinigt (gleiche Zeit =
+    ein Punkt), Zustand nach jedem Punkt = `ladezustand_aus_werten` der jeweils letzten Werte (der Vortag trägt je
+    Entität fort, weil jeder Verlauf ihn mitbringt). Rohwert der Zeitlinie ist das Kanon-Wort (``None`` ohne
+    ``evcc_verbunden``) — die Verweildauer-Schleife liest sie mit der Identität."""
+    from itertools import groupby
+
+    from backend.core import zustands_kanon
+
+    ereignisse = sorted(
+        ((ts, i, feld, roh) for i, (feld, punkte) in enumerate(historien.items()) for ts, roh, _akt in punkte),
+        key=lambda e: (e[0], e[1]),
+    )
+    letzter: dict[str, Optional[str]] = {}
+    out: list[tuple[datetime, Optional[str], None]] = []
+    for ts, gruppe in groupby(ereignisse, key=lambda e: e[0]):
+        for _ts, _i, feld, roh in gruppe:
+            letzter[feld] = zustands_kanon.normalisiere(feld, roh)
+        out.append((ts, zustands_kanon.ladezustand_aus_werten(letzter), None))
+    return out
+
+
+def _zustand_quellen(sensor_mapping: dict, ids: set[str], feld: str, option_a) -> tuple[dict, dict]:
+    """``(entity_zu_inv, option_a_inv)`` — die direkte Entität je Gerät (``betriebsmodus`` über `modus_quelle`, sonst
+    ``live[feld]``) und, nur ohne sie, die Option-A-Entitäten ``{inv_id: {feld: entity}}`` (``evcc_verbunden`` Pflicht)."""
+    from backend.core.betriebsmodus import MODUS_FELD_KEY, modus_quelle
 
     # Entity → Investitions-IDs. Mehrere Innengeräte dürfen dieselbe
     # `climate`-Entität tragen: der Modus gehört dem Außengerät, nicht dem
@@ -420,8 +506,9 @@ async def _get_betriebsmodus_history(
     # anderen tut in einer 2-Rohr-Anlage nichts). Dann steht derselbe Modus bei
     # beiden, und das ist richtig.
     entity_zu_inv: dict[str, list[int]] = {}
+    option_a_inv: dict[int, dict[str, str]] = {}
     for key, val in (sensor_mapping or {}).get("investitionen", {}).items():
-        if str(key) not in wp_ids:
+        if str(key) not in ids:
             continue
         if not isinstance(val, dict):
             continue
@@ -432,12 +519,73 @@ async def _get_betriebsmodus_history(
         # Wer den Modus je Innengerät zuordnete, bekam **keine Aufteilung**,
         # während der Daten-Checker „zugeordnet" meldete. `modus_quelle`
         # trägt zugleich die Eindeutigkeits-Regel — Begründung dort.
-        quelle = modus_quelle(val.get("live"))
+        if feld == MODUS_FELD_KEY:
+            quelle = modus_quelle(val.get("live"))
+        else:
+            live = val.get("live") if isinstance(val.get("live"), dict) else {}
+            quelle = live.get(feld) if isinstance(live.get(feld), str) and live.get(feld) else None
+            if quelle is None and option_a and isinstance(live.get(option_a[0]), str) and live.get(option_a[0]):
+                option_a_inv[int(key)] = {f: live[f] for f in option_a if isinstance(live.get(f), str) and live[f]}
         if quelle:
             entity_zu_inv.setdefault(quelle, []).append(int(key))
+    return entity_zu_inv, option_a_inv
 
+
+def _zustand_rang(feld: str):
+    """Gleichstand-Regel des Gewinners je Feld: Betriebsmodus `_KANON_RANG` (Bestand), sonst die Kanon-Reihenfolge."""
+    from backend.core import zustands_kanon
+    from backend.core.betriebsmodus import MODUS_FELD_KEY
+
+    if feld == MODUS_FELD_KEY:
+        return _KANON_RANG
+    kanon = zustands_kanon.KANON.get(feld, ())
+    return lambda w: kanon.index(w) if w in kanon else len(kanon)
+
+
+async def _get_zustand_history(
+    anlage: Anlage,
+    sensor_mapping: dict,
+    datum: date,
+    db: AsyncSession,
+    *,
+    typ: str,
+    feld: str,
+    normalisiere,
+    option_a: Optional[tuple[str, ...]] = None,
+) -> dict:
+    """Ein Zustandsfeld je Gerät und Stunde eines Tages — typoffen (P-433-2b K3, Bauplan K3-5).
+
+    Der Körper von `_get_betriebsmodus_history` (Begründung dort: Zustand hat eine Dauer, Fortschreibung aus dem
+    Vortag, «leer heißt leer», keine LTS ⇒ kein Backfill) für Geräte des Typs ``typ`` und das Feld ``feld``;
+    ``normalisiere(roh, aktion)`` übersetzt den rohen State in den Kanon des Felds. Für die E-Mobilität dazu:
+
+    * **Option A** (``option_a`` = ``zustands_kanon.OPTION_A_FELDER``, nur ``ladezustand``): eine Wallbox **ohne**
+      direkte Entität, aber mit ``evcc_verbunden`` bekommt die verschränkte Zeitlinie der bis zu drei Verläufe
+      (`_verschraenke`); ein gemessener Ladezustand geht immer vor (S3).
+    * **Wechsel** (``zustands_kanon.WECHSEL_FELDER[(typ, feld)]``): je Stunde mit Anteilen die Zahl der Übergänge nach
+      dem Wert (`_wechsel_der_stunde`) in ``.wechsel``.
+
+    Returns:
+        `ZustandJeStunde` (= `ModusJeStunde`) ``{stunde: {inv_id: gewinner}}`` mit ``.anteile``, ``.entitaeten``
+        (Option A: die Entitäten durch ``|`` getrennt, E-K3-2) und ``.wechsel``; ``{}`` ohne Gerät, Zuordnung oder
+        bei einem Fehler des Abrufs.
+    """
+    from backend.core import zustands_kanon
+    from backend.models.investition import Investition
+
+    inv_result = await db.execute(
+        select(Investition.id).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == typ,
+        )
+    )
+    ids = {str(row) for row in inv_result.scalars().all()}
+    if not ids:
+        return {}
+
+    entity_zu_inv, option_a_inv = _zustand_quellen(sensor_mapping, ids, feld, option_a)
     modus_entities = list(entity_zu_inv)
-    if not modus_entities:
+    if not modus_entities and not option_a_inv:
         return {}
 
     try:
@@ -451,92 +599,106 @@ async def _get_betriebsmodus_history(
         # in dem der Tag beginnt. Ohne ihn stünde jede Anlage, die ihren Modus
         # seit Wochen nicht geändert hat, jeden Tag bis zur ersten Änderung
         # ohne Signal da — bei saisonal gestelltem Modus (D11) also fast immer.
+        abruf = modus_entities + sorted({e for m in option_a_inv.values() for e in m.values()} - set(modus_entities))
         history = await ha_service.get_zustand_history(
-            modus_entities, start - timedelta(days=1), end
+            abruf, start - timedelta(days=1), end
         )
 
-        ergebnis: dict = {}
-        # HA-Bauform E1: die Verweildauern, aus denen der Gewinner unten entsteht, als „Anteil der
-        # Stunde je Betriebsart" — für die Kanal-Mitschrift (`services/kanal/schreiber.py`). Der
-        # Gewinner und damit `betriebsmodus_je_wp` bleiben unberührt.
-        anteile: dict = {}
-        for entity_id in modus_entities:
-            punkte = history.get(entity_id, [])
-            if not punkte:
-                continue
-
-            for h in range(24):
-                # BACKWARD-Slot (N-382): Slot h beschreibt [h-1, h), für h = 0
-                # also den Vortag 23:00–00:00. Der Tag Vorlauf im Abruf darüber
-                # deckt das bereits ab — es braucht keinen zweiten Request.
-                #
-                # ⛔ Bis 2026-09-04 stand hier `+ timedelta(hours=h)`, also
-                # [h, h+1). Das war mit dem Leistungspfad in derselben Zeile
-                # konsistent und mit allem anderen nicht. Beim Umstellen des
-                # Leistungspfads MUSS diese Zeile mitgehen: `modus_split_monat`
-                # paart `betriebsmodus_je_wp` mit `komponenten` DERSELBEN Zeile
-                # — bliebe der Modus forward, träfe ab dann der Modus der
-                # Stunde h auf den Strom der Stunde h-1, und die Aufteilung
-                # Heizen/Kühlen/Warmwasser (und mit ihr JAZ, Gas-Ersparnis und
-                # CO₂) wäre neu falsch statt alt richtig.
-                h_start = start + timedelta(hours=h - 1)
-                h_end = h_start + timedelta(hours=1)
-
-                # Zustand zu Beginn der Stunde = letzter Punkt davor.
-                # ⚠ Zustand UND Aktion wandern als Paar mit: `hvac_action` ist
-                # der Ist-Betrieb und verfeinert den eingestellten Modus (sie
-                # schlägt ihn, wo sie eine Richtung nennt; `idle` nicht, #399)
-                # — aber nur, wenn sie `normalisiere_betriebsmodus` als
-                # **zweites** Argument erreicht. Wer sie vorher in den Zustand faltet,
-                # verliert sie (s. `get_zustand_history`).
-                laufend: Optional[tuple[str, Optional[str]]] = None
-                for ts, roh, akt in punkte:
-                    if ts < h_start:
-                        laufend = (roh, akt)
-                    else:
-                        break
-
-                in_stunde = [
-                    (ts, roh, akt) for ts, roh, akt in punkte if h_start <= ts < h_end
-                ]
-                if laufend is None and not in_stunde:
-                    continue   # weder Vorgänger noch Punkt: nicht hingesehen.
-
-                # Verweildauer je Kanon-Modus aufsummieren. Die Intervalle
-                # laufen jeweils bis zum nächsten Wechsel, das letzte bis zum
-                # Stundenende.
-                dauer: dict[str, float] = {}
-                cursor = h_start
-                aktuell = laufend
-                for ts, roh, akt in in_stunde:
-                    modus = normalisiere_betriebsmodus(*aktuell) if aktuell else None
-                    if modus is not None:
-                        dauer[modus] = dauer.get(modus, 0.0) + (ts - cursor).total_seconds()
-                    cursor, aktuell = ts, (roh, akt)
-                modus = normalisiere_betriebsmodus(*aktuell) if aktuell else None
-                if modus is not None:
-                    dauer[modus] = dauer.get(modus, 0.0) + (h_end - cursor).total_seconds()
-
-                if not dauer:
-                    continue
-                # Längste Verweildauer gewinnt; bei Gleichstand entscheidet die
-                # Kanon-Reihenfolge, damit dieselbe Stunde nicht je nach
-                # Dict-Laufrichtung anders ausfällt.
-                gewinner = max(dauer.items(), key=lambda kv: (kv[1], -_KANON_RANG(kv[0])))[0]
-                stunde_s = (h_end - h_start).total_seconds()
-                for inv_id in entity_zu_inv[entity_id]:
-                    ergebnis.setdefault(h, {})[inv_id] = gewinner
-                    anteile.setdefault(h, {})[inv_id] = {m: d / stunde_s for m, d in dauer.items()}
-
-        return ModusJeStunde(
-            ergebnis,
-            anteile=anteile,
-            entitaeten={inv_id: eid for eid, ids in entity_zu_inv.items() for inv_id in ids},
-        )
+        # Zeitlinien je Quelle: direkt (Entität → Geräte) und Option A (verschränkt, Identität als Normalisierer).
+        linien: list[tuple[list, list[int], object]] = [
+            (history.get(entity_id, []), entity_zu_inv[entity_id], normalisiere) for entity_id in modus_entities
+        ]
+        linien += [
+            (_verschraenke({f: history.get(e, []) for f, e in quellen.items()}), [inv_id], _kanon_identitaet)
+            for inv_id, quellen in sorted(option_a_inv.items())
+        ]
+        entitaeten = {inv_id: eid for eid, ids_ in entity_zu_inv.items() for inv_id in ids_}
+        entitaeten.update({inv_id: "|".join(q[f] for f in option_a if f in q) for inv_id, q in option_a_inv.items()})
+        ergebnis, anteile, wechsel = _stunden_aus_linien(
+            linien, start, _zustand_rang(feld), zustands_kanon.WECHSEL_FELDER.get((typ, feld)))
+        return ModusJeStunde(ergebnis, anteile=anteile, entitaeten=entitaeten, wechsel=wechsel)
 
     except Exception as e:
-        logger.debug(f"Betriebsmodus-History für {datum}: {e}")
+        logger.debug(f"Betriebsmodus-History für {datum}: {e}" if typ == "waermepumpe"
+                     else f"Zustands-History {typ}/{feld} für {datum}: {e}")
         return {}
+
+
+def _kanon_identitaet(roh, _akt=None):
+    """Normalisierer der verschränkten Zeitlinie: ihr Rohwert ist schon das Kanon-Wort."""
+    return roh
+
+
+def _stunden_aus_linien(linien: list, start: datetime, rang, wechsel_ziel: Optional[str]) -> tuple[dict, dict, dict]:
+    """Je Zeitlinie und Stunde Gewinner, Anteile und (mit ``wechsel_ziel``) Übergänge — die Stunden-Schleife des
+    Bestands (`_get_betriebsmodus_history`), über `_verweildauer_der_stunde` und `_wechsel_der_stunde`."""
+    ergebnis: dict = {}
+    # HA-Bauform E1: die Verweildauern, aus denen der Gewinner unten entsteht, als „Anteil der
+    # Stunde je Betriebsart" — für die Kanal-Mitschrift (`services/kanal/schreiber.py`). Der
+    # Gewinner und damit `betriebsmodus_je_wp` bleiben unberührt.
+    anteile: dict = {}
+    wechsel: dict = {}
+    for punkte, inv_ids, normalisiere in linien:
+        if not punkte:
+            continue
+
+        for h in range(24):
+            # BACKWARD-Slot (N-382): Slot h beschreibt [h-1, h), für h = 0
+            # also den Vortag 23:00–00:00. Der Tag Vorlauf im Abruf darüber
+            # deckt das bereits ab — es braucht keinen zweiten Request.
+            #
+            # ⛔ Bis 2026-09-04 stand hier `+ timedelta(hours=h)`, also
+            # [h, h+1). Das war mit dem Leistungspfad in derselben Zeile
+            # konsistent und mit allem anderen nicht. Beim Umstellen des
+            # Leistungspfads MUSS diese Zeile mitgehen: `modus_split_monat`
+            # paart `betriebsmodus_je_wp` mit `komponenten` DERSELBEN Zeile
+            # — bliebe der Modus forward, träfe ab dann der Modus der
+            # Stunde h auf den Strom der Stunde h-1, und die Aufteilung
+            # Heizen/Kühlen/Warmwasser (und mit ihr JAZ, Gas-Ersparnis und
+            # CO₂) wäre neu falsch statt alt richtig.
+            h_start = start + timedelta(hours=h - 1)
+            h_end = h_start + timedelta(hours=1)
+
+            dauer = _verweildauer_der_stunde(punkte, h_start, h_end, normalisiere)
+            if dauer is None:
+                continue
+            # Längste Verweildauer gewinnt; bei Gleichstand entscheidet die
+            # Kanon-Reihenfolge, damit dieselbe Stunde nicht je nach
+            # Dict-Laufrichtung anders ausfällt.
+            gewinner = max(dauer.items(), key=lambda kv: (kv[1], -rang(kv[0])))[0]
+            stunde_s = (h_end - h_start).total_seconds()
+            n = _wechsel_der_stunde(punkte, h_start, h_end, normalisiere, wechsel_ziel) if wechsel_ziel else None
+            for inv_id in inv_ids:
+                ergebnis.setdefault(h, {})[inv_id] = gewinner
+                anteile.setdefault(h, {})[inv_id] = {m: d / stunde_s for m, d in dauer.items()}
+                if n is not None:
+                    wechsel.setdefault(h, {})[inv_id] = n
+    return ergebnis, anteile, wechsel
+
+
+async def _get_zustands_mitschrift_history(
+    anlage: Anlage, sensor_mapping: dict, datum: date, db: AsyncSession,
+) -> dict:
+    """Die HA-Verläufe aller Mitschrift-Felder (P-433-2b K3): ``{(typ, feld): ZustandJeStunde}`` — je Feld aus
+    ``field_definitions.MITSCHRIFT_LIVE_FELDER`` ein Aufruf von `_get_zustand_history` (HA-Ziffern sind kein Code,
+    ``codes=False``); Option A nur am Ladezustand. Ein Fehler kostet nur die Mitschrift (``{}``), nie die Aggregation."""
+    from backend.core import zustands_kanon
+    from backend.core.field_definitions import MITSCHRIFT_LIVE_FELDER
+
+    out: dict = {}
+    try:
+        for typ, feld in sorted(MITSCHRIFT_LIVE_FELDER):
+            ergebnis = await _get_zustand_history(
+                anlage, sensor_mapping, datum, db, typ=typ, feld=feld,
+                normalisiere=lambda roh, _akt=None, _f=feld: zustands_kanon.normalisiere(_f, roh),
+                option_a=zustands_kanon.OPTION_A_FELDER if feld == zustands_kanon.LADEZUSTAND else None,
+            )
+            if getattr(ergebnis, "anteile", None):
+                out[(typ, feld)] = ergebnis
+    except Exception as e:  # noqa: BLE001 — die Mitschrift darf die Aggregation nie kosten
+        logger.warning(f"Zustands-Mitschrift (HA) für Anlage {anlage.id}, {datum} nicht gelesen: {e}")
+        return {}
+    return out
 
 
 class ModusJeStunde(dict):
@@ -551,10 +713,16 @@ class ModusJeStunde(dict):
     Funktion ersetzen und ein einfaches dict liefern) unverändert bleibt.
     """
 
-    def __init__(self, werte: dict, *, anteile: dict, entitaeten: dict):
+    def __init__(self, werte: dict, *, anteile: dict, entitaeten: dict, wechsel: Optional[dict] = None):
         super().__init__(werte)
         self.anteile = anteile
         self.entitaeten = entitaeten
+        #: P-433-2b K3 (D4): ``{stunde: {investition_id: Zahl der Übergänge}}`` — nur beim Wechsel-Feld, sonst leer.
+        self.wechsel = wechsel or {}
+
+
+#: P-433-2b K3: dieselbe Form für jedes mitgeschriebene Zustandsfeld (Bauplan K3-5) — ein Name, keine zweite Klasse.
+ZustandJeStunde = ModusJeStunde
 
 
 def _KANON_RANG(modus: str) -> int:

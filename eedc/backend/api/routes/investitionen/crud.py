@@ -542,7 +542,10 @@ async def _entferne_messreihen(db: AsyncSession, anlage_id: int, investition_id:
     kanal_ids = list((await db.execute(select(Kanal.id).where(
         Kanal.anlage_id == anlage_id,
         or_(Kanal.key.startswith(praefix, autoescape=True),
-            Kanal.key.startswith(f"modus:{praefix}", autoescape=True)),
+            Kanal.key.startswith(f"modus:{praefix}", autoescape=True),
+            # P-433-2b K3: Zustands-Mitschrift und Wechsel-Zähler des Geräts gehen mit (dieselbe Regel wie `modus:`).
+            Kanal.key.startswith(f"zustand:{praefix}", autoescape=True),
+            Kanal.key.startswith(f"wechsel:{praefix}", autoescape=True)),
     ))).scalars().all())
     if kanal_ids:
         for kind in (KanalStatistik, KanalQuelle, KanalNachfuellung):

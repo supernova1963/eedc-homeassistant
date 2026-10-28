@@ -452,7 +452,9 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         # Modus-Split, den Komponenten → Wärmepumpe als Strom je Betriebsart zeigt
         # (`modus_split_schreiben` → `modus_strom_zeile`). N-686: hier stand
         # `lade_betriebsmodus_live` — das speist nur Live und die HA-Sensoren.
-        _a(KOMP_WP, "services/energie_profil/_helpers.py", "_get_betriebsmodus_history",
+        # P-433-2b K3: `_get_betriebsmodus_history` ist eine Hülle von `_get_zustand_history`; die Zuordnung liest
+        # seitdem `_zustand_quellen` (dieselbe Zeile `modus_quelle(val.get("live"))`).
+        _a(KOMP_WP, "services/energie_profil/_helpers.py", "_zustand_quellen",
            "modus_quelle"),
     ),
 
@@ -515,13 +517,23 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     # P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — Hub-Überblick E-Auto (und die Fahrzeugzeile der
     # Wallbox-Karte). Reine Anzeige, nichts gespeichert (K-1).
-    ("e-auto", "ladezustand_fahrzeug"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
+    # P-433-2b K3: Fahrzeug-Ladezustand und Standort werden mitgeschrieben — Karte «Betrieb heute» (Tag-Detail
+    # `emob_betrieb`, ein generischer Leser über `MITSCHRIFT_LIVE_FELDER`).
+    ("e-auto", "ladezustand_fahrzeug"): (
+        _a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),
+        _a(KOMP_EAUTO, "api/routes/energie_profil/tag.py", "_mit_emob_betrieb", "MITSCHRIFT_LIVE_FELDER",
+           "stunden_je_zustand"),
+    ),
     ("e-auto", "reichweite_km"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
     ("e-auto", "ziel_ladestand_prozent"): (
         _a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),
     ),
     ("e-auto", "restzeit_min"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
-    ("e-auto", "zu_hause"): (_a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),),
+    ("e-auto", "zu_hause"): (
+        _a(KOMP_EAUTO, "services/live_komponenten_builder.py", "_fahrzeug_emob"),
+        _a(KOMP_EAUTO, "api/routes/energie_profil/tag.py", "_mit_emob_betrieb", "MITSCHRIFT_LIVE_FELDER",
+           "stunden_je_zustand"),
+    ),
 
     # ── Wallbox ──────────────────────────────────────────────────────────────
     ("wallbox", "ladung_kwh"): (
@@ -543,6 +555,9 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ("wallbox", "ladezustand"): (
         _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),
+        # P-433-2b K3: «Betrieb heute» der Wallbox mit «Ladevorgänge heute» (D4).
+        _a(KOMP_WALLBOX, "api/routes/energie_profil/tag.py", "_mit_emob_betrieb", "MITSCHRIFT_LIVE_FELDER",
+           "stunden_je_zustand", "WECHSEL_FELDER"),
     ),
     ("wallbox", "lademodus"): (
         _a(KOMP_WALLBOX, "services/live_komponenten_builder.py", "_wallbox_emob_werte"),

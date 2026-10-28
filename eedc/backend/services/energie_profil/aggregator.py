@@ -2193,6 +2193,12 @@ async def aggregate_day(
     # Stand E1: wird geschrieben, von keiner Sicht gelesen.
     from backend.services.kanal.schreiber import schreibe_betriebsart_mitschrift_sicher
     await schreibe_betriebsart_mitschrift_sicher(db, anlage, datum, betriebsmodus_aus_quelle)
+    # P-433-2b K3: dieselbe Mitschrift für die Zustände der E-Mobilität (Ladezustand, Fahrzeug-Ladezustand, Standort) —
+    # eigener HA-Abruf je Feld, eigener SAVEPOINT; berührt keine Zeile oben.
+    from backend.services.energie_profil._helpers import _get_zustands_mitschrift_history
+    from backend.services.kanal.schreiber import schreibe_zustands_mitschrift_sicher
+    await schreibe_zustands_mitschrift_sicher(
+        db, anlage, datum, await _get_zustands_mitschrift_history(anlage, sensor_mapping, datum, db))
 
     logger.info(
         f"Anlage {anlage.id}, {datum}: {akku.stunden_count}h aggregiert, "

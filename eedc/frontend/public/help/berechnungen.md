@@ -4362,6 +4362,59 @@ Zwei Felderpaare, zwei Fragen:
 
 **Übergang ohne Bruch (kein Backfill).** Die neuen Felder entstehen ab dem Update; Bestandszeilen bleiben NULL. Damit der erste nächtliche Lauf nicht jeden Bin mit einem leeren Pool überschreibt, gilt je Bin: **der neue Wert ersetzt den alten erst, wenn er das Gate seiner Stufe mit NEUEN Datenpunkten erreicht** (Sonnenstand×Wetter 10 h, Sonnenstand 15 h, Stunde Σ 50 h je Monat, Skalar 7 Tage — dieselben Schwellen, die der Lookup anwendet). Beim Skalar gehören `tage_eingegangen` und `faktor_skalar` zum gehaltenen Wert, sonst fiele Stufe 4 aus. Die Marke je Bin steht in `Korrekturprofil.lern_basis_pro_bin` (`"alt"` | `"neu"`), der Beginn in `lern_umstellung_am`; nach **365 Tagen** endet die Regel (sonst bliebe ein saisonal nie wieder belegter Bin für immer auf seinem alten Wert).
 
+### Stunden je Zustand
+
+*Betriebsart-Mitschrift, typoffen — Karte «Betrieb heute» an Wärmepumpe, Wallbox und E-Auto (P-433-2c, P-433-2b K3).*
+
+**Eingang.** Für jeden mitgeschriebenen Zustand schreibt eedc je Gerät und **abgeschlossener** Stunde den **Anteil der
+Stunde je Kanon-Wert** (0 … 1) in einen Mittelwert-Kanal — eine Zeile in **jedem** Wert, 0 heißt „gemessen nicht in
+diesem Wert", eine Stunde ohne Signal hat in keinem Wert eine Zeile:
+
+| Gerät | Feld | Kanal | Werte mit Stunden (Karte) |
+| --- | --- | --- | --- |
+| Wärmepumpe | Betriebsmodus | `modus:inv:<id>:<betriebsart>` | Heizen · Warmwasser · Kühlen · Lüften · Entfeuchten |
+| Wallbox | Ladezustand | `zustand:inv:<id>:ladezustand:<wert>` | Lädt · Verbunden · Wartet · Fertig |
+| E-Auto | Ladezustand (Fahrzeug) | `zustand:inv:<id>:ladezustand_fahrzeug:<wert>` | Lädt · Lädt DC · Verbunden |
+| E-Auto | Zu Hause | `zustand:inv:<id>:zu_hause:<wert>` | Zu Hause · Unterwegs |
+
+Welche Felder mitgeschrieben werden, sagt die Registry (`mitschrift: True` an einem Zustandsfeld mit Kanon, abgeleitete
+Menge `MITSCHRIFT_LIVE_FELDER`); der Betriebsmodus behält seinen eigenen Pfad unverändert. Kein Betrieb sind `aus`,
+`unbestimmt` (Wärmepumpe) und `kein_fahrzeug`, `gesperrt`, `fehler`, `nicht_verbunden` (E-Mobilität).
+
+**Woher die Anteile kommen.** *Home Assistant:* aus der State-History der zugeordneten Entität (Vortag + Tag), je Stunde
+die **Verweildauer** je Wert — der letzte Punkt vor der Stunde trägt fort, das letzte Intervall läuft bis zum Stundenende
+(`energie_profil/_helpers.py::_get_zustand_history`, eine Schleife `_verweildauer_der_stunde` für alle Felder). Bei evcc
+über Home Assistant ohne Ladezustand-Entität (**Option A**) werden die drei Binär-Verläufe „verbunden · lädt · freigegeben"
+zu einer Zeitlinie verschränkt (`_verschraenke`: Wechselpunkte vereinigt, Zustand nach jedem Punkt = dieselbe Regel wie
+der Live-Chip, `zustands_kanon.ladezustand_aus_werten`); ein gemessener Ladezustand geht immer vor. *MQTT:* das
+Haltezeit-Fenster je (Gerät, Feld) im Inbound („ein Zustand gilt bis zur nächsten Meldung"), alle 5 Minuten als Anteil
+abgeschlossen; die Stunde ist das **längengewichtete** Mittel ihrer Fenster (`modus_anteile_je_stunde`) — eine Lücke zählt
+nicht als gemessene Zeit.
+
+**Formel.** `stunden_je_zustand(anteile_je_stunde, werte_mit_stunden)` in `core/berechnungen/betriebsstunden.py`:
+
+    Stunden(wert) = Σ über die Stunden des Tages  Anteil(stunde, wert)     — nur für werte_mit_stunden, gerundet auf 0,1 h
+
+Eine gemessene 0 bleibt stehen („Heute kein Betrieb"), ohne eine einzige Zeile ist das Ergebnis `None` (keine Karte). Die
+Wärmepumpe ruft dieselbe Formel mit ihren Betriebsarten (`stunden_je_betriebsart`, bitgleich). In der Herbst-Doppelstunde
+zählen beide realen Stunden (die Zeilen tragen eigene `start_ts`). Der Tag liegt im Raster der Kanal-Gruppe des Geräts
+(Kanal-Tag ⇒ `[D 00:00, D+1 00:00)`, Bestandstag ⇒ Backward-Slot).
+
+**Ladevorgänge heute (Wallbox).** Ein zweiter Kanal `wechsel:inv:<id>:ladezustand:laedt` (`sum`, fortlaufender Stand ab 0)
+zählt je Stunde die **Übergänge nach „Lädt"** aus einem **anderen, bekannten** Zustand; der Tageswert ist der Zuwachs des
+Tages (`kanal_stunden.zustand_wechsel_je_tag`). Der erste Wert ohne Vorgänger (Neustart, erster Tag) zählt nicht.
+
+**Grenzen.** Ab der Zuordnung, nicht rückwirkend (Zustände haben in Home Assistant keine Langzeitstatistik); nur
+abgeschlossene Stunden, eine geschriebene Stunde wird nie überschrieben; MQTT-Auflösung 5 Minuten, Broker-Lücke = Stunde
+ohne Zeile; der Wechsel-Zähler schreibt nur vorwärts ab seiner letzten Zeile. Ein Wert außerhalb des Kanons (etwa eine
+andere HA-Zone als `home`/`not_home`, ein fremder Status) zählt zu keinem Wert; die Summe der Stunden kann deshalb unter der
+Tageslänge liegen. Leerlauf der Wärmepumpe zählt als ihre Betriebsart. Stunden je Zustand sind Anzeige, keine Menge: Monats-Fakten, Bilanz, Kosten und CO₂ lesen sie nicht.
+
+**Aufrufer.** Tag-Detail `api/routes/energie_profil/tag.py::_mit_betrieb_stunden` (Wärmepumpe, `wp_geraete[].betrieb_stunden`)
+und `::_mit_emob_betrieb` (`emob_betrieb[]` mit `stunden`, `labels`, `wechsel`); Leser
+`services/energie_profil/kanal_stunden.py::zustand_anteile_je_stunde` (die WP-Fassung `wp_betriebsart_anteile_je_stunde` ist
+seine Hülle); Schreiber `services/kanal/schreiber.py` (Kern `_schreibe_betriebsart_anteile`, Hüllen HA/MQTT).
+
 ### Monats-Rollup (rollup_month)
 
 Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:

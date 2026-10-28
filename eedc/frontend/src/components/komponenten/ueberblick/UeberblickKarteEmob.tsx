@@ -16,7 +16,11 @@
  *    PV-Ladung heute «(Anlage)» aus dem Tag-Detail. **Ohne Kopfzahl PV-Anteil** (K-7): das Tag-Detail trägt keine
  *    Wallbox-kWh (`TagDetail` hat `emob_ladung_pv_kwh`/`emob_ladung_netz_kwh`, keine `komponenten_kwh`, gemessen
  *    27.10.2026) — der Quotient bräuchte zwei Pfade (Ü5); E-K1-5: keine zweite Route in K1.
- * 3. «Betrieb heute» kommt mit K3 (Mitschrift).
+ * 3. **«Betrieb heute»** (`data-karte="betrieb-heute"`, P-433-2b K3): Stunden je Zustand des Tages aus der
+ *    Zustands-Mitschrift (`TagDetail.emob_betrieb`) — Wallbox «Lädt · Verbunden · Wartet · Fertig» und «Ladevorgänge
+ *    heute», E-Auto Laden (lädt · lädt DC · verbunden) und Standort (zu Hause · unterwegs). Zeile nur mit Stunden > 0,
+ *    «Heute kein Betrieb» bei gemessener 0, die Karte fehlt ohne Mitschrift. Farbe = Funktion (`funktionsFarbe`,
+ *    Ruhezustände Grau), keine neue Farbe, keine Rahmenfarbe; Klartext und Reihenfolge aus dem Backend.
  *
  * **Regeln:** Zeilen und Karten nur mit Wert (kein «–», Mathek-Regel); Zustand nur gemessen — ohne Feld kein Chip
  * (K-2); welches Auto nur aus der Zuordnung des Backends (`fahrzeuge_zuordnung`), bei «geschätzt» alle Autos mit
@@ -35,10 +39,11 @@ import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
 import LadestandLeiste from '../../ui/LadestandLeiste'
 import ModusChip, { ZusatzChip, ladezustandKlartext } from '../../ui/ModusChip'
 import { fmtDauer, fmtZahl } from '../../../lib'
+import { funktionsFarbe } from '../../../lib/funktionsFarben'
 import { PARAM_WALLBOX } from '../../../lib/investitionParameter'
 import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower } from '../../live/EnergieFluss'
 import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../../api/liveDashboard'
-import type { TagDetail } from '../../../api/energie_profil'
+import type { EmobBetriebZeile, TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { AnlagenRing, Karte, KartenKopf, Zeile } from './UeberblickKarte'
 
@@ -65,6 +70,13 @@ export const LADUNG_TOOLTIP = 'Tageswert dieses Geräts (HA-Langzeitstatistik bz
 const KEIN_FAHRZEUG = 'kein_fahrzeug'
 /** Der Ladezustand «lädt» — Gast-Zeile «lädt» statt «verbunden». */
 const LAEDT = 'laedt'
+
+/** P-433-2b K3: Tooltip der Karte «Betrieb heute» (Grenze «ab Zuordnung» im Handbuch). */
+export const BETRIEB_EMOB_TOOLTIP = 'Stunden je Zustand aus der stündlichen Mitschrift, ab Zuordnung'
+/** P-433-2b K3: eine gemessene 0 in allen Werten ist eine Auskunft (P4). */
+export const KEIN_BETRIEB = 'Heute kein Betrieb'
+/** Gruppentitel am E-Auto (zwei Felder auf einer Karte). */
+const GRUPPE_TITEL: Record<string, string> = { ladezustand_fahrzeug: 'Laden', zu_hause: 'Standort' }
 
 /** P-433-2b K2a (K2-2): die Steuerung kennt kein Fahrzeug, aber eines lädt bzw. hängt dran. */
 export const GAST_LAEDT = 'Gastfahrzeug lädt'
@@ -297,7 +309,46 @@ function WallboxKarten({ inv, live, tag, mehrereGeraete }: UeberblickKarteEmobPr
         ladung={ladungHeute(live, `wallbox_${inv.id}`, 'wallbox', mehrereGeraete)}
         pvLadung={tag?.emob_ladung_pv_kwh ?? null}
       />
+      <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
     </>
+  )
+}
+
+// ── «Betrieb heute» (P-433-2b K3) ───────────────────────────────────────────
+
+/** Die Zeilen des Tag-Details für dieses Gerät (Reihenfolge des Backends). */
+export function betriebZeilen(tag: TagDetail | null, invId: number): EmobBetriebZeile[] {
+  return (tag?.emob_betrieb ?? []).filter((z) => z.investition_id === invId)
+}
+
+/** Karte «Betrieb heute» der E-Mobilität — eine eigene Komponente neben der WP-Karte (`UeberblickKarte.BetriebKarte`
+ *  kennt Betriebsarten und passives Kühlen). Ohne Zeile keine Karte. */
+export function BetriebKarteEmob({ zeilen }: { zeilen: EmobBetriebZeile[] }) {
+  if (zeilen.length === 0) return null
+  const gruppen = zeilen.map((z) => ({ z, werte: Object.keys(z.stunden).filter((w) => (z.stunden[w] ?? 0) > 0) }))
+  const ohneBetrieb = gruppen.every((g) => g.werte.length === 0)
+  const wechsel = zeilen.find((z) => z.wechsel != null)?.wechsel ?? null
+  const mitTitel = zeilen.length > 1
+  return (
+    <Karte name="betrieb-heute">
+      <KartenKopf text="Betrieb heute" tip={BETRIEB_EMOB_TOOLTIP} />
+      {gruppen.filter((g) => g.werte.length > 0).map(({ z, werte }) => (
+        <div key={z.feld} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm" data-gruppe={z.feld}>
+          {mitTitel && GRUPPE_TITEL[z.feld] && (
+            <span className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">{GRUPPE_TITEL[z.feld]}</span>
+          )}
+          {werte.map((w) => (
+            <span key={w} className="inline-flex items-center gap-1.5" data-zeile={`betrieb-${w}`}>
+              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: funktionsFarbe(w) }} data-betrieb-farbe={w} />
+              <span className="text-gray-500 dark:text-gray-400">{z.labels[w] ?? w}</span>
+              <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtZahl(z.stunden[w], 1)} h</span>
+            </span>
+          ))}
+        </div>
+      ))}
+      {ohneBetrieb && <p className="text-xs text-gray-500 dark:text-gray-400" data-betrieb-ohne>{KEIN_BETRIEB}</p>}
+      {wechsel != null && <Zeile label="Ladevorgänge heute" data="ladevorgaenge">{fmtZahl(wechsel, 0)}</Zeile>}
+    </Karte>
   )
 }
 
@@ -368,6 +419,7 @@ function EAutoKarten({ inv, live, tag }: UeberblickKarteEmobProps) {
     <>
       <EAutoGeraeteKarte inv={inv} live={live} />
       <HeuteKarte ladung={ladung} pvLadung={tag?.emob_ladung_pv_kwh ?? null} />
+      <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
     </>
   )
 }

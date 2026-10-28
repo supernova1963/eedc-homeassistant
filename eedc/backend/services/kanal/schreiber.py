@@ -39,6 +39,12 @@ den auch die Mitschrift nach ihrem Schreiben fortschreibt; seit E4e ``kosten.py`
   denselben Kern ``_schreibe_betriebsart_anteile`` (E-SG-6). Die Stunde aus den 5-Minuten-Zeilen verdichtet
   ``modus_anteile_je_stunde`` längengewichtet mit derselben Gewichtung wie die Mittelwerte (``fenster_gewicht``,
   Standalone-Gleichstand S3 — eine Mittelungsregel im MQTT-Pfad).
+* **Mitschrift Zustand (P-433-2b K3)** — dieselbe Mitschrift typoffen für jedes Registry-Zustandsfeld mit Kanon und
+  ``mitschrift: True`` (Wallbox ``ladezustand``, E-Auto ``ladezustand_fahrzeug``/``zu_hause``): Kanäle
+  ``zustand:inv:<id>:<feld>:<wert>`` über denselben Kern (``kanon``/``key`` als Parameter; der Betriebsmodus bleibt
+  wörtlich), HA aus ``aggregate_day`` (``schreibe_zustands_mitschrift_sicher``), MQTT im Stundenlauf
+  (``_zustands_mitschrift_mqtt``); dazu der Wechsel-Zähler «Ladevorgänge» ``wechsel:inv:<id>:ladezustand:laedt``
+  (``sum``, fortlaufender Stand, ``_schreibe_wechsel``).
 
 **Isolation vom Bestand.** Beide Einstiege (``schreibe_kanaele_im_stundenlauf``,
 ``schreibe_betriebsart_mitschrift_sicher``) laufen NACH dem heutigen Schreiben in derselben Sitzung,
@@ -58,7 +64,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import and_, func, or_, select, union_all
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -72,6 +78,7 @@ from backend.core.berechnungen.spannen import (
     achse_der_kategorie,
     deckel_fenster_stunden,
 )
+from backend.core import zustands_kanon
 from backend.core.betriebsmodus import BETRIEBSMODUS_KANON
 from backend.core.field_definitions import basis_feld_key, einheit_fuer
 from backend.models.kanal import (
@@ -89,13 +96,17 @@ from backend.services.kanal.katalog import (
     ist_mean_kanal,
     ist_tagesgroesse_ohne_kanal,
     modus_kanal_key,
+    wechsel_kanal_key,
     zaehler_art,
+    zustand_kanal_key,
 )
 
 logger = logging.getLogger(__name__)
 
 #: Einheit der Betriebsart-Mitschrift: Bruchteil der Stunde, 0 … 1.
 EINHEIT_ANTEIL = "Anteil"
+#: Einheit eines Wechsel-Zählers (P-433-2b K3, D4, E-K3-4): eine Anzahl — ohne Einheitenwort.
+EINHEIT_ANZAHL = ""
 #: Rohstände aus MQTT liegen höchstens so lange vor (``mqtt_energy_history_service``, Retention).
 MQTT_ROHSTAND_TAGE = 31
 _STUNDE = 3600
@@ -979,6 +990,7 @@ async def schreibe_betriebsart_mitschrift(
 
 async def _schreibe_betriebsart_anteile(
     db: AsyncSession, anlage, je_geraet: dict[int, list[tuple[int, dict]]], entitaeten: dict, *, jetzt_ts: int,
+    kanon: tuple[str, ...] = BETRIEBSMODUS_KANON, key: Callable[[int, str], str] = modus_kanal_key,
 ) -> int:
     """Der **Kern** der Betriebsart-Mitschrift — Stunden als Unix-``start_ts``, gleich für HA und MQTT (E-SG-6).
 
@@ -987,6 +999,11 @@ async def _schreibe_betriebsart_anteile(
     Ende spätestens ``jetzt_ts`` liegt; je Stunde und Gerät eine Zeile in JEDEM Kanon-Modus (0 = gemessen nicht in
     diesem Modus); eine schon geschriebene Stunde wird nie überschrieben (``schon`` + ``ON CONFLICT DO NOTHING``).
     Die Hüllen: ``schreibe_betriebsart_mitschrift`` (HA, Slot-Form des Tages) und ``_betriebsart_mitschrift_mqtt``.
+
+    **Typoffen seit P-433-2b K3** (Bauplan K3 E2): ``kanon`` und ``key`` sind Schlüsselwort-Parameter mit den Vorgaben
+    der Wärmepumpe (``BETRIEBSMODUS_KANON``, ``modus_kanal_key``) — deren Aufrufe bleiben wörtlich; die Zustands-
+    Mitschrift ruft mit ``zustands_kanon.KANON[feld]`` und ``zustand_kanal_key`` (Hüllen ``schreibe_zustands_mitschrift``
+    und ``_zustands_mitschrift_mqtt``).
     """
     # Die Hülle des HA-Pfads filtert schon selbst (Reihenfolge der Kanal-Anlage bleibt byte-gleich); hier für jede Hülle.
     je_geraet = {
@@ -996,7 +1013,7 @@ async def _schreibe_betriebsart_anteile(
     je_geraet = {inv_id: slots for inv_id, slots in je_geraet.items() if slots}
     if not je_geraet:
         return 0
-    gewuenscht = {modus_kanal_key(i, m): (ART_MEAN, EINHEIT_ANTEIL) for i in je_geraet for m in BETRIEBSMODUS_KANON}
+    gewuenscht = {key(i, m): (ART_MEAN, EINHEIT_ANTEIL) for i in je_geraet for m in kanon}
     kanaele = await kanaele_holen(db, anlage.id, gewuenscht)
     ids = [k.id for k in kanaele.values()]
     quellen = await aktuelle_quellen(db, ids)
@@ -1013,8 +1030,8 @@ async def _schreibe_betriebsart_anteile(
     for inv_id, slots in sorted(je_geraet.items()):
         slots.sort(key=lambda z: z[0])        # start_ts ist je Slot eindeutig (slot_start_ts)
         entity = entitaeten.get(inv_id)
-        for modus in BETRIEBSMODUS_KANON:
-            kanal = kanaele[modus_kanal_key(inv_id, modus)]
+        for modus in kanon:
+            kanal = kanaele[key(inv_id, modus)]
             q = quellen.get(kanal.id)
             if q is None or (q.statistic_id != entity and slots[0][0] > q.gueltig_ab):
                 db.add(KanalQuelle(kanal_id=kanal.id, gueltig_ab=slots[0][0], familie=FAMILIE_MITSCHRIFT,
@@ -1126,6 +1143,189 @@ async def schreibe_betriebsart_mitschrift_mqtt(
     return await _betriebsart_mitschrift_mqtt(db, kontext or await _kontext(db, anlage, zeitpunkt))
 
 
+# ── Zustands-Mitschrift (P-433-2b K3: typoffen, HA und MQTT) ─────────────────
+
+
+def _feld_key(feld: str) -> Callable[[int, str], str]:
+    """Die Schlüsselfunktion ``(inv_id, wert) → zustand:inv:<id>:<feld>:<wert>`` für den Kern."""
+    def key(inv_id: int, wert: str) -> str:
+        return zustand_kanal_key(inv_id, feld, wert)
+    return key
+
+
+async def _schreibe_wechsel(
+    db: AsyncSession, anlage, je_geraet: dict[int, list[tuple[int, int]]], entitaeten: dict, *, jetzt_ts: int,
+    feld: str, wert: str,
+) -> int:
+    """Wechsel-Zähler (D4) je Gerät: ``je_geraet`` ``{inv_id: [(start_ts, Zahl der Übergänge in der Stunde)]}``.
+
+    Ein ``sum``-Kanal mit HAs Bedeutung — die Zeile trägt den **fortlaufenden** Stand, der Zuwachs der Stunde ist die
+    Zahl ihrer Übergänge (so liest ``lesen.stunden``/``zeitraum`` ihn wie jeden Zähler, und der Rücksprung-Checker sieht
+    nie einen fallenden Stand). Der erste Stand beginnt bei 0. Geschrieben wird nur **vorwärts** ab der letzten Zeile des
+    Kanals (eine ältere Stunde, die später nachkäme, bekäme sonst einen Stand, den die Folgezeilen nicht kennen —
+    benannte Grenze), nur abgeschlossene Stunden.
+    """
+    je_geraet = {i: sorted((ts, n) for ts, n in slots if ts + _STUNDE <= jetzt_ts) for i, slots in je_geraet.items()}
+    je_geraet = {i: slots for i, slots in je_geraet.items() if slots}
+    if not je_geraet:
+        return 0
+    gewuenscht = {wechsel_kanal_key(i, feld, wert): (ART_SUM, EINHEIT_ANZAHL) for i in je_geraet}
+    staende = await _staende(db, anlage.id, gewuenscht, None)
+    zeilen: list[dict] = []
+    for inv_id, slots in sorted(je_geraet.items()):
+        st = staende[wechsel_kanal_key(inv_id, feld, wert)]
+        ab = st.letzte.start_ts if st.letzte is not None else None
+        neu = [(ts, n) for ts, n in slots if ab is None or ts > ab]
+        if not neu:
+            continue
+        entity = entitaeten.get(inv_id)
+        if st.quelle is None or (st.quelle.statistic_id != entity and neu[0][0] > st.quelle.gueltig_ab):
+            db.add(KanalQuelle(kanal_id=st.kanal.id, gueltig_ab=neu[0][0], familie=FAMILIE_MITSCHRIFT,
+                               statistic_id=entity, offset=0.0))
+        stand = float(st.letzte.sum) if st.letzte is not None and st.letzte.sum is not None else 0.0
+        for ts, n in neu:
+            stand += n
+            zeilen.append(_zeile(st.kanal.id, ts, FAMILIE_MITSCHRIFT, sum=stand))
+    await db.flush()
+    return await _zeilen_einfuegen(db, zeilen)
+
+
+def _slots_des_tages(datum: date, je_stunde: dict, jetzt_ts: int) -> dict[int, list[tuple[int, Any]]]:
+    """Slot-Form ``{h: {inv_id: x}}`` des HA-Pfads → ``{inv_id: [(start_ts, x)]}`` (dieselbe Umrechnung
+    ``slot_start_ts`` wie ``schreibe_betriebsart_mitschrift``; Frühjahrs-Slot ohne reale Stunde und laufende Stunde
+    fallen weg)."""
+    out: dict[int, list[tuple[int, Any]]] = {}
+    for h, geraete in je_stunde.items():
+        start_ts = slot_start_ts(datum, int(h))
+        if start_ts is None or start_ts + _STUNDE > jetzt_ts:
+            continue
+        for inv_id, x in geraete.items():
+            out.setdefault(int(inv_id), []).append((start_ts, x))
+    return out
+
+
+async def schreibe_zustands_mitschrift(
+    db: AsyncSession, anlage, datum: date, je_feld: dict, *, jetzt: Optional[datetime] = None,
+) -> int:
+    """Die Zustands-Mitschrift des HA-Pfads (P-433-2b K3, K3-5): je (typ, feld) das Ergebnis von
+    ``energie_profil/_helpers._get_zustand_history`` (``.anteile``, ``.entitaeten``, ``.wechsel``) → Kanäle
+    ``zustand:inv:<id>:<feld>:<wert>`` (Kern ``_schreibe_betriebsart_anteile`` mit ``KANON[feld]``) und beim
+    Wechsel-Feld ``wechsel:inv:<id>:<feld>:<wert>``. Regeln wie ``schreibe_betriebsart_mitschrift``: nur abgeschlossene
+    Stunden, eine geschriebene Stunde bleibt, ein Slot ohne Signal bleibt in allen Werten leer."""
+    jetzt_ts = _unix(jetzt or datetime.now())
+    n = 0
+    for (typ, feld), je_stunde in sorted(je_feld.items()):
+        anteile = getattr(je_stunde, "anteile", None)
+        if not anteile:
+            continue
+        entitaeten = getattr(je_stunde, "entitaeten", None) or {}
+        n += await _schreibe_betriebsart_anteile(
+            db, anlage, _slots_des_tages(datum, anteile, jetzt_ts), entitaeten, jetzt_ts=jetzt_ts,
+            kanon=zustands_kanon.KANON[feld], key=_feld_key(feld))
+        ziel = zustands_kanon.WECHSEL_FELDER.get((typ, feld))
+        if ziel is not None:
+            n += await _schreibe_wechsel(
+                db, anlage, _slots_des_tages(datum, getattr(je_stunde, "wechsel", None) or {}, jetzt_ts), entitaeten,
+                jetzt_ts=jetzt_ts, feld=feld, wert=ziel)
+    return n
+
+
+def _mqtt_zustand_geraete(k: _Kontext) -> dict[tuple[str, str], set[int]]:
+    """``{(typ, feld): {inv_id}}`` — die aktiven Geräte dieses Laufs, deren Mitschrift-Feld aus MQTT kommt.
+
+    Dieselbe Quellenregel wie der Live-Leser (``betriebsmodus_live._emob_quellen``: HA-Entität im ``live``-Block ⇒ HA;
+    sonst MQTT, außer ``quellen`` wählt HA oder «keine»). Für ``ladezustand`` zählt Option A mit: MQTT, wenn das Feld
+    oder ``evcc_verbunden`` aus MQTT kommt **und** keines von beiden eine HA-Entität hat (dann schreibt der HA-Pfad —
+    nie zwei Familien im Kanal).
+    """
+    from backend.core.field_definitions import MITSCHRIFT_LIVE_FELDER
+    from backend.services.betriebsmodus_live import _emob_quellen
+
+    typen = {typ for typ, _ in MITSCHRIFT_LIVE_FELDER}
+    emob = {int(i): inv.typ for i, inv in k.invs.items()
+            if getattr(inv, "typ", None) in typen and i not in k.stillgelegt}
+    if not emob:
+        return {}
+    ha, mqtt = _emob_quellen(k.anlage, emob)
+    ha_ziele = {z for ziele in ha.values() for z in ziele}
+    mqtt_ziele = set(mqtt)
+    out: dict[tuple[str, str], set[int]] = {}
+    for typ, feld in sorted(MITSCHRIFT_LIVE_FELDER):
+        traeger = (feld, zustands_kanon.EVCC_VERBUNDEN) if feld == zustands_kanon.LADEZUSTAND else (feld,)
+        for inv_id, t in emob.items():
+            if t != typ or any((inv_id, f) in ha_ziele for f in traeger):
+                continue
+            if any((inv_id, f) in mqtt_ziele for f in traeger):
+                out.setdefault((typ, feld), set()).add(inv_id)
+    return out
+
+
+async def _zustand_snapshot_zeilen(db: AsyncSession, anlage_id: int, geraete: set[int], feld: str, *, von: int,
+                                   bis: int) -> tuple[list, list]:
+    """``(anteils_zeilen, wechsel_zeilen)`` ``[ts_unix, component_key, wert]`` eines Felds in ``[von, bis)``."""
+    from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
+
+    rows = (await db.execute(
+        select(MqttLiveSnapshot.ts_unix, MqttLiveSnapshot.component_key, MqttLiveSnapshot.value_w).where(and_(
+            MqttLiveSnapshot.anlage_id == anlage_id,
+            MqttLiveSnapshot.ts_unix.is_not(None),
+            MqttLiveSnapshot.ts_unix >= von, MqttLiveSnapshot.ts_unix < bis,
+            MqttLiveSnapshot.component_key.like(f"inv:%:{feld}:%"),
+        ))
+    )).all()
+    anteile, wechsel = [], []
+    for r in rows:
+        teile = r[1].split(":")
+        if len(teile) != 4 or teile[2] != feld or _modus_zeile_geraet(r[1]) not in geraete:
+            continue
+        (wechsel if teile[3].startswith("wechsel_") else anteile).append(r)
+    return anteile, wechsel
+
+
+def wechsel_je_stunde(zeilen, stunden: dict[int, list[tuple[int, dict]]]) -> dict[int, list[tuple[int, int]]]:
+    """Wechsel-Zeilen der 5-Minuten-Fenster → ``{inv_id: [(start_ts, Σ Übergänge)]}`` für genau die Stunden mit Anteilen
+    (``stunden`` = Ergebnis von ``modus_anteile_je_stunde``): eine Stunde ohne Wechsel-Zeile zählt 0, eine Stunde ohne
+    Anteile bekommt keine Zeile (sie ist nicht gemessen)."""
+    summe: dict[int, dict[int, float]] = {}
+    for ts, key, n in zeilen:
+        inv_id = _modus_zeile_geraet(key)
+        stunde = _stunden_start_ts(datetime.fromtimestamp(int(ts)))
+        summe.setdefault(inv_id, {})[stunde] = summe.get(inv_id, {}).get(stunde, 0.0) + float(n)
+    return {inv_id: [(st, int(round(summe.get(inv_id, {}).get(st, 0.0)))) for st, _a in slots]
+            for inv_id, slots in stunden.items()}
+
+
+async def _zustands_mitschrift_mqtt(db: AsyncSession, k: _Kontext) -> int:
+    """Phase des Stundenlaufs (P-433-2b K3, K3-4): die Zustands-Mitschrift der MQTT-Geräte aus den 5-Minuten-Snapshots
+    ``inv:<id>:<feld>:<wert>`` — Muster ``_betriebsart_mitschrift_mqtt`` (nur abgeschlossene Stunden, letzte
+    ``_NAH_STUNDEN``, ``statistic_id`` = ``mqtt_live_statistic_id("inv:<id>:<feld>")``). Die Stunde verdichtet
+    ``modus_anteile_je_stunde`` (dieselbe längengewichtete Regel, wörtlich wiederverwendet); beim Wechsel-Feld dazu die
+    Summe der Übergänge der Stunde."""
+    n = 0
+    bis = _stunden_start_ts(k.zeitpunkt)
+    for (typ, feld), geraete in sorted(_mqtt_zustand_geraete(k).items()):
+        anteils_zeilen, wechsel_zeilen = await _zustand_snapshot_zeilen(
+            db, k.anlage.id, geraete, feld, von=bis - _NAH_STUNDEN * _STUNDE, bis=bis)
+        je_geraet = modus_anteile_je_stunde(anteils_zeilen)
+        if not je_geraet:
+            continue
+        entitaeten = {inv_id: mqtt_live_statistic_id(f"inv:{inv_id}:{feld}") for inv_id in je_geraet}
+        n += await _schreibe_betriebsart_anteile(db, k.anlage, je_geraet, entitaeten, jetzt_ts=bis,
+                                                 kanon=zustands_kanon.KANON[feld], key=_feld_key(feld))
+        ziel = zustands_kanon.WECHSEL_FELDER.get((typ, feld))
+        if ziel is not None:
+            n += await _schreibe_wechsel(db, k.anlage, wechsel_je_stunde(wechsel_zeilen, je_geraet), entitaeten,
+                                         jetzt_ts=bis, feld=feld, wert=ziel)
+    return n
+
+
+async def schreibe_zustands_mitschrift_mqtt(
+    db: AsyncSession, anlage, zeitpunkt: datetime, *, kontext: Optional[_Kontext] = None,
+) -> int:
+    """Die Zustands-Mitschrift aus MQTT für eine Anlage (Einstieg für Proben; im Betrieb ruft der Stundenlauf die Phase)."""
+    return await _zustands_mitschrift_mqtt(db, kontext or await _kontext(db, anlage, zeitpunkt))
+
+
 # ── Einstiege mit Isolation ─────────────────────────────────────────────────
 
 
@@ -1168,6 +1368,9 @@ async def schreibe_kanaele_im_stundenlauf(db: AsyncSession, anlage, zeitpunkt: d
             # HA-Bauform §9 (Standalone-Gleichstand S1): Betriebsart-Mitschrift der MQTT-Wärmepumpen aus den
             # 5-Minuten-Snapshots — VOR «Strom je Betriebsart», der sie im selben Lauf liest.
             n += await _betriebsart_mitschrift_mqtt(db, k)
+            # P-433-2b K3: die Zustands-Mitschrift der E-Mobilität aus denselben 5-Minuten-Snapshots (eigene Kanäle
+            # `zustand:`/`wechsel:`; «Strom je Betriebsart» liest sie nicht).
+            n += await _zustands_mitschrift_mqtt(db, k)
             # HA-Bauform E4d: Strom je Betriebsart der Wärmepumpe — NACH Spiegel und eigener Summe (die Strom-Kanäle
             # der Stunde) und aus der Mitschrift, soweit sie schon geschrieben ist (``modus_strom.py``).
             from backend.services.kanal.modus_strom import schreibe_modus_strom
@@ -1208,3 +1411,17 @@ async def schreibe_betriebsart_mitschrift_sicher(
     except Exception as e:  # noqa: BLE001
         await _fehler_vermerken(db, anlage_id, f"Strom je Betriebsart {datum}", e)
     return n
+
+
+async def schreibe_zustands_mitschrift_sicher(db: AsyncSession, anlage, datum: date, je_feld: dict) -> Optional[int]:
+    """Der Einstieg der Tagesaggregation für die Zustands-Mitschrift (P-433-2b K3) — NACH der Betriebsart-Mitschrift,
+    eigener SAVEPOINT; ein Fehler rollt nur sie zurück und wird vermerkt (wie ``schreibe_betriebsart_mitschrift_sicher``)."""
+    if not any(getattr(v, "anteile", None) for v in (je_feld or {}).values()):
+        return 0
+    anlage_id = anlage.id
+    try:
+        async with db.begin_nested():
+            return await schreibe_zustands_mitschrift(db, anlage, datum, je_feld)
+    except Exception as e:  # noqa: BLE001
+        await _fehler_vermerken(db, anlage_id, f"Zustands-Mitschrift {datum}", e)
+        return None

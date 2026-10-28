@@ -172,9 +172,10 @@ def test_staende_o7_o9_sind_stand():
 def test_mean_ist_mittelwert_kanal_spiegel_oder_mqtt_mitschrift_abgeleitetes_nur_benannt():
     """Seit HA-Bauform §9 (Standalone-Gleichstand S2): jeder ``mean`` außer der Betriebsart ist ein Mittelwert-Kanal —
     Spiegel bei HA-Entität, sonst MQTT-Mitschrift (bis S2: „Mitschrift, Quelle offen", ``mitschrift_offen``); die
-    Betriebsart hat ihre eigene Mitschrift; abgeleitete Kanäle sind benannt."""
+    Betriebsart hat ihre eigene Mitschrift — seit P-433-2b K3 auch die Zustände mit ``mitschrift`` (``zustand:``);
+    abgeleitete Kanäle sind benannt."""
     for z in kat.zuweisungen():
-        if z.art == ART_MEAN and z.feld != "betriebsmodus":
+        if z.art == ART_MEAN and not z.schluessel.startswith(("modus:", "zustand:")):
             assert z.e1_schreiber and z.mittelwert_kanal, z
             assert "sonst MQTT-Mitschrift (§9)" in z.grund, z
         elif z.art == ART_MEAN:

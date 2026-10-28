@@ -7,7 +7,7 @@
 77	api/routes/aktueller_monat/tkonto.py::_baue_investition_financial
 58	api/routes/aktueller_monat/waerme.py::waerme_klima_monat
 53	api/routes/cockpit/pv_strings.py::get_pv_strings
-60	api/routes/datenquellen.py::get_datenquellen_felder
+51	api/routes/datenquellen.py::get_datenquellen_felder
 60	api/routes/energie_profil/tag.py::get_tag_detail
 63	api/routes/energie_profil/waerme.py::get_waerme_verlauf_stunden
 79	api/routes/ha_export/anlage_preise_speicher.py::preise_speicher_sensoren
@@ -31,7 +31,6 @@
 77	services/daten_checker/monatsdaten.py::MonatsdatenChecks._check_wp_monatsdaten
 54	services/daten_checker/sensoren.py::SensorChecks._check_sensor_mapping_lts
 60	services/emob_ladebloecke.py::bilde_ladebloecke
-51	services/energie_profil/_helpers.py::_get_betriebsmodus_history
 77	services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf

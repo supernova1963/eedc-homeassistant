@@ -63,7 +63,7 @@ Park-ID `el:ueberblick-karte` (das Schaubild wird nicht gerendert), Summary «Au
 
 | Teil | Form |
 | --- | --- |
-| **Leitsatz** | Registry-Feld = Vertrag, Wert live aus der Integration, **nichts gespeichert** (nur die Zuordnung). Die Felder tragen `nur_live` ⇒ Kanal-Katalog-Ausnahme `nur_live_anzeige` (kein Kanal, keine Mitschrift, kein Mittel im MQTT-Snapshot). |
+| **Leitsatz** | Registry-Feld = Vertrag, Wert live aus der Integration, **nichts gespeichert** (nur die Zuordnung). Die Felder tragen `nur_live` ⇒ Kanal-Katalog-Ausnahme `nur_live_anzeige` (kein Kanal, keine Mitschrift, kein Mittel im MQTT-Snapshot). Seit K3 tragen Ladezustand, Fahrzeug-Ladezustand und Standort `mitschrift` statt `nur_live` (§2b-K3). |
 | **Felder** | Wallbox `ladezustand`, `lademodus` (Zustand), `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min`; E-Auto `ladezustand_fahrzeug`, `zu_hause` (Zustand), `reichweite_km`, `ziel_ladestand_prozent`, `restzeit_min`. Alle `erweitert`, Datenquellen-Abschnitt «Zustand & Sitzung» (`abschnitt`), Kopf «Zustands-Chip: zugeordnet / fehlt». Keine Einheiten-Umrechnung. |
 | **Kanon** | `core/zustands_kanon.py`, tabellengetrieben (je Feld Kanon + Werte-Tabelle + Normalisierer + Klartext); belegt: SMA EV Charger, evcc (Lademodus), Smart #1, go-e (Codes nur MQTT), HA-Zone. Fremder Wert ⇒ kein Chip + Daten-Checker-INFO (E12-Muster); `core/betriebsmodus.py` unberührt. |
 | **Leser** | `betriebsmodus_live.lade_zustaende_live` — die Abfrage nimmt jeden Typ mit Zustandsfeld (statt nur Wärmepumpe); derselbe 60-s-Takt wie der Modus, ein gebündelter HA-Abruf für alle E-Mob-Felder; HA über die `live`-Entität, sonst MQTT, «keine» schließt MQTT aus. |
@@ -111,9 +111,25 @@ Grundlage: Bauplan K2 Fassung 2, Sitzung K2b; Entscheid Gernot 27.10.2026 **D3**
 | K2-9 | **Preset «evcc Ladepunkt»** nur mit belegten Einheiten (evcc `server/mqtt.go encode()`: Floats `%.3f`, `time.Duration` als ganze Sekunden, Bools `true`/`false`, `nil` als leerer String): `chargePower` W · `sessionEnergy` Wh ×0,001 · `chargeDuration` s · `chargeRemainingDuration` s ×1/60 · `phasesActive` · `chargeTotalImport` kWh ×1 als Zählerstand unter `energy/` (die Bauplan-Annahme Wh war falsch, Quelle `api.MeterEnergy`) · `mode` · `connected`/`charging`/`enabled` · `vehicleName`. Nicht im Preset: Auto-Werte (`vehicleSoc`/`vehicleRange`), undokumentierte Topics. Presets bietet die Oberfläche derzeit nicht an (Aufruf über die API). |
 
 **Release-Regel (Gernot 27.10.2026):** kein Release der E-Mobilitäts-Änderungen ohne Panorama — K1 bis K3 sammeln sich
-ungepusht, das Panorama schließt das Paket. **K3** («Betrieb heute» aus einer typoffenen Mitschrift) folgt. Der
+ungepusht, das Panorama schließt das Paket. **K3** («Betrieb heute» aus einer typoffenen Mitschrift) ist gebaut (§2b-K3). Der
 evcc-Ladezustand aus drei Binär-Sensoren (offen aus K1) ist mit Option A (K2-7) gelöst; Weg B (Template-Sensor) bleibt für
 andere Integrationen.
+
+### 2b-K3. Zustands-Mitschrift typoffen, Karte «Betrieb heute» (gebaut 28.10.2026, unveröffentlicht)
+
+Grundlage: Konzept-Nachtrag K3 und Bauplan K3 (intern); Entscheide Gernot 28.10.2026 **D4** (Ladevorgänge über einen
+Wechsel-Zähler: ja) · **D5** (Standort mitschreiben: ja) · **D6** (Option A auch in der HA-Mitschrift: bauen, in K3) ·
+**D7** (Lademodus mitschreiben: nein).
+
+| Nr. | Entscheid |
+| --- | --- |
+| K3-1 | **Eine Regel:** jedes Registry-Zustandsfeld mit Kanon und `mitschrift: True` bekommt die Mitschrift der Betriebsart (Anteil der Stunde je Kanon-Wert) — Wallbox `ladezustand`, E-Auto `ladezustand_fahrzeug`, `zu_hause`; abgeleitete Menge `MITSCHRIFT_LIVE_FELDER`. Der Betriebsmodus behält seinen Pfad byte-gleich. |
+| K3-2 | Kanal `zustand:inv:<id>:<feld>:<wert>` (`mean`, Anteil); Wechsel-Zähler `wechsel:inv:<id>:ladezustand:laedt` (`sum`, fortlaufend). |
+| K3-3 | Snapshot `inv:<id>:<feld>:<wert>` (Anteil des 5-Minuten-Fensters) und `inv:<id>:ladezustand:wechsel_laedt` (Anzahl). |
+| K3-4 | Inbound-Fenster je (Gerät, Feld); Ladezustand über `ladezustand_aus_werten` (gemessener zuerst, sonst Option A) — eine Funktion für Live und Mitschrift. |
+| K3-5 | HA typoffen (`_get_zustand_history`), Option A über HA als verschränkte Zeitlinie der drei Verläufe; ein gemessener Ladezustand geht vor. |
+| K3-6/7 | Leser `zustand_anteile_je_stunde`, Layer `stunden_je_zustand` (WP-Fassungen sind Hüllen, bitgleich); Tag-Detail `emob_betrieb` (nur Tag). |
+| K3-8 | Karte «Betrieb heute» (`BetriebKarteEmob`): Wallbox Lädt · Verbunden · Wartet · Fertig + «Ladevorgänge heute»; E-Auto Laden (Lädt · Lädt DC · Verbunden) und Standort (Zu Hause · Unterwegs); `kein_fahrzeug`/`gesperrt`/`fehler`/`nicht_verbunden` kein Betrieb; Farbe = Funktion, keine Rahmenfarbe; «Heute kein Betrieb» bei gemessener 0. |
 
 ## 3. Entscheide
 
@@ -138,6 +154,11 @@ andere Integrationen.
 - **Ein Bild je Typ:** eine Luft-Luft-Anlage sieht Erdsonden und Speicher im Bild.
 - **Warmwasser-Temperatur** ist ein anlagenweiter Wert (erste Wärmepumpe mit Sensor); die Zeile «Ohne Sensor …» nennt sie unabhängig von der Bauart.
 - **Heute-Werte je Gerät** (Wärme, Arbeitszahl) nur, wenn das Gerät heute einen Strom-Beitrag hat.
+- **«Betrieb heute» E-Mobilität** (K3): ab der Zuordnung, nicht rückwirkend; nur abgeschlossene Stunden; über MQTT
+  5-Minuten-Fenster (Broker-Lücke = Stunde ohne Zeile, nach Neustart erst ab der nächsten Meldung); der erste Wert nach einem
+  Neustart ist kein Ladevorgang; der Wechsel-Zähler schreibt nur vorwärts; Option A über HA braucht `evcc_verbunden` (ohne
+  «lädt»/«freigegeben» nur Verbunden/Kein Fahrzeug); Gast und Fahrzeug je Stunde werden nicht mitgeschrieben; das Tag-Detail
+  hat keinen Demo-Schalter.
 - **«Betrieb heute»** nur mit Home-Assistant-Modus-Sensor und erst ab Beginn der Betriebsart-Mitschrift; **Leerlauf** zählt nicht
   getrennt (die Mitschrift schreibt ihn nicht — eine Stunde «Heizen · Leerlauf» zählt als Heizen). Ein Tag, an dem das Gerät nur
   aus war, zeigt «Heute kein Betrieb».

@@ -242,6 +242,20 @@ export interface TagStatus {
  * D1 „maximal erheben"). Ein Aufruf je gewähltem Tag (`getTagDetail`). Felder
  * `null` = Sensor nicht gemappt / keine Daten → Frontend lässt sie weg.
  */
+/** P-433-2b K3: Stunden je Zustand eines Geräts und Felds am Tag — fertig aus dem Backend (Layer
+ *  `betriebsstunden.stunden_je_zustand`, Klartext `zustands_kanon.LABEL`); der Client rechnet nichts. */
+export interface EmobBetriebZeile {
+  investition_id: number
+  typ: string
+  /** `ladezustand` (Wallbox) · `ladezustand_fahrzeug` · `zu_hause` (E-Auto) */
+  feld: string
+  /** `{wert: Stunden}` in Lese-Reihenfolge der Karte, 0,1 h; eine gemessene 0 steht da. */
+  stunden: Record<string, number>
+  labels: Record<string, string>
+  /** «Ladevorgänge heute» (nur Wallbox, nur mit Zähler-Zeile). */
+  wechsel: number | null
+}
+
 export interface TagDetail {
   datum: string
   wp_strom_heizen_kwh: number | null
@@ -331,6 +345,9 @@ export interface TagDetail {
   speicher_effektiver_ladepreis_quelle: string | null
   emob_ladung_pv_kwh: number | null
   emob_ladung_netz_kwh: number | null
+  /** P-433-2b K3 — «Betrieb heute» der Wallboxen und E-Autos: je Gerät und mitgeschriebenem Zustandsfeld eine Zeile
+   *  (nur Tag). Fehlt bei älteren Backends. */
+  emob_betrieb?: EmobBetriebZeile[]
   /** #263/T2 — Aufteilung Heizen/Kühlen DIESES Tages, anlagenweite Σ.
    *  `null` heißt „kein Modus-Signal an diesem Tag" ⇒ der Block fehlt ganz,
    *  statt drei Nullen zu zeigen (ADR-002/P4). Der Rest kommt aus dem

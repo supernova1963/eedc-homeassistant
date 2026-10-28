@@ -790,6 +790,21 @@ class TagStatusResponse(BaseModel):
     aktion_label: Optional[str] = None
 
 
+class EmobBetriebZeile(BaseModel):
+    """P-433-2b K3 (Bauplan K3-7, Karte «Betrieb heute» E-Mobilität): Stunden je Zustand eines Geräts und Felds am Tag.
+
+    ``stunden`` = ``{wert: h}`` in Lese-Reihenfolge der Karte (``zustands_kanon.WERTE_MIT_STUNDEN[feld]``), 0,1 h, aus
+    der Zustands-Mitschrift (Layer ``betriebsstunden.stunden_je_zustand``) — eine gemessene 0 bleibt stehen; ``labels`` =
+    Klartext je Wert (``zustands_kanon.LABEL``, der Client führt keine zweite Tabelle); ``wechsel`` = Übergänge nach
+    «lädt» am Tag (D4 «Ladevorgänge heute»), nur an der Wallbox und nur mit Zähler-Zeile."""
+    investition_id: int
+    typ: str
+    feld: str
+    stunden: dict[str, float]
+    labels: dict[str, str] = Field(default_factory=dict)
+    wechsel: Optional[int] = None
+
+
 class TagDetailResponse(BaseModel):
     """Tages-Detail-Werte für Cockpit/Tag, die NICHT in der Tages-Bilanz/
     `TagWerteResponse` stehen, aber aus Snapshots/TEP tagesgenau erhebbar sind
@@ -918,6 +933,9 @@ class TagDetailResponse(BaseModel):
     # E-Mobilität PV-/Netz-Anteil der Ladung — Tages-Boundary-Diff (nur bei Sensor).
     emob_ladung_pv_kwh: Optional[float] = None
     emob_ladung_netz_kwh: Optional[float] = None
+    #: P-433-2b K3: «Betrieb heute» der Wallboxen und E-Autos — je Gerät und Mitschrift-Feld eine Zeile, nur Geräte mit
+    #: mindestens einer Zeile der Mitschrift (nur der Tag; Monat/Jahr kennen das Feld nicht).
+    emob_betrieb: list[EmobBetriebZeile] = Field(default_factory=list)
     # Aufteilung Heizen/Kühlen des Tages (#263/T2) — anlagenweite Σ über alle
     # Wärmepumpen, wie die übrigen WP-Felder hier. `None` heißt „kein
     # Modus-Signal an diesem Tag": der Block erscheint dann gar nicht, statt

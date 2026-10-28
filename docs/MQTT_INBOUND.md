@@ -219,8 +219,18 @@ eedc/1_Meine_PV/live/inv/5_Smart_1/reichweite_km     → 312
 - Zustaende wie der Betriebsmodus: bei jeder Aenderung senden (retained empfohlen); die volle Werte-Tabelle steht im
   Handbuch Einstellungen §7.10 und am Feld in *Einstellungen → Datenquellen*. Ein fremder Wert ergibt keinen Chip; der
   Daten-Checker nennt ihn („E-Mobilitaet – unbekannter Zustand").
-- **Reine Anzeige:** eedc speichert diese Werte nicht (keine Mitschrift, kein Stundenmittel, kein Kanal) und rechnet keine
-  Einheit um — die Sitzung in **kWh** senden (nicht Wh), die Restzeit in **Minuten**.
+- **Reine Anzeige:** eedc speichert diese Werte nicht (kein Stundenmittel, kein Kanal) und rechnet keine Einheit um — die
+  Sitzung in **kWh** senden (nicht Wh), die Restzeit in **Minuten**. **Ausnahme — die Zustands-Mitschrift (seit der
+  naechsten Version):** fuer `ladezustand`, `ladezustand_fahrzeug` und `zu_hause` fuehrt der Inbound wie beim Betriebsmodus
+  ein **Haltezeit-Fenster je Geraet und Feld** (ein Zustand gilt bis zur naechsten Nachricht); der 5-Minuten-Snapshot
+  schreibt daraus `inv:<id>:<feld>:<wert>` = Anteil des Fensters und an der Wallbox `inv:<id>:ladezustand:wechsel_laedt` =
+  Zahl der Uebergaenge nach `laedt` im Fenster (nur > 0). Der Stundenlauf (:05) verdichtet sie je abgeschlossener Stunde in
+  die Kanaele `zustand:inv:<id>:<feld>:<wert>` und `wechsel:inv:<id>:ladezustand:laedt` — daraus „Betrieb heute" und
+  „Ladevorgaenge heute". Eine Nachricht auf `evcc_verbunden`/`evcc_laedt`/`evcc_freigegeben` schreibt das Fenster des
+  Ladezustands fort (Option A, dieselbe Regel wie unten; ein gesendeter `ladezustand` geht vor). Grenzen wie beim Modus: ab
+  dem ersten Wert, nicht rueckwirkend; Broker weg ⇒ Luecke; nach einem Neustart zaehlt die Stunde erst ab der naechsten
+  Meldung, und der erste Wert ist **kein** Ladevorgang. `lademodus`, `fahrzeug_am_ladepunkt` und die drei `evcc_…`-Werte
+  selbst werden nicht mitgeschrieben. Hat das Feld einen HA-Sensor, schreibt der HA-Weg mit, nicht MQTT.
 - Der Zustand ist bis zu 60 s alt (derselbe Takt wie der Betriebsmodus).
 - **Ladezustand aus drei Binaer-Werten (Option A):** liefert `ladezustand` keinen Wert (nicht gesendet, `unknown`, fremder
   Wert), setzt eedc ihn aus `evcc_verbunden`/`evcc_laedt`/`evcc_freigegeben` zusammen: verbunden `aus` ⇒ `kein_fahrzeug`;

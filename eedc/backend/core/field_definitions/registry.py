@@ -911,17 +911,23 @@ INVESTITION_FELDER: dict = {
 # `core/zustands_kanon.py`); `ha_domaenen` öffnet den HA-Picker für die Domains, in denen die belegten Integrationen
 # den Zustand führen (evcc-Lademodus ist ein `select`, der Standort ein `device_tracker`).
 _EMOB_LIVE_BASIS: dict = {"nur_live": True, "erweitert": True, "abschnitt": "zustand"}
+# P-433-2b K3 (Bauplan K3 §1 K3-1, D5): die drei Zustände, deren **Anteil je Stunde** eedc mitschreibt (Karte «Betrieb
+# heute»): `mitschrift: True` statt `nur_live` — gespeichert wird, was eedc selbst über Zeit baut (Leitsatz 7), nie der
+# Momentwert. Kanal `zustand:inv:<id>:<feld>:<wert>` (`kanal/katalog.py`), abgeleitete Menge `MITSCHRIFT_LIVE_FELDER`
+# (`karten.py`). `lademodus` (D7), die evcc-Rollen-Felder und das Textfeld bleiben `nur_live`.
+_EMOB_MITSCHRIFT_BASIS: dict = {"mitschrift": True, "erweitert": True, "abschnitt": "zustand"}
+_MITSCHRIFT_SATZ = (" Wird ab der Zuordnung stündlich mitgeschrieben (Karte «Betrieb heute», nicht rückwirkend).")
 
 _WEG_B = ("Andere Integrationen über einen Template-Sensor in Home Assistant, der genau diese Wörter liefert "
           "(Werte-Tabelle am Feld und im Handbuch).")
 
 _EMOB_LIVE_WALLBOX: list[dict] = [
     {"key": "ladezustand", "label": "Ladezustand", "einheit": "", "zustand": True, "kanon": "ladezustand",
-     "ha_domaenen": ("sensor", "select", "input_select"), **_EMOB_LIVE_BASIS,
+     "ha_domaenen": ("sensor", "select", "input_select"), **_EMOB_MITSCHRIFT_BASIS,
      "hinweis": "Was am Ladepunkt gerade geschieht: kein Fahrzeug · verbunden · wartet · lädt · fertig · gesperrt · "
                 "Fehler — ein Zustand, kein Messwert. Erscheint als Chip an der Wallbox im Überblick und an der "
                 "Kachel im Energiefluss. Verstanden werden die Kanon-Wörter und die Werte des SMA EV Charger; über "
-                "MQTT auch die go-eCharger-Codes 0–5. " + _WEG_B},
+                "MQTT auch die go-eCharger-Codes 0–5. " + _WEG_B + _MITSCHRIFT_SATZ},
     {"key": "lademodus", "label": "Lademodus", "einheit": "", "zustand": True, "kanon": "lademodus",
      "ha_domaenen": ("sensor", "select", "input_select"), **_EMOB_LIVE_BASIS,
      "hinweis": "Lademodus der Steuerung: aus · PV · Smart · Schnell · Plan · Eco — steht im Chip hinter «Lädt» "
@@ -982,11 +988,11 @@ _EMOB_LIVE_WALLBOX: list[dict] = [
 
 _EMOB_LIVE_EAUTO: list[dict] = [
     {"key": "ladezustand_fahrzeug", "label": "Ladezustand (Fahrzeug)", "einheit": "", "zustand": True,
-     "kanon": "ladezustand_fahrzeug", "ha_domaenen": ("sensor", "input_select"), **_EMOB_LIVE_BASIS,
+     "kanon": "ladezustand_fahrzeug", "ha_domaenen": ("sensor", "input_select"), **_EMOB_MITSCHRIFT_BASIS,
      "hinweis": "Was das Auto selbst meldet: nicht verbunden · verbunden · lädt · lädt DC · fertig · Fehler. "
                 "Erscheint als Chip an der Auto-Karte, wenn das Auto keiner Wallbox zugeordnet ist (an der Wallbox "
                 "sagt es deren Chip). Verstanden werden die Kanon-Wörter und die Werte der Smart-Integration "
-                "(`sensor.smart_ladesanschluss` oder `sensor.smart_ladezustand`). " + _WEG_B},
+                "(`sensor.smart_ladesanschluss` oder `sensor.smart_ladezustand`). " + _WEG_B + _MITSCHRIFT_SATZ},
     {"key": "reichweite_km", "label": "Reichweite", "einheit": "km", **_EMOB_LIVE_BASIS,
      "hinweis": "Restreichweite in km. Reine Anzeige. ⚠ evcc meldet sie nur, solange das Auto am Ladepunkt hängt "
                 "(danach 0 — dann lieber den Sensor der Fahrzeug-Integration)."},
@@ -995,10 +1001,10 @@ _EMOB_LIVE_EAUTO: list[dict] = [
     {"key": "restzeit_min", "label": "Restzeit", "einheit": "min", **_EMOB_LIVE_BASIS,
      "hinweis": "Verbleibende Ladezeit laut Fahrzeug in Minuten. Reine Anzeige."},
     {"key": "zu_hause", "label": "Zu Hause", "einheit": "", "zustand": True, "kanon": "zu_hause",
-     "ha_domaenen": ("device_tracker", "sensor", "input_select"), **_EMOB_LIVE_BASIS,
+     "ha_domaenen": ("device_tracker", "sensor", "input_select"), **_EMOB_MITSCHRIFT_BASIS,
      "hinweis": "Ist das Auto zu Hause? Der `device_tracker` des Fahrzeugs (Zone `home`/`not_home`) — nur die "
                 "Zone, nie eine Position. Andere Zonennamen versteht eedc nicht (Template-Sensor: zu_hause · "
-                "unterwegs)."},
+                "unterwegs)." + _MITSCHRIFT_SATZ},
 ]
 
 LIVE_FELDER_INV: dict = {

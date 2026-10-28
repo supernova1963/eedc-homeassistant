@@ -36,6 +36,8 @@ from backend.services import mqtt_inbound_service as mis
 WALLBOX_FELDER = ("ladezustand", "lademodus", "sitzung_kwh", "sitzung_dauer_s", "ladestrom_a", "phasen_aktiv",
                   "ziel_ladestand_prozent", "restzeit_min")
 EAUTO_FELDER = ("ladezustand_fahrzeug", "reichweite_km", "ziel_ladestand_prozent", "restzeit_min", "zu_hause")
+#: P-433-2b K3 (Bauplan K3-1): die drei Felder, die seitdem mitgeschrieben werden (die Seite gewechselt haben).
+MITSCHRIFT_K3 = {("wallbox", "ladezustand"), ("e-auto", "ladezustand_fahrzeug"), ("e-auto", "zu_hause")}
 
 
 # ── 1 · Registry ─────────────────────────────────────────────────────────────
@@ -47,7 +49,12 @@ def test_registry_felder_an_beiden_typen(typ, felder):
         assert feld in live, feld
         assert live[feld].get("erweitert") is True, feld
         assert live[feld].get("abschnitt") == "zustand", feld
-        assert live[feld].get("nur_live") is True, feld
+        # P-433-2b K3: Ladezustand, Fahrzeug-Ladezustand und Standort werden mitgeschrieben (`mitschrift` statt
+        # `nur_live`, Bauplan K3-1) — genau eines von beiden, die übrigen bleiben `nur_live`.
+        if (typ, feld) in MITSCHRIFT_K3:
+            assert live[feld].get("mitschrift") is True and "nur_live" not in live[feld], feld
+        else:
+            assert live[feld].get("nur_live") is True and "mitschrift" not in live[feld], feld
     # Der Bestand bleibt vorn und unverändert erste Reihe.
     assert "leistung_w" in live and not live["leistung_w"].get("erweitert")
 
@@ -143,8 +150,12 @@ def test_kein_kanal_und_kein_snapshot_mittel():
     # (`katalog.py`), also kein Kanal und keine Mitschrift wie beim Betriebsmodus.
     # P-433-2b K2b (Option A): die drei evcc-Rollen-Felder ebenso.
     option_a = {"evcc_verbunden", "evcc_laedt", "evcc_freigegeben"}
-    assert nur_live == ({("wallbox", f) for f in WALLBOX_FELDER} | {("e-auto", f) for f in EAUTO_FELDER}
-                        | {("wallbox", "fahrzeug_am_ladepunkt")} | {("wallbox", f) for f in option_a})
+    # P-433-2b K3: die drei Mitschrift-Felder haben seitdem einen `zustand:`-Kanal statt der Ausnahme.
+    assert nur_live == (({("wallbox", f) for f in WALLBOX_FELDER} | {("e-auto", f) for f in EAUTO_FELDER}
+                         | {("wallbox", "fahrzeug_am_ladepunkt")} | {("wallbox", f) for f in option_a})
+                        - MITSCHRIFT_K3)
+    mitschrift = {(z.typ, z.feld) for z in kat.zuweisungen() if z.schluessel.startswith("zustand:")}
+    assert mitschrift == MITSCHRIFT_K3
     assert not set(kat.mittelwert_live_keys("wallbox", {})) & (
         set(WALLBOX_FELDER) | {"fahrzeug_am_ladepunkt"} | option_a)
     assert not set(kat.mittelwert_live_keys("e-auto", {})) & set(EAUTO_FELDER)

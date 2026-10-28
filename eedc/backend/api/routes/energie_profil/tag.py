@@ -21,7 +21,7 @@ from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.monats_fakten import lade_monats_fakten
-from ._shared import TagDetailResponse, TagStatusResponse
+from ._shared import EmobBetriebZeile, TagDetailResponse, TagStatusResponse
 
 router = APIRouter()
 
@@ -123,6 +123,42 @@ async def _mit_betrieb_stunden(db, anlage, investitionen_by_id, datum, zeilen: l
         if str(z.investition_id) in anteile else z
         for z in zeilen
     ]
+
+
+async def _mit_emob_betrieb(db, anlage, investitionen_by_id, datum) -> list:
+    """P-433-2b K3 (Karte «Betrieb heute» E-Mobilität): je aktiver Wallbox/E-Auto und Mitschrift-Feld
+    (``MITSCHRIFT_LIVE_FELDER``) die Stunden je Zustand — Tagesleser ``kanal_stunden.zustand_anteile_je_stunde``, Formel
+    ``core/berechnungen/betriebsstunden.stunden_je_zustand`` mit ``WERTE_MIT_STUNDEN[feld]``; an der Wallbox dazu die
+    «Ladevorgänge» (``zustand_wechsel_je_tag``). Eigene Phase wie ``_mit_betrieb_stunden``; eine Zeile nur mit
+    Mitschrift (``stunden_je_zustand`` ≠ ``None``), sonst fehlt sie."""
+    from functools import partial
+
+    from backend.core import zustands_kanon
+    from backend.core.berechnungen.betriebsstunden import stunden_je_zustand
+    from backend.core.field_definitions import MITSCHRIFT_LIVE_FELDER
+    from backend.services.energie_profil.kanal_stunden import zustand_anteile_je_stunde, zustand_wechsel_je_tag
+    from backend.services.kanal.katalog import zustand_kanal_key
+
+    zeilen: list[EmobBetriebZeile] = []
+    for typ, feld in sorted(MITSCHRIFT_LIVE_FELDER):
+        anteile = await zustand_anteile_je_stunde(
+            db, anlage, investitionen_by_id, datum, typ=typ, feld=feld, kanon=zustands_kanon.KANON[feld],
+            key=lambda i, w, _f=feld: zustand_kanal_key(i, _f, w))
+        if not anteile:
+            continue
+        ziel = zustands_kanon.WECHSEL_FELDER.get((typ, feld))
+        wechsel = (await zustand_wechsel_je_tag(db, anlage, investitionen_by_id, datum, typ=typ, feld=feld, wert=ziel)
+                   if ziel is not None else {})
+        werte = zustands_kanon.WERTE_MIT_STUNDEN[feld]
+        label = partial(zustands_kanon.label, feld)
+        for inv_id in sorted(anteile, key=int):
+            stunden = stunden_je_zustand(anteile[inv_id], werte)
+            if stunden is None:
+                continue
+            zeilen.append(EmobBetriebZeile(
+                investition_id=int(inv_id), typ=typ, feld=feld, stunden=stunden,
+                labels={w: label(w) for w in stunden}, wechsel=wechsel.get(inv_id)))
+    return zeilen
 
 
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
@@ -981,6 +1017,8 @@ async def get_tag_detail(
         speicher_effektiver_ladepreis_quelle=eff.quelle,
         emob_ladung_pv_kwh=detail.get("emob_ladung_pv_kwh"),
         emob_ladung_netz_kwh=detail.get("emob_ladung_netz_kwh"),
+        # P-433-2b K3: «Betrieb heute» der E-Mobilität (Phase, nicht im Block-Bauer).
+        emob_betrieb=await _mit_emob_betrieb(db, anlage, investitionen_by_id, datum),
         # W-18, dieselbe Klasse an der E-Mobilität: Der PV-Anteil trug denselben
         # fest verdrahteten „Sensor zuordnen"-Satz. Er wird ebenfalls über
         # denselben Weg erhoben und hat deshalb dieselben drei Zustände.

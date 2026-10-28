@@ -18,11 +18,18 @@ Die Schlüssel von ``anteile_je_stunde`` sind beliebige, je Stunde eindeutige Ga
 
 Aufrufer: ``api/routes/energie_profil/tag.py::_mit_betrieb_stunden`` (Tag-Detail, je Gerät ``betrieb_stunden``) über
 den Tagesleser ``services/energie_profil/kanal_stunden.py::wp_betriebsart_anteile_je_stunde``.
+
+**Typoffen seit P-433-2b K3** (Bauplan K3-6): ``stunden_je_zustand(anteile, werte_mit_stunden)`` ist dieselbe Formel
+mit der Werte-Liste als Parameter — die Wärmepumpe ruft sie mit ``BETRIEBSARTEN_MIT_STUNDEN`` (bitgleich), die
+E-Mobilität mit ``core/zustands_kanon.WERTE_MIT_STUNDEN[feld]`` (Wallbox ``laedt · verbunden · wartet · fertig``,
+E-Auto ``laedt · laedt_dc · verbunden`` und ``zu_hause · unterwegs``). Eingang dort: die Kanäle
+``zustand:inv:<id>:<feld>:<wert>`` (Tagesleser ``kanal_stunden.zustand_anteile_je_stunde``), Aufrufer
+``tag.py::_mit_emob_betrieb``. Dieselben Regeln: gemessene 0 bleibt, ohne Zeile ``None``, 0,1 h.
 """
 
 from __future__ import annotations
 
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Sequence
 
 from backend.core.betriebsmodus import ENTFEUCHTEN, HEIZEN, KUEHLEN, LUEFTEN, WARMWASSER
 
@@ -30,13 +37,21 @@ from backend.core.betriebsmodus import ENTFEUCHTEN, HEIZEN, KUEHLEN, LUEFTEN, WA
 BETRIEBSARTEN_MIT_STUNDEN: tuple[str, ...] = (HEIZEN, WARMWASSER, KUEHLEN, LUEFTEN, ENTFEUCHTEN)
 
 
-def stunden_je_betriebsart(anteile_je_stunde: Mapping[int, Mapping[str, float]]) -> Optional[dict[str, float]]:
-    """``{betriebsart: Stunden}`` (0,1 h) aus den Anteilen je Stunde — ``None`` ohne eine Zeile einer Betriebsart."""
+def stunden_je_zustand(
+    anteile_je_stunde: Mapping[int, Mapping[str, float]], werte_mit_stunden: Sequence[str],
+) -> Optional[dict[str, float]]:
+    """``{wert: Stunden}`` (0,1 h) aus den Anteilen je Stunde, nur für ``werte_mit_stunden`` und in deren Reihenfolge —
+    ``None`` ohne eine Zeile eines dieser Werte (P-433-2b K3, die Formel von ``stunden_je_betriebsart``)."""
     summe: dict[str, float] = {}
     for anteile in anteile_je_stunde.values():
-        for modus, anteil in anteile.items():
-            if modus in BETRIEBSARTEN_MIT_STUNDEN and anteil is not None:
-                summe[modus] = summe.get(modus, 0.0) + float(anteil)
+        for wert, anteil in anteile.items():
+            if wert in werte_mit_stunden and anteil is not None:
+                summe[wert] = summe.get(wert, 0.0) + float(anteil)
     if not summe:
         return None
-    return {m: round(summe[m], 1) for m in BETRIEBSARTEN_MIT_STUNDEN if m in summe}
+    return {w: round(summe[w], 1) for w in werte_mit_stunden if w in summe}
+
+
+def stunden_je_betriebsart(anteile_je_stunde: Mapping[int, Mapping[str, float]]) -> Optional[dict[str, float]]:
+    """``{betriebsart: Stunden}`` (0,1 h) aus den Anteilen je Stunde — ``None`` ohne eine Zeile einer Betriebsart."""
+    return stunden_je_zustand(anteile_je_stunde, BETRIEBSARTEN_MIT_STUNDEN)

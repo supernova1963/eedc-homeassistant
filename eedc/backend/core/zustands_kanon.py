@@ -8,7 +8,9 @@ Werte-Tabelle am Feld, Normalisierer, Klartext, Daten-Checker-Hinweis bei fremde
 E-K1-1): er trägt Eigenheiten, die hier keine Rolle spielen (``hvac_action``, ``unbestimmt``, Innengeräte).
 
 **Leitsatz (Blatt §0 Nr. 7, K-1): Registry-Feld = Vertrag, Integration = Quelle, DB = nur Zuordnung.** Ein Zustand
-wird gelesen, wenn eine Sicht ihn braucht, und nicht gespeichert.
+wird gelesen, wenn eine Sicht ihn braucht, und nicht gespeichert. **Seit P-433-2b K3** schreibt eedc für die Felder mit
+`mitschrift: True` (Wallbox `ladezustand`, E-Auto `ladezustand_fahrzeug` und `zu_hause`) den **Anteil der Stunde je
+Kanon-Wert** mit — gespeichert wird, was eedc selbst über Zeit baut, nie der Momentwert (Leitsatz 7, Bauplan K3).
 
 ⛔ **Zustand nur gemessen (K-2, Blatt P9).** Hier gibt es keinen Zustand aus der Leistung und keine Schwelle. Ein
 unbekannter Rohwert wird **nicht** geraten: er ergibt ``None`` (kein Chip), und der Daten-Checker nennt ihn
@@ -81,6 +83,52 @@ LADEZUSTAENDE_MIT_FAHRZEUG: Final[frozenset[str]] = frozenset({VERBUNDEN, WARTET
 
 #: Die Felder dieses Kanons — der Datenquellen-Fläche und dem Leser bekannt.
 ZUSTANDS_FELDER: Final[frozenset[str]] = frozenset(KANON)
+
+# ── Mitschrift (P-433-2b K3, Bauplan K3 §1 K3-1/K3-8, D4/D5) ──────────────────────────────────────────────────────
+#
+# Welche Felder mitgeschrieben werden, sagt die Registry (`mitschrift: True`, abgeleitete Menge
+# `field_definitions.MITSCHRIFT_LIVE_FELDER`) — hier steht keine zweite Liste der Felder. Hier steht nur, was die Karte
+# «Betrieb heute» je Feld zählt und welcher Wechsel gezählt wird.
+
+#: Werte mit Stunden je Feld, in Lese-Reihenfolge der Karte «Betrieb heute» (Bauplan K3 E1). ``kein_fahrzeug``,
+#: ``gesperrt``, ``fehler``, ``nicht_verbunden`` sind kein Betrieb (wie ``aus``/``unbestimmt`` der Wärmepumpe) und
+#: stehen deshalb nicht hier — die Mitschrift schreibt sie trotzdem (0 = gemessen nicht in diesem Wert).
+WERTE_MIT_STUNDEN: Final[dict[str, tuple[str, ...]]] = {
+    LADEZUSTAND: (LAEDT, VERBUNDEN, WARTET, FERTIG),
+    LADEZUSTAND_FAHRZEUG: (LAEDT, LAEDT_DC, VERBUNDEN),
+    ZU_HAUSE: (ZU_HAUSE, UNTERWEGS),
+}
+
+#: Wechsel-Zähler (D4 «Ladevorgänge heute»): (typ, feld) → der Wert, dessen Übergänge gezählt werden. Gezählt wird
+#: ein Übergang **nach** dem Wert von einem anderen, bekannten Wert (E-K3-1: ``None → laedt`` nach einem Neustart
+#: zählt nicht).
+WECHSEL_FELDER: Final[dict[tuple[str, str], str]] = {("wallbox", LADEZUSTAND): LAEDT}
+
+
+def ladezustand_aus_werten(werte: dict[str, Optional[str]]) -> Optional[str]:
+    """Der Ladezustand einer Wallbox aus ihren Kanon-Werten — **die eine Regel** für Live-Leser und Mitschrift.
+
+    ``werte`` = ``{feld: Kanon-Wert | None}`` (schon normalisiert). Ein **gemessener** ``ladezustand`` geht immer vor
+    (Sprengsatz S7/S3). Ohne ihn Option A (K2-7) aus den drei evcc-Rollen-Feldern: ``evcc_verbunden`` aus ⇒
+    ``kein_fahrzeug`` · verbunden ∧ ``evcc_laedt`` an ⇒ ``laedt`` · verbunden ∧ ``evcc_freigegeben`` aus ⇒ ``wartet`` ·
+    sonst ``verbunden``. Ohne ``evcc_verbunden`` ``None`` — nie geraten. «Fertig» kennt Option A nicht.
+
+    Leser: ``services/betriebsmodus_live.py::_kombiniere_option_a`` (Live), ``mqtt_inbound_service`` (Fenster der
+    MQTT-Mitschrift), ``energie_profil/_helpers.py::_verschraenke`` (HA-Verlauf).
+    """
+    gemessen = werte.get(LADEZUSTAND)
+    if gemessen is not None:
+        return gemessen
+    verbunden = werte.get(EVCC_VERBUNDEN)
+    if verbunden is None:
+        return None
+    if verbunden == AUS:
+        return KEIN_FAHRZEUG
+    if werte.get(EVCC_LAEDT) == AN:
+        return LAEDT
+    if werte.get(EVCC_FREIGEGEBEN) == AUS:
+        return WARTET
+    return VERBUNDEN
 
 #: Kanon → Klartext je Feld. Der Client führt keine zweite Tabelle ([[feedback_typ_labels_pattern]]).
 LABEL: Final[dict[str, dict[str, str]]] = {

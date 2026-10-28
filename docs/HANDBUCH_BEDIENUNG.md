@@ -877,6 +877,10 @@ vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen B
   je Fläche. Ein Dienstwagen (Stammdatum) trägt den Chip „Dienstwagen".
 - **„Heute":** Ladung heute (nur mit eigenem Leistungssensor am Auto — sonst stünde die Wallbox-Energie zweimal da) und
   PV-Ladung heute „(Anlage)" (der PV-Anteil aller Ladungen der Anlage aus den Tageswerten).
+- **„Betrieb heute":** wie viele Stunden das Auto heute **geladen** hat („Lädt", „Lädt DC") oder **verbunden** stand, und wie
+  lange es **zu Hause** bzw. **unterwegs** war — aus der stündlichen Mitschrift von „Ladezustand (Fahrzeug)" und „Zu Hause".
+  Nur Werte mit Stunden; „Nicht verbunden", „Fertig" und „Fehler" sind kein Betrieb. Die Karte fehlt, solange keines der
+  beiden Felder mitgeschrieben wird; die Grenzen stehen unter §3.6.
 - Fehlt jedes der neuen Felder, sagt die Fußzeile „Zustand, Reichweite und Ziel erscheinen hier, sobald zugeordnet"
   ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
 
@@ -917,6 +921,12 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 - **„Heute":** Ladung heute (derselbe Tageswert wie im Energiefluss) und PV-Ladung heute „(Anlage)". **Ohne Kopfzahl
   „PV-Anteil heute"**: dafür bräuchte eedc Wallbox-Menge und PV-Menge aus **einem** Pfad, und die Tageswerte tragen die
   Wallbox-Menge heute nicht — zwei verschiedene Quellen gegeneinander zu teilen, wäre eine Zahl, die nicht aufgeht.
+- **„Betrieb heute":** wie viele Stunden die Wallbox heute **geladen** hat, **verbunden** war, **gewartet** hat oder **fertig**
+  stand („Lädt 3,2 h · Verbunden 5,7 h · Wartet 0,5 h") und darunter **„Ladevorgänge heute: n"** — die Wechsel nach „Lädt"
+  aus einem anderen bekannten Zustand. Grundlage ist die **stündliche Mitschrift** des Ladezustands (Anteil jeder Stunde je
+  Zustand), nicht die Leistung. „Kein Fahrzeug", „Gesperrt" und „Fehler" sind kein Betrieb; war den ganzen Tag kein Fahrzeug
+  da, steht „Heute kein Betrieb". Die Farbe des Punkts ist die der Funktion wie am Chip (Lädt in der Wallbox-Farbe, Wartet
+  gelb, sonst grau).
 - **Zustand nur gemessen:** ohne zugeordneten Ladezustand gibt es keinen Chip — eedc schließt nie aus der Leistung auf „lädt".
   Ohne jedes der neuen Felder sagt die Fußzeile „Zustand, Sitzung und Ladestrom erscheinen hier, sobald zugeordnet"
   ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)).
@@ -943,6 +953,18 @@ Derselbe Chip steht in *Cockpit → Live* an der Wallbox-Kachel, wenn sie **nich
 **Benannte Grenzen:** Zustand und Lademodus sind bis zu 60 s alt (derselbe Takt wie der Modus einer Wärmepumpe); Zustand und
 Sitzung erscheinen nur an einer Wallbox mit Leistungssensor; Lademodus und Ziel sind Angaben der Steuerung — eedc zeigt sie
 und bewertet sie nicht; der Solaranteil, den evcc je Sitzung rechnet, ist kein eedc-PV-Anteil und erscheint nicht.
+
+**Benannte Grenzen „Betrieb heute" (Wallbox und E-Auto).** Die Mitschrift beginnt **mit der Zuordnung** und ist nicht
+rückwirkend (Home Assistant führt für Zustände keine Langzeitstatistik); geschrieben wird nur eine **abgeschlossene** Stunde.
+Über MQTT zählt eedc in 5-Minuten-Fenstern mit der Halteregel „ein Zustand gilt bis zur nächsten Meldung"; fällt der Broker
+aus, bleibt die Stunde leer, und nach einem Neustart zählt sie erst ab der nächsten Meldung (ein leerer retained Payload
+löscht die Nachricht am Broker). Der erste Wert nach einem Neustart ist **kein** Ladevorgang. Ein Wert, den eedc nicht kennt (etwa eine andere
+Zone als „zu Hause“/„unterwegs“ beim Auto, ein fremder Status der Wallbox), zählt zu **keinem** Wert — die Summe der Stunden
+kann deshalb unter der Tageslänge liegen. Für evcc über Home Assistant
+(drei Binär-Sensoren, „Option A") verschränkt eedc die drei Verläufe zu einem Ladezustand — ohne „lädt" bzw. „freigegeben"
+nur „Verbunden"/„Kein Fahrzeug"; ein zugeordneter Ladezustand geht immer vor. Welches Fahrzeug oder ob ein Gast geladen hat,
+wird je Stunde **nicht** mitgeschrieben. Die Tageswerte haben keinen Demo-Schalter: im Demo-Modus zeigt die Karte den echten
+Tag (meist also keine Karte). Mehr in [Berechnungen → Stunden je Zustand](BERECHNUNGEN.md#stunden-je-zustand).
 
 - **Geladene Energie** (kWh) — die **Messung dieser Wallbox**, also alles, was an ihr geladen wurde (auch Gäste und Dienstwagen)
 - **Ladevorgänge** (Anzahl)
