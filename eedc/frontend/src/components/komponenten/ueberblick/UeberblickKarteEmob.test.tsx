@@ -97,6 +97,21 @@ describe('UeberblickKarteEmob — Wallbox', () => {
     expect(text(c, 'sitzung')).toBe('letzte Sitzung 12,4 kWh')
   })
 
+  it('Lab rc13 «Verbunden», nicht ladend: keine «0 Phasen · 0 A», «Ziel 80 %» ohne «noch 0 min», kein Fußzeilen-Hinweis', () => {
+    const c = zeichne(SMA, live({ komponenten: [labLaedt({
+      verbrauch_kw: 0, ladezustand: 'verbunden', ladezustand_label: 'Verbunden', sitzung: undefined,
+      phasen_aktiv: 0, ladestrom_a: 0, ziel_prozent: 80, restzeit_min: 0,
+    })] }))
+    expect(text(c, 'sitzung')).toBeNull()
+    expect(text(c, 'ziel')).toContain('80 %')
+    expect(text(c, 'ziel')).not.toContain('noch')
+    expect(c.querySelector('[data-fusszeile]')).toBeNull()
+    // Ohne Chip und nur mit Nullen zugeordnet: zugeordnet ist zugeordnet — kein «erscheinen hier, sobald zugeordnet».
+    const nurNullen = zeichne(SMA, live({ komponenten: [wb(4, 0, { phasen_aktiv: 0, ladestrom_a: 0 })] }))
+    expect(text(nurNullen, 'sitzung')).toBeNull()
+    expect(nurNullen.querySelector('[data-fusszeile]')).toBeNull()
+  })
+
   it('Lademodus nur hinter «Lädt» und «Wartet»', () => {
     const chip = (zustand: string, label: string) => zeichne(SMA, live({ komponenten: [labLaedt({ ladezustand: zustand, ladezustand_label: label })] }))
       .querySelector('[data-modus-chip]')?.textContent
@@ -178,6 +193,15 @@ describe('UeberblickKarteEmob — E-Auto', () => {
     expect(text(c, 'ladeleistung')).toContain('7.400 W')
   })
 
+  it('Kosmetik rc13 (K-1): Auto-Karte «Ziel 80 %» ohne «noch 0 min»', () => {
+    const c = zeichne(SMART, live({ fahrzeuge_ohne_wallbox: [fz(5, 'Smart #1', { soc: 45, ziel_prozent: 80, restzeit_min: 0 })] }))
+    expect(text(c, 'ziel')).toContain('80 %')
+    expect(text(c, 'ziel')).not.toContain('noch')
+    const nurRest = zeichne(SMART, live({ fahrzeuge_ohne_wallbox: [fz(5, 'Smart #1', { soc: 45, restzeit_min: 0 })] }))
+    expect(text(nurRest, 'ziel')).toBeNull()
+    expect(nurRest.querySelector('[data-fusszeile]')).toBeNull()
+  })
+
   it('«geschätzt»: kein Ort, der Satz statt einer behaupteten Wallbox', () => {
     const l = live({ komponenten: [wb(4, 3, { fahrzeuge_zuordnung: 'geschaetzt', fahrzeuge: [fz(5, 'Smart #1', { soc: 50 })] })] })
     const c = zeichne(SMART, l)
@@ -212,5 +236,14 @@ describe('Formatierung', () => {
     expect(sitzungsTeile(wb(4, 1))).toEqual([])
     expect(zielText(null, null)).toBeNull()
     expect(zielText(80, null)).toBe('80 %')
+  })
+  it('Kosmetik rc13 (K-1): Phasen, Strom und Restzeit nur mit Wert > 0 — das Ziel bleibt', () => {
+    expect(sitzungsTeile(wb(4, 0, { phasen_aktiv: 0, ladestrom_a: 0 }))).toEqual([])
+    expect(sitzungsTeile(wb(4, 0, { phasen_aktiv: 0, ladestrom_a: 0, sitzung: { kwh: 2.5, dauer_s: null } })))
+      .toEqual(['2,5 kWh in dieser Sitzung'])
+    expect(sitzungsTeile(wb(4, 11, { phasen_aktiv: 3, ladestrom_a: 16 }))).toEqual(['3 Phasen', '16 A'])
+    expect(zielText(80, 0)).toBe('80 %')
+    expect(zielText(null, 0)).toBeNull()
+    expect(zielText(80, 80)).toBe('80 % · noch 1 h 20 min')
   })
 })

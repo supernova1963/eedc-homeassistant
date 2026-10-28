@@ -63,6 +63,10 @@ anwenden, und die Felder stehen auf „Gateway". Vorhandene Gateway-Zuordnungen 
 ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto), [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität),
 [Berechnungen → PV-Anteil heute](BERECHNUNGEN.md#pv-anteil-heute)).
 
+**Komponenten: lesbare Einstellungen, keine Nullen ohne Aussage.** Der Block „Einstellungen" nennt die Parameter jetzt
+so wie das Formular — „Max. Ladeleistung (kW)" statt „max ladeleistung kw", „Wärmepumpenart: Luft/Wasser" statt
+„luft_wasser" —, und die Wallbox-Karte zeigt Phasen, Ladestrom und Restzeit nur, wenn sie über 0 liegen.
+
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0
 schreibt.** Zwei Korrekturen (4.1.9, 4.1.10) hatten den Tageszähler nur an der Stelle seiner 0 erkannt — Mitternacht, dann
 erste Morgenzeile. Schrieb Home Assistant nachts noch eine einzelne Zeile mit dem Vortagswert oder meldete der Wechselrichter

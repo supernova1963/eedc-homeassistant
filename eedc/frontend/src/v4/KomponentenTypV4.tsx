@@ -19,7 +19,10 @@ import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
-import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY } from '../lib'
+import {
+  BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY,
+  parameterAnzeigeName, parameterWertLabel,
+} from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { datenquellenApi, type DatenquelleGruppe } from '../api/datenquellen'
 import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Image as BildIcon, Layers, Network, Paperclip, Radio, Settings, SlidersHorizontal, Zap } from 'lucide-react'
@@ -67,12 +70,16 @@ function paramFelder(inv: Investition): { label: string; wert: string }[] {
   if (inv.anschaffungskosten_gesamt != null) felder.push({ label: 'Anschaffungskosten', wert: `${fmtCalc(inv.anschaffungskosten_gesamt, 0)} €` })
   for (const [k, v] of Object.entries(inv.parameter ?? {})) {
     if (v == null || typeof v === 'object' || STAMM_DUBLETTEN.has(k)) continue
-    // de-DE-Anzeige: Boolean → Ja/Nein, Zahl → Tausenderpunkt, sonst roh (Enum/Text).
+    // de-DE-Anzeige: Boolean → Ja/Nein, Zahl → Tausenderpunkt, Enum → Klartext der Options-Liste, sonst roh.
     // Nachkommastellen aus dem Wert, gedeckelt auf 2 — ein fester `nk = 0` machte
     // aus 8,4 eine 8 (N119). Der Dump kennt die Größe nicht, darf also nicht runden.
+    // Name und Enum-Klartext aus der einen Label-Quelle (`lib/investitionParameter.ts::PARAMETER_LABELS`,
+    // Kosmetik rc13); ohne Eintrag die Ableitung aus dem Schlüssel bzw. der rohe Wert.
     const nk = typeof v === 'number' ? Math.min(2, (String(v).split('.')[1] ?? '').length) : 0
-    const wert = typeof v === 'boolean' ? jaNein(v) : typeof v === 'number' ? fmtZahl(v, nk) : String(v)
-    felder.push({ label: k.replace(/_/g, ' '), wert })
+    const wert = typeof v === 'boolean' ? jaNein(v)
+      : typeof v === 'number' ? fmtZahl(v, nk)
+      : parameterWertLabel(inv.typ, k, String(v)) ?? String(v)
+    felder.push({ label: parameterAnzeigeName(inv.typ, k), wert })
   }
   return felder
 }

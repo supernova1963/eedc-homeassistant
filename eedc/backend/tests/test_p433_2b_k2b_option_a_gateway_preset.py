@@ -422,6 +422,30 @@ def test_preset_liste_traegt_die_vorgaben():
     assert {v.key: v.vorgabe for v in p.variablen} == {"prefix": "evcc", "loadpoint": "1"}
 
 
+def test_kosmetik_rc13_anleitung_ohne_investitions_auswahl():
+    """Kosmetik rc13 (K-2): seit K4 öffnet der Preset-Dialog am Gerät — keine Anleitung sagt mehr, man solle die
+    Investition auswählen. Die API sagt es ihr eigenes Mal (`generate_mappings` ⇒ ValueError ohne `investition_id`)."""
+    from backend.services.mqtt_presets import list_presets
+
+    for p in list_presets():
+        assert "auswählen" not in p.anleitung, p.id
+    with pytest.raises(ValueError, match="Investition"):
+        _evcc(inv=None)
+
+
+def test_kosmetik_rc13_lademodus_woerter_wie_der_kanon():
+    """Kosmetik rc13 (K-2, Halt H1 Entscheid Master): die evcc-Zeile nennt die Wörter, die evcc sendet — heute
+    off · smart · now (`api.ChargeMode`), ältere Versionen pv · minpv —, und jedes davon kennt der Kanon."""
+    import re
+
+    from backend.services.mqtt_presets import get_preset
+
+    zeile = next(m for m in get_preset("evcc_ladepunkt").mappings if m.ziel_key.endswith("/lademodus"))
+    woerter = re.findall(r"\b(off|smart|now|pv|minpv)\b", zeile.beschreibung)
+    assert woerter == ["off", "smart", "now", "pv", "minpv"]
+    assert all(zk.ist_bekannter_wert(zk.LADEMODUS, w) for w in woerter)
+
+
 # ── 5 · Datenquellen, Wissensbasis ───────────────────────────────────────────
 
 def test_datenquellen_werte_tabelle_und_klartext_option_a():

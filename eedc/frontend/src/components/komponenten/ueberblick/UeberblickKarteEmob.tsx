@@ -129,24 +129,30 @@ export function alleAutosAnWallboxen(live: LiveDashboardResponse | null): LiveFa
   return out
 }
 
-/** «3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min» — jeder Teil nur mit Feld; ohne Fahrzeug «letzte Sitzung». */
+/** Phasen, Strom und Restzeit sagen nur mit Wert > 0 etwas («0 Phasen · 0 A» an einer verbundenen, nicht ladenden
+ *  Wallbox ist keine Aussage; Lab rc13, 28.10.2026). */
+const mitWert = (x: number | null | undefined): x is number => x != null && x > 0
+
+/** «3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min» — jeder Teil nur mit Feld, Phasen und Strom nur > 0;
+ *  ohne Fahrzeug «letzte Sitzung». */
 export function sitzungsTeile(k: LiveKomponente | undefined): string[] {
   if (!k) return []
   const kwh = k.sitzung?.kwh ?? null
   if (k.ladezustand === KEIN_FAHRZEUG) return kwh != null ? [`letzte Sitzung ${fmtZahl(kwh, 1)} kWh`] : []
   const teile: string[] = []
-  if (k.phasen_aktiv != null) teile.push(`${fmtZahl(k.phasen_aktiv, 0)} ${k.phasen_aktiv === 1 ? 'Phase' : 'Phasen'}`)
-  if (k.ladestrom_a != null) teile.push(`${fmtZahl(k.ladestrom_a, 0)} A`)
+  if (mitWert(k.phasen_aktiv)) teile.push(`${fmtZahl(k.phasen_aktiv, 0)} ${k.phasen_aktiv === 1 ? 'Phase' : 'Phasen'}`)
+  if (mitWert(k.ladestrom_a)) teile.push(`${fmtZahl(k.ladestrom_a, 0)} A`)
   if (kwh != null) teile.push(`${fmtZahl(kwh, 1)} kWh in dieser Sitzung`)
   if (k.sitzung?.dauer_s != null) teile.push(fmtDauer(k.sitzung.dauer_s))
   return teile
 }
 
-/** «90 % · noch 1 h 20 min» — Ziel und Restzeit der Steuerung bzw. des Autos, jeder Teil nur mit Wert. */
+/** «90 % · noch 1 h 20 min» — Ziel und Restzeit der Steuerung bzw. des Autos, jeder Teil nur mit Wert, die Restzeit nur > 0
+ *  (das Ziel bleibt auch ohne Restzeit). */
 export function zielText(ziel: number | null | undefined, restzeitMin: number | null | undefined): string | null {
   const teile = [
     ziel != null ? `${fmtZahl(ziel, 0)} %` : null,
-    restzeitMin != null ? `noch ${fmtDauer(restzeitMin * 60)}` : null,
+    mitWert(restzeitMin) ? `noch ${fmtDauer(restzeitMin * 60)}` : null,
   ].filter((t): t is string => t != null)
   return teile.length > 0 ? teile.join(' · ') : null
 }
@@ -312,8 +318,10 @@ function WallboxGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv'
   const ev = live?.gauges?.find((g) => g.key === 'eigenverbrauch') ?? null
   const sitzung = sitzungsTeile(k)
   const ziel = zielText(k?.ziel_prozent, k?.restzeit_min)
-  // Vor der ersten Live-Antwort fehlt nichts, es ist nur noch nicht geladen (Regel der Wärme-Karte).
-  const ohneFelder = live != null && !chip && sitzung.length === 0 && ziel == null
+  // Vor der ersten Live-Antwort fehlt nichts, es ist nur noch nicht geladen (Regel der Wärme-Karte). Ein zugeordnetes Feld
+  // mit 0 (Phasen, Strom, Restzeit) steht nicht in der Zeile, ist aber zugeordnet — kein Fußzeilen-Hinweis.
+  const nullWert = k?.phasen_aktiv != null || k?.ladestrom_a != null || k?.restzeit_min != null
+  const ohneFelder = live != null && !chip && sitzung.length === 0 && ziel == null && !nullWert
   const url = oberflaecheUrl(inv)
 
   return (
@@ -413,7 +421,8 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
   const kw = k ? Math.max(k.erzeugung_kw ?? 0, k.verbrauch_kw ?? 0) : null
   const ziel = zielText(f?.ziel_prozent, f?.restzeit_min)
   const ohneFelder = live != null
-    && f?.reichweite_km == null && f?.ladezustand == null && ziel == null && f?.zu_hause == null && f?.km_stand == null
+    && f?.reichweite_km == null && f?.ladezustand == null && ziel == null && f?.restzeit_min == null && f?.zu_hause == null
+    && f?.km_stand == null
 
   return (
     <Karte name="geraet">

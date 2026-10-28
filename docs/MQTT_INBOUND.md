@@ -279,7 +279,7 @@ Dauern als ganze Sekunden, `true`/`false`, kein Wert als leerer Payload; retaine
 | `chargeRemainingDuration` | `restzeit_min` | s | 1/60 |
 | `phasesActive` | `phasen_aktiv` | Anzahl | 1 |
 | `chargeTotalImport` | `ladung_kwh` unter **`energy/`** (`eedc/<anlage>/energy/inv/<id>/ladung_kwh`) | kWh, Zaehlerstand (nur mit Lademeter) | 1 |
-| `mode` | `lademodus` | Text (`off` · `now` · `smart`) | — |
+| `mode` | `lademodus` | Text (`off` · `smart` · `now`; ältere evcc: `pv` · `minpv`) | — |
 | `connected` | `evcc_verbunden` | `true`/`false` | — |
 | `charging` | `evcc_laedt` | `true`/`false` | — |
 | `enabled` | `evcc_freigegeben` | `true`/`false` | — |

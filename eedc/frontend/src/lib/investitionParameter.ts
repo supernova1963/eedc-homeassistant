@@ -21,6 +21,8 @@
  *   const kap = sp[PARAM_SPEICHER.KAPAZITAET_KWH]
  */
 
+import { SONSTIGES_KATEGORIE_LABELS, WP_ART_LABELS, ZAEHLER_ART_LABELS } from './constants'
+
 // ============================================================================
 // E-Auto
 // ============================================================================
@@ -546,4 +548,194 @@ export function balkonkraftwerkParameter(parameter: unknown): BalkonkraftwerkPar
 
 export function sonstigesParameter(parameter: unknown): SonstigesParameter {
   return (parameter || {}) as SonstigesParameter
+}
+
+// ============================================================================
+// Anzeige-Labels der Parameter (Kosmetik Lab rc13, 28.10.2026)
+// ============================================================================
+
+// Wärmepumpe: Auswahl-Listen des Formulars (`WaermepumpeFelder`), hierher gehoben, damit Formular und Anzeige
+// (`v4/KomponentenTypV4.tsx::paramFelder`) dieselben Wörter tragen. `ABGRENZUNG_OPTIONEN` bleibt im Formular —
+// die Prüfer von N-349/N-371 (`test_soll_waerme_klima_achse3_aufloesung.py`) lesen ihre Texte dort.
+
+// SOLL §4.1/§7 A5 — passive Kühlung läuft nur über Umwälzpumpen. Ihre Kennzahl
+// ist KORREKT, nur um ein Vielfaches höher; gesperrt wird deshalb nie die Zahl,
+// sondern immer nur ihr Vergleich (Community-Benchmark).
+export const WP_KUEHLUNG_OPTIONEN = [
+  { value: 'keine', label: 'Kühlt nicht' },
+  { value: 'aktiv', label: 'Aktiv (Kompressor / Umkehrbetrieb)' },
+  { value: 'passiv', label: 'Passiv (nur Umwälzpumpen, „natural cooling")' },
+]
+
+export const WP_VORLAUF_OPTIONEN = [
+  { value: '35', label: '35 °C (Fußbodenheizung)' },
+  { value: '55', label: '55 °C (Heizkörper)' },
+]
+
+export const WP_ENERGIETRAEGER_OPTIONEN = [
+  { value: 'gas', label: 'Erdgas' },
+  { value: 'oel', label: 'Heizöl' },
+  { value: 'strom', label: 'Strom (Direktheizung)' },
+  { value: 'nichts', label: 'Nichts ersetzt (Neubau)' },
+]
+
+export const WP_EFFIZIENZ_MODUS_OPTIONEN = [
+  {
+    value: 'gesamt_jaz',
+    label: 'Jahresarbeitszahl (JAZ) – Gemessen vor Ort',
+    description: 'Gemessene Jahresarbeitszahl am eigenen Standort – der genaueste Wert, wenn verfügbar.',
+  },
+  {
+    value: 'scop',
+    label: 'SCOP (EU-Energielabel) – Aus Datenblatt',
+    description: 'EU-genormter SCOP vom Energielabel – realistischer als Hersteller-COP, aber standortunabhängig.',
+  },
+  {
+    value: 'getrennte_cops',
+    label: 'Getrennte COPs (Heizung/Warmwasser)',
+    description: 'Separate COPs für Heizung (~3,9) und Warmwasser (~3,0) – präziser bei unterschiedlichen Betriebspunkten.',
+  },
+] as const
+
+type ParamWert<T> = T[keyof T]
+type WertLabels = Readonly<Record<string, string>>
+interface LabelEintrag {
+  param: Readonly<Record<string, string>>
+  labels: Readonly<Record<string, string>>
+  werte: Readonly<Record<string, WertLabels>>
+}
+
+/** Ein Eintrag der Label-Quelle: die Schlüssel-Konstante, ein Label je Schlüssel (der Compiler verlangt jeden) und
+ *  die Klartexte der Enum-Werte, wo es schon eine Options-Liste bzw. Label-Tabelle gibt. */
+function labelsFuer<T extends Readonly<Record<string, string>>>(
+  param: T,
+  labels: Record<ParamWert<T>, string>,
+  werte: Partial<Record<ParamWert<T>, WertLabels>> = {},
+): LabelEintrag {
+  return { param, labels, werte: werte as Readonly<Record<string, WertLabels>> }
+}
+
+const ausOptionen = (optionen: readonly { value: string; label: string }[]): WertLabels =>
+  Object.fromEntries(optionen.map((o) => [o.value, o.label]))
+
+/**
+ * **Die eine Label-Quelle der Parameter je Investitions-Typ** — Wortlaut und Einheit wie im jeweiligen Formular
+ * (`components/forms/sections/InvestitionTypFelder/*.tsx`; PV-Leistung und Azimut aus `InvestitionForm`, «Innengeräte»
+ * wie im Überblick). Gelesen über `parameterLabel`/`parameterWertLabel`; ein Schlüssel ohne Eintrag fällt beim Leser
+ * auf die rohe Ableitung zurück.
+ *
+ * Ohne Formularfeld (Wortlaut nach dem Nachbarfeld, Kosmetik rc13 H2): E-Auto `v2h_entlade_preis_cent`,
+ * `v2h_entladung_kwh_jahr`, `alternativ_kosten_euro`; Wärmepumpe `waermebedarf_kwh` (Gesamtbedarf, nur über Importe)
+ * und `alternativ_kosten_euro`. Enum-Klartexte nur aus vorhandenen Listen (`WP_ART_LABELS`, `SPEICHER_KOPPLUNG_LABELS`,
+ * `SONSTIGES_KATEGORIE_LABELS`, `ZAEHLER_ART_LABELS`, die WP-Optionen oben); `abgrenzung` bleibt roh (ihre Liste steht
+ * im Formular, siehe oben).
+ */
+export const PARAMETER_LABELS: Readonly<Record<string, LabelEintrag>> = {
+  'e-auto': labelsFuer(PARAM_E_AUTO, {
+    batteriekapazitaet_kwh: 'Batteriekapazität (kWh)',
+    verbrauch_kwh_100km: 'Verbrauch (kWh/100km)',
+    jahresfahrleistung_km: 'Jahresfahrleistung (km)',
+    pv_ladeanteil_prozent: 'PV-Ladeanteil (%)',
+    vergleich_verbrauch_l_100km: 'Verbrenner-Verbrauch (L/100km)',
+    eigener_verbrauch_l_100km: 'Eigener Verbrauch (L/100 km)',
+    elektrischer_fahranteil_prozent: 'Elektrischer Fahranteil (%)',
+    benzinpreis_euro: 'Benzinpreis (€/L)',
+    v2h_faehig: 'V2H-fähig (Vehicle-to-Home)',
+    v2h_entladeleistung_kw: 'V2H Entladeleistung (kW)',
+    v2h_entlade_preis_cent: 'V2H Entladepreis (ct/kWh)',
+    v2h_entladung_kwh_jahr: 'V2H-Entladung (kWh/Jahr)',
+    ist_dienstlich: 'Firmenwagen (dienstlich – kein Benzinvergleich im ROI)',
+    alternativ_kosten_euro: 'Alternativkosten (€)',
+    kennung_in_steuerung: 'Kennung in der Steuerung (evcc vehicleName, openWB Fahrzeug)',
+  }),
+  speicher: labelsFuer(PARAM_SPEICHER, {
+    kapazitaet_kwh: 'Kapazität (kWh)',
+    nutzbare_kapazitaet_kwh: 'Nutzbare Kapazität (kWh)',
+    max_ladeleistung_kw: 'Max. Ladeleistung (kW)',
+    max_entladeleistung_kw: 'Max. Entladeleistung (kW)',
+    wirkungsgrad_prozent: 'Wirkungsgrad (%)',
+    laedt_aus_netz: 'Lädt aus dem Netz (z. B. Backup-/Notladung)',
+    arbitrage_faehig: 'Arbitrage-fähig (Netzladen bei Niedrigtarif)',
+    lade_durchschnittspreis_cent: 'Ø Ladepreis (ct/kWh)',
+    entlade_vermiedener_preis_cent: 'Ø Entladepreis (ct/kWh)',
+    kopplung: 'Kopplung',
+  }, { kopplung: SPEICHER_KOPPLUNG_LABELS }),
+  waermepumpe: labelsFuer(PARAM_WAERMEPUMPE, {
+    leistung_kw: 'Nennleistung (kW)',
+    wp_art: 'Wärmepumpenart',
+    effizienz_modus: 'Berechnungsmodus für Effizienz',
+    jaz: 'Jahresarbeitszahl (JAZ)',
+    scop_heizung: 'SCOP Heizung',
+    scop_warmwasser: 'SCOP Warmwasser',
+    vorlauftemperatur: 'Vorlauftemperatur (EU-Label)',
+    cop_heizung: 'COP Heizung',
+    cop_warmwasser: 'COP Warmwasser',
+    getrennte_strommessung: 'Getrennte Strommessung (Heizen / Warmwasser)',
+    heizwaermebedarf_kwh: 'Heizwärmebedarf (kWh/Jahr)',
+    warmwasserbedarf_kwh: 'Warmwasserbedarf (kWh/Jahr)',
+    waermebedarf_kwh: 'Wärmebedarf (kWh/Jahr)',
+    pv_anteil_prozent: 'PV-Anteil (%)',
+    alter_energietraeger: 'Alter Energieträger',
+    alter_preis_cent_kwh: 'Alter Preis (ct/kWh)',
+    alternativ_zusatzkosten_jahr: 'Zusatzkosten Alt-Heizung (€/Jahr)',
+    alternativ_kosten_euro: 'Alternativkosten (€)',
+    sg_ready: 'SG Ready (Smart Grid fähig)',
+    innengeraete: 'Innengeräte',
+    abgrenzung: 'Fremdanteil auf den Zählern',
+    kuehlung_art: 'Kühlung',
+  }, {
+    wp_art: WP_ART_LABELS,
+    effizienz_modus: ausOptionen(WP_EFFIZIENZ_MODUS_OPTIONEN),
+    vorlauftemperatur: ausOptionen(WP_VORLAUF_OPTIONEN),
+    alter_energietraeger: ausOptionen(WP_ENERGIETRAEGER_OPTIONEN),
+    kuehlung_art: ausOptionen(WP_KUEHLUNG_OPTIONEN),
+  }),
+  wallbox: labelsFuer(PARAM_WALLBOX, {
+    max_ladeleistung_kw: 'Max. Ladeleistung (kW)',
+    bidirektional: 'Bidirektional (V2H/V2G)',
+    pv_optimiert: 'PV-Überschussladen möglich',
+    ist_dienstlich: 'Ausschließlich dienstliches Laden (Firmenwagen)',
+    oberflaeche_url: 'Adresse der Hersteller-Oberfläche',
+  }),
+  wechselrichter: labelsFuer(PARAM_WECHSELRICHTER, {
+    max_leistung_kw: 'Max. Leistung (kW)',
+  }),
+  'pv-module': labelsFuer(PARAM_PV_MODULE, {
+    anzahl_module: 'Anzahl Module',
+    modul_leistung_wp: 'Leistung pro Modul (Wp)',
+    modul_typ: 'Modul-Typ',
+    ausrichtung_grad: 'Azimut (°)',
+    leistung_kwp: 'Leistung (kWp)',
+  }),
+  balkonkraftwerk: labelsFuer(PARAM_BALKONKRAFTWERK, {
+    leistung_wp: 'Leistung pro Modul (Wp)',
+    anzahl: 'Anzahl Module',
+    ausrichtung: 'Ausrichtung',
+    neigung_grad: 'Neigung (Grad)',
+    hat_speicher: 'Mit Speicher (z.B. Anker SOLIX)',
+    speicher_kapazitaet_wh: 'Speicher-Kapazität (Wh)',
+    wechselrichter_leistung_w: 'Wechselrichter-Leistung (W)',
+  }),
+  sonstiges: labelsFuer(PARAM_SONSTIGES, {
+    kategorie: 'Kategorie',
+    beschreibung: 'Beschreibung',
+    zaehler_art: 'Was wird gezählt?',
+    zaehler_einheit: 'Einheit',
+  }, { kategorie: SONSTIGES_KATEGORIE_LABELS, zaehler_art: ZAEHLER_ART_LABELS }),
+}
+
+/** Anzeige-Label eines Parameters (Formular-Wortlaut mit Einheit), sonst `null` (der Leser fällt auf die Ableitung zurück). */
+export function parameterLabel(typ: string, key: string): string | null {
+  return PARAMETER_LABELS[typ]?.labels[key] ?? null
+}
+
+/** Klartext eines Enum-Werts, wo eine Options-Liste ihn kennt, sonst `null` (der Wert bleibt roh). */
+export function parameterWertLabel(typ: string, key: string, wert: string): string | null {
+  return PARAMETER_LABELS[typ]?.werte[key]?.[wert] ?? null
+}
+
+/** Was eine Anzeige als Namen eines Parameters zeigt: das Label, sonst die Ableitung aus dem Schlüssel
+ *  (`max_ladeleistung_kw` ⇒ «max ladeleistung kw», der Stand vor Kosmetik rc13). */
+export function parameterAnzeigeName(typ: string, key: string): string {
+  return parameterLabel(typ, key) ?? key.replace(/_/g, ' ')
 }

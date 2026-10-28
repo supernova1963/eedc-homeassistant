@@ -2,7 +2,14 @@ import { X } from 'lucide-react'
 import { FormSection, Input, Select, Alert, RadioGroup, Button } from '../../../ui'
 import { SchalterZeile } from '../SchalterZeile'
 import type { Innengeraet } from '../../../../lib/investitionParameter'
-import { istLuftLuft } from '../../../../lib/investitionParameter'
+import {
+  istLuftLuft,
+  // Kosmetik rc13 (K-3): die Auswahl-Listen stehen in der Label-Quelle, damit die Hub-Anzeige dieselben Wörter trägt.
+  WP_EFFIZIENZ_MODUS_OPTIONEN as MODUS_OPTIONEN,
+  WP_ENERGIETRAEGER_OPTIONEN as ENERGIETRAEGER_OPTIONEN,
+  WP_KUEHLUNG_OPTIONEN as KUEHLUNG_OPTIONEN,
+  WP_VORLAUF_OPTIONEN as VORLAUF_OPTIONEN,
+} from '../../../../lib/investitionParameter'
 import { hatHeizAchse } from '../../../../lib/fieldDefinitions'
 import type { TypFelderProps } from './types'
 
@@ -140,44 +147,8 @@ const ABGRENZUNG_OPTIONEN = [
   },
 ] as const
 
-// SOLL §4.1/§7 A5 — passive Kühlung läuft nur über Umwälzpumpen. Ihre Kennzahl
-// ist KORREKT, nur um ein Vielfaches höher; gesperrt wird deshalb nie die Zahl,
-// sondern immer nur ihr Vergleich (Community-Benchmark).
-const KUEHLUNG_OPTIONEN = [
-  { value: 'keine', label: 'Kühlt nicht' },
-  { value: 'aktiv', label: 'Aktiv (Kompressor / Umkehrbetrieb)' },
-  { value: 'passiv', label: 'Passiv (nur Umwälzpumpen, „natural cooling")' },
-]
-
-const VORLAUF_OPTIONEN = [
-  { value: '35', label: '35 °C (Fußbodenheizung)' },
-  { value: '55', label: '55 °C (Heizkörper)' },
-]
-
-const ENERGIETRAEGER_OPTIONEN = [
-  { value: 'gas', label: 'Erdgas' },
-  { value: 'oel', label: 'Heizöl' },
-  { value: 'strom', label: 'Strom (Direktheizung)' },
-  { value: 'nichts', label: 'Nichts ersetzt (Neubau)' },
-]
-
-const MODUS_OPTIONEN = [
-  {
-    value: 'gesamt_jaz',
-    label: 'Jahresarbeitszahl (JAZ) – Gemessen vor Ort',
-    description: 'Gemessene Jahresarbeitszahl am eigenen Standort – der genaueste Wert, wenn verfügbar.',
-  },
-  {
-    value: 'scop',
-    label: 'SCOP (EU-Energielabel) – Aus Datenblatt',
-    description: 'EU-genormter SCOP vom Energielabel – realistischer als Hersteller-COP, aber standortunabhängig.',
-  },
-  {
-    value: 'getrennte_cops',
-    label: 'Getrennte COPs (Heizung/Warmwasser)',
-    description: 'Separate COPs für Heizung (~3,9) und Warmwasser (~3,0) – präziser bei unterschiedlichen Betriebspunkten.',
-  },
-] as const
+// KUEHLUNG_OPTIONEN, VORLAUF_OPTIONEN, ENERGIETRAEGER_OPTIONEN und MODUS_OPTIONEN stehen seit Kosmetik rc13 (K-3) in
+// `lib/investitionParameter.ts` (`WP_*_OPTIONEN`, oben importiert) — dieselben Wörter für Formular und Hub-Anzeige.
 
 export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, markTouched, setFeldRef }: TypFelderProps) {
   const modus = paramData.effizienz_modus as string

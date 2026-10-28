@@ -213,7 +213,7 @@ _register(MqttPreset(
     hersteller="Shelly",
     gruppe="Shelly",
     beschreibung="Shelly Gen2 Steckdose oder PM Mini zur Leistungsmessung eines einzelnen Verbrauchers (z.B. Wärmepumpe, Klimaanlage).",
-    anleitung="MQTT in der Shelly-App aktivieren. Die Device-ID findet sich unter Settings → Device Info. Bitte die zugehörige Investition auswählen.",
+    anleitung="MQTT in der Shelly-App aktivieren. Die Device-ID findet sich unter Settings → Device Info.",
     erfordert_investition=True,
     typen=("sonstiges",),
     variablen=[
@@ -365,7 +365,7 @@ _register(MqttPreset(
     hersteller="go-e",
     gruppe="Wallbox",
     beschreibung="go-eCharger Wallbox. Publiziert Energiedaten als JSON-Array (nrg-Topic).",
-    anleitung="MQTT in der go-eCharger App aktivieren. Die Seriennummer steht auf dem Gerät oder in der App unter Einstellungen. Bitte die zugehörige Wallbox-Investition auswählen.",
+    anleitung="MQTT in der go-eCharger App aktivieren. Die Seriennummer steht auf dem Gerät oder in der App unter Einstellungen.",
     erfordert_investition=True,
     typen=("wallbox",),
     variablen=[
@@ -405,8 +405,8 @@ _register(MqttPreset(
     beschreibung="Ein Ladepunkt aus evcc (MQTT): Ladeleistung, Sitzung, Restzeit, Phasen, Lademodus, Ladezustand aus "
                  "verbunden/lädt/freigegeben und der Fahrzeugname der Steuerung.",
     anleitung="In evcc MQTT aktivieren (evcc.yaml `mqtt:` mit `topic`, Vorgabe «evcc»). Ladepunkt-Nummer wie in evcc "
-              "(der erste ist 1). Bitte die zugehörige Wallbox-Investition auswählen. Ladestand und Reichweite des "
-              "Autos gehören an das E-Auto und sind nicht Teil dieses Presets.",
+              "(der erste ist 1). Ladestand und Reichweite des Autos gehören an das E-Auto und sind nicht "
+              "Teil dieses Presets.",
     erfordert_investition=True,
     typen=("wallbox",),
     variablen=[
@@ -461,7 +461,7 @@ _register(MqttPreset(
         PresetMapping(
             topic_template=f"{_EVCC_LP}/mode",
             ziel_key="live/inv/{inv_id}/lademodus",
-            beschreibung="Lademodus (off · now · smart) — Text",
+            beschreibung="Lademodus (off · smart · now; ältere evcc: pv · minpv) — Text",
         ),
         PresetMapping(
             topic_template=f"{_EVCC_LP}/connected",
@@ -526,7 +526,7 @@ _register(MqttPreset(
     hersteller="Tasmota",
     gruppe="Sonstiges",
     beschreibung="Tasmota-Gerät zur Leistungsmessung eines einzelnen Verbrauchers (Steckdose, Schalter mit Messung).",
-    anleitung="MQTT in Tasmota konfigurieren (Configuration → MQTT). Bitte die zugehörige Investition auswählen.",
+    anleitung="MQTT in Tasmota konfigurieren (Configuration → MQTT).",
     erfordert_investition=True,
     typen=("sonstiges",),
     variablen=[
@@ -554,7 +554,7 @@ _register(MqttPreset(
     hersteller="Zigbee2MQTT",
     gruppe="Sonstiges",
     beschreibung="Zigbee-Steckdose mit Leistungsmessung über Zigbee2MQTT (z.B. IKEA INSPELNING, Shelly Plug E, Sonoff S40).",
-    anleitung="Zigbee2MQTT muss konfiguriert und aktiv sein. Der Gerätename entspricht dem Namen in der Zigbee2MQTT-Oberfläche. Bitte die zugehörige Investition auswählen.",
+    anleitung="Zigbee2MQTT muss konfiguriert und aktiv sein. Der Gerätename entspricht dem Namen in der Zigbee2MQTT-Oberfläche.",
     erfordert_investition=True,
     typen=("sonstiges",),
     variablen=[
