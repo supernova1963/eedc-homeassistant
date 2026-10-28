@@ -4427,7 +4427,9 @@ pv_anteil_prozent = round( ladung_pv_kwh ÷ ladung_kwh × 100 )      (core/berec
 `kanal_stunden.komponenten_der_tage` (die eine Mischung der Tageskomponenten, E-Mob-Gruppe: Kanal schlägt Tageszeile);
 `ladung_pv_kwh` = Tagesdetail `werte_je_inv["emob_ladung_pv_kwh"][<id>]` (Boundary-Diff des PV-Ladezählers bzw. Kanal-Δ),
 **nur**, wenn `grund_je_feld` für `emob_ladung_pv_kwh` leer ist — ein Wert mit Grund (geschätzt, teilweise) trägt keine
-Kopfzahl. Nie der Live-Tageswert (`heute_kwh_pro_komponente`) gegen das Tag-Detail.
+Kopfzahl. Nie der Live-Tageswert (`heute_kwh_pro_komponente`) gegen das Tag-Detail. Kommt der Tageswert aus dem
+Leistungspfad (Live-Leistung ohne Zähler), trägt er das Vorzeichen der Senke (negativ); eedc nimmt für „Ladung heute" (Wallbox
+und E-Auto) den **Betrag** — dieselbe Regel wie die Tage-Ansicht.
 
 **Kein Wert** („keine Aussage", nie 0 %): ohne eine der beiden Mengen, bei `ladung_kwh ≤ 0`, bei negativem PV-Wert und bei
 `ladung_pv_kwh > ladung_kwh` (Zähler-Drift; keine Kopfzahl, kein eigener Checker-Hinweis — der Rücksprung-Checker deckt die
@@ -4456,7 +4458,9 @@ eines Kanals) **zählt 0** — ihr Wert ist ein Tachostand bzw. Zählerstand, ke
 
 **Grenzen.** Nur abgeschlossene Stunden (die laufende fehlt); ab dem ersten Spiegel- bzw. Mitschrift-Lauf nach der
 Zuordnung, nicht rückwirkend; ein Zähler, der selten meldet, zeigt die Fahrt mit dem nächsten Stand (in der Stunde des
-Sprungs). Der Kanal entsteht aus HA (Spiegel der Langzeitstatistik, mit Datenquellen-Wahl HA) oder aus MQTT (Mitschrift des
+Sprungs). Meldet der Kilometerzähler tage- oder wochenlang nicht und dann wieder, steht die gesamte Strecke der Lücke am
+Tag der Rückkehr in «Gefahren heute» (in der Stunde der nächsten Meldung; wie HAs `change`) — dasselbe gilt für den
+Fahrverbrauch. Der Kanal entsteht aus HA (Spiegel der Langzeitstatistik, mit Datenquellen-Wahl HA) oder aus MQTT (Mitschrift des
 Stands); eine Zuordnung nur im Sensor-Mapping ohne Datenquellen-Wahl wird nicht gespiegelt (vorbestehend, alle Zähler).
 Anzeige, keine Menge der Monats-Fakten: die Monatskilometer kommen weiter aus dem Monatsabschluss.
 

@@ -903,7 +903,9 @@ vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen B
 > Tachostand der Monatsdaten, und ist bis zu 60 s alt. **„Gefahren heute"** und **„Fahrverbrauch heute"** zählen nur
 > **abgeschlossene Stunden** (die laufende fehlt) und beginnen mit dem ersten stündlichen Lauf nach der Zuordnung, nicht
 > rückwirkend; die erste Stunde eines neuen Zählers zählt 0 (ihr Stand ist ein Tachostand, keine Tagesmenge). Ein Zähler, der
-> selten meldet (manche Integrationen stündlich oder nur bei Zündung), zeigt die Fahrt erst, wenn der Stand springt. Aus Home
+> selten meldet (manche Integrationen stündlich oder nur bei Zündung), zeigt die Fahrt erst, wenn der Stand springt. Meldet
+> der Kilometerzähler tage- oder wochenlang nicht und dann wieder, steht die gesamte Strecke der Lücke am Tag der Rückkehr in
+> „Gefahren heute" (in der Stunde der nächsten Meldung; wie Home Assistant) — dasselbe gilt für den Fahrverbrauch. Aus Home
 > Assistant liest eedc den Zähler über die Zuordnung unter *Einstellungen → Datenquellen*; eine ältere Zuordnung, die nur im
 > Sensor-Mapping steht, zählt bis zum erneuten Zuordnen nicht.
 
@@ -934,7 +936,7 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 - **„PV-Anteil heute" / „Heute":** misst deine Wallbox die geladene Menge **und** den PV-Anteil davon (ein eigener
   PV-Ladezähler, etwa beim SMA eCharger), steht oben groß der **PV-Anteil heute** („67 %") mit der Herleitung
   („9,8 kWh PV ÷ 14,7 kWh") — beide Zahlen aus den Tageswerten dieser Wallbox, nichts geschätzt. Darunter Ladung heute
-  (Tageswert aus dem Zähler; ohne ihn derselbe Wert wie im Energiefluss) und PV-Ladung heute „(Anlage)". Fehlt eine der
+  (Tageswert aus dem Zähler, ohne ihn aus der Live-Leistung — derselbe Wert wie im Energiefluss) und PV-Ladung heute „(Anlage)". Fehlt eine der
   beiden Mengen oder ist der PV-Wert größer als die Ladung (Zähler-Drift), heißt die Karte „Heute" und hat keine Kopfzahl.
   evcc liefert keinen PV-Ladezähler — seinen Solaranteil zeigt eedc nicht. Misst die Wallbox „Heim: PV" und „Heim: Netz"
   getrennt, aber keinen Gesamtzähler, gibt es keinen Tageswert der Wallbox und damit keine Kopfzahl.

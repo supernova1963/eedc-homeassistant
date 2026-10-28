@@ -257,6 +257,23 @@ async def test_eauto_ohne_wallbox_traegt_ladung_und_fahrt(db):
     assert (z.typ, z.ladung_kwh, z.km, z.fahrverbrauch_kwh, z.pv_anteil_prozent) == ("e-auto", 6.2, 42.0, 7.5, None)
 
 
+async def test_ladung_heute_aus_dem_leistungspfad_als_betrag(db):
+    """K4-N1 (Lab-Fund 28.10.): der Leistungspfad schreibt die Senke negativ in ``komponenten_kwh`` — die Wallbox-Zeile
+    trägt den Betrag, die Kopfzahl kommt (vorher −14,7 kWh und keine Kopfzahl). Positive Tageszeile: Probe oben (14,7)."""
+    a, wb, _auto = await _anlage_emob(db)
+    await _tz(db, a.id, {f"wallbox_{wb.id}": -14.7})
+    z = (await _heute(db, a, _detail({str(wb.id): 9.8})))[wb.id]
+    assert (z.ladung_kwh, z.ladung_pv_kwh, z.pv_anteil_prozent) == (14.7, 9.8, 67)
+
+
+async def test_eauto_ladung_aus_dem_leistungspfad_als_betrag(db):
+    """K4-N1: E-Auto ohne deckende Wallbox mit negativer Tageszeile (Leistungspfad) trägt den Betrag."""
+    a, _wb, auto = await _anlage_emob(db, mit_wallbox=False)
+    await _tz(db, a.id, {f"eauto_{auto.id}": -6.2})
+    z = (await _heute(db, a, _detail()))[auto.id]
+    assert z.ladung_kwh == 6.2
+
+
 async def test_tag_detail_traegt_emob_heute(db):
     from backend.api.routes.energie_profil.views import get_tag_detail
 

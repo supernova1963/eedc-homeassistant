@@ -166,12 +166,20 @@ def _gerundet(wert: Optional[float]) -> Optional[float]:
     return round(wert, 1) if wert is not None else None
 
 
+def _betrag(wert: Optional[float]) -> Optional[float]:
+    """Ladung heute als Betrag (K4-N1, Lab-Fund 28.10.2026): der Tageswert in ``komponenten_kwh`` trägt aus dem
+    Leistungspfad (Stundenmittel der Live-Leistung) das Vorzeichen der Senke (negativ), aus dem Zählerpfad ist er
+    positiv — beide stehen im selben JSON (Beispiel ``services/live_sensor_config.py:256``: «Zähler 12,00 kWh →
+    ``wallbox_2`` −12,00»). Dieselbe Regel wie die Tage-Ansicht (``TagKomponenten.tsx``: ``Math.abs``). None bleibt None."""
+    return abs(wert) if wert is not None else None
+
+
 def _emob_heute_wallbox(inv_id: str, komp: dict, pv_je_inv: dict) -> EmobHeuteZeile:
     """Die Wallbox-Zeile von ``emob_heute`` (K4-4): Tagesladung, gemessene PV-Ladung und ihr Anteil über die eine
     Layer-Formel ``pv_anteil_gemessen_prozent`` — beide Mengen aus dem Tag-Detail, nie aus dem Live-Pfad (Ü5)."""
     from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_gemessen_prozent
 
-    ladung = komp.get(f"wallbox_{inv_id}")
+    ladung = _betrag(komp.get(f"wallbox_{inv_id}"))
     pv = pv_je_inv.get(inv_id)
     return EmobHeuteZeile(
         investition_id=int(inv_id), typ="wallbox", ladung_kwh=_gerundet(ladung), ladung_pv_kwh=_gerundet(pv),
@@ -185,7 +193,7 @@ def _emob_heute_eauto(inv_id: str, komp: dict, fahrt: dict, wallbox_deckt: bool)
     return EmobHeuteZeile(
         investition_id=int(inv_id), typ="e-auto", km=_gerundet(werte.get("km")),
         fahrverbrauch_kwh=_gerundet(werte.get("verbrauch_kwh")),
-        ladung_kwh=None if wallbox_deckt else _gerundet(komp.get(f"eauto_{inv_id}")))
+        ladung_kwh=None if wallbox_deckt else _gerundet(_betrag(komp.get(f"eauto_{inv_id}"))))
 
 
 async def _mit_emob_heute(db, anlage, investitionen_by_id, datum, tagesdetail) -> list:
