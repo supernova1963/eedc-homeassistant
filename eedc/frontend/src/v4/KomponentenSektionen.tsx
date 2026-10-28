@@ -43,7 +43,7 @@ import {
   KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER, SONSTIGES_ERZEUGER_FARBE, ROLLEN_BG,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI, NETZLADUNG_AUS_TAGEN,
-  ersparnisAnzeige,
+  ersparnisAnzeige, fmtStundenDauer,
 } from '../lib'
 import type {
   AktuellerMonatResponse, SonstigesGeraet, WpGeraetZeile, WpMoeglichZeile,
@@ -950,10 +950,12 @@ export function baueKomponentenBloecke(
     const betriebZeigen = istTag ? (d.wp_betriebsstunden_summe_monat != null && d.wp_betriebsstunden_summe_monat > 0)
                                  : (d.wp_betriebsstunden_max_tag != null && d.wp_betriebsstunden_max_tag > 0)
     if (betriebZeigen) kpis.push({
-      title: 'Betriebsstunden', color: 'gray', icon: Clock, unit: 'h',
-      value: fmtCalc(d.wp_betriebsstunden_summe_monat ?? d.wp_betriebsstunden_max_tag, 1, '—'),
+      // Lab rc13 (Gernot 28.10.2026): eine Dauer am Tag als «h min», die Monatssumme in ganzen Stunden — nie dezimal.
+      title: 'Betriebsstunden', color: 'gray', icon: Clock, unit: istTag ? undefined : 'h',
+      value: istTag ? fmtStundenDauer(d.wp_betriebsstunden_summe_monat, '—')
+                    : fmtCalc(d.wp_betriebsstunden_summe_monat ?? d.wp_betriebsstunden_max_tag, 0, '—'),
       formel: istTag ? 'Betriebsstunden an diesem Tag' : 'Σ aller Tages-Betriebsstunden im Monat',
-      subtitle: istTag ? undefined : `Max/Tag: ${fmt(d.wp_betriebsstunden_max_tag, 1)} h`,
+      subtitle: istTag ? undefined : `Max/Tag: ${fmtStundenDauer(d.wp_betriebsstunden_max_tag, '—')}`,
     })
     // W-4 (SOLL §4.1) → Bauschnitt 8: die Arbeitszahl je Funktion steht bei den
     // Mengen, aus denen sie entsteht — nicht als eigene KPI-Kachel oben. Dort

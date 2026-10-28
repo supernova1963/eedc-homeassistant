@@ -198,6 +198,9 @@ deiner Geräte nur an die eedc-Topics, ohne unter *Einstellungen → Datenquelle
 ab der ersten Aufzeichnung, frühere Stunden bleiben leer. Auch die Stundenwerte je Gerät des Tages entstehen daraus,
 wie bei einer Anlage mit Zuordnung ([Bedienung → Live](HANDBUCH_BEDIENUNG.md#21-live)).
 
+**Zeiten als Stunden und Minuten.** „Betrieb heute" an Wärmepumpe, Wallbox und E-Auto, die Betriebsstunden eines Tages,
+„Ø Laufzeit/Start" und die Sonnenstunden in *Cockpit → Live* zeigen eine Dauer jetzt als „2 h 36 min" statt „2,6 h".
+
 **Mit Home Assistant: der Tagesverlauf auch für Geräte, die nur über MQTT liefern.** Läuft eedc als Home-Assistant-App,
 deine Geräte schicken ihre Leistung aber an die eedc-MQTT-Topics statt über einen Home-Assistant-Sensor, blieb das
 Diagramm „Tagesverlauf" in *Cockpit → Live* leer, und die Stundenwerte des Tages hatten keine Werte je Gerät. Jetzt

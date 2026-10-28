@@ -40,7 +40,7 @@ describe('BetriebKarteEmob (K3)', () => {
     expect(k.textContent).toContain('Betrieb heute')
     expect(k.querySelector('[title]')?.getAttribute('title')).toBe(BETRIEB_EMOB_TOOLTIP)
     expect([...k.querySelectorAll('[data-zeile^="betrieb-"]')].map((z) => z.textContent)).toEqual(
-      ['Lädt3,2 h', 'Verbunden5,7 h', 'Wartet0,5 h'])
+      ['Lädt3 h 12 min', 'Verbunden5 h 42 min', 'Wartet30 min'])
     expect(k.querySelector('[data-zeile="ladevorgaenge"]')?.textContent).toBe('Ladevorgänge heute1')
     expect(k.querySelector('[data-betrieb-ohne]')).toBeNull()
     // Die dritte Karte nach Gerät und Heute.
@@ -55,8 +55,8 @@ describe('BetriebKarteEmob (K3)', () => {
     ])))!
     expect([...k.querySelectorAll('[data-gruppe]')].map((g) => g.getAttribute('data-gruppe'))).toEqual(
       ['ladezustand_fahrzeug', 'zu_hause'])
-    expect(k.querySelector('[data-gruppe="ladezustand_fahrzeug"]')?.textContent).toBe('LadenLädt2,1 hVerbunden0,4 h')
-    expect(k.querySelector('[data-gruppe="zu_hause"]')?.textContent).toBe('StandortZu Hause14,0 hUnterwegs3,0 h')
+    expect(k.querySelector('[data-gruppe="ladezustand_fahrzeug"]')?.textContent).toBe('LadenLädt2 h 06 minVerbunden24 min')
+    expect(k.querySelector('[data-gruppe="zu_hause"]')?.textContent).toBe('StandortZu Hause14 h 00 minUnterwegs3 h 00 min')
     expect(k.querySelector('[data-zeile="ladevorgaenge"]')).toBeNull()
   })
 
@@ -96,6 +96,6 @@ describe('BetriebKarteEmob (K3)', () => {
 
   it('der Client rundet nicht nach: 0,1 h aus dem Backend steht wörtlich da', () => {
     const k = karte(zeichne(WB, tag([zeile(4, 'wallbox', 'ladezustand', { laedt: 0.1 })])))!
-    expect(k.querySelector('[data-zeile="betrieb-laedt"]')?.textContent).toBe('Lädt0,1 h')
+    expect(k.querySelector('[data-zeile="betrieb-laedt"]')?.textContent).toBe('Lädt6 min')
   })
 })

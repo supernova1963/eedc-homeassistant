@@ -36,11 +36,11 @@
  * «geschätzt»-Wallboxen — ein von der Steuerung gemeldetes Auto steht dort nicht noch einmal (W4). Keine Farbe für
  * den Gast, keine Rahmenfarbe (K2-11).
  */
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
 import LadestandLeiste from '../../ui/LadestandLeiste'
 import ModusChip, { ZusatzChip, ladezustandKlartext } from '../../ui/ModusChip'
-import { fmtDauer, fmtZahl } from '../../../lib'
+import { fmtDauer, fmtStundenDauer, fmtZahl } from '../../../lib'
 import { funktionsFarbe } from '../../../lib/funktionsFarben'
 import { PARAM_WALLBOX } from '../../../lib/investitionParameter'
 import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower } from '../../live/EnergieFluss'
@@ -329,7 +329,12 @@ function WallboxGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv'
       )}
       {k && <WallboxFahrzeuge live={live} k={k} />}
       {ziel != null && <Zeile label="Ziel" data="ziel">{ziel}</Zeile>}
-      {sitzung.length > 0 && <p className="text-xs text-gray-600 dark:text-gray-400" data-zeile="sitzung">{sitzung.join(' · ')}</p>}
+      {/* Lab rc13 (Handy 390): je Teil kein Umbruch — sonst bricht «30 min» zwischen Zahl und Einheit. */}
+      {sitzung.length > 0 && (
+        <p className="text-xs text-gray-600 dark:text-gray-400" data-zeile="sitzung">
+          {sitzung.map((t, i) => <Fragment key={t}>{i > 0 && ' · '}<span className="whitespace-nowrap">{t}</span></Fragment>)}
+        </p>
+      )}
       {ohneFelder && <Fusszeile>{FUSSZEILE_WALLBOX}</Fusszeile>}
       {url && <OberflaecheLink url={url} />}
     </Karte>
@@ -377,7 +382,7 @@ export function BetriebKarteEmob({ zeilen }: { zeilen: EmobBetriebZeile[] }) {
             <span key={w} className="inline-flex items-center gap-1.5" data-zeile={`betrieb-${w}`}>
               <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: funktionsFarbe(w) }} data-betrieb-farbe={w} />
               <span className="text-gray-500 dark:text-gray-400">{z.labels[w] ?? w}</span>
-              <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtZahl(z.stunden[w], 1)} h</span>
+              <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtStundenDauer(z.stunden[w])}</span>
             </span>
           ))}
         </div>

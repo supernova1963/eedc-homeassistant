@@ -31,7 +31,7 @@ import type { ReactNode } from 'react'
 import RingGauge from '../../charts/RingGauge'
 import { Card } from '../../ui'
 import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
-import { CHART_COLORS, fmtZahl } from '../../../lib'
+import { CHART_COLORS, fmtStundenDauer, fmtZahl } from '../../../lib'
 import { funktionsFarbe } from '../../../lib/funktionsFarben'
 import { formatPower } from '../../live/EnergieFluss'
 import { betriebsartTitel } from '../../live/datenquellenBetriebsart'
@@ -209,7 +209,7 @@ function BetriebKarte({ inv, stunden }: { inv: Investition; stunden: Record<stri
           <span key={m} className="inline-flex items-center gap-1.5" data-zeile={`betrieb-${m}`}>
             <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: funktionsFarbe(m) }} data-betrieb-farbe={m} />
             <span className="text-gray-500 dark:text-gray-400">{m === 'kuehlen' && passiv ? 'Kühlen passiv' : betriebsartTitel(m)}</span>
-            <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtZahl(stunden[m], 1)} h</span>
+            <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{fmtStundenDauer(stunden[m])}</span>
           </span>
         ))}
       </div>

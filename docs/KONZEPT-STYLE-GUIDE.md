@@ -614,6 +614,7 @@ Daraus die drei Klauseln:
 > **CSV-Präzision (R3b S20):** Rundung VOR dem Export — **max. 4 NK** (kappt Float-Artefakte wie „0,30000000000000004"), bewusst NICHT die Anzeige-NK (CSV bleibt maschinenlesbar präziser als die Tabelle); umgesetzt im CSV-SoT `lib/werte/csv.ts`.
 > **`%` mit Leerzeichen** („84,2 %", aus C2), deutsches Komma + Tausender-Punkt.
 > **kW ≠ kWh:** Leistung vs. Energie nie vermischen (#200-Linie) — die Einheit folgt der Größe.
+> **Zeitwerte nie dezimal (Gernot 28.10.2026, Lab rc13):** eine Dauer steht als **«2 h 36 min» / «45 min»** — nie «2,6 h», nie «2h 36m», auch kein sekundengenauer Countdown. SoT `lib/einheiten.ts`: `fmtDauer` (Sekunden) und `fmtStundenDauer` (Stunden, z. B. «Betrieb heute», Betriebsstunden am Tag, Ø Laufzeit je Start, Sonnenstunden); keine lokalen Zeit-Formatierer. **Summen über viele Tage** (Betriebsstunden im Monat/Lebensdauer, Sonnenstunden im Monat) in **ganzen h** (0 NK). Tabellen-Spalten in `h` (WerteTabelle, Tag-Tabelle) zeigen ganze Stunden; eine Dauer-Darstellung in Tabellenzellen (Sortierung, CSV-Rohwert) ist offen und gehört zum Spalten-Päckchen.
 
 **Betroffene Issues:** #237 (Einheiten-Header), #200 (kW/kWh), #258 P6 (%-Drift).
 

@@ -941,7 +941,7 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
   evcc liefert keinen PV-Ladezähler — seinen Solaranteil zeigt eedc nicht. Misst die Wallbox „Heim: PV" und „Heim: Netz"
   getrennt, aber keinen Gesamtzähler, gibt es keinen Tageswert der Wallbox und damit keine Kopfzahl.
 - **„Betrieb heute":** wie viele Stunden die Wallbox heute **geladen** hat, **verbunden** war, **gewartet** hat oder **fertig**
-  stand („Lädt 3,2 h · Verbunden 5,7 h · Wartet 0,5 h") und darunter **„Ladevorgänge heute: n"** — die Wechsel nach „Lädt"
+  stand („Lädt 3 h 12 min · Verbunden 5 h 42 min · Wartet 30 min") und darunter **„Ladevorgänge heute: n"** — die Wechsel nach „Lädt"
   aus einem anderen bekannten Zustand. Grundlage ist die **stündliche Mitschrift** des Ladezustands (Anteil jeder Stunde je
   Zustand), nicht die Leistung. „Kein Fahrzeug", „Gesperrt" und „Fehler" sind kein Betrieb; war den ganzen Tag kein Fahrzeug
   da, steht „Heute kein Betrieb". Die Farbe des Punkts ist die der Funktion wie am Chip (Lädt in der Wallbox-Farbe, Wartet

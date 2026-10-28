@@ -17,7 +17,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import SegmentControl from '../ui/SegmentControl'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt, verbrauchsprofilBasis, pvPrognoseKwDerQuelle } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtStundenDauer, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt, verbrauchsprofilBasis, pvPrognoseKwDerQuelle } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -422,7 +422,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
           {wetter.sonnenstunden !== null && (
             <div className="flex items-center gap-1.5 text-yellow-600 dark:text-yellow-400">
               <Sun className="h-3.5 w-3.5" />
-              <span>{(() => { const h = Math.floor(wetter.sonnenstunden!); const m = Math.round((wetter.sonnenstunden! - h) * 60); return `${h}h ${m.toString().padStart(2, '0')}m Sonne` })()}</span>
+              <span>{fmtStundenDauer(wetter.sonnenstunden)} Sonne</span>
             </div>
           )}
 {/* SA/SU/Noon werden als vertikale Linien im Chart angezeigt */}

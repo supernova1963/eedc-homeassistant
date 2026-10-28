@@ -723,6 +723,9 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     }])
     const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
     expect(titles(g.sekundaer!.kpis)).toEqual(['JAZ Heizen', 'JAZ Warmwasser', 'Kompressor-Starts', 'Betriebsstunden', 'Ø Laufzeit/Start'])
+    // Lab rc13 (28.10.2026): Laufzeit als Dauer, nicht «0,73 h».
+    const laufzeit = g.sekundaer!.kpis.find((x) => x.title === 'Ø Laufzeit/Start')!
+    expect([laufzeit.value, laufzeit.unit]).toEqual(['44 min', undefined])
     // starts_pro_betriebsstunde fehlt → KPI nicht da
     expect(titles(g.sekundaer!.kpis)).not.toContain('Starts/Betriebsstunde')
   })

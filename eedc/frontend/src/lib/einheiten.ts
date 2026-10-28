@@ -42,6 +42,12 @@ export function fmtDauer(sekunden: number | null | undefined, fallback = FALLBAC
   return stunden > 0 ? `${stunden} h ${String(rest).padStart(2, '0')} min` : `${rest} min`
 }
 
+/** Dauer in **Stunden** → «2 h 36 min» (Lab rc13, Gernot 28.10.2026: Zeitwerte nie als Dezimalzahl). Für Stunden-Mengen
+ *  aus dem Backend («Betrieb heute», Betriebsstunden am Tag, Ø Laufzeit je Start); Summen über viele Tage bleiben ganze h. */
+export function fmtStundenDauer(stunden: number | null | undefined, fallback = FALLBACK): string {
+  return stunden === null || stunden === undefined ? fallback : fmtDauer(stunden * 3600, fallback)
+}
+
 export interface FmtWert {
   /** formatierte Zahl (ohne Einheit), z. B. „2,00". */
   wert: string

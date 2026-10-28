@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Sunrise, Sunset } from 'lucide-react'
-import { SOLAR_INTENSITAET } from '../../lib'
+import { SOLAR_INTENSITAET, fmtDauer, fmtStundenDauer } from '../../lib'
 
 interface SunProgressBarProps {
   sunrise: string   // "06:12"
@@ -14,22 +14,6 @@ interface SunProgressBarProps {
 function timeToSeconds(t: string): number {
   const [h, m] = t.split(':').map(Number)
   return h * 3600 + m * 60
-}
-
-function secondsToHMS(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = Math.floor(seconds % 60)
-  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
-  if (m > 0) return `${m}m ${s.toString().padStart(2, '0')}s`
-  return `${s}s`
-}
-
-// Rückwärtskompatibilität für sonnenstunden-Formatierung
-function fmtH(h: number): string {
-  const hh = Math.floor(h)
-  const mm = Math.round((h - hh) * 60).toString().padStart(2, '0')
-  return hh > 0 ? `${hh}h ${mm}m` : `${mm}m`
 }
 
 export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstunden, sonnenstundenBisher, sonnenstundenRest }: SunProgressBarProps) {
@@ -66,16 +50,16 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstun
       {sonnenstunden != null && !beforeSunrise && (
         <div className="flex items-center justify-between mb-1 text-[10px]">
           <span className="text-yellow-600 dark:text-yellow-400 font-medium" title="Sonnenstunden bis jetzt (Ist-Werte)">
-            ☀ {sonnenstundenBisher != null ? fmtH(sonnenstundenBisher) : '—'} bisher
+            ☀ {sonnenstundenBisher != null ? fmtStundenDauer(sonnenstundenBisher) : '—'} bisher
           </span>
           {!afterSunset && sonnenstundenRest != null && sonnenstundenRest > 0 && (
             <span className="text-amber-500 dark:text-amber-400 font-medium" title="Prognostizierte Sonnenstunden bis Sonnenuntergang">
-              ~{fmtH(sonnenstundenRest)} erwartet
+              ~{fmtStundenDauer(sonnenstundenRest)} erwartet
             </span>
           )}
           {afterSunset && (
             <span className="text-gray-400 dark:text-gray-500">
-              {fmtH(sonnenstunden)} gesamt
+              {fmtStundenDauer(sonnenstunden)} gesamt
             </span>
           )}
         </div>
@@ -113,10 +97,10 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstun
           {sunrise}
         </span>
         <span className="text-center font-medium">
-          {beforeSunrise && `Sonnenaufgang in ${secondsToHMS(sunriseS - now)}`}
+          {beforeSunrise && `Sonnenaufgang in ${fmtDauer(sunriseS - now)}`}
           {!beforeSunrise && !afterSunset && (
             <span className="text-amber-500 dark:text-amber-400">
-              noch {secondsToHMS(remainingS)} Tageslicht
+              noch {fmtDauer(remainingS)} Tageslicht
             </span>
           )}
           {afterSunset && 'Sonne untergegangen'}

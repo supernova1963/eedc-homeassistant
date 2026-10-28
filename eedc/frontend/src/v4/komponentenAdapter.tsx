@@ -22,7 +22,7 @@
 import { Activity, Battery, Clock, Droplet, Euro, Flame, Fuel, Leaf, Power, Snowflake, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
-import { formatEnergie, formatEffizienz } from '../lib/einheiten'
+import { fmtStundenDauer, formatEnergie, formatEffizienz } from '../lib/einheiten'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, ENERGIE_KATEGORIE, KOMPONENTEN_FARBEN, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
 import {
@@ -726,9 +726,9 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         berechnung: z.kompressor_starts_gesamt != null ? `Zählerstand (Lebensdauer): ${n0(z.kompressor_starts_gesamt)}` : undefined,
       }))
       if (z.betriebsstunden_summe_erfasst != null) sek.push(k('Betriebsstunden', n0(z.betriebsstunden_summe_erfasst), 'h', 'blue', Clock, {
-        subtitle: z.betriebsstunden_max_tag != null ? `Max/Tag: ${n0(z.betriebsstunden_max_tag)} h` : undefined,
+        subtitle: z.betriebsstunden_max_tag != null ? `Max/Tag: ${fmtStundenDauer(z.betriebsstunden_max_tag)}` : undefined,
       }))
-      if (z.oe_laufzeit_pro_start_h != null) sek.push(k('Ø Laufzeit/Start', n2(z.oe_laufzeit_pro_start_h), 'h', 'gray', Clock, { formel: 'Betriebsstunden ÷ Kompressor-Starts' }))
+      if (z.oe_laufzeit_pro_start_h != null) sek.push(k('Ø Laufzeit/Start', fmtStundenDauer(z.oe_laufzeit_pro_start_h), undefined, 'gray', Clock, { formel: 'Betriebsstunden ÷ Kompressor-Starts' }))
       if (z.starts_pro_betriebsstunde != null) sek.push(k('Starts/Betriebsstunde', n2(z.starts_pro_betriebsstunde), undefined, 'gray', Activity, { formel: 'Kompressor-Starts ÷ Betriebsstunden' }))
       // Gemeinsame Skalen-Referenz für Wärme+Strom (größerer Wert bestimmt kWh/MWh).
       const wpEnergieRef = Math.max(z.gesamt_waerme_kwh ?? 0, z.gesamt_stromverbrauch_kwh ?? 0)

@@ -169,6 +169,8 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
     expect(screen.getByText('Kompressor-Starts')).toBeInTheDocument()
     expect(screen.getByText('120')).toBeInTheDocument()
     expect(screen.getByText('Betriebsstunden')).toBeInTheDocument()
+    // Lab rc13 (28.10.2026): Monatssumme ganze Stunden, Max/Tag als Dauer — nie dezimal.
+    expect(screen.getByText('Max/Tag: 8 h 30 min')).toBeInTheDocument()
     // Bauschnitt 8: die getrennten Strommengen stehen je Funktion, unter den
     // Namen des Formulars (vorher „Stromverbrauch · davon Heizung/Warmwasser").
     expect(screen.getByText('Strom Heizen')).toBeInTheDocument()

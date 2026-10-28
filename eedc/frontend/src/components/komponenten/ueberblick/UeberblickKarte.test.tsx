@@ -173,8 +173,8 @@ describe('P-433-2c Gestalt nach Mockup', () => {
       tag={MIT_ZEILE({ betrieb_stunden: { lueften: 0.5, warmwasser: 1.6, heizen: 9.4, kuehlen: 0, entfeuchten: 0 } })} mehrereGeraete={false} />)
     const b = karte(container, 'betrieb-heute')!
     expect(zeilen(b as HTMLElement)).toEqual(['betrieb-heizen', 'betrieb-warmwasser', 'betrieb-lueften'])
-    expect(b.querySelector('[data-zeile="betrieb-heizen"]')!.textContent).toBe('Heizen9,4 h')
-    expect(b.querySelector('[data-zeile="betrieb-warmwasser"]')!.textContent).toBe('Warmwasser1,6 h')
+    expect(b.querySelector('[data-zeile="betrieb-heizen"]')!.textContent).toBe('Heizen9 h 24 min')
+    expect(b.querySelector('[data-zeile="betrieb-warmwasser"]')!.textContent).toBe('Warmwasser1 h 36 min')
     expect((b.querySelector('[data-betrieb-farbe="heizen"]') as HTMLElement).style.backgroundColor).not.toBe('')
     const farbe = document.createElement('span')
     farbe.style.backgroundColor = funktionsFarbe('lueften')
@@ -198,14 +198,14 @@ describe('P-433-2c Gestalt nach Mockup', () => {
     const passiv = wpInv(7, { kuehlung_art: 'passiv' })
     const mit = render(<UeberblickKarte inv={passiv} live={live()} wetter={null}
       tag={MIT_ZEILE({ betrieb_stunden: { heizen: 2, kuehlen: 3.5 } })} mehrereGeraete={false} />)
-    expect(karte(mit.container, 'betrieb-heute')!.querySelector('[data-zeile="betrieb-kuehlen"]')!.textContent).toBe('Kühlen passiv3,5 h')
+    expect(karte(mit.container, 'betrieb-heute')!.querySelector('[data-zeile="betrieb-kuehlen"]')!.textContent).toBe('Kühlen passiv3 h 30 min')
     expect(karte(mit.container, 'betrieb-heute')!.querySelector('[data-betrieb-ohne]')).toBeNull()
     const ohne = render(<UeberblickKarte inv={passiv} live={live()} wetter={null}
       tag={MIT_ZEILE({ betrieb_stunden: { heizen: 9.4, kuehlen: 0 } })} mehrereGeraete={false} />)
     expect(karte(ohne.container, 'betrieb-heute')!.querySelector('[data-betrieb-ohne]')!.textContent).toBe('Kühlen passiv, heute kein Betrieb')
     const aktiv = render(<UeberblickKarte inv={wpInv(7, { kuehlung_art: 'aktiv' })} live={live()} wetter={null}
       tag={MIT_ZEILE({ betrieb_stunden: { heizen: 9.4, kuehlen: 1 } })} mehrereGeraete={false} />)
-    expect(karte(aktiv.container, 'betrieb-heute')!.querySelector('[data-zeile="betrieb-kuehlen"]')!.textContent).toBe('Kühlen1,0 h')
+    expect(karte(aktiv.container, 'betrieb-heute')!.querySelector('[data-zeile="betrieb-kuehlen"]')!.textContent).toBe('Kühlen1 h 00 min')
     expect(karte(aktiv.container, 'betrieb-heute')!.querySelector('[data-betrieb-ohne]')).toBeNull()
   })
 

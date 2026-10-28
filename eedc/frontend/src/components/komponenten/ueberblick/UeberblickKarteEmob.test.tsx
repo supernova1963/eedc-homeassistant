@@ -13,7 +13,7 @@ import UeberblickKarteEmob, {
   FUSSZEILE_EAUTO, FUSSZEILE_WALLBOX, OBERFLAECHE_TEXT, oberflaecheUrl, sitzungsTeile, zielText,
 } from './UeberblickKarteEmob'
 import { SATZ_ZUORDNUNG_UNBEKANNT } from '../../live/EnergieFluss'
-import { fmtDauer } from '../../../lib'
+import { fmtDauer, fmtStundenDauer } from '../../../lib'
 import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
@@ -199,6 +199,13 @@ describe('Formatierung', () => {
     expect(fmtDauer(21660)).toBe('6 h 01 min')
     expect(fmtDauer(2700)).toBe('45 min')
     expect(fmtDauer(null)).toBe('—')
+  })
+
+  it('fmtStundenDauer: Stunden nie dezimal (Lab rc13, Gernot 28.10.2026)', () => {
+    expect(fmtStundenDauer(2.6)).toBe('2 h 36 min')
+    expect(fmtStundenDauer(0.73)).toBe('44 min')
+    expect(fmtStundenDauer(0)).toBe('0 min')
+    expect(fmtStundenDauer(null)).toBe('—')
   })
   it('sitzungsTeile und zielText nur mit Feld', () => {
     expect(sitzungsTeile(wb(4, 1, { phasen_aktiv: 1 }))).toEqual(['1 Phase'])
