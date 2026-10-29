@@ -59,9 +59,9 @@ const NUR_TAG: Granularitaet[] = ['tag']
 // `granular`: Monat+Tag, wenn das Backend den Wert pro Tag sauber liefert
 // (Tages-Werte-Endpoint, gebündelt über das Fenster); nur-Monat, wenn es keinen
 // gebündelten Tages-Leser gibt (Wärme Heizen/WW, Arbeitszahlen, Strom Heizen/WW,
-// Zusatzheizung, Wallbox-PV-Anteil — die stehen nur in der Tagesansicht, Cockpit → Tag)
-// WP-Wärme, Kälte und Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt seit 29.10.2026 auch je Tag
-// (`tagMitWaerme`: die Tagesreihe von Cockpit → Monat, nur auf Anfrage geladen)
+// Wallbox-PV-Anteil — die stehen nur in der Tagesansicht, Cockpit → Tag)
+// WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt und Zusatzheizung seit 29.10.2026 auch je Tag
+// (`tagMitWaerme`: die Tagesreihe von Cockpit → Monat bzw. der Heizstab-Strom wie Cockpit → Tag, nur auf Anfrage geladen)
 // oder die Größe nur monatlich gepflegt wird (Ladung extern, Heimladung je Auto).
 // Nur-Tag: Größen ohne Monatswert in den Monats-Fakten (WP-Starts/Betriebszeit,
 // Vollzyklen der Entladung) und die Tag-nativen Metriken (Peaks/PR/Börsenpreis) im
@@ -121,7 +121,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wp_strom_nicht_aufgeteilt', label: 'Strom nicht aufgeteilt', unit: 'kWh', gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
   { key: 'wp_kaelte',          label: 'Kälte',             unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true, tagMitWaerme: true },
   // Heizstab-Strom (Teilmenge von „WP Strom"), nur mit Heizstab-Zähler.
-  { key: 'wp_heizstab',        label: 'WP Zusatzheizung',  unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
+  { key: 'wp_heizstab',        label: 'WP Zusatzheizung',  unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: false, tagMitWaerme: true },
   // Tageszähler des Herstellers (Starts, Betriebsstunden) — Tagessumme wie Cockpit → Monat. Die Betriebszeit in
   // ganzen Minuten (Style-Guide C3: Dauern nie dezimal). Die Monats-Fakten tragen beide nicht ⇒ nur Tag.
   { key: 'wp_starts',          label: 'WP Starts',         unit: '',        gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },

@@ -77,7 +77,7 @@ Betriebsart** (Kühlen, Lüften, Entfeuchten, nicht aufgeteilt), die **Kälte**,
 **Speicher-Netzladung**, die **Ø Außentemperatur** und die **dienstlichen Ladekosten**. Am Tag kommen **Gefahren (km)**,
 **Fahrverbrauch**, **Wallbox-Ladung**, **Ladevorgänge**, **V2H**, die **Starts** und die **Betriebszeit** der Wärmepumpe
 (in Minuten), die **Vollzyklen** des Speichers, **Temperatur min**, **Börsenpreis min** und die **Abgabe an Dritte** dazu,
-außerdem die **Wärme**, die **Kälte** und der **Strom nach Betriebsart** der Wärmepumpe je Tag — sind diese eingeblendet,
+außerdem die **Wärme**, die **Kälte**, der **Strom nach Betriebsart** und die **Zusatzheizung** der Wärmepumpe je Tag — sind diese eingeblendet,
 zeigt die Tabelle eine Lade-Anzeige, bis alle Tage gerechnet sind (bei einem Jahr einige Sekunden).
 Alles ist abwählbar und nicht voreingestellt; jede Zahl ist dieselbe wie in Cockpit und Hub. Die Arbeitszahlen eines
 einzelnen Tages stehen weiterhin in *Cockpit → Tag* ([Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank)).

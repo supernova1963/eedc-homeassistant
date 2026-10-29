@@ -233,6 +233,8 @@ export interface TagWerte {
   wp_strom_lueften?: number | null
   wp_strom_entfeuchten?: number | null
   wp_strom_nicht_aufgeteilt?: number | null
+  /** Gemessener Heizstab-Strom (Zusatzheizung) des Tages — dieselbe Zahl wie Cockpit → Tag; ohne Zähler `null`. */
+  wp_heizstab?: number | null
 }
 
 /**

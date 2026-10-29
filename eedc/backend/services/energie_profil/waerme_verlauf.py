@@ -298,6 +298,47 @@ async def lade_waerme_verlauf_beitraege(
     return ergebnis
 
 
+#: Der Heizstab-Strom (P-433-3 S2) — derselbe Ausschnitt aus der einen Feldtabelle, den *Cockpit → Tag* als
+#: ``wp_heizstab_kwh`` liest (``tag.py::_ohne_zusatzheizung_tag``).
+_HEIZSTAB_KEY = "wp_heizstab_kwh"
+_HEIZSTAB_FELDER = {
+    schluessel: key
+    for schluessel, key in TAGESDETAIL_AUSGABE.items()
+    if key == _HEIZSTAB_KEY
+}
+
+
+async def lade_heizstab_je_tag(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    von: date,
+    bis: date,
+) -> dict[date, float]:
+    """Der gemessene Heizstab-Strom je Tag für ``[von, bis]`` — Σ über die Geräte (*Auswertungen → Tabelle*, Auftrag
+    «Zusatzheizung je Tag» 29.10.2026).
+
+    ⭐ **Derselbe Leser und dasselbe Fenster wie die Wärme oben**: ``_tageswerte_je_geraet`` (Bestandstage über den
+    Bereichs-Leser ``lade_tageswerte_je_geraet`` mit den Rückwärts-Tagen aus ``_zaehlerstrom_je_tag``, WP-Kanal-Tage aus
+    dem Kanal-Stundentag) — damit dieselbe Zahl wie *Cockpit → Tag* (``tages_eingaenge`` → ``wp_heizstab_kwh``).
+    ``lade_waerme_verlauf`` selbst bleibt unberührt; der Aufrufer zahlt zwei Bereichsabfragen mehr.
+
+    Returns:
+        ``{datum: kWh}`` — nur Tage, an denen mindestens ein Gerät einen Heizstab-Wert hat (eine gemessene 0 bleibt 0,
+        wie in *Cockpit → Tag*); ein Tag ohne Zähler fehlt (keine 0 als Platzhalter).
+    """
+    _zaehler, rueckwaerts_tage = await _zaehlerstrom_je_tag(db, anlage.id, von, bis)
+    werte_je_tag = await _tageswerte_je_geraet(
+        db, anlage, investitionen_by_id, von, bis, _HEIZSTAB_FELDER,
+        rueckwaerts_tage=rueckwaerts_tage,
+    )
+    return {
+        tag: sum(je_inv.values())
+        for tag, werte in werte_je_tag.items()
+        if von <= tag <= bis and (je_inv := werte.get(_HEIZSTAB_KEY))
+    }
+
+
 # ── Dieselbe Tagesreihe, aber je GERÄT über den Zeitraum summiert (N-472/A-5) ──
 
 

@@ -92,6 +92,14 @@ describe('Tabellen — Wärmepumpen-Tagesspalten (29.10.2026)', () => {
     expect(mitWaermeAufrufe().at(-1)).toBe(false)
   })
 
+  it('auch «WP Zusatzheizung» ist je Tag wählbar und schaltet die Abfrage ein (29.10.2026, Halt H1 Option b)', () => {
+    speichereTagSpalten(['erzeugung'])
+    render(<AuswertungenTabelleV4 basis={basisMock} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /Spalten \(/ }).at(-1)!)
+    fireEvent.click(screen.getByLabelText('WP Zusatzheizung'))
+    expect(mitWaermeAufrufe().at(-1)).toBe(true)
+  })
+
   it('während die Abfrage mit WP-Spalte läuft: Lade-Anzeige mit Grund, keine Tabelle, kein CSV-Export', () => {
     speichereTagSpalten(['erzeugung', 'wp_waerme'])
     tagesState.current = { rows: [TAG], loading: true }   // auch ein noch stehender Stand wird NICHT gezeigt

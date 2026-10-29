@@ -1332,7 +1332,7 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > | Gruppe | Monatsansicht | Tagesansicht |
 > | --- | --- | --- |
 > | **E-Auto** | Gefahren (km), **Fahrverbrauch**, **Verbrauch (kWh/100 km)**, E-Auto-Ladung, **Ladung extern** (kWh und €), **V2H-Entladung**, **Ladevorgänge**, Wallbox-Ladung, Wallbox-PV-Ladung, Wallbox-PV-Anteil | Gefahren (km), **Fahrverbrauch**, **V2H-Entladung**, **Ladevorgänge**, **Wallbox-Ladung** |
-> | **Wärmepumpe** | Strom, Strom Heizen/WW, Wärme (gesamt/Heizen/WW), JAZ, **JAZ Heizen**, **JAZ WW**, **JAZ Kühlen**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung** | Strom, **Wärme**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Starts**, **Betriebszeit (min)** |
+> | **Wärmepumpe** | Strom, Strom Heizen/WW, Wärme (gesamt/Heizen/WW), JAZ, **JAZ Heizen**, **JAZ WW**, **JAZ Kühlen**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung** | Strom, **Wärme**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung**, **Starts**, **Betriebszeit (min)** |
 > | **Speicher** | Ladung, Entladung, Effizienz, **Netzladung** | Ladung, Entladung, Effizienz, **Vollzyklen (Entladung)** |
 > | Weitere | **Ø Außentemperatur**, **Dienstliche Ladekosten** (Finanzen), Abgabe an Dritte | **Temperatur min**, **Börsenpreis min**, **Abgabe an Dritte** |
 >
@@ -1348,9 +1348,11 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 >   genau wie im Monat. Die Tageswerte von E-Auto und Wallbox kommen aus der Mitschrift (Kilometerstand,
 >   Fahrverbrauch, Ladezustand); ohne sie steht „—". ⚠ **Nach einer Lücke im Kilometerstand** trägt der Tag der
 >   Rückkehr den ganzen Sprung — dieselbe Regel wie die Karte „Heute" im E-Mobilitäts-Hub.
-> - **Wärme, Kälte und Strom nach Betriebsart am Tag** sind dieselben Tageswerte wie im Verlauf von *Cockpit → Monat*:
+> - **Wärme, Kälte, Strom nach Betriebsart und Zusatzheizung am Tag** — Wärme, Kälte und Strom sind dieselben
+>   Tageswerte wie im Verlauf von *Cockpit → Monat*:
 >   die Wärme nur **gemessen** (ohne Wärmemengenzähler „—", auch wenn der Monat eine aus Strom × Arbeitszahl
->   abgeleitete Wärme zeigt), der Strom nach Betriebsart nur an Tagen mit Aufteilung. Für jeden Tag des gewählten
+>   abgeleitete Wärme zeigt), der Strom nach Betriebsart nur an Tagen mit Aufteilung. Die **Zusatzheizung** am Tag ist
+>   dieselbe Zahl wie in *Cockpit → Tag* — nur mit einem Heizstab-Zähler, sonst „—". Für jeden Tag des gewählten
 >   Zeitraums muss eedc dafür sehr viele Stundendatensätze durchsuchen und zusammenfassen — ist eine dieser Spalten
 >   eingeblendet, steht deshalb statt der Tabelle eine Lade-Anzeige, bis alles gerechnet ist (bei einem Jahr einige
 >   Sekunden); erst dann ist auch der CSV-Export da. Ohne diese Spalten lädt die Tabelle so schnell wie bisher.
@@ -1360,7 +1362,7 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > - **„Vollzyklen (Entladung)"** ist Entladung ÷ Kapazität des Tages — nicht dasselbe wie die **SoC-Hübe** unter
 >   „Tagesdetail" (Hub des Ladestands).
 > - **Nur in der Tagesansicht (*Cockpit → Tag*)** stehen die Arbeitszahlen des Tages (gesamt und je Funktion), die
->   Wärme und der Strom für Heizen und Warmwasser getrennt, die Zusatzheizung sowie die gemessene PV-Ladung und
+>   Wärme und der Strom für Heizen und Warmwasser getrennt sowie die gemessene PV-Ladung und
 >   der PV-Anteil der Wallbox des Tages. Sie entstehen dort aus Lesern für **einen** Tag; über ein ganzes Jahr gelesen
 >   wäre die Tabelle zu langsam bzw. bräuchte einen zweiten Rechenweg neben der Tagesansicht.
 

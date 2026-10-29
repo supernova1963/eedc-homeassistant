@@ -59,12 +59,13 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 72 Metriken (55 Monat, 50 Tag, davon 33 beides), jede mit gültiger Gruppe + granular', () => {
+  it('hat 72 Metriken (55 Monat, 51 Tag, davon 34 beides), jede mit gültiger Gruppe + granular', () => {
     // 37 seit 05.09.2026: `abgabe_dritte` (Konzept §9.2, dritter Weg der Verwendung).
     // 72 seit 28.10.2026 (Tabellen-Spalten E-Mobilität, Wärme/Klima, Speicher, Wetter): +23 Spalten.
-    // 33 beides seit 29.10.2026: WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt auch je Tag.
+    // 34 beides seit 29.10.2026: WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt und Zusatzheizung
+    // auch je Tag.
     expect(WERTE_METRIKEN).toHaveLength(72)
-    expect(WERTE_METRIKEN.filter((m) => m.granular.length === 2)).toHaveLength(33)
+    expect(WERTE_METRIKEN.filter((m) => m.granular.length === 2)).toHaveLength(34)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -98,9 +99,9 @@ describe('metrikenFuer (Granularität)', () => {
     expect(m.find((x) => x.key === 'wallbox_pv_anteil')).toBeDefined()
     expect(m.find((x) => x.key === 'netzbezug_preis_cent')).toBeDefined()
   })
-  it('Tag = ohne JAZ/Wärme je Funktion/Zusatzheizung/Wallbox-PV-Anteil, mit E-Auto-Fahrt, WP-Tagesreihe und Tag-nativen', () => {
+  it('Tag = ohne JAZ/Wärme je Funktion/Wallbox-PV-Anteil, mit E-Auto-Fahrt, WP-Tagesreihe und Tag-nativen', () => {
     const keys = metrikenFuer('tag').map((x) => x.key)
-    expect(keys).toHaveLength(50)
+    expect(keys).toHaveLength(51)
     expect(keys).toContain('peak_pv_kw')
     expect(keys).toContain('ueberschuss_kwh')
     expect(keys).toContain('erzeugung')
@@ -121,18 +122,19 @@ describe('metrikenFuer (Granularität)', () => {
       expect(keys).toContain(k)
     }
     for (const k of ['wp_cop', 'wp_jaz_heizen', 'wp_jaz_warmwasser', 'wp_jaz_kuehlen', 'wallbox_pv_anteil',
-      'wallbox_pv_ladung', 'eauto_kwh_100km', 'wp_heizstab', 'wp_waerme_heizen', 'wp_waerme_warmwasser',
+      'wallbox_pv_ladung', 'eauto_kwh_100km', 'wp_waerme_heizen', 'wp_waerme_warmwasser',
       'wp_strom_heizen', 'wp_strom_warmwasser']) {
       expect(keys).not.toContain(k)
     }
   })
-  it('WP-Tagesreihe (29.10.2026): genau sechs Spalten tragen `tagMitWaerme`, alle Monat + Tag', () => {
+  it('WP-Tagesreihe (29.10.2026): genau sieben Spalten tragen `tagMitWaerme`, alle Monat + Tag', () => {
     const waerme = WERTE_METRIKEN.filter((m) => m.tagMitWaerme).map((m) => m.key)
-    expect(waerme.sort()).toEqual(['wp_kaelte', 'wp_strom_entfeuchten', 'wp_strom_kuehlen', 'wp_strom_lueften',
-      'wp_strom_nicht_aufgeteilt', 'wp_waerme'])
+    expect(waerme.sort()).toEqual(['wp_heizstab', 'wp_kaelte', 'wp_strom_entfeuchten', 'wp_strom_kuehlen',
+      'wp_strom_lueften', 'wp_strom_nicht_aufgeteilt', 'wp_waerme'])
     for (const k of waerme) expect(METRIK_BY_KEY[k].granular).toEqual(['monat', 'tag'])
     expect(brauchtWaermeTag(['erzeugung', 'wp_strom', 'wp_starts'])).toBe(false)
     expect(brauchtWaermeTag(['erzeugung', 'wp_kaelte'])).toBe(true)
+    expect(brauchtWaermeTag(['wp_heizstab'])).toBe(true)
     expect(brauchtWaermeTag([])).toBe(false)
   })
 })

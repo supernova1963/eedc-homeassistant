@@ -791,6 +791,9 @@ class TagWerteResponse(BaseModel):
     wp_strom_lueften: Optional[float] = None
     wp_strom_entfeuchten: Optional[float] = None
     wp_strom_nicht_aufgeteilt: Optional[float] = None
+    #: Gemessener Heizstab-Strom (Zusatzheizung) des Tages, Σ über die Geräte — dieselbe Zahl wie *Cockpit → Tag*
+    #: (``wp_heizstab_kwh``, ``waerme_verlauf.lade_heizstab_je_tag``); ohne Heizstab-Zähler ``None`` (29.10.2026).
+    wp_heizstab: Optional[float] = None
 
 
 class TagStatusResponse(BaseModel):

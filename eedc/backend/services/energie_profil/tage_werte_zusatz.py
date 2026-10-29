@@ -14,7 +14,8 @@ Je Tag eines Fensters die Spalten E-Mobilität und Wärmepumpen-Zähler, die die
 * **WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt** (Auftrag 29.10.2026, nur auf Anfrage
   ``mit_waerme``) — die Tagesreihe von *Cockpit → Monat* (``waerme_verlauf.lade_waerme_verlauf``), EIN Aufruf über das
   Fenster, Werte und Rundung wie die Route ``waerme-verlauf``. Teuer (je Tag die Betriebsart-Zähler); der Client fragt
-  nur, wenn eine dieser Spalten eingeblendet ist.
+  nur, wenn eine dieser Spalten eingeblendet ist. Ebenso die **Zusatzheizung** (``waerme_verlauf.lade_heizstab_je_tag``,
+  derselbe Bereichs-Leser und dasselbe Fenster, Werte wie *Cockpit → Tag*).
 
 Summiert wird über die **privaten** Geräte (``ist_dienstlich`` nein) — dieselbe Menge wie die Monatsspalte mit demselben
 Schlüssel (Monats-Fakten «ohne Dienstwagen», private Wallboxen). Ein Tag ohne Wert trägt ``None`` (keine 0).
@@ -120,16 +121,23 @@ _STAPEL_SPALTEN = {
 async def _waerme(db: AsyncSession, anlage, invs: list, von: date, bis: date) -> dict[date, dict]:
     """WP-Wärme, Kälte und Betriebsart-Strom je Tag aus der Tagesreihe von *Cockpit → Monat* — derselbe Leser mit
     derselben Investitions-Menge wie ``get_waerme_verlauf``, EIN Aufruf über ``[von, bis]``. Rundung und «nur mit
-    Aufteilung» wie dort (Alles-oder-nichts je Tag); ein Tag ohne Zeile im Verlauf trägt nichts."""
-    from backend.services.energie_profil.waerme_verlauf import lade_waerme_verlauf
+    Aufteilung» wie dort (Alles-oder-nichts je Tag); ein Tag ohne Zeile im Verlauf trägt nichts.
 
-    zeilen = await lade_waerme_verlauf(db, anlage, {str(i.id): i for i in invs}, von, bis)
+    Dazu die **Zusatzheizung** (Auftrag 29.10.2026, Option (b) des Halts H1): ``lade_heizstab_je_tag`` — derselbe
+    Bereichs-Leser und dasselbe Fenster wie die Wärme des Verlaufs, Σ über die Geräte, auf zwei Stellen wie *Cockpit →
+    Tag* (``waerme_klima_block.ohne_zusatzheizung_felder``); ein Tag ohne Heizstab-Zähler trägt nichts."""
+    from backend.services.energie_profil.waerme_verlauf import lade_heizstab_je_tag, lade_waerme_verlauf
+
+    by_id = {str(i.id): i for i in invs}
+    zeilen = await lade_waerme_verlauf(db, anlage, by_id, von, bis)
     out: dict[date, dict] = {}
     for z in zeilen:
         werte = {"wp_waerme": z.waerme_kwh, "wp_kaelte": z.kaelte_kwh}
         for spalte, feld in _STAPEL_SPALTEN.items():
             werte[spalte] = round(getattr(z.stapel, feld), 2) if z.stapel.hat_split else None
         out[z.datum] = werte
+    for tag, kwh in (await lade_heizstab_je_tag(db, anlage, by_id, von, bis)).items():
+        out.setdefault(tag, {})["wp_heizstab"] = round(kwh, 2)
     return out
 
 

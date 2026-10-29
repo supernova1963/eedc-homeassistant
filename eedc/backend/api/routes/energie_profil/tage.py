@@ -109,7 +109,7 @@ async def get_tage_werte(
     # Nach `db` und in `Annotated`-Form (wie `monatsdaten.py`): Aufrufer rufen die Funktion positional mit `db` an
     # vierter Stelle, und als Default stünde sonst ein (wahres) `Query`-Objekt statt `False`.
     mit_waerme: Annotated[bool, Query(
-        description="Wärmepumpen-Tagesreihe (Wärme, Kälte, Betriebsart-Strom) mitliefern",
+        description="Wärmepumpen-Tagesreihe (Wärme, Kälte, Betriebsart-Strom, Zusatzheizung) mitliefern",
     )] = False,
 ):
     """Tages-Werte-Zeilen (Energie-Bilanz + Finanzen + tag-native Metriken)
@@ -120,7 +120,8 @@ async def get_tage_werte(
     SoT (je-Monat-Tarif).
 
     ``mit_waerme`` (Auftrag 29.10.2026): die Felder ``wp_waerme``, ``wp_kaelte`` und ``wp_strom_kuehlen``/``_lueften``/
-    ``_entfeuchten``/``_nicht_aufgeteilt`` aus der Tagesreihe von *Cockpit → Monat*. Teuer über lange Zeiträume — der
+    ``_entfeuchten``/``_nicht_aufgeteilt`` aus der Tagesreihe von *Cockpit → Monat*, dazu ``wp_heizstab`` (Zusatzheizung,
+    dieselbe Zahl wie *Cockpit → Tag*). Teuer über lange Zeiträume — der
     Client fragt nur, wenn eine dieser Spalten eingeblendet ist; ohne ihn bleiben die Felder ``None``.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))

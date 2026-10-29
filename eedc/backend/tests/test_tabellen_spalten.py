@@ -313,3 +313,70 @@ async def test_route_tage_werte_positional_mit_db_und_parameter_aus(db):
     assert ohne and all(z.wp_kaelte is None for z in ohne)
     mit = {z.datum: z for z in await get_tage_werte(a.id, D1, D2, db, mit_waerme=True)}
     assert mit[D1].wp_kaelte == pytest.approx(18.0)
+
+
+# ── Zusatzheizung je Tag (Auftrag 29.10.2026, Option (b) des Halts H1) ──────────────────────────────────────────────
+
+D0, D4 = date(2026, 6, 8), date(2026, 6, 12)
+
+
+async def _wp_heizstab_vier_tage(db):
+    """Eine Wärmepumpe mit Heizstab-Zähler, stündliche Stände von D0 00:00 bis D4 00:00: je Stunde +0,1 kWh, in der
+    Stunde D1 23:00–24:00 aber +5,0 kWh, und an D3 kein Zuwachs (gemessene 0). Die Tageszeilen von D1 und D2 kommen aus
+    der HA-Langzeitstatistik (Rückwärts-Fenster [Vortag 23:00, 23:00)), D3 aus dem Snapshot-Pfad (Kalendertag) — der
+    Sprung zählt damit zu D2, nicht zu D1. D4 hat keine Tageszeile."""
+    from backend.models.sensor_snapshot import SensorSnapshot
+    from backend.services.energie_profil._provenance_helpers import seed_tz_provenance
+    from backend.services.snapshot.boundary_range import TZ_QUELLE_LTS
+
+    a = await factories.anlage(db, anlagenname="Heizstab", sensor_mapping={})
+    wp = await factories.investition(db, a.id, "waermepumpe", bezeichnung="WP", anschaffungsdatum=date(2024, 1, 1))
+    feld = "heizstab_strom_kwh"
+    a.sensor_mapping = {"investitionen": {str(wp.id): {"felder": {
+        feld: {"strategie": "sensor", "sensor_id": f"sensor.{wp.id}_{feld}"}}}}}
+    t0 = datetime.combine(D0, datetime.min.time())
+    stand = 500.0
+    for h in range(4 * 24 + 1):
+        ts = t0 + timedelta(hours=h)
+        db.add(SensorSnapshot(anlage_id=a.id, sensor_key=f"inv:{wp.id}:{feld}", zeitpunkt=ts, wert_kwh=stand,
+                              quelle="ha_statistics"))
+        if ts.date() != D3:
+            stand += 5.0 if ts == datetime.combine(D1, datetime.min.time()) + timedelta(hours=23) else 0.1
+    for tag, lts in ((D1, True), (D2, True), (D3, False)):
+        tz = TagesZusammenfassung(anlage_id=a.id, datum=tag, komponenten_kwh={f"waermepumpe_{wp.id}": 10.0})
+        seed_tz_provenance(tz, writer="test", source=TZ_QUELLE_LTS if lts else "auto:monatsabschluss")
+        db.add(tz)
+    await db.commit()
+    return a
+
+
+async def test_zusatzheizung_je_tag_gleich_cockpit_tag_und_bereich_gleich_einzeltag(db):
+    """Je Tag mit ``mit_waerme`` dieselbe Zusatzheizung wie *Cockpit → Tag* (``tag-detail.wp_heizstab_kwh``) — auch am
+    Rückwärts-Tag; derselbe Wert, ob der Tag allein oder im Bereich gelesen wird; ohne Parameter ``None``; eine gemessene
+    0 bleibt 0 (wie im Tag), ein Tag ohne Stände trägt nichts. Die sechs Geschwister-Felder bleiben ``None`` (kein
+    Verlauf an diesen Tagen ohne Wärme/Aufteilung)."""
+    from backend.api.routes.energie_profil.views import get_tag_detail
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    a = await _wp_heizstab_vier_tage(db)
+    bereich = {z.datum: z for z in await baue_tage_werte(db, a, D1, D3, mit_waerme=True)}
+    assert set(bereich) == {D1, D2, D3}
+    for tag in (D1, D2, D3):
+        cockpit = (await get_tag_detail(a.id, tag, db)).wp_heizstab_kwh
+        [einzel] = await baue_tage_werte(db, a, tag, tag, mit_waerme=True)
+        assert bereich[tag].wp_heizstab == cockpit == einzel.wp_heizstab, tag
+    # Fenster: D1 rückwärts [D0 23:00, D1 23:00) = 24 × 0,1; D2 rückwärts trägt den Sprung der Stunde D1 23–24.
+    assert bereich[D1].wp_heizstab == pytest.approx(2.4)
+    assert bereich[D2].wp_heizstab == pytest.approx(7.3)
+    assert bereich[D3].wp_heizstab == 0.0, "gemessene 0 bleibt 0 — wie Cockpit → Tag"
+    ohne = {z.datum: z for z in await baue_tage_werte(db, a, D1, D3)}
+    assert all(z.wp_heizstab is None for z in ohne.values()), "ohne Parameter keine Zusatzheizung"
+    assert all(getattr(bereich[t], f) is None for t in (D1, D2, D3) for f in _WAERME_PAARE)
+
+
+async def test_zusatzheizung_ohne_zaehler_keine_aussage(db):
+    """Ohne Heizstab-Zähler trägt kein Tag eine Zusatzheizung — keine 0 als Platzhalter (wie Cockpit → Tag)."""
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    a = await _wp_klima_zwei_tage(db)
+    assert all(z.wp_heizstab is None for z in await baue_tage_werte(db, a, D1, D2, mit_waerme=True))
