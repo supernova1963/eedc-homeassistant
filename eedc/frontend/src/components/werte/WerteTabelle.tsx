@@ -94,6 +94,25 @@ export interface WerteTabelleProps {
    *  können — heute die Erträge je Erzeuger (#350, `erzeugerMetriken`). Sie
    *  verhalten sich wie jede andere Metrik (Picker, Sortierung, Δ, CSV, Fuß). */
   zusatzMetriken?: WerteMetrik[]
+  /** Meldet die eingeblendeten Spalten (nach jeder Änderung der Spaltenwahl) — für einen Aufrufer, der seine Abfrage
+   *  danach richtet (Werkbank «Energieprofile»: Wärmepumpen-Tagesreihe nur bei eingeblendeter Spalte, 29.10.2026). */
+  onSichtbareSpalten?: (keys: string[]) => void
+}
+
+/**
+ * Die im Scope gespeicherte Spaltenwahl einer Granularität (derselbe localStorage-Schlüssel wie die Tabelle selbst),
+ * oder `null`, wenn nichts gespeichert/lesbar ist. Für einen Aufrufer, der VOR dem ersten Laden wissen muss, welche
+ * Spalten die Tabelle zeigen wird (dieselbe Regel wie der Startwert unten: gespeichert, sonst Vorgabe).
+ */
+export function gespeicherteSpalten(scope: string, granularitaet: Granularitaet): string[] | null {
+  try {
+    const raw = localStorage.getItem(`eedc-${scope}:cols:${granularitaet}`)
+    if (raw) {
+      const keys = JSON.parse(raw) as string[]
+      if (Array.isArray(keys) && keys.length > 0) return keys
+    }
+  } catch { /* ignore */ }
+  return null
 }
 
 /** Stabile leere Zusatz-Liste — als Literal in der Signatur wäre sie bei jedem
@@ -112,6 +131,7 @@ export function WerteTabelle({
   defaultSpalten,
   vergleichDefaultAn = false,
   zusatzMetriken = KEINE_ZUSATZ_METRIKEN,
+  onSichtbareSpalten,
 }: WerteTabelleProps) {
   // Verfügbare Metriken + Picker-Gruppen je Granularität, plus die anlagen-
   // abhängigen Zusatz-Spalten (#350).
@@ -219,6 +239,9 @@ export function WerteTabelle({
   useEffect(() => {
     try { localStorage.setItem(lsCols, JSON.stringify([...visible])) } catch { /* ignore */ }
   }, [visible, lsCols])
+  useEffect(() => {
+    onSichtbareSpalten?.([...visible])
+  }, [visible, onSichtbareSpalten])
   useEffect(() => {
     try { localStorage.setItem(lsOrder, JSON.stringify(order)) } catch { /* ignore */ }
   }, [order, lsOrder])

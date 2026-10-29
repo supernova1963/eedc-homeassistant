@@ -780,6 +780,17 @@ class TagWerteResponse(BaseModel):
     #: Wärmepumpen-Starts und Betriebszeit (ganze Minuten) des Tages — Tagessumme wie *Cockpit → Monat*.
     wp_starts: Optional[int] = None
     wp_betriebszeit_min: Optional[int] = None
+    # ── Wärmepumpen-Tagesreihe (Auftrag 29.10.2026, nur mit ``?mit_waerme=true``, sonst ``None``) — dieselben Werte
+    # wie *Cockpit → Monat* (``waerme_verlauf.lade_waerme_verlauf``, Route ``waerme-verlauf``).
+    #: Σ gemessene Wärme (Heizen + Warmwasser, Vorrang Gesamtzähler je Gerät); ohne Wärmemengenzähler ``None``.
+    wp_waerme: Optional[float] = None
+    #: Gemessene Kälte des Tages, nie Teil der Wärme.
+    wp_kaelte: Optional[float] = None
+    #: Betriebsart-Strom des Tagesstapels — alle vier nur mit Aufteilung am Tag (Alles-oder-nichts wie im Verlauf).
+    wp_strom_kuehlen: Optional[float] = None
+    wp_strom_lueften: Optional[float] = None
+    wp_strom_entfeuchten: Optional[float] = None
+    wp_strom_nicht_aufgeteilt: Optional[float] = None
 
 
 class TagStatusResponse(BaseModel):

@@ -11,6 +11,10 @@ Je Tag eines Fensters die Spalten E-Mobilität und Wärmepumpen-Zähler, die die
 * **WP-Starts / Betriebszeit** — ``TagesZusammenfassung.komponenten_starts`` mit der Tagessumme von *Cockpit → Monat*
   (``wp_zaehler_tagessumme``: aktive Wärmepumpen des Monats, nur Werte > 0); die Betriebszeit in ganzen Minuten
   (Style-Guide C3: Dauern nie dezimal).
+* **WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt** (Auftrag 29.10.2026, nur auf Anfrage
+  ``mit_waerme``) — die Tagesreihe von *Cockpit → Monat* (``waerme_verlauf.lade_waerme_verlauf``), EIN Aufruf über das
+  Fenster, Werte und Rundung wie die Route ``waerme-verlauf``. Teuer (je Tag die Betriebsart-Zähler); der Client fragt
+  nur, wenn eine dieser Spalten eingeblendet ist.
 
 Summiert wird über die **privaten** Geräte (``ist_dienstlich`` nein) — dieselbe Menge wie die Monatsspalte mit demselben
 Schlüssel (Monats-Fakten «ohne Dienstwagen», private Wallboxen). Ein Tag ohne Wert trägt ``None`` (keine 0).
@@ -104,15 +108,44 @@ async def _emob(db: AsyncSession, anlage, invs: list, von: date, bis: date) -> d
     return out
 
 
+#: Betriebsart-Strom des Tagesstapels → Spalte; Wert nur mit Aufteilung (``hat_split``), sonst ``None``.
+_STAPEL_SPALTEN = {
+    "wp_strom_kuehlen": "kuehlen_kwh",
+    "wp_strom_lueften": "lueften_kwh",
+    "wp_strom_entfeuchten": "entfeuchten_kwh",
+    "wp_strom_nicht_aufgeteilt": "nicht_aufgeteilt_kwh",
+}
+
+
+async def _waerme(db: AsyncSession, anlage, invs: list, von: date, bis: date) -> dict[date, dict]:
+    """WP-Wärme, Kälte und Betriebsart-Strom je Tag aus der Tagesreihe von *Cockpit → Monat* — derselbe Leser mit
+    derselben Investitions-Menge wie ``get_waerme_verlauf``, EIN Aufruf über ``[von, bis]``. Rundung und «nur mit
+    Aufteilung» wie dort (Alles-oder-nichts je Tag); ein Tag ohne Zeile im Verlauf trägt nichts."""
+    from backend.services.energie_profil.waerme_verlauf import lade_waerme_verlauf
+
+    zeilen = await lade_waerme_verlauf(db, anlage, {str(i.id): i for i in invs}, von, bis)
+    out: dict[date, dict] = {}
+    for z in zeilen:
+        werte = {"wp_waerme": z.waerme_kwh, "wp_kaelte": z.kaelte_kwh}
+        for spalte, feld in _STAPEL_SPALTEN.items():
+            werte[spalte] = round(getattr(z.stapel, feld), 2) if z.stapel.hat_split else None
+        out[z.datum] = werte
+    return out
+
+
 async def lade_tabellen_zusatz(db: AsyncSession, anlage, tz_pro_tag: Mapping[date, Any], von: date,
-                               bis: date) -> dict[date, dict]:
+                               bis: date, *, mit_waerme: bool = False) -> dict[date, dict]:
     """``{datum: {spalte: wert}}`` der Zusatzspalten für ``[von, bis]`` — eine Abfrage der Investitionen, je Größe ein
-    Bereichs-Leser. Ohne Wallbox/E-Auto bzw. Wärmepumpe keine weitere Abfrage."""
+    Bereichs-Leser. Ohne Wallbox/E-Auto bzw. Wärmepumpe keine weitere Abfrage; die Wärmepumpen-Tagesreihe nur mit
+    ``mit_waerme`` (ohne ihn bleibt die Antwort wie vor dem 29.10.2026)."""
     invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage.id))).scalars().all())
     out: dict[date, dict] = defaultdict(dict)
     for tag, werte in _wp_zaehler(tz_pro_tag, invs).items():
         out[tag].update(werte)
     if any(i.typ in ("wallbox", "e-auto") for i in invs):
         for tag, werte in (await _emob(db, anlage, invs, von, bis)).items():
+            out[tag].update(werte)
+    if mit_waerme:
+        for tag, werte in (await _waerme(db, anlage, invs, von, bis)).items():
             out[tag].update(werte)
     return dict(out)

@@ -46,6 +46,9 @@ export interface WerteMetrik {
   granular: Granularitaet[]
   /** true=höher besser, false=niedriger besser, undefined=neutral (Δ grau). */
   higherIsBetter?: boolean
+  /** Tag: der Wert kommt nur mit der Wärmepumpen-Tagesreihe (`getTageWerte(…, mitWaerme)`, 29.10.2026) — teuer über
+   *  lange Zeiträume; die Tabelle fragt sie nur an, wenn eine solche Spalte eingeblendet ist (`brauchtWaermeTag`). */
+  tagMitWaerme?: boolean
 }
 
 const MONAT_TAG: Granularitaet[] = ['monat', 'tag']
@@ -55,8 +58,10 @@ const NUR_TAG: Granularitaet[] = ['tag']
 // Reihenfolge + Werte 1:1 aus TabelleTab.COLUMNS (verhaltensgleich).
 // `granular`: Monat+Tag, wenn das Backend den Wert pro Tag sauber liefert
 // (Tages-Werte-Endpoint, gebündelt über das Fenster); nur-Monat, wenn es keinen
-// gebündelten Tages-Leser gibt (WP-Wärme/Arbeitszahlen, Betriebsart-Strom, Kälte,
+// gebündelten Tages-Leser gibt (Wärme Heizen/WW, Arbeitszahlen, Strom Heizen/WW,
 // Zusatzheizung, Wallbox-PV-Anteil — die stehen nur in der Tagesansicht, Cockpit → Tag)
+// WP-Wärme, Kälte und Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt seit 29.10.2026 auch je Tag
+// (`tagMitWaerme`: die Tagesreihe von Cockpit → Monat, nur auf Anfrage geladen)
 // oder die Größe nur monatlich gepflegt wird (Ladung extern, Heimladung je Auto).
 // Nur-Tag: Größen ohne Monatswert in den Monats-Fakten (WP-Starts/Betriebszeit,
 // Vollzyklen der Entladung) und die Tag-nativen Metriken (Peaks/PR/Börsenpreis) im
@@ -94,7 +99,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wp_strom',           label: 'WP Strom',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'wp_strom_heizen',    label: 'WP Strom Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'wp_strom_warmwasser',label: 'WP Strom WW',       unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wp_waerme',          label: 'WP Wärme',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_waerme',          label: 'WP Wärme',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true, tagMitWaerme: true },
   { key: 'wp_waerme_heizen',   label: 'WP Wärme Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_waerme_warmwasser',label: 'WP Wärme WW',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // ⚠ `aggregation: 'none'` — eine Arbeitszahl ist ein Quotient und wird NICHT
@@ -110,11 +115,11 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wp_jaz_warmwasser',  label: 'WP JAZ WW',         unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_jaz_kuehlen',     label: 'JAZ Kühlen',        unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // Betriebsart-Strom: Teilmengen von „WP Strom", nur mit Aufteilung (Betriebsart-Zähler oder Modus-Signal).
-  { key: 'wp_strom_kuehlen',   label: 'Strom Kühlen',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wp_strom_lueften',   label: 'Strom Lüften',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wp_strom_entfeuchten', label: 'Strom Entfeuchten', unit: 'kWh',   gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wp_strom_nicht_aufgeteilt', label: 'Strom nicht aufgeteilt', unit: 'kWh', gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
-  { key: 'wp_kaelte',          label: 'Kälte',             unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_strom_kuehlen',   label: 'Strom Kühlen',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
+  { key: 'wp_strom_lueften',   label: 'Strom Lüften',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
+  { key: 'wp_strom_entfeuchten', label: 'Strom Entfeuchten', unit: 'kWh',   gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
+  { key: 'wp_strom_nicht_aufgeteilt', label: 'Strom nicht aufgeteilt', unit: 'kWh', gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
+  { key: 'wp_kaelte',          label: 'Kälte',             unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true, tagMitWaerme: true },
   // Heizstab-Strom (Teilmenge von „WP Strom"), nur mit Heizstab-Zähler.
   { key: 'wp_heizstab',        label: 'WP Zusatzheizung',  unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   // Tageszähler des Herstellers (Starts, Betriebsstunden) — Tagessumme wie Cockpit → Monat. Die Betriebszeit in
@@ -312,6 +317,12 @@ export function metrikenFuer(granularitaet: Granularitaet): WerteMetrik[] {
 export const METRIK_BY_KEY: Record<string, WerteMetrik> = Object.fromEntries(
   WERTE_METRIKEN.map((m) => [m.key, m]),
 )
+
+/** Braucht eine dieser (eingeblendeten) Spalten die Wärmepumpen-Tagesreihe? (`tagMitWaerme`, 29.10.2026) */
+export function brauchtWaermeTag(keys: Iterable<string>): boolean {
+  for (const k of keys) if (METRIK_BY_KEY[k]?.tagMitWaerme) return true
+  return false
+}
 
 /**
  * Granularitäts-Accessor „Monat": liest den Spalten-Wert aus einer

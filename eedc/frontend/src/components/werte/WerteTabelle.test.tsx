@@ -140,15 +140,17 @@ describe('WerteTabelle', () => {
     expect(heads.some((h) => h.textContent === '2024')).toBe(true)
   })
 
-  it('Tages-Granularität: Tag-native Spalte sichtbar, Footer „Tage", kein WP-Wärme', () => {
+  it('Tages-Granularität: Tag-native Spalte sichtbar, Footer „Tage", keine WP JAZ', () => {
     const tage = [tw('2026-05-10'), tw('2026-05-11')].map(tagesZeile)
     render(<WerteTabelle rows={tage} granularitaet="tag" />)
     // Tag-natives Default-Feld (Überschuss / Peak PV) erscheint
     expect(screen.getByText(/Überschuss \(kWh\)/)).toBeInTheDocument()
     expect(screen.getByText('2 Tage')).toBeInTheDocument()
-    // Picker zeigt keinen monat-only Eintrag „WP Wärme"
+    // Picker zeigt keinen monat-only Eintrag „WP JAZ" (bis 28.10.2026 stand hier „WP Wärme" — die gibt es seit
+    // 29.10. auch je Tag, aus der Wärmepumpen-Tagesreihe)
     fireEvent.click(screen.getByRole('button', { name: /Spalten/ }))
-    expect(screen.queryByText('WP Wärme')).not.toBeInTheDocument()
+    expect(screen.queryByText('WP JAZ')).not.toBeInTheDocument()
+    expect(screen.getByText('WP Wärme')).toBeInTheDocument()
     // Grundlast je Nacht steht als WÄHLBARE Spalte im Picker (OB73-gif, #395) —
     // nicht voreingestellt, wie alle Zusatzspalten seit rapahls Sonstiges-Wunsch.
     expect(screen.getByText('Grundlast')).toBeInTheDocument()

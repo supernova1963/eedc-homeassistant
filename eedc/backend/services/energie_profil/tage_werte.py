@@ -122,8 +122,12 @@ async def baue_tage_werte(
     anlage: Anlage,
     von: date,
     bis: date,
+    mit_waerme: bool = False,
 ) -> list[TagWerteResponse]:
     """Baut die Tages-Werte-Zeilen für ``[von, bis]`` (inklusiv), aufsteigend.
+
+    ``mit_waerme`` (Auftrag 29.10.2026): zusätzlich die Wärmepumpen-Tagesreihe (``tage_werte_zusatz._waerme``) — nur
+    auf Anfrage der Tabelle, sonst unverändert.
 
     Eine Zeile pro Tag, der stündliche TEP-Daten **oder** eine
     Tageszusammenfassung hat. Energie aus TEP-Σ, tag-native Felder aus der
@@ -336,7 +340,7 @@ async def baue_tage_werte(
         tarif_cache=tarif_cache,
         slot_kosten_je_tag=slot_kosten_je_tag,
         # Tabellen-Spalten (28.10.2026): je Größe ein Bereichs-Leser über das Fenster, kein Aufruf je Tag.
-        zusatz_je_tag=await lade_tabellen_zusatz(db, anlage, tz_pro_tag, von, bis),
+        zusatz_je_tag=await lade_tabellen_zusatz(db, anlage, tz_pro_tag, von, bis, mit_waerme=mit_waerme),
     )
 
     zeilen: list[TagWerteResponse] = []

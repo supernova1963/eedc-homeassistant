@@ -233,3 +233,83 @@ async def test_monatsroute_traegt_die_neuen_felder(db):
     assert z.eauto_verbrauch_kwh_100km == pytest.approx(17.0)
     assert z.eauto_v2h_entladung_kwh == pytest.approx(8.0)
     assert z.wp_jaz_heizen is None and z.wp_strom_kuehlen_kwh is None
+
+
+# ── Wärmepumpen-Tagesreihe (Auftrag 29.10.2026, ``?mit_waerme=true``) ──────────────────────────────────────────────
+
+_WAERME_PAARE = {  # Tabellen-Spalte → Feld der Route `waerme-verlauf` (Cockpit → Monat)
+    "wp_waerme": "wp_waerme_kwh", "wp_kaelte": "wp_kaelte_kwh",
+    "wp_strom_kuehlen": "wp_modus_strom_kuehlen_kwh", "wp_strom_lueften": "wp_modus_strom_lueften_kwh",
+    "wp_strom_entfeuchten": "wp_modus_strom_entfeuchten_kwh",
+    "wp_strom_nicht_aufgeteilt": "wp_modus_nicht_aufgeteilt_kwh",
+}
+
+
+async def _wp_klima_zwei_tage(db):
+    """Ein Klimagerät (luft_luft) an zwei Tagen: Kühlstrom 6 / 4 kWh (Betriebsart-Zähler ⇒ Aufteilung), Kälte 18 / 9,
+    Wärme (gemeinsamer Wärmemengenzähler) 5 / 0 — und Bezug 30 / 20 kWh in der Tageszeile. Am zweiten Tag ist die Wärme
+    0 (der Leser sagt dann «keine Aussage»), Kälte und Aufteilung bleiben."""
+    from backend.models.sensor_snapshot import SensorSnapshot
+    from backend.services.energie_profil._provenance_helpers import seed_tz_provenance
+
+    a = await factories.anlage(db, anlagenname="Klima", sensor_mapping={})
+    inv = await factories.investition(db, a.id, "waermepumpe", bezeichnung="Klima", anschaffungsdatum=date(2024, 1, 1),
+                                      parameter={"wp_art": "luft_luft"})
+    t0 = datetime.combine(D1, datetime.min.time())
+    felder = {}
+    for feld, je_tag in (("betriebsart_strom_kuehlen_kwh", (6.0, 4.0)),
+                         ("betriebsart_nutzenergie_kuehlen_kwh", (18.0, 9.0)),
+                         ("waerme_kwh", (5.0, 0.0))):
+        felder[feld] = {"strategie": "sensor", "sensor_id": f"sensor.{inv.id}_{feld}"}
+        stand = 100.0
+        for n, kwh in enumerate((0.0, *je_tag)):
+            stand += kwh
+            db.add(SensorSnapshot(anlage_id=a.id, sensor_key=f"inv:{inv.id}:{feld}", zeitpunkt=t0 + timedelta(days=n),
+                                  wert_kwh=stand, quelle="ha_statistics"))
+    a.sensor_mapping = {"investitionen": {str(inv.id): {"felder": felder}}}
+    for tag, bezug in ((D1, 30.0), (D2, 20.0)):
+        tz = TagesZusammenfassung(anlage_id=a.id, datum=tag, komponenten_kwh={f"waermepumpe_{inv.id}": bezug})
+        seed_tz_provenance(tz, writer="test", source="auto:monatsabschluss")
+        db.add(tz)
+    await db.commit()
+    return a
+
+
+async def test_tage_werte_waerme_nur_auf_anfrage_und_gleich_dem_cockpit_monat(db):
+    """Ohne ``mit_waerme`` bleiben die sechs Felder ``None`` (Cockpit → Monat ruft die Route so); mit ihm trägt jeder
+    Tag genau die Werte der Route ``waerme-verlauf`` für denselben Tag — derselbe Leser, dieselbe Rundung, «nur mit
+    Aufteilung» und «keine 0 als Platzhalter» wie dort. Die übrigen Spalten bleiben mit und ohne Parameter gleich."""
+    from backend.api.routes.energie_profil.waerme import get_waerme_verlauf
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    a = await _wp_klima_zwei_tage(db)
+    ohne = {z.datum: z for z in await baue_tage_werte(db, a, D1, D2)}
+    assert set(ohne) == {D1, D2}
+    assert all(getattr(z, f) is None for z in ohne.values() for f in _WAERME_PAARE), "ohne Parameter keine WP-Reihe"
+
+    mit = {z.datum: z for z in await baue_tage_werte(db, a, D1, D2, mit_waerme=True)}
+    cockpit = {z.datum: z for z in await get_waerme_verlauf(a.id, von=D1, bis=D2, db=db)}
+    assert set(cockpit) == {D1, D2}
+    for tag in (D1, D2):
+        for spalte, feld in _WAERME_PAARE.items():
+            assert getattr(mit[tag], spalte) == getattr(cockpit[tag], feld), (tag, spalte)
+    # Die Probe trägt Werte (sonst bewiese die Gleichheit nichts): Kühlstrom gemessen, der Rest nicht aufgeteilt.
+    assert mit[D1].wp_strom_kuehlen == pytest.approx(6.0)
+    assert mit[D1].wp_strom_nicht_aufgeteilt == pytest.approx(24.0)
+    assert mit[D1].wp_kaelte == pytest.approx(18.0) and mit[D1].wp_waerme == pytest.approx(5.0)
+    assert mit[D2].wp_kaelte == pytest.approx(9.0)
+    assert mit[D2].wp_waerme is None, "Wärme 0 ⇒ keine Aussage wie im Verlauf, keine 0 als Platzhalter"
+    for tag in (D1, D2):
+        assert ohne[tag].model_dump(exclude=set(_WAERME_PAARE)) == mit[tag].model_dump(exclude=set(_WAERME_PAARE))
+
+
+async def test_route_tage_werte_positional_mit_db_und_parameter_aus(db):
+    """Die Route bleibt positional mit ``db`` an vierter Stelle rufbar (vier Bestandsproben tun das), und ohne den
+    Parameter ist er ``False`` — kein wahres ``Query``-Objekt als Default."""
+    from backend.api.routes.energie_profil.tage import get_tage_werte
+
+    a = await _wp_klima_zwei_tage(db)
+    ohne = await get_tage_werte(a.id, D1, D2, db)
+    assert ohne and all(z.wp_kaelte is None for z in ohne)
+    mit = {z.datum: z for z in await get_tage_werte(a.id, D1, D2, db, mit_waerme=True)}
+    assert mit[D1].wp_kaelte == pytest.approx(18.0)

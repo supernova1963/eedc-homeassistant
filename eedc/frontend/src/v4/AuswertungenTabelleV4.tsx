@@ -10,13 +10,13 @@
  * Vergleich = Vorjahr an (Monat: akt. Jahr↔Vorjahr · Tag: akt. Monat↔selber Monat Vorjahr).
  * Tabelle je parkbar (R6); geparkt → Block-Hülle ausgeblendet.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Table, CalendarDays, CalendarClock } from 'lucide-react'
 import { Alert, FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, GeraeteHinweis, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
-import { WerteTabelle } from '../components/werte'
-import { monatsZeile, tagesZeile, richteMonateAus, type WerteZeile } from '../lib/werte'
+import { WerteTabelle, gespeicherteSpalten } from '../components/werte'
+import { monatsZeile, tagesZeile, richteMonateAus, brauchtWaermeTag, type WerteZeile } from '../lib/werte'
 import {
   baueErzeugerSpalten, ERZEUGER_OHNE_SENSOR_LABEL, ERZEUGER_OHNE_SENSOR_HINWEIS,
 } from '../lib/erzeugerSpalten'
@@ -36,6 +36,9 @@ const SCOPE = 'auswertungen-werkbank'
 // Bild-1-Default (Gernot 2026-06-26): Energie + Quoten, ohne Finanz-Spalten.
 const DEFAULT_SPALTEN = ['erzeugung', 'eigenverbrauch', 'einspeisung', 'netzbezug', 'gesamtverbrauch', 'autarkie', 'evQuote']
 const vglLabel = (modus: TagVergleichModus, jahr: number) => (modus === 'periodeImJahr' ? String(jahr) : 'Vorperiode')
+/** Lade-Anzeige, solange die Wärmepumpen-Tagesreihe gerechnet wird (Entscheid Gernot 28.10.2026: kein halber Stand). */
+export const WAERME_LADE_TEXT = 'Die Wärmepumpen-Werte werden berechnet. Dafür müssen sehr viele Stundendatensätze '
+  + 'durchsucht und zusammengefasst werden — bei langen Zeiträumen dauert das einige Sekunden.'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const letzterTag = (y: number, m: number) => new Date(y, m, 0).getDate()
@@ -396,7 +399,14 @@ function EnergieprofilBlock({
     () => (von && bis ? tagVergleich(vglModus, von, bis, vglJahr) : null),
     [von, bis, vglModus, vglJahr],
   )
-  const { rows, vorjahrRows, loading, error } = useTagesWerte(anlageId, von, bis, vgl?.von ?? null, vgl?.bis ?? null)
+  // Wärmepumpen-Tagesreihe nur, wenn eine ihrer Spalten eingeblendet ist (29.10.2026). Der Startwert kommt aus der
+  // gespeicherten Spaltenwahl (sonst Vorgabe) — dieselbe Regel wie der Startwert der Tabelle —, damit schon die erste
+  // Abfrage richtig fragt und nicht erst eine halbe Tabelle und dann die ganze erscheint; danach meldet die Tabelle.
+  const [mitWaerme, setMitWaerme] = useState(() => brauchtWaermeTag(gespeicherteSpalten(SCOPE, 'tag') ?? DEFAULT_SPALTEN))
+  const meldeSpalten = useCallback((keys: string[]) => setMitWaerme(brauchtWaermeTag(keys)), [])
+  const { rows, vorjahrRows, loading, error } = useTagesWerte(
+    anlageId, von, bis, vgl?.von ?? null, vgl?.bis ?? null, mitWaerme,
+  )
   const { primZeilen, vglZeilen } = useMemo(
     () => richteAus(rows.map(tagesZeile), vorjahrRows ? vorjahrRows.map(tagesZeile) : null, vgl),
     [rows, vorjahrRows, vgl],
@@ -446,7 +456,15 @@ function EnergieprofilBlock({
           />
         }
       />
-      {loading && rows.length === 0 ? (
+      {loading && mitWaerme ? (
+        // Wärmepumpen-Spalte eingeblendet (29.10.2026): bis ALLES geladen ist, weder die alte noch eine halbe Tabelle —
+        // die Lade-Anzeige mit Grund (B8: Tabellen-Skeleton, der Grund sichtbar darüber). Der CSV-Export hängt an der
+        // Tabelle und ist in der Zeit nicht greifbar.
+        <div className="space-y-2">
+          <p className="text-sm text-gray-500 dark:text-gray-400">{WAERME_LADE_TEXT}</p>
+          <TabellenSkeleton label="Lade Wärmepumpen-Werte…" />
+        </div>
+      ) : loading && rows.length === 0 ? (
         // Spinner nur beim Erst-Load; bei Zeitraum-/Vergleichswechsel bleibt die
         // bestehende Tabelle stehen und aktualisiert sich in-place (detLAN D7-6).
         <TabellenSkeleton label="Lade Tageswerte…" />
@@ -481,6 +499,7 @@ function EnergieprofilBlock({
             vergleichDefaultAn={!!vgl}
             scope={SCOPE} defaultSpalten={DEFAULT_SPALTEN}
             csvDateiname={`werte_tag_${anlagenname ?? 'export'}.csv`}
+            onSichtbareSpalten={meldeSpalten}
           />
         </Parkbar>
       )}

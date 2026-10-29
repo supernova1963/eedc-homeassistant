@@ -8,6 +8,7 @@ GET /api/energie-profil/{anlage_id}/tage-werte — Tages-Werte-Zeilen (Bilanz + 
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
 from datetime import date
+from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,6 +106,11 @@ async def get_tage_werte(
     von: date = Query(..., description="Startdatum (inklusiv)"),
     bis: date = Query(..., description="Enddatum (inklusiv)"),
     db: AsyncSession = Depends(get_db),
+    # Nach `db` und in `Annotated`-Form (wie `monatsdaten.py`): Aufrufer rufen die Funktion positional mit `db` an
+    # vierter Stelle, und als Default stünde sonst ein (wahres) `Query`-Objekt statt `False`.
+    mit_waerme: Annotated[bool, Query(
+        description="Wärmepumpen-Tagesreihe (Wärme, Kälte, Betriebsart-Strom) mitliefern",
+    )] = False,
 ):
     """Tages-Werte-Zeilen (Energie-Bilanz + Finanzen + tag-native Metriken)
     für die Werte/Tabelle-Embed-Sicht in Tagesgranularität (IA v4 E3).
@@ -112,6 +118,10 @@ async def get_tage_werte(
     Eine Zeile pro Tag, additiv zur Monatsbilanz (Σ stündl. TEP-Rows über den
     SoT-Helper `bilanz_aus_stundenrows`). Finanzen über den `baue_finanz_zeile`-
     SoT (je-Monat-Tarif).
+
+    ``mit_waerme`` (Auftrag 29.10.2026): die Felder ``wp_waerme``, ``wp_kaelte`` und ``wp_strom_kuehlen``/``_lueften``/
+    ``_entfeuchten``/``_nicht_aufgeteilt`` aus der Tagesreihe von *Cockpit → Monat*. Teuer über lange Zeiträume — der
+    Client fragt nur, wenn eine dieser Spalten eingeblendet ist; ohne ihn bleiben die Felder ``None``.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
@@ -125,4 +135,4 @@ async def get_tage_werte(
     # Import hier ergäbe einen Zyklus (routes-Package ↔ Service).
     from backend.services.energie_profil.tage_werte import baue_tage_werte
 
-    return await baue_tage_werte(db, anlage, von, bis)
+    return await baue_tage_werte(db, anlage, von, bis, mit_waerme=mit_waerme)

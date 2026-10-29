@@ -222,6 +222,17 @@ export interface TagWerte {
   /** Wärmepumpen-Starts und Betriebszeit in ganzen Minuten (Tagessumme wie Cockpit → Monat). */
   wp_starts?: number | null
   wp_betriebszeit_min?: number | null
+  // ── Wärmepumpen-Tagesreihe (29.10.2026) — nur mit `mitWaerme` (Query `mit_waerme=true`), sonst `null`; dieselben
+  // Werte wie Cockpit → Monat (Route `waerme-verlauf`). Teuer über lange Zeiträume.
+  /** Σ gemessene Wärme des Tages; ohne Wärmemengenzähler `null`. */
+  wp_waerme?: number | null
+  /** Gemessene Kälte des Tages. */
+  wp_kaelte?: number | null
+  /** Betriebsart-Strom — nur an Tagen mit Aufteilung. */
+  wp_strom_kuehlen?: number | null
+  wp_strom_lueften?: number | null
+  wp_strom_entfeuchten?: number | null
+  wp_strom_nicht_aufgeteilt?: number | null
 }
 
 /**
@@ -858,8 +869,10 @@ export const energieProfilApi = {
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
 
-  getTageWerte: (anlageId: number, von: string, bis: string): Promise<TagWerte[]> =>
-    api.get(`/energie-profil/${anlageId}/tage-werte?von=${von}&bis=${bis}`),
+  /** `mitWaerme`: zusätzlich die Wärmepumpen-Tagesreihe (s. `TagWerte.wp_waerme` …) — nur anfragen, wenn eine dieser
+   *  Spalten eingeblendet ist; ohne ihn bleibt die URL wie bisher. */
+  getTageWerte: (anlageId: number, von: string, bis: string, mitWaerme = false): Promise<TagWerte[]> =>
+    api.get(`/energie-profil/${anlageId}/tage-werte?von=${von}&bis=${bis}${mitWaerme ? '&mit_waerme=true' : ''}`),
 
   /** Die Tagesreihe des Wärme/Klima-Verlaufs. Zeitraum max. 31 Tage. */
   /** Verteilung & Verlauf (WK-16c) — **eine** Route für alle drei Sichten.

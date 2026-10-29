@@ -6,7 +6,7 @@ export {
   WERTE_METRIKEN, WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   ERZEUGER_METRIK_PREFIX, erzeugerMetriken,
   ZAEHLER_METRIK_PREFIX, zaehlerMetriken,
-  getMonatWert, getTagWert, metrikenFuer,
+  getMonatWert, getTagWert, metrikenFuer, brauchtWaermeTag,
 } from './registry'
 export type { WerteZeile } from './zeile'
 export { monatsZeile, tagesZeile, richteMonateAus } from './zeile'
