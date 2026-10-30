@@ -450,6 +450,8 @@ class TarifFakten:
     netzbezug_preis_herkunft: Optional[str] = None
     netzbezug_stammpreis_cent: float = NETZBEZUG_DEFAULT_CENT
     einspeiseverguetung_cent: float = EINSPEISEVERGUETUNG_DEFAULT_CENT
+    #: N-769: Σ der Grundpreise ALLER im Monat gültigen Tarife — allgemein plus ein EIGENER WP-/Wallbox-Tarif
+    #: (``tarif.grundpreis_des_monats``); gehört nur in die Stromrechnung.
     grundpreis_euro_monat: float = 0.0
     wp_preis_cent: float = NETZBEZUG_DEFAULT_CENT
     wallbox_preis_cent: float = NETZBEZUG_DEFAULT_CENT

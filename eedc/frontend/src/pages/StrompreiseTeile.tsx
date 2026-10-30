@@ -13,7 +13,7 @@ import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, Radio
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { SchalterZeile } from '../components/forms/sections/SchalterZeile'
 import { useAnlage, useStrompreise } from '../hooks'
-import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
+import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS, verwendungLabel } from '../lib'
 import type { Strompreis, StrompreisVerwendung, StrompreisZeitfenster } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
@@ -76,13 +76,9 @@ export function erstTarifVorbelegung(
   return monatsersterVon(installationsdatum)
 }
 
-export function verwendungLabel(v: StrompreisVerwendung): string {
-  switch (v) {
-    case 'waermepumpe': return 'Wärmepumpe'
-    case 'wallbox': return 'Wallbox'
-    default: return 'Standard'
-  }
-}
+// `verwendungLabel` lebt seit N-769 in `lib/tarifHinweise.ts` (auch der Ausweis der Grundgebühr spricht den Namen);
+// der Re-Export hält den bisherigen Import-Pfad.
+export { verwendungLabel }
 
 // ─── Daten-Hook (Strompreise + abgeleitete Sortierung/Aktuell-Auswahl + CRUD) ──
 

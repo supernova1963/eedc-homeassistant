@@ -26,7 +26,7 @@ import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, Monatsprogno
 import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
-import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
+import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE, grundgebuehrAufteilungText } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -284,7 +284,8 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       formel: preisFormel(d),
       berechnung: `${fmt(d.netzbezug_kwh)} kWh × ${fmtCalc(netzPreis, 1)} ct/kWh`,
       ergebnis: (d.grundgebuehr_euro ?? 0) > 0
-        ? `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € · + ${fmtCalc(d.grundgebuehr_euro, 2)} € Grundpreis = ${fmtCalc(d.netzbezug_kosten_euro, 2)} € gesamt`
+        // N-769: mit eigenem WP-/Wallbox-Tarif nennt der Zusatz den Grundpreis je Tarif.
+        ? `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € · + ${fmtCalc(d.grundgebuehr_euro, 2)} € Grundpreis${grundgebuehrAufteilungText(d.grundgebuehr_aufteilung, e => fmtCalc(e, 2))} = ${fmtCalc(d.netzbezug_kosten_euro, 2)} € gesamt`
         : `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € Kosten`,
     })
   }

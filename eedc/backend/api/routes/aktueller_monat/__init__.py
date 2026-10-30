@@ -807,6 +807,7 @@ async def _berechne_monat(
     einspeisung_neg_preis = _out["einspeisung_neg_preis"]
     ev_ersparnis = _out["ev_ersparnis"]
     grundgebuehr = _out["grundgebuehr"]
+    grundgebuehr_aufteilung = _out["grundgebuehr_aufteilung"]
     monats_benzinpreis = _out["monats_benzinpreis"]
     monats_gaspreis = _out["monats_gaspreis"]
     netzbezug_arbeitspreis_kosten = _out["netzbezug_arbeitspreis_kosten"]
@@ -1170,6 +1171,7 @@ async def _berechne_monat(
             if monats_fakt is not None and monats_fakt.meta.monatsdaten is not None else None
         ),
         grundgebuehr_euro=grundgebuehr,
+        grundgebuehr_aufteilung=grundgebuehr_aufteilung,
         zaehlergebuehr_euro_jahr=zaehlergebuehr_jahr,
         # Vergleiche
         vorjahr=vorjahr,

@@ -522,7 +522,8 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > **Die Kachel „Ø-Preis Netz" zeigt unter dem Preis die Arbeitspreis-Kosten** (`Netzbezug ×
 > Ø-Preis`) — nicht die Gesamtsumme der Stromrechnung. So geht die Division auf: kWh und €
 > der Unterzeile ergeben den Preis darüber. Der **Grundpreis** steht in der Herleitung
-> (Tipp/Hover) mit der Gesamtsumme daneben, und im Finanzen-Block darunter sind weiterhin
+> (Tipp/Hover) mit der Gesamtsumme daneben — mit eigenem Wärmepumpen- oder Wallbox-Tarif die Summe aller Grundpreise
+> samt Aufteilung je Tarif ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)) —, und im Finanzen-Block darunter sind weiterhin
 > die vollen Netzbezug-Kosten ausgewiesen. Bei einem **flexiblen Tarif** ist der Ø-Preis der
 > verbrauchsgewichtete Monatsdurchschnitt; mit ihm rechnen dann auch Kosten und
 > Eigenverbrauchs-Ersparnis dieses Monats.

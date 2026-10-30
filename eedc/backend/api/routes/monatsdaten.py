@@ -43,6 +43,7 @@ from backend.services.monats_fakten import (
     TAGESWERT_BKW,
     TAGESWERT_PV,
     TAGESWERT_SPEICHER,
+    grundpreis_des_monats,
     lade_monats_fakten,
     netzfeld_ist_erfasst,
 )
@@ -950,7 +951,8 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
             md,
             strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT,
         ),
-        grundpreis_euro_monat=strompreis.grundpreis_euro_monat or 0 if strompreis else 0,
+        # N-769: Σ der Grundpreise aller gültigen Tarife (allgemein + eigener WP-/Wallbox-Tarif) — die eine Bildungsstelle.
+        grundpreis_euro_monat=grundpreis_des_monats(tarife).summe_euro,
         # F-58: Nenner des spezifischen Ertrags in den Monatskennzahlen —
         # Σ der im Monat aktiven Erzeuger statt des gepflegten Referenzwerts.
         #

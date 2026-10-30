@@ -58,6 +58,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.dienstliche_ladekosten import DIENSTLICHE_LADEKOSTEN_HINWEIS
 from backend.models.anlage import Anlage
+from backend.services.monats_fakten.tarif import VERWENDUNG_LABEL
 from backend.services.pdf.formatierung import (
     LEER,
     fmt_einheit,
@@ -479,7 +480,10 @@ def _abschnitte_finanzen(d: Any) -> list[Abschnitt]:
         *([_z("WP-Ersparnis", fmt_euro(d.wp_ersparnis_euro))] if d.wp_ersparnis_euro else []),
         *([_z("E-Mobilität-Ersparnis", fmt_euro(d.emob_ersparnis_euro))] if d.emob_ersparnis_euro else []),
         _z("Netzbezugskosten", fmt_euro(d.netzbezug_kosten_euro)),
-        _z("davon Grundgebühr", fmt_euro(d.grundgebuehr_euro)),
+        # N-769: mit eigenem WP-/Wallbox-Tarif nennt der Hinweis die Grundgebühr je Tarif (Summe steht im Wert).
+        _z("davon Grundgebühr", fmt_euro(d.grundgebuehr_euro), hinweis=(
+            " · ".join(f"{VERWENDUNG_LABEL.get(k, k)} {fmt_euro(v)}" for k, v in d.grundgebuehr_aufteilung.items())
+            if getattr(d, "grundgebuehr_aufteilung", None) else None)),
         _z("Zwischensumme vor Betriebskosten", fmt_euro(d.ergebnis_vor_betriebskosten_euro)),
         _z("Betriebskosten (anteilig)", fmt_euro(d.betriebskosten_anteilig_euro)),
         _z("Monatsergebnis", fmt_euro(d.ergebnis_euro),

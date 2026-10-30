@@ -480,6 +480,9 @@ export interface AktuellerMonatResponse {
   // reiner Ausweis) + jährliche Zählergebühr vom Tarif (nur Jahresaufstellung,
   // nicht verrechnet).
   grundgebuehr_euro: number | null
+  /** N-769: Grundgebühr je Tarif-Verwendung (`allgemein`/`waermepumpe`/`wallbox` → €), nur wenn ein eigener WP-/
+   *  Wallbox-Tarif beiträgt; sonst `null`. Die Summe steht in `grundgebuehr_euro`. */
+  grundgebuehr_aufteilung?: Record<string, number> | null
   zaehlergebuehr_euro_jahr: number | null
 
   // Vergleiche

@@ -97,7 +97,9 @@ from backend.services.monats_fakten.laden import (  # noqa: F401 — Re-Export
     lade_monats_fakten,
 )
 from backend.services.monats_fakten.tarif import (  # noqa: F401 — Re-Export
+    GrundpreisDesMonats,
     dienstliche_ladekosten_euro,
+    grundpreis_des_monats,
     tarif_des_monats,
     tarife_der_monate,
 )
@@ -149,6 +151,8 @@ __all__ = [
     "lade_monats_fakten",
     "tarif_des_monats",
     "tarife_der_monate",
+    "grundpreis_des_monats",
+    "GrundpreisDesMonats",
     "dienstliche_ladekosten_euro",
     "sonstiges_aus_zeilen",
     "wp_aus_zeilen",

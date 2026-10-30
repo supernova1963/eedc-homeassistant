@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.strompreise import (
@@ -49,6 +50,52 @@ from backend.services.monats_fakten.fakten import MonatsSchluessel, TarifFakten
 #     `wirksamer_arbeitspreis_cent` die Datenbank gar nicht erst.
 # Wer das aendern will, gibt den Cache als eigenen Parameter durch — nicht als
 # Fremdschluessel in einem fremden Dict.
+
+
+#: Die Verwendungen, deren Tarif einen Grundpreis zur Stromrechnung beiträgt — in der Reihenfolge des Ausweises (N-769).
+GRUNDPREIS_VERWENDUNGEN: tuple[str, ...] = ("allgemein", "waermepumpe", "wallbox")
+#: Anwenderwort je Verwendung — wie die Tarifliste (`StrompreiseTeile.tsx::verwendungLabel` → `lib/tarifHinweise.ts`).
+VERWENDUNG_LABEL: dict[str, str] = {"allgemein": "Standard", "waermepumpe": "Wärmepumpe", "wallbox": "Wallbox"}
+
+
+@dataclass(frozen=True)
+class GrundpreisDesMonats:
+    """Der Grundpreis eines Monats: die Summe und — nur wenn ein eigener Komponenten-Tarif beiträgt — je Verwendung."""
+
+    summe_euro: float
+    #: ``{verwendung: €}`` der Tarife mit Grundpreis > 0, Reihenfolge ``GRUNDPREIS_VERWENDUNGEN``; ``None``, solange nur
+    #: der allgemeine Tarif beiträgt (dann ist die Summe sein Grundpreis, und eine Aufteilung sagte nichts Neues).
+    aufteilung: Optional[dict[str, float]] = None
+
+
+def grundpreis_des_monats(tarife: Mapping[str, object]) -> GrundpreisDesMonats:
+    """Der Grundpreis der Stromrechnung eines Monats aus den zum Stichtag gültigen Tarifen (N-769, 30.10.2026).
+
+    ``tarife`` ist das Dict von ``lade_tarife_fuer_anlage``/``tarife_zum_stichtag`` (``allgemein``, ``waermepumpe``,
+    ``wallbox``; ohne eigenen Datensatz zeigt die Verwendung auf DENSELBEN allgemeinen Datensatz). Die Stromrechnung
+    trägt die Grundpreise ALLER im Monat gültigen Tarife: den allgemeinen und je Verwendung den eines EIGENEN Datensatzes —
+    nicht den Rückfall auf den allgemeinen (sonst doppelt; dieselbe Identitätsprobe wie ``_wp_tarif is not allgemein``
+    unten). Bis dahin las jede Sicht nur ``allgemein.grundpreis_euro_monat``: der Grundpreis eines zweiten Zählers mit
+    eigenem WP-/Wallbox-Tarif ging in keine Zahl ein (gemessen r28, Januar 2025, WP-Tarif 10 €/Monat: Stromrechnung 126,17
+    statt 136,17 €). Der Komponenten-Grundpreis steht NUR hier (Stromrechnung), nicht zusätzlich in WP-Kosten, WP- oder
+    E-Mob-Ersparnis — sonst stünde er im Ergebnis doppelt (Vorentscheid 30.10.2026, Muster N-606).
+
+    Die EINE Bildungsstelle: die Tarif-Fakten (``TarifFakten.grundpreis_euro_monat``), *Cockpit → Monat* (samt Vorjahr
+    und Jahr) und ``GET /monatsdaten/{id}`` lesen den Grundpreis hier.
+    """
+    allgemein = tarife.get("allgemein")
+    posten: dict[str, float] = {}
+    for verwendung in GRUNDPREIS_VERWENDUNGEN:
+        tarif = tarife.get(verwendung)
+        if tarif is None or (verwendung != "allgemein" and tarif is allgemein):
+            continue
+        betrag = tarif.grundpreis_euro_monat
+        if betrag is not None and betrag > 0:
+            posten[verwendung] = betrag
+    return GrundpreisDesMonats(
+        summe_euro=sum(posten.values(), 0.0),
+        aufteilung=posten if any(v != "allgemein" for v in posten) else None,
+    )
 
 
 async def _komponenten_preis(
@@ -146,7 +193,8 @@ async def _lade_tarif(
             if allgemein
             else EINSPEISEVERGUETUNG_DEFAULT_CENT,
         ),
-        grundpreis_euro_monat=(allgemein.grundpreis_euro_monat or 0.0) if allgemein else 0.0,
+        # N-769: Σ der Grundpreise aller gültigen Tarife (allgemein + eigener WP-/Wallbox-Tarif) — die eine Bildungsstelle.
+        grundpreis_euro_monat=grundpreis_des_monats(tarife).summe_euro,
         wp_preis_cent=wp_preis_cent,
         wallbox_preis_cent=wallbox_cent,
         # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox.

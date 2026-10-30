@@ -16,7 +16,7 @@ import { render, screen } from '@testing-library/react'
 
 import { StrompreisForm } from '../pages/StrompreiseTeile'
 import StrompreiseStep from '../components/setup-wizard/steps/StrompreiseStep'
-import { EINSPEISEVERGUETUNG_FLAT_HINWEIS } from './tarifHinweise'
+import { EINSPEISEVERGUETUNG_FLAT_HINWEIS, grundgebuehrAufteilungText, verwendungLabel } from './tarifHinweise'
 import type { Anlage } from '../types'
 
 function anlageMit(kwp: number): Anlage {
@@ -74,5 +74,28 @@ describe('Einspeisevergütung — Hinweis auf die flache Rechnung', () => {
 
     render(<StrompreisForm anlageId={1} onCreate={async () => {}} onCancel={() => {}} />)
     expect(screen.getByText(/kein Einspeise-Erlös berechnet/)).toBeTruthy()
+  })
+})
+
+describe('N-769: Grundgebühr je Tarif', () => {
+  const fmt = (e: number) => e.toFixed(2).replace('.', ',')
+
+  it('nennt die Tarife in der Reihenfolge des Backends, mit den Namen der Tarifliste', () => {
+    expect(grundgebuehrAufteilungText({ allgemein: 14, waermepumpe: 10 }, fmt))
+      .toBe(' (Standard 14,00 € · Wärmepumpe 10,00 €)')
+    expect(grundgebuehrAufteilungText({ waermepumpe: 10, wallbox: 5 }, fmt))
+      .toBe(' (Wärmepumpe 10,00 € · Wallbox 5,00 €)')
+  })
+
+  it('bleibt ohne Aufteilung leer (nur der allgemeine Tarif)', () => {
+    expect(grundgebuehrAufteilungText(null, fmt)).toBe('')
+    expect(grundgebuehrAufteilungText(undefined, fmt)).toBe('')
+    expect(grundgebuehrAufteilungText({}, fmt)).toBe('')
+  })
+
+  it('verwendungLabel ist derselbe Name wie in der Tarifliste', () => {
+    expect(verwendungLabel('allgemein')).toBe('Standard')
+    expect(verwendungLabel('waermepumpe')).toBe('Wärmepumpe')
+    expect(verwendungLabel('wallbox')).toBe('Wallbox')
   })
 })

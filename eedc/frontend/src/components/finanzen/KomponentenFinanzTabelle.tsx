@@ -29,7 +29,7 @@
 import { fmtCalc, MobilKarte, MobilKarten } from '../ui'
 import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
-import { GELD_TEXT_CLASS, compareTyp } from '../../lib'
+import { GELD_TEXT_CLASS, compareTyp, grundgebuehrAufteilungText } from '../../lib'
 import type { AktuellerMonatResponse, InvestitionFinancialDetail } from '../../api/aktuellerMonat'
 import { bkwAufteilung, pvEigenverbrauchRestEuro } from './evAufteilung'
 import { DIENSTLICHE_LADEKOSTEN_HINWEIS, DIENSTLICHE_LADEKOSTEN_LABEL } from './dienstlicheLadekosten'
@@ -351,7 +351,7 @@ export function KomponentenFinanzTabelle({ d, zeitraum = 'monat' }: {
         {d.netzbezug_kosten_euro != null && (
           <p>
             Nachrichtlich (nicht im Saldo): Netzbezug-Kosten {fmtCalc(d.netzbezug_kosten_euro, 2)} €
-            {(d.grundgebuehr_euro ?? 0) > 0 && <> · davon Grundgebühr {fmtCalc(d.grundgebuehr_euro, 2)} €</>}
+            {(d.grundgebuehr_euro ?? 0) > 0 && <> · davon Grundgebühr {fmtCalc(d.grundgebuehr_euro, 2)} €{grundgebuehrAufteilungText(d.grundgebuehr_aufteilung, e => fmtCalc(e, 2))}</>}
           </p>
         )}
         {zeitraum === 'jahr' && d.zaehlergebuehr_euro_jahr != null && d.zaehlergebuehr_euro_jahr > 0 && (

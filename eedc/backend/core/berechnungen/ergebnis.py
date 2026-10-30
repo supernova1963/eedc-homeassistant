@@ -523,6 +523,26 @@ def _netzbezug_preis_herkunft_zeitraum(monate: Sequence[Mapping[str, Any]]) -> O
     return arten.pop() if len(arten) == 1 else "gemischt"
 
 
+def _grundgebuehr_aufteilung_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional[dict[str, float]]:
+    """Σ der Grundgebühr je Verwendung über die Monate (N-769, 30.10.2026).
+
+    Ein Monat ohne Aufteilung trägt nur den allgemeinen Tarif — seine Grundgebühr zählt als ``allgemein``, sonst ginge
+    die Aufteilung nicht auf die gefaltete ``grundgebuehr_euro`` auf (WP-Tarif ab Juli: Januar–Juni ohne Aufteilung).
+    ``None``, solange kein Monat eine Aufteilung trägt (dann ist alles ``allgemein``). Reihenfolge: ``allgemein`` zuerst,
+    dann die Komponenten-Tarife (``waermepumpe`` vor ``wallbox``).
+    """
+    if not any(m.get("grundgebuehr_aufteilung") for m in monate):
+        return None
+    je: dict[str, float] = {}
+    for m in monate:
+        teile = m.get("grundgebuehr_aufteilung")
+        if not teile:
+            teile = {"allgemein": m["grundgebuehr_euro"]} if m.get("grundgebuehr_euro") else {}
+        for verwendung, betrag in teile.items():
+            je[verwendung] = je.get(verwendung, 0.0) + betrag
+    return {k: je[k] for k in sorted(je, key=lambda k: (k != "allgemein", k))}
+
+
 def falte_zeitraum(
     monate: Sequence[Mapping[str, Any]],
     jahr: int,
@@ -818,6 +838,7 @@ def falte_zeitraum(
             if any(m.get("einspeise_durchschnittspreis_cent") is not None for m in monate) else None
         ),
         "grundgebuehr_euro": summe(f("grundgebuehr_euro")),
+        "grundgebuehr_aufteilung": _grundgebuehr_aufteilung_zeitraum(monate),
         "zaehlergebuehr_euro_jahr": next(
             (v for v in reversed(f("zaehlergebuehr_euro_jahr")) if v is not None), None),
 

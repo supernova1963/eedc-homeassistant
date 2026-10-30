@@ -559,8 +559,12 @@ class AktuellerMonatResponse(BaseModel):
     #: er zwangsläufig klein (die Abdeckung misst gegen den vollen Monat).
     netzbezug_preis_abdeckung: Optional[float] = None
     # G19-1 K3 (R19-3): Grundgebühr des Monats — steckt bereits in
-    # netzbezug_kosten_euro (reiner Ausweis, kein zweiter Posten).
+    # netzbezug_kosten_euro (reiner Ausweis, kein zweiter Posten). N-769: Σ aller gültigen Tarife (allgemein + eigener
+    # WP-/Wallbox-Tarif, `monats_fakten.grundpreis_des_monats`).
     grundgebuehr_euro: Optional[float] = None
+    #: N-769: die Grundgebühr je Verwendung (``allgemein``/``waermepumpe``/``wallbox`` → €), nur wenn ein eigener
+    #: Komponenten-Tarif beiträgt — sonst ``None``. Im Jahr Σ je Verwendung (``falte_zeitraum``).
+    grundgebuehr_aufteilung: Optional[dict[str, float]] = None
     # G19-1 K3: jährliche Zähler-/Messstellengebühr vom Tarif — reiner Ausweis
     # in der Jahresaufstellung, NICHT in Kosten/Netto-Ertrag verrechnet.
     zaehlergebuehr_euro_jahr: Optional[float] = None

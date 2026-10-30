@@ -268,7 +268,7 @@ Hardcodierte Werte in `cockpit.py`:
 | `v2h_entladung_kwh` | E-Auto V2H | `InvestitionMonatsdaten.verbrauch_daten` (Typ: e-auto) |
 | `einspeiseverguetung_cent` | Tarif, ggf. Monatswert | `Strompreis.einspeiseverguetung_cent_kwh`; bei variabler Vergütung schlägt `Monatsdaten.einspeise_durchschnittspreis_cent` (#392, `resolve_einspeise_preis_cent`) |
 | `netzbezug_preis_cent` | Tarif | `Strompreis.netzbezug_arbeitspreis_cent_kwh` |
-| `grundpreis_euro_monat` | Tarif | `Strompreis.grundpreis_euro_monat` |
+| `grundpreis_euro_monat` | Tarif | Σ `Strompreis.grundpreis_euro_monat` aller im Monat gültigen Tarife — allgemein plus ein **eigener** Wärmepumpen-/Wallbox-Tarif (N-769, `monats_fakten.grundpreis_des_monats`) |
 | `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis |
 | `leistung_kwp` | Anlage | Summe aller `Investition.leistung_kwp` (pv-module) |
 
@@ -788,7 +788,18 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 
 > **Grundgebühr / Zählergebühr (K3, ab v4.0):** Die **Grundgebühr** (`Strompreis.grundpreis_euro_monat`)
 > steckt bereits in den Netzbezugskosten (s. [§3.1](#31-energie-bilanz-monatskennzahlen)); der Cockpit-Finanz-Teaser
-> (Monat + Jahr) weist sie zusätzlich **nachrichtlich** aus („davon Grundgebühr: … €"). Die **Zählergebühr**
+> (Monat + Jahr) weist sie zusätzlich **nachrichtlich** aus („davon Grundgebühr: … €"). **Seit N-769 (30.10.2026)** ist
+> sie die **Summe der Grundpreise aller im Monat gültigen Tarife**: der allgemeine Tarif plus ein **eigener**
+> Wärmepumpen- oder Wallbox-Tarif (zweiter Zähler). Ein Komponenten-Tarif zählt nur mit einem eigenen Datensatz dieser
+> Verwendung — ohne ihn rechnet die Komponente mit dem allgemeinen Tarif, und dessen Grundpreis zählt nicht doppelt.
+> Gebildet an **einer** Stelle (`services/monats_fakten/tarif.py::grundpreis_des_monats`): Tarif-Fakten
+> (`TarifFakten.grundpreis_euro_monat` — Übersicht, Auswertungen → Tabelle, Komponenten-Zeitreihe), *Cockpit → Monat*
+> samt Vorjahresmonat und Jahr, `GET /monatsdaten/{id}`. Trägt ein Komponenten-Tarif bei, nennen Herleitung, Teaser und
+> PDF-Monatsbericht die Grundgebühr je Tarif (`grundgebuehr_aufteilung`, im Jahr Σ je Tarif; Monate ohne Aufteilung
+> zählen als „Standard"). Der Grundpreis des Komponenten-Tarifs steht **nur** in der Stromrechnung — nicht zusätzlich in
+> WP-Kosten, WP- oder E-Mobilitäts-Ersparnis (sonst stünde er im Ergebnis doppelt). Bis dahin trug die Stromrechnung nur
+> den allgemeinen Grundpreis (gemessen: WP-Tarif mit 10 €/Monat ⇒ Stromrechnung je Monat 10 € zu niedrig, Ergebnis
+> 10 € zu hoch). Die **Zählergebühr**
 > (neues optionales Tarif-Feld `Strompreis.zaehlergebuehr_euro_jahr`) wird im Jahr-Modus als „Zählergebühr:
 > … €/Jahr (nachrichtlich)" gezeigt, aber **nicht** in Kosten/Netto verrechnet — eine Einrechnung wäre ein
 > eigener Kennzahlen-Entscheid. Jahresfaltung (`falte_zeitraum`, Backend seit 03.10.2026): Grundgebühr = Σ, Zählergebühr = letzter Wert.
@@ -3707,7 +3718,7 @@ allgemein   → allgemein-Tarif   || Hardcoded Defaults (30.0 / 8.2)
 | PV Einspeisung/EV | `allgemein` | `einspeiseverguetung_cent_kwh`, `netzbezug_arbeitspreis_cent_kwh` |
 | Wärmepumpe Strom | `waermepumpe` | `netzbezug_arbeitspreis_cent_kwh` |
 | Wallbox/E-Auto Ladung | `wallbox` | `netzbezug_arbeitspreis_cent_kwh` |
-| Grundpreis | `allgemein` | `grundpreis_euro_monat` |
+| Grundpreis | `allgemein` + eigener `waermepumpe`/`wallbox`-Tarif (N-769, kein Rückfall) | `grundpreis_euro_monat` (Σ) |
 
 ### Hardcoded Defaults (wenn kein Tarif)
 

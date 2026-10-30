@@ -82,6 +82,13 @@ zeigt die Tabelle eine Lade-Anzeige, bis alle Tage gerechnet sind (bei einem Jah
 Alles ist abwählbar und nicht voreingestellt; jede Zahl ist dieselbe wie in Cockpit und Hub. Die Arbeitszahlen eines
 einzelnen Tages stehen weiterhin in *Cockpit → Tag* ([Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank)).
 
+**Stromrechnung mit dem Grundpreis deines Wärmepumpen- oder Wallbox-Tarifs.** Hast du für die Wärmepumpe oder die
+Wallbox einen zweiten Zähler mit eigenem Tarif eingetragen, zählt sein Grundpreis jetzt mit: Die Netzbezug-Kosten in
+*Cockpit → Monat/Jahr*, *Auswertungen → Tabelle*, der Übersicht und im PDF-Monatsbericht tragen die Grundpreise aller
+Tarife, die im Monat gelten, und „davon Grundgebühr" nennt die Aufteilung („Standard 14,00 € · Wärmepumpe 10,00 €").
+Bisher fehlte er — die Stromrechnung stand um ihn zu niedrig, das Monatsergebnis um ihn zu hoch. Ohne eigenen Tarif ändert
+sich nichts ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+
 ## v4.1.11 — 27. Oktober 2026
 
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0

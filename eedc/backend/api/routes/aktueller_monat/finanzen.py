@@ -32,7 +32,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     entscheide_emob_heimladung,
 )
 from backend.services.emob_kontext import lade_emob_kontext
-from backend.services.monats_fakten import SonstigesFakten
+from backend.services.monats_fakten import SonstigesFakten, grundpreis_des_monats
 from backend.core.berechnungen import abgetretene_bkw_ids
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -64,6 +64,7 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
     ev_preis_herkunft = None
     einspeise_cent = None
     grundgebuehr = None
+    grundgebuehr_aufteilung = None
     zaehlergebuehr_jahr = None
 
     # Die Monatszeile trägt sowohl den flexiblen Durchschnittspreis als auch die
@@ -176,7 +177,10 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
             einspeisung_neg_preis = round(m_erloes.nicht_verguetete_kwh, 1)
             nicht_vergueteter_erloes = round(m_erloes.nicht_vergueteter_erloes_euro, 2)
     if netzbezug is not None:
-        grundpreis = (allgemein_tarif.grundpreis_euro_monat or 0) if allgemein_tarif is not None else 0
+        # N-769 (30.10.2026): Σ der Grundpreise aller gültigen Tarife (allgemein + eigener WP-/Wallbox-Tarif) aus der
+        # einen Bildungsstelle der Tarif-Fakten — bis dahin nur `allgemein_tarif.grundpreis_euro_monat`.
+        _grundpreis = grundpreis_des_monats(tarife)
+        grundpreis = _grundpreis.summe_euro
         netzbezug_kosten = round(
             berechne_netzbezug_kosten(
                 netzbezug, netzbezug_preis_effektiv_cent, grundpreis
@@ -193,13 +197,16 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
         # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
         # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
         grundgebuehr = round(grundpreis, 2)
+        # N-769: je Verwendung, nur wenn ein eigener Komponenten-Tarif beiträgt (sonst None) — Herleitung und Teaser.
+        if _grundpreis.aufteilung is not None:
+            grundgebuehr_aufteilung = {k: round(v, 2) for k, v in _grundpreis.aufteilung.items()}
     if eigenverbrauch is not None:
         ev_ersparnis = round(eigenverbrauch * ev_preis_cent / 100, 2)
     # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
     # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
     # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
+    return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "grundgebuehr_aufteilung", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
 
 
 def komponenten_ersparnis(*, get_val):
