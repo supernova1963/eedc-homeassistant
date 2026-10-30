@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
 from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
 from backend.core.berechnungen.waermepumpe_kennzahl import abgrenzungs_grund, arbeitszahl
-from backend.core.berechnungen import berechne_finanz_aggregat, berechne_netzbezug_kosten, eauto_effizienz_100km
+from backend.core.berechnungen import berechne_finanz_aggregat, eauto_effizienz_100km
 from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, ust_anteil_euro
 from backend.services.finanz_zeilen import baue_finanz_zeile
-from backend.services.monats_fakten import finanz_zeile_eingabe
+from backend.services.monats_fakten import finanz_zeile_eingabe, komponenten_anteile_des_fakts, stromrechnung_euro
 
 
 @dataclass
@@ -56,8 +56,11 @@ async def _finanzen_des_monats(kx: _TabellenKontext, f, netzbezug: float) -> tup
         [finanz_zeile],
         erzeuger_erloes_euro=f.sonstiges.einspeise_erloes_euro,
     )
-    netzbezug_kosten = berechne_netzbezug_kosten(
-        netzbezug, f.tarif.netzbezug_preis_cent, f.tarif.grundpreis_euro_monat
+    # N-770 E2: die eine Bildungsstelle der Stromrechnung (`monats_fakten.stromrechnung_euro`).
+    netzbezug_kosten = stromrechnung_euro(
+        netzbezug, f.tarif.netzbezug_preis_cent, f.tarif.grundpreis_euro_monat,
+        # N-770/N-771: der gemessene Netzbezug zum WP-/Wallbox-Tarif zu dessen Preis.
+        komponenten_anteile_des_fakts(f, netzbezug),
     )
     _satz = kx._ust_saetze.get(f.jahr)
     _ust = (

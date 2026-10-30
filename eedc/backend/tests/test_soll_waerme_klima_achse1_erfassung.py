@@ -413,8 +413,10 @@ def test_i5_brauchwasser_waermepumpe_traegt_nur_die_warmwasser_achse():
     # P-433-3 S2 (25.10.2026): `heizstab_strom_kwh` («Strom Zusatzheizung») ebenso — ohne Bedingung an jedem
     # Gerät (P13), auch eine Brauchwasser-WP hat einen Heizstab. Er ist keine Heiz-Achse, sondern eine Teilmenge
     # des Gerätestroms.
+    # N-770 (30.10.2026): `netzbezug_eigener_tarif_kwh` («Netzbezug zum WP-Tarif») ebenso — keine Heiz-Achse, eine
+    # Teilmenge des Gerätestroms; ohne Tarif-Kontext filtert die Registry nicht (F1 entscheidet der Monatsabschluss).
     assert _pflegbar(p) == {"strom_warmwasser_kwh", "warmwasser_kwh",
-                            "waerme_kwh", "heizstab_strom_kwh"}
+                            "waerme_kwh", "heizstab_strom_kwh", "netzbezug_eigener_tarif_kwh"}
 
     # Zuordenbar bleibt beides — die Heiz-Achse als erweiterte Größe.
     flaeche = _zuordenbar(p)

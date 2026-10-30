@@ -65,6 +65,10 @@ class WpFakten:
     #: dazu zu addieren. ``None`` = kein Gerät misst ihn. Kein Leser von Ersparnis, CO₂, Community oder
     #: HA-Sensoren liest dieses Feld (B8); es trägt allein die Ausweis-Zahl „AZ ohne Zusatzheizung".
     heizstab_kwh: Optional[float] = None
+    #: N-770 (30.10.2026): Σ gemessener **Netzbezug zum WP-Tarif** (Feld ``netzbezug_eigener_tarif_kwh``) — die Menge, die
+    #: der Versorger zum eigenen WP-Tarif abrechnet; Teilmenge von ``strom_kwh``, nie dazu zu addieren. ``None`` = nicht
+    #: gemessen: kein Gerät misst ihn, oder ein Gerät mit Strom > 0 misst ihn nicht (F3). Leser: ``tarif.komponenten_anteile``.
+    netz_eigener_tarif_kwh: Optional[float] = None
     #: **N-479 — „gemessen" je Funktion.** Hat mindestens ein aktives Gerät des
     #: Zeitraums die Größe gemessen, auch wenn dabei 0 herauskam? Die Summen
     #: oben können das nicht sagen: Eine gemessene Null und ein fehlender Zähler

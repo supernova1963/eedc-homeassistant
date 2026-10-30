@@ -452,6 +452,14 @@ _SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG: dict[tuple[str, str], str] = {
     ("waermepumpe", "heizstab_strom_kwh"):
         "Teilmenge des Gerätestroms (Heizstab hinter dem WP-Zähler, H-B) — als eigener Beitrag "
         "stünde derselbe Strom in der Tagesbilanz doppelt",
+    # N-770/N-771: der Netzbezug zum Komponenten-Tarif ist eine Teilmenge des Gerätestroms bzw. der Ladung (der Anteil,
+    # den der Versorger zum WP-/Wallbox-Tarif abrechnet) — als eigener Beitrag stünde er in der Tagesbilanz doppelt.
+    # ⚠ Wortlaut ohne „thermisch" (wie der Heizstab): die Mengenart nimmt ihn über `WP_TEILMENGE_OHNE_MENGENART` heraus.
+    ("waermepumpe", "netzbezug_eigener_tarif_kwh"):
+        "Teilmenge des Gerätestroms (Netzanteil zum WP-Tarif, N-770) — als eigener Beitrag "
+        "stünde derselbe Strom in der Tagesbilanz doppelt",
+    ("wallbox", "netzbezug_eigener_tarif_kwh"):
+        "Teilmenge von ladung_kwh (Netzanteil zum Wallbox-Tarif, N-771), s. ladung_pv_kwh",
 }
 
 # #263 — die gemessenen Betriebsart-Zähler, aus zwei verschiedenen Gründen:
@@ -517,7 +525,9 @@ def wp_betriebsart(feld: str) -> Optional[str]:
 #: (H-B). Sie tragen keine Mengenart: der Status im Datenquellen-Block «Gerät gesamt» fragt «ist der Strom des Geräts
 #: gedeckt?», und ein zugeordneter Heizstab-Zähler deckt ihn nicht (gemessen 25.10.: ohne diese Ausnahme sagte der
 #: Block einer Wärmepumpe mit getrennter Strommessung «fehlt: Strom» statt «vollständig»).
-WP_TEILMENGE_OHNE_MENGENART: frozenset[str] = frozenset({"heizstab_strom_kwh"})
+#: N-770: dazu der Netzbezug zum WP-Tarif — eine Teilmenge, die den Gerätestrom nicht deckt (sonst sagte der Block
+#: «Gerät gesamt» mit diesem Zähler allein «vollständig»).
+WP_TEILMENGE_OHNE_MENGENART: frozenset[str] = frozenset({"heizstab_strom_kwh", "netzbezug_eigener_tarif_kwh"})
 
 
 def wp_menge(feld: str) -> Optional[str]:

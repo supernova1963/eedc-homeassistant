@@ -823,6 +823,23 @@ async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]
     return eintraege
 
 
+async def _nach_eigenem_tarif(db: AsyncSession, anlage_id: int, eintraege: list[dict]) -> list[dict]:
+    """N-770/N-771 (Bauplan F1): ein Feld mit ``tarif_verwendung`` (Netzbezug zum WP-/Wallbox-Tarif) ist ohne EIGENEN
+    Tarif dieser Verwendung **erweitert** — es steht hinter „Weitere Größen erfassen" (R1: mit Quelle rückt es vor, die
+    Fläche wertet ``erweitert and quelle == keine``). Mit eigenem Tarif steht es in der ersten Reihe (Block «Gerät
+    gesamt» bzw. kWh-Abschnitt der Wallbox). Die Tarife werden nur geladen, wenn ein solches Feld vorkommt."""
+    if not any(e.get("tarif_verwendung") for e in eintraege):
+        return eintraege
+    from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+    from backend.services.monats_fakten.tarif import eigene_tarif_verwendungen
+
+    eigene = eigene_tarif_verwendungen(await lade_tarife_fuer_anlage(db, anlage_id))
+    return [
+        {**e, "erweitert": True} if e.get("tarif_verwendung") and e["tarif_verwendung"] not in eigene else e
+        for e in eintraege
+    ]
+
+
 def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:
     """Entfernt `nur_manuell`- und bauartfremde Felder aus der Zuordnungs-Fläche.
 
@@ -1090,6 +1107,8 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     # ließe sich nicht mehr entfernen — dieselbe Falle, die `bedingung_anlage`
     # schon einmal gestellt hat (s. `get_felder_fuer_investition`).
     eintraege = ohne_nicht_zuordenbare(eintraege, quellen)
+    # N-770/N-771 (F1): «Netzbezug zum WP-/Wallbox-Tarif» in der ersten Reihe nur mit eigenem Tarif (heute).
+    eintraege = await _nach_eigenem_tarif(db, anlage_id, eintraege)
 
     # Vereinheitlichter Invert-Store (quellen-unabhängig, feld-/wert-level).
     invert_store = (anlage.sensor_mapping or {}).get("invertieren") or {}

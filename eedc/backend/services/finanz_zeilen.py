@@ -74,6 +74,10 @@ class FinanzZeileEingabe:
     #: Aggregat-Helper bewertet den Eigenverbrauch ohne sie, wenn der Vertrag hält. ``None`` ⇒ bitgleich.
     wandlungsverluste_kwh: Optional[float] = None
     verluste_grund: Optional[str] = None
+    #: N-770: PV-Anteil der Wärmepumpe und Preis des eigenen WP-Tarifs (``monats_fakten.komponenten_anteile``) — nur mit
+    #: gemessenem Netzbezug zum WP-Tarif; ``None`` ⇒ die Ersparnis bewertet alles zum EV-Preis (bitgleich).
+    wp_pv_kwh: Optional[float] = None
+    wp_tarif_cent: Optional[float] = None
 
 
 async def baue_finanz_zeile(
@@ -146,6 +150,8 @@ async def baue_finanz_zeile(
         neg_preis_kwh=eingabe.neg_preis_kwh,
         wandlungsverluste_kwh=eingabe.wandlungsverluste_kwh,
         verluste_grund=eingabe.verluste_grund,
+        wp_pv_kwh=eingabe.wp_pv_kwh,
+        wp_tarif_cent=eingabe.wp_tarif_cent,
     )
 
 

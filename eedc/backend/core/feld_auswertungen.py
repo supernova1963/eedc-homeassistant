@@ -324,6 +324,12 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
         _a(COCKPIT_MONAT, "api/routes/aktueller_monat/__init__.py", "_ohne_zusatzheizung_monat", "heizstab_kwh"),
         _a(COCKPIT_JAHR, "api/routes/cockpit/uebersicht.py", "_ohne_zusatzheizung_zeitraum", "heizstab_kwh"),
     ),
+    # N-770: der Netzbezug zum WP-Tarif — Stromrechnung und Eigenverbrauchs-Ersparnis (P = S − N zum WP-Tarif) über die
+    # Tarif-Fakten (`komponenten_anteile`), gelesen an der einen Lesetür.
+    ("waermepumpe", "netzbezug_eigener_tarif_kwh"): (
+        _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag", "NETZBEZUG_EIGENER_TARIF_FELD"),
+        _a(COCKPIT_JAHR, "services/monats_fakten/tarif.py", "komponenten_anteile", "netz_eigener_tarif_kwh"),
+    ),
 
     # ── Wärmepumpe / Klima: Wärme (D1) ───────────────────────────────────────
     ("waermepumpe", "waerme_kwh"): (
@@ -546,6 +552,12 @@ FELD_AUSWERTUNGEN: dict[tuple[str, str], tuple[Auswertung, ...]] = {
     ),
     ("wallbox", "ladevorgaenge"): (
         _a(KOMP_WALLBOX, "api/routes/investitionen/dashboard_wallbox.py", "get_wallbox_dashboard"),
+    ),
+    # N-771: der Netzbezug zum Wallbox-Tarif — gelesen an der einen Lesetür, bewertet in der Stromrechnung (Cockpit →
+    # Monat/Jahr über die Tarif-Fakten `komponenten_anteile`).
+    ("wallbox", "netzbezug_eigener_tarif_kwh"): (
+        _a(COCKPIT_MONAT, "core/berechnungen/imd_monatsaggregat.py", "imd_typ_beitrag", "NETZBEZUG_EIGENER_TARIF_FELD"),
+        _a(COCKPIT_JAHR, "services/monats_fakten/tarif.py", "komponenten_anteile", "wallbox_netz_eigener_tarif_kwh"),
     ),
     ("wallbox", "leistung_w"): (
         _a(COCKPIT_LIVE, "services/live_komponenten_builder.py", "_verbuche_investition"),

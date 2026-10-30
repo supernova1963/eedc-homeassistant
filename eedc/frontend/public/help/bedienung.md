@@ -527,6 +527,13 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > die vollen Netzbezug-Kosten ausgewiesen. Bei einem **flexiblen Tarif** ist der Ø-Preis der
 > verbrauchsgewichtete Monatsdurchschnitt; mit ihm rechnen dann auch Kosten und
 > Eigenverbrauchs-Ersparnis dieses Monats.
+>
+> **Mit Netzbezug zum WP- oder Wallbox-Tarif** (Feld an der Komponente, nur mit eigenem Tarif — [Einstellungen
+> §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)) rechnet die Herleitung den Netzbezug in Teilen: „117,9 kWh × 30,0 ct/kWh
+> + 256,0 kWh × 22,0 ct/kWh (Wärmepumpe)"; die Unterzeile nennt dann diese Summe, der Preis darüber bleibt der
+> Haushaltspreis. Der Netto-Ertrag nennt den PV-Strom der Wärmepumpe, den eedc zum WP-Tarif bewertet („davon 170,7 kWh
+> PV-Strom der Wärmepumpe zum WP-Tarif 22,0 ct/kWh"). Ist eine Menge größer als Gerätestrom oder Netzbezug, steht
+> „begrenzt" dabei.
 
 > **Die Ergebnis-Leiter in vier Zeilen** (Netto-Ertrag und Monatsergebnis rechnet eedc für Monat, Jahr und Gesamt gleich):
 >

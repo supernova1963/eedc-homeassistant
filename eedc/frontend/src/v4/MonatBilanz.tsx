@@ -26,7 +26,7 @@ import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, Monatsprogno
 import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
-import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE, grundgebuehrAufteilungText } from '../lib'
+import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE, evWpTarifText, grundgebuehrAufteilungText, netzbezugAnteileBerechnung } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -132,7 +132,10 @@ export function baueMonatKpis(
       // Rechnung: neben „—" steht nichts.
       formel: herl?.netto_ertrag.formel ?? 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
       berechnung: d.netto_ertrag_euro != null ? berechnungAus(herl?.netto_ertrag) : undefined,
-      ergebnis: herl?.netto_ertrag.ergebnis_euro != null ? ergebnisZeile(d.netto_ertrag_euro) : undefined,
+      // N-770: der PV-Anteil der Wärmepumpe steckt zum WP-Tarif in der Eigenverbrauchs-Ersparnis — der Zusatz sagt es.
+      ergebnis: herl?.netto_ertrag.ergebnis_euro != null
+        ? `${ergebnisZeile(d.netto_ertrag_euro) ?? ''}${evWpTarifText(d.ev_ersparnis_wp_tarif_kwh, d.ev_ersparnis_wp_tarif_cent, k => fmtCalc(k, 1), c => fmtCalc(c, 1))}`
+        : undefined,
     },
     {
       title: 'Monatsergebnis',
@@ -282,7 +285,10 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       // geworden: Ein aus Stundenpreisen gemittelter Wert hätte „Arbeitspreis
       // aus dem Strompreis-Tarif" darüber gehabt — eine Falschaussage.
       formel: preisFormel(d),
-      berechnung: `${fmt(d.netzbezug_kwh)} kWh × ${fmtCalc(netzPreis, 1)} ct/kWh`,
+      // N-770/N-771: mit gemessenem Netzbezug zum WP-/Wallbox-Tarif steht jeder Anteil mit seinem Preis da — sonst
+      // ginge «kWh × ct = €» nicht auf. Die Kopfzahl bleibt der Haushaltspreis.
+      berechnung: netzbezugAnteileBerechnung(d.netzbezug_kwh, netzPreis, d.netzbezug_anteile, k => fmtCalc(k, 1), c => fmtCalc(c, 1))
+        ?? `${fmt(d.netzbezug_kwh)} kWh × ${fmtCalc(netzPreis, 1)} ct/kWh`,
       ergebnis: (d.grundgebuehr_euro ?? 0) > 0
         // N-769: mit eigenem WP-/Wallbox-Tarif nennt der Zusatz den Grundpreis je Tarif.
         ? `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € · + ${fmtCalc(d.grundgebuehr_euro, 2)} € Grundpreis${grundgebuehrAufteilungText(d.grundgebuehr_aufteilung, e => fmtCalc(e, 2))} = ${fmtCalc(d.netzbezug_kosten_euro, 2)} € gesamt`

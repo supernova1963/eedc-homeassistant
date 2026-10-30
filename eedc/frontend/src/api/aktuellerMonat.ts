@@ -5,6 +5,7 @@
  */
 
 import { api } from './client'
+import type { NetzbezugAnteil } from '../lib/tarifHinweise'
 
 export interface DatenquelleInfo {
   quelle: string   // "ha_sensor" | "local_connector" | "gespeichert"
@@ -483,6 +484,12 @@ export interface AktuellerMonatResponse {
   /** N-769: Grundgebühr je Tarif-Verwendung (`allgemein`/`waermepumpe`/`wallbox` → €), nur wenn ein eigener WP-/
    *  Wallbox-Tarif beiträgt; sonst `null`. Die Summe steht in `grundgebuehr_euro`. */
   grundgebuehr_aufteilung?: Record<string, number> | null
+  /** N-770/N-771: gemessener Netzbezug zum eigenen WP-/Wallbox-Tarif je Verwendung (Stromrechnung =
+   *  (Netzbezug − Σ kWh) × Haushaltspreis + Σ euro + Grundgebühr); `null` ohne eigenen Tarif bzw. ohne Messung. */
+  netzbezug_anteile?: NetzbezugAnteil[] | null
+  /** N-770: PV-Anteil der Wärmepumpe, den die Eigenverbrauchs-Ersparnis zum WP-Tarif bewertet (kWh) und dieser Preis. */
+  ev_ersparnis_wp_tarif_kwh?: number | null
+  ev_ersparnis_wp_tarif_cent?: number | null
   zaehlergebuehr_euro_jahr: number | null
 
   // Vergleiche

@@ -20,6 +20,7 @@ from backend.core.berechnungen.pv_verteilung import eigenverbrauch_ohne_verluste
 from backend.services.finanz_zeilen import FinanzZeileEingabe
 from backend.services.monats_fakten.fakten import MonatsFakt, MonatsSchluessel
 from backend.services.monats_fakten.laden import lade_monats_fakten
+from backend.services.monats_fakten.tarif import komponenten_anteile_des_fakts
 
 
 async def ist_pv_ladeanteil_prozent(
@@ -135,6 +136,7 @@ def finanz_zeile_eingabe(fakt: MonatsFakt) -> FinanzZeileEingabe:
       ``sonstiges_erzeugung``; das BKW steckt in beiden gleichermaßen, die
       P9-Mechanik ändert sich nicht.
     """
+    _anteile = komponenten_anteile_des_fakts(fakt)
     return FinanzZeileEingabe(
         jahr=fakt.jahr,
         monat=fakt.monat,
@@ -151,6 +153,10 @@ def finanz_zeile_eingabe(fakt: MonatsFakt) -> FinanzZeileEingabe:
         # N-588: der Aggregat-Helper bewertet den Eigenverbrauch ohne die Wandlungsverluste, wenn der Vertrag hält.
         wandlungsverluste_kwh=fakt.erzeugung.wandlungsverluste_kwh,
         verluste_grund=fakt.erzeugung.verluste_grund,
+        # N-770 (Bauplan §1): mit gemessenem Netzbezug zum WP-Tarif der PV-Anteil der Wärmepumpe P = S − N und der Preis
+        # des eigenen WP-Tarifs — die Ersparnis bewertet P zum WP-Tarif (`finanz_aggregat.bewerte_eigenverbrauch`).
+        wp_pv_kwh=_anteile.wp_pv_kwh if _anteile is not None else None,
+        wp_tarif_cent=_anteile.wp_cent if _anteile is not None else None,
     )
 
 def kennzahlen_aus_fakten(fakten: Iterable[MonatsFakt]) -> VerbrauchsKennzahlen:

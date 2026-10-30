@@ -541,6 +541,27 @@ INVESTITION_FELDER: dict = {
                 "(Utility Meter mit täglichem Reset) ist kein kumulativer Zähler."
             ),
         },
+        {
+            # N-770 (Bauplan `bauplan-n770-wp-tarif-netzbezug.md` F1, 30.10.2026): der **Netzbezug zum WP-Tarif** —
+            # die Menge, die der Versorger zum eigenen Wärmepumpen-Tarif abrechnet. Eine **Teilmenge** des Gerätestroms
+            # (S = PV-Anteil P + Netzanteil N) wie der Heizstab: kein Bilanzbeitrag (`_SNAPSHOT_OHNE_KOMPONENTEN_BEITRAG`),
+            # keine Mengenart (`WP_TEILMENGE_OHNE_MENGENART`). Gelesen von der Stromrechnung ((Netzbezug − N) × Haushalt
+            # + N × WP-Tarif) und der Eigenverbrauchs-Ersparnis (P = S − N zum WP-Tarif) — `monats_fakten/tarif.py::
+            # komponenten_anteile`. `tarif_verwendung` (F1): auf der Datenquellen-Fläche in der ersten Reihe nur mit
+            # eigenem WP-Tarif, sonst hinter «Weitere Größen erfassen» (`routes/datenquellen.py`).
+            "feld": "netzbezug_eigener_tarif_kwh", "label": "Netzbezug zum WP-Tarif", "einheit": "kWh",
+            "betriebsart": WP_BETRIEBSART_GERAET,
+            "csv_suffix": "Netzbezug_WP_Tarif_kWh",
+            "tarif_verwendung": "waermepumpe",
+            "hinweis": (
+                "Die Menge, die dein Versorger zum Wärmepumpen-Tarif abrechnet (kWh, kumulativer Zähler). Optional — "
+                "nur mit eigenem Wärmepumpen-Tarif wirksam. Zählerkaskade (Z1 am Netzanschluss, Z2 für Haus und PV, "
+                "Wärmepumpe dazwischen): Z1-Bezug minus Z2-Bezug, als Template-Sensor mit state_class „total“ (nicht "
+                "„total_increasing“). Eigener Zähler, der nicht hinter der PV hängt: derselbe Sensor wie "
+                "„Stromverbrauch“. eedc rechnet damit die Stromrechnung mit beiden Tarifen und bewertet den PV-Anteil "
+                "der Wärmepumpe zum Wärmepumpen-Tarif."
+            ),
+        },
         # #263 — GEMESSENER Verbrauch je Betriebsart (Split-Klimaanlage).
         # Erzeugt aus dem Kanon (`core/betriebsmodus.py`), siehe
         # `_betriebsart_felder` unter dieser Tabelle.
@@ -675,6 +696,20 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Ladevorgaenge",
             "typ": "int",
             "hinweis": "Anzahl der Ladevorgänge (kumulativer Zähler oder Tagessensor). Optional.",
+        },
+        {
+            # N-771 (Bauplan N-770 F8): dieselbe Bauform wie an der Wärmepumpe — die Menge, die der Versorger zum
+            # eigenen Wallbox-Tarif abrechnet; Teilmenge der Ladung, kein Bilanzbeitrag. Gelesen allein von der
+            # Stromrechnung ((Netzbezug − N) × Haushalt + N × Wallbox-Tarif); die E-Mob-Ersparnis bleibt (F8).
+            "feld": "netzbezug_eigener_tarif_kwh", "label": "Netzbezug zum Wallbox-Tarif", "einheit": "kWh",
+            "csv_suffix": "Netzbezug_Wallbox_Tarif_kWh",
+            "tarif_verwendung": "wallbox",
+            "hinweis": (
+                "Die Menge, die dein Versorger zum Wallbox-Tarif abrechnet (kWh, kumulativer Zähler). Optional — nur "
+                "mit eigenem Wallbox-Tarif wirksam. Zählerkaskade: Bezug des Zählers am Netzanschluss minus Bezug des "
+                "Haus-Zählers, als Template-Sensor mit state_class „total“. eedc rechnet damit die Stromrechnung mit "
+                "beiden Tarifen."
+            ),
         },
     ],
 

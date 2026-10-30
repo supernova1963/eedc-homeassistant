@@ -19,8 +19,8 @@ from backend.services.strompreis_aggregator import (
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_einspeise_preis_cent
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen import (
-    berechne_netzbezug_kosten,
     betriebskosten_je_investition,
+    bewerte_eigenverbrauch,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
     spezifischer_ertrag_kwh_kwp,
@@ -32,7 +32,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     entscheide_emob_heimladung,
 )
 from backend.services.emob_kontext import lade_emob_kontext
-from backend.services.monats_fakten import SonstigesFakten, grundpreis_des_monats
+from backend.services.monats_fakten import SonstigesFakten, grundpreis_des_monats, komponenten_anteile, stromrechnung_euro
 from backend.core.berechnungen import abgetretene_bkw_ids
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -44,7 +44,7 @@ from backend.api.routes.aktueller_monat.tkonto import _baue_investition_financia
 from backend.api.routes.aktueller_monat.vergleich import _zeittarif_preis
 
 
-async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einspeisung, jahr, monat, netzbezug):
+async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einspeisung, jahr, monat, netzbezug, tarif_fakten=None, anteile=None):
     """Finanzen: Tarife, Netzbezugskosten, Einspeise-Erloes, EV-Ersparnis (N-267: eigener Tarif-Cache je Aufruf).
 
     Aus `get_aktueller_monat` Zeilen 772-899 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
@@ -181,19 +181,22 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
         # einen Bildungsstelle der Tarif-Fakten — bis dahin nur `allgemein_tarif.grundpreis_euro_monat`.
         _grundpreis = grundpreis_des_monats(tarife)
         grundpreis = _grundpreis.summe_euro
-        netzbezug_kosten = round(
-            berechne_netzbezug_kosten(
-                netzbezug, netzbezug_preis_effektiv_cent, grundpreis
-            ), 2
+        # ⭐ N-770 E2 (30.10.2026): die Stromrechnung entsteht an der EINEN Stelle der Tarif-Fakten
+        # (`monats_fakten.stromrechnung_euro`) — mit dem Haushaltspreis und dem Grundpreis DER FAKTEN, wo der Monat einen
+        # Fakt hat (`tarif_fakten`), sonst (laufender Monat ohne Abschluss) mit derselben Kaskade hier oben
+        # (`aufgeloester_monatspreis`, dieselbe Funktion wie `monats_fakten/tarif.py::_lade_tarif`). `anteile`: der
+        # gemessene Netzbezug zum WP-/Wallbox-Tarif (`komponenten_anteile`), sonst `None`.
+        _haushaltspreis = (
+            tarif_fakten.netzbezug_preis_cent if tarif_fakten is not None else netzbezug_preis_effektiv_cent
         )
+        _grundpreis_summe = tarif_fakten.grundpreis_euro_monat if tarif_fakten is not None else grundpreis
+        netzbezug_kosten = round(stromrechnung_euro(netzbezug, _haushaltspreis, _grundpreis_summe, anteile), 2)
         # Der reine Arbeitspreis-Anteil OHNE Grundpreis. Reiner Ausweis für
         # die Ø-Preis-Kachel: dort stehen kWh und € nebeneinander, und wer
         # sie dividiert, muss auf die Kopfzahl kommen. Mit den Gesamtkosten
         # ging das nie auf (559 kWh · 210,45 € ⇒ 37,6 ct statt 33 ct —
         # Forum simon42 #89667, Algie). Kein zweiter Kostenposten.
-        netzbezug_arbeitspreis_kosten = round(
-            netzbezug * netzbezug_preis_effektiv_cent / 100, 2
-        )
+        netzbezug_arbeitspreis_kosten = round(stromrechnung_euro(netzbezug, _haushaltspreis, 0.0, anteile), 2)
         # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
         # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
         grundgebuehr = round(grundpreis, 2)
@@ -201,12 +204,49 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
         if _grundpreis.aufteilung is not None:
             grundgebuehr_aufteilung = {k: round(v, 2) for k, v in _grundpreis.aufteilung.items()}
     if eigenverbrauch is not None:
-        ev_ersparnis = round(eigenverbrauch * ev_preis_cent / 100, 2)
+        # N-770 E2: dieselbe Formel wie `finanz_aggregat` (Layer `bewerte_eigenverbrauch`) — mit gemessenem Netzbezug zum
+        # WP-Tarif der PV-Anteil der Wärmepumpe zum WP-Tarif, sonst bitgleich `EV × ev_preis / 100`.
+        ev_ersparnis = round(bewerte_eigenverbrauch(
+            eigenverbrauch, ev_preis_cent,
+            anteile.wp_pv_kwh if anteile is not None else None,
+            anteile.wp_cent if anteile is not None else None,
+        ).euro, 2)
     # Der Netto-Ertrag entsteht hier NICHT mehr (bis 03.10.2026: `einspeise_erloes + ev_ersparnis`, ohne USt,
     # BKW-Rest, Erlös eigener Satz und Sonstiges — N-601). Er ist Stufe 1 der Ergebnis-Leiter und wird in
     # `ergebnis_des_monats` über den Layer gebildet, sobald alle Posten feststehen.
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "grundgebuehr_aufteilung", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
+
+
+def komponenten_anteile_des_monats(monats_fakt, wp_kanal, netzbezug):
+    """N-770/N-771: die gemessenen Anteile zum WP-/Wallbox-Tarif für *Cockpit → Monat* — über die eine Bildungsstelle
+    (``monats_fakten.komponenten_anteile``) mit dem Tarif und den Mengen des Fakts; die WP-Mengen wie die WP-Abschnitte
+    der Route (``_wp_sicht``: aus den Kanälen, wo der Monat keine WP-Zeile hat). Ohne Fakt (laufender Monat ohne
+    Abschluss) ``None`` — die Stromrechnung rechnet dann den ganzen Netzbezug zum Haushaltspreis (benannte Grenze)."""
+    if monats_fakt is None or netzbezug is None:
+        return None
+    wp = wp_kanal if wp_kanal is not None else monats_fakt.wp
+    return komponenten_anteile(
+        netzbezug, monats_fakt.tarif,
+        wp_strom_kwh=wp.strom_kwh, wp_netz_eigener_tarif_kwh=wp.netz_eigener_tarif_kwh,
+        wallbox_ladung_kwh=monats_fakt.emob.wallbox_ladung_alle_kwh,
+        wallbox_netz_eigener_tarif_kwh=monats_fakt.emob.wallbox_netz_eigener_tarif_kwh,
+    )
+
+
+def anteile_antwort(anteile) -> dict:
+    """Die Antwortfelder der Anteile (gerundet am Antwortrand): ``netzbezug_anteile``, ``ev_ersparnis_wp_tarif_*``."""
+    if anteile is None:
+        return {"netzbezug_anteile": None, "ev_ersparnis_wp_tarif_kwh": None, "ev_ersparnis_wp_tarif_cent": None}
+    return {
+        "netzbezug_anteile": [
+            {**d, "kwh": round(d["kwh"], 2), "cent": round(d["cent"], 2), "euro": round(d["euro"], 2),
+             "gemessen_kwh": round(d["gemessen_kwh"], 2)}
+            for d in anteile.als_dict()
+        ],
+        "ev_ersparnis_wp_tarif_kwh": round(anteile.wp_pv_kwh, 2) if anteile.wp_pv_kwh is not None else None,
+        "ev_ersparnis_wp_tarif_cent": round(anteile.wp_cent, 2) if anteile.wp_cent is not None else None,
+    }
 
 
 def komponenten_ersparnis(*, get_val):

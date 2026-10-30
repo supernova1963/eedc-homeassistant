@@ -98,8 +98,14 @@ from backend.services.monats_fakten.laden import (  # noqa: F401 — Re-Export
 )
 from backend.services.monats_fakten.tarif import (  # noqa: F401 — Re-Export
     GrundpreisDesMonats,
+    KomponentenAnteile,
+    NetzanteilZumTarif,
     dienstliche_ladekosten_euro,
+    eigene_tarif_verwendungen,
     grundpreis_des_monats,
+    komponenten_anteile,
+    komponenten_anteile_des_fakts,
+    stromrechnung_euro,
     tarif_des_monats,
     tarife_der_monate,
 )
@@ -153,6 +159,12 @@ __all__ = [
     "tarife_der_monate",
     "grundpreis_des_monats",
     "GrundpreisDesMonats",
+    "KomponentenAnteile",
+    "NetzanteilZumTarif",
+    "eigene_tarif_verwendungen",
+    "komponenten_anteile",
+    "komponenten_anteile_des_fakts",
+    "stromrechnung_euro",
     "dienstliche_ladekosten_euro",
     "sonstiges_aus_zeilen",
     "wp_aus_zeilen",

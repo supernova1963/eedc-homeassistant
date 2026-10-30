@@ -242,6 +242,12 @@ class EmobFakten:
     ladung_kwh: float = 0.0
     ladung_pv_kwh: float = 0.0
     ladung_netz_kwh: float = 0.0
+    #: N-771 (30.10.2026): Σ gemessener **Netzbezug zum Wallbox-Tarif** aller Wallboxen (privat und dienstlich) — Teilmenge
+    #: der Ladung, nur für die Stromrechnung (``tarif.komponenten_anteile``); ``None`` = nicht gemessen (F3 wie an der WP).
+    #: ⚠ Nicht ``ladung_netz_kwh``: die ist eedcs Zuteilung (N-569), dies die abgerechnete Menge.
+    wallbox_netz_eigener_tarif_kwh: Optional[float] = None
+    #: … und die Ladung ALLER Wallboxen des Monats — die Obergrenze der Klemme (F7).
+    wallbox_ladung_alle_kwh: float = 0.0
     #: Steht die Aufteilung ``ladung_pv_kwh``/``ladung_netz_kwh`` so in den
     #: Monatsdaten, oder ist sie aus der Tagesebene **abgeleitet** (N-141 Weg c)?
     #: Eine Wallbox misst ihren PV-Anteil nicht; fehlt er, galt bisher die ganze
@@ -456,6 +462,10 @@ class TarifFakten:
     wp_preis_cent: float = NETZBEZUG_DEFAULT_CENT
     wallbox_preis_cent: float = NETZBEZUG_DEFAULT_CENT
     wallbox_preis_effektiv_cent: float = NETZBEZUG_DEFAULT_CENT
+    #: N-770/N-771: gilt im Monat ein EIGENER WP- bzw. Wallbox-Tarif (nicht der Rückfall auf den allgemeinen)? Nur dann
+    #: rechnet die Stromrechnung einen gemessenen Netzbezug zum Komponenten-Tarif mit dessen Preis (``komponenten_anteile``).
+    wp_eigener_tarif: bool = False
+    wallbox_eigener_tarif: bool = False
     kraftstoffpreis_euro: Optional[float] = None
     gaspreis_cent_kwh: Optional[float] = None
 

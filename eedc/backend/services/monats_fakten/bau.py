@@ -283,6 +283,8 @@ async def _baue_fakt(
         ladung_kwh=pool.ladung_kwh,
         ladung_pv_kwh=pool.pv_kwh,
         ladung_netz_kwh=pool.netz_kwh,
+        wallbox_netz_eigener_tarif_kwh=roh.netz_eigener_tarif_kwh("wallbox"),
+        wallbox_ladung_alle_kwh=roh.wallbox_ladung_alle,
         ladung_anteil_abgeleitet=anteil_abgeleitet,
         extern_kwh=pool.extern_kwh,
         extern_euro=pool.extern_euro,
@@ -535,6 +537,8 @@ def _wp_fakten(roh: _RohMonat) -> WpFakten:
         strom_warmwasser_kwh=roh.wp_strom_warmwasser,
         # P-433-3 S2: ohne gemessenen Heizstab-Zähler keine Angabe (None), eine gemessene 0 bleibt 0 (N-673-Bauform).
         heizstab_kwh=roh.wp_heizstab if roh.wp_heizstab_gemessen else None,
+        # N-770 (F3): nur, wenn jedes Gerät mit Strom > 0 ihn misst.
+        netz_eigener_tarif_kwh=roh.netz_eigener_tarif_kwh("waermepumpe"),
         heizung_gemessen=roh.wp_heizung_gemessen,
         warmwasser_gemessen=roh.wp_warmwasser_gemessen,
         strom_heizen_gemessen=roh.wp_strom_heizen_gemessen,

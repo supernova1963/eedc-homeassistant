@@ -214,7 +214,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 **Was wird geprüft:** Gilt im laufenden Monat ein Tarif mit Verwendung *Wärmepumpe*, dessen Arbeitspreis vom Standard-Tarif abweicht — und hat die Wärmepumpe in den letzten zwölf abgeschlossenen Monaten Strom verbraucht?
 
-**Warum das zählt:** Mit dem Wärmepumpen-Tarif rechnet eedc die Stromkosten der Wärmepumpe. Die Eigenverbrauchs-Ersparnis der PV-Anlage bewertet dagegen jede selbst genutzte kWh zum Haushaltstarif — auch den Teil, den die Wärmepumpe aus der eigenen PV bezogen hat, denn wie groß dieser Teil ist, weiß eedc nicht. Bei zwei verschiedenen Preisen steht die Ersparnis deshalb um *PV-Anteil der Wärmepumpe × Tarifdifferenz* verschoben; ob nach oben oder unten, hängt davon ab, wo Netzbezug und Einspeisung gemessen werden ([Berechnungen, „Mit eigenem Wärmepumpen-Tarif"](BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--eine-benannte-grenze-n-767)).
+**Warum das zählt:** Mit dem Wärmepumpen-Tarif rechnet eedc die Stromkosten der Wärmepumpe. Die Eigenverbrauchs-Ersparnis der PV-Anlage bewertet dagegen jede selbst genutzte kWh zum Haushaltstarif — auch den Teil, den die Wärmepumpe aus der eigenen PV bezogen hat, denn wie groß dieser Teil ist, weiß eedc nicht. Bei zwei verschiedenen Preisen steht die Ersparnis deshalb um *PV-Anteil der Wärmepumpe × Tarifdifferenz* verschoben; ob nach oben oder unten, hängt davon ab, wo Netzbezug und Einspeisung gemessen werden ([Berechnungen, „Mit eigenem Wärmepumpen-Tarif"](BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770)).
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|

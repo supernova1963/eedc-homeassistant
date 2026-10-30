@@ -21,6 +21,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import not_found
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+from backend.services.monats_fakten.tarif import eigene_tarif_verwendungen
 from backend.core.database import get_db
 from backend.core.field_definitions import (
     OPTIONALE_FELDER,
@@ -249,6 +250,9 @@ class MonatsabschlussKontext:
     # braucht. Sie reist mit, statt ein zweites Mal gerechnet zu werden.
     preis_messung: Optional["StrompreisAggregat"]
     zaehler_ende: dict[int, float]
+    #: N-770/N-771 (F1): Verwendungen mit eigenem Tarif im Monat — das Feld «Netzbezug zum WP-/Wallbox-Tarif» steht
+    #: ohne eigenen Tarif nur mit Beleg im Formular (R1).
+    eigene_tarife: frozenset[str] = frozenset()
 
 
 async def lade_anlage_mit_investitionen(db: AsyncSession, anlage_id: int) -> Anlage:
@@ -689,6 +693,9 @@ async def baue_kontext(
         alle_basis_felder=alle_basis_felder,
         preis_messung=preis_messung,
         zaehler_ende=await lade_zaehler_ende(db, anlage_id, jahr, monat),
+        eigene_tarife=eigene_tarif_verwendungen(
+            await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
+        ),
     )
 
 
@@ -1111,6 +1118,7 @@ async def baue_investition_status(
         belegte_felder=belegte_felder,
         # N-555 Stufe 2 (Regel 0): „dienstliche Wallbox in Betrieb" im Monat des Formulars.
         jahr=ctx.jahr, monat=ctx.monat,
+        eigene_tarife=set(ctx.eigene_tarife),
     )
     if not felder_config:
         return None

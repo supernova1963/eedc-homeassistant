@@ -24,7 +24,6 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
-    berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     eauto_effizienz_zeitraum,
     erzeugung_hinter_zaehler_kwh,
@@ -56,6 +55,8 @@ from backend.services.waerme_klima_block import (
     was_noch_moeglich,
 )
 from backend.services.monats_fakten import (
+    komponenten_anteile_des_fakts,
+    stromrechnung_euro,
     bewertbare_wandlungsverluste_aus_fakten,
     finanz_zeile_eingabe,
     lade_monats_fakten,
@@ -1182,10 +1183,13 @@ async def _finanz_zeilen_der_monate(
     for f in md_pv:
         # Netzbezugskosten: derselbe effektive Preis wie in der Finanz-Zeile
         # (Flex-Ø vor Monats-Arbeitspreis, P8) plus der Grundpreis des Monats.
-        netzbezug_kosten += berechne_netzbezug_kosten(
+        # N-770 E2: die eine Bildungsstelle der Stromrechnung (`monats_fakten.stromrechnung_euro`).
+        netzbezug_kosten += stromrechnung_euro(
             f.zaehler.netzbezug_kwh,
             f.tarif.netzbezug_preis_cent,
             f.tarif.grundpreis_euro_monat,
+            # N-770/N-771: der gemessene Netzbezug zum WP-/Wallbox-Tarif zu dessen Preis.
+            komponenten_anteile_des_fakts(f),
         )
         # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
         # Konstruktions-Stelle, Wächter).

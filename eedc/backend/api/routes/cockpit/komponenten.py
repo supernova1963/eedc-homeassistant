@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.investition import Investition
 from backend.core.berechnungen import (
-    berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     eauto_effizienz_zeitraum,
     einspeise_erloes_euro,
@@ -22,7 +21,7 @@ from backend.core.berechnungen.waermepumpe_kennzahl import (
     abgrenzungs_grund, arbeitszahl,
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
-from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
+from backend.services.monats_fakten import MonatsFakt, komponenten_anteile_des_fakts, lade_monats_fakten, stromrechnung_euro
 from backend.services.wp_wirtschaftlichkeit import wp_ersparnis_monat
 
 router = APIRouter()
@@ -272,10 +271,13 @@ async def get_komponenten_zeitreihe(
 
         # N-736: Netzkosten und Einspeise-Erlös nur mit erfassten Netzfeldern (`meta.netz_erfasst`), sonst wie ohne Zeile.
         if f.meta.hat_zaehlerzeile and f.meta.netz_erfasst:
-            m_netzbezug_kosten = berechne_netzbezug_kosten(
+            # N-770 E2: die eine Bildungsstelle der Stromrechnung (`monats_fakten.stromrechnung_euro`).
+            m_netzbezug_kosten = stromrechnung_euro(
                 f.zaehler.netzbezug_kwh,
                 tarif.netzbezug_preis_cent,
                 tarif.grundpreis_euro_monat,
+                # N-770/N-771: der gemessene Netzbezug zum WP-/Wallbox-Tarif zu dessen Preis.
+                komponenten_anteile_des_fakts(f),
             )
             # §51 EEG: Einspeisung in Negativpreis-Stunden ist unvergütet.
             # Ohne Tages-Aggregat (neg_preis_kwh=None) greift die alte Berechnung.

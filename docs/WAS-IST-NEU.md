@@ -89,6 +89,18 @@ Tarife, die im Monat gelten, und „davon Grundgebühr" nennt die Aufteilung (�
 Bisher fehlte er — die Stromrechnung stand um ihn zu niedrig, das Monatsergebnis um ihn zu hoch. Ohne eigenen Tarif ändert
 sich nichts ([Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
 
+**Netzbezug zum WP- und Wallbox-Tarif: Stromrechnung und Ersparnis mit beiden Tarifen genau.** Hast du für die
+Wärmepumpe oder die Wallbox einen eigenen Tarif, rechnet dein Versorger einen Teil deines Netzbezugs zu diesem Tarif ab —
+welchen, wusste eedc bisher nicht und rechnete den ganzen Netzbezug zum Haushaltstarif. Neu gibt es an der Wärmepumpe das
+optionale Feld **„Netzbezug zum WP-Tarif"** und an der Wallbox **„Netzbezug zum Wallbox-Tarif"** (*Einstellungen →
+Datenquellen*, mit eigenem Tarif in der ersten Reihe, sonst unter „Weitere Größen erfassen"; auch im Monatsabschluss und
+als CSV-Spalte). Ordnest du die Menge zu — in einer Zählerkaskade *Z1-Bezug minus Z2-Bezug* als Template-Sensor —, rechnet
+die Stromrechnung diesen Teil zum Komponenten-Tarif und den Rest zum Haushaltstarif, und die Eigenverbrauchs-Ersparnis
+bewertet den PV-Strom der Wärmepumpe zum WP-Tarif. Die Herleitung der Ø-Preis-Kachel nennt die Teile („117,9 kWh × 30,0
+ct + 256,0 kWh × 22,0 ct (Wärmepumpe)"). Ohne das Feld oder ohne eigenen Tarif ändert sich nichts. Noch nicht in diesem
+Stand: Cockpit → Tag, Prognose und der Hinweis des Daten-Checkers ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif),
+[Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+
 ## v4.1.11 — 27. Oktober 2026
 
 **Daten-Checker: kein falscher „Sprung in Home Assistant“ mehr am PV-Tagesertrag, gleich wann der Wechselrichter seine 0

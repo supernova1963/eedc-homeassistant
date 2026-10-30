@@ -753,6 +753,41 @@ Misst du den Heizstab-Strom zusätzlich als **kumulativen kWh-Zähler**, ordne i
 
 > **Benannte Grenzen der Zahl ohne Zusatzheizung.** (1) Im **laufenden Monat** ohne Monatsabschluss zeigt *Cockpit → Monat* die Zeile noch nicht — die Tagesebene führt den Heizstab-Zähler nicht, erst der Monatsabschluss (oder der Kanal-Monat) trägt ihn. (2) Die Hauptzahl kann in Monat und Jahr aus der Vier-Quellen-Auflösung kommen (gepflegt, gemessen, Kanal, Bestand), der Heizstab kommt immer aus den Monats-Fakten; beide beschreiben denselben Zeitraum, aber nicht zwingend dieselbe Quelle. (3) Ordnest du den Zähler **mitten im Zeitraum** zu, zählt der Heizstab nur die Monate mit Zähler: Die Zahl ohne Zusatzheizung liegt dann zwischen der Hauptzahl und dem wahren Wert ohne Heizstab, bis der Zeitraum ganz gedeckt ist.
 
+### Schritt 6b — Netzbezug zum WP-Tarif (optional, nur mit eigenem Wärmepumpen-Tarif)
+
+Hast du für die Wärmepumpe einen **eigenen Tarif** (Einstellungen → Strompreise, Verwendung *Wärmepumpe*), rechnet dein
+Versorger einen Teil deines Netzbezugs zu diesem Tarif ab. Welcher Teil das ist, kann eedc nicht wissen — die Wärmepumpe
+läuft auch mit PV-Strom. Mit dem Feld **„Netzbezug zum WP-Tarif"** gibst du eedc genau diese Menge, und dann rechnet es
+beide Tarife genau:
+
+- die **Stromrechnung** = Rest des Netzbezugs × Haushaltstarif + Netzbezug zum WP-Tarif × WP-Tarif (+ alle Grundpreise),
+- die **Eigenverbrauchs-Ersparnis** bewertet den PV-Strom der Wärmepumpe (Stromverbrauch minus Netzbezug zum WP-Tarif)
+  zum WP-Tarif statt zum Haushaltstarif — er hätte ja nur den WP-Tarif gekostet.
+
+Die WP-Kosten und die WP-Ersparnis bleiben, wie sie sind (Stromverbrauch × WP-Tarif). Ohne das Feld bleibt alles wie
+bisher; der Daten-Checker nennt dann die mögliche Abweichung.
+
+**Welcher Sensor gehört hinein?** Das hängt davon ab, wie dein Zähler aufgebaut ist:
+
+- **Zählerkaskade** (Z1 am Netzanschluss für alles, Z2 dahinter für Haus, Wallbox und PV, die Wärmepumpe zwischen Z1
+  und Z2): Netzbezug und Einspeisung kommen von **Z1**. Der Netzbezug zum WP-Tarif ist **Z1-Bezug minus Z2-Bezug** — als
+  Template-Sensor in Home Assistant. Gib ihm `state_class: total` und **nicht** `total_increasing`: die zwei Zähler melden
+  zeitversetzt, die Differenz kann kurz kleiner werden, und `total_increasing` läse jede solche Abnahme als Zähler-Reset.
+  Der **Stromverbrauch** der Wärmepumpe ist in dieser Kaskade Z1 minus Z2 *saldiert* (Bezug minus Einspeisung beider
+  Zähler) — ein eigener Template-Sensor.
+- **Eigener WP-Zähler, der nicht hinter der PV hängt** (die Wärmepumpe bekommt nie PV-Strom): derselbe Sensor wie
+  „Stromverbrauch" — dann ist der ganze WP-Strom Netzbezug zum WP-Tarif.
+
+Das Feld steht im Block **Gerät gesamt**, sobald ein eigener WP-Tarif gilt; sonst unter **„Weitere Größen erfassen"**. Im
+Monatsabschluss steht es ebenfalls nur mit eigenem Tarif (oder wenn schon ein Wert da ist). **Mehrere Wärmepumpen:** der
+Tarif gilt allen; trage den Wert an jeder ein, die im Monat Strom verbraucht hat — fehlt er an einer, rechnet eedc den
+Monat ohne Messung. Ist die Menge größer als der Stromverbrauch der Wärmepumpe oder als dein ganzer Netzbezug, rechnet
+eedc mit dem kleineren Wert und sagt es im Tooltip der Ø-Preis-Kachel („begrenzt").
+
+> **Benannte Grenzen (noch nicht in diesem Stand):** *Cockpit → Tag* und die Tageswerte rechnen die Stromrechnung noch
+> ohne den WP-Anteil (die Summe der Tage liegt dann über dem Monat), ebenso die Prognose und die ROI-Jahresformel. Der
+> **laufende Monat ohne Monatsabschluss** rechnet noch ohne das Feld; mit dem Abschluss gilt es.
+
 ### Schritt 7 — Den Daten-Checker fragen
 
 *Einstellungen → Daten.* Er nennt fehlende Zuordnungen, Monate ohne Werte und Widersprüche — und zu jedem Befund den Weg dorthin. **Ein Befund, den du nicht auflösen kannst, ist ein Fehler im Checker und keine Aufgabe für dich.** Melde ihn.
@@ -952,6 +987,10 @@ also nicht um.
 > weiß eedc je Gerät nicht (dafür bräuchte es eine Zuteilungsannahme, und die wäre
 > erfunden). Die Zahl beantwortet *„was hat mich dieser Betrieb gekostet"*, nicht
 > *„was steht auf meiner Stromrechnung"*.
+>
+> Mit **eigenem Wärmepumpen-Tarif** und dem Feld *Netzbezug zum WP-Tarif* ([Schritt 6b](#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif))
+> rechnet die **Stromrechnung** im Cockpit den Teil, den dein Versorger zum WP-Tarif abrechnet, mit diesem Tarif — die
+> Kosten hier bleiben trotzdem die des ganzen Gerätestroms.
 
 ### Temperatur und Wettersymbol
 

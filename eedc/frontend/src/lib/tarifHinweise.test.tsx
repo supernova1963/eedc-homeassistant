@@ -16,7 +16,7 @@ import { render, screen } from '@testing-library/react'
 
 import { StrompreisForm } from '../pages/StrompreiseTeile'
 import StrompreiseStep from '../components/setup-wizard/steps/StrompreiseStep'
-import { EINSPEISEVERGUETUNG_FLAT_HINWEIS, grundgebuehrAufteilungText, verwendungLabel } from './tarifHinweise'
+import { EINSPEISEVERGUETUNG_FLAT_HINWEIS, evWpTarifText, grundgebuehrAufteilungText, netzbezugAnteileBerechnung, verwendungLabel } from './tarifHinweise'
 import type { Anlage } from '../types'
 
 function anlageMit(kwp: number): Anlage {
@@ -97,5 +97,25 @@ describe('N-769: Grundgebühr je Tarif', () => {
     expect(verwendungLabel('allgemein')).toBe('Standard')
     expect(verwendungLabel('waermepumpe')).toBe('Wärmepumpe')
     expect(verwendungLabel('wallbox')).toBe('Wallbox')
+  })
+})
+
+describe('N-770/N-771 — Anteile zum Komponenten-Tarif', () => {
+  const k = (v: number) => v.toFixed(1).replace('.', ',')
+  it('nennt Rest zum Haushaltspreis und jeden Anteil mit seinem Preis', () => {
+    expect(netzbezugAnteileBerechnung(373.9, 30, [
+      { verwendung: 'waermepumpe', kwh: 256, cent: 22, euro: 56.32, gemessen_kwh: 256, geklemmt: false },
+    ], k, k)).toBe('117,9 kWh × 30,0 ct/kWh + 256,0 kWh × 22,0 ct/kWh (Wärmepumpe)')
+  })
+  it('sagt, wenn ein Anteil begrenzt wurde', () => {
+    expect(netzbezugAnteileBerechnung(9.73, 30, [
+      { verwendung: 'waermepumpe', kwh: 9.73, cent: 22, euro: 2.14, gemessen_kwh: 105.1, geklemmt: true },
+    ], k, k)).toContain('gemessen 105,1 kWh, begrenzt')
+  })
+  it('ohne Anteile null, ohne WP-Anteil kein Zusatz', () => {
+    expect(netzbezugAnteileBerechnung(100, 30, null, k, k)).toBeNull()
+    expect(netzbezugAnteileBerechnung(100, 30, [], k, k)).toBeNull()
+    expect(evWpTarifText(null, 22, k, k)).toBe('')
+    expect(evWpTarifText(170.7, 22, k, k)).toBe(' · davon 170,7 kWh PV-Strom der Wärmepumpe zum WP-Tarif 22,0 ct/kWh')
   })
 })

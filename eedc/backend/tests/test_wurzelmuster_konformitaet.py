@@ -1670,6 +1670,9 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/strompreise.py::get_aktueller_strompreis_fuer",
     # Entscheidet, ob die Preis-Felder angeboten werden (Vertragsart heute).
     "backend/api/routes/datenquellen.py::_basis_preis_eintraege",
+    # N-770/N-771 (F1): ob «Netzbezug zum WP-/Wallbox-Tarif» in der ersten Reihe steht — eigener Tarif heute (Feld-
+    # struktur der Zuordnungsfläche, wie die Preis-Felder darüber); der Monatsabschluss fragt mit Stichtag.
+    "backend/api/routes/datenquellen.py::_nach_eigenem_tarif",
     # Spaltenstruktur von Vorlage und Export nach heutiger Vertragsart.
     "backend/api/routes/import_export/csv_operations.py::get_csv_template_info",
     "backend/api/routes/import_export/csv_operations.py::export_csv",

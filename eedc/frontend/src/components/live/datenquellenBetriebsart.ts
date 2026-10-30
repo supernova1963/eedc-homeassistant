@@ -69,12 +69,13 @@ function rang(f: DatenquelleFeld): number {
 
 /** P-433-2c C-6 (Mockup «Datenquellen Wärmepumpe Variante C»): Reihenfolge im Block «Gerät gesamt» — Leistung gesamt ·
  *  Betriebsmodus · Warmwasser-Temperatur · Vorlauf · Rücklauf · Leistung Zusatzheizung · Strom Zusatzheizung · Wärme
- *  gesamt, danach die übrigen in kWh → W → Sonstige. Die Warmwasser-Temperatur trägt in der Registry die Betriebsart
+ *  gesamt · Netzbezug zum WP-Tarif (N-770, nur mit eigenem WP-Tarif in der ersten Reihe), danach die übrigen in
+ *  kWh → W → Sonstige. Die Warmwasser-Temperatur trägt in der Registry die Betriebsart
  *  `warmwasser` und steht deshalb im Block Warmwasser (die Zuordnung der Registry gewinnt); der Eintrag hier greift nur,
  *  falls sie je «Gerät» wird. Die anderen Blöcke behalten kWh → W → Sonstige. */
 export const GERAET_REIHENFOLGE: readonly string[] = [
   'leistung_w', 'betriebsmodus', 'warmwasser_temperatur_c', 'vorlauf_temperatur_c', 'ruecklauf_temperatur_c',
-  'heizstab_leistung_w', 'heizstab_strom_kwh', 'waerme_kwh',
+  'heizstab_leistung_w', 'heizstab_strom_kwh', 'waerme_kwh', 'netzbezug_eigener_tarif_kwh',
 ]
 
 function geraetRang(f: DatenquelleFeld): number {

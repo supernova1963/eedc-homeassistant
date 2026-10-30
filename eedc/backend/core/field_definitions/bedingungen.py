@@ -117,6 +117,8 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("waermepumpe", "heizstab_leistung_w"): ("optional", None),
     # P-433-3 S2: der Heizstab-Zähler trägt nur die Ausweis-Zahl „AZ ohne Zusatzheizung" — ohne ihn fehlt sie.
     ("waermepumpe", "heizstab_strom_kwh"): ("optional", None),
+    # N-770/N-771 F1: der Netzbezug zum Komponenten-Tarif — wirksam nur mit eigenem Tarif, sonst ohne Folge.
+    ("waermepumpe", "netzbezug_eigener_tarif_kwh"): ("optional", None),
     # #263 K-2 (Konzept §7 E-E): JEDER Wärmepumpe angeboten, nicht nur
     # `wp_art = luft_luft`. Der Grund ist gemessen, nicht vorsorglich:
     # azywietz-webs zwei Klimaanlagen laufen als `luft_wasser`, weil das Feld
@@ -149,6 +151,7 @@ FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
     ("wallbox", "ladung_kwh"): ("pflicht", None),
     ("wallbox", "ladung_pv_kwh"): ("optional", None),
     ("wallbox", "ladevorgaenge"): ("optional", None),
+    ("wallbox", "netzbezug_eigener_tarif_kwh"): ("optional", None),
     ("wallbox", "leistung_w"): ("optional", None),
 }
 

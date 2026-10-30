@@ -270,6 +270,7 @@ Hardcodierte Werte in `cockpit.py`:
 | `netzbezug_preis_cent` | Tarif | `Strompreis.netzbezug_arbeitspreis_cent_kwh` |
 | `grundpreis_euro_monat` | Tarif | Σ `Strompreis.grundpreis_euro_monat` aller im Monat gültigen Tarife — allgemein plus ein **eigener** Wärmepumpen-/Wallbox-Tarif (N-769, `monats_fakten.grundpreis_des_monats`) |
 | `netzbezug_durchschnittspreis_cent` | HA-Sensor oder Monatsdaten | Dynamischer Ø-Preis |
+| `netzbezug_eigener_tarif_kwh` (WP, Wallbox) | Zähler, optional | `InvestitionMonatsdaten.verbrauch_daten` (Typ: waermepumpe bzw. wallbox) — **Netzbezug zum WP- bzw. Wallbox-Tarif**: die Menge, die der Versorger zum eigenen Komponenten-Tarif abrechnet (N-770/N-771, 30.10.2026). Wirkt nur mit eigenem Tarif dieser Verwendung; je Typ im Monat summiert, ohne Feld an einem Gerät mit Strom bzw. Ladung > 0 gilt der Monat als nicht gemessen (F3) |
 | `leistung_kwp` | Anlage | Summe aller `Investition.leistung_kwp` (pv-module) |
 
 #### Formeln
@@ -285,9 +286,11 @@ Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)
 Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV; zwei Varianten, s. u.)
 
 Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
-Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
-Arbeitspreis-Kosten (EUR)= Netzbezug * Netzbezug_Preis / 100            (ohne Grundpreis, reiner Ausweis)
-EV-Ersparnis (EUR)       = PV_Eigenverbrauch * EV_Preis / 100          (s. Hinweis; EV_Preis = EV-gewichteter Ø der Stundenpreise, sonst Netzbezug_Preis)
+Netzbezug-Kosten (EUR)   = (Netzbezug − N_WP − N_WB) * Netzbezug_Preis / 100
+                           + N_WP * WP_Tarif / 100 + N_WB * Wallbox_Tarif / 100 + Grundpreis   (N-770/N-771, s. Kasten)
+Arbeitspreis-Kosten (EUR)= dieselbe Summe ohne Grundpreis                (reiner Ausweis)
+EV-Ersparnis (EUR)       = (PV_Eigenverbrauch − P_WP) * EV_Preis / 100 + P_WP * WP_Tarif / 100
+                                                                          (s. Hinweis; EV_Preis = EV-gewichteter Ø der Stundenpreise, sonst Netzbezug_Preis)
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös_eigener_Satz
                            + Sonstige_Netto − Dienstliche_Ladekosten − USt-Anteil_Eigenverbrauch
                                                                           (Stufe 1 der Ergebnis-Leiter, §3.2)
@@ -410,6 +413,29 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > (gemessen 2026-07-31: das Feld existiert im Client-Typ `MonatsKennzahlen`, es gibt
 > keinen Leser). Sie bewegt also keine angezeigte Zahl — sie steht hier, damit niemand
 > sie für die gültige Definition hält. Der Kanon ist **§3.8**.
+
+> **Die Stromrechnung mit Anteilen zum Komponenten-Tarif (N-770/N-771, 30.10.2026).** Gilt ein **eigener** Wärmepumpen-
+> bzw. Wallbox-Tarif und ist an der Komponente das Feld **„Netzbezug zum WP-Tarif"** bzw. **„Netzbezug zum
+> Wallbox-Tarif"** gemessen (N, die Menge, die der Versorger zu diesem Tarif abrechnet), rechnet die Stromrechnung zwei
+> bzw. drei Arbeitspreise: der Rest des Netzbezugs zum Haushaltspreis, N zum Komponenten-Tarif (WP: `TarifFakten.
+> wp_preis_cent`, Wallbox: `wallbox_preis_effektiv_cent` — derselbe Preis, zu dem die E-Mob-Ersparnis die Netzladung
+> bewertet). Ohne Feld oder ohne eigenen Tarif fließt kein Anteil ein, und alles bleibt wie bisher (bitgleich). Gemessen
+> wird N z. B. in einer Zählerkaskade als *Z1-Bezug − Z2-Bezug*; ein eigener Zähler, der nicht hinter der PV hängt, ist N
+> selbst. Mit N rechnet zusätzlich die EV-Ersparnis den PV-Anteil der Wärmepumpe P = S − N zum WP-Tarif (§3.5, N-767).
+> **Klemme (F7):** N_WP auf `[0, min(WP-Strom, Netzbezug)]`, N_WB auf `[0, min(Ladung aller Wallboxen, Netzbezug −
+> N_WP)]`; die Herleitung (`netzbezug_anteile[].geklemmt`, „gemessen … kWh, begrenzt") sagt, wenn begrenzt wurde.
+> Zahlenbeispiel (Januar 2025 der Kopie r28, WP-Tarif 22 ct/10 €): Netzbezug 373,9 kWh, N_WP = 256 kWh ⇒
+> 117,9 × 30 ct + 256 × 22 ct + 24 € = **115,69 €** statt 136,17 €. **Eine Bildungsstelle** (N-770 E2): die Anteile
+> entstehen in `services/monats_fakten/tarif.py::komponenten_anteile` (aus den Monats-Fakten `WpFakten.
+> netz_eigener_tarif_kwh`, `EmobFakten.wallbox_netz_eigener_tarif_kwh`), die Formel im Layer
+> (`core/berechnungen/netzbezug_kosten.py::berechne_netzbezug_kosten` mit `anteile`, Klemme `klemme_netzanteil`), und
+> jede Sicht ruft `monats_fakten.stromrechnung_euro` — *Cockpit → Monat* (samt Vorjahr und Jahr, mit dem Monatstarif
+> der Fakten), Übersicht, Komponenten-Zeitreihe, Auswertungen → Tabelle, `GET /monatsdaten/{id}`. Bis dahin bildeten
+> fünf Stellen die Formel selbst, *Cockpit → Monat* mit eigener Preisauflösung (der Umzug änderte keine Zahl, Golden
+> Master 0 Diff). Benannte Grenzen: der **laufende Monat ohne Abschluss** (kein Monats-Fakt) rechnet ohne Anteile;
+> **Tag und Stunde** (Slot-Kosten, HT/NT-Gewichtung) folgen in einer eigenen Etappe — bis dahin trägt die Summe der Tage
+> den ganzen Netzbezug zum Haushaltspreis; `GET /monatsdaten/{id}` behält seinen eigenen Haushaltspreis (gepflegt →
+> Stamm, ohne die gemessene Stufe — vorbestehend).
 
 > **Zwei Kostenzahlen, eine Rechnung — `netzbezug_kosten_euro` vs.
 > `netzbezug_arbeitspreis_kosten_euro`:** verrechnet wird immer die **Gesamtsumme
@@ -644,6 +670,13 @@ Stufe 1  Netto-Ertrag (PV)           = Einspeise-Erlös + EV-Ersparnis + BKW-Res
 Stufe 2  (Zwischenstand)             = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis − Stromrechnung (inkl. Grundgebühr)
 Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur im Monat aktive Komponenten)
 ```
+
+* **Mit gemessenem Netzbezug zum Komponenten-Tarif (N-770/N-771, 30.10.2026)** trägt die Stromrechnung zwei bzw. drei
+  Arbeitspreise (§3.1, Kasten) und die EV-Ersparnis bewertet den PV-Anteil der Wärmepumpe zum WP-Tarif (§3.5, N-767).
+  Die Posten der Leiter bleiben dieselben; Monats- und Jahresergebnis bewegen sich um `(N_WP − P_WP) × (Haushalt −
+  WP-Tarif) + N_WB × (Haushalt − Wallbox-Tarif)`. Die Antwort nennt die Anteile (`netzbezug_anteile`,
+  `ev_ersparnis_wp_tarif_kwh`/`_cent`, im Jahr Σ je Verwendung), der Tooltip der Ø-Preis-Kachel und des Netto-Ertrags
+  ebenso.
 
 * **Ein Name je Stufe.** Stufe 1 ist der „Netto-Ertrag" überall — Cockpit → Monat/Jahr, Komponenten → PV-Anlage,
   PDF-Jahresbericht, HA-Sensor `netto_ertrag_euro`. Stufe 2 hat im UI keinen eigenen Namen; sie steht nur als
@@ -881,6 +914,14 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 > Sicht sie gutschreibt (gepflegt · gemessen · Zeitfenster · Stamm, §3.1); die Netzladung behält den Wallbox-Tarif.
 > „Davon aus PV" bleibt als Menge und Anteil sichtbar — als Information, nicht als eigener Geldposten. Eine Formel
 > für alle Sichten: `core/berechnungen/heimladung_kosten.py`.
+
+> **Wallbox-Tarif und Stromrechnung (N-771, 30.10.2026).** Die E-Mob-Ersparnis zieht die Netzladung zum Wallbox-Tarif ab;
+> die Stromrechnung rechnete denselben Strom bis dahin zum Haushaltstarif — mit einer Wallbox hinter dem
+> Netzbezug-Messpunkt stand das Ergebnis um Netzladung × (Haushalt − Wallbox-Tarif) zu niedrig (gemessen r28, 20 ct:
+> 155,70 € in 15 Monaten). eedcs Netzladung ist eine **Zuteilung** (N-569, in vier Monaten über dem ganzen Netzbezug),
+> keine Messung der abgerechneten Menge. Deshalb dieselbe Messgröße wie an der Wärmepumpe: das optionale Feld
+> **„Netzbezug zum Wallbox-Tarif"** an der Wallbox — gemessen, rechnet die Stromrechnung diese Menge zum Wallbox-Tarif
+> (`wallbox_preis_effektiv_cent`, §3.1, Kasten). Die E-Mob-Ersparnis selbst bleibt unverändert (Bauplan F8).
 
 **Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, seit N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
@@ -1847,6 +1888,10 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > den Eigenverbrauchs-Fallback der Prognose und die Zuordnung des Eigenverbrauchs auf das
 > einzelne Gerät. Es beantwortet **keine Preisfrage**.
 >
+> **Seit N-770 (30.10.2026) gilt der Satz auch mit eigenem WP-Tarif genau:** misst die Anlage den Netzbezug zum
+> WP-Tarif, wird der PV-Strom der Wärmepumpe auf der PV-Seite zum **WP-Tarif** gutgeschrieben (Abschnitt N-767 unten) —
+> die WP-Kosten bleiben WP-Strom × WP-Tarif, und die kWh ist weiter einmal Geld.
+>
 > Damit rechnen alle vier Ersparnis-Pfade derselben Wärmepumpe nach **einer** Regel:
 > Monats-Layer (`services/wp_wirtschaftlichkeit.py` — Komponenten-Hub, *Cockpit → Monat/
 > Jahr*, HA-Sensor je Gerät), anlagenweite Alternativkosten
@@ -1855,38 +1900,40 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > dabei mit dem gemessenen Pfad `co2_wp_ersparnis_kg`, der schon immer den vollen Strom
 > belastete (ADR-001/DI-1).
 >
-> #### Mit eigenem Wärmepumpen-Tarif — eine benannte Grenze (N-767)
+> #### Mit eigenem Wärmepumpen-Tarif — Netzbezug zum WP-Tarif oder Grenze (N-767, N-770)
 >
-> Die Regel oben setzt voraus, dass PV-Seite und Geräteseite **denselben** Preis tragen.
-> Mit einem Tarif *Verwendung Wärmepumpe*, dessen Arbeitspreis vom allgemeinen abweicht,
-> tun sie das nicht mehr: die Eigenverbrauchs-Ersparnis bewertet **jede** selbst genutzte
-> kWh zum Haushaltstarif — auch die, die die Wärmepumpe verbraucht hat —, die Wärmepumpe
-> selbst rechnet mit ihrem Tarif. Je PV-kWh in der Wärmepumpe steht in der Anlagensumme
+> Die Regel oben setzt voraus, dass PV-Seite und Geräteseite **denselben** Preis tragen. Mit einem Tarif *Verwendung
+> Wärmepumpe*, dessen Arbeitspreis vom allgemeinen abweicht, tun sie das nicht mehr. Je Monat ist der WP-Strom
+> **S = P + N** — P aus der PV, N aus dem Netz; Haushaltstarif H, WP-Tarif W:
 >
-> ```
-> Abweichung je PV-kWh in der WP = Haushaltstarif − WP-Tarif          (ct/kWh)
-> Abweichung gesamt              = PV-kWh in der WP × (Haushaltstarif − WP-Tarif) / 100
-> Obergrenze                     = WP-Strom × |Haushaltstarif − WP-Tarif| / 100
-> ```
+> | Größe | ohne Messung von N | mit gemessenem N (seit N-770, 30.10.2026) |
+> | --- | --- | --- |
+> | Stromrechnung | Netzbezug × H — zu hoch um N·(H−W) | (Netzbezug − N) × H + N × W |
+> | EV-Ersparnis | EV × H — zu hoch um P·(H−W) | (EV − P) × H + P × W, P = S − N |
+> | WP-Kosten / WP-Ersparnis | S × W | S × W (unverändert, P9) |
+> | Monats-/Jahresergebnis | zusammen (P − N)·(H−W) daneben | exakt |
 >
-> **Das Vorzeichen hängt am Messpunkt.** Sitzt die Wärmepumpe hinter dem Messpunkt, an dem
-> eedc Netzbezug und Einspeisung liest (Netzanschluss), zählt ihr PV-Strom als
-> Eigenverbrauch — die Ersparnis steht **zu hoch**. Liest eedc Netzbezug und Einspeisung
-> am Hauszähler einer Zählerkaskade, steckt der PV-Anteil der Wärmepumpe in der
-> „Einspeisung" und wird mit der Einspeisevergütung bewertet — die Ersparnis steht **zu
-> niedrig**.
+> **Die Messgröße** ist das optionale Feld **„Netzbezug zum WP-Tarif"** an der Wärmepumpe (`netzbezug_eigener_tarif_kwh`,
+> kWh, kumulativ): die Menge, die der Versorger zum WP-Tarif abrechnet. In einer **Zählerkaskade** (Z1 am Netzanschluss,
+> Z2 für Haus und PV, die Wärmepumpe dazwischen) ist sie *Z1-Bezug − Z2-Bezug* — die PV deckt hinter Z2 zuerst das Haus,
+> nur der Überschuss erreicht die Wärmepumpe, und was sie darüber hinaus braucht, zieht sie durch Z1 aus dem Netz. Ein
+> **eigener WP-Zähler, der nicht hinter der PV hängt**, ist N selbst (derselbe Sensor wie „Stromverbrauch", P = 0).
+> Mehrere Wärmepumpen: N je Gerät, im Monat summiert; fehlt N an einem Gerät mit Strom > 0, gilt der Monat als nicht
+> gemessen (keine Mischung aus gemessen und geschätzt). Klemme: N auf `[0, min(S, Netzbezug)]` (§3.1). Bildungsstelle
+> `monats_fakten/tarif.py::komponenten_anteile`, Formel `finanz_aggregat.bewerte_eigenverbrauch` (P auf den bewerteten
+> Eigenverbrauch begrenzt, P15-Grundmenge unverändert). Zahlenbeispiel (Januar 2025, r28, H 30 ct, W 22 ct): S 426,7,
+> N 256 ⇒ P 170,7 kWh; EV-Ersparnis −13,66 €, Stromrechnung −20,48 €, Ergebnis +6,82 €.
 >
-> **Warum eedc es nicht rechnet:** es kennt weder die Zähler-Topologie noch den PV-Anteil
-> der Wärmepumpe. Eine Zuteilung (etwa WP-Strom × Eigenverbrauchsquote) wäre eine erfundene
-> Genauigkeit — dieselbe Begründung, mit der die Zeitfenster des WP-Tarifs über den
-> Netzbezug des **Hauses** gewichtet werden (`monats_fakten/tarif.py::_komponenten_preis`).
-> Die Herkunft des Verbrauchsstroms je Gerät ist als Vorhaben nicht geplant (Konzept #433,
-> 24.10.2026). Ohne eigenen Wärmepumpen-Tarif tritt die Grenze nicht auf. Der
-> **Daten-Checker** nennt sie, sobald ein solcher Tarif gilt und WP-Strom gemessen ist, mit
-> der Obergrenze für die letzten zwölf abgeschlossenen Monate (Kategorie *Strompreise –
-> eigener Wärmepumpen-Tarif*). Eine Wallbox mit eigenem Tarif ist **nicht** betroffen: dort
-> kennt eedc den PV-Anteil der Heimladung und bewertet ihn zum Preis der
-> Eigenverbrauchs-Ersparnis (N-672, Abschnitt „E-Mob-Ersparnis im Cockpit“).
+> **Ohne Messung bleibt es bei der Grenze** — sie hängt dann am Messpunkt. Sitzt die Wärmepumpe hinter dem Messpunkt, an
+> dem eedc Netzbezug und Einspeisung liest (Netzanschluss), stehen die Ersparnis um P·(H−W) und die Stromrechnung um
+> N·(H−W) zu hoch, zusammen höchstens S·|H−W|; liest eedc am Hauszähler einer Kaskade, steckt der PV-Anteil der
+> Wärmepumpe in der „Einspeisung". Eine Zuteilung (etwa WP-Strom × Eigenverbrauchsquote) wäre erfundene Genauigkeit —
+> deshalb die Messgröße statt einer Schätzung (Gernot 30.10.2026). Der **Daten-Checker** nennt die Grenze mit der
+> Obergrenze für die letzten zwölf abgeschlossenen Monate (Kategorie *Strompreise – eigener Wärmepumpen-Tarif*); sein Text
+> bekommt die Stromrechnung und den Rat «Netzbezug zum WP-Tarif zuordnen» in einer eigenen Etappe (E4). Ebenso noch offen:
+> Tag/Stunde (E3) sowie Prognose und ROI-Jahresformel (E4) rechnen weiter mit H. Eine **Wallbox** mit eigenem Tarif hat
+> dieselbe Messgröße für die Stromrechnung („Netzbezug zum Wallbox-Tarif", N-771, §3.1); ihre PV-Ladung bewertet die
+> E-Mob-Ersparnis schon zum Preis der Eigenverbrauchs-Ersparnis (N-672).
 
 > **Wirkungsgrad der Altanlage (η_alt):** `Gesamtwärmebedarf` ist **abgegebene Wärme**, nicht Brennstoff — das Eingabefeld heißt „Heizwärmebedarf (kWh/Jahr) — aus Energieausweis", und derselbe Wert wird oben durch die JAZ geteilt (JAZ = Wärme/Strom). Ein Kessel muss dafür `Wärme / η` verfeuern; `Alter_Preis` ist der Preis je kWh **Brennstoff** (so steht er auf der Rechnung). Die Umrechnung macht der Layer-SoT `gas_kosten_altanlage`, die η-Wahl der Resolver `alter_wirkungsgrad` — beide in `core/berechnungen/alternativkosten.py`.
 >
@@ -3719,6 +3766,7 @@ allgemein   → allgemein-Tarif   || Hardcoded Defaults (30.0 / 8.2)
 | Wärmepumpe Strom | `waermepumpe` | `netzbezug_arbeitspreis_cent_kwh` |
 | Wallbox/E-Auto Ladung | `wallbox` | `netzbezug_arbeitspreis_cent_kwh` |
 | Grundpreis | `allgemein` + eigener `waermepumpe`/`wallbox`-Tarif (N-769, kein Rückfall) | `grundpreis_euro_monat` (Σ) |
+| Stromrechnung, Anteil zum Komponenten-Tarif | eigener `waermepumpe`/`wallbox`-Tarif + gemessenes Feld „Netzbezug zum WP-/Wallbox-Tarif" (N-770/N-771) | `netzbezug_arbeitspreis_cent_kwh` der Komponente (Kaskade wie WP-Kosten bzw. Netzladung) |
 
 ### Hardcoded Defaults (wenn kein Tarif)
 

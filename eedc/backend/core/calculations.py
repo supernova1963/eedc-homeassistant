@@ -5,7 +5,7 @@ Alle Formeln für Kennzahlen, Einsparungen und Auswertungen.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Sequence
 
 from backend.core.berechnungen import (
     eigenverbrauch_ohne_verluste_kwh,
@@ -18,6 +18,7 @@ from backend.core.berechnungen import (
     gas_kosten_altanlage,
     spezifischer_ertrag_kwh_kwp,
 )
+from backend.core.berechnungen.finanz_aggregat import bewerte_eigenverbrauch
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.heimladung_kosten import heimladung_stromkosten_euro
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -138,6 +139,10 @@ def berechne_monatskennzahlen(
     # N-588: Wandlungsverluste des Monats + Messpunkt-Vertrag (Monats-Fakten)
     wandlungsverluste_kwh: Optional[float] = None,
     verluste_grund: Optional[str] = None,
+    # N-770/N-771: gemessene Anteile zum Komponenten-Tarif ((kWh, ct) je Anteil) und der PV-Anteil der WP zum WP-Tarif
+    netzbezug_anteile: Sequence[tuple[float, float]] = (),
+    wp_pv_kwh: Optional[float] = None,
+    wp_tarif_cent: Optional[float] = None,
 ) -> MonatsKennzahlen:
     """
     Berechnet alle Kennzahlen für einen Monat.
@@ -189,11 +194,13 @@ def berechne_monatskennzahlen(
         einspeisung_kwh, None, einspeiseverguetung_cent
     ).erloes_euro
     netzbezug_kosten = berechne_netzbezug_kosten(
-        netzbezug_kwh, netzbezug_preis_cent, grundpreis_euro_monat
+        netzbezug_kwh, netzbezug_preis_cent, grundpreis_euro_monat, netzbezug_anteile
     )
-    ev_ersparnis = eigenverbrauch_ohne_verluste_kwh(
-        eigenverbrauch, wandlungsverluste_kwh, verluste_grund
-    ) * netzbezug_preis_cent / 100
+    # N-770: dieselbe Formel wie `finanz_aggregat` (PV-Anteil der WP zum WP-Tarif, wenn gemessen; sonst bitgleich).
+    ev_ersparnis = bewerte_eigenverbrauch(
+        eigenverbrauch_ohne_verluste_kwh(eigenverbrauch, wandlungsverluste_kwh, verluste_grund),
+        netzbezug_preis_cent, wp_pv_kwh, wp_tarif_cent,
+    ).euro
 
     # Netto-Ertrag der PV-Anlage:
     # = Einspeise-Erlös + Eigenverbrauch-Ersparnis

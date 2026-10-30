@@ -543,6 +543,27 @@ def _grundgebuehr_aufteilung_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Op
     return {k: je[k] for k in sorted(je, key=lambda k: (k != "allgemein", k))}
 
 
+def _netzbezug_anteile_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional[list[dict[str, Any]]]:
+    """Σ der Anteile zum Komponenten-Tarif je Verwendung über die Monate (N-770/N-771, 30.10.2026): kWh, Betrag und
+    gemessene kWh summiert, der Preis als Betrag ÷ kWh, ``geklemmt``, sobald ein Monat geklemmt wurde. ``None``, solange
+    kein Monat Anteile trägt."""
+    je: dict[str, dict[str, Any]] = {}
+    for m in monate:
+        for a in m.get("netzbezug_anteile") or ():
+            z = je.setdefault(a["verwendung"], {"verwendung": a["verwendung"], "kwh": 0.0, "euro": 0.0,
+                                                "gemessen_kwh": 0.0, "geklemmt": False})
+            z["kwh"] += a["kwh"]
+            z["euro"] += a["euro"]
+            z["gemessen_kwh"] += a["gemessen_kwh"]
+            z["geklemmt"] = z["geklemmt"] or bool(a["geklemmt"])
+    if not je:
+        return None
+    return [
+        {**z, "cent": (z["euro"] / z["kwh"] * 100) if z["kwh"] else None}
+        for z in (je[k] for k in ("waermepumpe", "wallbox") if k in je)
+    ]
+
+
 def falte_zeitraum(
     monate: Sequence[Mapping[str, Any]],
     jahr: int,
@@ -839,6 +860,11 @@ def falte_zeitraum(
         ),
         "grundgebuehr_euro": summe(f("grundgebuehr_euro")),
         "grundgebuehr_aufteilung": _grundgebuehr_aufteilung_zeitraum(monate),
+        # N-770/N-771: Σ je Verwendung; der PV-Anteil der WP zum WP-Tarif als Σ kWh (Preis: Betrag-gewichtet ist nicht
+        # ausgewiesen — der Monat trägt ihn, das Jahr nur die Menge).
+        "netzbezug_anteile": _netzbezug_anteile_zeitraum(monate),
+        "ev_ersparnis_wp_tarif_kwh": summe(f("ev_ersparnis_wp_tarif_kwh")),
+        "ev_ersparnis_wp_tarif_cent": None,
         "zaehlergebuehr_euro_jahr": next(
             (v for v in reversed(f("zaehlergebuehr_euro_jahr")) if v is not None), None),
 

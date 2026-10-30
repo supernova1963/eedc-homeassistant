@@ -56,6 +56,7 @@ def get_felder_fuer_investition(
     belegte_felder: Optional[set[str]] = None,
     jahr: Optional[int] = None,
     monat: Optional[int] = None,
+    eigene_tarife: Optional[set[str]] = None,
 ) -> list[dict]:
     """
     Gibt die relevanten Felder für eine Investition zurück (Bedingungen aufgelöst).
@@ -84,6 +85,9 @@ def get_felder_fuer_investition(
         jahr, monat: Der betrachtete Monat (Monatsabschluss) — „in Betrieb" einer
                      verdrängenden Investition gilt dann für ihn (N-555 Stufe 2,
                      Konzept Regel 0). Ohne: heute.
+        eigene_tarife: N-770/N-771 (F1) — die Verwendungen mit EIGENEM Tarif im Monat (``waermepumpe``, ``wallbox``).
+                       Ein Feld mit ``tarif_verwendung`` außerhalb dieser Menge ist **erweitert** (nur mit Beleg
+                       sichtbar, R1). ``None`` (Import, CSV, Checker) ⇒ kein Filter.
 
     Returns:
         Liste von Feld-Dicts ohne "bedingung"-Keys (bereits aufgelöst)
@@ -111,7 +115,7 @@ def get_felder_fuer_investition(
     # relevant, gehören nicht in die Eingabe-Antwort.
     SKIP_KEYS = {"bedingung", "weich", "bedingung_anlage", "label_wenn",
                  "nur_manuell", "nur_bestand", "je_innengeraet",
-                 "label_je_innengeraet"}
+                 "label_je_innengeraet", "tarif_verwendung"}
     belegt = belegte_felder or set()
 
     for feld in alle_felder:
@@ -142,6 +146,9 @@ def get_felder_fuer_investition(
         urteil = bedingungs_urteil(bedingung, feld.get("weich"), bedingungs_werte)
         if urteil == URTEIL_NEIN:
             continue
+        # N-770/N-771 (F1): der Netzbezug zum Komponenten-Tarif ohne eigenen Tarif ist untypisch (wirkungslos) — R1.
+        if eigene_tarife is not None and feld.get("tarif_verwendung") not in (None, *eigene_tarife):
+            urteil = URTEIL_ERWEITERT
         if urteil == URTEIL_ERWEITERT and basis_feld_key(feld["feld"]) not in belegt:
             # Erweitert und unbelegt: die Größe ist an diesem Gerät untypisch und
             # nichts deutet darauf hin, dass es sie gibt. Sie bleibt erreichbar —

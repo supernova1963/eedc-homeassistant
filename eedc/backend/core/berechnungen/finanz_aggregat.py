@@ -104,6 +104,38 @@ class FinanzMonatsZeile:
     #: Messpunkt-Vertrag (``verluste_grund``). ``None`` ⇒ kein Abzug (F3), der Eigenverbrauch bleibt bitgleich.
     wandlungsverluste_kwh: Optional[float] = None
     verluste_grund: Optional[str] = None
+    #: N-770 (30.10.2026): der PV-Anteil der Wärmepumpe P = S − N (gemessener Netzbezug zum WP-Tarif) und der Preis des
+    #: eigenen WP-Tarifs — ``bewerte_eigenverbrauch`` bewertet P zum WP-Tarif, den Rest zum EV-Preis. ``None`` ⇒ alles zum
+    #: EV-Preis (bitgleich wie bis dahin). Gebildet in ``monats_fakten.tarif.komponenten_anteile``.
+    wp_pv_kwh: Optional[float] = None
+    wp_tarif_cent: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class EigenverbrauchBewertung:
+    """Die Eigenverbrauchs-Ersparnis einer Zeile — Betrag und der Teil, der zum WP-Tarif bewertet wurde (N-770)."""
+
+    euro: float
+    #: angesetzter PV-Anteil der Wärmepumpe (kWh, auf den bewerteten Eigenverbrauch begrenzt); 0 ohne WP-Anteil
+    wp_tarif_kwh: float = 0.0
+
+
+def bewerte_eigenverbrauch(
+    ev_kwh: float,
+    ev_preis_cent: float,
+    wp_pv_kwh: Optional[float] = None,
+    wp_tarif_cent: Optional[float] = None,
+) -> EigenverbrauchBewertung:
+    """Die EINE Formel der Eigenverbrauchs-Ersparnis (N-770 E2: bis dahin auch in *Cockpit → Monat* inline).
+
+    Ohne WP-Anteil ``ev_kwh × ev_preis / 100`` (bitgleich wie bis dahin). Mit gemessenem Netzbezug zum WP-Tarif
+    (Bauplan §1): der PV-Anteil der Wärmepumpe P — auf ``[0, ev_kwh]`` begrenzt — ersetzt Strom zum **WP-Tarif**, nicht
+    zum Haushaltspreis: ``(EV − P) × ev_preis / 100 + P × wp_tarif / 100``. Die Grundmenge bleibt der Eigenverbrauch ohne
+    Wandlungsverluste (P15)."""
+    if wp_pv_kwh is None or wp_tarif_cent is None:
+        return EigenverbrauchBewertung(ev_kwh * ev_preis_cent / 100)
+    p = max(0.0, min(wp_pv_kwh, ev_kwh))
+    return EigenverbrauchBewertung((ev_kwh - p) * ev_preis_cent / 100 + p * wp_tarif_cent / 100, p)
 
 
 @dataclass
@@ -129,6 +161,8 @@ class FinanzAggregat:
     eigenverbrauch_ohne_verluste_kwh: float = 0.0
     #: N-588: Σ der abgezogenen Wandlungsverluste (0, wo der Messpunkt-Vertrag nicht hält oder keine gemessen sind).
     wandlungsverluste_kwh: float = 0.0
+    #: N-770: Σ des PV-Anteils der Wärmepumpe, der zum WP-Tarif statt zum EV-Preis bewertet wurde (0 ohne Messung).
+    ev_wp_tarif_kwh: float = 0.0
 
 
 def ev_preis_der_zeile(z: FinanzMonatsZeile) -> float:
@@ -175,6 +209,7 @@ def berechne_finanz_aggregat(
     nicht_verg_erloes = 0.0
     nicht_verg_kwh = 0.0
     hat_neg = False
+    ev_wp_kwh = 0.0
 
     for z in zeilen:
         kz = berechne_verbrauchs_kennzahlen(
@@ -196,7 +231,9 @@ def berechne_finanz_aggregat(
         # A-2: der EV-gewichtete Preis, wenn der Aufrufer ihn kennt — sonst
         # unverändert der Bezugspreis.
         ev_preis = ev_preis_der_zeile(z)
-        ev += ev_bewertet * ev_preis / 100
+        # N-770: der PV-Anteil der Wärmepumpe zum WP-Tarif, wenn gemessen — sonst bitgleich `ev_bewertet × ev_preis`.
+        ev += (_bew := bewerte_eigenverbrauch(ev_bewertet, ev_preis, z.wp_pv_kwh, z.wp_tarif_cent)).euro
+        ev_wp_kwh += _bew.wp_tarif_kwh
         # Nur der Rest-Eigenverbrauch aus BKW-Monaten OHNE erfasste Erzeugung
         # (P9-Kontrakt der Zeile) — mit Erzeugung steckt er bereits in `ev`.
         # Er ist dieselbe Größe wie `ev` und trägt deshalb denselben Preis.
@@ -228,4 +265,5 @@ def berechne_finanz_aggregat(
         hat_neg_preis_daten=hat_neg,
         eigenverbrauch_ohne_verluste_kwh=ev_ohne_verluste_kwh,
         wandlungsverluste_kwh=ev_kwh - ev_ohne_verluste_kwh,
+        ev_wp_tarif_kwh=ev_wp_kwh,
     )

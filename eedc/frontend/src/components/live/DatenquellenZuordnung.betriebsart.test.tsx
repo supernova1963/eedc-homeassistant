@@ -81,7 +81,9 @@ describe('P-433-2 S2 — Wärmepumpe nach Betriebsart', () => {
   it('erweiterte Felder bleiben in «Weitere Größen erfassen» und klappen dort auf', async () => {
     const { container } = await zeige('mathek')
     expect(container.textContent).not.toContain('Strom Lüftbetrieb')
-    fireEvent.click(screen.getByRole('button', { name: /Weitere Größen erfassen \(7\)/ }))
+    // N-770 (F1): ohne eigenen WP-Tarif steht «Netzbezug zum WP-Tarif» hier mit (7 → 8).
+    fireEvent.click(screen.getByRole('button', { name: /Weitere Größen erfassen \(8\)/ }))
+    expect(screen.getByText('Netzbezug zum WP-Tarif (kWh)')).toBeInTheDocument()
     expect(screen.getByText('Strom Lüftbetrieb (kWh)')).toBeInTheDocument()
     expect(screen.getByText('Stromverbrauch (kWh)')).toBeInTheDocument()
   })

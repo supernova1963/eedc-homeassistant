@@ -111,6 +111,8 @@ from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
     emob_aggregat_und_kennzahlen,
     wp_aggregat_aus_zeilen,
     finanzen_des_monats,
+    anteile_antwort,
+    komponenten_anteile_des_monats,
     komponenten_ersparnis,
     t_konto_je_investition,
 )
@@ -800,7 +802,12 @@ async def _berechne_monat(
         else eigenverbrauch_ohne_verluste_kwh(eigenverbrauch, _verluste, _verluste_grund)
     )
     # ── finanzen_des_monats (Vorlage 2: Abschnitt in finanzen.py, Schnittstelle 8 ein / 19 aus) ──
-    _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch_ohne_verluste, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug)
+    # N-770 E2: die Stromrechnung mit dem Monatstarif der Fakten (eine Bildungsstelle, `stromrechnung_euro`) und den
+    # gemessenen Anteilen zum WP-/Wallbox-Tarif (`komponenten_anteile`); die EV-Ersparnis bewertet den PV-Anteil der WP
+    # zum WP-Tarif.
+    _anteile = komponenten_anteile_des_monats(monats_fakt, _wp_kanal, netzbezug)
+    _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch_ohne_verluste, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug,
+                                     tarif_fakten=monats_fakt.tarif if monats_fakt is not None else None, anteile=_anteile)
     allgemein_tarif = _out["allgemein_tarif"]
     einspeise_cent = _out["einspeise_cent"]
     einspeise_erloes = _out["einspeise_erloes"]
@@ -1172,6 +1179,7 @@ async def _berechne_monat(
         ),
         grundgebuehr_euro=grundgebuehr,
         grundgebuehr_aufteilung=grundgebuehr_aufteilung,
+        **anteile_antwort(_anteile),
         zaehlergebuehr_euro_jahr=zaehlergebuehr_jahr,
         # Vergleiche
         vorjahr=vorjahr,

@@ -44,6 +44,7 @@ from backend.services.monats_fakten import (
     TAGESWERT_PV,
     TAGESWERT_SPEICHER,
     grundpreis_des_monats,
+    komponenten_anteile_des_fakts,
     lade_monats_fakten,
     netzfeld_ist_erfasst,
 )
@@ -933,6 +934,7 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         db, md.anlage_id, von=(md.jahr, md.monat), bis=(md.jahr, md.monat),
     )), None)
     pv_kwh = _fakt.erzeugung.pv_kwh if _fakt is not None else None
+    _anteile = komponenten_anteile_des_fakts(_fakt, md.netzbezug_kwh or 0.0)
 
     # Kennzahlen berechnen
     kennzahlen = berechne_monatskennzahlen(
@@ -980,6 +982,10 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         ),
         wandlungsverluste_kwh=_fakt.erzeugung.wandlungsverluste_kwh if _fakt is not None else None,
         verluste_grund=_fakt.erzeugung.verluste_grund if _fakt is not None else None,
+        # N-770/N-771: die gemessenen Anteile zum WP-/Wallbox-Tarif aus derselben Bildungsstelle wie Cockpit und Tabelle.
+        netzbezug_anteile=_anteile.stromrechnung_anteile() if _anteile is not None else (),
+        wp_pv_kwh=_anteile.wp_pv_kwh if _anteile is not None else None,
+        wp_tarif_cent=_anteile.wp_cent if _anteile is not None else None,
     )
 
     response = MonatsdatenMitKennzahlen.model_validate(md)

@@ -565,6 +565,15 @@ class AktuellerMonatResponse(BaseModel):
     #: N-769: die Grundgebühr je Verwendung (``allgemein``/``waermepumpe``/``wallbox`` → €), nur wenn ein eigener
     #: Komponenten-Tarif beiträgt — sonst ``None``. Im Jahr Σ je Verwendung (``falte_zeitraum``).
     grundgebuehr_aufteilung: Optional[dict[str, float]] = None
+    #: N-770/N-771: der gemessene Netzbezug zum Komponenten-Tarif — je Anteil ``verwendung`` (``waermepumpe``/``wallbox``),
+    #: ``kwh`` (angesetzt, geklemmt), ``cent``, ``euro``, ``gemessen_kwh``, ``geklemmt``; die Stromrechnung ist dann
+    #: ``(Netzbezug − Σ kWh) × Haushaltspreis + Σ euro + Grundgebühr``. ``None`` ohne eigenen Tarif bzw. ohne Messung.
+    #: Im Jahr Σ je Verwendung (``falte_zeitraum``).
+    netzbezug_anteile: Optional[list[dict]] = None
+    #: N-770: der PV-Anteil der Wärmepumpe, den die Eigenverbrauchs-Ersparnis zum WP-Tarif statt zum Haushaltspreis
+    #: bewertet (kWh), und dieser Preis — ``None`` ohne gemessenen Netzbezug zum WP-Tarif.
+    ev_ersparnis_wp_tarif_kwh: Optional[float] = None
+    ev_ersparnis_wp_tarif_cent: Optional[float] = None
     # G19-1 K3: jährliche Zähler-/Messstellengebühr vom Tarif — reiner Ausweis
     # in der Jahresaufstellung, NICHT in Kosten/Netto-Ertrag verrechnet.
     zaehlergebuehr_euro_jahr: Optional[float] = None

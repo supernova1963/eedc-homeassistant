@@ -269,6 +269,9 @@ async def build_expected_topics(
                 # entscheidet, ob das Feld in der ersten Reihe steht oder hinter
                 # „Weitere Größen erfassen".
                 "erweitert": bool(feld.get("erweitert")),
+                # N-770/N-771 (F1): ohne eigenen Tarif dieser Verwendung stellt die Fläche das Feld hinter „Weitere
+                # Größen erfassen" (`routes/datenquellen.py::_nach_eigenem_tarif`). Roh durchgereicht wie `bedingung`.
+                "tarif_verwendung": feld.get("tarif_verwendung"),
                 # Geräteklassen-Verletzung: die Größe gibt es an dieser Bauart
                 # NICHT. Die Fläche nimmt sie heraus, solange keine Quelle
                 # zugeordnet ist — mit Quelle bleibt sie sichtbar und damit

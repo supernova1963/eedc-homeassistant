@@ -186,6 +186,19 @@
    {
     "bedarf": "optional",
     "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
     "betriebsart": "heizen",
     "einheit": "kWh",
     "erweitert": true,
@@ -476,6 +489,19 @@
     "feld": "heizstab_strom_kwh",
     "kategorie": "energy",
     "label": "Strom Zusatzheizung",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
     "menge": null,
     "quelle": "keine",
     "zustand": false
@@ -793,6 +819,19 @@
    {
     "bedarf": "optional",
     "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
     "betriebsart": "heizen",
     "einheit": "kWh",
     "erweitert": false,
@@ -1090,6 +1129,19 @@
    {
     "bedarf": "optional",
     "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
     "betriebsart": "heizen",
     "einheit": "kWh",
     "erweitert": true,
@@ -1380,6 +1432,19 @@
     "feld": "heizstab_strom_kwh",
     "kategorie": "energy",
     "label": "Strom Zusatzheizung",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
     "menge": null,
     "quelle": "keine",
     "zustand": false
@@ -1710,6 +1775,19 @@
    {
     "bedarf": "optional",
     "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
     "betriebsart": "heizen",
     "einheit": "kWh",
     "erweitert": true,
@@ -2007,6 +2085,19 @@
    {
     "bedarf": "optional",
     "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
     "betriebsart": "heizen",
     "einheit": "kWh",
     "erweitert": false,
@@ -2297,6 +2388,19 @@
     "feld": "heizstab_strom_kwh",
     "kategorie": "energy",
     "label": "Strom Zusatzheizung",
+    "menge": null,
+    "quelle": "keine",
+    "zustand": false
+   },
+   {
+    "bedarf": "optional",
+    "bedarf_text": null,
+    "betriebsart": "geraet",
+    "einheit": "kWh",
+    "erweitert": true,
+    "feld": "netzbezug_eigener_tarif_kwh",
+    "kategorie": "energy",
+    "label": "Netzbezug zum WP-Tarif",
     "menge": null,
     "quelle": "keine",
     "zustand": false

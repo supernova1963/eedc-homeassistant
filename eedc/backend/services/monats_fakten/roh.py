@@ -147,6 +147,17 @@ class _RohMonat:
         #: P-433-3 S2: der gemessene Heizstab-Strom (Teilmenge, H-B) und ob ein Gerät ihn gemessen hat (auch 0).
         self.wp_heizstab = 0.0
         self.wp_heizstab_gemessen = False
+        #: N-770 (F3): Σ gemessener Netzbezug zum WP-Tarif und ob er für JEDES Gerät mit Strom > 0 gemessen ist — fehlt er
+        #: an einem, gilt der Monat als nicht gemessen (keine Mischung aus gemessen und geschätzt).
+        self.wp_netz_eigener_tarif = 0.0
+        self.wp_netz_eigener_tarif_gemessen = False
+        self.wp_netz_eigener_tarif_luecke = False
+        #: N-771 (F3 je Typ): dasselbe für die Wallboxen (privat und dienstlich — die Stromrechnung ist eine) samt der
+        #: Ladung aller Wallboxen als Obergrenze der Klemme (F7).
+        self.wallbox_netz_eigener_tarif = 0.0
+        self.wallbox_netz_eigener_tarif_gemessen = False
+        self.wallbox_netz_eigener_tarif_luecke = False
+        self.wallbox_ladung_alle = 0.0
         self.wp_waerme_abgeleitet = 0.0
         # ── R2/Gerät: Zählt der Block Geräte, die keine Wärme melden? ───────
         #
@@ -277,6 +288,32 @@ class _RohMonat:
         if b.wp_heizstab_gemessen:
             self.wp_heizstab_gemessen = True
             self.wp_geraete_mit_heizstab.add(inv.id)
+
+    def _falte_netz_eigener_tarif(self, inv, b) -> None:
+        """N-770/N-771: Netzbezug zum Komponenten-Tarif (Teilmenge) je Typ — eigene Phase (Komplexitäts-Wächter).
+        F3: ein Gerät mit Strom bzw. Ladung > 0 ohne das Feld macht den Monat «nicht gemessen»."""
+        if inv.typ == "waermepumpe":
+            self.wp_netz_eigener_tarif += b.wp_netz_eigener_tarif
+            if b.wp_netz_eigener_tarif_gemessen:
+                self.wp_netz_eigener_tarif_gemessen = True
+            elif b.wp_strom > 0:
+                self.wp_netz_eigener_tarif_luecke = True
+        elif inv.typ == "wallbox":
+            self.wallbox_ladung_alle += b.wallbox_ladung
+            self.wallbox_netz_eigener_tarif += b.wallbox_netz_eigener_tarif
+            if b.wallbox_netz_eigener_tarif_gemessen:
+                self.wallbox_netz_eigener_tarif_gemessen = True
+            elif b.wallbox_ladung > 0:
+                self.wallbox_netz_eigener_tarif_luecke = True
+
+    def netz_eigener_tarif_kwh(self, typ: str) -> Optional[float]:
+        """Der Monatswert des Netzbezugs zum Komponenten-Tarif — ``None`` = nicht gemessen (kein Gerät misst ihn, oder
+        eines mit Strom/Ladung > 0 misst ihn nicht, F3); eine gemessene 0 bleibt 0."""
+        if typ == "waermepumpe":
+            ok = self.wp_netz_eigener_tarif_gemessen and not self.wp_netz_eigener_tarif_luecke
+            return self.wp_netz_eigener_tarif if ok else None
+        ok = self.wallbox_netz_eigener_tarif_gemessen and not self.wallbox_netz_eigener_tarif_luecke
+        return self.wallbox_netz_eigener_tarif if ok else None
 
     def falte(
         self,
@@ -411,6 +448,7 @@ class _RohMonat:
             self.wp_strom_heizen += b.wp_strom_heizen
             self.wp_strom_warmwasser += b.wp_strom_warmwasser
             self._falte_heizstab(inv, b)
+            self._falte_netz_eigener_tarif(inv, b)
             # N-479: ODER über die Geräte — ein einziges gemessenes Gerät macht
             # die Funktion für diesen Monat „gemessen". Dieselbe Bauform wie
             # ``wp_hat_split`` darunter.
@@ -515,6 +553,7 @@ class _RohMonat:
                 self.wp_abgrenzung = b.wp_abgrenzung
 
         elif inv.typ in ("e-auto", "wallbox"):
+            self._falte_netz_eigener_tarif(inv, b)
             if ist_dienstlich(inv):
                 # Dienstlich geladen ist keine private Ersparnis — der Anteil
                 # wird herausgefiltert, aber nicht verworfen: er gehört als

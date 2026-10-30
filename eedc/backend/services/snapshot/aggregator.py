@@ -1144,6 +1144,10 @@ TAGESDETAIL_AUSGABE: dict[tuple[str, str], str] = {
     # `WAERME_AUSGABE_KEYS` noch in `WP_STROM_AUSGABE_ZU_FELD` (K3 entscheidet ohne ihn). Er trägt nur die
     # Ausweis-Zahl „AZ ohne Zusatzheizung" des Tages (`tag-detail`).
     ("waermepumpe", "heizstab_strom_kwh"): "wp_heizstab_kwh",
+    # N-770/N-771 (Bauplan F5, für E3): der Netzbezug zum Komponenten-Tarif — Teilmenge wie der Heizstab, weder Wärme
+    # noch WP-Strom-Ausgabe. Die Stundenwerte tragen später die Slot-Kosten der Tagessicht.
+    ("waermepumpe", "netzbezug_eigener_tarif_kwh"): "wp_netz_eigener_tarif_kwh",
+    ("wallbox", "netzbezug_eigener_tarif_kwh"): "wallbox_netz_eigener_tarif_kwh",
     ("speicher", "ladung_netz_kwh"): "speicher_ladung_netz_kwh",
     ("wallbox", "ladung_pv_kwh"): "emob_ladung_pv_kwh",
     ("wallbox", "ladung_netz_kwh"): "emob_ladung_netz_kwh",
