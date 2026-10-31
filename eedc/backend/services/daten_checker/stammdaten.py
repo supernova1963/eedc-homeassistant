@@ -63,6 +63,15 @@ EINSPEISUNG_MELDESCHWELLE_KWH_JAHR = 50.0
 ANLAGENLEISTUNG_TOLERANZ_KWP = 0.1
 
 
+def _tarif_verwendungen(strompreise) -> set[str]:
+    """Die Verwendungen der hinterlegten Tarife — F12 (N-770/N-771 E6): ein gemeinsamer Tarif «Wärmepumpe und Wallbox»
+    (``waermepumpe_wallbox``) ist der Tarif beider Verwendungen."""
+    verwendungen = {s.verwendung for s in strompreise}
+    if "waermepumpe_wallbox" in verwendungen:
+        verwendungen |= {"waermepumpe", "wallbox"}
+    return verwendungen
+
+
 class StammdatenChecks(StammdatenInvestitionenChecks):
     """Prüfungen für Stammdaten, Strompreise und Investitions-Stammwerte."""
 
@@ -739,7 +748,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
         # der nichts bewirkt, ist Rauschen.
 
         # Spezialtarife prüfen (WP / E-Auto)
-        verwendungen = {s.verwendung for s in anlage.strompreise}
+        verwendungen = _tarif_verwendungen(anlage.strompreise)
         heute = date.today()
         hat_wp = any(i.typ == "waermepumpe" and i.ist_aktiv_an(heute) for i in anlage.investitionen)
         hat_eauto = any(i.typ == "e-auto" and i.ist_aktiv_an(heute) for i in anlage.investitionen)

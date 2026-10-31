@@ -119,3 +119,26 @@ describe('N-770/N-771 — Anteile zum Komponenten-Tarif', () => {
     expect(evWpTarifText(170.7, 22, k, k)).toBe(' · davon 170,7 kWh PV-Strom der Wärmepumpe zum WP-Tarif 22,0 ct/kWh')
   })
 })
+
+describe('F12 (N-770/N-771 E6) — gemeinsamer Zähler Wärmepumpe und Wallbox', () => {
+  const k = (v: number) => v.toFixed(1).replace('.', ',')
+  const fmt = (e: number) => e.toFixed(2).replace('.', ',')
+
+  it('das Formular bietet die Verwendung «Wärmepumpe und Wallbox (gemeinsamer Zähler)» an', () => {
+    render(<StrompreisForm anlageId={1} onCreate={async () => {}} onCancel={() => {}} />)
+    expect(screen.getByText('Wärmepumpe und Wallbox (gemeinsamer Zähler)')).toBeTruthy()
+    expect(screen.getByText(/Den gemeinsamen Netzbezug trägt das Feld an der Wärmepumpe/)).toBeTruthy()
+  })
+
+  it('Tarifliste und Grundgebühr nennen den gemeinsamen Tarif einmal', () => {
+    expect(verwendungLabel('waermepumpe_wallbox')).toBe('Wärmepumpe und Wallbox')
+    expect(grundgebuehrAufteilungText({ allgemein: 14, waermepumpe_wallbox: 10 }, fmt))
+      .toBe(' (Standard 14,00 € · Wärmepumpe und Wallbox 10,00 €)')
+  })
+
+  it('die Rechnung der Ø-Preis-Kachel nennt den gemeinsamen Anteil als solchen', () => {
+    expect(netzbezugAnteileBerechnung(400, 30, [
+      { verwendung: 'waermepumpe_wallbox', kwh: 250, cent: 22, euro: 55, gemessen_kwh: 250, geklemmt: false },
+    ], k, k)).toBe('150,0 kWh × 30,0 ct/kWh + 250,0 kWh × 22,0 ct/kWh (Wärmepumpe und Wallbox, gemeinsamer Zähler)')
+  })
+})

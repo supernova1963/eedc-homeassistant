@@ -24,6 +24,20 @@ Datenquellen), dieselbe Klemme (``monats_fakten.komponenten_anteile``). Je Kompo
   paralleler Zähler (das Gerät hängt nicht hinter dem PV-Messpunkt, P = 0) — dann muss der Netzbezug der Anlage diesen
   Zähler enthalten (Netzbezug der Anlage = Summe beider Zähler), sonst fehlt N im Netzbezug und die Klemme greift.
 
+**F12 — gemeinsamer Zähler WP + Wallbox (E6, Verwendung ``waermepumpe_wallbox``):** das Feld an der WP trägt N_g
+(``monats_fakten.tarif._anteile_gemeinsam``, F12a = A). Dann statt der beiden Komponenten:
+
+* **WARNING — Vorrang:** ein eigener WP- bzw. Wallbox-Tarif gilt am selben Stichtag wie der gemeinsame — er hat Vorrang
+  für seine Verwendung (``strompreise.tarife_zum_stichtag``), der gemeinsame gilt nur noch für die andere.
+* **WARNING — Feld an der Wallbox:** unter dem gemeinsamen Tarif zählt ein «Netzbezug zum Wallbox-Tarif» nicht in der
+  Stromrechnung (N_g steht an der WP, sonst doppelt).
+* **INFO — Feld fehlt** (Obergrenze wie oben mit S_wp + L_wb) · **WARNING — geklemmt:** N_g > S_wp + L_wb (2 %) bzw.
+  > Netzbezug · **WARNING — N_wb > N_g:** die Netzladung der Wallbox nach der bisherigen Regel übersteigt den
+  gemeinsamen Netzbezug, N_wb wird auf N_g geklemmt.
+* **INFO — Tage teilen nicht** (Auftrag §3.4): Monate mit gemeinsamem Zähler und Ladung > 0 — ohne Stundenwerte der
+  Wallbox teilt der Tag die Eigenverbrauchs-Ersparnis nicht, der Monat trägt den Wert (benannte Grenze analog F9).
+* G1 (paralleler Zähler) gilt an der WP sinngemäß.
+
 **Eng gefasst (P-6):** nur wenn zum Monatsersten des Prüfmonats (P8-Stichtag) ein Tarif der Verwendung mit eigenem
 Arbeitspreis gilt, der vom allgemeinen abweicht; Mengen über die Monats-Fakten (ADR-002/P10). Verglichen wird der Preis
 des Monats, wie ``_lade_tarif`` ihn bildet (``tarif_des_monats``) — keine zweite Kaskade.
@@ -53,6 +67,10 @@ _KOMPONENTEN = {
     "waermepumpe": ("Wärmepumpen", "Netzbezug zum WP-Tarif", "stromverbrauch_kwh", "WP-Strom", "Stromverbrauch"),
     "wallbox": ("Wallbox", "Netzbezug zum Wallbox-Tarif", "ladung_kwh", "Ladung", "Ladung"),
 }
+#: F12 (E6): der gemeinsame Zähler WP + Wallbox — Anwenderwort, Feld-Label (an der WP), Mengenwort.
+GEMEINSAM = "waermepumpe_wallbox"
+_GEMEINSAM_TEXTE = ("Wärmepumpen-/Wallbox", "Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)", None,
+                    "WP-Strom und Ladung", None)
 
 
 def _monat_minus(jahr: int, monat: int, n: int) -> tuple[int, int]:
@@ -65,7 +83,13 @@ def _monate_text(monate) -> str:
     return ", ".join(f"{m:02d}/{j}" for j, m in sorted(monate))
 
 
+def _texte(verwendung: str) -> tuple:
+    return _GEMEINSAM_TEXTE if verwendung == GEMEINSAM else _KOMPONENTEN[verwendung]
+
+
 def _menge_und_n(fakt, verwendung: str) -> tuple[float, Optional[float]]:
+    if verwendung == GEMEINSAM:
+        return fakt.wp.strom_kwh + fakt.emob.wallbox_ladung_alle_kwh, fakt.wp.netz_eigener_tarif_kwh
     if verwendung == "waermepumpe":
         return fakt.wp.strom_kwh, fakt.wp.netz_eigener_tarif_kwh
     return fakt.emob.wallbox_ladung_alle_kwh, fakt.emob.wallbox_netz_eigener_tarif_kwh
@@ -88,13 +112,19 @@ class WpTarifChecks:
         allgemein = resolve_tarif_for_komponente(tarife, "allgemein")
         if allgemein is None:
             return []
+        from backend.services.monats_fakten.tarif import komponenten_tarif_gemeinsam
+
+        gemeinsam = komponenten_tarif_gemeinsam(tarife)
+        out: list[CheckErgebnis] = _vorrang_vor_gemeinsam(zeilen)
         verwendungen = [
             v for v in _KOMPONENTEN
             if (t := resolve_tarif_for_komponente(tarife, v)) is not None and t is not allgemein
             and t.netzbezug_arbeitspreis_cent_kwh != allgemein.netzbezug_arbeitspreis_cent_kwh
         ]
         if not verwendungen:
-            return []
+            return out
+        # F12: unter dem gemeinsamen Tarif EINE Prüfung über den gemeinsamen Netzbezug N_g (Feld an der WP).
+        pruefungen = [GEMEINSAM] if gemeinsam else verwendungen
 
         from backend.services.monats_fakten import lade_monats_fakten, tarif_des_monats
 
@@ -102,15 +132,47 @@ class WpTarifChecks:
         fenster = (_monat_minus(stichtag.year, stichtag.month, FENSTER_MONATE),
                    _monat_minus(stichtag.year, stichtag.month, 1))
         fakten = await lade_monats_fakten(self.db, anlage.id, von=fenster[0], bis=fenster[1], inkl_nur_tageswerte=True)
-        out: list[CheckErgebnis] = []
-        for v in verwendungen:
-            komp_cent = tarif.wp_preis_cent if v == "waermepumpe" else tarif.wallbox_preis_effektiv_cent
+        for v in pruefungen:
+            komp_cent = tarif.wallbox_preis_effektiv_cent if v == "wallbox" else tarif.wp_preis_cent
             out += _feld_fehlt(v, fakten, komp_cent, tarif.netzbezug_stammpreis_cent)
             out += _geklemmt(v, fakten)
-        out += await self._parallele_zaehler(anlage, verwendungen)
-        if "wallbox" in verwendungen:
+        out += await self._parallele_zaehler(anlage, ["waermepumpe"] if gemeinsam else verwendungen)
+        if gemeinsam:
+            out += _gemeinsam_tage_und_wallbox(fakten)
+            out += await self._feld_an_wallbox_unter_gemeinsam(anlage, fenster)
+        elif "wallbox" in verwendungen:
             out += await self._evcc_weicht_ab(anlage, fenster)
         return out
+
+    async def _feld_an_wallbox_unter_gemeinsam(self, anlage: Anlage, fenster) -> list[CheckErgebnis]:
+        """F12: ein «Netzbezug zum Wallbox-Tarif» an einer Wallbox (zugeordnet oder in einer Monatszeile des Fensters)
+        zählt unter dem gemeinsamen Tarif nicht in der Stromrechnung — sonst stünde N_wb doppelt (N_g steht an der WP)."""
+        from backend.models.investition import Investition, InvestitionMonatsdaten
+
+        (von_j, von_m), (bis_j, bis_m) = fenster
+        mapping = ((anlage.sensor_mapping or {}).get("investitionen") or {})
+        zeilen = (await self.db.execute(
+            select(Investition.id, Investition.bezeichnung, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat,
+                   InvestitionMonatsdaten.verbrauch_daten)
+            .outerjoin(InvestitionMonatsdaten, InvestitionMonatsdaten.investition_id == Investition.id)
+            .where(and_(Investition.anlage_id == anlage.id, Investition.typ == "wallbox"))
+        )).all()
+        namen: dict[int, str] = {}
+        for inv_id, name, j, m, vd in zeilen:
+            zugeordnet = bool(((mapping.get(str(inv_id)) or {}).get("felder") or {}).get(FELD))
+            im_fenster = j is not None and von_j * 12 + von_m <= j * 12 + m <= bis_j * 12 + bis_m
+            if zugeordnet or (im_fenster and (vd or {}).get(FELD) is not None):
+                namen[inv_id] = name
+        return [CheckErgebnis(
+            kategorie=_KAT, schwere=CheckSeverity.WARNING.value, investition_id=inv_id,
+            meldung=f"{name}: «Netzbezug zum Wallbox-Tarif» zählt unter dem gemeinsamen Tarif nicht",
+            details=(
+                f"Für Wärmepumpe und Wallbox gilt ein gemeinsamer Tarif (ein Zähler vor beiden Geräten). Den gemeinsamen "
+                f"Netzbezug trägt das Feld «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)» an der Wärmepumpe; ein "
+                f"Wert an {name} zählt in der Stromrechnung nicht (er stünde sonst doppelt). Entferne die Zuordnung an der "
+                f"Wallbox bzw. ordne den Zähler an der Wärmepumpe zu. Erklärt im Handbuch „Wärme & Klima“, Schritt 6b."
+            ),
+        ) for inv_id, name in sorted(namen.items())]
 
     async def _parallele_zaehler(self, anlage: Anlage, verwendungen) -> list[CheckErgebnis]:
         """G1: derselbe Sensor in der Gerätemenge und im Feld ⇒ paralleler Zähler — der Netzbezug der Anlage muss ihn
@@ -147,6 +209,8 @@ class WpTarifChecks:
         from backend.core.field_definitions import get_eauto_ladung_kwh
         from backend.models.investition import Investition, InvestitionMonatsdaten
 
+        from backend.services.kanal.netzanteil_leser import zuordnungsmonate_der_wallboxen
+
         (von_j, von_m), (bis_j, bis_m) = fenster
         zeilen = (await self.db.execute(
             select(Investition.id, Investition.bezeichnung, InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat,
@@ -154,9 +218,11 @@ class WpTarifChecks:
             .join(InvestitionMonatsdaten, InvestitionMonatsdaten.investition_id == Investition.id)
             .where(and_(Investition.anlage_id == anlage.id, Investition.typ == "wallbox"))
         )).all()
+        # N-771 Rest 1 (E6): im Zuordnungsmonat des Felds gilt N nicht als Netzladung — dort gibt es keine Abweichung.
+        zuordnung = await zuordnungsmonate_der_wallboxen(self.db, anlage.id, [(z[0], z[4]) for z in zeilen])
         je_inv: dict[int, tuple[str, list]] = {}
         for inv_id, name, j, m, vd in zeilen:
-            if not (von_j * 12 + von_m <= j * 12 + m <= bis_j * 12 + bis_m):
+            if not (von_j * 12 + von_m <= j * 12 + m <= bis_j * 12 + bis_m) or zuordnung.get(inv_id) == (j, m):
                 continue
             d = vd or {}
             if d.get(FELD) is None or (d.get("ladung_pv_kwh") is None and d.get("ladung_netz_kwh") is None):
@@ -179,10 +245,64 @@ class WpTarifChecks:
         ) for inv_id, (name, monate) in je_inv.items()]
 
 
+def _vorrang_vor_gemeinsam(zeilen) -> list[CheckErgebnis]:
+    """F12: gilt am Stichtag neben dem gemeinsamen Tarif ein eigener WP- bzw. Wallbox-Tarif, hat er Vorrang für seine
+    Verwendung (``strompreise.tarife_zum_stichtag``) — WARNING, wer Vorrang hat."""
+    verwendungen = {t.verwendung or "allgemein" for t in zeilen}
+    if GEMEINSAM not in verwendungen:
+        return []
+    return [CheckErgebnis(
+        kategorie=_KAT, schwere=CheckSeverity.WARNING.value,
+        meldung=f"Eigener {_KOMPONENTEN[v][0]}-Tarif hat Vorrang vor dem gemeinsamen Tarif «Wärmepumpe und Wallbox»",
+        details=(
+            f"Zum selben Stichtag gelten ein Tarif «{ 'Wärmepumpe' if v == 'waermepumpe' else 'Wallbox' }» und ein "
+            f"gemeinsamer Tarif «Wärmepumpe und Wallbox». eedc rechnet die {_KOMPONENTEN[v][0]} mit dem eigenen Tarif, "
+            f"der gemeinsame gilt nur noch für das andere Gerät — dann ist es kein gemeinsamer Zähler mehr. Hängen beide "
+            f"Geräte hinter einem Zähler, beende den eigenen Tarif; erklärt im Handbuch „Einstellungen“ (Strompreise)."
+        ),
+    ) for v in ("waermepumpe", "wallbox") if v in verwendungen]
+
+
+def _gemeinsam_tage_und_wallbox(fakten) -> list[CheckErgebnis]:
+    """F12: INFO «Tage teilen nicht» (Monate mit gemeinsamem Zähler und Ladung > 0, Auftrag §3.4) und WARNING «N_wb > N_g»
+    (die Netzladung der Wallbox nach der bisherigen Regel übersteigt den gemeinsamen Netzbezug, §3.3)."""
+    from backend.services.monats_fakten import komponenten_anteile_des_fakts
+
+    tage, ueber = [], []
+    for f in fakten:
+        a = komponenten_anteile_des_fakts(f)
+        if a is None or a.gemeinsam_wallbox_kwh is None or f.emob.wallbox_ladung_alle_kwh <= 0:
+            continue
+        tage.append((f.jahr, f.monat))
+        if (a.gemeinsam_wallbox_regel_kwh or 0.0) > a.netz[0].kwh + 0.005:
+            ueber.append((f.jahr, f.monat))
+    out = []
+    if tage:
+        out.append(CheckErgebnis(
+            kategorie=_KAT, schwere=CheckSeverity.INFO.value,
+            meldung=f"Gemeinsamer Zähler Wärmepumpe + Wallbox: Tage teilen die Ersparnis nicht ({_monate_text(tage)})",
+            details=(f"In {_monate_text(tage)} rechnet eedc die Stromrechnung mit dem gemeinsamen Netzbezug je Stunde. "
+                     f"Die Eigenverbrauchs-Ersparnis teilt der einzelne Tag aber nicht in Wärmepumpe und Wallbox: dafür "
+                     f"fehlen Stundenwerte der Netzladung der Wallbox. Der Tag rechnet sie wie ohne gemeinsamen Zähler, "
+                     f"der Monat trägt den genauen Wert — die Summe der Tage weicht bei der Ersparnis vom Monat ab. Kein "
+                     f"Handlungsbedarf; erklärt unter „Berechnungen“ und im Handbuch „Wärme & Klima“, Schritt 6b."),
+        ))
+    if ueber:
+        out.append(CheckErgebnis(
+            kategorie=_KAT, schwere=CheckSeverity.WARNING.value,
+            meldung=f"Netzladung der Wallbox größer als der gemeinsame Netzbezug ({_monate_text(ueber)})",
+            details=(f"In {_monate_text(ueber)} ist die Netzladung der Wallbox (evcc-Wert bzw. Tagesquote) größer als der "
+                     f"«Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)». eedc setzt den Wallbox-Teil auf den "
+                     f"gemeinsamen Netzbezug, der Wärmepumpe bleibt kein Netzanteil. Prüfe den Zähler («Zähler vor beiden "
+                     f"Geräten minus Zähler danach») und die Netzladung der Wallbox."),
+        ))
+    return out
+
+
 def _feld_fehlt(verwendung: str, fakten, komp_cent: float, haushalt_cent: float) -> list[CheckErgebnis]:
     """INFO, wenn ein Monat mit Gerätemenge > 0 das Feld nicht misst — mit der Obergrenze für Ersparnis UND
-    Stromrechnung (F7); still, wenn jeder solche Monat gemessen ist."""
-    wort, label, _feld, mengen_wort, _ = _KOMPONENTEN[verwendung]
+    Stromrechnung (F7); still, wenn jeder solche Monat gemessen ist. F12: beim gemeinsamen Zähler mit S_wp + L_wb."""
+    wort, label, _feld, mengen_wort, _ = _texte(verwendung)
     differenz_cent = abs(haushalt_cent - komp_cent)
     if round(differenz_cent, 2) == 0:
         return []
@@ -200,6 +320,10 @@ def _feld_fehlt(verwendung: str, fakten, komp_cent: float, haushalt_cent: float)
         wirkung = (f"eedc bewertet den PV-Anteil der Wärmepumpe dann zum Haushaltstarif ({fmt_zahl(haushalt_cent, 2)} ct) "
                    f"und rechnet ihren Netzbezug in der Stromrechnung zum Haushaltstarif statt zum Wärmepumpen-Tarif "
                    f"({fmt_zahl(komp_cent, 2)} ct)")
+    elif verwendung == GEMEINSAM:
+        wirkung = (f"eedc rechnet den Netzbezug von Wärmepumpe und Wallbox in der Stromrechnung dann zum Haushaltstarif "
+                   f"({fmt_zahl(haushalt_cent, 2)} ct) statt zum gemeinsamen Tarif ({fmt_zahl(komp_cent, 2)} ct) und "
+                   f"bewertet den PV-Anteil der Wärmepumpe zum Haushaltstarif")
     else:
         wirkung = (f"eedc rechnet die Netzladung der Wallbox in der Stromrechnung dann zum Haushaltstarif "
                    f"({fmt_zahl(haushalt_cent, 2)} ct) statt zum Wallbox-Tarif ({fmt_zahl(komp_cent, 2)} ct), und die "
@@ -227,7 +351,7 @@ def _geklemmt(verwendung: str, fakten) -> list[CheckErgebnis]:
     (Wallbox: über dem Rest nach der WP) liegt — der Monat rechnet begrenzt (``komponenten_anteile``, F7)."""
     from backend.services.monats_fakten import komponenten_anteile_des_fakts
 
-    wort, label, _feld, mengen_wort, _ = _KOMPONENTEN[verwendung]
+    wort, label, _feld, mengen_wort, _ = _texte(verwendung)
     ueber_menge, ueber_netz = [], []
     for f in fakten:
         a = komponenten_anteile_des_fakts(f)
@@ -250,7 +374,7 @@ def _geklemmt(verwendung: str, fakten) -> list[CheckErgebnis]:
                      f"(«Zähler vor dem Gerät minus Zähler nach dem Gerät»)."),
         ))
     if ueber_netz:
-        rest = "den Netzbezug der Anlage" if verwendung == "waermepumpe" else "den Netzbezug nach dem WP-Anteil"
+        rest = "den Netzbezug der Anlage" if verwendung != "wallbox" else "den Netzbezug nach dem WP-Anteil"
         out.append(CheckErgebnis(
             kategorie=_KAT, schwere=CheckSeverity.WARNING.value,
             meldung=f"«{label}» größer als {rest} ({_monate_text(ueber_netz)})",

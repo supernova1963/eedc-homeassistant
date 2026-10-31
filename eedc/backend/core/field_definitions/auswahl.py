@@ -49,6 +49,20 @@ def get_feld_hinweise() -> dict[str, dict[str, str]]:
 
     return result
 
+#: F12 (N-770/N-771 E6): die Marke in ``eigene_tarife`` für einen gemeinsamen Tarif «Wärmepumpe und Wallbox» und das
+#: Label des Felds an der Wärmepumpe dann (es trägt den gemeinsamen Netzbezug N_g).
+TARIF_GEMEINSAM: Final = "waermepumpe_wallbox"
+TARIF_LABEL_GEMEINSAM: Final = "Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)"
+
+
+def tarif_label(feld: dict, eigene_tarife) -> Optional[str]:
+    """F12: das Label des Felds «Netzbezug zum WP-Tarif» unter einem gemeinsamen Tarif für Wärmepumpe und Wallbox
+    (``eigene_tarife`` trägt dann die Marke ``waermepumpe_wallbox``) — sonst ``None`` (das Label der Registry gilt)."""
+    if eigene_tarife and TARIF_GEMEINSAM in eigene_tarife and feld.get("tarif_verwendung") == "waermepumpe":
+        return TARIF_LABEL_GEMEINSAM
+    return None
+
+
 def get_felder_fuer_investition(
     typ: str,
     parameter: Optional[dict],
@@ -159,7 +173,7 @@ def get_felder_fuer_investition(
         aufgeloest = dict(feld)
         if urteil == URTEIL_ERWEITERT:
             aufgeloest["erweitert"] = True
-        aufgeloest["label"] = _label_aufgeloest(feld, bedingungs_werte)
+        aufgeloest["label"] = tarif_label(feld, eigene_tarife) or _label_aufgeloest(feld, bedingungs_werte)
         result.append(aufgeloest)
 
     # #263 — je Innengerät eine Kopie, VOR dem Abstreifen der Steuer-Schlüssel:

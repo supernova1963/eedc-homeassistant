@@ -21,6 +21,11 @@ Drei Fragen, eine Stelle:
   selbst beginnt.
 * ``zellen_der_stunden`` — dieselben Stunden je (Wochentag, Uhrstunde) des Beginns: die Gewichte, mit denen ein
   Zeitfenster-Tarif (HT/NT) über N bzw. über (Netzbezug − N) gewichtet wird (F6, ``strompreis_aggregator``).
+* ``zuordnungsmonate_der_wallboxen`` / ``mit_zuordnungsauskunft`` (N-771 Rest 1, E6) — der Zuordnungsmonat je Wallbox
+  und die Auskunft an ihrer Zeile (``reader.ZeileImZuordnungsmonat``): im Zuordnungsmonat ist das Feld auch an der
+  E-Mob-Zeile nicht die Netzladung (F11 greift nicht, die bisherige Regel gilt) — dieselbe F10-Regel wie die
+  Stromrechnung, je Gerät. Gebunden an die Zeile wird die Auskunft dort, wo die Wallbox-Zeilen geladen werden
+  (``monats_fakten/laden.py``, ``emob_kontext.py``, *Cockpit → Monat* laufender Monat).
 
 Schwesterdateien: ``lesen.py`` (Lese-Schicht), ``fenster.py`` (Monatsfenster), ``preis_leser.py`` (Netzbezug-Zellen).
 """
@@ -149,6 +154,38 @@ async def beginn_je_geraet(db: AsyncSession, anlage_id: int, inv_ids: Iterable[i
     return {inv_je_kanal[kid]: int(ts) for kid, ts in zeilen if ts is not None}
 
 
+async def zuordnungsmonate_der_wallboxen(
+    db: AsyncSession, anlage_id: int, wallbox_zeilen: Iterable[tuple[int, Optional[Mapping]]],
+) -> dict[int, MonatsSchluessel]:
+    """N-771 Rest 1 (E6): ``wallbox_id → Zuordnungsmonat`` des Felds (der Kalendermonat, in dem sein Kanal beginnt, F10)
+    — **eine Abfrage nur, wenn eine Zeile das Feld trägt** (sonst ``{}`` ohne SQL; ohne Feld bitgleich). Im Lade-Kontext
+    über ``gemerkt`` je Anfrage einmal. ``wallbox_zeilen``: ``(investition_id, verbrauch_daten)`` der Wallbox-Zeilen,
+    die der Aufrufer geladen hat."""
+    from backend.services.kanal.lade_kontext import gemerkt
+
+    ids = sorted({int(i) for i, d in wallbox_zeilen if d and d.get(FELD) is not None})
+    if not ids:
+        return {}
+
+    async def _laden() -> dict[int, MonatsSchluessel]:
+        return {i: monat_der_stunde(ts) for i, ts in (await beginn_je_geraet(db, anlage_id, ids)).items()}
+
+    return dict(await gemerkt(db, ("netzanteil_zuordnungsmonate", anlage_id, tuple(ids)), _laden))
+
+
+def mit_zuordnungsauskunft(
+    daten: Mapping, inv_id: int, schluessel: MonatsSchluessel, zuordnung: Mapping[int, MonatsSchluessel],
+):
+    """N-771 Rest 1: die Zeile mit der Auskunft «Zuordnungsmonat» (``reader.ZeileImZuordnungsmonat``, eine Kopie), wenn
+    ``schluessel`` der Zuordnungsmonat dieser Wallbox ist und die Zeile das Feld trägt — sonst die Zeile selbst. Die EINE
+    Stelle, die die Auskunft an eine Zeile bindet; ``reader.netzladung_des_zaehlers`` liest sie (F10-Regel je Gerät)."""
+    from backend.core.field_definitions.reader import ZeileImZuordnungsmonat
+
+    if daten and daten.get(FELD) is not None and zuordnung.get(int(inv_id)) == tuple(schluessel):
+        return ZeileImZuordnungsmonat(daten)
+    return daten
+
+
 def monat_der_stunde(start_ts: int) -> MonatsSchluessel:
     """Der Kalendermonat, in dem die Stunde ``start_ts`` beginnt (Prozesszone, wie ``fenster.kalendertag_der_stunde``)."""
     d = datetime.fromtimestamp(start_ts)
@@ -168,5 +205,6 @@ def zellen_der_stunden(werte: Mapping[int, float]) -> list[tuple[int, int, float
 
 __all__ = [
     "FELD", "NetzanteilStunden", "TYP_JE_VERWENDUNG", "beginn_je_geraet", "hat_netzanteil_kanaele", "kanal_key",
-    "monat_der_stunde", "netzanteil_des_monats", "zellen_der_stunden",
+    "mit_zuordnungsauskunft", "monat_der_stunde", "netzanteil_des_monats", "zellen_der_stunden",
+    "zuordnungsmonate_der_wallboxen",
 ]

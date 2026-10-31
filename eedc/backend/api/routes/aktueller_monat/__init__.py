@@ -103,6 +103,7 @@ from backend.api.routes.aktueller_monat.aggregation import (  # Vorlage 2
     emob_heimlade_quellen,
     emob_heimladung_pool,
     extrahiere_werte,
+    wallbox_zuordnung_des_monats,
 )
 from backend.api.routes.aktueller_monat.finanzen import (  # Vorlage 2
     betriebskosten_und_sonstige_positionen,
@@ -743,6 +744,7 @@ async def _berechne_monat(
     _sonstiges_kanal = _out["_sonstiges_kanal"]
     _wp_kanal = _out["_wp_kanal"]
     _wp_kanal_zeilen = _out["_wp_kanal_zeilen"]
+    _emob_kanal_zeilen = _out["_emob_kanal_zeilen"]
     ha_felder_mit_daten = _out["ha_felder_mit_daten"]
     _tages_wp_mengen = _out["_tages_wp_mengen"]
     tagesebene = _out["tagesebene"]
@@ -768,6 +770,9 @@ async def _berechne_monat(
         bloecke=await _emob_bloecke_des_monats(db, anlage.id, investitionen, jahr, monat),
         # HA-Bauform E4c (N-631): der PV-Anteil aus dem abgeleiteten Kanal, wenn die E-Mob-Gruppe den Monat deckt.
         kanal_quote=_emob_kanal,
+        # N-771 Rest 1 (E6): der Zuordnungsmonat des Felds je Wallbox — dort ist das Feld nicht ihre Netzladung.
+        wallbox_zuordnung=await wallbox_zuordnung_des_monats(
+            db, anlage_id, investitionen, resolved, jahr, monat, ist_aktueller_monat=ist_aktueller_monat),
     )
     emob_entscheid = _out.get("emob_entscheid")
     # HA-Bauform E4d: die gemessene WP-0 der Monatszeile als letzte Quelle (Docstring dort).
@@ -805,7 +810,9 @@ async def _berechne_monat(
     # N-770 E2: die Stromrechnung mit dem Monatstarif der Fakten (eine Bildungsstelle, `stromrechnung_euro`) und den
     # gemessenen Anteilen zum WP-/Wallbox-Tarif (`komponenten_anteile`); die EV-Ersparnis bewertet den PV-Anteil der WP
     # zum WP-Tarif.
-    _anteile = await komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt, _wp_kanal, netzbezug)
+    _anteile = await komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt, _wp_kanal, netzbezug,
+                                                    emob_kanal=(_emob_kanal_zeilen, _emob_kanal[1]),
+                                                    investitionen=investitionen)
     _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch_ohne_verluste, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug,
                                      tarif_fakten=monats_fakt.tarif if monats_fakt is not None else None, anteile=_anteile)
     allgemein_tarif = _out["allgemein_tarif"]
@@ -1329,7 +1336,7 @@ async def _quellen_des_monats(
         if _ohne_ha is not None else None
     )
     # HA-Bauform E4c: E-Mob- und Sonstiges-Gruppe des Kalendermonats aus den Kanälen (Docstring dort).
-    ha_stats, _emob_kanal, _sonstiges_kanal = await _geraete_aus_kanaelen(
+    ha_stats, _emob_kanal, _sonstiges_kanal, _emob_kanal_zeilen = await _geraete_aus_kanaelen(
         db, anlage, investitionen, jahr, monat, ha_stats,
         monats_fakt=monats_fakt, bilanz_ersetzt=_bilanz_aus_kanaelen,
         sonstige_erzeuger=_erzeuger_ohne_ha, ohne_ha=_ohne_ha,
@@ -1421,7 +1428,7 @@ async def _quellen_des_monats(
         # N-750: für die Quellen-Übersicht nur, was die HA-Statistik geliefert hat (ohne sie: die Kanal-Gruppen allein).
         "mqtt_energy": mqtt_energy, "ha_stats": ha_stats if ha_geliefert else {}, "_emob_kanal": _emob_kanal,
         "_sonstiges_kanal": _sonstiges_kanal, "_wp_kanal": _wp_kanal, "_wp_kanal_zeilen": _wp_kanal_zeilen,
-        "ha_felder_mit_daten": ha_felder_mit_daten, "_tages_wp_mengen": _tages_wp_mengen, "tagesebene": tagesebene,
+        "_emob_kanal_zeilen": _emob_kanal_zeilen, "ha_felder_mit_daten": ha_felder_mit_daten, "_tages_wp_mengen": _tages_wp_mengen, "tagesebene": tagesebene,
         "resolved": resolved, "teilzeitraum": teilzeitraum,
     }
 

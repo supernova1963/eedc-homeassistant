@@ -451,11 +451,25 @@ async def emob_heimlade_quellen(db, anlage, investitionen, jahr, monat) -> froze
     return await lade_emob_heimlade_quellen(db, anlage, investitionen, jahr, monat)
 
 
+async def wallbox_zuordnung_des_monats(db, anlage_id, investitionen, resolved, jahr, monat, *, ist_aktueller_monat):
+    """N-771 Rest 1 (E6): ``wallbox_id → Zuordnungsmonat`` des Felds «Netzbezug zum Wallbox-Tarif» — nur für den
+    **laufenden** Monat, dessen Werte aus den Quellen kommen (``inv_<id>_netzbezug_eigener_tarif_kwh`` in ``resolved``);
+    die gespeicherten Zeilen eines abgeschlossenen Monats tragen die Auskunft schon aus den Monats-Fakten
+    (``laden.py``). Eine Abfrage nur, wenn eine Wallbox das Feld trägt (``kanal/netzanteil_leser``)."""
+    if not ist_aktueller_monat:
+        return {}
+    from backend.services.kanal.netzanteil_leser import FELD, zuordnungsmonate_der_wallboxen
+
+    zeilen = [(inv.id, {FELD: resolved[f"inv_{inv.id}_{FELD}"][0]}) for inv in investitionen
+              if inv.typ == "wallbox" and inv.ist_aktiv_im_monat(jahr, monat) and f"inv_{inv.id}_{FELD}" in resolved]
+    return await zuordnungsmonate_der_wallboxen(db, anlage_id, zeilen)
+
+
 def emob_heimladung_pool(
     *, direct_fields, investitionen, jahr, monat, resolved,
     monats_fakt=None, ist_aktueller_monat=True,
     heimlade_quellen=frozenset(), ha_felder_mit_daten=frozenset(),
-    bloecke=None, kanal_quote=(False, None),
+    bloecke=None, kanal_quote=(False, None), wallbox_zuordnung=None,
 ):
     """E-Mobilitaet: Heimladung nach der **einen Funktion** (veraendert `resolved` in place).
 
@@ -524,7 +538,7 @@ def emob_heimladung_pool(
         investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved,
         ist_aktueller_monat=ist_aktueller_monat, ha_felder_mit_daten=ha_felder_mit_daten,
         gespeicherte_zeilen=gespeicherte_zeilen, gespeicherte_dienstlich=gespeicherte_dienstlich,
-        heim_gesamt=heim_gesamt,
+        heim_gesamt=heim_gesamt, wallbox_zuordnung=wallbox_zuordnung or {},
     )
     eauto_je_inv = geraete.eauto_je_inv
     wallbox_daten = geraete.wallbox_daten
@@ -591,7 +605,7 @@ class _GeraeteDesMonats:
 
 def _geraete_des_monats(
     *, investitionen, jahr, monat, resolved, ist_aktueller_monat, ha_felder_mit_daten,
-    gespeicherte_zeilen, gespeicherte_dienstlich, heim_gesamt,
+    gespeicherte_zeilen, gespeicherte_dienstlich, heim_gesamt, wallbox_zuordnung=None,
 ) -> _GeraeteDesMonats:
     """RF-34: die Geräte-Schleife von ``emob_heimladung_pool`` — je E-Auto/Wallbox, das im Monat aktiv ist, die Zeile aus
     gespeicherter Zeile und Quellen (``_zeile_des_geraets``), einsortiert nach privat/dienstlich. Ergänzt
@@ -650,7 +664,7 @@ def _geraete_des_monats(
         else:
             wallbox_in_betrieb = True
             wallbox_ids.add(inv.id)
-            wallbox_daten.append(zeile)
+            wallbox_daten.append(_mit_auskunft(zeile, inv.id, jahr, monat, wallbox_zuordnung))
             for suffix in ("ladung_kwh", "ladung_pv_kwh"):
                 if werte.get(suffix):
                     emob_quelle = werte[suffix][1]
@@ -662,12 +676,24 @@ def _geraete_des_monats(
     )
 
 
+def _mit_auskunft(zeile, inv_id, jahr, monat, wallbox_zuordnung):
+    """N-771 Rest 1: die Wallbox-Zeile des laufenden Monats mit der Auskunft «Zuordnungsmonat», wo er es ist
+    (``kanal/netzanteil_leser.mit_zuordnungsauskunft``); sonst die Zeile selbst."""
+    if not wallbox_zuordnung:
+        return zeile
+    from backend.services.kanal.netzanteil_leser import mit_zuordnungsauskunft
+
+    return mit_zuordnungsauskunft(zeile, inv_id, (jahr, monat), wallbox_zuordnung)
+
+
 def _zeile_des_geraets(inv, *, praefix, werte, gespeicherte_zeile, ist_aktueller_monat, ha_felder_mit_daten):
     """RF-34: die Zeile eines Geräts — die gespeicherte Zeile, ergänzt um die Werte aus ``resolved`` (im laufenden
-    Monat gewinnen sie, im abgeschlossenen füllen sie nur Lücken) und um die HA-Felder mit Daten, aber 0."""
+    Monat gewinnen sie, im abgeschlossenen füllen sie nur Lücken) und um die HA-Felder mit Daten, aber 0. N-771 Rest 1:
+    die Kopie behält die Auskunft «Zuordnungsmonat» der gespeicherten Zeile (``reader.kopie_der_zeile``)."""
     from backend.core.field_definitions import HEIMLADE_FELDER
+    from backend.core.field_definitions.reader import kopie_der_zeile
 
-    zeile = dict(gespeicherte_zeile)
+    zeile = kopie_der_zeile(gespeicherte_zeile)
     for feld, eintrag in werte.items():
         if ist_aktueller_monat:
             zeile[feld] = eintrag[0]

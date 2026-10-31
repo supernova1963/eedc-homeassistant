@@ -166,13 +166,16 @@ async def lade_monats_fakten(
     #: (jahr, monat) → {investition_id_als_string: „der Nenner dieser Zeile ist
     #: die feine Summe"} — dieselbe Buchführung, andere Frage (N-462).
     wp_nenner_fein: dict[MonatsSchluessel, dict[str, bool]] = {}
+    # N-771 Rest 1 (E6): der Zuordnungsmonat des Felds je Wallbox (eine Abfrage nur, wenn eine Wallbox-Zeile das Feld
+    # trägt) — dort ist das Feld auch an der E-Mob-Zeile nicht die Netzladung (`reader.netzladung_des_zaehlers`).
+    _wb_zuordnung = await _wallbox_zuordnungsmonate(db, anlage_id, imd_rows, inv_by_id)
     for imd in imd_rows:
         inv = inv_by_id.get(imd.investition_id)
         # #153/#155/#236/#308: vor Anschaffung / nach Stilllegung / deaktiviert
         # zählt nichts — der EINE Ort, an dem dieser Filter gilt.
         if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
             continue
-        daten = imd.verbrauch_daten or {}
+        daten = _daten_mit_auskunft(imd, inv, _wb_zuordnung)
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(
             inv, daten,
             abgetretene_bkw=abgetretene_bkw_im_monat(imd.jahr, imd.monat),
@@ -566,6 +569,28 @@ def _falte_kanal_gruppen(roh, geraete, tages_summen, inv_by_id, *, offen):
         if any(gefaltet):
             gruppen.setdefault(m, set()).add(TAGESWERT_SONSTIGES)
     return emob_kanal, gruppen
+
+async def _wallbox_zuordnungsmonate(db: AsyncSession, anlage_id: int, imd_rows, inv_by_id) -> dict:
+    """N-771 Rest 1 (E6): ``wallbox_id → Zuordnungsmonat`` des Felds aus den geladenen Zeilen
+    (``kanal/netzanteil_leser.zuordnungsmonate_der_wallboxen`` — ohne Wallbox-Zeile mit Feld keine Abfrage)."""
+    from backend.services.kanal.netzanteil_leser import zuordnungsmonate_der_wallboxen
+
+    return await zuordnungsmonate_der_wallboxen(db, anlage_id, [
+        (imd.investition_id, imd.verbrauch_daten) for imd in imd_rows
+        if getattr(inv_by_id.get(imd.investition_id), "typ", None) == "wallbox"
+    ])
+
+
+def _daten_mit_auskunft(imd, inv, wb_zuordnung: dict) -> dict:
+    """Die Zeile einer IMD, wie die Faltung sie liest — an einer Wallbox im Zuordnungsmonat ihres Felds mit der Auskunft
+    (``netzanteil_leser.mit_zuordnungsauskunft``, N-771 Rest 1); sonst ``verbrauch_daten`` selbst."""
+    daten = imd.verbrauch_daten or {}
+    if not wb_zuordnung or inv.typ != "wallbox":
+        return daten
+    from backend.services.kanal.netzanteil_leser import mit_zuordnungsauskunft
+
+    return mit_zuordnungsauskunft(daten, inv.id, (imd.jahr, imd.monat), wb_zuordnung)
+
 
 async def _zuordnungsmonate_nicht_gemessen(db: AsyncSession, anlage_id: int, roh: dict, investitionen) -> None:
     """N-770/N-771 F10 (Bauplan §2c, Entscheid Gernot 31.10.2026): der **Zuordnungsmonat** des Felds «Netzbezug zum

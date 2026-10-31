@@ -218,7 +218,8 @@ async def finanzen_des_monats(*, _zt_cache, anlage_id, db, eigenverbrauch, einsp
     return {k: _loc[k] for k in ("allgemein_tarif", "einspeise_cent", "einspeise_erloes", "einspeisung_neg_preis", "ev_ersparnis", "ev_preis_cent", "ev_preis_herkunft", "grundgebuehr", "grundgebuehr_aufteilung", "monats_benzinpreis", "monats_gaspreis", "netzbezug_arbeitspreis_kosten", "netzbezug_durchschnittspreis", "netzbezug_kosten", "netzbezug_preis_abdeckung", "netzbezug_preis_cent", "netzbezug_preis_effektiv_cent", "netzbezug_preis_herkunft", "nicht_vergueteter_erloes", "tarife", "zaehlergebuehr_jahr",) if k in _loc}
 
 
-async def komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt, wp_kanal, netzbezug):
+async def komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt, wp_kanal, netzbezug, *,
+                                         emob_kanal=({}, None), investitionen=()):
     """N-770/N-771: die gemessenen Anteile zum WP-/Wallbox-Tarif für *Cockpit → Monat* — über die eine Bildungsstelle
     (``monats_fakten.komponenten_anteile``) mit dem Tarif und den Mengen des Fakts; die WP-Mengen wie die WP-Abschnitte
     der Route (``_wp_sicht``: aus den Kanälen, wo der Monat keine WP-Zeile hat).
@@ -226,37 +227,72 @@ async def komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt
     **Laufender Monat ohne Abschluss** (E3, Auftrag Fassung 2): ohne Fakt kommt N aus der Kanal-Zeile der WP-Gruppe
     (``wp_kanal`` — ``monats_fakten.wp_aus_zeilen`` über ``wp_kanal_zeile``; der Kanal des Felds zählt zum Kanal-Bedarf
     der WP, die Gruppe deckt den Monat also nur MIT ihm) und der Tarif über ``monatstarif_der_route``
-    (``tarif_des_monats``, dieselbe Auflösung wie die Schicht). Die Wallbox hat ohne Fakt keinen Anteil (benannte
-    Grenze: ihre Ladung aller Wallboxen trägt erst der Fakt). Ohne gemessenes N keine Abfrage."""
+    (``tarif_des_monats``, dieselbe Auflösung wie die Schicht). Ohne gemessenes N keine Abfrage.
+
+    ⭐ **N-771 Rest 2 (E6): die Wallbox ebenso** — ``emob_kanal`` = ``(Kanal-Zeilen der E-Mob-Gruppe, PV-Quote)``
+    (``quellen_leser._geraete_aus_kanaelen``; nur gefüllt, wenn die Gruppe den Monat bis jetzt deckt — der Kanal des
+    Felds gehört zu ihrem Kanal-Bedarf, ein Zuordnungsmonat deckt also nicht). Ladung aller Wallboxen, N_wb und die
+    Netzladung nach Regel (F12) entstehen über ``monats_fakten.wallbox_aus_zeilen`` (dieselbe Faltung wie der Fakt),
+    der Anteil an derselben Bildungsstelle (Klemme N_wb ≤ min(Ladung, Netzbezug − N_wp)); F6 über
+    ``netzanteil_preise_des_monats(…, ["waermepumpe", "wallbox"])``. F11 gilt in der E-Mob-Zeile des Pools
+    (``aggregation.emob_heimladung_pool``, Rest 1 eingeschlossen)."""
     if netzbezug is None:
         return None
+    wb = _wallbox_aus_kanal(investitionen, jahr, monat, emob_kanal)
     if monats_fakt is None:
-        if wp_kanal is None or wp_kanal.netz_eigener_tarif_kwh is None:
-            return None
-        import dataclasses
-        from datetime import date as _date
-
-        from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-        from backend.services.monats_fakten.tarif import netzanteil_preise_des_monats
-
-        tarif = await monatstarif_der_route(db, anlage_id, jahr, monat)
-        if tarif.wp_eigener_tarif:
-            # F6 wie die Monats-Fakten (`mit_netzanteil_preisen`): HT/NT über N bzw. Netzbezug − N.
-            _f6 = await netzanteil_preise_des_monats(
-                db, anlage_id, (jahr, monat), await lade_tarife_fuer_anlage(db, anlage_id, target_date=_date(jahr, monat, 1)),
-                tarif, ["waermepumpe"],
-            )
-            tarif = dataclasses.replace(tarif, netzanteil_preise=_f6) if _f6 is not None else tarif
-        return komponenten_anteile(
-            netzbezug, tarif,
-            wp_strom_kwh=wp_kanal.strom_kwh, wp_netz_eigener_tarif_kwh=wp_kanal.netz_eigener_tarif_kwh,
-        )
+        return await _anteile_ohne_fakt(db, anlage_id, jahr, monat, netzbezug, wp_kanal, wb)
     wp = wp_kanal if wp_kanal is not None else monats_fakt.wp
+    e = monats_fakt.emob
+    ladung, n_wb, netzladung = wb if wb is not None else (
+        e.wallbox_ladung_alle_kwh, e.wallbox_netz_eigener_tarif_kwh, e.wallbox_netzladung_kwh)
     return komponenten_anteile(
         netzbezug, monats_fakt.tarif,
         wp_strom_kwh=wp.strom_kwh, wp_netz_eigener_tarif_kwh=wp.netz_eigener_tarif_kwh,
-        wallbox_ladung_kwh=monats_fakt.emob.wallbox_ladung_alle_kwh,
-        wallbox_netz_eigener_tarif_kwh=monats_fakt.emob.wallbox_netz_eigener_tarif_kwh,
+        wallbox_ladung_kwh=ladung, wallbox_netz_eigener_tarif_kwh=n_wb, wallbox_netzladung_kwh=netzladung,
+    )
+
+
+def _wallbox_aus_kanal(investitionen, jahr, monat, emob_kanal):
+    """N-771 Rest 2: ``(Ladung aller Wallboxen, N_wb, Netzladung nach Regel)`` aus den Kanal-Zeilen der E-Mob-Gruppe —
+    ``None`` ohne Wallbox-Zeile darin (dann gelten die Mengen des Fakts)."""
+    zeilen, quote = emob_kanal
+    wb_ids = {i.id for i in investitionen if i.typ == "wallbox"}
+    wb_zeilen = {i: z for i, z in (zeilen or {}).items() if i in wb_ids}
+    if not wb_zeilen:
+        return None
+    from backend.services.monats_fakten import wallbox_aus_zeilen
+
+    return wallbox_aus_zeilen(list(investitionen), (jahr, monat), wb_zeilen, quote=quote)
+
+
+async def _anteile_ohne_fakt(db, anlage_id, jahr, monat, netzbezug, wp_kanal, wb):
+    """Laufender Monat ohne Fakt: N der WP aus der Kanal-Zeile der WP-Gruppe (E3), N_wb aus der E-Mob-Gruppe (Rest 2);
+    Tarif über ``monatstarif_der_route``, F6 über ``netzanteil_preise_des_monats`` für die gemessenen Verwendungen."""
+    n_wp = wp_kanal.netz_eigener_tarif_kwh if wp_kanal is not None else None
+    n_wb = wb[1] if wb is not None else None
+    if n_wp is None and n_wb is None:
+        return None
+    import dataclasses
+    from datetime import date as _date
+
+    from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+    from backend.services.monats_fakten.tarif import netzanteil_preise_des_monats
+
+    tarif = await monatstarif_der_route(db, anlage_id, jahr, monat)
+    verwendungen = [v for v, eigen, n in (("waermepumpe", tarif.wp_eigener_tarif, n_wp),
+                                          ("wallbox", tarif.wallbox_eigener_tarif, n_wb)) if eigen and n is not None]
+    if verwendungen:
+        # F6 wie die Monats-Fakten (`mit_netzanteil_preisen`): HT/NT über N bzw. Netzbezug − N.
+        _f6 = await netzanteil_preise_des_monats(
+            db, anlage_id, (jahr, monat), await lade_tarife_fuer_anlage(db, anlage_id, target_date=_date(jahr, monat, 1)),
+            tarif, verwendungen,
+        )
+        tarif = dataclasses.replace(tarif, netzanteil_preise=_f6) if _f6 is not None else tarif
+    return komponenten_anteile(
+        netzbezug, tarif,
+        wp_strom_kwh=wp_kanal.strom_kwh if wp_kanal is not None else 0.0, wp_netz_eigener_tarif_kwh=n_wp,
+        wallbox_ladung_kwh=wb[0] if wb is not None else 0.0, wallbox_netz_eigener_tarif_kwh=n_wb,
+        wallbox_netzladung_kwh=wb[2] if wb is not None else 0.0,
     )
 
 
@@ -519,8 +555,10 @@ def _netzladung_herkunft_nennen(investitionen_financials, wallbox_zeilen, imd_by
     Heimlade-Messung (Regel 2 Schritt 1) behält seine Aufteilung; seine Zeile bleibt ohne den Satz. Ohne das Feld bleibt
     der Text, wie er war."""
     from backend.core.field_definitions.heimladung import traegt_heimlade_wert
+    from backend.core.field_definitions.reader import misst_netz_zaehler
 
-    if not any((z or {}).get("netzbezug_eigener_tarif_kwh") is not None for z in wallbox_zeilen):
+    # N-771 Rest 1: im Zuordnungsmonat des Felds misst der Zähler die Netzladung der Zeile nicht (bisherige Regel).
+    if not any(misst_netz_zaehler(z) for z in wallbox_zeilen):
         return
     for d in investitionen_financials:
         eigen = d.typ == "e-auto" and traegt_heimlade_wert("e-auto", imd_by_inv.get(d.investition_id))

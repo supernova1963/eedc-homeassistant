@@ -107,7 +107,19 @@ nehmen den gemessenen PV-Anteil deiner Wärmepumpe der letzten zwölf Monate. De
 eigener WP-/Wallbox-Tarif") rät dir, das Feld zuzuordnen, wo es fehlt, und warnt bei unplausiblen Werten, bei einer
 Abweichung zu evcc und bei einem parallelen Zähler, der im Netzbezug der Anlage fehlt. Im Monat der Zuordnung rechnet eedc
 noch ohne das Feld — sein Wert deckt dort nur einen Teil des Monats ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif),
-[Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
+[Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)). Das gilt an der Wallbox auch für die Netzladung: im
+Monat der Zuordnung bleibt sie evcc bzw. die Tagesquote. Im **laufenden Monat** rechnet die Stromrechnung jetzt auch den
+Teil der Wallbox zum Wallbox-Tarif, sobald ihr Sensor den Monat deckt.
+
+**Wärmepumpe und Wallbox hinter einem gemeinsamen Zähler.** Hängt die Wallbox am Zähler der Wärmepumpe und rechnet dein
+Versorger beide zu einem Tarif ab (z. B. §14a Modul 2), wählst du unter *Einstellungen → Strompreise* die neue Verwendung
+**„Wärmepumpe und Wallbox (gemeinsamer Zähler)"**. Der Tarif gilt dann für beide Geräte, sein Grundpreis zählt einmal, und
+das Feld an der Wärmepumpe heißt **„Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)"** — dort trägst du den
+gemeinsamen Netzbezug ein (*Zähler vor beiden Geräten minus Zähler danach*). eedc rechnet die Stromrechnung damit genau
+und teilt den gemeinsamen Netzbezug für die Ersparnis wie zwei getrennte Zähler: die Wallbox mit ihrer Netzladung (evcc
+bzw. Tagesquote), die Wärmepumpe mit dem Rest. Je Tag rechnet die Stromrechnung stundengenau, die Ersparnis ohne diese
+Teilung — der Monat trägt den genauen Wert; der Daten-Checker nennt die Monate und warnt, wenn ein eigener Tarif daneben
+Vorrang hat oder an der Wallbox ein Wert steht, der dort nicht zählt ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif)).
 
 ## v4.1.11 — 27. Oktober 2026
 

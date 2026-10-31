@@ -2207,6 +2207,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # gemessenen Netzbezug zum Wallbox-Tarif — die Schicht gibt nur das Ergebnis (der Zähler gewinnt), nicht den
     # überstimmten evcc-Wert; dieselbe Begründung wie `daten_checker/emob.py::_check_emob_pv_ueber_gesamt` (N-201).
     "backend/services/daten_checker/wp_tarif.py::_evcc_weicht_ab",
+    # F12 (N-770/N-771 E6, 31.10.2026): der Checker sucht in den ROHEN Wallbox-Zeilen ein Feld «Netzbezug zum
+    # Wallbox-Tarif», das unter dem gemeinsamen Tarif nicht zählt — die Schicht trägt es dann nicht in die Stromrechnung
+    # (`wallbox_eigener_tarif` ist falsch), sie kann es also nicht melden; dieselbe Begründung wie die Zeile darüber.
+    "backend/services/daten_checker/wp_tarif.py::_feld_an_wallbox_unter_gemeinsam",
     # Stufe 2 derselben Auflösung (N-266): die Monatswerte der Balkonkraftwerke,
     # unter denen `pv-module` hängen. Sie werden hier ausdrücklich **nicht**
     # summiert, sondern je Elternteil vorgehalten, damit `lade_pv_je_monat`

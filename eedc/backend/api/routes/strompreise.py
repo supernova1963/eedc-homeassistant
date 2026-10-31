@@ -78,7 +78,7 @@ class StrompreisBase(BaseModel):
     tarifname: Optional[str] = Field(None, max_length=255)
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
-    verwendung: str = Field("allgemein", description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
+    verwendung: str = Field("allgemein", description="Tarif-Verwendung: allgemein, waermepumpe, wallbox, waermepumpe_wallbox (Wärmepumpe und Wallbox, gemeinsamer Zähler)")
     # #392: „Einspeisevergütung wechselt monatlich" — schaltet das Monatsfeld
     # `einspeise_durchschnittspreis_cent` im Monatsabschluss frei.
     einspeisung_variabel: bool = False
@@ -102,7 +102,7 @@ class StrompreisUpdate(BaseModel):
     tarifname: Optional[str] = Field(None, max_length=255)
     anbieter: Optional[str] = Field(None, max_length=255)
     vertragsart: Optional[str] = Field(None, max_length=50)
-    verwendung: Optional[str] = Field(None, description="Tarif-Verwendung: allgemein, waermepumpe, wallbox")
+    verwendung: Optional[str] = Field(None, description="Tarif-Verwendung: allgemein, waermepumpe, wallbox, waermepumpe_wallbox (Wärmepumpe und Wallbox, gemeinsamer Zähler)")
     einspeisung_variabel: Optional[bool] = None
     # N-267: die Fenster werden als GANZE Liste ersetzt, nicht einzeln gepflegt —
     # ein Tarif hat wenige, und Teil-Updates bräuchten eine zweite Route samt
@@ -124,6 +124,11 @@ class StrompreisResponse(StrompreisBase):
 # =============================================================================
 # Helper: Tarife nach Verwendung laden
 # =============================================================================
+
+#: F12 (N-770/N-771 E6): die Tarif-Verwendung «Wärmepumpe und Wallbox (gemeinsamer Zähler)», z. B. §14a Modul 2 mit der
+#: Wallbox am Wärmepumpen-Zähler. ``tarife_zum_stichtag`` löst sie auf ``waermepumpe`` UND ``wallbox`` auf.
+VERWENDUNG_GEMEINSAM = "waermepumpe_wallbox"
+
 
 async def lade_tarife_fuer_anlage(
     db: AsyncSession,
@@ -169,10 +174,21 @@ def tarife_zum_stichtag(
     """
     # Nach Verwendung gruppieren (erster = neuester wg. ORDER BY DESC)
     tarife: dict[str, Strompreis | None] = {"allgemein": None, "waermepumpe": None, "wallbox": None}
+    gemeinsam: Strompreis | None = None
     for preis in zeilen:
         verwendung = preis.verwendung or "allgemein"
         if verwendung in tarife and tarife[verwendung] is None:
             tarife[verwendung] = preis
+        elif verwendung == VERWENDUNG_GEMEINSAM and gemeinsam is None:
+            gemeinsam = preis
+
+    # F12 (N-770/N-771 E6, Entscheid Gernot 31.10.2026): ein Tarif «Wärmepumpe und Wallbox (gemeinsamer Zähler)» gilt
+    # für BEIDE Verwendungen — `waermepumpe` und `wallbox` zeigen auf DENSELBEN Datensatz (die Identität ist die
+    # Kennung, `monats_fakten.tarif.komponenten_tarif_gemeinsam`). Ein eigener WP- oder Wallbox-Tarif zum selben
+    # Stichtag hat Vorrang für seine Verwendung (der Daten-Checker sagt es). Ohne solchen Datensatz bitgleich wie bisher.
+    for verwendung in ("waermepumpe", "wallbox"):
+        if tarife[verwendung] is None and gemeinsam is not None:
+            tarife[verwendung] = gemeinsam
 
     # Fallback: WP/Wallbox → allgemein
     allgemein = tarife["allgemein"]

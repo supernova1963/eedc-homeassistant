@@ -26,7 +26,7 @@ import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, Monatsprogno
 import { unvollstaendigHerkunft } from '../lib/prognoseHinweise'
 import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
-import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE, evWpTarifText, grundgebuehrAufteilungText, netzbezugAnteileBerechnung } from '../lib'
+import { DATENROLLE, NETZLADUNG_AUS_TAGEN, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE, evWpTarifText, grundgebuehrAufteilungText, istGemeinsamerZaehler, netzbezugAnteileBerechnung } from '../lib'
 import { KOMPONENTEN_FARBEN } from '../lib/colors'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -198,7 +198,11 @@ export function baueMonatKpis(
 function preisFormel(d: AktuellerMonatResponse): string {
   // N-770/N-771 E4: mit gemessenem Netzbezug zum WP-/Wallbox-Tarif trägt der Rest den Haushaltspreis, jeder Anteil den
   // Preis seines Komponenten-Tarifs — die Kopfzahl bleibt der Haushaltspreis (Untertitel sagt es, der Client rechnet nichts).
-  const kosten = d.netzbezug_anteile && d.netzbezug_anteile.length > 0
+  // F12 (E6): beim gemeinsamen Zähler für Wärmepumpe und Wallbox nennt der Untertitel diesen Zähler.
+  const gemeinsam = (d.netzbezug_anteile ?? []).some((a) => istGemeinsamerZaehler(a.verwendung))
+  const kosten = gemeinsam
+    ? ' · Kosten = (Netzbezug − Netzbezug zum gemeinsamen WP-/Wallbox-Tarif) × Haushaltspreis + Netzbezug zum gemeinsamen WP-/Wallbox-Tarif × dessen Preis, ohne Grundpreis'
+    : d.netzbezug_anteile && d.netzbezug_anteile.length > 0
     ? ' · Kosten = (Netzbezug − Netzbezug zum Komponenten-Tarif) × Haushaltspreis + Netzbezug zum Komponenten-Tarif × dessen Preis, ohne Grundpreis'
     : ' · Kosten = Netzbezug × Ø-Preis, ohne Grundpreis'
   switch (d.netzbezug_preis_herkunft) {

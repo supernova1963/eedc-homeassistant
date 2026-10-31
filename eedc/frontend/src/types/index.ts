@@ -227,7 +227,7 @@ export interface Investition {
 }
 
 // Strompreise
-export type StrompreisVerwendung = 'allgemein' | 'waermepumpe' | 'wallbox'
+export type StrompreisVerwendung = 'allgemein' | 'waermepumpe' | 'wallbox' | 'waermepumpe_wallbox'
 
 export interface Strompreis {
   id: number

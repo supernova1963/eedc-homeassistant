@@ -16,6 +16,9 @@ Stunden des Kanals des Felds (``kanal/netzanteil_leser.py``, der einzigen Stunde
   der Slot-Preis der Kaskade P-6 (``strompreis_aggregator.slot_kosten_aus_zeilen``) — er bewertet den Rest der Stunde.
 * **EV-Ersparnis je Tag:** P_d = WP-Strom des Tages − N_wp des Tages zum WP-Tarif des Monats (``wp_cent``), der Rest zum
   EV-Preis des Tages (``finanz_aggregat.bewerte_eigenverbrauch`` — dieselbe Layer-Formel wie der Monat).
+* **F12 gemeinsamer Zähler WP + Wallbox (E6):** die Stunde rechnet N_g,h × W_g,h + Rest × H_h (Stunden des Felds an der
+  WP, Σ Tage = Monat in voll gedeckten Monaten); die EV-Ersparnis des Tages teilt NICHT — ohne Stundenwerte der Wallbox
+  ist N_wp des Tages nicht bekannt, der Monat trägt den Wert (benannte Grenze analog F9, Auftrag §3.4).
 
 Nichts wird geschrieben (``TagesEnergieProfil`` bleibt, aggregate-day unverändert).
 """
@@ -72,13 +75,23 @@ async def netzanteile_der_tage(
             continue
         tarife = tarife_je_stichtag.get(date(*m, 1)) or {}
         for a in anteile.netz:
-            stunden = netz[m].get(a.verwendung)
+            stunden = netz[m].get(_kanal_verwendung(a.verwendung))
             if stunden is None:
                 continue
             _stunden_eintragen(out.stunden, a, stunden.werte, tarife)
             if a.verwendung == "waermepumpe" and anteile.wp_cent is not None:
                 out.wp_cent[m] = anteile.wp_cent
     return out
+
+
+def _kanal_verwendung(verwendung: str) -> str:
+    """F12 (E6): der Anteil ``waermepumpe_wallbox`` (gemeinsamer Zähler) liest die Stunden des Felds an der Wärmepumpe
+    (dort trägt es N_g) und den Tarif über die Verwendung ``waermepumpe`` (derselbe Datensatz). Die EV-Ersparnis des
+    Tages teilt er NICHT: ohne Stundenwerte der Wallbox ist N_wp des Tages unbekannt — der Tag rechnet sie wie bisher,
+    der Monat trägt den Wert (benannte Grenze analog F9, Auftrag §3.4; ``wp_cent`` bleibt ohne Eintrag)."""
+    from backend.services.monats_fakten.tarif import GEMEINSAM
+
+    return "waermepumpe" if verwendung == GEMEINSAM else verwendung
 
 
 def _stunden_eintragen(ziel: dict, anteil, werte: Mapping[int, float], tarife: Mapping[str, object]) -> None:
@@ -88,7 +101,7 @@ def _stunden_eintragen(ziel: dict, anteil, werte: Mapping[int, float], tarife: M
     from backend.core.berechnungen.zeittarif import preis_je_uhrzeit
 
     faktor = (anteil.kwh / anteil.gemessen_kwh) if anteil.gemessen_kwh > 0 else 0.0
-    tarif = resolve_tarif_for_komponente(tarife, anteil.verwendung) if anteil.zeitfenster else None
+    tarif = resolve_tarif_for_komponente(tarife, _kanal_verwendung(anteil.verwendung)) if anteil.zeitfenster else None
     for ts, kwh in werte.items():
         cent = preis_je_uhrzeit(tarif, datetime.fromtimestamp(ts)) if tarif is not None else anteil.cent
         ziel.setdefault(ts, []).append((anteil.verwendung, kwh * faktor, cent))

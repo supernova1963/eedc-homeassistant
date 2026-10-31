@@ -62,7 +62,7 @@ class Strompreis(Base):
     )
 
     # Verwendung (Spezialtarife)
-    verwendung: Mapped[str] = mapped_column(String(30), nullable=False, default="allgemein", server_default="allgemein")  # allgemein, waermepumpe, wallbox
+    verwendung: Mapped[str] = mapped_column(String(30), nullable=False, default="allgemein", server_default="allgemein")  # allgemein, waermepumpe, wallbox, waermepumpe_wallbox (F12: gemeinsamer Zähler WP + Wallbox)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

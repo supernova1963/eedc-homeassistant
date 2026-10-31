@@ -21,7 +21,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import not_found
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-from backend.services.monats_fakten.tarif import eigene_tarif_verwendungen
+from backend.services.monats_fakten.tarif import tarif_verwendungen_der_flaeche
 from backend.core.database import get_db
 from backend.core.field_definitions import (
     OPTIONALE_FELDER,
@@ -693,7 +693,7 @@ async def baue_kontext(
         alle_basis_felder=alle_basis_felder,
         preis_messung=preis_messung,
         zaehler_ende=await lade_zaehler_ende(db, anlage_id, jahr, monat),
-        eigene_tarife=eigene_tarif_verwendungen(
+        eigene_tarife=tarif_verwendungen_der_flaeche(
             await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
         ),
     )

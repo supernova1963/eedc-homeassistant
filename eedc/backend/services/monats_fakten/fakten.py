@@ -248,6 +248,10 @@ class EmobFakten:
     wallbox_netz_eigener_tarif_kwh: Optional[float] = None
     #: … und die Ladung ALLER Wallboxen des Monats — die Obergrenze der Klemme (F7).
     wallbox_ladung_alle_kwh: float = 0.0
+    #: F12 (E6, F12a = A): die Netzladung der Wallbox-Zeilen nach der bisherigen Regel (Zähler des Versorgers, evcc-Wert,
+    #: sonst Tagesquote; ``reader.get_emob_pv_netz_kwh`` über die angereicherten Zeilen, privat und dienstlich) — N_wb im
+    #: gemeinsamen Zähler (``tarif.komponenten_anteile``). Keine eigene Zuteilung; ohne Wallbox-Zeile 0.
+    wallbox_netzladung_kwh: float = 0.0
     #: Steht die Aufteilung ``ladung_pv_kwh``/``ladung_netz_kwh`` so in den
     #: Monatsdaten, oder ist sie aus der Tagesebene **abgeleitet** (N-141 Weg c)?
     #: Eine Wallbox misst ihren PV-Anteil nicht; fehlt er, galt bisher die ganze
@@ -486,6 +490,11 @@ class TarifFakten:
     #: rechnet die Stromrechnung einen gemessenen Netzbezug zum Komponenten-Tarif mit dessen Preis (``komponenten_anteile``).
     wp_eigener_tarif: bool = False
     wallbox_eigener_tarif: bool = False
+    #: F12 (N-770/N-771 E6): gilt ein GEMEINSAMER Tarif für Wärmepumpe und Wallbox (Verwendung ``waermepumpe_wallbox``,
+    #: ``tarif.komponenten_tarif_gemeinsam``)? Dann trägt das Feld an der WP den gemeinsamen Netzbezug N_g, und
+    #: ``komponenten_anteile`` rechnet einen Anteil ``waermepumpe_wallbox`` (F12a = A). ``wp_eigener_tarif`` ist dann
+    #: ``True``, ``wallbox_eigener_tarif`` ``False`` (ein Feld an der Wallbox zählt nicht).
+    komponenten_tarif_gemeinsam: bool = False
     #: N-770/N-771 F6: die HT/NT-Preise über N bzw. (Netzbezug − N), wenn der Kanal des Felds den Monat deckt; sonst ``None``.
     netzanteil_preise: Optional[NetzanteilPreise] = None
     kraftstoffpreis_euro: Optional[float] = None

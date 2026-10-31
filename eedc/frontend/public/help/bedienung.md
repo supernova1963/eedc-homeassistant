@@ -541,7 +541,14 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > Heimladekosten rechnen damit, die Herleitung der Wallbox-Zeile (und eines E-Autos, das seine Heimladung aus der Wallbox
 > bekommt) nennt „Netzladung: Zähler des Versorgers". Ein E-Auto, das seine Heimladung selbst misst, behält seine eigene
 > Aufteilung — der Zähler teilt dann den Rest der Wallbox.
-> Weichen evcc und Zähler ab, sagt es der Daten-Checker. Ohne das Feld gilt wie bisher evcc bzw. die Tagesquote.
+> Weichen evcc und Zähler ab, sagt es der Daten-Checker. Ohne das Feld gilt wie bisher evcc bzw. die Tagesquote. Im
+> **Monat der Zuordnung** (der Sensor beginnt mitten im Monat) gilt der Teilwert nicht: dort bleibt die Netzladung evcc
+> bzw. die Tagesquote, ab dem ersten vollen Monat der Zähler.
+>
+> **Wärmepumpe und Wallbox mit gemeinsamem Zähler** (Tarif-Verwendung „Wärmepumpe und Wallbox"): die Netzladung der
+> E-Mobilität bleibt evcc bzw. die Tagesquote — der gemeinsame Zähler misst beide Geräte zusammen und teilt nicht je
+> Gerät. Die Stromrechnung rechnet den gemeinsamen Netzbezug zum gemeinsamen Tarif; die Kachel nennt den Anteil
+> „Wärmepumpe und Wallbox, gemeinsamer Zähler" ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif)).
 
 > **Die Ergebnis-Leiter in vier Zeilen** (Netto-Ertrag und Monatsergebnis rechnet eedc für Monat, Jahr und Gesamt gleich):
 >

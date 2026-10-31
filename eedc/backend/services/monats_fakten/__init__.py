@@ -113,6 +113,7 @@ from backend.services.monats_fakten.tarif import (  # noqa: F401 — Re-Export
 )
 from backend.services.monats_fakten.bau import (  # noqa: F401 — Re-Export
     sonstiges_aus_zeilen,
+    wallbox_aus_zeilen,
     wp_aus_zeilen,
     wp_kanal_zeile,
 )
@@ -171,6 +172,7 @@ __all__ = [
     "stromrechnung_euro",
     "dienstliche_ladekosten_euro",
     "sonstiges_aus_zeilen",
+    "wallbox_aus_zeilen",
     "wp_aus_zeilen",
     "wp_kanal_zeile",
     "ist_pv_ladeanteil_prozent",

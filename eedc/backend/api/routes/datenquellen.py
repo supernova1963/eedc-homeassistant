@@ -831,13 +831,24 @@ async def _nach_eigenem_tarif(db: AsyncSession, anlage_id: int, eintraege: list[
     if not any(e.get("tarif_verwendung") for e in eintraege):
         return eintraege
     from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-    from backend.services.monats_fakten.tarif import eigene_tarif_verwendungen
+    from backend.core.field_definitions.auswahl import tarif_label
+    from backend.services.monats_fakten.tarif import tarif_verwendungen_der_flaeche
 
-    eigene = eigene_tarif_verwendungen(await lade_tarife_fuer_anlage(db, anlage_id))
+    eigene = tarif_verwendungen_der_flaeche(await lade_tarife_fuer_anlage(db, anlage_id))
     return [
-        {**e, "erweitert": True} if e.get("tarif_verwendung") and e["tarif_verwendung"] not in eigene else e
+        {**e, "erweitert": True} if e.get("tarif_verwendung") and e["tarif_verwendung"] not in eigene
+        else _mit_tarif_label(e, tarif_label(e, eigene))
         for e in eintraege
     ]
+
+
+def _mit_tarif_label(e: dict, label: "str | None") -> dict:
+    """F12 (E6): unter dem gemeinsamen Tarif «Wärmepumpe und Wallbox» trägt das Feld an der WP das Label
+    «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)» (``auswahl.tarif_label``); sonst unverändert."""
+    if label is None:
+        return e
+    alt = e.get("feld_label") or ""
+    return {**e, "feld_label": label, "label": str(e.get("label") or alt).replace(alt, label, 1) if alt else label}
 
 
 def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:

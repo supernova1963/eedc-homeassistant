@@ -8,6 +8,9 @@ bewegt sich um 70 kWh × (EV-Preis 30 ct − Wallbox-Tarif 20 ct) = +7,00 € (N
 Eigenverbrauchs-Ersparnis, Netzladung zum Wallbox-Tarif).
 
 Sprengsatz (im Bericht gefahren): ``reader.netzladung_des_zaehlers`` liefert ``None`` ⇒ die Proben mit Feld rot.
+
+Schwesterdateien: test_n771_e6_reste_gemeinsamer_zaehler.py (Zuordnungsmonat, laufender Monat, gemeinsamer Zähler),
+test_n770_e3_tag_stunde.py, test_n767_wp_eigener_tarif.py.
 """
 
 from __future__ import annotations

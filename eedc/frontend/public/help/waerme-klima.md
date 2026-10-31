@@ -804,10 +804,27 @@ Tageswerte) — die bestehende Regel für jeden neuen WP-Zähler. Im **Monat der
 Teil des Monats; eedc rechnet diesen Monat deshalb **ohne** den Netzbezug zum WP-Tarif (sonst wäre der PV-Anteil der
 Wärmepumpe zu groß). ⚑ Das gilt auch für einen Wert, den du dort von Hand einträgst — eedc kann ihn im Monatsabschluss
 nicht von einem übernommenen Vorschlag unterscheiden. Ab dem ersten vollen Monat gilt das Feld. Der **laufende Monat**
-ohne Monatsabschluss rechnet mit dem Feld, sobald der Sensor den Monat deckt.
+ohne Monatsabschluss rechnet mit dem Feld, sobald der Sensor den Monat deckt — an der Wärmepumpe wie an der Wallbox. An
+der **Wallbox** gilt der Monat der Zuordnung auch für die Netzladung: dort nimmt eedc in diesem Monat die bisherige Regel
+(evcc-Wert bzw. Tagesquote), nicht den Teilwert; ab dem ersten vollen Monat ist der Zähler die Netzladung.
 
 **Prognose und Wirtschaftlichkeit** (Aussichten, ROI) rechnen mit dem **gemessenen** PV-Anteil deiner Wärmepumpe der
 letzten zwölf abgeschlossenen Monate; ohne Messung wie bisher.
+
+**Wärmepumpe und Wallbox hinter einem Unterzähler (§14a Modul 2).** Hängt die Wallbox am Zähler der Wärmepumpe und
+rechnet dein Versorger beide zu **einem** Tarif ab, lege den Tarif mit der Verwendung **„Wärmepumpe und Wallbox
+(gemeinsamer Zähler)"** an (Einstellungen → Strompreise) — keinen eigenen WP- und keinen eigenen Wallbox-Tarif daneben (ein
+eigener hätte für sein Gerät Vorrang). Dann heißt das Feld an der Wärmepumpe **„Netzbezug zum WP-/Wallbox-Tarif
+(gemeinsamer Zähler)"**: trage den **gemeinsamen** Netzbezug ein — *Zähler vor beiden Geräten minus Zähler danach*, als
+Template-Sensor mit `state_class: total` (wie oben). An der Wallbox bleibt das Feld leer (es würde dort nicht zählen; der
+Daten-Checker warnt). eedc rechnet damit die Stromrechnung genau: Rest des Netzbezugs × Haushaltstarif + gemeinsamer
+Netzbezug × gemeinsamer Tarif, der Grundpreis des gemeinsamen Tarifs einmal. Für die Eigenverbrauchs-Ersparnis teilt eedc
+den gemeinsamen Netzbezug wie zwei getrennte Zähler: der Wallbox-Teil ist ihre Netzladung, wie eedc sie ohnehin kennt
+(evcc-Wert bzw. Tagesquote), der Rest gehört der Wärmepumpe, und deren PV-Strom (Stromverbrauch minus ihr Teil) zählt zum
+gemeinsamen Tarif. ⚑ Zwei Grenzen: die Netzladung der E-Mobilität bleibt evcc bzw. die Tagesquote (der gemeinsame Zähler
+teilt nicht je Gerät; ist sie größer als der gemeinsame Netzbezug, begrenzt eedc sie und der Daten-Checker sagt es), und
+**je Tag** rechnet die Stromrechnung mit den Stunden des Sensors, die Eigenverbrauchs-Ersparnis aber ohne die Teilung —
+dafür fehlen Stundenwerte der Netzladung; der Monat trägt den genauen Wert, der Daten-Checker nennt die Monate.
 
 ### Schritt 7 — Den Daten-Checker fragen
 

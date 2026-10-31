@@ -151,13 +151,15 @@ async def _geraete_aus_kanaelen(
       (``sonstige_erzeuger``, ``TagesMonatsSumme.sonstige_erzeuger_je_inv`` — leer, wo sie den Bestand liest), wie in
       den Monats-Fakten (``laden._falte_kanal_gruppen``).
 
-    Returns: ``(ha_stats', emob, sonstiges)`` — ``emob`` = ``(gedeckt, quote)``, ``sonstiges`` = ``SonstigesFakten``
-    oder ``None``.
+    Returns: ``(ha_stats', emob, sonstiges, emob_zeilen)`` — ``emob`` = ``(gedeckt, quote)``, ``sonstiges`` =
+    ``SonstigesFakten`` oder ``None``, ``emob_zeilen`` = die Kanal-Zeilen der E-Mob-Gruppe je Gerät, wenn sie den Monat
+    deckt (sonst ``{}``) — N-771 Rest 2 (E6): aus ihnen bekommt die Wallbox ohne Abschluss ihren Anteil zum
+    Wallbox-Tarif (``finanzen.komponenten_anteile_des_monats``).
     """
     quelle = _kanal_quelle(ha_stats, ohne_ha)
     typen = {getattr(i, "typ", None) for i in investitionen}
     if quelle is None or not typen & {"e-auto", "wallbox", "sonstiges"}:
-        return ha_stats, (False, None), None
+        return ha_stats, (False, None), None, {}
     from backend.services.kanal.geraete_leser import geraete_kalendermonate
     from backend.services.monats_fakten import sonstiges_aus_zeilen
     from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER, _categorize_counter
@@ -170,7 +172,9 @@ async def _geraete_aus_kanaelen(
     typ_je_inv = {str(i.id): i.typ for i in investitionen}
 
     emob = (False, None)
+    emob_zeilen: dict[int, dict] = {}
     if g is not None and g.emob.kanal and not emob_zeile:
+        emob_zeilen = {int(i): dict(z) for i, z in g.emob.zeilen.items()}
         for inv_id, zeile in g.emob.zeilen.items():
             for feld, wert in zeile.items():
                 key = f"inv_{inv_id}_{feld}"
@@ -204,7 +208,7 @@ async def _geraete_aus_kanaelen(
                                ("sonstiges_abgabe_kwh", sonstiges.abgabe_kwh)):
                 if wert > 0:
                     out[feld] = (round(wert, 2), quelle)
-    return out, emob, sonstiges
+    return out, emob, sonstiges, emob_zeilen
 
 
 async def _wp_aus_kanaelen(

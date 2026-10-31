@@ -288,6 +288,8 @@ Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV;
 Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = (Netzbezug − N_WP − N_WB) * Netzbezug_Preis / 100
                            + N_WP * WP_Tarif / 100 + N_WB * Wallbox_Tarif / 100 + Grundpreis   (N-770/N-771, s. Kasten)
+                           gemeinsamer Zähler WP + Wallbox (F12): (Netzbezug − N_g) * Netzbezug_Preis / 100
+                           + N_g * W_g / 100 + Grundpreis (W_g einmal)   (s. Kasten „Gemeinsamer Zähler")
 Arbeitspreis-Kosten (EUR)= dieselbe Summe ohne Grundpreis                (reiner Ausweis)
 EV-Ersparnis (EUR)       = (PV_Eigenverbrauch − P_WP) * EV_Preis / 100 + P_WP * WP_Tarif / 100
                                                                           (s. Hinweis; EV_Preis = EV-gewichteter Ø der Stundenpreise, sonst Netzbezug_Preis)
@@ -434,8 +436,36 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > fünf Stellen die Formel selbst, *Cockpit → Monat* mit eigener Preisauflösung (der Umzug änderte keine Zahl, Golden
 > Master 0 Diff). Der **laufende Monat ohne Abschluss** (kein Monats-Fakt) nimmt N aus der Kanal-Zeile der WP-Gruppe
 > (der Kanal des Felds zählt zu ihrem Kanal-Bedarf) und den Tarif über `tarif_des_monats` (seit E3, 31.10.2026); die
-> Wallbox hat dort noch keinen Anteil (benannt — die Ladung aller Wallboxen trägt erst der Fakt). `GET /monatsdaten/{id}`
+> **Wallbox** seit E6 (N-771 Rest 2) ebenso aus den Kanal-Zeilen der E-Mob-Gruppe — Ladung aller Wallboxen und N_WB über
+> dieselbe Faltung wie der Fakt (`monats_fakten.wallbox_aus_zeilen`), nur wenn die Gruppe den Monat bis jetzt deckt (der
+> Kanal des Felds gehört zu ihrem Kanal-Bedarf, ein Zuordnungsmonat deckt also nicht); Klemme und F6 wie im Monat
+> (`netzanteil_preise_des_monats(…, ["waermepumpe", "wallbox"])`). `GET /monatsdaten/{id}`
 > behält seinen eigenen Haushaltspreis (gepflegt → Stamm, ohne die gemessene Stufe — vorbestehend).
+
+> **Gemeinsamer Zähler Wärmepumpe + Wallbox (F12, E6, 31.10.2026; F12a = A, Entscheid Gernot).** Hängen Wärmepumpe
+> **und** Wallbox hinter einem Unterzähler mit einem Tarif (§14a Modul 2, Wallbox am WP-Zähler), gilt die Tarif-
+> Verwendung **„Wärmepumpe und Wallbox (gemeinsamer Zähler)"** (`waermepumpe_wallbox`). **Auflösung** (P8, die eine
+> Regel `strompreise.tarife_zum_stichtag`): `waermepumpe` und `wallbox` zeigen auf **denselben** Datensatz; ein eigener
+> WP- bzw. Wallbox-Tarif zum selben Stichtag hat Vorrang für seine Verwendung (dann ist es kein gemeinsamer Tarif mehr,
+> der Daten-Checker sagt es). Damit tragen WP-Kosten S × W, der Wallbox-Preis, Heimladekosten und E-Mob-Ersparnis den
+> gemeinsamen Tarif W_g ohne eigene Regel. Kennung `TarifFakten.komponenten_tarif_gemeinsam`
+> (`tarife["waermepumpe"] is tarife["wallbox"] is not tarife["allgemein"]`); der **Grundpreis** des gemeinsamen
+> Datensatzes zählt **einmal** (`grundpreis_des_monats`, Schlüssel `waermepumpe_wallbox` der Aufteilung). **Messgröße:** das
+> Feld „Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)" **an der Wärmepumpe** trägt den gemeinsamen Netzbezug N_g
+> (Zähler vor beiden Geräten minus Zähler danach; mehrere WPs: Σ der Felder, F3 bleibt); ein Feld an einer Wallbox zählt
+> unter dem gemeinsamen Tarif nicht (sonst doppelt, Checker WARNING). **Formel** (`monats_fakten/tarif.py::
+> _anteile_gemeinsam`): Stromrechnung = (Netzbezug − N_g) × Haushalt + N_g × W_g + Grundpreise (allgemein + W_g einmal),
+> N_g auf `[0, min(S_wp + L_wb, Netzbezug)]` (L_wb = Ladung aller Wallboxen). **Aufteilung nach F12a = A — wie zwei
+> getrennte Zähler:** N_wb = die Netzladung der Wallbox-Zeilen nach der bisherigen Regel (evcc-Wert, sonst Tagesquote;
+> `EmobFakten.wallbox_netzladung_kwh`) auf `[0, min(L_wb, N_g)]`; N_wp = N_g − N_wb auf `[0, S_wp]`; der PV-Anteil der WP
+> P_wp = S_wp − N_wp wird in der Eigenverbrauchs-Ersparnis zum Tarif W_g bewertet (wie E2), die PV-Ladung der Wallbox wie
+> bisher. Folge: dieselbe Bewertung wie bei getrennten Zählern; Σ P_wp + PV_wb = S_wp + L_wb − N_g, solange nichts klemmt.
+> Prognose/ROI (F4) nehmen P_wp/S_wp. (Verworfen, B: P = S_wp + L_wb − N_g als Ganzes zu W_g — dieselbe PV-Ladung hätte je
+> nach Zählerbau zwei Bewertungen.) ⚑ **Benannte Grenzen:** die Netzladung der E-Mob-Zeile bleibt die bisherige Regel
+> (der gemeinsame Zähler teilt nicht je Gerät; der Checker nennt Monate, in denen N_wb > N_g geklemmt wird). **Tag:** die
+> Stunde rechnet N_g,h × W_g,h + Rest × H_h (Stunden des Felds an der WP, Σ Tage = Monat in voll gedeckten Monaten); die
+> **EV-Ersparnis des Tages teilt nicht** — ohne Stundenwerte der Wallbox ist N_wp des Tages unbekannt, der Tag rechnet sie
+> wie bisher und der Monat trägt den Wert (Σ Tage ≠ Monat bei der Ersparnis, analog F9; Checker INFO mit den Monaten).
 
 > **Tag und Stunde mit Netzbezug zum Komponenten-Tarif (N-770/N-771 E3, 31.10.2026; Bauplan F5, F9 = A, F6, F10).**
 > Stündlich gibt es N **nur im Kanal des Felds** (`inv:<id>:netzbezug_eigener_tarif_kwh`, Spiegel der HA-Langzeitstatistik
@@ -959,7 +989,12 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 > `[0, Ladung]` geklemmt (`core/field_definitions/reader.py::netzladung_des_zaehlers`, gelesen von
 > `get_emob_pv_netz_kwh` und damit vom Pool der Monats-Fakten, T-Konto, Wallbox-Hub, HA-Export E-Mob; die Tagesquote
 > überschreibt eine solche Zeile nicht). Vorrang der Netzladung für Geld: *Zähler des Versorgers* → *evcc-Regel* →
-> *eedc-Tagesquote*. E-Mob-Ersparnis und Heimladekosten lesen diese Netzladung; die Herleitung der Wallbox-Zeile und
+> *eedc-Tagesquote*. **Zuordnungsmonat (N-771 Rest 1, E6):** dieselbe F10-Regel wie die Stromrechnung, je Gerät — im
+> Kalendermonat, in dem der Kanal des Felds dieser Wallbox beginnt, ist der Monatswert eine Teilmenge und gilt auch an der
+> Wallbox-Zeile nicht; es greift die bisherige Regel (evcc-Wert bzw. Gesamt − PV, danach die Tagesquote). Die Zuordnungsmonate
+> kennt eine Stelle (`kanal/netzanteil_leser.zuordnungsmonate_der_wallboxen`, je Anfrage gemerkt, eine Abfrage nur, wenn
+> eine Zeile das Feld trägt); die Auskunft reist an der Zeile (`reader.ZeileImZuordnungsmonat`) zu
+> `netzladung_des_zaehlers` (Parameter `zuordnungsmonat`). E-Mob-Ersparnis und Heimladekosten lesen diese Netzladung; die Herleitung der Wallbox-Zeile und
 > eines E-Autos, dessen Heimladung aus der Wallbox kommt, nennt «Netzladung: Zähler des Versorgers». Wirkung: Netz und PV
 > der Wallbox-Zeile tauschen (N_wb − Netz_vorher) kWh; die E-Mob-Ersparnis bewegt sich um den Teil davon, der beim Auto
 > ankommt, × (Preis der Eigenverbrauchs-Ersparnis − Wallbox-Tarif). ⚑ Ein E-Auto **mit eigener Messung** der Heimladung

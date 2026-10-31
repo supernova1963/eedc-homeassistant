@@ -161,7 +161,7 @@ export function StrompreisAktuellInfo({
             <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-700 space-y-1">
               {aktiveSpezialtarife.map((sp) => (
                 <p key={sp.id} className="text-sm text-green-700 dark:text-green-300">
-                  <span className={`inline-block text-xs px-1.5 py-0.5 rounded mr-2 ${sp.verwendung === 'waermepumpe' ? 'bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300' : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>
+                  <span className={`inline-block text-xs px-1.5 py-0.5 rounded mr-2 ${sp.verwendung === 'waermepumpe' || sp.verwendung === 'waermepumpe_wallbox' ? 'bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300' : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300'}`}>
                     {verwendungLabel(sp.verwendung)}
                   </span>
                   <strong>{fmtZahl(sp.netzbezug_arbeitspreis_cent_kwh, 2)} ct/kWh</strong>
@@ -197,8 +197,8 @@ export function StrompreisTabelle({
   const verwendungBadge = (sp: Strompreis) =>
     (!sp.verwendung || sp.verwendung === 'allgemein') ? (
       <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">Standard</span>
-    ) : sp.verwendung === 'waermepumpe' ? (
-      <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300 rounded">Wärmepumpe</span>
+    ) : sp.verwendung === 'waermepumpe' || sp.verwendung === 'waermepumpe_wallbox' ? (
+      <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300 rounded">{verwendungLabel(sp.verwendung)}</span>
     ) : (
       <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded">Wallbox</span>
     )
@@ -535,6 +535,12 @@ const VERWENDUNG_OPTIONEN: readonly { value: StrompreisVerwendung; label: string
   { value: 'allgemein', label: 'Standard (allgemein)', description: 'Für alle Berechnungen; Fallback für WP/Wallbox ohne eigenen Tarif.' },
   { value: 'waermepumpe', label: 'Wärmepumpe (Spezialtarif)', description: 'Wird nur für die Wärmepumpe verwendet.' },
   { value: 'wallbox', label: 'Wallbox (Spezialtarif)', description: 'Wird nur für die Wallbox verwendet.' },
+  // F12 (N-770/N-771 E6): ein Zähler vor Wärmepumpe UND Wallbox mit einem Tarif (z. B. §14a Modul 2).
+  {
+    value: 'waermepumpe_wallbox',
+    label: 'Wärmepumpe und Wallbox (gemeinsamer Zähler)',
+    description: 'Ein Zähler und ein Tarif für Wärmepumpe und Wallbox. Den gemeinsamen Netzbezug trägt das Feld an der Wärmepumpe.',
+  },
 ]
 
 // Roh-Enum nie sichtbar → Label-Map (Style-Guide D1 / TYP_LABELS-Muster).

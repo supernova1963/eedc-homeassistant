@@ -71,12 +71,21 @@ async def lade_emob_kontext(
 
     roh: dict = {}
     heim_gesamt: set = set()
+    imd_zeilen = list(imd_zeilen)
+    # N-771 Rest 1 (E6): im Zuordnungsmonat des Felds «Netzbezug zum Wallbox-Tarif» trägt die Wallbox-Zeile die Auskunft
+    # (`kanal/netzanteil_leser`, eine Abfrage nur mit Feld) — dort ist das Feld nicht ihre Netzladung (F10 je Gerät).
+    from backend.services.kanal.netzanteil_leser import mit_zuordnungsauskunft, zuordnungsmonate_der_wallboxen
+
+    _wb_zuordnung = await zuordnungsmonate_der_wallboxen(db, anlage_id, [
+        (imd.investition_id, imd.verbrauch_daten) for imd in imd_zeilen
+        if imd.investition_id in emob and emob[imd.investition_id].typ == "wallbox"
+    ])
     for imd in imd_zeilen:
         inv = emob.get(imd.investition_id)
         if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
             continue
         schluessel = (imd.investition_id, imd.jahr, imd.monat)
-        daten = imd.verbrauch_daten or {}
+        daten = mit_zuordnungsauskunft(imd.verbrauch_daten or {}, imd.investition_id, (imd.jahr, imd.monat), _wb_zuordnung)
         roh[schluessel] = daten
         if inv.typ == "e-auto" and ist_heim_gesamt(daten, imd.source_provenance):
             heim_gesamt.add(schluessel)

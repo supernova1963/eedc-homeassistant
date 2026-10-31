@@ -35,9 +35,14 @@ export function verwendungLabel(v: StrompreisVerwendung | string): string {
   switch (v) {
     case 'waermepumpe': return 'Wärmepumpe'
     case 'wallbox': return 'Wallbox'
+    // F12 (N-770/N-771 E6): ein Tarif für Wärmepumpe und Wallbox hinter einem gemeinsamen Zähler.
+    case 'waermepumpe_wallbox': return 'Wärmepumpe und Wallbox'
     default: return 'Standard'
   }
 }
+
+/** F12: Ist ein Anteil der des gemeinsamen Zählers für Wärmepumpe und Wallbox? */
+export const istGemeinsamerZaehler = (verwendung: string): boolean => verwendung === 'waermepumpe_wallbox'
 
 /**
  * N-769 (30.10.2026): die Grundgebühr je Tarif, wenn ein eigener Wärmepumpen- oder Wallbox-Tarif beiträgt — als
@@ -81,7 +86,9 @@ export function netzbezugAnteileBerechnung(
   const rest = netzbezugKwh - anteile.reduce((s, a) => s + a.kwh, 0)
   const teile = anteile.map((a) => {
     const klemme = a.geklemmt ? `, gemessen ${fmtKwh(a.gemessen_kwh)} kWh, begrenzt` : ''
-    return `${fmtKwh(a.kwh)} kWh × ${a.cent != null ? fmtCent(a.cent) : '—'} ct/kWh (${verwendungLabel(a.verwendung)}${klemme})`
+    // F12: der gemeinsame Zähler nennt sich als solcher («Wärmepumpe und Wallbox, gemeinsamer Zähler»).
+    const name = verwendungLabel(a.verwendung) + (istGemeinsamerZaehler(a.verwendung) ? ', gemeinsamer Zähler' : '')
+    return `${fmtKwh(a.kwh)} kWh × ${a.cent != null ? fmtCent(a.cent) : '—'} ct/kWh (${name}${klemme})`
   })
   return [`${fmtKwh(rest)} kWh × ${fmtCent(haushaltCent)} ct/kWh`, ...teile].join(' + ')
 }

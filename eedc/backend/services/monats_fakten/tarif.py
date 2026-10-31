@@ -12,6 +12,7 @@ from typing import Iterable, Mapping, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.strompreise import (
+    VERWENDUNG_GEMEINSAM,
     lade_tarife_fuer_anlage,
     lade_tarife_je_stichtag,
     resolve_tarif_for_komponente,
@@ -55,8 +56,22 @@ from backend.services.monats_fakten.fakten import MonatsSchluessel, NetzanteilPr
 
 #: Die Verwendungen, deren Tarif einen Grundpreis zur Stromrechnung beiträgt — in der Reihenfolge des Ausweises (N-769).
 GRUNDPREIS_VERWENDUNGEN: tuple[str, ...] = ("allgemein", "waermepumpe", "wallbox")
+#: F12 (E6): die Verwendung «Wärmepumpe und Wallbox (gemeinsamer Zähler)» — Schlüssel der Grundpreis-Aufteilung und des
+#: Anteils zum Komponenten-Tarif, wenn ``waermepumpe`` und ``wallbox`` auf DENSELBEN Datensatz zeigen.
+GEMEINSAM: str = VERWENDUNG_GEMEINSAM
 #: Anwenderwort je Verwendung — wie die Tarifliste (`StrompreiseTeile.tsx::verwendungLabel` → `lib/tarifHinweise.ts`).
-VERWENDUNG_LABEL: dict[str, str] = {"allgemein": "Standard", "waermepumpe": "Wärmepumpe", "wallbox": "Wallbox"}
+VERWENDUNG_LABEL: dict[str, str] = {"allgemein": "Standard", "waermepumpe": "Wärmepumpe", "wallbox": "Wallbox",
+                                    GEMEINSAM: "Wärmepumpe und Wallbox"}
+
+
+def komponenten_tarif_gemeinsam(tarife: Mapping[str, object]) -> bool:
+    """F12 (N-770/N-771 E6, Entscheid Gernot 31.10.2026): gilt im Monat EIN gemeinsamer Tarif für Wärmepumpe und Wallbox
+    (Verwendung ``waermepumpe_wallbox``, ein Zähler vor beiden Geräten)? Die Identitätsprobe derselben Auflösung
+    (``strompreise.tarife_zum_stichtag``): ``tarife["waermepumpe"] is tarife["wallbox"] is not tarife["allgemein"]``.
+    Ein eigener WP- oder Wallbox-Tarif zum selben Stichtag hat Vorrang für seine Verwendung — dann ist es kein gemeinsamer
+    Tarif mehr (die andere Verwendung trägt den Datensatz wie einen eigenen)."""
+    wp, wb = tarife.get("waermepumpe"), tarife.get("wallbox")
+    return wp is not None and wp is wb and wp is not tarife.get("allgemein")
 
 
 @dataclass(frozen=True)
@@ -86,13 +101,19 @@ def grundpreis_des_monats(tarife: Mapping[str, object]) -> GrundpreisDesMonats:
     """
     allgemein = tarife.get("allgemein")
     posten: dict[str, float] = {}
+    gezaehlt: list[object] = []
     for verwendung in GRUNDPREIS_VERWENDUNGEN:
         tarif = tarife.get(verwendung)
         if tarif is None or (verwendung != "allgemein" and tarif is allgemein):
             continue
+        # F12 (E6): der gemeinsame Tarif für Wärmepumpe und Wallbox ist EIN Datensatz — sein Grundpreis zählt einmal,
+        # unter dem Schlüssel `waermepumpe_wallbox` (Identität, nicht Gleichheit der Werte).
+        if any(tarif is g for g in gezaehlt):
+            continue
+        gezaehlt.append(tarif)
         betrag = tarif.grundpreis_euro_monat
         if betrag is not None and betrag > 0:
-            posten[verwendung] = betrag
+            posten[GEMEINSAM if verwendung == "waermepumpe" and komponenten_tarif_gemeinsam(tarife) else verwendung] = betrag
     return GrundpreisDesMonats(
         summe_euro=sum(posten.values(), 0.0),
         aufteilung=posten if any(v != "allgemein" for v in posten) else None,
@@ -106,11 +127,24 @@ KOMPONENTEN_VERWENDUNGEN: tuple[str, ...] = ("waermepumpe", "wallbox")
 def eigene_tarif_verwendungen(tarife: Mapping[str, object]) -> frozenset[str]:
     """Die Verwendungen mit EIGENEM Tarif-Datensatz (nicht dem Rückfall auf den allgemeinen) — dieselbe Identitätsprobe
     wie ``grundpreis_des_monats``. Leser: Sichtbarkeit des Felds «Netzbezug zum WP-/Wallbox-Tarif» (F1) in Datenquellen
-    und Monatsabschluss."""
+    und Monatsabschluss.
+
+    F12 (E6): bei einem **gemeinsamen** Tarif für Wärmepumpe und Wallbox (``komponenten_tarif_gemeinsam``) nur
+    ``waermepumpe`` — das Feld an der Wärmepumpe trägt den gemeinsamen Netzbezug N_g, an der Wallbox wird es nicht
+    angeboten (es zählte doppelt)."""
     allgemein = tarife.get("allgemein")
-    return frozenset(
+    eigene = frozenset(
         v for v in KOMPONENTEN_VERWENDUNGEN if tarife.get(v) is not None and tarife.get(v) is not allgemein
     )
+    return eigene - {"wallbox"} if komponenten_tarif_gemeinsam(tarife) else eigene
+
+
+def tarif_verwendungen_der_flaeche(tarife: Mapping[str, object]) -> frozenset[str]:
+    """Was Datenquellen und Monatsabschluss über die Tarife wissen müssen: ``eigene_tarif_verwendungen`` und — F12 (E6) —
+    die Marke ``waermepumpe_wallbox`` bei gemeinsamem Tarif (das Feld an der WP heißt dann «Netzbezug zum WP-/Wallbox-
+    Tarif (gemeinsamer Zähler)», ``field_definitions.auswahl.tarif_label``). Keine Client-Regel (Auftrag §3.6)."""
+    eigene = eigene_tarif_verwendungen(tarife)
+    return eigene | {GEMEINSAM} if komponenten_tarif_gemeinsam(tarife) else eigene
 
 
 async def _komponenten_preis(
@@ -301,6 +335,8 @@ async def _lade_tarif(
         # N-770/N-771: eigener Datensatz der Verwendung (dieselbe Identitätsprobe wie der Grundpreis, N-769).
         wp_eigener_tarif="waermepumpe" in eigene_tarif_verwendungen(tarife),
         wallbox_eigener_tarif="wallbox" in eigene_tarif_verwendungen(tarife),
+        # F12 (E6): ein gemeinsamer Tarif für Wärmepumpe und Wallbox (ein Zähler vor beiden Geräten).
+        komponenten_tarif_gemeinsam=komponenten_tarif_gemeinsam(tarife),
         # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox.
         # #412: dieselbe Kaskade wie beim Netzbezug eine Zeile darüber — sonst
         # trüge DASSELBE `TarifFakten`-Objekt zwei verschiedene Auflösungen
@@ -413,6 +449,12 @@ class KomponentenAnteile:
     #: F6: der Haushaltspreis des Rests (Netzbezug − Σ N), wenn der Haushaltstarif Zeitfenster trägt und der Kanal des
     #: Felds den Monat deckt — er ersetzt in der Stromrechnung den Haushaltspreis für den Rest; sonst ``None``.
     haushalt_cent: Optional[float] = None
+    #: F12 (E6, F12a = A): beim gemeinsamen Zähler die Aufteilung von N_g — N_wb (die Netzladung der Wallbox-Zeilen nach
+    #: der bisherigen Regel, auf ``[0, min(L_wb, N_g)]``) und N_wp = N_g − N_wb (auf ``[0, S_wp]``); ``None`` ohne
+    #: gemeinsamen Tarif. ``wallbox_regel_kwh`` ist die Netzladung vor der Klemme (der Checker nennt N_wb > N_g).
+    gemeinsam_wallbox_kwh: Optional[float] = None
+    gemeinsam_wp_kwh: Optional[float] = None
+    gemeinsam_wallbox_regel_kwh: Optional[float] = None
 
     def stromrechnung_anteile(self) -> tuple[tuple[float, float], ...]:
         """``(kWh, ct)`` je Anteil — die Eingabe des Layers ``berechne_netzbezug_kosten``."""
@@ -435,8 +477,13 @@ def komponenten_anteile(
     wp_netz_eigener_tarif_kwh: Optional[float] = None,
     wallbox_ladung_kwh: float = 0.0,
     wallbox_netz_eigener_tarif_kwh: Optional[float] = None,
+    wallbox_netzladung_kwh: float = 0.0,
 ) -> Optional[KomponentenAnteile]:
     """Die gemessenen Anteile zum Komponenten-Tarif eines Monats (N-770/N-771, 30.10.2026, Bauplan §1/F7/F8).
+
+    ⭐ **F12 (E6): gemeinsamer Zähler WP + Wallbox** (``tarif.komponenten_tarif_gemeinsam``) — ``_anteile_gemeinsam``:
+    das Feld an der WP trägt N_g (``wp_netz_eigener_tarif_kwh``), ein Anteil ``waermepumpe_wallbox``; die Aufteilung
+    nach F12a = A über ``wallbox_netzladung_kwh`` (die Netzladung der Wallbox-Zeilen nach der bisherigen Regel).
 
     Je Verwendung nur, wenn ein EIGENER Tarif gilt (``tarif.wp_eigener_tarif`` bzw. ``wallbox_eigener_tarif``) UND der
     Netzbezug zum Komponenten-Tarif gemessen ist (``None`` = nicht gemessen, F3). Ohne beides ``None`` — die
@@ -450,6 +497,10 @@ def komponenten_anteile(
     """
     if netzbezug_kwh is None:
         return None
+    if tarif.komponenten_tarif_gemeinsam:
+        return _anteile_gemeinsam(
+            netzbezug_kwh, tarif, wp_strom_kwh, wp_netz_eigener_tarif_kwh, wallbox_ladung_kwh, wallbox_netzladung_kwh,
+        )
     netz: list[NetzanteilZumTarif] = []
     wp_pv: Optional[float] = None
     wp_cent: Optional[float] = None
@@ -480,6 +531,40 @@ def komponenten_anteile(
     )
 
 
+def _anteile_gemeinsam(
+    netzbezug_kwh: float, tarif: TarifFakten, wp_strom_kwh: float, n_g_gemessen: Optional[float],
+    wallbox_ladung_kwh: float, wallbox_netzladung_kwh: float,
+) -> Optional[KomponentenAnteile]:
+    """F12 (N-770/N-771 E6, Auftrag §3.3, **F12a = A**, Entscheid Gernot 31.10.2026): der gemeinsame Zähler vor
+    Wärmepumpe UND Wallbox mit EINEM Tarif W_g (§14a Modul 2).
+
+    * **Stromrechnung:** ``(Netzbezug − N_g) × Haushalt + N_g × W_g`` — N_g (Σ der Felder an den Wärmepumpen, F3 wie
+      bisher) auf ``[0, min(S_wp + L_wb, Netzbezug)]`` geklemmt; Preis ``tarif.wp_preis_cent`` (der gemeinsame
+      Datensatz über die WP-Kaskade), mit Zeitfenster über N gewichtet (F6, Kanal des Felds an der WP).
+    * **Aufteilung (A) — wie zwei getrennte Zähler:** N_wb = die Netzladung der Wallbox-Zeilen nach der bisherigen Regel
+      (Zähler/evcc-Wert, sonst Tagesquote) auf ``[0, min(L_wb, N_g)]``; N_wp = N_g − N_wb auf ``[0, S_wp]``; der
+      PV-Anteil der WP P_wp = S_wp − N_wp zum Tarif W_g in der Eigenverbrauchs-Ersparnis (wie E2). Die PV-Ladung der
+      Wallbox bleibt, wie sie ist. Folge: dieselbe Bewertung wie bei getrennten Zählern; Σ P_wp + PV_wb = S_wp + L_wb − N_g,
+      solange nichts klemmt. (B — P = S_wp + L_wb − N_g als Ganzes zu W_g — ist verworfen: dieselbe PV-Ladung trüge je
+      nach Zählerbau zwei Bewertungen.)
+    * Die Netzladung der E-Mob-Zeile bleibt die bisherige Regel (benannte Grenze: der gemeinsame Zähler teilt nicht je
+      Gerät); der Daten-Checker nennt Monate, in denen N_wb > N_g geklemmt wird."""
+    if n_g_gemessen is None:
+        return None
+    f6 = tarif.netzanteil_preise
+    n_g = klemme_netzanteil(n_g_gemessen, wp_strom_kwh + wallbox_ladung_kwh, netzbezug_kwh)
+    n_wb = max(0.0, min(wallbox_netzladung_kwh, wallbox_ladung_kwh, n_g))
+    n_wp = max(0.0, min(n_g - n_wb, wp_strom_kwh))
+    _zf = f6.komponente("waermepumpe") if f6 is not None else None
+    return KomponentenAnteile(
+        netz=(NetzanteilZumTarif(GEMEINSAM, n_g, tarif.wp_preis_cent if _zf is None else _zf, n_g_gemessen,
+                                 _zf is not None),),
+        wp_pv_kwh=max(0.0, wp_strom_kwh - n_wp), wp_cent=tarif.wp_preis_cent,
+        haushalt_cent=f6.haushalt_rest(("waermepumpe",)) if f6 is not None else None,
+        gemeinsam_wallbox_kwh=n_wb, gemeinsam_wp_kwh=n_wp, gemeinsam_wallbox_regel_kwh=wallbox_netzladung_kwh,
+    )
+
+
 def komponenten_anteile_des_fakts(fakt, netzbezug_kwh: Optional[float] = None) -> Optional[KomponentenAnteile]:
     """``komponenten_anteile`` aus einem ``MonatsFakt`` (Mengen der Fakten, Tarif des Fakts); ``netzbezug_kwh`` überschreibt
     den Zählerwert, wo die Sicht einen anderen trägt (Cockpit → Monat)."""
@@ -492,6 +577,7 @@ def komponenten_anteile_des_fakts(fakt, netzbezug_kwh: Optional[float] = None) -
         wp_netz_eigener_tarif_kwh=fakt.wp.netz_eigener_tarif_kwh,
         wallbox_ladung_kwh=fakt.emob.wallbox_ladung_alle_kwh,
         wallbox_netz_eigener_tarif_kwh=fakt.emob.wallbox_netz_eigener_tarif_kwh,
+        wallbox_netzladung_kwh=fakt.emob.wallbox_netzladung_kwh,
     )
 
 

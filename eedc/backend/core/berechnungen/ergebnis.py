@@ -560,7 +560,7 @@ def _netzbezug_anteile_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional
         return None
     return [
         {**z, "cent": (z["euro"] / z["kwh"] * 100) if z["kwh"] else None}
-        for z in (je[k] for k in ("waermepumpe", "wallbox") if k in je)
+        for z in (je[k] for k in ("waermepumpe", "wallbox", "waermepumpe_wallbox") if k in je)
     ]
 
 
