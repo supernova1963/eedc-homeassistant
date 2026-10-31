@@ -490,6 +490,8 @@ export interface AktuellerMonatResponse {
   /** N-770: PV-Anteil der Wärmepumpe, den die Eigenverbrauchs-Ersparnis zum WP-Tarif bewertet (kWh) und dieser Preis. */
   ev_ersparnis_wp_tarif_kwh?: number | null
   ev_ersparnis_wp_tarif_cent?: number | null
+  /** N-770 F6: Haushaltspreis des Rests (HT/NT über Netzbezug − N), wenn er von der Kopfzahl abweicht; sonst `null`. */
+  netzbezug_rest_preis_cent?: number | null
   zaehlergebuehr_euro_jahr: number | null
 
   // Vergleiche

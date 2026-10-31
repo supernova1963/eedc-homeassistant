@@ -46,6 +46,7 @@ from typing import Callable, Iterable, Optional, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.field_definitions import get_eauto_ladung_kwh, get_emob_pv_netz_kwh
+from backend.core.field_definitions.reader import NETZBEZUG_EIGENER_TARIF_FELD
 from backend.services.eauto_wirtschaftlichkeit import wallbox_ist_heimlade_quelle
 from backend.services.energie_profil.monats_aus_tagen import (
     MonatsSchluessel,
@@ -111,17 +112,20 @@ def hat_gepflegten_pv_anteil(
         if wallbox_ist_heimlade_quelle(wallbox_daten)
         else eauto_daten
     )
+    # N-771 F11: der gemessene Netzbezug zum Wallbox-Tarif ist die Aufteilung der Zeile (Zähler des Versorgers).
     return any(
-        zeile.get("ladung_pv_kwh") is not None
+        zeile.get("ladung_pv_kwh") is not None or zeile.get(NETZBEZUG_EIGENER_TARIF_FELD) is not None
         for zeile in quelle
         if zeile
     )
 
 
 def _zeile_ohne_aufteilung(zeile: Optional[dict]) -> bool:
-    """Trägt die Zeile weder „PV" noch „Netz" (auch keine 0)? — S2-4, die Frage je Zeile."""
+    """Trägt die Zeile weder „PV" noch „Netz" (auch keine 0)? — S2-4, die Frage je Zeile. N-771 F11: der gemessene
+    Netzbezug zum Wallbox-Tarif ist eine Aufteilung (``reader.netzladung_des_zaehlers``) — keine Tagesquote darüber."""
     zeile = zeile or {}
-    return zeile.get("ladung_pv_kwh") is None and zeile.get("ladung_netz_kwh") is None
+    return (zeile.get("ladung_pv_kwh") is None and zeile.get("ladung_netz_kwh") is None
+            and zeile.get(NETZBEZUG_EIGENER_TARIF_FELD) is None)
 
 
 def braucht_tages_quote(

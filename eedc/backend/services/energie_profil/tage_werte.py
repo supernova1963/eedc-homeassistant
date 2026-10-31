@@ -115,6 +115,9 @@ class _TageKontext:
     slot_kosten_je_tag: dict
     #: Tabellen-Spalten (28.10.2026): je Tag E-Mobilität und WP-Zähler, gebündelt geladen (`tage_werte_zusatz.py`).
     zusatz_je_tag: dict
+    #: N-770 E3: je Monat der WP-Tarif des PV-Anteils der WP, wo die WP-Stunden des Felds angesetzt sind
+    #: (`tage_netzanteil.TageNetzanteil.wp_cent`); die Mengen je Tag stehen in `slot_kosten_je_tag[tag].netzanteil_kwh`.
+    wp_cent_netzanteil: dict
 
 
 async def baue_tage_werte(
@@ -316,12 +319,22 @@ async def baue_tage_werte(
         _md = md_pro_monat.get((tag.year, tag.month))
         return getattr(_md, "netzbezug_durchschnittspreis_cent", None) if _md else None
 
+    # N-770/N-771 E3 (Bauplan F5 mit F9 = A, F6): der gemessene Netzbezug zum WP-/Wallbox-Tarif je Stunde aus dem Kanal
+    # des Felds — nur in Monaten, deren Anteil die Monats-Fakten ansetzen und die der Kanal voll deckt; sonst leer
+    # (ohne eigenen Komponenten-Tarif keine Abfrage). Die Slot-Kosten bewerten ihn zum Komponenten-Tarif.
+    from backend.services.energie_profil.tage_netzanteil import netzanteile_der_tage
+
+    netzanteil = await netzanteile_der_tage(db, anlage_id, alle_tage, _tarife_je_stichtag)
+
     slot_kosten_je_tag = _slot_kosten_der_bestandstage(
         [r for r in alle_tep if r.datum <= bis], kanal_stunden_je_tag, von, _tarif_fuer, _abgerechnet_fuer,
+        netzanteil.stunden,
     )
     # HA-Bauform S4 (§10a (3)): an einem Kanal-Tag dieselbe Kaskade über seine Mischzeilen — Kosten und EV-Preis im
     # Kalendertag wie der Netzbezug daneben (Preis zeilengleich gepaart, Beginn-Raster).
-    slot_kosten_je_tag.update(_slot_kosten_der_kanal_tage(kanal_stunden_je_tag, _tarif_fuer, _abgerechnet_fuer))
+    slot_kosten_je_tag.update(_slot_kosten_der_kanal_tage(
+        kanal_stunden_je_tag, _tarif_fuer, _abgerechnet_fuer, netzanteil.stunden,
+    ))
 
     kx = _TageKontext(
         db=db,
@@ -341,6 +354,7 @@ async def baue_tage_werte(
         slot_kosten_je_tag=slot_kosten_je_tag,
         # Tabellen-Spalten (28.10.2026): je Größe ein Bereichs-Leser über das Fenster, kein Aufruf je Tag.
         zusatz_je_tag=await lade_tabellen_zusatz(db, anlage, tz_pro_tag, von, bis, mit_waerme=mit_waerme),
+        wp_cent_netzanteil=netzanteil.wp_cent,
     )
 
     zeilen: list[TagWerteResponse] = []
@@ -352,7 +366,7 @@ async def baue_tage_werte(
 
 
 def _slot_kosten_der_bestandstage(zeilen: list, kanal_stunden_je_tag: dict, von: date, tarif_fuer,
-                                  abgerechnet_fuer) -> dict:
+                                  abgerechnet_fuer, netzanteile=None) -> dict:
     """Je Tag ohne Mischzeilen die Slot-Kosten (Kaskade P-6, ``slot_kosten_aus_zeilen``) aus den schon geladenen
     Stundenzeilen (``von``-1 … ``bis``) — dieselbe Zeilenfolge und Paarung wie ``lade_slot_kosten_je_tag`` über
     ``stunden_der_tage`` (Vortag für die Vorzeile, an Kanal-Tagen die Mischzeilen: ``stundenzeilen_mit_kanaelen``), ohne
@@ -365,16 +379,18 @@ def _slot_kosten_der_bestandstage(zeilen: list, kanal_stunden_je_tag: dict, von:
     folge = stundenzeilen_mit_kanaelen(zeilen, kanal_stunden_je_tag)
     gepaart = [(z, preis) for z, preis in zip(folge, forward_werte_je_backward_zeile(folge, "strompreis_cent"))
                if z.datum >= von and z.datum not in kanal_stunden_je_tag]
-    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
+    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer,
+                                  netzanteile=netzanteile)
 
 
-def _slot_kosten_der_kanal_tage(kanal_stunden_je_tag: dict, tarif_fuer, abgerechnet_fuer) -> dict:
+def _slot_kosten_der_kanal_tage(kanal_stunden_je_tag: dict, tarif_fuer, abgerechnet_fuer, netzanteile=None) -> dict:
     """Je Kanal-Tag die Slot-Kosten (Kaskade P-6) aus seinen Mischzeilen (HA-Bauform S4, §10a (3))."""
     from backend.services.strompreis_aggregator import slot_kosten_aus_zeilen
 
     gepaart = [(z, preis) for zeilen in kanal_stunden_je_tag.values()
                for z, preis in zip(zeilen, forward_werte_je_backward_zeile(zeilen, "strompreis_cent"))]
-    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
+    return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer,
+                                  netzanteile=netzanteile)
 
 
 async def _tageszeile(kx: _TageKontext, anlage: Anlage, tag: date) -> TagWerteResponse:
@@ -569,6 +585,18 @@ def _abgabe_und_quoten(bilanz, sonstiges):
     return abgabe_tag, ev_tag, autarkie_tag, evq_tag
 
 
+def _wp_pv_des_tages(kx: _TageKontext, tag: date, bilanz) -> dict:
+    """N-770 E3: ``wp_pv_kwh``/``wp_tarif_cent`` der Finanzzeile des Tages — nur, wo die WP-Stunden des Felds angesetzt
+    sind (``tage_netzanteil``): P_d = WP-Strom des Tages − Netzbezug zum WP-Tarif des Tages, auf 0 begrenzt (die Grenze auf
+    den Eigenverbrauch zieht ``bewerte_eigenverbrauch``)."""
+    cent = kx.wp_cent_netzanteil.get((tag.year, tag.month))
+    _slot = kx.slot_kosten_je_tag.get(tag)
+    n_wp = (_slot.netzanteil_kwh or {}).get("waermepumpe") if _slot is not None else None
+    if cent is None or n_wp is None:
+        return {}
+    return {"wp_pv_kwh": max(0.0, float(bilanz.wp_strom_kwh or 0.0) - n_wp), "wp_tarif_cent": cent}
+
+
 async def _geld_spalten(kx: _TageKontext, tag: date, bilanz, abgabe_tag, neg_preis_kwh, kanal_tag) -> dict:
     """Finanzzeile des Tages über den SoT (eine Abfrage-Folge je Tag) und die Geld- und CO₂-Spalten der Antwort."""
     # ── Finanzen über den SoT-Helper (je-Monat-Tarif, §51-bereinigt) ──
@@ -601,6 +629,9 @@ async def _geld_spalten(kx: _TageKontext, tag: date, bilanz, abgabe_tag, neg_pre
         # den Eigenverbrauch ohne sie (am Klemmtag des Volleinspeisers 0 statt Cent-Beträgen). Bestand: keine.
         wandlungsverluste_kwh=kanal_tag.wandlungsverluste_kwh if kanal_tag is not None else None,
         verluste_grund=kanal_tag.verluste_grund if kanal_tag is not None else None,
+        # N-770 E3: mit den WP-Stunden des Felds der PV-Anteil der WP des Tages P_d = S_d − N_d zum WP-Tarif — dieselbe
+        # Layer-Formel wie der Monat (`bewerte_eigenverbrauch`); ohne Stunden `None` (bitgleich).
+        **_wp_pv_des_tages(kx, tag, bilanz),
     )
     finanz_zeile = await baue_finanz_zeile(
         kx.db, kx.anlage_id, eingabe, tarif_cache=kx.tarif_cache

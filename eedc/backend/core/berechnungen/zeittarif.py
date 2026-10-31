@@ -189,3 +189,53 @@ def gewichteter_arbeitspreis_cent(
     if summe_menge <= 0:
         return None
     return summe_kosten / summe_menge
+
+
+def zellen_der_slots(slots: Iterable[tuple[date, int, Optional[float]]]) -> list[tuple[int, int, float]]:
+    """Backward-Slots ``(datum, stunde, kWh)`` als Zellen ``(wochentag, uhrstunde des Beginns, Σ kWh)`` — jede Menge auf 0
+    geklemmt wie in :func:`gewichteter_arbeitspreis_cent` (die Zellen-Form, die :func:`gewichteter_arbeitspreis_aus_zellen`
+    liest; ``uhrzeit_des_slots`` ist die eine Umrechnung)."""
+    zellen: dict[tuple[int, int], float] = {}
+    for datum, stunde, menge in slots:
+        if menge is None:
+            continue
+        beginn = uhrzeit_des_slots(datum, stunde)
+        zellen[(beginn.weekday(), beginn.hour)] = zellen.get((beginn.weekday(), beginn.hour), 0.0) + max(0.0, menge)
+    return [(w, h, kwh) for (w, h), kwh in sorted(zellen.items())]
+
+
+def gewichteter_arbeitspreis_netto_aus_zellen(
+    tarif: _Tarif,
+    bezug_zellen: Iterable[tuple[int, int, Optional[float]]],
+    abzug_zellen: Iterable[tuple[int, int, Optional[float]]],
+) -> Optional[float]:
+    """Das Ø eines Zeitfenster-Tarifs über **(Netzbezug − Abzug)** je Zelle ``(wochentag, stunde)`` — N-770/N-771 F6.
+
+    Mit gemessenem Netzbezug zum WP-/Wallbox-Tarif (Abzug = N aus dem Kanal des Felds) rechnet der Versorger den
+    Haushaltstarif nur über den Rest des Netzbezugs ab; dessen HT/NT-Gewicht ist deshalb ``Netzbezug − N``, nicht der
+    ganze Netzbezug:
+
+        Ø = Σ_z (B_z − N_z) × preis_z / Σ_z (B_z − N_z)
+
+    ``B_z`` sind die schon auf 0 geklemmten Bezugs-Zellen (wie :func:`gewichteter_arbeitspreis_aus_zellen`), ``N_z`` die
+    Zellen des Abzugs. ⚠ **Kein Klemmen je Zelle:** läuft eine Zelle ins Negative (zwei Zähler, zeitversetzt gelesen),
+    hielte eine Klemme Σ (B − N) × preis nicht mehr gleich der Summe der Stunden — und die Stunden der Tagessicht rechnen
+    ihren Rest ebenso ungeklemmt (``strompreis_aggregator.slot_kosten_aus_zeilen``). Der Preis hängt nur an der Zelle,
+    deshalb ist das Zellen-Ø gleich dem Stunden-Ø.
+
+    Returns: ct/kWh — ``None``, wenn der Rest ``Σ (B − N) ≤ 0`` ist (nicht gewichtbar; der Aufrufer bleibt beim Ø über
+    den ganzen Netzbezug)."""
+    netto: dict[tuple[int, int], float] = {}
+    for wochentag, stunde, menge in bezug_zellen:
+        if menge is not None:
+            netto[(int(wochentag), int(stunde))] = netto.get((int(wochentag), int(stunde)), 0.0) + max(0.0, menge)
+    for wochentag, stunde, menge in abzug_zellen:
+        if menge is not None:
+            netto[(int(wochentag), int(stunde))] = netto.get((int(wochentag), int(stunde)), 0.0) - menge
+    summe_menge = sum(netto.values())
+    if summe_menge <= 0:
+        return None
+    summe_kosten = sum(
+        kwh * preis_je_uhrzeit(tarif, _MONTAG + timedelta(days=w, hours=h)) for (w, h), kwh in netto.items()
+    )
+    return summe_kosten / summe_menge

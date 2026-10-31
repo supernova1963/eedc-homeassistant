@@ -12,6 +12,9 @@ W = 22 ct, Grundpreise 14 + 10 € ⇒ Stromrechnung 115,69 € (statt 136,17 �
 
 Sprengsätze (im Bericht gefahren): ``komponenten_anteile`` gibt immer ``None`` zurück (N ignoriert) ⇒ rot;
 ``bewerte_eigenverbrauch`` ignoriert den WP-Anteil (P nicht zu W) ⇒ die EV-Proben rot.
+
+Schwesterdateien: test_n770_e3_tag_stunde.py (Tag/Stunde, E3), test_n770_e4_prognose_roi.py,
+test_n771_f11_wallbox_netzladung.py, test_n767_wp_eigener_tarif.py.
 """
 
 from __future__ import annotations
@@ -225,7 +228,8 @@ async def test_monat_klemme_herleitung_sagt_es(db):
 
 
 @pytest.mark.asyncio
-async def test_monat_wallbox_stromrechnung_emob_ersparnis_unveraendert(db):
+async def test_monat_wallbox_stromrechnung_ohne_e_auto_emob_gleich(db):
+    """Ohne E-Auto keine E-Mob-Ersparnis; die Netzladung aus dem Feld (F11, E4) prüft ``test_n771_f11_…``."""
     mit = await get_aktueller_monat(anlage_id=(await _anlage(db, wp=(), wallbox=((200.0, 120.0),), wb_tarif=True,
                                                              wp_tarif=False)).id, jahr=JAHR, monat=1, db=db)
     ohne = await get_aktueller_monat(anlage_id=(await _anlage(db, wp=(), wallbox=((200.0, None),), wb_tarif=True,

@@ -428,6 +428,10 @@ class SlotKosten:
     #: Eigenverbrauchs-Menge bildet weiterhin
     #: ``berechne_verbrauchs_kennzahlen`` (mit Speicher, V2H und Abgabe).
     ev_menge_kwh: float = 0.0
+    #: N-770/N-771 E3: Σ des gemessenen Netzbezugs zum Komponenten-Tarif je Verwendung (``waermepumpe`` · ``wallbox``)
+    #: über die bewerteten Slots des Tages — leer ohne Stunden des Felds. Die Kosten oben tragen diese Mengen schon zum
+    #: Komponenten-Tarif; die EV-Ersparnis des Tages liest ``waermepumpe`` für den PV-Anteil der WP (P_d = S_d − N_d).
+    netzanteil_kwh: Optional[dict] = None
 
     @property
     def abdeckung_menge(self) -> Optional[float]:
@@ -527,7 +531,18 @@ async def lade_slot_kosten_je_tag(
     return slot_kosten_aus_zeilen(gepaart, tarif_fuer=tarif_fuer, abgerechnet_fuer=abgerechnet_fuer)
 
 
-def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None) -> dict[date, SlotKosten]:
+def _netzanteile_der_zeile(zeile, netzanteile, slot_tag: date, slot: int):
+    """N-770/N-771 E3: die Anteile ``[(verwendung, kWh, ct)]`` der Stunde, die die Zeile trägt — über ihren ``start_ts``
+    (``slot_konvention.slot_start_ts`` des Backward-Slots; eine Zeile im Beginn-Raster ist schon auf ihn gelegt)."""
+    from backend.core.berechnungen.slot_konvention import slot_start_ts
+
+    if not netzanteile:
+        return ()
+    ts = slot_start_ts(slot_tag, slot)
+    return netzanteile.get(ts, ()) if ts is not None else ()
+
+
+def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None, netzanteile=None) -> dict[date, SlotKosten]:
     """Die Kaskade P-6 von ``lade_slot_kosten_je_tag`` über schon gepaarte Zeilen ``[(zeile, preis_cent), …]``.
 
     HA-Bauform S4 (E-S4-1, Bauplan §10a (3)): ``tage-werte`` reicht an einem Kanal-Tag die **Mischzeilen** herein
@@ -535,10 +550,19 @@ def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None) -> dic
     zeilengleich). Für den abgeleiteten Slot-Preis (Zeitfenster) gilt die Uhr-Stunde der Zeile: eine Zeile im
     Beginn-Raster wird über ``slot_konvention.bestandszeile_fuer_stundenbeginn`` auf den Backward-Slot gelegt, den
     ``preis_je_slot`` erwartet — die eine Umrechnung, keine zweite.
+
+    ``netzanteile`` (N-770/N-771 E3, Bauplan F5 mit F9 = A): ``{start_ts: [(verwendung, kWh, ct), …]}`` — der gemessene
+    Netzbezug zum WP-/Wallbox-Tarif je Stunde aus dem Kanal des Felds (``energie_profil/tage_netzanteil.py``). Eine
+    Stunde mit Anteil kostet über die Layer-Formel der Stromrechnung (``berechne_netzbezug_kosten`` mit ``anteile``):
+    ``(Bezug − Σ N) × Slot-Preis + Σ N × Komponenten-Preis`` — dieselbe Formel wie der Monat, nur je Stunde. Der Rest
+    wird je Stunde NICHT geklemmt (zwei Zähler, zeitversetzt): sonst wäre Σ Stunden ≠ Monat. Ohne Anteil derselbe
+    Ausdruck wie bisher (bitgleich).
     """
+    from backend.core.berechnungen.netzbezug_kosten import berechne_netzbezug_kosten
     from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
 
     roh: dict[date, list[float]] = {}
+    netz_je_tag: dict[date, dict[str, float]] = {}
     for _z, preis_cent in gepaart:
         datum, stunde = _z.datum, _z.stunde
         netzbezug_kw, pv_kw, einspeisung_kw = _z.netzbezug_kw, _z.pv_kw, _z.einspeisung_kw
@@ -573,7 +597,17 @@ def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None) -> dic
         # Derselbe Slot-Preis, andere Gewichtungsmenge (A-2).
         eintrag[5] += preis * ev_menge / 100.0
         eintrag[6] += ev_menge
-        eintrag[0] += preis * menge / 100.0  # Kosten in €
+        anteile = (_netzanteile_der_zeile(
+            _z, netzanteile, *(bestandszeile_fuer_stundenbeginn(datum, int(stunde)) if ist_beginn_raster(_z)
+                               else (datum, int(stunde))),
+        ) if netzanteile else ())
+        if anteile:
+            eintrag[0] += berechne_netzbezug_kosten(menge, preis, 0.0, [(kwh, cent) for _v, kwh, cent in anteile])
+            _n = netz_je_tag.setdefault(datum, {})
+            for _v, kwh, _cent in anteile:
+                _n[_v] = _n.get(_v, 0.0) + kwh
+        else:
+            eintrag[0] += preis * menge / 100.0  # Kosten in €
         eintrag[1] += menge                  # bewertete Menge
         if gemessen:
             eintrag[2] += menge              # davon gemessen
@@ -614,6 +648,7 @@ def slot_kosten_aus_zeilen(gepaart, *, tarif_fuer, abgerechnet_fuer=None) -> dic
                 round(ev_kosten, 6) * 100.0 / ev_menge_sum if ev_menge_sum > 0 else None
             ),
             ev_menge_kwh=ev_menge_sum,
+            netzanteil_kwh=netz_je_tag.get(datum),
         )
     return je_tag
 
@@ -705,6 +740,47 @@ async def wirksamer_arbeitspreis_cent(
     if cache is not None:
         cache[schluessel] = preis
     return preis
+
+
+async def netzbezug_zellen_fuer_gewicht(db: AsyncSession, anlage_id: int, jahr: int, monat: int) -> list:
+    """Der gemessene Netzbezug des Monats je Zelle ``(wochentag, uhrstunde, kWh)`` — dieselben Quellen und dieselbe
+    Weiche wie ``wirksamer_arbeitspreis_cent`` (Kanäle, die den Monat decken, sonst die Stundenzeilen über
+    ``stunden_der_tage``), als Zellen statt als Slots (``zeittarif.zellen_der_slots``). Leser: die Netto-Gewichtung F6
+    (``wirksamer_arbeitspreis_netto_cent``)."""
+    from backend.core.berechnungen.zeittarif import zellen_der_slots
+    from backend.services.kanal.preis_leser import netzbezug_zellen_des_monats
+
+    zellen = await netzbezug_zellen_des_monats(db, anlage_id, jahr, monat)
+    if zellen is not None:
+        return list(zellen)
+    from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
+    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
+
+    _von, _bis = monats_fenster(jahr, monat)
+    return zellen_der_slots([
+        (*(bestandszeile_fuer_stundenbeginn(z.datum, z.stunde) if ist_beginn_raster(z) else (z.datum, z.stunde)),
+         z.netzbezug_kw)
+        for z in await stunden_der_tage(db, anlage_id, _von, _bis - timedelta(days=1), felder=("netzbezug_kw",))
+    ])
+
+
+async def wirksamer_arbeitspreis_netto_cent(
+    db: AsyncSession, anlage_id: int, jahr: int, monat: int, tarif, abzug_zellen,
+) -> Optional[float]:
+    """N-770/N-771 F6: der Arbeitspreis eines Zeitfenster-Tarifs (HT/NT), gewichtet über **(Netzbezug − Abzug)** statt
+    über den ganzen Netzbezug — der Haushaltspreis des Rests, wenn ein Teil des Netzbezugs gemessen zum WP-/Wallbox-Tarif
+    abgerechnet wird (``abzug_zellen``: der Kanal des Felds, ``kanal/netzanteil_leser.zellen_der_stunden``).
+
+    ``None`` ohne Zeitfenster oder ohne gewichtbaren Rest — der Aufrufer bleibt dann beim Preis über den ganzen
+    Netzbezug (``wirksamer_arbeitspreis_cent``). Dieselbe Formel im Layer (``gewichteter_arbeitspreis_netto_aus_zellen``)."""
+    if tarif is None or not hat_zeitfenster(tarif):
+        return None
+    from backend.core.berechnungen.zeittarif import gewichteter_arbeitspreis_netto_aus_zellen
+
+    p = gewichteter_arbeitspreis_netto_aus_zellen(
+        tarif, await netzbezug_zellen_fuer_gewicht(db, anlage_id, jahr, monat), abzug_zellen,
+    )
+    return None if p is None else round(p, 4)
 
 
 async def ev_preis_zeitfenster_cent(

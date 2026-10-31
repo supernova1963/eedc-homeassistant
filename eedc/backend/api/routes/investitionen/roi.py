@@ -752,6 +752,8 @@ async def get_roi_dashboard(
         investitionen=investitionen,
         jahr=jahr,
         strompreis_cent=strompreis_cent,
+        # N-770 F4: der Preis des gemessenen PV-Anteils der WP (heutiger WP-Tarif, ohne eigenen der allgemeine).
+        wp_tarif_cent=wp_strompreis,
     )
     if "_relevante_kosten" in _out: _relevante_kosten = _out["_relevante_kosten"]
     if "berechnungen" in _out: berechnungen = _out["berechnungen"]

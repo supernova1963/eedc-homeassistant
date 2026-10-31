@@ -68,6 +68,7 @@ async def pv_einsparung_und_speicher_ist(
     investitionen,
     jahr,
     strompreis_cent,
+    wp_tarif_cent=None,
 ):
     """PV-Einsparung einmal berechnen (Jahresdurchschnitt oder Einzeljahr, PVGIS-gewichtet), Speicher-IST-Aggregate,
     effektiver Ladepreis und IST-Wirkungsgrad je Speicher; legt die Summen-Akkumulatoren an.
@@ -87,6 +88,7 @@ async def pv_einsparung_und_speicher_ist(
         investitionen=investitionen,
         jahr=jahr,
         strompreis_cent=strompreis_cent,
+        wp_tarif_cent=wp_tarif_cent,
     )
 
     # ==========================================================================
@@ -209,6 +211,8 @@ class _PvKontext:
     investitionen: Any
     jahr: Optional[int]
     strompreis_cent: Any
+    #: N-770 F4: Arbeitspreis eines EIGENEN WP-Tarifs (``None`` ohne) — Preis des gemessenen PV-Anteils der WP.
+    wp_tarif_cent: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -285,7 +289,7 @@ async def _pv_einsparung_aus_monatsdaten(ctx: _PvKontext) -> tuple[float, float,
     # N-588 (P15): bewertet wird der Eigenverbrauch ohne die bewertbaren Wandlungsverluste — je Monat nach dem
     # Messpunkt-Vertrag entschieden (`verluste_je_monat`, daher hier „gilt" = None), hochgerechnet wie die Mengen.
     eigenverbrauch_ohne_verluste_jahr = eigenverbrauch_ohne_verluste_kwh(werte.eigenverbrauch_jahr, werte.verluste_jahr, None)
-    ev_ersparnis = eigenverbrauch_ohne_verluste_jahr * ctx.strompreis_cent / 100
+    ev_ersparnis, _wp_anteil = _ev_ersparnis_jahr(ctx, eigenverbrauch_ohne_verluste_jahr)
     jahres_einsparung = einspeise_erloes + ev_ersparnis
     # N-647 (ADR-001/DI-2, P15): CO₂ aus der EINEN Konstruktions-Stelle auf dem Eigenverbrauch ohne Wandlungsverluste —
     # dieselbe Menge wie die Ersparnis darüber. Bis 10.10.2026 stand hier `erzeugung_jahr × 0,38`: auch die
@@ -302,9 +306,27 @@ async def _pv_einsparung_aus_monatsdaten(ctx: _PvKontext) -> tuple[float, float,
         'einspeise_erloes_euro': round(einspeise_erloes, 2),
         'ev_ersparnis_euro': round(ev_ersparnis, 2),
         'hinweis': werte.hinweis,
+        # N-770 F4: nur mit gemessenem Netzbezug zum WP-Tarif — die Herleitung nennt den Anteil.
+        **({'ev_wp_pv_anteil_gemessen_prozent': round(_wp_anteil.prozent, 1),
+            'ev_wp_pv_kwh_jahr': round(_wp_anteil.pv_jahr_kwh, 0)} if _wp_anteil is not None else {}),
     }
 
     return jahres_einsparung, co2, detail
+
+
+def _ev_ersparnis_jahr(ctx: _PvKontext, eigenverbrauch_kwh: float, heute: Optional[date] = None):
+    """N-770 F4 (Bauplan §2, Auftrag E4): die Eigenverbrauchs-Ersparnis der ROI-Jahresformel. Mit **gemessenem**
+    PV-Anteil der Wärmepumpe (``monats_fakten.gemessener_wp_pv_anteil``, letzte 12 abgeschlossene Monate) und eigenem
+    WP-Tarif bewertet die eine Layer-Formel ``bewerte_eigenverbrauch`` den PV-Anteil der WP P_jahr zum WP-Tarif, den Rest
+    zum Haushaltspreis; ohne Messung ``EV × Preis / 100`` wie bisher (bitgleich). Rückgabe ``(Ersparnis, Anteil|None)``."""
+    from backend.core.berechnungen import bewerte_eigenverbrauch
+    from backend.services.monats_fakten import gemessener_wp_pv_anteil
+
+    anteil = (gemessener_wp_pv_anteil(ctx.anlage_fakten, heute)
+              if ctx.wp_tarif_cent is not None and ctx.anlage_fakten else None)
+    if anteil is None:
+        return eigenverbrauch_kwh * ctx.strompreis_cent / 100, None
+    return bewerte_eigenverbrauch(eigenverbrauch_kwh, ctx.strompreis_cent, anteil.pv_jahr_kwh, ctx.wp_tarif_cent).euro, anteil
 
 
 def _ev_ohne_bkw(f, investitionen, bkw_invs) -> float:

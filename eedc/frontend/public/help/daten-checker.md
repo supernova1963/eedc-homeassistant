@@ -14,7 +14,7 @@
 4. [Kategorien im Detail](#4-kategorien-im-detail)
    1. [Stammdaten](#41-stammdaten)
    2. [Strompreise](#42-strompreise)
-   2a. [Strompreise – eigener Wärmepumpen-Tarif](#42a-eigener-waermepumpen-tarif)
+   2a. [Strompreise – eigener WP-/Wallbox-Tarif](#42a-eigener-waermepumpen-tarif)
    3. [Investitionen](#43-investitionen)
    4. [Monatsdaten – Vollständigkeit](#44-monatsdaten--vollstaendigkeit)
    5. [Monatsdaten – Plausibilität](#45-monatsdaten--plausibilitaet)
@@ -114,7 +114,7 @@ eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne L
 |---|-----------|-----------|------------------------------|
 | 1 | Stammdaten (§4.1) | greift | greift |
 | 2 | Strompreise (§4.2) | greift | greift |
-| 2a | Strompreise – eigener Wärmepumpen-Tarif (§4.2a) | greift | greift |
+| 2a | Strompreise – eigener WP-/Wallbox-Tarif (§4.2a) | greift | greift |
 | 3 | Investitionen (§4.3) | greift | greift |
 | 4 | Monatsdaten – Vollständigkeit (§4.4) | greift | greift |
 | 5 | Messwerte ohne Monatszeile (§4.4a) | greift | greift |
@@ -210,15 +210,21 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 ---
 
-### 4.2a Strompreise – eigener Wärmepumpen-Tarif <a name="42a-eigener-waermepumpen-tarif"></a>
+### 4.2a Strompreise – eigener WP-/Wallbox-Tarif <a name="42a-eigener-waermepumpen-tarif"></a>
 
-**Was wird geprüft:** Gilt im laufenden Monat ein Tarif mit Verwendung *Wärmepumpe*, dessen Arbeitspreis vom Standard-Tarif abweicht — und hat die Wärmepumpe in den letzten zwölf abgeschlossenen Monaten Strom verbraucht?
+*Die Kategorie heißt jetzt **„Strompreise – eigener WP-/Wallbox-Tarif"** (bisher „… eigener Wärmepumpen-Tarif") und prüft beide Komponenten.*
 
-**Warum das zählt:** Mit dem Wärmepumpen-Tarif rechnet eedc die Stromkosten der Wärmepumpe. Die Eigenverbrauchs-Ersparnis der PV-Anlage bewertet dagegen jede selbst genutzte kWh zum Haushaltstarif — auch den Teil, den die Wärmepumpe aus der eigenen PV bezogen hat, denn wie groß dieser Teil ist, weiß eedc nicht. Bei zwei verschiedenen Preisen steht die Ersparnis deshalb um *PV-Anteil der Wärmepumpe × Tarifdifferenz* verschoben; ob nach oben oder unten, hängt davon ab, wo Netzbezug und Einspeisung gemessen werden ([Berechnungen, „Mit eigenem Wärmepumpen-Tarif"](BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770)).
+**Was wird geprüft:** Gilt im laufenden Monat ein Tarif mit Verwendung *Wärmepumpe* bzw. *Wallbox*, dessen Arbeitspreis vom Standard-Tarif abweicht — und ist in den letzten zwölf abgeschlossenen Monaten der **Netzbezug zum WP-/Wallbox-Tarif** gemessen, plausibel und richtig angeschlossen?
+
+**Warum das zählt:** Mit eigenem Tarif rechnet dein Versorger einen Teil des Netzbezugs zu diesem Tarif ab. Misst du diese Menge (Feld **„Netzbezug zum WP-Tarif"** bzw. **„Netzbezug zum Wallbox-Tarif"**, [Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif)), rechnet eedc Stromrechnung und Eigenverbrauchs-Ersparnis genau. Ohne sie bewertet eedc den PV-Strom der Wärmepumpe zum Haushaltstarif und rechnet ihren bzw. den Netzbezug der Wallbox in der Stromrechnung zum Haushaltstarif — beide Zahlen stehen dann zusammen um bis zu *Gerätemenge × Tarifdifferenz* daneben ([Berechnungen, „Mit eigenem Wärmepumpen-Tarif"](BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770)).
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **Eigener Wärmepumpen-Tarif (x ct gegen y ct): die Ersparnis der letzten 12 Monate kann um bis zu Z € abweichen** | ℹ️ INFO | Z ist die **Obergrenze**: WP-Strom der letzten zwölf abgeschlossenen Monate × Tarifdifferenz — so viel wäre es, wenn die Wärmepumpe nur PV-Strom bezogen hätte. Real ist es der PV-Anteil davon. Verglichen werden die Arbeitspreise des Monats so, wie eedc sie rechnet (mit HT/NT-Fenstern gewichtet). | **Nichts zu tun** — eedc ändert dafür keine Zahl, und es gibt nichts zu reparieren; die Meldung sagt, wo die Rechnung eine Grenze hat. Ohne eigenen Wärmepumpen-Tarif (oder mit gleichem Preis) erscheint sie nicht. |
+| **Eigener Wärmepumpen-Tarif (x ct gegen y ct): Ersparnis und Stromrechnung der letzten 12 Monate können zusammen um bis zu Z € abweichen — ordne «Netzbezug zum WP-Tarif» zu** | ℹ️ INFO | In Monaten mit WP-Strom fehlt das Feld. Z ist die **Obergrenze**: WP-Strom dieser Monate × Tarifdifferenz (Ersparnis und Stromrechnung zusammen). Mit dem Feld in allen Monaten erscheint die Meldung nicht. | Den Netzbezug zum WP-Tarif zuordnen (Datenquellen, Block *Gerät gesamt*: *Zähler vor dem Gerät minus Zähler nach dem Gerät*). |
+| **Eigener Wallbox-Tarif (…) — ordne «Netzbezug zum Wallbox-Tarif» zu** | ℹ️ INFO | Dasselbe an der Wallbox: ohne das Feld rechnet die Stromrechnung die Netzladung zum Haushaltstarif, und die Netzladung selbst ist eedcs Aufteilung (evcc bzw. Tagesquote). | Den Netzbezug zum Wallbox-Tarif zuordnen. |
+| **«Netzbezug zum WP-Tarif» größer als der WP-Strom (Monate)** / **… größer als den Netzbezug der Anlage** | ⚠️ WARNING | Mehr, als das Gerät verbraucht (Toleranz 2 %) bzw. als der Netzbezug trägt, kann nicht zum Komponenten-Tarif abgerechnet sein — eedc begrenzt den Monat (Tooltip „begrenzt"). An der Wallbox gilt die zweite Grenze dem Rest nach der Wärmepumpe; die E-Mob-Zeile behält die Netzladung bis zur Ladung. | Sensor prüfen; häufig ein paralleler Zähler, der nicht im Netzbezug der Anlage steht. |
+| **\[Wallbox\]: Netzladung aus evcc weicht vom Netzbezug zum Wallbox-Tarif ab (Monate)** | ⚠️ WARNING | Die Zeile trägt neben dem Feld einen PV-/Netz-Anteil (z. B. evcc), und beide nennen eine andere Netzladung (Abweichung > 0,5 kWh bzw. 2 %). eedc rechnet mit dem Zähler des Versorgers. | Prüfen, ob beide Sensoren dieselbe Wallbox messen. |
+| **\[Gerät\]: paralleler Zähler — derselbe Sensor in «Stromverbrauch» und «Netzbezug zum WP-Tarif»** | ℹ️ INFO | Ein eigener Zähler parallel zum Hauszähler (das Gerät bezieht keinen PV-Strom). Dann muss der Netzbezug der Anlage ihn enthalten: **Netzbezug der Anlage = Summe beider Zähler**. | Netzbezug der Anlage als Summe beider Zähler zuordnen (Einstellungen → Datenquellen). |
 
 ---
 

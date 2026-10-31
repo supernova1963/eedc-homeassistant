@@ -54,7 +54,12 @@ from backend.core.berechnungen import (
 )
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.services.finanz_zeilen import baue_finanz_zeile
-from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
+from backend.services.monats_fakten import (
+    eigene_tarif_verwendungen,
+    finanz_zeile_eingabe,
+    gemessener_wp_pv_anteil,
+    lade_monats_fakten,
+)
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     bemessungsgrundlage_aus_investitionen,
@@ -293,6 +298,11 @@ async def get_finanz_prognose(
     bisherige_sonstige_ausgaben = _out["bisherige_sonstige_ausgaben"]
     bisherige_sonstige_ertraege = _out["bisherige_sonstige_ertraege"]
     bisherige_ust_eigenverbrauch = _out["bisherige_ust_eigenverbrauch"]
+    # N-770 F4: der gemessene PV-Anteil der WP der letzten 12 abgeschlossenen Monate — nur mit EIGENEM WP-Tarif heute
+    # (sonst ist der WP-Tarif der Haushaltspreis, und der Anteil bewegt keine Zahl).
+    _wp_pv_gemessen = (
+        gemessener_wp_pv_anteil(fakten) if "waermepumpe" in eigene_tarif_verwendungen(tarife) else None
+    )
     # ── monatsprognose (Vorlage 7b: Phase in finanz_prognose.py, Schnittstelle 18 ein / 15 aus) ──
     _out = monatsprognose(
         anlage=anlage,
@@ -313,6 +323,9 @@ async def get_finanz_prognose(
         wp_mit_ersatz=wp_mit_ersatz,
         wp_strom_mit_ersatz_monat_avg=wp_strom_mit_ersatz_monat_avg,
         wp_strom_monat_avg=wp_strom_monat_avg,
+        wp_pv_anteil_gemessen=(
+            (_wp_pv_gemessen.quote, wp_netzbezug_preis) if _wp_pv_gemessen is not None else None
+        ),
     )
     _gepflegter_pv_anteil = _out["_gepflegter_pv_anteil"]
     heute = _out["heute"]
@@ -469,6 +482,7 @@ async def get_finanz_prognose(
         ),
         jahres_einspeise_erloes_euro=round(jahres_einspeise_erloes, 2),
         jahres_ev_ersparnis_euro=round(jahres_ev_ersparnis, 2),
+        ev_wp_pv_anteil_gemessen_prozent=round(_wp_pv_gemessen.prozent, 1) if _wp_pv_gemessen is not None else None,
         ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
         jahres_netto_ertrag_euro=round(jahres_netto_ertrag, 2),
         komponenten_beitraege=komponenten_beitraege,

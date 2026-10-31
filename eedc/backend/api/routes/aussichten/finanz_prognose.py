@@ -40,6 +40,7 @@ def monatsprognose(
     wp_mit_ersatz,
     wp_strom_mit_ersatz_monat_avg,
     wp_strom_monat_avg,
+    wp_pv_anteil_gemessen=None,
 ):
     """Je Prognosemonat PV-Erzeugung, Eigenverbrauch (historische Quote oder Komponentenmodell), Einspeisung, Erlös und
     Ersparnis mit dem heutigen Tarif; die Jahres-Akkumulatoren und die Lesetür `_gepflegter_pv_anteil` (N-277/N-354).
@@ -218,7 +219,7 @@ def monatsprognose(
         einspeise_erloes = einspeise_erloes_euro(
             einspeisung_kwh, None, einspeiseverguetung
         ).erloes_euro
-        ev_ersparnis = eigenverbrauch_kwh * netzbezug_preis / 100
+        ev_ersparnis = _ev_ersparnis_prognose(eigenverbrauch_kwh, netzbezug_preis, wp_verbrauch, wp_pv_anteil_gemessen)
         netto_ertrag = einspeise_erloes + ev_ersparnis
 
         monatswerte.append(FinanzPrognoseMonatSchema(
@@ -248,6 +249,19 @@ def monatsprognose(
         jahres_eauto_pv += eauto_pv
     _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
     return {k: _loc[k] for k in ("_gepflegter_pv_anteil", "heute", "jahres_eauto_pv", "jahres_eigenverbrauch", "jahres_einspeise_erloes", "jahres_einspeisung", "jahres_erzeugung", "jahres_ev_ersparnis", "jahres_speicher_beitrag", "jahres_v2h_beitrag", "jahres_wp_verbrauch", "jahres_wp_verbrauch_mit_ersatz", "monatswerte", "start_jahr", "start_monat",) if k in _loc}
+
+
+def _ev_ersparnis_prognose(eigenverbrauch_kwh, netzbezug_preis, wp_verbrauch_kwh, wp_pv_anteil_gemessen) -> float:
+    """N-770 F4 (Bauplan §2, Auftrag E4): die Eigenverbrauchs-Ersparnis eines Prognosemonats. Mit **gemessenem** PV-Anteil
+    der Wärmepumpe (``wp_pv_anteil_gemessen = (Anteil P/S der letzten 12 abgeschlossenen Monate, WP-Tarif heute)`` aus
+    ``monats_fakten.gemessener_wp_pv_anteil``) bewertet die eine Layer-Formel ``bewerte_eigenverbrauch`` den PV-Anteil des
+    prognostizierten WP-Stroms zum WP-Tarif; ohne Messung ``EV × Preis / 100`` wie bisher (bitgleich)."""
+    if wp_pv_anteil_gemessen is None:
+        return eigenverbrauch_kwh * netzbezug_preis / 100
+    from backend.core.berechnungen import bewerte_eigenverbrauch
+
+    quote, wp_cent = wp_pv_anteil_gemessen
+    return bewerte_eigenverbrauch(eigenverbrauch_kwh, netzbezug_preis, quote * wp_verbrauch_kwh, wp_cent).euro
 
 
 def jahres_alternativkosten(

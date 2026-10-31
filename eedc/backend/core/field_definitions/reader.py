@@ -4,7 +4,7 @@
 # Dateien): Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `__init__.py` exportiert
 # alle Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
-from typing import Optional
+from typing import Mapping, Optional
 from backend.core.field_definitions.auswahl import ist_abgabe_kategorie, ist_zaehler_kategorie
 from backend.core.field_definitions.bedingungen import groesse_gibt_es_am_geraet
 
@@ -142,6 +142,28 @@ def get_speicher_netzladung_kwh(data: dict) -> float:
         return 0.0
     return float(data.get("ladung_netz_kwh") or data.get("speicher_ladung_netz_kwh") or 0)
 
+#: N-771 F11: das Feld «Netzbezug zum Wallbox-Tarif» (an der Wärmepumpe derselbe Name, dort «… zum WP-Tarif»).
+NETZBEZUG_EIGENER_TARIF_FELD = "netzbezug_eigener_tarif_kwh"
+
+
+def netzladung_des_zaehlers(data: Optional[Mapping], total_kwh: float | None = None) -> tuple[float, float] | None:
+    """N-771 F11 (Entscheid Gernot 31.10.2026): ``(pv, netz)`` einer Wallbox-Zeile, die den **Netzbezug zum
+    Wallbox-Tarif** misst — dann IST er die Netzladung der Zeile, auch gegen einen gepflegten evcc-Wert
+    (``ladung_pv_kwh``/``ladung_netz_kwh``): der Zähler des Versorgers misst die Menge, die zum Wallbox-Tarif bezahlt wird.
+    Netz = N auf ``[0, Ladung]`` geklemmt (Trias geschlossen), PV = Ladung − Netz. ``None`` ohne das Feld — dann gilt
+    die bisherige Regel (evcc-Wert bzw. Gesamt − PV). Vorrang der Netzladung für Geld: *Zähler des Versorgers* →
+    *evcc-Regel* → *eedc-Tagesquote* (``emob_ladeanteil``, nur Zeilen ohne Aufteilung).
+
+    ⚠ Die zweite Klemme der Stromrechnung (N_wb ≤ Netzbezug − N_wp, ``klemme_netzanteil``) gilt hier NICHT — die
+    E-Mob-Zeile behält N_wb bis zur Ladung; der Daten-Checker nennt den Monat (Nachtrag Master 31.10.2026)."""
+    if not data or data.get(NETZBEZUG_EIGENER_TARIF_FELD) is None:
+        return None
+    if total_kwh is None:
+        total_kwh = get_eauto_ladung_kwh(data)
+    netz = max(0.0, min(float(data[NETZBEZUG_EIGENER_TARIF_FELD]), float(total_kwh)))
+    return (float(total_kwh) - netz, netz)
+
+
 def get_emob_pv_netz_kwh(data: dict, total_kwh: float | None = None) -> tuple[float, float]:
     """E-Mobilitäts-PV-/Netz-Anteil aus Wallbox-/E-Auto-Monatsdaten.
 
@@ -163,6 +185,9 @@ def get_emob_pv_netz_kwh(data: dict, total_kwh: float | None = None) -> tuple[fl
     """
     if not data:
         return (0.0, 0.0)
+    netz_zaehler = netzladung_des_zaehlers(data, total_kwh)
+    if netz_zaehler is not None:
+        return netz_zaehler
     pv = float(data.get("ladung_pv_kwh") or 0)
     if "ladung_netz_kwh" in data and data["ladung_netz_kwh"] is not None:
         return (pv, float(data["ladung_netz_kwh"]))

@@ -574,6 +574,10 @@ class AktuellerMonatResponse(BaseModel):
     #: bewertet (kWh), und dieser Preis — ``None`` ohne gemessenen Netzbezug zum WP-Tarif.
     ev_ersparnis_wp_tarif_kwh: Optional[float] = None
     ev_ersparnis_wp_tarif_cent: Optional[float] = None
+    #: N-770 F6 (E3): der Haushaltspreis des Rests (Netzbezug − Σ kWh), wenn der Haushaltstarif Zeitfenster (HT/NT) trägt
+    #: und der Kanal des Felds den Monat deckt — dann über den Rest gewichtet statt über den ganzen Netzbezug; ``None``
+    #: sonst (der Rest trägt den Haushaltspreis der Kopfzahl).
+    netzbezug_rest_preis_cent: Optional[float] = None
     # G19-1 K3: jährliche Zähler-/Messstellengebühr vom Tarif — reiner Ausweis
     # in der Jahresaufstellung, NICHT in Kosten/Netto-Ertrag verrechnet.
     zaehlergebuehr_euro_jahr: Optional[float] = None

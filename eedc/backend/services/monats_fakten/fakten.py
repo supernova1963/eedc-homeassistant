@@ -430,6 +430,26 @@ class SonstigesFakten:
     je_geraet: dict[int, SonstigesGeraetFakten] = field(default_factory=dict)
 
 @dataclass(frozen=True)
+class NetzanteilPreise:
+    """N-770/N-771 F6 (Bauplan §2): die Zeitfenster-Preise (HT/NT) eines Monats, wenn der Kanal des Felds «Netzbezug zum
+    WP-/Wallbox-Tarif» den Monat deckt (``monats_fakten/tarif.py::_netzanteil_preise``) — ``komponenten_anteile`` setzt
+    sie ein, sobald es den Anteil der Verwendung ansetzt.
+
+    * ``komponente_cent``: ``((verwendung, ct), …)`` — der Komponenten-Tarif über N gewichtet statt über den Haus-Netzbezug.
+    * ``haushalt_rest_cent``: ``((verwendungen, ct), …)`` — der Haushaltstarif über (Netzbezug − Σ N) der angesetzten
+      Verwendungen gewichtet (je Teilmenge, weil eine Verwendung ohne gemessenes N den Rest nicht kürzt)."""
+
+    komponente_cent: tuple[tuple[str, float], ...] = ()
+    haushalt_rest_cent: tuple[tuple[frozenset, float], ...] = ()
+
+    def komponente(self, verwendung: str) -> Optional[float]:
+        return dict(self.komponente_cent).get(verwendung)
+
+    def haushalt_rest(self, verwendungen) -> Optional[float]:
+        return dict(self.haushalt_rest_cent).get(frozenset(verwendungen))
+
+
+@dataclass(frozen=True)
 class TarifFakten:
     """Die Preise, die für **diesen** Monat galten (ADR-002/**P8**).
 
@@ -466,6 +486,8 @@ class TarifFakten:
     #: rechnet die Stromrechnung einen gemessenen Netzbezug zum Komponenten-Tarif mit dessen Preis (``komponenten_anteile``).
     wp_eigener_tarif: bool = False
     wallbox_eigener_tarif: bool = False
+    #: N-770/N-771 F6: die HT/NT-Preise über N bzw. (Netzbezug − N), wenn der Kanal des Felds den Monat deckt; sonst ``None``.
+    netzanteil_preise: Optional[NetzanteilPreise] = None
     kraftstoffpreis_euro: Optional[float] = None
     gaspreis_cent_kwh: Optional[float] = None
 

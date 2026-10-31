@@ -171,6 +171,9 @@ class FinanzPrognoseResponse(BaseModel):
     # Finanzen
     jahres_einspeise_erloes_euro: float
     jahres_ev_ersparnis_euro: float
+    #: N-770 F4: der gemessene PV-Anteil der WP (P/S, %) der letzten 12 abgeschlossenen Monate, mit dem die Prognose den
+    #: PV-Anteil des WP-Stroms zum WP-Tarif bewertet — ``None`` ohne Messung (dann alles zum Haushaltspreis, wie bisher).
+    ev_wp_pv_anteil_gemessen_prozent: Optional[float] = None
     ust_eigenverbrauch_euro: Optional[float] = None  # USt auf Eigenverbrauch (nur bei Regelbesteuerung)
     jahres_netto_ertrag_euro: float
 

@@ -97,8 +97,16 @@ Datenquellen*, mit eigenem Tarif in der ersten Reihe, sonst unter „Weitere Gr�
 als CSV-Spalte). Ordnest du die Menge zu — in einer Zählerkaskade *Z1-Bezug minus Z2-Bezug* als Template-Sensor —, rechnet
 die Stromrechnung diesen Teil zum Komponenten-Tarif und den Rest zum Haushaltstarif, und die Eigenverbrauchs-Ersparnis
 bewertet den PV-Strom der Wärmepumpe zum WP-Tarif. Die Herleitung der Ø-Preis-Kachel nennt die Teile („117,9 kWh × 30,0
-ct + 256,0 kWh × 22,0 ct (Wärmepumpe)"). Ohne das Feld oder ohne eigenen Tarif ändert sich nichts. Noch nicht in diesem
-Stand: Cockpit → Tag, Prognose und der Hinweis des Daten-Checkers ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif),
+ct + 256,0 kWh × 22,0 ct (Wärmepumpe)"). Ohne das Feld oder ohne eigenen Tarif ändert sich nichts.
+
+Mit einer Langzeitstatistik des Sensors in Home Assistant (bzw. einer eigenen Summe auf MQTT) rechnet auch **Cockpit →
+Tag** jede Stunde mit beiden Tarifen — die Summe der Tage ist der Monat, auch mit HT/NT-Tarif. Der **laufende Monat**
+rechnet schon vor dem Monatsabschluss mit dem Feld. An der **Wallbox** ist der gemessene Wert jetzt deine Netzladung —
+auch wenn evcc einen anderen Anteil meldet; die E-Mob-Ersparnis rechnet damit. **Prognose und Wirtschaftlichkeit**
+nehmen den gemessenen PV-Anteil deiner Wärmepumpe der letzten zwölf Monate. Der **Daten-Checker** (jetzt „Strompreise –
+eigener WP-/Wallbox-Tarif") rät dir, das Feld zuzuordnen, wo es fehlt, und warnt bei unplausiblen Werten, bei einer
+Abweichung zu evcc und bei einem parallelen Zähler, der im Netzbezug der Anlage fehlt. Im Monat der Zuordnung rechnet eedc
+noch ohne das Feld — sein Wert deckt dort nur einen Teil des Monats ([Wärme & Klima, Schritt 6b](HANDBUCH_WAERME_KLIMA.md#schritt-6b--netzbezug-zum-wp-tarif-optional-nur-mit-eigenem-wärmepumpen-tarif),
 [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)).
 
 ## v4.1.11 — 27. Oktober 2026

@@ -805,7 +805,7 @@ async def _berechne_monat(
     # N-770 E2: die Stromrechnung mit dem Monatstarif der Fakten (eine Bildungsstelle, `stromrechnung_euro`) und den
     # gemessenen Anteilen zum WP-/Wallbox-Tarif (`komponenten_anteile`); die EV-Ersparnis bewertet den PV-Anteil der WP
     # zum WP-Tarif.
-    _anteile = komponenten_anteile_des_monats(monats_fakt, _wp_kanal, netzbezug)
+    _anteile = await komponenten_anteile_des_monats(db, anlage_id, jahr, monat, monats_fakt, _wp_kanal, netzbezug)
     _out = await finanzen_des_monats(_zt_cache=_zt_cache, anlage_id=anlage_id, db=db, eigenverbrauch=eigenverbrauch_ohne_verluste, einspeisung=einspeisung, jahr=jahr, monat=monat, netzbezug=netzbezug,
                                      tarif_fakten=monats_fakt.tarif if monats_fakt is not None else None, anteile=_anteile)
     allgemein_tarif = _out["allgemein_tarif"]

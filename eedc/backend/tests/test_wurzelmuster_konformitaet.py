@@ -2203,6 +2203,10 @@ _P10_SCHICHT = "backend/services/monats_fakten/"   # seit Vorlage 10 (19.09.2026
 P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Die P7-Auflösung selbst — die Schicht ruft sie, sie ist ihr Unterbau.
     "backend/services/pv_monatswerte.py::lade_pv_je_monat",
+    # N-771 F11 (E4, 31.10.2026): der Checker vergleicht in den ROHEN Wallbox-Zeilen den gepflegten evcc-Anteil mit dem
+    # gemessenen Netzbezug zum Wallbox-Tarif — die Schicht gibt nur das Ergebnis (der Zähler gewinnt), nicht den
+    # überstimmten evcc-Wert; dieselbe Begründung wie `daten_checker/emob.py::_check_emob_pv_ueber_gesamt` (N-201).
+    "backend/services/daten_checker/wp_tarif.py::_evcc_weicht_ab",
     # Stufe 2 derselben Auflösung (N-266): die Monatswerte der Balkonkraftwerke,
     # unter denen `pv-module` hängen. Sie werden hier ausdrücklich **nicht**
     # summiert, sondern je Elternteil vorgehalten, damit `lade_pv_je_monat`

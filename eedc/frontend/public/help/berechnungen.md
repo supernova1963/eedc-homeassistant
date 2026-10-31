@@ -432,10 +432,42 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > jede Sicht ruft `monats_fakten.stromrechnung_euro` — *Cockpit → Monat* (samt Vorjahr und Jahr, mit dem Monatstarif
 > der Fakten), Übersicht, Komponenten-Zeitreihe, Auswertungen → Tabelle, `GET /monatsdaten/{id}`. Bis dahin bildeten
 > fünf Stellen die Formel selbst, *Cockpit → Monat* mit eigener Preisauflösung (der Umzug änderte keine Zahl, Golden
-> Master 0 Diff). Benannte Grenzen: der **laufende Monat ohne Abschluss** (kein Monats-Fakt) rechnet ohne Anteile;
-> **Tag und Stunde** (Slot-Kosten, HT/NT-Gewichtung) folgen in einer eigenen Etappe — bis dahin trägt die Summe der Tage
-> den ganzen Netzbezug zum Haushaltspreis; `GET /monatsdaten/{id}` behält seinen eigenen Haushaltspreis (gepflegt →
-> Stamm, ohne die gemessene Stufe — vorbestehend).
+> Master 0 Diff). Der **laufende Monat ohne Abschluss** (kein Monats-Fakt) nimmt N aus der Kanal-Zeile der WP-Gruppe
+> (der Kanal des Felds zählt zu ihrem Kanal-Bedarf) und den Tarif über `tarif_des_monats` (seit E3, 31.10.2026); die
+> Wallbox hat dort noch keinen Anteil (benannt — die Ladung aller Wallboxen trägt erst der Fakt). `GET /monatsdaten/{id}`
+> behält seinen eigenen Haushaltspreis (gepflegt → Stamm, ohne die gemessene Stufe — vorbestehend).
+
+> **Tag und Stunde mit Netzbezug zum Komponenten-Tarif (N-770/N-771 E3, 31.10.2026; Bauplan F5, F9 = A, F6, F10).**
+> Stündlich gibt es N **nur im Kanal des Felds** (`inv:<id>:netzbezug_eigener_tarif_kwh`, Spiegel der HA-Langzeitstatistik
+> bzw. eigene Summe auf MQTT; `services/kanal/netzanteil_leser.py`) — die Stundentabelle trägt das Feld nicht. Setzt der
+> Monat den Anteil an und decken die Kanäle aller Geräte der Verwendung den Kalendermonat voll, rechnet jede Stunde
+> `(Netzbezug_h − N_h) × Slot-Preis_h + N_h × Komponenten-Preis_h` (`strompreis_aggregator.slot_kosten_aus_zeilen` mit
+> `netzanteile`, Layer `berechne_netzbezug_kosten` je Stunde; der Rest wird je Stunde nicht geklemmt, damit Σ Stunden =
+> Monat) und die EV-Ersparnis des Tages den PV-Anteil der WP P_d = WP-Strom_d − N_d zum WP-Tarif des Monats
+> (`bewerte_eigenverbrauch`, `energie_profil/tage_netzanteil.py`). Hat der Monat geklemmt (F7), tragen die Stunden die
+> Klemme im Verhältnis *angesetzt ÷ gemessen*. Damit gilt **Σ Tage = Monat** für Stromrechnung und EV-Ersparnis, auch mit
+> HT/NT (Probe `test_n770_e3_tag_stunde.py`). Nichts wird geschrieben.
+> **HT/NT (F6):** trägt der Haushaltstarif Zeitfenster, gewichtet sein Ø im Monat über **(Netzbezug − N)** statt über den
+> ganzen Netzbezug (`gewichteter_arbeitspreis_netto_aus_zellen`, Antwortfeld `netzbezug_rest_preis_cent`; die Kopfzahl
+> der Ø-Preis-Kachel bleibt der Haushaltspreis über den ganzen Netzbezug); ein Komponenten-Tarif mit Zeitfenstern über
+> **N** statt über den Haus-Netzbezug (`TarifFakten.netzanteil_preise`, `NetzanteilZumTarif.zeitfenster`) — beides nur,
+> wenn der Kanal den Monat deckt, sonst wie bisher. Die WP-Kosten (S × W) und der Preis des PV-Anteils der WP bleiben
+> der Preis des Geräteverbrauchs.
+> **Zuordnungsmonat (F10):** beginnt der Kanal des Felds im Monat (er hat dort keinen Stand vor dem Monatsbeginn), ist
+> der Monatswert eine Teilmenge ⇒ der Monat gilt als **nicht gemessen** (Monat und Tage ohne Anteil;
+> `monats_fakten/laden.py::_zuordnungsmonate_nicht_gemessen`). ⚑ Benannte Grenze: ein **von Hand** eingetragener
+> Monatswert im Zuordnungsmonat gilt nicht — der Monatsabschluss stempelt jedes gesendete Feld `manual:form`, den
+> getippten Wert und den übernommenen HA-Vorschlag gleich; die Herkunft unterscheidet sie nicht.
+> **Benannte Grenze (F9):** ein Netzbezug zum WP-/Wallbox-Tarif, der nur als **Monatswert** vorliegt (Hand, CSV, Monate
+> ohne Kanal), teilt den Tag nicht — der Monat rechnet mit ihm (E2), die Tage tragen den ganzen Netzbezug zum
+> Haushaltspreis, Σ Tage ≠ Monat.
+> **Prognose und ROI-Jahresformel (F4, E4):** mit dem **gemessenen** PV-Anteil der WP P/S der letzten 12 abgeschlossenen
+> Monate (`monats_fakten.gemessener_wp_pv_anteil`): die Monatsprognose bewertet Anteil × prognostizierten WP-Strom zum
+> heutigen WP-Tarif (`finanz_prognose._ev_ersparnis_prognose`, Antwortfeld `ev_wp_pv_anteil_gemessen_prozent`), die
+> ROI-Jahresformel der PV den Jahreswert P_jahr (`roi_pv._ev_ersparnis_jahr`, Detail `ev_wp_pv_anteil_gemessen_prozent`).
+> Ohne Messung wie bisher. Nicht betroffen: die BKW-Pauschale (`roi.py::_bkw_pauschal_beitrag` — eine angenommene
+> Eigenverbrauchsquote des Balkonkraftwerks, kein WP-Anteil) und die E-Auto-Prognose (Netzladung zum heutigen
+> allgemeinen Tarif, vorbestehend).
 
 > **Zwei Kostenzahlen, eine Rechnung — `netzbezug_kosten_euro` vs.
 > `netzbezug_arbeitspreis_kosten_euro`:** verrechnet wird immer die **Gesamtsumme
@@ -921,7 +953,21 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 > 155,70 € in 15 Monaten). eedcs Netzladung ist eine **Zuteilung** (N-569, in vier Monaten über dem ganzen Netzbezug),
 > keine Messung der abgerechneten Menge. Deshalb dieselbe Messgröße wie an der Wärmepumpe: das optionale Feld
 > **„Netzbezug zum Wallbox-Tarif"** an der Wallbox — gemessen, rechnet die Stromrechnung diese Menge zum Wallbox-Tarif
-> (`wallbox_preis_effektiv_cent`, §3.1, Kasten). Die E-Mob-Ersparnis selbst bleibt unverändert (Bauplan F8).
+> (`wallbox_preis_effektiv_cent`, §3.1, Kasten).
+> **Die Netzladung aus dem Zähler (F11, E4, 31.10.2026):** wo das Feld an einer Wallbox-Zeile steht, **ist** N_wb ihre
+> Netzladung — auch gegen einen gepflegten evcc-Wert; PV-Ladung = Ladung − N_wb (Trias geschlossen), N_wb auf
+> `[0, Ladung]` geklemmt (`core/field_definitions/reader.py::netzladung_des_zaehlers`, gelesen von
+> `get_emob_pv_netz_kwh` und damit vom Pool der Monats-Fakten, T-Konto, Wallbox-Hub, HA-Export E-Mob; die Tagesquote
+> überschreibt eine solche Zeile nicht). Vorrang der Netzladung für Geld: *Zähler des Versorgers* → *evcc-Regel* →
+> *eedc-Tagesquote*. E-Mob-Ersparnis und Heimladekosten lesen diese Netzladung; die Herleitung der Wallbox-Zeile und
+> eines E-Autos, dessen Heimladung aus der Wallbox kommt, nennt «Netzladung: Zähler des Versorgers». Wirkung: Netz und PV
+> der Wallbox-Zeile tauschen (N_wb − Netz_vorher) kWh; die E-Mob-Ersparnis bewegt sich um den Teil davon, der beim Auto
+> ankommt, × (Preis der Eigenverbrauchs-Ersparnis − Wallbox-Tarif). ⚑ Ein E-Auto **mit eigener Messung** der Heimladung
+> behält sie (Regel 2 Schritt 1, N-555) — der Zähler teilt dann nur den Rest der Wallbox; neben einer Wallbox, die das
+> Feld trägt, wird die Wallbox-Zeile zudem als PV-Ladung-Zeile im T-Konto sichtbar (Teil der Eigenverbrauchs-Ersparnis,
+> kein Posten). Gemessen an der Kopie r28 (Satz `wbf`): die Autos messen selbst, die E-Mob-Ersparnis bleibt gleich. Die zweite Klemme der Stromrechnung (N_wb ≤
+> Netzbezug − N_WP) gilt nur dort; die E-Mob-Zeile behält N_wb bis zur Ladung (Daten-Checker nennt den Monat). Der
+> Daten-Checker warnt, wenn ein gepflegter evcc-Anteil und N_wb abweichen.
 
 **Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, seit N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
@@ -1928,12 +1974,14 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > dem eedc Netzbezug und Einspeisung liest (Netzanschluss), stehen die Ersparnis um P·(H−W) und die Stromrechnung um
 > N·(H−W) zu hoch, zusammen höchstens S·|H−W|; liest eedc am Hauszähler einer Kaskade, steckt der PV-Anteil der
 > Wärmepumpe in der „Einspeisung". Eine Zuteilung (etwa WP-Strom × Eigenverbrauchsquote) wäre erfundene Genauigkeit —
-> deshalb die Messgröße statt einer Schätzung (Gernot 30.10.2026). Der **Daten-Checker** nennt die Grenze mit der
-> Obergrenze für die letzten zwölf abgeschlossenen Monate (Kategorie *Strompreise – eigener Wärmepumpen-Tarif*); sein Text
-> bekommt die Stromrechnung und den Rat «Netzbezug zum WP-Tarif zuordnen» in einer eigenen Etappe (E4). Ebenso noch offen:
-> Tag/Stunde (E3) sowie Prognose und ROI-Jahresformel (E4) rechnen weiter mit H. Eine **Wallbox** mit eigenem Tarif hat
-> dieselbe Messgröße für die Stromrechnung („Netzbezug zum Wallbox-Tarif", N-771, §3.1); ihre PV-Ladung bewertet die
-> E-Mob-Ersparnis schon zum Preis der Eigenverbrauchs-Ersparnis (N-672).
+> deshalb die Messgröße statt einer Schätzung (Gernot 30.10.2026). Der **Daten-Checker** (Kategorie *Strompreise – eigener
+> WP-/Wallbox-Tarif*, seit E4 31.10.2026) nennt Monate ohne das Feld mit der Obergrenze für Ersparnis UND Stromrechnung
+> zusammen (S × |H − W| der ungemessenen Monate der letzten zwölf) und dem Rat «Netzbezug zum WP-Tarif zuordnen»; still,
+> wenn jeder Monat mit WP-Strom gemessen ist. Dazu WARNING bei N > S (2 %) bzw. N > Netzbezug (geklemmte Monate) und INFO,
+> wenn derselbe Sensor in «Stromverbrauch» und im Feld steht (paralleler Zähler: der Netzbezug der Anlage muss ihn
+> enthalten, Summe beider Zähler). Tag/Stunde (E3) und Prognose/ROI (E4) folgen der Messung (§3.1). Eine **Wallbox** mit
+> eigenem Tarif hat dieselbe Messgröße („Netzbezug zum Wallbox-Tarif", N-771); sie ist dort zugleich die Netzladung
+> (F11, E-Mob-Abschnitt).
 
 > **Wirkungsgrad der Altanlage (η_alt):** `Gesamtwärmebedarf` ist **abgegebene Wärme**, nicht Brennstoff — das Eingabefeld heißt „Heizwärmebedarf (kWh/Jahr) — aus Energieausweis", und derselbe Wert wird oben durch die JAZ geteilt (JAZ = Wärme/Strom). Ein Kessel muss dafür `Wärme / η` verfeuern; `Alter_Preis` ist der Preis je kWh **Brennstoff** (so steht er auf der Rechnung). Die Umrechnung macht der Layer-SoT `gas_kosten_altanlage`, die η-Wahl der Resolver `alter_wirkungsgrad` — beide in `core/berechnungen/alternativkosten.py`.
 >

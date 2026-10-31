@@ -63,8 +63,9 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   emob_zustand_wert: 'E-Mobilität – unbekannter Zustand',
   // P-433-2b K2a (K2-10): die Steuerung meldet ein Fahrzeug, dessen Kennung kein E-Auto trägt.
   emob_kennung_unbekannt: 'E-Mobilität – Fahrzeug der Steuerung unbekannt',
-  // N-767: eigener Wärmepumpen-Tarif — der PV-Anteil der Wärmepumpe wird zum Haushaltstarif bewertet.
-  wp_eigener_tarif: 'Strompreise – eigener Wärmepumpen-Tarif',
+  // N-767/N-770/N-771: eigener WP-/Wallbox-Tarif — Netzbezug zum Komponenten-Tarif fehlt, geklemmt, evcc weicht ab,
+  // paralleler Zähler (eine Kategorie für beide Komponenten: dieselbe Ursache, dasselbe Feld).
+  wp_eigener_tarif: 'Strompreise – eigener WP-/Wallbox-Tarif',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   // N-588 (F5): Anlagenzähler gegen String-Zähler — ob eedc die Wandlungsverluste bewerten darf, und warum nicht.
   messpunkt: 'PV – Messpunkt (Anlagenzähler und Strings)',

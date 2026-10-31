@@ -767,7 +767,9 @@ beide Tarife genau:
 Die WP-Kosten und die WP-Ersparnis bleiben, wie sie sind (Stromverbrauch × WP-Tarif). Ohne das Feld bleibt alles wie
 bisher; der Daten-Checker nennt dann die mögliche Abweichung.
 
-**Welcher Sensor gehört hinein?** Das hängt davon ab, wie dein Zähler aufgebaut ist:
+**Welcher Sensor gehört hinein?** Die Regel für jeden Aufbau: **Zähler vor dem Gerät minus Zähler nach dem Gerät** — der
+Bezug, der den Zähler vor der Wärmepumpe passiert, aber nicht mehr den Zähler dahinter. So passt sie auch zu
+Doppelkaskaden in beliebiger Reihenfolge (etwa Wärmepumpe und Wallbox hintereinander, jede mit eigenem Tarif).
 
 - **Zählerkaskade** (Z1 am Netzanschluss für alles, Z2 dahinter für Haus, Wallbox und PV, die Wärmepumpe zwischen Z1
   und Z2): Netzbezug und Einspeisung kommen von **Z1**. Der Netzbezug zum WP-Tarif ist **Z1-Bezug minus Z2-Bezug** — als
@@ -775,18 +777,37 @@ bisher; der Daten-Checker nennt dann die mögliche Abweichung.
   zeitversetzt, die Differenz kann kurz kleiner werden, und `total_increasing` läse jede solche Abnahme als Zähler-Reset.
   Der **Stromverbrauch** der Wärmepumpe ist in dieser Kaskade Z1 minus Z2 *saldiert* (Bezug minus Einspeisung beider
   Zähler) — ein eigener Template-Sensor.
-- **Eigener WP-Zähler, der nicht hinter der PV hängt** (die Wärmepumpe bekommt nie PV-Strom): derselbe Sensor wie
-  „Stromverbrauch" — dann ist der ganze WP-Strom Netzbezug zum WP-Tarif.
+- **Eigener WP-Zähler parallel zum Hauszähler** (die Wärmepumpe hängt nicht hinter der PV und bekommt nie PV-Strom):
+  derselbe Sensor wie „Stromverbrauch" — dann ist der ganze WP-Strom Netzbezug zum WP-Tarif. ⚠ **Dann muss der
+  Netzbezug der Anlage diesen Zähler enthalten: Netzbezug der Anlage = Summe beider Zähler** (Hauszähler + WP-Zähler,
+  z. B. ein Template-Sensor). Liest eedc nur den Hauszähler, fehlt der WP-Bezug im Netzbezug, und eedc begrenzt den
+  Anteil zum WP-Tarif auf den Netzbezug. Der Daten-Checker erkennt den parallelen Zähler am selben Sensor und sagt es.
+- **eedc braucht Z1.** Wer nur Z2 (den Hauszähler hinter der Wärmepumpe) liest, kann das Feld nicht bilden — dann fehlt
+  Netzbezug und Einspeisung der Wärmepumpe schon in der Bilanz (die Grenze seit N-767).
 
 Das Feld steht im Block **Gerät gesamt**, sobald ein eigener WP-Tarif gilt; sonst unter **„Weitere Größen erfassen"**. Im
 Monatsabschluss steht es ebenfalls nur mit eigenem Tarif (oder wenn schon ein Wert da ist). **Mehrere Wärmepumpen:** der
 Tarif gilt allen; trage den Wert an jeder ein, die im Monat Strom verbraucht hat — fehlt er an einer, rechnet eedc den
 Monat ohne Messung. Ist die Menge größer als der Stromverbrauch der Wärmepumpe oder als dein ganzer Netzbezug, rechnet
-eedc mit dem kleineren Wert und sagt es im Tooltip der Ø-Preis-Kachel („begrenzt").
+eedc mit dem kleineren Wert und sagt es im Tooltip der Ø-Preis-Kachel („begrenzt"); der Daten-Checker nennt den Monat.
 
-> **Benannte Grenzen (noch nicht in diesem Stand):** *Cockpit → Tag* und die Tageswerte rechnen die Stromrechnung noch
-> ohne den WP-Anteil (die Summe der Tage liegt dann über dem Monat), ebenso die Prognose und die ROI-Jahresformel. Der
-> **laufende Monat ohne Monatsabschluss** rechnet noch ohne das Feld; mit dem Abschluss gilt es.
+**Tag, Stunde, HT/NT.** Hat der Sensor eine Langzeitstatistik in Home Assistant (bzw. auf MQTT eine eigene Summe), kennt
+eedc den Netzbezug zum WP-Tarif je Stunde: *Cockpit → Tag* und die Tageswerte rechnen dann jede Stunde mit dem Rest zum
+Haushaltstarif und dem Anteil zum WP-Tarif, die Summe der Tage ist der Monat. Trägt dein Haushalts- oder WP-Tarif
+Zeitfenster (HT/NT), gewichtet eedc sie mit genau diesen Stunden. Liegt der Wert nur als **Monatswert** vor (von Hand,
+CSV, Monate vor dem Sensor), rechnet der Monat genau, die Tage aber ohne die Aufteilung — die Summe der Tage liegt dann
+über dem Monat.
+
+**Der Monat der Zuordnung.** Weil das Feld zu den Zählern zählt, die eedc für die Stundenwerte der Wärmepumpe voraussetzt,
+liest eedc im Monat der Zuordnung und in Monaten vor dem Sensor die ganze Wärmepumpe aus dem Bestand (Monatsabschluss bzw.
+Tageswerte) — die bestehende Regel für jeden neuen WP-Zähler. Im **Monat der Zuordnung** selbst deckt der Sensor nur einen
+Teil des Monats; eedc rechnet diesen Monat deshalb **ohne** den Netzbezug zum WP-Tarif (sonst wäre der PV-Anteil der
+Wärmepumpe zu groß). ⚑ Das gilt auch für einen Wert, den du dort von Hand einträgst — eedc kann ihn im Monatsabschluss
+nicht von einem übernommenen Vorschlag unterscheiden. Ab dem ersten vollen Monat gilt das Feld. Der **laufende Monat**
+ohne Monatsabschluss rechnet mit dem Feld, sobald der Sensor den Monat deckt.
+
+**Prognose und Wirtschaftlichkeit** (Aussichten, ROI) rechnen mit dem **gemessenen** PV-Anteil deiner Wärmepumpe der
+letzten zwölf abgeschlossenen Monate; ohne Messung wie bisher.
 
 ### Schritt 7 — Den Daten-Checker fragen
 

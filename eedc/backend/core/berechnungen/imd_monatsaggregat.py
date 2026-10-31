@@ -60,6 +60,7 @@ from backend.core.field_definitions import (
     ist_zaehler_kategorie,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,  # noqa: F401  (Re-Export fuer Altaufrufer)
+    netzladung_des_zaehlers,
     wp_strom_aufteilung,
 )
 from backend.core.investition_parameter import abgrenzung_stoerung
@@ -501,7 +502,9 @@ def imd_typ_beitrag(
         return ImdTypBeitrag(
             typ=typ,
             wallbox_ladung=_f(data, "ladung_kwh"),
-            wallbox_ladung_pv=_f(data, "ladung_pv_kwh"),
+            # N-771 F11: mit gemessenem Netzbezug zum Wallbox-Tarif ist die PV-Ladung Ladung − N (der Zähler schlägt evcc).
+            wallbox_ladung_pv=(_zaehler[0] if (_zaehler := netzladung_des_zaehlers(data, _f(data, "ladung_kwh")))
+                               is not None else _f(data, "ladung_pv_kwh")),
             wallbox_netz_eigener_tarif=_f(data, NETZBEZUG_EIGENER_TARIF_FELD),
             wallbox_netz_eigener_tarif_gemessen=_hat(data, NETZBEZUG_EIGENER_TARIF_FELD),
         )

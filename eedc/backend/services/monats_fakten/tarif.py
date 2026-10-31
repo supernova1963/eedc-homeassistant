@@ -30,7 +30,7 @@ from backend.core.berechnungen.dienstliche_ladekosten import (
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.core.berechnungen.netzbezug_kosten import berechne_netzbezug_kosten, klemme_netzanteil
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.monats_fakten.fakten import MonatsSchluessel, TarifFakten
+from backend.services.monats_fakten.fakten import MonatsSchluessel, NetzanteilPreise, TarifFakten
 
 
 # ⛔ Der Zeittarif-Cache reist NICHT im `tarif_cache` mit — erster Entwurf am
@@ -132,6 +132,12 @@ async def _komponenten_preis(
     keine groessere Genauigkeit, sondern eine erfundene. Wer einen
     Zeittarif-Waermepumpentarif genauer abrechnen will, traegt den Monats-Ø ein;
     dieses Feld schlaegt den Wert hier ohnehin.
+
+    ⭐ **N-770/N-771 F6 (31.10.2026): wo der Netzbezug zum WP-/Wallbox-Tarif gemessen ist, gilt die Festlegung nicht
+    mehr** — dann IST der Netzbezug des Geräts bekannt (Zähler des Versorgers, Kanal des Felds). Deckt sein Kanal den
+    Monat, gewichtet ``_netzanteil_preise`` den Komponenten-Tarif über N, und ``komponenten_anteile`` setzt diesen Preis
+    für den gemessenen Anteil der Stromrechnung ein. Dieser Wert hier bleibt der Preis des Geräteverbrauchs (WP-Kosten
+    S × W, unverändert) und der Rückfall ohne Kanal.
     """
     tarif = resolve_tarif_for_komponente(tarife, komponente)
     if tarif is None:
@@ -139,6 +145,80 @@ async def _komponenten_preis(
     return await wirksamer_arbeitspreis_cent(
         db, anlage_id, schluessel[0], schluessel[1], tarif, cache=zeittarif_cache
     )
+
+async def mit_netzanteil_preisen(db: AsyncSession, anlage_id: int, fakt, tarife: Mapping[str, object]):
+    """N-770/N-771 F6: der Fakt mit ``TarifFakten.netzanteil_preise`` — nur, wenn der Monat den Netzbezug zum
+    WP-/Wallbox-Tarif misst (eigener Tarif UND gemessenes N), sonst derselbe Fakt ohne jede Abfrage (ohne Feld bitgleich,
+    auch in der SQL-Folge). ``tarife`` sind die Tarife zum Stichtag des Monats (``lade_tarife_fuer_anlage``)."""
+    import dataclasses
+
+    t = fakt.tarif
+    gemessen = [v for v, eigen, n in (
+        ("waermepumpe", t.wp_eigener_tarif, fakt.wp.netz_eigener_tarif_kwh),
+        ("wallbox", t.wallbox_eigener_tarif, fakt.emob.wallbox_netz_eigener_tarif_kwh),
+    ) if eigen and n is not None]
+    if not gemessen:
+        return fakt
+    f6 = await netzanteil_preise_des_monats(db, anlage_id, (fakt.jahr, fakt.monat), tarife, t, gemessen)
+    return fakt if f6 is None else dataclasses.replace(fakt, tarif=dataclasses.replace(t, netzanteil_preise=f6))
+
+
+async def netzanteil_preise_des_monats(
+    db: AsyncSession, anlage_id: int, schluessel: MonatsSchluessel, tarife: Mapping[str, object], tarif: TarifFakten,
+    verwendungen,
+) -> Optional[NetzanteilPreise]:
+    """N-770/N-771 F6 (Bauplan §2, Auftrag E3): die Zeitfenster-Preise (HT/NT) des Monats mit dem Kanal des Felds
+    «Netzbezug zum WP-/Wallbox-Tarif» als Gewicht — **nur** für die ``verwendungen``, deren N der Monat misst, wenn ein
+    Zeitfenster im Spiel ist und der Kanal den Monat deckt (``kanal/netzanteil_leser.netzanteil_des_monats``); sonst
+    ``None`` und keine Abfrage. Leser: ``mit_netzanteil_preisen`` (Monats-Fakten) und *Cockpit → Monat* ohne Fakt.
+
+    * Der **Komponenten-Tarif** mit Zeitfenstern wird über N gewichtet statt über den Netzbezug des Hauses (der Grund,
+      warum ``_komponenten_preis`` den Haus-Netzbezug nimmt — «eedc misst je Gerät den Verbrauch, nicht den Netzbezug» —
+      entfällt, wo N gemessen ist). Für die Wallbox nur, wenn ihr Preis aus dem Tarif kommt (nicht der gepflegte oder
+      gemessene Ø des ganzen Zählers, der ihn schlägt).
+    * Der **Haushaltstarif** mit Zeitfenstern (Herkunft ``zeitfenster``) wird über (Netzbezug − Σ N) gewichtet — je
+      Teilmenge der gedeckten Verwendungen (``strompreis_aggregator.wirksamer_arbeitspreis_netto_cent``).
+    Welche Verwendung der Monat tatsächlich ansetzt (gemessen, F3, Klemme), entscheidet ``komponenten_anteile``."""
+    from backend.core.berechnungen.zeittarif import gewichteter_arbeitspreis_aus_zellen, hat_zeitfenster
+    from backend.services.strompreis_aggregator import PREIS_HERKUNFT_ZEITFENSTER, wirksamer_arbeitspreis_netto_cent
+
+    eigene = [v for v in verwendungen if v in eigene_tarif_verwendungen(tarife)]
+    if not eigene:
+        return None
+    tarif_je = {v: resolve_tarif_for_komponente(tarife, v) for v in eigene}
+    # Die Wallbox nur, wenn ihr Preis aus dem Tarif kommt — schlägt der gepflegte bzw. gemessene Ø des ganzen Zählers ihn
+    # (`wallbox_preis_effektiv_cent` ≠ `wallbox_preis_cent`), gibt es kein Zeitfenster zu gewichten.
+    komp_zf = {v for v in eigene if hat_zeitfenster(tarif_je[v])
+               and (v != "wallbox" or tarif.wallbox_preis_effektiv_cent == tarif.wallbox_preis_cent)}
+    haus_zf = tarif.netzbezug_preis_herkunft == PREIS_HERKUNFT_ZEITFENSTER
+    if not komp_zf and not haus_zf:
+        return None
+    from backend.services.kanal.netzanteil_leser import netzanteil_des_monats, zellen_der_stunden
+
+    netz = await netzanteil_des_monats(db, anlage_id, *schluessel)
+    gedeckt = [v for v in KOMPONENTEN_VERWENDUNGEN if v in eigene and v in netz]
+    if not gedeckt:
+        return None
+    zellen = {v: zellen_der_stunden(netz[v].werte) for v in gedeckt}
+    komponente = []
+    for v in gedeckt:
+        p = gewichteter_arbeitspreis_aus_zellen(tarif_je[v], zellen[v]) if v in komp_zf else None
+        if p is not None:
+            komponente.append((v, round(p, 4)))
+    haushalt = []
+    if haus_zf:
+        teilmengen = [frozenset({v}) for v in gedeckt] + ([frozenset(gedeckt)] if len(gedeckt) > 1 else [])
+        for menge in teilmengen:
+            p = await wirksamer_arbeitspreis_netto_cent(
+                db, anlage_id, schluessel[0], schluessel[1], tarife.get("allgemein"),
+                [z for v in sorted(menge) for z in zellen[v]],
+            )
+            if p is not None:
+                haushalt.append((menge, p))
+    if not komponente and not haushalt:
+        return None
+    return NetzanteilPreise(komponente_cent=tuple(komponente), haushalt_rest_cent=tuple(haushalt))
+
 
 async def _lade_tarif(
     db: AsyncSession,
@@ -196,6 +276,12 @@ async def _lade_tarif(
         )
     else:
         wp_preis_cent = preis.cent
+    # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox (Begründung unten am Feld).
+    _wb_preis = await aufgeloester_monatspreis(
+        db, anlage_id, schluessel[0], schluessel[1], monatsdaten,
+        resolve_tarif_for_komponente(tarife, "wallbox"),
+        stammpreis_override=wallbox_cent, messung=preis_messung,
+    )
     return TarifFakten(
         netzbezug_preis_cent=preis.cent,
         netzbezug_preis_herkunft=preis.herkunft,
@@ -230,11 +316,7 @@ async def _lade_tarif(
         # (Stufe 1) und gemessen (Stufe 2) gelten dem ganzen Zähler und schlagen
         # ihn weiter. Die zweite Kaskade `strompreise.monats_strompreis_lookup`
         # (sie übergab schon den Wallbox-Tarif) ist damit entfallen.
-        wallbox_preis_effektiv_cent=(await aufgeloester_monatspreis(
-            db, anlage_id, schluessel[0], schluessel[1], monatsdaten,
-            resolve_tarif_for_komponente(tarife, "wallbox"),
-            stammpreis_override=wallbox_cent, messung=preis_messung,
-        )).cent,
+        wallbox_preis_effektiv_cent=_wb_preis.cent,
         kraftstoffpreis_euro=monatsdaten.kraftstoffpreis_euro if monatsdaten else None,
         gaspreis_cent_kwh=monatsdaten.gaspreis_cent_kwh if monatsdaten else None,
     )
@@ -304,6 +386,9 @@ class NetzanteilZumTarif:
     cent: float
     #: die gemessene Menge vor der Klemme
     gemessen_kwh: float
+    #: F6: ist ``cent`` der Zeitfenster-Tarif über N gewichtet (``TarifFakten.netzanteil_preise``)? Dann bewertet die
+    #: Tagessicht jede Stunde mit dem Slot-Preis des Komponenten-Tarifs (``energie_profil/tage_netzanteil.py``).
+    zeitfenster: bool = False
 
     @property
     def geklemmt(self) -> bool:
@@ -325,6 +410,9 @@ class KomponentenAnteile:
     #: ``None`` ohne WP-Anteil.
     wp_pv_kwh: Optional[float] = None
     wp_cent: Optional[float] = None
+    #: F6: der Haushaltspreis des Rests (Netzbezug − Σ N), wenn der Haushaltstarif Zeitfenster trägt und der Kanal des
+    #: Felds den Monat deckt — er ersetzt in der Stromrechnung den Haushaltspreis für den Rest; sonst ``None``.
+    haushalt_cent: Optional[float] = None
 
     def stromrechnung_anteile(self) -> tuple[tuple[float, float], ...]:
         """``(kWh, ct)`` je Anteil — die Eingabe des Layers ``berechne_netzbezug_kosten``."""
@@ -366,20 +454,30 @@ def komponenten_anteile(
     wp_pv: Optional[float] = None
     wp_cent: Optional[float] = None
     rest = netzbezug_kwh
+    f6 = tarif.netzanteil_preise
     if tarif.wp_eigener_tarif and wp_netz_eigener_tarif_kwh is not None:
         n_wp = klemme_netzanteil(wp_netz_eigener_tarif_kwh, wp_strom_kwh, rest)
-        netz.append(NetzanteilZumTarif("waermepumpe", n_wp, tarif.wp_preis_cent, wp_netz_eigener_tarif_kwh))
+        _zf = f6.komponente("waermepumpe") if f6 is not None else None
+        netz.append(NetzanteilZumTarif(
+            "waermepumpe", n_wp, tarif.wp_preis_cent if _zf is None else _zf, wp_netz_eigener_tarif_kwh, _zf is not None,
+        ))
         rest -= n_wp
         wp_pv = max(0.0, wp_strom_kwh - n_wp)
+        # Der PV-Anteil ersetzt Strom zum Preis des Geräteverbrauchs (P9, WP-Kosten S × W) — nicht zum N-Gewicht (F6).
         wp_cent = tarif.wp_preis_cent
     if tarif.wallbox_eigener_tarif and wallbox_netz_eigener_tarif_kwh is not None:
         n_wb = klemme_netzanteil(wallbox_netz_eigener_tarif_kwh, wallbox_ladung_kwh, rest)
+        _zf = f6.komponente("wallbox") if f6 is not None else None
         netz.append(NetzanteilZumTarif(
-            "wallbox", n_wb, tarif.wallbox_preis_effektiv_cent, wallbox_netz_eigener_tarif_kwh,
+            "wallbox", n_wb, tarif.wallbox_preis_effektiv_cent if _zf is None else _zf, wallbox_netz_eigener_tarif_kwh,
+            _zf is not None,
         ))
     if not netz:
         return None
-    return KomponentenAnteile(netz=tuple(netz), wp_pv_kwh=wp_pv, wp_cent=wp_cent)
+    return KomponentenAnteile(
+        netz=tuple(netz), wp_pv_kwh=wp_pv, wp_cent=wp_cent,
+        haushalt_cent=f6.haushalt_rest(a.verwendung for a in netz) if f6 is not None else None,
+    )
 
 
 def komponenten_anteile_des_fakts(fakt, netzbezug_kwh: Optional[float] = None) -> Optional[KomponentenAnteile]:
@@ -397,6 +495,50 @@ def komponenten_anteile_des_fakts(fakt, netzbezug_kwh: Optional[float] = None) -
     )
 
 
+@dataclass(frozen=True)
+class WpPvAnteilGemessen:
+    """N-770 F4: der gemessene PV-Anteil der Wärmepumpe P/S der letzten abgeschlossenen Monate mit Messung."""
+
+    #: Σ P ÷ Σ S (0…1)
+    quote: float
+    #: Zahl der Monate mit gemessenem Netzbezug zum WP-Tarif (höchstens 12)
+    monate: int
+    #: Σ P und Σ S dieser Monate, je Monat gemittelt × 12 — der Jahreswert für die ROI-Jahresformel
+    pv_jahr_kwh: float
+    strom_jahr_kwh: float
+
+    @property
+    def prozent(self) -> float:
+        return self.quote * 100
+
+
+def gemessener_wp_pv_anteil(fakten, heute: Optional[date] = None) -> Optional[WpPvAnteilGemessen]:
+    """N-770 F4 (Bauplan §2, Entscheid Gernot 30.10.2026): der **gemessene** PV-Anteil der Wärmepumpe P/S über die
+    letzten 12 abgeschlossenen Monate (vor dem Monat von ``heute``), gezählt nur die Monate, in denen die Monats-Fakten
+    den Netzbezug zum WP-Tarif ansetzen (``komponenten_anteile_des_fakts`` mit WP-Anteil). ``None`` ohne einen solchen
+    Monat — Prognose und ROI-Jahresformel rechnen dann wie bisher (den ganzen Eigenverbrauch zum Haushaltspreis).
+
+    Leser: ``aussichten/finanz_prognose.monatsprognose`` (P_prog = Anteil × prognostizierter WP-Strom) und
+    ``investitionen/roi_pv._pv_einsparung_aus_monatsdaten`` (P_jahr). Beide bewerten P über die eine Layer-Formel
+    ``bewerte_eigenverbrauch`` zum WP-Tarif."""
+    heute = heute or date.today()
+    abgeschlossen = sorted(
+        (f for f in fakten if (f.jahr, f.monat) < (heute.year, heute.month)), key=lambda f: (f.jahr, f.monat),
+    )[-12:]
+    p = s = 0.0
+    n = 0
+    for f in abgeschlossen:
+        a = komponenten_anteile_des_fakts(f)
+        if a is None or a.wp_pv_kwh is None:
+            continue
+        p += a.wp_pv_kwh
+        s += f.wp.strom_kwh
+        n += 1
+    if n == 0 or s <= 0:
+        return None
+    return WpPvAnteilGemessen(quote=p / s, monate=n, pv_jahr_kwh=p / n * 12, strom_jahr_kwh=s / n * 12)
+
+
 def stromrechnung_euro(
     netzbezug_kwh: float,
     preis_cent: float,
@@ -406,7 +548,12 @@ def stromrechnung_euro(
     """Die Stromrechnung eines Monats — die EINE Stelle, an der jede Sicht sie bildet (N-770 E2: bis dahin fünf
     Aufrufe der Layer-Formel mit zwei Preisquellen). ``preis_cent`` ist der Haushaltspreis (Tarif-Fakten
     ``netzbezug_preis_cent``), ``grundpreis_euro`` die Σ der Grundpreise (N-769), ``anteile`` die gemessenen Anteile
-    zum Komponenten-Tarif. Mit ``grundpreis_euro = 0`` der reine Arbeitspreis-Anteil (Ø-Preis-Kachel)."""
+    zum Komponenten-Tarif. Mit ``grundpreis_euro = 0`` der reine Arbeitspreis-Anteil (Ø-Preis-Kachel).
+
+    F6 (E3): trägt ``anteile`` den Haushaltspreis des Rests (``haushalt_cent``, HT/NT über Netzbezug − N), ersetzt er
+    ``preis_cent`` für den Rest — die Kopfzahl (Haushaltspreis über den ganzen Netzbezug) bleibt beim Aufrufer."""
+    if anteile is not None and anteile.haushalt_cent is not None:
+        preis_cent = anteile.haushalt_cent
     return berechne_netzbezug_kosten(
         netzbezug_kwh, preis_cent, grundpreis_euro,
         anteile.stromrechnung_anteile() if anteile is not None else (),

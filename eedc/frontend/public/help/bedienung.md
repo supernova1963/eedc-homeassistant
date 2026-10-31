@@ -533,7 +533,15 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 > + 256,0 kWh × 22,0 ct/kWh (Wärmepumpe)"; die Unterzeile nennt dann diese Summe, der Preis darüber bleibt der
 > Haushaltspreis. Der Netto-Ertrag nennt den PV-Strom der Wärmepumpe, den eedc zum WP-Tarif bewertet („davon 170,7 kWh
 > PV-Strom der Wärmepumpe zum WP-Tarif 22,0 ct/kWh"). Ist eine Menge größer als Gerätestrom oder Netzbezug, steht
-> „begrenzt" dabei.
+> „begrenzt" dabei. Die Unterzeile der Kachel sagt dann „Kosten = (Netzbezug − Netzbezug zum Komponenten-Tarif) ×
+> Haushaltspreis + …"; trägt dein Haushaltstarif Zeitfenster (HT/NT), steht im Rest der über diesen Rest gewichtete Preis.
+>
+> **E-Mobilität mit „Netzbezug zum Wallbox-Tarif":** Dieser Zähler des Versorgers **ist** dann die Netzladung deiner
+> Wallbox — auch wenn evcc einen anderen PV-/Netz-Anteil meldet; PV-Ladung = Ladung − Netzladung. E-Mob-Ersparnis und
+> Heimladekosten rechnen damit, die Herleitung der Wallbox-Zeile (und eines E-Autos, das seine Heimladung aus der Wallbox
+> bekommt) nennt „Netzladung: Zähler des Versorgers". Ein E-Auto, das seine Heimladung selbst misst, behält seine eigene
+> Aufteilung — der Zähler teilt dann den Rest der Wallbox.
+> Weichen evcc und Zähler ab, sagt es der Daten-Checker. Ohne das Feld gilt wie bisher evcc bzw. die Tagesquote.
 
 > **Die Ergebnis-Leiter in vier Zeilen** (Netto-Ertrag und Monatsergebnis rechnet eedc für Monat, Jahr und Gesamt gleich):
 >

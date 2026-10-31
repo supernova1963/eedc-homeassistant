@@ -196,7 +196,11 @@ export function baueMonatKpis(
  *  fällt auf den neutralen Text, statt eine Herkunft zu behaupten.
  */
 function preisFormel(d: AktuellerMonatResponse): string {
-  const kosten = ' · Kosten = Netzbezug × Ø-Preis, ohne Grundpreis'
+  // N-770/N-771 E4: mit gemessenem Netzbezug zum WP-/Wallbox-Tarif trägt der Rest den Haushaltspreis, jeder Anteil den
+  // Preis seines Komponenten-Tarifs — die Kopfzahl bleibt der Haushaltspreis (Untertitel sagt es, der Client rechnet nichts).
+  const kosten = d.netzbezug_anteile && d.netzbezug_anteile.length > 0
+    ? ' · Kosten = (Netzbezug − Netzbezug zum Komponenten-Tarif) × Haushaltspreis + Netzbezug zum Komponenten-Tarif × dessen Preis, ohne Grundpreis'
+    : ' · Kosten = Netzbezug × Ø-Preis, ohne Grundpreis'
   switch (d.netzbezug_preis_herkunft) {
     case 'gepflegt':
       return 'Dein abgerechneter Ø-Preis aus dem Monatsabschluss' + kosten
@@ -287,7 +291,8 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       formel: preisFormel(d),
       // N-770/N-771: mit gemessenem Netzbezug zum WP-/Wallbox-Tarif steht jeder Anteil mit seinem Preis da — sonst
       // ginge «kWh × ct = €» nicht auf. Die Kopfzahl bleibt der Haushaltspreis.
-      berechnung: netzbezugAnteileBerechnung(d.netzbezug_kwh, netzPreis, d.netzbezug_anteile, k => fmtCalc(k, 1), c => fmtCalc(c, 1))
+      // F6: trägt der Monat einen eigenen Haushaltspreis des Rests (HT/NT über Netzbezug − N), steht dieser im Rest.
+      berechnung: netzbezugAnteileBerechnung(d.netzbezug_kwh, d.netzbezug_rest_preis_cent ?? netzPreis, d.netzbezug_anteile, k => fmtCalc(k, 1), c => fmtCalc(c, 1))
         ?? `${fmt(d.netzbezug_kwh)} kWh × ${fmtCalc(netzPreis, 1)} ct/kWh`,
       ergebnis: (d.grundgebuehr_euro ?? 0) > 0
         // N-769: mit eigenem WP-/Wallbox-Tarif nennt der Zusatz den Grundpreis je Tarif.
