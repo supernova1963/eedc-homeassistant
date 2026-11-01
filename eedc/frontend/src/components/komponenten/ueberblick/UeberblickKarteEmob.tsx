@@ -37,6 +37,7 @@
  * den Gast, keine Rahmenfarbe (K2-11).
  */
 import { Fragment, type ReactNode } from 'react'
+import { Parkbar, usePark } from '../../park'
 import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
 import LadestandLeiste from '../../ui/LadestandLeiste'
 import ModusChip, { ZusatzChip, ladezustandKlartext } from '../../ui/ModusChip'
@@ -48,6 +49,7 @@ import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../
 import type { EmobBetriebZeile, EmobHeuteZeile, TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { AnlagenRing, Karte, KartenKopf, Zeile } from './UeberblickKarte'
+import { UEBERBLICK_ALT_KARTE, type UeberblickKartenTeile } from './ueberblickPark'
 
 export interface UeberblickKarteEmobProps {
   inv: Investition
@@ -238,14 +240,36 @@ function OberflaecheLink({ url }: { url: string }) {
   )
 }
 
-function HeuteKarte({ ladung, pvLadung, zeile }: { ladung: number | null; pvLadung: number | null; zeile: EmobHeuteZeile | null }) {
+/** Die Eingänge der Karte «Heute» — eine Stelle für die Karte und ihre Park-Hülle (S1c). */
+interface HeuteDaten { ladung: number | null; pvLadung: number | null; zeile: EmobHeuteZeile | null }
+
+function heuteDaten({ inv, live, tag, mehrereGeraete }: UeberblickKarteEmobProps): HeuteDaten {
+  // K-6/W3: Ladung heute am Auto nur mit eigenem Knoten — sonst stünde die Wallbox-Energie zweimal da.
+  const ladung = inv.typ === 'wallbox'
+    ? ladungHeute(live, `wallbox_${inv.id}`, 'wallbox', mehrereGeraete)
+    : (eautoKnoten(live, inv.id) ? ladungHeute(live, `eauto_${inv.id}`, 'eauto', true) : null)
+  return { ladung, pvLadung: tag?.emob_ladung_pv_kwh ?? null, zeile: heuteZeile(tag, inv.id) }
+}
+
+/** Hat die Karte «Heute» einen Wert? */
+function heuteDa({ ladung, pvLadung, zeile }: HeuteDaten): boolean {
+  return zeile?.ladung_kwh != null || ladung != null || pvLadung != null || zeile?.pv_anteil_prozent != null
+    || zeile?.km != null || zeile?.fahrverbrauch_kwh != null
+}
+
+/** Welche datenabhängigen Karten erscheinen? (S1c: dieselbe Antwort für die Hüllen und die Meldung des Blocks.) */
+export function emobKartenTeile(props: UeberblickKarteEmobProps): UeberblickKartenTeile {
+  return { heute: heuteDa(heuteDaten(props)), betrieb: betriebZeilen(props.tag, props.inv.id).length > 0 }
+}
+
+function HeuteKarte({ ladung, pvLadung, zeile }: HeuteDaten) {
   // K4-6 (D-K4-2): trägt das Tag-Detail die Ladung, zeigt die Karte diese Zahl; der Live-Wert ist nur Rückfall.
   const ausTag = zeile?.ladung_kwh != null
   const ladungAnzeige = ausTag ? zeile!.ladung_kwh! : ladung
   const anteil = zeile?.pv_anteil_prozent ?? null
   const km = zeile?.km ?? null
   const fahrverbrauch = zeile?.fahrverbrauch_kwh ?? null
-  if (ladungAnzeige == null && pvLadung == null && anteil == null && km == null && fahrverbrauch == null) return null
+  if (!heuteDa({ ladung, pvLadung, zeile })) return null
   const herleitung = anteil != null ? herleitungPvAnteil(zeile?.ladung_pv_kwh, zeile?.ladung_kwh) : null
   return (
     <Karte name="heute">
@@ -353,20 +377,6 @@ function WallboxGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv'
   )
 }
 
-function WallboxKarten({ inv, live, tag, mehrereGeraete }: UeberblickKarteEmobProps) {
-  return (
-    <>
-      <WallboxGeraeteKarte inv={inv} live={live} />
-      <HeuteKarte
-        ladung={ladungHeute(live, `wallbox_${inv.id}`, 'wallbox', mehrereGeraete)}
-        pvLadung={tag?.emob_ladung_pv_kwh ?? null}
-        zeile={heuteZeile(tag, inv.id)}
-      />
-      <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
-    </>
-  )
-}
-
 // ── «Betrieb heute» (P-433-2b K3) ───────────────────────────────────────────
 
 /** Die Zeilen des Tag-Details für dieses Gerät (Reihenfolge des Backends). */
@@ -466,23 +476,35 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
   )
 }
 
-function EAutoKarten({ inv, live, tag }: UeberblickKarteEmobProps) {
-  // K-6/W3: Ladung heute am Auto nur mit eigenem Knoten — sonst stünde die Wallbox-Energie zweimal da.
-  const k = eautoKnoten(live, inv.id)
-  const ladung = k ? ladungHeute(live, `eauto_${inv.id}`, 'eauto', true) : null
-  return (
-    <>
-      <EAutoGeraeteKarte inv={inv} live={live} />
-      <HeuteKarte ladung={ladung} pvLadung={tag?.emob_ladung_pv_kwh ?? null} zeile={heuteZeile(tag, inv.id)} />
-      <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
-    </>
-  )
-}
-
+/**
+ * «Auf einen Blick» der E-Mobilität — seit P-433-2b S1c **je Karte eine Park-Hülle** mit denselben IDs wie Wärme/Klima
+ * (`ueberblickPark.ts`); Titel «Wallbox» bzw. «E-Auto», «Heute», «Betrieb». Heute und Betrieb stehen nur mit Werten da
+ * — ihre Hülle ebenso. Ist die alte Park-ID `el:ueberblick-karte` geparkt, gelten alle drei als geparkt.
+ */
 export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
+  const park = usePark()
+  const { inv, live, tag } = props
+  const istWallbox = inv.typ === 'wallbox'
+  const heute = heuteDaten(props)
+  const teile = emobKartenTeile(props)
+  const altGeparkt = park.istGeparkt(UEBERBLICK_ALT_KARTE)
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-3${props.nebenSchaubild ? ' xl:grid-cols-1' : ''} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={props.inv.typ}>
-      {props.inv.typ === 'wallbox' ? <WallboxKarten {...props} /> : <EAutoKarten {...props} />}
+    <div className={`grid grid-cols-1 md:grid-cols-3${props.nebenSchaubild ? ' xl:grid-cols-1' : ''} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={inv.typ}>
+      {!altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-geraet" titel={istWallbox ? 'Wallbox' : 'E-Auto'}>
+          {istWallbox ? <WallboxGeraeteKarte inv={inv} live={live} /> : <EAutoGeraeteKarte inv={inv} live={live} />}
+        </Parkbar>
+      )}
+      {teile.heute && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-heute" titel="Heute">
+          <HeuteKarte {...heute} />
+        </Parkbar>
+      )}
+      {teile.betrieb && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-betrieb" titel="Betrieb">
+          <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
+        </Parkbar>
+      )}
     </div>
   )
 }

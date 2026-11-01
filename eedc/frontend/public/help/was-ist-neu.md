@@ -72,6 +72,12 @@ Cockpit, „Gefahren heute" am Vorderrad und den Standort. Das Bild gehört dem 
 eine andere Wallbox oder ein anderes Auto wählst du dort. Was fehlt, nennt die Zeile unter dem Bild mit dem Weg zu den
 Datenquellen ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto), [Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox)).
 
+**Überblick: Gerät, Heute und Betrieb einzeln parken.** In „Auf einen Blick" an Wärmepumpe, Wallbox und E-Auto parkst du
+jetzt jede Karte für sich — Rechtsklick oder oben lange drücken, wie im Cockpit. Ist das Schaubild geparkt, stehen die
+übrigen Karten nebeneinander; sind alle Karten geparkt, nimmt das Schaubild die volle Breite. Hattest du „Auf einen Blick"
+als Ganzes geparkt, bleiben die drei Karten geparkt; der Chip „Auf einen Blick" auf dem Parkplatz holt alle drei zurück
+([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)).
+
 **Komponenten: lesbare Einstellungen, keine Nullen ohne Aussage.** Der Block „Einstellungen" nennt die Parameter jetzt
 so wie das Formular — „Max. Ladeleistung (kW)" statt „max ladeleistung kw", „Wärmepumpenart: Luft/Wasser" statt
 „luft_wasser" —, und die Wallbox-Karte zeigt Phasen, Ladestrom und Restzeit nur, wenn sie über 0 liegen.

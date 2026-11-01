@@ -32,7 +32,8 @@ import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenMonatsTabelle } from './KomponentenMonatsTabelle'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import HubLeerGrund from './HubLeerGrund'
-import UeberblickBlock, { UEBERBLICK_PARK_IDS, UeberblickBlockEmob } from '../components/komponenten/ueberblick/UeberblickBlock'
+import UeberblickBlock, { UeberblickBlockEmob } from '../components/komponenten/ueberblick/UeberblickBlock'
+import { ueberblickGeparkt } from '../components/komponenten/ueberblick/ueberblickPark'
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
 import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
@@ -588,9 +589,10 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
   // zerlegt (Phase 2, Gernot 2026-07-09): das Composite MELDET seine real gerenderten
   // Park-IDs hoch (`gemeldet[key]`). Block ausblenden, sobald ALLE gemeldeten geparkt
   // sind — solange nichts gemeldet ist (Block noch nie geöffnet), bleibt er sichtbar.
-  const regVerstecken = (key: string) => {
+  // `geparkt` (S1c): der Überblick bildet die alte Park-ID `el:ueberblick-karte` auf seine drei Karten ab.
+  const regVerstecken = (key: string, geparkt: (id: string) => boolean = istGeparkt) => {
     const ids = gemeldet[key]
-    return ids != null && ids.length > 0 && ids.every(istGeparkt)
+    return ids != null && ids.length > 0 && ids.every(geparkt)
   }
   const bloecke: Block[] = []
 
@@ -598,16 +600,20 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
   // Energiefluss-Kacheln links, «Auf einen Blick» rechts. Summary statisch: der
   // Live-Poll lebt im Inhalt und läuft zugeklappt nicht (W10).
   // P-433-2b S1b: Wallbox und E-Auto tragen ihre Szene («Ladepunkt» / «Fahrzeug») — dieselben Park-IDs wie Wärme/Klima.
+  // S1c: Schaubild und jede Karte einzeln parkbar; Heute/Betrieb erscheinen nur mit Werten, deshalb meldet der Block
+  // seine gerenderten IDs hoch (Muster `regVerstecken`, Schlüssel je Gerät) — ohne Meldung bleibt er sichtbar.
   const emob = typ === 'wallbox' || typ === 'e-auto'
-  if (UEBERBLICK_TYPEN.includes(typ) && g.inv.id > 0 && !alleGeparkt([...UEBERBLICK_PARK_IDS])) {
+  const ueberblickKey = `ueberblick:${g.inv.id}`
+  if (UEBERBLICK_TYPEN.includes(typ) && g.inv.id > 0 && !regVerstecken(ueberblickKey, (id) => ueberblickGeparkt(istGeparkt, id))) {
     const geraete = (alleInvs ?? [g.inv]).filter((inv) => inv.id > 0)
+    const meldeParkIds = (ids: string[]) => melde(ueberblickKey, ids)
     bloecke.push({
       id: 'ueberblick', title: 'Überblick', icon: BildIcon,
       summary: `Schaubild · ${g.inv.bezeichnung}`,
       defaultOpen: true,
       render: () => emob
-        ? <UeberblickBlockEmob anlageId={anlageId} geraete={geraete} inv={g.inv} />
-        : <UeberblickBlock anlageId={anlageId} geraete={geraete} inv={g.inv} />,
+        ? <UeberblickBlockEmob anlageId={anlageId} geraete={geraete} inv={g.inv} meldeParkIds={meldeParkIds} />
+        : <UeberblickBlock anlageId={anlageId} geraete={geraete} inv={g.inv} meldeParkIds={meldeParkIds} />,
     })
   }
 

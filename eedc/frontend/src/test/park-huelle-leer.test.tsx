@@ -8,6 +8,9 @@ import { zaehlerParkIds } from '../components/zaehler/ZaehlerstaendeBlock'
 import { top10ParkIds, STAT_PARK_IDS } from '../pages/community/CommunityStatistikenTeile'
 import type { Ranking } from '../api/community'
 import type { ZaehlerStand } from '../api/zaehlerstaende'
+import {
+  UEBERBLICK_PARK_IDS, ueberblickGemeldeteIds, ueberblickGeparkt,
+} from '../components/komponenten/ueberblick/ueberblickPark'
 
 // ── Die VERHALTENS-Hälfte der Park-Doktrin (2026-09-06) ──────────────────────
 //
@@ -173,5 +176,30 @@ describe('Klasse 2 — die ID-Liste folgt den Daten (die zwei Befunde vom 2026-0
   it('die feste Liste trägt die bedingte ID NICHT mehr', () => {
     // Gegenprobe zur Regel L2: stünde sie wieder drin, wäre der Fund zurück.
     expect([...STAT_PARK_IDS.top10]).toEqual(['stat-top10-tabelle'])
+  })
+})
+
+describe('Klasse 2 — Hub-Block «Überblick»: Heute/Betrieb folgen den Daten (P-433-2b S1c)', () => {
+  // Heute und Betrieb erscheinen nur mit Werten. Stünden sie in der festen Liste, würde ein Anwender ohne
+  // Modus-Mitschrift alles Sichtbare parken und den leeren Block behalten — der Referenzfall von L2.
+
+  it('die feste Liste trägt nur, was immer gerendert wird', () => {
+    expect([...UEBERBLICK_PARK_IDS]).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet'])
+  })
+
+  it('gemeldet werden Heute und Betrieb nur, wenn sie gerendert sind', () => {
+    expect(ueberblickGemeldeteIds({ heute: false, betrieb: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet'])
+    expect(ueberblickGemeldeteIds({ heute: true, betrieb: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-heute'])
+    expect(ueberblickGemeldeteIds({ heute: true, betrieb: true })).toEqual([
+      'el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-heute', 'el:ueberblick-karte-betrieb',
+    ])
+  })
+
+  it('die alte ID der ganzen Karte gilt für die drei Karten, nicht für das Schaubild', () => {
+    const nurAlt = (id: string) => id === 'el:ueberblick-karte'
+    expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-geraet')).toBe(true)
+    expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-heute')).toBe(true)
+    expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-betrieb')).toBe(true)
+    expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-schaubild')).toBe(false)
   })
 })

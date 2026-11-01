@@ -60,7 +60,7 @@ bleibt die aller Typen, andere Typen behalten die Abschnitte nach Einheit.
 
 Grundlage: Definitions-Blatt «Überblick E-Mobilität» Fassung 3 und Bauplan K1 (intern). Die Hub-Typ-Seiten **Wallbox** und
 **E-Auto** tragen den Block «Überblick» — in K1 ohne Schaubild (Panorama später, P1); seit S1b mit ihrer Szene wie Wärme/Klima
-(§2b-S1b: Park-IDs `el:ueberblick-schaubild`/`el:ueberblick-karte`, Summary «Schaubild · ‹Gerät›», Fokus-ID `ueberblick`).
+(§2b-S1b: Summary «Schaubild · ‹Gerät›», Fokus-ID `ueberblick`; Park-IDs seit S1c je Karte, §2b-S1c).
 
 | Teil | Form |
 | --- | --- |
@@ -169,6 +169,18 @@ Gerät), **E-2b-23** (Zählerkachel «Ladung heute · PV-Anteil» je Wallbox; «
 | **Karten** | «Auf einen Blick» unverändert; neben dem Schaubild ab `xl` untereinander, mit geparktem Schaubild nebeneinander in voller Breite. |
 | **Lab-Sichtprobe rc15 (Gernot 1.11.2026)** | Drei Gestaltungsfragen entschieden: der Ladestand steht an A (Energiefluss-Kachel mit Pegel) **und** an F — bleibt; **ein Leistungsformat je Szene**: auch die zweite Zeile der Fahrzeugkachel («lädt …») nutzt `formatPower` (unter 10 kW in Watt); **Pflegehinweis:** der Zustands-Chip an L kommt aus `fahrzeugZustandZeile` (`emobKachelAnker.ts`), eine Form-Kopie von `ladezustandZeile` (`energieFlussLayout.ts`), die auch «Lädt» zeigt und bei «Nicht verbunden»/«Fertig» dämpft — wer die Chip-Form ändert, ändert beide Stellen. |
 
+### 2b-S1c. Karten-Teile einzeln parkbar (gebaut 1.11.2026, unveröffentlicht)
+
+Wunsch Gernot aus der Lab-Sichtprobe rc16, Go 1.11.2026; Gate nach Entscheid des Masters «Option C». Gilt für **beide** Hubs.
+
+| Teil | Form |
+| --- | --- |
+| **Park-IDs** | Schaubild `el:ueberblick-schaubild`; je Karte eine Hülle `el:ueberblick-karte-geraet` (Titel «Gerät», E-Mobilität «Wallbox»/«E-Auto») · `el:ueberblick-karte-heute` («Heute») · `el:ueberblick-karte-betrieb` («Betrieb»), in beiden Hubs gleich (`ueberblickPark.ts`). Der Kartenkopf liegt in der Hülle (Kopfzone der Geste). Die Hülle «Auf einen Blick» entfällt. |
+| **Feste Liste** | `UEBERBLICK_PARK_IDS` = Schaubild + Gerät — nur, was immer gerendert wird (`check:park-idliste` L2). «Heute» und «Betrieb» erscheinen nur mit Werten (Kartenregel), ihre Hülle ebenso; sie kommen aus den Daten (`ueberblickGemeldeteIds`). |
+| **Block-Gate** | Muster `regVerstecken` (`KomponentenTypV4`): der Block meldet nach der ersten Live- **und** Tag-Antwort die gerenderten IDs unter `ueberblick:<inv.id>`; der Hub versteckt ihn nur, wenn eine Meldung vorliegt und alle gemeldeten IDs geparkt sind. Ohne Meldung bleibt er montiert, der Poll läuft. |
+| **Spalten** | Schaubild offen + mindestens eine Karte offen ⇒ 2/3 zu 1/3 (Karten rechts untereinander); Schaubild geparkt ⇒ die offenen Karten nebeneinander in voller Breite (Wärme/Klima zieht der E-Mobilität gleich); alle Karten geparkt ⇒ Schaubild volle Breite. |
+| **Alte Park-ID** | `el:ueberblick-karte` (bis S1c die ganze Karte) gilt beim Lesen als «alle drei Karten geparkt» (`ueberblickGeparkt`, im Block und im Gate); ihr Chip «Auf einen Blick» holt alle drei zurück. Der Park-Rahmen bleibt unverändert. |
+
 ## 3. Entscheide
 
 | # | Frage | Entscheid |
@@ -210,4 +222,7 @@ Gerät), **E-2b-23** (Zählerkachel «Ladung heute · PV-Anteil» je Wallbox; «
   Knoten (W3); «letzte Sitzung» nur, solange der Sensor den Wert hält; Reichweite aus evcc nur am Ladepunkt; Standort nur
   Zone; Anker-Karte und Platzgrenzen gelten je Bildpaar. Das Lab hat eine Wallbox und ein Auto — Gast, V2H, mehrere Autos an
   einer Wallbox und eine Anlage ohne Wallbox sind nur in Proben belegt.
+- **Einzeln geparkte Karten** (S1c): ein ausgeblendeter Block ist nicht montiert und fragt nicht ab — bekommt «Heute» oder
+  «Betrieb» erst später am Tag Werte, erscheint die Karte beim nächsten Aufruf der Seite. Die Meldung gilt je Gerät und
+  Seitenbesuch.
 - **Live-Kacheln ohne Home-Assistant-Zuordnung** (MQTT ohne Modus) gibt es nur für die zugeordneten Zahlen; der Modus bleibt leer.

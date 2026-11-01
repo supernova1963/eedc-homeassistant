@@ -865,7 +865,8 @@ Ganz oben steht der Block **„Überblick"**: links ein Bild einer Wärme/Klima-
   Eine Zeile oder Karte ohne Wert entfällt; Kosten und CO₂ stehen in den Blöcken darunter.
 - **Tooltip:** Antippen oder Überfahren einer Kachel nennt Name, Leistung, Modus, heute kWh und die Herkunft („Live-Snapshot", „HA-LTS (Tageszähler)", „Wetterdienst").
 - **Am Handy** haben Kacheln und Schrift dieselbe Größe wie im Energiefluss bei gleicher Breite; passt eine Reihe nicht, werden Kacheln gruppiert („Innengeräte (3)", „Weitere (2)"; nach „Weitere" gehen zuerst Außentemperatur, dann Zusatzheizung, dann Vorlauf · Rücklauf) — Antippen öffnet die Liste unter dem Bild. Die Karte steht unter dem Bild.
-- Der Block steht auch dann zuoberst, wenn du die Reihenfolge der Blöcke früher geändert hast; danach kannst du ihn wie jeden Block verschieben, zuklappen oder seine zwei Teile parken.
+- Der Block steht auch dann zuoberst, wenn du die Reihenfolge der Blöcke früher geändert hast; danach kannst du ihn wie jeden Block verschieben oder zuklappen.
+- **Einzeln parken:** Schaubild, Gerätekarte, „Heute" und „Betrieb" sind einzeln parkbar (Rechtsklick bzw. oben lange drücken). Ist das Schaubild geparkt, stehen die offenen Karten nebeneinander in voller Breite (ab Tablet-Breite); sind alle Karten geparkt, nimmt das Schaubild die volle Breite; ist alles geparkt, was gerade zu sehen ist, verschwindet der Block. *Benannte Grenze:* ein ausgeblendeter Block fragt nichts ab — bekommt „Heute" oder „Betrieb" erst später am Tag Werte, erscheint die Karte beim nächsten Aufruf der Seite. Wer vor dieser Version „Auf einen Blick" als Ganzes geparkt hatte, findet die drei Karten geparkt; der Chip „Auf einen Blick" auf dem Parkplatz holt alle drei zurück.
 
 > **Benannte Grenzen.** Solange der Block **aufgeklappt** und der Tab **sichtbar** ist, fragt er die Live-Werte alle **5 Sekunden** ab (Wetter und Tageswerte alle 5 Minuten) — ein zweiter Abfrage-Pfad neben *Cockpit → Live*. Zugeklappt, ganz geparkt oder im Hintergrund fragt er nichts. Der Tooltip nennt die **Entität** des Sensors nicht; welche zugeordnet ist, steht im Block „Einstellungen" und unter *Einstellungen → Datenquellen*. Im **Demo-Modus** stammen die Heute-Werte (Wärme, Arbeitszahl, Betrieb heute, Kachel „Wärme heute") vom echten Tag. **„Betrieb heute"** gibt es nur mit einem Betriebsmodus-Sensor aus Home Assistant und erst ab dem Tag, an dem eedc die Betriebsart mitschreibt; **Leerlauf** zählt nicht getrennt — eine Stunde „Heizen · Leerlauf" zählt als Heizen. Die Kachel **„Wärme heute"** kommt aus den Tageswerten (alle 5 Minuten), nicht aus der Live-Abfrage.
 
@@ -890,7 +891,8 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 
 **Überblick (oberster Block, seit der nächsten Version).** Wie bei der Wärmepumpe steht ganz oben der Block „Überblick" —
 links das **Schaubild „Fahrzeug"**, rechts „Auf einen Blick" für das gewählte Auto (Handy: untereinander; ist das Schaubild
-geparkt, stehen die Karten nebeneinander in voller Breite).
+geparkt, stehen die Karten nebeneinander in voller Breite). **Auf einen Blick: E-Auto, Heute und Betrieb sind einzeln parkbar**
+— wie bei der Wärmepumpe ([§3.4](#34-wärmepumpe), auch die benannte Grenze).
 
 **Schaubild „Fahrzeug".** Ein durchscheinendes Auto an einer Säulen-Wallbox vor dem Haus; daran **dieselben Kacheln wie im
 Energiefluss** — für das Auto, das du im Geräte-Selektor gewählt hast (die Szene gehört dem gewählten Gerät; ein anderes Auto
@@ -964,7 +966,8 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 ### 3.6 Wallbox
 
 **Überblick (oberster Block, seit der nächsten Version).** Links das **Schaubild „Ladepunkt"**, rechts „Auf einen Blick"
-(Handy: untereinander; ist das Schaubild geparkt, stehen die Karten nebeneinander in voller Breite).
+(Handy: untereinander; ist das Schaubild geparkt, stehen die Karten nebeneinander in voller Breite). **Auf einen Blick: Wallbox,
+Heute und Betrieb sind einzeln parkbar** — wie bei der Wärmepumpe ([§3.4](#34-wärmepumpe), auch die benannte Grenze).
 
 **Schaubild „Ladepunkt".** Der Blick in die offene Garage: Wandbox an der Rückwand, Zählerkasten an der Hauswand, ein Auto
 angesteckt. Die Kacheln gehören der Wallbox, die du im Geräte-Selektor gewählt hast (eine weitere Wallbox wählst du oben im

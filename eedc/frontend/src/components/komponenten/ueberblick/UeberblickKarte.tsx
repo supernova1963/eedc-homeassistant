@@ -28,6 +28,7 @@
  * ⛔ **Der Client rechnet nichts** (ADR-002/P12): jede Zahl kommt fertig aus Backend-Feldern.
  */
 import type { ReactNode } from 'react'
+import { Parkbar, usePark } from '../../park'
 import RingGauge from '../../charts/RingGauge'
 import { Card } from '../../ui'
 import { KPI_WERT_SCHRIFT } from '../../ui/KPICard'
@@ -44,6 +45,7 @@ import type { Investition } from '../../../types'
 import {
   istPassivGekuehlt, kuehltPassiv, stromHeute, vorlaufBeschriftung, warmwasserC, wpKnoten, zusatzheizungAktiv,
 } from './kachelAnker'
+import { UEBERBLICK_ALT_KARTE, type UeberblickKartenTeile } from './ueberblickPark'
 
 export interface UeberblickKarteProps {
   inv: Investition
@@ -52,6 +54,9 @@ export interface UeberblickKarteProps {
   tag: TagDetail | null
   /** Hat die Anlage mehr als eine Wärmepumpe? Dann zählt nur der exakte Tages-Key. */
   mehrereGeraete: boolean
+  /** P-433-2b S1c: steht die Karte neben dem Schaubild (Desktop ⅓-Spalte)? Dann untereinander wie bisher; ist das
+   *  Schaubild geparkt, nebeneinander in voller Breite (wie die E-Mobilität). Ohne Angabe: untereinander. */
+  nebenSchaubild?: boolean
 }
 
 /** Tooltip des Anlagen-Rings — die Zahl gehört der Anlage, nicht dem Gerät. */
@@ -159,13 +164,24 @@ export function AnlagenRing({ wert }: { wert: number }) {
   )
 }
 
+/** Hat die Karte «Heute» einen Wert? Eine Regel für die Karte und ihre Park-Hülle (S1c). */
+function heuteDa(strom: number | null, zeile: WpGeraetZeile | null): boolean {
+  return zeile?.jaz != null || strom != null || zeile?.waerme_kwh != null
+}
+
+/** Welche datenabhängigen Karten erscheinen? (S1c: dieselbe Antwort für die Hüllen und die Meldung des Blocks.) */
+export function waermeKartenTeile({ inv, live, tag, mehrereGeraete }: Pick<UeberblickKarteProps, 'inv' | 'live' | 'tag' | 'mehrereGeraete'>): UeberblickKartenTeile {
+  const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
+  return { heute: heuteDa(stromHeute(live, inv.id, mehrereGeraete), zeile), betrieb: zeile?.betrieb_stunden != null }
+}
+
 function HeuteKarte({ strom, zeile }: { strom: number | null; zeile: WpGeraetZeile | null }) {
   const azJe = zeile
     ? ([['Heizen', zeile.jaz_heizen], ['Warmwasser', zeile.jaz_warmwasser], ['Kühlen', zeile.jaz_kuehlen]] as const)
         .filter(([, v]) => v != null) as [string, number][]
     : []
   const jaz = zeile?.jaz ?? null
-  if (jaz == null && strom == null && zeile?.waerme_kwh == null) return null
+  if (!heuteDa(strom, zeile)) return null
   const herleitung = herleitungMengen(zeile?.jaz_zaehler_kwh, zeile?.jaz_nenner_kwh)
 
   return (
@@ -223,15 +239,36 @@ function BetriebKarte({ inv, stunden }: { inv: Investition; stunden: Record<stri
   )
 }
 
-export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete }: UeberblickKarteProps) {
+/**
+ * «Auf einen Blick» — seit P-433-2b S1c **je Karte eine Park-Hülle** (`el:ueberblick-karte-geraet|-heute|-betrieb`,
+ * `ueberblickPark.ts`); der Kartenkopf liegt in der Hülle, die Kopfzone der Geste greift dort. Heute und Betrieb
+ * stehen nur mit Werten da — ihre Hülle ebenso (keine leere Hülle). Ist die alte Park-ID `el:ueberblick-karte`
+ * geparkt, gelten alle drei als geparkt.
+ */
+export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete, nebenSchaubild = true }: UeberblickKarteProps) {
+  const park = usePark()
   const strom = stromHeute(live, inv.id, mehrereGeraete)
   const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
+  const teile = waermeKartenTeile({ inv, live, tag, mehrereGeraete })
+  const altGeparkt = park.istGeparkt(UEBERBLICK_ALT_KARTE)
 
   return (
-    <div className="space-y-3" data-ueberblick-karte>
-      <GeraeteKarte inv={inv} live={live} wetter={wetter} />
-      <HeuteKarte strom={strom} zeile={zeile} />
-      {zeile?.betrieb_stunden != null && <BetriebKarte inv={inv} stunden={zeile.betrieb_stunden} />}
+    <div className={nebenSchaubild ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-3 gap-3 items-start'} data-ueberblick-karte>
+      {!altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-geraet" titel="Gerät">
+          <GeraeteKarte inv={inv} live={live} wetter={wetter} />
+        </Parkbar>
+      )}
+      {teile.heute && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-heute" titel="Heute">
+          <HeuteKarte strom={strom} zeile={zeile} />
+        </Parkbar>
+      )}
+      {zeile?.betrieb_stunden != null && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-betrieb" titel="Betrieb">
+          <BetriebKarte inv={inv} stunden={zeile.betrieb_stunden} />
+        </Parkbar>
+      )}
     </div>
   )
 }
