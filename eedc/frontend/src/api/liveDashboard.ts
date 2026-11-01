@@ -191,6 +191,8 @@ export interface LiveThemaEintrag {
   zeitpunkt: string | null
   device_class: string | null
   quelle: 'ha' | 'mqtt'
+  /** TH-E2: `entity_id` (HA) bzw. das volle Inbound-Topic (MQTT) — Tooltip der Karte «Themen»; fehlt bei älterem Backend. */
+  kennung?: string | null
 }
 
 /** Themen-Kacheln (4.2.0): ein Thema eines Geräts — Store-Reihenfolge, Einträge ohne Wert fehlen. */

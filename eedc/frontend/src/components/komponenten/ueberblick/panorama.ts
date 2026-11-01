@@ -30,8 +30,9 @@ export const PANORAMA_HOEHE = 816
 /** Anker-ID eines Objekts im Bild — welche es gibt, sagt der Deskriptor des Bildes. */
 export type AnkerId = string
 
-/** Art einer Kachel — bestimmt Gruppierung und Rang im Layout. */
-export type KachelArt = 'geraet' | 'innengeraet' | 'wert'
+/** Art einer Kachel — bestimmt Gruppierung und Rang im Layout. `thema` (4.2.0 TH-E2): eine Wert-Kachel je Thema, Rang 3
+ *  (nach allen Werten), nie eine eigene Gruppe. */
+export type KachelArt = 'geraet' | 'innengeraet' | 'wert' | 'thema'
 
 /** Art einer Gruppenkachel. */
 export type GruppenArt = 'geraete' | 'innengeraete' | 'weitere'

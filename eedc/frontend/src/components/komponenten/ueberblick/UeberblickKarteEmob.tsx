@@ -48,8 +48,9 @@ import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower } from '../../live/EnergieFluss'
 import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../../api/liveDashboard'
 import type { EmobBetriebZeile, EmobHeuteZeile, TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
-import { AnlagenRing, Karte, KartenKopf, Zeile } from './UeberblickKarte'
-import { UEBERBLICK_ALT_KARTE, type UeberblickKartenTeile } from './ueberblickPark'
+import { AnlagenRing, Karte, KartenKopf, ThemenKarte, Zeile, kartenRaster } from './UeberblickKarte'
+import { themenVon } from './themenKacheln'
+import { UEBERBLICK_ALT_KARTE, UEBERBLICK_KARTE, ueberblickGeparkt, type UeberblickKartenTeile } from './ueberblickPark'
 
 export interface UeberblickKarteEmobProps {
   inv: Investition
@@ -259,7 +260,11 @@ function heuteDa({ ladung, pvLadung, zeile }: HeuteDaten): boolean {
 
 /** Welche datenabhängigen Karten erscheinen? (S1c: dieselbe Antwort für die Hüllen und die Meldung des Blocks.) */
 export function emobKartenTeile(props: UeberblickKarteEmobProps): UeberblickKartenTeile {
-  return { heute: heuteDa(heuteDaten(props)), betrieb: betriebZeilen(props.tag, props.inv.id).length > 0 }
+  return {
+    heute: heuteDa(heuteDaten(props)),
+    betrieb: betriebZeilen(props.tag, props.inv.id).length > 0,
+    themen: themenVon(props.live, props.inv.id).length > 0,
+  }
 }
 
 function HeuteKarte({ ladung, pvLadung, zeile }: HeuteDaten) {
@@ -479,7 +484,8 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
 /**
  * «Auf einen Blick» der E-Mobilität — seit P-433-2b S1c **je Karte eine Park-Hülle** mit denselben IDs wie Wärme/Klima
  * (`ueberblickPark.ts`); Titel «Wallbox» bzw. «E-Auto», «Heute», «Betrieb». Heute und Betrieb stehen nur mit Werten da
- * — ihre Hülle ebenso. Ist die alte Park-ID `el:ueberblick-karte` geparkt, gelten alle drei als geparkt.
+ * — ihre Hülle ebenso; seit TH-E2 die vierte Karte «Themen» (`ThemenKarte`, gemeinsam mit Wärme/Klima), ebenso nur
+ * mit Wert. Ist die alte Park-ID `el:ueberblick-karte` geparkt, gelten alle als geparkt.
  */
 export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
   const park = usePark()
@@ -488,8 +494,9 @@ export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
   const heute = heuteDaten(props)
   const teile = emobKartenTeile(props)
   const altGeparkt = park.istGeparkt(UEBERBLICK_ALT_KARTE)
+  const themenOffen = teile.themen && !ueberblickGeparkt(park.istGeparkt, UEBERBLICK_KARTE.themen)
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-3${props.nebenSchaubild ? ' xl:grid-cols-1' : ''} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={inv.typ}>
+    <div className={`grid grid-cols-1 ${props.nebenSchaubild ? `${themenOffen ? 'md:grid-cols-2' : 'md:grid-cols-3'} xl:grid-cols-1` : kartenRaster(themenOffen)} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={inv.typ}>
       {!altGeparkt && (
         <Parkbar id="el:ueberblick-karte-geraet" titel={istWallbox ? 'Wallbox' : 'E-Auto'}>
           {istWallbox ? <WallboxGeraeteKarte inv={inv} live={live} /> : <EAutoGeraeteKarte inv={inv} live={live} />}
@@ -503,6 +510,11 @@ export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
       {teile.betrieb && !altGeparkt && (
         <Parkbar id="el:ueberblick-karte-betrieb" titel="Betrieb">
           <BetriebKarteEmob zeilen={betriebZeilen(tag, inv.id)} />
+        </Parkbar>
+      )}
+      {teile.themen && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-themen" titel="Themen">
+          <ThemenKarte themen={themenVon(live, inv.id)} />
         </Parkbar>
       )}
     </div>

@@ -188,10 +188,14 @@ describe('Klasse 2 — Hub-Block «Überblick»: Heute/Betrieb folgen den Daten 
   })
 
   it('gemeldet werden Heute und Betrieb nur, wenn sie gerendert sind', () => {
-    expect(ueberblickGemeldeteIds({ heute: false, betrieb: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet'])
-    expect(ueberblickGemeldeteIds({ heute: true, betrieb: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-heute'])
-    expect(ueberblickGemeldeteIds({ heute: true, betrieb: true })).toEqual([
+    expect(ueberblickGemeldeteIds({ heute: false, betrieb: false, themen: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet'])
+    expect(ueberblickGemeldeteIds({ heute: true, betrieb: false, themen: false })).toEqual(['el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-heute'])
+    expect(ueberblickGemeldeteIds({ heute: true, betrieb: true, themen: false })).toEqual([
       'el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-heute', 'el:ueberblick-karte-betrieb',
+    ])
+    // TH-E2: die vierte Karte «Themen» ebenso datenabhängig.
+    expect(ueberblickGemeldeteIds({ heute: false, betrieb: false, themen: true })).toEqual([
+      'el:ueberblick-schaubild', 'el:ueberblick-karte-geraet', 'el:ueberblick-karte-themen',
     ])
   })
 
@@ -200,6 +204,7 @@ describe('Klasse 2 — Hub-Block «Überblick»: Heute/Betrieb folgen den Daten 
     expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-geraet')).toBe(true)
     expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-heute')).toBe(true)
     expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-betrieb')).toBe(true)
+    expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-karte-themen')).toBe(true)   // TH-E2: die vierte Karte ebenso
     expect(ueberblickGeparkt(nurAlt, 'el:ueberblick-schaubild')).toBe(false)
   })
 })

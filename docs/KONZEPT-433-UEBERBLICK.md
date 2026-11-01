@@ -181,6 +181,38 @@ Wunsch Gernot aus der Lab-Sichtprobe rc16, Go 1.11.2026; Gate nach Entscheid des
 | **Spalten** | Schaubild offen + mindestens eine Karte offen ⇒ 2/3 zu 1/3 (Karten rechts untereinander); Schaubild geparkt ⇒ die offenen Karten nebeneinander in voller Breite (Wärme/Klima zieht der E-Mobilität gleich); alle Karten geparkt ⇒ Schaubild volle Breite. |
 | **Alte Park-ID** | `el:ueberblick-karte` (bis S1c die ganze Karte) gilt beim Lesen als «alle drei Karten geparkt» (`ueberblickGeparkt`, im Block und im Gate); ihr Chip «Auf einen Blick» holt alle drei zurück. Der Park-Rahmen bleibt unverändert. |
 
+## 2c. Themen — frei gewählte Entitäten je Gerät (gebaut 1.11.2026, unveröffentlicht, geplant 4.2.0)
+
+Anlass Gernot 31.10.2026; Konzept «Themen-Kacheln» Fassung 3, Entscheide Gernot 1.11.2026, Bauplan in zwei Etappen (TH-E1 Datenmodell,
+Routen, Datenquellen-Fläche, MQTT, Live-Pfad; TH-E2 Kachel und Karte). Gilt für **beide** Hubs (Wärmepumpe, Wallbox, E-Auto).
+
+| Teil | Form |
+| --- | --- |
+| **Ablage** | `sensor_mapping.investitionen[<id>].themen` (Thema → Einträge, IDs `t<n>`/`e<n>` aus einem Zähler je Gerät), Quelle je Eintrag nur in `quellen["inv_thema_<inv>_<e>"]` (`services/themen_store.py`). **Kein Registry-Feld**, kein Kanal, keine Mitschrift, kein Daten-Checker, kein Export. |
+| **Live** | `LiveDashboardResponse.themen`: je Gerät die Themen mit `eintraege [{id, label, wert, einheit, zeitpunkt, device_class, quelle, kennung}]` — nur Einträge mit Wert, `null` ohne jeden Wert; 60-s-Takt wie Modus und Zustände (`betriebsmodus_live.TaktErgebnis.themen`). `kennung` = `entity_id` (HA) bzw. das Inbound-Topic (MQTT). |
+| **Kachel** | je Thema mit Wert **eine Wert-Kachel** `art: 'thema'` am HIMMEL der Szene (Wärme rechts neben «Außen», E-Mobilität die Reserve E-2b-28), Symbol `tags`, Rollenfarbe des Geräts, keine Linie: Name = Thema, Wert-Zeile «‹Label› · ‹Wert›» des ersten, zweite Zeile des zweiten Eintrags; kompakte Dims nur der Wert; Tooltip alle Einträge + Stand (`themenKacheln.ts`). |
+| **Kürzung** | in der Zeichnung (`UeberblickSchaubild.tsx`, nur `art === 'thema'`, `themenKachelTexte`): Budget `zeichenBudget(nodeW, Schriftgröße)`; zuerst das Label (mindestens 3 Zeichen + «…»), der Wert bleibt ganz; reicht es nicht, steht der Wert allein; passt auch er nicht, wird er am Ende gekürzt. Tooltip, «Weitere»-Liste und Karte ungekürzt. |
+| **Layout** | eine Zeile in `rang()`: Thema ⇒ 3 (nach allen Werten); bei voller Reihe wandern die Themen zuerst nach «Weitere (n)» (je Thema eine Zeile `label · wertText · zweiteZeile`). `grundgruppen`, `GruppenArt`, Deskriptoren unverändert. |
+| **Karte «Themen»** | vierte Karte in «Auf einen Blick» (`ThemenKarte`, `data-karte="themen"`): je Thema eine Zwischenüberschrift, je Eintrag eine Zeile, Tooltip «‹Kennung› · Stand hh:mm»; nur mit ≥ 1 Eintrag mit Wert des gewählten Geräts. Park-ID `el:ueberblick-karte-themen` («Themen»), datenabhängig gemeldet (`UeberblickKartenTeile.themen`), nicht in der festen Liste (L2); die alte ID `el:ueberblick-karte` deckt sie mit. Spalten: Schaubild geparkt ⇒ mit der Themen-Karte ab `xl` vier nebeneinander, darunter zwei. |
+| **Wert** | wie der HA-State, keine Übersetzung: Zahl mit Komma und so vielen Nachkommastellen wie geliefert (höchstens zwei), Zeitstempel/ISO als Uhrzeit (heute) bzw. Datum mit Uhrzeit (`lib/datum.ts`), reines Datum als Datum, sonst wörtlich; Einheit mit Leerzeichen. |
+
+**Entscheide (Gernot 1.11.2026, Konzept Fassung 3):**
+
+| # | Frage | Entscheid |
+| --- | --- | --- |
+| T-1 | Ebenen | zwei: Thema → Einträge |
+| T-2 | Ablage | `sensor_mapping` + `quellen[inv_thema_…]`, ein Store |
+| T-3 | Form im Bild | **eine Wert-Kachel je Thema** am HIMMEL, zwei Einträge sichtbar, Tooltip alle |
+| T-4 | Einheit über MQTT | keine (Rohtext) |
+| T-5 | nicht-numerische Werte | wörtlich der HA-State; Klartext per Template-Helfer (Weg B) |
+| T-6 | Picker | alle States, 200 Zeilen + Suche |
+| T-7 | Gerätetypen | nur Typen mit Überblick (Wärmepumpe, Wallbox, E-Auto) |
+| T-8 | evcc-Rest (Plan, Restenergie, Solaranteil) | über Themen, kein Registry-Feld |
+| T-9 | Reihenfolge | Pfeile ▲▼ je Thema und Eintrag |
+| T-10 | Daten-Checker | keine Meldung, amber in der Zeile |
+| T-11 | Preset legt Thema an | nein |
+| T-12 | MQTT | gleich mit (Inbound, Gateway, Topic `…/thema_<e>`) |
+
 ## 3. Entscheide
 
 | # | Frage | Entscheid |
@@ -225,4 +257,9 @@ Wunsch Gernot aus der Lab-Sichtprobe rc16, Go 1.11.2026; Gate nach Entscheid des
 - **Einzeln geparkte Karten** (S1c): ein ausgeblendeter Block ist nicht montiert und fragt nicht ab — bekommt «Heute» oder
   «Betrieb» erst später am Tag Werte, erscheint die Karte beim nächsten Aufruf der Seite. Die Meldung gilt je Gerät und
   Seitenbesuch.
+- **Themen** (§2c): Wert bis 60 s alt; kein Verlauf, keine Mitschrift, kein Monat, kein Export, kein Daten-Checker; der
+  HA-State wörtlich; zwei Einträge im Bild, alle im Tooltip und in der Karte; volle Reihe ⇒ «Weitere»; `null` ohne Themen;
+  nur Wärmepumpe, Wallbox, E-Auto; Demo ohne Themen; eedc verhindert keine Nutzer-Themen mit Kosten-/CO₂-Entitäten (B9 gilt
+  eedcs eigenen Zahlen). Fünf Plätze in einer Reihe gibt es nie (Zeichenbreiten 360/450/600 ⇒ 3/4/6 ab fünf Kacheln) — bei
+  vier Themen am Fahrzeug stehen am Desktop alle im Bild, am Handy eines oder keines (Rest in «Weitere»).
 - **Live-Kacheln ohne Home-Assistant-Zuordnung** (MQTT ohne Modus) gibt es nur für die zugeordneten Zahlen; der Modus bleibt leer.

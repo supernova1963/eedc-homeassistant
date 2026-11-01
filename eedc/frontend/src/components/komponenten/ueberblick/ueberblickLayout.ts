@@ -134,6 +134,7 @@ export interface UeberblickLayout<T extends LayoutKachel = LayoutKachel> {
 function rang(p: Platz, panorama: PanoramaDef): number {
   if (p.gruppe === 'geraete' || p.mitglieder[0].art === 'geraet') return 0
   if (p.gruppe === 'innengeraete' || p.mitglieder[0].art === 'innengeraet') return 1
+  if (p.mitglieder[0].art === 'thema') return 3
   return 2 + (panorama.wertRang[p.anker ?? ''] ?? 9) / 10
 }
 

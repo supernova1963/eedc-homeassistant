@@ -688,3 +688,68 @@ describe('Zwei Plätze wie Netz und Speicher (P-433-2e, Gernot 26.10.2026)', () 
     expect(trifftRechteck({ x1: 50, y1: 200, x2: 250, y2: 220 }, r)).toBe(false)
   })
 })
+
+describe('Themen-Kacheln am Himmel (4.2.0 TH-E2, Bauplan §2.4): «Außen + zwei Themen» über die 11 Breiten', () => {
+  // Rang 3 (eine Zeile in `rang()`): Themen bleiben eigene Plätze am HIMMEL, rechts neben Außen (1-D-Schub in der
+  // Reihenfolge der Liste), ohne Linie (der HIMMEL-Pin liegt im Kachelband, W5), und wandern bei voller Reihe als
+  // ERSTE nach «Weitere». ⚠ Sprengsatz S1: `return 2` statt `return 3` in `rang()` ⇒ die Rang-Probe bei 480/390/375 px
+  // wird rot (die Themen blieben, Strom und Außen wanderten nach «Weitere»).
+  const BREITEN_11 = [1440, 1150, 1100, 900, 700, 600, 480, 390, 375, 360, 340]
+  const thema = (id: string): LayoutKachel => ({ id, art: 'thema', anker: 'HIMMEL' })
+  const MATHEK_THEMEN = [...MATHEK, thema('t1'), thema('t2')]
+  const OHNE_GERAET = [wert('ww', 'E'), wert('strom', 'I'), wert('aussen', 'HIMMEL'), thema('t1'), thema('t2')]
+  const istEinzeln = (ps: Platz[], id: string) => ps.find((p) => p.gruppe == null && p.mitglieder[0].id === id)
+  const weitere = (ps: Platz[]) => ps.find((p) => p.gruppe === 'weitere')?.mitglieder.map((m) => m.id) ?? []
+
+  it('an jeder Breite: Themen oben, rechts von Außen, keine Linie am HIMMEL, 0 Kreuzungen; ein Thema im Bild ⇒ Außen auch', () => {
+    for (const fall of [MATHEK_THEMEN, OHNE_GERAET]) {
+      for (const ctr of BREITEN_11) {
+        const l = layoutUeberblick(fall, ctr)
+        const was = `${ctr}px ${fall.length}`
+        expect(hatKreuzung(l.oben) || hatKreuzung(l.unten), was).toBe(false)
+        expect(hatKreuzungZwischen(l.oben, l.unten), was).toBe(false)
+        expect(l.unten.flatMap((p) => p.mitglieder.map((m) => m.id)).filter((id) => id.startsWith('t')), was).toEqual([])
+        const aussen = istEinzeln(l.oben, 'aussen')
+        for (const id of ['t1', 't2']) {
+          const t = istEinzeln(l.oben, id)
+          if (!t) { expect(weitere(l.oben), was).toContain(id); continue }
+          expect(t.linie, `${was} ${id}`).toBeNull()
+          expect(aussen, `${was}: ${id} im Bild, Außen nicht`).toBeDefined()   // Rang: Themen wandern vor Außen
+          expect(t.x, `${was} ${id}`).toBeGreaterThan(aussen!.x)
+        }
+        if (aussen) expect(aussen.linie, was).toBeNull()
+        const t1 = istEinzeln(l.oben, 't1')
+        const t2 = istEinzeln(l.oben, 't2')
+        if (t1 && t2) expect(t2.x, was).toBeGreaterThan(t1.x)   // Reihenfolge der Themen bleibt
+      }
+    }
+  })
+
+  it.each([
+    [1440, 'aussen t1 t2 ww strom', 'wp'], [600, 'aussen t1 t2 ww strom', 'wp'],
+    [480, 'weitere(3) wp ww strom', null], [390, 'weitere(3) wp ww strom', null],
+    [360, 'wp weitere(4) ww', null], [340, 'wp weitere(4) ww', null],
+  ])('Mathek + zwei Themen bei %i px: oben «%s», links %s (gemessen)', (ctr, oben, links) => {
+    const l = layoutUeberblick(MATHEK_THEMEN, ctr)
+    expect(reihe(l.oben).join(' ')).toBe(oben)
+    expect(l.links ? name(l.links) : null).toBe(links)
+    if (ctr < 500) {
+      expect(weitere(l.oben)).toEqual(ctr < 375 ? ['strom', 'aussen', 't1', 't2'] : ['aussen', 't1', 't2'])
+      expect(l.oben.find((p) => p.gruppe === 'weitere')!.linie).toBeNull()
+    }
+  })
+
+  it.each([480, 390, 375])('Rang-Probe (Sprengsatz S1) bei %i px: Warmwasser · Strom · Außen bleiben, die zwei Themen gehen nach «Weitere (2)»', (ctr) => {
+    const l = layoutUeberblick(OHNE_GERAET, ctr)
+    expect(reihe(l.oben)).toEqual(['aussen', 'weitere(2)', 'ww', 'strom'])
+    expect(weitere(l.oben)).toEqual(['t1', 't2'])
+  })
+
+  it('Handy 360/340 px: drei Plätze — alle Himmel-Kacheln in «Weitere (3)», Warmwasser und Strom bleiben', () => {
+    for (const ctr of [360, 340]) {
+      const l = layoutUeberblick(OHNE_GERAET, ctr)
+      expect(reihe(l.oben), `${ctr}`).toEqual(['weitere(3)', 'ww', 'strom'])
+      expect(weitere(l.oben), `${ctr}`).toEqual(['aussen', 't1', 't2'])
+    }
+  })
+})

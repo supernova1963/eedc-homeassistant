@@ -20,7 +20,7 @@
  * die Kachel als Ganzes (`transform`), nie ihre Maße einzeln.
  */
 import type React from 'react'
-import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Thermometer } from 'lucide-react'
+import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Snowflake, Fan, Waves, Thermometer, Tags } from 'lucide-react'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { LiveKomponente } from '../../api/liveDashboard'
 import { funktionsFarbe } from '../../lib/funktionsFarben'
@@ -44,6 +44,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   // P-433-2: die Wert-Kachel „Außentemperatur" im Hub-Überblick — kein
   // Backend-Name, der Live-Builder liefert dieses Symbol nie.
   thermometer: Thermometer,
+  // Themen-Kacheln (4.2.0 TH-E2): eine Wert-Kachel je Thema im Hub-Überblick — kein Backend-Name.
+  tags: Tags,
 }
 
 /** Render Lucide Icon als React-Element */

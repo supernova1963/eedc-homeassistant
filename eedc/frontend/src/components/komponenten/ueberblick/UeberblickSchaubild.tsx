@@ -36,6 +36,7 @@ import { formatPower, kuerzeMitSuffix, liesLiteModus, zeichenBudget } from '../.
 import type { LiveInnengeraet } from '../../../api/liveDashboard'
 import { PANORAMA_BREITE, PANORAMA_HOEHE, type PanoramaDef } from './panorama'
 import { kachelWertText, type UeberblickKachel } from './kachelAnker'
+import { themenKachelTexte } from './themenKacheln'
 import { layoutUeberblick, type Platz, type UeberblickLayout } from './ueberblickLayout'
 
 /** Startbreite bis zur ersten Messung (Desktop-Spalte); jsdom misst nie. */
@@ -183,6 +184,8 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: U
           const label = einzeln
             ? (einzeln.label.length > maxC ? einzeln.label.slice(0, maxC - 2) + '…' : einzeln.label)
             : kuerzeMitSuffix(g!.name, ` (${p.mitglieder.length})`, zeichenBudget(dims.nodeW, dims.labelFontSize))
+          // TH-E2 (Entscheid Master 1.11.2026 zu H1): Themen-Kacheln kürzen Wert- und zweite Zeile auf das Zeichenbudget.
+          const thema = einzeln?.art === 'thema' ? themenKachelTexte(einzeln, dims) : null
           const knopf = g ? {
             key: p.key,
             ariaLabel: `${g.name} (${p.mitglieder.length}): Liste öffnen`,
@@ -196,8 +199,8 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: U
                 icon={einzeln?.icon ?? g!.icon}
                 color={einzeln?.color ?? g!.color}
                 isActive={einzeln?.isActive ?? g!.isActive}
-                wertText={einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
-                zweiteZeile={einzeln?.zweiteZeile ?? null}
+                wertText={thema ? thema.wertText : einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
+                zweiteZeile={thema ? thema.zweiteZeile : einzeln?.zweiteZeile ?? null}
                 pegel={einzeln?.pegel}
                 tip={einzeln?.tip ?? g!.tip}
                 mitglieder={g ? p.mitglieder.length : undefined}

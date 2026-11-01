@@ -12,13 +12,13 @@
  *
  * **Szene «Ladepunkt»** (Wallbox-Seite): Blick in die offene Garage — Wandbox A an der Rückwand (Platz links, ihre
  * Gerätekachel), Zählerkasten Z an der Hauswand («Ladung heute · PV-Anteil»), Stecker S am Heck («Sitzung»), Auto F
- * (Fahrzeugkachel des angesteckten Autos), HIMMEL Reserve an der Hauswand (keine Kachel, E-2b-28). S und F liegen im
+ * (Fahrzeugkachel des angesteckten Autos), HIMMEL an der Hauswand (Themen-Kacheln, 4.2.0). S und F liegen im
  * Bild über der Mitte, stehen aber **ausdrücklich unten** (§9): die Linien laufen vom Vorplatz hinauf, über ihnen bleibt
  * die obere Reihe frei für A und Z.
  *
  * **Szene «Fahrzeug»** (E-Auto-Seite): das durchscheinende Auto vor dem Haus (E-2b-27) — Säulen-Wallbox L (Platz links,
  * Gerätekachel «Laden»; die Linie hängt an der Säule, nicht am Port: kurz und waagerecht), Cockpit C («Reichweite»),
- * Terrasse H («Standort»), Akku B im Unterboden («Ladestand» mit Pegel), Vorderrad R («Gefahren heute»), HIMMEL Reserve.
+ * Terrasse H («Standort»), Akku B im Unterboden («Ladestand» mit Pegel), Vorderrad R («Gefahren heute»), HIMMEL Themen-Kacheln.
  *
  * **Platzgrenzen** (§10): links frei bis 45 % der Bildhöhe (Ladepunkt: Garagen-Außenwand; Fahrzeug: Glastür/Beton), rechts
  * ungenutzt (58 %, der Wert hält den Vertrag).
@@ -41,7 +41,7 @@ export const LADEPUNKT_ANKER: Record<LadepunktAnkerId, Anker> = {
   Z: { x: 64.0, y: 33.0, objekt: 'Zählerkasten an der Hauswand neben der Garage' },
   S: { x: 47.6, y: 42.3, objekt: 'Stecker am Auto (rechtes Heck)' },
   F: { x: 33.5, y: 44.0, objekt: 'Auto, Dachmitte' },
-  // Reserve (E-2b-28): keine Kachel.
+  // Reserve (E-2b-28), seit 4.2.0 (TH-E2) der Anker der Themen-Kacheln (`themenKacheln.ts`).
   HIMMEL: { x: 85, y: 10, objekt: 'Hauswand rechts oben (Reserve)' },
 }
 
@@ -91,7 +91,7 @@ export const FAHRZEUG_ANKER: Record<FahrzeugAnkerId, Anker> = {
   H: { x: 38.0, y: 24.0, objekt: 'Terrasse vor der Glastür' },
   B: { x: 64.0, y: 57.5, objekt: 'Akku-Platte im Unterboden' },
   R: { x: 54.0, y: 73.0, objekt: 'Vorderrad' },
-  // Reserve (E-2b-28): keine Kachel.
+  // Reserve (E-2b-28), seit 4.2.0 (TH-E2) der Anker der Themen-Kacheln (`themenKacheln.ts`).
   HIMMEL: { x: 85, y: 8, objekt: 'Hauswand rechts oben (Reserve)' },
 }
 

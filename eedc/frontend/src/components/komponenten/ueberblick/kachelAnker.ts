@@ -17,6 +17,8 @@
  * «Ohne Sensor»-Zeile (G7/E-P3-13): sie sind Zusatzangaben, kein Grundbestand.
  * Seit P-433-2c je Gerät «Wärme heute» aus dem Tag-Detail (`wp_geraete[].waerme_kwh`) am selben Heizkreis-Objekt wie
  * «Vorlauf · Rücklauf» — ebenfalls nur mit Wert und nicht in der «Ohne Sensor»-Zeile.
+ * Seit den Themen-Kacheln (4.2.0 TH-E2) je Thema mit Wert aller Geräte eine Kachel am Himmel **nach** der
+ * Außentemperatur (`themenKacheln.ts`, Rang 3) — nicht in der «Ohne Sensor»-Zeile.
  *
  * ⚠ **P13 (ADR-002), Gruppe 2 «Anzeige-Ort nach Bauart» bzw. nach Stammdatum (`vorlauftemperatur`, S2-8):** die Bauart wählt
  * hier nur, AN WELCHEM OBJEKT eine Kachel steht — nie, OB ein Wert gezeigt
@@ -38,6 +40,7 @@ import { modusZeile, type EnergieFlussKachelProps, type ZweiteZeile } from '../.
 import { modusKlartext } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
 import type { AnkerId as PanoramaAnkerId, KachelArt } from './panorama'
+import { baueThemenKacheln, type ThemaTeil } from './themenKacheln'
 
 // Seit P-433-2b S1a (E0) steht die Kachel-Art im Panorama-Vertrag (`panorama.ts`); hier für bestehende Leser weitergereicht.
 export type { KachelArt } from './panorama'
@@ -70,6 +73,9 @@ export interface UeberblickKachel {
   /** P-433-2b S1a (Ü1): Pegel der Kachel (Füllung von unten, wie der SoC-Pegel im Energiefluss) — Wärme/Klima setzt
    *  keinen (`undefined`), das Schaubild reicht ihn an `EnergieFlussKachel` durch. */
   pegel?: EnergieFlussKachelProps['pegel']
+  /** Themen-Kacheln (4.2.0 TH-E2): Label und Wert der zwei sichtbaren Einträge getrennt — die Zeichnung kürzt damit
+   *  (`themenKacheln.ts::themenKachelTexte`); andere Kacheln setzen es nicht. */
+  themaTeile?: { erste: ThemaTeil; zweite: ThemaTeil | null }
 }
 
 export interface KachelEingaben {
@@ -398,6 +404,11 @@ export function baueUeberblickKacheln({ geraete, live, wetter, referenz, tag }: 
   }
   // Die Außentemperatur fehlt nicht wegen eines Sensors (sie kommt vom
   // Wetterdienst über die Koordinaten) — sie gehört nicht in die Zeile.
+
+  // TH-E2: Themen aller Geräte am Himmel, nach der Außentemperatur (Store-Reihenfolge; nie in der «Ohne Sensor»-Zeile).
+  for (const inv of geraete) {
+    kacheln.push(...baueThemenKacheln(live?.themen, inv, 'HIMMEL', KATEGORIE_FARBEN.waermepumpe, mehrere))
+  }
 
   // Vor der ersten Live-Antwort ist nichts „ohne Sensor", nur noch nicht geladen.
   return { kacheln, ohneSensor: live ? ohneSensor : [] }

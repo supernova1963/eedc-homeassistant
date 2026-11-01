@@ -29,6 +29,9 @@
  *  - **R** «Gefahren heute» (zweite Zeile Fahrverbrauch) bzw. nur «Fahrverbrauch heute» — aus dem Tag-Detail;
  *  - **H** «Standort» «Zu Hause»/«Unterwegs» (HA-Zone).
  *
+ * **Themen** (4.2.0 TH-E2): in beiden Szenen je Thema des gewählten Geräts mit Wert eine Kachel am HIMMEL (vorher
+ * Reserve, E-2b-28), Rollenfarbe des Geräts (`themenKacheln.ts`, Rang 3 ⇒ bei voller Reihe zuerst in «Weitere»).
+ *
  * ⛔ **Der Client rechnet nichts** (ADR-002/P12): PV-Anteil nur `pv_anteil_prozent`, Fahrt nur `km`/`fahrverbrauch_kwh`,
  * jede Zahl kommt fertig aus dem Backend und wird hier nur formatiert. Reine Funktionen — kein Hook, kein Abruf.
  */
@@ -44,6 +47,7 @@ import { computeDims, ladezustandZeile, wallboxKachelAuto } from '../../live/ene
 import type { ZweiteZeile } from '../../live/EnergieFlussKachel'
 import { ladezustandKlartext } from '../../ui/ModusChip'
 import type { KachelErgebnis, UeberblickKachel } from './kachelAnker'
+import { baueThemenKacheln } from './themenKacheln'
 import {
   FAHRZEUG_UNBEKANNT, GAST_LAEDT, GAST_VERBUNDEN, LADUNG_TAG_TOOLTIP, LADUNG_TOOLTIP, TOOLTIP_STEUERUNG,
   alleAutosAnWallboxen, eautoKnoten, fahrzeugImLive, herleitungPvAnteil, heuteZeile, ladungHeute, sitzungsTeile,
@@ -228,6 +232,7 @@ export function baueLadepunktKacheln({ inv, geraete, live, tag, referenz }: Emob
     if (sitzung) kacheln.push(sitzung)
     kacheln.push(...ladepunktFahrzeuge(k))
   }
+  kacheln.push(...baueThemenKacheln(live?.themen, inv, 'HIMMEL', FARBE_WALLBOX))
   return { kacheln, ohneSensor: live ? ohneSensor : [] }
 }
 
@@ -356,5 +361,6 @@ export function baueFahrzeugKacheln({ inv, live, tag, referenz }: EmobKachelEing
     kacheln.push(wertKachel(`wert-standort-${inv.id}`, 'H', 'Standort', 'home', FARBE_EAUTO, ort, null,
       `${inv.bezeichnung}\nStandort: ${ort}\nQuelle: HA-Zone`, inv.id))
   }
+  kacheln.push(...baueThemenKacheln(live?.themen, inv, 'HIMMEL', FARBE_EAUTO))
   return { kacheln, ohneSensor: live ? ohneSensor : [] }
 }

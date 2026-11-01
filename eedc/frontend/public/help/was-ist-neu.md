@@ -17,8 +17,14 @@ Geplant als **v4.2.0**.
 ein neuer Block „Themen". Darin legst du Themen an — etwa „Fahrzeugzustand" mit den Einträgen „Türen" und „Reifen vorne
 links" — und ordnest jedem Eintrag eine beliebige Entität aus Home Assistant zu (Schloss, Reifendruck, Service-Termin,
 evcc-Ladeplan …) oder ein MQTT-Topic. eedc zeigt den Wert so, wie Home Assistant ihn liefert; für Klartext ordnest du einen
-Template-Helfer zu. Die Reihenfolge stellst du mit den Pfeilen ein. Im Schaubild des Komponenten-Hubs wird daraus mit der
-nächsten Etappe je Thema eine Kachel. [Handbuch Einstellungen §7.11](HANDBUCH_EINSTELLUNGEN.md#711-themen-frei-gewählte-entitäten)
+Template-Helfer zu. Die Reihenfolge stellst du mit den Pfeilen ein. [Handbuch Einstellungen §7.11](HANDBUCH_EINSTELLUNGEN.md#711-themen-frei-gewählte-entitäten)
+
+**Komponenten → Wärmepumpe, Wallbox, E-Auto: deine Themen im Schaubild und in „Auf einen Blick".** Jedes Thema mit Wert ist
+eine eigene Kachel oben im Bild (bei der Wärmepumpe rechts neben der Außentemperatur): die ersten zwei Einträge stehen in der
+Kachel („Türen · locked"), alle im Tooltip. Ist die Zeile zu lang, kürzt eedc zuerst die Beschriftung — der Wert bleibt ganz.
+Wird die Reihe voll, rücken die Themen als Erste in „Weitere". Rechts gibt es die neue Karte **„Themen"** mit allen
+Einträgen; der Tooltip einer Zeile nennt die Entität bzw. das Topic und den Stand. Die Karte ist wie „Heute" und „Betrieb"
+einzeln parkbar. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
 
 ## v4.1.12 — 1. November 2026
 

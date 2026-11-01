@@ -22,6 +22,10 @@
  *    Mitschrift des Modus-Sensors, nur HA), Lese-Reihenfolge Heizen · Warmwasser · Kühlen · Lüften · Entfeuchten,
  *    nur Betriebsarten > 0; ein passiv kühlendes Gerät (Stammdatum) nennt «Kühlen passiv». Ohne Feld entfällt sie.
  *    **Kein Leerlauf** — er wird nicht mitgeschrieben.
+ * 4. **«Themen»** (`data-karte="themen"`, Themen-Kacheln 4.2.0 TH-E2, gemeinsam mit der E-Mobilität): je Thema des
+ *    gewählten Geräts eine Zwischenüberschrift und je Eintrag mit Wert eine Zeile «‹Label› ‹Wert›» (Wert wie der
+ *    HA-State, nur formatiert — `themenKacheln.ts::themaWert`), Tooltip «‹Entität bzw. Topic› · Stand hh:mm». Nur mit
+ *    mindestens einem Eintrag mit Wert. Die Kacheln im Bild zeigen zwei Einträge je Thema, die Karte alle.
  *
  * **Gestrichen:** PV-Anteil je Gerät (Entscheid Gernot 24.10.: nicht geplant), Kompressor-Starts, «seit hh:mm» —
  * dafür gibt es kein Feld. Keine Kosten-, CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).
@@ -38,14 +42,15 @@ import { formatPower } from '../../live/EnergieFluss'
 import { betriebsartTitel } from '../../live/datenquellenBetriebsart'
 import ModusChip, { ZusatzChip } from '../../ui/ModusChip'
 import { herleitungMengen } from '../../../v4/wpFunktionsGruppen'
-import type { LiveDashboardResponse, LiveWetterResponse } from '../../../api/liveDashboard'
+import type { LiveDashboardResponse, LiveThema, LiveThemaEintrag, LiveWetterResponse } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
 import type { WpGeraetZeile } from '../../../api/aktuellerMonat'
 import type { Investition } from '../../../types'
 import {
   istPassivGekuehlt, kuehltPassiv, stromHeute, vorlaufBeschriftung, warmwasserC, wpKnoten, zusatzheizungAktiv,
 } from './kachelAnker'
-import { UEBERBLICK_ALT_KARTE, type UeberblickKartenTeile } from './ueberblickPark'
+import { UEBERBLICK_ALT_KARTE, UEBERBLICK_KARTE, ueberblickGeparkt, type UeberblickKartenTeile } from './ueberblickPark'
+import { themaStand, themaWert, themenVon } from './themenKacheln'
 
 export interface UeberblickKarteProps {
   inv: Investition
@@ -70,9 +75,9 @@ export const FUSSZEILE_OHNE_VORLAUF = 'Vorlauf und Rücklauf erscheinen hier, so
 const BETRIEBSARTEN = ['heizen', 'warmwasser', 'kuehlen', 'lueften', 'entfeuchten'] as const
 
 /** Bausteine der Karten — exportiert für «Auf einen Blick» der E-Mobilität (P-433-2b K1, `UeberblickKarteEmob`). */
-export function Zeile({ label, children, data }: { label: string; children: ReactNode; data: string }) {
+export function Zeile({ label, children, data, tip }: { label: string; children: ReactNode; data: string; tip?: string | null }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 text-sm" data-zeile={data}>
+    <div className={`flex items-baseline justify-between gap-2 text-sm${tip ? ' cursor-help' : ''}`} data-zeile={data} title={tip ?? undefined}>
       <span className="text-gray-500 dark:text-gray-400">{label}</span>
       <span className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{children}</span>
     </div>
@@ -172,7 +177,41 @@ function heuteDa(strom: number | null, zeile: WpGeraetZeile | null): boolean {
 /** Welche datenabhängigen Karten erscheinen? (S1c: dieselbe Antwort für die Hüllen und die Meldung des Blocks.) */
 export function waermeKartenTeile({ inv, live, tag, mehrereGeraete }: Pick<UeberblickKarteProps, 'inv' | 'live' | 'tag' | 'mehrereGeraete'>): UeberblickKartenTeile {
   const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
-  return { heute: heuteDa(stromHeute(live, inv.id, mehrereGeraete), zeile), betrieb: zeile?.betrieb_stunden != null }
+  return {
+    heute: heuteDa(stromHeute(live, inv.id, mehrereGeraete), zeile),
+    betrieb: zeile?.betrieb_stunden != null,
+    themen: themenVon(live, inv.id).length > 0,
+  }
+}
+
+/** Raster der Karten in voller Breite (Schaubild geparkt): drei Spalten; steht die vierte Karte «Themen» (gerendert und
+ *  nicht geparkt), ab `xl` vier nebeneinander, darunter zwei (TH-E2, Spaltenregel S1c). */
+export function kartenRaster(themen: boolean): string {
+  return themen ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'
+}
+
+/** Tooltip einer Themen-Zeile: «‹Entität bzw. Topic› · Stand hh:mm»; ohne Zeitpunkt nur die Kennung. */
+export function themaTooltip(e: Pick<LiveThemaEintrag, 'kennung' | 'zeitpunkt'>, jetzt: Date = new Date()): string | null {
+  const teile = [e.kennung, themaStand(e.zeitpunkt, jetzt)].filter((t): t is string => !!t)
+  return teile.length > 0 ? teile.join(' · ') : null
+}
+
+/** Die Karte «Themen» (TH-E2) — eine Komponente für Wärme/Klima und E-Mobilität; `null` ohne Eintrag mit Wert. */
+export function ThemenKarte({ themen }: { themen: LiveThema[] }) {
+  if (!themen.some((t) => t.eintraege.length > 0)) return null
+  return (
+    <Karte name="themen">
+      <KartenKopf text="Themen" />
+      {themen.filter((t) => t.eintraege.length > 0).map((t) => (
+        <div key={`${t.investition_id}-${t.id}`} className="space-y-1" data-thema={t.id}>
+          <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">{t.name}</div>
+          {t.eintraege.map((e) => (
+            <Zeile key={e.id} label={e.label} data={`thema-${e.id}`} tip={themaTooltip(e)}>{themaWert(e)}</Zeile>
+          ))}
+        </div>
+      ))}
+    </Karte>
+  )
 }
 
 function HeuteKarte({ strom, zeile }: { strom: number | null; zeile: WpGeraetZeile | null }) {
@@ -241,9 +280,9 @@ function BetriebKarte({ inv, stunden }: { inv: Investition; stunden: Record<stri
 
 /**
  * «Auf einen Blick» — seit P-433-2b S1c **je Karte eine Park-Hülle** (`el:ueberblick-karte-geraet|-heute|-betrieb`,
- * `ueberblickPark.ts`); der Kartenkopf liegt in der Hülle, die Kopfzone der Geste greift dort. Heute und Betrieb
- * stehen nur mit Werten da — ihre Hülle ebenso (keine leere Hülle). Ist die alte Park-ID `el:ueberblick-karte`
- * geparkt, gelten alle drei als geparkt.
+ * seit TH-E2 `-themen`, `ueberblickPark.ts`); der Kartenkopf liegt in der Hülle, die Kopfzone der Geste greift dort.
+ * Heute, Betrieb und Themen stehen nur mit Werten da — ihre Hülle ebenso (keine leere Hülle). Ist die alte Park-ID
+ * `el:ueberblick-karte` geparkt, gelten alle als geparkt.
  */
 export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete, nebenSchaubild = true }: UeberblickKarteProps) {
   const park = usePark()
@@ -251,9 +290,10 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
   const zeile = tag?.wp_geraete?.find((z) => z.investition_id === inv.id) ?? null
   const teile = waermeKartenTeile({ inv, live, tag, mehrereGeraete })
   const altGeparkt = park.istGeparkt(UEBERBLICK_ALT_KARTE)
+  const themenOffen = teile.themen && !ueberblickGeparkt(park.istGeparkt, UEBERBLICK_KARTE.themen)
 
   return (
-    <div className={nebenSchaubild ? 'space-y-3' : 'grid grid-cols-1 md:grid-cols-3 gap-3 items-start'} data-ueberblick-karte>
+    <div className={nebenSchaubild ? 'space-y-3' : `grid grid-cols-1 ${kartenRaster(themenOffen)} gap-3 items-start`} data-ueberblick-karte>
       {!altGeparkt && (
         <Parkbar id="el:ueberblick-karte-geraet" titel="Gerät">
           <GeraeteKarte inv={inv} live={live} wetter={wetter} />
@@ -267,6 +307,11 @@ export default function UeberblickKarte({ inv, live, wetter, tag, mehrereGeraete
       {zeile?.betrieb_stunden != null && !altGeparkt && (
         <Parkbar id="el:ueberblick-karte-betrieb" titel="Betrieb">
           <BetriebKarte inv={inv} stunden={zeile.betrieb_stunden} />
+        </Parkbar>
+      )}
+      {teile.themen && !altGeparkt && (
+        <Parkbar id="el:ueberblick-karte-themen" titel="Themen">
+          <ThemenKarte themen={themenVon(live, inv.id)} />
         </Parkbar>
       )}
     </div>

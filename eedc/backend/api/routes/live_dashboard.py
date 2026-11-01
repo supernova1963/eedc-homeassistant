@@ -203,6 +203,8 @@ class LiveThemaEintrag(BaseModel):
     device_class: Optional[str] = None
     #: ``"ha"`` oder ``"mqtt"``.
     quelle: str
+    #: TH-E2: ``entity_id`` (HA) bzw. das volle Inbound-Topic (MQTT) — für den Tooltip der Karte «Themen».
+    kennung: Optional[str] = None
 
 
 class LiveThema(BaseModel):

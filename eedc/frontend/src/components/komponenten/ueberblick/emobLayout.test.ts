@@ -145,3 +145,32 @@ describe('Szene «Fahrzeug» — Layout mit den Ist-Ankern (S1b E4)', () => {
     expect(layoutUeberblick(FAHRZEUG, 1440, FAHRZEUG_PANORAMA_DEF).links?.key).toBe('l')
   })
 })
+
+describe('Themen-Kacheln am HIMMEL der Szene «Fahrzeug» (4.2.0 TH-E2, P3; Entscheid Master 1.11.2026 zu H3)', () => {
+  // Gemessen: die Zeichenbreiten sind 360/450/600; ab fünf Kacheln passen 3/4/6 in eine Reihe — fünf Plätze gibt es
+  // nie. Voll + vier Themen: Desktop alle im Bild, ohne «Weitere»; 480–375 px eins im Bild, «Weitere (3)»; 360/340 px
+  // «Weitere (4)». Die wörtliche Form «zwei im Bild, Weitere (2)» entsteht mit Reichweite + vier Themen bei 480–375 px.
+  // Rang-Aussage überall: Standort (H) und Reichweite (C) bleiben im Bild — Themen wandern zuerst.
+  const thema = (id: string): LayoutKachel => ({ id, art: 'thema', anker: 'HIMMEL' })
+  const VIER = ['t1', 't2', 't3', 't4'].map(thema)
+  const VOLL = [geraet('l', 'L'), wert('b', 'B'), wert('c', 'C'), wert('r', 'R'), wert('h', 'H'), ...VIER]
+  const zeile = (ps: Platz[]) => ps.map((p) => (p.gruppe ? `${p.gruppe}(${p.mitglieder.map((m) => m.id).join(',')})` : p.key)).join(' ')
+
+  it.each([
+    [1440, 'c h t1 t2 t3 t4'], [1150, 'c h t1 t2 t3 t4'], [1100, 'c h t1 t2 t3 t4'], [900, 'c h t1 t2 t3 t4'],
+    [700, 'c h t1 t2 t3 t4'], [600, 'c h t1 t2 t3 t4'],
+    [480, 'h c t1 weitere(t2,t3,t4)'], [390, 'h c t1 weitere(t2,t3,t4)'], [375, 'h c t1 weitere(t2,t3,t4)'],
+    [360, 'h c weitere(t1,t2,t3,t4)'], [340, 'h c weitere(t1,t2,t3,t4)'],
+  ])('voll + vier Themen bei %i px: oben «%s»; Standort und Reichweite im Bild, 0 Kreuzungen', (ctr, oben) => {
+    const l = layoutUeberblick(VOLL, ctr, FAHRZEUG_PANORAMA_DEF)
+    expect(zeile(l.oben)).toBe(oben)
+    for (const id of ['c', 'h']) expect(l.oben.some((p) => p.gruppe == null && p.key === id), id).toBe(true)
+    expect(hatKreuzung(l.oben) || hatKreuzung(l.unten) || hatKreuzungZwischen(l.oben, l.unten)).toBe(false)
+    expect(l.oben.filter((p) => p.mitglieder.some((m) => m.art === 'thema')).every((p) => p.linie == null)).toBe(true)
+  })
+
+  it.each([480, 390, 375])('Reichweite + vier Themen bei %i px: zwei Themen im Bild, «Weitere (2)» mit den letzten zwei', (ctr) => {
+    const l = layoutUeberblick([wert('c', 'C'), ...VIER], ctr, FAHRZEUG_PANORAMA_DEF)
+    expect(zeile(l.oben)).toBe('c t1 t2 weitere(t3,t4)')
+  })
+})

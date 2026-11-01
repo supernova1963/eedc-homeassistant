@@ -113,7 +113,8 @@ class ThemenWert:
 
     ``wert`` ist der rohe State (HA) bzw. Payload (MQTT) als Text; ``einheit`` aus ``unit_of_measurement`` (MQTT: leer);
     ``zeitpunkt`` ist ``last_changed`` des HA-States bzw. der Empfang über MQTT (ISO, ``None`` ohne Angabe);
-    ``quelle`` ist ``"ha"`` oder ``"mqtt"``. Formatiert wird nur im Client.
+    ``quelle`` ist ``"ha"`` oder ``"mqtt"``; ``kennung`` (TH-E2, Tooltip der Karte «Themen») die ``entity_id`` (HA) bzw.
+    das volle Inbound-Topic ``eedc/<id>_<anlage>/live/inv/<id>_<gerät>/thema_<e>`` (MQTT). Formatiert wird nur im Client.
     """
 
     wert: str
@@ -121,6 +122,7 @@ class ThemenWert:
     zeitpunkt: Optional[str]
     device_class: Optional[str]
     quelle: str
+    kennung: str
 
 
 @dataclass(frozen=True)
@@ -302,18 +304,20 @@ async def _erhebe(db: AsyncSession, anlage) -> TaktErgebnis:
     from backend.utils.investition_filter import UEBERBLICK_TYPEN
 
     result = await db.execute(
-        select(Investition.id, Investition.typ).where(
+        select(Investition.id, Investition.typ, Investition.bezeichnung).where(
             Investition.anlage_id == anlage.id,
             Investition.typ.in_(sorted(_ZUSTAND_TYPEN | set(UEBERBLICK_TYPEN))),
             aktiv_jetzt(),
         )
     )
-    typ_je_id = {inv_id: typ for inv_id, typ in result.all()}
+    zeilen = result.all()
+    typ_je_id = {inv_id: typ for inv_id, typ, _name in zeilen}
+    namen = {inv_id: name for inv_id, typ, name in zeilen if typ in UEBERBLICK_TYPEN}
     inv_ids = {inv_id for inv_id, typ in typ_je_id.items() if typ == "waermepumpe"}
     emob = {inv_id: typ for inv_id, typ in typ_je_id.items() if _EMOB_ZUSTAENDE.get(typ)}
     zustaende = await _erhebe_emob(anlage, emob)
     staende = await _erhebe_staende(anlage, emob)
-    themen = await _erhebe_themen(db, anlage, sorted(i for i, typ in typ_je_id.items() if typ in UEBERBLICK_TYPEN))
+    themen = await _erhebe_themen(db, anlage, namen)
     if not inv_ids:
         return TaktErgebnis({}, {}, zustaende, staende, themen)
 
@@ -351,13 +355,14 @@ def _themen_quellen(anlage, inv_ids: list[int]) -> tuple[dict[str, list[tuple[in
     return ha, mqtt
 
 
-async def _erhebe_themen(db: AsyncSession, anlage, inv_ids: list[int]) -> dict[tuple[int, str], ThemenWert]:
-    """Die Themen-Werte — HA (ein gebündelter Abruf), dann MQTT aus dem Inbound-Cache."""
-    if not inv_ids:
+async def _erhebe_themen(db: AsyncSession, anlage, namen: dict[int, str]) -> dict[tuple[int, str], ThemenWert]:
+    """Die Themen-Werte — HA (ein gebündelter Abruf), dann MQTT aus dem Inbound-Cache. ``namen``: Geräte mit Block
+    «Überblick» → Bezeichnung (für das Inbound-Topic in ``kennung``)."""
+    if not namen:
         return {}
-    ha, mqtt = _themen_quellen(anlage, inv_ids)
+    ha, mqtt = _themen_quellen(anlage, sorted(namen))
     ergebnis = await _erhebe_themen_ha(db, ha)
-    ergebnis.update(_erhebe_themen_mqtt(anlage, mqtt))
+    ergebnis.update(_erhebe_themen_mqtt(anlage, mqtt, namen))
     return ergebnis
 
 
@@ -382,14 +387,14 @@ async def _erhebe_themen_ha(db: AsyncSession, ha: dict[str, list[tuple[int, str]
         return {}
     ergebnis: dict[tuple[int, str], ThemenWert] = {}
     for entity, ziele in ha.items():
-        wert = _themen_wert_aus_state(states.get(entity))
+        wert = _themen_wert_aus_state(states.get(entity), entity)
         for ziel in ziele if wert is not None else ():
             ergebnis[ziel] = wert
     return ergebnis
 
 
-def _themen_wert_aus_state(daten: Optional[dict]) -> Optional[ThemenWert]:
-    """Ein HA-State-Dict → `ThemenWert`, ``None`` ohne Wert (fehlt, ``unknown``, ``unavailable``, leer)."""
+def _themen_wert_aus_state(daten: Optional[dict], entity: str) -> Optional[ThemenWert]:
+    """Ein HA-State-Dict → `ThemenWert` (``kennung`` = ``entity``), ``None`` ohne Wert (fehlt, ``unknown``, ``unavailable``, leer)."""
     from backend.services.themen_store import wert_text
 
     roh = wert_text(daten.get("state")) if isinstance(daten, dict) else None
@@ -402,20 +407,26 @@ def _themen_wert_aus_state(daten: Optional[dict]) -> Optional[ThemenWert]:
         zeitpunkt=daten.get("last_changed") or None,
         device_class=attrs.get("device_class") or None,
         quelle="ha",
+        kennung=entity,
     )
 
 
-def _erhebe_themen_mqtt(anlage, ziele: list[tuple[int, str]]) -> dict[tuple[int, str], ThemenWert]:
-    """Themen-Werte aus dem MQTT-Inbound-Cache (roher Text, `thema_<e>`); leer oder ``unknown`` ⇒ fehlt (`KEIN_WERT`)."""
+def _erhebe_themen_mqtt(anlage, ziele: list[tuple[int, str]], namen: dict[int, str]) -> dict[tuple[int, str], ThemenWert]:
+    """Themen-Werte aus dem MQTT-Inbound-Cache (roher Text, `thema_<e>`); leer oder ``unknown`` ⇒ fehlt (`KEIN_WERT`).
+
+    ``kennung`` ist das Inbound-Topic in der Form der Topic-Registry (`mqtt_topic_registry._themen_topics`).
+    """
     if not ziele:
         return {}
     from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    from backend.services.mqtt_topic_registry import _mqtt_slug
     from backend.services.themen_store import eintrag_topic_key, wert_text
 
     svc = get_mqtt_inbound_service()
     if svc is None:
         return {}
     roh_inv = (svc.cache.get_all_live_raw().get(anlage.id) or {}).get("inv") or {}
+    live_prefix = f"eedc/{anlage.id}_{_mqtt_slug(anlage.anlagenname or f'Anlage {anlage.id}')}/live"
     ergebnis: dict[tuple[int, str], ThemenWert] = {}
     for inv_id, e_id in ziele:
         paar = (roh_inv.get(str(inv_id)) or {}).get(eintrag_topic_key(e_id))
@@ -426,6 +437,7 @@ def _erhebe_themen_mqtt(anlage, ziele: list[tuple[int, str]]) -> dict[tuple[int,
         ergebnis[(inv_id, e_id)] = ThemenWert(
             wert=text, einheit="", device_class=None, quelle="mqtt",
             zeitpunkt=ts.isoformat() if hasattr(ts, "isoformat") else None,
+            kennung=f"{live_prefix}/inv/{inv_id}_{_mqtt_slug(namen.get(inv_id, ''))}/{eintrag_topic_key(e_id)}",
         )
     return ergebnis
 

@@ -110,8 +110,8 @@ async def test_ha_ein_gebuendelter_abruf_fuer_alle_geraete(db, ha, inbound):
     werte = await bml.lade_themen_live(db, a)
     assert ha.abrufe == [["lock.carport", "sensor.plan", "sensor.reifen"]], "ein Abruf für alle Themen-Entitäten"
     io, wb = invs["Ioniq"].id, invs["WB Garage"].id
-    assert werte[(io, "e2")] == bml.ThemenWert("locked", "", "2026-11-01T06:20:43+00:00", None, "ha")
-    assert werte[(io, "e3")] == bml.ThemenWert("2.4", "bar", None, "pressure", "ha")
+    assert werte[(io, "e2")] == bml.ThemenWert("locked", "", "2026-11-01T06:20:43+00:00", None, "ha", "lock.carport")
+    assert werte[(io, "e3")] == bml.ThemenWert("2.4", "bar", None, "pressure", "ha", "sensor.reifen")
     assert werte[(wb, "e2")].device_class == "timestamp"
     # Derselbe 60-s-Takt: ein zweiter Leser holt nichts neu.
     await bml.lade_themen_live(db, a)
@@ -138,6 +138,26 @@ async def test_mqtt_aus_dem_cache_keine_schliesst_aus(db, ha, inbound):
     assert {k: v.wert for k, v in werte.items()} == {(io, "e2"): "locked", (io, "e4"): "an"}
     assert werte[(io, "e2")].quelle == "mqtt" and werte[(io, "e2")].zeitpunkt is not None
     assert ha.abrufe == [], "ohne HA-Zuordnung kein HA-Abruf"
+
+
+async def test_th_e2_kennung_ha_entity_mqtt_topic(db, ha, inbound):
+    """TH-E2 (Entscheid Master 1.11.2026): ``kennung`` = ``entity_id`` (HA) bzw. das volle Inbound-Topic in der Form der
+    Topic-Registry (MQTT) — für den Tooltip «‹kennung› · Stand» der Karte «Themen»."""
+    a, invs = await _anlage(
+        db, {"Ioniq 5": [("Zustand", ["Türen", "Fenster"])]}, {"inv_thema_{Ioniq 5}_e2": _ha("lock.carport")},
+    )
+    io = invs["Ioniq 5"].id
+    ha.states = {"lock.carport": {"state": "locked", "attributes": {}}}
+    inbound.on_message(f"eedc/{a.id}/live/inv/{io}/thema_e3", "zu")
+    werte = await bml.lade_themen_live(db, a)
+    assert werte[(io, "e2")].kennung == "lock.carport"
+    assert werte[(io, "e3")].kennung == f"eedc/{a.id}_Live/live/inv/{io}_Ioniq_5/thema_e3"
+    # Dieselbe Form wie die Topic-Registry (eine Quelle für Topic-Liste, Gateway-Ziel und Tooltip).
+    from backend.services.mqtt_topic_registry import build_expected_topics
+    topics = {t["topic"] for t in await build_expected_topics(db, a)}
+    assert werte[(io, "e3")].kennung in topics
+    themen = await live_dashboard._themen_live(db, a)
+    assert [e["kennung"] for e in themen[0]["eintraege"]] == ["lock.carport", werte[(io, "e3")].kennung]
 
 
 async def test_mqtt_leer_im_cache_fehlt_live(db, ha, inbound):
@@ -178,7 +198,7 @@ async def test_p1_p2_reihenfolge_und_nur_mit_wert(db, ha, inbound):
     ).model_dump()
     assert antwort["themen"][0]["eintraege"][0] == {
         "id": "e5", "label": "Reifen", "wert": "2.4", "einheit": "", "zeitpunkt": antwort["themen"][0]["eintraege"][0]["zeitpunkt"],
-        "device_class": None, "quelle": "mqtt",
+        "device_class": None, "quelle": "mqtt", "kennung": f"eedc/{a.id}_Live/live/inv/{io}_Ioniq/thema_e5",
     }
 
 

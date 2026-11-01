@@ -7,14 +7,16 @@
  *   Schaubild volle Breite;
  * - Meldung an das Hub-Gate erst nach Live- **und** Tag-Antwort, mit genau den gerenderten IDs;
  * - Park-Kopfzone an einer Hub-Karte (Long-Press im Kartenkopf);
- * - alte Park-ID `el:ueberblick-karte` aus `localStorage` ⇒ alle drei Karten geparkt, ihr Chip holt alle drei zurück.
+ * - alte Park-ID `el:ueberblick-karte` aus `localStorage` ⇒ alle drei Karten geparkt, ihr Chip holt alle drei zurück;
+ * - TH-E2 (Themen-Kacheln 4.2.0): die vierte Karte «Themen» nur mit Wert des gewählten Geräts, gemeldet, von der alten ID
+ *   gedeckt, Spaltenregel (vier Karten ab `xl` nebeneinander), Tooltip «‹Kennung› · Stand».
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, fireEvent, screen } from '@testing-library/react'
-import type { ReactElement } from 'react'
+import { cloneElement, type ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../../../context/ThemeContext'
-import type { LiveDashboardResponse, LiveKomponente } from '../../../api/liveDashboard'
+import type { LiveDashboardResponse, LiveKomponente, LiveThema, LiveThemaEintrag } from '../../../api/liveDashboard'
 import type { TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { GeparktBlock, ParkProvider } from '../../park'
@@ -180,5 +182,82 @@ describe('S1c: alte Park-ID `el:ueberblick-karte` (bis S1c die ganze Karte)', ()
     fireEvent.click(screen.getByRole('button', { name: 'Auf einen Blick' }))
     expect(huellen()).toEqual([S, G, H, B])
     expect(JSON.parse(localStorage.getItem('eedc-park:' + SICHT)!)).toEqual([])
+  })
+})
+
+describe('TH-E2: vierte Karte «Themen» (`el:ueberblick-karte-themen`) — nur mit Wert, alte ID deckt sie, Spaltenregel', () => {
+  const T = 'el:ueberblick-karte-themen'
+  const stand = new Date(2026, 10, 1, 11, 27).toISOString()
+  const eintrag = (id: string, label: string, wert: string, kennung: string | null, zeitpunkt: string | null = stand): LiveThemaEintrag =>
+    ({ id, label, wert, einheit: '', zeitpunkt, device_class: null, quelle: 'ha', kennung })
+  const themen = (inv: number): LiveThema[] => [
+    { investition_id: inv, id: 't1', name: 'Fahrzeugzustand', eintraege: [eintrag('e1', 'Türen', 'locked', 'lock.carport'), eintrag('e2', 'Reifen', '259.5', 'eedc/1_A/live/inv/8_ID.4/thema_e2', null)] },
+    { investition_id: inv, id: 't2', name: 'Service', eintraege: [eintrag('e3', 'Tage', '41', null, null)] },
+  ]
+  const MIT: Fall[] = [
+    ['Wärme/Klima', FAELLE[0][1], () => { liveMock.wert = { live: { ...WP_LIVE, themen: themen(7) }, wetter: null, tag: WP_TAG } }],
+    ['Wallbox', FAELLE[1][1], () => { liveMock.wert = { live: { ...EMOB_LIVE, themen: [...themen(6), ...themen(8)] }, wetter: null, tag: EMOB_TAG } }],
+    ['E-Auto', FAELLE[2][1], () => { liveMock.wert = { live: { ...EMOB_LIVE, themen: [...themen(6), ...themen(8)] }, wetter: null, tag: EMOB_TAG } }],
+  ]
+
+  it.each(MIT)('%s: mit Themen des gewählten Geräts vier Karten-Hüllen, gemeldet mit der Themen-ID', (_n, ui, daten) => {
+    daten()
+    const melde = vi.fn()
+    imPark(cloneElement(ui(), { meldeParkIds: melde }))
+    expect(huellen()).toEqual([S, G, H, B, T])
+    expect(melde).toHaveBeenLastCalledWith([S, G, H, B, T])
+    const karte = document.querySelector(`[data-park-id="${T}"] [data-karte="themen"]`)!
+    expect(karte.textContent).toContain('Themen')
+    expect([...karte.querySelectorAll('[data-thema]')].map((d) => d.getAttribute('data-thema'))).toEqual(['t1', 't2'])
+    const zeile = (id: string) => karte.querySelector(`[data-zeile="thema-${id}"]`)!
+    expect(zeile('e1').textContent).toBe('Türenlocked')
+    expect(zeile('e2').textContent).toBe('Reifen259,5')
+    // Tooltip «‹Entität bzw. Topic› · Stand hh:mm» (Entscheid Master zu H2); ohne Zeitpunkt nur die Kennung, ohne beides keiner.
+    expect(zeile('e1').getAttribute('title')).toBe('lock.carport · Stand 11:27')
+    expect(zeile('e2').getAttribute('title')).toBe('eedc/1_A/live/inv/8_ID.4/thema_e2')
+    expect(zeile('e3').getAttribute('title')).toBeNull()
+  })
+
+  it('Themen nur an einem anderen Gerät ⇒ keine vierte Hülle, keine Meldung der Themen-ID', () => {
+    liveMock.wert = { live: { ...WP_LIVE, themen: themen(99) }, wetter: null, tag: WP_TAG }
+    const melde = vi.fn()
+    imPark(<UeberblickBlock anlageId={1} geraete={[WP]} inv={WP} meldeParkIds={melde} />)
+    expect(huellen()).toEqual([S, G, H, B])
+    expect(melde).toHaveBeenLastCalledWith([S, G, H, B])
+  })
+
+  it.each(MIT)('%s: alte Park-ID `el:ueberblick-karte` parkt auch «Themen»; der Chip holt alle vier zurück', (_n, ui, daten) => {
+    daten()
+    parke('el:ueberblick-karte')
+    imPark(ui())
+    expect(huellen()).toEqual([S])
+    fireEvent.click(screen.getByText('Parkplatz (1)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Auf einen Blick' }))
+    expect(huellen()).toEqual([S, G, H, B, T])
+  })
+
+  it.each(MIT)('%s: Spaltenregel — Schaubild geparkt ⇒ vier Karten ab `xl` nebeneinander (darunter zwei)', (_n, ui, daten) => {
+    daten()
+    parke(S)
+    imPark(ui())
+    expect(huellen()).toEqual([G, H, B, T])
+    expect(karte()?.className).toContain('md:grid-cols-2')
+    expect(karte()?.className).toContain('xl:grid-cols-4')
+    expect(karte()?.className).not.toContain('md:grid-cols-3')
+  })
+
+  it.each(MIT)('%s: «Themen» geparkt ⇒ die anderen drei bleiben, Raster wie ohne Themen', (_n, ui, daten) => {
+    daten()
+    parke(T, S)
+    imPark(ui())
+    expect(huellen()).toEqual([G, H, B])
+    expect(karte()?.className).toContain('md:grid-cols-3')
+    expect(karte()?.className).not.toContain('xl:grid-cols-4')
+  })
+
+  it.each(MIT)('%s: neben dem Schaubild stehen die vier Karten untereinander', (n, ui, daten) => {
+    daten()
+    imPark(ui())
+    expect(karte()?.className).toContain(n === 'Wärme/Klima' ? 'space-y-3' : 'xl:grid-cols-1')
   })
 })
