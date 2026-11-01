@@ -82,7 +82,7 @@ describe('Szene «Ladepunkt» — Fall-Proben (§3, gekürzt um §9)', () => {
     expect([s.label, s.wertText, s.zweiteZeile?.text]).toEqual(['Sitzung', '9,8 kWh', '2 h 10 min'])
     expect(s.tip).toContain('3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min')
     const f = eine(kacheln, 'F')
-    expect([f.art, f.label, f.wertText, f.zweiteZeile?.text, f.color]).toEqual(['wert', 'ID.4', '52 %', 'lädt 7,4 kW', KATEGORIE_FARBEN.eauto])
+    expect([f.art, f.label, f.wertText, f.zweiteZeile?.text, f.color]).toEqual(['wert', 'ID.4', '52 %', `lädt ${formatPower(7.4)}`, KATEGORIE_FARBEN.eauto])
     expect(f.pegel).toEqual({ prozent: 52, fill: socColor(52), opacity: 0.3 })
     expect(f.tip).toContain('gemeldet von der Steuerung')
     // Desktop: A im Platz links, rechts kein Platz (§9).

@@ -167,6 +167,7 @@ Gerät), **E-2b-23** (Zählerkachel «Ladung heute · PV-Anteil» je Wallbox; «
 | **Kacheln Fahrzeug** | **L** «Laden»: Leistung des Autos (Betrag, `formatPower`) mit Zustands-Chip bzw. «entlädt (V2H)», ohne Leistung der Zustand als Text; **B** «Ladestand» mit Pegel, Ziel · Restzeit; **C** «Reichweite» (Stand) bzw. «Kilometerstand»; **R** «Gefahren heute» (Fahrverbrauch) bzw. «Fahrverbrauch heute»; **H** «Standort». Ohne-Sensor-Zeile: «Ladestand ‹Auto›». |
 | **Rechnen** | keines im Client: PV-Anteil nur `pv_anteil_prozent`, Fahrt nur `km`/`fahrverbrauch_kwh` aus dem Tag-Detail. |
 | **Karten** | «Auf einen Blick» unverändert; neben dem Schaubild ab `xl` untereinander, mit geparktem Schaubild nebeneinander in voller Breite. |
+| **Lab-Sichtprobe rc15 (Gernot 1.11.2026)** | Drei Gestaltungsfragen entschieden: der Ladestand steht an A (Energiefluss-Kachel mit Pegel) **und** an F — bleibt; **ein Leistungsformat je Szene**: auch die zweite Zeile der Fahrzeugkachel («lädt …») nutzt `formatPower` (unter 10 kW in Watt); **Pflegehinweis:** der Zustands-Chip an L kommt aus `fahrzeugZustandZeile` (`emobKachelAnker.ts`), eine Form-Kopie von `ladezustandZeile` (`energieFlussLayout.ts`), die auch «Lädt» zeigt und bei «Nicht verbunden»/«Fertig» dämpft — wer die Chip-Form ändert, ändert beide Stellen. |
 
 ## 3. Entscheide
 

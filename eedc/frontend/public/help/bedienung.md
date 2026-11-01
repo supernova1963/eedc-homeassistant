@@ -976,7 +976,7 @@ Selektor, die Kacheln wechseln mit):
 - **Ladung heute** am Zählerkasten („14,7 kWh"), darunter **„PV-Anteil 67 %"** nur, wenn deine Wallbox Ladung **und**
   PV-Ladung misst (derselbe Wert wie die Kopfzahl der Karte „PV-Anteil heute"; eedc teilt nicht selbst).
 - **Sitzung** am Stecker („9,8 kWh", darunter die Dauer; ohne Fahrzeug „letzte Sitzung", solange der Sensor den Wert hält).
-- **Das Auto** am Autodach: Name, Ladestand mit Füllstand, darunter das Ziel („Ziel 80 %") oder „lädt 7,4 kW" — **nur, wenn
+- **Das Auto** am Autodach: Name, Ladestand mit Füllstand, darunter das Ziel („Ziel 80 %") oder „lädt 7.400 W" (Leistung wie im Energiefluss: unter 10 kW in Watt) — **nur, wenn
   eedc weiß, welches Auto an dieser Wallbox steht** (eine einzige Wallbox, oder die Steuerung meldet es) und das Auto einen
   Ladestand meldet. Bei „weiß eedc noch nicht" und bei einem Gast steht kein Auto im Bild — der Tooltip der Wallbox sagt es.
   Stehen mehrere deiner Autos eindeutig an der Wallbox, steht das zuerst angelegte einzeln, die übrigen in der Gruppe

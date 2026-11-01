@@ -171,8 +171,9 @@ function sitzungKachel(inv: Investition, k: LiveKomponente): UeberblickKachel | 
 function fahrzeugZweite(f: LiveFahrzeug, zielWallbox: number | null): string | null {
   const ziel = f.ziel_prozent ?? zielWallbox
   if (ziel != null) return `Ziel ${fmtZahl(ziel, 0)} %`
-  if (f.kw != null && f.kw > 0) return `lädt ${fmtZahl(f.kw, 1)} kW`
-  if (f.kw != null && f.kw < 0) return `entlädt ${fmtZahl(-f.kw, 1)} kW`
+  // Leistung im Energiefluss-Format (`formatPower`: unter 10 kW in Watt) — ein Format je Szene (Gernot 1.11.2026).
+  if (f.kw != null && f.kw > 0) return `lädt ${formatPower(f.kw)}`
+  if (f.kw != null && f.kw < 0) return `entlädt ${formatPower(-f.kw)}`
   return null
 }
 
