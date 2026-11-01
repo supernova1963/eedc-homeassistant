@@ -13,9 +13,10 @@ import type { LiveDashboardResponse, LiveFahrzeug, LiveKomponente } from '../../
 import type { EmobHeuteZeile, TagDetail } from '../../../api/energie_profil'
 import type { Investition } from '../../../types'
 import { KATEGORIE_FARBEN } from '../../../lib'
-import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower, socColor } from '../../live/EnergieFluss'
+import { SATZ_ZUORDNUNG_UNBEKANNT, formatPower, socColor, zeichenBudget } from '../../live/EnergieFluss'
+import { computeDims } from '../../live/energieFlussLayout'
 import { renderMitProvidern, stubMatchMedia } from '../../../test/render'
-import { baueFahrzeugKacheln, baueLadepunktKacheln, fahrzeugZustandZeile } from './emobKachelAnker'
+import { baueFahrzeugKacheln, baueLadepunktKacheln, fahrzeugZustandZeile, kmStandZeile } from './emobKachelAnker'
 import { FAHRZEUG_PANORAMA_DEF, LADEPUNKT_PANORAMA_DEF } from './emobPanoramaAnker'
 import { LADUNG_TAG_TOOLTIP, LADUNG_TOOLTIP } from './UeberblickKarteEmob'
 import { layoutUeberblick } from './ueberblickLayout'
@@ -223,7 +224,8 @@ describe('Szene «Fahrzeug» — Fall-Proben (§3, gekürzt um §9)', () => {
     expect([b.wertText, b.zweiteZeile?.text]).toEqual(['62 %', '90 % · noch 1 h 20 min'])
     expect(b.pegel).toEqual({ prozent: 62, fill: socColor(62), opacity: 0.3 })
     const c = eine(kacheln, 'C')
-    expect([c.label, c.wertText, c.zweiteZeile?.text]).toEqual(['Reichweite', '312 km', 'Stand 23.044 km'])
+    expect([c.label, c.wertText, c.zweiteZeile?.text]).toEqual(['Reichweite', '312 km', '23.044 km'])   // K2: «Stand» passt nicht
+    expect(c.tip).toContain('Kilometerstand: 23.044 km')
     const r = eine(kacheln, 'R')
     expect([r.label, r.wertText, r.zweiteZeile?.text]).toEqual(['Gefahren heute', '42 km', '7,8 kWh'])
     const h = eine(kacheln, 'H')
@@ -259,6 +261,21 @@ describe('Szene «Fahrzeug» — Fall-Proben (§3, gekürzt um §9)', () => {
     expect(eine(kacheln, 'H').wertText).toBe('Unterwegs')
     expect(an(kacheln, 'L')).toEqual([])
     expect(ohneSensor).toEqual([])
+  })
+
+  it('K2 (Nachlauf 4.2.0): die zweite Zeile der Reichweite passt ins Budget der engsten Dims (13 Zeichen)', () => {
+    const budget = zeichenBudget(computeDims(5).nodeW, computeDims(5).socFontSize)
+    expect(budget).toBe(13)
+    expect(computeDims(4).socFontSize >= computeDims(5).socFontSize && computeDims(4).nodeW >= computeDims(5).nodeW).toBe(true)
+    for (const km of [0, 950, 23037, 123456, 1234567]) {
+      const text = kmStandZeile(km)
+      expect(text.length, text).toBeLessThanOrEqual(budget)
+    }
+    expect(kmStandZeile(23037)).toBe('23.037 km')
+    expect(kmStandZeile(950)).toBe('Stand 950 km')   // passt — bleibt mit «Stand»
+    const c = eine(fz(SMART, SMART_LIVE({ km_stand: 23037 })).kacheln, 'C')
+    expect(c.zweiteZeile?.text).toBe('23.037 km')
+    expect(c.tip).toContain('Kilometerstand: 23.037 km')
   })
 
   it('nur Kilometerstand ⇒ C «Kilometerstand»; nur Fahrverbrauch ⇒ R «Fahrverbrauch heute»', () => {

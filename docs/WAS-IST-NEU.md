@@ -30,7 +30,9 @@ einzeln parkbar. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe
 die Galerie auf der Website hat neue Bilder dazu, auch vom Handy und aus den Datenquellen.
 
 **Besser lesbar:** In Kacheln mit Füllstand (Speicher, Wallbox, E-Auto) steht die zweite Zeile jetzt dunkel statt in der Farbe
-der Füllung, und bei Wallbox und E-Auto rücken die Karten neben dem Schaubild ohne Leerfläche zusammen.
+der Füllung, und bei Wallbox und E-Auto rücken die Karten neben dem Schaubild ohne Leerfläche zusammen. Beim E-Auto passt der
+Kilometerstand unter der Reichweite wieder in die Kachel („23.037 km"), und am Handy steht der Eigenverbrauchs-Ring in der
+Gerätekarte unter dem Ladestand, statt Ladestand und Reichweite übereinanderzuschieben.
 
 ## v4.1.12 — 1. November 2026
 

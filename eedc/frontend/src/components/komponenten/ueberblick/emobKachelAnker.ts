@@ -80,6 +80,24 @@ const AUTO_ZEILE_BUDGET = (() => {
   return zeichenBudget(d.nodeW, d.socFontSize)
 })()
 
+/** Zeichenbudget der zweiten Zeile in den engsten Dims (`computeDims(5)`; ab fünf Kacheln je Reihe gleich, aus der
+ *  Layout-SoT, nicht getippt) — so passt die Zeile in jeder Reihenbreite (Dims(4) und Dims(5) beide 13 Zeichen). */
+const ENGSTE_ZWEITE_ZEILE_BUDGET = (() => {
+  const d = computeDims(5)
+  return zeichenBudget(d.nodeW, d.socFontSize)
+})()
+
+/**
+ * Die zweite Zeile der Reichweite-Kachel: «Stand ‹km› km», wenn sie ins Budget der engsten Dims passt, sonst nur
+ * «‹km› km» (Nachlauf 4.2.0 K2: «Stand 23.037 km» hat 15 Zeichen, Budget 13 ⇒ «23.037 km»). Der Tooltip behält
+ * «Kilometerstand ‹km› km».
+ */
+export function kmStandZeile(stand: number): string {
+  const km = `${fmtZahl(stand, 0)} km`
+  const voll = `Stand ${km}`
+  return voll.length <= ENGSTE_ZWEITE_ZEILE_BUDGET ? voll : km
+}
+
 /** Pegel eines Ladestands — wie der SoC-Pegel im Energiefluss (kräftig, 0,3). */
 function socPegel(soc: number): NonNullable<UeberblickKachel['pegel']> {
   return { prozent: soc, fill: socColor(soc), opacity: 0.3 }
@@ -291,7 +309,7 @@ function ladenKachel(
   }
 }
 
-/** C — «Reichweite» (zweite Zeile «Stand …») bzw. nur «Kilometerstand»; `null` ohne beides. */
+/** C — «Reichweite» (zweite Zeile Kilometerstand, {@link kmStandZeile}) bzw. nur «Kilometerstand»; `null` ohne beides. */
 function reichweiteKachel(inv: Investition, f: LiveFahrzeug | null): UeberblickKachel | null {
   const rw = f?.reichweite_km ?? null
   const stand = f?.km_stand ?? null
@@ -304,7 +322,7 @@ function reichweiteKachel(inv: Investition, f: LiveFahrzeug | null): UeberblickK
   ].join('\n')
   return rw != null
     ? wertKachel(`wert-reichweite-${inv.id}`, 'C', 'Reichweite', 'car', FARBE_EAUTO, `${fmtZahl(rw, 0)} km`,
-      stand != null ? `Stand ${fmtZahl(stand, 0)} km` : null, tip, inv.id)
+      stand != null ? kmStandZeile(stand) : null, tip, inv.id)
     : wertKachel(`wert-reichweite-${inv.id}`, 'C', 'Kilometerstand', 'car', FARBE_EAUTO, `${fmtZahl(stand!, 0)} km`, null, tip, inv.id)
 }
 

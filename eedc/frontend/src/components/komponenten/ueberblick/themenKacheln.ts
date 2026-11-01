@@ -13,8 +13,11 @@
  *
  * **Wert wie der HA-State, keine Rechnung** (Bauplan §0): Zahl ⇒ `fmtZahl` mit so vielen Nachkommastellen, wie der
  * State trägt, höchstens zwei («259,5», «12,38»); `device_class: timestamp` oder ein ISO-8601-Zeitstempel ⇒ Uhrzeit
- * aus `lib/datum.ts` (heute) bzw. Datum mit Uhrzeit (anderer Tag), ein reines ISO-Datum ⇒ Datum; sonst **wörtlich**
- * (`locked`, `not_home`). Einheit mit Leerzeichen dahinter («80 %»). Kein Kanon, keine Übersetzung.
+ * aus `lib/datum.ts` (heute) bzw. Datum mit Uhrzeit (anderer Tag) — **in der Kachel kurz** «02.11. 07:00» (Konzept
+ * Fassung 3; Nachlauf 4.2.0 K1, die volle Form «02.11.2026, 07:00» passte nicht in die Zeile) und, passt auch das nicht
+ * ins Zeichenbudget der Zeile, nur «02.11.» (Entscheid Master 1.11.2026, K1b: {@link ThemaTeil.wertKurz}); im Tooltip und
+ * in der Karte «Themen» voll (`formatDatumZeit`); ein reines ISO-Datum ⇒ Datum; sonst **wörtlich** (`locked`, `not_home`).
+ * Einheit mit Leerzeichen dahinter («80 %»). Kein Kanon, keine Übersetzung.
  *
  * Reine Funktionen — kein Hook, kein Abruf. Die Karte «Themen» (`UeberblickKarte.tsx::ThemenKarte`) nutzt dieselben
  * Formatierer ({@link themaWert}, {@link themaStand}).
@@ -34,6 +37,9 @@ export interface ThemaTeil {
   label: string
   /** «‹Wert› ‹Einheit›» ({@link themaWert}). */
   wert: string
+  /** Nur bei einem Zeitstempel eines anderen Tages: «TT.MM.» — steht statt {@link wert}, wenn der Wert nicht ins
+   *  Zeichenbudget der Zeile passt (K1b). Sonst fehlt das Feld. */
+  wertKurz?: string
 }
 
 /** Ein Zahl-State, wie HA ihn liefert (`"259.5"`, `"-3"`, `"12.3846"`). */
@@ -46,32 +52,68 @@ const ISO_ZEIT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/
 /** Höchstens zwei Nachkommastellen (Bauplan §0). */
 const MAX_NACHKOMMA = 2
 
-/** Ein Zeitpunkt für die Anzeige: heute nur die Uhrzeit, an einem anderen Tag Datum und Uhrzeit (Browser-Zeitzone). */
-function zeitText(iso: string, jetzt: Date): string {
+const zwei = (n: number) => String(n).padStart(2, '0')
+
+/** «TT.MM.» (Browser-Zeitzone) — der Tag ohne Jahr. */
+function tagKurz(d: Date): string {
+  return `${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.`
+}
+
+/** «TT.MM. HH:MM» (Browser-Zeitzone) — die Kurzform der Kachel für einen anderen Tag, ohne Jahr (Konzept Fassung 3). */
+function datumZeitKurz(d: Date): string {
+  return `${tagKurz(d)} ${zwei(d.getHours())}:${zwei(d.getMinutes())}`
+}
+
+/**
+ * Ein Zeitpunkt für die Anzeige: heute nur die Uhrzeit, an einem anderen Tag Datum und Uhrzeit (Browser-Zeitzone) —
+ * `kurz` (Kachel) als «TT.MM. HH:MM», sonst (Tooltip, Karte) voll aus `lib/datum.ts`.
+ */
+function zeitText(iso: string, jetzt: Date, kurz = false): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return toIsoDatum(d) === toIsoDatum(jetzt) ? formatUhrzeit(iso) : formatDatumZeit(iso)
+  if (toIsoDatum(d) === toIsoDatum(jetzt)) return formatUhrzeit(iso)
+  return kurz ? datumZeitKurz(d) : formatDatumZeit(iso)
 }
 
 /** Der Wert eines Eintrags ohne Einheit — Zahl, Zeitstempel, Datum oder wörtlich. */
-function wertOhneEinheit(e: Pick<LiveThemaEintrag, 'wert' | 'device_class'>, jetzt: Date): string {
+function wertOhneEinheit(e: Pick<LiveThemaEintrag, 'wert' | 'device_class'>, jetzt: Date, kurz: boolean): string {
   const roh = e.wert.trim()
   const zahl = ZAHL.exec(roh)
   if (zahl) return fmtZahl(Number(roh), Math.min(zahl[1]?.length ?? 0, MAX_NACHKOMMA))
   if (ISO_DATUM.test(roh)) return formatDatum(roh)
-  if (e.device_class === 'timestamp' || ISO_ZEIT.test(roh)) return zeitText(roh, jetzt)
+  if (e.device_class === 'timestamp' || ISO_ZEIT.test(roh)) return zeitText(roh, jetzt, kurz)
   return e.wert
 }
 
-/** «‹Wert› ‹Einheit›» eines Eintrags — die Einheit mit Leerzeichen, ohne Einheit nur der Wert. */
-export function themaWert(e: Pick<LiveThemaEintrag, 'wert' | 'einheit' | 'device_class'>, jetzt: Date = new Date()): string {
-  const wert = wertOhneEinheit(e, jetzt)
+/**
+ * «‹Wert› ‹Einheit›» eines Eintrags — die Einheit mit Leerzeichen, ohne Einheit nur der Wert. `kurz` nur für die
+ * Kachel (Zeitstempel eines anderen Tages als «TT.MM. HH:MM»); Tooltip und Karte «Themen» rufen ohne.
+ */
+export function themaWert(
+  e: Pick<LiveThemaEintrag, 'wert' | 'einheit' | 'device_class'>, jetzt: Date = new Date(), kurz = false,
+): string {
+  const wert = wertOhneEinheit(e, jetzt, kurz)
   return e.einheit ? `${wert} ${e.einheit}` : wert
 }
 
-/** «‹Label› · ‹Wert Einheit›» — eine Kachelzeile. */
+/**
+ * «TT.MM.» (mit Einheit, falls vorhanden) eines Eintrags, dessen Wert ein Zeitstempel eines **anderen** Tages ist — die
+ * Notform der Kachel, wenn «TT.MM. HH:MM» nicht ins Budget passt (K1b). `undefined` für alles andere (heute steht die
+ * Uhrzeit, die immer passt; Zahl, Datum, Text haben keine Notform).
+ */
+export function themaWertKurz(
+  e: Pick<LiveThemaEintrag, 'wert' | 'einheit' | 'device_class'>, jetzt: Date = new Date(),
+): string | undefined {
+  const roh = e.wert.trim()
+  if (ZAHL.test(roh) || ISO_DATUM.test(roh) || !(e.device_class === 'timestamp' || ISO_ZEIT.test(roh))) return undefined
+  const d = new Date(roh)
+  if (Number.isNaN(d.getTime()) || toIsoDatum(d) === toIsoDatum(jetzt)) return undefined
+  return e.einheit ? `${tagKurz(d)} ${e.einheit}` : tagKurz(d)
+}
+
+/** «‹Label› · ‹Wert Einheit›» — eine Kachelzeile (Zeitstempel in der Kurzform der Kachel). */
 export function themaZeile(e: LiveThemaEintrag, jetzt: Date = new Date()): string {
-  return `${e.label} · ${themaWert(e, jetzt)}`
+  return `${e.label} · ${themaWert(e, jetzt, true)}`
 }
 
 /** «Stand 11:27» aus `zeitpunkt` (HA `last_changed`, MQTT Empfang) — `null` ohne Angabe. */
@@ -88,9 +130,12 @@ const MIN_LABEL = 3
  * Eine Kachelzeile «‹Label› · ‹Wert›» auf `budget` Zeichen (Entscheid Master 1.11.2026 zu H1): **der Wert ist das
  * Wichtige.** Passt die Zeile nicht, wird zuerst das Label gekürzt (mindestens {@link MIN_LABEL} Zeichen + «…»), der
  * Wert bleibt ganz; reicht der Platz dafür nicht, steht der Wert allein; passt auch er nicht, wird er am Ende mit «…»
- * gekürzt. Ohne Label (`''`, kompakte Dims) gilt nur die letzte Stufe.
+ * gekürzt. Ohne Label (`''`, kompakte Dims) gilt nur die letzte Stufe. Mit `wertKurz` (Zeitstempel eines anderen Tages,
+ * K1b) tritt «TT.MM.» an die Stelle des Werts, sobald «TT.MM. HH:MM» allein das Budget überschreitet.
  */
-export function kuerzeThemenZeile(label: string, wert: string, budget: number): string {
+export function kuerzeThemenZeile(label: string, wert: string, budget: number, wertKurz?: string): string {
+  // K1b: ein Zeitstempel, der allein nicht ins Budget passt, steht nur als «TT.MM.» — dann gilt die Regel mit ihm.
+  if (wertKurz != null && wert.length > budget) wert = wertKurz
   const voll = label ? `${label}${TRENNER}${wert}` : wert
   if (voll.length <= budget) return voll
   const platz = budget - TRENNER.length - wert.length
@@ -116,11 +161,17 @@ export function themenKachelTexte(
   const wertBudget = zeichenBudget(dims.nodeW, dims.kwFontSize)
   const zweiteBudget = zeichenBudget(dims.nodeW, dims.socFontSize)
   return {
-    wertText: kuerzeThemenZeile(kompakt ? '' : t.erste.label, t.erste.wert, wertBudget),
+    wertText: kuerzeThemenZeile(kompakt ? '' : t.erste.label, t.erste.wert, wertBudget, t.erste.wertKurz),
     zweiteZeile: t.zweite && k.zweiteZeile
-      ? { ...k.zweiteZeile, text: kuerzeThemenZeile(t.zweite.label, t.zweite.wert, zweiteBudget) }
+      ? { ...k.zweiteZeile, text: kuerzeThemenZeile(t.zweite.label, t.zweite.wert, zweiteBudget, t.zweite.wertKurz) }
       : k.zweiteZeile,
   }
+}
+
+/** Label und Wert eines sichtbaren Eintrags für die Zeichnung — mit der Notform «TT.MM.», wo es eine gibt (K1b). */
+function teil(e: LiveThemaEintrag, jetzt: Date): ThemaTeil {
+  const wertKurz = themaWertKurz(e, jetzt)
+  return { label: e.label, wert: themaWert(e, jetzt, true), ...(wertKurz != null ? { wertKurz } : {}) }
 }
 
 /** Der jüngste Zeitpunkt der Einträge eines Themas — der Stand der Kachel. */
@@ -159,11 +210,11 @@ export function baueThemenKacheln(
         id: `thema-${t.investition_id}-${t.id}`, art: 'thema' as const, anker,
         label: t.name, icon: 'tags', color: farbe, isActive: true,
         wertText: themaZeile(erster, jetzt),
-        wertTextKompakt: themaWert(erster, jetzt),
+        wertTextKompakt: themaWert(erster, jetzt, true),
         zweiteZeile: zweiter ? { text: themaZeile(zweiter, jetzt), fill: null } : null,
         themaTeile: {
-          erste: { label: erster.label, wert: themaWert(erster, jetzt) },
-          zweite: zweiter ? { label: zweiter.label, wert: themaWert(zweiter, jetzt) } : null,
+          erste: teil(erster, jetzt),
+          zweite: zweiter ? teil(zweiter, jetzt) : null,
         },
         tip, investitionId: t.investition_id,
       }

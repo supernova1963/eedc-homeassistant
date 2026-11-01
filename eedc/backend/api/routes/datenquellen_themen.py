@@ -6,7 +6,8 @@ Quellen-Route (`datenquellen.set_feld_quelle`, Feld-ID ``inv_thema_<inv>_<e>``);
 Umbenennen, Verschieben und Entfernen. Store und Regeln: `services/themen_store.py`.
 
 Eigenes Modul statt `datenquellen.py`, damit die Fläche (1 900 Zeilen) nicht weiter wächst; dasselbe Präfix
-(``/api/datenquellen``, `main.py`). Jede Schreibroute schreibt `log_activity` in ihrer Sitzung (N-532) und antwortet
+(``/api/datenquellen``, `main.py`). Die fünf Routen an einem Thema tragen das Gerät als Pflicht-Query-Parameter
+``investition_id`` (Kennungen sind nur je Gerät eindeutig; ohne ⇒ 422, Thema nicht an diesem Gerät ⇒ 404). Jede Schreibroute schreibt `log_activity` in ihrer Sitzung (N-532) und antwortet
 mit der Themen-Gruppe des Geräts in der Form von ``GET /felder`` (`_themen_gruppe`).
 """
 
@@ -82,14 +83,16 @@ async def _lade_geraet(db: AsyncSession, anlage: Anlage, investition_id: int) ->
     return inv
 
 
-async def _geraet_des_themas(db: AsyncSession, anlage: Anlage, t_id: str) -> Investition:
-    """Das Gerät, an dem das Thema ``t_id`` steht (Kennungen sind je Gerät eindeutig, die Route nennt nur das Thema)."""
-    for key, eintrag in ((anlage.sensor_mapping or {}).get("investitionen") or {}).items():
-        if not str(key).isdigit() or not isinstance(eintrag, dict):
-            continue
-        if any(t["id"] == t_id for t in store.lade_themen(anlage.sensor_mapping, key)["liste"]):
-            return await _lade_geraet(db, anlage, int(key))
-    raise HTTPException(status_code=404, detail="Thema nicht gefunden")
+async def _geraet_mit_thema(db: AsyncSession, anlage: Anlage, investition_id: int, t_id: str) -> Investition:
+    """Das Gerät ``investition_id`` — und das Thema ``t_id`` muss **an diesem Gerät** stehen, sonst 404.
+
+    Die Kennungen ``t<n>``/``e<n>`` zählen je Gerät ab 1 (`themen_store.naechste_id`); zwei Geräte tragen also beide
+    ``t1``. Darum nennt jede Schreibroute das Gerät als Pflicht-Query-Parameter (Nachlauf 4.2.0, H2), statt das Gerät
+    aus der Kennung zu erraten."""
+    inv = await _lade_geraet(db, anlage, investition_id)
+    if not any(t["id"] == t_id for t in store.lade_themen(anlage.sensor_mapping, inv.id)["liste"]):
+        raise HTTPException(status_code=404, detail="Thema nicht gefunden")
+    return inv
 
 
 async def _antwort(db: AsyncSession, anlage: Anlage, inv: Investition) -> dict:
@@ -173,11 +176,12 @@ async def thema_anlegen(anlage_id: int, body: ThemaAnlegenRequest, db: AsyncSess
 
 @router.patch("/{anlage_id}/themen/{t_id}")
 async def thema_aendern(
-    anlage_id: int, t_id: str, body: ThemaAendernRequest, db: AsyncSession = Depends(get_db, scope="function"),
+    anlage_id: int, t_id: str, investition_id: int, body: ThemaAendernRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Benennt ein Thema um und/oder verschiebt es (``position`` 0-basiert, geklemmt)."""
     anlage = await _lade_anlage(db, anlage_id)
-    inv = await _geraet_des_themas(db, anlage, t_id)
+    inv = await _geraet_mit_thema(db, anlage, investition_id, t_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     alt = next(t["name"] for t in store.lade_themen(mapping, inv.id)["liste"] if t["id"] == t_id)
     texte = []
@@ -191,10 +195,12 @@ async def thema_aendern(
 
 
 @router.delete("/{anlage_id}/themen/{t_id}")
-async def thema_entfernen(anlage_id: int, t_id: str, db: AsyncSession = Depends(get_db, scope="function")):
+async def thema_entfernen(
+    anlage_id: int, t_id: str, investition_id: int, db: AsyncSession = Depends(get_db, scope="function"),
+):
     """Entfernt ein Thema samt Einträgen — je Eintrag die Quelle und die Gateway-Zeile."""
     anlage = await _lade_anlage(db, anlage_id)
-    inv = await _geraet_des_themas(db, anlage, t_id)
+    inv = await _geraet_mit_thema(db, anlage, investition_id, t_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     thema, feld_ids = _schreib(store.thema_entfernen, mapping, inv.id, t_id)
     await _quellen_raeumen(db, mapping, feld_ids)
@@ -203,11 +209,12 @@ async def thema_entfernen(anlage_id: int, t_id: str, db: AsyncSession = Depends(
 
 @router.post("/{anlage_id}/themen/{t_id}/eintraege")
 async def eintrag_anlegen(
-    anlage_id: int, t_id: str, body: EintragAnlegenRequest, db: AsyncSession = Depends(get_db, scope="function"),
+    anlage_id: int, t_id: str, investition_id: int, body: EintragAnlegenRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Legt einen Eintrag ohne Quelle an (ohne Label «Eintrag n»)."""
     anlage = await _lade_anlage(db, anlage_id)
-    inv = await _geraet_des_themas(db, anlage, t_id)
+    inv = await _geraet_mit_thema(db, anlage, investition_id, t_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     eintrag = _schreib(store.eintrag_anlegen, mapping, inv.id, t_id, body.label)
     return await _speichern(db, anlage, mapping, "Themen-Eintrag angelegt", f"Eintrag «{eintrag['label']}» angelegt", inv)
@@ -215,12 +222,12 @@ async def eintrag_anlegen(
 
 @router.patch("/{anlage_id}/themen/{t_id}/eintraege/{e_id}")
 async def eintrag_aendern(
-    anlage_id: int, t_id: str, e_id: str, body: EintragAendernRequest,
+    anlage_id: int, t_id: str, e_id: str, investition_id: int, body: EintragAendernRequest,
     db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Benennt einen Eintrag um und/oder verschiebt ihn im Thema."""
     anlage = await _lade_anlage(db, anlage_id)
-    inv = await _geraet_des_themas(db, anlage, t_id)
+    inv = await _geraet_mit_thema(db, anlage, investition_id, t_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     treffer = store.finde_eintrag(mapping, inv.id, e_id)
     if treffer is None or treffer[0]["id"] != t_id:
@@ -238,11 +245,11 @@ async def eintrag_aendern(
 
 @router.delete("/{anlage_id}/themen/{t_id}/eintraege/{e_id}")
 async def eintrag_entfernen(
-    anlage_id: int, t_id: str, e_id: str, db: AsyncSession = Depends(get_db, scope="function"),
+    anlage_id: int, t_id: str, e_id: str, investition_id: int, db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Entfernt einen Eintrag samt Quelle und Gateway-Zeile."""
     anlage = await _lade_anlage(db, anlage_id)
-    inv = await _geraet_des_themas(db, anlage, t_id)
+    inv = await _geraet_mit_thema(db, anlage, investition_id, t_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     eintrag, feld_id = _schreib(store.eintrag_entfernen, mapping, inv.id, t_id, e_id)
     await _quellen_raeumen(db, mapping, [feld_id])

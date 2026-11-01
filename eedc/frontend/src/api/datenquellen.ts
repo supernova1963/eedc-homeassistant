@@ -344,6 +344,16 @@ export interface LevelResponse {
  *  Idiom wie `useAnlagen`/`useSelectedAnlage` (window CustomEvent). */
 export const VERBINDUNG_GEAENDERT_EVENT = 'eedc:verbindung-geaendert'
 
+/**
+ * Pfad einer Themen-Route mit dem Gerät als Query (`?investition_id=`): ohne `eintragId` das Thema, mit `''` die
+ * Eintragsliste, sonst der Eintrag.
+ */
+function themaPfad(anlageId: number, investitionId: number, themaId: string, eintragId?: string): string {
+  const basis = `/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}`
+  const pfad = eintragId == null ? basis : eintragId === '' ? `${basis}/eintraege` : `${basis}/eintraege/${encodeURIComponent(eintragId)}`
+  return `${pfad}?investition_id=${investitionId}`
+}
+
 export const datenquellenApi = {
   getFelder: (anlageId: number) =>
     api.get<DatenquellenResponse>(`/datenquellen/${anlageId}/felder`),
@@ -405,22 +415,22 @@ export const datenquellenApi = {
     api.post<TaktCheckResponse>(`/datenquellen/${anlageId}/ha/takt-check`, { entity_id: entityId }),
 
   // ── Themen-Kacheln (4.2.0): Themen und Einträge je Gerät. Die Quelle eines Eintrags setzt `setQuelle(feld_id)`. ──
+  // Kennungen `t<n>`/`e<n>` sind nur je Gerät eindeutig — jede Route an einem Thema nennt das Gerät (`?investition_id=`,
+  // Pflicht im Backend; Nachlauf 4.2.0 H2).
   themaAnlegen: (anlageId: number, investitionId: number, name?: string) =>
     api.post<ThemenAntwort>(`/datenquellen/${anlageId}/themen`, { investition_id: investitionId, ...(name ? { name } : {}) }),
-  themaAendern: (anlageId: number, themaId: string, aenderung: { name?: string; position?: number }) =>
-    api.patch<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}`, aenderung),
-  themaEntfernen: (anlageId: number, themaId: string) =>
-    api.delete<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}`),
-  eintragAnlegen: (anlageId: number, themaId: string, label?: string) =>
-    api.post<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege`, label ? { label } : {}),
-  eintragAendern: (anlageId: number, themaId: string, eintragId: string, aenderung: { label?: string; position?: number }) =>
-    api.patch<ThemenAntwort>(
-      `/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege/${encodeURIComponent(eintragId)}`, aenderung,
-    ),
-  eintragEntfernen: (anlageId: number, themaId: string, eintragId: string) =>
-    api.delete<ThemenAntwort>(
-      `/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege/${encodeURIComponent(eintragId)}`,
-    ),
+  themaAendern: (anlageId: number, investitionId: number, themaId: string, aenderung: { name?: string; position?: number }) =>
+    api.patch<ThemenAntwort>(themaPfad(anlageId, investitionId, themaId), aenderung),
+  themaEntfernen: (anlageId: number, investitionId: number, themaId: string) =>
+    api.delete<ThemenAntwort>(themaPfad(anlageId, investitionId, themaId)),
+  eintragAnlegen: (anlageId: number, investitionId: number, themaId: string, label?: string) =>
+    api.post<ThemenAntwort>(themaPfad(anlageId, investitionId, themaId, ''), label ? { label } : {}),
+  eintragAendern: (
+    anlageId: number, investitionId: number, themaId: string, eintragId: string, aenderung: { label?: string; position?: number },
+  ) =>
+    api.patch<ThemenAntwort>(themaPfad(anlageId, investitionId, themaId, eintragId), aenderung),
+  eintragEntfernen: (anlageId: number, investitionId: number, themaId: string, eintragId: string) =>
+    api.delete<ThemenAntwort>(themaPfad(anlageId, investitionId, themaId, eintragId)),
 
   /**
    * `#`-Scan des Brokers (zeit-/mengenbegrenzt) für den Gateway-Quell-Picker.

@@ -90,3 +90,28 @@ describe('E-Auto: Fahrt heute und Kilometerstand (K4)', () => {
     expect(zeichne(AUTO, ohne, null).querySelector('[data-zeile="kilometerstand"]')).toBeNull()
   })
 })
+
+describe('Nachlauf 4.2.0 K3: Gerätekarte E-Auto am Handy — Ladestand und Reichweite überlagern sich nicht', () => {
+  it('die Reihe bricht unter `sm` um (Reichweite unter den Ladestand), ab `sm` nebeneinander wie bisher', () => {
+    const mit = live({ fahrzeuge_ohne_wallbox: [{ investition_id: 5, label: 'Smart #1', soc: 62, kw: null, v2h: false, reichweite_km: 312 }] })
+    const c = zeichne(AUTO, mit, null)
+    const reihe = c.querySelector('[data-reihe="ladestand"]') as HTMLElement
+    expect(reihe.querySelector('[data-zeile="ladestand"]')).not.toBeNull()
+    expect(reihe.querySelector('[data-zeile="reichweite"]')?.textContent).toBe('312 km')
+    expect(reihe.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'sm:flex-nowrap', 'items-baseline', 'gap-x-3']))
+  })
+
+  it('K3b (360/320 px): unter `sm` bricht auch die äußere Reihe um, die Spalte behält ihre Inhaltsbreite, der Ring rückt darunter', () => {
+    const mit = live({
+      fahrzeuge_ohne_wallbox: [{ investition_id: 5, label: 'Smart #1', soc: 62, kw: null, v2h: false, reichweite_km: 312 }],
+      gauges: [{ key: 'eigenverbrauch', label: 'Eigenverbrauch', wert: 80, min_wert: 0, max_wert: 100, einheit: '%' }],
+    })
+    const c = zeichne(AUTO, mit, null)
+    const aussen = c.querySelector('[data-reihe="ladestand-ring"]') as HTMLElement
+    expect(aussen.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'max-sm:flex-wrap', 'items-center', 'justify-between']))
+    expect(aussen.className.split(' ')).not.toContain('flex-wrap')   // ab `sm` unverändert nebeneinander
+    const spalte = aussen.querySelector('[data-spalte="ladestand"]') as HTMLElement
+    expect(spalte.className.split(' ')).toEqual(expect.arrayContaining(['min-w-0', 'max-sm:min-w-fit', 'flex-1']))
+    expect(aussen.querySelector('[data-anlagen-ring]')).not.toBeNull()
+  })
+})

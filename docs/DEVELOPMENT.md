@@ -996,7 +996,7 @@ Nach dem Start des Backends verfügbar unter:
 | `/api/strompreise` | `strompreise` | Tarife, Spezialtarife, Gültigkeitsfenster |
 | `/api/live` | `live_dashboard`, `live_mqtt_inbound`, `live_wetter`, **`mqtt_gateway`**, **`mqtt_presets`** | Live-Fluss, Tagesverlauf, Börsenpreise, MQTT-Inbound, Topic-Mapping, Geräte-Presets — **fünf** Module unter einem Prefix |
 | `/api/datenquellen` | `datenquellen` | Datenquellen-Fläche (ein Feld = eine Quelle) |
-| `/api/datenquellen/{anlage_id}/themen…` | `datenquellen_themen` | Themen je Gerät anlegen/umbenennen/verschieben/entfernen, Einträge ebenso (TH-E1, 4.2.0); Quelle je Eintrag über `set_feld_quelle` mit Kennung `inv_thema_<inv>_<e>` |
+| `/api/datenquellen/{anlage_id}/themen…` | `datenquellen_themen` | Themen je Gerät anlegen/umbenennen/verschieben/entfernen, Einträge ebenso (TH-E1, 4.2.0; die fünf Routen an einem Thema mit Pflicht-Query `investition_id`, Kennungen je Gerät); Quelle je Eintrag über `set_feld_quelle` mit Kennung `inv_thema_<inv>_<e>` |
 | `/api/connectors` | `connector` | Geräte-Connectors im lokalen Netz (**9**, SoT: `services/connectors/registry.py`) |
 | `/api/cloud-import` | `cloud_import` | Cloud-API-Import (**12** Provider, SoT: `services/cloud_import/registry.py`) |
 | `/api/portal-import` | `data_import` | Portal-CSV-Import — ⚠ **Modul heißt `data_import`, Prefix `portal-import`** |

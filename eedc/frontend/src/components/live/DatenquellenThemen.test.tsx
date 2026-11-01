@@ -120,7 +120,7 @@ describe('Themen-Kacheln TH-E1 — Block «Themen»', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Thema 3')).toBeTruthy())
     expect(datenquellenApi.themaAnlegen).toHaveBeenCalledWith(1, 4)
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: /^Eintrag$/ })[0]) })
-    expect(datenquellenApi.eintragAnlegen).toHaveBeenCalledWith(1, 't1')
+    expect(datenquellenApi.eintragAnlegen).toHaveBeenCalledWith(1, 4, 't1')
   })
 
   it('Umbenennen mit Enter, Pfeile verschieben', async () => {
@@ -130,9 +130,9 @@ describe('Themen-Kacheln TH-E1 — Block «Themen»', () => {
     fireEvent.change(name, { target: { value: 'Zustand' } })
     fireEvent.keyDown(name, { key: 'Enter' })
     fireEvent.blur(name)
-    await waitFor(() => expect(datenquellenApi.themaAendern).toHaveBeenCalledWith(1, 't1', { name: 'Zustand' }))
+    await waitFor(() => expect(datenquellenApi.themaAendern).toHaveBeenCalledWith(1, 4, 't1', { name: 'Zustand' }))
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Thema nach unten' })[0]) })
-    expect(datenquellenApi.themaAendern).toHaveBeenCalledWith(1, 't1', { position: 1 })
+    expect(datenquellenApi.themaAendern).toHaveBeenCalledWith(1, 4, 't1', { position: 1 })
     expect((screen.getAllByRole('button', { name: 'Thema nach oben' })[0] as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -141,13 +141,29 @@ describe('Themen-Kacheln TH-E1 — Block «Themen»', () => {
     block()
     const knoepfe = screen.getAllByRole('button', { name: /Thema entfernen/ })
     fireEvent.click(knoepfe[1])  // «Leer» ohne Einträge
-    expect(datenquellenApi.themaEntfernen).toHaveBeenCalledWith(1, 't4')
+    expect(datenquellenApi.themaEntfernen).toHaveBeenCalledWith(1, 4, 't4')
     vi.mocked(datenquellenApi.themaEntfernen).mockClear()
     fireEvent.click(screen.getAllByRole('button', { name: /Thema entfernen/ })[0])
     expect(datenquellenApi.themaEntfernen).not.toHaveBeenCalled()
     expect(await screen.findByText(/mit 2 Einträgen und ihren Zuordnungen entfernen/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }))
-    await waitFor(() => expect(datenquellenApi.themaEntfernen).toHaveBeenCalledWith(1, 't1'))
+    await waitFor(() => expect(datenquellenApi.themaEntfernen).toHaveBeenCalledWith(1, 4, 't1'))
+  })
+
+  it('H2: Eintrag umbenennen, verschieben, entfernen nennen das Gerät (Nachlauf 4.2.0)', async () => {
+    vi.mocked(datenquellenApi.eintragAendern).mockResolvedValue({ investition_id: 4, themen: THEMEN })
+    vi.mocked(datenquellenApi.eintragEntfernen).mockResolvedValue({ investition_id: 4, themen: THEMEN })
+    const { container } = block()
+    const tueren = container.querySelectorAll('[data-themen-eintrag]')[0] as HTMLElement
+    const label = within(tueren).getByDisplayValue('Türen')
+    fireEvent.change(label, { target: { value: 'Türschloss' } })
+    fireEvent.keyDown(label, { key: 'Enter' })
+    fireEvent.blur(label)
+    await waitFor(() => expect(datenquellenApi.eintragAendern).toHaveBeenCalledWith(1, 4, 't1', 'e2', { label: 'Türschloss' }))
+    await act(async () => { fireEvent.click(within(tueren).getByRole('button', { name: 'Eintrag nach unten' })) })
+    expect(datenquellenApi.eintragAendern).toHaveBeenCalledWith(1, 4, 't1', 'e2', { position: 1 })
+    await act(async () => { fireEvent.click(within(tueren).getByRole('button', { name: 'Eintrag entfernen' })) })
+    expect(datenquellenApi.eintragEntfernen).toHaveBeenCalledWith(1, 4, 't1', 'e2')
   })
 
   it('Keine setzt die Quelle über die Feld-Route und lädt neu', async () => {
@@ -186,5 +202,33 @@ describe('Themen-Kacheln TH-E1 — Picker mit `alle`', () => {
     fireEvent.click(screen.getByText('lock.tuer_229'))
     expect(onSpeichern).toHaveBeenCalledWith('lock.tuer_229')
     expect(datenquellenApi.taktCheck).not.toHaveBeenCalled()
+  })
+})
+
+describe('Nachlauf 4.2.0 H2 — Themen-Routen tragen `?investition_id=`', () => {
+  it('alle fünf Routen an einem Thema nennen das Gerät als Query', async () => {
+    const { api } = await vi.importActual<typeof import('../../api/client')>('../../api/client')
+    const echt = (await vi.importActual<typeof import('../../api/datenquellen')>('../../api/datenquellen')).datenquellenApi
+    const patch = vi.spyOn(api, 'patch').mockResolvedValue({})
+    const del = vi.spyOn(api, 'delete').mockResolvedValue({})
+    const post = vi.spyOn(api, 'post').mockResolvedValue({})
+    try {
+      await echt.themaAendern(1, 7, 't1', { name: 'x' })
+      await echt.themaEntfernen(1, 7, 't1')
+      await echt.eintragAnlegen(1, 7, 't1', 'Türen')
+      await echt.eintragAendern(1, 7, 't1', 'e2', { position: 0 })
+      await echt.eintragEntfernen(1, 7, 't1', 'e2')
+      expect(patch.mock.calls.map((c) => c[0])).toEqual([
+        '/datenquellen/1/themen/t1?investition_id=7', '/datenquellen/1/themen/t1/eintraege/e2?investition_id=7',
+      ])
+      expect(del.mock.calls.map((c) => c[0])).toEqual([
+        '/datenquellen/1/themen/t1?investition_id=7', '/datenquellen/1/themen/t1/eintraege/e2?investition_id=7',
+      ])
+      expect(post.mock.calls).toEqual([['/datenquellen/1/themen/t1/eintraege?investition_id=7', { label: 'Türen' }]])
+    } finally {
+      patch.mockRestore()
+      del.mockRestore()
+      post.mockRestore()
+    }
   })
 })

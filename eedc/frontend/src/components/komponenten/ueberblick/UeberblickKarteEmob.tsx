@@ -450,10 +450,14 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
         {f?.dienstwagen && <ZusatzChip text="Dienstwagen" />}
       </Kopf>
       {(f?.soc != null || ev) && (
-        <div className="flex items-center justify-between gap-3">
+        // K3/K3b (Nachlauf 4.2.0, Entscheid Master 1.11.2026): unter `sm` bricht die Reihe um — die Spalte behält ihre
+        // Inhaltsbreite (`max-sm:min-w-fit`), der Ring rückt darunter. Ohne Umbruch drückte der Ring (213 px) die Spalte auf
+        // 71 / 41 / 1 px (390 / 360 / 320 px Fenster), «Ladestand» lief unter «312 km» und in den Ring (gemessen).
+        <div className="flex max-sm:flex-wrap items-center justify-between gap-3" data-reihe="ladestand-ring">
           {f?.soc != null && (
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex items-baseline gap-3">
+            <div className="min-w-0 max-sm:min-w-fit flex-1 space-y-1" data-spalte="ladestand">
+              {/* K3: unter `sm` steht die Reichweite unter dem Ladestand, ab `sm` daneben wie bisher. */}
+              <div className="flex flex-wrap sm:flex-nowrap items-baseline gap-x-3" data-reihe="ladestand">
                 <GrosseZahl titel="Ladestand" wert={`${fmtZahl(f.soc, 0)} %`} data="ladestand" />
                 {f.reichweite_km != null && (
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap" data-zeile="reichweite">

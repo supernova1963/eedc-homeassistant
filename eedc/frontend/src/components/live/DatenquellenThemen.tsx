@@ -11,7 +11,8 @@
  * (Hinweise, Pflicht, Probleme, Invert, Werte-Tabelle) und ist ohne Verhaltensänderung nicht herauslösbar; wer dort
  * Klassen oder Knopf-Reihenfolge ändert, zieht diese Zeile mit (Muster S1b `fahrzeugZustandZeile`).
  *
- * Schreibwege: die sechs Themen-Routen (`datenquellenApi.thema*`/`eintrag*`, Antwort = Themen des Geräts) und für die
+ * Schreibwege: die sechs Themen-Routen (`datenquellenApi.thema*`/`eintrag*` mit der Geräte-ID — Kennungen sind nur je
+ * Gerät eindeutig, Nachlauf 4.2.0 H2; Antwort = Themen des Geräts) und für die
  * Quelle die Feld-Route `setQuelle(feld_id)` — danach lädt die Fläche neu (`onNeuLaden`).
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -154,7 +155,7 @@ export default function DatenquellenThemen({ anlageId, gruppe, verfuegbarkeit, o
       <div key={e.id} data-themen-eintrag={e.id} className="flex flex-col gap-1.5 py-2 sm:flex-row sm:items-center sm:gap-3">
         <div className={`min-w-0 sm:flex-1 ${istKeine ? 'opacity-60' : ''}`}>
           <InlineText wert={e.label} label="Name des Eintrags" maxLength={60}
-            onSpeichern={(label) => ausfuehren(datenquellenApi.eintragAendern(anlageId, t.id, e.id, { label }))} />
+            onSpeichern={(label) => ausfuehren(datenquellenApi.eintragAendern(anlageId, invId, t.id, e.id, { label }))} />
           <div className={`font-mono text-xs break-all ${amber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
             {istText}
           </div>
@@ -181,10 +182,10 @@ export default function DatenquellenThemen({ anlageId, gruppe, verfuegbarkeit, o
           <QuelleButton icon={Ban} label="Keine" active={istKeine} title="Keine Quelle — der Eintrag zeigt nichts"
             onClick={() => setzeQuelle(e, Q_KEINE)} />
           <PfeilKnoepfe index={index} anzahl={t.eintraege.length} was="Eintrag"
-            onVerschieben={(position) => ausfuehren(datenquellenApi.eintragAendern(anlageId, t.id, e.id, { position }))} />
+            onVerschieben={(position) => ausfuehren(datenquellenApi.eintragAendern(anlageId, invId, t.id, e.id, { position }))} />
           <Button type="button" variant="ghost" size="icon" className="!h-7 !w-7 !min-h-0 !min-w-0 !p-1"
             aria-label="Eintrag entfernen" title="Eintrag entfernen"
-            onClick={() => ausfuehren(datenquellenApi.eintragEntfernen(anlageId, t.id, e.id))}>
+            onClick={() => ausfuehren(datenquellenApi.eintragEntfernen(anlageId, invId, t.id, e.id))}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -206,12 +207,12 @@ export default function DatenquellenThemen({ anlageId, gruppe, verfuegbarkeit, o
             <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-700">
               <div className="min-w-0 flex-1">
                 <InlineText wert={t.name} label="Name des Themas" maxLength={40}
-                  onSpeichern={(name) => ausfuehren(datenquellenApi.themaAendern(anlageId, t.id, { name }))} />
+                  onSpeichern={(name) => ausfuehren(datenquellenApi.themaAendern(anlageId, invId, t.id, { name }))} />
               </div>
               <PfeilKnoepfe index={i} anzahl={themen.length} was="Thema"
-                onVerschieben={(position) => ausfuehren(datenquellenApi.themaAendern(anlageId, t.id, { position }))} />
+                onVerschieben={(position) => ausfuehren(datenquellenApi.themaAendern(anlageId, invId, t.id, { position }))} />
               <Button type="button" variant="ghost" size="sm" className="!min-h-0 !px-1 !py-1 !text-xs"
-                onClick={() => (t.eintraege.length > 0 ? setEntfernen(t) : ausfuehren(datenquellenApi.themaEntfernen(anlageId, t.id)))}>
+                onClick={() => (t.eintraege.length > 0 ? setEntfernen(t) : ausfuehren(datenquellenApi.themaEntfernen(anlageId, invId, t.id)))}>
                 <X className="mr-1 h-3.5 w-3.5" />Thema entfernen
               </Button>
             </div>
@@ -220,7 +221,7 @@ export default function DatenquellenThemen({ anlageId, gruppe, verfuegbarkeit, o
             </div>
             <div className="px-3 pb-2">
               <Button type="button" variant="ghost" size="sm" className="!mt-1 !min-h-0 !px-0 !py-1 !text-xs"
-                onClick={() => ausfuehren(datenquellenApi.eintragAnlegen(anlageId, t.id))}>
+                onClick={() => ausfuehren(datenquellenApi.eintragAnlegen(anlageId, invId, t.id))}>
                 <Plus className="mr-1 h-3.5 w-3.5" />Eintrag
               </Button>
             </div>
@@ -238,7 +239,7 @@ export default function DatenquellenThemen({ anlageId, gruppe, verfuegbarkeit, o
         onConfirm={async () => {
           const t = entfernen
           setEntfernen(null)
-          if (t) await ausfuehren(datenquellenApi.themaEntfernen(anlageId, t.id))
+          if (t) await ausfuehren(datenquellenApi.themaEntfernen(anlageId, invId, t.id))
         }}
         title="Thema entfernen?"
         message={entfernen ? `«${entfernen.name}» mit ${entfernen.eintraege.length === 1 ? 'einem Eintrag' : `${entfernen.eintraege.length} Einträgen`} und ihren Zuordnungen entfernen?` : ''}

@@ -212,9 +212,6 @@ const GALERIE_ZUSTAND = {
   'e-auto': ['ladezustand_fahrzeug', 'reichweite_km', 'zu_hause'],
 }
 
-/** Abstand der Themen-Kennungen je Geraet (s. `themenVorbereiten`). */
-const THEMEN_ID_ABSTAND = 20
-
 const ANSICHTEN = [
   {
     name: 'cockpit_main',
@@ -641,11 +638,8 @@ function entitaetSlug(label) {
  * `…/felder/{feld_id}/quelle`). Idempotent: ein Thema, dessen Name am Geraet schon steht, bleibt unberuehrt.
  * ⛔ Schreibt in die Datenbank — nur auf der KOPIE.
  *
- * ⚠ Kennungen gemessen 1.11.2026: `t<n>`/`e<n>` zaehlen je GERAET ab 1, die Schreibrouten nennen aber nur die
- * Anlage und das Thema (`_geraet_des_themas` nimmt das erste Geraet mit dieser Kennung). Zwei Geraete mit Themen
- * teilen sich also `t1` — ein Eintrag fuer das zweite landete im Thema des ersten. Damit die Galerie-Kopie stimmt,
- * rueckt die Vorbereitung die Zaehler der Geraete erst auseinander (je Geraet i: i × THEMEN_ID_ABSTAND Kennungen
- * per Anlegen + Entfernen eines Platzhalters — solange KEIN Geraet ein Thema traegt, ist jede Kennung eindeutig).
+ * Kennungen `t<n>`/`e<n>` zaehlen je Geraet ab 1; die Routen an einem Thema nennen darum das Geraet
+ * (`?investition_id=`, Nachlauf 4.2.0 H2) — zwei Geraete mit `t1` stoeren sich nicht.
  */
 async function themenVorbereiten() {
   const anlage = (await api('/api/anlagen/')).find(a => a.anlagenname === ANLAGE)
@@ -658,31 +652,21 @@ async function themenVorbereiten() {
     return { typ, g, invId: Number(g.id.replace('inv:', '')) }
   })
 
-  // 1. Zaehler auseinanderruecken — nur auf einer Kopie ohne jedes Thema (sonst waere ein Platzhalter mehrdeutig).
-  if (geraete.every(({ g }) => !(g.themen || []).length)) {
-    for (const [i, { invId }] of geraete.entries()) {
-      for (let n = 0; n < i * THEMEN_ID_ABSTAND; n++) {
-        const platz = (await api(`${dq}/themen`, 'POST', { investition_id: invId, name: 'Platzhalter' })).themen.at(-1)
-        await api(`${dq}/themen/${platz.id}`, 'DELETE')
-      }
-    }
-  }
-
   for (const { typ, g, invId } of geraete) {
-    // 2. Zustandsfelder auf eine HA-Entitaet (nur, was noch keine Quelle hat).
+    // 1. Zustandsfelder auf eine HA-Entitaet (nur, was noch keine Quelle hat).
     for (const key of GALERIE_ZUSTAND[typ] || []) {
       const f = g.felder.find(x => x.id === `inv_live_${invId}_${key}`)
       if (f && f.quelle === 'keine') {
         await api(`${dq}/felder/${f.id}/quelle`, 'POST', { quelle: 'ha_app', entity_id: `sensor.demo_${entitaetSlug(key)}` })
       }
     }
-    // 3. Themen und Eintraege.
+    // 2. Themen und Eintraege.
     const vorhanden = new Set((g.themen || []).map(t => t.name))
     for (const [name, eintraege] of GALERIE_THEMEN[typ]) {
       if (vorhanden.has(name)) continue
       const thema = (await api(`${dq}/themen`, 'POST', { investition_id: invId, name })).themen.at(-1)
       for (const [label, q] of eintraege) {
-        const antwort = await api(`${dq}/themen/${thema.id}/eintraege`, 'POST', { label })
+        const antwort = await api(`${dq}/themen/${thema.id}/eintraege?investition_id=${invId}`, 'POST', { label })
         if (antwort.investition_id !== invId) throw new Error(`Eintrag „${label}" landete an Geraet ${antwort.investition_id}`)
         const e = antwort.themen.find(t => t.id === thema.id).eintraege.at(-1)
         if (q === 'ha') {

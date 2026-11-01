@@ -15,7 +15,7 @@ import { computeDims } from '../../live/energieFlussLayout'
 import { baueUeberblickKacheln } from './kachelAnker'
 import { baueFahrzeugKacheln, baueLadepunktKacheln } from './emobKachelAnker'
 import {
-  baueThemenKacheln, kuerzeThemenZeile, themaStand, themaWert, themaZeile, themenKachelTexte, themenVon,
+  baueThemenKacheln, kuerzeThemenZeile, themaStand, themaWert, themaWertKurz, themaZeile, themenKachelTexte, themenVon,
 } from './themenKacheln'
 import type { LiveDashboardResponse } from '../../../api/liveDashboard'
 
@@ -56,6 +56,66 @@ describe('Wert wie der HA-State — nur formatiert (Bauplan §0)', () => {
     expect(themaWert(eintrag('e', 'Service', '2027-03-15', { device_class: 'date' }), JETZT)).toBe('15.03.2027')
     expect(themaStand(heute(11, 27), JETZT)).toBe('Stand 11:27')
     expect(themaStand(null, JETZT)).toBeNull()
+  })
+})
+
+describe('K1 (Nachlauf 4.2.0): Zeitstempel in der Kachel kurz «TT.MM. HH:MM», Tooltip und Karte voll', () => {
+  const plan = (iso: string) => eintrag('e', 'Plan', iso, { device_class: 'timestamp' })
+
+  it('heute nur die Uhrzeit, anderer Tag «02.11. 07:00» — themaWert kurz, die Kachelzeile, kompakt', () => {
+    expect(themaWert(plan(heute(9, 0)), JETZT, true)).toBe('09:00')
+    expect(themaWert(plan(morgen(7, 0)), JETZT, true)).toBe('02.11. 07:00')
+    expect(themaZeile(plan(morgen(7, 0)), JETZT)).toBe('Plan · 02.11. 07:00')
+    expect(themaWert(plan(morgen(7, 0)), JETZT)).toBe('02.11.2026, 07:00')  // ohne `kurz`: volle Form (Karte)
+  })
+
+  it('Jahreswechsel: ohne Jahr in der Kachel, mit Jahr im Tooltip', () => {
+    const silvester = new Date(2026, 11, 31, 23, 30)
+    const neujahr = new Date(2027, 0, 1, 0, 15).toISOString()
+    expect(themaWert(plan(neujahr), silvester, true)).toBe('01.01. 00:15')
+    expect(themaWert(plan(neujahr), silvester)).toBe('01.01.2027, 00:15')
+    expect(themaWert(plan(new Date(2026, 11, 31, 23, 59).toISOString()), new Date(2027, 0, 1, 8, 0), true)).toBe('31.12. 23:59')
+  })
+
+  it('baueThemenKacheln: Kachel kurz (Wert-Zeile, kompakt, Teile, zweite Zeile), Tooltip voll', () => {
+    const wartung = new Date(2026, 11, 11, 9, 0).toISOString()
+    const t = thema(7, 't2', 'Service', [
+      eintrag('e1', 'Nächste Wartung', wartung, { device_class: 'timestamp' }),
+      eintrag('e2', 'Ladeplan', wartung),
+    ])
+    const [k] = baueThemenKacheln([t], IONIQ, 'HIMMEL', KATEGORIE_FARBEN.eauto, false, JETZT)
+    expect(k.wertText).toBe('Nächste Wartung · 11.12. 09:00')
+    expect(k.wertTextKompakt).toBe('11.12. 09:00')
+    expect(k.themaTeile?.erste.wert).toBe('11.12. 09:00')
+    expect(k.zweiteZeile?.text).toBe('Ladeplan · 11.12. 09:00')
+    expect(k.themaTeile?.zweite?.wert).toBe('11.12. 09:00')
+    expect(k.tip).toBe('Service\nNächste Wartung: 11.12.2026, 09:00\nLadeplan: 11.12.2026, 09:00')
+  })
+
+  it('K1b (Entscheid Master 1.11.2026): passt «TT.MM. HH:MM» nicht ins Budget, steht nur «TT.MM.»; heute die Uhrzeit', () => {
+    expect(kuerzeThemenZeile('', '11.12. 09:00', 11, '11.12.')).toBe('11.12.')
+    expect(kuerzeThemenZeile('', '11.12. 09:00', 13, '11.12.')).toBe('11.12. 09:00')
+    expect(kuerzeThemenZeile('', '11.12. 09:00', 12, '11.12.')).toBe('11.12. 09:00')
+    expect(themaWertKurz(plan(morgen(7, 0)), JETZT)).toBe('02.11.')
+    expect(themaWertKurz(plan(heute(9, 0)), JETZT)).toBeUndefined()            // heute: Uhrzeit, keine Notform
+    expect(themaWertKurz(eintrag('e', 'x', 'locked'), JETZT)).toBeUndefined()
+    expect(themaWertKurz(eintrag('e', 'x', '2027-03-15', { device_class: 'date' }), JETZT)).toBeUndefined()
+
+    const wartung = new Date(2026, 11, 11, 9, 0).toISOString()
+    const t = thema(7, 't5', 'Service', [
+      eintrag('e6', 'Nächste Wartung', wartung, { device_class: 'timestamp' }),
+      eintrag('e7', 'Ladeplan', wartung),
+    ])
+    const [k] = baueThemenKacheln([t], IONIQ, 'HIMMEL', KATEGORIE_FARBEN.waermepumpe, false, JETZT)
+    expect(k.themaTeile?.erste.wertKurz).toBe('11.12.')
+    const d6 = themenKachelTexte(k, computeDims(6))   // kompakt: Wert-Budget 11 < 12 ⇒ «11.12.»; zweite Zeile Budget 13
+    expect(d6.wertText).toBe('11.12.')
+    expect(d6.zweiteZeile?.text).toBe('11.12. 09:00')
+    const d3 = themenKachelTexte(k, computeDims(3))   // Budget 13: die Kurzform passt ganz
+    expect(d3.wertText).toBe('11.12. 09:00')
+    expect(k.tip).toContain('Nächste Wartung: 11.12.2026, 09:00')   // Tooltip voll
+    const [heuteK] = baueThemenKacheln([thema(7, 't6', 'Heute', [plan(heute(9, 0))])], IONIQ, 'HIMMEL', KATEGORIE_FARBEN.waermepumpe, false, JETZT)
+    expect(themenKachelTexte(heuteK, computeDims(6)).wertText).toBe('09:00')
   })
 })
 
