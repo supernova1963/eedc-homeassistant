@@ -28,6 +28,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   von der alten ID `el:ueberblick-karte` mitgedeckt; mit ihr ab `xl` vier Karten nebeneinander) mit Tooltip
   „‹Entität bzw. Topic› · Stand hh:mm". Live-Antwort: neues Feld `themen[].eintraege[].kennung` (`entity_id` bzw.
   Inbound-Topic).
+- **Demo-Modus: Themen und Standort in den Hub-Schaubildern** — `GET /api/live/{id}?demo=true` trägt feste Demo-Themen je
+  Gerätetyp (Wärmepumpe „Anlagenstatus" und „Service", Wallbox „Ladepunkt", E-Auto „Fahrzeugzustand" und „Klima"; Form wie
+  im echten Pfad, auf die Geräte der Anlage umgeschrieben wie die Knoten) und an beiden Demo-Autos den Standort „Zu Hause".
+  Der echte Live-Pfad bleibt unberührt. Galerie: Hub-Bilder neu mit Themen-Kacheln, dazu E-Auto am Handy, Wallbox mit
+  geparktem Schaubild und die Datenquellen je Hub-Gerät mit dem Block „Themen" (`scripts/galerie-screenshots.mjs` legt die
+  Themen der Datenquellen-Bilder per API in der Demo-Kopie an).
 
 ### Changed
 

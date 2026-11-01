@@ -216,9 +216,10 @@ async def test_route_setzt_themen_neben_dem_leistungspfad(db, ha, inbound, monke
     inbound.on_message(f"eedc/{a.id}/live/inv/{invs['Ioniq'].id}/thema_e2", "locked")
     antwort = await live_dashboard.get_live_data(a.id, demo=False, db=db)
     assert antwort["themen"][0]["eintraege"][0]["wert"] == "locked"
-    # Demo bleibt ohne Themen (unberührt).
+    # Die Demo trägt seit dem Galerie-Auftrag 1.11.2026 feste Themen je Gerätetyp (nicht aus dem Store, sondern aus
+    # `_DEMO_THEMEN`; Probe `test_demo_hubs_vollstaendig.py`) — der echte Pfad oben bleibt davon unberührt.
     demo = live_dashboard.LiveDashboardResponse(**live_dashboard._generate_demo_data(1, "Demo"))
-    assert demo.themen is None
+    assert {t.investition_id for t in demo.themen} == {4, 5, 6}
 
 
 # ── Inbound, Gateway, Leistungspfad ───────────────────────────────────────────

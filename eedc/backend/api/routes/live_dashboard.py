@@ -8,7 +8,7 @@ GET /api/live/{anlage_id}/tagesverlauf — Stündlicher Leistungsverlauf.
 import logging
 import random
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -428,6 +428,8 @@ def _demo_auf_anlage(daten: dict, karte: dict[int, int]) -> dict:
             f["investition_id"] = karte.get(f["investition_id"], f["investition_id"])
     for f in daten.get("fahrzeuge_ohne_wallbox") or []:
         f["investition_id"] = karte.get(f["investition_id"], f["investition_id"])
+    for t in daten.get("themen") or []:
+        t["investition_id"] = karte.get(t["investition_id"], t["investition_id"])
     for gruppe in ("gauges", "serien"):
         for g in daten.get(gruppe, []):
             g["key"] = _demo_key(g["key"], karte)
@@ -458,6 +460,44 @@ def _demo_ladepunkt(ladezustand: str, lademodus: Optional[str]) -> dict:
     out = {"ladezustand": ladezustand, "ladezustand_label": zustands_kanon.label("ladezustand", ladezustand)}
     if lademodus is not None:
         out.update(lademodus=lademodus, lademodus_label=zustands_kanon.label("lademodus", lademodus))
+    return out
+
+
+#: Demo-Themen (Galerie 4.2.0, Entscheid Master 1.11.2026): fest je Gerätetyp, unabhängig von der Konfiguration der
+#: Anlage — (Demo-Slot des Geräts, Thema, ((Label, Rohwert, Einheit, device_class), …)). Der Slot ist die feste Demo-ID
+#: des ersten Knotens seines Typs (`_DEMO_SLOTS`); `_demo_auf_anlage` schreibt sie auf die Investition der Anlage um.
+#: Rohwerte wie der HA-State (`"259.5"`, `"locked"`), formatiert nur im Client (`themenKacheln.ts`). Der Rohwert
+#: `None` steht für «Zeitstempel in 40 Tagen» (`device_class: timestamp`, `_demo_themen`).
+_DEMO_THEMEN: tuple[tuple[int, str, tuple[tuple[str, Optional[str], str, Optional[str]], ...]], ...] = (
+    (5, "Anlagenstatus", (("Verdichter", "an", "", None), ("Störung", "keine", "", None),
+                          ("Betriebsstunden", "4812", "h", "duration"))),
+    (5, "Service", (("Nächste Wartung", None, "", "timestamp"),)),
+    (6, "Ladepunkt", (("Phasen", "3", "", None), ("Stromstärke", "16", "A", "current"), ("Freigabe", "on", "", None))),
+    (4, "Fahrzeugzustand", (("Türen", "locked", "", None), ("Reifen vorne links", "259.5", "kPa", "pressure"),
+                            ("Fenster", "closed", "", None))),
+    (4, "Klima", (("Innentemperatur", "21.5", "°C", "temperature"), ("Vorklimatisierung", "off", "", None))),
+)
+
+
+def _demo_themen() -> list[dict]:
+    """Die Demo-Themen in der Form von `LiveThema` (Themen-Kacheln 4.2.0) — Quelle «ha», Kennung `sensor.demo_…`.
+
+    Reine Anzeige wie im echten Pfad (`_themen_live`): keine Summe liest sie. IDs `t<n>`/`e<n>` je Gerät fortlaufend
+    wie im Store (`services/themen_store.py`).
+    """
+    jetzt = datetime.now().astimezone()
+    wartung = (jetzt.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=40)).isoformat()
+    zaehler: dict[int, int] = {}
+    out: list[dict] = []
+    for slot, name, eintraege in _DEMO_THEMEN:
+        n = zaehler.get(slot, 0)
+        zaehler[slot] = n + len(eintraege) + 1
+        out.append({"investition_id": slot, "id": f"t{n + 1}", "name": name, "eintraege": [
+            {"id": f"e{n + 2 + i}", "label": label, "wert": wert if wert is not None else wartung, "einheit": einheit,
+             "zeitpunkt": jetzt.isoformat(timespec="seconds"), "device_class": dc, "quelle": "ha",
+             "kennung": f"sensor.demo_{slot}_{n + 2 + i}"}
+            for i, (label, wert, einheit, dc) in enumerate(eintraege)
+        ]})
     return out
 
 
@@ -565,7 +605,7 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "sitzung": {"kwh": 9.8, "dauer_s": 7800.0}, "ladestrom_a": 16.0, "phasen_aktiv": 3.0,
          "fahrzeuge": [{"investition_id": 4, "label": "VW ID.4", "soc": eauto_soc,
                         "kw": eauto_kw, "v2h": False, "reichweite_km": 312.0, "ziel_prozent": 80.0,
-                        "km_stand": 23037.0}],
+                        "km_stand": 23037.0, "zu_hause": True}],
          "fahrzeuge_zuordnung": "eindeutig", "fahrzeuge_quelle": "steuerung"},
         {"key": "eauto_4", "label": "VW ID.4", "icon": "car",
          "erzeugung_kw": None, "verbrauch_kw": eauto_kw,
@@ -576,7 +616,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
          "erzeugung_kw": None, "verbrauch_kw": wallbox2_kw, "typ": "wallbox",
          **_demo_ladepunkt(LAEDT if wallbox2_kw > 0 else VERBUNDEN, None),
          "fahrzeuge": [{"investition_id": 12, "label": "Renault Zoe", "soc": zoe_soc,
-                        "kw": None, "v2h": False, "reichweite_km": 140.0, "km_stand": 61420.0}],
+                        "kw": None, "v2h": False, "reichweite_km": 140.0, "km_stand": 61420.0,
+                        "zu_hause": True}],
          "fahrzeuge_zuordnung": "eindeutig"},
         # P-433-2 (E-P2-9): Modus wie vom Builder (Kanon-Wert + Klartext), damit Galerie und Lab den
         # Hub-Überblick im Zielzustand zeigen (Modus-Chip, Kachel-Zeile «Heizen»).
@@ -653,6 +694,8 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
         "heute_kwh_pro_komponente": heute_pro_komp,
         # P-433-2 (E-P2-9): anlagenweit wie im Builder (erste WP mit Zuordnung).
         "warmwasser_temperatur_c": warmwasser_c,
+        # Themen-Kacheln 4.2.0 (Galerie): feste Demo-Themen je Gerätetyp, Form `LiveThema`.
+        "themen": _demo_themen(),
     }
 
 

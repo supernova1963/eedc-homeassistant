@@ -1,6 +1,6 @@
 ---
 title: Galerie
-description: Wie eedc mit gepflegten Daten aussieht – achtzehn Ansichten in hell und dunkel
+description: Wie eedc mit gepflegten Daten aussieht – dreiundzwanzig Ansichten in hell und dunkel
 ---
 
 import cockpitMainLight from '../../assets/screenshots/cockpit_main.webp';
@@ -27,6 +27,16 @@ import wallboxLight from '../../assets/screenshots/komponenten_wallbox.webp';
 import wallboxDark from '../../assets/screenshots/komponenten_wallbox-dark.webp';
 import eautoLight from '../../assets/screenshots/komponenten_eauto.webp';
 import eautoDark from '../../assets/screenshots/komponenten_eauto-dark.webp';
+import eautoHandyLight from '../../assets/screenshots/komponenten_eauto_handy.webp';
+import eautoHandyDark from '../../assets/screenshots/komponenten_eauto_handy-dark.webp';
+import wallboxGeparktLight from '../../assets/screenshots/komponenten_wallbox_geparkt.webp';
+import wallboxGeparktDark from '../../assets/screenshots/komponenten_wallbox_geparkt-dark.webp';
+import dqWaermepumpeLight from '../../assets/screenshots/datenquellen_waermepumpe.webp';
+import dqWaermepumpeDark from '../../assets/screenshots/datenquellen_waermepumpe-dark.webp';
+import dqWallboxLight from '../../assets/screenshots/datenquellen_wallbox.webp';
+import dqWallboxDark from '../../assets/screenshots/datenquellen_wallbox-dark.webp';
+import dqEautoLight from '../../assets/screenshots/datenquellen_eauto.webp';
+import dqEautoDark from '../../assets/screenshots/datenquellen_eauto-dark.webp';
 import roiLight from '../../assets/screenshots/auswertungen_roi.webp';
 import roiDark from '../../assets/screenshots/auswertungen_roi-dark.webp';
 import aussichtLight from '../../assets/screenshots/aussichten_langfristig.webp';
@@ -171,36 +181,129 @@ Wirtschaftlichkeit. Hier der Speicher mit Vollzyklen, Wirkungsgrad, Durchsatz un
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset={waermepumpeDark.src} />
-  <img src={waermepumpeLight.src} alt="eedc Komponenten → Wärmepumpe mit dem Block „Überblick“: Schaubild mit Kacheln und „Auf einen Blick“" />
+  <img src={waermepumpeLight.src} alt="eedc Komponenten → Wärmepumpe mit dem Block „Überblick“: Schaubild mit Kacheln, Themen-Kacheln und „Auf einen Blick“ mit vier Karten" />
 </picture>
 
-An Wärmepumpe, Wallbox und E-Auto steht über allem der Block „Überblick": links ein Schaubild mit
-den Kacheln aus dem Energiefluss dort, wo sie im Haus hingehören – Leistung mit Betriebsart,
-Außentemperatur, Warmwasser, Zusatzheizung, Strom heute, Vorlauf und Rücklauf. Rechts „Auf einen
-Blick" mit der Gerätekarte und der Karte „Heute"; jede Karte lässt sich einzeln parken.
+An Wärmepumpe, Wallbox und E-Auto steht über allem der Block „Überblick": links ein Schaubild,
+rechts „Auf einen Blick". Im Schaubild der Wärmepumpe stehen dieselben Kacheln wie im Energiefluss,
+dort, wo sie im Haus hingehören – **Technik oben, Räume unten**: oben Außentemperatur,
+Zusatzheizung, Warmwasser und Strom heute, unten Vorlauf → Rücklauf am Heizkreis. Die Gerätekachel
+mit Leistung und Betriebsart („Heizen") steht links neben dem Technikraum, wie Netz und Speicher im
+Energiefluss. Das Bild zeigt immer alle Gerätearten; welche du hast, zeigen die Kacheln. Was ohne
+Sensor bleibt, nennt die Zeile unter dem Bild.
+
+Rechts die **Gerätekarte** mit Modus, Leistung jetzt, dem Ring „Eigenverbrauch (Anlage)",
+Warmwasser, Zusatzheizung, Vorlauf, Rücklauf, Spreizung und Außentemperatur, darunter **„Heute"**
+mit dem Strom des Tages und die Karte **„Themen"**. Mit Tageswerten wird aus „Heute" die Karte
+„AZ heute" mit der Herleitung, und „Betrieb heute" nennt die Stunden je Betriebsart; an einer
+Klimaanlage kommen die Innengeräte als Kacheln dazu ([Handbuch Bedienung §3.4](/eedc-homeassistant/handbuch-bedienung/#34-wärmepumpe)).
+Die Demo-Anlage hat keine Tageswerte von heute, deshalb fehlen diese Karten im Bild.
+
+**Themen** sind Werte, die eedc nicht kennt und du trotzdem sehen willst – frei gewählte Entitäten
+aus Home Assistant oder MQTT-Topics je Gerät, etwa „Anlagenstatus" mit Verdichter, Störung und
+Betriebsstunden. Jedes Thema ist eine Kachel am Himmel, ohne Linie: die ersten zwei Einträge stehen
+in der Kachel, alle im Tooltip und in der Karte „Themen". eedc zeigt den Wert so, wie er geliefert
+wird (`an`, `locked`), Zeitstempel als Datum mit Uhrzeit, und rechnet nichts damit.
+
+Jede Karte und das Schaubild lassen sich einzeln parken.
+
+### Wärmepumpe – Datenquellen nach Betriebsart
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={dqWaermepumpeDark.src} />
+  <img src={dqWaermepumpeLight.src} alt="eedc Einstellungen → Datenquellen einer Wärmepumpe: Blöcke Gerät gesamt, Heizen, Warmwasser und der Block Themen" />
+</picture>
+
+Unter *Einstellungen → Datenquellen* ordnest du die Sensoren einer Wärmepumpe nach Betriebsart zu:
+„Gerät gesamt", „Heizen", „Warmwasser" (und Kühlen, Lüften, Entfeuchten, wenn das Gerät sie hat),
+jeder Block mit seinem Status im Kopf („vollständig"). Darunter der Block **„Themen"**: Thema
+anlegen, Einträge hinzufügen, je Eintrag eine Quelle – HA-Sensor, Gateway, Inbound oder Keine – und
+die Reihenfolge mit den Pfeilen. Ein zugeordneter Eintrag ohne Wert steht in Amber; auf der
+Galerie-Box gibt es kein Home Assistant, deshalb haben die Einträge hier keinen Wert. Über MQTT
+bekommt jeder Eintrag ein eigenes Topic (`…/thema_<Eintrag>`).
 
 ### Wallbox – Szene „Ladepunkt"
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset={wallboxDark.src} />
-  <img src={wallboxLight.src} alt="eedc Komponenten → Wallbox mit der Szene „Ladepunkt“: offene Garage mit Wallbox, Auto und Ladesitzung" />
+  <img src={wallboxLight.src} alt="eedc Komponenten → Wallbox mit der Szene „Ladepunkt“: offene Garage mit Wallbox, Auto, Ladesitzung und Themen-Kachel" />
 </picture>
 
-An der Wallbox blickst du in die offene Garage: an der Wandbox die Ladeleistung, am Zählerkasten
-„Ladung heute", am Stecker die laufende Sitzung und am Auto sein Ladestand mit dem Ziel. Rechts
-die Gerätekarte mit Zustand, Ladestand-Balken und Sitzung sowie die Karte „Heute" – auch hier
-einzeln parkbar.
+An der Wallbox blickst du in die offene Garage: an der Wandbox die Kachel aus dem Energiefluss mit
+Leistung und Zustands-Chip („Lädt · PV", „Wartet · PV"), am Zählerkasten „Ladung heute", am Stecker
+die laufende Sitzung mit Dauer und am Auto sein Ladestand mit dem Ziel; oben rechts das Thema
+„Ladepunkt". Rechts die Gerätekarte mit dem Chip, der Ladeleistung, der Fahrzeugzeile mit
+Ladestand-Leiste und Zielmarke und der Fußzeile „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung",
+darunter „Heute" und „Themen". Das Bild gehört der Wallbox, die du oben im Selektor wählst.
+
+Nicht im Bild, weil die Demo es nicht trägt: misst deine Wallbox Ladung und PV-Ladung, steht oben
+groß der **PV-Anteil heute** mit der Herleitung; „Betrieb heute" nennt die Stunden je Zustand und die
+Ladevorgänge des Tages. Meldet die Steuerung das Fahrzeug (evcc, openWB), nennt die Karte genau
+dieses Auto oder „Gastfahrzeug". Den Ladezustand von evcc setzt eedc auch ohne Template-Sensor aus
+den drei Binär-Sensoren zusammen ([Handbuch Bedienung §3.6](/eedc-homeassistant/handbuch-bedienung/#36-wallbox)).
+Der PV-Anteil 0 % in den Kennzahlen darunter ist der Stand der Demo-Daten.
+
+### Wallbox – Schaubild geparkt
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={wallboxGeparktDark.src} />
+  <img src={wallboxGeparktLight.src} alt="eedc Komponenten → Wallbox mit geparktem Schaubild: Gerätekarte, Heute und Themen nebeneinander" />
+</picture>
+
+Schaubild geparkt (Rechtsklick bzw. oben lange drücken): dann stehen die Karten nebeneinander in
+voller Breite, mit der Karte „Themen" auf breiten Bildschirmen bis zu vier. Zurück holst du es vom
+Parkplatz der Seite. Das geht in allen drei Hubs mit jeder Karte einzeln.
+
+### Wallbox – Datenquellen mit Zustand & Sitzung
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={dqWallboxDark.src} />
+  <img src={dqWallboxLight.src} alt="eedc Einstellungen → Datenquellen einer Wallbox: Zustand & Sitzung, Preset anwenden und der Block Themen" />
+</picture>
+
+Für die Wallbox ordnest du unter „Zustand & Sitzung" Ladezustand, Lademodus und Sitzung zu; der Kopf
+sagt, ob der Zustands-Chip zugeordnet ist. „Preset anwenden …" legt die Gateway-Zeilen für eine
+Steuerung wie evcc in einem Schritt an. Das zweite Thema im Bild zeigt den Ladeplan aus evcc – was
+evcc darüber hinaus meldet, holst du dir als Thema.
 
 ### E-Auto – Szene „Fahrzeug"
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset={eautoDark.src} />
-  <img src={eautoLight.src} alt="eedc Komponenten → E-Auto mit der Szene „Fahrzeug“: durchscheinendes Auto an der Ladesäule" />
+  <img src={eautoLight.src} alt="eedc Komponenten → E-Auto mit der Szene „Fahrzeug“: durchscheinendes Auto an der Ladesäule mit Standort, Reichweite und zwei Themen" />
 </picture>
 
 Am E-Auto steht ein durchscheinendes Auto an der Säule: „Laden" mit der Leistung, der Ladestand am
-Akku und die Reichweite mit dem Kilometerstand am Cockpit. Die Gerätekarte nennt Ort, Ziel,
-Ladeleistung und Kilometerstand; welches Auto das Bild zeigt, wählst du oben im Selektor.
+Akku mit dem Ziel, die Reichweite mit dem Kilometerstand am Cockpit und der **Standort** an der
+Terrasse („Zu Hause" – nur die Zone aus Home Assistant, nie eine Position). Oben rechts zwei Themen:
+„Fahrzeugzustand" mit Türen und Reifendruck, „Klima" mit Innentemperatur. Die Gerätekarte nennt
+Ladestand, Reichweite, Ort, Standort, Ladeleistung, Ziel und Kilometerstand.
+
+Mit einem km-Zähler kommt am Vorderrad **„Gefahren heute"** mit dem Fahrverbrauch dazu, in „Heute"
+die Fahrt des Tages und in „Betrieb heute" die Stunden geladen, verbunden, zu Hause und unterwegs
+([Handbuch Bedienung §3.5](/eedc-homeassistant/handbuch-bedienung/#35-e-auto)) –
+beides aus Tageswerten, die die Demo nicht hat.
+
+### E-Auto am Handy
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={eautoHandyDark.src} />
+  <img src={eautoHandyLight.src} alt="eedc E-Auto-Überblick am Handy: die obere Reihe ist voll, die Themen stehen in der Gruppe „Weitere (2)“" />
+</picture>
+
+Am Handy haben die Kacheln dieselbe Größe wie im Energiefluss. Passt die Reihe nicht, wandern die
+Themen zuerst in die Gruppe „Weitere (2)" – Antippen öffnet die Liste unter dem Bild. Die Karten
+stehen untereinander.
+
+### E-Auto – Datenquellen
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={dqEautoDark.src} />
+  <img src={dqEautoLight.src} alt="eedc Einstellungen → Datenquellen eines E-Autos: Zustand & Sitzung mit Ladezustand, Reichweite, Zu Hause und der Block Themen" />
+</picture>
+
+Am Auto ordnest du Ladezustand, Reichweite und „Zu Hause" zu; „eedc versteht: …" sagt dir, welche
+Werte eedc kennt. Darunter die Themen des Autos.
 
 ---
 

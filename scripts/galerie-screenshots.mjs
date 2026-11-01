@@ -46,6 +46,15 @@
  *
  *   # d) Lauf
  *   node scripts/galerie-screenshots.mjs
+ *   #    Die Ansichten mit `themen: true` (Datenquellen je Hub-Gerät) legen VORHER per API in der
+ *   #    KOPIE die Galerie-Themen an (`GALERIE_THEMEN` unten, `themenVorbereiten`): je Gerät zwei
+ *   #    Themen, Einträge auf eine HA-Entität (ohne HA amber «kein Wert»), einer auf Inbound (ohne
+ *   #    Broker-Wert steht er als «Keine»), einer ohne Quelle; dazu an Wallbox/E-Auto einige
+ *   #    Zustandsfelder auf eine HA-Entität (`GALERIE_ZUSTAND`, sonst kein Abschnitt «Zustand &
+ *   #    Sitzung»). Idempotent — ein Thema mit demselben Namen bleibt stehen. Die
+ *   #    Hub-Bilder brauchen das nicht: die Demo-Live-Antwort trägt eigene Themen
+ *   #    (`live_dashboard.py::_DEMO_THEMEN`). Für den Knopf «Inbound» die Datenquellen-Ansichten
+ *   #    im Nachzug nach §1a fahren (`enabled: true`, toter Host).
  *
  *   # e) ⛔ Danach das Bundle OHNE Demo-Flag zurueckbauen — sonst bleibt ein
  *   #    Demo-Build im Baum stehen, den andere Sitzungen aus `dist/` bedienen
@@ -156,7 +165,11 @@ const WEBP_QUALITAET = 88
 //   fenster  Abweichendes Fenster (Vorgabe FENSTER).
 //   hoehe    'auto' = Fenster auf den Inhalt wachsen lassen (bis MAX_HOEHE).
 //   bg       Hintergrund-Variante des Energieflusses ('default' = Tech, 'haus' …).
-//   klick    CSS-Selektor, der nach dem Laden angeklickt wird (fehlt er ⇒ ROT).
+//   klick    CSS-Selektor (oder Liste, der Reihe nach), der nach dem Laden angeklickt wird (fehlt er ⇒ ROT).
+//   speicher localStorage-Vorbelegung { Schluessel: Wert } VOR dem ersten Laden (Klapp-/Park-Zustand).
+//   aufklappen  false: die Bloecke NICHT alle aufklappen (der Klappzustand kommt aus `speicher`).
+//   themen   true: vor der Ansicht die Galerie-Themen per API in der Kopie anlegen (§1 d).
+//   zielBlock   Titel eines Blocks: nur diesen Block ablichten (wie `fokus` ueber den Titel gesucht).
 //   wegklicken  Selektoren, die weggeklickt werden, WENN es sie gibt (Hinweis-
 //            banner nach einer Aenderung). Fehlen ist in Ordnung — sonst waere
 //            der zweite Lauf auf derselben Datenbank rot.
@@ -168,6 +181,40 @@ const WEBP_QUALITAET = 88
 //            `VITE_DEMO_DEFAULT` rendert Cockpit/Live sauber, aber ueberall
 //            „0 W", und `pflicht` merkt davon nichts (selbst passiert 28.09.).
 // ───────────────────────────────────────────────────────────────────────────
+/** Block-IDs der Datenquellen-Fläche je Investitionstyp (`DatenquellenZuordnung.tsx`: `dq-${typ}`). */
+const DQ_TYPEN = ['pv-module', 'wechselrichter', 'speicher', 'balkonkraftwerk', 'e-auto', 'wallbox', 'waermepumpe', 'sonstiges']
+
+/**
+ * Galerie-Themen für die Datenquellen-Bilder (§1 d) — je Hub-Typ das ERSTE Gerät der Anlage, dieselben Namen und
+ * Labels wie die Demo-Live-Antwort (`live_dashboard.py::_DEMO_THEMEN`), an der Wallbox dazu «Ladeplan (evcc)» (T-8:
+ * der evcc-Rest über Themen; Beispiel wie Handbuch Bedienung §3.6). `q`: 'ha' (Entität, ohne HA amber «kein Wert») · 'inbound' (Standard-Topic) · 'keine'.
+ */
+const GALERIE_THEMEN = {
+  waermepumpe: [
+    ['Anlagenstatus', [['Verdichter', 'ha'], ['Störung', 'ha'], ['Betriebsstunden', 'inbound']]],
+    ['Service', [['Nächste Wartung', 'ha'], ['Filterwechsel', 'keine']]],
+  ],
+  wallbox: [
+    ['Ladepunkt', [['Phasen', 'ha'], ['Stromstärke', 'ha'], ['Freigabe', 'inbound']]],
+    ['Ladeplan (evcc)', [['Planzeit', 'ha'], ['Restenergie', 'keine']]],
+  ],
+  'e-auto': [
+    ['Fahrzeugzustand', [['Türen', 'ha'], ['Reifen vorne links', 'ha'], ['Fenster', 'inbound']]],
+    ['Klima', [['Innentemperatur', 'ha'], ['Vorklimatisierung', 'keine']]],
+  ],
+}
+
+/** Zustandsfelder, die die Vorbereitung einer HA-Entitaet zuordnet, damit der Abschnitt «Zustand & Sitzung» in der
+ *  ersten Reihe steht (die Felder sind `erweitert`; zugeordnet ruecken sie in ihren Abschnitt — gemessen 1.11.2026:
+ *  «Inbound» ohne Broker-Wert zaehlt dort als «keine», eine HA-Entitaet als zugeordnet). Ohne HA amber «kein Wert». */
+const GALERIE_ZUSTAND = {
+  wallbox: ['ladezustand', 'lademodus', 'sitzung_kwh', 'sitzung_dauer_s'],
+  'e-auto': ['ladezustand_fahrzeug', 'reichweite_km', 'zu_hause'],
+}
+
+/** Abstand der Themen-Kennungen je Geraet (s. `themenVorbereiten`). */
+const THEMEN_ID_ABSTAND = 20
+
 const ANSICHTEN = [
   {
     name: 'cockpit_main',
@@ -237,7 +284,9 @@ const ANSICHTEN = [
     demo: true,
     route: '#/komponenten/waermepumpe',
     hoehe: 'auto',
-    pflicht: ['Überblick', 'Leistung jetzt'],
+    // Galerie Hubs vollständig (1.11.2026): die Demo trägt Themen je Gerätetyp (`_DEMO_THEMEN`) ⇒ Kachel am Himmel
+    // und Karte «Themen».
+    pflicht: ['Überblick', 'Leistung jetzt', 'Themen', 'Anlagenstatus', 'Nächste Wartung'],
     titel: 'Komponenten → Wärmepumpe mit dem Block „Überblick"',
   },
   {
@@ -247,7 +296,7 @@ const ANSICHTEN = [
     demo: true,
     route: '#/komponenten/wallbox',
     hoehe: 'auto',
-    pflicht: ['Überblick', 'Ladeleistung jetzt'],
+    pflicht: ['Überblick', 'Ladeleistung jetzt', 'Themen', 'Stromstärke'],
     titel: 'Komponenten → Wallbox mit der Szene „Ladepunkt"',
   },
   {
@@ -257,8 +306,35 @@ const ANSICHTEN = [
     demo: true,
     route: '#/komponenten/e-auto',
     hoehe: 'auto',
-    pflicht: ['Überblick', 'Ladestand'],
+    // Seit 1.11.2026 (Galerie Hubs vollständig) mit Standort (`zu_hause` der Demo) und zwei Themen.
+    pflicht: ['Überblick', 'Ladestand', 'Standort', 'Themen', 'Fahrzeugzustand'],
     titel: 'Komponenten → E-Auto mit der Szene „Fahrzeug"',
+  },
+  {
+    // Galerie Hubs vollständig (1.11.2026): dieselbe Szene am Handy — die obere Reihe ist voll, die Themen wandern
+    // zuerst nach «Weitere (n)» (Rang 3, `ueberblickLayout.ts::rang`). Nur der Block «Überblick».
+    name: 'komponenten_eauto_handy',
+    demo: true,
+    route: '#/komponenten/e-auto',
+    fenster: { width: 390, height: 844 },
+    hoehe: 'auto',
+    zielBlock: 'Überblick',
+    pflicht: ['Überblick', 'Ladestand', 'Weitere'],
+    titel: 'Komponenten → E-Auto am Handy (390 px): volle Reihe, „Weitere"',
+  },
+  {
+    // Galerie Hubs vollständig (1.11.2026): das Schaubild geparkt (Park-Zustand vorbelegt, Muster `ParkContext.tsx`:
+    // `eedc-park:<Sicht>` = [{id, titel}]) ⇒ die Karten stehen nebeneinander in voller Breite, der Chip «Schaubild»
+    // auf dem Parkplatz holt es zurück.
+    name: 'komponenten_wallbox_geparkt',
+    demo: true,
+    route: '#/komponenten/wallbox',
+    hoehe: 'auto',
+    speicher: {
+      'eedc-park:v4-komponenten-wallbox': JSON.stringify([{ id: 'el:ueberblick-schaubild', titel: 'Schaubild' }]),
+    },
+    pflicht: ['Überblick', 'Ladeleistung jetzt', 'Themen', 'Stromstärke'],
+    titel: 'Komponenten → Wallbox mit geparktem Schaubild: Karten nebeneinander',
   },
   {
     name: 'auswertungen_roi',
@@ -329,6 +405,33 @@ const ANSICHTEN = [
     pflicht: ['Datenquellen'],
     titel: 'Einstellungen → Datenquellen',
   },
+  // Galerie Hubs vollständig (1.11.2026): Datenquellen je Hub-Gerät — nur der Block des Typs offen (Klappzustand
+  // vorbelegt, `BlockShell` `eedc-bloecke:<Sicht>` = {zu: [...]}), das Gerät aufgeklappt, darin der Block «Themen»
+  // mit den Galerie-Themen (`themen: true`, §1 d). Im Nachzug §1a fahren, damit «Inbound» wählbar steht.
+  ...[
+    { name: 'datenquellen_waermepumpe', typ: 'waermepumpe', geraet: 'Daikin Altherma',
+      pflicht: ['Gerät gesamt', 'Heizen', 'Themen', 'Anlagenstatus', 'Service'] },
+    { name: 'datenquellen_wallbox', typ: 'wallbox', geraet: null,
+      pflicht: ['Zustands-Chip', 'Preset anwenden', 'Themen', 'Ladepunkt', 'Ladeplan (evcc)'] },
+    { name: 'datenquellen_eauto', typ: 'e-auto', geraet: 'Tesla Model 3',
+      pflicht: ['Zustands-Chip', 'Themen', 'Fahrzeugzustand', 'Klima'] },
+  ].map(({ name, typ, geraet, pflicht }) => ({
+    name,
+    route: '#/einstellungen/datenquellen',
+    themen: true,
+    aufklappen: false,
+    speicher: {
+      'eedc-bloecke:v4-einst-datenquellen': JSON.stringify({
+        zu: ['dq-basis', 'dq-topics', ...DQ_TYPEN.filter(t => t !== typ).map(t => `dq-${t}`)],
+      }),
+    },
+    // Ein Gerät allein steht offen (`defaultOpen` bei einem Gerät); bei zweien das gezeigte aufklappen.
+    ...(geraet ? { klick: `button[aria-expanded="false"]:has-text("${geraet}")` } : {}),
+    wegklicken: ['button:has-text("Verstanden")'],
+    hoehe: 'auto',
+    pflicht,
+    titel: `Einstellungen → Datenquellen, ${typ} mit dem Block „Themen"`,
+  })),
   {
     name: 'deeplink_karte',
     // FD-1 (docs/KONZEPT-FOKUS-DEEPLINK.md): so sieht der Block als
@@ -514,6 +617,85 @@ async function hoeheAnpassen(page, breite, maxHoehe) {
   return page.viewportSize().height
 }
 
+/** JSON-Abruf gegen die Galerie-Box; ein Fehler bricht den Lauf ab (Vorbereitung, kein Bild). */
+async function api(pfad, methode = 'GET', body) {
+  const r = await fetch(`${BASE}${pfad}`, {
+    method: methode,
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!r.ok) throw new Error(`${methode} ${pfad}: HTTP ${r.status}`)
+  return r.json()
+}
+
+/** `sensor.demo_<slug>` aus einem Label — Umlaute ausgeschrieben, wie HA eine Entitaets-ID bildet. */
+function entitaetSlug(label) {
+  return label.toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+/**
+ * §1 d: die Galerie-Themen (`GALERIE_THEMEN`) und die Zustandsfelder (`GALERIE_ZUSTAND`) am ersten Geraet je Hub-Typ
+ * der Anlage anlegen — ueber die Routen, die auch die Flaeche nutzt (`datenquellen_themen.py`, Quelle ueber
+ * `…/felder/{feld_id}/quelle`). Idempotent: ein Thema, dessen Name am Geraet schon steht, bleibt unberuehrt.
+ * ⛔ Schreibt in die Datenbank — nur auf der KOPIE.
+ *
+ * ⚠ Kennungen gemessen 1.11.2026: `t<n>`/`e<n>` zaehlen je GERAET ab 1, die Schreibrouten nennen aber nur die
+ * Anlage und das Thema (`_geraet_des_themas` nimmt das erste Geraet mit dieser Kennung). Zwei Geraete mit Themen
+ * teilen sich also `t1` — ein Eintrag fuer das zweite landete im Thema des ersten. Damit die Galerie-Kopie stimmt,
+ * rueckt die Vorbereitung die Zaehler der Geraete erst auseinander (je Geraet i: i × THEMEN_ID_ABSTAND Kennungen
+ * per Anlegen + Entfernen eines Platzhalters — solange KEIN Geraet ein Thema traegt, ist jede Kennung eindeutig).
+ */
+async function themenVorbereiten() {
+  const anlage = (await api('/api/anlagen/')).find(a => a.anlagenname === ANLAGE)
+  if (!anlage) throw new Error(`Anlage „${ANLAGE}" nicht gefunden`)
+  const dq = `/api/datenquellen/${anlage.id}`
+  const { gruppen } = await api(`${dq}/felder`)
+  const geraete = Object.keys(GALERIE_THEMEN).map((typ) => {
+    const g = gruppen.find(x => x.typ === typ)
+    if (!g) throw new Error(`Kein Geraet vom Typ ${typ}`)
+    return { typ, g, invId: Number(g.id.replace('inv:', '')) }
+  })
+
+  // 1. Zaehler auseinanderruecken — nur auf einer Kopie ohne jedes Thema (sonst waere ein Platzhalter mehrdeutig).
+  if (geraete.every(({ g }) => !(g.themen || []).length)) {
+    for (const [i, { invId }] of geraete.entries()) {
+      for (let n = 0; n < i * THEMEN_ID_ABSTAND; n++) {
+        const platz = (await api(`${dq}/themen`, 'POST', { investition_id: invId, name: 'Platzhalter' })).themen.at(-1)
+        await api(`${dq}/themen/${platz.id}`, 'DELETE')
+      }
+    }
+  }
+
+  for (const { typ, g, invId } of geraete) {
+    // 2. Zustandsfelder auf eine HA-Entitaet (nur, was noch keine Quelle hat).
+    for (const key of GALERIE_ZUSTAND[typ] || []) {
+      const f = g.felder.find(x => x.id === `inv_live_${invId}_${key}`)
+      if (f && f.quelle === 'keine') {
+        await api(`${dq}/felder/${f.id}/quelle`, 'POST', { quelle: 'ha_app', entity_id: `sensor.demo_${entitaetSlug(key)}` })
+      }
+    }
+    // 3. Themen und Eintraege.
+    const vorhanden = new Set((g.themen || []).map(t => t.name))
+    for (const [name, eintraege] of GALERIE_THEMEN[typ]) {
+      if (vorhanden.has(name)) continue
+      const thema = (await api(`${dq}/themen`, 'POST', { investition_id: invId, name })).themen.at(-1)
+      for (const [label, q] of eintraege) {
+        const antwort = await api(`${dq}/themen/${thema.id}/eintraege`, 'POST', { label })
+        if (antwort.investition_id !== invId) throw new Error(`Eintrag „${label}" landete an Geraet ${antwort.investition_id}`)
+        const e = antwort.themen.find(t => t.id === thema.id).eintraege.at(-1)
+        if (q === 'ha') {
+          await api(`${dq}/felder/${e.feld_id}/quelle`, 'POST', { quelle: 'ha_app', entity_id: `sensor.demo_${entitaetSlug(label)}` })
+        } else if (q === 'inbound') {
+          await api(`${dq}/felder/${e.feld_id}/quelle`, 'POST', { quelle: 'mqtt_inbound_standard' })
+        }
+      }
+    }
+    console.log(`  Themen ${typ} (${g.titel}): ${GALERIE_THEMEN[typ].map(t => t[0]).join(', ')}`)
+  }
+}
+
 async function lauf() {
   mkdirSync(OUT, { recursive: true })
   const browser = await chromium.launch({ executablePath: CHROME, headless: true })
@@ -524,6 +706,7 @@ async function lauf() {
   }
   let rot = 0
   const zeilen = []
+  if (liste.some(a => a.themen)) await themenVorbereiten()
 
   for (const modus of ['hell', 'dunkel']) {
     const suffix = modus === 'dunkel' ? '-dark' : ''
@@ -555,6 +738,12 @@ async function lauf() {
       await ctx.addInitScript(() => {
         try { localStorage.setItem('eedc-energiefluss-lite', '0') } catch { /* privater Modus */ }
       })
+      // `speicher`: Klapp-/Park-Zustand vorbelegen — wie ein Anwender, der ihn vorher so eingestellt hat.
+      if (a.speicher) {
+        await ctx.addInitScript((eintraege) => {
+          try { for (const [k, v] of Object.entries(eintraege)) localStorage.setItem(k, v) } catch { /* privat */ }
+        }, a.speicher)
+      }
 
       const page = await ctx.newPage()
       const fehler = []
@@ -574,7 +763,7 @@ async function lauf() {
           await page.goto('about:blank')
           await page.goto(`${BASE}/${a.route}`, { waitUntil: 'networkidle', timeout: 45000 })
           await ruhe(page)
-          await alleAufklappen(page)
+          if (a.aufklappen !== false) await alleAufklappen(page)
         }
 
         // §3: der Modus muss am DOM ankommen, sonst ist das Bild wertlos.
@@ -612,13 +801,13 @@ async function lauf() {
             await page.goto('about:blank')
             await page.goto(`${BASE}/${a.route}`, { waitUntil: 'networkidle', timeout: 45000 })
             await ruhe(page)
-            await alleAufklappen(page)
+            if (a.aufklappen !== false) await alleAufklappen(page)
           }
         }
 
-        if (a.klick) {
-          const el = await page.$(a.klick)
-          if (!el) fehler.push(`Klickziel fehlt: ${a.klick}`)
+        for (const sel of [a.klick || []].flat()) {
+          const el = await page.$(sel)
+          if (!el) fehler.push(`Klickziel fehlt: ${sel}`)
           else {
             try { await el.scrollIntoViewIfNeeded() } catch { /* SVG */ }
             await el.click()
@@ -628,7 +817,7 @@ async function lauf() {
 
         // Ein Klick kann eine ANDERE Bloecke-Liste bringen (Aussicht:
         // Kurzfristig ⇄ Langfristig) — die neuen kommen zugeklappt.
-        if (a.klick && !a.fokus && !a.route.includes('fokus=')) await alleAufklappen(page)
+        if (a.klick && a.aufklappen !== false && !a.fokus && !a.route.includes('fokus=')) await alleAufklappen(page)
 
         if (a.fokus) {
           // Die ⤢-Knoepfe der BlockShell heissen ALLE „Fokus / Vollbild" — der
@@ -648,7 +837,9 @@ async function lauf() {
         await nachObenRollen(page)
         await ruhe(page, 2)
 
-        const text = await page.evaluate(() => document.body.innerText)
+        // Dazu die Werte der Eingabefelder: Themen-Namen und -Labels stehen in <input>, nicht im innerText.
+        const text = await page.evaluate(() => `${document.body.innerText}\n${
+          [...document.querySelectorAll('input')].map(i => i.value).join('\n')}`)
         for (const p of (a.pflicht || [])) if (!text.includes(p)) fehler.push(`Text fehlt: „${p}"`)
         if (/NaN|undefined kWh|Infinity/.test(text)) fehler.push('NaN/undefined im Text')
         if (a.demo && !demoGesehen) {
@@ -659,7 +850,12 @@ async function lauf() {
         // zurueck und geht durch `sharp` nach WebP (§6).
         const pfad = `${OUT}/${a.name}${suffix}.webp`
         let roh
-        if (a.ziel) {
+        if (a.zielBlock) {
+          // Der Block ueber seinen Titel (die BlockShell-Sektion, deren Kopf ihn traegt), wie bei `fokus`.
+          const block = page.locator('section').filter({ hasText: a.zielBlock }).first()
+          if (await block.count() === 0) { fehler.push(`Zielblock fehlt: ${a.zielBlock}`); roh = await page.screenshot() }
+          else roh = await block.screenshot()
+        } else if (a.ziel) {
           const el = await page.$(a.ziel)
           if (!el) { fehler.push(`Zielelement fehlt: ${a.ziel}`); roh = await page.screenshot() }
           else roh = await el.screenshot()

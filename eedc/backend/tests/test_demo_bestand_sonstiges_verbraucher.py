@@ -1,5 +1,7 @@
 """Der Demo-Bestand muss BEIDE *Sonstiges*-Richtungen zeigen.
 
+Schwesterdatei: test_demo_hubs_vollstaendig.py (Demo-Live-Antwort der Hubs mit «Überblick»).
+
 **Warum es diesen Prüfer gibt.** Bis zum 17.08.2026 kannte der Demo-Bestand
 unter ``sonstiges`` **nur** einen Erzeuger (das Mini-BHKW). Das war keine
 Geschmacksfrage, sondern eine Prüf-Blindstelle mit gemessener Folge:
