@@ -175,6 +175,30 @@ export interface LiveDashboardResponse {
   innengeraete?: LiveInnengeraet[] | null
   /** P-433-2b K1: Autos an keiner live liefernden Wallbox (Hub-Karte E-Auto); Autos an einer Wallbox stehen dort. */
   fahrzeuge_ohne_wallbox?: LiveFahrzeug[] | null
+  /** Themen-Kacheln (4.2.0): je Gerät mit «Überblick» die Themen mit Wert — reine Anzeige; `null` ohne jeden Wert. */
+  themen?: LiveThema[] | null
+}
+
+/** Themen-Kacheln (4.2.0): ein Eintrag mit Wert **wie geliefert** — formatiert wird nur hier im Client. */
+export interface LiveThemaEintrag {
+  id: string
+  label: string
+  /** Roher State (HA) bzw. Payload (MQTT) als Text. */
+  wert: string
+  /** `unit_of_measurement` (HA); über MQTT leer. */
+  einheit: string
+  /** `last_changed` (HA) bzw. Empfang (MQTT), ISO — `null` ohne Angabe. */
+  zeitpunkt: string | null
+  device_class: string | null
+  quelle: 'ha' | 'mqtt'
+}
+
+/** Themen-Kacheln (4.2.0): ein Thema eines Geräts — Store-Reihenfolge, Einträge ohne Wert fehlen. */
+export interface LiveThema {
+  investition_id: number
+  id: string
+  name: string
+  eintraege: LiveThemaEintrag[]
 }
 
 export interface WetterStunde {

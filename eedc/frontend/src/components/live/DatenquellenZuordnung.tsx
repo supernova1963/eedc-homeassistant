@@ -26,7 +26,7 @@
  * Wert-Lese-Pfad kommt mit dem Resolver (B5), sonst leuchtete jedes HA-/Gateway-Feld
  * fälschlich amber (§2b1).
  */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
@@ -36,6 +36,10 @@ import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
 import DatenquellenGatewayPicker from './DatenquellenGatewayPicker'
 import DatenquellenHaPicker from './DatenquellenHaPicker'
+// Themen-Kacheln (4.2.0): der Quellen-Knopf steht seit TH-E1 in eigenem Modul (unverändert), damit die Zeile eines
+// Themen-Eintrags ihn teilt; der Block «Themen» je Gerät mit «Überblick».
+import QuelleButton from './DatenquellenQuelleButton'
+import DatenquellenThemen from './DatenquellenThemen'
 import DatenquellenPresetDialog, { presetsFuerAnlage, presetsFuerTyp } from './DatenquellenPresetDialog'
 import { liveDashboardApi, type MqttPreset } from '../../api/liveDashboard'
 import DatenquellenTopicListe from './DatenquellenTopicListe'
@@ -637,7 +641,12 @@ export default function DatenquellenZuordnung() {
 
   // Feld-Abschnitte (kWh/W/Sonstige) — leere Abschnitte weglassen. Danach die
   // vierte Stufe: „Weitere Größen erfassen" (R1, s. ERWEITERT_TITEL).
-  const abschnitte = (gruppeId: string, felder: DatenquelleFeld[]) => {
+  // Themen-Kacheln (4.2.0, TH-E1 §1.5): der Block «Themen» eines Geräts (rendert nichts an Typen ohne «Überblick»).
+  const themenBlock = (g: DatenquelleGruppe) => selectedAnlageId != null && (
+    <DatenquellenThemen anlageId={selectedAnlageId} gruppe={g} verfuegbarkeit={verfuegbarkeit} onNeuLaden={neuLaden} />
+  )
+
+  const abschnitte = (gruppeId: string, felder: DatenquelleFeld[], themen?: ReactNode) => {
     const buckets: Record<Abschnitt, DatenquelleFeld[]> = { kwh: [], w: [], zustand: [], sonstige: [] }
     const erweitert: DatenquelleFeld[] = []
     for (const f of felder) {
@@ -658,6 +667,7 @@ export default function DatenquellenZuordnung() {
             <div className="divide-y divide-gray-100 dark:divide-gray-800">{buckets[k].map(feldZeile)}</div>
           </div>
         ))}
+        {themen}
         {erweiterung(gruppeId, erweitert)}
       </>
     )
@@ -706,6 +716,7 @@ export default function DatenquellenZuordnung() {
             ? <a href={`#/einstellungen/komponenten?bearbeiten=${invId}`} className="text-primary-700 dark:text-primary-300 hover:underline">Investition bearbeiten</a>
             : 'Investition bearbeiten'}. Hier werden nur Sensoren zugeordnet.
         </p>
+        {themenBlock(g)}
         {erweiterung(g.id, g.felder.filter((f) => f.erweitert))}
       </div>
     )
@@ -770,7 +781,7 @@ export default function DatenquellenZuordnung() {
                   statusSlot={geraetBadge(g)}
                 >
                   {presetKnopf(presetsFuerTyp(presets, g.typ), investitionIdDerGruppe(g), g.titel)}
-                  {g.typ === TYP_NACH_BETRIEBSART ? betriebsartAbschnitte(g) : abschnitte(g.id, g.felder)}
+                  {g.typ === TYP_NACH_BETRIEBSART ? betriebsartAbschnitte(g) : abschnitte(g.id, g.felder, themenBlock(g))}
                 </FormSection>
               ))}
             </div>
@@ -793,7 +804,7 @@ export default function DatenquellenZuordnung() {
     // Verhaltenstest `DatenquellenZuordnung.erweiterung.test.tsx` hält das Auf-
     // klappen fest, wenn die Erinnerung wieder nicht reicht.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung, presets])
+  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung, presets, selectedAnlageId, neuLaden])
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400">wird geladen …</p>
   if (fehler) return <p className="text-sm text-red-600 dark:text-red-400">{fehler}</p>
@@ -913,32 +924,3 @@ function HistorieHinweisBlock({
   )
 }
 
-/** Ein Quellen-Button (aktiv = gefüllt). Icon + Label; Klick öffnet Modal bzw. setzt direkt.
- *  Pro Feld ist immer genau EINE Quelle aktiv → der grün gefüllte Chip zeigt die
- *  aktuelle Wahl (auch „Keine"); inaktive bleiben neutral (secondary). */
-function QuelleButton({
-  icon: Icon, label, active, disabled, title, onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  active: boolean
-  disabled?: boolean
-  title: string
-  onClick: () => void
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? 'primary' : 'secondary'}
-      size="sm"
-      disabled={disabled}
-      onClick={onClick}
-      title={title}
-      aria-pressed={active}
-      aria-label={label}
-    >
-      <Icon className="h-4 w-4" />
-      <span className="ml-1.5">{label}</span>
-    </Button>
-  )
-}

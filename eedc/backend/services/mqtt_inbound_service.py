@@ -53,6 +53,7 @@ from backend.core.field_definitions import (
     MITSCHRIFT_FELD_KEYS,
     basis_feld_key,
     ist_text_feld,
+    ist_thema_key,
     ist_zustand_feld,
 )
 from backend.services.activity_service import log_activity
@@ -242,8 +243,12 @@ class MqttInboundCache:
         if adresse is None:
             return
         anlage_id, category, inv_id, key = adresse
-        ist_zustand = category == "live" and bool(inv_id) and ist_zustand_feld(key)
-        wert = _wert_aus_payload(ist_zustand, payload, topic, ist_text=ist_zustand and ist_text_feld(key))
+        # Themen-Kacheln (4.2.0, TH-E1 §1.3): ein Themen-Eintrag (`thema_<e>`) ist ein Text wie `fahrzeug_am_ladepunkt` —
+        # roher String im Cache, «leer ist ein Wert». Sein Key steht in keiner Mitschrift- und keiner Option-A-Liste:
+        # `_zustand_nach_nachricht` tut für ihn nichts, und eine Mittelwert-Fortschreibung bekommt er als Zustand nie.
+        ist_thema = category == "live" and bool(inv_id) and ist_thema_key(key)
+        ist_zustand = ist_thema or (category == "live" and bool(inv_id) and ist_zustand_feld(key))
+        wert = _wert_aus_payload(ist_zustand, payload, topic, ist_text=ist_thema or (ist_zustand and ist_text_feld(key)))
         if wert is None:
             return
 

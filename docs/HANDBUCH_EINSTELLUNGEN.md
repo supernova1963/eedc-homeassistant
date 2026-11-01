@@ -1070,6 +1070,39 @@ und keinen Hinweis „unbekannter Zustand" — ein Name ist kein Zustand. **Bena
 Steuerung, die Fahrzeuge erkennt; ein leerer `input_text` in Home Assistant ist von „nicht verfügbar" nicht zu
 unterscheiden und gilt nicht als Gast; nichts davon wird gespeichert, eine Gast-Ladung erscheint nicht als eigene Menge.
 
+### 7.11 Themen (frei gewählte Entitäten)
+
+*Seit der nächsten Version.* An **Wärmepumpe**, **Wallbox** und **E-Auto** — den Geräten mit Block „Überblick" im
+Komponenten-Hub — steht unter den Abschnitten (bzw. unter den Betriebsart-Blöcken der Wärmepumpe) ein Block **„Themen"**.
+Ein **Thema** ist eine Überschrift mit **Einträgen**, und jeder Eintrag ist eine Entität aus Home Assistant oder ein
+MQTT-Topic, die **du** wählst: Türschloss, Reifendruck, Tage bis zum Service, der Ladeplan von evcc, die Restenergie bis zum
+Ziel. eedc kennt diese Werte nicht und rechnet nicht mit ihnen — es zeigt sie.
+
+**Bedienen.** „+ Thema" legt ein Thema an („Thema 1"), der Name ist direkt im Kopf änderbar (Enter oder Verlassen
+speichert). „+ Eintrag" legt einen Eintrag ohne Quelle an; seine Zeile sieht aus wie eine Feldzeile: Name (änderbar),
+darunter die Zuordnung, rechts der Wert und die Knöpfe **HA-Sensor · Gateway · Inbound · Keine** (je nach Verbindung).
+Der HA-Picker zeigt hier **jede** Entität mit einem Zustand (`lock.`, `binary_sensor.`, `sensor.` …) mit ihrer Domain und
+höchstens 200 Zeilen — über die Suche grenzt du ein. Trägt ein Eintrag noch den Namen „Eintrag n", übernimmt er beim
+ersten HA-Pick den Namen der Entität. Mit den Pfeilen ▲▼ stellst du die Reihenfolge der Themen und der Einträge ein;
+„Thema entfernen" fragt nach, wenn Einträge darin stehen, und nimmt ihre Zuordnungen mit.
+
+**Was im Schaubild steht** (mit der nächsten Etappe): jedes Thema ist **eine Kachel** im Schaubild des Hubs — die ersten
+**zwei** Einträge mit Wert stehen in der Kachel („Türen · locked"), alle im Tooltip und in der Karte „Themen" unter
+„Auf einen Blick". Ein Eintrag ohne Wert fehlt dort; in der Zuordnung steht er **amber**.
+
+**Der Wert ist der Zustand aus Home Assistant**, wie HA ihn liefert, mit der Einheit der Entität — eedc übersetzt nicht
+(ein Schloss meldet `locked`, nicht „verriegelt"). Willst du Klartext, ordne einen **Template-Helfer** zu (Weg B wie beim
+Betriebsmodus), der aus `locked` „zu" macht. `unknown`, `unavailable` und ein leerer Zustand gelten als „kein Wert".
+
+**Über MQTT** hat jeder Eintrag sein eigenes Topic `eedc/<anlage>_<name>/live/inv/<id>_<name>/thema_e<n>` (in der Zeile
+angezeigt). Der Payload ist **Text** — publiziere ihn am besten `retained`, sonst steht nach einem Neustart nichts da.
+Über das Gateway reicht eedc ein Fremd-Topic als Text weiter (ohne Faktor). Siehe [MQTT-Inbound](MQTT_INBOUND.md).
+
+**Grenzen.** Der Wert ist bis zu **60 Sekunden** alt (derselbe Takt wie Betriebsmodus und Ladezustand). Es gibt **keinen
+Verlauf**, **keine Mitschrift**, keine Monatswerte, keinen Export als eedc-Sensor und **keinen Daten-Checker** für Themen —
+eedc prüft nicht, ob ein Eintrag Werte liefert, er steht dann nur amber. Themen gibt es nur an Wärmepumpe, Wallbox und
+E-Auto; ein Thema gehört zu genau einem Gerät. Löschst du das Gerät, gehen seine Themen und Zuordnungen mit.
+
 ---
 
 ## 8. System

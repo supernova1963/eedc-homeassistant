@@ -6,6 +6,8 @@ DELETE /api/community/delete/{anlage_id}
 DELETE /api/connectors/{anlage_id}
 DELETE /api/custom-import/templates/{name}
 DELETE /api/datenquellen/{anlage_id}/historie-hinweis
+DELETE /api/datenquellen/{anlage_id}/themen/{t_id}
+DELETE /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege/{e_id}
 DELETE /api/energie-profil/rohdaten
 DELETE /api/energie-profil/{anlage_id}/rohdaten
 DELETE /api/ha/export/mqtt/remove/{anlage_id}
@@ -200,6 +202,8 @@ GET /api/zaehlerstaende/{anlage_id}
 GET /api/zaehlerstaende/{anlage_id}/heute
 GET,HEAD /api/openapi.json
 PATCH /api/anlagen/{anlage_id}/sensors
+PATCH /api/datenquellen/{anlage_id}/themen/{t_id}
+PATCH /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege/{e_id}
 POST /api/anlagen/
 POST /api/anlagen/{anlage_id}/foto
 POST /api/cloud-import/fetch-async
@@ -220,6 +224,8 @@ POST /api/datenquellen/{anlage_id}/energy-vorschlaege/uebernehmen
 POST /api/datenquellen/{anlage_id}/felder/{field_id}/invert
 POST /api/datenquellen/{anlage_id}/felder/{field_id}/quelle
 POST /api/datenquellen/{anlage_id}/ha/takt-check
+POST /api/datenquellen/{anlage_id}/themen
+POST /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege
 POST /api/diagnostics/resnap-snapshots
 POST /api/energie-profil/reaggregate-heute
 POST /api/energie-profil/{anlage_id}/kanal-abgleich

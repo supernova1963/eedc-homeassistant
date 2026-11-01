@@ -571,7 +571,9 @@ function WirtschaftlichkeitInhalt({ w, kpis }: {
 
 type MeldeBlock = (block: string, ids: string[]) => void
 
-/** Typen mit Block «Überblick» (Konzept #433 Stufe 2; E-Mobilität seit P-433-2b K1, Schaubild seit S1b). */
+/** Typen mit Block «Überblick» (Konzept #433 Stufe 2; E-Mobilität seit P-433-2b K1, Schaubild seit S1b).
+ *  Spiegel im Backend: `backend/utils/investition_filter.py:UEBERBLICK_TYPEN` (Themen-Kacheln 4.2.0 — dieselben Typen
+ *  haben den Block «Themen» in den Datenquellen; Probe `backend/tests/test_themen_store.py`). */
 export const UEBERBLICK_TYPEN: readonly string[] = ['waermepumpe', 'wallbox', 'e-auto']
 /** Neue Block-IDs, die vorn in eine gespeicherte Reihenfolge kommen (E-P2-7). */
 export const VORANSTELLEN: string[] = ['ueberblick']

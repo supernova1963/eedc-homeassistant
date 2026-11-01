@@ -220,6 +220,9 @@ async def build_expected_topics(
                 "gruppe_titel": gruppe_titel,
             })
 
+        # Themen-Kacheln (4.2.0, TH-E1 §1.3): je Themen-Eintrag ein Live-Topic `…/thema_<e>` (Text, retained).
+        topics.extend(_themen_topics(anlage, inv, inv_live_prefix, gruppe_id, gruppe_titel))
+
         # N-456: Welche Felder muss GENAU DIESES Gerät liefern? Die Antwort
         # steht in der Registry, und `pflicht_felder_am_geraet` ist ihr einziger
         # Leser — die Zuordnungs-Fläche fragt sie über dieses Kennzeichen,
@@ -295,3 +298,45 @@ async def build_expected_topics(
             })
 
     return topics
+
+
+def _themen_topics(anlage: Anlage, inv: Investition, inv_live_prefix: str, gruppe_id: str, gruppe_titel: str) -> list[dict]:
+    """Die Topics der Themen-Einträge eines Geräts mit Block «Überblick» (Themen-Kacheln 4.2.0, Bauplan TH-E1 §1.3).
+
+    ⛔ **Kein Registry-Feld** (Bauplan §0): die Einträge kommen aus dem Store (`services/themen_store.py`), nicht aus
+    `field_definitions`. Sie stehen hier nur, damit Topic-Liste, Gateway-Ziel (`_standard_topic_suffix`) und Label
+    (`_feld_label`) eine Quelle haben. ``zustand: True`` nimmt sie aus der Abdeckungsprüfung des Daten-Checkers
+    (`daten_checker/sensoren.py` filtert ``not e.get("zustand")``) und aus dem Initialwert «0» beim Speichern der
+    MQTT-Einstellungen; ``abschnitt: "themen"`` nimmt sie aus der Feldliste der Datenquellen-Fläche (dort baut
+    `_themen_gruppe` den eigenen Block). ``match_key`` adressiert den Inbound-Cache (``inv_live``/``<id>``/``thema_<e>``).
+    """
+    from backend.services.themen_store import eintrag_topic_key, lade_themen
+    from backend.utils.investition_filter import UEBERBLICK_TYPEN
+
+    if inv.typ not in UEBERBLICK_TYPEN:
+        return []
+    out: list[dict] = []
+    for thema in lade_themen(anlage.sensor_mapping, inv.id)["liste"]:
+        for eintrag in thema["eintraege"]:
+            key = eintrag_topic_key(eintrag["id"])
+            label = f"{thema['name']} · {eintrag['label']}"
+            out.append({
+                "topic": f"{inv_live_prefix}/{key}",
+                "zustand": True,
+                "text": True,
+                "label": f"{inv.bezeichnung} – {label}",
+                "kategorie": "live",
+                "typ": inv.typ,
+                "match_key": ("inv_live", str(inv.id), key),
+                "feld": key,
+                "feld_label": label,
+                "einheit": "",
+                "hinweis": "",
+                "bedarf": "optional",
+                "bedarf_gruppe": None,
+                "erweitert": False,
+                "abschnitt": "themen",
+                "gruppe_id": gruppe_id,
+                "gruppe_titel": gruppe_titel,
+            })
+    return out

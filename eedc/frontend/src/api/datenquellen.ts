@@ -169,11 +169,48 @@ export interface FeldProblem {
   andere_felder?: string[]
 }
 
+/**
+ * Themen-Kacheln (4.2.0): ein Eintrag eines Themas — eine frei gewählte HA-Entität bzw. ein MQTT-Topic. Der Wert
+ * kommt **wie geliefert** (`wert_text`, kein Kanon); `null` ⇒ amber (zugeordnet, aber ohne Wert).
+ */
+export interface ThemaEintragZeile {
+  /** Kennung im Store (`e<n>`). */
+  id: string
+  label: string
+  /** Feld-ID der Quelle (`inv_thema_<inv>_<e>`) — für `setQuelle`. */
+  feld_id: string
+  quelle: string
+  ha_entity: string | null
+  ha_name: string | null
+  gateway_topic: string | null
+  /** Inbound-Topic des Eintrags (`…/live/inv/<id>_<name>/thema_<e>`). */
+  standard_topic: string
+  wert_text: string | null
+  einheit: string
+  wert_zeit: string | null
+}
+
+/** Themen-Kacheln (4.2.0): ein Thema eines Geräts mit Block «Überblick» — eine Kachel im Schaubild. */
+export interface ThemaGruppe {
+  /** Kennung im Store (`t<n>`). */
+  id: string
+  name: string
+  eintraege: ThemaEintragZeile[]
+}
+
+/** Antwort der Themen-Routen: die Themen des Geräts in der Form von `GET /felder`. */
+export interface ThemenAntwort {
+  investition_id: number
+  themen: ThemaGruppe[]
+}
+
 export interface DatenquelleGruppe {
   id: string
   titel: string
   typ: string
   felder: DatenquelleFeld[]
+  /** Themen-Kacheln (4.2.0): je Gerät die Themen — `[]` an Typen ohne «Überblick», fehlt an der Basis-Gruppe. */
+  themen?: ThemaGruppe[]
   /** P-433-2, nur Wärmepumpe: Stammdatum `kuehlung_art` (`keine` · `passiv` · `aktiv`). */
   kuehlung_art?: string
   /** P-433-2, nur Wärmepumpe: Betriebsarten, die eedc aus einem Betriebsmodus-Sensor ableitet (Kanon). */
@@ -219,6 +256,8 @@ export interface HaSensor {
   unit: string | null
   device_class: string | null
   state: string | null
+  /** Themen-Kacheln (4.2.0): HA-Domain (`lock`, `sensor` …) — der Themen-Picker zeigt sie an der Zeile. */
+  domain?: string | null
 }
 
 /** Kuratierter Feld-Vorschlag aus der Integrations-Wissensbasis (#343 A, D2). */
@@ -343,10 +382,12 @@ export const datenquellenApi = {
 
   /** HA-Entities für den HA-Sensor-Picker (Supervisor ODER Remote-HA).
    *  feld/invTyp aktivieren die Wissensbasis-Vorschläge (#343 A). */
-  haSensoren: (anlageId: number, feld?: string, invTyp?: string) => {
+  haSensoren: (anlageId: number, feld?: string, invTyp?: string, alle?: boolean) => {
     const q = new URLSearchParams()
     if (feld) q.set('feld', feld)
     if (invTyp) q.set('inv_typ', invTyp)
+    // Themen-Kacheln (4.2.0): jede Entität mit State, ohne Energie-Filter und ohne Wissensbasis-Vorschläge.
+    if (alle) q.set('alle', 'true')
     const suffix = q.toString() ? `?${q.toString()}` : ''
     return api.get<HaSensorenResponse>(`/datenquellen/${anlageId}/ha/sensoren${suffix}`)
   },
@@ -362,6 +403,24 @@ export const datenquellenApi = {
   /** On-Demand-Takt-Check eines kWh-Kandidaten im Pick-Moment (#343 B). */
   taktCheck: (anlageId: number, entityId: string) =>
     api.post<TaktCheckResponse>(`/datenquellen/${anlageId}/ha/takt-check`, { entity_id: entityId }),
+
+  // ── Themen-Kacheln (4.2.0): Themen und Einträge je Gerät. Die Quelle eines Eintrags setzt `setQuelle(feld_id)`. ──
+  themaAnlegen: (anlageId: number, investitionId: number, name?: string) =>
+    api.post<ThemenAntwort>(`/datenquellen/${anlageId}/themen`, { investition_id: investitionId, ...(name ? { name } : {}) }),
+  themaAendern: (anlageId: number, themaId: string, aenderung: { name?: string; position?: number }) =>
+    api.patch<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}`, aenderung),
+  themaEntfernen: (anlageId: number, themaId: string) =>
+    api.delete<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}`),
+  eintragAnlegen: (anlageId: number, themaId: string, label?: string) =>
+    api.post<ThemenAntwort>(`/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege`, label ? { label } : {}),
+  eintragAendern: (anlageId: number, themaId: string, eintragId: string, aenderung: { label?: string; position?: number }) =>
+    api.patch<ThemenAntwort>(
+      `/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege/${encodeURIComponent(eintragId)}`, aenderung,
+    ),
+  eintragEntfernen: (anlageId: number, themaId: string, eintragId: string) =>
+    api.delete<ThemenAntwort>(
+      `/datenquellen/${anlageId}/themen/${encodeURIComponent(themaId)}/eintraege/${encodeURIComponent(eintragId)}`,
+    ),
 
   /**
    * `#`-Scan des Brokers (zeit-/mengenbegrenzt) für den Gateway-Quell-Picker.

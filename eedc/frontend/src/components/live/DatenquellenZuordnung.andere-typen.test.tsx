@@ -5,7 +5,8 @@
  * Typ bleiben die Abschnitte nach Einheit (kWh · W · Sonstige) und «Weitere Größen erfassen»
  * unverändert. Diese Probe hält das fest: die ganze Fläche mit Basis, zwei Speichern, Wallbox und
  * E-Auto, alle Blöcke und alle «Weitere Größen»-Schalter aufgeklappt, als HTML gegen eine Datei —
- * **erzeugt am Code vor E3** (HEAD `0edd0cfb`), danach gleich.
+ * **erzeugt am Code vor E3** (HEAD `0edd0cfb`), danach gleich. Themen-Kacheln (4.2.0, TH-E1) schrieben sie neu: einzige
+ * Änderung sind die zwei Blöcke «Themen» an Wallbox und E-Auto (Geräte mit «Überblick»); ohne sie ist die Datei bitgleich.
  *
  * Wer die Fläche für diese Typen absichtlich ändert, schreibt die Datei neu und schickt den Diff mit:
  *

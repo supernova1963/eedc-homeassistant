@@ -88,7 +88,10 @@ def split_inv(rest: str) -> tuple[Optional[str], Optional[str]]:
 #: Schreibform — die Fläche, das Aufräumen in `investitionen/crud.py` und der
 #: JSON-Import-Remap lesen sie hier. Bis 25.09.2026 suchte das Aufräumen nach
 #: `inv:{id}:{feld}` (der Snapshot-Schlüssel, nicht die Feld-ID) und fand nie etwas.
-INV_FELD_PRAEFIXE = ("inv_energy_", "inv_live_")
+#: Themen-Kacheln (4.2.0, TH-E1): `inv_thema_{id}_{e}` — die Quelle eines Themen-Eintrags
+#: (`services/themen_store.py`); damit räumt das Geräte-Löschen sie mit und der Import
+#: remapped sie, ohne eigenen Zweig. `uebernehme_quelle_ins_mapping` kennt sie bewusst nicht.
+INV_FELD_PRAEFIXE = ("inv_energy_", "inv_live_", "inv_thema_")
 
 
 def feld_id(match_key) -> str:

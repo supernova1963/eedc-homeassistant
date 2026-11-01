@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Themen je Gerät (Themen-Kacheln, Etappe 1 von 2):** an Wärmepumpe, Wallbox und E-Auto legst du unter *Einstellungen →
+  Datenquellen* im neuen Block „Themen" eigene Themen mit Einträgen an — je Eintrag eine frei gewählte HA-Entität (jede
+  Domain, Picker mit Suche und Domain) oder ein MQTT-Topic `…/live/inv/<id>_<name>/thema_e<n>` (Text, auch über das
+  Gateway). eedc zeigt den Wert wie geliefert, ohne Rechnung und ohne Mitschrift; die Live-Antwort trägt `themen`
+  (60-s-Takt, `null` ohne Wert). Anlegen, Umbenennen, Pfeile, Entfernen mit Rückfrage; Löschen eines Geräts und JSON-Import
+  nehmen die Zuordnungen mit. Die Kacheln im Schaubild und die Karte „Themen" folgen mit Etappe 2.
+  Neue Routen `POST/PATCH/DELETE /api/datenquellen/{anlage}/themen…`; `GET /api/datenquellen/{anlage}/ha/sensoren?alle=true`.
+
 ## [4.1.12] - 2026-11-01 — E-Mobilität nach Konzept #433: Hub-Überblick für Wallbox und E-Auto mit den Szenen „Ladepunkt" und „Fahrzeug", „Auf einen Blick" je Karte parkbar (auch Wärme/Klima), Zustand & Sitzung, Fahrzeug am Ladepunkt und Gast, evcc-Chip ohne Template-Sensor, „Betrieb heute", Kilometerstand und „Gefahren heute"; Tabellen-Spalten E-Mobilität und Wärme/Klima; Stromrechnung mit eigenem WP-/Wallbox-Tarif (N-769, N-770, N-771); 4 Korrekturen
 
 ### Added

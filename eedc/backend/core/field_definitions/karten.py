@@ -164,6 +164,25 @@ def ist_text_feld(feld: str, typ: Optional[str] = None) -> bool:
         return (typ, basis) in TEXT_LIVE_FELDER
     return basis in TEXT_FELD_KEYS
 
+#: Themen-Kacheln (4.2.0, Bauplan TH-E1 §1.3): der Live-Key eines **Themen-Eintrags** — ``thema_<e>`` (``thema_e3``).
+#: ⛔ **Kein Registry-Feld** (Bauplan §0): ein Thema ist eine frei gewählte HA-Entität bzw. ein MQTT-Topic zur reinen
+#: Anzeige — kein Kanal, keine Mitschrift, kein Checker. Der Key steht nur hier, weil der MQTT-Inbound, das Gateway und
+#: der Live-Leistungspfad ihn ohne Typ-Kontext erkennen müssen (Bauform `ist_text_feld`). Die Schreibform der Kennung
+#: (``e<n>``) und die Feld-ID ``inv_thema_<inv>_<e>`` führt `services/themen_store.py`.
+THEMA_KEY_PRAEFIX: Final = "thema_"
+
+
+def ist_thema_key(feld: str) -> bool:
+    """Ist dieser Live-Key ein Themen-Eintrag (``thema_e<n>``)? — dann trägt der Inbound-Cache einen rohen Text.
+
+    Wie ein Textfeld: «leer ist ein Wert», kein Kanon, keine Mittelwert-Fortschreibung, kein Zustands-Fenster.
+    """
+    if not isinstance(feld, str) or not feld.startswith(THEMA_KEY_PRAEFIX):
+        return False
+    rest = feld[len(THEMA_KEY_PRAEFIX):]
+    return len(rest) > 1 and rest[0] == "e" and rest[1:].isdigit()
+
+
 def build_feld_labels() -> dict[str, str]:
     """
     Baut ein vollständiges Label-Dict aus der Registry auf.

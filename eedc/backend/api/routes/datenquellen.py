@@ -190,6 +190,7 @@ _HA_DEVICE_CLASSES = {"energy", "power", "battery", "temperature", "distance", "
 
 def _ha_sensor_relevant(
     state: dict, filter_energy: bool, zustand: bool = False, domaenen: tuple[str, ...] | None = None,
+    alle: bool = False,
 ) -> bool:
     """Gehört diese HA-Entity in den Picker für dieses Feld?
 
@@ -204,7 +205,12 @@ def _ha_sensor_relevant(
     `sensor.` bleibt für Zustandsfelder ausdrücklich zulässig: manche
     Integrationen (und viele selbstgebaute Template-Sensoren) liefern den Modus
     als gewöhnlichen Text-Sensor.
+
+    Themen-Kacheln (4.2.0, G6): ``alle=True`` (Picker eines Themen-Eintrags) lässt **jede** Entität mit nicht-leerem
+    State durch — kein Domain-Test, kein Energie-Filter: ein Thema zeigt, was HA liefert (Schloss, Reifendruck, Zähler).
     """
+    if alle:
+        return bool(str(state.get("state") or "").strip())
     eid = str(state.get("entity_id", ""))
     if zustand:
         # Zustandsfelder: `climate.` UND `sensor.`, und der Energie-Filter
@@ -529,6 +535,22 @@ def _feld_id(match_key) -> str:
     return feld_id(match_key)
 
 
+def _registry_feld_id(field_id: str) -> str:
+    """Die Feld-ID, unter der die Topic-Registry ein Feld führt — für einen **Themen-Eintrag** (Themen-Kacheln 4.2.0)
+    ``inv_thema_7_e3`` → ``inv_live_7_thema_e3`` (`match_key` ``("inv_live", "7", "thema_e3")``), sonst unverändert.
+
+    Die Quelle eines Eintrags steht unter ``inv_thema_…`` (Bauplan §0, ein Store); das Topic, über das Inbound und
+    Gateway den Wert tragen, ist ein Live-Topic des Geräts. Label (`_feld_label`) und Gateway-Ziel
+    (`_standard_topic_suffix`) kommen damit aus derselben Registry-Zeile wie jedes Feld.
+    """
+    from backend.services.themen_store import eintrag_topic_key, eintrag_von_feld_id
+
+    teile = eintrag_von_feld_id(field_id)
+    if teile is None:
+        return field_id
+    return _feld_id(("inv_live", str(teile[0]), eintrag_topic_key(teile[1])))
+
+
 async def _feld_label(db: AsyncSession, anlage: Anlage, field_id: str) -> str:
     """Anwendersichtbare Bezeichnung eines Feldes der Fläche.
 
@@ -536,8 +558,11 @@ async def _feld_label(db: AsyncSession, anlage: Anlage, field_id: str) -> str:
     also genau die Menge, die die Fläche zeigt. Fällt auf die technische
     `field_id` zurück, damit ein Hinweis nie leer bleibt (ein Feld ohne Label
     wäre für den Anwender schlimmer als eine hässliche Kennung).
+
+    Themen-Kacheln (4.2.0): ein Themen-Eintrag heißt «‹Gerät› – ‹Thema› · ‹Label›» (Registry-Zeile aus dem Store,
+    `_registry_feld_id`) statt der Rohkennung ``inv_thema_…``.
     """
-    return (await _feld_labels(db, anlage)).get(field_id, field_id)
+    return (await _feld_labels(db, anlage)).get(_registry_feld_id(field_id), field_id)
 
 
 async def _feld_labels(db: AsyncSession, anlage: Anlage) -> dict[str, str]:
@@ -714,13 +739,17 @@ async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str
     genau dieses Suffix ist, trifft der Wert die Inbound-Subscription
     `eedc/+/live|energy/#` und fließt durch die bestehende Inbound-Maschinerie
     (Live + kWh). Ableitung aus der Topic-Registry-SoT (kein Neu-Basteln).
+
+    Themen-Kacheln (4.2.0, W9): ein Themen-Eintrag ``inv_thema_<id>_<e>`` bekommt ``live/inv/<id>_<slug>/thema_<e>`` —
+    ohne diese Auflösung republishte das Gateway ins Leere (`_registry_feld_id`).
     """
+    ziel = _registry_feld_id(field_id)
     invs = (await db.execute(
         select(Investition).where(Investition.anlage_id == anlage.id, aktiv_am_tag(date.today()))
     )).scalars().all()
     invs = sort_investitionen_nach_typ(invs)
     for e in await build_expected_topics(db, anlage, investitionen=invs):
-        if _feld_id(e["match_key"]) == field_id:
+        if _feld_id(e["match_key"]) == ziel:
             # topic = eedc/{aid}_{slug}/live/… → Suffix ab dem 3. Segment.
             parts = e["topic"].split("/", 2)
             return parts[2] if len(parts) == 3 else None
@@ -932,6 +961,118 @@ def _cache_wert(cache, aid: int, match_key) -> tuple:
     return (val, ts.isoformat() if hasattr(ts, "isoformat") else ts)
 
 
+# ─── Themen-Kacheln (4.2.0, Bauplan TH-E1 §1.2) ─────────────────────
+def _ist_themen_topic(e: dict) -> bool:
+    return e.get("abschnitt") == "themen"
+
+
+def _ohne_themen(eintraege) -> list[dict]:
+    """Die Registry-Einträge ohne Themen-Topics — die Feldliste der Fläche (Themen haben ihren eigenen Block)."""
+    return [e for e in eintraege if not _ist_themen_topic(e)]
+
+
+def _themen_ha_entities(anlage: Anlage) -> set:
+    """Die HA-Entitäten aller Themen-Einträge (für den Detail-Abruf der Fläche, `_ha_states_detail`)."""
+    from backend.services.themen_store import eintrag_von_feld_id
+
+    return {
+        v["entity_id"] for fid, v in _quellen_map(anlage).items()
+        if eintrag_von_feld_id(fid) is not None and isinstance(v, dict)
+        and v.get("quelle") in QUELLEN_HA and v.get("entity_id")
+    }
+
+
+def _pruefe_themen_eintrag(mapping: dict, field_id: str) -> bool:
+    """``True`` für die Kennung eines Themen-Eintrags (``inv_thema_…``); fehlt der Eintrag im Store ⇒ **404**."""
+    from backend.services.themen_store import eintrag_von_feld_id, finde_eintrag
+
+    teile = eintrag_von_feld_id(field_id)
+    if teile is None:
+        return False
+    if finde_eintrag(mapping, teile[0], teile[1]) is None:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
+    return True
+
+
+async def _thema_label_aus_ha(db: AsyncSession, mapping: dict, field_id: str, entity_id: str) -> None:
+    """Erster HA-Pick: steht am Eintrag noch die Vorgabe «Eintrag n», übernimmt er den ``friendly_name`` (einmalig).
+
+    Der Abruf läuft nur bei Vorgabe-Label; ohne erreichbares HA oder ohne Klarnamen bleibt das Label.
+    """
+    from backend.services.themen_store import (
+        eintrag_label_setzen_wenn_vorgabe, eintrag_von_feld_id, finde_eintrag, ist_vorgabe_label,
+    )
+
+    inv_id, e_id = eintrag_von_feld_id(field_id)
+    treffer = finde_eintrag(mapping, inv_id, e_id)
+    if not entity_id or treffer is None or not ist_vorgabe_label(treffer[1]["label"]):
+        return
+    name = ((await _ha_states_detail(db, {entity_id})).get(entity_id) or {}).get("friendly_name")
+    eintrag_label_setzen_wenn_vorgabe(mapping, inv_id, e_id, name)
+
+
+def _thema_eintrag_wert(
+    q: str, eintrag: dict, ha_detail: dict, cache_wert: tuple,
+) -> tuple:
+    """``(wert_text, einheit, wert_zeit)`` eines Themen-Eintrags aus seiner Quelle — wie geliefert, ohne Wert ``None``."""
+    from backend.services.themen_store import wert_text
+
+    if q in QUELLEN_HA:
+        d = ha_detail.get(eintrag.get("entity_id")) or {}
+        return wert_text(d.get("wert_text")), d.get("einheit") or "", None
+    if q in (QUELLE_STANDARD, QUELLE_GATEWAY):
+        return wert_text(cache_wert[0]), "", cache_wert[1]
+    return None, "", None
+
+
+def _themen_gruppe(
+    anlage: Anlage, inv: Investition, quellen: dict, ha_detail: dict, cache, gateway_topics: dict, topics: dict,
+) -> list[dict]:
+    """Die Themen eines Geräts für die Fläche (G9): je Thema die Einträge mit Quelle, Zuordnung und Wert.
+
+    Quelle eines Eintrags: sein ``quellen``-Eintrag; ohne Eintrag Inbound, wenn das Topic einen Wert trägt, sonst
+    «keine» (die Regel der Felder, B8-2 Stufe 3 — hier ohne Festschreiben). ``topics``: Registry-Feld-ID → Topic.
+    Typen ohne Überblick ⇒ ``[]``.
+    """
+    from backend.services.themen_store import eintrag_feld_id, eintrag_topic_key, lade_themen
+    from backend.utils.investition_filter import UEBERBLICK_TYPEN
+
+    if inv.typ not in UEBERBLICK_TYPEN:
+        return []
+    out: list[dict] = []
+    for thema in lade_themen(anlage.sensor_mapping, inv.id)["liste"]:
+        zeilen = []
+        for e in thema["eintraege"]:
+            fid = eintrag_feld_id(inv.id, e["id"])
+            match_key = ("inv_live", str(inv.id), eintrag_topic_key(e["id"]))
+            cw = _cache_wert(cache, anlage.id, match_key)
+            eintrag = quellen.get(fid) if isinstance(quellen.get(fid), dict) else {}
+            q = eintrag.get("quelle") or (QUELLE_STANDARD if cw[0] is not None else QUELLE_KEINE)
+            text, einheit, zeit = _thema_eintrag_wert(q, eintrag, ha_detail, cw)
+            zeilen.append({
+                "id": e["id"], "label": e["label"], "feld_id": fid, "quelle": q,
+                "ha_entity": eintrag.get("entity_id"),
+                "ha_name": (ha_detail.get(eintrag.get("entity_id")) or {}).get("friendly_name"),
+                "gateway_topic": gateway_topics.get(eintrag.get("mapping_id")),
+                "standard_topic": topics.get(_feld_id(match_key), ""),
+                "wert_text": text, "einheit": einheit, "wert_zeit": zeit,
+            })
+        out.append({"id": thema["id"], "name": thema["name"], "eintraege": zeilen})
+    return out
+
+
+def _themen_anhaengen(
+    gruppen: list[dict], anlage: Anlage, inv_je_gruppe: dict, quellen: dict, ha_detail: dict, cache,
+    gateway_topics: dict, alle_topics,
+) -> None:
+    """Setzt je Gerätegruppe ``themen`` (`_themen_gruppe`); die Basis-Gruppe bekommt keinen Schlüssel."""
+    topics = {_feld_id(e["match_key"]): e["topic"] for e in alle_topics if _ist_themen_topic(e)}
+    for gruppe in gruppen:
+        inv = inv_je_gruppe.get(gruppe["id"])
+        if inv is not None:
+            gruppe["themen"] = _themen_gruppe(anlage, inv, quellen, ha_detail, cache, gateway_topics, topics)
+
+
 # ─── HA-Sensor-Discovery (Schritt B) ─────────────────────────────────
 class HaSensor(BaseModel):
     entity_id: str
@@ -939,6 +1080,8 @@ class HaSensor(BaseModel):
     unit: str | None = None
     device_class: str | None = None
     state: str | None = None
+    #: Themen-Kacheln (4.2.0): die HA-Domain (``lock``, ``sensor`` …) — der Picker mit ``alle`` zeigt sie an der Zeile.
+    domain: str | None = None
 
 
 class HaVorschlag(BaseModel):
@@ -967,6 +1110,7 @@ async def get_ha_sensoren(
     filter_energy: bool = True,
     feld: str | None = None,
     inv_typ: str | None = None,
+    alle: bool = False,
     db: AsyncSession = Depends(get_db),
 ) -> HaSensorenResponse:
     """HA-Entities für den HA-Sensor-Picker — Supervisor ODER Remote-HA (verbindungs-transparent).
@@ -974,6 +1118,9 @@ async def get_ha_sensoren(
     Liest `/api/states` der aktiven HA-Verbindung und filtert energie-relevante
     Sensoren (Symmetrie zu sensor_mapping.available-sensors). `quelle` sagt dem
     Frontend, welche Quell-Kennung zu persistieren ist (ha_app/ha_connector).
+
+    Themen-Kacheln (4.2.0): ``alle=True`` ⇒ jede Entität mit State (`_ha_sensor_relevant(…, alle=True)`), ohne
+    Vorschläge und Warnungen der Wissensbasis (sie gelten Feldern, nicht frei gewählten Entitäten).
     """
     api_url, token, kind = await _resolve_ha(db)
     if not api_url or not token:
@@ -995,7 +1142,7 @@ async def get_ha_sensoren(
     domaenen = _ha_domaenen(feld, inv_typ) if ist_zustand else None
     sensoren: list[HaSensor] = []
     for st in resp.json():
-        if not _ha_sensor_relevant(st, filter_energy, zustand=ist_zustand, domaenen=domaenen):
+        if not _ha_sensor_relevant(st, filter_energy, zustand=ist_zustand, domaenen=domaenen, alle=alle):
             continue
         attrs = st.get("attributes", {}) or {}
         sensoren.append(HaSensor(
@@ -1004,10 +1151,14 @@ async def get_ha_sensoren(
             unit=attrs.get("unit_of_measurement") or None,
             device_class=attrs.get("device_class") or None,
             state=st.get("state"),
+            domain=str(st.get("entity_id", "")).split(".", 1)[0] or None,
         ))
     sensoren.sort(key=lambda s: s.entity_id)
-    # #343 A: Wissensbasis-Vorschlaege fuer das Ziel-Feld + Anti-Empfehlungen.
-    assistenz = analysiere_vorschlaege([se.entity_id for se in sensoren], feld=feld, inv_typ=inv_typ)
+    # #343 A: Wissensbasis-Vorschlaege fuer das Ziel-Feld + Anti-Empfehlungen (nicht im Themen-Picker).
+    assistenz = (
+        {"integrationen": [], "vorschlaege": [], "warnungen": {}} if alle
+        else analysiere_vorschlaege([se.entity_id for se in sensoren], feld=feld, inv_typ=inv_typ)
+    )
     return HaSensorenResponse(
         verfuegbar=True, quelle=kind, sensoren=sensoren,
         integrationen=assistenz["integrationen"],
@@ -1101,7 +1252,10 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         select(Investition).where(Investition.anlage_id == anlage_id, aktiv_am_tag(date.today()))
     )).scalars().all()
     invs = sort_investitionen_nach_typ(invs)
-    eintraege = list(await build_expected_topics(db, anlage, investitionen=invs))
+    # Themen-Kacheln (4.2.0): die Topics der Themen-Einträge stehen in der Registry, aber nicht in der Feldliste —
+    # sie bekommen ihren eigenen Block (`_themen_anhaengen`).
+    alle_topics = await build_expected_topics(db, anlage, investitionen=invs)
+    eintraege = _ohne_themen(alle_topics)
     # Preis-Slots hängen an derselben Basis-Gruppe, kommen aber nicht aus der
     # MQTT-Registry (s. Helper). Angehängt statt eingemischt: die Gruppierung
     # ist reihenfolge-erhaltend, „Anlage (Basis)" existiert an dieser Stelle
@@ -1187,7 +1341,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         v.get("entity_id") for v in effektiv.values()
         if isinstance(v, dict) and v.get("quelle") in QUELLEN_HA and v.get("entity_id")
     }
-    ha_detail = await _ha_states_detail(db, ha_entities)
+    ha_detail = await _ha_states_detail(db, ha_entities | _themen_ha_entities(anlage))
     ha_werte = {eid: d.get("wert") for eid, d in ha_detail.items()}
     ha_texte = {eid: d.get("wert_text") for eid, d in ha_detail.items()}
     ha_namen = {eid: d.get("friendly_name") for eid, d in ha_detail.items()}
@@ -1486,6 +1640,8 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # `basis` — so heißt der Schlüssel in der Tabelle (`TYP_ANLAGE`).
             "ausgewertet_in": sichten_fuer(e.get("typ", ""), e.get("feld", "")),
         })
+    # Themen-Kacheln (4.2.0, TH-E1 §1.2): je Gerätegruppe `themen` (eigene Funktion, G9).
+    _themen_anhaengen(gruppen, anlage, inv_je_gruppe, quellen, ha_detail, cache, gateway_topics, alle_topics)
 
     # B8-2: aufgelöste positive Evidenz additiv festschreiben (guarded — nur bei
     # tatsächlicher Änderung; §2h: paralleles Gateway bei HA-Wahl deaktivieren,
@@ -1676,6 +1832,8 @@ async def set_feld_quelle(
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
     mapping = dict(anlage.sensor_mapping or {})
+    # Themen-Kacheln (4.2.0, G2-1): eine Themen-Kennung muss zu einem Eintrag gehören — sonst 404 statt stiller Ablage.
+    ist_thema = _pruefe_themen_eintrag(mapping, field_id)
     quellen = dict(mapping.get(QUELLEN_KEY) or {})
     vorher = quellen.get(field_id) or {}
     alt_mapping_id = vorher.get("mapping_id")
@@ -1742,8 +1900,12 @@ async def set_feld_quelle(
     # Konzept #192 B: Zuordnungen wirken ab jetzt — die gespeicherten Tages- und
     # Stundenwerte tragen die Zuordnung ihres Aggregationslaufs. Vermerkt wird
     # nur eine ECHTE Änderung; ein erneutes Bestätigen derselben Wahl ist keine.
-    if ist_echte_aenderung(vorher, quellen.get(field_id)):
+    # Themen-Kacheln (4.2.0, G2-2): ein Themen-Eintrag hat keine Historie — kein Vermerk.
+    if not ist_thema and ist_echte_aenderung(vorher, quellen.get(field_id)):
         await _historie_vermerken(db, anlage, mapping, field_id)
+    if ist_thema and quelle in QUELLEN_HA:
+        # Beim ersten HA-Pick übernimmt ein Eintrag mit Vorgabe-Label «Eintrag n» den Klarnamen der Entität.
+        await _thema_label_aus_ha(db, mapping, field_id, (body.entity_id or "").strip())
     # Klassische Struktur mitschreiben: HA → Sensor-Eintrag, sonst räumen. Ohne
     # das Räumen spränge die B8-2-Auflösung beim nächsten `/felder` über Stufe 1
     # („HA-Sensor zugeordnet") zurück auf HA und drehte die Wahl zurück.

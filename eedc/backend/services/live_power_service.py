@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.energie import SONSTIGES_KOMPONENTEN_PREFIX
 from backend.core.config import HA_INTEGRATION_AVAILABLE
-from backend.core.field_definitions import ist_zustand_feld
+from backend.core.field_definitions import ist_thema_key, ist_zustand_feld
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -39,6 +39,17 @@ from backend.services.live_sensor_config import (
     extract_quellen_live,
 )
 from backend.services.live_history_service import safe_get_tages_kwh
+
+
+def _ohne_themen_keys(alle_inv: dict[str, dict]) -> dict[str, dict]:
+    """Der Inbound-Cache je Gerät ohne die Themen-Einträge (Themen-Kacheln 4.2.0) — ein Gerät, das **nur**
+    Themen-Werte trägt, fehlt ganz, wie ohne Themen. Die Themen liest `betriebsmodus_live.lade_themen_live`."""
+    out: dict[str, dict] = {}
+    for inv_id, values in alle_inv.items():
+        ohne = {k: v for k, v in values.items() if not ist_thema_key(k)}
+        if ohne:
+            out[inv_id] = ohne
+    return out
 
 
 class LivePowerService:
@@ -105,9 +116,11 @@ class LivePowerService:
             # Modus erreicht die Sichten über `betriebsmodus_live`, nicht über diesen Pfad; ohne den
             # Filter legte auch ein `quellen`-Eintrag (B8-Stempel) den String über
             # `_apply_quellen_overrides` in `inv_values`.
+            # Themen-Kacheln (4.2.0, TH-E1): die Themen-Einträge (`thema_<e>`, Text) gehen vorher heraus — so, als gäbe es
+            # sie nicht (`_ohne_themen_keys`): Leistungswerte und Energiefluss bleiben bitgleich (P9).
             mqtt_inv = {
                 inv_id: {k: v for k, v in values.items() if not ist_zustand_feld(k)}
-                for inv_id, values in mqtt_svc.cache.get_all_live_inv(anlage.id).items()
+                for inv_id, values in _ohne_themen_keys(mqtt_svc.cache.get_all_live_inv(anlage.id)).items()
             }
             for inv_id, values in mqtt_inv.items():
                 if inv_id not in inv_values:

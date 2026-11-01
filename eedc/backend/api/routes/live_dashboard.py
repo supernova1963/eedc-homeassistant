@@ -192,6 +192,27 @@ class LiveInnengeraet(BaseModel):
     ist_temperatur_c: Optional[float] = None
 
 
+class LiveThemaEintrag(BaseModel):
+    """Ein Themen-Eintrag mit Wert (Themen-Kacheln 4.2.0) — der Wert **wie geliefert**, formatiert nur im Client."""
+    id: str
+    label: str
+    wert: str
+    einheit: str = ""
+    #: ``last_changed`` des HA-States bzw. Empfang über MQTT (ISO); ``None`` ohne Angabe.
+    zeitpunkt: Optional[str] = None
+    device_class: Optional[str] = None
+    #: ``"ha"`` oder ``"mqtt"``.
+    quelle: str
+
+
+class LiveThema(BaseModel):
+    """Ein Thema eines Geräts mit mindestens einem Eintrag mit Wert — Store-Reihenfolge, Einträge ohne Wert fehlen."""
+    investition_id: int
+    id: str
+    name: str
+    eintraege: list[LiveThemaEintrag]
+
+
 class LiveDashboardResponse(BaseModel):
     anlage_id: int
     anlage_name: str
@@ -234,6 +255,10 @@ class LiveDashboardResponse(BaseModel):
     #: Seit P-433-2b K2a auch die Autos, die an keiner Wallbox zugeordnet sind, weil jede live liefernde Wallbox eine
     #: Steuerungs-Aussage trägt (Treffer eines anderen Autos, Gast, unbekanntes Fahrzeug).
     fahrzeuge_ohne_wallbox: Optional[list[LiveFahrzeug]] = None
+
+    #: Themen-Kacheln (4.2.0, Bauplan TH-E1 §1.4): je Gerät mit Block «Überblick» die Themen mit Wert — **reine
+    #: Anzeige**, in keiner Summe. `None`, solange kein einziger Eintrag einen Wert hat (Muster `innengeraete`, G5).
+    themen: Optional[list[LiveThema]] = None
 
 
 class TagesverlaufSerie(BaseModel):
@@ -650,7 +675,37 @@ async def get_live_data(
         )
 
     service = get_live_power_service()
-    return await service.get_live_data(anlage, db)
+    daten = await service.get_live_data(anlage, db)
+    # Themen-Kacheln (4.2.0): neben dem Leistungspfad, nicht in ihm — Builder und Energiefluss bleiben unberührt.
+    daten["themen"] = await _themen_live(db, anlage)
+    return daten
+
+
+async def _themen_live(db: AsyncSession, anlage: Anlage) -> Optional[list[dict]]:
+    """Die Themen mit Wert (`betriebsmodus_live.lade_themen_live`, 60-s-Takt) in Geräte- und Store-Reihenfolge.
+
+    Ein Thema ohne einen einzigen Wert fehlt; ohne jeden Wert ``None`` (⇒ ``null``, G5).
+    """
+    from backend.services.betriebsmodus_live import lade_themen_live
+    from backend.services.themen_store import lade_themen
+    from backend.utils.investition_filter import sort_investitionen_nach_typ
+
+    werte = await lade_themen_live(db, anlage)
+    if not werte:
+        return None
+    invs = sort_investitionen_nach_typ((await db.execute(
+        select(Investition).where(Investition.id.in_(sorted({inv_id for inv_id, _e in werte})))
+    )).scalars().all())
+    out: list[dict] = []
+    for inv in invs:
+        for thema in lade_themen(anlage.sensor_mapping, inv.id)["liste"]:
+            eintraege = [
+                {"id": e["id"], "label": e["label"], **vars(werte[(inv.id, e["id"])])}
+                for e in thema["eintraege"] if (inv.id, e["id"]) in werte
+            ]
+            if eintraege:
+                out.append({"investition_id": inv.id, "id": thema["id"], "name": thema["name"], "eintraege": eintraege})
+    return out or None
 
 
 # ── Tagesverlauf Demo-Daten ──────────────────────────────────────────────────

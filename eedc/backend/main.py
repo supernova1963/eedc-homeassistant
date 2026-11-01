@@ -90,6 +90,7 @@ from backend.api.routes import (
     zaehlerstaende,
     ha_remote,
     datenquellen,
+    datenquellen_themen,
     sperre,
 )
 from backend.core.log_buffer import setup_log_buffer
@@ -628,6 +629,8 @@ app.include_router(mqtt_gateway.router, prefix="/api/live", tags=["MQTT Gateway"
 app.include_router(ha_remote.router, prefix="/api/ha", tags=["HA Remote"])
 # Datenquellen-Zuordnung (feld-zentrische Fläche) — Datenquellen-V4 / B2.
 app.include_router(datenquellen.router, prefix="/api/datenquellen", tags=["Datenquellen"])
+# Themen-Kacheln (4.2.0, TH-E1): die sechs Themen-Routen am selben Präfix (eigenes Modul).
+app.include_router(datenquellen_themen.router, prefix="/api/datenquellen", tags=["Datenquellen"])
 app.include_router(
     mqtt_presets.router, prefix="/api/live", tags=["MQTT Gateway Presets"]
 )

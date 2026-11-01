@@ -700,6 +700,7 @@ def _normiert(res: dict, namen: dict[int, str]) -> dict:
 
 # N-603 (03.10.2026): das Label des Restverbrauchs-Knotens heißt „Restverbrauch" (bis dahin „Haushalt") — die
 # einzige bewusste Änderung an diesem Abzug (drei Stellen); Schlüssel und Werte unverändert.
+# Themen-Kacheln (4.2.0, TH-E1 §1.4): die Antwort trägt `themen` — ohne Themen `None` (drei Stellen, sonst nichts).
 _VORHER: dict = {'k1_haus': {'anlage_id': 1,
              'anlage_name': 'Merkmale',
              'verfuegbar': True,
@@ -800,7 +801,8 @@ _VORHER: dict = {'k1_haus': {'anlage_id': 1,
              'gestern_eigenverbrauch_kwh': None,
              'heute_kwh_pro_komponente': None,
              'warmwasser_temperatur_c': None,
-             'innengeraete': None},
+             'innengeraete': None,
+             'themen': None},
  'k2_emobilitaet': {'anlage_id': 1,
                     'anlage_name': 'Merkmale',
                     'verfuegbar': True,
@@ -913,7 +915,8 @@ _VORHER: dict = {'k1_haus': {'anlage_id': 1,
                     'gestern_eigenverbrauch_kwh': None,
                     'heute_kwh_pro_komponente': None,
                     'warmwasser_temperatur_c': None,
-                    'innengeraete': None},
+                    'innengeraete': None,
+                    'themen': None},
  'k3_sonstige_bkw_v2h': {'anlage_id': 1,
                          'anlage_name': 'Merkmale',
                          'verfuegbar': True,
@@ -1041,7 +1044,8 @@ _VORHER: dict = {'k1_haus': {'anlage_id': 1,
                          'gestern_eigenverbrauch_kwh': None,
                          'heute_kwh_pro_komponente': None,
                          'warmwasser_temperatur_c': None,
-                         'innengeraete': None}}
+                         'innengeraete': None,
+                         'themen': None}}
 
 
 @pytest.mark.parametrize("name", list(KONSTELLATIONEN))

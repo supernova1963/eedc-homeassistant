@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Optional
 
 from backend.core.betriebsmodus import MODUS_FELD_KEY
-from backend.core.field_definitions import basis_feld_key, ist_zustand_feld
+from backend.core.field_definitions import basis_feld_key, ist_thema_key, ist_zustand_feld
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -103,9 +103,10 @@ def _als_text(ziel_key: str) -> bool:
     an der Quelle. ⛔ **Der Betriebsmodus bleibt beim Zahlen-Weg** (D3, Gernot 27.10.2026; HA-Bauform §9: Modus über
     MQTT nur über das Inbound-Topic) — sein Pfad bleibt damit bitgleich, auch für eine von Hand angelegte Zeile.
     Ein Zahlenfeld bekommt nie Text: ein Wort dort ist ein Transform-Fehler wie bisher (Sprengsatz S9).
+    Themen-Kacheln (4.2.0, TH-E1 §1.3): ein Themen-Eintrag (`thema_<e>`) ist ein Text — weitergereicht ohne Faktor.
     """
     basis = basis_feld_key(ziel_key.rsplit("/", 1)[-1])
-    return basis != MODUS_FELD_KEY and ist_zustand_feld(basis)
+    return (basis != MODUS_FELD_KEY and ist_zustand_feld(basis)) or ist_thema_key(basis)
 
 
 # ─── Mapping Dataclass (leichtgewichtig, aus DB geladen) ─────────────

@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy import select
@@ -101,7 +102,36 @@ _TAKT_SEKUNDEN = 60.0
 #: die Zustände der E-Mobilität (Ladezustand, Lademodus, Fahrzeug-Ladezustand, Standort) — im selben Takt, mit einem
 #: eigenen gebündelten HA-Abruf für alle E-Mob-Felder (neben dem des Modus).
 #: Seit P-433-2b K4 dazu die Zählerstände der E-Mobilität je Gerät (Kilometerstand, `lade_staende_live`).
-_cache: dict[int, tuple[float, dict[int, str], dict[int, str], dict[tuple[int, str], str], dict[int, float]]] = {}
+#: Seit den Themen-Kacheln (4.2.0, TH-E1 §1.4, Ü5) trägt der Eintrag ein `TaktErgebnis` statt eines Tupels — ein fünftes
+#: Feld (`themen`) hätte jede Positions-Lesung `[0]…[3]` stillschweigend verschieben können.
+_cache: dict[int, tuple[float, "TaktErgebnis"]] = {}
+
+
+@dataclass(frozen=True)
+class ThemenWert:
+    """Der Wert eines Themen-Eintrags **wie geliefert** (Themen-Kacheln 4.2.0) — kein Kanon, keine Rechnung.
+
+    ``wert`` ist der rohe State (HA) bzw. Payload (MQTT) als Text; ``einheit`` aus ``unit_of_measurement`` (MQTT: leer);
+    ``zeitpunkt`` ist ``last_changed`` des HA-States bzw. der Empfang über MQTT (ISO, ``None`` ohne Angabe);
+    ``quelle`` ist ``"ha"`` oder ``"mqtt"``. Formatiert wird nur im Client.
+    """
+
+    wert: str
+    einheit: str
+    zeitpunkt: Optional[str]
+    device_class: Optional[str]
+    quelle: str
+
+
+@dataclass(frozen=True)
+class TaktErgebnis:
+    """Was der 60-s-Takt je Anlage erhebt — ein Abruf, fünf Leser (`lade_*`)."""
+
+    modi: dict[int, str]
+    aktionen: dict[int, str]
+    zustaende: dict[tuple[int, str], str]
+    staende: dict[int, float]
+    themen: dict[tuple[int, str], ThemenWert]
 
 #: P-433-2b K1 (Bauplan E2): die Typen, die ein Zustandsfeld haben — abgeleitet aus der Registry
 #: (`ZUSTAND_LIVE_FELDER`), nicht getippt. Bis K1 stand an der Abfrage `typ == "waermepumpe"`.
@@ -188,7 +218,7 @@ async def lade_betriebsmodus_live(
     Returns:
         ``{investition_id: Kanon-Wert}`` aus `BETRIEBSMODUS_KANON`.
     """
-    return (await _im_takt(db, anlage))[0]
+    return (await _im_takt(db, anlage)).modi
 
 
 async def lade_betriebsmodus_aktion_live(
@@ -201,7 +231,7 @@ async def lade_betriebsmodus_aktion_live(
     Anzeige** — HA-Sensor und MQTT-Topic lesen `lade_betriebsmodus_live` und
     sehen den Kanon-Wert unverändert. Derselbe Abruf, derselbe 60-s-Takt.
     """
-    return (await _im_takt(db, anlage))[1]
+    return (await _im_takt(db, anlage)).aktionen
 
 
 async def lade_zustaende_live(db: AsyncSession, anlage) -> dict[tuple[int, str], str]:
@@ -221,7 +251,7 @@ async def lade_zustaende_live(db: AsyncSession, anlage) -> dict[tuple[int, str],
     P-433-2b K2b (Option A): eine Wallbox ohne gemessenen ``ladezustand`` bekommt ihn aus den evcc-Rollen-Feldern
     ``evcc_verbunden``/``evcc_laedt``/``evcc_freigegeben`` (`_kombiniere_option_a`); ein gemessener geht vor.
     """
-    return (await _im_takt(db, anlage))[2]
+    return (await _im_takt(db, anlage)).zustaende
 
 
 async def lade_staende_live(db: AsyncSession, anlage) -> dict[int, float]:
@@ -233,26 +263,33 @@ async def lade_staende_live(db: AsyncSession, anlage) -> dict[int, float]:
     schließt HA aus. ⛔ **Nie** aus dem Monatsfeld ``km_stand`` (Handeingabe) und nie aus ``Monatsdaten``. Derselbe
     60-s-Takt wie Modus und Zustände (benannte Grenze: bis zu 60 s alt). Ein Auto ohne Zähler bzw. ohne Wert fehlt.
     """
-    return (await _im_takt(db, anlage))[3]
+    return (await _im_takt(db, anlage)).staende
 
 
-async def _im_takt(
-    db: AsyncSession, anlage,
-) -> tuple[dict[int, str], dict[int, str], dict[tuple[int, str], str], dict[int, float]]:
-    """Kanon, Aktion, E-Mob-Zustände und Zählerstände aus dem Takt-Cache, sonst frisch erhoben."""
+async def lade_themen_live(db: AsyncSession, anlage) -> dict[tuple[int, str], ThemenWert]:
+    """Die Werte der Themen-Einträge je ``(investition_id, e_id)`` (Themen-Kacheln 4.2.0, Bauplan TH-E1 §1.4).
+
+    Quelle je Eintrag aus ``quellen["inv_thema_<inv>_<e>"]``: HA-Sensor ⇒ der State aus HA (ein gebündelter Abruf für
+    alle Themen-Entitäten aller Geräte, `fetch_selected_states`); Inbound/Gateway oder kein Eintrag ⇒ der Inbound-Cache
+    (``thema_<e>``); «keine» ⇒ nichts (Muster `_emob_quellen`). ``unknown``/``unavailable``/leer ⇒ der Eintrag
+    **fehlt**. Derselbe 60-s-Takt wie Modus und Zustände (benannte Grenze: bis zu 60 s alt).
+    """
+    return (await _im_takt(db, anlage)).themen
+
+
+async def _im_takt(db: AsyncSession, anlage) -> TaktErgebnis:
+    """Kanon, Aktion, E-Mob-Zustände, Zählerstände und Themen aus dem Takt-Cache, sonst frisch erhoben."""
     jetzt = time.monotonic()
     treffer = _cache.get(anlage.id)
     if treffer is not None and (jetzt - treffer[0]) < _TAKT_SEKUNDEN:
-        return treffer[1], treffer[2], treffer[3], treffer[4]
+        return treffer[1]
 
-    modi, aktionen, zustaende, staende = await _erhebe(db, anlage)
-    _cache[anlage.id] = (jetzt, modi, aktionen, zustaende, staende)
-    return modi, aktionen, zustaende, staende
+    ergebnis = await _erhebe(db, anlage)
+    _cache[anlage.id] = (jetzt, ergebnis)
+    return ergebnis
 
 
-async def _erhebe(
-    db: AsyncSession, anlage,
-) -> tuple[dict[int, str], dict[int, str], dict[tuple[int, str], str], dict[int, float]]:
+async def _erhebe(db: AsyncSession, anlage) -> TaktErgebnis:
     """Die eigentliche Erhebung — ohne Takt, damit der Takt eine Stelle hat.
 
     Erst die Geräte mit HA-Modus-Entität (`_erhebe_ha`), dann die übrigen über MQTT
@@ -260,11 +297,14 @@ async def _erhebe(
 
     P-433-2b K1: die Abfrage nimmt jede Investition eines Typs mit Zustandsfeld (`_ZUSTAND_TYPEN`); der Modus-Pfad
     bekommt davon nur die Wärmepumpen (bitgleich zu vorher), die E-Mobilität ihren eigenen (`_erhebe_emob`).
+    Themen-Kacheln (4.2.0): dazu jede Investition mit Block «Überblick» (`UEBERBLICK_TYPEN`) für die Themen.
     """
+    from backend.utils.investition_filter import UEBERBLICK_TYPEN
+
     result = await db.execute(
         select(Investition.id, Investition.typ).where(
             Investition.anlage_id == anlage.id,
-            Investition.typ.in_(sorted(_ZUSTAND_TYPEN)),
+            Investition.typ.in_(sorted(_ZUSTAND_TYPEN | set(UEBERBLICK_TYPEN))),
             aktiv_jetzt(),
         )
     )
@@ -273,14 +313,121 @@ async def _erhebe(
     emob = {inv_id: typ for inv_id, typ in typ_je_id.items() if _EMOB_ZUSTAENDE.get(typ)}
     zustaende = await _erhebe_emob(anlage, emob)
     staende = await _erhebe_staende(anlage, emob)
+    themen = await _erhebe_themen(db, anlage, sorted(i for i, typ in typ_je_id.items() if typ in UEBERBLICK_TYPEN))
     if not inv_ids:
-        return {}, {}, zustaende, staende
+        return TaktErgebnis({}, {}, zustaende, staende, themen)
 
     entity_map = _entity_zu_investitionen(anlage.sensor_mapping, inv_ids)
     modi, aktionen = await _erhebe_ha(entity_map)
     ha_ids = {inv_id for ids in entity_map.values() for inv_id in ids}
     modi.update(_erhebe_mqtt(anlage, inv_ids - ha_ids))
-    return modi, aktionen, zustaende, staende
+    return TaktErgebnis(modi, aktionen, zustaende, staende, themen)
+
+
+# ── Themen-Kacheln (4.2.0, Bauplan TH-E1 §1.4) ───────────────────────────────
+
+def _themen_quellen(anlage, inv_ids: list[int]) -> tuple[dict[str, list[tuple[int, str]]], list[tuple[int, str]]]:
+    """Je Themen-Eintrag die Quelle: ``(entity → [(inv_id, e_id)], [(inv_id, e_id) über MQTT])``.
+
+    HA nur über einen ``quellen``-Eintrag mit HA-Quelle und Entität (ein Thema hat keinen ``live``-Block); Inbound,
+    Gateway oder kein Eintrag ⇒ MQTT; «keine» ⇒ weder noch.
+    """
+    from backend.services.themen_store import eintrag_feld_id, lade_themen
+
+    mapping = anlage.sensor_mapping if isinstance(anlage.sensor_mapping, dict) else {}
+    quellen = mapping.get("quellen") if isinstance(mapping.get("quellen"), dict) else {}
+    ha: dict[str, list[tuple[int, str]]] = {}
+    mqtt: list[tuple[int, str]] = []
+    for inv_id in inv_ids:
+        for thema in lade_themen(mapping, inv_id)["liste"]:
+            for eintrag in thema["eintraege"]:
+                ziel = (inv_id, eintrag["id"])
+                wahl = quellen.get(eintrag_feld_id(inv_id, eintrag["id"]))
+                wahl = wahl if isinstance(wahl, dict) else {}
+                if wahl.get("quelle") in ("ha_app", "ha_connector") and wahl.get("entity_id"):
+                    ha.setdefault(wahl["entity_id"], []).append(ziel)
+                elif wahl.get("quelle") is None or wahl.get("quelle") in _QUELLEN_MQTT:
+                    mqtt.append(ziel)
+    return ha, mqtt
+
+
+async def _erhebe_themen(db: AsyncSession, anlage, inv_ids: list[int]) -> dict[tuple[int, str], ThemenWert]:
+    """Die Themen-Werte — HA (ein gebündelter Abruf), dann MQTT aus dem Inbound-Cache."""
+    if not inv_ids:
+        return {}
+    ha, mqtt = _themen_quellen(anlage, inv_ids)
+    ergebnis = await _erhebe_themen_ha(db, ha)
+    ergebnis.update(_erhebe_themen_mqtt(anlage, mqtt))
+    return ergebnis
+
+
+async def _erhebe_themen_ha(db: AsyncSession, ha: dict[str, list[tuple[int, str]]]) -> dict[tuple[int, str], ThemenWert]:
+    """Themen-Werte aus HA über die aktive Verbindung (Supervisor oder Remote-HA) — ein Abruf für alle Entitäten.
+
+    N3 (Bauplan §1.4, gemessen 1.11.2026 am HA-State-Objekt): ``last_changed`` steht im State-Dict von
+    ``GET /api/states/<entity_id>`` (neben ``last_updated``/``last_reported``); fehlt es, bleibt ``zeitpunkt`` leer.
+    """
+    if not ha:
+        return {}
+    from backend.services.ha_connection import resolve_ha_connection
+    from backend.services.ha_state_service import fetch_selected_states
+
+    api_url, token, _kind = await resolve_ha_connection(db)
+    if not api_url or not token:
+        return {}
+    try:
+        states = await fetch_selected_states(api_url, token, list(ha))
+    except Exception as e:  # pragma: no cover — Soft-fail, die Sicht bleibt ohne Themen
+        logger.warning("Themen (live) nicht lesbar: %s", e)
+        return {}
+    ergebnis: dict[tuple[int, str], ThemenWert] = {}
+    for entity, ziele in ha.items():
+        wert = _themen_wert_aus_state(states.get(entity))
+        for ziel in ziele if wert is not None else ():
+            ergebnis[ziel] = wert
+    return ergebnis
+
+
+def _themen_wert_aus_state(daten: Optional[dict]) -> Optional[ThemenWert]:
+    """Ein HA-State-Dict → `ThemenWert`, ``None`` ohne Wert (fehlt, ``unknown``, ``unavailable``, leer)."""
+    from backend.services.themen_store import wert_text
+
+    roh = wert_text(daten.get("state")) if isinstance(daten, dict) else None
+    if roh is None:
+        return None
+    attrs = daten.get("attributes") if isinstance(daten.get("attributes"), dict) else {}
+    return ThemenWert(
+        wert=roh,
+        einheit=str(attrs.get("unit_of_measurement") or ""),
+        zeitpunkt=daten.get("last_changed") or None,
+        device_class=attrs.get("device_class") or None,
+        quelle="ha",
+    )
+
+
+def _erhebe_themen_mqtt(anlage, ziele: list[tuple[int, str]]) -> dict[tuple[int, str], ThemenWert]:
+    """Themen-Werte aus dem MQTT-Inbound-Cache (roher Text, `thema_<e>`); leer oder ``unknown`` ⇒ fehlt (`KEIN_WERT`)."""
+    if not ziele:
+        return {}
+    from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+    from backend.services.themen_store import eintrag_topic_key, wert_text
+
+    svc = get_mqtt_inbound_service()
+    if svc is None:
+        return {}
+    roh_inv = (svc.cache.get_all_live_raw().get(anlage.id) or {}).get("inv") or {}
+    ergebnis: dict[tuple[int, str], ThemenWert] = {}
+    for inv_id, e_id in ziele:
+        paar = (roh_inv.get(str(inv_id)) or {}).get(eintrag_topic_key(e_id))
+        text = wert_text(paar[0]) if paar else None
+        if text is None:
+            continue
+        ts = paar[1]
+        ergebnis[(inv_id, e_id)] = ThemenWert(
+            wert=text, einheit="", device_class=None, quelle="mqtt",
+            zeitpunkt=ts.isoformat() if hasattr(ts, "isoformat") else None,
+        )
+    return ergebnis
 
 
 # ── Zählerstände der E-Mobilität (P-433-2b K4, K4-1) ─────────────────────────

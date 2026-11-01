@@ -48,6 +48,12 @@ INVESTITION_TYP_ORDER: list[str] = [
 ]
 
 
+#: Die Typen mit Block «Überblick» im Komponenten-Hub — und damit mit Block «Themen» in den Datenquellen
+#: (Themen-Kacheln 4.2.0, Bauplan TH-E1 §1.1). Spiegel im Frontend: `frontend/src/v4/KomponentenTypV4.tsx:UEBERBLICK_TYPEN`
+#: (Probe `tests/test_themen_store.py::test_ueberblick_typen_spiegel`).
+UEBERBLICK_TYPEN: tuple[str, ...] = ("waermepumpe", "wallbox", "e-auto")
+
+
 _T = TypeVar("_T")
 
 

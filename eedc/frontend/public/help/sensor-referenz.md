@@ -411,6 +411,20 @@ Vorzeichenkorrekturen, oder das Zusammenfassen mehrerer Entitäten zu einer.
 
 ---
 
+## 6a. Themen (frei gewählte Entitäten) — Wärmepumpe, Wallbox, E-Auto
+
+*Seit der nächsten Version.* Kein eedc-Feld: ein **Themen-Eintrag** zeigt den Zustand einer Entität, die du selbst wählst,
+wie Home Assistant ihn liefert — jede Domain, keine Einheit vorgeschrieben, keine Rechnung, keine Mitschrift
+([Handbuch Einstellungen §7.11](HANDBUCH_EINSTELLUNGEN.md#711-themen-frei-gewählte-entitäten)).
+
+| Weg | Form | Hinweis |
+|-----|------|---------|
+| HA-Sensor | jede Entität mit Zustand (`lock.…`, `binary_sensor.…`, `sensor.…`, `device_tracker.…`) | Wert = State, Einheit = `unit_of_measurement`; für Klartext einen Template-Helfer zuordnen |
+| MQTT-Inbound | `eedc/{id}_{name}/live/inv/{id}_{name}/thema_e{n}` | Text, am besten `retained` ([MQTT-Inbound](MQTT_INBOUND.md)) |
+| MQTT-Gateway | Fremd-Topic → `…/thema_e{n}` | als Text weitergereicht, ohne Faktor |
+
+---
+
 ## 7. Sonstiges (Erzeuger / Verbraucher / Abgabe an Dritte / Speicher / Verbrauchszähler)
 
 ### Monatserfassung

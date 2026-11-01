@@ -298,6 +298,8 @@ async def test_andere_typen_unveraendert(db, monkeypatch):
     resp = await get_datenquellen_felder(anlage.id, db)
     for g in resp["gruppen"]:
         neu = {"kuehlung_art", "modus_ableitbar"} if g["typ"] == "waermepumpe" else set()
+        # Themen-Kacheln (4.2.0, TH-E1 §1.2): jede Gerätegruppe trägt `themen` (`[]` an Typen ohne «Überblick»).
+        neu |= {"themen"} if g["typ"] != "basis" else set()
         assert set(g) == _GRUPPEN_SCHLUESSEL_VORHER | neu, g["typ"]
         for f in g["felder"]:
             # P-433-2b K1: `abschnitt` (Registry, «zustand» ⇒ «Zustand & Sitzung») an jedem Feld, sonst `None`.

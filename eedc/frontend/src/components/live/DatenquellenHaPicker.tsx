@@ -12,6 +12,10 @@
  * („Integration erkannt: evcc") + Anti-Empfehlungen als amber Zeilen-Hinweis —
  * Assistenz, NIE Auto-Auswahl; (B) On-Demand-Takt-Check beim Wählen eines
  * kWh-Kandidaten (Session-Ende-Zähler → Warnung + „Trotzdem übernehmen").
+ *
+ * Themen-Kacheln (4.2.0, TH-E1 §1.5): mit `alle` listet der Picker **jede** Entität mit State (Schloss, Reifendruck,
+ * Zeitstempel …) — ohne Einheiten-Warnung, ohne Takt-Check, ohne Vorschläge; die Zeile nennt die Domain, gerendert
+ * werden höchstens `ALLE_DECKEL` Zeilen (darunter «‹n› weitere — über die Suche eingrenzen»).
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, Loader2, Check, AlertTriangle, Lightbulb } from 'lucide-react'
@@ -28,9 +32,14 @@ interface Props {
   feldKey?: string
   invTyp?: string
   initialEntity: string | null
+  /** Themen-Kacheln (4.2.0): jede Entität mit State statt der energie-relevanten Sensoren. */
+  alle?: boolean
   onClose: () => void
   onSpeichern: (entityId: string) => void
 }
+
+/** Themen-Picker: so viele Zeilen werden höchstens gerendert — eine HA-Instanz hat Tausende Entitäten. */
+export const ALLE_DECKEL = 200
 
 // Dimensions-Klasse (Spiegel von core.field_definitions.einheit_klasse) — nur
 // Leistung↔Energie, um die #200-Verwechslung beim Wählen sichtbar zu machen.
@@ -41,9 +50,10 @@ function einheitKlasse(unit: string | null | undefined): 'leistung' | 'energie' 
 }
 
 export default function DatenquellenHaPicker({
-  isOpen, anlageId, feldLabel, feldEinheit, feldKey, invTyp, initialEntity, onClose, onSpeichern,
+  isOpen, anlageId, feldLabel, feldEinheit, feldKey, invTyp, initialEntity, alle = false, onClose, onSpeichern,
 }: Props) {
-  const erwartet = einheitKlasse(feldEinheit)
+  // Themen-Picker: keine Einheiten-Erwartung ⇒ keine Einheiten-Warnung und kein Takt-Check.
+  const erwartet = alle ? null : einheitKlasse(feldEinheit)
   const [sensoren, setSensoren] = useState<HaSensor[]>([])
   const [vorschlaege, setVorschlaege] = useState<HaVorschlag[]>([])
   const [integrationen, setIntegrationen] = useState<string[]>([])
@@ -65,7 +75,7 @@ export default function DatenquellenHaPicker({
     setLoading(true)
     setFehler(null)
     setTaktWarnung(null)
-    datenquellenApi.haSensoren(anlageId, feldKey, invTyp)
+    datenquellenApi.haSensoren(anlageId, feldKey, invTyp, alle)
       .then((r) => {
         if (r.fehler) setFehler(r.fehler)
         setSensoren(r.sensoren)
@@ -75,7 +85,7 @@ export default function DatenquellenHaPicker({
       })
       .catch((e) => setFehler(e instanceof Error ? e.message : 'Laden fehlgeschlagen'))
       .finally(() => setLoading(false))
-  }, [isOpen, anlageId, feldKey, invTyp])
+  }, [isOpen, anlageId, feldKey, invTyp, alle])
 
   /** Sensor mit bekannter, aber anderer Einheiten-Klasse als das Feld erwartet (§2i). */
   const istMismatch = useCallback((s: HaSensor) => {
@@ -133,7 +143,7 @@ export default function DatenquellenHaPicker({
         <span className="ml-2 min-w-0 flex-1 text-left">
           <span className="block truncate font-mono text-xs text-gray-800 dark:text-gray-200">{s.entity_id}</span>
           <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
-            {s.friendly_name ?? '—'}{s.unit ? ` · ${s.unit}` : ''}{s.state != null ? ` · ${s.state}` : ''}
+            {alle && s.domain ? `${s.domain} · ` : ''}{s.friendly_name ?? '—'}{s.unit ? ` · ${s.unit}` : ''}{s.state != null ? ` · ${s.state}` : ''}
           </span>
           {mismatch && (
             <span className="mt-0.5 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
@@ -153,7 +163,7 @@ export default function DatenquellenHaPicker({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`HA-Sensor für „${feldLabel}"`} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={`${alle ? 'HA-Entität' : 'HA-Sensor'} für „${feldLabel}"`} size="xl">
       <div className="space-y-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
@@ -249,8 +259,13 @@ export default function DatenquellenHaPicker({
 
         {!loading && gefiltert.length > 0 && (
           <div className="max-h-96 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-gray-800 dark:border-gray-700">
-            {gefiltert.map(sensorZeile)}
+            {(alle ? gefiltert.slice(0, ALLE_DECKEL) : gefiltert).map(sensorZeile)}
           </div>
+        )}
+        {!loading && alle && gefiltert.length > ALLE_DECKEL && (
+          <p className="text-xs text-gray-500 dark:text-gray-400" data-picker-deckel>
+            {gefiltert.length - ALLE_DECKEL} weitere — über die Suche eingrenzen
+          </p>
         )}
 
         <div className="flex justify-end">
