@@ -231,8 +231,8 @@ const ANSICHTEN = [
     // und eine Warmwasser-Temperatur, und ihre Knoten nehmen die IDs der aktiven Investitionen der
     // Anlage (n-te Demo-WP = n-te WP der DB, `live_dashboard.py::_demo_auf_anlage`) — die erste
     // Wärmepumpe der Demo-DB hat damit Kachel und Modus-Chip; «Leistung jetzt» steht, wenn sie im
-    // Selektor vorn steht (Vorwahl = erstes Gerät, Reihenfolge nicht gemessen).
-    // Ausführen nur auf Gernots Nachfrage.
+    // Selektor vorn steht (Vorwahl = erstes Gerät; gemessen 1.11.2026: „Daikin Altherma 3 H HT" vorn).
+    // Erster Lauf 1.11.2026 (Galerie vor 4.2.0): Pflicht-Texte grün, Bild in galerie.mdx.
     name: 'komponenten_waermepumpe',
     demo: true,
     route: '#/komponenten/waermepumpe',
@@ -242,7 +242,7 @@ const ANSICHTEN = [
   },
   {
     // P-433-2b S1b: Szene «Ladepunkt» im Block «Überblick» der Wallbox (Demo: go-eCharger mit Auto, Carport) —
-    // vorbereitet, Ausführen nur auf Gernots Nachfrage; Pflicht-Texte nach dem ersten Lauf prüfen.
+    // erster Lauf 1.11.2026 (Galerie vor 4.2.0): Pflicht-Texte grün, Bild in galerie.mdx.
     name: 'komponenten_wallbox',
     demo: true,
     route: '#/komponenten/wallbox',
@@ -251,7 +251,8 @@ const ANSICHTEN = [
     titel: 'Komponenten → Wallbox mit der Szene „Ladepunkt"',
   },
   {
-    // P-433-2b S1b: Szene «Fahrzeug» im Block «Überblick» des E-Autos — vorbereitet, Ausführen nur auf Gernots Nachfrage.
+    // P-433-2b S1b: Szene «Fahrzeug» im Block «Überblick» des E-Autos — erster Lauf 1.11.2026 (Galerie vor 4.2.0):
+    // Pflicht-Texte grün, Bild in galerie.mdx.
     name: 'komponenten_eauto',
     demo: true,
     route: '#/komponenten/e-auto',

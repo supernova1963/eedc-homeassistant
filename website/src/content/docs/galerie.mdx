@@ -1,6 +1,6 @@
 ---
 title: Galerie
-description: Wie eedc mit gepflegten Daten aussieht – zwölf Ansichten in hell und dunkel
+description: Wie eedc mit gepflegten Daten aussieht – achtzehn Ansichten in hell und dunkel
 ---
 
 import cockpitMainLight from '../../assets/screenshots/cockpit_main.webp';
@@ -21,6 +21,12 @@ import jahrLight from '../../assets/screenshots/cockpit_jahr.webp';
 import jahrDark from '../../assets/screenshots/cockpit_jahr-dark.webp';
 import speicherLight from '../../assets/screenshots/komponenten_speicher.webp';
 import speicherDark from '../../assets/screenshots/komponenten_speicher-dark.webp';
+import waermepumpeLight from '../../assets/screenshots/komponenten_waermepumpe.webp';
+import waermepumpeDark from '../../assets/screenshots/komponenten_waermepumpe-dark.webp';
+import wallboxLight from '../../assets/screenshots/komponenten_wallbox.webp';
+import wallboxDark from '../../assets/screenshots/komponenten_wallbox-dark.webp';
+import eautoLight from '../../assets/screenshots/komponenten_eauto.webp';
+import eautoDark from '../../assets/screenshots/komponenten_eauto-dark.webp';
 import roiLight from '../../assets/screenshots/auswertungen_roi.webp';
 import roiDark from '../../assets/screenshots/auswertungen_roi-dark.webp';
 import aussichtLight from '../../assets/screenshots/aussichten_langfristig.webp';
@@ -160,6 +166,41 @@ aus Wetterprognose und der gelernten Korrektur der eigenen Anlage.
 
 Jedes Gerät hat eine feste Heimat mit derselben Gliederung: Status → Verlauf → Vergleich →
 Wirtschaftlichkeit. Hier der Speicher mit Vollzyklen, Wirkungsgrad, Durchsatz und Netzladeanteil.
+
+### Wärmepumpe – Block „Überblick"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={waermepumpeDark.src} />
+  <img src={waermepumpeLight.src} alt="eedc Komponenten → Wärmepumpe mit dem Block „Überblick“: Schaubild mit Kacheln und „Auf einen Blick“" />
+</picture>
+
+An Wärmepumpe, Wallbox und E-Auto steht über allem der Block „Überblick": links ein Schaubild mit
+den Kacheln aus dem Energiefluss dort, wo sie im Haus hingehören – Leistung mit Betriebsart,
+Außentemperatur, Warmwasser, Zusatzheizung, Strom heute, Vorlauf und Rücklauf. Rechts „Auf einen
+Blick" mit der Gerätekarte und der Karte „Heute"; jede Karte lässt sich einzeln parken.
+
+### Wallbox – Szene „Ladepunkt"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={wallboxDark.src} />
+  <img src={wallboxLight.src} alt="eedc Komponenten → Wallbox mit der Szene „Ladepunkt“: offene Garage mit Wallbox, Auto und Ladesitzung" />
+</picture>
+
+An der Wallbox blickst du in die offene Garage: an der Wandbox die Ladeleistung, am Zählerkasten
+„Ladung heute", am Stecker die laufende Sitzung und am Auto sein Ladestand mit dem Ziel. Rechts
+die Gerätekarte mit Zustand, Ladestand-Balken und Sitzung sowie die Karte „Heute" – auch hier
+einzeln parkbar.
+
+### E-Auto – Szene „Fahrzeug"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={eautoDark.src} />
+  <img src={eautoLight.src} alt="eedc Komponenten → E-Auto mit der Szene „Fahrzeug“: durchscheinendes Auto an der Ladesäule" />
+</picture>
+
+Am E-Auto steht ein durchscheinendes Auto an der Säule: „Laden" mit der Leistung, der Ladestand am
+Akku und die Reichweite mit dem Kilometerstand am Cockpit. Die Gerätekarte nennt Ort, Ziel,
+Ladeleistung und Kilometerstand; welches Auto das Bild zeigt, wählst du oben im Selektor.
 
 ---
 
