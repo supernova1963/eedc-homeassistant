@@ -485,7 +485,9 @@ function EAutoGeraeteKarte({ inv, live }: Pick<UeberblickKarteEmobProps, 'inv' |
  * «Auf einen Blick» der E-Mobilität — seit P-433-2b S1c **je Karte eine Park-Hülle** mit denselben IDs wie Wärme/Klima
  * (`ueberblickPark.ts`); Titel «Wallbox» bzw. «E-Auto», «Heute», «Betrieb». Heute und Betrieb stehen nur mit Werten da
  * — ihre Hülle ebenso; seit TH-E2 die vierte Karte «Themen» (`ThemenKarte`, gemeinsam mit Wärme/Klima), ebenso nur
- * mit Wert. Ist die alte Park-ID `el:ueberblick-karte` geparkt, gelten alle als geparkt.
+ * mit Wert. Ist die alte Park-ID `el:ueberblick-karte` geparkt, gelten alle als geparkt. Neben dem Schaubild streckt das
+ * Block-Raster die Spalte auf Schaubild-Höhe; `content-start` hält die Kartenzeilen oben (ohne Lücke zwischen den Karten,
+ * Galerie 4.2.0).
  */
 export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
   const park = usePark()
@@ -496,7 +498,7 @@ export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
   const altGeparkt = park.istGeparkt(UEBERBLICK_ALT_KARTE)
   const themenOffen = teile.themen && !ueberblickGeparkt(park.istGeparkt, UEBERBLICK_KARTE.themen)
   return (
-    <div className={`grid grid-cols-1 ${props.nebenSchaubild ? `${themenOffen ? 'md:grid-cols-2' : 'md:grid-cols-3'} xl:grid-cols-1` : kartenRaster(themenOffen)} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={inv.typ}>
+    <div className={`grid grid-cols-1 ${props.nebenSchaubild ? `${themenOffen ? 'md:grid-cols-2' : 'md:grid-cols-3'} xl:grid-cols-1 content-start` : kartenRaster(themenOffen)} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={inv.typ}>
       {!altGeparkt && (
         <Parkbar id="el:ueberblick-karte-geraet" titel={istWallbox ? 'Wallbox' : 'E-Auto'}>
           {istWallbox ? <WallboxGeraeteKarte inv={inv} live={live} /> : <EAutoGeraeteKarte inv={inv} live={live} />}

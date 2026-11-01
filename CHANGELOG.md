@@ -29,6 +29,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   „‹Entität bzw. Topic› · Stand hh:mm". Live-Antwort: neues Feld `themen[].eintraege[].kennung` (`entity_id` bzw.
   Inbound-Topic).
 
+### Changed
+
+- **Kacheln mit Füllstand (Energiefluss und Hub-Schaubild): die zweite Zeile steht neutral** (dunkel bzw. im Dunkelmodus weiß
+  wie der Wert) statt in der Ladestands- bzw. Zustandsfarbe über der gleichfarbigen Füllung — „ID.4 64 %", „71 %",
+  „Wartet · PV", „Ziel 80 %" sind im Hellmodus lesbar; der Zustands-Chip behält seine Farbe, Kacheln ohne Füllstand bleiben, wie sie waren.
+- **E-Mobilität → „Auf einen Blick" neben dem Schaubild:** die Karten stehen ab breiten Bildschirmen dicht untereinander,
+  ohne Leerfläche zwischen Gerätekarte und „Heute" (wie bei der Wärmepumpe).
+
 ## [4.1.12] - 2026-11-01 — E-Mobilität nach Konzept #433: Hub-Überblick für Wallbox und E-Auto mit den Szenen „Ladepunkt" und „Fahrzeug", „Auf einen Blick" je Karte parkbar (auch Wärme/Klima), Zustand & Sitzung, Fahrzeug am Ladepunkt und Gast, evcc-Chip ohne Template-Sensor, „Betrieb heute", Kilometerstand und „Gefahren heute"; Tabellen-Spalten E-Mobilität und Wärme/Klima; Stromrechnung mit eigenem WP-/Wallbox-Tarif (N-769, N-770, N-771); 4 Korrekturen
 
 ### Added

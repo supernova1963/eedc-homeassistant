@@ -247,3 +247,21 @@ describe('Formatierung', () => {
     expect(zielText(80, 80)).toBe('80 % · noch 1 h 20 min')
   })
 })
+
+describe('UeberblickKarteEmob — Kartenspalte neben dem Schaubild (Galerie 4.2.0)', () => {
+  const behaelter = (c: HTMLElement) => c.querySelector('[data-ueberblick-karte]')!.className
+  const labl = () => live({ komponenten: [labLaedt()], gauges: [EV] })
+
+  it('neben dem Schaubild: `content-start` — die Zeilen bleiben oben, keine Lücke zwischen den Karten', () => {
+    const c = render(<UeberblickKarteEmob inv={SMA} live={labl()} tag={null} mehrereGeraete={false} nebenSchaubild />).container
+    expect(behaelter(c)).toContain('xl:grid-cols-1')
+    expect(behaelter(c)).toContain('content-start')
+  })
+
+  it('Schaubild geparkt: Raster in voller Breite unverändert, ohne `content-start`', () => {
+    const c = render(<UeberblickKarteEmob inv={SMA} live={labl()} tag={null} mehrereGeraete={false} nebenSchaubild={false} />).container
+    expect(behaelter(c)).toContain('md:grid-cols-3')
+    expect(behaelter(c)).not.toContain('xl:grid-cols-1')
+    expect(behaelter(c)).not.toContain('content-start')
+  })
+})

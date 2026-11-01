@@ -68,3 +68,43 @@ describe('Wallbox-Kachel — Zustands-Chip', () => {
     expect(funktionsFarbe('verbunden')).toBe(funktionsFarbe('aus'))
   })
 })
+
+/**
+ * Kontrast über dem Pegel (Gernot 1.11.2026, Galerie 4.2.0, «Weg 1»): trägt die Kachel einen Pegel (Füllung von unten
+ * in der Ladestandsfarbe), steht der Text der zweiten Zeile neutral wie die Wert-Zeile — ohne `fill`-Attribut, Klassen
+ * `fill-gray-900 dark:fill-white`; das Chip-Rechteck behält Füllung und Rand in der Funktionsfarbe. Ohne Pegel bleibt
+ * die Zeile farbig wie bisher.
+ */
+describe('Wallbox-Kachel — zweite Zeile über dem Pegel neutral', () => {
+  const zeile = (c: HTMLElement, inhalt: string) =>
+    [...c.querySelectorAll('text')].find((t) => t.textContent?.trim() === inhalt)!
+  const pegelRect = (c: HTMLElement) => c.querySelector('g[data-title^="go-eCharger"] rect[fill-opacity="0.3"]')
+
+  it('Chip mit Pegel (Auto 45 %): Text ohne `fill`, neutrale Klasse; Chip-Rechteck in Funktionsfarbe', () => {
+    const c = zeichne(wallbox({ verbrauch_kw: 0, ladezustand: 'wartet', ladezustand_label: 'Wartet', lademodus: 'pv', lademodus_label: 'PV' }))
+    expect(pegelRect(c)).not.toBeNull()
+    const t = zeile(c, 'Wartet · PV')
+    expect(t.hasAttribute('fill')).toBe(false)
+    expect(t.getAttribute('class')).toBe('font-semibold fill-gray-900 dark:fill-white')
+    const chip = c.querySelector('rect[data-modus-chip]')!
+    expect(chip.getAttribute('fill')).toBe(STATUS_COLORS.warnung)
+    expect(chip.getAttribute('stroke')).toBe(STATUS_COLORS.warnung)
+  })
+
+  it('Auto-Zeile mit Pegel («lädt»): Text neutral statt Ladestandsfarbe', () => {
+    const c = zeichne(wallbox({ ladezustand: 'laedt', ladezustand_label: 'Lädt' }))
+    expect(pegelRect(c)).not.toBeNull()
+    const t = [...c.querySelectorAll('text')].find((x) => x.textContent?.trim().startsWith('ID.4'))!
+    expect(t.hasAttribute('fill')).toBe(false)
+    expect(t.getAttribute('class')).toBe('font-semibold fill-gray-900 dark:fill-white')
+  })
+
+  it('Chip ohne Pegel (kein Auto): Text in der Funktionsfarbe wie bisher', () => {
+    const c = zeichne(wallbox({ verbrauch_kw: 0, fahrzeuge: [], ladezustand: 'wartet', ladezustand_label: 'Wartet', lademodus: 'pv', lademodus_label: 'PV' }))
+    expect(pegelRect(c)).toBeNull()
+    const t = zeile(c, 'Wartet · PV')
+    expect(t.getAttribute('fill')).toBe(STATUS_COLORS.warnung)
+    expect(t.getAttribute('class')).toBe('font-semibold')
+    expect(c.querySelector('rect[data-modus-chip]')!.getAttribute('fill')).toBe(STATUS_COLORS.warnung)
+  })
+})

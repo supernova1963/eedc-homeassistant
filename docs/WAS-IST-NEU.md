@@ -26,6 +26,9 @@ Wird die Reihe voll, rücken die Themen als Erste in „Weitere". Rechts gibt es
 Einträgen; der Tooltip einer Zeile nennt die Entität bzw. das Topic und den Stand. Die Karte ist wie „Heute" und „Betrieb"
 einzeln parkbar. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
 
+**Besser lesbar:** In Kacheln mit Füllstand (Speicher, Wallbox, E-Auto) steht die zweite Zeile jetzt dunkel statt in der Farbe
+der Füllung, und bei Wallbox und E-Auto rücken die Karten neben dem Schaubild ohne Leerfläche zusammen.
+
 ## v4.1.12 — 1. November 2026
 
 **Komponenten → Wallbox und E-Auto: neuer Block „Überblick" — was am Ladepunkt gerade geschieht.** Ganz oben steht jetzt
