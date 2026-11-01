@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Oktober 2026 (v4.1.10)
+> **Stand:** November 2026 (v4.1.12)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -10,6 +10,8 @@
 ---
 
 ## Unveröffentlicht — kommt mit der nächsten Version
+
+## v4.1.12 — 1. November 2026
 
 **Komponenten → Wallbox und E-Auto: neuer Block „Überblick" — was am Ladepunkt gerade geschieht.** Ganz oben steht jetzt
 „Auf einen Blick" (daneben das Schaubild, siehe unten). An der Wallbox sagt **ein Chip**, was los ist — „Lädt · PV",
