@@ -269,8 +269,9 @@ export function zeichenBudget(nodeW: number, fontSize: number): number {
  * ein Auto „ID.4 52 %" (entlädt es — V2H —, mit „· entlädt"); mehrere, von
  * denen keines eindeutig lädt, die Ladestände nebeneinander „64 · 81 %".
  * Der Name weicht zuerst, Ladestand und Richtung nie.
+ * Exportiert für die Szene «Ladepunkt» im Hub-Überblick (P-433-2b S1b, `emobKachelAnker.ts`) — dieselbe Zeile.
  */
-function autoZeile(auto: KachelAuto, max: number): string {
+export function autoZeile(auto: KachelAuto, max: number): string {
   if (auto.art === 'ladestaende') {
     return auto.autos.map(a => (a.soc != null ? String(a.soc) : '–')).join(' · ') + ' %'
   }
@@ -280,8 +281,9 @@ function autoZeile(auto: KachelAuto, max: number): string {
   return rest ? kuerzeMitSuffix(a.label, ' ' + rest, max) : kuerzeMitSuffix(a.label, '', max)
 }
 
-/** Eine Tooltip-Zeile je Auto: Ladestand und — gemessen — lädt/entlädt. */
-function autoTip(a: LiveFahrzeug): string {
+/** Eine Tooltip-Zeile je Auto: Ladestand und — gemessen — lädt/entlädt. Exportiert für die Szenen der E-Mobilität
+ *  (P-433-2b S1b, `emobKachelAnker.ts`). */
+export function autoTip(a: LiveFahrzeug): string {
   const soc = a.soc != null ? `${a.soc} %` : 'Ladestand unbekannt'
   const kw = a.kw ?? 0
   const richtung = kw > 0 ? `, lädt ${fmtZahl(kw, 2)} kW` : kw < 0 ? `, entlädt ${fmtZahl(-kw, 2)} kW (V2H)` : ''
@@ -319,8 +321,8 @@ export function nennleistungKwp(k: LiveKomponente): number | null {
   return k.leistung_kwp != null && k.leistung_kwp > 0 ? k.leistung_kwp : null
 }
 
-/** SoC Farbe: rot < 20%, gelb 20-50%, grün > 50% */
-function socColor(pct: number): string {
+/** SoC Farbe: rot < 20%, gelb 20-50%, grün > 50%. Exportiert für den Pegel der Szenen der E-Mobilität (P-433-2b S1b). */
+export function socColor(pct: number): string {
   if (pct < 20) return STATUS_COLORS.kritisch
   if (pct < 50) return STATUS_COLORS.warnung
   return STATUS_COLORS.ok

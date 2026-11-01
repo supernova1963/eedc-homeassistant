@@ -18,6 +18,8 @@ import { Parkbar, usePark } from '../../park'
 import { useChartTheme } from '../../../context/ThemeContext'
 import { useDemoMode } from '../../../v4/status/AppStatusContext'
 import type { Investition } from '../../../types'
+import { baueFahrzeugKacheln, baueLadepunktKacheln } from './emobKachelAnker'
+import { emobPanorama } from './emobPanoramaAnker'
 import { baueUeberblickKacheln } from './kachelAnker'
 import UeberblickKarte from './UeberblickKarte'
 import UeberblickKarteEmob from './UeberblickKarteEmob'
@@ -27,11 +29,6 @@ import { WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 
 /** Park-IDs der zwei Elemente des Blocks. */
 export const UEBERBLICK_PARK_IDS = ['el:ueberblick-schaubild', 'el:ueberblick-karte'] as const
-/** P-433-2b K1: der Block der E-Mobilität trägt vorerst nur «Auf einen Blick» (kein Schaubild, P1 «Panorama später»). */
-export const UEBERBLICK_EMOB_PARK_IDS = ['el:ueberblick-karte'] as const
-/** Typen, deren Überblick (noch) ohne Schaubild steht — die Karten in voller Breite. */
-export const UEBERBLICK_OHNE_SCHAUBILD: readonly string[] = ['wallbox', 'e-auto']
-
 export interface UeberblickBlockProps {
   anlageId: number
   /** Alle Geräte des Typs — ihre Kacheln stehen im Bild. */
@@ -64,18 +61,33 @@ export default function UeberblickBlock({ anlageId, geraete, inv }: UeberblickBl
 }
 
 /**
- * P-433-2b K1 (Bauplan E4): der Block «Überblick» der Typ-Seiten Wallbox und E-Auto — **ohne Schaubild** (Panorama
- * später, Blatt P1), «Auf einen Blick» in voller Breite (innen bis zu drei Karten nebeneinander, Handy gestapelt).
- * Derselbe Live-Hook wie Wärme/Klima (Poll nur, solange der Inhalt montiert und die Seite sichtbar ist); die Park-ID
- * `el:ueberblick-karte` ist dieselbe, ein Schaubild wird nicht gerendert.
+ * Der Block «Überblick» der Typ-Seiten Wallbox und E-Auto (P-433-2b K1; Schaubild seit S1b, Bauplan Fassung 2 §9):
+ * dieselbe Bauform wie Wärme/Klima — links das Schaubild, rechts «Auf einen Blick», je einzeln parkbar mit denselben
+ * Park-IDs ({@link UEBERBLICK_PARK_IDS}). **Die Szene gehört dem gewählten Gerät** (E-2b-22): Wallbox ⇒ Szene
+ * «Ladepunkt», E-Auto ⇒ Szene «Fahrzeug» ({@link emobPanorama}); die Kacheln bauen `baueLadepunktKacheln` bzw.
+ * `baueFahrzeugKacheln` für `inv` — ein Selektor-Wechsel wechselt Bild-Kacheln und Karte zusammen. Neben dem Schaubild
+ * stehen die Karten ab `xl` untereinander (`nebenSchaubild`); ist das Schaubild geparkt, nebeneinander in voller Breite.
+ * Derselbe Live-Hook (Poll nur, solange der Inhalt montiert und die Seite sichtbar ist).
  */
 export function UeberblickBlockEmob({ anlageId, geraete, inv }: UeberblickBlockProps) {
   const { demoMode } = useDemoMode()
   const { live, tag } = useLiveUeberblick(anlageId, demoMode)
+  const achsen = useChartTheme()
+  const park = usePark()
+  const istWallbox = inv.typ === 'wallbox'
+  const { kacheln, ohneSensor } = useMemo(
+    () => (istWallbox ? baueLadepunktKacheln : baueFahrzeugKacheln)({ inv, geraete, live, tag, referenz: achsen.referenz }),
+    [istWallbox, inv, geraete, live, tag, achsen.referenz],
+  )
+  const beide = !UEBERBLICK_PARK_IDS.some((id) => park.istGeparkt(id))
+
   return (
-    <div className="grid grid-cols-1 gap-4" data-ueberblick-block>
+    <div className={`grid grid-cols-1 gap-4${beide ? ' xl:grid-cols-3' : ''}`} data-ueberblick-block>
+      <Parkbar id="el:ueberblick-schaubild" titel="Schaubild" className={beide ? 'xl:col-span-2' : undefined}>
+        <UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={emobPanorama(inv.typ)} />
+      </Parkbar>
       <Parkbar id="el:ueberblick-karte" titel="Auf einen Blick">
-        <UeberblickKarteEmob inv={inv} live={live} tag={tag} mehrereGeraete={geraete.length > 1} />
+        <UeberblickKarteEmob inv={inv} live={live} tag={tag} mehrereGeraete={geraete.length > 1} nebenSchaubild={beide} />
       </Parkbar>
     </div>
   )

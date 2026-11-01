@@ -12,7 +12,7 @@
 ## Unveröffentlicht — kommt mit der nächsten Version
 
 **Komponenten → Wallbox und E-Auto: neuer Block „Überblick" — was am Ladepunkt gerade geschieht.** Ganz oben steht jetzt
-„Auf einen Blick" (das Schaubild der E-Mobilität folgt). An der Wallbox sagt **ein Chip**, was los ist — „Lädt · PV",
+„Auf einen Blick" (daneben das Schaubild, siehe unten). An der Wallbox sagt **ein Chip**, was los ist — „Lädt · PV",
 „Wartet · PV", „Verbunden", „Kein Fahrzeug" —, darunter die Ladeleistung, dein Auto mit Ladestand, Reichweite und einer
 Leiste mit Zielmarke, und eine Zeile „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung · 2 h 10 min". Am E-Auto steht der
 Ladestand groß mit Ziel und Reichweite, wo es steht („an ‹Wallbox›", „Zu Hause"/„Unterwegs") und, wenn du es als
@@ -62,6 +62,15 @@ Wallbox (und an Speicher und Steckdosen) den Knopf „Preset anwenden …" — e
 anwenden, und die Felder stehen auf „Gateway". Vorhandene Gateway-Zuordnungen derselben Felder ersetzt das Preset
 ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto), [Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität),
 [Berechnungen → PV-Anteil heute](BERECHNUNGEN.md#pv-anteil-heute)).
+
+**Wallbox und E-Auto: das Schaubild — „Ladepunkt" und „Fahrzeug".** Neben „Auf einen Blick" steht jetzt ein Bild mit den
+Kacheln aus dem Energiefluss, wie bei der Wärmepumpe. An der **Wallbox** blickst du in die offene Garage: an der Wandbox
+die Wallbox-Kachel, am Zählerkasten „Ladung heute" (mit dem PV-Anteil, wenn deine Wallbox ihn misst), am Stecker die
+laufende Sitzung und am Auto sein Ladestand — wenn eedc weiß, welches Auto dort steht. Am **E-Auto** siehst du ein
+durchscheinendes Auto an der Säule: „Laden" mit der Leistung und dem Zustand, den Ladestand am Akku, die Reichweite am
+Cockpit, „Gefahren heute" am Vorderrad und den Standort. Das Bild gehört dem Gerät, das du oben im Selektor gewählt hast —
+eine andere Wallbox oder ein anderes Auto wählst du dort. Was fehlt, nennt die Zeile unter dem Bild mit dem Weg zu den
+Datenquellen ([Bedienung §3.5](HANDBUCH_BEDIENUNG.md#35-e-auto), [Bedienung §3.6](HANDBUCH_BEDIENUNG.md#36-wallbox)).
 
 **Komponenten: lesbare Einstellungen, keine Nullen ohne Aussage.** Der Block „Einstellungen" nennt die Parameter jetzt
 so wie das Formular — „Max. Ladeleistung (kW)" statt „max ladeleistung kw", „Wärmepumpenart: Luft/Wasser" statt

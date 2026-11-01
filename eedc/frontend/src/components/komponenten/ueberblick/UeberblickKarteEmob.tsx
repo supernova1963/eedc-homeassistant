@@ -55,6 +55,9 @@ export interface UeberblickKarteEmobProps {
   tag: TagDetail | null
   /** Mehr als ein Gerät des Typs? Dann zählt nur der exakte Tages-Key (wie `stromHeute`). */
   mehrereGeraete: boolean
+  /** P-433-2b S1b: steht die Karte neben dem Schaubild (Desktop ⅓-Spalte)? Dann stehen die Karten ab `xl` untereinander
+   *  wie bei der Wärmepumpe; ist das Schaubild geparkt, nebeneinander in voller Breite. */
+  nebenSchaubild?: boolean
 }
 
 /** Fußzeile der Wallbox-Karte ohne jedes K1-Feld (A7-Vokabular: «zugeordnet»). */
@@ -177,8 +180,9 @@ export function herleitungPvAnteil(pvKwh: number | null | undefined, ladungKwh: 
 }
 
 /** Ladung heute aus `heute_kwh_pro_komponente` — der exakte Key; der Typ-Key nur beim einzigen Gerät. Seit K4 nur der
- *  **Rückfall** ohne Tageswert im Tag-Detail (`emob_heute`, ein Pfad je Karte, D-K4-2). */
-function ladungHeute(live: LiveDashboardResponse | null, key: string, typKey: string, mehrere: boolean): number | null {
+ *  **Rückfall** ohne Tageswert im Tag-Detail (`emob_heute`, ein Pfad je Karte, D-K4-2). Exportiert für die Zählerkachel
+ *  der Szene «Ladepunkt» (P-433-2b S1b, `emobKachelAnker.ts`) — dieselbe Regel. */
+export function ladungHeute(live: LiveDashboardResponse | null, key: string, typKey: string, mehrere: boolean): number | null {
   const werte = live?.heute_kwh_pro_komponente
   if (!werte) return null
   return werte[key] ?? (mehrere ? null : werte[typKey] ?? null)
@@ -477,7 +481,7 @@ function EAutoKarten({ inv, live, tag }: UeberblickKarteEmobProps) {
 
 export default function UeberblickKarteEmob(props: UeberblickKarteEmobProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start" data-ueberblick-karte data-ueberblick-emob={props.inv.typ}>
+    <div className={`grid grid-cols-1 md:grid-cols-3${props.nebenSchaubild ? ' xl:grid-cols-1' : ''} gap-3 items-start`} data-ueberblick-karte data-ueberblick-emob={props.inv.typ}>
       {props.inv.typ === 'wallbox' ? <WallboxKarten {...props} /> : <EAutoKarten {...props} />}
     </div>
   )

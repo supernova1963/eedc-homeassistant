@@ -28,7 +28,7 @@ der Geräte auf einem Panorama). Kacheln nur für Werte mit Sensor; keine Kachel
 
 | Teil | Form |
 | --- | --- |
-| **Block** | oberster Block der Hub-Typ-Seite (Wärmepumpe; Wallbox und E-Auto seit P-433-2b K1 ohne Schaubild, §2b), auch bei gespeicherter Block-Reihenfolge vorn (`voranstellen`). Desktop: Schaubild 2/3, «Auf einen Blick» 1/3; Handy gestapelt. Summary statisch «Schaubild · ‹Gerät›». |
+| **Block** | oberster Block der Hub-Typ-Seite (Wärmepumpe; Wallbox und E-Auto seit P-433-2b K1, mit ihrer Szene seit S1b, §2b-S1b), auch bei gespeicherter Block-Reihenfolge vorn (`voranstellen`). Desktop: Schaubild 2/3, «Auf einen Blick» 1/3; Handy gestapelt. Summary statisch «Schaubild · ‹Gerät›». |
 | **Panorama** | ein Bild je Typ, 1312 × 816, hell und dunkel bildgleich (beide gestapelt, Umschaltung über das Farbschema). **Das Bild zeigt immer alle Gerätearten, deine Anlage zeigen die Kacheln.** Eine **Anker-Karte** (Objekt → x/y % des Bildes) liegt als Tabelle neben dem Code; neues Bild = neue Karte. |
 | **Kacheln** | Maße wie im Energiefluss (`computeDims`), **Maßstab wie im Energiefluss**: k = 1312 / W mit W = 360 · 450 · 600 nach Containerbreite — Kachel und Schrift sind bei gleicher Breite pixelgleich mit dem Energiefluss. **Zwei Reihen im Bild, Reihe nach Anker-Art** (P-433-2d, Gernot 26.10.2026: **Technik oben, Räume unten** — oben Himmel, Geräte A/B/C/F/O, Speicher D/E, Hydraulikmodul G (Vorlauf · Rücklauf und Wärme heute ohne Stammdatum), Zählerreihe I; unten die Heizkreise J/K mit Vorlauf · Rücklauf und Wärme heute und die Innengeräte L/M/N; Tabelle `ANKER_REIHE` neben der Anker-Karte, Bildlage y < 50 % als Rückfall für Anker ohne Eintrag), Kachel-x = Anker-x mit 1-D-Schub, Linie zum Objekt mit Saum, **keine kreuzenden Linien** — innerhalb einer Reihe Probe + Nachbartausch, zwischen den Reihen **Reihenwechsel bei Kreuzung** (Entscheid Gernot 26.10.2026): kreuzt eine Linie der oberen eine der unteren Reihe (gezeichnete Linie oder Strecke Kachelmitte → Anker), wechselt die beteiligte Kachel, die nicht in der Reihe ihrer Bildlage steht (größter Abstand Anker-y ↔ Reihe zuerst), in die Reihe ihrer Bildlage, und das Layout wird neu gerechnet (Kapazität und «Weitere» inklusive); höchstens n Wechsel, im schlimmsten Fall steht jede Kachel in ihrer Bildlage, und dort kreuzt keine Linie die andere Reihe. **Zwei Plätze wie Netz und Speicher** (P-433-2e, Gernot 26.10.2026, nur Desktop ab 500 px): links die Gerätekachel der Wärmepumpe am ersten belegten Anker in fester Rangfolge A → C → F (Entscheid Master 26.10.2026: unabhängig von der Listenreihenfolge; weitere Geräte am selben Anker mit ihr als «Wärmepumpen (n)»; fällt ein Rang zurück, wird der nächste versucht), rechts die an O (`PLATZ_ANKER` neben der Anker-Karte, Lage gemessen am Bild v4); x am Bildrand wie die äußerste Reihenkachel, y = Anker-y geklemmt — links zwischen Unterkante obere Reihe + 12k und 45 % der Bildhöhe, rechts zwischen 58 % und Oberkante untere Reihe − 12k; Linie von der dem Anker nächsten Kante. Die Plätze werden vor den Reihen aus der Kachelliste genommen (Reihen = der 2d-Lauf, `dims` aus den Reihen); ein belegter rechter Platz kürzt die untere Reihe um eine Kachelbreite. Schneidet die Platz-Linie eine Reihenlinie (gezeichnet oder Mitte → Anker) oder läuft eine Reihenlinie durch das Platz-Rechteck, **Rückfall** in die Reihe (links höchstens drei Versuche, je ein Reihenlauf). Am Handy keine Plätze. Reihenkapazität wie im Energiefluss; der Rest wird gruppiert («Innengeräte (n)», «Wärmepumpen (n)» mit Σ Leistung, «Weitere (n)»), Tipp auf eine Gruppe öffnet die Liste unter dem Bild. Wert-Kacheln (Temperatur, Strom heute) tragen immer die Rollenfarbe. |
 | **Panorama-Deskriptor** (P-433-2b S1a, 28.10.2026, unveröffentlicht; keine sichtbare Änderung) | Was zu einem Bild gehört, steht in **einem** Deskriptor je Bild (`components/komponenten/ueberblick/panorama.ts`, Typ `PanoramaDef`; Wärme/Klima `WAERME_PANORAMA_DEF` in `waermePanoramaAnker.ts`); Layout (`layoutUeberblick(kacheln, ctr, panorama)`) und Schaubild (Prop `panorama`) kennen kein Bild. Felder: **Bild** (`bilder` tag/nacht, `aria`), **Anker** (x/y % und Objekt), **Reihe** je Anker (ohne Eintrag die Bildlage y < 50 %), **Plätze** (`plaetze` links/rechts in Rangfolge, Grenzen `platzLinksBis`/`platzRechtsAb` als Anteil der Bildhöhe), **Wert-Rang** für «Weitere (n)», **Gruppenname** je Gruppen-Art und Anker, **Farbe** der Gruppe «Weitere», optional der Anker der **Restgruppe** «Innengeräte (n−3)» (Wärme N; ohne Eintrag der Anker des vierten Innengeräts). Das Bildmaß 1312 × 816 ist allen Panoramen gemeinsam (kein Feld). Die Kachel trägt optional einen **Pegel** (Füllung wie der SoC-Pegel im Energiefluss; Wärme keinen). Der Wärme/Klima-Überblick ist dabei byte-gleich geblieben (Fixpunkte, Kachel- und Fokus-Snapshot, Zwölf-Fälle-Snapshot `ueberblickZwoelfFaelle.test.tsx` mit Fall 13 «zwei Klima-Geräte 2+2»). **Benannte Grenze:** mit zwei oder mehr Klima-Geräten, die zusammen vier oder mehr Innengeräte haben, hängt die Restgruppe am Schlafzimmer-Gerät N, auch wenn ihr Mitglied an L oder M steht (die Innengeräte-Anker zählen je Gerät neu) — so wie vor dem Deskriptor; eine Umstellung wäre eine sichtbare Änderung mit eigenem Entscheid. |
@@ -59,8 +59,8 @@ bleibt die aller Typen, andere Typen behalten die Abschnitte nach Einheit.
 ## 2b. E-Mobilität — Kern K1 (gebaut 27.10.2026, unveröffentlicht)
 
 Grundlage: Definitions-Blatt «Überblick E-Mobilität» Fassung 3 und Bauplan K1 (intern). Die Hub-Typ-Seiten **Wallbox** und
-**E-Auto** tragen den Block «Überblick» **vorerst ohne Schaubild** (Panorama später, P1) — «Auf einen Blick» in voller Breite,
-Park-ID `el:ueberblick-karte` (das Schaubild wird nicht gerendert), Summary «Auf einen Blick · ‹Gerät›», Fokus-ID `ueberblick`.
+**E-Auto** tragen den Block «Überblick» — in K1 ohne Schaubild (Panorama später, P1); seit S1b mit ihrer Szene wie Wärme/Klima
+(§2b-S1b: Park-IDs `el:ueberblick-schaubild`/`el:ueberblick-karte`, Summary «Schaubild · ‹Gerät›», Fokus-ID `ueberblick`).
 
 | Teil | Form |
 | --- | --- |
@@ -149,6 +149,25 @@ Kopfzahl bei `pv > ladung`), nach den Halten H1/H2 (Master 28.10.2026).
 | K4-6 | Karte «Heute»: Ladung aus dem Tag-Detail (Live nur Rückfall), Kopfzahl mit Herleitung «9,8 kWh PV ÷ 14,7 kWh»; E-Auto «Gefahren heute», «Fahrverbrauch heute», Gerätekarte «Kilometerstand». |
 | K4-7/8 | **«Preset anwenden …»** je Gerät (`MqttPreset.typen`) und an der Anlage; Apply **ersetzt** aktive Gateway-Zeilen desselben Felds (beide Schreibweisen des Ziels) und setzt die Quelle «Gateway». |
 
+### 2b-S1b. Zwei Szenen «Ladepunkt» und «Fahrzeug» (gebaut 1.11.2026, unveröffentlicht)
+
+Grundlage: Bauplan S1b Fassung 2 (intern), Bild-Brief «Szenen E-Mobilität» mit den Anker-Karten Ist (gemessen am Bild
+1.11.2026); Entscheide **E-2b-1 neu** (zwei Szenen statt eines Haus-Panoramas), **E-2b-22** (die Szene gehört dem gewählten
+Gerät), **E-2b-23** (Zählerkachel «Ladung heute · PV-Anteil» je Wallbox; «PV-Ladung (Anlage)» bleibt Karte), **E-2b-24**
+(Sitzung im Bild), **E-2b-25** (kein V2H-Anker; die Richtung steht an «Laden»), **E-2b-26** (eine Etappe nach dem Bild),
+**E-2b-27** (durchscheinendes Auto, gleiche Kamera), **E-2b-28** (Himmel-Reserve ohne Kachel) — Gernot 1.11.2026.
+**«Ein Bild je Typ» bleibt wörtlich:** Wallbox ⇒ «Ladepunkt», E-Auto ⇒ «Fahrzeug».
+
+| Teil | Form |
+| --- | --- |
+| **Deskriptoren** | `emobPanoramaAnker.ts`: `LADEPUNKT_PANORAMA_DEF` (Anker A Wandbox · Z Zählerkasten · S Stecker · F Auto · HIMMEL Reserve) und `FAHRZEUG_PANORAMA_DEF` (L Säulen-Wallbox · C Cockpit · H Terrasse · B Akku · R Vorderrad · HIMMEL Reserve); Ist-Anker gemessen am Bild 1.11.2026, neues Bild = neue Messung. Layout und Zeichnung unverändert (Wärme byte-gleich). |
+| **Szene gehört dem Gerät** | Anders als Wärme/Klima (Kacheln aller Geräte im Bild) zeigt die Szene **nur das gewählte Gerät**; weitere Wallboxen/Autos erreicht der Selektor — die Szenen haben je ein Hauptobjekt, keinen Nebenanker (B/W entfallen, Gernot 1.11.). Ein Selektor-Wechsel wechselt Bild-Kacheln und Karte zusammen. |
+| **Reihen und Plätze** | Ladepunkt: A (Platz links), Z, HIMMEL oben; **S und F ausdrücklich unten** (Bildlage wäre oben). Fahrzeug: H, C, HIMMEL oben; B, R unten; L Platz links (am Handy unten). Rechts kein Platz (`plaetze.rechts = []`); Platzgrenzen 45 %/58 %. Wert-Rang Ladepunkt Z 0 · S 1 · F 2; Fahrzeug B 0 · R 1 · C 2 · H 3. |
+| **Kacheln Ladepunkt** | **A** die Energiefluss-Kachel der Wallbox (Chip bzw. Auto-Zeile, Pegel, Tooltip wie dort, dazu Gast/unbekannt); **Z** «Ladung heute» (Tag-Detail vor Live-Rückfall), zweite Zeile «PV-Anteil» nur mit `pv_anteil_prozent`; **S** «Sitzung» (kWh, Dauer bzw. «letzte Sitzung»); **F** das Auto nur bei eindeutiger Zuordnung und mit Ladestand — das erste nach ID als Fahrzeugkachel (Wert-Kachel mit Pegel), weitere als Gerätekacheln am selben Objekt ⇒ «E-Autos (n)». Ohne-Sensor-Zeile: «Leistung ‹Wallbox›», «Ladung heute ‹Wallbox›». |
+| **Kacheln Fahrzeug** | **L** «Laden»: Leistung des Autos (Betrag, `formatPower`) mit Zustands-Chip bzw. «entlädt (V2H)», ohne Leistung der Zustand als Text; **B** «Ladestand» mit Pegel, Ziel · Restzeit; **C** «Reichweite» (Stand) bzw. «Kilometerstand»; **R** «Gefahren heute» (Fahrverbrauch) bzw. «Fahrverbrauch heute»; **H** «Standort». Ohne-Sensor-Zeile: «Ladestand ‹Auto›». |
+| **Rechnen** | keines im Client: PV-Anteil nur `pv_anteil_prozent`, Fahrt nur `km`/`fahrverbrauch_kwh` aus dem Tag-Detail. |
+| **Karten** | «Auf einen Blick» unverändert; neben dem Schaubild ab `xl` untereinander, mit geparktem Schaubild nebeneinander in voller Breite. |
+
 ## 3. Entscheide
 
 | # | Frage | Entscheid |
@@ -164,7 +183,8 @@ Kopfzahl bei `pv > ladung`), nach den Halten H1/H2 (Master 28.10.2026).
 | — | Datenquellen-Blockkopf | Status-Wörter, keine Arbeitszahl. |
 | — | Poll-Hook teilen | nein, eigener Hook; Zusammenführung mit dem Cockpit später mit eigenem Go. |
 | — | Demo-Daten | die Demo-Wärmepumpe trägt Modus «Heizen» und die Antwort eine Warmwasser-Temperatur; die Demo-Knoten nehmen die IDs der aktiven Investitionen der Anlage (n-ter Demo-Knoten eines Typs = n-te Investition), sonst ihre festen IDs. |
-| — | Panorama E-Mobilität | später (P1, Gernot 27.10.2026): erst die Karten (K1), das Panorama schließt das E-Mobilitäts-Paket; kein Release vorher. |
+| — | Panorama E-Mobilität | später (P1, Gernot 27.10.2026): erst die Karten (K1), das Panorama schließt das E-Mobilitäts-Paket; kein Release vorher. **Gebaut als zwei Szenen** (E-2b-1 neu, Gernot 1.11.2026, §2b-S1b). |
+| E-2b-22 | Anlage- oder Gerät-zentriert (E-Mobilität) | die Szene gehört dem gewählten Gerät; weitere Geräte nur über den Selektor (kein Nebenanker, 1.11.2026). |
 | B6 | Wallbox-Zustand | **«Zustand nur gemessen»** (P9, 27.10.2026; vorher «gibt es nicht»): ein Zustand nur aus einem zugeordneten Feld, nie aus der Leistung, keine Schwelle. |
 
 ## 4. Grenzen (benannt)
@@ -183,4 +203,10 @@ Kopfzahl bei `pv > ladung`), nach den Halten H1/H2 (Master 28.10.2026).
 - **Kachel «Wärme heute»** kommt aus dem Tag-Detail (alle 5 min), nicht aus der Live-Antwort; eine Zweitzeile Heizen · Warmwasser
   gibt es nicht (die Gerätezeile liefert Wärme je Funktion nicht).
 - **Tag-Detail hat keinen Demo-Schalter:** im Demo-Modus zeigt die Karte Heute-Wärme und -Arbeitszahl des echten Tages.
+- **Szenen E-Mobilität** (S1b): je **ein** Gerät im Bild, weitere nur über den Selektor; ein Auto an mehreren live liefernden
+  Wallboxen ohne Meldung der Steuerung steht in keiner Szene «Ladepunkt» (Satz im Tooltip), ein Gast ebenso nicht; «an
+  ‹Wallbox›» nur eindeutig; PV-Anteil nur gemessen, PV-Ladung der Anlage nur in der Karte; Laden am Auto nur mit eigenem
+  Knoten (W3); «letzte Sitzung» nur, solange der Sensor den Wert hält; Reichweite aus evcc nur am Ladepunkt; Standort nur
+  Zone; Anker-Karte und Platzgrenzen gelten je Bildpaar. Das Lab hat eine Wallbox und ein Auto — Gast, V2H, mehrere Autos an
+  einer Wallbox und eine Anlage ohne Wallbox sind nur in Proben belegt.
 - **Live-Kacheln ohne Home-Assistant-Zuordnung** (MQTT ohne Modus) gibt es nur für die zugeordneten Zahlen; der Modus bleibt leer.

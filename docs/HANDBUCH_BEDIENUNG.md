@@ -692,7 +692,7 @@ Jede Komponenten-Sicht bezieht sich auf den **Gesamtzeitraum** (kein Datums-Sele
 
 | Block | Inhalt |
 |-------|--------|
-| **Überblick** | nur **Wärmepumpe** (weitere Typen folgen): ein Schaubild des Gerätetyps mit den Live-Kacheln deiner Geräte und daneben „Auf einen Blick" — die einzige Live-Fläche im Hub, siehe [§3.4](#34-wärmepumpe) |
+| **Überblick** | **Wärmepumpe**, **E-Auto** und **Wallbox**: ein Schaubild des Gerätetyps mit Live-Kacheln und daneben „Auf einen Blick" — die einzige Live-Fläche im Hub, siehe [§3.4](#34-wärmepumpe), [§3.5](#35-e-auto), [§3.6](#36-wallbox) |
 | **Kennzahlen (gesamte Laufzeit)** | die Kernkennzahlen des Typs über die gesamte Laufzeit — keine Live-Werte (immer offen) |
 | **System-Struktur / Zuordnung** | Aufbau und Kopplung (z. B. Wechselrichter → Module/Speicher) bzw. Herkunft der Werte — sofern für den Typ sinnvoll |
 | **Sub-Komponente** | untergeordnete Kennzahlen (z. B. gekoppelter Speicher) — sofern vorhanden |
@@ -889,7 +889,24 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 ### 3.5 E-Auto
 
 **Überblick (oberster Block, seit der nächsten Version).** Wie bei der Wärmepumpe steht ganz oben der Block „Überblick" —
-vorerst **ohne Schaubild** (das Bild der E-Mobilität folgt), mit „Auf einen Blick" für das gewählte Auto in voller Breite:
+links das **Schaubild „Fahrzeug"**, rechts „Auf einen Blick" für das gewählte Auto (Handy: untereinander; ist das Schaubild
+geparkt, stehen die Karten nebeneinander in voller Breite).
+
+**Schaubild „Fahrzeug".** Ein durchscheinendes Auto an einer Säulen-Wallbox vor dem Haus; daran **dieselben Kacheln wie im
+Energiefluss** — für das Auto, das du im Geräte-Selektor gewählt hast (die Szene gehört dem gewählten Gerät; ein anderes Auto
+wählst du oben im Selektor, die Kacheln wechseln mit):
+
+- **Laden** an der Säule (Desktop links neben dem Bild): die gemessene Lade- bzw. Entladeleistung des Autos, darunter sein
+  Zustand als Chip („Lädt", „Verbunden" …) bzw. „entlädt (V2H)"; ohne eigene Leistungsmessung steht nur der Zustand („Lädt DC").
+  Der Tooltip nennt „an ‹Wallbox›" (nur wenn eedc die Zuordnung kennt) bzw. „ohne Wallbox".
+- **Ladestand** am Akku im Unterboden: „62 %" mit Füllstand, darunter Ziel · Restzeit („90 % · noch 1 h 20 min").
+- **Reichweite** am Cockpit („312 km", darunter „Stand 23.044 km"; ohne Reichweite nur der **Kilometerstand**).
+- **Gefahren heute** am Vorderrad („42 km", darunter der Fahrverbrauch „7,8 kWh"; ohne km nur „Fahrverbrauch heute").
+- **Standort** an der Terrasse („Zu Hause" / „Unterwegs" — nur die Zone aus Home Assistant).
+- Was als Grundbestand fehlt, nennt die Zeile unter dem Bild („Ohne Sensor, deshalb ohne Kachel: Ladestand ‹Auto›");
+  Laden, Reichweite, Fahrt und Standort sind Zusatzangaben und stehen dort nicht.
+
+„Auf einen Blick" für das gewählte Auto:
 
 - **Gerätekarte:** der **Ladestand groß** mit einer Leiste und der **Zielmarke** („Ziel 80 %"), daneben die **Reichweite**;
   rechts der Ring „Eigenverbrauch (Anlage)" (die Zahl gehört der Anlage, nicht dem Auto). Darunter **Ort** („an ‹Wallbox›",
@@ -946,7 +963,28 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 
 ### 3.6 Wallbox
 
-**Überblick (oberster Block, seit der nächsten Version).** Vorerst ohne Schaubild, „Auf einen Blick" in voller Breite:
+**Überblick (oberster Block, seit der nächsten Version).** Links das **Schaubild „Ladepunkt"**, rechts „Auf einen Blick"
+(Handy: untereinander; ist das Schaubild geparkt, stehen die Karten nebeneinander in voller Breite).
+
+**Schaubild „Ladepunkt".** Der Blick in die offene Garage: Wandbox an der Rückwand, Zählerkasten an der Hauswand, ein Auto
+angesteckt. Die Kacheln gehören der Wallbox, die du im Geräte-Selektor gewählt hast (eine weitere Wallbox wählst du oben im
+Selektor, die Kacheln wechseln mit):
+
+- **Wallbox** an der Wandbox (Desktop links neben dem Bild): **genau die Kachel aus dem Energiefluss** — Leistung, darunter
+  der Zustands-Chip („Wartet · PV", „Kein Fahrzeug" …) bzw. beim Laden das Auto („ID.4 52 %"), Füllstand wie dort; der
+  Tooltip nennt Zustand, Tageswert, die Autos und — falls die Steuerung es meldet — „Gastfahrzeug".
+- **Ladung heute** am Zählerkasten („14,7 kWh"), darunter **„PV-Anteil 67 %"** nur, wenn deine Wallbox Ladung **und**
+  PV-Ladung misst (derselbe Wert wie die Kopfzahl der Karte „PV-Anteil heute"; eedc teilt nicht selbst).
+- **Sitzung** am Stecker („9,8 kWh", darunter die Dauer; ohne Fahrzeug „letzte Sitzung", solange der Sensor den Wert hält).
+- **Das Auto** am Autodach: Name, Ladestand mit Füllstand, darunter das Ziel („Ziel 80 %") oder „lädt 7,4 kW" — **nur, wenn
+  eedc weiß, welches Auto an dieser Wallbox steht** (eine einzige Wallbox, oder die Steuerung meldet es) und das Auto einen
+  Ladestand meldet. Bei „weiß eedc noch nicht" und bei einem Gast steht kein Auto im Bild — der Tooltip der Wallbox sagt es.
+  Stehen mehrere deiner Autos eindeutig an der Wallbox, steht das zuerst angelegte einzeln, die übrigen in der Gruppe
+  „E-Autos (n)".
+- Was als Grundbestand fehlt, nennt die Zeile unter dem Bild („Leistung ‹Wallbox›", „Ladung heute ‹Wallbox›"); Sitzung und
+  Auto sind Zusatzangaben und stehen dort nicht.
+
+„Auf einen Blick" für die gewählte Wallbox:
 
 - **Gerätekarte:** Name und **ein Chip** mit dem gemessenen Zustand und dem Lademodus dahinter — „Lädt · PV", „Wartet · PV",
   „Verbunden", „Fertig", „Kein Fahrzeug", „Gesperrt", „Fehler" (der Lademodus nur bei „Lädt"/„Wartet"). Die Farbe des Punkts
@@ -995,6 +1033,14 @@ Derselbe Chip steht in *Cockpit → Live* an der Wallbox-Kachel, wenn sie **nich
 **Benannte Grenzen:** Zustand und Lademodus sind bis zu 60 s alt (derselbe Takt wie der Modus einer Wärmepumpe); Zustand und
 Sitzung erscheinen nur an einer Wallbox mit Leistungssensor; Lademodus und Ziel sind Angaben der Steuerung — eedc zeigt sie
 und bewertet sie nicht; der Solaranteil, den evcc je Sitzung rechnet, ist kein eedc-PV-Anteil und erscheint nicht.
+
+**Benannte Grenzen der Schaubilder „Ladepunkt" und „Fahrzeug".** Die Bilder zeigen je **ein** Gerät — weitere Wallboxen
+oder Autos erreichst du über den Selektor, nicht im Bild. Ein Auto an mehreren live liefernden Wallboxen ohne Meldung der
+Steuerung steht in keinem Bild (Satz im Tooltip der Wallbox); ein Gast ebenso nicht. „An ‹Wallbox›" steht nur bei eindeutiger
+Zuordnung. Der PV-Anteil steht nur gemessen; die PV-Ladung der Anlage steht nur in der Karte. Lade- und Entladeleistung am
+Auto gibt es nur mit eigener Leistungsmessung des Autos. Die Reichweite aus evcc kommt vom Ladepunkt, also nur, solange das
+Auto dort steht; der Standort ist nur die Zone aus Home Assistant. Die Kacheln sind halbdurchsichtig und dürfen Stoßstange
+und Kabel überdecken.
 
 **Benannte Grenzen „Betrieb heute" (Wallbox und E-Auto).** Die Mitschrift beginnt **mit der Zuordnung** und ist nicht
 rückwirkend (Home Assistant führt für Zustände keine Langzeitstatistik); geschrieben wird nur eine **abgeschlossene** Stunde.

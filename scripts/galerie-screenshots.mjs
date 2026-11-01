@@ -241,6 +241,25 @@ const ANSICHTEN = [
     titel: 'Komponenten → Wärmepumpe mit dem Block „Überblick"',
   },
   {
+    // P-433-2b S1b: Szene «Ladepunkt» im Block «Überblick» der Wallbox (Demo: go-eCharger mit Auto, Carport) —
+    // vorbereitet, Ausführen nur auf Gernots Nachfrage; Pflicht-Texte nach dem ersten Lauf prüfen.
+    name: 'komponenten_wallbox',
+    demo: true,
+    route: '#/komponenten/wallbox',
+    hoehe: 'auto',
+    pflicht: ['Überblick', 'Ladeleistung jetzt'],
+    titel: 'Komponenten → Wallbox mit der Szene „Ladepunkt"',
+  },
+  {
+    // P-433-2b S1b: Szene «Fahrzeug» im Block «Überblick» des E-Autos — vorbereitet, Ausführen nur auf Gernots Nachfrage.
+    name: 'komponenten_eauto',
+    demo: true,
+    route: '#/komponenten/e-auto',
+    hoehe: 'auto',
+    pflicht: ['Überblick', 'Ladestand'],
+    titel: 'Komponenten → E-Auto mit der Szene „Fahrzeug"',
+  },
+  {
     name: 'auswertungen_roi',
     route: '#/auswertungen/roi',
     hoehe: 'auto',
