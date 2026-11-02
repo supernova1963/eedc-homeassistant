@@ -9,7 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
-## [4.2.0] - 2026-11-02 — Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox · E-Auto): eigene „Themen" aus frei gewählten HA-Entitäten oder MQTT-Topics je Gerät, je Thema eine Kachel im Schaubild und die Karte „Themen" in „Auf einen Blick"; Demo-Modus mit Themen und Standort; 4 Gestaltungs-Korrekturen
+## [4.2.1] - 2026-11-02
+
+Nachlauf zu 4.2.0 aus der Sichtprobe bei Full HD: das Hub-Schaubild passt ins Fenster und hat einen eigenen Fokus mit „Link / Einbetten" (mit Gerät in der Adresse), Themen-Kacheln sind lesbar (Einzel-Kachel bzw. dreizeilige Gruppe), Wächter gegen datumsabhängige Frontend-Proben.
+
+### Added
+
+- **Komponenten → Wärmepumpe, Wallbox, E-Auto: ⤢ am Schaubild** — öffnet das Schaubild allein im Fokus/Vollbild, mit
+  „Link / Einbetten" für eine Karte im Home-Assistant-Dashboard (`#/komponenten/<typ>?fokus=ueberblick:schaubild`); bei
+  mehreren Geräten des Typs trägt die Adresse das gewählte als `&geraet=<investition_id>`, damit die Karte nicht immer das
+  erste zeigt (gilt für den Fokus jedes Blocks auf den Komponenten-Seiten).
+
+### Changed
+
+- **Schaubild im Komponenten-Hub nie höher als das Fenster; im Fokus füllt es die Höhe** (bisher folgte es nur der Breite
+  und war bei Full HD unten abgeschnitten).
+- **Themen-Kacheln im Schaubild neu:** ein Thema mit einem Eintrag ist eine gewöhnliche Wert-Kachel (Bezeichnung und Wert),
+  ein Thema mit mehreren Einträgen eine dreizeilige Gruppe wie eine Geräte-Kachel (Wert und Bezeichnung des ersten Eintrags,
+  „‹Thema› (n)") — ein Klick zeigt alle mit Wert und Stand (bisher zwei Einträge in einer Kachel mit gekürzter Beschriftung, am Handy nur die Werte);
+  in „Weitere (n)" heißt die Gruppe „‹Thema› (n) · ‹Bezeichnung› · ‹Wert›".
+
+## [4.2.0] - 2026-11-02
+
+Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox · E-Auto): eigene „Themen" aus frei gewählten HA-Entitäten oder MQTT-Topics je Gerät, je Thema eine Kachel im Schaubild und die Karte „Themen" in „Auf einen Blick"; Demo-Modus mit Themen und Standort; 4 Gestaltungs-Korrekturen
+
 
 ### Added
 
@@ -51,7 +74,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **E-Auto, Gerätekarte am Handy: der Eigenverbrauchs-Ring steht unter dem Ladestand** (unter 640 px), statt „Ladestand"
   und Reichweite auf wenige Pixel zusammenzudrücken, bis sie sich überlagerten (390, 360, 320 px gemessen).
 
-## [4.1.12] - 2026-11-01 — E-Mobilität nach Konzept #433: Hub-Überblick für Wallbox und E-Auto mit den Szenen „Ladepunkt" und „Fahrzeug", „Auf einen Blick" je Karte parkbar (auch Wärme/Klima), Zustand & Sitzung, Fahrzeug am Ladepunkt und Gast, evcc-Chip ohne Template-Sensor, „Betrieb heute", Kilometerstand und „Gefahren heute"; Tabellen-Spalten E-Mobilität und Wärme/Klima; Stromrechnung mit eigenem WP-/Wallbox-Tarif (N-769, N-770, N-771); 4 Korrekturen
+## [4.1.12] - 2026-11-01
+
+E-Mobilität nach Konzept #433: Hub-Überblick für Wallbox und E-Auto mit den Szenen „Ladepunkt" und „Fahrzeug", „Auf einen Blick" je Karte parkbar (auch Wärme/Klima), Zustand & Sitzung, Fahrzeug am Ladepunkt und Gast, evcc-Chip ohne Template-Sensor, „Betrieb heute", Kilometerstand und „Gefahren heute"; Tabellen-Spalten E-Mobilität und Wärme/Klima; Stromrechnung mit eigenem WP-/Wallbox-Tarif (N-769, N-770, N-771); 4 Korrekturen
+
 
 ### Added
 
@@ -84,7 +110,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Wallbox mit «Netzbezug zum Wallbox-Tarif»: Netzladung im Monat der Zuordnung und Anteil im laufenden Monat (N-771, Reste 1 und 2 aus E3–E4; Etappe E6).** (1) Im **Zuordnungsmonat** des Felds (sein Kanal beginnt im Monat, F10) nahm die Stromrechnung den Monat schon als nicht gemessen, die Wallbox-Zeile trug den Teilwert aber weiter als Netzladung (F11) — Netzladung zu klein, PV-Ladung zu groß, wo kein Auto selbst misst. Jetzt dieselbe F10-Regel je Gerät: eine Stelle kennt die Zuordnungsmonate (`kanal/netzanteil_leser.zuordnungsmonate_der_wallboxen`, je Anfrage gemerkt, eine Abfrage nur mit Feld), die Auskunft reist an der Zeile (`reader.ZeileImZuordnungsmonat`, gebunden in `monats_fakten/laden.py`, `emob_kontext.py` und im laufenden Monat in `aktueller_monat/aggregation.py`) zu `reader.netzladung_des_zaehlers` (Parameter `zuordnungsmonat`) — dort greift die bisherige Regel (evcc-Wert bzw. Gesamt − PV, danach die Tagesquote); Herleitung und evcc-Checker lassen den Monat aus. (2) Im **laufenden Monat** ohne Abschluss hatte die Wallbox keinen Anteil in der Stromrechnung: jetzt N_wb und die Ladung aller Wallboxen aus den Kanal-Zeilen der E-Mob-Gruppe (`quellen_leser._geraete_aus_kanaelen` reicht sie, `monats_fakten.wallbox_aus_zeilen` faltet wie der Fakt), Bildungsstelle unverändert `komponenten_anteile`, Klemme N_wb ≤ min(Ladung, Netzbezug − N_wp), F6 über `netzanteil_preise_des_monats(…, ["waermepumpe", "wallbox"])`. Proben `test_n771_e6_reste_gemeinsamer_zaehler.py` (Zuordnungsmonat mit und ohne evcc, erster voller Monat, Monat ohne Kanal, Auto mit eigener Messung, laufender Monat mit/ohne Kanal, zweite Klemme).
 - **Komponenten → Wallbox und E-Auto: keine Nullen ohne Aussage (Kosmetik Lab rc13).** An einer verbundenen, nicht ladenden Wallbox stand „0 Phasen · 0 A" und „Ziel 80 % · noch 0 min"; Phasen, Ladestrom und Restzeit erscheinen jetzt nur mit Wert > 0, das Ziel bleibt (`UeberblickKarteEmob.tsx::sitzungsTeile`/`zielText`, Wallbox- und Auto-Karte). Ein zugeordnetes Feld, das nur 0 meldet, löst keinen Hinweis „erscheinen hier, sobald zugeordnet" aus.
 
-## [4.1.11] - 2026-10-27 — Wärme/Klima nach Konzept #433: Hub-Überblick mit Panorama, Live-Kacheln und „Auf einen Blick", Datenquellen nach Betriebsart (#431), Vorlauf/Rücklauf/Zusatzheizung live und als Tagessicht (#432), „AZ ohne Zusatzheizung", Energiefluss mit „Rest", Netzrichtung und Modus-Chip; Standalone-Gleichstand: Betriebsmodus und Stundenmittel über MQTT, Tagesverlauf für reine MQTT-Anlagen und für HA-Add-ons mit MQTT-Geräten; 2 Korrekturen
+## [4.1.11] - 2026-10-27
+
+Wärme/Klima nach Konzept #433: Hub-Überblick mit Panorama, Live-Kacheln und „Auf einen Blick", Datenquellen nach Betriebsart (#431), Vorlauf/Rücklauf/Zusatzheizung live und als Tagessicht (#432), „AZ ohne Zusatzheizung", Energiefluss mit „Rest", Netzrichtung und Modus-Chip; Standalone-Gleichstand: Betriebsmodus und Stundenmittel über MQTT, Tagesverlauf für reine MQTT-Anlagen und für HA-Add-ons mit MQTT-Geräten; 2 Korrekturen
+
 
 ### Added
 
