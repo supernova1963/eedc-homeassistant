@@ -24,8 +24,15 @@
  * - **Bild aus dem Deskriptor** (P-433-2b S1a, E0): Panoramen, aria, Gruppenname und Farbe der Gruppe «Weitere»
  *   kommen aus `panorama` (`panorama.ts`; Wärme/Klima `WAERME_PANORAMA_DEF`), das Layout ebenso. Der Pegel einer
  *   Kachel (`pegel`) geht unverändert an `EnergieFlussKachel` (Wärme: keiner).
+ * - **Höhe (Nachlauf 4.2.1, N1/N2):** auf der Seite folgt das Bild der Spaltenbreite, aber nie höher als
+ *   {@link SCHAUBILD_DECKEL} (Fensterhöhe minus Kopf- und Fußzeilen) — die **Zeichenfläche** (`data-schaubild-flaeche`)
+ *   wird dafür schmaler und steht zentriert. Im Vollbild (`vollbild`) ist die Höhe fest (die verfügbare Höhe des
+ *   Overlay-Inhalts) und die Breite folgt dem Seitenverhältnis, höchstens die Spaltenbreite — wie der Energiefluss im
+ *   Vollbild. Beides reines CSS; der ResizeObserver misst die **tatsächliche Bildbreite** (Seite: das Schaubild in der
+ *   gedeckelten Zeichenfläche; Vollbild: die Zeichenfläche selbst), und nur sie geht an `layoutUeberblick` (sonst
+ *   passten die Kachelgrößen nicht zum Bild).
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ENERGIEFLUSS_SAUM } from '../../../lib'
 import { verbergeTouchTooltip } from '../../../hooks/useTouchTitleTooltip'
 import { Button } from '../../ui'
@@ -41,6 +48,15 @@ import { layoutUeberblick, type Platz, type UeberblickLayout } from './ueberblic
 
 /** Startbreite bis zur ersten Messung (Desktop-Spalte); jsdom misst nie. */
 const START_BREITE = 900
+
+/**
+ * N1 — Höhendeckel auf der Seite: die Bildbreite höchstens `(100dvh − 16rem) · 1312/816`, die Bildhöhe also höchstens
+ * `100dvh − 16rem`. 16rem = 256 px decken bei 1920 × 900 die Zeilen über dem Bild (Block-Kopf-Unterkante 215 px,
+ * gemessen am Lab) und die Status-Fußzeile (32 px, `StatusFusszeile` `h-8`) mit 9 px Luft. Unter dem Deckel
+ * (Galerie 1400 × 1000: 560 px Bild, Deckel 744 px) ändert sich nichts; am Handy ist die Breite der Engpass.
+ * ⚠ Als Klassen-Literal, damit Tailwind sie findet (kein zusammengesetzter String).
+ */
+export const SCHAUBILD_DECKEL = 'max-w-[calc((100dvh_-_16rem)_*_1312_/_816)]'
 
 /** Name einer Gruppenkachel aus dem Deskriptor (je Gruppen-Art und Anker; «Weitere» ohne Anker). */
 function gruppenName(p: Platz<UeberblickKachel>, panorama: PanoramaDef): string {
@@ -139,9 +155,16 @@ export interface UeberblickSchaubildProps {
   ohneSensor: string[]
   /** Das Bild mit Anker-Karte und Regeln (P-433-2b S1a) — Wärme/Klima: `WAERME_PANORAMA_DEF`. */
   panorama: PanoramaDef
+  /**
+   * N2 (Nachlauf 4.2.1): steht das Schaubild im Fokus/Vollbild? Dann füllt es die Höhe seines Behälters (Breite folgt,
+   * höchstens die Spaltenbreite, zentriert); der Seiten-Deckel {@link SCHAUBILD_DECKEL} gilt dort nicht.
+   */
+  vollbild?: boolean
+  /** N3: Aktion oben rechts im Bild (der ⤢ «Schaubild: Fokus / Vollbild»); fehlt sie, steht dort nichts. */
+  kopfAktion?: ReactNode
 }
 
-export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: UeberblickSchaubildProps) {
+export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama, vollbild = false, kopfAktion }: UeberblickSchaubildProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [breite, setBreite] = useState(START_BREITE)
   const [lite] = useState(liesLiteModus)
@@ -155,62 +178,70 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: U
     })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+    // `vollbild` wechselt den Behälter der Zeichenfläche — dann neu anmelden.
+  }, [vollbild])
 
   const layout = layoutUeberblick(kacheln, breite, panorama)
   const { dims, k } = layout
   const plaetze = allePlaetze(layout)
   const offenerPlatz = offen != null ? plaetze.find((p) => p.key === offen) ?? null : null
 
-  return (
-    <div ref={ref} className="w-full" data-ueberblick-schaubild>
-      <svg viewBox={`0 0 ${PANORAMA_BREITE} ${PANORAMA_HOEHE}`} className="w-full h-auto block rounded-lg" role="img" aria-label={panorama.aria}>
-        <defs><EnergieFlussDefs lite={lite} /></defs>
-        <image
-          data-panorama="tag" href={panorama.bilder.tag}
-          x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
-          className="opacity-100 dark:opacity-0"
-        />
-        <image
-          data-panorama="nacht" href={panorama.bilder.nacht}
-          x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
-          className="opacity-0 dark:opacity-100"
-        />
-        <Linien layout={layout} panorama={panorama} />
-        {plaetze.map((p) => {
-          const einzeln = p.gruppe == null ? p.mitglieder[0] : null
-          const g = einzeln ? null : gruppenKachel(p, panorama)
-          const maxC = dims.labelMaxChars
-          const label = einzeln
-            ? (einzeln.label.length > maxC ? einzeln.label.slice(0, maxC - 2) + '…' : einzeln.label)
-            : kuerzeMitSuffix(g!.name, ` (${p.mitglieder.length})`, zeichenBudget(dims.nodeW, dims.labelFontSize))
-          // TH-E2 (Entscheid Master 1.11.2026 zu H1): Themen-Kacheln kürzen Wert- und zweite Zeile auf das Zeichenbudget.
-          const thema = einzeln?.art === 'thema' ? themenKachelTexte(einzeln, dims) : null
-          const knopf = g ? {
-            key: p.key,
-            ariaLabel: `${g.name} (${p.mitglieder.length}): Liste öffnen`,
-            onOeffnen: () => { verbergeTouchTooltip(); setOffen((o) => (o === p.key ? null : p.key)) },
-          } : null
-          return (
-            <g key={p.key} transform={`translate(${p.x} ${p.y}) scale(${k})`} data-platz={p.key}>
-              <EnergieFlussKachel
-                x={0} y={0} dims={dims}
-                label={label}
-                icon={einzeln?.icon ?? g!.icon}
-                color={einzeln?.color ?? g!.color}
-                isActive={einzeln?.isActive ?? g!.isActive}
-                wertText={thema ? thema.wertText : einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
-                zweiteZeile={thema ? thema.zweiteZeile : einzeln?.zweiteZeile ?? null}
-                pegel={einzeln?.pegel}
-                tip={einzeln?.tip ?? g!.tip}
-                mitglieder={g ? p.mitglieder.length : undefined}
-                knopf={knopf}
-                lite={lite} bgVariant="haus"
-              />
-            </g>
-          )
-        })}
-      </svg>
+  const svg = (
+    // Vollbild: ist die Spalte der Engpass, ist die Zeichenfläche höher als das Bild — das Bild steht dann oben (bündig mit
+    // den Karten daneben), waagrecht zentriert. Auf der Seite unverändert (Zwölf-Fälle-Snapshot).
+    <svg
+      viewBox={`0 0 ${PANORAMA_BREITE} ${PANORAMA_HOEHE}`} preserveAspectRatio={vollbild ? 'xMidYMin meet' : undefined}
+      className={`w-full ${vollbild ? 'h-full' : 'h-auto'} block rounded-lg`} role="img" aria-label={panorama.aria}
+    >
+      <defs><EnergieFlussDefs lite={lite} /></defs>
+      <image
+        data-panorama="tag" href={panorama.bilder.tag}
+        x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
+        className="opacity-100 dark:opacity-0"
+      />
+      <image
+        data-panorama="nacht" href={panorama.bilder.nacht}
+        x="0" y="0" width={PANORAMA_BREITE} height={PANORAMA_HOEHE}
+        className="opacity-0 dark:opacity-100"
+      />
+      <Linien layout={layout} panorama={panorama} />
+      {plaetze.map((p) => {
+        const einzeln = p.gruppe == null ? p.mitglieder[0] : null
+        const g = einzeln ? null : gruppenKachel(p, panorama)
+        const maxC = dims.labelMaxChars
+        const label = einzeln
+          ? (einzeln.label.length > maxC ? einzeln.label.slice(0, maxC - 2) + '…' : einzeln.label)
+          : kuerzeMitSuffix(g!.name, ` (${p.mitglieder.length})`, zeichenBudget(dims.nodeW, dims.labelFontSize))
+        // TH-E2 (Entscheid Master 1.11.2026 zu H1): Themen-Kacheln kürzen Wert- und zweite Zeile auf das Zeichenbudget.
+        const thema = einzeln?.art === 'thema' ? themenKachelTexte(einzeln, dims) : null
+        const knopf = g ? {
+          key: p.key,
+          ariaLabel: `${g.name} (${p.mitglieder.length}): Liste öffnen`,
+          onOeffnen: () => { verbergeTouchTooltip(); setOffen((o) => (o === p.key ? null : p.key)) },
+        } : null
+        return (
+          <g key={p.key} transform={`translate(${p.x} ${p.y}) scale(${k})`} data-platz={p.key}>
+            <EnergieFlussKachel
+              x={0} y={0} dims={dims}
+              label={label}
+              icon={einzeln?.icon ?? g!.icon}
+              color={einzeln?.color ?? g!.color}
+              isActive={einzeln?.isActive ?? g!.isActive}
+              wertText={thema ? thema.wertText : einzeln ? kachelWertText(einzeln, dims) : g!.wertText}
+              zweiteZeile={thema ? thema.zweiteZeile : einzeln?.zweiteZeile ?? null}
+              pegel={einzeln?.pegel}
+              tip={einzeln?.tip ?? g!.tip}
+              mitglieder={g ? p.mitglieder.length : undefined}
+              knopf={knopf}
+              lite={lite} bgVariant="haus"
+            />
+          </g>
+        )
+      })}
+    </svg>
+  )
+  const unterDemBild = (
+    <>
       {offenerPlatz && <GruppenListe platz={offenerPlatz} panorama={panorama} onSchliessen={() => setOffen(null)} />}
       {ohneSensor.length > 0 && (
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400" data-ohne-sensor>
@@ -220,6 +251,34 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama }: U
           </a>
         </p>
       )}
+    </>
+  )
+
+  // N2 — Vollbild: die Zeichenfläche (`data-schaubild-flaeche`, gemessen) füllt die Höhe des Behälters, die Breite folgt
+  // über das Seitenverhältnis, höchstens die Spalte, zentriert. Ohne feste Behälterhöhe (gestapelte Spalten unter `xl`)
+  // fällt `h-full` auf `auto` zurück, dann folgt die Höhe der Breite wie auf der Seite.
+  if (vollbild) {
+    return (
+      <div className="h-full flex flex-col" data-ueberblick-schaubild data-vollbild>
+        <div className="flex-1 min-h-0">
+          <div ref={ref} className="relative mx-auto h-full max-w-full aspect-[1312/816]" data-schaubild-flaeche>{svg}</div>
+        </div>
+        {unterDemBild}
+      </div>
+    )
+  }
+
+  // N1 — Seite: der Deckel sitzt an der Zeichenfläche **um** das Schaubild (volle Spaltenbreite, nie höher als
+  // `SCHAUBILD_DECKEL` erlaubt, zentriert); gemessen wird wie bisher das Schaubild, dessen Breite jetzt die Bildbreite
+  // ist. Das Innere ist Zeichen für Zeichen das bisherige (Zwölf-Fälle-Snapshot byte-gleich). Der ⤢ (N3) liegt oben
+  // rechts über dem Bild.
+  return (
+    <div className={`relative mx-auto w-full ${SCHAUBILD_DECKEL}`} data-schaubild-flaeche>
+      <div ref={ref} className="w-full" data-ueberblick-schaubild>
+        {svg}
+        {unterDemBild}
+      </div>
+      {kopfAktion != null && <div className="absolute top-0.5 right-0.5 z-10">{kopfAktion}</div>}
     </div>
   )
 }

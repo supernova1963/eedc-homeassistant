@@ -11,6 +11,12 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
+**Komponenten → Wärmepumpe, Wallbox, E-Auto: das Schaubild passt ins Fenster und hat einen eigenen Fokus.** Das Bild im
+Block „Überblick" wird nie höher als das Fenster — bei Full HD war es bisher unten abgeschnitten. Oben rechts im Bild öffnet
+**⤢** das Schaubild allein im Vollbild, wo es die ganze Höhe nutzt (auch im Fokus des ganzen Blocks füllt es jetzt die Höhe).
+Mit **„Link / Einbetten"** holst du die Adresse für eine Karte im Home-Assistant-Dashboard, etwa
+`#/komponenten/wallbox?fokus=ueberblick:schaubild`. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
+
 ## v4.2.0 — 2. November 2026
 
 **Einstellungen → Datenquellen: eigene „Themen" an Wärmepumpe, Wallbox und E-Auto.** Unter den Feldern eines Geräts steht

@@ -869,6 +869,7 @@ Ganz oben steht der Block **„Überblick"**: links ein Bild einer Wärme/Klima-
 - **Am Handy** haben Kacheln und Schrift dieselbe Größe wie im Energiefluss bei gleicher Breite; passt eine Reihe nicht, werden Kacheln gruppiert („Innengeräte (3)", „Weitere (2)"; nach „Weitere" gehen zuerst Außentemperatur, dann Zusatzheizung, dann Vorlauf · Rücklauf) — Antippen öffnet die Liste unter dem Bild. Die Karte steht unter dem Bild.
 - Der Block steht auch dann zuoberst, wenn du die Reihenfolge der Blöcke früher geändert hast; danach kannst du ihn wie jeden Block verschieben oder zuklappen.
 - **Einzeln parken:** Schaubild, Gerätekarte, „Heute", „Betrieb" und „Themen" sind einzeln parkbar (Rechtsklick bzw. oben lange drücken). Ist das Schaubild geparkt, stehen die offenen Karten nebeneinander in voller Breite (ab Tablet-Breite; mit der Karte „Themen" auf breiten Bildschirmen vier nebeneinander, sonst je zwei); sind alle Karten geparkt, nimmt das Schaubild die volle Breite; ist alles geparkt, was gerade zu sehen ist, verschwindet der Block. *Benannte Grenze:* ein ausgeblendeter Block fragt nichts ab — bekommt „Heute", „Betrieb" oder „Themen" erst später Werte, erscheint die Karte beim nächsten Aufruf der Seite. Wer vor dieser Version „Auf einen Blick" als Ganzes geparkt hatte, findet die Karten geparkt (auch „Themen"); der Chip „Auf einen Blick" auf dem Parkplatz holt alle zurück.
+- **Höhe, Fokus und Einbetten:** Auf der Seite ist das Schaubild nie höher als das Fenster (es wird dann schmaler und steht mittig); im Fokus des ganzen Blocks (⤢ im Blockkopf) füllt es die Höhe. Oben rechts im Bild öffnet **⤢** das **Schaubild allein** im Vollbild (ab Tablet-Breite; ESC oder „Zurück" schließt), und **„Link / Einbetten"** liefert die Adresse für eine Karte im Home-Assistant-Dashboard ([§1.5](#15-eine-eedc-anzeige-im-home-assistant-dashboard)): `#/komponenten/waermepumpe?fokus=ueberblick:schaubild`. Das Bild zeigt die Kacheln aller Wärmepumpen der Anlage.
 
 > **Benannte Grenzen.** Solange der Block **aufgeklappt** und der Tab **sichtbar** ist, fragt er die Live-Werte alle **5 Sekunden** ab (Wetter und Tageswerte alle 5 Minuten) — ein zweiter Abfrage-Pfad neben *Cockpit → Live*. Zugeklappt, ganz geparkt oder im Hintergrund fragt er nichts. Der Tooltip nennt die **Entität** des Sensors nicht; welche zugeordnet ist, steht im Block „Einstellungen" und unter *Einstellungen → Datenquellen*. Im **Demo-Modus** stammen die Heute-Werte (Wärme, Arbeitszahl, Betrieb heute, Kachel „Wärme heute") vom echten Tag. **„Betrieb heute"** gibt es nur mit einem Betriebsmodus-Sensor aus Home Assistant und erst ab dem Tag, an dem eedc die Betriebsart mitschreibt; **Leerlauf** zählt nicht getrennt — eine Stunde „Heizen · Leerlauf" zählt als Heizen. Die Kachel **„Wärme heute"** kommt aus den Tageswerten (alle 5 Minuten), nicht aus der Live-Abfrage.
 
@@ -894,7 +895,9 @@ Zusätzlich: **JAZ Heizen / JAZ Warmwasser getrennt** (nur wenn du Strom je Funk
 **Überblick (oberster Block, seit der nächsten Version).** Wie bei der Wärmepumpe steht ganz oben der Block „Überblick" —
 links das **Schaubild „Fahrzeug"**, rechts „Auf einen Blick" für das gewählte Auto (Handy: untereinander; ist das Schaubild
 geparkt, stehen die Karten nebeneinander in voller Breite). **Auf einen Blick: E-Auto, Heute, Betrieb und Themen sind einzeln
-parkbar** — wie bei der Wärmepumpe ([§3.4](#34-wärmepumpe), auch die benannte Grenze).
+parkbar** — wie bei der Wärmepumpe ([§3.4](#34-wärmepumpe), auch die benannte Grenze). Höhe, ⤢ am Schaubild und „Link /
+Einbetten" ebenso; die Adresse ist `#/komponenten/e-auto?fokus=ueberblick:schaubild` — sie nennt kein Auto, die Dashboard-Karte
+zeigt das erste Auto der Liste.
 
 **Schaubild „Fahrzeug".** Ein durchscheinendes Auto an einer Säulen-Wallbox vor dem Haus; daran **dieselben Kacheln wie im
 Energiefluss** — für das Auto, das du im Geräte-Selektor gewählt hast (die Szene gehört dem gewählten Gerät; ein anderes Auto
@@ -973,6 +976,8 @@ In der Monatstabelle steht ein Monat, in dem das Auto nur einen Anteil am Rest d
 **Überblick (oberster Block, seit der nächsten Version).** Links das **Schaubild „Ladepunkt"**, rechts „Auf einen Blick"
 (Handy: untereinander; ist das Schaubild geparkt, stehen die Karten nebeneinander in voller Breite). **Auf einen Blick: Wallbox,
 Heute, Betrieb und Themen sind einzeln parkbar** — wie bei der Wärmepumpe ([§3.4](#34-wärmepumpe), auch die benannte Grenze).
+Höhe, ⤢ am Schaubild und „Link / Einbetten" ebenso; die Adresse ist `#/komponenten/wallbox?fokus=ueberblick:schaubild` — sie
+nennt keine Wallbox, die Dashboard-Karte zeigt die erste der Liste.
 
 **Schaubild „Ladepunkt".** Der Blick in die offene Garage: Wandbox an der Rückwand, Zählerkasten an der Hauswand, ein Auto
 angesteckt. Die Kacheln gehören der Wallbox, die du im Geräte-Selektor gewählt hast (eine weitere Wallbox wählst du oben im

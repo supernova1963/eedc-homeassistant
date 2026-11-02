@@ -93,6 +93,7 @@ const ROH_INFRA = new Map([
   ['src/components/ui/Textarea.tsx', 1],
   // Gruppe 2 — Shell-/Layout-/Park-Mechanik (Gattung BlockShell/IATopNav):
   ['src/components/blocks/FokusKachel.tsx', 1], // ⤢ Fokus-Icon (Gattung CockpitLiveV4)
+  ['src/components/komponenten/ueberblick/UeberblickBlock.tsx', 1], // ⤢ Fokus-Icon am Hub-Schaubild (Gattung CockpitLiveV4; Nachlauf 4.2.1 N3)
   ['src/components/blocks/FokusVollbild.tsx', 1], // „Zurück" im Vollbild-Overlay
   // Gattungs-Bezug war `FeldMappingInput` — mit dem V3-Aufräumen 2026-08-13 gefallen;
   // diese Datei ist seither die einzige verbliebene Listbox-Combobox-Implementierung.

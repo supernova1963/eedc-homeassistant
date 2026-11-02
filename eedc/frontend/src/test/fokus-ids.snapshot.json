@@ -1,4 +1,7 @@
 {
+  "src/components/komponenten/ueberblick/UeberblickBlock.tsx": [
+    "ueberblick:schaubild"
+  ],
   "src/components/live/DatenquellenZuordnung.tsx": [
     "dq-topics"
   ],

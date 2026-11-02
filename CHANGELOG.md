@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Komponenten → Wärmepumpe, Wallbox, E-Auto: ⤢ am Schaubild** — öffnet das Schaubild allein im Fokus/Vollbild, mit
+  „Link / Einbetten" für eine Karte im Home-Assistant-Dashboard (`#/komponenten/<typ>?fokus=ueberblick:schaubild`).
+
+### Changed
+
+- **Schaubild im Komponenten-Hub nie höher als das Fenster; im Fokus füllt es die Höhe** (bisher folgte es nur der Breite
+  und war bei Full HD unten abgeschnitten).
+
 ## [4.2.0] - 2026-11-02
 
 Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox · E-Auto): eigene „Themen" aus frei gewählten HA-Entitäten oder MQTT-Topics je Gerät, je Thema eine Kachel im Schaubild und die Karte „Themen" in „Auf einen Blick"; Demo-Modus mit Themen und Standort; 4 Gestaltungs-Korrekturen

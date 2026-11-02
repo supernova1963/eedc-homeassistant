@@ -8,7 +8,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import UeberblickSchaubild from './UeberblickSchaubild'
+import type { ReactNode } from 'react'
+import UeberblickSchaubild, { SCHAUBILD_DECKEL } from './UeberblickSchaubild'
 import { baueUeberblickKacheln, geraeteAnker, modusText } from './kachelAnker'
 import { WAERME_PANORAMA, WAERME_PANORAMA_DEF } from './waermePanoramaAnker'
 import { ThemeProvider } from '../../../context/ThemeContext'
@@ -253,5 +254,90 @@ describe('Zwei Plätze wie Netz und Speicher (P-433-2e)', () => {
     const y = (key: string) => Number(/translate\([\d.]+ ([\d.]+)\)/.exec(transform(container, key))?.[1])
     expect(y('geraet-7')).toBeCloseTo(y('geraet-9'), 6)
     expect(y('geraet-7')).toBeLessThan(0.2 * 816)
+  })
+})
+
+/**
+ * Nachlauf 4.2.1 (Lab-Befunde Gernot 2.11.2026): N1 Höhendeckel auf der Seite, N2 Vollbild höhengeführt, N3 Platz für den
+ * ⤢ oben rechts über dem Bild. Die Pixel misst der Master am Lab; hier die Bauform (Klassen, gemessenes Element, Dims).
+ */
+describe('Nachlauf 4.2.1: Höhe des Schaubilds', () => {
+  /** ResizeObserver, der festhält, welches Element er misst, und ihm `px` als Breite meldet. */
+  function messeMit(px: number) {
+    const gemessen: Element[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      private cb: ResizeObserverCallback
+      constructor(cb: ResizeObserverCallback) { this.cb = cb }
+      observe(target: Element) {
+        gemessen.push(target)
+        this.cb([{ target, contentRect: { width: px, height: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver)
+      }
+      unobserve() {}
+      disconnect() {}
+    })
+    return gemessen
+  }
+  const bild = (props: { vollbild?: boolean; kopfAktion?: ReactNode } = {}) => {
+    const { kacheln, ohneSensor } = baueUeberblickKacheln({ geraete: [MATHEK], live: matheksLive(), wetter: wetterMit(5), referenz: 'referenz' })
+    return render(<ThemeProvider><UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} {...props} /></ThemeProvider>)
+  }
+  const skala = (c: HTMLElement) => Number(/scale\(([\d.]+)\)/.exec(c.querySelector('g[data-platz]')!.getAttribute('transform')!)?.[1])
+
+  it('N1 Seite: der Deckel sitzt an der Zeichenfläche um das Schaubild, gemessen wird das Schaubild darin', () => {
+    expect(SCHAUBILD_DECKEL).toBe('max-w-[calc((100dvh_-_16rem)_*_1312_/_816)]')
+    const gemessen = messeMit(900)
+    const { container } = bild()
+    const flaeche = container.querySelector('[data-schaubild-flaeche]')!
+    expect(flaeche.className.split(' ')).toEqual(expect.arrayContaining(['relative', 'mx-auto', 'w-full', SCHAUBILD_DECKEL]))
+    const wurzel = flaeche.querySelector(':scope > [data-ueberblick-schaubild]')!
+    expect(wurzel).not.toBeNull()
+    expect(wurzel.hasAttribute('data-vollbild')).toBe(false)
+    // Gemessen wird das Element IN der gedeckelten Fläche — seine Breite ist die Bildbreite.
+    expect(gemessen).toEqual([wurzel])
+    expect(wurzel.querySelector('svg')!.getAttribute('class')).toBe('w-full h-auto block rounded-lg')
+    expect(wurzel.querySelector('svg')!.hasAttribute('preserveAspectRatio')).toBe(false)
+  })
+
+  it('N1: die Dims folgen der Bildbreite — der Deckel macht das Bild schmaler, also kleinere Kacheln (Handy-Maß unter 500 px)', () => {
+    messeMit(1225)
+    const breit = bild()
+    const kBreit = skala(breit.container)
+    breit.unmount()
+    // Ein flaches Fenster deckelt die Bildbreite (z. B. 480 px): das Layout bekommt diese Breite, nicht die Spalte.
+    messeMit(480)
+    const { container } = bild()
+    const kSchmal = skala(container)
+    expect(kBreit).toBeCloseTo(1312 / 600, 6)
+    expect(kSchmal).toBeCloseTo(1312 / 450, 6)
+    // Pixelgröße einer Kachel = nodeW · k · Bildbreite / 1312 = nodeW · Bildbreite / W: 480/450 < 1225/600.
+    expect((kSchmal * 480) / 1312).toBeLessThan((kBreit * 1225) / 1312)
+  })
+
+  it('N3: die Kopf-Aktion steht oben rechts über dem Bild, außerhalb des Schaubild-Inhalts', () => {
+    messeMit(900)
+    const { container } = bild({ kopfAktion: <button type="button" aria-label="probe">x</button> })
+    const knopf = container.querySelector('[aria-label="probe"]')!
+    const halter = knopf.parentElement!
+    expect(halter.className).toBe('absolute top-0.5 right-0.5 z-10')
+    expect(halter.parentElement!.hasAttribute('data-schaubild-flaeche')).toBe(true)
+    expect(container.querySelector('[data-ueberblick-schaubild] [aria-label="probe"]')).toBeNull()
+  })
+
+  it('N2 Vollbild: Höhe des Behälters, Breite über das Seitenverhältnis (höchstens die Spalte), kein Deckel, Bild oben', () => {
+    const gemessen = messeMit(900)
+    const { container } = bild({ vollbild: true, kopfAktion: <button type="button" aria-label="probe">x</button> })
+    const wurzel = container.querySelector('[data-ueberblick-schaubild]')!
+    expect(wurzel.hasAttribute('data-vollbild')).toBe(true)
+    expect(wurzel.className).toBe('h-full flex flex-col')
+    const flaeche = wurzel.querySelector('[data-schaubild-flaeche]')!
+    expect(flaeche.parentElement!.className).toBe('flex-1 min-h-0')
+    expect(flaeche.className.split(' ')).toEqual(expect.arrayContaining(['h-full', 'max-w-full', 'aspect-[1312/816]', 'mx-auto']))
+    expect(container.innerHTML).not.toContain(SCHAUBILD_DECKEL)
+    expect(gemessen).toEqual([flaeche])
+    const svg = flaeche.querySelector('svg')!
+    expect(svg.getAttribute('class')).toBe('w-full h-full block rounded-lg')
+    expect(svg.getAttribute('preserveAspectRatio')).toBe('xMidYMin meet')
+    // Im Vollbild gibt es nichts zu vergrößern: eine Kopf-Aktion wird dort nicht gezeichnet.
+    expect(container.querySelector('[aria-label="probe"]')).toBeNull()
   })
 })

@@ -265,3 +265,86 @@ describe('TH-E2: vierte Karte «Themen» (`el:ueberblick-karte-themen`) — nur 
     expect(karte()?.className).toContain(n === 'Wärme/Klima' ? 'space-y-3' : 'xl:grid-cols-1')
   })
 })
+
+/**
+ * Nachlauf 4.2.1 (Lab-Befunde Gernot 2.11.2026): N2 — der Block im Fokus gibt `vollbild` an das Schaubild und trägt ab
+ * `xl` die volle Höhe in einer Zeile; N3 — eigener ⤢ am Schaubild, Vollbild nur mit dem Bild und «Link / Einbetten»
+ * (Fokus-ID `ueberblick:schaubild`), im Fokus und in jeder Deep-Link-Ansicht ohne ⤢; Deep-Link-Betriebsart rahmenlos.
+ */
+describe.each(FAELLE)('Nachlauf 4.2.1 %s: Fokus des Schaubilds', (_name, ui, daten) => {
+  const URSPRUNG = window.location.hash
+  beforeEach(() => { daten(); window.location.hash = '' })
+  afterEach(() => { window.location.hash = URSPRUNG })
+  const overlay = () => document.querySelector<HTMLElement>('.fixed.inset-0.z-50')
+  const knopf = () => screen.queryByRole('button', { name: 'Schaubild: Fokus / Vollbild' })
+
+  it('N2: im Block-Fokus (`vollbild`) füllt das Schaubild die Höhe — Raster ab xl in einer Zeile mit voller Höhe, kein ⤢', () => {
+    imPark(cloneElement(ui(), { vollbild: true }))
+    expect(document.querySelector('[data-ueberblick-schaubild]')?.hasAttribute('data-vollbild')).toBe(true)
+    expect(block().className.split(' ')).toEqual(expect.arrayContaining(['xl:grid-cols-3', 'xl:h-full', 'xl:grid-rows-[minmax(0,1fr)]']))
+    expect(knopf()).toBeNull()
+  })
+
+  it('N2: auf der Seite ohne `vollbild` — keine Höhenklassen am Raster, kein `data-vollbild`', () => {
+    imPark(ui())
+    expect(document.querySelector('[data-ueberblick-schaubild]')?.hasAttribute('data-vollbild')).toBe(false)
+    expect(block().className).not.toContain('xl:h-full')
+  })
+
+  it('N2: Schaubild geparkt ⇒ der Block-Fokus streckt die Karten nicht', () => {
+    parke(S)
+    imPark(cloneElement(ui(), { vollbild: true }))
+    expect(block().className).not.toContain('xl:h-full')
+  })
+
+  it('N3: ⤢ am Schaubild (max-sm:hidden), Klick öffnet das Schaubild allein mit «Link / Einbetten», ESC schließt', async () => {
+    imPark(ui())
+    const k = knopf()!
+    expect(k).not.toBeNull()
+    expect(k.className).toContain('max-sm:hidden')
+    expect(k.closest('[data-schaubild-flaeche]')).not.toBeNull()
+    expect(overlay()).toBeNull()
+    fireEvent.click(k)
+    const o = overlay()!
+    expect(o).not.toBeNull()
+    expect(o.querySelector('h2')?.textContent).toContain('Überblick · Schaubild')
+    expect(o.querySelector('[data-ueberblick-schaubild][data-vollbild]')).not.toBeNull()
+    expect(o.querySelector('[data-ueberblick-karte]')).toBeNull()
+    expect(o.querySelector('[aria-label="Schaubild: Fokus / Vollbild"]')).toBeNull()
+    expect(o.textContent).toContain('Link / Einbetten')
+    expect(o.textContent).toContain('Zurück')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    expect(overlay()).toBeNull()
+    // Die Seite darunter blieb montiert (kein Sprung beim Schließen).
+    expect(karte()).not.toBeNull()
+  })
+
+  it('N3: «Link / Einbetten» trägt die Adresse mit `?fokus=ueberblick:schaubild`', () => {
+    window.location.hash = '#/komponenten/waermepumpe'
+    imPark(ui())
+    fireEvent.click(knopf()!)
+    fireEvent.click(screen.getByRole('button', { name: /Link \/ Einbetten/ }))
+    expect(document.body.textContent).toContain('#/komponenten/waermepumpe?fokus=ueberblick%3Aschaubild')
+  })
+
+  it('N3: in einer Deep-Link-Ansicht (z. B. `?fokus=ueberblick`) kein ⤢ — es gibt keinen Weg zurück', () => {
+    window.location.hash = '#/komponenten/waermepumpe?fokus=ueberblick'
+    imPark(cloneElement(ui(), { vollbild: true }))
+    expect(knopf()).toBeNull()
+  })
+
+  it('N3 Deep-Link-Betriebsart: nur das Schaubild-Vollbild, rahmenlos (kein Zurück, kein Einbetten), keine Karte', () => {
+    window.location.hash = '#/komponenten/waermepumpe?fokus=ueberblick:schaubild'
+    imPark(cloneElement(ui(), { schaubildDeepLink: true }))
+    const o = overlay()!
+    expect(o).not.toBeNull()
+    expect(o.querySelector('h2')?.textContent).toBe('Überblick · Schaubild')
+    expect(o.querySelector('[data-ueberblick-schaubild][data-vollbild]')).not.toBeNull()
+    expect(document.querySelector('[data-ueberblick-karte]')).toBeNull()
+    expect(document.querySelector('[data-ueberblick-block]')).toBeNull()
+    expect(o.textContent).not.toContain('Zurück')
+    expect(o.textContent).not.toContain('Link / Einbetten')
+    expect(knopf()).toBeNull()
+  })
+})
