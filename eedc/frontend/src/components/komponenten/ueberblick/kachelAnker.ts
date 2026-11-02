@@ -40,7 +40,7 @@ import { modusZeile, type EnergieFlussKachelProps, type ZweiteZeile } from '../.
 import { modusKlartext } from '../../ui/ModusChip'
 import type { AnkerId } from './waermePanoramaAnker'
 import type { AnkerId as PanoramaAnkerId, KachelArt } from './panorama'
-import { baueThemenKacheln, type ThemaTeil } from './themenKacheln'
+import { baueThemenKacheln, type ThemaEintragAnzeige } from './themenKacheln'
 
 // Seit P-433-2b S1a (E0) steht die Kachel-Art im Panorama-Vertrag (`panorama.ts`); hier für bestehende Leser weitergereicht.
 export type { KachelArt } from './panorama'
@@ -73,9 +73,9 @@ export interface UeberblickKachel {
   /** P-433-2b S1a (Ü1): Pegel der Kachel (Füllung von unten, wie der SoC-Pegel im Energiefluss) — Wärme/Klima setzt
    *  keinen (`undefined`), das Schaubild reicht ihn an `EnergieFlussKachel` durch. */
   pegel?: EnergieFlussKachelProps['pegel']
-  /** Themen-Kacheln (4.2.0 TH-E2): Label und Wert der zwei sichtbaren Einträge getrennt — die Zeichnung kürzt damit
-   *  (`themenKacheln.ts::themenKachelTexte`); andere Kacheln setzen es nicht. */
-  themaTeile?: { erste: ThemaTeil; zweite: ThemaTeil | null }
+  /** Themen-Kacheln (Nachlauf 4.2.1 N4): alle Einträge eines Themas mit ≥ 2 Einträgen (Bezeichnung, Wert mit Einheit,
+   *  Stand) — die Zeichnung macht daraus die Gruppenkachel «‹Thema› (n)» mit Liste (`themenKacheln.ts`); fehlt sonst. */
+  themaEintraege?: ThemaEintragAnzeige[]
 }
 
 export interface KachelEingaben {

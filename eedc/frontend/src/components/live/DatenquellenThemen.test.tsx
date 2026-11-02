@@ -90,11 +90,12 @@ describe('Themen-Kacheln TH-E1 — Block «Themen»', () => {
     expect(wallbox.compareDocumentPosition(weitere) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('Hinweis wörtlich (Gernot 1.11.2026)', () => {
+  it('Hinweis wörtlich (Gernot 1.11.2026, Kachelform N4 2.11.2026)', () => {
     expect(THEMEN_HINWEIS).toBe(
-      'Jedes Thema ist eine Kachel im Schaubild: die ersten zwei Einträge mit Wert stehen im Bild, alle im Tooltip und '
-      + 'in der Karte «Themen» — die Reihenfolge stellst du mit den Pfeilen ein. Angezeigt wird, was Home Assistant '
-      + 'liefert (z. B. locked); für Klartext einen Template-Helfer zuordnen.',
+      'Jedes Thema ist eine Kachel im Schaubild: mit einem Eintrag stehen dessen Bezeichnung und Wert im Bild, mit '
+      + 'mehreren eine Gruppe «Thema (n)» mit Wert und Bezeichnung des ersten Eintrags — ein Klick zeigt alle; die '
+      + 'Reihenfolge stellst du mit den Pfeilen ein. Angezeigt wird, was Home Assistant liefert (z. B. locked); für Klartext '
+      + 'einen Template-Helfer zuordnen.',
     )
   })
 

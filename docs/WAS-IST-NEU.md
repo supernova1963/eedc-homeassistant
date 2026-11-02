@@ -17,6 +17,12 @@ Block „Überblick" wird nie höher als das Fenster — bei Full HD war es bish
 Mit **„Link / Einbetten"** holst du die Adresse für eine Karte im Home-Assistant-Dashboard, etwa
 `#/komponenten/wallbox?fokus=ueberblick:schaubild`. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
 
+**Komponenten → Wärmepumpe, Wallbox, E-Auto: Themen-Kacheln, die man lesen kann.** Bisher standen zwei Einträge in einer
+Kachel, und weil der Platz nicht reichte, kürzte eedc die Beschriftung — am Handy blieben nackte Werte. Jetzt ist ein Thema
+mit **einem** Eintrag eine gewöhnliche Wert-Kachel mit Bezeichnung und Wert, wie „Außen 5,0 °C". Ein Thema mit **mehreren**
+Einträgen ist eine Gruppe wie eine Geräte-Kachel: groß der Wert des ersten Eintrags („locked"), darunter seine Bezeichnung
+(„Türen") und „Fahrzeugzustand (3)"; ein Klick oder Tipp zeigt alle mit Wert und Stand. Welcher Eintrag oben steht, stellst du in den Datenquellen mit den Pfeilen ein. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
+
 ## v4.2.0 — 2. November 2026
 
 **Einstellungen → Datenquellen: eigene „Themen" an Wärmepumpe, Wallbox und E-Auto.** Unter den Feldern eines Geräts steht

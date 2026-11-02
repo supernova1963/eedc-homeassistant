@@ -190,9 +190,9 @@ Routen, Datenquellen-Fläche, MQTT, Live-Pfad; TH-E2 Kachel und Karte). Gilt fü
 | --- | --- |
 | **Ablage** | `sensor_mapping.investitionen[<id>].themen` (Thema → Einträge, IDs `t<n>`/`e<n>` aus einem Zähler je Gerät), Quelle je Eintrag nur in `quellen["inv_thema_<inv>_<e>"]` (`services/themen_store.py`). **Kein Registry-Feld**, kein Kanal, keine Mitschrift, kein Daten-Checker, kein Export. |
 | **Live** | `LiveDashboardResponse.themen`: je Gerät die Themen mit `eintraege [{id, label, wert, einheit, zeitpunkt, device_class, quelle, kennung}]` — nur Einträge mit Wert, `null` ohne jeden Wert; 60-s-Takt wie Modus und Zustände (`betriebsmodus_live.TaktErgebnis.themen`). `kennung` = `entity_id` (HA) bzw. das Inbound-Topic (MQTT). |
-| **Kachel** | je Thema mit Wert **eine Wert-Kachel** `art: 'thema'` am HIMMEL der Szene (Wärme rechts neben «Außen», E-Mobilität die Reserve E-2b-28), Symbol `tags`, Rollenfarbe des Geräts, keine Linie: Name = Thema, Wert-Zeile «‹Label› · ‹Wert›» des ersten, zweite Zeile des zweiten Eintrags; kompakte Dims nur der Wert; Tooltip alle Einträge + Stand (`themenKacheln.ts`). |
-| **Kürzung** | in der Zeichnung (`UeberblickSchaubild.tsx`, nur `art === 'thema'`, `themenKachelTexte`): Budget `zeichenBudget(nodeW, Schriftgröße)`; zuerst das Label (mindestens 3 Zeichen + «…»), der Wert bleibt ganz; reicht es nicht, steht der Wert allein; passt auch er nicht, wird er am Ende gekürzt. Tooltip, «Weitere»-Liste und Karte ungekürzt. |
-| **Layout** | eine Zeile in `rang()`: Thema ⇒ 3 (nach allen Werten); bei voller Reihe wandern die Themen zuerst nach «Weitere (n)» (je Thema eine Zeile `label · wertText · zweiteZeile`). `grundgruppen`, `GruppenArt`, Deskriptoren unverändert. |
+| **Kachel** | je Thema mit Wert **eine Kachel** `art: 'thema'` (`id: thema-<inv>-<t>`) am HIMMEL der Szene (Wärme rechts neben «Außen», E-Mobilität die Reserve E-2b-28), Symbol `tags`, Rollenfarbe des Geräts, keine Linie, keine zweite Zeile (`themenKacheln.ts`). **Seit Nachlauf 4.2.1 N4 (Entscheid Gernot 2.11.2026):** **ein** Eintrag ⇒ Wert-Kachel, Beschriftung = Bezeichnung des Eintrags, Wert = der Wert (Zeitstempel kurz K1, in den kompakten Dims «TT.MM.» als `wertTextKompakt`, K1b), Tooltip «‹Thema›» + «Bezeichnung: Wert» + Stand; **mehrere** ⇒ die Zeichnung macht daraus die **dreizeilige** Gruppenkachel in der Form der Geräte-Kachel (Stapel-Optik, aria «‹Thema› (n): Liste öffnen»): Wert des ersten Eintrags (immer ganz; kompakt «TT.MM.»), zweite Zeile seine Bezeichnung (neutral), Beschriftung «‹Thema› (n)» über `kuerzeMitSuffix` — in jeder Reihenbreite gleich; Tipp öffnet die Liste Bezeichnung · Wert · Stand aus `themaEintraege`; Tooltip «‹Thema› (n)» + «• Bezeichnung: Wert» + Stand. Wärme mit > 1 Gerät: Kopf «‹Gerät› · ‹Thema›». |
+| **Kürzung** | in der Zeichnung (`UeberblickSchaubild.tsx`, nur `art === 'thema'`, `themenKachelTexte`): Einzel-Kachel der Wert über `kachelWertText`, am Ende «…» auf `zeichenBudget(nodeW, kwFontSize)`; Gruppe der Wert nie, die Bezeichnung am Ende «…» auf `zeichenBudget(nodeW, socFontSize)` (N4; ersetzt die Label-zuerst-Regel vom 1.11.). Tooltip, Liste, «Weitere»-Liste («‹Bezeichnung› · ‹Wert›» des ersten) und Karte ungekürzt. |
+| **Layout** | eine Zeile in `rang()`: Thema ⇒ 3 (nach allen Werten); ein Thema belegt **einen** Platz, auch als Gruppenkachel; bei voller Reihe wandern die Themen zuerst nach «Weitere (n)» (je Thema eine Zeile: Beschriftung und Wert bzw. «‹Bezeichnung› · ‹Wert›» des ersten Eintrags). `grundgruppen`, `GruppenArt`, Deskriptoren unverändert. |
 | **Karte «Themen»** | vierte Karte in «Auf einen Blick» (`ThemenKarte`, `data-karte="themen"`): je Thema eine Zwischenüberschrift, je Eintrag eine Zeile, Tooltip «‹Kennung› · Stand hh:mm»; nur mit ≥ 1 Eintrag mit Wert des gewählten Geräts. Park-ID `el:ueberblick-karte-themen` («Themen»), datenabhängig gemeldet (`UeberblickKartenTeile.themen`), nicht in der festen Liste (L2); die alte ID `el:ueberblick-karte` deckt sie mit. Spalten: Schaubild geparkt ⇒ mit der Themen-Karte ab `xl` vier nebeneinander, darunter zwei. |
 | **Wert** | wie der HA-State, keine Übersetzung: Zahl mit Komma und so vielen Nachkommastellen wie geliefert (höchstens zwei), Zeitstempel/ISO als Uhrzeit (heute) bzw. Datum mit Uhrzeit (`lib/datum.ts`), reines Datum als Datum, sonst wörtlich; Einheit mit Leerzeichen. |
 
@@ -202,7 +202,7 @@ Routen, Datenquellen-Fläche, MQTT, Live-Pfad; TH-E2 Kachel und Karte). Gilt fü
 | --- | --- | --- |
 | T-1 | Ebenen | zwei: Thema → Einträge |
 | T-2 | Ablage | `sensor_mapping` + `quellen[inv_thema_…]`, ein Store |
-| T-3 | Form im Bild | **eine Wert-Kachel je Thema** am HIMMEL, zwei Einträge sichtbar, Tooltip alle |
+| T-3 | Form im Bild | **eine Kachel je Thema** am HIMMEL, Tooltip alle — **geändert 2.11.2026 (Entscheid Gernot, Nachlauf 4.2.1 N4):** ein Eintrag ⇒ Wert-Kachel (Bezeichnung und Wert), mehrere ⇒ dreizeilige Gruppenkachel wie die Geräte-Kachel (Wert / Bezeichnung des ersten Eintrags / «‹Thema› (n)») mit Liste (vorher: zwei Einträge sichtbar) |
 | T-4 | Einheit über MQTT | keine (Rohtext) |
 | T-5 | nicht-numerische Werte | wörtlich der HA-State; Klartext per Template-Helfer (Weg B) |
 | T-6 | Picker | alle States, 200 Zeilen + Suche |
@@ -258,7 +258,8 @@ Routen, Datenquellen-Fläche, MQTT, Live-Pfad; TH-E2 Kachel und Karte). Gilt fü
   «Betrieb» erst später am Tag Werte, erscheint die Karte beim nächsten Aufruf der Seite. Die Meldung gilt je Gerät und
   Seitenbesuch.
 - **Themen** (§2c): Wert bis 60 s alt; kein Verlauf, keine Mitschrift, kein Monat, kein Export, kein Daten-Checker; der
-  HA-State wörtlich; zwei Einträge im Bild, alle im Tooltip und in der Karte; volle Reihe ⇒ «Weitere»; `null` ohne Themen;
+  HA-State wörtlich; im Bild ein Eintrag als Wert-Kachel bzw. der erste als dreizeilige Gruppe «‹Thema› (n)» mit Liste (Entscheid
+  Gernot 2.11.2026), alle im Tooltip und in der Karte; volle Reihe ⇒ «Weitere»; `null` ohne Themen;
   nur Wärmepumpe, Wallbox, E-Auto; Demo ohne Themen; eedc verhindert keine Nutzer-Themen mit Kosten-/CO₂-Entitäten (B9 gilt
   eedcs eigenen Zahlen). Fünf Plätze in einer Reihe gibt es nie (Zeichenbreiten 360/450/600 ⇒ 3/4/6 ab fünf Kacheln) — bei
   vier Themen am Fahrzeug stehen am Desktop alle im Bild, am Handy eines oder keines (Rest in «Weitere»).

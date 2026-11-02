@@ -38,11 +38,12 @@ const Q_GATEWAY = 'mqtt_gateway'
 const Q_KEINE = 'keine'
 const Q_HA = new Set(['ha_app', 'ha_connector'])
 
-/** Die Hinweiszeile unter dem Kopf (Gernot 1.11.2026, Bauplan TH-E1 §1.5) — wörtlich. */
+/** Die Hinweiszeile unter dem Kopf (Gernot 1.11.2026, Bauplan TH-E1 §1.5; Kachelform Nachlauf 4.2.1 N4, Gernot 2.11.2026) — wörtlich. */
 export const THEMEN_HINWEIS =
-  'Jedes Thema ist eine Kachel im Schaubild: die ersten zwei Einträge mit Wert stehen im Bild, alle im Tooltip und in '
-  + 'der Karte «Themen» — die Reihenfolge stellst du mit den Pfeilen ein. Angezeigt wird, was Home Assistant liefert '
-  + '(z. B. locked); für Klartext einen Template-Helfer zuordnen.'
+  'Jedes Thema ist eine Kachel im Schaubild: mit einem Eintrag stehen dessen Bezeichnung und Wert im Bild, mit mehreren '
+  + 'eine Gruppe «Thema (n)» mit Wert und Bezeichnung des ersten Eintrags — ein Klick zeigt alle; die Reihenfolge stellst '
+  + 'du mit den Pfeilen ein. Angezeigt wird, was Home Assistant liefert (z. B. locked); für Klartext einen Template-Helfer '
+  + 'zuordnen.'
 
 /** Hat dieses Gerät einen Block «Themen»? — dieselben Typen wie der Block «Überblick» im Hub. */
 export function hatThemen(typ: string): boolean {

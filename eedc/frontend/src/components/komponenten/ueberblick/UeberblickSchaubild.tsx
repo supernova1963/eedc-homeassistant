@@ -21,6 +21,10 @@
  *   Innengeräte-Abschnitt (`LiveInnengeraete`) unter dem Bild, auf
  *   «Wärmepumpen (n)» oder «Weitere (n)» eine einfache Liste — nicht das
  *   Energiefluss-Overlay (es kennt nur Live-Knoten).
+ * - **Themen (Nachlauf 4.2.1 N4, Entscheid Gernot 2.11.2026):** eine Themen-Kachel mit mehreren Einträgen
+ *   (`themaEintraege`) zeichnet sich als dreizeilige Gruppenkachel wie eine Geräte-Kachel — Wert des ersten Eintrags,
+ *   seine Bezeichnung, «‹Thema› (n)»; Stapel-Optik, Tipp öffnet die Liste Bezeichnung · Wert · Stand —, bleibt im Layout
+ *   aber **ein** Platz (keine Gruppen-Art, Rang 3). In «Weitere» steht sie als «‹Bezeichnung› · ‹Wert›» des ersten.
  * - **Bild aus dem Deskriptor** (P-433-2b S1a, E0): Panoramen, aria, Gruppenname und Farbe der Gruppe «Weitere»
  *   kommen aus `panorama` (`panorama.ts`; Wärme/Klima `WAERME_PANORAMA_DEF`), das Layout ebenso. Der Pegel einer
  *   Kachel (`pegel`) geht unverändert an `EnergieFlussKachel` (Wärme: keiner).
@@ -77,11 +81,17 @@ function gruppenWert(p: Platz<UeberblickKachel>): { text: string; kw: number | n
   return { text: formatPower(kw), kw }
 }
 
+/** Wert einer Themen-Gruppe (N4) als Mitglied von «Weitere» (Tooltip und Liste): «‹Bezeichnung› · ‹Wert›» des ersten
+ *  Eintrags wie vor der dreizeiligen Form — `null` für jede andere Kachel. */
+function themenGruppenWert(m: UeberblickKachel): string | null {
+  return m.themaEintraege && m.zweiteZeile ? `${m.zweiteZeile.text} · ${m.wertText}` : null
+}
+
 /** Was eine Gruppenkachel zeigt. */
 function gruppenKachel(p: Platz<UeberblickKachel>, panorama: PanoramaDef) {
   const n = p.mitglieder.length
   const name = gruppenName(p, panorama)
-  const tip = [`${name} (${n})`, ...p.mitglieder.map((m) => `• ${m.label}: ${m.wertText}${m.zweiteZeile ? ` (${m.zweiteZeile.text})` : ''}`)].join('\n')
+  const tip = [`${name} (${n})`, ...p.mitglieder.map((m) => `• ${m.label}: ${themenGruppenWert(m) ?? `${m.wertText}${m.zweiteZeile ? ` (${m.zweiteZeile.text})` : ''}`}`)].join('\n')
   const erste = p.mitglieder[0]
   const wert = gruppenWert(p)
   return {
@@ -123,8 +133,17 @@ function Linien({ layout, panorama }: { layout: UeberblickLayout<UeberblickKache
   )
 }
 
+/** Die Themen-Gruppe eines Platzes (N4): eine Einzelkachel `art: 'thema'` mit mehreren Einträgen — sonst `null`. */
+function themenGruppe(p: Platz<UeberblickKachel>): UeberblickKachel | null {
+  const m = p.gruppe == null ? p.mitglieder[0] : null
+  return m?.art === 'thema' && m.themaEintraege ? m : null
+}
+
 function GruppenListe({ platz, panorama, onSchliessen }: { platz: Platz<UeberblickKachel>; panorama: PanoramaDef; onSchliessen: () => void }) {
-  const titel = `${gruppenName(platz, panorama)} (${platz.mitglieder.length})`
+  const thema = themenGruppe(platz)
+  const titel = thema
+    ? `${thema.label} (${thema.themaEintraege!.length})`
+    : `${gruppenName(platz, panorama)} (${platz.mitglieder.length})`
   const innen = platz.gruppe === 'innengeraete'
     ? platz.mitglieder.map((m) => m.innengeraet).filter((g): g is LiveInnengeraet => g != null)
     : null
@@ -134,13 +153,26 @@ function GruppenListe({ platz, panorama, onSchliessen }: { platz: Platz<Ueberbli
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{titel}</span>
         <Button type="button" variant="ghost" size="sm" onClick={onSchliessen}>schließen</Button>
       </div>
-      {innen ? <LiveInnengeraete geraete={innen} /> : (
+      {innen ? <LiveInnengeraete geraete={innen} /> : thema ? (
+        <ul className="text-sm space-y-0.5">
+          {thema.themaEintraege!.map((e) => (
+            <li key={e.id} className="flex justify-between gap-2" data-thema-eintrag={e.id}>
+              <span className="text-gray-600 dark:text-gray-400 truncate min-w-0">{e.label}</span>
+              <span className="flex items-baseline gap-2 whitespace-nowrap">
+                <span className="text-gray-900 dark:text-white font-medium">{e.wert}</span>
+                {e.stand && <span className="text-xs text-gray-500 dark:text-gray-400">{e.stand}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
         <ul className="text-sm space-y-0.5">
           {platz.mitglieder.map((m) => (
             <li key={m.id} className="flex justify-between gap-2">
               <span className="text-gray-600 dark:text-gray-400 truncate min-w-0">{m.label}</span>
               <span className="text-gray-900 dark:text-white font-medium whitespace-nowrap">
-                {m.wertText}{m.zweiteZeile ? ` · ${m.zweiteZeile.text}` : ''}
+                {/* Text-Knoten wie vor N4 (Zwölf-Fälle-Snapshot byte-gleich); nur die Themen-Gruppe hat ihre eigene Zeile. */}
+                {themenGruppenWert(m) ?? <>{m.wertText}{m.zweiteZeile ? ` · ${m.zweiteZeile.text}` : ''}</>}
               </span>
             </li>
           ))}
@@ -208,15 +240,18 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama, vol
       {plaetze.map((p) => {
         const einzeln = p.gruppe == null ? p.mitglieder[0] : null
         const g = einzeln ? null : gruppenKachel(p, panorama)
+        // N4: Themen-Kachel mit mehreren Einträgen ⇒ Gruppenkachel «‹Thema› (n)» (ein Platz im Layout).
+        const themaN = themenGruppe(p)?.themaEintraege?.length ?? null
+        const gruppenTitel = g ? { name: g.name, n: p.mitglieder.length } : themaN != null ? { name: einzeln!.label, n: themaN } : null
         const maxC = dims.labelMaxChars
-        const label = einzeln
-          ? (einzeln.label.length > maxC ? einzeln.label.slice(0, maxC - 2) + '…' : einzeln.label)
-          : kuerzeMitSuffix(g!.name, ` (${p.mitglieder.length})`, zeichenBudget(dims.nodeW, dims.labelFontSize))
-        // TH-E2 (Entscheid Master 1.11.2026 zu H1): Themen-Kacheln kürzen Wert- und zweite Zeile auf das Zeichenbudget.
+        const label = gruppenTitel
+          ? kuerzeMitSuffix(gruppenTitel.name, ` (${gruppenTitel.n})`, zeichenBudget(dims.nodeW, dims.labelFontSize))
+          : (einzeln!.label.length > maxC ? einzeln!.label.slice(0, maxC - 2) + '…' : einzeln!.label)
+        // Themen-Kacheln (N4): Einzel-Kachel kürzt den Wert, die Gruppe die Bezeichnung (zweite Zeile), am Ende mit «…».
         const thema = einzeln?.art === 'thema' ? themenKachelTexte(einzeln, dims) : null
-        const knopf = g ? {
+        const knopf = gruppenTitel ? {
           key: p.key,
-          ariaLabel: `${g.name} (${p.mitglieder.length}): Liste öffnen`,
+          ariaLabel: `${gruppenTitel.name} (${gruppenTitel.n}): Liste öffnen`,
           onOeffnen: () => { verbergeTouchTooltip(); setOffen((o) => (o === p.key ? null : p.key)) },
         } : null
         return (
@@ -231,7 +266,7 @@ export default function UeberblickSchaubild({ kacheln, ohneSensor, panorama, vol
               zweiteZeile={thema ? thema.zweiteZeile : einzeln?.zweiteZeile ?? null}
               pegel={einzeln?.pegel}
               tip={einzeln?.tip ?? g!.tip}
-              mitglieder={g ? p.mitglieder.length : undefined}
+              mitglieder={gruppenTitel ? gruppenTitel.n : undefined}
               knopf={knopf}
               lite={lite} bgVariant="haus"
             />

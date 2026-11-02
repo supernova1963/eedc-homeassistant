@@ -18,6 +18,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Schaubild im Komponenten-Hub nie höher als das Fenster; im Fokus füllt es die Höhe** (bisher folgte es nur der Breite
   und war bei Full HD unten abgeschnitten).
+- **Themen-Kacheln im Schaubild neu:** ein Thema mit einem Eintrag ist eine gewöhnliche Wert-Kachel (Bezeichnung und Wert),
+  ein Thema mit mehreren Einträgen eine dreizeilige Gruppe wie eine Geräte-Kachel (Wert und Bezeichnung des ersten Eintrags,
+  „‹Thema› (n)") — ein Klick zeigt alle mit Wert und Stand (bisher zwei Einträge in einer Kachel mit gekürzter Beschriftung, am Handy nur die Werte).
 
 ## [4.2.0] - 2026-11-02
 

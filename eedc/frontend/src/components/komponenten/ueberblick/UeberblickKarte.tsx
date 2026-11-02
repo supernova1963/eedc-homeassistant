@@ -25,7 +25,9 @@
  * 4. **«Themen»** (`data-karte="themen"`, Themen-Kacheln 4.2.0 TH-E2, gemeinsam mit der E-Mobilität): je Thema des
  *    gewählten Geräts eine Zwischenüberschrift und je Eintrag mit Wert eine Zeile «‹Label› ‹Wert›» (Wert wie der
  *    HA-State, nur formatiert — `themenKacheln.ts::themaWert`), Tooltip «‹Entität bzw. Topic› · Stand hh:mm». Nur mit
- *    mindestens einem Eintrag mit Wert. Die Kacheln im Bild zeigen zwei Einträge je Thema, die Karte alle.
+ *    mindestens einem Eintrag mit Wert. Im Bild ist jedes Thema eine Kachel — ein Eintrag als Wert-Kachel, mehrere als
+ *    dreizeilige Gruppe «‹Thema› (n)» mit Wert und Bezeichnung des ersten Eintrags und Liste (Nachlauf 4.2.1 N4) —, die
+ *    Karte zeigt alle.
  *
  * **Gestrichen:** PV-Anteil je Gerät (Entscheid Gernot 24.10.: nicht geplant), Kompressor-Starts, «seit hh:mm» —
  * dafür gibt es kein Feld. Keine Kosten-, CO₂- oder Ersparniszahl (sie stehen in den Blöcken darunter).

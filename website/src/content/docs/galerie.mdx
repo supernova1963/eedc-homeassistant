@@ -201,9 +201,11 @@ Die Demo-Anlage hat keine Tageswerte von heute, deshalb fehlen diese Karten im B
 
 **Themen** sind Werte, die eedc nicht kennt und du trotzdem sehen willst – frei gewählte Entitäten
 aus Home Assistant oder MQTT-Topics je Gerät, etwa „Anlagenstatus" mit Verdichter, Störung und
-Betriebsstunden. Jedes Thema ist eine Kachel am Himmel, ohne Linie: die ersten zwei Einträge stehen
-in der Kachel, alle im Tooltip und in der Karte „Themen". eedc zeigt den Wert so, wie er geliefert
-wird (`an`, `locked`), Zeitstempel als Datum mit Uhrzeit, und rechnet nichts damit.
+Betriebsstunden. Jedes Thema ist eine Kachel am Himmel, ohne Linie: mit einem Eintrag eine
+gewöhnliche Wert-Kachel („Nächste Wartung"), mit mehreren eine Gruppe wie eine Geräte-Kachel – groß
+der Wert des ersten Eintrags, darunter seine Bezeichnung, unten „Anlagenstatus (3)"; ein Klick zeigt
+alle mit Wert und Stand, alle stehen auch im Tooltip und in der Karte „Themen". eedc zeigt den Wert so, wie er geliefert wird (`an`, `locked`), Zeitstempel als Datum
+mit Uhrzeit, und rechnet nichts damit.
 
 Jede Karte und das Schaubild lassen sich einzeln parken.
 
@@ -232,7 +234,7 @@ bekommt jeder Eintrag ein eigenes Topic (`…/thema_<Eintrag>`).
 An der Wallbox blickst du in die offene Garage: an der Wandbox die Kachel aus dem Energiefluss mit
 Leistung und Zustands-Chip („Lädt · PV", „Wartet · PV"), am Zählerkasten „Ladung heute", am Stecker
 die laufende Sitzung mit Dauer und am Auto sein Ladestand mit dem Ziel; oben rechts das Thema
-„Ladepunkt". Rechts die Gerätekarte mit dem Chip, der Ladeleistung, der Fahrzeugzeile mit
+„Ladepunkt (3)" mit seinem ersten Eintrag („3", darunter „Phasen"). Rechts die Gerätekarte mit dem Chip, der Ladeleistung, der Fahrzeugzeile mit
 Ladestand-Leiste und Zielmarke und der Fußzeile „3 Phasen · 16 A · 9,8 kWh in dieser Sitzung",
 darunter „Heute" und „Themen". Das Bild gehört der Wallbox, die du oben im Selektor wählst.
 
@@ -275,8 +277,10 @@ evcc darüber hinaus meldet, holst du dir als Thema.
 
 Am E-Auto steht ein durchscheinendes Auto an der Säule: „Laden" mit der Leistung, der Ladestand am
 Akku mit dem Ziel, die Reichweite mit dem Kilometerstand am Cockpit und der **Standort** an der
-Terrasse („Zu Hause" – nur die Zone aus Home Assistant, nie eine Position). Oben rechts zwei Themen:
-„Fahrzeugzustand" mit Türen und Reifendruck, „Klima" mit Innentemperatur. Die Gerätekarte nennt
+Terrasse („Zu Hause" – nur die Zone aus Home Assistant, nie eine Position). Oben rechts zwei Themen
+als Gruppen: „Fahrzeugzustand (3)" mit Türen, Reifendruck und Fenstern, „Klima (2)" mit
+Innentemperatur und Vorklimatisierung – im Bild Wert und Bezeichnung des ersten Eintrags, ein Klick
+zeigt alle. Die Gerätekarte nennt
 Ladestand, Reichweite, Ort, Standort, Ladeleistung, Ziel und Kilometerstand.
 
 Mit einem km-Zähler kommt am Vorderrad **„Gefahren heute"** mit dem Fahrverbrauch dazu, in „Heute"

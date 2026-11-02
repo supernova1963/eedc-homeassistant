@@ -1072,7 +1072,7 @@ unterscheiden und gilt nicht als Gast; nichts davon wird gespeichert, eine Gast-
 
 ### 7.11 Themen (frei gewählte Entitäten)
 
-*Seit der nächsten Version.* An **Wärmepumpe**, **Wallbox** und **E-Auto** — den Geräten mit Block „Überblick" im
+*Seit Version 4.2.0.* An **Wärmepumpe**, **Wallbox** und **E-Auto** — den Geräten mit Block „Überblick" im
 Komponenten-Hub — steht unter den Abschnitten (bzw. unter den Betriebsart-Blöcken der Wärmepumpe) ein Block **„Themen"**.
 Ein **Thema** ist eine Überschrift mit **Einträgen**, und jeder Eintrag ist eine Entität aus Home Assistant oder ein
 MQTT-Topic, die **du** wählst: Türschloss, Reifendruck, Tage bis zum Service, der Ladeplan von evcc, die Restenergie bis zum
@@ -1086,10 +1086,13 @@ höchstens 200 Zeilen — über die Suche grenzt du ein. Trägt ein Eintrag noch
 ersten HA-Pick den Namen der Entität. Mit den Pfeilen ▲▼ stellst du die Reihenfolge der Themen und der Einträge ein;
 „Thema entfernen" fragt nach, wenn Einträge darin stehen, und nimmt ihre Zuordnungen mit.
 
-**Was im Schaubild steht:** jedes Thema ist **eine Kachel** im Schaubild des Hubs — die ersten **zwei** Einträge mit Wert
-stehen in der Kachel („Türen · locked"; ist die Zeile zu lang, wird zuerst die Beschriftung gekürzt, der Wert bleibt ganz),
-alle im Tooltip und in der Karte „Themen" unter „Auf einen Blick" (Tooltip dort: Entität bzw. Topic · Stand). Ist die Reihe
-voll, wandern die Themen zuerst nach „Weitere (n)" ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)). Ein Eintrag ohne
+**Was im Schaubild steht:** jedes Thema ist **eine Kachel** im Schaubild des Hubs. Mit **einem** Eintrag stehen dessen
+Bezeichnung und Wert in der Kachel (wie „Außen 5,0 °C"); mit **mehreren** ist es eine dreizeilige Gruppe wie eine
+Geräte-Kachel: Wert des **ersten** Eintrags („locked"), seine Bezeichnung („Türen", zu lang ⇒ „…" am Ende) und
+„‹Thema› (n)" — ein Klick zeigt alle mit Wert und Stand. Der erste Eintrag ist
+der, den du mit den Pfeilen nach oben stellst; ohne Wert rückt der nächste nach. Alle Einträge stehen außerdem im Tooltip und
+in der Karte „Themen" unter „Auf einen Blick" (Tooltip dort: Entität bzw. Topic · Stand). Ist die Reihe voll, wandern die
+Themen zuerst nach „Weitere (n)" ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)). Ein Eintrag ohne
 Wert fehlt dort; in der Zuordnung steht er **amber**.
 
 **Der Wert ist der Zustand aus Home Assistant**, wie HA ihn liefert, mit der Einheit der Entität — eedc übersetzt nicht

@@ -1,9 +1,12 @@
 /**
- * Themen-Kacheln im gezeichneten Schaubild (4.2.0 TH-E2, Bauplan §2.4; Entscheid Master 1.11.2026 zu H1/H3):
- * - die Zeichnung kürzt Wert- und zweite Zeile einer Themen-Kachel auf das Zeichenbudget der Dims (der Wert bleibt),
- *   der Tooltip (`data-title`) trägt alle Einträge ungekürzt;
+ * Themen-Kacheln im gezeichneten Schaubild (4.2.0 TH-E2, Bauplan §2.4; Kachelform Nachlauf 4.2.1 N4, Entscheid Gernot
+ * 2.11.2026):
+ * - ein Eintrag ⇒ Wert-Kachel: Beschriftung = Bezeichnung, Wert allein, keine zweite Zeile, kein Knopf;
+ * - mehrere Einträge ⇒ dreizeilige Gruppenkachel wie die Geräte-Kachel (Entscheid Gernot 2.11.2026): Wert des ersten
+ *   Eintrags (ganz), seine Bezeichnung (am Ende gekürzt), «‹Thema› (n)»; Stapel-Optik, Tipp öffnet die Liste
+ *   Bezeichnung · Wert · Stand; im Layout **ein** Platz (Schlüssel `thema-<inv>-<t>`);
  * - «Fahrzeug mit vier Themen» am Handy (390 px): Standort und Reichweite bleiben, ein Thema im Bild, «Weitere (3)»
- *   mit je Thema der Zeile «‹Name›  ‹Wert-Zeile› · ‹zweite Zeile›» (ungekürzt);
+ *   mit je Thema einer Zeile «‹Beschriftung›  ‹Bezeichnung · Wert›» des ersten Eintrags — die Themen wandern zuerst;
  * - Wärme: Themen am Himmel rechts neben Außen, ohne Linie.
  *
  * Schwesterdateien: themenKacheln.test.ts, emobLayout.test.ts, UeberblickSchaubild.test.tsx.
@@ -36,11 +39,15 @@ function mitBreite(px: number) {
 beforeEach(() => { stubMatchMedia(); localStorage.clear() })
 afterEach(() => { vi.unstubAllGlobals(); globalThis.ResizeObserver = ORIGINAL_RO })
 
-const e = (id: string, label: string, wert: string, einheit = ''): LiveThemaEintrag =>
-  ({ id, label, wert, einheit, zeitpunkt: null, device_class: null, quelle: 'ha' })
+const e = (id: string, label: string, wert: string, einheit = '', zeitpunkt: string | null = null): LiveThemaEintrag =>
+  ({ id, label, wert, einheit, zeitpunkt, device_class: null, quelle: 'ha' })
+// Zeitpunkte aus der lokalen Uhr am heutigen Tag ⇒ «Stand hh:mm» in jeder Zeitzone (CI: UTC und Auckland).
+const heute = (h: number, m: number) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString() }
 const IONIQ = { id: 7, anlage_id: 1, typ: 'e-auto', bezeichnung: 'Ioniq', aktiv: true, parameter: {} } as Investition
 const THEMEN: LiveThema[] = [
-  { investition_id: 7, id: 't1', name: 'Fahrzeugzustand', eintraege: [e('e1', 'Türen', 'locked'), e('e2', 'Reifen vorne links', '259.5', 'kPa')] },
+  { investition_id: 7, id: 't1', name: 'Fahrzeugzustand', eintraege: [
+    e('e1', 'Türen', 'locked', '', heute(6, 20)), e('e2', 'Reifen vorne links', '259.5', 'kPa', heute(11, 27)), e('e7', 'Fenster', 'closed'),
+  ] },
   { investition_id: 7, id: 't2', name: 'Service', eintraege: [e('e3', 'Tage bis Service', '41')] },
   { investition_id: 7, id: 't3', name: 'Klima', eintraege: [e('e4', 'Innen', '21.5', '°C'), e('e5', 'Soll', '22', '°C')] },
   { investition_id: 7, id: 't4', name: 'Plan', eintraege: [e('e6', 'Start', 'ready')] },
@@ -55,11 +62,33 @@ function zeichne(kacheln: UeberblickKachel[], panorama: PanoramaDef, breite: num
 const texte = (c: HTMLElement, key: string) => [...c.querySelectorAll(`g[data-platz="${key}"] text`)].map((t) => t.textContent)
 
 describe('Themen-Kacheln im Schaubild (TH-E2)', () => {
-  it('Desktop, eine Themen-Kachel (Dims ≤ 3): Wert-Zeile «Tür… · locked», zweite Zeile «259,5 kPa», Tooltip ungekürzt', () => {
-    const { container } = zeichne(baueThemenKacheln(THEMEN.slice(0, 1), IONIQ, 'HIMMEL', 'c'), FAHRZEUG_PANORAMA_DEF, 900)
-    expect(texte(container, 'thema-7-t1')).toEqual(['Tür… · locked', '259,5 kPa', 'Fahrzeugzust…'])   // Name nach `labelMaxChars` 14 wie jede Kachel
-    const tip = container.querySelector('g[data-platz="thema-7-t1"] [data-title]')!.getAttribute('data-title')
-    expect(tip).toBe('Fahrzeugzustand\nTüren: locked\nReifen vorne links: 259,5 kPa')
+  it('ein Eintrag ⇒ Wert-Kachel: Beschriftung = Bezeichnung, Wert, keine zweite Zeile, kein Knopf; Tooltip-Kopf = Thema', () => {
+    const { container } = zeichne(baueThemenKacheln([THEMEN[1]], IONIQ, 'HIMMEL', 'c'), FAHRZEUG_PANORAMA_DEF, 900)
+    expect(texte(container, 'thema-7-t2')).toEqual(['41', 'Tage bis Ser…'])   // Wert, Beschriftung nach `labelMaxChars` 14
+    expect(container.querySelector('g[data-platz="thema-7-t2"] [data-gruppe]')).toBeNull()
+    const tip = container.querySelector('g[data-platz="thema-7-t2"] [data-title]')!.getAttribute('data-title')
+    expect(tip).toBe('Service\nTage bis Service: 41')
+  })
+
+  it('drei Einträge ⇒ dreizeilige Gruppenkachel «locked / Türen / Fahrzeugzustand (3)», ein Platz; Tipp öffnet die Liste mit Stand', () => {
+    const { container, getByRole } = zeichne(baueThemenKacheln(THEMEN.slice(0, 1), IONIQ, 'HIMMEL', 'c'), FAHRZEUG_PANORAMA_DEF, 900)
+    expect([...container.querySelectorAll('g[data-platz]')].map((g) => g.getAttribute('data-platz'))).toEqual(['thema-7-t1'])
+    // Dims(1): Wert ganz, Bezeichnung (Budget 15) ganz, Titel-Budget 16 ⇒ «Fahrzeugzus… (3)» (Anzahl bleibt ganz).
+    expect(texte(container, 'thema-7-t1')).toEqual(['locked', 'Türen', 'Fahrzeugzus… (3)'])
+    const knopf = getByRole('button', { name: 'Fahrzeugzustand (3): Liste öffnen' })
+    expect(knopf.getAttribute('data-title')).toBe('Fahrzeugzustand (3)\n• Türen: locked\n• Reifen vorne links: 259,5 kPa\n• Fenster: closed\nStand 11:27')
+    expect(container.querySelector('[data-gruppen-liste]')).toBeNull()
+    fireEvent.click(knopf)
+    const liste = container.querySelector('[data-gruppen-liste="thema-7-t1"]')!
+    expect(liste.textContent).toContain('Fahrzeugzustand (3)')
+    const zeilen = [...liste.querySelectorAll('li')].map((li) => [...li.querySelectorAll('span')].map((s) => s.textContent))
+    expect(zeilen).toEqual([
+      ['Türen', 'lockedStand 06:20', 'locked', 'Stand 06:20'],
+      ['Reifen vorne links', '259,5 kPaStand 11:27', '259,5 kPa', 'Stand 11:27'],
+      ['Fenster', 'closed', 'closed'],
+    ])
+    fireEvent.click(getByRole('button', { name: 'schließen' }))
+    expect(container.querySelector('[data-gruppen-liste]')).toBeNull()
   })
 
   it('Handy 390 px, Fahrzeug mit Standort, Reichweite und vier Themen: ein Thema im Bild, «Weitere (3)» mit den Zeilen', () => {
@@ -70,15 +99,15 @@ describe('Themen-Kacheln im Schaubild (TH-E2)', () => {
     const { container } = zeichne(kacheln, FAHRZEUG_PANORAMA_DEF, 390)
     const plaetze = [...container.querySelectorAll('g[data-platz]')].map((g) => g.getAttribute('data-platz'))
     expect(plaetze).toEqual(['wert-standort-7', 'wert-reichweite-7', 'thema-7-t1', 'grp-weitere'])
-    // Dims(4): Wert-Budget 12 ⇒ «locked» allein, zweite Zeile 13 ⇒ «259,5 kPa».
-    expect(texte(container, 'thema-7-t1')).toEqual(['locked', '259,5 kPa', 'Fahrzeugzu…'])
+    // Dims(4): die Gruppe zählt als ein Platz; dieselben drei Zeilen, Titel-Budget 15 — kein nackter Wert.
+    expect(texte(container, 'thema-7-t1')).toEqual(['locked', 'Türen', 'Fahrzeugzu… (3)'])
     const weitere = container.querySelector('g[data-gruppe="grp-weitere"]')!
     fireEvent.click(weitere)
     const zeilen = [...container.querySelectorAll('[data-gruppen-liste] li')].map((li) => [...li.querySelectorAll('span')].map((s) => s.textContent))
     expect(zeilen).toEqual([
-      ['Service', 'Tage bis Service · 41'],
-      ['Klima', 'Innen · 21,5 °C · Soll · 22 °C'],
-      ['Plan', 'Start · ready'],
+      ['Tage bis Service', '41'],
+      ['Klima', 'Innen · 21,5 °C'],   // «Weitere» wie vor der dreizeiligen Form
+      ['Start', 'ready'],
     ])
   })
 

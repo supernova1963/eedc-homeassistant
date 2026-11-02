@@ -7,6 +7,7 @@
  * E-Auto, alle Blöcke und alle «Weitere Größen»-Schalter aufgeklappt, als HTML gegen eine Datei —
  * **erzeugt am Code vor E3** (HEAD `0edd0cfb`), danach gleich. Themen-Kacheln (4.2.0, TH-E1) schrieben sie neu: einzige
  * Änderung sind die zwei Blöcke «Themen» an Wallbox und E-Auto (Geräte mit «Überblick»); ohne sie ist die Datei bitgleich.
+ * Nachlauf 4.2.1 N4 (2.11.2026) schrieb sie neu: einzige Änderung ist die Hinweiszeile `THEMEN_HINWEIS` in diesen zwei Blöcken.
  *
  * Wer die Fläche für diese Typen absichtlich ändert, schreibt die Datei neu und schickt den Diff mit:
  *
