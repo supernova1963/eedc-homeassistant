@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.2.1] - 2026-11-02
+
+Nachlauf zu 4.2.0 aus der Sichtprobe bei Full HD: das Hub-Schaubild passt ins Fenster und hat einen eigenen Fokus mit „Link / Einbetten" (mit Gerät in der Adresse), Themen-Kacheln sind lesbar (Einzel-Kachel bzw. dreizeilige Gruppe), Wächter gegen datumsabhängige Frontend-Proben.
+
 ### Added
 
 - **Komponenten → Wärmepumpe, Wallbox, E-Auto: ⤢ am Schaubild** — öffnet das Schaubild allein im Fokus/Vollbild, mit
