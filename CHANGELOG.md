@@ -9,6 +9,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-11-02 — Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox · E-Auto): eigene „Themen" aus frei gewählten HA-Entitäten oder MQTT-Topics je Gerät, je Thema eine Kachel im Schaubild und die Karte „Themen" in „Auf einen Blick"; Demo-Modus mit Themen und Standort; 4 Gestaltungs-Korrekturen
+
 ### Added
 
 - **Themen je Gerät (Themen-Kacheln, Etappe 1 von 2):** an Wärmepumpe, Wallbox und E-Auto legst du unter *Einstellungen →

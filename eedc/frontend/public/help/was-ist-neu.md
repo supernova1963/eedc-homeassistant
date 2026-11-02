@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** November 2026 (v4.1.12)
+> **Stand:** November 2026 (v4.2.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -11,7 +11,7 @@
 
 ## Unveröffentlicht — kommt mit der nächsten Version
 
-Geplant als **v4.2.0**.
+## v4.2.0 — 2. November 2026
 
 **Einstellungen → Datenquellen: eigene „Themen" an Wärmepumpe, Wallbox und E-Auto.** Unter den Feldern eines Geräts steht
 ein neuer Block „Themen". Darin legst du Themen an — etwa „Fahrzeugzustand" mit den Einträgen „Türen" und „Reifen vorne
