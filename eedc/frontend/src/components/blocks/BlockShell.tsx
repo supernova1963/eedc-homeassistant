@@ -47,6 +47,7 @@ export function BlockShell({
   fokusKopf,
   oeffneBeimMount,
   voranstellen,
+  einbettenZusatz,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
@@ -65,6 +66,9 @@ export function BlockShell({
    *  Reihenfolge ist schon beim ersten Besuch persistiert). Wirkt nur beim
    *  ersten Auftauchen der ID; wer ihn danach verschiebt, behält seine Wahl. */
   voranstellen?: string[]
+  /** Nachlauf 4.2.1 N5: weitere Parameter für die Adresse von «Link / Einbetten» (z. B. `{ geraet: '31' }` auf einer
+   *  Typ-Seite mit mehreren Geräten) — reicht sie an {@link EinbettenKnopf} durch. */
+  einbettenZusatz?: Record<string, string>
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -215,7 +219,7 @@ export function BlockShell({
           // FD-2: „Link / Einbetten" — die Adresse dieser Anzeige für eine
           // Webseiten-Karte im HA-Dashboard. Als Funktion, weil sie die gerade
           // offene Ablesung (Chart/Tabelle) mit aufnimmt.
-          aktionen={(ansicht) => <EinbettenKnopf fokusId={fokus} ansicht={ansicht} />}
+          aktionen={(ansicht) => <EinbettenKnopf fokusId={fokus} ansicht={ansicht} zusatz={einbettenZusatz} />}
           onClose={() => setFokus(null)}
         >
           {b

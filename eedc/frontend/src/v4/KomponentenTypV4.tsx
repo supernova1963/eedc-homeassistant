@@ -574,6 +574,23 @@ function WirtschaftlichkeitInhalt({ w, kpis }: {
 type MeldeBlock = (block: string, ids: string[]) => void
 
 /**
+ * Nachlauf 4.2.1 N5: der Zusatz für «Link / Einbetten» — `{ geraet: '<investition_id>' }` nur bei ≥ 2 Geräten des Typs
+ * (mit echter ID), damit eine Dashboard-Karte das gewählte Gerät zeigt; bei einem Gerät bleibt die Adresse wie bisher,
+ * bestehende Karten werden nicht länger. Gelesen wird der Parameter über `useDeepLinkFokus().geraetId`.
+ */
+export function geraetEinbettenZusatz(g: KompGeraet, alleInvs: Investition[] | undefined): Record<string, string> | undefined {
+  const mehrere = (alleInvs ?? [g.inv]).filter((inv) => inv.id > 0).length >= 2
+  return mehrere && g.inv.id > 0 ? { geraet: String(g.inv.id) } : undefined
+}
+
+/** N5: Index des Geräts aus `?geraet=` — ohne Angabe oder bei unbekannter ID still das erste (kein Hinweis-Overlay). */
+export function aktivAusDeepLink(geraete: KompGeraet[], geraetId: number | null): number {
+  if (geraetId == null) return 0
+  const i = geraete.findIndex((d) => d.inv.id === geraetId)
+  return i >= 0 ? i : 0
+}
+
+/**
  * Inhalt des Blocks «Überblick» aus einer Hand — für `Block.render(fokus)` (N2: `vollbild`) und für den Deep-Link
  * `?fokus=ueberblick:schaubild` (N3: `schaubildDeepLink`). Meldet unter `ueberblick:<inv.id>` an das Block-Gate (S1c).
  */
@@ -586,6 +603,7 @@ function ueberblickInhalt(
     geraete: (alleInvs ?? [g.inv]).filter((inv) => inv.id > 0),
     inv: g.inv,
     meldeParkIds: (ids) => melde(`ueberblick:${g.inv.id}`, ids),
+    einbettenZusatz: geraetEinbettenZusatz(g, alleInvs),
     ...modus,
   }
   return typ === 'wallbox' || typ === 'e-auto' ? <UeberblickBlockEmob {...props} /> : <UeberblickBlock {...props} />
@@ -852,17 +870,21 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
 
   const adapter = KOMPONENTEN_ADAPTER[typ]
   const ident = KOMPONENTEN_IDENTITAET[typ]
+  // FD-1/N3/N5: Deep-Link der Adresse (Instanz-Memo, je Mount einmal gelesen). `geraetId` (N5) wählt nach dem Laden
+  // das Gerät mit dieser Investitions-ID, sonst das erste.
+  const deep = useDeepLinkFokus()
+  const deepGeraetId = deep.geraetId
 
   useEffect(() => {
     if (!anlageId || !adapter) { setLoading(false); return }
     let ab = false
     setLoading(true); setError(null); setAktiv(0)
     adapter.fetch(anlageId)
-      .then((gs) => { if (!ab) setGeraete(gs) })
+      .then((gs) => { if (!ab) { setGeraete(gs); setAktiv(aktivAusDeepLink(gs, deepGeraetId)) } })
       .catch(() => { if (!ab) setError('Fehler beim Laden der Komponente') })
       .finally(() => { if (!ab) setLoading(false) })
     return () => { ab = true }
-  }, [anlageId, adapter, typ, retryKey])
+  }, [anlageId, adapter, typ, retryKey, deepGeraetId])
 
   const g = geraete[aktiv]
   const alleInvs = useMemo(() => geraete.map((d) => d.inv), [geraete])
@@ -870,7 +892,6 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   // N3 (Nachlauf 4.2.1): `?fokus=ueberblick:schaubild` ist keine Block-ID — die BlockShell zeigte dafür «gibt es
   // nicht». Der Hub rendert an ihrer Stelle das Schaubild-Vollbild des gewählten Geräts, solange der Block
   // «Überblick» da ist und das Schaubild nicht geparkt (Muster `liveFokusVorhanden`), sonst den Hinweis (FD-5).
-  const deep = useDeepLinkFokus()
   const schaubildDeepLink = deep.deepLink && deep.fokusId === SCHAUBILD_FOKUS_ID
   const schaubildDa = bloecke.some((b) => b.id === 'ueberblick') && !ueberblickGeparkt(park.istGeparkt, 'el:ueberblick-schaubild')
 
@@ -927,7 +948,12 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
         ? (schaubildDa
             ? ueberblickInhalt(g, typ, anlageId, melde, alleInvs, { schaubildDeepLink: true })
             : <FokusFehltOverlay fokusId={SCHAUBILD_FOKUS_ID} />)
-        : <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar voranstellen={VORANSTELLEN} />}
+        : (
+          <BlockShell
+            key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar voranstellen={VORANSTELLEN}
+            einbettenZusatz={g ? geraetEinbettenZusatz(g, alleInvs) : undefined}
+          />
+        )}
 
       {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert ohne Provider. */}
       <ParkFuss />

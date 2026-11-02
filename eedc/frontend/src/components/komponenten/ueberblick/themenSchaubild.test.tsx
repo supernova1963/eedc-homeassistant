@@ -6,7 +6,8 @@
  *   Eintrags (ganz), seine Bezeichnung (am Ende gekürzt), «‹Thema› (n)»; Stapel-Optik, Tipp öffnet die Liste
  *   Bezeichnung · Wert · Stand; im Layout **ein** Platz (Schlüssel `thema-<inv>-<t>`);
  * - «Fahrzeug mit vier Themen» am Handy (390 px): Standort und Reichweite bleiben, ein Thema im Bild, «Weitere (3)»
- *   mit je Thema einer Zeile «‹Beschriftung›  ‹Bezeichnung · Wert›» des ersten Eintrags — die Themen wandern zuerst;
+ *   mit je Thema einer Zeile — die Themen wandern zuerst; eine Themen-Gruppe dort als «‹Thema› (n) · ‹Bezeichnung› · ‹Wert›»
+ *   des ersten Eintrags, in der Liste mit dessen Stand, Einzel-Themen unverändert (Nachlauf 4.2.1 N6);
  * - Wärme: Themen am Himmel rechts neben Außen, ohne Linie.
  *
  * Schwesterdateien: themenKacheln.test.ts, emobLayout.test.ts, UeberblickSchaubild.test.tsx.
@@ -106,9 +107,34 @@ describe('Themen-Kacheln im Schaubild (TH-E2)', () => {
     const zeilen = [...container.querySelectorAll('[data-gruppen-liste] li')].map((li) => [...li.querySelectorAll('span')].map((s) => s.textContent))
     expect(zeilen).toEqual([
       ['Tage bis Service', '41'],
-      ['Klima', 'Innen · 21,5 °C'],   // «Weitere» wie vor der dreizeiligen Form
+      ['Klima (2)', 'Innen · 21,5 °C', 'Innen · 21,5 °C'],   // N6: Themen-Gruppe mit «(n)», ohne Zeitpunkt kein Stand
       ['Start', 'ready'],
     ])
+  })
+
+  it('N6: volle Reihe, Themen-Gruppe in «Weitere» ⇒ Tooltip und Liste «‹Thema› (n) · ‹Bezeichnung› · ‹Wert›», Liste mit Stand', () => {
+    // Service (Einzel-Thema) vorn ⇒ es bleibt im Bild, die Gruppe «Fahrzeugzustand (3)» wandert mit Klima und Plan nach «Weitere».
+    const themen = [THEMEN[1], THEMEN[0], THEMEN[2], THEMEN[3]]
+    const kacheln = [
+      wertKachel('wert-reichweite-7', 'C', 'Reichweite', '312 km'), wertKachel('wert-standort-7', 'H', 'Standort', 'Zu Hause'),
+      ...baueThemenKacheln(themen, IONIQ, 'HIMMEL', 'c'),
+    ]
+    const { container } = zeichne(kacheln, FAHRZEUG_PANORAMA_DEF, 390)
+    const plaetze = [...container.querySelectorAll('g[data-platz]')].map((g) => g.getAttribute('data-platz'))
+    expect(plaetze).toEqual(['wert-standort-7', 'wert-reichweite-7', 'thema-7-t2', 'grp-weitere'])
+    const weitere = container.querySelector('g[data-gruppe="grp-weitere"]')!
+    expect(weitere.getAttribute('data-title')).toBe(
+      'Weitere (3)\n• Fahrzeugzustand (3) · Türen · locked\n• Klima (2) · Innen · 21,5 °C\n• Start: ready',
+    )
+    fireEvent.click(weitere)
+    const zeilen = [...container.querySelectorAll('[data-gruppen-liste] li')].map((li) => [...li.querySelectorAll('span')].map((s) => s.textContent))
+    expect(zeilen).toEqual([
+      ['Fahrzeugzustand (3)', 'Türen · lockedStand 06:20', 'Türen · locked', 'Stand 06:20'],   // Stand des ersten Eintrags
+      ['Klima (2)', 'Innen · 21,5 °C', 'Innen · 21,5 °C'],
+      ['Start', 'ready'],                                                                      // Einzel-Thema unverändert
+    ])
+    expect([...container.querySelectorAll('[data-gruppen-liste] [data-thema-gruppe]')].map((li) => li.getAttribute('data-thema-gruppe')))
+      .toEqual(['thema-7-t1', 'thema-7-t3'])
   })
 
   it('Wärme: Themen am Himmel rechts neben Außen, ohne Linie', () => {

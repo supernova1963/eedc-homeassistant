@@ -12,7 +12,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Added
 
 - **Komponenten → Wärmepumpe, Wallbox, E-Auto: ⤢ am Schaubild** — öffnet das Schaubild allein im Fokus/Vollbild, mit
-  „Link / Einbetten" für eine Karte im Home-Assistant-Dashboard (`#/komponenten/<typ>?fokus=ueberblick:schaubild`).
+  „Link / Einbetten" für eine Karte im Home-Assistant-Dashboard (`#/komponenten/<typ>?fokus=ueberblick:schaubild`); bei
+  mehreren Geräten des Typs trägt die Adresse das gewählte als `&geraet=<investition_id>`, damit die Karte nicht immer das
+  erste zeigt (gilt für den Fokus jedes Blocks auf den Komponenten-Seiten).
 
 ### Changed
 
@@ -20,7 +22,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   und war bei Full HD unten abgeschnitten).
 - **Themen-Kacheln im Schaubild neu:** ein Thema mit einem Eintrag ist eine gewöhnliche Wert-Kachel (Bezeichnung und Wert),
   ein Thema mit mehreren Einträgen eine dreizeilige Gruppe wie eine Geräte-Kachel (Wert und Bezeichnung des ersten Eintrags,
-  „‹Thema› (n)") — ein Klick zeigt alle mit Wert und Stand (bisher zwei Einträge in einer Kachel mit gekürzter Beschriftung, am Handy nur die Werte).
+  „‹Thema› (n)") — ein Klick zeigt alle mit Wert und Stand (bisher zwei Einträge in einer Kachel mit gekürzter Beschriftung, am Handy nur die Werte);
+  in „Weitere (n)" heißt die Gruppe „‹Thema› (n) · ‹Bezeichnung› · ‹Wert›".
 
 ## [4.2.0] - 2026-11-02
 

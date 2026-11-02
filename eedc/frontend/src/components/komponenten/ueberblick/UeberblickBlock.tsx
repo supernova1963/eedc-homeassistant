@@ -26,7 +26,9 @@
  * die Höhe (N2). Daneben trägt das Schaubild seinen eigenen ⤢ «Schaubild: Fokus / Vollbild» (N3): ein
  * `FokusVollbild` nur mit dem Bild, mit «Link / Einbetten» unter der Fokus-ID {@link SCHAUBILD_FOKUS_ID}. Den
  * Deep-Link `#/komponenten/<typ>?fokus=ueberblick:schaubild` rendert der Hub über `schaubildDeepLink` — dann zeigt
- * der Block nur dieses Overlay, rahmenlos. Das Gerät ist das gewählte der Seite; es steht nicht in der Adresse.
+ * der Block nur dieses Overlay, rahmenlos. Das Gerät ist das gewählte der Seite; bei ≥ 2 Geräten des Typs schreibt
+ * «Link / Einbetten» es als `&geraet=<investition_id>` in die Adresse (N5, `einbettenZusatz` vom Hub), und der Hub wählt
+ * es beim Laden wieder.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Image as BildIcon, Maximize2 } from 'lucide-react'
@@ -69,6 +71,8 @@ export interface UeberblickBlockProps {
   vollbild?: boolean
   /** N3: Deep-Link `?fokus=ueberblick:schaubild` — nur das Schaubild-Vollbild, rahmenlos (der Hub entscheidet). */
   schaubildDeepLink?: boolean
+  /** N5: Zusatz für «Link / Einbetten» am Schaubild-⤢ (`{ geraet: '<id>' }` bei ≥ 2 Geräten; der Hub entscheidet). */
+  einbettenZusatz?: Record<string, string>
 }
 
 /**
@@ -89,12 +93,14 @@ function useUeberblickPark(teile: UeberblickKartenTeile, geladen: boolean, melde
 }
 
 /** N3: das Schaubild allein im Fokus/Vollbild — Titel «Überblick · Schaubild», Icon des Blocks, «Link / Einbetten». */
-function SchaubildVollbild({ deepLink, onClose, children }: { deepLink: boolean; onClose: () => void; children: ReactNode }) {
+function SchaubildVollbild({ deepLink, zusatz, onClose, children }: {
+  deepLink: boolean; zusatz?: Record<string, string>; onClose: () => void; children: ReactNode
+}) {
   return (
     <FokusVollbild
       titel="Überblick · Schaubild" icon={BildIcon}
       deepLink={deepLink}
-      aktionen={(ansicht) => <EinbettenKnopf fokusId="ueberblick:schaubild" ansicht={ansicht} />}
+      aktionen={(ansicht) => <EinbettenKnopf fokusId="ueberblick:schaubild" ansicht={ansicht} zusatz={zusatz} />}
       onClose={onClose}
     >
       {children}
@@ -109,7 +115,7 @@ function SchaubildVollbild({ deepLink, onClose, children }: { deepLink: boolean;
  */
 const RASTER_VOLLBILD = 'xl:h-full xl:grid-rows-[minmax(0,1fr)]'
 
-interface RasterProps extends Pick<UeberblickBlockProps, 'vollbild' | 'schaubildDeepLink'> {
+interface RasterProps extends Pick<UeberblickBlockProps, 'vollbild' | 'schaubildDeepLink' | 'einbettenZusatz'> {
   kacheln: UeberblickKachel[]
   ohneSensor: string[]
   panorama: PanoramaDef
@@ -125,13 +131,13 @@ interface RasterProps extends Pick<UeberblickBlockProps, 'vollbild' | 'schaubild
  * fehlt er (dort gibt es nichts zu vergrößern bzw. keinen Weg zurück, Muster Energiefluss). Die Seite darunter bleibt
  * montiert (ein Abruf für beide Darstellungen, kein Sprung beim Schließen).
  */
-function UeberblickRaster({ kacheln, ohneSensor, panorama, park, karte, vollbild = false, schaubildDeepLink = false }: RasterProps) {
+function UeberblickRaster({ kacheln, ohneSensor, panorama, park, karte, vollbild = false, schaubildDeepLink = false, einbettenZusatz }: RasterProps) {
   const deep = useDeepLinkFokus()
   const [fokus, setFokus] = useState(false)
   const bild = (imVollbild: boolean, kopfAktion?: ReactNode) => (
     <UeberblickSchaubild kacheln={kacheln} ohneSensor={ohneSensor} panorama={panorama} vollbild={imVollbild} kopfAktion={kopfAktion} />
   )
-  if (schaubildDeepLink) return <SchaubildVollbild deepLink onClose={() => {}}>{bild(true)}</SchaubildVollbild>
+  if (schaubildDeepLink) return <SchaubildVollbild deepLink zusatz={einbettenZusatz} onClose={() => {}}>{bild(true)}</SchaubildVollbild>
 
   // D14-16: unter 640 px ausgeblendet (nicht entfernt) wie das ⤢ am Energiefluss.
   const knopf = vollbild || deep.deepLink ? undefined : (
@@ -147,7 +153,7 @@ function UeberblickRaster({ kacheln, ohneSensor, panorama, park, karte, vollbild
   const { beide, karteOffen, schaubildOffen } = park
   return (
     <div className={`grid grid-cols-1 gap-4${beide ? ' xl:grid-cols-3' : ''}${vollbild && schaubildOffen ? ` ${RASTER_VOLLBILD}` : ''}`} data-ueberblick-block>
-      {fokus && <SchaubildVollbild deepLink={false} onClose={() => setFokus(false)}>{bild(true)}</SchaubildVollbild>}
+      {fokus && <SchaubildVollbild deepLink={false} zusatz={einbettenZusatz} onClose={() => setFokus(false)}>{bild(true)}</SchaubildVollbild>}
       <Parkbar id="el:ueberblick-schaubild" titel="Schaubild" className={beide ? 'xl:col-span-2' : undefined}>
         {bild(vollbild, knopf)}
       </Parkbar>
@@ -156,7 +162,7 @@ function UeberblickRaster({ kacheln, ohneSensor, panorama, park, karte, vollbild
   )
 }
 
-export default function UeberblickBlock({ anlageId, geraete, inv, meldeParkIds, vollbild, schaubildDeepLink }: UeberblickBlockProps) {
+export default function UeberblickBlock({ anlageId, geraete, inv, meldeParkIds, vollbild, schaubildDeepLink, einbettenZusatz }: UeberblickBlockProps) {
   const { demoMode } = useDemoMode()
   const { live, wetter, tag } = useLiveUeberblick(anlageId, demoMode)
   const achsen = useChartTheme()
@@ -171,7 +177,7 @@ export default function UeberblickBlock({ anlageId, geraete, inv, meldeParkIds, 
   return (
     <UeberblickRaster
       kacheln={kacheln} ohneSensor={ohneSensor} panorama={WAERME_PANORAMA_DEF} park={park}
-      vollbild={vollbild} schaubildDeepLink={schaubildDeepLink}
+      vollbild={vollbild} schaubildDeepLink={schaubildDeepLink} einbettenZusatz={einbettenZusatz}
       karte={<UeberblickKarte inv={inv} live={live} wetter={wetter} tag={tag} mehrereGeraete={mehrereGeraete} nebenSchaubild={park.beide} />}
     />
   )
@@ -186,7 +192,7 @@ export default function UeberblickBlock({ anlageId, geraete, inv, meldeParkIds, 
  * stehen die Karten ab `xl` untereinander (`nebenSchaubild`); ist das Schaubild geparkt, nebeneinander in voller Breite.
  * Derselbe Live-Hook (Poll nur, solange der Inhalt montiert und die Seite sichtbar ist).
  */
-export function UeberblickBlockEmob({ anlageId, geraete, inv, meldeParkIds, vollbild, schaubildDeepLink }: UeberblickBlockProps) {
+export function UeberblickBlockEmob({ anlageId, geraete, inv, meldeParkIds, vollbild, schaubildDeepLink, einbettenZusatz }: UeberblickBlockProps) {
   const { demoMode } = useDemoMode()
   const { live, tag } = useLiveUeberblick(anlageId, demoMode)
   const achsen = useChartTheme()
@@ -202,7 +208,7 @@ export function UeberblickBlockEmob({ anlageId, geraete, inv, meldeParkIds, voll
   return (
     <UeberblickRaster
       kacheln={kacheln} ohneSensor={ohneSensor} panorama={emobPanorama(inv.typ)} park={park}
-      vollbild={vollbild} schaubildDeepLink={schaubildDeepLink}
+      vollbild={vollbild} schaubildDeepLink={schaubildDeepLink} einbettenZusatz={einbettenZusatz}
       karte={<UeberblickKarteEmob {...kartenProps} nebenSchaubild={park.beide} />}
     />
   )

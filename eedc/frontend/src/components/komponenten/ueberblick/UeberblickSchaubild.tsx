@@ -24,7 +24,8 @@
  * - **Themen (Nachlauf 4.2.1 N4, Entscheid Gernot 2.11.2026):** eine Themen-Kachel mit mehreren Einträgen
  *   (`themaEintraege`) zeichnet sich als dreizeilige Gruppenkachel wie eine Geräte-Kachel — Wert des ersten Eintrags,
  *   seine Bezeichnung, «‹Thema› (n)»; Stapel-Optik, Tipp öffnet die Liste Bezeichnung · Wert · Stand —, bleibt im Layout
- *   aber **ein** Platz (keine Gruppen-Art, Rang 3). In «Weitere» steht sie als «‹Bezeichnung› · ‹Wert›» des ersten.
+ *   aber **ein** Platz (keine Gruppen-Art, Rang 3). In «Weitere» steht sie als «‹Thema› (n) · ‹Bezeichnung› · ‹Wert›»
+ *   des ersten Eintrags, in der Liste mit dessen Stand (N6).
  * - **Bild aus dem Deskriptor** (P-433-2b S1a, E0): Panoramen, aria, Gruppenname und Farbe der Gruppe «Weitere»
  *   kommen aus `panorama` (`panorama.ts`; Wärme/Klima `WAERME_PANORAMA_DEF`), das Layout ebenso. Der Pegel einer
  *   Kachel (`pegel`) geht unverändert an `EnergieFlussKachel` (Wärme: keiner).
@@ -81,17 +82,28 @@ function gruppenWert(p: Platz<UeberblickKachel>): { text: string; kw: number | n
   return { text: formatPower(kw), kw }
 }
 
-/** Wert einer Themen-Gruppe (N4) als Mitglied von «Weitere» (Tooltip und Liste): «‹Bezeichnung› · ‹Wert›» des ersten
- *  Eintrags wie vor der dreizeiligen Form — `null` für jede andere Kachel. */
-function themenGruppenWert(m: UeberblickKachel): string | null {
-  return m.themaEintraege && m.zweiteZeile ? `${m.zweiteZeile.text} · ${m.wertText}` : null
+/** Eine Themen-Gruppe (N4) als Mitglied von «Weitere» (Nachlauf 4.2.1 N6, Entscheid Gernot 2.11.2026): Titel «‹Thema› (n)»,
+ *  Wert «‹Bezeichnung› · ‹Wert›» und Stand des ersten Eintrags — `null` für jede andere Kachel (auch Einzel-Themen). */
+function themenGruppeInWeitere(m: UeberblickKachel): { titel: string; wert: string; stand: string | null } | null {
+  if (!m.themaEintraege || !m.zweiteZeile) return null
+  return {
+    titel: `${m.label} (${m.themaEintraege.length})`,
+    wert: `${m.zweiteZeile.text} · ${m.wertText}`,
+    stand: m.themaEintraege[0]?.stand ?? null,
+  }
+}
+
+/** Tooltip-Zeile eines Mitglieds einer Gruppenkachel; die Themen-Gruppe als «• ‹Thema› (n) · ‹Bezeichnung› · ‹Wert›» (N6). */
+function mitgliedTipZeile(m: UeberblickKachel): string {
+  const tg = themenGruppeInWeitere(m)
+  return tg ? `• ${tg.titel} · ${tg.wert}` : `• ${m.label}: ${m.wertText}${m.zweiteZeile ? ` (${m.zweiteZeile.text})` : ''}`
 }
 
 /** Was eine Gruppenkachel zeigt. */
 function gruppenKachel(p: Platz<UeberblickKachel>, panorama: PanoramaDef) {
   const n = p.mitglieder.length
   const name = gruppenName(p, panorama)
-  const tip = [`${name} (${n})`, ...p.mitglieder.map((m) => `• ${m.label}: ${themenGruppenWert(m) ?? `${m.wertText}${m.zweiteZeile ? ` (${m.zweiteZeile.text})` : ''}`}`)].join('\n')
+  const tip = [`${name} (${n})`, ...p.mitglieder.map(mitgliedTipZeile)].join('\n')
   const erste = p.mitglieder[0]
   const wert = gruppenWert(p)
   return {
@@ -167,15 +179,27 @@ function GruppenListe({ platz, panorama, onSchliessen }: { platz: Platz<Ueberbli
         </ul>
       ) : (
         <ul className="text-sm space-y-0.5">
-          {platz.mitglieder.map((m) => (
-            <li key={m.id} className="flex justify-between gap-2">
-              <span className="text-gray-600 dark:text-gray-400 truncate min-w-0">{m.label}</span>
-              <span className="text-gray-900 dark:text-white font-medium whitespace-nowrap">
-                {/* Text-Knoten wie vor N4 (Zwölf-Fälle-Snapshot byte-gleich); nur die Themen-Gruppe hat ihre eigene Zeile. */}
-                {themenGruppenWert(m) ?? <>{m.wertText}{m.zweiteZeile ? ` · ${m.zweiteZeile.text}` : ''}</>}
-              </span>
-            </li>
-          ))}
+          {platz.mitglieder.map((m) => {
+            const tg = themenGruppeInWeitere(m)
+            // N6: die Themen-Gruppe in der Form der Themen-Zeilen (Wert und Stand); jedes andere Mitglied mit den
+            // Text-Knoten wie vor N4 (Zwölf-Fälle-Snapshot byte-gleich).
+            return tg ? (
+              <li key={m.id} className="flex justify-between gap-2" data-thema-gruppe={m.id}>
+                <span className="text-gray-600 dark:text-gray-400 truncate min-w-0">{tg.titel}</span>
+                <span className="flex items-baseline gap-2 whitespace-nowrap">
+                  <span className="text-gray-900 dark:text-white font-medium">{tg.wert}</span>
+                  {tg.stand && <span className="text-xs text-gray-500 dark:text-gray-400">{tg.stand}</span>}
+                </span>
+              </li>
+            ) : (
+              <li key={m.id} className="flex justify-between gap-2">
+                <span className="text-gray-600 dark:text-gray-400 truncate min-w-0">{m.label}</span>
+                <span className="text-gray-900 dark:text-white font-medium whitespace-nowrap">
+                  {m.wertText}{m.zweiteZeile ? ` · ${m.zweiteZeile.text}` : ''}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

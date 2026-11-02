@@ -15,7 +15,8 @@
 Block „Überblick" wird nie höher als das Fenster — bei Full HD war es bisher unten abgeschnitten. Oben rechts im Bild öffnet
 **⤢** das Schaubild allein im Vollbild, wo es die ganze Höhe nutzt (auch im Fokus des ganzen Blocks füllt es jetzt die Höhe).
 Mit **„Link / Einbetten"** holst du die Adresse für eine Karte im Home-Assistant-Dashboard, etwa
-`#/komponenten/wallbox?fokus=ueberblick:schaubild`. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
+`#/komponenten/wallbox?fokus=ueberblick:schaubild`; hast du zwei Wallboxen oder zwei Autos, steht das gewählte Gerät mit in der
+Adresse (`&geraet=31`), und die Karte zeigt genau dieses. [Handbuch Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)
 
 **Komponenten → Wärmepumpe, Wallbox, E-Auto: Themen-Kacheln, die man lesen kann.** Bisher standen zwei Einträge in einer
 Kachel, und weil der Platz nicht reichte, kürzte eedc die Beschriftung — am Handy blieben nackte Werte. Jetzt ist ein Thema

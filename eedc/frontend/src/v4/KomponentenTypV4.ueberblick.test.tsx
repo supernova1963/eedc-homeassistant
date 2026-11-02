@@ -8,7 +8,7 @@
  * Die alte ID `el:ueberblick-karte` gilt als «alle drei Karten geparkt».
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 
 vi.mock('../api/liveDashboard', () => ({
   liveDashboardApi: {
@@ -36,7 +36,8 @@ vi.mock('./komponentenAdapter', async (orig) => {
   }
 })
 
-import KomponentenTypV4, { geraetBloecke, UEBERBLICK_TYPEN, VORANSTELLEN } from './KomponentenTypV4'
+import { liveDashboardApi } from '../api/liveDashboard'
+import KomponentenTypV4, { aktivAusDeepLink, geraetBloecke, geraetEinbettenZusatz, UEBERBLICK_TYPEN, VORANSTELLEN } from './KomponentenTypV4'
 import { BlockShell } from '../components/blocks'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 import type { ParkApi } from '../components/park'
@@ -201,5 +202,94 @@ describe('Nachlauf 4.2.1: Fokus des Überblicks', () => {
     await waitFor(() => expect(document.querySelector('[data-ueberblick-schaubild]')).not.toBeNull())
     expect(screen.getByRole('button', { name: 'Schaubild: Fokus / Vollbild' })).toBeInTheDocument()
     expect(overlay()).toBeNull()
+  })
+})
+
+/**
+ * Nachlauf 4.2.1 N5 (Entscheid Gernot 2.11.2026): `&geraet=<investition_id>` wählt auf einer Typ-Seite mit mehreren
+ * Geräten das Gerät — sonst zeigte eine Dashboard-Karte immer das erste. Unbekannte ID ⇒ still das erste. «Link /
+ * Einbetten» (Block-⤢ der BlockShell und Schaubild-⤢) schreibt den Parameter nur bei ≥ 2 Geräten des Typs.
+ * Belegt wird das gewählte Gerät im Schaubild über die «Ohne Sensor»-Zeile der Szene «Ladepunkt» — sie nennt das Gerät,
+ * dessen Szene gezeichnet ist (`baueLadepunktKacheln` für `inv`), sobald eine Live-Antwort da ist.
+ */
+describe('Nachlauf 4.2.1 N5: Gerät in der Deep-Link-Adresse', () => {
+  const URSPRUNG = window.location.hash
+  const ohneLive = () => new Promise(() => {})
+  afterEach(() => {
+    window.location.hash = URSPRUNG
+    vi.mocked(liveDashboardApi.getData).mockImplementation(ohneLive as never)
+  })
+  const overlay = () => document.querySelector<HTMLElement>('.fixed.inset-0.z-50')
+  const aktiverSelektor = () => screen.getAllByRole('button').filter((b) => b.className.includes('bg-primary-100')).map((b) => b.textContent)
+
+  it('reine Helfer: Index aus der ID, Zusatz nur bei ≥ 2 echten Geräten', () => {
+    const zwei = [geraet(7, 'wallbox'), geraet(8, 'wallbox')]
+    expect(aktivAusDeepLink(zwei, 8)).toBe(1)
+    expect(aktivAusDeepLink(zwei, 99)).toBe(0)
+    expect(aktivAusDeepLink(zwei, null)).toBe(0)
+    expect(geraetEinbettenZusatz(zwei[1], zwei.map((g) => g.inv))).toEqual({ geraet: '8' })
+    expect(geraetEinbettenZusatz(zwei[0], [zwei[0].inv])).toBeUndefined()
+    // Ein Pseudo-Gerät ohne echte ID (id 0) zählt nicht und bekommt keinen Parameter.
+    expect(geraetEinbettenZusatz(zwei[0], [zwei[0].inv, geraet(0, 'wallbox').inv])).toBeUndefined()
+    expect(geraetEinbettenZusatz(geraet(0, 'wallbox'), zwei.map((g) => g.inv))).toBeUndefined()
+  })
+
+  it('zwei Wallboxen + &geraet=<zweite> ⇒ das zweite Gerät ist gewählt, das Deep-Link-Overlay zeigt dessen Schaubild', async () => {
+    vi.mocked(liveDashboardApi.getData).mockResolvedValue({ komponenten: [], gauges: [] } as never)
+    adapterGeraete.liste = [geraet(7, 'wallbox'), geraet(8, 'wallbox')]
+    window.location.hash = '#/komponenten/wallbox?fokus=ueberblick:schaubild&geraet=8'
+    renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
+    expect(await screen.findByRole('heading', { name: 'Überblick · Schaubild', level: 2 })).toBeInTheDocument()
+    const zeile = await within(overlay()!).findByText(/Ohne Sensor/)
+    expect(zeile).toHaveTextContent('Leistung Gerät 8')
+    expect(zeile).not.toHaveTextContent('Gerät 7')
+    expect(aktiverSelektor()).toEqual(['Gerät 8'])
+    // Deep-Link-Ansicht ohne Knopf bleibt ohne Knopf.
+    expect(screen.queryByRole('button', { name: /Link \/ Einbetten/ })).not.toBeInTheDocument()
+  })
+
+  it('unbekannte ID ⇒ still das erste Gerät, kein Hinweis-Overlay', async () => {
+    vi.mocked(liveDashboardApi.getData).mockResolvedValue({ komponenten: [], gauges: [] } as never)
+    adapterGeraete.liste = [geraet(7, 'wallbox'), geraet(8, 'wallbox')]
+    window.location.hash = '#/komponenten/wallbox?fokus=ueberblick:schaubild&geraet=99'
+    renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
+    expect(await screen.findByRole('heading', { name: 'Überblick · Schaubild', level: 2 })).toBeInTheDocument()
+    const zeile = await within(overlay()!).findByText(/Ohne Sensor/)
+    expect(zeile).toHaveTextContent('Leistung Gerät 7')
+    expect(aktiverSelektor()).toEqual(['Gerät 7'])
+    expect(screen.queryByText(/gibt es in dieser Sicht nicht/)).not.toBeInTheDocument()
+  })
+
+  /** Öffnet «Link / Einbetten» im offenen Overlay und liefert die angezeigte Adresse. */
+  const adresse = () => {
+    fireEvent.click(within(overlay()!).getByRole('button', { name: /Link \/ Einbetten/ }))
+    return screen.getByText(/#\/komponenten\/wallbox\?fokus=/).textContent
+  }
+
+  it('zwei Geräte: Schaubild-⤢ schreibt &geraet=<gewähltes>', async () => {
+    adapterGeraete.liste = [geraet(7, 'wallbox'), geraet(8, 'wallbox')]
+    window.location.hash = '#/komponenten/wallbox'
+    renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerät 8' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Schaubild: Fokus / Vollbild' }))
+    expect(adresse()).toMatch(/#\/komponenten\/wallbox\?fokus=ueberblick%3Aschaubild&geraet=8$/)
+  })
+
+  it('zwei Geräte: Block-⤢ «Überblick» schreibt &geraet=<gewähltes>', async () => {
+    adapterGeraete.liste = [geraet(7, 'wallbox'), geraet(8, 'wallbox')]
+    window.location.hash = '#/komponenten/wallbox'
+    renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerät 8' }))
+    await waitFor(() => expect(document.querySelector('[data-ueberblick-schaubild]')).not.toBeNull())
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fokus / Vollbild' })[0])
+    expect(adresse()).toMatch(/#\/komponenten\/wallbox\?fokus=ueberblick&geraet=8$/)
+  })
+
+  it('ein Gerät: die Adresse bleibt ohne geraet (bestehende Karten werden nicht länger)', async () => {
+    adapterGeraete.liste = [geraet(7, 'wallbox')]
+    window.location.hash = '#/komponenten/wallbox'
+    renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Schaubild: Fokus / Vollbild' }))
+    expect(adresse()).toMatch(/#\/komponenten\/wallbox\?fokus=ueberblick%3Aschaubild$/)
   })
 })

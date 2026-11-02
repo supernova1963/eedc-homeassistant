@@ -11,7 +11,7 @@
 >
 > | # | Maßnahme | Stand |
 > | --- | --- | --- |
-> | **FD-1** | URL-Vertrag `#/<sicht>?fokus=<id>[&ansicht=tabelle]` | ✅ **ohne** `kiosk=`/`theme=`/`zurueck=` |
+> | **FD-1** | URL-Vertrag `#/<sicht>?fokus=<id>[&ansicht=tabelle][&geraet=<investition_id>]` | ✅ **ohne** `kiosk=`/`theme=`/`zurueck=`; `geraet` seit Nachlauf 4.2.1 N5 (§1) |
 > | **FD-2** | Ein zentraler Hook in `BlockShell` + `FokusKachel` + Energiefluss | ✅ als `hooks/useDeepLinkFokus.ts` |
 > | **FD-3** | „Link / Einbetten" in der `FokusVollbild`-Kopfzeile | ✅ `components/blocks/EinbettenKnopf.tsx`, **eine** Adresse |
 > | **FD-4** | Kiosk-Modus (`&kiosk=1`) | ⛔ **nicht gebaut** (Entscheid Gernot 22.09.) |
@@ -59,7 +59,7 @@
 
 | # | Maßnahme | Status | Notiz |
 | --- | --- | --- | --- |
-| **FD-1** | URL-Vertrag `#/<sicht>?fokus=<id>[&ansicht=tabelle]` (**prefix-frei**, korrigiert 21.09.) | ✅ **gebaut 22.09.** | Query statt eigener Route; Block-IDs sind damit **öffentlicher Vertrag** (Wächter `fokus-id-vertrag.test.ts`). ⛔ **ohne** `kiosk=`/`theme=`/`zurueck=` — der Parameter ist ein **Eingang, kein Spiegel**: ⤢ und Schließen schreiben die Adresse nicht |
+| **FD-1** | URL-Vertrag `#/<sicht>?fokus=<id>[&ansicht=tabelle][&geraet=<investition_id>]` (**prefix-frei**, korrigiert 21.09.; `geraet` 2.11.2026) | ✅ **gebaut 22.09.** | Query statt eigener Route; Block-IDs sind damit **öffentlicher Vertrag** (Wächter `fokus-id-vertrag.test.ts`). ⛔ **ohne** `kiosk=`/`theme=`/`zurueck=` — der Parameter ist ein **Eingang, kein Spiegel**: ⤢ und Schließen schreiben die Adresse nicht |
 | **FD-2** | Ein zentraler Hook in `BlockShell` + `FokusKachel` | ✅ **gebaut 22.09.** als `hooks/useDeepLinkFokus.ts` | gilt für ALLE V4-Sichten; dazu der Energiefluss (eigener Fokus-State) und `ParkProvider`/`ThemeProvider`. Liest `window.location.hash` **je Mount einmal**, kein `useSearchParams` |
 | **FD-3** | „Link kopieren / In HA einbetten"-Aktion in der `FokusVollbild`-Kopfzeile | ✅ **gebaut 22.09.** (`EinbettenKnopf.tsx`) | **der Benutzerfreundlichkeits-Kern** — Nutzer baut nie eine URL von Hand. **Eine** Adresse (nicht drei), `ui/Button` + `ui/Modal` + `useCopyFeedback`; nur im normalen Betrieb, nicht in der Deep-Link-Ansicht |
 | **FD-4** | Kiosk-Modus (`&kiosk=1`): Chrome weg + read-only | ⛔ **nicht gebaut** (Entscheid Gernot 22.09.) | Begründung im Kasten oben: die Deep-Link-Ansicht **ist** die Einbett-Form. „Chart ⇄ Tabelle" bleibt dort bedienbar (CT-5 über `&ansicht=tabelle`) |
@@ -183,8 +183,14 @@ Card), später ggf. eine eigene HACS-Card, die eedc-Ansichten als Cards anbietet
 
 ### 1. URL-Vertrag (Query-Parameter, nicht neue Route)
 
-> ⭐ **Gebaut wurde `#/<sicht>?fokus=<id>[&ansicht=tabelle]`** — z. B.
+> ⭐ **Gebaut wurde `#/<sicht>?fokus=<id>[&ansicht=tabelle][&geraet=<investition_id>]`** — z. B.
 > `#/cockpit/live?fokus=live:energiefluss` oder `#/cockpit/jahr?fokus=bilanz&ansicht=tabelle`.
+> **`geraet`** (Nachlauf 4.2.1 N5, Entscheid Gernot 2.11.2026) wählt auf `#/komponenten/<typ>` mit mehreren Geräten das
+> Gerät mit dieser Investitions-ID (`useDeepLinkFokus().geraetId`: ganze Zahl > 0, sonst `null`; unbekannte ID ⇒ still das
+> erste Gerät, kein Hinweis-Overlay) — z. B. `#/komponenten/wallbox?fokus=ueberblick:schaubild&geraet=31`. «Link / Einbetten»
+> schreibt ihn nur bei ≥ 2 Geräten des Typs (`EinbettenKnopf` Prop `zusatz`, Reihenfolge `fokus`, `ansicht`, dann der Zusatz
+> alphabetisch; durchgereicht über `BlockShell.einbettenZusatz` und den Schaubild-⤢); bei einem Gerät bleibt die Adresse kurz.
+> Wie `fokus` ist er ein Eingang, kein Spiegel: der Geräte-Selektor schreibt die Adresse nicht.
 > `kiosk=` und `theme=` sind **entfallen** (Entscheid 22.09., Kasten oben); `poll` bleibt Reserve.
 > ⛔ **Und der Parameter spiegelt den Zustand NICHT:** Das ⤢ im normalen Betrieb schreibt die
 > Adresse nicht, das Schließen ändert sie nicht. Der Absatz darunter empfahl 21.09. noch das

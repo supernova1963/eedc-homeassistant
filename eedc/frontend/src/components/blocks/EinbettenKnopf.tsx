@@ -14,6 +14,11 @@
  * Fokus der Bilanzen trägt seine Zeitraum-Auswahl selbst, eine Karte soll den
  * *laufenden* Monat zeigen und nicht den, der beim Kopieren offen war. Wer ein
  * festes Datum will, hängt es von Hand an — es läuft durch.
+ *
+ * **Zusatz (Nachlauf 4.2.1 N5):** Eine Sicht kann über die optionale Prop `zusatz`
+ * weitere Parameter mitgeben, die zur Anzeige gehören — die Typ-Seite der
+ * Komponenten gibt bei ≥ 2 Geräten `{ geraet: '<investition_id>' }` mit, damit die
+ * Karte das gewählte Gerät zeigt und nicht das erste.
  */
 import { useState } from 'react'
 import { Link2, Check, Copy } from 'lucide-react'
@@ -35,12 +40,20 @@ export interface OrtAngaben {
  * Unter dem HA-Ingress ist das die Ingress-URL
  * (`…/api/hassio_ingress/<token>/#/…`) — genau die, die eine Webseiten-Karte auf
  * demselben HA-Origin laden darf.
+ *
+ * Reihenfolge fest: `fokus`, `ansicht`, dann `zusatz` alphabetisch nach Schlüssel —
+ * dieselbe Anzeige ergibt immer dieselbe Adresse. Schlüssel und Werte des Zusatzes
+ * werden URL-kodiert.
  */
-export function baueDeepLink(ort: OrtAngaben, fokusId: string, ansicht: 'chart' | 'tabelle'): string {
+export function baueDeepLink(
+  ort: OrtAngaben, fokusId: string, ansicht: 'chart' | 'tabelle', zusatz?: Record<string, string>,
+): string {
   const basis = ort.href.split('#')[0]
   const pfad = (ort.hash.split('?')[0] || '').replace(/^#/, '') || '/'
   const ansichtTeil = ansicht === 'tabelle' ? '&ansicht=tabelle' : ''
-  return `${basis}#${pfad}?fokus=${encodeURIComponent(fokusId)}${ansichtTeil}`
+  const zusatzTeil = Object.keys(zusatz ?? {}).sort()
+    .map((k) => `&${encodeURIComponent(k)}=${encodeURIComponent(zusatz![k])}`).join('')
+  return `${basis}#${pfad}?fokus=${encodeURIComponent(fokusId)}${ansichtTeil}${zusatzTeil}`
 }
 
 /** Läuft eedc gerade als HA-Add-on hinter dem Ingress? */
@@ -48,17 +61,19 @@ export function istIngress(ort: Pick<OrtAngaben, 'pathname'>): boolean {
   return ort.pathname.includes('/api/hassio_ingress/')
 }
 
-export function EinbettenKnopf({ fokusId, ansicht, ort = window.location }: {
+export function EinbettenKnopf({ fokusId, ansicht, zusatz, ort = window.location }: {
   /** Fokus-ID dieser Anzeige (Block-`id` bzw. Kachel-`fokusId`). */
   fokusId: string
   /** Aktuelle Ablesung im Overlay — entscheidet über `&ansicht=tabelle`. */
   ansicht: 'chart' | 'tabelle'
+  /** N5: weitere Parameter der Anzeige (z. B. `{ geraet: '31' }`), hinter `fokus`/`ansicht` angehängt. */
+  zusatz?: Record<string, string>
   /** Nur für Proben: gestellte Adresse statt `window.location`. */
   ort?: OrtAngaben
 }) {
   const [offen, setOffen] = useState(false)
   const { istKopiert, kopiere } = useCopyFeedback()
-  const adresse = baueDeepLink(ort, fokusId, ansicht)
+  const adresse = baueDeepLink(ort, fokusId, ansicht, zusatz)
 
   return (
     <>

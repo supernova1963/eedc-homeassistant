@@ -54,6 +54,18 @@ describe('baueDeepLink — die Adresse', () => {
       .toBe('http://x/#/?fokus=a')
   })
 
+  it('N5: zusatz hängt hinter fokus/ansicht an — alphabetisch, URL-kodiert', () => {
+    const wb: OrtAngaben = { href: 'http://x:8099/#/komponenten/wallbox', hash: '#/komponenten/wallbox', pathname: '/' }
+    expect(baueDeepLink(wb, 'ueberblick:schaubild', 'chart', { geraet: '31' }))
+      .toBe('http://x:8099/#/komponenten/wallbox?fokus=ueberblick%3Aschaubild&geraet=31')
+    // Feste Reihenfolge: fokus, ansicht, dann der Zusatz nach Schlüssel sortiert (nicht nach Einfüge-Reihenfolge).
+    expect(baueDeepLink(wb, 'ueberblick', 'tabelle', { zeta: '1', geraet: '31', alpha: 'a b&c' }))
+      .toBe('http://x:8099/#/komponenten/wallbox?fokus=ueberblick&ansicht=tabelle&alpha=a%20b%26c&geraet=31&zeta=1')
+    // Ohne oder mit leerem Zusatz die alte Adresse.
+    expect(baueDeepLink(wb, 'ueberblick', 'chart', {})).toBe(baueDeepLink(wb, 'ueberblick', 'chart'))
+    expect(baueDeepLink(wb, 'ueberblick', 'chart', undefined)).toBe('http://x:8099/#/komponenten/wallbox?fokus=ueberblick')
+  })
+
   it('erkennt den Ingress am Pfad', () => {
     expect(istIngress(INGRESS)).toBe(true)
     expect(istIngress(STANDALONE)).toBe(false)
@@ -61,6 +73,12 @@ describe('baueDeepLink — die Adresse', () => {
 })
 
 describe('EinbettenKnopf — Dialog', () => {
+  it('N5: die Prop `zusatz` steht in der angezeigten Adresse', () => {
+    render(<EinbettenKnopf fokusId="ueberblick" ansicht="chart" zusatz={{ geraet: '31' }} ort={STANDALONE} />)
+    fireEvent.click(screen.getByRole('button', { name: /Link \/ Einbetten/ }))
+    expect(screen.getByText('http://192.168.1.50:8099/#/cockpit/live?fokus=ueberblick&geraet=31')).toBeInTheDocument()
+  })
+
   it('zeigt Adresse + Anleitung; der Standalone-Hinweis nur ohne Ingress', () => {
     render(<EinbettenKnopf fokusId="bilanz" ansicht="chart" ort={STANDALONE} />)
     fireEvent.click(screen.getByRole('button', { name: /Link \/ Einbetten/ }))
