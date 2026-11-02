@@ -9,6 +9,48 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-11-02 — Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox · E-Auto): eigene „Themen" aus frei gewählten HA-Entitäten oder MQTT-Topics je Gerät, je Thema eine Kachel im Schaubild und die Karte „Themen" in „Auf einen Blick"; Demo-Modus mit Themen und Standort; 4 Gestaltungs-Korrekturen
+
+### Added
+
+- **Themen je Gerät (Themen-Kacheln, Etappe 1 von 2):** an Wärmepumpe, Wallbox und E-Auto legst du unter *Einstellungen →
+  Datenquellen* im neuen Block „Themen" eigene Themen mit Einträgen an — je Eintrag eine frei gewählte HA-Entität (jede
+  Domain, Picker mit Suche und Domain) oder ein MQTT-Topic `…/live/inv/<id>_<name>/thema_e<n>` (Text, auch über das
+  Gateway). eedc zeigt den Wert wie geliefert, ohne Rechnung und ohne Mitschrift; die Live-Antwort trägt `themen`
+  (60-s-Takt, `null` ohne Wert). Anlegen, Umbenennen, Pfeile, Entfernen mit Rückfrage; Löschen eines Geräts und JSON-Import
+  nehmen die Zuordnungen mit. Die Kacheln im Schaubild und die Karte „Themen" folgen mit Etappe 2.
+  Neue Routen `POST/PATCH/DELETE /api/datenquellen/{anlage}/themen…` (die Routen an einem Thema nennen das Gerät als
+  Pflicht-Query `?investition_id=` — Kennungen `t<n>`/`e<n>` sind je Gerät vergeben); `GET /api/datenquellen/{anlage}/ha/sensoren?alle=true`.
+- **Themen im Schaubild und Karte „Themen" (Themen-Kacheln, Etappe 2 von 2):** im Block „Überblick" von Wärmepumpe, Wallbox
+  und E-Auto steht je Thema mit Wert **eine Kachel** am Himmel der Szene (Wärme rechts neben der Außentemperatur), Symbol
+  „Tags", Rollenfarbe des Geräts, ohne Linie: Name = Thema, die ersten zwei Einträge als „Label · Wert", alle im Tooltip.
+  Die Zeichnung kürzt eine zu lange Zeile auf das Zeichenbudget der Kachel — zuerst die Beschriftung, der Wert bleibt
+  ganz. Rang 3 im Layout: bei voller Reihe wandern die Themen zuerst nach „Weitere (n)". Werte wie der HA-State, nur
+  formatiert (Zahl mit Komma, ≤ 2 Nachkommastellen; Zeitstempel als Uhrzeit bzw. Datum mit Uhrzeit, in der Kachel kurz
+  „02.11. 07:00", in schmalen Kacheln nur „02.11."). Vierte Karte
+  **„Themen"** in „Auf einen Blick" (Park-ID `el:ueberblick-karte-themen`, nur mit Wert, gemeldet wie „Heute"/„Betrieb",
+  von der alten ID `el:ueberblick-karte` mitgedeckt; mit ihr ab `xl` vier Karten nebeneinander) mit Tooltip
+  „‹Entität bzw. Topic› · Stand hh:mm". Live-Antwort: neues Feld `themen[].eintraege[].kennung` (`entity_id` bzw.
+  Inbound-Topic).
+- **Demo-Modus: Themen und Standort in den Hub-Schaubildern** — `GET /api/live/{id}?demo=true` trägt feste Demo-Themen je
+  Gerätetyp (Wärmepumpe „Anlagenstatus" und „Service", Wallbox „Ladepunkt", E-Auto „Fahrzeugzustand" und „Klima"; Form wie
+  im echten Pfad, auf die Geräte der Anlage umgeschrieben wie die Knoten) und an beiden Demo-Autos den Standort „Zu Hause".
+  Der echte Live-Pfad bleibt unberührt. Galerie: Hub-Bilder neu mit Themen-Kacheln, dazu E-Auto am Handy, Wallbox mit
+  geparktem Schaubild und die Datenquellen je Hub-Gerät mit dem Block „Themen" (`scripts/galerie-screenshots.mjs` legt die
+  Themen der Datenquellen-Bilder per API in der Demo-Kopie an).
+
+### Changed
+
+- **Kacheln mit Füllstand (Energiefluss und Hub-Schaubild): die zweite Zeile steht neutral** (dunkel bzw. im Dunkelmodus weiß
+  wie der Wert) statt in der Ladestands- bzw. Zustandsfarbe über der gleichfarbigen Füllung — „ID.4 64 %", „71 %",
+  „Wartet · PV", „Ziel 80 %" sind im Hellmodus lesbar; der Zustands-Chip behält seine Farbe, Kacheln ohne Füllstand bleiben, wie sie waren.
+- **E-Mobilität → „Auf einen Blick" neben dem Schaubild:** die Karten stehen ab breiten Bildschirmen dicht untereinander,
+  ohne Leerfläche zwischen Gerätekarte und „Heute" (wie bei der Wärmepumpe).
+- **E-Auto, Szene „Fahrzeug": die Kachel „Reichweite" nennt den Kilometerstand in der zweiten Zeile ohne „Stand", wenn er
+  sonst nicht passt** („23.037 km" statt „Stand 23.037 km", das über den Kachelrand lief; Tooltip unverändert „Kilometerstand …").
+- **E-Auto, Gerätekarte am Handy: der Eigenverbrauchs-Ring steht unter dem Ladestand** (unter 640 px), statt „Ladestand"
+  und Reichweite auf wenige Pixel zusammenzudrücken, bis sie sich überlagerten (390, 360, 320 px gemessen).
+
 ## [4.1.12] - 2026-11-01 — E-Mobilität nach Konzept #433: Hub-Überblick für Wallbox und E-Auto mit den Szenen „Ladepunkt" und „Fahrzeug", „Auf einen Blick" je Karte parkbar (auch Wärme/Klima), Zustand & Sitzung, Fahrzeug am Ladepunkt und Gast, evcc-Chip ohne Template-Sensor, „Betrieb heute", Kilometerstand und „Gefahren heute"; Tabellen-Spalten E-Mobilität und Wärme/Klima; Stromrechnung mit eigenem WP-/Wallbox-Tarif (N-769, N-770, N-771); 4 Korrekturen
 
 ### Added
