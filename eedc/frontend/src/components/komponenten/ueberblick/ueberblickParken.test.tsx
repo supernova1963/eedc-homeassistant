@@ -187,6 +187,10 @@ describe('S1c: alte Park-ID `el:ueberblick-karte` (bis S1c die ganze Karte)', ()
 
 describe('TH-E2: vierte Karte «Themen» (`el:ueberblick-karte-themen`) — nur mit Wert, alte ID deckt sie, Spaltenregel', () => {
   const T = 'el:ueberblick-karte-themen'
+  // «Stand 11:27» gilt nur am selben Tag (`themaStand` ⇒ `zeitText`: anderer Tag trägt das Datum) — deshalb steht die
+  // Uhr fest auf dem Tag des Fixtures. Ohne das lief der Fall am 1.11.2026 grün und ab dem 2.11. rot (CI Release 4.2.0).
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 10, 1, 12, 0)) })
+  afterEach(() => { vi.useRealTimers() })
   const stand = new Date(2026, 10, 1, 11, 27).toISOString()
   const eintrag = (id: string, label: string, wert: string, kennung: string | null, zeitpunkt: string | null = stand): LiveThemaEintrag =>
     ({ id, label, wert, einheit: '', zeitpunkt, device_class: null, quelle: 'ha', kennung })
