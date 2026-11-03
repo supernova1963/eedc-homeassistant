@@ -20,6 +20,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Energie-Dashboard mit mehreren Solar-Quellen:** eedc schlägt dann keinen PV-Gesamtzähler mehr vor (bisher nahm es still
   die letzte Quelle). Der Integrations-Schritt sagt, dass weitere Netz-, Solar- oder Batteriequellen unter
   *Einstellungen → Datenquellen* zugeordnet werden.
+- **Cockpit → Live, „PV heute/gestern": Erzeuger mit nur einem Leistungssensor zählen mit, auch wenn ein anderer Erzeuger
+  einen Zähler hat.** Bisher fiel zum Beispiel ein Balkonkraftwerk ohne Zähler neben einem Wechselrichter mit Zähler aus der
+  Summe, wenn kein PV-Gesamtzähler der Anlage zugeordnet war (gesät: 57,0 statt 62,7 kWh); sein Wert stand nur im Tooltip.
+  Jetzt zählt jeder Erzeuger mit seiner Messung — Zähler, wo einer misst, sonst die Leistung. Mit PV-Gesamtzähler bleibt es,
+  wie es war.
 
 ### Added
 

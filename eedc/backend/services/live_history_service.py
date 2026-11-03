@@ -658,10 +658,47 @@ def _pv_verteilung_des_tages(quellen: _TagesQuellen, mess: _Tagesmessung, erzeug
     return live_pv_verteilung(erzeuger, eigen, mess.delta(quellen.basis_pv_kwh_sensor))
 
 
+def _entity_kwh(entity_id: str, mess: _Tagesmessung) -> Optional[float]:
+    """Tagesmenge einer Leistungs-Entity: kWh-Entity per Delta, W-Sensor per Trapez."""
+    if mess.ist_energie(entity_id):
+        return mess.delta(entity_id)
+    return trapez_kwh(mess.history[entity_id])
+
+
+def _pv_leistung_ohne_zaehler(
+    quellen: _TagesQuellen, mess: _Tagesmessung, gemessen: dict[str, float],
+) -> dict[str, float]:
+    """⭐ N-773 (3.11.2026): Erzeuger ohne Zählerwert, aber mit Leistungs-Entity — je Sensor seine Messung.
+
+    Bis dahin fiel, sobald EIN Erzeuger einen kWh-Zähler maß und kein Anlagenzähler zugeordnet war, die
+    Leistungsmessung der übrigen Erzeuger aus der Summe «PV heute/gestern» (gesäter Mischfall Wechselrichter-Zähler
+    57,04 + Balkonkraftwerk nur W-Sensor 5,70 ⇒ Kachel 57,0 statt 62,7); der Wert stand nur im Tooltip. Jetzt wie die
+    PV-Achse der Stunden (Bauform E4a-2): Zähler-Delta, wo ein Zähler misst, Leistungsmessung, wo nur ein W-Sensor
+    hängt. Ein Erzeuger mit Zählerwert in ``gemessen`` zählt nur mit dem Zähler (keine Doppelzählung). Nur Entities
+    der Kategorie ``pv`` mit Erzeuger-Key ``pv_<id>`` — der anlagenweite Leistungssensor (``pv_gesamt``) ist eine
+    Summe und bleibt draußen. Mit Anlagenzähler gilt weiter dessen Verteilung (N-752), diese Funktion läuft dann nicht.
+    """
+    pv_entities = set(quellen.category_entities.get("pv", []))
+    werte: dict[str, float] = {}
+    for comp_key, entity_id in quellen.component_entities.items():
+        if (
+            comp_key in gemessen
+            or entity_id not in pv_entities
+            or entity_id not in mess.history
+            or not any(comp_key.startswith(p) and comp_key[len(p):].isdigit() for p in PV_KOMPONENTEN_PREFIXE)
+        ):
+            continue
+        kwh = _entity_kwh(entity_id, mess)
+        if kwh is not None:
+            werte[comp_key] = kwh
+    return werte
+
+
 def _pv_zaehler_kwh(
     quellen: _TagesQuellen, mess: _Tagesmessung, erzeuger: list,
 ) -> Optional[float]:
-    """PV aus Zählern: Erzeuger-Einzelzähler, sonst Anlagenzähler — None ⇒ Trapez-Fallback."""
+    """PV aus Zählern: Erzeuger-Einzelzähler (ohne Anlagenzähler plus die Leistungsmessung der Erzeuger ohne Zähler,
+    N-773), sonst Anlagenzähler — None ⇒ Trapez-Fallback."""
     # N-536: erst je Erzeuger sammeln, dann das abtretende
     # Balkonkraftwerk auf seinen Rest kürzen, dann summieren. Vorher
     # stand sein Gesamtzähler neben den Zählern seiner Kinder in
@@ -686,6 +723,10 @@ def _pv_zaehler_kwh(
         z = _pv_verteilung_des_tages(quellen, mess, erzeuger)
         if z is not None and z.bilanz_kwh is not None:
             return round(z.bilanz_kwh, 1)
+        # N-773: ohne Anlagenzähler trägt jeder Erzeuger ohne Zählerwert seine Leistungsmessung bei. Steht ein
+        # Anlagenzähler in der History, bleibt es bei den Zählern (Anlagenzähler-Anlagen unverändert, auch ohne Träger).
+        if quellen.basis_pv_kwh_sensor not in mess.history:
+            pv_je_komponente.update(_pv_leistung_ohne_zaehler(quellen, mess, pv_je_komponente))
         gekuerzt = kuerze_bkw_in_werte_map(pv_je_komponente, erzeuger)
         return round(sum(gekuerzt.values()), 1)
     # F-49: kein Erzeuger misst selbst → der anlagenweite PV-Zähler.
@@ -731,10 +772,7 @@ def _kategorie_aus_entities(
     for idx, entity_id in enumerate(entity_ids):
         if entity_id not in mess.history:
             continue
-        if mess.ist_energie(entity_id):
-            kwh = mess.delta(entity_id)
-        else:
-            kwh = trapez_kwh(mess.history[entity_id])
+        kwh = _entity_kwh(entity_id, mess)
         if kwh is not None:
             werte_je_key[eid_je_key.get(entity_id, f"__{idx}")] = kwh
             has_data = True
