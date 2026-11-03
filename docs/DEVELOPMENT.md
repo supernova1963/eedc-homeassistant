@@ -260,6 +260,11 @@ neue Version — ein Commit auf `main` genügt nicht.
   bitgleich): Baseline 60 → 48; über 80 liegen nur noch `main.py::lifespan` (Start-Orchestrierung, bewusst
   ausgelassen — ihr einziger Prüfstand ist der Lab-Start) und `migrate_emob_canonical_source` (Einmal-Migration)
   neben den beiden Migrations-Ausnahmen. Nächstes Band, falls je wieder gewollt: 66–80 (15 Funktionen).
+  Seit RF-41 (3.11.2026) ist `lifespan` eine Aufrufliste der Start-Phasen `_start_*` und der Stop-Phase `_shutdown`
+  in `main.py` (Reihenfolge ist Vertrag, jede Phase mit eigenem `try/except`); ihr Gate ist
+  `tests/test_lifespan_start_stop.py` (Ausgabe- und Aufrufreihenfolge, am HEAD aufgezeichnet), der Lab-Start bleibt
+  Prüfstand für die echten Broker- und Supervisor-Zweige. `migrate_emob_canonical_source` ist seit RF-42 ein Orchestrator
+  (lädt die Zeilen, zählt die Ausgänge) über Phasen je Monat, die in `P10_PER_INVESTITION_PHASE` an ihm hängen.
 - Neuer Code liest im Stil der Nachbarschaft: gleiche Kommentar-Dichte, gleiche Benennung.
 
 ### TypeScript (Frontend)

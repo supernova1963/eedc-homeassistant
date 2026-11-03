@@ -2464,7 +2464,7 @@ _P10_FALT_SICHTFELD: tuple[str, ...] = ("backend/api/", "backend/services/")
 #:
 #: ⚠ **Der Name sagt `PER_INVESTITION`, die Kategorie ist weiter.** Ein Lader
 #: darf auch aus `P10_SCHREIBEN_IMPORT_CHECKER` kommen oder in der Schicht
-#: liegen — drei Einträge unten sind genau das (Schreib- und Löschpfade). Die
+#: liegen — mehrere Einträge unten sind genau das (Schreib- und Löschpfade; gezählt 3.11.2026: 13 von 26). Die
 #: gemeinsame Aussage ist nicht „per Investition", sondern: **diese Funktion
 #: lädt nicht, sie bekommt.** Wer den Lader verschiebt, verschiebt die Phase mit.
 #:
@@ -2552,6 +2552,31 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
         "backend/api/routes/ha_statistics.py::get_import_vorschau",
     "backend/api/routes/ha_statistics.py::_bkw_eigene_werte_kwh":
         "backend/api/routes/ha_statistics.py::get_import_vorschau",
+    # RF-42 (3.11.2026): Phasen der Einmal-Migration Phase 2a (Heimladung E-Auto → Wallbox; Boot über
+    # `_apply_once("phase_2a_emob_canonical_source")`, seit v3.36.0). Lader ist der Orchestrator
+    # `migrate_emob_canonical_source` (`P10_SCHREIBEN_IMPORT_CHECKER`, «Import / Export / Migration»), die beiden
+    # `select` sind dort geblieben. SCHREIBPFAD wie `modus_split_schreiben`: `_eauto_seite` summiert die E-Auto-
+    # Heimladung EINES Monats über die Gerätezeilen — dieselbe Summe, die die Schicht als `EmobFakten.eauto_summe`
+    # bildet (`summiere_emob_quelle`, gleicher Leser `get_emob_pv_netz_kwh`) — aber nur als Entscheidungsgröße
+    # («höherer Wert gewinnt»), die in die Wallbox-Zeile GESCHRIEBEN und nirgends ausgeliefert wird. Durch die Schicht
+    # geführt käme die Migration an die Zeilen nicht heran, in die sie schreibt und aus denen sie räumt (`MonatsFakt`
+    # trägt Mengen, keine Zeilen). Nicht gelistet und damit gewächtert: `_eautos_und_wallboxen`, `_protokolliere`.
+    # (Gegenprüfung Fable 3.11.2026: Eintragung richtig, Kommentar faktentreu gemacht.)
+    # Sammelt die Monate, in denen ein aktives E-Auto Heimladung trägt (liest je Zeile, summiert nicht).
+    "backend/services/migrations/migrate_emob_canonical_source.py::_monate_mit_eauto_heimladung":
+        "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
+    # Summiert die E-Auto-Seite EINES Monats über die übergebenen Zeilen — die Entscheidungsgröße des Schreibpfads.
+    "backend/services/migrations/migrate_emob_canonical_source.py::_eauto_seite":
+        "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
+    # Schreibt die E-Auto-Trias in die Wallbox-Zeile (legt sie ggf. an).
+    "backend/services/migrations/migrate_emob_canonical_source.py::_schreibe_eauto_trias_in_wallbox":
+        "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
+    # Räumt die Heim-Keys der E-Auto-Zeilen (Löschpfad).
+    "backend/services/migrations/migrate_emob_canonical_source.py::_raeume_eauto_heim_keys":
+        "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
+    # Entscheidet einen Monat: liest die Wallbox-Zeile, vergleicht mit der E-Auto-Summe, ruft Schreiben und Räumen.
+    "backend/services/migrations/migrate_emob_canonical_source.py::_konsolidiere_monat":
+        "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
 }
 
 #: **Checker-Pfade ohne Lader** — die Blindstelle aus dem Prüfbericht

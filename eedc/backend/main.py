@@ -161,25 +161,8 @@ async def _load_mqtt_config() -> dict | None:
     }
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Lifecycle Management für die FastAPI App.
-
-    Beim Start:
-    - Datenbank initialisieren (Tabellen erstellen falls nicht vorhanden)
-    - Scheduler starten (Cron-Jobs für Monatswechsel etc.)
-
-    Beim Shutdown:
-    - Scheduler stoppen
-    - Ressourcen freigeben
-    """
-    # Startup
-    print("EEDC Backend startet...")
-    setup_log_buffer()
-    await init_db()
-    print("Datenbank initialisiert.")
-
+async def _start_pin_ruecksetzung() -> None:
+    """Start-Phase 1 (nach der Datenbank): Rückweg für eine vergessene Einstellungs-PIN."""
     # Rückweg für eine vergessene Einstellungs-PIN — verlangt Zugriff auf die Maschine
     # (Add-on-Option bzw. Umgebungsvariable), nicht auf eine öffentliche Adresse.
     try:
@@ -191,6 +174,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.debug(f"PIN-Rücksetzung nicht prüfbar: {e}")
 
+
+async def _start_ha_verbindung() -> None:
+    """Start-Phase 2: HA-Verbindung für die Langzeitstatistik übernehmen."""
     # Die HA-Langzeitstatistik liest ohne Recorder-Zugang über die WebSocket-API.
     # Der Service ist synchron und kann die Verbindung nicht selbst nachschlagen
     # — ohne diesen Aufruf bliebe der Weg bis zum ersten Speichern der
@@ -205,6 +191,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.debug(f"HA-Verbindung für Statistik nicht ermittelbar: {e}")
 
+
+async def _start_cache_warmup() -> bool:
+    """Start-Phase 3: Wetter-Cache L2 → L1. Gibt zurück, ob der Cache kalt geblieben ist."""
     # L2-Cache → L1-Cache Warmup (sofort, bevor irgendein Request kommt)
     _cache_cold = True
     try:
@@ -218,12 +207,11 @@ async def lifespan(app: FastAPI):
             _cache_cold = False
     except Exception as e:
         logger.debug(f"Cache-Warmup fehlgeschlagen: {e}")
+    return _cache_cold
 
-    # Statische Demo-/Showcase-Deployments (z. B. Tester-Server) brauchen weder
-    # Scheduler noch externe Prefetches: keine Hintergrund-Snapshots (→ kein
-    # Default-Monat-Drift bei festen Daten), keine Wetter/Preis-API-Calls.
-    _disable_scheduler = os.environ.get("EEDC_DISABLE_SCHEDULER", "").lower() == "true"
 
+def _start_scheduler_und_prefetch(_cache_cold: bool, _disable_scheduler: bool) -> None:
+    """Start-Phase 4: Sofort-Prefetch, Scheduler und die Startläufe, die nicht am Scheduler hängen."""
     # Kein L2-Inhalt → Prefetch sofort im Hintergrund starten
     # Damit ist der Cache warm bevor der erste User die Seite lädt.
     if _cache_cold and not _disable_scheduler:
@@ -311,132 +299,152 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Kanal-Nachfüllen nicht gestartet: {e}")
 
-    # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
-    mqtt_inbound = None
-    mqtt_cfg = await _load_mqtt_config()
-    if mqtt_cfg and mqtt_cfg.get("enabled"):
-        from backend.services.mqtt_inbound_service import init_mqtt_inbound_service
 
-        host = mqtt_cfg["host"]
-        port = mqtt_cfg["port"]
-        mqtt_inbound = init_mqtt_inbound_service(
+async def _start_mqtt_gateway(host, port, mqtt_cfg: dict) -> None:
+    """Teil von Start-Phase 5: MQTT-Gateway (gleicher Broker wie der Inbound)."""
+    # MQTT-Gateway starten (nutzt gleichen Broker)
+    try:
+        from backend.services.mqtt_gateway_service import (
+            init_mqtt_gateway_service,
+            GatewayMapping,
+        )
+        from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
+
+        gateway = init_mqtt_gateway_service(
             host=host,
             port=port,
             username=mqtt_cfg.get("username") or None,
             password=mqtt_cfg.get("password") or None,
         )
-        if await mqtt_inbound.start():
-            print(f"  MQTT-Inbound: aktiv ({host}:{port})")
-
-            # Snapshot-Jobs erst jetzt registrieren — ohne MQTT würden sie alle
-            # 5 Min leer laufen und die System-Logs zumüllen (#322). Erfasst auch
-            # Gateway/Connector-Bridge, die unten in diesem Block hängen.
-            try:
-                from backend.services.scheduler import enable_mqtt_snapshot_jobs
-
-                enable_mqtt_snapshot_jobs()
-            except Exception as e:
-                logger.debug(f"MQTT-Snapshot-Jobs konnten nicht aktiviert werden: {e}")
-
-            # Initialer Energy-Snapshot nach kurzem Delay (Cache braucht erste Nachrichten)
-            async def _initial_snapshot():
-                import asyncio
-
-                await asyncio.sleep(10)
-                try:
-                    from backend.services.mqtt_energy_history_service import (
-                        snapshot_energy_cache,
+        # Aktive Mappings aus DB laden
+        async with get_session() as session:
+            result = await session.execute(
+                select(MqttGatewayMapping).where(
+                    MqttGatewayMapping.aktiv == True
+                )
+            )
+            db_mappings = result.scalars().all()
+            if db_mappings:
+                gw_mappings = [
+                    GatewayMapping(
+                        id=m.id,
+                        anlage_id=m.anlage_id,
+                        quell_topic=m.quell_topic,
+                        ziel_key=m.ziel_key,
+                        payload_typ=m.payload_typ or "plain",
+                        json_pfad=m.json_pfad,
+                        array_index=m.array_index,
+                        faktor=m.faktor if m.faktor is not None else 1.0,
+                        offset=m.offset if m.offset is not None else 0.0,
+                        invertieren=bool(m.invertieren),
                     )
-
-                    count = await snapshot_energy_cache()
-                    if count > 0:
-                        logger.info(
-                            f"MQTT Energy: Initialer Snapshot ({count} Einträge)"
-                        )
-                except Exception as e:
-                    logger.debug(f"Initialer MQTT Energy Snapshot fehlgeschlagen: {e}")
-
-            asyncio.create_task(_initial_snapshot())
-
-            # MQTT-Gateway starten (nutzt gleichen Broker)
-            try:
-                from backend.services.mqtt_gateway_service import (
-                    init_mqtt_gateway_service,
-                    GatewayMapping,
-                )
-                from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
-
-                gateway = init_mqtt_gateway_service(
-                    host=host,
-                    port=port,
-                    username=mqtt_cfg.get("username") or None,
-                    password=mqtt_cfg.get("password") or None,
-                )
-                # Aktive Mappings aus DB laden
-                async with get_session() as session:
-                    result = await session.execute(
-                        select(MqttGatewayMapping).where(
-                            MqttGatewayMapping.aktiv == True
-                        )
+                    for m in db_mappings
+                ]
+                gateway.load_mappings(gw_mappings)
+                if await gateway.start():
+                    print(
+                        f"  MQTT-Gateway: aktiv ({len(gw_mappings)} Mappings)"
                     )
-                    db_mappings = result.scalars().all()
-                    if db_mappings:
-                        gw_mappings = [
-                            GatewayMapping(
-                                id=m.id,
-                                anlage_id=m.anlage_id,
-                                quell_topic=m.quell_topic,
-                                ziel_key=m.ziel_key,
-                                payload_typ=m.payload_typ or "plain",
-                                json_pfad=m.json_pfad,
-                                array_index=m.array_index,
-                                faktor=m.faktor if m.faktor is not None else 1.0,
-                                offset=m.offset if m.offset is not None else 0.0,
-                                invertieren=bool(m.invertieren),
-                            )
-                            for m in db_mappings
-                        ]
-                        gateway.load_mappings(gw_mappings)
-                        if await gateway.start():
-                            print(
-                                f"  MQTT-Gateway: aktiv ({len(gw_mappings)} Mappings)"
-                            )
-                        else:
-                            print("  MQTT-Gateway: konnte nicht gestartet werden")
-                    else:
-                        print("  MQTT-Gateway: keine Mappings konfiguriert")
-            except Exception as e:
-                logger.warning("MQTT-Gateway: Fehler beim Starten: %s", e)
-
-            # Connector → MQTT Bridge starten (pollt Geräte-Connectoren, publisht auf MQTT)
-            try:
-                from backend.services.connector_mqtt_bridge import (
-                    init_connector_mqtt_bridge,
-                    build_targets_from_db,
-                )
-
-                bridge = init_connector_mqtt_bridge(
-                    mqtt_host=host,
-                    mqtt_port=port,
-                    mqtt_username=mqtt_cfg.get("username") or None,
-                    mqtt_password=mqtt_cfg.get("password") or None,
-                )
-                # Anlagen mit Connector-Config aus DB laden (inkl. field_inv_map)
-                async with get_session() as session:
-                    targets = await build_targets_from_db(session)
-                if targets:
-                    bridge.load_targets(targets)
-                    if await bridge.start():
-                        print(f"  Connector-Bridge: aktiv ({len(targets)} Geräte)")
-                    else:
-                        print("  Connector-Bridge: konnte nicht gestartet werden")
                 else:
-                    print("  Connector-Bridge: keine Connectors konfiguriert")
-            except Exception as e:
-                logger.warning("Connector-Bridge: Fehler beim Starten: %s", e)
-        else:
-            print("  MQTT-Inbound: konnte nicht gestartet werden")
+                    print("  MQTT-Gateway: konnte nicht gestartet werden")
+            else:
+                print("  MQTT-Gateway: keine Mappings konfiguriert")
+    except Exception as e:
+        logger.warning("MQTT-Gateway: Fehler beim Starten: %s", e)
 
+
+async def _start_connector_bridge(host, port, mqtt_cfg: dict) -> None:
+    """Teil von Start-Phase 5: Connector → MQTT Bridge."""
+    # Connector → MQTT Bridge starten (pollt Geräte-Connectoren, publisht auf MQTT)
+    try:
+        from backend.services.connector_mqtt_bridge import (
+            init_connector_mqtt_bridge,
+            build_targets_from_db,
+        )
+
+        bridge = init_connector_mqtt_bridge(
+            mqtt_host=host,
+            mqtt_port=port,
+            mqtt_username=mqtt_cfg.get("username") or None,
+            mqtt_password=mqtt_cfg.get("password") or None,
+        )
+        # Anlagen mit Connector-Config aus DB laden (inkl. field_inv_map)
+        async with get_session() as session:
+            targets = await build_targets_from_db(session)
+        if targets:
+            bridge.load_targets(targets)
+            if await bridge.start():
+                print(f"  Connector-Bridge: aktiv ({len(targets)} Geräte)")
+            else:
+                print("  Connector-Bridge: konnte nicht gestartet werden")
+        else:
+            print("  Connector-Bridge: keine Connectors konfiguriert")
+    except Exception as e:
+        logger.warning("Connector-Bridge: Fehler beim Starten: %s", e)
+
+
+def _start_mqtt_snapshots() -> None:
+    """Teil von Start-Phase 5: Snapshot-Jobs und der initiale Energy-Snapshot (nur bei laufendem Inbound)."""
+    # Snapshot-Jobs erst jetzt registrieren — ohne MQTT würden sie alle
+    # 5 Min leer laufen und die System-Logs zumüllen (#322). Erfasst auch
+    # Gateway/Connector-Bridge, die unten in diesem Block hängen.
+    try:
+        from backend.services.scheduler import enable_mqtt_snapshot_jobs
+
+        enable_mqtt_snapshot_jobs()
+    except Exception as e:
+        logger.debug(f"MQTT-Snapshot-Jobs konnten nicht aktiviert werden: {e}")
+
+    # Initialer Energy-Snapshot nach kurzem Delay (Cache braucht erste Nachrichten)
+    async def _initial_snapshot():
+        import asyncio
+
+        await asyncio.sleep(10)
+        try:
+            from backend.services.mqtt_energy_history_service import (
+                snapshot_energy_cache,
+            )
+
+            count = await snapshot_energy_cache()
+            if count > 0:
+                logger.info(
+                    f"MQTT Energy: Initialer Snapshot ({count} Einträge)"
+                )
+        except Exception as e:
+            logger.debug(f"Initialer MQTT Energy Snapshot fehlgeschlagen: {e}")
+
+    asyncio.create_task(_initial_snapshot())
+
+
+async def _start_mqtt():
+    """Start-Phase 5: MQTT-Inbound, danach Gateway und Connector-Bridge. Gibt den Inbound-Dienst zurück (oder None)."""
+    # MQTT-Inbound starten (DB-Settings haben Vorrang vor Env-Vars)
+    mqtt_inbound = None
+    mqtt_cfg = await _load_mqtt_config()
+    if not (mqtt_cfg and mqtt_cfg.get("enabled")):
+        return mqtt_inbound
+    from backend.services.mqtt_inbound_service import init_mqtt_inbound_service
+
+    host = mqtt_cfg["host"]
+    port = mqtt_cfg["port"]
+    mqtt_inbound = init_mqtt_inbound_service(
+        host=host,
+        port=port,
+        username=mqtt_cfg.get("username") or None,
+        password=mqtt_cfg.get("password") or None,
+    )
+    if await mqtt_inbound.start():
+        print(f"  MQTT-Inbound: aktiv ({host}:{port})")
+        _start_mqtt_snapshots()
+        await _start_mqtt_gateway(host, port, mqtt_cfg)
+        await _start_connector_bridge(host, port, mqtt_cfg)
+    else:
+        print("  MQTT-Inbound: konnte nicht gestartet werden")
+    return mqtt_inbound
+
+
+def _start_initial_prefetch(_disable_scheduler: bool) -> None:
+    """Start-Phase 6 (nach MQTT): der verzögerte Prognose-Prefetch."""
     # Initialer Prognose-Prefetch nach kurzem Delay (DB + Scheduler müssen bereit
     # sein). Im statischen Demo-Modus übersprungen — der Prefetch holt externe
     # Wetterdaten UND persistiert eine HEUTE-Tageszeile (Default-Monat-Drift).
@@ -455,9 +463,9 @@ async def lifespan(app: FastAPI):
     if not _disable_scheduler:
         asyncio.create_task(_initial_prefetch())
 
-    yield
 
-    # Shutdown
+async def _shutdown(mqtt_inbound) -> None:
+    """Stop-Phase: MQTT-Inbound, Gateway, Bridge — erst danach der Scheduler (Reihenfolge ist Vertrag)."""
     if mqtt_inbound:
         await mqtt_inbound.stop()
     # Gateway + Bridge stoppen
@@ -479,6 +487,49 @@ async def lifespan(app: FastAPI):
         pass
     stop_scheduler()
     print("EEDC Backend wird beendet...")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifecycle Management für die FastAPI App.
+
+    Beim Start:
+    - Datenbank initialisieren (Tabellen erstellen falls nicht vorhanden)
+    - Scheduler starten (Cron-Jobs für Monatswechsel etc.)
+
+    Beim Shutdown:
+    - Scheduler stoppen
+    - Ressourcen freigeben
+
+    Form (RF-41, 3.11.2026): eine Aufrufliste der Start-Phasen `_start_*` und der Stop-Phase `_shutdown`
+    in der Reihenfolge des früheren Rumpfs — **Reihenfolge ist Vertrag** (Scheduler erst nach der Datenbank;
+    MQTT-Snapshot-Jobs erst nach dem Scheduler; MQTT-Dienste stoppen vor dem Scheduler). Jede Phase behält ihr
+    eigenes `try/except` und ihre Ausgabezeilen wortgleich; Gate `tests/test_lifespan_start_stop.py`.
+    """
+    # Startup
+    print("EEDC Backend startet...")
+    setup_log_buffer()
+    await init_db()
+    print("Datenbank initialisiert.")
+
+    await _start_pin_ruecksetzung()
+    await _start_ha_verbindung()
+    _cache_cold = await _start_cache_warmup()
+
+    # Statische Demo-/Showcase-Deployments (z. B. Tester-Server) brauchen weder
+    # Scheduler noch externe Prefetches: keine Hintergrund-Snapshots (→ kein
+    # Default-Monat-Drift bei festen Daten), keine Wetter/Preis-API-Calls.
+    _disable_scheduler = os.environ.get("EEDC_DISABLE_SCHEDULER", "").lower() == "true"
+
+    _start_scheduler_und_prefetch(_cache_cold, _disable_scheduler)
+    mqtt_inbound = await _start_mqtt()
+    _start_initial_prefetch(_disable_scheduler)
+
+    yield
+
+    # Shutdown
+    await _shutdown(mqtt_inbound)
 
 
 # FastAPI App erstellen
