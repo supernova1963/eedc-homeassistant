@@ -247,7 +247,7 @@ export function AnlagenVerwaltung() {
         onConfirm={handleDelete}
         title="Anlage löschen"
         itemLabel={<>Anlage „{deleteConfirm?.anlagenname}" wird unwiderruflich gelöscht.</>}
-        warningMessage="Alle zugehörigen Monatsdaten, Investitionen, Strompreise, Sensor-Mappings und Prognosen gehen verloren."
+        warningMessage="Alle zugehörigen Monatsdaten, Investitionen, Strompreise, Datenquellen-Zuordnungen und Prognosen gehen verloren."
         anlageId={deleteConfirm?.id}
         anlageName={deleteConfirm?.anlagenname || ''}
       />

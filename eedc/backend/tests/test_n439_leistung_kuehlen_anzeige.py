@@ -29,7 +29,8 @@ die Wahrheit).
 
 ## Warum diese Datei die echte Uhr liest
 
-⚠ **Eine Ablesung, in einer Konstanten, die alle Proben teilen** (``_JETZT``) —
+⚠ **Eine Ablesung je Probe, in einer Konstanten, die die Helfer der Probe teilen** (``_JETZT``, gesetzt von der
+autouse-Fixture ``_uhr_je_probe`` — bis 3.11.2026 beim Import, das kippte im CI-Lauf Auckland über Mitternacht) —
 und sie ist unvermeidbar: Beide Tagesverlauf-Pfade verankern ihr Fenster
 **selbst** an ``datetime.now()`` (``get_tagesverlauf`` / ``_get_tagesverlauf_mqtt``
 rechnen ``start`` aus ``now`` und ``tage_zurueck``). Ein festes Datum in der
@@ -248,7 +249,15 @@ def _mapping(inv_id: int) -> dict:
 #: ⚠ **Die EINE Ablesung der Prozessuhr in dieser Datei** — Begründung im
 #: Modul-Docstring (Abschnitt „Warum diese Datei die echte Uhr liest").
 #: `test_konformitaet_echte_uhr_in_tests.py::_BASELINE` führt sie mit **1**.
-_JETZT: datetime = datetime.now()
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+_JETZT: datetime
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global _JETZT
+    _JETZT = datetime.now()
 
 
 def _gestern(stunde: int, minute: int = 0) -> datetime:

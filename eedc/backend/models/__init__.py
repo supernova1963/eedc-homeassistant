@@ -7,6 +7,9 @@ from backend.models.settings import Settings
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.models.activity_log import ActivityLog
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+# Triage 3.11.2026: registriert, damit `Base.metadata.create_all` (conftest, init_db) die Tabelle immer anlegt —
+# bis dahin hing sie an der Import-Reihenfolge (eine Testdatei allein lief ohne Tabelle).
+from backend.models.mqtt_live_snapshot import MqttLiveSnapshot
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.models.infothek import InfothekEintrag, InfothekDatei
 from backend.models.korrekturprofil import Korrekturprofil
@@ -28,6 +31,7 @@ __all__ = [
     "PVGISMonatsprognose",
     "ActivityLog",
     "MqttEnergySnapshot",
+    "MqttLiveSnapshot",
     "TagesEnergieProfil",
     "TagesZusammenfassung",
     "InfothekEintrag",

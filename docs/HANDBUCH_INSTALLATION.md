@@ -130,11 +130,9 @@ Siehe [DEVELOPMENT.md](DEVELOPMENT.md) für die lokale Entwicklungsumgebung (Bac
 
 Beim **ersten Start** – wenn noch keine Anlage angelegt ist – begrüßt dich ein geführter Assistent und richtet eedc in wenigen Schritten ein. Der Assistent erscheint automatisch, solange in der Datenbank **keine Anlage** vorhanden ist; die Datenbank hat dabei Vorrang vor dem Browser-Speicher. Das Anlegen dauert rund 2–3 Minuten.
 
-Der Wizard läuft **vor der eigentlichen App**. Auf jedem Schritt gibt es oben rechts einen **Hilfe-Knopf**, der genau den passenden Abschnitt dieses Kapitels als Overlay einblendet – ohne die Einrichtung zu verlassen.
+Der Wizard läuft **vor der eigentlichen App**. Was ein Schritt bedeutet, steht direkt in ihm; dieses Kapitel beschreibt dieselben Schritte ausführlicher.
 
 > **Umgebungsabhängig:** Ein Teil der Schritte passt sich deiner Umgebung an. Der **Integrations-Schritt** sieht im HA-Add-on anders aus als im Standalone-Betrieb, und einzelne Felder erscheinen nur, wenn sie in deiner Umgebung sinnvoll sind. Die folgenden Abschnitte beschreiben den vollen Umfang.
-
-> Dieses Kapitel beschreibt den **Flip-Zustand (v4.0)**. Bis zum Flip sind der **Integrations-Schritt**, das Feld **Straße & Hausnummer** und der Abschluss-Absprung **„Sensor- & Topic-Pflege"** noch hinter dem `IA_V4`-Schalter verborgen; mit **v4.0** erscheinen sie regulär. *(Interner Merker: Das Kontext-Hilfe-Overlay wird über `WIZARD_HILFE_AKTIV` erst im Flip-Zug scharfgeschaltet – nicht vorher anfassen.)*
 
 ### Erst-Setup
 
@@ -199,6 +197,8 @@ Dieser Schritt bindet – ganz optional – deine **Datenquellen** an. Er passt 
 
 **Im Home-Assistant-Add-on** ist HA bereits verbunden. eedc liest deine **HA-Energy-Dashboard-Konfiguration** und schlägt dir daraus passende Sensoren vor – für die Anlage insgesamt und für einzelne Komponenten. Du hakst die gewünschten Vorschläge an und übernimmst sie mit **„Ausgewählte übernehmen"**. Die Übernahme ist immer **bestätigt**, nie still. Zusätzlich kannst du den **MQTT-Export** aktivieren.
 
+> **Je Feld eine Quelle:** eedc schlägt für jedes Feld höchstens einen Sensor vor — beim Netz das erste Bezugs-/Einspeise-Paar, bei der Batterie die erste Batterie, und den PV-Gesamtzähler nur, wenn dein Energie-Dashboard **genau eine** Solar-Quelle kennt (mehrere Solar-Quellen sind Teilmengen, keine Anlagensumme). Weitere Netz-, Solar- oder Batteriequellen ordnest du unter *Einstellungen → Datenquellen* zu.
+
 **Im Standalone-Betrieb** fragt eedc zuerst: *„Nutzt du eine externe Home-Assistant-Instanz?"*
 
 - **Ja, HA verbinden** – du hinterlegst die HA-Basis-URL und einen **langlebigen Zugriffstoken**. Den Token erstellst du in Home Assistant unter *Profil → Sicherheit → „Langlebige Zugriffstoken" → Token erstellen*. Nach **„Verbinden & testen"** stehen dieselben Energy-Dashboard-Vorschläge zur Verfügung wie im Add-on. Auch hier ist der **MQTT-Export** zusätzlich möglich.
@@ -210,7 +210,7 @@ Dieser Schritt bindet – ganz optional – deine **Datenquellen** an. Er passt 
 
 > **Ein Broker, klare Richtungen:** eedc nutzt genau einen MQTT-Broker. Im HA-Zweig ist MQTT reiner Export; im Nur-MQTT-Zweig kommen empfangene Werte **und** Export über denselben Broker. Die Details der Broker-Verbindung stehen in [Teil III: Einstellungen → Integration](HANDBUCH_EINSTELLUNGEN.md#6-integration).
 
-> **Takt-Hinweis:** Nicht jeder HA-Sensor eignet sich als Datenquelle – manche melden zu selten für eine stündliche Auswertung. Übernommene bzw. zugeordnete Sensoren werden deshalb in der Datenquellen-Fläche auf ihren **Melde-Takt** geprüft (Takt-Check); bei zu grobem Takt bekommst du dort einen Hinweis und kannst die Zuordnung trotzdem bewusst übernehmen. Diese Prüfung läuft in der Datenquellen-Pflege, siehe [Teil III: Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). *(Redaktion: prüfen, ob der Takt-Check-Hinweis mit v4.0 auch schon im Wizard-Schritt selbst sichtbar ist oder erst in der Datenquellen-Fläche – aktueller Code läuft im Picker.)*
+> **Takt-Hinweis:** Nicht jeder HA-Sensor eignet sich als Datenquelle – manche melden zu selten für eine stündliche Auswertung. Übernommene bzw. zugeordnete Sensoren werden deshalb in der Datenquellen-Fläche auf ihren **Melde-Takt** geprüft (Takt-Check); bei zu grobem Takt bekommst du dort einen Hinweis und kannst die Zuordnung trotzdem bewusst übernehmen. Diese Prüfung läuft in der Datenquellen-Pflege (beim Auswählen eines Sensors), nicht schon im Wizard-Schritt, siehe [Teil III: Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung).
 
 ### Erst-Setup: Abschluss
 

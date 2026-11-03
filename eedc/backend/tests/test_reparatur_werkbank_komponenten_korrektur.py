@@ -9,8 +9,11 @@ liefert Boundary-Diff jetzt korrekte Per-Typ-Werte. Daher:
 
 - Bei `source=Source.MANUAL_REPAIR` MUSS Boundary-Diff laufen (sonst Reparatur
   unwirksam für die einzigen Werte, die der User reparieren wollte).
-- Bei `datum >= today` BLEIBT der Skip — Self-Healing kann hier den
-  AKTUELLEN Counter-Stand statt einen Tagesgrenz-Wert liefern.
+- Bei `datum > today` BLEIBT der Skip. Für `datum == today` ist er seit N-772
+  (3.11.2026) aufgehoben: der Tageswert kommt aus derselben slot-basierten
+  Tagestabelle wie die Stunden (E5), ein Zukunfts-Rand hat keinen Stand — das
+  Self-Heal-Problem des alten Rand-Diffs (AKTUELLER Stand statt Tagesgrenze)
+  besteht dort nicht mehr.
 - Preserve-Logik (alte Werte behalten wenn alle Quellen leer) bleibt als
   defensiver Schutz für seltene Konstellationen.
 """
@@ -141,9 +144,10 @@ async def test_manuell_0h_und_leerer_boundary_behaelt_alte_werte(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manuell_heute_ueberspringt_boundary_diff_weiterhin(db) -> None:
-    """`datum == today` skippt Boundary auch bei `datenquelle='manuell'` —
-    der today-Skip ist strukturell (Bug B), nicht symptomatisch."""
+async def test_manuell_heute_traegt_den_tageswert_der_snapshot_tabelle(db) -> None:
+    """`datum == today` mit `source=MANUAL_REPAIR`: wie der Scheduler übernimmt
+    der Snapshot-Pfad den Tageswert seiner Tagestabelle (N-772, 3.11.2026;
+    bis v4.2.1 der strukturelle Today-Skip aus #290 Bug B)."""
     from backend.services.energie_profil.aggregator import aggregate_day
 
     anlage = Anlage(
@@ -178,7 +182,5 @@ async def test_manuell_heute_ueberspringt_boundary_diff_weiterhin(db) -> None:
         result = await aggregate_day(anlage, heute, db, source=Source.MANUAL_REPAIR)
 
     assert result is not None
-    # Der Snapshot-Tageswert darf für heute NICHT geschrieben werden (Bug B bleibt).
-    # Seit E5 liefert dieselbe Tabelle auch die Stunden — sie wird also gerufen;
-    # ihr Tageswert aber nicht übernommen.
-    assert "waermepumpe_99" not in (result.komponenten_kwh or {})
+    # Seit N-772 gilt der Tageswert der Tabelle auch heute (vorher: nicht übernommen).
+    assert (result.komponenten_kwh or {}).get("waermepumpe_99") == 99.9

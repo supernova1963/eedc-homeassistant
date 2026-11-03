@@ -40,9 +40,10 @@ Was dadurch nicht ungeprueft bleibt, haelt `test_auslieferungspfad_existiert_in_
 weiter unten fest.
 
 ⚠ **Sie traegt auch NICHT den Add-on-Modus.** Der App-Boot laeuft hier ohne
-`SUPERVISOR_TOKEN`; die drei Router hinter `HA_INTEGRATION_AVAILABLE`
-(`ha_integration`, `sensor_mapping`, `ha_statistics`-Teile) sind dabei gar nicht
-erst eingehaengt und stehen deshalb in keiner Baseline-Zeile. Gemessen am
+`SUPERVISOR_TOKEN`; die Router hinter `HA_INTEGRATION_AVAILABLE`
+(heute nur noch `ha_integration`; `ha_statistics` seit N-237 und `sensor_mapping` seit
+dem Paeckchen Triage 3.11.2026 haengen an der Verbindung und sind immer da) sind dabei gar
+nicht erst eingehaengt und stehen deshalb in keiner Baseline-Zeile. Gemessen am
 2026-08-25: 0 von 268 Zeilen. Das ist dieselbe Klasse wie der Auslieferungs-Absatz
 darueber -- ein Vertrag, der von der Umgebung abhaengt --, nur eine Ebene groesser:
 dort fehlten drei Routen, hier fehlt eine Betriebsart. **Bewusst nicht ausgebaut**

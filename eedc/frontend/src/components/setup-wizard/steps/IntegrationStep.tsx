@@ -61,12 +61,14 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
   // ── Energy-Dashboard-Vorschläge (#197 — Add-on ODER Remote nach Token) ───
   const haVerbunden = haAvailable || remoteStatus === 'ok'
   const [vorschlaege, setVorschlaege] = useState<HAEnergySuggestResponse | null>(null)
+  const [vorschlagFehler, setVorschlagFehler] = useState(false)
   const [auswahl, setAuswahl] = useState<Record<string, boolean>>({})
   const [uebernommen, setUebernommen] = useState<number | null>(null)
   const [uebernehmeLaeuft, setUebernehmeLaeuft] = useState(false)
 
   useEffect(() => {
     if (!haVerbunden || anlageId == null) return
+    setVorschlagFehler(false)
     sensorMappingApi.getHAEnergySuggestions(anlageId)
       .then((r) => {
         setVorschlaege(r)
@@ -79,7 +81,10 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
           setAuswahl(alle)
         }
       })
-      .catch(() => setVorschlaege(null))
+      .catch(() => {
+        setVorschlaege(null)
+        setVorschlagFehler(true)
+      })
   }, [haVerbunden, anlageId])
 
   const uebernehmeVorschlaege = useCallback(async () => {
@@ -214,7 +219,13 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
               <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800 dark:text-gray-200">
                 <Lightbulb className="w-4 h-4 text-amber-500" /> Sensor-Vorschläge aus deinem HA-Energy-Dashboard
               </p>
-              {vorschlaege == null && <p className="text-xs text-gray-500 dark:text-gray-400">Vorschläge werden geladen …</p>}
+              {vorschlaege == null && !vorschlagFehler && <p className="text-xs text-gray-500 dark:text-gray-400">Vorschläge werden geladen …</p>}
+              {vorschlaege == null && vorschlagFehler && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Die Vorschläge ließen sich nicht abrufen — Sensoren später unter
+                  Einstellungen → Datenquellen zuordnen.
+                </p>
+              )}
               {vorschlaege != null && !vorschlaege.available && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Keine Energy-Dashboard-Konfiguration gefunden — Sensoren später unter
@@ -223,6 +234,10 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
               )}
               {vorschlaege?.available && uebernommen == null && (
                 <>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    eedc schlägt je Feld eine Quelle vor; weitere Netz-, Solar- oder Batteriequellen deines
+                    Energie-Dashboards ordnest du unter Einstellungen → Datenquellen zu.
+                  </p>
                   <div className="space-y-1">
                     {vorschlagZeilen.map((z) => (
                       <Checkbox

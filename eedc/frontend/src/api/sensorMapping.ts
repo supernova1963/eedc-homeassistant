@@ -39,8 +39,8 @@ export interface HAEnergySuggestResponse {
 export const sensorMappingApi = {
   /**
    * Vorschläge aus der HA-Energiekonfiguration abrufen (#197).
-   * Add-on-only: gibt available=false zurück wenn kein SUPERVISOR_TOKEN
-   * gesetzt ist oder /config/.storage/core.energy fehlt.
+   * Add-on: Supervisor-Datei; Standalone mit Remote-HA: Prefs per WebSocket.
+   * Ohne HA-Verbindung (oder ohne Energy-Konfiguration) available=false.
    */
   async getHAEnergySuggestions(anlageId: number): Promise<HAEnergySuggestResponse> {
     return api.get<HAEnergySuggestResponse>(`/sensor-mapping/${anlageId}/suggest`)

@@ -28,8 +28,17 @@ from backend.models import Anlage, Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services.energie_profil.tag_status import baue_tag_status
 
-GESTERN = date.today() - timedelta(days=1)
-VORGESTERN = date.today() - timedelta(days=2)
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+GESTERN: date
+VORGESTERN: date
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global GESTERN, VORGESTERN
+    GESTERN = date.today() - timedelta(days=1)
+    VORGESTERN = date.today() - timedelta(days=2)
 
 
 def _mapping(*, basis: bool = True) -> dict:

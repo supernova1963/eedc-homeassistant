@@ -450,7 +450,7 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
         <div className="absolute right-0 top-full mt-1 z-[10000] w-72 max-w-[calc(100vw-2rem)] p-3 bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg shadow-xl text-left">
           <div className="text-xs font-semibold text-white mb-1">IST-Daten unvollständig</div>
           <div className="text-xs text-gray-300 leading-relaxed mb-2">
-            Ohne Werte für {stundenLabel}. Falls eedc oder HA kürzlich neu gestartet wurden, schließt sich die Lücke beim nächsten Snapshot-Zyklus (max. 1 h). Bleibt sie bestehen, ist wahrscheinlich der kumulative Zähler im Sensor-Mapping nicht gesetzt.
+            Ohne Werte für {stundenLabel}. Falls eedc oder HA kürzlich neu gestartet wurden, schließt sich die Lücke beim nächsten Snapshot-Zyklus (max. 1 h). Bleibt sie bestehen, ist wahrscheinlich der kumulative Zähler unter Einstellungen → Datenquellen nicht zugeordnet.
           </div>
           {feedback && (
             // Chips auf dem dunklen Pop-up in beiden Modi in der Dark-Variante.
@@ -467,7 +467,7 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
             <a
               href="#/einstellungen/datenquellen"
               className={buttonClasses({ variant: 'secondary', size: 'sm' })}
-            >Sensor-Mapping</a>
+            >Datenquellen</a>
           </div>
         </div>
       )}

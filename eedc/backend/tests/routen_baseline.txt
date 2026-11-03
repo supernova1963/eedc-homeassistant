@@ -180,6 +180,7 @@ GET /api/redoc
 GET /api/repair/kanal-auswahl
 GET /api/repair/plans
 GET /api/scheduler
+GET /api/sensor-mapping/{anlage_id}/suggest
 GET /api/settings
 GET /api/solar-prognose/{anlage_id}
 GET /api/sperre/status

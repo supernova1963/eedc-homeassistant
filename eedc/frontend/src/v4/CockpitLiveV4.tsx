@@ -450,8 +450,8 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           <Activity className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">Keine Live-Daten verfügbar</h2>
           <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            Um Live-Daten zu sehen, konfiguriere Leistungs-Sensoren über eine der beiden Optionen:
-            Sensor-Zuordnung (Einstellungen → Home Assistant) oder MQTT-Inbound (Einstellungen → MQTT).
+            Um Live-Daten zu sehen, ordne Leistungs-Sensoren unter Einstellungen → Datenquellen zu —
+            als Home-Assistant-Sensor oder per MQTT.
           </p>
         </div>
       )}

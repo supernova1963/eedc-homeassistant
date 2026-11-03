@@ -419,8 +419,8 @@ export default function HAStatistikImport() {
 
             {!vorschau && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-                Wichtig: Stellen Sie sicher, dass das Sensor-Mapping für diese Anlage konfiguriert ist,
-                damit die HA-Sensoren den eedc-Feldern zugeordnet werden können.
+                Wichtig: Stellen Sie sicher, dass die HA-Sensoren dieser Anlage unter Einstellungen → Datenquellen
+                den eedc-Feldern zugeordnet sind.
               </p>
             )}
           </div>

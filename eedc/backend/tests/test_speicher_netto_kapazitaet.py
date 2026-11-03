@@ -40,8 +40,17 @@ from backend.core.investition_kennwerte import (
 from backend.models import Anlage, Investition
 from backend.tests import factories
 
-HEUTE = date.today()
-MORGEN = HEUTE + timedelta(days=1)
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+HEUTE: date
+MORGEN: date
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global HEUTE, MORGEN
+    HEUTE = date.today()
+    MORGEN = HEUTE + timedelta(days=1)
 
 _BRUTTO_KWH = 10.0
 _NETTO_KWH = 8.0

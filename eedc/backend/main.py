@@ -114,13 +114,17 @@ from backend.api.routes import ha_export
 # Token-Betrieb unerreichbar, obwohl Cockpit und Monatsabschluss dieselben
 # Werte lesen.
 from backend.api.routes import ha_statistics
+# Die Energy-Dashboard-Vorschläge (#197) hängen ebenso an der VERBINDUNG
+# (Paeckchen Triage 3.11.2026, Bauform wie N-237): `/suggest` liest im Add-on die
+# Supervisor-Datei und im Standalone mit Remote-HA die Prefs per WebSocket (D2),
+# ohne Verbindung antwortet es `available=False`. Bis dahin hing der Router am
+# Supervisor — der Setup-Wizard bekam im Standalone den SPA-Fallback (HTML) und
+# blieb bei «Vorschläge werden geladen …» stehen.
+from backend.api.routes import sensor_mapping
 
 # Supervisor-gebundene Imports (Add-on-API — ohne Supervisor gibt es sie nicht)
 if HA_INTEGRATION_AVAILABLE:
-    from backend.api.routes import (
-        ha_integration,
-        sensor_mapping,
-    )
+    from backend.api.routes import ha_integration
 
 
 async def _load_mqtt_config() -> dict | None:
@@ -673,11 +677,13 @@ app.include_router(
     ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"]
 )
 
+# Energy-Dashboard-Vorschläge: immer gemountet, die Route prüft die Verbindung selbst (s. Import oben).
+app.include_router(
+    sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]
+)
+
 if HA_INTEGRATION_AVAILABLE:
     app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
-    app.include_router(
-        sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]
-    )
     print("  HA-Integration: aktiv (SUPERVISOR_TOKEN gesetzt)")
 else:
     print("  HA-Integration: nicht verfügbar (Standalone-Modus)")

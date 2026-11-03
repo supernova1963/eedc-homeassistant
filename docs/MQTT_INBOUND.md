@@ -369,14 +369,12 @@ SoT der Regeln: Anzeige
 `backend/core/berechnungen/datenquellen.py::merge_datenquellen`, Schreiben
 `backend/services/provenance.py::write_with_provenance`.
 
-## Home Assistant Automation Generator
+## Home Assistant als Sender
 
-EEDC enthaelt einen integrierten **HA Automation Generator** unter *Einstellungen → MQTT-Inbound*. Dort kannst du deine HA-Sensoren den EEDC-Topics zuordnen und erhaeltst zwei fertige YAML-Automationen (Live + Energy) zum Kopieren.
-
-1. In EEDC: **Einstellungen → MQTT-Inbound → HA Automation Generator** aufklappen
-2. Pro Topic deine HA-Entity eintragen (z.B. `sensor.pv_power`)
-3. Intervall waehlen (5s, 10s, 30s oder 60s)
-4. Fertiges YAML kopieren und in Home Assistant einfuegen
+Einen eingebauten Automations-Generator gibt es seit der Oberfläche 4.0 nicht mehr. Wer Werte aus Home Assistant
+per MQTT an eedc schickt, legt die Automation selbst an — Vorlage im nächsten Abschnitt. Im HA-Add-on ist das
+in der Regel unnötig: dort ordnest du HA-Sensoren direkt unter *Einstellungen → Datenquellen* zu, ohne MQTT.
+Die erwarteten Topics deiner Anlage zeigt der Block **MQTT-Topics** am Ende der Datenquellen-Fläche zum Kopieren.
 
 ## Beispiel-Flows (andere Systeme)
 

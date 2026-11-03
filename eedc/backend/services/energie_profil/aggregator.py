@@ -1614,8 +1614,10 @@ async def komponenten_tagesgesamt_und_peaks(
     # Vier andere Schutzmaßnahmen aus Audit §5.1.1 bewusst UNANGETASTET:
     #   1. BKW-Bug-Fix Live-Σ-Bypass (Z. 403) — schützt vor BKW-Schema-
     #      Mismatch-Doppelzählung (Rainer-PN 2026-05-19).
-    #   2. Snapshot-Fallback bleibt an `datum < today` gekoppelt (Z. 531) —
-    #      #290 Bug B Schutz für die Snapshot-Variante bleibt aktiv.
+    #   2. (aufgehoben mit N-772, 3.11.2026, s. unten am `elif`) — der
+    #      Snapshot-Pfad hing an `datum < today` (#290 Bug B); seit die
+    #      Snapshot-Tabelle slot-basiert ist, gilt der Grund nicht mehr. Nur der
+    #      Snapshot-Rückfall INNERHALB des LTS-Pfads bleibt an `datum < today`.
     #   3. `live_snapshot_if_missing` im HA-Add-on deaktiviert (#184).
     #   4. LTS-Statistics-Lag (Stunde verfügbar ~5 min nach voller Stunde).
     #
@@ -1640,13 +1642,22 @@ async def komponenten_tagesgesamt_und_peaks(
             f"Anlage {anlage.id}, {datum}: Boundary-Diff übersprungen für "
             f"Zukunfts-Tag — keine Daten verfügbar."
         )
-    elif tages_tabelle is not None and (
-        kwh_source_label == "external:ha_statistics:hourly" or datum < date.today()
-    ):
+    elif tages_tabelle is not None:
         # Zählerlücken wie HA (R5b/E5): Σ der in den Stunden verwendeten
         # Gerätewerte aus DERSELBEN Tagestabelle — kein zweiter Lesezugriff, und
-        # im Snapshot-Pfad dasselbe Stundenfenster wie im HA-Pfad. Der
-        # Snapshot-Pfad bleibt an `datum < heute` gekoppelt (#290 Bug B).
+        # im Snapshot-Pfad dasselbe Stundenfenster wie im HA-Pfad.
+        # N-772 (3.11.2026): auch am laufenden Tag, im Snapshot-Pfad wie im
+        # LTS-Pfad. Bis dahin hing der Snapshot-Pfad an `datum < heute` (#290
+        # Bug B) — die Begründung galt dem alten Rand-Diff
+        # `snap[Folgetag 00:00] − snap[Tag 00:00]`, den das Self-Healing mit dem
+        # AKTUELLEN Stand füllte. Die Tabelle ist slot-basiert wie die LTS-
+        # Variante: ein Rand in der Zukunft hat keinen Stand (DB ±5 min, HA ±10
+        # min, MQTT ±10 min), sein Slot bleibt leer, `komponenten_kwh` ist die
+        # Teilsumme der abgelaufenen Stunden — dieselben Stunden, die die
+        # Stunden-Schleife schon heute aus dieser Tabelle schreibt. Ohne das trug
+        # der Tag (Standalone/MQTT ohne HA-LTS) die Live-Σ der Kurve: Riemann
+        # statt Zähler, die Wärmepumpe mit negativem Vorzeichen (Lab 26.10.:
+        # 2,0 statt 2,75 kWh), am Folgetag ersetzt durch den Zählerwert.
         boundary_kwh = dict(tages_tabelle.komponenten_kwh)
         pv_marken.update(tages_tabelle.pv_marken)
     if not boundary_kwh and datum < date.today() and kwh_source_label == "external:ha_statistics:hourly":

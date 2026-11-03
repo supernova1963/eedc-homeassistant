@@ -152,7 +152,7 @@ export default function WelcomeStep({ onNext, onLoadDemo, onImportComplete }: We
             <p className="mt-2 text-sm text-green-600 dark:text-green-400">{importSuccess}</p>
           )}
           <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-            Importiert Anlage, Strompreise, Investitionen, Monatsdaten und Sensor-Mapping
+            Importiert Anlage, Strompreise, Investitionen, Monatsdaten und die Datenquellen-Zuordnung
           </p>
         </div>
 

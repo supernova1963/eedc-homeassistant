@@ -128,6 +128,15 @@ def _suggestions_aus_prefs(data: dict) -> HAEnergySuggestions:
 
     suggestions: list[EnergySourceSuggestion] = []
     battery: Optional[BatterySuggestion] = None
+    # Mehrere Solar-Quellen (z. B. zwei Wechselrichter, ein Balkonkraftwerk) sind
+    # Teilmengen, kein Anlagenzähler: bis 3.11.2026 gewann still die letzte als
+    # `pv_gesamt`. Jetzt kein Vorschlag — der Wizard nennt den Weg über die
+    # Datenquellen (Paeckchen Triage 3.11.2026, P4). Netz (erstes Paar) und
+    # Batterie (erste Quelle) bleiben unverändert.
+    solar_entities = [
+        src.get("stat_energy_from") for src in sources
+        if src.get("type") == "solar" and src.get("stat_energy_from")
+    ]
 
     for src in sources:
         typ = src.get("type")
@@ -144,7 +153,7 @@ def _suggestions_aus_prefs(data: dict) -> HAEnergySuggestions:
                     break
         elif typ == "solar":
             ent = src.get("stat_energy_from")
-            if ent:
+            if ent and len(solar_entities) == 1:
                 suggestions.append(EnergySourceSuggestion(feld="pv_gesamt", entity_id=ent))
         elif typ == "battery":
             # Erste Batterie-Quelle gewinnt — bei mehreren Speichern pflegt der User manuell

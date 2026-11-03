@@ -15,9 +15,13 @@ Diese Tests halten beide Schutzmechanismen fest:
 
 - **Preserve**: `source == Source.MANUAL_REPAIR` + `stunden_count == 0` →
   bestehende `komponenten_kwh` / `komponenten_starts` bleiben unverändert.
-- **Snapshot-Today-skip**: `datum == date.today()` ohne aktiven LTS-Pfad →
-  Snapshot-`get_komponenten_tageskwh` wird NICHT aufgerufen (Snapshot-
-  Variante hat das `snap[Folgetag 00:00]`-Self-Heal-Problem).
+- **Snapshot-Today** (gedreht mit N-772, 3.11.2026): der Today-Skip galt dem
+  alten Rand-Diff `snap[Folgetag 00:00] − snap[Tag 00:00]` (Self-Heal-Problem,
+  „today-so-far" gegen eine andere Σ-Hourly). Seit „Zählerlücken wie HA" (E5)
+  kommt der Tageswert aus DERSELBEN slot-basierten Tagestabelle wie die
+  Stunden (Σ Slots, Zukunfts-Ränder ohne Stand) — dieselbe Eigenschaft, mit
+  der v3.34.1 den LTS-Pfad für heute geöffnet hat. Heute gewinnt also auch im
+  Snapshot-Pfad der Tageswert der Tabelle über die Live-Σ der Kurve.
 
 Hinweis: seit B-clean v3.34.1 (Audit §5.1.1 / #620 MartyBr) ist der
 Today-SKIP NUR noch auf die Snapshot-Variante beschränkt. Bei aktivem
@@ -163,13 +167,13 @@ async def test_scheduler_0h_setzt_komponenten_kwh_auf_none(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_heute_ueberspringt_boundary_diff(db) -> None:
-    """Für `datum == today` darf die Snapshot-Boundary-Diff nicht laufen —
-    sonst liefert Self-Healing aus HA-history einen Inflationswert (#290
-    detLAN 30,5 vs 3,57). Seit B-clean v3.34.1 (Audit §5.1.1) gilt der
-    SKIP nur noch für die Snapshot-Variante; die LTS-Variante ist slot-
-    basiert und wird für today aufgerufen (Test:
-    `test_symmetrie_aggregator_today.py`)."""
+async def test_heute_traegt_den_tageswert_der_snapshot_tabelle(db) -> None:
+    """Für `datum == today` übernimmt der Snapshot-Pfad den Tageswert seiner
+    Tagestabelle (N-772, 3.11.2026) — wie der LTS-Pfad seit B-clean v3.34.1
+    (`test_symmetrie_aggregator_today.py`). Bis v4.2.1 stand hier der
+    Today-Skip gegen den Inflationswert des alten Rand-Diffs (#290 detLAN
+    30,5 vs 3,57); die Tabelle ist slot-basiert, ein Zukunfts-Rand hat keinen
+    Stand (Mechanismus-Probe: `test_n772_laufender_tag_zaehler_delta.py`)."""
     from backend.services.energie_profil.aggregator import aggregate_day
 
     anlage = Anlage(
@@ -204,8 +208,5 @@ async def test_heute_ueberspringt_boundary_diff(db) -> None:
         result = await aggregate_day(anlage, heute, db, source=Source.SCHEDULER)
 
     assert result is not None
-    # Der Snapshot-Tageswert darf für heute NICHT geschrieben werden (seit E5
-    # liefert dieselbe Tabelle die Stunden, sie wird gerufen — ihr Tageswert
-    # nicht übernommen; `komponenten_kwh is None` unten prüft genau das).
-    # Komponenten-Aggregate aus Σ-Hourly = leer (keine Live-Daten gemockt)
-    assert result.komponenten_kwh is None
+    # Seit N-772 gilt der Tageswert der Tabelle auch heute (vorher: None).
+    assert result.komponenten_kwh == {"waermepumpe_99": 99.9}

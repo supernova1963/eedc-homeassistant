@@ -11,7 +11,7 @@ ihre Leistung aber nur über MQTT-Inbound — keine `live`-Zuordnung auf eine HA
   (sonst keine zusätzliche Query, Antwort wie vorher). Der F-26-Rückfall fragt nur den HA-Anteil. Eine Zuordnung ganz
   ohne HA-Leistungs-, Netz- oder Preis-Entität (z. B. nur Temperaturen aus HA) nimmt mit MQTT-Inbound den MQTT-Zweig.
 * **M-3 Tagesaggregation:** `aggregate_day` schreibt für die Mischform-Anlage Gerätewerte je Stunde aus der Kurve;
-  `komponenten_kwh[Wärmepumpe]` deckt sich mit Σ Stunden — am laufenden Tag ohne Drift-Warnung.
+  `komponenten_kwh[Wärmepumpe]` deckt sich mit Σ Stunden — am laufenden Tag ohne Drift-Warnung (seit N-772).
 
 Schwesterdateien: test_standalone_s3_tagesverlauf_mittelung.py (reine MQTT-Anlage ohne Token),
 test_tagesverlauf_standalone_ha_verbindung.py (Weggabelung F-26, N-598), test_408_wrapper_reicht_vortagsrand_durch.py.
@@ -364,12 +364,10 @@ async def test_m3_aggregate_day_vergangener_tag_geraetewerte_je_stunde(db, ha_ve
 
 @pytest.mark.asyncio
 async def test_m3_laufender_tag_wie_standalone_mit_zuordnung(db, ha_verbindung, caplog, monkeypatch):
-    """Am laufenden Tag trägt die Mischform-Anlage jetzt Gerätewerte je Stunde, und ihr WP-Tageswert ist die Σ der
-    Kurve — genau wie bei einer Standalone-Anlage mit `live`-Zuordnung (Snapshot-Pfad ohne Tageswert am laufenden Tag,
-    #290 Bug B). Die Σ trägt die Senke mit Vorzeichen (−2,0); die Komponenten-Invariante vergleicht sie mit den
-    positiven Zählerstunden (+2,0) — die Drift-Warnung des laufenden Tages bleibt deshalb (vorher «tatsächlich 0»,
-    jetzt «tatsächlich −2,0»), wie sie für Standalone mit Zuordnung schon vor S4 stand. Benannt im Baubericht S4
-    (Halt M-3), nicht in dieser Sitzung geändert."""
+    """Am laufenden Tag trägt die Mischform-Anlage Gerätewerte je Stunde, und ihr WP-Tageswert ist das Zähler-Delta
+    der Snapshot-Tabelle (+2,0) — wie an einem vergangenen Tag. Bis v4.2.1 hing der Snapshot-Pfad an `datum < today`
+    (#290 Bug B), der Tageswert war die Live-Σ der Kurve mit dem Vorzeichen der Senke (−2,0) und die Komponenten-
+    Invariante warnte (Halt M-3 im Baubericht S4). Seit N-772 (3.11.2026) gewinnt der Zähler auch heute; kein Drift-Log."""
     from backend.services.energie_profil import _helpers, aggregator
 
     class _Heute(date):
@@ -385,7 +383,8 @@ async def test_m3_laufender_tag_wie_standalone_mit_zuordnung(db, ha_verbindung, 
 
     assert {z.stunde for z in zeilen if (z.komponenten or {}).get(f"waermepumpe_{wp.id}") is not None} == {11, 12}
     assert sum(z.waermepumpe_kw or 0 for z in zeilen) == pytest.approx(2.0)
-    assert tz.komponenten_kwh == {f"waermepumpe_{wp.id}": -2.0}, "Live-Σ der Kurve (vorher: keine)"
+    assert tz.komponenten_kwh == {f"waermepumpe_{wp.id}": 2.0}, "Zähler-Delta (bis v4.2.1: Live-Σ −2,0)"
+    assert _drift_logs(caplog) == []
 
 
 @pytest.mark.asyncio

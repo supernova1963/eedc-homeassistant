@@ -68,9 +68,14 @@ async def get_reaggregate_preview(
                        neu = snap_neu[h] - snap_neu[h-1]
       - Tagesumme pro Kategorie alt/neu
 
-    **Schreibt nichts.** Der Aufrufer entscheidet (UI-Bestätigung), ob danach
+    **Schreibt keine Tageswerte** (weder `tages_energie_profil` noch
+    `tages_zusammenfassung`). Der Aufrufer entscheidet (UI-Bestätigung), ob danach
     `reaggregate_tag` aufgerufen wird, das die `neu`-Werte tatsächlich in die
-    DB schreibt.
+    DB schreibt. ⚠ **Eine Schreibspur gibt es doch:** ohne HA-Tagestabelle rechnet
+    die `neu`-Spalte über `snapshot_tagestabelle`, und deren Self-Healing
+    (`reader.get_snapshot`) trägt fehlende Zählerstände aus HA-Statistik oder MQTT
+    per Upsert in `sensor_snapshots` nach — in der Sitzung des Aufrufers, die
+    `get_db` am Ende festschreibt (Docstring berichtigt, Triage 3.11.2026).
 
     Returns:
         {

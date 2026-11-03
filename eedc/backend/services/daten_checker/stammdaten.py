@@ -24,7 +24,7 @@ from backend.core.investition_kennwerte import (
 )
 
 from .kategorien import (
-    CheckErgebnis, CheckKategorie, CheckSeverity,
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
 )
 from backend.core.zahlenformat import fmt_zahl
 
@@ -900,6 +900,64 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
         ))
         return ergebnisse
 
+    def _check_wp_heizbetrieb_und_strom_heizen(
+        self, inv, name: str, sensor_mapping: dict,
+    ) -> list[CheckErgebnis]:
+        """«Strom Heizbetrieb» und «Strom Heizen» beide zugeordnet — der Betriebsart-Zähler hat Vorrang.
+
+        Die Regel steht in ``core/berechnungen/betriebsart_gemessen.py::modus_strom_zeile``: misst ein
+        Betriebsart-Zähler den Heizbetrieb (``betriebsart_strom_heizen_kwh``), zählt eedc nur ihn, und der
+        Summand ``strom_heizen_kwh`` geht nicht in die Heizen-Zahl ein (Handbuch Einstellungen §7, «Der
+        Betriebsart-Zähler im Block Heizen»). Bei richtiger Zuordnung ist das gewollt; liegt im Betriebsart-Feld
+        aber ein anderer Zähler (Melderfall pipp086 #438: Heizen zeigte den Kühlwert), sieht der Anwender ohne
+        diesen Hinweis nicht, warum sein «Strom Heizen» nicht zählt (Triage 3.11.2026, Gernot: bauen).
+
+        ⚠ **Nur Heizen.** Die Summanden sind ``strom_heizen_kwh`` und ``strom_warmwasser_kwh``
+        (``FEINE_STROM_FELDER``), die Betriebsart-Zähler Heizen · Kühlen · Lüften · Entfeuchten
+        (``BETRIEBSART_STROM_FELD``, kein Warmwasser) — nur bei Heizen stehen zwei Felder für dieselbe Menge.
+
+        «Zugeordnet» wie in ``kuehl_zaehler.hat_kuehl_zaehler``: eine Quellenwahl der Datenquellen-Fläche
+        entscheidet (``keine`` = nicht zugeordnet), sonst ein HA-Sensor im Mapping; Innengeräte-Kopien
+        (``…-3``) zählen über ``basis_feld_key`` mit.
+        """
+        from backend.core.betriebsmodus import BETRIEBSART_STROM_FELD, HEIZEN
+        from backend.core.field_definitions import basis_feld_key
+
+        inv_id = str(inv.id)
+        quellen = (sensor_mapping or {}).get("quellen") or {}
+        eintrag = ((sensor_mapping or {}).get("investitionen") or {}).get(inv_id)
+        felder = (eintrag.get("felder") or {}) if isinstance(eintrag, dict) else {}
+        praefix = f"inv_energy_{inv_id}_"
+
+        def _zugeordnet(feld: str) -> bool:
+            gewaehlt = {
+                k[len(praefix):]: (q or {}).get("quelle") if isinstance(q, dict) else None
+                for k, q in quellen.items()
+                if isinstance(k, str) and k.startswith(praefix) and basis_feld_key(k[len(praefix):]) == feld
+            }
+            for k, m in felder.items():
+                if basis_feld_key(k) != feld:
+                    continue
+                if k in gewaehlt:
+                    continue  # die Quellenwahl entscheidet (unten)
+                if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                    return True
+            return any(q and q != "keine" for q in gewaehlt.values())
+
+        if not (_zugeordnet(BETRIEBSART_STROM_FELD[HEIZEN]) and _zugeordnet("strom_heizen_kwh")):
+            return []
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.INVESTITIONEN, schwere=CheckSeverity.WARNING,
+            meldung=f"{name}: „Strom Heizbetrieb“ und „Strom Heizen“ beide belegt",
+            details=(
+                "Der Betriebsart-Zähler „Strom Heizbetrieb“ hat Vorrang — „Strom Heizen“ wird nicht gezählt. "
+                "Misst der Betriebsart-Zähler wirklich den Heizbetrieb, ist das richtig und nichts zu tun. "
+                "Wer Heizen und Warmwasser getrennt misst, lässt den Betriebsart-Zähler leer. Liegt dort ein "
+                "anderer Zähler (etwa der Kühlbetrieb), zeigt eedc unter Heizen dessen Wert."
+            ),
+            link=LINK_DATENQUELLEN,
+        )]
+
     def _check_wechselrichter_pv_altbestand(
         self, inv, name: str, sensor_mapping: dict,
     ) -> list[CheckErgebnis]:
@@ -1138,6 +1196,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 ergebnisse.extend(self._check_typ_wechselrichter(kat, inv, name, param, anlage))
             elif inv.typ == "waermepumpe":
                 ergebnisse.extend(self._check_typ_waermepumpe(kat, inv, name, param, monatsdaten))
+                ergebnisse.extend(self._check_wp_heizbetrieb_und_strom_heizen(inv, name, anlage.sensor_mapping or {}))
 
             # Allgemeine Prüfungen für alle Typen
             ergebnisse.extend(self._check_alle_typen(kat, inv, name, param))

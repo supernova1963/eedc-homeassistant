@@ -694,8 +694,8 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
             </div>
           ) : verfuegbareMonate.length === 0 ? (
             <Alert type="warning">
-              Keine Daten in HA-Statistik gefunden. Stellen Sie sicher, dass das Sensor-Mapping
-              konfiguriert ist und die Sensoren Langzeit-Statistiken haben.
+              Keine Daten in HA-Statistik gefunden. Stellen Sie sicher, dass die Sensoren unter
+              Einstellungen → Datenquellen zugeordnet sind und Langzeit-Statistiken haben.
             </Alert>
           ) : (
             <>

@@ -615,7 +615,7 @@ Nach **HA-Neustart** landet der Sensor in HA-Long-Term-Statistics und steht dami
 
 **Ohne eedc-Neustart.** Liest eedc die Statistik über die WebSocket-Verbindung (kein Zugriff auf die Recorder-Datenbank, etwa eedc als eigener Container oder Home Assistant mit MariaDB), sieht es einen Sensor, dessen Statistik erst nach dem Start von eedc beginnt, ohne Neustart, spätestens nach fünf Minuten — wie beim Lesen aus der Datenbank. eedc holt die Liste der Statistik-Sensoren dafür neu, wenn ein zugeordneter Sensor darin fehlt, höchstens einmal je fünf Minuten.
 
-### Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics"
+### Daten-Checker-Kategorie „Datenquellen – HA-Statistics"
 
 Prüft pro Anlage, ob alle in der Datenquellen-Zuordnung verwendeten **kWh-Sensoren** tatsächlich in HA-LTS landen (siehe [Handbuch Daten-Checker §4.9](HANDBUCH_DATEN_CHECKER.md#49-sensor-mapping--ha-statistics)):
 

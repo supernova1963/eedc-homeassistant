@@ -26,7 +26,7 @@
    8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
-   9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
+   9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
@@ -127,7 +127,7 @@ eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne L
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik); der Hinweis zu „PV gesamt“ neben einem Balkonkraftwerk greift aus der Zuordnung | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** (außer dem Zuordnungs-Hinweis) |
 | 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
-| 10 | **Sensor-Mapping – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
+| 10 | **Datenquellen – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
 | 13 | **Zeitzone – Abweichung zu HA** (§4.12) | greift | **wird übersprungen** (keine HA-Verbindung) |
@@ -153,9 +153,9 @@ eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne L
 
 - **Stiller Skip:** Die Kategorie erscheint gar nicht in der Ergebnisliste — keine Sektion, keine Meldung. So bleibt die Übersicht für Nicht-Betroffene aufgeräumt.
   - *MQTT-Topic-Abdeckung* (§4.8) bei nicht aktiviertem MQTT-Import.
-  - *Sensor-Mapping HA-Statistics* (§4.9) wenn keine Datenquellen-Zuordnung mit HA-Sensoren vorhanden ist.
+  - *Datenquellen – HA-Statistics* (§4.9) wenn keine Datenquellen-Zuordnung mit HA-Sensoren vorhanden ist.
 - **INFO-Skip:** Die Kategorie erscheint mit einem einzelnen INFO-Eintrag, der den Grund des Überspringens erklärt.
-  - *Sensor-Mapping HA-Statistics* (§4.9) bei Standalone, weil HA-Long-Term-Statistics nicht erreichbar sind.
+  - *Datenquellen – HA-Statistics* (§4.9) bei Standalone, weil HA-Long-Term-Statistics nicht erreichbar sind.
   - *MQTT-Topic-Abdeckung* (§4.8) wenn der MQTT-Import aktiviert ist, der Subscriber aber nicht läuft.
 
 ### Beziehung zu Datenquellen-Zuordnung und HA/MQTT
@@ -329,6 +329,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Stromverbrauch fehlt in N Monat(en)** | ⚠️ WARNING | Ohne getrennte Strommessung: `stromverbrauch_kwh` fehlt. | Monatsdaten nachtragen. |
 | **\[Name\]: Gesamtzähler kleiner als die Summe der Achsen (Monate)** | ⚠️ WARNING | Bei getrennter Strommessung mit **zusätzlichem** Gesamtzähler: *Strom Heizen* und *Strom Warmwasser* sind Teile des Gesamtverbrauchs und können zusammen nicht mehr sein. Meist misst der Gesamtzähler nur einen Teil des Geräts (nur das Außengerät, nur einen Stromkreis) — oder eine der Achsen zählt fremden Verbrauch mit. **eedc rechnet in diesen Monaten mit der Summe der Achsen**, damit nichts verloren geht. ⚠ Nur diese Richtung ist ein Fehler; ein **höherer** Gesamtzähler ist der Normalfall (Standby, Steuerung, Umwälzpumpen). | Im Monatsabschluss prüfen, welcher Zähler welchen Wert liefert. Stammt der Gesamtwert aus dem Monatsformular, nennt die Meldung zusätzlich den Handgriff: Feld *Stromverbrauch* leeren und speichern — dann rechnet eedc die Summe neu. |
 | **\[Name\]: Der Gesamtzähler misst deutlich mehr als die Achsen — misst er nur die Wärmepumpe? (Monate)** | ℹ️ INFO | Mehr als ein Viertel des Verbrauchs liegt weder auf *Strom Heizen* noch auf *Strom Warmwasser*; eedc führt diese Menge als **„nicht aufgeteilt"**. **Das ist oft richtig** — Standby, Steuerung und Umwälzpumpen laufen auf keiner der beiden Achsen. Es kann aber auch heißen, dass am Gesamtzähler noch etwas anderes hängt. **Eine Frage, kein Fehler:** eedc weiß nicht, was am Zähler hängt, und behauptet es nicht. | *Einstellungen → Datenquellen*, den Gesamtzähler prüfen. Stimmt er, ist nichts zu tun — der Hinweis bleibt als Auskunft stehen. Stammt der Gesamtwert aus dem Monatsformular, kann er auch ein stehen gebliebener alter Stand sein; dann Feld *Stromverbrauch* im Monatsabschluss leeren und speichern. |
+| **\[Name\]: „Strom Heizbetrieb“ und „Strom Heizen“ beide belegt** | ⚠️ WARNING | Am Gerät sind der Betriebsart-Zähler **„Strom Heizbetrieb“** und der Summand **„Strom Heizen“** zugeordnet (HA-Sensor oder MQTT). Der Betriebsart-Zähler hat Vorrang — „Strom Heizen“ wird nicht gezählt. Misst er wirklich den Heizbetrieb, ist das richtig; liegt dort ein anderer Zähler (etwa der Kühlbetrieb), zeigt eedc unter Heizen dessen Wert. **Nur Heizen:** Warmwasser hat keinen Betriebsart-Zähler, Kühlen keinen Summanden — dort gibt es diese Doppelbelegung nicht. | Wer Heizen und Warmwasser getrennt misst, lässt den Betriebsart-Zähler unter *Einstellungen → Datenquellen* leer (Quelle „keine“). Misst er den Heizbetrieb, ist nichts zu tun. |
 | **\[Name\]: Heizwärme fehlt in N Monat(en)** | ℹ️ INFO | Die abgegebene Wärmemenge fehlt — ohne sie gibt es für diese Monate keine gemessene JAZ und keinen COP-Vergleich. Der Stromverbrauch bleibt vollständig erfasst, die Stromauswertung ist unberührt. | **Mit Wärmemengenzähler:** Werte nachtragen. **Ohne Wärmemengenzähler bleibt der Hinweis stehen** — und das ist Absicht: eedc zeigt bei JAZ/COP dann „—" statt einer Scheinzahl. Der Hinweis sagt dir, *warum* dort ein Strich steht. |
 | **\[Name\]: Warmwasser-Wärme in N Monat(en) gespeichert — eine Split-Klimaanlage hat keinen Warmwasserkreis** | ℹ️ INFO | An einem Gerät der Art **Luft-Luft (Klimaanlage)** steht ein Warmwasser-Wert. Solche Geräte haben keinen Warmwasserkreis; eedc bietet das Feld dort seit 2026 nicht mehr an, ältere Einträge blieben aber stehen — und sind im Monatsabschluss deshalb **nicht mehr erreichbar**. **Der Wert zählt nicht als Wärme des Geräts** — sonst stünde dort eine Ersparnis gegenüber der Heizung, die das Gerät nie erzeugt hat. | Stammt der Wert aus dem **Kühlbetrieb**, trag ihn unter *Nutzenergie Kuehlbetrieb* ein — daraus rechnet eedc die **Arbeitszahl Kühlen**. Den gespeicherten Wert selbst entfernst du mit dem Knopf **„Wert entfernen"** direkt an der Meldung; er nimmt alle genannten Monate mit und fragt vorher nach. eedc löscht und verschiebt nichts von allein. |
 | **\[Name\]: \[Feld\] in N Monat(en) gespeichert — dieses Gerät führt das Feld nicht mehr** | ℹ️ INFO | Dasselbe für **jedes** Feld, das an einer Einstellung des Geräts hängt: Netzladung an einem Speicher ohne „lädt aus dem Netz", V2H-Entladung an einem E-Auto ohne V2H, Speicherwerte an einem Balkonkraftwerk ohne Speicher, getrennte Ströme Heizen/Warmwasser nach Abschalten der getrennten Strommessung. Wird der Schalter zurückgestellt, verschwindet das Feld aus dem Monatsabschluss — ein vorher gespeicherter Wert bleibt in der Zeile und ist nicht mehr erreichbar. Eine **0** meldet der Checker nicht. | Stimmt die Einstellung: **„Wert entfernen"** an der Meldung. Soll der Wert weiter zählen: die Einstellung am Gerät zurückstellen — dann erscheint das Feld wieder im Monatsabschluss. Ein Feld, das das Gerät führt, lässt sich über den Knopf **nicht** entfernen (das Backend weist es ab) — es gehört im Monatsabschluss geleert. |
@@ -510,7 +511,7 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 | **Basis-Zähler (Einspeisung + Netzbezug) gemappt** | ✅ OK | Beide Basis-Zähler zugeordnet. | – |
 | **Alle N aktiven Komponenten haben kWh-Zähler gemappt** | ✅ OK | Alle aktiven Komponenten mit erwarteten Zählern sind vollständig zugeordnet. | – |
 
-> **Hinweis:** Diese Kategorie prüft nur das **Vorhandensein** der Zuordnung — ob der Zähler tatsächlich Daten liefert, prüft §4.8 (MQTT-Topic-Abdeckung) bzw. §4.9 (Sensor-Mapping HA-Statistics). Plausibilität der bereits aggregierten Stundenwerte (Counter-Spikes durch Update-Restarts) erfasst §4.7.
+> **Hinweis:** Diese Kategorie prüft nur das **Vorhandensein** der Zuordnung — ob der Zähler tatsächlich Daten liefert, prüft §4.8 (MQTT-Topic-Abdeckung) bzw. §4.9 (Datenquellen – HA-Statistics). Plausibilität der bereits aggregierten Stundenwerte (Counter-Spikes durch Update-Restarts) erfasst §4.7.
 
 ---
 
@@ -722,7 +723,7 @@ im Standalone-Betrieb das MQTT-Topic. Liefert er wieder Werte, zählen die folge
 
 ---
 
-### 4.9 Sensor-Mapping – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
+### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
 > **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; ein eventuell vorhandener INFO-Befund weist auf den Skip hin. Funktional wird die analoge Drift-Erkennung im Standalone-Betrieb über §4.8 *MQTT-Topic-Abdeckung* abgedeckt.
 
@@ -1323,7 +1324,7 @@ Der Daten-Checker ist Diagnose, nicht Behebung. Er **zeigt** Probleme und verlin
 | §4.6 Energieprofil-Zähler | Einstellungen → Datenquellen |
 | §4.7 Energieprofil-Plausibilität | Reparatur-Werkbank: *„Tag neu aggregieren"* bzw. *„Mehrere Tage neu aggregieren"* (zieht Snapshots frisch + baut Aggregate neu) |
 | §4.8 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Broker-Verbindung |
-| §4.9 Sensor-Mapping HA-Statistics | HA-Helfer „Verbrauchszähler" (ohne Zyklus), ersatzweise `customize` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
+| §4.9 Datenquellen – HA-Statistics | HA-Helfer „Verbrauchszähler" (ohne Zyklus), ersatzweise `customize` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
 | §4.10 Fehlende Tageswerte | Knopf am Befund: *„Zeitraum neu aggregieren"* / *„Tag reparieren"*; ohne Leistungs-Zuordnung zuerst Einstellungen → Datenquellen |
 
 ### Reparatur-Werkzeuge in der Energieprofil-Pflege

@@ -28,11 +28,21 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from backend.models.investition import Investition
 from backend.services.repair_orchestrator import _komponenten_rueckmeldung
 
 _SENSOR = {"strategie": "sensor", "sensor_id": "sensor.x"}
-_TAG = date.today() - timedelta(days=3)
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+_TAG: date
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global _TAG
+    _TAG = date.today() - timedelta(days=3)
 
 
 def _anlage(*, wp_ids=(8,), pv_gesamt: bool = False, pv_modul_zaehler: bool = True):

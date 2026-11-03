@@ -10,7 +10,7 @@ Jetzt: vergangener Tag ⇒ `aktiv_am_tag(tag)`, **heute unverändert `aktiv_jetz
 Filter unterscheiden sich gerade an heute (Anschaffung in der Zukunft zählt live mit, eine
 Stilllegung heute nicht); die Heute-Proben unten halten genau diese zwei Punkte fest.
 
-⚠ **Eine Ablesung der echten Uhr (`HEUTE`), mit Ansage** (Baseline in
+⚠ **Eine Ablesung der echten Uhr (`HEUTE`, je Probe in der autouse-Fixture `_uhr_je_probe`), mit Ansage** (Baseline in
 `test_konformitaet_echte_uhr_in_tests.py`): der Prüfling rechnet seinen Tag selbst aus
 `datetime.now()` und `tage_zurueck`, ein festes Datum fiele aus seinem Fenster. Die Fixture
 legt alle Daten relativ zu `HEUTE` (nur Tagesabstände, keine Uhrzeit) — wie N-439.
@@ -31,7 +31,15 @@ from backend.models.investition import Investition
 from backend.services import live_tagesverlauf_service as ltv
 from backend.services.ha_state_service import get_ha_state_service
 
-HEUTE = date.today()
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+HEUTE: date
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global HEUTE
+    HEUTE = date.today()
 
 
 @pytest.fixture

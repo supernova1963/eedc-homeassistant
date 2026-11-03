@@ -9,6 +9,31 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Laufender Tag ohne Home-Assistant-Statistik (Standalone, MQTT, MQTT-Geräte neben HA): die Tagesmenge kommt aus den
+  Zählerständen, nicht aus der Leistungskurve.** Bisher zeigte der laufende Tag — und mit ihm der laufende Monat — für heute
+  die aufsummierte Leistung (an der Wärmepumpe etwa 2,0 statt 2,75 kWh); erst am Folgetag stand der Zählerwert da.
+- **Einrichtung im Standalone-Betrieb mit Home-Assistant-Verbindung: die Vorschläge aus dem Energie-Dashboard kommen an.**
+  Bisher blieb der Integrations-Schritt bei „Vorschläge werden geladen …“ stehen; jetzt holt eedc sie über die Verbindung,
+  und lässt sich nichts abrufen, sagt der Schritt das in einem Satz.
+- **Energie-Dashboard mit mehreren Solar-Quellen:** eedc schlägt dann keinen PV-Gesamtzähler mehr vor (bisher nahm es still
+  die letzte Quelle). Der Integrations-Schritt sagt, dass weitere Netz-, Solar- oder Batteriequellen unter
+  *Einstellungen → Datenquellen* zugeordnet werden.
+
+### Added
+
+- **Daten-Checker: „Strom Heizbetrieb“ und „Strom Heizen“ an derselben Wärmepumpe beide belegt** — Hinweis, dass der
+  Betriebsart-Zähler Vorrang hat und „Strom Heizen“ nicht gezählt wird; wer getrennt misst, lässt den Betriebsart-Zähler leer.
+
+### Changed
+
+- **Texte nennen die heutigen Orte:** „Einstellungen → Datenquellen“ statt „Sensor-Mapping“, „Einstellungen → Home
+  Assistant“ oder „Einstellungen → MQTT“ (Live-Hinweis, Willkommen, Statistik-Import, Monatsabschluss, Sicherung, Anlage
+  löschen, Prognose-Vergleich, Daten-Checker-Kategorien „Datenquellen – HA-Statistics“ und „Datenquellen – Einheiten“).
+- **Live-Tagesverlauf:** der Untertitel heißt „10-Min-Durchschnitte aus den Live-Daten“ (die Werte kommen aus Home Assistant
+  oder über MQTT), der Hinweis zu nicht gezeigten Geräten „kein Leistungssensor zugeordnet“.
+
 ## [4.2.1] - 2026-11-02
 
 Nachlauf zu 4.2.0 aus der Sichtprobe bei Full HD: das Hub-Schaubild passt ins Fenster und hat einen eigenen Fokus mit „Link / Einbetten" (mit Gerät in der Adresse), Themen-Kacheln sind lesbar (Einzel-Kachel bzw. dreizeilige Gruppe), Wächter gegen datumsabhängige Frontend-Proben.
@@ -55,12 +80,11 @@ Abschluss der Komponenten-Visualisierung (Hub-Überblick Wärmepumpe · Wallbox 
   von der alten ID `el:ueberblick-karte` mitgedeckt; mit ihr ab `xl` vier Karten nebeneinander) mit Tooltip
   „‹Entität bzw. Topic› · Stand hh:mm". Live-Antwort: neues Feld `themen[].eintraege[].kennung` (`entity_id` bzw.
   Inbound-Topic).
-- **Demo-Modus: Themen und Standort in den Hub-Schaubildern** — `GET /api/live/{id}?demo=true` trägt feste Demo-Themen je
-  Gerätetyp (Wärmepumpe „Anlagenstatus" und „Service", Wallbox „Ladepunkt", E-Auto „Fahrzeugzustand" und „Klima"; Form wie
-  im echten Pfad, auf die Geräte der Anlage umgeschrieben wie die Knoten) und an beiden Demo-Autos den Standort „Zu Hause".
-  Der echte Live-Pfad bleibt unberührt. Galerie: Hub-Bilder neu mit Themen-Kacheln, dazu E-Auto am Handy, Wallbox mit
-  geparktem Schaubild und die Datenquellen je Hub-Gerät mit dem Block „Themen" (`scripts/galerie-screenshots.mjs` legt die
-  Themen der Datenquellen-Bilder per API in der Demo-Kopie an).
+- **Demo-Modus: Themen und Standort in den Hub-Schaubildern** — die Demo zeigt an Wärmepumpe, Wallbox und E-Auto feste
+  Beispiel-Themen (Wärmepumpe „Anlagenstatus" und „Service", Wallbox „Ladepunkt", E-Auto „Fahrzeugzustand" und „Klima") und
+  an beiden Demo-Autos den Standort „Zu Hause". Deine eigenen Live-Werte sind davon nicht berührt. Die Galerie auf der
+  Website hat neue Bilder dazu: die Hub-Schaubilder mit Themen-Kacheln, das E-Auto am Handy, die Wallbox mit geparktem
+  Schaubild und die Datenquellen je Gerät mit dem Block „Themen".
 
 ### Changed
 

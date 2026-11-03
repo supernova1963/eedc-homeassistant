@@ -165,12 +165,12 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           Tagesverlauf
         </h3>
         <span className="text-[10px] text-gray-400 dark:text-gray-500">
-          10-Min-Durchschnitte aus HA-History
+          10-Min-Durchschnitte aus den Live-Daten
         </span>
       </div>
       {uebersprungen && uebersprungen.length > 0 && (
         <p className="text-[10px] text-amber-500 dark:text-amber-400 mb-2">
-          Nicht dargestellt (kein HA-Leistungssensor): {uebersprungen.join(', ')}
+          Nicht dargestellt (kein Leistungssensor zugeordnet): {uebersprungen.join(', ')}
         </p>
       )}
       <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between px-1">

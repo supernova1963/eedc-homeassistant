@@ -31,7 +31,15 @@ from backend.services.solar_forecast_service import (
     get_multi_string_prognose,
 )
 
-HEUTE = date.today().isoformat()
+#: Uhr je Probe (Päckchen Triage 3.11.2026, CI Auckland 1.11.): die autouse-Fixture `_uhr_je_probe` liest sie zu
+#: Beginn JEDER Probe, nicht beim Import — sonst las die Probe ihr Datum beim Sammeln (vor Mitternacht) und der
+#: Prüfling seines danach (nach Mitternacht): zwei Tage. Kein freezegun (Entscheid 23.08.2026).
+HEUTE: str
+
+@pytest.fixture(autouse=True)
+def _uhr_je_probe():
+    global HEUTE
+    HEUTE = date.today().isoformat()
 
 
 def _fake_response(kwp: float, tages_kwh: float) -> SolarPrognoseResponse:

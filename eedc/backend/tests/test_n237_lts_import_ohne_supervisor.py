@@ -58,12 +58,16 @@ def test_supervisor_routen_bleiben_gesperrt():
     Sie ist mit der Route selbst gefallen — ``api/routes/ha_import.py`` war seit
     dem 2026-02-11 clientlos und seine Feld-Tabelle vom Feld-SoT abgehängt: eine
     Zusicherung „Pfad X ist nicht gemountet" über einen Pfad, den es nirgends
-    mehr gibt, ist trivial wahr und behauptet nichts. **Der Gegenstand der Probe
-    bleibt gedeckt** — ``/api/sensor-mapping`` hängt weiter am selben
-    ``HA_INTEGRATION_AVAILABLE``-Block und trägt die Aussage allein.
+    mehr gibt, ist trivial wahr und behauptet nichts. Bis zum 3.11.2026 trug
+    ``/api/sensor-mapping`` die Aussage; seitdem ist es wie diese Route an die
+    Verbindung gehängt (Energy-Vorschläge im Standalone mit Remote-HA,
+    `test_energie_vorschlaege_ohne_supervisor.py`). **Der Gegenstand der Probe
+    bleibt gedeckt** — ``/api/ha/status`` (`ha_integration`, Supervisor-API) hängt
+    weiter am ``HA_INTEGRATION_AVAILABLE``-Block (die übrigen ``/api/ha/…``-Routen
+    gehören `ha_remote`/`ha_export` und sind bewusst immer da).
     """
     pfade = {r.path for r in app.routes if hasattr(r, "path")}
-    assert not [p for p in pfade if p.startswith("/api/sensor-mapping")]
+    assert "/api/ha/status" not in pfade
 
 
 def test_lts_status_antwortet_sachlich_statt_mit_fehler():

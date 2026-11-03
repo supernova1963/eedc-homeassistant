@@ -125,7 +125,7 @@ export function BackupVerwaltung({
             {exporting ? 'Backup wird erstellt…' : 'Backup als JSON herunterladen'}
           </Button>
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Enthält Konfiguration und Messdaten. Sensor-Mapping wird mitexportiert,
+            Enthält Konfiguration und Messdaten. Die Datenquellen-Zuordnung wird mitexportiert,
             MQTT-Setup muss nach Restore neu eingerichtet werden.
           </p>
         </div>

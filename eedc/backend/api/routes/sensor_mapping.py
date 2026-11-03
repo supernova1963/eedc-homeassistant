@@ -230,8 +230,10 @@ async def get_ha_energy_suggest(anlage_id: int):
     """
     Liefert Auto-Vorbefüllungs-Vorschläge aus der HA-Energiekonfiguration.
 
-    Add-on-only: liest `/config/.storage/core.energy`. Auf Standalone-Setups
-    wird `available=False` zurückgegeben — Frontend zeigt dann keinen Banner.
+    Im Add-on liest sie `/config/.storage/core.energy`, im Standalone mit
+    Remote-HA die Prefs per WebSocket (D2). Ohne HA-Verbindung antwortet sie
+    `available=False`. Der Router ist seit dem Paeckchen Triage 3.11.2026 immer
+    gemountet (`main.py`) — die Route prüft die Verbindung selbst.
     """
     suggestions = get_ha_energy_suggestions()
 
