@@ -8,7 +8,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import event
+from sqlalchemy import event, text
 
 from backend.core.config import settings
 
@@ -746,73 +746,71 @@ def _migrate_mqtt_live_snapshot_min_max(connection) -> None:
             connection.execute(_text(f'ALTER TABLE mqtt_live_snapshots ADD COLUMN "{spalte}" FLOAT'))
 
 
-async def run_migrations(conn):
-    """
-    Führt einfache Migrationen durch.
+# ── Die Leiter von `run_migrations` (RF-40): ein Schritt je Tabellen-Block, Inhalt wortgleich aus `_run_migrations`.
+# Alle Schritte bekommen den EINEN Inspector der Leiter und holen sich keinen eigenen: SQLAlchemy cacht
+# `get_table_names()`/`get_columns()` je Inspector (gemessen 3.11.2026, SQLAlchemy 2.0.54 — nach CREATE TABLE/ALTER
+# TABLE liefert derselbe Inspector den Stand des ersten Aufrufs). Ein eigener Inspector je Schritt sähe die Spalten
+# der Schritte davor und wäre eine Verhaltensänderung; die Reihenfolge der Aufrufe steht in `_run_migrations`.
 
-    SQLite unterstützt keine nativen ALTER TABLE ADD COLUMN,
-    daher prüfen wir ob Spalten existieren und fügen sie hinzu.
-    """
-    from sqlalchemy import text, inspect
 
-    def _run_migrations(connection):
-        inspector = inspect(connection)
+def _migrate_anlagen_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``anlagen``: fehlende Spalten, die Bestands-UPDATEs neu angelegter Spalten und die zwei
+    JSON-Bereinigungen, die im Tabellen-Block hängen (Aufrufe und Reihenfolge wie bisher)."""
+    if 'anlagen' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('anlagen')}
+    new_columns = [
+        ('ha_sensor_pv_erzeugung', 'VARCHAR(255)'),
+        ('ha_sensor_einspeisung', 'VARCHAR(255)'),
+        ('ha_sensor_netzbezug', 'VARCHAR(255)'),
+        ('ha_sensor_batterie_ladung', 'VARCHAR(255)'),
+        ('ha_sensor_batterie_entladung', 'VARCHAR(255)'),
+        ('wechselrichter_hersteller', 'VARCHAR(50)'),
+        # v1.0.0-beta.6: Versorger-Stammdaten
+        ('mastr_id', 'VARCHAR(20)'),
+        ('versorger_daten', 'JSON'),
+        # v1.0.0-beta.10: Wetterdaten-Provider
+        ('wetter_provider', 'VARCHAR(30)'),
+        # v1.1.0: Sensor-Mapping für HA-Integration
+        ('sensor_mapping', 'JSON'),
+        # v2.0.3: Community-Sharing Hash
+        ('community_hash', 'VARCHAR(64)'),
+        # v2.3.0: Land-Auswahl für DACH-Unterstützung
+        ('standort_land', 'VARCHAR(5)'),
+        # Horizont-Profil für PVGIS
+        ('horizont_daten', 'JSON'),
+        # Steuerliche Behandlung (Kleinunternehmerregelung)
+        ('steuerliche_behandlung', "VARCHAR(30) DEFAULT 'keine_ust'"),
+        ('ust_satz_prozent', 'FLOAT DEFAULT 19.0'),
+        # v2.6.0: Connector-Konfiguration für direkte Geräteverbindung
+        ('connector_config', 'JSON'),
+        # v3.5.0: Wettermodell für Solar-Prognose (Kaskade mit Fallback)
+        ('wetter_modell', "VARCHAR(50) DEFAULT 'auto'"),
+        # v3.5.0: Community Auto-Share nach Monatsabschluss
+        ('community_auto_share', 'BOOLEAN DEFAULT 0'),
+        # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
+        ('netz_puffer_w', 'INTEGER DEFAULT 100'),
+        ('vollbackfill_durchgefuehrt', 'BOOLEAN DEFAULT 0'),
+        # v3.17: Prognose-Basis (openmeteo, solcast, sfml) — DEPRECATED, durch prognose_quelle ersetzt
+        ('prognose_basis', "VARCHAR(30) DEFAULT 'openmeteo'"),
+        # v3.30: Prognosequelle pro Anlage (eedc, solcast, sfml)
+        ('prognose_quelle', "VARCHAR(30) DEFAULT 'eedc'"),
+        # §51 EEG Negativpreis-Abzug pro Anlage (manueller Schalter, Default aus)
+        ('unterliegt_eeg_51', 'BOOLEAN DEFAULT 0'),
+        # v3.43: Günstig-Schwelle der Börsenpreis-Sensoren (% unter Ø ohne 3 Peaks)
+        ('guenstig_schwelle_prozent', 'FLOAT DEFAULT 10.0'),
+    ]
+    newly_added = set()
+    for col_name, col_type in new_columns:
+        if col_name not in existing_columns:
+            connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
+            newly_added.add(col_name)
 
-        # v0.8.0+: Neue Spalten zur anlagen Tabelle
-        if 'anlagen' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('anlagen')}
-            new_columns = [
-                ('ha_sensor_pv_erzeugung', 'VARCHAR(255)'),
-                ('ha_sensor_einspeisung', 'VARCHAR(255)'),
-                ('ha_sensor_netzbezug', 'VARCHAR(255)'),
-                ('ha_sensor_batterie_ladung', 'VARCHAR(255)'),
-                ('ha_sensor_batterie_entladung', 'VARCHAR(255)'),
-                ('wechselrichter_hersteller', 'VARCHAR(50)'),
-                # v1.0.0-beta.6: Versorger-Stammdaten
-                ('mastr_id', 'VARCHAR(20)'),
-                ('versorger_daten', 'JSON'),
-                # v1.0.0-beta.10: Wetterdaten-Provider
-                ('wetter_provider', 'VARCHAR(30)'),
-                # v1.1.0: Sensor-Mapping für HA-Integration
-                ('sensor_mapping', 'JSON'),
-                # v2.0.3: Community-Sharing Hash
-                ('community_hash', 'VARCHAR(64)'),
-                # v2.3.0: Land-Auswahl für DACH-Unterstützung
-                ('standort_land', 'VARCHAR(5)'),
-                # Horizont-Profil für PVGIS
-                ('horizont_daten', 'JSON'),
-                # Steuerliche Behandlung (Kleinunternehmerregelung)
-                ('steuerliche_behandlung', "VARCHAR(30) DEFAULT 'keine_ust'"),
-                ('ust_satz_prozent', 'FLOAT DEFAULT 19.0'),
-                # v2.6.0: Connector-Konfiguration für direkte Geräteverbindung
-                ('connector_config', 'JSON'),
-                # v3.5.0: Wettermodell für Solar-Prognose (Kaskade mit Fallback)
-                ('wetter_modell', "VARCHAR(50) DEFAULT 'auto'"),
-                # v3.5.0: Community Auto-Share nach Monatsabschluss
-                ('community_auto_share', 'BOOLEAN DEFAULT 0'),
-                # v3.5.0: Netz-Puffer für Energiefluss-Farbwechsel (Watt)
-                ('netz_puffer_w', 'INTEGER DEFAULT 100'),
-                ('vollbackfill_durchgefuehrt', 'BOOLEAN DEFAULT 0'),
-                # v3.17: Prognose-Basis (openmeteo, solcast, sfml) — DEPRECATED, durch prognose_quelle ersetzt
-                ('prognose_basis', "VARCHAR(30) DEFAULT 'openmeteo'"),
-                # v3.30: Prognosequelle pro Anlage (eedc, solcast, sfml)
-                ('prognose_quelle', "VARCHAR(30) DEFAULT 'eedc'"),
-                # §51 EEG Negativpreis-Abzug pro Anlage (manueller Schalter, Default aus)
-                ('unterliegt_eeg_51', 'BOOLEAN DEFAULT 0'),
-                # v3.43: Günstig-Schwelle der Börsenpreis-Sensoren (% unter Ø ohne 3 Peaks)
-                ('guenstig_schwelle_prozent', 'FLOAT DEFAULT 10.0'),
-            ]
-            newly_added = set()
-            for col_name, col_type in new_columns:
-                if col_name not in existing_columns:
-                    connection.execute(text(f'ALTER TABLE anlagen ADD COLUMN {col_name} {col_type}'))
-                    newly_added.add(col_name)
-
-            # Bestandsdaten-Heuristik: Anlagen mit substanzieller Energieprofil-Historie
-            # sollen den Auto-Vollbackfill NICHT erneut auslösen. Nur beim erstmaligen
-            # Anlegen der Spalte einmalig markieren.
-            if 'vollbackfill_durchgefuehrt' in newly_added and 'tages_zusammenfassung' in inspector.get_table_names():
-                connection.execute(text(f"""
+    # Bestandsdaten-Heuristik: Anlagen mit substanzieller Energieprofil-Historie
+    # sollen den Auto-Vollbackfill NICHT erneut auslösen. Nur beim erstmaligen
+    # Anlegen der Spalte einmalig markieren.
+    if 'vollbackfill_durchgefuehrt' in newly_added and 'tages_zusammenfassung' in inspector.get_table_names():
+        connection.execute(text(f"""
                     UPDATE anlagen SET vollbackfill_durchgefuehrt = 1
                     WHERE id IN (
                         SELECT anlage_id FROM tages_zusammenfassung
@@ -820,10 +818,10 @@ async def run_migrations(conn):
                     )
                 """))
 
-            # v3.30: prognose_basis → prognose_quelle migrieren
-            if 'prognose_quelle' in newly_added:
-                # openmeteo → eedc (Default), solcast → solcast (pur)
-                connection.execute(text("""
+    # v3.30: prognose_basis → prognose_quelle migrieren
+    if 'prognose_quelle' in newly_added:
+        # openmeteo → eedc (Default), solcast → solcast (pur)
+        connection.execute(text("""
                     UPDATE anlagen SET prognose_quelle = CASE
                         WHEN prognose_basis = 'solcast' THEN 'solcast'
                         ELSE 'eedc'
@@ -831,376 +829,403 @@ async def run_migrations(conn):
                     WHERE prognose_quelle IS NULL OR prognose_quelle = 'eedc'
                 """))
 
-            # Datenchecker-Achse A1 (v3.39.0): Dead-Strategie-Werte im
-            # sensor_mapping-JSON auf `keine` umschreiben — Hard-Precondition
-            # vor der StrategieTyp-Enum-Reduktion (Pydantic-validiert).
-            # Idempotent. [[project_datenchecker_konsistenz]]
-            _migrate_sensor_mapping_strategien_clear(connection)
+    # Datenchecker-Achse A1 (v3.39.0): Dead-Strategie-Werte im
+    # sensor_mapping-JSON auf `keine` umschreiben — Hard-Precondition
+    # vor der StrategieTyp-Enum-Reduktion (Pydantic-validiert).
+    # Idempotent. [[project_datenchecker_konsistenz]]
+    _migrate_sensor_mapping_strategien_clear(connection)
 
-            # Fall B (#300): vor v3.39.0 angelegte connector_config ohne
-            # field_inv_map nachrüsten — der automatische Energy-Poll publisht
-            # sonst PV nur aufs Fallback-Topic und Speicher/Wallbox gar nicht.
-            # Leitet die Zuordnung eindeutig aus den Investitionen ab. Idempotent.
-            # [[project_connector_mqtt_energie]]
-            _migrate_connector_field_inv_map_backfill(connection)
+    # Fall B (#300): vor v3.39.0 angelegte connector_config ohne
+    # field_inv_map nachrüsten — der automatische Energy-Poll publisht
+    # sonst PV nur aufs Fallback-Topic und Speicher/Wallbox gar nicht.
+    # Leitet die Zuordnung eindeutig aus den Investitionen ab. Idempotent.
+    # [[project_connector_mqtt_energie]]
+    _migrate_connector_field_inv_map_backfill(connection)
 
-        # v1.1.0: Neue Spalten zur monatsdaten Tabelle
-        if 'monatsdaten' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('monatsdaten')}
-            new_columns = [
-                ('durchschnittstemperatur', 'FLOAT'),
-                ('sonderkosten_euro', 'FLOAT'),
-                ('sonderkosten_beschreibung', 'VARCHAR(500)'),
-                ('notizen', 'VARCHAR(1000)'),
-                ('netzbezug_durchschnittspreis_cent', 'FLOAT'),
-                # v3.1.0: Energiebilanz-Analyse
-                ('ueberschuss_kwh', 'FLOAT'),
-                ('defizit_kwh', 'FLOAT'),
-                ('batterie_vollzyklen', 'FLOAT'),
-                ('performance_ratio', 'FLOAT'),
-                ('peak_netzbezug_kw', 'FLOAT'),
-                # v3.17.0: Kraftstoffpreis aus EU Oil Bulletin
-                ('kraftstoffpreis_euro', 'FLOAT'),
-                # v3.21.0: Alter Energiepreis (Gas/Öl) pro Monat für WP-Alternativvergleich
-                ('gaspreis_cent_kwh', 'FLOAT'),
-                # G19-1: Strukturierte sonstige Erträge & Ausgaben (Anlage-Ebene)
-                ('sonstige_positionen', 'JSON'),
-                # #392: variable Einspeisevergütung — der Satz des Monats
-                ('einspeise_durchschnittspreis_cent', 'FLOAT'),
-            ]
-            for col_name, col_type in new_columns:
-                if col_name not in existing_columns:
-                    connection.execute(text(f'ALTER TABLE monatsdaten ADD COLUMN {col_name} {col_type}'))
 
-            # G19-1: Alt-Sonderkosten als Ausgabe-Position materialisieren
-            # (idempotent — füllt nur Zeilen mit sonstige_positionen IS NULL).
-            _migrate_monatsdaten_sonderkosten_zu_positionen(connection)
+def _migrate_monatsdaten_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``monatsdaten``: fehlende Spalten, danach die Sonderkosten-Materialisierung (G19-1)."""
+    if 'monatsdaten' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('monatsdaten')}
+    new_columns = [
+        ('durchschnittstemperatur', 'FLOAT'),
+        ('sonderkosten_euro', 'FLOAT'),
+        ('sonderkosten_beschreibung', 'VARCHAR(500)'),
+        ('notizen', 'VARCHAR(1000)'),
+        ('netzbezug_durchschnittspreis_cent', 'FLOAT'),
+        # v3.1.0: Energiebilanz-Analyse
+        ('ueberschuss_kwh', 'FLOAT'),
+        ('defizit_kwh', 'FLOAT'),
+        ('batterie_vollzyklen', 'FLOAT'),
+        ('performance_ratio', 'FLOAT'),
+        ('peak_netzbezug_kw', 'FLOAT'),
+        # v3.17.0: Kraftstoffpreis aus EU Oil Bulletin
+        ('kraftstoffpreis_euro', 'FLOAT'),
+        # v3.21.0: Alter Energiepreis (Gas/Öl) pro Monat für WP-Alternativvergleich
+        ('gaspreis_cent_kwh', 'FLOAT'),
+        # G19-1: Strukturierte sonstige Erträge & Ausgaben (Anlage-Ebene)
+        ('sonstige_positionen', 'JSON'),
+        # #392: variable Einspeisevergütung — der Satz des Monats
+        ('einspeise_durchschnittspreis_cent', 'FLOAT'),
+    ]
+    for col_name, col_type in new_columns:
+        if col_name not in existing_columns:
+            connection.execute(text(f'ALTER TABLE monatsdaten ADD COLUMN {col_name} {col_type}'))
 
-        # v2.3.2: Neue Spalten zur pvgis_prognosen Tabelle (per-Modul-Daten + gesamt kWp)
-        if 'pvgis_prognosen' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('pvgis_prognosen')}
-            new_columns = [
-                ('gesamt_leistung_kwp', 'FLOAT'),
-                ('module_monatswerte', 'JSON'),
-                ('horizont_verwendet', 'BOOLEAN DEFAULT 0'),
-                # v4.0.11 (#363): Strahlungsdatensatz der Zahl. Bewusst ohne
-                # DEFAULT — NULL bedeutet „vor der Umstellung geschrieben, also
-                # aus PVGIS v5_2/SARAH2" und ist der Auslöser, der eine Anlage
-                # ohne Stammdaten-Änderung einmalig nachziehen lässt.
-                ('raddatabase', 'VARCHAR(50)'),
-            ]
-            for col_name, col_type in new_columns:
-                if col_name not in existing_columns:
-                    connection.execute(text(f'ALTER TABLE pvgis_prognosen ADD COLUMN {col_name} {col_type}'))
+    # G19-1: Alt-Sonderkosten als Ausgabe-Position materialisieren
+    # (idempotent — füllt nur Zeilen mit sonstige_positionen IS NULL).
+    _migrate_monatsdaten_sonderkosten_zu_positionen(connection)
 
-            # A17/P5: Invariante „genau eine aktive Prognose je Anlage".
-            # Reihenfolge ist zwingend — erst bereinigen, dann der Index, sonst
-            # scheitert `CREATE UNIQUE INDEX` auf Bestandsdaten. Beides idempotent,
-            # beides ohne Löschen (deaktivieren ≠ entfernen) und nicht blockierend.
-            _migrate_pvgis_eine_aktive_prognose(connection)
-            _migrate_pvgis_index_eine_aktive(connection)
 
-        # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
-        if 'investitionen' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('investitionen')}
-            new_columns = [
-                ('leistung_kwp', 'FLOAT'),
-                ('ausrichtung', 'VARCHAR(50)'),
-                ('neigung_grad', 'FLOAT'),
-                ('ha_entity_id', 'VARCHAR(255)'),
-                # v3.14.0: Stilllegungsdatum (Issue #123) — historische Aggregate
-                # blenden Investitionen nicht mehr rückwirkend aus
-                ('stilllegungsdatum', 'DATE'),
-                # #284: Graue Herstellungs-Last (CO2) — optionales Override für die
-                # CO2-Amortisation; leer = Default-Richtwert nach Typ/Größe.
-                ('graue_last_kg', 'FLOAT'),
-            ]
-            for col_name, col_type in new_columns:
-                if col_name not in existing_columns:
-                    connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
+def _migrate_pvgis_prognosen_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``pvgis_prognosen``: fehlende Spalten, danach Bereinigung und Index «eine aktive» (A17/P5)."""
+    if 'pvgis_prognosen' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('pvgis_prognosen')}
+    new_columns = [
+        ('gesamt_leistung_kwp', 'FLOAT'),
+        ('module_monatswerte', 'JSON'),
+        ('horizont_verwendet', 'BOOLEAN DEFAULT 0'),
+        # v4.0.11 (#363): Strahlungsdatensatz der Zahl. Bewusst ohne
+        # DEFAULT — NULL bedeutet „vor der Umstellung geschrieben, also
+        # aus PVGIS v5_2/SARAH2" und ist der Auslöser, der eine Anlage
+        # ohne Stammdaten-Änderung einmalig nachziehen lässt.
+        ('raddatabase', 'VARCHAR(50)'),
+    ]
+    for col_name, col_type in new_columns:
+        if col_name not in existing_columns:
+            connection.execute(text(f'ALTER TABLE pvgis_prognosen ADD COLUMN {col_name} {col_type}'))
 
-            # v3.25.0: Investitions-Parameter-Key-Vereinheitlichung (siehe
-            # docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md). 7 Drift-Bugs zwischen Form/Wizard
-            # und Backend-Reads sind in v3.25.0 gefixt — bestehende Anlagen können historisch
-            # aber alte Keys gespeichert haben (typischerweise nicht, weil Form/Wizard-Schreibseite
-            # immer kanonisch war, aber HA-Import o. ä. Schreib-Pfade können zu Drift geführt haben).
-            # Diese Migration schreibt alte Keys auf neue Kanon-Keys um. Idempotent.
-            _migrate_investitionen_parameter_keys_v325(connection)
+    # A17/P5: Invariante „genau eine aktive Prognose je Anlage".
+    # Reihenfolge ist zwingend — erst bereinigen, dann der Index, sonst
+    # scheitert `CREATE UNIQUE INDEX` auf Bestandsdaten. Beides idempotent,
+    # beides ohne Löschen (deaktivieren ≠ entfernen) und nicht blockierend.
+    _migrate_pvgis_eine_aktive_prognose(connection)
+    _migrate_pvgis_index_eine_aktive(connection)
 
-            # v3.25.8: verbrauch_daten-JSON Legacy-Keys auf Kanon-Keys umschreiben
-            # (Drift-Audit Bündel G — `pv_erzeugung_kwh`/`erzeugung_kwh`,
-            # `heizenergie_kwh`/`heizung_kwh`, `ladung_kwh`/`verbrauch_kwh`,
-            # `ladung_netz_kwh`/`speicher_ladung_netz_kwh`). Idempotent.
-            _migrate_verbrauch_daten_keys_v326(connection)
 
-            # Etappe A (Issue #264): `laedt_aus_netz` als eigener Erfassungs-
-            # Schalter. Backfill: arbitrage_faehig=true ⇒ laedt_aus_netz=true.
-            _migrate_speicher_laedt_aus_netz_backfill(connection)
+def _migrate_investitionen_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``investitionen``: fehlende Spalten, danach die vier Daten-Migrationen des Tabellen-Blocks."""
+    if 'investitionen' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('investitionen')}
+    new_columns = [
+        ('leistung_kwp', 'FLOAT'),
+        ('ausrichtung', 'VARCHAR(50)'),
+        ('neigung_grad', 'FLOAT'),
+        ('ha_entity_id', 'VARCHAR(255)'),
+        # v3.14.0: Stilllegungsdatum (Issue #123) — historische Aggregate
+        # blenden Investitionen nicht mehr rückwirkend aus
+        ('stilllegungsdatum', 'DATE'),
+        # #284: Graue Herstellungs-Last (CO2) — optionales Override für die
+        # CO2-Amortisation; leer = Default-Richtwert nach Typ/Größe.
+        ('graue_last_kg', 'FLOAT'),
+    ]
+    for col_name, col_type in new_columns:
+        if col_name not in existing_columns:
+            connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
 
-            # kWp-Verteilung-Etappe (#289/#651): pv_erzeugung_kwh ist ein rein
-            # manuelles Aggregat — Auto-Summen mit Pro-Modul-Werten im Monat
-            # leeren, Read-time-Verteilung übernimmt. Idempotent.
-            _migrate_pv_erzeugung_aggregat_clear(connection)
+    # v3.25.0: Investitions-Parameter-Key-Vereinheitlichung (siehe
+    # docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md). 7 Drift-Bugs zwischen Form/Wizard
+    # und Backend-Reads sind in v3.25.0 gefixt — bestehende Anlagen können historisch
+    # aber alte Keys gespeichert haben (typischerweise nicht, weil Form/Wizard-Schreibseite
+    # immer kanonisch war, aber HA-Import o. ä. Schreib-Pfade können zu Drift geführt haben).
+    # Diese Migration schreibt alte Keys auf neue Kanon-Keys um. Idempotent.
+    _migrate_investitionen_parameter_keys_v325(connection)
 
-        # Spezialtarife: verwendung-Feld für Strompreise
-        if 'strompreise' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('strompreise')}
-            if 'verwendung' not in existing_columns:
-                connection.execute(text("ALTER TABLE strompreise ADD COLUMN verwendung VARCHAR(30) DEFAULT 'allgemein'"))
-            # G19-1 K3 (R19-3): jährliche Zähler-/Messstellengebühr (Ausweis-only)
-            if 'zaehlergebuehr_euro_jahr' not in existing_columns:
-                connection.execute(text("ALTER TABLE strompreise ADD COLUMN zaehlergebuehr_euro_jahr FLOAT"))
-            # #392: Häkchen „Einspeisevergütung wechselt monatlich"
-            if 'einspeisung_variabel' not in existing_columns:
-                connection.execute(text("ALTER TABLE strompreise ADD COLUMN einspeisung_variabel BOOLEAN NOT NULL DEFAULT 0"))
+    # v3.25.8: verbrauch_daten-JSON Legacy-Keys auf Kanon-Keys umschreiben
+    # (Drift-Audit Bündel G — `pv_erzeugung_kwh`/`erzeugung_kwh`,
+    # `heizenergie_kwh`/`heizung_kwh`, `ladung_kwh`/`verbrauch_kwh`,
+    # `ladung_netz_kwh`/`speicher_ladung_netz_kwh`). Idempotent.
+    _migrate_verbrauch_daten_keys_v326(connection)
 
-        # v3.5.0: Preset-ID für MQTT-Gateway-Mappings
-        if 'mqtt_gateway_mappings' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('mqtt_gateway_mappings')}
-            if 'preset_id' not in existing_columns:
-                connection.execute(text('ALTER TABLE mqtt_gateway_mappings ADD COLUMN preset_id VARCHAR(50)'))
+    # Etappe A (Issue #264): `laedt_aus_netz` als eigener Erfassungs-
+    # Schalter. Backfill: arbitrage_faehig=true ⇒ laedt_aus_netz=true.
+    _migrate_speicher_laedt_aus_netz_backfill(connection)
 
-        # v3.2.0: Per-Komponenten kWh in TagesZusammenfassung
-        if 'tages_zusammenfassung' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('tages_zusammenfassung')}
-            if 'komponenten_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_kwh JSON'))
-            # N-384: GTI-Tagessumme — der NENNER der Performance Ratio. Rein additiv,
-            # Bestandszeilen bleiben NULL („nicht erhoben", keine 0). Ohne diese Spalte
-            # war die Kennzahl für niemanden nachrechenbar; angezeigt wurde daneben die
-            # horizontale Globalstrahlung, die nicht in ihrer Formel steht.
-            if 'gti_summe_wh_m2' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN gti_summe_wh_m2 FLOAT'))
-            # v3.3.0: PV-Prognose für Lernfaktor
-            if 'pv_prognose_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_kwh FLOAT'))
-            # v3.4.1: SFML-Tagesprognose für Prognose-Vergleich
-            if 'sfml_prognose_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
-            # v3.16.0: Börsenpreis-Tagesaggregation
-            if 'boersenpreis_avg_cent' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_avg_cent FLOAT'))
-            if 'boersenpreis_min_cent' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_min_cent FLOAT'))
-            if 'negative_preis_stunden' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN negative_preis_stunden INTEGER'))
-            if 'einspeisung_neg_preis_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN einspeisung_neg_preis_kwh FLOAT'))
-            # Kraftstoffpreis (EU Weekly Oil Bulletin, €/L)
-            if 'kraftstoffpreis_euro' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN kraftstoffpreis_euro FLOAT'))
-            # v3.17.0: Solcast PV-Prognose (p50, p10, p90)
-            if 'solcast_prognose_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_prognose_kwh FLOAT'))
-            if 'solcast_p10_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_p10_kwh FLOAT'))
-            if 'solcast_p90_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_p90_kwh FLOAT'))
-            # Day-Ahead Stundenprofil-Snapshot (24 Werte JSON, vor Sonnenaufgang gefroren)
-            if 'pv_prognose_stundenprofil' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_stundenprofil JSON'))
-            if 'solcast_prognose_stundenprofil' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_prognose_stundenprofil JSON'))
-            # Tracking #110 „A": SFML/Tom-HA echtes Stundenprofil (Backward-Slots)
-            if 'sfml_prognose_stundenprofil' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_stundenprofil JSON'))
-            # v3.24.0 (Issue #136): WP-Starts und andere Counter pro Komponente
-            if 'komponenten_starts' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_starts JSON'))
-            # Prognose-Kanon §6: konvergenz-gefrorener Genauigkeits-Endwert
-            # (rollt mit, bis OM für den Tag konvergiert; dann via _final_at fix).
-            if 'pv_prognose_final_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_kwh FLOAT'))
-            if 'pv_prognose_final_at' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_at VARCHAR(40)'))
-            # N-141 Weg (c): abgeleiteter PV-/Netz-Anteil der Heimladung.
-            # Rein additiv — Bestandszeilen bleiben NULL, und NULL heißt
-            # „keine Aussage". Damit gibt es KEINE rückwirkende Änderung an
-            # historischen Werten (Rahmenbedingung 5, Gernot 2026-08-08).
-            if 'emob_ladung_pv_abgeleitet_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_pv_abgeleitet_kwh FLOAT'))
-            if 'emob_ladung_netz_abgeleitet_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_netz_abgeleitet_kwh FLOAT'))
-            # N-569-Ergänzung: davon aus dem Speicher (Teilmenge des PV-Anteils). Additiv,
-            # Bestand bleibt NULL = keine Aussage.
-            if 'emob_ladung_speicher_abgeleitet_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_speicher_abgeleitet_kwh FLOAT'))
-            # N-547: das Lern-SOLL des Korrekturprofils (rohe, GEKAPPTE, aber
-            # unkorrigierte OpenMeteo-Reihe) — getrennt von der Vorhersage
-            # `pv_prognose_stundenprofil`, gegen die bis 22.09.2026 gelernt
-            # wurde (zirkulär: Faktoren konvergierten auf √r statt r).
-            # ⛔ RÜCKWÄRTS LEER, kein Backfill: Bestandszeilen tragen die
-            # korrigierte Reihe, eine Rückrechnung wäre geraten. Die Bins
-            # behalten dafür ihren alten Faktor, bis das Gate ihrer Stufe mit
-            # NEUEN Datenpunkten erreicht ist (Korrekturprofil-Aggregator).
-            if 'lern_soll_stundenprofil_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_stundenprofil_kwh JSON'))
-            if 'lern_soll_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_kwh FLOAT'))
-            # Zählerlücken wie HA (R4/R9): `verworfen` ist Markierung UND
-            # Regelmarke. Rein additiv, kein Backfill — Altbestand behält NULL
-            # und rechnet damit weiter nach N-92, bis er neu aggregiert wird
-            # (E6/E7; der Daten-Checker nennt die Tage). Kein Start-Rewrite.
-            if 'verworfen' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN verworfen JSON'))
-            # N-567: Nachtrag nach Nullstunden (nur benannt, zählt wie in HA). Rein additiv,
-            # kein Backfill — Bestandstage bekommen ihn mit der nächsten Neuaggregation.
-            if 'nachtrag' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN nachtrag JSON'))
+    # kWp-Verteilung-Etappe (#289/#651): pv_erzeugung_kwh ist ein rein
+    # manuelles Aggregat — Auto-Summen mit Pro-Modul-Werten im Monat
+    # leeren, Read-time-Verteilung übernimmt. Idempotent.
+    _migrate_pv_erzeugung_aggregat_clear(connection)
 
-        # N-547: Übergangs-Marker am Korrekturprofil. `lern_basis_pro_bin` sagt
-        # je Bin, ob sein Faktor schon gegen das neue Lern-SOLL gelernt ist
-        # („neu") oder noch der zirkulär gelernte Bestand ist („alt");
-        # `lern_umstellung_am` trägt den Beginn der 365-Tage-Keep-Regel.
-        # NULL bei Bestandszeilen — der Aggregator liest das als „alt" bzw.
-        # setzt das Datum beim ersten Lauf.
-        if 'korrekturprofile' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('korrekturprofile')}
-            if 'lern_basis_pro_bin' not in existing_columns:
-                connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_basis_pro_bin JSON'))
-            if 'lern_umstellung_am' not in existing_columns:
-                connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_umstellung_am DATE'))
 
-        # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
-        # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),
-        # neue Spalten waermepumpe_kw und wallbox_kw werden ergänzt.
-        if 'tages_energie_profil' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('tages_energie_profil')}
-            if 'waermepumpe_kw' not in existing_columns:
-                # Altdaten löschen (einmalig, nur wenn neue Spalten noch nicht existieren)
-                connection.execute(text('DELETE FROM tages_energie_profil'))
-                connection.execute(text('DELETE FROM tages_zusammenfassung'))
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN waermepumpe_kw FLOAT'))
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wallbox_kw FLOAT'))
-            # v3.12.3: Per-Komponenten-Aufschlüsselung für Vollbackfill
-            if 'komponenten' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN komponenten JSON'))
-            # v3.16.0: Stündlicher Strompreis (Sensor + Börsenpreis getrennt)
-            if 'strompreis_cent' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN strompreis_cent FLOAT'))
-            if 'boersenpreis_cent' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN boersenpreis_cent FLOAT'))
-            # v3.24.0 (Issue #136): WP-Kompressor-Starts pro Stunde
-            if 'wp_starts_anzahl' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_starts_anzahl INTEGER'))
-            # Issue #238: WP-Betriebsstunden pro Stunde (analog Kompressor-Starts)
-            if 'wp_betriebsstunden' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_betriebsstunden FLOAT'))
-            # N-239: Ladestand je Speicher-Investition. Rein **additiv** — kein
-            # Backfill, keine Neuberechnung beim Start. Altbestand behält `NULL`
-            # und damit die Ein-Gerät-Zahl in `soc_prozent`; sichtbar gemacht
-            # wird das vom Daten-Checker, repariert auf Knopfdruck über die
-            # bestehende Neu-Aggregation. Ein stiller Massen-Rewrite beim Start
-            # wäre der „große Heiler-Knopf", den dieses Projekt ausschließt.
-            if 'soc_je_speicher' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN soc_je_speicher JSON'))
-            # #263 K-2: Betriebsmodus je Wärmepumpe/Klimaanlage in dieser Stunde.
-            # Dieselbe Bauform und dieselbe Zurückhaltung wie eine Zeile darüber:
-            # rein **additiv**, kein Backfill, keine Neuberechnung beim Start.
-            # Hier ist der Verzicht sogar zwingend statt nur vorsichtig — der
-            # Modus lässt sich gar nicht nachtragen: `/history/period` liest den
-            # recorder (Default-Purge 10 Tage), und Long-Term-Statistics gibt es
-            # nur für numerische Sensoren mit `state_class`. Ein `climate`-
-            # Zustand hat keine. Wer den Sensor heute zuordnet, bekommt die
-            # Aufteilung ab heute; Altbestand bleibt `NULL` = „nicht hingesehen".
-            if 'betriebsmodus_je_wp' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN betriebsmodus_je_wp JSON'))
-            # Zählerlücken wie HA (R2): Spanne je Achse, nur für n > 1.
-            # Additiv, Altbestand NULL (= jede Achse trägt ihre Stunde).
-            if 'spannen' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN spannen JSON'))
-            # v3.26.0: Stündliches Wetter (Bewölkung, Niederschlag, WMO-Code)
-            # für Wetter-Stratifizierung und Korrekturprofil — siehe KONZEPT-KORREKTURPROFIL.md
-            if 'bewoelkung_prozent' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN bewoelkung_prozent FLOAT'))
-            if 'niederschlag_mm' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN niederschlag_mm FLOAT'))
-            if 'wetter_code' not in existing_columns:
-                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wetter_code INTEGER'))
+def _migrate_strompreise_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``strompreise``: fehlende Spalten."""
+    if 'strompreise' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('strompreise')}
+    if 'verwendung' not in existing_columns:
+        connection.execute(text("ALTER TABLE strompreise ADD COLUMN verwendung VARCHAR(30) DEFAULT 'allgemein'"))
+    # G19-1 K3 (R19-3): jährliche Zähler-/Messstellengebühr (Ausweis-only)
+    if 'zaehlergebuehr_euro_jahr' not in existing_columns:
+        connection.execute(text("ALTER TABLE strompreise ADD COLUMN zaehlergebuehr_euro_jahr FLOAT"))
+    # #392: Häkchen „Einspeisevergütung wechselt monatlich"
+    if 'einspeisung_variabel' not in existing_columns:
+        connection.execute(text("ALTER TABLE strompreise ADD COLUMN einspeisung_variabel BOOLEAN NOT NULL DEFAULT 0"))
 
-        # Etappe 3c P1 (KONZEPT-ENERGIEPROFIL-3C.md): Source-Marker auf SensorSnapshot.
-        # Diagnostiziert Schreib-Pfad pro Snapshot — Voraussetzung für 3d-Schablone.
-        # N-555 Stufe 3 / N-569: `emob_ladebloecke` entsteht per `create_all`; eine
-        # Entwicklungs-DB, die die Tabelle vor der Spalte `speicher_kwh` bekam, holt sie nach.
-        if 'emob_ladebloecke' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('emob_ladebloecke')}
-            if 'speicher_kwh' not in existing_columns:
-                connection.execute(text('ALTER TABLE emob_ladebloecke ADD COLUMN speicher_kwh FLOAT'))
 
-        if 'sensor_snapshots' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('sensor_snapshots')}
-            if 'quelle' not in existing_columns:
+def _migrate_mqtt_gateway_mappings_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``mqtt_gateway_mappings``: fehlende Spalte ``preset_id``."""
+    if 'mqtt_gateway_mappings' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('mqtt_gateway_mappings')}
+    if 'preset_id' not in existing_columns:
+        connection.execute(text('ALTER TABLE mqtt_gateway_mappings ADD COLUMN preset_id VARCHAR(50)'))
+
+
+def _migrate_tages_zusammenfassung_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``tages_zusammenfassung``: fehlende Spalten (rein additiv)."""
+    if 'tages_zusammenfassung' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('tages_zusammenfassung')}
+    if 'komponenten_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_kwh JSON'))
+    # N-384: GTI-Tagessumme — der NENNER der Performance Ratio. Rein additiv,
+    # Bestandszeilen bleiben NULL („nicht erhoben", keine 0). Ohne diese Spalte
+    # war die Kennzahl für niemanden nachrechenbar; angezeigt wurde daneben die
+    # horizontale Globalstrahlung, die nicht in ihrer Formel steht.
+    if 'gti_summe_wh_m2' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN gti_summe_wh_m2 FLOAT'))
+    # v3.3.0: PV-Prognose für Lernfaktor
+    if 'pv_prognose_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_kwh FLOAT'))
+    # v3.4.1: SFML-Tagesprognose für Prognose-Vergleich
+    if 'sfml_prognose_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_kwh FLOAT'))
+    # v3.16.0: Börsenpreis-Tagesaggregation
+    if 'boersenpreis_avg_cent' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_avg_cent FLOAT'))
+    if 'boersenpreis_min_cent' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN boersenpreis_min_cent FLOAT'))
+    if 'negative_preis_stunden' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN negative_preis_stunden INTEGER'))
+    if 'einspeisung_neg_preis_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN einspeisung_neg_preis_kwh FLOAT'))
+    # Kraftstoffpreis (EU Weekly Oil Bulletin, €/L)
+    if 'kraftstoffpreis_euro' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN kraftstoffpreis_euro FLOAT'))
+    # v3.17.0: Solcast PV-Prognose (p50, p10, p90)
+    if 'solcast_prognose_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_prognose_kwh FLOAT'))
+    if 'solcast_p10_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_p10_kwh FLOAT'))
+    if 'solcast_p90_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_p90_kwh FLOAT'))
+    # Day-Ahead Stundenprofil-Snapshot (24 Werte JSON, vor Sonnenaufgang gefroren)
+    if 'pv_prognose_stundenprofil' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_stundenprofil JSON'))
+    if 'solcast_prognose_stundenprofil' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN solcast_prognose_stundenprofil JSON'))
+    # Tracking #110 „A": SFML/Tom-HA echtes Stundenprofil (Backward-Slots)
+    if 'sfml_prognose_stundenprofil' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN sfml_prognose_stundenprofil JSON'))
+    # v3.24.0 (Issue #136): WP-Starts und andere Counter pro Komponente
+    if 'komponenten_starts' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_starts JSON'))
+    # Prognose-Kanon §6: konvergenz-gefrorener Genauigkeits-Endwert
+    # (rollt mit, bis OM für den Tag konvergiert; dann via _final_at fix).
+    if 'pv_prognose_final_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_kwh FLOAT'))
+    if 'pv_prognose_final_at' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_at VARCHAR(40)'))
+    # N-141 Weg (c): abgeleiteter PV-/Netz-Anteil der Heimladung.
+    # Rein additiv — Bestandszeilen bleiben NULL, und NULL heißt
+    # „keine Aussage". Damit gibt es KEINE rückwirkende Änderung an
+    # historischen Werten (Rahmenbedingung 5, Gernot 2026-08-08).
+    if 'emob_ladung_pv_abgeleitet_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_pv_abgeleitet_kwh FLOAT'))
+    if 'emob_ladung_netz_abgeleitet_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_netz_abgeleitet_kwh FLOAT'))
+    # N-569-Ergänzung: davon aus dem Speicher (Teilmenge des PV-Anteils). Additiv,
+    # Bestand bleibt NULL = keine Aussage.
+    if 'emob_ladung_speicher_abgeleitet_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN emob_ladung_speicher_abgeleitet_kwh FLOAT'))
+    # N-547: das Lern-SOLL des Korrekturprofils (rohe, GEKAPPTE, aber
+    # unkorrigierte OpenMeteo-Reihe) — getrennt von der Vorhersage
+    # `pv_prognose_stundenprofil`, gegen die bis 22.09.2026 gelernt
+    # wurde (zirkulär: Faktoren konvergierten auf √r statt r).
+    # ⛔ RÜCKWÄRTS LEER, kein Backfill: Bestandszeilen tragen die
+    # korrigierte Reihe, eine Rückrechnung wäre geraten. Die Bins
+    # behalten dafür ihren alten Faktor, bis das Gate ihrer Stufe mit
+    # NEUEN Datenpunkten erreicht ist (Korrekturprofil-Aggregator).
+    if 'lern_soll_stundenprofil_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_stundenprofil_kwh JSON'))
+    if 'lern_soll_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN lern_soll_kwh FLOAT'))
+    # Zählerlücken wie HA (R4/R9): `verworfen` ist Markierung UND
+    # Regelmarke. Rein additiv, kein Backfill — Altbestand behält NULL
+    # und rechnet damit weiter nach N-92, bis er neu aggregiert wird
+    # (E6/E7; der Daten-Checker nennt die Tage). Kein Start-Rewrite.
+    if 'verworfen' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN verworfen JSON'))
+    # N-567: Nachtrag nach Nullstunden (nur benannt, zählt wie in HA). Rein additiv,
+    # kein Backfill — Bestandstage bekommen ihn mit der nächsten Neuaggregation.
+    if 'nachtrag' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN nachtrag JSON'))
+
+
+def _migrate_korrekturprofile_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``korrekturprofile``: Übergangs-Marker N-547."""
+    if 'korrekturprofile' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('korrekturprofile')}
+    if 'lern_basis_pro_bin' not in existing_columns:
+        connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_basis_pro_bin JSON'))
+    if 'lern_umstellung_am' not in existing_columns:
+        connection.execute(text('ALTER TABLE korrekturprofile ADD COLUMN lern_umstellung_am DATE'))
+
+
+def _migrate_tages_energie_profil_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``tages_energie_profil``: fehlende Spalten; v3.6.9 löscht beim ersten Mal die Altdaten."""
+    if 'tages_energie_profil' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('tages_energie_profil')}
+    if 'waermepumpe_kw' not in existing_columns:
+        # Altdaten löschen (einmalig, nur wenn neue Spalten noch nicht existieren)
+        connection.execute(text('DELETE FROM tages_energie_profil'))
+        connection.execute(text('DELETE FROM tages_zusammenfassung'))
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN waermepumpe_kw FLOAT'))
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wallbox_kw FLOAT'))
+    # v3.12.3: Per-Komponenten-Aufschlüsselung für Vollbackfill
+    if 'komponenten' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN komponenten JSON'))
+    # v3.16.0: Stündlicher Strompreis (Sensor + Börsenpreis getrennt)
+    if 'strompreis_cent' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN strompreis_cent FLOAT'))
+    if 'boersenpreis_cent' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN boersenpreis_cent FLOAT'))
+    # v3.24.0 (Issue #136): WP-Kompressor-Starts pro Stunde
+    if 'wp_starts_anzahl' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_starts_anzahl INTEGER'))
+    # Issue #238: WP-Betriebsstunden pro Stunde (analog Kompressor-Starts)
+    if 'wp_betriebsstunden' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_betriebsstunden FLOAT'))
+    # N-239: Ladestand je Speicher-Investition. Rein **additiv** — kein
+    # Backfill, keine Neuberechnung beim Start. Altbestand behält `NULL`
+    # und damit die Ein-Gerät-Zahl in `soc_prozent`; sichtbar gemacht
+    # wird das vom Daten-Checker, repariert auf Knopfdruck über die
+    # bestehende Neu-Aggregation. Ein stiller Massen-Rewrite beim Start
+    # wäre der „große Heiler-Knopf", den dieses Projekt ausschließt.
+    if 'soc_je_speicher' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN soc_je_speicher JSON'))
+    # #263 K-2: Betriebsmodus je Wärmepumpe/Klimaanlage in dieser Stunde.
+    # Dieselbe Bauform und dieselbe Zurückhaltung wie eine Zeile darüber:
+    # rein **additiv**, kein Backfill, keine Neuberechnung beim Start.
+    # Hier ist der Verzicht sogar zwingend statt nur vorsichtig — der
+    # Modus lässt sich gar nicht nachtragen: `/history/period` liest den
+    # recorder (Default-Purge 10 Tage), und Long-Term-Statistics gibt es
+    # nur für numerische Sensoren mit `state_class`. Ein `climate`-
+    # Zustand hat keine. Wer den Sensor heute zuordnet, bekommt die
+    # Aufteilung ab heute; Altbestand bleibt `NULL` = „nicht hingesehen".
+    if 'betriebsmodus_je_wp' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN betriebsmodus_je_wp JSON'))
+    # Zählerlücken wie HA (R2): Spanne je Achse, nur für n > 1.
+    # Additiv, Altbestand NULL (= jede Achse trägt ihre Stunde).
+    if 'spannen' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN spannen JSON'))
+    # v3.26.0: Stündliches Wetter (Bewölkung, Niederschlag, WMO-Code)
+    # für Wetter-Stratifizierung und Korrekturprofil — siehe KONZEPT-KORREKTURPROFIL.md
+    if 'bewoelkung_prozent' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN bewoelkung_prozent FLOAT'))
+    if 'niederschlag_mm' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN niederschlag_mm FLOAT'))
+    if 'wetter_code' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wetter_code INTEGER'))
+
+
+def _migrate_emob_ladebloecke_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``emob_ladebloecke``: fehlende Spalte ``speicher_kwh``."""
+    if 'emob_ladebloecke' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('emob_ladebloecke')}
+    if 'speicher_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE emob_ladebloecke ADD COLUMN speicher_kwh FLOAT'))
+
+
+def _migrate_sensor_snapshots_quelle(connection, inspector) -> None:
+    """Leiter-Schritt ``sensor_snapshots``: Spalte ``quelle`` samt UPDATE-Sicherheitsnetz."""
+    if 'sensor_snapshots' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('sensor_snapshots')}
+    if 'quelle' not in existing_columns:
+        connection.execute(text(
+            "ALTER TABLE sensor_snapshots ADD COLUMN quelle VARCHAR(20) NOT NULL DEFAULT 'unknown'"
+        ))
+        # Idempotenz-Sicherheitsnetz: bestehende Zeilen explizit auf 'unknown'
+        # setzen, falls die DEFAULT-Klausel auf älteren SQLite-Versionen nicht
+        # rückwirkend wirkt.
+        connection.execute(text(
+            "UPDATE sensor_snapshots SET quelle = 'unknown' WHERE quelle IS NULL"
+        ))
+
+
+def _migrate_source_provenance_spalten(connection, inspector) -> None:
+    """Leiter-Schritt Etappe 3d P1: ``source_provenance`` an vier Tabellen samt UPDATE-Sicherheitsnetz."""
+    for tbl in ('monatsdaten', 'investition_monatsdaten',
+                'tages_zusammenfassung', 'tages_energie_profil'):
+        if tbl in inspector.get_table_names():
+            existing = {col['name'] for col in inspector.get_columns(tbl)}
+            if 'source_provenance' not in existing:
                 connection.execute(text(
-                    "ALTER TABLE sensor_snapshots ADD COLUMN quelle VARCHAR(20) NOT NULL DEFAULT 'unknown'"
+                    f"ALTER TABLE {tbl} ADD COLUMN source_provenance JSON "
+                    "NOT NULL DEFAULT '{}'"
                 ))
-                # Idempotenz-Sicherheitsnetz: bestehende Zeilen explizit auf 'unknown'
-                # setzen, falls die DEFAULT-Klausel auf älteren SQLite-Versionen nicht
-                # rückwirkend wirkt.
+                # Idempotenz-Sicherheitsnetz für ältere SQLite-Versionen,
+                # bei denen DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
                 connection.execute(text(
-                    "UPDATE sensor_snapshots SET quelle = 'unknown' WHERE quelle IS NULL"
+                    f"UPDATE {tbl} SET source_provenance = '{{}}' "
+                    "WHERE source_provenance IS NULL"
                 ))
 
-        # Etappe 3d P1 (KONZEPT-DATENPIPELINE.md Sektion 3.2 + 6.1):
-        # source_provenance JSON-Spalte auf 4 Aggregat-Tabellen für Per-Feld-Provenance,
-        # source_hash TEXT-Spalte auf monatsdaten + investition_monatsdaten für
-        # Idempotenz-Detection bei Cloud-/CSV-Re-Imports (P2-Lieferung).
-        # Helper write_with_provenance() liest/schreibt diese Spalten erst ab P3.
-        for tbl in ('monatsdaten', 'investition_monatsdaten',
-                    'tages_zusammenfassung', 'tages_energie_profil'):
-            if tbl in inspector.get_table_names():
-                existing = {col['name'] for col in inspector.get_columns(tbl)}
-                if 'source_provenance' not in existing:
-                    connection.execute(text(
-                        f"ALTER TABLE {tbl} ADD COLUMN source_provenance JSON "
-                        "NOT NULL DEFAULT '{}'"
-                    ))
-                    # Idempotenz-Sicherheitsnetz für ältere SQLite-Versionen,
-                    # bei denen DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
-                    connection.execute(text(
-                        f"UPDATE {tbl} SET source_provenance = '{{}}' "
-                        "WHERE source_provenance IS NULL"
-                    ))
-        for tbl in ('monatsdaten', 'investition_monatsdaten'):
-            if tbl in inspector.get_table_names():
-                existing = {col['name'] for col in inspector.get_columns(tbl)}
-                if 'source_hash' not in existing:
-                    connection.execute(text(
-                        f"ALTER TABLE {tbl} ADD COLUMN source_hash VARCHAR(80)"
-                    ))
 
-        # v4.0.6 (PN 90128): geprueft_gegen JSON-Spalte — je Feld die bewusst
-        # behaltene Situation {"sensor": …, "wert": …}. Leeres Dict für
-        # Bestandsdaten heißt schlicht „nichts bestätigt", es geht nichts verloren.
-        for tbl in ('monatsdaten', 'investition_monatsdaten'):
-            if tbl in inspector.get_table_names():
-                existing = {col['name'] for col in inspector.get_columns(tbl)}
-                if 'geprueft_gegen' not in existing:
-                    connection.execute(text(
-                        f"ALTER TABLE {tbl} ADD COLUMN geprueft_gegen JSON "
-                        "NOT NULL DEFAULT '{}'"
-                    ))
-                    # Sicherheitsnetz für ältere SQLite-Versionen, bei denen
-                    # DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
-                    connection.execute(text(
-                        f"UPDATE {tbl} SET geprueft_gegen = '{{}}' "
-                        "WHERE geprueft_gegen IS NULL"
-                    ))
+def _migrate_source_hash_spalten(connection, inspector) -> None:
+    """Leiter-Schritt Etappe 3d P1: ``source_hash`` an ``monatsdaten`` und ``investition_monatsdaten``."""
+    for tbl in ('monatsdaten', 'investition_monatsdaten'):
+        if tbl in inspector.get_table_names():
+            existing = {col['name'] for col in inspector.get_columns(tbl)}
+            if 'source_hash' not in existing:
+                connection.execute(text(
+                    f"ALTER TABLE {tbl} ADD COLUMN source_hash VARCHAR(80)"
+                ))
 
-        # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
-        if 'infothek_eintraege' in inspector.get_table_names():
-            existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
-            if 'ansprechpartner_id' not in existing_columns:
-                connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN ansprechpartner_id INTEGER REFERENCES infothek_eintraege(id) ON DELETE SET NULL'))
-            # v3.15.2: Flag für Anlagendokumentation
-            if 'in_anlagendoku' not in existing_columns:
-                connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN in_anlagendoku BOOLEAN DEFAULT 1'))
 
-        # v3.15.2: Infothek N:M Verknüpfung mit Investitionen (Junction Table)
-        # Tabelle wird von create_all erstellt (SQLAlchemy Model), hier nur Datenmigration
-        table_names = inspector.get_table_names()
-        if 'infothek_investition' not in table_names and 'infothek_eintraege' in table_names:
-            # Junction Table manuell erstellen (vor create_all, damit Datenmigration sofort läuft)
-            connection.execute(text("""
+def _migrate_geprueft_gegen_spalten(connection, inspector) -> None:
+    """Leiter-Schritt v4.0.6: ``geprueft_gegen`` an zwei Tabellen samt UPDATE-Sicherheitsnetz."""
+    for tbl in ('monatsdaten', 'investition_monatsdaten'):
+        if tbl in inspector.get_table_names():
+            existing = {col['name'] for col in inspector.get_columns(tbl)}
+            if 'geprueft_gegen' not in existing:
+                connection.execute(text(
+                    f"ALTER TABLE {tbl} ADD COLUMN geprueft_gegen JSON "
+                    "NOT NULL DEFAULT '{}'"
+                ))
+                # Sicherheitsnetz für ältere SQLite-Versionen, bei denen
+                # DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
+                connection.execute(text(
+                    f"UPDATE {tbl} SET geprueft_gegen = '{{}}' "
+                    "WHERE geprueft_gegen IS NULL"
+                ))
+
+
+def _migrate_infothek_eintraege_spalten(connection, inspector) -> None:
+    """Leiter-Schritt ``infothek_eintraege``: fehlende Spalten."""
+    if 'infothek_eintraege' not in inspector.get_table_names():
+        return
+    existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}
+    if 'ansprechpartner_id' not in existing_columns:
+        connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN ansprechpartner_id INTEGER REFERENCES infothek_eintraege(id) ON DELETE SET NULL'))
+    # v3.15.2: Flag für Anlagendokumentation
+    if 'in_anlagendoku' not in existing_columns:
+        connection.execute(text('ALTER TABLE infothek_eintraege ADD COLUMN in_anlagendoku BOOLEAN DEFAULT 1'))
+
+
+def _migrate_infothek_investition_junction(connection, inspector) -> None:
+    """Leiter-Schritt v3.15.2: Junction ``infothek_investition`` anlegen und die 1:1-Verknüpfungen übertragen."""
+    table_names = inspector.get_table_names()
+    if 'infothek_investition' not in table_names and 'infothek_eintraege' in table_names:
+        # Junction Table manuell erstellen (vor create_all, damit Datenmigration sofort läuft)
+        connection.execute(text("""
                 CREATE TABLE infothek_investition (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     infothek_eintrag_id INTEGER NOT NULL REFERENCES infothek_eintraege(id) ON DELETE CASCADE,
@@ -1208,11 +1233,93 @@ async def run_migrations(conn):
                     UNIQUE(infothek_eintrag_id, investition_id)
                 )
             """))
-            # Bestehende 1:1-Verknüpfungen übertragen
-            connection.execute(text("""
+        # Bestehende 1:1-Verknüpfungen übertragen
+        connection.execute(text("""
                 INSERT OR IGNORE INTO infothek_investition (infothek_eintrag_id, investition_id)
                 SELECT id, investition_id FROM infothek_eintraege WHERE investition_id IS NOT NULL
             """))
+
+
+async def run_migrations(conn):
+    """
+    Führt einfache Migrationen durch.
+
+    SQLite unterstützt keine nativen ALTER TABLE ADD COLUMN,
+    daher prüfen wir ob Spalten existieren und fügen sie hinzu.
+
+    Form (RF-40, 3.11.2026): ``_run_migrations`` ist eine **Aufrufliste in Ausführungsreihenfolge** — je
+    Tabellen-Block der Leiter ein Schritt ``_migrate_<tabelle>_<zweck>(connection, inspector)`` (Modulfunktionen
+    oberhalb), dahinter die drei Schritte, die schon eigene Funktionen waren. **Reihenfolge ist Vertrag** — neue
+    Schritte ans Ende, nie einsortieren; ein Schritt, der Daten umschreibt, bleibt ein eigener Schritt. Gate:
+    ``test_migrations_round_trip.py`` und der Schema-Dump (``docs/DEVELOPMENT.md`` → Golden Master).
+    """
+    from sqlalchemy import inspect
+
+    def _run_migrations(connection):
+        # Reihenfolge ist Vertrag — neue Schritte ans Ende, nie einsortieren.
+        inspector = inspect(connection)
+
+        # v0.8.0+: Neue Spalten zur anlagen Tabelle
+        _migrate_anlagen_spalten(connection, inspector)
+
+        # v1.1.0: Neue Spalten zur monatsdaten Tabelle
+        _migrate_monatsdaten_spalten(connection, inspector)
+
+        # v2.3.2: Neue Spalten zur pvgis_prognosen Tabelle (per-Modul-Daten + gesamt kWp)
+        _migrate_pvgis_prognosen_spalten(connection, inspector)
+
+        # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
+        _migrate_investitionen_spalten(connection, inspector)
+
+        # Spezialtarife: verwendung-Feld für Strompreise
+        _migrate_strompreise_spalten(connection, inspector)
+
+        # v3.5.0: Preset-ID für MQTT-Gateway-Mappings
+        _migrate_mqtt_gateway_mappings_spalten(connection, inspector)
+
+        # v3.2.0: Per-Komponenten kWh in TagesZusammenfassung
+        _migrate_tages_zusammenfassung_spalten(connection, inspector)
+
+        # N-547: Übergangs-Marker am Korrekturprofil. `lern_basis_pro_bin` sagt
+        # je Bin, ob sein Faktor schon gegen das neue Lern-SOLL gelernt ist
+        # („neu") oder noch der zirkulär gelernte Bestand ist („alt");
+        # `lern_umstellung_am` trägt den Beginn der 365-Tage-Keep-Regel.
+        # NULL bei Bestandszeilen — der Aggregator liest das als „alt" bzw.
+        # setzt das Datum beim ersten Lauf.
+        _migrate_korrekturprofile_spalten(connection, inspector)
+
+        # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
+        # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),
+        # neue Spalten waermepumpe_kw und wallbox_kw werden ergänzt.
+        _migrate_tages_energie_profil_spalten(connection, inspector)
+
+        # Etappe 3c P1 (KONZEPT-ENERGIEPROFIL-3C.md): Source-Marker auf SensorSnapshot.
+        # Diagnostiziert Schreib-Pfad pro Snapshot — Voraussetzung für 3d-Schablone.
+        # N-555 Stufe 3 / N-569: `emob_ladebloecke` entsteht per `create_all`; eine
+        # Entwicklungs-DB, die die Tabelle vor der Spalte `speicher_kwh` bekam, holt sie nach.
+        _migrate_emob_ladebloecke_spalten(connection, inspector)
+
+        _migrate_sensor_snapshots_quelle(connection, inspector)
+
+        # Etappe 3d P1 (KONZEPT-DATENPIPELINE.md Sektion 3.2 + 6.1):
+        # source_provenance JSON-Spalte auf 4 Aggregat-Tabellen für Per-Feld-Provenance,
+        # source_hash TEXT-Spalte auf monatsdaten + investition_monatsdaten für
+        # Idempotenz-Detection bei Cloud-/CSV-Re-Imports (P2-Lieferung).
+        # Helper write_with_provenance() liest/schreibt diese Spalten erst ab P3.
+        _migrate_source_provenance_spalten(connection, inspector)
+        _migrate_source_hash_spalten(connection, inspector)
+
+        # v4.0.6 (PN 90128): geprueft_gegen JSON-Spalte — je Feld die bewusst
+        # behaltene Situation {"sensor": …, "wert": …}. Leeres Dict für
+        # Bestandsdaten heißt schlicht „nichts bestätigt", es geht nichts verloren.
+        _migrate_geprueft_gegen_spalten(connection, inspector)
+
+        # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
+        _migrate_infothek_eintraege_spalten(connection, inspector)
+
+        # v3.15.2: Infothek N:M Verknüpfung mit Investitionen (Junction Table)
+        # Tabelle wird von create_all erstellt (SQLAlchemy Model), hier nur Datenmigration
+        _migrate_infothek_investition_junction(connection, inspector)
 
         # HA-Bauform S3, E-S3-5: `kanal_quelle.verworfen_ts` (Marke «verworfen am» der Werkbank).
         _migrate_kanal_quelle_verworfen_ts(connection)

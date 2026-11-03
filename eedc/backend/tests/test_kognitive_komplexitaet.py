@@ -7,9 +7,11 @@ der Baseline ist lesbar) · `test_wurzelmuster_konformitaet.py` (baumweiter Prü
 **Was gilt (Entscheid Gernot 14.10.2026, nach Messung — Hintergrund in `docs/DEVELOPMENT.md`
 → Code-Konventionen → Python):**
 
-1. **Keine Funktion über 100**, außer den hier mit Grund genannten `AUSNAHMEN` (lineare Listen,
-   deren Zahl nichts über Verzweigungstiefe sagt) und dem befristeten `ABBAU`-Bestand mit Auftragsnummer,
-   der nur schrumpfen darf.
+1. **Keine Funktion über 100**, außer den hier mit Grund genannten `AUSNAHMEN` und dem befristeten
+   `ABBAU`-Bestand mit Auftragsnummer, der nur schrumpfen darf. Seit RF-40 (3.11.2026, Entscheid Gernot: Ziel
+   «Baseline leer») sind die `AUSNAHMEN` leer — die einzigen beiden, `core/database.py::run_migrations` und ihre
+   innere `_run_migrations` (lineare Migrationsleiter, 230/151), sind eine Aufrufliste mit einem Schritt je
+   Tabellen-Block geworden.
 2. **Keine neue Funktion über 50.** Der Bestand steht in `kognitive_komplexitaet_baseline.txt`
    und darf nur schrumpfen; eine Funktion darin darf nicht wachsen.
 3. **Die Baseline ist eine Behauptung.** Fällt eine Funktion unter 50, wird der Test rot, bis die
@@ -57,15 +59,12 @@ SCHWELLE_HART = 100
 #: Ab hier gilt der Bestand: keine neue, keine wächst, Baseline nur schrumpfend.
 SCHWELLE_BESTAND = 50
 
-#: Funktionen über 100, die bleiben dürfen — mit dem Grund, den ein Prüfer lesen soll.
+#: Funktionen über 100, die bleiben dürfen — mit dem Grund, den ein Prüfer lesen soll. Seit RF-40 (3.11.2026) leer:
+#: die Migrationsleiter `core/database.py::run_migrations` (230, innere `_run_migrations` 151) stand hier als «lineare
+#: Liste»; sie ist jetzt eine Aufrufliste in Ausführungsreihenfolge (Reihenfolge ist Vertrag) mit je einer
+#: `_migrate_<tabelle>_<zweck>`-Funktion pro Tabellen-Block, jede unter 50. Ein neuer Eintrag braucht einen Grund, den
+#: die Bauform RF-1 nicht auflösen kann, und Gernots Entscheid.
 AUSNAHMEN: dict[str, str] = {
-    "core/database.py::run_migrations": (
-        "lineare Liste von Migrationsschritten in Ausführungsreihenfolge; die Zahl misst Länge, "
-        "nicht Verschachtelung — ein Schnitt in Phasen würde nur die Reihenfolge verstecken"
-    ),
-    "core/database.py::run_migrations._run_migrations": (
-        "innere Funktion derselben Liste (läuft in der Boot-Verbindung); zählt in `run_migrations` mit"
-    ),
 }
 
 

@@ -22,8 +22,6 @@
 72	api/routes/investitionen/roi_standalone.py::standalone_zeilen
 66	core/berechnungen/ergebnis.py::falte_zeitraum
 58	core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows
-230	core/database.py::run_migrations
-151	core/database.py::run_migrations._run_migrations
 91	main.py::lifespan
 58	services/community_service.py::prepare_community_data
 56	services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift
@@ -41,7 +39,7 @@
 74	services/live_verbrauchsprofil_service.py::_profil_from_ha
 80	services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source
 51	services/monats_fakten/bau.py::_baue_fakt
-61	services/monats_fakten/laden.py::lade_monats_fakten
+60	services/monats_fakten/laden.py::lade_monats_fakten
 59	services/monats_fakten/roh.py::_RohMonat.falte
 57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 71	services/snapshot/bereichs_leser.py::lade_tageswerte_je_geraet
