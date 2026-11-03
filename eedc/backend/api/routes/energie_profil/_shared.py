@@ -786,7 +786,13 @@ class TagWerteResponse(BaseModel):
     wp_waerme: Optional[float] = None
     #: Gemessene Kälte des Tages, nie Teil der Wärme.
     wp_kaelte: Optional[float] = None
-    #: Betriebsart-Strom des Tagesstapels — alle vier nur mit Aufteilung am Tag (Alles-oder-nichts wie im Verlauf).
+    #: Betriebsart-Strom des Tagesstapels — alle sechs nur mit Aufteilung am Tag (Alles-oder-nichts wie im Verlauf).
+    #: ⚠ Heizbetrieb/Warmwasserbetrieb (3.11.2026, #446) sind eine **Teilmenge** des Gesamtstroms aus den
+    #: mitgeschriebenen Betriebsart-Stunden, **nicht** der Summand der getrennten Zähler (Monatsspalten
+    #: ``wp_strom_heizen``/``wp_strom_warmwasser``: Heizen + Warmwasser = Gesamt). Wer beide addiert, zählt doppelt —
+    #: derselbe Satz wie bei den HA-Export-Sensoren «Strom Heiz-/Warmwasserbetrieb» (``ha_sensors_export.py``).
+    wp_strom_heizbetrieb: Optional[float] = None
+    wp_strom_warmwasserbetrieb: Optional[float] = None
     wp_strom_kuehlen: Optional[float] = None
     wp_strom_lueften: Optional[float] = None
     wp_strom_entfeuchten: Optional[float] = None

@@ -1420,7 +1420,7 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > | Gruppe | Monatsansicht | Tagesansicht |
 > | --- | --- | --- |
 > | **E-Auto** | Gefahren (km), **Fahrverbrauch**, **Verbrauch (kWh/100 km)**, E-Auto-Ladung, **Ladung extern** (kWh und €), **V2H-Entladung**, **Ladevorgänge**, Wallbox-Ladung, Wallbox-PV-Ladung, Wallbox-PV-Anteil | Gefahren (km), **Fahrverbrauch**, **V2H-Entladung**, **Ladevorgänge**, **Wallbox-Ladung** |
-> | **Wärmepumpe** | Strom, Strom Heizen/WW, Wärme (gesamt/Heizen/WW), JAZ, **JAZ Heizen**, **JAZ WW**, **JAZ Kühlen**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung** | Strom, **Wärme**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung**, **Starts**, **Betriebszeit (min)** |
+> | **Wärmepumpe** | Strom, Strom Heizen/WW, Wärme (gesamt/Heizen/WW), JAZ, **JAZ Heizen**, **JAZ WW**, **JAZ Kühlen**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung** | Strom, **Wärme**, **Strom Heizbetrieb**, **Strom Warmwasserbetrieb**, **Strom Kühlen/Lüften/Entfeuchten**, **Strom nicht aufgeteilt**, **Kälte**, **Zusatzheizung**, **Starts**, **Betriebszeit (min)** |
 > | **Speicher** | Ladung, Entladung, Effizienz, **Netzladung** | Ladung, Entladung, Effizienz, **Vollzyklen (Entladung)** |
 > | Weitere | **Ø Außentemperatur**, **Dienstliche Ladekosten** (Finanzen), Abgabe an Dritte | **Temperatur min**, **Börsenpreis min**, **Abgabe an Dritte** |
 >
@@ -1444,15 +1444,23 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 >   Zeitraums muss eedc dafür sehr viele Stundendatensätze durchsuchen und zusammenfassen — ist eine dieser Spalten
 >   eingeblendet, steht deshalb statt der Tabelle eine Lade-Anzeige, bis alles gerechnet ist (bei einem Jahr einige
 >   Sekunden); erst dann ist auch der CSV-Export da. Ohne diese Spalten lädt die Tabelle so schnell wie bisher.
+> - **Strom Heizbetrieb und Strom Warmwasserbetrieb** (nur Tagesansicht) sind die Betriebsart-Aufteilung des Tages
+>   aus demselben Balken wie Kühlen, Lüften und Entfeuchten — dieselben Zahlen wie der Verlauf in *Cockpit → Monat*
+>   und wie die Home-Assistant-Sensoren *Strom Heizbetrieb* / *Strom Warmwasserbetrieb*. ⚠ **Das ist etwas anderes
+>   als „WP Strom Heizen/WW" der Monatsansicht.** Die Monatsspalten sind deine **getrennten Zähler** — Summanden:
+>   Heizen + Warmwasser ergeben den Gesamtstrom. Die Tagesspalten sind eine **Teilmenge** des Gesamtstroms aus
+>   mitgeschriebenen Betriebsart-Stunden. **Addiere sie nie** — sonst zählt derselbe Strom doppelt.
 > - **Starts und Betriebszeit** sind die Tageszähler deines Herstellers, summiert über die Wärmepumpen wie in
 >   *Cockpit → Monat*; die Betriebszeit steht in ganzen Minuten. Eine Monatsspalte gibt es dafür nicht — die
 >   Summe über den Monat steht in *Cockpit → Monat*.
 > - **„Vollzyklen (Entladung)"** ist Entladung ÷ Kapazität des Tages — nicht dasselbe wie die **SoC-Hübe** unter
 >   „Tagesdetail" (Hub des Ladestands).
 > - **Nur in der Tagesansicht (*Cockpit → Tag*)** stehen die Arbeitszahlen des Tages (gesamt und je Funktion), die
->   Wärme und der Strom für Heizen und Warmwasser getrennt sowie die gemessene PV-Ladung und
->   der PV-Anteil der Wallbox des Tages. Sie entstehen dort aus Lesern für **einen** Tag; über ein ganzes Jahr gelesen
->   wäre die Tabelle zu langsam bzw. bräuchte einen zweiten Rechenweg neben der Tagesansicht.
+>   Werte deiner **getrennten Zähler** für Heizen und Warmwasser (Strom und Wärme je Funktion) sowie die gemessene
+>   PV-Ladung und der PV-Anteil der Wallbox des Tages. Sie entstehen dort aus Lesern für **einen** Tag; über ein ganzes
+>   Jahr gelesen wäre die Tabelle zu langsam bzw. bräuchte einen zweiten Rechenweg neben der Tagesansicht. Die
+>   **Betriebsart-Aufteilung** (Heizbetrieb, Warmwasserbetrieb, Kühlen, Lüften, Entfeuchten, nicht aufgeteilt) steht
+>   dagegen auch in der Tagestabelle — siehe oben.
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 

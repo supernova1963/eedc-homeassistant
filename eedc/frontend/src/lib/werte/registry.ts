@@ -63,6 +63,8 @@ const NUR_TAG: Granularitaet[] = ['tag']
 // WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt und Zusatzheizung seit 29.10.2026 auch je Tag
 // (`tagMitWaerme`: die Tagesreihe von Cockpit → Monat bzw. der Heizstab-Strom wie Cockpit → Tag, nur auf Anfrage geladen)
 // oder die Größe nur monatlich gepflegt wird (Ladung extern, Heimladung je Auto).
+// Strom Heizbetrieb/Warmwasserbetrieb (3.11.2026, #446): nur Tag, aus demselben Betriebsart-Stapel wie Strom Kühlen —
+// eigene Schlüssel, weil „WP Strom Heizen/WW" (Monat) die getrennten Zähler meint (Summanden, nicht Teilmengen).
 // Nur-Tag: Größen ohne Monatswert in den Monats-Fakten (WP-Starts/Betriebszeit,
 // Vollzyklen der Entladung) und die Tag-nativen Metriken (Peaks/PR/Börsenpreis) im
 // Block `tagdetail`.
@@ -95,7 +97,8 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // Entladung ÷ Kapazität des Tages (Backend-SoT) — NICHT die „SoC-Hübe" (`batterie_vollzyklen`, Ladestand-Hub) im
   // Block Tagesdetail; der Name sagt deshalb, woraus er entsteht.
   { key: 'speicher_vollzyklen', label: 'Vollzyklen (Entladung)', unit: '', gruppe: 'speicher',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
-  // Wärmepumpe — nur Strom pro Tag ableitbar; Wärme/COP bleiben monat-only
+  // Wärmepumpe — Strom, Wärme (Σ), Kälte und Betriebsart-Strom auch je Tag; Wärme je Funktion, Strom der getrennten
+  // Zähler und Arbeitszahlen bleiben monat-only (je Tag nur Cockpit → Tag)
   { key: 'wp_strom',           label: 'WP Strom',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'wp_strom_heizen',    label: 'WP Strom Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'wp_strom_warmwasser',label: 'WP Strom WW',       unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
@@ -115,6 +118,10 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'wp_jaz_warmwasser',  label: 'WP JAZ WW',         unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_jaz_kuehlen',     label: 'JAZ Kühlen',        unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'none', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // Betriebsart-Strom: Teilmengen von „WP Strom", nur mit Aufteilung (Betriebsart-Zähler oder Modus-Signal).
+  // ⚠ Heiz-/Warmwasserbetrieb (nur Tag, #446) sind Teilmengen aus den Betriebsart-Stunden — NICHT mit „WP Strom
+  // Heizen/WW" (Monat, getrennte Zähler = Summanden des Gesamtstroms) addieren, das zählte doppelt.
+  { key: 'wp_strom_heizbetrieb', label: 'Strom Heizbetrieb', unit: 'kWh',   gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined, tagMitWaerme: true },
+  { key: 'wp_strom_warmwasserbetrieb', label: 'Strom Warmwasserbetrieb', unit: 'kWh', gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined, tagMitWaerme: true },
   { key: 'wp_strom_kuehlen',   label: 'Strom Kühlen',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
   { key: 'wp_strom_lueften',   label: 'Strom Lüften',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },
   { key: 'wp_strom_entfeuchten', label: 'Strom Entfeuchten', unit: 'kWh',   gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined, tagMitWaerme: true },

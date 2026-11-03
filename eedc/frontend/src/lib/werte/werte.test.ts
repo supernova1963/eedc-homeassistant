@@ -59,12 +59,12 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 72 Metriken (55 Monat, 51 Tag, davon 34 beides), jede mit gültiger Gruppe + granular', () => {
+  it('hat 74 Metriken (55 Monat, 53 Tag, davon 34 beides), jede mit gültiger Gruppe + granular', () => {
     // 37 seit 05.09.2026: `abgabe_dritte` (Konzept §9.2, dritter Weg der Verwendung).
     // 72 seit 28.10.2026 (Tabellen-Spalten E-Mobilität, Wärme/Klima, Speicher, Wetter): +23 Spalten.
     // 34 beides seit 29.10.2026: WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt und Zusatzheizung
-    // auch je Tag.
-    expect(WERTE_METRIKEN).toHaveLength(72)
+    // auch je Tag. 74 seit 3.11.2026 (#446): + Strom Heizbetrieb / Warmwasserbetrieb, nur Tag.
+    expect(WERTE_METRIKEN).toHaveLength(74)
     expect(WERTE_METRIKEN.filter((m) => m.granular.length === 2)).toHaveLength(34)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
@@ -101,7 +101,8 @@ describe('metrikenFuer (Granularität)', () => {
   })
   it('Tag = ohne JAZ/Wärme je Funktion/Wallbox-PV-Anteil, mit E-Auto-Fahrt, WP-Tagesreihe und Tag-nativen', () => {
     const keys = metrikenFuer('tag').map((x) => x.key)
-    expect(keys).toHaveLength(51)
+    // 53 seit 3.11.2026 (#446): + Strom Heizbetrieb / Strom Warmwasserbetrieb (nur Tag).
+    expect(keys).toHaveLength(53)
     expect(keys).toContain('peak_pv_kw')
     expect(keys).toContain('ueberschuss_kwh')
     expect(keys).toContain('erzeugung')
@@ -127,11 +128,13 @@ describe('metrikenFuer (Granularität)', () => {
       expect(keys).not.toContain(k)
     }
   })
-  it('WP-Tagesreihe (29.10.2026): genau sieben Spalten tragen `tagMitWaerme`, alle Monat + Tag', () => {
+  it('WP-Tagesreihe (29.10.2026): neun Spalten tragen `tagMitWaerme` — sieben Monat + Tag, Heiz-/Warmwasserbetrieb nur Tag', () => {
     const waerme = WERTE_METRIKEN.filter((m) => m.tagMitWaerme).map((m) => m.key)
-    expect(waerme.sort()).toEqual(['wp_heizstab', 'wp_kaelte', 'wp_strom_entfeuchten', 'wp_strom_kuehlen',
-      'wp_strom_lueften', 'wp_strom_nicht_aufgeteilt', 'wp_waerme'])
-    for (const k of waerme) expect(METRIK_BY_KEY[k].granular).toEqual(['monat', 'tag'])
+    expect(waerme.sort()).toEqual(['wp_heizstab', 'wp_kaelte', 'wp_strom_entfeuchten', 'wp_strom_heizbetrieb',
+      'wp_strom_kuehlen', 'wp_strom_lueften', 'wp_strom_nicht_aufgeteilt', 'wp_strom_warmwasserbetrieb', 'wp_waerme'])
+    const nurTag = ['wp_strom_heizbetrieb', 'wp_strom_warmwasserbetrieb']
+    for (const k of waerme) expect(METRIK_BY_KEY[k].granular).toEqual(nurTag.includes(k) ? ['tag'] : ['monat', 'tag'])
+    expect(brauchtWaermeTag(['wp_strom_heizbetrieb'])).toBe(true)
     expect(brauchtWaermeTag(['erzeugung', 'wp_strom', 'wp_starts'])).toBe(false)
     expect(brauchtWaermeTag(['erzeugung', 'wp_kaelte'])).toBe(true)
     expect(brauchtWaermeTag(['wp_heizstab'])).toBe(true)
@@ -145,8 +148,40 @@ describe('Tabellen-Spalten 28.10.2026 (E-Mobilität, Wärme/Klima, Speicher, Wet
       'ladevorgaenge', 'dienstliche_ladekosten', 'wp_jaz_heizen', 'wp_jaz_warmwasser', 'wp_jaz_kuehlen',
       'wp_strom_kuehlen', 'wp_strom_lueften', 'wp_strom_entfeuchten', 'wp_strom_nicht_aufgeteilt', 'wp_kaelte',
       'wp_heizstab', 'wp_starts', 'wp_betriebszeit_min', 'speicher_netzladung', 'speicher_vollzyklen',
-      'temperatur_avg_c', 'temperatur_min_c', 'boersenpreis_min_cent']
+      'temperatur_avg_c', 'temperatur_min_c', 'boersenpreis_min_cent', 'wp_strom_heizbetrieb', 'wp_strom_warmwasserbetrieb']
     for (const k of neu) expect(METRIK_BY_KEY[k]?.defaultVisible, k).toBe(false)
+  })
+  it('Strom Heiz-/Warmwasserbetrieb (#446, 3.11.2026): nur Tag, eigene Schlüssel neben den Monatsspalten der getrennten Zähler', () => {
+    const tag = metrikenFuer('tag').map((x) => x.key)
+    const monat = metrikenFuer('monat').map((x) => x.key)
+    for (const k of ['wp_strom_heizbetrieb', 'wp_strom_warmwasserbetrieb']) {
+      expect(tag).toContain(k)
+      expect(monat).not.toContain(k)
+      expect(METRIK_BY_KEY[k].gruppe).toBe('waermepumpe')
+      expect(METRIK_BY_KEY[k].aggregation).toBe('sum')
+    }
+    // Die Monatsspalten der getrennten Zähler bleiben Monat — eine andere Größe (Summand, nicht Teilmenge).
+    expect(monat).toContain('wp_strom_heizen')
+    expect(tag).not.toContain('wp_strom_heizen')
+    expect(METRIK_BY_KEY['wp_strom_heizbetrieb'].label).toBe('Strom Heizbetrieb')
+    expect(METRIK_BY_KEY['wp_strom_warmwasserbetrieb'].label).toBe('Strom Warmwasserbetrieb')
+    // Einsortiert direkt vor „Strom Kühlen".
+    const reihe = WERTE_METRIKEN.map((m) => m.key)
+    expect(reihe.indexOf('wp_strom_warmwasserbetrieb')).toBe(reihe.indexOf('wp_strom_heizbetrieb') + 1)
+    expect(reihe.indexOf('wp_strom_kuehlen')).toBe(reihe.indexOf('wp_strom_warmwasserbetrieb') + 1)
+  })
+  it('Strom Heiz-/Warmwasserbetrieb: getTagWert reicht durch, null bleibt null, und die CSV trägt die Spalten', () => {
+    vi.mocked(exportToCSV).mockClear()
+    const r = tw('2026-01-10', { wp_strom_heizbetrieb: 12.34, wp_strom_warmwasserbetrieb: 0 })
+    expect(getTagWert(r, 'wp_strom_heizbetrieb')).toBe(12.34)
+    expect(getTagWert(r, 'wp_strom_warmwasserbetrieb')).toBe(0)
+    expect(getTagWert(tw('2026-01-11'), 'wp_strom_heizbetrieb')).toBeNull()
+    const metriken = [METRIK_BY_KEY['wp_strom_heizbetrieb'], METRIK_BY_KEY['wp_strom_warmwasserbetrieb']]
+    exportWerteCsv({ rows: [tagesZeile(r)], vorjahrRows: null, jahrLabel: 'Jan', vergleichLabel: null, metriken,
+      einheitLabel: 'Tage', dateiname: 't.csv' })
+    const [headers, out] = vi.mocked(exportToCSV).mock.calls[0]
+    expect(headers).toEqual(['Zeitraum', 'Strom Heizbetrieb (kWh)', 'Strom Warmwasserbetrieb (kWh)'])
+    expect(out[0].slice(1)).toEqual([12.34, 0])
   })
   it('Vollzyklen der Entladung tragen einen anderen Namen als die SoC-Hübe', () => {
     expect(METRIK_BY_KEY['speicher_vollzyklen'].label).not.toBe(METRIK_BY_KEY['batterie_vollzyklen'].label)

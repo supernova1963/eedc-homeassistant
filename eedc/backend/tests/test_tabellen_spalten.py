@@ -242,13 +242,18 @@ _WAERME_PAARE = {  # Tabellen-Spalte → Feld der Route `waerme-verlauf` (Cockpi
     "wp_strom_kuehlen": "wp_modus_strom_kuehlen_kwh", "wp_strom_lueften": "wp_modus_strom_lueften_kwh",
     "wp_strom_entfeuchten": "wp_modus_strom_entfeuchten_kwh",
     "wp_strom_nicht_aufgeteilt": "wp_modus_nicht_aufgeteilt_kwh",
+    # Zusage #446 (3.11.2026): Heiz-/Warmwasserbetrieb aus demselben Stapel — eigene Schlüssel, nicht die Monatsspalten
+    # `wp_strom_heizen`/`wp_strom_warmwasser` (getrennte Zähler, andere Größe).
+    "wp_strom_heizbetrieb": "wp_modus_strom_heizen_kwh",
+    "wp_strom_warmwasserbetrieb": "wp_modus_strom_warmwasser_kwh",
 }
 
 
-async def _wp_klima_zwei_tage(db):
+async def _wp_klima_zwei_tage(db, *, heizstrom: tuple[float, float] | None = None):
     """Ein Klimagerät (luft_luft) an zwei Tagen: Kühlstrom 6 / 4 kWh (Betriebsart-Zähler ⇒ Aufteilung), Kälte 18 / 9,
     Wärme (gemeinsamer Wärmemengenzähler) 5 / 0 — und Bezug 30 / 20 kWh in der Tageszeile. Am zweiten Tag ist die Wärme
-    0 (der Leser sagt dann «keine Aussage»), Kälte und Aufteilung bleiben."""
+    0 (der Leser sagt dann «keine Aussage»), Kälte und Aufteilung bleiben. ``heizstrom``: zusätzlich ein Betriebsart-
+    Zähler Heizen mit diesen Tagesmengen (Zusage #446, Strom Heizbetrieb)."""
     from backend.models.sensor_snapshot import SensorSnapshot
     from backend.services.energie_profil._provenance_helpers import seed_tz_provenance
 
@@ -257,9 +262,12 @@ async def _wp_klima_zwei_tage(db):
                                       parameter={"wp_art": "luft_luft"})
     t0 = datetime.combine(D1, datetime.min.time())
     felder = {}
-    for feld, je_tag in (("betriebsart_strom_kuehlen_kwh", (6.0, 4.0)),
-                         ("betriebsart_nutzenergie_kuehlen_kwh", (18.0, 9.0)),
-                         ("waerme_kwh", (5.0, 0.0))):
+    zaehler = [("betriebsart_strom_kuehlen_kwh", (6.0, 4.0)),
+               ("betriebsart_nutzenergie_kuehlen_kwh", (18.0, 9.0)),
+               ("waerme_kwh", (5.0, 0.0))]
+    if heizstrom is not None:
+        zaehler.append(("betriebsart_strom_heizen_kwh", heizstrom))
+    for feld, je_tag in zaehler:
         felder[feld] = {"strategie": "sensor", "sensor_id": f"sensor.{inv.id}_{feld}"}
         stand = 100.0
         for n, kwh in enumerate((0.0, *je_tag)):
@@ -380,3 +388,59 @@ async def test_zusatzheizung_ohne_zaehler_keine_aussage(db):
 
     a = await _wp_klima_zwei_tage(db)
     assert all(z.wp_heizstab is None for z in await baue_tage_werte(db, a, D1, D2, mit_waerme=True))
+
+
+# ── Strom Heizbetrieb / Warmwasserbetrieb je Tag (Zusage #446 an Rainer, simon42, 3.11.2026) ────────────────────────
+
+
+async def test_heizbetrieb_je_tag_gleich_cockpit_monat_mit_gemessenem_heizstrom(db):
+    """Mit Betriebsart-Zähler Heizen trägt «Strom Heizbetrieb» die gemessene Teilmenge (7 / 3 kWh) — dieselbe Zahl wie
+    die Route ``waerme-verlauf`` (``wp_modus_strom_heizen_kwh``); «Strom Warmwasserbetrieb» ist an einem Tag mit
+    Aufteilung eine gemessene 0, kein ``None``. Ohne ``mit_waerme`` bleiben beide ``None``. Eine Summe der sechs
+    Betriebsart-Spalten gegen «WP Strom» wird bewusst nicht behauptet (Teilmenge nur bei Abdeckung)."""
+    from backend.api.routes.energie_profil.waerme import get_waerme_verlauf
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    a = await _wp_klima_zwei_tage(db, heizstrom=(7.0, 3.0))
+    ohne = {z.datum: z for z in await baue_tage_werte(db, a, D1, D2)}
+    assert all(z.wp_strom_heizbetrieb is None and z.wp_strom_warmwasserbetrieb is None for z in ohne.values())
+
+    mit = {z.datum: z for z in await baue_tage_werte(db, a, D1, D2, mit_waerme=True)}
+    cockpit = {z.datum: z for z in await get_waerme_verlauf(a.id, von=D1, bis=D2, db=db)}
+    for tag in (D1, D2):
+        assert mit[tag].wp_strom_heizbetrieb == cockpit[tag].wp_modus_strom_heizen_kwh, tag
+        assert mit[tag].wp_strom_warmwasserbetrieb == cockpit[tag].wp_modus_strom_warmwasser_kwh, tag
+    assert mit[D1].wp_strom_heizbetrieb == pytest.approx(7.0)
+    assert mit[D2].wp_strom_heizbetrieb == pytest.approx(3.0)
+    assert mit[D1].wp_strom_warmwasserbetrieb == 0.0, "Tag mit Aufteilung: gemessene 0, kein None"
+
+
+async def test_heiz_und_warmwasserbetrieb_aus_dem_stapel_gerundet_ohne_aufteilung_none(db, monkeypatch):
+    """Die zwei Spalten lesen ``stapel.heizen_kwh``/``warmwasser_kwh`` mit derselben Regel wie die vier bestehenden:
+    zwei Stellen, nur mit Aufteilung (``hat_split``), sonst ``None`` — Alles-oder-nichts je Tag."""
+    from backend.core.berechnungen.tages_stapel import TagesStapel
+    from backend.services.energie_profil import tage_werte_zusatz as twz
+    from backend.services.energie_profil import waerme_verlauf as wv
+
+    zeilen = [
+        wv.WaermeVerlaufTag(datum=D1, stapel=TagesStapel(heizen_kwh=4.236, warmwasser_kwh=1.234, kuehlen_kwh=0.5,
+                                                         nicht_aufgeteilt_kwh=2.0, bezug_kwh=8.0, hat_split=True),
+                            waerme_kwh=None, kaelte_kwh=None, temperatur_c=None, strom_kwh=8.0),
+        wv.WaermeVerlaufTag(datum=D2, stapel=TagesStapel(heizen_kwh=9.9, warmwasser_kwh=3.3, hat_split=False),
+                            waerme_kwh=None, kaelte_kwh=None, temperatur_c=None, strom_kwh=13.2),
+    ]
+
+    async def _verlauf(*_a, **_k):
+        return zeilen
+
+    async def _heizstab(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(wv, "lade_waerme_verlauf", _verlauf)
+    monkeypatch.setattr(wv, "lade_heizstab_je_tag", _heizstab)
+    out = await twz._waerme(db, SimpleNamespace(id=1), [], D1, D2)
+    assert out[D1]["wp_strom_heizbetrieb"] == 4.24 and out[D1]["wp_strom_warmwasserbetrieb"] == 1.23
+    assert out[D1]["wp_strom_kuehlen"] == 0.5
+    assert out[D2]["wp_strom_heizbetrieb"] is None and out[D2]["wp_strom_warmwasserbetrieb"] is None, (
+        "ohne Aufteilung keine Teilmenge — auch wenn der Stapel Zahlen trüge")
+    assert all(out[D2][s] is None for s in twz._STAPEL_SPALTEN)

@@ -119,8 +119,8 @@ async def get_tage_werte(
     SoT-Helper `bilanz_aus_stundenrows`). Finanzen über den `baue_finanz_zeile`-
     SoT (je-Monat-Tarif).
 
-    ``mit_waerme`` (Auftrag 29.10.2026): die Felder ``wp_waerme``, ``wp_kaelte`` und ``wp_strom_kuehlen``/``_lueften``/
-    ``_entfeuchten``/``_nicht_aufgeteilt`` aus der Tagesreihe von *Cockpit → Monat*, dazu ``wp_heizstab`` (Zusatzheizung,
+    ``mit_waerme`` (Auftrag 29.10.2026): die Felder ``wp_waerme``, ``wp_kaelte``, ``wp_strom_heizbetrieb``/
+    ``_warmwasserbetrieb`` (3.11.2026) und ``wp_strom_kuehlen``/``_lueften``/``_entfeuchten``/``_nicht_aufgeteilt`` aus der Tagesreihe von *Cockpit → Monat*, dazu ``wp_heizstab`` (Zusatzheizung,
     dieselbe Zahl wie *Cockpit → Tag*). Teuer über lange Zeiträume — der
     Client fragt nur, wenn eine dieser Spalten eingeblendet ist; ohne ihn bleiben die Felder ``None``.
     """

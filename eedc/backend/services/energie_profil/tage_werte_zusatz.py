@@ -11,7 +11,8 @@ Je Tag eines Fensters die Spalten E-Mobilität und Wärmepumpen-Zähler, die die
 * **WP-Starts / Betriebszeit** — ``TagesZusammenfassung.komponenten_starts`` mit der Tagessumme von *Cockpit → Monat*
   (``wp_zaehler_tagessumme``: aktive Wärmepumpen des Monats, nur Werte > 0); die Betriebszeit in ganzen Minuten
   (Style-Guide C3: Dauern nie dezimal).
-* **WP-Wärme, Kälte, Strom Kühlen/Lüften/Entfeuchten/nicht aufgeteilt** (Auftrag 29.10.2026, nur auf Anfrage
+* **WP-Wärme, Kälte, Strom Heizbetrieb/Warmwasserbetrieb/Kühlen/Lüften/Entfeuchten/nicht aufgeteilt** (Auftrag
+  29.10.2026, Heiz-/Warmwasserbetrieb seit 3.11.2026, nur auf Anfrage
   ``mit_waerme``) — die Tagesreihe von *Cockpit → Monat* (``waerme_verlauf.lade_waerme_verlauf``), EIN Aufruf über das
   Fenster, Werte und Rundung wie die Route ``waerme-verlauf``. Teuer (je Tag die Betriebsart-Zähler); der Client fragt
   nur, wenn eine dieser Spalten eingeblendet ist. Ebenso die **Zusatzheizung** (``waerme_verlauf.lade_heizstab_je_tag``,
@@ -110,7 +111,12 @@ async def _emob(db: AsyncSession, anlage, invs: list, von: date, bis: date) -> d
 
 
 #: Betriebsart-Strom des Tagesstapels → Spalte; Wert nur mit Aufteilung (``hat_split``), sonst ``None``.
+#: Heizbetrieb/Warmwasserbetrieb (Zusage #446, 3.11.2026) heißen bewusst anders als die Monatsspalten
+#: ``wp_strom_heizen``/``wp_strom_warmwasser``: dort die getrennten Zähler (Summanden des Gesamtstroms), hier die
+#: Teilmenge aus den Betriebsart-Stunden — Namen wie die HA-Export-Sensoren «Strom Heiz-/Warmwasserbetrieb».
 _STAPEL_SPALTEN = {
+    "wp_strom_heizbetrieb": "heizen_kwh",
+    "wp_strom_warmwasserbetrieb": "warmwasser_kwh",
     "wp_strom_kuehlen": "kuehlen_kwh",
     "wp_strom_lueften": "lueften_kwh",
     "wp_strom_entfeuchten": "entfeuchten_kwh",

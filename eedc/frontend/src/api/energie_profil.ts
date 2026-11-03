@@ -228,7 +228,10 @@ export interface TagWerte {
   wp_waerme?: number | null
   /** Gemessene Kälte des Tages. */
   wp_kaelte?: number | null
-  /** Betriebsart-Strom — nur an Tagen mit Aufteilung. */
+  /** Betriebsart-Strom — nur an Tagen mit Aufteilung. Heiz-/Warmwasserbetrieb (3.11.2026, #446): Teilmenge aus den
+   *  Betriebsart-Stunden, nicht der Summand der getrennten Zähler (Monat `wp_strom_heizen`/`_warmwasser`). */
+  wp_strom_heizbetrieb?: number | null
+  wp_strom_warmwasserbetrieb?: number | null
   wp_strom_kuehlen?: number | null
   wp_strom_lueften?: number | null
   wp_strom_entfeuchten?: number | null

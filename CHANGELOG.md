@@ -30,6 +30,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **Daten-Checker: „Strom Heizbetrieb“ und „Strom Heizen“ an derselben Wärmepumpe beide belegt** — Hinweis, dass der
   Betriebsart-Zähler Vorrang hat und „Strom Heizen“ nicht gezählt wird; wer getrennt misst, lässt den Betriebsart-Zähler leer.
+- **Auswertungen → Tabelle, Tagesansicht: Spalten „Strom Heizbetrieb“ und „Strom Warmwasserbetrieb“** (Gruppe Wärmepumpe,
+  nicht voreingestellt, auch im CSV-Export). Sie zeigen die Betriebsart-Aufteilung des Tages — dieselben Zahlen wie der Verlauf
+  in *Cockpit → Monat* und die Home-Assistant-Sensoren gleichen Namens, nur an Tagen mit Aufteilung. Es ist eine Teilmenge des
+  Wärmepumpen-Stroms aus mitgeschriebenen Betriebsart-Stunden, nicht der Wert getrennter Zähler („WP Strom Heizen/WW“ der
+  Monatsansicht) — die beiden nicht addieren.
 
 ### Changed
 

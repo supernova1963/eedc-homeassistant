@@ -19,6 +19,8 @@
 
 **Daten-Checker: Heizstrom doppelt zugeordnet.** Sind an einer Wärmepumpe „Strom Heizbetrieb“ und „Strom Heizen“ beide belegt, sagt der Daten-Checker jetzt, dass nur der Betriebsart-Zähler zählt — wer Heizen und Warmwasser getrennt misst, lässt ihn leer. [Handbuch Daten-Checker §4.3.7](HANDBUCH_DATEN_CHECKER.md#437-wärmepumpe)
 
+**Auswertungen → Tabelle: Strom für Heizen und Warmwasser je Tag.** In der Tagesansicht gibt es zwei neue Spalten unter „Wärmepumpe“: **Strom Heizbetrieb** und **Strom Warmwasserbetrieb** — die Betriebsart-Aufteilung des Tages, dieselben Zahlen wie der Verlauf in Cockpit → Monat und die gleichnamigen Sensoren in Home Assistant, auch im CSV-Export. Sie sind nicht voreingestellt; du blendest sie über „Spalten“ ein. Wichtig: das ist eine Teilmenge des Wärmepumpen-Stroms aus mitgeschriebenen Stunden, nicht der Wert getrennter Zähler wie „WP Strom Heizen/WW“ in der Monatsansicht — die beiden nicht addieren. [Handbuch Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank)
+
 **Texte mit den heutigen Orten:** Hinweise, die noch „Sensor-Mapping“ oder alte Einstellungs-Seiten nannten, zeigen jetzt auf Einstellungen → Datenquellen; der Live-Tagesverlauf nennt keine Quelle mehr, die nicht stimmen muss.
 
 ## v4.2.1 — 2. November 2026
