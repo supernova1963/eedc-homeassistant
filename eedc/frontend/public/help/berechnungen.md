@@ -639,6 +639,11 @@ Die Felder derselben Antwort:
 > ⚠ **Die pauschale BKW-Schätzung ist davon unberührt und bleibt eine Schätzung** (0,9 kWh/Wp,
 > 80 % Eigenverbrauch). Sie greift nur noch für ein Balkonkraftwerk ohne Modul-Kinder — dort, wo
 > keine gemessenen Modulwerte existieren. Melder: Issue #381 (azywietz-web).
+>
+> Ist gar keine Leistung gepflegt (weder `leistung_kwp` noch `parameter.kwp`/`leistung_kwp` noch
+> `leistung_wp × anzahl`, `get_bkw_kwp` = 0), rechnet die Pauschale mit **800 Wp**, und die Zeile nennt
+> diese Leistung im Hinweis („Balkonkraftwerk 800 Wp") — eine Annahme, keine Messung (Register N-273;
+> `roi.py::_bkw_pauschal_beitrag`, Anzeige `roi_standalone.py::_bkw_bewertung`).
 
 **Auch die PDF-Berichte rechnen so.** Der Jahresbericht leitete Eigenverbrauch, Autarkie und
 EV-Quote bis v4.0.0 allein aus der PV-Erzeugung ab, während der Einspeise-Zähler daneben die Summe
@@ -1632,6 +1637,20 @@ Für Jahresprognose:
   Prognose_Benzinpreis = Ø(Monatsdaten.kraftstoffpreis_euro)  (historischer Durchschnitt)
                        ∨ Investition.parameter.benzinpreis_euro  (Fallback)
 ```
+
+In der **ROI-Sicht** ([Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi)) rechnet die E-Auto-Zeile mit **einem**
+Preis für die Jahres-Prognose, aufgelöst in dieser Rangfolge (`services/eauto_wirtschaftlichkeit.py::resolve_eauto_benzinpreis`,
+die Quelle steht im Detail als `benzinpreis_quelle`):
+
+```
+Benzinpreis_ROI = Query benzinpreis_euro (Slider)                         → "slider"
+                ∨ Investition.parameter.benzinpreis_euro (gepflegt)        → "parameter"
+                ∨ letzter Monatsdaten.kraftstoffpreis_euro der Anlage     → "monatsdaten"
+                ∨ 1,65 €/L                                                → "default"
+```
+
+Die Antwort nennt daneben `benzinpreis_hinweis_euro` = letzter Monatspreis; fehlt er, 1,65 €/L
+(`roi_eingaenge.py::_kraftstoffpreise`).
 
 **Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie. Das Feld *Benzinpreis (€/L)* am E-Auto ist seit 27.09.2026 (N-572) nicht mehr mit 1,65 vorbelegt: ein geleertes Feld bleibt beim nächsten Speichern leer, und es gilt der Monatspreis bzw. 1,65 €/L. Wer dort eine Zahl einträgt, legt den Preis fest — in der ROI-Sicht (`resolve_eauto_benzinpreis`) hat sie Vorrang vor dem jüngsten Monatspreis.
 
@@ -2667,6 +2686,13 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 >
 > Die Unterscheidung kostet **keine zusätzliche Pflege**: `typ: ertrag|ausgabe`
 > wird beim Erfassen ohnehin gewählt, und der Ort sagt die Häufigkeit.
+>
+> **Anlagenweite Positionen** (Monatsabschluss ohne Komponente) haben **keine** Investition und stehen
+> deshalb auf keiner ROI-Zeile: sie wirken nur auf die Gesamt-Zahlen — `gesamt_sonstige_ausgaben_euro`/
+> `gesamt_sonstige_ertraege_euro`, Gesamt-Kapitaleinsatz, Gesamt-ROI und die Kalender-Treppe im Jahr
+> ihres Monats (Bauschritt 4). Gelesen über die Monats-Fakten (`sonstiges.anlage_ausgaben_euro`/
+> `anlage_ertraege_euro`, ohne die schon gezählten Beträge der Komponenten); Code
+> `investitionen/roi_eingaenge.py::_anlagenweite_positionen` und `roi.py::_gesamt_zeile`.
 >
 > **Und der Kapitaleinsatz ist nicht die USt-Bemessungsgrundlage.** Die bleibt
 > bei den reinen Mehrkosten (§ 3 Abs. 1b UStG, [§3.7](#37-umsatzsteuer-auf-eigenverbrauch)) —
@@ -3929,6 +3955,32 @@ PV-Einsparung wird proportional nach kWp auf Module verteilt:
 > Abgabe an Dritte 1 824 statt 1 464 € (dieselbe kWh zusätzlich als Erlös der Abgabe-Zeile), mit Speicher zählten die
 > Speicherverluste als Eigenverbrauch (im Beispiel 36 € zu viel; jetzt ergibt PV-Zeile + Speicher-Zeile die
 > Cockpit-Ersparnis). ⚑ Nicht abgezogen ist die V2H-Rückspeisung, die zusätzlich parametrisch in der E-Auto-Zeile steht.
+
+#### Speicher-Anteil aus dem PV-Topf (F-37, seit v4.0.20)
+
+Der PV-Topf (`Eigenverbrauch × Strompreis + Einspeisung × Vergütung`) enthält schon alles, was durch einen Speicher
+lief — was in den Akku ging und wieder heraus, wurde nicht eingespeist. Deshalb bekommt jeder Speicher seinen PV-Anteil
+**aus** dem Topf, nicht daneben (Zerlegung statt Addition, dieselbe Doktrin wie `aussichten/finanz_zerlegung.py`):
+
+```
+Speicher_PV_€   = Σ pv_anteil_euro      aller Speicher der Anlage   (`_speicher_roi`, IST- oder Prognose-Modus)
+Speicher_CO2_kg = Σ co2_einsparung_kg   aller Speicher der Anlage
+PV_Topf_€'      = max(0, PV_Topf_€  − Speicher_PV_€)
+PV_CO2_kg'      = max(0, PV_CO2_kg  − Speicher_CO2_kg)
+Modul_Einsparung = PV_Topf_€' · (Modul_kWp / Gesamt_kWp)          (Gesamt_kWp inkl. Module ohne Träger)
+```
+
+| Feld | Quelle |
+|------|--------|
+| `pv_anteil_euro` | `berechne_speicher_ersparnis` — nur der PV-Anteil; der **Netz-Anteil** (Arbitrage) steckt nicht im Eigenverbrauch und wird nicht gekürzt |
+| Speicher | **alle** Speicher der Anlage — DC am Träger (Systemzeile) und eigenständige AC-Speicher (eigene Zeile), die Kürzung steht vor beiden |
+| `Modul_kWp` | `get_pv_kwp` (ADR-002/P3-a); ein Modul ohne Nennleistung bekommt 0 € und 0 kg |
+
+Die Klemmung bei 0 greift bei dünner oder widersprüchlicher Datenlage, wenn der zugerechnete Speicher-Anteil über der
+ganzen PV-Ersparnis liegt: die Module stehen dann mit 0 statt einer negativen Zeile, und die Summe der Zeilen liegt nicht
+über der physikalischen Menge. Bis v4.0.19 stand der Speicher-Spread **neben** dem Topf (gemeldete Anlage #381: 55,9 ct
+für eine Kilowattstunde, 895,64 € statt 723,89 €). Code: `api/routes/investitionen/roi_pv.py::_f37_speicher_aus_pv_topf`
+(Phase von `pv_systeme_zeilen`, RF-43). Gesichert durch `test_roi_summe_symmetrie_f37.py`.
 
 ### Hochrechnung bei unvollständigen Jahren
 

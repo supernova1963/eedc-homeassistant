@@ -53,6 +53,7 @@ from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.investitionen.roi import (
     ROIBerechnung,
     ROIKomponente,
+    _RoiSummen,
     _SpeicherRoi,
     _bkw_pauschal_beitrag,
     _speicher_roi,
@@ -552,7 +553,128 @@ def pv_systeme_zeilen(
     ROI-Zeile mit Komponenten, Kapitaleinsatz und Treppe.
 
     Aus `get_roi_dashboard` Zeilen 1240-1607 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 5b.
+
+    RF-43 (4.11.2026, Bauform RF-1): Orchestrator über Phasen — `_f37_speicher_aus_pv_topf` kürzt den PV-Topf um den
+    PV-Anteil der Speicher, dann je PV-System `_pv_system_zeile` (Kopf `_kopf_komponente`, Module `_modul_komponenten`,
+    DC-Speicher `_dc_speicher_komponente`, Rechnung und Summen `_system_rechnung`). Die geteilten Eingänge stehen in
+    `_PvSystemKontext`, die Summen in `_RoiSummen` (`roi.py`); die 26 Parameter und die 11 Rückgabe-Schlüssel bleiben.
     """
+    speicher_roi_by_inv, pv_jahres_einsparung, pv_co2 = _f37_speicher_aus_pv_topf(
+        speicher_invs_alle=speicher_invs_alle,
+        strompreis_cent=strompreis_cent,
+        einspeiseverguetung_cent=einspeiseverguetung_cent,
+        speicher_ist_by_inv=speicher_ist_by_inv,
+        speicher_ladepreis_anlage=speicher_ladepreis_anlage,
+        speicher_eta_by_inv=speicher_eta_by_inv,
+        pv_jahres_einsparung=pv_jahres_einsparung,
+        pv_co2=pv_co2,
+    )
+
+    # Gesamt-kWp aller PV-Module für proportionale Verteilung.
+    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
+    # Modul (#229) bekam sonst `anteil = 0` — also 0 € Einsparung, 0 kg CO₂ und
+    # keine Amortisation, während die übrigen Module zu viel zugerechnet bekamen.
+    gesamt_kwp = sum(
+        get_pv_kwp(inv)
+        for system in pv_systeme.values()
+        for inv in system["pv_module"]
+    )
+    gesamt_kwp += sum(get_pv_kwp(inv) for inv in orphan_pv_module)
+
+    ctx = _PvSystemKontext(
+        _relevante_kosten=_relevante_kosten,
+        _sonstige_ausgaben_kumuliert_fuer=_sonstige_ausgaben_kumuliert_fuer,
+        _sonstige_ertraege_kumuliert_fuer=_sonstige_ertraege_kumuliert_fuer,
+        _treppe_zeile=_treppe_zeile,
+        basis_jahr=basis_jahr,
+        berechnungen=berechnungen,
+        einspeiseverguetung_cent=einspeiseverguetung_cent,
+        investitionen=investitionen,
+        pv_co2=pv_co2,
+        pv_detail=pv_detail,
+        pv_jahres_einsparung=pv_jahres_einsparung,
+        gesamt_kwp=gesamt_kwp,
+        speicher_eta_by_inv=speicher_eta_by_inv,
+        speicher_ladepreis_anlage=speicher_ladepreis_anlage,
+        speicher_roi_by_inv=speicher_roi_by_inv,
+        strompreis_cent=strompreis_cent,
+    )
+    summen = _RoiSummen(
+        gesamt_betriebskosten=gesamt_betriebskosten,
+        gesamt_co2=gesamt_co2,
+        gesamt_einsparung=gesamt_einsparung,
+        gesamt_investition=gesamt_investition,
+        gesamt_relevante=gesamt_relevante,
+        gesamt_sonstige_ausgaben=gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=gesamt_sonstige_ertraege,
+    )
+    for wr_id, system in pv_systeme.items():
+        _pv_system_zeile(ctx, summen, system, standalone)
+    return {
+        "gesamt_betriebskosten": summen.gesamt_betriebskosten,
+        "gesamt_co2": summen.gesamt_co2,
+        "gesamt_einsparung": summen.gesamt_einsparung,
+        "gesamt_investition": summen.gesamt_investition,
+        "gesamt_kwp": gesamt_kwp,
+        "gesamt_relevante": summen.gesamt_relevante,
+        "gesamt_sonstige_ausgaben": summen.gesamt_sonstige_ausgaben,
+        "gesamt_sonstige_ertraege": summen.gesamt_sonstige_ertraege,
+        "pv_co2": pv_co2,
+        "pv_jahres_einsparung": pv_jahres_einsparung,
+        "speicher_roi_by_inv": speicher_roi_by_inv,
+    }
+
+
+@dataclass(frozen=True)
+class _PvSystemKontext:
+    """Die geteilten Eingaenge der PV-System-Zeilen (RF-43) — nur gelesen; `berechnungen` ist die Liste, in die die
+    Zeilen gehen. Die Feldnamen sind die Parameter von `pv_systeme_zeilen`."""
+    _relevante_kosten: Any
+    _sonstige_ausgaben_kumuliert_fuer: Any
+    _sonstige_ertraege_kumuliert_fuer: Any
+    _treppe_zeile: Any
+    basis_jahr: Optional[int]
+    berechnungen: list
+    einspeiseverguetung_cent: Any
+    investitionen: Any
+    #: nach der F-37-Kürzung (`_f37_speicher_aus_pv_topf`)
+    pv_co2: float
+    pv_detail: dict
+    #: nach der F-37-Kürzung (`_f37_speicher_aus_pv_topf`)
+    pv_jahres_einsparung: float
+    gesamt_kwp: float
+    speicher_eta_by_inv: dict
+    speicher_ladepreis_anlage: Any
+    speicher_roi_by_inv: dict
+    strompreis_cent: Any
+
+
+@dataclass
+class _SystemTopf:
+    """Was EIN PV-System über Kopf, Module und DC-Speicher sammelt (RF-43) — in der Reihenfolge des Rumpfs."""
+    system_kosten: float
+    system_alternativ: float
+    system_betriebskosten: float
+    system_invs: list
+    komponenten: list
+    system_kwp: float = 0.0
+    system_einsparung: float = 0.0
+    system_co2: float = 0.0
+
+
+def _f37_speicher_aus_pv_topf(
+    *,
+    speicher_invs_alle,
+    strompreis_cent,
+    einspeiseverguetung_cent,
+    speicher_ist_by_inv,
+    speicher_ladepreis_anlage,
+    speicher_eta_by_inv,
+    pv_jahres_einsparung,
+    pv_co2,
+) -> tuple[dict[int, _SpeicherRoi], float, float]:
+    """F-37 (RF-43): das Speicher-Ergebnis je Speicher und der PV-Topf NACH Abzug des PV-Anteils aller Speicher,
+    geklemmt bei 0. Rückgabe `(speicher_roi_by_inv, pv_jahres_einsparung, pv_co2)`."""
     # ==========================================================================
     # F-37: Der Speicher bekommt seinen Anteil AUS dem PV-Topf, nicht daneben
     # ==========================================================================
@@ -616,315 +738,330 @@ def pv_systeme_zeilen(
     # Symmetrie-Test prüft.
     pv_jahres_einsparung = max(0.0, pv_jahres_einsparung - _speicher_pv_anteil)
     pv_co2 = max(0.0, pv_co2 - _speicher_co2_pv)
+    return speicher_roi_by_inv, pv_jahres_einsparung, pv_co2
 
-    # Gesamt-kWp aller PV-Module für proportionale Verteilung.
-    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
-    # Modul (#229) bekam sonst `anteil = 0` — also 0 € Einsparung, 0 kg CO₂ und
-    # keine Amortisation, während die übrigen Module zu viel zugerechnet bekamen.
-    gesamt_kwp = sum(
-        get_pv_kwp(inv)
-        for system in pv_systeme.values()
-        for inv in system["pv_module"]
+
+def _pv_system_zeile(ctx: _PvSystemKontext, summen: _RoiSummen, system: dict, standalone: list) -> None:
+    """Ein PV-System (RF-43): Kopf, Module, DC-Speicher, dann Rechnung und Summen. Ein Traegergeraet ohne
+    Komponenten geht als Hinweis-Zeile an `standalone`."""
+    wr = system["wr"]
+    pv_module = system["pv_module"]
+    dc_speicher = system["speicher"]
+    # F-33: der Systemkopf ist seit #381 nicht mehr zwingend ein
+    # Wechselrichter. Ein Balkonkraftwerk trägt — anders als ein WR — eine
+    # **eigene** Erzeugung, solange keine Module an ihm hängen; dann muss
+    # sein Beitrag in die Systemzeile, sonst verlöre ein BKW mit reinem
+    # Speicher-Kind (Kanon seit v4.0.5) seine Einsparung ganz.
+    kopf_ist_bkw = wr.typ == InvestitionTyp.BALKONKRAFTWERK.value
+    # `traegt_erzeugungsgroessen_selbst` ist der SoT der Abtretung (N-266):
+    # False heißt, die Modul-Kinder tragen die Erzeugung — dann darf der
+    # Kopf nichts mehr beisteuern, sonst ist die Doppelzählung zurück.
+    kopf_traegt_selbst = kopf_ist_bkw and traegt_erzeugungsgroessen_selbst(
+        wr, ctx.investitionen
     )
-    gesamt_kwp += sum(get_pv_kwp(inv) for inv in orphan_pv_module)
 
-    for wr_id, system in pv_systeme.items():
-        wr = system["wr"]
-        pv_module = system["pv_module"]
-        dc_speicher = system["speicher"]
-        # F-33: der Systemkopf ist seit #381 nicht mehr zwingend ein
-        # Wechselrichter. Ein Balkonkraftwerk trägt — anders als ein WR — eine
-        # **eigene** Erzeugung, solange keine Module an ihm hängen; dann muss
-        # sein Beitrag in die Systemzeile, sonst verlöre ein BKW mit reinem
-        # Speicher-Kind (Kanon seit v4.0.5) seine Einsparung ganz.
-        kopf_ist_bkw = wr.typ == InvestitionTyp.BALKONKRAFTWERK.value
-        # `traegt_erzeugungsgroessen_selbst` ist der SoT der Abtretung (N-266):
-        # False heißt, die Modul-Kinder tragen die Erzeugung — dann darf der
-        # Kopf nichts mehr beisteuern, sonst ist die Doppelzählung zurück.
-        kopf_traegt_selbst = kopf_ist_bkw and traegt_erzeugungsgroessen_selbst(
-            wr, investitionen
-        )
+    # Nur Systeme mit PV-Modulen anzeigen
+    if not pv_module and not dc_speicher:
+        # Trägergerät ohne zugeordnete Komponenten - als Hinweis zeigen
+        standalone.append(wr)
+        return
 
-        # Nur Systeme mit PV-Modulen anzeigen
-        if not pv_module and not dc_speicher:
-            # Trägergerät ohne zugeordnete Komponenten - als Hinweis zeigen
-            standalone.append(wr)
-            continue
-
-        # Kosten summieren
-        system_kosten = (wr.anschaffungskosten_gesamt or 0)
-        system_alternativ = (wr.anschaffungskosten_alternativ or 0)
-        system_betriebskosten = (wr.betriebskosten_jahr or 0)
+    # Kosten summieren
+    t = _SystemTopf(
+        system_kosten=(wr.anschaffungskosten_gesamt or 0),
+        system_alternativ=(wr.anschaffungskosten_alternativ or 0),
+        system_betriebskosten=(wr.betriebskosten_jahr or 0),
         # Die beteiligten Positionen wandern mit, damit die relevanten Kosten
         # des Bündels je Position geklemmt werden (siehe `_relevante_kosten`)
         # statt als `Σ gesamt − Σ alternativ`.
-        system_invs = [wr]
+        system_invs=[wr],
+        komponenten=[],
+    )
 
-        komponenten: list[ROIKomponente] = []
+    t.komponenten.append(_kopf_komponente(ctx, wr, kopf_ist_bkw, kopf_traegt_selbst))
 
-        # Trägergerät als Komponente
-        wr_kosten = wr.anschaffungskosten_gesamt or 0
-        wr_alternativ = wr.anschaffungskosten_alternativ or 0
-        # F-33: der Hinweis nennt den Grund, aus dem der Kopf keine eigene Zahl
-        # trägt — und der ist je Typ ein anderer. Ein WR erzeugt nie selbst;
-        # ein BKW mit Modul-Kindern hat abgetreten.
-        if not kopf_ist_bkw:
-            kopf_hinweis = 'Wechselrichter - Einsparung über PV-Module'
-        elif kopf_traegt_selbst:
-            kopf_hinweis = 'Balkonkraftwerk - eigene Erzeugung, Einsparung in der Systemzeile'
+    # PV-Module Einsparung proportional nach kWp verteilen
+    t.system_kwp = sum(get_pv_kwp(inv) for inv in pv_module)
+    t.system_einsparung = 0.0
+    t.system_co2 = 0.0
+
+    # F-33: BKW-Kopf ohne Modul-Kinder — seine eigene (pauschale)
+    # Erzeugungs-Ersparnis geht in die Systemzeile. Bewusst DIESELBE
+    # Formel wie im standalone-Zweig, damit sich für diesen Fall die
+    # **Summe** nicht bewegt: repariert ist die Struktur (eine Zeile statt
+    # zwei addierten), nicht die Pauschale. Dass die 80-%-Annahme einen
+    # Speicher gar nicht kennt und deshalb neben dessen Mehr-Eigenverbrauch
+    # zu hoch stehen kann, ist ein eigener Befund (Register N-272) und
+    # ausdrücklich NICHT Teil von #381.
+    if kopf_traegt_selbst:
+        kopf_ertrag_kwh, kopf_einsparung, kopf_co2 = _bkw_pauschal_beitrag(
+            wr,
+            strompreis_cent=ctx.strompreis_cent,
+            einspeiseverguetung_cent=ctx.einspeiseverguetung_cent,
+        )
+        t.system_einsparung += kopf_einsparung
+        t.system_co2 += kopf_co2
+        t.system_kwp += get_bkw_kwp(wr)
+
+    _modul_komponenten(ctx, t, pv_module)
+
+    # DC-Speicher (am Hybrid-WR)
+    for inv in dc_speicher:
+        _dc_speicher_komponente(ctx, t, inv)
+
+    _system_rechnung(ctx, summen, t, wr=wr, pv_module=pv_module, dc_speicher=dc_speicher, kopf_ist_bkw=kopf_ist_bkw)
+
+
+def _kopf_komponente(ctx: _PvSystemKontext, wr, kopf_ist_bkw: bool, kopf_traegt_selbst: bool) -> ROIKomponente:
+    """Das Traegergeraet als Komponente (RF-43) — ohne eigene Zeilen-Zahl, der Hinweis nennt den Grund (F-33)."""
+    # Trägergerät als Komponente
+    wr_kosten = wr.anschaffungskosten_gesamt or 0
+    wr_alternativ = wr.anschaffungskosten_alternativ or 0
+    # F-33: der Hinweis nennt den Grund, aus dem der Kopf keine eigene Zahl
+    # trägt — und der ist je Typ ein anderer. Ein WR erzeugt nie selbst;
+    # ein BKW mit Modul-Kindern hat abgetreten.
+    if not kopf_ist_bkw:
+        kopf_hinweis = 'Wechselrichter - Einsparung über PV-Module'
+    elif kopf_traegt_selbst:
+        kopf_hinweis = 'Balkonkraftwerk - eigene Erzeugung, Einsparung in der Systemzeile'
+    else:
+        kopf_hinweis = 'Balkonkraftwerk - Einsparung über die zugeordneten PV-Module'
+    return ROIKomponente(
+        investition_id=wr.id,
+        bezeichnung=wr.bezeichnung,
+        typ=wr.typ,
+        kosten=wr_kosten,
+        kosten_alternativ=wr_alternativ,
+        relevante_kosten=ctx._relevante_kosten(wr),
+        einsparung=None,  # der Kopf trägt keine eigene Zeilen-Zahl
+        co2_einsparung_kg=None,
+        detail={'hinweis': kopf_hinweis}
+    )
+
+
+def _modul_komponenten(ctx: _PvSystemKontext, t: _SystemTopf, pv_module: list) -> None:
+    """Die PV-Module eines Systems (RF-43): Kosten in den Topf, Einsparung und CO2 proportional nach kWp aus dem
+    (gekuerzten) PV-Topf; ein Modul ohne Nennleistung bekommt 0."""
+    for inv in pv_module:
+        inv_kosten = inv.anschaffungskosten_gesamt or 0
+        inv_alternativ = inv.anschaffungskosten_alternativ or 0
+        t.system_kosten += inv_kosten
+        t.system_alternativ += inv_alternativ
+        t.system_betriebskosten += (inv.betriebskosten_jahr or 0)
+        t.system_invs.append(inv)
+
+        # Einsparung proportional nach kWp.
+        # `anteil` vor dem Zweig setzen: Zeile 1066 liest es, sobald
+        # `gesamt_kwp > 0` — bei einem Modul ganz ohne Nennleistung war es
+        # dort ungebunden ⇒ 500er im ROI-Dashboard (an der Box gemessen).
+        inv_kwp = get_pv_kwp(inv)
+        anteil = 0.0
+        if ctx.gesamt_kwp > 0 and inv_kwp > 0:
+            anteil = inv_kwp / ctx.gesamt_kwp
+            inv_einsparung = ctx.pv_jahres_einsparung * anteil
+            inv_co2 = ctx.pv_co2 * anteil
         else:
-            kopf_hinweis = 'Balkonkraftwerk - Einsparung über die zugeordneten PV-Module'
-        komponenten.append(ROIKomponente(
-            investition_id=wr.id,
-            bezeichnung=wr.bezeichnung,
-            typ=wr.typ,
-            kosten=wr_kosten,
-            kosten_alternativ=wr_alternativ,
-            relevante_kosten=_relevante_kosten(wr),
-            einsparung=None,  # der Kopf trägt keine eigene Zeilen-Zahl
-            co2_einsparung_kg=None,
-            detail={'hinweis': kopf_hinweis}
-        ))
+            inv_einsparung = 0
+            inv_co2 = 0
 
-        # PV-Module Einsparung proportional nach kWp verteilen
-        system_kwp = sum(get_pv_kwp(inv) for inv in pv_module)
-        system_einsparung = 0.0
-        system_co2 = 0.0
+        t.system_einsparung += inv_einsparung
+        t.system_co2 += inv_co2
 
-        # F-33: BKW-Kopf ohne Modul-Kinder — seine eigene (pauschale)
-        # Erzeugungs-Ersparnis geht in die Systemzeile. Bewusst DIESELBE
-        # Formel wie im standalone-Zweig, damit sich für diesen Fall die
-        # **Summe** nicht bewegt: repariert ist die Struktur (eine Zeile statt
-        # zwei addierten), nicht die Pauschale. Dass die 80-%-Annahme einen
-        # Speicher gar nicht kennt und deshalb neben dessen Mehr-Eigenverbrauch
-        # zu hoch stehen kann, ist ein eigener Befund (Register N-272) und
-        # ausdrücklich NICHT Teil von #381.
-        if kopf_traegt_selbst:
-            kopf_ertrag_kwh, kopf_einsparung, kopf_co2 = _bkw_pauschal_beitrag(
-                wr,
-                strompreis_cent=strompreis_cent,
-                einspeiseverguetung_cent=einspeiseverguetung_cent,
-            )
-            system_einsparung += kopf_einsparung
-            system_co2 += kopf_co2
-            system_kwp += get_bkw_kwp(wr)
-
-        for inv in pv_module:
-            inv_kosten = inv.anschaffungskosten_gesamt or 0
-            inv_alternativ = inv.anschaffungskosten_alternativ or 0
-            system_kosten += inv_kosten
-            system_alternativ += inv_alternativ
-            system_betriebskosten += (inv.betriebskosten_jahr or 0)
-            system_invs.append(inv)
-
-            # Einsparung proportional nach kWp.
-            # `anteil` vor dem Zweig setzen: Zeile 1066 liest es, sobald
-            # `gesamt_kwp > 0` — bei einem Modul ganz ohne Nennleistung war es
-            # dort ungebunden ⇒ 500er im ROI-Dashboard (an der Box gemessen).
-            inv_kwp = get_pv_kwp(inv)
-            anteil = 0.0
-            if gesamt_kwp > 0 and inv_kwp > 0:
-                anteil = inv_kwp / gesamt_kwp
-                inv_einsparung = pv_jahres_einsparung * anteil
-                inv_co2 = pv_co2 * anteil
-            else:
-                inv_einsparung = 0
-                inv_co2 = 0
-
-            system_einsparung += inv_einsparung
-            system_co2 += inv_co2
-
-            komponenten.append(ROIKomponente(
-                investition_id=inv.id,
-                bezeichnung=f"{inv.bezeichnung} ({inv_kwp} kWp)",
-                typ=inv.typ,
-                kosten=inv_kosten,
-                kosten_alternativ=inv_alternativ,
-                relevante_kosten=_relevante_kosten(inv),
-                einsparung=round(inv_einsparung, 2),
-                co2_einsparung_kg=round(inv_co2, 1),
-                detail={
-                    'anteil_prozent': round(anteil * 100, 1) if gesamt_kwp > 0 else 0,
-                    'leistung_kwp': inv_kwp,
-                }
-            ))
-
-        # DC-Speicher (am Hybrid-WR)
-        for inv in dc_speicher:
-            inv_kosten = inv.anschaffungskosten_gesamt or 0
-            inv_alternativ = inv.anschaffungskosten_alternativ or 0
-            system_kosten += inv_kosten
-            system_alternativ += inv_alternativ
-            system_betriebskosten += (inv.betriebskosten_jahr or 0)
-            system_invs.append(inv)
-
-            params = inv.parameter or {}
-            # N127: BRUTTO-Kapazität über den SoT-Helper, ohne Default. Hier
-            # stand `.get(…, 10)` — ein Speicher ohne gepflegte Kapazität bekam
-            # still 10 kWh und daraus eine Jahres-Ersparnis, die es nie gab.
-            # Sie geht NUR in den Prognose-Modus ein (s. `ist_aggregat` unten);
-            # im IST-Modus rechnet `berechne_speicher_einsparung` aus der
-            # gemessenen Entladung und die Kapazität bleibt ungelesen.
-            kapazitaet = get_speicher_kapazitaet_kwh(inv)
-            # A31-2/E-1: der Prognose-Modus rechnet NETTO — Kapazität × 250
-            # Zyklen × η ist eine durchgefahrene Energiemenge, und durch den
-            # Speicher geht nur der nutzbare Hub. `kapazitaet` (brutto) bleibt
-            # daneben stehen: sie ist die *Beschreibung* der Komponente
-            # (Detail-Feld und Label unten), nicht die Rechengröße.
-            # F-37: die Rechnung liegt im Vorablauf — sie wird dort gebraucht,
-            # um den PV-Topf zu kürzen, und darf hier kein zweites Mal
-            # entstehen. `_speicher_roi` trägt Ergebnis und Quellen zusammen.
-            _roi = speicher_roi_by_inv[inv.id]
-            ist_aggregat = _roi.ist_aggregat
-            nutzt_arbitrage = _roi.nutzt_arbitrage
-            wirkungsgrad_eff, wirkungsgrad_quelle = _roi.wirkungsgrad_eff, _roi.wirkungsgrad_quelle
-            lade_preis_eff, ladepreis_quelle = _roi.lade_preis_eff, _roi.ladepreis_quelle
-            eff_ladepreis = speicher_ladepreis_anlage
-            eta_ist = speicher_eta_by_inv.get(inv.id)
-            kapazitaet_fehlt = _roi.kapazitaet_fehlt
-            result = _roi.result
-            inv_einsparung = result.jahres_einsparung_euro if result else None
-            inv_co2 = result.co2_einsparung_kg if result else None
-            system_einsparung += inv_einsparung or 0
-            system_co2 += inv_co2 or 0
-
-            # #351: `dc_gekoppelt` stand hier hart auf `True` — eine Behauptung
-            # über eine Eigenschaft, die eedc nie erhoben hatte. Sie kommt jetzt
-            # aus dem Feld (Vorbelegung: zugeordnet ⇒ DC), die Gruppierung
-            # darüber bleibt unverändert an der Zuordnung.
-            komp_detail: dict[str, Any] = {
-                'kapazitaet_kwh': kapazitaet,
-                'dc_gekoppelt': get_speicher_kopplung(inv) == SPEICHER_KOPPLUNG_DC,
-                'kopplung': get_speicher_kopplung(inv),
-                'kopplung_gepflegt': get_speicher_kopplung_gepflegt(inv) is not None,
+        t.komponenten.append(ROIKomponente(
+            investition_id=inv.id,
+            bezeichnung=f"{inv.bezeichnung} ({inv_kwp} kWp)",
+            typ=inv.typ,
+            kosten=inv_kosten,
+            kosten_alternativ=inv_alternativ,
+            relevante_kosten=ctx._relevante_kosten(inv),
+            einsparung=round(inv_einsparung, 2),
+            co2_einsparung_kg=round(inv_co2, 1),
+            detail={
+                'anteil_prozent': round(anteil * 100, 1) if ctx.gesamt_kwp > 0 else 0,
+                'leistung_kwp': inv_kwp,
             }
-            if kapazitaet_fehlt:
-                komp_detail['hinweis'] = (
-                    'Keine Kapazität gepflegt — ohne sie lässt sich die Ersparnis '
-                    'nicht abschätzen. Kapazität in der Investitionspflege nachtragen.'
-                )
-            if ist_aggregat is not None:
-                komp_detail.update({
-                    'modus': 'ist',
-                    'ist_entladung_kwh_jahr': round(ist_aggregat.entladung_kwh_jahr, 1),
-                    'ist_ladung_netz_kwh_jahr': round(ist_aggregat.ladung_netz_kwh_jahr, 1),
-                    'ist_monate': ist_aggregat.anzahl_monate,
-                    'pv_anteil_euro': result.pv_anteil_euro,
-                    'netz_anteil_euro': result.arbitrage_anteil_euro,
-                    'effektiver_ladepreis_cent': round(lade_preis_eff, 2) if (lade_preis_eff is not None and nutzt_arbitrage) else None,
-                    'ladepreis_quelle': ladepreis_quelle,
-                    'verwendetes_wirkungsgrad_prozent': round(wirkungsgrad_eff, 1),
-                    'wirkungsgrad_quelle': wirkungsgrad_quelle,
-                })
-                # Etappe C1 Diagnose-Felder für UI-Badge bei dünner Datenbasis.
-                if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
-                    komp_detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
-                # ⛔ Der Degradations-Alarm stand hier bis zum 03.09.2026 und ist
-                # ENTFALLEN (Entscheid Gernot: „ich sehe keinen Zusammenhang").
-                # Am Code belegt, warum er hier nie hingehörte: Gesetzt wurde er
-                # nur unter `eta_ist.wirkungsgrad_prozent is not None` — und
-                # GENAU unter dieser Bedingung gibt `_aufloesen_wirkungsgrad` die
-                # MESSUNG zurück (`:112`). Der Alarm konnte in dieser Sicht also
-                # ausschließlich dann erscheinen, wenn der Parameter, über den er
-                # sich beschwert, hier keine einzige Zahl beeinflusst. Er bleibt
-                # im Komponenten-Hub (`dashboards.py`), wo der gepflegte Wert
-                # zählt (Sizing, Tages-Vorschau, HA-Sensoren).
-            else:
-                komp_detail['modus'] = 'prognose'
-            komponenten.append(ROIKomponente(
-                investition_id=inv.id,
-                # Ohne gepflegte Kapazität steht der Name ohne Klammerzusatz da —
-                # „(None kWh)" wäre schlechter als gar keine Angabe (N127).
-                bezeichnung=(
-                    f"{inv.bezeichnung} ({kapazitaet} kWh)" if kapazitaet is not None
-                    else inv.bezeichnung
-                ),
-                typ=inv.typ,
-                kosten=inv_kosten,
-                kosten_alternativ=inv_alternativ,
-                relevante_kosten=_relevante_kosten(inv),
-                einsparung=round(inv_einsparung, 2) if inv_einsparung is not None else None,
-                co2_einsparung_kg=round(inv_co2, 1) if inv_co2 is not None else None,
-                detail=komp_detail,
-            ))
-
-        # System-ROI berechnen
-        # #310: manuell gepflegte sonstige Erträge/Ausgaben des Systems
-        # (WR + PV-Module + DC-Speicher) einrechnen.
-        # F-19: Ausgaben kumuliert in den NENNER. Bauschritt 7: die Erträge
-        # ebenfalls — mit umgekehrtem Vorzeichen (§8/3 hatte sie nur aus dem
-        # Zähler genommen).
-        _system_ids = [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
-        system_sonstige_ausgaben = _sonstige_ausgaben_kumuliert_fuer(_system_ids)
-        system_sonstige_ertraege = _sonstige_ertraege_kumuliert_fuer(_system_ids)
-        system_relevante = _relevante_kosten(*system_invs)
-        system_kapitaleinsatz = kapitaleinsatz_euro(
-            relevante_kosten_euro=system_kosten - system_alternativ,
-            sonstige_ausgaben_euro=system_sonstige_ausgaben,
-            sonstige_ertraege_euro=system_sonstige_ertraege,
-        )
-        system_netto_einsparung = system_einsparung - system_betriebskosten
-        roi_result = berechne_roi(system_kapitaleinsatz, system_einsparung, 0, system_betriebskosten)
-        gesamt_betriebskosten += system_betriebskosten
-        # N-525: jede Komponente stuft ihre Mehrkosten ab ihrem Jahr; die
-        # Einsparung des Systems läuft ab seiner ersten Komponente (eine
-        # Jahres-Einsparung je System — ein später ergänztes Modulfeld stuft
-        # die Kosten, nicht die Einsparung; benannte Grenze).
-        system_zeilen_jahr = _treppe_zeile(
-            invs=system_invs,
-            kosten_je_inv={
-                k.investition_id: (k.kosten or 0.0) - (k.kosten_alternativ or 0.0)
-                for k in komponenten
-            },
-            netto_einsparung=system_netto_einsparung,
-        )
-
-        # F-33: die Zeile trägt den Typ ihres KOPFES, nicht pauschal
-        # "pv-system". Ein Balkonkraftwerk als „PV-System Toni" mit
-        # Sonnen-Icon zu beschriften, hieße dem Melder aus #381 sein Gerät
-        # umzubenennen — und es verstieße gegen Regel 0a (eine Datenrolle =
-        # eine Farbe): ein BKW hat im Farb-SoT seine eigene. Dass die Zeile
-        # ein System ist, macht die Komponenten-Liste darunter sichtbar.
-        berechnungen.append(ROIBerechnung(
-            investition_id=wr.id,  # Kopf-ID als System-ID
-            anschaffungsjahr=system_zeilen_jahr if basis_jahr is not None else None,
-            investition_bezeichnung=(
-                wr.bezeichnung if kopf_ist_bkw else f"PV-System {wr.bezeichnung}"
-            ),
-            investition_typ=(
-                InvestitionTyp.BALKONKRAFTWERK.value if kopf_ist_bkw else "pv-system"
-            ),
-            anschaffungskosten=system_kosten,
-            anschaffungskosten_alternativ=system_alternativ,
-            relevante_kosten=system_relevante,
-            kapitaleinsatz=round(system_kapitaleinsatz, 2),
-            jahres_einsparung=round(system_netto_einsparung, 2),
-            roi_prozent=roi_result['roi_prozent'],
-            amortisation_jahre=roi_result['amortisation_jahre'],
-            amortisation_annahme=annahme_dauer_text(
-                betriebskosten_jahr_euro=system_betriebskosten,
-            ),
-            co2_einsparung_kg=round(system_co2, 1),
-            detail_berechnung={
-                **pv_detail,
-                'komponenten_count': len(komponenten),
-                'system_kwp': system_kwp,
-                'sonstige_netto_euro': round(system_sonstige_ertraege - system_sonstige_ausgaben, 2),
-                'sonstige_ausgaben_euro': round(system_sonstige_ausgaben, 2),
-                # Bauschritt 7: die Zeile nennt beide Seiten ihres Nenners.
-                'sonstige_ertraege_euro': round(system_sonstige_ertraege, 2),
-            },
-            komponenten=komponenten,
         ))
 
-        gesamt_investition += system_kosten
-        gesamt_relevante += system_relevante
-        gesamt_sonstige_ausgaben += system_sonstige_ausgaben
-        gesamt_sonstige_ertraege += system_sonstige_ertraege
-        gesamt_einsparung += system_netto_einsparung
-        gesamt_co2 += system_co2
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("gesamt_betriebskosten", "gesamt_co2", "gesamt_einsparung", "gesamt_investition", "gesamt_kwp", "gesamt_relevante", "gesamt_sonstige_ausgaben", "gesamt_sonstige_ertraege", "pv_co2", "pv_jahres_einsparung", "speicher_roi_by_inv",) if k in _loc}
+
+def _dc_speicher_komponente(ctx: _PvSystemKontext, t: _SystemTopf, inv) -> None:
+    """Ein DC-Speicher am Traegergeraet (RF-43): Kosten in den Topf, Ergebnis aus dem F-37-Vorablauf
+    (`ctx.speicher_roi_by_inv`), Detail je Modus (IST/Prognose)."""
+    inv_kosten = inv.anschaffungskosten_gesamt or 0
+    inv_alternativ = inv.anschaffungskosten_alternativ or 0
+    t.system_kosten += inv_kosten
+    t.system_alternativ += inv_alternativ
+    t.system_betriebskosten += (inv.betriebskosten_jahr or 0)
+    t.system_invs.append(inv)
+
+    params = inv.parameter or {}
+    # N127: BRUTTO-Kapazität über den SoT-Helper, ohne Default. Hier
+    # stand `.get(…, 10)` — ein Speicher ohne gepflegte Kapazität bekam
+    # still 10 kWh und daraus eine Jahres-Ersparnis, die es nie gab.
+    # Sie geht NUR in den Prognose-Modus ein (s. `ist_aggregat` unten);
+    # im IST-Modus rechnet `berechne_speicher_einsparung` aus der
+    # gemessenen Entladung und die Kapazität bleibt ungelesen.
+    kapazitaet = get_speicher_kapazitaet_kwh(inv)
+    # A31-2/E-1: der Prognose-Modus rechnet NETTO — Kapazität × 250
+    # Zyklen × η ist eine durchgefahrene Energiemenge, und durch den
+    # Speicher geht nur der nutzbare Hub. `kapazitaet` (brutto) bleibt
+    # daneben stehen: sie ist die *Beschreibung* der Komponente
+    # (Detail-Feld und Label unten), nicht die Rechengröße.
+    # F-37: die Rechnung liegt im Vorablauf — sie wird dort gebraucht,
+    # um den PV-Topf zu kürzen, und darf hier kein zweites Mal
+    # entstehen. `_speicher_roi` trägt Ergebnis und Quellen zusammen.
+    _roi = ctx.speicher_roi_by_inv[inv.id]
+    ist_aggregat = _roi.ist_aggregat
+    nutzt_arbitrage = _roi.nutzt_arbitrage
+    wirkungsgrad_eff, wirkungsgrad_quelle = _roi.wirkungsgrad_eff, _roi.wirkungsgrad_quelle
+    lade_preis_eff, ladepreis_quelle = _roi.lade_preis_eff, _roi.ladepreis_quelle
+    eff_ladepreis = ctx.speicher_ladepreis_anlage
+    eta_ist = ctx.speicher_eta_by_inv.get(inv.id)
+    kapazitaet_fehlt = _roi.kapazitaet_fehlt
+    result = _roi.result
+    inv_einsparung = result.jahres_einsparung_euro if result else None
+    inv_co2 = result.co2_einsparung_kg if result else None
+    t.system_einsparung += inv_einsparung or 0
+    t.system_co2 += inv_co2 or 0
+
+    # #351: `dc_gekoppelt` stand hier hart auf `True` — eine Behauptung
+    # über eine Eigenschaft, die eedc nie erhoben hatte. Sie kommt jetzt
+    # aus dem Feld (Vorbelegung: zugeordnet ⇒ DC), die Gruppierung
+    # darüber bleibt unverändert an der Zuordnung.
+    komp_detail: dict[str, Any] = {
+        'kapazitaet_kwh': kapazitaet,
+        'dc_gekoppelt': get_speicher_kopplung(inv) == SPEICHER_KOPPLUNG_DC,
+        'kopplung': get_speicher_kopplung(inv),
+        'kopplung_gepflegt': get_speicher_kopplung_gepflegt(inv) is not None,
+    }
+    if kapazitaet_fehlt:
+        komp_detail['hinweis'] = (
+            'Keine Kapazität gepflegt — ohne sie lässt sich die Ersparnis '
+            'nicht abschätzen. Kapazität in der Investitionspflege nachtragen.'
+        )
+    if ist_aggregat is not None:
+        komp_detail.update({
+            'modus': 'ist',
+            'ist_entladung_kwh_jahr': round(ist_aggregat.entladung_kwh_jahr, 1),
+            'ist_ladung_netz_kwh_jahr': round(ist_aggregat.ladung_netz_kwh_jahr, 1),
+            'ist_monate': ist_aggregat.anzahl_monate,
+            'pv_anteil_euro': result.pv_anteil_euro,
+            'netz_anteil_euro': result.arbitrage_anteil_euro,
+            'effektiver_ladepreis_cent': round(lade_preis_eff, 2) if (lade_preis_eff is not None and nutzt_arbitrage) else None,
+            'ladepreis_quelle': ladepreis_quelle,
+            'verwendetes_wirkungsgrad_prozent': round(wirkungsgrad_eff, 1),
+            'wirkungsgrad_quelle': wirkungsgrad_quelle,
+        })
+        # Etappe C1 Diagnose-Felder für UI-Badge bei dünner Datenbasis.
+        if eff_ladepreis is not None and eff_ladepreis.quelle == "datenbasis-zu-duenn":
+            komp_detail['ladepreis_abdeckung_prozent'] = round(eff_ladepreis.abdeckung_prozent, 0)
+        # ⛔ Der Degradations-Alarm stand hier bis zum 03.09.2026 und ist
+        # ENTFALLEN (Entscheid Gernot: „ich sehe keinen Zusammenhang").
+        # Am Code belegt, warum er hier nie hingehörte: Gesetzt wurde er
+        # nur unter `eta_ist.wirkungsgrad_prozent is not None` — und
+        # GENAU unter dieser Bedingung gibt `_aufloesen_wirkungsgrad` die
+        # MESSUNG zurück (`:112`). Der Alarm konnte in dieser Sicht also
+        # ausschließlich dann erscheinen, wenn der Parameter, über den er
+        # sich beschwert, hier keine einzige Zahl beeinflusst. Er bleibt
+        # im Komponenten-Hub (`dashboards.py`), wo der gepflegte Wert
+        # zählt (Sizing, Tages-Vorschau, HA-Sensoren).
+    else:
+        komp_detail['modus'] = 'prognose'
+    t.komponenten.append(ROIKomponente(
+        investition_id=inv.id,
+        # Ohne gepflegte Kapazität steht der Name ohne Klammerzusatz da —
+        # „(None kWh)" wäre schlechter als gar keine Angabe (N127).
+        bezeichnung=(
+            f"{inv.bezeichnung} ({kapazitaet} kWh)" if kapazitaet is not None
+            else inv.bezeichnung
+        ),
+        typ=inv.typ,
+        kosten=inv_kosten,
+        kosten_alternativ=inv_alternativ,
+        relevante_kosten=ctx._relevante_kosten(inv),
+        einsparung=round(inv_einsparung, 2) if inv_einsparung is not None else None,
+        co2_einsparung_kg=round(inv_co2, 1) if inv_co2 is not None else None,
+        detail=komp_detail,
+    ))
+
+
+def _system_rechnung(ctx: _PvSystemKontext, summen: _RoiSummen, t: _SystemTopf, *, wr, pv_module, dc_speicher, kopf_ist_bkw) -> None:
+    """Die Systemzeile (RF-43): sonstige Positionen in den Nenner, Kapitaleinsatz, `berechne_roi` mit den
+    Betriebskosten als eigenem Argument, Treppe (N-525), Zeile, Summen."""
+    # System-ROI berechnen
+    # #310: manuell gepflegte sonstige Erträge/Ausgaben des Systems
+    # (WR + PV-Module + DC-Speicher) einrechnen.
+    # F-19: Ausgaben kumuliert in den NENNER. Bauschritt 7: die Erträge
+    # ebenfalls — mit umgekehrtem Vorzeichen (§8/3 hatte sie nur aus dem
+    # Zähler genommen).
+    _system_ids = [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
+    system_sonstige_ausgaben = ctx._sonstige_ausgaben_kumuliert_fuer(_system_ids)
+    system_sonstige_ertraege = ctx._sonstige_ertraege_kumuliert_fuer(_system_ids)
+    system_relevante = ctx._relevante_kosten(*t.system_invs)
+    system_kapitaleinsatz = kapitaleinsatz_euro(
+        relevante_kosten_euro=t.system_kosten - t.system_alternativ,
+        sonstige_ausgaben_euro=system_sonstige_ausgaben,
+        sonstige_ertraege_euro=system_sonstige_ertraege,
+    )
+    system_netto_einsparung = t.system_einsparung - t.system_betriebskosten
+    roi_result = berechne_roi(system_kapitaleinsatz, t.system_einsparung, 0, t.system_betriebskosten)
+    summen.gesamt_betriebskosten += t.system_betriebskosten
+    # N-525: jede Komponente stuft ihre Mehrkosten ab ihrem Jahr; die
+    # Einsparung des Systems läuft ab seiner ersten Komponente (eine
+    # Jahres-Einsparung je System — ein später ergänztes Modulfeld stuft
+    # die Kosten, nicht die Einsparung; benannte Grenze).
+    system_zeilen_jahr = ctx._treppe_zeile(
+        invs=t.system_invs,
+        kosten_je_inv={
+            k.investition_id: (k.kosten or 0.0) - (k.kosten_alternativ or 0.0)
+            for k in t.komponenten
+        },
+        netto_einsparung=system_netto_einsparung,
+    )
+
+    # F-33: die Zeile trägt den Typ ihres KOPFES, nicht pauschal
+    # "pv-system". Ein Balkonkraftwerk als „PV-System Toni" mit
+    # Sonnen-Icon zu beschriften, hieße dem Melder aus #381 sein Gerät
+    # umzubenennen — und es verstieße gegen Regel 0a (eine Datenrolle =
+    # eine Farbe): ein BKW hat im Farb-SoT seine eigene. Dass die Zeile
+    # ein System ist, macht die Komponenten-Liste darunter sichtbar.
+    ctx.berechnungen.append(ROIBerechnung(
+        investition_id=wr.id,  # Kopf-ID als System-ID
+        anschaffungsjahr=system_zeilen_jahr if ctx.basis_jahr is not None else None,
+        investition_bezeichnung=(
+            wr.bezeichnung if kopf_ist_bkw else f"PV-System {wr.bezeichnung}"
+        ),
+        investition_typ=(
+            InvestitionTyp.BALKONKRAFTWERK.value if kopf_ist_bkw else "pv-system"
+        ),
+        anschaffungskosten=t.system_kosten,
+        anschaffungskosten_alternativ=t.system_alternativ,
+        relevante_kosten=system_relevante,
+        kapitaleinsatz=round(system_kapitaleinsatz, 2),
+        jahres_einsparung=round(system_netto_einsparung, 2),
+        roi_prozent=roi_result['roi_prozent'],
+        amortisation_jahre=roi_result['amortisation_jahre'],
+        amortisation_annahme=annahme_dauer_text(
+            betriebskosten_jahr_euro=t.system_betriebskosten,
+        ),
+        co2_einsparung_kg=round(t.system_co2, 1),
+        detail_berechnung={
+            **ctx.pv_detail,
+            'komponenten_count': len(t.komponenten),
+            'system_kwp': t.system_kwp,
+            'sonstige_netto_euro': round(system_sonstige_ertraege - system_sonstige_ausgaben, 2),
+            'sonstige_ausgaben_euro': round(system_sonstige_ausgaben, 2),
+            # Bauschritt 7: die Zeile nennt beide Seiten ihres Nenners.
+            'sonstige_ertraege_euro': round(system_sonstige_ertraege, 2),
+        },
+        komponenten=t.komponenten,
+    ))
+
+    summen.gesamt_investition += t.system_kosten
+    summen.gesamt_relevante += system_relevante
+    summen.gesamt_sonstige_ausgaben += system_sonstige_ausgaben
+    summen.gesamt_sonstige_ertraege += system_sonstige_ertraege
+    summen.gesamt_einsparung += system_netto_einsparung
+    summen.gesamt_co2 += t.system_co2
 
 
 def orphan_modul_zeilen(

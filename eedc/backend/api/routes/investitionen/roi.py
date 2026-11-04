@@ -11,6 +11,7 @@ Dazu die Kennwert-Aufloeser Param-Fallback ↔ IST (Etappe C, #264), die struktu
 # Routen ein (Reihenfolge in /api/openapi.json unveraendert) und exportiert die Namen weiter.
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -303,6 +304,20 @@ class _SpeicherRoi:
     def co2_pv_kg(self) -> float:
         """CO₂ aus dem PV-Anteil — dieselbe Doppelzählung eine Spalte weiter."""
         return getattr(self.result, "co2_einsparung_kg", 0.0) or 0.0 if self.result else 0.0
+
+
+@dataclass
+class _RoiSummen:
+    """Die Summen-Akkumulatoren der Zeilen-Phasen (RF-43/RF-44, 4.11.2026): je Zeile in derselben Reihenfolge
+    aufaddiert wie vorher die lokalen Variablen gleichen Namens; die Phasen geben sie im Rückgabe-Dict unverändert
+    weiter (`gesamt_*`-Schlüssel). Angelegt mit den Startwerten aus `pv_einsparung_und_speicher_ist`."""
+    gesamt_betriebskosten: float
+    gesamt_co2: float
+    gesamt_einsparung: float
+    gesamt_investition: float
+    gesamt_relevante: float
+    gesamt_sonstige_ausgaben: float
+    gesamt_sonstige_ertraege: float
 
 def _speicher_roi(
     inv: Any,
@@ -661,10 +676,14 @@ def _angezeigte_jahres_einsparung(
     Behauptung war falsch: Eine Zahl in der *Einsparungs*-Spalte sagt „so viel
     spart dieses Gerät", und genau das ist hier unbekannt.
 
-    **Die Betriebskosten bleiben deshalb überall sonst stehen** — in
-    ``gesamt_betriebskosten`` und in ``berechne_roi`` (dort als eigenes
-    Argument, nicht als negativer Zähler). Unterdrückt wird ausschließlich der
-    Anzeige- und Summenbeitrag, den die Oberfläche ohnehin als „—" zeigt.
+    **Die Betriebskosten bleiben deshalb stehen** — in
+    ``gesamt_betriebskosten`` und in der ROI-Zeile des Geräts (``berechne_roi``
+    dort als eigenes Argument, nicht als negativer Zähler). Unterdrückt wird der
+    Anzeige- und Summenbeitrag, den die Oberfläche ohnehin als „—" zeigt; im
+    Gesamt-ROI und in der Gesamt-Amortisation zählen sie damit nicht (Messung
+    4.11.2026, RF-43 Schritt 0: Demo-WP ohne Bedarf, 200 € Betriebskosten —
+    ``gesamt_jahres_einsparung`` = Σ der übrigen Zeilen, die 200 € fehlen dort,
+    die Annahme-Zeile nennt sie mit).
     """
     if isinstance(detail, dict) and detail.get('nicht_bewertet'):
         return 0.0
@@ -695,13 +714,7 @@ async def get_roi_dashboard(
     Returns:
         ROIDashboardResponse: Vollständige ROI-Übersicht
     """
-    from backend.core.calculations import berechne_roi
-    from backend.services.ust_satz import ust_hochrechnung
-    from backend.core.berechnungen.kapitalrechnung import (
-        amortisations_verlauf,
-        annahme_dauer_text,
-        kapitaleinsatz_euro,
-    )
+    from backend.core.berechnungen.kapitalrechnung import annahme_dauer_text
     # Vorlage 5b: die Phasen liegen in roi_eingaenge / roi_pv / roi_standalone. Sie importieren
     # Helfer und Schemas aus DIESEM Modul — der Import steht deshalb hier im Endpunkt, nicht auf
     # Modulebene (Importzyklus). Dieselbe Bauform wie die Lazy-Importe der Energieprofil-Routen.
@@ -709,171 +722,196 @@ async def get_roi_dashboard(
     from backend.api.routes.investitionen.roi_pv import pv_einsparung_und_speicher_ist, pv_systeme_zeilen, orphan_modul_zeilen
     from backend.api.routes.investitionen.roi_standalone import standalone_zeilen
 
+    # RF-45 (4.11.2026, Bauform RF-1): die Rückgaben der Phasen sammelt der Namensraum `s` — `vars(s).update(_out)`
+    # ersetzt die Leitern `if "x" in _out: x = _out["x"]` — gleichwertig, weil jede Phase jeden ihrer Rückgabe-
+    # Schlüssel unbedingt bindet (am Code gelesen 4.11.2026). Die Phasen-Signaturen bleiben; die Gesamt-Nachrechnung
+    # ist `_gesamt_zeile`.
+    s = SimpleNamespace()
     # ── lade_roi_eingaenge (Vorlage 5b: Phase in roi_eingaenge.py, Schnittstelle 5 ein / 18 aus) ──
-    _out = await lade_roi_eingaenge(
+    vars(s).update(await lade_roi_eingaenge(
         anlage_id=anlage_id,
         db=db,
         einspeiseverguetung_cent=einspeiseverguetung_cent,
         jahr=jahr,
         strompreis_cent=strompreis_cent,
-    )
-    if "_anlage_fakten" in _out: _anlage_fakten = _out["_anlage_fakten"]
-    if "_ist_pv_ladeanteil" in _out: _ist_pv_ladeanteil = _out["_ist_pv_ladeanteil"]
-    if "_sonstige_ausgaben_kumuliert_fuer" in _out: _sonstige_ausgaben_kumuliert_fuer = _out["_sonstige_ausgaben_kumuliert_fuer"]
-    if "_sonstige_ertraege_kumuliert_fuer" in _out: _sonstige_ertraege_kumuliert_fuer = _out["_sonstige_ertraege_kumuliert_fuer"]
-    if "_treppe_zeile" in _out: _treppe_zeile = _out["_treppe_zeile"]
-    if "anlage" in _out: anlage = _out["anlage"]
-    if "anlage_sonstige_ausgaben" in _out: anlage_sonstige_ausgaben = _out["anlage_sonstige_ausgaben"]
-    if "anlage_sonstige_ertraege" in _out: anlage_sonstige_ertraege = _out["anlage_sonstige_ertraege"]
-    if "basis_jahr" in _out: basis_jahr = _out["basis_jahr"]
-    if "benzinpreis_hinweis_euro" in _out: benzinpreis_hinweis_euro = _out["benzinpreis_hinweis_euro"]
-    if "einspeiseverguetung_cent" in _out: einspeiseverguetung_cent = _out["einspeiseverguetung_cent"]
-    if "ersparnis_zeilen" in _out: ersparnis_zeilen = _out["ersparnis_zeilen"]
-    if "investitionen" in _out: investitionen = _out["investitionen"]
-    if "kapital_ereignisse" in _out: kapital_ereignisse = _out["kapital_ereignisse"]
-    if "letzter_marktpreis" in _out: letzter_marktpreis = _out["letzter_marktpreis"]
-    if "strompreis_cent" in _out: strompreis_cent = _out["strompreis_cent"]
-    if "wallbox_strompreis" in _out: wallbox_strompreis = _out["wallbox_strompreis"]
-    if "wp_strompreis" in _out: wp_strompreis = _out["wp_strompreis"]
+    ))
     # ==========================================================================
     # Phase 1: Gruppiere Investitionen nach PV-Systemen und Standalone
     # ==========================================================================
     # Strukturierung extrahiert nach modul-internem `_gruppiere_investitionen`
     # (rein, DB-/Anzeige-frei). `pv_systeme`: wr_id -> {wr, pv_module[], speicher[]};
     # `orphan_pv_module`: PV-Module ohne WR-Zuordnung (Altdaten).
-    pv_systeme, standalone, orphan_pv_module = _gruppiere_investitionen(investitionen)
+    pv_systeme, standalone, orphan_pv_module = _gruppiere_investitionen(s.investitionen)
 
     # ── pv_einsparung_und_speicher_ist (Vorlage 5b: Phase in roi_pv.py, Schnittstelle 7 ein / 16 aus) ──
-    _out = await pv_einsparung_und_speicher_ist(
-        _anlage_fakten=_anlage_fakten,
+    vars(s).update(await pv_einsparung_und_speicher_ist(
+        _anlage_fakten=s._anlage_fakten,
         anlage_id=anlage_id,
         db=db,
-        einspeiseverguetung_cent=einspeiseverguetung_cent,
-        investitionen=investitionen,
+        einspeiseverguetung_cent=s.einspeiseverguetung_cent,
+        investitionen=s.investitionen,
         jahr=jahr,
-        strompreis_cent=strompreis_cent,
+        strompreis_cent=s.strompreis_cent,
         # N-770 F4: der Preis des gemessenen PV-Anteils der WP (heutiger WP-Tarif, ohne eigenen der allgemeine).
-        wp_tarif_cent=wp_strompreis,
-    )
-    if "_relevante_kosten" in _out: _relevante_kosten = _out["_relevante_kosten"]
-    if "berechnungen" in _out: berechnungen = _out["berechnungen"]
-    if "gesamt_betriebskosten" in _out: gesamt_betriebskosten = _out["gesamt_betriebskosten"]
-    if "gesamt_co2" in _out: gesamt_co2 = _out["gesamt_co2"]
-    if "gesamt_einsparung" in _out: gesamt_einsparung = _out["gesamt_einsparung"]
-    if "gesamt_investition" in _out: gesamt_investition = _out["gesamt_investition"]
-    if "gesamt_relevante" in _out: gesamt_relevante = _out["gesamt_relevante"]
-    if "gesamt_sonstige_ausgaben" in _out: gesamt_sonstige_ausgaben = _out["gesamt_sonstige_ausgaben"]
-    if "gesamt_sonstige_ertraege" in _out: gesamt_sonstige_ertraege = _out["gesamt_sonstige_ertraege"]
-    if "pv_co2" in _out: pv_co2 = _out["pv_co2"]
-    if "pv_detail" in _out: pv_detail = _out["pv_detail"]
-    if "pv_jahres_einsparung" in _out: pv_jahres_einsparung = _out["pv_jahres_einsparung"]
-    if "speicher_eta_by_inv" in _out: speicher_eta_by_inv = _out["speicher_eta_by_inv"]
-    if "speicher_invs_alle" in _out: speicher_invs_alle = _out["speicher_invs_alle"]
-    if "speicher_ist_by_inv" in _out: speicher_ist_by_inv = _out["speicher_ist_by_inv"]
-    if "speicher_ladepreis_anlage" in _out: speicher_ladepreis_anlage = _out["speicher_ladepreis_anlage"]
+        wp_tarif_cent=s.wp_strompreis,
+    ))
     # ── pv_systeme_zeilen (Vorlage 5b: Phase in roi_pv.py, Schnittstelle 26 ein / 11 aus) ──
-    _out = pv_systeme_zeilen(
-        _relevante_kosten=_relevante_kosten,
-        _sonstige_ausgaben_kumuliert_fuer=_sonstige_ausgaben_kumuliert_fuer,
-        _sonstige_ertraege_kumuliert_fuer=_sonstige_ertraege_kumuliert_fuer,
-        _treppe_zeile=_treppe_zeile,
-        basis_jahr=basis_jahr,
-        berechnungen=berechnungen,
-        einspeiseverguetung_cent=einspeiseverguetung_cent,
-        gesamt_betriebskosten=gesamt_betriebskosten,
-        gesamt_co2=gesamt_co2,
-        gesamt_einsparung=gesamt_einsparung,
-        gesamt_investition=gesamt_investition,
-        gesamt_relevante=gesamt_relevante,
-        gesamt_sonstige_ausgaben=gesamt_sonstige_ausgaben,
-        gesamt_sonstige_ertraege=gesamt_sonstige_ertraege,
-        investitionen=investitionen,
+    vars(s).update(pv_systeme_zeilen(
+        _relevante_kosten=s._relevante_kosten,
+        _sonstige_ausgaben_kumuliert_fuer=s._sonstige_ausgaben_kumuliert_fuer,
+        _sonstige_ertraege_kumuliert_fuer=s._sonstige_ertraege_kumuliert_fuer,
+        _treppe_zeile=s._treppe_zeile,
+        basis_jahr=s.basis_jahr,
+        berechnungen=s.berechnungen,
+        einspeiseverguetung_cent=s.einspeiseverguetung_cent,
+        gesamt_betriebskosten=s.gesamt_betriebskosten,
+        gesamt_co2=s.gesamt_co2,
+        gesamt_einsparung=s.gesamt_einsparung,
+        gesamt_investition=s.gesamt_investition,
+        gesamt_relevante=s.gesamt_relevante,
+        gesamt_sonstige_ausgaben=s.gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=s.gesamt_sonstige_ertraege,
+        investitionen=s.investitionen,
         orphan_pv_module=orphan_pv_module,
-        pv_co2=pv_co2,
-        pv_detail=pv_detail,
-        pv_jahres_einsparung=pv_jahres_einsparung,
+        pv_co2=s.pv_co2,
+        pv_detail=s.pv_detail,
+        pv_jahres_einsparung=s.pv_jahres_einsparung,
         pv_systeme=pv_systeme,
-        speicher_eta_by_inv=speicher_eta_by_inv,
-        speicher_invs_alle=speicher_invs_alle,
-        speicher_ist_by_inv=speicher_ist_by_inv,
-        speicher_ladepreis_anlage=speicher_ladepreis_anlage,
+        speicher_eta_by_inv=s.speicher_eta_by_inv,
+        speicher_invs_alle=s.speicher_invs_alle,
+        speicher_ist_by_inv=s.speicher_ist_by_inv,
+        speicher_ladepreis_anlage=s.speicher_ladepreis_anlage,
         standalone=standalone,
-        strompreis_cent=strompreis_cent,
-    )
-    if "gesamt_betriebskosten" in _out: gesamt_betriebskosten = _out["gesamt_betriebskosten"]
-    if "gesamt_co2" in _out: gesamt_co2 = _out["gesamt_co2"]
-    if "gesamt_einsparung" in _out: gesamt_einsparung = _out["gesamt_einsparung"]
-    if "gesamt_investition" in _out: gesamt_investition = _out["gesamt_investition"]
-    if "gesamt_kwp" in _out: gesamt_kwp = _out["gesamt_kwp"]
-    if "gesamt_relevante" in _out: gesamt_relevante = _out["gesamt_relevante"]
-    if "gesamt_sonstige_ausgaben" in _out: gesamt_sonstige_ausgaben = _out["gesamt_sonstige_ausgaben"]
-    if "gesamt_sonstige_ertraege" in _out: gesamt_sonstige_ertraege = _out["gesamt_sonstige_ertraege"]
-    if "pv_co2" in _out: pv_co2 = _out["pv_co2"]
-    if "pv_jahres_einsparung" in _out: pv_jahres_einsparung = _out["pv_jahres_einsparung"]
-    if "speicher_roi_by_inv" in _out: speicher_roi_by_inv = _out["speicher_roi_by_inv"]
+        strompreis_cent=s.strompreis_cent,
+    ))
     # ── orphan_modul_zeilen (Vorlage 5b: Phase in roi_pv.py, Schnittstelle 18 ein / 7 aus) ──
-    _out = orphan_modul_zeilen(
-        _relevante_kosten=_relevante_kosten,
-        _sonstige_ausgaben_kumuliert_fuer=_sonstige_ausgaben_kumuliert_fuer,
-        _sonstige_ertraege_kumuliert_fuer=_sonstige_ertraege_kumuliert_fuer,
-        _treppe_zeile=_treppe_zeile,
-        basis_jahr=basis_jahr,
-        berechnungen=berechnungen,
-        gesamt_betriebskosten=gesamt_betriebskosten,
-        gesamt_co2=gesamt_co2,
-        gesamt_einsparung=gesamt_einsparung,
-        gesamt_investition=gesamt_investition,
-        gesamt_kwp=gesamt_kwp,
-        gesamt_relevante=gesamt_relevante,
-        gesamt_sonstige_ausgaben=gesamt_sonstige_ausgaben,
-        gesamt_sonstige_ertraege=gesamt_sonstige_ertraege,
+    vars(s).update(orphan_modul_zeilen(
+        _relevante_kosten=s._relevante_kosten,
+        _sonstige_ausgaben_kumuliert_fuer=s._sonstige_ausgaben_kumuliert_fuer,
+        _sonstige_ertraege_kumuliert_fuer=s._sonstige_ertraege_kumuliert_fuer,
+        _treppe_zeile=s._treppe_zeile,
+        basis_jahr=s.basis_jahr,
+        berechnungen=s.berechnungen,
+        gesamt_betriebskosten=s.gesamt_betriebskosten,
+        gesamt_co2=s.gesamt_co2,
+        gesamt_einsparung=s.gesamt_einsparung,
+        gesamt_investition=s.gesamt_investition,
+        gesamt_kwp=s.gesamt_kwp,
+        gesamt_relevante=s.gesamt_relevante,
+        gesamt_sonstige_ausgaben=s.gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=s.gesamt_sonstige_ertraege,
         orphan_pv_module=orphan_pv_module,
-        pv_co2=pv_co2,
-        pv_detail=pv_detail,
-        pv_jahres_einsparung=pv_jahres_einsparung,
-    )
-    if "gesamt_betriebskosten" in _out: gesamt_betriebskosten = _out["gesamt_betriebskosten"]
-    if "gesamt_co2" in _out: gesamt_co2 = _out["gesamt_co2"]
-    if "gesamt_einsparung" in _out: gesamt_einsparung = _out["gesamt_einsparung"]
-    if "gesamt_investition" in _out: gesamt_investition = _out["gesamt_investition"]
-    if "gesamt_relevante" in _out: gesamt_relevante = _out["gesamt_relevante"]
-    if "gesamt_sonstige_ausgaben" in _out: gesamt_sonstige_ausgaben = _out["gesamt_sonstige_ausgaben"]
-    if "gesamt_sonstige_ertraege" in _out: gesamt_sonstige_ertraege = _out["gesamt_sonstige_ertraege"]
+        pv_co2=s.pv_co2,
+        pv_detail=s.pv_detail,
+        pv_jahres_einsparung=s.pv_jahres_einsparung,
+    ))
     # ── standalone_zeilen (Vorlage 5b: Phase in roi_standalone.py, Schnittstelle 25 ein / 7 aus) ──
-    _out = await standalone_zeilen(
-        _anlage_fakten=_anlage_fakten,
-        _ist_pv_ladeanteil=_ist_pv_ladeanteil,
-        _relevante_kosten=_relevante_kosten,
-        _sonstige_ausgaben_kumuliert_fuer=_sonstige_ausgaben_kumuliert_fuer,
-        _sonstige_ertraege_kumuliert_fuer=_sonstige_ertraege_kumuliert_fuer,
-        _treppe_zeile=_treppe_zeile,
-        basis_jahr=basis_jahr,
+    vars(s).update(await standalone_zeilen(
+        _anlage_fakten=s._anlage_fakten,
+        _ist_pv_ladeanteil=s._ist_pv_ladeanteil,
+        _relevante_kosten=s._relevante_kosten,
+        _sonstige_ausgaben_kumuliert_fuer=s._sonstige_ausgaben_kumuliert_fuer,
+        _sonstige_ertraege_kumuliert_fuer=s._sonstige_ertraege_kumuliert_fuer,
+        _treppe_zeile=s._treppe_zeile,
+        basis_jahr=s.basis_jahr,
         benzinpreis_euro=benzinpreis_euro,
-        berechnungen=berechnungen,
-        einspeiseverguetung_cent=einspeiseverguetung_cent,
-        gesamt_betriebskosten=gesamt_betriebskosten,
-        gesamt_co2=gesamt_co2,
-        gesamt_einsparung=gesamt_einsparung,
-        gesamt_investition=gesamt_investition,
-        gesamt_relevante=gesamt_relevante,
-        gesamt_sonstige_ausgaben=gesamt_sonstige_ausgaben,
-        gesamt_sonstige_ertraege=gesamt_sonstige_ertraege,
-        letzter_marktpreis=letzter_marktpreis,
-        speicher_eta_by_inv=speicher_eta_by_inv,
-        speicher_ladepreis_anlage=speicher_ladepreis_anlage,
-        speicher_roi_by_inv=speicher_roi_by_inv,
+        berechnungen=s.berechnungen,
+        einspeiseverguetung_cent=s.einspeiseverguetung_cent,
+        gesamt_betriebskosten=s.gesamt_betriebskosten,
+        gesamt_co2=s.gesamt_co2,
+        gesamt_einsparung=s.gesamt_einsparung,
+        gesamt_investition=s.gesamt_investition,
+        gesamt_relevante=s.gesamt_relevante,
+        gesamt_sonstige_ausgaben=s.gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=s.gesamt_sonstige_ertraege,
+        letzter_marktpreis=s.letzter_marktpreis,
+        speicher_eta_by_inv=s.speicher_eta_by_inv,
+        speicher_ladepreis_anlage=s.speicher_ladepreis_anlage,
+        speicher_roi_by_inv=s.speicher_roi_by_inv,
         standalone=standalone,
-        strompreis_cent=strompreis_cent,
-        wallbox_strompreis=wallbox_strompreis,
-        wp_strompreis=wp_strompreis,
+        strompreis_cent=s.strompreis_cent,
+        wallbox_strompreis=s.wallbox_strompreis,
+        wp_strompreis=s.wp_strompreis,
+    ))
+    g = await _gesamt_zeile(
+        anlage=s.anlage,
+        anlage_id=anlage_id,
+        db=db,
+        jahr=jahr,
+        pv_detail=s.pv_detail,
+        gesamt_einsparung=s.gesamt_einsparung,
+        gesamt_relevante=s.gesamt_relevante,
+        gesamt_sonstige_ausgaben=s.gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=s.gesamt_sonstige_ertraege,
+        anlage_sonstige_ausgaben=s.anlage_sonstige_ausgaben,
+        anlage_sonstige_ertraege=s.anlage_sonstige_ertraege,
+        kapital_ereignisse=s.kapital_ereignisse,
+        ersparnis_zeilen=s.ersparnis_zeilen,
+        basis_jahr=s.basis_jahr,
     )
-    if "gesamt_betriebskosten" in _out: gesamt_betriebskosten = _out["gesamt_betriebskosten"]
-    if "gesamt_co2" in _out: gesamt_co2 = _out["gesamt_co2"]
-    if "gesamt_einsparung" in _out: gesamt_einsparung = _out["gesamt_einsparung"]
-    if "gesamt_investition" in _out: gesamt_investition = _out["gesamt_investition"]
-    if "gesamt_relevante" in _out: gesamt_relevante = _out["gesamt_relevante"]
-    if "gesamt_sonstige_ausgaben" in _out: gesamt_sonstige_ausgaben = _out["gesamt_sonstige_ausgaben"]
-    if "gesamt_sonstige_ertraege" in _out: gesamt_sonstige_ertraege = _out["gesamt_sonstige_ertraege"]
+
+    return ROIDashboardResponse(
+        anlage_id=anlage_id,
+        anlage_name=s.anlage.anlagenname,
+        gesamt_investition=round(s.gesamt_investition, 2),
+        gesamt_relevante_kosten=round(s.gesamt_relevante, 2),
+        gesamt_sonstige_ausgaben_euro=round(g.gesamt_sonstige_ausgaben, 2),
+        gesamt_sonstige_ertraege_euro=round(g.gesamt_sonstige_ertraege, 2),
+        gesamt_kapitaleinsatz=round(g.gesamt_kapitaleinsatz, 2),
+        gesamt_jahres_einsparung=round(g.gesamt_einsparung, 2),
+        gesamt_roi_prozent=g.gesamt_roi['roi_prozent'],
+        gesamt_amortisation_jahre=g.gesamt_roi['amortisation_jahre'],
+        basis_jahr=s.basis_jahr,
+        gesamt_amortisation_jahr=g.gesamt_amortisation_jahr,
+        amortisations_verlauf=g.amortisations_verlauf_zeilen,
+        amortisation_annahme=annahme_dauer_text(
+            betriebskosten_jahr_euro=s.gesamt_betriebskosten,
+        ),
+        gesamt_co2_einsparung_kg=round(s.gesamt_co2, 1),
+        berechnungen=s.berechnungen,
+        benzinpreis_hinweis_euro=round(s.benzinpreis_hinweis_euro, 3),
+    )
+
+
+@dataclass(frozen=True)
+class _GesamtZeile:
+    """Die Gesamt-Zahlen nach der Nachrechnung (RF-45): Einsparung nach USt-Abzug, sonstige Positionen samt den
+    anlagenweiten, Kapitaleinsatz, `berechne_roi`, Treppe (N-525)."""
+    gesamt_einsparung: float
+    gesamt_sonstige_ausgaben: float
+    gesamt_sonstige_ertraege: float
+    gesamt_kapitaleinsatz: float
+    gesamt_roi: dict
+    amortisations_verlauf_zeilen: list
+    gesamt_amortisation_jahr: Optional[int]
+
+
+async def _gesamt_zeile(
+    *,
+    anlage,
+    anlage_id,
+    db,
+    jahr,
+    pv_detail,
+    gesamt_einsparung,
+    gesamt_relevante,
+    gesamt_sonstige_ausgaben,
+    gesamt_sonstige_ertraege,
+    anlage_sonstige_ausgaben,
+    anlage_sonstige_ertraege,
+    kapital_ereignisse,
+    ersparnis_zeilen,
+    basis_jahr,
+) -> _GesamtZeile:
+    """Die Nachrechnung Gesamt (RF-45): USt auf den Eigenverbrauch bei Regelbesteuerung (N-588), die anlagenweiten
+    sonstigen Positionen (Bauschritt 4), Kapitaleinsatz, Gesamt-ROI und die Kalender-Treppe (N-525)."""
+    from backend.core.calculations import berechne_roi
+    from backend.services.ust_satz import ust_hochrechnung
+    from backend.core.berechnungen.kapitalrechnung import (
+        amortisations_verlauf,
+        annahme_dauer_text,
+        kapitaleinsatz_euro,
+    )
     # USt auf Eigenverbrauch bei Regelbesteuerung (reduziert Gesamt-Einsparung)
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     if steuerliche_beh == "regelbesteuerung" and pv_detail.get('erzeugung_kwh_jahr', 0) > 0:
@@ -933,25 +971,12 @@ async def get_roi_dashboard(
     gesamt_amortisation_jahr = (
         _verlauf.break_even_jahr if basis_jahr is not None else None
     )
-
-    return ROIDashboardResponse(
-        anlage_id=anlage_id,
-        anlage_name=anlage.anlagenname,
-        gesamt_investition=round(gesamt_investition, 2),
-        gesamt_relevante_kosten=round(gesamt_relevante, 2),
-        gesamt_sonstige_ausgaben_euro=round(gesamt_sonstige_ausgaben, 2),
-        gesamt_sonstige_ertraege_euro=round(gesamt_sonstige_ertraege, 2),
-        gesamt_kapitaleinsatz=round(gesamt_kapitaleinsatz, 2),
-        gesamt_jahres_einsparung=round(gesamt_einsparung, 2),
-        gesamt_roi_prozent=gesamt_roi['roi_prozent'],
-        gesamt_amortisation_jahre=gesamt_roi['amortisation_jahre'],
-        basis_jahr=basis_jahr,
+    return _GesamtZeile(
+        gesamt_einsparung=gesamt_einsparung,
+        gesamt_sonstige_ausgaben=gesamt_sonstige_ausgaben,
+        gesamt_sonstige_ertraege=gesamt_sonstige_ertraege,
+        gesamt_kapitaleinsatz=gesamt_kapitaleinsatz,
+        gesamt_roi=gesamt_roi,
+        amortisations_verlauf_zeilen=amortisations_verlauf_zeilen,
         gesamt_amortisation_jahr=gesamt_amortisation_jahr,
-        amortisations_verlauf=amortisations_verlauf_zeilen,
-        amortisation_annahme=annahme_dauer_text(
-            betriebskosten_jahr_euro=gesamt_betriebskosten,
-        ),
-        gesamt_co2_einsparung_kg=round(gesamt_co2, 1),
-        berechnungen=berechnungen,
-        benzinpreis_hinweis_euro=round(benzinpreis_hinweis_euro, 3),
     )

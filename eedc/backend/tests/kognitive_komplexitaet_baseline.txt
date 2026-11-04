@@ -16,10 +16,6 @@
 64	api/routes/import_export/csv_operations.py::export_csv
 65	api/routes/import_export/demo_data.py::create_demo_data
 51	api/routes/import_export/json_operations.py::import_json
-65	api/routes/investitionen/roi.py::get_roi_dashboard
-64	api/routes/investitionen/roi_eingaenge.py::lade_roi_eingaenge
-78	api/routes/investitionen/roi_pv.py::pv_systeme_zeilen
-72	api/routes/investitionen/roi_standalone.py::standalone_zeilen
 66	core/berechnungen/ergebnis.py::falte_zeitraum
 58	core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows
 58	services/community_service.py::prepare_community_data
