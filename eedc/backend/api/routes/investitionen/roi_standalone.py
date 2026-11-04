@@ -91,7 +91,8 @@ async def standalone_zeilen(
     `_speicher_bewertung`, `_eauto_bewertung`, `_wp_bewertung`, `_bkw_bewertung`, `_ertragsfeld_bewertung`; WP ohne
     Bewertung und Wechselrichter ohne Module direkt dort) und der gemeinsame Abschluss `_zeile_abschliessen`
     (sonstige Positionen, Betriebskosten, `berechne_roi`, Treppe, Summen). Geteilte Eingänge in
-    `_StandaloneKontext`, Summen in `_RoiSummen` (`roi.py`); die 25 Parameter und die 7 Rückgabe-Schlüssel bleiben.
+    `_StandaloneKontext`, Summen in `_RoiSummen` (`roi.py`); die 25 Parameter bleiben, die Rückgabe trägt seit N-774 (4.11.2026) 8 Schlüssel
+    (`gesamt_betriebskosten_unbewertet` dazu).
     """
     ctx = _StandaloneKontext(
         _anlage_fakten=_anlage_fakten,
@@ -143,6 +144,7 @@ async def standalone_zeilen(
         "gesamt_relevante": summen.gesamt_relevante,
         "gesamt_sonstige_ausgaben": summen.gesamt_sonstige_ausgaben,
         "gesamt_sonstige_ertraege": summen.gesamt_sonstige_ertraege,
+        "gesamt_betriebskosten_unbewertet": summen.gesamt_betriebskosten_unbewertet,  # N-774
     }
 
 
@@ -656,9 +658,15 @@ def _zeile_abschliessen(
     )
     roi_result = berechne_roi(inv_kapitaleinsatz, jahres_einsparung, 0, betriebskosten)
     summen.gesamt_betriebskosten += betriebskosten
+    # N-774 (4.11.2026): die angezeigte Einsparung einer nicht bewerteten Zeile ist 0 (N-258), ihre Betriebskosten
+    # fallen trotzdem an — sie gehen als eigener Abzug in den Gesamt-ROI (`_gesamt_zeile`) und als negative
+    # Treppenzeile in die Kalender-Treppe, damit Dauer und Break-Even-Jahr dieselbe Rechnung meinen.
+    nicht_bewertet = isinstance(detail, dict) and bool(detail.get('nicht_bewertet'))
+    unbewertet_betriebskosten = betriebskosten if nicht_bewertet else 0.0
+    summen.gesamt_betriebskosten_unbewertet += unbewertet_betriebskosten
     inv_zeilen_jahr = ctx._treppe_zeile(
         invs=[inv], kosten_je_inv={inv.id: kosten - alternativ},
-        netto_einsparung=netto_einsparung,
+        netto_einsparung=netto_einsparung - unbewertet_betriebskosten,
     )
 
     ctx.berechnungen.append(ROIBerechnung(

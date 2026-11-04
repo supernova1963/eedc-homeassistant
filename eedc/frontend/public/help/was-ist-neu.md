@@ -21,6 +21,8 @@
 
 **Auswertungen → Tabelle: Strom für Heizen und Warmwasser je Tag.** In der Tagesansicht gibt es zwei neue Spalten unter „Wärmepumpe“: **Strom Heizbetrieb** und **Strom Warmwasserbetrieb** — die Betriebsart-Aufteilung des Tages, dieselben Zahlen wie der Verlauf in Cockpit → Monat und die gleichnamigen Sensoren in Home Assistant, auch im CSV-Export. Sie sind nicht voreingestellt; du blendest sie über „Spalten“ ein. Wichtig: das ist eine Teilmenge des Wärmepumpen-Stroms aus mitgeschriebenen Stunden, nicht der Wert getrennter Zähler wie „WP Strom Heizen/WW“ in der Monatsansicht — die beiden nicht addieren. [Handbuch Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank)
 
+**Auswertungen → ROI: die Betriebskosten eines nicht bewerteten Geräts zählen im Gesamt mit.** Steht bei einer Wärmepumpe ohne Wärmebedarf oder einem Gerät unter Sonstiges ohne „Ertrag/Jahr" in der Zeile „—", fehlten seine Kosten/Jahr bisher in Gesamt-ROI, Amortisationsdauer und Break-Even-Jahr — obwohl der Satz darunter „inkl. … €/Jahr Betriebskosten" sie nannte. Jetzt sind sie abgezogen; die Zeile des Geräts zeigt weiter „—", und die Summe der Spalte bleibt die Summe der Zeilen. An der Demo-Anlage (Mini-BHKW mit 300 €/Jahr) wird aus 19,7 Jahren 20,9. [Handbuch Bedienung §4.2](HANDBUCH_BEDIENUNG.md#42-roi)
+
 **Texte mit den heutigen Orten:** Hinweise, die noch „Sensor-Mapping“ oder alte Einstellungs-Seiten nannten, zeigen jetzt auf Einstellungen → Datenquellen; der Live-Tagesverlauf nennt keine Quelle mehr, die nicht stimmen muss.
 
 ## v4.2.1 — 2. November 2026

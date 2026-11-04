@@ -25,6 +25,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Summe, wenn kein PV-Gesamtzähler der Anlage zugeordnet war (gesät: 57,0 statt 62,7 kWh); sein Wert stand nur im Tooltip.
   Jetzt zählt jeder Erzeuger mit seiner Messung — Zähler, wo einer misst, sonst die Leistung. Mit PV-Gesamtzähler bleibt es,
   wie es war.
+- **Auswertungen → ROI: Gesamt-ROI und Amortisation ziehen auch die Betriebskosten eines nicht bewerteten Geräts ab.**
+  Eine Wärmepumpe ohne gepflegten Wärmebedarf oder ein Gerät unter *Sonstiges* ohne „Ertrag/Jahr“ zeigt in seiner Zeile weiter
+  „—“, seine Kosten/Jahr fehlten aber bisher in Gesamt-ROI, Amortisationsdauer und Break-Even-Jahr — obwohl der Satz darunter
+  „inkl. … €/Jahr Betriebskosten“ sie mitnannte. Jetzt sind sie abgezogen (Demo-Anlage mit Mini-BHKW, 300 €/Jahr: 19,7 → 20,9 Jahre).
 
 ### Added
 

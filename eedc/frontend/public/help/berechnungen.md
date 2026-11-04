@@ -2617,6 +2617,27 @@ Amortisation (Jahre) = Relevante_Kosten / Netto_Einsparung
 
 Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versicherung etc., Default: 0).
 
+**Gesamt-Zeile** (Auswertungen → ROI, `investitionen/roi.py::_gesamt_zeile`, seit N-774 am 4.11.2026):
+
+```
+Gesamt_Einsparung          = Σ angezeigte Jahres-Einsparung der Zeilen (− USt bei Regelbesteuerung, §3.7)
+Betriebskosten_unbewertet  = Σ Betriebskosten_Jahr der Zeilen mit detail.nicht_bewertet
+Gesamt-ROI (%)             = (Gesamt_Einsparung − Betriebskosten_unbewertet) / Gesamt_Kapitaleinsatz * 100
+Gesamt-Amortisation (J.)   = Gesamt_Kapitaleinsatz / (Gesamt_Einsparung − Betriebskosten_unbewertet)
+```
+
+Eine **nicht bewertete** Zeile (Wärmepumpe ohne Wärmebedarf, Wallbox/Sonstiges ohne „Ertrag/Jahr") zeigt in der Spalte
+*Jahres-Einsparung* „—" und trägt **0** zur Spaltensumme `gesamt_jahres_einsparung` bei — nicht `0 − Betriebskosten` (N-258:
+eine Zahl in der Einsparungs-Spalte behauptete sonst eine negative Ersparnis eines Geräts, das eedc gar nicht bewertet). Ihre
+Betriebskosten fallen trotzdem an: sie gehen als eigenes Argument `betriebskosten_jahr` in den Gesamt-`berechne_roi` und als
+negative Zeile `ErsparnisZeile(Zeilenjahr, −Betriebskosten)` in die Kalender-Treppe, damit Dauer und Break-Even-Jahr dieselbe
+Rechnung meinen. Bewertete Zeilen tragen ihre Betriebskosten schon in ihrer Netto-Einsparung und werden **nicht** noch einmal
+abgezogen. Die Annahme-Zeile `amortisation_annahme` („inkl. N €/Jahr Betriebskosten") nennt die Summe **aller** Zeilen
+(`gesamt_betriebskosten`) und stimmt damit mit der Zahl überein. ⚠ Bis N-774 fehlten die Kosten unbewerteter Zeilen im
+Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitnannte (Demo r28, Mini-BHKW 300 €/Jahr:
+19,7 statt 20,9 Jahre). PV-System- und Orphan-Zeilen (`roi_pv.py`) kennen kein `nicht_bewertet`. Gesichert durch
+`test_n774_gesamt_roi_betriebskosten_unbewertet.py` (**Probe**, mit Gegenfall ohne unbewertete Zeilen).
+
 **WICHTIG - Zwei verschiedene ROI-Metriken:**
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |

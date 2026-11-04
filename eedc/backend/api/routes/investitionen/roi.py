@@ -318,6 +318,10 @@ class _RoiSummen:
     gesamt_relevante: float
     gesamt_sonstige_ausgaben: float
     gesamt_sonstige_ertraege: float
+    # N-774 (4.11.2026): Σ `betriebskosten_jahr` der Zeilen mit `detail.nicht_bewertet` — sie stehen in keiner
+    # Netto-Einsparung (N-258) und gehen deshalb als eigenes Argument in den Gesamt-`berechne_roi`. Default 0, nur
+    # die Standalone-Zeilen kennen das Flag.
+    gesamt_betriebskosten_unbewertet: float = 0.0
 
 def _speicher_roi(
     inv: Any,
@@ -679,11 +683,13 @@ def _angezeigte_jahres_einsparung(
     **Die Betriebskosten bleiben deshalb stehen** — in
     ``gesamt_betriebskosten`` und in der ROI-Zeile des Geräts (``berechne_roi``
     dort als eigenes Argument, nicht als negativer Zähler). Unterdrückt wird der
-    Anzeige- und Summenbeitrag, den die Oberfläche ohnehin als „—" zeigt; im
-    Gesamt-ROI und in der Gesamt-Amortisation zählen sie damit nicht (Messung
-    4.11.2026, RF-43 Schritt 0: Demo-WP ohne Bedarf, 200 € Betriebskosten —
-    ``gesamt_jahres_einsparung`` = Σ der übrigen Zeilen, die 200 € fehlen dort,
-    die Annahme-Zeile nennt sie mit).
+    Anzeige- und Summenbeitrag, den die Oberfläche ohnehin als „—" zeigt. Im
+    Gesamt-ROI und in der Gesamt-Amortisation zählen sie seit **N-774**
+    (4.11.2026) als eigenes Argument des Gesamt-``berechne_roi``
+    (``gesamt_betriebskosten_unbewertet``) und als negative Treppenzeile
+    (``_treppe_zeile`` in ``roi_standalone._zeile_abschliessen``) — Messung
+    davor (RF-43 Schritt 0, Demo-WP ohne Bedarf, 200 € Betriebskosten): sie
+    fehlten dort, 24,1 J, während die Annahme-Zeile sie mitnannte.
     """
     if isinstance(detail, dict) and detail.get('nicht_bewertet'):
         return 0.0
@@ -848,6 +854,7 @@ async def get_roi_dashboard(
         kapital_ereignisse=s.kapital_ereignisse,
         ersparnis_zeilen=s.ersparnis_zeilen,
         basis_jahr=s.basis_jahr,
+        gesamt_betriebskosten_unbewertet=s.gesamt_betriebskosten_unbewertet,
     )
 
     return ROIDashboardResponse(
@@ -902,6 +909,7 @@ async def _gesamt_zeile(
     kapital_ereignisse,
     ersparnis_zeilen,
     basis_jahr,
+    gesamt_betriebskosten_unbewertet=0.0,
 ) -> _GesamtZeile:
     """Die Nachrechnung Gesamt (RF-45): USt auf den Eigenverbrauch bei Regelbesteuerung (N-588), die anlagenweiten
     sonstigen Positionen (Bauschritt 4), Kapitaleinsatz, Gesamt-ROI und die Kalender-Treppe (N-525)."""
@@ -949,7 +957,9 @@ async def _gesamt_zeile(
         sonstige_ausgaben_euro=gesamt_sonstige_ausgaben,
         sonstige_ertraege_euro=gesamt_sonstige_ertraege,
     )
-    gesamt_roi = berechne_roi(gesamt_kapitaleinsatz, gesamt_einsparung, 0)
+    # N-774 (4.11.2026): die Betriebskosten nicht bewerteter Zeilen stehen in keiner Netto-Einsparung (die Zeile zeigt
+    # «—», N-258) und kommen deshalb hier als eigenes Argument dazu; bewertete Zeilen tragen ihre schon im Zähler.
+    gesamt_roi = berechne_roi(gesamt_kapitaleinsatz, gesamt_einsparung, 0, gesamt_betriebskosten_unbewertet)
 
     # N-525: Kalender-Treppe statt Anker + Dauer. Bis 2026-09-18 stand hier
     # `basis_jahr + ⌈Dauer⌉` — „dieselbe Näherung, die die Kurve ohnehin macht".

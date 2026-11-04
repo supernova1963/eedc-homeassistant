@@ -1219,7 +1219,9 @@ Erträge stehen dabei im Kapitaleinsatz, nicht noch einmal bei den Erträgen.
 >
 > **Willst du mit Instandhaltung rechnen**, trag sie bei der Komponente als **Kosten/Jahr** ein.
 > Dann steht dort „inkl. 200,00 €/Jahr Betriebskosten, ohne weitere Instandhaltung" — der Betrag
-> ist in der Zahl bereits abgezogen. Aus deiner bisherigen Reparatur-Historie rechnet eedc
+> ist in der Zahl bereits abgezogen. Das gilt auch für ein Gerät, das eedc **nicht bewertet**
+> (Wärmepumpe ohne Wärmebedarf, *Sonstiges* ohne „Ertrag/Jahr"): seine Betriebskosten stehen nicht
+> in seiner Zeile — dort steht „—" —, zählen aber in Gesamt-ROI, Amortisation und Break-Even-Jahr. Aus deiner bisherigen Reparatur-Historie rechnet eedc
 > **keine** Reparatur-Rate hoch: bei ein bis zwei Ereignissen wäre das eine Zahl, die sich jedes
 > Jahr ändert, ohne dass etwas passiert ist.
 
