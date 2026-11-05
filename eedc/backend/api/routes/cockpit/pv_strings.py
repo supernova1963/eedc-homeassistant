@@ -350,6 +350,11 @@ class PVStringsGesamtlaufzeitResponse(BaseModel):
     vergleich_hinweis: Optional[str] = None
 
 
+# RF-70 (5.11.2026, Bauform RF-1): die Route ist ein Orchestrator — Kopf (Anlage, Erzeuger ohne aktiv-Filter #123 mit
+# dem Selektor, heutige Zuordnung `struktur`, Monate mit selbst tragenden BKW, Zeilen), Wechselrichter, aktive Prognose,
+# SOLL-Nenner je Monat (N-661/N-613), IST über den Read-time-SoT; je Zeile die Phase `_string_im_jahr` (SOLL nur in
+# Monaten mit IST, F-34, Abweichung/PR, Jahreswerte, spez. Ertrag, Quelle); danach Summen, Ranking `_ranking` und Antwort.
+# Reihenfolge der Abfragen, Antwortform und OpenAPI (Docstring) unverändert.
 @router.get("/pv-strings/{anlage_id}", response_model=PVStringsResponse)
 async def get_pv_strings(
     anlage_id: int,
@@ -443,66 +448,12 @@ async def get_pv_strings(
     ist_gesamt = 0
 
     for modul in pv_module:
-        modul_kwp = get_erzeuger_kwp(modul)
-        params = modul.parameter or {}
-        ausrichtung = modul.ausrichtung or params.get("ausrichtung")
-        neigung = modul.neigung_grad or params.get("neigung_grad")
-        monatswerte = []
-        prognose_jahr = 0
-        ist_jahr = 0
-        modul_prognose = prognose_per_modul.get(modul.id)
-        months_with_data = set(md_by_inv.get(modul.id, {}).keys())
-
-        for monat in range(1, 13):
-            if monat in months_with_data:
-                if modul_prognose is not None:
-                    prog_monat = modul_prognose.get(monat, 0)
-                else:
-                    nenner = nenner_je_monat[monat]
-                    kwp_anteil = modul_kwp / nenner if nenner > 0 else 0
-                    prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
-                # F-34: im Anschaffungs-/Stilllegungsmonat lief das Modul nur
-                # einen Teil des Monats — das SOLL wird darauf gekürzt.
-                prog_monat = soll_im_laufmonat(prog_monat, modul, jahr, monat)
-            else:
-                prog_monat = 0.0
-            ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
-            abweichung = ist_monat - prog_monat
-            abweichung_pct = (abweichung / prog_monat * 100) if prog_monat > 0 else None
-            perf_ratio = (ist_monat / prog_monat) if prog_monat > 0 else None
-            monatswerte.append(PVStringMonat(
-                monat=monat, monat_name=MONATSNAMEN[monat],
-                prognose_kwh=round(prog_monat, 1), ist_kwh=round(ist_monat, 1),
-                abweichung_kwh=round(abweichung, 1),
-                abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
-                performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
-                ist_quelle=ist_quellen.get((modul.id, jahr, monat), PV_QUELLE_FEHLT),
-            ))
-            prognose_jahr += prog_monat
-            ist_jahr += ist_monat
-
-        modul_quelle = _rollup_quelle(
-            ist_quellen[(modul.id, jahr, m)]
-            for m in sorted(months_with_data) if (modul.id, jahr, m) in ist_quellen
+        daten, prognose_jahr, ist_jahr = _string_im_jahr(
+            modul, jahr=jahr, md_by_inv=md_by_inv, prognose_per_modul=prognose_per_modul,
+            prognose_monate=prognose_monate, nenner_je_monat=nenner_je_monat, ist_quellen=ist_quellen,
+            wechselrichter_map=wechselrichter_map,
         )
-        abweichung_jahr = ist_jahr - prognose_jahr
-        abweichung_jahr_pct = (abweichung_jahr / prognose_jahr * 100) if prognose_jahr > 0 else None
-        perf_ratio_jahr = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
-        spez_ertrag = (ist_jahr / modul_kwp) if modul_kwp > 0 else None
-
-        strings_data.append(PVStringDaten(
-            investition_id=modul.id, bezeichnung=modul.bezeichnung,
-            leistung_kwp=modul_kwp, ausrichtung=ausrichtung, neigung_grad=neigung,
-            wechselrichter_id=modul.parent_investition_id,
-            wechselrichter_name=wechselrichter_map.get(modul.parent_investition_id) if modul.parent_investition_id else None,
-            prognose_jahr_kwh=round(prognose_jahr, 1), ist_jahr_kwh=round(ist_jahr, 1),
-            abweichung_jahr_kwh=round(abweichung_jahr, 1),
-            abweichung_jahr_prozent=round(abweichung_jahr_pct, 1) if abweichung_jahr_pct is not None else None,
-            performance_ratio_jahr=round(perf_ratio_jahr, 3) if perf_ratio_jahr is not None else None,
-            spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
-            ist_quelle=modul_quelle,
-            monatswerte=monatswerte,
-        ))
+        strings_data.append(daten)
         prognose_gesamt += prognose_jahr
         ist_gesamt += ist_jahr
 
@@ -524,6 +475,74 @@ async def get_pv_strings(
         ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
         vergleich_hinweis=vergleich_hinweis,
     )
+
+
+def _string_im_jahr(modul, *, jahr, md_by_inv, prognose_per_modul, prognose_monate, nenner_je_monat, ist_quellen,
+                    wechselrichter_map) -> tuple[PVStringDaten, float, float]:
+    """Eine String-Zeile der Jahressicht (RF-70): je Monat SOLL (nur mit IST; Prognose je Modul vor dem kWp-Anteil am
+    Nenner des Monats; F-34) und IST, dazu die Jahreswerte. Rückgabe ``(zeile, prognose_jahr, ist_jahr)`` — die beiden
+    Summen ungerundet für die Anlagen-Summe der Route."""
+    modul_kwp = get_erzeuger_kwp(modul)
+    params = modul.parameter or {}
+    ausrichtung = modul.ausrichtung or params.get("ausrichtung")
+    neigung = modul.neigung_grad or params.get("neigung_grad")
+    monatswerte = []
+    prognose_jahr = 0
+    ist_jahr = 0
+    modul_prognose = prognose_per_modul.get(modul.id)
+    months_with_data = set(md_by_inv.get(modul.id, {}).keys())
+
+    for monat in range(1, 13):
+        if monat in months_with_data:
+            if modul_prognose is not None:
+                prog_monat = modul_prognose.get(monat, 0)
+            else:
+                nenner = nenner_je_monat[monat]
+                kwp_anteil = modul_kwp / nenner if nenner > 0 else 0
+                prog_monat = prognose_monate.get(monat, 0) * kwp_anteil
+            # F-34: im Anschaffungs-/Stilllegungsmonat lief das Modul nur
+            # einen Teil des Monats — das SOLL wird darauf gekürzt.
+            prog_monat = soll_im_laufmonat(prog_monat, modul, jahr, monat)
+        else:
+            prog_monat = 0.0
+        ist_monat = md_by_inv.get(modul.id, {}).get(monat, 0)
+        abweichung = ist_monat - prog_monat
+        abweichung_pct = (abweichung / prog_monat * 100) if prog_monat > 0 else None
+        perf_ratio = (ist_monat / prog_monat) if prog_monat > 0 else None
+        monatswerte.append(PVStringMonat(
+            monat=monat, monat_name=MONATSNAMEN[monat],
+            prognose_kwh=round(prog_monat, 1), ist_kwh=round(ist_monat, 1),
+            abweichung_kwh=round(abweichung, 1),
+            abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
+            performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
+            ist_quelle=ist_quellen.get((modul.id, jahr, monat), PV_QUELLE_FEHLT),
+        ))
+        prognose_jahr += prog_monat
+        ist_jahr += ist_monat
+
+    modul_quelle = _rollup_quelle(
+        ist_quellen[(modul.id, jahr, m)]
+        for m in sorted(months_with_data) if (modul.id, jahr, m) in ist_quellen
+    )
+    abweichung_jahr = ist_jahr - prognose_jahr
+    abweichung_jahr_pct = (abweichung_jahr / prognose_jahr * 100) if prognose_jahr > 0 else None
+    perf_ratio_jahr = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
+    spez_ertrag = (ist_jahr / modul_kwp) if modul_kwp > 0 else None
+
+    daten = PVStringDaten(
+        investition_id=modul.id, bezeichnung=modul.bezeichnung,
+        leistung_kwp=modul_kwp, ausrichtung=ausrichtung, neigung_grad=neigung,
+        wechselrichter_id=modul.parent_investition_id,
+        wechselrichter_name=wechselrichter_map.get(modul.parent_investition_id) if modul.parent_investition_id else None,
+        prognose_jahr_kwh=round(prognose_jahr, 1), ist_jahr_kwh=round(ist_jahr, 1),
+        abweichung_jahr_kwh=round(abweichung_jahr, 1),
+        abweichung_jahr_prozent=round(abweichung_jahr_pct, 1) if abweichung_jahr_pct is not None else None,
+        performance_ratio_jahr=round(perf_ratio_jahr, 3) if perf_ratio_jahr is not None else None,
+        spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
+        ist_quelle=modul_quelle,
+        monatswerte=monatswerte,
+    )
+    return daten, prognose_jahr, ist_jahr
 
 
 @router.get("/pv-strings-gesamtlaufzeit/{anlage_id}", response_model=PVStringsGesamtlaufzeitResponse)

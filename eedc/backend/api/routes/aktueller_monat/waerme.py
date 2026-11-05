@@ -30,6 +30,14 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen
     """Arbeitszahl (R2/W-3), die drei R2-Lagen ueber die eine Layer-Stelle, E1b-Schranke, Tagesebene im laufenden Monat (N-472/A-5), S5 anlagenweit (WK-16i), SOLL 3.2b: welche Funktionen die Verletzung trifft.
 
     Aus `get_aktueller_monat` Zeilen 807-1080 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+
+    **Phasenform (RF-67, 5.11.2026, Bauform RF-1):** Kopf (abgeleiteter Anteil, funktionsfremder Strom, Kennzahlen je
+    Gerät) · `_kennzahlen_aus_kanal_zeilen` (E4d) vor `_kennzahlen_aus_tagesebene` (N-472/A-5) — ersetzt wird nur, was
+    leer ist · `_wp_abgrenzung` (die R2-Lagen, S5 anlagenweit WK-16i/N-503, SOLL §3.2b je Funktion, die E1b-Schranke und
+    die sperrende Kette) · Systemarbeitszahl, Herkunft, Vorbehalt · `_wp_ersparnis_des_monats` (async: WP-Preis aus den
+    Monats-Fakten N-713/N-712, Σ der Gerätezeilen N-609). ⚠ Die R2-Lagen stehen seit dem Schnitt hinter den Kennzahlen
+    je Gerät (rein, ohne Abfrage; Reihenfolge der Abfragen unverändert): beide Ketten, die die Bauart lesen, liegen
+    damit in EINER Phase (P13). Signatur und die zehn Schlüssel der Rückgabe sind unverändert.
     """
     # ── Arbeitszahl aus dem Layer, nicht aus dem Client (R2/W-3) ────────────
     #
@@ -41,58 +49,6 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen
     wp_waerme_abgeleitet_kwh = (
         monats_fakt.wp.waerme_abgeleitet_kwh if monats_fakt is not None else 0.0
     )
-    # ── R2: alle drei erkennbaren Lagen, über die eine Layer-Stelle ─────────
-    #
-    # **Gerät:** Trägt der Block Strom von Geräten, deren Wärme fehlt? Der Block
-    # *Wärme/Klima* aggregiert alle Wärmepumpen der Anlage — bei dietmar1968
-    # „Wärmepumpe · Klimaanlage" — und nur eines meldete Wärme.
-    #
-    # **Anwender-Angabe:** Heizstab-Strom auf dem WP-Zähler (Fall H-C) oder ein
-    # bivalenter Zweiterzeuger am selben Kreis. Beides ist aus keiner Messreihe
-    # ableitbar; die Reihenfolge (Angabe schlägt Erkennung) steht im Layer.
-    #
-    # **Zeitraum (SOLL §4.2 Fall 3):** ⭐ Diese Sicht ist die **einzige** mit
-    # Vier-Quellen-Auflösung — und `teilzeitraum` weist genau die Felder aus,
-    # deren Endwert nur einen Ausschnitt des Monats misst (#361, coolxmad #353:
-    # ein frisch eingerichteter Connector, der erst mitten im Monat zu zählen
-    # begann). Steht **genau eine** der beiden Seiten darin, tragen Q und E
-    # verschieden lange Zeiträume und der Quotient wäre einer aus zwei
-    # Wirklichkeiten.
-    #
-    # ⛔ **Bewusst kein Zählen von Tagen mit Wert.** Der naheliegende Weg —
-    # „an wie vielen Tagen des Monats gab es überhaupt eine Zahl?" — kann
-    # *„kein Wert, weil das Gerät stand"* nicht von *„kein Wert, weil der Sensor
-    # fehlte"* unterscheiden. Bei einer Wärmepumpe im Juli ist Ersteres der
-    # Normalfall; ein Wächter darauf meldete jeden Sommer bei jeder Anlage.
-    # Genau die Fehlalarm-Klasse, die §2i-6 schon einmal eingefangen hat.
-    _wp_seiten_teilzeitraum = sum(
-        1 for f in ("wp_waerme_kwh", "wp_strom_kwh") if f in teilzeitraum
-    )
-    wp_abgrenzung_verletzt = abgrenzungs_grund(
-        abgrenzung_stoerung=(
-            monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None
-        ),
-        # R2/Bauart (SOLL §5): Wärmepumpe und Split-Klimaanlage in einer Zahl.
-        bauarten_gemischt=(
-            monats_fakt is not None and monats_fakt.wp.bauarten_gemischt
-        ),
-        geraete_ohne_waerme=(
-            monats_fakt is not None
-            and monats_fakt.wp.waerme_deckt_nicht_alle_geraete
-        ),
-        zeitraum_versetzt=_wp_seiten_teilzeitraum == 1,
-        # N-441: die Gegenrichtung. ⚠ Sie haengt **hinter** `zeitraum_versetzt`
-        # in der Kette (`abgrenzungs_grund`), weil hier — und nur hier — beide
-        # zugleich wahr sein koennen: Der Zeitraum-Versatz entsteht aus der
-        # Vier-Quellen-Aufloesung dieses Monats. Vorn eingehaengt haette das
-        # neue Glied dort einen heute gezeigten Grund samt Hub-Link getauscht.
-        geraete_verschieden=(
-            monats_fakt is not None and monats_fakt.wp.geraete_verschieden
-        ),
-    )
-    # ⭐ **Die Frage „welche Funktion trifft die Verletzung?" steht weiter
-    # unten** (SOLL §3.2b; seit WK-16i hinter den Geräte-Kennzahlen, denn aus
-    # ihnen beantwortet der laufende Monat sie).
     # W-14 + E4: Der funktionsfremde Strom (Kühlen · Lüften · Entfeuchten) kommt
     # — wie der abgeleitete Anteil darüber — IMMER aus den Monats-Fakten. Er
     # beschreibt die Aufteilung der IMD-Zeilen dieses Monats, und die ändert sich
@@ -149,61 +105,191 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen
     # Dieselbe Faltung wie eine Monatszeile (``mengen_aus_monatszeilen``), weil die Kanal-Zeile deren Form hat
     # (``monats_fakten.wp_kanal_zeile``). Ersetzt wird nur, was leer ist; die Tagesebene darunter bleibt der Rückfall.
     if kanal_wp_zeilen:
-        from types import SimpleNamespace
-
-        from backend.services.monats_fakten import wp_kanal_zeile
-        from backend.services.waermepumpe_kennzahlen_je_geraet import (
-            kennzahlen_aus_mengen,
-            mengen_aus_monatszeilen,
+        _wp_kennzahlen_je_geraet = _kennzahlen_aus_kanal_zeilen(
+            _wp_kennzahlen_je_geraet, kanal_wp_zeilen, _wp_invs_fuer_block, jahr, monat,
         )
-        _wp_invs_by_id_k = {i.id: i for i in _wp_invs_fuer_block}
-        _ersetzt_k: list = []
-        for _k in _wp_kennzahlen_je_geraet:
-            _z = kanal_wp_zeilen.get(_k.inv_id)
-            _inv = _wp_invs_by_id_k.get(_k.inv_id)
-            if _z is None or _inv is None or traegt_menge(_k.mengen):
-                _ersetzt_k.append(_k)
-                continue
-            _daten, _herkunft = wp_kanal_zeile(_inv, _z)
-            _ersetzt_k.append(kennzahlen_aus_mengen(mengen_aus_monatszeilen(_inv, [SimpleNamespace(
-                verbrauch_daten=_daten, source_provenance=_herkunft, jahr=jahr, monat=monat,
-            )])[0]))
-        _wp_kennzahlen_je_geraet = _ersetzt_k
     if _tages_wp_mengen:
-        from backend.services.waermepumpe_kennzahlen_je_geraet import (
-            kennzahlen_aus_mengen,
-            mengen_aus_tageswerten,
+        _wp_kennzahlen_je_geraet = _kennzahlen_aus_tagesebene(
+            _wp_kennzahlen_je_geraet, _tages_wp_mengen, _wp_invs_fuer_block,
         )
-        _wp_invs_by_id = {i.id: i for i in _wp_invs_fuer_block}
-        _ersetzt: list = []
-        for _k in _wp_kennzahlen_je_geraet:
-            _m = _tages_wp_mengen.get(str(_k.inv_id))
-            _inv = _wp_invs_by_id.get(_k.inv_id)
-            if _m is None or _inv is None or traegt_menge(_k.mengen):
-                _ersetzt.append(_k)
-                continue
-            _ersetzt.append(kennzahlen_aus_mengen(mengen_aus_tageswerten(
-                _inv,
-                strom_kwh=_m.strom_kwh,
-                waerme_kwh=waerme_gesamt_kwh(
-                    _m.waerme_kwh or None,
-                    _m.heizung_kwh + _m.warmwasser_kwh,
-                    None,
-                ),
-                heizung_kwh=_m.heizung_kwh,
-                warmwasser_kwh=_m.warmwasser_kwh,
-                strom_heizen_kwh=_m.strom_heizen_kwh,
-                strom_warmwasser_kwh=_m.strom_warmwasser_kwh,
-                kaelte_kwh=_m.kaelte_kwh,
-                modus_strom_kuehlen_kwh=_m.modus_strom_kuehlen_kwh,
-                funktionsfremd_abzug_kwh=_m.funktionsfremd_abzug_kwh,
-                waerme_ist_gesamt=bool(_m.waerme_kwh),
-                # E4d: gemessene 0 (mindestens ein Tag mit Wert) — „kein Betrieb" statt „kein Zähler".
-                strom_gemessen="strom_kwh" in getattr(_m, "gemessen", ()),
-                waerme_gemessen=bool({"waerme_kwh", "heizung_kwh", "warmwasser_kwh"}
-                                     & set(getattr(_m, "gemessen", ()))),
-            )))
-        _wp_kennzahlen_je_geraet = _ersetzt
+    (
+        wp_abgrenzung_verletzt, _wp_funktion, _wp_abgrenzung_je_funktion,
+        _wp_strom_ohne_waerme, _wp_geraete_ohne_waerme, wp_abgrenzung_sperrt,
+    ) = _wp_abgrenzung(monats_fakt, teilzeitraum, _wp_kennzahlen_je_geraet)
+    from backend.core.berechnungen.waermepumpe_kennzahl import kein_betrieb_grund_der_achsen
+    from backend.services.waerme_klima_block import achsen_der_anlage
+
+    wp_arbeitszahl = systemarbeitszahl(
+        wp_waerme, wp_strom,
+        # E4d (Bauplan §8a): Strom 0 und Wärme 0 GEMESSEN (beide nicht None — die Quellen-Kaskade führt eine 0 nur, wo
+        # gemessen wurde) ⇒ Stufe 3 „kein Heizbetrieb …" statt „kein Stromverbrauch erfasst".
+        kein_betrieb_grund=kein_betrieb_grund_der_achsen(achsen_der_anlage(_wp_kennzahlen_je_geraet)),
+        waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
+        kuehlstrom_kwh=wp_strom_funktionsfremd_kwh,
+        strom_ohne_waerme_kwh=_wp_strom_ohne_waerme,
+        geraete_ohne_waerme=_wp_geraete_ohne_waerme,
+        abgrenzung_verletzt=wp_abgrenzung_sperrt,
+    )
+    # B4 (C-2): Herkunft und Vorbehalt — der Faktor nur bei EINER Wärmepumpe
+    # (bei mehreren gibt es keinen einen Faktor, der Text nennt dann die Regel).
+    from backend.core.berechnungen.modus_split import heiz_effizienz_gepflegt
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        ersparnis_vorbehalt as _ersparnis_vorbehalt,
+        waerme_herkunft as _waerme_herkunft,
+    )
+    _wp_invs_alle = [i for i in investitionen if i.typ == "waermepumpe"]
+    _wp_abgeleitet = wp_waerme_abgeleitet_kwh > 0
+    wp_waerme_herkunft = _waerme_herkunft(
+        _wp_abgeleitet,
+        heiz_effizienz_gepflegt(_wp_invs_alle[0].parameter)
+        if (_wp_abgeleitet and len(_wp_invs_alle) == 1) else None,
+    )
+    wp_ersparnis_vorbehalt = _ersparnis_vorbehalt(
+        waerme_abgeleitet=_wp_abgeleitet,
+        abgrenzung=monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None,
+    )
+
+    wp_ersparnis, wp_ersparnis_berechnung_text = await _wp_ersparnis_des_monats(
+        resolved=resolved, _tages_wp_mengen=_tages_wp_mengen, kanal_wp_zeilen=kanal_wp_zeilen, anlage_id=anlage_id,
+        db=db, get_val=get_val, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt,
+        monats_gaspreis=monats_gaspreis,
+    )
+
+    # G20-2 (Gernot 2026-07-20): Die eMob-Ersparnis-Aggregation folgt weiter unten
+    # als **Summe der Per-Fahrzeug-Ersparnisse** (dieselben Werte wie die
+    # investitionen_financials-Zeilen), NACHDEM diese gebaut sind. Der frühere
+    # Einmal-Lauf über die Gesamt-km mit dem parameter-Satz des ERSTEN E-Autos
+    # (pick_emob_ref_parameter) rechnete bei unterschiedlichem Verbrauch je Fahrzeug
+    # falsch (Demo: 167,79 € statt 65,37 + 85,59 = 150,96 €).
+    # [[feedback_aggregator_symmetrie]] [[feedback_aggregations_drift]]
+
+    # BKW-Ersparnis wird NICHT separat ausgewiesen — BKW-Erzeugung fließt in
+    # pv_erzeugung_total und damit in eigenverbrauch ein → bereits in ev_ersparnis enthalten.
+    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
+    return {k: _loc[k] for k in ("_wp_abgrenzung_je_funktion", "_wp_funktion", "_wp_kennzahlen_je_geraet", "wp_abgrenzung_verletzt", "wp_arbeitszahl", "wp_ersparnis", "wp_ersparnis_berechnung_text", "wp_ersparnis_vorbehalt", "wp_waerme_abgeleitet_kwh", "wp_waerme_herkunft",) if k in _loc}
+
+
+def _kennzahlen_aus_kanal_zeilen(_wp_kennzahlen_je_geraet, kanal_wp_zeilen, _wp_invs_fuer_block, jahr, monat):
+    """HA-Bauform E4d (RF-67): die Kennzahl eines Geräts ohne Menge aus seiner Kanal-Zeile — Kommentar am Aufruf."""
+    from types import SimpleNamespace
+
+    from backend.services.monats_fakten import wp_kanal_zeile
+    from backend.services.waermepumpe_kennzahlen_je_geraet import (
+        kennzahlen_aus_mengen,
+        mengen_aus_monatszeilen,
+    )
+    _wp_invs_by_id_k = {i.id: i for i in _wp_invs_fuer_block}
+    _ersetzt_k: list = []
+    for _k in _wp_kennzahlen_je_geraet:
+        _z = kanal_wp_zeilen.get(_k.inv_id)
+        _inv = _wp_invs_by_id_k.get(_k.inv_id)
+        if _z is None or _inv is None or traegt_menge(_k.mengen):
+            _ersetzt_k.append(_k)
+            continue
+        _daten, _herkunft = wp_kanal_zeile(_inv, _z)
+        _ersetzt_k.append(kennzahlen_aus_mengen(mengen_aus_monatszeilen(_inv, [SimpleNamespace(
+            verbrauch_daten=_daten, source_provenance=_herkunft, jahr=jahr, monat=monat,
+        )])[0]))
+    return _ersetzt_k
+
+
+def _kennzahlen_aus_tagesebene(_wp_kennzahlen_je_geraet, _tages_wp_mengen, _wp_invs_fuer_block):
+    """N-472/A-5 (RF-67): die Kennzahl eines Geräts ohne Menge aus den Tagesmengen des Monats — Kommentar am Aufruf."""
+    from backend.services.waermepumpe_kennzahlen_je_geraet import (
+        kennzahlen_aus_mengen,
+        mengen_aus_tageswerten,
+    )
+    _wp_invs_by_id = {i.id: i for i in _wp_invs_fuer_block}
+    _ersetzt: list = []
+    for _k in _wp_kennzahlen_je_geraet:
+        _m = _tages_wp_mengen.get(str(_k.inv_id))
+        _inv = _wp_invs_by_id.get(_k.inv_id)
+        if _m is None or _inv is None or traegt_menge(_k.mengen):
+            _ersetzt.append(_k)
+            continue
+        _ersetzt.append(kennzahlen_aus_mengen(mengen_aus_tageswerten(
+            _inv,
+            strom_kwh=_m.strom_kwh,
+            waerme_kwh=waerme_gesamt_kwh(
+                _m.waerme_kwh or None,
+                _m.heizung_kwh + _m.warmwasser_kwh,
+                None,
+            ),
+            heizung_kwh=_m.heizung_kwh,
+            warmwasser_kwh=_m.warmwasser_kwh,
+            strom_heizen_kwh=_m.strom_heizen_kwh,
+            strom_warmwasser_kwh=_m.strom_warmwasser_kwh,
+            kaelte_kwh=_m.kaelte_kwh,
+            modus_strom_kuehlen_kwh=_m.modus_strom_kuehlen_kwh,
+            funktionsfremd_abzug_kwh=_m.funktionsfremd_abzug_kwh,
+            waerme_ist_gesamt=bool(_m.waerme_kwh),
+            # E4d: gemessene 0 (mindestens ein Tag mit Wert) — „kein Betrieb" statt „kein Zähler".
+            strom_gemessen="strom_kwh" in getattr(_m, "gemessen", ()),
+            waerme_gemessen=bool({"waerme_kwh", "heizung_kwh", "warmwasser_kwh"}
+                                 & set(getattr(_m, "gemessen", ()))),
+        )))
+    return _ersetzt
+
+
+def _wp_abgrenzung(monats_fakt, teilzeitraum, _wp_kennzahlen_je_geraet):
+    """R2 und SOLL §3.2b (RF-67): die Lagen der anlagenweiten Zahl, die Eingänge der Funktions-Zahlen (S5), die Abgrenzung
+    je Funktion, der Eingang der E1b-Schranke und die sperrende Kette ohne die beiden Schranken-Glieder.
+
+    Rückgabe ``(wp_abgrenzung_verletzt, _wp_funktion, _wp_abgrenzung_je_funktion, _wp_strom_ohne_waerme,
+    _wp_geraete_ohne_waerme, wp_abgrenzung_sperrt)``. Rein, ohne Abfrage.
+    """
+    # ── R2: alle drei erkennbaren Lagen, über die eine Layer-Stelle ─────────
+    #
+    # **Gerät:** Trägt der Block Strom von Geräten, deren Wärme fehlt? Der Block
+    # *Wärme/Klima* aggregiert alle Wärmepumpen der Anlage — bei dietmar1968
+    # „Wärmepumpe · Klimaanlage" — und nur eines meldete Wärme.
+    #
+    # **Anwender-Angabe:** Heizstab-Strom auf dem WP-Zähler (Fall H-C) oder ein
+    # bivalenter Zweiterzeuger am selben Kreis. Beides ist aus keiner Messreihe
+    # ableitbar; die Reihenfolge (Angabe schlägt Erkennung) steht im Layer.
+    #
+    # **Zeitraum (SOLL §4.2 Fall 3):** ⭐ Diese Sicht ist die **einzige** mit
+    # Vier-Quellen-Auflösung — und `teilzeitraum` weist genau die Felder aus,
+    # deren Endwert nur einen Ausschnitt des Monats misst (#361, coolxmad #353:
+    # ein frisch eingerichteter Connector, der erst mitten im Monat zu zählen
+    # begann). Steht **genau eine** der beiden Seiten darin, tragen Q und E
+    # verschieden lange Zeiträume und der Quotient wäre einer aus zwei
+    # Wirklichkeiten.
+    #
+    # ⛔ **Bewusst kein Zählen von Tagen mit Wert.** Der naheliegende Weg —
+    # „an wie vielen Tagen des Monats gab es überhaupt eine Zahl?" — kann
+    # *„kein Wert, weil das Gerät stand"* nicht von *„kein Wert, weil der Sensor
+    # fehlte"* unterscheiden. Bei einer Wärmepumpe im Juli ist Ersteres der
+    # Normalfall; ein Wächter darauf meldete jeden Sommer bei jeder Anlage.
+    # Genau die Fehlalarm-Klasse, die §2i-6 schon einmal eingefangen hat.
+    _wp_seiten_teilzeitraum = sum(
+        1 for f in ("wp_waerme_kwh", "wp_strom_kwh") if f in teilzeitraum
+    )
+    wp_abgrenzung_verletzt = abgrenzungs_grund(
+        abgrenzung_stoerung=(
+            monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None
+        ),
+        # R2/Bauart (SOLL §5): Wärmepumpe und Split-Klimaanlage in einer Zahl.
+        bauarten_gemischt=(
+            monats_fakt is not None and monats_fakt.wp.bauarten_gemischt
+        ),
+        geraete_ohne_waerme=(
+            monats_fakt is not None
+            and monats_fakt.wp.waerme_deckt_nicht_alle_geraete
+        ),
+        zeitraum_versetzt=_wp_seiten_teilzeitraum == 1,
+        # N-441: die Gegenrichtung. ⚠ Sie haengt **hinter** `zeitraum_versetzt`
+        # in der Kette (`abgrenzungs_grund`), weil hier — und nur hier — beide
+        # zugleich wahr sein koennen: Der Zeitraum-Versatz entsteht aus der
+        # Vier-Quellen-Aufloesung dieses Monats. Vorn eingehaengt haette das
+        # neue Glied dort einen heute gezeigten Grund samt Hub-Link getauscht.
+        geraete_verschieden=(
+            monats_fakt is not None and monats_fakt.wp.geraete_verschieden
+        ),
+    )
+    # ⭐ **Die Frage „welche Funktion trifft die Verletzung?" steht weiter
+    # unten** (SOLL §3.2b; seit WK-16i hinter den Geräte-Kennzahlen, denn aus
+    # ihnen beantwortet der laufende Monat sie).
     # ── S5 anlagenweit (WK-16i, N-503): die Eingänge der Funktions-Zahlen ──
     #
     # ⛔ **Sie kamen bis zum 15.09.2026 ausschließlich aus den Monats-Fakten**,
@@ -269,39 +355,18 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen
             monats_fakt is not None and monats_fakt.wp.geraete_verschieden
         ),
     )
-    from backend.core.berechnungen.waermepumpe_kennzahl import kein_betrieb_grund_der_achsen
-    from backend.services.waerme_klima_block import achsen_der_anlage
-
-    wp_arbeitszahl = systemarbeitszahl(
-        wp_waerme, wp_strom,
-        # E4d (Bauplan §8a): Strom 0 und Wärme 0 GEMESSEN (beide nicht None — die Quellen-Kaskade führt eine 0 nur, wo
-        # gemessen wurde) ⇒ Stufe 3 „kein Heizbetrieb …" statt „kein Stromverbrauch erfasst".
-        kein_betrieb_grund=kein_betrieb_grund_der_achsen(achsen_der_anlage(_wp_kennzahlen_je_geraet)),
-        waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh,
-        kuehlstrom_kwh=wp_strom_funktionsfremd_kwh,
-        strom_ohne_waerme_kwh=_wp_strom_ohne_waerme,
-        geraete_ohne_waerme=_wp_geraete_ohne_waerme,
-        abgrenzung_verletzt=wp_abgrenzung_sperrt,
-    )
-    # B4 (C-2): Herkunft und Vorbehalt — der Faktor nur bei EINER Wärmepumpe
-    # (bei mehreren gibt es keinen einen Faktor, der Text nennt dann die Regel).
-    from backend.core.berechnungen.modus_split import heiz_effizienz_gepflegt
-    from backend.core.berechnungen.waermepumpe_kennzahl import (
-        ersparnis_vorbehalt as _ersparnis_vorbehalt,
-        waerme_herkunft as _waerme_herkunft,
-    )
-    _wp_invs_alle = [i for i in investitionen if i.typ == "waermepumpe"]
-    _wp_abgeleitet = wp_waerme_abgeleitet_kwh > 0
-    wp_waerme_herkunft = _waerme_herkunft(
-        _wp_abgeleitet,
-        heiz_effizienz_gepflegt(_wp_invs_alle[0].parameter)
-        if (_wp_abgeleitet and len(_wp_invs_alle) == 1) else None,
-    )
-    wp_ersparnis_vorbehalt = _ersparnis_vorbehalt(
-        waerme_abgeleitet=_wp_abgeleitet,
-        abgrenzung=monats_fakt.wp.abgrenzung_stoerung if monats_fakt is not None else None,
+    return (
+        wp_abgrenzung_verletzt, _wp_funktion, _wp_abgrenzung_je_funktion,
+        _wp_strom_ohne_waerme, _wp_geraete_ohne_waerme, wp_abgrenzung_sperrt,
     )
 
+
+async def _wp_ersparnis_des_monats(*, resolved, _tages_wp_mengen, kanal_wp_zeilen, anlage_id, db, get_val, investitionen, jahr,
+                                   monat, monats_fakt, monats_gaspreis):
+    """N-609 (RF-67): die WP-Ersparnis des Monats als Σ der cent-gerundeten Gerätezeilen und ihre Herleitung.
+
+    Rückgabe ``(wp_ersparnis, wp_ersparnis_berechnung_text)`` — beide ``None`` ohne Gerätezeile.
+    """
     # ⭐ N-609 (04.10.2026): auch ohne Gerätezeile ist die WP-Ersparnis die Σ der Gerätezeilen — je
     # Wärmepumpe mit IHREN Parametern über die eine Zeilenregel (`wp_ersparnis_zeile`). Hier stand bis dahin
     # ein Aggregat über die Summenmengen mit dem Parametersatz der ERSTEN Wärmepumpe: laufender Monat mit
@@ -368,19 +433,7 @@ async def waerme_klima_monat(*, resolved=None, _tages_wp_mengen, kanal_wp_zeilen
     else:
         wp_ersparnis = None
         wp_ersparnis_berechnung_text = None
-
-    # G20-2 (Gernot 2026-07-20): Die eMob-Ersparnis-Aggregation folgt weiter unten
-    # als **Summe der Per-Fahrzeug-Ersparnisse** (dieselben Werte wie die
-    # investitionen_financials-Zeilen), NACHDEM diese gebaut sind. Der frühere
-    # Einmal-Lauf über die Gesamt-km mit dem parameter-Satz des ERSTEN E-Autos
-    # (pick_emob_ref_parameter) rechnete bei unterschiedlichem Verbrauch je Fahrzeug
-    # falsch (Demo: 167,79 € statt 65,37 + 85,59 = 150,96 €).
-    # [[feedback_aggregator_symmetrie]] [[feedback_aggregations_drift]]
-
-    # BKW-Ersparnis wird NICHT separat ausgewiesen — BKW-Erzeugung fließt in
-    # pv_erzeugung_total und damit in eigenverbrauch ein → bereits in ev_ersparnis enthalten.
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("_wp_abgrenzung_je_funktion", "_wp_funktion", "_wp_kennzahlen_je_geraet", "wp_abgrenzung_verletzt", "wp_arbeitszahl", "wp_ersparnis", "wp_ersparnis_berechnung_text", "wp_ersparnis_vorbehalt", "wp_waerme_abgeleitet_kwh", "wp_waerme_herkunft",) if k in _loc}
+    return wp_ersparnis, wp_ersparnis_berechnung_text
 
 
 async def flags_und_wp_counter(*, anlage_id, db, investitionen, jahr, monat):

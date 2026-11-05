@@ -459,6 +459,11 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, inv
     """D-Sicht: die Tabelle je Geraet und der EINE Kasten; Sonstiges-Geraete, E-Mob-Mengen, BKW-Eigenverbrauch.
 
     Aus `get_aktueller_monat` Zeilen 1151-1278 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+
+    **Phasenform (RF-68, 5.11.2026, Bauform RF-1):** D-Sicht (Tabelle je Gerät, der EINE Kasten) · `_emob_mengen`
+    (PV/Netz/Extern/V2H aus dem kanonischen Pool C1d, der Entscheid der Route N-555/N-557) · BKW-Eigenverbrauch ·
+    `_sonstiges_summen` und `_sonstiges_geraete` (Liste je Gerät, Richtung N-250) · R15-1 Kosten der Speicher-Netzladung.
+    Signatur und die 15 Schlüssel der Rückgabe sind unverändert; die Gerätesicht rechnet nicht (Layer-Aufrufe).
     """
     # ── D-Sicht: die Tabelle je Gerät und der EINE Kasten ──────────────────
     #
@@ -477,6 +482,39 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, inv
     ], wp_block_geraete)
 
     # E-Mobilität: PV/Netz/Extern-Split + V2H
+    emob_pv, emob_ladung_netz, emob_ladung_extern, emob_v2h = _emob_mengen(get_val, mf_emob, emob_entscheid)
+
+    # BKW: Eigenverbrauch
+    bkw_eigenverbrauch = None
+    if mf_bkw is not None and mf_bkw.eigenverbrauch_gemessen_kwh > 0:
+        bkw_eigenverbrauch = round(mf_bkw.eigenverbrauch_gemessen_kwh, 2)
+
+    # Sonstiges: erzeuger + verbraucher aggregieren
+    (
+        sonstiges_erzeugung, sonstiges_eigenverbrauch, sonstiges_einspeisung,
+        sonstiges_verbrauch, sonstiges_bezug_pv, sonstiges_bezug_netz,
+    ) = _sonstiges_summen(mf_sonstiges)
+    sonstiges_geraete = _sonstiges_geraete(mf_sonstiges, investitionen)
+
+    # (`netzbezug_durchschnittspreis` wird oben mit der Monatszeile geladen —
+    #  er geht in die Netzbezugskosten ein und muss dort schon vorliegen.)
+
+    # R15-1 (Rainer-Kostenkacheln): Kosten der Speicher-Netzladung.
+    # Preis-Kette TEP-effektiv → IMD-Ø (Handeingabe) → Bezugspreis
+    # (Ø-Monatspreis vor festem Tarif) — Berechnungs-Layer-Helper.
+    netzladung_kosten = berechne_netzladung_kosten(
+        speicher_ladung_netz,
+        eff_ladepreis_cent=speicher_eff_ladepreis,
+        imd_preis_cent=speicher_imd_ladepreis,
+        netzbezug_preis_cent=netzbezug_preis_effektiv_cent,
+    )
+    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
+    return {k: _loc[k] for k in ("bkw_eigenverbrauch", "emob_ladung_extern", "emob_ladung_netz", "emob_pv", "emob_v2h", "netzladung_kosten", "sonstiges_bezug_netz", "sonstiges_bezug_pv", "sonstiges_eigenverbrauch", "sonstiges_einspeisung", "sonstiges_erzeugung", "sonstiges_geraete", "sonstiges_verbrauch", "wp_block_geraete", "wp_block_moeglich",) if k in _loc}
+
+
+def _emob_mengen(get_val, mf_emob, emob_entscheid):
+    """E-Mobilität (RF-68): PV/Netz/Extern-Split + V2H — Rückgabe ``(emob_pv, emob_ladung_netz, emob_ladung_extern,
+    emob_v2h)``, je ``None`` ohne Menge über 0."""
     emob_pv = get_val("emob_pv_ladung_kwh")
     emob_ladung_netz = None
     emob_ladung_extern = None
@@ -506,13 +544,12 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, inv
         emob_ladung_netz = round(_pool.netz_kwh, 2) if _pool.netz_kwh > 0 else None
         if _pool.extern_kwh > 0:
             emob_ladung_extern = round(_pool.extern_kwh, 2)
+    return emob_pv, emob_ladung_netz, emob_ladung_extern, emob_v2h
 
-    # BKW: Eigenverbrauch
-    bkw_eigenverbrauch = None
-    if mf_bkw is not None and mf_bkw.eigenverbrauch_gemessen_kwh > 0:
-        bkw_eigenverbrauch = round(mf_bkw.eigenverbrauch_gemessen_kwh, 2)
 
-    # Sonstiges: erzeuger + verbraucher aggregieren
+def _sonstiges_summen(mf_sonstiges):
+    """Sonstiges (RF-68): die sechs Summen der Gruppe aus dem Monats-Fakt, je ``None`` ohne Menge über 0 — Rückgabe
+    ``(erzeugung, eigenverbrauch, einspeisung, verbrauch, bezug_pv, bezug_netz)``."""
     sonstiges_erzeugung = None
     sonstiges_eigenverbrauch = None
     sonstiges_einspeisung = None
@@ -520,6 +557,27 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, inv
     sonstiges_bezug_pv = None
     sonstiges_bezug_netz = None
 
+    if mf_sonstiges is not None:
+        if mf_sonstiges.erzeugung_kwh > 0:
+            sonstiges_erzeugung = round(mf_sonstiges.erzeugung_kwh, 2)
+        if mf_sonstiges.eigenverbrauch_kwh > 0:
+            sonstiges_eigenverbrauch = round(mf_sonstiges.eigenverbrauch_kwh, 2)
+        if mf_sonstiges.einspeisung_kwh > 0:
+            sonstiges_einspeisung = round(mf_sonstiges.einspeisung_kwh, 2)
+        if mf_sonstiges.verbrauch_kwh > 0:
+            sonstiges_verbrauch = round(mf_sonstiges.verbrauch_kwh, 2)
+        if mf_sonstiges.bezug_pv_kwh > 0:
+            sonstiges_bezug_pv = round(mf_sonstiges.bezug_pv_kwh, 2)
+        if mf_sonstiges.bezug_netz_kwh > 0:
+            sonstiges_bezug_netz = round(mf_sonstiges.bezug_netz_kwh, 2)
+    return (
+        sonstiges_erzeugung, sonstiges_eigenverbrauch, sonstiges_einspeisung,
+        sonstiges_verbrauch, sonstiges_bezug_pv, sonstiges_bezug_netz,
+    )
+
+
+def _sonstiges_geraete(mf_sonstiges, investitionen) -> list[SonstigesGeraet]:
+    """Sonstiges (RF-68): die Liste je Gerät in Investitions-Reihenfolge (leer ohne Monats-Fakt-Gruppe)."""
     sonstiges_geraete: list[SonstigesGeraet] = []
     if mf_sonstiges is not None:
         if mf_sonstiges.erzeugung_kwh > 0:
@@ -585,19 +643,5 @@ def geraete_sicht(*, _wp_kennzahlen_je_geraet, get_val, emob_entscheid=None, inv
                         eigenverbrauch_kwh=_v(g.eigenverbrauch_kwh),
                         einspeisung_kwh=_v(g.einspeisung_kwh),
                     ))
-
-    # (`netzbezug_durchschnittspreis` wird oben mit der Monatszeile geladen —
-    #  er geht in die Netzbezugskosten ein und muss dort schon vorliegen.)
-
-    # R15-1 (Rainer-Kostenkacheln): Kosten der Speicher-Netzladung.
-    # Preis-Kette TEP-effektiv → IMD-Ø (Handeingabe) → Bezugspreis
-    # (Ø-Monatspreis vor festem Tarif) — Berechnungs-Layer-Helper.
-    netzladung_kosten = berechne_netzladung_kosten(
-        speicher_ladung_netz,
-        eff_ladepreis_cent=speicher_eff_ladepreis,
-        imd_preis_cent=speicher_imd_ladepreis,
-        netzbezug_preis_cent=netzbezug_preis_effektiv_cent,
-    )
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("bkw_eigenverbrauch", "emob_ladung_extern", "emob_ladung_netz", "emob_pv", "emob_v2h", "netzladung_kosten", "sonstiges_bezug_netz", "sonstiges_bezug_pv", "sonstiges_eigenverbrauch", "sonstiges_einspeisung", "sonstiges_erzeugung", "sonstiges_geraete", "sonstiges_verbrauch", "wp_block_geraete", "wp_block_moeglich",) if k in _loc}
+    return sonstiges_geraete
 

@@ -155,14 +155,17 @@ async def _geraete_aus_kanaelen(
     ``SonstigesFakten`` oder ``None``, ``emob_zeilen`` = die Kanal-Zeilen der E-Mob-Gruppe je Gerät, wenn sie den Monat
     deckt (sonst ``{}``) — N-771 Rest 2 (E6): aus ihnen bekommt die Wallbox ohne Abschluss ihren Anteil zum
     Wallbox-Tarif (``finanzen.komponenten_anteile_des_monats``).
+
+    **Phasenform (RF-69, 5.11.2026, Bauform RF-1):** Kopf (Quelle je Gruppe ``_kanal_quelle``, Typ-Tor, Leser-Aufruf,
+    Zeilen des Monats) · ``_emob_aus_kanaelen`` (E-Mob-Gerätefelder, Quote) · ``_sonstiges_aus_kanaelen`` (Verbraucher aus
+    der Gruppe, Erzeuger aus der Bilanz-Gruppe bzw. der fünften Quelle, Faltung ``sonstiges_aus_zeilen``). Signatur,
+    Rückgabe und die Reihenfolge der Leser-Aufrufe sind unverändert.
     """
     quelle = _kanal_quelle(ha_stats, ohne_ha)
     typen = {getattr(i, "typ", None) for i in investitionen}
     if quelle is None or not typen & {"e-auto", "wallbox", "sonstiges"}:
         return ha_stats, (False, None), None, {}
     from backend.services.kanal.geraete_leser import geraete_kalendermonate
-    from backend.services.monats_fakten import sonstiges_aus_zeilen
-    from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER, _categorize_counter
 
     g = (await geraete_kalendermonate(db, anlage.id, [(jahr, monat)])).get((jahr, monat))
     zeilen_typen = set(monats_fakt.meta.typen_mit_zeile) if monats_fakt is not None else set()
@@ -171,6 +174,20 @@ async def _geraete_aus_kanaelen(
     out = dict(ha_stats)
     typ_je_inv = {str(i.id): i.typ for i in investitionen}
 
+    emob, emob_zeilen = _emob_aus_kanaelen(g, emob_zeile, out, typ_je_inv, quelle)
+
+    sonstiges = None
+    if "sonstiges" not in zeilen_typen:
+        sonstiges = _sonstiges_aus_kanaelen(
+            g, investitionen, jahr, monat, out, quelle,
+            bilanz_ersetzt=bilanz_ersetzt, sonstige_erzeuger=sonstige_erzeuger,
+        )
+    return out, emob, sonstiges, emob_zeilen
+
+
+def _emob_aus_kanaelen(g, emob_zeile: bool, out: dict, typ_je_inv: dict[str, str], quelle: DatenquelleInfo):
+    """E-Mob-Gruppe (RF-69): deckt der Kanal den Monat und trägt der Monat keine E-Mob-Zeile, schreibt sie die
+    Gerätefelder nach ``out`` (gemessene 0 nach N-585) — Rückgabe ``(emob, emob_zeilen)`` wie am Orchestrator."""
     emob = (False, None)
     emob_zeilen: dict[int, dict] = {}
     if g is not None and g.emob.kanal and not emob_zeile:
@@ -184,31 +201,40 @@ async def _geraete_aus_kanaelen(
                 else:
                     out.pop(key, None)
         emob = (True, g.emob.quote)
+    return emob, emob_zeilen
+
+
+def _sonstiges_aus_kanaelen(g, investitionen, jahr: int, monat: int, out: dict, quelle: DatenquelleInfo, *,
+                            bilanz_ersetzt: bool, sonstige_erzeuger: Optional[dict]):
+    """Sonstiges-Gruppe (RF-69) eines Monats ohne Sonstiges-Zeile: Verbraucher aus ihrer Gruppe, Erzeuger aus der
+    Bilanz-Gruppe (``bilanz_ersetzt``) oder aus ``sonstige_erzeuger`` — ``SonstigesFakten`` oder ``None``; die Summen
+    über 0 schreibt sie nach ``out``."""
+    from backend.services.monats_fakten import sonstiges_aus_zeilen
+    from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER, _categorize_counter
 
     sonstiges = None
-    if "sonstiges" not in zeilen_typen:
-        zeilen: dict[int, dict] = {}
-        if g is not None and g.sonstiges.kanal:
-            zeilen.update({i: dict(z) for i, z in g.sonstiges.zeilen.items()})
-        if bilanz_ersetzt:
-            for inv in investitionen:
-                if inv.typ != "sonstiges" or not inv.ist_aktiv_im_monat(jahr, monat):
-                    continue
-                params = inv.parameter if isinstance(inv.parameter, dict) else {}
-                for feld in KUMULATIVE_ZAEHLER_FELDER.get("sonstiges", ()):
-                    key = f"inv_{inv.id}_{feld}"
-                    if key in out and _categorize_counter(feld, "sonstiges", params) == "erzeugung_sonstiges":
-                        zeilen.setdefault(inv.id, {})[feld] = out[key][0]
-        elif sonstige_erzeuger:
-            for inv_id, kwh in sonstige_erzeuger.items():
-                zeilen.setdefault(int(inv_id), {})["erzeugung_kwh"] = kwh
-        if zeilen:
-            sonstiges = sonstiges_aus_zeilen(investitionen, (jahr, monat), zeilen)
-            for feld, wert in (("sonstiges_erzeugung_kwh", sonstiges.erzeugung_kwh),
-                               ("sonstiges_abgabe_kwh", sonstiges.abgabe_kwh)):
-                if wert > 0:
-                    out[feld] = (round(wert, 2), quelle)
-    return out, emob, sonstiges, emob_zeilen
+    zeilen: dict[int, dict] = {}
+    if g is not None and g.sonstiges.kanal:
+        zeilen.update({i: dict(z) for i, z in g.sonstiges.zeilen.items()})
+    if bilanz_ersetzt:
+        for inv in investitionen:
+            if inv.typ != "sonstiges" or not inv.ist_aktiv_im_monat(jahr, monat):
+                continue
+            params = inv.parameter if isinstance(inv.parameter, dict) else {}
+            for feld in KUMULATIVE_ZAEHLER_FELDER.get("sonstiges", ()):
+                key = f"inv_{inv.id}_{feld}"
+                if key in out and _categorize_counter(feld, "sonstiges", params) == "erzeugung_sonstiges":
+                    zeilen.setdefault(inv.id, {})[feld] = out[key][0]
+    elif sonstige_erzeuger:
+        for inv_id, kwh in sonstige_erzeuger.items():
+            zeilen.setdefault(int(inv_id), {})["erzeugung_kwh"] = kwh
+    if zeilen:
+        sonstiges = sonstiges_aus_zeilen(investitionen, (jahr, monat), zeilen)
+        for feld, wert in (("sonstiges_erzeugung_kwh", sonstiges.erzeugung_kwh),
+                           ("sonstiges_abgabe_kwh", sonstiges.abgabe_kwh)):
+            if wert > 0:
+                out[feld] = (round(wert, 2), quelle)
+    return sonstiges
 
 
 async def _wp_aus_kanaelen(
