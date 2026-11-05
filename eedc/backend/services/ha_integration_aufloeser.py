@@ -246,42 +246,12 @@ def invalidate_cache() -> None:
     _registry_cache = (0.0, None)
 
 
-async def loese_integration_auf(
-    *,
-    domain: str,
-    praefixe: list[str],
-    unique_kerne: dict[str, str],
-    namens_kerne: dict[str, str],
-    muster: list[tuple[str, str]],
-    states: list[dict],
-) -> AufloesungsErgebnis:
-    """Ordnet die Entitäten einer Integration ihren Rollen zu — vierstufig.
-
-    Args:
-        domain: HA-Integrationsdomäne, z. B. ``solar_forecast_ml``.
-        praefixe: die alte Entity-ID-Präfix-Liste — Rückfall für die **Menge**.
-        unique_kerne: ``unique_id``-Kern → Rolle (Stufe 1).
-        namens_kerne: normalisierter Namenskern → Rolle (Stufe 2).
-        muster: ``(entity_id-Suffix, Rolle)`` in Prioritätsreihenfolge (Stufe 3).
-        states: die rohe ``/api/states``-Antwort — der Aufrufer holt sie ohnehin.
-
-    Die Stufen gelten **je Rolle**, nicht je Lauf: eine Rolle, die Stufe 1 nicht
-    findet, darf Stufe 2 oder 3 finden. Eine Rolle, die Stufe 1 gefunden hat,
-    wird von den späteren Stufen nicht mehr überschrieben.
-    """
-    menge = await integration_entity_ids(domain)
-    if menge is not None:
-        gehoert_dazu = menge.__contains__
-        menge_quelle = "integration_entities"
-    else:
-        def gehoert_dazu(eid: str) -> bool:
-            return any(eid.startswith(p) for p in praefixe)
-        menge_quelle = "praefix"
-
-    eigene = [it for it in states if gehoert_dazu(it.get("entity_id", ""))]
-
-    treffer: dict[str, RollenTreffer] = {}
-
+async def _stufe_unique_id(
+    eigene: list[dict], unique_kerne: dict[str, str], treffer: dict[str, RollenTreffer],
+) -> None:
+    """Stufe 1 (RF-78): ``unique_id``-Kern als Endung der Registry-``unique_id``, längster Kern
+    zuerst; eine Entität trägt eine Rolle, eine besetzte Rolle bleibt. Ohne ``unique_kerne`` wird
+    die Registry nicht gefragt; ``None``/leer (alte HA, WS gesperrt) ⇒ die Stufe greift nicht."""
     # ── Stufe 1: unique_id ───────────────────────────────────────────────────
     # Der Kern ist die Rollen-Kennung, NICHT der Config-Entry-Präfix davor: SFML
     # schreibt `<entry-id>_ml_expected_daily_production`, Solcast schreibt
@@ -301,6 +271,13 @@ async def loese_integration_auf(
                     treffer[rolle] = RollenTreffer(eid, rolle, "unique_id", item)
                     break
 
+
+def _stufe_name(
+    eigene: list[dict], namens_kerne: dict[str, str], treffer: dict[str, RollenTreffer],
+) -> None:
+    """Stufe 2 (RF-78): normalisierter Anzeigename gleich dem Kern oder mit vorangestelltem Zusatz,
+    längster Kern zuerst; der erste passende Kern entscheidet — ist seine Rolle besetzt, bleibt die
+    Entität ohne Rolle."""
     # ── Stufe 2: Anzeigename ─────────────────────────────────────────────────
     # Deutsche UND englische Kerne, gegen den normalisierten `friendly_name`.
     # Sie greift dort, wo die Registry nicht lesbar ist (alte HA-Version, WS
@@ -331,6 +308,12 @@ async def loese_integration_auf(
                         )
                     break
 
+
+def _stufe_muster(
+    eigene: list[dict], muster: list[tuple[str, str]], treffer: dict[str, RollenTreffer],
+) -> None:
+    """Stufe 3 (RF-78): das alte Entity-ID-Muster (Suffix, klein) in Listen-Reihenfolge; nur das
+    erste passende Muster je Entität, eine besetzte Rolle bleibt."""
     # ── Stufe 3: das alte Entity-ID-Muster ───────────────────────────────────
     # ⛔ Bleibt ausdrücklich stehen. Wer heute gefunden wird, wird auch morgen
     # gefunden — auch wenn Stufe 1 und 2 auf seiner HA-Version nicht antworten.
@@ -347,6 +330,51 @@ async def loese_integration_auf(
                         item.get("entity_id", ""), rolle, "muster", item
                     )
                 break
+
+
+async def loese_integration_auf(
+    *,
+    domain: str,
+    praefixe: list[str],
+    unique_kerne: dict[str, str],
+    namens_kerne: dict[str, str],
+    muster: list[tuple[str, str]],
+    states: list[dict],
+) -> AufloesungsErgebnis:
+    """Ordnet die Entitäten einer Integration ihren Rollen zu — vierstufig.
+
+    Args:
+        domain: HA-Integrationsdomäne, z. B. ``solar_forecast_ml``.
+        praefixe: die alte Entity-ID-Präfix-Liste — Rückfall für die **Menge**.
+        unique_kerne: ``unique_id``-Kern → Rolle (Stufe 1).
+        namens_kerne: normalisierter Namenskern → Rolle (Stufe 2).
+        muster: ``(entity_id-Suffix, Rolle)`` in Prioritätsreihenfolge (Stufe 3).
+        states: die rohe ``/api/states``-Antwort — der Aufrufer holt sie ohnehin.
+
+    Die Stufen gelten **je Rolle**, nicht je Lauf: eine Rolle, die Stufe 1 nicht
+    findet, darf Stufe 2 oder 3 finden. Eine Rolle, die Stufe 1 gefunden hat,
+    wird von den späteren Stufen nicht mehr überschrieben.
+
+    Form (RF-78, Bauform RF-1): der Rumpf ist die Stufenleiter — Menge (``integration_entities``,
+    sonst Präfix-Rückfall), dann ``_stufe_unique_id``, ``_stufe_name``, ``_stufe_muster`` in dieser
+    Reihenfolge über dasselbe ``treffer``-Dict (der erste Treffer je Rolle bleibt), zuletzt die
+    beste benutzte Stufe als ``rolle_quelle``.
+    """
+    menge = await integration_entity_ids(domain)
+    if menge is not None:
+        gehoert_dazu = menge.__contains__
+        menge_quelle = "integration_entities"
+    else:
+        def gehoert_dazu(eid: str) -> bool:
+            return any(eid.startswith(p) for p in praefixe)
+        menge_quelle = "praefix"
+
+    eigene = [it for it in states if gehoert_dazu(it.get("entity_id", ""))]
+
+    treffer: dict[str, RollenTreffer] = {}
+    await _stufe_unique_id(eigene, unique_kerne, treffer)
+    _stufe_name(eigene, namens_kerne, treffer)
+    _stufe_muster(eigene, muster, treffer)
 
     stufen = {t.stufe for t in treffer.values()}
     beste = ("unique_id" if "unique_id" in stufen

@@ -116,39 +116,85 @@ class TagesverlaufSerie:
     suffix: Optional[str] = None
 
 
-def baue_investitions_serien(
+def _wp_split_serien(
+    inv_id: str,
+    live: dict[str, str],
+    serien: list[TagesverlaufSerie],
+    serie_entities: dict[str, list[str]],
+) -> None:
+    """Wärmepumpe ohne ``leistung_w``: je zugeordnetem Funktions-Feld eine Serie (RF-79: Teil von
+    `_serien_je_investition`)."""
+    config = TV_SERIE_CONFIG.get("waermepumpe")
+    if config:
+        # ⭐ **Drei Betriebsarten, nicht zwei** (N-439, 13.09.2026).
+        # `leistung_kuehlen_w` ist seit W-13 (26.08.) jeder Wärmepumpe
+        # zuordenbar und wurde bis hierher an keiner Station gelesen —
+        # wer nur den Kühlsensor hatte, bekam gar keine Serie und stand
+        # darunter als „nicht dargestellt". Die drei Felder sind
+        # **disjunkte Momentanwerte** desselben Kältekreises
+        # (`core/betriebsmodus.py`: ein Umschaltventil, dietmar1968
+        # T89667 #225), also dieselbe Bauform wie ihre zwei Nachbarn.
+        for suffix, field in (
+            ("heizen", "leistung_heizen_w"),
+            ("warmwasser", "leistung_warmwasser_w"),
+            ("kuehlen", "leistung_kuehlen_w"),
+        ):
+            eid = live.get(field)
+            if eid:
+                key = f"waermepumpe_{inv_id}_{suffix}"
+                serien.append(TagesverlaufSerie(
+                    key=key, inv_id=inv_id, kategorie=config["kategorie"],
+                    seite=config["seite"], bidirektional=config["bidirektional"],
+                    suffix=suffix,
+                ))
+                serie_entities[key] = [eid]
+
+
+def _serie_der_investition(inv_id: str, inv) -> Optional[TagesverlaufSerie]:
+    """Die eine Serie einer Investition mit ``leistung_w`` — ``None``: E-Auto mit Parent, Typ ohne
+    Serien-Konfiguration, Sonstiges-Zähler (#377). Seite/Richtung aus `TV_SERIE_CONFIG`, bei
+    Sonstiges nach Kategorie (RF-79: Teil von `_serien_je_investition`)."""
+    typ = inv.typ
+
+    # E-Auto mit Parent (Wallbox) überspringen — Wallbox misst bereits
+    if typ == "e-auto" and inv.parent_investition_id is not None:
+        return None
+
+    config = TV_SERIE_CONFIG.get(typ)
+    if not config:
+        return None
+
+    seite = config["seite"]
+    bidirektional = config["bidirektional"]
+    if typ == "sonstiges" and isinstance(inv.parameter, dict):
+        kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
+        # #377: Ein Zähler bekommt **keine Serie**. Er führt keine
+        # Leistung, und m³ auf einer kW-Achse ist genau die
+        # Einheiten-Verwechslung, vor der der `soc_je_speicher`-Kommentar
+        # in `models/tages_energie_profil.py` warnt. Die Alternative
+        # („Serie mit Seite quelle/senke") gibt es nicht — er hat keine
+        # Seite, das ist der dritte Zustand.
+        if ist_zaehler_kategorie(kat):
+            return None
+        if kat == "erzeuger":
+            seite = "quelle"
+        elif kat == "speicher":
+            bidirektional = True
+
+    serie_key = f"{config['kategorie']}_{inv_id}"
+    return TagesverlaufSerie(
+        key=serie_key, inv_id=inv_id, kategorie=config["kategorie"],
+        seite=seite, bidirektional=bidirektional, suffix=None,
+    )
+
+
+def _serien_je_investition(
     inv_live_map: dict[str, dict[str, str]],
     investitionen: dict[str, "object"],
-    tag: Optional[date] = None,
 ) -> tuple[list[TagesverlaufSerie], dict[str, list[str]]]:
-    """Single Source of Truth für die Investitions-Serien-Selektion des
-    Tagesverlaufs (Issue #318, M1).
-
-    Vor v3.35.x bauten ``live_tagesverlauf_service`` und ``energie_profil.backfill``
-    dieselbe Selektion zweimal parallel — ohne Symmetrie-Test (S1 umging die
-    Achse). Drift: der Pool-Dedup (#227, gleiche ``leistung_w``-Entity →
-    Wallbox vor E-Auto) lief NUR im Live-Pfad. Da ``aggregate_day`` seine
-    ``punkte`` für den Scheduler aus ``get_tagesverlauf`` (live, mit Dedup) und
-    für den Backfill aus ``prefetched_tagesverlauf`` (backfill, ohne Dedup) zog,
-    konnte derselbe Tag je nach Trigger unterschiedliche ``TEP.komponenten``/
-    Peaks erzeugen — gleiche Aggregator-Asymmetrie-Klasse wie #290/#298
-    ([[feedback_aggregator_symmetrie]]).
-
-    Diese Funktion ist jetzt die einzige Stelle, in der die Selektion lebt —
-    inklusive Pool-Dedup, damit beide Pfade deckungsgleich sind.
-
-    Args:
-        inv_live_map: ``{inv_id: {leistung_w: entity_id, ...}}`` aus
-            ``extract_live_config``.
-        investitionen: ``{inv_id: Investition}`` (typ/parameter/parent_id/…).
-        tag: der betrachtete Tag — für „Wallbox **in Betrieb**" (N-555 Stufe 2, Konzept
-            Regel 0/8). ``None`` ⇒ die Auswahl des Aufrufers gilt (er hat die
-            Investitionen schon auf seinen Zeitraum gefiltert, `aktiv_im_zeitraum`).
-
-    Returns:
-        ``(serien, serie_entities)`` — Kern-Serien in stabiler, Pool-deduplizierter
-        Reihenfolge + ``{serie_key: [entity_id]}``.
-    """
+    """Phase 1 von `baue_investitions_serien` (RF-79): je Investition des Live-Mappings ihre
+    Serien in Mapping-Reihenfolge — ohne Investition oder als Durchleiter (`SKIP_TYPEN`) keine,
+    Wärmepumpe ohne ``leistung_w`` über `_wp_split_serien`, sonst `_serie_der_investition`."""
     serien: list[TagesverlaufSerie] = []
     serie_entities: dict[str, list[str]] = {}
 
@@ -164,67 +210,26 @@ def baue_investitions_serien(
 
         # WP mit getrennter Strommessung → zwei Serien (Heizen/Warmwasser)
         if not has_leistung and typ == "waermepumpe":
-            config = TV_SERIE_CONFIG.get("waermepumpe")
-            if config:
-                # ⭐ **Drei Betriebsarten, nicht zwei** (N-439, 13.09.2026).
-                # `leistung_kuehlen_w` ist seit W-13 (26.08.) jeder Wärmepumpe
-                # zuordenbar und wurde bis hierher an keiner Station gelesen —
-                # wer nur den Kühlsensor hatte, bekam gar keine Serie und stand
-                # darunter als „nicht dargestellt". Die drei Felder sind
-                # **disjunkte Momentanwerte** desselben Kältekreises
-                # (`core/betriebsmodus.py`: ein Umschaltventil, dietmar1968
-                # T89667 #225), also dieselbe Bauform wie ihre zwei Nachbarn.
-                for suffix, field in (
-                    ("heizen", "leistung_heizen_w"),
-                    ("warmwasser", "leistung_warmwasser_w"),
-                    ("kuehlen", "leistung_kuehlen_w"),
-                ):
-                    eid = live.get(field)
-                    if eid:
-                        key = f"waermepumpe_{inv_id}_{suffix}"
-                        serien.append(TagesverlaufSerie(
-                            key=key, inv_id=inv_id, kategorie=config["kategorie"],
-                            seite=config["seite"], bidirektional=config["bidirektional"],
-                            suffix=suffix,
-                        ))
-                        serie_entities[key] = [eid]
+            _wp_split_serien(inv_id, live, serien, serie_entities)
             continue
 
         if not has_leistung:
             continue
 
-        # E-Auto mit Parent (Wallbox) überspringen — Wallbox misst bereits
-        if typ == "e-auto" and inv.parent_investition_id is not None:
+        serie = _serie_der_investition(inv_id, inv)
+        if serie is None:
             continue
+        serien.append(serie)
+        serie_entities[serie.key] = [live["leistung_w"]]
+    return serien, serie_entities
 
-        config = TV_SERIE_CONFIG.get(typ)
-        if not config:
-            continue
 
-        seite = config["seite"]
-        bidirektional = config["bidirektional"]
-        if typ == "sonstiges" and isinstance(inv.parameter, dict):
-            kat = inv.parameter.get("kategorie", SONSTIGES_KATEGORIE_UNGEPFLEGT)
-            # #377: Ein Zähler bekommt **keine Serie**. Er führt keine
-            # Leistung, und m³ auf einer kW-Achse ist genau die
-            # Einheiten-Verwechslung, vor der der `soc_je_speicher`-Kommentar
-            # in `models/tages_energie_profil.py` warnt. Die Alternative
-            # („Serie mit Seite quelle/senke") gibt es nicht — er hat keine
-            # Seite, das ist der dritte Zustand.
-            if ist_zaehler_kategorie(kat):
-                continue
-            if kat == "erzeuger":
-                seite = "quelle"
-            elif kat == "speicher":
-                bidirektional = True
-
-        serie_key = f"{config['kategorie']}_{inv_id}"
-        serien.append(TagesverlaufSerie(
-            key=serie_key, inv_id=inv_id, kategorie=config["kategorie"],
-            seite=seite, bidirektional=bidirektional, suffix=None,
-        ))
-        serie_entities[serie_key] = [live["leistung_w"]]
-
+def _pool_schutz(
+    serien: list[TagesverlaufSerie], serie_entities: dict[str, list[str]],
+) -> list[TagesverlaufSerie]:
+    """Phase 2 von `baue_investitions_serien` (RF-79, #227): sortiert ``serien`` nach Priorität
+    und lässt je primärer Entity nur die erste Serie stehen; die Entities der verdrängten fallen
+    aus ``serie_entities``."""
     # Pool-Doppelzählungs-Schutz (#227): teilen zwei Investitionen dieselbe
     # primäre `leistung_w`-Entity (Wallbox + E-Auto ohne gesetzten
     # parent_investition_id — beide messen denselben Stromfluss), bleibt nur
@@ -244,7 +249,18 @@ def baue_investitions_serien(
         if primary:
             gesehen_entity.add(primary)
         dedupliziert.append(serie)
+    return dedupliziert
 
+
+def _emob_quelle(
+    dedupliziert: list[TagesverlaufSerie],
+    serie_entities: dict[str, list[str]],
+    investitionen: dict[str, "object"],
+    tag: Optional[date],
+) -> list[TagesverlaufSerie]:
+    """Phase 3 von `baue_investitions_serien` (RF-79, #356 mit N-555 Stufe 2): steht eine Wallbox-
+    Serie einer am ``tag`` in Betrieb befindlichen Wallbox da, fallen die E-Auto-Serien samt
+    Entities; sonst bleibt die Liste."""
     # Strukturelle Quellen-Regel für E-Mob (#356) — dieselbe wie auf der
     # Monatsebene (`eauto_wirtschaftlichkeit.get_emob_heimladung_canonical`,
     # Phase 2a / Entscheidung 1): **existiert eine Wallbox-Serie, ist sie die
@@ -279,7 +295,51 @@ def baue_investitions_serien(
                 continue
             behalten.append(serie)
         dedupliziert = behalten
+    return dedupliziert
 
+
+def baue_investitions_serien(
+    inv_live_map: dict[str, dict[str, str]],
+    investitionen: dict[str, "object"],
+    tag: Optional[date] = None,
+) -> tuple[list[TagesverlaufSerie], dict[str, list[str]]]:
+    """Single Source of Truth für die Investitions-Serien-Selektion des
+    Tagesverlaufs (Issue #318, M1).
+
+    Vor v3.35.x bauten ``live_tagesverlauf_service`` und ``energie_profil.backfill``
+    dieselbe Selektion zweimal parallel — ohne Symmetrie-Test (S1 umging die
+    Achse). Drift: der Pool-Dedup (#227, gleiche ``leistung_w``-Entity →
+    Wallbox vor E-Auto) lief NUR im Live-Pfad. Da ``aggregate_day`` seine
+    ``punkte`` für den Scheduler aus ``get_tagesverlauf`` (live, mit Dedup) und
+    für den Backfill aus ``prefetched_tagesverlauf`` (backfill, ohne Dedup) zog,
+    konnte derselbe Tag je nach Trigger unterschiedliche ``TEP.komponenten``/
+    Peaks erzeugen — gleiche Aggregator-Asymmetrie-Klasse wie #290/#298
+    ([[feedback_aggregator_symmetrie]]).
+
+    Diese Funktion ist jetzt die einzige Stelle, in der die Selektion lebt —
+    inklusive Pool-Dedup, damit beide Pfade deckungsgleich sind.
+
+    Args:
+        inv_live_map: ``{inv_id: {leistung_w: entity_id, ...}}`` aus
+            ``extract_live_config``.
+        investitionen: ``{inv_id: Investition}`` (typ/parameter/parent_id/…).
+        tag: der betrachtete Tag — für „Wallbox **in Betrieb**" (N-555 Stufe 2, Konzept
+            Regel 0/8). ``None`` ⇒ die Auswahl des Aufrufers gilt (er hat die
+            Investitionen schon auf seinen Zeitraum gefiltert, `aktiv_im_zeitraum`).
+
+    Returns:
+        ``(serien, serie_entities)`` — Kern-Serien in stabiler, Pool-deduplizierter
+        Reihenfolge + ``{serie_key: [entity_id]}``.
+
+    Form (RF-79, Bauform RF-1): der Rumpf ist der Orchestrator über drei Phasen —
+    ``_serien_je_investition`` (Serien je Investition; WP-Split N-439 in ``_wp_split_serien``,
+    Parent/Typ/Sonstiges-Kategorie #377 in ``_serie_der_investition``), ``_pool_schutz``
+    (Pool-Doppelzählungs-Schutz #227: Priorität Wallbox > E-Auto, eine Serie je primärer Entity)
+    und ``_emob_quelle`` (Quellen-Regel #356 mit «Wallbox in Betrieb» am ``tag``, N-555 Stufe 2).
+    """
+    serien, serie_entities = _serien_je_investition(inv_live_map, investitionen)
+    dedupliziert = _pool_schutz(serien, serie_entities)
+    dedupliziert = _emob_quelle(dedupliziert, serie_entities, investitionen, tag)
     return dedupliziert, serie_entities
 
 

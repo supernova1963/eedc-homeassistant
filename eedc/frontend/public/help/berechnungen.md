@@ -1161,8 +1161,9 @@ Block    vom Sprung rückwärts über die Wallbox-Stunden; aus jeder Stunde, was
          Σ ≥ Sprung − 0,05 kWh, höchstens bis zur Stunde des vorigen Sprungs IRGENDEINES Autos (einschließlich).
          Nullstunden werden übersprungen; eine gemeinsame Stunde wird nach Restmengen geteilt.
 Menge    = der Sprung (gemessen am Auto) — nie die Summe der Wallbox-Stunden.
-PV       = Σ (Blockstunde × PV-Anteil dieser Stunde nach der Einspeise-Deckung) ÷ Σ Blockstunden × Sprung
-           (davon aus dem Speicher ebenso, als Teilmenge);
+PV       = Σ (Blockstunde × PV-Anteil dieser Stunde nach der Einspeise-Deckung) ÷ Σ ableitbare Blockstunden × Sprung
+           (ableitbar = Anteil bekannt und keine gebündelte Stunde; davon aus dem Speicher ebenso, als Teilmenge,
+           höchstens der PV-Teil);
            eine gebündelte Stunde (Zählerlücke, n > 1) zählt zur Blockenergie, liefert aber keinen Anteil —
            ohne ableitbare Stunde teilt der Wallbox-Monatsanteil. Der Anteil ist eine Schätzung derselben
            Regel wie der PV-Anteil der Heimladung.
@@ -1171,6 +1172,11 @@ Monat    Anteil eines Monats = Σ Blockstunden, die in ihm BEGINNEN, ÷ Σ Block
 Kennzeichen  stunden_gedeckt = Σ Blockstunden ÷ Sprung; unter 0,95 hat die Wallbox den Vorgang nicht voll gezählt.
            Mikrosprünge bis 0,05 kWh (Standby des Fahrzeug-Zählers) zählen als Menge, nicht als Ladevorgang.
 ```
+
+Code-Orte (RF-80): `emob_ladebloecke.py::bilde_ladebloecke` sammelt die Blöcke über `_wallbox_achse` (mehrfach genannte
+Stunden summiert, Stunden ≤ 0 fallen weg, Restmenge nach den schon gespeicherten Blöcken), `_spruenge_nach_zeit`
+(Reihenfolge nach Zeit, dann Auto; ein Sprung ≤ 0 bildet keinen Block und setzt keine Schranke), `_block_rueckwaerts`
+(Zeile «Block») und `_block_anteile` (Zeilen «Menge», «PV», «Kennzeichen»).
 
 In Regel 2 Schritt 1 ist die Summe der monatsverteilten Sprünge dann die eigene Messung des Autos (Menge **und**
 PV-Anteil) an der Stelle von „Heim: gesamt"; „Heim: PV/Netz" gehen weiter vor. Der Daten-Checker (Regel 7) vergleicht
@@ -3909,8 +3915,29 @@ Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 |---|---|
 | **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus GTI × kWp × (1 − System_Losses). **Auch die Stundenkurve „OpenMeteo (roh)" fächert seit v4.0.1 je Orientierungsgruppe auf** — vorher rechnete sie die Gesamtleistung so, als hinge sie an *einer* Dachfläche (Neigung/Ausrichtung der zufällig ersten PV-Zeile, sonst stillschweigend 35° Süd), während der OM-**Tageswert** derselben Spalte längst auffächerte. Kurve, Summenzeile und Tageswert sind jetzt deckungsgleich. |
 | **eedc (kalibriert)** | die anlagenspezifisch korrigierte Prognose. Legende und Beschriftung sagen seit v4.0.1 „eedc (kalibriert)" statt „eedc (OpenMeteo × Faktor)" — korrigiert wird **pro Stunden-Slot auf der Energie**, nicht mit einem Tagesfaktor. |
-| **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
+| **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet — die API liefert `period_end` (`backward_slot_aus_period_end`), die HA-Integration `period_start` (`backward_slot_aus_period_start`: volle Stunde des Beginns + 1 h; für 30-Min-Buckets derselbe Slot). Der HA-Pfad im Einzelnen: Absatz „Solcast über die HA-Integration" unten. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
+
+**Solcast über die HA-Integration** (`solcast_service.py::_fetch_solcast_ha_auto`, Cache 5 min): die sieben
+Tages-Sensoren (heute … Tag 7, gefunden über `ha_integration_aufloeser.py`) werden in einem Abruf gelesen; je Sensor:
+
+```
+Tageswert_d      = State des Sensors, 1 Nachkommastelle (unknown/unavailable/leer/keine Zahl ⇒ der Tag fehlt)
+p10_d / p90_d    = Attribut estimate10 / estimate90, 1 Nachkommastelle; fehlt oder leer ⇒ 0
+Slot_d[s]        = Σ pv_estimate × 0,5 über die 30-Min-Buckets aus detailedForecast (Leistung in kW → Energie in kWh),
+                   s = backward_slot_aus_period_start(period_start); ein Bucket zählt nur, wenn sein Slot auf den Tag
+                   SEINES Sensors fällt (#357) — 23:00/23:30 gehören zu Slot 0 des Folgetags und fallen dort weg
+                   (p10/p90 ebenso aus pv_estimate10/pv_estimate90; fehlt ein Wert ⇒ 0); Slots auf 2 Stellen
+Stundenprofil_d  nur, wenn ein Slot ≠ 0; Heute-Sicht hourly_kw = Profil von heute, sonst 24 × 0
+Morgen           = der zweite gelesene Tag der Liste (ist der Morgen-Sensor nicht lesbar, der nächste lesbare); ohne ihn 0
+```
+
+Der Auflöser `ha_integration_aufloeser.py::loese_integration_auf` rechnet nicht: er ordnet die Entitäten der
+Integration je Rolle in drei Stufen zu (unique_id → Anzeigename → Entity-ID-Muster, der erste Treffer bleibt; RF-78:
+`_stufe_unique_id`, `_stufe_name`, `_stufe_muster`). Ohne Heute-Sensor (nicht gefunden oder nicht lesbar) liefert der
+Pfad keine Prognose. `period_start` ohne Zeitzone
+gilt als Europe/Berlin. Code-Orte (RF-77): Phasen `_lese_states`, `_tageswerte_aus_states`, `_stundenprofil_aus_detail`,
+`_heute_morgen`.
 
 #### Abweichung und Σ-Zeile im Stundenvergleich (ab v4.0.6)
 
@@ -4361,7 +4388,7 @@ Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Ti
 
 **Migration auf Backward (v3.20.0):**
 - `sensor_snapshot_service.get_hourly_kwh_by_category`: Delta `snap[h] − snap[h-1]` → Slot h (vorher: `snap[h+1] − snap[h]` → Slot h)
-- `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot. Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
+- `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot (API über `period_end`, HA-Sensor über `period_start` + 1 h, s. §4.1c). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
 - **Nach Update auf v3.20.0 nötig:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit alle historischen Stundenwerte umverteilt werden. Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig korrekt.
 
 #### Tageswerte: Zähler und Bezug aus einem Fenster
@@ -4730,7 +4757,10 @@ Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 **Leistungskurve älterer Tage** (`services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts`, Vollbackfill und
 Reparatur-Werkbank): beschafft für Tage außerhalb der HA-Historie die Stunden-Leistungen aus der Langzeitstatistik (ein
 gebündelter Read ab dem Vortag, Serien je Tag über `baue_investitions_serien`, Vorzeichen-Invertierung, Vortagsrand
-Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`.
+Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`. Auch die Serienwahl
+`live_sensor_config.py::baue_investitions_serien` (Live-Kurve und LTS-Kurve) rechnet nicht: sie wählt je Investition
+die Serien, behält je Entity eine (#227, Wallbox vor E-Auto) und lässt bei einer am Tag in Betrieb befindlichen Wallbox
+die E-Auto-Serie weg (#356, N-555) — Phasen `_serien_je_investition`, `_pool_schutz`, `_emob_quelle` (RF-79).
 
 #### Zählerlücken wie HA (ab v4.0.51)
 
