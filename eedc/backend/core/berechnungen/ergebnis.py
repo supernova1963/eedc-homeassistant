@@ -93,6 +93,14 @@ Layer-Original                          ``speicher_wirkungsgrad`` (``fenster_lan
 Kennzahlen der Übersicht (P12)          alle WP-Kennzahlen (``wp_jaz*``, Modus-Reste, Geräte) — ohne Übersicht wie bisher
 =====================================  ==========================================================================
 
+**Phasenform (RF-52, 05.11.2026):** ``falte_zeitraum`` setzt die Antwort aus den Teilstücken von sieben Phasen zusammen,
+je Abschnitt der Antwort eine, in der Schlüssel-Reihenfolge des Antwort-Dicts — ``_falte_kopf_und_bilanz`` (Kopf, Mengen,
+Autarkie/EV-Quote/Wandlungsverluste paarweise) · ``_falte_speicher`` (η aus Σ Ladung/Entladung, Auslastung und
+Netzlade-Preis paarweise) · ``_falte_wp`` (Modus-Rest-Rückfall ``max(0, …)``, Kennzahlen P12) ·
+``_falte_emob_bkw_sonstiges`` · ``_falte_leiter_und_soll`` (Leiter auf den Jahressummen, SOLL) · ``_falte_preise``
+(``gewichtet``) · ``_falte_grundlast_und_details`` (Grundlast-Anteil nur über Monate mit Grundlast, Σ je Investition).
+Den gemeinsamen Eingang trägt ``_FaltKontext`` (Monate, Jahr, Kennzahlen, Σ PV, Spalten-Leser ``f``).
+
 Die Funktionen nehmen **Antwort-Dicts** (``AktuellerMonatResponse.model_dump()``) und geben eines zurück — kein ORM,
 keine Session. Die Monatsauswahl (welche Monate geladen werden, welche abgeschlossen sind) ist Aufbereitung und liegt in
 ``services/jahres_aggregat.py``.
@@ -564,6 +572,21 @@ def _netzbezug_anteile_zeitraum(monate: Sequence[Mapping[str, Any]]) -> Optional
     ]
 
 
+@dataclass
+class _FaltKontext:
+    """Die Eingänge von `falte_zeitraum` für ihre Phasen (RF-52): die Monatsantworten, das Jahr, die Kennzahlen der
+    Übersicht (``k``, P12) und Σ PV (Bilanz-Abschnitt und SOLL lesen dieselbe Summe). ``f(feld)`` ist die Spalte eines
+    Felds über die Monate (``None`` für fehlende Werte), Eingang von `summe`/`mittel`/`gewichtet`."""
+
+    monate: Sequence[Mapping[str, Any]]
+    jahr: int
+    k: Optional[Mapping[str, Any]]
+    pv: Optional[float] = None
+
+    def f(self, key: str) -> list:
+        return [m.get(key) for m in self.monate]
+
+
 def falte_zeitraum(
     monate: Sequence[Mapping[str, Any]],
     jahr: int,
@@ -573,110 +596,45 @@ def falte_zeitraum(
 
     Regeln s. Modul-Docstring. ``kennzahlen`` ist die Übersicht des Jahres (``CockpitUebersichtResponse``-Dict) — sie
     liefert die WP-Kennzahlen (P12); ohne sie bleiben die Mengen, und die Kennzahlen fehlen (wie im Client).
-    """
-    k = kennzahlen
-    f = lambda key: [m.get(key) for m in monate]  # noqa: E731
 
-    pv = summe(f("pv_erzeugung_kwh"))
+    **Phasenform (RF-52, 5.11.2026, Bauform RF-1; Layer, rein — keine DB, keine Uhr):** die Antwort sind die Teilstücke
+    der Phasen in fester Reihenfolge — `_falte_kopf_und_bilanz` (Kopf, Mengen, Autarkie/EV-Quote/Wandlungsverluste
+    paarweise) · `_falte_speicher` (η aus Σ Ladung/Entladung, Auslastung und Netzlade-Preis paarweise) · `_falte_wp`
+    (Mengen, Modus-Rest-Rückfall, Kennzahlen der Übersicht) · `_falte_emob_bkw_sonstiges` (E-Auto-Effizienz, Σ der
+    sonstigen Geräte) · `_falte_leiter_und_soll` (Ergebnis-Leiter auf den Jahressummen, SOLL) · `_falte_preise`
+    (verbrauchsgewichtete Preise, Grundgebühr, Komponenten-Anteile) · `_falte_grundlast_und_details` (Grundlast-Anteil
+    über die Monate mit Grundlast, Σ je Investition, Geräte, Feldquellen). Die Schlüssel-Reihenfolge ist die des
+    Antwort-Dicts vor dem Schnitt (Probe `test_rf50_checker_export_jahr_phasen.py::test_rf52_schluessel_…`).
+    """
+    ctx = _FaltKontext(monate=monate, jahr=jahr, k=kennzahlen)
+    ctx.pv = summe(ctx.f("pv_erzeugung_kwh"))
+    return {
+        **_falte_kopf_und_bilanz(ctx),
+        **_falte_speicher(ctx),
+        **_falte_wp(ctx),
+        **_falte_emob_bkw_sonstiges(ctx),
+        **_falte_leiter_und_soll(ctx),
+        **_falte_preise(ctx),
+        **_falte_grundlast_und_details(ctx),
+    }
+
+
+def _falte_kopf_und_bilanz(ctx: _FaltKontext) -> dict[str, Any]:
+    """Kopf (Identität vom ersten Monat, Hinweise vereinigt) und Energiebilanz: Σ Mengen; Autarkie, EV-Quote und
+    Wandlungsverluste als Quote paarweise (R-Q, N-584) — Zähler und Nenner nur über Monate, die beide tragen."""
+    monate, f = ctx.monate, ctx.f
+    pv, jahr = ctx.pv, ctx.jahr
+
     ev = summe(f("eigenverbrauch_kwh"))
-    speicher_ladung = summe(f("speicher_ladung_kwh"))
-    speicher_entladung = summe(f("speicher_entladung_kwh"))
-    eta = speicher_wirkungsgrad(speicher_ladung, speicher_entladung, langes_fenster_quelle="fenster_lang")
-    speicher_ladung_netz = summe(f("speicher_ladung_netz_kwh"))
-    wp_strom = summe(f("wp_strom_kwh"))
-    emob = eauto_effizienz_zeitraum(
-        EffizienzWert(None, m.get("emob_verbrauch_quelle") or "keine", m.get("emob_verbrauch_basis_kwh"),
-                      m.get("emob_km") or 0.0)
-        for m in monate
-    )
 
     # R-Q: Quoten aus einer Grundgesamtheit je Quote.
     q_autarkie = quote_paarweise(monate, "eigenverbrauch_kwh", "gesamtverbrauch_kwh")
     q_ev_quote = quote_paarweise(monate, "eigenverbrauch_kwh", "pv_erzeugung_kwh")
-    q_auslastung = quote_paarweise(monate, "speicher_entladung_kwh", "speicher_auslastungs_basis_kwh")
-    q_netzladung = quote_paarweise(monate, "speicher_ladung_netz_kosten_euro", "speicher_ladung_netz_kwh")
     # HA-Bauform E4b: Wandlungsverluste des Zeitraums = Σ der Monatswerte (``None``, wenn kein Monat
     # einen trägt); Prozent über die Monate, die Verluste UND Bezug tragen.
     q_verluste = quote_paarweise(monate, "wandlungsverluste_kwh", "wandlungsverluste_bezug_kwh")
 
-    # N-680: je Monat der Preis, der für ihn gilt (volle Kaskade inkl. „gemessen"), nicht der Tarifwert.
-    netzbezug_preis_effektiv = [_netzbezug_preis_des_monats(m) for m in monate]
-    netzbezug_preis_herkunft = _netzbezug_preis_herkunft_zeitraum(monate)
-
-    # Per-Investition-Finanzdetails: Σ je Investition, Identität vom ersten Vorkommen; Monats-Formeln entfallen.
-    financials: dict[int, dict[str, Any]] = {}
-    for m in monate:
-        for fin in m.get("investitionen_financials") or []:
-            prev = financials.get(fin["investition_id"])
-            if prev is None:
-                neu = dict(fin)
-                neu.update(formel=None, berechnung=None, erloes_berechnung=None, betriebskosten_jahr_euro=None)
-                financials[fin["investition_id"]] = neu
-                continue
-            prev["betriebskosten_monat_euro"] = prev["betriebskosten_monat_euro"] + fin["betriebskosten_monat_euro"]
-            for feld in ("erloes_euro", "ersparnis_euro"):
-                a, b = prev.get(feld), fin.get(feld)
-                prev[feld] = None if a is None and b is None else (a if a is not None else 0) + (b if b is not None else 0)
-            prev["sonstige_ertraege_euro"] = prev["sonstige_ertraege_euro"] + fin["sonstige_ertraege_euro"]
-            prev["sonstige_ausgaben_euro"] = prev["sonstige_ausgaben_euro"] + fin["sonstige_ausgaben_euro"]
-            if not prev.get("ersparnis_label") and fin.get("ersparnis_label"):
-                prev["ersparnis_label"] = fin["ersparnis_label"]
-
-    geraete: dict[str, list[str]] = {}
-    for m in monate:
-        for typ, namen in (m.get("komponenten_geraete") or {}).items():
-            geraete[typ] = _union([geraete.get(typ, []), namen])
-
-    sg: dict[str, dict[str, Any]] = {}
-    sg_felder = ("erzeugung_kwh", "eigenverbrauch_kwh", "einspeisung_kwh", "verbrauch_kwh",
-                 "bezug_pv_kwh", "bezug_netz_kwh", "abgabe_kwh", "erloes_euro")
-    for m in monate:
-        for g in m.get("sonstiges_geraete") or []:
-            key = f"{g['kategorie']}|{g['bezeichnung']}"
-            a = sg.setdefault(key, {"bezeichnung": g["bezeichnung"], "kategorie": g["kategorie"],
-                                    **{x: 0 for x in sg_felder}})
-            for x in sg_felder:
-                a[x] = a[x] + (g.get(x) if g.get(x) is not None else 0)
-    # Rundung am Rand (G8, Nachmessung 03.10.): hier nur „0 ⇒ kein Wert", gerundet wird in `jahres_aggregat.runde_rand`.
-    nz = lambda v: v if v > 0 else None  # noqa: E731
-    sonstiges_geraete = [
-        {"bezeichnung": g["bezeichnung"], "kategorie": g["kategorie"], **{x: nz(g[x]) for x in sg_felder}}
-        for g in sg.values()
-    ]
-
-    feld_quellen: dict[str, Any] = {}
-    for m in monate:
-        feld_quellen.update(m.get("feld_quellen") or {})
-
     erster = monate[0] if monate else {}
-
-    gl_kwh = summe(f("grundlast_kwh"))
-    gl_basis = summe(m.get("gesamtverbrauch_kwh") for m in monate if m.get("grundlast_kwh") is not None)
-    gl_anteil = (
-        (gl_kwh / gl_basis) * 100
-        if gl_kwh is not None and gl_basis is not None and gl_basis > 0 else None
-    )
-
-    def kz(name: str, rueckfall: Any = None) -> Any:
-        if k is None:
-            return rueckfall
-        v = k.get(name)
-        return v if v is not None else rueckfall
-
-    modus_heizen = summe(f("wp_modus_strom_heizen_kwh"))
-    modus_kuehlen = summe(f("wp_modus_strom_kuehlen_kwh"))
-    modus_ww = summe(f("wp_modus_strom_warmwasser_kwh"))
-
-    # Ergebnis-Leiter auf den Jahressummen (G2).
-    komponenten = frozenset(
-        x for x, flag in (("waermepumpe", any(m.get("hat_waermepumpe") for m in monate)),
-                          ("emob", any(m.get("hat_emobilitaet") for m in monate)),
-                          ("ust", any(m.get("ust_eigenverbrauch_euro") is not None for m in monate)))
-        if flag
-    )
-    eingang = replace(falte_posten(monate, jahr), komponenten_vorhanden=komponenten)
-    leiter = berechne_ergebnis(eingang)
-    soll = soll_erfuellung(pv, summe(f("soll_pv_kwh")), summe(f("soll_pv_tage")), summe(f("soll_pv_tage_gesamt")))
 
     return {
         "anlage_id": erster.get("anlage_id", 0),
@@ -710,7 +668,23 @@ def falte_zeitraum(
         "eigenverbrauch_quote_nenner_kwh": q_ev_quote.nenner,
         "eigenverbrauch_quote_fenster": q_ev_quote.fenster_text,
         "spez_ertrag": summe(f("spez_ertrag")),
+    }
 
+
+def _falte_speicher(ctx: _FaltKontext) -> dict[str, Any]:
+    """Speicher: Σ Ladung/Entladung/Netzladung, η des Zeitraums aus Σ Entladung ÷ Σ Ladung (`speicher_wirkungsgrad`,
+    Quelle `fenster_lang`), Auslastung und Netzlade-Ø-Preis paarweise, Ladepreis als Mittel der Monate."""
+    monate, f = ctx.monate, ctx.f
+
+    speicher_ladung = summe(f("speicher_ladung_kwh"))
+    speicher_entladung = summe(f("speicher_entladung_kwh"))
+    eta = speicher_wirkungsgrad(speicher_ladung, speicher_entladung, langes_fenster_quelle="fenster_lang")
+    speicher_ladung_netz = summe(f("speicher_ladung_netz_kwh"))
+
+    q_auslastung = quote_paarweise(monate, "speicher_entladung_kwh", "speicher_auslastungs_basis_kwh")
+    q_netzladung = quote_paarweise(monate, "speicher_ladung_netz_kosten_euro", "speicher_ladung_netz_kwh")
+
+    return {
         "speicher_ladung_kwh": speicher_ladung,
         "speicher_entladung_kwh": speicher_entladung,
         "speicher_ladung_netz_kwh": speicher_ladung_netz,
@@ -735,7 +709,28 @@ def falte_zeitraum(
         "speicher_ladung_netz_preis_quelle": next(
             (m.get("speicher_ladung_netz_preis_quelle") for m in monate if m.get("speicher_ladung_netz_preis_quelle")),
             None),
+    }
 
+
+def _falte_wp(ctx: _FaltKontext) -> dict[str, Any]:
+    """Wärmepumpe: Σ Mengen; ``wp_modus_nicht_aufgeteilt_kwh`` aus der Übersicht, sonst max(0, Strom − Σ Modi); die
+    WP-Kennzahlen (JAZ, Gründe, Geräte, Kälte) aus der Übersicht des Jahres (P12), ohne sie wie im Client."""
+    monate, f = ctx.monate, ctx.f
+    k = ctx.k
+
+    wp_strom = summe(f("wp_strom_kwh"))
+
+    def kz(name: str, rueckfall: Any = None) -> Any:
+        if k is None:
+            return rueckfall
+        v = k.get(name)
+        return v if v is not None else rueckfall
+
+    modus_heizen = summe(f("wp_modus_strom_heizen_kwh"))
+    modus_kuehlen = summe(f("wp_modus_strom_kuehlen_kwh"))
+    modus_ww = summe(f("wp_modus_strom_warmwasser_kwh"))
+
+    return {
         "wp_strom_kwh": wp_strom,
         "wp_waerme_kwh": summe(f("wp_waerme_kwh")),
         "wp_heizung_kwh": summe(f("wp_heizung_kwh")),
@@ -790,7 +785,38 @@ def falte_zeitraum(
         "wp_betriebsstunden_summe_monat": summe(f("wp_betriebsstunden_summe_monat")),
         "wp_betriebsstunden_max_tag": _max(f("wp_betriebsstunden_max_tag")),
         "hat_waermepumpe": any(m.get("hat_waermepumpe") for m in monate),
+    }
 
+
+def _falte_emob_bkw_sonstiges(ctx: _FaltKontext) -> dict[str, Any]:
+    """E-Mobilität (Verbrauch je 100 km über `eauto_effizienz_zeitraum`), Balkonkraftwerk und Sonstiges: Σ Mengen; die
+    sonstigen Geräte je Kategorie|Bezeichnung summiert, 0 ⇒ kein Wert (gerundet wird am Rand, `runde_rand`)."""
+    monate, f = ctx.monate, ctx.f
+
+    emob = eauto_effizienz_zeitraum(
+        EffizienzWert(None, m.get("emob_verbrauch_quelle") or "keine", m.get("emob_verbrauch_basis_kwh"),
+                      m.get("emob_km") or 0.0)
+        for m in monate
+    )
+
+    sg: dict[str, dict[str, Any]] = {}
+    sg_felder = ("erzeugung_kwh", "eigenverbrauch_kwh", "einspeisung_kwh", "verbrauch_kwh",
+                 "bezug_pv_kwh", "bezug_netz_kwh", "abgabe_kwh", "erloes_euro")
+    for m in monate:
+        for g in m.get("sonstiges_geraete") or []:
+            key = f"{g['kategorie']}|{g['bezeichnung']}"
+            a = sg.setdefault(key, {"bezeichnung": g["bezeichnung"], "kategorie": g["kategorie"],
+                                    **{x: 0 for x in sg_felder}})
+            for x in sg_felder:
+                a[x] = a[x] + (g.get(x) if g.get(x) is not None else 0)
+    # Rundung am Rand (G8, Nachmessung 03.10.): hier nur „0 ⇒ kein Wert", gerundet wird in `jahres_aggregat.runde_rand`.
+    nz = lambda v: v if v > 0 else None  # noqa: E731
+    sonstiges_geraete = [
+        {"bezeichnung": g["bezeichnung"], "kategorie": g["kategorie"], **{x: nz(g[x]) for x in sg_felder}}
+        for g in sg.values()
+    ]
+
+    return {
         "emob_ladung_kwh": summe(f("emob_ladung_kwh")),
         "emob_km": summe(f("emob_km")),
         "emob_verbrauch_100km": emob.wert,
@@ -816,7 +842,27 @@ def falte_zeitraum(
         "sonstiges_bezug_netz_kwh": summe(f("sonstiges_bezug_netz_kwh")),
         "sonstiges_geraete": sonstiges_geraete,
         "hat_sonstiges": any(m.get("hat_sonstiges") for m in monate),
+    }
 
+
+def _falte_leiter_und_soll(ctx: _FaltKontext) -> dict[str, Any]:
+    """Geld und Ergebnis: Σ der Posten, die Ergebnis-Leiter auf den Jahressummen (G2, `falte_posten` mit den
+    Komponenten des Zeitraums) und die SOLL-Erfüllung aus Σ PV gegen Σ SOLL."""
+    monate, f = ctx.monate, ctx.f
+    pv, jahr = ctx.pv, ctx.jahr
+
+    # Ergebnis-Leiter auf den Jahressummen (G2).
+    komponenten = frozenset(
+        x for x, flag in (("waermepumpe", any(m.get("hat_waermepumpe") for m in monate)),
+                          ("emob", any(m.get("hat_emobilitaet") for m in monate)),
+                          ("ust", any(m.get("ust_eigenverbrauch_euro") is not None for m in monate)))
+        if flag
+    )
+    eingang = replace(falte_posten(monate, jahr), komponenten_vorhanden=komponenten)
+    leiter = berechne_ergebnis(eingang)
+    soll = soll_erfuellung(pv, summe(f("soll_pv_kwh")), summe(f("soll_pv_tage")), summe(f("soll_pv_tage_gesamt")))
+
+    return {
         "einspeise_erloes_euro": summe(f("einspeise_erloes_euro")),
         "einspeisung_neg_preis_kwh": summe(f("einspeisung_neg_preis_kwh")),
         "nicht_vergueteter_erloes_euro": summe(f("nicht_vergueteter_erloes_euro")),
@@ -843,7 +889,19 @@ def falte_zeitraum(
         "soll_erfuellung_prozent": soll.prozent,
         "soll_erfuellung_monat_prozent": None,
         "soll_fenster_text": soll.fenster_text,
+    }
 
+
+def _falte_preise(ctx: _FaltKontext) -> dict[str, Any]:
+    """Preise: Netzbezug- und Einspeisepreis verbrauchs- bzw. einspeisegewichtet (`gewichtet`; Monate ohne Menge fallen
+    aus dem Gewicht, ohne jede Menge das Mittel), die Ø-Preise nur, wenn ein Monat sie trägt; Grundgebühr, Anteile."""
+    monate, f = ctx.monate, ctx.f
+
+    # N-680: je Monat der Preis, der für ihn gilt (volle Kaskade inkl. „gemessen"), nicht der Tarifwert.
+    netzbezug_preis_effektiv = [_netzbezug_preis_des_monats(m) for m in monate]
+    netzbezug_preis_herkunft = _netzbezug_preis_herkunft_zeitraum(monate)
+
+    return {
         "netzbezug_preis_cent": gewichtet(netzbezug_preis_effektiv, f("netzbezug_kwh")),
         # N-655: woher der Ø oben stammt — die Formel-Zeile der Kachel liest es (`MonatBilanz.tsx::preisFormel`).
         "netzbezug_preis_herkunft": netzbezug_preis_herkunft,
@@ -867,7 +925,50 @@ def falte_zeitraum(
         "ev_ersparnis_wp_tarif_cent": None,
         "zaehlergebuehr_euro_jahr": next(
             (v for v in reversed(f("zaehlergebuehr_euro_jahr")) if v is not None), None),
+    }
 
+
+def _falte_grundlast_und_details(ctx: _FaltKontext) -> dict[str, Any]:
+    """SOLL-Summen, Grundlast (Anteil = Σ Grundlast ÷ Σ Verbrauch der Monate MIT Grundlast) und die Details: Σ je
+    Investition (Identität vom ersten Vorkommen, Monats-Formeln entfallen), Geräte vereinigt, Feldquellen."""
+    monate, f = ctx.monate, ctx.f
+
+    gl_kwh = summe(f("grundlast_kwh"))
+    gl_basis = summe(m.get("gesamtverbrauch_kwh") for m in monate if m.get("grundlast_kwh") is not None)
+    gl_anteil = (
+        (gl_kwh / gl_basis) * 100
+        if gl_kwh is not None and gl_basis is not None and gl_basis > 0 else None
+    )
+
+    # Per-Investition-Finanzdetails: Σ je Investition, Identität vom ersten Vorkommen; Monats-Formeln entfallen.
+    financials: dict[int, dict[str, Any]] = {}
+    for m in monate:
+        for fin in m.get("investitionen_financials") or []:
+            prev = financials.get(fin["investition_id"])
+            if prev is None:
+                neu = dict(fin)
+                neu.update(formel=None, berechnung=None, erloes_berechnung=None, betriebskosten_jahr_euro=None)
+                financials[fin["investition_id"]] = neu
+                continue
+            prev["betriebskosten_monat_euro"] = prev["betriebskosten_monat_euro"] + fin["betriebskosten_monat_euro"]
+            for feld in ("erloes_euro", "ersparnis_euro"):
+                a, b = prev.get(feld), fin.get(feld)
+                prev[feld] = None if a is None and b is None else (a if a is not None else 0) + (b if b is not None else 0)
+            prev["sonstige_ertraege_euro"] = prev["sonstige_ertraege_euro"] + fin["sonstige_ertraege_euro"]
+            prev["sonstige_ausgaben_euro"] = prev["sonstige_ausgaben_euro"] + fin["sonstige_ausgaben_euro"]
+            if not prev.get("ersparnis_label") and fin.get("ersparnis_label"):
+                prev["ersparnis_label"] = fin["ersparnis_label"]
+
+    geraete: dict[str, list[str]] = {}
+    for m in monate:
+        for typ, namen in (m.get("komponenten_geraete") or {}).items():
+            geraete[typ] = _union([geraete.get(typ, []), namen])
+
+    feld_quellen: dict[str, Any] = {}
+    for m in monate:
+        feld_quellen.update(m.get("feld_quellen") or {})
+
+    return {
         "soll_pv_kwh": summe(f("soll_pv_kwh")),
         "soll_pv_tage": summe(f("soll_pv_tage")),
         "soll_pv_tage_gesamt": summe(f("soll_pv_tage_gesamt")),

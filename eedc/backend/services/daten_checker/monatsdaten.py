@@ -70,6 +70,24 @@ from .monatsdaten_plausibilitaet import (
 _REST_AUFFAELLIG_ANTEIL = 0.25
 
 
+@dataclass
+class _WpMonatsKontext:
+    """Was die Phasen von `MonatsdatenChecks._check_wp_monatsdaten` teilen (RF-50): das Gerät, die Registry-Antworten
+    (`heiz_erwartet`, `ww_strom_gibt_es`), die erwarteten Monate, die Zeilen je Monat (`imd_map`) und die EINE Liste
+    ``ergebnisse``, an die jede Phase in ihrer Reihenfolge anhängt."""
+
+    inv: Investition
+    name: str
+    param: dict
+    ergebnisse: list
+    kat: CheckKategorie
+    erwartete: list
+    getrennte_strommessung: bool
+    heiz_erwartet: bool
+    ww_strom_gibt_es: bool
+    imd_map: dict
+
+
 class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
     """Prüfungen rund um Monatsdaten und Investition-Monatsdaten."""
 
@@ -780,6 +798,12 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         """Prüft WP-Monatsdaten für alle erwarteten Monate ab anschaffungsdatum.
 
         Berücksichtigt getrennte_strommessung und prüft zusätzlich heizenergie_kwh.
+
+        **Phasenform (RF-50, 5.11.2026, Bauform RF-1):** Kopf (erwartete Monate, Registry-Antworten B2, `imd_map`) ·
+        `_wp_modus_widerspruch` (#263 K-2: Σ Betriebsart-Strom > Gesamtstrom) · `_wp_waerme_widerspruch` (N-391:
+        Gesamtwärme < Heizwärme + Warmwasser-Wärme) · `_wp_gesamtzaehler_achsen` (WK-16d: Gesamtzähler < Σ Achsen,
+        Rest > 25 %; N-578-Handgriff) · `_wp_fehlende_monate` (fehlende Strom-/Wärme-Monate je Messmodus, OK-Zeile).
+        Die Reihenfolge der Aufrufe ist die Reihenfolge der Meldungen.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN
@@ -818,6 +842,21 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             (imd.jahr, imd.monat): (imd.verbrauch_daten or {})
             for imd in inv.monatsdaten
         }
+        ctx = _WpMonatsKontext(
+            inv=inv, name=name, param=param, ergebnisse=ergebnisse, kat=kat, erwartete=erwartete,
+            getrennte_strommessung=getrennte_strommessung, heiz_erwartet=heiz_erwartet,
+            ww_strom_gibt_es=ww_strom_gibt_es, imd_map=imd_map,
+        )
+        self._wp_modus_widerspruch(ctx)
+        self._wp_waerme_widerspruch(ctx)
+        self._wp_gesamtzaehler_achsen(ctx)
+        self._wp_fehlende_monate(ctx)
+        return ergebnisse
+
+    @staticmethod
+    def _wp_modus_widerspruch(ctx: _WpMonatsKontext) -> None:
+        """#263 K-2: Σ der Betriebsart-Teilmengen > Gesamtstrom + 0,5 kWh ⇒ eine Warnung mit der Monatsliste."""
+        inv, name, param, ergebnisse, kat, imd_map = ctx.inv, ctx.name, ctx.param, ctx.ergebnisse, ctx.kat, ctx.imd_map
 
         # #263 K-2 (S3, Entscheid E-H): Die Aufteilung nach Betriebsmodus ist
         # eine **Teilmenge** des Gesamtstroms. Beim Schreiben wird das geprüft —
@@ -867,6 +906,11 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 link="/monatsabschluss",
                 investition_id=inv.id,
             ))
+
+    @staticmethod
+    def _wp_waerme_widerspruch(ctx: _WpMonatsKontext) -> None:
+        """N-391: Gesamtwärme < Heizwärme (D1-Weiche) + Warmwasser-Wärme − 0,5 kWh ⇒ eine Warnung mit der Monatsliste."""
+        inv, name, param, ergebnisse, kat, imd_map = ctx.inv, ctx.name, ctx.param, ctx.ergebnisse, ctx.kat, ctx.imd_map
 
         # N-391: **dieselbe Frage auf der Wärmeseite** — eine Aufteilung kann
         # ihre Gesamtmenge nicht übersteigen. Sie steht bewusst hier, direkt
@@ -922,6 +966,12 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 link=link_monat_erfassen(waerme_widerspruch[0]),
                 investition_id=inv.id,
             ))
+
+    @staticmethod
+    def _wp_gesamtzaehler_achsen(ctx: _WpMonatsKontext) -> None:
+        """WK-16d: Gesamtzähler < Σ Achsen (Warnung) und Rest > `_REST_AUFFAELLIG_ANTEIL` der Menge (INFO-Frage), beide
+        aus `wp_strom_aufteilung`; N-578: der Handgriff «Feld leeren» an Formular-Werten ohne Summen-Marke."""
+        inv, name, param, ergebnisse, kat, imd_map = ctx.inv, ctx.name, ctx.param, ctx.ergebnisse, ctx.kat, ctx.imd_map
 
         # ── WK-16d: der Gesamt-Stromzähler und seine Achsen ──────────────────
         #
@@ -1048,6 +1098,14 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 link=LINK_DATENQUELLEN,
                 investition_id=inv.id,
             ))
+
+    @staticmethod
+    def _wp_fehlende_monate(ctx: _WpMonatsKontext) -> None:
+        """Fehlende Strom-/Wärme-Monate je Messmodus (nicht getrennt: Stromverbrauch; getrennt: beide Seiten bzw. eine
+        Seite mit erfasster Wärme, B5 ohne Warmwasser-Seite; N-391 Wärme-Gruppe) und die OK-Zeile «vollständig»."""
+        inv, name, param, ergebnisse, kat, imd_map = ctx.inv, ctx.name, ctx.param, ctx.ergebnisse, ctx.kat, ctx.imd_map
+        erwartete, getrennte_strommessung = ctx.erwartete, ctx.getrennte_strommessung
+        heiz_erwartet, ww_strom_gibt_es = ctx.heiz_erwartet, ctx.ww_strom_gibt_es
 
         fehlend_strom: list[str] = []
         fehlend_strom_heizen: list[str] = []
@@ -1211,8 +1269,6 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"{name}: Monatsdaten vollständig ({len(erwartete)} Monate)",
             ))
-
-        return ergebnisse
 
     async def _check_modus_split_nicht_gespeichert(self, anlage: Anlage) -> list[CheckErgebnis]:
         """N-597: Aufteilung nach Betriebsart, die der Monatsabschluss nicht speichern kann.

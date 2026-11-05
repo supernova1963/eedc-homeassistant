@@ -18,6 +18,7 @@ braucht. ⛔ Hier stand in Fassung 3 der Vorlage, die Zeilen kämen aus
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
 
@@ -297,6 +298,23 @@ def _leer_um_und_reicht(
     return leer_slot, reicht, round(end_soc, 1), min_slot
 
 
+@dataclass
+class _PreisSpeicherKontext:
+    """Die Eingänge der Stufe 3b für ihre Phasen (RF-51). ``bezug_jetzt`` setzt `_bezugspreis_jetzt`; die
+    Speicher-Phase liest ihn für die Netzladekosten (ohne Bezugspreise bleibt er ``None``)."""
+
+    sensor_values: list
+    prognose: dict
+    preis: dict
+    fenster_ctx: Any
+    bezugspreise: Any
+    speicher_eta: dict
+    heute: date
+    jetzt_stunde: int
+    jetzt_slot: int
+    bezug_jetzt: Optional[float] = None
+
+
 async def preise_speicher_sensoren(
     *,
     anlage,
@@ -315,93 +333,128 @@ async def preise_speicher_sensoren(
     Orchestrator hat sie vor ``steuerungs_sensoren`` geholt, weil P3 sie dort
     schon braucht. Eine zweite Beschaffung wäre eine zweite Wahrheit über
     denselben Moment.
-    """
-    from backend.core.berechnungen.preis_reihe import wert_je_kwh
-    from backend.core.berechnungen.speicher_kosten import eta_anlage, speicher_kwh_kosten
-    from backend.api.routes.ha_export.anlage_steuerung import _hhmm_beginn, _iso, _iso_ende
 
+    **Phasenform (RF-51, 5.11.2026, Bauform RF-1):** `_bezugspreis_jetzt` (1 Bezugspreis jetzt, 2 Einspeisevergütung)
+    und `_eigenverbrauchswert` (3) — beide nur mit Bezugspreisen · `_speicher_kosten` (η der Anlage, 4 Speicherstrom,
+    5 Netzladen) · `_speicher_reichweite` (6 leer um, 7 reicht bis Mitternacht) · `_abregelung_und_51` (8 Abregelung,
+    9 §51). Jede Phase hängt ihre Sensoren an ``sensor_values`` an; die Reihenfolge der Aufrufe ist die der Sensoren.
+    """
     prognose = prognose or {}
     preis = preis or {}
     jetzt_slot = jetzt_stunde + 1          # backward: die laufende Stunde
+    ctx = _PreisSpeicherKontext(
+        sensor_values=sensor_values, prognose=prognose, preis=preis, fenster_ctx=fenster_ctx,
+        bezugspreise=bezugspreise, speicher_eta=speicher_eta, heute=heute, jetzt_stunde=jetzt_stunde,
+        jetzt_slot=jetzt_slot,
+    )
+    if bezugspreise is not None:
+        _bezugspreis_jetzt(ctx)
+        _eigenverbrauchswert(ctx)
+    _speicher_kosten(ctx)
+    _speicher_reichweite(ctx)
+    _abregelung_und_51(ctx)
+    return {}
+
+
+def _bezugspreis_jetzt(ctx: _PreisSpeicherKontext) -> None:
+    """Sensoren 1 und 2 — der Bezugspreis der laufenden Stunde (Formeltext `_bezug_berechnung`) und die
+    Einspeisevergütung. Nur mit Bezugspreisen (der Orchestrator fragt); setzt ``ctx.bezug_jetzt``."""
+    sensor_values, preis, bezugspreise, jetzt_slot = ctx.sensor_values, ctx.preis, ctx.bezugspreise, ctx.jetzt_slot
 
     # ── 1 · Bezugspreis jetzt ───────────────────────────────────────────────
-    bezug_jetzt: Optional[float] = None
     ev_grund: Optional[str] = None
-    speicher_grund: Optional[str] = None
-    if bezugspreise is not None:
-        reihe = bezugspreise.allgemein
-        bezug_jetzt = _jetzt_preis(reihe, jetzt_slot)
-        aufschlag = bezugspreise.aufschlag
-        wp = bezugspreise.waermepumpe
-        wp_eigen = bezugspreise.wp_eigener_tarif and wp.hat_preis
-        if not reihe.ist_vollstaendig:
-            ev_grund = (
-                "dynamischer Tarif ohne ableitbaren Aufschlag — die nackte Börse "
-                "gegen eine Vertragsvergütung wäre keine Näherung, sondern eine "
-                "Differenz aus zwei Preisebenen"
-            )
+    reihe = bezugspreise.allgemein
+    bezug_jetzt = _jetzt_preis(reihe, jetzt_slot)
+    aufschlag = bezugspreise.aufschlag
+    wp = bezugspreise.waermepumpe
+    wp_eigen = bezugspreise.wp_eigener_tarif and wp.hat_preis
+    if not reihe.ist_vollstaendig:
+        ev_grund = (
+            "dynamischer Tarif ohne ableitbaren Aufschlag — die nackte Börse "
+            "gegen eine Vertragsvergütung wäre keine Näherung, sondern eine "
+            "Differenz aus zwei Preisebenen"
+        )
+    _anhaengen(
+        sensor_values, "eedc_bezugspreis_jetzt_cent", bezug_jetzt,
+        {
+            "preisquelle": reihe.quelle,
+            "aufschlag_cent": aufschlag.cent if aufschlag else None,
+            "aufschlag_quelle": aufschlag.quelle if aufschlag else (
+                "keiner" if reihe.quelle == "boersenpreis" else None
+            ),
+            "aufschlag_basis": aufschlag.basis if aufschlag else None,
+            "ust_prozent": bezugspreise.ust_prozent if aufschlag else None,
+            "tarif": getattr(bezugspreise.tarif_heute, "vertragsart", None) or "fest",
+            "gueltig_ab": (
+                getattr(bezugspreise.tarif_heute, "gueltig_ab", None).isoformat()
+                if getattr(bezugspreise.tarif_heute, "gueltig_ab", None) else None
+            ),
+            "markt": preis.get("markt") if reihe.quelle in
+                     ("boersenpreis", "boerse_plus_aufschlag") else None,
+            "slot_konvention": "backward",
+            "stundenprofil_cent": _tagesteil(reihe.preis_cent, 0, 24),
+            "stundenprofil_morgen_cent": _tagesteil(reihe.preis_cent, 24, 48),
+            "waermepumpe_cent": _jetzt_preis(wp, jetzt_slot) if wp_eigen else None,
+            "waermepumpe_preisquelle": wp.quelle if wp_eigen else None,
+            "zeitfenster_ignoriert": bezugspreise.zeitfenster_ignoriert or None,
+            "eigenverbrauch_wert_grund": ev_grund,
+            "verguetung_grund": bezugspreise.verguetung_grund,
+        },
+        berechnung=_bezug_berechnung(reihe, aufschlag, bezugspreise.ust_prozent),
+    )
+    ctx.bezug_jetzt = bezug_jetzt
+
+    # ── 2 · Einspeisevergütung ──────────────────────────────────────────
+    _anhaengen(
+        sensor_values, "eedc_einspeiseverguetung_cent", bezugspreise.verguetung_cent,
+        {
+            "verguetung_quelle": bezugspreise.verguetung_quelle,
+            "tarif": getattr(bezugspreise.tarif_heute, "vertragsart", None) or "fest",
+            "einspeisung_variabel": bezugspreise.einspeisung_variabel,
+        },
+    )
+
+
+def _eigenverbrauchswert(ctx: _PreisSpeicherKontext) -> None:
+    """Sensor 3 — Bezug − Vergütung (`wert_je_kwh`), nur mit vollständigem Bezugspreis (Flex P-5)."""
+    from backend.core.berechnungen.preis_reihe import wert_je_kwh
+
+    sensor_values, bezugspreise, bezug_jetzt = ctx.sensor_values, ctx.bezugspreise, ctx.bezug_jetzt
+    reihe, aufschlag = bezugspreise.allgemein, bezugspreise.aufschlag
+
+    # ── 3 · Was der Eigenverbrauch wert ist ─────────────────────────────
+    #
+    # ⚠ **Nur mit VOLLSTÄNDIGEM Bezugspreis** (Flex P-5): „nackte Börse
+    # minus Vertragsvergütung" wäre keine Näherung, sondern eine Differenz
+    # aus zwei verschiedenen Preisebenen.
+    if reihe.ist_vollstaendig:
         _anhaengen(
-            sensor_values, "eedc_bezugspreis_jetzt_cent", bezug_jetzt,
+            sensor_values, "eedc_eigenverbrauch_wert_cent",
+            wert_je_kwh(bezug_jetzt, bezugspreise.verguetung_cent),
             {
                 "preisquelle": reihe.quelle,
-                "aufschlag_cent": aufschlag.cent if aufschlag else None,
-                "aufschlag_quelle": aufschlag.quelle if aufschlag else (
-                    "keiner" if reihe.quelle == "boersenpreis" else None
-                ),
-                "aufschlag_basis": aufschlag.basis if aufschlag else None,
-                "ust_prozent": bezugspreise.ust_prozent if aufschlag else None,
-                "tarif": getattr(bezugspreise.tarif_heute, "vertragsart", None) or "fest",
-                "gueltig_ab": (
-                    getattr(bezugspreise.tarif_heute, "gueltig_ab", None).isoformat()
-                    if getattr(bezugspreise.tarif_heute, "gueltig_ab", None) else None
-                ),
-                "markt": preis.get("markt") if reihe.quelle in
-                         ("boersenpreis", "boerse_plus_aufschlag") else None,
-                "slot_konvention": "backward",
-                "stundenprofil_cent": _tagesteil(reihe.preis_cent, 0, 24),
-                "stundenprofil_morgen_cent": _tagesteil(reihe.preis_cent, 24, 48),
-                "waermepumpe_cent": _jetzt_preis(wp, jetzt_slot) if wp_eigen else None,
-                "waermepumpe_preisquelle": wp.quelle if wp_eigen else None,
-                "zeitfenster_ignoriert": bezugspreise.zeitfenster_ignoriert or None,
-                "eigenverbrauch_wert_grund": ev_grund,
-                "verguetung_grund": bezugspreise.verguetung_grund,
-            },
-            berechnung=_bezug_berechnung(reihe, aufschlag, bezugspreise.ust_prozent),
-        )
-
-        # ── 2 · Einspeisevergütung ──────────────────────────────────────────
-        _anhaengen(
-            sensor_values, "eedc_einspeiseverguetung_cent", bezugspreise.verguetung_cent,
-            {
                 "verguetung_quelle": bezugspreise.verguetung_quelle,
-                "tarif": getattr(bezugspreise.tarif_heute, "vertragsart", None) or "fest",
-                "einspeisung_variabel": bezugspreise.einspeisung_variabel,
+                "aufschlag_quelle": aufschlag.quelle if aufschlag else None,
+                "slot_konvention": "backward",
+                "stundenprofil_cent": _ev_profil(reihe.preis_cent, bezugspreise.verguetung_cent, 0, 24),
+                "stundenprofil_morgen_cent": _ev_profil(reihe.preis_cent, bezugspreise.verguetung_cent, 24, 48),
             },
+            berechnung=(
+                f"{fmt_zahl(bezug_jetzt, 2)} ct Bezug − {fmt_zahl(bezugspreise.verguetung_cent, 2)} ct Vergütung"
+                if bezug_jetzt is not None and bezugspreise.verguetung_cent is not None
+                else None
+            ),
         )
 
-        # ── 3 · Was der Eigenverbrauch wert ist ─────────────────────────────
-        #
-        # ⚠ **Nur mit VOLLSTÄNDIGEM Bezugspreis** (Flex P-5): „nackte Börse
-        # minus Vertragsvergütung" wäre keine Näherung, sondern eine Differenz
-        # aus zwei verschiedenen Preisebenen.
-        if reihe.ist_vollstaendig:
-            _anhaengen(
-                sensor_values, "eedc_eigenverbrauch_wert_cent",
-                wert_je_kwh(bezug_jetzt, bezugspreise.verguetung_cent),
-                {
-                    "preisquelle": reihe.quelle,
-                    "verguetung_quelle": bezugspreise.verguetung_quelle,
-                    "aufschlag_quelle": aufschlag.quelle if aufschlag else None,
-                    "slot_konvention": "backward",
-                    "stundenprofil_cent": _ev_profil(reihe.preis_cent, bezugspreise.verguetung_cent, 0, 24),
-                    "stundenprofil_morgen_cent": _ev_profil(reihe.preis_cent, bezugspreise.verguetung_cent, 24, 48),
-                },
-                berechnung=(
-                    f"{fmt_zahl(bezug_jetzt, 2)} ct Bezug − {fmt_zahl(bezugspreise.verguetung_cent, 2)} ct Vergütung"
-                    if bezug_jetzt is not None and bezugspreise.verguetung_cent is not None
-                    else None
-                ),
-            )
+
+def _speicher_kosten(ctx: _PreisSpeicherKontext) -> None:
+    """Sensoren 4 und 5 — η der Anlage (`eta_anlage`: Minimum, ``None`` sobald EIN Speicher keinen hat), Speicherstrom
+    = Vergütung ÷ η, Netzladen = Bezug ÷ η (nur wenn ein Speicher aus dem Netz lädt); beide nur mit Bezugspreisen."""
+    from backend.core.berechnungen.speicher_kosten import eta_anlage, speicher_kwh_kosten
+
+    sensor_values, bezugspreise, speicher_eta, bezug_jetzt = (
+        ctx.sensor_values, ctx.bezugspreise, ctx.speicher_eta, ctx.bezug_jetzt)
+    speicher_grund: Optional[str] = None
 
     # ── 4+5 · Was Speicherstrom kostet ──────────────────────────────────────
     eta = eta_anlage([i.wirkungsgrad for i in speicher_eta.values()])
@@ -459,6 +512,13 @@ async def preise_speicher_sensoren(
                 ),
             )
 
+
+def _speicher_reichweite(ctx: _PreisSpeicherKontext) -> None:
+    """Sensoren 6 und 7 — «leer um» und «reicht bis Mitternacht» aus der SoC-Reihe der Simulation (`_leer_um_und_reicht`)."""
+    from backend.api.routes.ha_export.anlage_steuerung import _iso_ende
+
+    sensor_values, prognose, heute = ctx.sensor_values, ctx.prognose, ctx.heute
+
     # ── 6+7 · Leer um / reicht bis Mitternacht ──────────────────────────────
     leer_slot, reicht, end_soc, min_slot = _leer_um_und_reicht(
         prognose.get("speicher_soc_pro_stunde"), prognose.get("speicher_sim_start_stunde"),
@@ -499,6 +559,14 @@ async def preise_speicher_sensoren(
                 **sim_annahme,
             },
         )
+
+
+def _abregelung_und_51(ctx: _PreisSpeicherKontext) -> None:
+    """Sensoren 8 und 9 — Abregelung heute (Σ Roh − gekappt, 0 ist ein Wert) und §51 (Börse < 0 ∧ PV-Prognose > 0)."""
+    from backend.api.routes.ha_export.anlage_steuerung import _hhmm_beginn
+
+    sensor_values, prognose, preis, fenster_ctx = ctx.sensor_values, ctx.prognose, ctx.preis, ctx.fenster_ctx
+    jetzt_stunde, jetzt_slot = ctx.jetzt_stunde, ctx.jetzt_slot
 
     # ── 8 · Abregelung heute ────────────────────────────────────────────────
     #
@@ -558,7 +626,7 @@ async def preise_speicher_sensoren(
                 **(fenster_ctx.profil_attribute if fenster_ctx is not None else {}),
             },
         )
-    return {}
+
 
 
 def _bezug_berechnung(reihe, aufschlag, ust) -> Optional[str]:

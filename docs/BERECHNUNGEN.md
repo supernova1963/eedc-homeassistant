@@ -800,6 +800,32 @@ Monat zwischen Inbetriebnahme und heute, der gemessene Mengen trägt — auch oh
   der gemittelten Mengen, nicht das Mittel der Prozente.
 * Kopfzahl = das Jahr bis heute (inkl. laufendem Monat); Vergleich, Vorjahr, Ø-Jahr nur über abgeschlossene Monate.
 
+Die übrigen Faltungsregeln, die eine eigene Formel tragen (M = Monate des Zeitraums):
+
+```
+η Speicher (Jahr)        = speicher_wirkungsgrad(Σ_M Ladung, Σ_M Entladung)      Quelle „fenster_lang"
+                           (eine Quote der Jahressummen — kein Mittel der Monats-η)
+Netzbezug-Preis (Ø)      = Σ(Preis_m × Netzbezug_m) ÷ Σ Netzbezug_m               Preis_m = Kaskaden-Preis des
+                           über die Monate mit Preis UND Menge; Σ Menge = 0        Monats (N-680)
+                           ⇒ ungewichtetes Mittel der Monatspreise
+Einspeise-Preis (Ø)      = Σ(Preis_m × Einspeisung_m) ÷ Σ Einspeisung_m          dieselbe Regel
+…_durchschnittspreis     = der gewichtete Ø oben, nur wenn ein Monat ihn trägt, sonst None
+Grundlast-Anteil         = Σ Grundlast_kWh ÷ Σ Gesamtverbrauch_m × 100           Nenner NUR über Monate mit
+                                                                                  Grundlast; Nenner 0 ⇒ None
+Grundlast (kW)           = Mittel der Monate
+WP nicht aufgeteilt      = Übersicht des Jahres (P12), sonst
+                           max(0, Σ WP-Strom − Σ Modus Heizen − Σ Kühlen − Σ Warmwasser)
+Quote paarweise          = Σ Zähler ÷ Σ Nenner × 100, Nenner 0 ⇒ None
+```
+
+Die WP-Kennzahlen (JAZ, Gründe, Geräte, Kälte) kommen aus der Übersicht des Jahres, ohne sie bleiben nur die Mengen.
+Investitions-Finanzzeilen werden je Investition summiert (Identität vom ersten Vorkommen, die Monats-Formeln entfallen;
+zwei fehlende Erlöse bleiben fehlend), sonstige Geräte je Kategorie und Bezeichnung (0 ⇒ kein Wert). **Code-Ort:**
+`falte_zeitraum` setzt die Antwort aus den Teilstücken seiner Phasen zusammen (RF-52) — `_falte_kopf_und_bilanz` (Mengen,
+Autarkie/EV-Quote/Wandlungsverluste paarweise) · `_falte_speicher` (η, Auslastung, Netzlade-Preis) · `_falte_wp` ·
+`_falte_emob_bkw_sonstiges` · `_falte_leiter_und_soll` (Leiter, SOLL) · `_falte_preise` (gewichtete Preise, Grundgebühr) ·
+`_falte_grundlast_und_details`; gerundet wird erst am Rand der Jahresroute (`services/jahres_aggregat.py::runde_rand`).
+
 
 **Endpoint:** `GET /api/cockpit/uebersicht/{anlage_id}` in `cockpit.py`
 
@@ -1307,6 +1333,46 @@ kostenneutrale Durchleitung (z. B. Backup-Vorhaltung).
 > Komponenten-Hub addiert beide Posten, netzgeladene Energie zählte damit doppelt. Die Formel im
 > Layer zu haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht
 > (ADR-001).
+
+#### Preis- und Speicher-Sensoren des HA-Exports (Stufe 3b)
+
+Neun anlagenweite Sensoren für Automationen in Home Assistant — **Momentwerte je kWh** der laufenden Stunde, keine
+Monats- oder Jahresgröße. Rechenort `api/routes/ha_export/anlage_preise_speicher.py::preise_speicher_sensoren` (eine
+Phase von `calculate_anlage_sensors`; sie lädt nichts — Bezugspreis-Reihen und Wirkungsgrade je Speicher holt der
+Orchestrator vorher, weil die Steuerungs-Sensoren dieselben brauchen). Die Formeln darunter liegen im Layer
+(`core/berechnungen/preis_reihe.py`, `speicher_kosten.py`). `Slot` = die laufende Stunde in Backward-Konvention
+(`jetzt_stunde + 1`).
+
+```
+Bezugspreis jetzt     = (1 + USt) × Börsenpreis_Slot + Aufschlag     dynamischer Tarif mit ableitbarem Aufschlag
+                      = Börsenpreis_Slot                              dynamisch ohne Aufschlag (Näherung, „unvollständig")
+                      = Arbeitspreis des Zeitfensters / des Tarifs    Zeitfenster / Festpreis
+Einspeisevergütung    = Vergütung des Tarifs bzw. gepflegter Monatswert
+Eigenverbrauch-Wert   = Bezugspreis jetzt − Einspeisevergütung        NUR bei vollständigem Bezugspreis (Flex P-5)
+η Anlage              = min(η je Speicher)                            None, sobald EIN Speicher weder gemessenen noch
+                                                                      gepflegten Wirkungsgrad hat (kein Vorgabewert)
+Speicherstrom-Kosten  = Einspeisevergütung ÷ η Anlage                 entgangene Vergütung je entnommener kWh
+Netzladekosten        = Bezugspreis jetzt ÷ η Anlage                  nur wenn ein Speicher „lädt aus dem Netz" hat
+Leer um               = Ende des ersten Slots NACH dem Sim-Start mit SoC_vorher > 2 % und SoC ≤ 2 %
+Reicht bis Mitternacht= kein solcher Übergang UND End-SoC (letzter Slot des Tages) > 2 %
+Abregelung heute      = Σ_Stunden (Rohprognose − an der Wechselrichter-Grenze gekappt)   Skala der Rohprognose
+Einspeisung unerwünscht (§51) = Börsenpreis_Stunde < 0  UND  PV-Prognose_Slot > 0
+```
+
+* **Kein Wert ⇒ kein Sensor** (ADR-002/P4): fehlt ein Eingang (Vergütung, η, Bezugspreise, SoC-Reihe, AC-Grenze,
+  Börsenpreis der Stunde), entsteht der Sensor nicht — eine 0 wäre in HA eine Messung. Ausnahme in die andere Richtung:
+  Abregelung **0** ist ein Wert („heute wird nichts abgeregelt").
+* Die beiden Speicher-Sensoren und die Abregelung/§51 laufen auch ohne Bezugspreise; Bezugspreis, Vergütung und
+  Eigenverbrauch-Wert nur mit ihnen. «Leer um» und «reicht» kommen aus **einem** Simulationslauf
+  (`_leer_um_und_reicht`, Start beim zuletzt gemessenen Ladestand, V1) — «leer um» darf deshalb in der Vergangenheit
+  liegen. §51 ist **nicht tarifgebunden**: es zählt die Börse, nicht der eigene Bezugspreis.
+* **Abgrenzung zum Spread oben:** der Spread bewertet die **Ersparnis** einer entladenen kWh über einen Monat
+  (Bezug − Vergütung bzw. Bezug − Ladepreis). Die Speicherstrom-Kosten sind der **Preis** einer entnommenen kWh jetzt
+  (Vergütung ÷ η) — eine andere Größe für eine andere Frage (lohnt es, jetzt aus dem Speicher zu verbrauchen?).
+* **Code-Ort je Phase (RF-51):** `_bezugspreis_jetzt` (Bezugspreis, Vergütung; Formeltext `_bezug_berechnung`) ·
+  `_eigenverbrauchswert` · `_speicher_kosten` (η Anlage, Speicherstrom, Netzladen) · `_speicher_reichweite` (leer um,
+  reicht bis Mitternacht) · `_abregelung_und_51`. Anwender-Wortlaut und Attribute:
+  [SENSOR-REFERENZ §11](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha).
 
 #### Welche Stunde gilt — Ladestand, Preis und Menge (N-387, 2026-09-23)
 
@@ -1913,6 +1979,28 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > **Die Toleranz steht an einer Stelle** (`wp_strom_toleranz_kwh`): 1 % der Summe, mindestens
 > 0,5 kWh im Monat bzw. 0,05 kWh im Tag. Liegt der Gesamtzähler weiter darunter, tragen die Achsen
 > und der Daten-Checker meldet den Widerspruch.
+>
+> **Was der Daten-Checker aus derselben Auflösung fragt** (`services/daten_checker/monatsdaten.py`,
+> Phasen von `MonatsdatenChecks._check_wp_monatsdaten`, RF-50):
+>
+> ```
+> Widerspruch   (Warnung) : gesamtzaehler_zu_klein                         — Toleranz wie oben
+> Rest-Frage    (INFO)    : Rest_kWh > 0,25 × Menge_kWh, nur wenn Σ Achsen > 0  (_REST_AUFFAELLIG_ANTEIL;
+>                                                                            genau 25 % fragt nicht)
+> Modus-Teilmengen (Warnung): Σ modus_strom_* > get_wp_strom_kwh + 0,5 kWh (#263 K-2)
+> Wärme-Teile   (Warnung) : Heizwärme (D1-Weiche) + Warmwasser-Wärme > waerme_kwh + 0,5 kWh (N-391)
+> ```
+>
+> Die Rest-Frage ist **kein Fehler** — Standby, Steuerung und Umwälzpumpen laufen auf keiner Achse;
+> ein Viertel trennt „Systemverbrauch" von „da hängt vermutlich noch etwas anderes am Zähler". Eine
+> Zeile, deren Achsen nichts tragen (nur Gesamtzähler, oder nur eine gemessene 0), hat keine
+> Aufteilung und deshalb keine Frage. **Fehlende Monate je Messmodus** (`_wp_fehlende_monate`): ohne
+> getrennte Strommessung fehlt `stromverbrauch_kwh`; mit getrennter Strommessung fehlen beide Achsen
+> ⇒ **eine** Meldung („Strom Heizen/Warmwasser", an einer Klimaanlage ohne Warmwasser-Seite „Strom
+> Heizen"), fehlt nur **eine** Achse ⇒ je Seite eine Meldung, aber nur, wenn die Wärme dieser Seite
+> erfasst ist (sonst zählte jede reine Heiz-Anlage zwölf Lücken im Jahr). Heizwärme fehlt nur, wenn
+> weder `heizenergie_kwh` noch `waerme_kwh` steht (Gruppe `wp_waerme`). Wortlaut und Handgriffe:
+> [HANDBUCH_DATEN_CHECKER §4.3.7](HANDBUCH_DATEN_CHECKER.md#437-wärmepumpe).
 >
 > ⛔ **Bis zum 14.09.2026 galt eine erste Stufe davor:** War die feine Aufteilung vollständig,
 > wurde der Gesamtzähler verworfen — *„sonst zählte derselbe Strom zweimal"*. Der Satz stimmte für
