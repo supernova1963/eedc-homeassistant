@@ -2663,9 +2663,9 @@ JAZ` anbietet (bzw. SCOP/COP je Funktion nach `effizienz_modus`). Seit B1 gilt d
 
 | Feld | Basis-Strom | Sprosse | wenn nicht … |
 | --- | --- | --- | --- |
-| **Heizwärme** | gemessener Heizbetrieb `betriebsart_strom_heizen_kwh` | F4 | … dann `strom_heizen_kwh` (getrennte Messung, F5) |
-| | | | … dann `stromverbrauch_kwh` (F2) — **nur ohne fremde Spur** in der Zeile: kein gemessener Kühl-/Lüft-/Entfeucht-Strom, keine Kältemenge, kein getrennter Warmwasser-Strom. Sonst **kein Vorschlag** |
-| **Warmwasser-Wärme** | `strom_warmwasser_kwh` (getrennte Messung, F5) | F5 | ohne getrennte Strommessung **kein Vorschlag** — die Menge steckt im Heizwärme-Vorschlag (Gesamtwärme landet unter „Heizwärme", N-391) |
+| **Heizwärme** | gemessener Heizbetrieb `betriebsart_strom_heizen_kwh` | F4 | … dann `strom_heizen_kwh` (getrennte Messung, F5), sonst **kein Vorschlag** |
+| **Warmwasser-Wärme** | `strom_warmwasser_kwh` (getrennte Messung, F5) | F5 | ohne getrennte Strommessung **kein Vorschlag** — die Menge steckt im Vorschlag *Wärme gesamt* |
+| **Wärme gesamt** (`waerme_kwh`) | `stromverbrauch_kwh` (F2) — **nur ohne getrennte Strommessung und ohne fremde Spur** in der Zeile: kein gemessener Kühl-/Lüft-/Entfeucht-Strom, keine Kältemenge, kein getrennter Warmwasser-Strom | F2 | sonst **kein Vorschlag**. Seit N-391 (14.09.2026) steht der F2-Zweig hier und nicht mehr unter *Heizwärme*, und er braucht die gepflegte **JAZ** — eine Funktions-Arbeitszahl (SCOP/COP) auf dem Gesamtstrom ergäbe eine Menge, die keine Funktion beschreibt |
 
 **Der Vorschlag trägt die Marke `jaz_vorschlag`** (`REGEL_JAZ_VORSCHLAG`, zweite Regel neben
 `jaz_modus_split`): der Client meldet sie beim Übernehmen zurück (`abgeleitet_felder`), die
@@ -2682,6 +2682,32 @@ der Dienst `E_gesamt × JAZ` — 254 kWh Kühlstrom wurden 889 kWh „Warmwasser
 Lesestelle als Messung. ⚠ **Die Bauart entscheidet hier nichts** (R1, ADR-002/P13): ob der
 Gesamtstrom der Heizstrom ist, sagt die Beleglage der Zeile, nicht `wp_art`. Proben:
 `test_waerme_vorschlag_b1.py`.
+
+**Alle berechneten Vorschläge des Monatsabschlusses** (`vorschlag_service.py::VorschlagService._get_berechnete_werte`,
+nur an einem Gerätefeld, `investition_id` gesetzt; die Liste sortiert `get_vorschlaege` nach Konfidenz — Vormonat 80,
+Vorjahr 70, Ø 12 Monate 50):
+
+```
+Wärme (Heiz-/WW-/Gesamt) = round(Basis-Strom × Arbeitszahl, 1)          Konfidenz 60 · berechnung · Marke jaz_vorschlag
+    Arbeitszahl:  Wärme gesamt → jaz (N-391)
+                  Heiz/WW: effizienz_modus gesamt_jaz (Default) → jaz · scop → scop_heizung | scop_warmwasser
+                           getrennte_cops → cop_heizung | cop_warmwasser · anderer Modus → keine
+                  keine oder 0 ⇒ kein Vorschlag
+Gesamtstrom (stromverbrauch_kwh) = round(strom_heizen_kwh + strom_warmwasser_kwh, 1)
+                                   nur bei getrennter Strommessung und beiden Werten   Konfidenz 95 · berechnung
+Speicher-Ladepreis (speicher_ladepreis_cent) = round(effektiver Ladepreis des Monats, 2)   (#264, R15-2)
+    stundengewichtet aus Netzladung × Strompreis-Mitschrift, Fenster Monatserster … Monatsletzter (`speicher_wirtschaftlichkeit.berechne_effektiver_ladepreis`)
+    Konfidenz 90 bei Quelle dyn-tarif | boersenpreis, sonst 55 (Text nennt dann die Abdeckung in %)
+    ohne Preis oder bei einem Fehler im Lesen: kein Vorschlag (der Abschluss stirbt nie daran)
+km aus Tachostand (km_gefahren) = round(km_stand − km_stand des Vormonats, 0)        Konfidenz 95 · berechnung
+    nur mit beiden Ständen und Ende ≥ Anfang — ein rückwärts laufender Stand gibt keinen Vorschlag (#407, #396)
+km aus Jahresfahrleistung       = round(jahresfahrleistung_km / 12, 0)                Konfidenz 30 · parameter
+    nur bei gepflegter Jahresfahrleistung > 0
+```
+
+Code-Orte (RF-84, 5.11.2026): `_wp_vorschlaege` (Wärme mit `_arbeitszahl`, Gesamtstrom) · `_speicher_ladepreis` ·
+`_eauto_km` (Tachostand, Jahresfahrleistung). Proben: `test_vorschlag_ladepreis_r15_2.py`, `test_407_tachostand.py`,
+`test_rf83_community_vorschlag_korrektur_phasen.py`.
 #### 3.5d Arbeitszahl je Funktion und die Arbeitszahl Kühlen (W-4 · W-5)
 
 ⛔ **Dieser Abschnitt fehlte bis zum 27.08.2026 vollständig** — beide Größen waren gebaut und in
@@ -3757,6 +3783,45 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Netzbezugspreis
 
 ---
 
+### 3.11 Community-Datensatz: abgeleitete Stammdaten
+
+Der Datensatz, den eedc an den Community-Server schickt (`services/community_service.py::prepare_community_data`,
+Aufrufer: Vorschau/Teilen `api/routes/community.py`, Monatsabschluss, nächtliches Nachsenden), beschreibt die
+**heutige Ausstattung** der Anlage. Der Server rechnet nichts nach — jede Zahl hier geht so in den Benchmark ein, wie
+eedc sie bildet. Schlüssel, Namen und Rundungen sind der Vertrag mit `eedc-community` (Kopf des Datensatzes,
+`monatswerte` je Monat nach `backend/schemas.py::MonatswertInput`).
+
+```
+Region          = Land (AT/CH/IT) | Bundesland aus der PLZ (DE) | "XX"
+kwp             = round(Anlagen-kWp, 1)
+Jetzt-Menge     = Investitionen mit ist_aktiv_an(heute)                               (F-24, N-617)
+speicher_kwh    = round(Σ Brutto-Kapazität der heute aktiven Speicher, 1)  | None bei 0  (F-24)
+wallbox_kw      = max Ladeleistung der heute aktiven Wallboxen             | None bei 0  (N-617)
+bkw_wp          = Σ je heute aktivem Balkonkraftwerk:
+                    Σ kWp der heute aktiven Modul-Kinder × 1000, falls es Kinder hat     (E5, N-266)
+                    sonst leistung_wp × anzahl (anzahl fehlt oder 0 ⇒ 1)
+                  | None bei 0
+neigung_grad    = int(Ø Neigung der Erzeuger)        Erzeuger = Selektor(Jetzt-Menge ∩ {pv-module, balkonkraftwerk})
+ausrichtung     = ein Erzeuger mit „Ost-West"                       ⇒ "ost-west"
+                  sonst Azimute (Kompass, 180 = Süd) mit Spanne > 45°:
+                      einer in 60–120° UND einer in 240–300°        ⇒ "ost-west", sonst "gemischt"
+                  sonst Label von int(Ø Azimut)  (8 Sektoren à 45°)
+                  ohne Erzeuger: 30° und "süd" (Defaults)
+sonstiges       = die ersten 3 nicht leeren Bezeichnungen der Sonstiges-Geräte, mit „, " verbunden
+hat_* / wp_art  = alle erfassten Geräte (ohne Zeitfilter); wp_art und kuehlung_art der ersten Wärmepumpe
+installation_jahr = Jahr des Installationsdatums, sonst das laufende Jahr
+soll_jahr_kwh   = round(Jahresertrag der aktiven PVGIS-Prognose, 1)  | None ohne aktive Prognose oder bei 0 (#387)
+```
+
+Die Monatswerte kommen aus den **Monats-Fakten** (ADR-002/P10, `_monatswert` je Fakt mit seinen Filtern — u. a. ohne
+Zählerzeile bzw. erfasste Netzfelder und ohne PV kein Monatswert); `monate_vollstaendig` sagt dem Server, dass der Datensatz alle teilbaren
+Monate trägt (N18-2). Die Ausstattungs-Merkmale `hat_*` und `wp_art` laufen bewusst ohne Zeitfilter — sie öffnen auf
+dem Server den Vergleich der historischen Monatswerte (N-617, Abgrenzung im Test `test_n617_community_stammdaten_heute.py`).
+
+Code-Orte (RF-83, 5.11.2026): `_stammdaten` (Region, Investitionen, `hat_*`, Sonstiges, Stichtag und Jetzt-Menge) ·
+`_speicher_und_wallbox` · `_bkw_wp` · `_neigung_ausrichtung` · `_payload` (Schlüssel-Reihenfolge, Installationsjahr,
+Wärmepumpen-Art) · `_monatswerte` (SOLL-Jahr, Monatswerte).
+
 ## 4. Prognosen (Aussichten)
 
 > **Prognose-Kanon — „PV-Tagesprognose heute" ist EIN Wert.** Der „heute"-Wert (sowie Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird seit dem Prognose-Kanon-Fix über **einen** Service (`services/prognose_kanon.py`) gebildet und an alle Konsumenten geliefert: Live/Cockpit (`live_wetter`), die „eedc"-Spalte im Vergleich (`api/routes/prognosen`), die HA-/MQTT-Sensoren (`ha_export_prognose`) und den persistierten Tageswert (`TagesZusammenfassung.pv_prognose_kwh`). Rechenweg: **Multi-String-Fan-out** pro Orientierungsgruppe (`pv_orientation.orientierungs_gruppen` → je ein `get_solar_prognose`) → slot-weise Summe = rohes OpenMeteo-kWh-Profil → **eedc-Korrektur pro Energie-Slot** (`core/berechnungen/prognose_korrektur.korrigiere_tagesprofil`, Kaskade `korrekturprofil_lookup`) mit Invariante `Tageswert == Σ Export-Slots`. Der Wert **rollt** mit OpenMeteo, aber überall synchron. Mathematik in `core/berechnungen/` (ADR-001), Orchestrierung im Kanon-Service. Symmetrie-Test: `tests/test_prognose_kanon.py`.
@@ -3955,6 +4020,36 @@ Die aktive Stufe wird im Status-Banner und im KPI-Card-Header angezeigt.
 **Restzeit-Banner (v3.22.0):** Wenn die 7-Tage-Schwelle noch nicht erreicht ist, zeigt das Banner: „X von 7 Tagen, noch Y Tage" — Y berücksichtigt nur Tage mit gültiger Prognose UND IST > 0.5 kWh, also dieselbe Filterregel wie der Faktor selbst.
 
 **Persistierung:** Lernfaktor pro Quelle separat gecacht. Backfill-Kandidat-Felder (`pv_prognose_kwh`, Solcast-Tageswerte) werden seit v3.16.14 alle 45 Min automatisch aus dem **Prefetch-Job** in `TagesZusammenfassung` geschrieben — vorher hing die Persistierung als Nebeneffekt am Dashboard-Besuch und der Lernfaktor konnte ohne Nutzer-Interaktion nicht berechnet werden.
+
+#### Das Korrekturprofil: vier Stufen aus den Stundenpaaren (`korrekturprofil_aggregator.py`)
+
+Der nächtliche Aggregator (`aggregiere_korrekturprofil_anlage`, Aufrufer Scheduler und `POST …/korrekturprofil`)
+lernt je Anlage vier Profile; der Lookup nimmt die feinste Stufe, die ihr Gate erreicht. SOLL ist das **Lern-SOLL**
+(gekappt, unkorrigiert, N-547, siehe §6b), IST die Stundenzeile bzw. an einem Kanal-Tag die Mischzeile (S5-R1).
+
+```
+Lookback           = 730 Tage vor dem Stichtag (Default heute)
+Stunden-Stichprobe = Stunde mit Day-Ahead-Snapshot des Tages, IST ≥ 0,05 kW und SOLL ≥ 0,05 kWh,
+                     PV-Spanne der Zeile = 1 (eine Zählerlücken-Stunde fällt aus, bleibt in jeder Summe — §6b, §2)
+Faktor(Bin)        = clamp(Σ IST / Σ SOLL, 0,5, 1,3), gerundet 0,001;  Σ SOLL < 1 kWh ⇒ kein Faktor
+Stufe 1  sonnenstand_wetter : Bin (Azimut, Elevation, Wetterklasse klar|diffus|wechselhaft); Sonne über dem Horizont
+                              und Wetterklasse bestimmbar
+Stufe 2  stunde (Variante A): Zelle (Monat, Stunde) — die Stunde braucht keinen Sonnenstand (Dämmerung zählt);
+                              Saisonbin-Kaskade je Zelle: Monat ≥ 15 Stunden-Tage → Quartal ≥ 15 → Gesamt (letzte
+                              30 Tage) ≥ 7, sonst keine Zelle — der Schlüsselraum bleibt Monat 1–12
+Stufe 3  sonnenstand        : Bin (Azimut, Elevation), Sonne über dem Horizont
+Stufe 4  skalar (O1+O2)     : je Tag q = Σ IST / lern_soll_kwh; Gewicht = SOLL × 1,30 für Tage < 30 Tage alt, sonst × 1;
+                              je int(n × 0,1) kleinste und größte q fallen weg (Trim); Faktor = clamp(Σ q·w / Σ w, 0,5, 1,3)
+Status             = "skipped" ohne Koordinaten oder wenn keine Stufe einen Wert hat; sonst Zählungen und
+                     tage_eingegangen = Tage mit Sonnenstand-Stichprobe, ohne solche die Skalar-Tage
+```
+
+Dieselbe Kaskade Monat → Quartal → 30 Tage mit 15/15/7 trägt der Skalar-Lernfaktor oben; hier gilt sie je
+(Monat, Stunde)-Zelle. Bestandsprofile wechseln je Bin erst auf das neue Lern-SOLL, wenn das Gate der Stufe mit
+neuen Datenpunkten erreicht ist (Keep-Regel N-547, §6b). Code-Orte (RF-85, 5.11.2026): `_tage_und_snapshots`
+(Lookback, Snapshots, Filter; `_akkumuliere` füllt die Pools) · `_stufe_sonnenstand_wetter` und
+`_stufe_sonnenstand` (beide über `_flache_faktoren`) · `_stufe_stunde` (Kaskade `_stunde_zelle`) · `_stufe_skalar`
+· `_ergebnis`.
 
 #### Genauigkeits-Tracking: MAE + MBE getrennt (v3.22.0, #151)
 
