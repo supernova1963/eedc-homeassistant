@@ -52,8 +52,9 @@ Monat wöge das schwerer als über einen Tag.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -141,6 +142,22 @@ async def lade_tageswerte_je_feld(
     }
 
 
+@dataclass
+class _BereichKontext:
+    """Die geteilten Eingänge von ``lade_tageswerte_je_geraet`` (RF-57): Anlage und Sitzung, die Zuordnungen
+    (``investitionen``-Map, Energie-Quellen, MQTT-Zähler), die Fenster je Tag mit ihren Randzeitpunkten und das Ergebnis
+    ``{datum: {ausgabe_key: {inv_id: kWh}}}``, in das die Felder auffalten."""
+
+    db: AsyncSession
+    anlage: Any
+    investitionen_map: dict
+    quellen_energy: dict
+    mqtt_keys: set
+    fenster_je_tag: dict[date, tuple[datetime, datetime]]
+    grenzen: list[datetime]
+    ergebnis: dict[date, dict[str, dict[str, float]]] = field(default_factory=dict)
+
+
 async def lade_tageswerte_je_geraet(
     db: AsyncSession,
     anlage,
@@ -180,11 +197,43 @@ async def lade_tageswerte_je_geraet(
         Wert fehlt — ebenso ein Tag, dessen Zähler zurückgesprungen ist.
         **Keine 0 als Platzhalter** (ADR-002/P4: keine Aussage statt einer
         Zahl, die wie eine Messung aussieht).
+
+    Form (RF-57, Bauform RF-1): der Orchestrator läuft über Geräte und Felder — ``_tagesfenster`` (Fenster je Tag,
+    N-435, und die Randzeitpunkte) · ``_geraete_aufloesung`` (Gerät überspringen: ``None``, E-Auto mit Parent;
+    Zähler-Kandidaten) · ``_tageswerte_des_feldes`` (Gerätefeld und Innengerät-Kopien mit Zähler, je Zähler EINE Reihe
+    und die Ränder mit Heilung) · ``_randstaende`` (ein Tag eines Zählers: Lückenanker R1, Rücksprung ⇒ kein Tag) ·
+    ``_auffalten`` (Gerätefeld ODER Innengeräte, Akkumulation je Gerät). Geteilte Eingänge: ``_BereichKontext``.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     quellen_energy = extract_quellen_energy(anlage)
     mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)
+    fenster_je_tag, grenzen = _tagesfenster(von, bis, rueckwaerts_tage)
+    ctx = _BereichKontext(db=db, anlage=anlage, investitionen_map=investitionen_map, quellen_energy=quellen_energy,
+                          mqtt_keys=mqtt_keys, fenster_je_tag=fenster_je_tag, grenzen=grenzen)
+
+    for inv_id_str, inv in investitionen_by_id.items():
+        geraet = _geraete_aufloesung(ctx, inv_id_str, inv)
+        if geraet is None:
+            continue
+        typ, geraet_felder, kandidaten = geraet
+        for (t, feld), ausgabe_key in felder.items():
+            if t != typ:
+                continue
+            je_tag_je_key = await _tageswerte_des_feldes(ctx, inv_id_str, geraet_felder, kandidaten, feld)
+            _auffalten(ctx, je_tag_je_key, feld, ausgabe_key, inv_id_str)
+
+    return ctx.ergebnis
+
+
+def _tagesfenster(
+    von: date, bis: date, rueckwaerts_tage: frozenset[date] | set[date],
+) -> tuple[dict[date, tuple[datetime, datetime]], list[datetime]]:
+    """Je Tag sein Fenster und die sortierten Randzeitpunkte aller Fenster (RF-57).
+
+    ``[00:00, 24:00)``, an den ``rueckwaerts_tage`` (N-435) ``[Vortag 23:00, 23:00)``; die Ränder sind die Menge der
+    Fenster-Enden — benachbarte Tage mit gleichem Fenster teilen ihren Rand.
+    """
     # Je Tag sein Fenster: [00:00, 24:00) oder — N-435 — [Vortag 23:00, 23:00).
     # Die Randzeitpunkte aller Tage bilden EINE sortierte Menge; benachbarte
     # Tage mit gleichem Fenster teilen weiterhin ihren gemeinsamen Rand.
@@ -198,91 +247,122 @@ async def lade_tageswerte_je_geraet(
         )
         fenster_je_tag[tag] = (start, start + timedelta(days=1))
     grenzen = sorted({ts for paar in fenster_je_tag.values() for ts in paar})
+    return fenster_je_tag, grenzen
 
-    ergebnis: dict[date, dict[str, dict[str, float]]] = {}
 
-    for inv_id_str, inv in investitionen_by_id.items():
-        if inv is None:
+def _geraete_aufloesung(ctx: _BereichKontext, inv_id_str, inv) -> Optional[tuple[Any, dict, set[str]]]:
+    """Das Gerät für den Leser (RF-57): ``None`` überspringt (kein Gerät; E-Auto mit Parent — die Wallbox misst die
+    Ladung), sonst ``(typ, Gerätefelder der Zuordnung, Zähler-Kandidaten)`` — die Kandidaten aus beiden Ablagen
+    (``felder`` und MQTT, N-328b), aus denen ``_tageswerte_des_feldes`` die Innengerät-Kopien auflöst."""
+    if inv is None:
+        return None
+    typ = getattr(inv, "typ", None)
+    # E-Auto mit parent (die Wallbox misst die Ladung) → sonst Doppelzählung;
+    # dieselbe Regel wie in `get_tagesdetail_kwh`.
+    if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
+        return None
+    inv_data = ctx.investitionen_map.get(str(inv_id_str))
+    geraet_felder = (inv_data or {}).get("felder", {}) or {}
+    kandidaten = zaehler_feld_kandidaten(inv_id_str, geraet_felder, ctx.mqtt_keys)
+    return typ, geraet_felder, kandidaten
+
+
+async def _tageswerte_des_feldes(
+    ctx: _BereichKontext, inv_id_str, geraet_felder: dict, kandidaten: set[str], feld: str,
+) -> dict[str, dict[date, float]]:
+    """Ein Feld eines Geräts (RF-57): ``{feld-key: {tag: kWh}}`` über das Gerätefeld und seine Innengerät-Kopien mit
+    Zähler — je Zähler EINE Standreihe über alle Fenster (``_reihe_ueber_bereich``), die Ränder lokal bzw. über die
+    Heilungs-Kaskade (``_raender_mit_heilung``), je Tag ``_randstaende``."""
+    # Bauschnitt 6: Gerätefeld UND Innengerät-Kopien — dieselbe Menge wie
+    # `get_tagesdetail_kwh`, dieselbe Auflösung danach. Die Tabelle ist
+    # geteilt; ein Aufrufer, der die Kälte hereinreicht, bekäme sonst
+    # still die Antwort ohne Innengeräte.
+    je_tag_je_key: dict[str, dict[date, float]] = {}
+    for k in (feld, *innengeraet_felder(feld, kandidaten)):
+        cfg = geraet_felder.get(k)
+        sensor_key = f"inv:{inv_id_str}:{k}"
+        if not feld_hat_zaehler(cfg, sensor_key, ctx.quellen_energy, ctx.mqtt_keys):
             continue
-        typ = getattr(inv, "typ", None)
-        # E-Auto mit parent (die Wallbox misst die Ladung) → sonst Doppelzählung;
-        # dieselbe Regel wie in `get_tagesdetail_kwh`.
-        if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
+        sensor_id = cfg.get("sensor_id") if isinstance(cfg, dict) else None
+
+        reihe = await _reihe_ueber_bereich(
+            ctx.db, ctx.anlage.id, sensor_key, ctx.grenzen[0], ctx.grenzen[-1],
+        )
+        staende = await _raender_mit_heilung(
+            ctx.db, ctx.anlage, sensor_key, sensor_id, ctx.quellen_energy, ctx.grenzen, reihe,
+        )
+        stand_am = dict(zip(ctx.grenzen, staende))
+
+        for tag, fenster in ctx.fenster_je_tag.items():
+            wert = await _randstaende(ctx, sensor_key, sensor_id, reihe, stand_am, tag, fenster)
+            if wert is not None:
+                je_tag_je_key.setdefault(k, {})[tag] = wert
+    return je_tag_je_key
+
+
+async def _randstaende(
+    ctx: _BereichKontext,
+    sensor_key: str,
+    sensor_id: Optional[str],
+    reihe: list[tuple[datetime, float]],
+    stand_am: dict[datetime, Optional[float]],
+    tag: date,
+    fenster: tuple[datetime, datetime],
+) -> Optional[float]:
+    """Ein Tag eines Zählers (RF-57): Randstand-Differenz über das Fenster samt Zwischenständen
+    (``tageswert_aus_reihe``); fehlt der Anfangsstand, trägt der Lückenanker R1 (letzter Stand davor, aus der Reihe
+    oder beliebig weit zurück) — ``None`` ohne Anfangs- oder Endstand und bei Rücksprung (kein Tag)."""
+    tages_start, tages_ende = fenster
+    s0, s1 = stand_am[tages_start], stand_am[tages_ende]
+    anker_ts = tages_start
+    if s0 is None and s1 is not None:
+        # ⭐ Zählerlücken wie HA (R1): fehlt der Stand am
+        # Tagesbeginn, trägt der letzte Stand davor — zuerst aus
+        # der geladenen Reihe, sonst beliebig weit zurück. Die
+        # Energie einer Lücke über Mitternacht gehört zu diesem
+        # Tag (wie im HA-Dashboard, wie Cockpit → Tag).
+        vorher = [(ts, w) for ts, w in reihe if ts < tages_start]
+        if vorher:
+            anker_ts, s0 = vorher[-1]
+        else:
+            anker = await letzter_stand_vor(
+                ctx.db, ctx.anlage.id, sensor_key, tages_start,
+                sensor_id=sensor_id, quellen_energy=ctx.quellen_energy,
+            )
+            if anker is not None:
+                anker_ts, s0 = anker
+    if s0 is None or s1 is None:
+        return None
+    zwischen = [
+        w for ts, w in reihe if anker_ts < ts < tages_ende
+    ]
+    wert = tageswert_aus_reihe(s0, s1, zwischen)
+    if wert is None:
+        logger.debug(
+            "Zähler-Rücksprung im Tagesfenster für anlage=%s key=%s "
+            "(%s) — keine Tagesaussage",
+            ctx.anlage.id, sensor_key, tag,
+        )
+    return wert
+
+
+def _auffalten(
+    ctx: _BereichKontext, je_tag_je_key: dict[str, dict[date, float]], feld: str, ausgabe_key: str, inv_id_str,
+) -> None:
+    """Die Tageswerte eines Feldes in das Ergebnis (RF-57): je Tag Gerätefeld ODER Σ Innengeräte, nie addiert
+    (``geraetefeld_oder_innengeraete``); ein Gerät läuft über mehrere ``(typ, feld)``-Paare in denselben Ausgabe-Key
+    und wird dort aufaddiert."""
+    for tag in ctx.fenster_je_tag:
+        wert = geraetefeld_oder_innengeraete(
+            {k: w[tag] for k, w in je_tag_je_key.items() if tag in w}, feld,
+        )
+        if wert is None:
             continue
-        inv_data = investitionen_map.get(str(inv_id_str))
-        geraet_felder = (inv_data or {}).get("felder", {}) or {}
-        kandidaten = zaehler_feld_kandidaten(inv_id_str, geraet_felder, mqtt_keys)
-
-        for (t, feld), ausgabe_key in felder.items():
-            if t != typ:
-                continue
-            # Bauschnitt 6: Gerätefeld UND Innengerät-Kopien — dieselbe Menge wie
-            # `get_tagesdetail_kwh`, dieselbe Auflösung danach. Die Tabelle ist
-            # geteilt; ein Aufrufer, der die Kälte hereinreicht, bekäme sonst
-            # still die Antwort ohne Innengeräte.
-            je_tag_je_key: dict[str, dict[date, float]] = {}
-            for k in (feld, *innengeraet_felder(feld, kandidaten)):
-                cfg = geraet_felder.get(k)
-                sensor_key = f"inv:{inv_id_str}:{k}"
-                if not feld_hat_zaehler(cfg, sensor_key, quellen_energy, mqtt_keys):
-                    continue
-                sensor_id = cfg.get("sensor_id") if isinstance(cfg, dict) else None
-
-                reihe = await _reihe_ueber_bereich(
-                    db, anlage.id, sensor_key, grenzen[0], grenzen[-1],
-                )
-                staende = await _raender_mit_heilung(
-                    db, anlage, sensor_key, sensor_id, quellen_energy, grenzen, reihe,
-                )
-                stand_am = dict(zip(grenzen, staende))
-
-                for tag, (tages_start, tages_ende) in fenster_je_tag.items():
-                    s0, s1 = stand_am[tages_start], stand_am[tages_ende]
-                    anker_ts = tages_start
-                    if s0 is None and s1 is not None:
-                        # ⭐ Zählerlücken wie HA (R1): fehlt der Stand am
-                        # Tagesbeginn, trägt der letzte Stand davor — zuerst aus
-                        # der geladenen Reihe, sonst beliebig weit zurück. Die
-                        # Energie einer Lücke über Mitternacht gehört zu diesem
-                        # Tag (wie im HA-Dashboard, wie Cockpit → Tag).
-                        vorher = [(ts, w) for ts, w in reihe if ts < tages_start]
-                        if vorher:
-                            anker_ts, s0 = vorher[-1]
-                        else:
-                            anker = await letzter_stand_vor(
-                                db, anlage.id, sensor_key, tages_start,
-                                sensor_id=sensor_id, quellen_energy=quellen_energy,
-                            )
-                            if anker is not None:
-                                anker_ts, s0 = anker
-                    if s0 is None or s1 is None:
-                        continue
-                    zwischen = [
-                        w for ts, w in reihe if anker_ts < ts < tages_ende
-                    ]
-                    wert = tageswert_aus_reihe(s0, s1, zwischen)
-                    if wert is None:
-                        logger.debug(
-                            "Zähler-Rücksprung im Tagesfenster für anlage=%s key=%s "
-                            "(%s) — keine Tagesaussage",
-                            anlage.id, sensor_key, tag,
-                        )
-                        continue
-                    je_tag_je_key.setdefault(k, {})[tag] = wert
-
-            for tag in fenster_je_tag:
-                wert = geraetefeld_oder_innengeraete(
-                    {k: w[tag] for k, w in je_tag_je_key.items() if tag in w}, feld,
-                )
-                if wert is None:
-                    continue
-                # Dieselbe Akkumulation wie in `get_tagesdetail_kwh`: EIN Gerät
-                # kann über mehrere (typ, feld)-Paare in denselben Ausgabe-Key
-                # laufen, mehrere Geräte ohnehin.
-                geraete = ergebnis.setdefault(tag, {}).setdefault(ausgabe_key, {})
-                geraete[str(inv_id_str)] = geraete.get(str(inv_id_str), 0.0) + wert
-
-    return ergebnis
+        # Dieselbe Akkumulation wie in `get_tagesdetail_kwh`: EIN Gerät
+        # kann über mehrere (typ, feld)-Paare in denselben Ausgabe-Key
+        # laufen, mehrere Geräte ohnehin.
+        geraete = ctx.ergebnis.setdefault(tag, {}).setdefault(ausgabe_key, {})
+        geraete[str(inv_id_str)] = geraete.get(str(inv_id_str), 0.0) + wert
 
 
 async def _reihe_ueber_bereich(

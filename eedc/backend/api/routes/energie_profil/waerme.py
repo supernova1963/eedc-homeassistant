@@ -9,8 +9,9 @@ GET /api/energie-profil/{anlage_id}/waerme-verteilung      — Verteilung des Wa
 # Dateien): Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `views.py` haengt den Router ein und
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -215,6 +216,61 @@ def _waerme_funktions_stapel(linie, achsen_geraete: frozenset, waerme_je_slot: l
     return segmente, True
 
 
+@dataclass
+class _WaermeStundenKontext:
+    """Die geteilten Eingänge von ``get_waerme_verlauf_stunden`` (RF-58): der Tag (Eingänge wie ``tag-detail``, Beiträge,
+    Tagesmengen ``detail``), die Zuordnung (Mapping, Energie-Quellen, MQTT-Zähler), die Formen aus der Standreihe bzw. dem
+    Kanal-Stundentag, die Verteilung und — nach ``_waerme_linie_d1``/``_funktions_stapel`` — Linien und Stapel."""
+
+    anlage_id: int
+    investitionen_by_id: dict
+    eingaenge: Any
+    beitraege: list
+    detail: Any
+    mapping: dict
+    quellen_energy: dict
+    mqtt_keys: set
+    # ── Verteilung (`_stunden_verteilung`) ──
+    verteilte_felder: dict = field(default_factory=dict)
+    formen_je_key: dict = field(default_factory=dict)
+    verteilung: Any = None
+    basis_je_ausgabe: dict = field(default_factory=dict)
+    # ── Linien und Wärme-Stapel (`_waerme_linie_d1`) ──
+    waerme_je_slot: list = field(default_factory=list)
+    waerme_ohne: float = 0.0
+    kaelte_je_slot: list = field(default_factory=list)
+    kaelte_ohne: float = 0.0
+    waerme_segmente: list = field(default_factory=list)
+    waerme_stapel_verfuegbar: bool = False
+    # ── Funktions-Stapel (`_funktions_stapel`) ──
+    funk_heizen: list = field(default_factory=list)
+    funk_ww: list = field(default_factory=list)
+    funktions_stapel_verfuegbar: bool = False
+    funktion_ohne: float = 0.0
+    leer_funktion: list = field(default_factory=list)
+    wp_kw: dict = field(default_factory=dict)
+
+    def linie(self, ausgaben, *, nur_geraete=None) -> tuple[list, float, list[bool]]:
+        """Eine Linie über die genannten Ausgabe-Keys (``_verteile_linie``)."""
+        return _verteile_linie(ausgaben, nur_geraete, self.verteilte_felder, self.formen_je_key, self.basis_je_ausgabe,
+                               self.eingaenge.wp_aus_kanal)
+
+    def zaehler(self, inv_id: str, feld: str):
+        """``(sensor_key, sensor_id)`` des Feldes, wenn es einen Zähler trägt (``feld_hat_zaehler``), sonst ``None``."""
+        from backend.services.snapshot.keys import feld_hat_zaehler
+
+        cfg = ((self.mapping.get(inv_id) or {}).get("felder") or {}).get(feld)
+        key = f"inv:{inv_id}:{feld}"
+        if not feld_hat_zaehler(cfg, key, self.quellen_energy, self.mqtt_keys):
+            return None
+        return key, (cfg.get("sensor_id") if isinstance(cfg, dict) else None)
+
+
+# Form (RF-58, Bauform RF-1; als Kommentar, weil der Route-Docstring die OpenAPI-Beschreibung ist): `_waerme_tag` (die
+# Tagesmengen wie `tag-detail`) · `_stunden_verteilung` (je Zähler die Form, Verteilung des Tages-Stapels: Σ Stunden = Balken) ·
+# `_waerme_linie_d1` (Wärme-Linie mit D1 je Gerät, N-391b; Kälte-Linie; Wärme-Stapel nach Funktion) · `_funktions_stapel`
+# (Heizen/Warmwasser-Strom, «übrige» = max(0, Gesamt − Heizen − WW) je Slot, `None` ohne Gesamtstrom) · `_antwort` (die 24 Zeilen
+# und die Tageswerte ohne Stundenform). Geteilte Eingänge: `_WaermeStundenKontext`.
 @router.get(
     "/{anlage_id}/waerme-verlauf-stunden",
     response_model=WaermeVerlaufStundenResponse,
@@ -242,25 +298,21 @@ async def get_waerme_verlauf_stunden(
     if not anlage:
         raise not_found("Anlage", anlage_id)
 
-    from backend.core.berechnungen.slot_konvention import RASTER_BEGINN, RASTER_ENDE
-    from backend.core.berechnungen.tages_stapel import (
-        STUNDEN,
-        StundenFormen,
-        beitraege_des_tages,
-        summanden_aus_tageswerten,
-        verteile_tages_stapel_auf_stunden,
-    )
-    from backend.core.berechnungen.waermepumpe_kennzahl import (
-        geraete_mit_gesamtwaerme,
-    )
-    from backend.services.energie_profil.kanal_stunden import tages_eingaenge, wp_strom_je_stunde, wp_stundenformen
-    from backend.services.snapshot.aggregator import (
-        TAGESDETAIL_AUSGABE,
-        WAERME_AUSGABE_KEYS,
-        get_wp_strom_stufe_je_investition,
-    )
-    from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
-    from backend.services.snapshot.komponenten_beitraege import investition_beitraege
+    ctx = await _waerme_tag(db, anlage, anlage_id, datum)
+    await _stunden_verteilung(db, anlage, datum, ctx)
+    _waerme_linie_d1(ctx)
+    await _funktions_stapel(db, datum, ctx)
+    return _antwort(ctx)
+
+
+async def _waerme_tag(db: AsyncSession, anlage, anlage_id: int, datum: date) -> _WaermeStundenKontext:
+    """Der Tag (RF-58): dieselben Eingänge wie ``tag-detail`` (``tages_eingaenge``, an einem WP-Kanal-Tag aus dem
+    Kanal-Stundentag), dieselben Beiträge (``beitraege_des_tages`` mit Stufe N-462 und Summanden N-766) und die Zuordnung
+    für die Formen."""
+    from backend.core.berechnungen.tages_stapel import beitraege_des_tages, summanden_aus_tageswerten
+    from backend.services.energie_profil.kanal_stunden import tages_eingaenge
+    from backend.services.snapshot.aggregator import get_wp_strom_stufe_je_investition
+    from backend.services.snapshot.keys import extract_quellen_energy
     from backend.services.snapshot.reader import mqtt_zaehler_keys
 
     inv_result = await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
@@ -289,17 +341,24 @@ async def get_waerme_verlauf_stunden(
     mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
     quellen_energy = extract_quellen_energy(anlage)
     mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)
+    return _WaermeStundenKontext(anlage_id=anlage_id, investitionen_by_id=investitionen_by_id, eingaenge=eingaenge,
+                                 beitraege=beitraege, detail=detail, mapping=mapping, quellen_energy=quellen_energy,
+                                 mqtt_keys=mqtt_keys)
 
-    def _zaehler(inv_id: str, feld: str):
-        cfg = ((mapping.get(inv_id) or {}).get("felder") or {}).get(feld)
-        key = f"inv:{inv_id}:{feld}"
-        if not feld_hat_zaehler(cfg, key, quellen_energy, mqtt_keys):
-            return None
-        return key, (cfg.get("sensor_id") if isinstance(cfg, dict) else None)
 
+def _zaehler_der_verteilung(ctx: _WaermeStundenKontext, investitionen_by_id: dict) -> tuple[dict, dict[str, list[str]]]:
+    """Die Zähler, deren Form der Tag braucht (RF-58): je gemessenem Beitrag seine Felder und Summanden (N-766) und die
+    Gesamt-Felder der Beitragsschicht, dazu die Felder, die den TAGESWERT der Linien trugen (N-437, WK-09 B2) —
+    ``(zaehler, gesamt_felder)``; ``ctx.verteilte_felder`` wird hier gesetzt."""
+    from backend.services.snapshot.aggregator import WAERME_AUSGABE_KEYS
+    from backend.services.snapshot.keys import feld_hat_zaehler
+    from backend.services.snapshot.komponenten_beitraege import investition_beitraege
+
+    mapping, quellen_energy, mqtt_keys, detail = ctx.mapping, ctx.quellen_energy, ctx.mqtt_keys, ctx.detail
+    _zaehler = ctx.zaehler
     zaehler: dict[str, tuple[str, object]] = {}
     gesamt_felder: dict[str, list[str]] = {}
-    for b in beitraege:
+    for b in ctx.beitraege:
         if not b.gemessen:
             continue
         for feld in (*b.felder, *b.summanden):   # N-766: auch die Summanden-Zähler
@@ -343,19 +402,37 @@ async def get_waerme_verlauf_stunden(
                 z = _zaehler(inv_id, feld)
                 if z:
                     zaehler[z[0]] = z
+    ctx.verteilte_felder = verteilte_felder
+    return zaehler, gesamt_felder
+
+
+def _summe_je_slot(formen_je_key: dict, keys: list[str]) -> list:
+    """Σ der Formen der genannten Zähler je Slot; ein Slot ohne jede Form ``None`` (RF-58, vorher Closure)."""
+    from backend.core.berechnungen.tages_stapel import STUNDEN
+
+    reihen = [formen_je_key[k] for k in keys if k in formen_je_key]
+    if not reihen:
+        return [None] * STUNDEN
+    return [
+        (sum(r[h] for r in reihen if r[h] is not None)
+         if any(r[h] is not None for r in reihen) else None)
+        for h in range(STUNDEN)
+    ]
+
+
+async def _stunden_verteilung(db: AsyncSession, anlage, datum: date, ctx: _WaermeStundenKontext) -> None:
+    """Die Verteilung des Tages auf 24 Stunden (RF-58): je Zähler die Form (Standreihe bzw. Kanal-Stundentag,
+    ``wp_stundenformen``), daraus ``verteile_tages_stapel_auf_stunden`` — Σ Stunden = Balken; dazu die Basis-Felder je
+    Ausgabe-Key für die Linien."""
+    from backend.core.berechnungen.tages_stapel import STUNDEN, StundenFormen, verteile_tages_stapel_auf_stunden
+    from backend.services.energie_profil.kanal_stunden import wp_stundenformen
+    from backend.services.snapshot.aggregator import TAGESDETAIL_AUSGABE
+
+    zaehler, gesamt_felder = _zaehler_der_verteilung(ctx, ctx.investitionen_by_id)
+    beitraege = ctx.beitraege
     # HA-Bauform E-S3-2 (H-1 → A): an einem WP-Kanal-Tag kommt die Form aus dem Kanal-Stundentag (HAs `change` je
     # Zähler, Modus-Stunden aus den abgeleiteten Kanälen) — die Verteilung darunter bleibt, Σ Stunden = Balken.
     formen_je_key, modus_stunden = await wp_stundenformen(db, anlage, datum, zaehler)
-
-    def _summe_je_slot(keys: list[str]) -> list:
-        reihen = [formen_je_key[k] for k in keys if k in formen_je_key]
-        if not reihen:
-            return [None] * STUNDEN
-        return [
-            (sum(r[h] for r in reihen if r[h] is not None)
-             if any(r[h] is not None for r in reihen) else None)
-            for h in range(STUNDEN)
-        ]
 
     formen = StundenFormen(
         felder_je_inv={
@@ -366,12 +443,13 @@ async def get_waerme_verlauf_stunden(
             for b in beitraege if b.gemessen
         },
         gesamt_je_inv={
-            inv_id: _summe_je_slot([f"inv:{inv_id}:{f}" for f in felder])
+            inv_id: _summe_je_slot(formen_je_key, [f"inv:{inv_id}:{f}" for f in felder])
             for inv_id, felder in gesamt_felder.items()
         },
         modus_stunden_je_inv=modus_stunden,
     )
-    verteilung = verteile_tages_stapel_auf_stunden(beitraege, formen)
+    ctx.formen_je_key = formen_je_key
+    ctx.verteilung = verteile_tages_stapel_auf_stunden(beitraege, formen)
 
     # ── Linien: je Gerät, je Feld verteilt, je Stunde aufgelöst (N-437) ────
     # Die Bauform des Stapels (`verteile_felder_auf_stunden`). Was keine Form
@@ -382,16 +460,20 @@ async def get_waerme_verlauf_stunden(
     # kleiner als die Kachel, ohne Hinweis (gemessen: Tag 7,0, Linie 2,0).
     # S4 bleibt gewahrt: Ohne jede verteilte Menge entsteht keine Linie aus
     # Nullen — dann steht nur der genannte Rest da.
-    basis_je_ausgabe = {
+    ctx.basis_je_ausgabe = {
         ausgabe: feld for (t, feld), ausgabe in TAGESDETAIL_AUSGABE.items()
         if t == "waermepumpe"
     }
 
-    def _linie(ausgaben, *, nur_geraete=None) -> tuple[list, float, list[bool]]:
-        """Eine Linie über die genannten Ausgabe-Keys (``_verteile_linie``)."""
-        return _verteile_linie(ausgaben, nur_geraete, verteilte_felder, formen_je_key, basis_je_ausgabe,
-                               eingaenge.wp_aus_kanal)
 
+def _waerme_linie_d1(ctx: _WaermeStundenKontext) -> None:
+    """Wärme- und Kälte-Linie (RF-58): die Wärme mit D1 je Gerät (N-391/N-391b — Gesamtzähler, wo er den Tageswert trug,
+    sonst die Achsen), die Kälte über ``wp_kaelte_kwh``, dazu der Wärme-Stapel nach Funktion mit Rest-Segment
+    (``_waerme_funktions_stapel``, P-433-3 S3)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import geraete_mit_gesamtwaerme
+    from backend.services.snapshot.aggregator import WAERME_AUSGABE_KEYS
+
+    detail, verteilte_felder, _linie = ctx.detail, ctx.verteilte_felder, ctx.linie
     # N-391/D1 — **Gesamtwert vor Summanden, auch in der Linie.** Der gemeinsame
     # Wärmemengenzähler steht bewusst NICHT in `WAERME_AUSGABE_KEYS`: die Menge
     # dort wird **summiert**, und ein Gerät mit Gesamtzähler UND Aufteilung
@@ -414,17 +496,26 @@ async def get_waerme_verlauf_stunden(
         for key in WAERME_AUSGABE_KEYS
         for inv_id in (verteilte_felder.get(key) or {})
     ) - _gesamt_geraete
-    waerme_je_slot, waerme_ohne, _ = _linie(
+    ctx.waerme_je_slot, ctx.waerme_ohne, _ = _linie(
         (*sorted(WAERME_AUSGABE_KEYS), "wp_waerme_kwh"),
         nur_geraete={
             **{key: _achsen_geraete for key in WAERME_AUSGABE_KEYS},
             "wp_waerme_kwh": _gesamt_geraete,
         },
     )
-    kaelte_je_slot, kaelte_ohne, _ = _linie(("wp_kaelte_kwh",))
+    ctx.kaelte_je_slot, ctx.kaelte_ohne, _ = _linie(("wp_kaelte_kwh",))
     # P-433-3 S3 (G3): dieselbe Wärme als Stapel nach Funktion mit Rest-Segment — Höhe = die Linie darüber.
-    waerme_segmente, waerme_stapel_verfuegbar = _waerme_funktions_stapel(_linie, _achsen_geraete, waerme_je_slot)
+    ctx.waerme_segmente, ctx.waerme_stapel_verfuegbar = _waerme_funktions_stapel(
+        _linie, _achsen_geraete, ctx.waerme_je_slot)
 
+
+async def _funktions_stapel(db: AsyncSession, datum: date, ctx: _WaermeStundenKontext) -> None:
+    """Der Funktions-Stapel (RF-58, WK-09 B2): Heizen- und Warmwasser-Strom als Linien, «verfügbar» am TAGESWERT, die
+    Stunden ohne eigene Zeile (``_stapel_leer``) und die Zählerspalte des Slots (``wp_strom_je_stunde``) — die Segmente
+    je Slot bildet ``_funktions_segmente``."""
+    from backend.services.energie_profil.kanal_stunden import wp_strom_je_stunde
+
+    _linie, detail = ctx.linie, ctx.detail
     # ── Der Funktions-Stapel (WK-09 B2, SOLL §3.3/S2a) ─────────────────────
     #
     # **Dieselbe Verteilung wie die Linien**, nur eine andere Familie: Heizen und
@@ -444,53 +535,65 @@ async def get_waerme_verlauf_stunden(
     # „Nach Funktion" gibt es nur, wo Funktions-Zähler gepflegt sind — sonst hat
     # die Sicht nichts zu sagen (S2a). Maßgeblich ist der TAGESWERT, nicht die
     # Stundenform: ein Zähler ohne Form wird unten genannt, nicht verschwiegen.
-    funktions_stapel_verfuegbar = any(
+    ctx.funktions_stapel_verfuegbar = any(
         (detail.werte.get(k) or 0.0) > 0.0
         for k in ("wp_strom_heizen_kwh", "wp_strom_warmwasser_kwh")
     )
-    funktion_ohne = funk_heizen_ohne + funk_ww_ohne
-    leer_funktion = _stapel_leer((funk_heizen, leer_heizen), (funk_ww, leer_ww))
+    ctx.funk_heizen, ctx.funk_ww = funk_heizen, funk_ww
+    ctx.funktion_ohne = funk_heizen_ohne + funk_ww_ohne
+    ctx.leer_funktion = _stapel_leer((funk_heizen, leer_heizen), (funk_ww, leer_ww))
 
     # Die Zählerspalte des Slots — ihre Summe ist die Kachel „Strom verbraucht" (an einem WP-Kanal-Tag der Adapter).
-    wp_kw = await wp_strom_je_stunde(db, anlage_id, datum)
+    ctx.wp_kw = await wp_strom_je_stunde(db, ctx.anlage_id, datum)
 
-    def _r(v: float, hat: bool, stellen: int = 3):
-        return round(v, stellen) if hat else None
 
-    def _funktions_segmente(h: int) -> dict:
-        """Die drei Segmente der Funktions-Sicht eines Slots.
+def _funktions_segmente(ctx: _WaermeStundenKontext, h: int) -> dict:
+    """Die drei Segmente der Funktions-Sicht eines Slots.
 
-        ⭐ **Die Stapelhöhe ist der Gesamtstrom** (SOLL §3.3/S2a, K1): `uebrige`
-        füllt auf, was die Funktions-Zähler nicht erklären — Standby, ein
-        zweites Gerät ohne solche Zähler. Bezug ist **`wp_strom_kwh` dieses
-        Slots**, also genau die Größe, deren Summe die Kachel „Strom
-        verbraucht" ist; hier entsteht kein zweiter Gesamtstrom.
+    ⭐ **Die Stapelhöhe ist der Gesamtstrom** (SOLL §3.3/S2a, K1): `uebrige`
+    füllt auf, was die Funktions-Zähler nicht erklären — Standby, ein
+    zweites Gerät ohne solche Zähler. Bezug ist **`wp_strom_kwh` dieses
+    Slots**, also genau die Größe, deren Summe die Kachel „Strom
+    verbraucht" ist; hier entsteht kein zweiter Gesamtstrom.
 
-        ⚠ **`bezug_kwh` des Betriebsart-Stapels wäre hier falsch:** die Größe
-        zählt nur Geräte, die eine **Betriebsart**-Aufteilung beigesteuert
-        haben. Ein Gerät mit Funktions-Zählern, aber ohne Betriebsart-Zähler und
-        ohne Modus-Signal (Sprosse **F5**) trägt dort 0 bei — der Rest wäre
-        negativ, und genau diese Lage ist der Anlass von B2.
-        """
-        if not funktions_stapel_verfuegbar:
-            return {}
-        heizen = funk_heizen[h] or 0.0
-        warmwasser = funk_ww[h] or 0.0
-        gesamt = wp_kw.get(h)
-        return {
-            # HA-Bauform S5 (S5-R5): eine Stunde ohne eigene Zeile an einem WP-Kanal-Tag ist leer, keine 0.
-            "wp_funktion_strom_heizen_kwh": _segment(heizen, leer_funktion[h]),
-            "wp_funktion_strom_warmwasser_kwh": _segment(warmwasser, leer_funktion[h]),
-            # Ohne Gesamtstrom in diesem Slot gibt es keinen Rest zu benennen —
-            # `None` heißt „keine Aussage", nicht 0 (ADR-002/P4).
-            "wp_funktion_uebrige_kwh": (
-                round(max(0.0, gesamt - heizen - warmwasser), 3)
-                if gesamt is not None else None
-            ),
-        }
+    ⚠ **`bezug_kwh` des Betriebsart-Stapels wäre hier falsch:** die Größe
+    zählt nur Geräte, die eine **Betriebsart**-Aufteilung beigesteuert
+    haben. Ein Gerät mit Funktions-Zählern, aber ohne Betriebsart-Zähler und
+    ohne Modus-Signal (Sprosse **F5**) trägt dort 0 bei — der Rest wäre
+    negativ, und genau diese Lage ist der Anlass von B2.
+    """
+    if not ctx.funktions_stapel_verfuegbar:
+        return {}
+    leer_funktion = ctx.leer_funktion
+    heizen = ctx.funk_heizen[h] or 0.0
+    warmwasser = ctx.funk_ww[h] or 0.0
+    gesamt = ctx.wp_kw.get(h)
+    return {
+        # HA-Bauform S5 (S5-R5): eine Stunde ohne eigene Zeile an einem WP-Kanal-Tag ist leer, keine 0.
+        "wp_funktion_strom_heizen_kwh": _segment(heizen, leer_funktion[h]),
+        "wp_funktion_strom_warmwasser_kwh": _segment(warmwasser, leer_funktion[h]),
+        # Ohne Gesamtstrom in diesem Slot gibt es keinen Rest zu benennen —
+        # `None` heißt „keine Aussage", nicht 0 (ADR-002/P4).
+        "wp_funktion_uebrige_kwh": (
+            round(max(0.0, gesamt - heizen - warmwasser), 3)
+            if gesamt is not None else None
+        ),
+    }
 
+
+def _r(v: float, hat: bool, stellen: int = 3):
+    """Gerundet, wenn der Slot eine Aufteilung trägt (``hat_split``), sonst ``None`` (RF-58, vorher Closure)."""
+    return round(v, stellen) if hat else None
+
+
+def _antwort(ctx: _WaermeStundenKontext) -> WaermeVerlaufStundenResponse:
+    """Die Antwort (RF-58): je Stunde Strom (Zählerspalte), Wärme, Kälte, Betriebsart-Stapel (nur mit Aufteilung, sonst
+    ``None``), Funktions-Segmente und Wärme-Segmente; dazu Raster und die Tageswerte ohne Stundenform."""
+    from backend.core.berechnungen.slot_konvention import RASTER_BEGINN, RASTER_ENDE
+
+    wp_kw, waerme_je_slot, kaelte_je_slot = ctx.wp_kw, ctx.waerme_je_slot, ctx.kaelte_je_slot
     zeilen = []
-    for h, s in enumerate(verteilung.stunden):
+    for h, s in enumerate(ctx.verteilung.stunden):
         hat = s.hat_split
         zeilen.append(WaermeVerlaufStundeResponse(
             stunde=h,
@@ -510,20 +613,21 @@ async def get_waerme_verlauf_stunden(
             wp_modus_strom_bezug_kwh=_r(s.bezug_kwh, hat),
             wp_modus_abdeckung_h=_r(s.abdeckung_h, hat, 1),
             wp_modus_gemessen=s.hat_gemessen if hat else None,
-            **_funktions_segmente(h),
-            **waerme_segmente[h],
+            **_funktions_segmente(ctx, h),
+            **ctx.waerme_segmente[h],
         ))
-    ohne = verteilung.ohne_stundenform_kwh
+    ohne = ctx.verteilung.ohne_stundenform_kwh
+    waerme_ohne, kaelte_ohne, funktion_ohne = ctx.waerme_ohne, ctx.kaelte_ohne, ctx.funktion_ohne
     return WaermeVerlaufStundenResponse(
         stunden=zeilen,
         # HA-Bauform S4 (S4-E2 A): an einem WP-Kanal-Tag liegen alle Stunden auf dem Beginn (Kanal-Stunden, Modus aus
         # den abgeleiteten Kanälen, Snapshot-Formen umgelegt), sonst auf dem Ende (Backward-Slots).
-        raster=RASTER_BEGINN if eingaenge.wp_aus_kanal else RASTER_ENDE,
+        raster=RASTER_BEGINN if ctx.eingaenge.wp_aus_kanal else RASTER_ENDE,
         ohne_stundenform_kwh=round(ohne, 2) if ohne > 0.005 else None,
         waerme_ohne_stundenform_kwh=round(waerme_ohne, 2) if waerme_ohne > 0.005 else None,
         kaelte_ohne_stundenform_kwh=round(kaelte_ohne, 2) if kaelte_ohne > 0.005 else None,
-        funktions_stapel_verfuegbar=funktions_stapel_verfuegbar,
-        waerme_funktions_stapel_verfuegbar=waerme_stapel_verfuegbar,
+        funktions_stapel_verfuegbar=ctx.funktions_stapel_verfuegbar,
+        waerme_funktions_stapel_verfuegbar=ctx.waerme_stapel_verfuegbar,
         funktion_ohne_stundenform_kwh=(
             round(funktion_ohne, 2) if funktion_ohne > 0.005 else None
         ),
@@ -532,7 +636,7 @@ async def get_waerme_verlauf_stunden(
 def _strom_zaehler_der_geraete(anlage, investitionen_by_id: dict, inv_ids, mqtt_keys) -> dict[str, list[str]]:
     """Je Gerät die Schlüssel seiner Gesamt-Strom-Zähler (K3-Auswahl der Beitragsschicht, nur mit Zähler) — der Strom je
     Stunde, an dem ``temperatur_tagesmittel`` ohne Modus-Signal die Betriebsstunden erkennt. Dieselbe Auswahl wie die
-    Gesamt-Form des Wärme-Verlaufs (``gesamt_felder`` in ``get_waerme_verlauf_stunden``)."""
+    Gesamt-Form des Wärme-Verlaufs (``gesamt_felder`` in ``_zaehler_der_verteilung``, Phase von ``get_waerme_verlauf_stunden``)."""
     from backend.services.snapshot.keys import extract_quellen_energy, feld_hat_zaehler
     from backend.services.snapshot.komponenten_beitraege import investition_beitraege
 

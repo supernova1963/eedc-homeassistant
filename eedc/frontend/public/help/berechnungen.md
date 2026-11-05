@@ -2286,8 +2286,14 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 >   gespeicherte Aufteilung, kommt die Ergänzung im gedeckten Monat aus dem Kanal (dieselben Regeln wie oben), sonst aus
 >   der Tagesebene — und die Tagesebene lädt gedeckte Monate gar nicht mehr.
 > * **Beginn:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat, frühestens mit der Betriebsart-
->   Mitschrift; frühere Monate rechnet eedc nicht neu. Geschrieben wird eine Stunde erst, wenn die Mitschrift sie erreicht
->   hat; hört die Mitschrift auf, bleibt der Kanal stehen und der Monat rechnet wie bisher.
+>   Mitschrift; frühere Monate rechnet eedc nicht neu. Geschrieben wird eine Stunde erst, wenn die Mitschrift **und jeder
+>   Strom-Kanal des Geräts** sie erreicht haben (ein neuer Kanal zudem erst ab einer Stunde, in der jeder Strom-Kanal einen
+>   Vorstand hat); hört die Mitschrift auf, bleibt der Kanal stehen und der Monat rechnet wie bisher.
+> * **Code-Orte (RF-56):** `schreibe_modus_strom` ist der eine Schreibweg (beide Einstiege, Rückgabe = geschriebene
+>   Zeilen) und ruft die Phasen `_modus_strom_kontext` (Geräte mit Mitschrift ohne Betriebsart-Zähler, Fenster bis zur
+>   Stunde vor dem Lauf) · `_modus_strom_eingaenge` (Stand je Gerät, Beginn/`aufbaubar_ab`, Strom-Kanäle) ·
+>   `_modus_strom_stunden` (die Schreibbedingungen oben) · `_modus_strom_stunde` (der Formelblock oben je Stunde) ·
+>   `_modus_strom_schreiben` (Kanäle, `aufbaubar_ab` = erste Stunde, Quelle `modus_anteil_je_stunde`).
 > * **Der Monatsabschluss schreibt im gedeckten Monat dieselbe Aufteilung** (`modus_split_schreiben.kanal_split_des_monats`):
 >   Strom je Betriebsart und Abdeckung kommen aus dem abgeleiteten Kanal, derselbe Monat nennt vor und nach dem
 >   Abschluss dieselben Zahlen. Deckt die WP-Gruppe den Monat nicht, schreibt er die Aufteilung der Tagesebene
@@ -4461,6 +4467,21 @@ nach denselben Regeln wie die Tagessummen:
   Kälte, Funktions-Strom) eine Zeile hat, `None` (`waerme._verteile_linie`; der Funktions-Stapel ist dort ganz leer); die
   Folgestunde mit der Spanne trägt die Energie, Σ Stunden = Balken. Bestandstage unverändert. Der Betriebsart-Stapel
   verteilt weiter über die Modus-Form (die Modus-Spur der Stundenzeile hat in einer Spannen-Stunde eine Form, H-2a).
+  Die Stunden-Route `/waerme-verlauf-stunden` (`api/routes/energie_profil/waerme.py::get_waerme_verlauf_stunden`, Phasen
+  RF-58: `_waerme_tag` · `_stunden_verteilung` · `_waerme_linie_d1` · `_funktions_stapel` · `_antwort`) trägt je Slot `h`
+  zwei Stapel nebeneinander, nie überlagert:
+
+  ```
+  Wärme-Linie(h)      = Σ je Gerät nach D1 (N-391b): Gesamt-Wärmezähler, wo er den Tageswert trug, sonst Heizen + WW
+  Wärme-Stapel(h)     = heizen, warmwasser (Summanden-Formen der Achsen-Geräte), übrige = max(0, Linie − heizen − ww)
+                        — alle drei auf 3 Stellen; ohne Linien-Wert keine Segmente (P-433-3 S3)
+  Funktions-Stapel(h) = heizen = Linie strom_heizen_kwh, warmwasser = Linie strom_warmwasser_kwh,
+                        übrige  = round(max(0, Gesamt(h) − heizen − warmwasser), 3),  Gesamt(h) = wp_strom_kwh des Slots
+                                  (die Zählerspalte, Σ = Kachel «Strom verbraucht»)
+                        Gesamt(h) fehlt ⇒ übrige = None (keine Aussage, nicht 0); Funktions-Stapel nur, wenn ein
+                        Funktions-Zähler am TAG einen Wert > 0 trägt; Stunde ohne eigene Zeile an einem WP-Kanal-Tag ⇒
+                        heizen/warmwasser None (S5-R5)
+  ```
 * **Wärme-Verlauf (Tagesreihe, Beiträge, Monatsmengen) an einem WP-Kanal-Tag (W-3, S5a):** Modus-Split und gemessene
   Betriebsart-Zähler kommen wie in *Cockpit → Tag* aus den Kanälen (`kanal_stunden.wp_modus_der_kanal_tage`: Σ der
   abgeleiteten Kanäle «Strom je Betriebsart» im Kalendertag, Abdeckung `modus_abdeckung_h`, Bezug der Kanal-Strom; die
@@ -4570,6 +4591,33 @@ kein Anker    ⇒ der erste belegte Slot bleibt leer (die Reihe beginnt im Fenst
 
 Die Einheit wird **beim Lesen** umgerechnet (Fenster und Anker), die Differenz entsteht in kWh. Lesefehler (SQL oder
 WebSocket) ⇒ Warnung im Log und ein leeres Ergebnis für alle Zähler des Tages.
+
+**Tageswert je Gerät aus der Standreihe** (Bereichs-Leser `services/snapshot/bereichs_leser.py::lade_tageswerte_je_geraet`,
+Wärme/Klima-Verlauf je Tag und Speicher-Netzladung im Monats-Rückfall; dieselbe Regel wie `get_tagesdetail_kwh` für einen
+Tag, hier über einen Bereich mit **einer** Standreihe je Zähler):
+
+```
+Fenster(tag)  = [00:00, 24:00); an den Rückwärts-Tagen des Aufrufers [Vortag 23:00, 23:00) (N-435: die Tageszeile trägt
+                ihren WP-Strom aus den HA-LTS-Slots)                                     — Phase _tagesfenster
+Ränder        = die Menge aller Fenster-Enden; benachbarte Tage mit gleichem Fenster teilen ihren Rand
+Reihe         = EINE Abfrage je Zähler über [erster Rand − 5 min, letzter Rand + 5 min] (Snapshot-Tabelle)
+Stand(Rand)   = der Stand der Reihe, der dem Rand am nächsten liegt (±5 min); fehlt er, die Heilungs-Kaskade get_snapshot
+                (HA-Langzeitstatistik → MQTT-Backup, schreibt zurück) — nur für die fehlenden Ränder
+Anker (R1)    = fehlt Stand(Beginn) und ist Stand(Ende) da: der letzte Stand der Reihe vor dem Beginn, sonst der letzte
+                Stand beliebig weit zurück (letzter_stand_vor); die Energie der Lücke gehört zu diesem Tag (wie HA)
+Tageswert     = tageswert_aus_reihe(Anker bzw. Stand(Beginn), Stand(Ende), Stände dazwischen) = max(0, Ende − Anfang);
+                Rücksprung (Randdifferenz < −Toleranz oder fallende Folge, auch ein Tagesreset) ⇒ kein Tag
+                                                                                          — Phase _randstaende
+Gerät         = Gerätefeld ODER Σ der Innengerät-Kopien (geraetefeld_oder_innengeraete, nie addiert); laufen mehrere
+                (typ, feld) eines Geräts in denselben Ausgabe-Key, addieren sie sich       — Phase _auffalten
+übersprungen  = Gerät None · E-Auto mit Parent (die Wallbox misst die Ladung, sonst Doppelzählung) · Feld ohne Zähler
+                (feld_hat_zaehler, auch Quelle «keine»)                                   — Phase _geraete_aufloesung
+```
+
+Ein Tag ohne Anfangs- oder Endstand und ein Tag mit Rücksprung **fehlen** im Ergebnis `{datum: {ausgabe_key: {inv_id: kWh}}}`
+— keine 0 als Platzhalter (ADR-002/P4); der Rücksprung steht als Debug-Zeile im Log. Die Hülle `lade_tageswerte_je_feld`
+summiert die Geräte. Proben: `test_waerme_verlauf_bereichs_leser.py`, `test_zaehlerluecken_waerme_leser.py`,
+`test_rf56_kanal_leser_phasen.py`.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (seit N-635, 05.10.2026; vorher max(0, ΣPV − ΣEinsp), s. §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.

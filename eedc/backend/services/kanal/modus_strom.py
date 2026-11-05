@@ -44,8 +44,9 @@ Schwesterdateien: ``abgeleitet.py`` (PV-Anteil der Heimladung, Vorbild), ``wp_le
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -182,6 +183,35 @@ async def _mitschrift_anteile(db: AsyncSession, kanaele: list[Kanal], von: int, 
     return out
 
 
+@dataclass
+class _ModusStromKontext:
+    """Die geteilten Eingänge von ``schreibe_modus_strom`` (RF-56): Aufruf (``anlage``, ``zeitpunkt``, ``invs``, ``ab_ts``),
+    die abzuleitenden Geräte und das Fenster; ``_modus_strom_eingaenge`` füllt Stand, Mitschrift, Beginn und die
+    Strom-Stunden je Gerät nach."""
+
+    db: AsyncSession
+    anlage: Any
+    zeitpunkt: datetime
+    invs: list
+    ab_ts: Optional[int]
+    geraete: dict[int, list[str]]
+    inv_by_id: dict
+    ts_bis: int
+    # ── Stand je Gerät (`_modus_strom_stand`) ──
+    vorhanden: dict[str, Kanal] = field(default_factory=dict)
+    letzte: dict = field(default_factory=dict)
+    mit: dict[int, list[Kanal]] = field(default_factory=dict)
+    weiter_ab: dict[int, int] = field(default_factory=dict)
+    staende: dict[int, dict[str, float]] = field(default_factory=dict)
+    mitschrift_bis: dict[int, Optional[int]] = field(default_factory=dict)
+    # ── Beginn (`_modus_strom_beginn`) ──
+    start_je: dict[int, int] = field(default_factory=dict)
+    # ── Strom-Kanäle (`_modus_strom_kanaele`) ──
+    strom_keys: dict[int, list[str]] = field(default_factory=dict)
+    werte: dict = field(default_factory=dict)
+    erreicht: dict = field(default_factory=dict)
+
+
 async def schreibe_modus_strom(
     db: AsyncSession, anlage, zeitpunkt: datetime, *, invs: Optional[list] = None, ab_ts: Optional[int] = None,
 ) -> int:
@@ -189,30 +219,67 @@ async def schreibe_modus_strom(
 
     Je Gerät ab seiner letzten Zeile (bzw. ``aufbaubar_ab`` nach einem Verwerfen); ein neues Gerät ab ``ab_ts`` bzw.
     dem laufenden Monat (Modul-Kopf). Returns: Zahl der geschriebenen Zeilen.
+
+    Form (RF-56, Bauform RF-1): der Orchestrator ruft die Phasen und zählt ``n`` — ``_modus_strom_kontext`` (Geräte,
+    Fenster) · ``_modus_strom_eingaenge`` (Stand je Gerät, Mitschrift, Beginn/``aufbaubar_ab``, Strom-Kanäle) ·
+    ``_modus_strom_stunden`` (Schreibbedingungen je Stunde; die Stunde selbst rechnet ``_modus_strom_stunde``: Strom ×
+    Anteil je Betriebsart, Rest, Abdeckung) · ``_modus_strom_schreiben`` (Kanäle, ``aufbaubar_ab`` und Quelle, Zeilen);
+    eingefügt wird mit ``schreiber._zeilen_einfuegen`` (Upsert). Geteilte Eingänge: ``_ModusStromKontext``.
     """
+    from backend.services.kanal.schreiber import _zeilen_einfuegen
+
+    ctx = await _modus_strom_kontext(db, anlage, zeitpunkt, invs, ab_ts)
+    if ctx is None or not await _modus_strom_eingaenge(ctx):
+        return 0
+    neue = await _modus_strom_stunden(ctx)
+    if not neue:
+        return 0
+    return await _zeilen_einfuegen(db, await _modus_strom_schreiben(ctx, neue))
+
+
+async def _modus_strom_kontext(
+    db: AsyncSession, anlage, zeitpunkt: datetime, invs: Optional[list], ab_ts: Optional[int],
+) -> Optional[_ModusStromKontext]:
+    """Phase 1 (RF-56): die Geräte, die einen abgeleiteten Kanal bekommen, und das Fenster bis ``ts_bis`` (die Stunde vor
+    ``zeitpunkt``) — ``None``, wenn es nichts abzuleiten gibt (keine Wärmepumpe, kein Gerät mit Mitschrift ohne
+    gemessenen Betriebsart-Zähler, K2)."""
     from backend.models.investition import Investition
     from backend.services.kanal.abgeleitet import verfuegbarkeit
-    from backend.services.kanal.fenster import monatsfenster
-    from backend.services.kanal.abgeleitet import tag_der_stunde
-    from backend.services.kanal.lesen import kanaele_laden, stunden_stapel
-    from backend.services.kanal.schreiber import _zeilen_einfuegen, kanaele_holen, letzte_zeilen
 
     if invs is None:
         invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage.id))).scalars().all())
     if not any(getattr(i, "typ", None) == "waermepumpe" for i in invs):
-        return 0
+        return None
     hat_feld = await verfuegbarkeit(db, anlage)
     geraete = await abzuleitende_geraete(db, anlage, invs, hat_feld)
     if not geraete:
-        return 0
+        return None
     inv_by_id = {i.id: i for i in invs}
     ts_bis = (_unix(zeitpunkt) // _STUNDE) * _STUNDE - _STUNDE
-    if ab_ts is not None:
-        neu_ab = int(ab_ts)
-    else:
-        tag = tag_der_stunde(ts_bis)
-        neu_ab = monatsfenster(tag.year, tag.month)[0] - _STUNDE
+    return _ModusStromKontext(db=db, anlage=anlage, zeitpunkt=zeitpunkt, invs=invs, ab_ts=ab_ts, geraete=geraete,
+                              inv_by_id=inv_by_id, ts_bis=ts_bis)
 
+
+async def _modus_strom_eingaenge(ctx: _ModusStromKontext) -> bool:
+    """Phase 2 (RF-56): Stand je Gerät, Mitschrift, Beginn/``aufbaubar_ab`` und die Strom-Kanäle der Stunden — ``False``,
+    wenn keine Stunde zu schreiben ist (kein Gerät, dessen Mitschrift seine nächste Stunde erreicht hat; Beginn nach
+    ``ts_bis``; keine Strom-Kanäle)."""
+    await _modus_strom_stand(ctx)
+    await _modus_strom_beginn(ctx)
+    if not ctx.start_je:
+        return False
+    start = min(ctx.start_je.values())
+    if start > ctx.ts_bis:
+        return False
+    return await _modus_strom_kanaele(ctx, start)
+
+
+async def _modus_strom_stand(ctx: _ModusStromKontext) -> None:
+    """Stand je Gerät (Phase 2a, RF-56): die Kanäle, die es schon gibt, ihre letzten Zeilen, die Mitschrift und wie weit
+    sie reicht; ein bestehender Kanal schreibt ab seiner letzten Zeile bzw. ``aufbaubar_ab`` weiter."""
+    from backend.services.kanal.schreiber import letzte_zeilen
+
+    db, anlage, geraete = ctx.db, ctx.anlage, ctx.geraete
     # Stand je Gerät: die Kanäle, die es schon gibt, und ihre letzten Zeilen (alle Kanäle eines Geräts schreiben
     # dieselben Stunden; maßgeblich ist der Abdeckungs-Kanal).
     vorhanden = {k.key: k for k in (await db.execute(select(Kanal).where(and_(
@@ -221,10 +288,8 @@ async def schreibe_modus_strom(
     letzte = await letzte_zeilen(db, [k.id for k in vorhanden.values()])
     mit = await mitschrift_kanaele(db, anlage.id, list(geraete))
     mit_letzte = await letzte_zeilen(db, [k.id for ks in mit.values() for k in ks])
-    weiter_ab: dict[int, int] = {}
-    staende: dict[int, dict[str, float]] = {}
-    erste_mitschrift: dict[int, Optional[int]] = {}
-    mitschrift_bis: dict[int, Optional[int]] = {}
+    ctx.vorhanden, ctx.letzte, ctx.mit = vorhanden, letzte, mit
+    weiter_ab, staende, mitschrift_bis = ctx.weiter_ab, ctx.staende, ctx.mitschrift_bis
     for inv_id in geraete:
         ts_mit = [mit_letzte[k.id].start_ts for k in mit.get(inv_id, []) if k.id in mit_letzte]
         mitschrift_bis[inv_id] = max(ts_mit) if ts_mit else None
@@ -237,12 +302,28 @@ async def schreibe_modus_strom(
                       and letzte[vorhanden[key].id].sum is not None else 0.0)
                 for key in alle_keys(inv_id)
             }
+
+
+async def _modus_strom_beginn(ctx: _ModusStromKontext) -> None:
+    """Beginn je Gerät (Phase 2b, RF-56): ein bestehender Kanal ab ``weiter_ab``, ein neuer ab ``ab_ts`` bzw. dem laufenden
+    Monat (H-2 aus E4c), frühestens eine Stunde vor seiner ersten Mitschrift-Zeile; danach nur die Geräte, deren
+    Mitschrift ihre nächste Stunde schon erreicht hat."""
+    from backend.services.kanal.abgeleitet import tag_der_stunde
+    from backend.services.kanal.fenster import monatsfenster
+
+    db, geraete, weiter_ab, mitschrift_bis = ctx.db, ctx.geraete, ctx.weiter_ab, ctx.mitschrift_bis
+    if ctx.ab_ts is not None:
+        neu_ab = int(ctx.ab_ts)
+    else:
+        tag = tag_der_stunde(ctx.ts_bis)
+        neu_ab = monatsfenster(tag.year, tag.month)[0] - _STUNDE
+    erste_mitschrift: dict[int, Optional[int]] = {}
     # Die erste Mitschrift-Zeile je NEUEM Gerät (ein Index-Schritt je Kanal).
     for inv_id in geraete:
         if inv_id in weiter_ab:
             continue
         erste = None
-        for k in mit.get(inv_id, []):
+        for k in ctx.mit.get(inv_id, []):
             z = (await db.execute(select(KanalStatistik.start_ts).where(KanalStatistik.kanal_id == k.id)
                                   .order_by(KanalStatistik.start_ts.asc()).limit(1))).scalar()
             if z is not None and (erste is None or z < erste):
@@ -256,31 +337,40 @@ async def schreibe_modus_strom(
             start_je[inv_id] = max(neu_ab, erste_mitschrift[inv_id] - _STUNDE)
     # Nur Geräte, deren Mitschrift ihre nächste Stunde schon erreicht hat — sonst gibt es nichts zu schreiben (der
     # Regelfall zwischen zwei Mitschrift-Läufen; spart die Stunden-Abfrage der Strom-Kanäle).
-    start_je = {i: ab for i, ab in start_je.items() if mitschrift_bis.get(i) is not None and mitschrift_bis[i] >= ab}
-    if not start_je:
-        return 0
-    start = min(start_je.values())
-    if start > ts_bis:
-        return 0
+    ctx.start_je = {i: ab for i, ab in start_je.items() if mitschrift_bis.get(i) is not None and mitschrift_bis[i] >= ab}
 
-    strom_keys = {i: [f"inv:{i}:{f}" for f in felder] for i, felder in geraete.items()}
-    kanaele = await kanaele_laden(db, anlage.id, {k for ks in strom_keys.values() for k in ks})
+
+async def _modus_strom_kanaele(ctx: _ModusStromKontext, start: int) -> bool:
+    """Die Strom-Kanäle der Geräte (Phase 2c, RF-56) — ihre Stunden ``[start, ts_bis]`` und je Kanal die letzte Stunde mit
+    Zeile (``erreicht``); ``False`` ohne einen Kanal der Art ``sum``."""
+    from backend.services.kanal.lesen import kanaele_laden, stunden_stapel
+
+    strom_keys = {i: [f"inv:{i}:{f}" for f in felder] for i, felder in ctx.geraete.items()}
+    kanaele = await kanaele_laden(ctx.db, ctx.anlage.id, {k for ks in strom_keys.values() for k in ks})
     mengen = [k for k in kanaele.values() if k.art == ART_SUM]
     if not mengen:
-        return 0
-    je = await stunden_stapel(db, mengen, start, ts_bis + _STUNDE, jetzt=_unix(zeitpunkt) + _STUNDE)
+        return False
+    je = await stunden_stapel(ctx.db, mengen, start, ctx.ts_bis + _STUNDE, jetzt=_unix(ctx.zeitpunkt) + _STUNDE)
     werte = {key: {w.start_ts: w for w in st.werte} for key, st in je.items()}
-    erreicht = {key: (max(w) if w else None) for key, w in werte.items()}
+    ctx.strom_keys, ctx.werte = strom_keys, werte
+    ctx.erreicht = {key: (max(w) if w else None) for key, w in werte.items()}
+    return True
 
+
+async def _modus_strom_stunden(ctx: _ModusStromKontext) -> dict[int, list[tuple[int, dict[str, float]]]]:
+    """Phase 3 (RF-56): je Gerät die Stunden ab seinem Beginn, solange die Schreibbedingungen gelten — jeder Strom-Kanal und
+    die Mitschrift haben die Stunde erreicht (sonst «später weiter»), ein neuer Kanal beginnt erst mit Vorstand. Je
+    Stunde der Stand aller Kanäle des Geräts nach ``_modus_strom_stunde``."""
+    werte, erreicht, mitschrift_bis, ts_bis = ctx.werte, ctx.erreicht, ctx.mitschrift_bis, ctx.ts_bis
     neue: dict[int, list[tuple[int, dict[str, float]]]] = {}
-    for inv_id, ab in sorted(start_je.items()):
-        keys = [k for k in strom_keys[inv_id] if k in werte]
+    for inv_id, ab in sorted(ctx.start_je.items()):
+        keys = [k for k in ctx.strom_keys[inv_id] if k in werte]
         if not keys:
             continue
-        inv = inv_by_id[inv_id]
-        anteile = await _mitschrift_anteile(db, mit.get(inv_id, []), ab, ts_bis)
-        stand = dict(staende.get(inv_id) or {k: 0.0 for k in alle_keys(inv_id)})
-        begonnen = inv_id in weiter_ab
+        inv = ctx.inv_by_id[inv_id]
+        anteile = await _mitschrift_anteile(ctx.db, ctx.mit.get(inv_id, []), ab, ts_bis)
+        stand = dict(ctx.staende.get(inv_id) or {k: 0.0 for k in alle_keys(inv_id)})
+        begonnen = inv_id in ctx.weiter_ab
         h = ab
         while h <= ts_bis:
             if any(erreicht[k] is None or erreicht[k] < h for k in keys):
@@ -292,22 +382,36 @@ async def schreibe_modus_strom(
                 h += _STUNDE                            # ein neuer Kanal beginnt erst mit Vorstand
                 continue
             begonnen = True
-            menge, eindeutig = menge_der_stunde(zeilen, inv.parameter)
-            a = anteile.get(h)
-            je_modus, rest = modus_strom_der_stunde(menge, a, stunde_eindeutig=eindeutig)
-            for m, v in je_modus.items():
-                stand[modus_strom_key(inv_id, m)] += v
-            stand[modus_strom_key(inv_id, MODUS_STROM_REST)] += rest
-            if a and sum(a.values()) > 0:
-                stand[abdeckung_key(inv_id)] += 1.0
+            _modus_strom_stunde(stand, inv_id, zeilen, inv.parameter, anteile.get(h))
             neue.setdefault(inv_id, []).append((h, dict(stand)))
             h += _STUNDE
-    if not neue:
-        return 0
+    return neue
 
+
+def _modus_strom_stunde(stand: dict[str, float], inv_id: int, zeilen: dict, parameter: Optional[dict],
+                        a: Optional[dict[str, float]]) -> None:
+    """Eine Stunde eines Geräts (RF-56): die K3-Menge der Stunde (``menge_der_stunde``) × Anteil je Betriebsart nach der
+    Regel des Layers (``modus_strom_der_stunde``), der Rest in ``modus_strom_rest_kwh``, Abdeckung +1 nur bei Signal
+    (Σ Anteile > 0) — auf den Stand ``stand`` (kumulativ) addiert."""
+    menge, eindeutig = menge_der_stunde(zeilen, parameter)
+    je_modus, rest = modus_strom_der_stunde(menge, a, stunde_eindeutig=eindeutig)
+    for m, v in je_modus.items():
+        stand[modus_strom_key(inv_id, m)] += v
+    stand[modus_strom_key(inv_id, MODUS_STROM_REST)] += rest
+    if a and sum(a.values()) > 0:
+        stand[abdeckung_key(inv_id)] += 1.0
+
+
+async def _modus_strom_schreiben(ctx: _ModusStromKontext, neue: dict[int, list[tuple[int, dict[str, float]]]]) -> list[dict]:
+    """Phase 4 (RF-56): die Kanäle holen (Art ``sum``, ``h`` bzw. ``kWh``), einem neuen Kanal ``aufbaubar_ab`` = seine
+    erste Stunde und die Quelle ``modus_anteil_je_stunde`` geben, die Zeilen bilden; ``flush`` — einfügen (Upsert) und
+    zählen tut der Orchestrator."""
+    from backend.services.kanal.schreiber import kanaele_holen
+
+    db = ctx.db
     gewuenscht = {key: (ART_SUM, "h" if key.endswith(MODUS_ABDECKUNG_FELD) else "kWh")
                   for i in neue for key in alle_keys(i)}
-    kanaele_neu = await kanaele_holen(db, anlage.id, gewuenscht)
+    kanaele_neu = await kanaele_holen(db, ctx.anlage.id, gewuenscht)
     zeilen_db: list[dict] = []
     for inv_id, punkte in neue.items():
         for key in alle_keys(inv_id):
@@ -319,7 +423,7 @@ async def schreibe_modus_strom(
             zeilen_db.extend({"kanal_id": kanal.id, "start_ts": ts, "sum": st[key], "state": None, "mean": None,
                               "min": None, "max": None, "familie": FAMILIE_ABGELEITET} for ts, st in punkte)
     await db.flush()
-    return await _zeilen_einfuegen(db, zeilen_db)
+    return zeilen_db
 
 
 __all__ = [
