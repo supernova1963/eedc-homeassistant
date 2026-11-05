@@ -251,40 +251,44 @@ def mit_v2h_entladung(bilanz: "TagesBilanz", v2h_entladung_kwh: Optional[float])
     )
 
 
-def bilanz_aus_stundenrows(
-    rows: Iterable[_StundenRow], *, verworfen: Optional[dict] = None,
-    v2h_entladung_kwh: Optional[float] = None,
-) -> TagesBilanz:
-    """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring).
+@dataclass
+class _StundenSummen:
+    """Phase 1 von `bilanz_aus_stundenrows` (RF-73): die Σ je Achse über die Stunden — ein Durchlauf über die Zeilen.
 
-    ⭐ **Zählerlücken wie HA (R7, Vorlage Fassung 7).** ``verworfen`` ist die
-    Spalte der Tageszeile und zugleich ihre **Regelmarke** (R9):
+    Felder wie die Lokalen der Fassung bis RF-73 (Namen gleich), damit die Formeln der Folgephasen wörtlich bleiben.
+    """
 
-    * ``None`` (Altbestand, oder eine Faltung ohne Tageszeile) ⇒ **N-92 wie
-      bisher**: Differenzen und Quoten nur bei gleicher Abdeckung ihrer
-      Summanden. Die Stunden solcher Tage haben die Energie einer Lücke noch
-      verloren (E6) — eine Teilabdeckung ist dort ein echter Fehler.
-    * ein Dict (auch ``{}``) ⇒ **R7**: jede Stunde trägt, was HA für sie zeigt,
-      die Energie einer Lücke steht in der Folgestunde. Mengen = Σ Stunden;
-      **Gesamtverbrauch nach HA-Formel** (`gesamtverbrauch_ha_formel_kwh`),
-      ``None`` nur im **Total-Fall** (PV, Netzbezug oder Einspeisung hat am Tag
-      keinen einzigen Stundenwert; fehlende Batterie = 0). **EV = Direkt-
-      verbrauch + Speicher-Entladung** (`_eigenverbrauch_kwh`, N-635) — die
-      Formel des Monats und des HA-Energie-Dashboards (``used_solar`` +
-      ``used_battery``); „EV = PV − Einspeisung, wie HA" galt nur ohne
-      Speicher. Die Batterie trägt dieselbe Regel wie der Gesamtverbrauch
-      daneben: fehlende Batterie = 0, ``verworfen.batterie`` sperrt den
-      Eigenverbrauch nicht (er sperrt nur die Autarkie). Unterdrückt werden
-      nur noch: EV/EV-Quote bei Total-Fall oder ``verworfen`` auf
-      pv/einspeisung; Autarkie bei fehlendem Gesamtverbrauch oder
-      ``verworfen`` auf pv/netzbezug/einspeisung/batterie. Teilabdeckung wird
-      nicht mehr unterdrückt — wie in HA (G3).
+    pv_sum: float = 0.0
+    pv_erfasst: bool = False
+    # Abdeckung je Achse + die beiden Paar-Abdeckungen der Differenzen (N-92).
+    pv_n: int = 0
+    verbrauch_n: int = 0
+    einspeisung_n: int = 0
+    netzbezug_n: int = 0
+    pv_ein_n: int = 0
+    verb_netz_n: int = 0
+    verbrauch_erfasst: bool = False
+    einspeisung_erfasst: bool = False
+    netzbezug_erfasst: bool = False
+    verbrauch_sum: float = 0.0
+    einspeisung_sum: float = 0.0
+    netzbezug_sum: float = 0.0
+    ueberschuss_sum: float = 0.0
+    defizit_sum: float = 0.0
+    direkt_sum: float = 0.0
+    batt_lade_sum: float = 0.0
+    batt_entlade_sum: float = 0.0
+    wp_sum: float = 0.0
+    wp_erfasst: bool = False
+    n: int = 0
 
-    Direktverbrauch, Überschuss und Defizit bleiben in beiden Regeln Σ über die
-    Stunden mit (R6-)Verbrauchswert — benannte Teilsummen.
 
-    ``v2h_entladung_kwh`` (#110): die V2H-Tagesgröße aus dem Rollup — nur mit
-    Regelmarke wirksam (`mit_v2h_entladung`, dort die Sperren); ``None`` = keine.
+def _stunden_summen(rows: Iterable[_StundenRow]) -> _StundenSummen:
+    """Phase 1 (RF-73): Σ je Achse mit `None`-Überspringen, Abdeckung je Achse und Paar (N-92), Überschuss/Defizit und
+    Direktverbrauch Σ min(PV, V) nur über Stunden mit PV **und** Verbrauch, Batterie richtungsgetrennt.
+
+    Liest die Zeilen genau einmal (``rows`` darf ein Iterator sein). Summiert in der Reihenfolge der Zeilen in Lokale
+    und legt sie erst am Ende ab — dieselbe Gleitkomma-Folge wie vor RF-73.
     """
     pv_sum = 0.0
     pv_erfasst = False
@@ -354,6 +358,31 @@ def bilanz_aus_stundenrows(
             elif batt > 0:
                 batt_entlade_sum += batt
 
+    return _StundenSummen(
+        pv_sum=pv_sum, pv_erfasst=pv_erfasst,
+        pv_n=pv_n, verbrauch_n=verbrauch_n, einspeisung_n=einspeisung_n, netzbezug_n=netzbezug_n,
+        pv_ein_n=pv_ein_n, verb_netz_n=verb_netz_n,
+        verbrauch_erfasst=verbrauch_erfasst, einspeisung_erfasst=einspeisung_erfasst,
+        netzbezug_erfasst=netzbezug_erfasst,
+        verbrauch_sum=verbrauch_sum, einspeisung_sum=einspeisung_sum, netzbezug_sum=netzbezug_sum,
+        ueberschuss_sum=ueberschuss_sum, defizit_sum=defizit_sum, direkt_sum=direkt_sum,
+        batt_lade_sum=batt_lade_sum, batt_entlade_sum=batt_entlade_sum,
+        wp_sum=wp_sum, wp_erfasst=wp_erfasst, n=n,
+    )
+
+
+def _eigenverbrauch_je_regel(
+    s: _StundenSummen, *, regelmarke: bool, verw: dict,
+) -> tuple[Optional[float], Optional[float]]:
+    """Phase 2 (RF-73): Gesamtverbrauch nach HA-Formel (nur R7) und Eigenverbrauch je Regel → ``(gesamtverbrauch_ha, eigenverbrauch)``.
+
+    R7 (Regelmarke): Gesamtverbrauch nur ohne Total-Fall; EV gesperrt bei Total-Fall oder ``verworfen`` auf
+    pv/einspeisung. N-92 (Altbestand): EV nur bei gleicher Abdeckung von PV und Einspeisung.
+    """
+    pv_sum, pv_erfasst, pv_n, pv_ein_n = s.pv_sum, s.pv_erfasst, s.pv_n, s.pv_ein_n
+    einspeisung_sum, einspeisung_erfasst, einspeisung_n = s.einspeisung_sum, s.einspeisung_erfasst, s.einspeisung_n
+    netzbezug_sum, netzbezug_erfasst = s.netzbezug_sum, s.netzbezug_erfasst
+    batt_lade_sum, batt_entlade_sum = s.batt_lade_sum, s.batt_entlade_sum
     # Eigenverbrauch ist eine DIFFERENZ — fehlt die Erzeugung ganz, ist die
     # Richtung des Fehlers unbekannt und der Wert wird unterdrückt statt
     # geraten (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Ohne diese Regel
@@ -379,8 +408,6 @@ def bilanz_aus_stundenrows(
     # **unterdrückt**, nicht beschriftet, weil ihre Fehlerrichtung davon abhängt,
     # *welcher* Summand fehlt. Und §3 Regel 1 wörtlich: „Eine Differenz erbt die
     # Unvollständigkeit jedes Summanden."
-    regelmarke = verworfen is not None
-    verw = dict(verworfen or {})
     gesamtverbrauch_ha: Optional[float] = None
     if regelmarke:
         # R7: Total-Fall statt Abdeckungsgleichheit.
@@ -421,6 +448,17 @@ def bilanz_aus_stundenrows(
             if pv_erfasst and pv_n == einspeisung_n == pv_ein_n
             else None
         )
+    return gesamtverbrauch_ha, eigenverbrauch
+
+
+def _autarkie_je_regel(
+    s: _StundenSummen, *, regelmarke: bool, verw: dict, gesamtverbrauch_ha: Optional[float],
+) -> Optional[float]:
+    """Phase 3 (RF-73): Autarkie je Regel — R7 aus dem HA-Gesamtverbrauch mit den ``verworfen``-Sperren, N-92 aus
+    Σ Verbrauch nur bei erfasstem Netzbezug und gleicher Abdeckung Verbrauch/Netzbezug."""
+    verbrauch_sum, verbrauch_n = s.verbrauch_sum, s.verbrauch_n
+    netzbezug_sum, netzbezug_erfasst, netzbezug_n = s.netzbezug_sum, s.netzbezug_erfasst, s.netzbezug_n
+    verb_netz_n = s.verb_netz_n
     # Quoten über den SoT (kennzahlen-Layer); None statt 0 wenn Nenner fehlt,
     # damit die UI '—' statt '0 %' zeigt.
     #
@@ -449,6 +487,18 @@ def bilanz_aus_stundenrows(
             and verbrauch_n == netzbezug_n == verb_netz_n
             else None
         )
+    return autarkie
+
+
+def _bilanz_aus_summen(
+    s: _StundenSummen, *, regelmarke: bool, verw: dict, gesamtverbrauch_ha: Optional[float],
+    eigenverbrauch: Optional[float], autarkie: Optional[float],
+) -> TagesBilanz:
+    """Phase 4 (RF-73): EV-Quote (nur bei ``pv_sum > 0``), Speicher-Effizienz (Ladung > 0,1 kWh), unter R7 der
+    Gesamtverbrauch der HA-Formel auf dem Träger ``verbrauch_erfasst`` — und die ``TagesBilanz`` (ohne V2H)."""
+    pv_sum, pv_erfasst = s.pv_sum, s.pv_erfasst
+    batt_lade_sum, batt_entlade_sum = s.batt_lade_sum, s.batt_entlade_sum
+    verbrauch_sum, verbrauch_erfasst = s.verbrauch_sum, s.verbrauch_erfasst
     ev_quote = (
         eigenverbrauchsquote_prozent(eigenverbrauch, pv_sum)
         if pv_erfasst and eigenverbrauch is not None and pv_sum > 0 else None
@@ -464,35 +514,88 @@ def bilanz_aus_stundenrows(
         verbrauch_sum = gesamtverbrauch_ha if gesamtverbrauch_ha is not None else 0.0
         verbrauch_erfasst = gesamtverbrauch_ha is not None
 
-    bilanz = TagesBilanz(
+    return TagesBilanz(
         erzeugung_kwh=pv_sum,
         gesamtverbrauch_kwh=verbrauch_sum,
-        einspeisung_kwh=einspeisung_sum,
-        netzbezug_kwh=netzbezug_sum,
-        ueberschuss_kwh=ueberschuss_sum,
-        defizit_kwh=defizit_sum,
-        direktverbrauch_kwh=direkt_sum,
+        einspeisung_kwh=s.einspeisung_sum,
+        netzbezug_kwh=s.netzbezug_sum,
+        ueberschuss_kwh=s.ueberschuss_sum,
+        defizit_kwh=s.defizit_sum,
+        direktverbrauch_kwh=s.direkt_sum,
         eigenverbrauch_kwh=eigenverbrauch,
         speicher_ladung_kwh=batt_lade_sum,
         speicher_entladung_kwh=batt_entlade_sum,
-        wp_strom_kwh=wp_sum,
+        wp_strom_kwh=s.wp_sum,
         autarkie_prozent=autarkie,
         ev_quote_prozent=ev_quote,
         speicher_effizienz_prozent=speicher_eff,
-        stunden=n,
+        stunden=s.n,
         pv_erfasst=pv_erfasst,
-        pv_stunden=pv_n,
-        verbrauch_stunden=verbrauch_n,
-        einspeisung_stunden=einspeisung_n,
-        netzbezug_stunden=netzbezug_n,
-        pv_und_einspeisung_stunden=pv_ein_n,
-        verbrauch_und_netzbezug_stunden=verb_netz_n,
+        pv_stunden=s.pv_n,
+        verbrauch_stunden=s.verbrauch_n,
+        einspeisung_stunden=s.einspeisung_n,
+        netzbezug_stunden=s.netzbezug_n,
+        pv_und_einspeisung_stunden=s.pv_ein_n,
+        verbrauch_und_netzbezug_stunden=s.verb_netz_n,
         verbrauch_erfasst=verbrauch_erfasst,
-        einspeisung_erfasst=einspeisung_erfasst,
-        netzbezug_erfasst=netzbezug_erfasst,
-        wp_erfasst=wp_erfasst,
+        einspeisung_erfasst=s.einspeisung_erfasst,
+        netzbezug_erfasst=s.netzbezug_erfasst,
+        wp_erfasst=s.wp_erfasst,
         regelmarke=regelmarke,
         verworfen=verw,
+    )
+
+
+def bilanz_aus_stundenrows(
+    rows: Iterable[_StundenRow], *, verworfen: Optional[dict] = None,
+    v2h_entladung_kwh: Optional[float] = None,
+) -> TagesBilanz:
+    """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring).
+
+    ⭐ **Zählerlücken wie HA (R7, Vorlage Fassung 7).** ``verworfen`` ist die
+    Spalte der Tageszeile und zugleich ihre **Regelmarke** (R9):
+
+    * ``None`` (Altbestand, oder eine Faltung ohne Tageszeile) ⇒ **N-92 wie
+      bisher**: Differenzen und Quoten nur bei gleicher Abdeckung ihrer
+      Summanden. Die Stunden solcher Tage haben die Energie einer Lücke noch
+      verloren (E6) — eine Teilabdeckung ist dort ein echter Fehler.
+    * ein Dict (auch ``{}``) ⇒ **R7**: jede Stunde trägt, was HA für sie zeigt,
+      die Energie einer Lücke steht in der Folgestunde. Mengen = Σ Stunden;
+      **Gesamtverbrauch nach HA-Formel** (`gesamtverbrauch_ha_formel_kwh`),
+      ``None`` nur im **Total-Fall** (PV, Netzbezug oder Einspeisung hat am Tag
+      keinen einzigen Stundenwert; fehlende Batterie = 0). **EV = Direkt-
+      verbrauch + Speicher-Entladung** (`_eigenverbrauch_kwh`, N-635) — die
+      Formel des Monats und des HA-Energie-Dashboards (``used_solar`` +
+      ``used_battery``); „EV = PV − Einspeisung, wie HA" galt nur ohne
+      Speicher. Die Batterie trägt dieselbe Regel wie der Gesamtverbrauch
+      daneben: fehlende Batterie = 0, ``verworfen.batterie`` sperrt den
+      Eigenverbrauch nicht (er sperrt nur die Autarkie). Unterdrückt werden
+      nur noch: EV/EV-Quote bei Total-Fall oder ``verworfen`` auf
+      pv/einspeisung; Autarkie bei fehlendem Gesamtverbrauch oder
+      ``verworfen`` auf pv/netzbezug/einspeisung/batterie. Teilabdeckung wird
+      nicht mehr unterdrückt — wie in HA (G3).
+
+    Direktverbrauch, Überschuss und Defizit bleiben in beiden Regeln Σ über die
+    Stunden mit (R6-)Verbrauchswert — benannte Teilsummen.
+
+    ``v2h_entladung_kwh`` (#110): die V2H-Tagesgröße aus dem Rollup — nur mit
+    Regelmarke wirksam (`mit_v2h_entladung`, dort die Sperren); ``None`` = keine.
+
+    **Form (RF-73, 5.11.2026):** Orchestrator über vier reine Phasen in dieser Datei (Layer ADR-001: keine Session,
+    keine Uhr) — `_stunden_summen` (Σ je Achse, Abdeckung N-92, Überschuss/Defizit, Σ min(PV, V), Batterie
+    richtungsgetrennt; ein Durchlauf über ``rows``) · `_eigenverbrauch_je_regel` (R7: Gesamtverbrauch nach HA-Formel
+    und EV mit Sperren; N-92: EV nur bei gleicher Abdeckung) · `_autarkie_je_regel` · `_bilanz_aus_summen` (EV-Quote,
+    Speicher-Effizienz, R7-Gesamtverbrauch auf ``verbrauch_erfasst``, ``TagesBilanz``); V2H danach über
+    `mit_v2h_entladung` nur mit Regelmarke.
+    """
+    s = _stunden_summen(rows)
+    regelmarke = verworfen is not None
+    verw = dict(verworfen or {})
+    gesamtverbrauch_ha, eigenverbrauch = _eigenverbrauch_je_regel(s, regelmarke=regelmarke, verw=verw)
+    autarkie = _autarkie_je_regel(s, regelmarke=regelmarke, verw=verw, gesamtverbrauch_ha=gesamtverbrauch_ha)
+    bilanz = _bilanz_aus_summen(
+        s, regelmarke=regelmarke, verw=verw, gesamtverbrauch_ha=gesamtverbrauch_ha,
+        eigenverbrauch=eigenverbrauch, autarkie=autarkie,
     )
     # #110: V2H im R7-Zweig über die eine Funktion — ohne Regelmarke unverändert.
     return mit_v2h_entladung(bilanz, v2h_entladung_kwh) if regelmarke else bilanz
