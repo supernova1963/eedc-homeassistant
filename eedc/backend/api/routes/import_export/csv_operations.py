@@ -933,6 +933,12 @@ async def _schreibe_monatszeile(
         db.add(md)
 
 
+# Form (RF-60, 5.11.2026, Bauform RF-1) — als Kommentar, weil der Docstring der Route die OpenAPI-Beschreibung ist:
+# Orchestrator = Kontext `_ExportKontext` und vier Phasen in Reihenfolge — `_export_laden` (Anlage, Monatszeilen,
+# Investitionen ohne aktiv-Filter #123 und ihre Gerätezeilen), `_export_spalten` (Kopf: Tarif-/#392-Spalte nach heutiger
+# Vertragsart, Registry-Spalten je Gerät, Sonderkosten), `_export_zeilen` (Fallback-Keys, Dezimal-Komma, Zeilen),
+# `_export_antwort` (Dateiname #220, BOM, StreamingResponse). Die SQL-Reihenfolge ist die von vorher (Anlage,
+# Monatszeilen, Investitionen, Gerätezeilen je Investition, Tarife).
 @router.get("/export/{anlage_id}")
 async def export_csv(
     anlage_id: int,
@@ -941,6 +947,34 @@ async def export_csv(
     db: AsyncSession = Depends(get_db)
 ):
     """Exportiert Monatsdaten als CSV."""
+    ctx = _ExportKontext(anlage_id=anlage_id, jahr=jahr, include_investitionen=include_investitionen)
+    await _export_laden(db, ctx)
+    await _export_spalten(db, ctx)
+    output = _export_zeilen(ctx)
+    return _export_antwort(ctx, output)
+
+
+@dataclass
+class _ExportKontext:
+    """Geteilte Eingänge der Export-Phasen (RF-60): Parameter, geladene Zeilen, Kopf und Vertragsart-Flags."""
+
+    anlage_id: int
+    jahr: Optional[int]
+    include_investitionen: bool
+    anlage: Optional[Anlage] = None
+    monatsdaten: list[Monatsdaten] = field(default_factory=list)
+    investitionen: list[Investition] = field(default_factory=list)
+    inv_monatsdaten_map: dict[tuple[int, int, int], dict] = field(default_factory=dict)
+    header: list[str] = field(default_factory=list)
+    hat_dynamisch_export: bool = False
+    hat_variable_einspeisung_export: bool = False
+    inv_columns: list[tuple[Investition, str, str]] = field(default_factory=list)
+
+
+async def _export_laden(db: AsyncSession, ctx: _ExportKontext) -> None:
+    """Phase 1 (RF-60): Anlage (404), Monatszeilen (Jahr-Filter, sortiert), Investitionen OHNE aktiv-Filter (#123)
+    und ihre Gerätezeilen als `(investition_id, jahr, monat) → verbrauch_daten` (P10: Export-Lader)."""
+    anlage_id, jahr, include_investitionen = ctx.anlage_id, ctx.jahr, ctx.include_investitionen
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = anlage_result.scalar_one_or_none()
@@ -981,10 +1015,17 @@ async def export_csv(
             for imd in imd_result.scalars().all():
                 inv_monatsdaten_map[(inv.id, imd.jahr, imd.monat)] = imd.verbrauch_daten or {}
 
-    # CSV erstellen
-    output = StringIO()
-    writer = csv.writer(output, delimiter=";")
+    ctx.anlage = anlage
+    ctx.monatsdaten = monatsdaten
+    ctx.investitionen = investitionen
+    ctx.inv_monatsdaten_map = inv_monatsdaten_map
 
+
+async def _export_spalten(db: AsyncSession, ctx: _ExportKontext) -> None:
+    """Phase 2 (RF-60): der CSV-Kopf — Basis-Spalten, Tarif-Spalte bei dynamischem Tarif, #392-Spalte bei variabler
+    Einspeisevergütung (beide nach HEUTIGER Vertragsart, P8-Ausnahme), je Gerät die Registry-Spalten und die
+    Sonderkosten (Wechselrichter ohne Spalten), am Ende «Notizen»."""
+    anlage_id, investitionen = ctx.anlage_id, ctx.investitionen
     header = ["Jahr", "Monat", "Einspeisung_kWh", "Netzbezug_kWh"]
 
     # Bei dynamischem Tarif: Durchschnittspreis-Spalte
@@ -1019,6 +1060,23 @@ async def export_csv(
         header.extend([f"{prefix}_Sonderkosten_Euro", f"{prefix}_Sonderkosten_Notiz"])
 
     header.append("Notizen")
+
+    ctx.header = header
+    ctx.hat_dynamisch_export = hat_dynamisch_export
+    ctx.hat_variable_einspeisung_export = hat_variable_einspeisung_export
+    ctx.inv_columns = inv_columns
+
+
+def _export_zeilen(ctx: _ExportKontext) -> StringIO:
+    """Phase 3 (RF-60): Kopf und je Monatszeile eine CSV-Zeile (`;`, CRLF) — Tarif-/#392-Zelle mit `is not None`,
+    Gerätezellen mit Fallback-Keys und Dezimal-Komma, Sonderkosten aus `sonstige_positionen`, Notizen."""
+    monatsdaten, header, inv_columns = ctx.monatsdaten, ctx.header, ctx.inv_columns
+    inv_monatsdaten_map = ctx.inv_monatsdaten_map
+    hat_dynamisch_export, hat_variable_einspeisung_export = ctx.hat_dynamisch_export, ctx.hat_variable_einspeisung_export
+
+    # CSV erstellen
+    output = StringIO()
+    writer = csv.writer(output, delimiter=";")
     writer.writerow(header)
 
     # Fallback-Keys: Manche Felder wurden unter verschiedenen Namen gespeichert
@@ -1086,6 +1144,12 @@ async def export_csv(
         row.append(md.notizen or "")
         writer.writerow(row)
 
+    return output
+
+
+def _export_antwort(ctx: _ExportKontext, output: StringIO) -> StreamingResponse:
+    """Phase 4 (RF-60): Dateiname (Anlagenname sanitisiert, #220; ohne Jahr «alle»), BOM, StreamingResponse."""
+    anlage, jahr = ctx.anlage, ctx.jahr
     output.seek(0)
     # Anlagenname sanitisieren (Umlaute → ae/oe/ue, Sonderzeichen → _) — HTTP-Header
     # erlaubt nur Latin-1, ungequoteted nur Token-Zeichen (kein Leerzeichen, kein ;, " etc.).

@@ -8,8 +8,6 @@
 60	api/routes/energie_profil/tag.py::get_tag_detail
 58	api/routes/ha_export/anlage_sensoren.py::calculate_anlage_sensors
 53	api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan
-64	api/routes/import_export/csv_operations.py::export_csv
-65	api/routes/import_export/demo_data.py::create_demo_data
 51	api/routes/import_export/json_operations.py::import_json
 58	core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows
 58	services/community_service.py::prepare_community_data
