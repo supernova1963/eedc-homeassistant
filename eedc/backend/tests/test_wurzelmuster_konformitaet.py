@@ -3024,7 +3024,13 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # Balkonkraftwerk sein Kanal ODER, abgetreten ohne eigenen, die Kanäle seiner Kinder — nie beide). Eltern und Kind
     # können sich so nicht doppeln; der Selektor beantwortete die Frage „wer ist ein String?" nicht.
     "backend/services/daten_checker/datenquelle/zaehler_steht.py::_check_pv_zaehler_steht",
-    "backend/services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts",
+    # RF-53 (5.11.2026): bis dahin stand hier `_helpers.py::_get_tagespeaks_aus_ha_lts`; die Typ-Menge
+    # `pv_typ = {"pv-module", "balkonkraftwerk"}` steht seitdem in seiner Auswahl-Phase. Sie WÄHLT nur die
+    # Leistungs-Entities (`leistung_w` je Investition, sonst `pv_gesamt_w`) und summiert nichts; die Σ max je
+    # Stunde bildet die Phase `_peak_pv_aus_lts` über genau diese Auswahl — ohne Selektor: misst ein
+    # abtretendes BKW selbst UND messen seine Kinder, zählen beide (die Abfrage lädt keine Elternschaft).
+    # Der Eintrag ist mit dem Schnitt umgehängt, nicht neu bewertet.
+    "backend/services/energie_profil/_helpers.py::_lts_sensoren_je_rolle",
     # LADEPFAD, keine Summe: holt die Erzeuger-Zeilen aus der DB und reicht sie
     # weiter. Die Menge wird erst in `soll_fuer_monat` gebildet — dort läuft sie
     # durch den Selektor, und zwar NACH dem Zeitfilter. Den Selektor schon beim

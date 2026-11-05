@@ -11,7 +11,7 @@ Extrahiert aus `services/energie_profil_service.py` im 3d-Etappenabschluss-Tail
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -767,6 +767,40 @@ class TagesPeaks:
     einspeisung: Optional[float]
 
 
+@dataclass
+class _PeakKontext:
+    """Geteilte Eingänge der Peak-Phasen (RF-53): die Live-Zuordnung der Anlage, die Investitions-Zeilen, die Sensoren je
+    Rolle samt Invert-Set und die gelesenen HA-LTS-Min/Max des Tages."""
+    datum: date
+    basis_live: dict[str, str]
+    inv_live_map: dict[str, dict[str, str]]
+    basis_invert: dict[str, bool]
+    inv_invert_map: dict[str, dict[str, bool]]
+    inv_zeilen: list = field(default_factory=list)
+    pv_entities: set[str] = field(default_factory=set)
+    netz_kombi: Optional[str] = None
+    netz_bezug: Optional[str] = None
+    netz_einspeisung: Optional[str] = None
+    netz_entities: set[str] = field(default_factory=set)
+    invert_eids: set[str] = field(default_factory=set)
+    minmax: dict = field(default_factory=dict)
+    datum_iso: str = ""
+
+    def slot_for(self, eid: str, h: int) -> dict[str, float]:
+        """Min/Max des Sensors in Stunde ``h`` — bei invertiertem Sensor getauscht und negiert."""
+        minmax, datum_iso, invert_eids = self.minmax, self.datum_iso, self.invert_eids
+        s = minmax.get(eid, {}).get(datum_iso, {}).get(h)
+        if not s:
+            return {}
+        if eid in invert_eids:
+            # invert: min wird zu -max, max wird zu -min
+            return {
+                "min": -s["max"] if "max" in s else None,
+                "max": -s["min"] if "min" in s else None,
+            }
+        return s
+
+
 async def _get_tagespeaks_aus_ha_lts(
     anlage: Anlage,
     datum: date,
@@ -791,6 +825,12 @@ async def _get_tagespeaks_aus_ha_lts(
         (`netz_kombi_w`): negativer Teil = Einspeisung, positiver = Bezug.
       - `live_invert`-Flags werden angewendet (min↔max getauscht + Vorzeichen).
 
+    **Form (RF-53, 5.11.2026, Bauform RF-1):** Orchestrator über dem Kontext
+    `_PeakKontext` — Laden der Investitionen, Phase `_lts_sensoren_je_rolle`
+    (Sensoren je Rolle, Invert-Set), Lesen der HA-LTS samt den drei Wächtern,
+    dann `_peak_pv_aus_lts` und `_peak_netz_aus_lts`; `_PeakKontext.slot_for`
+    ist die eine Stelle, an der der Invert-Tausch steht.
+
     Returns:
         TagesPeaks; jeder Wert None wenn nicht ermittelbar (Caller-Fallback
         greift dann auf den Tagesverlauf-Pfad).
@@ -803,47 +843,17 @@ async def _get_tagespeaks_aus_ha_lts(
     from backend.services.live_sensor_config import extract_live_config
 
     basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
+    ctx = _PeakKontext(datum, basis_live, inv_live_map, basis_invert, inv_invert_map)
 
-    # ── PV-Entities ermitteln ─────────────────────────────────────────────
-    pv_entities: set[str] = set()
     inv_result = await db.execute(
         select(Investition.id, Investition.typ).where(Investition.anlage_id == anlage.id)
     )
-    pv_typ = {"pv-module", "balkonkraftwerk"}
-    for inv_id, typ in inv_result.all():
-        if typ in pv_typ:
-            live = inv_live_map.get(str(inv_id), {})
-            eid = live.get("leistung_w")
-            if eid:
-                pv_entities.add(eid)
-
-    has_individual_pv = bool(pv_entities)
-    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
-        pv_entities.add(basis_live["pv_gesamt_w"])
-
-    # ── Netz-Entities ermitteln ──────────────────────────────────────────
-    netz_kombi = basis_live.get("netz_kombi_w")
-    netz_bezug = basis_live.get("netzbezug_w")
-    netz_einspeisung = basis_live.get("einspeisung_w")
-    # Wenn dedizierte Bezug/Einspeisung existieren, Kombi nicht zusätzlich nutzen
-    if netz_bezug or netz_einspeisung:
-        netz_kombi = None
-
-    netz_entities = {e for e in (netz_kombi, netz_bezug, netz_einspeisung) if e}
+    ctx.inv_zeilen = inv_result.all()
+    _lts_sensoren_je_rolle(ctx)
+    pv_entities, netz_entities = ctx.pv_entities, ctx.netz_entities
 
     if not pv_entities and not netz_entities:
         return TagesPeaks(None, None, None)
-
-    # ── Invert-Set bauen ─────────────────────────────────────────────────
-    invert_eids: set[str] = set()
-    for key, should_invert in basis_invert.items():
-        if should_invert and key in basis_live:
-            invert_eids.add(basis_live[key])
-    for inv_id, invert_flags in inv_invert_map.items():
-        live = inv_live_map.get(inv_id, {})
-        for key, should_invert in invert_flags.items():
-            if should_invert and key in live:
-                invert_eids.add(live[key])
 
     # ── HA-LTS-Min/Max lesen ─────────────────────────────────────────────
     try:
@@ -865,19 +875,68 @@ async def _get_tagespeaks_aus_ha_lts(
     if not minmax:
         return TagesPeaks(None, None, None)
 
-    datum_iso = datum.isoformat()
+    ctx.minmax = minmax
+    ctx.datum_iso = datum.isoformat()
+    peak_pv = _peak_pv_aus_lts(ctx)
+    peak_bezug, peak_einsp = _peak_netz_aus_lts(ctx)
+    return TagesPeaks(pv=peak_pv, netzbezug=peak_bezug, einspeisung=peak_einsp)
 
-    def slot_for(eid: str, h: int) -> dict[str, float]:
-        s = minmax.get(eid, {}).get(datum_iso, {}).get(h)
-        if not s:
-            return {}
-        if eid in invert_eids:
-            # invert: min wird zu -max, max wird zu -min
-            return {
-                "min": -s["max"] if "max" in s else None,
-                "max": -s["min"] if "min" in s else None,
-            }
-        return s
+
+def _lts_sensoren_je_rolle(ctx: _PeakKontext) -> None:
+    """Phase 1 von `_get_tagespeaks_aus_ha_lts` (RF-53): die Sensoren je Rolle und das Invert-Set.
+
+    PV = `leistung_w` der `pv-module`/`balkonkraftwerk`-Investitionen, sonst `pv_gesamt_w`; Netz = `netzbezug_w` /
+    `einspeisung_w`, der Kombi-Sensor `netz_kombi_w` nur ohne beide; Invert = alle Entities, deren `live_invert`-Flag
+    (Basis oder Investition) gesetzt ist. Schreibt `pv_entities`, `netz_*`, `netz_entities`, `invert_eids` auf den Kontext.
+    """
+    basis_live, inv_live_map = ctx.basis_live, ctx.inv_live_map
+    basis_invert, inv_invert_map = ctx.basis_invert, ctx.inv_invert_map
+
+    # ── PV-Entities ermitteln ─────────────────────────────────────────────
+    pv_entities: set[str] = set()
+    pv_typ = {"pv-module", "balkonkraftwerk"}
+    for inv_id, typ in ctx.inv_zeilen:
+        if typ in pv_typ:
+            live = inv_live_map.get(str(inv_id), {})
+            eid = live.get("leistung_w")
+            if eid:
+                pv_entities.add(eid)
+
+    has_individual_pv = bool(pv_entities)
+    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
+        pv_entities.add(basis_live["pv_gesamt_w"])
+
+    # ── Netz-Entities ermitteln ──────────────────────────────────────────
+    netz_kombi = basis_live.get("netz_kombi_w")
+    netz_bezug = basis_live.get("netzbezug_w")
+    netz_einspeisung = basis_live.get("einspeisung_w")
+    # Wenn dedizierte Bezug/Einspeisung existieren, Kombi nicht zusätzlich nutzen
+    if netz_bezug or netz_einspeisung:
+        netz_kombi = None
+
+    netz_entities = {e for e in (netz_kombi, netz_bezug, netz_einspeisung) if e}
+
+    # ── Invert-Set bauen ─────────────────────────────────────────────────
+    invert_eids: set[str] = set()
+    for key, should_invert in basis_invert.items():
+        if should_invert and key in basis_live:
+            invert_eids.add(basis_live[key])
+    for inv_id, invert_flags in inv_invert_map.items():
+        live = inv_live_map.get(inv_id, {})
+        for key, should_invert in invert_flags.items():
+            if should_invert and key in live:
+                invert_eids.add(live[key])
+
+    ctx.pv_entities, ctx.netz_entities, ctx.invert_eids = pv_entities, netz_entities, invert_eids
+    ctx.netz_kombi, ctx.netz_bezug, ctx.netz_einspeisung = netz_kombi, netz_bezug, netz_einspeisung
+
+
+def _peak_pv_aus_lts(ctx: _PeakKontext) -> Optional[float]:
+    """Phase 2 von `_get_tagespeaks_aus_ha_lts` (RF-53): peak_pv = max über die 24 Stunden von Σ max(PV-Sensor je Stunde).
+
+    Je Stunde zählen nur positive Stunden-Maxima; eine Stunde ohne einen davon trägt nicht bei (None ≠ 0).
+    """
+    pv_entities, slot_for = ctx.pv_entities, ctx.slot_for
 
     # ── peak_pv ──────────────────────────────────────────────────────────
     peak_pv: Optional[float] = None
@@ -893,6 +952,17 @@ async def _get_tagespeaks_aus_ha_lts(
                     haben_daten = True
             if haben_daten and (peak_pv is None or stundensumme > peak_pv):
                 peak_pv = stundensumme
+    return peak_pv
+
+
+def _peak_netz_aus_lts(ctx: _PeakKontext) -> tuple[Optional[float], Optional[float]]:
+    """Phase 3 von `_get_tagespeaks_aus_ha_lts` (RF-53): `(peak_netzbezug, peak_einspeisung)`.
+
+    Dedizierte Sensoren: je das größte positive Stunden-Maximum. Kombi-Sensor (nur ohne dedizierte): Bezug = größtes
+    positives Maximum, Einspeisung = größter Betrag eines negativen Minimums.
+    """
+    netz_kombi, netz_bezug, netz_einspeisung = ctx.netz_kombi, ctx.netz_bezug, ctx.netz_einspeisung
+    slot_for = ctx.slot_for
 
     # ── peak_netzbezug / peak_einspeisung ────────────────────────────────
     peak_bezug: Optional[float] = None
@@ -925,7 +995,7 @@ async def _get_tagespeaks_aus_ha_lts(
         peak_bezug = best_max_positiv(netz_kombi)
         peak_einsp = best_betrag_negativ(netz_kombi)
 
-    return TagesPeaks(pv=peak_pv, netzbezug=peak_bezug, einspeisung=peak_einsp)
+    return peak_bezug, peak_einsp
 
 
 def strompreis_sensor_id(sensor_mapping: Optional[dict]) -> Optional[str]:

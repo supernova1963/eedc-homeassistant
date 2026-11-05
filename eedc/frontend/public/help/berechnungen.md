@@ -4206,6 +4206,26 @@ Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
 Symmetrie-Test „gleiche Wirklichkeit, drei Messarten ⇒ **ein** Profil"
 (`feedback_aggregator_symmetrie`).
 
+**Die Stunde im HA-Pfad** (`live_verbrauchsprofil_service.py::_profil_from_ha`, Phasen `_history_je_sensor`,
+`_stunden_mittel`, `_verbrauch_und_wp_anteil`, `_profil_ergebnis`): je Sensor das arithmetische Mittel seiner
+History-Punkte im Intervall `[h_start, h_end)` des Slots, in kW:
+
+```
+PV_h          = Σ Mittel(PV-Sensor) / 1000       leistung_w der aktiven pv-module/balkonkraftwerk; ohne einen pv_gesamt_w
+Bezug_h       = Mittel(netzbezug_w) / 1000        Einspeisung_h = Mittel(einspeisung_w) / 1000
+  Kombi-Sensor (nur ohne beide): Mittel ≥ 0 ⇒ Bezug_h = Mittel / 1000, sonst Einspeisung_h = |Mittel| / 1000
+Verbrauch_h   = max(0, PV_h + Bezug_h − Einspeisung_h)
+WP_h          = Σ |Mittel(WP-Sensor)| / 1000      (wp_werktag / wp_wochenende nur, wenn ein WP-Sensor zugeordnet ist)
+Profil[slot]  = Mittel der Stichproben je Slot, 3 Stellen    Werktag = Slot-Datum Mo–Fr, Wochenende = Sa–So
+```
+
+Ein Sensor ohne Punkt in der Stunde trägt dort 0 bei; ob die Stunde überhaupt zählt, entscheidet der Netz-Beleg (N-46,
+unten). Die Temperatur-Mittel je Stunde (`aussentemperatur_c`) ergeben über den Tag die Heizgradtage der Lernwoche
+`referenz_hdd_kd` (N-593, wie im DB-Pfad). **N-536:** Die Entity eines Balkonkraftwerks entfällt aus der PV-Summe genau
+dann, wenn **jedes** seiner `pv-module`-Kinder selbst einen Leistungssensor hat (`bkw_kinder_decken_vollstaendig`); fehlt
+einem Kind die Zuordnung, bleibt das Gerät drin — sonst verlöre das Profil die einzige Quelle dieses Kindes, und der
+Rest-Anteil, den es dann zu viel trägt, ist dieselbe Teil-Deckung wie im Tagespfad.
+
 #### Temperaturkorrektur des Wärmepumpen-Anteils (N-593, N-594)
 
 Das Profil trägt den Wärmepumpen-Anteil je Stunde (`wp_werktag` / `wp_wochenende`, Zählermenge
@@ -4446,6 +4466,23 @@ spannen[achse]= n, nur für n > 1 (TagesEnergieProfil.spannen)
 komponenten_kwh = Σ derselben Geräte-Slots (R5)
 ```
 
+Die Slot-Tabelle selbst (`get_hourly_slots_for_day`, Phasen `_slot_fenster`, `_anker_vor_fenster`, `_slot_werte`):
+
+```
+Fenster       = HA-Zeilen mit start_ts in [Vortag 22:00 − 5 min, heute 22:00 + 5 min], Index über lts_boundary_index
+                (−1 … 23); sum NULL ist keine Zeile; zwei Zeilen auf einem Index (Herbst-Doppelstunde) ⇒ die spätere
+Stand         = sum × Faktor(Einheit des Zählers)      Wh 0,001 · kWh 1 · MWh 1000 · GWh 10⁶; ohne/unbekannt 1
+Anker(h)      = höchster belegter Index < h (W1, über den Index, nicht den Zeitstempel);
+                sonst Index −1, sonst die letzte Zeile mit sum vor dem Fenster (SQL eine Abfrage,
+                WebSocket rückwärts über 1 · 8 · 32 · 128 · 1024 Tage)
+Slot h        = round(Stand(h) − Stand(Anker), 3)      n = 1 bei Slot h = 0 (R2), sonst max(1, round(Δstart_ts / 3600))
+kein Anker    ⇒ der erste belegte Slot bleibt leer (die Reihe beginnt im Fenster) — benannte Abweichung zu HA,
+                das dort 0 als Anker nimmt und die erste Stunde zeigt
+```
+
+Die Einheit wird **beim Lesen** umgerechnet (Fenster und Anker), die Differenz entsteht in kWh. Lesefehler (SQL oder
+WebSocket) ⇒ Warnung im Log und ein leeres Ergebnis für alle Zähler des Tages.
+
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (seit N-635, 05.10.2026; vorher max(0, ΣPV − ΣEinsp), s. §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).
@@ -4466,6 +4503,28 @@ Peak_Einspeisung_kW     = max(W-Sample) / 1000
 ```
 
 Peaks brauchen die Leistungssamples — die kWh-Aggregation läuft separat über die Snapshots.
+
+**Peaks aus der HA-Langzeitstatistik (Vorrang, Etappe 5 v3.31.0):** Liefert HA für die Leistungssensoren je Stunde
+`statistics.min`/`statistics.max` (Sensoren mit `has_mean`, in kW umgerechnet von `get_hourly_minmax_sensor_data`), ersetzt
+`aggregate_day` jeden der drei Peaks, für den dieser Pfad einen Wert hat; sonst bleibt der Wert aus den W-Samples oben:
+
+```
+PV-Sensoren   = leistung_w der pv-module/balkonkraftwerk-Investitionen; ohne einen davon pv_gesamt_w
+Netz-Sensoren = netzbezug_w / einspeisung_w; netz_kombi_w nur, wenn beide fehlen
+live_invert   : min' = −max, max' = −min                      (Basis- oder Investitions-Flag)
+
+Peak_PV_kW          = max über h=0…23 von Σ max_h(PV-Sensor)  nur positive max_h; Stunde ohne einen zählt nicht
+Peak_Netzbezug_kW   = max über h von max_h(netzbezug_w)       nur > 0
+Peak_Einspeisung_kW = max über h von max_h(einspeisung_w)     nur > 0
+  Kombi-Sensor:  Peak_Netzbezug_kW = max über h von max_h > 0,  Peak_Einspeisung_kW = max über h von |min_h < 0|
+```
+
+Σ max je Stunde ist bei mehreren PV-Sensoren eine **obere Schranke** (die Einzelspitzen können in verschiedene Minuten
+der Stunde fallen). Kein Sensor, Statistik nicht erreichbar, Lesefehler oder leere Antwort ⇒ alle drei `None` und der
+W-Sample-Wert bleibt. Code: `services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts` (Phasen
+`_lts_sensoren_je_rolle`, `_peak_pv_aus_lts`, `_peak_netz_aus_lts`; Invert-Tausch in `_PeakKontext.slot_for`), Aufrufer
+`aggregator.py` am Ende des Stundenteils; geschrieben als `peak_pv_kw`/`peak_netzbezug_kw`/`peak_einspeisung_kw` der
+Tageszusammenfassung (unten).
 
 **Zusätzliche Daten pro Stunde:**
 
