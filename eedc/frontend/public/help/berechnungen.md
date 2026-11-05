@@ -4678,6 +4678,32 @@ summiert die Geräte. Proben: `test_waerme_verlauf_bereichs_leser.py`, `test_zae
 - **Daten-Checker:** Tage mit Regelmarke, an denen Σ Einspeisung > Σ PV + Σ Entladung + 0,5 kWh, erscheinen als Hinweis „Einspeisung über Erzeugung" (Entladung ins Netz ist erlaubt).
 - **Benannt:** Die Live-Tageskacheln (`live_history_service`) weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. Preise einer gebündelten Stunde: s. [KONZEPT-FLEX-TARIFE](KONZEPT-FLEX-TARIFE.md) [A-6].
 
+**Drift-Prüfung Datenquellen (Daten-Checker)** — die gespeicherten Tageswerte gegen HAs Tageswert aus der
+Langzeitstatistik (`snapshot/lts_aggregator.get_komponenten_tageskwh_lts`, je Tag **ein** Lesen für beide Achsen). Nur mit
+HA-Statistik; im Standalone keine Zeile.
+
+```
+Fenster       = die 90 Tage bis gestern mit Tageszeile; eedc-Seite je Tag über die Lesestelle
+                (kanal_stunden.komponenten_der_tage — an einem Kanal-Tag PV/Netz/Speicher aus dem Spiegel)
+aktiv(tag)    = Investitionen mit ist_aktiv_an(tag); die HA-Seite liest nur deren Sensoren (N-64)
+Achse 1 (PV)  Σ_eedc, Σ_HA = Σ der positiven Werte über die PV-/BKW-Keys, die der LTS-Read für den Tag liefern konnte
+              (#311: nicht gelesen ≠ 0); kein lesbarer PV-Key oder Σ_eedc ≤ 0 ∧ Σ_HA ≤ 0 ⇒ kein Vergleich —
+              eine Seite 0 gegen die andere > 0 IST ein Vergleich
+Achse 2       je übriger Key einzeln (Wallbox, E-Auto, Wärmepumpe, Sonstiges, Einspeisung, Netzbezug; nie batterie_*),
+              nur wenn beide Seiten > 0 (sonst Lücke ⇒ «fehlende Tageswerte», N-201)
+Δ             = |Σ_eedc − Σ_HA|
+Drift         wenn Δ ≥ 2 kWh ∧ Δ / max(Σ_eedc, Σ_HA) ≥ 5 %          (beide Achsen, beide Schwellen zugleich)
+Ausgabe       Achse 1: je Drift-Tag eine Zeile, |Δ| absteigend, höchstens 20; der Rest als «… plus N weitere Tag(e)»
+              Achse 2: je Komponente EINE Zeile — Zahl der Drift-Tage, der Tag mit dem größten |Δ| als Beleg und
+              Reparatur-Ziel; die Komponente mit dem größten |Δ| zuerst
+```
+
+Reihenfolge der Zeilen: die PV-Tage, dann die Komponenten, zuletzt die Rest-Zeile; ohne Drift eine OK-Zeile. Die Meldung
+nennt `HA − eedc` mit Vorzeichen und den Anteil an `max(Σ_eedc, Σ_HA)`. Ein Lesefehler an einem Tag nimmt den Tag aus beiden
+Achsen. Code: `services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift` (Phasen
+`_drift_pv_achse`, `_drift_komponenten_achse`, `_drift_tageszeilen`, `_drift_komponentenzeilen`, RF-64). Meldungen und
+Behebung: [HANDBUCH_DATEN_CHECKER §4.17](HANDBUCH_DATEN_CHECKER.md#417-datenquellen-drift).
+
 **Peaks aus W-Integration (für Spitzenwerte):**
 
 ```

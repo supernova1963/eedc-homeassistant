@@ -3074,7 +3074,9 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/snapshot/keys.py::_categorize_counter",
     "backend/services/snapshot/komponenten_beitraege.py::investition_beitraege",
     "backend/core/database.py::_migrate_connector_field_inv_map_backfill",
-    "backend/services/daten_checker/energieprofil.py::_check_energieprofil_abdeckung",
+    # RF-65 (5.11.2026): bis dahin stand hier `::_check_energieprofil_abdeckung`. Die Typ-Menge liegt seitdem in der
+    # Phase `_abdeckung_je_investition`, die den Selektor ruft (`traegt_erzeugungsgroessen_selbst`, F-39) — der
+    # Suchlauf stellt sie damit selbst frei; der Eintrag war schon am HEAD nicht tragend (Nachmessung 5.11.) und entfällt.
     "backend/services/daten_checker/monatsdaten.py::_check_monatsdaten_vollstaendigkeit",
     "backend/services/daten_checker/stammdaten.py::_check_stammdaten",
     # Prüft JE GERÄT (Ausrichtung, kWp, Kosten gepflegt?) und bildet keine

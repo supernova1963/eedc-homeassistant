@@ -5,6 +5,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
 import asyncio
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -132,6 +133,22 @@ def _pflicht_ohne_eintrag(
         fid for fid, stufe in stufe_bedarf_ein(eingabe, vorhandene_typen).items()
         if stufe.get("bedarf") == "pflicht"
     }
+
+
+@dataclass
+class _LtsKontext:
+    """Was die Befund-Phase von ``SensorChecks._check_sensor_mapping_lts`` braucht (RF-66, Bauform RF-1).
+
+    Die drei Sensor-Listen ``(sensor_id, label)`` aus ``_lts_sensoren_sammeln`` und die Antwort von HAs
+    Langzeitstatistik: ``missing`` (kein ``statistics_meta``-Eintrag) und ``ohne_sum`` (Eintrag ohne Summen-Spalte).
+    """
+
+    kat: CheckKategorie
+    kwh_sensors: list[tuple[str, str]]
+    counter_sensors: list[tuple[str, str]]
+    stand_sensors: list[tuple[str, str]]
+    missing: set[str] = field(default_factory=set)
+    ohne_sum: set[str] = field(default_factory=set)
 
 
 class SensorChecks:
@@ -512,13 +529,15 @@ class SensorChecks:
         (bitShake/Tasmota — Tasmota-Discovery setzt gar keins, HA-Core #104305);
         `measurement` ist dort der bekannte Griff daneben.
         Forum simon42 #89667/44.
+
+        **Phasenform (RF-66, 5.11.2026).** ``_lts_sensoren_sammeln`` sammelt die Sensor-IDs je kWh-, Counter- und
+        Stand-Feld (Live-Mappings ignoriert, ``pv_gesamt`` bewusst ohne Präzedenz-Guard, stillgelegte Geräte
+        übersprungen, N-310-Adressen aufgelöst); der Orchestrator fragt HAs Langzeitstatistik **einmal** nach
+        Summen-Fähigkeit (nicht nur Existenz) und reicht die Antwort in einem ``_LtsKontext`` an ``_lts_befunde``, die
+        die Meldungen in fester Reihenfolge bildet (kWh fehlt · Counter fehlt · kWh ohne Summe · Counter ohne Summe ·
+        Stand fehlt · Stand OK · kWh OK). Texte und Reihenfolge wie vorher.
         """
-        from backend.core.field_definitions import (
-            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
-            ist_stand_feld,
-        )
         from backend.services.ha_statistics_service import get_ha_statistics_service
-        from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
         kat = CheckKategorie.SENSOR_MAPPING_LTS
         ergebnisse: list[CheckErgebnis] = []
@@ -526,6 +545,57 @@ class SensorChecks:
         mapping = anlage.sensor_mapping or {}
         if not mapping:
             return []
+
+        kwh_sensors, counter_sensors, stand_sensors = self._lts_sensoren_sammeln(anlage, mapping)
+
+        if not kwh_sensors and not counter_sensors and not stand_sensors:
+            return []
+
+        ha_service = get_ha_statistics_service()
+        if not ha_service.is_available:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO,
+                meldung="HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen",
+            ))
+            return ergebnisse
+
+        # Summen-fähig statt nur „vorhanden" (2026-07-29): ein Sensor mit
+        # `state_class: measurement` steht in `statistics_meta`, hat aber kein
+        # `has_sum` — `get_hourly_kwh_deltas_for_day` überspringt ihn dann
+        # vollständig. Vorher meldete dieser Check dafür OK, während Cockpit/Tag
+        # auf 0 stand (Forum simon42 #89667/44).
+        all_sids = list(
+            {s for s, _ in kwh_sensors}
+            | {s for s, _ in counter_sensors}
+            | {s for s, _ in stand_sensors}
+        )
+        _mit_sum, ohne_sum_sids, missing_sids = await asyncio.to_thread(
+            ha_service.filter_summen_faehige_sensor_ids, all_sids
+        )
+        missing = set(missing_sids)
+        ohne_sum = set(ohne_sum_sids)
+
+        ergebnisse.extend(self._lts_befunde(_LtsKontext(
+            kat=kat, kwh_sensors=kwh_sensors, counter_sensors=counter_sensors, stand_sensors=stand_sensors,
+            missing=missing, ohne_sum=ohne_sum,
+        )))
+        return ergebnisse
+
+    @staticmethod
+    def _lts_sensoren_sammeln(
+        anlage: Anlage, mapping: dict,
+    ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+        """Die Sensor-IDs ``(sensor_id, label)`` des Mappings, getrennt nach kWh-, Counter- und Stand-Feld.
+
+        Basis: ``einspeisung``, ``netzbezug``, ``pv_gesamt`` (nur Strategie «sensor»). Investitionen: nur aktive (verwaiste
+        Mapping-Einträge bleiben drin), der Feld-Key über ``basis_feld_key`` aufgelöst (N-310); Stand vor Counter
+        (D3/F-58), sonst nur Energie-Felder.
+        """
+        from backend.core.field_definitions import (
+            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
+            ist_stand_feld,
+        )
+        from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
         # Sensor-IDs sammeln, getrennt nach kWh-Feld und Counter-Feld.
         # Live-Mappings (basis.live, inv.live) werden ignoriert — die lesen
@@ -623,32 +693,14 @@ class SensorChecks:
                 # Wächter gegen fehlende `FELD_EINHEITEN`-Einträge:
                 # test_daten_checker_lts_summen_spalte.py::test_alle_zaehlerfelder_bleiben_gedeckt
 
-        if not kwh_sensors and not counter_sensors and not stand_sensors:
-            return []
+        return kwh_sensors, counter_sensors, stand_sensors
 
-        ha_service = get_ha_statistics_service()
-        if not ha_service.is_available:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
-                meldung="HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen",
-            ))
-            return ergebnisse
-
-        # Summen-fähig statt nur „vorhanden" (2026-07-29): ein Sensor mit
-        # `state_class: measurement` steht in `statistics_meta`, hat aber kein
-        # `has_sum` — `get_hourly_kwh_deltas_for_day` überspringt ihn dann
-        # vollständig. Vorher meldete dieser Check dafür OK, während Cockpit/Tag
-        # auf 0 stand (Forum simon42 #89667/44).
-        all_sids = list(
-            {s for s, _ in kwh_sensors}
-            | {s for s, _ in counter_sensors}
-            | {s for s, _ in stand_sensors}
-        )
-        _mit_sum, ohne_sum_sids, missing_sids = await asyncio.to_thread(
-            ha_service.filter_summen_faehige_sensor_ids, all_sids
-        )
-        missing = set(missing_sids)
-        ohne_sum = set(ohne_sum_sids)
+    @staticmethod
+    def _lts_befunde(ctx: _LtsKontext) -> list[CheckErgebnis]:
+        """Die Meldungen aus HAs Antwort — Summen-fähig statt nur vorhanden; ein Stand braucht keine Summen-Spalte."""
+        kat, kwh_sensors, counter_sensors, stand_sensors = ctx.kat, ctx.kwh_sensors, ctx.counter_sensors, ctx.stand_sensors
+        missing, ohne_sum = ctx.missing, ctx.ohne_sum
+        ergebnisse: list[CheckErgebnis] = []
 
         kwh_missing = [(sid, lbl) for sid, lbl in kwh_sensors if sid in missing]
         counter_missing = [(sid, lbl) for sid, lbl in counter_sensors if sid in missing]
@@ -659,7 +711,6 @@ class SensorChecks:
         # `state`; die Summen-Spalte ist für ihn ohne Bedeutung. Diese Zeile
         # nachzutragen hieße, die Falschmeldung wieder einzubauen, die D3
         # entfernt hat.
-
 
         if kwh_missing:
             beispiele = "; ".join(f"{lbl} ({sid})" for sid, lbl in kwh_missing[:5])
@@ -838,6 +889,7 @@ class SensorChecks:
                     "HA-Long-Term-Statistics verfügbar"
                 ),
             ))
+
 
         return ergebnisse
 
