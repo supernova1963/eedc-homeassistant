@@ -18,14 +18,11 @@
 56	services/daten_checker/energieprofil.py::EnergieprofilChecks._check_energieprofil_abdeckung
 54	services/daten_checker/sensoren.py::SensorChecks._check_sensor_mapping_lts
 60	services/emob_ladebloecke.py::bilde_ladebloecke
-77	services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf
-70	services/ha_statistics_service.py::HAStatisticsService.get_hourly_slots_for_day
 72	services/kanal/modus_strom.py::schreibe_modus_strom
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage
 56	services/live_sensor_config.py::baue_investitions_serien
-74	services/live_verbrauchsprofil_service.py::_profil_from_ha
 51	services/monats_fakten/bau.py::_baue_fakt
 60	services/monats_fakten/laden.py::lade_monats_fakten
 59	services/monats_fakten/roh.py::_RohMonat.falte

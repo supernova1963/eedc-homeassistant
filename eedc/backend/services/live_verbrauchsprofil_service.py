@@ -37,6 +37,7 @@ Slot und setzt seine Standard-Grundlast ein, statt still 0 kW anzunehmen
 
 import logging
 from bisect import bisect_right
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, date
 from types import SimpleNamespace
 from typing import Iterator, Optional
@@ -371,6 +372,34 @@ def _wp_teilmengen_der_stunde(
     return ww, kuehl
 
 
+@dataclass
+class _HaProfilKontext:
+    """Geteilte Eingänge der Phasen von `_profil_from_ha` (RF-54): Live-Zuordnung, Sensoren je Rolle, Uhr und Fenster,
+    die History, die Belege und die Stunden-Eimer des Profils."""
+    anlage_id: int
+    basis_live: dict[str, str]
+    inv_live_map: dict[str, dict[str, str]]
+    basis_invert: dict[str, bool]
+    inv_invert_map: dict[str, dict[str, bool]]
+    einsp_eid: Optional[str]
+    bezug_eid: Optional[str]
+    kombi_eid: Optional[str]
+    pv_eids: list[str] = field(default_factory=list)
+    wp_eids: list[str] = field(default_factory=list)
+    temp_eid: Optional[str] = None
+    now: Optional[datetime] = None
+    start_tag: Optional[date] = None
+    history: dict = field(default_factory=dict)
+    beleg_eids: list[str] = field(default_factory=list)
+    werktag_sums: dict[int, list[float]] = field(default_factory=lambda: {h: [] for h in range(24)})
+    wochenende_sums: dict[int, list[float]] = field(default_factory=lambda: {h: [] for h in range(24)})
+    wp_werktag_sums: dict[int, list[float]] = field(default_factory=lambda: {h: [] for h in range(24)})
+    wp_wochenende_sums: dict[int, list[float]] = field(default_factory=lambda: {h: [] for h in range(24)})
+    werktage_set: set[str] = field(default_factory=set)
+    wochenende_set: set[str] = field(default_factory=set)
+    temp_je_tag: dict[date, list[float]] = field(default_factory=dict)  # N-593, wie im DB-Pfad
+
+
 async def _profil_from_ha(
     anlage: Anlage, db: AsyncSession
 ) -> Optional[dict]:
@@ -381,6 +410,13 @@ async def _profil_from_ha(
 
     Eine Stunde ohne Messpunkte am Netzanschluss liefert **keine** Stichprobe
     (N-46, s. Modul-Docstring).
+
+    **Form (RF-54, 5.11.2026, Bauform RF-1):** Orchestrator über dem Kontext
+    `_HaProfilKontext` — Erreichbarkeit und Netz-Zuordnung, Phase
+    `_history_je_sensor` (Laden, N-536), der Beleg-Wächter (N-46), dann
+    `_stunden_mittel` (Backward-Slot, Kombi-Vorzeichen, unbeobachtete Stunden),
+    `_verbrauch_und_wp_anteil` (``max(0, PV + Bezug − Einspeisung)``, WP-Anteil,
+    Werktag/Wochenende) und `_profil_ergebnis` (Dict, Referenz-HDD).
     """
     # N-156/F-26: kein Gate auf `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN)
     # mehr — `get_history_normalized` liest über den `HAStateService`, der
@@ -402,6 +438,49 @@ async def _profil_from_ha(
         pass  # Kombi-Sensor wird unten behandelt
     elif not einsp_eid and not bezug_eid:
         return None
+
+    ctx = _HaProfilKontext(anlage.id, basis_live, inv_live_map, basis_invert, inv_invert_map, einsp_eid, bezug_eid, kombi_eid)
+    history = await _history_je_sensor(ctx, anlage, db)
+
+    if not history:
+        return None
+
+    # ── Beleg dafür, dass eine Stunde überhaupt beobachtet wurde (N-46) ──
+    #
+    # Genommen werden die Netz-Sensoren: ohne sie ist „Verbrauch" gar nicht
+    # bestimmbar, und sie belegen, dass der Recorder in dieser Stunde lief.
+    # PV- und WP-Sensoren taugen nicht als Beleg — sie melden nachts bzw. im
+    # Stillstand stundenlang keine Zustandsänderung, obwohl nichts fehlt.
+    # Umgekehrt ist ``any`` statt ``all`` richtig: nachts steht der
+    # Einspeise-Sensor konstant auf 0 (keine Zustandsänderung), mittags der
+    # Bezugs-Sensor — einer von beiden bewegt sich immer.
+    nutzt_kombi = bool(kombi_eid and not bezug_eid and not einsp_eid)
+    netz_eids = [kombi_eid] if nutzt_kombi else [e for e in (bezug_eid, einsp_eid) if e]
+    beleg_eids = [eid for eid in netz_eids if history.get(eid)]
+    if not beleg_eids:
+        logger.info(
+            "Verbrauchsprofil Anlage %s: kein Netz-Sensor mit History im Fenster — "
+            "ohne Netzmessung gäbe es nur die PV-Kurve als vermeintlichen Verbrauch.",
+            anlage.id,
+        )
+        return None
+
+    ctx.beleg_eids = beleg_eids
+    stunden = _stunden_mittel(ctx)
+    _verbrauch_und_wp_anteil(ctx, stunden)
+    return _profil_ergebnis(ctx)
+
+
+async def _history_je_sensor(ctx: _HaProfilKontext, anlage: Anlage, db: AsyncSession) -> dict:
+    """Phase 1 von `_profil_from_ha` (RF-54): Sensoren je Rolle bestimmen und ihre History laden.
+
+    PV = `leistung_w` der aktiven Erzeuger (`ERZEUGER_TYPEN`) außer der Entity eines Balkonkraftwerks, dessen
+    `pv-module`-Kinder **alle** selbst messen (N-536), sonst `pv_gesamt_w`; WP = `leistung_w` der Wärmepumpen;
+    Temperatur = `aussentemperatur_c`. Fenster ``[_fenster_start(heute − 7 Tage), jetzt]``, danach Vorzeichen-Invertierung
+    (#58). Schreibt Sensoren, Uhr, Fenster und History auf den Kontext und gibt die History zurück.
+    """
+    inv_live_map, basis_live = ctx.inv_live_map, ctx.basis_live
+    einsp_eid, bezug_eid, kombi_eid = ctx.einsp_eid, ctx.bezug_eid, ctx.kombi_eid
 
     # PV-Entity-IDs
     inv_result = await db.execute(
@@ -455,42 +534,27 @@ async def _profil_from_ha(
 
     # Vorzeichen-Invertierung auf History anwenden (#58)
     apply_invert_to_history(
-        history, basis_live, basis_invert, inv_live_map, inv_invert_map
+        history, basis_live, ctx.basis_invert, inv_live_map, ctx.inv_invert_map
     )
 
-    if not history:
-        return None
+    ctx.pv_eids, ctx.wp_eids, ctx.temp_eid = pv_eids, wp_eids, temp_eid
+    ctx.now, ctx.start_tag, ctx.history = now, start_tag, history
+    return history
 
-    # ── Beleg dafür, dass eine Stunde überhaupt beobachtet wurde (N-46) ──
-    #
-    # Genommen werden die Netz-Sensoren: ohne sie ist „Verbrauch" gar nicht
-    # bestimmbar, und sie belegen, dass der Recorder in dieser Stunde lief.
-    # PV- und WP-Sensoren taugen nicht als Beleg — sie melden nachts bzw. im
-    # Stillstand stundenlang keine Zustandsänderung, obwohl nichts fehlt.
-    # Umgekehrt ist ``any`` statt ``all`` richtig: nachts steht der
-    # Einspeise-Sensor konstant auf 0 (keine Zustandsänderung), mittags der
-    # Bezugs-Sensor — einer von beiden bewegt sich immer.
-    nutzt_kombi = bool(kombi_eid and not bezug_eid and not einsp_eid)
-    netz_eids = [kombi_eid] if nutzt_kombi else [e for e in (bezug_eid, einsp_eid) if e]
-    beleg_eids = [eid for eid in netz_eids if history.get(eid)]
-    if not beleg_eids:
-        logger.info(
-            "Verbrauchsprofil Anlage %s: kein Netz-Sensor mit History im Fenster — "
-            "ohne Netzmessung gäbe es nur die PV-Kurve als vermeintlichen Verbrauch.",
-            anlage.id,
-        )
-        return None
 
-    werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
-    wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
-    wp_werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
-    wp_wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
-    werktage_set: set[str] = set()
-    wochenende_set: set[str] = set()
-    temp_je_tag: dict[date, list[float]] = {}  # N-593, wie im DB-Pfad
+def _stunden_mittel(ctx: _HaProfilKontext) -> list[tuple[datetime, datetime, date, int, float, float, float]]:
+    """Phase 2 von `_profil_from_ha` (RF-54): je beobachtetem Backward-Slot die Stundenmittel in kW.
+
+    Liefert ``(h_start, h_end, slot_datum, h, pv_kw, bezug_kw, einsp_kw)`` für jeden Slot von `_slot_fenster`, dessen
+    Stunde schon vorbei ist und in dem ein Beleg-Sensor einen Punkt hat (N-46 — sonst keine Stichprobe, gezählt und
+    geloggt). Kombi-Sensor: Mittel ≥ 0 ist Bezug, < 0 ist Einspeisung (Betrag); sonst die dedizierten Mittel.
+    """
+    history, beleg_eids, now = ctx.history, ctx.beleg_eids, ctx.now
+    pv_eids, einsp_eid, bezug_eid, kombi_eid = ctx.pv_eids, ctx.einsp_eid, ctx.bezug_eid, ctx.kombi_eid
+    stunden: list[tuple[datetime, datetime, date, int, float, float, float]] = []
     unbeobachtet = 0
 
-    for h_start, h_end, slot_datum, h in _slot_fenster(start_tag):
+    for h_start, h_end, slot_datum, h in _slot_fenster(ctx.start_tag):
         if h_end > now:
             break
 
@@ -500,9 +564,6 @@ async def _profil_from_ha(
         ):
             unbeobachtet += 1
             continue  # nicht beobachtet ⇒ keine Stichprobe (N-46)
-
-        tag_str = slot_datum.isoformat()
-        ist_wochenende = slot_datum.weekday() >= 5
 
         pv_kw = 0.0
         for eid in pv_eids:
@@ -535,6 +596,34 @@ async def _profil_from_ha(
                 if h_pts:
                     einsp_kw = sum(h_pts) / len(h_pts) / 1000
 
+        stunden.append((h_start, h_end, slot_datum, h, pv_kw, bezug_kw, einsp_kw))
+
+    if unbeobachtet:
+        logger.info(
+            "Verbrauchsprofil Anlage %s: %d von %d Stunden ohne Netz-History — "
+            "ausgelassen statt als 0 kW gezählt.",
+            ctx.anlage_id, unbeobachtet, TAGE_FENSTER * 24,
+        )
+    return stunden
+
+
+def _verbrauch_und_wp_anteil(
+    ctx: _HaProfilKontext, stunden: list[tuple[datetime, datetime, date, int, float, float, float]],
+) -> None:
+    """Phase 3 von `_profil_from_ha` (RF-54): je beobachteter Stunde Verbrauch, WP-Leistung und Temperatur in die Eimer.
+
+    ``Verbrauch_h = max(0, PV_h + Bezug_h − Einspeisung_h)``; WP = Σ |Mittel| der WP-Sensoren; Temperatur-Mittel je
+    Stunde für die Tages-Heizgradtage (N-593). Werktag (Mo–Fr) und Wochenende (Sa–So) nach dem Datum des Slots.
+    """
+    history, wp_eids, temp_eid, temp_je_tag = ctx.history, ctx.wp_eids, ctx.temp_eid, ctx.temp_je_tag
+    werktag_sums, wochenende_sums = ctx.werktag_sums, ctx.wochenende_sums
+    wp_werktag_sums, wp_wochenende_sums = ctx.wp_werktag_sums, ctx.wp_wochenende_sums
+    werktage_set, wochenende_set = ctx.werktage_set, ctx.wochenende_set
+
+    for h_start, h_end, slot_datum, h, pv_kw, bezug_kw, einsp_kw in stunden:
+        tag_str = slot_datum.isoformat()
+        ist_wochenende = slot_datum.weekday() >= 5
+
         verbrauch_kw = max(0, pv_kw + bezug_kw - einsp_kw)
 
         wp_kw = 0.0
@@ -559,12 +648,16 @@ async def _profil_from_ha(
             wp_werktag_sums[h].append(wp_kw)
             werktage_set.add(tag_str)
 
-    if unbeobachtet:
-        logger.info(
-            "Verbrauchsprofil Anlage %s: %d von %d Stunden ohne Netz-History — "
-            "ausgelassen statt als 0 kW gezählt.",
-            anlage.id, unbeobachtet, TAGE_FENSTER * 24,
-        )
+
+def _profil_ergebnis(ctx: _HaProfilKontext) -> Optional[dict]:
+    """Phase 4 von `_profil_from_ha` (RF-54): das Profil-Dict über `_build_profil_result` (Quelle ``"ha"``).
+
+    WP-Reihen nur, wenn ein WP-Sensor zugeordnet ist; `referenz_hdd_kd` aus den Tages-Temperaturen (N-593).
+    """
+    werktag_sums, wochenende_sums = ctx.werktag_sums, ctx.wochenende_sums
+    wp_werktag_sums, wp_wochenende_sums = ctx.wp_werktag_sums, ctx.wp_wochenende_sums
+    werktage_set, wochenende_set = ctx.werktage_set, ctx.wochenende_set
+    wp_eids, temp_je_tag = ctx.wp_eids, ctx.temp_je_tag
 
     return _build_profil_result(
         werktag_sums, wochenende_sums, werktage_set, wochenende_set, "ha",

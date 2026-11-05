@@ -32,6 +32,7 @@ Datei-Import die Antwort.
 import logging
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, NamedTuple
@@ -192,6 +193,61 @@ def _snap_to_slot(dt: datetime, slot_minuten: int) -> datetime:
     if rest * 2 >= slot_minuten:  # aufrunden ab Hälfte
         gerundet += timedelta(minutes=slot_minuten)
     return gerundet
+
+
+@dataclass
+class _SlotLesen:
+    """Geteilte Eingänge der Lese-Phasen von `get_hourly_slots_for_day` (RF-55): Tag, Fenster ``[ts_von, ts_bis]``, die
+    Metadaten der Summen-Zähler und die beiden Ergebnis-Tabellen (Stände je Index, Anker vor dem Fenster)."""
+    datum: date
+    ts_von: float
+    ts_bis: float
+    meta_by_id: dict[str, SensorMeta]
+    per_sensor: dict[str, dict[int, tuple[float, float]]]
+    anker: dict[str, tuple[float, float]] = field(default_factory=dict)
+
+
+def _slot_kwh_faktor(meta_by_id: dict[str, SensorMeta], sid: str) -> float:
+    """Einheit des Zählers → kWh (`_ENERGY_UNIT_TO_KWH`; ohne oder unbekannte Einheit 1) — für Fenster und Anker gleich."""
+    unit = meta_by_id[sid].unit
+    return _ENERGY_UNIT_TO_KWH.get(unit, 1.0) if unit else 1.0
+
+
+def _slot_werte(
+    per_sensor: dict[str, dict[int, tuple[float, float]]],
+    anker: dict[str, tuple[float, float]],
+) -> dict[str, SensorSlotReihe]:
+    """Phase 3 von `HAStatisticsService.get_hourly_slots_for_day` (RF-55): die Slot-Tabelle aus den gelesenen Ständen.
+
+    Anker für Slot h = höchster belegter Index < h (W1), sonst Index −1 bzw. die Anker-Zeile vor dem Fenster;
+    ``delta = round(Stand(h) − Stand(Anker), 3)``, ``n = 1`` bei Delta 0 (R2), sonst reale Stunden aus ``start_ts``;
+    ohne Anker bleibt der erste belegte Slot leer (benannte Abweichung zu HA). Reine Rechnung, liest nichts.
+    """
+    result: dict[str, SensorSlotReihe] = {}
+    for sid, boundaries in per_sensor.items():
+        if not boundaries:
+            continue  # Sensor hatte im Fenster keine Zeile — seine Energie trägt der Folgetag
+        vorher: Optional[tuple[float, float]] = boundaries.get(-1) or anker.get(sid)
+        erster_anker_ts: Optional[float] = vorher[1] if vorher else None
+        erster = True
+        slots: dict[int, StundenSlot] = {}
+        for h in range(24):
+            stand = boundaries.get(h)
+            if stand is None:
+                continue  # leerer Slot — die Energie trägt der nächste belegte
+            if vorher is not None:
+                delta = round(stand[0] - vorher[0], 3)
+                n = 1 if delta == 0 else max(1, round((stand[1] - vorher[1]) / 3600))
+                slots[h] = StundenSlot(delta=delta, n=n)
+                if erster:
+                    erster = False
+            elif erster:
+                erster_anker_ts = None  # Reihe beginnt im Fenster: kein Anker
+                erster = False
+            vorher = stand
+        result[sid] = SensorSlotReihe(slots=slots, anker_start_ts=erster_anker_ts)
+
+    return result
 
 
 class HAStatisticsService:
@@ -1745,6 +1801,14 @@ class HAStatisticsService:
         Negative Deltas werden roh geliefert; verwerfen (R4) und deckeln (R3)
         entscheidet der Aggregator.
 
+        **Form (RF-55, 5.11.2026, Bauform RF-1):** Orchestrator mit Fenster,
+        Sensor-Metadaten und dem einen `try/except` des Lesens; die Phasen
+        `_slot_fenster` (Zeilen des Fensters → Index −1…24, Einheit → kWh beim
+        Lesen), `_anker_vor_fenster` (Anker-Zeile vor dem Fenster, SQL bzw.
+        WebSocket rückwärts wachsend) lesen über denselben Kontext `_SlotLesen`;
+        die reine Rechnung `_slot_werte` (Anker-Regel über den Index, kein Anker
+        ⇒ erster Slot leer, Delta, ``n``) läuft nach dem Lesen.
+
         Returns:
             ``{entity_id: SensorSlotReihe}`` — ``entity_id`` fehlt, wenn der
             Sensor in `statistics_meta` fehlt, keine Summen-Spalte hat oder im
@@ -1773,28 +1837,42 @@ class HAStatisticsService:
                         meta_by_id[sid] = m
                 if not meta_by_id:
                     return {}
-                meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
+                lesen = _SlotLesen(datum, ts_von, ts_bis, meta_by_id, per_sensor, anker)
+                self._slot_fenster(conn, lesen)
+                self._anker_vor_fenster(conn, lesen)
 
-                def _faktor(sid: str) -> float:
-                    unit = meta_by_id[sid].unit
-                    return _ENERGY_UNIT_TO_KWH.get(unit, 1.0) if unit else 1.0
+        except Exception as e:
+            logger.warning(f"get_hourly_slots_for_day Fehler: {type(e).__name__}: {e}")
+            return {}
 
-                if conn is None:
-                    rows = [
-                        (meta_by_id[sid].id, z["start_ts"], z["sum"])
-                        for sid, zeilen in self._ws_zeilen(
-                            list(meta_by_id), ts_von, ts_bis, types=["sum", "state"],
-                        ).items()
-                        if sid in meta_by_id
-                        for z in zeilen
-                    ]
-                else:
-                    placeholders_meta = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
-                    meta_params: dict = {
-                        f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())
-                    }
-                    rows = conn.execute(
-                        text(f"""
+        return _slot_werte(per_sensor, anker)
+
+    def _slot_fenster(self, conn, lesen: "_SlotLesen") -> None:
+        """Phase 1 von `get_hourly_slots_for_day` (RF-55): die Zeilen des Fensters ``[ts_von, ts_bis]`` je Zähler auf den
+        Boundary-Index −1…24 (`lts_boundary_index`), Stand in kWh (Einheit des Zählers × `_slot_kwh_faktor`) samt
+        ``start_ts``; ``sum`` NULL ist keine Zeile; zwei Zeilen auf einem Index ⇒ die spätere. Füllt `lesen.per_sensor`."""
+        datum, ts_von, ts_bis = lesen.datum, lesen.ts_von, lesen.ts_bis
+        meta_by_id, per_sensor = lesen.meta_by_id, lesen.per_sensor
+        meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
+
+        if conn is None:
+            rows = [
+                (meta_by_id[sid].id, z["start_ts"], z["sum"])
+                for sid, zeilen in self._ws_zeilen(
+                    list(meta_by_id), ts_von, ts_bis, types=["sum", "state"],
+                ).items()
+                if sid in meta_by_id
+                for z in zeilen
+            ]
+        else:
+            placeholders_meta = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
+            meta_params: dict = {
+                f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())
+            }
+            # Beide SQL-Texte behalten ihre Einrückung von vor RF-55: eine Ausnahme der Abfrage nennt den Text wörtlich
+            # in der Warnung des `except` (Golden Master `hourly-slots`, Fall «SQL ohne statistics-Tabelle»).
+            rows = conn.execute(
+                text(f"""
                             SELECT metadata_id, start_ts, sum
                             FROM statistics
                             WHERE metadata_id IN ({placeholders_meta})
@@ -1802,43 +1880,51 @@ class HAStatisticsService:
                               AND start_ts <= :ts_bis
                             ORDER BY metadata_id, start_ts
                         """),
-                        {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
-                    )
-                for metadata_id, start_ts, sum_val in rows:
-                    sid = meta_id_to_sensor.get(metadata_id)
-                    if not sid or sum_val is None:
-                        continue  # NULL → keine Zeile; die Energie trägt die nächste
-                    b_idx = lts_boundary_index(datetime.fromtimestamp(start_ts), datum)
-                    if b_idx < -1 or b_idx > 24:
-                        continue
-                    # Aufsteigend gelesen ⇒ bei zwei Zeilen auf einem Index
-                    # (Herbst-Umstellung) gewinnt die spätere.
-                    per_sensor[sid][b_idx] = (sum_val * _faktor(sid), float(start_ts))
+                {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
+            )
+        for metadata_id, start_ts, sum_val in rows:
+            sid = meta_id_to_sensor.get(metadata_id)
+            if not sid or sum_val is None:
+                continue  # NULL → keine Zeile; die Energie trägt die nächste
+            b_idx = lts_boundary_index(datetime.fromtimestamp(start_ts), datum)
+            if b_idx < -1 or b_idx > 24:
+                continue
+            # Aufsteigend gelesen ⇒ bei zwei Zeilen auf einem Index
+            # (Herbst-Umstellung) gewinnt die spätere.
+            per_sensor[sid][b_idx] = (sum_val * _slot_kwh_faktor(meta_by_id, sid), float(start_ts))
 
-                # Anker vor dem Fenster — nur, wo Index -1 fehlt und das Fenster
-                # überhaupt eine Zeile trägt.
-                brauchen = [sid for sid in meta_by_id
-                            if per_sensor[sid] and -1 not in per_sensor[sid]]
-                if brauchen:
-                    if conn is None:
-                        offen = list(brauchen)
-                        for tage in _WS_ANKER_FENSTER_TAGE:
-                            if not offen:
-                                break
-                            zeilen = self._ws_zeilen(
-                                offen, ts_von - tage * 86400, ts_von - 1, types=["sum"],
-                            )
-                            for sid in list(offen):
-                                treffer = [z for z in zeilen.get(sid, [])
-                                           if z.get("sum") is not None and z["start_ts"] < ts_von]
-                                if treffer:
-                                    letzte = max(treffer, key=lambda z: z["start_ts"])
-                                    anker[sid] = (letzte["sum"] * _faktor(sid), float(letzte["start_ts"]))
-                                    offen.remove(sid)
-                    else:
-                        for sid in brauchen:
-                            zeile = conn.execute(
-                                text("""
+    def _anker_vor_fenster(self, conn, lesen: "_SlotLesen") -> None:
+        """Phase 2 von `get_hourly_slots_for_day` (RF-55): die Anker-Zeile vor dem Fenster — die letzte mit ``sum`` IS NOT
+        NULL und ``start_ts < ts_von``, beliebig weit zurück; SQL in einer Abfrage je Zähler, WebSocket rückwärts wachsend
+        über `_WS_ANKER_FENSTER_TAGE`. Nur für Zähler, deren Fenster eine Zeile trägt und denen Index −1 fehlt. Füllt
+        `lesen.anker` (Stand in kWh, ``start_ts``)."""
+        ts_von, meta_by_id = lesen.ts_von, lesen.meta_by_id
+        per_sensor, anker = lesen.per_sensor, lesen.anker
+
+        # Anker vor dem Fenster — nur, wo Index -1 fehlt und das Fenster
+        # überhaupt eine Zeile trägt.
+        brauchen = [sid for sid in meta_by_id
+                    if per_sensor[sid] and -1 not in per_sensor[sid]]
+        if brauchen:
+            if conn is None:
+                offen = list(brauchen)
+                for tage in _WS_ANKER_FENSTER_TAGE:
+                    if not offen:
+                        break
+                    zeilen = self._ws_zeilen(
+                        offen, ts_von - tage * 86400, ts_von - 1, types=["sum"],
+                    )
+                    for sid in list(offen):
+                        treffer = [z for z in zeilen.get(sid, [])
+                                   if z.get("sum") is not None and z["start_ts"] < ts_von]
+                        if treffer:
+                            letzte = max(treffer, key=lambda z: z["start_ts"])
+                            anker[sid] = (letzte["sum"] * _slot_kwh_faktor(meta_by_id, sid), float(letzte["start_ts"]))
+                            offen.remove(sid)
+            else:
+                for sid in brauchen:
+                    zeile = conn.execute(
+                        text("""
                                     SELECT start_ts, sum FROM statistics
                                     WHERE metadata_id = :mid
                                       AND start_ts < :ts_von
@@ -1846,40 +1932,10 @@ class HAStatisticsService:
                                     ORDER BY start_ts DESC
                                     LIMIT 1
                                 """),
-                                {"mid": meta_by_id[sid].id, "ts_von": ts_von},
-                            ).fetchone()
-                            if zeile is not None:
-                                anker[sid] = (zeile[1] * _faktor(sid), float(zeile[0]))
-
-        except Exception as e:
-            logger.warning(f"get_hourly_slots_for_day Fehler: {type(e).__name__}: {e}")
-            return {}
-
-        result: dict[str, SensorSlotReihe] = {}
-        for sid, boundaries in per_sensor.items():
-            if not boundaries:
-                continue  # Sensor hatte im Fenster keine Zeile — seine Energie trägt der Folgetag
-            vorher: Optional[tuple[float, float]] = boundaries.get(-1) or anker.get(sid)
-            erster_anker_ts: Optional[float] = vorher[1] if vorher else None
-            erster = True
-            slots: dict[int, StundenSlot] = {}
-            for h in range(24):
-                stand = boundaries.get(h)
-                if stand is None:
-                    continue  # leerer Slot — die Energie trägt der nächste belegte
-                if vorher is not None:
-                    delta = round(stand[0] - vorher[0], 3)
-                    n = 1 if delta == 0 else max(1, round((stand[1] - vorher[1]) / 3600))
-                    slots[h] = StundenSlot(delta=delta, n=n)
-                    if erster:
-                        erster = False
-                elif erster:
-                    erster_anker_ts = None  # Reihe beginnt im Fenster: kein Anker
-                    erster = False
-                vorher = stand
-            result[sid] = SensorSlotReihe(slots=slots, anker_start_ts=erster_anker_ts)
-
-        return result
+                        {"mid": meta_by_id[sid].id, "ts_von": ts_von},
+                    ).fetchone()
+                    if zeile is not None:
+                        anker[sid] = (zeile[1] * _slot_kwh_faktor(meta_by_id, sid), float(zeile[0]))
 
     def get_short_term_5min_for_day(
         self,
