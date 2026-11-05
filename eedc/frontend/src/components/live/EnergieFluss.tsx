@@ -433,6 +433,9 @@ export default function EnergieFluss({
   const sollText = pvSollKw != null && pvSollKw > 0 ? `~${fmtZahl(pvSollKw, 1)} kW` : null
   const sollAnKachel = sollText != null && pvCount === 1
   const sollAmChip = sollText != null && pvCount > 1
+  // Rückfall (Nachtrag Gernot 5.11.2026, Lab rc24 Winterborn: nur eine Wärmepumpe als Live-Knoten): ohne
+  // PV-Knoten gibt es weder Kachel noch Chip — dann steht «Solar Soll» als Pille über dem Haus. Nie neben Kachel/Chip.
+  const sollUeberHaus = sollText != null && pvCount === 0
 
   // „Gesamtleistung"-Rahmen + Chip (#341 Rainer, Bau A §A6). Bedingung wie die
   // frühere „Solarleistung"-Zeile: Summe > 0 und mehr als ein PV-Knoten (über
@@ -740,6 +743,49 @@ export default function EnergieFluss({
             )
           })()}
         </g>
+
+        {/* Rückfall ohne PV-Knoten (Nachtrag 5.11.2026): «Solar Soll» als Pille über dem Haus — Form wie der
+            «gesamt …»-Chip darunter (weiße Fläche, damit es auf jedem Hintergrund lesbar bleibt), Text und Rand
+            lila in den Farben des früheren nackten Soll-Texts je Hintergrund. Eigener Tooltip, deshalb neben
+            und nicht in der Haus-Gruppe. Eine Linie PV → Haus, auf der es läge, gibt es hier nicht. */}
+        {sollUeberHaus && (() => {
+          const text = `Solar Soll ${sollText}`
+          const font = dims.socFontSize - 1
+          const breite = text.length * 0.62 * font + 10
+          const hoehe = font + 5
+          const oben = CY - HAUS_R - 4 - hoehe
+          const tip = sollTipZeile(sollText!)
+          const [textKlasse, randKlasse] = bgVariant === 'sunset'
+            ? ['fill-purple-800 dark:fill-purple-400', 'stroke-purple-800 dark:stroke-purple-400']
+            : bgVariant === 'alps'
+              ? ['fill-indigo-800 dark:fill-indigo-300', 'stroke-indigo-800 dark:stroke-indigo-300']
+              // „Haus" (Bau B, Regel D): hell dunkel wie bei Alpen, dunkel der Bestand.
+              : bgVariant === 'haus'
+                ? ['fill-indigo-800 dark:fill-purple-400', 'stroke-indigo-800 dark:stroke-purple-400']
+                : ['fill-purple-500 dark:fill-purple-400', 'stroke-purple-500 dark:stroke-purple-400']
+          return (
+            <g data-solar-soll="" className="cursor-default" data-title={tip}>
+              <title>{tip}</title>
+              <rect
+                x={CX - breite / 2} y={oben}
+                width={breite} height={hoehe}
+                rx={hoehe / 2}
+                className={`fill-white dark:fill-gray-800 ${randKlasse}`}
+                fillOpacity={0.92}
+                strokeOpacity={0.5}
+                strokeWidth={1}
+              />
+              <text
+                x={CX} y={oben + hoehe / 2 + font * 0.35}
+                textAnchor="middle"
+                style={{ fontSize: `${font}px` }}
+                className={`font-semibold ${textKlasse}`}
+              >
+                {text}
+              </text>
+            </g>
+          )
+        })()}
 
         {/* Komponenten-Knoten — Einzelkacheln und Gruppen (Bau A §A4).
             Seit §A5 ist eine GRUPPENkachel ein Knopf (Klick, Enter, Leertaste)

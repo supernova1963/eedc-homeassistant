@@ -55,7 +55,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   oder über MQTT), der Hinweis zu nicht gezeigten Geräten „kein Leistungssensor zugeordnet“.
 - **Cockpit → Live, Energiefluss: das Soll der laufenden Stunde steht an der PV statt über dem Haus.** Bisher stand
   „Solar Soll ~3,9 kW“ als Text über dem Haus, genau auf der Linie von der PV zum Haus. Jetzt steht es bei einem PV-Erzeuger
-  als zweite Zeile in seiner Kachel („Soll ~3,9 kW“), bei mehreren am Schild „Gesamtleistung … · Soll ~3,9 kW“; der Tooltip
+  als zweite Zeile in seiner Kachel („Soll ~3,9 kW“), bei mehreren am Schild „Gesamtleistung … · Soll ~3,9 kW“; ohne
+  PV-Leistungssensor (keine PV-Kachel im Energiefluss) steht es als Schild „Solar Soll ~3,9 kW“ über dem Haus. Der Tooltip
   sagt, dass es die Prognose für die laufende Stunde ist.
 
 ## [4.2.1] - 2026-11-02

@@ -18,6 +18,10 @@
  *
  *       cd eedc/frontend && EEDC_PV_SOLL_SNAPSHOT=schreiben npx vitest run src/components/live/EnergieFluss.pv-soll.test.tsx
  *
+ * - **kein PV-Knoten** (Nachtrag Gernot 5.11.2026 nach dem Lab-Test rc24, Winterborn: nur eine
+ *   Wärmepumpe als Live-Knoten): Rückfall «Solar Soll ~6,5 kW» als Pille über dem Haus, Form wie
+ *   der «gesamt …»-Chip darunter, Tooltip derselbe Soll-Satz. Mit PV-Knoten nie die Pille.
+ *
  * Die Markierung `data-solar-soll` sitzt am tragenden Element (Kachel-Textzeile bzw.
  * Chip-Gruppe) — Proben und Playwright-Pläne finden das Soll darüber.
  *
@@ -96,6 +100,8 @@ const pvKacheln = (c: HTMLElement) =>
 const texte = (el: Element) => [...el.querySelectorAll('text')].map(t => t.textContent?.trim() ?? '')
 const chip = (c: HTMLElement) => c.querySelector('g[data-gesamtleistung]')
 const sollTraeger = (c: HTMLElement) => [...c.querySelectorAll('[data-solar-soll]')]
+/** Die Rückfall-Pille über dem Haus (kein PV-Knoten): die Soll-Gruppe, die nicht der Chip ist. */
+const hausPille = (c: HTMLElement) => c.querySelector('g[data-solar-soll]:not([data-gesamtleistung])')
 const alleTexte = (c: HTMLElement) => [...c.querySelectorAll('svg text')].map(t => t.textContent?.trim() ?? '')
 
 /** Ein Element kanonisch: Tag, Attribute sortiert, Kinder rekursiv; Icon-Innenleben draußen (Muster `kachel-sot`). */
@@ -254,5 +260,74 @@ describe('Soll bei mehreren PV-Erzeugern — am «Gesamtleistung»-Chip', () => 
     const gruppen = [...container.querySelectorAll('svg g[data-title]')].filter(g => g.querySelector('[data-stapel]'))
     expect(gruppen.length).toBeGreaterThan(0)
     for (const g of gruppen) expect(texte(g)).toHaveLength(2)
+  })
+})
+
+describe('Rückfall ohne PV-Knoten — «Solar Soll» als Pille über dem Haus (Nachtrag 5.11.2026)', () => {
+  const OHNE_PV = () => [WP, NETZ, HAUS]
+
+  it('kein PV-Knoten, Soll 6,5 ⇒ Pille «Solar Soll ~6,5 kW» mit data-solar-soll und Tooltip, über dem Haus', () => {
+    const komp = OHNE_PV()
+    const { container } = zeichne(komp, 6.5)
+    const p = hausPille(container)!
+    expect(p).not.toBeNull()
+    expect(p.querySelector('text')?.textContent).toBe('Solar Soll ~6,5 kW')
+    expect(sollTraeger(container).map(e => e === p)).toEqual([true])
+    const tip = 'Soll (Prognose der laufenden Stunde): ~6,5 kW'
+    expect(p.getAttribute('data-title')).toBe(tip)
+    expect(p.querySelector(':scope > title')?.textContent).toBe(tip)
+    // Form wie der «gesamt …»-Chip: weiße Pille, Unterkante 4 Einheiten über dem Haus-Kreis
+    const rect = p.querySelector('rect')!
+    expect(rect.getAttribute('class')).toMatch(/^fill-white dark:fill-gray-800 /)
+    const l = layoutEnergieFluss(komp, { breitePx: 1150 })
+    const hoehe = Number(rect.getAttribute('height'))
+    expect(Number(rect.getAttribute('y')) + hoehe).toBeCloseTo(l.CY - l.dims.hausR - 4, 9)
+    expect(Number(rect.getAttribute('rx'))).toBeCloseTo(hoehe / 2, 9)
+    expect(Number(rect.getAttribute('x')) + Number(rect.getAttribute('width')) / 2).toBeCloseTo(l.CX, 9)
+    expect(chip(container)).toBeNull()
+  })
+
+  it('Farben je Hintergrund wie der frühere Soll-Text (Text und Rand lila)', () => {
+    const erwartet: Record<string, [string, string]> = {
+      default: ['fill-purple-500 dark:fill-purple-400', 'stroke-purple-500 dark:stroke-purple-400'],
+      milchstrasse: ['fill-purple-500 dark:fill-purple-400', 'stroke-purple-500 dark:stroke-purple-400'],
+      sunset: ['fill-purple-800 dark:fill-purple-400', 'stroke-purple-800 dark:stroke-purple-400'],
+      alps: ['fill-indigo-800 dark:fill-indigo-300', 'stroke-indigo-800 dark:stroke-indigo-300'],
+      haus: ['fill-indigo-800 dark:fill-purple-400', 'stroke-indigo-800 dark:stroke-purple-400'],
+    }
+    for (const [hg, [text, rand]] of Object.entries(erwartet)) {
+      localStorage.setItem('eedc-energiefluss-bg', hg)
+      const { container, unmount } = zeichne(OHNE_PV(), 6.5)
+      const p = hausPille(container)!
+      expect(p.querySelector('text')?.getAttribute('class'), hg).toBe(`font-semibold ${text}`)
+      expect(p.querySelector('rect')?.getAttribute('class'), hg).toBe(`fill-white dark:fill-gray-800 ${rand}`)
+      expect(p.querySelector('rect')?.getAttribute('stroke'), hg).toBeNull()
+      unmount()
+    }
+  })
+
+  it('kein PV-Knoten, Soll null oder 0 ⇒ nichts', () => {
+    for (const soll of [null, 0]) {
+      const { container, unmount } = zeichne(OHNE_PV(), soll)
+      expect(sollTraeger(container).length, `soll=${soll}`).toBe(0)
+      expect(alleTexte(container).some(t => t.includes('Soll')), `soll=${soll}`).toBe(false)
+      unmount()
+    }
+  })
+
+  it('mit PV-Knoten nie die Pille: ein PV, zwei PV, zwei PV mit Summe 0, Gruppe', () => {
+    const faelle: [string, LiveKomponente[], number][] = [
+      ['1 PV', EIN_PV(), 1150],
+      ['1 PV bei 0 W', [pv(1, 'Dach Süd', 'Süd', 0, 13.3), WP, NETZ, HAUS], 1150],
+      ['2 PV', ZWEI_PV(), 1150],
+      ['2 PV Summe 0', ZWEI_PV(0), 1150],
+      ['Gruppe', [...[1, 2, 3, 4].map(i => pv(i, `String ${i}`, null, 1)), WP, NETZ, HAUS], 360],
+    ]
+    for (const [name, komp, breite] of faelle) {
+      const { container, unmount } = zeichne(komp, 3.9, { breite })
+      expect(hausPille(container), name).toBeNull()
+      expect(alleTexte(container).some(t => t.includes('Solar Soll')), name).toBe(false)
+      unmount()
+    }
   })
 })
