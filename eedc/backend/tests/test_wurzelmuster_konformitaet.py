@@ -1675,7 +1675,9 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/datenquellen.py::_nach_eigenem_tarif",
     # Spaltenstruktur von Vorlage und Export nach heutiger Vertragsart.
     "backend/api/routes/import_export/csv_operations.py::get_csv_template_info",
-    "backend/api/routes/import_export/csv_operations.py::export_csv",
+    # RF-60 (5.11.2026): der Export lädt den Tarif in seiner Kopf-Phase (bis dahin `::export_csv`) — dieselbe Ladung, die
+    # nur die Spalten Durchschnittspreis/Einspeisevergütung entscheidet; die Zahl je Zeile kommt aus den Monatsdaten.
+    "backend/api/routes/import_export/csv_operations.py::_export_spalten",
     # ROI-/Wirtschaftlichkeits-Prognose NACH VORN (Ø-Jahreswert). Vorlage 5 (18.09.2026): crud.py → roi.py;
     # Vorlage 5b (18.09.2026): die Tarif-Ladung zog mit dem Kopf des Endpunkts nach roi_eingaenge.py.
     "backend/api/routes/investitionen/roi_eingaenge.py::lade_roi_eingaenge",
@@ -2258,7 +2260,11 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # um ihre PROVENIENZ zu prüfen und den Sub-Key zu entfernen; keine Monatsgröße entsteht. Ersetzt den Eintrag
     # `::_verteile_anlagen_pv` (N-533, der Verteil-Schreibweg ist mit E4b entfallen).
     "backend/api/routes/ha_statistics_import.py::_entferne_eigene_zerlegung",   # RF-5: Schwestermodul
-    "backend/api/routes/import_export/csv_operations.py::export_csv",
+    # RF-60 (5.11.2026): der CSV-Export lädt die Gerätezeilen in seiner Lade-Phase (bis dahin `::export_csv`) als Map
+    # `(investition_id, jahr, monat) → verbrauch_daten`; die Zeilen-Phase `_export_zeilen` schreibt daraus je Gerät und
+    # Spalte den gespeicherten Wert (Fallback-Key, Dezimal-Komma, Sonderkosten-Netto der EINEN Zeile) — ein Backup der
+    # Rohzeilen, keine Monatsgröße über Geräte. Sie trägt keinen Marker und braucht keinen Phasen-Eintrag.
+    "backend/api/routes/import_export/csv_operations.py::_export_laden",
     "backend/api/routes/import_export/json_operations.py::_export_anlage_full_impl",
     "backend/services/migrations/migrate_emob_canonical_source.py::migrate_emob_canonical_source",
     # N-555 (25.09.2026): einmalige Rückbenennung der Startroutine-Umbuchungen —

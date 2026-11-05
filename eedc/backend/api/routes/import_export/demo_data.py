@@ -5,6 +5,7 @@ Erstellen und Löschen von Demo-Daten für Tests und Präsentationen.
 """
 
 from datetime import date
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -63,6 +64,12 @@ DEMO_MONATSDATEN = [
 ]
 
 
+# Form (RF-59, 5.11.2026, Bauform RF-1) — als Kommentar, weil der Docstring der Route die OpenAPI-Beschreibung ist:
+# Orchestrator = Existenz-Prüfung und die Phasen in der Reihenfolge der Nummern-Absätze — `_demo_anlage` (1.),
+# `_demo_strompreise` (2.), `_demo_investitionen` (3., liefert `_DemoGeraete`), `_demo_monatsdaten` (4., je Gerät eine
+# Monats-Phase `_demo_monat_<gerät>`), `_demo_pvgis` (5.). **Reihenfolge ist Vertrag:** die Einfüge- und Flush-Reihenfolge
+# vergibt die IDs der Demo-Geräte (Wechselrichter 1 … Heizstab 11; `live_dashboard.py` verlässt sich auf WP = ID 4) und
+# der Gerätezeilen.
 @router.post("/demo", response_model=DemoDataResult)
 async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function")):
     """
@@ -89,6 +96,26 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
             detail="Demo-Anlage existiert bereits. Bitte zuerst löschen."
         )
 
+    # Reihenfolge ist Vertrag (Kommentar über der Route): Anlage, Strompreise, Geräte, Monatsdaten, PVGIS.
+    anlage = await _demo_anlage(db)
+    _demo_strompreise(db, anlage)
+    geraete = await _demo_investitionen(db, anlage)
+    monatsdaten_count = _demo_monatsdaten(db, anlage, geraete)
+    await _demo_pvgis(db, anlage)
+
+    return DemoDataResult(
+        erfolg=True,
+        anlage_id=anlage.id,
+        anlage_name=anlage.anlagenname,
+        monatsdaten_count=monatsdaten_count,
+        investitionen_count=10,
+        strompreise_count=3,
+        message=f"Demo-Anlage mit {monatsdaten_count} Monatsdaten, 10 Investitionen und 3 Strompreisen erstellt.",
+    )
+
+
+async def _demo_anlage(db: AsyncSession) -> Anlage:
+    """Phase 1 (RF-59): die Demo-Anlage anlegen und flushen (ihre ID brauchen alle folgenden Phasen)."""
     # 1. Anlage erstellen (Standort: München - für DWD/Bright Sky Verfügbarkeit)
     anlage = Anlage(
         anlagenname="Demo-Anlage",
@@ -140,7 +167,11 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
     )
     db.add(anlage)
     await db.flush()
+    return anlage
 
+
+def _demo_strompreise(db: AsyncSession, anlage: Anlage) -> None:
+    """Phase 2 (RF-59): drei Strompreise 2023 · 2024 · ab 2025 (ohne eigenen Flush — der folgt mit dem Wechselrichter)."""
     # 2. Strompreise erstellen
     strompreise = [
         Strompreis(
@@ -177,6 +208,27 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
     for sp in strompreise:
         db.add(sp)
 
+
+@dataclass
+class _DemoGeraete:
+    """Die elf Demo-Geräte aus Phase 3 (RF-59) — die Monats-Phasen brauchen ihre IDs."""
+
+    wechselrichter: Investition
+    speicher: Investition
+    eauto: Investition
+    waermepumpe: Investition
+    wallbox: Investition
+    pv_sued: Investition
+    pv_ost: Investition
+    pv_west: Investition
+    balkonkraftwerk: Investition
+    mini_bhkw: Investition
+    heizstab: Investition
+
+
+async def _demo_investitionen(db: AsyncSession, anlage: Anlage) -> _DemoGeraete:
+    """Phase 3 (RF-59): die Geräte in fester Reihenfolge (IDs!) — Wechselrichter zuerst und geflusht, weil Speicher
+    und PV-Strings ihn als `parent_investition_id` tragen; ein Flush am Ende für die übrigen."""
     # 3. Investitionen erstellen
     # Wechselrichter
     wechselrichter = Investition(
@@ -414,27 +466,41 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
 
     await db.flush()
 
+    return _DemoGeraete(
+        wechselrichter=wechselrichter, speicher=speicher, eauto=eauto, waermepumpe=waermepumpe, wallbox=wallbox,
+        pv_sued=pv_sued, pv_ost=pv_ost, pv_west=pv_west, balkonkraftwerk=balkonkraftwerk, mini_bhkw=mini_bhkw,
+        heizstab=heizstab,
+    )
+
+
+# Etappe 3d Päckchen 2: Lokale Helper für Provenance-Seeding der Demo-Daten.
+# auto:demo_data ist AUTO_AGGREGATION-Klasse, damit nachträgliche
+# Form-Bearbeitung sie sauber schlägt (manual:form > auto:demo_data).
+# Seit RF-59 (5.11.2026) Modul-Funktionen mit `db` als erstem Parameter (vorher Closures in `create_demo_data`).
+def _add_demo_md(db: AsyncSession, md_obj, present_fields: list[str]) -> None:
+    seed_provenance(
+        md_obj, source="auto:demo_data", writer="demo_data_loader",
+        fields=present_fields,
+    )
+    db.add(md_obj)
+
+
+def _add_demo_imd(db: AsyncSession, inv_id: int, jahr: int, monat: int, vd: dict) -> None:
+    imd = InvestitionMonatsdaten(
+        investition_id=inv_id, jahr=jahr, monat=monat, verbrauch_daten=vd,
+    )
+    seed_provenance(
+        imd, source="auto:demo_data", writer="demo_data_loader",
+        json_subkeys={"verbrauch_daten": list(vd.keys())},
+    )
+    db.add(imd)
+
+
+def _demo_monatsdaten(db: AsyncSession, anlage: Anlage, g: _DemoGeraete) -> int:
+    """Phase 4 (RF-59): je Zeile von `DEMO_MONATSDATEN` die Monatszeile, dann die Gerätezeilen in fester Reihenfolge
+    (E-Auto, Speicher, WP, BKW, BHKW, Heizstab, PV-Strings, Wallbox — die Reihenfolge vergibt die IDs der Zeilen).
+    Rückgabe: Anzahl der Monatszeilen."""
     # 4. Monatsdaten erstellen
-    # Etappe 3d Päckchen 2: Lokale Helper für Provenance-Seeding der Demo-Daten.
-    # auto:demo_data ist AUTO_AGGREGATION-Klasse, damit nachträgliche
-    # Form-Bearbeitung sie sauber schlägt (manual:form > auto:demo_data).
-    def _add_demo_md(md_obj, present_fields: list[str]) -> None:
-        seed_provenance(
-            md_obj, source="auto:demo_data", writer="demo_data_loader",
-            fields=present_fields,
-        )
-        db.add(md_obj)
-
-    def _add_demo_imd(inv_id: int, jahr: int, monat: int, vd: dict) -> None:
-        imd = InvestitionMonatsdaten(
-            investition_id=inv_id, jahr=jahr, monat=monat, verbrauch_daten=vd,
-        )
-        seed_provenance(
-            imd, source="auto:demo_data", writer="demo_data_loader",
-            json_subkeys={"verbrauch_daten": list(vd.keys())},
-        )
-        db.add(imd)
-
     monatsdaten_count = 0
     for row in DEMO_MONATSDATEN:
         (jahr, monat, einspeisung, netzbezug, pv_erzeugung, batt_ladung, batt_entladung,
@@ -452,136 +518,180 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
             sonnenstunden=sonnenstunden,
             datenquelle="demo",
         )
-        _add_demo_md(md, [
+        _add_demo_md(db, md, [
             "einspeisung_kwh", "netzbezug_kwh",
             "globalstrahlung_kwh_m2", "sonnenstunden",
         ])
         monatsdaten_count += 1
 
-        # E-Auto Monatsdaten
-        if eauto_km > 0:
-            eauto_verbrauch_daten = {
-                "km_gefahren": eauto_km,
-                "verbrauch_kwh": eauto_verbrauch,
-                "ladung_pv_kwh": eauto_pv,
-                "ladung_netz_kwh": eauto_netz,
-                "v2h_entladung_kwh": v2h,
-            }
-            if eauto_extern_kwh > 0:
-                eauto_verbrauch_daten["ladung_extern_kwh"] = eauto_extern_kwh
-                eauto_verbrauch_daten["ladung_extern_euro"] = eauto_extern_euro
+        _demo_monat_eauto(db, g.eauto, jahr, monat, eauto_km, eauto_verbrauch, eauto_pv, eauto_netz,
+                          eauto_extern_kwh, eauto_extern_euro, v2h)
+        _demo_monat_speicher(db, g.speicher, jahr, monat, batt_ladung, batt_entladung)
+        _demo_monat_wp(db, g.waermepumpe, jahr, monat, wp_strom, wp_heizung, wp_warmwasser)
+        _demo_monat_bkw(db, g.balkonkraftwerk, jahr, monat, pv_erzeugung)
+        _demo_monat_bhkw(db, g.mini_bhkw, jahr, monat)
+        _demo_monat_heizstab(db, g.heizstab, jahr, monat)
+        _demo_monat_pv(db, g.pv_sued, g.pv_ost, g.pv_west, jahr, monat, pv_erzeugung)
+        _demo_monat_wallbox(db, g.wallbox, jahr, monat, eauto_km, eauto_pv, eauto_netz)
 
-            if monat == 4:
-                eauto_verbrauch_daten["sonstige_positionen"] = [
-                    {"bezeichnung": "Reifenwechsel Sommer", "betrag": 120.0, "typ": "ausgabe"}
-                ]
-            elif monat == 6:
-                eauto_verbrauch_daten["sonstige_positionen"] = [
-                    {"bezeichnung": "Arbeitgeber-Erstattung Laden", "betrag": 185.0, "typ": "ertrag"},
-                    {"bezeichnung": "Reifenrotation", "betrag": 35.0, "typ": "ausgabe"}
-                ]
-            elif monat == 11 and jahr == 2024:
-                eauto_verbrauch_daten["sonstige_positionen"] = [
-                    {"bezeichnung": "Jahresservice", "betrag": 250.0, "typ": "ausgabe"},
-                    {"bezeichnung": "THG-Quote", "betrag": 85.0, "typ": "ertrag"}
-                ]
+    return monatsdaten_count
 
-            _add_demo_imd(eauto.id, jahr, monat, eauto_verbrauch_daten)
 
-        # Speicher Monatsdaten
-        if batt_ladung > 0:
-            speicher_daten = {
-                "ladung_kwh": batt_ladung,
-                "entladung_kwh": batt_entladung,
-            }
-            if jahr >= 2025:
-                arbitrage_anteil = 0.15 + (monat % 3) * 0.05
-                speicher_daten["ladung_netz_kwh"] = round(batt_ladung * arbitrage_anteil, 1)
-                speicher_daten["speicher_ladepreis_cent"] = round(18 + (monat % 4) * 2, 1)
+def _demo_monat_eauto(db: AsyncSession, eauto: Investition, jahr: int, monat: int, eauto_km, eauto_verbrauch,
+                      eauto_pv, eauto_netz, eauto_extern_kwh, eauto_extern_euro, v2h) -> None:
+    """Phase 4 (RF-59): E-Auto-Monatszeile ab Dezember 2023, Sonderposten April/Juni/November 2024."""
+    # E-Auto Monatsdaten
+    if eauto_km > 0:
+        eauto_verbrauch_daten = {
+            "km_gefahren": eauto_km,
+            "verbrauch_kwh": eauto_verbrauch,
+            "ladung_pv_kwh": eauto_pv,
+            "ladung_netz_kwh": eauto_netz,
+            "v2h_entladung_kwh": v2h,
+        }
+        if eauto_extern_kwh > 0:
+            eauto_verbrauch_daten["ladung_extern_kwh"] = eauto_extern_kwh
+            eauto_verbrauch_daten["ladung_extern_euro"] = eauto_extern_euro
 
-            if jahr == 2025 and monat == 3:
-                speicher_daten["sonstige_positionen"] = [
-                    {"bezeichnung": "Firmware-Update", "betrag": 95.0, "typ": "ausgabe"}
-                ]
+        if monat == 4:
+            eauto_verbrauch_daten["sonstige_positionen"] = [
+                {"bezeichnung": "Reifenwechsel Sommer", "betrag": 120.0, "typ": "ausgabe"}
+            ]
+        elif monat == 6:
+            eauto_verbrauch_daten["sonstige_positionen"] = [
+                {"bezeichnung": "Arbeitgeber-Erstattung Laden", "betrag": 185.0, "typ": "ertrag"},
+                {"bezeichnung": "Reifenrotation", "betrag": 35.0, "typ": "ausgabe"}
+            ]
+        elif monat == 11 and jahr == 2024:
+            eauto_verbrauch_daten["sonstige_positionen"] = [
+                {"bezeichnung": "Jahresservice", "betrag": 250.0, "typ": "ausgabe"},
+                {"bezeichnung": "THG-Quote", "betrag": 85.0, "typ": "ertrag"}
+            ]
 
-            _add_demo_imd(speicher.id, jahr, monat, speicher_daten)
+        _add_demo_imd(db, eauto.id, jahr, monat, eauto_verbrauch_daten)
 
-        # Wärmepumpe Monatsdaten
-        if wp_strom > 0:
-            wp_daten = {
-                "stromverbrauch_kwh": wp_strom,
-                "heizenergie_kwh": wp_heizung,
-                "warmwasser_kwh": wp_warmwasser,
-            }
-            if monat == 10:
-                wp_daten["sonstige_positionen"] = [
-                    {"bezeichnung": "Jahreswartung", "betrag": 180.0, "typ": "ausgabe"}
-                ]
 
-            _add_demo_imd(waermepumpe.id, jahr, monat, wp_daten)
-
-        # Balkonkraftwerk Monatsdaten
-        if jahr > 2024 or (jahr == 2024 and monat >= 3):
-            bkw_skalierung = 0.04
-            bkw_erzeugung = round(pv_erzeugung * bkw_skalierung, 1)
-            bkw_eigenverbrauch = round(bkw_erzeugung * 0.95, 1)
-            bkw_speicher_ladung = round(bkw_erzeugung * 0.3, 1)
-            bkw_speicher_entladung = round(bkw_speicher_ladung * 0.92, 1)
-
-            _add_demo_imd(balkonkraftwerk.id, jahr, monat, {
-                "pv_erzeugung_kwh": bkw_erzeugung,
-                "eigenverbrauch_kwh": bkw_eigenverbrauch,
-                "speicher_ladung_kwh": bkw_speicher_ladung,
-                "speicher_entladung_kwh": bkw_speicher_entladung,
-            })
-
-        # Mini-BHKW Monatsdaten
-        if (jahr == 2024 and monat >= 10) or jahr > 2024:
-            if monat in [1, 2, 3, 10, 11, 12]:
-                bhkw_erzeugung = 120 + (monat % 3) * 30
-            else:
-                bhkw_erzeugung = 30 + (monat % 2) * 10
-
-            _add_demo_imd(mini_bhkw.id, jahr, monat, {"erzeugung_kwh": bhkw_erzeugung})
-
-        # Heizstab Warmwasser — der KANONISCHE Feldname `verbrauch_sonstig_kwh`
-        # (nicht der Legacy-Zwilling `verbrauch_kwh`): So schreibt es die
-        # Zuordnungsfläche, und unter diesem Namen publiziert eedc auch sein
-        # MQTT-Topic. Der Legacy-Name bleibt lesbar, gehört aber nicht in einen
-        # frisch erzeugten Bestand.
-        # Mengenbild: im Sommer trägt die PV das Warmwasser, im Winter springt
-        # der Heizstab ein — deshalb die Monats-Staffelung statt einer Konstante.
+def _demo_monat_speicher(db: AsyncSession, speicher: Investition, jahr: int, monat: int, batt_ladung,
+                         batt_entladung) -> None:
+    """Phase 4 (RF-59): Speicher-Monatszeile, Arbitrage-Anteil ab 2025, Sonderposten März 2025."""
+    # Speicher Monatsdaten
+    if batt_ladung > 0:
+        speicher_daten = {
+            "ladung_kwh": batt_ladung,
+            "entladung_kwh": batt_entladung,
+        }
         if jahr >= 2025:
-            heizstab_verbrauch = 45 if monat in (11, 12, 1, 2) else (
-                20 if monat in (3, 4, 9, 10) else 6
-            )
-            _add_demo_imd(
-                heizstab.id, jahr, monat,
-                {"verbrauch_sonstig_kwh": heizstab_verbrauch},
-            )
+            arbitrage_anteil = 0.15 + (monat % 3) * 0.05
+            speicher_daten["ladung_netz_kwh"] = round(batt_ladung * arbitrage_anteil, 1)
+            speicher_daten["speicher_ladepreis_cent"] = round(18 + (monat % 4) * 2, 1)
 
-        # PV-Module InvestitionMonatsdaten
-        if pv_erzeugung > 0:
-            if monat in [5, 6, 7]:
-                sued_anteil, ost_anteil, west_anteil = 0.55, 0.27, 0.18
-            elif monat in [11, 12, 1, 2]:
-                sued_anteil, ost_anteil, west_anteil = 0.70, 0.18, 0.12
-            else:
-                sued_anteil, ost_anteil, west_anteil = 0.60, 0.24, 0.16
+        if jahr == 2025 and monat == 3:
+            speicher_daten["sonstige_positionen"] = [
+                {"bezeichnung": "Firmware-Update", "betrag": 95.0, "typ": "ausgabe"}
+            ]
 
-            for pv_inv, anteil in [(pv_sued, sued_anteil), (pv_ost, ost_anteil), (pv_west, west_anteil)]:
-                _add_demo_imd(pv_inv.id, jahr, monat, {
-                    "pv_erzeugung_kwh": round(pv_erzeugung * anteil, 1),
-                })
+        _add_demo_imd(db, speicher.id, jahr, monat, speicher_daten)
 
-        # Wallbox Monatsdaten
-        if eauto_km > 0:
-            heimladung = eauto_pv + eauto_netz
-            _add_demo_imd(wallbox.id, jahr, monat, {
-                "ladung_kwh": heimladung,
-                "ladevorgaenge": max(4, int(heimladung / 25)),
+
+def _demo_monat_wp(db: AsyncSession, waermepumpe: Investition, jahr: int, monat: int, wp_strom, wp_heizung,
+                   wp_warmwasser) -> None:
+    """Phase 4 (RF-59): WP-Monatszeile, Jahreswartung im Oktober."""
+    # Wärmepumpe Monatsdaten
+    if wp_strom > 0:
+        wp_daten = {
+            "stromverbrauch_kwh": wp_strom,
+            "heizenergie_kwh": wp_heizung,
+            "warmwasser_kwh": wp_warmwasser,
+        }
+        if monat == 10:
+            wp_daten["sonstige_positionen"] = [
+                {"bezeichnung": "Jahreswartung", "betrag": 180.0, "typ": "ausgabe"}
+            ]
+
+        _add_demo_imd(db, waermepumpe.id, jahr, monat, wp_daten)
+
+
+def _demo_monat_bkw(db: AsyncSession, balkonkraftwerk: Investition, jahr: int, monat: int, pv_erzeugung) -> None:
+    """Phase 4 (RF-59): BKW-Monatszeile ab März 2024 (4 % der Anlagen-PV)."""
+    # Balkonkraftwerk Monatsdaten
+    if jahr > 2024 or (jahr == 2024 and monat >= 3):
+        bkw_skalierung = 0.04
+        bkw_erzeugung = round(pv_erzeugung * bkw_skalierung, 1)
+        bkw_eigenverbrauch = round(bkw_erzeugung * 0.95, 1)
+        bkw_speicher_ladung = round(bkw_erzeugung * 0.3, 1)
+        bkw_speicher_entladung = round(bkw_speicher_ladung * 0.92, 1)
+
+        _add_demo_imd(db, balkonkraftwerk.id, jahr, monat, {
+            "pv_erzeugung_kwh": bkw_erzeugung,
+            "eigenverbrauch_kwh": bkw_eigenverbrauch,
+            "speicher_ladung_kwh": bkw_speicher_ladung,
+            "speicher_entladung_kwh": bkw_speicher_entladung,
+        })
+
+
+def _demo_monat_bhkw(db: AsyncSession, mini_bhkw: Investition, jahr: int, monat: int) -> None:
+    """Phase 4 (RF-59): BHKW-Monatszeile ab Oktober 2024, Winter- und Sommerwert."""
+    # Mini-BHKW Monatsdaten
+    if (jahr == 2024 and monat >= 10) or jahr > 2024:
+        if monat in [1, 2, 3, 10, 11, 12]:
+            bhkw_erzeugung = 120 + (monat % 3) * 30
+        else:
+            bhkw_erzeugung = 30 + (monat % 2) * 10
+
+        _add_demo_imd(db, mini_bhkw.id, jahr, monat, {"erzeugung_kwh": bhkw_erzeugung})
+
+
+def _demo_monat_heizstab(db: AsyncSession, heizstab: Investition, jahr: int, monat: int) -> None:
+    """Phase 4 (RF-59): Heizstab-Monatszeile ab 2025, Staffelung nach Jahreszeit."""
+    # Heizstab Warmwasser — der KANONISCHE Feldname `verbrauch_sonstig_kwh`
+    # (nicht der Legacy-Zwilling `verbrauch_kwh`): So schreibt es die
+    # Zuordnungsfläche, und unter diesem Namen publiziert eedc auch sein
+    # MQTT-Topic. Der Legacy-Name bleibt lesbar, gehört aber nicht in einen
+    # frisch erzeugten Bestand.
+    # Mengenbild: im Sommer trägt die PV das Warmwasser, im Winter springt
+    # der Heizstab ein — deshalb die Monats-Staffelung statt einer Konstante.
+    if jahr >= 2025:
+        heizstab_verbrauch = 45 if monat in (11, 12, 1, 2) else (
+            20 if monat in (3, 4, 9, 10) else 6
+        )
+        _add_demo_imd(
+            db, heizstab.id, jahr, monat,
+            {"verbrauch_sonstig_kwh": heizstab_verbrauch},
+        )
+
+
+def _demo_monat_pv(db: AsyncSession, pv_sued: Investition, pv_ost: Investition, pv_west: Investition, jahr: int,
+                   monat: int, pv_erzeugung) -> None:
+    """Phase 4 (RF-59): die Anlagen-PV auf die drei Strings verteilt (Anteile je Jahreszeit)."""
+    # PV-Module InvestitionMonatsdaten
+    if pv_erzeugung > 0:
+        if monat in [5, 6, 7]:
+            sued_anteil, ost_anteil, west_anteil = 0.55, 0.27, 0.18
+        elif monat in [11, 12, 1, 2]:
+            sued_anteil, ost_anteil, west_anteil = 0.70, 0.18, 0.12
+        else:
+            sued_anteil, ost_anteil, west_anteil = 0.60, 0.24, 0.16
+
+        for pv_inv, anteil in [(pv_sued, sued_anteil), (pv_ost, ost_anteil), (pv_west, west_anteil)]:
+            _add_demo_imd(db, pv_inv.id, jahr, monat, {
+                "pv_erzeugung_kwh": round(pv_erzeugung * anteil, 1),
             })
 
+
+def _demo_monat_wallbox(db: AsyncSession, wallbox: Investition, jahr: int, monat: int, eauto_km, eauto_pv,
+                        eauto_netz) -> None:
+    """Phase 4 (RF-59): Wallbox-Monatszeile = Heimladung des E-Autos (PV + Netz)."""
+    # Wallbox Monatsdaten
+    if eauto_km > 0:
+        heimladung = eauto_pv + eauto_netz
+        _add_demo_imd(db, wallbox.id, jahr, monat, {
+            "ladung_kwh": heimladung,
+            "ladevorgaenge": max(4, int(heimladung / 25)),
+        })
+
+
+async def _demo_pvgis(db: AsyncSession, anlage: Anlage) -> None:
+    """Phase 5 (RF-59): eine aktive PVGIS-Prognose mit zwölf Monatswerten."""
     # 5. PVGIS Prognose
     pvgis_monatswerte = [
         {"monat": 1, "e_m": 680, "h_m": 32.5, "sd_m": 85},
@@ -623,16 +733,6 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
             einstrahlung_kwh_m2=m["h_m"],
             standardabweichung_kwh=m["sd_m"],
         ))
-
-    return DemoDataResult(
-        erfolg=True,
-        anlage_id=anlage.id,
-        anlage_name=anlage.anlagenname,
-        monatsdaten_count=monatsdaten_count,
-        investitionen_count=10,
-        strompreise_count=3,
-        message=f"Demo-Anlage mit {monatsdaten_count} Monatsdaten, 10 Investitionen und 3 Strompreisen erstellt.",
-    )
 
 
 @router.delete("/demo", response_model=dict)
