@@ -41,6 +41,7 @@ Filter pro Stunde:
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -506,49 +507,46 @@ async def _upsert_profil(
     profil.aktualisiert_am = datetime.now()
 
 
-async def aggregiere_korrekturprofil_anlage(
-    anlage: Anlage,
-    db: AsyncSession,
-    *,
-    lookback_tage: int = DEFAULT_LOOKBACK_TAGE,
-    azimut_breite: int = AZIMUT_BIN_BREITE_DEFAULT,
-    elevation_breite: int = ELEVATION_BIN_BREITE_DEFAULT,
-    heute: Optional[date] = None,
-) -> dict:
-    """Aggregiert die vier Korrekturprofil-Stufen für eine Anlage.
+@dataclass
+class _KorrekturKontext:
+    """Geteilte Eingänge der Stufen (RF-85): Anlage, Stichtag/Lookback, Day-Ahead-Snapshots und die Bin-Akkumulatoren."""
 
-    Idempotent: bestehende Profile derselben `(anlage_id, NULL,
-    quelle, profil_typ)`-Kombination werden überschrieben.
-
-    `heute` dient als Stichtag für Lookback und Gesamt-Fenster
-    (Default: heutiges Datum; injizierbar für deterministische Tests).
-
-    Liefert ein Status-Dict (für Logging und Endpoint-Response).
-    """
-    if anlage.latitude is None or anlage.longitude is None:
-        return {
-            "status": "skipped",
-            "grund": "Anlage hat keine Koordinaten — Sonnenstand nicht berechenbar",
-        }
-
-    if heute is None:
-        heute = date.today()
-    von = heute - timedelta(days=lookback_tage)
-
-    prog_pro_tag = await _lade_tagesprognose(db, anlage.id, von, heute)
-
+    anlage: Anlage
+    heute: date
+    von: date
+    azimut_breite: int
+    elevation_breite: int
+    prog_pro_tag: dict[date, list[float]] = field(default_factory=dict)
     # Bin-Akkumulatoren
-    sw_acc: dict[str, _BinAccumulator] = {}  # sonnenstand_wetter
-    s_acc: dict[str, _BinAccumulator] = {}  # sonnenstand only
-    tage_genutzt: set[date] = set()
-
+    sw_acc: dict[str, _BinAccumulator] = field(default_factory=dict)  # sonnenstand_wetter
+    s_acc: dict[str, _BinAccumulator] = field(default_factory=dict)  # sonnenstand only
+    tage_genutzt: set[date] = field(default_factory=set)
     # stunde-Stufe (Variante A): drei Pool-Granularitäten parallel füllen,
     # die Saisonbin-Kaskade wird nach dem Loop pro Zelle aufgelöst.
-    st_monat_acc: dict[tuple[int, int], _BinAccumulator] = {}    # (monat, stunde)
-    st_quartal_acc: dict[tuple[int, int], _BinAccumulator] = {}  # (quartal, stunde)
-    st_gesamt_acc: dict[int, _BinAccumulator] = {}               # stunde
-    st_tage: set[date] = set()
-    st_gesamt_von = heute - timedelta(days=ST_GESAMT_FENSTER_TAGE)
+    st_monat_acc: dict[tuple[int, int], _BinAccumulator] = field(default_factory=dict)    # (monat, stunde)
+    st_quartal_acc: dict[tuple[int, int], _BinAccumulator] = field(default_factory=dict)  # (quartal, stunde)
+    st_gesamt_acc: dict[int, _BinAccumulator] = field(default_factory=dict)               # stunde
+    st_tage: set[date] = field(default_factory=set)
+    st_gesamt_von: Optional[date] = None
+
+
+async def _tage_und_snapshots(
+    db: AsyncSession,
+    anlage: Anlage,
+    *,
+    heute: date,
+    lookback_tage: int,
+    azimut_breite: int,
+    elevation_breite: int,
+) -> _KorrekturKontext:
+    """Lookback, Day-Ahead-Snapshots, Stunden-IST samt Filtern (Schwellen, Zählerlücken) → gefüllte Bin-Akkumulatoren."""
+    von = heute - timedelta(days=lookback_tage)
+    ctx = _KorrekturKontext(
+        anlage=anlage, heute=heute, von=von,
+        azimut_breite=azimut_breite, elevation_breite=elevation_breite,
+        st_gesamt_von=heute - timedelta(days=ST_GESAMT_FENSTER_TAGE),
+    )
+    ctx.prog_pro_tag = prog_pro_tag = await _lade_tagesprognose(db, anlage.id, von, heute)
 
     if not prog_pro_tag:
         # Kein Day-Ahead-Snapshot im Zeitraum — die Bin-Stufen bleiben leer,
@@ -573,58 +571,92 @@ async def aggregiere_korrekturprofil_anlage(
         prog = prog_profil[stunde] if 0 <= stunde < 24 else None
         if prog is None or prog < MIN_LEISTUNG_KW:
             continue
+        _akkumuliere(ctx, datum, stunde, pv_kw, prog, bw, ns, wc)
+    return ctx
 
-        # stunde-Stufe: braucht keinen Sonnenstand — vor dem bin_key-Filter
-        # akkumulieren, damit auch Dämmerungs-Slots einfließen (wie Skalar).
-        st_monat_acc.setdefault((datum.month, stunde), _BinAccumulator()).add(pv_kw, prog)
-        st_quartal_acc.setdefault(
-            (_quartal_von_monat(datum.month), stunde), _BinAccumulator()
-        ).add(pv_kw, prog)
-        if datum >= st_gesamt_von:
-            st_gesamt_acc.setdefault(stunde, _BinAccumulator()).add(pv_kw, prog)
-        st_tage.add(datum)
 
-        sp = solar_position_lokal(anlage.latitude, anlage.longitude, datum, stunde)
-        bk = bin_key(sp.azimut, sp.elevation, azimut_breite, elevation_breite)
-        if bk is None:
-            continue  # Sonne unter Horizont — keine sinnvolle Korrektur
+def _akkumuliere(
+    ctx: _KorrekturKontext, datum: date, stunde: int, pv_kw: float, prog: float, bw, ns, wc,
+) -> None:
+    """Eine gefilterte Stunde in die Pools aller Bin-Stufen (stunde vor dem Sonnenstand-Filter)."""
+    # stunde-Stufe: braucht keinen Sonnenstand — vor dem bin_key-Filter
+    # akkumulieren, damit auch Dämmerungs-Slots einfließen (wie Skalar).
+    ctx.st_monat_acc.setdefault((datum.month, stunde), _BinAccumulator()).add(pv_kw, prog)
+    ctx.st_quartal_acc.setdefault(
+        (_quartal_von_monat(datum.month), stunde), _BinAccumulator()
+    ).add(pv_kw, prog)
+    if datum >= ctx.st_gesamt_von:
+        ctx.st_gesamt_acc.setdefault(stunde, _BinAccumulator()).add(pv_kw, prog)
+    ctx.st_tage.add(datum)
 
-        # sonnenstand-only: immer akkumulieren
-        s_acc.setdefault(bk, _BinAccumulator()).add(pv_kw, prog)
+    sp = solar_position_lokal(ctx.anlage.latitude, ctx.anlage.longitude, datum, stunde)
+    bk = bin_key(sp.azimut, sp.elevation, ctx.azimut_breite, ctx.elevation_breite)
+    if bk is None:
+        return  # Sonne unter Horizont — keine sinnvolle Korrektur
 
-        # sonnenstand_wetter: nur wenn Klassifikation gelingt
-        klasse = klassifiziere_stunde(bw, ns, wc)
-        if klasse is not None:
-            kombi_key = f"{bk}_{klasse}"
-            sw_acc.setdefault(kombi_key, _BinAccumulator()).add(pv_kw, prog)
+    # sonnenstand-only: immer akkumulieren
+    ctx.s_acc.setdefault(bk, _BinAccumulator()).add(pv_kw, prog)
 
-        tage_genutzt.add(datum)
+    # sonnenstand_wetter: nur wenn Klassifikation gelingt
+    klasse = klassifiziere_stunde(bw, ns, wc)
+    if klasse is not None:
+        kombi_key = f"{bk}_{klasse}"
+        ctx.sw_acc.setdefault(kombi_key, _BinAccumulator()).add(pv_kw, prog)
 
-    # ── sonnenstand_wetter ────────────────────────────────────────────────
-    sw_faktoren: dict[str, float] = {}
-    sw_datenpunkte: dict[str, int] = {}
-    for k, acc in sw_acc.items():
+    ctx.tage_genutzt.add(datum)
+
+
+def _flache_faktoren(accs: dict[str, _BinAccumulator]) -> tuple[dict[str, float], dict[str, int]]:
+    """Σ IST / Σ Prognose je Bin, geklemmt und gerundet — die eine Form von `sonnenstand_wetter` und `sonnenstand`."""
+    faktoren: dict[str, float] = {}
+    datenpunkte: dict[str, int] = {}
+    for k, acc in accs.items():
         raw = _produktionsgewichtet(acc.sum_ist, acc.sum_prog)
         if raw is None:
             continue
-        sw_faktoren[k] = round(_clamp(raw), 3)
-        sw_datenpunkte[k] = acc.anzahl
+        faktoren[k] = round(_clamp(raw), 3)
+        datenpunkte[k] = acc.anzahl
+    return faktoren, datenpunkte
+
+
+async def _stufe_sonnenstand_wetter(db: AsyncSession, ctx: _KorrekturKontext) -> dict[str, float]:
+    """Stufe 1 `sonnenstand_wetter` — Faktor je `(azimut_bin, elevation_bin, wetterklasse)`."""
+    # ── sonnenstand_wetter ────────────────────────────────────────────────
+    sw_faktoren, sw_datenpunkte = _flache_faktoren(ctx.sw_acc)
 
     await _upsert_profil(
         db,
-        anlage_id=anlage.id,
+        anlage_id=ctx.anlage.id,
         profil_typ=PROFIL_TYP_SONNENSTAND_WETTER,
         bin_definition={
-            "azimut_aufloesung": azimut_breite,
-            "elevation_aufloesung": elevation_breite,
+            "azimut_aufloesung": ctx.azimut_breite,
+            "elevation_aufloesung": ctx.elevation_breite,
             "wetterklassen": list(WETTERKLASSEN),
         },
         faktoren=sw_faktoren,
         datenpunkte_pro_bin=sw_datenpunkte,
-        tage_eingegangen=len(tage_genutzt),
-        heute=heute,
+        tage_eingegangen=len(ctx.tage_genutzt),
+        heute=ctx.heute,
     )
+    return sw_faktoren
 
+
+def _stunde_zelle(ctx: _KorrekturKontext, monat: int, quartal: int, h: int) -> Optional[_BinAccumulator]:
+    """Saisonbin-Kaskade einer Zelle `(monat, h)`: Monat (≥ 15 Tage) → Quartal (≥ 15) → Gesamt (≥ 7) — oder `None`."""
+    acc = ctx.st_monat_acc.get((monat, h))
+    if acc is None or acc.anzahl < ST_MIN_TAGE_MONAT:
+        acc = ctx.st_quartal_acc.get((quartal, h))
+        if acc is None or acc.anzahl < ST_MIN_TAGE_QUARTAL:
+            acc = ctx.st_gesamt_acc.get(h)
+            if acc is None or acc.anzahl < ST_MIN_TAGE_GESAMT:
+                return None
+    return acc
+
+
+async def _stufe_stunde(
+    db: AsyncSession, ctx: _KorrekturKontext,
+) -> tuple[dict[str, dict[str, float]], dict[str, int]]:
+    """Stufe 2 `stunde` (Variante A) — Faktor je `(saisonbin, stunde)` über die Saisonbin-Kaskade."""
     # ── stunde (Variante A: Saisonbin × Stunde) ───────────────────────────
     # Pro Zelle (monat, stunde) die feinste ausreichend belegte Granularität
     # wählen: Monat → Quartal → Gesamt (rollierend). Der Schlüsselraum bleibt
@@ -634,13 +666,9 @@ async def aggregiere_korrekturprofil_anlage(
     for monat in range(1, 13):
         quartal = _quartal_von_monat(monat)
         for h in range(24):
-            acc = st_monat_acc.get((monat, h))
-            if acc is None or acc.anzahl < ST_MIN_TAGE_MONAT:
-                acc = st_quartal_acc.get((quartal, h))
-                if acc is None or acc.anzahl < ST_MIN_TAGE_QUARTAL:
-                    acc = st_gesamt_acc.get(h)
-                    if acc is None or acc.anzahl < ST_MIN_TAGE_GESAMT:
-                        continue
+            acc = _stunde_zelle(ctx, monat, quartal, h)
+            if acc is None:
+                continue
             raw = _produktionsgewichtet(acc.sum_ist, acc.sum_prog)
             if raw is None:
                 continue
@@ -649,7 +677,7 @@ async def aggregiere_korrekturprofil_anlage(
 
     await _upsert_profil(
         db,
-        anlage_id=anlage.id,
+        anlage_id=ctx.anlage.id,
         profil_typ=PROFIL_TYP_STUNDE,
         bin_definition={
             "saisonbin": "monat",
@@ -660,60 +688,70 @@ async def aggregiere_korrekturprofil_anlage(
         },
         faktoren=st_faktoren,
         datenpunkte_pro_bin=st_datenpunkte,
-        tage_eingegangen=len(st_tage),
-        heute=heute,
+        tage_eingegangen=len(ctx.st_tage),
+        heute=ctx.heute,
     )
+    return st_faktoren, st_datenpunkte
 
+
+async def _stufe_sonnenstand(db: AsyncSession, ctx: _KorrekturKontext) -> dict[str, float]:
+    """Stufe 3 `sonnenstand` — Faktor je `(azimut_bin, elevation_bin)` als Fallback."""
     # ── sonnenstand (Fallback) ────────────────────────────────────────────
-    s_faktoren: dict[str, float] = {}
-    s_datenpunkte: dict[str, int] = {}
-    for k, acc in s_acc.items():
-        raw = _produktionsgewichtet(acc.sum_ist, acc.sum_prog)
-        if raw is None:
-            continue
-        s_faktoren[k] = round(_clamp(raw), 3)
-        s_datenpunkte[k] = acc.anzahl
+    s_faktoren, s_datenpunkte = _flache_faktoren(ctx.s_acc)
 
     await _upsert_profil(
         db,
-        anlage_id=anlage.id,
+        anlage_id=ctx.anlage.id,
         profil_typ=PROFIL_TYP_SONNENSTAND,
         bin_definition={
-            "azimut_aufloesung": azimut_breite,
-            "elevation_aufloesung": elevation_breite,
+            "azimut_aufloesung": ctx.azimut_breite,
+            "elevation_aufloesung": ctx.elevation_breite,
         },
         faktoren=s_faktoren,
         datenpunkte_pro_bin=s_datenpunkte,
-        tage_eingegangen=len(tage_genutzt),
-        heute=heute,
+        tage_eingegangen=len(ctx.tage_genutzt),
+        heute=ctx.heute,
     )
+    return s_faktoren
 
+
+async def _stufe_skalar(db: AsyncSession, ctx: _KorrekturKontext) -> tuple[Optional[float], int]:
+    """Stufe 4 `skalar` — O1+O2 auf Tagesebene; `(faktor | None, n)`."""
     # ── skalar (O1+O2 auf Tagesebene als letzter Fallback) ────────────────
     # Skalar wird unabhängig von Day-Ahead-Stundenprofilen berechnet —
     # so hat der Live-Pfad ab Tag 1 einen Korrekturfaktor, auch wenn die
     # höheren Stufen erst über Wochen aufgebaut werden.
-    tages_skalar = await _lade_tagesist_skalar(db, anlage.id, von, heute)
+    tages_skalar = await _lade_tagesist_skalar(db, ctx.anlage.id, ctx.von, ctx.heute)
     daten = [(d, ist, prog) for d, (ist, prog) in tages_skalar.items()]
-    raw_skalar, n_skalar = _aggregate_skalar_o12(daten, heute)
+    raw_skalar, n_skalar = _aggregate_skalar_o12(daten, ctx.heute)
     if raw_skalar is not None:
         skalar_faktor = round(_clamp(raw_skalar), 3)
         await _upsert_profil(
             db,
-            anlage_id=anlage.id,
+            anlage_id=ctx.anlage.id,
             profil_typ=PROFIL_TYP_SKALAR,
             bin_definition={"variante": "o12"},
             faktoren={"value": skalar_faktor},
             datenpunkte_pro_bin={"value": n_skalar},
             tage_eingegangen=n_skalar,
-            heute=heute,
+            heute=ctx.heute,
             faktor_skalar=skalar_faktor,
         )
     else:
         skalar_faktor = None
+    return skalar_faktor, n_skalar
 
-    await db.commit()
-    invalidate_cache(anlage.id)
 
+def _ergebnis(
+    ctx: _KorrekturKontext,
+    sw_faktoren: dict,
+    st_faktoren: dict,
+    st_datenpunkte: dict,
+    s_faktoren: dict,
+    skalar_faktor: Optional[float],
+    n_skalar: int,
+) -> dict:
+    """Status-Dict: Skipped ohne jede Stufe, sonst Zählungen und UI-Wert (Bin-Tage, sonst Skalar-Tage)."""
     # Falls weder Bins noch Skalar berechenbar waren → Skipped
     if (
         not sw_faktoren
@@ -728,12 +766,12 @@ async def aggregiere_korrekturprofil_anlage(
         }
 
     # Aussage-Wert für UI: Bin-Tage falls vorhanden, sonst Skalar-Tagesanzahl
-    tage_aussagekraft = len(tage_genutzt) if tage_genutzt else n_skalar
+    tage_aussagekraft = len(ctx.tage_genutzt) if ctx.tage_genutzt else n_skalar
 
     logger.info(
         "Korrekturprofil Anlage %s: %d Tage, %d sonnenstand_wetter-Bins, "
         "%d stunde-Zellen, %d sonnenstand-Bins, Skalar=%s (n=%d)",
-        anlage.id,
+        ctx.anlage.id,
         tage_aussagekraft,
         len(sw_faktoren),
         len(st_datenpunkte),
@@ -750,3 +788,54 @@ async def aggregiere_korrekturprofil_anlage(
         "bins_sonnenstand": len(s_faktoren),
         "skalar": skalar_faktor,
     }
+
+
+async def aggregiere_korrekturprofil_anlage(
+    anlage: Anlage,
+    db: AsyncSession,
+    *,
+    lookback_tage: int = DEFAULT_LOOKBACK_TAGE,
+    azimut_breite: int = AZIMUT_BIN_BREITE_DEFAULT,
+    elevation_breite: int = ELEVATION_BIN_BREITE_DEFAULT,
+    heute: Optional[date] = None,
+) -> dict:
+    """Aggregiert die vier Korrekturprofil-Stufen für eine Anlage.
+
+    Idempotent: bestehende Profile derselben `(anlage_id, NULL,
+    quelle, profil_typ)`-Kombination werden überschrieben.
+
+    `heute` dient als Stichtag für Lookback und Gesamt-Fenster
+    (Default: heutiges Datum; injizierbar für deterministische Tests).
+
+    Liefert ein Status-Dict (für Logging und Endpoint-Response).
+
+    Form (RF-85, 5.11.2026): Stufenleiter in der Reihenfolge des Lookups —
+    `_tage_und_snapshots` (Lookback, Day-Ahead-Snapshots, Stundenfilter,
+    Zählerlücken; füllt den `_KorrekturKontext` über `_akkumuliere`),
+    `_stufe_sonnenstand_wetter`, `_stufe_stunde` (Saisonbin-Kaskade
+    `_stunde_zelle`), `_stufe_sonnenstand`, `_stufe_skalar`, dann `commit`,
+    Cache-Invalidierung und `_ergebnis` (Skipped, UI-Wert). Die zwei flachen
+    Stufen teilen `_flache_faktoren`.
+    """
+    if anlage.latitude is None or anlage.longitude is None:
+        return {
+            "status": "skipped",
+            "grund": "Anlage hat keine Koordinaten — Sonnenstand nicht berechenbar",
+        }
+
+    if heute is None:
+        heute = date.today()
+
+    ctx = await _tage_und_snapshots(
+        db, anlage, heute=heute, lookback_tage=lookback_tage,
+        azimut_breite=azimut_breite, elevation_breite=elevation_breite,
+    )
+    sw_faktoren = await _stufe_sonnenstand_wetter(db, ctx)
+    st_faktoren, st_datenpunkte = await _stufe_stunde(db, ctx)
+    s_faktoren = await _stufe_sonnenstand(db, ctx)
+    skalar_faktor, n_skalar = await _stufe_skalar(db, ctx)
+
+    await db.commit()
+    invalidate_cache(anlage.id)
+
+    return _ergebnis(ctx, sw_faktoren, st_faktoren, st_datenpunkte, s_faktoren, skalar_faktor, n_skalar)

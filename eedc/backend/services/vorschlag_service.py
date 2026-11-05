@@ -76,6 +76,34 @@ class PlausibilitaetsWarnung:
     details: Optional[dict] = None
 
 
+def _arbeitszahl(feld: str, params: dict) -> Optional[float]:
+    """Die Arbeitszahl des Wärme-Vorschlags je Feld und Effizienz-Modus — oder `None` (RF-84, aus `_wp_vorschlaege`)."""
+    # Effizienz-Modus prüfen
+    modus = params.get("effizienz_modus", "gesamt_jaz")
+
+    cop = None
+    if feld == "waerme_kwh":
+        # N-391: **eine Gesamtwärme braucht eine Gesamt-Arbeitszahl.**
+        # Die getrennten Werte (`scop_*`/`cop_*`) gelten je Funktion
+        # — einen davon auf den Gesamtstrom anzuwenden ergäbe eine
+        # Menge, die keine Funktion beschreibt. Fehlt die gepflegte
+        # JAZ, gibt es hier keinen Vorschlag statt eines falschen.
+        cop = params.get("jaz")
+    elif modus == "gesamt_jaz":
+        cop = params.get("jaz")
+    elif modus == "scop":
+        if feld == "heizenergie_kwh":
+            cop = params.get("scop_heizung")
+        else:
+            cop = params.get("scop_warmwasser")
+    elif modus == "getrennte_cops":
+        if feld == "heizenergie_kwh":
+            cop = params.get("cop_heizung")
+        else:
+            cop = params.get("cop_warmwasser")
+    return cop
+
+
 class VorschlagService:
     """Generiert intelligente Vorschläge für Monatsdaten."""
 
@@ -327,7 +355,14 @@ class VorschlagService:
         monat: int,
         investition_id: int,
     ) -> list[Vorschlag]:
-        """Generiert berechnete Vorschläge basierend auf Investitions-Parametern."""
+        """Generiert berechnete Vorschläge basierend auf Investitions-Parametern.
+
+        Form (RF-84, 5.11.2026): Orchestrator — Investition laden, dann die drei
+        Phasen in der Reihenfolge des Bestands: `_wp_vorschlaege` (Wärme × JAZ
+        über `_arbeitszahl`, Gesamtstrom = Heizen + WW), `_speicher_ladepreis`
+        (stundengewichteter Ø-Ladepreis), `_eauto_km` (Tachostand,
+        Jahresfahrleistung ÷ 12). Jede Phase prüft Typ und Feld selbst.
+        """
         vorschlaege: list[Vorschlag] = []
 
         # Investition laden
@@ -339,6 +374,25 @@ class VorschlagService:
             return vorschlaege
 
         params = inv.parameter or {}
+
+        vorschlaege.extend(await self._wp_vorschlaege(inv, params, anlage_id, feld, jahr, monat, investition_id))
+        vorschlaege.extend(await self._speicher_ladepreis(inv, anlage_id, feld, jahr, monat))
+        vorschlaege.extend(await self._eauto_km(inv, params, anlage_id, feld, jahr, monat, investition_id))
+
+        return vorschlaege
+
+    async def _wp_vorschlaege(
+        self,
+        inv: Investition,
+        params: dict,
+        anlage_id: int,
+        feld: str,
+        jahr: int,
+        monat: int,
+        investition_id: int,
+    ) -> list[Vorschlag]:
+        """Wärmepumpe: Wärme-Schätzung Strom × Arbeitszahl (B1, N-391) und Gesamtstrom = Heizen + WW."""
+        vorschlaege: list[Vorschlag] = []
 
         # Wärmepumpe: Heiz-/Warmwasserwärme als SCHÄTZUNG aus Strom × JAZ.
         #
@@ -354,29 +408,7 @@ class VorschlagService:
             basis = strom_basis_fuer_waerme_vorschlag(feld, daten, params)
 
             if basis is not None:
-                # Effizienz-Modus prüfen
-                modus = params.get("effizienz_modus", "gesamt_jaz")
-
-                cop = None
-                if feld == "waerme_kwh":
-                    # N-391: **eine Gesamtwärme braucht eine Gesamt-Arbeitszahl.**
-                    # Die getrennten Werte (`scop_*`/`cop_*`) gelten je Funktion
-                    # — einen davon auf den Gesamtstrom anzuwenden ergäbe eine
-                    # Menge, die keine Funktion beschreibt. Fehlt die gepflegte
-                    # JAZ, gibt es hier keinen Vorschlag statt eines falschen.
-                    cop = params.get("jaz")
-                elif modus == "gesamt_jaz":
-                    cop = params.get("jaz")
-                elif modus == "scop":
-                    if feld == "heizenergie_kwh":
-                        cop = params.get("scop_heizung")
-                    else:
-                        cop = params.get("scop_warmwasser")
-                elif modus == "getrennte_cops":
-                    if feld == "heizenergie_kwh":
-                        cop = params.get("cop_heizung")
-                    else:
-                        cop = params.get("cop_warmwasser")
+                cop = _arbeitszahl(feld, params)
 
                 if cop:
                     berechneter_wert = round(basis.strom_kwh * cop, 1)
@@ -407,6 +439,19 @@ class VorschlagService:
                     beschreibung=f"Summe: {strom_h:.0f} (Heizen) + {strom_w:.0f} (WW)",
                     details={"strom_heizen": strom_h, "strom_warmwasser": strom_w}
                 ))
+
+        return vorschlaege
+
+    async def _speicher_ladepreis(
+        self,
+        inv: Investition,
+        anlage_id: int,
+        feld: str,
+        jahr: int,
+        monat: int,
+    ) -> list[Vorschlag]:
+        """Speicher: Ø-Ladepreis der Netzladung aus der Strompreis-Mitschrift (Konfidenz 90 belastbar, sonst 55)."""
+        vorschlaege: list[Vorschlag] = []
 
         # Speicher: Ø-Ladepreis der Netzladung stundengewichtet aus der
         # Strompreis-Mitschrift (#264 Etappe C) — R15-2 (Rainer): errechneter
@@ -439,6 +484,21 @@ class VorschlagService:
                     ))
             except Exception:  # noqa: BLE001 — Vorschlag ist optional, Wizard darf nie daran sterben
                 pass
+
+        return vorschlaege
+
+    async def _eauto_km(
+        self,
+        inv: Investition,
+        params: dict,
+        anlage_id: int,
+        feld: str,
+        jahr: int,
+        monat: int,
+        investition_id: int,
+    ) -> list[Vorschlag]:
+        """E-Auto: gefahrene km aus dem Tachostand (#407) und aus der Jahresfahrleistung ÷ 12."""
+        vorschlaege: list[Vorschlag] = []
 
         # #407 (8ear): gefahrene km aus dem TACHOSTAND — Ende − Anfang, das
         # Zählerstand-Modell aus #377. Nur wenn beide Stände da sind und der

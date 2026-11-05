@@ -3576,7 +3576,10 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     # tot und die Liste ist damit um einen Leser kürzer.
 
     # ── 3. Stammdatum: die Bauart reist als Eigenschaft ──────────────────────
-    "backend/services/community_service.py::prepare_community_data",
+    # RF-83 (5.11.2026): `prepare_community_data` ist ein Orchestrator und liest die Bauart nicht mehr; die Wärmepumpen-
+    # Art der ersten Wärmepumpe (`PARAM_WAERMEPUMPE["WP_ART"]`) und ihr Schlüssel `wp_art` im Datensatz stehen in der Phase
+    # `_payload` — dieselbe Eigenschaft wie bisher, der Server nimmt sie für den fairen JAZ-Vergleich und rechnet nichts.
+    "backend/services/community_service.py::_payload",
 
     # ── 2b. Hinweis-Auswahl: die Bauart schlägt vor, die Beleglage ergänzt ────
     # B2 (05.09.2026): `_check_klima_modus_sensor` bietet den Modus-Hinweis an

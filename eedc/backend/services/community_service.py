@@ -4,6 +4,7 @@ EEDC Community Service
 Bereitet Anlagendaten für die anonyme Übertragung an den Community-Server vor.
 """
 
+from dataclasses import dataclass
 from datetime import date, datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,6 +130,26 @@ def get_ausrichtung_label(azimut: int | None) -> str:
     return "gemischt"
 
 
+@dataclass
+class _CommunityKontext:
+    """Geteilte Eingänge der Phasen von `prepare_community_data` (RF-83): Anlage, Investitionen, Region, Ausstattung,
+    Stichtag und die Jetzt-Menge (nur heute aktive Investitionen, F-24/N-617)."""
+
+    anlage: Anlage
+    anlage_id: int
+    investitionen: Sequence[Investition]
+    region: str
+    hat_speicher: bool
+    hat_waermepumpe: bool
+    hat_eauto: bool
+    hat_wallbox: bool
+    hat_balkonkraftwerk: bool
+    hat_sonstiges: bool
+    sonstiges_bezeichnung: str | None
+    heute: date
+    investitionen_heute: list[Investition]
+
+
 async def prepare_community_data(
     db: AsyncSession,
     anlage_id: int,
@@ -139,6 +160,13 @@ async def prepare_community_data(
 
     Returns:
         dict mit anonymisierten Daten oder None wenn Anlage nicht gefunden
+
+    Form (RF-83, 5.11.2026): Orchestrator — Anlage laden, dann die Phasen
+    `_stammdaten` (Region, Ausstattung, Sonstiges, Stichtag und Jetzt-Menge im
+    `_CommunityKontext`), `_speicher_und_wallbox` (F-24, N-617), `_bkw_wp`
+    (Modul-Kinder E5/N-266), `_neigung_ausrichtung` (Selektor, Spanne > 45°),
+    `_payload` (Basis-Daten in Vertrags-Reihenfolge, Wärmepumpen-Art) und
+    `_monatswerte` (SOLL-Jahr, Monatswerte aus den Monats-Fakten).
     """
     # Anlage laden
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -147,6 +175,26 @@ async def prepare_community_data(
     if not anlage:
         return None
 
+    ctx = await _stammdaten(db, anlage, anlage_id)
+    speicher_kwh, wallbox_kw = _speicher_und_wallbox(ctx)
+    bkw_wp = _bkw_wp(ctx)
+    neigung_grad, ausrichtung = _neigung_ausrichtung(ctx)
+    data = _payload(
+        ctx,
+        speicher_kwh=speicher_kwh,
+        wallbox_kw=wallbox_kw,
+        bkw_wp=bkw_wp,
+        neigung_grad=neigung_grad,
+        ausrichtung=ausrichtung,
+        include_monatswerte=include_monatswerte,
+    )
+    await _monatswerte(db, ctx, data, include_monatswerte)
+
+    return data
+
+
+async def _stammdaten(db: AsyncSession, anlage: Anlage, anlage_id: int) -> _CommunityKontext:
+    """Region aus Land + PLZ, Investitionen, Ausstattung (`hat_*`), Sonstiges (≤ 3 Bezeichnungen), Stichtag und Jetzt-Menge."""
     # Region aus Land + PLZ ermitteln
     region = get_region_from_plz(anlage.standort_plz, getattr(anlage, 'standort_land', None))
     if not region:
@@ -166,6 +214,40 @@ async def prepare_community_data(
     hat_balkonkraftwerk = any(inv.typ == "balkonkraftwerk" for inv in investitionen)
     hat_sonstiges = any(inv.typ == "sonstiges" for inv in investitionen)
 
+    # Stichtag der Jetzt-Menge: Speicher (F-24), Wallbox, Balkonkraftwerk und
+    # Erzeuger (N-617) zählen nur, was heute vorhanden ist — die Begründungen
+    # stehen an den Phasen, die die Menge lesen.
+    heute_ = date.today()
+    investitionen_heute = [inv for inv in investitionen if inv.ist_aktiv_an(heute_)]
+
+    # Sonstiges Bezeichnung
+    sonstiges_bezeichnung = None
+    sonstige = [inv for inv in investitionen if inv.typ == "sonstiges"]
+    if sonstige:
+        bezeichnungen = [inv.bezeichnung for inv in sonstige if inv.bezeichnung]
+        sonstiges_bezeichnung = ", ".join(bezeichnungen[:3]) if bezeichnungen else None
+
+    return _CommunityKontext(
+        anlage=anlage,
+        anlage_id=anlage_id,
+        investitionen=investitionen,
+        region=region,
+        hat_speicher=hat_speicher,
+        hat_waermepumpe=hat_waermepumpe,
+        hat_eauto=hat_eauto,
+        hat_wallbox=hat_wallbox,
+        hat_balkonkraftwerk=hat_balkonkraftwerk,
+        hat_sonstiges=hat_sonstiges,
+        sonstiges_bezeichnung=sonstiges_bezeichnung,
+        heute=heute_,
+        investitionen_heute=investitionen_heute,
+    )
+
+
+def _speicher_und_wallbox(ctx: _CommunityKontext) -> tuple[float, float | None]:
+    """Speicherkapazität Σ der heute aktiven Speicher (F-24) und Wallbox-Leistung max der heute aktiven (N-617)."""
+    investitionen, heute_ = ctx.investitionen, ctx.heute
+
     # Speicherkapazität summieren — NUR die heute vorhandenen Geräte (F-24).
     #
     # Der Datensatz beschreibt die **aktuelle Ausstattung** der Anlage; der
@@ -180,7 +262,6 @@ async def prepare_community_data(
     # `ist_aktiv_an(heute)` statt `aktiv`: Wer ein Gerät ersetzt, setzt das
     # **Stilllegungsdatum** — den `aktiv`-Haken zu entfernen würde es auch aus
     # der Historie nehmen (`models/investition.py::ist_aktiv_an`).
-    heute_ = date.today()
     speicher_kwh = sum(
         get_speicher_kapazitaet_kwh(inv) or 0
         for inv in investitionen
@@ -205,6 +286,13 @@ async def prepare_community_data(
         if wallbox_kw == 0:
             wallbox_kw = None
 
+    return speicher_kwh, wallbox_kw
+
+
+def _bkw_wp(ctx: _CommunityKontext) -> float | None:
+    """Balkonkraftwerk-Leistung in Wp: Σ kWp der heute aktiven Modul-Kinder × 1000, sonst Wp × Anzahl (E5, N-266, N-617)."""
+    investitionen_heute = ctx.investitionen_heute
+
     # Balkonkraftwerk Leistung (Wp pro Modul × Anzahl Module)
     #
     # ⚠ **N-266, Handarbeit-Stelle 1 von 2.** Diese Zeile liest das
@@ -223,7 +311,6 @@ async def prepare_community_data(
     # keins). Ein Kind mit Anschaffung in der Zukunft hat die Leistung heute
     # noch nicht übernommen; dann gilt die eigene Pflege des BKW.
     bkw_wp = None
-    investitionen_heute = [inv for inv in investitionen if inv.ist_aktiv_an(heute_)]
     bkws = [inv for inv in investitionen_heute if inv.typ == "balkonkraftwerk"]
     if bkws:
         bkw_wp = 0.0
@@ -239,12 +326,12 @@ async def prepare_community_data(
         if bkw_wp == 0:
             bkw_wp = None
 
-    # Sonstiges Bezeichnung
-    sonstiges_bezeichnung = None
-    sonstige = [inv for inv in investitionen if inv.typ == "sonstiges"]
-    if sonstige:
-        bezeichnungen = [inv.bezeichnung for inv in sonstige if inv.bezeichnung]
-        sonstiges_bezeichnung = ", ".join(bezeichnungen[:3]) if bezeichnungen else None
+    return bkw_wp
+
+
+def _neigung_ausrichtung(ctx: _CommunityKontext) -> tuple[int, str]:
+    """Ø Neigung und Ausrichtung der heutigen PV-Erzeuger nach dem Selektor (F-10, N-266, N-617); Defaults 30° / „süd"."""
+    investitionen_heute = ctx.investitionen_heute
 
     # Durchschnittliche Neigung und Ausrichtung aus den PV-ERZEUGERN (F-10).
     #
@@ -293,6 +380,22 @@ async def prepare_community_data(
         neigung_grad = 30
         ausrichtung = "süd"
 
+    return neigung_grad, ausrichtung
+
+
+def _payload(
+    ctx: _CommunityKontext,
+    *,
+    speicher_kwh: float,
+    wallbox_kw: float | None,
+    bkw_wp: float | None,
+    neigung_grad: int,
+    ausrichtung: str,
+    include_monatswerte: bool,
+) -> dict:
+    """Basis-Daten des Datensatzes (Schlüssel-Reihenfolge des Bestands — Draht-Vertrag mit eedc-community), Installationsjahr, Wärmepumpen-Art."""
+    anlage, investitionen = ctx.anlage, ctx.investitionen
+
     # Installation Jahr
     if anlage.installationsdatum:
         installation_jahr = anlage.installationsdatum.year
@@ -309,7 +412,7 @@ async def prepare_community_data(
     # ⚠ Wie `wp_art`: die erste Wärmepumpe steht für die Anlage. Das ist eine
     # bekannte Vereinfachung des Anlagen-Datensatzes, keine neue.
     kuehlung_art = None
-    if hat_waermepumpe:
+    if ctx.hat_waermepumpe:
         wps = [inv for inv in investitionen if inv.typ == "waermepumpe"]
         if wps:
             wp_art = (wps[0].parameter or {}).get(PARAM_WAERMEPUMPE["WP_ART"])
@@ -318,23 +421,23 @@ async def prepare_community_data(
             )
 
     # Basis-Daten
-    data = {
-        "region": region,
+    return {
+        "region": ctx.region,
         "kwp": round(anlage.leistung_kwp or 0, 1),
         "ausrichtung": ausrichtung,
         "neigung_grad": neigung_grad,
         "speicher_kwh": round(speicher_kwh, 1) if speicher_kwh > 0 else None,
         "installation_jahr": installation_jahr,
-        "hat_waermepumpe": hat_waermepumpe,
-        "hat_eauto": hat_eauto,
-        "hat_wallbox": hat_wallbox,
-        "hat_balkonkraftwerk": hat_balkonkraftwerk,
-        "hat_sonstiges": hat_sonstiges,
+        "hat_waermepumpe": ctx.hat_waermepumpe,
+        "hat_eauto": ctx.hat_eauto,
+        "hat_wallbox": ctx.hat_wallbox,
+        "hat_balkonkraftwerk": ctx.hat_balkonkraftwerk,
+        "hat_sonstiges": ctx.hat_sonstiges,
         "wp_art": wp_art,
         "kuehlung_art": kuehlung_art,
         "wallbox_kw": wallbox_kw,
         "bkw_wp": bkw_wp,
-        "sonstiges_bezeichnung": sonstiges_bezeichnung,
+        "sonstiges_bezeichnung": ctx.sonstiges_bezeichnung,
         "monatswerte": [],
         # N18-2: Der Payload enthält ALLE teilbaren Monate (Voll-Submit) — der
         # Server darf serverseitig vorhandene Monate, die hier fehlen (Monat
@@ -342,6 +445,11 @@ async def prepare_community_data(
         # Alt-Server ignorieren das Feld folgenlos.
         "monate_vollstaendig": bool(include_monatswerte),
     }
+
+
+async def _monatswerte(db: AsyncSession, ctx: _CommunityKontext, data: dict, include_monatswerte: bool) -> None:
+    """SOLL-Jahr und Monatswerte aus den Monats-Fakten (ADR-002/P10) — hängt an `data` an, in der Reihenfolge des Bestands."""
+    anlage_id, investitionen = ctx.anlage_id, ctx.investitionen
 
     # Monatswerte aus den Monats-Fakten (ADR-002/P10, S6 des Bauplans).
     # Vorher faltete diese Sicht die `InvestitionMonatsdaten` selbst — und
@@ -376,7 +484,6 @@ async def prepare_community_data(
             if monatswert_data is not None:
                 data["monatswerte"].append(monatswert_data)
 
-    return data
 
 
 def _monatswert(
