@@ -4649,6 +4649,11 @@ Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 
 **Strikte NULL-Semantik:** Wenn ein Zähler nicht gemappt ist, bleibt das zugehörige Feld `NULL` (statt aus Leistungs-Samples zu schätzen). Im Frontend zeigt eedc ein ⚠-Badge bei Datenlücken — siehe Reparatur-Popover in §4.1c.
 
+**Leistungskurve älterer Tage** (`services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts`, Vollbackfill und
+Reparatur-Werkbank): beschafft für Tage außerhalb der HA-Historie die Stunden-Leistungen aus der Langzeitstatistik (ein
+gebündelter Read ab dem Vortag, Serien je Tag über `baue_investitions_serien`, Vorzeichen-Invertierung, Vortagsrand
+Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`.
+
 #### Zählerlücken wie HA (ab v4.0.51)
 
 Fehlt in Home Assistant eine Stundenzeile eines Zählers, zeigt HA die Energie der Lücke in der
@@ -4721,6 +4726,34 @@ summiert die Geräte. Proben: `test_waerme_verlauf_bereichs_leser.py`, `test_zae
 - **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge (Lab 24.05.2026: +37 kWh nach drei stillen Stunden). Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag (Bestands-Tagespfad, Lesart 1) ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp); der Monatsleser deckelt seit S4 nicht (benannte Asymmetrie zum Bestandstag). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.
 - **Daten-Checker:** Tage mit Regelmarke, an denen Σ Einspeisung > Σ PV + Σ Entladung + 0,5 kWh, erscheinen als Hinweis „Einspeisung über Erzeugung" (Entladung ins Netz ist erlaubt).
 - **Benannt:** Die Live-Tageskacheln (`live_history_service`) weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. Preise einer gebündelten Stunde: s. [KONZEPT-FLEX-TARIFE](KONZEPT-FLEX-TARIFE.md) [A-6].
+
+**Tagesbilanz aus den Stundenzeilen** (`core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows`, Layer ADR-001; Tag, Monat aus
+Stunden, Kanal-Tag, Zeitraum) — Σ über die Zeilen, eine Stunde ohne Wert (`NULL`) zählt **nicht** als 0:
+
+```
+Mengen        = Σ pv_kw · Σ verbrauch_kw · Σ einspeisung_kw · Σ netzbezug_kw · Σ waermepumpe_kw (je Achse nur Stunden mit Wert;
+                *_erfasst = mindestens eine Stunde, *_stunden = Abdeckung je Achse)       — Phase _stunden_summen
+Speicher      = Ladung Σ max(0, −batterie_kw) · Entladung Σ max(0, batterie_kw)              — Phase _stunden_summen
+nur Stunden mit PV UND Verbrauch:
+Überschuss    = Σ max(0, PV − V)    Defizit = Σ max(0, V − PV)    Direktverbrauch = Σ min(PV, V)  — Phase _stunden_summen
+Regelmarke (R9) = verworfen ist nicht None (auch {} — Tag der neuen Regel); sonst N-92 (Altbestand, Monatsfaltung roh)
+R7  Gesamtverbrauch = gesamtverbrauch_ha_formel_kwh (PV + Netzbezug + Entladung − Einspeisung − Ladung, einmal ≥ 0)
+                      nur ohne Total-Fall (PV, Netzbezug und Einspeisung je ≥ 1 Stunde), sonst None (Anzeige «—»)
+    Eigenverbrauch  = _eigenverbrauch_kwh (Direktverbrauch + Entladung, N-635) bei PV und Einspeisung erfasst und
+                      ohne verworfen.pv / verworfen.einspeisung                              — Phase _eigenverbrauch_je_regel
+    Autarkie        = (GV − Netzbezug) / GV × 100 bei GV > 0 und ohne verworfen auf pv/netzbezug/einspeisung/batterie
+N-92 Eigenverbrauch = dieselbe Formel, nur bei PV erfasst und GLEICHER Abdeckung pv_stunden = einspeisung_stunden
+                      = Stunden mit beiden (Teilabdeckung PV 24 h / Einspeisung 18 h ⇒ None statt 48 − 18 = 30)
+    Autarkie        = (Σ V − Σ Netzbezug) / Σ V × 100 bei Σ V > 0, Netzbezug erfasst und gleicher Abdeckung
+                      verbrauch_stunden = netzbezug_stunden = Stunden mit beiden               — Phase _autarkie_je_regel
+EV-Quote      = min(100, EV / Σ PV × 100) nur bei PV erfasst, EV nicht None und Σ PV > 0 (sonst None, nicht 0 %)
+Speicher-Eff. = Entladung / Ladung × 100 nur bei Ladung > 0,1 kWh (sonst None)              — Phase _bilanz_aus_summen
+V2H (#110)    = nur mit Regelmarke über mit_v2h_entladung (Summand in GV und EV, dieselben Sperren)
+```
+
+Eine Differenz ohne gemeinsame Grundlage wird unterdrückt, nicht beschriftet (`KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3). Die
+Phasen lesen die Zeilen genau einmal (ein Iterator genügt). Proben: `test_tagesbilanz_pv_nicht_erfasst.py`, `test_v2h_tageswert.py`,
+`test_n635_eine_eigenverbrauchs_formel.py`, `test_rf73_tagesbilanz_lts_phasen.py`.
 
 **Drift-Prüfung Datenquellen (Daten-Checker)** — die gespeicherten Tageswerte gegen HAs Tageswert aus der
 Langzeitstatistik (`snapshot/lts_aggregator.get_komponenten_tageskwh_lts`, je Tag **ein** Lesen für beide Achsen). Nur mit

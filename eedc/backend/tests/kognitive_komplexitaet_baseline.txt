@@ -5,10 +5,8 @@
 58	api/routes/ha_export/anlage_sensoren.py::calculate_anlage_sensors
 53	api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan
 51	api/routes/import_export/json_operations.py::import_json
-58	core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows
 58	services/community_service.py::prepare_community_data
 60	services/emob_ladebloecke.py::bilde_ladebloecke
-55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage
 56	services/live_sensor_config.py::baue_investitions_serien

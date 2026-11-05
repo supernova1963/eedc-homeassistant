@@ -145,58 +145,12 @@ def _stunden_werte(
     return werte
 
 
-async def lade_tagesverlauf_aus_lts(
-    db: AsyncSession,
-    anlage: Anlage,
-    von: date,
-    bis: date,
-    nur_tage: Optional[set[date]] = None,
-) -> LtsTagesverlauf:
-    """
-    Baut die Stunden-Leistungskurve je Tag aus HA-LTS.
-
-    Args:
-        db: DB-Session
-        anlage: Die Anlage (liefert die Live-Sensor-Zuordnung)
-        von/bis: Datumsbereich (inklusiv) — EIN gebündelter LTS-Read dafür
-        nur_tage: optional die Teilmenge, für die Punkte gebaut werden sollen
-            (der Bulk-Read umfasst trotzdem die ganze Range — er kostet
-            einmal, das Punkte-Bauen kostet pro Tag). None = alle Tage.
-
-    Returns:
-        `LtsTagesverlauf` — `tage` in der Form, die
-        `aggregate_day(prefetched_tagesverlauf=…)` erwartet, plus `grund`, warum
-        gegebenenfalls nichts kam. Die Unterscheidung ist keine Kosmetik: „du
-        hast keinen Leistungssensor zugeordnet" und „HA reicht nicht so weit
-        zurück" verlangen verschiedene Handgriffe vom Anwender.
-    """
-    from backend.models.investition import Investition
-    from backend.utils.investition_filter import aktiv_im_zeitraum
-    from backend.services.live_sensor_config import (
-        baue_investitions_serien,
-        extract_live_config,
-    )
-    from backend.services.ha_statistics_service import get_ha_statistics_service
-
-    # Investitionen laden — alle die im Zeitraum aktiv waren (`aktiv_im_zeitraum`),
-    # für den Serien-Aufbau über die Range. Die Per-Tag-Verfeinerung (genau die am
-    # jeweiligen Tag aktiven) macht die `ist_aktiv_an`-Filterung unten plus der
-    # `aktiv_am_tag`-Inv-Load in `aggregate_day` (Audit §6.4).
-    inv_result = await db.execute(
-        sa_select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            aktiv_im_zeitraum(von, bis),
-        )
-    )
-    investitionen: dict[str, Investition] = {
-        str(inv.id): inv for inv in inv_result.scalars().all()
-    }
-
-    basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
-
-    if not basis_live and not inv_live_map:
-        logger.info(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert, LTS-Tagesverlauf übersprungen")
-        return LtsTagesverlauf(grund="keine_live_zuordnung")
+def _serien_je_tag(
+    inv_live_map: dict, investitionen: dict, von: date, bis: date, nur_tage: Optional[set[date]],
+) -> tuple[dict[date, list[dict]], dict[str, list[str]], list[dict]]:
+    """Phase 1 von `lade_tagesverlauf_aus_lts` (RF-74): die Investitions-Serien **je Tag** über die geteilte Quelle
+    (`baue_investitions_serien`, #318/M1) und ihre Vereinigung → ``(serien_je_tag, serie_entities, serien)``."""
+    from backend.services.live_sensor_config import baue_investitions_serien
 
     # ── Serien + Entity-Mapping über die geteilte Quelle (Issue #318, M1) ──────
     # Identische Selektion (inkl. Pool-Dedup #227) wie der Live-Pfad
@@ -234,7 +188,14 @@ async def lade_tagesverlauf_aus_lts(
             if s["key"] not in _gesehen:
                 _gesehen.add(s["key"])
                 serien.append(s)
+    return serien_je_tag, serie_entities, serien
 
+
+def _basis_serien(
+    serien: list[dict], serie_entities: dict[str, list[str]], basis_live: dict,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Phase 2 (RF-74): PV Gesamt als Fallback und die Netz-Serie (Kombi nur ohne dedizierte Sensoren) — hängt an
+    ``serien``/``serie_entities`` an und liefert ``(netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid)``."""
     # PV Gesamt als Fallback
     has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
     if not has_individual_pv and basis_live.get("pv_gesamt_w"):
@@ -250,7 +211,14 @@ async def lade_tagesverlauf_aus_lts(
     elif netz_einspeisung_eid or netz_bezug_eid:
         netz_kombi_eid = None
         serien.append({"key": "netz", "kategorie": "netz", "seite": "quelle", "bidirektional": True})
+    return netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid
 
+
+def _alle_entity_ids(
+    serie_entities: dict[str, list[str]], netz_kombi_eid: Optional[str], netz_bezug_eid: Optional[str],
+    netz_einspeisung_eid: Optional[str],
+) -> set[str]:
+    """Phase 3 (RF-74): alle Entity-IDs für den einen gebündelten LTS-Read."""
     # ── Alle Entity-IDs sammeln ──────────────────────────────────────────────
     all_entity_ids: set[str] = set(eid for eids in serie_entities.values() for eid in eids)
     if netz_kombi_eid:
@@ -259,6 +227,183 @@ async def lade_tagesverlauf_aus_lts(
         all_entity_ids.add(netz_bezug_eid)
     if netz_einspeisung_eid:
         all_entity_ids.add(netz_einspeisung_eid)
+    return all_entity_ids
+
+
+def _invertieren(
+    hourly_data: dict, basis_live: dict, inv_live_map: dict, basis_invert: dict, inv_invert_map: dict,
+) -> None:
+    """Phase 4 (RF-74): Vorzeichen-Invertierung auf den gelesenen Stunden (in place, wie `apply_invert_to_history`)."""
+    # ── Vorzeichen-Invertierung anwenden (wie apply_invert_to_history) ───────
+    invert_eids: set[str] = set()
+    for key, should_invert in basis_invert.items():
+        if should_invert and key in basis_live:
+            invert_eids.add(basis_live[key])
+    for inv_id, invert_flags in inv_invert_map.items():
+        live = inv_live_map.get(inv_id, {})
+        for key, should_invert in invert_flags.items():
+            if should_invert and key in live:
+                invert_eids.add(live[key])
+    for eid in invert_eids:
+        if eid in hourly_data:
+            for datum_iso in hourly_data[eid]:
+                hourly_data[eid][datum_iso] = {
+                    h: -v for h, v in hourly_data[eid][datum_iso].items()
+                }
+
+
+@dataclass
+class _KurvenBasis:
+    """Was Phase 5 (`_punkte_je_tag`) je Tag braucht (RF-74)."""
+
+    hourly_data: dict
+    serie_entities: dict[str, list[str]]
+    serien_je_tag: dict[date, list[dict]]
+    serien: list[dict]
+    investitionen: dict
+    netz_kombi_eid: Optional[str]
+    netz_bezug_eid: Optional[str]
+    netz_einspeisung_eid: Optional[str]
+
+
+def _tages_serien(k: _KurvenBasis, current: date) -> list[dict]:
+    """Die Serien EINES Tages (RF-74): die Investitions-Serien dieses Tages plus die Basis-Serien, nur aktive Investitionen."""
+    serien, investitionen = k.serien, k.investitionen
+    # Serien filtern: nur Investitionen, die an diesem Tag aktiv waren.
+    # In-Memory-Pendant zum `aktiv_am_tag`-Inv-Load in `aggregate_day`
+    # (Audit §6.4) — punkte + Serien-Metadaten bleiben so tag-konsistent.
+    # S2-8b: die Investitions-Serien DIESES Tages (Wallbox in Betrieb je
+    # Tag), dazu die Basis-Serien (PV Gesamt, Netz) aus der Vereinigung.
+    kandidaten = k.serien_je_tag.get(current, []) + [
+        s for s in serien if s.get("inv_id") is None
+    ]
+    return [
+        s for s in kandidaten
+        if s.get("inv_id") is None  # Basis-Serien (PV Gesamt, Netz)
+        or investitionen.get(s["inv_id"], None) is None  # Safety
+        or investitionen[s["inv_id"]].ist_aktiv_an(current)
+    ]
+
+
+def _tag_punkte(k: _KurvenBasis, current: date) -> Optional[dict]:
+    """Die Kurve EINES Tages (RF-74): Punkte je Stunde mit Daten und der Vortagsrand; ``None`` ohne einen Punkt."""
+    hourly_data, serie_entities = k.hourly_data, k.serie_entities
+    netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid = k.netz_kombi_eid, k.netz_bezug_eid, k.netz_einspeisung_eid
+    datum_iso = current.isoformat()
+    tages_serien = _tages_serien(k, current)
+
+    # punkte (get_tagesverlauf-Form): je Stunde MIT Daten ein werte-Dict
+    # {serie_key: kW}. Stunden ohne jeglichen Wert werden ausgelassen —
+    # damit bleibt `stunden_verfuegbar` die Zahl der Stunden mit Daten.
+    punkte: list[dict] = []
+    for h in range(24):
+        werte = _stunden_werte(
+            hourly_data, serie_entities, tages_serien, datum_iso, h,
+            netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+        )
+        if werte:
+            punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
+
+    # Vortagsrand: [Vortag 23:00, 00:00) = das Intervall des Backward-
+    # Slots 0 (N-382). Dieselbe Bauform wie ein regulaerer Punkt, nur aus
+    # dem Datum davor — deshalb eine eigene Liste: ein Punkt traegt seine
+    # Uhrzeit, nicht sein Datum, und „23:00" von gestern waere neben
+    # „23:00" von heute nicht mehr unterscheidbar.
+    vortag_iso = (current - timedelta(days=1)).isoformat()
+    rand_werte = _stunden_werte(
+        hourly_data, serie_entities, tages_serien, vortag_iso, 23,
+        netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+    )
+    vortagsrand = (
+        [{"zeit": "23:00", "werte": rand_werte}] if rand_werte else []
+    )
+
+    if punkte:
+        return {
+            "serien": tages_serien,
+            "punkte": punkte,
+            "vortagsrand": vortagsrand,
+        }
+    return None
+
+
+def _punkte_je_tag(k: _KurvenBasis, von: date, bis: date, nur_tage: Optional[set[date]]) -> dict[date, dict]:
+    """Phase 5 (RF-74): die Kurve je Tag der Range (nur ``nur_tage``, wenn gesetzt); Tage ohne Punkt fehlen."""
+    # ── Punkte je Tag bauen ─────────────────────────────────────────────────
+    ergebnis: dict[date, dict] = {}
+    current = von
+    while current <= bis:
+        if nur_tage is not None and current not in nur_tage:
+            current += timedelta(days=1)
+            continue
+
+        tag_kurve = _tag_punkte(k, current)
+        if tag_kurve is not None:
+            ergebnis[current] = tag_kurve
+
+        current += timedelta(days=1)
+    return ergebnis
+
+
+async def lade_tagesverlauf_aus_lts(
+    db: AsyncSession,
+    anlage: Anlage,
+    von: date,
+    bis: date,
+    nur_tage: Optional[set[date]] = None,
+) -> LtsTagesverlauf:
+    """
+    Baut die Stunden-Leistungskurve je Tag aus HA-LTS.
+
+    Args:
+        db: DB-Session
+        anlage: Die Anlage (liefert die Live-Sensor-Zuordnung)
+        von/bis: Datumsbereich (inklusiv) — EIN gebündelter LTS-Read dafür
+        nur_tage: optional die Teilmenge, für die Punkte gebaut werden sollen
+            (der Bulk-Read umfasst trotzdem die ganze Range — er kostet
+            einmal, das Punkte-Bauen kostet pro Tag). None = alle Tage.
+
+    Returns:
+        `LtsTagesverlauf` — `tage` in der Form, die
+        `aggregate_day(prefetched_tagesverlauf=…)` erwartet, plus `grund`, warum
+        gegebenenfalls nichts kam. Die Unterscheidung ist keine Kosmetik: „du
+        hast keinen Leistungssensor zugeordnet" und „HA reicht nicht so weit
+        zurück" verlangen verschiedene Handgriffe vom Anwender.
+
+    Form (RF-74, 5.11.2026): Orchestrator (Investitionen laden, Live-Zuordnung, Wächter, der eine gebündelte LTS-Read)
+    über fünf Phasen in dieser Datei — `_serien_je_tag` (geteilte Quelle `baue_investitions_serien` je Tag, S2-8b,
+    und die Vereinigung) · `_basis_serien` (PV Gesamt als Fallback, Netz-Serie) · `_alle_entity_ids` · `_invertieren`
+    · `_punkte_je_tag` (je Tag `_tag_punkte`: `_tages_serien`, Punkte je Stunde über `_stunden_werte`, Vortagsrand).
+    Rechnet nichts: die Stundenwerte baut `_stunden_werte`, alles Weitere `aggregate_day`.
+    """
+    from backend.models.investition import Investition
+    from backend.utils.investition_filter import aktiv_im_zeitraum
+    from backend.services.live_sensor_config import extract_live_config
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+
+    # Investitionen laden — alle die im Zeitraum aktiv waren (`aktiv_im_zeitraum`),
+    # für den Serien-Aufbau über die Range. Die Per-Tag-Verfeinerung (genau die am
+    # jeweiligen Tag aktiven) macht die `ist_aktiv_an`-Filterung unten plus der
+    # `aktiv_am_tag`-Inv-Load in `aggregate_day` (Audit §6.4).
+    inv_result = await db.execute(
+        sa_select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            aktiv_im_zeitraum(von, bis),
+        )
+    )
+    investitionen: dict[str, Investition] = {
+        str(inv.id): inv for inv in inv_result.scalars().all()
+    }
+
+    basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
+
+    if not basis_live and not inv_live_map:
+        logger.info(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert, LTS-Tagesverlauf übersprungen")
+        return LtsTagesverlauf(grund="keine_live_zuordnung")
+
+    serien_je_tag, serie_entities, serien = _serien_je_tag(inv_live_map, investitionen, von, bis, nur_tage)
+    netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid = _basis_serien(serien, serie_entities, basis_live)
+    all_entity_ids = _alle_entity_ids(serie_entities, netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid)
 
     # SoC wird hier NICHT vorgeholt — `aggregate_day` holt die Speicher-SoC-History
     # selbst über `_get_soc_history` (Pfad 1: HA-LTS-Hourly-Mean, dieselbe Quelle
@@ -286,81 +431,11 @@ async def lade_tagesverlauf_aus_lts(
         logger.info(f"Anlage {anlage.id}: Keine Statistics-Daten für {von}–{bis}")
         return LtsTagesverlauf(grund="keine_daten")
 
-    # ── Vorzeichen-Invertierung anwenden (wie apply_invert_to_history) ───────
-    invert_eids: set[str] = set()
-    for key, should_invert in basis_invert.items():
-        if should_invert and key in basis_live:
-            invert_eids.add(basis_live[key])
-    for inv_id, invert_flags in inv_invert_map.items():
-        live = inv_live_map.get(inv_id, {})
-        for key, should_invert in invert_flags.items():
-            if should_invert and key in live:
-                invert_eids.add(live[key])
-    for eid in invert_eids:
-        if eid in hourly_data:
-            for datum_iso in hourly_data[eid]:
-                hourly_data[eid][datum_iso] = {
-                    h: -v for h, v in hourly_data[eid][datum_iso].items()
-                }
+    _invertieren(hourly_data, basis_live, inv_live_map, basis_invert, inv_invert_map)
 
-    # ── Punkte je Tag bauen ─────────────────────────────────────────────────
-    ergebnis: dict[date, dict] = {}
-    current = von
-    while current <= bis:
-        if nur_tage is not None and current not in nur_tage:
-            current += timedelta(days=1)
-            continue
-
-        datum_iso = current.isoformat()
-
-        # Serien filtern: nur Investitionen, die an diesem Tag aktiv waren.
-        # In-Memory-Pendant zum `aktiv_am_tag`-Inv-Load in `aggregate_day`
-        # (Audit §6.4) — punkte + Serien-Metadaten bleiben so tag-konsistent.
-        # S2-8b: die Investitions-Serien DIESES Tages (Wallbox in Betrieb je
-        # Tag), dazu die Basis-Serien (PV Gesamt, Netz) aus der Vereinigung.
-        kandidaten = serien_je_tag.get(current, []) + [
-            s for s in serien if s.get("inv_id") is None
-        ]
-        tages_serien = [
-            s for s in kandidaten
-            if s.get("inv_id") is None  # Basis-Serien (PV Gesamt, Netz)
-            or investitionen.get(s["inv_id"], None) is None  # Safety
-            or investitionen[s["inv_id"]].ist_aktiv_an(current)
-        ]
-
-        # punkte (get_tagesverlauf-Form): je Stunde MIT Daten ein werte-Dict
-        # {serie_key: kW}. Stunden ohne jeglichen Wert werden ausgelassen —
-        # damit bleibt `stunden_verfuegbar` die Zahl der Stunden mit Daten.
-        punkte: list[dict] = []
-        for h in range(24):
-            werte = _stunden_werte(
-                hourly_data, serie_entities, tages_serien, datum_iso, h,
-                netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
-            )
-            if werte:
-                punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
-
-        # Vortagsrand: [Vortag 23:00, 00:00) = das Intervall des Backward-
-        # Slots 0 (N-382). Dieselbe Bauform wie ein regulaerer Punkt, nur aus
-        # dem Datum davor — deshalb eine eigene Liste: ein Punkt traegt seine
-        # Uhrzeit, nicht sein Datum, und „23:00" von gestern waere neben
-        # „23:00" von heute nicht mehr unterscheidbar.
-        vortag_iso = (current - timedelta(days=1)).isoformat()
-        rand_werte = _stunden_werte(
-            hourly_data, serie_entities, tages_serien, vortag_iso, 23,
-            netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
-        )
-        vortagsrand = (
-            [{"zeit": "23:00", "werte": rand_werte}] if rand_werte else []
-        )
-
-        if punkte:
-            ergebnis[current] = {
-                "serien": tages_serien,
-                "punkte": punkte,
-                "vortagsrand": vortagsrand,
-            }
-
-        current += timedelta(days=1)
-
-    return LtsTagesverlauf(tage=ergebnis)
+    kurve = _KurvenBasis(
+        hourly_data=hourly_data, serie_entities=serie_entities, serien_je_tag=serien_je_tag, serien=serien,
+        investitionen=investitionen, netz_kombi_eid=netz_kombi_eid, netz_bezug_eid=netz_bezug_eid,
+        netz_einspeisung_eid=netz_einspeisung_eid,
+    )
+    return LtsTagesverlauf(tage=_punkte_je_tag(kurve, von, bis, nur_tage))
