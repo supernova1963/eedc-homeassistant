@@ -5,7 +5,7 @@ Werte-Extraktion (mit `get_val`) und die berechneten Bilanzwerte.
 # `get_aktueller_monat` byte-identisch als Funktionen, Schnittstelle als Schluesselwort-
 # Parameter und Rueckgabe-Dict; der Endpunkt orchestriert. Kein Verhaltenswechsel — Gate ist
 # `plans/skript-golden-master-aktueller-monat.py` (alte gegen neue Antworten, bitgleich).
-from typing import Optional
+from typing import Any, Optional
 from dataclasses import dataclass
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.berechnungen import (
@@ -60,7 +60,160 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
     """Investitions-Felder in Top-Level aggregieren (typabhaengig) — inkl. der D1-/K3-Vorausloesung je Waermepumpe.
 
     Aus `get_aktueller_monat` Zeilen 754-1019 (Stand vor dem Umzug) byte-identisch herausgeloest — Vorlage 2.
+
+    **Phasenform (RF-49, 5.11.2026, Bauform RF-1):** `_bkw_abtretung` (N-627, Vorauflösung der Kinder in `resolved`) ·
+    `direct_fields`/`ersetzbar` (Bruchstück-Regel #361) · `_anlagen_pv_zaehler` (N-587) · `_typ_aggregation` (Feld →
+    Tupel Zielfelder, D1/K3 je Gerät, `_aggregate`). Alle Phasen mutieren dasselbe `resolved`; der Aufrufer liest es
+    danach. Rückgabe unverändert `{"direct_fields": …}`.
     """
+    ctx = _TypenKontext(investitionen=investitionen, jahr=jahr, monat=monat, resolved=resolved, teilzeitraum=teilzeitraum)
+    ctx.abgetreten = _bkw_abtretung(ctx)
+
+    # Top-Level-Felder die bereits direkt von Collectoren gesetzt wurden
+    # → nicht nochmal aus Einzel-Investitionen aufaddieren.
+    #
+    # #361 (coolxmad #353): Ein Connector-Delta ohne Abdeckung des
+    # Monatsanfangs misst nur Stunden bis Tage und ist als Anlagen-Gesamtwert
+    # kein Ersatz für die Komponenten-Summe — es sperrt die Aggregation daher
+    # NICHT. Der Bruchstück-Wert wird beim ersten aggregierten Beitrag ersetzt
+    # (nicht addiert, das wäre die Doppelzählung, die die Sperre verhindert).
+    direct_fields = set(resolved.keys()) - teilzeitraum
+    ersetzbar = set(teilzeitraum)
+    ctx.direct_fields, ctx.ersetzbar = direct_fields, ersetzbar
+
+    _anlagen_pv_zaehler(ctx)
+    _typ_aggregation(ctx)
+    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
+    return {k: _loc[k] for k in ("direct_fields",) if k in _loc}
+
+
+@dataclass
+class _TypenKontext:
+    """Kontext von `aggregiere_typen` (RF-49): die fünf Eingänge und was der Orchestrator zwischen den Phasen bildet
+    (`abgetreten` aus `_bkw_abtretung`, `direct_fields`/`ersetzbar` vor `_anlagen_pv_zaehler`)."""
+
+    investitionen: Any
+    jahr: int
+    monat: int
+    resolved: dict
+    teilzeitraum: Any
+    abgetreten: Any = None
+    direct_fields: Any = None
+    ersetzbar: Any = None
+
+
+def _bkw_abtretung(ctx: _TypenKontext):
+    """N-627: abgetretene Balkonkraftwerke füllen die Lücken ihrer aktiven Modul-Kinder in `resolved`; Rückgabe die
+    Menge der abgetretenen BKW-IDs (die Typ-Schleife gibt ihnen keine eigene Zeile)."""
+    investitionen, jahr, monat, resolved = ctx.investitionen, ctx.jahr, ctx.monat, ctx.resolved
+    # ── N-627: der Monat tritt ab — auch ohne Abschluss ──
+    # Ein Balkonkraftwerk mit `pv-module`-Kindern, die IN DIESEM MONAT aktiv sind (ADR-002/P11, Zeitfilter vor
+    # dem Selektor), hat seine Erzeugungsgrößen an sie abgetreten (N-266). Sein Wert ist das Aggregat seiner
+    # Kinder: er füllt ihre Lücken (Stufe 2 der P7-Präzedenz, `bkw_kinder_luecken_kwh` — dieselbe Formel wie
+    # `pv_monatswerte.lade_pv_je_monat` im abgeschlossenen Monat), gemessene Kinder gewinnen. Danach trägt das
+    # BKW weder die PV-Achse noch eine eigene Zeile (Typ-Schleife unten). Bis 04.10.2026 zählte der Monat ohne
+    # Abschluss BKW-Zähler UND gemessene Kinder (66,6 / 72 statt 63), und die HA-Statistik füllte im
+    # abgeschlossenen Monat die BKW-Zeile neben den Kindern (90 statt 0). Der Tag bleibt bei E4.
+    # Vorauflösung je Gerät wie `_wp_waerme_d1`: das Ergebnis steht unter dem Feld des Kindes in `resolved`.
+    _pv_aktiv = [
+        inv for inv in investitionen
+        if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
+    ]
+    _abgetreten = abgetretene_bkw_ids(_pv_aktiv)
+    for _bkw_id in _abgetreten:
+        _bkw_wert = resolved.get(f"inv_{_bkw_id}_pv_erzeugung_kwh")
+        if _bkw_wert is None:
+            continue
+        _kinder = [k for k in _pv_aktiv if k.typ == PV_MODUL_TYP and k.parent_investition_id == _bkw_id]
+        for _kind_id, _kwh in bkw_kinder_luecken_kwh(
+            bkw_kwh=_bkw_wert[0],
+            kinder=[
+                PvModul(
+                    inv_id=k.id,
+                    leistung_kwp=get_erzeuger_kwp(k),
+                    eigen_kwh=(resolved[f"inv_{k.id}_pv_erzeugung_kwh"][0]
+                               if f"inv_{k.id}_pv_erzeugung_kwh" in resolved else None),
+                )
+                for k in _kinder
+            ],
+        ).items():
+            resolved[f"inv_{_kind_id}_pv_erzeugung_kwh"] = (_kwh, _bkw_wert[1])
+    return _abgetreten
+
+
+def _anlagen_pv_zaehler(ctx: _TypenKontext) -> None:
+    """N-587: der Anlagen-PV-Zähler (HA-Statistik/MQTT) füllt nur die Lücken der PV-Quellen —
+    Σ gemessene + max(0, Zähler − Σ gemessene) über `gesamt_pv_kwh`; «gespeichert» bleibt unberührt."""
+    investitionen, jahr, monat, resolved = ctx.investitionen, ctx.jahr, ctx.monat, ctx.resolved
+    direct_fields = ctx.direct_fields
+    # ── N-587: der Anlagen-PV-Zähler füllt nur die Lücken der PV-Quellen ──
+    # Der Anlagen-PV-Zähler der Datenquellen (`basis.pv_gesamt` — über die HA-Statistik oder MQTT
+    # `pv_gesamt_kwh`) stand hier bis 03.10.2026 als **Direktwert** und sperrte die Aggregation der
+    # Einzelwerte: wer Strings UND einen Anlagenzähler zugeordnet hatte, sah im Monat ohne Abschluss den
+    # Anlagenzähler, nach dem Abschluss die Strings — die Zahl sprang (gemessen: 1000 statt 930 kWh).
+    #
+    # ⭐ **Der Anlagen-PV-Zähler umfasst ALLE PV-Quellen der Anlage — PV-Module UND Balkonkraftwerke**
+    # (Entscheid Gernot 03.10.2026, Variante B). So lesen ihn die Tagesregel
+    # (`pv_tages_praezedenz.erwartete_erzeuger_ids`), die Datenquellen-Prüfung
+    # (`datenquellen_validierung._PV_KOMPONENTEN_TYPEN`) und das Handbuch §7.6. Die Grundgesamtheit ist
+    # deshalb dieselbe wie am Tag: aktive `pv-module` + `balkonkraftwerk`, über `erzeuger_traeger` (ein BKW
+    # mit Modul-Kindern tritt an sie ab, N-266). Die Rechnung ist die P7-Formel `gesamt_pv_kwh`
+    # (Σ `resolve_pv_je_modul`, typ-blind): alle Quellen mit eigenem Wert ⇒ Σ Einzelwerte; fehlt einer der
+    # Wert ⇒ Σ gemessene + max(0, Zähler − Σ gemessene). Das BKW kommt danach NICHT noch einmal dazu —
+    # es steckt im Zähler; seine eigene Zeile `bkw_erzeugung_kwh` bleibt sein eigener Wert.
+    # Der abgeschlossene Monat (Monats-Fakten) liest den Zähler seit N-611 genauso: der eigene BKW-Wert
+    # mindert ihn, bevor der Rest die Modul-Lücken füllt (`pv_monatswerte.lade_pv_je_monat`); vorher
+    # addierte er das BKW obendrauf.
+    # ⚠ Nur diese zwei Quellen. Der gespeicherte Wert (`"gespeichert"`) ist schon aufgelöst und bleibt
+    # unberührt — die Quellen-Präzedenz der Route ändert sich nicht. Das Connector-Delta
+    # (`"local_connector"`) ist ein eigener Fall: `test_aktueller_monat_datenquellen_prioritaet.py::
+    # test_laufender_monat_connector_mit_abdeckung_sperrt_pv_aggregation_weiter` (#361) legt fest, dass
+    # sein monatsdeckender Anlagenwert gilt — nicht Teil von N-587. Ohne aktive PV-Quelle bleibt der
+    # Anlagenwert wie bisher stehen.
+    _pv_anlage = resolved.get("pv_erzeugung_kwh")
+    if (
+        _pv_anlage is not None
+        and "pv_erzeugung_kwh" in direct_fields
+        and _pv_anlage[1].quelle in _ANLAGEN_PV_ZAEHLER_QUELLEN
+    ):
+        _quellen = erzeuger_traeger([
+            inv for inv in investitionen
+            if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
+        ])
+        if _quellen:
+            _eigen = {inv.id: resolved.get(f"inv_{inv.id}_pv_erzeugung_kwh") for inv in _quellen}
+            # `gesamt_pv_kwh` = Σ `resolve_pv_je_modul` (Σ-Invariante dort); mit einem Anlagenwert ist jede Quelle
+            # aufgelöst (gemessen oder verteilt). `None` käme nur ohne Zahl im Anlagenwert — dann bleibt alles wie bisher.
+            _summe = gesamt_pv_kwh(
+                aggregat_kwh=_pv_anlage[0],
+                module=[
+                    PvModul(
+                        inv_id=inv.id,
+                        leistung_kwp=get_erzeuger_kwp(inv),
+                        eigen_kwh=_eigen[inv.id][0] if _eigen[inv.id] is not None else None,
+                    )
+                    for inv in _quellen
+                ],
+            )
+            # Die Herkunfts-Marke: der Anlagenzähler, sobald er etwas beigetragen hat; sonst die der
+            # letzten gemessenen Quelle (wie `_aggregate` sie hinterließe).
+            _gemessen = [e for e in _eigen.values() if e is not None]
+            _quelle = (
+                _gemessen[-1][1]
+                if len(_gemessen) == len(_quellen) else _pv_anlage[1]
+            )
+            if _summe is not None:
+                # Bleibt in `direct_fields`: die Sperre in `_aggregate` hält Strings und BKW aus der PV-Achse
+                # heraus (sie stecken in `_summe`); `bkw_erzeugung_kwh` läuft unberührt weiter.
+                resolved["pv_erzeugung_kwh"] = (_summe, _quelle)
+
+
+def _typ_aggregation(ctx: _TypenKontext) -> None:
+    """Typ-Aggregation: je aktive Investition die Felder nach `typ_aggregation` in ihre Zielfelder (`_aggregate`, mit
+    Sperre `direct_fields` und Bruchstück-Ersatz `ersetzbar`); vorher D1/K3 je Wärmepumpe."""
+    investitionen, jahr, monat, resolved = ctx.investitionen, ctx.jahr, ctx.monat, ctx.resolved
+    direct_fields, ersetzbar = ctx.direct_fields, ctx.ersetzbar
+    _abgetreten = ctx.abgetreten
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
     # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)
     # Direkte Werte kommen z.B. aus gespeicherten Aggregaten oder MQTT pv_gesamt_kwh.
@@ -129,111 +282,6 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
         # Energie-Bilanz, während der Kategorien-Block die 45 kWh korrekt auswies.
         "balkonkraftwerk": {"pv_erzeugung_kwh": ("bkw_erzeugung_kwh", "pv_erzeugung_kwh")},
     }
-
-    # Top-Level-Felder die bereits direkt von Collectoren gesetzt wurden
-    # → nicht nochmal aus Einzel-Investitionen aufaddieren.
-    #
-    # #361 (coolxmad #353): Ein Connector-Delta ohne Abdeckung des
-    # Monatsanfangs misst nur Stunden bis Tage und ist als Anlagen-Gesamtwert
-    # kein Ersatz für die Komponenten-Summe — es sperrt die Aggregation daher
-    # NICHT. Der Bruchstück-Wert wird beim ersten aggregierten Beitrag ersetzt
-    # (nicht addiert, das wäre die Doppelzählung, die die Sperre verhindert).
-    # ── N-627: der Monat tritt ab — auch ohne Abschluss ──
-    # Ein Balkonkraftwerk mit `pv-module`-Kindern, die IN DIESEM MONAT aktiv sind (ADR-002/P11, Zeitfilter vor
-    # dem Selektor), hat seine Erzeugungsgrößen an sie abgetreten (N-266). Sein Wert ist das Aggregat seiner
-    # Kinder: er füllt ihre Lücken (Stufe 2 der P7-Präzedenz, `bkw_kinder_luecken_kwh` — dieselbe Formel wie
-    # `pv_monatswerte.lade_pv_je_monat` im abgeschlossenen Monat), gemessene Kinder gewinnen. Danach trägt das
-    # BKW weder die PV-Achse noch eine eigene Zeile (Typ-Schleife unten). Bis 04.10.2026 zählte der Monat ohne
-    # Abschluss BKW-Zähler UND gemessene Kinder (66,6 / 72 statt 63), und die HA-Statistik füllte im
-    # abgeschlossenen Monat die BKW-Zeile neben den Kindern (90 statt 0). Der Tag bleibt bei E4.
-    # Vorauflösung je Gerät wie `_wp_waerme_d1`: das Ergebnis steht unter dem Feld des Kindes in `resolved`.
-    _pv_aktiv = [
-        inv for inv in investitionen
-        if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
-    ]
-    _abgetreten = abgetretene_bkw_ids(_pv_aktiv)
-    for _bkw_id in _abgetreten:
-        _bkw_wert = resolved.get(f"inv_{_bkw_id}_pv_erzeugung_kwh")
-        if _bkw_wert is None:
-            continue
-        _kinder = [k for k in _pv_aktiv if k.typ == PV_MODUL_TYP and k.parent_investition_id == _bkw_id]
-        for _kind_id, _kwh in bkw_kinder_luecken_kwh(
-            bkw_kwh=_bkw_wert[0],
-            kinder=[
-                PvModul(
-                    inv_id=k.id,
-                    leistung_kwp=get_erzeuger_kwp(k),
-                    eigen_kwh=(resolved[f"inv_{k.id}_pv_erzeugung_kwh"][0]
-                               if f"inv_{k.id}_pv_erzeugung_kwh" in resolved else None),
-                )
-                for k in _kinder
-            ],
-        ).items():
-            resolved[f"inv_{_kind_id}_pv_erzeugung_kwh"] = (_kwh, _bkw_wert[1])
-
-    direct_fields = set(resolved.keys()) - teilzeitraum
-    ersetzbar = set(teilzeitraum)
-
-    # ── N-587: der Anlagen-PV-Zähler füllt nur die Lücken der PV-Quellen ──
-    # Der Anlagen-PV-Zähler der Datenquellen (`basis.pv_gesamt` — über die HA-Statistik oder MQTT
-    # `pv_gesamt_kwh`) stand hier bis 03.10.2026 als **Direktwert** und sperrte die Aggregation der
-    # Einzelwerte: wer Strings UND einen Anlagenzähler zugeordnet hatte, sah im Monat ohne Abschluss den
-    # Anlagenzähler, nach dem Abschluss die Strings — die Zahl sprang (gemessen: 1000 statt 930 kWh).
-    #
-    # ⭐ **Der Anlagen-PV-Zähler umfasst ALLE PV-Quellen der Anlage — PV-Module UND Balkonkraftwerke**
-    # (Entscheid Gernot 03.10.2026, Variante B). So lesen ihn die Tagesregel
-    # (`pv_tages_praezedenz.erwartete_erzeuger_ids`), die Datenquellen-Prüfung
-    # (`datenquellen_validierung._PV_KOMPONENTEN_TYPEN`) und das Handbuch §7.6. Die Grundgesamtheit ist
-    # deshalb dieselbe wie am Tag: aktive `pv-module` + `balkonkraftwerk`, über `erzeuger_traeger` (ein BKW
-    # mit Modul-Kindern tritt an sie ab, N-266). Die Rechnung ist die P7-Formel `gesamt_pv_kwh`
-    # (Σ `resolve_pv_je_modul`, typ-blind): alle Quellen mit eigenem Wert ⇒ Σ Einzelwerte; fehlt einer der
-    # Wert ⇒ Σ gemessene + max(0, Zähler − Σ gemessene). Das BKW kommt danach NICHT noch einmal dazu —
-    # es steckt im Zähler; seine eigene Zeile `bkw_erzeugung_kwh` bleibt sein eigener Wert.
-    # Der abgeschlossene Monat (Monats-Fakten) liest den Zähler seit N-611 genauso: der eigene BKW-Wert
-    # mindert ihn, bevor der Rest die Modul-Lücken füllt (`pv_monatswerte.lade_pv_je_monat`); vorher
-    # addierte er das BKW obendrauf.
-    # ⚠ Nur diese zwei Quellen. Der gespeicherte Wert (`"gespeichert"`) ist schon aufgelöst und bleibt
-    # unberührt — die Quellen-Präzedenz der Route ändert sich nicht. Das Connector-Delta
-    # (`"local_connector"`) ist ein eigener Fall: `test_aktueller_monat_datenquellen_prioritaet.py::
-    # test_laufender_monat_connector_mit_abdeckung_sperrt_pv_aggregation_weiter` (#361) legt fest, dass
-    # sein monatsdeckender Anlagenwert gilt — nicht Teil von N-587. Ohne aktive PV-Quelle bleibt der
-    # Anlagenwert wie bisher stehen.
-    _pv_anlage = resolved.get("pv_erzeugung_kwh")
-    if (
-        _pv_anlage is not None
-        and "pv_erzeugung_kwh" in direct_fields
-        and _pv_anlage[1].quelle in _ANLAGEN_PV_ZAEHLER_QUELLEN
-    ):
-        _quellen = erzeuger_traeger([
-            inv for inv in investitionen
-            if inv.typ in (PV_MODUL_TYP, BKW_TYP) and inv.ist_aktiv_im_monat(jahr, monat)
-        ])
-        if _quellen:
-            _eigen = {inv.id: resolved.get(f"inv_{inv.id}_pv_erzeugung_kwh") for inv in _quellen}
-            # `gesamt_pv_kwh` = Σ `resolve_pv_je_modul` (Σ-Invariante dort); mit einem Anlagenwert ist jede Quelle
-            # aufgelöst (gemessen oder verteilt). `None` käme nur ohne Zahl im Anlagenwert — dann bleibt alles wie bisher.
-            _summe = gesamt_pv_kwh(
-                aggregat_kwh=_pv_anlage[0],
-                module=[
-                    PvModul(
-                        inv_id=inv.id,
-                        leistung_kwp=get_erzeuger_kwp(inv),
-                        eigen_kwh=_eigen[inv.id][0] if _eigen[inv.id] is not None else None,
-                    )
-                    for inv in _quellen
-                ],
-            )
-            # Die Herkunfts-Marke: der Anlagenzähler, sobald er etwas beigetragen hat; sonst die der
-            # letzten gemessenen Quelle (wie `_aggregate` sie hinterließe).
-            _gemessen = [e for e in _eigen.values() if e is not None]
-            _quelle = (
-                _gemessen[-1][1]
-                if len(_gemessen) == len(_quellen) else _pv_anlage[1]
-            )
-            if _summe is not None:
-                # Bleibt in `direct_fields`: die Sperre in `_aggregate` hält Strings und BKW aus der PV-Achse
-                # heraus (sie stecken in `_summe`); `bkw_erzeugung_kwh` läuft unberührt weiter.
-                resolved["pv_erzeugung_kwh"] = (_summe, _quelle)
 
     def _wp_heizwaerme_eintrag(inv_id: int):
         """Die Heizwaerme dieses Geraets aus den Nicht-DB-Quellen (N-398).
@@ -422,8 +470,6 @@ def aggregiere_typen(*, investitionen, jahr, monat, resolved, teilzeitraum):
         for inv_suffix, ziel_felder in agg_map.items():
             for top_level_feld in ziel_felder:
                 _aggregate(top_level_feld, f"inv_{inv.id}_{inv_suffix}")
-    _loc = locals()  # nur gebundene Namen zurueckgeben — ein bedingt gesetzter Name bleibt sonst UnboundLocal
-    return {k: _loc[k] for k in ("direct_fields",) if k in _loc}
 
 
 async def emob_bloecke_des_monats(db, anlage_id, investitionen, jahr, monat) -> dict:

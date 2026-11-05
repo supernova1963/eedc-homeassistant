@@ -11,7 +11,7 @@ variieren (rilmor-mhrs #326: Sommer-EV fällt aus der netzbezug-Gewichtung).
 Dieser Helper rechnet **ausschließlich per-Monat** und summiert:
 
     ev_ersparnis   = Σ( eigenverbrauch_ohne_verluste_m × netzbezug_preis_cent_m / 100 )
-    bkw_ersparnis  = Σ( bkw_eigenverbrauch_m × netzbezug_preis_cent_m / 100 )
+    bkw_ersparnis  = Σ( bkw_rest_eigenverbrauch_m × ev_preis_cent_m / 100 )   (P9: nur Monate ohne erfasste BKW-Erzeugung)
     einspeise_erloes = Σ einspeise_erloes_euro(...)   (§51-bereinigt)
 
 - Eigenverbrauch pro Monat über den kanonischen `berechne_verbrauchs_kennzahlen`

@@ -7,7 +7,8 @@ kein Aggregat) — deshalb ein Modul dieses Pakets, nicht `core/berechnungen`.
 # grosser Dateien): Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `__init__.py`
 # exportiert alle Namen weiter, die Tests und Aufrufer bisher aus dem Modul importierten.
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_kwh, waerme_gesamt_kwh
 from backend.core.berechnungen import berechne_speicher_ersparnis, betriebskosten_monatsanteil
 from backend.services.wp_wirtschaftlichkeit import (
@@ -85,6 +86,12 @@ def _baue_investition_financial(
     Stelle wie *Komponenten → Balkonkraftwerk*. Ohne Fakt (Einzelaufruf) gibt es keine Hausbilanz: der gemessene
     Eigenverbrauch einer Zeile ohne Erzeugung trägt, eine Erzeugung allein ist nicht bewertbar (P4) — nie mehr die
     ganze Erzeugung als Eigenverbrauch.
+
+    **Phasenform (RF-47, 5.11.2026, Bauform RF-1):** Kopf (Monatsanteil der Betriebskosten N-699, sonstige
+    Positionen) · Kontext `_ZeilenKontext` · Typ-Weiche auf genau eine Zeilen-Phase (`_bkw_zeile`,
+    `_speicher_zeile`, `_wp_zeile`, `_emob_zeile`, `_sonstiges_zeile`; ein Dienstwagen bekommt keine, `ist_dienstlich`)
+    · Abschluss (Inclusion-Guard, Response-Modell). Die Phasen rechnen auf dem Kontext und laden nichts; ihre Formeln
+    und Fund-Kommentare stehen wortgleich an Ort und Stelle.
     """
     if not inv.aktiv:
         return None
@@ -98,297 +105,27 @@ def _baue_investition_financial(
     inv_sonstige = berechne_sonstige_summen(data)
     inv_sonstige_ertraege = round(inv_sonstige["ertraege_euro"], 2)
     inv_sonstige_ausgaben = round(inv_sonstige["ausgaben_euro"], 2)
-    inv_erloes: Optional[float] = None
-    inv_erloes_formel: Optional[str] = None
-    inv_erloes_berechnung: Optional[str] = None
-    #: Default „Einspeisung" — die Abgabe-Kategorie überschreibt ihn unten.
-    inv_erloes_label = ERLOES_LABEL_EINSPEISUNG
-
-    inv_ersparnis: Optional[float] = None
-    inv_label = ""
-    inv_formel: Optional[str] = None
-    inv_berechnung: Optional[str] = None
+    ctx = _ZeilenKontext(
+        inv=inv, data=data, netz_p=netz_p, einsp_p=einsp_p, wp_p=wp_p, wb_p=wb_p, monats_gaspreis=monats_gaspreis,
+        monats_benzinpreis=monats_benzinpreis, emob_pool_attr=emob_pool_attr, emob_entscheid=emob_entscheid, ev_p=ev_p,
+        wp_fakt=wp_fakt, monats_fakt=monats_fakt, bkw_abgetreten=bkw_abgetreten,
+    )
 
     if inv.typ == "balkonkraftwerk":
-        # ⛔ N-724 (12.10.2026): hier stand `eigenverbrauch_kwh or pv_erzeugung_kwh` — die GANZE Erzeugung galt als
-        # Eigenverbrauch (27,00 € gegen 18,82 € im BKW-Hub für denselben Monat; ein an Modul-Kinder abgetretenes Gerät
-        # trug weiter 27,00 €). Jetzt der bewertete Anteil an der Hausbilanz aus derselben Stelle wie der Hub
-        # (ADR-002/P9, `bkw_finanz.py::bkw_eigenverbrauch_anteil`, ohne bewertbare Wandlungsverluste, N-588).
-        from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag as _imd_typ_beitrag
-        from backend.services.monats_fakten import bkw_beitrag_im_monat
-
-        _b_bkw = _imd_typ_beitrag(inv, data)
-        _anteil = bkw_beitrag_im_monat(
-            inv.id, monats_fakt,
-            zeile_erzeugung_kwh=_b_bkw.bkw_erzeugung,
-            zeile_eigenverbrauch_kwh=_b_bkw.bkw_eigenverbrauch,
-            abgetreten=bkw_abgetreten,
-        ).anteil_bewertet
-        ev_kwh = _anteil.kwh if _anteil.bewertbar else None
-        einsp_kwh = data.get("einspeisung_kwh")
-        if ev_kwh:
-            # N-607 (A-2): die Zeile ist ein Teil der Eigenverbrauchs-Ersparnis (T-Konto/Tabelle schneiden sie dort
-            # heraus) und trägt deshalb DENSELBEN Preis — den EV-gewichteten, wenn es ihn gibt.
-            _p = ev_p if ev_p is not None else netz_p
-            inv_ersparnis = round(ev_kwh * _p / 100, 2)
-            inv_label = "Eigenverbrauch-Ersparnis"
-            _ev_name = "BKW-Eigenverbrauch" if _anteil.quelle == "gemessen" else "BKW-Anteil am Eigenverbrauch"
-            inv_formel = (f"{_ev_name} × Ø-Preis der vermiedenen Stunden" if ev_p is not None and ev_p != netz_p
-                          else f"{_ev_name} × Netzbezugspreis")
-            inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(_p, 2)} ct/kWh"
-        if einsp_kwh and einsp_kwh > 0:
-            inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
-            # A6: Formel und eingesetzte Werte in GETRENNTE Felder — beides in
-            # einem Satz stand unter der Überschrift „Formel", während jede
-            # andere Kachel „Berechnung" daneben führt. Kein Wert ändert sich.
-            inv_erloes_formel = "Einspeisung × Einspeisevergütung"
-            inv_erloes_berechnung = (
-                f"{fmt_zahl(einsp_kwh, 1)} kWh × {fmt_zahl(einsp_p, 2)} ct/kWh"
-            )
-
+        _bkw_zeile(ctx)
     elif inv.typ == "speicher":
-        entl_kwh = data.get("entladung_kwh")
-        if entl_kwh and entl_kwh > 0:
-            # SPREAD, nicht Voll-Netzbezugspreis (Entscheid Gernot 2026-08-04,
-            # #358 — er bestätigt den Drift-Audit-Entscheid A3, der seit
-            # `core/berechnungen/speicher_wirtschaftlichkeit.py` im Docstring
-            # steht und den ROI und Aussichten längst befolgen). Bis hierher
-            # rechnete das T-Konto `Entladung × Netzbezug` und damit bei 30/8 ct
-            # 36 % über der Zahl, die dieselbe Anlage in der ROI-Sicht trug.
-            #
-            # Begründung: die entladene kWh hätte sonst eingespeist werden
-            # können — die entgangene Vergütung ist eine reale Gegenposition.
-            # Netzgeladene Energie ist davon ausgenommen (sie hätte nie
-            # eingespeist werden können); diese Trennung macht der Layer, nicht
-            # dieser Aufrufer.
-            netzladung = get_speicher_netzladung_kwh(data)
-            lad_kwh = data.get("ladung_kwh") or 0
-            # Gemessener Monats-η, sonst der Layer-Default. Er wirkt nur auf die
-            # Aufteilung der Entladung nach Herkunft, nicht auf den PV-Spread.
-            eta = (entl_kwh / lad_kwh * 100) if lad_kwh > 0 else None
-            erg = berechne_speicher_ersparnis(
-                entladung_kwh=entl_kwh,
-                bezug_preis_cent=netz_p,
-                einspeise_verg_cent=einsp_p,
-                ladung_netz_kwh=netzladung,
-                **({"wirkungsgrad_prozent": eta} if eta is not None else {}),
-                lade_preis_cent=data.get("speicher_ladepreis_cent"),
-            )
-            inv_ersparnis = round(erg.ersparnis_euro, 2)
-            inv_label = "Entladung-Ersparnis"
-            if netzladung > 0:
-                inv_formel = "PV-Anteil × (Netzbezug − Einspeisung) + Netz-Anteil × (Netzbezug − Ladepreis)"
-                inv_berechnung = (
-                    f"{fmt_zahl(erg.pv_anteil_entladung_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
-                    f" + {fmt_zahl(erg.netz_anteil_entladung_kwh, 1)} kWh Netz-Anteil"
-                )
-            else:
-                inv_formel = "Speicher-Entladung × (Netzbezugspreis − Einspeisevergütung)"
-                inv_berechnung = f"{fmt_zahl(entl_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
-
+        _speicher_zeile(ctx)
     elif inv.typ == "waermepumpe":
-        # N-398: dieselbe Weiche wie im Layer — Geraetefeld, sonst die gemessene
-        # Nutzenergie Heizbetrieb. Ohne sie blieb die Zeile „Ersparnis vs.
-        # Alternative" an einer Split-Klimaanlage leer, die ihre Waerme je
-        # Innengeraet misst.
-        waerme = heizwaerme_kwh(data)
-        # N-379: die eine Lesetuer — an einem Geraet ohne Warmwasserkreis ist 0.
-        ww = get_wp_warmwasser_kwh(data, inv.parameter)
-        strom = get_wp_strom_kwh(data, inv.parameter) or None
-        # ⛔ **N-391/D1 (14.09.2026): Gesamtwert vor Summanden, je Geraet.**
-        # Hier stand bis dahin `(waerme or 0) + (ww or 0)`. Traegt der Monat
-        # dieses Geraets EINEN Waermemengenzaehler (`waerme_kwh`), war die
-        # Summe **0** — und die Zeile „Ersparnis vs. Alternative" entstand
-        # wegen der Bedingung darunter **gar nicht**, waehrend der
-        # Komponenten-Hub fuer dieselbe Anlage seit WK-14b eine Ersparnis
-        # nennt. Zwei Sichten, zwei Auskuenfte (SOLL §3.3 S1). Gemessen ueber
-        # die echte Route (`get_aktueller_monat`): Lage B **0** WP-Zeilen,
-        # Lage D eine Zeile mit **33,33 EUR**.
-        waerme_total = waerme_gesamt_kwh(data.get("waerme_kwh"), waerme, ww)
-        # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
-        # B5/X-5c: über den SoT der Betriebsart-Weiche (F-56) — das
-        # Rohfeld kennt nur den abgeleiteten Split; bei gemessenen
-        # Betriebsart-Zählern stand hier 0 und der Kühlstrom blieb im
-        # Vergleich (dieselbe Klasse wie im Hub am 26.08.).
-        kuehlstrom = modus_strom_zeile(data).kuehlen_kwh
-        if wp_fakt is not None:
-            # N-609: dieselben drei Mengen wie Übersicht und Komponenten-Zeitreihe (Monats-Fakten, P10).
-            waerme_total = wp_fakt.waerme_kwh
-            strom = wp_fakt.strom_kwh or None
-            kuehlstrom = wp_fakt.strom_kuehlen_kwh
-        # HA-Bauform E4d (Bauplan §8a, Rest N-585): Strom UND Wärme der Zeile GEMESSEN 0 ⇒ „kein Betrieb", Ersparnis 0 €
-        # (die eine Lesetür `imd_typ_beitrag` sagt, ob die Zeile die Mengen trägt — auch mit 0).
-        from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
-
-        _b = imd_typ_beitrag(inv, data)
-        _kein_betrieb = bool(
-            _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and not (strom or 0)
-        )
-        # N-670 (Fachentscheid Master Wärme/Klima): Strom gemessen > 0, Wärme gemessen 0 ⇒ Standby-Zeile mit 0 € —
-        # dieselbe Lesetür sagt, ob die Wärme-0 gemessen ist (sonst fehlt die Wärme, und die Zeile entsteht nicht).
-        _standby = bool(
-            _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and (strom or 0) > 0
-        )
-        # N-609: die EINE Zeilenregel (Wärme > 0 und Strom > 0, Parameter des Geräts, Preise des Monats).
-        wp_result = wp_ersparnis_zeile(
-            waerme_kwh=0.0 if (_kein_betrieb or _standby) else waerme_total,
-            strom_kwh=0.0 if _kein_betrieb else strom,
-            strom_kuehlen_kwh=kuehlstrom,
-            strompreis_cent=wp_p,
-            parameter=inv.parameter,
-            gaspreis_cent=monats_gaspreis,
-            null_ist_kein_betrieb=_kein_betrieb or _standby,
-        )
-        if wp_result is not None:
-            inv_ersparnis = round(wp_result.ersparnis_euro, 2)
-            # #411: Der ersetzte Energietraeger ist gepflegt (Gas · Oel ·
-            # Strom-Direktheizung) und wird korrekt verrechnet — die
-            # Beschriftung nannte trotzdem unbedingt Gas. Der Block fasst
-            # ausserdem mehrere Waermepumpen zusammen, die verschiedene
-            # Traeger ersetzt haben koennen: ein Aggregat kann keinem
-            # einzelnen folgen. Deshalb die allgemeine Form.
-            inv_label = "Ersparnis vs. Alternative"
-            # B6/Y-3: Formel und Rechnung beschreiben, was der Layer rechnet —
-            # mit Zusatzkosten der Altheizung und ohne den Kühlstrom (E-B). Bis
-            # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.
-            inv_formel = WP_ERSPARNIS_FORMEL
-            inv_berechnung = wp_ersparnis_berechnung(
-                wp_result, 0.0 if (_kein_betrieb or _standby) else waerme_total,
-                0.0 if _kein_betrieb else strom, wp_p, inv.parameter,
-            )
-
+        _wp_zeile(ctx)
     elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
-        km = data.get("km_gefahren") or 0
-        ladung = get_eauto_ladung_kwh(data) or None
-        # #262: SoT-Helper konsolidiert den vorherigen Inline-Fallback
-        # (netz = ladung_netz ?? total − pv) — gleiche Semantik, gleiche
-        # Drift-Quelle wie in den anderen Read-Sites.
-        ladung_pv, netz_kwh = get_emob_pv_netz_kwh(data, total_kwh=ladung or 0)
-        ladung_pv = ladung_pv or None
-        heim_des_autos = 0.0
-        if inv.typ == "e-auto":
-            # N-555 (Konzept Regel 2): die Heimladung DIESES Autos kommt aus dem
-            # Entscheid des Monats (`je_auto`) — seine eigene Messung, sein Anteil am
-            # Rest der Wallbox (nach km, bei 0 km zusammen gleich verteilt, E6), die
-            # Schätzung aus dem Fahrverbrauch oder 0. Ohne übergebenen Entscheid
-            # (Einzelaufruf) entscheidet die Funktion aus dieser Zeile und dem
-            # Wallbox-Topf des Aufrufers.
-            entscheid = emob_entscheid or entscheide_emob_heimladung(
-                eauto_je_inv={inv.id: data},
-                wallbox_zeilen=[{
-                    "ladung_kwh": emob_pool_attr.wb_pool_pv + emob_pool_attr.wb_pool_netz,
-                    "ladung_pv_kwh": emob_pool_attr.wb_pool_pv,
-                }] if emob_pool_attr.use_wb_pool else [],
-            )
-            pv_a, netz_a = heimladung_des_autos(entscheid, inv.id)
-            ladung_pv = pv_a or None
-            netz_kwh = netz_a
-            heim_des_autos = pv_a + netz_a
-        # ⭐ N-555 Stufe 2: das `km > 0`-Tor gilt nicht mehr für ein E-Auto, das geladen
-        # hat (Konzept Regel 2, E6): hier stand `if km and km > 0` — ein Auto, das im
-        # Monat geladen hat, aber nicht gefahren ist, verlor still seine Stromrechnung.
-        # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung trägt den Preis, zu dem die
-        # Eigenverbrauchs-Ersparnis sie schon gutschreibt — wie die BKW-Zeile oben (N-607).
-        _pv_p = ev_p if ev_p is not None else netz_p
-        if (km and km > 0) or heim_des_autos > 0:
-            extern_euro = data.get("ladung_extern_euro", 0) or 0
-            if inv.typ == "e-auto" and entscheid.quelle == QUELLE_WALLBOX:
-                share = attribute_emob_pool_by_km(emob_pool_attr, km)
-                if share.netz_kwh + share.pv_kwh > 0:
-                    # N-555 F-5: Extern nach der Topf-Regel (höhere Kosten), nicht
-                    # blind der Wallbox-Anteil — sonst fiel das Extern des Autos weg.
-                    _, extern_euro = waehle_extern_paar(
-                        share.extern_kwh, share.extern_euro,
-                        data.get("ladung_extern_kwh", 0) or 0, extern_euro,
-                    )
-            eauto_result = berechne_eauto_ersparnis(
-                km_gefahren=km,
-                ladung_netz_kwh=max(0, netz_kwh),
-                ladung_pv_kwh=ladung_pv or 0.0,
-                pv_strompreis_cent=_pv_p,
-                ladung_extern_euro=extern_euro,
-                wallbox_strompreis_cent=wb_p,
-                eauto_parameter=inv.parameter,
-                monats_benzinpreis_euro=monats_benzinpreis,
-                # #331: der EXPLIZITE Fahrverbrauch, nicht `ladung` von oben —
-                # `get_eauto_ladung_kwh` fällt auf dasselbe Feld zurück und
-                # läse eine Heimladung als Fahrleistung.
-                fahrverbrauch_kwh=data.get("verbrauch_kwh"),
-            )
-            inv_ersparnis = round(eauto_result.ersparnis_euro, 2)
-            inv_label = "Ersparnis vs. Verbrenner"
-            inv_formel = EAUTO_ERSPARNIS_FORMEL
-            inv_berechnung = (
-                # N-555 (§11): deutsche Schreibweise über den Backend-SoT
-                # `core/zahlenformat.py` (Style-Guide 0a) — hier stand
-                # „1500 km × 7.5 L/100km × 1.65 €" mit Dezimalpunkt.
-                f"{fmt_zahl(km, 0)} km × "
-                f"{fmt_zahl(eauto_result.verwendeter_verbrauch_l_100km, 1)} L/100 km × "
-                f"{fmt_euro(eauto_result.verwendeter_benzinpreis_euro)}"
-            )
-        elif inv.typ == "wallbox" and ladung_pv and ladung_pv > 0:
-            # Diese Zeile ist ein TEIL der Eigenverbrauchs-Ersparnis — T-Konto und Tabelle schneiden sie dort heraus
-            # (`evAufteilung.ts`), sie ist kein zweiter Posten. ⭐ N-672: deshalb trägt sie denselben Preis wie die
-            # Eigenverbrauchs-Ersparnis (wie die BKW-Zeile, N-607) und nicht den Wallbox-Tarif — genau der Betrag, mit
-            # dem die E-Auto-Zeile dieselbe kWh belastet.
-            inv_ersparnis = round(ladung_pv * _pv_p / 100, 2)
-            inv_label = "PV-Ladung-Ersparnis"
-            inv_formel = "PV-Ladung × Preis der Eigenverbrauchs-Ersparnis (Teil davon, kein eigener Posten)"
-            inv_berechnung = f"{fmt_zahl(ladung_pv, 1)} kWh × {fmt_zahl(_pv_p, 2)} ct/kWh"
-
+        _emob_zeile(ctx)
     elif inv.typ == "sonstiges":
-        # ⛔ KEINE Eigenverbrauchs-Bewertung je Gerät (N-131, Entscheid Gernot
-        # 2026-09-01: „Für einen sonstigen Erzeuger rechnet eedc den Nutzen
-        # bewusst nicht selbst; er wird am Gerät als ‚Ertrag/Jahr' gepflegt").
-        #
-        # Bis 2026-09-02 stand hier `eigenverbrauch_kwh × netz_p` — und das war
-        # eine **gemessene Doppelzählung**, keine zweite Meinung: Die Bilanz
-        # führt den sonstigen Erzeuger über `erzeugung_hinter_zaehler_kwh` in
-        # `eigenverbrauch_kwh` (ein Netzanschluss, ein Zähler), und
-        # `ev_ersparnis_euro` bewertet **diese** Menge. Dieselben kWh standen
-        # damit zweimal im Σ HABEN. Gegen eine Probe-Anlage erhoben: 430 kWh
-        # Bilanz-Eigenverbrauch (129,00 €) enthielten die 50 kWh des BHKW, die
-        # daneben noch einmal mit 15,00 € auftraten.
-        #
-        # ⚠ Die PV-Zeile sagt das seit N-131 sogar selbst („Eigenverbrauch aus
-        # Sonstiges ist hier nicht bewertet") — der Satz war unwahr, solange
-        # diese Zeile daneben stand. Jetzt stimmt er.
-        #
-        # ⚑ Der Erlös bleibt, aber nur als **gepflegter** Betrag: Konzept §9
-        # Weg 2 (`einspeise_erloes_euro`, Layer-SoT
-        # `finanz_aggregat.erzeuger_erloes_euro` = „Σ der gepflegten Erlöse").
-        # Ein aus `einspeisung_kwh × Anlagen-Vergütung` gerechneter Betrag wäre
-        # die zweite Doppelzählung: diese kWh stehen im Hauszähler und sind in
-        # `einspeise_erloes_euro` eine Zeile höher bereits bewertet. Wer einen
-        # eigenen Vergütungssatz hat, hat einen eigenen Zähler — und pflegt
-        # deshalb den Betrag (Begründung Maintainer 2026-08-10, §9).
-        #
-        # ⚑ §9.2 Geldseite (06.09.): Dasselbe Feld trägt bei der Kategorie
-        # *Abgabe an Dritte* eine **andere Ertragsart** — den Erlös des dritten
-        # Wegs statt eines Einspeise-Erlöses. Der Betrag wird gleich behandelt
-        # (gepflegt, nicht nachgerechnet), nur benannt wird er anders: Regel 0
-        # verlangt für die Geldzeile denselben Namen wie für die Energiezeile.
-        # Vorher stand über beiden „— Einspeisung", und rilmor-mhrs (#402) hat
-        # im T-Konto ein Wort gelesen, das seine Bilanz gar nicht kennt.
-        erloes_gepflegt = data.get("einspeise_erloes_euro")
-        if erloes_gepflegt:
-            inv_erloes = round(float(erloes_gepflegt), 2)
-            if ist_abgabe_kategorie((inv.parameter or {}).get("kategorie")):
-                inv_erloes_label = SONSTIGES_ABGABE_LABEL
-                inv_erloes_formel = (
-                    f"Am Gerät gepflegter Erlös aus {SONSTIGES_ABGABE_LABEL} "
-                    "(eigener Satz) — von eedc nicht nachgerechnet"
-                )
-            else:
-                inv_erloes_formel = (
-                    "Am Gerät gepflegter Einspeise-Erlös (eigener Vergütungssatz) "
-                    "— von eedc nicht nachgerechnet"
-                )
+        _sonstiges_zeile(ctx)
 
     if (
         bk_monat > 0
-        or inv_ersparnis is not None
-        or inv_erloes is not None
+        or ctx.inv_ersparnis is not None
+        or ctx.inv_erloes is not None
         or inv_sonstige_ertraege > 0
         or inv_sonstige_ausgaben > 0
     ):
@@ -398,15 +135,341 @@ def _baue_investition_financial(
             typ=inv.typ,
             betriebskosten_monat_euro=bk_monat,
             betriebskosten_jahr_euro=round(float(inv.betriebskosten_jahr or 0), 2),
-            erloes_euro=inv_erloes,
-            erloes_formel=inv_erloes_formel,
-            erloes_berechnung=inv_erloes_berechnung,
-            erloes_label=inv_erloes_label,
-            ersparnis_euro=inv_ersparnis,
-            ersparnis_label=inv_label,
-            formel=inv_formel,
-            berechnung=inv_berechnung,
+            erloes_euro=ctx.inv_erloes,
+            erloes_formel=ctx.inv_erloes_formel,
+            erloes_berechnung=ctx.inv_erloes_berechnung,
+            erloes_label=ctx.inv_erloes_label,
+            ersparnis_euro=ctx.inv_ersparnis,
+            ersparnis_label=ctx.inv_label,
+            formel=ctx.inv_formel,
+            berechnung=ctx.inv_berechnung,
             sonstige_ertraege_euro=inv_sonstige_ertraege,
             sonstige_ausgaben_euro=inv_sonstige_ausgaben,
         )
     return None
+
+
+@dataclass
+class _ZeilenKontext:
+    """Kontext der T-Konto-Zeile EINER Investition (RF-47): die Eingänge des Aufrufers und die Felder der Zeile, die
+    genau eine Typ-Phase füllt. Monatsanteil der Betriebskosten und sonstige Positionen bleiben im Kopf des
+    Orchestrators — keine Phase liest sie."""
+
+    inv: Any
+    data: dict
+    netz_p: float
+    einsp_p: float
+    wp_p: float
+    wb_p: float
+    monats_gaspreis: Optional[float]
+    monats_benzinpreis: Optional[float]
+    emob_pool_attr: Any
+    emob_entscheid: Any
+    ev_p: Optional[float]
+    wp_fakt: Any
+    monats_fakt: Any
+    bkw_abgetreten: bool
+    inv_erloes: Optional[float] = None
+    inv_erloes_formel: Optional[str] = None
+    inv_erloes_berechnung: Optional[str] = None
+    #: Default „Einspeisung" — die Abgabe-Kategorie überschreibt ihn unten.
+    inv_erloes_label: str = ERLOES_LABEL_EINSPEISUNG
+
+    inv_ersparnis: Optional[float] = None
+    inv_label: str = ""
+    inv_formel: Optional[str] = None
+    inv_berechnung: Optional[str] = None
+
+
+def _bkw_zeile(ctx: _ZeilenKontext) -> None:
+    """Balkonkraftwerk: bewerteter Anteil an der Hausbilanz × EV-Preis (N-724/N-607), Erlös der Einspeisung."""
+    inv, data, monats_fakt, bkw_abgetreten = ctx.inv, ctx.data, ctx.monats_fakt, ctx.bkw_abgetreten
+    ev_p, netz_p, einsp_p = ctx.ev_p, ctx.netz_p, ctx.einsp_p
+    # ⛔ N-724 (12.10.2026): hier stand `eigenverbrauch_kwh or pv_erzeugung_kwh` — die GANZE Erzeugung galt als
+    # Eigenverbrauch (27,00 € gegen 18,82 € im BKW-Hub für denselben Monat; ein an Modul-Kinder abgetretenes Gerät
+    # trug weiter 27,00 €). Jetzt der bewertete Anteil an der Hausbilanz aus derselben Stelle wie der Hub
+    # (ADR-002/P9, `bkw_finanz.py::bkw_eigenverbrauch_anteil`, ohne bewertbare Wandlungsverluste, N-588).
+    from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
+    from backend.services.monats_fakten import bkw_beitrag_im_monat
+
+    _b_bkw = imd_typ_beitrag(inv, data)
+    _anteil = bkw_beitrag_im_monat(
+        inv.id, monats_fakt,
+        zeile_erzeugung_kwh=_b_bkw.bkw_erzeugung,
+        zeile_eigenverbrauch_kwh=_b_bkw.bkw_eigenverbrauch,
+        abgetreten=bkw_abgetreten,
+    ).anteil_bewertet
+    ev_kwh = _anteil.kwh if _anteil.bewertbar else None
+    einsp_kwh = data.get("einspeisung_kwh")
+    if ev_kwh:
+        # N-607 (A-2): die Zeile ist ein Teil der Eigenverbrauchs-Ersparnis (T-Konto/Tabelle schneiden sie dort
+        # heraus) und trägt deshalb DENSELBEN Preis — den EV-gewichteten, wenn es ihn gibt.
+        _p = ev_p if ev_p is not None else netz_p
+        ctx.inv_ersparnis = round(ev_kwh * _p / 100, 2)
+        ctx.inv_label = "Eigenverbrauch-Ersparnis"
+        _ev_name = "BKW-Eigenverbrauch" if _anteil.quelle == "gemessen" else "BKW-Anteil am Eigenverbrauch"
+        ctx.inv_formel = (f"{_ev_name} × Ø-Preis der vermiedenen Stunden" if ev_p is not None and ev_p != netz_p
+                          else f"{_ev_name} × Netzbezugspreis")
+        ctx.inv_berechnung = f"{fmt_zahl(ev_kwh, 1)} kWh × {fmt_zahl(_p, 2)} ct/kWh"
+    if einsp_kwh and einsp_kwh > 0:
+        ctx.inv_erloes = round(einsp_kwh * einsp_p / 100, 2)
+        # A6: Formel und eingesetzte Werte in GETRENNTE Felder — beides in
+        # einem Satz stand unter der Überschrift „Formel", während jede
+        # andere Kachel „Berechnung" daneben führt. Kein Wert ändert sich.
+        ctx.inv_erloes_formel = "Einspeisung × Einspeisevergütung"
+        ctx.inv_erloes_berechnung = (
+            f"{fmt_zahl(einsp_kwh, 1)} kWh × {fmt_zahl(einsp_p, 2)} ct/kWh"
+        )
+
+
+def _speicher_zeile(ctx: _ZeilenKontext) -> None:
+    """Speicher: Entladung × Spread über den Layer (`berechne_speicher_ersparnis`, #358/A3)."""
+    data, netz_p, einsp_p = ctx.data, ctx.netz_p, ctx.einsp_p
+    entl_kwh = data.get("entladung_kwh")
+    if entl_kwh and entl_kwh > 0:
+        # SPREAD, nicht Voll-Netzbezugspreis (Entscheid Gernot 2026-08-04,
+        # #358 — er bestätigt den Drift-Audit-Entscheid A3, der seit
+        # `core/berechnungen/speicher_wirtschaftlichkeit.py` im Docstring
+        # steht und den ROI und Aussichten längst befolgen). Bis hierher
+        # rechnete das T-Konto `Entladung × Netzbezug` und damit bei 30/8 ct
+        # 36 % über der Zahl, die dieselbe Anlage in der ROI-Sicht trug.
+        #
+        # Begründung: die entladene kWh hätte sonst eingespeist werden
+        # können — die entgangene Vergütung ist eine reale Gegenposition.
+        # Netzgeladene Energie ist davon ausgenommen (sie hätte nie
+        # eingespeist werden können); diese Trennung macht der Layer, nicht
+        # dieser Aufrufer.
+        netzladung = get_speicher_netzladung_kwh(data)
+        lad_kwh = data.get("ladung_kwh") or 0
+        # Gemessener Monats-η, sonst der Layer-Default. Er wirkt nur auf die
+        # Aufteilung der Entladung nach Herkunft, nicht auf den PV-Spread.
+        eta = (entl_kwh / lad_kwh * 100) if lad_kwh > 0 else None
+        erg = berechne_speicher_ersparnis(
+            entladung_kwh=entl_kwh,
+            bezug_preis_cent=netz_p,
+            einspeise_verg_cent=einsp_p,
+            ladung_netz_kwh=netzladung,
+            **({"wirkungsgrad_prozent": eta} if eta is not None else {}),
+            lade_preis_cent=data.get("speicher_ladepreis_cent"),
+        )
+        ctx.inv_ersparnis = round(erg.ersparnis_euro, 2)
+        ctx.inv_label = "Entladung-Ersparnis"
+        if netzladung > 0:
+            ctx.inv_formel = "PV-Anteil × (Netzbezug − Einspeisung) + Netz-Anteil × (Netzbezug − Ladepreis)"
+            ctx.inv_berechnung = (
+                f"{fmt_zahl(erg.pv_anteil_entladung_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
+                f" + {fmt_zahl(erg.netz_anteil_entladung_kwh, 1)} kWh Netz-Anteil"
+            )
+        else:
+            ctx.inv_formel = "Speicher-Entladung × (Netzbezugspreis − Einspeisevergütung)"
+            ctx.inv_berechnung = f"{fmt_zahl(entl_kwh, 1)} kWh × {fmt_zahl(erg.spread_cent_kwh, 2)} ct/kWh"
+
+
+def _wp_zeile(ctx: _ZeilenKontext) -> None:
+    """Wärmepumpe: die eine Zeilenregel `wp_ersparnis_zeile` (D1, Kühlstrom E-B, kein Betrieb, Standby; N-609)."""
+    inv, data, wp_fakt, wp_p = ctx.inv, ctx.data, ctx.wp_fakt, ctx.wp_p
+    monats_gaspreis = ctx.monats_gaspreis
+    # N-398: dieselbe Weiche wie im Layer — Geraetefeld, sonst die gemessene
+    # Nutzenergie Heizbetrieb. Ohne sie blieb die Zeile „Ersparnis vs.
+    # Alternative" an einer Split-Klimaanlage leer, die ihre Waerme je
+    # Innengeraet misst.
+    waerme = heizwaerme_kwh(data)
+    # N-379: die eine Lesetuer — an einem Geraet ohne Warmwasserkreis ist 0.
+    ww = get_wp_warmwasser_kwh(data, inv.parameter)
+    strom = get_wp_strom_kwh(data, inv.parameter) or None
+    # ⛔ **N-391/D1 (14.09.2026): Gesamtwert vor Summanden, je Geraet.**
+    # Hier stand bis dahin `(waerme or 0) + (ww or 0)`. Traegt der Monat
+    # dieses Geraets EINEN Waermemengenzaehler (`waerme_kwh`), war die
+    # Summe **0** — und die Zeile „Ersparnis vs. Alternative" entstand
+    # wegen der Bedingung darunter **gar nicht**, waehrend der
+    # Komponenten-Hub fuer dieselbe Anlage seit WK-14b eine Ersparnis
+    # nennt. Zwei Sichten, zwei Auskuenfte (SOLL §3.3 S1). Gemessen ueber
+    # die echte Route (`get_aktueller_monat`): Lage B **0** WP-Zeilen,
+    # Lage D eine Zeile mit **33,33 EUR**.
+    waerme_total = waerme_gesamt_kwh(data.get("waerme_kwh"), waerme, ww)
+    # E-B: Kühlen ersetzt keine Heizung (#263 K-2).
+    # B5/X-5c: über den SoT der Betriebsart-Weiche (F-56) — das
+    # Rohfeld kennt nur den abgeleiteten Split; bei gemessenen
+    # Betriebsart-Zählern stand hier 0 und der Kühlstrom blieb im
+    # Vergleich (dieselbe Klasse wie im Hub am 26.08.).
+    kuehlstrom = modus_strom_zeile(data).kuehlen_kwh
+    if wp_fakt is not None:
+        # N-609: dieselben drei Mengen wie Übersicht und Komponenten-Zeitreihe (Monats-Fakten, P10).
+        waerme_total = wp_fakt.waerme_kwh
+        strom = wp_fakt.strom_kwh or None
+        kuehlstrom = wp_fakt.strom_kuehlen_kwh
+    # HA-Bauform E4d (Bauplan §8a, Rest N-585): Strom UND Wärme der Zeile GEMESSEN 0 ⇒ „kein Betrieb", Ersparnis 0 €
+    # (die eine Lesetür `imd_typ_beitrag` sagt, ob die Zeile die Mengen trägt — auch mit 0).
+    from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
+
+    _b = imd_typ_beitrag(inv, data)
+    _kein_betrieb = bool(
+        _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and not (strom or 0)
+    )
+    # N-670 (Fachentscheid Master Wärme/Klima): Strom gemessen > 0, Wärme gemessen 0 ⇒ Standby-Zeile mit 0 € —
+    # dieselbe Lesetür sagt, ob die Wärme-0 gemessen ist (sonst fehlt die Wärme, und die Zeile entsteht nicht).
+    _standby = bool(
+        _b.wp_strom_gemessen and _b.wp_waerme_gemessen and not (waerme_total or 0) and (strom or 0) > 0
+    )
+    # N-609: die EINE Zeilenregel (Wärme > 0 und Strom > 0, Parameter des Geräts, Preise des Monats).
+    wp_result = wp_ersparnis_zeile(
+        waerme_kwh=0.0 if (_kein_betrieb or _standby) else waerme_total,
+        strom_kwh=0.0 if _kein_betrieb else strom,
+        strom_kuehlen_kwh=kuehlstrom,
+        strompreis_cent=wp_p,
+        parameter=inv.parameter,
+        gaspreis_cent=monats_gaspreis,
+        null_ist_kein_betrieb=_kein_betrieb or _standby,
+    )
+    if wp_result is not None:
+        ctx.inv_ersparnis = round(wp_result.ersparnis_euro, 2)
+        # #411: Der ersetzte Energietraeger ist gepflegt (Gas · Oel ·
+        # Strom-Direktheizung) und wird korrekt verrechnet — die
+        # Beschriftung nannte trotzdem unbedingt Gas. Der Block fasst
+        # ausserdem mehrere Waermepumpen zusammen, die verschiedene
+        # Traeger ersetzt haben koennen: ein Aggregat kann keinem
+        # einzelnen folgen. Deshalb die allgemeine Form.
+        ctx.inv_label = "Ersparnis vs. Alternative"
+        # B6/Y-3: Formel und Rechnung beschreiben, was der Layer rechnet —
+        # mit Zusatzkosten der Altheizung und ohne den Kühlstrom (E-B). Bis
+        # hierher stand ein Text, der bei F8 10 € ergab, neben dem Wert 100 €.
+        ctx.inv_formel = WP_ERSPARNIS_FORMEL
+        ctx.inv_berechnung = wp_ersparnis_berechnung(
+            wp_result, 0.0 if (_kein_betrieb or _standby) else waerme_total,
+            0.0 if _kein_betrieb else strom, wp_p, inv.parameter,
+        )
+
+
+def _emob_zeile(ctx: _ZeilenKontext) -> None:
+    """E-Auto/Wallbox (privat): Ersparnis vs. Verbrenner bzw. PV-Ladung × EV-Preis (N-555, N-672)."""
+    inv, data, emob_entscheid, emob_pool_attr = ctx.inv, ctx.data, ctx.emob_entscheid, ctx.emob_pool_attr
+    ev_p, netz_p, wb_p, monats_benzinpreis = ctx.ev_p, ctx.netz_p, ctx.wb_p, ctx.monats_benzinpreis
+    km = data.get("km_gefahren") or 0
+    ladung = get_eauto_ladung_kwh(data) or None
+    # #262: SoT-Helper konsolidiert den vorherigen Inline-Fallback
+    # (netz = ladung_netz ?? total − pv) — gleiche Semantik, gleiche
+    # Drift-Quelle wie in den anderen Read-Sites.
+    ladung_pv, netz_kwh = get_emob_pv_netz_kwh(data, total_kwh=ladung or 0)
+    ladung_pv = ladung_pv or None
+    heim_des_autos = 0.0
+    if inv.typ == "e-auto":
+        # N-555 (Konzept Regel 2): die Heimladung DIESES Autos kommt aus dem
+        # Entscheid des Monats (`je_auto`) — seine eigene Messung, sein Anteil am
+        # Rest der Wallbox (nach km, bei 0 km zusammen gleich verteilt, E6), die
+        # Schätzung aus dem Fahrverbrauch oder 0. Ohne übergebenen Entscheid
+        # (Einzelaufruf) entscheidet die Funktion aus dieser Zeile und dem
+        # Wallbox-Topf des Aufrufers.
+        entscheid = emob_entscheid or entscheide_emob_heimladung(
+            eauto_je_inv={inv.id: data},
+            wallbox_zeilen=[{
+                "ladung_kwh": emob_pool_attr.wb_pool_pv + emob_pool_attr.wb_pool_netz,
+                "ladung_pv_kwh": emob_pool_attr.wb_pool_pv,
+            }] if emob_pool_attr.use_wb_pool else [],
+        )
+        pv_a, netz_a = heimladung_des_autos(entscheid, inv.id)
+        ladung_pv = pv_a or None
+        netz_kwh = netz_a
+        heim_des_autos = pv_a + netz_a
+    # ⭐ N-555 Stufe 2: das `km > 0`-Tor gilt nicht mehr für ein E-Auto, das geladen
+    # hat (Konzept Regel 2, E6): hier stand `if km and km > 0` — ein Auto, das im
+    # Monat geladen hat, aber nicht gefahren ist, verlor still seine Stromrechnung.
+    # ⭐ N-672 (eine kWh ist einmal Geld): die PV-Ladung trägt den Preis, zu dem die
+    # Eigenverbrauchs-Ersparnis sie schon gutschreibt — wie die BKW-Zeile oben (N-607).
+    _pv_p = ev_p if ev_p is not None else netz_p
+    if (km and km > 0) or heim_des_autos > 0:
+        extern_euro = data.get("ladung_extern_euro", 0) or 0
+        if inv.typ == "e-auto" and entscheid.quelle == QUELLE_WALLBOX:
+            share = attribute_emob_pool_by_km(emob_pool_attr, km)
+            if share.netz_kwh + share.pv_kwh > 0:
+                # N-555 F-5: Extern nach der Topf-Regel (höhere Kosten), nicht
+                # blind der Wallbox-Anteil — sonst fiel das Extern des Autos weg.
+                _, extern_euro = waehle_extern_paar(
+                    share.extern_kwh, share.extern_euro,
+                    data.get("ladung_extern_kwh", 0) or 0, extern_euro,
+                )
+        eauto_result = berechne_eauto_ersparnis(
+            km_gefahren=km,
+            ladung_netz_kwh=max(0, netz_kwh),
+            ladung_pv_kwh=ladung_pv or 0.0,
+            pv_strompreis_cent=_pv_p,
+            ladung_extern_euro=extern_euro,
+            wallbox_strompreis_cent=wb_p,
+            eauto_parameter=inv.parameter,
+            monats_benzinpreis_euro=monats_benzinpreis,
+            # #331: der EXPLIZITE Fahrverbrauch, nicht `ladung` von oben —
+            # `get_eauto_ladung_kwh` fällt auf dasselbe Feld zurück und
+            # läse eine Heimladung als Fahrleistung.
+            fahrverbrauch_kwh=data.get("verbrauch_kwh"),
+        )
+        ctx.inv_ersparnis = round(eauto_result.ersparnis_euro, 2)
+        ctx.inv_label = "Ersparnis vs. Verbrenner"
+        ctx.inv_formel = EAUTO_ERSPARNIS_FORMEL
+        ctx.inv_berechnung = (
+            # N-555 (§11): deutsche Schreibweise über den Backend-SoT
+            # `core/zahlenformat.py` (Style-Guide 0a) — hier stand
+            # „1500 km × 7.5 L/100km × 1.65 €" mit Dezimalpunkt.
+            f"{fmt_zahl(km, 0)} km × "
+            f"{fmt_zahl(eauto_result.verwendeter_verbrauch_l_100km, 1)} L/100 km × "
+            f"{fmt_euro(eauto_result.verwendeter_benzinpreis_euro)}"
+        )
+    elif inv.typ == "wallbox" and ladung_pv and ladung_pv > 0:
+        # Diese Zeile ist ein TEIL der Eigenverbrauchs-Ersparnis — T-Konto und Tabelle schneiden sie dort heraus
+        # (`evAufteilung.ts`), sie ist kein zweiter Posten. ⭐ N-672: deshalb trägt sie denselben Preis wie die
+        # Eigenverbrauchs-Ersparnis (wie die BKW-Zeile, N-607) und nicht den Wallbox-Tarif — genau der Betrag, mit
+        # dem die E-Auto-Zeile dieselbe kWh belastet.
+        ctx.inv_ersparnis = round(ladung_pv * _pv_p / 100, 2)
+        ctx.inv_label = "PV-Ladung-Ersparnis"
+        ctx.inv_formel = "PV-Ladung × Preis der Eigenverbrauchs-Ersparnis (Teil davon, kein eigener Posten)"
+        ctx.inv_berechnung = f"{fmt_zahl(ladung_pv, 1)} kWh × {fmt_zahl(_pv_p, 2)} ct/kWh"
+
+
+def _sonstiges_zeile(ctx: _ZeilenKontext) -> None:
+    """Sonstiges: nur der gepflegte Erlös, keine Eigenverbrauchs-Bewertung (N-131, §9.2)."""
+    inv, data = ctx.inv, ctx.data
+    # ⛔ KEINE Eigenverbrauchs-Bewertung je Gerät (N-131, Entscheid Gernot
+    # 2026-09-01: „Für einen sonstigen Erzeuger rechnet eedc den Nutzen
+    # bewusst nicht selbst; er wird am Gerät als ‚Ertrag/Jahr' gepflegt").
+    #
+    # Bis 2026-09-02 stand hier `eigenverbrauch_kwh × netz_p` — und das war
+    # eine **gemessene Doppelzählung**, keine zweite Meinung: Die Bilanz
+    # führt den sonstigen Erzeuger über `erzeugung_hinter_zaehler_kwh` in
+    # `eigenverbrauch_kwh` (ein Netzanschluss, ein Zähler), und
+    # `ev_ersparnis_euro` bewertet **diese** Menge. Dieselben kWh standen
+    # damit zweimal im Σ HABEN. Gegen eine Probe-Anlage erhoben: 430 kWh
+    # Bilanz-Eigenverbrauch (129,00 €) enthielten die 50 kWh des BHKW, die
+    # daneben noch einmal mit 15,00 € auftraten.
+    #
+    # ⚠ Die PV-Zeile sagt das seit N-131 sogar selbst („Eigenverbrauch aus
+    # Sonstiges ist hier nicht bewertet") — der Satz war unwahr, solange
+    # diese Zeile daneben stand. Jetzt stimmt er.
+    #
+    # ⚑ Der Erlös bleibt, aber nur als **gepflegter** Betrag: Konzept §9
+    # Weg 2 (`einspeise_erloes_euro`, Layer-SoT
+    # `finanz_aggregat.erzeuger_erloes_euro` = „Σ der gepflegten Erlöse").
+    # Ein aus `einspeisung_kwh × Anlagen-Vergütung` gerechneter Betrag wäre
+    # die zweite Doppelzählung: diese kWh stehen im Hauszähler und sind in
+    # `einspeise_erloes_euro` eine Zeile höher bereits bewertet. Wer einen
+    # eigenen Vergütungssatz hat, hat einen eigenen Zähler — und pflegt
+    # deshalb den Betrag (Begründung Maintainer 2026-08-10, §9).
+    #
+    # ⚑ §9.2 Geldseite (06.09.): Dasselbe Feld trägt bei der Kategorie
+    # *Abgabe an Dritte* eine **andere Ertragsart** — den Erlös des dritten
+    # Wegs statt eines Einspeise-Erlöses. Der Betrag wird gleich behandelt
+    # (gepflegt, nicht nachgerechnet), nur benannt wird er anders: Regel 0
+    # verlangt für die Geldzeile denselben Namen wie für die Energiezeile.
+    # Vorher stand über beiden „— Einspeisung", und rilmor-mhrs (#402) hat
+    # im T-Konto ein Wort gelesen, das seine Bilanz gar nicht kennt.
+    erloes_gepflegt = data.get("einspeise_erloes_euro")
+    if erloes_gepflegt:
+        ctx.inv_erloes = round(float(erloes_gepflegt), 2)
+        if ist_abgabe_kategorie((inv.parameter or {}).get("kategorie")):
+            ctx.inv_erloes_label = SONSTIGES_ABGABE_LABEL
+            ctx.inv_erloes_formel = (
+                f"Am Gerät gepflegter Erlös aus {SONSTIGES_ABGABE_LABEL} "
+                "(eigener Satz) — von eedc nicht nachgerechnet"
+            )
+        else:
+            ctx.inv_erloes_formel = (
+                "Am Gerät gepflegter Einspeise-Erlös (eigener Vergütungssatz) "
+                "— von eedc nicht nachgerechnet"
+            )

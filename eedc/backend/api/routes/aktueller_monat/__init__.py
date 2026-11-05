@@ -865,7 +865,7 @@ async def _berechne_monat(
     sonstige_ausgaben_total = _out["sonstige_ausgaben_total"]
     sonstige_ertraege_total = _out["sonstige_ertraege_total"]
     sonstige_netto_total = _out["sonstige_netto_total"]
-    # ── komponenten_detail (Vorlage 2: Abschnitt in komponenten.py, Schnittstelle 15 ein / 33 aus) ──
+    # ── komponenten_detail (Vorlage 2: Abschnitt in komponenten.py, Schnittstelle 19 ein / 34 aus) ──
     _out = await komponenten_detail(_wp_abgrenzung_je_funktion=_wp_abgrenzung_je_funktion, _wp_funktion=_wp_funktion, _wp_kennzahlen_je_geraet=_wp_kennzahlen_je_geraet, anlage_id=anlage_id, db=db, fenster=fenster, investitionen=investitionen, jahr=jahr, monat=monat, monats_fakt=monats_fakt, wp_fakten=_wp_kanal, speicher_entladung=speicher_entladung, speicher_ladung=speicher_ladung, wp_abgrenzung_verletzt=wp_abgrenzung_verletzt, wp_arbeitszahl=wp_arbeitszahl, wp_waerme_abgeleitet_kwh=wp_waerme_abgeleitet_kwh, anlage=anlage, ist_aktueller_monat=ist_aktueller_monat, heute=now.date())
     mf_bkw = _out["mf_bkw"]
     mf_emob = _out["mf_emob"]

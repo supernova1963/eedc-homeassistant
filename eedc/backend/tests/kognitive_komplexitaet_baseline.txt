@@ -1,10 +1,7 @@
 # Bestand der Funktionen mit kognitiver Komplexität > 50 — darf nur schrumpfen.
 # Neu schreiben: siehe test_kognitive_komplexitaet.py (Docstring). Format: kognitiv<TAB>datei::qualname
-68	api/routes/aktueller_monat/aggregation.py::aggregiere_typen
 56	api/routes/aktueller_monat/komponenten.py::geraete_sicht
-74	api/routes/aktueller_monat/komponenten.py::komponenten_detail
 55	api/routes/aktueller_monat/quellen_leser.py::_geraete_aus_kanaelen
-77	api/routes/aktueller_monat/tkonto.py::_baue_investition_financial
 58	api/routes/aktueller_monat/waerme.py::waerme_klima_monat
 53	api/routes/cockpit/pv_strings.py::get_pv_strings
 51	api/routes/datenquellen.py::get_datenquellen_felder

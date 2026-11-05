@@ -2478,7 +2478,14 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # übergebenen `verbrauch_daten`. Einziger Lader ist der Haupt-Pfad (Cockpit → Monat);
     # bis 03.10.2026 rief auch `aktueller_monat/vergleich.py::_load_vorjahr` die Funktion
     # mit eigener IMD-Ladung — seit N-610 rechnet das Vorjahr über die Monatsfunktion.
-    "backend/api/routes/aktueller_monat/tkonto.py::_baue_investition_financial":
+    # RF-47 (5.11.2026): `_baue_investition_financial` ist ein Orchestrator (Kopf, Kontext `_ZeilenKontext`, Typ-Weiche,
+    # Abschluss) und lädt nichts. Gefaltet wird die übergebene Zeile `ctx.data` des Lader-Aufrufs — dieselbe Zeile wie
+    # bisher — in zwei Phasen: `_wp_zeile` (Marker `modus_strom_zeile`, `imd_typ_beitrag`) und `_bkw_zeile`
+    # (Marker `imd_typ_beitrag`; bis 5.11. unter dem Alias `_imd_typ_beitrag` importiert, den dieser Suchlauf nicht
+    # sieht — der Alias ist entfernt, damit der Wächter die Phase sieht).
+    "backend/api/routes/aktueller_monat/tkonto.py::_wp_zeile":
+        "backend/api/routes/aktueller_monat/finanzen.py::t_konto_je_investition",
+    "backend/api/routes/aktueller_monat/tkonto.py::_bkw_zeile":
         "backend/api/routes/aktueller_monat/finanzen.py::t_konto_je_investition",
     # Vorlage 8b: Phase des Anlagen-Rechners. Faltet `historische_inv_daten`,
     # das die Lade-Phase eine Zeile vorher gebaut hat (WP-Ersparnis, CO₂).
