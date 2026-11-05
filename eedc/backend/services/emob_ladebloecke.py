@@ -163,6 +163,120 @@ def anteile_der_stunde(
     return anteil.pv_kwh / anteil.ladung_kwh, speicher
 
 
+@dataclass
+class _WallboxAchse:
+    """Die Wallbox-Stunden des Fensters, je Stundenbeginn zusammengefasst (RF-80).
+
+    ``rest`` ist die **Restmenge** je Stunde — was frühere Blöcke (``schon_genommen`` und die
+    Blöcke dieses Laufs) dort noch nicht genommen haben; ``_block_rueckwaerts`` schreibt sie fort.
+    """
+    n_je: dict[datetime, int]
+    q_je: dict[datetime, Optional[float]]
+    sq_je: dict[datetime, Optional[float]]
+    rest: dict[datetime, float]
+    reihenfolge: list[datetime]
+
+
+def _wallbox_achse(
+    stunden: Iterable[WallboxStunde], schon_genommen: Optional[Mapping[datetime, float]],
+) -> _WallboxAchse:
+    """Mehrfach genannte Stunden summiert (n = max, ein Anteil nur, wo alle Nennungen ihn gleich
+    tragen); Stunden ≤ 0 fallen weg; Restmenge = Stunde − ``schon_genommen``, geklemmt auf ≥ 0."""
+    kwh_je: dict[datetime, float] = {}
+    n_je: dict[datetime, int] = {}
+    q_je: dict[datetime, Optional[float]] = {}
+    sq_je: dict[datetime, Optional[float]] = {}
+    for s in stunden:
+        if s.kwh is None or s.kwh <= 0:
+            continue
+        kwh_je[s.beginn] = kwh_je.get(s.beginn, 0.0) + s.kwh
+        n_je[s.beginn] = max(n_je.get(s.beginn, 1), s.n)
+        q_je[s.beginn] = s.pv_anteil if s.beginn not in q_je else (
+            q_je[s.beginn] if q_je[s.beginn] == s.pv_anteil else None
+        )
+        sq_je[s.beginn] = s.speicher_anteil if s.beginn not in sq_je else (
+            sq_je[s.beginn] if sq_je[s.beginn] == s.speicher_anteil else None
+        )
+    rest = {b: max(0.0, k - (schon_genommen or {}).get(b, 0.0)) for b, k in kwh_je.items()}
+    reihenfolge = sorted(kwh_je)
+    return _WallboxAchse(n_je=n_je, q_je=q_je, sq_je=sq_je, rest=rest, reihenfolge=reihenfolge)
+
+
+def _spruenge_nach_zeit(spruenge: Iterable[FahrzeugSprung]) -> list[FahrzeugSprung]:
+    """Die Sprünge der Zeit nach (bei gleicher Stunde nach ``inv_id``); ein Sprung ≤ 0 bildet
+    keinen Block und setzt keine Schranke."""
+    reihe: list[FahrzeugSprung] = []
+    for sp in sorted(spruenge, key=lambda s: (s.beginn, s.inv_id)):
+        if sp.kwh <= 0:
+            continue
+        reihe.append(sp)
+    return reihe
+
+
+def _block_rueckwaerts(
+    achse: _WallboxAchse, sp: FahrzeugSprung, schranke: Optional[datetime],
+) -> list[BlockStunde]:
+    """Regel 9 Punkt 2 (D-1): der Block geht von der Sprungstunde **rückwärts** über die
+    Wallbox-Stunden und nimmt aus jeder die Restmenge — in der eigenen Sprungstunde höchstens den
+    Bedarf, in früheren höchstens Bedarf + ``TOLERANZ_KWH``; voll bei Σ ≥ Sprung − Toleranz;
+    höchstens bis zur ``schranke`` (Stunde des vorigen Sprungs irgendeines Autos, einschließlich);
+    Nullstunden übersprungen (W4). Schreibt ``achse.rest`` fort; Blockstunden in Zeitordnung."""
+    rest = achse.rest
+    bedarf = sp.kwh
+    genommen: list[BlockStunde] = []
+    for b in reversed(achse.reihenfolge):
+        if b > sp.beginn:
+            continue
+        if schranke is not None and b < schranke:
+            break
+        if bedarf <= TOLERANZ_KWH + _EPS and genommen:
+            break
+        r = rest.get(b, 0.0)
+        if r <= _EPS:
+            continue  # Nullstunde (oder schon vergeben) — überspringen (W4)
+        grenze = bedarf if b == sp.beginn else bedarf + TOLERANZ_KWH
+        take = min(r, grenze)
+        if take <= _EPS:
+            continue
+        rest[b] = r - take
+        bedarf -= take
+        genommen.append(BlockStunde(b, round(take, 6), achse.n_je[b], achse.q_je[b], achse.sq_je[b]))
+        if bedarf <= TOLERANZ_KWH + _EPS:
+            break
+    genommen.reverse()
+    return genommen
+
+
+def _block_anteile(sp: FahrzeugSprung, genommen: list[BlockStunde]) -> Ladeblock:
+    """Regel 9 Punkt 3 (G2): die Menge ist der Sprung; PV-/Speicher-Anteil aus den ableitbaren
+    Blockstunden (Anteil bekannt, kein Bündel), auf den Sprung skaliert, Speicher ≤ PV;
+    ``stunden_gedeckt`` = Σ Blockenergie ÷ Sprung; ``luecke`` bei einem Bündel (W-A)."""
+    summe = sum(g.kwh for g in genommen)
+    ableitbar = [g for g in genommen if g.pv_anteil is not None and g.n == 1]
+    pv: Optional[float] = None
+    speicher: Optional[float] = None
+    if ableitbar:
+        basis = sum(g.kwh for g in ableitbar)
+        if basis > _EPS:
+            pv = sp.kwh * sum(g.kwh * g.pv_anteil for g in ableitbar) / basis
+            if any(g.speicher_anteil is not None for g in ableitbar):
+                # Teilmenge von PV, gleich skaliert (Anhang E, Ergänzung).
+                speicher = min(pv, sp.kwh * sum(
+                    g.kwh * (g.speicher_anteil or 0.0) for g in ableitbar
+                ) / basis)
+    return Ladeblock(
+        inv_id=sp.inv_id,
+        beginn=genommen[0].beginn if genommen else sp.beginn,
+        ende=sp.beginn + timedelta(hours=1),
+        kwh=round(sp.kwh, 3),
+        pv_kwh=None if pv is None else round(pv, 3),
+        stunden=tuple(genommen),
+        stunden_gedeckt=round(summe / sp.kwh, 4),
+        luecke=any(g.n > 1 for g in genommen),
+        speicher_kwh=None if speicher is None else round(speicher, 3),
+    )
+
+
 def bilde_ladebloecke(
     stunden: Iterable[WallboxStunde],
     spruenge: Iterable[FahrzeugSprung],
@@ -182,76 +296,19 @@ def bilde_ladebloecke(
 
     Returns:
         Die Blöcke in der Reihenfolge der Sprünge.
-    """
-    kwh_je: dict[datetime, float] = {}
-    n_je: dict[datetime, int] = {}
-    q_je: dict[datetime, Optional[float]] = {}
-    sq_je: dict[datetime, Optional[float]] = {}
-    for s in stunden:
-        if s.kwh is None or s.kwh <= 0:
-            continue
-        kwh_je[s.beginn] = kwh_je.get(s.beginn, 0.0) + s.kwh
-        n_je[s.beginn] = max(n_je.get(s.beginn, 1), s.n)
-        q_je[s.beginn] = s.pv_anteil if s.beginn not in q_je else (
-            q_je[s.beginn] if q_je[s.beginn] == s.pv_anteil else None
-        )
-        sq_je[s.beginn] = s.speicher_anteil if s.beginn not in sq_je else (
-            sq_je[s.beginn] if sq_je[s.beginn] == s.speicher_anteil else None
-        )
-    rest = {b: max(0.0, k - (schon_genommen or {}).get(b, 0.0)) for b, k in kwh_je.items()}
-    reihenfolge = sorted(kwh_je)
 
+    Form (RF-80, Bauform RF-1): der Rumpf ist der Orchestrator und sammelt die Blöcke —
+    ``_wallbox_achse`` (Stunden summiert, Restmenge nach ``schon_genommen``),
+    ``_spruenge_nach_zeit`` (Reihenfolge, Sprünge ≤ 0 fallen weg), je Sprung
+    ``_block_rueckwaerts`` (Restmenge, Toleranz, Schranke) und ``_block_anteile``
+    (PV/Speicher skaliert, ``stunden_gedeckt``); die Schranke rückt auf die Sprungstunde vor.
+    """
+    achse = _wallbox_achse(stunden, schon_genommen)
     bloecke: list[Ladeblock] = []
     schranke = voriger_sprung
-    for sp in sorted(spruenge, key=lambda s: (s.beginn, s.inv_id)):
-        if sp.kwh <= 0:
-            continue
-        bedarf = sp.kwh
-        genommen: list[BlockStunde] = []
-        for b in reversed(reihenfolge):
-            if b > sp.beginn:
-                continue
-            if schranke is not None and b < schranke:
-                break
-            if bedarf <= TOLERANZ_KWH + _EPS and genommen:
-                break
-            r = rest.get(b, 0.0)
-            if r <= _EPS:
-                continue  # Nullstunde (oder schon vergeben) — überspringen (W4)
-            grenze = bedarf if b == sp.beginn else bedarf + TOLERANZ_KWH
-            take = min(r, grenze)
-            if take <= _EPS:
-                continue
-            rest[b] = r - take
-            bedarf -= take
-            genommen.append(BlockStunde(b, round(take, 6), n_je[b], q_je[b], sq_je[b]))
-            if bedarf <= TOLERANZ_KWH + _EPS:
-                break
-        genommen.reverse()
-        summe = sum(g.kwh for g in genommen)
-        ableitbar = [g for g in genommen if g.pv_anteil is not None and g.n == 1]
-        pv: Optional[float] = None
-        speicher: Optional[float] = None
-        if ableitbar:
-            basis = sum(g.kwh for g in ableitbar)
-            if basis > _EPS:
-                pv = sp.kwh * sum(g.kwh * g.pv_anteil for g in ableitbar) / basis
-                if any(g.speicher_anteil is not None for g in ableitbar):
-                    # Teilmenge von PV, gleich skaliert (Anhang E, Ergänzung).
-                    speicher = min(pv, sp.kwh * sum(
-                        g.kwh * (g.speicher_anteil or 0.0) for g in ableitbar
-                    ) / basis)
-        bloecke.append(Ladeblock(
-            inv_id=sp.inv_id,
-            beginn=genommen[0].beginn if genommen else sp.beginn,
-            ende=sp.beginn + timedelta(hours=1),
-            kwh=round(sp.kwh, 3),
-            pv_kwh=None if pv is None else round(pv, 3),
-            stunden=tuple(genommen),
-            stunden_gedeckt=round(summe / sp.kwh, 4),
-            luecke=any(g.n > 1 for g in genommen),
-            speicher_kwh=None if speicher is None else round(speicher, 3),
-        ))
+    for sp in _spruenge_nach_zeit(spruenge):
+        genommen = _block_rueckwaerts(achse, sp, schranke)
+        bloecke.append(_block_anteile(sp, genommen))
         schranke = sp.beginn
     return bloecke
 

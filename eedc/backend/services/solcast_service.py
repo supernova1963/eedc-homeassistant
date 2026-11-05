@@ -527,6 +527,153 @@ async def _resolve_solcast_entities() -> dict[str, str]:
         return {}
 
 
+#: Die sieben Tages-Sensoren der Solcast-Integration in Tagesfolge (Offset 0 … 6 ab heute).
+_SOLCAST_TAGE: tuple[str, ...] = ("heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7")
+
+
+@dataclass
+class _SolcastHaKontext:
+    """Was die Phasen von `_fetch_solcast_ha_auto` teilen (RF-77): die aufgelösten Entities, die
+    gelesenen States (entity_id → {"value": float, "attrs": dict}) und der Tag «heute»."""
+    entity_map: dict[str, str]
+    ha_states: dict[str, dict]
+    heute: date
+
+
+async def _lese_states(ha_svc, entity_map: dict[str, str]) -> dict[str, dict]:
+    """Alle Tages-Sensoren in **einem** Batch-Call (inkl. Attribute). Nur die gesuchten Entities,
+    States ohne Zahl (unknown/unavailable/leer) entfallen; ein Abruf-Fehler bleibt still — was bis
+    dahin gelesen war, zählt (RF-77: Phase von `_fetch_solcast_ha_auto`)."""
+    # Alle 7 Tages-Sensoren in einem Batch-Call lesen (inkl. Attribute)
+    entity_ids = list(entity_map.values())
+    wanted = set(entity_ids)
+    ha_states: dict[str, dict] = {}  # entity_id → {"value": float, "attrs": dict}
+    try:
+        async with httpx.AsyncClient() as _client:
+            _resp = await _client.get(
+                f"{ha_svc.api_url}/states",
+                headers={"Authorization": f"Bearer {ha_svc.token}"},
+                timeout=10.0,
+            )
+            if _resp.status_code == 200:
+                for item in _resp.json():
+                    eid = item.get("entity_id", "")
+                    if eid not in wanted:
+                        continue
+                    state_val = item.get("state")
+                    if state_val in [None, "unknown", "unavailable", ""]:
+                        continue
+                    try:
+                        ha_states[eid] = {
+                            "value": float(state_val),
+                            "attrs": item.get("attributes") or {},
+                        }
+                    except (ValueError, TypeError):
+                        continue
+    except Exception:
+        pass
+    return ha_states
+
+
+def _tageswerte_aus_states(ctx: _SolcastHaKontext) -> list[dict]:
+    """``tage_voraus``: je gelesenem Tages-Sensor ``{datum, kwh, p10, p90}`` — kWh aus dem State,
+    p10/p90 aus den Attributen ``estimate10``/``estimate90`` (fehlt eines ⇒ 0), je 1 NK."""
+    # 7-Tage-Werte aus Sensor-States + estimate10/estimate90 Attribute
+    tage_voraus = []
+    for day_offset, key in enumerate(_SOLCAST_TAGE):
+        entity = ctx.entity_map.get(key)
+        if not entity:
+            continue
+        sensor = ctx.ha_states.get(entity)
+        if sensor:
+            datum = ctx.heute + timedelta(days=day_offset)
+            attrs = sensor["attrs"]
+            tage_voraus.append({
+                "datum": datum.isoformat(),
+                "kwh": round(sensor["value"], 1),
+                "p10": round(float(attrs.get("estimate10", 0) or 0), 1),
+                "p90": round(float(attrs.get("estimate90", 0) or 0), 1),
+            })
+    return tage_voraus
+
+
+def _stundenprofil_aus_detail(ctx: _SolcastHaKontext) -> dict[str, TagesStundenprofil]:
+    """Ein Stundenprofil je Tages-Sensor mit ``detailedForecast`` (#357): 30-Min-Bucket
+    ``pv_estimate*`` (kW) × 0,5 = kWh im Backward-Slot aus ``period_start``; ein Bucket zählt nur
+    beim Tag seines Sensors; ein Profil nur mit Werten (ungerundet — gerundet wird im Rumpf)."""
+    # detailedForecast je Tages-Sensor → ein Stundenprofil pro Tag (#357).
+    # Bis v4.0.8 wurde nur das Attribut des HEUTE-Sensors gelesen; die
+    # übrigen Sensoren liegen aus demselben Batch-Call längst in
+    # `ha_states` (inkl. Attribute), es fehlte nur die Auswertung.
+    # Jeder Sensor wird gegen SEIN Datum gefiltert (`slot_date == datum`) —
+    # so wie vorher gegen `heute`. Das hält Rand-Slots (23:30 → Slot 0 des
+    # Folgetags) beim Tag, dessen Sensor sie liefert, und verhindert, dass
+    # zwei Sensoren denselben Slot doppelt füllen.
+    profile: dict[str, TagesStundenprofil] = {}
+    tz = ZoneInfo("Europe/Berlin")
+
+    for day_offset, key in enumerate(_SOLCAST_TAGE):
+        entity = ctx.entity_map.get(key)
+        sensor = ctx.ha_states.get(entity) if entity else None
+        if not sensor:
+            continue
+        attrs = sensor["attrs"]
+        detailed = (
+            attrs.get("detailedForecast")
+            or attrs.get("DetailedForecast")
+            or attrs.get("detailedHourly")
+            or attrs.get("detailed_hourly")
+            or []
+        )
+        if not detailed:
+            continue
+
+        datum = ctx.heute + timedelta(days=day_offset)
+        profil = TagesStundenprofil(datum=datum)
+
+        for entry in detailed:
+            period_start = entry.get("period_start", "")
+            try:
+                dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=tz)
+                else:
+                    dt = dt.astimezone(tz)
+            except (ValueError, TypeError):
+                continue
+
+            pv_p50 = entry.get("pv_estimate", 0) or 0
+            pv_p10 = entry.get("pv_estimate10", 0) or 0
+            pv_p90 = entry.get("pv_estimate90", 0) or 0
+
+            # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+            # HA-Sensor liefert periodenbeginnende 30-Min-Buckets (period_start,
+            # nicht period_end wie die API). Die Abbildung auf den Backward-Slot
+            # ist zentral in core/berechnungen/slot_konvention.py gekapselt.
+            slot_date, slot_hour = backward_slot_aus_period_start(dt)
+
+            if slot_date == datum:
+                profil.p50[slot_hour] += pv_p50 * 0.5
+                profil.p10[slot_hour] += pv_p10 * 0.5
+                profil.p90[slot_hour] += pv_p90 * 0.5
+
+        if profil.hat_werte():
+            profile[datum.isoformat()] = profil
+    return profile
+
+
+def _heute_morgen(tage_voraus: list[dict]) -> tuple:
+    """``(heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90)`` aus ``tage_voraus`` — «morgen»
+    ist der **zweite gelesene** Tag; fehlt er, 0 (int)."""
+    # Morgen/Heute aus tage_voraus
+    morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
+    morgen_p10 = tage_voraus[1]["p10"] if len(tage_voraus) > 1 else 0
+    morgen_p90 = tage_voraus[1]["p90"] if len(tage_voraus) > 1 else 0
+    heute_p10 = tage_voraus[0]["p10"] if tage_voraus else 0
+    heute_p90 = tage_voraus[0]["p90"] if tage_voraus else 0
+    return heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90
+
+
 async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
     """
     Liest Solcast-Daten aus der HA Solcast-Integration (BJReplay).
@@ -534,7 +681,13 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
     Erkennt Sensoren automatisch über die Entity Registry (unique_id),
     unabhängig von der HA-Spracheinstellung.
     Tageswerte (Heute bis Tag 7) direkt aus Sensor-States.
-    Stundenprofil + p10/p90 aus dem DetailedForecast-Attribut des Heute-Sensors.
+    Stundenprofil aus dem DetailedForecast-Attribut je Tages-Sensor (#357), Tages-p10/p90 aus `estimate10`/`estimate90`.
+
+    Form (RF-77, Bauform RF-1): der Rumpf ist der Orchestrator (Cache, HA erreichbar, Entities,
+    Heute-Sensor, `SolcastForecast`, Cache-Ablage, das eine äußere ``except``) über die Phasen
+    ``_lese_states`` (Batch-Call), ``_tageswerte_aus_states`` (kWh, p10/p90 je Tag),
+    ``_stundenprofil_aus_detail`` (Bucket × 0,5, Backward-Slot, Tag seines Sensors, je Tages-Sensor
+    seit #357) und ``_heute_morgen``; der Kontext ``_SolcastHaKontext`` trägt Entities, States, heute.
     """
     cache_key = "solcast_ha:auto"
     cached = _cache_get(cache_key)
@@ -553,34 +706,7 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
             logger.debug("Solcast HA: Keine Solcast-Entities in der Entity Registry gefunden")
             return None
 
-        # Alle 7 Tages-Sensoren in einem Batch-Call lesen (inkl. Attribute)
-        entity_ids = list(entity_map.values())
-        wanted = set(entity_ids)
-        ha_states: dict[str, dict] = {}  # entity_id → {"value": float, "attrs": dict}
-        try:
-            async with httpx.AsyncClient() as _client:
-                _resp = await _client.get(
-                    f"{ha_svc.api_url}/states",
-                    headers={"Authorization": f"Bearer {ha_svc.token}"},
-                    timeout=10.0,
-                )
-                if _resp.status_code == 200:
-                    for item in _resp.json():
-                        eid = item.get("entity_id", "")
-                        if eid not in wanted:
-                            continue
-                        state_val = item.get("state")
-                        if state_val in [None, "unknown", "unavailable", ""]:
-                            continue
-                        try:
-                            ha_states[eid] = {
-                                "value": float(state_val),
-                                "attrs": item.get("attributes") or {},
-                            }
-                        except (ValueError, TypeError):
-                            continue
-        except Exception:
-            pass
+        ha_states = await _lese_states(ha_svc, entity_map)
 
         # Heute prüfen
         heute_entity = entity_map["heute"]
@@ -590,82 +716,10 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
 
         today_kwh = ha_states[heute_entity]["value"]
         heute = date.today()
+        ctx = _SolcastHaKontext(entity_map=entity_map, ha_states=ha_states, heute=heute)
 
-        # 7-Tage-Werte aus Sensor-States + estimate10/estimate90 Attribute
-        tage_voraus = []
-        for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
-            entity = entity_map.get(key)
-            if not entity:
-                continue
-            sensor = ha_states.get(entity)
-            if sensor:
-                datum = heute + timedelta(days=day_offset)
-                attrs = sensor["attrs"]
-                tage_voraus.append({
-                    "datum": datum.isoformat(),
-                    "kwh": round(sensor["value"], 1),
-                    "p10": round(float(attrs.get("estimate10", 0) or 0), 1),
-                    "p90": round(float(attrs.get("estimate90", 0) or 0), 1),
-                })
-
-        # detailedForecast je Tages-Sensor → ein Stundenprofil pro Tag (#357).
-        # Bis v4.0.8 wurde nur das Attribut des HEUTE-Sensors gelesen; die
-        # übrigen Sensoren liegen aus demselben Batch-Call längst in
-        # `ha_states` (inkl. Attribute), es fehlte nur die Auswertung.
-        # Jeder Sensor wird gegen SEIN Datum gefiltert (`slot_date == datum`) —
-        # so wie vorher gegen `heute`. Das hält Rand-Slots (23:30 → Slot 0 des
-        # Folgetags) beim Tag, dessen Sensor sie liefert, und verhindert, dass
-        # zwei Sensoren denselben Slot doppelt füllen.
-        profile: dict[str, TagesStundenprofil] = {}
-        tz = ZoneInfo("Europe/Berlin")
-
-        for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
-            entity = entity_map.get(key)
-            sensor = ha_states.get(entity) if entity else None
-            if not sensor:
-                continue
-            attrs = sensor["attrs"]
-            detailed = (
-                attrs.get("detailedForecast")
-                or attrs.get("DetailedForecast")
-                or attrs.get("detailedHourly")
-                or attrs.get("detailed_hourly")
-                or []
-            )
-            if not detailed:
-                continue
-
-            datum = heute + timedelta(days=day_offset)
-            profil = TagesStundenprofil(datum=datum)
-
-            for entry in detailed:
-                period_start = entry.get("period_start", "")
-                try:
-                    dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=tz)
-                    else:
-                        dt = dt.astimezone(tz)
-                except (ValueError, TypeError):
-                    continue
-
-                pv_p50 = entry.get("pv_estimate", 0) or 0
-                pv_p10 = entry.get("pv_estimate10", 0) or 0
-                pv_p90 = entry.get("pv_estimate90", 0) or 0
-
-                # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
-                # HA-Sensor liefert periodenbeginnende 30-Min-Buckets (period_start,
-                # nicht period_end wie die API). Die Abbildung auf den Backward-Slot
-                # ist zentral in core/berechnungen/slot_konvention.py gekapselt.
-                slot_date, slot_hour = backward_slot_aus_period_start(dt)
-
-                if slot_date == datum:
-                    profil.p50[slot_hour] += pv_p50 * 0.5
-                    profil.p10[slot_hour] += pv_p10 * 0.5
-                    profil.p90[slot_hour] += pv_p90 * 0.5
-
-            if profil.hat_werte():
-                profile[datum.isoformat()] = profil
+        tage_voraus = _tageswerte_aus_states(ctx)
+        profile = _stundenprofil_aus_detail(ctx)
 
         _runde_profile(profile)
         heute_profil = profile.get(heute.isoformat())
@@ -673,12 +727,7 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
         hourly_p10 = list(heute_profil.p10) if heute_profil else [0.0] * 24
         hourly_p90 = list(heute_profil.p90) if heute_profil else [0.0] * 24
 
-        # Morgen/Heute aus tage_voraus
-        morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
-        morgen_p10 = tage_voraus[1]["p10"] if len(tage_voraus) > 1 else 0
-        morgen_p90 = tage_voraus[1]["p90"] if len(tage_voraus) > 1 else 0
-        heute_p10 = tage_voraus[0]["p10"] if tage_voraus else 0
-        heute_p90 = tage_voraus[0]["p90"] if tage_voraus else 0
+        heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90 = _heute_morgen(tage_voraus)
 
         result = SolcastForecast(
             daily_kwh=round(today_kwh, 1),
