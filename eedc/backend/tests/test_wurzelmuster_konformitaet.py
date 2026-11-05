@@ -2657,7 +2657,8 @@ _P10_ZEILE_ERLAUBT: frozenset[str] = frozenset({
     _P10_SCHICHT,
     # Der Builder selbst nimmt die Eingabe entgegen.
     "backend/services/finanz_zeilen.py",
-    # Tages-Pfad (§4). Vorlage 4 (18.09.2026): die Zeile entsteht in `get_tag_detail`, heute `tag.py`.
+    # Tages-Pfad (§4). Vorlage 4 (18.09.2026): die Zeile entsteht in `get_tag_detail`, heute `tag.py`;
+    # RF-71 (5.11.2026): in dessen Phase `_tag_preis`.
     "backend/api/routes/energie_profil/tag.py",
     "backend/services/energie_profil/tage_werte.py",
 })
@@ -3528,7 +3529,11 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     # und wird an `abgrenzungs_grund` gereicht — P12 hält, dass daraus nie eine
     # rohe Division wird.
     "backend/services/monats_fakten/roh.py::_falte_wp",           # zählt luft_luft/luft_wasser je Block (RF-62: Phase von `_RohMonat.falte`)
-    "backend/api/routes/energie_profil/tag.py::get_tag_detail",   # dieselbe Frage je Tag (Vorlage 4: views.py → tag.py)
+    # RF-71 (5.11.2026): `get_tag_detail` ist ein Orchestrator und liest die Bauart nicht mehr; beide Ketten, die
+    # `bauarten_gemischt` lesen (`abgrenzungs_grund` der Block-Lage — Bauarten des Tages über `ist_luft_luft_waermepumpe`,
+    # nur Geräte mit Strom des Tages —, `abgrenzung_je_funktion` nach SOLL §3.2b), stehen in der Phase `_abgrenzung_tag`
+    # — dieselbe Abgrenzung einer Kennzahl wie bisher, kein Feldangebot.
+    "backend/api/routes/energie_profil/tag.py::_abgrenzung_tag",  # dieselbe Frage je Tag (Vorlage 4: views.py → tag.py)
     # Vorlage 2 (18.09.2026): die R2-/SOLL-3.2b-Abgrenzung zog aus dem Endpunkt nach waerme.py.
     # RF-67 (5.11.2026): `waerme_klima_monat` ist ein Orchestrator und liest die Bauart nicht mehr; beide Ketten, die
     # `bauarten_gemischt` lesen (`abgrenzungs_grund` der anlagenweiten Lage, `abgrenzung_je_funktion` nach SOLL §3.2b),

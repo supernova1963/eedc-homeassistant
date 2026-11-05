@@ -2748,6 +2748,28 @@ gemeint war (ADR-002/P4).
 > Faktor zurück, mit dem gerechnet wurde — dieselbe Zirkularität, die §3.5c für die abgeleitete
 > Heizwärme beschreibt, nur auf der Kälte-Achse.
 
+> **Die Tageszahlen von *Cockpit → Tag*** (`api/routes/energie_profil/tag.py::get_tag_detail`, Phasen seit RF-71). Neben
+> den vier Arbeitszahlen trägt die Tag-Antwort drei Größen, deren Regel nur dort steht:
+>
+> ```text
+> Tages-SOLL PV         = round(pv_prognose_kwh × Lernfaktor(openmeteo), 1); ohne Prognose oder ohne Lernfaktor die
+>                         Prognose selbst (None bleibt None)                                  — Phase _tages_soll_pv
+> Netzbezugspreis (Tag) = Slot-Ø des Tages (lade_slot_kosten_je_tag → mittel_cent), sonst der Arbeitspreis des Monats
+>                         (baue_finanz_zeile mit der Monatsdaten-Zeile; bei dynamischem Tarif ihr abgerechneter Monats-Ø);
+>                         Herkunft = die des Slot-Tags, ohne Slot-Tag None (SOLL P-2; dieselbe Quelle wie die
+>                         Tages-Tabelle, sonst die F-18-Klasse)                                — Phase _tag_preis
+> Nenner je Funktion    = Strom Heizen bzw. Warmwasser aus der Faltung funktions_eingaenge_der_anlage, wo sie > 0 trägt,
+>                         sonst der Tageswert samt seiner None-heit (_nenner_der_funktion — nur die Faltung kennt die
+>                         Ein-Achsen-Regel R-4); Zähler = die Tagessumme (aufgelöste Heizwärme D1, Warmwasser)
+>                                                                                            — Phase _funktions_deckung
+> ```
+>
+> Code-Orte je Phase: `_tag_laden` (Tageseingänge `tages_eingaenge`, W-18-Grund, Ladepreis) · `_wp_strom_je_geraet`
+> (R-4/N-482/N-491, Tages-Stapel) · `_waerme_tag` (D1 je Gerät, N-391b) · `_geraete_mengen` (D-Sicht 3, Schranken-Eingang) ·
+> `_funktions_deckung` (§3.2b, Kühlen beidseitig) · `_abgrenzung_tag` (R2/Bauart nur über Geräte mit Strom des Tages, §4.2 Fall 1
+> und N-441 aus den Monats-Fakten des Monats, je Funktion) · `_schranke_und_kasten` (E1b: die Gegenrichtung am Tag gezählt,
+> W-18-Kurzformen, Systemarbeitszahl) · `_arbeitszahl_je_funktion` (N-348, Kühlen) · `_antwort`. Proben: `test_rf71_tag_phasen.py`.
+
 #### 3.5e Anzeige-Regeln der Betriebsart-Aufteilung (W-17 · W-17b · W-18)
 
 Drei Regeln, die keine Formel sind und trotzdem in jede Sicht gehören:
@@ -4314,6 +4336,12 @@ Typ `[00:00, 24:00)` (`for_day_total`) — dieselbe Regel N-444, angewandt auf d
 | Speicher | Σ der Ladung aus den Stundenzeilen (`batterie_kw`) | **immer** `[Vortag 23:00, 23:00)` |
 | Wallbox / E-Auto | Σ der Ladeserien aus den Stundenzeilen (`komponenten`) | **immer** `[Vortag 23:00, 23:00)` |
 | alles Übrige | kein Tages-Bezug hinterlegt | `[00:00, 24:00)` |
+
+Der Leser je Tag ist `services/snapshot/aggregator.py::get_tagesdetail_kwh` (Phasen seit RF-72): `_fenster_je_typ` fragt
+`tagesfenster_fuer` je Gerät, `_typ_summe` überspringt das E-Auto mit Wallbox-Parent oder mit deckender Wallbox (N-555,
+`_wallbox_deckt`) und summiert je Ausgabe-Key über die Geräte des Typs, `_geraet_oder_innengeraete` liest Gerätefeld und
+Innengerät-Kopien (Gerätefeld ODER Σ der Kopien, nie addiert), `_merke_grund`/`_gruende` führen den W-18-Grund (der
+aussagekräftigste gewinnt; ein Grund nur für Keys ohne Wert). Proben: `test_rf71_tag_phasen.py`.
 
 Betroffen sind die Detailwerte in *Cockpit → Tag*: die Netzladung des Speichers („davon aus dem Netz
 (Arbitrage)") und die PV-/Netz-Anteile der E-Mobilität. Sie standen bis dahin in `[00:00, 24:00)`,

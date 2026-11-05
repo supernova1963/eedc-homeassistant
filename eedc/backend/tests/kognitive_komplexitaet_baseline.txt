@@ -1,7 +1,6 @@
 # Bestand der Funktionen mit kognitiver Komplexität > 50 — darf nur schrumpfen.
 # Neu schreiben: siehe test_kognitive_komplexitaet.py (Docstring). Format: kognitiv<TAB>datei::qualname
 51	api/routes/datenquellen.py::get_datenquellen_felder
-60	api/routes/energie_profil/tag.py::get_tag_detail
 58	api/routes/ha_export/anlage_sensoren.py::calculate_anlage_sensors
 53	api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan
 51	api/routes/import_export/json_operations.py::import_json
@@ -12,6 +11,5 @@
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage
 56	services/live_sensor_config.py::baue_investitions_serien
-57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 60	services/solcast_service.py::_fetch_solcast_ha_auto
 57	services/vorschlag_service.py::VorschlagService._get_berechnete_werte

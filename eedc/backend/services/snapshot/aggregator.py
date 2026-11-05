@@ -1176,6 +1176,195 @@ WP_STROM_AUSGABE_ZU_FELD: dict[str, str] = {
 }
 
 
+@dataclass
+class _TagesDetailKontext:
+    """RF-72 (Bauform RF-1): die geteilten Eingänge von ``get_tagesdetail_kwh`` und die Sammler, die die Phasen in
+    derselben Reihenfolge füllen wie bisher die eine Schleife (Werte, Gründe, je Gerät, je Feld, Abdeckung)."""
+
+    db: AsyncSession
+    anlage: object
+    datum: date
+    quellen_energy: dict
+    mqtt_keys: object
+    tageszeile_rueckwaerts: bool
+    kanal_tag: bool
+    summen: dict = dc_field(default_factory=dict)
+    # W-18: Warum ein Ausgabe-Key FEHLT — je Key der Zustand, der ihn verhindert
+    # hat. Er entsteht in **derselben** Schleife wie der Wert; eine zweite
+    # Schleife mit denselben Regeln wäre die F-56-Klasse.
+    grund_kandidat: dict = dc_field(default_factory=dict)
+    je_inv: dict = dc_field(default_factory=dict)
+    felder_je: dict = dc_field(default_factory=dict)
+    abdeckung_von: Optional[datetime] = None
+    abdeckung_bis: Optional[datetime] = None
+
+    async def diff(
+        self, sensor_key: str, sensor_id: Optional[str], *, rng: BoundaryRange,
+    ) -> tuple[Optional["TagesRandMenge"], Optional[str]]:
+        """Zwei Randstände des Feldes im Fenster ``rng`` (RF-72: bis 5.11.2026 die Closure ``_diff``)."""
+        start_off, end_off = rng.boundary_offsets
+        return await _tagesdetail_boundary_diff_mit_grund(
+            self.db, self.anlage, self.quellen_energy, sensor_key, sensor_id,
+            rng.boundary_at(start_off), rng.boundary_at(end_off),
+            self.datum, rueckfall_tagesrand=True,
+        )
+
+
+def _fenster_je_typ(ctx: _TagesDetailKontext, typ: Optional[str]) -> BoundaryRange:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72): das Tagesfenster, in dem dieser Gerätetyp gelesen wird —
+    ``tagesfenster_fuer`` (N-435 · N-444, SOLL §3.3/S1a; an einem Kanal-Tag der Kalendertag, HA-Bauform S4)."""
+    # ⛔ **Jeder Typ liest im Fenster SEINES Bezugs (N-435 · N-444, SOLL §3.3/S1a).**
+    # Ein Tagesdetail ist eine Teilmenge, ein Anteil oder ein Quotient — Zähler
+    # und Bezug müssen denselben Zeitraum abdecken, sonst ist die Zahl eine
+    # Rechnung über zwei Tage. Welches Fenster ein Typ trägt, steht **einmal** in
+    # `boundary_range.TAGESFENSTER_JE_TYP`; hier wird es nur je Investition
+    # abgefragt (keine zusätzliche DB-Abfrage — weiterhin zwei Randstände je Feld).
+    #
+    # ⚠ **Es ist NICHT „alle rückwärts".** Die Wärmepumpe bleibt bedingt: ihr
+    # Bezug `komponenten_kwh` ist im HA-Add-on Σ der LTS-Slots [Vortag 23:00,
+    # 23:00), im Snapshot-Pfad [00:00, 24:00) — über das falsche Fenster gelesen
+    # war die Arbeitszahl um die Differenz zweier Randstunden verfälscht
+    # (gemessen: 2,23 statt 4,04 an einer Wärmepumpe, die jede Stunde 3,0 macht).
+    # Speicher, Wallbox und E-Auto hängen dagegen an den **Stundenzeilen**, und
+    # die liegen seit N-382 unbedingt rückwärts — dort ist der Versatz in JEDER
+    # Installation da.
+    #
+    # ⭐ **Hier stand bis N-444: „Speicher- und E-Mob-Felder behalten [0, 24) …
+    # Verdacht V-4, aber nicht gemessen".** Gemessen ist er seit dem 12.09.2026
+    # (Demo-DB, 187 Tage): an 18 von 182 Tagen weicht die Speicher-Ladung
+    # zwischen den Fenstern um mehr als 5 % ab, am 25.11.2025 um +131,9 %
+    # (1,11 gegen 2,58 kWh). Die Netzladung konnte dadurch größer sein als ihr
+    # eigener Bezug — im Client still auf 100 % gekappt.
+    #
+    # Das Fenster hängt am Bezug DIESES Typs, nicht am Aufrufweg (S1a).
+    # HA-Bauform S4 (§10a (1)): an einem Kanal-Tag folgt jeder Typ seinem Bezug in den Kalendertag.
+    return tagesfenster_fuer(
+        typ, ctx.datum, tageszeile_rueckwaerts=ctx.tageszeile_rueckwaerts, kanal_tag=ctx.kanal_tag,
+    )
+
+
+def _merke_grund(ctx: _TagesDetailKontext, out_key: str, grund: str) -> None:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72, W-18): je Ausgabe-Key der aussagekräftigste Grund
+    (``GRUND_RANG``) — RF-72: bis 5.11.2026 die gleichnamige Closure."""
+    # ⚠ **Der schwächste Grund gewinnt, und das ist Absicht.** Ein Ausgabe-Key
+    # kann mehrere Geräte tragen (`emob_ladung_pv_kwh` = Wallbox + E-Auto).
+    # Liefert eines davon einen Wert, ist die Zahl da und es gibt nichts zu
+    # erklären; nur wenn KEIN Gerät geliefert hat, wird ein Grund genannt — und
+    # dann der aussagekräftigste: „zugeordnet, aber leer" schlägt „nicht
+    # zugeordnet", denn das ist der Fall, den der Anwender nicht selbst sieht.
+    vorher = ctx.grund_kandidat.get(out_key)
+    if vorher is None or GRUND_RANG[grund] > GRUND_RANG[vorher]:
+        ctx.grund_kandidat[out_key] = grund
+
+
+def _gruende(ctx: _TagesDetailKontext) -> dict[str, str]:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72, W-18): die Gründe nur für Keys OHNE Wert."""
+    # Ein Key mit Wert braucht keine Erklärung — und ein Grund neben einer
+    # vorhandenen Zahl wäre ein Widerspruch auf der Fläche.
+    return {k: g for k, g in ctx.grund_kandidat.items() if k not in ctx.summen}
+
+
+def _wallbox_deckt(ctx: _TagesDetailKontext, sensor_mapping: dict, investitionen_by_id: dict) -> bool:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72): N-555 — deckt eine Wallbox mit Zähler die Ladung ab?"""
+    # N-555 (Konzept Regel 6, „PV/Netz folgt"): dieselbe Wallbox-Regel wie
+    # `komponenten_kwh`. Ist eine Wallbox mit Zähler in Betrieb, zählen die
+    # Heim-PV/-Netz-Zähler der Autos nicht zusätzlich — bis 25.09.2026 flossen
+    # Wallbox- und Auto-PV hier in denselben Key, der PV-Anteil zählte doppelt.
+    _inv_map = (sensor_mapping.get("investitionen") or {})
+    return wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), sensor_mapping,
+        ist_verfuegbar=lambda i, f: feld_hat_zaehler(
+            ((_inv_map.get(str(i.id)) or {}).get("felder") or {}).get(f),
+            f"inv:{i.id}:{f}", ctx.quellen_energy, ctx.mqtt_keys,
+        ),
+        datum=ctx.datum,
+    )
+
+
+def _abdeckung(ctx: _TagesDetailKontext, menge: "TagesRandMenge") -> None:
+    """R-4: die weiteste Einschränkung über alle gelesenen Felder (RF-72: Teil von ``_geraet_oder_innengeraete``)."""
+    if not menge.ab_tagesbeginn:
+        ctx.abdeckung_von = (
+            menge.seit if ctx.abdeckung_von is None
+            else max(ctx.abdeckung_von, menge.seit)
+        )
+    if not menge.bis_tagesende:
+        ctx.abdeckung_bis = (
+            menge.bis if ctx.abdeckung_bis is None
+            else min(ctx.abdeckung_bis, menge.bis)
+        )
+
+
+async def _geraet_oder_innengeraete(
+    ctx: _TagesDetailKontext, inv_id_str: str, feld: str, out_key: str, felder: dict, kandidaten,
+    rng_typ: BoundaryRange,
+) -> tuple[Optional[float], dict[str, float]]:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72): ein Feld EINES Geräts — Gerätefeld und seine Innengerät-Kopien
+    je mit Zähler (N-328b) als Randstand-Differenz im Fenster ``rng_typ``, W-18-Grund je fehlendem Feld, Abdeckung;
+    dann die EINE Regel ``geraetefeld_oder_innengeraete`` (Gerätefeld ODER Σ Innengeräte, nie addiert).
+    Rückgabe ``(Tageswert des Geräts oder None, gelesene Felder)``."""
+    # ⭐ Bauschnitt 6: Gerätefeld UND seine Innengerät-Kopien (Suffix
+    # `-<id>`). Bis dahin las diese Schleife allein den exakten Key — ein
+    # Multisplit mit Kälte je Innengerät bekam deshalb keine Zahl und den
+    # Grund „nicht zugeordnet", obwohl beide Zähler zugeordnet waren
+    # (gemessen 11.09.2026). Für Felder ohne Innengerät-Kopien ist die
+    # Liste leer und die Schleife bitgleich zu vorher.
+    werte_geraet: dict[str, float] = {}
+    for k in (feld, *innengeraet_felder(feld, kandidaten)):
+        cfg = felder.get(k)
+        sensor_key = f"inv:{inv_id_str}:{k}"
+        # ⛔ N-328b: Hier entschied bis 2026-08-27 `strategie == "sensor"`,
+        # ob das Feld überhaupt erhoben wird — und wer per MQTT misst,
+        # bekam von W-18 den Grund „Kein Zähler zugeordnet" zu lesen,
+        # obwohl seine Zählerstände in der Datenbank standen. Der Grund
+        # war damit nicht nur nutzlos, sondern **falsch**: Er riet zu
+        # einer Zuordnung, die es gar nicht braucht.
+        if not feld_hat_zaehler(cfg, sensor_key, ctx.quellen_energy, ctx.mqtt_keys):
+            _merke_grund(ctx, out_key, GRUND_NICHT_ZUGEORDNET)
+            continue
+        menge, grund = await ctx.diff(
+            sensor_key, cfg.get("sensor_id") if isinstance(cfg, dict) else None,
+            rng=rng_typ,
+        )
+        if menge is None:
+            _merke_grund(ctx, out_key, grund or GRUND_KEINE_ZAEHLERSTAENDE)
+            continue
+        werte_geraet[k] = menge.wert_kwh
+        # R-4: die weiteste Einschränkung über alle gelesenen Felder.
+        _abdeckung(ctx, menge)
+    # Die EINE Regel für Gerät vs. Innengeräte — dieselbe, mit der der
+    # Monat und der Nenner (Zweig 1, `modus_strom_zeile`) auflösen.
+    return geraetefeld_oder_innengeraete(werte_geraet, feld), werte_geraet
+
+
+async def _typ_summe(ctx: _TagesDetailKontext, inv_id_str: str, inv, inv_data: dict, wb_deckt: bool) -> None:
+    """Phase von ``get_tagesdetail_kwh`` (RF-72): die Ausgabe-Keys EINES Geräts in die Summe seines Typs — E-Auto
+    mit Wallbox-Parent oder mit deckender Wallbox übersprungen (N-555-Doppelzählschutz), Fenster des Typs, je
+    Ausgabe-Key ``_geraet_oder_innengeraete``; Σ, je Gerät und je Feld in derselben Reihenfolge wie bisher."""
+    typ = getattr(inv, "typ", None)
+    # E-Auto mit parent (Wallbox misst die Ladung) → Skip, sonst Doppelzählung
+    # (spiegelt investition_beitraege/Live-Pfad).
+    if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
+        return
+    if typ == "e-auto" and wb_deckt:
+        return
+    rng_typ = _fenster_je_typ(ctx, typ)
+    felder = inv_data.get("felder", {}) or {}
+    kandidaten = zaehler_feld_kandidaten(inv_id_str, felder, ctx.mqtt_keys)
+    for (t, feld), out_key in TAGESDETAIL_AUSGABE.items():
+        if t != typ:
+            continue
+        d, werte_geraet = await _geraet_oder_innengeraete(
+            ctx, inv_id_str, feld, out_key, felder, kandidaten, rng_typ,
+        )
+        if d is None:
+            continue
+        ctx.summen[out_key] = ctx.summen.get(out_key, 0.0) + d
+        geraete = ctx.je_inv.setdefault(out_key, {})
+        geraete[inv_id_str] = geraete.get(inv_id_str, 0.0) + d
+        ctx.felder_je.setdefault(out_key, {}).setdefault(inv_id_str, {}).update(werte_geraet)
+
+
 async def get_tagesdetail_kwh(
     db: AsyncSession,
     anlage,
@@ -1207,155 +1396,32 @@ async def get_tagesdetail_kwh(
     fest verdrahteten Satz *„Sensor zuordnen"* — auch dem Anwender, der
     zugeordnet hatte. Die Erhebung **weiß**, welcher der drei Zustände vorliegt;
     sie hat es bisher nur nicht gesagt.
+
+    Form (RF-72, Bauform RF-1): Orchestrator über den Kontext ``_TagesDetailKontext`` — ``_wallbox_deckt`` (N-555),
+    je Gerät mit Zuordnung ``_typ_summe`` (Überspringen N-555, ``_fenster_je_typ`` N-435/N-444, je Ausgabe-Key
+    ``_geraet_oder_innengeraete`` mit ``_merke_grund``/``_abdeckung``), am Ende ``_gruende`` (W-18, nur Keys ohne Wert).
     """
     sensor_mapping = anlage.sensor_mapping or {}
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
     mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)  # N-328b
-    # ⛔ **Jeder Typ liest im Fenster SEINES Bezugs (N-435 · N-444, SOLL §3.3/S1a).**
-    # Ein Tagesdetail ist eine Teilmenge, ein Anteil oder ein Quotient — Zähler
-    # und Bezug müssen denselben Zeitraum abdecken, sonst ist die Zahl eine
-    # Rechnung über zwei Tage. Welches Fenster ein Typ trägt, steht **einmal** in
-    # `boundary_range.TAGESFENSTER_JE_TYP`; hier wird es nur je Investition
-    # abgefragt (keine zusätzliche DB-Abfrage — weiterhin zwei Randstände je Feld).
-    #
-    # ⚠ **Es ist NICHT „alle rückwärts".** Die Wärmepumpe bleibt bedingt: ihr
-    # Bezug `komponenten_kwh` ist im HA-Add-on Σ der LTS-Slots [Vortag 23:00,
-    # 23:00), im Snapshot-Pfad [00:00, 24:00) — über das falsche Fenster gelesen
-    # war die Arbeitszahl um die Differenz zweier Randstunden verfälscht
-    # (gemessen: 2,23 statt 4,04 an einer Wärmepumpe, die jede Stunde 3,0 macht).
-    # Speicher, Wallbox und E-Auto hängen dagegen an den **Stundenzeilen**, und
-    # die liegen seit N-382 unbedingt rückwärts — dort ist der Versatz in JEDER
-    # Installation da.
-    #
-    # ⭐ **Hier stand bis N-444: „Speicher- und E-Mob-Felder behalten [0, 24) …
-    # Verdacht V-4, aber nicht gemessen".** Gemessen ist er seit dem 12.09.2026
-    # (Demo-DB, 187 Tage): an 18 von 182 Tagen weicht die Speicher-Ladung
-    # zwischen den Fenstern um mehr als 5 % ab, am 25.11.2025 um +131,9 %
-    # (1,11 gegen 2,58 kWh). Die Netzladung konnte dadurch größer sein als ihr
-    # eigener Bezug — im Client still auf 100 % gekappt.
-    async def _diff(
-        sensor_key: str, sensor_id: Optional[str], *, rng: BoundaryRange,
-    ) -> tuple[Optional["TagesRandMenge"], Optional[str]]:
-        start_off, end_off = rng.boundary_offsets
-        return await _tagesdetail_boundary_diff_mit_grund(
-            db, anlage, quellen_energy, sensor_key, sensor_id,
-            rng.boundary_at(start_off), rng.boundary_at(end_off),
-            datum, rueckfall_tagesrand=True,
-        )
-
-    AUSGABE = TAGESDETAIL_AUSGABE
-    summen: dict[str, float] = {}
-    # W-18: Warum ein Ausgabe-Key FEHLT — je Key der Zustand, der ihn verhindert
-    # hat. Er entsteht in **derselben** Schleife wie der Wert; eine zweite
-    # Schleife mit denselben Regeln wäre die F-56-Klasse.
-    #
-    # ⚠ **Der schwächste Grund gewinnt, und das ist Absicht.** Ein Ausgabe-Key
-    # kann mehrere Geräte tragen (`emob_ladung_pv_kwh` = Wallbox + E-Auto).
-    # Liefert eines davon einen Wert, ist die Zahl da und es gibt nichts zu
-    # erklären; nur wenn KEIN Gerät geliefert hat, wird ein Grund genannt — und
-    # dann der aussagekräftigste: „zugeordnet, aber leer" schlägt „nicht
-    # zugeordnet", denn das ist der Fall, den der Anwender nicht selbst sieht.
-    grund_kandidat: dict[str, str] = {}
-
-    def _merke_grund(out_key: str, grund: str) -> None:
-        vorher = grund_kandidat.get(out_key)
-        if vorher is None or GRUND_RANG[grund] > GRUND_RANG[vorher]:
-            grund_kandidat[out_key] = grund
-
-    je_inv: dict[str, dict[str, float]] = {}
-    felder_je: dict[str, dict[str, dict[str, float]]] = {}
-    abdeckung_von: Optional[datetime] = None
-    abdeckung_bis: Optional[datetime] = None
-    # N-555 (Konzept Regel 6, „PV/Netz folgt"): dieselbe Wallbox-Regel wie
-    # `komponenten_kwh`. Ist eine Wallbox mit Zähler in Betrieb, zählen die
-    # Heim-PV/-Netz-Zähler der Autos nicht zusätzlich — bis 25.09.2026 flossen
-    # Wallbox- und Auto-PV hier in denselben Key, der PV-Anteil zählte doppelt.
-    _inv_map = (sensor_mapping.get("investitionen") or {})
-    _wb_deckt = wallbox_deckt_ladung_ab(
-        investitionen_by_id.values(), sensor_mapping,
-        ist_verfuegbar=lambda i, f: feld_hat_zaehler(
-            ((_inv_map.get(str(i.id)) or {}).get("felder") or {}).get(f),
-            f"inv:{i.id}:{f}", quellen_energy, mqtt_keys,
-        ),
-        datum=datum,
+    # Jeder Typ liest im Fenster SEINES Bezugs (N-435 · N-444) — Begründung in `_fenster_je_typ`.
+    ctx = _TagesDetailKontext(
+        db=db, anlage=anlage, datum=datum, quellen_energy=quellen_energy, mqtt_keys=mqtt_keys,
+        tageszeile_rueckwaerts=tageszeile_rueckwaerts, kanal_tag=kanal_tag,
     )
+    _wb_deckt = _wallbox_deckt(ctx, sensor_mapping, investitionen_by_id)
     for inv_id_str, inv, inv_data in _investitionen_mit_mapping(
         sensor_mapping, investitionen_by_id
     ):
-        typ = getattr(inv, "typ", None)
-        # E-Auto mit parent (Wallbox misst die Ladung) → Skip, sonst Doppelzählung
-        # (spiegelt investition_beitraege/Live-Pfad).
-        if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
-            continue
-        if typ == "e-auto" and _wb_deckt:
-            continue
-        # Das Fenster hängt am Bezug DIESES Typs, nicht am Aufrufweg (S1a).
-        # HA-Bauform S4 (§10a (1)): an einem Kanal-Tag folgt jeder Typ seinem Bezug in den Kalendertag.
-        rng_typ = tagesfenster_fuer(
-            typ, datum, tageszeile_rueckwaerts=tageszeile_rueckwaerts, kanal_tag=kanal_tag,
-        )
-        felder = inv_data.get("felder", {}) or {}
-        kandidaten = zaehler_feld_kandidaten(inv_id_str, felder, mqtt_keys)
-        for (t, feld), out_key in AUSGABE.items():
-            if t != typ:
-                continue
-            # ⭐ Bauschnitt 6: Gerätefeld UND seine Innengerät-Kopien (Suffix
-            # `-<id>`). Bis dahin las diese Schleife allein den exakten Key — ein
-            # Multisplit mit Kälte je Innengerät bekam deshalb keine Zahl und den
-            # Grund „nicht zugeordnet", obwohl beide Zähler zugeordnet waren
-            # (gemessen 11.09.2026). Für Felder ohne Innengerät-Kopien ist die
-            # Liste leer und die Schleife bitgleich zu vorher.
-            werte_geraet: dict[str, float] = {}
-            for k in (feld, *innengeraet_felder(feld, kandidaten)):
-                cfg = felder.get(k)
-                sensor_key = f"inv:{inv_id_str}:{k}"
-                # ⛔ N-328b: Hier entschied bis 2026-08-27 `strategie == "sensor"`,
-                # ob das Feld überhaupt erhoben wird — und wer per MQTT misst,
-                # bekam von W-18 den Grund „Kein Zähler zugeordnet" zu lesen,
-                # obwohl seine Zählerstände in der Datenbank standen. Der Grund
-                # war damit nicht nur nutzlos, sondern **falsch**: Er riet zu
-                # einer Zuordnung, die es gar nicht braucht.
-                if not feld_hat_zaehler(cfg, sensor_key, quellen_energy, mqtt_keys):
-                    _merke_grund(out_key, GRUND_NICHT_ZUGEORDNET)
-                    continue
-                menge, grund = await _diff(
-                    sensor_key, cfg.get("sensor_id") if isinstance(cfg, dict) else None,
-                    rng=rng_typ,
-                )
-                if menge is None:
-                    _merke_grund(out_key, grund or GRUND_KEINE_ZAEHLERSTAENDE)
-                    continue
-                werte_geraet[k] = menge.wert_kwh
-                # R-4: die weiteste Einschränkung über alle gelesenen Felder.
-                if not menge.ab_tagesbeginn:
-                    abdeckung_von = (
-                        menge.seit if abdeckung_von is None
-                        else max(abdeckung_von, menge.seit)
-                    )
-                if not menge.bis_tagesende:
-                    abdeckung_bis = (
-                        menge.bis if abdeckung_bis is None
-                        else min(abdeckung_bis, menge.bis)
-                    )
-            # Die EINE Regel für Gerät vs. Innengeräte — dieselbe, mit der der
-            # Monat und der Nenner (Zweig 1, `modus_strom_zeile`) auflösen.
-            d = geraetefeld_oder_innengeraete(werte_geraet, feld)
-            if d is None:
-                continue
-            summen[out_key] = summen.get(out_key, 0.0) + d
-            geraete = je_inv.setdefault(out_key, {})
-            geraete[inv_id_str] = geraete.get(inv_id_str, 0.0) + d
-            felder_je.setdefault(out_key, {}).setdefault(inv_id_str, {}).update(werte_geraet)
+        await _typ_summe(ctx, inv_id_str, inv, inv_data, _wb_deckt)
 
     return TagesDetail(
-        werte=summen,
-        # Ein Key mit Wert braucht keine Erklärung — und ein Grund neben einer
-        # vorhandenen Zahl wäre ein Widerspruch auf der Fläche.
-        grund_je_feld={k: g for k, g in grund_kandidat.items() if k not in summen},
-        werte_je_inv=je_inv,
-        felder_je_inv=felder_je,
-        abdeckung_von=abdeckung_von,
-        abdeckung_bis=abdeckung_bis,
+        werte=ctx.summen,
+        grund_je_feld=_gruende(ctx),
+        werte_je_inv=ctx.je_inv,
+        felder_je_inv=ctx.felder_je,
+        abdeckung_von=ctx.abdeckung_von,
+        abdeckung_bis=ctx.abdeckung_bis,
     )
 
 

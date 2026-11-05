@@ -9,8 +9,9 @@ Dazu die W-18-Grund-Formulierer fuer Groessen aus mehreren Feldern.
 # Dateien): Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `views.py` haengt den Router ein und
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -224,6 +225,75 @@ async def _mit_emob_heute(db, anlage, investitionen_by_id, datum, tagesdetail) -
     ]
     return [z for z in zeilen if z.model_dump(exclude={"investition_id", "typ"}, exclude_none=True)]
 
+@dataclass
+class _TagKontext:
+    """RF-71 (Bauform RF-1): die geteilten Eingänge und Zwischenergebnisse von ``get_tag_detail`` — je Phase gefüllt,
+    in der Reihenfolge des Antwort-Aufbaus. Die Phasen laden über die Tageseingänge hinaus nichts selbst außer dem,
+    was sie bisher an derselben Stelle geladen haben (Tagesprognose, Tarif, Slot-Preise, K3-Stufe, Monats-Fakten)."""
+
+    db: AsyncSession
+    anlage: Anlage
+    datum: date
+    investitionen_by_id: dict
+    #: ``kanal_stunden.TagesEingaenge`` — Tageszeile, Tagesdetail, gemessene Betriebsart-Zähler, Splits.
+    eingaenge: Any
+    #: ``snapshot.aggregator.TagesDetail`` des Tages.
+    tagesdetail: Any
+    #: ``tagesdetail.werte`` — die Anlagensummen des Tages.
+    detail: dict
+    #: W-18 ``tagesdetail.grund_je_feld``.
+    grund: dict
+    #: Effektiver Ladepreis des Speichers.
+    eff: Any
+    # ── _tages_soll_pv / _tag_preis ──
+    soll_pv: Optional[float] = None
+    tarif: Any = None
+    netzbezug_preis_tag: Optional[float] = None
+    netzbezug_preis_herkunft_tag: Optional[str] = None
+    # ── _wp_strom_je_geraet ──
+    wp_strom_je_inv: dict = field(default_factory=dict)
+    beitraege_tag: list = field(default_factory=list)
+    stapel: Any = None
+    # ── _waerme_tag ──
+    wp_heizung_je_inv: dict = field(default_factory=dict)
+    wp_waerme_je_geraet: dict = field(default_factory=dict)
+    wp_heizung_tag: Optional[float] = None
+    d1_heiz_grund_keys: tuple = ()
+    wp_waerme_tag: Optional[float] = None
+    wp_strom_tag: Optional[float] = None
+    # ── _geraete_mengen ──
+    wp_beitrag_je_inv: dict = field(default_factory=dict)
+    wp_kennzahlen_je_geraet: list = field(default_factory=list)
+    wp_strom_ohne_waerme_tag: Any = None
+    wp_geraete_ohne_waerme_tag: Any = None
+    # ── _funktions_deckung ──
+    deckung_je_funktion_tag: dict = field(default_factory=dict)
+    deckung_kuehlen_tag: Optional[bool] = None
+    wp_heizung_fn: Optional[float] = None
+    wp_warmwasser_fn: Optional[float] = None
+    wp_strom_heizen_fn: Optional[float] = None
+    wp_strom_warmwasser_fn: Optional[float] = None
+    # ── _abgrenzung_tag ──
+    stoerung_tag: Optional[str] = None
+    wp_abgrenzung_tag: Optional[str] = None
+    wp_abgrenzung_je_funktion_tag: dict = field(default_factory=dict)
+    # ── _schranke_und_kasten ──
+    wp_waerme_grund_kurz_tag: Optional[str] = None
+    wp_jaz_tag: Any = None
+    # ── _arbeitszahl_je_funktion ──
+    wp_az_funktion_tag: Any = None
+    wp_az_kuehlen_tag: Any = None
+
+
+# RF-71 (Serie „Funktion vor Datei", Bauform RF-1): ``get_tag_detail`` ist ein Orchestrator — Laden, dann je
+# Antwort-Abschnitt eine Phase über den Kontext ``_TagKontext``: ``_tag_laden`` (Anlage, Investitionen, Tageseingänge
+# E4a-2, W-18-Grund, Ladepreis) · ``_tages_soll_pv`` (Tages-SOLL = Prognose × Lernfaktor) · ``_tag_preis`` (Monatstarif,
+# Preis des Tages SOLL P-2) · ``_wp_strom_je_geraet`` (#263, R-4/N-482/N-491, Stapel) · ``_waerme_tag`` (Wärme gesamt
+# und Heizwärme je Gerät, D1, Layer) · ``_geraete_mengen`` (D-Sicht 3) · ``_funktions_deckung`` (SOLL §3.2b, Nenner
+# ``_nenner_der_funktion``, R2 Kühlen) · ``_abgrenzung_tag`` (R2/Bauart, R2 §4.2 Fall 1, N-441, §3.2b je Funktion) ·
+# ``_schranke_und_kasten`` (E1b, W-18-Kurzform, R-5/N-492, Systemarbeitszahl) · ``_arbeitszahl_je_funktion`` (N-348,
+# Kühlen) · ``_antwort``. Der Docstring der Route ist ihre OpenAPI-Beschreibung und bleibt deshalb wortgleich; die
+# Form steht hier als Kommentar (Lehre S7). Keine Layer-Formel ist in die Route gewandert (ADR-001).
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
 async def get_tag_detail(
     anlage_id: int,
@@ -238,6 +308,24 @@ async def get_tag_detail(
     tagesgenau aus Snapshots/TEP/Prognose. Bewusst EIN Aufruf pro gewähltem Tag
     (nicht über die 90-Tage-Werte-Spanne), da Snapshot-Boundary-Diffs teuer sind.
     """
+    ctx = await _tag_laden(db, anlage_id, datum)
+    await _tages_soll_pv(ctx)
+    await _tag_preis(ctx)
+    await _wp_strom_je_geraet(ctx)
+    _waerme_tag(ctx)
+    _geraete_mengen(ctx)
+    _funktions_deckung(ctx)
+    await _abgrenzung_tag(ctx)
+    _schranke_und_kasten(ctx)
+    _arbeitszahl_je_funktion(ctx)
+    return await _antwort(ctx)
+
+
+async def _tag_laden(db: AsyncSession, anlage_id: int, datum: date) -> _TagKontext:
+    """Phase von ``get_tag_detail`` (RF-71): Anlage (404), Investitionen, die Tageseingänge (N-434/N-435, E4a-2, S4)
+    samt W-18-Grund und der effektive Ladepreis des Speichers."""
+    from backend.services.speicher_wirtschaftlichkeit import berechne_effektiver_ladepreis
+
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -245,10 +333,6 @@ async def get_tag_detail(
 
     inv_result = await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
     investitionen_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
-
-    from backend.services.speicher_wirtschaftlichkeit import berechne_effektiver_ladepreis
-    from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
-    from backend.api.routes.live_wetter import _get_lernfaktor
 
     # ⛔ **N-434/N-435: Die Tageszeile wird ZUERST gelesen**, weil ihre Herkunft
     # das Fenster aller Wärmepumpen-Zähler dieses Tages bestimmt (Bestandstag).
@@ -260,25 +344,41 @@ async def get_tag_detail(
     from backend.services.energie_profil.kanal_stunden import tages_eingaenge
 
     _eingaenge = await tages_eingaenge(db, anlage, investitionen_by_id, datum)
-    tz_komp, _tagesdetail = _eingaenge.tz_komp, _eingaenge.detail
-    detail = _tagesdetail.werte
+    _tagesdetail = _eingaenge.detail
     # W-18: Warum ein Tageswert fehlt. Der Grund wird **hergeleitet**, nicht
     # geraten — bis zum 26.08.2026 hing der Client an jedes „—" denselben Satz
     # „Sensor zuordnen", auch bei zugeordnetem Zähler (dietmar1968, T89667 #210).
     _grund = _tagesdetail.grund_je_feld
     eff = await berechne_effektiver_ladepreis(db, anlage_id=anlage_id, von=datum, bis=datum)
+    return _TagKontext(
+        db=db, anlage=anlage, datum=datum, investitionen_by_id=investitionen_by_id, eingaenge=_eingaenge,
+        tagesdetail=_tagesdetail, detail=_tagesdetail.werte, grund=_grund, eff=eff,
+    )
+
+
+async def _tages_soll_pv(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): ``soll_pv = round(pv_prognose × Lernfaktor(openmeteo), 1)``; ohne
+    Prognose oder Lernfaktor die Prognose selbst (``None`` bleibt ``None``)."""
+    from backend.api.routes.live_wetter import _get_lernfaktor
 
     # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
-    tz_prog = await db.execute(
+    tz_prog = await ctx.db.execute(
         select(TagesZusammenfassung.pv_prognose_kwh).where(
-            TagesZusammenfassung.anlage_id == anlage_id,
-            TagesZusammenfassung.datum == datum,
+            TagesZusammenfassung.anlage_id == ctx.anlage.id,
+            TagesZusammenfassung.datum == ctx.datum,
         )
     )
     pv_prognose = tz_prog.scalar_one_or_none()
-    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle="openmeteo")
-    soll_pv = round(pv_prognose * lernfaktor, 1) if (pv_prognose and lernfaktor) else pv_prognose
+    lernfaktor = await _get_lernfaktor(ctx.anlage.id, ctx.db, quelle="openmeteo")
+    ctx.soll_pv = round(pv_prognose * lernfaktor, 1) if (pv_prognose and lernfaktor) else pv_prognose
 
+
+async def _tag_preis(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): der Monatstarif (Tarif-Zeile) und der Netzbezugspreis DIESES Tages —
+    Slot-Ø, wo Slot-Preise mitgeschrieben sind, sonst der Arbeitspreis des Monats (SOLL Flex-Tarife P-2, F-18)."""
+    from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
+
+    anlage_id, datum, db = ctx.anlage.id, ctx.datum, ctx.db
     # Tagestarif (Monatstarif je Tag) — Preise hängen nicht von Mengen ab.
     # Die Monatsdaten-Zeile muss mit: bei dynamischem Tarif trägt sie den
     # abgerechneten Monats-Ø, der den Stammdaten-Arbeitspreis schlägt. Ohne sie
@@ -318,12 +418,18 @@ async def get_tag_detail(
         ) if md_tag else None,
     )
     _slot_tag = _slot_kosten.get(datum)
-    netzbezug_preis_tag = (
+    ctx.tarif = tarif
+    ctx.netzbezug_preis_tag = (
         _slot_tag.mittel_cent if _slot_tag is not None and _slot_tag.mittel_cent is not None
         else tarif.netzbezug_preis_cent
     )
-    netzbezug_preis_herkunft_tag = _slot_tag.herkunft if _slot_tag is not None else None
+    ctx.netzbezug_preis_herkunft_tag = _slot_tag.herkunft if _slot_tag is not None else None
 
+
+async def _wp_strom_je_geraet(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): der Tages-Strom je Wärmepumpe, aufgelöst (R-4/N-482 · N-491, Layer
+    ``loese_wp_tagesstrom_auf``), die gemessenen Betriebsart-Zähler (#263, K2) und der Tages-Stapel samt Beiträgen
+    je Gerät (Layer ``beitraege_des_tages``/``falte_tages_stapel``, N-462, N-766)."""
     # #263/T2 — die Aufteilung Heizen/Kühlen des Tages, anlagenweite Σ.
     #
     # Die Rechnung ist ohnehin tagesweise (`falte_modus_split_tag`); die
@@ -332,39 +438,16 @@ async def get_tag_detail(
     #
     from backend.core.berechnungen import waermepumpe_kwh_je_investition
     from backend.core.berechnungen.tages_stapel import (
-        beitrag_abzug_kwh, beitraege_des_tages, falte_tages_stapel, summanden_aus_tageswerten,
+        beitraege_des_tages, falte_tages_stapel, summanden_aus_tageswerten,
     )
-    from backend.core.berechnungen.wp_tages_praezedenz import (
-        QUELLE_TAGESRAND, loese_wp_tagesstrom_auf,
-    )
-    from backend.core.berechnungen.waermepumpe_kennzahl import (
-        GRUND_FUNKTION_NICHT_DECKUNGSGLEICH, abgrenzungs_grund,
-        ARBEITSZAHL_FUNKTIONEN, abgrenzung_je_funktion,
-        als_arbeitszahl, arbeitszahl, arbeitszahl_je_funktion,
-        arbeitszahl_kuehlen,
-        deckung_aus_geraeten, heizwaerme_je_geraet, systemarbeitszahl,
-        waerme_gesamt_je_geraet,
-    )
-    from backend.services.waermepumpe_kennzahlen_je_geraet import (
-        kennzahlen_aus_mengen, mengen_aus_tageswerten,
-    )
-    from backend.services.waerme_klima_block import (
-        achsen_der_anlage, funktions_eingaenge_der_anlage, geraete_zeilen,
-        schranken_eingang, was_noch_moeglich,
-    )
-    from backend.core.investition_parameter import (
-        abgrenzung_stoerung, ist_luft_luft_waermepumpe,
-    )
-    from backend.core.tageswert_grund import (
-        GRUND_KEINE_ZAEHLERSTAENDE, GRUND_NICHT_ZUGEORDNET,
-        GRUND_ZAEHLER_RUECKSPRUNG,
-        tages_abdeckung_hinweis, tageswert_grund_kurz, tageswert_grund_text,
-    )
+    from backend.core.berechnungen.wp_tages_praezedenz import loese_wp_tagesstrom_auf
     from backend.services.snapshot.aggregator import (
         WP_STROM_AUSGABE_ZU_FELD as _WP_STROM_AUSGABE_ZU_FELD,
         get_wp_strom_stufe_je_investition,
     )
 
+    _eingaenge, _tagesdetail = ctx.eingaenge, ctx.tagesdetail
+    investitionen_by_id, datum = ctx.investitionen_by_id, ctx.datum
     # ── Zweig 1 laden: gemessene Betriebsart-Zähler (#263) ────────────────
     #
     # **Gemessen schlägt abgeleitet — ganz oder gar nicht je Gerät**
@@ -404,7 +487,7 @@ async def get_tag_detail(
     for _inv_id, _felder_tag in gemessen_je_inv.items():
         _wp_tageswerte_je_inv.setdefault(_inv_id, {}).update(_felder_tag)
     wp_strom_je_inv, wp_strom_herkunft = loese_wp_tagesstrom_auf(
-        waermepumpe_kwh_je_investition(tz_komp or {}),
+        waermepumpe_kwh_je_investition(_eingaenge.tz_komp or {}),
         _wp_tageswerte_je_inv,
         investitionen_by_id,
     )
@@ -432,15 +515,15 @@ async def get_tag_detail(
     # Nenner?" — und das entscheidet die K3-Stufe des Bezugs, nicht das
     # Kennzeichen. Gemessen: 3,00 statt 3,75 an derselben Anlage.
     _stufe_je_inv = await get_wp_strom_stufe_je_investition(
-        db, anlage, investitionen_by_id,
+        ctx.db, ctx.anlage, investitionen_by_id,
     )
     # N-766: die Summanden des Tages (Strom Heizen/Warmwasser) — Zweig 1 liest sie bei getrennter Strommessung mit.
     _summanden_tag = summanden_aus_tageswerten(_tagesdetail.werte_je_inv)
-    beitraege_tag = beitraege_des_tages(
+    ctx.beitraege_tag = beitraege_des_tages(
         gemessen_je_inv, wp_kwh_je_inv, _splits_tag, investitionen_by_id, datum,
         stufe_je_inv=_stufe_je_inv, summanden_je_inv=_summanden_tag,
     )
-    stapel = falte_tages_stapel(
+    ctx.stapel = falte_tages_stapel(
         gemessen_je_inv,
         wp_kwh_je_inv,
         _splits_tag,
@@ -449,17 +532,15 @@ async def get_tag_detail(
         stufe_je_inv=_stufe_je_inv,
         summanden_je_inv=_summanden_tag,
     )
-    heizen_tag = stapel.heizen_kwh
-    kuehlen_tag = stapel.kuehlen_kwh
-    warmwasser_tag = stapel.warmwasser_kwh
-    lueften_tag = stapel.lueften_kwh
-    entfeuchten_tag = stapel.entfeuchten_kwh
-    rest_tag = stapel.nicht_aufgeteilt_kwh
-    bezug_tag = stapel.bezug_kwh
-    abdeckung_tag = stapel.abdeckung_h
-    hat_split = stapel.hat_split
-    hat_gemessen = stapel.hat_gemessen
+    ctx.wp_strom_je_inv = wp_strom_je_inv
 
+
+def _waerme_tag(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): Heizwärme und Wärme gesamt je Gerät aus dem Layer (D1-Stufe 3, N-391,
+    N-391b, R-2/N-487), ihre Tagessummen, die W-18-Alternativ-Gruppe der Heizwärme und der Tages-Strom (R-4)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import heizwaerme_je_geraet, waerme_gesamt_je_geraet
+
+    _tagesdetail, _grund = ctx.tagesdetail, ctx.grund
     # ── Wärme gesamt + Arbeitszahl des Tages, beide aus dem Layer ──────────
     #
     # Der Tages-Strom ist die Σ der `waermepumpe_*`-Keys der Tageszusammen-
@@ -495,7 +576,7 @@ async def get_tag_detail(
     )
     # Die anlagenweite Heizwärme ist die Σ der **aufgelösten** Geräte (E1), nicht
     # die Σ der Achse — sonst nennt dieselbe Route zwei Zahlen.
-    _wp_heizung_tag = sum(_wp_heizung_je_inv.values()) if _wp_heizung_je_inv else None
+    ctx.wp_heizung_tag = sum(_wp_heizung_je_inv.values()) if _wp_heizung_je_inv else None
     # W-18 für eine **Alternativ-Gruppe**: Die Heizwärme hat seit R-2 zwei
     # mögliche Zähler, und ein Grund gilt der Gruppe, nicht dem Feld.
     #
@@ -508,29 +589,41 @@ async def get_tag_detail(
     # `test_n348_…::test_gemessene_null_heisst_kein_betrieb_nicht_kein_zaehler`,
     # und genau die Verwechslung, die dietmar1968 einen Zuordnungsfehler suchen
     # ließ (T89667 #322).
-    _D1_HEIZ_GRUND_KEYS = (
+    ctx.d1_heiz_grund_keys = (
         ("wp_heizung_kwh", "wp_betriebsart_heizen_kwh")
         if "wp_heizung_kwh" in _grund else ("wp_heizung_kwh",)
     )
     _wp_waerme_tag = sum(_wp_waerme_je_geraet.values())
-    wp_waerme_tag = round(_wp_waerme_tag, 2) if _wp_waerme_tag > 0 else None
+    ctx.wp_waerme_tag = round(_wp_waerme_tag, 2) if _wp_waerme_tag > 0 else None
     # ⛔ **Hier stand bis zum 15.09.2026 eine ZWEITE Abfrage derselben Spalte**
     # (`komponenten_kwh`) und eine zweite Faltung daneben — während `tz_komp`
     # dreißig Zeilen weiter oben schon gelesen war. `wp_strom_je_inv` kommt
     # jetzt aus der einen Auflösung (R-4), und damit lesen der Stapel, die
     # Verteilung und die Arbeitszahl **dieselbe** Menge.
-    wp_strom_tag = sum(wp_strom_je_inv.values()) or None
+    ctx.wp_strom_tag = sum(ctx.wp_strom_je_inv.values()) or None
+    ctx.wp_heizung_je_inv, ctx.wp_waerme_je_geraet = _wp_heizung_je_inv, _wp_waerme_je_geraet
+
+
+def _geraete_mengen(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): D-Sicht 3 — die Mengen und Kennzahlen je Gerät des TAGES
+    (``mengen_aus_tageswerten`` → ``kennzahlen_aus_mengen``, Geräte-Kreis der Strom-Beiträge, WK-16j/§7) und der
+    Schranken-Eingang (E1b)."""
+    from backend.core.berechnungen.tages_stapel import beitrag_abzug_kwh
+    from backend.services.waermepumpe_kennzahlen_je_geraet import kennzahlen_aus_mengen, mengen_aus_tageswerten
+    from backend.services.waerme_klima_block import schranken_eingang
+
+    werte_je_inv = ctx.tagesdetail.werte_je_inv
     # ── D-Sicht 3: die Mengen je Gerät des TAGES ──────────────────────────
     #
     # ⚠ **Die zweite Mengen-Herkunft** (s. Modulkopf des Dienstes): Der Tag
     # faltet Snapshots, nicht IMD-Zeilen — die **Kennzahl** entsteht trotzdem in
     # derselben Funktion wie im Hub, im Monat und im Jahr.
-    _wp_kaelte_je_inv = _tagesdetail.werte_je_inv.get("wp_kaelte_kwh") or {}
-    _wp_ww_je_inv = _tagesdetail.werte_je_inv.get("wp_warmwasser_kwh") or {}
-    _wp_gesamtwaerme_je_inv = _tagesdetail.werte_je_inv.get("wp_waerme_kwh") or {}
-    _wp_strom_heizen_je_inv = _tagesdetail.werte_je_inv.get("wp_strom_heizen_kwh") or {}
-    _wp_strom_ww_je_inv = _tagesdetail.werte_je_inv.get("wp_strom_warmwasser_kwh") or {}
-    _wp_beitrag_je_inv = {b.inv_id: b for b in beitraege_tag}
+    _wp_kaelte_je_inv = werte_je_inv.get("wp_kaelte_kwh") or {}
+    _wp_ww_je_inv = werte_je_inv.get("wp_warmwasser_kwh") or {}
+    _wp_gesamtwaerme_je_inv = werte_je_inv.get("wp_waerme_kwh") or {}
+    _wp_strom_heizen_je_inv = werte_je_inv.get("wp_strom_heizen_kwh") or {}
+    _wp_strom_ww_je_inv = werte_je_inv.get("wp_strom_warmwasser_kwh") or {}
+    _wp_beitrag_je_inv = {b.inv_id: b for b in ctx.beitraege_tag}
     # ⚠ **Der Geräte-Kreis ist der der STROM-Beiträge — und das ist heute eine
     # benannte Grenze, keine Absicht** (WK-16j/§7). Ein Gerät mit Wärmemengen-
     # zähler und ohne Stromwert **an diesem Tag** (r28/Demo, 15.06.2026: Daikin
@@ -541,8 +634,8 @@ async def get_tag_detail(
     # Stromverbrauch erfasst"*, also genau den Satz, den N-492 abgestellt hat
     # (der Zähler **ist** zugeordnet, nur dieser Tag trägt keine Stände).
     _wp_kennzahlen_je_geraet = []
-    for _inv_id_str, _inv_strom in wp_strom_je_inv.items():
-        _inv = investitionen_by_id.get(_inv_id_str)
+    for _inv_id_str, _inv_strom in ctx.wp_strom_je_inv.items():
+        _inv = ctx.investitionen_by_id.get(_inv_id_str)
         if _inv is None:
             continue
         _b = _wp_beitrag_je_inv.get(_inv_id_str)
@@ -550,8 +643,8 @@ async def get_tag_detail(
             mengen_aus_tageswerten(
                 _inv,
                 strom_kwh=float(_inv_strom or 0.0),
-                waerme_kwh=float(_wp_waerme_je_geraet.get(_inv_id_str, 0.0)),
-                heizung_kwh=float(_wp_heizung_je_inv.get(_inv_id_str, 0.0)),
+                waerme_kwh=float(ctx.wp_waerme_je_geraet.get(_inv_id_str, 0.0)),
+                heizung_kwh=float(ctx.wp_heizung_je_inv.get(_inv_id_str, 0.0)),
                 warmwasser_kwh=float(_wp_ww_je_inv.get(_inv_id_str, 0.0)),
                 strom_heizen_kwh=float(_wp_strom_heizen_je_inv.get(_inv_id_str, 0.0)),
                 strom_warmwasser_kwh=float(_wp_strom_ww_je_inv.get(_inv_id_str, 0.0)),
@@ -561,9 +654,163 @@ async def get_tag_detail(
                 waerme_ist_gesamt=bool(_wp_gesamtwaerme_je_inv.get(_inv_id_str)),
             ),
         ))
-    _wp_strom_ohne_waerme_tag, _wp_geraete_ohne_waerme_tag = schranken_eingang(
+    ctx.wp_strom_ohne_waerme_tag, ctx.wp_geraete_ohne_waerme_tag = schranken_eingang(
         _wp_kennzahlen_je_geraet,
     )
+    ctx.wp_beitrag_je_inv, ctx.wp_kennzahlen_je_geraet = _wp_beitrag_je_inv, _wp_kennzahlen_je_geraet
+
+
+# ── Und Zähler und Nenner kommen aus DERSELBEN Faltung wie die Deckung ──
+#
+# ⛔ **Sonst bewacht die Deckung eine andere Rechnung, als sie sieht.**
+# Gemessen an der Prüfstand-Lage **ohne** den Vaillant (Nibe + Brauchwasser-WP,
+# laufender Monat): Die Faltung setzt die Brauchwasser-WP nach der
+# Ein-Achsen-Regel (**R-4**) auf **beide** Seiten der Warmwasser-Achse ⇒ die
+# Deckung sagt zu Recht „deckt sich". Der Tages-Nenner
+# ``detail["wp_strom_warmwasser_kwh"]`` kennt sie aber nicht — ihr Strom steht
+# unter ``stromverbrauch_kwh``. Ergebnis wäre 12,5 ÷ 1,5 = **8,33** statt
+# 12,5 ÷ 3,5 = **3,57**: eine freigegebene Zahl mit halbem Nenner. *Cockpit →
+# Monat* rechnet im laufenden Monat seit WK-16i aus genau derselben Faltung
+# (dort 96,36 ÷ 29,08); der Tag zieht damit nach.
+#
+# ⭐ **Jede Seite aus der Quelle, die für sie vollständig ist.**
+#
+# * **Nenner — die Faltung.** Nur sie kennt die Ein-Achsen-Regel; ein Gerät
+#   ohne Gesamt-Strom kann keinen Funktions-Strom tragen, ihr Geräte-Kreis
+#   verliert auf dieser Seite also nichts.
+# * **Zähler — die Tagessumme.** Sie deckt **jedes** Gerät mit Wärme ab, auch
+#   eines ohne Tages-Stromwert (r27/Demo, 05.12.2025: 29,9 kWh Heizwärme ohne
+#   einen einzigen Stromstand). Die Faltung sähe es nicht, und eine Kachel
+#   darf nicht schrumpfen, weil ein Nachbargerät seinen Zähler hat.
+#
+# ⚠ **Die Faltung gewinnt nur, wo sie etwas trägt** — dieselbe Bauform wie
+# die S5-Weiche ``traegt_menge``: Eine 0 ist hier keine Messung, sondern ein
+# Gerät, das sie nicht sieht; der Tageswert trägt dann seinen vollen Wert
+# **und** seine ``None``-heit, an der der W-18-Grund hängt.
+# ⭐ **Gemessen bitgleich** auf r27 (alle fünf Tage) und auf den Demo-Tagen
+# der r28; sichtbar wird der Unterschied nur, wo R-4 greift.
+def _nenner_der_funktion(
+    aus_faltung: float, aus_tageswerten: Optional[float],
+) -> Optional[float]:
+    # RF-71: bis 5.11.2026 eine Closure in ``get_tag_detail``; Aufrufer ist die Phase ``_funktions_deckung``.
+    return aus_faltung if aus_faltung > 0 else aus_tageswerten
+
+
+def _funktions_deckung(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): SOLL §3.2b am TAG — die Deckung je Funktion aus derselben Faltung wie
+    der Monat (WK-16j/R-1, N-441), Zähler und Nenner je Funktion (Nenner ``_nenner_der_funktion``: Faltung, sonst
+    Tageswert) und R2 für KÜHLEN aus dem Tag selbst, beidseitig (Bauschnitt 6)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import ARBEITSZAHL_FUNKTIONEN, deckung_aus_geraeten
+    from backend.services.waerme_klima_block import funktions_eingaenge_der_anlage
+
+    detail = ctx.detail
+    # ── SOLL §3.2b: WELCHE Funktionen die Verletzung trifft — am TAG gezählt ─
+    #
+    # ⛔ **Hier stand bis zum 15.09.2026 die Monats-Näherung**, und sie war im
+    # **laufenden** Monat leer: Ohne `Monatsdaten`-Zeile antwortet
+    # `WpFakten.deckung_je_funktion` überall `None` ⇒ „die Frage stellt sich
+    # nicht" ⇒ keine Sperre. Gemessen an der Prüfstand-Anlage der r28
+    # (`tag-detail?datum=2026-09-10`): *Arbeitszahl Heizen* **3,346** und
+    # *Warmwasser* **4,211**, beide **ohne Grund** — genau die zwei Zahlen, die
+    # *Cockpit → Monat* derselben Anlage seit WK-16i mit R2 zurückhält, und die
+    # derselbe Monat nach seinem Abschluss sperrt (Juli, August 2026). **Zwei
+    # Sichten, zwei Antworten auf dieselbe Frage** (N-506).
+    #
+    # ⭐ **Der Tag fragt jetzt dieselbe Faltung wie der Monat** (**WK-16j/R-1**,
+    # `waerme_klima_block.funktions_eingaenge_der_anlage`) — Σ über dieselben
+    # Geräte-Mengen, aus denen die Tabelle *Zahlen je Gerät* entsteht, und über
+    # denselben Layer-SoT `deckung_aus_geraeten` (Identitäten, nicht Anzahlen,
+    # N-441). **Keine zweite Faltung** (F-56): derselbe Aufruf, eine Route
+    # weiter. Deshalb steht der Block mit den Geräte-Kennzahlen jetzt **über**
+    # diesem hier — eine Deckungs-Aussage kommt aus denselben Mengen, die die
+    # Zahl bilden.
+    #
+    # ⚠ **Die Monats-Näherung bleibt für die beiden Block-Lagen darüber**
+    # (`_geraete_ohne_waerme_monat`, `_geraete_verschieden_monat` in
+    # `wp_abgrenzung_tag`): Sie beschreiben den **Block**, nicht eine Funktion,
+    # und die eine davon zählt der Tag ohnehin selbst (`_wp_abgrenzung_sperrt_tag`).
+    # (RF-71: beide stehen seit dem Schnitt in der Phase `_abgrenzung_tag`, die nach dieser läuft.)
+    _wp_funktions_eingaenge_tag = funktions_eingaenge_der_anlage(
+        ctx.wp_kennzahlen_je_geraet,
+    )
+    _deckung_je_funktion_tag = {
+        f: _wp_funktions_eingaenge_tag.deckung_je_funktion(f)
+        for f in ARBEITSZAHL_FUNKTIONEN
+    }
+
+    # Zähler und Nenner: Begründung über `_nenner_der_funktion` (RF-71: dort steht der Block seit dem Schnitt).
+    ctx.wp_heizung_fn = ctx.wp_heizung_tag
+    ctx.wp_warmwasser_fn = detail.get("wp_warmwasser_kwh")
+    ctx.wp_strom_heizen_fn = _nenner_der_funktion(
+        _wp_funktions_eingaenge_tag.strom_heizen_kwh,
+        detail.get("wp_strom_heizen_kwh"),
+    )
+    ctx.wp_strom_warmwasser_fn = _nenner_der_funktion(
+        _wp_funktions_eingaenge_tag.strom_warmwasser_kwh,
+        detail.get("wp_strom_warmwasser_kwh"),
+    )
+    # ── Bauschnitt 6: R2 für KÜHLEN aus dem Tag selbst, beidseitig ─────────
+    #
+    # ⛔ **Hier reicht die Monats-Näherung darüber NICHT**, und das ist gemessen:
+    # Die Kälte summiert `get_tagesdetail_kwh` über alle Geräte, den Kühlstrom
+    # trägt nur, wer den Tages-Stapel besteht (Bezug da · Teilmengen-Invariante
+    # · aktiv, `tages_stapel.beitraege_des_tages`). Fällt ein Gerät an diesem Tag
+    # heraus, stand seine Kälte im Zähler und sein Strom nirgends — **6,0 statt
+    # 3,0**, während der Monat sich deckt und deshalb nicht sperrt.
+    #
+    # ⭐ Anders als bei der Wärme **kennt** der Tag hier beide Seiten je Gerät
+    # (Kälte je Gerät aus `werte_je_inv`, Kühlstrom je Beitrag). Die Regel ist
+    # dieselbe wie im Monat (`deckung_aus_geraeten`) — und seit N-441 vergleicht
+    # sie selbst die **Identitäten**. Der Zwei-Zeilen-Sonderweg, der hier bis
+    # zum 12.09.2026 stand (Anzahlen an die Regel, Identität per `if` daneben),
+    # ist damit entfallen: eine Regel statt anderthalb.
+    _kuehl_geraete_tag = {b.inv_id for b in ctx.beitraege_tag if b.kuehlen_kwh > 0}
+    _kaelte_geraete_tag = {
+        inv_id for inv_id, kwh in
+        ctx.tagesdetail.werte_je_inv.get("wp_kaelte_kwh", {}).items()
+        if kwh > 0
+    }
+    _deckung_kuehlen_tag = deckung_aus_geraeten(
+        _kuehl_geraete_tag, _kaelte_geraete_tag,
+    )
+    # Nur „kuehlen" wird ersetzt: Die Faltung beantwortet diese Funktion
+    # ausdrücklich **nicht** (sie liefert die Eingänge, deren Mengen sie auch
+    # liefert), und der Tag kennt hier beide Seiten je Gerät — genauer geht es
+    # nicht. Heizen und Warmwasser kommen seit WK-16j aus derselben Faltung.
+    ctx.deckung_je_funktion_tag = {
+        **_deckung_je_funktion_tag, "kuehlen": _deckung_kuehlen_tag,
+    }
+    ctx.deckung_kuehlen_tag = _deckung_kuehlen_tag
+
+
+def _abgrenzung_stoerung_des_tages(wp_strom_je_inv: dict, investitionen_by_id: dict) -> Optional[str]:
+    """Die erste gemeldete Abgrenzungs-Störung unter den Geräten, die an diesem Tag Strom beigetragen haben — oder
+    ``None``. RF-71: bis 5.11.2026 dreimal wortgleich als Generator in ``get_tag_detail`` (Abgrenzung des Blocks,
+    je Funktion, E1b); einmal gebildet, in ``_abgrenzung_tag`` und ``_schranke_und_kasten`` gelesen."""
+    from backend.core.investition_parameter import abgrenzung_stoerung
+
+    return next(
+        (
+            stoerung
+            for inv_id_str, kwh in wp_strom_je_inv.items()
+            if kwh
+            for stoerung in (
+                abgrenzung_stoerung(investitionen_by_id.get(inv_id_str)),
+            )
+            if stoerung
+        ),
+        None,
+    )
+
+
+async def _abgrenzung_tag(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): R2 am Tag — die anlagenweite Abgrenzung des Blocks (Störung, R2/Bauart
+    SOLL §5, R2/§4.2 Fall 1 und N-441 aus den Monats-Fakten des Monats) und die Abgrenzung je Funktion (SOLL §3.2b,
+    Deckung aus ``_funktions_deckung``). Die eine Phase, die die Bauart liest (P13: Kennzahl-Abgrenzung)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import abgrenzung_je_funktion, abgrenzungs_grund
+    from backend.core.investition_parameter import ist_luft_luft_waermepumpe
+
+    wp_strom_je_inv, investitionen_by_id, datum = ctx.wp_strom_je_inv, ctx.investitionen_by_id, ctx.datum
     # R2 (26.08.2026): Auch der Tag kannte bisher **keine** Abgrenzungs-Sperre.
     # Die Anwender-Angabe hängt am **Gerät**, nicht am Zeitraum — ein Heizstab
     # auf dem WP-Zähler ist am Dienstag derselbe wie im Monatsbericht. Genau
@@ -606,7 +853,7 @@ async def get_tag_detail(
     # „im Monat dieses Tages", und der einzige Fehler, den sie machen kann, ist
     # der mildere von beiden.
     _wp_fakten_monat = await lade_monats_fakten(
-        db, anlage_id, von=(datum.year, datum.month), bis=(datum.year, datum.month),
+        ctx.db, ctx.anlage.id, von=(datum.year, datum.month), bis=(datum.year, datum.month),
     )
     _geraete_ohne_waerme_monat = any(
         f.wp.waerme_deckt_nicht_alle_geraete for f in _wp_fakten_monat
@@ -617,148 +864,30 @@ async def get_tag_detail(
     _geraete_verschieden_monat = any(
         f.wp.geraete_verschieden for f in _wp_fakten_monat
     )
-    wp_abgrenzung_tag = abgrenzungs_grund(
-        abgrenzung_stoerung=next(
-            (
-                stoerung
-                for inv_id_str, kwh in wp_strom_je_inv.items()
-                if kwh
-                for stoerung in (
-                    abgrenzung_stoerung(investitionen_by_id.get(inv_id_str)),
-                )
-                if stoerung
-            ),
-            None,
-        ),
+    ctx.stoerung_tag = _abgrenzung_stoerung_des_tages(wp_strom_je_inv, investitionen_by_id)
+    ctx.wp_abgrenzung_tag = abgrenzungs_grund(
+        abgrenzung_stoerung=ctx.stoerung_tag,
         bauarten_gemischt=len(_bauarten_tag) > 1,
         geraete_ohne_waerme=_geraete_ohne_waerme_monat,
         geraete_verschieden=_geraete_verschieden_monat,
     )
-    # ── SOLL §3.2b: WELCHE Funktionen die Verletzung trifft — am TAG gezählt ─
-    #
-    # ⛔ **Hier stand bis zum 15.09.2026 die Monats-Näherung**, und sie war im
-    # **laufenden** Monat leer: Ohne `Monatsdaten`-Zeile antwortet
-    # `WpFakten.deckung_je_funktion` überall `None` ⇒ „die Frage stellt sich
-    # nicht" ⇒ keine Sperre. Gemessen an der Prüfstand-Anlage der r28
-    # (`tag-detail?datum=2026-09-10`): *Arbeitszahl Heizen* **3,346** und
-    # *Warmwasser* **4,211**, beide **ohne Grund** — genau die zwei Zahlen, die
-    # *Cockpit → Monat* derselben Anlage seit WK-16i mit R2 zurückhält, und die
-    # derselbe Monat nach seinem Abschluss sperrt (Juli, August 2026). **Zwei
-    # Sichten, zwei Antworten auf dieselbe Frage** (N-506).
-    #
-    # ⭐ **Der Tag fragt jetzt dieselbe Faltung wie der Monat** (**WK-16j/R-1**,
-    # `waerme_klima_block.funktions_eingaenge_der_anlage`) — Σ über dieselben
-    # Geräte-Mengen, aus denen die Tabelle *Zahlen je Gerät* entsteht, und über
-    # denselben Layer-SoT `deckung_aus_geraeten` (Identitäten, nicht Anzahlen,
-    # N-441). **Keine zweite Faltung** (F-56): derselbe Aufruf, eine Route
-    # weiter. Deshalb steht der Block mit den Geräte-Kennzahlen jetzt **über**
-    # diesem hier — eine Deckungs-Aussage kommt aus denselben Mengen, die die
-    # Zahl bilden.
-    #
-    # ⚠ **Die Monats-Näherung bleibt für die beiden Block-Lagen darüber**
-    # (`_geraete_ohne_waerme_monat`, `_geraete_verschieden_monat` in
-    # `wp_abgrenzung_tag`): Sie beschreiben den **Block**, nicht eine Funktion,
-    # und die eine davon zählt der Tag ohnehin selbst (`_wp_abgrenzung_sperrt_tag`).
-    _wp_funktions_eingaenge_tag = funktions_eingaenge_der_anlage(
-        _wp_kennzahlen_je_geraet,
-    )
-    _deckung_je_funktion_tag = {
-        f: _wp_funktions_eingaenge_tag.deckung_je_funktion(f)
-        for f in ARBEITSZAHL_FUNKTIONEN
-    }
-
-    # ── Und Zähler und Nenner kommen aus DERSELBEN Faltung wie die Deckung ──
-    #
-    # ⛔ **Sonst bewacht die Deckung eine andere Rechnung, als sie sieht.**
-    # Gemessen an der Prüfstand-Lage **ohne** den Vaillant (Nibe + Brauchwasser-WP,
-    # laufender Monat): Die Faltung setzt die Brauchwasser-WP nach der
-    # Ein-Achsen-Regel (**R-4**) auf **beide** Seiten der Warmwasser-Achse ⇒ die
-    # Deckung sagt zu Recht „deckt sich". Der Tages-Nenner
-    # ``detail["wp_strom_warmwasser_kwh"]`` kennt sie aber nicht — ihr Strom steht
-    # unter ``stromverbrauch_kwh``. Ergebnis wäre 12,5 ÷ 1,5 = **8,33** statt
-    # 12,5 ÷ 3,5 = **3,57**: eine freigegebene Zahl mit halbem Nenner. *Cockpit →
-    # Monat* rechnet im laufenden Monat seit WK-16i aus genau derselben Faltung
-    # (dort 96,36 ÷ 29,08); der Tag zieht damit nach.
-    #
-    # ⭐ **Jede Seite aus der Quelle, die für sie vollständig ist.**
-    #
-    # * **Nenner — die Faltung.** Nur sie kennt die Ein-Achsen-Regel; ein Gerät
-    #   ohne Gesamt-Strom kann keinen Funktions-Strom tragen, ihr Geräte-Kreis
-    #   verliert auf dieser Seite also nichts.
-    # * **Zähler — die Tagessumme.** Sie deckt **jedes** Gerät mit Wärme ab, auch
-    #   eines ohne Tages-Stromwert (r27/Demo, 05.12.2025: 29,9 kWh Heizwärme ohne
-    #   einen einzigen Stromstand). Die Faltung sähe es nicht, und eine Kachel
-    #   darf nicht schrumpfen, weil ein Nachbargerät seinen Zähler hat.
-    #
-    # ⚠ **Die Faltung gewinnt nur, wo sie etwas trägt** — dieselbe Bauform wie
-    # die S5-Weiche ``traegt_menge``: Eine 0 ist hier keine Messung, sondern ein
-    # Gerät, das sie nicht sieht; der Tageswert trägt dann seinen vollen Wert
-    # **und** seine ``None``-heit, an der der W-18-Grund hängt.
-    # ⭐ **Gemessen bitgleich** auf r27 (alle fünf Tage) und auf den Demo-Tagen
-    # der r28; sichtbar wird der Unterschied nur, wo R-4 greift.
-    def _nenner_der_funktion(
-        aus_faltung: float, aus_tageswerten: Optional[float],
-    ) -> Optional[float]:
-        return aus_faltung if aus_faltung > 0 else aus_tageswerten
-
-    _wp_heizung_fn = _wp_heizung_tag
-    _wp_warmwasser_fn = detail.get("wp_warmwasser_kwh")
-    _wp_strom_heizen_fn = _nenner_der_funktion(
-        _wp_funktions_eingaenge_tag.strom_heizen_kwh,
-        detail.get("wp_strom_heizen_kwh"),
-    )
-    _wp_strom_warmwasser_fn = _nenner_der_funktion(
-        _wp_funktions_eingaenge_tag.strom_warmwasser_kwh,
-        detail.get("wp_strom_warmwasser_kwh"),
-    )
-    # ── Bauschnitt 6: R2 für KÜHLEN aus dem Tag selbst, beidseitig ─────────
-    #
-    # ⛔ **Hier reicht die Monats-Näherung darüber NICHT**, und das ist gemessen:
-    # Die Kälte summiert `get_tagesdetail_kwh` über alle Geräte, den Kühlstrom
-    # trägt nur, wer den Tages-Stapel besteht (Bezug da · Teilmengen-Invariante
-    # · aktiv, `tages_stapel.beitraege_des_tages`). Fällt ein Gerät an diesem Tag
-    # heraus, stand seine Kälte im Zähler und sein Strom nirgends — **6,0 statt
-    # 3,0**, während der Monat sich deckt und deshalb nicht sperrt.
-    #
-    # ⭐ Anders als bei der Wärme **kennt** der Tag hier beide Seiten je Gerät
-    # (Kälte je Gerät aus `werte_je_inv`, Kühlstrom je Beitrag). Die Regel ist
-    # dieselbe wie im Monat (`deckung_aus_geraeten`) — und seit N-441 vergleicht
-    # sie selbst die **Identitäten**. Der Zwei-Zeilen-Sonderweg, der hier bis
-    # zum 12.09.2026 stand (Anzahlen an die Regel, Identität per `if` daneben),
-    # ist damit entfallen: eine Regel statt anderthalb.
-    _kuehl_geraete_tag = {b.inv_id for b in beitraege_tag if b.kuehlen_kwh > 0}
-    _kaelte_geraete_tag = {
-        inv_id for inv_id, kwh in
-        _tagesdetail.werte_je_inv.get("wp_kaelte_kwh", {}).items()
-        if kwh > 0
-    }
-    _deckung_kuehlen_tag = deckung_aus_geraeten(
-        _kuehl_geraete_tag, _kaelte_geraete_tag,
-    )
-    # Nur „kuehlen" wird ersetzt: Die Faltung beantwortet diese Funktion
-    # ausdrücklich **nicht** (sie liefert die Eingänge, deren Mengen sie auch
-    # liefert), und der Tag kennt hier beide Seiten je Gerät — genauer geht es
-    # nicht. Heizen und Warmwasser kommen seit WK-16j aus derselben Faltung.
-    _deckung_je_funktion_tag = {
-        **_deckung_je_funktion_tag, "kuehlen": _deckung_kuehlen_tag,
-    }
-    _wp_abgrenzung_je_funktion_tag = abgrenzung_je_funktion(
-        abgrenzung_stoerung=next(
-            (
-                stoerung
-                for inv_id_str, kwh in wp_strom_je_inv.items()
-                if kwh
-                for stoerung in (
-                    abgrenzung_stoerung(investitionen_by_id.get(inv_id_str)),
-                )
-                if stoerung
-            ),
-            None,
-        ),
+    # SOLL §3.2b je Funktion: die Deckung je Funktion (Kühlen ersetzt) aus `_funktions_deckung`.
+    ctx.wp_abgrenzung_je_funktion_tag = abgrenzung_je_funktion(
+        abgrenzung_stoerung=ctx.stoerung_tag,
         bauarten_gemischt=len(_bauarten_tag) > 1,
         geraete_ohne_waerme=_geraete_ohne_waerme_monat,
-        deckung_je_funktion=_deckung_je_funktion_tag,
+        deckung_je_funktion=ctx.deckung_je_funktion_tag,
     )
+
+
+def _schranke_und_kasten(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): E1b — die Tageszahl als Schranke, die Gegenrichtung am TAG gezählt;
+    die W-18-Kurzformen für Wärme und Strom (Kasten, R-5/N-492) und die Systemarbeitszahl des Tages (Layer
+    ``systemarbeitszahl``, SOLL-§9-E7/Option A)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import abgrenzungs_grund, systemarbeitszahl
+    from backend.core.tageswert_grund import GRUND_NICHT_ZUGEORDNET
+
+    _grund, wp_strom_je_inv = ctx.grund, ctx.wp_strom_je_inv
     # ── E1b: die anlagenweite Tageszahl als Schranke statt als Strich ─────
     #
     # ⭐ Dieselbe Entscheidung wie in Monat und Jahr (14.09.2026): Der Grund
@@ -783,29 +912,18 @@ async def get_tag_detail(
     # zur Schranke, wo sie zutrifft, statt zu sperren.
     _wp_strom_geraete_tag = {i for i, kwh in wp_strom_je_inv.items() if kwh}
     _wp_waerme_geraete_tag = {
-        i for i, kwh in _wp_waerme_je_geraet.items() if kwh and kwh > 0
+        i for i, kwh in ctx.wp_waerme_je_geraet.items() if kwh and kwh > 0
     }
     _wp_abgrenzung_sperrt_tag = abgrenzungs_grund(
-        abgrenzung_stoerung=next(
-            (
-                stoerung
-                for inv_id_str, kwh in wp_strom_je_inv.items()
-                if kwh
-                for stoerung in (
-                    abgrenzung_stoerung(investitionen_by_id.get(inv_id_str)),
-                )
-                if stoerung
-            ),
-            None,
-        ),
+        abgrenzung_stoerung=ctx.stoerung_tag,
         geraete_verschieden=bool(_wp_waerme_geraete_tag - _wp_strom_geraete_tag),
     )
     # W-18, als Eingang für BEIDES: die Sperre der Arbeitszahl und die Zeile im
     # Kasten. ⚠ **Die Kurzform, nicht die Langform** — der Kasten trägt Sätze
     # neben einem Handgriff; der Absatz aus `_tageswert_grund_kombiniert` steht
     # weiterhin unter der Wärme-Kachel, wo er hingehört.
-    _wp_waerme_grund_kurz_tag = _tageswert_grund_kurz_kombiniert(
-        _grund, (*_D1_HEIZ_GRUND_KEYS, "wp_warmwasser_kwh"),
+    ctx.wp_waerme_grund_kurz_tag = _tageswert_grund_kurz_kombiniert(
+        _grund, (*ctx.d1_heiz_grund_keys, "wp_warmwasser_kwh"),
     )
     # ── R-5/N-492: „kein Stromverbrauch erfasst" neben einer Strom-Kachel ──
     #
@@ -827,8 +945,8 @@ async def get_tag_detail(
         },
         ("wp_strom_gesamt_kwh", "wp_strom_heizen_kwh", "wp_strom_warmwasser_kwh"),
     )
-    wp_jaz_tag = systemarbeitszahl(
-        wp_waerme_tag, wp_strom_tag,
+    ctx.wp_jaz_tag = systemarbeitszahl(
+        ctx.wp_waerme_tag, ctx.wp_strom_tag,
         # W-14 + E4: Strom in Funktionen ohne bewertete Nutzenergie. Am Tag
         # wiegt der Effekt am schwersten: ein Sommertag kann fast reiner
         # Kühlbetrieb sein.
@@ -841,21 +959,34 @@ async def get_tag_detail(
         # `strom_heizen + strom_warmwasser`, er stellt nichts daneben). Der
         # Stapel entscheidet das **je Gerät**; die drei Summanden daneben
         # bleiben unverändert und tragen weiter die Balken (K1).
-        kuehlstrom_kwh=stapel.funktionsfremd_abzug_kwh,
-        strom_ohne_waerme_kwh=_wp_strom_ohne_waerme_tag,
-        geraete_ohne_waerme=_wp_geraete_ohne_waerme_tag,
+        kuehlstrom_kwh=ctx.stapel.funktionsfremd_abzug_kwh,
+        strom_ohne_waerme_kwh=ctx.wp_strom_ohne_waerme_tag,
+        geraete_ohne_waerme=ctx.wp_geraete_ohne_waerme_tag,
         abgrenzung_verletzt=_wp_abgrenzung_sperrt_tag,
         # W-18: Die Sperre „kein Wärmemengenzähler zugeordnet" ist im Tag
         # regelmäßig falsch — der Zähler kann zugeordnet und für DIESEN Tag
         # trotzdem leer sein (Snapshots entstehen erst ab der Zuordnung; der
         # Monatswert kommt aus der HA-Langzeitstatistik und steht deshalb da).
         # Der Erhebungspfad weiß es, der Layer kann es nicht wissen.
-        waerme_fehlt_grund=_wp_waerme_grund_kurz_tag,
+        waerme_fehlt_grund=ctx.wp_waerme_grund_kurz_tag,
         # R-5: dieselbe Bauform auf der Stromseite — der Erhebungspfad weiß,
         # welcher der drei W-18-Zustände vorliegt, der Layer kann es nicht.
         strom_fehlt_grund=_wp_strom_grund_kurz_tag,
     )
 
+
+def _arbeitszahl_je_funktion(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (RF-71): die Arbeitszahl JE FUNKTION (N-348, Layer ``arbeitszahl_je_funktion``,
+    R-2/WK-16h ``achsen_der_anlage``) und die Arbeitszahl KÜHLEN (Bauschnitt 6, ``arbeitszahl_kuehlen``)."""
+    from backend.core.berechnungen.waermepumpe_kennzahl import (
+        GRUND_FUNKTION_NICHT_DECKUNGSGLEICH, als_arbeitszahl, arbeitszahl_je_funktion, arbeitszahl_kuehlen,
+    )
+    from backend.core.tageswert_grund import (
+        GRUND_KEINE_ZAEHLERSTAENDE, GRUND_ZAEHLER_RUECKSPRUNG, tageswert_grund_kurz,
+    )
+    from backend.services.waerme_klima_block import achsen_der_anlage
+
+    _grund, detail, investitionen_by_id = ctx.grund, ctx.detail, ctx.investitionen_by_id
     # ── Arbeitszahl JE FUNKTION — der dritte Aufrufer desselben SoT (N-348) ─
     #
     # ⛔ **Bis 2026-08-29 gab es diesen Block nicht, und der Tag hat die drei
@@ -871,6 +1002,7 @@ async def get_tag_detail(
     # Monat (`imd_monatsaggregat.py:223`). Die Namensgleichheit ist genau die
     # Falle, an der ein Fix „im Vorbeigehen" eine falsche Zahl erzeugt hätte,
     # deshalb der ausgeschriebene Name.
+    # (RF-71: «oben» ist seit dem Schnitt `stapel.hat_split` in `_antwort`.)
     #
     # ⚠ Gefragt werden — wie bei der Abgrenzung darüber — **nur die Geräte, die
     # an diesem Tag Strom beigetragen haben.** Ein stillgelegtes Gerät mit
@@ -878,7 +1010,7 @@ async def get_tag_detail(
     _wp_getrennte_strommessung_tag = any(
         bool(((investitionen_by_id.get(inv_id_str).parameter or {})
               .get("getrennte_strommessung")))
-        for inv_id_str, kwh in wp_strom_je_inv.items()
+        for inv_id_str, kwh in ctx.wp_strom_je_inv.items()
         if kwh and investitionen_by_id.get(inv_id_str) is not None
     )
     # `waerme_abgeleitet_kwh` bleibt 0: Im Tag kommt nur eine **gemessene**
@@ -886,21 +1018,21 @@ async def get_tag_detail(
     # abgeleitete Zweig existiert hier nicht, siehe die Begründung an
     # `_wp_waerme_tag` oben. `abgrenzung_verletzt` ist dieselbe Sperre wie bei
     # der Gesamtzahl: ein Heizstab auf dem Zähler trifft beide Funktionen.
-    wp_az_funktion_tag = arbeitszahl_je_funktion(
+    ctx.wp_az_funktion_tag = arbeitszahl_je_funktion(
         # R-2: dieselbe aufgelöste Heizwärme wie oben — `detail` trägt nur die
         # Achse, und die ist bei einem Gerät mit Betriebsart-Wärme leer.
-        heizung_kwh=_wp_heizung_fn,
-        strom_heizen_kwh=_wp_strom_heizen_fn,
-        warmwasser_kwh=_wp_warmwasser_fn,
-        strom_warmwasser_kwh=_wp_strom_warmwasser_fn,
+        heizung_kwh=ctx.wp_heizung_fn,
+        strom_heizen_kwh=ctx.wp_strom_heizen_fn,
+        warmwasser_kwh=ctx.wp_warmwasser_fn,
+        strom_warmwasser_kwh=ctx.wp_strom_warmwasser_fn,
         hat_split=_wp_getrennte_strommessung_tag,
         # N-391: derselbe Eingang wie im Monat, nur aus dem Tagesdetail. Trägt
         # der Tag einen Wert des gemeinsamen Wärmemengenzählers, sagen die zwei
         # Zeilen „Wärme nicht je Funktion gemessen" statt „kein Zähler
         # zugeordnet" — der Zähler ist zugeordnet.
         waerme_ist_gesamt=bool(detail.get("wp_waerme_kwh")),
-        abgrenzung_verletzt=wp_abgrenzung_tag,
-        abgrenzung_je_funktion_grund=_wp_abgrenzung_je_funktion_tag,
+        abgrenzung_verletzt=ctx.wp_abgrenzung_tag,
+        abgrenzung_je_funktion_grund=ctx.wp_abgrenzung_je_funktion_tag,
         # W-18 je Funktion: dieselbe Sperre wie oben bei der Gesamt-Arbeitszahl,
         # aber **je Zähler**. Der Layer bekam den Parameter am 26.08.; dieser
         # Block entstand am 29.08. (N-348) und hat ihn nie durchgereicht — die
@@ -910,7 +1042,7 @@ async def get_tag_detail(
         # ⚠ Je EINE Feldliste, nicht die kombinierte von oben — sonst erbt die
         # eine Zeile den Grund der anderen.
         waerme_fehlt_grund_heizen=_tageswert_grund_kurz_kombiniert(
-            _grund, _D1_HEIZ_GRUND_KEYS,
+            _grund, ctx.d1_heiz_grund_keys,
         ),
         waerme_fehlt_grund_warmwasser=_tageswert_grund_kurz_kombiniert(
             _grund, ("wp_warmwasser_kwh",),
@@ -926,8 +1058,8 @@ async def get_tag_detail(
         # allein die Split-Klimaanlage Strom bei — und der Kasten empfahl
         # *„Getrennte Strommessung einschalten und beide Zähler zuordnen"* für
         # eine Warmwasser-Achse, die es an dieser Ausstattung nicht gibt.
-        achsen=achsen_der_anlage(_wp_kennzahlen_je_geraet),
-        gesamt=als_arbeitszahl(wp_jaz_tag),
+        achsen=achsen_der_anlage(ctx.wp_kennzahlen_je_geraet),
+        gesamt=als_arbeitszahl(ctx.wp_jaz_tag),
     )
 
     # ── Arbeitszahl KÜHLEN — derselbe Aufruf wie im Monat (Bauschnitt 6) ───
@@ -943,14 +1075,14 @@ async def get_tag_detail(
     # (der Default des Layers) der richtige Satz, und er trifft jeden kühlenden
     # Anwender ohne Kältemengenzähler.
     _kaelte_grund_roh = _grund.get("wp_kaelte_kwh")
-    wp_az_kuehlen_tag = arbeitszahl_kuehlen(
+    ctx.wp_az_kuehlen_tag = arbeitszahl_kuehlen(
         detail.get("wp_kaelte_kwh"),
-        kuehlen_tag,
+        ctx.stapel.kuehlen_kwh,
         abgrenzung_verletzt=(
-            _wp_abgrenzung_je_funktion_tag["kuehlen"]
+            ctx.wp_abgrenzung_je_funktion_tag["kuehlen"]
             or (
                 GRUND_FUNKTION_NICHT_DECKUNGSGLEICH
-                if _deckung_kuehlen_tag is False else None
+                if ctx.deckung_kuehlen_tag is False else None
             )
         ),
         kaelte_fehlt_grund=(
@@ -961,13 +1093,26 @@ async def get_tag_detail(
         null_ist_gemessen=True,
     )
 
+
+async def _antwort(ctx: _TagKontext) -> TagDetailResponse:
+    """Phase von ``get_tag_detail`` (RF-71): die Gerätezeilen (D-Sicht 3, P-433-2c), die aktiven Geräte je Typ und
+    die Antwort — Schlüssel und Reihenfolge wie bisher; die E-Mob-Phasen laufen an derselben Stelle wie bisher."""
+    from backend.core.tageswert_grund import tages_abdeckung_hinweis, tageswert_grund_text
+    from backend.services.waerme_klima_block import geraete_zeilen, was_noch_moeglich
+
+    db, anlage, investitionen_by_id, datum = ctx.db, ctx.anlage, ctx.investitionen_by_id, ctx.datum
+    detail, _grund, _tagesdetail, eff, tarif = ctx.detail, ctx.grund, ctx.tagesdetail, ctx.eff, ctx.tarif
+    stapel, wp_jaz_tag = ctx.stapel, ctx.wp_jaz_tag
+    wp_az_funktion_tag, wp_az_kuehlen_tag = ctx.wp_az_funktion_tag, ctx.wp_az_kuehlen_tag
+    wp_waerme_tag = ctx.wp_waerme_tag
+    hat_split = stapel.hat_split
     # D-Sicht 3: EINMAL gebaut — die Tabelle im Block **und** der Kasten lesen
     # dieselben Zeilen (R-4). Zwei Aufrufe nebeneinander wären zwei Wahrheiten
     # über dieselbe Frage, und die Dedup-Regel des Kastens hinge dann an einer
     # zweiten Liste.
     # P-433-2c: am Tag tragen die Zeilen zusätzlich die Stunden je Betriebsart (Phase, nicht im Block-Bauer).
     _wp_block_geraete = await _mit_betrieb_stunden(
-        db, anlage, investitionen_by_id, datum, geraete_zeilen(_wp_kennzahlen_je_geraet),
+        db, anlage, investitionen_by_id, datum, geraete_zeilen(ctx.wp_kennzahlen_je_geraet),
     )
 
     # ── Aktive Geräte je Typ (Namen) für die „aggregiert aus …"-Hinweise ──
@@ -983,28 +1128,28 @@ async def get_tag_detail(
     return TagDetailResponse(
         datum=datum,
         komponenten_geraete=komponenten_geraete,
-        wp_modus_strom_heizen_kwh=round(heizen_tag, 2) if hat_split else None,
-        wp_modus_strom_kuehlen_kwh=round(kuehlen_tag, 2) if hat_split else None,
-        wp_modus_strom_warmwasser_kwh=round(warmwasser_tag, 2) if hat_split else None,
-        wp_modus_strom_lueften_kwh=round(lueften_tag, 2) if hat_split else None,
-        wp_modus_strom_entfeuchten_kwh=round(entfeuchten_tag, 2) if hat_split else None,
-        wp_modus_nicht_aufgeteilt_kwh=round(rest_tag, 2) if hat_split else None,
-        wp_modus_abdeckung_h=round(abdeckung_tag, 1) if hat_split else None,
+        wp_modus_strom_heizen_kwh=round(stapel.heizen_kwh, 2) if hat_split else None,
+        wp_modus_strom_kuehlen_kwh=round(stapel.kuehlen_kwh, 2) if hat_split else None,
+        wp_modus_strom_warmwasser_kwh=round(stapel.warmwasser_kwh, 2) if hat_split else None,
+        wp_modus_strom_lueften_kwh=round(stapel.lueften_kwh, 2) if hat_split else None,
+        wp_modus_strom_entfeuchten_kwh=round(stapel.entfeuchten_kwh, 2) if hat_split else None,
+        wp_modus_nicht_aufgeteilt_kwh=round(stapel.nicht_aufgeteilt_kwh, 2) if hat_split else None,
+        wp_modus_abdeckung_h=round(stapel.abdeckung_h, 1) if hat_split else None,
         # W-17b: Der Balken sagt jetzt, worauf er sich bezieht. Ohne dieses
         # Feld stand er unter einer Kachel mit einer GROESSEREN Zahl, ohne dass
         # irgendwo die Differenz benannt war — dietmar1968 sah 30 kWh Balken
         # unter 284 kWh Kachel (T89667 #210).
-        wp_modus_strom_bezug_kwh=round(bezug_tag, 2) if hat_split else None,
+        wp_modus_strom_bezug_kwh=round(stapel.bezug_kwh, 2) if hat_split else None,
         # Wie in der Monatssicht: „gemessen" gilt für die Zeile, sobald ein
         # Gerät des Tages seine Aufteilung aus Zählern hat. Ein
         # Betriebsart-Zähler hat keine „Stunden mit Signal" — die Abdeckung
         # bleibt dann 0, ohne dass etwas fehlt (das Frontend zeigt deshalb
         # „Herkunft: gemessen" statt „Modus erfasst: 0 Stunden").
-        wp_modus_gemessen=hat_gemessen if hat_split else None,
+        wp_modus_gemessen=stapel.hat_gemessen if hat_split else None,
         # A6: Die Kacheln zeigen, **womit die Kennzahl gerechnet hat** — also
         # dieselben vier Zahlen, die oben in `arbeitszahl_je_funktion` gehen.
-        wp_strom_heizen_kwh=_wp_strom_heizen_fn,
-        wp_strom_warmwasser_kwh=_wp_strom_warmwasser_fn,
+        wp_strom_heizen_kwh=ctx.wp_strom_heizen_fn,
+        wp_strom_warmwasser_kwh=ctx.wp_strom_warmwasser_fn,
         # R-2: die **aufgelöste** Heizwärme (D1-Stufe 3), nicht die Achse.
         # R-4: die Marke steht an der **Basis**-Größe des Blocks, nicht an
         # jeder abgeleiteten — dieselbe Regel, mit der N-472 die Gründe im
@@ -1015,8 +1160,8 @@ async def get_tag_detail(
             _tagesdetail.abdeckung_bis.strftime("%H:%M")
             if _tagesdetail.abdeckung_bis else None,
         ),
-        wp_heizung_kwh=_wp_heizung_fn,
-        wp_warmwasser_kwh=_wp_warmwasser_fn,
+        wp_heizung_kwh=ctx.wp_heizung_fn,
+        wp_warmwasser_kwh=ctx.wp_warmwasser_fn,
         wp_waerme_kwh=wp_waerme_tag,
         # W-18: Warum die Wärme fehlt. Sie entsteht aus ZWEI Feldern; der
         # aussagekräftigere Grund gewinnt (`GRUND_RANG`), damit nicht „kein
@@ -1024,7 +1169,7 @@ async def get_tag_detail(
         # leer ist. Steht ein Wert, steht kein Grund — nie beides.
         wp_waerme_grund=(
             _tageswert_grund_kombiniert(
-                _grund, (*_D1_HEIZ_GRUND_KEYS, "wp_warmwasser_kwh"),
+                _grund, (*ctx.d1_heiz_grund_keys, "wp_warmwasser_kwh"),
             ) if wp_waerme_tag is None else None
         ),
         wp_jaz=wp_jaz_tag.wert,
@@ -1048,8 +1193,8 @@ async def get_tag_detail(
         wp_jaz_schranke_hinweis=wp_jaz_tag.schranke_hinweis,
         # P-433-3 S2: Heizstab-Strom und „AZ ohne Zusatzheizung" — nur mit Zähler (B2); Geräte-Regel: jede
         # Wärmepumpe mit Strom-Beitrag des Tages trägt einen Heizstab-Zähler (sonst Grund).
-        **_ohne_zusatzheizung_tag(detail, _tagesdetail.werte_je_inv, wp_strom_je_inv, wp_jaz_tag,
-                                  _wp_beitrag_je_inv),
+        **_ohne_zusatzheizung_tag(detail, _tagesdetail.werte_je_inv, ctx.wp_strom_je_inv, wp_jaz_tag,
+                                  ctx.wp_beitrag_je_inv),
         wp_geraete=_wp_block_geraete,
         # D-Sicht 1: Der Tag kennt einen Grund mehr als Monat und Jahr — den
         # der **Wärme** (W-18: „für diesen Tag keine Zählerstände"). Er gehört
@@ -1059,7 +1204,7 @@ async def get_tag_detail(
             ("Arbeitszahl", wp_jaz_tag.grund),
             (
                 "Wärme erzeugt",
-                _wp_waerme_grund_kurz_tag if wp_waerme_tag is None else None,
+                ctx.wp_waerme_grund_kurz_tag if wp_waerme_tag is None else None,
             ),
             ("Arbeitszahl Heizen", wp_az_funktion_tag.heizen.grund),
             ("Arbeitszahl Warmwasser", wp_az_funktion_tag.warmwasser.grund),
@@ -1090,10 +1235,10 @@ async def get_tag_detail(
         emob_ladung_pv_grund=tageswert_grund_text(
             _grund.get("emob_ladung_pv_kwh"), "emob_ladung_pv_kwh",
         ),
-        soll_pv_kwh=soll_pv,
+        soll_pv_kwh=ctx.soll_pv,
         einspeise_preis_cent=tarif.einspeiseverguetung_cent,
-        netzbezug_preis_cent=netzbezug_preis_tag,
-        netzbezug_preis_herkunft=netzbezug_preis_herkunft_tag,
+        netzbezug_preis_cent=ctx.netzbezug_preis_tag,
+        netzbezug_preis_herkunft=ctx.netzbezug_preis_herkunft_tag,
     )
 
 @router.get("/{anlage_id}/tag-status", response_model=TagStatusResponse)
