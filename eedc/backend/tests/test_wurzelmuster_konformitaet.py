@@ -3525,7 +3525,7 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     # Feldangebot. `bauarten_gemischt` kommt aus den Stammdaten (monats_fakten)
     # und wird an `abgrenzungs_grund` gereicht — P12 hält, dass daraus nie eine
     # rohe Division wird.
-    "backend/services/monats_fakten/roh.py::falte",               # zählt luft_luft/luft_wasser je Block
+    "backend/services/monats_fakten/roh.py::_falte_wp",           # zählt luft_luft/luft_wasser je Block (RF-62: Phase von `_RohMonat.falte`)
     "backend/api/routes/energie_profil/tag.py::get_tag_detail",   # dieselbe Frage je Tag (Vorlage 4: views.py → tag.py)
     # Vorlage 2 (18.09.2026): die R2-/SOLL-3.2b-Abgrenzung zog aus dem Endpunkt nach waerme.py.
     "backend/api/routes/aktueller_monat/waerme.py::waerme_klima_monat",

@@ -7,7 +7,7 @@ Zeitfilter und Dienstwagen-Filter genau hier).
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +61,15 @@ async def _baue_fakt(
     emob_kanal=None,
     kanal_gruppen: frozenset = frozenset(),
 ) -> MonatsFakt:
+    """Aus einem Rohmonat wird der kanonische ``MonatsFakt`` (einziger Aufrufer ``laden.lade_monats_fakten``).
+
+    Form (RF-63, Bauform RF-1): der Orchestrator baut den ``MonatsFakt`` in derselben Feldreihenfolge; die Mengen
+    kommen aus Phasen über den Kontext ``_FaktKontext``: ``_zaehler_fakten`` (N-121/N-736/N-751), ``_pv_aus_tagen``
+    (N-121/N-627/N-626/N-725), ``_bkw_rest`` (N-640, N-621), ``_erzeugung`` (``pv_kwh`` N-621, Wandlungsverluste
+    N-588), ``_emob_heimladung`` (PV-Anteil N-141, N-555 Stufe 1), ``_lade_tarif`` (P8, die einzige Abfrage),
+    ``_speicher_aus_tagen`` (#427), ``_dienstliche_ladekosten`` (N-633, nach dem Tarif), ``_bkw_fakten``,
+    ``_kennzahlen`` und ``_meta_fakten``.
+    """
     jahr, monat = schluessel
 
     # ── Lücken aus der Tagesebene füllen (N-121, nur mit `inkl_nur_tageswerte`) ──
@@ -72,25 +81,112 @@ async def _baue_fakt(
 
     zaehler, einspeisung_erfasst, netzbezug_erfasst = _zaehler_fakten(monatsdaten, tages_summe, tageswert_gruppen)
 
+    ctx = _FaktKontext(
+        jahr=jahr, monat=monat, roh=roh, monatsdaten=monatsdaten, investitionen=investitionen,
+        pv_modul_summe=pv_modul_summe, pv_modul_teilsumme=pv_modul_teilsumme, pv_je_modul=pv_je_modul,
+        bkw_aus_anlagenwert=bkw_aus_anlagenwert, tages_summe=tages_summe, netzladung_tage=netzladung_tage,
+        heimlade_quellen=heimlade_quellen, bloecke=bloecke, verluste_summe=verluste_summe, emob_kanal=emob_kanal,
+        tageswert_gruppen=tageswert_gruppen,
+    )
+    _pv_aus_tagen(ctx)
+    _bkw_rest(ctx)
+    erzeugung = _erzeugung(ctx)
+    emob = _emob_heimladung(ctx)
+
+    md_summen = berechne_md_sonstige_summen(monatsdaten) if monatsdaten else None
+    ertraege = roh.ertraege_euro + (md_summen["ertraege_euro"] if md_summen else 0.0)
+    ausgaben = roh.ausgaben_euro + (md_summen["ausgaben_euro"] if md_summen else 0.0)
+
+    tarif = await _lade_tarif(
+        db, anlage_id, schluessel, monatsdaten, tarif_cache, zeittarif_cache,
+        preis_cache=preis_cache, preis_messung=preis_messung,
+    )
+
+    speicher = _speicher_aus_tagen(ctx)
+    emob = _dienstliche_ladekosten(emob, tarif)
+
+    return MonatsFakt(
+        jahr=jahr,
+        monat=monat,
+        zaehler=zaehler,
+        erzeugung=erzeugung,
+        bkw=_bkw_fakten(ctx),
+        speicher=speicher,
+        emob=emob,
+        wp=_wp_fakten(roh),
+        sonstiges=_sonstiges_fakten(roh, md_summen, ertraege, ausgaben),
+        tarif=tarif,
+        eeg=EegFakten(neg_preis_kwh=neg_preis_kwh),
+        kennzahlen=_kennzahlen(roh, erzeugung, zaehler, speicher, emob),
+        meta=_meta_fakten(ctx, erzeugung, einspeisung_erfasst=einspeisung_erfasst, netzbezug_erfasst=netzbezug_erfasst),
+    )
+
+
+@dataclass
+class _FaktKontext:
+    """Die Eingänge EINES Monats und die Zwischenstände der Phasen von ``_baue_fakt`` (RF-63).
+
+    ``pv_modul_summe`` ist der Eingang aus der P7-Auflösung und wird von ``_pv_aus_tagen`` an Ort und Stelle aufgelöst
+    (Tageswert, dann Teilsumme); ``tageswert_gruppen`` sammeln die Marken der Gruppen, die die Tagesebene gefüllt hat.
+    """
+
+    jahr: int
+    monat: int
+    roh: _RohMonat
+    monatsdaten: Optional[Monatsdaten]
+    investitionen: list[Investition]
+    pv_modul_summe: Optional[float]
+    pv_modul_teilsumme: Optional[float]
+    pv_je_modul: dict[int, PvModulWert]
+    bkw_aus_anlagenwert: Optional[dict[int, float]]
+    tages_summe: Optional[TagesMonatsSumme]
+    netzladung_tage: object
+    heimlade_quellen: frozenset
+    bloecke: Optional[dict]
+    verluste_summe: Optional[TagesMonatsSumme]
+    emob_kanal: object
+    tageswert_gruppen: set[str]
+    tages_module: float = 0.0
+    tages_bkw: float = 0.0
+    tages_bkw_gemessen: float = 0.0
+    pv_vollstaendig: bool = True
+    pv_aus_tagen: bool = False
+    bkw_anteil: dict[int, float] = field(default_factory=dict)
+    bkw_aus_anlagenwert_kwh: float = 0.0
+    bkw_erzeugung: float = 0.0
+    wallbox_in_betrieb: bool = False
+    pv_quote: Optional[float] = None
+    eauto_ladedaten: list = field(default_factory=list)
+    wallbox_ladedaten: list = field(default_factory=list)
+    anteil_abgeleitet: bool = False
+
+    def aktiv(self, i: Investition) -> bool:
+        """Ist die Investition in diesem Monat aktiv (aktiv · Anschaffung · Stilllegung)?"""
+        return i.ist_aktiv_im_monat(self.jahr, self.monat)
+
+
+def _pv_aus_tagen(ctx: _FaktKontext) -> None:
+    """Die Modulsumme des Monats: P7-Auflösung, sonst Tageswert (N-121, Umbuchung abgetretener BKW N-627), sonst
+    Teilsumme (N-626); ``pv_vollstaendig`` folgt den Modulen (N-725) — RF-63, Phase von ``_baue_fakt``."""
     # N-627 (Bauplan PV-Achse T4, Zusatz Master): die Monatsregel gilt auch im Tageswert-Rückfall.
     # Ein Balkonkraftwerk, dessen Modul-Kinder in diesem Monat aktiv sind, hat seine Erzeugung an
     # sie abgetreten (ADR-002/P11); sein Tages-Key (der E4-Rest) gehört im Monat zur Gruppe der
     # Module, nicht zur BKW-Zeile — sonst nennte derselbe Monat vor dem Abschluss BKW 90 / Module
     # 540 und danach 0 / 630. Eine Umbuchung zwischen den zwei Gruppen; die Summe bleibt.
-    tages_module = tages_bkw = tages_bkw_gemessen = 0.0
+    tages_summe = ctx.tages_summe
     if tages_summe is not None:
         _abgetreten = abgetretene_bkw_ids([
-            i for i in investitionen
-            if i.typ in (PV_MODUL_TYP, BKW_TYP) and i.ist_aktiv_im_monat(jahr, monat)
+            i for i in ctx.investitionen
+            if i.typ in (PV_MODUL_TYP, BKW_TYP) and ctx.aktiv(i)
         ])
         _abgetreten_tag = sum(
             v for k, v in (tages_summe.bkw_je_inv or {}).items() if k.isdigit() and int(k) in _abgetreten
         )
-        tages_module = tages_summe.pv_module_kwh + _abgetreten_tag
-        tages_bkw = max(0.0, tages_summe.bkw_kwh - _abgetreten_tag)
+        ctx.tages_module = tages_summe.pv_module_kwh + _abgetreten_tag
+        ctx.tages_bkw = max(0.0, tages_summe.bkw_kwh - _abgetreten_tag)
         # N-640: davon die eigene MESSUNG der Balkonkraftwerke (Tages-Keys ohne Marke `kwp_anteil`, N-628) — der Rest
         # der BKW-Tageswerte ist ein kWp-Anteil am Anlagenzähler des Tages, keine zweite Quelle.
-        tages_bkw_gemessen = min(tages_bkw, sum(
+        ctx.tages_bkw_gemessen = min(ctx.tages_bkw, sum(
             v for k, v in (tages_summe.bkw_gemessen_je_inv or {}).items()
             if not (k.isdigit() and int(k) in _abgetreten)
         ))
@@ -104,26 +200,30 @@ async def _baue_fakt(
     # kein Anlagenwert), lud aber die Tagesebene (eine Wallbox-Zeile ohne PV-Anteil genügt, `laden.py`), war dieselbe
     # Teilsumme (Form F16: 360) plötzlich „vollständig" — kein Hinweis in Cockpit → Monat/Jahr, der Daten-Checker prüfte
     # gegen sie. Ohne Modulwert im Monat (`pv_je_modul` leer, der laufende Monat) bleibt es True wie bisher.
-    pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
-    pv_aus_tagen = False
-    if pv_modul_summe is None and tages_summe is not None and tages_module > 0:
-        pv_modul_summe = tages_module
-        pv_aus_tagen = True
-        tageswert_gruppen.add(TAGESWERT_PV)
+    ctx.pv_vollstaendig = ctx.pv_modul_summe is not None or not ctx.pv_je_modul
+    ctx.pv_aus_tagen = False
+    if ctx.pv_modul_summe is None and tages_summe is not None and ctx.tages_module > 0:
+        ctx.pv_modul_summe = ctx.tages_module
+        ctx.pv_aus_tagen = True
+        ctx.tageswert_gruppen.add(TAGESWERT_PV)
     else:
         # N-626 (Gernot 04.10.2026): fehlt einem Modul der Wert und gibt es keinen Anlagenwert, trägt es
         # nichts bei — die vorhandenen Werte bleiben in der Summe (vorher fiel die ganze Modulsumme weg:
         # 90 statt 450). Reihenfolge: vollständige Summe → Tageswert (oben) → Teilsumme. `pv_vollstaendig`
         # bleibt False — der Hinweis „unvollständig" (`pv_unvollstaendig_hinweis`) und der Daten-Checker
         # sagen es weiter; `pv_module_kwh` trägt die Teilsumme, sonst blieben Tabelle und ROI leer.
-        if pv_modul_summe is None and pv_modul_teilsumme is not None:
-            pv_modul_summe = pv_modul_teilsumme
+        if ctx.pv_modul_summe is None and ctx.pv_modul_teilsumme is not None:
+            ctx.pv_modul_summe = ctx.pv_modul_teilsumme
 
+
+def _bkw_rest(ctx: _FaktKontext) -> None:
+    """Die BKW-Erzeugung des Monats: Anteil am Anlagenwert (N-621), eigene Zeile, sonst Tageswert bzw. Rest des
+    Anlagenzählers (N-640) — RF-63, Phase von ``_baue_fakt``."""
     # N-621: der Anteil der Balkonkraftwerke ohne eigenen Wert am gespeicherten
     # Anlagenwert (`pv_monatswerte.lade_pv_je_monat`, `bkw_anteile`). Leer ohne
     # Anlagenwert — dann ist jede Zahl unten dieselbe wie vorher.
-    bkw_anteil = dict(bkw_aus_anlagenwert or {})
-    bkw_aus_anlagenwert_kwh = sum(bkw_anteil.values())
+    ctx.bkw_anteil = dict(ctx.bkw_aus_anlagenwert or {})
+    ctx.bkw_aus_anlagenwert_kwh = sum(ctx.bkw_anteil.values())
 
     # BKW nur ohne eigene IMD-Zeile im Monat — und nicht neben einem Anteil am
     # Anlagenwert (N-621, Tageswert-Vorrang): der gespeicherte Anlagenwert steht
@@ -138,34 +238,39 @@ async def _baue_fakt(
     # nie < 0. Ohne diese Regel setzte die Monatsleiste den Anteil obendrauf (Frank: 215,2 = 161,4 + 53,8 gegen Kopf
     # und Tabelle 161,4, Gesamtzähler 161,4). Kommen die Module selbst aus der Tagesebene (`pv_aus_tagen`) oder sind
     # sie nur eine Teilsumme, bleibt der Tageswert wie bisher — dann sind beide Seiten Anteile derselben Tage.
-    bkw_erzeugung = roh.bkw_erzeugung
+    ctx.bkw_erzeugung = ctx.roh.bkw_erzeugung
     if (
-        "balkonkraftwerk" not in roh.typen_mit_zeile
-        and not bkw_anteil
-        and tages_summe is not None
-        and tages_bkw > 0
+        "balkonkraftwerk" not in ctx.roh.typen_mit_zeile
+        and not ctx.bkw_anteil
+        and ctx.tages_summe is not None
+        and ctx.tages_bkw > 0
     ):
-        bkw_tag = tages_bkw
-        if (tages_bkw > tages_bkw_gemessen and not pv_aus_tagen and pv_modul_summe is not None
-                and pv_vollstaendig):
-            bkw_tag = tages_bkw_gemessen + max(
-                0.0, tages_module + tages_bkw - pv_modul_summe - tages_bkw_gemessen)
+        bkw_tag = ctx.tages_bkw
+        if (ctx.tages_bkw > ctx.tages_bkw_gemessen and not ctx.pv_aus_tagen and ctx.pv_modul_summe is not None
+                and ctx.pv_vollstaendig):
+            bkw_tag = ctx.tages_bkw_gemessen + max(
+                0.0, ctx.tages_module + ctx.tages_bkw - ctx.pv_modul_summe - ctx.tages_bkw_gemessen)
         if bkw_tag > 0:
-            bkw_erzeugung = bkw_tag
-            tageswert_gruppen.add(TAGESWERT_BKW)
+            ctx.bkw_erzeugung = bkw_tag
+            ctx.tageswert_gruppen.add(TAGESWERT_BKW)
 
-    pv_kwh = (pv_modul_summe or 0.0) + bkw_erzeugung + bkw_aus_anlagenwert_kwh
-    erzeugung = ErzeugungFakten(
-        pv_module_kwh=pv_modul_summe,
-        bkw_kwh=bkw_erzeugung,
+
+def _erzeugung(ctx: _FaktKontext) -> ErzeugungFakten:
+    """Die Erzeugungsgruppe: ``pv_kwh`` = Module + BKW + BKW-Anteil am Anlagenwert (N-621), Netzpunkt-Bilanz,
+    Wandlungsverluste aus dem Kanal-Monat (E4b, N-588) — RF-63, Phase von ``_baue_fakt``."""
+    roh, verluste_summe = ctx.roh, ctx.verluste_summe
+    pv_kwh = (ctx.pv_modul_summe or 0.0) + ctx.bkw_erzeugung + ctx.bkw_aus_anlagenwert_kwh
+    return ErzeugungFakten(
+        pv_module_kwh=ctx.pv_modul_summe,
+        bkw_kwh=ctx.bkw_erzeugung,
         sonstige_erzeuger_kwh=roh.sonstiges_erzeugung,
         pv_kwh=pv_kwh,
         # Netzpunkt-Bilanz: der sonstige Erzeuger speist hinter denselben Zähler.
         hinter_zaehler_kwh=erzeugung_hinter_zaehler_kwh(pv_kwh, roh.sonstiges_erzeugung),
-        pv_je_modul=pv_je_modul,
-        pv_vollstaendig=pv_vollstaendig,
-        bkw_aus_anlagenwert_kwh=bkw_aus_anlagenwert_kwh,
-        bkw_aus_anlagenwert_je_investition=bkw_anteil,
+        pv_je_modul=ctx.pv_je_modul,
+        pv_vollstaendig=ctx.pv_vollstaendig,
+        bkw_aus_anlagenwert_kwh=ctx.bkw_aus_anlagenwert_kwh,
+        bkw_aus_anlagenwert_je_investition=ctx.bkw_anteil,
         # HA-Bauform E4b: aus dem Kanal-Monat (`verluste_summe`), unabhängig davon, woher die Mengen dieses Monats
         # kommen; der Bestandspfad liefert keinen Wert. N-588: samt Messpunkt-Vertrag (`verluste_grund`) — bewertet
         # werden sie erst beim Konsumenten (`eigenverbrauch_ohne_verluste_kwh`), die Bilanz bleibt.
@@ -176,6 +281,20 @@ async def _baue_fakt(
         verluste_grund=verluste_summe.verluste_grund if verluste_summe is not None else None,
     )
 
+
+def _emob_heimladung(ctx: _FaktKontext) -> EmobFakten:
+    """Die E-Mob-Gruppe ohne den Geldposten: PV-Anteil der Heimladung (``_emob_anreicherung``), die EINE Funktion
+    (``_emob_entscheid``, N-555 Stufe 1), die Fakten (``_emob_fakten``) — RF-63, Phase von ``_baue_fakt``. Die
+    dienstlichen Ladekosten (N-633) setzt ``_dienstliche_ladekosten`` nach dem Tarif."""
+    _emob_anreicherung(ctx)
+    entscheid = _emob_entscheid(ctx)
+    return _emob_fakten(ctx, entscheid)
+
+
+def _emob_anreicherung(ctx: _FaktKontext) -> None:
+    """PV-Anteil der Heimladung: echter Wert gewinnt, sonst ableiten (N-141 Weg c, E4c/N-631) — RF-63, Unterphase von
+    ``_emob_heimladung``."""
+    roh, tages_summe = ctx.roh, ctx.tages_summe
     # ── PV-Anteil der Heimladung: echter Wert gewinnt, sonst ableiten ──────
     # Rahmenbedingung 1 (N-141 Weg c): die Ableitung füllt NUR Lücken. Gepflegt
     # ist der Anteil, sobald irgendeine Quellzeile den Schlüssel trägt — auch
@@ -191,32 +310,37 @@ async def _baue_fakt(
     # Unterhalb des Pools angesetzt gilt die Aufteilung für jeden dieser Wege.
     # N-555 Stufe 2: „Wallbox in Betrieb" kommt aus der Investitionsliste, nicht aus der
     # Existenz einer Zeile — eine Wallbox ohne Monatszeile ist trotzdem da (Regel 2).
-    wallbox_in_betrieb = bool(roh.wallbox_ladedaten) or any(
+    ctx.wallbox_in_betrieb = bool(roh.wallbox_ladedaten) or any(
         i.typ == "wallbox" and not ist_dienstlich(i)
-        and i.ist_aktiv_im_monat(jahr, monat)
-        for i in investitionen
-    )
-    dienstliche_wallbox_in_betrieb = bool(roh.dienstliche_wallbox_ids) or any(
-        i.typ == "wallbox" and ist_dienstlich(i)
-        and i.ist_aktiv_im_monat(jahr, monat)
-        for i in investitionen
+        and ctx.aktiv(i)
+        for i in ctx.investitionen
     )
     # HA-Bauform E4c (N-631): deckt die E-Mob-Gruppe den Monat aus den Kanälen, ist der Anteil der des abgeleiteten
     # Kanals (Σ Δ abgeleitet / Σ Δ Ladung, `kanal/geraete_leser.py`) — mit UND ohne Abschluss derselbe; sonst die Quote
     # der Tagesebene wie bisher (Lesart 1). `None` heißt in beiden Fällen „keine Aussage".
-    pv_quote = (
-        emob_kanal.quote if emob_kanal is not None
+    ctx.pv_quote = (
+        ctx.emob_kanal.quote if ctx.emob_kanal is not None
         else (tages_summe.abgeleiteter_pv_anteil if tages_summe is not None else None)
     )
-    eauto_ladedaten, wallbox_ladedaten, anteil_abgeleitet = reichere_ladezeilen_an(
+    ctx.eauto_ladedaten, ctx.wallbox_ladedaten, ctx.anteil_abgeleitet = reichere_ladezeilen_an(
         eauto_daten=roh.eauto_ladedaten,
         wallbox_daten=roh.wallbox_ladedaten,
-        quote=pv_quote,
-        wallbox_in_betrieb=wallbox_in_betrieb,
+        quote=ctx.pv_quote,
+        wallbox_in_betrieb=ctx.wallbox_in_betrieb,
     )
-    if anteil_abgeleitet:
-        tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
+    if ctx.anteil_abgeleitet:
+        ctx.tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
 
+
+def _emob_entscheid(ctx: _FaktKontext):
+    """N-555 Stufe 1: die EINE Funktion ``entscheide_emob_heimladung`` mit den Eingängen des Monats — RF-63,
+    Unterphase von ``_emob_heimladung``."""
+    roh, tages_summe = ctx.roh, ctx.tages_summe
+    dienstliche_wallbox_in_betrieb = bool(roh.dienstliche_wallbox_ids) or any(
+        i.typ == "wallbox" and ist_dienstlich(i)
+        and ctx.aktiv(i)
+        for i in ctx.investitionen
+    )
     # ── N-555 Stufe 1: die EINE Funktion entscheidet (Regel 1, 2-Ü, 6) ──────
     # Abgeschlossene Monate entscheiden nur nach dem gespeicherten Wert; nur für
     # den laufenden Monat reicht `laden.py` die Heimlade-Quellen herein. „Wallbox in Betrieb" kommt aus der
@@ -225,9 +349,9 @@ async def _baue_fakt(
     # Die Tages-Quote gilt auch für die Schätzung — dieselbe Zahl wie vor N-555,
     # als die Anreicherung sie über den Fahrverbrauch der Zeile legte.
     entscheid = entscheide_emob_heimladung(
-        eauto_je_inv=dict(zip(roh.eauto_ladedaten_ids, eauto_ladedaten)),
-        wallbox_zeilen=wallbox_ladedaten,
-        wallbox_in_betrieb=wallbox_in_betrieb,
+        eauto_je_inv=dict(zip(roh.eauto_ladedaten_ids, ctx.eauto_ladedaten)),
+        wallbox_zeilen=ctx.wallbox_ladedaten,
+        wallbox_in_betrieb=ctx.wallbox_in_betrieb,
         # N-555 Stufe 2 (Regel 3): Dienstwagen und dienstliche Wallboxen getrennt — eine
         # gemessene dienstliche Ladung fehlt im Rest der privaten Wallbox, eine dienstliche
         # Wallbox in Betrieb macht Felder und Schätzung der Dienstwagen wirkungslos.
@@ -241,45 +365,52 @@ async def _baue_fakt(
         },
         dienstliche_wallbox_in_betrieb=dienstliche_wallbox_in_betrieb,
         # Nur im laufenden Monat nicht leer (Regel 1: dort zählt auch eine Quelle).
-        heimlade_quellen=heimlade_quellen,
-        pv_quote=pv_quote,
+        heimlade_quellen=ctx.heimlade_quellen,
+        pv_quote=ctx.pv_quote,
         # Regel 8 (E5): welches `ladung_kwh` „Heim: gesamt" ist — nach Herkunft.
         heim_gesamt=roh.heim_gesamt_ids,
         # Wessen Quelle ist eine Wallbox-Quelle? (Die Quellen tragen seit Stufe 2 auch
         # Dienstwagen — eine Quelle am Dienstwagen sagt nichts über die private Wallbox.)
         wallbox_ids={
-            i.id for i in investitionen
+            i.id for i in ctx.investitionen
             if i.typ == "wallbox" and not ist_dienstlich(i)
-            and i.ist_aktiv_im_monat(jahr, monat)
+            and ctx.aktiv(i)
         },
         # Regel 2 Schritt 3: Empfänger des Rests sind alle privaten Autos in Betrieb, auch
         # die ohne Monatszeile (0 km, E6) — sonst fiele der Rest eines Monats, in dem nur
         # die Wallbox erfasst ist, aus dem Topf.
         eauto_in_betrieb=[
-            i.id for i in investitionen
+            i.id for i in ctx.investitionen
             if i.typ == "e-auto" and not ist_dienstlich(i)
-            and i.ist_aktiv_im_monat(jahr, monat)
+            and ctx.aktiv(i)
         ],
         # W-1 (Konzept Regel 2 Schritt 3): „nur eine Wallbox" nur ohne Dienstwagen in Betrieb.
         dienstwagen_in_betrieb=[
-            i.id for i in investitionen
+            i.id for i in ctx.investitionen
             if i.typ == "e-auto" and ist_dienstlich(i)
-            and i.ist_aktiv_im_monat(jahr, monat)
+            and ctx.aktiv(i)
         ],
         # N-555 Stufe 3 (Regel 9 Punkt 3): hat ein Auto im Monat geltende Ladeblöcke, sind
         # sie seine Messung (Menge und Anteil), nicht der gespeicherte „Heim: gesamt".
-        bloecke=bloecke,
+        bloecke=ctx.bloecke,
         # N-569-Ergänzung: „davon aus dem Speicher" — nur Ausweis je Auto.
         speicher_quote=(
             tages_summe.abgeleiteter_speicher_anteil if tages_summe is not None else None
         ),
     )
-    pool = entscheid.pool
     if entscheid.anteil_abgeleitet:
-        anteil_abgeleitet = True
-        tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
+        ctx.anteil_abgeleitet = True
+        ctx.tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
+    return entscheid
 
-    emob = EmobFakten(
+
+def _emob_fakten(ctx: _FaktKontext, entscheid) -> EmobFakten:
+    """Die ``EmobFakten`` aus dem Topf der EINEN Funktion und den Rohzeilen — RF-63, Unterphase von
+    ``_emob_heimladung``."""
+    roh = ctx.roh
+    eauto_ladedaten, wallbox_ladedaten = ctx.eauto_ladedaten, ctx.wallbox_ladedaten
+    pool = entscheid.pool
+    return EmobFakten(
         ladung_kwh=pool.ladung_kwh,
         ladung_pv_kwh=pool.pv_kwh,
         ladung_netz_kwh=pool.netz_kwh,
@@ -288,7 +419,7 @@ async def _baue_fakt(
         # F12 (E6, F12a = A): N_wb des gemeinsamen Zählers = die Netzladung der Wallbox-Zeilen nach der bisherigen Regel.
         wallbox_netzladung_kwh=wallbox_netzladung_der_zeilen(
             [*wallbox_ladedaten, *(roh.dienstlich_je_inv[i] for i in sorted(roh.dienstliche_wallbox_ids))]),
-        ladung_anteil_abgeleitet=anteil_abgeleitet,
+        ladung_anteil_abgeleitet=ctx.anteil_abgeleitet,
         extern_kwh=pool.extern_kwh,
         extern_euro=pool.extern_euro,
         ladevorgaenge=pool.ladevorgaenge,
@@ -321,8 +452,8 @@ async def _baue_fakt(
         dienstwagen_gemessen=entscheid.dienstwagen_gemessen,
         dienstliche_wallbox_in_betrieb=entscheid.dienstliche_wallbox_in_betrieb,
         dienstwagen_in_betrieb=any(
-            i.typ == "e-auto" and ist_dienstlich(i) and i.ist_aktiv_im_monat(jahr, monat)
-            for i in investitionen
+            i.typ == "e-auto" and ist_dienstlich(i) and ctx.aktiv(i)
+            for i in ctx.investitionen
         ),
         heim_gesamt_ids=frozenset(roh.heim_gesamt_ids),
         dienstlich_ladedaten_je_inv=dict(roh.dienstlich_je_inv),
@@ -342,7 +473,7 @@ async def _baue_fakt(
         # Altwert (Steckerlader) schon.
         eauto_summe_gemessen=summiere_emob_quelle(
             eauto_zeile_ohne_altwert(
-                z, wallbox_in_betrieb=wallbox_in_betrieb,
+                z, wallbox_in_betrieb=ctx.wallbox_in_betrieb,
                 heim_gesamt=i in roh.heim_gesamt_ids,
             )
             for i, z in zip(roh.eauto_ladedaten_ids, roh.eauto_ladedaten)
@@ -350,15 +481,11 @@ async def _baue_fakt(
         wallbox_summe_gemessen=summiere_emob_quelle(roh.wallbox_ladedaten),
     )
 
-    md_summen = berechne_md_sonstige_summen(monatsdaten) if monatsdaten else None
-    ertraege = roh.ertraege_euro + (md_summen["ertraege_euro"] if md_summen else 0.0)
-    ausgaben = roh.ausgaben_euro + (md_summen["ausgaben_euro"] if md_summen else 0.0)
 
-    tarif = await _lade_tarif(
-        db, anlage_id, schluessel, monatsdaten, tarif_cache, zeittarif_cache,
-        preis_cache=preis_cache, preis_messung=preis_messung,
-    )
-
+def _speicher_aus_tagen(ctx: _FaktKontext) -> SpeicherFakten:
+    """Die Speichergruppe: aus den Zeilen, ohne Speicher-Zeile aus den Tagen samt Netzladung und Preis (#427) —
+    RF-63, Phase von ``_baue_fakt``."""
+    roh, tages_summe, netzladung_tage = ctx.roh, ctx.tages_summe, ctx.netzladung_tage
     speicher = SpeicherFakten(
         ladung_kwh=roh.speicher_ladung,
         entladung_kwh=roh.speicher_entladung,
@@ -388,62 +515,73 @@ async def _baue_fakt(
             ),
             netzladung_gewicht_kwh=netzladung_tage.gewicht_kwh if netzladung_tage is not None else 0.0,
         )
-        tageswert_gruppen.add(TAGESWERT_SPEICHER)
+        ctx.tageswert_gruppen.add(TAGESWERT_SPEICHER)
+    return speicher
 
+
+def _dienstliche_ladekosten(emob: EmobFakten, tarif) -> EmobFakten:
+    """N-633: der Posten «Dienstliche Ladekosten» mit dem Tarif DIESES Monats (P8) — RF-63, Phase von ``_baue_fakt``
+    nach ``_lade_tarif``."""
     # N-633: der Posten „Dienstliche Ladekosten" — bewertet mit dem Tarif DIESES Monats (P8), über die eine
     # Layer-Formel. Hier statt im EmobFakten-Aufbau oben, weil der Tarif erst danach geladen ist.
     # HA-Bauform E4e: dieselbe Bewertung ruft Cockpit → Monat für einen Monat ohne Fakt (`tarif.dienstliche_ladekosten_euro`).
-    emob = replace(emob, dienstliche_ladekosten_euro=dienstliche_ladekosten_euro(
+    return replace(emob, dienstliche_ladekosten_euro=dienstliche_ladekosten_euro(
         emob.dienstlich_ladung_pv_kwh, emob.dienstlich_ladung_netz_kwh, tarif,
     ))
 
-    return MonatsFakt(
-        jahr=jahr,
-        monat=monat,
-        zaehler=zaehler,
-        erzeugung=erzeugung,
-        bkw=BkwFakten(
-            erzeugung_kwh=bkw_erzeugung,
-            eigenverbrauch_gemessen_kwh=roh.bkw_eigenverbrauch,
-            rest_eigenverbrauch_kwh=roh.bkw_rest_eigenverbrauch,
-            speicher_ladung_kwh=roh.bkw_speicher_ladung,
-            speicher_entladung_kwh=roh.bkw_speicher_entladung,
-            # Leer lassen, sobald die Zahl von der Tagesebene kommt: dort ist sie
-            # anlagenweit, eine Aufteilung wäre erfunden (s. Feld-Docstring).
-            erzeugung_je_investition=(
-                {} if TAGESWERT_BKW in tageswert_gruppen
-                else dict(roh.bkw_je_investition)
-            ),
+
+def _bkw_fakten(ctx: _FaktKontext) -> BkwFakten:
+    """Die BKW-Gruppe (Erzeugung aus ``_bkw_rest``, Mengen der Zeilen) — RF-63, Phase von ``_baue_fakt``."""
+    roh = ctx.roh
+    return BkwFakten(
+        erzeugung_kwh=ctx.bkw_erzeugung,
+        eigenverbrauch_gemessen_kwh=roh.bkw_eigenverbrauch,
+        rest_eigenverbrauch_kwh=roh.bkw_rest_eigenverbrauch,
+        speicher_ladung_kwh=roh.bkw_speicher_ladung,
+        speicher_entladung_kwh=roh.bkw_speicher_entladung,
+        # Leer lassen, sobald die Zahl von der Tagesebene kommt: dort ist sie
+        # anlagenweit, eine Aufteilung wäre erfunden (s. Feld-Docstring).
+        erzeugung_je_investition=(
+            {} if TAGESWERT_BKW in ctx.tageswert_gruppen
+            else dict(roh.bkw_je_investition)
         ),
-        speicher=speicher,
-        emob=emob,
-        wp=_wp_fakten(roh),
-        sonstiges=_sonstiges_fakten(roh, md_summen, ertraege, ausgaben),
-        tarif=tarif,
-        eeg=EegFakten(neg_preis_kwh=neg_preis_kwh),
-        kennzahlen=berechne_verbrauchs_kennzahlen(
-            pv_erzeugung_kwh=erzeugung.hinter_zaehler_kwh,
-            einspeisung_kwh=zaehler.einspeisung_kwh,
-            netzbezug_kwh=zaehler.netzbezug_kwh,
-            speicher_ladung_kwh=speicher.ladung_kwh,
-            speicher_entladung_kwh=speicher.entladung_kwh,
-            v2h_entladung_kwh=emob.v2h_entladung_kwh,
-            abgabe_dritte_kwh=roh.sonstiges_abgabe,
+    )
+
+
+def _kennzahlen(roh: _RohMonat, erzeugung: ErzeugungFakten, zaehler: ZaehlerFakten, speicher: SpeicherFakten,
+                emob: EmobFakten):
+    """Die Verbrauchs-Kennzahlen des Monats über den Layer (``berechne_verbrauchs_kennzahlen``) — RF-63, Phase von
+    ``_baue_fakt``."""
+    return berechne_verbrauchs_kennzahlen(
+        pv_erzeugung_kwh=erzeugung.hinter_zaehler_kwh,
+        einspeisung_kwh=zaehler.einspeisung_kwh,
+        netzbezug_kwh=zaehler.netzbezug_kwh,
+        speicher_ladung_kwh=speicher.ladung_kwh,
+        speicher_entladung_kwh=speicher.entladung_kwh,
+        v2h_entladung_kwh=emob.v2h_entladung_kwh,
+        abgabe_dritte_kwh=roh.sonstiges_abgabe,
+    )
+
+
+def _meta_fakten(
+    ctx: _FaktKontext, erzeugung: ErzeugungFakten, *, einspeisung_erfasst: bool, netzbezug_erfasst: bool,
+) -> MetaFakten:
+    """Die Meta-Gruppe (Zeile, Erfassung der Netzfelder, Erzeuger-Fenster, aktive Investitionen, Tageswert-Marken) —
+    RF-63, Phase von ``_baue_fakt``."""
+    monatsdaten = ctx.monatsdaten
+    return MetaFakten(
+        monatsdaten=monatsdaten,
+        hat_zaehlerzeile=monatsdaten is not None,
+        netzbezug_erfasst=netzbezug_erfasst,
+        einspeisung_erfasst=einspeisung_erfasst,
+        netz_erfasst=monatsdaten is not None and netzbezug_erfasst and einspeisung_erfasst,
+        erzeuger_aktiv=_erzeuger_aktiv(ctx.investitionen, ctx.jahr, ctx.monat),
+        pv_vollstaendig=erzeugung.pv_vollstaendig,
+        aktive_investitionen=tuple(
+            i.id for i in ctx.investitionen if ctx.aktiv(i)
         ),
-        meta=MetaFakten(
-            monatsdaten=monatsdaten,
-            hat_zaehlerzeile=monatsdaten is not None,
-            netzbezug_erfasst=netzbezug_erfasst,
-            einspeisung_erfasst=einspeisung_erfasst,
-            netz_erfasst=monatsdaten is not None and netzbezug_erfasst and einspeisung_erfasst,
-            erzeuger_aktiv=_erzeuger_aktiv(investitionen, jahr, monat),
-            pv_vollstaendig=erzeugung.pv_vollstaendig,
-            aktive_investitionen=tuple(
-                i.id for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)
-            ),
-            typen_mit_zeile=frozenset(roh.typen_mit_zeile),
-            tageswert_gruppen=frozenset(tageswert_gruppen),
-        ),
+        typen_mit_zeile=frozenset(ctx.roh.typen_mit_zeile),
+        tageswert_gruppen=frozenset(ctx.tageswert_gruppen),
     )
 
 

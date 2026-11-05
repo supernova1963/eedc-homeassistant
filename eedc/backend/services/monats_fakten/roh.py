@@ -345,6 +345,11 @@ class _RohMonat:
         dasselbe wie für ein abtretendes BKW: ihre Erzeugung geht über einen
         anderen Weg in die PV-Summe (``ErzeugungFakten.bkw_aus_anlagenwert_kwh``),
         der Ersatzträger von P9 entfällt.
+
+        Form (RF-62, Bauform RF-1): ``falte`` ist das Dienstwagen-Tor, die Typ-Weiche und die Finanz-Summen; je Typ eine
+        Phase derselben Klasse — ``_falte_bkw`` (N-266/N-621, P9), ``_falte_speicher`` (Netzladung, gewichteter
+        Ladepreis), ``_falte_wp`` (Mengen, Modus-Strom, ``*_mit_ersatz``, Geräte-Regel, Bauart- und Funktions-Zählung),
+        ``_falte_emob`` (privat/dienstlich, N-555), ``_falte_pv_modul`` (nur Kandidatur) und ``_falte_sonstiges``.
         """
         b = imd_typ_beitrag(inv, data, source_provenance)
         # Dienstwagen zählen NICHT als Beitrag: sie sind aus dem E-Mob-Pool der
@@ -355,290 +360,317 @@ class _RohMonat:
             self.typen_mit_zeile.add(inv.typ)
 
         if inv.typ == "balkonkraftwerk":
-            # N-266: Hängen `pv-module` an diesem BKW, hat es seine Erzeugung
-            # abgetreten — sie steht schon in `pv_je_modul` (dort füllt der
-            # BKW-Monatswert die Lücken seiner Kinder, `pv_monatswerte.py`
-            # Stufe 2). Hier zählt sie deshalb 0.
-            #
-            # ⚠ Und der **Rest-Eigenverbrauch** wird damit ebenfalls 0, nicht
-            # etwa der Ersatzträger: P9 sagt, der Ersatzträger greift genau
-            # dann, wenn die Erzeugung **nirgends** in die PV-Summe eingeht. Hier
-            # geht sie ein, nur über die Kinder — der selbst verbrauchte Anteil
-            # steckt also wie im Normalfall bereits in der Ableitung
-            # `PV − Einspeisung − Speicherladung`. Ihn zusätzlich zu tragen wäre
-            # exakt die Doppelzählung, gegen die P9 geschrieben ist.
-            hat_abgetreten = inv.id in abgetretene_bkw
-            # P9: je (BKW, Monat) trägt genau EINER der beiden Werte die
-            # Finanz-Zeile — die Entscheidung fällt der Helfer, nie der Aufrufer.
-            beitrag = bkw_finanz_beitrag(
-                erzeugung_kwh=b.bkw_erzeugung,
-                eigenverbrauch_kwh=b.bkw_eigenverbrauch,
-            )
-            # ⚠ N-621 — P9-Zusatzregel: ein BKW ohne eigene Erzeugung, das in
-            # diesem Monat einen Anteil am gespeicherten Anlagenwert bekommt,
-            # trägt KEINEN Ersatz-Eigenverbrauch. Seine Erzeugung geht über den
-            # Anteil in `pv_kwh` ein, der selbst verbrauchte Teil steckt damit
-            # schon in der Ableitung `PV − Einspeisung − Speicherladung` — ein
-            # zweiter Term wäre die Doppelzählung, gegen die P9 geschrieben ist
-            # (gemessen vorher: Anlagenwert 1000, Strings 550 + 380, BKW-Zeile
-            # nur mit Eigenverbrauch 30 ⇒ PV 930 + Ersatz-EV 30). Dieselbe Form
-            # wie die Abtretung im Absatz darüber, aus demselben Grund. Gilt
-            # für jeden Empfänger des Anteils, auch wenn der Rest 0 ist — der
-            # Anlagenwert sagt dann, dass das BKW nichts erzeugt hat.
-            if hat_abgetreten or inv.id in bkw_mit_anlagenanteil:
-                beitrag = bkw_finanz_beitrag(erzeugung_kwh=None, eigenverbrauch_kwh=None)
-            if not hat_abgetreten:
-                self.bkw_erzeugung += b.bkw_erzeugung
-            # Je Investition zusätzlich zur Summe (F-10): der String-Vergleich
-            # des Jahresbericht-PDF stellt jeden Erzeuger einzeln seinem SOLL
-            # gegenüber und findet ein BKW in `pv_je_modul` nicht — dort stehen
-            # nur `pv-module`. Die Summe `bkw_erzeugung` hilft ihm nicht, sobald
-            # zwei Balkonkraftwerke da sind. Rein additiv; `pv_je_modul` und
-            # `pv_module_kwh` bleiben unberührt, weil `pv_module_kwh` in die
-            # ROI-Rechnung geht, wo das BKW bewusst eine eigene Zeile hat
-            # (`investitionen/roi.py::get_roi_dashboard`, innere `get_pv_erzeugung`) und sonst doppelt zählte.
-            #
-            # N-266: ein abtretendes BKW steht hier NICHT. Beide Leser dieses
-            # Felds addieren es neben `pv_je_modul` — der String-Vergleich des
-            # PDF (dort ist das BKW seit E2 keine eigene Zeile mehr) und die
-            # ROI-Gewichtung in `aussichten/finanz_zerlegung.py::roi_und_fortschritt`
-            # (`_erz_gewichte` + `_bkw_gewichte`).
-            # Dort wäre es die Doppelzählung ein zweites Mal, auf der Geldachse.
-            if not hat_abgetreten:
-                self.bkw_je_investition[inv.id] = (
-                    self.bkw_je_investition.get(inv.id, 0.0) + b.bkw_erzeugung
-                )
-            self.bkw_eigenverbrauch += b.bkw_eigenverbrauch
-            self.bkw_rest_eigenverbrauch += beitrag.rest_eigenverbrauch_kwh
-            self.bkw_speicher_ladung += b.bkw_speicher_ladung
-            self.bkw_speicher_entladung += b.bkw_speicher_entladung
-
+            self._falte_bkw(inv, b, abgetretene_bkw=abgetretene_bkw, bkw_mit_anlagenanteil=bkw_mit_anlagenanteil)
         elif inv.typ == "speicher":
-            self.speicher_ladung += b.speicher_ladung
-            self.speicher_entladung += b.speicher_entladung
-            self.speicher_netzladung += b.speicher_arbitrage
-            if b.speicher_ladepreis_cent > 0 and b.speicher_arbitrage > 0:
-                self.speicher_preis_summe += b.speicher_ladepreis_cent * b.speicher_arbitrage
-                self.speicher_preis_gewicht += b.speicher_arbitrage
-
+            self._falte_speicher(b)
         elif inv.typ == "waermepumpe":
-            # N-609: die Mengen je Gerät aus DEMSELBEN Beitrag wie die Summen darunter (K3 · D1 · Kühlanteil).
-            _geraet = self.wp_je_geraet.setdefault(inv.id, [0.0, 0.0, 0.0])
-            _geraet[0] += b.wp_strom
-            _geraet[1] += b.wp_waerme
-            _geraet[2] += b.wp_modus_strom_kuehlen
-            self.wp_strom += b.wp_strom
-            # WK-16d: der Rest der Summanden-Achsen, je Geraet aufgeloest und
-            # erst danach summiert — wie die Menge darueber. Auf der
-            # Anlagensumme gebildet waere er fuer eine Mischanlage sinnlos.
-            self.wp_strom_nicht_aufgeteilt += b.wp_strom_nicht_aufgeteilt
-            self.wp_waerme += b.wp_waerme
-            # N-256: dieselben Mengen noch einmal, aber nur über die Geräte, die
-            # überhaupt eine Heizung ersetzt haben. KEINE Aufteilung je Gerät —
-            # zwei zusätzliche Summen, additiv neben den bestehenden. Sie sind
-            # die Grundmenge des **fossilen Vergleichs**; `wp_waerme`/`wp_strom`
-            # bleiben die Mengen der Anlage und werden von niemandem umgedeutet.
-            if not ersetzt_keine_heizung(
-                (inv.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
-            ):
-                self.wp_strom_mit_ersatz += b.wp_strom
-                self.wp_waerme_mit_ersatz += b.wp_waerme
-            self.wp_heizung += b.wp_heizung
-            self.wp_warmwasser += b.wp_warmwasser
-            self.wp_strom_heizen += b.wp_strom_heizen
-            self.wp_strom_warmwasser += b.wp_strom_warmwasser
-            self._falte_heizstab(inv, b)
-            self._falte_netz_eigener_tarif(inv, b)
-            # N-479: ODER über die Geräte — ein einziges gemessenes Gerät macht
-            # die Funktion für diesen Monat „gemessen". Dieselbe Bauform wie
-            # ``wp_hat_split`` darunter.
-            self.wp_heizung_gemessen = (
-                self.wp_heizung_gemessen or b.wp_heizung_gemessen)
-            self.wp_warmwasser_gemessen = (
-                self.wp_warmwasser_gemessen or b.wp_warmwasser_gemessen)
-            self.wp_strom_heizen_gemessen = (
-                self.wp_strom_heizen_gemessen or b.wp_strom_heizen_gemessen)
-            self.wp_strom_gemessen = self.wp_strom_gemessen or b.wp_strom_gemessen
-            self.wp_waerme_gemessen = self.wp_waerme_gemessen or b.wp_waerme_gemessen
-            self.wp_strom_warmwasser_gemessen = (
-                self.wp_strom_warmwasser_gemessen or b.wp_strom_warmwasser_gemessen)
-            self.wp_hat_split = self.wp_hat_split or b.wp_hat_split
-            self.wp_waerme_ist_gesamt = (
-                self.wp_waerme_ist_gesamt or b.wp_waerme_ist_gesamt
-            )
-            self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
-            self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
-            self.wp_modus_strom_warmwasser += b.wp_modus_strom_warmwasser
-            self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
-            self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
-            # SOLL-§9-E7/Option A: die Entscheidung ist in `b` schon gefallen
-            # (je Gerät). Hier wird nur addiert — anlagenweit wäre sie falsch,
-            # sobald ein F5-Gerät neben einem nicht-F5-Gerät steht.
-            self.wp_modus_strom_funktionsfremd_abzug += (
-                b.wp_modus_strom_funktionsfremd_abzug
-            )
-            self.wp_nutzenergie_kuehlen += b.wp_nutzenergie_kuehlen
-            self.wp_nutzenergie_lueften += b.wp_nutzenergie_lueften
-            self.wp_nutzenergie_entfeuchten += b.wp_nutzenergie_entfeuchten
-            # W-17: derselbe Grund wie im abgeleiteten Zweig oben — `b` ist der
-            # Beitrag EINES Geraets zu diesem Monat. Beide Zweige schreiben in
-            # dasselbe `_RohMonat`; das Maximum ueber beide ist deshalb das
-            # Maximum ueber alle Geraete des Monats, egal auf welchem Weg sie
-            # hereinkommen.
-            self.wp_modus_abdeckung_h = abdeckung_ueber_geraete(
-                self.wp_modus_abdeckung_h, b.wp_modus_abdeckung_h,
-            )
-            self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
-            self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
-            self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
-            # ⭐ **N-441/Fall J: der Geräte-Kreis des Nenners wird NACH dem
-            # Abzug gezählt.** `arbeitszahl` zieht den funktionsfremden Strom
-            # (Kühlen · Lüften · Entfeuchten, W-14/E4) vom Nenner ab. Ein
-            # Zweitgerät, das ausschliesslich kühlt, steht damit **nicht** im
-            # Nenner der Gesamtzahl — es darf sie auch nicht sperren. Gemessen:
-            # 2400 kWh Waerme ÷ 800 kWh Heizstrom = 3,0 existiert, wurde aber
-            # mit „nicht alle Geraete melden Waerme" unterdrueckt, waehrend
-            # Heizen und Kuehlen daneben beide 3,0 zeigten.
-            if b.wp_strom > 0:
-                # R2/Bauart: nur Geräte, die auch **Strom** beitragen — ein
-                # stillstehendes Zweitgerät soll die Kennzahl des laufenden
-                # nicht sperren. Dieselbe Zusicherung wie beim Tages-Zweig der
-                # Abgrenzungs-Störung, wo genau das schon einmal nötig war.
-                #
-                # ⚠ Die Bauart-Zaehler bleiben bei „Strom > 0" — sie zaehlen
-                # STAMMDATEN (welche Bauarten stehen im Block?), nicht den
-                # Nenner. Ein reines Kuehlgeraet ist weiterhin ein Geraet der
-                # Anlage, und eine gemischte Bauart bleibt gemischt.
-                if ist_luft_luft_waermepumpe(inv):
-                    self.wp_geraete_luft_luft += 1
-                else:
-                    self.wp_geraete_luft_wasser += 1
-            # P-433-3 S3-8: das Kriterium steht im Layer (`zaehlt_fuer_geraete_regel`), der Tag ruft dasselbe.
-            if zaehlt_fuer_geraete_regel(
-                b.wp_strom,
-                b.wp_modus_strom_kuehlen + b.wp_modus_strom_lueften + b.wp_modus_strom_entfeuchten,
-            ):
-                self.wp_geraete_mit_strom.add(inv.id)
-            if b.wp_waerme > 0:
-                self.wp_geraete_mit_waerme.add(inv.id)
-            # R2 je Funktion: je Seite EINES Quotienten zaehlen. Gezaehlt wird
-            # der **Beitrag**, nicht die Stammdaten-Zusicherung — nur so faengt
-            # die Regel den Altbestand, den die Bauart-Bedingung nicht kennt.
-            #
-            # ⚠ `wp_strom` (das ungeteilte `stromverbrauch_kwh`) zaehlt hier
-            # bewusst NICHT mit: Es gehoert zu KEINER Funktion. Genau deshalb
-            # stoert die Klimaanlage in A5 die Heiz-Arbeitszahl nicht — ihre
-            # 200 kWh stehen in keinem der beiden Quotienten.
-            #
-            # ⛔ **Gesammelt werden IDs, nicht Anzahlen (N-441).** „Ein Geraet
-            # hier, ein Geraet dort" ergab `(1, 1)` und galt als deckungsgleich
-            # — der Anlassfall (Waerme von A, Heizstrom von B) lieferte 3,0 ohne
-            # jeden Grund. Die Regel prueft seither Identitaet.
-            if b.wp_strom_heizen > 0:
-                self.wp_geraete_e_heizen.add(inv.id)
-            if b.wp_heizung > 0:
-                self.wp_geraete_q_heizen.add(inv.id)
-            if b.wp_strom_warmwasser > 0:
-                self.wp_geraete_e_warmwasser.add(inv.id)
-            if b.wp_warmwasser > 0:
-                self.wp_geraete_q_warmwasser.add(inv.id)
-            if b.wp_modus_strom_kuehlen > 0:
-                self.wp_geraete_e_kuehlen.add(inv.id)
-            if b.wp_nutzenergie_kuehlen > 0:
-                self.wp_geraete_q_kuehlen.add(inv.id)
-            # Erste gemeldete Störung gewinnt. Zwei verschiedene Störungen an
-            # zwei Geräten wären beide richtig — die Kachel trägt aber nur einen
-            # Grund, und beide führen zu derselben Folge (keine Kennzahl).
-            if self.wp_abgrenzung is None and b.wp_abgrenzung:
-                self.wp_abgrenzung = b.wp_abgrenzung
-
+            self._falte_wp(inv, b)
         elif inv.typ in ("e-auto", "wallbox"):
-            self._falte_netz_eigener_tarif(inv, b)
-            if ist_dienstlich(inv):
-                # Dienstlich geladen ist keine private Ersparnis — der Anteil
-                # wird herausgefiltert, aber nicht verworfen: er gehört als
-                # Ausgabe in die Sonstige-Summen (Bewertung beim Aufrufer, sie
-                # braucht den Monatstarif). [[feedback_dienstwagen_alle_checks]]
-                #
-                # N-555: die Menge rechnet die eine Funktion (`bau.py`, über
-                # `entscheide_emob_heimladung`) — bitgleich zu vorher, aber der
-                # Fahrverbrauch als Schätzung steht dort ausdrücklich. Hier stand
-                # `get_emob_pv_netz_kwh(data)`, dessen Ersatz still einsprang.
-                self.dienstlich_je_inv[inv.id] = data
-                if inv.typ == "wallbox":
-                    self.dienstliche_wallbox_ids.add(inv.id)
-                elif ist_heim_gesamt(data, source_provenance):
-                    self.heim_gesamt_ids.add(inv.id)
-            elif inv.typ == "e-auto":
-                if ist_heim_gesamt(data, source_provenance):
-                    self.heim_gesamt_ids.add(inv.id)
-                self.eauto_ladedaten.append(data)
-                self.eauto_ladedaten_ids.append(inv.id)
-                self.eauto_km += b.eauto_km
-                self.eauto_fahrverbrauch += b.eauto_verbrauch
-                self.eauto_v2h += b.eauto_v2h
-                if b.eauto_km:
-                    self.eauto_km_je_fahrzeug[inv.id] = (
-                        self.eauto_km_je_fahrzeug.get(inv.id, 0.0) + b.eauto_km
-                    )
-                if b.eauto_verbrauch:
-                    self.eauto_fahrverbrauch_je_fahrzeug[inv.id] = (
-                        self.eauto_fahrverbrauch_je_fahrzeug.get(inv.id, 0.0)
-                        + b.eauto_verbrauch
-                    )
-            else:
-                self.wallbox_ladedaten.append(data)
-                self.wallbox_ladedaten_ids.append(inv.id)
-
+            self._falte_emob(inv, data, b, source_provenance)
         elif inv.typ == "pv-module":
-            # Nur zur Monats-Kandidatur; der WERT kommt aus der P7-Auflösung.
-            self.pv_je_modul_roh[inv.id] = b.pv_erzeugung
-
+            self._falte_pv_modul(inv, b)
         elif inv.typ == "sonstiges":
-            self.sonstiges_erzeugung += b.sonstiges_erzeugung
-            self.sonstiges_verbrauch += b.sonstiges_verbrauch
-            self.sonstiges_eigenverbrauch += b.sonstiges_eigenverbrauch
-            self.sonstiges_einspeisung += b.sonstiges_einspeisung
-            self.sonstiges_bezug_pv += b.sonstiges_bezug_pv
-            self.sonstiges_bezug_netz += b.sonstiges_bezug_netz
-            self.sonstiges_einspeise_erloes_euro += b.sonstiges_einspeise_erloes_euro
-            self.sonstiges_abgabe += b.sonstiges_abgabe
-            g = self.sonstiges_je_geraet.setdefault(
-                inv.id,
-                {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
-                 "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0,
-                 "einspeise_erloes_euro": 0.0, "abgabe": 0.0,
-                 "hat_einspeise_erloes": False},
-            )
-            g["erzeugung"] += b.sonstiges_erzeugung
-            g["verbrauch"] += b.sonstiges_verbrauch
-            g["eigenverbrauch"] += b.sonstiges_eigenverbrauch
-            g["einspeisung"] += b.sonstiges_einspeisung
-            g["bezug_pv"] += b.sonstiges_bezug_pv
-            g["bezug_netz"] += b.sonstiges_bezug_netz
-            g["einspeise_erloes_euro"] += b.sonstiges_einspeise_erloes_euro
-            # ODER über die Monate: EIN gepflegter Monat genügt, damit das
-            # Gerät als bewertbar gilt. Die Zahl der Monate MIT Wert zählt der
-            # Aufrufer selbst (F-20: eigene Monatszahl je Posten).
-            g["hat_einspeise_erloes"] = (
-                g["hat_einspeise_erloes"] or b.hat_einspeise_erloes
-            )
-            g["abgabe"] += b.sonstiges_abgabe
-            # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
-            # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
-            # ein Beitrag > 0.
-            if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
-                self.hat_sonstigen_erzeuger = True
-            # Dieselbe Regel auf der Verbraucherseite: ein Heizstab, der im
-            # Monat 0 kWh gezogen hat, ist ein echter 0-Wert.
-            if b.sonstiges_verbrauch or (inv.parameter or {}).get("kategorie") == "verbraucher":
-                self.hat_sonstigen_verbraucher = True
+            self._falte_sonstiges(inv, b)
 
         # #310: die Finanz-Positionen hängen NICHT am Typ — eine Reparatur am
         # Wechselrichter ist so real wie eine am Speicher.
         summen = berechne_sonstige_summen(data)
         self.ertraege_euro += summen["ertraege_euro"]
         self.ausgaben_euro += summen["ausgaben_euro"]
+
+    def _falte_bkw(self, inv, b, *, abgetretene_bkw: frozenset, bkw_mit_anlagenanteil: frozenset) -> None:
+        """Balkonkraftwerk: Erzeugung (nicht bei Abtretung, N-266), je Investition (F-10), Eigenverbrauch und der
+        Rest-Eigenverbrauch als Ersatzträger (P9, nicht bei Abtretung oder Anlagenanteil, N-621) — RF-62, Phase von
+        ``falte``."""
+        # N-266: Hängen `pv-module` an diesem BKW, hat es seine Erzeugung
+        # abgetreten — sie steht schon in `pv_je_modul` (dort füllt der
+        # BKW-Monatswert die Lücken seiner Kinder, `pv_monatswerte.py`
+        # Stufe 2). Hier zählt sie deshalb 0.
+        #
+        # ⚠ Und der **Rest-Eigenverbrauch** wird damit ebenfalls 0, nicht
+        # etwa der Ersatzträger: P9 sagt, der Ersatzträger greift genau
+        # dann, wenn die Erzeugung **nirgends** in die PV-Summe eingeht. Hier
+        # geht sie ein, nur über die Kinder — der selbst verbrauchte Anteil
+        # steckt also wie im Normalfall bereits in der Ableitung
+        # `PV − Einspeisung − Speicherladung`. Ihn zusätzlich zu tragen wäre
+        # exakt die Doppelzählung, gegen die P9 geschrieben ist.
+        hat_abgetreten = inv.id in abgetretene_bkw
+        # P9: je (BKW, Monat) trägt genau EINER der beiden Werte die
+        # Finanz-Zeile — die Entscheidung fällt der Helfer, nie der Aufrufer.
+        beitrag = bkw_finanz_beitrag(
+            erzeugung_kwh=b.bkw_erzeugung,
+            eigenverbrauch_kwh=b.bkw_eigenverbrauch,
+        )
+        # ⚠ N-621 — P9-Zusatzregel: ein BKW ohne eigene Erzeugung, das in
+        # diesem Monat einen Anteil am gespeicherten Anlagenwert bekommt,
+        # trägt KEINEN Ersatz-Eigenverbrauch. Seine Erzeugung geht über den
+        # Anteil in `pv_kwh` ein, der selbst verbrauchte Teil steckt damit
+        # schon in der Ableitung `PV − Einspeisung − Speicherladung` — ein
+        # zweiter Term wäre die Doppelzählung, gegen die P9 geschrieben ist
+        # (gemessen vorher: Anlagenwert 1000, Strings 550 + 380, BKW-Zeile
+        # nur mit Eigenverbrauch 30 ⇒ PV 930 + Ersatz-EV 30). Dieselbe Form
+        # wie die Abtretung im Absatz darüber, aus demselben Grund. Gilt
+        # für jeden Empfänger des Anteils, auch wenn der Rest 0 ist — der
+        # Anlagenwert sagt dann, dass das BKW nichts erzeugt hat.
+        if hat_abgetreten or inv.id in bkw_mit_anlagenanteil:
+            beitrag = bkw_finanz_beitrag(erzeugung_kwh=None, eigenverbrauch_kwh=None)
+        if not hat_abgetreten:
+            self.bkw_erzeugung += b.bkw_erzeugung
+        # Je Investition zusätzlich zur Summe (F-10): der String-Vergleich
+        # des Jahresbericht-PDF stellt jeden Erzeuger einzeln seinem SOLL
+        # gegenüber und findet ein BKW in `pv_je_modul` nicht — dort stehen
+        # nur `pv-module`. Die Summe `bkw_erzeugung` hilft ihm nicht, sobald
+        # zwei Balkonkraftwerke da sind. Rein additiv; `pv_je_modul` und
+        # `pv_module_kwh` bleiben unberührt, weil `pv_module_kwh` in die
+        # ROI-Rechnung geht, wo das BKW bewusst eine eigene Zeile hat
+        # (`investitionen/roi.py::get_roi_dashboard`, innere `get_pv_erzeugung`) und sonst doppelt zählte.
+        #
+        # N-266: ein abtretendes BKW steht hier NICHT. Beide Leser dieses
+        # Felds addieren es neben `pv_je_modul` — der String-Vergleich des
+        # PDF (dort ist das BKW seit E2 keine eigene Zeile mehr) und die
+        # ROI-Gewichtung in `aussichten/finanz_zerlegung.py::roi_und_fortschritt`
+        # (`_erz_gewichte` + `_bkw_gewichte`).
+        # Dort wäre es die Doppelzählung ein zweites Mal, auf der Geldachse.
+        if not hat_abgetreten:
+            self.bkw_je_investition[inv.id] = (
+                self.bkw_je_investition.get(inv.id, 0.0) + b.bkw_erzeugung
+            )
+        self.bkw_eigenverbrauch += b.bkw_eigenverbrauch
+        self.bkw_rest_eigenverbrauch += beitrag.rest_eigenverbrauch_kwh
+        self.bkw_speicher_ladung += b.bkw_speicher_ladung
+        self.bkw_speicher_entladung += b.bkw_speicher_entladung
+
+    def _falte_speicher(self, b) -> None:
+        """Speicher: Ladung, Entladung, Netzladung (Arbitrage) und der verbrauchsgewichtete Ladepreis als Summe
+        ``Preis × kWh`` und Gewicht ``kWh`` — RF-62, Phase von ``falte``."""
+        self.speicher_ladung += b.speicher_ladung
+        self.speicher_entladung += b.speicher_entladung
+        self.speicher_netzladung += b.speicher_arbitrage
+        if b.speicher_ladepreis_cent > 0 and b.speicher_arbitrage > 0:
+            self.speicher_preis_summe += b.speicher_ladepreis_cent * b.speicher_arbitrage
+            self.speicher_preis_gewicht += b.speicher_arbitrage
+
+    def _falte_wp(self, inv, b) -> None:
+        """Wärmepumpe: Mengen je Gerät (N-609) und Summe, ``*_mit_ersatz`` nur für Geräte, die eine Heizung ersetzen
+        (N-256), Heizstab, Netzbezug zum WP-Tarif, Gemessen-Marken (N-479), Modus-Strom, Abdeckung (W-17), Geräte-Regel
+        (N-441), Bauart-Zählung (R2/SOLL §5), Funktions-Mengen (R2 je Funktion) und die Abgrenzungs-Störung — RF-62,
+        Phase von ``falte``."""
+        # N-609: die Mengen je Gerät aus DEMSELBEN Beitrag wie die Summen darunter (K3 · D1 · Kühlanteil).
+        _geraet = self.wp_je_geraet.setdefault(inv.id, [0.0, 0.0, 0.0])
+        _geraet[0] += b.wp_strom
+        _geraet[1] += b.wp_waerme
+        _geraet[2] += b.wp_modus_strom_kuehlen
+        self.wp_strom += b.wp_strom
+        # WK-16d: der Rest der Summanden-Achsen, je Geraet aufgeloest und
+        # erst danach summiert — wie die Menge darueber. Auf der
+        # Anlagensumme gebildet waere er fuer eine Mischanlage sinnlos.
+        self.wp_strom_nicht_aufgeteilt += b.wp_strom_nicht_aufgeteilt
+        self.wp_waerme += b.wp_waerme
+        # N-256: dieselben Mengen noch einmal, aber nur über die Geräte, die
+        # überhaupt eine Heizung ersetzt haben. KEINE Aufteilung je Gerät —
+        # zwei zusätzliche Summen, additiv neben den bestehenden. Sie sind
+        # die Grundmenge des **fossilen Vergleichs**; `wp_waerme`/`wp_strom`
+        # bleiben die Mengen der Anlage und werden von niemandem umgedeutet.
+        if not ersetzt_keine_heizung(
+            (inv.parameter or {}).get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+        ):
+            self.wp_strom_mit_ersatz += b.wp_strom
+            self.wp_waerme_mit_ersatz += b.wp_waerme
+        self.wp_heizung += b.wp_heizung
+        self.wp_warmwasser += b.wp_warmwasser
+        self.wp_strom_heizen += b.wp_strom_heizen
+        self.wp_strom_warmwasser += b.wp_strom_warmwasser
+        self._falte_heizstab(inv, b)
+        self._falte_netz_eigener_tarif(inv, b)
+        # N-479: ODER über die Geräte — ein einziges gemessenes Gerät macht
+        # die Funktion für diesen Monat „gemessen". Dieselbe Bauform wie
+        # ``wp_hat_split`` darunter.
+        self.wp_heizung_gemessen = (
+            self.wp_heizung_gemessen or b.wp_heizung_gemessen)
+        self.wp_warmwasser_gemessen = (
+            self.wp_warmwasser_gemessen or b.wp_warmwasser_gemessen)
+        self.wp_strom_heizen_gemessen = (
+            self.wp_strom_heizen_gemessen or b.wp_strom_heizen_gemessen)
+        self.wp_strom_gemessen = self.wp_strom_gemessen or b.wp_strom_gemessen
+        self.wp_waerme_gemessen = self.wp_waerme_gemessen or b.wp_waerme_gemessen
+        self.wp_strom_warmwasser_gemessen = (
+            self.wp_strom_warmwasser_gemessen or b.wp_strom_warmwasser_gemessen)
+        self.wp_hat_split = self.wp_hat_split or b.wp_hat_split
+        self.wp_waerme_ist_gesamt = (
+            self.wp_waerme_ist_gesamt or b.wp_waerme_ist_gesamt
+        )
+        self.wp_modus_strom_heizen += b.wp_modus_strom_heizen
+        self.wp_modus_strom_kuehlen += b.wp_modus_strom_kuehlen
+        self.wp_modus_strom_warmwasser += b.wp_modus_strom_warmwasser
+        self.wp_modus_strom_lueften += b.wp_modus_strom_lueften
+        self.wp_modus_strom_entfeuchten += b.wp_modus_strom_entfeuchten
+        # SOLL-§9-E7/Option A: die Entscheidung ist in `b` schon gefallen
+        # (je Gerät). Hier wird nur addiert — anlagenweit wäre sie falsch,
+        # sobald ein F5-Gerät neben einem nicht-F5-Gerät steht.
+        self.wp_modus_strom_funktionsfremd_abzug += (
+            b.wp_modus_strom_funktionsfremd_abzug
+        )
+        self.wp_nutzenergie_kuehlen += b.wp_nutzenergie_kuehlen
+        self.wp_nutzenergie_lueften += b.wp_nutzenergie_lueften
+        self.wp_nutzenergie_entfeuchten += b.wp_nutzenergie_entfeuchten
+        # W-17: derselbe Grund wie im abgeleiteten Zweig oben — `b` ist der
+        # Beitrag EINES Geraets zu diesem Monat. Beide Zweige schreiben in
+        # dasselbe `_RohMonat`; das Maximum ueber beide ist deshalb das
+        # Maximum ueber alle Geraete des Monats, egal auf welchem Weg sie
+        # hereinkommen.
+        self.wp_modus_abdeckung_h = abdeckung_ueber_geraete(
+            self.wp_modus_abdeckung_h, b.wp_modus_abdeckung_h,
+        )
+        self.wp_modus_gemessen = self.wp_modus_gemessen or b.wp_modus_gemessen
+        self.wp_modus_strom_bezug += b.wp_modus_strom_bezug
+        self.wp_waerme_abgeleitet += b.wp_waerme_abgeleitet
+        # ⭐ **N-441/Fall J: der Geräte-Kreis des Nenners wird NACH dem
+        # Abzug gezählt.** `arbeitszahl` zieht den funktionsfremden Strom
+        # (Kühlen · Lüften · Entfeuchten, W-14/E4) vom Nenner ab. Ein
+        # Zweitgerät, das ausschliesslich kühlt, steht damit **nicht** im
+        # Nenner der Gesamtzahl — es darf sie auch nicht sperren. Gemessen:
+        # 2400 kWh Waerme ÷ 800 kWh Heizstrom = 3,0 existiert, wurde aber
+        # mit „nicht alle Geraete melden Waerme" unterdrueckt, waehrend
+        # Heizen und Kuehlen daneben beide 3,0 zeigten.
+        if b.wp_strom > 0:
+            # R2/Bauart: nur Geräte, die auch **Strom** beitragen — ein
+            # stillstehendes Zweitgerät soll die Kennzahl des laufenden
+            # nicht sperren. Dieselbe Zusicherung wie beim Tages-Zweig der
+            # Abgrenzungs-Störung, wo genau das schon einmal nötig war.
+            #
+            # ⚠ Die Bauart-Zaehler bleiben bei „Strom > 0" — sie zaehlen
+            # STAMMDATEN (welche Bauarten stehen im Block?), nicht den
+            # Nenner. Ein reines Kuehlgeraet ist weiterhin ein Geraet der
+            # Anlage, und eine gemischte Bauart bleibt gemischt.
+            if ist_luft_luft_waermepumpe(inv):
+                self.wp_geraete_luft_luft += 1
+            else:
+                self.wp_geraete_luft_wasser += 1
+        # P-433-3 S3-8: das Kriterium steht im Layer (`zaehlt_fuer_geraete_regel`), der Tag ruft dasselbe.
+        if zaehlt_fuer_geraete_regel(
+            b.wp_strom,
+            b.wp_modus_strom_kuehlen + b.wp_modus_strom_lueften + b.wp_modus_strom_entfeuchten,
+        ):
+            self.wp_geraete_mit_strom.add(inv.id)
+        if b.wp_waerme > 0:
+            self.wp_geraete_mit_waerme.add(inv.id)
+        # R2 je Funktion: je Seite EINES Quotienten zaehlen. Gezaehlt wird
+        # der **Beitrag**, nicht die Stammdaten-Zusicherung — nur so faengt
+        # die Regel den Altbestand, den die Bauart-Bedingung nicht kennt.
+        #
+        # ⚠ `wp_strom` (das ungeteilte `stromverbrauch_kwh`) zaehlt hier
+        # bewusst NICHT mit: Es gehoert zu KEINER Funktion. Genau deshalb
+        # stoert die Klimaanlage in A5 die Heiz-Arbeitszahl nicht — ihre
+        # 200 kWh stehen in keinem der beiden Quotienten.
+        #
+        # ⛔ **Gesammelt werden IDs, nicht Anzahlen (N-441).** „Ein Geraet
+        # hier, ein Geraet dort" ergab `(1, 1)` und galt als deckungsgleich
+        # — der Anlassfall (Waerme von A, Heizstrom von B) lieferte 3,0 ohne
+        # jeden Grund. Die Regel prueft seither Identitaet.
+        if b.wp_strom_heizen > 0:
+            self.wp_geraete_e_heizen.add(inv.id)
+        if b.wp_heizung > 0:
+            self.wp_geraete_q_heizen.add(inv.id)
+        if b.wp_strom_warmwasser > 0:
+            self.wp_geraete_e_warmwasser.add(inv.id)
+        if b.wp_warmwasser > 0:
+            self.wp_geraete_q_warmwasser.add(inv.id)
+        if b.wp_modus_strom_kuehlen > 0:
+            self.wp_geraete_e_kuehlen.add(inv.id)
+        if b.wp_nutzenergie_kuehlen > 0:
+            self.wp_geraete_q_kuehlen.add(inv.id)
+        # Erste gemeldete Störung gewinnt. Zwei verschiedene Störungen an
+        # zwei Geräten wären beide richtig — die Kachel trägt aber nur einen
+        # Grund, und beide führen zu derselben Folge (keine Kennzahl).
+        if self.wp_abgrenzung is None and b.wp_abgrenzung:
+            self.wp_abgrenzung = b.wp_abgrenzung
+
+    def _falte_emob(self, inv, data: dict, b, source_provenance: dict | None) -> None:
+        """E-Auto und Wallbox: Netzbezug zum Wallbox-Tarif, dienstlich (N-555, Heim-gesamt-Marke) oder privat (Ladezeilen,
+        km, Fahrverbrauch, V2H) — RF-62, Phase von ``falte``."""
+        self._falte_netz_eigener_tarif(inv, b)
+        if ist_dienstlich(inv):
+            # Dienstlich geladen ist keine private Ersparnis — der Anteil
+            # wird herausgefiltert, aber nicht verworfen: er gehört als
+            # Ausgabe in die Sonstige-Summen (Bewertung beim Aufrufer, sie
+            # braucht den Monatstarif). [[feedback_dienstwagen_alle_checks]]
+            #
+            # N-555: die Menge rechnet die eine Funktion (`bau.py`, über
+            # `entscheide_emob_heimladung`) — bitgleich zu vorher, aber der
+            # Fahrverbrauch als Schätzung steht dort ausdrücklich. Hier stand
+            # `get_emob_pv_netz_kwh(data)`, dessen Ersatz still einsprang.
+            self.dienstlich_je_inv[inv.id] = data
+            if inv.typ == "wallbox":
+                self.dienstliche_wallbox_ids.add(inv.id)
+            elif ist_heim_gesamt(data, source_provenance):
+                self.heim_gesamt_ids.add(inv.id)
+        elif inv.typ == "e-auto":
+            if ist_heim_gesamt(data, source_provenance):
+                self.heim_gesamt_ids.add(inv.id)
+            self.eauto_ladedaten.append(data)
+            self.eauto_ladedaten_ids.append(inv.id)
+            self.eauto_km += b.eauto_km
+            self.eauto_fahrverbrauch += b.eauto_verbrauch
+            self.eauto_v2h += b.eauto_v2h
+            if b.eauto_km:
+                self.eauto_km_je_fahrzeug[inv.id] = (
+                    self.eauto_km_je_fahrzeug.get(inv.id, 0.0) + b.eauto_km
+                )
+            if b.eauto_verbrauch:
+                self.eauto_fahrverbrauch_je_fahrzeug[inv.id] = (
+                    self.eauto_fahrverbrauch_je_fahrzeug.get(inv.id, 0.0)
+                    + b.eauto_verbrauch
+                )
+        else:
+            self.wallbox_ladedaten.append(data)
+            self.wallbox_ladedaten_ids.append(inv.id)
+
+    def _falte_pv_modul(self, inv, b) -> None:
+        """PV-Modul — RF-62, Phase von ``falte``."""
+        # Nur zur Monats-Kandidatur; der WERT kommt aus der P7-Auflösung.
+        self.pv_je_modul_roh[inv.id] = b.pv_erzeugung
+
+    def _falte_sonstiges(self, inv, b) -> None:
+        """Sonstiges: die acht Mengen als Summe und je Gerät, Erlös-Marke je Gerät, Erzeuger-/Verbraucher-Marke (P4) —
+        RF-62, Phase von ``falte``."""
+        self.sonstiges_erzeugung += b.sonstiges_erzeugung
+        self.sonstiges_verbrauch += b.sonstiges_verbrauch
+        self.sonstiges_eigenverbrauch += b.sonstiges_eigenverbrauch
+        self.sonstiges_einspeisung += b.sonstiges_einspeisung
+        self.sonstiges_bezug_pv += b.sonstiges_bezug_pv
+        self.sonstiges_bezug_netz += b.sonstiges_bezug_netz
+        self.sonstiges_einspeise_erloes_euro += b.sonstiges_einspeise_erloes_euro
+        self.sonstiges_abgabe += b.sonstiges_abgabe
+        g = self.sonstiges_je_geraet.setdefault(
+            inv.id,
+            {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
+             "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0,
+             "einspeise_erloes_euro": 0.0, "abgabe": 0.0,
+             "hat_einspeise_erloes": False},
+        )
+        g["erzeugung"] += b.sonstiges_erzeugung
+        g["verbrauch"] += b.sonstiges_verbrauch
+        g["eigenverbrauch"] += b.sonstiges_eigenverbrauch
+        g["einspeisung"] += b.sonstiges_einspeisung
+        g["bezug_pv"] += b.sonstiges_bezug_pv
+        g["bezug_netz"] += b.sonstiges_bezug_netz
+        g["einspeise_erloes_euro"] += b.sonstiges_einspeise_erloes_euro
+        # ODER über die Monate: EIN gepflegter Monat genügt, damit das
+        # Gerät als bewertbar gilt. Die Zahl der Monate MIT Wert zählt der
+        # Aufrufer selbst (F-20: eigene Monatszahl je Posten).
+        g["hat_einspeise_erloes"] = (
+            g["hat_einspeise_erloes"] or b.hat_einspeise_erloes
+        )
+        g["abgabe"] += b.sonstiges_abgabe
+        # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
+        # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
+        # ein Beitrag > 0.
+        if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
+            self.hat_sonstigen_erzeuger = True
+        # Dieselbe Regel auf der Verbraucherseite: ein Heizstab, der im
+        # Monat 0 kWh gezogen hat, ist ein echter 0-Wert.
+        if b.sonstiges_verbrauch or (inv.parameter or {}).get("kategorie") == "verbraucher":
+            self.hat_sonstigen_verbraucher = True
 
 def _erzeuger_aktiv(investitionen: list[Investition], jahr: int, monat: int) -> bool:
     """War im Monat ein Erzeuger hinter dem Zähler aktiv? (Anschaffungs-Grenze)

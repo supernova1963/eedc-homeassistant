@@ -19,9 +19,6 @@
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 56	services/korrekturprofil_aggregator.py::aggregiere_korrekturprofil_anlage
 56	services/live_sensor_config.py::baue_investitions_serien
-51	services/monats_fakten/bau.py::_baue_fakt
-60	services/monats_fakten/laden.py::lade_monats_fakten
-59	services/monats_fakten/roh.py::_RohMonat.falte
 57	services/snapshot/aggregator.py::get_tagesdetail_kwh
 60	services/solcast_service.py::_fetch_solcast_ha_auto
 57	services/vorschlag_service.py::VorschlagService._get_berechnete_werte

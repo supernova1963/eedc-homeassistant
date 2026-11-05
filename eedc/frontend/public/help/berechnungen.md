@@ -175,6 +175,17 @@ und zum Verständnis der Datenflüsse.
 > - **Gemessene 0 (Cockpit → Monat, laufend und ohne Abschluss, seit 04.10.2026):** hat eine Quelle im Monat **gemessen**, gilt ihr Wert auch, wenn er 0 ist — für Einspeisung, Netzbezug und den Anlagen-PV-Zähler sowie die Gerätefelder von Speicher, Balkonkraftwerk, Wallbox und E-Auto. Gemessen heißt bei der HA-Statistik mindestens **ein Intervall** (`SensorMonatswert.intervalle ≥ 1`: Anker + eine Zeile oder zwei Zeilen — eine einzelne Zeile misst nichts), bei der Tagesebene mindestens eine Stunde mit Wert (`TagesMonatsSumme.einspeisung_erfasst`/`netzbezug_erfasst`, nur diese zwei Felder). Ein nicht zugeordneter Zähler und einer ohne Zeilen im Monat bleiben `None` mit Grund. Auch im abgeschlossenen Monat mit Abschluss wirkt sie, wenn die gespeicherte Zeile für das Feld 0 trägt (Balkonkraftwerk, Speicher, Anlagen-PV-Zähler): das Feld zeigt dann 0,0 mit Herkunft Home Assistant statt „kein Wert“; eine gespeicherte Zahl über 0 wird nie verdrängt. Beispiel: Netzbezug-Zähler flach, drei Juli-Tage ⇒ Netzbezug 0,0 · Gesamtverbrauch 42,0 · Autarkie 100 % · Stromrechnung 0,00 € · Ergebnis 16,20 € (vorher alles „—“ und der Rat „Zähler zuordnen“). ⛔ **Nicht** für Wärmepumpe und einzelne Strings: eine WP-0 bräuchte eine Darstellungsregel für „kein Betrieb“, eine String-0 neben dem Anlagenzähler nähme dem String seinen Rest — beide bleiben bei „über 0“. Benannt: ein eingefrorener Sensor mit weiterlaufenden Zeilen ist 0 (wie HA ihn zeigt); im laufenden Monat schlägt eine HA-0 den gespeicherten Zwischenstand wie jeder HA-Wert. Proben: `test_n585_gemessene_null.py`.
 > - **Balkonkraftwerk mit Modul-Kindern:** der Monat tritt ab, in jeder Form — laufend, ohne Abschluss, abgeschlossen und im Tageswert-Rückfall der Monats-Fakten (`pv_verteilung.bkw_kinder_luecken_kwh`, Stufe 2 von P7; N-627, seit 04.10.2026). Gezählt werden nur Kinder, die im Monat aktiv sind (ADR-002/P11); der BKW-Wert füllt ihre Lücken (`max(0, BKW − Σ gemessene Kinder)` nach kWp), gemessene Kinder gewinnen, und das BKW trägt danach weder die PV-Achse noch eine eigene Zeile (vorher 66,6 / 72 statt 63 kWh im Monat ohne Abschluss). Code-Ort `aktueller_monat/aggregation.py::_bkw_abtretung`. Der Tag bleibt bei E4.
 > - **Modul ohne Wert, kein Gesamtwert:** die **Anzeige-Summe** nimmt die vorhandenen Werte (`pv_monatswerte.pv_teilsumme_je_monat`, `pv_vollstaendig=False`, Hinweis „Teilsumme"; der Daten-Checker nennt den Monat). Die **Prüf-Summe** `pv_summe_je_monat` bleibt `None` — Daten-Checker-PV-Map, Import-Vorschau und `gesamt_pv_kwh` prüfen nur vollständige Monate (Gernot 04.10.2026; N42 gilt nur noch für die Prüf-Leser).
+> - **Tageswert-Rückfall der Monats-Fakten** (`services/monats_fakten/bau.py`, Phasen von `_baue_fakt`; N-121/N-627/N-626/N-725): ergibt die P7-Auflösung für einen Monat **nichts** (`None` — kein Modulwert, kein Anlagenwert) und ist die Tagesebene geladen (mit `inkl_nur_tageswerte` oder für den Ladeanteil, `laden.py::_tagesebene`), trägt die **Modulsumme der Tage**: die Tages-Keys der Module plus die Tages-Keys der Balkonkraftwerke, die im Monat an aktive Modul-Kinder abgetreten haben (`abgetretene_bkw_ids` über die aktiven `pv-module`/`balkonkraftwerk`; N-627 — eine Umbuchung zwischen den beiden Gruppen, die Summe bleibt). Ein aufgelöster Wert, auch ein teilweise geschätzter, wird nie überschrieben; erst danach nimmt der Monat die Teilsumme der vorhandenen Modulwerte (N-626). Reihenfolge: **vollständige Summe → Tageswert → Teilsumme**. `pv_vollstaendig` folgt den Modulen auch im Rückfall (N-725): wahr nur, wenn die P7-Summe vollständig war oder der Monat gar keinen Modulwert trägt (der laufende Monat) — ein Monat mit Modul-Lücke bleibt „Teilsumme", auch wenn die Tagesebene die Zahl liefert (vorher hieß dieselbe Teilsumme „vollständig", kein Hinweis, der Daten-Checker prüfte gegen sie). Code-Ort `_pv_aus_tagen`.
+>
+>   **BKW-Rest (N-640):** trägt der Monat weder eine BKW-Zeile noch einen BKW-Anteil am Anlagenwert (N-621), kommt die BKW-Erzeugung aus den Tagen (`Tages_BKW` = BKW-Tages-Keys ohne die abgetretenen). Ist ein Teil davon nur ein kWp-Anteil am Anlagenzähler der Tage (Balkonkraftwerk ohne eigenen kWh-Zähler, Tages-Key mit Marke `kwp_anteil`, N-628) und kommen die Module aus **gespeicherten, vollständigen** Monatswerten (nicht aus den Tagen), bekommt das Balkonkraftwerk den Rest des Anlagenzählers:
+>
+>   ```
+>   BKW_Monat = Tageswert_BKW_gemessen + max(0, Σ Tages_Module + Σ Tages_BKW − Modulsumme_Monat − Tageswert_BKW_gemessen)
+>     Tages_Module           = Tages-Keys der Module + abgetretene BKW-Tages-Keys (N-627)
+>     Tageswert_BKW_gemessen = min(Tages_BKW, Σ BKW-Tages-Keys ohne kwp_anteil)
+>   ```
+>
+>   Kommen die Module selbst aus den Tagen oder sind sie nur eine Teilsumme, bleibt der Tageswert (dann sind beide Seiten Anteile derselben Tage). Ein Ergebnis 0 setzt keine Tageswert-Marke. Ohne die Regel stand der Anteil obendrauf (Frank85: 215,2 = 161,4 + 53,8 gegen den Gesamtzähler 161,4). Code-Ort `_bkw_rest`; `pv_kwh = Modulsumme + BKW + BKW-Anteil am Anlagenwert` steht in `_erzeugung` (N-621), dort auch die Wandlungsverluste aus dem Kanal-Monat (N-588).
 
 > **Seit 2026-07-31 ist die Lesequelle nicht mehr `lade_pv_je_monat`, sondern eine Schicht darüber:** `services/monats_fakten/::lade_monats_fakten` (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)). Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw. `erzeugung.pv_kwh`), daneben stehen Zähler, Speicher, E-Mobilität, Wärmepumpe, Sonstiges, Tarif, §51 und die Verbrauchs-Kennzahlen. Sie **ruft** `lade_pv_je_monat` (die P7-Regel bleibt unverändert), wendet aber zusätzlich **einmal** alle Zeitfilter (`aktiv` · Anschaffung · Stilllegung) und den Dienstwagen-Filter an. Wer eine abgeleitete Monatsgröße auswertet, nimmt sie von dort; `lade_pv_je_monat` direkt zu rufen bleibt richtig, wo **nur** die Pro-Modul-PV gebraucht wird (String-Vergleich, PV-Diagnose). Ausgenommen sind Schreib-, Import- und Checker-Pfade — die Schicht ist reines Lesen.
 >
@@ -851,6 +862,19 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
                       Investition_gesamt im Einzeljahr: nur Investitionen mit Anschaffung ≤ 31.12. (N-720)
 ```
 
+> **`BKW_Rest_Eigenverbrauch` entsteht in der Faltung der Monats-Fakten** (`monats_fakten/roh.py::_RohMonat._falte_bkw`,
+> ADR-002/P9): je BKW-Zeile entscheidet `bkw_finanz_beitrag`, welcher Wert die Finanz-Zeile trägt — mit erfasster
+> Erzeugung die Erzeugung (Rest 0, der selbst verbrauchte Teil steckt in `PV − Einspeisung − Speicherladung`), ohne sie
+> der gemessene Eigenverbrauch. Für ein Balkonkraftwerk, das an Modul-Kinder abgetreten hat (N-266), und für eines mit
+> Anteil am gespeicherten Anlagenwert (N-621) entfällt er ganz — seine Erzeugung steht über die Kinder bzw. den Anteil
+> schon in der PV-Summe:
+>
+> ```
+> BKW_Rest_Eigenverbrauch(Monat) = Σ_BKW-Zeilen  ( 0                     wenn abgetreten oder Anteil am Anlagenwert
+>                                                 0                     wenn Erzeugung > 0
+>                                                 Eigenverbrauch_gemessen sonst )
+> ```
+
 > **Betriebskosten des Zeitraums — die Laufzeit-Regel (N-228), eine Funktion.** Jede Komponente trägt ihre
 > gepflegten Betriebskosten nur über **ihre** aktiven Monate des Zeitraums (Anschaffung bis Stilllegung), ungerundet:
 > `core/berechnungen/betriebskosten.py::betriebskosten_im_zeitraum` (je Komponente `betriebskosten_je_investition`,
@@ -1326,6 +1350,18 @@ erbracht. Die entgangene Vergütung ist eine reale Gegenposition (Drift-Audit A3
 **Warum die Netzladung ausgenommen ist:** sie hätte nie eingespeist werden können, der PV-Spread
 gilt für sie nicht. Ihr Vorteil ist `Netzbezug − Ladepreis`; ohne gepflegten Ladepreis ist sie
 kostenneutrale Durchleitung (z. B. Backup-Vorhaltung).
+
+**Der Ladepreis eines Monats ist verbrauchsgewichtet** — die Faltung der Monats-Fakten
+(`monats_fakten/roh.py::_RohMonat._falte_speicher`) summiert je Speicher-Zeile Preis × Menge und Menge, der Ø entsteht
+erst beim Lesen (`SpeicherFakten.netzladung_preis_cent`):
+
+```
+Ladepreis_Monat = Σ (Ladepreis_Zeile × Netzladung_Zeile) / Σ Netzladung_Zeile
+                  nur Zeilen mit Ladepreis > 0 und Netzladung > 0; Σ Gewicht = 0 ⇒ None (Leser fallen auf den Bezugspreis)
+```
+
+Zwei Speicher mit 100 kWh zu 10 ct und 10 kWh zu 30 ct ergeben 11,8 ct, nicht das Mittel 20 ct. Ohne Speicher-Zeile
+trägt der Tageswert-Rückfall dieselben zwei Felder TEP-gewichtet aus den Tagen (#427, §6b).
 
 > ⚠ **Zwei Fundstellen wichen bis zum 2026-08-04 ab** — beide sichtbar: `aktueller_monat.py`
 > rechnete `Entladung × Netzbezug` (bei 30/8 ct **36 % zu hoch**), `dashboard_speicher.py` (damals `dashboards.py`) den Spread
@@ -2166,6 +2202,11 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 >
 > **Heute gilt Punkt (1) überall.** Der fossile Vergleich rechnet auf beiden Seiten mit **den Geräten, die etwas ersetzt haben** — dieselbe Grundmenge im Zähler wie im Abzug. Die Mengen der Anlage (Stromverbrauch, gelieferte Wärme) bleiben davon unberührt; kleiner wird allein die **Grundmenge des Vergleichs**. SoT sind die Teilmengen `WpFakten.waerme_mit_ersatz_kwh` / `strom_mit_ersatz_kwh` aus der Monats-Fakten-Schicht (ADR-002/P10).
 >
+> **Faltung der Teilmengen** (`monats_fakten/roh.py::_RohMonat._falte_wp`, N-256): je WP-Zeile gehen Strom und Wärme
+> zusätzlich in die `*_mit_ersatz`-Summen, wenn das Gerät eine Heizung ersetzt hat (`not ersetzt_keine_heizung(ersetzter
+> Energieträger)`; ein ungesetztes Feld zählt wie bisher als ersetzt) — keine Aufteilung je Gerät, zwei Summen neben den
+> Anlagenmengen: `strom_mit_ersatz = Σ_{Geräte mit Ersatz} Strom`, `waerme_mit_ersatz = Σ_{Geräte mit Ersatz} Wärme`.
+>
 > ⭐ **Warum Teilsummen und keine Sperre.** Die *Arbeitszahl* wird bei gemischten Bauarten gesperrt, weil ein Quotient über zwei Maßstäbe keine Aussage hat. Eine *CO₂-Menge* dagegen ist additiv — für sie genügt die Teilsumme. **Kennzahlen trennen wir je Bauart, Mengen summieren wir.**
 
 
@@ -2661,6 +2702,13 @@ wurden an einer eigenen Stelle gerechnet und kannten die Sperren nicht. Ein Heiz
 WP-Zähler ließ die Gesamtzahl mit Begründung verschwinden, während „JAZ Heizen" unbeeindruckt
 danebenstand — *dieselbe Anlage, zwei Aussagen*. Dazu stand dort eine **0**, wo „unbekannt"
 gemeint war (ADR-002/P4).
+
+> **Die Bauart-Zählung der Monats-Fakten** (`monats_fakten/roh.py::_RohMonat._falte_wp`): je WP-Zeile mit
+> Strom > 0 zählt das Gerät als Split-Klimaanlage (`ist_luft_luft_waermepumpe`) **oder** als klassische Wärmepumpe —
+> `WpFakten.geraete_luft_luft` / `geraete_luft_wasser`; beide > 0 ⇒ `bauarten_gemischt`. Gezählt wird je Zeile, also je
+> Gerät und Monat; ein stillstehendes Zweitgerät sperrt nichts. Der Zähler bleibt bewusst bei „Strom > 0" und nicht bei
+> der Geräte-Regel des Nenners (`zaehlt_fuer_geraete_regel`, nach Abzug des funktionsfremden Stroms): er zählt
+> Stammdaten, nicht den Nenner — ein reines Kühlgerät bleibt ein Gerät der Anlage.
 
 > **Warum die Arbeitszahl Kühlen nicht „SEER" heißt** (Entscheid, 26.08.2026): SEER ist eine
 > genormte Größe aus definierten Prüfstandsbedingungen. Was eedc bildet, ist der Quotient zweier
