@@ -5,6 +5,7 @@ Daten-Checker — Energieprofil-Abdeckung, -Plausibilität & PV-Erfassung
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
@@ -105,6 +106,45 @@ def _tage_text(n: int) -> str:
     return "1 Tag" if n == 1 else f"{n} Tage"
 
 
+@dataclass
+class _AbdeckungsKontext:
+    """Was die Phasen von ``EnergieprofilChecks._check_energieprofil_abdeckung`` teilen (RF-65, Bauform RF-1).
+
+    Eingänge (vom Orchestrator): die Anlage, die Kategorie, die drei Teile des ``sensor_mapping``, die Achse-B-Quelle
+    ``manuelle_quelle``, die ``quellen``-Ablage und die angekommenen MQTT-Zählerstände (N-328). Die Investitions-Phase
+    schreibt ``heute`` und die Zählung zurück (fehlend · gemappt · Quelle · Anlagen-Zählerstand · Modul-Kind), die
+    Meldungs-Phase liest sie.
+    """
+
+    anlage: Anlage
+    kat: CheckKategorie
+    sensor_mapping: dict
+    basis: dict
+    inv_map: dict
+    manuelle_quelle: Optional[str]
+    quellen_energy: dict
+    mqtt_zaehler: Optional[set[str]]
+    heute: Optional[date] = None
+    fehlend_pro_komponente: list[tuple[str, str, list[str]]] = field(default_factory=list)
+    gemappt_count: int = 0
+    quelle_count: int = 0
+    aggregat_count: int = 0
+    kind_count: int = 0
+
+    def basis_zaehler(self, feld: str) -> bool:
+        """N-328: trägt das Basis-Feld einen Zähler — HA-Sensor oder angekommene MQTT-Zählerstände?"""
+        return feld_hat_zaehler(
+            self.basis.get(feld), f"basis:{feld}", self.quellen_energy, self.mqtt_zaehler,
+        )
+
+    def inv_zaehler(self, inv_id, feld: str) -> bool:
+        """N-328: dieselbe Frage für ein Feld der Investition ``inv_id``."""
+        felder = ((self.inv_map.get(str(inv_id), {}) or {}).get("felder", {}) or {})
+        return feld_hat_zaehler(
+            felder.get(feld), f"inv:{inv_id}:{feld}", self.quellen_energy, self.mqtt_zaehler,
+        )
+
+
 class EnergieprofilChecks:
     """Prüfungen rund um Energieprofil-Abdeckung, Counter-Spikes und PV-Erfassung."""
 
@@ -176,6 +216,14 @@ class EnergieprofilChecks:
                 einzige MQTT-Nachricht. Der Eintrag allein hätte diese Prüfung
                 auf jeder Bestandsanlage verstummen lassen — s.
                 `snapshot/keys.feld_hat_zaehler`.
+
+        **Phasenform (RF-65, 5.11.2026).** Der Orchestrator liest das Mapping, die Achse-B-Quelle und die
+        ``quellen``-Ablage und reicht einen ``_AbdeckungsKontext`` (mit den N-328-Fragen ``basis_zaehler``/
+        ``inv_zaehler``) durch drei Phasen: ``_abdeckung_basis`` (Einspeisung + Netzbezug), ``_abdeckung_je_investition``
+        (je heute aktive Investition in Typ-Reihenfolge #214 — F-39-Abtretung, Wallbox-Schwäche B, Achse C über den
+        Anlagen-Zählerstand F-7, Achse B, WP-Erwartung aus der Registry) und ``_abdeckung_meldungen`` (WARNING mit
+        Details, dann die OK-Zeilen Modul-Kind · gemappt · Anlagen-Zählerstand · Quelle); danach wie bisher die
+        Tages-Zusatzfelder. Texte und Reihenfolge der Meldungen wie vorher.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.ENERGIEPROFIL_ABDECKUNG
@@ -197,16 +245,25 @@ class EnergieprofilChecks:
         # MQTT-Zählerstände, „keine" schlägt beides.
         quellen_energy = extract_quellen_energy(anlage)
 
-        def _basis_zaehler(feld: str) -> bool:
-            return feld_hat_zaehler(
-                basis.get(feld), f"basis:{feld}", quellen_energy, mqtt_zaehler,
-            )
+        ctx = _AbdeckungsKontext(
+            anlage=anlage, kat=kat, sensor_mapping=sensor_mapping, basis=basis, inv_map=inv_map,
+            manuelle_quelle=manuelle_quelle, quellen_energy=quellen_energy, mqtt_zaehler=mqtt_zaehler,
+        )
+        ergebnisse.extend(self._abdeckung_basis(ctx))
+        self._abdeckung_je_investition(ctx)
+        ergebnisse.extend(self._abdeckung_meldungen(ctx))
 
-        def _inv_zaehler(inv_id, feld: str) -> bool:
-            felder = ((inv_map.get(str(inv_id), {}) or {}).get("felder", {}) or {})
-            return feld_hat_zaehler(
-                felder.get(feld), f"inv:{inv_id}:{feld}", quellen_energy, mqtt_zaehler,
-            )
+        ergebnisse.extend(
+            self._check_tages_zusatzfelder(anlage, ctx.inv_zaehler, ctx.heute)
+        )
+
+        return ergebnisse
+
+    @staticmethod
+    def _abdeckung_basis(ctx: _AbdeckungsKontext) -> list[CheckErgebnis]:
+        """Die Basis-Zähler Einspeisung + Netzbezug: gemappt ⇒ OK, sonst über die Achse-B-Quelle ⇒ OK, sonst WARNING."""
+        ergebnisse: list[CheckErgebnis] = []
+        kat, manuelle_quelle, _basis_zaehler = ctx.kat, ctx.manuelle_quelle, ctx.basis_zaehler
 
         # Basis: Einspeisung + Netzbezug
         fehlende_basis: list[str] = []
@@ -244,6 +301,21 @@ class EnergieprofilChecks:
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung="Basis-Zähler (Einspeisung + Netzbezug) gemappt",
             ))
+
+        return ergebnisse
+
+    @staticmethod
+    def _abdeckung_je_investition(ctx: _AbdeckungsKontext) -> None:
+        """Je heute aktive Investition in Typ-Reihenfolge (#214): fehlt ihr ein erwarteter kWh-Zähler?
+
+        Ausnahmen in dieser Reihenfolge: stillgelegt · BKW mit abgetretenen Erzeugungsgrößen (F-39, zählt als
+        Modul-Kind) · ohne Erwartung · Dienstwagen · E-Auto unter einer Wallbox mit Zähler (Wallbox-Schwäche B) ·
+        PV/BKW über den Anlagen-Zählerstand (Achse C, F-7, zählt als Aggregat); die Wärmepumpe erwartet, was die
+        Registry verlangt (B2). Ohne Zähler zählt die Achse-B-Quelle, sonst ist die Komponente fehlend. Schreibt
+        ``heute`` und die Zählung in den Kontext.
+        """
+        anlage, sensor_mapping, manuelle_quelle = ctx.anlage, ctx.sensor_mapping, ctx.manuelle_quelle
+        _basis_zaehler, _inv_zaehler = ctx.basis_zaehler, ctx.inv_zaehler
 
         # Pro Investition prüfen.
         # Jeder Eintrag ist eine Liste von Alternativen — gemappt sein muss
@@ -435,6 +507,21 @@ class EnergieprofilChecks:
             else:
                 fehlend_pro_komponente.append((inv.bezeichnung, inv.typ, fehlend))
 
+        ctx.heute = heute
+        ctx.fehlend_pro_komponente = fehlend_pro_komponente
+        ctx.gemappt_count, ctx.quelle_count = gemappt_count, quelle_count
+        ctx.aggregat_count, ctx.kind_count = aggregat_count, kind_count
+
+    @staticmethod
+    def _abdeckung_meldungen(ctx: _AbdeckungsKontext) -> list[CheckErgebnis]:
+        """Die Meldungen aus der Zählung: WARNING (fehlend, mit Details), dann OK Modul-Kind · gemappt ·
+        Anlagen-Zählerstand · Quelle."""
+        ergebnisse: list[CheckErgebnis] = []
+        kat, manuelle_quelle = ctx.kat, ctx.manuelle_quelle
+        fehlend_pro_komponente = ctx.fehlend_pro_komponente
+        gemappt_count, quelle_count = ctx.gemappt_count, ctx.quelle_count
+        aggregat_count, kind_count = ctx.aggregat_count, ctx.kind_count
+
         if fehlend_pro_komponente:
             gesamt = (
                 len(fehlend_pro_komponente)
@@ -521,10 +608,6 @@ class EnergieprofilChecks:
                     + _REICHWEITE_MONAT
                 ),
             ))
-
-        ergebnisse.extend(
-            self._check_tages_zusatzfelder(anlage, _inv_zaehler, heute)
-        )
 
         return ergebnisse
 

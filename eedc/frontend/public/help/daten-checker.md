@@ -969,6 +969,8 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 > **Verglichen wird nur, was HA für den Tag auch liefern konnte.** Ein Zähler ohne Summen-Spalte (§4.9) taucht hier nicht als Lücke auf — sonst meldete der Vergleich Phantom-Drift und böte einen Knopf an, der korrekte Werte mit 0 überschreibt.
 >
 > **Und nur, was auf beiden Seiten einen Wert hat.** Liefert HA einen Wert und die gespeicherte Tageszeile nicht, ist das eine **Lücke** und gehört §4.10 *Energieprofil – fehlende Tageswerte* — kein zweiter Turm über denselben Sachverhalt. Der **Speicher** (`batterie_*`) steht in keiner der beiden Achsen: Sein Tages-Netto darf legitim ~0 sein, und sein Vorzeichen hat mit §4.21 *Batterie-Vorzeichen in der Historie* eine eigene Prüfung.
+>
+> **Höchstens 20 PV-Tage, und je Tag nur, was an diesem Tag in Betrieb war.** Die PV-Zeilen stehen nach der Größe der Abweichung; die 20 größten erscheinen einzeln, der Rest gesammelt als **„… plus N weitere Tag(e) mit Drift"** mit dem Weg in die Reparatur-Werkbank. Die HA-Seite liest an jedem Tag nur die Sensoren der Komponenten, die an diesem Tag in Betrieb waren (Anschaffung, Stilllegung, „aktiv") — ein später angeschafftes oder stillgelegtes Modul erzeugt so keine Abweichung, die kein „Tag reparieren" auflösen könnte.
 
 ---
 

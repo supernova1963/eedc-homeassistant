@@ -6,7 +6,8 @@
 
 import logging
 import json
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from typing import Optional
 from sqlalchemy import select
 from backend.models.anlage import Anlage
@@ -23,6 +24,30 @@ from backend.services.daten_checker.kategorien import (
 from backend.core.zahlenformat import fmt_zahl, fmt_pct
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _DriftKontext:
+    """Was die Phasen von ``QuellenChecks._check_datenquelle_drift`` teilen (RF-64, Bauform RF-1).
+
+    Die Eingänge lädt der Orchestrator (die Tageszeilen der 90 Tage, die eedc-Seite je Tag aus der Lesestelle, alle
+    Investitionen der Anlage); die beiden Achsen füllen die drei Sammlungen darunter, die Zeilen-Phasen lesen sie.
+    """
+
+    anlage: Anlage
+    kat: str
+    tz_list: list
+    komp_je_tag: dict
+    alle_invs: list
+    drift_pro_tag: list[tuple[date, float, float]] = field(default_factory=list)  # (datum, eedc, ha)
+    # N-201, zweite Achse: dieselbe Frage je NICHT-PV-Komponente.
+    # `{key: [(datum, eedc, ha), …]}` — je Gerät gesammelt statt je Tag,
+    # weil eine Wallbox mit 30 Drift-Tagen sonst 30 Zeilen erzeugt, die
+    # alle dasselbe sagen.
+    drift_komponente: dict[str, list[tuple[date, float, float]]] = field(default_factory=dict)
+    # Der LTS-Read ist das Teure an dieser Prüfung. Er wird EINMAL gefahren
+    # und aufgehoben — die zweite Achse liest nicht noch einmal.
+    ha_komp_je_tag: dict[date, dict] = field(default_factory=dict)
 
 
 class QuellenChecks:
@@ -314,6 +339,13 @@ class QuellenChecks:
         selben Fall auf den Snapshot-Pfad zurück; der Check tut es analog,
         indem er nicht-lesbare Keys aus dem Vergleich ausnimmt.
 
+        **Phasenform (RF-64, 5.11.2026).** Der Orchestrator lädt (Tageszeilen der 90 Tage bis gestern, die eedc-Seite
+        über die Lesestelle, die Investitionen) und reicht einen ``_DriftKontext`` durch vier Phasen in Lesereihenfolge:
+        ``_drift_pv_achse`` (Achse 1, PV/BKW als Summe je Tag — Aktiv-Grenze N-64, #311, der LTS-Read einmal),
+        ``_drift_komponenten_achse`` (Achse 2, N-201 — je Nicht-PV-Komponente ohne ``batterie_*``),
+        ``_drift_tageszeilen`` (|Δ| absteigend, höchstens 20) und ``_drift_komponentenzeilen`` (je Komponente EIN
+        Eintrag). Die OK-Zeile und die «… plus N weitere»-Zeile bleiben im Orchestrator; Texte und Reihenfolge wie vorher.
+
         Memory-Linien:
           - feedback_kein_grosser_heiler_knopf.md (keine Sammel-Reparatur
             in der Liste — Verweis auf Reparatur-Werkbank)
@@ -326,7 +358,6 @@ class QuellenChecks:
         """
         from datetime import date, timedelta as _td
         from backend.services.ha_statistics_service import get_ha_statistics_service
-        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
         from backend.models.tages_energie_profil import TagesZusammenfassung
         from backend.models.investition import Investition as _Inv
 
@@ -363,15 +394,57 @@ class QuellenChecks:
         )
         alle_invs = list(inv_result.scalars().all())
 
-        drift_pro_tag: list[tuple[date, float, float]] = []  # (datum, eedc, ha)
-        # N-201, zweite Achse: dieselbe Frage je NICHT-PV-Komponente.
-        # `{key: [(datum, eedc, ha), …]}` — je Gerät gesammelt statt je Tag,
-        # weil eine Wallbox mit 30 Drift-Tagen sonst 30 Zeilen erzeugt, die
-        # alle dasselbe sagen.
-        drift_komponente: dict[str, list[tuple[date, float, float]]] = {}
-        # Der LTS-Read ist das Teure an dieser Prüfung. Er wird EINMAL gefahren
-        # und aufgehoben — die zweite Achse liest nicht noch einmal.
-        ha_komp_je_tag: dict[date, dict] = {}
+        ctx = _DriftKontext(
+            anlage=anlage, kat=kat, tz_list=tz_list, komp_je_tag=komp_je_tag, alle_invs=alle_invs,
+        )
+        await self._drift_pv_achse(ctx)
+        self._drift_komponenten_achse(ctx)
+
+        if not ctx.drift_pro_tag and not ctx.drift_komponente:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
+                details=(
+                    "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-"
+                    "Tagessumme — und zusätzlich jede andere zugeordnete "
+                    "Komponente einzeln (Wallbox, E-Auto, Wärmepumpe, "
+                    "Sonstiges). Schwelle je Vergleich: ≥ 2 kWh UND ≥ 5 % "
+                    "Abweichung gleichzeitig — kleinere Boundary-Drift wird "
+                    "bewusst ignoriert. Der Speicher steht nicht in dieser "
+                    "Liste: sein Tages-Netto darf 0 sein, und sein Vorzeichen "
+                    "hat eine eigene Prüfung."
+                ),
+            )]
+
+        ergebnisse, rest = self._drift_tageszeilen(ctx)
+        ergebnisse.extend(self._drift_komponentenzeilen(ctx))
+
+        if rest > 0:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=f"… plus {rest} weitere Tag(e) mit Drift",
+                details=(
+                    f"Anzeige auf die 20 Tage mit größtem |Δ| begrenzt. "
+                    f"Für alle Drift-Tage auf einmal: Einstellungen → Daten → "
+                    f"Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren "
+                    f"(Datumsbereich aktiv wählen, keine automatische Sammel-Aktion)."
+                ),
+            ))
+
+        return ergebnisse
+
+    @staticmethod
+    async def _drift_pv_achse(ctx: _DriftKontext) -> None:
+        """Achse 1 (Etappe 6, #311, N-64): die PV-/BKW-Tagessumme je Tageszeile gegen HA-LTS.
+
+        Je Tag die Aktiv-Grenze des Tages, EIN LTS-Read (aufgehoben in ``ctx.ha_komp_je_tag`` für die zweite Achse),
+        verglichen nur über die PV-/BKW-Keys, die der LTS-Read liefern konnte; ein Tag mit beiden Seiten ≤ 0 fällt
+        heraus. Drift bei ``Δ ≥ 2 kWh UND Δ/max ≥ 5 %`` ⇒ ``ctx.drift_pro_tag``.
+        """
+        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+
+        anlage, alle_invs, komp_je_tag = ctx.anlage, ctx.alle_invs, ctx.komp_je_tag
+        tz_list, drift_pro_tag, ha_komp_je_tag = ctx.tz_list, ctx.drift_pro_tag, ctx.ha_komp_je_tag
         for tz in tz_list:
             # N-64 — **die Aktiv-Grenze gehört PRO TAG gezogen**, sonst entsteht
             # Phantom-Drift. `get_komponenten_tageskwh_lts` liest, was das
@@ -450,6 +523,16 @@ class QuellenChecks:
             if delta >= 2.0 and rel >= 0.05:
                 drift_pro_tag.append((tz.datum, eedc_kwh, ha_kwh))
 
+    @staticmethod
+    def _drift_komponenten_achse(ctx: _DriftKontext) -> None:
+        """Achse 2 (N-201): je Nicht-PV-Komponente ohne ``batterie_*``, beide Seiten > 0, dieselben Schwellen.
+
+        Liest den aufgehobenen LTS-Read der ersten Achse (kein zweiter Read) und sammelt je Key in
+        ``ctx.drift_komponente``.
+        """
+        tz_list, komp_je_tag = ctx.tz_list, ctx.komp_je_tag
+        ha_komp_je_tag, drift_komponente = ctx.ha_komp_je_tag, ctx.drift_komponente
+
         # ── N-201: dieselbe Prüfung für alles, was keine PV ist ──────────────
         #
         # Bis hierher vergleicht dieser Check **nur** die PV-/BKW-Tagessumme;
@@ -497,21 +580,10 @@ class QuellenChecks:
                         (tz.datum, float(eedc_v), float(ha_v))
                     )
 
-        if not drift_pro_tag and not drift_komponente:
-            return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
-                meldung="Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
-                details=(
-                    "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-"
-                    "Tagessumme — und zusätzlich jede andere zugeordnete "
-                    "Komponente einzeln (Wallbox, E-Auto, Wärmepumpe, "
-                    "Sonstiges). Schwelle je Vergleich: ≥ 2 kWh UND ≥ 5 % "
-                    "Abweichung gleichzeitig — kleinere Boundary-Drift wird "
-                    "bewusst ignoriert. Der Speicher steht nicht in dieser "
-                    "Liste: sein Tages-Netto darf 0 sein, und sein Vorzeichen "
-                    "hat eine eigene Prüfung."
-                ),
-            )]
+    @staticmethod
+    def _drift_tageszeilen(ctx: _DriftKontext) -> tuple[list[CheckErgebnis], int]:
+        """Die Tageszeilen der ersten Achse samt «Tag reparieren»; dazu die Zahl der über 20 hinaus weggelassenen Tage."""
+        anlage, kat, drift_pro_tag = ctx.anlage, ctx.kat, ctx.drift_pro_tag
 
         # Sortierung nach |Δ| desc, max 20 Einträge
         drift_pro_tag.sort(key=lambda x: abs(x[1] - x[2]), reverse=True)
@@ -542,10 +614,18 @@ class QuellenChecks:
                 action_label="Tag reparieren",
             ))
 
+        return ergebnisse, rest
+
+    @staticmethod
+    def _drift_komponentenzeilen(ctx: _DriftKontext) -> list[CheckErgebnis]:
+        """Die Zeilen der zweiten Achse (N-201): je Komponente EIN Eintrag, die größte Abweichung zuerst."""
+        anlage, kat, alle_invs, drift_komponente = ctx.anlage, ctx.kat, ctx.alle_invs, ctx.drift_komponente
+
         # N-201: je Komponente EIN Eintrag — mit dem schlimmsten Tag als
         # Beleg und als Reparatur-Ziel. Dreißig gleichlautende Tageszeilen für
         # eine Wallbox wären keine Auskunft, sondern Rauschen.
         from backend.services.snapshot.komponenten_beitraege import komponenten_key_label
+        ergebnisse: list[CheckErgebnis] = []
 
         inv_je_id = {str(inv.id): inv for inv in alle_invs}
         for key in sorted(
@@ -584,18 +664,6 @@ class QuellenChecks:
                 action_label="Tag reparieren",
                 investition_id=(
                     int(rest_id) if rest_id.isdigit() else None
-                ),
-            ))
-
-        if rest > 0:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
-                meldung=f"… plus {rest} weitere Tag(e) mit Drift",
-                details=(
-                    f"Anzeige auf die 20 Tage mit größtem |Δ| begrenzt. "
-                    f"Für alle Drift-Tage auf einmal: Einstellungen → Daten → "
-                    f"Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren "
-                    f"(Datumsbereich aktiv wählen, keine automatische Sammel-Aktion)."
                 ),
             ))
 

@@ -11,9 +11,6 @@
 51	api/routes/import_export/json_operations.py::import_json
 58	core/berechnungen/tagesbilanz.py::bilanz_aus_stundenrows
 58	services/community_service.py::prepare_community_data
-56	services/daten_checker/datenquelle/quellen.py::QuellenChecks._check_datenquelle_drift
-56	services/daten_checker/energieprofil.py::EnergieprofilChecks._check_energieprofil_abdeckung
-54	services/daten_checker/sensoren.py::SensorChecks._check_sensor_mapping_lts
 60	services/emob_ladebloecke.py::bilde_ladebloecke
 55	services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts
 52	services/ha_integration_aufloeser.py::loese_integration_auf
