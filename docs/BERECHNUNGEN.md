@@ -2796,6 +2796,56 @@ Fenster-Summe wird **neu gerechnet, nie gemittelt** (SOLL §5), und ein Monat ge
 Verbrauchshistorie (mit dem Monat ihres Beginns) · kein getrennt gemessener Heizstrom · Fenster ohne
 Heizgradtage. **Eine normierte Arbeitszahl gibt es nicht** — sie ist bereits ein Quotient.
 
+#### 3.5g Steuerungs-Sensoren der Wärmepumpe (HA-Export E2/P4/P7/P8)
+
+**Orchestrator:** `api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan` (je Wärmepumpe, gerufen von
+`_wp_sensoren`; Phasen seit RF-76, 5.11.2026) · **gemeinsamer Eingang:** der Fenster-Kontext
+`services/ha_export_fenster.py::FensterKontext` (einmal je Anlage aus Prognose, Preis und Bezugspreisen) · **Formeln:**
+`core/berechnungen/fenster.py` (`bestes_fenster`, `kosten_profil`, `verteile_auf_guenstigste`) über
+`ha_export_fenster.fenster_fuer_menge` · **Anwender-Referenz:** `docs/SENSOR-REFERENZ.md`, «Stufe 3 je Gerät — Fenster mit
+Betrag». Hier wird **kein** Fenster gerechnet — die Phasen sagen nur, welche Menge, welche Dauer und welche Frist für
+dieses Gerät gilt. Slots liegen auf der backward-Achse (Slot `h` deckt `[h−1, h)`, s. «Backward-Slot-Konvention»).
+
+| Phase (Code-Ort) | Sensor | Regel |
+|---|---|---|
+| E2 `_warmwasser_betrieb` | `wp_warmwasserbetrieb` | an, wenn der live gelesene Betriebsmodus (`modus_map`, #398) Warmwasser ist; ohne Modus-Zuordnung **kein** Sensor |
+| P4 `_warmwasser_fenster` | `wp_warmwasser_fenster_ab` | s. Formelblock; ohne Menge oder ohne Fenster kein Sensor |
+| P7 `_heizfenster` | `wp_heizfenster_stunden` | günstigste Stunden der erwarteten Heizzeit; ohne WP-Stundenprofil (N-332) oder ohne Verteilung kein Sensor |
+| P8 `_kuehlfenster` | `wp_kuehlfenster_ab` | Kühl-Zähler **und** Kühlstrom-Menge; Frist = Spitzen-Slot der Temperatur |
+
+Ohne Fenster-Kontext (kein Preis **und** kein Überschuss) entsteht nur E2.
+
+```
+P4  Monate     = die letzten 3 abgeschlossenen Monate (_MENGE_MONATE)
+    Menge      = Σ wp_strom_warmwasser (imd_typ_beitrag, gemessen)        wenn ein Monat gemessen ist UND Σ > 0
+               = Σ modus_strom_zeile(…).warmwasser_kwh (abgeleitet)       sonst                        # F-56
+    je_Tag     = Menge ÷ Σ Kalendertage dieser Monate (nur Monate mit Zeile)
+    Fenster    = fenster_fuer_menge(ctx, je_Tag, dauer_h = 2,
+                                    frist_slot = min(24, ctx.frist_slot oder 24))                     # N-544
+    kosten_cent             = round(Fenster.kosten_cent_kwh × je_Tag)
+    ersparnis_cent_vs_jetzt = round(−Fenster.delta_vs_jetzt × je_Tag)      (None ohne Vergleich)
+
+P7  Heizzeit   = Slots i mit WP-Profil[i] > 0 und i ≥ ctx.jetzt_slot
+    Verteilung = verteile_auf_guenstigste(ctx.kosten, WP-Profil, Heizzeit)  # gleiche Menge, günstigere Stunden
+    Wert       = Anzahl der gewählten Slots;  guenstige_heizstunden = "(h−1) % 24 : 00" je Slot h  # N-544: Beginn
+    ersparnis_cent_vs_profil = round(Verteilung.ersparnis_cent);  heizzeit_stunden = |Heizzeit|
+
+P8  Bedingung  = kuehl_je_monat nicht leer  ∧  hat_kuehl_zaehler(Gerät, Zeilen, Mapping, Quellen)   # Zähler, keine Kältemenge
+    je_Tag     = Σ Kühlstrom der letzten 3 abgeschlossenen Monate ÷ Σ Kalendertage derer davon mit Kühlstrom-Eintrag
+    Spitze     = Slot der höchsten Temperatur in ctx.temperatur_c[0 … 24]
+    Fenster    = fenster_fuer_menge(ctx, je_Tag, dauer_h = 2, frist_slot = Spitze)
+                 nur wenn je_Tag > 0 und Spitze ≥ ctx.jetzt_slot                                    # N-544: Frist = Spitze
+    temperatur_max_um = "Spitze % 24 : 00" (Zeitpunkt, kein Slot-Beginn); ueberschuss_kwh_im_fenster = Σ Überschuss[ab … bis)
+```
+
+**Warum je Gerät und nicht aus den Monats-Fakten:** `WpFakten.strom_warmwasser_kwh` ist eine anlagenweite Summe über
+alle Wärmepumpen; P4 liest deshalb die Gerätezeilen über `imd_typ_beitrag`, dieselbe Lesetür, die die Monats-Fakten
+benutzen (P10-Eintrag `_warmwasser_fenster` in `P10_PER_INVESTITION_PHASE`, Lader `calculate_investition_sensors`).
+`herkunft` sagt dem Anwender, ob die Menge gemessen oder abgeleitet ist — beides trägt das Fenster. **Kosten** sind der
+effektive Ø-Preis des Fensters (Überschuss eingerechnet, Preis der Verwendung) × Menge, **Ersparnis** der Abstand zum
+Kostenwert des laufenden Slots (`ctx.jetzt_slot`) × Menge. P7 ist eine Obergrenze: wie weit eine Verschiebung trägt, entscheidet die Regelung
+der Wärmepumpe (`verteile_auf_guenstigste`, Docstring).
+
 ### 3.6 ROI & Amortisation
 
 **Funktion:** `berechne_roi()` in `core/calculations.py`
