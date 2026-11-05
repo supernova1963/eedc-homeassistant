@@ -1,7 +1,5 @@
 # Bestand der Funktionen mit kognitiver Komplexität > 50 — darf nur schrumpfen.
 # Neu schreiben: siehe test_kognitive_komplexitaet.py (Docstring). Format: kognitiv<TAB>datei::qualname
-51	api/routes/datenquellen.py::get_datenquellen_felder
-51	api/routes/import_export/json_operations.py::import_json
 60	services/emob_ladebloecke.py::bilde_ladebloecke
 52	services/ha_integration_aufloeser.py::loese_integration_auf
 56	services/live_sensor_config.py::baue_investitions_serien
