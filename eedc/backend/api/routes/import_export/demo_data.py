@@ -5,7 +5,7 @@ Erstellen und Löschen von Demo-Daten für Tests und Präsentationen.
 """
 
 from datetime import date
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -75,14 +75,17 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
     """
     Erstellt eine komplette Demo-Anlage mit allen Daten.
 
-    Beinhaltet:
+    Beinhaltet elf Geräte:
+    - Wechselrichter (Hybrid, 10 kW)
     - PV-Anlage (20 kWp, 3 Strings)
     - Speicher (15 kWh)
     - E-Auto (Tesla Model 3) mit V2H
     - Wärmepumpe (Heizung + Warmwasser)
     - Wallbox (11 kW)
     - Balkonkraftwerk (800 Wp mit Speicher)
-    - Sonstiges: Mini-BHKW (Erzeuger)
+    - Sonstiges: Mini-BHKW (Erzeuger) und Heizstab Warmwasser (Verbraucher)
+
+    Dazu:
     - Strompreise (2023-2025)
     - 31 Monate Monatsdaten (Juni 2023 - Dezember 2025)
     """
@@ -102,15 +105,21 @@ async def create_demo_data(db: AsyncSession = Depends(get_db, scope="function"))
     geraete = await _demo_investitionen(db, anlage)
     monatsdaten_count = _demo_monatsdaten(db, anlage, geraete)
     await _demo_pvgis(db, anlage)
+    # Die Zahl kommt aus dem angelegten Bestand, nicht als Literal: bis 5.11.2026 stand hier «10», seit dem Heizstab
+    # (17.08.) legt die Demo elf Geräte an.
+    investitionen_count = len(fields(geraete))
 
     return DemoDataResult(
         erfolg=True,
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
         monatsdaten_count=monatsdaten_count,
-        investitionen_count=10,
+        investitionen_count=investitionen_count,
         strompreise_count=3,
-        message=f"Demo-Anlage mit {monatsdaten_count} Monatsdaten, 10 Investitionen und 3 Strompreisen erstellt.",
+        message=(
+            f"Demo-Anlage mit {monatsdaten_count} Monatsdaten, {investitionen_count} Investitionen "
+            "und 3 Strompreisen erstellt."
+        ),
     )
 
 

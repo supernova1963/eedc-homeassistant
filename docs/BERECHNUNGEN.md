@@ -4646,6 +4646,8 @@ Peaks brauchen die Leistungssamples — die kWh-Aggregation läuft separat über
 
 ```
 PV-Sensoren   = leistung_w der pv-module/balkonkraftwerk-Investitionen; ohne einen davon pv_gesamt_w
+                außer der Entity eines Balkonkraftwerks, dessen pv-module-Kinder ALLE selbst messen (N-775)
+BKW teilgedeckt (ein Teil seiner Kinder misst): je Stunde max_h(BKW) → max(0, max_h(BKW) − Σ max_h(messende Kinder))
 Netz-Sensoren = netzbezug_w / einspeisung_w; netz_kombi_w nur, wenn beide fehlen
 live_invert   : min' = −max, max' = −min                      (Basis- oder Investitions-Flag)
 
@@ -4656,9 +4658,14 @@ Peak_Einspeisung_kW = max über h von max_h(einspeisung_w)     nur > 0
 ```
 
 Σ max je Stunde ist bei mehreren PV-Sensoren eine **obere Schranke** (die Einzelspitzen können in verschiedene Minuten
-der Stunde fallen). Kein Sensor, Statistik nicht erreichbar, Lesefehler oder leere Antwort ⇒ alle drei `None` und der
+der Stunde fallen). **Balkonkraftwerk mit Modul-Kindern (N-775, Regel N-536):** das BKW zählt nie neben seinen Kindern —
+messen alle Kinder, wird seine Entity nicht gelesen (`bkw_kinder_decken_vollstaendig`); misst nur ein Teil, trägt es je
+Stunde den Rest (`bkw_restwerte`, unverteilt). Bis N-775 standen BKW und Kinder beide in der Summe (0,8 + 0,4 + 0,4 ⇒ 1,6 statt
+0,8 kW). Die Elternschaft lädt der Pfad nur, wenn ein BKW und ein Modul beide einen Leistungssensor haben; als Kind zählt
+nur ein Modul, das am Tag aktiv war (`aktiv_am_tag` — der Selektor läuft nach dem Zeitfilter). Kein Sensor, Statistik nicht erreichbar, Lesefehler oder leere Antwort ⇒ alle drei `None` und der
 W-Sample-Wert bleibt. Code: `services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts` (Phasen
-`_lts_sensoren_je_rolle`, `_peak_pv_aus_lts`, `_peak_netz_aus_lts`; Invert-Tausch in `_PeakKontext.slot_for`), Aufrufer
+`_lts_sensoren_je_rolle`, `_peak_pv_aus_lts`, `_peak_netz_aus_lts`; Invert-Tausch in `_PeakKontext.slot_for`; Eltern-Regel in
+`_pv_elternschaft`, `_bkw_teil_deckung`, `_bkw_rest_der_stunde`), Aufrufer
 `aggregator.py` am Ende des Stundenteils; geschrieben als `peak_pv_kw`/`peak_netzbezug_kw`/`peak_einspeisung_kw` der
 Tageszusammenfassung (unten).
 

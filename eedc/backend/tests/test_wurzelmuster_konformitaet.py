@@ -3033,9 +3033,12 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # RF-53 (5.11.2026): bis dahin stand hier `_helpers.py::_get_tagespeaks_aus_ha_lts`; die Typ-Menge
     # `pv_typ = {"pv-module", "balkonkraftwerk"}` steht seitdem in seiner Auswahl-Phase. Sie WÄHLT nur die
     # Leistungs-Entities (`leistung_w` je Investition, sonst `pv_gesamt_w`) und summiert nichts; die Σ max je
-    # Stunde bildet die Phase `_peak_pv_aus_lts` über genau diese Auswahl — ohne Selektor: misst ein
-    # abtretendes BKW selbst UND messen seine Kinder, zählen beide (die Abfrage lädt keine Elternschaft).
-    # Der Eintrag ist mit dem Schnitt umgehängt, nicht neu bewertet.
+    # Stunde bildet die Phase `_peak_pv_aus_lts` über genau diese Auswahl.
+    # N-775 (5.11.2026): die Auswahl läuft seitdem durch `bkw_kinder_decken_vollstaendig` (die Entity eines BKW,
+    # dessen Kinder alle messen, entfällt) und ist damit auch über `_P11_SELEKTOR_AUFRUFE` gedeckt; die Teil-Deckung
+    # kürzt `_bkw_rest_der_stunde` über `bkw_restwerte`. Bis dahin zählten BKW und messende Kinder beide (die
+    # Abfrage lud keine Elternschaft). Der Eintrag bleibt, weil `test_p11_ausnahmen_sind_alle_erreichbar` ihn
+    # nicht als tot meldet (die Funktion bildet die Menge weiter); er ist seit N-775 redundant zum Selektor-Aufruf.
     "backend/services/energie_profil/_helpers.py::_lts_sensoren_je_rolle",
     # LADEPFAD, keine Summe: holt die Erzeuger-Zeilen aus der DB und reicht sie
     # weiter. Die Menge wird erst in `soll_fuer_monat` gebildet — dort läuft sie

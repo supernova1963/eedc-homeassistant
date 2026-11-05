@@ -29,6 +29,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Eine Wärmepumpe ohne gepflegten Wärmebedarf oder ein Gerät unter *Sonstiges* ohne „Ertrag/Jahr“ zeigt in seiner Zeile weiter
   „—“, seine Kosten/Jahr fehlten aber bisher in Gesamt-ROI, Amortisationsdauer und Break-Even-Jahr — obwohl der Satz darunter
   „inkl. … €/Jahr Betriebskosten“ sie mitnannte. Jetzt sind sie abgezogen (Demo-Anlage mit Mini-BHKW, 300 €/Jahr: 19,7 → 20,9 Jahre).
+- **Cockpit → Tag, „Peak PV": ein Balkonkraftwerk zählt nicht mehr zusätzlich zu seinen messenden Modulen.** Hat ein
+  Balkonkraftwerk einen eigenen Leistungssensor und seine Module (als Kinder angelegt) ebenfalls, stand im Tages-Peak die
+  Summe aus beiden (etwa 1,6 statt 0,8 kW). Jetzt zählt die Leistung einmal — messen alle Module, zählen die Module, sonst
+  das Balkonkraftwerk mit dem Anteil, den seine Module nicht messen. Gespeicherte Tage zeigen den richtigen Wert, sobald
+  sie neu berechnet werden (Reparatur-Werkbank).
+- **Einstellungen → „Demo-Daten laden“ nennt die richtige Zahl der angelegten Geräte** (11 statt 10).
 
 ### Added
 

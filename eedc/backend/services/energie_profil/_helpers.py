@@ -15,9 +15,19 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+from types import SimpleNamespace
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.erzeuger_traeger import (
+    BKW_TYP,
+    PV_MODUL_TYP,
+    abgetretene_bkw_ids,
+    bkw_kinder_decken_vollstaendig,
+    bkw_restwerte,
+    modul_kinder,
+)
 from backend.models.anlage import Anlage
 
 logger = logging.getLogger(__name__)
@@ -770,13 +780,19 @@ class TagesPeaks:
 @dataclass
 class _PeakKontext:
     """Geteilte Eingänge der Peak-Phasen (RF-53): die Live-Zuordnung der Anlage, die Investitions-Zeilen, die Sensoren je
-    Rolle samt Invert-Set und die gelesenen HA-LTS-Min/Max des Tages."""
+    Rolle samt Invert-Set und die gelesenen HA-LTS-Min/Max des Tages.
+
+    N-775: ``investitionen`` trägt die Elternschaft (``SimpleNamespace(id, typ, parent_investition_id)``, nur geladen, wenn
+    ein Balkonkraftwerk und ein `pv-module` beide eine Leistungs-Entity haben — sonst leer); ``bkw_teil`` nennt je
+    teilgedecktem abtretendem BKW seine Entity und die Entities seiner messenden Kinder."""
     datum: date
     basis_live: dict[str, str]
     inv_live_map: dict[str, dict[str, str]]
     basis_invert: dict[str, bool]
     inv_invert_map: dict[str, dict[str, bool]]
     inv_zeilen: list = field(default_factory=list)
+    investitionen: list = field(default_factory=list)
+    bkw_teil: dict = field(default_factory=dict)
     pv_entities: set[str] = field(default_factory=set)
     netz_kombi: Optional[str] = None
     netz_bezug: Optional[str] = None
@@ -831,6 +847,11 @@ async def _get_tagespeaks_aus_ha_lts(
     dann `_peak_pv_aus_lts` und `_peak_netz_aus_lts`; `_PeakKontext.slot_for`
     ist die eine Stelle, an der der Invert-Tausch steht.
 
+    **Balkonkraftwerk mit Modul-Kindern (N-775, Regel N-536):** messen alle
+    Kinder selbst, wird die BKW-Entity nicht gelesen; misst nur ein Teil,
+    trägt das BKW je Stunde den Rest (Stunden-Maximum − Σ Maxima der messenden
+    Kinder, ≥ 0). Bis N-775 zählten BKW und Kinder beide (0,8 + 0,4 + 0,4 kW).
+
     Returns:
         TagesPeaks; jeder Wert None wenn nicht ermittelbar (Caller-Fallback
         greift dann auf den Tagesverlauf-Pfad).
@@ -849,6 +870,7 @@ async def _get_tagespeaks_aus_ha_lts(
         select(Investition.id, Investition.typ).where(Investition.anlage_id == anlage.id)
     )
     ctx.inv_zeilen = inv_result.all()
+    ctx.investitionen = await _pv_elternschaft(ctx, anlage.id, db)
     _lts_sensoren_je_rolle(ctx)
     pv_entities, netz_entities = ctx.pv_entities, ctx.netz_entities
 
@@ -882,25 +904,64 @@ async def _get_tagespeaks_aus_ha_lts(
     return TagesPeaks(pv=peak_pv, netzbezug=peak_bezug, einspeisung=peak_einsp)
 
 
+async def _pv_elternschaft(ctx: _PeakKontext, anlage_id: int, db: AsyncSession) -> list:
+    """N-775: die Investitions-Zeilen mit Elternschaft — ``SimpleNamespace(id, typ, parent_investition_id)``.
+
+    Gebraucht nur, wenn ein Balkonkraftwerk UND ein `pv-module` je eine `leistung_w`-Entity tragen: nur dann können
+    Eltern und Kind in derselben Peak-Summe stehen. Sonst ``[]`` und keine zweite Abfrage (dieselbe Abwägung wie
+    `live_history_service._lade_erzeuger` bis N-752: die Elternschaft kostet eine Query, und nur, wenn ein BKW gepflegt ist).
+    Als Kind zählt nur ein Modul, das am Tag aktiv war (`aktiv_am_tag`) — der Selektor läuft nach dem Zeitfilter (P11,
+    N-615): ein später angeschafftes Modul nimmt dem Balkonkraftwerk die früheren Tage nicht.
+    """
+    from backend.models.investition import Investition
+    from backend.utils.investition_filter import aktiv_am_tag
+
+    gemessen = {
+        typ for inv_id, typ in ctx.inv_zeilen
+        if (ctx.inv_live_map.get(str(inv_id)) or {}).get("leistung_w")
+    }
+    if BKW_TYP not in gemessen or PV_MODUL_TYP not in gemessen:
+        return []
+    zeilen = (await db.execute(
+        select(Investition.id, Investition.parent_investition_id).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == PV_MODUL_TYP,
+            Investition.parent_investition_id.isnot(None),
+            aktiv_am_tag(ctx.datum),
+        )
+    )).all()
+    eltern = {z[0]: z[1] for z in zeilen}
+    return [SimpleNamespace(id=inv_id, typ=typ, parent_investition_id=eltern.get(inv_id)) for inv_id, typ in ctx.inv_zeilen]
+
+
 def _lts_sensoren_je_rolle(ctx: _PeakKontext) -> None:
     """Phase 1 von `_get_tagespeaks_aus_ha_lts` (RF-53): die Sensoren je Rolle und das Invert-Set.
 
-    PV = `leistung_w` der `pv-module`/`balkonkraftwerk`-Investitionen, sonst `pv_gesamt_w`; Netz = `netzbezug_w` /
+    PV = `leistung_w` der `pv-module`/`balkonkraftwerk`-Investitionen außer der Entity eines Balkonkraftwerks, dessen
+    `pv-module`-Kinder **alle** selbst messen (N-775, Selektor wie N-536), sonst `pv_gesamt_w`; Netz = `netzbezug_w` /
     `einspeisung_w`, der Kombi-Sensor `netz_kombi_w` nur ohne beide; Invert = alle Entities, deren `live_invert`-Flag
-    (Basis oder Investition) gesetzt ist. Schreibt `pv_entities`, `netz_*`, `netz_entities`, `invert_eids` auf den Kontext.
+    (Basis oder Investition) gesetzt ist. Schreibt `pv_entities`, `bkw_teil`, `netz_*`, `netz_entities`, `invert_eids`
+    auf den Kontext.
     """
     basis_live, inv_live_map = ctx.basis_live, ctx.inv_live_map
     basis_invert, inv_invert_map = ctx.basis_invert, ctx.inv_invert_map
 
     # ── PV-Entities ermitteln ─────────────────────────────────────────────
+    # N-775: ein abtretendes BKW, dessen Kinder alle selbst messen, wird nicht gelesen (N-536-Regel); misst nur ein
+    # Teil, bleibt es drin und trägt in `_peak_pv_aus_lts` je Stunde nur den Rest (`ctx.bkw_teil`).
+    voll_gedeckte_bkw = bkw_kinder_decken_vollstaendig(
+        ctx.investitionen,
+        lambda inv_id: bool((inv_live_map.get(inv_id) or {}).get("leistung_w")),
+    )
     pv_entities: set[str] = set()
     pv_typ = {"pv-module", "balkonkraftwerk"}
     for inv_id, typ in ctx.inv_zeilen:
-        if typ in pv_typ:
+        if typ in pv_typ and str(inv_id) not in voll_gedeckte_bkw:
             live = inv_live_map.get(str(inv_id), {})
             eid = live.get("leistung_w")
             if eid:
                 pv_entities.add(eid)
+    ctx.bkw_teil = _bkw_teil_deckung(ctx, voll_gedeckte_bkw)
 
     has_individual_pv = bool(pv_entities)
     if not has_individual_pv and basis_live.get("pv_gesamt_w"):
@@ -931,10 +992,44 @@ def _lts_sensoren_je_rolle(ctx: _PeakKontext) -> None:
     ctx.netz_kombi, ctx.netz_bezug, ctx.netz_einspeisung = netz_kombi, netz_bezug, netz_einspeisung
 
 
+def _bkw_teil_deckung(ctx: _PeakKontext, voll_gedeckte_bkw: frozenset) -> dict:
+    """N-775: ``{bkw_id: (bkw_eid, [(kind_id, kind_eid), …])}`` je abtretendem BKW mit eigener Leistungs-Entity, von dessen
+    Kindern nur ein Teil selbst misst (mindestens eines). Für die anderen ist nichts zu kürzen: voll gedeckt ⇒ die
+    BKW-Entity ist nicht gewählt; kein Kind misst ⇒ der Rest ist der ganze BKW-Wert."""
+    teil: dict = {}
+    for bkw_id in abgetretene_bkw_ids(ctx.investitionen):
+        bkw_eid = (ctx.inv_live_map.get(str(bkw_id)) or {}).get("leistung_w")
+        if not bkw_eid or str(bkw_id) in voll_gedeckte_bkw:
+            continue
+        kinder = [
+            (str(k.id), eid) for k in modul_kinder(bkw_id, ctx.investitionen)
+            if (eid := (ctx.inv_live_map.get(str(k.id)) or {}).get("leistung_w"))
+        ]
+        if kinder:
+            teil[str(bkw_id)] = (bkw_eid, kinder)
+    return teil
+
+
+def _bkw_rest_der_stunde(ctx: _PeakKontext, h: int) -> dict[str, float]:
+    """N-775: ``{bkw_eid: Rest}`` der teilgedeckten BKW in Stunde ``h`` — `bkw_restwerte` (N-536-SoT) auf den positiven
+    Stunden-Maxima: Rest = max(0, BKW − Σ messende Kinder). Ein BKW ohne positives Maximum steht nicht im Ergebnis."""
+    ersatz: dict[str, float] = {}
+    for bkw_id, (bkw_eid, kinder) in ctx.bkw_teil.items():
+        werte: dict[str, float] = {}
+        for inv_id, eid in [(bkw_id, bkw_eid), *kinder]:
+            v = ctx.slot_for(eid, h).get("max")
+            if v is not None and v > 0:
+                werte[inv_id] = v
+        if bkw_id in werte:
+            ersatz[bkw_eid] = bkw_restwerte(ctx.investitionen, werte)[bkw_id]
+    return ersatz
+
+
 def _peak_pv_aus_lts(ctx: _PeakKontext) -> Optional[float]:
     """Phase 2 von `_get_tagespeaks_aus_ha_lts` (RF-53): peak_pv = max über die 24 Stunden von Σ max(PV-Sensor je Stunde).
 
-    Je Stunde zählen nur positive Stunden-Maxima; eine Stunde ohne einen davon trägt nicht bei (None ≠ 0).
+    Je Stunde zählen nur positive Stunden-Maxima; eine Stunde ohne einen davon trägt nicht bei (None ≠ 0). Ein
+    teilgedecktes Balkonkraftwerk trägt nur seinen Rest (`_bkw_rest_der_stunde`, N-775).
     """
     pv_entities, slot_for = ctx.pv_entities, ctx.slot_for
 
@@ -944,9 +1039,12 @@ def _peak_pv_aus_lts(ctx: _PeakKontext) -> Optional[float]:
         for h in range(24):
             stundensumme = 0.0
             haben_daten = False
+            ersatz = _bkw_rest_der_stunde(ctx, h) if ctx.bkw_teil else {}
             for eid in pv_entities:
                 s = slot_for(eid, h)
                 v = s.get("max") if s else None
+                if eid in ersatz:
+                    v = ersatz[eid]
                 if v is not None and v > 0:
                     stundensumme += v
                     haben_daten = True

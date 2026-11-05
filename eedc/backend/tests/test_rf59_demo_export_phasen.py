@@ -45,11 +45,15 @@ async def test_demo_antwort_und_mengen(db):
         "anlage_id": 1,
         "anlage_name": "Demo-Anlage",
         "monatsdaten_count": 31,
-        "investitionen_count": 10,
+        "investitionen_count": 11,
         "strompreise_count": 3,
-        "message": "Demo-Anlage mit 31 Monatsdaten, 10 Investitionen und 3 Strompreisen erstellt.",
+        "message": "Demo-Anlage mit 31 Monatsdaten, 11 Investitionen und 3 Strompreisen erstellt.",
     }
-    assert await _zeilenzahlen(db) == {
+    # Handgriff 5.11.2026: die gemeldete Zahl ist die der angelegten Zeilen (bis dahin fest «10» bei elf Geräten).
+    zeilen = await _zeilenzahlen(db)
+    assert antwort.investitionen_count == zeilen["investitionen"]
+    assert f"{zeilen['investitionen']} Investitionen" in antwort.message
+    assert zeilen == {
         "anlagen": 1, "strompreise": 3, "investitionen": 11, "monatsdaten": 31, "investition_monatsdaten": 248,
         "pvgis_prognosen": 1, "pvgis_monatsprognosen": 12,
     }
