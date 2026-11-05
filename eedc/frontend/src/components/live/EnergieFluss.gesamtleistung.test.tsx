@@ -6,7 +6,8 @@
  * `energieFlussLayout.test.ts`. Hier steht, was nur der Render zeigt: dass
  * Rahmen und Chip wirklich gezeichnet werden, wann nicht (#137: ein
  * PV-Knoten; nachts: Summe 0), dass „Solarleistung" über dem Haus weg ist,
- * dass der Chip den Tooltip trägt und dass das Soll funktionsgleich bleibt.
+ * dass der Chip den Tooltip trägt und wo das Soll steht (seit 5.11.2026 an der
+ * PV: im Chip bzw. in der einzigen PV-Kachel, Detail `EnergieFluss.pv-soll.test.tsx`).
  *
  * ⚠ ResizeObserver-Stub wie in `EnergieFluss.gruppen.test.tsx` (jsdom hat keinen).
  */
@@ -147,18 +148,22 @@ describe('EnergieFluss §A6 — „Gesamtleistung" im Rahmen über der PV-Reihe'
     expect(chip(container)).toBeNull()
   })
 
-  it('„Solar Soll" bleibt: direkt über dem Haus, mit und ohne Gesamtleistung an derselben Stelle', () => {
+  it('das Soll steht an der PV (5.11.2026): mit Gesamtleistung im Chip, bei einem PV-Knoten in der Kachel — nie über dem Haus', () => {
+    // bis 4.2.1: «Solar Soll ~12,4 kW» als nackter Text bei y = CY − hausR − 8, mit und ohne Gesamtleistung
     mitBreite(1150)
     const mit = zeichne([...neunStrings(), NETZ, HAUS], 11.3, 12.4)
-    const sollMit = mit.container.querySelector('text[data-solar-soll]')
-    expect(sollMit?.textContent).toBe('Solar Soll ~12,4 kW')
-    // 1150 px: drei Ausrichtungsgruppen oben, unten keine ⇒ ≤ 3er-Stufe, CY = 180 + 14 (Rahmen), hausR 38
-    const l = layoutEnergieFluss([...neunStrings(), NETZ, HAUS], { breitePx: 1150 })
-    expect(zahl(sollMit, 'y')).toBe(l.CY - l.dims.hausR - 8)
+    const sollMit = [...mit.container.querySelectorAll('[data-solar-soll]')]
+    expect(sollMit.map(e => e === chip(mit.container))).toEqual([true])
+    expect(chip(mit.container)?.querySelector('text')?.textContent).toBe('Gesamtleistung 11,3 kW · Soll ~12,4 kW')
+    expect(alleTexte(mit.container).some(t => t.startsWith('Solar Soll'))).toBe(false)
     mit.unmount()
     const ohne = zeichne([pv(1, 'Dach Süd', 'Süd', 6.2), NETZ, HAUS], 6.2, 12.4)
-    const lo = layoutEnergieFluss([pv(1, 'Dach Süd', 'Süd', 6.2), NETZ, HAUS], { breitePx: 1150 })
-    expect(zahl(ohne.container.querySelector('text[data-solar-soll]'), 'y')).toBe(lo.CY - lo.dims.hausR - 8)
+    const sollOhne = [...ohne.container.querySelectorAll('[data-solar-soll]')]
+    expect(sollOhne.length).toBe(1)
+    expect(sollOhne[0].tagName.toLowerCase()).toBe('text')
+    expect(sollOhne[0].closest('g[data-title]')?.getAttribute('data-title')).toMatch(/^Dach Süd/)
+    expect(sollOhne[0].textContent).toBe('Soll ~12,4 kW')
+    expect(alleTexte(ohne.container).some(t => t.startsWith('Solar Soll'))).toBe(false)
   })
 })
 

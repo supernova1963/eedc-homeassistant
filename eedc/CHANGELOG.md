@@ -47,6 +47,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   löschen, Prognose-Vergleich, Daten-Checker-Kategorien „Datenquellen – HA-Statistics“ und „Datenquellen – Einheiten“).
 - **Live-Tagesverlauf:** der Untertitel heißt „10-Min-Durchschnitte aus den Live-Daten“ (die Werte kommen aus Home Assistant
   oder über MQTT), der Hinweis zu nicht gezeigten Geräten „kein Leistungssensor zugeordnet“.
+- **Cockpit → Live, Energiefluss: das Soll der laufenden Stunde steht an der PV statt über dem Haus.** Bisher stand
+  „Solar Soll ~3,9 kW“ als Text über dem Haus, genau auf der Linie von der PV zum Haus. Jetzt steht es bei einem PV-Erzeuger
+  als zweite Zeile in seiner Kachel („Soll ~3,9 kW“), bei mehreren am Schild „Gesamtleistung … · Soll ~3,9 kW“; der Tooltip
+  sagt, dass es die Prognose für die laufende Stunde ist.
 
 ## [4.2.1] - 2026-11-02
 

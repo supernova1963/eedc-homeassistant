@@ -1,5 +1,10 @@
 /**
- * Cockpit → Live: die Anzeige „Solar Soll ~x kW" im Energiefluss (N-691).
+ * Cockpit → Live: die Anzeige des PV-Solls der laufenden Stunde im Energiefluss (N-691).
+ *
+ * Seit 5.11.2026 (Entscheid Gernot) steht das Soll an der PV statt nackt über dem Haus:
+ * bei genau einem PV-Erzeuger — wie hier — als zweite Zeile seiner Kachel «Soll ~x kW»
+ * (bei mehreren am «Gesamtleistung»-Chip, `EnergieFluss.pv-soll.test.tsx`). Der Sinn der
+ * Probe bleibt: der richtige Slot trifft.
  *
  * Render-Probe über die echte Sicht. `CockpitLiveV4` sucht im Verbrauchsprofil
  * der Live-Wetter-Antwort den Eintrag der laufenden Stunde und reicht dessen
@@ -96,6 +101,8 @@ import { _clearSwrCacheForTests } from '../hooks/useApiData'
 const URSPRUNG = window.location.hash
 const tick = () => new Promise(r => setTimeout(r, 0))
 const sollText = () => document.body.querySelector('[data-solar-soll]')?.textContent ?? null
+/** Der Träger des Solls: die Textzeile der einzigen PV-Kachel («PV Süd»). */
+const sollInPvKachel = () => document.body.querySelector('g[data-title^="PV Süd"] text[data-solar-soll]')?.textContent ?? null
 
 /** Uhr auf heute `hh:mm` Ortszeit stellen (nur `Date`, die Timer bleiben echt). */
 function uhrAuf(hh: number, mm: number) {
@@ -111,7 +118,7 @@ async function sichtGeladen() {
   await tick()
 }
 
-describe('Cockpit → Live: „Solar Soll ~x kW" im Energiefluss (N-691)', () => {
+describe('Cockpit → Live: „Soll ~x kW" an der PV-Kachel im Energiefluss (N-691)', () => {
   beforeEach(() => {
     localStorage.clear()
     _clearSwrCacheForTests()
@@ -130,7 +137,8 @@ describe('Cockpit → Live: „Solar Soll ~x kW" im Energiefluss (N-691)', () =>
     uhrAuf(14, 30)
     renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
     await sichtGeladen()
-    await waitFor(() => expect(sollText()).toBe('Solar Soll ~5,2 kW'))
+    await waitFor(() => expect(sollText()).toBe('Soll ~5,2 kW'))
+    expect(sollInPvKachel()).toBe('Soll ~5,2 kW')
   })
 
   it('trägt der Slot eine Solar-Forecast-ML-Prognose, hat sie Vorrang vor dem eedc-Wert', async () => {
@@ -138,7 +146,8 @@ describe('Cockpit → Live: „Solar Soll ~x kW" im Energiefluss (N-691)', () =>
     uhrAuf(14, 30)
     renderMitProvidern(<CockpitLiveV4 anlageId={1} />)
     await sichtGeladen()
-    await waitFor(() => expect(sollText()).toBe('Solar Soll ~6,3 kW'))
+    await waitFor(() => expect(sollText()).toBe('Soll ~6,3 kW'))
+    expect(sollInPvKachel()).toBe('Soll ~6,3 kW')
   })
 
   it('Gegenprobe: um 21:30 (Slot 22, PV-Soll 0) erscheint keine Anzeige', async () => {

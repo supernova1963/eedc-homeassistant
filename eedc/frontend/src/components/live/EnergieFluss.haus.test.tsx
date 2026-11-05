@@ -10,7 +10,8 @@
  *   Vollbild-/Einbettfall (hohe Fläche ⇒ Quadrat-Bild).
  * - Regel B: beide Bilder eines Formats als `dark:`-Opacity-Paar, kein Schleier.
  * - Regel C: Linien-Saum nur bei „Haus", nur hell, in BEIDEN Schalterstellungen.
- * - Regel D: Solar-Soll-Zweig.
+ * - Regel D: Solar-Soll-Zweig — seit 5.11.2026 nicht mehr nackt auf dem Bild, sondern im
+ *   «Gesamtleistung»-Chip bzw. in der einzigen PV-Kachel (beide auf eigener heller Fläche).
  * - Regel E: keine Hintergrund-Deko; Vordergrund-Effekte wie Tech.
  * - Persistenz über den Bestand (`useBgVariant`).
  *
@@ -385,20 +386,38 @@ describe('Bau B Regel C — Saum je aktiver Flusslinie, nur „Haus", nur hell, 
 // ─── Regel D — Solar-Soll ───────────────────────────────────────────
 
 describe('Bau B Regel D — Solar-Soll auf dem Bild', () => {
-  const sollKlasse = (hg: string) => {
-    const { container, unmount } = zeichne({ hg, soll: 12.4 })
-    const k = container.querySelector('text[data-solar-soll]')?.getAttribute('class')
+  // Bis 4.2.1 stand «Solar Soll» als nackter Text auf dem Bild über dem Haus; Regel D gab ihm deshalb je
+  // Hintergrund eine eigene Klasse (Haus hell indigo-800 statt purple-500, 6,4:1 statt 2,55:1). Seit 5.11.2026
+  // trägt die PV das Soll — der Chip bzw. die Kachel liegen auf eigener heller Fläche, ihre Schrift ist die
+  // des Trägers. Die Probe hält fest: auf keinem Hintergrund steht das Soll mehr nackt auf dem Bild.
+  const soll = (hg: string, komp?: LiveKomponente[]) => {
+    const { container, unmount } = zeichne({ hg, soll: 12.4, komp })
+    const traeger = [...container.querySelectorAll('[data-solar-soll]')]
+    const chipText = traeger[0]?.matches('g[data-gesamtleistung]') ? traeger[0].querySelector('text') : null
+    const ergebnis = {
+      anzahl: traeger.length,
+      traeger: traeger[0]?.matches('g[data-gesamtleistung]') ? 'chip' : traeger[0]?.closest('g[data-title]') ? 'kachel' : 'nackt',
+      text: chipText?.textContent ?? traeger[0]?.textContent ?? null,
+      klasse: chipText?.getAttribute('class') ?? traeger[0]?.getAttribute('class') ?? null,
+    }
     unmount()
-    return k
+    return ergebnis
   }
-  it('„Haus": hell indigo-800 (6,4:1 statt 2,55:1), dunkel der Bestand purple-400', () => {
-    expect(sollKlasse('haus')).toBe('fill-indigo-800 dark:fill-purple-400')
+  it('mehrere Strings: im «Gesamtleistung»-Chip, auf jedem Hintergrund mit der Chip-Schrift', () => {
+    const chipKlasse: Record<string, string> = {
+      haus: 'fill-amber-600 dark:fill-yellow-300',
+      default: 'fill-amber-600 dark:fill-yellow-300',
+      milchstrasse: 'fill-amber-600 dark:fill-yellow-300',
+      sunset: 'fill-amber-900 dark:fill-yellow-300',
+      alps: 'fill-blue-900 dark:fill-blue-200',
+    }
+    for (const [hg, klasse] of Object.entries(chipKlasse)) {
+      expect(soll(hg), hg).toEqual({ anzahl: 1, traeger: 'chip', text: 'Gesamtleistung 11,3 kW · Soll ~12,4 kW', klasse })
+    }
   })
-  it('Tech, Sunset, Alpen und Fotos unverändert', () => {
-    expect(sollKlasse('default')).toBe('fill-purple-500 dark:fill-purple-400')
-    expect(sollKlasse('milchstrasse')).toBe('fill-purple-500 dark:fill-purple-400')
-    expect(sollKlasse('sunset')).toBe('fill-purple-800 dark:fill-purple-400')
-    expect(sollKlasse('alps')).toBe('fill-indigo-800 dark:fill-indigo-300')
+  it('ein PV-Erzeuger auf «Haus»: in der Kachel, nicht auf dem Bild', () => {
+    const e = soll('haus', [pv(1, 'Dach Süd', 'Süd', 2.4), WP, NETZ, HAUS])
+    expect([e.anzahl, e.traeger, e.text]).toEqual([1, 'kachel', 'Soll ~12,4 kW'])
   })
 })
 

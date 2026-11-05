@@ -65,6 +65,9 @@ export interface ZweiteZeile {
   /** `null` ⇒ graue Klasse statt Farbe; mit Pegel an der Kachel gilt keins von beiden (Text neutral). */
   fill: string | null
   chip?: { farbe: string; gedaempft: boolean } | null
+  /** Trägt die Zeile das Soll der laufenden Stunde (PV-Kachel bei genau einem PV-Erzeuger, Gernot 5.11.2026)?
+   *  ⇒ Markierung `data-solar-soll` an der Textzeile — dort suchen Proben und Playwright-Pläne das Soll. */
+  solarSoll?: boolean
 }
 
 /**
@@ -112,7 +115,7 @@ export interface EnergieFlussKachelProps {
   color: string
   isActive: boolean
   wertText: string
-  /** SoC · Betriebsmodus (Chip) · Auto- · Netz-Zeile — `fill: null` ⇒ graue Klasse statt Farbe. */
+  /** SoC · Betriebsmodus (Chip) · Auto- · Netz- · Soll-Zeile — `fill: null` ⇒ graue Klasse statt Farbe. */
   zweiteZeile?: ZweiteZeile | null
   /** Füllung von unten (SoC oder PV-Auslastung — nie beide an einem Gerät). */
   pegel?: { prozent: number; fill: string; opacity: number } | null
@@ -280,6 +283,7 @@ export default function EnergieFlussKachel({
           className={pegel ? 'font-semibold fill-gray-900 dark:fill-white'
             : zweiteZeile.fill ? 'font-semibold' : 'font-semibold fill-gray-500 dark:fill-gray-400'}
           fill={pegel ? undefined : zweiteZeile.fill ?? undefined}
+          data-solar-soll={zweiteZeile.solarSoll ? '' : undefined}
         >
           {zweiteZeile.text}
         </text>
