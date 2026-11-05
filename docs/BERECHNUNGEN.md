@@ -2353,6 +2353,34 @@ derselbe wie dort — **E7/Option A**, also der **Abzug** und nicht die Menge.
 > meinen. Die Systemzahl ist eine dritte Größe mit eigenem Namen, und im Block
 > steht die Zahl **je Gerät** direkt daneben.
 
+**In *Cockpit → Monat*** (`api/routes/aktueller_monat/waerme.py::waerme_klima_monat`) gelten drei Regeln, die nur
+diese Sicht braucht — sie ist die einzige mit Vier-Quellen-Auflösung und laufendem Monat zugleich:
+
+```text
+Zeitraum versetzt   ⇔ genau EINE von {wp_waerme_kwh, wp_strom_kwh} misst nur einen Ausschnitt des Monats (Teilzeitraum)
+Kennzahl je Gerät   = Zeile des Geräts, wenn sie eine Menge trägt (Strom > 0 oder Wärme > 0)
+                      sonst Kanal-Zeile des Geräts (Faltung wie eine Monatszeile)
+                      sonst Tagesmengen des Geräts im Monat
+Funktions-Eingänge  = Monatszeile, wenn sie eine Menge trägt — sonst Faltung derselben Geräte-Mengen (S5)
+```
+
+* **Zeitraum-Versatz** (SOLL §4.2 Fall 3, #361): Der Quotient wäre einer aus zwei Zeiträumen — `GRUND_ZEITRAUM`
+  sperrt die Systemzahl (keine Schranke, die Richtung ist unbekannt) und jede Funktion (§3.5d). Messen beide Seiten
+  denselben Ausschnitt, gibt es keinen Versatz. Bewusst **nicht** aus „Tagen mit Wert" erkannt: das kann „das Gerät
+  stand" nicht von „der Sensor fehlte" unterscheiden.
+* **Ersatz leerer Gerätekennzahlen** (HA-Bauform E4d, N-472/A-5): Den Dienst `lade_kennzahlen_je_geraet` speisen die
+  Monatszeilen, die es im laufenden Monat nicht gibt — die Tabelle *Zahlen je Gerät* blieb leer, während Kachel und
+  Verlauf darüber dieselben Tage zeigten. Ersetzt wird nur, was leer ist; die Kanal-Zeile geht der Tagesebene vor.
+* **S5 anlagenweit** (WK-16i, N-503): Die Eingänge der Funktions-Arbeitszahlen und die Deckung je Funktion kamen bis
+  15.09.2026 nur aus den Monats-Fakten — im laufenden Monat stand deshalb „Strom nicht getrennt je Funktion gemessen"
+  über einer Tabelle mit 5,58 und 3,32. Die Faltung der Geräte-Mengen steht an einer Stelle
+  (`services/waerme_klima_block.py::funktions_eingaenge_der_anlage`).
+
+Die Systemarbeitszahl bekommt die **sperrende** Kette ohne die beiden Schranken-Glieder (Bauarten gemischt, Geräte
+ohne Wärme): Anwender-Angabe, Zeitraum-Versatz, verschiedene Geräte. Code-Orte seit RF-67 (5.11.2026): die
+Phase `_wp_abgrenzung` (R2-Lagen, S5, SOLL §3.2b, Schranken-Eingang, sperrende Kette), `_kennzahlen_aus_kanal_zeilen`
+und `_kennzahlen_aus_tagesebene`; Proben `test_rf67_aktueller_monat_pv_strings_phasen.py`.
+
 #### 3.5b-H Die **Arbeitszahl ohne Zusatzheizung** — Ausweis-Zahl neben der Hauptzahl (P-433-3, 25.10.2026)
 
 Wer den Heizstab-Strom als kumulativen Zähler erfasst (*Strom Zusatzheizung*, `heizstab_strom_kwh`; Fall **H-B**:
@@ -3206,6 +3234,9 @@ Abweichung gegenüber dem Cockpit).
 
 **Faire Vergleichsbasis (ab v2.3.2):**
 SOLL wird NUR für Monate gezählt, die auch IST-Daten haben. Verhindert aufgeblähten SOLL bei Teil-Jahren.
+In *Komponenten → PV-Strings* (Jahressicht) trägt ein Monat ohne IST-Wert die Zeile mit SOLL **0** (keine Abweichung,
+keine Performance Ratio) und geht nicht in das Jahres-SOLL des Strings ein (`api/routes/cockpit/pv_strings.py::_string_im_jahr`,
+seit RF-70).
 Seit 04.10.2026 (N-616) gilt das auch im Abschnitt „String-Vergleich" des Jahresbericht-PDF — vorher stand dort
 je String das SOLL des ganzen Jahres (im Gesamtzeitraum × Jahre) gegen die erfassten Monate. Beide Sichten
 nehmen „Monat mit Wert" aus derselben Auflösung (`lade_pv_je_monat`, Quelle gemessen oder verteilt) und kürzen
@@ -3529,6 +3560,19 @@ Spez. Ertrag (kWh/kWp) = IST_Jahr / Modul_kWp
 **Ohne aktive PVGIS-Prognose** entfallen Abweichung und Performance Ratio (`None`); IST,
 Ertragsanteil und spezifischer Ertrag bleiben. Die Sicht zeigt sie seit v4.0.9 auch an — bis dahin
 brach sie ohne Prognose vollständig ab und verbarg damit auch die gemessenen Werte (#350).
+
+**Bester und schwächster String** (`api/routes/cockpit/pv_strings.py::_ranking`, beide Sichten):
+
+```
+Platzierung nur, wenn ≥ 2 Strings UND jeder String durchgängig gemessen (Quelle des Zeitraums = gemessen)
+bester        = String mit der höchsten Performance Ratio des Zeitraums
+schwächster   = String mit der niedrigsten — nur, wenn mindestens zwei Strings eine Performance Ratio tragen
+```
+
+Strings ohne Performance Ratio (ohne Prognose, ohne SOLL) oder mit 0 zählen nicht mit; trägt keiner eine, bleibt die Platzierung
+leer, ohne Hinweis. Ist auch nur ein String verteilt statt gemessen, steht statt der Platzierung der Erklärsatz —
+im Mischfall (mindestens ein String gemessen) der Satz „Nicht alle Module haben gemessene Werte …" (N-653), sonst
+„Die Werte je Modul sind nicht gemessen …" (A4/E3, s. oben „Der kWp-Anteil ist ein Prognose-, kein Ertragsschlüssel").
 
 ### 3.10 Sonstige Positionen
 

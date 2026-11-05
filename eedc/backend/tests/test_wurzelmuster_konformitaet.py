@@ -3528,7 +3528,10 @@ P13_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/monats_fakten/roh.py::falte",               # zählt luft_luft/luft_wasser je Block
     "backend/api/routes/energie_profil/tag.py::get_tag_detail",   # dieselbe Frage je Tag (Vorlage 4: views.py → tag.py)
     # Vorlage 2 (18.09.2026): die R2-/SOLL-3.2b-Abgrenzung zog aus dem Endpunkt nach waerme.py.
-    "backend/api/routes/aktueller_monat/waerme.py::waerme_klima_monat",
+    # RF-67 (5.11.2026): `waerme_klima_monat` ist ein Orchestrator und liest die Bauart nicht mehr; beide Ketten, die
+    # `bauarten_gemischt` lesen (`abgrenzungs_grund` der anlagenweiten Lage, `abgrenzung_je_funktion` nach SOLL §3.2b),
+    # stehen in der Phase `_wp_abgrenzung` — dieselbe Abgrenzung einer Kennzahl wie bisher, kein Feldangebot.
+    "backend/api/routes/aktueller_monat/waerme.py::_wp_abgrenzung",
     "backend/api/routes/cockpit/komponenten.py::get_komponenten_zeitreihe",
     "backend/api/routes/monatsdaten_aggregiert.py::_arbeitszahl_des_monats",
     # B6/Y-2 (05.09.2026): Jahresroute UND PDF-Jahresbericht lesen die Abgrenzung
