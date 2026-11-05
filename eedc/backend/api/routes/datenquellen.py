@@ -16,6 +16,7 @@ import asyncio
 import copy
 import json as json_mod
 import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
 import httpx
@@ -1235,9 +1236,71 @@ async def ha_takt_check(
     return TaktCheckResponse(geprueft=True, problem=takt_problem(werte))
 
 
+# RF-82 (5.11.2026, Bauform RF-1): die Route ist ein Orchestrator über `_FelderKontext` und sechs Phasen in fester
+# Reihenfolge (die SQL-Folge ist Vertrag — B8-2 schreibt VOR der MQTT-Einstellungsabfrage fest):
+#   `_felder_laden`       Anlage (404), aktive Investitionen, Registry-Einträge + Preis-Slots, Filter, Invert-Store
+#   `_quellen_aufloesen`  Gateway-Zeilen, Inbound-Cache, HA-Transport + Live-Maps, Pass 1 (B8-2), HA-Batch (C1/§2i)
+#   `_praezedenzen`       §2i-Probleme (Einheit, state_class, Redundanz, Bauschnitt 7, N-537, Doppelmapping) + Bedarf je Gerät
+#   `_antwort`            Pass 2: Gruppen und Felder, Themen-Kacheln
+#   `_festschreiben`      B8-2 additiv festschreiben (guarded) + §2h-Deaktivierung, eigener Commit
+#   `_verfuegbarkeit`     Quell-Achsen HA/MQTT
+# Der Docstring der Route ist ihre OpenAPI-Beschreibung und bleibt unverändert.
 @router.get("/{anlage_id}/felder")
 async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get_db)):
     """Gruppierte Feldliste (Basis + je Investition) mit Standard-Topic + aktiver Quelle."""
+    ctx = await _felder_laden(db, anlage_id)
+    await _quellen_aufloesen(db, ctx)
+    _praezedenzen(ctx)
+    gruppen = _antwort(ctx)
+    await _festschreiben(db, ctx)
+    verfuegbarkeit = await _verfuegbarkeit(db, ctx)
+    anlage = ctx.anlage
+
+    return {
+        "anlage_id": anlage_id,
+        "gruppen": gruppen,
+        "verfuegbarkeit": verfuegbarkeit,
+        # Konzept #192 B: offener Hinweis auf die unberührte Historie — `None`,
+        # solange keine Zuordnung geändert wurde. Bewusst hier und nicht als
+        # eigener Endpunkt: die Fläche lädt diese Antwort ohnehin, und ein
+        # zweiter Aufruf hätte den Block nur später erscheinen lassen.
+        "historie_hinweis": vermerk_lesen(anlage.sensor_mapping),
+    }
+
+
+@dataclass
+class _FelderKontext:
+    """Geteilte Eingänge und Zwischenstände der `/felder`-Phasen (RF-82) — je Aufruf neu, nie zwischengespeichert."""
+
+    anlage_id: int
+    anlage: Anlage
+    invs: list
+    alle_topics: list
+    eintraege: list
+    quellen: dict
+    invert_store: dict
+    # `_quellen_aufloesen`
+    gateway_topics: dict = field(default_factory=dict)
+    cache: object = None
+    ha_url: str | None = None
+    ha_kind: str | None = None
+    inv_live_map: dict = field(default_factory=dict)
+    effektiv: dict = field(default_factory=dict)
+    cache_wert: dict = field(default_factory=dict)
+    neu_persistieren: dict = field(default_factory=dict)
+    gw_deaktivieren: list = field(default_factory=list)
+    ha_detail: dict = field(default_factory=dict)
+    ha_werte: dict = field(default_factory=dict)
+    ha_texte: dict = field(default_factory=dict)
+    ha_namen: dict = field(default_factory=dict)
+    # `_praezedenzen`
+    probleme_je_feld: dict = field(default_factory=dict)
+    bedarf_je_feld: dict = field(default_factory=dict)
+
+
+async def _felder_laden(db: AsyncSession, anlage_id: int) -> _FelderKontext:
+    """Phase 1 von `/felder`: Anlage (404), aktive Investitionen in Typ-Reihenfolge, Registry-Einträge ohne Themen,
+    Preis-Slots, `nur_manuell`-/Tarif-Filter und der Invert-Store."""
     anlage = (
         await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     ).scalar_one_or_none()
@@ -1277,6 +1340,16 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
 
     # Vereinheitlichter Invert-Store (quellen-unabhängig, feld-/wert-level).
     invert_store = (anlage.sensor_mapping or {}).get("invertieren") or {}
+    return _FelderKontext(
+        anlage_id=anlage_id, anlage=anlage, invs=invs, alle_topics=alle_topics, eintraege=eintraege,
+        quellen=quellen, invert_store=invert_store,
+    )
+
+
+async def _quellen_aufloesen(db: AsyncSession, ctx: _FelderKontext) -> None:
+    """Phase 2 von `/felder`: Gateway-Zeilen, Inbound-Cache, HA-Transport + Live-Maps, Pass 1 (effektive Quelle je Feld,
+    B8-2) und der HA-Detail-Batch (Wert C1, Einheit/state_class §2i)."""
+    anlage_id, anlage, eintraege, quellen = ctx.anlage_id, ctx.anlage, ctx.eintraege, ctx.quellen
 
     # Gateway-Quell-Topics dieser Anlage (mapping_id → quell_topic) für die
     # Anzeige der aktiven Gateway-Zuordnung je Feld (B3.3) + ziel_key→Row-Index
@@ -1345,6 +1418,18 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     ha_werte = {eid: d.get("wert") for eid, d in ha_detail.items()}
     ha_texte = {eid: d.get("wert_text") for eid, d in ha_detail.items()}
     ha_namen = {eid: d.get("friendly_name") for eid, d in ha_detail.items()}
+    ctx.gateway_topics, ctx.cache, ctx.ha_url, ctx.ha_kind = gateway_topics, cache, ha_url, ha_kind
+    ctx.inv_live_map, ctx.effektiv, ctx.cache_wert = inv_live_map, effektiv, cache_wert
+    ctx.neu_persistieren, ctx.gw_deaktivieren = neu_persistieren, gw_deaktivieren
+    ctx.ha_detail, ctx.ha_werte, ctx.ha_texte, ctx.ha_namen = ha_detail, ha_werte, ha_texte, ha_namen
+
+
+def _praezedenzen(ctx: _FelderKontext) -> None:
+    """Phase 3 von `/felder`: die §2i-Probleme je Feld (Einheit, state_class, Redundanz, Bauschnitt 7, N-537,
+    Doppelmapping — in dieser Reihenfolge, sie ist die Reihenfolge der Liste `probleme`) und die Bedarfs-Einstufung
+    je Gerät (§2i-6, N-456)."""
+    invs, eintraege, effektiv, cache_wert = ctx.invs, ctx.eintraege, ctx.effektiv, ctx.cache_wert
+    ha_detail, ha_werte, inv_live_map = ctx.ha_detail, ctx.ha_werte, ctx.inv_live_map
 
     # §2i — proaktive Zuordnungs-Validierung (rein diagnostisch): pro Feld eine
     # Liste `probleme`. Einheit-Mismatch (#200) + fehlendes state_class je HA-Feld;
@@ -1518,6 +1603,17 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         for fid in feld_feld
     ]
     bedarf_je_feld = stufe_bedarf_ein(_bedarf_eingabe, vorhandene_inv_typen)
+    ctx.probleme_je_feld, ctx.bedarf_je_feld = probleme_je_feld, bedarf_je_feld
+
+
+def _antwort(ctx: _FelderKontext) -> list[dict]:
+    """Phase 4 von `/felder`: Pass 2 — Gruppen reihenfolge-erhaltend, je Feld der Antwort-Eintrag, dazu die Themen."""
+    anlage, invs, eintraege, quellen, alle_topics = ctx.anlage, ctx.invs, ctx.eintraege, ctx.quellen, ctx.alle_topics
+    invert_store, gateway_topics, cache, effektiv, cache_wert = (
+        ctx.invert_store, ctx.gateway_topics, ctx.cache, ctx.effektiv, ctx.cache_wert,
+    )
+    ha_detail, ha_werte, ha_texte, ha_namen = ctx.ha_detail, ctx.ha_werte, ctx.ha_texte, ctx.ha_namen
+    probleme_je_feld, bedarf_je_feld = ctx.probleme_je_feld, ctx.bedarf_je_feld
 
     # Pass 2 — Reihenfolge-erhaltend nach gruppe_id gruppieren + Response bauen.
     gruppen: list[dict] = []
@@ -1642,6 +1738,12 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         })
     # Themen-Kacheln (4.2.0, TH-E1 §1.2): je Gerätegruppe `themen` (eigene Funktion, G9).
     _themen_anhaengen(gruppen, anlage, inv_je_gruppe, quellen, ha_detail, cache, gateway_topics, alle_topics)
+    return gruppen
+
+
+async def _festschreiben(db: AsyncSession, ctx: _FelderKontext) -> None:
+    """Phase 5 von `/felder`: B8-2 — die positive Evidenz aus Pass 1 additiv festschreiben, mit eigenem Commit."""
+    anlage, neu_persistieren, gw_deaktivieren = ctx.anlage, ctx.neu_persistieren, ctx.gw_deaktivieren
 
     # B8-2: aufgelöste positive Evidenz additiv festschreiben (guarded — nur bei
     # tatsächlicher Änderung; §2h: paralleles Gateway bei HA-Wahl deaktivieren,
@@ -1658,6 +1760,11 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             row.aktiv = False
         await db.commit()
 
+
+async def _verfuegbarkeit(db: AsyncSession, ctx: _FelderKontext) -> dict:
+    """Phase 6 von `/felder`: Verfügbarkeit der Quell-Achsen."""
+    ha_url, ha_kind = ctx.ha_url, ctx.ha_kind
+
     # Verfügbarkeit der Quell-Achsen (Schritt B Gating): HA (Supervisor ODER
     # Remote-HA) + MQTT (Broker aktiv). Steuert Aktiv/Ausgegraut der Buttons.
     verfuegbarkeit = {
@@ -1665,17 +1772,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         "ha_quelle": ha_kind,
         "mqtt": await _mqtt_import_aktiviert(db),
     }
-
-    return {
-        "anlage_id": anlage_id,
-        "gruppen": gruppen,
-        "verfuegbarkeit": verfuegbarkeit,
-        # Konzept #192 B: offener Hinweis auf die unberührte Historie — `None`,
-        # solange keine Zuordnung geändert wurde. Bewusst hier und nicht als
-        # eigener Endpunkt: die Fläche lädt diese Antwort ohnehin, und ein
-        # zweiter Aufruf hätte den Block nur später erscheinen lassen.
-        "historie_hinweis": vermerk_lesen(anlage.sensor_mapping),
-    }
+    return verfuegbarkeit
 
 
 class QuelleSetRequest(BaseModel):

@@ -6,6 +6,7 @@ Vollständiger Anlagen-Export und -Import im JSON-Format.
 
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, date
 from typing import Optional, List
 
@@ -509,6 +510,19 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
     )
 
 
+# RF-81 (5.11.2026, Bauform RF-1): die Route ist ein Orchestrator über `_ImportKontext` und Phasen in der
+# Schreibreihenfolge des Imports (sie ist Vertrag — IDs, Flush-Punkte, Provenance):
+#   `_lesen_und_pruefen`     1.–3. JSON lesen, Version 1.0–1.3, Pflichtfelder (Ablehnung ohne Schreiben)
+#   `_anlage_anlegen`        4.–5. Namensprüfung (überschreiben ⇒ Kaskaden-Löschung, sonst Suffix), Anlage + Flush
+#   `_strompreise_anlegen`   6.
+#   `_investitionen_anlegen` 7. rekursiv über `_investition_anlegen` (ID-Map #353) und `_geraetezeilen_anlegen`
+#   `_sensor_mapping_remap`  7b. #353
+#   `_monatsdaten_anlegen`   8.
+#   `_prognosen_anlegen`     9. PVGIS — neueste aktive gewinnt (P5/A17)
+#   `_antwort`               Commit, Protokoll (N-532), `JSONImportResult`
+# Die Fehlerbehandlung (Rollback, Protokoll in der Sitzung, Antwort) bleibt im Orchestrator; Signatur und Dependency
+# (`scope="function"`, N-530) unverändert — `test_wurzelmuster_p5_invariante.py` ruft die Route direkt. Der Docstring
+# der Route ist ihre OpenAPI-Beschreibung und bleibt unverändert.
 @router.post("/json")
 async def import_json(
     file: UploadFile = File(...),
@@ -533,6 +547,58 @@ async def import_json(
         "pvgis_monatsprognosen": 0,
     }
 
+    ctx = await _lesen_und_pruefen(file, ueberschreiben, warnungen, importiert)
+    if isinstance(ctx, JSONImportResult):
+        return ctx
+
+    try:
+        await _anlage_anlegen(db, ctx)
+        _strompreise_anlegen(db, ctx)
+        await _investitionen_anlegen(db, ctx)
+        _sensor_mapping_remap(ctx)
+        _monatsdaten_anlegen(db, ctx)
+        await _prognosen_anlegen(db, ctx)
+        return await _antwort(db, ctx)
+
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"Fehler beim JSON-Import: {e}")
+        await log_activity(
+            kategorie="backup_import",
+            aktion="Import fehlgeschlagen",
+            erfolg=False,
+            details=f"{type(e).__name__}: {e}",
+            db=db,
+        )
+        return JSONImportResult(
+            erfolg=False,
+            fehler=[f"Import-Fehler: {str(e)}"],
+            warnungen=warnungen,
+        )
+
+
+@dataclass
+class _ImportKontext:
+    """Geteilte Eingänge und Zwischenstände der JSON-Import-Phasen (RF-81) — `warnungen`/`importiert` sind die Objekte
+    der Route (die Fehlerbehandlung dort liest dieselbe Liste)."""
+
+    data: dict
+    anlage_data: dict
+    original_name: str
+    ueberschreiben: bool
+    warnungen: list[str]
+    importiert: dict
+    anlage_name: Optional[str] = None
+    anlage_id: Optional[int] = None
+    new_anlage: Optional[Anlage] = None
+    imported_sensor_mapping: Optional[dict] = None
+    alt_id_zu_neu: dict[int, int] = field(default_factory=dict)
+
+
+async def _lesen_und_pruefen(
+    file: UploadFile, ueberschreiben: bool, warnungen: list[str], importiert: dict,
+) -> "_ImportKontext | JSONImportResult":
+    """Schritte 1–3 des JSON-Imports: lesen, Version, Pflichtfelder — eine Ablehnung kommt als `JSONImportResult`."""
     # 1. JSON lesen und validieren
     try:
         content = await file.read()
@@ -548,7 +614,7 @@ async def import_json(
             fehler=[f"Fehler beim Lesen der Datei: {e}"]
         )
 
-    # 2. Version prüfen (1.0 und 1.1 werden unterstützt)
+    # 2. Version prüfen (1.0 bis 1.3 werden unterstützt; der Kommentar nannte bis 5.11.2026 nur 1.0 und 1.1)
     export_version = data.get("export_version")
     if export_version not in ["1.0", "1.1", "1.2", "1.3"]:
         return JSONImportResult(
@@ -574,358 +640,390 @@ async def import_json(
             erfolg=False,
             fehler=["Fehlender Anlagenname im Export"]
         )
+    return _ImportKontext(
+        data=data, anlage_data=anlage_data, original_name=original_name, ueberschreiben=ueberschreiben,
+        warnungen=warnungen, importiert=importiert,
+    )
 
-    try:
-        # 4. Prüfen ob Anlage existiert
-        result = await db.execute(
-            select(Anlage).where(Anlage.anlagenname == original_name)
-        )
-        existing_anlage = result.scalar_one_or_none()
 
-        if existing_anlage:
-            if ueberschreiben:
-                logger.info(f"Überschreibe Anlage '{original_name}' (ID: {existing_anlage.id})")
-                await _delete_anlage_cascade(db, existing_anlage.id)
-                anlage_name = original_name
-                warnungen.append(f"Existierende Anlage '{original_name}' wurde überschrieben")
-            else:
-                anlage_name = await _generate_unique_anlage_name(db, original_name)
-                if anlage_name != original_name:
-                    warnungen.append(f"Anlage wurde als '{anlage_name}' importiert (Original: '{original_name}')")
-        else:
+async def _anlage_anlegen(db: AsyncSession, ctx: _ImportKontext) -> None:
+    """Schritte 4–5: Namensprüfung (überschreiben ⇒ Kaskaden-Löschung, sonst eindeutiger Name), Anlage anlegen + Flush."""
+    anlage_data, original_name, ueberschreiben, warnungen = (
+        ctx.anlage_data, ctx.original_name, ctx.ueberschreiben, ctx.warnungen,
+    )
+    # 4. Prüfen ob Anlage existiert
+    result = await db.execute(
+        select(Anlage).where(Anlage.anlagenname == original_name)
+    )
+    existing_anlage = result.scalar_one_or_none()
+
+    if existing_anlage:
+        if ueberschreiben:
+            logger.info(f"Überschreibe Anlage '{original_name}' (ID: {existing_anlage.id})")
+            await _delete_anlage_cascade(db, existing_anlage.id)
             anlage_name = original_name
+            warnungen.append(f"Existierende Anlage '{original_name}' wurde überschrieben")
+        else:
+            anlage_name = await _generate_unique_anlage_name(db, original_name)
+            if anlage_name != original_name:
+                warnungen.append(f"Anlage wurde als '{anlage_name}' importiert (Original: '{original_name}')")
+    else:
+        anlage_name = original_name
 
-        # 5. Anlage erstellen
-        imported_sensor_mapping = anlage_data.get("sensor_mapping")
-        if imported_sensor_mapping:
-            warnungen.append(
-                "Sensor-Zuordnung importiert. Die Entitäts-Namen stammen aus der Quell-Installation "
-                "und müssen ggf. angepasst werden (Einstellungen → Datenquellen)."
-            )
-
-        new_anlage = Anlage(
-            anlagenname=anlage_name,
-            leistung_kwp=anlage_data.get("leistung_kwp", 0),
-            installationsdatum=_parse_date(anlage_data.get("installationsdatum")),
-            standort_land=anlage_data.get("standort_land", "DE"),
-            standort_plz=anlage_data.get("standort_plz"),
-            standort_ort=anlage_data.get("standort_ort"),
-            standort_strasse=anlage_data.get("standort_strasse"),
-            latitude=anlage_data.get("latitude"),
-            longitude=anlage_data.get("longitude"),
-            wechselrichter_hersteller=anlage_data.get("wechselrichter_hersteller"),
-            mastr_id=anlage_data.get("mastr_id"),
-            versorger_daten=anlage_data.get("versorger_daten"),
-            wetter_provider=anlage_data.get("wetter_provider", "auto"),
-            sensor_mapping=imported_sensor_mapping,
-            connector_config=None,  # Connector muss nach Import neu konfiguriert werden
-            steuerliche_behandlung=anlage_data.get("steuerliche_behandlung", "keine_ust"),
-            ust_satz_prozent=anlage_data.get("ust_satz_prozent", 19.0),
-            horizont_daten=anlage_data.get("horizont_daten"),
+    # 5. Anlage erstellen
+    imported_sensor_mapping = anlage_data.get("sensor_mapping")
+    if imported_sensor_mapping:
+        warnungen.append(
+            "Sensor-Zuordnung importiert. Die Entitäts-Namen stammen aus der Quell-Installation "
+            "und müssen ggf. angepasst werden (Einstellungen → Datenquellen)."
         )
-        db.add(new_anlage)
+
+    new_anlage = Anlage(
+        anlagenname=anlage_name,
+        leistung_kwp=anlage_data.get("leistung_kwp", 0),
+        installationsdatum=_parse_date(anlage_data.get("installationsdatum")),
+        standort_land=anlage_data.get("standort_land", "DE"),
+        standort_plz=anlage_data.get("standort_plz"),
+        standort_ort=anlage_data.get("standort_ort"),
+        standort_strasse=anlage_data.get("standort_strasse"),
+        latitude=anlage_data.get("latitude"),
+        longitude=anlage_data.get("longitude"),
+        wechselrichter_hersteller=anlage_data.get("wechselrichter_hersteller"),
+        mastr_id=anlage_data.get("mastr_id"),
+        versorger_daten=anlage_data.get("versorger_daten"),
+        wetter_provider=anlage_data.get("wetter_provider", "auto"),
+        sensor_mapping=imported_sensor_mapping,
+        connector_config=None,  # Connector muss nach Import neu konfiguriert werden
+        steuerliche_behandlung=anlage_data.get("steuerliche_behandlung", "keine_ust"),
+        ust_satz_prozent=anlage_data.get("ust_satz_prozent", 19.0),
+        horizont_daten=anlage_data.get("horizont_daten"),
+    )
+    db.add(new_anlage)
+    await db.flush()
+    anlage_id = new_anlage.id
+    logger.info(f"Anlage '{anlage_name}' erstellt mit ID {anlage_id}")
+    ctx.anlage_name, ctx.anlage_id, ctx.new_anlage = anlage_name, anlage_id, new_anlage
+    ctx.imported_sensor_mapping = imported_sensor_mapping
+
+
+def _strompreise_anlegen(db: AsyncSession, ctx: _ImportKontext) -> None:
+    """Schritt 6: Strompreise (ohne Flush, wie vorher)."""
+    data, anlage_id, importiert = ctx.data, ctx.anlage_id, ctx.importiert
+    # 6. Strompreise importieren
+    for sp_data in data.get("strompreise", []):
+        strompreis = Strompreis(
+            anlage_id=anlage_id,
+            tarifname=sp_data.get("tarifname"),
+            anbieter=sp_data.get("anbieter"),
+            netzbezug_arbeitspreis_cent_kwh=sp_data.get("netzbezug_arbeitspreis_cent_kwh", 0),
+            einspeiseverguetung_cent_kwh=sp_data.get("einspeiseverguetung_cent_kwh", 0),
+            grundpreis_euro_monat=sp_data.get("grundpreis_euro_monat"),
+            zaehlergebuehr_euro_jahr=sp_data.get("zaehlergebuehr_euro_jahr"),
+            gueltig_ab=_parse_date(sp_data.get("gueltig_ab")),
+            gueltig_bis=_parse_date(sp_data.get("gueltig_bis")),
+            vertragsart=sp_data.get("vertragsart"),
+            verwendung=sp_data.get("verwendung", "allgemein"),
+            einspeisung_variabel=bool(sp_data.get("einspeisung_variabel", False)),
+        )
+        db.add(strompreis)
+        importiert["strompreise"] += 1
+
+
+async def _investitionen_anlegen(db: AsyncSession, ctx: _ImportKontext) -> None:
+    """Schritt 7: Investitionen hierarchisch (je Investition `_investition_anlegen`, rekursiv mit Children)."""
+    data = ctx.data
+    # 7. Investitionen hierarchisch importieren
+    # Quell-ID → neu vergebene ID (ab Export-Version 1.3). Damit schreibt
+    # 7b die Komponenten-Sensorzuordnung um, statt sie zu verwerfen (#353).
+    # Ältere Dateien tragen keine `id` — die Map bleibt dann leer.
+    alt_id_zu_neu: dict[int, int] = {}
+    ctx.alt_id_zu_neu = alt_id_zu_neu
+
+    for inv_data in data.get("investitionen", []):
+        await _investition_anlegen(db, ctx, inv_data)
+
+
+async def _investition_anlegen(
+    db: AsyncSession, ctx: _ImportKontext, inv_data: dict, parent_id: Optional[int] = None,
+) -> int:
+    """Importiert eine Investition rekursiv mit Children."""
+    anlage_id, importiert, alt_id_zu_neu = ctx.anlage_id, ctx.importiert, ctx.alt_id_zu_neu
+    inv = Investition(
+        anlage_id=anlage_id,
+        typ=inv_data.get("typ", "sonstiges"),
+        bezeichnung=inv_data.get("bezeichnung", "Unbenannt"),
+        anschaffungskosten_gesamt=inv_data.get("anschaffungskosten_gesamt"),
+        anschaffungskosten_alternativ=inv_data.get("anschaffungskosten_alternativ"),
+        betriebskosten_jahr=inv_data.get("betriebskosten_jahr"),
+        einsparung_prognose_jahr=inv_data.get("einsparung_prognose_jahr"),
+        anschaffungsdatum=_parse_date(inv_data.get("anschaffungsdatum")),
+        stilllegungsdatum=_parse_date(inv_data.get("stilllegungsdatum")),
+        leistung_kwp=inv_data.get("leistung_kwp"),
+        ausrichtung=inv_data.get("ausrichtung"),
+        neigung_grad=inv_data.get("neigung_grad"),
+        ha_entity_id=inv_data.get("ha_entity_id"),
+        parameter=inv_data.get("parameter"),
+        aktiv=inv_data.get("aktiv", True),
+        parent_investition_id=parent_id,
+    )
+    db.add(inv)
+    await db.flush()
+    inv_id = inv.id
+    importiert["investitionen"] += 1
+
+    # Quell-ID merken (für den sensor_mapping-Remap in 7b)
+    alt_id = inv_data.get("id")
+    if isinstance(alt_id, int):
+        alt_id_zu_neu[alt_id] = inv_id
+
+    _geraetezeilen_anlegen(db, ctx, inv_id, inv_data)
+
+    # Children rekursiv importieren
+    for child_data in inv_data.get("children", []):
+        await _investition_anlegen(db, ctx, child_data, parent_id=inv_id)
+
+    return inv_id
+
+
+def _geraetezeilen_anlegen(db: AsyncSession, ctx: _ImportKontext, inv_id: int, inv_data: dict) -> None:
+    """Schritt 7, je Investition: ihre Monatsdaten (Gerätezeilen) mit Initial-Provenance `manual:json_backup`."""
+    importiert = ctx.importiert
+    # Monatsdaten der Investition importieren
+    for md_data in inv_data.get("monatsdaten", []):
+        verbrauch_daten = md_data.get("verbrauch_daten") or {}
+        inv_md = InvestitionMonatsdaten(
+            investition_id=inv_id,
+            jahr=md_data.get("jahr"),
+            monat=md_data.get("monat"),
+            verbrauch_daten=verbrauch_daten,
+            einsparung_monat_euro=md_data.get("einsparung_monat_euro"),
+            co2_einsparung_kg=md_data.get("co2_einsparung_kg"),
+        )
+        # Etappe 3d Päckchen 2: Initial-Provenance setzen, damit künftige
+        # Cloud-Syncs diese aus dem Backup wiederhergestellten User-Werte
+        # respektieren (manual:json_backup ist MANUAL-Klasse, blockiert
+        # external:cloud_import:*).
+        seed_provenance(
+            inv_md,
+            source="manual:json_backup",
+            writer="json_backup_restore",
+            json_subkeys={"verbrauch_daten": list(verbrauch_daten.keys())},
+        )
+        db.add(inv_md)
+        importiert["investition_monatsdaten"] += 1
+
+
+def _sensor_mapping_remap(ctx: _ImportKontext) -> None:
+    """Schritt 7b (#353): `sensor_mapping` auf die neu vergebenen Investitions-IDs umschreiben, mit Warnungen."""
+    imported_sensor_mapping, alt_id_zu_neu, new_anlage, warnungen = (
+        ctx.imported_sensor_mapping, ctx.alt_id_zu_neu, ctx.new_anlage, ctx.warnungen,
+    )
+    # 7b. sensor_mapping auf die neu vergebenen Investitions-IDs umschreiben.
+    # Die Zuordnung hängt an den IDs der Quell-Installation — sowohl in
+    # `investitionen` als auch in den `quellen`-Feld-IDs. Bis Export-Version
+    # 1.2 trug die Datei die Quell-IDs nicht; dort bleibt es beim Verwerfen,
+    # weil es nichts gibt, worauf sich umschreiben ließe (#353).
+    if imported_sensor_mapping:
+        bericht = remap_investitionen_ids(imported_sensor_mapping, alt_id_zu_neu)
+        new_anlage.sensor_mapping = imported_sensor_mapping
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(new_anlage, "sensor_mapping")
+
+        if bericht.uebernommen:
+            warnungen.append(
+                f"Sensor-Zuordnung für {bericht.uebernommen} Komponente(n) übernommen "
+                "(Basis-Zähler und Komponenten-Felder bleiben erhalten)."
+            )
+        if bericht.hat_verworfen:
+            verworfen = ", ".join(bericht.verworfen[:8])
+            mehr = f" (und {len(bericht.verworfen) - 8} weitere)" if len(bericht.verworfen) > 8 else ""
+            warnungen.append(
+                "WICHTIG: Für folgende Einträge ließ sich die Sensor-Zuordnung nicht übernehmen "
+                f"und wurde entfernt: {verworfen}{mehr}. "
+                + (
+                    "Die Datei stammt aus einer Version vor 1.3 und enthält die dafür nötigen "
+                    "Komponenten-IDs nicht. "
+                    if not alt_id_zu_neu else ""
+                )
+                + "Bitte die betroffenen Felder unter Einstellungen → Datenquellen neu zuordnen."
+            )
+        logger.info(
+            "sensor_mapping-Remap: %d Komponenten übernommen, %d Einträge verworfen",
+            bericht.uebernommen, len(bericht.verworfen),
+        )
+
+
+def _monatsdaten_anlegen(db: AsyncSession, ctx: _ImportKontext) -> None:
+    """Schritt 8: Monatsdaten (Zählerwerte) mit Initial-Provenance der gesetzten Felder."""
+    data, anlage_id, warnungen, importiert = ctx.data, ctx.anlage_id, ctx.warnungen, ctx.importiert
+    # 8. Monatsdaten (Zählerwerte) importieren
+    for md_data in data.get("monatsdaten", []):
+        jahr = md_data.get("jahr")
+        monat = md_data.get("monat")
+
+        if jahr is None or monat is None:
+            warnungen.append("Monatsdaten ohne Jahr/Monat übersprungen")
+            continue
+
+        monatsdaten = Monatsdaten(
+            anlage_id=anlage_id,
+            jahr=jahr,
+            monat=monat,
+            einspeisung_kwh=md_data.get("einspeisung_kwh", 0),
+            netzbezug_kwh=md_data.get("netzbezug_kwh", 0),
+            pv_erzeugung_kwh=md_data.get("pv_erzeugung_kwh"),
+            direktverbrauch_kwh=md_data.get("direktverbrauch_kwh"),
+            eigenverbrauch_kwh=md_data.get("eigenverbrauch_kwh"),
+            gesamtverbrauch_kwh=md_data.get("gesamtverbrauch_kwh"),
+            batterie_ladung_kwh=md_data.get("batterie_ladung_kwh"),
+            batterie_entladung_kwh=md_data.get("batterie_entladung_kwh"),
+            batterie_ladung_netz_kwh=md_data.get("batterie_ladung_netz_kwh"),
+            batterie_ladepreis_cent=md_data.get("batterie_ladepreis_cent"),
+            netzbezug_durchschnittspreis_cent=md_data.get("netzbezug_durchschnittspreis_cent"),
+            einspeise_durchschnittspreis_cent=md_data.get("einspeise_durchschnittspreis_cent"),
+            globalstrahlung_kwh_m2=md_data.get("globalstrahlung_kwh_m2"),
+            sonnenstunden=md_data.get("sonnenstunden"),
+            durchschnittstemperatur=md_data.get("durchschnittstemperatur"),
+            sonderkosten_euro=md_data.get("sonderkosten_euro"),
+            sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),
+            sonstige_positionen=md_data.get("sonstige_positionen"),
+            datenquelle=md_data.get("datenquelle") or "json_import",
+            notizen=md_data.get("notizen"),
+        )
+        # Etappe 3d Päckchen 2: Initial-Provenance für alle nicht-leeren
+        # Top-Level-Felder (nur die, die im Backup tatsächlich gesetzt waren —
+        # keine Default-Werte mit-provenieren).
+        _BACKUP_FIELDS = [
+            "einspeisung_kwh", "netzbezug_kwh", "pv_erzeugung_kwh",
+            "direktverbrauch_kwh", "eigenverbrauch_kwh", "gesamtverbrauch_kwh",
+            "batterie_ladung_kwh", "batterie_entladung_kwh",
+            "batterie_ladung_netz_kwh", "batterie_ladepreis_cent",
+            "netzbezug_durchschnittspreis_cent",
+            "einspeise_durchschnittspreis_cent",
+            "globalstrahlung_kwh_m2", "sonnenstunden", "durchschnittstemperatur",
+            "sonderkosten_euro", "sonstige_positionen",
+        ]
+        seed_provenance(
+            monatsdaten,
+            source="manual:json_backup",
+            writer="json_backup_restore",
+            fields=[f for f in _BACKUP_FIELDS if md_data.get(f) is not None],
+        )
+        db.add(monatsdaten)
+        importiert["monatsdaten"] += 1
+
+
+async def _prognosen_anlegen(db: AsyncSession, ctx: _ImportKontext) -> None:
+    """Schritt 9: PVGIS-Prognosen + Monatsprognosen — genau eine aktiv, die zuletzt abgerufene gewinnt (P5/A17)."""
+    data, anlage_id, warnungen, importiert = ctx.data, ctx.anlage_id, ctx.warnungen, ctx.importiert
+    # 9. PVGIS-Prognosen importieren
+    #
+    # Invariante „genau eine aktive Prognose je Anlage" (P5/A17). Der Import
+    # legt immer eine NEUE Anlage an (oben: überschreiben ⇒ Kaskaden-Löschung,
+    # sonst eindeutiger Name), es gibt also keine Bestands-Prognosen, gegen die
+    # zu deaktivieren wäre — die Invariante kann nur die Backup-Datei selbst
+    # verletzen. Genau das tat sie: `ist_aktiv` wurde mit Default `True`
+    # gelesen, ein Backup ohne dieses Feld erzeugte damit N aktive Prognosen
+    # (Wurzel der HTTP-500- und Verdopplungs-Befunde N83–N85).
+    #
+    # Bewusste Entscheidung gegen beide Extreme:
+    #  * NICHT die Datei ablehnen — ein Restore ist ein Wiederherstellungspfad;
+    #    er darf nicht an einem redundanten Flag scheitern, während die
+    #    Energiedaten daneben fehlerfrei sind.
+    #  * NICHT stillschweigend zurechtbiegen — das wäre dasselbe Schweigen wie
+    #    das Übernehmen. Deshalb: deterministisch normalisieren UND es in
+    #    `warnungen` sagen, damit der Nutzer die Auswahl prüfen kann.
+    #
+    # `ist_aktiv` fehlt ⇒ **False** (nicht True): ein Backup, das nichts über
+    # den Aktiv-Zustand sagt, behauptet ihn auch nicht. Bleibt danach keine
+    # aktive übrig, wird die zuletzt abgerufene aktiviert — dieselbe Regel wie
+    # im Auswahl-SoT und in der Bestands-Bereinigung.
+    pvgis_alle = list(data.get("pvgis_prognosen", []))
+    aktiv_flags = [bool(p.get("ist_aktiv", False)) for p in pvgis_alle]
+
+    def _abgerufen_am(eintrag: dict):
+        return _parse_datetime(eintrag.get("abgerufen_am")) or datetime.min
+
+    gewaehlt_idx: Optional[int] = None
+    aktiv_indizes = [i for i, flag in enumerate(aktiv_flags) if flag]
+    if len(aktiv_indizes) > 1:
+        gewaehlt_idx = max(aktiv_indizes, key=lambda i: _abgerufen_am(pvgis_alle[i]))
+        warnungen.append(
+            f"Das Backup enthielt {len(aktiv_indizes)} als aktiv markierte "
+            "PVGIS-Prognosen — es kann nur eine aktiv sein. Die zuletzt "
+            "abgerufene wurde aktiviert, die übrigen bleiben als inaktive "
+            "Historie erhalten (Auswertungen → Prognose)."
+        )
+    elif len(aktiv_indizes) == 1:
+        gewaehlt_idx = aktiv_indizes[0]
+    elif pvgis_alle:
+        gewaehlt_idx = max(range(len(pvgis_alle)), key=lambda i: _abgerufen_am(pvgis_alle[i]))
+        warnungen.append(
+            "Das Backup enthielt PVGIS-Prognosen ohne Aktiv-Kennzeichnung. "
+            "Die zuletzt abgerufene wurde aktiviert."
+        )
+
+    for idx, pvgis_data in enumerate(pvgis_alle):
+        pvgis = PVGISPrognoseModel(
+            anlage_id=anlage_id,
+            latitude=pvgis_data.get("latitude", 0),
+            longitude=pvgis_data.get("longitude", 0),
+            neigung_grad=pvgis_data.get("neigung_grad", 0),
+            ausrichtung_grad=pvgis_data.get("ausrichtung_grad", 0),
+            jahresertrag_kwh=pvgis_data.get("jahresertrag_kwh", 0),
+            spezifischer_ertrag_kwh_kwp=pvgis_data.get("spezifischer_ertrag_kwh_kwp", 0),
+            gesamt_leistung_kwp=pvgis_data.get("gesamt_leistung_kwp"),
+            system_losses=pvgis_data.get("system_losses", 14.0),
+            horizont_verwendet=pvgis_data.get("horizont_verwendet", False),
+            monatswerte=pvgis_data.get("monatswerte"),
+            module_monatswerte=pvgis_data.get("module_monatswerte"),
+            ist_aktiv=(idx == gewaehlt_idx),
+        )
+        # `abgerufen_am` stand im Export, wurde beim Import aber verworfen —
+        # alle Prognosen bekamen den Zeitpunkt des Restores. Damit war die
+        # Historie nach einem Restore nicht mehr unterscheidbar und der
+        # Tiebreak `abgerufen_am DESC` beliebig. Nachbefund A17.
+        abgerufen = _parse_datetime(pvgis_data.get("abgerufen_am"))
+        if abgerufen is not None:
+            pvgis.abgerufen_am = abgerufen
+        db.add(pvgis)
         await db.flush()
-        anlage_id = new_anlage.id
-        logger.info(f"Anlage '{anlage_name}' erstellt mit ID {anlage_id}")
+        pvgis_id = pvgis.id
+        importiert["pvgis_prognosen"] += 1
 
-        # 6. Strompreise importieren
-        for sp_data in data.get("strompreise", []):
-            strompreis = Strompreis(
-                anlage_id=anlage_id,
-                tarifname=sp_data.get("tarifname"),
-                anbieter=sp_data.get("anbieter"),
-                netzbezug_arbeitspreis_cent_kwh=sp_data.get("netzbezug_arbeitspreis_cent_kwh", 0),
-                einspeiseverguetung_cent_kwh=sp_data.get("einspeiseverguetung_cent_kwh", 0),
-                grundpreis_euro_monat=sp_data.get("grundpreis_euro_monat"),
-                zaehlergebuehr_euro_jahr=sp_data.get("zaehlergebuehr_euro_jahr"),
-                gueltig_ab=_parse_date(sp_data.get("gueltig_ab")),
-                gueltig_bis=_parse_date(sp_data.get("gueltig_bis")),
-                vertragsart=sp_data.get("vertragsart"),
-                verwendung=sp_data.get("verwendung", "allgemein"),
-                einspeisung_variabel=bool(sp_data.get("einspeisung_variabel", False)),
+        # Monatsprognosen importieren
+        for mp_data in pvgis_data.get("monatsprognosen", []):
+            mp = PVGISMonatsprognose(
+                prognose_id=pvgis_id,
+                monat=mp_data.get("monat"),
+                ertrag_kwh=mp_data.get("ertrag_kwh", 0),
+                einstrahlung_kwh_m2=mp_data.get("einstrahlung_kwh_m2", 0),
+                standardabweichung_kwh=mp_data.get("standardabweichung_kwh", 0),
             )
-            db.add(strompreis)
-            importiert["strompreise"] += 1
+            db.add(mp)
+            importiert["pvgis_monatsprognosen"] += 1
 
-        # 7. Investitionen hierarchisch importieren
-        # Quell-ID → neu vergebene ID (ab Export-Version 1.3). Damit schreibt
-        # 7b die Komponenten-Sensorzuordnung um, statt sie zu verwerfen (#353).
-        # Ältere Dateien tragen keine `id` — die Map bleibt dann leer.
-        alt_id_zu_neu: dict[int, int] = {}
 
-        async def import_investition(inv_data: dict, parent_id: Optional[int] = None) -> int:
-            """Importiert eine Investition rekursiv mit Children."""
-            inv = Investition(
-                anlage_id=anlage_id,
-                typ=inv_data.get("typ", "sonstiges"),
-                bezeichnung=inv_data.get("bezeichnung", "Unbenannt"),
-                anschaffungskosten_gesamt=inv_data.get("anschaffungskosten_gesamt"),
-                anschaffungskosten_alternativ=inv_data.get("anschaffungskosten_alternativ"),
-                betriebskosten_jahr=inv_data.get("betriebskosten_jahr"),
-                einsparung_prognose_jahr=inv_data.get("einsparung_prognose_jahr"),
-                anschaffungsdatum=_parse_date(inv_data.get("anschaffungsdatum")),
-                stilllegungsdatum=_parse_date(inv_data.get("stilllegungsdatum")),
-                leistung_kwp=inv_data.get("leistung_kwp"),
-                ausrichtung=inv_data.get("ausrichtung"),
-                neigung_grad=inv_data.get("neigung_grad"),
-                ha_entity_id=inv_data.get("ha_entity_id"),
-                parameter=inv_data.get("parameter"),
-                aktiv=inv_data.get("aktiv", True),
-                parent_investition_id=parent_id,
-            )
-            db.add(inv)
-            await db.flush()
-            inv_id = inv.id
-            importiert["investitionen"] += 1
+async def _antwort(db: AsyncSession, ctx: _ImportKontext) -> JSONImportResult:
+    """Abschluss: Commit, Protokoll in derselben Sitzung (N-532), `JSONImportResult`."""
+    anlage_id, anlage_name, warnungen, importiert = ctx.anlage_id, ctx.anlage_name, ctx.warnungen, ctx.importiert
+    await db.commit()
 
-            # Quell-ID merken (für den sensor_mapping-Remap in 7b)
-            alt_id = inv_data.get("id")
-            if isinstance(alt_id, int):
-                alt_id_zu_neu[alt_id] = inv_id
+    logger.info(f"JSON-Import abgeschlossen: {importiert}")
 
-            # Monatsdaten der Investition importieren
-            for md_data in inv_data.get("monatsdaten", []):
-                verbrauch_daten = md_data.get("verbrauch_daten") or {}
-                inv_md = InvestitionMonatsdaten(
-                    investition_id=inv_id,
-                    jahr=md_data.get("jahr"),
-                    monat=md_data.get("monat"),
-                    verbrauch_daten=verbrauch_daten,
-                    einsparung_monat_euro=md_data.get("einsparung_monat_euro"),
-                    co2_einsparung_kg=md_data.get("co2_einsparung_kg"),
-                )
-                # Etappe 3d Päckchen 2: Initial-Provenance setzen, damit künftige
-                # Cloud-Syncs diese aus dem Backup wiederhergestellten User-Werte
-                # respektieren (manual:json_backup ist MANUAL-Klasse, blockiert
-                # external:cloud_import:*).
-                seed_provenance(
-                    inv_md,
-                    source="manual:json_backup",
-                    writer="json_backup_restore",
-                    json_subkeys={"verbrauch_daten": list(verbrauch_daten.keys())},
-                )
-                db.add(inv_md)
-                importiert["investition_monatsdaten"] += 1
+    await log_activity(
+        kategorie="backup_import",
+        aktion=f"Anlage '{anlage_name}' importiert",
+        erfolg=True,
+        details=f"{importiert['monatsdaten']} Monate, {importiert['investitionen']} Investitionen",
+        anlage_id=anlage_id,
+        db=db,
+    )
 
-            # Children rekursiv importieren
-            for child_data in inv_data.get("children", []):
-                await import_investition(child_data, parent_id=inv_id)
-
-            return inv_id
-
-        for inv_data in data.get("investitionen", []):
-            await import_investition(inv_data)
-
-        # 7b. sensor_mapping auf die neu vergebenen Investitions-IDs umschreiben.
-        # Die Zuordnung hängt an den IDs der Quell-Installation — sowohl in
-        # `investitionen` als auch in den `quellen`-Feld-IDs. Bis Export-Version
-        # 1.2 trug die Datei die Quell-IDs nicht; dort bleibt es beim Verwerfen,
-        # weil es nichts gibt, worauf sich umschreiben ließe (#353).
-        if imported_sensor_mapping:
-            bericht = remap_investitionen_ids(imported_sensor_mapping, alt_id_zu_neu)
-            new_anlage.sensor_mapping = imported_sensor_mapping
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(new_anlage, "sensor_mapping")
-
-            if bericht.uebernommen:
-                warnungen.append(
-                    f"Sensor-Zuordnung für {bericht.uebernommen} Komponente(n) übernommen "
-                    "(Basis-Zähler und Komponenten-Felder bleiben erhalten)."
-                )
-            if bericht.hat_verworfen:
-                verworfen = ", ".join(bericht.verworfen[:8])
-                mehr = f" (und {len(bericht.verworfen) - 8} weitere)" if len(bericht.verworfen) > 8 else ""
-                warnungen.append(
-                    "WICHTIG: Für folgende Einträge ließ sich die Sensor-Zuordnung nicht übernehmen "
-                    f"und wurde entfernt: {verworfen}{mehr}. "
-                    + (
-                        "Die Datei stammt aus einer Version vor 1.3 und enthält die dafür nötigen "
-                        "Komponenten-IDs nicht. "
-                        if not alt_id_zu_neu else ""
-                    )
-                    + "Bitte die betroffenen Felder unter Einstellungen → Datenquellen neu zuordnen."
-                )
-            logger.info(
-                "sensor_mapping-Remap: %d Komponenten übernommen, %d Einträge verworfen",
-                bericht.uebernommen, len(bericht.verworfen),
-            )
-
-        # 8. Monatsdaten (Zählerwerte) importieren
-        for md_data in data.get("monatsdaten", []):
-            jahr = md_data.get("jahr")
-            monat = md_data.get("monat")
-
-            if jahr is None or monat is None:
-                warnungen.append("Monatsdaten ohne Jahr/Monat übersprungen")
-                continue
-
-            monatsdaten = Monatsdaten(
-                anlage_id=anlage_id,
-                jahr=jahr,
-                monat=monat,
-                einspeisung_kwh=md_data.get("einspeisung_kwh", 0),
-                netzbezug_kwh=md_data.get("netzbezug_kwh", 0),
-                pv_erzeugung_kwh=md_data.get("pv_erzeugung_kwh"),
-                direktverbrauch_kwh=md_data.get("direktverbrauch_kwh"),
-                eigenverbrauch_kwh=md_data.get("eigenverbrauch_kwh"),
-                gesamtverbrauch_kwh=md_data.get("gesamtverbrauch_kwh"),
-                batterie_ladung_kwh=md_data.get("batterie_ladung_kwh"),
-                batterie_entladung_kwh=md_data.get("batterie_entladung_kwh"),
-                batterie_ladung_netz_kwh=md_data.get("batterie_ladung_netz_kwh"),
-                batterie_ladepreis_cent=md_data.get("batterie_ladepreis_cent"),
-                netzbezug_durchschnittspreis_cent=md_data.get("netzbezug_durchschnittspreis_cent"),
-                einspeise_durchschnittspreis_cent=md_data.get("einspeise_durchschnittspreis_cent"),
-                globalstrahlung_kwh_m2=md_data.get("globalstrahlung_kwh_m2"),
-                sonnenstunden=md_data.get("sonnenstunden"),
-                durchschnittstemperatur=md_data.get("durchschnittstemperatur"),
-                sonderkosten_euro=md_data.get("sonderkosten_euro"),
-                sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),
-                sonstige_positionen=md_data.get("sonstige_positionen"),
-                datenquelle=md_data.get("datenquelle") or "json_import",
-                notizen=md_data.get("notizen"),
-            )
-            # Etappe 3d Päckchen 2: Initial-Provenance für alle nicht-leeren
-            # Top-Level-Felder (nur die, die im Backup tatsächlich gesetzt waren —
-            # keine Default-Werte mit-provenieren).
-            _BACKUP_FIELDS = [
-                "einspeisung_kwh", "netzbezug_kwh", "pv_erzeugung_kwh",
-                "direktverbrauch_kwh", "eigenverbrauch_kwh", "gesamtverbrauch_kwh",
-                "batterie_ladung_kwh", "batterie_entladung_kwh",
-                "batterie_ladung_netz_kwh", "batterie_ladepreis_cent",
-                "netzbezug_durchschnittspreis_cent",
-                "einspeise_durchschnittspreis_cent",
-                "globalstrahlung_kwh_m2", "sonnenstunden", "durchschnittstemperatur",
-                "sonderkosten_euro", "sonstige_positionen",
-            ]
-            seed_provenance(
-                monatsdaten,
-                source="manual:json_backup",
-                writer="json_backup_restore",
-                fields=[f for f in _BACKUP_FIELDS if md_data.get(f) is not None],
-            )
-            db.add(monatsdaten)
-            importiert["monatsdaten"] += 1
-
-        # 9. PVGIS-Prognosen importieren
-        #
-        # Invariante „genau eine aktive Prognose je Anlage" (P5/A17). Der Import
-        # legt immer eine NEUE Anlage an (oben: überschreiben ⇒ Kaskaden-Löschung,
-        # sonst eindeutiger Name), es gibt also keine Bestands-Prognosen, gegen die
-        # zu deaktivieren wäre — die Invariante kann nur die Backup-Datei selbst
-        # verletzen. Genau das tat sie: `ist_aktiv` wurde mit Default `True`
-        # gelesen, ein Backup ohne dieses Feld erzeugte damit N aktive Prognosen
-        # (Wurzel der HTTP-500- und Verdopplungs-Befunde N83–N85).
-        #
-        # Bewusste Entscheidung gegen beide Extreme:
-        #  * NICHT die Datei ablehnen — ein Restore ist ein Wiederherstellungspfad;
-        #    er darf nicht an einem redundanten Flag scheitern, während die
-        #    Energiedaten daneben fehlerfrei sind.
-        #  * NICHT stillschweigend zurechtbiegen — das wäre dasselbe Schweigen wie
-        #    das Übernehmen. Deshalb: deterministisch normalisieren UND es in
-        #    `warnungen` sagen, damit der Nutzer die Auswahl prüfen kann.
-        #
-        # `ist_aktiv` fehlt ⇒ **False** (nicht True): ein Backup, das nichts über
-        # den Aktiv-Zustand sagt, behauptet ihn auch nicht. Bleibt danach keine
-        # aktive übrig, wird die zuletzt abgerufene aktiviert — dieselbe Regel wie
-        # im Auswahl-SoT und in der Bestands-Bereinigung.
-        pvgis_alle = list(data.get("pvgis_prognosen", []))
-        aktiv_flags = [bool(p.get("ist_aktiv", False)) for p in pvgis_alle]
-
-        def _abgerufen_am(eintrag: dict):
-            return _parse_datetime(eintrag.get("abgerufen_am")) or datetime.min
-
-        gewaehlt_idx: Optional[int] = None
-        aktiv_indizes = [i for i, flag in enumerate(aktiv_flags) if flag]
-        if len(aktiv_indizes) > 1:
-            gewaehlt_idx = max(aktiv_indizes, key=lambda i: _abgerufen_am(pvgis_alle[i]))
-            warnungen.append(
-                f"Das Backup enthielt {len(aktiv_indizes)} als aktiv markierte "
-                "PVGIS-Prognosen — es kann nur eine aktiv sein. Die zuletzt "
-                "abgerufene wurde aktiviert, die übrigen bleiben als inaktive "
-                "Historie erhalten (Auswertungen → Prognose)."
-            )
-        elif len(aktiv_indizes) == 1:
-            gewaehlt_idx = aktiv_indizes[0]
-        elif pvgis_alle:
-            gewaehlt_idx = max(range(len(pvgis_alle)), key=lambda i: _abgerufen_am(pvgis_alle[i]))
-            warnungen.append(
-                "Das Backup enthielt PVGIS-Prognosen ohne Aktiv-Kennzeichnung. "
-                "Die zuletzt abgerufene wurde aktiviert."
-            )
-
-        for idx, pvgis_data in enumerate(pvgis_alle):
-            pvgis = PVGISPrognoseModel(
-                anlage_id=anlage_id,
-                latitude=pvgis_data.get("latitude", 0),
-                longitude=pvgis_data.get("longitude", 0),
-                neigung_grad=pvgis_data.get("neigung_grad", 0),
-                ausrichtung_grad=pvgis_data.get("ausrichtung_grad", 0),
-                jahresertrag_kwh=pvgis_data.get("jahresertrag_kwh", 0),
-                spezifischer_ertrag_kwh_kwp=pvgis_data.get("spezifischer_ertrag_kwh_kwp", 0),
-                gesamt_leistung_kwp=pvgis_data.get("gesamt_leistung_kwp"),
-                system_losses=pvgis_data.get("system_losses", 14.0),
-                horizont_verwendet=pvgis_data.get("horizont_verwendet", False),
-                monatswerte=pvgis_data.get("monatswerte"),
-                module_monatswerte=pvgis_data.get("module_monatswerte"),
-                ist_aktiv=(idx == gewaehlt_idx),
-            )
-            # `abgerufen_am` stand im Export, wurde beim Import aber verworfen —
-            # alle Prognosen bekamen den Zeitpunkt des Restores. Damit war die
-            # Historie nach einem Restore nicht mehr unterscheidbar und der
-            # Tiebreak `abgerufen_am DESC` beliebig. Nachbefund A17.
-            abgerufen = _parse_datetime(pvgis_data.get("abgerufen_am"))
-            if abgerufen is not None:
-                pvgis.abgerufen_am = abgerufen
-            db.add(pvgis)
-            await db.flush()
-            pvgis_id = pvgis.id
-            importiert["pvgis_prognosen"] += 1
-
-            # Monatsprognosen importieren
-            for mp_data in pvgis_data.get("monatsprognosen", []):
-                mp = PVGISMonatsprognose(
-                    prognose_id=pvgis_id,
-                    monat=mp_data.get("monat"),
-                    ertrag_kwh=mp_data.get("ertrag_kwh", 0),
-                    einstrahlung_kwh_m2=mp_data.get("einstrahlung_kwh_m2", 0),
-                    standardabweichung_kwh=mp_data.get("standardabweichung_kwh", 0),
-                )
-                db.add(mp)
-                importiert["pvgis_monatsprognosen"] += 1
-
-        await db.commit()
-
-        logger.info(f"JSON-Import abgeschlossen: {importiert}")
-
-        await log_activity(
-            kategorie="backup_import",
-            aktion=f"Anlage '{anlage_name}' importiert",
-            erfolg=True,
-            details=f"{importiert['monatsdaten']} Monate, {importiert['investitionen']} Investitionen",
-            anlage_id=anlage_id,
-            db=db,
-        )
-
-        return JSONImportResult(
-            erfolg=True,
-            anlage_id=anlage_id,
-            anlage_name=anlage_name,
-            importiert=importiert,
-            warnungen=warnungen,
-        )
-
-    except Exception as e:
-        await db.rollback()
-        logger.exception(f"Fehler beim JSON-Import: {e}")
-        await log_activity(
-            kategorie="backup_import",
-            aktion="Import fehlgeschlagen",
-            erfolg=False,
-            details=f"{type(e).__name__}: {e}",
-            db=db,
-        )
-        return JSONImportResult(
-            erfolg=False,
-            fehler=[f"Import-Fehler: {str(e)}"],
-            warnungen=warnungen,
-        )
+    return JSONImportResult(
+        erfolg=True,
+        anlage_id=anlage_id,
+        anlage_name=anlage_name,
+        importiert=importiert,
+        warnungen=warnungen,
+    )
