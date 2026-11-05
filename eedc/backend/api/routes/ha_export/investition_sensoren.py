@@ -1032,49 +1032,40 @@ def _tage_im_monat(jahr: int, monat: int) -> int:
     return calendar.monthrange(jahr, monat)[1]
 
 
-async def _wp_steuerung_und_plan(
-    *, db, investition, sensor_values, fenster_ctx, modus_map,
-    monatsdaten, kuehl_je_monat: dict,
-):
-    """E2 (Warmwasserbetrieb) sowie P4 · P7 · P8 dieser Wärmepumpe.
+@dataclass
+class _WpSteuerKontext:
+    """Was die Steuerungs-Phasen E2/P4/P7/P8 einer Wärmepumpe gemeinsam lesen (RF-76, 5.11.2026)."""
+    investition: Investition
+    sensor_values: list
+    fenster_ctx: object
+    monatsdaten: list
+    kuehl_je_monat: dict
 
-    ⚠ **Die Faltung über `monatsdaten` (P4, unten) ist ein per-Investition-Aggregat;
-    die Zeilen kommen aus `calculate_investition_sensors`, dem in
-    `P10_PER_INVESTITION` gelisteten Lader.** Seit N-542 (22.09.2026) sieht der
-    P10-Wächter auch diese Bauform: `test_wurzelmuster_konformitaet.py::_p10_imd_falter`
-    findet Funktionen, die `verbrauch_daten`/`imd_typ_beitrag`/`modus_strom_zeile`
-    über einen Parameter falten, und diese Funktion steht dort in
-    `P10_PER_INVESTITION_PHASE` mit ihrem Lader. Wer die Funktion umbenennt oder
-    aus der Liste nimmt, macht den Wächter rot; dass die Zeilen tatsächlich vom
-    genannten Lader kommen, prüft er nicht (gemessen 22.09.2026) — das belegt der
-    Aufruf in `calculate_investition_sensors`, nicht der Test. (Hier stand bis
-    N-542: „der Wächter sieht diese Funktion nicht (kein `select`)" — das war die
-    Blindstelle.)
-
-    ⛔ **Warum überhaupt je Investition und nicht über `lade_monats_fakten`:**
-    `WpFakten.strom_warmwasser_kwh` ist eine **anlagenweite** Summe über alle
-    Wärmepumpen — bei zwei Geräten wäre die Menge des einen die Summe beider.
-    Gelesen wird deshalb über `imd_typ_beitrag`, denselben Layer-SoT, den die
-    Monats-Fakten selbst benutzen; ein eigener Griff ins `verbrauch_daten` wäre
-    der Nachbau, an dem F-56 entstanden ist.
-    """
-    from backend.core.betriebsmodus import WARMWASSER
-    from backend.services.ha_export_fenster import SLOTS_JE_TAG, fenster_fuer_menge
-    from backend.services.ha_sensors_export import WAERMEPUMPE_SENSOREN
-
-    def _def(key):
-        for d in WAERMEPUMPE_SENSOREN:
-            if d.key == key:
-                return d
-        raise KeyError(key)
-
-    def _an(key, wert, zusatz=None, berechnung=None):
+    def an(self, key, wert, zusatz=None, berechnung=None):
+        """Einen Sensor aus `WAERMEPUMPE_SENSOREN` anhängen — ohne Wert keiner; `None`-Attribute fallen weg."""
         if wert is None:
             return
-        sensor_values.append(SensorValue(
-            definition=_def(key), value=wert, berechnung=berechnung,
+        self.sensor_values.append(SensorValue(
+            definition=_wp_sensor_def(key), value=wert, berechnung=berechnung,
             zusatz_attribute={k: v for k, v in (zusatz or {}).items() if v is not None},
         ))
+
+
+def _wp_sensor_def(key):
+    """Die Definition zu ``key`` aus `WAERMEPUMPE_SENSOREN` (``KeyError``, wenn es sie nicht gibt)."""
+    from backend.services.ha_sensors_export import WAERMEPUMPE_SENSOREN
+
+    for d in WAERMEPUMPE_SENSOREN:
+        if d.key == key:
+            return d
+    raise KeyError(key)
+
+
+def _warmwasser_betrieb(k: _WpSteuerKontext, modus_map) -> None:
+    """E2-Phase (RF-76): Warmwasserbetrieb an/aus aus dem Betriebsmodus — ohne Zuordnung kein Sensor."""
+    from backend.core.betriebsmodus import WARMWASSER
+
+    investition, _an = k.investition, k.an
 
     # ── E2 · Warmwasserbetrieb ──────────────────────────────────────────────
     #
@@ -1086,10 +1077,17 @@ async def _wp_steuerung_und_plan(
         _an("wp_warmwasserbetrieb", _modus == WARMWASSER,
             {"modus": BETRIEBSMODUS_LABEL[_modus]})
 
-    if fenster_ctx is None:
-        return
 
-    heute = fenster_ctx.heute
+def _warmwasser_fenster(k: _WpSteuerKontext, heute: date) -> None:
+    """P4-Phase (RF-76): Warmwasser-Fenster — Ø-Warmwasserstrom je Tag der letzten drei abgeschlossenen Monate
+    (gemessen schlägt abgeleitet, F-56), 2-Stunden-Fenster mit Frist ≤ Slot 24 (N-544).
+
+    ⚠ Faltet die übergebenen Monatszeilen (`verbrauch_daten`, `imd_typ_beitrag`, `modus_strom_zeile`) — Eintrag in
+    `P10_PER_INVESTITION_PHASE` mit dem Lader `calculate_investition_sensors` (Begründung im Docstring von
+    `_wp_steuerung_und_plan`)."""
+    from backend.services.ha_export_fenster import SLOTS_JE_TAG, fenster_fuer_menge
+
+    investition, fenster_ctx, monatsdaten, _an = k.investition, k.fenster_ctx, k.monatsdaten, k.an
 
     # ── P4 · Warmwasser-Fenster ─────────────────────────────────────────────
     #
@@ -1153,6 +1151,12 @@ async def _wp_steuerung_und_plan(
                 f"({'gemessen' if herkunft == 'gemessen' else 'aus dem Betriebsmodus abgeleitet'})"
             ))
 
+
+def _heizfenster(k: _WpSteuerKontext) -> None:
+    """P7-Phase (RF-76): Heizfenster — die günstigsten Stunden der erwarteten Heizzeit (WP-Stundenprofil, N-332),
+    Beginn je Slot ``(h−1) % 24`` (N-544)."""
+    fenster_ctx, _an = k.fenster_ctx, k.an
+
     # ── P7 · Heizfenster ────────────────────────────────────────────────────
     #
     # **Menge:** das **erwartete** WP-Stundenprofil von heute (Modell A mit
@@ -1181,6 +1185,16 @@ async def _wp_steuerung_und_plan(
                 f"erwarteten Heizzeit — Verschiebung der gleichen Menge in die "
                 f"günstigsten davon"
             ))
+
+
+def _kuehlfenster(k: _WpSteuerKontext, heute: date) -> None:
+    """P8-Phase (RF-76): Kühlfenster — nur mit Kühl-Zähler UND gemessener Kühlstrom-Menge der letzten drei Monate;
+    2-Stunden-Fenster mit Frist = Spitzen-Slot der Temperatur (N-544)."""
+    from backend.services.ha_export_fenster import SLOTS_JE_TAG, fenster_fuer_menge
+
+    investition, fenster_ctx, monatsdaten, kuehl_je_monat, _an = (
+        k.investition, k.fenster_ctx, k.monatsdaten, k.kuehl_je_monat, k.an,
+    )
 
     # ── P8 · Kühlfenster ────────────────────────────────────────────────────
     #
@@ -1257,6 +1271,57 @@ async def _wp_steuerung_und_plan(
                     f"Ø {fmt_zahl(je_tag, 1)} kWh gemessener Kühlstrom je Tag — günstigstes "
                     f"2-Stunden-Fenster vor der Tageshöchsttemperatur um {spitze:02d}:00"
                 ))
+
+
+async def _wp_steuerung_und_plan(
+    *, db, investition, sensor_values, fenster_ctx, modus_map,
+    monatsdaten, kuehl_je_monat: dict,
+):
+    """E2 (Warmwasserbetrieb) sowie P4 · P7 · P8 dieser Wärmepumpe.
+
+    ⚠ **Die Faltung über `monatsdaten` (P4, Phase `_warmwasser_fenster`) ist ein per-Investition-Aggregat;
+    die Zeilen kommen aus `calculate_investition_sensors`, dem in
+    `P10_PER_INVESTITION` gelisteten Lader.** Seit N-542 (22.09.2026) sieht der
+    P10-Wächter auch diese Bauform: `test_wurzelmuster_konformitaet.py::_p10_imd_falter`
+    findet Funktionen, die `verbrauch_daten`/`imd_typ_beitrag`/`modus_strom_zeile`
+    über einen Parameter falten, und die P4-Phase `_warmwasser_fenster` steht dort in
+    `P10_PER_INVESTITION_PHASE` mit ihrem Lader (bis RF-76, 5.11.2026: diese Funktion
+    selbst). Wer die Phase umbenennt oder aus der Liste nimmt, macht den Wächter
+    rot; dass die Zeilen tatsächlich vom
+    genannten Lader kommen, prüft er nicht (gemessen 22.09.2026) — das belegt der
+    Aufruf in `calculate_investition_sensors`, nicht der Test. (Hier stand bis
+    N-542: „der Wächter sieht diese Funktion nicht (kein `select`)" — das war die
+    Blindstelle.)
+
+    ⛔ **Warum überhaupt je Investition und nicht über `lade_monats_fakten`:**
+    `WpFakten.strom_warmwasser_kwh` ist eine **anlagenweite** Summe über alle
+    Wärmepumpen — bei zwei Geräten wäre die Menge des einen die Summe beider.
+    Gelesen wird deshalb über `imd_typ_beitrag`, denselben Layer-SoT, den die
+    Monats-Fakten selbst benutzen; ein eigener Griff ins `verbrauch_daten` wäre
+    der Nachbau, an dem F-56 entstanden ist.
+
+    **Form (RF-76, 5.11.2026):** Orchestrator — Kontext `_WpSteuerKontext` (Gerät, Sensorliste, Fenster-Kontext,
+    Monatszeilen, Kühlstrom je Monat; `an` hängt einen Sensor an), dann in dieser Reihenfolge die Phasen
+    `_warmwasser_betrieb` (E2), ohne Fenster-Kontext Schluss, `_warmwasser_fenster` (P4), `_heizfenster` (P7),
+    `_kuehlfenster` (P8). Die Sensoren entstehen wortgleich und in derselben Reihenfolge wie vorher.
+    """
+    k = _WpSteuerKontext(
+        investition=investition,
+        sensor_values=sensor_values,
+        fenster_ctx=fenster_ctx,
+        monatsdaten=monatsdaten,
+        kuehl_je_monat=kuehl_je_monat,
+    )
+    _warmwasser_betrieb(k, modus_map)
+
+    if fenster_ctx is None:
+        return
+
+    heute = fenster_ctx.heute
+
+    _warmwasser_fenster(k, heute)
+    _heizfenster(k)
+    _kuehlfenster(k, heute)
 
 
 def _mapping_der_anlage(investition) -> dict:

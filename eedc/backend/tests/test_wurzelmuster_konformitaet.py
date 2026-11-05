@@ -1690,14 +1690,20 @@ P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/api/routes/investitionen/dashboard_wallbox.py::get_wallbox_dashboard",
     # Heutiger Tarif als Fallback des Perioden-Mappings und für die nach vorn
     # gerichteten Sensor-Werte. Die Historien-Summen daneben lösen je Monat auf
-    # (`wp_preis_by_periode` / `wallbox_preis_by_periode`, beide mit Stichtag).
+    # (`wp_preis_by_periode` / `wallbox_preis_by_periode` aus `tarife_der_monate`, seit N-712/N-713;
+    # bis dahin je Monat mit Stichtag).
     # ⛔ `calculate_investition_sensors` stand bis 05.09.2026 (B5/X-1) mit
     # derselben Begründung hier — sie war für die Wärmepumpe falsch: der
     # Ersparnis-Sensor je Gerät bewertete ALLE Monate mit dem heutigen WP-Tarif
     # (gemessen: Juli mit dem Septemberpreis). Die Ausnahme zählte den Lader,
     # nicht, was mit dem Tarif geschah — dieselbe Lücke wie bei P8/S4 oben.
     # Seit X-1 lädt die Funktion je Monat mit Stichtag; der Eintrag ist weg.
-    "backend/api/routes/ha_export/anlage_sensoren.py::calculate_anlage_sensors",   # Vorlage 8 (18.09.2026): ha_export.py → Paket ha_export/
+    # Vorlage 8 (18.09.2026): ha_export.py → Paket ha_export/. RF-75 (5.11.2026): der Anlagen-Rechner lädt den heutigen
+    # Tarif in seiner Kopf-Phase (bis dahin `::calculate_anlage_sensors`) — dieselbe Ladung (N-200, SoT
+    # `lade_tarife_fuer_anlage`), die Fallback und die nach vorn gerichteten Sensor-Werte trägt; die Historien-Summen
+    # lösen weiter je Monat auf (`historische_komponenten`: `wp_preis_by_periode` / `wallbox_preis_by_periode` aus
+    # `tarife_der_monate`).
+    "backend/api/routes/ha_export/anlage_sensoren.py::_anlage_eingaenge",
     # N-200: seit dem SoT-Umbau sichtbar. Die Route reicht den Tarif nur an
     # `calculate_investition_sensors` durch — dieselbe Rolle wie die Zeile
     # darüber, eine Ebene höher.
@@ -2500,9 +2506,14 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
     # Die eMob-Mengen EINER Zeile für die Geräte-Sensoren.
     "backend/api/routes/ha_export/investition_sensoren.py::_emob_daten":
         "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
-    # E2/P4/P7/P8 einer Wärmepumpe. Der Docstring dieser Funktion benannte die
+    # E2/P4/P7/P8 einer Wärmepumpe. Der Docstring von `_wp_steuerung_und_plan` benannte die
     # Blindstelle, gegen die dieser Suchlauf gebaut ist.
-    "backend/api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan":
+    # RF-76 (5.11.2026): `_wp_steuerung_und_plan` ist ein Orchestrator (Kontext `_WpSteuerKontext`, Phasen E2/P4/P7/P8)
+    # und faltet nichts mehr selbst. Den Marker trägt allein die P4-Phase `_warmwasser_fenster` (Ø-Warmwasserstrom
+    # der letzten drei Monate über `imd_typ_beitrag`/`modus_strom_zeile` aus `.verbrauch_daten` der übergebenen
+    # Zeilen — dieselben Zeilen wie bisher); E2 `_warmwasser_betrieb`, P7 `_heizfenster` und P8 `_kuehlfenster`
+    # tragen keinen (P8 reicht die Zeilen an `hat_kuehl_zaehler` weiter, s. unten).
+    "backend/api/routes/ha_export/investition_sensoren.py::_warmwasser_fenster":
         "backend/api/routes/ha_export/investition_sensoren.py::calculate_investition_sensors",
     # RF-8 (Serie „Funktion vor Datei"): Phasen des Geraete-Rechners — Faltung der WP-Monatszeilen (Strom, Waerme,
     # Modus-Teilmengen) und die WP-Ersparnis je Monat. Die Zeilen laedt der Orchestrator selbst.
@@ -2522,7 +2533,7 @@ P10_PER_INVESTITION_PHASE: dict[str, str] = {
         "backend/api/routes/investitionen/dashboard_eauto.py::get_eauto_dashboard",
     # CHECKER-Phase: beantwortet „führt dieses Gerät einen Kühl-Zähler?" über
     # übergebene Zeilen. Der Lader ist der Datenquellen-Check daneben; zweiter
-    # Aufrufer ist `_wp_steuerung_und_plan` (selbst eine Phase, s. o.).
+    # Aufrufer ist `_kuehlfenster`, die P8-Phase von `_wp_steuerung_und_plan` (RF-76; s. o.).
     "backend/services/daten_checker/kuehl_zaehler.py::hat_kuehl_zaehler":
         "backend/services/daten_checker/datenquelle/klima.py::_check_klima_modus_sensor",
     # RF-26 (Serie „Funktion vor Datei"): Phase des Klima-Checks — WK-06 „Kühlanteil wird geschätzt" befragt die
