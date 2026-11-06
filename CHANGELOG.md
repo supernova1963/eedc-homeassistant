@@ -7,7 +7,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.2.2] - 2026-11-06
+
+Fehlerbehebungen und zwei Melder-Wünsche aus dem simon42-Forum: der laufende Tag ohne Home-Assistant-Statistik zählt mit den Zählern, „PV heute“ im Live zählt Erzeuger ohne Zähler mit, der Gesamt-ROI zieht die Betriebskosten nicht bewerteter Geräte ab, der Tages-Peak zählt ein Balkonkraftwerk nicht doppelt, die Einrichtung im Standalone-Betrieb bekommt die Energie-Dashboard-Vorschläge; neu die Tagesspalten „Strom Heizbetrieb/Warmwasserbetrieb“ in der Tabelle und der Daten-Checker-Hinweis bei doppelt zugeordnetem Heizstrom; das Solar-Soll steht an der PV. Dazu intern: alle 25 verbliebenen Funktionen über der Komplexitätsschwelle 50 nach Bauform RF-1 geschnitten (Golden Master je Funktion, verhaltensgleich), die Baseline des Wächters ist leer.
 
 ### Fixed
 
