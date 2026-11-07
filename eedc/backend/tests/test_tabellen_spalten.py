@@ -235,6 +235,47 @@ async def test_monatsroute_traegt_die_neuen_felder(db):
     assert z.wp_jaz_heizen is None and z.wp_strom_kuehlen_kwh is None
 
 
+# ── N-778 (7.11.2026): Monatsspalte «WP Wärme» nach Regel D1 (Gesamtwert vor Summanden, je Gerät) ──────────────────
+
+async def _wp_waerme_des_monats(db, *geraete: dict) -> float | None:
+    """Monatsroute mit einer WP je ``verbrauch_daten``-Dict; ohne Dict keine WP. Gibt ``wp_waerme_kwh`` der Zeile."""
+    from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
+
+    a = await factories.anlage(db, anlagenname="WP", sensor_mapping={})
+    await factories.monatsdaten(db, a.id, 2026, 5, einspeisung_kwh=100.0, netzbezug_kwh=50.0)
+    for n, daten in enumerate(geraete):
+        wp = await factories.investition(db, a.id, "waermepumpe", bezeichnung=f"WP{n}",
+                                         anschaffungsdatum=date(2024, 1, 1))
+        await factories.imd(db, wp.id, 2026, 5, verbrauch_daten={"stromverbrauch_kwh": 30.0, **daten})
+    [z] = await list_monatsdaten_aggregiert(a.id, jahr=None, db=db)
+    return z.wp_waerme_kwh
+
+
+@pytest.mark.parametrize("geraete, soll", [
+    pytest.param(({"waerme_kwh": 100.0},), 100.0, id="nur-gesamtzaehler"),
+    pytest.param(({"heizenergie_kwh": 60.0, "warmwasser_kwh": 35.0},), 95.0, id="split"),
+    pytest.param(({"waerme_kwh": 100.0, "heizenergie_kwh": 60.0, "warmwasser_kwh": 35.0},), 100.0,
+                 id="beides-gesamtwert-gilt"),
+    # D1 fällt je Gerät VOR dem Summieren (N-391b): Gesamtzähler-Gerät + Gerät mit Aufteilung — die Form der
+    # r28-Kopie (Anlage 2, 24 Monate), dort zeigte die Spalte nur die Achsen-Summe.
+    pytest.param(({"waerme_kwh": 30.0}, {"heizenergie_kwh": 20.0, "warmwasser_kwh": 5.0}), 55.0,
+                 id="zwei-geraete-gesamt-und-split"),
+    pytest.param(({"heizenergie_kwh": 60.0},), 60.0, id="nur-heizwaerme"),
+    pytest.param(({"heizenergie_kwh": 0.0, "warmwasser_kwh": 0.0},), 0.0, id="gemessene-null"),
+    pytest.param(({},), None, id="wp-ohne-waermemessung"),
+    pytest.param((), None, id="keine-wp"),
+])
+async def test_n778_monatsspalte_wp_waerme_nach_d1(db, geraete, soll):
+    """Die Monatszeile trägt die Wärme fertig nach D1 (`WpFakten.waerme_kwh`) — wie Cockpit → Monat. Vorher bildete der
+    Client `wp_heizung_kwh + wp_warmwasser_kwh` (nur wenn beide gesetzt): «—» bei nur Gesamtzähler und bei nur
+    Heizwärme, 25 statt 55 bei zwei verschieden zählenden Geräten. Ohne Wärmemessung keine Angabe statt 0 (K1)."""
+    ist = await _wp_waerme_des_monats(db, *geraete)
+    if soll is None:
+        assert ist is None
+    else:
+        assert ist == pytest.approx(soll)
+
+
 # ── Wärmepumpen-Tagesreihe (Auftrag 29.10.2026, ``?mit_waerme=true``) ──────────────────────────────────────────────
 
 _WAERME_PAARE = {  # Tabellen-Spalte → Feld der Route `waerme-verlauf` (Cockpit → Monat)

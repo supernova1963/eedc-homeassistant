@@ -19,6 +19,8 @@
 
 **Daten-Checker: Felder heißen wie an ihrem Gerät.** Die Meldung zur Langzeitstatistik nannte den WP-Tarif-Zähler einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“. Jetzt trägt jedes Feld den Namen, den es an seinem Gerät hat — an der Wärmepumpe „Netzbezug zum WP-Tarif“, an PV-Modulen „PV-Erzeugung“, am Speicher „Ladung“ und „Netzladung“, wie auf der Datenquellen-Seite. Das gilt auch für die Meldungen zu Zählerstand-Rücksprüngen, zur Sensor-Einheit und für die Werkbank „Verwerfen vor Quellbeginn“.
 
+**Auswertungen → Tabelle: „WP Wärme“ je Monat wie im Cockpit.** Misst deine Wärmepumpe die Wärme mit einem gemeinsamen Wärmemengenzähler (oder nur die Heizwärme), zeigt die Monatsspalte „WP Wärme“ jetzt die gemessene Wärme statt „—“ — dieselbe Zahl wie *Cockpit → Monat*; mit mehreren Wärmepumpen zählt auch die mit dem Gesamtzähler mit.
+
 **Neu in der Hilfe: «Größen».** Eine Übersicht aller Größen von eedc — was du zuordnest oder einträgst, was eedc je Monat daraus bildet, welche Spalten die Werte-Tabelle zeigt und welche Sensoren eedc an Home Assistant meldet —, je Größe eine Zeile mit Einheit und Herkunft. Sie wird aus dem Programm erzeugt und ist damit immer auf dem Stand der Version. [Übersicht der Größen](UEBERSICHT-GROESSEN.md)
 
 ## v4.2.2 — 6. November 2026

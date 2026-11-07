@@ -2057,8 +2057,9 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > Community-Payload, der Tag, die anlagenweiten Alternativkosten
 > (`core/berechnungen/alternativkosten.py` ⇒ Aussichten · ROI · Jahres-Ersparnis des HA-Exports),
 > die thermische Gewichtung der WP-Prognose (`api/routes/aussichten/finanz_prognose.py`), die Komponenten-Zeile
-> „Ersparnis vs. Alternative“ in *Cockpit → Monat* und die Nicht-DB-Quellen des laufenden Monats
-> (MQTT · Connector · HA-Statistik).
+> „Ersparnis vs. Alternative“ in *Cockpit → Monat*, die Monatsspalte „WP Wärme“ in *Auswertungen → Tabelle*
+> (`monatsdaten_aggregiert._zeile_komponenten` ⇒ `wp_waerme_kwh`; bis N-778, 7.11.2026, summierte dort der Client die
+> beiden Achsen) und die Nicht-DB-Quellen des laufenden Monats (MQTT · Connector · HA-Statistik).
 >
 > ```
 > Wärme_kWh = waerme_kwh            , wenn gepflegt        (EIN gemeinsamer Wärmemengenzähler)

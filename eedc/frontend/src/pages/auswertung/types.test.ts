@@ -157,3 +157,20 @@ describe('Tabellen-Spalten 28.10.2026 — durchgereicht, nicht gerechnet', () =>
     expect(createMonatsZeitreihe([md({ dienstliche_ladekosten_euro: 0 })])[0].dienstliche_ladekosten).toBe(0)
   })
 })
+
+describe('WP Wärme (Monat) — fertig aus der Antwort nach D1 (N-778)', () => {
+  it('liest `wp_waerme_kwh`, nicht die Summe der Achsen', () => {
+    // Nur Gesamt-Wärmemengenzähler: beide Achsen leer, die Wärme steht trotzdem (bis N-778: «—»).
+    const [z] = createMonatsZeitreihe([md({ wp_heizung_kwh: null, wp_warmwasser_kwh: null, wp_waerme_kwh: 100 })])
+    expect(z.wp_waerme).toBe(100)
+    expect([z.wp_waerme_heizen, z.wp_waerme_warmwasser]).toEqual([null, null])
+    // Achsen und Gesamtwert widersprechen sich absichtlich (Gesamtzähler neben einem Split-Gerät):
+    // wer wieder addiert, fällt auf (60 + 35 = 95 statt 130).
+    const [zwei] = createMonatsZeitreihe([md({ wp_heizung_kwh: 60, wp_warmwasser_kwh: 35, wp_waerme_kwh: 130 })])
+    expect(zwei.wp_waerme).toBe(130)
+  })
+  it('ohne Feld bleibt die Zelle leer, eine gemessene 0 bleibt 0', () => {
+    expect(createMonatsZeitreihe([md({ wp_heizung_kwh: 60, wp_warmwasser_kwh: 35 })])[0].wp_waerme).toBeNull()
+    expect(createMonatsZeitreihe([md({ wp_waerme_kwh: 0 })])[0].wp_waerme).toBe(0)
+  })
+})

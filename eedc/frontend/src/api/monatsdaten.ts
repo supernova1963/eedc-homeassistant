@@ -162,6 +162,11 @@ export interface AggregierteMonatsdaten {
   wp_heizung_kwh: number | null
   wp_warmwasser_kwh: number | null
   /**
+   * Wärme des Monats nach Regel D1 (Gesamtwert vor Summanden, je Gerät) — fertig aus den Monats-Fakten (N-778).
+   * `null` = keine Wärmepumpe aktiv oder keine Wärme gemessen. Optional: ältere Server liefern das Feld nicht.
+   */
+  wp_waerme_kwh?: number | null
+  /**
    * Arbeitszahl des Monats — fertig aus dem Layer (ADR-002/P12).
    * `null` heisst „keine Kennzahl"; `wp_arbeitszahl_grund` sagt warum.
    */

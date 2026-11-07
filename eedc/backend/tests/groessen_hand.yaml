@@ -212,8 +212,8 @@ kennwert:
     abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
     test: "backend/tests/test_tabellen_spalten.py"
   "wp_waerme":
+    abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
     test: "backend/tests/test_tabellen_spalten.py"
-    hinweis: "Den Monat rechnet der Client: `wp_heizung_kwh` + `wp_warmwasser_kwh` (nur wenn beide gesetzt) — nicht nach Regel D1 (Gesamtwärme je Gerät vor Summanden); der Tag kommt nach D1 aus `waerme_verlauf.py`."
   "wp_waerme_heizen":
     abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
     test: "backend/tests/test_block1_imd_aggregat_charnetz.py"

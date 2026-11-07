@@ -359,6 +359,11 @@ class AggregierteMonatsdatenResponse(BaseModel):
     wp_strom_warmwasser_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)
     wp_heizung_kwh: Optional[float]
     wp_warmwasser_kwh: Optional[float]
+    # N-778 (7.11.2026): die gemessene Wärme des Monats nach Regel D1 (Gesamtwert vor Summanden, je Gerät) —
+    # `WpFakten.waerme_kwh`. Bis dahin addierte der Client `wp_heizung_kwh + wp_warmwasser_kwh` und verlor so
+    # einen Gesamt-Wärmemengenzähler («—» bzw. eine zu kleine Summe neben Cockpit → Monat). `None` = keine
+    # Wärmepumpe aktiv oder keine Wärme gemessen; eine gemessene 0 bleibt 0.
+    wp_waerme_kwh: Optional[float] = None
     # ── Arbeitszahl je Monat (ADR-002/P12, 02.09.2026) ───────────────────────
     # Bis dahin rechnete der **Client** sie selbst
     # (`pages/auswertung/types.ts`: `calcCOP(wp_waerme, wp_strom)`) — dieselbe

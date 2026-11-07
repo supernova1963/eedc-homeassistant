@@ -13,7 +13,6 @@ kennwert:sonstiges_verbrauch
 kennwert:speicher_netzladung
 kennwert:temperatur_avg_c
 kennwert:wp_betriebszeit_min
-kennwert:wp_waerme
 kennwert:zaehler:<id>
 monatsgroesse:BkwFakten.eigenverbrauch_gemessen_kwh
 monatsgroesse:BkwFakten.erzeugung_je_investition

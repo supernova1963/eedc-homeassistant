@@ -212,13 +212,14 @@ export function createMonatsZeitreihe(
       ? speicherWirkungsgrad(speicher_ladung, speicher_entladung).prozent
       : null
 
-    // Wärmepumpe: null = WP in dem Monat nicht aktiv. Wenn auch nur eines
-    // der Komponenten-Felder null ist, gilt der ganze Block als nicht aktiv.
+    // Wärmepumpe: null = WP in dem Monat nicht aktiv bzw. nicht gemessen.
     const wp_heizung = md.wp_heizung_kwh
     const wp_warmwasser = md.wp_warmwasser_kwh
-    const wp_waerme = (wp_heizung != null && wp_warmwasser != null)
-      ? wp_heizung + wp_warmwasser
-      : null
+    // N-778 (7.11.2026): die Wärme kommt fertig aus der Antwort (Regel D1, Gesamtwert vor Summanden).
+    // **Bis dahin stand hier `wp_heizung + wp_warmwasser`** (nur wenn beide gesetzt) — ein Gesamt-
+    // Wärmemengenzähler fehlte damit: «—» bei einer Wärmepumpe nur mit Gesamtzähler, eine zu kleine Summe
+    // neben einem zweiten Gerät mit Aufteilung, während Cockpit → Monat die Wärme zeigte.
+    const wp_waerme = md.wp_waerme_kwh ?? null
     const wp_strom = md.wp_strom_kwh
     // ADR-002/P12 (02.09.2026): Die Arbeitszahl kommt fertig aus der Antwort.
     // **Bis dahin stand hier `calcCOP(wp_waerme, wp_strom)`** — eine eigene

@@ -230,6 +230,11 @@ def _zeile_komponenten(
                         if "waermepumpe" in typen and f.wp.heizung_kwh is not None else None),
         wp_warmwasser_kwh=(round(f.wp.warmwasser_kwh, 1)
                            if "waermepumpe" in typen and f.wp.warmwasser_kwh is not None else None),
+        # N-778: die Wärme nach D1 fertig aus den Fakten (`WpFakten.waerme_kwh`), wie Cockpit → Monat und der Hub —
+        # der Client summiert die Achsen nicht mehr. Ohne Messung `None` (Marke `waerme_gemessen`, K1: nur eine
+        # gemessene 0 ist 0); über 0 bleibt jeder Wert, wie er ist (dieselbe Lesart wie `cockpit/uebersicht.py`).
+        wp_waerme_kwh=(round(f.wp.waerme_kwh, 1)
+                       if "waermepumpe" in typen and (f.wp.waerme_gemessen or f.wp.waerme_kwh > 0) else None),
         wp_arbeitszahl=_wp_az.wert if "waermepumpe" in typen else None,
         wp_arbeitszahl_grund=_wp_az.grund if "waermepumpe" in typen else None,
         eauto_ladung_kwh=round(eauto.ladung_kwh, 1) if "e-auto" in typen else None,

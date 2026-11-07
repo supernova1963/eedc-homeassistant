@@ -636,7 +636,7 @@ WAERMEPUMPE_SENSOREN = [
         unit="",
         icon="mdi:water-boiler",
         category=SensorCategory.WAERMEPUMPE,
-        formel="AN, wenn der mitgeschriebene Betriebsmodus der letzten vollen Stunde 'warmwasser' war",
+        formel="AN, wenn der live gelesene Betriebsmodus (höchstens 60 s alt) 'warmwasser' ist; ohne Modus-Zuordnung kein Sensor",
         device_class="running",
         komponente="binary_sensor",
     ),

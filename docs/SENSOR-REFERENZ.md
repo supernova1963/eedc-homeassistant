@@ -719,7 +719,7 @@ Stufe 1 der Sensorliste sagt, **was ist**. Diese Gruppe sagt, **was jetzt gilt**
 | `eedc_prognose_auffaellig` | Die Tagesabweichung liegt über dem **Doppelten** des mittleren Fehlers der letzten 30 Tage — frühestens nach 3 vollen Sonnenstunden | `schwelle_prozent`, `mae_30_tage_prozent`, `mae_tage`, `sonnenstunden_bisher`, ggf. `grund` |
 | `eedc_speicher_reicht_bis_mitternacht` | Der Ladestand geht bis Mitternacht **nicht** in den Leerstand über und endet über der Schwelle — dieselbe Regel und derselbe Simulationslauf wie „Speicher leer um" | `min_soc_prozent`, `min_soc_um`, `end_soc_prozent`, Modell-Angaben |
 | `eedc_einspeisung_unerwuenscht` | Der Börsenpreis der laufenden Stunde ist **negativ** und für dieselbe Stunde wird PV-Erzeugung erwartet (§51 EEG). ⛔ Das ist ein Marktzustand, kein Urteil — was daraus folgt, entscheidest du | `boersenpreis_cent`, `pv_prognose_kwh`, `ueberschuss_prognose_kwh`, `negative_stunden_heute`, `naechste_negative_ab` |
-| `wp_warmwasserbetrieb` (je Wärmepumpe) | Der mitgeschriebene Betriebsmodus der letzten vollen Stunde war *Warmwasser* | `modus` |
+| `wp_warmwasserbetrieb` (je Wärmepumpe) | Der live gelesene Betriebsmodus (höchstens 60 s alt) ist *Warmwasser*; ohne Modus-Zuordnung gibt es den Sensor nicht | `modus` |
 
 > **Warum „Abregelung heute" in der Skala der Rohprognose steht.** Der Wert ist die Differenz zwischen dem, was deine Module könnten, und dem, was der Wechselrichter durchlässt — und diese Kappung rechnet eedc auf der **ungefilterten** OpenMeteo-Prognose, **bevor** der gelernte Korrekturfaktor deiner Anlage darauf angewendet wird. Das Attribut `skala: openmeteo_roh_vor_korrektur` sagt es ausdrücklich.
 >

@@ -29,6 +29,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Quellbeginn“.
 - **Komponenten-Hub: kein 404 in der Konsole beim Anlagenwechsel.** Beim Wechsel der Anlage fragte der Hub einmal den
   Leer-Grund für ein Gerät der vorherigen Anlage ab; jetzt nur noch für Geräte der gewählten Anlage.
+- **Auswertungen → Tabelle: die Monatsspalte „WP Wärme“ zeigt die gemessene Wärme wie Cockpit → Monat.** Bei einer
+  Wärmepumpe mit einem gemeinsamen Wärmemengenzähler stand dort seit 4.1.6 „—“ (davor 0), ebenso bei einem Gerät, das nur
+  die Heizwärme misst; und neben einer zweiten Wärmepumpe mit getrennten Zählern für Heizen und Warmwasser fehlte die Wärme
+  des Gesamtzählers in der Summe. Jetzt kommt die Spalte von derselben Stelle wie Cockpit → Monat und der Komponenten-Hub:
+  je Gerät der Gesamtzähler, sonst Heizen + Warmwasser. Die Spalten „WP Wärme Heizen“ und „WP Wärme WW“ bleiben, wie sie
+  sind (N-778).
+- **HA-Export: die Beschreibung des Sensors „Warmwasserbetrieb“ stimmt.** In den Export-Einstellungen und im Attribut
+  `formel` stand „Betriebsmodus der letzten vollen Stunde“; der Sensor folgt aber dem live gelesenen Betriebsmodus
+  (höchstens 60 s alt). Der Text sagt das jetzt; am Sensor selbst ändert sich nichts.
 
 ### Added
 
