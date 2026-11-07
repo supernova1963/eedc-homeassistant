@@ -19,6 +19,8 @@
 
 **Daten-Checker: Felder heißen wie an ihrem Gerät.** Die Meldung zur Langzeitstatistik nannte den WP-Tarif-Zähler einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“. Jetzt trägt jedes Feld den Namen, den es an seinem Gerät hat — an der Wärmepumpe „Netzbezug zum WP-Tarif“, an PV-Modulen „PV-Erzeugung“, am Speicher „Ladung“ und „Netzladung“, wie auf der Datenquellen-Seite. Das gilt auch für die Meldungen zu Zählerstand-Rücksprüngen, zur Sensor-Einheit und für die Werkbank „Verwerfen vor Quellbeginn“.
 
+**Neu in der Hilfe: «Größen».** Eine Übersicht aller Größen von eedc — was du zuordnest oder einträgst, was eedc je Monat daraus bildet, welche Spalten die Werte-Tabelle zeigt und welche Sensoren eedc an Home Assistant meldet —, je Größe eine Zeile mit Einheit und Herkunft. Sie wird aus dem Programm erzeugt und ist damit immer auf dem Stand der Version. [Übersicht der Größen](UEBERSICHT-GROESSEN.md)
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
@@ -12273,7 +12275,7 @@ Neues optionales Feld **„Strompreis (dynamischer Tarif)"** im Sensor-Mapping u
 
 Der Lernfaktor nutzt jetzt eine saisonale Kaskade: **Monatsfaktor** (≥15 Tage gleicher Kalendermonat) → **Quartalsfaktor** (≥15 Tage) → **30-Tage-Fenster** (≥7 Tage, bisheriges Verhalten). Bei wachsendem Datenbestand wird die Kalibrierung automatisch präziser. Im Prognosen-Tab wird die aktive Stufe angezeigt.
 
-→ [Berechnungen §4.1c Prognose-Genauigkeit](BERECHNUNGEN.md#41c-prognose-genauigkeit-mae-mbe-asymmetrie)
+→ [Berechnungen §4.1c Prognose-Genauigkeit](BERECHNUNGEN.md#41c-prognose-vergleich-auswertungen--prognose)
 
 ### Stündliche Strompreis-Mitschrift im Energieprofil
 

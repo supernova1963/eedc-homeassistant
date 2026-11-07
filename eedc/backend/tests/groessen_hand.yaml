@@ -1,0 +1,29 @@
+# Hand-Datei der «Übersicht der Größen» (Bauplan «Übersicht der Größen» §3) — die zwei Spalten, die der Code nicht weiß.
+#
+# Erzeugt wird docs/UEBERSICHT-GROESSEN.md von eedc/backend/tests/groessen_uebersicht.py (scripts/groessen-uebersicht.sh);
+# der Wächter eedc/backend/tests/test_groessen_uebersicht.py bindet diese Datei an die Registries.
+#
+# Je Ebene ein Block; Schlüssel = Zeilen-Identität:
+#   eingabefeld:   "<typ>:<feld>"        (typ `basis` für die Anlagen-Ebene; wie FELD_BEDARF)
+#   monatsgroesse: "<Klasse>.<feld>"     (z. B. "ErzeugungFakten.pv_kwh")
+#   kennwert:      "<key>"               (registry.ts; Familien "erzeuger:<id>", "zaehler:<id>")
+#   sensor:        "<key>"               (SensorDefinition.key)
+#
+# Erlaubte Felder (ein Schlüssel, den keine Registry kennt, ist ein Fehler):
+#   abschnitt:    "BERECHNUNGEN.md#<anker>" oder "SENSOR-REFERENZ.md#<anker>" — Slug einer Überschrift (github-slugger)
+#   test:         Pfad relativ zu eedc/ (optional "::<name>"), z. B. "backend/tests/test_tabellen_spalten.py",
+#                 oder "GM <name>" (Golden Master aus docs/DEVELOPMENT.md)
+#   backend_feld: nur kennwert — Feld der Monats-Antwort, wo createMonatsZeitreihe es nicht ableitbar nennt
+#   code_ort:     nur als Überschreibung (nicht eingabefeld): "backend.modul.pfad::funktion" oder "frontend/src/…"
+#   hinweis:      ein Satz
+# Kein `formel`-Text von Hand: die Formel kommt aus dem Code (SensorDefinition.formel, `#:`-Kommentar) oder über `abschnitt`.
+#
+# Nach jeder Änderung: scripts/groessen-uebersicht.sh && scripts/groessen-uebersicht.sh --baseline && ./scripts/sync-help.sh
+
+eingabefeld: {}
+
+monatsgroesse: {}
+
+kennwert: {}
+
+sensor: {}

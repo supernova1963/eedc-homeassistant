@@ -27,6 +27,7 @@ declare -A DOCS=(
   ["HANDBUCH_WAERME_KLIMA.md"]="handbuch-waerme-klima.md|Modul: Wärme & Klima|Wärmepumpe, Klimaanlage und Heizstab: welcher Zähler welche Kennzahl möglich macht"
   ["SENSOR-REFERENZ.md"]="sensor-referenz.md|Sensor-Referenz|HA-Export-Sensoren und MQTT-Topics im Überblick"
   ["BERECHNUNGEN.md"]="berechnungen.md|Berechnungsreferenz|Formeln und Berechnungsgrundlagen aller Kennzahlen"
+  ["UEBERSICHT-GROESSEN.md"]="uebersicht-groessen.md|Übersicht der Größen|Jede Größe von eedc in einer Zeile: Eingabefelder, Monatsgrößen, Kennwerte, Export-Sensoren (aus dem Code erzeugt)"
   ["GLOSSAR.md"]="glossar.md|Glossar|Begriffserklärungen und Support-Informationen"
   ["WAS-IST-NEU.md"]="was-ist-neu.md|Was ist neu|Was sich pro Version für dich als Anwender geändert hat"
   ["ARCHITEKTUR.md"]="architektur.md|Architektur|Architektur-Dokumentation – Systemaufbau, Datenmodell und Schnittstellen"

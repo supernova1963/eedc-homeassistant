@@ -43,6 +43,7 @@ ENTRIES=(
     "waerme-klima|HANDBUCH_WAERME_KLIMA.md|Wärme & Klima|Handbuch"
     "berechnungen|BERECHNUNGEN.md|Berechnungen & Kennzahlen|Referenz"
     "sensor-referenz|SENSOR-REFERENZ.md|Sensor-Referenz|Referenz"
+    "groessen|UEBERSICHT-GROESSEN.md|Größen|Referenz"
     "glossar|GLOSSAR.md|Glossar|Referenz"
 )
 

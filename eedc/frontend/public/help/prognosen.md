@@ -198,7 +198,7 @@ Der Block steht **neben** der Mehrjahres-Performance, und das ist Absicht: Dort 
 
 #### „Stundenvergleich heute" — was die Abweichungen sagen
 
-Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Jede Quelle hat **zwei** Spalten: ihren Wert, und daneben unter **Δ** die Abweichung zum gemessenen IST **derselben** Stunde:
+Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention-ab-v3200-144)). Jede Quelle hat **zwei** Spalten: ihren Wert, und daneben unter **Δ** die Abweichung zum gemessenen IST **derselben** Stunde:
 
 - **Sobald für eine Stunde ein IST vorliegt, trägt jede Prognosespalte eine Abweichung** — auch wenn sie „± 0,0" lautet. Eine fehlende Annotation heißt also nicht „kleine Abweichung", sondern **„für diese Stunde gibt es noch keine Messung"**.
 - **± 0,0** = Treffer im Rahmen der angezeigten Nachkommastelle, **▲** = Prognose lag über dem IST, **▼** = darunter. Die Farbe folgt der relativen Abweichung (grün < 10 %, gelb < 30 %, sonst rot).

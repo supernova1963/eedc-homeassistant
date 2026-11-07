@@ -46,6 +46,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Funktion gilt in Monat, Jahr und Tag der Grund aus `abgrenzung_je_funktion`; die anlagenweite Kette (mit „verschiedene
   Geräte/Monate“, N-441) sperrt die Gesamtzahl. Keine Zahl ändert sich.
 
+### Intern
+
+- **Übersicht der Größen, erzeugt (Bauplan U1):** `docs/UEBERSICHT-GROESSEN.md` nennt jede Größe von eedc in einer Zeile —
+  106 Eingabefelder, 104 Monatsgrößen, 76 Kennwerte der Tabelle (74 + 2 Familien), 86 Export-Sensoren — mit den Spalten aus
+  dem Code (Kanal, Bedarf, Bau-Funktion, Backend-Feld, Formel). Erzeuger `eedc/backend/tests/groessen_uebersicht.py`
+  (`./scripts/groessen-uebersicht.sh`), Hand-Datei `groessen_hand.yaml` für Regel-Abschnitt und Test, Wächter
+  `test_groessen_uebersicht.py` (Datei aktuell, Hand-Datei gültig, Baseline nur schrumpfend, Anker-Probe aller Verweise auf
+  BERECHNUNGEN und SENSOR-REFERENZ). Zwei tote Anker repariert (WAS-IST-NEU → §4.1c, Handbuch Prognosen →
+  Backward-Slot-Konvention). Neu in der In-App-Hilfe und auf der Website unter Referenz bzw. Dokumentation.
+
 ## [4.2.2] - 2026-11-06
 
 Fehlerbehebungen und zwei Melder-Wünsche aus dem simon42-Forum: der laufende Tag ohne Home-Assistant-Statistik zählt mit den Zählern, „PV heute“ im Live zählt Erzeuger ohne Zähler mit, der Gesamt-ROI zieht die Betriebskosten nicht bewerteter Geräte ab, der Tages-Peak zählt ein Balkonkraftwerk nicht doppelt, die Einrichtung im Standalone-Betrieb bekommt die Energie-Dashboard-Vorschläge; neu die Tagesspalten „Strom Heizbetrieb/Warmwasserbetrieb“ in der Tabelle und der Daten-Checker-Hinweis bei doppelt zugeordnetem Heizstrom; das Solar-Soll steht an der PV. Dazu intern: alle 25 verbliebenen Funktionen über der Komplexitätsschwelle 50 nach Bauform RF-1 geschnitten (Golden Master je Funktion, verhaltensgleich), die Baseline des Wächters ist leer.
