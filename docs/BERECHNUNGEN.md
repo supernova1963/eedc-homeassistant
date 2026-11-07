@@ -2748,6 +2748,11 @@ Arbeitszahl Kühlen     = nutzenergie_kuehlen_kwh ÷ betriebsart_strom_kuehlen_k
 ⚠ **Die R2-Sperren gelten für alle vier** — Anwender-Angabe `abgrenzung`, abgeleitete Wärme,
 **gemischte Bauarten**, Geräte ohne Wärme, Zeitraum-Versatz, **verschiedene Geräte** und
 **verschiedene Monate** (die letzten beiden seit N-441; die Kette steht in `abgrenzungs_grund`).
+Die Kette `abgrenzungs_grund` sperrt dabei die **anlagenweite** Zahl. Die zwei Funktions-Kennzahlen und Kühlen
+bekommen in Monat, Jahr und Tag ihren Grund **je Funktion** aus `abgrenzung_je_funktion` (SOLL §3.2b), und dann gilt
+nur er — `arbeitszahl_je_funktion` liest `abgrenzung_verletzt` allein ohne dieses Dict (Hub je Gerät). «Verschiedene
+Geräte» erreicht die Funktionen dort als Deckung je Funktion (beidseitig gezählt), «verschiedene Monate» im Jahr als
+Perioden je Funktion — nicht über die N-441-Glieder der Kette.
 
 > **R2/Bauart — neu am 28.08.2026** (`GRUND_BAUARTEN_GEMISCHT`, SOLL §5): Trägt ein Block eine
 > Luft-Wasser-Wärmepumpe **und** eine Luft-Luft-Split-Klimaanlage, gibt es **keine gemeinsame
@@ -2799,7 +2804,8 @@ gemeint war (ADR-002/P4).
 > Code-Orte je Phase: `_tag_laden` (Tageseingänge `tages_eingaenge`, W-18-Grund, Ladepreis) · `_wp_strom_je_geraet`
 > (R-4/N-482/N-491, Tages-Stapel) · `_waerme_tag` (D1 je Gerät, N-391b) · `_geraete_mengen` (D-Sicht 3, Schranken-Eingang) ·
 > `_funktions_deckung` (§3.2b, Kühlen beidseitig) · `_abgrenzung_tag` (R2/Bauart nur über Geräte mit Strom des Tages, §4.2 Fall 1
-> und N-441 aus den Monats-Fakten des Monats, je Funktion) · `_schranke_und_kasten` (E1b: die Gegenrichtung am Tag gezählt,
+> und N-441 aus den Monats-Fakten des Monats für die anlagenweite Zahl; je Funktion der Grund aus der Tages-Deckung
+> von `_funktions_deckung` — N-441 wirkt dort nicht) · `_schranke_und_kasten` (E1b: die Gegenrichtung am Tag gezählt,
 > W-18-Kurzformen, Systemarbeitszahl) · `_arbeitszahl_je_funktion` (N-348, Kühlen) · `_antwort`. Proben: `test_rf71_tag_phasen.py`.
 
 #### 3.5e Anzeige-Regeln der Betriebsart-Aufteilung (W-17 · W-17b · W-18)
@@ -3994,7 +4000,7 @@ Slot_d[s]        = Σ pv_estimate × 0,5 über die 30-Min-Buckets aus detailedFo
                    SEINES Sensors fällt (#357) — 23:00/23:30 gehören zu Slot 0 des Folgetags und fallen dort weg
                    (p10/p90 ebenso aus pv_estimate10/pv_estimate90; fehlt ein Wert ⇒ 0); Slots auf 2 Stellen
 Stundenprofil_d  nur, wenn ein Slot ≠ 0; Heute-Sicht hourly_kw = Profil von heute, sonst 24 × 0
-Morgen           = der zweite gelesene Tag der Liste (ist der Morgen-Sensor nicht lesbar, der nächste lesbare); ohne ihn 0
+Morgen           = der Tag mit Datum heute + 1 (wie der direkte API-Pfad); ist der Morgen-Sensor nicht lesbar ⇒ 0 (N-776)
 ```
 
 Der Auflöser `ha_integration_aufloeser.py::loese_integration_auf` rechnet nicht: er ordnet die Entitäten der
@@ -4852,7 +4858,14 @@ Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
 **Leistungskurve älterer Tage** (`services/energie_profil/lts_tagesverlauf.py::lade_tagesverlauf_aus_lts`, Vollbackfill und
 Reparatur-Werkbank): beschafft für Tage außerhalb der HA-Historie die Stunden-Leistungen aus der Langzeitstatistik (ein
 gebündelter Read ab dem Vortag, Serien je Tag über `baue_investitions_serien`, Vorzeichen-Invertierung, Vortagsrand
-Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`. Auch die Serienwahl
+Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`. **Balkonkraftwerk mit Modul-Kindern
+(N-777, Werte-Regel N-536 wie der Live-Zwilling `live_tagesverlauf_service._bkw_kuerzung_slot`):** je Stunde trägt das BKW
+über `kuerze_bkw_in_werte_map` nur `max(0, BKW − Σ Kinder mit Wert in dieser Stunde)`, Rest 0 ⇒ kein Wert; fehlt den Kindern
+die Stunde, bleibt der BKW-Wert (Lücke gedeckt); als Kind zählt nur ein am Tag aktives Modul. Bis N-777 standen BKW und
+Kinder beide in der Kurve (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). ⚠ **Anders als der Peak (N-775, unten)**, der bei voller
+Deckung die BKW-Entity gar nicht liest: hier bleibt bei BKW 0,9 und Kindern 0,4 + 0,4 der Rest 0,1 beim BKW (Summe 0,9), und
+eine Stunde, in der das BKW 0,0 meldet und kein Kind einen Wert hat, verliert den BKW-Key (Rest 0) — beides wie im Live-Pfad.
+Code: `_bkw_abtretung`, `_bkw_rest_einsetzen`. Auch die Serienwahl
 `live_sensor_config.py::baue_investitions_serien` (Live-Kurve und LTS-Kurve) rechnet nicht: sie wählt je Investition
 die Serien, behält je Entity eine (#227, Wallbox vor E-Auto) und lässt bei einer am Tag in Betrieb befindlichen Wallbox
 die E-Auto-Serie weg (#356, N-555) — Phasen `_serien_je_investition`, `_pool_schutz`, `_emob_quelle` (RF-79).

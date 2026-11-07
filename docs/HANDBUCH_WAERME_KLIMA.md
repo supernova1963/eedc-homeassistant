@@ -775,6 +775,11 @@ Doppelkaskaden in beliebiger Reihenfolge (etwa Wärmepumpe und Wallbox hinterein
   und Z2): Netzbezug und Einspeisung kommen von **Z1**. Der Netzbezug zum WP-Tarif ist **Z1-Bezug minus Z2-Bezug** — als
   Template-Sensor in Home Assistant. Gib ihm `state_class: total` und **nicht** `total_increasing`: die zwei Zähler melden
   zeitversetzt, die Differenz kann kurz kleiner werden, und `total_increasing` läse jede solche Abnahme als Zähler-Reset.
+  Bau das Template aus den **fortlaufenden Zählerständen** von Z1 und Z2, nicht aus Tageszählern („… heute"): die
+  Differenz zweier Tageszähler fällt um Mitternacht auf 0, und Home Assistant bucht das bei `state_class: total` jede Nacht
+  als Rückgang — der Daten-Checker zeigt es unter [„Zählerstände – Rückgang"](HANDBUCH_DATEN_CHECKER.md#48c-zaehlerstaende--rueckgang-in-home-assistant).
+  Ein einzelner Tageszähler an einem Feld bleibt erlaubt ([Kumulativ oder Tageszähler](#kumulativ-oder-tageszähler--beides-geht)) —
+  nur die Differenz zweier Tageszähler taugt nicht.
   Der **Stromverbrauch** der Wärmepumpe ist in dieser Kaskade Z1 minus Z2 *saldiert* (Bezug minus Einspeisung beider
   Zähler) — ein eigener Template-Sensor.
 - **Eigener WP-Zähler parallel zum Hauszähler** (die Wärmepumpe hängt nicht hinter der PV und bekommt nie PV-Strom):

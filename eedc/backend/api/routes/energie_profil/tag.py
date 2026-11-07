@@ -1016,8 +1016,10 @@ def _arbeitszahl_je_funktion(ctx: _TagKontext) -> None:
     # `waerme_abgeleitet_kwh` bleibt 0: Im Tag kommt nur eine **gemessene**
     # Wärme an (nur ein zugeordneter Wärmemengenzähler erreicht `detail`) — der
     # abgeleitete Zweig existiert hier nicht, siehe die Begründung an
-    # `_wp_waerme_tag` oben. `abgrenzung_verletzt` ist dieselbe Sperre wie bei
-    # der Gesamtzahl: ein Heizstab auf dem Zähler trifft beide Funktionen.
+    # `_wp_waerme_tag` oben. `abgrenzung_verletzt` (die anlagenweite Sperre samt
+    # N-441) wirkt hier NICHT: der Tag reicht `abgrenzung_je_funktion_grund`, und
+    # dann gilt je Funktion allein dessen Grund (Störung trifft beide, sonst die
+    # Tages-Deckung aus `_funktions_deckung`) — s. `arbeitszahl_je_funktion._abgrenzung`.
     ctx.wp_az_funktion_tag = arbeitszahl_je_funktion(
         # R-2: dieselbe aufgelöste Heizwärme wie oben — `detail` trägt nur die
         # Achse, und die ist bei einem Gerät mit Betriebsart-Wärme leer.

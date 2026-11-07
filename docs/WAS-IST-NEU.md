@@ -9,6 +9,16 @@
 
 ---
 
+## Unreleased
+
+**Ältere Tage neu berechnet: das Balkonkraftwerk zählt nicht doppelt.** Berechnet eedc einen Tag aus der Langzeitstatistik von Home Assistant neu (Vollbackfill, Reparatur-Werkbank) und hat dein Balkonkraftwerk einen eigenen Leistungssensor und seine Module (als Kinder angelegt) ebenfalls, standen bisher beide in der Stundenkurve — etwa 1,6 statt 0,8 kW. Jetzt trägt das Balkonkraftwerk nur, was seine Module nicht messen, wie im Live-Tagesverlauf; fehlt den Modulen eine Stunde, zählt das Balkonkraftwerk sie. Schon gespeicherte Tage ändern sich erst, wenn sie neu berechnet werden. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
+
+**Cockpit → Live, Prognose-Vergleich: „Morgen“ bei Solcast über Home Assistant ist wirklich morgen.** War der Morgen-Sensor der Solcast-Integration gerade nicht lesbar, zeigte eedc unter „Morgen“ den Wert von übermorgen. Jetzt bleibt „Morgen“ dann leer, und übermorgen steht nur dort, wo es hingehört. [Handbuch Prognosen §2.3](HANDBUCH_PROGNOSEN.md#23-solcast--optional-dritte-meinung)
+
+**Daten-Checker: Heizen/Warmwasser zugeordnet, der Schalter aber aus.** Hast du an der Wärmepumpe „Strom Heizen“ oder „Strom Warmwasser“ zugeordnet und den Schalter „Getrennte Strommessung (Heizen / Warmwasser)“ nicht eingeschaltet, zählt eedc diese Zähler nicht als Aufteilung — Heizen bleibt leer, der ganze Strom steht unter „nicht aufgeteilt“. Der Daten-Checker sagt das jetzt und nennt den Weg: Einstellungen → Komponenten → deine Wärmepumpe → bearbeiten. [Handbuch Daten-Checker §4.3.7](HANDBUCH_DATEN_CHECKER.md#437-wärmepumpe)
+
+**Daten-Checker: Felder heißen wie an ihrem Gerät.** Die Meldung zur Langzeitstatistik nannte den WP-Tarif-Zähler einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“. Jetzt trägt jedes Feld den Namen, den es an seinem Gerät hat — an der Wärmepumpe „Netzbezug zum WP-Tarif“, an PV-Modulen „PV-Erzeugung“, wie auf der Datenquellen-Seite.
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)

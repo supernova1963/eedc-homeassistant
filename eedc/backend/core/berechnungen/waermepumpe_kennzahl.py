@@ -1515,6 +1515,9 @@ def arbeitszahl_je_funktion(
             dem sie gerechnet wurde, wie in der Summe (Konzept §3.5).
         abgrenzung_verletzt: gilt für **beide** — ein Heizstab auf dem Zähler
             oder ein versetzter Zeitraum trifft nicht nur eine der Funktionen.
+            ⚠ **Nur ohne** ``abgrenzung_je_funktion_grund`` gelesen (Hub je Gerät).
+            Monat, Jahr und Tag reichen das Dict immer — dort gilt je Funktion
+            allein dessen Grund, und dieses Argument wirkt nicht (s. ``_abgrenzung``).
         waerme_fehlt_grund_heizen: **W-18 je Funktion.** Kurzer Grund, warum
             ``heizung_kwh`` fehlt. ``None`` lässt den Default-Wortlaut von
             ``arbeitszahl`` stehen — der Aufruf ist damit **bitgleich zu vorher**.
@@ -1638,6 +1641,10 @@ def arbeitszahl_je_funktion(
             kein_betrieb_grund=kein_betrieb_grund,
         )
 
+    # Mit Dict (Monat, Jahr, Tag) gilt je Funktion NUR sein Grund; `abgrenzung_verletzt` — die anlagenweite Kette
+    # `abgrenzungs_grund`, samt ihren N-441-Gliedern «verschiedene Geräte»/«verschiedene Monate» — wird dann nicht
+    # gelesen. Diese Lagen erreichen die Funktionen über das Dict selbst: Deckung je Funktion (beidseitig), im Jahr
+    # zusätzlich die Perioden je Funktion. Ohne Dict (Hub je Gerät) gilt `abgrenzung_verletzt` für beide.
     def _abgrenzung(funktion: str) -> Optional[str]:
         if abgrenzung_je_funktion_grund is None:
             return abgrenzung_verletzt

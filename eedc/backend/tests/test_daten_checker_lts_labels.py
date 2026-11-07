@@ -93,8 +93,8 @@ async def test_detailtext_nennt_labels_statt_roh_keys(db, monkeypatch):
 
     details = " ".join(r.details or "" for r in ergebnisse)
     assert "Basis: Einspeisung" in details, f"Label erwartet, fand: {details!r}"
-    # `FELD_LABELS["pv_erzeugung_kwh"]` == „Erzeugung" (Gerätename steht davor).
-    assert "WR Süd: Erzeugung" in details, f"Label erwartet, fand: {details!r}"
+    # Label je Typ aus der Registry (seit Päckchen R, 7.11.2026): `pv-module` ⇒ „PV-Erzeugung" (Gerätename steht davor).
+    assert "WR Süd: PV-Erzeugung" in details, f"Label erwartet, fand: {details!r}"
     assert "Basis: einspeisung" not in details, "Roh-Mapping-Key im Anwendertext"
     assert "pv_erzeugung_kwh" not in details, "Roh-Feldname im Anwendertext"
 
@@ -125,3 +125,37 @@ async def test_pv_gesamt_ohne_lts_wird_gemeldet(db, monkeypatch):
     assert "sensor.eins" not in details and "sensor.pv" not in details.replace(
         "sensor.pv_gesamt", ""
     )
+
+
+async def test_tarif_feld_traegt_das_label_seines_typs(db, monkeypatch):
+    """Päckchen R (ottokar, PN 7.11.2026): `netzbezug_eigener_tarif_kwh` heißt an der Wärmepumpe «Netzbezug zum
+    WP-Tarif», an der Wallbox «Netzbezug zum Wallbox-Tarif». `FELD_LABELS` ist flach über alle Typen, der letzte Eintrag
+    gewann — die Meldung nannte am WP-Sensor den Wallbox-Tarif. Hier ist der Typ bekannt, das Label kommt je Typ."""
+    from backend.services.daten_checker import DatenChecker
+    import backend.services.ha_statistics_service as ha_mod
+
+    anlage = Anlage(anlagenname="Tarif", leistung_kwp=5.0)
+    db.add(anlage)
+    await db.flush()
+    wp = Investition(anlage_id=anlage.id, typ="waermepumpe", bezeichnung="Wärmepumpe",
+                     anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+    wb = Investition(anlage_id=anlage.id, typ="wallbox", bezeichnung="Wallbox",
+                     anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+    db.add_all([wp, wb])
+    await db.flush()
+    feld = {"strategie": "sensor"}
+    anlage.sensor_mapping = {"basis": {}, "investitionen": {
+        str(wp.id): {"felder": {"netzbezug_eigener_tarif_kwh": {**feld, "sensor_id": "sensor.wp_tarif"}}},
+        str(wb.id): {"felder": {"netzbezug_eigener_tarif_kwh": {**feld, "sensor_id": "sensor.wb_tarif"}}},
+    }}
+    await db.commit()
+    anlage = (await db.execute(
+        select(Anlage).options(selectinload(Anlage.investitionen)).where(Anlage.id == anlage.id)
+    )).scalar_one()
+    monkeypatch.setattr(ha_mod, "get_ha_statistics_service",
+                        lambda: _FakeHaStats({"sensor.wp_tarif", "sensor.wb_tarif"}))
+
+    details = " ".join(r.details or "" for r in await DatenChecker(db)._check_sensor_mapping_lts(anlage))
+    assert "Wärmepumpe: Netzbezug zum WP-Tarif (sensor.wp_tarif)" in details, details
+    assert "Wallbox: Netzbezug zum Wallbox-Tarif (sensor.wb_tarif)" in details, details
+    assert "Wärmepumpe: Netzbezug zum Wallbox-Tarif" not in details

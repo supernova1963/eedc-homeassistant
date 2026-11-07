@@ -72,6 +72,35 @@ def _tarif_verwendungen(strompreise) -> set[str]:
     return verwendungen
 
 
+def _wp_feld_zugeordnet(inv_id, sensor_mapping: dict, feld: str) -> bool:
+    """Ist ``feld`` an der Investition ``inv_id`` zugeordnet? (N-774-Nachbar, seit Päckchen R von zwei Checks geteilt.)
+
+    «Zugeordnet» wie in ``kuehl_zaehler.hat_kuehl_zaehler``: eine Quellenwahl der Datenquellen-Fläche entscheidet
+    (``keine`` = nicht zugeordnet), sonst ein HA-Sensor im Mapping; Innengeräte-Kopien (``…-3``) zählen über
+    ``basis_feld_key`` mit.
+    """
+    from backend.core.field_definitions import basis_feld_key
+
+    inv_id = str(inv_id)
+    quellen = (sensor_mapping or {}).get("quellen") or {}
+    eintrag = ((sensor_mapping or {}).get("investitionen") or {}).get(inv_id)
+    felder = (eintrag.get("felder") or {}) if isinstance(eintrag, dict) else {}
+    praefix = f"inv_energy_{inv_id}_"
+    gewaehlt = {
+        k[len(praefix):]: (q or {}).get("quelle") if isinstance(q, dict) else None
+        for k, q in quellen.items()
+        if isinstance(k, str) and k.startswith(praefix) and basis_feld_key(k[len(praefix):]) == feld
+    }
+    for k, m in felder.items():
+        if basis_feld_key(k) != feld:
+            continue
+        if k in gewaehlt:
+            continue  # die Quellenwahl entscheidet (unten)
+        if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+            return True
+    return any(q and q != "keine" for q in gewaehlt.values())
+
+
 class StammdatenChecks(StammdatenInvestitionenChecks):
     """Prüfungen für Stammdaten, Strompreise und Investitions-Stammwerte."""
 
@@ -921,28 +950,9 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
         (``…-3``) zählen über ``basis_feld_key`` mit.
         """
         from backend.core.betriebsmodus import BETRIEBSART_STROM_FELD, HEIZEN
-        from backend.core.field_definitions import basis_feld_key
-
-        inv_id = str(inv.id)
-        quellen = (sensor_mapping or {}).get("quellen") or {}
-        eintrag = ((sensor_mapping or {}).get("investitionen") or {}).get(inv_id)
-        felder = (eintrag.get("felder") or {}) if isinstance(eintrag, dict) else {}
-        praefix = f"inv_energy_{inv_id}_"
 
         def _zugeordnet(feld: str) -> bool:
-            gewaehlt = {
-                k[len(praefix):]: (q or {}).get("quelle") if isinstance(q, dict) else None
-                for k, q in quellen.items()
-                if isinstance(k, str) and k.startswith(praefix) and basis_feld_key(k[len(praefix):]) == feld
-            }
-            for k, m in felder.items():
-                if basis_feld_key(k) != feld:
-                    continue
-                if k in gewaehlt:
-                    continue  # die Quellenwahl entscheidet (unten)
-                if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
-                    return True
-            return any(q and q != "keine" for q in gewaehlt.values())
+            return _wp_feld_zugeordnet(inv.id, sensor_mapping, feld)
 
         if not (_zugeordnet(BETRIEBSART_STROM_FELD[HEIZEN]) and _zugeordnet("strom_heizen_kwh")):
             return []
@@ -956,6 +966,39 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 "anderer Zähler (etwa der Kühlbetrieb), zeigt eedc unter Heizen dessen Wert."
             ),
             link=LINK_DATENQUELLEN,
+        )]
+
+    def _check_wp_strom_felder_ohne_schalter(
+        self, inv, name: str, param: dict, sensor_mapping: dict,
+    ) -> list[CheckErgebnis]:
+        """«Strom Heizen»/«Strom Warmwasser» zugeordnet, der Schalter «Getrennte Strommessung» aber aus (Melder pipp086 #463).
+
+        Die beiden Felder sind die **Summanden** der getrennten Strommessung — die Registry bietet sie nur mit dem
+        Kennzeichen an (``bedingung: getrennte_strommessung``, hart), und ohne es rechnet der Monat den Gerätestrom allein
+        aus dem Gesamtzähler; die feinen Felder sind dann keine Teile des Stroms (``wp_strom.get_wp_strom_kwh``,
+        Nicht-getrennt-Zweig). Eine Zuordnung an diesen Feldern bei ausgeschaltetem Kennzeichen ist also eine Messung, die
+        eedc nicht als Aufteilung liest: Heizen bleibt leer, der ganze Strom steht unter «nicht aufgeteilt» — ohne dass
+        eine Fläche den Grund nennt. Kein Umschalten durch eedc (der Schalter ist eine Aussage des Anwenders über seine
+        Messung); «zugeordnet» wie im Nachbarn ``_check_wp_heizbetrieb_und_strom_heizen`` (``_wp_feld_zugeordnet``).
+        """
+        if param.get("getrennte_strommessung"):
+            return []
+        belegt = [label for feld, label in (("strom_heizen_kwh", "Strom Heizen"), ("strom_warmwasser_kwh", "Strom Warmwasser"))
+                  if _wp_feld_zugeordnet(inv.id, sensor_mapping, feld)]
+        if not belegt:
+            return []
+        felder = " und ".join(f"„{b}“" for b in belegt)
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.INVESTITIONEN, schwere=CheckSeverity.WARNING,
+            meldung=f"{name}: Strom Heizen/Warmwasser zugeordnet, aber „Getrennte Strommessung“ ist aus",
+            details=(
+                f"Zugeordnet: {felder}. Diese Zähler zählt eedc erst als Teile des Wärmepumpen-Stroms, wenn der Schalter "
+                "„Getrennte Strommessung (Heizen / Warmwasser)“ an ist — bis dahin bleibt Heizen/Warmwasser leer und der "
+                f"ganze Strom erscheint als „nicht aufgeteilt“. Einschalten unter Einstellungen → Komponenten → "
+                f"{inv.bezeichnung or name} → bearbeiten. "
+                "Wer bewusst nur den Gesamtzähler nutzt, löst die beiden Zuordnungen stattdessen."
+            ),
+            link="/einstellungen/investitionen",
         )]
 
     def _check_wechselrichter_pv_altbestand(
@@ -1197,6 +1240,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
             elif inv.typ == "waermepumpe":
                 ergebnisse.extend(self._check_typ_waermepumpe(kat, inv, name, param, monatsdaten))
                 ergebnisse.extend(self._check_wp_heizbetrieb_und_strom_heizen(inv, name, anlage.sensor_mapping or {}))
+                ergebnisse.extend(self._check_wp_strom_felder_ohne_schalter(inv, name, param, anlage.sensor_mapping or {}))
 
             # Allgemeine Prüfungen für alle Typen
             ergebnisse.extend(self._check_alle_typen(kat, inv, name, param))

@@ -593,7 +593,7 @@ class SensorChecks:
         """
         from backend.core.field_definitions import (
             FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
-            ist_stand_feld,
+            get_alle_felder_fuer_investition, ist_stand_feld,
         )
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
@@ -633,6 +633,14 @@ class SensorChecks:
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
         heute = date.today()
         inv_aktiv = {str(i.id): i.ist_aktiv_an(heute) for i in (anlage.investitionen or [])}
+        # Feld-Label je Typ (R5, ottokar PN 7.11.2026): `FELD_LABELS` ist flach über alle Typen — derselbe Feldname
+        # trägt an Wärmepumpe und Wallbox verschiedene Labels («Netzbezug zum WP-Tarif» / «…Wallbox-Tarif»), der letzte
+        # gewann. Hier ist der Typ bekannt ⇒ das Label der Registry für DIESE Investition; verwaiste Mapping-Einträge
+        # (Investition gelöscht) behalten das flache.
+        feld_label_je_inv = {
+            str(i.id): {f["feld"]: f["label"] for f in get_alle_felder_fuer_investition(i.typ, i.parameter)}
+            for i in (anlage.investitionen or [])
+        }
 
         for inv_id, inv_data in (mapping.get("investitionen") or {}).items():
             if not isinstance(inv_data, dict):
@@ -661,10 +669,8 @@ class SensorChecks:
                 # `field_definitions` nennt `FELD_EINHEITEN` dort namentlich als
                 # Leser, der auflösen muss. Dieser hier tat es als einziger nicht.
                 basis = basis_feld_key(feld)
-                lbl = (
-                    f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: "
-                    f"{FELD_LABELS.get(basis, feld)}"
-                )
+                feld_label = feld_label_je_inv.get(str(inv_id), {}).get(basis) or FELD_LABELS.get(basis, feld)
+                lbl = f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: {feld_label}"
                 if ist_stand_feld(basis):
                     # **VOR dem Counter-Zweig**, denn `zaehlerstand` steht in
                     # beiden Mengen — und der Counter-Zweig beantwortet den Fall

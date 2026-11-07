@@ -662,13 +662,18 @@ def _stundenprofil_aus_detail(ctx: _SolcastHaKontext) -> dict[str, TagesStundenp
     return profile
 
 
-def _heute_morgen(tage_voraus: list[dict]) -> tuple:
+def _heute_morgen(tage_voraus: list[dict], heute: date) -> tuple:
     """``(heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90)`` aus ``tage_voraus`` — «morgen»
-    ist der **zweite gelesene** Tag; fehlt er, 0 (int)."""
-    # Morgen/Heute aus tage_voraus
-    morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
-    morgen_p10 = tage_voraus[1]["p10"] if len(tage_voraus) > 1 else 0
-    morgen_p90 = tage_voraus[1]["p90"] if len(tage_voraus) > 1 else 0
+    ist der Eintrag mit dem Datum ``heute + 1``; fehlt er (Morgen-Sensor nicht lesbar), 0 (int).
+
+    N-776: ``tage_voraus`` enthält nur die lesbaren Tage. Bis N-776 galt ``tage_voraus[1]`` als «morgen» —
+    war der Morgen-Sensor nicht lesbar, stand dort Tag 3. Der direkte API-Pfad liest seit jeher nach Datum."""
+    # Morgen nach Datum, Heute aus tage_voraus[0] (der Heute-Sensor ist Pflicht, s. Rumpf)
+    morgen_str = (heute + timedelta(days=1)).isoformat()
+    morgen = next((t for t in tage_voraus if t["datum"] == morgen_str), None)
+    morgen_kwh = morgen["kwh"] if morgen is not None else 0
+    morgen_p10 = morgen["p10"] if morgen is not None else 0
+    morgen_p90 = morgen["p90"] if morgen is not None else 0
     heute_p10 = tage_voraus[0]["p10"] if tage_voraus else 0
     heute_p90 = tage_voraus[0]["p90"] if tage_voraus else 0
     return heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90
@@ -727,7 +732,7 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
         hourly_p10 = list(heute_profil.p10) if heute_profil else [0.0] * 24
         hourly_p90 = list(heute_profil.p90) if heute_profil else [0.0] * 24
 
-        heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90 = _heute_morgen(tage_voraus)
+        heute_p10, heute_p90, morgen_kwh, morgen_p10, morgen_p90 = _heute_morgen(tage_voraus, heute)
 
         result = SolcastForecast(
             daily_kwh=round(today_kwh, 1),

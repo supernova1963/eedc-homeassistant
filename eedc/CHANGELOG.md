@@ -7,6 +7,37 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Vollbackfill und Reparatur-Werkbank ohne Energie-Statistik: ein Balkonkraftwerk zählt neben seinen messenden Modulen
+  nicht doppelt.** Die Stunden-Leistungskurve aus der Home-Assistant-Langzeitstatistik nahm Balkonkraftwerk und Module
+  nebeneinander (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). Jetzt trägt das Balkonkraftwerk je Stunde nur, was seine Module nicht
+  messen — dieselbe Regel wie im Live-Tagesverlauf; fehlt den Modulen eine Stunde, zählt das Balkonkraftwerk sie (N-777).
+- **Cockpit → Live, Prognose-Vergleich (Solcast über Home Assistant): „Morgen“ ist der morgige Tag.** War der
+  Morgen-Sensor der Solcast-Integration nicht lesbar, stand unter „Morgen“ bisher der Wert von übermorgen; jetzt bleibt
+  „Morgen“ dann leer (0), wie beim direkten Solcast-Abruf (N-776).
+- **Daten-Checker, Langzeitstatistik-Meldung: Felder heißen wie an ihrem Gerät.** Die Meldung nannte den WP-Tarif-Zähler
+  einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“; jetzt trägt jedes Feld das Label seines Gerätetyps — „Netzbezug zum
+  WP-Tarif“ an der Wärmepumpe, und etwa „PV-Erzeugung“ an PV-Modulen wie auf der Datenquellen-Fläche (Melder ottokar, PN 7.11.2026).
+
+### Added
+
+- **Daten-Checker: „Strom Heizen/Warmwasser zugeordnet, aber ‚Getrennte Strommessung‘ ist aus“.** Sind an einer
+  Wärmepumpe die Zähler für Heizen oder Warmwasser zugeordnet, der Schalter „Getrennte Strommessung“ aber aus, zählt eedc
+  sie nicht als Aufteilung — Heizen bleibt leer, der ganze Strom steht unter „nicht aufgeteilt“. Der Daten-Checker sagt das
+  jetzt und nennt den Weg zum Schalter (Melder pipp086, simon42 T89667 / #463).
+
+### Docs
+
+- **Wärme & Klima, Schritt 6b (Netzbezug zum WP-Tarif in der Zählerkaskade):** den Template-Sensor Z1 minus Z2 aus den
+  fortlaufenden Zählerständen bauen, nicht aus Tageszählern — deren Differenz fällt um Mitternacht auf 0, und Home Assistant
+  bucht das jede Nacht als Rückgang (Melder ottokar, simon42 PN 7.11.2026).
+- **Berechnungen §3.5:** die Abgrenzung je Funktion der Wärmepumpen-Kennzahlen beschrieben, wie der Code sie liest — je
+  Funktion gilt in Monat, Jahr und Tag der Grund aus `abgrenzung_je_funktion`; die anlagenweite Kette (mit „verschiedene
+  Geräte/Monate“, N-441) sperrt die Gesamtzahl. Keine Zahl ändert sich.
+
 ## [4.2.2] - 2026-11-06
 
 Fehlerbehebungen und zwei Melder-Wünsche aus dem simon42-Forum: der laufende Tag ohne Home-Assistant-Statistik zählt mit den Zählern, „PV heute“ im Live zählt Erzeuger ohne Zähler mit, der Gesamt-ROI zieht die Betriebskosten nicht bewerteter Geräte ab, der Tages-Peak zählt ein Balkonkraftwerk nicht doppelt, die Einrichtung im Standalone-Betrieb bekommt die Energie-Dashboard-Vorschläge; neu die Tagesspalten „Strom Heizbetrieb/Warmwasserbetrieb“ in der Tabelle und der Daten-Checker-Hinweis bei doppelt zugeordnetem Heizstrom; das Solar-Soll steht an der PV. Dazu intern: alle 25 verbliebenen Funktionen über der Komplexitätsschwelle 50 nach Bauform RF-1 geschnitten (Golden Master je Funktion, verhaltensgleich), die Baseline des Wächters ist leer.

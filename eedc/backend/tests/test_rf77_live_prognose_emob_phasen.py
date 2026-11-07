@@ -223,16 +223,30 @@ async def test_rf77_profil_ohne_werte_wird_nicht_eingetragen(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rf77_morgen_ist_der_zweite_gelesene_tag(monkeypatch):
-    """Ist der Morgen-Sensor nicht lesbar, steht in ``tomorrow_kwh`` der nächste gelesene Tag (Tag 3) — Bestand,
-    `tage_voraus[1]`; die Probe hält das Verhalten fest, sie bewertet es nicht."""
+async def test_rf77_morgen_ist_der_tag_heute_plus_eins(monkeypatch):
+    """N-776: «Morgen» ist der Tag ``heute + 1``. Ist der Morgen-Sensor nicht lesbar, ist ``tomorrow_kwh`` 0 — nicht
+    der nächste gelesene Tag (Tag 3, so bis N-776 über `tage_voraus[1]`). Heute bleibt Heute; Tag 3 bleibt in der Liste."""
     from backend.services.solcast_service import _fetch_solcast_ha_auto
 
     _stelle_solcast(monkeypatch, entities={"heute": "sensor.h", "morgen": "sensor.m", "tag_3": "sensor.d3"},
-                    states=[_st("sensor.h", "20.0"), _st("sensor.m", "unavailable"), _st("sensor.d3", "7.0", estimate10=3)])
+                    states=[_st("sensor.h", "20.0", estimate10=9), _st("sensor.m", "unavailable"),
+                            _st("sensor.d3", "7.0", estimate10=3)])
     r = await _fetch_solcast_ha_auto()
     assert [t["kwh"] for t in r.tage_voraus] == [20.0, 7.0]
-    assert (r.tomorrow_kwh, r.tomorrow_p10_kwh) == (7.0, 3.0)
+    assert r.tage_voraus[1]["datum"] == (HEUTE + timedelta(days=2)).isoformat()
+    assert (r.tomorrow_kwh, r.tomorrow_p10_kwh, r.tomorrow_p90_kwh) == (0, 0, 0)
+    assert (r.daily_kwh, r.daily_p10_kwh) == (20.0, 9.0)
+
+
+@pytest.mark.asyncio
+async def test_rf77_morgen_lesbar_ist_morgen(monkeypatch):
+    """Gegenprobe N-776: lesbarer Morgen-Sensor ⇒ sein Wert, auch wenn Tag 3 fehlt."""
+    from backend.services.solcast_service import _fetch_solcast_ha_auto
+
+    _stelle_solcast(monkeypatch, entities={"heute": "sensor.h", "morgen": "sensor.m", "tag_3": "sensor.d3"},
+                    states=[_st("sensor.h", "20.0"), _st("sensor.m", "11.0", estimate10=4), _st("sensor.d3", "unavailable")])
+    r = await _fetch_solcast_ha_auto()
+    assert (r.tomorrow_kwh, r.tomorrow_p10_kwh) == (11.0, 4.0)
 
 
 @pytest.mark.asyncio

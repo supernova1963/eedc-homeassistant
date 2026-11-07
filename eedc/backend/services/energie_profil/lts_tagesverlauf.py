@@ -35,6 +35,11 @@ from typing import Literal, Optional
 from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.erzeuger_traeger import (
+    abgetretene_bkw_ids,
+    kuerze_bkw_in_werte_map,
+    modul_kinder,
+)
 from backend.models.anlage import Anlage
 
 logger = logging.getLogger(__name__)
@@ -77,6 +82,57 @@ class LtsTagesverlauf:
     grund: LtsGrund = "ok"
 
 
+@dataclass(frozen=True)
+class _BkwAbtretung:
+    """N-777: die Abtretung der Balkonkraftwerke mit `pv-module`-Kindern an EINEM Tag.
+
+    ``keys`` — die PV-Serien-Keys der abtretenden BKW mit eigener Serie und ihrer Kinder mit eigener Serie: auf genau
+    diesen Werten kuerzt `_bkw_rest_einsetzen` je Stunde. ``investitionen`` — die am Tag aktiven Investitionen
+    (Elternschaft fuer `kuerze_bkw_in_werte_map`).
+    """
+
+    keys: frozenset
+    investitionen: tuple
+
+
+def _bkw_abtretung(investitionen: dict, tages_serien: list[dict], current: date) -> Optional[_BkwAbtretung]:
+    """N-777: die Abtretung des Tages ``current`` — ``None``, wenn kein am Tag aktives BKW mit eigener PV-Serie ein am Tag
+    aktives Modul-Kind mit eigener PV-Serie hat (dann gibt es nichts zu kuerzen).
+
+    Als Kind zaehlt nur ein am Tag aktives Modul (P11, N-615): ein spaeter angeschafftes Modul nimmt dem Balkonkraftwerk
+    die frueheren Tage nicht.
+    """
+    aktiv = tuple(inv for inv in investitionen.values() if inv.ist_aktiv_an(current))
+    abgetreten = abgetretene_bkw_ids(aktiv)
+    if not abgetreten:
+        return None
+    key_je_inv = {str(s["inv_id"]): s["key"] for s in tages_serien if s["kategorie"] == "pv" and s.get("inv_id") is not None}
+    keys: set[str] = set()
+    for bkw_id in abgetreten:
+        bkw_key = key_je_inv.get(str(bkw_id))
+        if bkw_key is None:
+            continue
+        kinder = [key_je_inv[str(k.id)] for k in modul_kinder(bkw_id, aktiv) if str(k.id) in key_je_inv]
+        if kinder:
+            keys.update([bkw_key, *kinder])
+    if not keys:
+        return None
+    return _BkwAbtretung(keys=frozenset(keys), investitionen=aktiv)
+
+
+def _bkw_rest_einsetzen(bkw: _BkwAbtretung, roh_pv: dict[str, float], werte: dict[str, float]) -> None:
+    """N-777: dieselbe Kuerzung wie der Live-Zwilling (`live_tagesverlauf_service._bkw_kuerzung_slot`) — ueber
+    `kuerze_bkw_in_werte_map` (Werte-Regel N-536) auf den ungerundeten Stundenwerten: das BKW traegt
+    ``max(0, BKW − Σ Kinder mit Wert in dieser Stunde)``; Rest 0 ⇒ der Key faellt heraus. Ein Kind ohne Wert in der Stunde
+    zieht nichts ab — das BKW deckt dessen Luecke."""
+    gekuerzt = kuerze_bkw_in_werte_map(roh_pv, bkw.investitionen)
+    for key, roh in roh_pv.items():
+        if key not in gekuerzt:
+            werte.pop(key, None)
+        elif gekuerzt[key] != roh:
+            werte[key] = round(gekuerzt[key], 3)
+
+
 def _stunden_werte(
     hourly_data: dict,
     serie_entities: dict,
@@ -86,6 +142,7 @@ def _stunden_werte(
     netz_kombi_eid: Optional[str],
     netz_bezug_eid: Optional[str],
     netz_einspeisung_eid: Optional[str],
+    bkw: Optional["_BkwAbtretung"] = None,
 ) -> dict[str, float]:
     """Das ``werte``-Dict EINER Stunde aus den gebuendelten LTS-Daten.
 
@@ -94,9 +151,14 @@ def _stunden_werte(
     jede andere Stunde. Zwei Aufbauten fuer dieselbe Groesse waeren zwei
     Wahrheiten, sobald eine von beiden angefasst wird.
 
+    ``bkw`` (N-777): die Abtretung der Balkonkraftwerke mit `pv-module`-Kindern an diesem Tag
+    (`_bkw_abtretung`) — ein BKW traegt je Stunde nur den Rest neben den Kindern mit Wert
+    (`_bkw_rest_einsetzen`, Werte-Regel des Live-Pfads). ``None`` = nichts abgetreten.
+
     Leeres Dict = diese Stunde hat in keiner Serie einen Wert.
     """
     werte: dict[str, float] = {}
+    roh_pv: dict[str, float] = {}
 
     for serie in tages_serien:
         skey = serie["key"]
@@ -118,6 +180,10 @@ def _stunden_werte(
             else:
                 raw_val = abs(serie_sum_kw)
             werte[skey] = round(raw_val, 3)
+            if bkw is not None and skey in bkw.keys:
+                roh_pv[skey] = raw_val
+    if roh_pv:
+        _bkw_rest_einsetzen(bkw, roh_pv, werte)
 
     # Netz (Kombi-Sensor oder getrennt Bezug/Einspeisung)
     bezug_kw = 0.0
@@ -291,6 +357,7 @@ def _tag_punkte(k: _KurvenBasis, current: date) -> Optional[dict]:
     netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid = k.netz_kombi_eid, k.netz_bezug_eid, k.netz_einspeisung_eid
     datum_iso = current.isoformat()
     tages_serien = _tages_serien(k, current)
+    bkw = _bkw_abtretung(k.investitionen, tages_serien, current)   # N-777
 
     # punkte (get_tagesverlauf-Form): je Stunde MIT Daten ein werte-Dict
     # {serie_key: kW}. Stunden ohne jeglichen Wert werden ausgelassen —
@@ -299,7 +366,7 @@ def _tag_punkte(k: _KurvenBasis, current: date) -> Optional[dict]:
     for h in range(24):
         werte = _stunden_werte(
             hourly_data, serie_entities, tages_serien, datum_iso, h,
-            netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+            netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid, bkw,
         )
         if werte:
             punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
@@ -312,7 +379,7 @@ def _tag_punkte(k: _KurvenBasis, current: date) -> Optional[dict]:
     vortag_iso = (current - timedelta(days=1)).isoformat()
     rand_werte = _stunden_werte(
         hourly_data, serie_entities, tages_serien, vortag_iso, 23,
-        netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid,
+        netz_kombi_eid, netz_bezug_eid, netz_einspeisung_eid, bkw,
     )
     vortagsrand = (
         [{"zeit": "23:00", "werte": rand_werte}] if rand_werte else []
