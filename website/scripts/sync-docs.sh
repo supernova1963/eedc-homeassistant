@@ -65,4 +65,4 @@ done
 # Changelog separat (von Repository-Root)
 sync_file "$CHANGELOG" "changelog.md" "Changelog" "Alle Änderungen und Versionshistorie von eedc"
 
-echo "✓ Docs sync complete (16 files)"
+echo "✓ Docs sync complete ($(( ${#DOCS[@]} + 1 )) files)"

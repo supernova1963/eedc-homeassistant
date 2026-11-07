@@ -35,6 +35,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   des Gesamtzählers in der Summe. Jetzt kommt die Spalte von derselben Stelle wie Cockpit → Monat und der Komponenten-Hub:
   je Gerät der Gesamtzähler, sonst Heizen + Warmwasser. Die Spalten „WP Wärme Heizen“ und „WP Wärme WW“ bleiben, wie sie
   sind (N-778).
+- **Sensor-Referenz: alle Eingabefelder und alle Export-Sensoren vollständig, Beschreibungen gleichlautend mit der
+  Zuordnungs-Oberfläche.** Die Tabellen kommen jetzt aus dem Programm: je Feld der Hinweis und die Liste „ausgewertet in“,
+  die auch die Datenquellen-Zuordnung zeigt, je Export-Sensor Einheit, Klassen und Formel. Bisher fehlten 16 Eingabefelder
+  (etwa die Außentemperatur, die Preisfelder des Monatsabschlusses, der Wechselrichter) und 13 Export-Sensoren (E-Auto,
+  Wärmepumpe, „heute (nachgeführt)“). Die MQTT-Topic-Tabellen waren unvollständig, drei Angaben „kein MQTT-Topic“ passten
+  nicht zur Topic-Liste, die eedc selbst anzeigt — die Kapitel verweisen jetzt auf MQTT-Inbound.
 - **HA-Export: die Beschreibung des Sensors „Warmwasserbetrieb“ stimmt.** In den Export-Einstellungen und im Attribut
   `formel` stand „Betriebsmodus der letzten vollen Stunde“; der Sensor folgt aber dem live gelesenen Betriebsmodus
   (höchstens 60 s alt). Der Text sagt das jetzt; am Sensor selbst ändert sich nichts.
@@ -64,7 +70,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `test_groessen_uebersicht.py` (Datei aktuell, Hand-Datei gültig, Baseline nur schrumpfend, Anker-Probe aller Verweise auf
   BERECHNUNGEN und SENSOR-REFERENZ). Zwei tote Anker repariert (WAS-IST-NEU → §4.1c, Handbuch Prognosen →
   Backward-Slot-Konvention). Neu in der In-App-Hilfe und auf der Website unter Referenz bzw. Dokumentation; Kennwerte und
-  Export-Sensoren mit Regel-Abschnitt und Test verknüpft (U2).
+  Export-Sensoren mit Regel-Abschnitt und Test verknüpft (U2). `docs/SENSOR-REFERENZ.md` ist jetzt ebenfalls erzeugt (U3):
+  Hand-Bausteine `docs/sensor-referenz/` plus erzeugte Tabellen der Eingabefelder (Registry, Kanal-Katalog, Sichten aus
+  `core/feld_auswertungen.py`) und der Export-Sensoren (Beschreibungen als `hinweis` in der Hand-Datei); 16 Eingabefelder
+  und 13 Export-Sensoren stehen damit erstmals in der Referenz, der Erzeuger bricht ab, wenn eine Zeile fehlt oder doppelt
+  steht.
 
 ## [4.2.2] - 2026-11-06
 

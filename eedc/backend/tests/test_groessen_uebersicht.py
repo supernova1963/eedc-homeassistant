@@ -16,13 +16,20 @@ nicht (Regel-Abschnitt, haltender Test); sie stehen in ``groessen_hand.yaml``. D
 (e) Gegenproben: ein künstlicher Registry-Eintrag ohne Hand-Eintrag, ein falscher Verweis, ein toter Anker werden
     beim Namen gemeldet — sonst wäre ein grüner Lauf nichts wert (Muster ``test_kanal_feld_deckung.py``).
 
+**SENSOR-REFERENZ (Stufe U3).** ``docs/SENSOR-REFERENZ.md`` ist ebenfalls erzeugt: Hand-Bausteine
+``docs/sensor-referenz/NN-*.md`` (Prosa, Überschriften ⇒ Anker) und an Markern die Tabellen der Eingabefelder (Registry,
+Kanal-Katalog, Sichten aus ``core/feld_auswertungen.py``) und der Export-Sensoren (Definitionen + ``hinweis`` der
+Hand-Datei). (c) prüft beide Dateien, (d) liest auch die Bausteine; die Totalität (jede Eingabefeld-Zeile und jeder
+Sensor in genau einem Marker, jede Kategorie in genau einem Unterabschnitt) prüft der Erzeuger selbst — die
+Gegenproben unten zeigen, dass er dabei den Namen nennt.
+
 **Die Slug-Regeln** (github-slugger, ein Slugger je Dokument; Überschriften in Blockquotes und Setext zählen) sind am
 7.11.2026 gegen die Pipeline der In-App-Hilfe gemessen (remark-gfm + rehype-raw + rehype-slug wie
 ``components/ui/MarkdownDoc.tsx``): 3164 Überschriften in 39 Dateien, alle Anker gleich.
 
 **Wenn dieser Test rot wird:**
 
-    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md neu schreiben
+    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md + docs/SENSOR-REFERENZ.md neu schreiben
     scripts/groessen-uebersicht.sh --baseline   # nach einem Hand-Eintrag: Baseline schrumpfen lassen
     ./scripts/sync-help.sh                      # In-App-Hilfe nachziehen
 
@@ -116,7 +123,7 @@ def test_b_hand_datei_ist_gueltig(zeilen, hand):
 
 def test_b_jeder_verweis_der_hand_datei_existiert(hand, anker):
     fehler = gu.hand_verweisfehler(hand, anker, mit_docs=_MIT_DOCS)
-    assert not fehler, "groessen_hand.yaml verweist ins Leere:\n  " + "\n  ".join(fehler)
+    assert not fehler, "groessen_hand.yaml verweist ins Leere:\n  " + "\n  ".join(fehler) + _BEFEHLE
 
 
 # ── (c) erzeugte Datei == Erzeuger-Ausgabe ──────────────────────────────────
@@ -129,6 +136,19 @@ def test_c_erzeugte_datei_ist_aktuell():
     assert ist == soll, (
         "docs/UEBERSICHT-GROESSEN.md weicht von der Erzeuger-Ausgabe ab — Registry, Monats-Fakten, Werte-Registry, "
         "Export-Sensoren oder groessen_hand.yaml geändert, ohne neu zu erzeugen (oder die Datei von Hand geändert)."
+        + _BEFEHLE
+    )
+
+
+@_OHNE_DOCS
+def test_c_sensor_referenz_ist_aktuell():
+    fehler, soll = gu.sr_pruefung_und_text()
+    assert not fehler, "SENSOR-REFERENZ nicht erzeugbar:\n  " + "\n  ".join(fehler) + _BEFEHLE
+    ist = gu.SR_ZIEL.read_text(encoding="utf-8") if gu.SR_ZIEL.exists() else ""
+    assert ist == soll, (
+        "docs/SENSOR-REFERENZ.md weicht von der Erzeuger-Ausgabe ab — ein Baustein in docs/sensor-referenz/, die "
+        "Feld-Registry, der Kanal-Katalog, core/feld_auswertungen.py, die Export-Sensoren oder groessen_hand.yaml "
+        "geändert, ohne neu zu erzeugen (oder die Datei von Hand geändert — Änderungen gehören in die Bausteine)."
         + _BEFEHLE
     )
 
@@ -258,3 +278,68 @@ def test_e_quellen_sind_austauschbar():
     """Die Gegenproben greifen an den Lesern, nicht an Produktivcode — ``Quellen`` ist die Naht dafür."""
     leer = dataclasses.replace(gu.produktiv_quellen(), sensoren=list)
     assert gu.alle_zeilen(leer)[gu.SENSOR] == []
+
+
+# ── (e) Gegenproben SENSOR-REFERENZ ─────────────────────────────────────────
+
+
+def _sr_fehler(**quellen) -> str:
+    return "\n".join(gu.sr_pruefung_und_text(**quellen)[0])
+
+
+def test_e_sr_unbekannter_marker_wird_beim_namen_gemeldet():
+    bausteine = [("00-kopf.md", "# Titel\n\n<!-- erzeugt: gibtsnicht typ=x -->\n")]
+    fehler = _sr_fehler(bausteine=bausteine, felder=[], sensoren=[], hand={}, anker={})
+    assert "00-kopf.md:3: unbekannter Marker" in fehler, fehler
+
+
+def test_e_sr_marker_ohne_zeilen_wird_gemeldet():
+    bausteine = [("00-kopf.md", "# Titel\n<!-- erzeugt: eingabefelder typ=gibtsnicht liste=monat -->\n")]
+    fehler = _sr_fehler(bausteine=bausteine, felder=[], sensoren=[], hand={}, anker={})
+    assert "00-kopf.md:2: Marker ohne Zeilen" in fehler, fehler
+
+
+@_OHNE_DOCS
+def test_e_sr_kuenstlicher_sensor_steht_in_der_tabelle_seiner_kategorie():
+    from backend.services.ha_sensors_export import SensorCategory, SensorDefinition
+
+    kuenstlich = SensorDefinition(key="kuenstlich_u3_kwh", name="Künstlich U3", unit="kWh", icon="mdi:test",
+                                  category=SensorCategory.ENERGIE, formel="Gegenprobe")
+    fehler, text = gu.sr_pruefung_und_text(sensoren=[*gu.sensor_definitionen(), kuenstlich])
+    assert not fehler, fehler
+    abschnitt = text.split("### Anlage-weite Sensoren", 1)[1].split("\n### ", 1)[0]
+    assert "| `kuenstlich_u3_kwh` | Künstlich U3 | kWh |" in abschnitt
+
+
+@_OHNE_DOCS
+def test_e_sr_kategorie_ohne_marker_wird_beim_namen_gemeldet():
+    bausteine = [(name, "\n".join(z for z in text.split("\n") if "kategorie=preis" not in z))
+                 for name, text in gu.sr_bausteine_lesen()]
+    fehler = _sr_fehler(bausteine=bausteine)
+    assert "Kategorie `preis` gehört zu 0 Unterabschnitten" in fehler, fehler
+    assert "Export-Sensor `eedc_preis_rang` (Kategorie `preis`) steht in 0 Markern" in fehler, fehler
+
+
+@_OHNE_DOCS
+def test_e_sr_eingabefeld_ohne_marker_wird_beim_namen_gemeldet():
+    neu = gu.SrFeld("fantasie", "", "neu_kwh", "INVESTITION_FELDER", {"feld": "neu_kwh", "einheit": "kWh"})
+    fehler = _sr_fehler(felder=[*gu.sr_eingabefelder(), neu])
+    assert "Eingabefeld fantasie:neu_kwh (INVESTITION_FELDER) steht in 0 Markern" in fehler, fehler
+
+
+@_OHNE_DOCS
+def test_e_sr_doppelter_marker_wird_beim_namen_gemeldet():
+    bausteine = gu.sr_bausteine_lesen()
+    bausteine.append(("99-doppelt.md", "## Doppelt\n<!-- erzeugt: eingabefelder typ=speicher liste=live -->\n"))
+    fehler = _sr_fehler(bausteine=bausteine)
+    assert "Eingabefeld speicher:soc (LIVE_FELDER_INV) steht in 2 Markern" in fehler, fehler
+
+
+def test_e_sr_sichten_kommen_aus_feld_auswertungen():
+    """Die Spalte «Sichten» ist die Liste der Zuordnungs-Fläche (``sichten_fuer``), kein Hand-Feld."""
+    from backend.core.feld_auswertungen import sichten_fuer
+
+    felder = {f.name: f for f in gu.sr_eingabefelder()}
+    assert gu.sr_sichten(felder["basis:einspeisung_kwh"]) == " · ".join(sichten_fuer("basis", "einspeisung_kwh"))
+    assert gu.sr_sichten(felder["e-auto:km_stand"]).startswith("— "), "Feld ohne Auswertung nennt den Grund"
+    assert "sichten" not in gu.HAND_FELDER[gu.EINGABEFELD]

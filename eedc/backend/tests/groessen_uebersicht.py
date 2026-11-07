@@ -1,6 +1,9 @@
-"""Übersicht der Größen — Erzeuger und Parser (Bauplan «Übersicht der Größen» §3, Stufe U1, 7.11.2026).
+"""Übersicht der Größen — Erzeuger und Parser (Bauplan «Übersicht der Größen» §3, Stufen U1 und U3, 7.11.2026).
 
 Schreibt ``docs/UEBERSICHT-GROESSEN.md``: jeder Eintrag der vier Registries von eedc bekommt genau eine Zeile.
+Schreibt ``docs/SENSOR-REFERENZ.md`` (U3): Hand-Bausteine ``docs/sensor-referenz/NN-*.md`` in Namens-Reihenfolge, an
+Markern die Tabellen der Eingabefelder und der Export-Sensoren — vollständig, jede Zeile genau einmal (Abschnitt
+«SENSOR-REFERENZ» unten). Die Bausteine sind Quelle; die erzeugte Datei wird nie von Hand geändert.
 
 ======================  =====================================================================  ==========================
 Ebene                   Quelle                                                                 gelesen über
@@ -23,9 +26,9 @@ wäre ein zweiter Wahrheitsort.
 **Aufruf** (setzt ``DATABASE_URL`` auf eine Scratch-DB, BEVOR ``backend`` importiert wird — ``core/database.py`` baut
 die Engine beim Import)::
 
-    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md neu schreiben
+    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md + docs/SENSOR-REFERENZ.md neu schreiben
     scripts/groessen-uebersicht.sh --baseline   # groessen_offen_baseline.txt neu schreiben (nur schrumpfend)
-    scripts/groessen-uebersicht.sh --pruefen    # nur vergleichen, nichts schreiben (Exit 1 bei Abweichung)
+    scripts/groessen-uebersicht.sh --pruefen    # beide nur vergleichen, nichts schreiben (Exit 1 bei Abweichung)
 
 Danach ``./scripts/sync-help.sh`` (In-App-Hilfe); die Website spiegelt beim Build.
 """
@@ -718,8 +721,9 @@ def anker_verweise(dateien: Iterable[Path]) -> list[tuple[str, int, str, str]]:
 
 
 def verweis_dateien() -> list[Path]:
-    """``docs/*.md`` und ``CHANGELOG.md`` — die Dateien, die Wächter (d) prüft."""
-    return sorted(DOCS.glob("*.md")) + [CHANGELOG]
+    """``docs/*.md``, die Bausteine ``docs/sensor-referenz/*.md`` und ``CHANGELOG.md`` — die Dateien, die Wächter (d)
+    prüft."""
+    return sorted(DOCS.glob("*.md")) + sorted((DOCS / "sensor-referenz").glob("*.md")) + [CHANGELOG]
 
 
 def tote_anker(verweise: Iterable[tuple[str, int, str, str]], anker: Mapping[str, Mapping[str, str]]) -> list[str]:
@@ -963,8 +967,362 @@ def dokument(zeilen: Mapping[str, list[Zeile]], hand: Mapping, anker: Mapping[st
     return "\n".join(teile) + "\n"
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SENSOR-REFERENZ (Stufe U3): Hand-Bausteine + erzeugte Tabellen an Markern
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ``docs/SENSOR-REFERENZ.md`` = die Bausteine ``docs/sensor-referenz/NN-*.md`` in Namens-Reihenfolge; jede Marker-Zeile
+# wird durch eine erzeugte Tabelle ersetzt, nach der H1 des ersten Bausteins steht die Kopfzeile. Zwei Marker-Arten:
+#
+#   <!-- erzeugt: eingabefelder typ=<typ>[,<typ>…] liste=monat|live [merkmal=<attr>|!<attr>] -->
+#   <!-- erzeugt: export-sensoren kategorie=<kat>[,<kat>…] [komponente=sensor|binary_sensor] -->
+#
+# Totalität (Fehler beim Namen, ``sr_pruefung``): jede Eingabefeld-Zeile und jeder Export-Sensor steht in genau
+# einem Marker; jede ``SensorCategory`` gehört genau einem Unterabschnitt (der letzten Überschrift über dem Marker);
+# ein Marker ohne Zeilen und ein unbekannter Marker sind Fehler.
+
+SR_ZIEL = DOCS / "SENSOR-REFERENZ.md"
+SR_BAUSTEINE = DOCS / "sensor-referenz"
+SR_KOPFZEILE = (
+    f"> **Erzeugt — nicht von Hand ändern —** Bausteine in `docs/sensor-referenz/`, `{BEFEHL}`. Die Tabellen der "
+    "Eingabefelder (§1–§7) und der Export-Sensoren (§11) kommen aus dem Code; ihre Spalte «Hinweise» bei den "
+    "Export-Sensoren aus `eedc/backend/tests/groessen_hand.yaml`."
+)
+_MARKER = re.compile(r"^<!-- erzeugt: (?P<art>\S+)(?P<param>(?: [a-z_]+=\S+)*) -->\s*$")
+_MARKER_ANFANG = "<!-- erzeugt:"
+MARKER_EINGABE = "eingabefelder"
+MARKER_EXPORT = "export-sensoren"
+_MARKER_PARAMETER: dict[str, frozenset[str]] = {
+    MARKER_EINGABE: frozenset({"typ", "liste", "merkmal"}),
+    MARKER_EXPORT: frozenset({"kategorie", "komponente"}),
+}
+_MARKER_PFLICHT: dict[str, frozenset[str]] = {
+    MARKER_EINGABE: frozenset({"typ", "liste"}),
+    MARKER_EXPORT: frozenset({"kategorie"}),
+}
+#: Registry-Liste → Tabelle «monat» oder «live» (die Preis-Felder stehen bei den Live-Feldern der Anlage).
+_SR_LISTE: dict[str, str] = {
+    "BASIS_FELDER": "monat", "BEDINGTE_BASIS_FELDER": "monat", "OPTIONALE_FELDER": "monat",
+    "INVESTITION_FELDER": "monat", "LIVE_FELDER_INV": "live", "BASIS_LIVE_FELDER": "live",
+    "BASIS_PREIS_FELDER": "live",
+}
+
+
+@dataclass(frozen=True)
+class SrFeld:
+    """Eine Eingabefeld-Zeile der SENSOR-REFERENZ (eine je Registry-Eintrag, wie in der Übersicht)."""
+
+    typ: str
+    art: str
+    feld: str
+    liste: str
+    eintrag: Mapping = field(compare=False, hash=False)
+    kanal: object = field(default=None, compare=False, hash=False)
+
+    @property
+    def name(self) -> str:
+        return f"{self.typ}:{self.feld}" + (f" ({self.art})" if self.art else "")
+
+
+def sr_eingabefelder() -> list[SrFeld]:
+    """Alle Registry-Einträge in Quellreihenfolge, mit Kanal-Zuweisung (Naht für die Gegenproben)."""
+    from backend.services.kanal import katalog as kat
+
+    listen_name = {
+        "BASIS_FELDER": kat.L_BASIS, "BEDINGTE_BASIS_FELDER": kat.L_BEDINGT, "OPTIONALE_FELDER": kat.L_OPTIONAL,
+        "INVESTITION_FELDER": kat.L_INV, "LIVE_FELDER_INV": kat.L_LIVE_INV,
+        "BASIS_LIVE_FELDER": kat.L_LIVE_BASIS, "BASIS_PREIS_FELDER": kat.L_PREIS,
+    }
+    kanal = _kanal_index()
+    out = []
+    for liste, typ, art, f in _registry_eintraege():
+        feld = f.get("feld") or f["key"]
+        out.append(SrFeld(typ, art, feld, liste, f, kanal.get((listen_name[liste], None if typ == "basis" else typ, feld))))
+    return out
+
+
+# ── Sensortyp aus der Kanal-Art (Auftrag U3 §2, Entscheid Master H2) ────────
+#
+# Reihenfolge = Vorrang. ``nur_manuell`` (nicht zuordenbar, Katalog O5) entscheidet vor jeder Kanal-Art. Die Texte
+# der vom Auftrag nicht benannten Arten folgen dem Katalog-Text (``services/kanal/katalog.py``):
+#   stand                    «Stand-Feld … Δ des Standes, ohne Reset-Regel» / «Zählwerk … Bestandsgröße»
+#   nur_live_anzeige         «Wert live aus der Integration, nichts gespeichert — reine Anzeige»
+#   mean + Registry `zustand` «Zustand ⇒ Mitschrift» / «Betriebsart ⇒ Mitschrift» (kein Messwert)
+#   tagesgroesse_ohne_kanal  «V2H ist eine Tagesgröße aus dem Zählerpfad (Snapshot/HA-Langzeitstatistik)»
+#   snapshot_ausnahme        «Abschluss-Felder» — zuordenbar, aber nur als Monatswert, kein Stunden-/Tageskanal
+SENSORTYP_MANUELL = "kein Sensor — manuell/Import"
+_SENSORTYP_ART: dict[str, str] = {
+    "sum": "Kumulativ oder Tagessensor",
+    "mean": "Momentanwert",
+    "stand": "Zählerstand (kumulativ)",
+}
+_SENSORTYP_AUSNAHME: dict[str, str] = {
+    "abschluss_ohne_sensor": "kein Sensor — Monatsabschluss",
+    "snapshot_ausnahme": "Kumulativ — nur Monatswert, kein Kanal",
+    "tagesgroesse_ohne_kanal": "Kumulativ oder Tagessensor — Tagesgröße ohne Kanal",
+    "nur_live_anzeige": "Momentanwert — nur Anzeige",
+}
+
+
+def sr_sensortyp(f: SrFeld) -> Optional[str]:
+    """Sensortyp-Text eines Eingabefelds; ``None``, wo die Kanal-Art unbekannt ist (Zelle «—»)."""
+    z = f.kanal
+    if f.eintrag.get("nur_manuell"):
+        return SENSORTYP_MANUELL
+    if z is None:
+        return None
+    if z.ausnahme == "nur_live_anzeige" and f.eintrag.get("zustand"):
+        return ("Text" if f.eintrag.get("text") else "Zustand") + " — nur Anzeige"
+    if z.ausnahme:
+        return _SENSORTYP_AUSNAHME.get(z.ausnahme)
+    if z.art == "mean" and f.eintrag.get("zustand"):
+        return "Zustand"
+    return _SENSORTYP_ART.get(z.art)
+
+
+#: Grund für eine leere Spalte «Sichten» bei den Handeingaben (``feld_auswertungen.alle_registry_felder``: «reine
+#: Handeingaben ohne Quelle; sie stehen nie auf der Zuordnungs-Fläche»).
+_SICHTEN_OPTIONAL = "— Handeingabe im Monatsabschluss, nicht auf der Zuordnungs-Fläche"
+
+
+def sr_sichten(f: SrFeld) -> str:
+    """Die Sichten aus ``core/feld_auswertungen.py`` (dieselbe Liste wie «ausgewertet in» der Zuordnungs-Fläche)."""
+    from backend.core.feld_auswertungen import FELDER_OHNE_AUSWERTUNG_BEKANNT, sichten_fuer
+
+    sichten = sichten_fuer(f.typ, f.feld)
+    if sichten:
+        return " · ".join(sichten)
+    if (f.typ, f.feld) in FELDER_OHNE_AUSWERTUNG_BEKANNT:
+        return f"— {FELDER_OHNE_AUSWERTUNG_BEKANNT[(f.typ, f.feld)]}"
+    return _SICHTEN_OPTIONAL if f.liste == "OPTIONALE_FELDER" else "—"
+
+
+def _sr_label(f: SrFeld) -> str:
+    label = str(f.eintrag.get("label", ""))
+    for bedingung, anders in sorted((f.eintrag.get("label_wenn") or {}).items()):
+        label += f" — mit `{bedingung}`: «{anders}»"
+    return label
+
+
+def _sr_einheit(f: SrFeld) -> str:
+    if f.eintrag.get("einheit_je_geraet"):
+        return f"vom Gerät (`{f.eintrag['einheit_je_geraet']}`)"
+    return str(f.eintrag.get("einheit", ""))
+
+
+def _sr_feld_zelle(f: SrFeld) -> str:
+    zelle_ = f"`{f.feld}`"
+    return zelle_ + (f" · je Innengerät zusätzlich `{f.feld}-<id>`" if f.eintrag.get("je_innengeraet") else "")
+
+
+# ── Marker ──────────────────────────────────────────────────────────────────
+
+
+def marker_lesen(zeile: str) -> Optional[tuple[str, dict[str, str]]]:
+    """``(art, parameter)`` einer Marker-Zeile; ``None`` für jede andere Zeile. Eine Zeile, die wie ein Marker
+    beginnt, aber nicht passt, ist ein Fehler (``ValueError``)."""
+    if not zeile.lstrip().startswith(_MARKER_ANFANG):
+        return None
+    m = _MARKER.match(zeile.strip())
+    if not m or m.group("art") not in _MARKER_PARAMETER:
+        raise ValueError(f"unbekannter Marker: {zeile.strip()}")
+    param = dict(p.split("=", 1) for p in m.group("param").split())
+    unbekannt = sorted(set(param) - _MARKER_PARAMETER[m.group("art")])
+    fehlend = sorted(_MARKER_PFLICHT[m.group("art")] - set(param))
+    if unbekannt or fehlend:
+        raise ValueError(f"Marker {zeile.strip()}: unbekannte Parameter {unbekannt}, fehlende {fehlend}")
+    return m.group("art"), param
+
+
+def _merkmal_passt(f: SrFeld, merkmal: Optional[str]) -> bool:
+    if not merkmal:
+        return True
+    if merkmal.startswith("!"):
+        return not f.eintrag.get(merkmal[1:])
+    return bool(f.eintrag.get(merkmal))
+
+
+def sr_felder_des_markers(felder: Iterable[SrFeld], param: Mapping[str, str]) -> list[SrFeld]:
+    """Die Zeilen eines Eingabefeld-Markers: Typen in Marker-Reihenfolge, je Typ in Registry-Reihenfolge."""
+    typen = param["typ"].split(",")
+    auswahl = [f for f in felder if f.typ in typen and _SR_LISTE[f.liste] == param["liste"]
+               and _merkmal_passt(f, param.get("merkmal"))]
+    return sorted(auswahl, key=lambda f: typen.index(f.typ))
+
+
+def sr_sensoren_des_markers(sensoren: Iterable, param: Mapping[str, str]) -> list:
+    """Die Zeilen eines Export-Markers in Definitions-Reihenfolge."""
+    kategorien = param["kategorie"].split(",")
+    komponente = param.get("komponente")
+    return [s for s in sensoren if _kategorie(s) in kategorien and (not komponente or s.komponente == komponente)]
+
+
+def _kategorie(s) -> str:
+    return getattr(s.category, "value", str(s.category))
+
+
+# ── Tabellen ────────────────────────────────────────────────────────────────
+
+
+def sr_eingabe_tabelle(zeilen: list[SrFeld]) -> str:
+    """Feld · Label · Einheit · Sensortyp · Bedarf · Hinweis · Sichten · Bedingung — mit «Typ» bei mehr als einem
+    Typ und «Art» bei den Arten von `sonstiges`."""
+    mit_typ = len({f.typ for f in zeilen}) > 1
+    mit_art = any(f.art for f in zeilen)
+    kopf = (["Typ"] if mit_typ else []) + (["Art"] if mit_art else []) + [
+        "Feld", "Label", "Einheit", "Sensortyp", "Bedarf", "Hinweis", "Sichten", "Bedingung"]
+    out = ["| " + " | ".join(kopf) + " |", "|" + "---|" * len(kopf)]
+    for f in zeilen:
+        spalten = ([f"`{f.typ}`"] if mit_typ else []) + ([f"`{f.art}`"] if mit_art else []) + [
+            _sr_feld_zelle(f), _sr_label(f), _sr_einheit(f), sr_sensortyp(f) or "", _bedarf_text(f.typ, f.feld),
+            str(f.eintrag.get("hinweis", "")), sr_sichten(f), _bedingung_text(f.eintrag)]
+        out.append("| " + " | ".join(zelle(s) for s in spalten) + " |")
+    return "\n".join(out)
+
+
+def _sr_regel_link(abschnitt: str, anker: Mapping[str, Mapping[str, str]]) -> str:
+    """Regel-Link wie in der Übersicht; ein Abschnitt der SENSOR-REFERENZ selbst als ``#anker``."""
+    datei, _, a = abschnitt.partition("#")
+    if datei != "SENSOR-REFERENZ.md":
+        return _regel_link(abschnitt, anker)
+    titel = anker.get(datei, {}).get(a, a)
+    return f"[§ {titel.replace('[', '(').replace(']', ')')}](#{a})"
+
+
+def sr_sensor_tabelle(sensoren: list, hand: Mapping, anker: Mapping[str, Mapping[str, str]]) -> str:
+    """Schlüssel · Name · Einheit · Klassen · Formel · Regel · Hinweise (Hand-Datei ``hinweis``)."""
+    kopf = ("Schlüssel", "Name", "Einheit", "Klassen", "Formel", "Regel", "Hinweise")
+    out = ["| " + " | ".join(kopf) + " |", "|" + "---|" * len(kopf)]
+    eintraege = hand.get(SENSOR) or {}
+    for s in sensoren:
+        e = eintraege.get(s.key) or {}
+        regel = _sr_regel_link(e["abschnitt"], anker) if e.get("abschnitt") else ""
+        hinweis = str(e.get("hinweis", "")).replace("](SENSOR-REFERENZ.md#", "](#")
+        spalten = (f"`{s.key}`", s.name, s.unit or "", _klassen_text(s), s.formel, regel, hinweis)
+        out.append("| " + " | ".join(zelle(x) for x in spalten) + " |")
+    return "\n".join(out)
+
+
+# ── Zusammensetzen und Prüfen ───────────────────────────────────────────────
+
+
+def sr_bausteine_lesen(verzeichnis: Path = SR_BAUSTEINE) -> list[tuple[str, str]]:
+    """``(Dateiname, Text)`` je Baustein in Namens-Reihenfolge."""
+    return [(p.name, p.read_text(encoding="utf-8")) for p in sorted(verzeichnis.glob("*.md"))]
+
+
+@dataclass
+class _SrLauf:
+    """Zustand eines Zusammensetz-Laufs: verbrauchte Zeilen, Kategorie → Unterabschnitt, Fehler."""
+
+    felder: list[SrFeld]
+    sensoren: list
+    hand: Mapping
+    anker: Mapping[str, Mapping[str, str]]
+    feld_marker: dict[int, list[str]] = field(default_factory=lambda: defaultdict(list))
+    sensor_marker: dict[str, list[str]] = field(default_factory=lambda: defaultdict(list))
+    kategorie_abschnitt: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+    fehler: list[str] = field(default_factory=list)
+
+    def tabelle(self, ort: str, abschnitt: str, art: str, param: Mapping[str, str]) -> str:
+        if art == MARKER_EINGABE:
+            zeilen = sr_felder_des_markers(self.felder, param)
+            for f in zeilen:
+                self.feld_marker[id(f)].append(ort)
+            text = sr_eingabe_tabelle(zeilen) if zeilen else ""
+        else:
+            zeilen = sr_sensoren_des_markers(self.sensoren, param)
+            for kat in param["kategorie"].split(","):
+                self.kategorie_abschnitt[kat].add(abschnitt)
+            for s in zeilen:
+                self.sensor_marker[s.key].append(ort)
+            text = sr_sensor_tabelle(zeilen, self.hand, self.anker) if zeilen else ""
+        if not zeilen:
+            self.fehler.append(f"{ort}: Marker ohne Zeilen ({art} {dict(param)})")
+        return text
+
+    def totalitaet(self) -> None:
+        for f in self.felder:
+            orte = self.feld_marker.get(id(f), [])
+            if len(orte) != 1:
+                self.fehler.append(f"Eingabefeld {f.name} ({f.liste}) steht in {len(orte)} Markern {orte} — Soll: genau einem")
+        for s in self.sensoren:
+            orte = self.sensor_marker.get(s.key, [])
+            if len(orte) != 1:
+                self.fehler.append(f"Export-Sensor `{s.key}` (Kategorie `{_kategorie(s)}`) steht in {len(orte)} Markern "
+                                   f"{orte} — Soll: genau einem")
+        for kat in sorted({_kategorie(s) for s in self.sensoren}):
+            abschnitte = sorted(self.kategorie_abschnitt.get(kat, set()))
+            if len(abschnitte) != 1:
+                self.fehler.append(f"Kategorie `{kat}` gehört zu {len(abschnitte)} Unterabschnitten {abschnitte} — Soll: "
+                                   "genau einem (ein Marker `kategorie=` darunter)")
+
+
+def _sr_zusammensetzen(bausteine: list[tuple[str, str]], lauf: _SrLauf) -> str:
+    teile: list[str] = []
+    abschnitt = ""
+    kopf_gesetzt = False
+    zaun: Optional[str] = None
+    for name, text in bausteine:
+        for nr, zeile in enumerate(text.splitlines(), start=1):
+            z = _ZAUN.match(zeile)
+            zaun = _zaun_wechsel(zaun, z.group(1)) if z else zaun
+            u = _UEBERSCHRIFT.match(zeile) if zaun is None and not z else None
+            if u:
+                abschnitt = ueberschrift_text(u.group(1) or "")
+            try:
+                marker = marker_lesen(zeile)
+            except ValueError as e:
+                lauf.fehler.append(f"{name}:{nr}: {e}")
+                continue
+            if marker:
+                teile.append(lauf.tabelle(f"{name}:{nr}", abschnitt, *marker))
+                continue
+            teile.append(zeile)
+            if not kopf_gesetzt and zeile.startswith("# "):
+                teile += ["", SR_KOPFZEILE]
+                kopf_gesetzt = True
+    if not kopf_gesetzt:
+        lauf.fehler.append("kein Baustein beginnt mit einer H1 — die Kopfzeile hat keinen Platz")
+    return "\n".join(teile) + "\n"
+
+
+def sr_pruefung_und_text(bausteine: Optional[list[tuple[str, str]]] = None, felder: Optional[list[SrFeld]] = None,
+                         sensoren: Optional[list] = None, hand: Optional[Mapping] = None,
+                         anker: Optional[Mapping[str, Mapping[str, str]]] = None) -> tuple[list[str], str]:
+    """``(Fehler, Text)`` der SENSOR-REFERENZ; jede Quelle austauschbar (Gegenproben des Wächters)."""
+    lauf = _SrLauf(
+        felder=sr_eingabefelder() if felder is None else felder,
+        sensoren=sensor_definitionen() if sensoren is None else sensoren,
+        hand=hand_lesen() if hand is None else hand,
+        anker=anker_aller_zieldateien() if anker is None else anker,
+    )
+    text = _sr_zusammensetzen(sr_bausteine_lesen() if bausteine is None else bausteine, lauf)
+    lauf.totalitaet()
+    return lauf.fehler, text
+
+
+def sensor_referenz_text(**quellen) -> str:
+    """Die SENSOR-REFERENZ, wie sie aus Bausteinen, Registries und Hand-Datei entsteht; bricht bei Fehlern ab."""
+    fehler, text = sr_pruefung_und_text(**quellen)
+    if fehler:
+        raise ValueError("SENSOR-REFERENZ nicht erzeugbar:\n  " + "\n  ".join(fehler))
+    return text
+
+
+def _anker_sensor_referenz() -> dict[str, str]:
+    """Anker der SENSOR-REFERENZ aus den Bausteinen (Marker und Kopfzeile tragen keine Überschrift) — so hängt der
+    Erzeuger nicht an einer veralteten erzeugten Datei."""
+    if SR_BAUSTEINE.is_dir():
+        return {s: t for t, s in ueberschriften("\n".join(text for _n, text in sr_bausteine_lesen()))}
+    return anker_der_datei(SR_ZIEL) if SR_ZIEL.exists() else {}
+
+
 def anker_aller_zieldateien() -> dict[str, dict[str, str]]:
-    return {d: anker_der_datei(DOCS / d) for d in ANKER_DATEIEN if (DOCS / d).exists()}
+    anker = {d: anker_der_datei(DOCS / d) for d in ANKER_DATEIEN if (DOCS / d).exists()}
+    if DOCS.is_dir():
+        anker["SENSOR-REFERENZ.md"] = _anker_sensor_referenz()
+    return anker
 
 
 def erzeugen(quellen: Optional[Quellen] = None, hand: Optional[Mapping] = None) -> str:
@@ -978,9 +1336,10 @@ def erzeugen(quellen: Optional[Quellen] = None, hand: Optional[Mapping] = None) 
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Übersicht der Größen erzeugen (docs/UEBERSICHT-GROESSEN.md).")
+    parser = argparse.ArgumentParser(
+        description="Übersicht der Größen und SENSOR-REFERENZ erzeugen (docs/UEBERSICHT-GROESSEN.md, docs/SENSOR-REFERENZ.md).")
     gruppe = parser.add_mutually_exclusive_group()
-    gruppe.add_argument("--schreiben", action="store_true", help="docs/UEBERSICHT-GROESSEN.md schreiben (Vorgabe)")
+    gruppe.add_argument("--schreiben", action="store_true", help="beide Dateien schreiben (Vorgabe)")
     gruppe.add_argument("--baseline", action="store_true", help="groessen_offen_baseline.txt neu schreiben")
     gruppe.add_argument("--pruefen", action="store_true", help="nur vergleichen; Exit 1 bei Abweichung")
     args = parser.parse_args(argv)
@@ -988,13 +1347,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         BASELINE.write_text(baseline_text(offene_schluessel(hand_lesen(), alle_zeilen())), encoding="utf-8")
         print(f"  {BASELINE.relative_to(REPO)} geschrieben")
         return 0
-    text = erzeugen()
+    dateien = ((ZIEL, erzeugen()), (SR_ZIEL, sensor_referenz_text()))
     if args.pruefen:
-        gleich = ZIEL.exists() and ZIEL.read_text(encoding="utf-8") == text
-        print(f"  {ZIEL.relative_to(REPO)}: {'aktuell' if gleich else 'VERALTET'}")
-        return 0 if gleich else 1
-    ZIEL.write_text(text, encoding="utf-8")
-    print(f"  {ZIEL.relative_to(REPO)} geschrieben")
+        veraltet = 0
+        for ziel, text in dateien:
+            gleich = ziel.exists() and ziel.read_text(encoding="utf-8") == text
+            veraltet += not gleich
+            print(f"  {ziel.relative_to(REPO)}: {'aktuell' if gleich else 'VERALTET'}")
+        return 1 if veraltet else 0
+    for ziel, text in dateien:
+        ziel.write_text(text, encoding="utf-8")
+        print(f"  {ziel.relative_to(REPO)} geschrieben")
     return 0
 
 

@@ -23,6 +23,8 @@
 
 **Neu in der Hilfe: «Größen».** Eine Übersicht aller Größen von eedc — was du zuordnest oder einträgst, was eedc je Monat daraus bildet, welche Spalten die Werte-Tabelle zeigt und welche Sensoren eedc an Home Assistant meldet —, je Größe eine Zeile mit Einheit und Herkunft. Sie wird aus dem Programm erzeugt und ist damit immer auf dem Stand der Version. [Übersicht der Größen](UEBERSICHT-GROESSEN.md)
 
+**Sensor-Referenz vollständig.** Die Tabellen der Sensor-Referenz — welche Felder du zuordnen kannst und welche Sensoren eedc an Home Assistant meldet — kommen jetzt ebenfalls aus dem Programm: jedes Feld und jeder Export-Sensor steht darin, mit demselben Hinweis und derselben Liste „ausgewertet in“ wie auf der Datenquellen-Seite. Die MQTT-Topics je Gerät findest du in MQTT-Inbound. [Sensor-Referenz](SENSOR-REFERENZ.md)
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
