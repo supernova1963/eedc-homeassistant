@@ -269,6 +269,25 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
         [_mit_urteil(f) for f in alle_felder], parameter, "feld",
     )
 
+def feld_label_fuer_investition(inv, feld: str) -> str:
+    """Das Anzeige-Label eines Investitions-Feldes **an dieser Investition** (Päckchen R, Nachlauf N1).
+
+    `FELD_LABELS` ist flach über alle Typen: derselbe Feldname trägt je Typ verschiedene Labels (`ladung_kwh` am
+    Speicher «Ladung», an der Wallbox «Ladung gesamt»; `netzbezug_eigener_tarif_kwh` an der WP «…WP-Tarif», an der
+    Wallbox «…Wallbox-Tarif»), und dort gewinnt der letzte. Mit bekannter Investition kommt das Label deshalb aus
+    `get_alle_felder_fuer_investition(typ, parameter)` (dieselbe Quelle wie die Datenquellen-Fläche, `label_wenn`
+    aufgelöst), über `basis_feld_key` (Innengeräte-Kopien `…-3` heißen wie ihr Basisfeld); ohne Investition oder für
+    ein Feld, das der Typ nicht führt (Live-Felder, Altbestand), der Rückfall `FELD_LABELS.get(basis, feld)`.
+    """
+    from backend.core.field_definitions.karten import FELD_LABELS
+
+    basis = basis_feld_key(feld)
+    if inv is not None:
+        for f in get_alle_felder_fuer_investition(getattr(inv, "typ", None), getattr(inv, "parameter", None)):
+            if f.get("feld") == basis and f.get("label"):
+                return f["label"]
+    return FELD_LABELS.get(basis, feld)
+
 def get_basis_felder(
     hat_dynamischen_tarif: bool = False,
     aktive_inv_typen: Optional[set[str]] = None,

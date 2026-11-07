@@ -17,7 +17,7 @@
 
 **Daten-Checker: Heizen/Warmwasser zugeordnet, der Schalter aber aus.** Hast du an der Wärmepumpe „Strom Heizen“ oder „Strom Warmwasser“ zugeordnet und den Schalter „Getrennte Strommessung (Heizen / Warmwasser)“ nicht eingeschaltet, zählt eedc diese Zähler nicht als Aufteilung — Heizen bleibt leer, der ganze Strom steht unter „nicht aufgeteilt“. Der Daten-Checker sagt das jetzt und nennt den Weg: Einstellungen → Komponenten → deine Wärmepumpe → bearbeiten. [Handbuch Daten-Checker §4.3.7](HANDBUCH_DATEN_CHECKER.md#437-wärmepumpe)
 
-**Daten-Checker: Felder heißen wie an ihrem Gerät.** Die Meldung zur Langzeitstatistik nannte den WP-Tarif-Zähler einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“. Jetzt trägt jedes Feld den Namen, den es an seinem Gerät hat — an der Wärmepumpe „Netzbezug zum WP-Tarif“, an PV-Modulen „PV-Erzeugung“, wie auf der Datenquellen-Seite.
+**Daten-Checker: Felder heißen wie an ihrem Gerät.** Die Meldung zur Langzeitstatistik nannte den WP-Tarif-Zähler einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“. Jetzt trägt jedes Feld den Namen, den es an seinem Gerät hat — an der Wärmepumpe „Netzbezug zum WP-Tarif“, an PV-Modulen „PV-Erzeugung“, am Speicher „Ladung“ und „Netzladung“, wie auf der Datenquellen-Seite. Das gilt auch für die Meldungen zu Zählerstand-Rücksprüngen, zur Sensor-Einheit und für die Werkbank „Verwerfen vor Quellbeginn“.
 
 ## v4.2.2 — 6. November 2026
 

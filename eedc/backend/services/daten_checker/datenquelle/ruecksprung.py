@@ -117,7 +117,7 @@ class RuecksprungChecks:
             jetzt: Endzeitpunkt des Prüffensters. Default ist die Uhr; die
                 Naht existiert für die Proben (s. Kommentar im Rumpf).
         """
-        from backend.core.field_definitions import FELD_LABELS
+        from backend.core.field_definitions import FELD_LABELS, feld_label_fuer_investition
         from backend.models.investition import Investition as _Inv
         from backend.models.kanal import ART_SUM, FAMILIE_MITSCHRIFT, Kanal, KanalQuelle
         from backend.services.snapshot.reader import (
@@ -156,7 +156,7 @@ class RuecksprungChecks:
             if sensor_key.startswith("inv:"):
                 _, inv_id, feld = sensor_key.split(":", 2)
                 inv = invs_by_id.get(inv_id)
-                label = FELD_LABELS.get(feld, feld)
+                label = feld_label_fuer_investition(inv, feld)
                 return f"{inv.bezeichnung} – {label}" if inv else label
             feld = sensor_key.split(":", 1)[-1]
             return FELD_LABELS.get(feld, FELD_LABELS.get(f"{feld}_kwh", feld))

@@ -22,6 +22,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   einer Wärmepumpe „Netzbezug zum Wallbox-Tarif“; jetzt trägt jedes Feld das Label seines Gerätetyps — „Netzbezug zum
   WP-Tarif“ an der Wärmepumpe, und etwa „PV-Erzeugung“ an PV-Modulen wie auf der Datenquellen-Fläche (Melder ottokar, PN 7.11.2026).
 
+- **Daten-Checker und Werkbank: Feldnamen je Gerätetyp auch in Rückgang-, Einheiten- und Werkbank-Meldungen.** Wie schon in
+  der Langzeitstatistik-Meldung heißt ein Feld jetzt überall so wie an seinem Gerät — etwa „Ladung“ am Speicher statt
+  „Ladung gesamt“, „Netzladung“ statt „Heim: Netz“, „Netzbezug zum WP-Tarif“ an der Wärmepumpe —, auch in den Meldungen zum
+  Zählerstand-Rücksprung, zur falschen Sensor-Einheit, zu Sensoren ohne Langzeitstatistik und in der Werkbank „Verwerfen vor
+  Quellbeginn“.
+- **Komponenten-Hub: kein 404 in der Konsole beim Anlagenwechsel.** Beim Wechsel der Anlage fragte der Hub einmal den
+  Leer-Grund für ein Gerät der vorherigen Anlage ab; jetzt nur noch für Geräte der gewählten Anlage.
+
 ### Added
 
 - **Daten-Checker: „Strom Heizen/Warmwasser zugeordnet, aber ‚Getrennte Strommessung‘ ist aus“.** Sind an einer

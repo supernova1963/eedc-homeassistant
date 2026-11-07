@@ -8,6 +8,7 @@
  * Die alte ID `el:ueberblick-karte` gilt als «alle drei Karten geparkt».
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { useState } from 'react'
 import { screen, waitFor, fireEvent, within } from '@testing-library/react'
 
 vi.mock('../api/liveDashboard', () => ({
@@ -37,6 +38,7 @@ vi.mock('./komponentenAdapter', async (orig) => {
 })
 
 import { liveDashboardApi } from '../api/liveDashboard'
+import { investitionenApi } from '../api/investitionen'
 import KomponentenTypV4, { aktivAusDeepLink, geraetBloecke, geraetEinbettenZusatz, UEBERBLICK_TYPEN, VORANSTELLEN } from './KomponentenTypV4'
 import { BlockShell } from '../components/blocks'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
@@ -291,5 +293,30 @@ describe('Nachlauf 4.2.1 N5: Gerät in der Deep-Link-Adresse', () => {
     renderMitProvidern(<KomponentenTypV4 typ="wallbox" anlageId={1} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Schaubild: Fokus / Vollbild' }))
     expect(adresse()).toMatch(/#\/komponenten\/wallbox\?fokus=ueberblick%3Aschaubild$/)
+  })
+})
+
+/**
+ * Päckchen R N2 (Lab rc24/rc26: `GET …/hub-leer-grund/4/39` ⇒ 404, Investition 39 gehört zu Anlage 1): beim
+ * Anlagenwechsel rendert der Hub einmal mit der neuen `anlageId` und dem Gerät der alten Liste — der Leer-Grund darf
+ * dann nicht gefragt werden (die Frage wäre «Gerät der Anlage 1 in Anlage 4»).
+ */
+describe('Päckchen R N2: Leer-Grund nur für ein Gerät der gewählten Anlage', () => {
+  it('Anlagenwechsel: kein getHubLeerGrund(neue Anlage, altes Gerät)', async () => {
+    const spy = vi.spyOn(investitionenApi, 'getHubLeerGrund').mockResolvedValue({ leer: false } as never)
+    adapterGeraete.liste = [{ ...geraet(39, 'speicher'), monatswerte: 0 }]
+    window.location.hash = '#/komponenten/speicher'
+    function Umschalter() {
+      const [anlageId, setAnlageId] = useState(1)
+      return <><button onClick={() => setAnlageId(4)}>Anlage 4</button><KomponentenTypV4 typ="speicher" anlageId={anlageId} /></>
+    }
+    renderMitProvidern(<Umschalter />)
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(1, 39))
+    const neu = geraet(40, 'speicher')
+    adapterGeraete.liste = [{ ...neu, inv: { ...neu.inv, anlage_id: 4 }, monatswerte: 0 }]
+    fireEvent.click(screen.getByRole('button', { name: 'Anlage 4' }))
+    await waitFor(() => expect(spy).toHaveBeenCalledWith(4, 40))
+    expect(spy).not.toHaveBeenCalledWith(4, 39)
+    spy.mockRestore()
   })
 })

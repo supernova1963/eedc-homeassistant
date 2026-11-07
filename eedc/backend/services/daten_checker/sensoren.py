@@ -593,7 +593,7 @@ class SensorChecks:
         """
         from backend.core.field_definitions import (
             FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse,
-            get_alle_felder_fuer_investition, ist_stand_feld,
+            feld_label_fuer_investition, ist_stand_feld,
         )
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
@@ -633,14 +633,9 @@ class SensorChecks:
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
         heute = date.today()
         inv_aktiv = {str(i.id): i.ist_aktiv_an(heute) for i in (anlage.investitionen or [])}
-        # Feld-Label je Typ (R5, ottokar PN 7.11.2026): `FELD_LABELS` ist flach über alle Typen — derselbe Feldname
-        # trägt an Wärmepumpe und Wallbox verschiedene Labels («Netzbezug zum WP-Tarif» / «…Wallbox-Tarif»), der letzte
-        # gewann. Hier ist der Typ bekannt ⇒ das Label der Registry für DIESE Investition; verwaiste Mapping-Einträge
-        # (Investition gelöscht) behalten das flache.
-        feld_label_je_inv = {
-            str(i.id): {f["feld"]: f["label"] for f in get_alle_felder_fuer_investition(i.typ, i.parameter)}
-            for i in (anlage.investitionen or [])
-        }
+        # Feld-Label je Typ (R5, ottokar PN 7.11.2026): `feld_label_fuer_investition` — verwaiste Mapping-Einträge
+        # (Investition gelöscht) bekommen den Rückfall auf das flache Label.
+        inv_obj = {str(i.id): i for i in (anlage.investitionen or [])}
 
         for inv_id, inv_data in (mapping.get("investitionen") or {}).items():
             if not isinstance(inv_data, dict):
@@ -669,8 +664,7 @@ class SensorChecks:
                 # `field_definitions` nennt `FELD_EINHEITEN` dort namentlich als
                 # Leser, der auflösen muss. Dieser hier tat es als einziger nicht.
                 basis = basis_feld_key(feld)
-                feld_label = feld_label_je_inv.get(str(inv_id), {}).get(basis) or FELD_LABELS.get(basis, feld)
-                lbl = f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: {feld_label}"
+                lbl = f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: {feld_label_fuer_investition(inv_obj.get(str(inv_id)), feld)}"
                 if ist_stand_feld(basis):
                     # **VOR dem Counter-Zweig**, denn `zaehlerstand` steht in
                     # beiden Mengen — und der Counter-Zweig beantwortet den Fall
@@ -914,7 +908,7 @@ class SensorChecks:
         Gelesen wird `state_class` aus dem aktuellen State, derselbe Abruf wie die Einheit im Nachbarn
         `_check_sensor_mapping_einheit`.
         """
-        from backend.core.field_definitions import FELD_LABELS
+        from backend.core.field_definitions import feld_label_fuer_investition
         from backend.models.investition import Investition
         from backend.services.ha_state_service import get_ha_state_service
 
@@ -947,7 +941,7 @@ class SensorChecks:
         for inv, feld, eid in slots:
             if eid not in klassen or klassen[eid] == "measurement":
                 continue
-            je_geraet.setdefault(inv.id, (inv, []))[1].append(f"{FELD_LABELS.get(feld, feld)} ({eid})")
+            je_geraet.setdefault(inv.id, (inv, []))[1].append(f"{feld_label_fuer_investition(inv, feld)} ({eid})")
         return [_meldung_ohne_langzeitstatistik(kat, inv, betroffen) for inv, betroffen in je_geraet.values()]
 
     # ─── Sensor-Mapping-Einheit: Leistung ↔ Energie (#674 + #200) ────────
@@ -972,7 +966,7 @@ class SensorChecks:
         Live-Werte).
         """
         from backend.core.field_definitions import (
-            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse as _klasse,
+            FELD_EINHEITEN, FELD_LABELS, basis_feld_key, einheit_klasse as _klasse, feld_label_fuer_investition,
         )
         from backend.services.live_sensor_config import extract_live_config
 
@@ -980,6 +974,7 @@ class SensorChecks:
 
         mapping = anlage.sensor_mapping or {}
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
+        inv_obj = {str(i.id): i for i in (anlage.investitionen or [])}
 
         # Slots sammeln: (entity_id, label, erwartete_klasse) — nur Slots, deren
         # erwartete Einheit (aus FELD_EINHEITEN) Leistung oder Energie ist.
@@ -1009,7 +1004,7 @@ class SensorChecks:
         for inv_id, live in inv_live_map.items():
             name = inv_label.get(str(inv_id), f"Inv. {inv_id}")
             for key, eid in live.items():
-                _add(eid, key, f"{name}: {FELD_LABELS.get(basis_feld_key(key), key)} (Live)")
+                _add(eid, key, f"{name}: {feld_label_fuer_investition(inv_obj.get(str(inv_id)), key)} (Live)")
 
         # Basis-Zähler (mapping["basis"][mapping_key] = {strategie, sensor_id})
         for mk, m in (mapping.get("basis") or {}).items():
@@ -1024,7 +1019,7 @@ class SensorChecks:
             for feld, m in (inv_data.get("felder") or {}).items():
                 if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
                     _add(m["sensor_id"], feld,
-                         f"{name}: {FELD_LABELS.get(basis_feld_key(feld), feld)}")
+                         f"{name}: {feld_label_fuer_investition(inv_obj.get(str(inv_id)), feld)}")
 
         if not slots:
             return []

@@ -120,8 +120,9 @@ async def bestand_ziele(db: AsyncSession, anlage: Anlage, key: str) -> BestandZi
 
 
 def feld_label(key: str, invs: dict[int, Investition]) -> str:
-    """«Süddach · Erzeugung» bzw. «Anlage · Einspeisung» — der Name des Feldes für Vorschau und Auswahl."""
-    from backend.core.field_definitions import FELD_LABELS
+    """«Süddach · PV-Erzeugung» bzw. «Anlage · Einspeisung» — der Name des Feldes für Vorschau und Auswahl (Label je Gerätetyp,
+    `feld_label_fuer_investition`)."""
+    from backend.core.field_definitions import FELD_LABELS, feld_label_fuer_investition
 
     teile = key.split(":")
     feld = teile[-1]
@@ -129,7 +130,7 @@ def feld_label(key: str, invs: dict[int, Investition]) -> str:
         return f"Anlage · {FELD_LABELS.get(feld, feld)}"
     inv = invs.get(int(teile[1]))
     name = inv.bezeichnung if inv is not None else f"Gerät {teile[1]}"
-    return f"{name} · {FELD_LABELS.get(feld, feld)}"
+    return f"{name} · {feld_label_fuer_investition(inv, feld)}"
 
 
 async def _investitionen(db: AsyncSession, anlage_id: int) -> dict[int, Investition]:

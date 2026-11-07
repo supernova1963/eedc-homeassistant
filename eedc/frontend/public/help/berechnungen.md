@@ -4865,6 +4865,9 @@ die Stunde, bleibt der BKW-Wert (Lücke gedeckt); als Kind zählt nur ein am Tag
 Kinder beide in der Kurve (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). ⚠ **Anders als der Peak (N-775, unten)**, der bei voller
 Deckung die BKW-Entity gar nicht liest: hier bleibt bei BKW 0,9 und Kindern 0,4 + 0,4 der Rest 0,1 beim BKW (Summe 0,9), und
 eine Stunde, in der das BKW 0,0 meldet und kein Kind einen Wert hat, verliert den BKW-Key (Rest 0) — beides wie im Live-Pfad.
+Der technische Grund der Asymmetrie: der Tages-Peak summiert je Stunde die **Maxima** der Entities, und die Maxima verschiedener
+Entities fallen auf verschiedene Minuten — eine Differenz der Maxima wäre kein Rest; deshalb liest der Peak bei voller Deckung
+die BKW-Entity nicht (Entity-Regel), während Live und Kurve Werte derselben Stunde haben und den Rest bilden können (Werte-Regel).
 Code: `_bkw_abtretung`, `_bkw_rest_einsetzen`. Auch die Serienwahl
 `live_sensor_config.py::baue_investitions_serien` (Live-Kurve und LTS-Kurve) rechnet nicht: sie wählt je Investition
 die Serien, behält je Entity eine (#227, Wallbox vor E-Auto) und lässt bei einer am Tag in Betrieb befindlichen Wallbox

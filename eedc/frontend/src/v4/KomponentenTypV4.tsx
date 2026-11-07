@@ -940,8 +940,10 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
       {/* N-247: Ein Gerät ohne Monatszeilen füllt jeden Block mit Nullen. Der
           Grund dafür steht ÜBER den Blöcken, nicht in einem davon — er gilt für
           die ganze Sicht. Ihn holt der Server ({@link HubLeerGrund}), damit hier
-          keine zweite Wahrheit entsteht. */}
-      {g && g.monatswerte === 0 && anlageId != null && g.inv.id > 0 && (
+          keine zweite Wahrheit entsteht.
+          Päckchen R N2: beim Anlagenwechsel rendert der Hub einmal mit der neuen `anlageId` und dem Gerät der alten Liste
+          (Lab rc24/rc26: `hub-leer-grund/4/39` ⇒ 404, Investition 39 gehört zu Anlage 1) — gefragt wird nur ein Gerät DIESER Anlage. */}
+      {g && g.monatswerte === 0 && anlageId != null && g.inv.id > 0 && g.inv.anlage_id === anlageId && (
         <HubLeerGrund anlageId={anlageId} investitionId={g.inv.id} />
       )}
       {schaubildDeepLink && g
