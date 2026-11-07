@@ -174,7 +174,8 @@ def test_slug_doppel_setext_und_codezaun():
 
 
 def _neu_ohne_abschnitt(zeilen_) -> set[str]:
-    return set(gu.offene_schluessel({}, zeilen_)) - set(gu.baseline_lesen())
+    """Wie Wächter (a): echte Hand-Datei, echte Baseline."""
+    return set(gu.offene_schluessel(gu.hand_lesen(), zeilen_)) - set(gu.baseline_lesen())
 
 
 def test_e_kuenstlicher_sensor_wird_beim_namen_gemeldet(monkeypatch):

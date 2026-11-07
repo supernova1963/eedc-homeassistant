@@ -24,6 +24,435 @@ eingabefeld: {}
 
 monatsgroesse: {}
 
-kennwert: {}
+kennwert:
+  "autarkie":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "batterie_vollzyklen":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_tage_werte_symmetrie.py"
+  "boersenpreis_avg_cent":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+  "boersenpreis_min_cent":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_backfill_konsolidierung.py"
+  "co2_einsparung":
+    abschnitt: "BERECHNUNGEN.md#der-tageswert-trägt-nur-den-pv-anteil"
+    test: "backend/tests/test_co2_tages_bezugsgroesse.py"
+    backend_feld: "co2_pv_kg"
+    hinweis: "Monat aus `GET /api/cockpit/nachhaltigkeit/{id}` (`NachhaltigkeitMonat.co2_pv_kg`, nachgeschlagen in `createMonatsZeitreihe`), nicht aus `/monatsdaten/aggregiert`."
+  "defizit_kwh":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_rf73_tagesbilanz_lts_phasen.py"
+  "dienstliche_ladekosten":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_dienstliche_ladekosten_drei_sichten.py"
+  "direktverbrauch":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+    hinweis: "Der Tag rechnet Σ min(PV, Verbrauch) je Stunde (BERECHNUNGEN «Zählerlücken wie HA», Tagesbilanz aus den Stundenzeilen), der Monat die Formel aus den Monatssummen."
+  "eauto_fahrverbrauch":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "eauto_kwh_100km":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "eigenverbrauch":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "einspeise_erloes":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_finanz_aggregat_sot_326.py"
+  "einspeisung":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_aggregiert_monats_fakten.py"
+  "einspeisung_neg_preis_kwh":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_einspeise_erloes.py"
+  "emob_extern_euro":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "emob_extern_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "erzeuger:<id>":
+    abschnitt: "BERECHNUNGEN.md#ist-je-erzeuger-auf-tagesebene-ab-v409-350"
+    test: "backend/tests/test_erzeuger_kwh_je_tag_350.py"
+  "erzeugung":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "evQuote":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "ev_ersparnis":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
+    hinweis: "Den Monat rechnet der Client: `ev_ersparnis_euro` + `bkw_ersparnis_euro` (`types.ts::createMonatsZeitreihe`); der Tag kommt fertig aus `tage_werte.py::_geld_spalten`."
+  "gesamtverbrauch":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "negative_preis_stunden":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_einspeise_erloes.py"
+  "netto_ertrag":
+    abschnitt: "BERECHNUNGEN.md#die-ergebnis-leiter--monat-jahr-und-gesamt-aus-einer-rechnung-seit-03102026"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
+  "netzbezug":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "netzbezug_kosten":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
+    hinweis: "Der Tag ist die Σ der Stundenkosten (Slot-Preis), ohne Grundpreis."
+  "netzbezug_preis_cent":
+    abschnitt: "BERECHNUNGEN.md#dynamischer-tarif--monatlicher-ø-strompreis"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
+  "peak_einspeisung_kw":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_backfill_konsolidierung.py"
+  "peak_netzbezug_kw":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_backfill_konsolidierung.py"
+  "peak_pv_kw":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_backfill_konsolidierung.py"
+  "performance_ratio":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_388_wetter_altbestand.py"
+  "sonstiges_erzeugung":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_sonstiges_spalten_tag_und_monat.py"
+  "speicher_effizienz":
+    abschnitt: "BERECHNUNGEN.md#round-trip-wirkungsgrad-η--soc-korrigiert-nicht-roh"
+    test: "backend/tests/test_speicher_wirkungsgrad_symmetrie.py"
+    hinweis: "Den Monat rechnet der Client aus `speicher_ladung_kwh` und `speicher_entladung_kwh` (`lib/speicherWirkungsgrad.ts`, Spiegel des Layers); der Tag kommt fertig aus `tage_werte.py`."
+  "speicher_entladung":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "speicher_ladung":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "speicher_vollzyklen":
+    abschnitt: "BERECHNUNGEN.md#vollzyklen--eine-definition-für-alle-sichten"
+    test: "backend/tests/test_tage_werte_symmetrie.py"
+  "spezErtrag":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "frontend/src/lib/calculations.test.ts"
+    hinweis: "Den Monat rechnet der Client: `pv_erzeugung_kwh` ÷ `anlagen_kwp` (Rückfall `anlage.leistung_kwp`) über `calcSpezifischerErtrag`; der Tag kommt fertig aus `tage_werte.py::_energie_spalten`."
+  "temperatur_max_c":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_388_wetter_altbestand.py"
+  "temperatur_min_c":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_388_wetter_altbestand.py"
+  "ueberschuss_kwh":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_rf73_tagesbilanz_lts_phasen.py"
+  "ust_eigenverbrauch":
+    abschnitt: "BERECHNUNGEN.md#37-ust-auf-eigenverbrauch"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
+  "v2h_entladung":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wallbox_ladung":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wallbox_pv_anteil":
+    abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
+    hinweis: "Rechnet der Client: `wallbox_ladung_pv_kwh` ÷ `wallbox_ladung_kwh` × 100 (`types.ts::createMonatsZeitreihe`)."
+  "wallbox_pv_ladung":
+    abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_cop":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_soll_waerme_klima_w4_arbeitszahl_je_funktion.py"
+  "wp_heizstab":
+    abschnitt: "BERECHNUNGEN.md#35b-h-die-arbeitszahl-ohne-zusatzheizung--ausweis-zahl-neben-der-hauptzahl-p-433-3-25102026"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_jaz_heizen":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_soll_waerme_klima_w4_arbeitszahl_je_funktion.py"
+  "wp_jaz_kuehlen":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_soll_waerme_klima_w5_arbeitszahl_kuehlen.py"
+  "wp_jaz_warmwasser":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_soll_waerme_klima_w4_arbeitszahl_je_funktion.py"
+  "wp_kaelte":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_starts":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_strom_entfeuchten":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom_heizbetrieb":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom_heizen":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_strom_kuehlen":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom_lueften":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom_nicht_aufgeteilt":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_strom_warmwasser":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_strom_warmwasserbetrieb":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_tabellen_spalten.py"
+  "wp_waerme":
+    test: "backend/tests/test_tabellen_spalten.py"
+    hinweis: "Den Monat rechnet der Client: `wp_heizung_kwh` + `wp_warmwasser_kwh` (nur wenn beide gesetzt) — nicht nach Regel D1 (Gesamtwärme je Gerät vor Summanden); der Tag kommt nach D1 aus `waerme_verlauf.py`."
+  "wp_waerme_heizen":
+    abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_waerme_warmwasser":
+    abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
+    test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
 
-sensor: {}
+sensor:
+  "amortisation_jahre":
+    abschnitt: "BERECHNUNGEN.md#36-roi--amortisation"
+    test: "backend/tests/test_n352_ha_export_relevante_kosten_sot.py"
+  "anzahl_monate_erfasst":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "autarkie_prozent":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_cockpit_ha_export_aggregations_fenster.py"
+  "co2_ersparnis_kg":
+    abschnitt: "BERECHNUNGEN.md#monatliche-co2-berechnung"
+    test: "backend/tests/test_n659_bilanz_eine_fakten_menge.py"
+  "direktverbrauch_gesamt_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_cockpit_ha_export_aggregations_fenster.py"
+  "e_auto_ersparnis_vs_benzin_euro":
+    abschnitt: "BERECHNUNGEN.md#e-mob-ersparnis-im-cockpit"
+    test: "backend/tests/test_ha_export_multi_eauto.py"
+  "e_auto_pv_anteil_prozent":
+    abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
+    test: "backend/tests/test_ha_export_multi_eauto.py"
+  "e_auto_verbrauch_kwh_100km":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_n555_fahrverbrauch_bleibt_fahrverbrauch.py"
+  "eedc_abregelung_heute_kwh":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_arbitrage_vorschlag_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_fenster_rechner.py"
+  "eedc_bestes_fenster_ab":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_fenster_rechner.py"
+  "eedc_bezugspreis_jetzt_cent":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_eigenverbrauch_wert_cent":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_einspeiseverguetung_cent":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_einspeisung_unerwuenscht":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_grundlast_kw":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+    test: "backend/tests/test_395_export_haelften_grundlast.py"
+  "eedc_guenstige_stunde":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_netzbezug_spitze_heute_kw":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_preis_abstand_cent":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_abstand_prozent":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_aktuell_cent":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_guenstige_stunden_anzahl":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_guenstige_stunden_nacht":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_guenstige_stunden_tag":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_optimierter_durchschnitt_cent":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_rang":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_preis_tages_durchschnitt_cent":
+    abschnitt: "SENSOR-REFERENZ.md#börsenpreis-trigger-eedc_preis_"
+    test: "backend/tests/test_ha_export_preis_150.py"
+  "eedc_prognose_abweichung_heute_prozent":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_prognose_auffaellig":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_prognose_day_plus_1_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_ha_export_prognose_150.py"
+  "eedc_prognose_day_plus_2_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_ha_export_prognose_150.py"
+  "eedc_prognose_day_plus_3_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_ha_export_prognose_150.py"
+  "eedc_prognose_heute_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_ha_export_prognose_150.py"
+  "eedc_prognose_heute_nachmittag_kwh":
+    abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
+  "eedc_prognose_heute_vormittag_kwh":
+    abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
+  "eedc_prognose_morgen_nachmittag_kwh":
+    abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
+  "eedc_prognose_morgen_vormittag_kwh":
+    abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
+  "eedc_prognose_rest_today_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_ha_export_prognose_150.py"
+  "eedc_speicher_leer_um_ts":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_speicher_netzladen_kosten_cent":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_speicher_reicht_bis_mitternacht":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_speicher_soc_prozent":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_speicher_strom_kosten_cent":
+    abschnitt: "BERECHNUNGEN.md#preis--und-speicher-sensoren-des-ha-exports-stufe-3b"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_speicher_voll":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_speicher_voll_um":
+    abschnitt: "SENSOR-REFERENZ.md#pv-prognose-sensoren-eedc_prognose_"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_speicher_voll_um_ts":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s3b_preise_speicher_sensoren.py"
+  "eedc_ueberschuss_heute_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_ueberschuss_jetzt_kw":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_ueberschuss_prognose_heute_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_ueberschuss_verfuegbar":
+    abschnitt: "SENSOR-REFERENZ.md#steuerungshilfen--die-gruppe-für-automationen-neu"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_verbrauchsprognose_heute_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+    test: "backend/tests/test_s2_entscheidungs_sensoren.py"
+  "eedc_verbrauchsprognose_morgen_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+    test: "backend/tests/test_n591_verbrauchsprognose_morgen.py"
+  "eigenverbrauch_ersparnis_euro":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_n659_bilanz_eine_fakten_menge.py"
+  "eigenverbrauch_gesamt_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_cockpit_ha_export_aggregations_fenster.py"
+  "eigenverbrauch_quote_prozent":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_co2_bilanz_ha_export_symmetrie.py"
+  "einspeise_erloes_euro":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_finanz_aggregat_sot_326.py"
+  "einspeisung_gesamt_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "gesamtverbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_ha_export_eigenverbrauch_imd_304.py"
+  "investition_gesamt_euro":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "jahres_ersparnis_euro":
+    abschnitt: "BERECHNUNGEN.md#36-roi--amortisation"
+    test: "backend/tests/test_ha_export_alternativkosten.py"
+  "letzter_import_jahr":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "letzter_import_monat":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "letzter_import_monat_name":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "netto_ertrag_euro":
+    abschnitt: "BERECHNUNGEN.md#die-ergebnis-leiter--monat-jahr-und-gesamt-aus-einer-rechnung-seit-03102026"
+    test: "backend/tests/test_netto_ertrag_vier_wege_symmetrie.py"
+  "netzbezug_gesamt_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#anlage-weite-sensoren"
+  "pv_erzeugung_gesamt_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_n659_bilanz_eine_fakten_menge.py"
+  "roi_prozent":
+    abschnitt: "BERECHNUNGEN.md#36-roi--amortisation"
+    test: "backend/tests/test_n352_ha_export_relevante_kosten_sot.py"
+  "sonstiges_fenster_ab":
+    abschnitt: "SENSOR-REFERENZ.md#stufe-3-je-gerät--fenster-mit-betrag"
+  "sonstiges_verbrauch_monat_kwh":
+    abschnitt: "SENSOR-REFERENZ.md#stufe-3-je-gerät--fenster-mit-betrag"
+    test: "backend/tests/test_s3_geraete_fenster.py"
+  "speicher_effizienz_prozent":
+    abschnitt: "BERECHNUNGEN.md#round-trip-wirkungsgrad-η--soc-korrigiert-nicht-roh"
+    test: "backend/tests/test_n252_speicher_wirkungsgrad_deckung.py"
+  "speicher_zyklen":
+    abschnitt: "BERECHNUNGEN.md#vollzyklen--eine-definition-für-alle-sichten"
+    test: "backend/tests/test_speicher_zyklen_kapazitaets_basis.py"
+  "spezifischer_ertrag_kwh_kwp":
+    abschnitt: "BERECHNUNGEN.md#dieselbe-abtretung-gilt-für-die-wirtschaftlichkeit-ab-v4019-f-33381"
+    test: "backend/tests/test_n621_bkw_anteil_am_anlagenwert.py"
+  "wp_betriebsmodus":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_398_betriebsmodus_live.py"
+  "wp_cop_durchschnitt":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_n391_gesamtwaerme.py"
+  "wp_ersparnis_euro":
+    abschnitt: "BERECHNUNGEN.md#wp-ersparnis-im-cockpit--σ-der-gerätezeilen-je-monat"
+    test: "backend/tests/test_n609_wp_ersparnis_je_geraet.py"
+  "wp_heizfenster_stunden":
+    abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
+    test: "backend/tests/test_rf75_ha_export_phasen.py"
+  "wp_kuehlfenster_ab":
+    abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
+    test: "backend/tests/test_s3_geraete_fenster.py"
+  "wp_strom_heizen_modus_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_ha_export_betriebsart_gemessen_f56.py"
+  "wp_strom_kuehlen_modus_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_ha_export_betriebsart_gemessen_f56.py"
+  "wp_strom_warmwasser_modus_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_n727_ha_export_wp_modus_kanal.py"
+  "wp_warmwasser_fenster_ab":
+    abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
+    test: "backend/tests/test_s3_geraete_fenster.py"
+  "wp_warmwasserbetrieb":
+    abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
+    test: "backend/tests/test_s3_geraete_fenster.py"

@@ -54,7 +54,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   (`./scripts/groessen-uebersicht.sh`), Hand-Datei `groessen_hand.yaml` für Regel-Abschnitt und Test, Wächter
   `test_groessen_uebersicht.py` (Datei aktuell, Hand-Datei gültig, Baseline nur schrumpfend, Anker-Probe aller Verweise auf
   BERECHNUNGEN und SENSOR-REFERENZ). Zwei tote Anker repariert (WAS-IST-NEU → §4.1c, Handbuch Prognosen →
-  Backward-Slot-Konvention). Neu in der In-App-Hilfe und auf der Website unter Referenz bzw. Dokumentation.
+  Backward-Slot-Konvention). Neu in der In-App-Hilfe und auf der Website unter Referenz bzw. Dokumentation; Kennwerte und
+  Export-Sensoren mit Regel-Abschnitt und Test verknüpft (U2).
 
 ## [4.2.2] - 2026-11-06
 
