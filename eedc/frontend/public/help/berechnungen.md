@@ -2031,6 +2031,7 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 >                                                                            genau 25 % fragt nicht)
 > Modus-Teilmengen (Warnung): Σ modus_strom_* > get_wp_strom_kwh + 0,5 kWh (#263 K-2)
 > Wärme-Teile   (Warnung) : Heizwärme (D1-Weiche) + Warmwasser-Wärme > waerme_kwh + 0,5 kWh (N-391)
+> Wärme 0 neben Achsen (Warnung): waerme_kwh = 0 (gemessen) und Heizwärme (D1-Weiche) + Warmwasser-Wärme > 0,5 kWh
 > ```
 >
 > Die Rest-Frage ist **kein Fehler** — Standby, Steuerung und Umwälzpumpen laufen auf keiner Achse;
@@ -2065,6 +2066,12 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > Wärme_kWh = waerme_kwh            , wenn gepflegt        (EIN gemeinsamer Wärmemengenzähler)
 >           = heizenergie_kwh + warmwasser_kwh, sonst      (getrennte Zähler)
 > ```
+>
+> **„Gepflegt" heißt > 0** (Entscheid 8.11.2026, bewusste Ausnahme von der 0-Regel): Eine gemessene 0 des Gesamtzählers
+> gilt nicht als Gesamtwert, die Achsen zählen — ein Zähler ohne neuen Stand im Zeitraum (eingefroren, Statistik-Lücke, erst
+> seit kurzem zugeordnet) ergibt Δ = 0, und die Achsen tragen dann die bessere Zahl. Dieselbe Weiche in Monat, Tag, Stunde
+> (`geraete_mit_gesamtwaerme`) und laufendem Monat; der Daten-Checker meldet den Fall (Meldung „‚Wärme gesamt‘ ist 0, Heizwärme +
+> Warmwasser-Wärme sind größer“, Warnung). Festgeschrieben in `test_n391_gesamtwaerme.py::test_k13_gemessene_null_ist_kein_gesamtwert`.
 >
 > ⚠ **Die vier zuletzt genannten standen bis zum 14.09.2026 nicht in dieser Liste — und lasen die
 > Regel auch nicht** (N-391c). An einem Gerät mit gemeinsamem Wärmemengenzähler war die thermische

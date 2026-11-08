@@ -44,9 +44,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **HA-Export: die Beschreibung des Sensors „Warmwasserbetrieb“ stimmt.** In den Export-Einstellungen und im Attribut
   `formel` stand „Betriebsmodus der letzten vollen Stunde“; der Sensor folgt aber dem live gelesenen Betriebsmodus
   (höchstens 60 s alt). Der Text sagt das jetzt; am Sensor selbst ändert sich nichts.
+- **Sensor-Referenz: zwei Aussagen richtiggestellt.** Für Vormittag/Nachmittag gibt es vier eigene PV-Prognose-Sensoren
+  (Grenze am Solar Noon) — die Referenz behauptete, es gebe sie nicht; der Weg über `stundenprofil_kwh` bleibt für eine andere
+  Grenze. Und der Hinweis an der Ladeleistung des E-Autos sagt jetzt, was eedc tut: Mit einer Wallbox mit eigenem
+  Leistungssensor zählt die Ladeleistung einmal, an der Wallbox; nur wenn beide Werte über MQTT kommen, steht sie im
+  Tagesverlauf doppelt — dann das Feld am Auto leer lassen.
+- **Feld-Hinweise ausführlicher und richtig.** Die Hinweise unter den Eingabefeldern (Monatsabschluss, Datenquellen)
+  sagen jetzt, was bisher nur in der Sensor-Referenz stand: Wetterwerte holt eedc in Deutschland von Bright Sky (DWD),
+  sonst von Open-Meteo, und nur in ein leeres Feld; die Speicher-Ladung schließt die Netzladung ein; den Ø-Ladepreis
+  schlägt der Monatsabschluss vor (überschreibbar); der Strompreis-Sensor darf auch €/MWh liefern; der Netz-Kombi-Sensor
+  ersetzt nicht die kWh-Zähler; Vorlauf und Rücklauf bekommen über MQTT Stundenmittel ab der Zuordnung; eine Zusatzheizung
+  über 0 W zeigt „Zusatzheizung aktiv“; ein sonstiger Erzeuger zählt wie PV in Eigenverbrauch und Autarkie. Die Kästen
+  „Aus der früheren Spalte Beschreibung“ in der Sensor-Referenz entfallen damit.
 
 ### Added
 
+- **Daten-Checker: „Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer.** Steht in einem Monat unter „Wärme
+  gesamt“ eine 0, während die beiden Einzelwerte Wärme tragen, rechnet eedc mit den Einzelwerten — bisher ohne es zu sagen.
+  Jetzt nennt der Daten-Checker die Monate; meist hat der Wärmemengenzähler im Monat keinen neuen Stand geliefert.
 - **Daten-Checker: „Strom Heizen/Warmwasser zugeordnet, aber ‚Getrennte Strommessung‘ ist aus“.** Sind an einer
   Wärmepumpe die Zähler für Heizen oder Warmwasser zugeordnet, der Schalter „Getrennte Strommessung“ aber aus, zählt eedc
   sie nicht als Aufteilung — Heizen bleibt leer, der ganze Strom steht unter „nicht aufgeteilt“. Der Daten-Checker sagt das

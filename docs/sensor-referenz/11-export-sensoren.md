@@ -153,7 +153,7 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 
 <!-- erzeugt: export-sensoren kategorie=prognose -->
 
-> **Vormittag/Nachmittag:** eigene VM/NM-Sensoren gibt es bewusst nicht — beides ist per HA-Template direkt aus `stundenprofil_kwh` ableitbar (z. B. `{{ state_attr('sensor.…_day_plus_1_kwh', 'stundenprofil_kwh')[:13] | sum }}` für die Stunden bis 12 Uhr).
+> **Vormittag/Nachmittag:** die vier Sensoren `eedc_prognose_heute_vormittag_kwh`, `…_heute_nachmittag_kwh`, `…_morgen_vormittag_kwh` und `…_morgen_nachmittag_kwh` teilen den Tag am **Solar Noon**; die Grenze steht im Attribut `solar_noon`. Wer eine andere Grenze braucht, leitet sie per HA-Template aus dem Attribut `stundenprofil_kwh` ab — es hängt an `eedc_prognose_heute_kwh` und an den Tagesprognosen morgen bis in 3 Tagen; Eintrag *N* ist die Energie der Stunde, die um *N* Uhr endet (z. B. `{{ state_attr('sensor.…_day_plus_1_kwh', 'stundenprofil_kwh')[:13] | sum }}` für die Stunden bis 12 Uhr).
 
 ### Börsenpreis-Trigger (`eedc_preis_*`)
 

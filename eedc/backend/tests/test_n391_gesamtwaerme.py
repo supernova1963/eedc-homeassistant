@@ -62,6 +62,9 @@ from backend.api.routes.import_export.csv_operations import (
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     GRUND_WAERME_NICHT_JE_FUNKTION,
+    geraete_mit_gesamtwaerme,
+    waerme_gesamt_je_geraet,
+    waerme_gesamt_kwh,
 )
 from backend.core.field_definitions import (
     BEDARF_GRUPPEN_ALTERNATIV,
@@ -561,3 +564,21 @@ def test_k12b_die_gruppen_menge_sagt_es_einmal():
     )
     assert get_feld_bedarf("waermepumpe", "waerme_kwh")[1] == "wp_waerme"
     assert get_feld_bedarf("waermepumpe", "heizenergie_kwh")[1] == "wp_waerme"
+
+
+def test_k13_gemessene_null_ist_kein_gesamtwert():
+    """D1 «gepflegt» heißt > 0: eine gemessene 0 von «Wärme gesamt» gilt nicht als Gesamtwert, die Achsen zählen.
+
+    Festschreibung eines Entscheids (Master, 8.11.2026, Päckchen T), kein Wächter. Grund: ein Gesamtzähler, der im
+    Monat oder am Tag keinen neuen Stand liefert (eingefroren, Statistik-Lücke, erst seit kurzem zugeordnet), ergibt
+    Δ = 0 — die Achsen tragen dann die bessere Zahl; sonst verlöre ein Gerät seine Aufteilung an einen Zähler, der
+    nichts gemeldet hat ({@link geraete_mit_gesamtwaerme}). Der umgekehrte Fall (0 richtig, Achsen falsch) hieße, zwei
+    Zähler messen dieselbe Wärme falsch — das entscheidet kein Programm. Die Lücke schließt der Daten-Checker
+    («„Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer», `test_rf50_checker_export_jahr_phasen.py`).
+    Dieselbe Weiche an fünf Stellen: Monat, Tag, Stunde, laufender Monat, Checker.
+    """
+    assert waerme_gesamt_kwh(0.0, 20, 5) == 25
+    assert waerme_gesamt_kwh(0.0, None, None) == 0.0
+    assert waerme_gesamt_kwh(None, None, None) == 0.0
+    assert geraete_mit_gesamtwaerme({"1": 0.0, "2": 30}) == frozenset({"2"})
+    assert waerme_gesamt_je_geraet({"1": 0.0}, {"1": 20}, {"1": 5}) == {"1": 25}

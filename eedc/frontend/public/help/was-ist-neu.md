@@ -25,6 +25,8 @@
 
 **Sensor-Referenz vollständig.** Die Tabellen der Sensor-Referenz — welche Felder du zuordnen kannst und welche Sensoren eedc an Home Assistant meldet — kommen jetzt ebenfalls aus dem Programm: jedes Feld und jeder Export-Sensor steht darin, mit demselben Hinweis und derselben Liste „ausgewertet in“ wie auf der Datenquellen-Seite. Die MQTT-Topics je Gerät findest du in MQTT-Inbound. [Sensor-Referenz](SENSOR-REFERENZ.md)
 
+**Feld-Hinweise und Daten-Checker: genauer, was eedc mit deinen Werten tut.** Die Hinweise unter den Eingabefeldern sagen jetzt mehr: Wetterwerte holt eedc in Deutschland von Bright Sky (DWD), sonst von Open-Meteo, und nur in ein leeres Feld; die Speicher-Ladung schließt die Netzladung ein; den Ø-Ladepreis schlägt der Monatsabschluss vor; an der Ladeleistung des E-Autos steht, wann du das Feld neben einer Wallbox besser leer lässt. Steht unter „Wärme gesamt“ einer Wärmepumpe eine 0, während Heizwärme und Warmwasser-Wärme Werte tragen, meldet der Daten-Checker das jetzt — eedc rechnet dann mit den Einzelwerten, und meist hat der Wärmemengenzähler im Monat nichts geliefert. In der Sensor-Referenz sind zwei Aussagen richtiggestellt (Vormittag/Nachmittag-Prognose, E-Auto-Ladeleistung). [Sensor-Referenz](SENSOR-REFERENZ.md)
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)

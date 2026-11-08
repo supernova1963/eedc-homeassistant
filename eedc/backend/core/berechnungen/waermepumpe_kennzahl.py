@@ -120,6 +120,10 @@ def waerme_gesamt_kwh(
     Liegt eine gemessene Gesamtwärme vor, gilt sie. Sonst ist die Wärme die
     Summe ihrer beiden Achsen.
 
+    ⚠ **Gepflegt heißt > 0:** eine gemessene 0 gilt nicht als Gesamtwert —
+    Begründung {@link geraete_mit_gesamtwaerme}; bewusste Ausnahme von der
+    0-Regel, Entscheid 8.11.2026 (der Daten-Checker meldet den Fall).
+
     ⭐ **Warum das eine Funktion ist:** Die Regel stand im Layer
     (`imd_monatsaggregat`) **und** im Client (`v4/TagKomponenten.tsx:89`, dort
     seit der ersten Fassung der Datei). Der Client hatte nur die zweite Hälfte —

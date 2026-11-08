@@ -121,6 +121,44 @@ def test_rf50_gesamtwaerme_unter_den_achsen_und_toleranz():
     assert w[0].link is not None and w[0].investition_id == 7
 
 
+_WAERME_NULL = "„Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer"
+
+
+def test_t_gesamtwaerme_null_neben_achsen_eigene_warnung():
+    """Päckchen T: «Wärme gesamt» = gemessene 0 bei 800 + 300 ⇒ genau eine eigene Warnung, der Zwilling schweigt
+    (dessen Details sagen «eedc rechnet mit der Gesamtwärme» — bei 0 rechnet eedc nach D1 mit den Achsen)."""
+    erg = _pruefe(LW_GESAMT, {(2025, 3): {"stromverbrauch_kwh": 300.0, "waerme_kwh": 0.0,
+                                          "heizenergie_kwh": 800.0, "warmwasser_kwh": 300.0}})
+    w = _meldungen(erg, _WAERME_NULL)
+    assert len(w) == 1 and w[0].meldung.endswith("(03/2025)") and w[0].schwere == CheckSeverity.WARNING
+    assert w[0].link is not None and w[0].investition_id == 7
+    assert "mit den beiden Einzelwerten" in w[0].details
+    assert _meldungen(erg, "Gesamtwärme kleiner als Heizwärme + Warmwasser-Wärme") == []
+
+
+def test_t_gesamtwaerme_null_ohne_achsen_still():
+    """Gesamt 0, Achsen 0 bzw. None ⇒ still (kein Widerspruch, eine echte Null)."""
+    erg = _pruefe(LW_GESAMT, {
+        (2025, 3): {"stromverbrauch_kwh": 300.0, "waerme_kwh": 0.0, "heizenergie_kwh": 0.0, "warmwasser_kwh": 0.0},
+        (2025, 4): {"stromverbrauch_kwh": 300.0, "waerme_kwh": 0.0},
+    })
+    assert _meldungen(erg, _WAERME_NULL) == []
+
+
+def test_t_gesamtwaerme_none_neben_achsen_still():
+    """Gesamt None (kein Wert) neben Achsen > 0 ⇒ still: getrennte Zähler sind der Normalfall."""
+    erg = _pruefe(LW_GESAMT, {(2025, 3): {"stromverbrauch_kwh": 300.0, "heizenergie_kwh": 800.0,
+                                          "warmwasser_kwh": 300.0}})
+    assert _meldungen(erg, _WAERME_NULL) == []
+
+
+def test_t_gesamtwaerme_null_unter_der_toleranz_still():
+    """Gesamt 0, Achsen zusammen 0,4 kWh ≤ 0,5 ⇒ still (Toleranz wie beim Zwilling)."""
+    erg = _pruefe(LW_GESAMT, {(2025, 3): {"stromverbrauch_kwh": 300.0, "waerme_kwh": 0.0,
+                                          "heizenergie_kwh": 0.3, "warmwasser_kwh": 0.1}})
+    assert _meldungen(erg, _WAERME_NULL) == []
+
+
 def test_rf50_modus_widerspruch_mit_toleranz():
     """Σ Modus-Strom 300,6 > 300 + 0,5 ⇒ Warnung; 300,5 ⇒ still."""
     erg = _pruefe(LW_GESAMT, {

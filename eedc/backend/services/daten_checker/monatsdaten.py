@@ -801,7 +801,8 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 
         **Phasenform (RF-50, 5.11.2026, Bauform RF-1):** Kopf (erwartete Monate, Registry-Antworten B2, `imd_map`) ·
         `_wp_modus_widerspruch` (#263 K-2: Σ Betriebsart-Strom > Gesamtstrom) · `_wp_waerme_widerspruch` (N-391:
-        Gesamtwärme < Heizwärme + Warmwasser-Wärme) · `_wp_gesamtzaehler_achsen` (WK-16d: Gesamtzähler < Σ Achsen,
+        Gesamtwärme < Heizwärme + Warmwasser-Wärme) · `_wp_waerme_gesamt_null` (Päckchen T: «Wärme gesamt» = gemessene 0
+        neben Achsen > 0,5 kWh) · `_wp_gesamtzaehler_achsen` (WK-16d: Gesamtzähler < Σ Achsen,
         Rest > 25 %; N-578-Handgriff) · `_wp_fehlende_monate` (fehlende Strom-/Wärme-Monate je Messmodus, OK-Zeile).
         Die Reihenfolge der Aufrufe ist die Reihenfolge der Meldungen.
         """
@@ -849,6 +850,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         )
         self._wp_modus_widerspruch(ctx)
         self._wp_waerme_widerspruch(ctx)
+        self._wp_waerme_gesamt_null(ctx)
         self._wp_gesamtzaehler_achsen(ctx)
         self._wp_fehlende_monate(ctx)
         return ergebnisse
@@ -966,6 +968,50 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 link=link_monat_erfassen(waerme_widerspruch[0]),
                 investition_id=inv.id,
             ))
+
+    @staticmethod
+    def _wp_waerme_gesamt_null(ctx: _WpMonatsKontext) -> None:
+        """«Wärme gesamt» = gemessene 0 neben Heizwärme (D1-Weiche) + Warmwasser-Wärme > 0,5 kWh ⇒ eine Warnung mit der Monatsliste.
+
+        Zwilling von `_wp_waerme_widerspruch`, der genau bei 0 schweigt (``if not _gesamt_waerme``). D1 wertet eine gemessene
+        0 bewusst nicht als Gesamtwert und rechnet mit den Achsen (`waerme_gesamt_kwh`, `geraete_mit_gesamtwaerme`;
+        Entscheid 8.11.2026, Layer unverändert): ein Gesamtzähler ohne neuen Stand im Monat (eingefroren, Statistik-Lücke, erst
+        seit kurzem zugeordnet) ergibt Δ = 0, die Achsen tragen dann die bessere Zahl. Die Meldung sagt dem Anwender, dass
+        sein Gesamtzähler im Monat nichts geliefert hat — eigene Meldung, weil die Details des Zwillings («eedc rechnet mit
+        der Gesamtwärme») bei 0 nicht stimmen. ``None`` (kein Wert) bleibt still; Toleranz 0,5 kWh wie beim Zwilling.
+        """
+        inv, name, param, ergebnisse, kat, imd_map = ctx.inv, ctx.name, ctx.param, ctx.ergebnisse, ctx.kat, ctx.imd_map
+        null_monate: list[str] = []
+        for (jahr, monat), daten in sorted(imd_map.items()):
+            _gesamt_waerme = daten.get("waerme_kwh")
+            if _gesamt_waerme is None or float(_gesamt_waerme) != 0.0:
+                continue
+            _teile = ((heizwaerme_kwh(daten) or 0.0)
+                      + get_wp_warmwasser_kwh(daten, param))
+            if _teile > 0.5:
+                null_monate.append(f"{monat:02d}/{jahr}")
+        if not null_monate:
+            return
+        _monate = ", ".join(null_monate[:6])
+        if len(null_monate) > 6:
+            _monate += f" … (+{len(null_monate) - 6})"
+        ergebnisse.append(CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING,
+            meldung=(
+                f"{name}: „Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer ({_monate})"
+            ),
+            details=(
+                "In diesen Monaten steht unter „Wärme gesamt“ eine 0, während Heizwärme und "
+                "Warmwasser-Wärme Werte tragen. eedc rechnet hier mit den beiden Einzelwerten. "
+                "Häufigster Grund: Der Wärmemengenzähler hat im Monat keinen neuen Stand geliefert "
+                "(keine Statistik in Home Assistant, eingefroren oder erst seit kurzem zugeordnet). "
+                "Prüf bitte im Monatsabschluss, ob der Zähler Werte liefert: Misst EIN Zähler Heizung "
+                "und Warmwasser zusammen, gehört sein Monatswert unter „Wärme gesamt“; mit getrennten "
+                "Zählern bleibt das Feld leer."
+            ),
+            link=link_monat_erfassen(null_monate[0]),
+            investition_id=inv.id,
+        ))
 
     @staticmethod
     def _wp_gesamtzaehler_achsen(ctx: _WpMonatsKontext) -> None:

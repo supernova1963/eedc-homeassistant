@@ -6,25 +6,9 @@
 
 <!-- erzeugt: eingabefelder typ=wallbox liste=monat -->
 
-> **Aus der früheren Spalte „Beschreibung"** — was die Hinweise der Tabelle (noch) nicht sagen:
->
-> - `ladung_kwh`: Gesamte von der Wallbox abgegebene Ladeenergie im Monat. evcc über MQTT: das Gateway-Preset „evcc Ladepunkt" legt `chargeTotalImport` (kWh-Zählerstand, nur mit Lademeter) unter `energy/` ab ([MQTT-Inbound](MQTT_INBOUND.md)). *Preset ab der nächsten Version.*
-
 ### Live-Dashboard
 
 <!-- erzeugt: eingabefelder typ=wallbox liste=live -->
-
-> **Aus der früheren Spalte „Beschreibung"** — was die Hinweise der Tabelle (noch) nicht sagen:
->
-> - `ladezustand`: `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler`; SMA `smaev`-Werte, über MQTT die go-e-Codes 0–5 ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Chip im Überblick und an der Energiefluss-Kachel; **stündlich mitgeschrieben** (Karte „Betrieb heute" mit „Ladevorgänge heute", ab Zuordnung; ohne Ladezustand aus den drei evcc-Feldern verschränkt). *Ab der nächsten Version.*
-> - `fahrzeug_am_ladepunkt`: Fahrzeugname der Steuerung (evcc `select.…_vehicle_name`, openWB). Treffer mit der „Kennung in der Steuerung" eines E-Autos ⇒ genau dieses Auto; leer bei angestecktem Fahrzeug ⇒ „Gastfahrzeug"; fremder Name ⇒ „Fahrzeug der Steuerung unbekannt" + Daten-Checker ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). Kein Kanon, keine Werte-Tabelle. *Ab der nächsten Version.*
-> - `sitzung_kwh`: Seit dem Anstecken geladen. ⚠ SMA/go-e/evcc-MQTT liefern Wh — eedc rechnet nicht um (das Gateway-Preset „evcc Ladepunkt" setzt Faktor 0,001, [MQTT-Inbound](MQTT_INBOUND.md)). *Ab der nächsten Version.*
-> - `evcc_verbunden`: `an` · `aus` (HA `binary_sensor.evcc_…_connected` on/off, MQTT `connected` true/false, über MQTT auch 1/0). Nur nötig ohne Ladezustand-Sensor: mit „evcc: lädt" und „evcc: Laden freigegeben" setzt eedc den Ladezustand zusammen; ein gemessener Ladezustand geht vor ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)). *Ab der nächsten Version.*
-> - `ziel_ladestand_prozent`: Ladelimit der Steuerung (evcc `effective_limit_soc`). *Ab der nächsten Version.*
-> - `restzeit_min`: ⚠ evcc meldet Sekunden — Anzeigeeinheit in HA auf Minuten stellen (das Gateway-Preset „evcc Ladepunkt" setzt Faktor 1/60). *Ab der nächsten Version.*
-> - `lademodus`: `aus` · `pv` · `smart` · `schnell` · `plan` · `eco`; evcc `select.…_mode`, SMA. *Ab der nächsten Version.*
-> - `evcc_laedt`: `an` · `aus` (HA `binary_sensor.evcc_…_charging`, MQTT `charging`). Teil von Option A — ohne dieses Feld nie „Lädt". *Ab der nächsten Version.*
-> - `evcc_freigegeben`: `an` · `aus` (HA `binary_sensor.evcc_…_enabled`, MQTT `enabled`). Verbunden, aber nicht freigegeben ⇒ „Wartet"; ohne dieses Feld nie „Wartet". *Ab der nächsten Version.*
 
 ### MQTT Energy Topics
 

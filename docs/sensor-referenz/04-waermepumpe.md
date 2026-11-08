@@ -4,25 +4,9 @@
 
 <!-- erzeugt: eingabefelder typ=waermepumpe liste=monat merkmal=!je_innengeraet -->
 
-> **Aus der früheren Spalte „Beschreibung"** — was die Hinweise der Tabelle (noch) nicht sagen:
->
-> - `stromverbrauch_kwh`: Gesamter elektrischer Energieverbrauch der WP im Monat. Bei getrennter Messung zählt er, solange nicht **beide** getrennten Werte vorliegen — erst dann ist ihre Summe der Verbrauch des Geräts und dieser Zähler wird verworfen (sonst zählte derselbe Strom zweimal).
-> - `heizenergie_kwh`: Bereitgestellte Wärmeenergie (thermisch, **nicht** Strom). Für JAZ-Berechnung: `heizenergie / stromverbrauch`. Kann alternativ via JAZ-Strategie aus Strom × JAZ berechnet werden.
-> - `warmwasser_kwh`: Bereitgestellte Warmwasserenergie (thermisch). Optional.
-> - `waerme_kwh`: **Seit v4.0.45 (N-391).** Abgegebene Wärme **gesamt** (thermisch) — für **EINEN** Wärmemengenzähler, der Heizung und Warmwasser zusammen misst (der Regelfall bei Umschaltventil auf den Speicher). Mit **getrennten** Zählern bleibt das Feld leer. ⚠️ **Ein gepflegter Gesamtwert gilt vor den beiden Einzelwerten** (`heizenergie_kwh` + `warmwasser_kwh`): Er ist die Wärme des Geräts, die Aufteilung steht daneben. Wo er die Wärme trägt, gibt es **keine** Arbeitszahl je Funktion — die Zeilen *Heizen* und *Warmwasser* nennen dann den Grund „Wärme nicht je Funktion gemessen".
-> - `heizstab_strom_kwh`: Optional, an jeder Wärmepumpe. Strom des Heizstabs **hinter** dem WP-Zähler (eine Teilmenge des Stromverbrauchs, nie dazugezählt). Trägt allein die Zahl „AZ ohne Zusatzheizung“ neben der Arbeitszahl (Heizstab mit Wirkungsgrad 1 aus Wärme und Strom herausgerechnet); ändert weder Strom, Wärme, Ersparnis, CO₂ noch HA-Sensoren. Ein Heizstab mit eigenem Zähler am Hausnetz gehört unter *Sonstiges*. Nur aus einem Zähler, nie aus der Leistung.
-
 ### Live-Dashboard
 
 <!-- erzeugt: eingabefelder typ=waermepumpe liste=live -->
-
-> **Aus der früheren Spalte „Beschreibung"** — was die Hinweise der Tabelle (noch) nicht sagen:
->
-> - `warmwasser_temperatur_c`: Aktuelle Warmwassertemperatur. Optional, wird als Gauge angezeigt; im Überblick des Wärmepumpen-Hubs je Gerät.
-> - `vorlauf_temperatur_c`: Vorlauftemperatur des Heizkreises. Optional, reine Anzeige (Kachel und Karte im Überblick, je Gerät). Mit `state_class: measurement` in Home Assistant entstehen daraus stündliche Mittelwerte — rückwirkend, so weit HAs Langzeitstatistik reicht; über MQTT aus der 5-Minuten-Mitschrift von eedc (zeitgewichtet, ab der Zuordnung, nicht rückwirkend).
-> - `ruecklauf_temperatur_c`: Rücklauftemperatur des Heizkreises. Optional, reine Anzeige wie der Vorlauf; mit beiden steht die Spreizung in der Karte. Stündliche Mittelwerte wie beim Vorlauf (HA-Langzeitstatistik oder MQTT-Mitschrift).
-> - `betriebsmodus`: Was das Gerät gerade tut. In Home Assistant die `climate`-Entität oder ein Text-Sensor (eine Zahl ist dort ein Rohwert ⇒ unbestimmt); über MQTT das Topic `…/live/inv/<id>_<name>/betriebsmodus` mit einem Wort oder Zahlencode (**0** Aus · **1** Heizen · **2** Warmwasser · **3** Kühlen · **4** Lüften · **5** Entfeuchten; Werte-Tabelle im Handbuch Wärme & Klima). Optional. Über MQTT gibt es keinen „Leerlauf" und kein Gateway; die Mitschrift beginnt mit der Zuordnung (nicht rückwirkend). Hat das Gerät einen HA-Sensor dafür, gilt er.
-> - `heizstab_leistung_w`: Leistung der Zusatzheizung (Heizstab). Optional, reine Anzeige: **keine** kWh, **keine** Summe — aus einer Leistung rechnet eedc keine Menge hoch. Über 0 W steht in der Karte „Zusatzheizung aktiv".
 
 > ⚠️ **`leistung_w` verdrängt `leistung_heizen_w`, `leistung_warmwasser_w` und
 > `leistung_kuehlen_w`.** Ist die Gesamtleistung zugeordnet, wertet eedc die drei

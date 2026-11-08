@@ -18,18 +18,18 @@ BASIS_FELDER = [
     {"feld": "netzbezug_kwh",          "label": "Netzbezug",       "einheit": "kWh",    "mapping_key": "netzbezug",      "gruppe": "zaehler",
      "hinweis": "Kumulativer kWh-Zähler (oder Tagessensor mit 0:00-Reset) der aus dem Netz bezogenen Energie. Immer ≥ 0; bei Zweirichtungszähler nur den Bezugs-Anteil."},
     {"feld": "globalstrahlung_kwh_m2", "label": "Globalstrahlung", "einheit": "kWh/m²", "mapping_key": "globalstrahlung","gruppe": "wetter",
-     "hinweis": "Globalstrahlung im Monat (kWh/m²). Wird automatisch von Open-Meteo geholt, wenn nicht manuell gepflegt."},
+     "hinweis": "Globalstrahlung im Monat (kWh/m²). eedc holt sie automatisch vom Wetterdienst des Standorts (Bright Sky/DWD in Deutschland, sonst Open-Meteo) — nur in ein leeres Feld; ein selbst eingetragener Wert bleibt stehen."},
     # N-426 (Nachbesserung): derselbe Halbsatz wie bei der Globalstrahlung
     # darüber. Seit alle drei Wetterfelder nur noch LÜCKEN füllen, ist er für
     # beide wahr — vorher versprach ihn nur das eine Feld, und keines hielt ihn.
     {"feld": "sonnenstunden",          "label": "Sonnenstunden",   "einheit": "h",      "mapping_key": "sonnenstunden",  "gruppe": "wetter",
-     "hinweis": "Sonnenstunden im Monat (h). Wird automatisch von Open-Meteo geholt, wenn nicht manuell gepflegt."},
+     "hinweis": "Sonnenstunden im Monat (h). eedc holt sie automatisch vom Wetterdienst des Standorts (Bright Sky/DWD in Deutschland, sonst Open-Meteo) — nur in ein leeres Feld; ein selbst eingetragener Wert bleibt stehen."},
     # N-426: Bis v4.0.44 stand hier „Wird automatisch von Open-Meteo geholt" —
     # eine Zusage, die der V4-Auto-Fill nicht mehr einlöste (er füllte nur die
     # zwei Felder darüber). Der Hinweis sagt jetzt, was der Knopf wirklich tut,
     # UND woher der Wert kommt: die eigene Messreihe schlägt das Archiv.
     {"feld": "durchschnittstemperatur","label": "Ø Temperatur",    "einheit": "°C",     "mapping_key": "temperatur",     "gruppe": "wetter",
-     "hinweis": "Monatsdurchschnittstemperatur (°C). „Auto-Fill\" holt sie aus den gemessenen Außentemperaturen des Monats, sonst von Open-Meteo — ein selbst eingetragener Wert bleibt stehen und lässt sich jederzeit überschreiben."},
+     "hinweis": "Monatsdurchschnittstemperatur (°C). „Auto-Fill\" holt sie aus den gemessenen Außentemperaturen des Monats, sonst vom Wetterdienst des Standorts — ein selbst eingetragener Wert bleibt stehen und lässt sich jederzeit überschreiben."},
 ]
 
 # =============================================================================
@@ -332,7 +332,7 @@ INVESTITION_FELDER: dict = {
             # für beide Bauformen erhebbar ist — bei einem DC-gekoppelten
             # Speicher gibt es zwischen Batterie und Hybrid-Wechselrichter gar
             # keinen AC-Punkt, ein „immer AC"-Vertrag wäre dort nicht messbar.
-            "hinweis": "Gesamte in den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0. Gemessen an der Stelle, die zur Kopplung des Speichers passt: bei AC-Kopplung hausseitig hinter dem Batterie-Wechselrichter, bei DC-Kopplung am Batterie-Anschluss. Ladung und Entladung müssen von derselben Seite kommen — sonst enthält der Wirkungsgrad die Wandlung nur in eine Richtung.",
+            "hinweis": "Gesamte in den Speicher geladene Energie, Netzladung eingeschlossen (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0. Messstelle passend zur Kopplung: bei AC hausseitig hinter dem Batterie-Wechselrichter, bei DC am Batterie-Anschluss. Ladung und Entladung von derselben Seite — sonst enthält der Wirkungsgrad die Wandlung nur in eine Richtung.",
         },
         {
             "feld": "entladung_kwh", "label": "Entladung", "einheit": "kWh",
@@ -361,7 +361,7 @@ INVESTITION_FELDER: dict = {
             "bedingung": "arbitrage_faehig",
             "nur_manuell": True,
             "csv_suffix": "Ladepreis_Cent",
-            "hinweis": "Ø Preis der Netzladung in ct/kWh. Nur bei Arbitrage relevant (gezielt günstig laden) — Backup-/Notladung läuft zum normalen Bezugspreis. Meist manuell im Monatsabschluss; bei dynamischem Tarif rechnet eedc den Wert selbst aus den Stundenpreisen.",
+            "hinweis": "Ø Preis der Netzladung in ct/kWh. Nur bei Arbitrage relevant (gezielt günstig laden) — Backup-/Notladung läuft zum normalen Bezugspreis. Im Monatsabschluss schlägt eedc einen Wert aus Netzladung und mitgeschriebenen Stundenpreisen vor; überschreibbar, etwa mit dem Preis aus der Rechnung.",
         },
     ],
 
@@ -682,7 +682,7 @@ INVESTITION_FELDER: dict = {
             "feld": "ladung_kwh", "label": "Ladung gesamt", "einheit": "kWh",
             "placeholder": "z.B. 200",
             "csv_suffix": "Ladung_kWh",
-            "hinweis": "Gesamte von der Wallbox abgegebene Ladeenergie (kWh, kumulativer Zähler oder Tagessensor). Kanonische Heimladungs-Quelle (Phase 2a) — hier mappen, nicht am E-Auto.",
+            "hinweis": "Gesamte von der Wallbox abgegebene Ladeenergie (kWh, kumulativer Zähler oder Tagessensor). Die Quelle der Heimladung — den Zähler hier zuordnen, nicht am E-Auto.",
         },
         {
             "feld": "ladung_pv_kwh", "label": "Ladung PV", "einheit": "kWh",
@@ -776,7 +776,7 @@ INVESTITION_FELDER: dict = {
                 "feld": "erzeugung_kwh", "label": "Erzeugung", "einheit": "kWh",
                 "csv_suffix": "Erzeugung_kWh",
                 "aggregiert_in": "pv_erzeugung_sum",
-                "hinweis": "Erzeugte Energie (z. B. BHKW, Windrad) in kWh, kumulativer Zähler oder Tagessensor.",
+                "hinweis": "Erzeugte Energie (z. B. BHKW, Windrad) in kWh, kumulativer Zähler oder Tagessensor. Zählt wie PV-Strom hinter dem Hauszähler in Eigenverbrauch und Autarkie.",
             },
             {
                 "feld": "eigenverbrauch_kwh", "label": "Eigenverbrauch", "einheit": "kWh",
@@ -1066,9 +1066,10 @@ LIVE_FELDER_INV: dict = {
     ],
     "e-auto": [
         {"key": "leistung_w", "label": "Ladeleistung", "einheit": "W",
-         "hinweis": "Momentane Ladeleistung des Fahrzeugs in W. Bei vorhandener Wallbox "
-                    "misst diese meist dasselbe — denselben Sensor nicht beiden Geräten "
-                    "zuordnen, sonst zählt die Live-Bilanz ihn doppelt."},
+         "hinweis": "Momentane Ladeleistung des Fahrzeugs in W. Lädt das Auto an einer Wallbox mit eigenem "
+                    "Leistungssensor, zählt eedc die Ladeleistung einmal, an der Wallbox; misst das Auto mit "
+                    "eigenem Sensor, steht es darunter. Kommen beide Werte über MQTT, stapelt der Tagesverlauf sie "
+                    "doppelt — dann dieses Feld leer lassen."},
         {"key": "soc",        "label": "Ladestand",    "einheit": "%",
          "hinweis": "Ladestand der Fahrzeugbatterie in Prozent (0–100)."},
         # P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — Felder des Hub-Überblicks E-Auto.
@@ -1160,18 +1161,20 @@ LIVE_FELDER_INV: dict = {
          "betriebsart": WP_BETRIEBSART_GERAET,
          "hinweis": "Vorlauftemperatur des Heizkreises in °C — reine Anzeige, geht in keine Berechnung ein. "
                     "Stündliche Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
-                    "(`state_class: measurement`)."},
+                    "(`state_class: measurement`), über MQTT aus der Mitschrift von eedc ab der "
+                    "Zuordnung (nicht rückwirkend)."},
         {"key": "ruecklauf_temperatur_c", "label": "Rücklauf", "einheit": "°C",
          "betriebsart": WP_BETRIEBSART_GERAET,
          "hinweis": "Rücklauftemperatur des Heizkreises in °C — reine Anzeige, geht in keine Berechnung ein. "
                     "Stündliche Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
-                    "(`state_class: measurement`)."},
+                    "(`state_class: measurement`), über MQTT aus der Mitschrift von eedc ab der "
+                    "Zuordnung (nicht rückwirkend)."},
         {"key": "heizstab_leistung_w", "label": "Leistung Zusatzheizung", "einheit": "W",
          "betriebsart": WP_BETRIEBSART_GERAET,
          "hinweis": "Momentane elektrische Leistung der Zusatzheizung (Heizstab) in W — reine Anzeige: "
-                    "aus diesem Feld entsteht keine kWh, und es geht in keine Summe ein. Stündliche "
-                    "Mittelwerte entstehen aus der HA-Langzeitstatistik des Sensors "
-                    "(`state_class: measurement`)."},
+                    "aus diesem Feld entsteht keine kWh, und es geht in keine Summe ein. Über 0 W steht "
+                    "an der Gerätekarte im Überblick „Zusatzheizung aktiv“. Stündliche Mittelwerte "
+                    "entstehen aus der HA-Langzeitstatistik des Sensors (`state_class: measurement`)."},
         # #263 K-2: der erste Wert in eedc, der ein ZUSTAND ist statt einer Zahl.
         # `zustand: True` ist keine Kosmetik, sondern die Weiche — siehe
         # ZUSTAND_LIVE_FELDER unter der Tabelle.
@@ -1238,10 +1241,10 @@ BASIS_LIVE_FELDER: list[dict] = [
      "hinweis": "Momentane Bezugsleistung in W — nur für das Live-Dashboard. "
                 "Alternative: ein einzelner Sensor mit Vorzeichen unter „Netz kombiniert (±)“."},
     {"key": "netz_kombi_w",        "label": "Netz kombiniert (±)",      "einheit": "W",
-     "hinweis": "EIN vorzeichenbehafteter Netz-Sensor (+ Bezug / − Einspeisung) statt zweier "
-                "getrennter. Wirkt nur, wenn „Einspeisung (W)“ und „Netzbezug (W)“ beide auf "
-                "„keine“ stehen — sonst haben die getrennten Felder Vorrang. Zeigt der Sensor "
-                "in die falsche Richtung, dreht ihn das ⇅-Symbol am Wert."},
+     "hinweis": "EIN Netz-Sensor mit Vorzeichen (+ Bezug / − Einspeisung) statt zweier getrennter; "
+                "wirkt nur, wenn „Einspeisung (W)“ und „Netzbezug (W)“ auf „keine“ stehen. Zeigt er "
+                "in die falsche Richtung, dreht ihn das ⇅-Symbol am Wert. Die kWh-Zähler für "
+                "Einspeisung und Netzbezug bleiben daneben zugeordnet — sie liefern die Mengen."},
     {"key": "pv_gesamt_w",         "label": "PV gesamt",                "einheit": "W",
      "hinweis": "Momentane PV-Leistung der ganzen Anlage in W. Nur nötig, wenn die PV-Module "
                 "keine eigenen Leistungs-Sensoren haben — sobald dort einer zugeordnet ist, "
@@ -1280,8 +1283,8 @@ BASIS_PREIS_FELDER: list[dict] = [
      "hinweis": "HA-Sensor mit dem aktuellen Arbeitspreis (Tibber, aWATTar, EPEX-Endpreis). "
                 "eedc schreibt daraus die Stundenpreise mit und rechnet damit den "
                 "verbrauchsgewichteten Ø-Bezugspreis des Monats sowie den Ø-Ladepreis der "
-                "Speicher-Netzladung. Einheit ct/kWh oder €/kWh — eedc rechnet um. "
-                "Ohne Sensor bleibt der Arbeitspreis aus den Stammdaten maßgeblich."},
+                "Speicher-Netzladung. Einheit ct/kWh, €/kWh oder €/MWh — eedc rechnet um. "
+                "Ohne Sensor gilt der Arbeitspreis aus den Stammdaten."},
 ]
 
 # =============================================================================
