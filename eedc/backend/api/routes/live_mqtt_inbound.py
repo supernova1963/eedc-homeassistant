@@ -332,6 +332,9 @@ async def get_mqtt_topics(
                 # Inbound-Parser war `float(payload)`; seit S1-3 hält er ihren
                 # rohen String, und das Modus-Topic gehört in die Liste.)
                 continue
+            if entry.get("ohne_leser"):
+                # N-780: angenommen, aber von keinem Leser verarbeitet — kein Topic, auf das jemand publizieren soll.
+                continue
             # Endpoint-Konvention: energy-Topics führen typ="energy",
             # live-Topics behalten "basis" oder den Investitions-Typ.
             api_typ = "energy" if entry["kategorie"] == "energy" else entry["typ"]

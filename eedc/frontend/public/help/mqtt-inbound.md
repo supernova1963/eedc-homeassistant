@@ -121,8 +121,10 @@ der Datenquellen-Fläche zum Kopieren zeigt) und der Feld-Registry. Jedes Feld s
 - **Bedingung** nennt den Geräte-Parameter, an dem das Feld hängt; „(weich)" heißt: an dieser Bauart untypisch, aber
   möglich. Ein Live-Feld, dessen Bedingung am Gerät nicht gilt, erwartet eedc dort nicht (außer bei „weich");
   Energie-Topics erwartet es unabhängig von der Bedingung.
-- „wird angenommen, aber von keiner Sicht gelesen": eedc nimmt den Wert entgegen, aber heute verarbeitet ihn kein
-  Teil von eedc (keine Zählerreihe, keine Kachel). Soll er zählen, trag ihn im Monatsabschluss ein.
+- „kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor)": eedc verarbeitet diesen Wert nicht aus MQTT — er ist eine
+  optionale Aufteilung oder ein Anteil (Eigenverbrauch, Einspeisung, PV-/Netz-Bezug), auswärts geladene Energie oder ein
+  Geldbetrag. Er kommt im Monatsabschluss von Hand oder als Vorschlag aus einem zugeordneten HA-Sensor; bei Geldbeträgen
+  steht „(Hand)".
 - Was ein Feld bedeutet, sagt die Spalte „Hinweis" der [Sensor-Referenz](SENSOR-REFERENZ.md) — dieselbe Registry.
 
 #### Anlage (Basis)
@@ -180,7 +182,7 @@ Energie-Topics:
 | Feld | Label | Einheit | Topic | Payload | Bedingung |
 |---|---|---|---|---|---|
 | `pv_erzeugung_kwh` | Erzeugung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | Zählerstand (kumuliert) | — |
-| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
 | `speicher_ladung_kwh` | Speicher Ladung | kWh | kein MQTT-Topic — nur manuell | — | `hat_speicher` |
 | `speicher_entladung_kwh` | Speicher Entladung | kWh | kein MQTT-Topic — nur manuell | — | `hat_speicher` |
 
@@ -262,8 +264,8 @@ Energie-Topics:
 | `ladung_pv_kwh` | Heim: PV | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_pv_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
 | `ladung_netz_kwh` | Heim: Netz | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_netz_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
 | `ladung_kwh` | Heim: gesamt | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
-| `ladung_extern_kwh` | Extern | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_extern_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
-| `ladung_extern_euro` | Extern Kosten | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_extern_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `ladung_extern_kwh` | Extern | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
+| `ladung_extern_euro` | Extern Kosten | € | kein MQTT-Topic — Monatsabschluss (Hand) | — | — |
 | `v2h_entladung_kwh` | V2H Entladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | Zählerstand (kumuliert) | `v2h_faehig` |
 
 Live-Topics:
@@ -321,14 +323,14 @@ Energie-Topics:
 | Art | Feld | Label | Einheit | Topic | Payload | Bedingung |
 |---|---|---|---|---|---|---|
 | `erzeuger` | `erzeugung_kwh` | Erzeugung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/erzeugung_kwh` | Zählerstand (kumuliert) | — |
-| `erzeuger` | `eigenverbrauch_kwh` | Eigenverbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
-| `erzeuger` | `einspeisung_kwh` | Einspeisung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeisung_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
-| `erzeuger` | `einspeise_erloes_euro` | Einspeise-Erlös | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeise_erloes_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `erzeuger` | `eigenverbrauch_kwh` | Eigenverbrauch | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
+| `erzeuger` | `einspeisung_kwh` | Einspeisung | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
+| `erzeuger` | `einspeise_erloes_euro` | Einspeise-Erlös | € | kein MQTT-Topic — Monatsabschluss (Hand) | — | — |
 | `verbraucher` | `verbrauch_sonstig_kwh` | Verbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/verbrauch_sonstig_kwh` | Zählerstand (kumuliert) | — |
-| `verbraucher` | `bezug_pv_kwh` | davon PV | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/bezug_pv_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
-| `verbraucher` | `bezug_netz_kwh` | davon Netz | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/bezug_netz_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `verbraucher` | `bezug_pv_kwh` | davon PV | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
+| `verbraucher` | `bezug_netz_kwh` | davon Netz | kWh | kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor) | — | — |
 | `abgabe` | `abgabe_kwh` | Abgabe | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/abgabe_kwh` | Zählerstand (kumuliert) | — |
-| `abgabe` | `einspeise_erloes_euro` | Erlös | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeise_erloes_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `abgabe` | `einspeise_erloes_euro` | Erlös | € | kein MQTT-Topic — Monatsabschluss (Hand) | — | — |
 | `speicher` | `erzeugung_kwh` | Erzeugung/Entladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/erzeugung_kwh` | Zählerstand (kumuliert) | — |
 | `speicher` | `verbrauch_sonstig_kwh` | Verbrauch/Ladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/verbrauch_sonstig_kwh` | Zählerstand (kumuliert) | — |
 | `zaehler` | `zaehlerstand` | Zählerstand | vom Gerät (`zaehler_einheit`) | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/zaehlerstand` | Zählerstand (kumuliert) | — |

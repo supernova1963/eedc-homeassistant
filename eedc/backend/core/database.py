@@ -1486,6 +1486,16 @@ async def _run_data_migrations() -> None:
             migriere_quellen_ins_mapping,
         )
 
+        # N-780 (Päckchen U): Inbound-Stempel an Energie-Feldern ohne Leser (B8/Pass 1) auf „Keine" — der Wert wurde nie
+        # gelesen; Gateway- und HA-Zuordnungen bleiben. Idempotent, kein HTTP.
+        from backend.services.migrations.migrate_ohne_leser_inbound_stempel import (
+            ohne_leser_inbound_stempel_auf_keine,
+        )
+        await _apply_once(
+            "n780_ohne_leser_inbound_stempel_auf_keine",
+            ohne_leser_inbound_stempel_auf_keine,
+        )
+
         # N-545: Die Sensor-Definitionen eines NEUEN Pakets starten bei einer
         # BESTANDSinstallation abgewaehlt (Entscheid Gernot 22.09.2026). Kein
         # `_apply_once` — der Name einer Migration gilt einmal je Installation,

@@ -758,6 +758,18 @@ async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str
 
 
 
+async def _ist_ohne_leser(db: AsyncSession, anlage: Anlage, field_id: str) -> bool:
+    """Trägt das Feld das Flag ``ohne_leser`` der Topic-Registry (N-780)? Dieselbe Erwartungsliste wie die Fläche
+    (alle Investitionen der Anlage — ein Riegel darf an einem stillgelegten Gerät nicht anders antworten)."""
+    if not field_id.startswith("inv_energy_"):
+        return False
+    invs = (await db.execute(select(Investition).where(Investition.anlage_id == anlage.id))).scalars().all()
+    return any(
+        e.get("ohne_leser") for e in await build_expected_topics(db, anlage, investitionen=list(invs))
+        if _feld_id(e["match_key"]) == field_id
+    )
+
+
 async def setze_gateway_quellen(db: AsyncSession, anlage: Anlage, zeilen) -> tuple[int, list[str]]:
     """Setzt für frisch angelegte Gateway-Zeilen (Preset-Apply, P-433-2b K4-8) die Quelle ihres Feldes auf
     ``mqtt_gateway`` — dieselbe Schreibform wie ``set_feld_quelle`` (``quellen[field_id] = {quelle, mapping_id}`` +
@@ -1398,9 +1410,11 @@ async def _quellen_aufloesen(db: AsyncSession, ctx: _FelderKontext) -> None:
         if eintrag:
             effektiv[fid] = eintrag
             continue
+        # N-780: ein Feld ohne Leser wird nicht auf Inbound gestempelt, auch wenn ein Wert im Cache liegt (HA und
+        # eine vom Anwender angelegte Gateway-Zeile lösen weiter auf — sie bleiben sichtbar und löschbar).
         display_q, persist_entry, gw_row = resolve_effektive_quelle(
             fid, e["topic"], anlage.sensor_mapping or {},
-            basis_live, inv_live_map, gw_by_zielkey, ha_kind_persist, cw[0] is not None,
+            basis_live, inv_live_map, gw_by_zielkey, ha_kind_persist, cw[0] is not None and not e.get("ohne_leser"),
         )
         effektiv[fid] = persist_entry or {"quelle": display_q}
         if persist_entry is not None:
@@ -1561,7 +1575,7 @@ def _praezedenzen(ctx: _FelderKontext) -> None:
     # die Falschmeldung, gegen die [[feedback_user_fehlermeldungen]] steht.
     # Was ein eigener Zähler ZUSÄTZLICH bringt, sagt weiterhin der Hinweistext
     # an den Komponenten-Zeilen (`_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`).
-    for fid, p in finde_doppelmappings(ha_zuordnungen, feld_einheit).items():
+    for fid, p in finde_doppelmappings(ha_zuordnungen, feld_einheit, feld_typ).items():
         _add_problem(fid, p)
 
     # §2i-6 — Bedarfs-Einstufung: ist ein LEERES Feld überhaupt eine Lücke?
@@ -1656,7 +1670,10 @@ def _antwort(ctx: _FelderKontext) -> list[dict]:
             # String; das Gateway blendet die Fläche nur am Betriebsmodus aus
             # (D3) — an den übrigen Zustandsfeldern reicht es seit P-433-2b K2b
             # den Text weiter (`mqtt_gateway_service._als_text`).
-            "nur_ha": bool(e.get("nur_ha")),
+            # N-780: ein Energie-Feld ohne Leser (`ohne_leser`, Topic-Registry) ebenso — eedc nähme den MQTT-Wert an,
+            # verarbeitete ihn aber nicht; HA-Sensor (Monatsabschluss-Vorschlag) und Hand bleiben. Eine bestehende
+            # MQTT-/Gateway-Zuordnung bleibt sichtbar und über «Keine» entfernbar (die Fläche blendet nur die Knöpfe aus).
+            "nur_ha": bool(e.get("nur_ha") or e.get("ohne_leser")),
             # Zustand statt Zahl (#263 K-2): steuert den Entity-Picker — für
             # diese Felder ist auch die `climate.`-Domain zulässig, und der
             # Energie-Filter greift nicht; am Betriebsmodus kein Gateway-Knopf (D3).
@@ -1927,6 +1944,14 @@ async def set_feld_quelle(
     ).scalar_one_or_none()
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+    # N-780 (Päckchen U): dieselbe Form für ein Energie-Feld ohne Leser — eedc nähme den MQTT-Wert an, verarbeitete ihn
+    # aber nicht. Die Fläche bietet Gateway/Inbound dort nicht an (`nur_ha`); hier der Riegel für den direkten API-Weg.
+    if quelle in (QUELLE_STANDARD, QUELLE_GATEWAY) and await _ist_ohne_leser(db, anlage, field_id):
+        raise HTTPException(
+            status_code=400,
+            detail="eedc liest dieses Feld nicht über MQTT — ordne einen HA-Sensor zu oder trag den Wert im "
+                   "Monatsabschluss von Hand ein.",
+        )
 
     mapping = dict(anlage.sensor_mapping or {})
     # Themen-Kacheln (4.2.0, G2-1): eine Themen-Kennung muss zu einem Eintrag gehören — sonst 404 statt stiller Ablage.

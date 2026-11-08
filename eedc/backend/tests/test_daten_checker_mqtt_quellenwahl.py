@@ -780,3 +780,140 @@ async def test_pflicht_ist_dieselbe_wie_auf_der_flaeche(db, monkeypatch, typ, pa
             flaeche_pflicht.add(e["topic"])
     assert flaeche_pflicht, "Gegenprobe: ohne Pflichtfeld prüft dieser Test nichts"
     assert erwartet == flaeche_pflicht
+
+
+# ─── N-780: ein Energie-Topic ohne Leser ist kein erwartetes Topic ───────────
+#
+# `build_expected_topics` nannte acht Energie-Topics, deren Wert der Inbound-Cache annimmt, aber kein Leser
+# verarbeitet (`snapshot/keys.py::_mqtt_key_to_sensor_key` ⇒ None): BKW-/Sonstiges-Eigenverbrauch, Sonstiges-Einspeisung,
+# -Erlös und -Bezugsaufteilung, externe Ladung (kWh, €). Seit Päckchen U (8.11.2026) tragen sie `ohne_leser`; die
+# Route `/api/live/mqtt/topics` nennt sie nicht, die Fläche bietet nur HA-Sensor und Hand an, der Check erwartet sie nie.
+
+_OHNE_LESER = {
+    ("balkonkraftwerk", "eigenverbrauch_kwh"), ("e-auto", "ladung_extern_kwh"), ("e-auto", "ladung_extern_euro"),
+    ("sonstiges", "eigenverbrauch_kwh"), ("sonstiges", "einspeisung_kwh"), ("sonstiges", "einspeise_erloes_euro"),
+    ("sonstiges", "bezug_pv_kwh"), ("sonstiges", "bezug_netz_kwh"),
+}
+
+
+def test_n780_genau_die_acht_tragen_das_flag():
+    """Ein Gerät je Typ und Variante (Sonstiges je Kategorie) — das Flag folgt dem Leser, nicht einer Liste."""
+    from backend.tests.groessen_uebersicht import mq_erwartete_topics
+
+    topics = mq_erwartete_topics()
+    assert {(t["typ"], t["feld"]) for t in topics if t.get("ohne_leser")} == _OHNE_LESER
+    assert not any(t.get("ohne_leser") and t.get("nur_manuell") for t in topics), "nur_manuell hat seinen eigenen Grund"
+    assert all(t["topic"] for t in topics if t.get("ohne_leser")), "topic/match_key bleiben (Konsumenten-Verträge)"
+
+
+@pytest.mark.asyncio
+async def test_n780_route_nennt_kein_topic_ohne_leser(db):
+    from backend.api.routes.live_mqtt_inbound import get_mqtt_topics
+
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    topics = {t["topic"].rsplit("/", 1)[1] for t in (await get_mqtt_topics(db=db, anlage_id=anlage.id))["topics"]
+              if f"/energy/inv/{auto.id}_" in t["topic"]}
+    assert not topics & {"ladung_extern_kwh", "ladung_extern_euro"}, topics
+    assert "km_gefahren" in topics, "ein Feld mit Leser bleibt"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quelle", [QUELLE_INBOUND, QUELLE_GATEWAY])
+async def test_n780_feld_ohne_leser_mit_mqtt_quelle_wird_nicht_erwartet(db, monkeypatch, quelle):
+    """Bestand mit gesetzter MQTT-Quelle: der Check mahnt kein Topic an, das niemand liest — ein Feld mit Leser
+    auf derselben Quelle bleibt erwartet."""
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    _auf_inbound(anlage, [
+        ("inv_energy", str(auto.id), "ladung_extern_kwh"),
+        ("inv_energy", str(auto.id), "ladung_extern_euro"),
+        ("inv_energy", str(auto.id), "km_gefahren"),
+    ], quelle=quelle)
+    erwartet = _endungen(await _erwartete_topics(db, monkeypatch, anlage), f"/energy/inv/{auto.id}_")
+    assert "km_gefahren" in erwartet
+    assert not erwartet & {"ladung_extern_kwh", "ladung_extern_euro"}, erwartet
+
+
+@pytest.mark.asyncio
+async def test_n780_flaeche_bietet_nur_ha_und_hand_bestand_bleibt_sichtbar(db):
+    """Die Fläche nimmt Inbound/Gateway (`nur_ha`), behält das Feld; eine bestehende MQTT-Quelle bleibt stehen
+    (sichtbar, über «Keine» entfernbar)."""
+    from backend.api.routes.datenquellen import get_datenquellen_felder
+
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    _auf_inbound(anlage, [("inv_energy", str(auto.id), "ladung_extern_kwh")])
+    await db.flush()
+    felder = {f["id"]: f for g in (await get_datenquellen_felder(anlage.id, db))["gruppen"] for f in g["felder"]}
+    extern = felder[f"inv_energy_{auto.id}_ladung_extern_kwh"]
+    assert extern["nur_ha"] is True and extern["quelle"] == QUELLE_INBOUND
+    assert felder[f"inv_energy_{auto.id}_ladung_extern_euro"]["nur_ha"] is True
+    assert felder[f"inv_energy_{auto.id}_km_gefahren"]["nur_ha"] is False
+
+
+# ── N-780 Runde 2: Riegel, Pass 1, Bestand ─────────────────────────────────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quelle, topic", [(QUELLE_INBOUND, None), (QUELLE_GATEWAY, "fremd/extern")])
+async def test_n780_riegel_mqtt_an_feld_ohne_leser_abgewiesen(db, quelle, topic):
+    """Dieselbe Form wie bei den Preis-Feldern: 400 mit Anwender-Satz; HA bleibt erlaubt, ein Feld mit Leser auch."""
+    from fastapi import HTTPException
+
+    from backend.api.routes.datenquellen import QuelleSetRequest, set_feld_quelle
+
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    with pytest.raises(HTTPException) as fehler:
+        await set_feld_quelle(anlage.id, f"inv_energy_{auto.id}_ladung_extern_kwh",
+                              QuelleSetRequest(quelle=quelle, quell_topic=topic), db)
+    assert fehler.value.status_code == 400 and "nicht über MQTT" in fehler.value.detail
+    await set_feld_quelle(anlage.id, f"inv_energy_{auto.id}_ladung_extern_kwh",
+                          QuelleSetRequest(quelle=QUELLE_HA_APP, entity_id="sensor.extern"), db)
+    await set_feld_quelle(anlage.id, f"inv_energy_{auto.id}_km_gefahren",
+                          QuelleSetRequest(quelle=quelle, quell_topic=topic), db)
+    quellen = anlage.sensor_mapping["quellen"]
+    assert quellen[f"inv_energy_{auto.id}_ladung_extern_kwh"]["quelle"] == QUELLE_HA_APP
+
+
+@pytest.mark.asyncio
+async def test_n780_pass1_stempelt_feld_ohne_leser_nicht_auf_inbound(db, monkeypatch):
+    """Ein Cache-Wert an einem Feld ohne Leser macht es nicht zu «Inbound» (ein Feld mit Leser schon)."""
+    from datetime import datetime
+
+    from backend.api.routes.datenquellen import get_datenquellen_felder
+
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    zeit = datetime(2026, 1, 1, 12, 0)
+
+    class _Cache:
+        _live: dict = {}
+        _energy = {anlage.id: {f"inv/{auto.id}/ladung_extern_kwh": (465.0, zeit),
+                               f"inv/{auto.id}/km_gefahren": (12000.0, zeit)}}
+
+    class _Svc:
+        cache = _Cache()
+
+    monkeypatch.setattr("backend.services.mqtt_inbound_service.get_mqtt_inbound_service", lambda: _Svc())
+    felder = {f["id"]: f for g in (await get_datenquellen_felder(anlage.id, db))["gruppen"] for f in g["felder"]}
+    assert felder[f"inv_energy_{auto.id}_ladung_extern_kwh"]["quelle"] == QUELLE_KEINE
+    assert felder[f"inv_energy_{auto.id}_km_gefahren"]["quelle"] == QUELLE_INBOUND
+    quellen = (anlage.sensor_mapping or {}).get("quellen") or {}
+    assert f"inv_energy_{auto.id}_ladung_extern_kwh" not in quellen
+
+
+@pytest.mark.asyncio
+async def test_n780_migration_stempel_auf_keine_gateway_und_leser_bleiben(db):
+    from backend.services.migrations.migrate_ohne_leser_inbound_stempel import ohne_leser_inbound_stempel_auf_keine
+
+    anlage, auto = await _anlage_mit_geraet(db, "e-auto", {})
+    kwh, euro, km = (f"inv_energy_{auto.id}_{f}" for f in ("ladung_extern_kwh", "ladung_extern_euro", "km_gefahren"))
+    anlage.sensor_mapping = {"quellen": {
+        kwh: {"quelle": QUELLE_INBOUND},
+        euro: {"quelle": QUELLE_GATEWAY, "mapping_id": 7},
+        km: {"quelle": QUELLE_INBOUND},
+    }}
+    await db.flush()
+
+    assert await ohne_leser_inbound_stempel_auf_keine(db) == 1
+    quellen = anlage.sensor_mapping["quellen"]
+    assert quellen[kwh] == {"quelle": QUELLE_KEINE}
+    assert quellen[euro] == {"quelle": QUELLE_GATEWAY, "mapping_id": 7}, "vom Anwender angelegt — bleibt"
+    assert quellen[km] == {"quelle": QUELLE_INBOUND}, "Feld mit Leser — bleibt"
+    assert await ohne_leser_inbound_stempel_auf_keine(db) == 0, "idempotent"

@@ -85,6 +85,32 @@ class TestDoppelzaehlungNurBeiMengen:
         assert set(out) == {"a", "b"}
 
 
+class TestWallboxUndAutoAnDerselbenLadeleistung:
+    """Päckchen U (8.11.2026): derselbe Leistungssensor an Wallbox- und E-Auto-`leistung_w` zählt einmal (Pool-Schutz
+    #227 und Quellen-Regel #356 im Tagesverlauf, Live-Bilanz überspringt das Auto) — keine Doppelzählungs-Warnung."""
+
+    WB, AUTO, WB2 = "inv_live_1_leistung_w", "inv_live_2_leistung_w", "inv_live_3_leistung_w"
+    TYP = {WB: "wallbox", AUTO: "e-auto", WB2: "wallbox", "inv_live_4_leistung_w": "waermepumpe"}
+
+    def test_das_paar_wird_nicht_gemeldet(self):
+        out = finde_doppelmappings({self.WB: "sensor.lp", self.AUTO: "sensor.lp"}, {self.WB: "W", self.AUTO: "W"}, self.TYP)
+        assert out == {}
+
+    def test_zwei_wallboxen_bleiben_gemeldet_ohne_das_auto(self):
+        z = {self.WB: "sensor.lp", self.AUTO: "sensor.lp", self.WB2: "sensor.lp"}
+        out = finde_doppelmappings(z, {k: "W" for k in z}, self.TYP)
+        assert set(out) == {self.WB, self.WB2}
+
+    def test_auto_neben_einem_anderen_geraet_bleibt_gemeldet(self):
+        z = {self.AUTO: "sensor.x", "inv_live_4_leistung_w": "sensor.x"}
+        out = finde_doppelmappings(z, {k: "W" for k in z}, self.TYP)
+        assert set(out) == set(z)
+
+    def test_ohne_typen_gilt_das_alte_verhalten(self):
+        z = {self.WB: "sensor.lp", self.AUTO: "sensor.lp"}
+        assert set(finde_doppelmappings(z, {k: "W" for k in z})) == set(z)
+
+
 class TestHinweisTexteNennenDieHandlung:
     def test_gruppentexte_sagen_dass_nichts_zu_tun_ist(self):
         """Ein Zustandssatz neben einem Schalter wird als Aufforderung gelesen.

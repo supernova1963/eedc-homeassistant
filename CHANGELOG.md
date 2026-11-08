@@ -11,6 +11,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Cockpit → Live, Tagesverlauf über MQTT: die Ladeleistung von Wallbox und E-Auto zählt einmal, wie über Home
+  Assistant.** Lieferten Wallbox und E-Auto ihre Ladeleistung je über ein eigenes MQTT-Topic, standen beide im
+  Verbrauchs-Stapel — dieselbe Ladung zweimal, der Gipfel um die Ladeleistung zu hoch. Jetzt trägt sie die Wallbox, wenn
+  sie am Tag in Betrieb ist, wie im Tagesverlauf über Home Assistant und in der Live-Bilanz — auch, wenn die Wallbox über
+  Home Assistant und das Auto über MQTT misst (oder umgekehrt); ohne Wallbox bleibt das Auto (N-779).
+- **Datenquellen und MQTT-Dokumentation nennen nur noch Topics, die eedc auch liest.** Acht Monatsabschluss-Felder
+  (Eigenverbrauch des Balkonkraftwerks, externe Ladung des E-Autos in kWh und €, Eigenverbrauch, Einspeisung, Erlös und
+  PV-/Netz-Anteil sonstiger Geräte) bieten kein MQTT-Topic mehr an: eedc nahm den Wert an, verarbeitete ihn aber nicht. Sie
+  kommen wie bisher von Hand oder aus einem Home-Assistant-Sensor in den Monatsabschluss. Die automatische Vorbelegung
+  „Inbound“ an diesen Feldern stellt eedc beim Update auf „Keine“ (der Wert wurde nie gelesen); eine selbst angelegte
+  Gateway-Zuordnung bleibt sichtbar und lässt sich auf „Keine“ stellen. Der Daten-Checker mahnt diese Topics nicht mehr an (N-780).
+- **Datenquellen: die Warnung „Doppelzählung“ erscheint nicht mehr für denselben Leistungssensor an Wallbox und E-Auto.**
+  Diesen Fall zählt eedc einmal, an der Wallbox; der Rat, den Sensor nur einem Feld zuzuordnen, war unnötig. Für alle
+  anderen Mengen-Felder bleibt die Warnung.
+
 - **Vollbackfill und Reparatur-Werkbank ohne Energie-Statistik: ein Balkonkraftwerk zählt neben seinen messenden Modulen
   nicht doppelt.** Die Stunden-Leistungskurve aus der Home-Assistant-Langzeitstatistik nahm Balkonkraftwerk und Module
   nebeneinander (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). Jetzt trägt das Balkonkraftwerk je Stunde nur, was seine Module nicht
@@ -47,8 +62,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Sensor-Referenz: zwei Aussagen richtiggestellt.** Für Vormittag/Nachmittag gibt es vier eigene PV-Prognose-Sensoren
   (Grenze am Solar Noon) — die Referenz behauptete, es gebe sie nicht; der Weg über `stundenprofil_kwh` bleibt für eine andere
   Grenze. Und der Hinweis an der Ladeleistung des E-Autos sagt jetzt, was eedc tut: Mit einer Wallbox mit eigenem
-  Leistungssensor zählt die Ladeleistung einmal, an der Wallbox; nur wenn beide Werte über MQTT kommen, steht sie im
-  Tagesverlauf doppelt — dann das Feld am Auto leer lassen.
+  Leistungssensor zählt die Ladeleistung einmal, an der Wallbox.
 - **Feld-Hinweise ausführlicher und richtig.** Die Hinweise unter den Eingabefeldern (Monatsabschluss, Datenquellen)
   sagen jetzt, was bisher nur in der Sensor-Referenz stand: Wetterwerte holt eedc in Deutschland von Bright Sky (DWD),
   sonst von Open-Meteo, und nur in ein leeres Feld; die Speicher-Ladung schließt die Netzladung ein; den Ø-Ladepreis
@@ -61,9 +75,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   sonstigen Geräte und die Basis-Topics, die Live-Tabellen kannten die Zustände von Wallbox und E-Auto nur in einem eigenen
   Abschnitt, und „Nicht per MQTT lieferbar“ ließ die Preisfelder aus. Je Topic steht jetzt, was eedc erwartet und was es
   damit macht (Zählerstand, 5-Minuten- und Stundenmittel, Zustand mit allen Werten, die eedc versteht, oder nur Anzeige).
-  Die Tabelle sagt auch ehrlich, welche Topics eedc heute nur annimmt: Bei acht Feldern (Eigenverbrauch des
-  Balkonkraftwerks, externe Ladung des E-Autos in kWh und €, Eigenverbrauch, Einspeisung, Erlös und PV-/Netz-Anteil
-  sonstiger Geräte) liest keine Ansicht den gesendeten Wert — er zählt nur, wenn er im Monatsabschluss steht.
+  Acht Felder, deren Wert eedc aus MQTT nicht verarbeitet, stehen dort als „kein MQTT-Topic — Monatsabschluss“ (s. o.).
 
 ### Added
 

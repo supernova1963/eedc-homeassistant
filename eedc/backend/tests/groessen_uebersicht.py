@@ -1378,18 +1378,23 @@ MQ_PRAEFIX = "eedc/{anlage_id}_{name}"
 MQ_INV = "inv/{inv_id}_{name}"
 KEIN_TOPIC_MANUELL = "kein MQTT-Topic — nur manuell"
 KEIN_TOPIC_ABSCHLUSS = "kein MQTT-Topic — Monatsabschluss"
+#: N-780 (Päckchen U): ein Energie-Feld ohne Leser (``mqtt_topic_registry.energie_topic_ohne_leser``) hat kein Topic mehr;
+#: es geht über den Monatsabschluss — von Hand, und als Vorschlag aus einem HA-Sensor nur, wo der Vorschlag das Feld aus
+#: der HA-Statistik liest (``ist_zaehler_differenz_feld``, ``monatsabschluss/views.py``; Geldbeträge nicht).
+KEIN_TOPIC_OHNE_LESER_HA = KEIN_TOPIC_ABSCHLUSS + " (Hand oder HA-Sensor)"
+KEIN_TOPIC_OHNE_LESER_HAND = KEIN_TOPIC_ABSCHLUSS + " (Hand)"
 KEIN_TOPIC = "kein MQTT-Topic"
 # Payload. Energie: der Inbound-Cache nimmt jeden Schlüssel an — ob ein Wert zählt, entscheiden die LESER, und die
 # werden hier befragt, nicht abgeschrieben (``mq_energie_leser``): die Zählerreihe (``snapshot/keys.py::
 # _mqtt_key_to_sensor_key`` — Snapshot-Schreiber, Monatsabschluss-Vorschlag, aktueller Monat, Kanal), die «Heute»-Kachel
 # (``mqtt_energy_history_service._KEY_TO_CATEGORY``/``_MQTT_FIELD_TO_LIVE_KEY``) und der Kilometerstand
-# (``betriebsmodus_live._KM_FELD``). Ein erwartetes Topic ohne Leser sagt das (U3b-Halt, Entscheid Master 8.11.2026).
+# (``betriebsmodus_live._KM_FELD``). Ein Geräte-Energiefeld ohne Leser hat seit N-780 kein Topic (``_mq_ohne_leser``);
+# ein Basis-Energie-Topic ohne Leser sagte es in der Payload (U3b-Halt, Entscheid Master 8.11.2026).
 # Live: ein Mittelwert-Kanal (``katalog._MEAN_LIVE``: Art ``mean`` mit ``mittelwert_kanal``) wird als 5-Minuten-/
 # Stundenmittel mitgeschrieben (``mqtt_live_history_service.mittel_zeilen``), alles andere ist Anzeige; Zustände mit
 # Kanal ``mean`` schreibt eedc als Anteil je Wert mit.
 PAYLOAD_ZAEHLER = "Zählerstand (kumuliert)"
 PAYLOAD_OHNE_LESER = "wird angenommen, aber von keiner Sicht gelesen"
-PAYLOAD_OHNE_LESER_ABSCHLUSS = " — der Wert zählt heute nur, wenn er im Monatsabschluss steht"
 PAYLOAD_MITTEL = "Zahl (Momentanwert) — 5-Minuten- und Stundenmittel"
 PAYLOAD_ANZEIGE = "Zahl (Momentanwert) — nur Anzeige"
 #: Probe-Varianten des Sollbilds über ``{}`` hinaus — ein Live-Feld mit harter Bedingung erscheint nur, wenn eine
@@ -1486,19 +1491,8 @@ def mq_energie_leser(typ: str, feld: str) -> list[str]:
     return leser
 
 
-def _im_monatsabschluss(typ: str, art: str, feld: str) -> bool:
-    """Steht das Feld im Monatsabschluss-Formular? Dieselbe Funktion wie ``monatsabschluss/views.py`` (Feldliste)."""
-    from backend.core.field_definitions import get_felder_fuer_investition
-
-    parameter = {"kategorie": art} if art else {}
-    return any(x.get("feld") == feld for x in get_felder_fuer_investition(typ, parameter, belegte_felder={feld}))
-
-
 def mq_energie_payload(typ: str, art: str, feld: str) -> str:
-    if mq_energie_leser(typ, feld):
-        return PAYLOAD_ZAEHLER
-    return PAYLOAD_OHNE_LESER + (PAYLOAD_OHNE_LESER_ABSCHLUSS if typ != "basis" and _im_monatsabschluss(typ, art, feld)
-                                 else "")
+    return PAYLOAD_ZAEHLER if mq_energie_leser(typ, feld) else PAYLOAD_OHNE_LESER
 
 
 def mq_payload(f: SrFeld, liste: str) -> str:
@@ -1512,9 +1506,22 @@ def mq_payload(f: SrFeld, liste: str) -> str:
     return PAYLOAD_MITTEL if z is not None and z.art == "mean" and z.mittelwert_kanal else PAYLOAD_ANZEIGE
 
 
+def _mq_ohne_leser(f: SrFeld) -> bool:
+    """Geräte-Energiefeld, dessen Wert kein Leser verarbeitet — dieselbe Frage wie das Flag ``ohne_leser`` von
+    ``build_expected_topics`` (N-780), nicht nachgebaut."""
+    from backend.services.mqtt_topic_registry import energie_topic_ohne_leser
+
+    return (f.typ != "basis" and _MQ_LISTE[f.liste] == "energy" and not f.eintrag.get("nur_manuell")
+            and energie_topic_ohne_leser(1, f.feld))
+
+
 def _mq_ohne_topic(f: SrFeld) -> str:
+    from backend.core.field_definitions import basis_feld_key, ist_zaehler_differenz_feld
+
     if f.eintrag.get("nur_manuell"):
         return KEIN_TOPIC_MANUELL
+    if _mq_ohne_leser(f):
+        return KEIN_TOPIC_OHNE_LESER_HA if ist_zaehler_differenz_feld(basis_feld_key(f.feld)) else KEIN_TOPIC_OHNE_LESER_HAND
     if f.kanal is not None and f.kanal.ausnahme == "abschluss_ohne_sensor":
         return KEIN_TOPIC_ABSCHLUSS
     return KEIN_TOPIC
@@ -1522,10 +1529,10 @@ def _mq_ohne_topic(f: SrFeld) -> str:
 
 def _mq_hat_topic(f: SrFeld) -> bool:
     """Wie ``build_expected_topics``: Basis nur die Live-Felder (Energie: ``BASIS_ENERGY_TOPICS``), je Gerät jedes
-    Energie- und Live-Feld; ``nur_manuell`` filtert die Route ``/api/live/mqtt/topics`` heraus."""
+    Energie- und Live-Feld; ``nur_manuell`` und ``ohne_leser`` (N-780) filtert die Route ``/api/live/mqtt/topics`` heraus."""
     if f.typ == "basis":
         return f.liste == "BASIS_LIVE_FELDER"
-    return not f.eintrag.get("nur_manuell")
+    return not f.eintrag.get("nur_manuell") and not _mq_ohne_leser(f)
 
 
 def _mq_zeile(f: SrFeld) -> MqZeile:
@@ -1737,9 +1744,10 @@ def mq_sollbild_fehler(zeilen: list[MqZeile], topics: list[dict]) -> list[str]:
 def _mq_topic_meldung(t: Mapping, feld: str, muster: str, kandidaten: list[MqZeile]) -> Optional[str]:
     if not kandidaten:
         return f"Topic `{muster}` ({t['typ']}): die Registry erwartet es, keine Tabellen-Zeile"
-    if t.get("nur_manuell"):
+    if t.get("nur_manuell") or t.get("ohne_leser"):
+        grund = "nur_manuell" if t.get("nur_manuell") else "ohne Leser (N-780)"
         falsch = [z.name for z in kandidaten if z.topic]
-        return f"`{feld}` ({t['typ']}) ist nur_manuell, die Tabelle nennt ein Topic: {falsch}" if falsch else None
+        return f"`{feld}` ({t['typ']}) ist {grund}, die Tabelle nennt ein Topic: {falsch}" if falsch else None
     if t["feld"] != feld and not all(z.je_innengeraet for z in kandidaten):
         return f"Topic `{t['topic']}`: Innengeräte-Kopie, die Zeile {kandidaten[0].name} sagt «je Innengerät» nicht"
     if not any(z.topic == muster for z in kandidaten):

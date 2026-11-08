@@ -270,6 +270,9 @@ class SensorChecks:
         # nicht zuordenbar; als „nie empfangen" gemeldet wären sie eine Lücke,
         # die niemand schließen kann (dieselbe Begründung wie bei den
         # Preis-Slots in `_basis_preis_eintraege`).
+        # Ebenso `ohne_leser` (N-780): ein Energie-Topic, das eedc annimmt, aber
+        # nicht verarbeitet — auch bei gesetzter MQTT-Quelle (Bestand) nicht
+        # anmahnen, sonst fordert der Check ein Topic, das niemand liest.
         #
         # `zustand`-Felder ebenso (#263 K-2): Der MQTT-Inbound-Parser ist
         # `float(payload)` — ein Betriebsmodus kann über MQTT gar nicht
@@ -350,7 +353,7 @@ class SensorChecks:
         )
         erwartet = [
             e for e in topics
-            if not e.get("nur_manuell") and not e.get("zustand")
+            if not e.get("nur_manuell") and not e.get("zustand") and not e.get("ohne_leser")
             and erwartet_inbound_topic(quellen, feld_id_aus_match_key(e["match_key"]))
             and (
                 feld_id_aus_match_key(e["match_key"]) in quellen

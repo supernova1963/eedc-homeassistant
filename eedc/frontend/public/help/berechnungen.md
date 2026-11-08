@@ -1971,7 +1971,7 @@ Trägt eine Wallbox die Ladeenergie, ist **sie** die Quelle — auch ohne gesetz
 | Pfad | Ort |
 | --- | --- |
 | Monatsebene | `eauto_wirtschaftlichkeit.get_emob_heimladung_canonical` |
-| Tages-**Leistungs**pfad | `services/live_sensor_config.py` (#356) |
+| Tages-**Leistungs**pfad | `services/live_sensor_config.py::emob_auto_verdraengt` (#356) — HA- und MQTT-Weg (N-779) |
 | Tages-**Zähler**pfad | `snapshot/komponenten_beitraege.wallbox_deckt_ladung_ab` |
 
 Vorher kannte der Zählerpfad nur die Zuordnung; ein E-Auto mit eigenem kWh-Zähler **ohne** Parent
@@ -4880,6 +4880,9 @@ Code: `_bkw_abtretung`, `_bkw_rest_einsetzen`. Auch die Serienwahl
 `live_sensor_config.py::baue_investitions_serien` (Live-Kurve und LTS-Kurve) rechnet nicht: sie wählt je Investition
 die Serien, behält je Entity eine (#227, Wallbox vor E-Auto) und lässt bei einer am Tag in Betrieb befindlichen Wallbox
 die E-Auto-Serie weg (#356, N-555) — Phasen `_serien_je_investition`, `_pool_schutz`, `_emob_quelle` (RF-79).
+Die Regel «Wallbox in Betrieb ⇒ Auto-Serie fällt» gilt für HA- und MQTT-Weg: beide rufen `emob_auto_verdraengt`
+(der MQTT-Tagesverlauf über `_mqtt_emob_quelle`, N-779 — bis 8.11.2026 kannte er nur die Zuordnung «Gehört zu»); in der
+Mischform (Wallbox über HA, Auto über MQTT oder umgekehrt) gilt sie einmal über die Serien beider Wege (`_emob_quelle_ueber_beide_wege`).
 
 #### Zählerlücken wie HA (ab v4.0.51)
 

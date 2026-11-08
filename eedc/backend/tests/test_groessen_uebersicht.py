@@ -28,7 +28,8 @@ Gegenproben unten zeigen, dass er dabei den Namen nennt.
 Gerätetyp eine Tabelle der Energie- und eine der Live-Topics (jeder Registry-Eintrag außer ``SKIP_TYPEN`` genau einmal,
 auch ohne Topic) sowie die Preset-Tabelle. (c) prüft auch diese Datei; der Erzeuger prüft Totalität je Marker und das
 **Sollbild** gegen ``build_expected_topics`` in beiden Richtungen. Die Spalte «Payload» der Energie-Topics fragt die Leser
-(``mq_energie_leser``): ein erwartetes Topic ohne Leser sagt «wird angenommen, aber von keiner Sicht gelesen».
+(``mq_energie_leser``). Ein Geräte-Energiefeld ohne Leser hat seit N-780 (Päckchen U) kein Topic mehr — die Zelle sagt
+«kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor)» bzw. «(Hand)», am Flag ``ohne_leser`` der Topic-Registry.
 
 **Die Slug-Regeln** (github-slugger, ein Slugger je Dokument; Überschriften in Blockquotes und Setext zählen) sind am
 7.11.2026 gegen die Pipeline der In-App-Hilfe gemessen (remark-gfm + rehype-raw + rehype-slug wie
@@ -399,10 +400,17 @@ def test_mq_sprengsatz_registry_feld_entfernt_wird_beim_namen_gemeldet():
     assert "inv/{inv_id}_{name}/soc` (speicher): die Registry erwartet es, keine Tabellen-Zeile" in fehler, fehler
 
 
-def test_mq_kuenstliches_feld_ohne_topic_in_der_registry_wird_gemeldet():
-    neu = gu.SrFeld("speicher", "", "neu_kwh", "INVESTITION_FELDER", {"feld": "neu_kwh", "einheit": "kWh"})
+@pytest.mark.parametrize("neu, zeile", [
+    # Ein Energie-Name MIT Leser (Stand-Zähler), den die Speicher-Registry nicht kennt — seit N-780 bekommt ein
+    # Energie-Feld ohne Leser kein Topic mehr, ein erfundenes `neu_kwh` liefe deshalb still durch.
+    (gu.SrFeld("speicher", "", "ladevorgaenge", "INVESTITION_FELDER", {"feld": "ladevorgaenge", "einheit": ""}),
+     "speicher:ladevorgaenge [INVESTITION_FELDER, energy]"),
+    (gu.SrFeld("speicher", "", "neu_w", "LIVE_FELDER_INV", {"key": "neu_w", "einheit": "W"}),
+     "speicher:neu_w [LIVE_FELDER_INV, live]"),
+], ids=["energy", "live"])
+def test_mq_kuenstliches_feld_ohne_topic_in_der_registry_wird_gemeldet(neu, zeile):
     fehler = _mq_fehler(zeilen=gu.mqtt_zeilen([*gu.sr_eingabefelder(), neu]))
-    assert "speicher:neu_kwh [INVESTITION_FELDER, energy]: die Tabelle nennt" in fehler, fehler
+    assert f"{zeile}: die Tabelle nennt" in fehler, fehler
 
 
 def test_mq_typ_ohne_marker_wird_beim_namen_gemeldet():
@@ -427,13 +435,26 @@ def test_mq_nur_manuell_hat_kein_topic():
 
 
 def test_mq_payload_kommt_aus_den_lesern():
-    """Ein Energie-Topic ohne Leser (Zählerreihe, Heute, Kilometerstand) sagt das; eines mit Leser nennt den Stand."""
+    """Ein Geräte-Energiefeld ohne Leser (Zählerreihe, Heute, Kilometerstand) hat seit N-780 kein Topic — die Zelle sagt,
+    wie der Wert stattdessen kommt (HA-Sensor nur, wo der Monatsabschluss-Vorschlag ihn aus der HA-Statistik liest);
+    eines mit Leser nennt den Stand."""
     assert gu.mq_energie_leser("e-auto", "ladung_extern_kwh") == []
     assert "Zählerreihe" in gu.mq_energie_leser("wallbox", "ladung_kwh")
     assert "Kilometerstand" in gu.mq_energie_leser("e-auto", "km_gefahren")
     zeilen = {z.name: z for z in gu.mqtt_zeilen()}
-    assert zeilen["e-auto:ladung_extern_kwh [INVESTITION_FELDER, energy]"].payload.startswith(gu.PAYLOAD_OHNE_LESER)
+    kwh = zeilen["e-auto:ladung_extern_kwh [INVESTITION_FELDER, energy]"]
+    assert kwh.topic is None and kwh.ohne_topic == gu.KEIN_TOPIC_OHNE_LESER_HA
+    euro = zeilen["e-auto:ladung_extern_euro [INVESTITION_FELDER, energy]"]
+    assert euro.topic is None and euro.ohne_topic == gu.KEIN_TOPIC_OHNE_LESER_HAND
     assert zeilen["wallbox:ladung_kwh [INVESTITION_FELDER, energy]"].payload == gu.PAYLOAD_ZAEHLER
+
+
+def test_mq_sollbild_meldet_ein_topic_ohne_leser_beim_namen():
+    """Die Tabelle darf für ein Feld mit ``ohne_leser`` kein Topic nennen (Gegenprobe an den Zeilen)."""
+    zeilen = [dataclasses.replace(z, topic=gu.mq_topic(z.typ, z.liste, z.feld), ohne_topic="")
+              if z.name == "e-auto:ladung_extern_kwh [INVESTITION_FELDER, energy]" else z for z in gu.mqtt_zeilen()]
+    fehler = gu.mq_sollbild_fehler(zeilen, gu.mq_erwartete_topics())
+    assert any("`ladung_extern_kwh` (e-auto) ist ohne Leser (N-780)" in f for f in fehler), fehler
 
 
 def test_mq_zustandswoerter_kommen_aus_dem_kanon():

@@ -6,7 +6,7 @@ Ausgelagert aus live_power_service.py (Schritt 5 des Refactorings).
 
 import logging
 import operator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
@@ -24,6 +24,7 @@ from backend.services.live_sensor_config import (
     TV_SERIE_CONFIG,
     UNIT_TO_W,
     baue_investitions_serien,
+    emob_auto_verdraengt,
     extract_live_config,
     inv_ids_mit_serie,
     uebersprungene_investitionen,
@@ -820,14 +821,15 @@ class _MqttGeraete:
 
 async def _mqtt_geraete_ohne_ha(
     anlage: Anlage, db: AsyncSession, abruf_start: datetime, end: datetime,
-    investitionen: dict, inv_live_map: dict,
+    investitionen: dict, inv_live_map: dict, tag: Optional[date] = None,
 ) -> _MqttGeraete:
     """MQTT-Serien der Geräte ohne HA-Leistungs-Entität (Mischform, S4).
 
     Ein Gerät mit HA-Leistungs-Entität bleibt beim HA-Zweig, auch wenn sein Verlauf leer ist (sonst zwei Quellen in
     einer Serie); eins ohne bekommt seine Serie aus den 5-Minuten-Snapshots — mit den Bausteinen des MQTT-Zweigs
     (``_mqtt_history``, ``_mqtt_investitions_serien``), damit beide Wege dieselbe Serie bauen. Basis-Felder (Netz,
-    PV gesamt, Preis) bleiben beim HA-Zweig.
+    PV gesamt, Preis) bleiben beim HA-Zweig. ``tag``: der betrachtete Tag für «Wallbox in Betrieb» (N-779, wie
+    ``_ha_serien``).
     """
     from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 
@@ -845,7 +847,7 @@ async def _mqtt_geraete_ohne_ha(
 
     history = _mqtt_history(await get_snapshots_for_range(anlage.id, abruf_start, end, db))
     verfuegbar = frozenset(history)
-    serien, keys, _ = _mqtt_investitions_serien(ohne_ha, set(verfuegbar))
+    serien, keys, _ = _mqtt_investitions_serien(ohne_ha, set(verfuegbar), tag)
     benutzt = {k for ks in keys.values() for k in ks}
     return _MqttGeraete(
         eingerichtet=True, serien=serien, keys=keys,
@@ -853,6 +855,41 @@ async def _mqtt_geraete_ohne_ha(
         # Komponenten-Key `inv:<id>:<feld>` ⇒ das Gerät, für das der MQTT-Baustein eine Serie gebaut hat.
         mit_serie=frozenset(k.split(":")[1] for k in benutzt),
     )
+
+
+def _emob_quelle_ueber_beide_wege(
+    serien_core: list, serie_entities: dict[str, list[str]], serien: list[dict], mqtt: _MqttGeraete,
+    investitionen: dict, tag: Optional[date],
+) -> tuple[list, list[dict], _MqttGeraete]:
+    """Die E-Mob-Quellen-Regel über die **vereinigten** Serien der Mischform (N-779, Päckchen U Runde 2).
+
+    Jeder Weg ruft `emob_auto_verdraengt` schon für seine eigenen Serien (`_emob_quelle`, `_mqtt_emob_quelle`) — das
+    deckt die reinen Anlagen. In der Mischform kann die Wallbox ihre Leistung über HA liefern und das Auto über MQTT
+    (oder umgekehrt); dann sah jeder Weg nur ein Gerät, und die Ladung stand zweimal im Stapel (gemessen 8.11.2026:
+    `['wallbox_2', 'eauto_1', …]`, je −7,0 kW). Hier gilt die Regel einmal über beide: steht eine Wallbox in Betrieb mit
+    Serie da (gleich auf welchem Weg), fallen die Auto-Serien beider Wege samt Entities bzw. Snapshot-Schlüsseln.
+    Ohne MQTT-Serien oder ohne Verdrängung bleibt alles unverändert (die HA-Antwort bitgleich).
+    """
+    if not mqtt.serien:
+        return serien_core, serien, mqtt
+
+    def _mqtt_inv(serie: dict) -> str:
+        return mqtt.keys[serie["key"]][0].split(":")[1]
+
+    paare = [(s.kategorie, s.inv_id) for s in serien_core] + [(s["kategorie"], _mqtt_inv(s)) for s in mqtt.serien]
+    weg = {s.key for s in serien_core if s.kategorie == "eauto"} | {s["key"] for s in mqtt.serien if s["kategorie"] == "eauto"}
+    if not weg or not emob_auto_verdraengt(paare, investitionen, tag):
+        return serien_core, serien, mqtt
+    for key in weg:
+        serie_entities.pop(key, None)
+    keys = {k: v for k, v in mqtt.keys.items() if k not in weg}
+    benutzt = {x for ks in keys.values() for x in ks}
+    mqtt = replace(
+        mqtt, serien=[s for s in mqtt.serien if s["key"] not in weg], keys=keys,
+        history={k: v for k, v in mqtt.history.items() if k in benutzt},
+        mit_serie=frozenset(k.split(":")[1] for k in benutzt),
+    )
+    return [s for s in serien_core if s.key not in weg], [s for s in serien if s["key"] not in weg], mqtt
 
 
 async def _ohne_ha_leistungs_entitaet(
@@ -974,9 +1011,15 @@ async def get_tagesverlauf(
     # S4 (Mischform): Geräte ohne HA-Leistungs-Entität mit MQTT-Leistung — ihre Serien stehen hinter denen aus HA und
     # VOR „PV Gesamt", damit ein MQTT-Erzeuger die Basis-Gesamtleistung genauso ersetzt wie ein HA-Erzeuger (eine
     # Regel, keine Doppelzählung).
-    mqtt_geraete = await _mqtt_geraete_ohne_ha(anlage, db, abruf_start, end, investitionen, inv_live_map)
+    mqtt_geraete = await _mqtt_geraete_ohne_ha(
+        anlage, db, abruf_start, end, investitionen, inv_live_map, start.date(),
+    )
     serien_core, serie_entities, serien, uebersprungen = _ha_serien(
         inv_live_map, investitionen, start, mqtt_geraete,
+    )
+    # N-779 (Mischform über Kreuz): die E-Mob-Quellen-Regel einmal über HA- und MQTT-Serien zusammen.
+    serien_core, serien, mqtt_geraete = _emob_quelle_ueber_beide_wege(
+        serien_core, serie_entities, serien, mqtt_geraete, investitionen, start.date(),
     )
     serien.extend(mqtt_geraete.serien)
     _ha_pv_gesamt(serien, serie_entities, basis_live, anlage)
@@ -1159,10 +1202,36 @@ def _mqtt_leistungs_serien(
         mit_serie.add(inv_id)
 
 
+def _mqtt_emob_quelle(
+    serien: list[dict], serie_comp_keys: dict[str, list[str]], mit_serie: set[str],
+    investitionen: dict, tag: Optional[date],
+) -> None:
+    """Die E-Mob-Quellen-Regel im MQTT-Pfad (N-779): dieselbe Funktion wie im HA-Weg (`emob_auto_verdraengt`) —
+    steht eine Wallbox am ``tag`` in Betrieb mit Serie da, fallen die E-Auto-Serien samt Schlüsseln.
+
+    Das verdrängte Auto steht danach nicht unter „Nicht dargestellt" — es hat eine Leistungsquelle, wie im HA-Weg
+    (`uebersprungene_investitionen`, N-447).
+    """
+    # Komponenten-Key `inv:<id>:<feld>` ⇒ das Gerät der Serie (wie `_MqttGeraete.mit_serie`).
+    def _inv_id(serie: dict) -> str:
+        return serie_comp_keys[serie["key"]][0].split(":")[1]
+
+    if not emob_auto_verdraengt(((s["kategorie"], _inv_id(s)) for s in serien), investitionen, tag):
+        return
+    for serie in [s for s in serien if s["kategorie"] == "eauto"]:
+        mit_serie.discard(_inv_id(serie))
+        serie_comp_keys.pop(serie["key"], None)
+        serien.remove(serie)
+
+
 def _mqtt_investitions_serien(
-    investitionen: dict, available_keys: set[str],
+    investitionen: dict, available_keys: set[str], tag: Optional[date] = None,
 ) -> tuple[list[dict], dict[str, list[str]], list]:
-    """Investitions-Serien des MQTT-Pfads: ``(serien, serie_comp_keys, uebersprungen)``."""
+    """Investitions-Serien des MQTT-Pfads: ``(serien, serie_comp_keys, uebersprungen)``.
+
+    ``tag``: der betrachtete Tag für «Wallbox in Betrieb» (N-779; ``None`` ⇒ die Auswahl des Aufrufers gilt, wie
+    `baue_investitions_serien`).
+    """
     serien: list[dict] = []
     serie_comp_keys: dict[str, list[str]] = {}
     #: Für welche Investition dieser Pfad eine Serie gebaut hat — der Eingang der
@@ -1173,6 +1242,7 @@ def _mqtt_investitions_serien(
 
     _mqtt_wp_split_serien(investitionen, available_keys, serien, serie_comp_keys, mit_serie)
     _mqtt_leistungs_serien(investitionen, available_keys, serien, serie_comp_keys, mit_serie)
+    _mqtt_emob_quelle(serien, serie_comp_keys, mit_serie, investitionen, tag)
 
     # Wer NICHT gezeichnet wird, und warum — dieselbe Bedingung wie im HA-Pfad
     # (N-447). Die Pfade beantworten „hat eine Leistungsquelle?" verschieden
@@ -1256,7 +1326,7 @@ async def _get_tagesverlauf_mqtt(
     _bkw_erzeuger = list(investitionen.values())
 
     serien, serie_comp_keys, uebersprungen = _mqtt_investitions_serien(
-        investitionen, available_keys,
+        investitionen, available_keys, start.date(),
     )
     _mqtt_pv_gesamt(serien, serie_comp_keys, available_keys, anlage)
 

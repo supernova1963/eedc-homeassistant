@@ -417,11 +417,21 @@ def finde_bkw_fuellt_kinder_luecken(
 def finde_doppelmappings(
     ha_zuordnungen: dict[str, str],
     feld_einheit: Optional[dict[str, str]] = None,
+    feld_typ: Optional[dict[str, str]] = None,
 ) -> dict[str, dict]:
     """Dieselbe HA-Entity in ≥2 MENGEN-Feldern → Doppelzählung (#314).
 
     `ha_zuordnungen`: {field_id: entity_id} nur der HA-zugeordneten Felder.
     `feld_einheit`: {field_id: Einheit} — ohne sie gilt das alte Verhalten.
+    `feld_typ`: {field_id: Investitionstyp} — für die Ausnahme Wallbox/E-Auto-Ladeleistung (unten); ohne ihn keine.
+
+    ⭐ **Wallbox und E-Auto an derselben Ladeleistung** (Päckchen U, 8.11.2026, Nebenbefund Päckchen T): steht dieselbe
+    Entity an `leistung_w` einer Wallbox und eines E-Autos, zählen die Leser sie einmal — der Tagesverlauf behält je
+    Entity eine Serie, Wallbox vor Auto (`live_sensor_config._pool_schutz`, #227), und lässt neben einer Wallbox in
+    Betrieb das Auto ganz weg (`emob_auto_verdraengt`, #356); die Live-Bilanz überspringt das Auto
+    (`live_komponenten_builder`). Die Warnung „→ Doppelzählung" behauptete dort eine Wirkung, die nicht eintritt. Das
+    Auto-Feld fällt deshalb aus der Zählung, sobald eine Wallbox-`leistung_w` dieselbe Entity trägt; zwei Wallboxen oder
+    ein drittes Feld an derselben Entity bleiben gemeldet.
 
     ⭐ **Preise werden nicht doppelt gezählt** (rapahl, PN 91806, 2026-08-30).
     Bei ihm hängt derselbe Sensor am *Strompreis (dynamischer Tarif)* und am
@@ -441,14 +451,21 @@ def finde_doppelmappings(
             per_eid[eid].append(fid)
     einheiten = feld_einheit or {}
 
+    typen = feld_typ or {}
+
     def _additiv(fid: str) -> bool:
         return (einheiten.get(fid) or "").strip().lower() not in _NICHT_ADDITIVE_EINHEITEN
+
+    def _ladeleistung(fid: str, typ: str) -> bool:
+        return typen.get(fid) == typ and fid.startswith("inv_live_") and fid.endswith("_leistung_w")
 
     out: dict[str, dict] = {}
     for eid, fids in per_eid.items():
         # Nur Felder, deren Werte überhaupt summiert werden, können doppelt
         # zählen. Bleiben davon weniger als zwei, gibt es nichts zu melden.
         additive = [f for f in fids if _additiv(f)]
+        if any(_ladeleistung(f, "wallbox") for f in additive):
+            additive = [f for f in additive if not _ladeleistung(f, "e-auto")]
         if len(additive) >= 2:
             for fid in additive:
                 out[fid] = {

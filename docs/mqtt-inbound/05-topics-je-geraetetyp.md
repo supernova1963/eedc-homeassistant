@@ -11,8 +11,10 @@ der Datenquellen-Fläche zum Kopieren zeigt) und der Feld-Registry. Jedes Feld s
 - **Bedingung** nennt den Geräte-Parameter, an dem das Feld hängt; „(weich)" heißt: an dieser Bauart untypisch, aber
   möglich. Ein Live-Feld, dessen Bedingung am Gerät nicht gilt, erwartet eedc dort nicht (außer bei „weich");
   Energie-Topics erwartet es unabhängig von der Bedingung.
-- „wird angenommen, aber von keiner Sicht gelesen": eedc nimmt den Wert entgegen, aber heute verarbeitet ihn kein
-  Teil von eedc (keine Zählerreihe, keine Kachel). Soll er zählen, trag ihn im Monatsabschluss ein.
+- „kein MQTT-Topic — Monatsabschluss (Hand oder HA-Sensor)": eedc verarbeitet diesen Wert nicht aus MQTT — er ist eine
+  optionale Aufteilung oder ein Anteil (Eigenverbrauch, Einspeisung, PV-/Netz-Bezug), auswärts geladene Energie oder ein
+  Geldbetrag. Er kommt im Monatsabschluss von Hand oder als Vorschlag aus einem zugeordneten HA-Sensor; bei Geldbeträgen
+  steht „(Hand)".
 - Was ein Feld bedeutet, sagt die Spalte „Hinweis" der [Sensor-Referenz](SENSOR-REFERENZ.md) — dieselbe Registry.
 
 #### Anlage (Basis)

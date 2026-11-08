@@ -8,7 +8,7 @@ Enthält nur reine Daten und Logik ohne I/O.
 import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Callable, Container, Mapping, Optional, Sequence
+from typing import Callable, Container, Iterable, Mapping, Optional, Sequence
 
 from backend.core.field_definitions import (
     SONSTIGES_KATEGORIE_UNGEPFLEGT,
@@ -252,21 +252,28 @@ def _pool_schutz(
     return dedupliziert
 
 
-def _emob_quelle(
-    dedupliziert: list[TagesverlaufSerie],
-    serie_entities: dict[str, list[str]],
-    investitionen: dict[str, "object"],
+def emob_auto_verdraengt(
+    serien: Iterable[tuple[str, str]],
+    investitionen: Mapping[str, object],
     tag: Optional[date],
-) -> list[TagesverlaufSerie]:
-    """Phase 3 von `baue_investitions_serien` (RF-79, #356 mit N-555 Stufe 2): steht eine Wallbox-
-    Serie einer am ``tag`` in Betrieb befindlichen Wallbox da, fallen die E-Auto-Serien samt
-    Entities; sonst bleibt die Liste."""
+) -> bool:
+    """Die Quellen-Regel für E-Mob im Tagesverlauf (#356, N-555 Stufe 2) — **die eine Stelle für HA- und MQTT-Weg**
+    (N-779): steht eine Serie einer am ``tag`` in Betrieb befindlichen Wallbox da, fallen die E-Auto-Serien.
+
+    Typneutral: ``serien`` sind ``(kategorie, inv_id)`` je gebauter Serie — der HA-Weg reicht seine
+    ``TagesverlaufSerie``, der MQTT-Weg seine Serien-Dicts (Gerät aus dem Komponenten-Key). Die Regel braucht keine
+    Zuordnung Auto → Wallbox (ein «Gehört zu» gibt es für E-Autos nicht, ``ERLAUBTE_PARENT_TYPEN``).
+
+    ⛔ N-779 (8.11.2026): bis dahin stand die Regel nur im HA-Weg (``_emob_quelle``); der MQTT-Weg kannte allein die
+    Parent-Regel und stapelte Wallbox und Auto mit je eigenem ``leistung_w``-Topic doppelt — Live-Bilanz und HA-Weg
+    zählten dieselbe Ladung einmal.
+    """
     # Strukturelle Quellen-Regel für E-Mob (#356) — dieselbe wie auf der
     # Monatsebene (`eauto_wirtschaftlichkeit.get_emob_heimladung_canonical`,
     # Phase 2a / Entscheidung 1): **existiert eine Wallbox-Serie, ist sie die
     # Quelle der Heimladung**; sonst das E-Auto.
     #
-    # Die beiden Regeln darüber greifen nur, wenn das E-Auto einen Parent hat
+    # Die Regeln davor (Parent, Pool-Schutz) greifen nur, wenn das E-Auto einen Parent hat
     # oder **dieselbe** `leistung_w`-Entity teilt. Misst das Fahrzeug mit einem
     # eigenen Sensor, lief derselbe Ladevorgang zweimal ins `komponenten`-JSON:
     # Anlage 1, 2026-08-06, Zähler 12,00 kWh → `wallbox_2` −12,00 **und**
@@ -281,13 +288,25 @@ def _emob_quelle(
     # fragte): die Wallbox muss am betrachteten Tag **in Betrieb** sein (Regel 0: nicht
     # vor der Anschaffung, nicht nach der Stilllegung). Eine Wallbox, die erst nach dem
     # Tag gekauft oder vorher stillgelegt wurde, verdrängt das Auto nicht.
-    def _in_betrieb(serie: TagesverlaufSerie) -> bool:
-        inv = investitionen.get(serie.inv_id)
+    def _in_betrieb(inv_id: str) -> bool:
+        inv = investitionen.get(inv_id)
         if tag is None or inv is None or not hasattr(inv, "ist_aktiv_an"):
             return True
         return inv.ist_aktiv_an(tag)
 
-    if any(s.kategorie == "wallbox" and _in_betrieb(s) for s in dedupliziert):
+    return any(kategorie == "wallbox" and _in_betrieb(inv_id) for kategorie, inv_id in serien)
+
+
+def _emob_quelle(
+    dedupliziert: list[TagesverlaufSerie],
+    serie_entities: dict[str, list[str]],
+    investitionen: dict[str, "object"],
+    tag: Optional[date],
+) -> list[TagesverlaufSerie]:
+    """Phase 3 von `baue_investitions_serien` (RF-79, #356 mit N-555 Stufe 2): steht eine Wallbox-
+    Serie einer am ``tag`` in Betrieb befindlichen Wallbox da, fallen die E-Auto-Serien samt
+    Entities; sonst bleibt die Liste. Die Regel selbst steht in `emob_auto_verdraengt` (N-779)."""
+    if emob_auto_verdraengt(((s.kategorie, s.inv_id) for s in dedupliziert), investitionen, tag):
         behalten: list[TagesverlaufSerie] = []
         for serie in dedupliziert:
             if serie.kategorie == "eauto":

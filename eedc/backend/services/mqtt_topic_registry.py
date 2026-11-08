@@ -68,6 +68,22 @@ BASIS_ENERGY_TOPICS = [
 ]
 
 
+def energie_topic_ohne_leser(inv_id, feld: str) -> bool:
+    """Liest eedc den Wert des Energie-Topics ``energy/inv/<id>/<feld>``? ``True`` ⇒ kein Leser (N-780).
+
+    Der Inbound-Cache nimmt jeden Schlüssel ``inv/<id>/<feld>`` an; verarbeitet wird ein Energie-Wert nur über die
+    Zählerreihe (``snapshot/keys.py::_mqtt_key_to_sensor_key`` — Snapshot-Schreiber, Monatsabschluss-Vorschlag,
+    aktueller Monat, Kanal). Die «Heute»-Abbildung und der Kilometerstand lesen nur Felder, die auch dort stehen
+    (gemessen 8.11.2026). Bewusst ohne Leser sind die Verfeinerungen und Anteile aus
+    ``core/field_definitions/karten.py::_SNAPSHOT_AUSNAHMEN`` (BKW-/Sonstiges-Eigenverbrauch, Sonstiges-Einspeisung und
+    -Bezugsaufteilung, externe Ladung) und die €-Abschlussfelder — sie gehen über den Monatsabschluss (Hand oder
+    HA-Sensor), nicht über MQTT. Die eine Wahrheit ist ``_mqtt_key_to_sensor_key``; hier steht keine zweite Liste.
+    """
+    from backend.services.snapshot.keys import _mqtt_key_to_sensor_key
+
+    return _mqtt_key_to_sensor_key(f"inv/{inv_id}/{feld}") is None
+
+
 def _mqtt_slug(name: str) -> str:
     slug = name.strip().replace(" ", "_")
     slug = re.sub(r"[^\w.\-]", "", slug)
@@ -293,6 +309,12 @@ async def build_expected_topics(
                     feld.get("bedingung_anlage"), inv.parameter,
                 ),
                 "nur_manuell": bool(feld.get("nur_manuell")),
+                # N-780 (Päckchen U, 8.11.2026): eedc nimmt das Topic an, aber kein Leser verarbeitet den Wert
+                # (`energie_topic_ohne_leser`). Markiert statt gefiltert wie `nur_manuell` — `topic`/`match_key` bleiben
+                # (Verträge der Konsumenten): die Route `/api/live/mqtt/topics` nennt es nicht, die Fläche bietet nur
+                # HA-Sensor und Hand an (`nur_ha`), der Daten-Checker erwartet es nie. Ein `nur_manuell`-Feld trägt
+                # das Flag nicht — es hat schon seinen eigenen Grund.
+                "ohne_leser": not feld.get("nur_manuell") and energie_topic_ohne_leser(inv.id, feld["feld"]),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })

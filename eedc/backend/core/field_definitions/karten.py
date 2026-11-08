@@ -402,12 +402,13 @@ _SNAPSHOT_AUSNAHMEN: dict[tuple[str, str], str] = {
         "Anteil der Erzeugung, optional gepflegt; die Bilanz führt der "
         "Anlagen-Einspeisezähler (basis:einspeisung)",
     # — Teilmengen des Sonstiges-Verbrauchs —
+    # Bewertet (Entscheid Master 8.11.2026, Päckchen U, N-780) — vorher «⚠ UNBEWERTET».
     ("sonstiges", "bezug_pv_kwh"):
-        "⚠ UNBEWERTET: Teilmenge von verbrauch_sonstig_kwh. Bei der Wallbox ist "
-        "das Gegenstück (ladung_pv_kwh) sehr wohl erfasst — die Ungleichheit ist "
-        "gemessen, aber nicht entschieden. Beim nächsten Eingriff bewerten",
+        "wie eigenverbrauch_kwh — optional gepflegte Aufteilung von "
+        "verbrauch_sonstig_kwh, kein Zähler; den Verbrauch führt verbrauch_sonstig_kwh. "
+        "Eine Erfassung wie Wallbox ladung_pv_kwh erst bei Bedarf (Melder)",
     ("sonstiges", "bezug_netz_kwh"):
-        "⚠ UNBEWERTET: siehe bezug_pv_kwh",
+        "wie bezug_pv_kwh — optional gepflegte Aufteilung, kein Zähler",
     # — E-Auto —
     ("e-auto", "ladung_extern_kwh"):
         "Monatswert ohne Snapshot-Erfassung — auswärts geladene Energie fließt "

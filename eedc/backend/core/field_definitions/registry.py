@@ -1068,8 +1068,7 @@ LIVE_FELDER_INV: dict = {
         {"key": "leistung_w", "label": "Ladeleistung", "einheit": "W",
          "hinweis": "Momentane Ladeleistung des Fahrzeugs in W. Lädt das Auto an einer Wallbox mit eigenem "
                     "Leistungssensor, zählt eedc die Ladeleistung einmal, an der Wallbox; misst das Auto mit "
-                    "eigenem Sensor, steht es darunter. Kommen beide Werte über MQTT, stapelt der Tagesverlauf sie "
-                    "doppelt — dann dieses Feld leer lassen."},
+                    "eigenem Sensor, steht es darunter."},
         {"key": "soc",        "label": "Ladestand",    "einheit": "%",
          "hinweis": "Ladestand der Fahrzeugbatterie in Prozent (0–100)."},
         # P-433-2b K1 (Blatt §2/§5a): was das Fahrzeug selbst meldet — Felder des Hub-Überblicks E-Auto.

@@ -393,3 +393,127 @@ async def test_m3_tageszeile_traegt_den_wp_tageswert(db, ha_verbindung, caplog):
     wp, _, _ = await _aggregiere_lab_lage(db, caplog, TAG)
     gespeichert = (await db.execute(select(TagesZusammenfassung).where(TagesZusammenfassung.datum == TAG))).scalars().one()
     assert gespeichert.komponenten_kwh[f"waermepumpe_{wp.id}"] == pytest.approx(2.0)
+
+
+# ═══ N-779 Die E-Mob-Quellen-Regel im MQTT-Weg ════════════════════════════════════════════════════════════════════
+#
+# Wallbox und E-Auto liefern je ein eigenes `leistung_w`-Topic, das Auto hat kein «Gehört zu» (gibt es für E-Autos
+# nicht, `ERLAUBTE_PARENT_TYPEN`). Der HA-Weg (`_emob_quelle`) und die Live-Bilanz zählen die Ladung einmal, an der
+# Wallbox; der MQTT-Weg kannte bis 8.11.2026 nur die Parent-Regel und stapelte beide (Messung `t2b_messung.py`:
+# `['wallbox_1', 'eauto_2']`). Jetzt rufen beide Wege `live_sensor_config.emob_auto_verdraengt`.
+
+async def _wallbox_und_auto(db, mapping: dict, wallbox_ab: date = date(2020, 1, 1), parent: bool = False):
+    a, (auto,) = await _anlage(db, mapping, ("e-auto", "Auto"))
+    wb = await factories.investition(db, a.id, "wallbox", bezeichnung="Wallbox", anschaffungsdatum=wallbox_ab)
+    if parent:
+        auto.parent_investition_id = wb.id  # Altbestand: per Oberfläche/API nicht mehr setzbar
+    _snaps(db, a.id, {f"inv:{wb.id}:leistung_w": 7000.0, f"inv:{auto.id}:leistung_w": 7000.0}, tag=TAG)
+    await db.commit()
+    return a, wb, auto
+
+
+@pytest.mark.asyncio
+async def test_n779_reine_mqtt_anlage_wallbox_verdraengt_auto(db):
+    a, wb, auto = await _wallbox_und_auto(db, {})
+
+    erg = await ltv._get_tagesverlauf_mqtt(a, db, _tz())
+
+    keys = [s["key"] for s in erg["serien"]]
+    assert f"wallbox_{wb.id}" in keys and f"eauto_{auto.id}" not in keys, keys
+    assert _slot(erg, "10:00")[f"wallbox_{wb.id}"] == -7.0
+    assert f"eauto_{auto.id}" not in _slot(erg, "10:00"), "die Ladung steht einmal im Stapel"
+    assert erg["uebersprungen"] == [], "das Auto hat eine Leistungsquelle — kein «Nicht dargestellt», wie im HA-Weg"
+
+
+@pytest.mark.asyncio
+async def test_n779_wallbox_am_tag_nicht_in_betrieb_auto_bleibt(db, monkeypatch):
+    """Heute (Live-Menge `aktiv_jetzt`) steht eine erst morgen angeschaffte Wallbox in der Liste — sie verdrängt das
+    Auto nicht (N-555 Stufe 2, «in Betrieb» am betrachteten Tag), im MQTT-Weg wie im HA-Weg."""
+    monkeypatch.setattr(ltv, "datetime", _feste_uhr_klasse(HEUTE_MITTAG))
+    a, wb, auto = await _wallbox_und_auto(db, {}, wallbox_ab=TAG + timedelta(days=1))
+
+    erg = await ltv._get_tagesverlauf_mqtt(a, db, 0)
+
+    keys = [s["key"] for s in erg["serien"]]
+    assert f"wallbox_{wb.id}" in keys and f"eauto_{auto.id}" in keys, keys
+
+
+@pytest.mark.asyncio
+async def test_n779_auto_allein_behaelt_seine_serie(db):
+    a, (auto,) = await _anlage(db, {}, ("e-auto", "Auto"))
+    _snaps(db, a.id, {f"inv:{auto.id}:leistung_w": 7000.0})
+    await db.commit()
+
+    erg = await ltv._get_tagesverlauf_mqtt(a, db, _tz())
+
+    assert f"eauto_{auto.id}" in [s["key"] for s in erg["serien"]]
+    assert _slot(erg, "10:00")[f"eauto_{auto.id}"] == -7.0
+
+
+@pytest.mark.asyncio
+async def test_n779_auto_mit_parent_altbestand_nur_wallbox(db):
+    a, wb, auto = await _wallbox_und_auto(db, {}, parent=True)
+
+    erg = await ltv._get_tagesverlauf_mqtt(a, db, _tz())
+
+    keys = [s["key"] for s in erg["serien"]]
+    assert f"wallbox_{wb.id}" in keys and f"eauto_{auto.id}" not in keys, keys
+
+
+@pytest.mark.asyncio
+async def test_n779_mischform_mqtt_geraete_wallbox_verdraengt_auto(db, ha_verbindung, monkeypatch, inbound):
+    """Der zweite Aufrufer (Mischform, HA-Zuordnung nur fürs Netz): die Geräte ohne HA-Leistungs-Entität bekommen ihre
+    Serien aus MQTT — mit derselben Regel."""
+    _Zaehler(monkeypatch, {"sensor.netz": 7500.0})
+    a, wb, auto = await _wallbox_und_auto(db, {"basis": {"live": {"netzbezug_w": "sensor.netz"}}})
+
+    erg = await ltv.get_tagesverlauf(a, db, _tz())
+
+    keys = [s["key"] for s in erg["serien"]]
+    assert f"wallbox_{wb.id}" in keys and f"eauto_{auto.id}" not in keys, keys
+    assert _slot(erg, "10:00")[f"wallbox_{wb.id}"] == -7.0
+    assert erg["uebersprungen"] == []
+
+
+# ── N-779 Runde 2: Mischform über Kreuz — die Regel über die vereinigten Serien beider Wege ──────────────────────────
+
+async def _kreuz(db, ha_seite: str):
+    """Wallbox und Auto, das eine Gerät mit HA-Leistungs-Entität, das andere nur über MQTT."""
+    a, (auto, wb) = await _anlage(db, {}, ("e-auto", "Auto"), ("wallbox", "Wallbox"))
+    ha_inv, mqtt_inv = (wb, auto) if ha_seite == "wallbox" else (auto, wb)
+    a.sensor_mapping = {"basis": {"live": {"netzbezug_w": "sensor.netz"}},
+                        "investitionen": {str(ha_inv.id): {"live": {"leistung_w": "sensor.ha_leistung"}}}}
+    _snaps(db, a.id, {f"inv:{mqtt_inv.id}:leistung_w": 7000.0})
+    await db.commit()
+    return a, wb, auto
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ha_seite", ["wallbox", "auto"])
+async def test_n779_mischform_ueber_kreuz_eine_serie_an_der_wallbox(db, ha_verbindung, monkeypatch, inbound, ha_seite):
+    """Bis Runde 2 sah jeder Weg nur ein Gerät: `['wallbox_…', 'eauto_…', 'netzbezug']`, je −7,0 kW im Stapel."""
+    zaehler = _Zaehler(monkeypatch, {"sensor.netz": 7500.0, "sensor.ha_leistung": 7000.0})
+    a, wb, auto = await _kreuz(db, ha_seite)
+
+    erg = await ltv.get_tagesverlauf(a, db, _tz())
+
+    keys = [s["key"] for s in erg["serien"]]
+    assert f"wallbox_{wb.id}" in keys and f"eauto_{auto.id}" not in keys, keys
+    assert _slot(erg, "10:00")[f"wallbox_{wb.id}"] == -7.0
+    assert f"eauto_{auto.id}" not in _slot(erg, "10:00")
+    assert erg["uebersprungen"] == []
+    if ha_seite == "auto":
+        assert zaehler.ha == [["sensor.netz"]], "die Auto-Entität wird nicht mehr abgefragt"
+
+
+@pytest.mark.asyncio
+async def test_n779_mischform_ohne_emob_kreuz_bitgleich(db, ha_verbindung, monkeypatch, inbound):
+    """Eine Mischform ohne Wallbox/Auto über zwei Wege: die Antwort ist bitgleich mit und ohne die vereinigte Regel."""
+    _Zaehler(monkeypatch, {"sensor.wp_haus": 800.0, "sensor.netz": 2500.0})
+    a, wp_ha, wp_mqtt = await _zwei_wps(db)
+
+    mit = await ltv.get_tagesverlauf(a, db, _tz(), mit_vortagsrand=True)
+    monkeypatch.setattr(ltv, "_emob_quelle_ueber_beide_wege", lambda sc, se, s, m, i, t: (sc, s, m))
+    ohne = await ltv.get_tagesverlauf(a, db, _tz(), mit_vortagsrand=True)
+
+    assert mit == ohne
