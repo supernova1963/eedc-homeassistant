@@ -2,27 +2,17 @@
 # Neu schreiben (nach einem Hand-Eintrag): scripts/groessen-uebersicht.sh --baseline
 # Eine Zeile je Schlüssel: <ebene>:<schlüssel>, sortiert.
 kennwert:abgabe_dritte
-kennwert:eauto_km
 kennwert:eauto_ladung
 kennwert:globalstrahlung
 kennwert:grundlast_kw
-kennwert:ladevorgaenge
 kennwert:netto_bilanz
 kennwert:sonnenstunden
 kennwert:sonstiges_verbrauch
-kennwert:speicher_netzladung
 kennwert:temperatur_avg_c
 kennwert:wp_betriebszeit_min
 kennwert:zaehler:<id>
-monatsgroesse:EmobFakten.km
-monatsgroesse:EmobFakten.km_je_fahrzeug
-monatsgroesse:EmobFakten.ladevorgaenge
-monatsgroesse:EmobFakten.v2h_entladung_kwh
 monatsgroesse:MonatsFakt.jahr
 monatsgroesse:MonatsFakt.monat
-monatsgroesse:SpeicherFakten.entladung_kwh
-monatsgroesse:SpeicherFakten.ladung_kwh
-monatsgroesse:SpeicherFakten.netzladung_kwh
 monatsgroesse:TarifFakten.wp_preis_cent
 monatsgroesse:WpFakten.heizung_kwh
 monatsgroesse:WpFakten.modus_strom_entfeuchten_kwh
@@ -33,7 +23,6 @@ monatsgroesse:WpFakten.nutzenergie_lueften_kwh
 monatsgroesse:WpFakten.strom_heizen_kwh
 monatsgroesse:WpFakten.strom_warmwasser_kwh
 monatsgroesse:WpFakten.warmwasser_kwh
-sensor:e_auto_km_gesamt
 sensor:eedc_prognose_heute_rollend_kwh
 sensor:wp_betriebsstunden
 sensor:wp_kompressor_starts

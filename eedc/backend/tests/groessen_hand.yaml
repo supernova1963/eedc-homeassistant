@@ -73,6 +73,14 @@ monatsgroesse:
   "EmobFakten.fahrverbrauch_kwh":
     abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
     test: "backend/tests/test_n555_fahrverbrauch_bleibt_fahrverbrauch.py"
+  "EmobFakten.km":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.km_je_fahrzeug":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.ladevorgaenge":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
   "EmobFakten.ladung_kwh":
     abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
     test: "backend/tests/test_monats_fakten_schicht.py"
@@ -87,6 +95,9 @@ monatsgroesse:
     test: "backend/tests/test_monats_fakten_schicht.py"
   "EmobFakten.rest_pv_kwh":
     abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.v2h_entladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
     test: "backend/tests/test_monats_fakten_schicht.py"
   "EmobFakten.wallbox_ladung_alle_kwh":
     abschnitt: "BERECHNUNGEN.md#formeln"
@@ -186,8 +197,17 @@ monatsgroesse:
   "SonstigesGeraetFakten.verbrauch_kwh":
     abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
     hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.verbrauch_kwh`."
+  "SpeicherFakten.entladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#ladung-entladung-und-netzladung-des-monats"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SpeicherFakten.ladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#ladung-entladung-und-netzladung-des-monats"
+    test: "backend/tests/test_monats_fakten_schicht.py"
   "SpeicherFakten.netzladung_gewicht_kwh":
     abschnitt: "BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis"
+  "SpeicherFakten.netzladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#ladung-entladung-und-netzladung-des-monats"
+    test: "backend/tests/test_monats_fakten_schicht.py"
   "SpeicherFakten.netzladung_preis_summe_cent_kwh":
     abschnitt: "BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis"
   "TarifFakten.einspeiseverguetung_cent":
@@ -310,6 +330,9 @@ kennwert:
   "eauto_fahrverbrauch":
     abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
     test: "backend/tests/test_tabellen_spalten.py"
+  "eauto_km":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
+    test: "backend/tests/test_aggregiert_monats_fakten.py"
   "eauto_kwh_100km":
     abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
     test: "backend/tests/test_tabellen_spalten.py"
@@ -347,6 +370,9 @@ kennwert:
   "gesamtverbrauch":
     abschnitt: "BERECHNUNGEN.md#formeln"
     test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "ladevorgaenge":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
+    test: "backend/tests/test_tabellen_spalten.py"
   "negative_preis_stunden":
     abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
     test: "backend/tests/test_einspeise_erloes.py"
@@ -388,6 +414,9 @@ kennwert:
   "speicher_ladung":
     abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
     test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "speicher_netzladung":
+    abschnitt: "BERECHNUNGEN.md#ladung-entladung-und-netzladung-des-monats"
+    test: "backend/tests/test_achsen_matrix.py"
   "speicher_vollzyklen":
     abschnitt: "BERECHNUNGEN.md#vollzyklen--eine-definition-für-alle-sichten"
     test: "backend/tests/test_tage_werte_symmetrie.py"
@@ -499,6 +528,9 @@ sensor:
     hinweis: "PV direkt verbraucht (ohne Speicherumweg)"
   "e_auto_ersparnis_vs_benzin_euro":
     abschnitt: "BERECHNUNGEN.md#e-mob-ersparnis-im-cockpit"
+    test: "backend/tests/test_ha_export_multi_eauto.py"
+  "e_auto_km_gesamt":
+    abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
     test: "backend/tests/test_ha_export_multi_eauto.py"
   "e_auto_pv_anteil_prozent":
     abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"

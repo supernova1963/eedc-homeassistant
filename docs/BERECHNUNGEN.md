@@ -1139,19 +1139,30 @@ Vollkosten, Festannahmen setzt eedc nicht ein (§3.6).
 ### 3.3 Speicher-Einsparung
 
 **Funktion:** `berechne_speicher_einsparung()` in `core/calculations.py`
-**Verwendet in:** ROI-Dashboard (`investitionen.py`)
+**Verwendet in:** ROI-Dashboard (`GET /api/investitionen/roi/{anlage_id}`, Paket `api/routes/investitionen/`; Aufruf in
+`roi.py::_speicher_roi`)
 
 #### Eingabefelder
+
+Die Monats-Messgrößen des Speichers (Ladung, Entladung, Netzladung, Ladepreis) stehen in der
+[Übersicht der Größen §1](UEBERSICHT-GROESSEN.md#1-eingabefelder) und in der
+[Sensor-Referenz §3](SENSOR-REFERENZ.md#3-speicher-batterie); ihre Monatsregel steht unten unter „Ladung, Entladung und
+Netzladung des Monats". Diese Rechnung liest die Investitions-Parameter (`core/investition_parameter.py`,
+`PARAM_SPEICHER_DEFAULTS`); gemessener Wirkungsgrad und gemessener Ladepreis gehen den Parametern vor
+(`roi.py::_aufloesen_wirkungsgrad`, `_aufloesen_ladepreis`):
 
 | Feld | Quelle |
 |------|--------|
 | `kapazitaet_kwh` | `get_speicher_nutzbare_kapazitaet_kwh(inv)` — **netto**, still auf brutto zurückfallend (A31-2/E17, s. u.). Greift nur im Prognose-Modus; mit gemessener Entladung übernimmt der Spread-Service und liest gar keine Kapazität. |
 | `wirkungsgrad_prozent` | `Investition.parameter["wirkungsgrad_prozent"]` (Default: 95) |
-| `arbitrage_faehig` | `Investition.parameter["arbitrage_faehig"]` (Default: false) — der Kanon; `nutzt_arbitrage` war der Name vor v3.25.0 |
+| `arbitrage_faehig` | `Investition.parameter["arbitrage_faehig"]` (Default: false) — der Kanon; den Altnamen `nutzt_arbitrage` übersetzt `LEGACY_PARAM_KEYS` |
 | `lade_preis_cent` | `Investition.parameter["lade_durchschnittspreis_cent"]` (Default: 12) |
 | `entlade_preis_cent` | `Investition.parameter["entlade_vermiedener_preis_cent"]` (Default: 35) |
 
 #### Formeln
+
+Prognose-Modus — ohne gemessene Jahres-Entladung; mit ihr rechnet die Funktion den Spread
+([Der Nutzen in Euro](#der-nutzen-in-euro--spread-nicht-voll-strompreis)). `250 Zyklen` = `SPEICHER_ZYKLEN_PRO_JAHR`.
 
 **Ohne Arbitrage (Eigenverbrauchsoptimierung):**
 ```
@@ -1172,6 +1183,27 @@ Arbitrage-Einsparung  = Arbitrage-Anteil * Arbitrage_Spread / 100
 Jahres-Einsparung     = PV-Einsparung + Arbitrage-Einsparung
 ```
 
+#### Ladung, Entladung und Netzladung des Monats
+
+`SpeicherFakten.ladung_kwh`, `.entladung_kwh` und `.netzladung_kwh` sind Summen über die Monatszeilen aller Geräte vom Typ
+Speicher (`monats_fakten/roh.py::_RohMonat._falte_speicher`): Ladung aus `ladung_kwh`, Entladung aus `entladung_kwh`,
+Netzladung (Arbitrage) aus `ladung_netz_kwh` (Lesetür `get_speicher_netzladung_kwh`, Rückfall auf den Altnamen
+`speicher_ladung_netz_kwh`). Dieselbe Faltung bildet den mengengewichteten Ladepreis
+([Der Nutzen in Euro](#der-nutzen-in-euro--spread-nicht-voll-strompreis)). Die Akku-Felder eines Balkonkraftwerks zählen
+hier nicht mit (`BkwFakten.speicher_*`).
+
+**Monat ohne Speicher-Zeile:** trägt kein Gerät vom Typ Speicher eine Zeile, die Tagessumme des Monats aber Ladung oder
+Entladung > 0, kommen alle drei aus den Tagen (`monats_fakten/bau.py::_speicher_aus_tagen`, #427, Entscheid Gernot
+13.10.2026) — Ladung und Entladung aus der Tagessumme, die Netzladung samt Preis aus `monats_fakten/netzladung_tage.py`
+(`netzladung_aus_tagen`; die Menge über `speicher_netzladung_aus_tagen`, die auch *Cockpit → Monat* ruft); ohne
+Netzlade-Zähler ist sie 0. Der Fakt trägt dann die Marke der Tageswert-Gruppe Speicher (`TAGESWERT_SPEICHER`). Eine
+Speicher-Zeile ersetzt die Tageswerte (P8). Fenster und Grenzen des Rückfalls:
+[§6b „Tageswerte: Zähler und Bezug aus einem Fenster"](#tageswerte-zähler-und-bezug-aus-einem-fenster).
+
+Die Werte-Tabelle zeigt die Netzladung im Monat als `speicher_netzladung_kwh` = `SpeicherFakten.netzladung_kwh`
+(`monatsdaten_aggregiert.py::_zeile_komponenten`), sobald der Monat eine Speicher- oder BKW-Zeile oder Speicher-Tageswerte
+trägt (`monatsdaten.py`, `hat_speicher_imd`).
+
 #### Vollzyklen — eine Definition für alle Sichten
 
 ```
@@ -1180,17 +1212,14 @@ Vollzyklen = Entladung_kWh ÷ Kapazität_brutto_kWh
 
 **SoT:** `core/berechnungen/speicher.py::vollzyklen`. Alle Sichten rufen ihn auf —
 Komponenten-Hub (`investitionen/dashboard_*.py`), Cockpit Tag (`energie_profil/tage_werte.py`),
-Monat/Jahr (`aktueller_monat/komponenten.py::_speicher_detail`) und **Cockpit-Übersicht (`cockpit/uebersicht.py`)**,
-PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
+Monat/Jahr (`aktueller_monat/komponenten.py::_speicher_detail`), **Cockpit-Übersicht (`cockpit/uebersicht.py`)**,
+PDF-Jahresbericht, HA-Sensor `speicher_zyklen` (`ha_export/anlage_komponenten.py`) und die Speicher-Potential-Monate
+(`services/speicher_potential_service.py`).
 Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie),
 `test_tage_werte_symmetrie.py` und `test_speicher_kanon_symmetrie.py`.
 
-> ⚠ **Diese Aufzählung war bis zum 2026-08-04 unvollständig — und genau die fehlende Zeile war die
-> fehlerhafte.** `cockpit/uebersicht.py` rechnete weiterhin `Ladung ÷ Kapazität`; der Sweep vom
-> 2026-07-28 hatte die Route übersehen, und weil ihr Wert damals keinen Client-Leser hatte, fiel es
-> niemandem auf (#358 gab ihm einen). **Lehre:** eine Liste von Aufrufern in der Doku ist eine
-> Behauptung über den Code — sie gehört mit einem baumweiten Grep belegt, sonst dokumentiert sie
-> den Soll- statt den Ist-Zustand.
+> ⚠ **Eine Liste von Aufrufern ist eine Behauptung über den Code** — sie ist am baumweiten Grep (`vollzyklen(`)
+> belegt, sonst dokumentiert sie den Soll- statt den Ist-Zustand.
 
 **Warum die Entladung:** Ein Vollzyklus meint die einmal *entnommene* Kapazität — die Größe, auf die
 sich Hersteller-Garantien beziehen, und unabhängig von den Wandlungsverlusten des Ladepfads. Sie ist
@@ -1199,7 +1228,7 @@ außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
 **Warum Brutto im Nenner:** `nutzbare_kapazitaet_kwh` ist optional und meist nicht gepflegt; ein
 Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
 Wert. Im HA-Export ist das Netto-Feld reiner **Fallback**, falls die Brutto-Kapazität fehlt — die
-Lese-Reihenfolge dort ist bewusst brutto → netto und bleibt es auch nach A31-2.
+Lese-Reihenfolge dort ist bewusst brutto → netto (A31-2).
 
 #### Auslastung — zeitraum-normierte Nutzung (#358 Phase 1)
 
@@ -1239,18 +1268,16 @@ Ersparnis = PV-Anteil   × (Netzbezug − Einspeisevergütung) / 100
 
 **SoT:** `core/berechnungen/speicher_wirtschaftlichkeit.py::berechne_speicher_ersparnis`.
 Aufrufer: T-Konto (`aktueller_monat/tkonto.py::_speicher_zeile`), Speicher-Dashboard und
-Sonstiges-Speicher (`investitionen/dashboard_sonstiges.py`), Aussichten.
+Sonstiges-Speicher (`investitionen/dashboard_sonstiges.py`), Aussichten, ROI im IST-Modus (`berechne_speicher_einsparung`).
 **Beide Preise je Monat aus den Monats-Fakten** (`TarifFakten.netzbezug_preis_cent` und `einspeiseverguetung_cent`:
 #392-Monatssatz → Tarif des Monats → Vorbelegung 8,2 ct), in T-Konto und Hubs dieselben — auch für V2H und den
-Erlös eines sonstigen Erzeugers (`investitionen/dashboard_basis.py::_gewichtete_monatspreise`). Bis 12.10.2026 nahmen
-Speicher-, V2H- und Sonstiges-Hub vor dem ersten Tarif die **heutige** Vergütung und V2H/Sonstiges keinen Monatssatz
-(Speicher-Hub 192,00 statt 187,60 € = Σ T-Konto, V2H 88,00 statt 108,00 €; N-715/N-716). Gewächtert von
+Erlös eines sonstigen Erzeugers (`investitionen/dashboard_basis.py::_gewichtete_monatspreise`; N-715/N-716: auch vor dem
+ersten Tarif nie die heutige Vergütung). Gewächtert von
 `test_speicher_kanon_symmetrie.py` (drei Achsen, mit **absoluten** Erwartungen — Symmetrie allein
 ließe auch drei gleich falsche Zahlen durch, Lehre aus N-130).
 
 **Warum der Spread:** die entladene kWh ersetzt Netzbezug, hätte aber sonst Einspeisevergütung
-erbracht. Die entgangene Vergütung ist eine reale Gegenposition (Drift-Audit A3, von Gernot am
-2026-08-04 für #358 bestätigt).
+erbracht. Die entgangene Vergütung ist eine reale Gegenposition (Drift-Audit A3, #358).
 
 **Warum die Netzladung ausgenommen ist:** sie hätte nie eingespeist werden können, der PV-Spread
 gilt für sie nicht. Ihr Vorteil ist `Netzbezug − Ladepreis`; ohne gepflegten Ladepreis ist sie
@@ -1265,15 +1292,12 @@ Ladepreis_Monat = Σ (Ladepreis_Zeile × Netzladung_Zeile) / Σ Netzladung_Zeile
                   nur Zeilen mit Ladepreis > 0 und Netzladung > 0; Σ Gewicht = 0 ⇒ None (Leser fallen auf den Bezugspreis)
 ```
 
-Zwei Speicher mit 100 kWh zu 10 ct und 10 kWh zu 30 ct ergeben 11,8 ct, nicht das Mittel 20 ct. Ohne Speicher-Zeile
-trägt der Tageswert-Rückfall dieselben zwei Felder TEP-gewichtet aus den Tagen (#427, §6b).
+Gewichtet wird nach Menge, nicht über das Mittel der Preise. Ohne Speicher-Zeile trägt der Tageswert-Rückfall dieselben
+zwei Felder TEP-gewichtet aus den Tagen (#427, §6b).
 
-> ⚠ **Zwei Fundstellen wichen bis zum 2026-08-04 ab** — beide sichtbar: `aktueller_monat.py`
-> rechnete `Entladung × Netzbezug` (bei 30/8 ct **36 % zu hoch**), `dashboard_speicher.py` (damals `dashboards.py`) den Spread
-> **inline** auf der gesamten Entladung *und* wies den Arbitrage-Gewinn zusätzlich aus — der
-> Komponenten-Hub addiert beide Posten, netzgeladene Energie zählte damit doppelt. Die Formel im
-> Layer zu haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht
-> (ADR-001).
+> ⚠ **Keine Sicht rechnet die Entladung zum vollen Bezugspreis oder den Spread inline**, und keine weist den
+> Netz-Anteil zusätzlich als Arbitrage-Gewinn aus — sonst zählte netzgeladene Energie doppelt. Die Formel im Layer zu
+> haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht (ADR-001).
 
 #### Preis- und Speicher-Sensoren des HA-Exports (Stufe 3b)
 
@@ -1326,18 +1350,17 @@ Vortags). Der eine Ort dafür ist `slot_konvention.forward_werte_je_backward_zei
 
 Das betrifft sichtbar:
 
-* **Speicher-Potential** — „Überschuss bei vollem Speicher" zählte bis dahin auch die Einspeisung
-  der Stunde **vor** dem Vollwerden, „Fehlmenge bei leerem Speicher" spiegelbildlich den Netzbezug
-  der Stunde, in der er erst leerlief. Das Fenster lag eine Stunde zu früh.
-* **Effektiver Ladepreis und Entladewert** — die Netzladung einer Stunde zahlte den Preis der
-  Nachbarstunde. Bei einem **Festpreis** ändert das nichts (jede Stunde derselbe Preis); bei einem
+* **Speicher-Potential** — „Überschuss bei vollem Speicher" und „Fehlmenge bei leerem Speicher" paaren den
+  Ladestand der Zeile davor mit der Menge der Stunde; ohne die Umkehr läge das Fenster eine Stunde zu früh (es zählte
+  die Einspeisung der Stunde **vor** dem Vollwerden und den Netzbezug der Stunde, in der er erst leerlief).
+* **Effektiver Ladepreis und Entladewert** — die Netzladung einer Stunde zahlt den Preis ihrer eigenen Stunde, nicht den
+  der Nachbarstunde. Bei einem **Festpreis** ändert das nichts (jede Stunde derselbe Preis); bei einem
   dynamischen Tarif ist es die volle Differenz zweier Nachbarstunden.
 * **Tageskosten, Monats-Ø-Preis und Eigenverbrauchs-Ersparnis** der Flex-Kaskade
   ([KONZEPT-FLEX-TARIFE §2](KONZEPT-FLEX-TARIFE.md)) sowie der **§51-Einspeiseerlös**.
 * **Die Stundenliste des Tagesdetails** (`GET /energie-profil/{id}/stunden`, N-553): Sie zeigt
-  keine Rechnung, aber dieselbe Zeile — wer in *Cockpit → Tag → Stundenwerte* die Spalte „SoC"
-  einschaltet, las den Ladestand der Nachbarstunde neben dem Batteriefluss. Die Liste trägt den
-  Ladestand jetzt zur Stunde ihrer Zeile.
+  keine Rechnung, aber dieselbe Zeile — sie trägt den Ladestand zur Stunde ihrer Zeile, die Spalte „SoC" in
+  *Cockpit → Tag → Stundenwerte* steht also neben dem Batteriefluss derselben Stunde.
 
 > ⭐ **„Stand am Tagesende" ist eine andere Frage und hat deshalb eine eigene Größe** (N-553).
 > Die Kachel *Ladestand* im Speicher-Block fragt „wie voll war der Speicher **zuletzt**", nicht
@@ -1345,21 +1368,15 @@ Das betrifft sichtbar:
 > Tagesraster (sein Intervall `[23, 24)` liegt backward schon im Folgetag), und am **laufenden**
 > Tag wäre die Kachel damit eine Stunde älter geworden. Die Antwort führt ihn deshalb ungepaart
 > als `soc_zuletzt_prozent` mit. **Spanne** (min/max) ist gegen die Zuordnung unempfindlich und
-> kommt weiter aus der Liste.
+> kommt aus der Liste.
 
 > ⛔ **Zwei Stellen paaren bewusst OHNE diese Umkehr, beide gemessen.**
 > (1) Der **Wirkungsgrad am Periodenrand** (`speicher_wirtschaftlichkeit._lese_soc_am_periodenrand`)
 > stellt SoC-Randzeilen gegen **Monatsintegrale**: Zeile 0 liegt ½ h nach dem Periodenbeginn,
 > Zeile 23 ½ h vor dem Ende — symmetrisch; die Vorzeile machte daraus 1½ h und wäre schlechter.
 > (2) Die **Sizing-Kalibrierung** (`speicher_sizing_service._als_sizing_stunde`) bildet eine
-> *Differenz zweier Stundenmittel* und stellt sie einer **einzelnen** Stundenmenge gegenüber:
-> `ΔSoC(s−1 → s) ≈ ½ (b_s + b_{s+1})`, verglichen wird aber `b_s` allein. **Beide Fassungen
-> verfehlen gleichermaßen** — an einer reinen Demo-Reihe (4 800 Stunden, Wahrheit 10,0 kWh je
-> 100 % SoC und Roundtrip 1,00) liefert die Zeilen-Paarung 10,03/11,11 (Roundtrip 1,108), die
-> Vorzeile 12,44/13,62 (1,095); **beide fallen aus dem Plausibilitätsband und ergeben `None`**,
-> die Sicht nimmt dann die gepflegten Werte. Die Paarung ist hier also nicht die Stellschraube.
-> **Die Lösung ist die Formel** — der Hub gehört gegen das *Mittel der zwei angrenzenden
-> Stundenmengen*.
+> *Differenz zweier Stundenmittel*, keine Paarung: sie stellt den Hub dem *Mittel der zwei angrenzenden
+> Stundenmengen* gegenüber (N-552, nächster Abschnitt) — eine Verschiebung des Ladestands bräche das.
 
 #### Wie die Sizing-Kalibrierung Kapazität und Wirkungsgrad misst (N-552, 23.09.2026)
 
@@ -1369,23 +1386,20 @@ Stunde deutlich lädt oder entlädt, wird der Hub des Ladestands gegen die beweg
 
 Beide Ladestände sind **Stundenmittel**. Ihre Differenz beschreibt deshalb den Fluss zwischen den
 **Mitten** der beiden Stunden, also je zur Hälfte zwei Wanduhr-Stunden — und genau diese zwei
-halben Stunden stellt eedc dem Hub seit N-552 gegenüber (`½ (b_s + b_{s+1})` bei heutigen Zeilen,
+halben Stunden stellt eedc dem Hub gegenüber (N-552: `½ (b_s + b_{s+1})` bei heutigen Zeilen,
 `½ (b_{s−1} + b_s)` bei Altbestand vor dem 04.06.2026, entschieden je Zeile an ihrer
 Aggregationszeit). Läuft die eine Hälfte in die andere Richtung als die zweite, zählt der Hub nicht:
 dann mischt er zwei Wirkungsgrade.
 
-**Gemessen an einem echten Jahr** (eine Anlage, 356 vollständige Tage): Der Hub folgt der Formel mit
-einer Korrelation von 0,98 (die Einzelstunde vorher: 0,95). Gegen die gemessene Einspeisung und den
-gemessenen Netzbezug weicht die simulierte Anlage jetzt um zusammen 3,3 Prozentpunkte ab statt 4,9;
-der Wirkungsgrad bleibt über Zeiträume und Schwellen stabil bei 72–74 % (vorher 82–88 %). Die
-nutzbare Kapazität hängt weiter am Median der selteneren Entladestunden und kann zwischen Zeiträumen
-um einige Zehntel Kilowattstunden schwanken. Die Mindestschwelle von 10 Prozentpunkten Hub bleibt:
-eine höhere wäre an dieser Anlage minimal besser, halbierte aber die Entladestunden und ließe
-Anlagen mit weniger Daten auf die gepflegten Werte zurückfallen.
+Die Formel ist an einem echten Jahr gemessen (Korrelation des Hubs 0,98 gegen 0,95 der Einzelstunde). Die
+nutzbare Kapazität hängt am Median der selteneren Entladestunden und kann zwischen Zeiträumen
+um einige Zehntel Kilowattstunden schwanken. Die Mindestschwelle ist 10 Prozentpunkte Hub
+(`MIN_SOC_HUB_PROZENTPUNKTE`): eine höhere halbierte die Entladestunden und ließe Anlagen mit weniger Daten auf die
+gepflegten Werte zurückfallen.
 
-> ⛔ **Die Umkehr gilt nicht rückwirkend für jede gespeicherte Zeile.** Der HA-Stundenpfad
-> beschriftete seine Energiemengen bis zum **04.06.2026** selbst *forward* — auf einer Zeile, die
-> damals aggregiert wurde, ist die Paarung innerhalb **derselben** Zeile die richtige. eedc
+> ⛔ **Die Umkehr gilt nicht rückwirkend für jede gespeicherte Zeile.** Zeilen, die der HA-Stundenpfad vor dem
+> **04.06.2026** aggregiert hat, tragen ihre Energiemengen *forward* beschriftet — auf ihnen ist die Paarung innerhalb
+> **derselben** Zeile die richtige. eedc
 > entscheidet das je Zeile an ihrer **Aggregationszeit** (`created_at`, Grenze
 > `slot_konvention.SLOT_PAARUNG_VORZEILE_AB`), nicht an ihrem Datum. **Reparaturweg: neu
 > aggregieren stellt einen alten Tag um** — `aggregate_day` löscht den Tag und schreibt ihn neu,
@@ -1401,10 +1415,8 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 | **Wie oft wurde der Speicher umgeschlagen?** | **brutto** (`kapazitaet_kwh`) | Bezugsgröße der Hersteller-Garantie; ein Nenner, der am Pflegezustand hängt, macht dieselbe Anlage unvergleichbar | Vollzyklen (alle Sichten), graue Last, Community-Datensatz, Anzeige/Beschreibung der Komponente |
 | **Wie viel Energie geht durch den Speicher?** | **netto** (`nutzbare_kapazitaet_kwh`, still auf brutto zurückfallend) | Simuliert bzw. prognostiziert wird eine *durchgefahrene Menge* — und durch den Speicher geht nur der nutzbare Hub | Tages-Vorschau „Speicher voll um …" (Planungs-Tab **und** HA-Sensor `eedc_speicher_voll_um`), Wirtschaftlichkeits-**Prognose** ohne IST-Aggregat, η-SoC-Delta |
 
-> ⚑ **Und seit N-238 (2026-08-12) gehört der Wirkungsgrad dazu.** Die Tages-Vorschau rechnete den
-> Ladeweg **verlustfrei** — für 12 kWh im Speicher hielt sie 12 kWh Überschuss für ausreichend,
-> real sind es bei η = 95 % rund 12,7 und bei 85 % über 14. „Speicher voll um" lag deshalb
-> systematisch **vor** der tatsächlichen Uhrzeit. Kapazität **und** Wirkungsgrad kommen jetzt aus
+> ⚑ **Der Wirkungsgrad gehört dazu (N-238).** Die Tages-Vorschau rechnet den Ladeweg mit Verlust — verlustfrei
+> läge „Speicher voll um" systematisch **vor** der tatsächlichen Uhrzeit. Kapazität **und** Wirkungsgrad kommen aus
 > **einem** Helper (`aggregiere_speicher_basis`: Kapazität summiert, Wirkungsgrad als **Minimum** —
 > eine Kette ist nicht besser als ihr schwächstes Glied); der HA-Sensor und die Kachel lesen
 > dieselbe Regel, statt sie zweimal zu bilden. Die Verluste sitzen ganz auf der **Ladeseite**, weil
@@ -1412,54 +1424,45 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 > Doppelzählung (dieselbe Konvention wie `core/berechnungen/speicher_sizing.py`).
 >
 > ⚑ **Welche Geräte in den Helper gehen, entscheidet der Aufrufer — und für die beiden
-> Planungs-Sichten sind es seit N-546 (2026-09-22) nur die HEUTE laufenden.** `Sizing` und
-> `Speicher-Potential` holten bis dahin **alle** Investitionen vom Typ Speicher, ohne `aktiv`
-> und ohne `stilllegungsdatum`; ein abgelöstes Gerät hob damit die Kapazität, senkte über das
-> **Minimum** den Wirkungsgrad und verschob die Leer-Schwelle (beide Summen gehen ein).
+> Planungs-Sichten sind es nur die HEUTE laufenden (N-546).** `Sizing` und `Speicher-Potential` nehmen die
+> Investitionen vom Typ Speicher mit `aktiv` und ohne Stilllegung vor heute; ein abgelöstes Gerät höbe sonst die
+> Kapazität, senkte über das **Minimum** den Wirkungsgrad und verschöbe die Leer-Schwelle (beide Summen gehen ein).
 > Stichtag ist `date.today()` und nicht das Fenster-Ende: beide Sichten fragen nach vorn, wie
-> schon der Tarif im Docstring von `speicher_sizing_service.py`.
+> der Tarif im Docstring von `speicher_sizing_service.py`.
 >
 > ⚠ **Die gepflegte Kapazität bleibt maßgeblich und wird NICHT durch die gemessene ersetzt**
-> (Gernots Entscheid 2026-08-12). Sie trägt eine **Absicht**: es gibt Anwender, die ihren Speicher
+> (Entscheid Gernot). Sie trägt eine **Absicht**: es gibt Anwender, die ihren Speicher
 > bewusst nicht auf 100 % laden, und für die wäre eine Korrektur nach unten falsch — sie wollen
 > wissen, wann *ihr* Ziel erreicht ist. Der Sizing-Block weist die gemessene Größe stattdessen
 > **daneben** aus und trennt die zwei Ursachen einer Lücke (Ladegrenze ⟷ Ladeverlust) über den
 > tatsächlich genutzten Ladestands-Bereich (`messe_soc_nutzung`).
 
-> ⚑ **Seit #379 (2026-08-15) trägt das Netto-Feld eine dritte Aussage: die Entlade-Untergrenze.**
+> ⚑ **Das Netto-Feld trägt eine dritte Aussage: die Entlade-Untergrenze (#379).**
 > Aus dem Verhältnis beider Kapazitäten leitet `core/berechnungen/speicher_potential.py::
 > leer_schwelle_prozent` ab, ab welchem Ladestand *dieser* Speicher nichts mehr abgibt —
-> `(1 − netto ÷ brutto) × 100`, bei 24 von 30 kWh also 20 %. Vorher stand dort die feste Zahl
-> **5 %**, und das war ein Fehler mit Folgen: Wer eine eigene Untergrenze fährt, dessen Speicher
-> erreicht 5 % **nie**, also lief er nie „leer", also war das *Nutzbare Zusatzpotential*
-> **strukturell 0** — die Sicht behauptete „ein größerer Speicher hätte nichts gebracht", obwohl
-> sie es gar nicht messen konnte.
+> `(1 − netto ÷ brutto) × 100`, bei 24 von 30 kWh also 20 %. Eine feste Schwelle verfehlt jede eigene Untergrenze:
+> ein Speicher, der sie nie erreicht, liefe nie „leer", und das *Nutzbare Zusatzpotential* wäre **strukturell 0** —
+> die Sicht behauptete „ein größerer Speicher hätte nichts gebracht", ohne es messen zu können.
 >
 > Drei Festlegungen gehören dazu, jede aus einer Messung:
 >
-> * **Aufschlag von 3 Prozentpunkten** (`SOC_LEER_TOLERANZ_PP`). Der Melder hat 20 % eingestellt,
->   seine Kurve dreht bei **21 %** — Wechselrichter schalten mit Puffer ab, der SoC kommt in ganzen
->   Prozent, und diese Auswertung liest Stundenmittel. Ohne Aufschlag träfe die neue Schwelle so
->   zuverlässig daneben wie die alte.
+> * **Aufschlag von 3 Prozentpunkten** (`SOC_LEER_TOLERANZ_PP`): Wechselrichter schalten mit Puffer ab, der SoC kommt
+>   in ganzen Prozent, und diese Auswertung liest Stundenmittel — ohne Aufschlag träfe die Schwelle die eingestellte
+>   Untergrenze knapp nicht.
 > * **Deckel bei 50 %** (`SOC_LEER_MAX_PROZENT`) gegen die N-235-Klasse: „1 kWh nutzbar von 30"
 >   ergäbe sonst 96,7 % und ließe den Speicher fast immer als leer gelten — die Kennzahl fiele zu
 >   **hoch** aus, also in die Gegenrichtung der Deckelung.
 > * **Die Reserve sitzt unten.** Bei Heimspeichern der Normalfall; die Oberseite deckt
 >   `SOC_VOLL_PROZENT` ab, und eine gewollte *Lade*-Grenze erkennt `messe_soc_nutzung` an den Daten.
->   ⛔ **Hier stand bis 2026-08-31 nur diese Annahme, ohne ihren Preis.** Trifft sie nicht zu,
->   fällt die Schwelle zu hoch aus — und die Kennzahl damit zu **hoch**, nicht konservativ.
->   Am Minimalfall gemessen (31.08.): 10 kWh brutto, Fahrweise 10/90 ⇒ Eintrag 8 kWh ⇒ Schwelle
->   **23 % statt 13 %**; `berechne_zusatzpotential` zählt ab da mehr Netzbezug in die Fehlmenge,
->   das nutzbare Zusatzpotential wuchs von **3,0 auf 5,0 kWh**. Das ist die Richtung, gegen die
->   §3.3 gebaut ist. ⚠ **Und es ist kein Einzelfall:** `nutzbare_kapazitaet_kwh` meint vertraglich
->   den **ganzen** fahrbaren SoC-Hub, das Handbuch weist das 10/90-Muster ausdrücklich an — wer
->   eine obere Ladegrenze fährt, pflegt also korrekt und bekommt trotzdem die zu hohe Untergrenze.
->   **Gebaut wurde kein zweites Feld** (Entscheid Gernot 15.08. steht), sondern die Annahme an
->   beiden Anzeigen: im Speicher-Formular beim Eintippen und im Block *Größerer Speicher?*.
->   Auslöser: cbrosius auf [#379](https://github.com/supernova1963/eedc-homeassistant/issues/379).
+>   ⛔ **Die Annahme hat einen Preis:** trifft sie nicht zu, fällt die Schwelle zu hoch aus — und die Kennzahl damit
+>   zu **hoch**, nicht konservativ; `berechne_zusatzpotential` zählt dann mehr Netzbezug in die Fehlmenge. Das trifft
+>   jede obere Ladegrenze (Fahrweise 10/90): `nutzbare_kapazitaet_kwh` meint vertraglich den **ganzen** fahrbaren
+>   SoC-Hub, wer so pflegt, pflegt korrekt und bekommt trotzdem die zu hohe Untergrenze. **Gebaut ist kein zweites
+>   Feld** (Entscheid Gernot 15.08.), sondern der Hinweis auf die Annahme an beiden Anzeigen: im Speicher-Formular beim
+>   Eintippen und im Block *Größerer Speicher?* (#379).
 >
-> ⚠ **Wer nichts pflegt, sieht keine geänderte Zahl** — Rückfall auf 5 %, Abnahmekriterium des Baus.
-> Umgekehrt heißt das: Die Korrektur erreicht nur Anlagen mit gepflegter nutzbarer Kapazität.
+> ⚠ **Ohne gepflegte nutzbare Kapazität gilt die feste Schwelle 5 %** (`SOC_LEER_PROZENT`) — die abgeleitete Schwelle
+> erreicht nur Anlagen mit gepflegtem Netto-Feld.
 >
 > ⚑ **Und die Umkehrung gehört dazu (N-254):** Ohne gepflegte nutzbare Kapazität ist „der Speicher
 > wurde nie leer" **zweideutig** — er kann groß genug sein (dann hätte mehr Kapazität nichts
@@ -1470,39 +1473,33 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 > wie „nicht gemessen statt 0".
 >
 > ⚠ **Die Regel hängt an der Pflege, nicht am Abstand allein** — sonst verlöre auch der Fall seine
-> Aussage, für den die Kennzahl gebaut wurde (Dev-Anlage, nie unter 31 %). Ist die Schwelle
-> abgeleitet, kennt eedc die Untergrenze, und ein Speicher, der sie nicht erreicht, war wirklich
-> groß genug. Wer seinen Boden real berührt (Winter, 6 %), bekommt die klare Aussage ebenfalls.
+> Aussage, für den die Kennzahl gebaut wurde. Ist die Schwelle abgeleitet, kennt eedc die Untergrenze, und ein
+> Speicher, der sie nicht erreicht, war wirklich groß genug. Wer seinen Boden real berührt, bekommt die klare
+> Aussage ebenfalls.
 >
-> ⚠ **Die Schwelle gilt im ganzen Speicher-Hub, nicht nur in Phase 2.** `speicher_sizing.py`
-> definierte `95.0`/`5.0` bis dahin **selbst** — mit dem Kommentar „dieselben Schwellen wie in
-> `speicher_potential.py`". Die Absicht war formuliert, die Kopplung fehlte; ein `==`-Test hätte
-> nie angeschlagen, weil beide Werte gleich waren. Jetzt Import statt Kopie, geprüft an der Quelle.
+> ⚠ **Die Schwelle gilt im ganzen Speicher-Hub, nicht nur in Phase 2.** `speicher_sizing.py` importiert
+> `SOC_VOLL_PROZENT`/`SOC_LEER_PROZENT` aus `speicher_potential.py` — Import statt Kopie: bei einer Kopie hätte ein
+> `==`-Test nie angeschlagen, solange beide Werte gleich sind.
 
-**SoT netto (seit A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
+**SoT netto (A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
 netto, sonst brutto, sonst `None`. Der Brutto-Fallback ist **still** (Entscheidung **E17**): kein
 Hinweis, keine Kennzeichnung, **kein P4-Fall**. Der Brutto-Wert ist nicht *unvollständig*, er ist die
-andere gültige Lesart derselben Größe; die Zahlenänderung aus A31-2 trifft deshalb ausschließlich
-Anlagen, die das optionale Feld bewusst gepflegt haben. Die Leserichtung geht nur netto → brutto und
+andere gültige Lesart derselben Größe; netto wirkt deshalb nur, wo das optionale Feld gepflegt ist.
+Die Leserichtung geht nur netto → brutto und
 **nie** zurück — ein Brutto-Helper mit Netto-Fallback wäre genau die Verwechslung, die die Vollzyklen
 wieder vom Pflegezustand abhängig machte.
 
 **Nebenwirkung der Vorschau, die dazugehört:** dieselbe Simulation liefert auch Einspeisung,
 Eigenverbrauch und Autarkie des Vorschautags. Ein kleinerer Puffer nimmt weniger Überschuss auf —
-mehr geht ins Netz. Gemessen an der Demo-Anlage (15,4 kWh brutto gegen
-13,9 kWh netto, 28.07.–02.08.2026): Einspeisung +0,75 bis +1,08 kWh/Tag,
-Autarkie −1,7 bis −3,2 Prozentpunkte, „Speicher voll" an einem der sechs Tage eine Stunde
-früher (die Stundenauflösung verschluckt den Effekt an den übrigen). Der **Eigenverbrauch** sinkt seit N-635
-(05.10.2026, Direktverbrauch + Entladung statt PV − Einspeisung) nur noch, wenn der kleinere Speicher den Abend
-nicht mehr trägt; trägt er ihn, bleibt er gleich (vorher zählte die Ladung mit, und der größere Speicher
-„verbrauchte" mehr).
+mehr geht ins Netz, die Autarkie sinkt, „Speicher voll" kommt früher (in Stundenauflösung nicht an jedem Tag
+sichtbar). Der **Eigenverbrauch** (Direktverbrauch + Entladung, N-635) sinkt nur, wenn der kleinere Speicher den Abend
+nicht mehr trägt; trägt er ihn, bleibt er gleich.
 
-**Woher die Kapazität kommt (SoT seit A31-1):** `core/investition_kennwerte.py::get_speicher_kapazitaet_kwh`
+**Woher die Kapazität kommt (SoT A31-1):** `core/investition_kennwerte.py::get_speicher_kapazitaet_kwh`
 — brutto (`kapazitaet_kwh`), nur aus dem `parameter`-JSON, **ohne Default**. Ist nichts gepflegt,
 liefert er `None`, und der Aufrufer entscheidet (summieren mit `or 0`, Zahl unterdrücken, Rechnung
-auslassen); eine Zahl erfindet er nicht (Entscheidung **E16**, ADR-002/P3-a). Bis dahin stand an drei
-Stellen ein `.get(…, 10)`: ein Speicher ohne gepflegte Kapazität bekam still 10 kWh und daraus
-Vollzyklen und eine Jahres-Ersparnis (**N127**). Der fehlende Wert wird stattdessen ausgewiesen —
+auslassen); eine Zahl erfindet er nicht — kein stilles „10 kWh" mit Vollzyklen und Jahres-Ersparnis daraus
+(Entscheidung **E16**, ADR-002/P3-a, **N127**). Der fehlende Wert wird stattdessen ausgewiesen —
 Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_fehlt` + Hinweis, P4).
 
 > **Abgrenzung „SoC-Hübe"** (`TagesZusammenfassung.batterie_vollzyklen` = ΣΔSoC ÷ 200): eine andere
@@ -1510,21 +1507,12 @@ Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_f
 > Hub = 160 pp = 0,8). Sie ist ein Bestandsmaß, hängt an einem SoC-Sensor und ist **kein** Ersatz für
 > die Vollzyklen. Sichtbar in der Energieprofil-Tagestabelle unter diesem Namen.
 
-> **Historie:** Bis 2026-07-28 rechneten vier von fünf Stellen mit der **Ladung** und nur der
-> HA-Sensor mit der Entladung; die Tages-Kachel zeigte sogar die ΔSoC-Größe unter dem Namen
-> „Vollzyklen". Auf derselben Anlage standen dadurch Zahlen, die um den Speicher-Wirkungsgrad
-> auseinanderlagen (gemessen 10,97 gegen 8,57 bei η 78 %). Kein Test hat das bemerkt — daher jetzt
-> der Symmetrie-Test über alle Pfade.
-
 > eedc kennt und braucht keinen Ziel-SOC: Vollzyklen und Wirkungsgrad kommen aus **gemessenen**
 > Lade-/Entlademengen. Eine Annahme steckt nur in der Wirtschaftlichkeits-**Prognose**
-> (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
+> (250 Vollzyklen × nutzbare Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
 > Messdaten greift, sowie in der Tages-**Vorschau** („Speicher voll um …",
-> `core/berechnungen/speicher_simulation.py`), die von 0 bis 100 % der Brutto-Kapazität simuliert —
-> wer bei 90 % abriegelt, ist real früher voll. **Beides ist mit v4.0.2 erledigt:** Kapazitäts-SoT
-> `get_speicher_kapazitaet_kwh` (`52d3714b`) und die Netto-Umstellung von Tagesvorschau und
-> Wirtschaftlichkeits-Prognose (`c5c4437c`), baumweit gewächtert (`5dc3f488`, ADR-002 P3-a).
-> **Die Vollzyklen bleiben bewusst brutto** (Kanon `f1644cc8`) — die Netto-Umstellung zieht sie nicht mit.
+> `core/berechnungen/speicher_simulation.py`) über die nutzbare Kapazität — beide netto mit Brutto-Rückfall
+> (`get_speicher_nutzbare_kapazitaet_kwh`, Tabelle oben; ADR-002 P3-a). **Die Vollzyklen bleiben bewusst brutto.**
 
 #### Round-Trip-Wirkungsgrad (η) — SoC-korrigiert, nicht roh
 
@@ -1554,8 +1542,8 @@ Zwei Pfade, in dieser Reihenfolge:
 > **In *Cockpit → Monat*** (`aktueller_monat/komponenten.py::_speicher_detail`) wird die Funktion für den Kalendermonat
 > gerufen (`fenster_monate=1`, nie das lange Fenster), nur mit Ladung **und** Entladung > 0. Liefert sie keinen Wert
 > (kein SoC am Rand), steht der rohe Quotient, wenn er ≤ 100 % ist (`roh-unkorrigiert`); schlägt die Ermittlung fehl,
-> gibt es **keinen** rohen Rückfall, sondern den Grund `nicht-ermittelbar`. `speicher_soc_drift_flag` heißt seit F-22
-> „kein belastbarer η" (Probe `test_rf47_aktueller_monat_phasen.py`).
+> gibt es **keinen** rohen Rückfall, sondern den Grund `nicht-ermittelbar`. `speicher_soc_drift_flag` heißt
+> „kein belastbarer η" (F-22, Probe `test_rf47_aktueller_monat_phasen.py`).
 
 > **Der Layer-SoT `speicher_effizienz_prozent` klemmt bewusst NICHT**
 > („Diagnose statt stillem Cap"). Die Diagnose ist der Daten-Checker: meldet ein
@@ -1563,38 +1551,34 @@ Zwei Pfade, in dieser Reihenfolge:
 > sondern ein Erfassungsfehler — meist `ladung_kwh` als reine PV-Ladung gepflegt
 > (#281). `ladung_netz_kwh` ⊆ `ladung_kwh` ist Vertrag, kein zweiter Posten.
 
-> **Historie (F-22, rapahl 2026-05-22 **und** 2026-08-08):** Bis v4.0.11 stand in
-> `aktueller_monat.py` ein Alles-oder-Nichts-Schalter auf `|ΔSoC| > 20 pp` — über
-> der Schwelle wurde ausgeblendet, darunter der **rohe** Wert gezeigt; korrigiert
-> wurde nie, und ohne SoC-Randwerte ging er **ungeprüft** hinaus. Gemessen an der
-> Demo-Anlage: 2025-11 „—" statt 81,6 %, 2025-10 roh 83,1 statt 82,4 %. Die
-> korrigierende Funktion existierte seit #264 und erreichte 2 von 12 Sichten —
-> dieselbe Klasse wie F-16.
-
 ### 3.4 E-Auto-Einsparung
 
 **Funktion:** `berechne_eauto_einsparung()` in `core/calculations.py`
-**Verwendet in:** ROI-Dashboard (`investitionen.py`)
+**Verwendet in:** ROI-Dashboard (`GET /api/investitionen/roi/{anlage_id}`, Paket `api/routes/investitionen/`; Aufruf in
+`roi_standalone.py::_eauto_bewertung`)
 
 #### Eingabefelder
+
+Die Monats-Messgrößen des E-Autos (Kilometer, Ladung, Fahrverbrauch, V2H) stehen in der
+[Übersicht der Größen §1](UEBERSICHT-GROESSEN.md#1-eingabefelder) und in der
+[Sensor-Referenz §5](SENSOR-REFERENZ.md#5-e-auto); Kilometer, V2H und Ladevorgänge des Monats stehen unten. Diese
+Prognose liest die Investitions-Parameter (`core/investition_parameter.py`, `PARAM_E_AUTO_DEFAULTS`):
 
 | Feld | Quelle |
 |------|--------|
 | `jahresfahrleistung_km` | `Investition.parameter` (Default: 15000) |
 | `verbrauch_kwh_100km` | `Investition.parameter` (Default: 18) |
-| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) — im Formular **nicht vorbelegt** (N-572, 27.09.2026): ein geleertes Feld bleibt leer, dann gilt der gemessene IST-Anteil, ohne Messung 60 (s. N-188 unten) |
+| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) — im Formular **nicht vorbelegt** (N-572): ein geleertes Feld bleibt leer, dann gilt der gemessene IST-Anteil, ohne Messung 60 (s. N-188 unten) |
 | `benzinpreis_euro` | `Investition.parameter` (Default: 1,65) — im Formular **nicht vorbelegt** (N-572): ein geleertes Feld bleibt leer, dann gilt der Kraftstoffpreis der Monatsdaten, ohne ihn 1,65 |
 | `vergleich_verbrauch_l_100km` | `Investition.parameter` (Default: 7,5) — der **fiktive** Vergleichs-Benziner |
 | `v2h_faehig` | `Investition.parameter` (Default: false) |
+| `v2h_entladung_kwh_jahr` | `Investition.parameter` — ohne Wert rechnet die ROI-Prognose mit 0 (`roi_standalone.py::_eauto_bewertung`) |
+| `v2h_entlade_preis_cent` | `Investition.parameter` — **kein Default**; der Override zu `V2H_Preis` (Formeln unten) |
 | `eigener_verbrauch_l_100km` | `Investition.parameter` — **kein Default**, s. „Plug-in-Hybrid" unten |
 | `elektrischer_fahranteil_prozent` | `Investition.parameter` — **kein Default** |
 
-> ⚠ **Diese Tabelle nannte bis 2026-08-08 vier Schlüssel, die eedc nicht kennt**
-> (`km_jahr`, `pv_anteil_prozent`, `benzin_verbrauch_liter_100km`, `nutzt_v2h`) und
-> zwei falsche Defaults (1,85 € statt 1,65 €; 7,0 L statt 7,5 L). Es sind genau die
-> Legacy-Keys, deren Lesen v3.25.0 im Code als Bugs #1–#4 korrigiert hat —
-> die Doku ist damals nicht mitgezogen. Historie: `LEGACY_PARAM_KEYS` in
-> `core/investition_parameter.py` führt die Zuordnung alt → neu.
+> Die Altnamen `km_jahr`, `pv_anteil_prozent`, `benzin_verbrauch_liter_100km` und `nutzt_v2h` übersetzt
+> `LEGACY_PARAM_KEYS` in `core/investition_parameter.py` auf die Schlüssel der Tabelle.
 
 #### Formeln
 
@@ -1626,15 +1610,34 @@ CO2_Fossil           = km_verbrenner / 100 * Eigener_L_100km * 2.37
 CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto - CO2_Fossil
 ```
 
+#### Kilometer, V2H und Ladevorgänge des Monats
+
+Die IST-Achse liest diese Mengen aus den Monats-Fakten (`EmobFakten`, ohne Dienstwagen):
+
+- **Kilometer** (`EmobFakten.km`): Σ `km_gefahren` der E-Auto-Zeilen des Monats (`monats_fakten/roh.py::_RohMonat._falte_emob`).
+  Ein Dienstwagen (`ist_dienstlich`) zählt nicht mit — seine Zeile geht in den dienstlichen Zweig (`dienstlich_je_inv`, F-7).
+  `EmobFakten.km_je_fahrzeug` ist dieselbe Summe je Fahrzeug (`Investition.id`, nur Zeilen mit km): die Ersparnis je
+  Fahrzeug rechnet mit dessen Verbrauchs-Parametern (G20-2). Der HA-Sensor `e_auto_km_gesamt` eines Fahrzeugs summiert
+  `km_gefahren` seiner Monatszeilen über die Monate, in denen es aktiv ist (`ha_export/investition_sensoren.py::_emob_summen`).
+- **V2H-Entladung** (`EmobFakten.v2h_entladung_kwh`): Σ `v2h_entladung_kwh` der E-Auto-Zeilen ohne Dienstwagen — die
+  V2H eines Dienstwagens ist keine eigene Bilanz.
+- **Ladevorgänge** (`EmobFakten.ladevorgaenge`): das **Maximum** aus der Summe der privaten Wallbox-Zeilen und der Summe
+  der privaten E-Auto-Zeilen (`services/emob_heimladung_phasen.py::_topf_des_monats`, Topf der einen Funktion
+  `entscheide_emob_heimladung`), nicht die Summe beider — dieselbe Ladung, an Wallbox und Auto gezählt, wäre sonst doppelt.
+
+Die Werte-Tabelle zeigt beide Zählgrößen im Monat aus diesen Fakten (`monatsdaten_aggregiert.py`: `eauto_km` in
+`_zeile_komponenten`, `emob_ladevorgaenge` in `_zeile_emob_zusatz`, dort 0 ⇒ leer); am Tag summiert sie über die privaten,
+am Tag aktiven Geräte (`energie_profil/tage_werte_zusatz.py::_emob`): Kilometer aus der Fahrt der E-Autos, Ladevorgänge
+als Wechsel des Ladezustands der Wallboxen nach „lädt".
+
 #### Plug-in-Hybrid: elektrischer und fossiler Anteil (ab #331)
 
-Ein Plug-in-Hybrid fährt einen Teil seiner Kilometer mit Kraftstoff. eedc unterstellte
-bis dahin **100 % elektrisch** — Ersparnis und CO₂-Bilanz fielen dadurch zu gut aus.
+Ein Plug-in-Hybrid fährt einen Teil seiner Kilometer mit Kraftstoff; als **100 % elektrisch** gerechnet fielen
+Ersparnis und CO₂-Bilanz zu gut aus.
 
 **Es gibt keinen Fahrzeugtyp und keinen Schalter: das gepflegte Feld ist die Aussage.**
 Ist `eigener_verbrauch_l_100km` gesetzt, hat das Fahrzeug einen Verbrenner; ist es leer,
-bleibt **jede Zahl exakt wie vorher**. Bestandsfahrzeuge tragen das Feld nicht, für sie
-ändert sich nichts.
+rechnet eedc das Fahrzeug als reines Elektroauto.
 
 Wie der elektrische Anteil bestimmt wird (SoT `core/berechnungen/phev_anteil.py`,
 dieselbe Funktion für IST **und** Prognose):
@@ -1643,14 +1646,14 @@ dieselbe Funktion für IST **und** Prognose):
 | --- | --- | --- |
 | **gemessen** | monatlicher Fahrverbrauch (kWh) erfasst | `km_elektrisch = min(km_gefahren, Fahrverbrauch / Verbrauch_kWh_100km × 100)` |
 | **geschätzt** | nur `elektrischer_fahranteil_prozent` gepflegt | `km_elektrisch = km_gefahren × Anteil / 100` |
-| **unbestimmt** | keines von beiden | `km_elektrisch = km_gefahren` (Verhalten wie vorher) — der Daten-Checker meldet es |
+| **unbestimmt** | keines von beiden | `km_elektrisch = km_gefahren` (wie ein reines Elektroauto) — der Daten-Checker meldet es |
 
 > ⚠ **Die Deckelung auf die gefahrenen Kilometer ist nicht kosmetisch.** Ist der
 > Kennwert zu niedrig gepflegt oder der Zähler zu großzügig, käme rechnerisch mehr
 > elektrische Strecke heraus als gefahren wurde — und damit negative Verbrenner-Kilometer,
 > also eine Ersparnis größer als die Wahrheit.
 
-**Zwei Verbräuche, zwei Bedeutungen:** `vergleich_verbrauch_l_100km` beschreibt weiterhin
+**Zwei Verbräuche, zwei Bedeutungen:** `vergleich_verbrauch_l_100km` beschreibt
 den **fiktiven** Vergleichs-Benziner, und die Frage „was hätte ein Benziner gekostet"
 bleibt über **alle** Kilometer gestellt — sonst verglichen wir ein Auto mit einem halben.
 `eigener_verbrauch_l_100km` ist der **real getankte** Verbrauch und erzeugt eine eigene
@@ -1669,7 +1672,7 @@ Für jeden historischen Monat:
   Strom_Kosten_Monat  = ladung_netz_kwh * Netzbezug_Preis / 100   # kanonische Heimladungs-Quelle (Wallbox bzw. E-Auto), s. §3.2
                       + ladung_pv_kwh   * EV_Preis        / 100   # N-672: Preis der Eigenverbrauchs-Ersparnis des Monats
 
-Für Jahresprognose:
+Für Jahresprognose (aussichten/finanz_prognose.py):
   Prognose_Benzinpreis = Ø(Monatsdaten.kraftstoffpreis_euro)  (historischer Durchschnitt)
                        ∨ Investition.parameter.benzinpreis_euro  (Fallback)
 ```
@@ -1688,20 +1691,22 @@ Benzinpreis_ROI = Query benzinpreis_euro (Slider)                         → "s
 Die Antwort nennt daneben `benzinpreis_hinweis_euro` = letzter Monatspreis; fehlt er, 1,65 €/L
 (`roi_eingaenge.py::_kraftstoffpreise`).
 
-**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie. Das Feld *Benzinpreis (€/L)* am E-Auto ist seit 27.09.2026 (N-572) nicht mehr mit 1,65 vorbelegt: ein geleertes Feld bleibt beim nächsten Speichern leer, und es gilt der Monatspreis bzw. 1,65 €/L. Wer dort eine Zahl einträgt, legt den Preis fest — in der ROI-Sicht (`resolve_eauto_benzinpreis`) hat sie Vorrang vor dem jüngsten Monatspreis.
+**Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung durch den Scheduler-Job (**täglich 06:00 + Startlauf**), den Reparatur-Pfad „Kraftstoffpreise nachpflegen" oder den Backfill-Endpoint. Fehlt der Monatswert, rechnet die Kette mit dem Investitions-Parameter bzw. 1,65 €/L weiter — der Daten-Checker meldet offene Monate deshalb als eigene Kategorie. Das Feld *Benzinpreis (€/L)* am E-Auto ist nicht vorbelegt (N-572): ein geleertes Feld bleibt beim nächsten Speichern leer, und es gilt der Monatspreis bzw. 1,65 €/L. Wer dort eine Zahl einträgt, legt den Preis fest — in der ROI-Sicht (`resolve_eauto_benzinpreis`) hat sie Vorrang vor dem jüngsten Monatspreis.
 
-**Betroffen:** Aussichten (`aussichten/finanzen.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
+**Leser des Monatspreises:** Aussichten (`aussichten/finanz_rueckblick.py`, `finanz_prognose.py`, `finanz_eingaenge.py`), Cockpit
+(`cockpit/uebersicht.py`, #260; *Cockpit → Monat* `aktueller_monat/finanzen.py`), Komponenten-Hub (`investitionen/dashboard_eauto.py`), HA-Sensor-Export
+(`ha_export/anlage_komponenten.py`, `investition_sensoren.py`), ROI (Rangfolge oben, `investitionen/roi_eingaenge.py`) und
+über das ROI-Dashboard der PDF-Finanzbericht (`services/pdf/builders/finanzbericht.py`).
 
 #### PV-Anteil der Heimladung: gemessen, sonst abgeleitet (ab 2026-08-08, N-141)
 
 Die Formeln oben beschreiben die **Prognose**-Achse, die den von Hand gepflegten
-`pv_ladeanteil_prozent` liest — und, wo er fehlt oder leer ist, seit 2026-08-08 den IST-Anteil (s. unten;
-das Formularfeld ist seit N-572 nicht mehr vorbelegt, ein geleertes Feld bleibt leer).
+`pv_ladeanteil_prozent` liest — und, wo er fehlt oder leer ist, den IST-Anteil (N-188, unten;
+das Formularfeld ist nicht vorbelegt, N-572).
 Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
-je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. Und genau das fehlte den meisten
-Anlagen: **eine Wallbox misst ihren PV-Anteil nicht**, sie zählt nur Kilowattstunden. Ohne evcc
-oder einen eigenen Zähler lieferte `get_emob_pv_netz_kwh` deshalb `(0, Gesamtladung)` — die
-gesamte Heimladung galt als Netzstrom.
+je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. **Eine Wallbox misst ihren PV-Anteil meist nicht**,
+sie zählt nur Kilowattstunden; ohne Messung (evcc, eigener Zähler) leitet eedc den Anteil ab, statt die gesamte
+Heimladung als Netzstrom zu zählen.
 
 **Reihenfolge (SoT `core/berechnungen/pv_anteil_ladung.py`):**
 
@@ -1711,17 +1716,17 @@ gesamte Heimladung galt als Netzstrom.
 2. **Sonst leitet eedc den Anteil aus den eigenen Stundenwerten ab**, Regel **Einspeise-Deckung**:
 
    ```
-   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug)          (ab v4.0.51, N-569)
+   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug)          (N-569)
                PV        = min(Ladung, ungedeckt + Einspeisung)
                Netz      = Ladung − PV
                davon aus dem Speicher = min(Speicherentladung, PV)   (nur Ausweis)
    ```
    Der Speicheranteil rechnet mit dem **Stunden-Netto** der Batterie (Entladung − Ladung derselben Stunde): lädt und entlädt der
-   Speicher in einer Stunde, untertreibt er (Lab-Fixture 21,7 % netto gegen 24,8 % brutto); der PV-Anteil ist davon unberührt.
+   Speicher in einer Stunde, untertreibt er; der PV-Anteil ist davon unberührt.
 
    Der zweite Summand fängt die Unschärfe der Stundenmittelung auf: Was in derselben Stunde
    eingespeist wurde, hätte stattdessen laden können. **Die Speicherentladung zählt zur PV-Deckung**
-   (bis v4.0.50 wurde sie abgezogen): der PV-Anteil sagt, wie viel der Ladung nicht aus dem Netz kam,
+   (N-569): der PV-Anteil sagt, wie viel der Ladung nicht aus dem Netz kam,
    und gespeicherter Eigenstrom ist Eigenstrom. „Davon aus dem Speicher" ist eine **Teilmenge** des
    PV-Anteils (PV = Direkt + Speicher), gezeigt als Unterzeile im E-Auto-Hub; ohne Speicherzähler gibt
    es sie nicht, und keine Kosten-, Ersparnis-, CO₂- oder Community-Rechnung liest sie.
@@ -1729,13 +1734,11 @@ gesamte Heimladung galt als Netzstrom.
    die kanonische Monatsladung — nur so bleibt `Ladung == PV + Netz` exakt geschlossen, auch wenn
    die Tagesspur eine andere Menge kennt als die Monatszeile.
 
-**Wo die Regel angewandt wird — eine Schicht unter dem Pool** (`services/emob_ladeanteil.py`, seit
-2026-08-08, Fund **F-16**): die Monatszeilen werden angereichert, **bevor** irgendjemand sie zu
-einer Heimladung poolt. Das ist keine Feinheit, sondern der Unterschied zwischen vier und achtzehn
-Sichten: liegt die Ableitung *über* `get_emob_heimladung_canonical`, trifft sie nur die Felder
-`EmobFakten.ladung_pv_kwh`/`ladung_netz_kwh` — jede Sicht, die die mitgereichten Rohzeilen selbst
-poolt (Cockpit → Jahr, Jahresbericht-PDF) oder `InvestitionMonatsdaten` direkt liest
-(Komponenten-Hub, Aussichten, HA-Export), zeigt daneben weiter 0 %. Sichten der zweiten Gruppe
+**Wo die Regel angewandt wird — eine Schicht unter dem Pool** (`services/emob_ladeanteil.py`, Fund **F-16**): die
+Monatszeilen werden angereichert, **bevor** irgendjemand sie zu einer Heimladung poolt. Läge die Ableitung *über*
+`get_emob_heimladung_canonical`, träfe sie nur die Felder `EmobFakten.ladung_pv_kwh`/`ladung_netz_kwh` — jede Sicht,
+die die mitgereichten Rohzeilen selbst poolt (Cockpit → Jahr, Jahresbericht-PDF) oder `InvestitionMonatsdaten` direkt
+liest (Komponenten-Hub, Aussichten, HA-Export), zeigte daneben 0 %. Sichten der zweiten Gruppe
 holen dieselbe Anreicherung über `reichere_monatszeilen_an`.
 
 **Zwei Ausnahmen, beide bewusst:**
@@ -1746,15 +1749,12 @@ holen dieselbe Anreicherung über `reichere_monatszeilen_an`.
 - **Schreib-, Import- und Checker-Pfade** bleiben außen vor. Die Anreicherung geschieht zur
   **Lesezeit** auf Kopien; programmatisch in `verbrauch_daten` zu schreiben bleibt verboten.
 
-**Die Prognose-Achse rechnet mit derselben Zahl** (N-188, seit 2026-08-08): fehlt am Fahrzeug der
+**Die Prognose-Achse rechnet mit derselben Zahl** (N-188): fehlt am Fahrzeug der
 gepflegte `pv_ladeanteil_prozent`, nimmt die ROI-Prognose den IST-Anteil über
-`monats_fakten.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung, ladungsgewichtet) statt des früheren
-Vorgabewerts von 60 %. Der Default greift nur noch, wenn auch das IST keine Heimladung kennt.
-**Seit 27.09.2026 (N-572) belegt das Formular das Feld nicht mehr mit 60 vor:** ein geleertes Feld
-bleibt beim nächsten Speichern leer, und es gilt der IST-Anteil. Vorher schrieb jedes Speichern die
-60 als gepflegten Wert zurück, und der IST-Anteil kam an formular-gespeicherten Fahrzeugen nie zum
-Zug. Eine früher gespeicherte 60 bleibt stehen — eedc kann sie nicht von einer Eingabe
-unterscheiden; wer den gemessenen Anteil will, leert das Feld. Die
+`monats_fakten.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung, ladungsgewichtet); der Vorgabewert 60 % greift nur,
+wenn auch das IST keine Heimladung kennt. **Das Formular belegt das Feld nicht mit 60 vor** (N-572): ein geleertes Feld
+bleibt beim nächsten Speichern leer, und es gilt der IST-Anteil. Eine gespeicherte 60 bleibt stehen — eedc kann sie
+nicht von einer Eingabe unterscheiden; wer den gemessenen Anteil will, leert das Feld. Die
 zweite Prognose-Quelle (`aussichten/finanz_prognose.py`, leitet ihre Quote aus der Historie ab) zieht über dieselbe
 Anreicherung mit.
 
@@ -1763,24 +1763,14 @@ Tagesebene trägt `source_provenance` die Marke `einspeise_deckung` bzw.
 `einspeise_deckung_teilweise` (letztere, wenn nicht jede Ladestunde auswertbar war — dann ist der
 Wert eine Teilsumme, P4).
 
-**Vermessen gegen evcc** (2026-08-08, Anlage 1, Feb–Aug 2026, 963 kWh Heimladung, Referenz
-`sensor.evcc_helper_pv/net_charged_kwh`):
+**Gegen evcc vermessen:** die Einspeise-Deckung lag näher an evccs PV-Anteil als die netzbasierte Regel
+`min(Ladung, Netzbezug)` und „Netz + Speicherentladung"; ohne Speicherabzug (N-569) trifft sie evcc in der Nachmessung
+auf rund einen Prozentpunkt, mit Abzug lag sie deutlich darunter — im Sommer lädt das Auto oft aus dem Hausakku.
 
-| Regel | PV-Anteil | Abweichung zu evcc (67,9 %) |
-| --- | --- | --- |
-| netzbasiert `min(Ladung, Netzbezug)` | 73,8 % | +5,9 pp |
-| netz + Speicherentladung | 60,8 % | −7,2 pp |
-| Einspeise-Deckung (bis v4.0.50, mit Speicherabzug) | 64,7 % | −3,2 pp |
+⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Tage, die ohne diese Ableitung
+aggregiert wurden, tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".
 
-**Nachgemessen 2026-09-27** (N-569, Lab-Kopie des Recorders, evcc-Solar-%): 15 Ladevorgänge Juni–August
-2026 — mit Speicherabzug 76,0 %, **ohne (gebaut ab v4.0.51) 94,5 %**, evcc 93,5 %; anlagenweit Mai–September
-79,4 → 92,6 %. Feb–Aug ist dort nicht neu messbar; die Zeiträume stehen getrennt. Im Sommer lädt das Auto
-oft aus dem Hausakku — den Fall sah die Messung vom 08.08. kaum.
-
-⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Zeiträume vor
-diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".
-
-> **E-Mobilität und Sonstiges aus Zeitraum-Differenzen (HA-Bauform E4c, Stand 06.10.2026).** Mit Home Assistant (bzw.
+> **E-Mobilität und Sonstiges aus Zeitraum-Differenzen (HA-Bauform E4c).** Mit Home Assistant (bzw.
 > der eigenen Summe aus MQTT) führt eedc die Aufteilung der Heimladung als **abgeleiteten Kanal** je Gerät:
 > `abgeleitet:inv:<id>:ladung_pv_kwh` (`services/kanal/abgeleitet.py`). Der Stundenlauf schreibt ihn nach dem Spiegel
 > fort — je Stunde dieselbe Regel wie oben (`pv_anteil_ladung.pv_der_stunde`, Einspeise-Deckung) auf die Δ der Stunde:
@@ -1791,16 +1781,16 @@ diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „kein
 >
 > * **Derselbe Anteil mit und ohne Abschluss** (N-631): deckt die E-Mob-Gruppe den Monat, nehmen die Monats-Fakten,
 >   *Cockpit → Monat* und die Sichten außerhalb der Fakten (`lade_abgeleitete_ladeanteile`: Komponenten-Hub, Aussichten,
->   HA-Export) diesen Anteil; sonst die Quote der Tagesebene wie bisher. Angewandt wird er wie bisher auf die Ladung der
+>   HA-Export) diesen Anteil; sonst die Quote der Tagesebene. Angewandt wird er auf die Ladung der
 >   Zeilen ohne eigene Aufteilung (Punkt 3).
 > * **Die Lademengen eines Monats ohne Abschluss** kommen aus den Kanälen der E-Mob-Gruppe (je Gerät jedes Energiefeld
 >   mit Zähler — die Felder, die ein Abschluss schriebe) und laufen durch dieselbe Faltung und dieselbe eine Funktion wie
 >   eine gespeicherte Monatszeile: Wallbox-Regel, Pool, Rest nach km, Dienstwagen getrennt. Ein Monat mit Zeile behält
 >   sie (gespeichert schlägt gerechnet).
 > * **Quellenwahl je Monat und Gruppe**, getrennt von der Bilanz-Gruppe: `kanal` nur, wenn jeder Kanal der Gruppe
->   (auch der abgeleitete) den Monat voll deckt — sonst rechnet der Monat wie bisher.
+>   (auch der abgeleitete) den Monat voll deckt — sonst rechnet der Monat aus Zeilen und Tagesebene.
 > * **Grenze — eine Stunde ohne Aussage** (fehlende Netzbezugs- oder Einspeisezeile, Zählerlücke über mehr als eine
->   Stunde) trägt im Kanal keinen PV-Teil — ihre Ladung zählt im Anteil zum Netz. Die Tagesebene ließ eine solche Stunde
+>   Stunde) trägt im Kanal keinen PV-Teil — ihre Ladung zählt im Anteil zum Netz. Die Tagesebene lässt eine solche Stunde
 >   ganz aus (Entscheid: so belassen; die Abweichung irrt zur kleineren Ersparnis).
 > * **Rückwirkung nur für den laufenden Monat:** ein neuer Kanal beginnt beim ersten Lauf mit dem laufenden Monat
 >   (`aufbaubar_ab` eine Stunde vor dem Monatsfenster), sobald der Spiegel die Stunden trägt; kein abgeschlossener Monat
@@ -1813,14 +1803,8 @@ diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „kein
 > **Erzeuger hinter dem Zähler** aus dem Kanal-Monat der Bilanz-Gruppe (§3.1). Damit rechnen Eigenverbrauch, Autarkie
 > und „Erzeugung hinter dem Zähler" eines Monats ohne Abschluss mit dem BHKW, wie nach dem Abschluss.
 
-⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden
-(an der Referenzanlage 218 von 218 Stunden-Deltas ganzzahlig), trifft keine Rechnung die einzelne
-Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
-
-> ⚠ **Korrektur (2026-08-08):** hier stand bis dahin „Offen: die Prognose zieht noch nicht mit
-> (N-188)". Das ist seit demselben Tag erledigt und vier Absätze weiter oben beschrieben — der Satz
-> stammte aus dem Paket davor und ist beim Nachziehen stehen geblieben. Ein Dokument, das an zwei
-> Stellen dasselbe verschieden behauptet, ist schlechter als eines, das schweigt.
+⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden, trifft keine
+Rechnung die einzelne Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
 
 #### Welcher Strompreis die Ladung bewertet (F-18 · ADR-002/P8)
 
@@ -1828,33 +1812,23 @@ Die Netzladung eines E-Autos wird mit dem Tarif bewertet, der **im jeweiligen Mo
 mit dem heutigen. SoT ist `services/eauto_wirtschaftlichkeit.aufgeloester_strompreis_cent`, gerufen
 aus `berechne_eauto_ersparnis_periode`.
 
-Bis 2026-08-08 löste jede Sicht diese eine Größe selbst auf, und zwar auf **vier** Arten:
-
-| Sicht | vorher | jetzt |
-| --- | --- | --- |
-| Cockpit → Jahr | heutiger Wallbox-Tarif | Monatstarif inkl. Flex-Ø |
-| HA-Export (Anlagen-Sensoren) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
-| HA-Export (Fahrzeug-Sensor) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
-| Komponenten-Hub | mengengewichteter Monats-Ø | unverändert (jetzt über den SoT) |
-| Auswertungen → Aussichten | Monatstarif, aber **allgemein** | Monats-Wallbox-Tarif inkl. Flex-Ø |
+Cockpit → Jahr, HA-Export (Anlagen- und Fahrzeug-Sensoren), Komponenten-Hub und Auswertungen → Aussichten lösen diese
+eine Größe nicht selbst auf, sondern über diese Funktion — Monats-Wallbox-Tarif inkl. Flex-Ø, nie der heutige Tarif und
+nie der allgemeine statt eines eigenen Wallbox-Tarifs (F-18).
 
 **Gewichtet wird nach der Netzladung je Monat**, nicht nach Kilometern: der Preis bepreist
 Kilowattstunden. Nur wo eine Monatsaufteilung der Netzladung nicht existiert — bei reinem PV-Laden
 — fällt die Mittelung auf die km zurück, den Schlüssel, nach dem der Wallbox-Pool ohnehin
 attribuiert.
 
-> **Der Monatspreis der Netzladung kommt aus den Monats-Fakten** (`TarifFakten.wallbox_preis_effektiv_cent`, seit
-> N-712 in allen Sichten, seit N-717 auch im Fahrzeug-Sensor): gepflegter Monats-Ø → gemessener Ø → Zeitfenster →
+> **Der Monatspreis der Netzladung kommt aus den Monats-Fakten** (`TarifFakten.wallbox_preis_effektiv_cent`, in allen
+> Sichten einschließlich Fahrzeug-Sensor, N-712/N-717): gepflegter Monats-Ø → gemessener Ø → Zeitfenster →
 > Arbeitspreis — **Zeitfenster und Arbeitspreis vom Tarif derselben Verwendung** (eigener Wallbox-Tarif, sonst der
-> allgemeine). Bis 12.10.2026 prüfte die Zeitfenster-Stufe die HT/NT-Fenster des **allgemeinen** Tarifs und ersetzte
-> einen eigenen Wallbox-Tarif durch deren Ø (Allgemein 30 ct mit 22–6 Uhr 20 ct, Wallbox-Tarif 25 ct: 26,667 statt
-> 25 ct ⇒ E-Auto-Ersparnis 760,00 statt 772,00 € in Cockpit, Hubs, HA-Anlagensensoren und Aussichten; nur der Fahrzeug-Sensor rechnete über eine zweite,
-> inzwischen entfernte Kaskade richtig). N-433: der Komponenten-Tarif ist Stufe 4 und geht nicht verloren.
+> allgemeine; N-717: nie die HT/NT-Fenster des allgemeinen Tarifs für einen eigenen Wallbox-Tarif). N-433: der
+> Komponenten-Tarif ist Stufe 4 und geht nicht verloren.
 
-> ⚠ **Für eine Anlage ohne Tarifwechsel bewegt sich nichts.** Der mengengewichtete Ø eines
-> einzigen Tarifs *ist* dieser Tarif. Wer den Tarif gewechselt hat, sieht dagegen vier
-> HA-Sensoren einmalig springen (`e_auto_ersparnis_vs_benzin_euro`, `netto_ertrag_euro`,
-> `roi_prozent`, `amortisation_jahre`) — an einer vermessenen Anlage um −41,10 €.
+> ⚠ **Ein einziger Tarif bleibt ein einziger Preis.** Der mengengewichtete Ø eines
+> einzigen Tarifs *ist* dieser Tarif.
 
 > ⚠ **Der P8-Wächter deckt diese Fläche nicht ab.** Alle vier beteiligten Dateien stehen in
 > `P8_BASELINE_AUSNAHMEN`, weil sie den heutigen Tarif für die Hochrechnung nach vorn auch
@@ -1865,19 +1839,13 @@ attribuiert.
 #### Wo die Wallbox die Quelle ist (F-14 · N-196)
 
 Trägt eine Wallbox die Ladeenergie, ist **sie** die Quelle — auch ohne gesetzte Zuordnung
-(`parent_investition_id`). Diese Regel gilt seit 2026-08-08 in allen drei Pfaden:
-
-| Pfad | Ort |
-| --- | --- |
-| Monatsebene | `eauto_wirtschaftlichkeit.get_emob_heimladung_canonical` |
-| Tages-**Leistungs**pfad | `services/live_sensor_config.py::emob_auto_verdraengt` (#356) — HA- und MQTT-Weg (N-779) |
-| Tages-**Zähler**pfad | `snapshot/komponenten_beitraege.wallbox_deckt_ladung_ab` |
-
-Vorher kannte der Zählerpfad nur die Zuordnung; ein E-Auto mit eigenem kWh-Zähler **ohne** Parent
-lief an ihr vorbei, und derselbe Ladevorgang stand zweimal im Tagesverlauf. Bereits gespeicherte
-Tage bleiben davon unberührt — dafür meldet der Daten-Checker sie (Kategorie
-`emob_doppelzaehlung_tage`) und bietet „Zeitraum neu aggregieren" an. **Bewusst kein
-Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Entscheidung des
+(`parent_investition_id`). Die Regel gilt in allen drei Pfaden: Monatsebene
+`eauto_wirtschaftlichkeit.entscheide_emob_heimladung` (die eine Funktion, N-555; Kurzform `get_emob_heimladung_canonical`),
+Tages-**Leistungs**pfad `services/live_sensor_config.py::emob_auto_verdraengt` (#356; HA- und MQTT-Weg, N-779),
+Tages-**Zähler**pfad `snapshot/komponenten_beitraege.wallbox_deckt_ladung_ab` — sonst stünde ein E-Auto mit eigenem
+kWh-Zähler **ohne** Parent mit demselben Ladevorgang zweimal im Tagesverlauf. Tage, die vor der Regel gespeichert
+wurden, meldet der Daten-Checker (Kategorie `emob_doppelzaehlung_tage`) und bietet „Zeitraum neu aggregieren" an.
+**Bewusst kein Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Entscheidung des
 Anwenders.
 
 **Auch in der Live-Bilanz bucht die Wallbox (Cockpit → Live, N-575).** Ist eine Wallbox erfasst,
@@ -1887,7 +1855,7 @@ gerade keinen, zählt das Auto selbst als Verbraucher. Eine gemessene V2H-**Entl
 eine Speicher-Entladung zum Eigenverbrauch, und zwar einmal: Meldet die Wallbox den negativen Wert,
 ist **sie** die Quelle und das Auto zeigt nur seine Richtung; misst nur das Auto, bucht das Auto.
 Ohne erfasste Wallbox bleibt das V2H-Auto ein Speicher am Hausanschluss (F-69). Vorzeichentreu
-liest eedc die Wallbox nur, wenn ein V2H-fähiges Auto erfasst ist — sonst weiter den Betrag. Ein
+liest eedc die Wallbox nur, wenn ein V2H-fähiges Auto erfasst ist — sonst den Betrag. Ein
 invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über „Vorzeichen umkehren
 (⇅)" an seiner Datenquelle korrigiert. Ort: `services/live_komponenten_builder.py`, Proben
 `test_n575_v2h_hinter_wallbox.py`.

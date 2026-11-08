@@ -118,7 +118,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Sätze am Code richtiggestellt (WP-Preis ohne eigenen WP-Tarif = Preis des Hauszählers mit Monats-Ø nach N-663, Cockpit-
   Übersicht: Netto-Ertrag, kumulative Ersparnis und Investitionssumme nach Ergebnis-Leiter und N-137, anlagenweite
   Positionen im Kapitaleinsatz, Kraftstoffpreis des Monats im Cockpit, Plug-in-Hybrid und Kühlstrom in Ersparnis und
-  CO₂-Formel, Eingang der USt nach N-601).
+  CO₂-Formel, Eingang der USt nach N-601). Ebenso §3.3 und §3.4 (U5c): Chronik und Messbeispiele gestrichen, Aufrufer und
+  Leser am Code richtiggestellt (ROI-Dashboard im Paket `api/routes/investitionen/`, Leser des Monats-Kraftstoffpreises,
+  Wallbox-Regel der Monatsebene in `entscheide_emob_heimladung`); neue Regel-Absätze für Ladung, Entladung und Netzladung
+  des Speichers (mit Tageswert-Rückfall #427) und für Kilometer, V2H und Ladevorgänge des E-Autos (Maximum aus Wallbox- und
+  Auto-Seite) — sieben Monatsgrößen, drei Kennwerte und ein Sensor mehr mit Regel-Abschnitt, Baseline 36 → 25.
 
 ## [4.2.2] - 2026-11-06
 
