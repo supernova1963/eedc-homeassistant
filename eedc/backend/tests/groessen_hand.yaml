@@ -394,6 +394,9 @@ kennwert:
   "gesamtverbrauch":
     abschnitt: "BERECHNUNGEN.md#formeln"
     test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
+  "grundlast_kw":
+    abschnitt: "BERECHNUNGEN.md#zählerlücken-wie-ha-ab-v4051"
+    test: "backend/tests/test_zaehlerluecken_tagesregel.py"
   "ladevorgaenge":
     abschnitt: "BERECHNUNGEN.md#kilometer-v2h-und-ladevorgänge-des-monats"
     test: "backend/tests/test_tabellen_spalten.py"
@@ -472,6 +475,9 @@ kennwert:
   "wallbox_pv_ladung":
     abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
     test: "backend/tests/test_block1_imd_aggregat_charnetz.py"
+  "wp_betriebszeit_min":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_tabellen_spalten.py"
   "wp_cop":
     abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
     test: "backend/tests/test_soll_waerme_klima_w4_arbeitszahl_je_funktion.py"
@@ -665,6 +671,8 @@ sensor:
     abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
     hinweis: "PV-Prognose je Tageshälfte, für **heute und morgen** (die Abendentscheidung braucht den Folgetag). ⭐ **Die Grenze ist der Sonnenhöchststand**, nicht 13:00 — dieselbe Aufteilung wie in *Cockpit → Aussicht*. Sie reist als Attribut **`solar_noon`** („13:28\") mit, damit eine Automation sie lesen kann statt sie zu raten."
   "eedc_prognose_heute_rollend_kwh":
+    abschnitt: "BERECHNUNGEN.md#4-prognosen-aussichten"
+    test: "backend/tests/test_prognose_kanon.py"
     hinweis: "**Heute (nachgeführt)** — was heute bereits erzeugt wurde **plus** die Prognose der Reststunden. Folgt dem IST; `…_heute_kwh` folgt dagegen OpenMeteo. Beide stehen bewusst nebeneinander (rapahl-PN 2026-08-23)."
   "eedc_prognose_heute_vormittag_kwh":
     abschnitt: "BERECHNUNGEN.md#vmnm-split-an-solar-noon-v3220"
@@ -810,6 +818,9 @@ sensor:
   "wp_betriebsmodus":
     abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
     test: "backend/tests/test_398_betriebsmodus_live.py"
+  "wp_betriebsstunden":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_betriebsstunden_sichtbarkeit_238.py"
   "wp_cop_durchschnitt":
     abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
     test: "backend/tests/test_n391_gesamtwaerme.py"
@@ -820,6 +831,9 @@ sensor:
     abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
     test: "backend/tests/test_rf75_ha_export_phasen.py"
     hinweis: "Anzahl der Stunden innerhalb der erwarteten **Heizzeit**, in die sich das Heizprofil günstiger verschieben ließe. Attribute: `heizstrom_stundenprofil_kwh` (so lang wie die Fenster-Achse, 25 bzw. 48 Slots, aus dem gelernten WP-Profil mit Heizgradtag-Korrektur), `guenstige_heizstunden`, `ersparnis_cent_vs_profil`, `heizzeit_stunden`. ⚠ **Was eedc nicht kennt und nicht erfindet:** Heizkurve, Vorlauftemperatur, Speichervermögen des Gebäudes. Wie weit eine Anhebung trägt, entscheidet deine Wärmepumpen-Regelung — eedc nennt Fenster und Preisvorteil, nicht die Gradzahl"
+  "wp_kompressor_starts":
+    abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
+    test: "backend/tests/test_betriebsstunden_sichtbarkeit_238.py"
   "wp_kuehlfenster_ab":
     abschnitt: "BERECHNUNGEN.md#35g-steuerungs-sensoren-der-wärmepumpe-ha-export-e2p4p7p8"
     test: "backend/tests/test_s3_geraete_fenster.py"

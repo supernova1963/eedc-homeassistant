@@ -4,15 +4,10 @@
 kennwert:abgabe_dritte
 kennwert:eauto_ladung
 kennwert:globalstrahlung
-kennwert:grundlast_kw
 kennwert:netto_bilanz
 kennwert:sonnenstunden
 kennwert:sonstiges_verbrauch
 kennwert:temperatur_avg_c
-kennwert:wp_betriebszeit_min
 kennwert:zaehler:<id>
 monatsgroesse:MonatsFakt.jahr
 monatsgroesse:MonatsFakt.monat
-sensor:eedc_prognose_heute_rollend_kwh
-sensor:wp_betriebsstunden
-sensor:wp_kompressor_starts

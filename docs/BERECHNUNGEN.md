@@ -3596,20 +3596,24 @@ Wärmepumpen-Art) · `_monatswerte` (SOLL-Jahr, Monatswerte).
 
 ## 4. Prognosen (Aussichten)
 
-> **Prognose-Kanon — „PV-Tagesprognose heute" ist EIN Wert.** Der „heute"-Wert (sowie Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird seit dem Prognose-Kanon-Fix über **einen** Service (`services/prognose_kanon.py`) gebildet und an alle Konsumenten geliefert: Live/Cockpit (`live_wetter`), die „eedc"-Spalte im Vergleich (`api/routes/prognosen`), die HA-/MQTT-Sensoren (`ha_export_prognose`) und den persistierten Tageswert (`TagesZusammenfassung.pv_prognose_kwh`). Rechenweg: **Multi-String-Fan-out** pro Orientierungsgruppe (`pv_orientation.orientierungs_gruppen` → je ein `get_solar_prognose`) → slot-weise Summe = rohes OpenMeteo-kWh-Profil → **eedc-Korrektur pro Energie-Slot** (`core/berechnungen/prognose_korrektur.korrigiere_tagesprofil`, Kaskade `korrekturprofil_lookup`) mit Invariante `Tageswert == Σ Export-Slots`. Der Wert **rollt** mit OpenMeteo, aber überall synchron. Mathematik in `core/berechnungen/` (ADR-001), Orchestrierung im Kanon-Service. Symmetrie-Test: `tests/test_prognose_kanon.py`.
+> **Prognose-Kanon — „PV-Tagesprognose heute" ist EIN Wert.** Der „heute"-Wert (sowie Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird über **einen** Service (`services/prognose_kanon.py`) gebildet und an alle Konsumenten geliefert: Live/Cockpit (`live_wetter`), die „eedc"-Spalte im Vergleich (`api/routes/prognosen`), die HA-/MQTT-Sensoren (`ha_export_prognose`) und den persistierten Tageswert (`TagesZusammenfassung.pv_prognose_kwh`). Rechenweg: **Multi-String-Fan-out** pro Orientierungsgruppe (`pv_orientation.orientierungs_gruppen` → je ein `get_solar_prognose`) → slot-weise Summe = rohes OpenMeteo-kWh-Profil → **eedc-Korrektur pro Energie-Slot** (`core/berechnungen/prognose_korrektur.korrigiere_tagesprofil`, Kaskade `korrekturprofil_lookup`) mit Invariante `Tageswert == Σ Export-Slots`. Der Wert **rollt** mit OpenMeteo, aber überall synchron. Mathematik in `core/berechnungen/` (ADR-001), Orchestrierung im Kanon-Service. Symmetrie-Test: `tests/test_prognose_kanon.py`.
 >
-> **Was seit v4.0.1 zusätzlich am Kanon hängt.** Der 14-Tage-Balken in Cockpit → Aussicht samt
-> 14-Tage-Tabelle und den Kacheln „Morgen"/„Summe"/„Ø_Tag", die Zeilen Morgen/Übermorgen der
-> Live-Solar-Aussicht sowie die Blöcke „Stunden-Prognose"/„Stundenwerte" lasen bis dahin die
-> **unkorrigierte** OpenMeteo-Zahl bzw. gingen einen eigenen Ein-Abruf-Weg mit der Orientierung einer
-> beliebigen PV-Zeile. Sie kommen jetzt aus derselben Rechnung wie der Prognosen-Vergleich und der
-> Sensor `eedc_prognose_day_plus_1_kwh`. *(Ausgenommen: die Spalte „OpenMeteo" im Prognosen-Vergleich
-> — sie ist der Rohwert und bleibt es.)* Fehlt eine Korrektur, bleibt der Wetterdienst-Wert stehen und
-> die Kopfzeile sagt es („Quelle: Open-Meteo (ohne Korrektur)").
+> **Am Kanon hängen außerdem** (v4.0.1) der 14-Tage-Balken in Cockpit → Aussicht samt 14-Tage-Tabelle und den Kacheln
+> „Morgen"/„Summe"/„Ø_Tag", die Zeilen Morgen/Übermorgen der Live-Solar-Aussicht und die Blöcke
+> „Stunden-Prognose"/„Stundenwerte" — dieselbe Rechnung wie der Prognosen-Vergleich und der Sensor
+> `eedc_prognose_day_plus_1_kwh`. *(Ausgenommen: die Spalte „OpenMeteo" im Prognosen-Vergleich — sie ist der Rohwert.)*
+> Fehlt eine Korrektur, bleibt der Wetterdienst-Wert stehen und die Kopfzeile sagt es („Quelle: Open-Meteo (ohne Korrektur)").
+>
+> **Heute nachgeführt** (`KanonPrognose.heute_rollend_kwh`, Sensor `eedc_prognose_heute_rollend_kwh`) = **bereits erzeugt**
+> + **Rest heute**. Bereits erzeugt ist gemessen: Σ der PV-Stunden von heute über `kanal_stunden.stunden_der_tage` (an einem
+> Kanal-Tag die Mischzeilen, wie *Prognosen → Vergleich*) — es hängt an keiner Prognose und bleibt auch stehen, wenn der
+> Wetterabruf ausfällt. Rest heute = Σ der korrigierten Slots nach der laufenden Stunde plus die laufende Stunde anteilig
+> nach den verstrichenen Minuten (`prognose_kanon.rest_aus_slots`, #339, Backward-Slots). Ohne Stundenprofil des Tages gibt
+> es keinen Rest und keinen nachgeführten Wert (`None`, auch bei teilweise ausgefallenem Fan-out). Der Tageswert
+> `…_heute_kwh` folgt OpenMeteo, der nachgeführte dem IST; *bereits erzeugt + Rest = nachgeführt* (#401).
 >
 > **Fällt der Kanon aus** (kein OpenMeteo-Ergebnis, keine kWp, Zieltag jenseits des Abruf-Horizonts),
-> springt ein Ersatz-Weg ein — der **fächert seit v4.0.1 ebenfalls je Orientierungsgruppe auf** statt
-> die Gesamtleistung mit der Orientierung einer beliebigen PV-Zeile zu rechnen (ADR-002/P1: kein
+> springt ein Ersatz-Weg ein — er **fächert ebenfalls je Orientierungsgruppe auf** (ADR-002/P1: kein
 > Anlagen-Kennwert aus EINER Investition). Liefert eine Gruppe nichts, trägt die **Antwort** den
 > Hinweis auf die Teilsumme — nicht das Log (ADR-002/P4). Dasselbe gilt, wenn gar keine Prognose
 > vorliegt: 24 Nullen werden als „keine Prognose" ausgewiesen, nicht als Prognose „0 kWh".
@@ -3622,59 +3626,55 @@ Wärmepumpen-Art) · `_monatswerte` (SOLL-Jahr, Monatswerte).
 **Datenquelle:** Open-Meteo (konfigurierbar, siehe Wettermodell-Kaskade)
 
 ```
-PV_Ertrag_Tag = GTI_kWh_m2 * Anlagenleistung_kWp * (1 - System_Losses) * Lernfaktor
+PV_Ertrag_Tag = Globalstrahlung_kWh_m2 * Anlagenleistung_kWp * (1 - System_Losses)
 
-Wenn Temperatur > 25°C:
-    Temp_Verlust = (Temperatur - 25) * 0.004
+Wenn Temperatur_max > 25°C:
+    Temp_Verlust = (Temperatur_max - 25) * 0.004
     PV_Ertrag_Tag *= (1 - Temp_Verlust)
 ```
 
 | Parameter | Quelle | Default |
 |-----------|--------|---------|
-| `System_Losses` | `PVGISPrognose.system_losses / 100` | 0.14 (14%) |
-| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Dispatcher `get_erzeuger_kwp` (ADR-002/P3). Reihenfolge: Feld **Leistung (kWp)** der Investition → ersatzweise die Detail-Felder `kwp` bzw. `leistung_kwp` (nur Bestands-/Importdaten) → beim Balkonkraftwerk zusätzlich `leistung_wp` × `anzahl` (Anzahl fehlt ⇒ **1**, nicht die Formular-Vorbelegung 2). Seit v4.0.2 gilt dieselbe Kette an **allen** Lesestellen der Nennleistung — Prognose, Cockpit, PV-Strings, ROI, CO₂, Live und PDF. | `Anlage.leistung_kwp` |
-| `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
+| `System_Losses` | `PVGISPrognose.system_losses / 100` der aktiven Prognose (`pv_orientation.resolve_system_losses`) | 0.14 (14%) |
+| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Dispatcher `get_erzeuger_kwp` (ADR-002/P3). Reihenfolge: Feld **Leistung (kWp)** der Investition → ersatzweise die Detail-Felder `kwp` bzw. `leistung_kwp` (nur Bestands-/Importdaten) → beim Balkonkraftwerk zusätzlich `leistung_wp` × `anzahl` (Anzahl fehlt ⇒ **1**, nicht die Formular-Vorbelegung 2). Dieselbe Kette gilt an **allen** Lesestellen der Nennleistung — Prognose, Cockpit, PV-Strings, ROI, CO₂, Live und PDF (v4.0.2). | `Anlage.leistung_kwp` |
+| `Globalstrahlung_kWh_m2` | Tagessumme der **horizontalen** Globalstrahlung (`shortwave_radiation_sum`) aus `fetch_open_meteo_forecast`, Wettermodell der Anlage | – |
+| `Temperatur_max` | Tageshöchstwert derselben Vorhersage (Lufttemperatur, kein Modul-Aufheizungsmodell) | – |
+
+Code: `services/prognose_service.py::berechne_pv_ertrag_tag` (Probe `test_prognose_ertrag_tag.py`). Dieselbe Formel trägt die
+OpenMeteo-Tageswerte des Prognosen-Vergleichs ab Tag 4 (`prognosen.py::_openmeteo_tageswerte`, N-317; Tag 0–3 aus dem Kanon).
+Die **eedc-Prognose** rechnet nicht hier, sondern im Kanon (Kasten oben): je Orientierungsgruppe mit der **GTI** (Global
+Tilted Irradiance aus Open-Meteo Solar, modul-projiziert mit Neigung und Azimut; parallele Abrufe, kWp-gewichtet kombiniert)
+und korrigiert je Stunden-Slot (Lernfaktor als gröbste Stufe, §4.1c).
 
 > **GTI-Spalte der 14-Tage-Tabelle ist ein kWp-gewichtetes Mittel** („GTI Modulfläche"): die
 > Einstrahlung auf die Modulflächen *dieser* Anlage, konsistent zur Ertragssumme derselben Zeile
-> (`Ertrag ≈ GTI × kWp × (1 − Verluste)` ist linear in kWp). Bis v4.0.0 wurde ungewichtet gemittelt —
-> ein 0,8-kWp-Balkonmodul zählte so viel wie ein 12-kWp-Süddach, und die Spalte passte zu keiner
-> anderen Zahl ihrer Zeile. Anlagen mit nur einer Ausrichtung sind nicht betroffen. *(Die Performance
-> Ratio läuft über einen anderen Pfad — die Tages-GTI aus der Aggregation, dort schon immer
-> kWp-gewichtet.)*
-| `Lernfaktor` | Anlagenspezifischer Korrekturfaktor (siehe §4.1c) | 1.0 (vor 7 Tagen Daten) |
+> (`Ertrag ≈ GTI × kWp × (1 − Verluste)` ist linear in kWp). *(Die Performance Ratio nimmt die Tages-GTI
+> aus der Aggregation, ebenfalls kWp-gewichtet.)*
 
-> **GTI vs. GHI:** Bis v3.19.x rechnete eedc mit GHI (`shortwave_radiation`, horizontal). Bei steilen Modulen und tiefstehender Wintersonne ist die Modul-projizierte GTI 2–3× höher — der GHI-basierte „theoretische Ertrag" lag im Winter systematisch zu niedrig (PR-Werte > 1 möglich). Seit v3.20.0 werden GTI-Werte für Prognose und Performance Ratio verwendet.
+> **GTI statt GHI (v3.20.0):** Kanon-Prognose und Performance Ratio rechnen mit der modul-projizierten GTI. Bei steilen
+> Modulen und tiefstehender Wintersonne ist sie 2–3× höher als die horizontale GHI (`shortwave_radiation`) — ein GHI-basierter
+> „theoretischer Ertrag" läge im Winter systematisch zu niedrig (PR-Werte > 1). Die Tagesformel oben rechnet weiter mit der GHI.
 
 > **Multi-String / PV-Parameter-Quelle (v3.20.2/v3.20.3):** kWp, Neigung und Azimut werden über den Helper `services/pv_orientation.py` gelesen, der in dieser Reihenfolge prüft: Top-Level-Spalte der Investition → `parameter.{neigung,ausrichtung}_grad` (Zahl) → `parameter.{neigung,ausrichtung}` (Zahl oder String mit Mapping `{"süd": 0, "ost": -90, "west": 90, ...}`) → Default. Damit liefern alle drei Prognose-Pfade (Energieprofil-Tagesprognose, Aussichten-Kurzfrist, Prefetch-Cache) identische Eingabe-Parameter an Open-Meteo.
 
 #### Wettermodell-Kaskade
 
-Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wettermodell`):
+Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wetter_modell`). Die wählbaren Werte, ihre Reichweite in
+Tagen und ihre Anzeigenamen stehen in `services/wetter/models.py` (`WETTER_MODELLE`, `MODELL_ANZEIGE`). `auto` ist für die
+Prognose Open-Meteo `best_match`; für die Wetterwerte des Monats heißt `auto` Bright Sky (DWD), wenn das **gepflegte Land** es
+erlaubt (#386, `wetter/orchestrator.py::nutze_brightsky`), sonst Open-Meteo.
 
-| Wert | Modell | Auflösung | Einsatz |
-|------|--------|-----------|---------|
-| `auto` | Bright Sky (DWD) für DE, sonst Open-Meteo best_match | variabel | Standard — maßgeblich ist seit #386 das gepflegte **Land**, nicht die Koordinaten-Box |
-| `meteoswiss_icon_ch2` | MeteoSwiss ICON-CH2 | 2 km | Alpine Standorte CH/AT/IT |
-| `icon_d2` | DWD ICON-D2 | 2,2 km | Deutschland (hochauflösend) |
-| `icon_eu` | DWD ICON-EU | ~7 km | Europa |
-| `ecmwf_ifs04` | ECMWF IFS | 0,25° | Global |
+Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Das Modell, das einen Tag geliefert hat, steht je Tag in `datenquelle` (`solar_forecast_service.DayForecast`); die Kopfzeile nennt es mit seinem Anzeigenamen.
 
-Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
-
-**Geltungsbereich (seit v4.0.2, A30):** Die Modellwahl wirkt auf **alle** Prognose-Pfade, weil der Prognose-Kanon (`services/prognose_kanon.py`) `Anlage.wetter_modell` an `get_solar_prognose` durchreicht — also auch auf die eedc-korrigierte Tagesprognose, die Stundenprofile, die Live-/Persistenz-Werte und den HA-/MQTT-Export (`services/ha_export_prognose.py`). Bis v4.0.1 rechnete dieser Pfad unabhängig von der Einstellung mit `best_match`, während Live-Wetter, 14-Tage-Wettertabelle und die OpenMeteo-Spalte von `/solar-prognose` das Modell bereits nutzten — dieselbe Seite zeigte damit zwei Modelle nebeneinander.
+**Geltungsbereich (seit v4.0.2, A30):** Die Modellwahl wirkt auf **alle** Prognose-Pfade, weil der Prognose-Kanon (`services/prognose_kanon.py`) `Anlage.wetter_modell` an `get_solar_prognose` durchreicht — also auch auf die eedc-korrigierte Tagesprognose, die Stundenprofile, die Live-/Persistenz-Werte und den HA-/MQTT-Export (`services/ha_export_prognose.py`).
 
 **Am Rand der Modell-Reichweite entscheidet die Abdeckung, nicht die Existenz (seit v4.0.19, F-36).**
-Jedes Modell hat eine Reichweite (Spalte oben, hinterlegt in `WETTER_MODELLE`), und am **letzten
-Tag innerhalb** dieser Reichweite liefert Open-Meteo häufig nur noch die Stunden bis zum Ende des
-Modelllaufs. Gemessen am 2026-08-18: `icon_d2` (2 Tage) endete um **08:00** — die 15 Stunden
-danach, also der gesamte Ertragszeitraum, trugen `null`. Die Kaskade holt für solche Fälle
-ohnehin zusätzlich `best_match`, verwarf diesen Tag aber, sobald das gewählte Modell für ihn
-**irgendetwas** geliefert hatte:
+Jedes Modell hat eine Reichweite (`WETTER_MODELLE`), und am **letzten Tag innerhalb** dieser Reichweite liefert Open-Meteo
+häufig nur noch die Stunden bis zum Ende des Modelllaufs — der Rest des Tages, oft der ganze Ertragszeitraum, trägt `null`.
+Die Kaskade holt für solche Fälle zusätzlich `best_match`:
 
 ```
-falsch:  Primary gewinnt, wenn der Tag in seiner Antwort VORKOMMT
-richtig: Primary gewinnt, wenn er den Tag mindestens so weit ABDECKT wie best_match
+Primary gewinnt einen Tag, wenn er ihn mindestens so weit ABDECKT wie best_match — nicht schon, wenn der Tag VORKOMMT
 ```
 
 Gezählt werden Stunden mit einem GTI-**Wert**, nicht mit Ertrag — nachts ist GTI `0.0` und damit
@@ -3685,67 +3685,62 @@ werden (ADR-002/**P4**). SoT: `solar_forecast_service._gti_abdeckung_je_tag` und
 `_merge_nach_abdeckung`; der Ein-Abruf-Zweig (`tage ≤ Reichweite`) holt `best_match` in diesem
 Fall nach, sonst wäre die Regel dort blind.
 
-> ⚠ **Diese Lücke war seit dem 2026-07-28 bekannt und wurde zunächst nur umgangen.** Die
-> Snapshot-Begrenzung auf den Modellhorizont (`wetter/cache.snapshot_days`, Auflage E15-a) nimmt
-> der Kaskade die **ganz leeren** Tage jenseits der Reichweite — den **angeschnittenen** Tag am
-> Rand lässt sie stehen, denn der liegt ja im Fenster. Die Begrenzung bleibt richtig (sie spart
-> Abrufe und hält den Cache-Kanon), sie ist nur nicht das, was den Fehler verhindert.
+> ⚠ Die Snapshot-Begrenzung auf den Modellhorizont (`wetter/cache.snapshot_days`, Auflage E15-a) nimmt der Kaskade nur
+> die **ganz leeren** Tage jenseits der Reichweite (sie spart Abrufe und hält den Cache-Kanon); den **angeschnittenen** Tag
+> am Rand löst allein die Abdeckungsregel oben.
 
-**„Keine Daten" schließt die leere Antwort ein.** Open-Meteo kann für ein Modell mit HTTP 200 antworten und trotzdem für jede Stunde `null` liefern; `_hat_nutzbares_gti` behandelt das wie einen Fehlschlag, damit die `best_match`-Kaskade greift statt einen 0-kWh-Tag zu bauen. **Am 2026-07-28 gemessen betrifft das drei der acht wählbaren Werte:** `ecmwf_ifs04` (HTTP 200, 0 von 72 Stundenwerten gesetzt — das Modell läuft nicht mehr, der Name wird noch akzeptiert) sowie `ecmwf_seamless` und `meteoswiss_seamless` (keine gültigen Modellnamen mehr, HTTP-Fehler). Für diese drei rechnet eedc faktisch mit `best_match`; die Bereinigung der Auswahlliste steht aus.
+**„Keine Daten" schließt die leere Antwort ein.** Open-Meteo kann für ein Modell mit HTTP 200 antworten und trotzdem für jede Stunde `null` liefern; `_hat_nutzbares_gti` behandelt das wie einen Fehlschlag, damit die `best_match`-Kaskade greift statt einen 0-kWh-Tag zu bauen. Drei der acht wählbaren Werte bedient Open-Meteo nicht mehr (gemessen: `ecmwf_ifs04` antwortet mit HTTP 200 ohne einen Stundenwert, `ecmwf_seamless` und `meteoswiss_seamless` mit HTTP-Fehler) — sie rechnen faktisch mit `best_match`; die Auswahlliste führt sie weiter.
 
 ### 4.1b Solar Forecast ML (SFML)
 
-**Endpoint:** `GET /api/aussichten/prognosen/{anlage_id}` (Prognosen-Vergleich) und `GET /api/live-wetter/{anlage_id}` (Live-Cockpit).
-⛔ **NICHT** `/aussichten/kurzfristig/` — hier stand das bis 2026-08-30, und `aussichten.py` nennt SFML mit **0 Treffern** (gemessen, Melder Burkard #401).
-**Service:** `services/solar_forecast_service.py`
-**Externe API:** forecast.solar oder solcast.com (konfigurierbar)
+**Endpoint:** `GET /api/aussichten/prognosen/{anlage_id}` (Prognosen-Vergleich) und `GET /api/live/{anlage_id}/wetter` (Live-Cockpit).
+**Quelle:** die Home-Assistant-Integration *Solar Forecast ML* (`solar_forecast_ml`) — nur im HA-Add-on, als Prognosequelle
+der Anlage gewählt (`services/prognose_router.py`: „SFML pur, ohne Korrektur"; ohne erreichbare HA-Instanz Rückfall auf eedc
+mit Hinweis).
 
 SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der eedc-Eigenprognose und den IST-Werten — im **Prognosen-Vergleich** und im **Live-Cockpit**, nicht in der 7–14-Tage-Aussicht.
 
-Ist SFML als Quelle gewählt, kommen seit 2026-08-30 **alle** Prognosezahlen des Live-Blocks aus SFML: Tageswert, verbleibender Ertrag, nachgeführter Tageswert und der VM/NM-Split. Wo SFML einen Tag nicht abdeckt, steht „eedc" dabei. Ohne SFML-Stundenprofil gibt es **keinen** verbleibenden Ertrag — er würde sonst aus der Kurvenform einer anderen Quelle entstehen.
+Ist SFML als Quelle gewählt, kommen **alle** Prognosezahlen des Live-Blocks aus SFML (#401): Tageswert, verbleibender Ertrag, nachgeführter Tageswert und der VM/NM-Split. Wo SFML einen Tag nicht abdeckt, steht „eedc" dabei. Ohne SFML-Stundenprofil gibt es **keinen** verbleibenden Ertrag — er würde sonst aus der Kurvenform einer anderen Quelle entstehen.
 
 #### Datenfluss
 
 ```
-1. Externer SFML-Anbieter liefert kWh-Prognose pro Tag
-2. Werte werden in DB persistiert (Tabelle: SolarForecastML)
-3. Endpoint gibt SFML-Werte zusammen mit eedc-Prognose zurück
+1. Erkennung der SFML-Sensoren über die Integration (services/prognose_discovery.py, Rolle aus der unique_id —
+   Kaskade in ha_integration_aufloeser.py, #401)
+2. Tageswerte und Stundenprofil aus den Sensoren lesen
+3. je Tag persistieren (Schreibstelle api/routes/live_wetter.py, derselbe Lauf wie der Day-Ahead-Schnappschuss §6b):
+   TagesZusammenfassung.sfml_prognose_kwh und .sfml_prognose_stundenprofil (24 Backward-Slots, erster Wert bleibt)
 ```
 
 #### Response-Felder (pro Tag)
 
-```json
-{
-  "datum": "2026-03-28",
-  "eedc_prognose_kwh":  12.4,
-  "sfml_prognose_kwh":  11.8,
-  "ist_kwh":            13.1,       // null wenn Zukunft
-  "datenquelle":        "MS"        // Wettermodell-Kürzel
-}
+```
+PrognosenVergleichResponse — gefüllt nur, wenn SFML die gewählte Quelle ist:
+  sfml_verfuegbar                                       ohne ihn keine SFML-Spalte
+  sfml_heute_kwh · sfml_morgen_kwh · sfml_uebermorgen_kwh
+  sfml_stundenprofil                                    24 StundenProfilEintrag (Backward-Slots)
+  sfml_tageshaelften                                    Vormittag/Nachmittag je Tag
 ```
 
 #### Abweichungsberechnung (Prognose-Vergleich)
 
-```
-EEDC_Abweichung (%) = (IST - EEDC_Prognose) / EEDC_Prognose * 100
-SFML_Abweichung (%) = (IST - SFML_Prognose) / SFML_Prognose * 100
-```
-
-Beide Abweichungen werden im Frontend als farbige Badges angezeigt (grün = Übererfüllung, rot = Untererfüllung).
+SFML wird angezeigt, aber **nicht eingewertet**: keine Δ-Spalte neben dem Wert und kein Platz im Genauigkeits-Ranking
+(MAE/MBE kennen OM, eedc, Solcast); im 7-Tage-Vergleich stehen heute und morgen, nichts Vergangenes (Probe
+`PrognoseVergleichTeile.stundenvergleich.test.tsx`). Die Δ der übrigen Quellen: Absatz *Abweichung und Σ-Zeile* unten.
 
 ### 4.1c Prognose-Vergleich (Auswertungen → Prognose)
 
 Anzeige: [Auswertungen → Prognose (Genauigkeit gegen IST)](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-ist) — fachlich beschrieben im [Handbuch Prognosen](HANDBUCH_PROGNOSEN.md).
 
 **Endpoint:** `GET /api/aussichten/prognosen/{anlage_id}`
-**Service:** `api/routes/prognosen.py` (in v3.16.6 aus `aussichten.py` ausgelagert), `services/solcast_service.py`
+**Service:** `api/routes/prognosen.py`, `services/solcast_service.py`
 
 Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 
 | Quelle | Bedeutung |
 |---|---|
-| **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus GTI × kWp × (1 − System_Losses). **Auch die Stundenkurve „OpenMeteo (roh)" fächert seit v4.0.1 je Orientierungsgruppe auf** — vorher rechnete sie die Gesamtleistung so, als hinge sie an *einer* Dachfläche (Neigung/Ausrichtung der zufällig ersten PV-Zeile, sonst stillschweigend 35° Süd), während der OM-**Tageswert** derselben Spalte längst auffächerte. Kurve, Summenzeile und Tageswert sind jetzt deckungsgleich. |
-| **eedc (kalibriert)** | die anlagenspezifisch korrigierte Prognose. Legende und Beschriftung sagen seit v4.0.1 „eedc (kalibriert)" statt „eedc (OpenMeteo × Faktor)" — korrigiert wird **pro Stunden-Slot auf der Energie**, nicht mit einem Tagesfaktor. |
+| **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus GTI × kWp × (1 − System_Losses) je Orientierungsgruppe: Tageswert, Stundenkurve „OpenMeteo (roh)" und Summenzeile sind deckungsgleich (v4.0.1). Ab Tag 4 trägt die Tageszeile die Tagesformel aus §4.1 (GHI, N-317). |
+| **eedc (kalibriert)** | die anlagenspezifisch korrigierte Prognose — korrigiert wird **pro Stunden-Slot auf der Energie**, nicht mit einem Tagesfaktor. |
 | **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet — die API liefert `period_end` (`backward_slot_aus_period_end`), die HA-Integration `period_start` (`backward_slot_aus_period_start`: volle Stunde des Beginns + 1 h; für 30-Min-Buckets derselbe Slot). Der HA-Pfad im Einzelnen: Absatz „Solcast über die HA-Integration" unten. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
 
@@ -3779,9 +3774,9 @@ Die Tabelle „Stundenvergleich heute" annotiert jeden Prognosewert mit seiner A
 Δ_relativ  = |Δ| / IST × 100                   (nur für die Farbskala bzw. die Σ-Zeile; IST > 0,05 vorausgesetzt)
 ```
 
-- **Liegt ein IST vor, wird immer annotiert** — auch bei Δ = 0. Eine fehlende Annotation bedeutet damit eindeutig „keine Messung", nicht „kleine Abweichung". *(Bis v4.0.5 unterdrückte die Anzeige jedes |Δ| < 0,03 kWh; das traf je Spalte unterschiedlich zu und sah in der Zeile aus wie eine Datenlücke — PN Rainer 90004.)*
-- **Die Σ-Zeile summiert über ein gemeinsames Fenster.** Obergrenze ist die letzte Stunde mit IST, höchstens `aktuelle_stunde` (Slot `aktuelle_stunde + 1` läuft noch, s. Backward-Konvention). Stunden **ohne** IST bleiben in allen vier Spalten außen vor — die vier Summen meinen damit paarweise dieselben Stunden. *(Bis v4.0.5 stand dort die 24-Stunden-Prognosesumme neben `ist_heute_kwh`: mittags z. B. 78,1 gegen 26,1 — die Abweichung maß die Tageszeit.)*
-- **Ohne jedes IST** (Zukunftstag) zeigt die Σ-Zeile die volle Prognosesumme und **kein** Δ — ADR-002/P4: kein 0-%-Ergebnis auf einer nicht vorhandenen Referenz. Der Vollständigkeits-Grenzfall „alle 24 Stunden gemessen" verhält sich wie vorher (keine `bis HH:00`-Kennzeichnung).
+- **Liegt ein IST vor, wird immer annotiert** — auch bei Δ = 0. Eine fehlende Annotation bedeutet damit eindeutig „keine Messung", nicht „kleine Abweichung".
+- **Die Σ-Zeile summiert über ein gemeinsames Fenster.** Obergrenze ist die letzte Stunde mit IST, höchstens `aktuelle_stunde` (Slot `aktuelle_stunde + 1` läuft noch, s. Backward-Konvention). Stunden **ohne** IST bleiben in allen vier Spalten außen vor — die vier Summen meinen damit paarweise dieselben Stunden.
+- **Ohne jedes IST** (Zukunftstag) zeigt die Σ-Zeile die volle Prognosesumme und **kein** Δ — ADR-002/P4: kein 0-%-Ergebnis auf einer nicht vorhandenen Referenz. Sind alle 24 Stunden gemessen, entfällt die `bis HH:00`-Kennzeichnung.
 
 Nicht zu verwechseln mit der **Tagesprognose** derselben Spalte (`openmeteo_heute_kwh` etc.) in der Kennzahl-Matrix — die bleibt der ganze Tag, ebenso `verbleibend_*` (= IST bisher + Σ Prognose-Slots der Reststunden).
 
@@ -3797,9 +3792,9 @@ faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
 
 > ⚠ **Der Skalar-Lernfaktor hier ist der LEGACY-Faktor** (`live_wetter._get_lernfaktor_detail`) und liest `pv_prognose_kwh`, also die **ungekappte** Rohprognose. Die Skalar-Stufe des **Korrekturprofils** (Stufe 4 der Kaskade) rechnet seit N-547 gegen `lern_soll_kwh`, also gegen die **gekappte** Summe.
 >
-> ⭐ **Seit N-551 (2026-09-23) gibt es ihn deshalb ZWEIMAL — einmal je Bezugsgröße.** Ein Faktor, der auf der rohen Prognose gelernt ist, rechnet auf einer an der Wechselrichter-Grenze **gekappten** Reihe die Abregelung ein zweites Mal heraus (an einer Messkopie mit 12-kW-Grenze: 0,809 statt 0,923, **−12,4 %**). Ein bloßer Nenner-Tausch wäre aber falsch gewesen: **fünf** Leser wenden denselben Faktor auf die **rohe** Basis an (Genauigkeits-Tracking, Prognosen-Vergleich, Energieprofil-Tages-SOLL, Tagesprognose, Kanon-Schätzpfad) — sie hätten dann um +14,2 % zu hoch gelegen. Gebaut ist daher: `faktor` bleibt Σ IST / Σ `pv_prognose_kwh`; daneben steht `faktor_gekappt` = Σ IST / Σ `lern_soll_kwh` über die Tage **derselben** Kaskadenstufe, die das Feld tragen (Gate ≥ 7 Tage, sonst kein zweiter Faktor). Den gekappten nimmt **nur** der Kanon-Fallback, also die Stelle, die auf gekappte Slots trifft. Ohne Kappung sind beide Zahlen gleich; an einer Anlage ohne AC-Grenze bewegt sich nichts.
+> ⭐ **Es gibt ihn deshalb ZWEIMAL — einmal je Bezugsgröße (N-551).** Ein auf der rohen Prognose gelernter Faktor rechnete auf einer an der Wechselrichter-Grenze **gekappten** Reihe die Abregelung ein zweites Mal heraus; ein bloßer Nenner-Tausch wäre falsch, denn **fünf** Leser wenden denselben Faktor auf die **rohe** Basis an (Genauigkeits-Tracking, Prognosen-Vergleich, Energieprofil-Tages-SOLL, Tagesprognose, Kanon-Schätzpfad). Darum: `faktor` = Σ IST / Σ `pv_prognose_kwh`; daneben `faktor_gekappt` = Σ IST / Σ `lern_soll_kwh` über die Tage **derselben** Kaskadenstufe, die das Feld tragen (Gate ≥ 7 Tage, sonst kein zweiter Faktor). Den gekappten nimmt **nur** der Kanon-Fallback, die Stelle, die auf gekappte Slots trifft. Ohne Kappung sind beide Zahlen gleich.
 
-Seit v3.16.15 nutzt eedc eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
+eedc nutzt eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
 
 | Stufe | Bedingung | Bezugszeitraum |
 |---|---|---|
@@ -3812,7 +3807,7 @@ Die aktive Stufe wird im Status-Banner und im KPI-Card-Header angezeigt.
 
 **Restzeit-Banner (v3.22.0):** Wenn die 7-Tage-Schwelle noch nicht erreicht ist, zeigt das Banner: „X von 7 Tagen, noch Y Tage" — Y berücksichtigt nur Tage mit gültiger Prognose UND IST > 0.5 kWh, also dieselbe Filterregel wie der Faktor selbst.
 
-**Persistierung:** Lernfaktor pro Quelle separat gecacht. Backfill-Kandidat-Felder (`pv_prognose_kwh`, Solcast-Tageswerte) werden seit v3.16.14 alle 45 Min automatisch aus dem **Prefetch-Job** in `TagesZusammenfassung` geschrieben — vorher hing die Persistierung als Nebeneffekt am Dashboard-Besuch und der Lernfaktor konnte ohne Nutzer-Interaktion nicht berechnet werden.
+**Persistierung:** Lernfaktor pro Quelle separat gecacht. Backfill-Kandidat-Felder (`pv_prognose_kwh`, Solcast-Tageswerte) schreibt der **Prefetch-Job** alle 45 Min in `TagesZusammenfassung` (v3.16.14) — unabhängig vom Seitenbesuch, sonst entstünde ohne Besuch kein Lernfaktor.
 
 #### Das Korrekturprofil: vier Stufen aus den Stundenpaaren (`korrekturprofil_aggregator.py`)
 
@@ -3839,7 +3834,7 @@ Status             = "skipped" ohne Koordinaten oder wenn keine Stufe einen Wert
 
 Dieselbe Kaskade Monat → Quartal → 30 Tage mit 15/15/7 trägt der Skalar-Lernfaktor oben; hier gilt sie je
 (Monat, Stunde)-Zelle. Bestandsprofile wechseln je Bin erst auf das neue Lern-SOLL, wenn das Gate der Stufe mit
-neuen Datenpunkten erreicht ist (Keep-Regel N-547, §6b). Code-Orte (RF-85, 5.11.2026): `_tage_und_snapshots`
+neuen Datenpunkten erreicht ist (Keep-Regel N-547, §6b). Code-Orte (RF-85): `_tage_und_snapshots`
 (Lookback, Snapshots, Filter; `_akkumuliere` füllt die Pools) · `_stufe_sonnenstand_wetter` und
 `_stufe_sonnenstand` (beide über `_flache_faktoren`) · `_stufe_stunde` (Kaskade `_stunde_zelle`) · `_stufe_skalar`
 · `_ergebnis`.
@@ -3885,7 +3880,7 @@ Tageshälften (Vormittag/Nachmittag) werden nicht hart bei 12:00 Uhr Clockzeit g
 - **Backward-Slot-Konvention** (siehe §6b): Slot N enthält Energie aus dem Intervall `[N-1, N)`.
 - **Gerade abgeschlossene Stunde (v3.23.0):** wird nicht als Lücke geflaggt — HA Long-Term Statistics schreibt die Stunden-Row erst am Ende der Stunde, das Zeitfenster zwischen Stundenwechsel und HA-Stats-Write (typisch ~5–60 Min) wird mit `<` (statt `<=`) toleriert.
 - **Echte Lücken (>1 h alt)** werden mit ⚠ markiert. Klick auf das Symbol öffnet einen Reparatur-Popover mit „Tag neu berechnen" (`POST /api/energie-profil/{anlage_id}/reaggregate-tag`) und einem Fallback-Link zur [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung).
-- **Gebündelte Stunde (ab v4.0.51, Zählerlücken wie HA):** trägt eine IST-Stunde die Energie mehrerer realer Stunden (HA hatte davor keine Zeile), steht sie im Stundenvergleich **nicht** als Stichprobe (Slot leer, Stunde in `buendel_stunden`); ihre Energie zählt in der Tagessumme. Als unvollständig gilt der Tag nur noch bei einem **Mitternachtsbündel** der PV (Energie aus dem Vortag) oder bei verworfener PV — nicht mehr bei jeder fehlenden Stunde.
+- **Gebündelte Stunde (ab v4.0.51, Zählerlücken wie HA):** trägt eine IST-Stunde die Energie mehrerer realer Stunden (HA hatte davor keine Zeile), steht sie im Stundenvergleich **nicht** als Stichprobe (Slot leer, Stunde in `buendel_stunden`); ihre Energie zählt in der Tagessumme. Als unvollständig gilt der Tag nur bei einem **Mitternachtsbündel** der PV (Energie aus dem Vortag) oder bei verworfener PV, nicht bei jeder fehlenden Stunde.
 
 ### 4.2 Langfrist-Prognose (12 Monate)
 
@@ -3947,30 +3942,36 @@ Bisherige_Erträge = Σ(Einspeisung * Vergütung / 100)         (PV)
 #### WP-Ersparnis (historisch, in Finanzen)
 
 ```
-Für jeden Monat mit WP-Daten:
-    Gas_Preis     = Monatsdaten.gaspreis_cent_kwh        # ab v3.21.0, wenn pro Monat gepflegt
-                  ∨ Investition.parameter.alter_preis_cent_kwh   # Fallback statisch
-    Gas_Kosten    = (Heizung + WW) / 0.9 * Gas_Preis / 100
-                  + alternativ_zusatzkosten_jahr / 12     # Zusatzkosten anteilig pro Monat
-    WP_Netzkosten = Strom * WP_Preis / 100               # der GANZE Strom (SOLL S1b)
+Je Wärmepumpe, die eine Heizung ersetzt (N-88: Energieträger „keiner" bringt nichts ein), je Monat:
+    Wärme         = waerme_gesamt_kwh(waerme_kwh, Heizwärme, Warmwasser)      # D1, §3.5 (N-391/N-398/N-379)
+    Strom         = WP-Strom − Kühlstrom (modus_strom_zeile, gemessen vor abgeleitet)   # Kühlen ersetzt keine Heizung
+    Strom > 0, Wärme ≤ 0  ⇒  der Monat zählt nicht (N-670: Standby, kein Vergleich)
+    Gas_Preis     = Monatsdaten.gaspreis_cent_kwh                  # Monatswert, wenn gepflegt (#141)
+                  ∨ Investition.parameter.alter_preis_cent_kwh     # sonst der Wert an der WP
+                  ∨ 12 ct                                          # sonst die Vorgabe (PARAM_WAERMEPUMPE_DEFAULTS = GASPREIS_DEFAULT_CENT)
+    Gas_Kosten    = Wärme / η_alt(Energieträger) * Gas_Preis / 100   # 0,90 Gas · 0,85 Öl · 1,0 Strom
+    WP_Netzkosten = Strom * wp_preis_cent / 100                    # der GANZE Strom (SOLL S1b); Preis des Monats, §3.5b-V (N-663)
     Ersparnis     = Gas_Kosten - WP_Netzkosten
+  + alternativ_zusatzkosten_jahr × erfasste Monate / 12            # Zusatzkosten anteilig (#141)
 ```
 
-> **Der ganze WP-Strom trägt den Netztarif (SOLL Wärme/Klima S1b).** Hier stand bis September 2026 ein fester Abschlag von 50 % („Netzanteil-Annahme"). Er ist ersatzlos entfallen: Der PV-Strom, den die Wärmepumpe verbraucht, ist auf der PV-Seite bereits als Eigenverbrauch gutgeschrieben — ihn hier ein zweites Mal abzuziehen zählte dieselbe Kilowattstunde doppelt (ADR-002/P9). Begründung und Zahlenbeispiel stehen im Kasten zur Planungsformel in [§3.5](#35-wärmepumpe-einsparung).
+> **Der ganze WP-Strom trägt den Netztarif (SOLL Wärme/Klima S1b, N-459), ohne Abschlag für den PV-Anteil.** Der PV-Strom, den die Wärmepumpe verbraucht, ist auf der PV-Seite bereits als Eigenverbrauch gutgeschrieben — ihn hier ein zweites Mal abzuziehen zählte dieselbe Kilowattstunde doppelt (ADR-002/P9). Code: `core/berechnungen/alternativkosten.py::berechne_wp_alternativkosten_ersparnis` (Aussichten, ROI-Fortschritt, Jahres-Ersparnis des HA-Exports); Begründung und Zahlenbeispiel im Kasten zur Planungsformel in [§3.5](#35-wärmepumpe-einsparung).
 
-> **Monats-Gaspreis (v3.21.0):** Wenn `Monatsdaten.gaspreis_cent_kwh` pro Monat gepflegt ist, wird er Monat für Monat verwendet — ein Tarifwechsel ändert dann nicht mehr rückwirkend die ganze Historie. Ohne Eintrag bleibt es beim statischen `alter_preis_cent_kwh` der Investition. Pflege in der assistierten `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`) — in V4 der EINE Erfassungsweg; der frühere Monatsabschluss-Wizard ist als V4-Fläche stillgelegt und läuft nur noch über die V3-Route (bis zum Flip).
+> **Monats-Gaspreis (v3.21.0):** Ist `Monatsdaten.gaspreis_cent_kwh` gepflegt, gilt er Monat für Monat — ein Tarifwechsel ändert nicht rückwirkend die Historie. Ohne Eintrag gilt `alter_preis_cent_kwh` der Wärmepumpe, ohne beide die Vorgabe (12 ct, `GASPREIS_DEFAULT_CENT`). Pflege in der assistierten `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`) — in V4 der eine Erfassungsweg.
 >
-> **Rechenweg neben der Zahl (seit 05.09.2026):** Der Tooltip im Cockpit-Detailblock und im T-Konto zeigt den Rechenweg aus demselben Layer-Ergebnis — mit den anteiligen Zusatzkosten und dem herausgehaltenen Kühlstrom, wenn es sie gibt. Bis dahin stand dort ein Text ohne beides, der bei einer Klimaanlage 10 € ergab, während daneben 100 € standen.
+> **Rechenweg neben der Zahl:** Der Tooltip im Cockpit-Detailblock und im T-Konto zeigt den Rechenweg aus demselben Layer-Ergebnis — mit den anteiligen Zusatzkosten und dem herausgehaltenen Kühlstrom, wenn es sie gibt.
 >
-> **Kühlstrom (Entscheid E-B, 18.08.2026; in dieser Jahresformel seit 05.09.2026):** Der Strom des Kühlbetriebs (`modus_strom_zeile`, gemessen vor abgeleitet) bleibt aus dem Vergleich — Kühlen ersetzt keine Heizung. Bis dahin kannte nur die Monatsformel (`berechne_wp_ersparnis`) die Regel; Aussichten, ROI, HA-Jahresersparnis und der Vorjahresvergleich im Cockpit rechneten den Kühlstrom weiter gegen die vermiedenen Gaskosten.
+> **Kühlstrom (Entscheid E-B; B5/X-5):** Der Strom des Kühlbetriebs (`modus_strom_zeile`, gemessen vor abgeleitet) bleibt aus dem Vergleich — Kühlen ersetzt keine Heizung. Dieselbe Regel gilt in der Monatsformel (`berechne_wp_ersparnis`) und in dieser Jahresformel (Aussichten, ROI, HA-Jahresersparnis, Vorjahresvergleich im Cockpit).
 
 #### E-Auto-Ersparnis (historisch, in Finanzen)
 
 ```
-Benzin_Liter  = Σ(km) / 100 * Vergleich_L_100km
-Benzin_Kosten = Benzin_Liter * Benzinpreis
-Netzstrom_Kosten = Σ(ladung_netz_kwh) * Strompreis / 100
-Ersparnis     = Benzin_Kosten - Netzstrom_Kosten
+Benzin_Kosten  = Σ_Monat km_m / 100 * Vergleich_L_100km * Benzinpreis_m   # Kraftstoffpreis des Monats ∨ Parameter ∨ 1,65 €/L (#260)
+Strom_Kosten   = Heim-Netzladung * Netzbezug_Preis / 100
+               + Heim-PV-Ladung  * EV_Preis        / 100                   # N-672: Preis der Eigenverbrauchs-Ersparnis des Monats
+               + Kosten externer Ladung
+Fossile_Kosten = km_Verbrenner / 100 * eigener_Verbrauch * Benzinpreis     # nur Plug-in-Hybrid (#331), sonst 0
+Ersparnis      = Benzin_Kosten - Strom_Kosten - Fossile_Kosten
 ```
 
 #### Monatsprognose (zukünftig)
@@ -4000,16 +4001,11 @@ Normierung     = Σ_Monate(Saison_Faktor) / Σ_Monate(Saison_Faktor * sqrt(PV_Fa
 > ⚠ **`WP_PV_Anteil` hat zwei Bestandteile, die leicht verwechselt werden.**
 > `PV_Anteil_gepflegt` ist der am Gerät eingetragene *PV-Anteil (%)* (Vorgabe 30 %, wenn nie
 > eingetragen; bei mehreren Wärmepumpen ihr Mittel). Ein **geleertes** Feld ist eine Rücknahme: es
-> bleibt leer (das Formular belegt es seit 27.09.2026, N-572, nicht mehr vor), und das Gerät fällt
+> bleibt leer (N-572: das Formular belegt es nicht vor), und das Gerät fällt
 > aus dem Mittel heraus. Der Beitrag **je Gerät** rechnet in diesem Fall weiter mit 30 %.
 > `sqrt(PV_Faktor)` gibt der Größe ihre **Saisonform** — im Sommer steht mehr PV zur
 > Verfügung —, und die `Normierung` über die **zwölf Kalendermonate** sorgt dafür, dass
-> die Jahressumme trotz dieser Form genau dem gepflegten Anteil entspricht. Ohne sie
-> stünde im Formular 30 % und in der Jahresbilanz 23 %.
->
-> ⛔ Hier stand bis zum 13.09.2026 `WP_Strom * 0.5 * sqrt(PV_Faktor)` — der Stand **vor**
-> dem 30.08.2026, als der gepflegte Anteil diese Stelle erreichte. Reine Doku-Drift; die
-> Zeile darunter (`WP_Strom_Monat`) war die ganze Zeit richtig.
+> die Jahressumme trotz dieser Form genau dem gepflegten Anteil entspricht.
 >
 > ⚠ Diese Größe ist eine **Mengen**-Aussage und wirkt nur im Eigenverbrauchs-Modell der
 > Prognose. Auf die **Kosten** der Wärmepumpe wirkt sie nicht — siehe den Kasten in
@@ -4058,9 +4054,9 @@ Wenn nicht amortisiert:
 3. Fallback-Kette:
 
 ```
-waermepumpe → waermepumpe-Tarif || allgemein
-wallbox     → wallbox-Tarif     || allgemein
-allgemein   → allgemein-Tarif   || Hardcoded Defaults (30.0 / 8.2)
+waermepumpe → waermepumpe-Tarif || Tarif „Wärmepumpe und Wallbox (gemeinsamer Zähler)" || allgemein
+wallbox     → wallbox-Tarif     || Tarif „Wärmepumpe und Wallbox (gemeinsamer Zähler)" || allgemein
+allgemein   → allgemein-Tarif   || Vorgaben (unten)
 ```
 
 ### Verwendung in Berechnungen
@@ -4076,9 +4072,9 @@ allgemein   → allgemein-Tarif   || Hardcoded Defaults (30.0 / 8.2)
 ### Hardcoded Defaults (wenn kein Tarif)
 
 ```text
-Netzbezug_Preis   = 30.0 ct/kWh
-Einspeisevergütung = 8.2 ct/kWh
-Grundpreis         = 0 EUR/Monat
+Netzbezug_Preis    = NETZBEZUG_DEFAULT_CENT             (core/wirtschaftlichkeit_defaults.py)
+Einspeisevergütung = EINSPEISEVERGUETUNG_DEFAULT_CENT
+Grundpreis         = 0 EUR/Monat                        (ohne Tarif kein Grundpreis)
 ```
 
 ### Dynamischer Tarif / Monatlicher Ø-Strompreis
@@ -4098,17 +4094,14 @@ Jede gelieferte Zahl trägt ihre **Herkunft** (`netzbezug_preis_herkunft`) und b
 Stufe 2 zusätzlich die **Abdeckung** — ein Ø aus 40 % der Stunden hat dieselbe
 Herkunft wie einer aus 98 %, aber nicht dieselbe Belastbarkeit.
 
-> **Die Tages- und Stundenebene rechnet mit ihren eigenen Preisen** (seit
-> 2026-09-17). Ein abgerechneter Monatswert ist die Wahrheit über **den Monat**;
-> er ist keine Aussage über einen einzelnen Tag. Wo Stundenpreise mitgeschrieben
-> sind, bildet eedc die Tageskosten deshalb als **Summe der Stunden-Kosten**
-> (Preis der Stunde × Menge der Stunde) und den Tages-Ø als deren Quotienten —
-> nicht mehr als Tagesmenge × Monatspreis.
+> **Die Tages- und Stundenebene rechnet mit ihren eigenen Preisen.** Ein abgerechneter Monatswert ist die Wahrheit über
+> **den Monat**; er ist keine Aussage über einen einzelnen Tag. Wo Stundenpreise mitgeschrieben sind, bildet eedc die
+> Tageskosten deshalb als **Summe der Stunden-Kosten** (Preis der Stunde × Menge der Stunde) und den Tages-Ø als deren
+> Quotienten — nicht als Tagesmenge × Monatspreis.
 >
 > Die Slot-Kaskade lautet: **gemessener Stundenpreis → abgerechneter Monats-Ø
 > (über den Monat verteilt) → Vertragspreis → kein Wert.** Bei Festpreis und
-> Zeitfenstern ist der Stundenpreis aus dem Vertrag *ableitbar*; dort ändert
-> sich gegenüber früher keine Zahl.
+> Zeitfenstern ist der Stundenpreis aus dem Vertrag *ableitbar*.
 >
 > ⚠ **Folge:** Σ der Tageskosten kann vom abgerechneten Monatsbetrag
 > **abweichen**. Das ist gewollt — die Messung sagt, *wann* das Geld angefallen
@@ -4121,7 +4114,7 @@ Herkunft wie einer aus 98 %, aber nicht dieselbe Belastbarkeit.
 - In der [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) kann ein HA-Sensor (oder MQTT-Topic) für das Feld `strompreis` zugeordnet werden
 - Im [Monatsdaten-Formular](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) wird der Ø-Preis als Vorschlag angezeigt und ist dort manuell editierbar
 
-> **Der Jahres-Ø ist mengengewichtet.** Die Jahres-/Gesamt-Kachel „Ø-Preis Netz" (und ebenso die Ø-Einspeisevergütung) rechnet `Σ(Preis_Monat × Menge_Monat) / Σ Menge_Monat` — nicht das arithmetische Mittel der Monatspreise. Gewichtet wird der **effektive** Monatspreis — das Ergebnis der vollen Kaskade des Monats (abgerechneter Ø → gemessene Stundenpreise → Zeittarif HT/NT → Tarif-Arbeitspreis), also genau der Preis, den die Monatskachel zeigt und mit dem der Monat seine Kosten rechnet. Bis 11.10.2026 übersprang die Jahres-Faltung die gemessene Stufe und setzte für einen Monat ohne Abschluss den Tarifpreis ein (N-680) — der Jahres-Ø passte dann nicht zur Kostenzeile derselben Kachel. Ohne diese Kette fiele ein Jahr mit dynamischem Tarif auf den Referenzpreis zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind. Monate ohne Menge fallen aus Zähler und Nenner; gibt es im Zeitraum überhaupt keine Menge, bleibt das arithmetische Mittel als Rückfall stehen, statt die Kachel zu leeren. **Ohne die Gewichtung passte der Kopfwert nicht zu den kWh und Euro darunter** — ein teurer Winter- und ein billiger Sommermonat wogen gleich viel (Forum simon42 #89667/67).
+> **Der Jahres-Ø ist mengengewichtet.** Die Jahres-/Gesamt-Kachel „Ø-Preis Netz" (und ebenso die Ø-Einspeisevergütung) rechnet `Σ(Preis_Monat × Menge_Monat) / Σ Menge_Monat` — nicht das arithmetische Mittel der Monatspreise. Gewichtet wird der **effektive** Monatspreis — das Ergebnis der vollen Kaskade des Monats (abgerechneter Ø → gemessene Stundenpreise → Zeittarif HT/NT → Tarif-Arbeitspreis), also genau der Preis, den die Monatskachel zeigt und mit dem der Monat seine Kosten rechnet. Die Faltung überspringt keine Stufe der Kette (N-680) — sonst passte der Jahres-Ø nicht zur Kostenzeile derselben Kachel, und ein Jahr mit dynamischem Tarif fiele auf den Referenzpreis zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind. Monate ohne Menge fallen aus Zähler und Nenner; gibt es im Zeitraum überhaupt keine Menge, bleibt das arithmetische Mittel als Rückfall stehen, statt die Kachel zu leeren. **Ohne die Gewichtung passte der Kopfwert nicht zu den kWh und Euro darunter** — ein teurer Winter- und ein billiger Sommermonat wögen gleich viel.
 
 ---
 
@@ -4132,25 +4125,23 @@ Herkunft wie einer aus 98 %, aber nicht dieselbe Belastbarkeit.
 ### PV-System-Gruppierung (3-Pass)
 
 ```
-Pass 1: Alle Wechselrichter identifizieren → pv_systeme[wr_id]
-Pass 2: PV-Module via parent_investition_id zuordnen,
-         DC-Speicher via parent_investition_id zuordnen
-Pass 3: Verbleibende Investitionen → standalone
+Pass 1: Trägergeräte registrieren → pv_systeme[traeger_id]: jeder Wechselrichter und jedes Balkonkraftwerk,
+        an dem ein PV-Modul oder Speicher hängt (F-33, #381; ein BKW ohne Kinder bleibt standalone)
+Pass 2: PV-Module und Speicher via parent_investition_id dem Träger zuordnen (Speicher am Träger = DC-gekoppelt);
+        ein PV-Modul ohne Träger → orphan_pv_module (eigene Zeile „ohne WR")
+Pass 3: Verbleibende Investitionen (AC-Speicher, BKW ohne Kinder, E-Auto, Wärmepumpe, Wallbox, Sonstiges) → standalone
 
 PV-Einsparung wird proportional nach kWp auf Module verteilt:
     Modul_Einsparung = Gesamt_PV_Einsparung * (Modul_kWp / Gesamt_kWp)
 ```
 
-> **Der Eigenverbrauch der PV-System-Zeile kommt aus den Monats-Fakten (N-723, seit 12.10.2026).** Je Monat der
+> **Der Eigenverbrauch der PV-System-Zeile kommt aus den Monats-Fakten (N-723).** Je Monat der
 > Anlagen-Eigenverbrauch wie im Cockpit (`kennzahlen.eigenverbrauch_kwh`: Erzeugung hinter dem Zähler **inklusive**
 > sonstiger Erzeuger, abzüglich Abgabe an Dritte, Speicher nach der Bilanzformel) **minus** der Anteil der
 > Balkonkraftwerke (`bkw_eigenverbrauch_anteil`, dieselbe Zahl wie im BKW-Hub) — das Balkonkraftwerk hat seine eigene
-> ROI-Zeile (ADR-002/P9). Dann ohne die bewertbaren Wandlungsverluste (P15) und hochgerechnet wie die Mengen. Bis dahin
-> stand hier `Eigenverbrauch = PV-Module − Einspeisung der ganzen Anlage`: mit einem BHKW 1 560 statt 2 640 € (sein
-> eingespeister Strom wurde von der PV abgezogen, sein Eigenverbrauch fehlte — gegen den Vertrag vom 03.09.2026), mit
-> Abgabe an Dritte 1 824 statt 1 464 € (dieselbe kWh zusätzlich als Erlös der Abgabe-Zeile), mit Speicher zählten die
-> Speicherverluste als Eigenverbrauch (im Beispiel 36 € zu viel; jetzt ergibt PV-Zeile + Speicher-Zeile die
-> Cockpit-Ersparnis). ⚑ Nicht abgezogen ist die V2H-Rückspeisung, die zusätzlich parametrisch in der E-Auto-Zeile steht.
+> ROI-Zeile (ADR-002/P9). Dann ohne die bewertbaren Wandlungsverluste (P15) und hochgerechnet wie die Mengen; PV-Zeile +
+> Speicher-Zeile ergeben die Cockpit-Ersparnis. ⚑ Nicht abgezogen ist die V2H-Rückspeisung, die zusätzlich parametrisch in der
+> E-Auto-Zeile steht.
 
 #### Speicher-Anteil aus dem PV-Topf (F-37, seit v4.0.20)
 
@@ -4174,8 +4165,8 @@ Modul_Einsparung = PV_Topf_€' · (Modul_kWp / Gesamt_kWp)          (Gesamt_kWp
 
 Die Klemmung bei 0 greift bei dünner oder widersprüchlicher Datenlage, wenn der zugerechnete Speicher-Anteil über der
 ganzen PV-Ersparnis liegt: die Module stehen dann mit 0 statt einer negativen Zeile, und die Summe der Zeilen liegt nicht
-über der physikalischen Menge. Bis v4.0.19 stand der Speicher-Spread **neben** dem Topf (gemeldete Anlage #381: 55,9 ct
-für eine Kilowattstunde, 895,64 € statt 723,89 €). Code: `api/routes/investitionen/roi_pv.py::_f37_speicher_aus_pv_topf`
+über der physikalischen Menge.
+Code: `api/routes/investitionen/roi_pv.py::_f37_speicher_aus_pv_topf`
 (Phase von `pv_systeme_zeilen`, RF-43). Gesichert durch `test_roi_summe_symmetrie_f37.py`.
 
 ### Hochrechnung bei unvollständigen Jahren
@@ -4197,7 +4188,7 @@ Wenn weniger als 12 Monate Daten:
 
 ### Snapshot-basierte Architektur (ab v3.19.0, #135)
 
-Stunden-kWh werden **nicht mehr** aus 10-Min-Leistungs-Samples integriert (±5–15 % Drift), sondern als **Differenz kumulativer Zähler-Snapshots** berechnet — analog zum HA Energy Dashboard.
+Stunden-kWh entstehen als **Differenz kumulativer Zähler-Snapshots**, nicht aus integrierten Leistungs-Samples — analog zum HA Energy Dashboard.
 
 ```
 1. Stündlicher Snapshot-Job (Cron :05) schreibt pro Anlage und gemapptem
@@ -4213,29 +4204,27 @@ Stunden-kWh werden **nicht mehr** aus 10-Min-Leistungs-Samples integriert (±5�
 
 **Snapshot-Lücken-Interpolation (v3.20.0, #145):**
 
-Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert eedc linear zwischen den vorhandenen Nachbar-Stunden:
+Wenn ein Snapshot fehlt (Scheduler-Ausfall, HA-Statistics-Timeout, MQTT-Cache leer), interpoliert eedc linear zwischen den vorhandenen Nachbar-Stunden (`snapshot/aggregator.py::_fill_gaps_linear`) — die Energie der Lücke verteilt sich auf ihre Stunden, statt als Spike in der nächsten zu stehen:
 
 ```
-Beispiel: snap[10] = 1500 kWh, snap[11] = None, snap[12] = 1505 kWh
-        → interpoliert: snap[11] = 1502.5 kWh
-        → kWh[11] = 2.5, kWh[12] = 2.5  (statt fälschlich kWh[11]=0, kWh[12]=5 als Spike)
+snap[h] = snap[a] + (snap[b] − snap[a]) × (h − a) / (b − a)      a < h < b, a und b die belegten Nachbarn
 ```
 
 Ränder (h0 fehlend am Tagesanfang, h24 am Tagesende) werden **nicht** extrapoliert — der Wert bleibt None und die betroffene Stunde fällt aus der Delta-Bildung. Tagessumme bleibt in jedem Fall korrekt (`snap[24] − snap[0]`).
 
-> ⚠ **Seit „Zählerlücken wie HA" (v4.0.51) gilt die Interpolation nur noch innen und nur im Zählerstands-Pfad** (Standalone/MQTT ohne HA-Statistik, `snapshot/aggregator.py`). Im HA-Pfad wird nichts aufgefüllt: die Energie einer fehlenden Stunde steht wie im HA-Energie-Dashboard in der Stunde danach (Bündel mit Spanne `n`), und der Rand am Tagesanfang wird über den letzten vorhandenen Stand davor verankert — auch in diesem Pfad, statt die erste Stunde auszulassen. Regeln und Leser: Abschnitt *Zählerlücken wie HA* weiter unten.
+> ⚠ **Die Interpolation gilt nur innen und nur im Zählerstands-Pfad** („Zählerlücken wie HA", v4.0.51) (Standalone/MQTT ohne HA-Statistik, `snapshot/aggregator.py`). Im HA-Pfad wird nichts aufgefüllt: die Energie einer fehlenden Stunde steht wie im HA-Energie-Dashboard in der Stunde danach (Bündel mit Spanne `n`), und der Rand am Tagesanfang wird über den letzten vorhandenen Stand davor verankert — auch in diesem Pfad, statt die erste Stunde auszulassen. Regeln und Leser: Abschnitt *Zählerlücken wie HA* weiter unten.
 
-**HA-Statistics-Toleranz (v3.20.0, #145):** Reduziert von 120 min auf **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
+**HA-Statistics-Toleranz (v3.20.0, #145):** **10 min**. Wenn die Zielstunde in HA-Statistics noch nicht vorhanden ist, schreibt der Job nichts (statt einen Nachbar-Wert zu liefern, der Slot N als 0 und Slot N+1 als 2-Stunden-Delta entstehen ließ). Der nächste `aggregate_day`-Lauf 15 Min später holt den Wert via Self-Healing nach.
 
 **Restart-Recovery (v3.23.0):** Beim Scheduler-Start läuft `sensor_snapshot_startup_recovery()` im Hintergrund — holt für die letzten 6 Stunden je Anlage HA-Statistics-Snapshots (idempotent dank Upsert) plus für die laufende Stunde einen Live-Snapshot, anschließend `aggregate_today_all`.
 
-**Tagesreset-Heuristik (v3.23.0):** HA-`utility_meter`-Sensoren mit täglichem Reset werfen um Mitternacht ein stark negatives Delta. Erkannt am Muster `s1 < 0.5 ∧ s0 > 0.5`, eedc nimmt dann `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt die Reset-Warnung wie bisher.
+**Tagesreset-Heuristik (v3.23.0):** HA-`utility_meter`-Sensoren mit täglichem Reset werfen um Mitternacht ein stark negatives Delta. Erkannt am Muster `s1 < 0.5 ∧ s0 > 0.5`, eedc nimmt dann `max(0, s1)` als Slot-0-Wert (Energie seit Reset, typ. ≈ 0 nachts). Bei untypischen negativen Deltas mitten am Tag bleibt es bei der Reset-Warnung.
 
-**Phase D Cleanup (v3.21.0, #138):** Seit v3.21.0 ist der Zähler-Snapshot-Pfad die einzige kWh-Quelle. Der frühere W-Integration-Fallback (`_val()`-Helper, `else`-Branch in `backfill_from_statistics`) und das Feature-Flag `EEDC_ENERGIEPROFIL_QUELLE` sind entfernt. Auf Anlagen ohne kumulative Zähler erscheinen Stunden-kWh-Felder als `NULL` statt geschätzter Werte.
+**Phase D Cleanup (v3.21.0, #138):** Der Zähler-Snapshot-Pfad ist die einzige kWh-Quelle; einen W-Integration-Fallback und ein Feature-Flag gibt es nicht. Auf Anlagen ohne kumulative Zähler erscheinen Stunden-kWh-Felder als `NULL` statt geschätzter Werte.
 
 ### Backward-Slot-Konvention (ab v3.20.0, #144)
 
-Alle Stundenzeilen des Energieprofils (`TagesEnergieProfil`) und die Prognose-Quellen folgen seit v3.20.0 der
+Alle Stundenzeilen des Energieprofils (`TagesEnergieProfil`) und die Prognose-Quellen folgen der
 **Backward-Konvention**. Die Stunden eines **Kanal-Tags** (Tag, den der HA-Spiegel bzw. die eigene Summe für eine Gruppe
 deckt) tragen seit HA-Bauform S4 ihren **Beginn** `[h, h+1)` wie HAs Statistik-Zeile (Kasten „Der Kanal-Stundentag"
 unten); für die gespeicherten Stundenzeilen gilt weiter:
@@ -4247,10 +4236,10 @@ unten); für die gespeicherten Stundenzeilen gilt weiter:
 
 Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Tibber.
 
-**Migration auf Backward (v3.20.0):**
-- `sensor_snapshot_service.get_hourly_kwh_by_category`: Delta `snap[h] − snap[h-1]` → Slot h (vorher: `snap[h+1] − snap[h]` → Slot h)
-- `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot (API über `period_end`, HA-Sensor über `period_start` + 1 h, s. §4.1c). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
-- **Nach Update auf v3.20.0 nötig:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit alle historischen Stundenwerte umverteilt werden. Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig korrekt.
+**Zuordnung auf Backward-Slots (v3.20.0):**
+- `sensor_snapshot_service.get_hourly_kwh_by_category`: Delta `snap[h] − snap[h-1]` → Slot h.
+- `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot (API über `period_end`, HA-Sensor über `period_start` + 1 h, s. §4.1c). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
+- Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig.
 
 #### Tageswerte: Zähler und Bezug aus einem Fenster
 
@@ -4282,27 +4271,21 @@ Innengerät-Kopien (Gerätefeld ODER Σ der Kopien, nie addiert), `_merke_grund`
 aussagekräftigste gewinnt; ein Grund nur für Keys ohne Wert). Proben: `test_rf71_tag_phasen.py`.
 
 Betroffen sind die Detailwerte in *Cockpit → Tag*: die Netzladung des Speichers („davon aus dem Netz
-(Arbitrage)") und die PV-/Netz-Anteile der E-Mobilität. Sie standen bis dahin in `[00:00, 24:00)`,
-ihre Bezüge in den Stundenzeilen — an einem Tag mit Ladung zwischen 23 und 24 Uhr fehlte die Menge
-also im einen und tauchte im anderen Tag auf. **Gemessen** an der Demo-Datenbank (187 Tage): 18 von
-182 Tagen weichen um mehr als 5 % ab, am 25.11.2025 um +131,9 % (1,11 gegen 2,58 kWh). Der Client
-konnte dadurch einen Netz-Anteil über 100 % errechnen — er kappte ihn stillschweigend auf 100 %.
-
-Die Kappung bleibt (der Zähler ist eine **Brutto**-Menge, der Bezug eine **Netto**-Menge — eine
-Stunde mit 2,0 kWh Netzladung und 1,5 kWh Entladung ergibt netto 0,5 kWh), aber sie ist nicht mehr
-stumm: Greift sie, nennt der Formel-Tooltip der Zeile „Wirkungsverluste" den Grund
+(Arbitrage)") und die PV-/Netz-Anteile der E-Mobilität — Zähler und Bezug im selben Fenster, sonst fehlte die Ladung
+zwischen 23 und 24 Uhr im einen Tag und tauchte im anderen auf. Der Client kappt den Netz-Anteil auf 100 % (der Zähler ist
+eine **Brutto**-Menge, der Bezug eine **Netto**-Menge — eine Stunde mit 2,0 kWh Netzladung und 1,5 kWh Entladung ergibt
+netto 0,5 kWh); greift die Kappung, nennt der Formel-Tooltip der Zeile „Wirkungsverluste" den Grund
 ([ADR-002/P4](ADR-002-WURZELMUSTER.md)).
 
 Monats-, Jahres- und Auswertungssichten sind **nicht** betroffen — sie rechnen aus den Monatsdaten
 bzw. den Monats-Fakten und kennen kein Tagesfenster.
 
-> **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot 13.10.2026).**
+> **Eine Ausnahme: die Speicher-Netzladung im Tageswert-Rückfall der Monats-Fakten (Entscheid Gernot).**
 > Ein Monat **ohne Speicher-Zeile** (laufend oder vergangen ohne Abschluss), dessen Tage Speicherwerte tragen, bekommt
-> Ladung und Entladung aus der Tagesebene — und seitdem auch die **Netzladung samt Preis**, als Σ der abgelaufenen
+> Ladung und Entladung aus der Tagesebene — und auch die **Netzladung samt Preis**, als Σ der abgelaufenen
 > Tage, dieselbe Boundary-Differenz und dasselbe Fenster wie *Cockpit → Tag*: ein Bestandstag im Speicher-Fenster
 > `[Vortag 23:00, 23:00)`, ein **Kanal-Tag** (`bilanz_leser.kanal_tage`, HA-Bauform S4) im Kalendertag
-> (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`) — Σ der Tage ≡ Monat (H-3, S4-Nachlauf; bis dahin rechnete
-> der Rückfall auch Kanal-Tage rückwärts und lag um die Randstunde 23–24 Uhr neben den Tagen). Die eine
+> (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`) — Σ der Tage ≡ Monat (H-3, S4-Nachlauf). Die eine
 > Rechenstelle ist `services/monats_fakten/netzladung_tage.py`: `speicher_netzladung_aus_tagen` (Menge über den
 > Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; ein Tag mit Rücksprung oder
 > ohne Rand fehlt, ohne Netzlade-Zähler keine Menge) und `netzladung_aus_tagen` (dazu der TEP-gewichtete Ladepreis
@@ -4312,11 +4295,9 @@ bzw. den Monats-Fakten und kennen kein Tagesfenster.
 > Ohne Stundenpreis bleibt das Gewicht 0, jeder Leser fällt dann auf den Bezugspreis (`berechne_netzladung_kosten`),
 > wie am Tag. *Cockpit → Monat* hat für solche Monate keinen Fakt (der Kontext lädt ohne `inkl_nur_tageswerte`,
 > Ladung/Entladung kommen dort aus der Vier-Quellen-Auflösung) und ruft deshalb dieselbe Funktion für jeden Monat
-> ohne Speicher-Zeile, **in dem ihr Speicherblock auch Ladung oder Entladung trägt** (Entscheid Master 13.10.2026: keine
+> ohne Speicher-Zeile, **in dem ihr Speicherblock auch Ladung oder Entladung trägt** (Entscheid Master: keine
 > halbe Anzeige — ohne HA hat ein vergangener Monat ohne Abschluss dort keine, N-472/N-677; die Fakten tragen alle
-> drei aus demselben Rückfall). Bis dahin ließ der Rückfall die Netzladung aus („eine Preis-Aussage, die die Tagesebene nicht
-> trägt", N-121-Lesart) und *Cockpit → Monat* nannte sie nur im laufenden Monat (#427 Punkt 2) — der Jahr-Verlauf zeigte daneben 0
-> (*Auswertungen → Tabelle* hat keine Netzladungs-Spalte). Eine Speicher-Zeile ersetzt den Wert (P8). Proben: `test_427_netzladung_laufender_monat.py`,
+> drei aus demselben Rückfall; #427). Eine Speicher-Zeile ersetzt den Wert (P8). Proben: `test_427_netzladung_laufender_monat.py`,
 > Matrix-Form M04 (`test_achsen_matrix.py`).
 
 **Die Konvention endet nicht am Backend (v4.0.6).** Wer eine Stunde *beschriftet* oder einen Messwert
@@ -4330,12 +4311,8 @@ in eine Chart-Spalte *einsortiert*, folgt derselben Regel — Client-SoT ist
 | `slotAusIntervallStart(h)` | Messreihen mit Slot-**Beginn**-Stempel (10-Min-Punkte des Tagesverlaufs) → Slot `h+1`. Rückgabe 24 = Slot 0 des Folgetags, **kein** Modulo. |
 | `slotAusZeitpunkt("HH:MM")` | Zeitpunkt-Marker (Sonnenaufgang, Solar Noon) in den Slot, der ihn enthält — 05:56 → Slot 6. |
 
-Auslöser war Rainer (PN 90106, 01.08.2026): der Live-Block „Wetter heute" baute seine Zeitspanne selbst
-und **vorwärts** (`[h, h+1)`), während die Prognose-Sicht rückwärts beschriftete; zusätzlich bündelte er
-die 10-Minuten-Punkte der Stunde `h` in Spalte `h` statt `h+1`. Gemessen gegen die Live-Box lag die
-IST-Kurve dadurch **genau eine Spalte** neben der Prognose im selben Chart. Klasse: nicht das
-Beschriftungs-Symptom patchen, sondern die Stelle, die die Zuordnung konstruiert
-(`feedback_aggregations_drift`).
+Regel: wer eine Stunde beschriftet oder einsortiert, nimmt die Zuordnung von dieser einen Stelle — nicht das
+Beschriftungs-Symptom patchen, sondern die Stelle, die die Zuordnung konstruiert.
 
 **Auch die Verbrauchs-Seite folgt ihr (v4.0.6).** Die gestrichelte Verbrauchs-Prognose im Live-Chart
 kommt aus dem individuellen Verbrauchsprofil der letzten 7 vollen Tage
@@ -4348,10 +4325,8 @@ Reihenfolge:
 | HA-History (Leistungsmittel je Stunde) | frische Installation, noch keine DB-Historie | `_slot_fenster` → `backward_slot_aus_period_start` |
 | MQTT-Snapshots (Zähler-Delta je Stunde) | Standalone-Betrieb ohne HA | dieselbe Stelle |
 
-Bis v4.0.5 bündelten die beiden **Fallback**-Quellen forward: die Energie aus `[h, h+1)` landete unter
-Index `h`, das Profil lag also eine Stunde zu früh — unsichtbar für jeden, der schon DB-Historie hat,
-sichtbar bei **Neuinstallation** und im **Standalone-Betrieb**. Seit v4.0.6 ordnet **eine** Stelle im
-Modul zu (`_slot_fenster`), und zwar über den Backend-SoT `core/berechnungen/slot_konvention.py`;
+Die beiden **Fallback**-Quellen ordnet **eine** Stelle im Modul zu (`_slot_fenster`), über den Backend-SoT
+`core/berechnungen/slot_konvention.py` (v4.0.6);
 das Abfrage-Fenster beginnt dafür eine Stunde vor Mitternacht, weil Slot 0 des ersten Tages das
 Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
 `tests/test_verbrauchsprofil_slot_konvention.py` — je eine Regression pro Fallback-Pfad plus ein
@@ -4403,9 +4378,7 @@ Warmwasser und Kühlen lernt der DB-Pfad (`_profil_from_db`) als **Teilmengen** 
 Stichproben (`wp_ww_<tagtyp>`, `wp_kuehlen_<tagtyp>`, nur wenn die Lernwoche eine davon trägt): aus getrennten
 Leistungssensoren (`waermepumpe_<id>_warmwasser` / `_kuehlen`) oder aus dem Betriebsmodus-Etikett der Stunde × der
 Stundenmenge des Geräts (Leistungssensor; bei genau einer aktiven Wärmepumpe die Zählermenge). Nie aus der Bauart
-(ADR-002/P13). Keine Kühlgrenze. Beispiel (Lernwoche Ø 10 °C = 5 Kd, Heizen 7 × 1,0 kWh, Warmwasser 2,0 kWh): Tag
-mit Ø 16 °C **2,7 kWh** (vorher 0,9 — der Warmwasser-Zyklus fiel auf 0,2), Tag mit Ø 0 °C **23 kWh** (vorher 27);
-milde Lernwoche (0,5 Kd) bei gleichem Wetter **9,0 kWh** (vorher 9,64), danach ein Tag mit 5 °C 21,79 kWh.
+(ADR-002/P13). Keine Kühlgrenze.
 
 Benannte Grenzen: mehrere Wärmepumpen ohne Leistungssensor ⇒ keine Trennung (die Zählermenge gehört keinem Gerät);
 Betriebsart-Zähler und getrennte Strom-Zähler trennen hier nicht; das Etikett ist der überwiegende Modus der Stunde;
@@ -4429,16 +4402,13 @@ sie wird ausgelassen, nicht geschätzt und nicht als 0 kW gezählt:
 Zu den beiden Fallbacks im Einzelnen:
 
 - **MQTT misst über die Intervallgrenzen**, nicht über die zufällig in der Stunde liegenden Snapshots.
-  Bis v4.0.5 war das Stundendelta „letzter minus erster Snapshot *innerhalb* der Stunde"; das letzte
-  Snapshot-Intervall fiel damit jede Stunde heraus — bei 5-Minuten-Takt rund **8 % zu wenig**, und ein
-  Verbrauch, der erst gegen Ende der Stunde anfiel, ging ganz verloren. Der Randwert ist der letzte
+  Der Randwert ist der letzte
   Zählerstand *bei oder vor* der Grenze; benachbarte Stunden lesen denselben Wert, deshalb geht an der
   Grenze nichts verloren und nichts wird doppelt gezählt. Der Scheduler schreibt alle 5 Minuten, aber
   nicht auf die volle Stunde gerastert — daher die 6 Minuten Toleranz (Reserve für Verzug, aber nicht
   genug für einen ausgefallenen Snapshot).
-- **HA zählt eine Stunde ohne Historie nicht mehr als gemessene Null.** Bis v4.0.5 hängte jede Stunde
-  eine Stichprobe an, auch wenn der Recorder nichts geliefert hatte: aus *unbekannt* wurde *war
-  nichts*, und ein einziger Ausfalltag drückte jeden Werktags-Slot auf 4/5 des wahren Werts. Beleg ist
+- **HA zählt eine Stunde ohne Historie nicht als gemessene Null** — aus *unbekannt* würde *war nichts*, und ein einziger
+  Ausfalltag drückte jeden Werktags-Slot auf 4/5 des wahren Werts. Beleg ist
   bewusst der **Netzanschluss** und dort `any` statt `all`: PV- und WP-Sensoren melden nachts bzw. im
   Stillstand stundenlang keine Zustandsänderung, ohne dass Daten fehlen, und von Bezug und Einspeisung
   bewegt sich immer genau einer. Liefert im ganzen Fenster **kein** Netz-Sensor, gibt es kein
@@ -4458,7 +4428,7 @@ vorgesehene Rückfall und **kein Fehler**: Ein dünnes eigenes Profil ist besser
 eine schärfere Schwelle würde einer frisch eingerichteten Anlage ihr individuelles Profil wieder
 wegnehmen.
 
-Sichtbar war davon bis v4.0.37 nur die **Tageszahl** — „2 Tage" liest sich aber wie eine Aussage über
+Die **Tageszahl** allein („2 Tage") läse sich wie eine Aussage über
 die Güte des Profils. Deshalb liefert das Ergebnis je Klasse zusätzlich die **gemessene
 Slot-Abdeckung** (`slots_werktag` / `slots_wochenende`, die Route reicht sie als `profil_slots`
 durch), und beide Anzeigen — die Legende in *Cockpit → Live* und der Verbrauchs-Tooltip der
@@ -4486,8 +4456,8 @@ nach denselben Regeln wie die Tagessummen:
   00:00 und liegt damit genau auf der Tagesgrenze. Umstellungstage: im Herbst trägt Stunde 2 beide Zeilen (Zuwachs und
   Spanne addiert), im Frühjahr bleibt Stunde 2 leer; es bleiben 24 Spalten. Jede Stunde trägt `raster = "beginn"` (die
   Stundenzeile eines Bestandstags `raster = "ende"`), das Frontend beschriftet beide als Bereich („11–12",
-  `lib/stundenBereich.ts`). Bis S4 war der Kanal-Tag das Bestands-Fenster `[Vortag 23:00, 23:00)` im Backward-Raster
-  (`lts_boundary_index`); der Unterschied je Kanal und Tag ist die **Randstunde** `change(D 23:00) − change(D−1 23:00)`.
+  `lib/stundenBereich.ts`). Gegen das Bestands-Fenster `[Vortag 23:00, 23:00)` (Backward-Raster, `lts_boundary_index`)
+  unterscheidet sich ein Kanal-Tag je Kanal um die **Randstunde** `change(D 23:00) − change(D−1 23:00)`.
   **Bestandstage** bleiben, wie sie geschrieben sind (Backward-Slots, Tagesfenster `[Vortag 23:00, 23:00)`); zwischen einem
   Bestandstag D und einem Kanal-Tag D+1 fehlt die Stunde `[D 23:00, D+1 00:00)`, in umgekehrter Reihenfolge zählt sie
   doppelt (benannte Naht S4-R-3c; sie bleibt, solange ein Bestandstag neben einem Kanal-Tag liegt — Lesart 1). Fehlt eine Stunde, trägt die nächste belegte ihren Zuwachs und ihre Spanne (`spannen`, „enthält n Stunden"); eine
@@ -4520,8 +4490,8 @@ nach denselben Regeln wie die Tagessummen:
   `abgeleitet:inv:<id>:modus_strom_<art>_kwh`; hat dieser Kanal am Tag keine Zeile, je Gerät die Modus-Spur der
   Stundenzeile als backward-Bahn — `kanal_stunden.modus_stunden_mit_rueckfall`). Die Tageswerte von `tag-detail` und der
   Wärme-Sichten (WP-Strom, Wärme/Kälte, Modus-Stapel, E-Mob-Ladung) kommen an einem Kanal-Tag aus dem Kanal-Stundentag bzw.
-  seinem Tages-Δ (eine Umschaltstelle `kanal_stunden.tages_eingaenge`). Stunden einer Spanne ohne eigene Zeile sind seit
-  S5a (S5-R5) **leer**, nicht 0,0: an einem WP-Kanal-Tag trägt eine Stunde, in der keiner der Zähler einer Linie (Wärme,
+  seinem Tages-Δ (eine Umschaltstelle `kanal_stunden.tages_eingaenge`). Stunden einer Spanne ohne eigene Zeile sind
+  **leer** (S5-R5), nicht 0,0: an einem WP-Kanal-Tag trägt eine Stunde, in der keiner der Zähler einer Linie (Wärme,
   Kälte, Funktions-Strom) eine Zeile hat, `None` (`waerme._verteile_linie`; der Funktions-Stapel ist dort ganz leer); die
   Folgestunde mit der Spanne trägt die Energie, Σ Stunden = Balken. Bestandstage unverändert. Der Betriebsart-Stapel
   verteilt weiter über die Modus-Form (die Modus-Spur der Stundenzeile hat in einer Spannen-Stunde eine Form, H-2a).
@@ -4545,10 +4515,10 @@ nach denselben Regeln wie die Tagessummen:
   abgeleiteten Kanäle «Strom je Betriebsart» im Kalendertag, Abdeckung `modus_abdeckung_h`, Bezug der Kanal-Strom; die
   Betriebsart-Zähler aus den Tages-Δ der WP-Gruppe) — eine Umschaltstelle `waerme_verlauf._modus_eingaenge`; ein Gerät
   ohne Zeile im abgeleiteten Kanal behält den Split der Modus-Spur der Stundenzeilen (H-2a, `splits_mit_kanal`).
-  **Seit S5b Teil 2 (E-S5-4):** Wärme, Kälte und die Funktions-Achsen liest der Verlauf an einem WP-Kanal-Tag nur aus dem
-  Kanal (`wp_werte_der_kanal_tage`); die Zählerstände (`snapshot/bereichs_leser.lade_tageswerte_je_geraet`) nur noch für die
-  Tage ohne WP-Kanal-Wahl (Lesart 1, je Lauf solcher Tage ein Bereichs-Leser) — gemessen auf den Mess-Kopien ohne
-  Wertänderung. Ein WP- oder Bilanz-Kanal-Tag **ohne Tageszeile** (`aggregate_day` schreibt nicht jeden Tag eine) hat
+  Wärme, Kälte und die Funktions-Achsen liest der Verlauf an einem WP-Kanal-Tag nur aus dem Kanal
+  (`wp_werte_der_kanal_tage`, E-S5-4); die Zählerstände (`snapshot/bereichs_leser.lade_tageswerte_je_geraet`) nur für die
+  Tage ohne WP-Kanal-Wahl (Lesart 1, je Lauf solcher Tage ein Bereichs-Leser). Ein WP- oder Bilanz-Kanal-Tag
+  **ohne Tageszeile** (`aggregate_day` schreibt nicht jeden Tag eine) hat
   seinen Bezug aus dem Kanal wie in *Cockpit → Tag* (Nachmessung E2 A-2).
 * **Tage älter als zwei Jahre:** die Stundenzeilen werden nach 730 Tagen gelöscht (`scheduler_jobs.py`); der HA-Spiegel
   reicht so weit zurück wie HAs Langzeitstatistik. Ein solcher Kanal-Tag zeigt seinen Stunden-Verlauf wieder — Mengen aus
@@ -4567,9 +4537,9 @@ nach denselben Regeln wie die Tagessummen:
   | Weg | Deckel |
   | --- | --- |
   | Kanal-Tag, Kanal-Monat, Kanal-Stunde (HA-Spiegel, Lese-Schicht) | **nein** — HAs Zahl wörtlich (seit S1/S3) |
-  | HA-Monatsleser `get_sensor_monatswert` an *Cockpit → Monat* (HA-Weg), „Aus HA laden", alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag | **nein** (seit S4; seit S5b Teil 2, E-S5-4, kennt der Monatsleser keinen Deckel mehr — `monatswert_deckel.py` und der Parameter `deckel_je_sensor` sind gestrichen) |
+  | HA-Monatsleser `get_sensor_monatswert` an *Cockpit → Monat* (HA-Weg), „Aus HA laden", alle Monatswerte, Import-Vorschau, Sammelimport, Monatsabschluss-Vorschlag | **nein** (S4, E-S5-4: kein Deckel im Monatsleser, auch kein Parameter dafür) |
   | Kanal-Schreiber, Eigene Summe aus MQTT-Rohständen (Stundenlauf und Nachfüllen) | **ja, als Schreibfilter** (`schreiber._deckel_achse`, Achse PV/Einspeisung, kWp der Anlage) |
-  | Bestands-Tagespfad `snapshot/tages_tabelle.py` (Stundenzeilen, Bestandstage, HA wie MQTT) | **ja** (R3, Lesart 1 — an Kanal-Tagen schreibt der Lauf die Mengen seit S5b nicht mehr) |
+  | Bestands-Tagespfad `snapshot/tages_tabelle.py` (Stundenzeilen, Bestandstage, HA wie MQTT) | **ja** (R3, Lesart 1 — an Kanal-Tagen schreibt der Lauf keine Mengen, S5b) |
 
   Ein Sprung in HAs Statistik steht damit in Tag und Monat wie im HA-Energie-Dashboard; der Daten-Checker
   `ha_zaehlersprung` benennt das Phantom-Muster (Reset und Rückkehr).
@@ -4584,10 +4554,10 @@ nach denselben Regeln wie die Tagessummen:
   | R-8 Komposition als Konfiguration | Weg 2 (W2-R1…R5) für Kanal-Zeiträume plus Checker-Hinweis „PV gesamt neben Balkonkraftwerk" (#428), seit S1/S2 |
   | R-10 Herkunft am Kanal | `kanal_quelle(familie, gueltig_ab, verworfen_ts)` seit S1; `source_provenance` je Zelle bleibt an der Stundenzeile |
   | R-11 jeder Zeitraum gleich billig und gleich vollständig | *Cockpit → Monat*: ein vergangener Monat ohne Abschluss und ohne HA-Antwort nimmt die fünfte Quelle, wenn die Bilanz-Kanäle ihn voll decken (`kanal_monate`, dieselbe Wahl wie die Monats-Fakten; `aktueller_monat._summen_der_tagesebene`) — erledigt mit N-758; ohne volle Deckung bleibt er bis zum Abschluss leer (N-472) |
-  | S5a (Teil 1, E-S5-1) eine Mengenquelle je Tag für die Stundenleser | gebaut: jede Kennzahl, die Stundenmengen braucht (Speicher-Potenzial, -Sizing, effektiver Ladepreis, Ladeblöcke, Verbrauchsprognose, Verbrauchs- und Korrekturprofil, Preis-Aggregator, Grundlast, Prognose-IST, Wochenmuster, Tagesvergleich), liest die Stunden über `kanal_stunden.stunden_der_tage` — an einem Kanal-Tag die Mischzeilen wie *Cockpit → Tag*, an einem Bestandstag die Stundenzeile; Tagesmengen der Tageszeile (PV-IST, Komponenten, Regelmarke) an Kanal-Tagen aus `kanal_tage`. Daten-Checker, HA-Export-Steuerung (S5a Teil 2) siehe nächste Zeile, der Schreiber (S5b) die übernächste. Laufzeit (E-S5-1c): abgeschlossene Kanal-Tage (Adapter-Zeilen und Tageswahl der Bilanz; seit E-S5-4 auch die Tageswerte der Geräte-Gruppen Wärmepumpe, E-Mobilität und Sonstiges je Tag und Gruppe, Speicher `GERAETE`) merkt eedc je Prozess (`services/kanal/merken.py`, invalidiert beim Schreiben der Kanäle und bei jeder Änderung an Anlage, Investition, Kanal oder Quelle) — Sichten über die ganze Historie (Speicher-Sizing, -Potenzial, -Dashboard, aktueller Monat, HA-Export) brauchen ab dem zweiten Aufruf je Prozess wieder etwa so lange wie vor S5a (an einer Kopie mit 716 Kanal-Tagen ≤ 1,5 × HEAD vor S5a). Benannte Grenze: der **erste** Aufruf je Prozess (nach einem Neustart oder nach einem Schreiben, das die Tage verwirft) rechnet die Kanal-Tage neu, an dieser Kopie 3–4 s; der Speicher hält je Prozess höchstens 3 000 Tage (im Vollzustand ≈ 92 MB); fragt eine Sicht mehr Tage ab, als der Speicher hält, verdrängt sie sich selbst und rechnet jeden Aufruf neu |
-  | S5a (Teil 2, E-S5-2) Daten-Checker, HA-Export-Steuerung, Wärme-Sichten, Vormerkungen | gebaut: die Checker-Regeln auf Mengen (PV-Doppelerfassung, Σ PV-Tageswerte des Monats, Drift zu HA, Batterie-Vorzeichen, leere Tage trotz Zähler, E-Mob-Doppelzählung, Einspeisung über Erzeugung, Spitzen) lesen die Lesestelle (`pv_ist_je_tag`, `komponenten_der_tage`, `verworfen_der_tage`, `stunden_der_tage`) — an einem Kanal-Tag ist die eedc-Seite des Vergleichs der Spiegel selbst; «Nachtrag nach eingefrorenem Zähler» nimmt Kanal-Tage aus; neu INFO «n Tage ohne Kanal-Deckung» (Lesart 1 sichtbar, S5-E2 b). HA-Export E1/E2/E5 aus `stunden_der_tage`, Überschuss heute an Kanal-Tagen Σ der Mischzeilen (`tagesbilanz.bilanz_aus_stundenrows`), Zeitangaben am Raster der Zeile. Wärme-Verlauf Modus-Split/Betriebsart aus dem Kanal (W-3), Spannen-Stunden leer statt 0,0 (S5-R5), Wochenmuster ohne gebündelte Zeilen (M-1). Wächter S5-R6 `test_tep_mengen_leser_waechter.py` (Empfänger-Regel). Benannt: die E-Mob-Schlüssel (`wallbox_<id>`/`eauto_<id>`) bleiben an jedem Tag die der Tageszeile (seit E-S5-3 aus dem Kanal); `monatswert_deckel.py` und der `deckel_je_sensor`-Parameter der HA-Monatsleser sind in E-S5-4 gestrichen |
+  | S5a (Teil 1, E-S5-1) eine Mengenquelle je Tag für die Stundenleser | gebaut: jede Kennzahl, die Stundenmengen braucht (Speicher-Potenzial, -Sizing, effektiver Ladepreis, Ladeblöcke, Verbrauchsprognose, Verbrauchs- und Korrekturprofil, Preis-Aggregator, Grundlast, Prognose-IST, Wochenmuster, Tagesvergleich), liest die Stunden über `kanal_stunden.stunden_der_tage` — an einem Kanal-Tag die Mischzeilen wie *Cockpit → Tag*, an einem Bestandstag die Stundenzeile; Tagesmengen der Tageszeile (PV-IST, Komponenten, Regelmarke) an Kanal-Tagen aus `kanal_tage`. Daten-Checker, HA-Export-Steuerung (S5a Teil 2) siehe nächste Zeile, der Schreiber (S5b) die übernächste. Laufzeit (E-S5-1c): abgeschlossene Kanal-Tage (Adapter-Zeilen und Tageswahl der Bilanz; auch die Tageswerte der Geräte-Gruppen Wärmepumpe, E-Mobilität und Sonstiges je Tag und Gruppe, Speicher `GERAETE`, E-S5-4) merkt eedc je Prozess (`services/kanal/merken.py`, invalidiert beim Schreiben der Kanäle und bei jeder Änderung an Anlage, Investition, Kanal oder Quelle) — Sichten über die ganze Historie (Speicher-Sizing, -Potenzial, -Dashboard, aktueller Monat, HA-Export) brauchen ab dem zweiten Aufruf je Prozess wieder etwa so lange wie vor S5a. Benannte Grenze: der **erste** Aufruf je Prozess (nach einem Neustart oder nach einem Schreiben, das die Tage verwirft) rechnet die Kanal-Tage neu; der Speicher hält je Prozess höchstens 3 000 Tage (im Vollzustand ≈ 92 MB); fragt eine Sicht mehr Tage ab, als der Speicher hält, verdrängt sie sich selbst und rechnet jeden Aufruf neu |
+  | S5a (Teil 2, E-S5-2) Daten-Checker, HA-Export-Steuerung, Wärme-Sichten, Vormerkungen | gebaut: die Checker-Regeln auf Mengen (PV-Doppelerfassung, Σ PV-Tageswerte des Monats, Drift zu HA, Batterie-Vorzeichen, leere Tage trotz Zähler, E-Mob-Doppelzählung, Einspeisung über Erzeugung, Spitzen) lesen die Lesestelle (`pv_ist_je_tag`, `komponenten_der_tage`, `verworfen_der_tage`, `stunden_der_tage`) — an einem Kanal-Tag ist die eedc-Seite des Vergleichs der Spiegel selbst; «Nachtrag nach eingefrorenem Zähler» nimmt Kanal-Tage aus; neu INFO «n Tage ohne Kanal-Deckung» (Lesart 1 sichtbar, S5-E2 b). HA-Export E1/E2/E5 aus `stunden_der_tage`, Überschuss heute an Kanal-Tagen Σ der Mischzeilen (`tagesbilanz.bilanz_aus_stundenrows`), Zeitangaben am Raster der Zeile. Wärme-Verlauf Modus-Split/Betriebsart aus dem Kanal (W-3), Spannen-Stunden leer statt 0,0 (S5-R5), Wochenmuster ohne gebündelte Zeilen (M-1). Wächter S5-R6 `test_tep_mengen_leser_waechter.py` (Empfänger-Regel). Benannt: die E-Mob-Schlüssel (`wallbox_<id>`/`eauto_<id>`) bleiben an jedem Tag die der Tageszeile (seit E-S5-3 aus dem Kanal) |
   | S5b (Teil 1, E-S5-3) der Schreiber lässt Mengen an Kanal-Tagen weg | gebaut: `aggregate_day` gibt die fertig gebauten Zeilen durch die **Mengen-Weiche** (`services/energie_profil/mengen_weiche.py`, EIN Kanal-Stundentag, Uhr der Lese-Schicht): an einem **Kanal-Tag** (Bilanz-Gruppe mit Wahl `kanal`) bleiben je Gruppe mit Wahl `kanal` die TEP-Mengen (`pv_kw` … `defizit_kw` der Bilanz, `waermepumpe_kw`, `wallbox_kw`), ihre `spannen`-Achsen, TZ `ueberschuss/defizit_kwh`, ihre `komponenten_kwh`-Schlüssel (Bilanz wie `mische_komponenten`, Wärmepumpe/Sonstiges die Ziel-Schlüssel ihrer Zähler, E-Mobilität der ganze Präfix `wallbox_*`/`eauto_*`) und ihre `verworfen`/`nachtrag`-Achsen leer (`None`; die Regelmarke `{}` bleibt). Bahnen und Kennzahlen bleiben; PR, §51-Menge und Heimladungs-Anteil an Kanal-Tagen aus den Kanal-Stunden (`kanal_stunden.performance_ratio_des_kanal_tags`, `einspeisung_neg_preis_der_kanal_stunden`, `ladeanteil_der_kanal_stunden`; der Archiv-Nachzug ruft die PR-Stelle). Herkunft `TZ_QUELLE_KANAL` (`auto:kanal_tag`, Gruppen im Eintrag), `tageszeile_ist_rueckwaerts` ⇒ `False`. Richtung beidseitig (die Wahl zum Schreibzeitpunkt). Lesestelle vervollständigt: `komponenten_der_tage` mischt an Kanal-Tagen alle Gruppen (Tagesliste, `tage-werte`, *Energieprofil → Monat*, Modus-Split-Bezug), `ueberschuss_defizit_der_tage` (Tagesliste, Monats-Rollup, HA-Export). Werkbank-Vorschau und -Rückmeldung nennen die leeren Gruppen. **Lesart-1-Monate mit Kanal-Tagen** (Rand der Kanal-Deckung, laufender Monat mit Wahl `bestand`): `monats_aus_tagen.lade_monats_summen_aus_tagen` faltet die Bestandstage aus den Zeilen und die Kanal-Tage aus der Lesestelle (`KanalTag`: Bilanz, PV/BKW-Schlüssel, Marken; Heimladungs-Anteile aus der Tageszeile) — Monat = Σ Tage wie *Cockpit → Tag* (Entscheid Master H-1 → B). In der einen Mischung `komponenten_der_tage` schlägt die Bilanz-Komposition die Sonstiges-Gruppe für jeden Schlüssel, den sie trägt (Sonstiges-Erzeuger hinter dem Anlagenzähler; Entscheid Gernot 19.10. H-2 → B). Benannt: ein vor 4.1.8 gespeicherter Monatsabschluss (Bestand) kann von Σ der Kanal-Tage abweichen (Naht S4-R-3c-Klasse); die Alt/Neu-Tabelle der Reaggregat-Vorschau nennt seit E-S5-4 an einem Kanal-Tag nur die Achsen der Bestandsgruppen |
-  | S5b (Teil 2, E-S5-4) Bestands-Tagespfad nur Lesart 1, Reste | gebaut: **eine PR-Stelle für jeden gespeicherten Tag** (`kanal_stunden.performance_ratio_des_tages`: Kanal-Tag aus den Kanal-Stunden wie `aggregate_day`, Bestandstag aus den Stundenzeilen ohne die Sonstiges-Erzeuger über den Schlüssel der Konstante `SONSTIGES_KOMPONENTEN_PREFIX` — N-759; der Archiv-Nachzug suchte bis dahin `sonstiges_<id>`). Wärme-Verlauf: Zählerstände nur für Tage ohne WP-Kanal-Wahl, A-2 (Kanal-Tag ohne Tageszeile). Netzladung der Monats-Fakten: die Wahl zuerst, das Fenster `TAGESFENSTER_JE_TYP` nur für Bestandstage. Merken der Geräte-Tageswerte (`kanal/merken.py`, dritter Speicher `GERAETE`, Schlüssel Anlage/Tag/Gruppe, dieselbe Generation, Invalidierung und Verfall, eigene Obergrenze 9 000 Einträge = 3 000 Tage × drei Gruppen; ≈ 610–630 B je Eintrag, Vollzustand ≈ 5,7 MB). HA-Monatsleser ohne Deckel und ohne `state`-Rückfall. Achse-2-Diagnose nennt die Kanal-Tage. **Benannt, nicht geschnitten:** *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter `get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte` (Kalendertag) — die Gründe «nicht zugeordnet»/«keine Zählerstände» der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand` kommen nur von dort; `_fill_gaps_linear` läuft an Kanal-Tagen weiter im Schreiber (Snapshot-Tabelle ohne HA) und für einen WP-Zähler ohne Kanal (`wp_stundenformen`); die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet — ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile (Leistungspfad-PV-Schlüssel ohne Zähler-Gegenstück, Heimladung bei E-Mob-Wahl `bestand`, Zeilen für Stunden ohne Leistungspunkt) |
+  | S5b (Teil 2, E-S5-4) Bestands-Tagespfad nur Lesart 1, Reste | gebaut: **eine PR-Stelle für jeden gespeicherten Tag** (`kanal_stunden.performance_ratio_des_tages`: Kanal-Tag aus den Kanal-Stunden wie `aggregate_day`, Bestandstag aus den Stundenzeilen ohne die Sonstiges-Erzeuger über den Schlüssel der Konstante `SONSTIGES_KOMPONENTEN_PREFIX` — N-759). Wärme-Verlauf: Zählerstände nur für Tage ohne WP-Kanal-Wahl, A-2 (Kanal-Tag ohne Tageszeile). Netzladung der Monats-Fakten: die Wahl zuerst, das Fenster `TAGESFENSTER_JE_TYP` nur für Bestandstage. Merken der Geräte-Tageswerte (`kanal/merken.py`, dritter Speicher `GERAETE`, Schlüssel Anlage/Tag/Gruppe, dieselbe Generation, Invalidierung und Verfall, eigene Obergrenze 9 000 Einträge = 3 000 Tage × drei Gruppen; ≈ 610–630 B je Eintrag, Vollzustand ≈ 5,7 MB). HA-Monatsleser ohne Deckel und ohne `state`-Rückfall. Achse-2-Diagnose nennt die Kanal-Tage. **Benannt, nicht geschnitten:** *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter `get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte` (Kalendertag) — die Gründe «nicht zugeordnet»/«keine Zählerstände» der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand` kommen nur von dort; `_fill_gaps_linear` läuft an Kanal-Tagen weiter im Schreiber (Snapshot-Tabelle ohne HA) und für einen WP-Zähler ohne Kanal (`wp_stundenformen`); die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet — ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile (Leistungspfad-PV-Schlüssel ohne Zähler-Gegenstück, Heimladung bei E-Mob-Wahl `bestand`, Zeilen für Stunden ohne Leistungspunkt) |
   | **S5 abgeschlossen (E-S5-0 … E-S5-5)** | **gilt:** eine Mengenquelle je Tag für alle Leser — jede Sicht, Kennzahl, Prognose-Lernfunktion und Checker-Regel, die Stunden- oder Tagesmengen braucht, liest sie über die Lesestelle (`kanal_stunden.stunden_der_tage`, `komponenten_der_tage`, `pv_ist_je_tag`, `verworfen_der_tage`, `ueberschuss_defizit_der_tage`): an einem Kanal-Tag aus den Kanälen, an einem Bestandstag aus der Stunden- bzw. Tageszeile; außerhalb der erlaubten Liste liest kein Modul TEP/TZ-Mengen (Wächter `test_tep_mengen_leser_waechter.py`, Stand leer). An einem Kanal-Tag schreibt `aggregate_day` keine Mengen der Kanal-Gruppen (Mengen-Weiche); Tage und Monate ohne volle Kanal-Deckung (Lesart 1) lesen wie vor S5, der Daten-Checker zählt sie (INFO). `TagesEnergieProfil` und `TagesZusammenfassung` bleiben als Tabellen für Bahnen, Kennzahlen und Lesart-1-Tage — keine Tabelle, keine Spalte gelöscht, Retention 730 Tage unverändert. **Benannt bleibt:** (a) *Cockpit → Tag* (`tages_eingaenge`) fragt an Kanal-Tagen weiter den Bestands-Tagespfad (`get_tagesdetail_kwh`/`get_betriebsart_strom_tageswerte`, Kalendertag) — nur von dort kommen die Gründe der Tagesdetail-Zeilen (W-18), die Speicher-Netzladung und Gerätegruppen mit Wahl `bestand`; die Snapshot-Kaskade schrumpft darum nicht; (b) die Tagestabelle des Schreibers (`lts_tagestabelle`/`snapshot_tagestabelle`) wird an Kanal-Tagen weiter ganz gerechnet (≈ 90 % der Laufzeit von `aggregate_day`); ohne die Teile der Kanal-Gruppen änderte sich die Tageszeile; (c) `_fill_gaps_linear` läuft an Kanal-Tagen weiter im Schreiber und für einen WP-Zähler ohne Kanal; (d) **W2-R5-Klemme** — Σ Tage ≠ Monat in PV-Summe und Wandlungsverlusten an Tagen, an denen der Rest des Anlagenzählers für ein Gerät ohne Kanal klemmt (Regel W2-5, N-760 widerlegt); (e) die Naht S4-R-3c zwischen Bestandstag und Kanal-Tag und ein vor 4.1.8 gespeicherter Abschluss gegen Σ der Kanal-Tage; (f) Tagesreset-Zähler in Live und im Monatsabschluss-Vorschlag ohne Kanal (S5-E4) |
 
 ### Stündliche Berechnung (aggregate_day)
@@ -4599,9 +4569,9 @@ Netzbezug_kWh     = snap_netzbezug[h] - snap_netzbezug[h-1]
 Bat_Ladung_kWh    = snap_ladung[h] - snap_ladung[h-1]
 Bat_Entladung_kWh = snap_entladung[h] - snap_entladung[h-1]
 
-Verbrauch_kWh     = PV + Netzbezug + Bat_Entladung - Einspeisung - Bat_Ladung
-Überschuss_kWh    = max(0, PV - Verbrauch_kWh - Bat_Ladung)
-Defizit_kWh       = max(0, Verbrauch_kWh + Bat_Ladung - PV)
+Verbrauch_kWh     = max(0, PV + Netzbezug + Bat_Entladung - Einspeisung - Bat_Ladung)   # nur bei gleicher Spanne (R6)
+Überschuss_kWh    = max(0, PV - Verbrauch_kWh)      # nur, wenn PV und Verbrauch einen Wert haben
+Defizit_kWh       = max(0, Verbrauch_kWh - PV)
 ```
 
 > **An einem Kanal-Tag schreibt `aggregate_day` keine Mengen (HA-Bauform S5b, E-S5-3, S5-R2).** Kommt die
@@ -4621,9 +4591,9 @@ gebündelter Read ab dem Vortag, Serien je Tag über `baue_investitions_serien`,
 Stunde 23) und **rechnet nichts** — Mengen, Peaks und Bilanz bildet `aggregate_day`. **Balkonkraftwerk mit Modul-Kindern
 (N-777, Werte-Regel N-536 wie der Live-Zwilling `live_tagesverlauf_service._bkw_kuerzung_slot`):** je Stunde trägt das BKW
 über `kuerze_bkw_in_werte_map` nur `max(0, BKW − Σ Kinder mit Wert in dieser Stunde)`, Rest 0 ⇒ kein Wert; fehlt den Kindern
-die Stunde, bleibt der BKW-Wert (Lücke gedeckt); als Kind zählt nur ein am Tag aktives Modul. Bis N-777 standen BKW und
-Kinder beide in der Kurve (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). ⚠ **Anders als der Peak (N-775, unten)**, der bei voller
-Deckung die BKW-Entity gar nicht liest: hier bleibt bei BKW 0,9 und Kindern 0,4 + 0,4 der Rest 0,1 beim BKW (Summe 0,9), und
+die Stunde, bleibt der BKW-Wert (Lücke gedeckt); als Kind zählt nur ein am Tag aktives Modul.
+⚠ **Anders als der Peak (N-775, unten)**, der bei voller
+Deckung die BKW-Entity gar nicht liest: hier bleibt der Rest beim BKW (die Summe ist der BKW-Wert), und
 eine Stunde, in der das BKW 0,0 meldet und kein Kind einen Wert hat, verliert den BKW-Key (Rest 0) — beides wie im Live-Pfad.
 Der technische Grund der Asymmetrie: der Tages-Peak summiert je Stunde die **Maxima** der Entities, und die Maxima verschiedener
 Entities fallen auf verschiedene Minuten — eine Differenz der Maxima wäre kein Rest; deshalb liest der Peak bei voller Deckung
@@ -4633,7 +4603,7 @@ Code: `_bkw_abtretung`, `_bkw_rest_einsetzen`. Auch die Serienwahl
 die Serien, behält je Entity eine (#227, Wallbox vor E-Auto) und lässt bei einer am Tag in Betrieb befindlichen Wallbox
 die E-Auto-Serie weg (#356, N-555) — Phasen `_serien_je_investition`, `_pool_schutz`, `_emob_quelle` (RF-79).
 Die Regel «Wallbox in Betrieb ⇒ Auto-Serie fällt» gilt für HA- und MQTT-Weg: beide rufen `emob_auto_verdraengt`
-(der MQTT-Tagesverlauf über `_mqtt_emob_quelle`, N-779 — bis 8.11.2026 kannte er nur die Zuordnung «Gehört zu»); in der
+(der MQTT-Tagesverlauf über `_mqtt_emob_quelle`, N-779); in der
 Mischform (Wallbox über HA, Auto über MQTT oder umgekehrt) gilt sie einmal über die Serien beider Wege (`_emob_quelle_ueber_beide_wege`).
 
 #### Zählerlücken wie HA (ab v4.0.51)
@@ -4699,13 +4669,14 @@ summiert die Geräte. Proben: `test_waerme_verlauf_bereichs_leser.py`, `test_zae
 `test_rf56_kanal_leser_phasen.py`.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
-- **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (seit N-635, 05.10.2026; vorher max(0, ΣPV − ΣEinsp), s. §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
+- **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).
 - **Regelmarke** (R9): `TagesZusammenfassung.verworfen` ist für jeden neu geschriebenen Tag mindestens `{}`; NULL = Altbestand, der bis zur Neuaggregation N-92 rechnet (Daten-Checker §4.6 nennt ihn).
-- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit Verwerfung des Rücksprungs; ohne Deckel — der Monat nennt HAs Zahl wie Tag und Kanal-Monat (Tabelle „Wo der Plausibilitätsdeckel gilt" oben; seit S5b Teil 2 ohne Parameter). Trägt der Kalendermonat keine `sum`-Zeile, hat er keinen Monatswert (`None`, wie HA; bis E-S5-4 fiel die Funktion dort auf `MAX(state) − MIN(state)` zurück) — der Sensor fehlt dann bei „Aus HA laden", Import und Monatsabschluss-Vorschlag (Anzeige «–»). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
+- **Monatswert aus der HA-Statistik** (R10, `get_sensor_monatswert`): Σ der Stundenänderungen ab dem letzten Stand **vor** dem Monat, mit Verwerfung des Rücksprungs; ohne Deckel — der Monat nennt HAs Zahl wie Tag und Kanal-Monat (Tabelle „Wo der Plausibilitätsdeckel gilt" oben). Trägt der Kalendermonat keine `sum`-Zeile, hat er keinen Monatswert (`None`, wie HA; kein Rückfall auf `state`) — der Sensor fehlt dann bei „Aus HA laden", Import und Monatsabschluss-Vorschlag (Anzeige «–»). Damit zählt die erste Stunde des Monats (N-563), und eine Lücke über die Monatsgrenze landet im Folgemonat. `intervalle` nennt die Zahl der Stützstellen-Paare hinter dem Wert; 0 heißt „eine einzige Zeile, nichts gemessen“.
 - **Stundenzeilen:** jeder Slot mit Zählerwert bekommt eine Zeile, auch ohne Leistungspunkt (dort keine `komponenten`, keine Spitze).
 - **Leser:** Stunde-gegen-Stunde-Auswertungen lassen Zeilen mit `spannen > 1` als Stichprobe aus; Tag-gegen-Tag-Auswertungen (Lernfaktor, Prognose-Genauigkeit, PR-Check) lassen beide Tage um ein Mitternachtsbündel mit Energie aus. Die Energie zählt in jeder Summe. Helfer: `core/berechnungen/spannen.py`.
-- **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge (Lab 24.05.2026: +37 kWh nach drei stillen Stunden). Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag (Bestands-Tagespfad, Lesart 1) ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp); der Monatsleser deckelt seit S4 nicht (benannte Asymmetrie zum Bestandstag). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.
+- **Grundlast des Tages** (Spalte der Tage-Ansicht, `tage_werte.py`; Formel `core/berechnungen/grundlast.py::berechne_grundlast`): Median der Stunden-Verbrauchsleistung `verbrauch_kw` der Stunden 0–4 mit Wert > 0, auf 0,01 kW; eine Zeile, deren Verbrauchs-Achsen mehr als eine reale Stunde tragen, ist keine Stichprobe (`verbrauch_gebuendelt`). An einem Kanal-Tag aus den Mischzeilen `[00:00, 05:00)` des Kalendertags, sonst aus den Slots 0–4. Ohne eine Nachtstunde kein Wert (`None`, Anzeige «—»), eine Teilabdeckung bleibt stehen. Derselbe Filter wie die Monats-Kachel (`aktueller_monat/vergleich.py::_load_grundlast_nacht_kw`).
+- **Eingefrorener Stand:** Liefert HA Stunden mit unverändertem `sum` und danach den Nachtrag in einer Zeile, bleiben die Nullzeilen Nullstunden und die Menge steht in der Nachtragsstunde (n = 1, wie HA). Der Deckel rechnet dort mit dem Fenster seit der letzten Änderung — der Nachtrag bleibt Menge. Grenze: nach einer Nacht mit echten Nullen passiert ein Sprung bis Schwelle × (Nullstunden + 1) — am Tag (Bestands-Tagespfad, Lesart 1) ab dem Anker Vortag 22:00 (Winter ≈ 150 kWh bei 10 kWp); der Monatsleser deckelt seit S4 nicht (benannte Asymmetrie zum Bestandstag). Der Spike-Checker (§4.7 im Daten-Checker-Handbuch) liest dieselbe Regel.
 - **Daten-Checker:** Tage mit Regelmarke, an denen Σ Einspeisung > Σ PV + Σ Entladung + 0,5 kWh, erscheinen als Hinweis „Einspeisung über Erzeugung" (Entladung ins Netz ist erlaubt).
 - **Benannt:** Die Live-Tageskacheln (`live_history_service`) weichen von *Cockpit → Tag* um jedes Mitternachtsbündel ab. Preise einer gebündelten Stunde: s. [KONZEPT-FLEX-TARIFE](KONZEPT-FLEX-TARIFE.md) [A-6].
 
@@ -4793,8 +4764,8 @@ Peak_Einspeisung_kW = max über h von max_h(einspeisung_w)     nur > 0
 Σ max je Stunde ist bei mehreren PV-Sensoren eine **obere Schranke** (die Einzelspitzen können in verschiedene Minuten
 der Stunde fallen). **Balkonkraftwerk mit Modul-Kindern (N-775, Regel N-536):** das BKW zählt nie neben seinen Kindern —
 messen alle Kinder, wird seine Entity nicht gelesen (`bkw_kinder_decken_vollstaendig`); misst nur ein Teil, trägt es je
-Stunde den Rest (`bkw_restwerte`, unverteilt). Bis N-775 standen BKW und Kinder beide in der Summe (0,8 + 0,4 + 0,4 ⇒ 1,6 statt
-0,8 kW). Die Elternschaft lädt der Pfad nur, wenn ein BKW und ein Modul beide einen Leistungssensor haben; als Kind zählt
+Stunde den Rest (`bkw_restwerte`, unverteilt).
+Die Elternschaft lädt der Pfad nur, wenn ein BKW und ein Modul beide einen Leistungssensor haben; als Kind zählt
 nur ein Modul, das am Tag aktiv war (`aktiv_am_tag` — der Selektor läuft nach dem Zeitfilter). Kein Sensor, Statistik nicht erreichbar, Lesefehler oder leere Antwort ⇒ alle drei `None` und der
 W-Sample-Wert bleibt. Code: `services/energie_profil/_helpers.py::_get_tagespeaks_aus_ha_lts` (Phasen
 `_lts_sensoren_je_rolle`, `_peak_pv_aus_lts`, `_peak_netz_aus_lts`; Invert-Tausch in `_PeakKontext.slot_for`; Eltern-Regel in
@@ -4805,7 +4776,7 @@ Tageszusammenfassung (unten).
 **Zusätzliche Daten pro Stunde:**
 
 - **Temperatur + Globalstrahlung + GTI:** Open-Meteo Historical API (Archiv) bzw. Forecast API (heute), inkl. `global_tilted_irradiance` mit Modul-Tilt/Azimut
-- **Stunden-Aggregation IST von Wetter-Samples:** seit v3.23.6 als arithmetisches Mittel der 10-Min-Slots (vorher „last") — konsistent mit der Mean-Konvention der Open-Meteo-Stundenwerte, behebt einen ~25-min-Versatz im Live-Heute-Chart.
+- **Stunden-Aggregation IST von Wetter-Samples:** arithmetisches Mittel der 10-Min-Slots (v3.23.6) — konsistent mit der Mean-Konvention der Open-Meteo-Stundenwerte (ein „last"-Wert läge im Live-Heute-Chart ≈ 25 min versetzt).
 - **Batterie-SoC:** HA Sensor History (Stundenmittel) — gefiltert auf `inv.typ == "speicher"`, siehe Vollzyklen-Hinweis unten
 - **Strompreis (zwei Felder):** `strompreis_cent` (Endpreis aus HA-Sensor) + `boersenpreis_cent` (EPEX, immer befüllt)
 
@@ -4823,9 +4794,9 @@ Tageszusammenfassung (unten).
 ```
 Überschuss_kWh         = Σ(Überschuss_kWh)            alle 24 Stunden
 Defizit_kWh            = Σ(Defizit_kWh)
-Peak_PV_kW             = max(PV_kW)                   über alle Stunden
-Peak_Netzbezug_kW      = max(Netzbezug_kW)
-Peak_Einspeisung_kW    = max(Einspeisung_kW)
+Peak_PV_kW             ┐ Tagesspitzen nach «Peaks» oben: HA-LTS-Stundenmaximum, wo HA es liefert,
+Peak_Netzbezug_kW      │ sonst das Maximum aus den Leistungswerten des Tagesverlaufs (W-Samples)
+Peak_Einspeisung_kW    ┘ (_get_tagespeaks_aus_ha_lts; nie das Maximum der stündlichen kWh)
 Temperatur_Min/Max     = min/max(Temperatur_C)        aus Open-Meteo
 Strahlung_Summe_Wh_m2  = Σ(Globalstrahlung_W/m²)     × 1h
 GTI_Summe_Wh_m2        = Σ(global_tilted_irradiance) × 1h        # ab v3.20.0
@@ -4839,28 +4810,20 @@ GTI_Summe_Wh_m2        = Σ(global_tilted_irradiance) × 1h        # ab v3.20.0
 Vollzyklen    = Δ_SoC_Summe / 200          # 0→100→0 = 200 % = 1 Vollzyklus
 ```
 
-> **E-Auto-SoC-Trennung:** Vor v3.22.0 nahm `_get_soc_history` den **ersten** `live.soc`-Sensor aus den Investitionen — bei Anlagen mit E-Auto landete dessen SoC zuerst in der Liste, der eigentliche stationäre Speicher wurde nicht angefasst. Folge: `batterie_vollzyklen` reflektierten den ΔSoC des Autos. Seit v3.22.0 filtern beide Selektions-Pfade (`_get_soc_history`, Bulk-Fetch in `backfill_from_statistics`) auf `inv.typ == "speicher"`. **Nach Update auf v3.22.0:** einmal „Verlauf nachberechnen + überschreiben" auslösen.
+> **E-Auto-SoC-Trennung (v3.22.0):** Beide Selektions-Pfade (`_get_soc_history`, Bulk-Fetch in `backfill_from_statistics`) lesen den Ladestand nur von Investitionen mit `inv.typ == "speicher"` — der SoC eines E-Autos zählt nie in die `batterie_vollzyklen`.
 
 **Performance Ratio (v3.20.0 auf GTI):**
 
 ```
 Theoretisch_kWh   = GTI_Wh_m2 × kWp / 1000     # ab v3.20.0
 Performance_Ratio = PV_Ertrag_kWh / Theoretisch_kWh
-
-# Vor v3.20.0 (deprecated, GHI-basiert):
-# Theoretisch_kWh = Strahlung_Wh_m2 × kWp / 1000   # horizontale Globalstrahlung
 ```
 
 Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abgerufen und kWp-gewichtet kombiniert (analog Live-Wetter-Pfad). Ohne gemappte PV-Module bleibt PR bewusst `None` statt einen verzerrten GHI-Wert zu melden.
 
-> ⭐ **Der Nenner steht seit v4.0.39 auch in der Zeile — vorher nur in der Rechnung.** Die Aufstellung
-> der Tages-Aggregate oben führt `GTI_Summe_Wh_m2` seit v3.20.0, **gespeichert wurde die Größe aber
-> nie**: `aggregate_day` bildete sie, teilte durch sie und verwarf sie wieder. Angezeigt wurde
-> daneben `Strahlung_Summe_Wh_m2`, also die **horizontale** Globalstrahlung — unter der Formel
-> „Ertrag ÷ (Einstrahlung × kWp)", in der sie nicht vorkommt. Wer die Kennzahl nachrechnete,
-> bekam damit zwangsläufig eine andere Zahl, und der Widerspruch war nicht auflösbar.
-> Seit v4.0.39 trägt `TagesZusammenfassung` die Spalte `gti_summe_wh_m2`, und *Cockpit → Tag*
-> nennt sie beim Namen („bei X kWh/m² auf der Modulfläche").
+> ⭐ **Der Nenner steht in der Zeile** (v4.0.39): `TagesZusammenfassung.gti_summe_wh_m2`, und *Cockpit → Tag* nennt ihn beim
+> Namen („bei X kWh/m² auf der Modulfläche"). Neben der Formel „Ertrag ÷ (Einstrahlung × kWp)" steht nie die horizontale
+> `Strahlung_Summe_Wh_m2` — mit ihr ginge die Rechnung nicht auf.
 >
 > ⚠ **Rückwärts bleibt sie leer.** Für Tage vor der Spalte steht dort `NULL` — „nicht erhoben",
 > nicht 0. Die Anzeige lässt die Bezugsgröße dann weg; die horizontale Summe ersatzweise
@@ -4868,33 +4831,21 @@ Bei Multi-String-Anlagen werden GTI-Werte pro Orientierungsgruppe parallel abger
 > der Reparatur-Werkbank (*Einstellungen → Daten*) „Mehrere Tage neu aggregieren" für den
 > Zeitraum aus.
 
-> ⭐ **Der Nenner ist an den jüngsten Tagen vorläufig — und wird seit v4.0.39 nachgezogen.** Die
-> Einstrahlung der letzten fünf Tage kommt vom **Forecast**-Endpunkt: das Reanalyse-Archiv (ERA5)
-> hinkt der Echtzeit zwei bis fünf Tage nach. Der Forecast-Wert ist im Mittel gut (Median-Faktor
-> 1,00 über 91 Tage gemessen), an **bewölkten** Tagen aber deutlich zu klein — gemessen bis Faktor
-> **8,7**. Eine zu kleine Einstrahlung macht den Nenner zu klein und die PR zu groß; genau daraus
-> entstand ein „PV-Doppelerfassungs"-Verdacht ohne Doppelerfassung. Seit v4.0.39 aggregiert eedc
-> nachts den einen Tag neu, der die Archiv-Grenze gerade passiert hat, und ersetzt den vorläufigen
-> Wert dabei durch den endgültigen. **Für die letzten fünf Tage bleibt er vorläufig** — das lässt
-> sich nicht abkürzen, das Archiv hat diese Tage noch nicht.
+> ⭐ **Der Nenner ist an den jüngsten Tagen vorläufig und wird nachgezogen** (v4.0.39). Die Einstrahlung der letzten fünf
+> Tage kommt vom **Forecast**-Endpunkt: das Reanalyse-Archiv (ERA5) hinkt der Echtzeit zwei bis fünf Tage nach. Der
+> Forecast-Wert ist im Mittel gut, an **bewölkten** Tagen aber deutlich zu klein — der Nenner wird zu klein, die PR zu groß
+> (bis zum Schein einer PV-Doppelerfassung). eedc aggregiert deshalb nachts den einen Tag neu, der die Archiv-Grenze gerade
+> passiert hat, und ersetzt den vorläufigen Wert durch den endgültigen. **Für die letzten fünf Tage bleibt er vorläufig.**
 >
-> **Und der Bestand vor diesem Nachzug wird einmalig nachgeholt.** Tage, die vor dem ersten Lauf
-> aggregiert wurden, trugen ihren vorläufigen Wert dauerhaft — und die Reparatur-Werkbank kann sie
-> nicht heilen, weil ein Tag dort komplett neu aus der HA-Historie gebaut wird und die nur wenige
-> Tage zurückreicht. Deshalb schreibt eedc für diese Tage einmalig **nur die Wetterzeile** neu
-> (Temperatur, Einstrahlung, Bewölkung, Niederschlag, Wettercode und daraus die Performance Ratio);
-> die gemessene Energie bleibt unangetastet. Das passiert von selbst in der Nacht nach dem Update,
-> je Anlage genau einmal, bis zwei Jahre zurück. Ein Tag, den der nächtliche Nachzug wegen
-> geschrumpfter HA-Historie nicht neu bauen kann, bekommt auf demselben Weg seine Wetterzeile.
+> **Bestand vor diesem Nachzug:** eedc schreibt für Tage, die ihren vorläufigen Wert dauerhaft trugen, einmalig **nur die
+> Wetterzeile** neu (Temperatur, Einstrahlung, Bewölkung, Niederschlag, Wettercode und daraus die Performance Ratio) — je
+> Anlage genau einmal, bis zwei Jahre zurück; die gemessene Energie bleibt unangetastet. Denselben Weg nimmt ein Tag, den
+> der nächtliche Nachzug wegen geschrumpfter HA-Historie nicht neu bauen kann (die Reparatur-Werkbank baut einen Tag ganz
+> aus der HA-Historie und reicht nur so weit zurück wie sie).
 >
-> **Die Einstrahlung je Tag mit den Dachflächen dieses Tages (N-730, seit 12.10.2026).** Auch der Wetter-Nachzug gewichtet
-> die Einstrahlung auf die Modulfläche nur mit den Modulen und Balkonkraftwerken, die **an dem Tag** in Betrieb waren —
-> wie die Tagesaggregation (`aktiv_am_tag`). Bis dahin holte er den ganzen Zeitraum mit allen aktiven Modulen: eine später
-> zugebaute Fläche mit anderer Ausrichtung zog die Einstrahlung der Tage vor ihrer Anschaffung mit, während der kWp-Nenner
-> sie richtig nicht zählte (gemessen Süd 6 kWp + West 4 kWp ab 10.06., Tag 01.06.: Einstrahlung 800 statt 1 000 Wh/m², PR
-> 1,00 statt 0,80). Ein Archiv-Abruf je Modulmenge, nicht je Tag.
-
-> **Validation Winterborn 2025-12-28:** GHI 1317 Wh/m² vs. GTI Süd35° 3358 Wh/m² (Faktor 2.55×). PR vorher 2.16 (physikalisch unmöglich), nachher 0.85 (plausibel für einen kalten Wintertag). Betrifft historische `TagesZusammenfassung.performance_ratio`, `MonatsAuswertungResponse.performance_ratio_avg` und die PR-Spalte im PDF-Jahresbericht — **nach Update einmalig „Verlauf nachberechnen + überschreiben" auslösen**. PV-kWh-Werte selbst bleiben unverändert.
+> **Die Einstrahlung je Tag mit den Dachflächen dieses Tages (N-730).** Auch der Wetter-Nachzug gewichtet die Einstrahlung
+> auf die Modulfläche nur mit den Modulen und Balkonkraftwerken, die **an dem Tag** in Betrieb waren — wie die
+> Tagesaggregation (`aktiv_am_tag`) und wie der kWp-Nenner. Ein Archiv-Abruf je Modulmenge, nicht je Tag.
 
 **§51 EEG (Negativpreis-Analyse):**
 
@@ -4910,23 +4861,32 @@ Datengrundlage für die §51-Sektion in [Cockpit → Monat](HANDBUCH_BEDIENUNG.m
 **WP-Kompressor-Starts (v3.24.0, #136):**
 
 ```
-TagesEnergieProfil.wp_starts_anzahl[h]   = snap_starts[h] - snap_starts[h-1]
-                                            # Summe aller WP-Investitionen pro Stunde
-TagesZusammenfassung.komponenten_starts  = {"wp_starts_anzahl": {"<inv_id>": <int>, ...}}
-                                            # Tages-Differenz pro WP-Investition
+TagesEnergieProfil.wp_starts_anzahl[h]   = snap_starts[h] - snap_starts[h-1]          (Summe aller WP-Investitionen je Stunde)
+TagesEnergieProfil.wp_betriebsstunden[h] = dasselbe für den Betriebsstunden-Zähler (Stunden, ungerundet)
+TagesZusammenfassung.komponenten_starts  = {"wp_starts_anzahl":   {"<inv_id>": <int>, ...},
+                                            "wp_betriebsstunden": {"<inv_id>": <h>, ...}}
+                                            # Tages-Differenz je WP (Boundary-Diff, get_daily_counter_deltas_by_inv);
+                                            # die Stunden-Σ wird auf sie skaliert (verteile_counter_auf_stunden)
+
+Kennwert wp_starts (Tag)            = Σ komponenten_starts.wp_starts_anzahl   der am Tag aktiven WPs, nur Werte > 0
+Kennwert wp_betriebszeit_min (Tag)  = Σ komponenten_starts.wp_betriebsstunden der am Tag aktiven WPs × 60, ganze Minuten
+                                      (tage_werte_zusatz.py::_wp_zaehler; beide None ohne Wert > 0)
+Sensor wp_kompressor_starts (je WP) = Σ der Tageswerte > 0 dieser WP über alle Tage in Monaten, in denen sie aktiv ist
+Sensor wp_betriebsstunden (je WP)   = dasselbe für die Betriebsstunden; ohne einen Wert kein Sensor (#238,
+                                      ha_export/investition_sensoren.py::_wp_zaehler)
 ```
 
 Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER`, damit reine Counter nicht versehentlich in die Energie-Bilanz fließen. Vollbackfill aus HA Long-Term Statistics greift für Tages-Summen (Faktor 1.0 statt 0.001 bei unbekannter Einheit). Stunden-Detail wird ab Live-Erfassung gefüllt.
 
 **Day-Ahead-Stundenprofil-Snapshot (v3.23.4, intern):**
 
-Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht. Reine Hintergrund-Datensammlung für künftige Diagnostik (Korrekturprofil-Konzept). Speicher ~80 KB/Jahr/Anlage.
+Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht. Leser: Genauigkeit und Stratifizierung (Tabelle im Lern-SOLL-Abschnitt unten); das Korrekturprofil lernt nicht gegen diesen Schnappschuss, sondern gegen das Lern-SOLL (N-547). Bei gewählter SFML-Quelle kommt `sfml_prognose_stundenprofil` dazu (§4.1b). Speicher ~80 KB/Jahr/Anlage.
 
-**Geschrieben wird der Schnappschuss seit N-547 vom Prefetch-Job** (alle 45 min, erster Lauf nach Mitternacht) statt beim ersten Besuch von *Cockpit → Live*. Anlagen ohne täglichen Seitenbesuch bekamen vorher gar keins — und damit nie genug Stunden für die Stufen 1–3 der Kaskade.
+**Geschrieben wird der Schnappschuss vom Prefetch-Job** (N-547; alle 45 min, erster Lauf nach Mitternacht; Schreibstelle `api/routes/live_wetter.py`) — unabhängig vom Seitenbesuch. Derselbe Lauf schreibt das Lern-SOLL (unten), aus dem die Stufen 1–3 der Kaskade lernen.
 
 #### Das Lern-SOLL des Korrekturprofils (N-547, gebaut 22.09.2026)
 
-⛔ **Wogegen gelernt wird, ist nicht dasselbe wie das, was vorhergesagt wurde.** Bis zum 22.09.2026 las der Korrekturprofil-Aggregator sein SOLL aus `pv_prognose_stundenprofil` — der **korrigierten** Kanon-Ausgabe, also dem Produkt genau der Faktoren, die er gerade lernt. Der gepoolte Quotient `Σ IST / Σ SOLL` folgt dann der Abbildung `f ↦ r/f`, und deren Fixpunkt ist **√r, nicht r**: bei einem wahren Verhältnis r = 0,85 konvergieren die Faktoren auf 0,922 — **+8,5 % an jedem Tag**.
+⛔ **Wogegen gelernt wird, ist nicht dasselbe wie das, was vorhergesagt wurde.** Das SOLL des Lernens darf nicht die **korrigierte** Kanon-Ausgabe (`pv_prognose_stundenprofil`) sein — das Produkt genau der Faktoren, die gelernt werden: der gepoolte Quotient `Σ IST / Σ SOLL` folgte dann der Abbildung `f ↦ r/f`, deren Fixpunkt **√r, nicht r** ist (bei einem wahren Verhältnis r = 0,85 lernten die Faktoren 0,922 — **+8,5 % an jedem Tag**). Der Aggregator liest deshalb nur das Lern-SOLL (`korrekturprofil_aggregator._lade_tagesprognose`).
 
 Zwei Felderpaare, zwei Fragen:
 
@@ -4937,7 +4897,7 @@ Zwei Felderpaare, zwei Fragen:
 
 **Warum gekappt.** Die AC-Grenze des Wechselrichters ist keine Prognoseabweichung, sondern eine physikalische Schranke: oberhalb von ihr *kann* die Anlage nicht liefern. Ein ungekapptes SOLL schriebe diesen Deckel als dauerhaften Fehler in die Mittagsfaktoren.
 
-**Warum der Tageswert `pv_prognose_kwh` roh und UNgekappt bleibt.** Seine drei Leser (Genauigkeits-Tracking, HA-Abweichungs-Ampel, Tages-SOLL im Energieprofil) multiplizieren ihn mit dem Legacy-Lernfaktor; sie erwarten die rohe Lage. Er wurde nur von zwei Schreibern in **zwei verschiedenen** Lagen gefüllt (Prefetch roh, Live korrigiert+gekappt, „letzter gewinnt") — seit N-547 schreiben beide roh (`KanonTag.roh_kwh` = `om_kwh + abregelung_om_kwh`).
+**Warum der Tageswert `pv_prognose_kwh` roh und UNgekappt bleibt.** Seine drei Leser (Genauigkeits-Tracking, HA-Abweichungs-Ampel, Tages-SOLL im Energieprofil) multiplizieren ihn mit dem Legacy-Lernfaktor; sie erwarten die rohe Lage. Beide Schreiber (Prefetch und Live) schreiben ihn roh (`KanonTag.roh_kwh` = `om_kwh + abregelung_om_kwh`, N-547).
 
 **Übergang ohne Bruch (kein Backfill).** Die neuen Felder entstehen ab dem Update; Bestandszeilen bleiben NULL. Damit der erste nächtliche Lauf nicht jeden Bin mit einem leeren Pool überschreibt, gilt je Bin: **der neue Wert ersetzt den alten erst, wenn er das Gate seiner Stufe mit NEUEN Datenpunkten erreicht** (Sonnenstand×Wetter 10 h, Sonnenstand 15 h, Stunde Σ 50 h je Monat, Skalar 7 Tage — dieselben Schwellen, die der Lookup anwendet). Beim Skalar gehören `tage_eingegangen` und `faktor_skalar` zum gehaltenen Wert, sonst fiele Stufe 4 aus. Die Marke je Bin steht in `Korrekturprofil.lern_basis_pro_bin` (`"alt"` | `"neu"`), der Beginn in `lern_umstellung_am`; nach **365 Tagen** endet die Regel (sonst bliebe ein saisonal nie wieder belegter Bin für immer auf seinem alten Wert).
 
@@ -5055,22 +5015,21 @@ Aggregiert alle `TagesZusammenfassung` eines Monats in `Monatsdaten`-Felder:
 | `performance_ratio` | Ø(Tages-PR) | Durchschnittliche Performance Ratio |
 | `peak_netzbezug_kw` | max(Tages-Peak) | Maximaler Netzbezug im Monat |
 
-**Auslöser:** Wird beim Monatsabschluss nach `backfill_range()` aufgerufen, um fehlende Tage nachzuberechnen (begrenzt durch HA-History ~10 Tage).
+**Auslöser:** der Nachlauf des Monatsabschlusses, nach dem Nachrechnen fehlender Tage (`backfill_range`, Kasten unten).
 
-**Überschuss und Defizit an Kanal-Tagen (S5b, E-S5-3):** die Tageszeile trägt sie dort nicht mehr; `rollup_month` liest
+**Überschuss und Defizit an Kanal-Tagen (S5b, E-S5-3):** die Tageszeile trägt sie dort nicht; `rollup_month` liest
 sie je Tag über `kanal_stunden.ueberschuss_defizit_der_tage` (Kanal-Tag: Σ der Mischzeilen in der Form der Tageszeile —
 zwei Stellen, 0 ⇒ leer; sonst die Tageszeile).
 
-> **Was der Monatsabschluss nachrechnet (HA-Bauform E4f, 07.10.2026).** Der Nachlauf nach dem Speichern eines Monats
-> (`services/monatsabschluss_aggregator.py`) rechnet nur noch **Tage ohne Tageszeile**, und nur, solange Home Assistant
+> **Was der Monatsabschluss nachrechnet (HA-Bauform E4f).** Der Nachlauf nach dem Speichern eines Monats
+> (`services/monatsabschluss_aggregator.py`) rechnet nur **Tage ohne Tageszeile**, und nur, solange Home Assistant
 > sie im Verlauf hat — erkannt an derselben Stelle wie N-596 (die Leistungskurve trägt noch einen Wert;
 > `aggregate_day(nur_mit_verlauf=True)`), kein fester Tageswert, denn die Aufbewahrung (`purge_keep_days`, Standard 10
-> Tage) ist je Installation anders. **Ein vorhandener Tag wird nie neu gerechnet** — bis E4f schrieb der Nachlauf jeden
-> Tag des Monats neu und damit Tage ohne HA-Verlauf mit leerer Leistungskurve (#422). Danach `rollup_month()` (oben) und
-> das Festschreiben der Aufteilung nach Betriebsart (§3.5). Der einmalige Auto-Vollbackfill beim ersten Abschluss nach
-> einem Upgrade ist entfallen: die Summen der Sichten kommen aus den Kanälen, Lücken der Tageszeilen füllt die
+> Tage) ist je Installation anders. **Ein vorhandener Tag wird nie neu gerechnet** — sonst bekämen Tage ohne HA-Verlauf eine leere
+> Leistungskurve (#422). Danach `rollup_month()` (oben) und
+> das Festschreiben der Aufteilung nach Betriebsart (§3.5). Einen Auto-Vollbackfill gibt es nicht: die Summen der Sichten kommen aus den Kanälen, Lücken der Tageszeilen füllt die
 > Reparatur-Werkbank („Lücken aus HA-LTS nachfüllen") auf Knopfdruck. Ohne Home Assistant (MQTT-Zähler) gibt es keinen
-> Verlauf, der verfallen könnte: ein fehlender Tag wird wie bisher aus den Zählerständen angelegt.
+> Verlauf, der verfallen könnte: ein fehlender Tag wird aus den Zählerständen angelegt.
 
 ---
 
@@ -5083,9 +5042,9 @@ zwei Stellen, 0 ⇒ leer; sonst die Tageszeile).
 | Autarkie zu hoch/niedrig | Falsche Einspeisung/Netzbezug-Werte | `Monatsdaten` prüfen - sind die Zählerwerte plausibel? |
 | EV-Quote > 100% | Speicher-Entladung > PV-Erzeugung | `InvestitionMonatsdaten` für Speicher prüfen |
 | Netto-Ertrag = 0 | Kein Tarif angelegt | `Strompreis`-Tabelle prüfen |
-| WP-Ersparnis fehlt | Kein WP-Spezialtarif, falscher Gas-Preis | Tarife prüfen; hardcodierter Gas-Preis 10ct im Cockpit |
-| ROI weicht ab (Cockpit vs Investitionen) | Verschiedene Berechnungswege | Cockpit: kumuliert; Investitionen: p.a. mit calculations.py |
-| SOLL überhöht | Teil-Jahr ohne faire Vergleichsbasis | `months_with_data` prüfen (ab v2.3.2 behoben) |
+| WP-Ersparnis fehlt oder 0 | Monat mit Strom, aber ohne Wärme (Standby-Zeile 0 €, N-670) · alter Energieträger „keiner" (N-88) · Gaspreis | Wärme- und Stromwerte der WP prüfen; Gaspreis = Monatswert `Monatsdaten.gaspreis_cent_kwh` vor `alter_preis_cent_kwh` der WP vor Vorgabe `GASPREIS_DEFAULT_CENT` (12 ct), §4.4 |
+| ROI weicht ab (Cockpit vs. Auswertungen → ROI) | Verschiedene Kennzahlen | Rendite (`/cockpit/uebersicht`, Jahresbericht-PDF) = kumulierte Ersparnis ÷ relevante Kosten; ROI p.a. (Auswertungen → ROI) = Jahres-Einsparung ÷ relevante Kosten (Tabelle §3.6) |
+| SOLL überhöht | Teil-Jahr ohne faire Vergleichsbasis | `months_with_data` prüfen (PV-Strings: SOLL nur über Monate mit IST) |
 | PV-Erzeugung = 0 | Legacy-Feld statt InvestitionMonatsdaten | Prüfen ob PV-Module als Investitionen angelegt sind |
 | Dienstl. Wallbox in E-Mob | `ist_dienstlich` nicht gesetzt | `Investition.parameter["ist_dienstlich"]` prüfen |
 | USt wird nicht abgezogen | Steuerliche Behandlung falsch | `Anlage.steuerliche_behandlung` muss `regelbesteuerung` sein |
@@ -5096,7 +5055,7 @@ zwei Stellen, 0 ⇒ leer; sonst die Tageszeile).
 **Schritt 1: Eingabedaten prüfen**
 ```
 API: GET /api/monatsdaten/aggregiert/{anlage_id}
-→ Zeigt Monatsdaten + InvestitionMonatsdaten zusammen
+→ Monatszeilen aus den Monats-Fakten (Monatsdaten + InvestitionMonatsdaten gefaltet, P10)
 ```
 
 **Schritt 2: Tarife prüfen**
@@ -5130,8 +5089,8 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 3. **Legacy-Felder:** `Monatsdaten.batterie_*` ist deprecated. `Monatsdaten.pv_erzeugung_kwh` ist es **nicht** — kein Schreibziel für neuen Code und nur als **Eingang von `resolve_pv_je_modul`** zu lesen (Anlagen-Aggregat, s. [Schicht 1](#schicht-1-rohdaten-eingabe)); Pro-Modul-Werte kommen aus `InvestitionMonatsdaten` (Typ: pv-module)
 4. **PVGIS E_m vs e_m:** Ältere Prognosen verwenden `E_m` (Großbuchstabe), neuere `e_m`
 5. **Grundpreis:** Wird zu den Netzbezugskosten addiert, NICHT vom Netto-Ertrag abgezogen. Er ist auch der Grund, warum „Kosten ÷ kWh" **nicht** den Ø-Preis ergibt — dafür gibt es `netzbezug_arbeitspreis_kosten_euro` (s. [§3.1](#31-energie-bilanz-monatskennzahlen))
-6. **Cockpit vs ROI-Dashboard:** Cockpit berechnet inline (vereinfacht), ROI-Dashboard nutzt `calculations.py` (detaillierter)
+6. **Cockpit vs ROI-Dashboard:** beide rechnen über den Layer (Cockpit `core/berechnungen/ergebnis.py::berechne_ergebnis`, ROI-Dashboard die Typkette in `api/routes/investitionen/`), messen aber Verschiedenes — kumulierte Rendite (`/cockpit/uebersicht`) gegen ROI p.a. (Tabelle [§3.6](#36-roi--amortisation))
 
 ---
 
-*Letzte Aktualisierung: 2026-07-25 (v4.0)*
+*Letzte Aktualisierung: 2026-11-08 (Kap. 1–7 auf Regeln gekürzt, U5)*

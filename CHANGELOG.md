@@ -128,6 +128,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   derselben Richtung wie die Stromseite, ROI-Aufrufer); neue Regel-Absätze für die Achsen Heizwärme und Warmwasser (Lesetüren
   N-398/N-379, keine Angabe ohne gemessene Achse N-673), Strom Heizen und Strom Warmwasser, die Teilmengen Warmwasser, Lüften
   und Entfeuchten und die Nutzenergie Lüften und Entfeuchten — zehn Monatsgrößen mehr mit Regel-Abschnitt, Baseline 25 → 15.
+  Ebenso Kap. 4–7 (U5e): Chronik, Melder- und Messbeispiele gestrichen, am Code richtiggestellt (Stunden-Überschuss und
+  -Defizit aus PV gegen Hausverbrauch, Tagesspitzen aus der HA-Langzeitstatistik bzw. den Leistungswerten, Formel der
+  Kurzfrist-Route mit der horizontalen Globalstrahlung, Solar Forecast ML als Home-Assistant-Integration ohne Einwertung,
+  Live-Route, Wärmepumpen- und E-Auto-Ersparnis der Finanz-Prognose nach §3.4/§3.5, Tarif-Rückfall über den gemeinsamen
+  Zähler, Trägergeräte der PV-System-Gruppierung nach F-33, Gaspreis-Vorgabe 12 ct statt „10 ct“, Fehlerbilder des
+  Debugging-Leitfadens); neue Regel-Sätze für den nachgeführten Tageswert der Prognose, die Grundlast des Tages und die
+  Betriebsstunden der Wärmepumpe — zwei Kennwerte und drei Sensoren mehr mit Regel-Abschnitt, Baseline 15 → 10.
+  BERECHNUNGEN ist damit vollständig auf Regeln gekürzt (U5a–e).
 
 ## [4.2.2] - 2026-11-06
 
