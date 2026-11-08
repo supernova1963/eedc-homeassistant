@@ -1,5 +1,7 @@
 # MQTT-Inbound: Universelle Datenbruecke
 
+> **Erzeugt — nicht von Hand ändern —** Bausteine in `docs/mqtt-inbound/`, `scripts/groessen-uebersicht.sh`. Die Topic-Tabellen je Gerätetyp und die Preset-Tabelle kommen aus dem Code (`services/mqtt_topic_registry.py`, Feld-Registry, `services/mqtt_presets.py`).
+
 MQTT-Inbound ermoeglicht es, Live-Leistungsdaten und Zaehlerstaende von **jedem Smarthome-System** an EEDC zu senden. Es wird nur ein MQTT-Broker benoetigt (z.B. Mosquitto).
 
 ## Unterstuetzte Systeme
@@ -94,29 +96,7 @@ eedc/{anlage_id}_{name}/
 
 Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern der jeweiligen Investition. EEDC erkennt alle Felder automatisch — es muss kein Mapping konfiguriert werden.
 
-| Investitionstyp | Key | Einheit | Beschreibung |
-|---|---|---|---|
-| **PV-Module** | `pv_erzeugung_kwh` | kWh | PV-Erzeugung |
-| **Speicher** | `ladung_kwh` | kWh | Batterie-Ladung |
-| **Speicher** | `entladung_kwh` | kWh | Batterie-Entladung |
-| **Waermepumpe** | `stromverbrauch_kwh` | kWh | Stromverbrauch |
-| **Waermepumpe** | `heizenergie_kwh` | kWh | Erzeugte Heizenergie |
-| **Waermepumpe** | `warmwasser_kwh` | kWh | Warmwasser-Erzeugung |
-| **E-Auto** | `km_gefahren` | km | **Tachostand** (Odometer) — eedc bildet die gefahrenen Kilometer daraus |
-| **E-Auto** | `v2h_entladung_kwh` | kWh | Vehicle-to-Home Entladung |
-| **Wallbox** | `ladung_kwh` | kWh | Ladung gesamt |
-| **Wallbox** | `ladung_pv_kwh` | kWh | PV-Anteil der Ladung — **auch als Zaehlerstand**, eedc bildet die Monatsdifferenz daraus (s. Kasten unten) |
-| **Wallbox** | `ladevorgaenge` | Anzahl | **Fortlaufender Zaehler** der Ladevorgaenge — eedc bildet die Anzahl im Monat daraus |
-| **E-Auto** | `ladung_pv_kwh` / `ladung_netz_kwh` | kWh | Heimladung PV-/Netz-Anteil für dieses Auto. Neben einer Wallbox freiwillig: zählt für dieses Auto, die Wallbox trägt den Rest |
-| **E-Auto** | `ladung_kwh` | kWh | Heimladung gesamt für dieses Auto (Zähler am Auto, der PV und Netz nicht trennt) — mit `ladung_pv_kwh`/`ladung_netz_kwh` leer lassen. Neben einer Wallbox freiwillig wie oben |
-| **E-Auto** | `ladung_extern_kwh` / `ladung_extern_euro` | kWh / EUR | Externe Ladung (Menge und Kosten) |
-| **Speicher** | `ladung_netz_kwh` | kWh | Netz-Anteil der Ladung (Arbitrage) |
-| **BKW** | `pv_erzeugung_kwh` | kWh | BKW-Erzeugung |
-| **BKW** | `eigenverbrauch_kwh` | kWh | Eigenverbrauch |
-| **BKW** | `speicher_ladung_kwh` | kWh | BKW-Speicher Ladung |
-| **BKW** | `speicher_entladung_kwh` | kWh | BKW-Speicher Entladung |
-| **Sonstiges** | `erzeugung_kwh` | kWh | Erzeugung (Erzeuger/Speicher) |
-| **Sonstiges** | `verbrauch_sonstig_kwh` | kWh | Verbrauch (Verbraucher/Speicher) |
+Welche Felder das je Gerätetyp sind, steht in den Tabellen unter [Topics je Gerätetyp](#topics-je-gerätetyp) — vollständig, auch die Felder ohne Topic.
 
 > ⭐ **Ein selbst errechneter PV-Ladezaehler (Discussion #414).** Liefert die Wallbox oder evcc
 > keinen eigenen PV-Zaehlerstand, sondern nur einen Solar-Anteil in Prozent, laesst sich
@@ -126,26 +106,253 @@ Die Felder unter `energy/inv/{id}_{name}/` entsprechen den Monatsdaten-Feldern d
 > dann den **Anteil des jeweiligen Monats** (Sommer nahe 100 %, Winter nahe 0 %), nicht den
 > kumulierten Durchschnitt, den evcc anzeigt — die Summe ueber die Monate trifft ihn wieder.
 
-**Nicht per MQTT lieferbar** (werden im Monatsabschluss manuell eingegeben oder berechnet):
-- Wetterdaten (`globalstrahlung`, `sonnenstunden`, `temperatur`)
-- `sonderkosten_euro`, `notizen`
+Was nicht per MQTT lieferbar ist (Wetterdaten, Preise, Sonderkosten, Notizen — im Monatsabschluss von Hand eingetragen oder berechnet), nennt die Basis-Tabelle unter [Topics je Gerätetyp](#topics-je-gerätetyp) mit „kein MQTT-Topic".
+
+### Topics je Gerätetyp
+
+Je Gerätetyp eine Tabelle der Energie-Topics (`energy/`, Zählerstände) und eine der Live-Topics (`live/`), erzeugt aus
+der Erwartungsliste von eedc (`services/mqtt_topic_registry.py` — dieselbe Liste, die der Block **MQTT-Topics** am Ende
+der Datenquellen-Fläche zum Kopieren zeigt) und der Feld-Registry. Jedes Feld steht genau einmal, auch eines ohne Topic.
+`{anlage_id}` und `{inv_id}` sind die Datenbank-IDs, `{name}` dient nur der Lesbarkeit (siehe [Beispiel](#beispiel)).
+
+- **Payload** sagt, was eedc auf dem Topic erwartet und was es daraus macht. Bei einem Zustand steht das Wort, das eedc
+  intern führt, vorn; in Klammern die übrigen Werte, die eedc als dasselbe versteht (Herstellerwörter und Zahlencodes —
+  die Codes gelten nur über MQTT).
+- **Bedingung** nennt den Geräte-Parameter, an dem das Feld hängt; „(weich)" heißt: an dieser Bauart untypisch, aber
+  möglich. Ein Live-Feld, dessen Bedingung am Gerät nicht gilt, erwartet eedc dort nicht (außer bei „weich");
+  Energie-Topics erwartet es unabhängig von der Bedingung.
+- „wird angenommen, aber von keiner Sicht gelesen": eedc nimmt den Wert entgegen, aber heute verarbeitet ihn kein
+  Teil von eedc (keine Zählerreihe, keine Kachel). Soll er zählen, trag ihn im Monatsabschluss ein.
+- Was ein Feld bedeutet, sagt die Spalte „Hinweis" der [Sensor-Referenz](SENSOR-REFERENZ.md) — dieselbe Registry.
+
+#### Anlage (Basis)
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung | Beschreibung |
+|---|---|---|---|---|---|---|
+| `pv_gesamt_kwh` | PV-Erzeugung Zählerstand | kWh | `eedc/{anlage_id}_{name}/energy/pv_gesamt_kwh` | Zählerstand (kumuliert) | — | Zählerstand der gesamten PV-Erzeugung — aller Erzeuger, auch des Balkonkraftwerks. Haben alle PV-Module und Balkonkraftwerke einen eigenen Zähler, dient er dem Vergleich (Wandlungsverluste); fehlt einem der eigene Zähler, verteilt eedc den Rest nach kWp auf ihn — in Tag, Monat und Live gleich. Misst dein Zähler nur den Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu. Kumulierter kWh-Zählerstand. Speist die „Heute"-Kachel — EEDC bildet das Tagesdelta gegen den Mitternachtswert (täglich resettende oder fortlaufende Zähler funktionieren beide). |
+| `einspeisung_kwh` | Einspeisung Zählerstand | kWh | `eedc/{anlage_id}_{name}/energy/einspeisung_kwh` | Zählerstand (kumuliert) | — | Zählerstand der ins Netz eingespeisten Energie. Kernwert: ohne ihn lassen sich Eigenverbrauch und Autarkie nicht berechnen. Ohne Sensor im Monatsabschluss manuell erfassbar. Kumulierter kWh-Zählerstand. Speist die „Heute"-Kachel — EEDC bildet das Tagesdelta gegen den Mitternachtswert (täglich resettende oder fortlaufende Zähler funktionieren beide). |
+| `netzbezug_kwh` | Netzbezug Zählerstand | kWh | `eedc/{anlage_id}_{name}/energy/netzbezug_kwh` | Zählerstand (kumuliert) | — | Zählerstand der aus dem Netz bezogenen Energie. Kernwert: ohne ihn lassen sich Gesamtverbrauch und Stromkosten nicht berechnen. Ohne Sensor im Monatsabschluss manuell erfassbar. Kumulierter kWh-Zählerstand. Speist die „Heute"-Kachel — EEDC bildet das Tagesdelta gegen den Mitternachtswert (täglich resettende oder fortlaufende Zähler funktionieren beide). |
+| `globalstrahlung_kwh_m2` | Globalstrahlung | kWh/m² | kein MQTT-Topic — Monatsabschluss | — | — | — |
+| `sonnenstunden` | Sonnenstunden | h | kein MQTT-Topic — Monatsabschluss | — | — | — |
+| `durchschnittstemperatur` | Ø Temperatur | °C | kein MQTT-Topic — Monatsabschluss | — | — | — |
+| `netzbezug_durchschnittspreis_cent` | Ø Strompreis | ct/kWh | kein MQTT-Topic — Monatsabschluss | — | Anlage: `dynamischer_tarif` | — |
+| `einspeise_durchschnittspreis_cent` | Einspeisevergütung (Monat) | ct/kWh | kein MQTT-Topic — Monatsabschluss | — | Anlage: `variable_einspeisung` | — |
+| `kraftstoffpreis_euro` | Ø Benzinpreis | €/L | kein MQTT-Topic — Monatsabschluss | — | Anlage: `hat_eauto` | — |
+| `gaspreis_cent_kwh` | Ø Gas-/Ölpreis | ct/kWh | kein MQTT-Topic — Monatsabschluss | — | Anlage: `hat_waermepumpe` | — |
+| `sonderkosten_euro` | Sonderkosten | € | kein MQTT-Topic — Monatsabschluss | — | — | — |
+| `sonderkosten_beschreibung` | Beschreibung | — | kein MQTT-Topic — Monatsabschluss | — | — | — |
+| `notizen` | Notizen | — | kein MQTT-Topic — Monatsabschluss | — | — | — |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `einspeisung_w` | Einspeisung | W | `eedc/{anlage_id}_{name}/live/einspeisung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `netzbezug_w` | Netzbezug | W | `eedc/{anlage_id}_{name}/live/netzbezug_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `netz_kombi_w` | Netz kombiniert (±) | W | `eedc/{anlage_id}_{name}/live/netz_kombi_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `pv_gesamt_w` | PV gesamt | W | `eedc/{anlage_id}_{name}/live/pv_gesamt_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `aussentemperatur_c` | Außentemperatur | °C | `eedc/{anlage_id}_{name}/live/aussentemperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `strompreis` | Strompreis (dynamischer Tarif) | ct/kWh | kein MQTT-Topic | — | Anlage: `dynamischer_tarif` |
+
+Den Strompreis nimmt eedc als `live/strompreis_ct` (ct/kWh) entgegen und zeigt ihn nur im Tagesverlauf (siehe
+[Live-Mittelwerte](#live-mittelwerte-was-eedc-aus-den-live-topics-mitschreibt)); die Erwartungsliste nennt dieses Topic nicht.
+
+#### PV-Module
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `pv_erzeugung_kwh` | PV-Erzeugung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | Zählerstand (kumuliert) | — |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Leistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+
+#### Balkonkraftwerk
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `pv_erzeugung_kwh` | Erzeugung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | Zählerstand (kumuliert) | — |
+| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `speicher_ladung_kwh` | Speicher Ladung | kWh | kein MQTT-Topic — nur manuell | — | `hat_speicher` |
+| `speicher_entladung_kwh` | Speicher Entladung | kWh | kein MQTT-Topic — nur manuell | — | `hat_speicher` |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Leistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+
+#### Speicher
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `ladung_kwh` | Ladung — mit `laedt_aus_netz`: «Ladung (gesamt, inkl. Netz)» | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_kwh` | Zählerstand (kumuliert) | — |
+| `entladung_kwh` | Entladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/entladung_kwh` | Zählerstand (kumuliert) | — |
+| `ladung_netz_kwh` | Netzladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_netz_kwh` | Zählerstand (kumuliert) | `laedt_aus_netz` |
+| `speicher_ladepreis_cent` | Ø Ladepreis | ct/kWh | kein MQTT-Topic — nur manuell | — | `arbitrage_faehig` |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Leistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `soc` | Ladestand | % | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/soc` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+
+#### Wärmepumpe
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `stromverbrauch_kwh` | Stromverbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/stromverbrauch_kwh` | Zählerstand (kumuliert) | `!getrennte_strommessung` (weich) |
+| `strom_heizen_kwh` | Strom Heizen | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/strom_heizen_kwh` | Zählerstand (kumuliert) | `['getrennte_strommessung', '!brauchwasser']` (weich) |
+| `strom_warmwasser_kwh` | Strom Warmwasser | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/strom_warmwasser_kwh` | Zählerstand (kumuliert) | `['getrennte_strommessung', '!luft_luft']` |
+| `heizenergie_kwh` | Heizwärme | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/heizenergie_kwh` | Zählerstand (kumuliert) | `!brauchwasser` (weich) |
+| `warmwasser_kwh` | Warmwasser-Wärme | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/warmwasser_kwh` | Zählerstand (kumuliert) | `!luft_luft` |
+| `waerme_kwh` | Wärme gesamt | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/waerme_kwh` | Zählerstand (kumuliert) | — |
+| `heizstab_strom_kwh` | Strom Zusatzheizung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/heizstab_strom_kwh` | Zählerstand (kumuliert) | — |
+| `netzbezug_eigener_tarif_kwh` | Netzbezug zum WP-Tarif | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/netzbezug_eigener_tarif_kwh` | Zählerstand (kumuliert) | — |
+| `betriebsart_strom_heizen_kwh` · je Innengerät zusätzlich `betriebsart_strom_heizen_kwh-<id>` | Strom Heizbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_strom_heizen_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+| `betriebsart_strom_kuehlen_kwh` · je Innengerät zusätzlich `betriebsart_strom_kuehlen_kwh-<id>` | Strom Kühlbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_strom_kuehlen_kwh` | Zählerstand (kumuliert) | `kuehlt` (weich) |
+| `betriebsart_strom_lueften_kwh` · je Innengerät zusätzlich `betriebsart_strom_lueften_kwh-<id>` | Strom Lüftbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_strom_lueften_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+| `betriebsart_strom_entfeuchten_kwh` · je Innengerät zusätzlich `betriebsart_strom_entfeuchten_kwh-<id>` | Strom Entfeuchtungsbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_strom_entfeuchten_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+| `betriebsart_nutzenergie_heizen_kwh` · je Innengerät zusätzlich `betriebsart_nutzenergie_heizen_kwh-<id>` | Nutzenergie Heizbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_nutzenergie_heizen_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+| `betriebsart_nutzenergie_kuehlen_kwh` · je Innengerät zusätzlich `betriebsart_nutzenergie_kuehlen_kwh-<id>` | Nutzenergie Kühlbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_nutzenergie_kuehlen_kwh` | Zählerstand (kumuliert) | `kuehlt` (weich) |
+| `betriebsart_nutzenergie_lueften_kwh` · je Innengerät zusätzlich `betriebsart_nutzenergie_lueften_kwh-<id>` | Nutzenergie Lüftbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_nutzenergie_lueften_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+| `betriebsart_nutzenergie_entfeuchten_kwh` · je Innengerät zusätzlich `betriebsart_nutzenergie_entfeuchten_kwh-<id>` | Nutzenergie Entfeuchtungsbetrieb | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/betriebsart_nutzenergie_entfeuchten_kwh` | Zählerstand (kumuliert) | `luft_luft` (weich) |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` · je Innengerät zusätzlich `leistung_w-<id>` | Leistung gesamt | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `leistung_heizen_w` | Leistung Heizen | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_heizen_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `!brauchwasser` (weich) |
+| `leistung_warmwasser_w` | Leistung Warmwasser | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_warmwasser_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `!luft_luft` (weich) |
+| `leistung_kuehlen_w` | Leistung Kühlen | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_kuehlen_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `kuehlt` (weich) |
+| `warmwasser_temperatur_c` | Warmwasser-Temperatur | °C | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/warmwasser_temperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `!luft_luft` (weich) |
+| `vorlauf_temperatur_c` | Vorlauf | °C | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/vorlauf_temperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `ruecklauf_temperatur_c` | Rücklauf | °C | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ruecklauf_temperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `heizstab_leistung_w` | Leistung Zusatzheizung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/heizstab_leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `betriebsmodus` | Betriebsmodus | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/betriebsmodus` | Zustand: `heizen` (auch `heat`, `1`) · `warmwasser` (auch `brauchwasser`, `trinkwasser`, `dhw`, `hot_water`, `water_heating`, `2`) · `kuehlen` (auch `cool`, `kühlen`, `3`) · `entfeuchten` (auch `dry`, `5`) · `lueften` (auch `fan_only`, `lüften`, `4`) · `aus` (auch `off`, `0`) · als unbestimmt gezählt: `auto`, `heat_cool`, `automatik` — Betriebsart-Mitschrift (Anteil der Stunde je Betriebsart) | — |
+| `soll_temperatur_c` · je Innengerät zusätzlich `soll_temperatur_c-<id>` | Soll-Temperatur | °C | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/soll_temperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `luft_luft` |
+| `ist_temperatur_c` · je Innengerät zusätzlich `ist_temperatur_c-<id>` | Raumtemperatur | °C | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ist_temperatur_c` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | `luft_luft` |
+
+Felder mit „je Innengerät" erwartet eedc an einer Klimaanlage mit Innengeräten zusätzlich einmal je Innengerät; die
+konkreten Topics mit der Nummer des Innengeräts zeigt der Block **MQTT-Topics** am Ende der Datenquellen-Fläche.
+
+#### E-Auto
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `km_gefahren` | Gefahrene km | km | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/km_gefahren` | Zählerstand (kumuliert) | — |
+| `km_stand` | Tachostand | km | kein MQTT-Topic — nur manuell | — | — |
+| `verbrauch_kwh` | Verbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/verbrauch_kwh` | Zählerstand (kumuliert) | — |
+| `ladung_pv_kwh` | Heim: PV | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_pv_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
+| `ladung_netz_kwh` | Heim: Netz | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_netz_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
+| `ladung_kwh` | Heim: gesamt | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_kwh` | Zählerstand (kumuliert) | Anlage: `keine_dienstliche_wallbox` |
+| `ladung_extern_kwh` | Extern | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_extern_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `ladung_extern_euro` | Extern Kosten | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_extern_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `v2h_entladung_kwh` | V2H Entladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | Zählerstand (kumuliert) | `v2h_faehig` |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Ladeleistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `soc` | Ladestand | % | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/soc` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `ladezustand_fahrzeug` | Ladezustand (Fahrzeug) | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ladezustand_fahrzeug` | Zustand: `nicht_verbunden` (auch `not_connected`) · `verbunden` (auch `plugged_not_charging`, `plugged_in`, `waiting_for_charging`) · `laedt` (auch `charging`) · `laedt_dc` (auch `dc_connected`, `dc_charging`) · `fertig` (auch `complete`, `fully_charged`, `finished_fully_charged`, `finished_not_full`, `target_reached`) · `fehler` (auch `error`) — Zustands-Mitschrift (Anteil der Stunde je Wert) | — |
+| `reichweite_km` | Reichweite | km | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/reichweite_km` | Zahl (Momentanwert) — nur Anzeige | — |
+| `ziel_ladestand_prozent` | Ladeziel | % | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ziel_ladestand_prozent` | Zahl (Momentanwert) — nur Anzeige | — |
+| `restzeit_min` | Restzeit | min | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/restzeit_min` | Zahl (Momentanwert) — nur Anzeige | — |
+| `zu_hause` | Zu Hause | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/zu_hause` | Zustand: `zu_hause` (auch `home`) · `unterwegs` (auch `not_home`) — Zustands-Mitschrift (Anteil der Stunde je Wert) | — |
+
+Heimladung am Auto: entweder `ladung_pv_kwh` und `ladung_netz_kwh` oder `ladung_kwh` (gesamt, für einen Zähler, der PV
+und Netz nicht trennt — dann die beiden anderen leer lassen). Neben einer Wallbox zählt der Wert für dieses Auto, die
+Wallbox trägt den Rest.
+
+#### Wallbox
+
+Energie-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `ladung_kwh` | Ladung gesamt | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_kwh` | Zählerstand (kumuliert) | — |
+| `ladung_pv_kwh` | Ladung PV | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladung_pv_kwh` | Zählerstand (kumuliert) | — |
+| `ladevorgaenge` | Ladevorgänge | — | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/ladevorgaenge` | Zählerstand (kumuliert) | — |
+| `netzbezug_eigener_tarif_kwh` | Netzbezug zum Wallbox-Tarif | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/netzbezug_eigener_tarif_kwh` | Zählerstand (kumuliert) | — |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Leistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+| `ladezustand` | Ladezustand | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ladezustand` | Zustand: `kein_fahrzeug` (auch `not_connected`, `1`) · `verbunden` (auch `sleep_mode`) · `wartet` (auch `3`) · `laedt` (auch `active_mode`, `2`) · `fertig` (auch `4`) · `gesperrt` (auch `station_locked`) · `fehler` (auch `station_fault`, `0`, `5`) — Zustands-Mitschrift (Anteil der Stunde je Wert) | — |
+| `lademodus` | Lademodus | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/lademodus` | Zustand: `aus` (auch `off`, `charge_stop`) · `pv` (auch `smart_charging`) · `smart` (auch `minpv`) · `schnell` (auch `now`, `boost_charging`, `3`) · `plan` (auch `5`) · `eco` (auch `4`) — nur Anzeige | — |
+| `fahrzeug_am_ladepunkt` | Fahrzeug am Ladepunkt | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/fahrzeug_am_ladepunkt` | Text (getrimmt, höchstens 80 Zeichen) — nur Anzeige | — |
+| `evcc_verbunden` | evcc: Fahrzeug verbunden | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/evcc_verbunden` | Zustand: `an` (auch `on`, `true`, `1`) · `aus` (auch `off`, `false`, `0`) — nur Anzeige | — |
+| `evcc_laedt` | evcc: lädt | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/evcc_laedt` | Zustand: `an` (auch `on`, `true`, `1`) · `aus` (auch `off`, `false`, `0`) — nur Anzeige | — |
+| `evcc_freigegeben` | evcc: Laden freigegeben | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/evcc_freigegeben` | Zustand: `an` (auch `on`, `true`, `1`) · `aus` (auch `off`, `false`, `0`) — nur Anzeige | — |
+| `sitzung_kwh` | Energie dieser Sitzung | kWh | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/sitzung_kwh` | Zahl (Momentanwert) — nur Anzeige | — |
+| `sitzung_dauer_s` | Dauer dieser Sitzung | s | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/sitzung_dauer_s` | Zahl (Momentanwert) — nur Anzeige | — |
+| `ladestrom_a` | Ladestrom | A | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ladestrom_a` | Zahl (Momentanwert) — nur Anzeige | — |
+| `phasen_aktiv` | Aktive Phasen | — | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/phasen_aktiv` | Zahl (Momentanwert) — nur Anzeige | — |
+| `ziel_ladestand_prozent` | Ladeziel | % | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/ziel_ladestand_prozent` | Zahl (Momentanwert) — nur Anzeige | — |
+| `restzeit_min` | Restzeit | min | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/restzeit_min` | Zahl (Momentanwert) — nur Anzeige | — |
+
+#### Sonstiges
+
+Die Spalte „Art" ist die Kategorie des Geräts. Ohne gepflegte Kategorie erwartet eedc die Felder von Verbraucher,
+Erzeuger und Speicher.
+
+Energie-Topics:
+
+| Art | Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|---|
+| `erzeuger` | `erzeugung_kwh` | Erzeugung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/erzeugung_kwh` | Zählerstand (kumuliert) | — |
+| `erzeuger` | `eigenverbrauch_kwh` | Eigenverbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `erzeuger` | `einspeisung_kwh` | Einspeisung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeisung_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `erzeuger` | `einspeise_erloes_euro` | Einspeise-Erlös | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeise_erloes_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `verbraucher` | `verbrauch_sonstig_kwh` | Verbrauch | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/verbrauch_sonstig_kwh` | Zählerstand (kumuliert) | — |
+| `verbraucher` | `bezug_pv_kwh` | davon PV | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/bezug_pv_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `verbraucher` | `bezug_netz_kwh` | davon Netz | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/bezug_netz_kwh` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `abgabe` | `abgabe_kwh` | Abgabe | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/abgabe_kwh` | Zählerstand (kumuliert) | — |
+| `abgabe` | `einspeise_erloes_euro` | Erlös | € | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/einspeise_erloes_euro` | wird angenommen, aber von keiner Sicht gelesen — der Wert zählt heute nur, wenn er im Monatsabschluss steht | — |
+| `speicher` | `erzeugung_kwh` | Erzeugung/Entladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/erzeugung_kwh` | Zählerstand (kumuliert) | — |
+| `speicher` | `verbrauch_sonstig_kwh` | Verbrauch/Ladung | kWh | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/verbrauch_sonstig_kwh` | Zählerstand (kumuliert) | — |
+| `zaehler` | `zaehlerstand` | Zählerstand | vom Gerät (`zaehler_einheit`) | `eedc/{anlage_id}_{name}/energy/inv/{inv_id}_{name}/zaehlerstand` | Zählerstand (kumuliert) | — |
+
+Live-Topics:
+
+| Feld | Label | Einheit | Topic | Payload | Bedingung |
+|---|---|---|---|---|---|
+| `leistung_w` | Leistung | W | `eedc/{anlage_id}_{name}/live/inv/{inv_id}_{name}/leistung_w` | Zahl (Momentanwert) — 5-Minuten- und Stundenmittel | — |
+
+#### Wechselrichter
+
+Wechselrichter haben keine eigenen Topics: ihre Werte gehören zu den PV-Modulen und Speichern, denen sie zugeordnet sind
+(`SKIP_TYPEN` in `services/mqtt_topic_registry.py`).
 
 ### Live-Mittelwerte: was eedc aus den Live-Topics mitschreibt
 
 Jedes Live-Topic mit einer Zahl ist ein Momentanwert — senden bei jeder Aenderung genuegt (ein Wert gilt bis zur
 naechsten Nachricht, wie in Home Assistant). Alle 5 Minuten haelt eedc daraus das **zeitgewichtete Mittel** des
 Fensters fest (mit Minimum und Maximum) und bildet je abgeschlossener Stunde **Stundenmittel** — dasselbe, was Home
-Assistant aus seinen 5-Minuten-Statistiken macht (seit Standalone-Gleichstand S2). Mitgeschrieben werden alle
-Live-Felder in W, °C und %:
-
-| Ebene | Topics (`live/…`) |
-|---|---|
-| Anlage | `einspeisung_w`, `netzbezug_w`, `netz_kombi_w`, `pv_gesamt_w`, `aussentemperatur_c` |
-| PV-Module, Wechselrichter, Balkonkraftwerk, Wallbox, Sonstiges | `inv/…/leistung_w` |
-| Speicher, E-Auto | `inv/…/leistung_w`, `inv/…/soc` |
-| Waermepumpe | `inv/…/leistung_w`, `leistung_heizen_w`, `leistung_warmwasser_w`, `leistung_kuehlen_w`, `vorlauf_temperatur_c`, `ruecklauf_temperatur_c`, `warmwasser_temperatur_c`, `heizstab_leistung_w` |
-| Klimaanlage mit Innengeraeten | zusaetzlich `soll_temperatur_c`, `ist_temperatur_c`; je Innengeraet `leistung_w-<n>`, `soll_temperatur_c-<n>`, `ist_temperatur_c-<n>` |
-| Betriebsmodus | `inv/…/betriebsmodus` — als Anteil je Modus (siehe naechster Abschnitt) |
+Assistant aus seinen 5-Minuten-Statistiken macht (seit Standalone-Gleichstand S2). Mitgeschrieben werden die
+Live-Topics, deren Spalte „Payload" unter [Topics je Gerätetyp](#topics-je-gerätetyp) „5-Minuten- und Stundenmittel"
+nennt (Leistung, Ladestand, Temperatur); den Betriebsmodus schreibt eedc als Anteil je Modus mit (siehe naechster
+Abschnitt).
 
 Daraus entstehen ohne Home Assistant u. a. das Temperatur-Diagramm, Ø Vorlauf und Ø Spreizung der Waermepumpe. Der
 **Tagesverlauf** in *Cockpit → Live* zeigt ueber MQTT damit 5-Minuten-Mittel statt einzelner Momentanwerte, ab der
@@ -203,18 +410,8 @@ eedc/1_Meine_PV/live/inv/7_Vitocal/betriebsmodus → 2
 ### Zustand und Sitzung der E-Mobilitaet (ab der naechsten Version)
 
 Wallbox und E-Auto haben eigene Live-Topics fuer den Ueberblick im Komponenten-Hub — Topic = Registry-Feld unter
-`…/live/inv/{id}_{name}/`:
-
-| Geraet | Topic-Suffix | Payload |
-|---|---|---|
-| Wallbox | `ladezustand` | Zustand: `kein_fahrzeug` · `verbunden` · `wartet` · `laedt` · `fertig` · `gesperrt` · `fehler` (go-e-Code `0`…`5` geht auch) |
-| Wallbox | `lademodus` | Zustand: `aus` · `pv` · `smart` · `schnell` · `plan` · `eco` (go-e `lmo` `3`/`4`/`5` geht auch) |
-| Wallbox | `fahrzeug_am_ladepunkt` | Text: der Fahrzeugname der Steuerung (evcc `vehicleName`); **leer ist ein Wert** (kein bzw. unbekanntes Fahrzeug) |
-| Wallbox | `evcc_verbunden`, `evcc_laedt`, `evcc_freigegeben` | Zustand: `an` · `aus` (`true`/`false`, `on`/`off`, `1`/`0` gehen auch) — nur ohne `ladezustand` noetig, eedc setzt daraus den Ladezustand zusammen |
-| Wallbox | `sitzung_kwh`, `sitzung_dauer_s`, `ladestrom_a`, `phasen_aktiv`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (kWh, s, A, Anzahl, %, min) |
-| E-Auto | `ladezustand_fahrzeug` | Zustand: `nicht_verbunden` · `verbunden` · `laedt` · `laedt_dc` · `fertig` · `fehler` |
-| E-Auto | `zu_hause` | Zustand: `zu_hause` · `unterwegs` |
-| E-Auto | `reichweite_km`, `ziel_ladestand_prozent`, `restzeit_min` | Zahl (km, %, min) |
+`…/live/inv/{id}_{name}/`. Welche das sind und welche Werte eedc je Zustand versteht, steht in den Live-Tabellen von
+[Wallbox](#wallbox) und [E-Auto](#e-auto) unter Topics je Gerätetyp (Spalte „Payload").
 
 ```
 eedc/1_Meine_PV/live/inv/4_SMA_eCharger_22/ladezustand → laedt
@@ -271,19 +468,19 @@ Ein Gateway-Preset legt fuer **einen** evcc-Ladepunkt alle Zeilen auf einmal an 
 Vorgabe `1`). Die Einheiten stammen aus der evcc-Quelle (`server/mqtt.go`: Kommazahlen mit hoechstens drei Nachkommastellen,
 Dauern als ganze Sekunden, `true`/`false`, kein Wert als leerer Payload; retained):
 
-| evcc-Topic `<prefix>/loadpoints/<n>/…` | eedc-Feld | Einheit bei evcc | Faktor |
+| Quell-Topic (Vorlage) | Ziel in eedc | Umrechnung | Beschreibung (aus dem Preset) |
 |---|---|---|---|
-| `chargePower` | `leistung_w` | W | 1 |
-| `sessionEnergy` | `sitzung_kwh` | Wh | 0,001 |
-| `chargeDuration` | `sitzung_dauer_s` | s | 1 |
-| `chargeRemainingDuration` | `restzeit_min` | s | 1/60 |
-| `phasesActive` | `phasen_aktiv` | Anzahl | 1 |
-| `chargeTotalImport` | `ladung_kwh` unter **`energy/`** (`eedc/<anlage>/energy/inv/<id>/ladung_kwh`) | kWh, Zaehlerstand (nur mit Lademeter) | 1 |
-| `mode` | `lademodus` | Text (`off` · `smart` · `now`; ältere evcc: `pv` · `minpv`) | — |
-| `connected` | `evcc_verbunden` | `true`/`false` | — |
-| `charging` | `evcc_laedt` | `true`/`false` | — |
-| `enabled` | `evcc_freigegeben` | `true`/`false` | — |
-| `vehicleName` | `fahrzeug_am_ladepunkt` | Text, leer = kein bzw. unbekanntes Fahrzeug | — |
+| `{prefix}/loadpoints/{loadpoint}/chargePower` | `live/inv/{inv_id}/leistung_w` | 1 | Ladeleistung in W |
+| `{prefix}/loadpoints/{loadpoint}/sessionEnergy` | `live/inv/{inv_id}/sitzung_kwh` | 0,001 | Energie dieser Sitzung — evcc meldet Wh, Faktor 0,001 ⇒ kWh |
+| `{prefix}/loadpoints/{loadpoint}/chargeDuration` | `live/inv/{inv_id}/sitzung_dauer_s` | 1 | Ladedauer dieser Sitzung in Sekunden |
+| `{prefix}/loadpoints/{loadpoint}/chargeRemainingDuration` | `live/inv/{inv_id}/restzeit_min` | 1/60 | Restzeit — evcc meldet Sekunden, Faktor 1/60 ⇒ Minuten |
+| `{prefix}/loadpoints/{loadpoint}/phasesActive` | `live/inv/{inv_id}/phasen_aktiv` | 1 | Aktive Phasen |
+| `{prefix}/loadpoints/{loadpoint}/chargeTotalImport` | `energy/inv/{inv_id}/ladung_kwh` | 1 | Zählerstand der Wallbox in kWh (nur mit Lademeter) — eedc bildet daraus die Monatsdifferenz |
+| `{prefix}/loadpoints/{loadpoint}/mode` | `live/inv/{inv_id}/lademodus` | — (Text) | Lademodus (off · smart · now; ältere evcc: pv · minpv) — Text |
+| `{prefix}/loadpoints/{loadpoint}/connected` | `live/inv/{inv_id}/evcc_verbunden` | — (Text) | Fahrzeug verbunden (true/false) — Text |
+| `{prefix}/loadpoints/{loadpoint}/charging` | `live/inv/{inv_id}/evcc_laedt` | — (Text) | Lädt (true/false) — Text |
+| `{prefix}/loadpoints/{loadpoint}/enabled` | `live/inv/{inv_id}/evcc_freigegeben` | — (Text) | Laden freigegeben (true/false) — Text |
+| `{prefix}/loadpoints/{loadpoint}/vehicleName` | `live/inv/{inv_id}/fahrzeug_am_ladepunkt` | — (Text) | Fahrzeugname der Steuerung — Text, leer heißt kein bzw. unbekanntes Fahrzeug |
 
 - **Nicht im Preset:** Ladestand und Reichweite (`vehicleSoc`, `vehicleRange` — Werte des Autos, das Preset legt die Zeilen
   einer Wallbox; am E-Auto einzeln ueber das Gateway zuordnen) und `chargeCurrent`/`effectiveLimitSoc` (in der evcc-Doku
@@ -515,8 +712,8 @@ mosquitto_sub -h localhost -t "eedc/#" -v
 
 ## Hinweise
 
-- **Payload-Format:** Nur numerische Werte (z.B. `4200`, `72.5`). Kein JSON. Ausnahme: `betriebsmodus` (Wort oder Code, siehe oben).
-- **Einheiten:** Live-Topics in **Watt** (nicht kW). Energy-Topics in **kWh**.
+- **Payload-Format:** Zahlen (z.B. `4200`, `72.5`), kein JSON. Ausnahmen: die Zustands- und Textfelder (Spalte „Payload" unter [Topics je Gerätetyp](#topics-je-gerätetyp), darunter `betriebsmodus` mit Wort oder Code) und die [Themen](#themen-je-geraet-ab-der-naechsten-version).
+- **Einheiten:** Leistung in **Watt** (nicht kW), Energie in **kWh** — die Einheit jedes Topics steht in der Spalte „Einheit" unter [Topics je Gerätetyp](#topics-je-gerätetyp).
 - **Batterie:** Positive Werte = Ladung, negative = Entladung
 - **Retained Messages:** EEDC publisht beim Speichern Initialwerte (0) als Retained, damit Topics am Broker sichtbar sind — nicht auf `betriebsmodus`: dort hiesse `0` „Aus".
 - **Reconnect:** Bei Verbindungsverlust verbindet sich der Subscriber automatisch nach 10 Sekunden neu.

@@ -11,7 +11,8 @@ nicht (Regel-Abschnitt, haltender Test); sie stehen in ``groessen_hand.yaml``. D
 (b) jeder ``code_ort`` und jeder ``test`` existiert, jeder ``abschnitt`` ist der Anker einer Überschrift.
 (c) die erzeugte Datei ist gleich der Erzeuger-Ausgabe — **skip ohne** ``docs/`` (Standalone-Spiegel, Muster
     ``test_soll_waerme_klima_achse3_aufloesung.py``).
-(d) Anker-Probe: jeder Verweis ``BERECHNUNGEN.md#…``/``SENSOR-REFERENZ.md#…`` in ``docs/*.md`` und ``CHANGELOG.md``
+(d) Anker-Probe: jeder Verweis ``BERECHNUNGEN.md#…``/``SENSOR-REFERENZ.md#…``/``MQTT_INBOUND.md#…`` in ``docs/*.md``,
+    den Bausteinen und ``CHANGELOG.md``
     trifft eine Überschrift. Der Website-Build prüft keine Anker — das tut nur diese Probe (U0: zwei waren tot).
 (e) Gegenproben: ein künstlicher Registry-Eintrag ohne Hand-Eintrag, ein falscher Verweis, ein toter Anker werden
     beim Namen gemeldet — sonst wäre ein grüner Lauf nichts wert (Muster ``test_kanal_feld_deckung.py``).
@@ -23,13 +24,19 @@ Hand-Datei). (c) prüft beide Dateien, (d) liest auch die Bausteine; die Totalit
 Sensor in genau einem Marker, jede Kategorie in genau einem Unterabschnitt) prüft der Erzeuger selbst — die
 Gegenproben unten zeigen, dass er dabei den Namen nennt.
 
+**MQTT_INBOUND (Stufe U3b).** ``docs/MQTT_INBOUND.md`` ist erzeugt: Bausteine ``docs/mqtt-inbound/NN-*.md`` und an Markern je
+Gerätetyp eine Tabelle der Energie- und eine der Live-Topics (jeder Registry-Eintrag außer ``SKIP_TYPEN`` genau einmal,
+auch ohne Topic) sowie die Preset-Tabelle. (c) prüft auch diese Datei; der Erzeuger prüft Totalität je Marker und das
+**Sollbild** gegen ``build_expected_topics`` in beiden Richtungen. Die Spalte «Payload» der Energie-Topics fragt die Leser
+(``mq_energie_leser``): ein erwartetes Topic ohne Leser sagt «wird angenommen, aber von keiner Sicht gelesen».
+
 **Die Slug-Regeln** (github-slugger, ein Slugger je Dokument; Überschriften in Blockquotes und Setext zählen) sind am
 7.11.2026 gegen die Pipeline der In-App-Hilfe gemessen (remark-gfm + rehype-raw + rehype-slug wie
 ``components/ui/MarkdownDoc.tsx``): 3164 Überschriften in 39 Dateien, alle Anker gleich.
 
 **Wenn dieser Test rot wird:**
 
-    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md + docs/SENSOR-REFERENZ.md neu schreiben
+    scripts/groessen-uebersicht.sh              # UEBERSICHT-GROESSEN.md, SENSOR-REFERENZ.md, MQTT_INBOUND.md neu
     scripts/groessen-uebersicht.sh --baseline   # nach einem Hand-Eintrag: Baseline schrumpfen lassen
     ./scripts/sync-help.sh                      # In-App-Hilfe nachziehen
 
@@ -343,3 +350,96 @@ def test_e_sr_sichten_kommen_aus_feld_auswertungen():
     assert gu.sr_sichten(felder["basis:einspeisung_kwh"]) == " · ".join(sichten_fuer("basis", "einspeisung_kwh"))
     assert gu.sr_sichten(felder["e-auto:km_stand"]).startswith("— "), "Feld ohne Auswertung nennt den Grund"
     assert "sichten" not in gu.HAND_FELDER[gu.EINGABEFELD]
+
+
+# ── MQTT_INBOUND (Stufe U3b) ────────────────────────────────────────────────
+
+
+@_OHNE_DOCS
+def test_c_mqtt_inbound_ist_aktuell():
+    fehler, soll = gu.mq_pruefung_und_text()
+    assert not fehler, "MQTT_INBOUND nicht erzeugbar:\n  " + "\n  ".join(fehler) + _BEFEHLE
+    ist = gu.MQ_ZIEL.read_text(encoding="utf-8") if gu.MQ_ZIEL.exists() else ""
+    assert ist == soll, (
+        "docs/MQTT_INBOUND.md weicht von der Erzeuger-Ausgabe ab — ein Baustein in docs/mqtt-inbound/, die Feld-Registry, "
+        "die Topic-Registry (services/mqtt_topic_registry.py), ein MQTT-Leser, der Kanal-Katalog oder ein Preset geändert, "
+        "ohne neu zu erzeugen (oder die Datei von Hand geändert — Änderungen gehören in die Bausteine)." + _BEFEHLE
+    )
+
+
+@_OHNE_DOCS
+def test_d_mqtt_inbound_anker_sind_belegt(anker):
+    """Hilfe und Sensor-Referenz verweisen auf zwei Anker von MQTT_INBOUND — beide stehen in den Bausteinen."""
+    verweise = [v for v in gu.anker_verweise(gu.verweis_dateien()) if v[2] == "MQTT_INBOUND.md"]
+    assert {a for *_r, a in verweise} >= {"topic-struktur", "zustand-und-sitzung-der-e-mobilitaet-ab-der-naechsten-version"}
+    assert not gu.tote_anker(verweise, anker)
+
+
+def _mq_fehler(**quellen) -> str:
+    return "\n".join(gu.mq_pruefung_und_text(**quellen)[0])
+
+
+def test_mq_jedes_feld_genau_eine_zeile_ohne_skip_typen():
+    """Totalität: jeder Registry-Eintrag außer ``SKIP_TYPEN`` hat genau eine Zeile (Basis-Energy nimmt gleichnamige
+    Basis-Felder auf); Wechselrichter haben keine."""
+    felder = gu.sr_eingabefelder()
+    zeilen = gu.mqtt_zeilen(felder)
+    skip = gu._skip_typen()
+    energy_keys = {k for k, *_r in gu._basis_energy_topics()}
+    erwartet = sum(1 for f in felder if f.typ not in skip
+                   and not (f.typ == "basis" and gu._MQ_LISTE[f.liste] == "energy" and f.feld in energy_keys))
+    assert len(zeilen) == erwartet + len(energy_keys)
+    assert not [z for z in zeilen if z.typ in skip]
+
+
+def test_mq_sprengsatz_registry_feld_entfernt_wird_beim_namen_gemeldet():
+    """Fehlt ein Feld in den Zeilen, das die Topic-Registry erwartet, meldet das Sollbild es — (c) wird rot."""
+    felder = [f for f in gu.sr_eingabefelder() if f.name != "speicher:soc"]
+    fehler = _mq_fehler(zeilen=gu.mqtt_zeilen(felder))
+    assert "inv/{inv_id}_{name}/soc` (speicher): die Registry erwartet es, keine Tabellen-Zeile" in fehler, fehler
+
+
+def test_mq_kuenstliches_feld_ohne_topic_in_der_registry_wird_gemeldet():
+    neu = gu.SrFeld("speicher", "", "neu_kwh", "INVESTITION_FELDER", {"feld": "neu_kwh", "einheit": "kWh"})
+    fehler = _mq_fehler(zeilen=gu.mqtt_zeilen([*gu.sr_eingabefelder(), neu]))
+    assert "speicher:neu_kwh [INVESTITION_FELDER, energy]: die Tabelle nennt" in fehler, fehler
+
+
+def test_mq_typ_ohne_marker_wird_beim_namen_gemeldet():
+    neu = gu.SrFeld("fantasie", "", "neu_w", "LIVE_FELDER_INV", {"key": "neu_w", "einheit": "W"})
+    fehler = _mq_fehler(zeilen=gu.mqtt_zeilen([*gu.sr_eingabefelder(), neu]))
+    assert "Topic-Zeile fantasie:neu_w [LIVE_FELDER_INV, live] steht in 0 Markern" in fehler, fehler
+
+
+def test_mq_falsche_marker_werden_beim_namen_gemeldet():
+    bausteine = [("00-kopf.md", "# T\n<!-- erzeugt: mqtt-topics typ=wechselrichter liste=live -->\n"
+                                "<!-- erzeugt: mqtt-topics typ=speicher -->\n<!-- erzeugt: mqtt-preset id=gibtsnicht -->\n")]
+    fehler = _mq_fehler(bausteine=bausteine, topics=[])
+    assert "00-kopf.md:2: Typ ['wechselrichter'] hat keine Topics (SKIP_TYPEN)" in fehler, fehler
+    assert "00-kopf.md:3: Marker" in fehler and "fehlende ['liste']" in fehler, fehler
+    assert "00-kopf.md:4: Preset `gibtsnicht` unbekannt" in fehler, fehler
+
+
+def test_mq_nur_manuell_hat_kein_topic():
+    zeilen = {z.name: z for z in gu.mqtt_zeilen()}
+    z = zeilen["e-auto:km_stand [INVESTITION_FELDER, energy]"]
+    assert z.topic is None and z.ohne_topic == gu.KEIN_TOPIC_MANUELL
+
+
+def test_mq_payload_kommt_aus_den_lesern():
+    """Ein Energie-Topic ohne Leser (Zählerreihe, Heute, Kilometerstand) sagt das; eines mit Leser nennt den Stand."""
+    assert gu.mq_energie_leser("e-auto", "ladung_extern_kwh") == []
+    assert "Zählerreihe" in gu.mq_energie_leser("wallbox", "ladung_kwh")
+    assert "Kilometerstand" in gu.mq_energie_leser("e-auto", "km_gefahren")
+    zeilen = {z.name: z for z in gu.mqtt_zeilen()}
+    assert zeilen["e-auto:ladung_extern_kwh [INVESTITION_FELDER, energy]"].payload.startswith(gu.PAYLOAD_OHNE_LESER)
+    assert zeilen["wallbox:ladung_kwh [INVESTITION_FELDER, energy]"].payload == gu.PAYLOAD_ZAEHLER
+
+
+def test_mq_zustandswoerter_kommen_aus_dem_kanon():
+    from backend.core import zustands_kanon as zk
+
+    zeilen = {z.name: z for z in gu.mqtt_zeilen()}
+    payload = zeilen["wallbox:ladezustand [LIVE_FELDER_INV, live]"].payload
+    assert all(f"`{w}`" in payload for w in zk.KANON["ladezustand"]), payload
+    assert "`1`" in payload, "Codes (nur MQTT) stehen in der Zelle"

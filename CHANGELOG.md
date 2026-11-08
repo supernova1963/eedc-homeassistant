@@ -56,6 +56,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   ersetzt nicht die kWh-Zähler; Vorlauf und Rücklauf bekommen über MQTT Stundenmittel ab der Zuordnung; eine Zusatzheizung
   über 0 W zeigt „Zusatzheizung aktiv“; ein sonstiger Erzeuger zählt wie PV in Eigenverbrauch und Autarkie. Die Kästen
   „Aus der früheren Spalte Beschreibung“ in der Sensor-Referenz entfallen damit.
+- **MQTT-Inbound: die Dokumentation nennt jedes Topic, das eedc erwartet, je Gerätetyp vollständig — auch, was kein Topic
+  hat; sie steht jetzt in der Hilfe und auf der Website.** Bisher fehlten etwa 13 Energie-Topics der Wärmepumpe, 7 der
+  sonstigen Geräte und die Basis-Topics, die Live-Tabellen kannten die Zustände von Wallbox und E-Auto nur in einem eigenen
+  Abschnitt, und „Nicht per MQTT lieferbar“ ließ die Preisfelder aus. Je Topic steht jetzt, was eedc erwartet und was es
+  damit macht (Zählerstand, 5-Minuten- und Stundenmittel, Zustand mit allen Werten, die eedc versteht, oder nur Anzeige).
+  Die Tabelle sagt auch ehrlich, welche Topics eedc heute nur annimmt: Bei acht Feldern (Eigenverbrauch des
+  Balkonkraftwerks, externe Ladung des E-Autos in kWh und €, Eigenverbrauch, Einspeisung, Erlös und PV-/Netz-Anteil
+  sonstiger Geräte) liest keine Ansicht den gesendeten Wert — er zählt nur, wenn er im Monatsabschluss steht.
 
 ### Added
 

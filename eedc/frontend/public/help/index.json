@@ -11,6 +11,7 @@
   {"slug": "waerme-klima", "title": "Wärme & Klima", "category": "Handbuch", "filename": "HANDBUCH_WAERME_KLIMA.md"},
   {"slug": "berechnungen", "title": "Berechnungen & Kennzahlen", "category": "Referenz", "filename": "BERECHNUNGEN.md"},
   {"slug": "sensor-referenz", "title": "Sensor-Referenz", "category": "Referenz", "filename": "SENSOR-REFERENZ.md"},
+  {"slug": "mqtt-inbound", "title": "MQTT-Inbound", "category": "Referenz", "filename": "MQTT_INBOUND.md"},
   {"slug": "groessen", "title": "Größen", "category": "Referenz", "filename": "UEBERSICHT-GROESSEN.md"},
   {"slug": "glossar", "title": "Glossar", "category": "Referenz", "filename": "GLOSSAR.md"}
 ]

@@ -1,13 +1,14 @@
 #!/bin/bash
 # =============================================================================
-# groessen-uebersicht.sh — docs/UEBERSICHT-GROESSEN.md und docs/SENSOR-REFERENZ.md aus dem Code erzeugen
+# groessen-uebersicht.sh — docs/UEBERSICHT-GROESSEN.md, docs/SENSOR-REFERENZ.md und docs/MQTT_INBOUND.md aus dem Code erzeugen
 #
 # Erzeuger: eedc/backend/tests/groessen_uebersicht.py (Bauplan «Übersicht der Größen»).
 # Wächter:  eedc/backend/tests/test_groessen_uebersicht.py — rot, sobald Registry, Monats-Fakten,
-#           Werte-Registry, Export-Sensoren oder groessen_hand.yaml sich ändern und dieser Lauf fehlt.
+#           Werte-Registry, Export-Sensoren, Topic-Registry, MQTT-Leser, Presets, ein Baustein
+#           (docs/sensor-referenz/, docs/mqtt-inbound/) oder groessen_hand.yaml sich ändern und dieser Lauf fehlt.
 #
 # Verwendung:
-#   ./scripts/groessen-uebersicht.sh              # beide Dateien neu schreiben (Vorgabe: --schreiben)
+#   ./scripts/groessen-uebersicht.sh              # alle drei Dateien neu schreiben (Vorgabe: --schreiben)
 #   ./scripts/groessen-uebersicht.sh --baseline   # eedc/backend/tests/groessen_offen_baseline.txt neu schreiben
 #   ./scripts/groessen-uebersicht.sh --pruefen    # nur vergleichen (Exit 1 bei Abweichung)
 #

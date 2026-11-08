@@ -26,6 +26,7 @@ declare -A DOCS=(
   ["HANDBUCH_PROGNOSEN.md"]="handbuch-prognosen.md|Modul: Prognosen|Vorschau, Genauigkeit und Prognosequellen"
   ["HANDBUCH_WAERME_KLIMA.md"]="handbuch-waerme-klima.md|Modul: Wärme & Klima|Wärmepumpe, Klimaanlage und Heizstab: welcher Zähler welche Kennzahl möglich macht"
   ["SENSOR-REFERENZ.md"]="sensor-referenz.md|Sensor-Referenz|HA-Export-Sensoren und MQTT-Topics im Überblick"
+  ["MQTT_INBOUND.md"]="mqtt-inbound.md|MQTT-Inbound|Jedes MQTT-Topic, das eedc erwartet, je Gerätetyp — mit Payload, Beispielen und Presets (Tabellen aus dem Code erzeugt)"
   ["BERECHNUNGEN.md"]="berechnungen.md|Berechnungsreferenz|Formeln und Berechnungsgrundlagen aller Kennzahlen"
   ["UEBERSICHT-GROESSEN.md"]="uebersicht-groessen.md|Übersicht der Größen|Jede Größe von eedc in einer Zeile: Eingabefelder, Monatsgrößen, Kennwerte, Export-Sensoren (aus dem Code erzeugt)"
   ["GLOSSAR.md"]="glossar.md|Glossar|Begriffserklärungen und Support-Informationen"

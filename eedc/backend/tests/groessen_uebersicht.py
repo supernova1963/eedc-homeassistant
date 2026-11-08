@@ -1,9 +1,11 @@
-"""Übersicht der Größen — Erzeuger und Parser (Bauplan «Übersicht der Größen» §3, Stufen U1 und U3, 7.11.2026).
+"""Übersicht der Größen — Erzeuger und Parser (Bauplan «Übersicht der Größen» §3, Stufen U1, U3 und U3b, 7./8.11.2026).
 
 Schreibt ``docs/UEBERSICHT-GROESSEN.md``: jeder Eintrag der vier Registries von eedc bekommt genau eine Zeile.
 Schreibt ``docs/SENSOR-REFERENZ.md`` (U3): Hand-Bausteine ``docs/sensor-referenz/NN-*.md`` in Namens-Reihenfolge, an
 Markern die Tabellen der Eingabefelder und der Export-Sensoren — vollständig, jede Zeile genau einmal (Abschnitt
-«SENSOR-REFERENZ» unten). Die Bausteine sind Quelle; die erzeugte Datei wird nie von Hand geändert.
+«SENSOR-REFERENZ» unten). Schreibt ``docs/MQTT_INBOUND.md`` (U3b): Bausteine ``docs/mqtt-inbound/NN-*.md``, an Markern
+die Topic-Tabellen je Gerätetyp (Feld-Registry + Topic-Registry, Payload aus den MQTT-Lesern) und die Preset-Tabelle
+(Abschnitt «MQTT_INBOUND»). Die Bausteine sind Quelle; die erzeugten Dateien werden nie von Hand geändert.
 
 ======================  =====================================================================  ==========================
 Ebene                   Quelle                                                                 gelesen über
@@ -26,9 +28,9 @@ wäre ein zweiter Wahrheitsort.
 **Aufruf** (setzt ``DATABASE_URL`` auf eine Scratch-DB, BEVOR ``backend`` importiert wird — ``core/database.py`` baut
 die Engine beim Import)::
 
-    scripts/groessen-uebersicht.sh              # docs/UEBERSICHT-GROESSEN.md + docs/SENSOR-REFERENZ.md neu schreiben
+    scripts/groessen-uebersicht.sh              # UEBERSICHT-GROESSEN.md, SENSOR-REFERENZ.md, MQTT_INBOUND.md neu
     scripts/groessen-uebersicht.sh --baseline   # groessen_offen_baseline.txt neu schreiben (nur schrumpfend)
-    scripts/groessen-uebersicht.sh --pruefen    # beide nur vergleichen, nichts schreiben (Exit 1 bei Abweichung)
+    scripts/groessen-uebersicht.sh --pruefen    # alle drei nur vergleichen, nichts schreiben (Exit 1 bei Abweichung)
 
 Danach ``./scripts/sync-help.sh`` (In-App-Hilfe); die Website spiegelt beim Build.
 """
@@ -50,7 +52,7 @@ import unicodedata  # noqa: E402
 from collections import defaultdict  # noqa: E402
 from dataclasses import dataclass, field  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import Callable, Iterable, Mapping, Optional  # noqa: E402
+from typing import Callable, ClassVar, Iterable, Mapping, Optional  # noqa: E402
 from urllib.parse import unquote  # noqa: E402
 
 import yaml  # noqa: E402
@@ -98,6 +100,8 @@ HAND_FELDER: dict[str, frozenset[str]] = {
 }
 #: Dateien, auf die ``abschnitt`` zeigen darf (und deren Anker Wächter (d) prüft).
 ANKER_DATEIEN: tuple[str, ...] = ("BERECHNUNGEN.md", "SENSOR-REFERENZ.md")
+#: Dateien, deren ``<Datei>#<anker>``-Verweise Wächter (d) prüft — dazu ``MQTT_INBOUND.md`` (U3b, erzeugt aus Bausteinen).
+VERWEIS_DATEIEN: tuple[str, ...] = (*ANKER_DATEIEN, "MQTT_INBOUND.md")
 
 EBENEN_TITEL: dict[str, str] = {
     EINGABEFELD: "Eingabefelder",
@@ -707,11 +711,11 @@ def anker_der_datei(pfad: Path) -> dict[str, str]:
     return {s: t for t, s in ueberschriften(pfad.read_text(encoding="utf-8"))}
 
 
-_VERWEIS = re.compile(r"\b(BERECHNUNGEN\.md|SENSOR-REFERENZ\.md)#([^)\s\"'>]+)")
+_VERWEIS = re.compile(r"\b(" + "|".join(re.escape(d) for d in VERWEIS_DATEIEN) + r")#([^)\s\"'>]+)")
 
 
 def anker_verweise(dateien: Iterable[Path]) -> list[tuple[str, int, str, str]]:
-    """``(Datei, Zeile, Ziel-Datei, Anker)`` je Verweis auf BERECHNUNGEN/SENSOR-REFERENZ."""
+    """``(Datei, Zeile, Ziel-Datei, Anker)`` je Verweis auf BERECHNUNGEN/SENSOR-REFERENZ/MQTT_INBOUND."""
     out = []
     for pfad in dateien:
         for nr, zeile in enumerate(pfad.read_text(encoding="utf-8").splitlines(), start=1):
@@ -721,9 +725,10 @@ def anker_verweise(dateien: Iterable[Path]) -> list[tuple[str, int, str, str]]:
 
 
 def verweis_dateien() -> list[Path]:
-    """``docs/*.md``, die Bausteine ``docs/sensor-referenz/*.md`` und ``CHANGELOG.md`` — die Dateien, die Wächter (d)
-    prüft."""
-    return sorted(DOCS.glob("*.md")) + sorted((DOCS / "sensor-referenz").glob("*.md")) + [CHANGELOG]
+    """``docs/*.md``, die Bausteine ``docs/sensor-referenz/*.md`` und ``docs/mqtt-inbound/*.md`` und ``CHANGELOG.md`` —
+    die Dateien, die Wächter (d) prüft."""
+    return (sorted(DOCS.glob("*.md")) + sorted((DOCS / "sensor-referenz").glob("*.md"))
+            + sorted((DOCS / "mqtt-inbound").glob("*.md")) + [CHANGELOG])
 
 
 def tote_anker(verweise: Iterable[tuple[str, int, str, str]], anker: Mapping[str, Mapping[str, str]]) -> list[str]:
@@ -1118,17 +1123,21 @@ def _sr_feld_zelle(f: SrFeld) -> str:
 # ── Marker ──────────────────────────────────────────────────────────────────
 
 
-def marker_lesen(zeile: str) -> Optional[tuple[str, dict[str, str]]]:
+def marker_lesen(zeile: str, erlaubt: Optional[Mapping[str, frozenset[str]]] = None,
+                 pflicht: Optional[Mapping[str, frozenset[str]]] = None) -> Optional[tuple[str, dict[str, str]]]:
     """``(art, parameter)`` einer Marker-Zeile; ``None`` für jede andere Zeile. Eine Zeile, die wie ein Marker
-    beginnt, aber nicht passt, ist ein Fehler (``ValueError``)."""
+    beginnt, aber nicht passt, ist ein Fehler (``ValueError``). ``erlaubt``/``pflicht``: die Marker-Arten des Dokuments
+    (Vorgabe: die der SENSOR-REFERENZ)."""
+    erlaubt = _MARKER_PARAMETER if erlaubt is None else erlaubt
+    pflicht = _MARKER_PFLICHT if pflicht is None else pflicht
     if not zeile.lstrip().startswith(_MARKER_ANFANG):
         return None
     m = _MARKER.match(zeile.strip())
-    if not m or m.group("art") not in _MARKER_PARAMETER:
+    if not m or m.group("art") not in erlaubt:
         raise ValueError(f"unbekannter Marker: {zeile.strip()}")
     param = dict(p.split("=", 1) for p in m.group("param").split())
-    unbekannt = sorted(set(param) - _MARKER_PARAMETER[m.group("art")])
-    fehlend = sorted(_MARKER_PFLICHT[m.group("art")] - set(param))
+    unbekannt = sorted(set(param) - erlaubt[m.group("art")])
+    fehlend = sorted(pflicht[m.group("art")] - set(param))
     if unbekannt or fehlend:
         raise ValueError(f"Marker {zeile.strip()}: unbekannte Parameter {unbekannt}, fehlende {fehlend}")
     return m.group("art"), param
@@ -1215,6 +1224,9 @@ def sr_bausteine_lesen(verzeichnis: Path = SR_BAUSTEINE) -> list[tuple[str, str]
 class _SrLauf:
     """Zustand eines Zusammensetz-Laufs: verbrauchte Zeilen, Kategorie → Unterabschnitt, Fehler."""
 
+    marker_erlaubt: ClassVar[Mapping[str, frozenset[str]]] = _MARKER_PARAMETER
+    marker_pflicht: ClassVar[Mapping[str, frozenset[str]]] = _MARKER_PFLICHT
+
     felder: list[SrFeld]
     sensoren: list
     hand: Mapping
@@ -1259,6 +1271,12 @@ class _SrLauf:
 
 
 def _sr_zusammensetzen(bausteine: list[tuple[str, str]], lauf: _SrLauf) -> str:
+    return _zusammensetzen(bausteine, lauf, SR_KOPFZEILE)
+
+
+def _zusammensetzen(bausteine: list[tuple[str, str]], lauf, kopfzeile: str) -> str:
+    """Bausteine in Reihenfolge; jede Marker-Zeile wird durch ``lauf.tabelle(ort, abschnitt, art, param)`` ersetzt,
+    nach der ersten H1 steht ``kopfzeile``. Fehler sammelt ``lauf.fehler``."""
     teile: list[str] = []
     abschnitt = ""
     kopf_gesetzt = False
@@ -1271,7 +1289,7 @@ def _sr_zusammensetzen(bausteine: list[tuple[str, str]], lauf: _SrLauf) -> str:
             if u:
                 abschnitt = ueberschrift_text(u.group(1) or "")
             try:
-                marker = marker_lesen(zeile)
+                marker = marker_lesen(zeile, lauf.marker_erlaubt, lauf.marker_pflicht)
             except ValueError as e:
                 lauf.fehler.append(f"{name}:{nr}: {e}")
                 continue
@@ -1280,7 +1298,7 @@ def _sr_zusammensetzen(bausteine: list[tuple[str, str]], lauf: _SrLauf) -> str:
                 continue
             teile.append(zeile)
             if not kopf_gesetzt and zeile.startswith("# "):
-                teile += ["", SR_KOPFZEILE]
+                teile += ["", kopfzeile]
                 kopf_gesetzt = True
     if not kopf_gesetzt:
         lauf.fehler.append("kein Baustein beginnt mit einer H1 — die Kopfzeile hat keinen Platz")
@@ -1310,6 +1328,456 @@ def sensor_referenz_text(**quellen) -> str:
     return text
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# MQTT_INBOUND (Stufe U3b): Hand-Bausteine + erzeugte Topic-Tabellen an Markern
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ``docs/MQTT_INBOUND.md`` = die Bausteine ``docs/mqtt-inbound/NN-*.md`` in Namens-Reihenfolge, Marker wie bei der
+# SENSOR-REFERENZ (dieselbe Zusammensetzung, ``_zusammensetzen``). Zwei Marker-Arten:
+#
+#   <!-- erzeugt: mqtt-topics ebene=basis liste=energy|live -->
+#   <!-- erzeugt: mqtt-topics typ=<typ>[,<typ>…] liste=energy|live -->
+#   <!-- erzeugt: mqtt-preset id=<preset-id> -->
+#
+# Zeilen: jeder Eintrag der Feld-Registry (Liste → ``energy``/``live`` nach ``_MQ_LISTE``) außer den Typen in
+# ``SKIP_TYPEN`` (Wechselrichter, ein Satz im Baustein), dazu die drei ``BASIS_ENERGY_TOPICS`` (mit Beschreibung; ein
+# gleichnamiges Basis-Feld der Registry geht in ihrer Zeile auf). Ein Feld ohne Topic steht mit Grund da
+# («kein MQTT-Topic — nur manuell» bei ``nur_manuell``; die Route ``/api/live/mqtt/topics`` filtert genau diese).
+#
+# Totalität (Fehler beim Namen, ``mq_pruefung_und_text``): jede Zeile in genau einem Marker; jeder Marker mit Zeilen;
+# kein ``SKIP_TYPEN``-Typ in einem Marker. **Sollbild:** ``build_expected_topics`` für eine Probe-Anlage mit einem Gerät
+# je Typ und Variante (``_MQ_VARIANTEN``) — jedes Topic, das eedc erwartet, hat eine Zeile mit genau diesem Muster, und
+# jede Zeile mit Topic wird in einer Variante erwartet. So hängt das Muster an der Topic-Registry, nicht an diesem Modul.
+
+MQ_ZIEL = DOCS / "MQTT_INBOUND.md"
+MQ_BAUSTEINE = DOCS / "mqtt-inbound"
+MQ_KOPFZEILE = (
+    f"> **Erzeugt — nicht von Hand ändern —** Bausteine in `docs/mqtt-inbound/`, `{BEFEHL}`. Die Topic-Tabellen je "
+    "Gerätetyp und die Preset-Tabelle kommen aus dem Code (`services/mqtt_topic_registry.py`, Feld-Registry, "
+    "`services/mqtt_presets.py`)."
+)
+MARKER_MQTT = "mqtt-topics"
+MARKER_PRESET = "mqtt-preset"
+_MQ_MARKER_ERLAUBT: dict[str, frozenset[str]] = {
+    MARKER_MQTT: frozenset({"ebene", "typ", "liste"}),
+    MARKER_PRESET: frozenset({"id"}),
+}
+_MQ_MARKER_PFLICHT: dict[str, frozenset[str]] = {
+    MARKER_MQTT: frozenset({"liste"}),
+    MARKER_PRESET: frozenset({"id"}),
+}
+#: Registry-Liste → Topic-Ebene (``build_expected_topics``: Monatsfelder unter ``energy/``, Live-Felder unter ``live/``).
+_MQ_LISTE: dict[str, str] = {
+    "BASIS_FELDER": "energy", "BEDINGTE_BASIS_FELDER": "energy", "OPTIONALE_FELDER": "energy",
+    "INVESTITION_FELDER": "energy", "LIVE_FELDER_INV": "live", "BASIS_LIVE_FELDER": "live",
+    "BASIS_PREIS_FELDER": "live",
+}
+MQ_LISTEN: tuple[str, ...] = ("energy", "live")
+#: Topic-Muster wie ``build_expected_topics`` (``eedc/{aid}_{aslug}/…``, ``inv/{inv.id}_{islug}``) — das Sollbild prüft es.
+MQ_PRAEFIX = "eedc/{anlage_id}_{name}"
+MQ_INV = "inv/{inv_id}_{name}"
+KEIN_TOPIC_MANUELL = "kein MQTT-Topic — nur manuell"
+KEIN_TOPIC_ABSCHLUSS = "kein MQTT-Topic — Monatsabschluss"
+KEIN_TOPIC = "kein MQTT-Topic"
+# Payload. Energie: der Inbound-Cache nimmt jeden Schlüssel an — ob ein Wert zählt, entscheiden die LESER, und die
+# werden hier befragt, nicht abgeschrieben (``mq_energie_leser``): die Zählerreihe (``snapshot/keys.py::
+# _mqtt_key_to_sensor_key`` — Snapshot-Schreiber, Monatsabschluss-Vorschlag, aktueller Monat, Kanal), die «Heute»-Kachel
+# (``mqtt_energy_history_service._KEY_TO_CATEGORY``/``_MQTT_FIELD_TO_LIVE_KEY``) und der Kilometerstand
+# (``betriebsmodus_live._KM_FELD``). Ein erwartetes Topic ohne Leser sagt das (U3b-Halt, Entscheid Master 8.11.2026).
+# Live: ein Mittelwert-Kanal (``katalog._MEAN_LIVE``: Art ``mean`` mit ``mittelwert_kanal``) wird als 5-Minuten-/
+# Stundenmittel mitgeschrieben (``mqtt_live_history_service.mittel_zeilen``), alles andere ist Anzeige; Zustände mit
+# Kanal ``mean`` schreibt eedc als Anteil je Wert mit.
+PAYLOAD_ZAEHLER = "Zählerstand (kumuliert)"
+PAYLOAD_OHNE_LESER = "wird angenommen, aber von keiner Sicht gelesen"
+PAYLOAD_OHNE_LESER_ABSCHLUSS = " — der Wert zählt heute nur, wenn er im Monatsabschluss steht"
+PAYLOAD_MITTEL = "Zahl (Momentanwert) — 5-Minuten- und Stundenmittel"
+PAYLOAD_ANZEIGE = "Zahl (Momentanwert) — nur Anzeige"
+#: Probe-Varianten des Sollbilds über ``{}`` hinaus — ein Live-Feld mit harter Bedingung erscheint nur, wenn eine
+#: Variante sie erfüllt. Ein neues solches Feld meldet das Sollbild beim Namen («in keiner Probe-Variante erwartet»).
+_MQ_VARIANTEN: dict[str, list[dict]] = {
+    "waermepumpe": [{"wp_art": "luft_luft", "innengeraete": [{"id": 7, "bezeichnung": "Innengerät"}]}],
+}
+_MQ_PROBE_ANLAGE = ("1", "Haus")
+_MQ_PROBE_GERAET = "geraet"
+
+
+@dataclass(frozen=True)
+class MqZeile:
+    """Eine Zeile einer MQTT-Topic-Tabelle: ein Registry-Eintrag (oder ein Basis-Energy-Topic) mit Topic oder Grund."""
+
+    typ: str
+    art: str
+    feld: str
+    liste: str
+    label: str
+    einheit: str
+    feld_zelle: str
+    topic: Optional[str]
+    ohne_topic: str
+    payload: str
+    bedingung: str
+    beschreibung: str = ""
+    quelle: str = ""
+    je_innengeraet: bool = False
+
+    @property
+    def name(self) -> str:
+        return f"{self.typ}:{self.feld}" + (f" ({self.art})" if self.art else "") + f" [{self.quelle}, {self.liste}]"
+
+
+def mq_topic(typ: str, liste: str, feld: str) -> str:
+    return f"{MQ_PRAEFIX}/{liste}" + ("" if typ == "basis" else f"/{MQ_INV}") + f"/{feld}"
+
+
+def _skip_typen() -> frozenset[str]:
+    from backend.services.mqtt_topic_registry import SKIP_TYPEN
+
+    return frozenset(SKIP_TYPEN)
+
+
+def _basis_energy_topics() -> list[tuple[str, str, str, str]]:
+    from backend.services.mqtt_topic_registry import BASIS_ENERGY_TOPICS
+
+    return list(BASIS_ENERGY_TOPICS)
+
+
+def _werte_text(gruppen: Iterable[Mapping]) -> str:
+    """Werte-Tabelle eines Zustands: das Kanon-Wort vorn, die übrigen Werte derselben Gruppe in Klammern."""
+    teile = []
+    for g in gruppen:
+        werte = list(g["werte"])
+        if g["kanon"] in werte:
+            andere = ", ".join(f"`{w}`" for w in werte if w != g["kanon"])
+            teile.append(f"`{g['kanon']}`" + (f" (auch {andere})" if andere else ""))
+        else:
+            teile.append(f"als {str(g['label']).lower()} gezählt: " + ", ".join(f"`{w}`" for w in werte))
+    return " · ".join(teile)
+
+
+def _zustand_payload(f: SrFeld) -> str:
+    from backend.core import zustands_kanon as zk
+    from backend.core.betriebsmodus import MODUS_FELD_KEY, betriebsmodus_werte_je_betriebsart
+
+    mitschrift = f.kanal is not None and f.kanal.art == "mean"
+    if f.eintrag.get("text"):
+        return f"Text (getrimmt, höchstens {zk.TEXT_MAX_ZEICHEN} Zeichen) — nur Anzeige"
+    if f.feld == MODUS_FELD_KEY:
+        werte = _werte_text(betriebsmodus_werte_je_betriebsart(codes=True))
+        weg = "Betriebsart-Mitschrift (Anteil der Stunde je Betriebsart)" if mitschrift else "nur Anzeige"
+    else:
+        werte = _werte_text(zk.werte_je_kanon(f.feld, codes=True))
+        weg = "Zustands-Mitschrift (Anteil der Stunde je Wert)" if mitschrift else "nur Anzeige"
+    return f"Zustand: {werte} — {weg}" if werte else ""
+
+
+def mq_energie_leser(typ: str, feld: str) -> list[str]:
+    """Die Leser, die den Wert eines Energie-Topics verarbeiten — aus den Lesern selbst, nicht aus einer Liste."""
+    from backend.services.betriebsmodus_live import _KM_FELD
+    from backend.services.mqtt_energy_history_service import _KEY_TO_CATEGORY, _MQTT_FIELD_TO_LIVE_KEY
+    from backend.services.snapshot.keys import _mqtt_key_to_sensor_key
+
+    leser = []
+    if _mqtt_key_to_sensor_key(feld if typ == "basis" else f"inv/1/{feld}"):
+        leser.append("Zählerreihe")
+    if (typ == "basis" and feld in _KEY_TO_CATEGORY) or typ in _MQTT_FIELD_TO_LIVE_KEY.get(feld, {}):
+        leser.append("Heute")
+    if typ == "e-auto" and feld == _KM_FELD:
+        leser.append("Kilometerstand")
+    return leser
+
+
+def _im_monatsabschluss(typ: str, art: str, feld: str) -> bool:
+    """Steht das Feld im Monatsabschluss-Formular? Dieselbe Funktion wie ``monatsabschluss/views.py`` (Feldliste)."""
+    from backend.core.field_definitions import get_felder_fuer_investition
+
+    parameter = {"kategorie": art} if art else {}
+    return any(x.get("feld") == feld for x in get_felder_fuer_investition(typ, parameter, belegte_felder={feld}))
+
+
+def mq_energie_payload(typ: str, art: str, feld: str) -> str:
+    if mq_energie_leser(typ, feld):
+        return PAYLOAD_ZAEHLER
+    return PAYLOAD_OHNE_LESER + (PAYLOAD_OHNE_LESER_ABSCHLUSS if typ != "basis" and _im_monatsabschluss(typ, art, feld)
+                                 else "")
+
+
+def mq_payload(f: SrFeld, liste: str) -> str:
+    """Was eedc auf dem Topic erwartet und was es daraus macht — aus den Lesern, Registry-Merkmalen und Kanal-Katalog.
+    Leer heißt: nicht aus dem Code lesbar (die Prüfung nennt die Zeile)."""
+    z = f.kanal
+    if liste == "energy":
+        return mq_energie_payload(f.typ, f.art, f.feld)
+    if f.eintrag.get("zustand"):
+        return _zustand_payload(f)
+    return PAYLOAD_MITTEL if z is not None and z.art == "mean" and z.mittelwert_kanal else PAYLOAD_ANZEIGE
+
+
+def _mq_ohne_topic(f: SrFeld) -> str:
+    if f.eintrag.get("nur_manuell"):
+        return KEIN_TOPIC_MANUELL
+    if f.kanal is not None and f.kanal.ausnahme == "abschluss_ohne_sensor":
+        return KEIN_TOPIC_ABSCHLUSS
+    return KEIN_TOPIC
+
+
+def _mq_hat_topic(f: SrFeld) -> bool:
+    """Wie ``build_expected_topics``: Basis nur die Live-Felder (Energie: ``BASIS_ENERGY_TOPICS``), je Gerät jedes
+    Energie- und Live-Feld; ``nur_manuell`` filtert die Route ``/api/live/mqtt/topics`` heraus."""
+    if f.typ == "basis":
+        return f.liste == "BASIS_LIVE_FELDER"
+    return not f.eintrag.get("nur_manuell")
+
+
+def _mq_zeile(f: SrFeld) -> MqZeile:
+    liste = _MQ_LISTE[f.liste]
+    topic = mq_topic(f.typ, liste, f.feld) if _mq_hat_topic(f) else None
+    return MqZeile(
+        typ=f.typ, art=f.art, feld=f.feld, liste=liste, label=_sr_label(f), einheit=_sr_einheit(f),
+        feld_zelle=_sr_feld_zelle(f), topic=topic, ohne_topic="" if topic else _mq_ohne_topic(f),
+        payload=mq_payload(f, liste) if topic else "", bedingung=_bedingung_text(f.eintrag), quelle=f.liste,
+        je_innengeraet=bool(f.eintrag.get("je_innengeraet")),
+    )
+
+
+def mqtt_zeilen(felder: Optional[list[SrFeld]] = None,
+                basis_energy: Optional[list[tuple[str, str, str, str]]] = None) -> list[MqZeile]:
+    """Alle Zeilen: zuerst die Basis-Energy-Topics, dann die Registry in Quellreihenfolge (ohne ``SKIP_TYPEN``)."""
+    felder = sr_eingabefelder() if felder is None else felder
+    basis_energy = _basis_energy_topics() if basis_energy is None else basis_energy
+    skip = _skip_typen()
+    basis_reg = {f.feld: f for f in felder if f.typ == "basis" and _MQ_LISTE[f.liste] == "energy"}
+    zeilen = []
+    for key, label, einheit, beschreibung in basis_energy:
+        f = basis_reg.get(key)
+        zeilen.append(MqZeile(
+            typ="basis", art="", feld=key, liste="energy", label=label, einheit=einheit, feld_zelle=f"`{key}`",
+            topic=mq_topic("basis", "energy", key), ohne_topic="", payload=mq_energie_payload("basis", "", key),
+            bedingung=_bedingung_text(f.eintrag) if f else "", beschreibung=beschreibung, quelle="BASIS_ENERGY_TOPICS",
+        ))
+    energy_keys = {key for key, *_rest in basis_energy}
+    for f in felder:
+        if f.typ in skip or (f.typ == "basis" and _MQ_LISTE[f.liste] == "energy" and f.feld in energy_keys):
+            continue
+        zeilen.append(_mq_zeile(f))
+    return zeilen
+
+
+def mq_zeilen_des_markers(zeilen: Iterable[MqZeile], param: Mapping[str, str]) -> list[MqZeile]:
+    """Die Zeilen eines Topic-Markers: Typen in Marker-Reihenfolge, je Typ in Quellreihenfolge. ``ValueError`` bei einem
+    falschen Marker (``ebene=``/``typ=`` beide oder keiner, unbekannte Liste, ``SKIP_TYPEN``-Typ)."""
+    if ("ebene" in param) == ("typ" in param):
+        raise ValueError("genau einer von `ebene=basis` oder `typ=` erwartet")
+    if param["liste"] not in MQ_LISTEN:
+        raise ValueError(f"`liste={param['liste']}` — erlaubt: {', '.join(MQ_LISTEN)}")
+    if "ebene" in param and param["ebene"] != "basis":
+        raise ValueError(f"`ebene={param['ebene']}` — erlaubt: basis")
+    typen = ["basis"] if "ebene" in param else param["typ"].split(",")
+    ohne = sorted(set(typen) & _skip_typen())
+    if ohne:
+        raise ValueError(f"Typ {ohne} hat keine Topics (SKIP_TYPEN) — ein Satz im Baustein statt eines Markers")
+    auswahl = [z for z in zeilen if z.typ in typen and z.liste == param["liste"]]
+    return sorted(auswahl, key=lambda z: typen.index(z.typ))
+
+
+def mq_tabelle(zeilen: list[MqZeile]) -> str:
+    """Feld · Label · Einheit · Topic · Payload · Bedingung — mit «Typ» bei mehr als einem Typ, «Art» bei den Arten
+    von `sonstiges`, «Beschreibung» bei den Basis-Energy-Topics."""
+    mit_typ = len({z.typ for z in zeilen}) > 1
+    mit_art = any(z.art for z in zeilen)
+    mit_beschreibung = any(z.beschreibung for z in zeilen)
+    kopf = (["Typ"] if mit_typ else []) + (["Art"] if mit_art else []) + [
+        "Feld", "Label", "Einheit", "Topic", "Payload", "Bedingung"] + (["Beschreibung"] if mit_beschreibung else [])
+    out = ["| " + " | ".join(kopf) + " |", "|" + "---|" * len(kopf)]
+    for z in zeilen:
+        spalten = ([f"`{z.typ}`"] if mit_typ else []) + ([f"`{z.art}`"] if mit_art else []) + [
+            z.feld_zelle, z.label, z.einheit, f"`{z.topic}`" if z.topic else z.ohne_topic, z.payload, z.bedingung,
+        ] + ([z.beschreibung] if mit_beschreibung else [])
+        out.append("| " + " | ".join(zelle(s) for s in spalten) + " |")
+    return "\n".join(out)
+
+
+def _faktor_text(faktor: float) -> str:
+    """``1`` · ``0,001`` · ``1/60`` — ein Bruch, wo der Nenner keine Zehnerpotenz ist."""
+    from fractions import Fraction
+
+    if float(faktor).is_integer():
+        return str(int(faktor))
+    bruch = Fraction(faktor).limit_denominator(1000)
+    if abs(float(bruch) - faktor) < 1e-12 and bruch.denominator not in (10, 100, 1000):
+        return f"{bruch.numerator}/{bruch.denominator}"
+    return f"{faktor:g}".replace(".", ",")
+
+
+def _umrechnung_text(m) -> str:
+    """Faktor, Offset, Vorzeichen und Payload-Form eines Preset-Mappings; an einem Zustandsfeld reicht das Gateway den
+    Text weiter (``mqtt_gateway_service._als_text``) — Faktor und Offset gelten dort nicht."""
+    from backend.core.field_definitions import ist_zustand_feld
+
+    if ist_zustand_feld(m.ziel_key.rsplit("/", 1)[1]):
+        teile = ["— (Text)"]
+    else:
+        teile = [_faktor_text(m.faktor)] + ([f"Offset {m.offset:g}"] if m.offset else [])
+        teile += ["invertiert"] if m.invertieren else []
+    if m.payload_typ != "plain":
+        pfad = m.json_pfad if m.json_pfad is not None else m.array_index
+        teile.append(f"`{m.payload_typ}`" + (f" `{pfad}`" if pfad is not None else ""))
+    return " · ".join(teile)
+
+
+def mq_preset_tabelle(preset) -> str:
+    """Quell-Topic · Ziel in eedc · Umrechnung · Beschreibung — je Mapping des Presets eine Zeile."""
+    kopf = ("Quell-Topic (Vorlage)", "Ziel in eedc", "Umrechnung", "Beschreibung (aus dem Preset)")
+    out = ["| " + " | ".join(kopf) + " |", "|" + "---|" * len(kopf)]
+    for m in preset.mappings:
+        spalten = (f"`{m.topic_template}`", f"`{m.ziel_key}`", _umrechnung_text(m), m.beschreibung)
+        out.append("| " + " | ".join(zelle(s) for s in spalten) + " |")
+    return "\n".join(out)
+
+
+def _preset_lesen(preset_id: str):
+    from backend.services.mqtt_presets import get_preset
+
+    return get_preset(preset_id)
+
+
+@dataclass
+class _MqLauf:
+    """Zustand eines Zusammensetz-Laufs von MQTT_INBOUND: verbrauchte Zeilen, Fehler."""
+
+    marker_erlaubt: ClassVar[Mapping[str, frozenset[str]]] = _MQ_MARKER_ERLAUBT
+    marker_pflicht: ClassVar[Mapping[str, frozenset[str]]] = _MQ_MARKER_PFLICHT
+
+    zeilen: list[MqZeile]
+    preset: Callable[[str], object]
+    zeile_marker: dict[int, list[str]] = field(default_factory=lambda: defaultdict(list))
+    fehler: list[str] = field(default_factory=list)
+
+    def tabelle(self, ort: str, _abschnitt: str, art: str, param: Mapping[str, str]) -> str:
+        if art == MARKER_PRESET:
+            preset = self.preset(param["id"])
+            if preset is None or not getattr(preset, "mappings", None):
+                self.fehler.append(f"{ort}: Preset `{param['id']}` unbekannt oder ohne Mappings")
+                return ""
+            return mq_preset_tabelle(preset)
+        try:
+            zeilen = mq_zeilen_des_markers(self.zeilen, param)
+        except ValueError as e:
+            self.fehler.append(f"{ort}: {e}")
+            return ""
+        for z in zeilen:
+            self.zeile_marker[id(z)].append(ort)
+        if not zeilen:
+            self.fehler.append(f"{ort}: Marker ohne Zeilen ({art} {dict(param)})")
+        return mq_tabelle(zeilen) if zeilen else ""
+
+    def totalitaet(self) -> None:
+        for z in self.zeilen:
+            orte = self.zeile_marker.get(id(z), [])
+            if len(orte) != 1:
+                self.fehler.append(f"Topic-Zeile {z.name} steht in {len(orte)} Markern {orte} — Soll: genau einem")
+            if z.topic and not z.payload:
+                self.fehler.append(f"Topic-Zeile {z.name}: Payload nicht aus dem Code lesbar (Zustand ohne Werte-Tabelle?)")
+
+
+def mq_erwartete_topics() -> list[dict]:
+    """``build_expected_topics`` für die Probe-Anlage: ein Gerät je Registry-Typ und Variante (``{}``, die Varianten aus
+    ``_MQ_VARIANTEN``, bei `sonstiges` jede Kategorie). Kein DB-Zugriff (Geräte werden übergeben)."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from backend.core.field_definitions import INVESTITION_FELDER, LIVE_FELDER_INV
+    from backend.services.mqtt_topic_registry import build_expected_topics
+
+    anlage = SimpleNamespace(id=int(_MQ_PROBE_ANLAGE[0]), anlagenname=_MQ_PROBE_ANLAGE[1], sensor_mapping={})
+    geraete = []
+    for typ in sorted(set(INVESTITION_FELDER) | set(LIVE_FELDER_INV)):
+        varianten = [{}, *_MQ_VARIANTEN.get(typ, [])]
+        if isinstance(INVESTITION_FELDER.get(typ), dict):
+            varianten += [{"kategorie": k} for k in INVESTITION_FELDER[typ]]
+        for parameter in varianten:
+            geraete.append(SimpleNamespace(id=100 + len(geraete), typ=typ, bezeichnung=_MQ_PROBE_GERAET,
+                                           parameter=parameter, anlage_id=anlage.id))
+    return asyncio.run(build_expected_topics(None, anlage, geraete))
+
+
+def _mq_muster(topic: str, feld: str) -> str:
+    """Probe-Topic → Muster der Tabelle (IDs und Namen als Platzhalter, Innengeräte-Suffix auf das Basisfeld)."""
+    aid, aname = _MQ_PROBE_ANLAGE
+    muster = re.sub(rf"^eedc/{aid}_{aname}/", f"{MQ_PRAEFIX}/", topic)
+    muster = re.sub(rf"/inv/\d+_{_MQ_PROBE_GERAET}/", f"/{MQ_INV}/", muster)
+    return muster.rsplit("/", 1)[0] + f"/{feld}"
+
+
+def mq_sollbild_fehler(zeilen: list[MqZeile], topics: list[dict]) -> list[str]:
+    """Erwartete Topics (``build_expected_topics``) gegen die Zeilen — beide Richtungen, beim Namen."""
+    from backend.core.field_definitions import basis_feld_key
+
+    je_schluessel: dict[tuple[str, str, str], list[MqZeile]] = defaultdict(list)
+    for z in zeilen:
+        je_schluessel[(z.typ, z.liste, z.feld)].append(z)
+    fehler, erwartet = [], set()
+    for t in topics:
+        if t.get("abschnitt") == "themen":
+            continue  # Themen: je Instanz aus dem Store, Hand-Prosa (Baustein «Themen»)
+        feld = basis_feld_key(t["feld"])
+        schl = (t["typ"], t["kategorie"], feld)
+        muster = _mq_muster(t["topic"], feld)
+        kandidaten = je_schluessel.get(schl, [])
+        erwartet.add(schl)
+        meldung = _mq_topic_meldung(t, feld, muster, kandidaten)
+        if meldung:
+            fehler.append(meldung)
+    for z in zeilen:
+        if z.topic and (z.typ, z.liste, z.feld) not in erwartet:
+            fehler.append(f"Topic-Zeile {z.name}: die Tabelle nennt `{z.topic}`, die Registry erwartet es in keiner "
+                          "Probe-Variante (Bedingung? `_MQ_VARIANTEN` ergänzen)")
+    return fehler
+
+
+def _mq_topic_meldung(t: Mapping, feld: str, muster: str, kandidaten: list[MqZeile]) -> Optional[str]:
+    if not kandidaten:
+        return f"Topic `{muster}` ({t['typ']}): die Registry erwartet es, keine Tabellen-Zeile"
+    if t.get("nur_manuell"):
+        falsch = [z.name for z in kandidaten if z.topic]
+        return f"`{feld}` ({t['typ']}) ist nur_manuell, die Tabelle nennt ein Topic: {falsch}" if falsch else None
+    if t["feld"] != feld and not all(z.je_innengeraet for z in kandidaten):
+        return f"Topic `{t['topic']}`: Innengeräte-Kopie, die Zeile {kandidaten[0].name} sagt «je Innengerät» nicht"
+    if not any(z.topic == muster for z in kandidaten):
+        return f"Topic `{muster}` ({t['typ']}): die Tabelle nennt {[z.topic or z.ohne_topic for z in kandidaten]}"
+    return None
+
+
+def mq_bausteine_lesen(verzeichnis: Path = MQ_BAUSTEINE) -> list[tuple[str, str]]:
+    return [(p.name, p.read_text(encoding="utf-8")) for p in sorted(verzeichnis.glob("*.md"))]
+
+
+def mq_pruefung_und_text(bausteine: Optional[list[tuple[str, str]]] = None, zeilen: Optional[list[MqZeile]] = None,
+                         topics: Optional[list[dict]] = None,
+                         preset: Optional[Callable[[str], object]] = None) -> tuple[list[str], str]:
+    """``(Fehler, Text)`` von MQTT_INBOUND; jede Quelle austauschbar (Gegenproben des Wächters)."""
+    lauf = _MqLauf(zeilen=mqtt_zeilen() if zeilen is None else zeilen,
+                   preset=_preset_lesen if preset is None else preset)
+    text = _zusammensetzen(mq_bausteine_lesen() if bausteine is None else bausteine, lauf, MQ_KOPFZEILE)
+    lauf.totalitaet()
+    lauf.fehler += mq_sollbild_fehler(lauf.zeilen, mq_erwartete_topics() if topics is None else topics)
+    return lauf.fehler, text
+
+
+def mqtt_inbound_text(**quellen) -> str:
+    """MQTT_INBOUND, wie es aus Bausteinen, Topic-Registry, Feld-Registry und Presets entsteht; bricht bei Fehlern ab."""
+    fehler, text = mq_pruefung_und_text(**quellen)
+    if fehler:
+        raise ValueError("MQTT_INBOUND nicht erzeugbar:\n  " + "\n  ".join(fehler))
+    return text
+
+
+def _anker_mqtt_inbound() -> dict[str, str]:
+    """Anker von MQTT_INBOUND aus den Bausteinen (Marker und Kopfzeile tragen keine Überschrift)."""
+    if MQ_BAUSTEINE.is_dir():
+        return {s: t for t, s in ueberschriften("\n".join(text for _n, text in mq_bausteine_lesen()))}
+    return anker_der_datei(MQ_ZIEL) if MQ_ZIEL.exists() else {}
+
+
 def _anker_sensor_referenz() -> dict[str, str]:
     """Anker der SENSOR-REFERENZ aus den Bausteinen (Marker und Kopfzeile tragen keine Überschrift) — so hängt der
     Erzeuger nicht an einer veralteten erzeugten Datei."""
@@ -1322,6 +1790,7 @@ def anker_aller_zieldateien() -> dict[str, dict[str, str]]:
     anker = {d: anker_der_datei(DOCS / d) for d in ANKER_DATEIEN if (DOCS / d).exists()}
     if DOCS.is_dir():
         anker["SENSOR-REFERENZ.md"] = _anker_sensor_referenz()
+        anker["MQTT_INBOUND.md"] = _anker_mqtt_inbound()
     return anker
 
 
@@ -1337,9 +1806,10 @@ def erzeugen(quellen: Optional[Quellen] = None, hand: Optional[Mapping] = None) 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Übersicht der Größen und SENSOR-REFERENZ erzeugen (docs/UEBERSICHT-GROESSEN.md, docs/SENSOR-REFERENZ.md).")
+        description="Übersicht der Größen, SENSOR-REFERENZ und MQTT_INBOUND erzeugen (docs/UEBERSICHT-GROESSEN.md, "
+                    "docs/SENSOR-REFERENZ.md, docs/MQTT_INBOUND.md).")
     gruppe = parser.add_mutually_exclusive_group()
-    gruppe.add_argument("--schreiben", action="store_true", help="beide Dateien schreiben (Vorgabe)")
+    gruppe.add_argument("--schreiben", action="store_true", help="alle drei Dateien schreiben (Vorgabe)")
     gruppe.add_argument("--baseline", action="store_true", help="groessen_offen_baseline.txt neu schreiben")
     gruppe.add_argument("--pruefen", action="store_true", help="nur vergleichen; Exit 1 bei Abweichung")
     args = parser.parse_args(argv)
@@ -1347,7 +1817,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         BASELINE.write_text(baseline_text(offene_schluessel(hand_lesen(), alle_zeilen())), encoding="utf-8")
         print(f"  {BASELINE.relative_to(REPO)} geschrieben")
         return 0
-    dateien = ((ZIEL, erzeugen()), (SR_ZIEL, sensor_referenz_text()))
+    dateien = ((ZIEL, erzeugen()), (SR_ZIEL, sensor_referenz_text()), (MQ_ZIEL, mqtt_inbound_text()))
     if args.pruefen:
         veraltet = 0
         for ziel, text in dateien:

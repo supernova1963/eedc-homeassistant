@@ -59,6 +59,7 @@ export default defineConfig({
 						{ label: 'Architektur', slug: 'architektur' },
 						{ label: 'Berechnungsreferenz', slug: 'berechnungen' },
 						{ label: 'Sensor-Referenz', slug: 'sensor-referenz' },
+						{ label: 'MQTT-Inbound', slug: 'mqtt-inbound' },
 						{ label: 'Übersicht der Größen', slug: 'uebersicht-groessen' },
 						{ label: 'Entwicklung', slug: 'entwicklung' },
 						{ label: 'Dev-Machine Setup', slug: 'setup-devmachine' },
