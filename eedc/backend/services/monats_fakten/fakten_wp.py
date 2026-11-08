@@ -21,8 +21,14 @@ class WpGeraetFakten:
     ``strom_kwh``, kein Summand.
     """
 
+    #: Strom dieses Geräts im Monat in kWh nach K1/K3 (``wp_strom.wp_strom_aufteilung``) — derselbe Beitrag, den
+    #: ``WpFakten.strom_kwh`` summiert (``roh._falte_wp``).
     strom_kwh: float = 0.0
+    #: Wärme dieses Geräts im Monat in kWh nach D1 (``waermepumpe_kennzahl.waerme_gesamt_kwh``: Gesamtwärme, sonst
+    #: Heizwärme + Warmwasser-Wärme) — derselbe Beitrag, den ``WpFakten.waerme_kwh`` summiert.
     waerme_kwh: float = 0.0
+    #: Strom im Kühlbetrieb dieses Geräts in kWh, eine Teilmenge von ``strom_kwh`` aus der Betriebsart-Weiche
+    #: (``betriebsart_gemessen.modus_strom_zeile``: gemessener Zähler, sonst aus dem Modus-Signal abgeleitet).
     strom_kuehlen_kwh: float = 0.0
 
 
@@ -30,7 +36,11 @@ class WpGeraetFakten:
 class WpFakten:
     """Wärmepumpe des Monats — kanonisch gelesen (D1, ``imd_typ_beitrag``)."""
 
+    #: Strom der Wärmepumpen im Monat in kWh: Σ der Geräte-Mengen nach K1/K3 (``wp_strom.wp_strom_aufteilung``: der
+    #: Gesamtzähler, wenn gepflegt, sonst Strom Heizen + Strom Warmwasser und die gemessenen Teilmengen).
     strom_kwh: float = 0.0
+    #: Wärme der Wärmepumpen im Monat in kWh: Σ je Gerät nach D1 (``waermepumpe_kennzahl.waerme_gesamt_kwh``:
+    #: Gesamtwärme > 0, sonst Heizwärme + Warmwasser-Wärme).
     waerme_kwh: float = 0.0
     #: **Teilmengen** von ``strom_kwh``/``waerme_kwh`` — nur die Geräte, die laut
     #: Pflege eine Heizung **ersetzt** haben (N-256). Sie sind die Grundmenge
@@ -50,6 +60,8 @@ class WpFakten:
     #: wie bei ``modus_strom_*`` weiter unten. Die Anlage verbraucht und liefert
     #: weiterhin die vollen Mengen; nur der Vergleich hat eine kleinere Basis.
     strom_mit_ersatz_kwh: float = 0.0
+    #: Wärme nur der Geräte, die laut Pflege eine Heizung ersetzt haben, in kWh (N-256, ``roh._falte_wp``) — Teilmenge
+    #: von ``waerme_kwh``, Grundmenge des fossilen Vergleichs.
     waerme_mit_ersatz_kwh: float = 0.0
     #: ⭐ **N-673 (Fachentscheid Master Wärme/Klima, 11.10.2026): eine ungemessene Aufteilung ist keine Angabe.**
     #: ``None``, wenn kein aktives Gerät des Monats die Achse misst (``heizung_gemessen``/``warmwasser_gemessen``) —
@@ -57,8 +69,14 @@ class WpFakten:
     #: gemessene 0 ist 0). Bis dahin stand hier 0.0, und Tabelle, Übersicht, Zeitreihe und Jahr-Verlauf zeigten „0 kWh"
     #: neben Cockpit → Monat mit „—". Wer summiert, liest ``or 0.0`` und fragt die Marke, ob die Summe eine Angabe ist.
     heizung_kwh: Optional[float] = None
+    #: Warmwasser-Wärme der Wärmepumpen in kWh, Σ je Gerät über ``get_wp_warmwasser_kwh`` (nur an Geräten mit
+    #: Warmwasserkreis, N-379); ``None``, wenn kein Gerät sie misst und die Summe 0 ist (N-673, ``bau._wp_fakten``).
     warmwasser_kwh: Optional[float] = None
+    #: Σ des Felds Strom Heizen (``strom_heizen_kwh``) der WP-Zeilen in kWh, wie gespeichert (``roh._falte_wp``); ob es
+    #: gemessen ist, sagt ``strom_heizen_gemessen`` (N-479).
     strom_heizen_kwh: float = 0.0
+    #: Σ des Felds Strom Warmwasser (``strom_warmwasser_kwh``) der WP-Zeilen in kWh, wie gespeichert
+    #: (``roh._falte_wp``); ob es gemessen ist, sagt ``strom_warmwasser_gemessen`` (N-479).
     strom_warmwasser_kwh: float = 0.0
     #: P-433-3 S2 (#432): Σ gemessener **Heizstab-Strom** der aktiven Geräte (Feld ``heizstab_strom_kwh``) —
     #: eine **Teilmenge** von ``strom_kwh`` (Konvention H-B: der Heizstab hängt hinter dem WP-Zähler), nie
@@ -98,10 +116,13 @@ class WpFakten:
     #: **Teilmengen** von ``strom_kwh``, keine Summanden — nie addieren
     #: (Präzedenz: ``ladung_pv_kwh`` bei der Wallbox, Konzept §3.1).
     modus_strom_heizen_kwh: float = 0.0
+    #: Strom im Kühlbetrieb in kWh, Σ der Geräte aus der Betriebsart-Weiche (``betriebsart_gemessen.modus_strom_zeile``:
+    #: der gemessene Betriebsart-Zähler, sonst der aus dem Modus-Signal abgeleitete Split; F-56).
     modus_strom_kuehlen_kwh: float = 0.0
-    #: N-336 (27.08.): Nur aus dem **abgeleiteten** Split — für Warmwasser gibt
-    #: es keinen Betriebsart-Zähler (Begründung bei ``MESSBARE_MODI``). Die
-    #: Gegenrichtung zu ``modus_strom_lueften_kwh`` darunter.
+    #: Strom im Warmwasserbetrieb in kWh, Σ der Geräte (``betriebsart_gemessen.modus_strom_zeile``): im abgeleiteten
+    #: Split aus dem Modus-Signal (N-336), im gemessenen Zweig aus dem Summanden ``strom_warmwasser_kwh`` — nur mit dem
+    #: Kennzeichen ``getrennte_strommessung`` des Geräts (N-766). Einen Betriebsart-Zähler für Warmwasser gibt es nicht
+    #: (Begründung bei ``MESSBARE_MODI``).
     #: ⛔ Zählt **nicht** in {@link modus_strom_funktionsfremd_kwh}: Warmwasser
     #: hat eine bewertete Nutzenergie, die im Zähler desselben Quotienten steht.
     modus_strom_warmwasser_kwh: float = 0.0
@@ -112,6 +133,8 @@ class WpFakten:
     #: Vorher fielen sie stumm unter „nicht aufgeteilt", obwohl die Registry
     #: die Felder anbietet.
     modus_strom_lueften_kwh: float = 0.0
+    #: Strom im Entfeuchtungsbetrieb in kWh, Σ der gemessenen Betriebsart-Zähler (``modus_strom_zeile``, E4) — der
+    #: abgeleitete Split kennt diese Betriebsart nicht und lässt sie bei 0.
     modus_strom_entfeuchten_kwh: float = 0.0
     #: **SOLL-§9-E7 / Ergänzung (Option A, 12.09.2026): der Teil des
     #: funktionsfremden Stroms, der vom Nenner abgezogen werden DARF.**
@@ -140,6 +163,8 @@ class WpFakten:
     #: ``modus_strom_lueften_kwh``/``…_entfeuchten_kwh``, nie als Quotient.
     #: Bis zum 14.09.2026 hatte kein Leser diese zwei Registry-Felder.
     nutzenergie_lueften_kwh: float = 0.0
+    #: Abgegebene Nutzenergie im Entfeuchtungsbetrieb in kWh, Σ der Geräte, nur gemessen
+    #: (``betriebsart_gemessen.nutzenergie_ohne_kennzahl_kwh``: Gerätefeld, sonst Σ Innengeräte; R-C/N-398).
     nutzenergie_entfeuchten_kwh: float = 0.0
     #: Stunden mit gültigem Modus-Signal — das Qualitätsmaß neben den Mengen.
     modus_abdeckung_h: float = 0.0

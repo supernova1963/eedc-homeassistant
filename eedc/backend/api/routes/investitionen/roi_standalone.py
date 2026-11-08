@@ -40,6 +40,7 @@ from backend.core.calculations import (
     berechne_waermepumpe_einsparung,
     berechne_roi,
 )
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_v2h_ersparnis
 from backend.core.berechnungen.kapitalrechnung import (
     annahme_dauer_text,
     jahres_ersparnis_euro,
@@ -345,7 +346,15 @@ async def _eauto_bewertung(ctx: _StandaloneKontext, params: dict) -> tuple[float
     benzin_verbrauch = param_zahl(params, PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"], PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"])
     nutzt_v2h = params.get(PARAM_E_AUTO["V2H_FAEHIG"], PARAM_E_AUTO_DEFAULTS["v2h_faehig"])
     v2h_entladung = param_zahl(params, PARAM_E_AUTO["V2H_ENTLADUNG_KWH_JAHR"], 0)
-    v2h_preis = param_zahl(params, PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"], ctx.strompreis_cent)
+    # N-781: ohne Override bewertet der Spread Bezug − Einspeisevergütung die V2H-Entladung (Layer, wie Hub und Aussichten);
+    # ein gepflegter `v2h_entlade_preis_cent` gilt wie gepflegt.
+    v2h_preis = param_zahl(params, PARAM_E_AUTO["V2H_ENTLADE_PREIS_CENT"])
+    if v2h_preis is None:
+        v2h_preis = berechne_v2h_ersparnis(
+            v2h_entladung_kwh=v2h_entladung,
+            bezug_preis_cent=ctx.strompreis_cent,
+            einspeise_verg_cent=ctx.einspeiseverguetung_cent,
+        ).spread_cent_kwh
 
     # Benzinpreis-Auflösung: Slider-Override > per-Inv-Param > letzter
     # Monatsdaten-Preis (EU OB) > Default 1,65. Korrigiert die v3.25.0-

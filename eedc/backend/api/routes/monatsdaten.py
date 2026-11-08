@@ -438,9 +438,10 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # `netto_ertrag_euro` abgezogen; einzeln hier, damit *Auswertungen → Finanzen* ihn im Rechenweg nennen kann.
     dienstliche_ladekosten_euro: float = 0.0
     netzbezug_kosten_euro: Optional[float]
-    # Einspeise-Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen (netto) − USt — die Stufe 1 der
-    # Ergebnis-Leiter, dieselbe Zahl wie die Cockpit-Kachel des Monats (GLOSSAR „Netto-Ertrag (PV)"). Bis 03.10.2026
-    # ohne die Sonstigen Positionen; die Finanz-Sicht schlug sie selbst auf (A1). Sie LIEST das Feld seither nur.
+    # Einspeise-Erlös + EV- + BKW-Ersparnis + Erlös eigener Satz + Sonstige Positionen (netto) − Dienstliche
+    # Ladekosten (N-633) − USt — die Stufe 1 der Ergebnis-Leiter (`berechne_ergebnis`, `monatsdaten_aggregiert.py`),
+    # dieselbe Zahl wie die Cockpit-Kachel des Monats (GLOSSAR „Netto-Ertrag (PV)"); die Finanz-Sicht liest das Feld
+    # und schlägt nichts selbst auf (A1).
     netto_ertrag_euro: Optional[float]
     # Netto-Ertrag − Netzbezugskosten — eine eigene Größe dieser Tabelle (ohne WP-/E-Mob-Ersparnis, ohne
     # Betriebskosten; Sonstige Positionen seit 03.10.2026 über den Netto-Ertrag MIT), NICHT die Stufe 2 der

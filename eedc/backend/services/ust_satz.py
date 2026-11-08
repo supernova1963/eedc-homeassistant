@@ -17,10 +17,11 @@ für dasselbe Jahr. Ohne die inaktive Wallbox nannten alle drei 18,90 €.
 * **Monate (Grundgesamtheit des Jahres):** die Monats-Fakten des Kalenderjahres mit **Zählerzeile** und **aktivem
   Erzeuger** (``meta.hat_zaehlerzeile and meta.erzeuger_aktiv``) — die abgeschlossenen Monate, in denen die Anlage lief;
   dieselbe Menge, über die die Übersicht ihre Finanz-Zeilen bildet. ``monate`` ist ihre Anzahl (Anteiligkeit N-130).
-* **Eigenverbrauch:** Σ der **Monats**-Eigenverbräuche (``fakt.kennzahlen.eigenverbrauch_kwh`` — dieselben Eingänge
-  wie die Finanz-Zeile, ``finanz_zeile_eingabe``). Nur so gilt Σ der Monatsanteile = Jahreswert; die Perioden-EV
-  (Summen erst addiert, dann einmal geklemmt), die Übersicht und HA-Export bisher übergaben, weicht in Monaten mit
-  Einspeisung > PV davon ab.
+* **Eigenverbrauch:** Σ der **Monats**-Eigenverbräuche ohne Wandlungsverluste (N-588, ADR-002/P15:
+  ``pv_verteilung.eigenverbrauch_ohne_verluste_kwh`` über ``fakt.kennzahlen.eigenverbrauch_kwh`` und die Verluste des
+  Monats — ohne bewertbare Verluste bitgleich der Monats-EV; derselbe Bewertungs-Eingang wie der EV-Posten der
+  Finanz-Zeile). Nur so gilt Σ der Monatsanteile = Jahreswert; eine Perioden-EV (Summen erst addiert, dann einmal
+  geklemmt) weicht in Monaten mit Einspeisung > PV davon ab.
 * **PV:** Σ ``erzeugung.pv_kwh`` derselben Monate.
 
 **Rückfall (§3.4 der Vorlage):** Hat das Jahr noch keinen solchen Monat (Januar des laufenden Jahres), gilt der Satz

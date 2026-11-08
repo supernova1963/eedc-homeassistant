@@ -25,6 +25,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Datenquellen: die Warnung „Doppelzählung“ erscheint nicht mehr für denselben Leistungssensor an Wallbox und E-Auto.**
   Diesen Fall zählt eedc einmal, an der Wallbox; der Rat, den Sensor nur einem Feld zuzuordnen, war unnötig. Für alle
   anderen Mengen-Felder bleibt die Warnung.
+- **Auswertungen → ROI und PDF-Finanzbericht: die V2H-Ersparnis eines E-Autos rechnet wie der Komponenten-Hub.** Die
+  ROI-Prognose bewertete die ins Haus entladene Energie mit dem vollen Bezugspreis; jetzt nimmt sie den Abstand
+  Bezugspreis − Einspeisevergütung wie Komponenten-Hub und Aussichten — die Energie hätte sonst eingespeist werden
+  können. Betrifft nur Anlagen mit gepflegter V2H-Jahresmenge ohne eigenen Entladepreis; ein gepflegter Entladepreis gilt
+  wie bisher (N-781).
 
 - **Vollbackfill und Reparatur-Werkbank ohne Energie-Statistik: ein Balkonkraftwerk zählt neben seinen messenden Modulen
   nicht doppelt.** Die Stunden-Leistungskurve aus der Home-Assistant-Langzeitstatistik nahm Balkonkraftwerk und Module

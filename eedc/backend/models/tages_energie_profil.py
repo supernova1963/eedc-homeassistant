@@ -266,8 +266,12 @@ class TagesZusammenfassung(Base):
 
     # Day-Ahead Stundenprofil (kWh, 24 Werte): vor Sonnenaufgang gefrorener
     # Forecast für den Tag, indexiert von Stunde 0 bis 23 (Backward-Slot-Konvention,
-    # Index h = Energie im Intervall [h-1, h)). Dient als Datenbasis für künftige
-    # Stundenprofil-Diagnostik (siehe docs/archive/KONZEPT-KORREKTURPROFIL.md).
+    # Index h = Energie im Intervall [h-1, h)), first-write-wins (`api/routes/live_wetter.py`).
+    # `pv_prognose_stundenprofil` ist die korrigierte eedc-Vorhersage; Leser ist die Wetter-Stratifizierung der
+    # Stunden-Genauigkeit (`api/routes/korrekturprofil.py::stratifizierung_endpoint`, Auswertungen → Prognose, Block
+    # Genauigkeit). Das Korrekturprofil lernt nicht daraus, sondern gegen das unkorrigierte Lern-SOLL
+    # `lern_soll_stundenprofil_kwh` (N-547). `solcast_prognose_stundenprofil` wird geschrieben und bei der
+    # Neu-Aggregation erhalten, aber von keiner Sicht gelesen.
     pv_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     solcast_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # SFML/Tom-HA echtes Stundenprofil (24 kWh-Slots, Backward) — bei gewählter

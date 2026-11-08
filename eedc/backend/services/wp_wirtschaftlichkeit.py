@@ -357,9 +357,11 @@ def wp_ersparnis_zeile(
 def wp_ersparnis_monat(fakt, inv_by_id: dict) -> Optional[float]:
     """Σ der Gerätezeilen EINES Monats aus den Monats-Fakten (ADR-002/P10) — je Zeile auf 2 Stellen gerundet.
 
-    Mengen aus ``fakt.wp.je_geraet``, Preis ``fakt.tarif.wp_preis_cent`` (Komponenten-Kaskade WP-Tarif → allgemein
-    am Stichtag des Monats, mit Zeitfenstern — dieselbe Tarifzeile und derselbe Helfer wie die T-Konto-Zeile),
-    Gaspreis ``fakt.tarif.gaspreis_cent_kwh``. ``inv_by_id`` liefert die Parameter je Gerät.
+    Mengen aus ``fakt.wp.je_geraet``, Preis ``fakt.tarif.wp_preis_cent`` am Stichtag des Monats (ADR-002/P8): mit
+    **eigenem** Wärmepumpen-Tarif dessen Kaskade (WP-Tarif, mit Zeitfenstern); **ohne** ihn hängt die Wärmepumpe am
+    Hauszähler und trägt dessen Preis mit der ganzen Kaskade — abgerechneter Monats-Ø → gemessener Ø → Zeitfenster →
+    Stammpreis (N-663, ``monats_fakten/tarif.py``). Gaspreis ``fakt.tarif.gaspreis_cent_kwh``. ``inv_by_id`` liefert
+    die Parameter je Gerät.
 
     Returns:
         Die Summe, oder ``None``, wenn der Monat keine einzige Zeile trägt (z. B. Standby-Monat: Strom ohne Wärme).

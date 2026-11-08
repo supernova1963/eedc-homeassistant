@@ -57,7 +57,13 @@ TAGESWERT_WP = "waermepumpe"
 class ZaehlerFakten:
     """Die gemessenen Zählerwerte des Monats (``Monatsdaten``)."""
 
+    #: Einspeisung des Monats in kWh vom Hauszähler (``Monatsdaten.einspeisung_kwh``, ``bau._zaehler_fakten``); ohne
+    #: Zeile (N-751) bzw. bei nicht erfasstem Feld der Zeile (N-736, nur wenn die Tagesebene es erfasst) steht der Wert
+    #: der Tagesebene, und ``MetaFakten.einspeisung_erfasst`` sagt, ob er erfasst ist.
     einspeisung_kwh: float = 0.0
+    #: Netzbezug des Monats in kWh vom Hauszähler (``Monatsdaten.netzbezug_kwh``, ``bau._zaehler_fakten``); ohne Zeile
+    #: (N-751) bzw. bei nicht erfasstem Feld der Zeile (N-736, nur wenn die Tagesebene es erfasst) steht der Wert der
+    #: Tagesebene, und ``MetaFakten.netzbezug_erfasst`` sagt, ob er erfasst ist.
     netzbezug_kwh: float = 0.0
 
 @dataclass(frozen=True)
@@ -86,10 +92,22 @@ class ErzeugungFakten:
       energetisch Erzeuger, aber kein PV-Modul.
     """
 
+    #: Σ der PV-Module des Monats in kWh aus der P7-Auflösung (``pv_monatswerte.lade_pv_je_monat``), ohne sie der
+    #: Modul-Tageswert der Tagesebene (N-121), sonst die Teilsumme der vorhandenen Modulwerte (N-626) — ``None``, wenn
+    #: nichts davon einen Wert hat (``bau._pv_aus_tagen``).
     pv_module_kwh: Optional[float] = None
+    #: Eigene Erzeugung der Balkonkraftwerke in kWh: Σ der BKW-Zeilen ohne abtretende BKW (N-266), ohne BKW-Zeile und
+    #: ohne Anteil am Anlagenwert der BKW-Tageswert bzw. der Rest des Anlagenzählers (N-640, ``bau._bkw_rest``).
     bkw_kwh: float = 0.0
+    #: Σ der Erzeugung sonstiger Geräte in kWh (BHKW, Mini-KWK) aus der Kategorie-Weiche von ``imd_typ_beitrag`` —
+    #: Erzeuger (mit Ersatzfeld, N-667) und Geräte ohne Kategorie; Verbraucher, Zähler und Abgabe tragen 0 — dieselbe
+    #: Zahl wie ``SonstigesFakten.erzeugung_kwh``.
     sonstige_erzeuger_kwh: float = 0.0
+    #: Die PV des Monats in kWh: ``pv_module_kwh`` (``None`` als 0) + ``bkw_kwh`` + ``bkw_aus_anlagenwert_kwh`` (N-621,
+    #: ``bau._erzeugung``).
     pv_kwh: float = 0.0
+    #: Alles hinter dem Hauszähler Erzeugte in kWh: ``pv_kwh`` + ``sonstige_erzeuger_kwh``
+    #: (``energie.erzeugung_hinter_zaehler_kwh``, ``bau._erzeugung``) — der Eingang von Eigenverbrauch und Autarkie.
     hinter_zaehler_kwh: float = 0.0
     #: Pro-Modul-Auflösung mit Quelle/Status je Investition (``PvModulWert``) —
     #: für String-Vergleiche, die den einzelnen Wert und seine Herkunft zeigen.
@@ -142,10 +160,21 @@ class BkwFakten:
     ROI-Rechnung, wo das BKW eine eigene Zeile hat und sonst doppelt zählte.
     """
 
+    #: Erzeugung der Balkonkraftwerke in kWh — dieselbe Zahl wie ``ErzeugungFakten.bkw_kwh`` (``bau._bkw_rest``: Σ der
+    #: BKW-Zeilen ohne abtretende BKW, N-266, sonst Tageswert bzw. Rest des Anlagenzählers, N-640).
     erzeugung_kwh: float = 0.0
+    #: Σ des gemessenen Eigenverbrauchs (``eigenverbrauch_kwh``) aller BKW-Zeilen in kWh, roh für die Anzeige
+    #: (``roh._falte_bkw``).
     eigenverbrauch_gemessen_kwh: float = 0.0
+    #: Ersatz-Eigenverbrauch der Finanz-Zeile in kWh (P9, ``bkw_finanz.bkw_finanz_beitrag``): der gemessene
+    #: Eigenverbrauch der BKW-Zeilen ohne Erzeugung > 0, summiert — 0 für ein abtretendes BKW (N-266) und für ein BKW
+    #: mit Anteil am Anlagenwert (N-621).
     rest_eigenverbrauch_kwh: float = 0.0
+    #: Σ der Ladung des Speichers am Balkonkraftwerk (``speicher_ladung_kwh`` der BKW-Zeilen) in kWh — nicht Teil von
+    #: ``SpeicherFakten``.
     speicher_ladung_kwh: float = 0.0
+    #: Σ der Entladung des Speichers am Balkonkraftwerk (``speicher_entladung_kwh`` der BKW-Zeilen) in kWh — nicht Teil
+    #: von ``SpeicherFakten``.
     speicher_entladung_kwh: float = 0.0
     #: ``{investition_id: erzeugung_kwh}`` aus den IMD-Zeilen des Monats.
     #: Σ der Werte == ``erzeugung_kwh`` — **außer** wenn der Monat seine BKW-Zahl
@@ -172,10 +201,20 @@ class SpeicherFakten:
     Stundenpreis bleibt das Gewicht 0 und jeder Leser fällt auf den Bezugspreis.
     """
 
+    #: Ladung der Speicher in kWh, Σ von ``ladung_kwh`` der Speicher-Zeilen; ohne Speicher-Zeile im Monat der Tageswert
+    #: der Tagesebene (#427, ``bau._speicher_aus_tagen``).
     ladung_kwh: float = 0.0
+    #: Entladung der Speicher in kWh, Σ von ``entladung_kwh`` der Speicher-Zeilen; ohne Speicher-Zeile im Monat der
+    #: Tageswert der Tagesebene (#427, ``bau._speicher_aus_tagen``).
     entladung_kwh: float = 0.0
+    #: Netzladung (Arbitrage) der Speicher in kWh, Σ von ``ladung_netz_kwh`` der Speicher-Zeilen; ohne Speicher-Zeile
+    #: die Netzladung der Tage (``netzladung_tage.netzladung_aus_tagen``, #427), ohne Netzlade-Zähler 0.
     netzladung_kwh: float = 0.0
+    #: Σ Ladepreis × Netzladung (ct/kWh × kWh) über die Speicher-Zeilen mit Ladepreis > 0 und Netzladung > 0 — der
+    #: Zähler von ``netzladung_preis_cent``; ohne Speicher-Zeile die TEP-gewichtete Summe der Tage (#427).
     netzladung_preis_summe_cent_kwh: float = 0.0
+    #: Σ der Netzladung der Speicher-Zeilen mit Ladepreis > 0 in kWh — der Nenner von ``netzladung_preis_cent``; ohne
+    #: Speicher-Zeile das Gewicht der Tage (#427), ohne Stundenpreis 0.
     netzladung_gewicht_kwh: float = 0.0
 
     @property
@@ -239,8 +278,15 @@ class EmobFakten:
     Tabelle und PDF führten ihn gar nicht.
     """
 
+    #: Private Heimladung des Monats in kWh: Σ der Heimladung je privatem Auto (eigene Messung, zugeordneter Rest,
+    #: Schätzung — ``je_auto``), in einem Monat ohne Auto-Zeile und ohne Dienstwagen der Rest der Wallbox (W-1); Gast
+    #: und Dienstwagen stehen nicht darin (N-555 Regel 3, ``emob_heimladung_phasen._topf_des_monats``).
     ladung_kwh: float = 0.0
+    #: PV-Teil der privaten Heimladung in kWh, gebildet wie ``ladung_kwh`` (Σ je Auto, W-1-Rest); gemessen oder aus der
+    #: Tagesebene abgeleitet (N-141, ``ladung_anteil_abgeleitet``).
     ladung_pv_kwh: float = 0.0
+    #: Netz-Teil der privaten Heimladung in kWh, gebildet wie ``ladung_kwh`` (Σ je Auto, W-1-Rest) — eedcs Zuteilung,
+    #: nicht der zum Wallbox-Tarif abgerechnete Netzbezug (``wallbox_netz_eigener_tarif_kwh``).
     ladung_netz_kwh: float = 0.0
     #: N-771 (30.10.2026): Σ gemessener **Netzbezug zum Wallbox-Tarif** aller Wallboxen (privat und dienstlich) — Teilmenge
     #: der Ladung, nur für die Stromrechnung (``tarif.komponenten_anteile``); ``None`` = nicht gemessen (F3 wie an der WP).
@@ -262,12 +308,23 @@ class EmobFakten:
     #: wird auf die kanonische ``ladung_kwh`` angewandt — nicht die kWh der
     #: Tagesebene übernommen (sonst #262-Klasse, PV-Anteil > 100 %).
     ladung_anteil_abgeleitet: bool = False
+    #: Auswärts geladene kWh der privaten E-Mobilität, geschlossen aus EINER Seite (``waehle_extern_paar``: Wallbox-
+    #: oder E-Auto-Seite mit den höheren externen Kosten, bei Gleichstand die größere Menge, dann die Wallbox; N-728).
     extern_kwh: float = 0.0
+    #: Kosten der externen Ladung in € — das Paar zu ``extern_kwh`` aus derselben Seite (``waehle_extern_paar``, N-728).
     extern_euro: float = 0.0
+    #: Zahl der Ladevorgänge des Monats: das Maximum aus Wallbox-Seite und E-Auto-Seite
+    #: (``emob_heimladung_phasen._topf_des_monats``).
     ladevorgaenge: float = 0.0
     quelle: str = "leer"
+    #: Gefahrene Kilometer der privaten E-Autos, Σ von ``km_gefahren`` ihrer Zeilen (``roh._falte_emob``; Dienstwagen
+    #: ausgenommen).
     km: float = 0.0
+    #: Fahrverbrauch der privaten E-Autos in kWh, Σ des Felds Verbrauch (``verbrauch_kwh``) ihrer Zeilen — eine eigene
+    #: Menge neben der Heimladung (N-555, ``roh._falte_emob``).
     fahrverbrauch_kwh: float = 0.0
+    #: Ins Haus entladene Energie der privaten E-Autos (V2H) in kWh, Σ von ``v2h_entladung_kwh`` ihrer Zeilen — Eingang
+    #: des Eigenverbrauchs (``bau._kennzahlen``).
     v2h_entladung_kwh: float = 0.0
     #: km je Fahrzeug (``Investition.id``) — Voraussetzung dafür, dass eine
     #: Ersparnis je Fahrzeug mit DESSEN Verbrauchs-Parameter gerechnet wird (G20-2).
@@ -279,7 +336,12 @@ class EmobFakten:
     #: anlagenweite Summe ``fahrverbrauch_kwh`` darüber bleibt unverändert —
     #: additiv statt umgedeutet (Muster ``BkwFakten.erzeugung_je_investition``).
     fahrverbrauch_je_fahrzeug: dict[int, float] = field(default_factory=dict)
+    #: PV-Teil der dienstlichen Ladung in kWh (N-555 Regel 3, ``_dienstliche_ladung_des_monats``): die Zeilen der
+    #: dienstlichen Wallboxen und, ohne dienstliche Wallbox in Betrieb, die eigene Messung jedes Dienstwagens — ein
+    #: Dienstwagen ohne Messung trägt hier 0.
     dienstlich_ladung_pv_kwh: float = 0.0
+    #: Netz-Teil der dienstlichen Ladung in kWh, gebildet wie ``dienstlich_ladung_pv_kwh`` — ein Dienstwagen ohne eigene
+    #: Messung trägt hier seinen Fahrverbrauch als Schätzung (N-555 Regel 3, ``dienstlich_geschaetzt``).
     dienstlich_ladung_netz_kwh: float = 0.0
     #: N-555: stammt die dienstliche Menge (ganz oder teilweise) aus dem
     #: Fahrverbrauch eines Dienstwagens ohne eigene Ladefelder? Die Menge ist
@@ -298,6 +360,9 @@ class EmobFakten:
     je_auto: dict = field(default_factory=dict)
     #: Regel 2 Schritt 2/3: der Rest der Wallbox und ob er an private Autos ging.
     rest_pv_kwh: float = 0.0
+    #: Netz-Teil des Wallbox-Rests in kWh: Wallbox-Ladung − gemessene Autos und Dienstwagen (≥ 0) abzüglich
+    #: ``rest_pv_kwh`` (N-555 Regel 2 Schritt 2, ``emob_heimladung_phasen._rest_der_wallbox``); 0, wenn die Wallbox
+    #: keinen Wert trägt.
     rest_netz_kwh: float = 0.0
     rest_zugeordnet: bool = False
     #: Trägt eine private Wallbox einen Wert (auch 0) oder — laufend — eine Quelle?
@@ -307,6 +372,8 @@ class EmobFakten:
     #: Regel 3 / E3: die gemessene dienstliche Ladung (vom Rest abgezogen) — der
     #: Community-Payload kürzt das Wallbox-Feld darum.
     dienstlich_gemessen_pv_kwh: float = 0.0
+    #: Netz-Teil der gemessenen dienstlichen Ladung in kWh — Σ über die Dienstwagen mit eigener Messung
+    #: (``dienstwagen_gemessen``), wie der PV-Teil darüber.
     dienstlich_gemessen_netz_kwh: float = 0.0
     #: Regel 3 / E3 / E7: Dienstwagen ohne bzw. mit eigener Messung (``inv_id``s).
     dienstwagen_ungemessen: frozenset = frozenset()
@@ -357,12 +424,26 @@ class SonstigesGeraetFakten:
     Entscheidung fällt ``imd_typ_beitrag``, nicht der Aufrufer (ADR-001).
     """
 
+    #: Erzeugung dieses Geräts in kWh — dieselbe Kategorie-Weiche wie die Anlagensumme (``imd_typ_beitrag``: Erzeuger
+    #: mit Ersatzfeld N-667 und Gerät ohne Kategorie; Verbraucher, Zähler und Abgabe 0).
     erzeugung_kwh: float = 0.0
+    #: An Dritte abgegebene kWh dieses Geräts (Kategorie „abgabe", Feld ``abgabe_kwh``, §9.2); jede andere Kategorie
+    #: trägt 0.
     abgabe_kwh: float = 0.0
+    #: Verbrauch dieses Geräts in kWh (``verbrauch_sonstig_kwh``, sonst ``verbrauch_kwh``) — als Verbraucher oder ohne
+    #: Kategorie; Erzeuger, Zähler und Abgabe tragen 0 (``imd_typ_beitrag``).
     verbrauch_kwh: float = 0.0
+    #: Gepflegter Eigenverbrauch dieses Geräts (``eigenverbrauch_kwh``) in kWh — als Erzeuger oder ohne Kategorie;
+    #: Verbraucher, Zähler und Abgabe tragen 0 (``imd_typ_beitrag``).
     eigenverbrauch_kwh: float = 0.0
+    #: Gepflegte Einspeisung dieses Geräts (``einspeisung_kwh``) in kWh — als Erzeuger oder ohne Kategorie; Verbraucher,
+    #: Zähler und Abgabe tragen 0 (``imd_typ_beitrag``).
     einspeisung_kwh: float = 0.0
+    #: Gepflegter PV-Bezug dieses Geräts (``bezug_pv_kwh``) in kWh — als Verbraucher oder ohne Kategorie; Erzeuger,
+    #: Zähler und Abgabe tragen 0 (``imd_typ_beitrag``).
     bezug_pv_kwh: float = 0.0
+    #: Gepflegter Netzbezug dieses Geräts (``bezug_netz_kwh``) in kWh — als Verbraucher oder ohne Kategorie; Erzeuger,
+    #: Zähler und Abgabe tragen 0 (``imd_typ_beitrag``).
     bezug_netz_kwh: float = 0.0
     #: Konzept §9 Weg 2: gepflegter Erlös DIESES Erzeugers in €. Er ersetzt
     #: keine Anlagengröße, sondern kommt hinzu — eedc kennt nur einen
@@ -402,25 +483,46 @@ class SonstigesFakten:
     hielt die letzte anlagenweite Faltung des Baums am Leben (N-107).
     """
 
+    #: Σ der Erzeugung der sonstigen Geräte in kWh über ``je_geraet`` (``roh._falte_sonstiges``; Kategorie-Weiche in
+    #: ``imd_typ_beitrag``) — dieselbe Zahl wie ``ErzeugungFakten.sonstige_erzeuger_kwh``.
     erzeugung_kwh: float = 0.0
     #: §9.2 — Σ der an Dritte abgegebenen kWh (Kategorie „abgabe"). Sie stehen
     #: NICHT in ``erzeugung_kwh`` und werden in ``kennzahlen`` vom Eigenverbrauch
     #: abgezogen: der dritte Weg neben Eigenverbrauch und Netz-Einspeisung.
     abgabe_kwh: float = 0.0
+    #: Σ des Verbrauchs der sonstigen Geräte in kWh über ``je_geraet`` — Verbraucher und Geräte ohne Kategorie
+    #: (``imd_typ_beitrag``, ``roh._falte_sonstiges``).
     verbrauch_kwh: float = 0.0
+    #: Σ des gepflegten Eigenverbrauchs der sonstigen Erzeuger und Geräte ohne Kategorie in kWh über ``je_geraet`` (C1d,
+    #: ``roh._falte_sonstiges``).
     eigenverbrauch_kwh: float = 0.0
+    #: Σ der gepflegten Einspeisung der sonstigen Erzeuger und Geräte ohne Kategorie in kWh über ``je_geraet`` (C1d,
+    #: ``roh._falte_sonstiges``).
     einspeisung_kwh: float = 0.0
+    #: Σ des gepflegten PV-Bezugs der sonstigen Verbraucher und Geräte ohne Kategorie in kWh über ``je_geraet`` (C1d,
+    #: ``roh._falte_sonstiges``).
     bezug_pv_kwh: float = 0.0
+    #: Σ des gepflegten Netzbezugs der sonstigen Verbraucher und Geräte ohne Kategorie in kWh über ``je_geraet`` (C1d,
+    #: ``roh._falte_sonstiges``).
     bezug_netz_kwh: float = 0.0
     #: Konzept §9 Weg 2 — Σ der gepflegten Erzeuger-Erlöse (§9-Fall: eigener
     #: Einspeisetarif). **Kein** Teil von ``ertraege_euro``: das sind die
     #: sonstigen Positionen aus dem Monatsabschluss, dies hier ist ein
     #: gemessener Monatswert je Erzeuger.
     einspeise_erloes_euro: float = 0.0
+    #: Σ der Ertrags-Positionen des Monats in € aus allen Geräte-Zeilen jedes Typs (#310, ``berechne_sonstige_summen``)
+    #: plus den Basis-Positionen der Monatszeile (G19-1), auf 2 Stellen gerundet (``bau._baue_fakt``).
     ertraege_euro: float = 0.0
+    #: Σ der Ausgaben-Positionen des Monats in € aus allen Geräte-Zeilen jedes Typs (#310, ``berechne_sonstige_summen``)
+    #: plus den Basis-Positionen der Monatszeile (G19-1), auf 2 Stellen gerundet (``bau._baue_fakt``).
     ausgaben_euro: float = 0.0
+    #: Sonstige Positionen netto in €: Erträge − Ausgaben, auf 2 Stellen gerundet (``bau._sonstiges_fakten``).
     netto_euro: float = 0.0
+    #: Der Ertrags-Anteil der Basis-Positionen der Monatszeile in € (``berechne_md_sonstige_summen``, G19-1), auf 2
+    #: Stellen gerundet, ohne Zeile 0 — in ``ertraege_euro`` schon enthalten.
     anlage_ertraege_euro: float = 0.0
+    #: Der Ausgaben-Anteil der Basis-Positionen der Monatszeile in € (``berechne_md_sonstige_summen``, G19-1), auf 2
+    #: Stellen gerundet, ohne Zeile 0 — in ``ausgaben_euro`` schon enthalten.
     anlage_ausgaben_euro: float = 0.0
     hat_erzeuger_zeile: bool = False
     #: Gegenstück für die Verbraucherseite (Heizstab, Pool, Klimasplit). Erst
@@ -473,18 +575,34 @@ class TarifFakten:
     nur eine weitere Stelle, die veraltet.
     """
 
+    #: Netzbezugspreis des Monats in ct/kWh am Monatsersten (P8) über die ganze Kaskade abgerechneter Monats-Ø →
+    #: gemessener Ø → Zeitfenster → Stammpreis (#412, ``strompreis_aggregator.aufgeloester_monatspreis``); die Stufe
+    #: steht in ``netzbezug_preis_herkunft``.
     netzbezug_preis_cent: float = NETZBEZUG_DEFAULT_CENT
     #: Welche Stufe der Kaskade den Preis geliefert hat (``gepflegt`` ·
     #: ``gemessen`` · ``zeitfenster`` · ``stamm``) — die Zahl allein sagt es
     #: nicht, und eine Sicht muss es aussprechen können (P4, #412).
     netzbezug_preis_herkunft: Optional[str] = None
+    #: Arbeitspreis des allgemeinen Tarifs am Monatsersten in ct/kWh, mit HT/NT-Fenstern über den gemessenen Netzbezug
+    #: des Monats gewichtet (N-267, ``strompreis_aggregator.wirksamer_arbeitspreis_cent``) — ohne abgerechneten oder
+    #: gemessenen Monats-Ø.
     netzbezug_stammpreis_cent: float = NETZBEZUG_DEFAULT_CENT
+    #: Einspeisevergütung des Monats in ct/kWh: der Monatssatz der variablen Vergütung
+    #: (``Monatsdaten.einspeise_durchschnittspreis_cent``, #392) vor dem Satz des allgemeinen Tarifs am Monatsersten
+    #: (``strompreise.resolve_einspeise_preis_cent``), ohne Tarif der Default.
     einspeiseverguetung_cent: float = EINSPEISEVERGUETUNG_DEFAULT_CENT
     #: N-769: Σ der Grundpreise ALLER im Monat gültigen Tarife — allgemein plus ein EIGENER WP-/Wallbox-Tarif
     #: (``tarif.grundpreis_des_monats``); gehört nur in die Stromrechnung.
     grundpreis_euro_monat: float = 0.0
+    #: Preis des WP-Stroms in ct/kWh am Monatsersten: mit eigenem Wärmepumpen-Tarif dessen Arbeitspreis mit Zeitfenstern
+    #: (``tarif._komponenten_preis``), ohne ihn der Preis des Hauszählers mit der ganzen Kaskade, also
+    #: ``netzbezug_preis_cent`` (N-663).
     wp_preis_cent: float = NETZBEZUG_DEFAULT_CENT
+    #: Arbeitspreis des Wallbox-Tarifs am Monatsersten in ct/kWh, mit HT/NT-Fenstern über den Netzbezug des Hauses
+    #: gewichtet; ohne eigenen Wallbox-Tarif der des allgemeinen Tarifs (``tarif._komponenten_preis``).
     wallbox_preis_cent: float = NETZBEZUG_DEFAULT_CENT
+    #: Preis der Wallbox-Ladung in ct/kWh: die Kaskade des Monatspreises über den Tarif der Wallbox — abgerechneter
+    #: Monats-Ø → gemessener Ø → Zeitfenster → ``wallbox_preis_cent`` (N-717/N-433, ``aufgeloester_monatspreis``).
     wallbox_preis_effektiv_cent: float = NETZBEZUG_DEFAULT_CENT
     #: N-770/N-771: gilt im Monat ein EIGENER WP- bzw. Wallbox-Tarif (nicht der Rückfall auf den allgemeinen)? Nur dann
     #: rechnet die Stromrechnung einen gemessenen Netzbezug zum Komponenten-Tarif mit dessen Preis (``komponenten_anteile``).
@@ -497,7 +615,11 @@ class TarifFakten:
     komponenten_tarif_gemeinsam: bool = False
     #: N-770/N-771 F6: die HT/NT-Preise über N bzw. (Netzbezug − N), wenn der Kanal des Felds den Monat deckt; sonst ``None``.
     netzanteil_preise: Optional[NetzanteilPreise] = None
+    #: Kraftstoffpreis des Monats in €/l aus der Monatszeile (``Monatsdaten.kraftstoffpreis_euro``); ``None`` ohne Zeile
+    #: oder ohne Wert.
     kraftstoffpreis_euro: Optional[float] = None
+    #: Gas-/Ölpreis des Monats für den WP-Alternativvergleich in ct/kWh aus der Monatszeile
+    #: (``Monatsdaten.gaspreis_cent_kwh``); ``None`` ohne Zeile oder ohne Wert.
     gaspreis_cent_kwh: Optional[float] = None
 
 @dataclass(frozen=True)
@@ -509,6 +631,9 @@ class EegFakten:
     Strompreis-Mitschrift. Eine 0 wäre dort eine Aussage, die niemand belegen kann.
     """
 
+    #: Einspeisung zu negativen Preisen in kWh: Σ von ``einspeisung_neg_preis_kwh`` der Tage des Monats
+    #: (``einspeise_erloes_service.get_neg_preis_einspeisung_je_monat``); ``None`` ohne §51-Pflicht oder ohne Tag mit
+    #: Strompreis-Mitschrift.
     neg_preis_kwh: Optional[float] = None
 
 @dataclass(frozen=True)
@@ -574,7 +699,9 @@ class MonatsFakt:
     Auflösungsentscheidung mehr selbst.
     """
 
+    #: Kalenderjahr — mit ``monat`` der Schlüssel des Fakts (``schluessel``, ``MonatsSchluessel``; ``bau._baue_fakt``).
     jahr: int
+    #: Kalendermonat 1–12 — mit ``jahr`` der Schlüssel des Fakts; ``stichtag`` ist sein Monatserster (P8).
     monat: int
     zaehler: ZaehlerFakten
     erzeugung: ErzeugungFakten

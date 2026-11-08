@@ -31,11 +31,11 @@ die Selbstkosten je kWh steigen künstlich. Dieselbe Gewichtung gilt für die
 Betriebskosten des Zeitraums in Übersicht, Aussichten und Jahresbericht — dort je
 Komponente über ihre aktiven Monate (`core/berechnungen/betriebskosten.py`, N-228/N-699).
 
-**Was diese Funktion NICHT vereinheitlicht:** welche Menge als „Eigenverbrauch"
-eingeht. Cockpit und HA-Export übergeben den **Netzpunkt**-Eigenverbrauch (inkl.
-Brennstoff-Erzeuger), Jahresbericht, Aussichten und die Monatszeile den
-**Finanz**-Eigenverbrauch (PV allein). Das ist die vorbestehende Asymmetrie aus
-Fund **N-131**; sie hier still zu glätten wäre eine fünfte Lesart.
+**Welche Menge als „Eigenverbrauch" eingeht, entscheidet nicht diese Funktion**, sondern der eine Eingang
+`services/ust_satz.py` (G1, N-601): über einen Zeitraum die Σ der Monats-Eigenverbräuche der Monats-Fakten ohne
+Wandlungsverluste (N-588) — der Eigenverbrauch hinter dem Zähler mit den sonstigen Erzeugern, dieselbe Menge wie die
+Finanz-Zeile (`monats_fakten/ableitungen.py::finanz_zeile_eingabe`, N-131); für eine auf zwölf Monate hochgerechnete
+Menge (ROI, Aussichten-Prognose) übergibt der Aufrufer sie an `ust_satz.ust_hochrechnung`.
 """
 
 from __future__ import annotations
