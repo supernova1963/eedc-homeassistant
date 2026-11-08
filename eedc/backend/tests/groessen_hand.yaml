@@ -27,6 +27,9 @@
 eingabefeld: {}
 
 monatsgroesse:
+  "BkwFakten.eigenverbrauch_gemessen_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_monats_fakten_schicht.py"
   "BkwFakten.erzeugung_je_investition":
     abschnitt: "BERECHNUNGEN.md#was-eine-string-zeile-ist--die-erzeuger-abgrenzung-f-10"
     test: "backend/tests/test_bkw_parent_pv_module_n266.py"
@@ -37,6 +40,10 @@ monatsgroesse:
   "BkwFakten.rest_eigenverbrauch_kwh":
     abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
     test: "backend/tests/test_monats_fakten_schicht.py"
+  "BkwFakten.speicher_entladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+  "BkwFakten.speicher_ladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
   "EegFakten.neg_preis_kwh":
     abschnitt: "BERECHNUNGEN.md#formeln"
     test: "backend/tests/test_monats_fakten_schicht.py"
@@ -109,12 +116,19 @@ monatsgroesse:
   "ErzeugungFakten.pv_module_kwh":
     abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
     test: "backend/tests/test_monats_fakten_schicht.py"
+  "ErzeugungFakten.sonstige_erzeuger_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+    hinweis: "Dieselbe Summe wie `SonstigesFakten.erzeugung_kwh`; dritter Summand von `hinter_zaehler_kwh`."
   "ErzeugungFakten.wandlungsverluste_bezug_kwh":
     abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
     test: "backend/tests/test_wandlungsverluste_anzeige.py"
   "ErzeugungFakten.wandlungsverluste_kwh":
     abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
     test: "backend/tests/test_wandlungsverluste_anzeige.py"
+  "SonstigesFakten.abgabe_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_abgabe_an_dritte_vier_sichten.py"
   "SonstigesFakten.anlage_ausgaben_euro":
     abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
     hinweis: "Nur die Positionen der Anlage-Ebene (`Monatsdaten.sonstige_positionen`); sie stecken schon in `ausgaben_euro`."
@@ -124,18 +138,54 @@ monatsgroesse:
   "SonstigesFakten.ausgaben_euro":
     abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
     test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesFakten.bezug_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+  "SonstigesFakten.bezug_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+  "SonstigesFakten.eigenverbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
   "SonstigesFakten.einspeise_erloes_euro":
     abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
     test: "backend/tests/test_abgabe_an_dritte_vier_sichten.py"
+  "SonstigesFakten.einspeisung_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
   "SonstigesFakten.ertraege_euro":
     abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesFakten.erzeugung_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
     test: "backend/tests/test_monats_fakten_schicht.py"
   "SonstigesFakten.netto_euro":
     abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
     test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesFakten.verbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesGeraetFakten.abgabe_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_abgabe_an_dritte_vier_sichten.py"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.abgabe_kwh`."
+  "SonstigesGeraetFakten.bezug_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.bezug_netz_kwh`."
+  "SonstigesGeraetFakten.bezug_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.bezug_pv_kwh`."
+  "SonstigesGeraetFakten.eigenverbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.eigenverbrauch_kwh`."
   "SonstigesGeraetFakten.einspeise_erloes_euro":
     abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
     hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.einspeise_erloes_euro`."
+  "SonstigesGeraetFakten.einspeisung_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.einspeisung_kwh`."
+  "SonstigesGeraetFakten.erzeugung_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.erzeugung_kwh`."
+  "SonstigesGeraetFakten.verbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.verbrauch_kwh`."
   "SpeicherFakten.netzladung_gewicht_kwh":
     abschnitt: "BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis"
   "SpeicherFakten.netzladung_preis_summe_cent_kwh":
@@ -223,6 +273,12 @@ monatsgroesse:
   "WpGeraetFakten.waerme_kwh":
     abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
     hinweis: "Je Gerät (`WpFakten.je_geraet`); die Anlagensumme ist `WpFakten.waerme_kwh`."
+  "ZaehlerFakten.einspeisung_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n736_fakten_netzfeld_nicht_erfasst.py"
+  "ZaehlerFakten.netzbezug_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n736_fakten_netzfeld_nicht_erfasst.py"
 
 kennwert:
   "autarkie":

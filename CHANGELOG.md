@@ -110,7 +110,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   `core/feld_auswertungen.py`) und der Export-Sensoren (Beschreibungen als `hinweis` in der Hand-Datei); 16 Eingabefelder
   und 13 Export-Sensoren stehen damit erstmals in der Referenz, der Erzeuger bricht ab, wenn eine Zeile fehlt oder doppelt
   steht. Monatsgrößen mit Regel-Abschnitt und Test verknüpft (U4); 39 ohne Regel-Abschnitt bleiben benannt in der
-  Baseline.
+  Baseline. BERECHNUNGEN Kap. 1–2, §3.1, §3.9–3.11 auf Regeln gekürzt (U5a): Chronik gestrichen, Feld-Tabelle → Verweis auf
+  die Übersicht, veraltete Sätze am Code richtiggestellt (Konstanten-Orte und Vorgabewerte, Paketpfade, CO₂-Zeile der
+  Monatskennzahlen nach N-647, Wirkung der Speicher-Kopplung, Community-Ausrichtung); neue Regel-Absätze für die
+  Zähler-Füllregel (N-736/N-751), die BKW-Messgrößen und die Kategorie-Weiche der Sonstiges-Geräte — 20 Monatsgrößen mehr
+  mit Regel-Abschnitt, Baseline 56 → 36.
 
 ## [4.2.2] - 2026-11-06
 

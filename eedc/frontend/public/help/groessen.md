@@ -7,7 +7,7 @@ Jeder Eintrag der vier Registries von eedc hat hier genau eine Zeile. Dieselbe G
 | Ebene | Zeilen | davon mit Regel-Abschnitt |
 |---|---|---|
 | Eingabefelder | 106 | 0 |
-| Monatsgrößen | 104 | 65 |
+| Monatsgrößen | 104 | 85 |
 | Kennwerte der Tabelle | 76 | 63 |
 | HA-Export-Sensoren | 86 | 82 |
 
@@ -132,12 +132,12 @@ Was die Monats-Fakten (`services/monats_fakten/fakten.py`, `fakten_wp.py`) je Mo
 
 | Klasse | Feld | Typ | Erklärung (`#:`-Erstsatz) | Bau-Funktion | Regel | Test | Hinweis |
 |---|---|---|---|---|---|---|---|
-| `BkwFakten` | `eigenverbrauch_gemessen_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | — | — | — |
+| `BkwFakten` | `eigenverbrauch_gemessen_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_monats_fakten_schicht.py` | — |
 | `BkwFakten` | `erzeugung_je_investition` | dict[int, float] je Gerät | ``{investition_id: erzeugung_kwh}`` aus den IMD-Zeilen des Monats. Σ der Werte == ``erzeugung_kwh`` — **außer** wenn der Monat seine BKW-Zahl aus der Tagesebene bezieht (``TAGESWERT_BKW``): die Tagessumme ist anlagenweit und lässt sich nicht je Investition aufteilen. | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Was eine „String"-Zeile ist — die Erzeuger-Abgrenzung (F-10)](BERECHNUNGEN.md#was-eine-string-zeile-ist--die-erzeuger-abgrenzung-f-10) | `backend/tests/test_bkw_parent_pv_module_n266.py` | Je Balkonkraftwerk; ein an Modul-Kinder abtretendes BKW fehlt, im Tageswert-Rückfall bleibt das Feld leer. |
 | `BkwFakten` | `erzeugung_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_rf61_monats_fakten_phasen.py` | — |
 | `BkwFakten` | `rest_eigenverbrauch_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Finanzielle Kennzahlen](BERECHNUNGEN.md#finanzielle-kennzahlen) | `backend/tests/test_monats_fakten_schicht.py` | — |
-| `BkwFakten` | `speicher_entladung_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | — | — | — |
-| `BkwFakten` | `speicher_ladung_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | — | — | — |
+| `BkwFakten` | `speicher_entladung_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | — | — |
+| `BkwFakten` | `speicher_ladung_kwh` | float | — | `monats_fakten/bau.py::_bkw_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | — | — |
 | `EegFakten` | `neg_preis_kwh` | float oder None | — | `monats_fakten/bau.py::_baue_fakt` | [BERECHNUNGEN: Formeln](BERECHNUNGEN.md#formeln) | `backend/tests/test_monats_fakten_schicht.py` | — |
 | `EmobFakten` | `dienstlich_gemessen_netz_kwh` | float | — | `monats_fakten/bau.py::_emob_fakten` | [BERECHNUNGEN: Heimladung und Fahrverbrauch — zwei verschiedene Mengen (ab N-555)](BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555) | — | — |
 | `EmobFakten` | `dienstlich_gemessen_pv_kwh` | float | Regel 3 / E3: die gemessene dienstliche Ladung (vom Rest abgezogen) — der Community-Payload kürzt das Wallbox-Feld darum. | `monats_fakten/bau.py::_emob_fakten` | [BERECHNUNGEN: Heimladung und Fahrverbrauch — zwei verschiedene Mengen (ab N-555)](BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555) | — | — |
@@ -166,32 +166,32 @@ Was die Monats-Fakten (`services/monats_fakten/fakten.py`, `fakten_wp.py`) je Mo
 | `ErzeugungFakten` | `hinter_zaehler_kwh` | float | — | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Formeln](BERECHNUNGEN.md#formeln) | `backend/tests/test_monats_fakten_schicht.py` | — |
 | `ErzeugungFakten` | `pv_kwh` | float | — | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_n621_bkw_anteil_am_anlagenwert.py` | — |
 | `ErzeugungFakten` | `pv_module_kwh` | float oder None | — | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_monats_fakten_schicht.py` | — |
-| `ErzeugungFakten` | `sonstige_erzeuger_kwh` | float | — | `monats_fakten/bau.py::_erzeugung` | — | — | — |
+| `ErzeugungFakten` | `sonstige_erzeuger_kwh` | float | — | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | `backend/tests/test_monats_fakten_schicht.py` | Dieselbe Summe wie `SonstigesFakten.erzeugung_kwh`; dritter Summand von `hinter_zaehler_kwh`. |
 | `ErzeugungFakten` | `wandlungsverluste_bezug_kwh` | float oder None | Σ der Geräte-Werte desselben Kanal-Monats — Bezug der Prozentangabe (``wandlungsverluste_prozent``). | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_wandlungsverluste_anzeige.py` | — |
 | `ErzeugungFakten` | `wandlungsverluste_kwh` | float oder None | HA-Bauform E4b: ``max(0, Σ String-Zähler − Anlagenzähler)`` des Monats aus dem Kanal-Leser (``services/kanal/bilanz_leser``, W2-R3). | `monats_fakten/bau.py::_erzeugung` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_wandlungsverluste_anzeige.py` | — |
 | `MonatsFakt` | `jahr` | int | — | `monats_fakten/bau.py::_baue_fakt` | — | — | — |
 | `MonatsFakt` | `monat` | int | — | `monats_fakten/bau.py::_baue_fakt` | — | — | — |
-| `SonstigesFakten` | `abgabe_kwh` | float | §9.2 — Σ der an Dritte abgegebenen kWh (Kategorie „abgabe"). | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesFakten` | `abgabe_kwh` | float | §9.2 — Σ der an Dritte abgegebenen kWh (Kategorie „abgabe"). | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | `backend/tests/test_abgabe_an_dritte_vier_sichten.py` | — |
 | `SonstigesFakten` | `anlage_ausgaben_euro` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: 3.10 Sonstige Positionen](BERECHNUNGEN.md#310-sonstige-positionen) | — | Nur die Positionen der Anlage-Ebene (`Monatsdaten.sonstige_positionen`); sie stecken schon in `ausgaben_euro`. |
 | `SonstigesFakten` | `anlage_ertraege_euro` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: 3.10 Sonstige Positionen](BERECHNUNGEN.md#310-sonstige-positionen) | — | Nur die Positionen der Anlage-Ebene (`Monatsdaten.sonstige_positionen`); sie stecken schon in `ertraege_euro`. |
 | `SonstigesFakten` | `ausgaben_euro` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: 3.10 Sonstige Positionen](BERECHNUNGEN.md#310-sonstige-positionen) | `backend/tests/test_monats_fakten_schicht.py` | — |
-| `SonstigesFakten` | `bezug_netz_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesFakten` | `bezug_pv_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesFakten` | `eigenverbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesFakten` | `bezug_netz_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | — |
+| `SonstigesFakten` | `bezug_pv_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | — |
+| `SonstigesFakten` | `eigenverbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | — |
 | `SonstigesFakten` | `einspeise_erloes_euro` | float | Konzept §9 Weg 2 — Σ der gepflegten Erzeuger-Erlöse (§9-Fall: eigener Einspeisetarif). | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Finanzielle Kennzahlen](BERECHNUNGEN.md#finanzielle-kennzahlen) | `backend/tests/test_abgabe_an_dritte_vier_sichten.py` | — |
-| `SonstigesFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | — |
 | `SonstigesFakten` | `ertraege_euro` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: 3.10 Sonstige Positionen](BERECHNUNGEN.md#310-sonstige-positionen) | `backend/tests/test_monats_fakten_schicht.py` | — |
-| `SonstigesFakten` | `erzeugung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesFakten` | `erzeugung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | `backend/tests/test_monats_fakten_schicht.py` | — |
 | `SonstigesFakten` | `netto_euro` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: 3.10 Sonstige Positionen](BERECHNUNGEN.md#310-sonstige-positionen) | `backend/tests/test_monats_fakten_schicht.py` | — |
-| `SonstigesFakten` | `verbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `abgabe_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `bezug_netz_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `bezug_pv_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `eigenverbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesFakten` | `verbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | `backend/tests/test_monats_fakten_schicht.py` | — |
+| `SonstigesGeraetFakten` | `abgabe_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | `backend/tests/test_abgabe_an_dritte_vier_sichten.py` | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.abgabe_kwh`. |
+| `SonstigesGeraetFakten` | `bezug_netz_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.bezug_netz_kwh`. |
+| `SonstigesGeraetFakten` | `bezug_pv_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.bezug_pv_kwh`. |
+| `SonstigesGeraetFakten` | `eigenverbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.eigenverbrauch_kwh`. |
 | `SonstigesGeraetFakten` | `einspeise_erloes_euro` | float | Konzept §9 Weg 2: gepflegter Erlös DIESES Erzeugers in €. | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Finanzielle Kennzahlen](BERECHNUNGEN.md#finanzielle-kennzahlen) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.einspeise_erloes_euro`. |
-| `SonstigesGeraetFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `erzeugung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
-| `SonstigesGeraetFakten` | `verbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | — | — | — |
+| `SonstigesGeraetFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.einspeisung_kwh`. |
+| `SonstigesGeraetFakten` | `erzeugung_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.erzeugung_kwh`. |
+| `SonstigesGeraetFakten` | `verbrauch_kwh` | float | — | `monats_fakten/bau.py::_sonstiges_fakten` | [BERECHNUNGEN: Energie der Sonstiges-Geräte — die Kategorie-Weiche](BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche) | — | Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.verbrauch_kwh`. |
 | `SpeicherFakten` | `entladung_kwh` | float | — | `monats_fakten/bau.py::_speicher_aus_tagen` | — | — | — |
 | `SpeicherFakten` | `ladung_kwh` | float | — | `monats_fakten/bau.py::_speicher_aus_tagen` | — | — | — |
 | `SpeicherFakten` | `netzladung_gewicht_kwh` | float | — | `monats_fakten/bau.py::_speicher_aus_tagen` | [BERECHNUNGEN: Der Nutzen in Euro — Spread, nicht Voll-Strompreis](BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis) | — | — |
@@ -234,8 +234,8 @@ Was die Monats-Fakten (`services/monats_fakten/fakten.py`, `fakten_wp.py`) je Mo
 | `WpGeraetFakten` | `strom_kuehlen_kwh` | float | — | `monats_fakten/bau.py::_wp_fakten` | [BERECHNUNGEN: WP-Ersparnis im Cockpit — Σ der Gerätezeilen je Monat](BERECHNUNGEN.md#wp-ersparnis-im-cockpit--σ-der-gerätezeilen-je-monat) | — | Je Gerät; Teilmenge von `strom_kwh`, die Anlagensumme ist `WpFakten.modus_strom_kuehlen_kwh`. |
 | `WpGeraetFakten` | `strom_kwh` | float | — | `monats_fakten/bau.py::_wp_fakten` | [BERECHNUNGEN: Die Strommenge eines Geräts — der Gesamtzähler ist die Menge (K1/K3)](BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3) | — | Je Gerät (`WpFakten.je_geraet`); die Anlagensumme ist `WpFakten.strom_kwh`. |
 | `WpGeraetFakten` | `waerme_kwh` | float | — | `monats_fakten/bau.py::_wp_fakten` | [BERECHNUNGEN: Die gemessene Wärme eines Geräts — Gesamtwert vor Summanden (Regel D1)](BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1) | — | Je Gerät (`WpFakten.je_geraet`); die Anlagensumme ist `WpFakten.waerme_kwh`. |
-| `ZaehlerFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_zaehler_fakten` | — | — | — |
-| `ZaehlerFakten` | `netzbezug_kwh` | float | — | `monats_fakten/bau.py::_zaehler_fakten` | — | — | — |
+| `ZaehlerFakten` | `einspeisung_kwh` | float | — | `monats_fakten/bau.py::_zaehler_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_n736_fakten_netzfeld_nicht_erfasst.py` | — |
+| `ZaehlerFakten` | `netzbezug_kwh` | float | — | `monats_fakten/bau.py::_zaehler_fakten` | [BERECHNUNGEN: Schicht 1: Rohdaten (Eingabe)](BERECHNUNGEN.md#schicht-1-rohdaten-eingabe) | `backend/tests/test_n736_fakten_netzfeld_nicht_erfasst.py` | — |
 
 ## 3. Kennwerte der Tabelle
 
