@@ -114,7 +114,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Übersicht, veraltete Sätze am Code richtiggestellt (Konstanten-Orte und Vorgabewerte, Paketpfade, CO₂-Zeile der
   Monatskennzahlen nach N-647, Wirkung der Speicher-Kopplung, Community-Ausrichtung); neue Regel-Absätze für die
   Zähler-Füllregel (N-736/N-751), die BKW-Messgrößen und die Kategorie-Weiche der Sonstiges-Geräte — 20 Monatsgrößen mehr
-  mit Regel-Abschnitt, Baseline 56 → 36.
+  mit Regel-Abschnitt, Baseline 56 → 36. Ebenso §3.2 und §3.6–3.8 (U5b): Chronik und Zahlenbeispiele gestrichen, veraltete
+  Sätze am Code richtiggestellt (WP-Preis ohne eigenen WP-Tarif = Preis des Hauszählers mit Monats-Ø nach N-663, Cockpit-
+  Übersicht: Netto-Ertrag, kumulative Ersparnis und Investitionssumme nach Ergebnis-Leiter und N-137, anlagenweite
+  Positionen im Kapitaleinsatz, Kraftstoffpreis des Monats im Cockpit, Plug-in-Hybrid und Kühlstrom in Ersparnis und
+  CO₂-Formel, Eingang der USt nach N-601).
 
 ## [4.2.2] - 2026-11-06
 

@@ -661,9 +661,8 @@ Wahrheit; die Differenz wird erklärt, nicht durch eine zweite Datenquelle erset
 #### Die Ergebnis-Leiter — Monat, Jahr und Gesamt aus einer Rechnung (seit 03.10.2026)
 
 **SoT:** `core/berechnungen/ergebnis.py` (`berechne_ergebnis`, `soll_erfuellung`, `falte_zeitraum`), der USt-Satz aus
-`services/ust_satz.py`. Bis dahin entstanden Netto-Ertrag, Monats-/Jahresergebnis und SOLL-Erfüllung an zwölf
-Stellen mit verschiedener Zusammensetzung — Cockpit → Monat nannte bei Regelbesteuerung für denselben Monat 212,00 €,
-die Übersicht 206,30 €.
+`services/ust_satz.py`. Netto-Ertrag, Monats-/Jahresergebnis und SOLL-Erfüllung entstehen in jeder Sicht aus dieser
+einen Rechnung (N-601).
 
 ```
 Stufe 1  Netto-Ertrag (PV)           = Einspeise-Erlös + EV-Ersparnis + BKW-Rest-Ersparnis + Erlös eigener Satz
@@ -673,7 +672,7 @@ Stufe 2  (Zwischenstand)             = Netto-Ertrag + WP-Ersparnis + E-Mob-Erspa
 Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur im Monat aktive Komponenten)
 ```
 
-* **Mit gemessenem Netzbezug zum Komponenten-Tarif (N-770/N-771, 30.10.2026)** trägt die Stromrechnung zwei bzw. drei
+* **Mit gemessenem Netzbezug zum Komponenten-Tarif (N-770/N-771)** trägt die Stromrechnung zwei bzw. drei
   Arbeitspreise (§3.1, Kasten) und die EV-Ersparnis bewertet den PV-Anteil der Wärmepumpe zum WP-Tarif (§3.5, N-767).
   Die Posten der Leiter bleiben dieselben; Monats- und Jahresergebnis bewegen sich um `(N_WP − P_WP) × (Haushalt −
   WP-Tarif) + N_WB × (Haushalt − Wallbox-Tarif)`. Die Antwort nennt die Anteile (`netzbezug_anteile`,
@@ -687,41 +686,37 @@ Stufe 3  Monats-/Jahresergebnis      = Stufe 2 − Betriebskosten (anteilig, nur
 * **Herleitung aus derselben Rechnung (A6).** Die Antwort trägt je Stufe Formel und eingesetzte Werte
   (`ergebnis_herleitung`); der Tooltip nennt jeden Summanden einzeln — WP-, E-Mob-, BKW-, Erzeuger-, Sonstige-,
   Dienstwagen- und USt-Posten nur, wenn sie etwas beitragen.
-* **Dienstliche Ladekosten sind ein eigener Posten (N-633, 05.10.2026).** Die Monats-Fakten bilden ihn
+* **Dienstliche Ladekosten sind ein eigener Posten (N-633).** Die Monats-Fakten bilden ihn
   (`EmobFakten.dienstliche_ladekosten_euro`, Formel §3.10); Cockpit → Monat und → Jahr, Auswertungen → Tabelle und
   → Finanzen, Monats- und Jahresbericht führen ihn als Zeile bzw. Summanden „Dienstliche Ladekosten" (T-Konto SOLL,
-  Komponenten-Finanztabelle als Aufwand, nur wenn ≠ 0). Bis dahin zogen nur Übersicht, HA-Sensor und Aussichten ihn ab —
-  dieselbe Anlage hatte dort 104,40 €, in Cockpit → Monat/Jahr, Tabelle und PDF 122,40 € (Beispiel: 60 kWh × 30 ct).
-  Übersicht, HA-Sensor und Aussichten lesen seither denselben Wert aus den Monats-Fakten, falten ihn aber wie zuvor in
-  ihre Sonstigen Positionen (der Netto-Ertrag ist in beiden Formen derselbe). Er steht **nicht** in den Sonstigen
+  Komponenten-Finanztabelle als Aufwand, nur wenn ≠ 0). Übersicht, HA-Sensor und Aussichten lesen denselben Wert aus
+  den Monats-Fakten und falten ihn in ihre Sonstigen Positionen (der Netto-Ertrag ist in beiden Formen derselbe). Er steht **nicht** in den Sonstigen
   Ausgaben des Monats — die sind Eingang des Kapitaleinsatzes (F-19), der Posten ist laufender Aufwand.
 * **Fehlende Eingänge — eine Regel für Monat, Vorjahr und Jahr.** Eine Stufe gibt es nicht (`—`), wenn einer ihrer
   Pflichtposten fehlt: Stufe 1 braucht Einspeise-Erlös und EV-Ersparnis, Stufe 2 zusätzlich die Stromrechnung.
   Optionale Posten gehen als 0 ein und werden in `fehlende_posten` genannt, wenn die Komponente existiert, aber keinen
   Wert hat. Der **Vorjahresmonat** folgt derselben Regel; ein Vorjahresmonat mit 0 kWh Netzbezug trägt dabei die
-  Grundgebühr als Stromrechnung, wie der laufende Monat auch (bis 03.10.2026 zählte die Stromrechnung dort als 0).
+  Grundgebühr als Stromrechnung, wie der laufende Monat auch.
 * **Betriebskosten des Monats** zählen nur Komponenten, die im Monat aktiv waren (Anschaffungs- und
   Stilllegungsdatum) — dieselbe Filtermenge wie die T-Konto-Zeilen, gerechnet mit der Laufzeit-Regel
   (`core/berechnungen/betriebskosten.py`, s. Cockpit-Übersicht unten) und **ungerundet** ausgeliefert: so ist die Summe
-  der Monate eines Jahres der Jahresbetrag (100 €/Jahr ⇒ 100,00 €; bis 12.10.2026 summierte *Cockpit → Jahr* auf Cent
-  gerundete Monate zu 99,96 €, N-699).
+  der Monate eines Jahres der Jahresbetrag (N-699).
 * **USt-Anteil eines Monats** = Eigenverbrauch des Monats × USt je kWh **des Jahres** (§3.7). Σ der Monatsanteile
   eines Jahres = der Jahreswert der Übersicht. Im laufenden Jahr wandert der Satz mit jedem Abschluss um Cent-Beträge
   (eine Jahressteuer); die Herleitung nennt Satz und Grundlage. Hat das Jahr noch keinen Abschluss, gilt der Satz des
   Vorjahres; gibt es auch den nicht, wird kein USt-Anteil gerechnet, und die Herleitung sagt es.
 * **SOLL-Erfüllung** (`soll_erfuellung_prozent`, `soll_erfuellung_monat_prozent`, `soll_fenster_text`) kommt ebenfalls
-  fertig aus der Antwort — Cockpit und PDF-Monatsbericht rechnen sie nicht mehr selbst.
+  fertig aus der Antwort — Cockpit und PDF-Monatsbericht rechnen sie nicht selbst.
 * **Der Layer rundet nicht**; gerundet wird am Antwortrand (Cockpit → Monat je Posten auf Cent — außer den
   Betriebskosten, die erst die Darstellung rundet).
 
-**Das Jahr (Cockpit → Jahr, Auswertungen → Finanzen im Jahr-Modus)** rechnet seit 03.10.2026 das Backend:
-`GET /api/cockpit/jahr/{anlage_id}?jahr=` lädt die Monatsantworten des Jahres (dieselbe Monatsmenge wie bisher: jeder
-Monat zwischen Inbetriebnahme und heute, der gemessene Mengen trägt — auch ohne Monatsabschluss) und faltet sie
-(`falte_zeitraum`):
+**Das Jahr (Cockpit → Jahr, Auswertungen → Finanzen im Jahr-Modus)** rechnet das Backend:
+`GET /api/cockpit/jahr/{anlage_id}?jahr=` lädt die Monatsantworten des Jahres (jeder Monat zwischen Inbetriebnahme und
+heute, der gemessene Mengen trägt — auch ohne Monatsabschluss) und faltet sie (`falte_zeitraum`):
 
 * **Summen** (kWh, €) über alle Monate; **Quoten paarweise** — Autarkie, EV-Quote, Speicher-Auslastung und der
   Netzlade-Ø-Preis entstehen aus Summen über genau die Monate, die **beide** Größen tragen. Ein Monat mit
-  Eigenverbrauch, aber ohne Gesamtverbrauch, fällt aus Zähler und Nenner (vorher: 198 % Autarkie, #421). Zähler,
+  Eigenverbrauch, aber ohne Gesamtverbrauch, fällt aus Zähler und Nenner (#421). Zähler,
   Nenner und Fenster („aus 8 von 9 Monaten") stehen in der Antwort und im Tooltip.
 * **Ergebnisgrößen über die Leiter** auf den Jahressummen ihrer Posten, mit derselben None-Regel: fehlt einem Monat die
   Stromrechnung, gibt es kein Jahresergebnis (`fehlende_posten` nennt den Monat). Der Netto-Ertrag hängt nicht an der
@@ -757,7 +752,7 @@ Autarkie/EV-Quote/Wandlungsverluste paarweise) · `_falte_speicher` (η, Auslast
 `_falte_grundlast_und_details`; gerundet wird erst am Rand der Jahresroute (`services/jahres_aggregat.py::runde_rand`).
 
 
-**Endpoint:** `GET /api/cockpit/uebersicht/{anlage_id}` in `cockpit.py`
+**Endpoint:** `GET /api/cockpit/uebersicht/{anlage_id}` in `api/routes/cockpit/uebersicht.py`
 
 Die Cockpit-Übersicht aggregiert alle Monatsdaten für ein Jahr (oder alle Jahre) und berechnet:
 
@@ -766,18 +761,20 @@ Die Cockpit-Übersicht aggregiert alle Monatsdaten für ein Jahr (oder alle Jahr
 ```
 Einspeise-Erlös     = Σ(Einspeisung) * Einspeisevergütung / 100
 EV-Ersparnis        = Σ(PV_Eigenverbrauch * EV_Preis) / 100         (s. Hinweis; je Monat der EV-gewichtete Ø, sonst Netzbezug_Preis)
-Netto-Ertrag        = Einspeise-Erlös + EV-Ersparnis + Erlös_eigener_Satz
-                      [- USt_Eigenverbrauch]
 BKW-Ersparnis       = Σ(BKW_Rest_Eigenverbrauch * EV_Preis) / 100   (P9: nur BKW-Monate ohne erfasste Erzeugung; Preis wie EV-Ersparnis, A-2)
 Sonstige-Netto      = Σ(sonstige_ertraege) - Σ(sonstige_ausgaben)
+Netto-Ertrag        = Stufe 1 der Ergebnis-Leiter (berechne_ergebnis):
+                      Einspeise-Erlös + EV-Ersparnis + BKW-Ersparnis + Erlös_eigener_Satz + Sonstige-Netto
+                      [- USt_Eigenverbrauch]
 
 Betriebskosten_Zeitraum = Σ_Komponente Betriebskosten_Jahr × aktive_Monate_im_Zeitraum / 12
 
 Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
-                       + BKW-Ersparnis + Sonstige-Netto
                        - Betriebskosten_Zeitraum
+                       (BKW-Ersparnis und Sonstige-Netto stecken im Netto-Ertrag und zählen nicht ein zweites Mal; #326, P9)
 
 Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwortfeld jahres_rendite_prozent)
+                      Investition_gesamt = relevante Kosten (Mehrkosten, N-137; s. „Investitionskosten" unten)
                       Investition_gesamt im Einzeljahr: nur Investitionen mit Anschaffung ≤ 31.12. (N-720)
 ```
 
@@ -797,20 +794,17 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > **Betriebskosten des Zeitraums — die Laufzeit-Regel (N-228), eine Funktion.** Jede Komponente trägt ihre
 > gepflegten Betriebskosten nur über **ihre** aktiven Monate des Zeitraums (Anschaffung bis Stilllegung), ungerundet:
 > `core/berechnungen/betriebskosten.py::betriebskosten_im_zeitraum` (je Komponente `betriebskosten_je_investition`,
-> ein Monat `betriebskosten_monatsanteil`). Die Monate des Zeitraums sind die der Monats-Fakten. Dieselbe Funktion
+> ein Monat `betriebskosten_monatsanteil`). Die Monate des Zeitraums sind die der Monats-Fakten. Dieselben Funktionen
 > rufen Cockpit → Übersicht, Cockpit → Monat (und über die Faltung Cockpit → Jahr samt T-Konto-Zeilen), die
-> Aussichten (bisherige Erträge der ROI-Kachel) und der Jahresbericht-PDF. Bis 12.10.2026 stand die Regel dort
-> viermal, und der Jahresbericht rechnete daneben `Σ Jahresbeträge × Monatszeilen ÷ 12` — auch für Monate vor der
-> Anschaffung und nach der Stilllegung (gemessen 120 statt 20 € bei zwei erfassten Monaten, N-699).
+> Aussichten (bisherige Erträge der ROI-Kachel) und der Jahresbericht-PDF (N-699).
 
 > **Das Cockpit zeigt diese Rendite nicht an.** `jahres_rendite_prozent` steht in der Antwort von
-> `/cockpit/uebersicht`; der **Jahresbericht-PDF** druckt sie seit 12.10.2026 als „Rendite" (Berichtsjahr bzw.
+> `/cockpit/uebersicht`; der **Jahresbericht-PDF** druckt sie als „Rendite" (Berichtsjahr bzw.
 > Gesamtzeitraum, mit ihrem Nenner beschriftet, N-699). Die Rendite einer Anlage steht unter *Auswertungen → ROI*
 > (ROI pro Jahr = jährliche Einsparung ÷ Kapitaleinsatz, s. „ROI & Amortisation“).
 > **Im Einzeljahr** stehen im Nenner nur die Investitionen, die bis zum 31.12. des Jahres angeschafft waren (ohne
-> Anschaffungsdatum: immer) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts „Stand 31.12." (N-720, Entscheid
-> Master 12.10.2026). Bis dahin teilte die Rendite eines Jahres auch durch später gekaufte Komponenten (PV ab 2024,
-> E-Auto ab 2025: Rendite 2024 6,7 % auf 15.000 € statt 10,1 % auf 10.000 €). Der Gesamtzeitraum kennt alle.
+> Anschaffungsdatum: immer) — dieselbe Grenze wie der Kapitaleinsatz des Fortschritts „Stand 31.12." (N-720). Der
+> Gesamtzeitraum kennt alle.
 
 > **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
 > `Einspeisevergütung` ist genau der Wert aus dem für den Monat gültigen Tarif
@@ -823,14 +817,14 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > gepflegt ist — und genau das meldet der Daten-Checker. Anwendersicht:
 > [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise).
 >
-> **Variable Einspeisevergütung (#392, seit 2026-08-22):** Trägt der Tarif das Häkchen
+> **Variable Einspeisevergütung (#392):** Trägt der Tarif das Häkchen
 > „Einspeisevergütung wechselt monatlich“ (`Strompreis.einspeisung_variabel`, z. B.
 > OeMAG-Marktpreis in Österreich), bietet der Monatsabschluss das Feld
 > `Monatsdaten.einspeise_durchschnittspreis_cent` an. Der gepflegte **Monatssatz schlägt den
 > Stammwert** — aufgelöst ausschließlich über `resolve_einspeise_preis_cent`
 > (`api/routes/strompreise.py`), mit `is not None`: **0 ct ist ein Wert**. Monate ohne
 > Eintrag rechnen mit dem Stammwert. Die Hochrechnung nach vorn (Aussichten-Prognose) und
-> die ROI-Rechnung über die Lebensdauer nehmen bewusst weiter den heutigen Stammwert —
+> die ROI-Rechnung über die Lebensdauer nehmen bewusst den heutigen Stammwert —
 > künftige Monate haben keinen Monatswert (dieselbe Begründung wie beim Netzbezug, N-113).
 > eedc holt den Satz **nicht** automatisch ab (keine länderspezifische Quelle); er wird
 > eingetragen oder per CSV importiert (Spalte `Einspeiseverguetung_Cent`).
@@ -839,10 +833,10 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > Einspeise-Erlös, EV-/BKW-Ersparnis und Sonstige-Netto werden **per-Monat** gerechnet und über die
 > sichtbaren Monate summiert (nicht mit einem Ø-Preis) — bei Flex-Tarifen (Tibber/aWATTar/EPEX) laufen
 > Monats-Preis und EV/Netzbezug-Split sonst auseinander (#326). Der **naive** `netto_ertrag_euro`
-> = Einspeise-Erlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto; Sites mit Zusatzlogik (Cockpit
-> zieht `USt_Eigenverbrauch` ab) bauen den Netto-Ertrag aus den Einzel-Komponenten selbst zusammen.
+> = Σ der fünf Summanden (Einspeise-Erlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto + Erlös eigener Satz,
+> nächster Kasten); Sichten mit USt-Abzug bilden den Netto-Ertrag über die Ergebnis-Leiter (`berechne_ergebnis`, oben).
 
-> **Der fünfte Summand — Erlös mit eigenem Vergütungssatz (§9.2 Geldseite, 06.09.2026):** Ein
+> **Der fünfte Summand — Erlös mit eigenem Vergütungssatz (§9.2 Geldseite):** Ein
 > Gerät der Kategorie *Abgabe an Dritte* oder ein *Sonstiges/Erzeuger* mit eigenem Einspeisetarif
 > trägt einen **gepflegten** Monatsbetrag (`einspeise_erloes_euro`). Er ist Teil des Netto-Ertrags
 > (`finanz_aggregat.erzeuger_erloes_euro`) und steht **neben** `Einspeise-Erlös`, nicht darin: Jener
@@ -850,20 +844,19 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > nicht kennt und **nicht nachrechnet**. Alle Sichten führen ihn — Cockpit → Monat/Jahr,
 > Auswertungen → Finanzen, HA-Sensor `netto_ertrag_euro`, Jahresbericht-PDF und Aussichten.
 
-> **G19-1 — Sonstige Positionen auf Anlage-Ebene (ab v4.0):** `Sonstige-Netto` umfasst jetzt **auch**
+> **G19-1 — Sonstige Positionen auf Anlage-Ebene:** `Sonstige-Netto` umfasst **auch**
 > die auf **Anlage-Ebene** (nicht nur pro Komponente) erfassten Positionen — siehe [§3.10](#310-sonstige-positionen).
 > Sie fließen als eigene T-Konto-Zeilen „Anlage — Sonstige Erträge/Ausgaben" in **fünf** Anlage-Finanz-
-> Pfade (Cockpit-Monat/-Jahr, Übersichts-Netto, PDF-Jahresbericht, HA-Export-Netto-Sensor). Wichtig für
-> Bestandsdaten: die früher rein informativen `Monatsdaten.sonderkosten_euro` (die **nirgends** rechneten)
-> werden migriert und wirken ab v4.0 in den Finanz-Summen. **Bewusste Inkonsistenz:** Die Aussichten-
-> und ROI-Pfade (investitions-zentrierte Amortisation, s. [§3.6](#36-roi--amortisation) / [§4.4](#44-finanz-prognose--amortisation))
-> sehen die **Anlage-Positionen NICHT** — sie fließen dort nicht in Bisherige-Erträge/Amortisation ein.
-> Das ist so dokumentiert, kein Bug (offener Entscheid unter „Kennzahlen-Drift-Inventur").
+> Pfade (Cockpit-Monat/-Jahr, Übersichts-Netto, PDF-Jahresbericht, HA-Export-Netto-Sensor); die migrierten
+> `Monatsdaten.sonderkosten_euro` rechnen dort mit. In den Aussichten- und ROI-Pfaden (investitions-zentrierte
+> Amortisation, s. [§3.6](#36-roi--amortisation) / [§4.4](#44-finanz-prognose--amortisation)) wirken sie im
+> **Kapitaleinsatz** — Ausgaben erhöhend, Erträge mindernd —, gelesen aus den Monats-Fakten; auf einer ROI-Zeile stehen
+> sie nicht, weil sie keine Investition haben (Wirtschaftlichkeits-Konzept Bauschritt 4, §3.6 „Anlagenweite Positionen").
 
-> **Grundgebühr / Zählergebühr (K3, ab v4.0):** Die **Grundgebühr** (`Strompreis.grundpreis_euro_monat`)
+> **Grundgebühr / Zählergebühr (K3):** Die **Grundgebühr** (`Strompreis.grundpreis_euro_monat`)
 > steckt bereits in den Netzbezugskosten (s. [§3.1](#31-energie-bilanz-monatskennzahlen)); der Cockpit-Finanz-Teaser
-> (Monat + Jahr) weist sie zusätzlich **nachrichtlich** aus („davon Grundgebühr: … €"). **Seit N-769 (30.10.2026)** ist
-> sie die **Summe der Grundpreise aller im Monat gültigen Tarife**: der allgemeine Tarif plus ein **eigener**
+> (Monat + Jahr) weist sie zusätzlich **nachrichtlich** aus („davon Grundgebühr: … €"). Sie ist die **Summe der
+> Grundpreise aller im Monat gültigen Tarife** (N-769): der allgemeine Tarif plus ein **eigener**
 > Wärmepumpen- oder Wallbox-Tarif (zweiter Zähler). Ein Komponenten-Tarif zählt nur mit einem eigenen Datensatz dieser
 > Verwendung — ohne ihn rechnet die Komponente mit dem allgemeinen Tarif, und dessen Grundpreis zählt nicht doppelt.
 > Gebildet an **einer** Stelle (`services/monats_fakten/tarif.py::grundpreis_des_monats`): Tarif-Fakten
@@ -871,32 +864,25 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > samt Vorjahresmonat und Jahr, `GET /monatsdaten/{id}`. Trägt ein Komponenten-Tarif bei, nennen Herleitung, Teaser und
 > PDF-Monatsbericht die Grundgebühr je Tarif (`grundgebuehr_aufteilung`, im Jahr Σ je Tarif; Monate ohne Aufteilung
 > zählen als „Standard"). Der Grundpreis des Komponenten-Tarifs steht **nur** in der Stromrechnung — nicht zusätzlich in
-> WP-Kosten, WP- oder E-Mobilitäts-Ersparnis (sonst stünde er im Ergebnis doppelt). Bis dahin trug die Stromrechnung nur
-> den allgemeinen Grundpreis (gemessen: WP-Tarif mit 10 €/Monat ⇒ Stromrechnung je Monat 10 € zu niedrig, Ergebnis
-> 10 € zu hoch). Die **Zählergebühr**
-> (neues optionales Tarif-Feld `Strompreis.zaehlergebuehr_euro_jahr`) wird im Jahr-Modus als „Zählergebühr:
+> WP-Kosten, WP- oder E-Mobilitäts-Ersparnis (sonst stünde er im Ergebnis doppelt). Die **Zählergebühr**
+> (optionales Tarif-Feld `Strompreis.zaehlergebuehr_euro_jahr`) wird im Jahr-Modus als „Zählergebühr:
 > … €/Jahr (nachrichtlich)" gezeigt, aber **nicht** in Kosten/Netto verrechnet — eine Einrechnung wäre ein
-> eigener Kennzahlen-Entscheid. Jahresfaltung (`falte_zeitraum`, Backend seit 03.10.2026): Grundgebühr = Σ, Zählergebühr = letzter Wert.
+> eigener Kennzahlen-Entscheid. Jahresfaltung (`falte_zeitraum`): Grundgebühr = Σ, Zählergebühr = letzter Wert.
 
-> **Cockpit-Finanzen-Block = Komponenten-Finanz-Tabelle (G20-1, ab v4.0; fortgeschrieben 03.10.2026):** Der
+> **Cockpit-Finanzen-Block = Komponenten-Finanz-Tabelle (G20-1):** Der
 > Finanzen-Block in Cockpit-Monat/-Jahr zeigt **eine Zeile je Komponente** (Reihenfolge = Typ-SoT) mit den Spalten
 > **Erträge** (tatsächliche Zahlungsflüsse) · **Einsparungen** (kalkulatorisch/vermiedene Kosten) · **Aufwand** (inkl.
 > anteilig umgelegter Betriebskosten, PV-Zeile bei Regelbesteuerung inkl. USt auf den Eigenverbrauch; die
 > Netzladung des Speichers steht an seiner Zeile nur als Ausweis — sie läuft über den Hauszähler und steckt in der
-> Stromrechnung, wie im T-Konto) · **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Bis
-> 03.10.2026 stand hier, die Tabellen-Summe sei „bewusst eine dritte Netto-Semantik" — mit #402 (02.09.) trägt das nicht
-> mehr: eine Attribution verteilt einen Betrag, sie vervielfacht ihn nicht. Die Tabelle verteilt dieselben Posten wie
-> die **Ergebnis-Leiter** (oben) auf die Komponenten; ihre Zusatzzeile heißt seither **„Monatsergebnis"/„Jahresergebnis"**
-> und **liest** `ergebnis_euro` (bis dahin „Ergebnis nach Stromrechnung" = Saldo − Netzbezug-Kosten, G20-4). Beide
-> Wege führen auf dieselbe Zahl — die Probe P8 misst es an echten Antworten. Die zwei Abweichungen, die sie beim Bau
-> fand, sind seit 03.10.2026 geschlossen: die **Wärmepumpen-Ersparnis** der Kachel ist die Σ der Gerätezeilen (Bauform
-> wie die E-Mobilität, G20-2; vorher ein Aggregat mit dem Parametersatz der ersten Wärmepumpe), und die
-> **Speicher-Netzladung** steht nicht mehr zusätzlich im Aufwand der Speicher-Zeile.
-> *(Bis 03.10.2026 stand hier außerdem, die Vergleichs-Asymmetrie `gesamtnettoertrag` Monat vs. Vorjahr sei „kein
-> Bug". Sie war einer: ein Vorjahr mit fehlender Stromrechnung zählte sie als 0. Seit der Ergebnis-Leiter folgt das
-> Vorjahr derselben Regel wie der Monat; das Feld `gesamtnettoertrag_euro` ist entfallen.)*
+> Stromrechnung, wie im T-Konto) · **Saldo**; die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe).
+> Eine Attribution verteilt einen Betrag, sie vervielfacht ihn nicht (#402): die Tabelle verteilt dieselben Posten wie
+> die **Ergebnis-Leiter** (oben) auf die Komponenten; ihre Zusatzzeile **„Monatsergebnis"/„Jahresergebnis"** **liest**
+> `ergebnis_euro` (G20-4). Beide Wege führen auf dieselbe Zahl — die Probe P8 misst es an echten Antworten. Die
+> **Wärmepumpen-Ersparnis** der Kachel ist die Σ der Gerätezeilen (Bauform wie die E-Mobilität, G20-2), und die
+> **Speicher-Netzladung** steht nicht zusätzlich im Aufwand der Speicher-Zeile. Das Vorjahr folgt derselben Regel
+> wie der Monat (Ergebnis-Leiter, „Fehlende Eingänge").
 
-> **Die Zeile „Balkonkraftwerk" im T-Konto (Cockpit → Monat/Jahr, N-724/N-607, seit 12.10.2026).**
+> **Die Zeile „Balkonkraftwerk" im T-Konto (Cockpit → Monat/Jahr, N-724/N-607).**
 >
 > ```
 > BKW-Zeile (Ersparnis) = Anteil_bewertet × EV_Preis / 100      (EV_Preis: EV-gewichteter Ø des Monats, sonst Netzbezug_Preis)
@@ -910,8 +896,7 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
 > ⇒ `core/berechnungen/bkw_finanz.py::bkw_eigenverbrauch_anteil`, ADR-002/P9, ohne bewertbare Wandlungsverluste N-588):
 > ein an Modul-Kinder abgetretenes Gerät (ADR-002/P11) trägt 0, ohne Zählerzeile ist der Anteil nicht bewertbar (P4) —
 > keine 0 und nie die ganze Erzeugung. Ohne Monats-Fakt (Einzelaufruf) trägt nur ein gemessener Eigenverbrauch der
-> Zeile. Bis 12.10.2026 stand im T-Konto `(eigenverbrauch_kwh or pv_erzeugung_kwh) × Netzbezug_Preis`: gemessen 27,00 €
-> gegen 18,82 € im Hub für denselben Monat, und ein abgetretenes Gerät trug weiter 27,00 €. Code-Ort
+> Zeile. Code-Ort
 > `aktueller_monat/tkonto.py::_bkw_zeile`; Probe `test_n724_bkw_hub_gleich_tkonto.py`.
 
 > **Anschaffungsdatum-Grenze auch im Vorjahres-Vergleich (DI-5/DI-2-C):** Der Trend-Pfeil zum Vorjahr
@@ -936,23 +921,21 @@ Wobei:
   (`inv_<id>__strom_k3_kwh` / `inv_<id>__waerme_d1_kwh`).
 - **η, Gaspreis-Default, Zusatzkosten** aus den Parametern **des Geräts** (`berechne_wp_ersparnis`).
 - **Gaspreis** des Monats (`Monatsdaten.gaspreis_cent_kwh`), sonst der des Geräts.
-- **WP-Preis** des Monats: WP-Tarif, sonst allgemeiner Tarif, am Stichtag des Monats (ADR-002/P8), mit Zeitfenstern.
+- **WP-Preis** des Monats (`TarifFakten.wp_preis_cent`, am Stichtag des Monats, ADR-002/P8): mit **eigenem**
+  Wärmepumpen-Tarif dessen Kaskade (WP-Tarif, mit Zeitfenstern); **ohne** ihn hängt die Wärmepumpe am Hauszähler und
+  trägt dessen Preis mit der ganzen Kaskade — abgerechneter Monats-Ø → gemessener Ø → Zeitfenster → Stammpreis (N-663).
 
 **Eine Zeilenregel** (`services/wp_wirtschaftlichkeit.py::wp_ersparnis_zeile`, Monatssumme `wp_ersparnis_monat`) für
 T-Konto und Kachel in *Cockpit → Monat* (auch ohne Gerätezeile), *Cockpit → Jahr* (Σ Monate), *Cockpit → Übersicht*
-(Feld `wp_ersparnis_euro`, geht in `jahres_rendite_prozent`) und *Auswertungen → Komponenten*. Grund: zwei Wärmepumpen
-haben keine gemeinsame Referenz-WP — bis 04.10.2026 rechneten Übersicht, Komponenten-Zeitreihe und der Monat ohne
-Gerätezeile ein Aggregat mit dem Parametersatz der ersten Wärmepumpe, die Übersicht dazu mit dem heutigen Tarif und
-ohne Monats-Gaspreis. Beispiel (zwei WP, Gas 10 bzw. 16 ct, je 900 kWh Wärme / 250 kWh Strom, 30 ct): Zeilen 25 € +
-85 € = **110 €** in Monat, Jahr, Übersicht und Komponenten (vorher Übersicht 50 €); laufender Monat mit zwei WP
-**5,76 €** (vorher 1,44 €). Die Zeilenrundung hält Σ Zeilen = Sicht: fünf Monate à 10,81 € sind 54,05 €, nicht 54,07 €.
+(Feld `wp_ersparnis_euro`, geht in `jahres_rendite_prozent`) und *Auswertungen → Komponenten* (N-605/N-609). Grund:
+zwei Wärmepumpen haben keine gemeinsame Referenz-WP — kein Aggregat mit dem Parametersatz eines Geräts, kein heutiger
+Tarif für vergangene Monate. Die Zeilenrundung hält Σ Zeilen = Sicht.
 
-**Standby-Monat** (seit N-670, 11.10.2026): Ein Monat mit gemessenem WP-Strom und gemessener Wärme 0 ist eine Zeile
+**Standby-Monat** (N-670): Ein Monat mit gemessenem WP-Strom und gemessener Wärme 0 ist eine Zeile
 mit **0 €** (Etikett „Standby", Stromkosten echt, kein Vergleich gegen die Alternative). Dieselbe Regel gilt im
 HA-Sensor je Wärmepumpe und in der Jahresformel `berechne_wp_alternativkosten_ersparnis` (Aussichten, ROI-Fortschritt,
 Jahres-Ersparnis des HA-Exports): ein Monat mit Strom ohne Wärme trägt dort weder Stromkosten noch den Zwölftel
-Zusatzkosten. Bis dahin entstand keine Zeile, und HA-Export und Aussichten zogen den Strom ab (gemessen 25 € gegen
-19 €). Proben: `test_n605_wp_ersparnis_aus_geraetezeilen.py`, `test_n609_wp_ersparnis_je_geraet.py`,
+Zusatzkosten. Proben: `test_n605_wp_ersparnis_aus_geraetezeilen.py`, `test_n609_wp_ersparnis_je_geraet.py`,
 `test_n670_wp_standby_zeile.py`.
 
 #### E-Mob-Ersparnis im Cockpit
@@ -961,34 +944,35 @@ Zusatzkosten. Bis dahin entstand keine Zeile, und HA-Export und Aussichten zogen
 Benzin_Verbrauch    = Σ(km_gefahren) * Vergleichsverbrauch / 100   (Parameter des Autos, Default 7,5 L/100 km)
 Benzin_Kosten       = Benzin_Verbrauch * Benzinpreis               (Kraftstoffpreis des Monats, sonst Parameter, sonst 1,65 €/L)
 Strom_Kosten        = Ladung_Netz * Wallbox_Preis / 100
-                    + Ladung_PV   * EV_Preis      / 100   ← seit N-672 (Preis der Eigenverbrauchs-Ersparnis des Monats)
+                    + Ladung_PV   * EV_Preis      / 100   (N-672: Preis der Eigenverbrauchs-Ersparnis des Monats)
                     + Kosten_externe_Ladung
-E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
+Fossile_Kosten      = km_Verbrenner / 100 * eigener_Verbrauch * Benzinpreis   (nur Plug-in-Hybrid, #331; sonst 0)
+E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten - Fossile_Kosten
 ```
 
-> ⭐ **Eine kWh ist einmal Geld (N-672, 11.10.2026).** Die PV-Ladung steckt im Eigenverbrauch der Anlage und ist
-> dort schon zum Strompreis gutgeschrieben. Bis dahin stand hier `(Ladung_gesamt − Ladung_PV) × Wallbox_Preis` — die
-> PV-Ladung war „kostenlos" und damit zweimal Geld (an einer Beispielanlage mit 200 kWh PV-Ladung und 30 ct:
-> 399,50 € statt 339,50 € im Jahr). Sie trägt jetzt genau den Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
+`Fossile_Kosten` und die Aufteilung der Kilometer stehen in §3.4
+([Plug-in-Hybrid](#plug-in-hybrid-elektrischer-und-fossiler-anteil-ab-331)).
+
+> ⭐ **Eine kWh ist einmal Geld (N-672).** Die PV-Ladung steckt im Eigenverbrauch der Anlage und ist
+> dort schon zum Strompreis gutgeschrieben; „kostenlos" wäre sie zweimal Geld. Sie trägt genau den Preis, zu dem die Eigenverbrauchs-Ersparnis derselben
 > Sicht sie gutschreibt (gepflegt · gemessen · Zeitfenster · Stamm, §3.1); die Netzladung behält den Wallbox-Tarif.
 > „Davon aus PV" bleibt als Menge und Anteil sichtbar — als Information, nicht als eigener Geldposten. Eine Formel
 > für alle Sichten: `core/berechnungen/heimladung_kosten.py`.
 
-> **Wallbox-Tarif und Stromrechnung (N-771, 30.10.2026).** Die E-Mob-Ersparnis zieht die Netzladung zum Wallbox-Tarif ab;
-> die Stromrechnung rechnete denselben Strom bis dahin zum Haushaltstarif — mit einer Wallbox hinter dem
-> Netzbezug-Messpunkt stand das Ergebnis um Netzladung × (Haushalt − Wallbox-Tarif) zu niedrig (gemessen r28, 20 ct:
-> 155,70 € in 15 Monaten). eedcs Netzladung ist eine **Zuteilung** (N-569, in vier Monaten über dem ganzen Netzbezug),
+> **Wallbox-Tarif und Stromrechnung (N-771).** Die E-Mob-Ersparnis zieht die Netzladung zum Wallbox-Tarif ab; ohne
+> Messung rechnet die Stromrechnung denselben Strom zum Haushaltstarif (mit einer Wallbox hinter dem Netzbezug-Messpunkt
+> fehlt dem Ergebnis dann Netzladung × (Haushalt − Wallbox-Tarif)). eedcs Netzladung ist eine **Zuteilung** (N-569),
 > keine Messung der abgerechneten Menge. Deshalb dieselbe Messgröße wie an der Wärmepumpe: das optionale Feld
 > **„Netzbezug zum Wallbox-Tarif"** an der Wallbox — gemessen, rechnet die Stromrechnung diese Menge zum Wallbox-Tarif
 > (`wallbox_preis_effektiv_cent`, §3.1, Kasten).
-> **Die Netzladung aus dem Zähler (F11, E4, 31.10.2026):** wo das Feld an einer Wallbox-Zeile steht, **ist** N_wb ihre
+> **Die Netzladung aus dem Zähler (F11):** wo das Feld an einer Wallbox-Zeile steht, **ist** N_wb ihre
 > Netzladung — auch gegen einen gepflegten evcc-Wert; PV-Ladung = Ladung − N_wb (Trias geschlossen), N_wb auf
 > `[0, Ladung]` geklemmt (`core/field_definitions/reader.py::netzladung_des_zaehlers`, gelesen von
 > `get_emob_pv_netz_kwh` und damit vom Pool der Monats-Fakten, T-Konto, Wallbox-Hub, HA-Export E-Mob; die Tagesquote
 > überschreibt eine solche Zeile nicht). Vorrang der Netzladung für Geld: *Zähler des Versorgers* → *evcc-Regel* →
 > *eedc-Tagesquote*. **Zuordnungsmonat (N-771 Rest 1, E6):** dieselbe F10-Regel wie die Stromrechnung, je Gerät — im
 > Kalendermonat, in dem der Kanal des Felds dieser Wallbox beginnt, ist der Monatswert eine Teilmenge und gilt auch an der
-> Wallbox-Zeile nicht; es greift die bisherige Regel (evcc-Wert bzw. Gesamt − PV, danach die Tagesquote). Die Zuordnungsmonate
+> Wallbox-Zeile nicht; es greift die Regel ohne Feld (evcc-Wert bzw. Gesamt − PV, danach die Tagesquote). Die Zuordnungsmonate
 > kennt eine Stelle (`kanal/netzanteil_leser.zuordnungsmonate_der_wallboxen`, je Anfrage gemerkt, eine Abfrage nur, wenn
 > eine Zeile das Feld trägt); die Auskunft reist an der Zeile (`reader.ZeileImZuordnungsmonat`) zu
 > `netzladung_des_zaehlers` (Parameter `zuordnungsmonat`). E-Mob-Ersparnis und Heimladekosten lesen diese Netzladung; die Herleitung der Wallbox-Zeile und
@@ -997,15 +981,15 @@ E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 > ankommt, × (Preis der Eigenverbrauchs-Ersparnis − Wallbox-Tarif). ⚑ Ein E-Auto **mit eigener Messung** der Heimladung
 > behält sie (Regel 2 Schritt 1, N-555) — der Zähler teilt dann nur den Rest der Wallbox; neben einer Wallbox, die das
 > Feld trägt, wird die Wallbox-Zeile zudem als PV-Ladung-Zeile im T-Konto sichtbar (Teil der Eigenverbrauchs-Ersparnis,
-> kein Posten). Gemessen an der Kopie r28 (Satz `wbf`): die Autos messen selbst, die E-Mob-Ersparnis bleibt gleich. Die zweite Klemme der Stromrechnung (N_wb ≤
+> kein Posten). Die zweite Klemme der Stromrechnung (N_wb ≤
 > Netzbezug − N_WP) gilt nur dort; die E-Mob-Zeile behält N_wb bis zur Ladung (Daten-Checker nennt den Monat). Der
 > Daten-Checker warnt, wenn ein gepflegter evcc-Anteil und N_wb abweichen.
 
-**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, seit N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
+**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten sind ein eigener Posten der Ergebnis-Leiter („Dienstliche Ladekosten", §3.2, N-633) — Formel und Begründung stehen in §3.10 unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
-> **G20-2 — Aggregat bei mehreren E-Autos = Σ der Einzel-Fahrzeuge:** Die Gesamt-E-Mob-Ersparnis wird als **Summe der pro Fahrzeug** gerechneten Ersparnisse gebildet — jedes E-Auto mit seinem **eigenen** Vergleichsverbrauch (L/100 km) und Benzinpreis. Sie ist NICHT ein Einmal-Lauf über die Gesamt-Kilometer mit dem Parametersatz des ersten Fahrzeugs (das überschätzte die Ersparnis, sobald zwei E-Autos unterschiedliche Vergleichsverbräuche hatten). Bei genau **einem** E-Auto ist das Ergebnis unverändert. Die Per-Fahrzeug-Zeilen (T-Konto) rechneten schon immer je Fahrzeug korrekt; nur das aggregierte Cockpit-Feld ist jetzt symmetrisch dazu.
+> **G20-2 — Aggregat bei mehreren E-Autos = Σ der Einzel-Fahrzeuge:** Die Gesamt-E-Mob-Ersparnis wird als **Summe der pro Fahrzeug** gerechneten Ersparnisse gebildet — jedes E-Auto mit seinem **eigenen** Vergleichsverbrauch (L/100 km) und Benzinpreis, wie die Per-Fahrzeug-Zeilen im T-Konto. Sie ist NICHT ein Einmal-Lauf über die Gesamt-Kilometer mit dem Parametersatz des ersten Fahrzeugs.
 
-**Heimladung je Auto (ab v4.0.51, N-555 Stufe 2):** Die Wallbox ist die **Summe** aller Ladungen an ihr; jedes Auto mit eigener Messung trägt seine eigene Heimladung, die Wallbox den Rest (Regel 2 und 3 unten). Bei mehreren Wallboxen zählt ihre Summe. Die Netzladung **je Fahrzeug** in der Ersparnis ist die Summe seiner Monatsmengen aus dem Entscheid (`EmobFakten.je_auto`), nicht mehr ein km-Anteil an einem gemeinsamen Topf; ein Auto, das geladen hat, aber nicht gefahren ist, trägt seine Stromkosten (Ersparnis negativ statt 0). Zentraler Helper: `entscheide_emob_heimladung()` (`services/eauto_wirtschaftlichkeit.py`; `get_emob_heimladung_canonical()` ist seine Kurzform). *Bis v4.0.50 (Phase 2a, Entscheidung 1):* existierte eine Wallbox mit Heimladung, war sie die einzige Quelle, und Heimlade-Werte am Auto zählten daneben nicht.
+**Heimladung je Auto (N-555 Stufe 2):** Die Wallbox ist die **Summe** aller Ladungen an ihr; jedes Auto mit eigener Messung trägt seine eigene Heimladung, die Wallbox den Rest (Regel 2 und 3 unten). Bei mehreren Wallboxen zählt ihre Summe. Die Netzladung **je Fahrzeug** in der Ersparnis ist die Summe seiner Monatsmengen aus dem Entscheid (`EmobFakten.je_auto`), kein km-Anteil an einem gemeinsamen Topf; ein Auto, das geladen hat, aber nicht gefahren ist, trägt seine Stromkosten (Ersparnis negativ statt 0). Zentraler Helper: `entscheide_emob_heimladung()` (`services/eauto_wirtschaftlichkeit.py`; `get_emob_heimladung_canonical()` ist seine Kurzform).
 
 #### Heimladung und Fahrverbrauch — zwei verschiedene Mengen (ab N-555)
 
@@ -1025,7 +1009,7 @@ gespeichert. Abgeschlossene Monate entscheiden nur nach dem gespeicherten Wert; 
 ohne Monatsabschluss aus der HA-Statistik, zählt deren Wert wie ein gespeicherter, auch 0, sofern die Statistik Daten
 hat. Die Entscheidung fällt **je Monat**; ein Jahr, eine Übersicht, ein Hub-Zeitraum ist die **Summe seiner Monate**.
 
-**Regel 2 — wer welche Heimladung trägt** (je Monat, ab v4.0.51):
+**Regel 2 — wer welche Heimladung trägt** (je Monat):
 
 ```
 Schritt 1  Jedes Auto mit EIGENER Messung trägt sie — privat und Dienstwagen, auch neben
@@ -1051,9 +1035,9 @@ Ohne private Wallbox in Betrieb         ⇒ jedes Auto seine Messung (auch der a
 Beispiel: Wallbox 400 kWh (200 PV / 200 Netz). Auto A misst 100 (70/30), der Dienstwagen „Heim: gesamt" 150
 (Wallbox-Anteil 50 % ⇒ 75/75), Auto B ohne Messung ⇒ Rest 400 − 250 = 150, davon PV 200 − 145 = 55, Netz 95 an B.
 
-Beispiel (gemeldet, Johnny_1993): Wallbox mit HA-Sensor, 0 kWh im September, am Auto nur „Verbrauch" 1.364 kWh ⇒
-Wallbox 0 ⇒ Rest 0 ⇒ Heimladung **0**. Der Verbrauch zählt nur für die kWh/100 km. Eine Schätzung bekommt denselben aus
-der Tagesebene abgeleiteten PV-Anteil wie jede andere Heimladung (s. „PV-Anteil der Heimladung" unten).
+Misst die Wallbox 0, ist die Heimladung der Autos ohne eigene Messung **0** (Rest 0) — ihr „Verbrauch" zählt dann nur
+für die kWh/100 km. Eine Schätzung bekommt denselben aus der Tagesebene abgeleiteten PV-Anteil wie jede andere
+Heimladung (s. „PV-Anteil der Heimladung" unten).
 
 **Regel 3 — wozu die Menge zählt, und was „die Heimladung" ist:** Die Heimladung (`EmobFakten.ladung_*`, gelesen von
 Cockpit, CO₂-Bilanz, PV-Anteil der Heimladung, HA-Anlagen-Sensoren, Jahresbericht, Aussichten, Community E-Auto-Seite)
@@ -1069,7 +1053,7 @@ Wallbox in Betrieb** ist deren Menge die dienstliche Ladung, Felder und Schätzu
 ohne eigene Messung ist sein Fahrverbrauch die Schätzung (als Netzstrom, `EmobFakten.dienstlich_geschaetzt`) und wird
 **nie** vom Rest abgezogen (sie enthält auch das Laden beim Arbeitgeber).
 
-**Ladevorgänge je Auto — Regel 9 (ab v4.0.51, N-555 Stufe 3):** Trägt ein Auto an „Heim: gesamt" einen **Zähler**, der
+**Ladevorgänge je Auto — Regel 9 (N-555 Stufe 3):** Trägt ein Auto an „Heim: gesamt" einen **Zähler**, der
 am Ende eines Ladevorgangs um dessen Menge springt (evcc-Fahrzeug-Sensor), und hat eine Wallbox in Betrieb einen
 Ladezähler, ordnet die Tagesberechnung jeden Sprung den Stunden der Wallbox zu (`services/emob_ladebloecke.py`, Ablage
 `emob_ladebloecke`, geschrieben aus `aggregate_day`):
@@ -1120,41 +1104,37 @@ die Summe der Stunden ergibt den Tag.
 
 Die Ladungs-Näherung **überschätzt** den echten Fahrverbrauch (AC-Ladung an der Wallbox enthält Ladeverluste ~10–15 %, blendet SoC-Drift + nicht erfasste Fremdladung aus) — in der UI als „≈ aus Ladung (inkl. Ladeverluste)" gelabelt. Vorteil: funktioniert auch ohne Verbrauchssensor (den die wenigsten Fahrzeuge liefern). Alle Read-Sites zeigen denselben Wert. Symmetrie abgesichert durch `test_emob_readsite_symmetrie.py` und `test_n555_fahrverbrauch_bleibt_fahrverbrauch.py`.
 
-**Zeitraum (Jahr, Übersicht, Hub, Auswertungen) — ab N-557:** Jeder Monat entscheidet für sich (Regel oben), der
+**Zeitraum (Jahr, Übersicht, Hub, Auswertungen) — N-557:** Jeder Monat entscheidet für sich (Regel oben), der
 Zeitraum ist die **Summe der Monatswerte geteilt durch die Summe der Kilometer**
-(`eauto_effizienz_zeitraum`; *Cockpit → Jahr* ruft sie seit 03.10.2026 über die Jahresroute, der frühere Client-Spiegel ist entfallen). Monate ohne jede
+(`eauto_effizienz_zeitraum`; *Cockpit → Jahr* ruft sie über die Jahresroute). Monate ohne jede
 Energiemenge zählen weder im Zähler noch im Nenner. „gemessen" steht nur, wenn **jeder** Monat mit Kilometern gemessen
-ist, sonst „Näherung über die Ladung". Bis v4.0.50 teilte das Aggregat den Fahrverbrauch der Monate **mit** Sensor
-durch die Kilometer **aller** Monate — mit einem Verbrauchssensor ab Juli also rund die halbe Zahl, beschriftet
-„gemessen"; *Cockpit → Jahr* bildete sogar Heimladung ÷ km.
+ist, sonst „Näherung über die Ladung".
 
-**„Ladung gesamt" — ab N-557:** Heimladung **plus Extern**, soweit Extern bekannt ist (mit Sensor im laufenden Monat
+**„Ladung gesamt" — N-557:** Heimladung **plus Extern**, soweit Extern bekannt ist (mit Sensor im laufenden Monat
 sofort, bei Pflege von Hand ab dem Monatsabschluss); darunter „davon extern … kWh". Eine **eigene** Anzeige-Größe
 (`emob_ladung_gesamt_kwh`): die Heimladung (`emob_ladung_kwh`) behält ihre Bedeutung, der **PV-Anteil** bleibt auf
-die Heimladung bezogen, T-Konto, CO₂ und Community rechnen weiter mit ihr. Extern liegt außerhalb der Hausbilanz.
+die Heimladung bezogen, T-Konto, CO₂ und Community rechnen mit ihr. Extern liegt außerhalb der Hausbilanz.
 
-**Externe Ladung je Monat — eine Quelle (N-728, seit 12.10.2026):** Externe Ladung kann am Auto stehen oder (Altbestand)
+**Externe Ladung je Monat — eine Quelle (N-728):** Externe Ladung kann am Auto stehen oder (Altbestand)
 an der Wallbox-Zeile. Welches Paar (kWh, €) zählt, entscheidet die Topf-Regel `waehle_extern_paar` **je Monat** — ist die
 Wallbox im Monat die Heimlade-Quelle, gewinnt das Paar mit den höheren Kosten aus dem km-Anteil am Extern der
 Wallbox-Zeilen und dem Extern des Autos (`emob_extern_im_monat`, dieselbe Funktion wie HA-Export und Aussichten). Der
-E-Auto-Hub summiert diese Monatswerte, und seine Monatszeilen (Verlauf, Tabelle, Jahresvergleich) tragen genau sie. Bis
-dahin wählte der Hub-Kopf das Paar einmal über den ganzen Zeitraum, während der Verlauf das rohe Feld am Auto zeigte
-(Kopf 40 kWh an der Wallbox gegen Verlauf 0; Verlauf 80 kWh am Auto ohne Euro gegen Kopf 0). Bei **Kosten-Gleichstand**
-gewinnt die **größere Menge**, erst bei gleicher Menge die Wallbox (Entscheid Master 12.10.2026) — extern am Auto ohne
-Euro neben einer Wallbox zählt damit in jeder Sicht (bis dahin 0 statt 80 kWh).
+E-Auto-Hub summiert diese Monatswerte, und seine Monatszeilen (Verlauf, Tabelle, Jahresvergleich) tragen genau sie.
+Bei **Kosten-Gleichstand** gewinnt die **größere Menge**, erst bei gleicher Menge die Wallbox — extern am Auto ohne
+Euro neben einer Wallbox zählt damit in jeder Sicht.
 
-**Hinweis Kraftstoffpreis (ab v3.17.0):** Im Cockpit werden weiterhin die hardcodierten Defaults verwendet. In der **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), im **HA-Sensor-Export** und im **PDF-Finanzbericht** wird stattdessen pro Monat der echte Kraftstoffpreis aus `Monatsdaten.kraftstoffpreis_euro` verwendet (Quelle: EU Weekly Oil Bulletin). Fallback auf den statischen `benzinpreis_euro`-Parameter der Komponente wenn kein Monatswert vorhanden. Das Formularfeld *Benzinpreis (€/L)* ist seit 27.09.2026 (N-572) nicht mehr vorbelegt: ein geleertes Feld bleibt leer, und die Kette fällt dann auf 1,65 €/L zurück.
+**Hinweis Kraftstoffpreis:** Cockpit (#260), **Finanz-Prognose** ([Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen)), **HA-Sensor-Export** und **PDF-Finanzbericht** nehmen je Monat den Kraftstoffpreis des Monats aus `Monatsdaten.kraftstoffpreis_euro` (Quelle: EU Weekly Oil Bulletin), ohne Monatswert den `benzinpreis_euro`-Parameter der Komponente, sonst 1,65 €/L. Das Formularfeld *Benzinpreis (€/L)* ist nicht vorbelegt (N-572): ein geleertes Feld bleibt leer, und die Kette fällt dann auf 1,65 €/L zurück.
 
 #### Investitionskosten (Mehrkosten-Ansatz)
 
 ```
-PV-System-Kosten     = Σ(Kosten) für pv-module, wechselrichter, speicher, wallbox, bkw
-WP-Mehrkosten        = max(0, WP_Kosten - alternativ_kosten_euro)     (Default: 8.000 EUR)
-E-Auto-Mehrkosten    = max(0, E-Auto_Kosten - alternativ_kosten_euro) (Default: 35.000 EUR)
-Sonstige-Kosten      = Σ(Kosten) für andere Typen
-
-Investition_gesamt   = PV-System + WP-Mehrkosten + E-Auto-Mehrkosten + Sonstige
+Investition_gesamt   = relevante Kosten = Σ_Investitionen max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)
+                       Einzeljahr: nur Investitionen mit Anschaffung ≤ 31.12. (ohne Datum: immer; N-720)
 ```
+
+Eine Definition für Rendite, ROI, Amortisation und USt-Bemessung (N-137, SoT
+`core/berechnungen/investitionskosten.py::relevante_kosten_aus_investitionen`): ohne gepflegte Alternativkosten zählen die
+Vollkosten, Festannahmen setzt eedc nicht ein (§3.6).
 
 ### 3.3 Speicher-Einsparung
 
@@ -2839,10 +2819,9 @@ der Wärmepumpe (`verteile_auf_guenstigste`, Docstring).
 **Nenner-SoT:** `core/berechnungen/kapitalrechnung.py`
 
 > **Warum eine Zahl dort steht, wo sie steht:**
-> [`docs/KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md).
-> Dort stehen die Entscheidungen samt den **verworfenen** Alternativen und den
-> Messungen, die sie verworfen haben — inklusive der häufigen Einwände mit
-> Antwort. Dieses Kapitel hier nennt die Formeln, jenes die Begründung.
+> [`docs/KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md) — die Entscheidungen samt
+> den **verworfenen** Alternativen und den häufigen Einwänden mit Antwort. Dieses Kapitel nennt die Formeln, jenes die
+> Begründung.
 
 ```
 Relevante_Kosten     = Anschaffungskosten - Alternativkosten
@@ -2853,7 +2832,7 @@ Amortisation (Jahre) = Relevante_Kosten / Netto_Einsparung
 
 Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versicherung etc., Default: 0).
 
-**Gesamt-Zeile** (Auswertungen → ROI, `investitionen/roi.py::_gesamt_zeile`, seit N-774 am 4.11.2026):
+**Gesamt-Zeile** (Auswertungen → ROI, `investitionen/roi.py::_gesamt_zeile`, N-774):
 
 ```
 Gesamt_Einsparung          = Σ angezeigte Jahres-Einsparung der Zeilen (− USt bei Regelbesteuerung, §3.7)
@@ -2869,9 +2848,7 @@ Betriebskosten fallen trotzdem an: sie gehen als eigenes Argument `betriebskoste
 negative Zeile `ErsparnisZeile(Zeilenjahr, −Betriebskosten)` in die Kalender-Treppe, damit Dauer und Break-Even-Jahr dieselbe
 Rechnung meinen. Bewertete Zeilen tragen ihre Betriebskosten schon in ihrer Netto-Einsparung und werden **nicht** noch einmal
 abgezogen. Die Annahme-Zeile `amortisation_annahme` („inkl. N €/Jahr Betriebskosten") nennt die Summe **aller** Zeilen
-(`gesamt_betriebskosten`) und stimmt damit mit der Zahl überein. ⚠ Bis N-774 fehlten die Kosten unbewerteter Zeilen im
-Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitnannte (Demo r28, Mini-BHKW 300 €/Jahr:
-19,7 statt 20,9 Jahre). PV-System- und Orphan-Zeilen (`roi_pv.py`) kennen kein `nicht_bewertet`. Gesichert durch
+(`gesamt_betriebskosten`) und stimmt damit mit der Zahl überein. PV-System- und Orphan-Zeilen (`roi_pv.py`) kennen kein `nicht_bewertet`. Gesichert durch
 `test_n774_gesamt_roi_betriebskosten_unbewertet.py` (**Probe**, mit Gegenfall ohne unbewertete Zeilen).
 
 **WICHTIG - Zwei verschiedene ROI-Metriken:**
@@ -2882,58 +2859,48 @@ Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitna
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF (Einzeljahr: Stand 31.12.) | Bisherige Erträge / Kapitaleinsatz * 100 | Kumulierter Fortschritt |
 
-> **Ein Nenner für alle drei (N-137, seit 2026-08-04).** „Relevante Kosten" sind die **Mehrkosten**
+> **Ein Nenner für alle drei (N-137).** „Relevante Kosten" sind die **Mehrkosten**
 > `Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)` — SoT
 > `core/berechnungen/investitionskosten.py::relevante_kosten_aus_investitionen`, identisch mit der
-> USt-Bemessungsgrundlage (§3.7). Vorher gab es **drei** Antworten: die ROI-Sicht rechnete ohne
-> Klemmung je Position, Aussichten und Cockpit trugen eine Hybrid-Summe, deren WP-/E-Auto-Mehrkosten
-> aus `parameter["alternativ_kosten_euro"]` kamen — einem Schlüssel **ohne Schreiber**, der immer auf
-> die Festannahmen 8.000 € / 35.000 € zurückfiel. Gepflegt wird die Spalte
+> USt-Bemessungsgrundlage (§3.7), in ROI-Sicht, Aussichten und Cockpit dieselbe Summe. Gepflegt wird die Spalte
 > `anschaffungskosten_alternativ`, die der Daten-Checker mit WARNING einfordert.
 >
-> **Ohne gepflegte Alternativkosten zählen die Vollkosten.** eedc setzt keine Annahme mehr ein; die
-> Amortisation fällt dadurch für WP und E-Auto ungünstiger aus als vorher, dafür entspricht sie den
-> Daten, die tatsächlich da sind. Gesichert durch `test_amortisation_nenner_symmetrie.py`
+> **Ohne gepflegte Alternativkosten zählen die Vollkosten.** eedc setzt keine Annahme (Festbetrag) ein — die
+> Amortisation entspricht den Daten, die tatsächlich da sind. Gesichert durch `test_amortisation_nenner_symmetrie.py`
 > (**Regression**, drei Sichten auf einer Fixture mit Alternativkosten ≠ Festannahme).
 
-> **Sonstige Positionen: Zeitraum-Bilanz ↔ Kapitalrechnung (seit 2026-08-09).**
-> Eine Reparatur ist zweierlei, je nach Frage — und seit 2026-08-10 gilt
-> dasselbe für eine Förderung:
+> **Sonstige Positionen: Zeitraum-Bilanz ↔ Kapitalrechnung (F-19).**
+> Eine Reparatur ist zweierlei, je nach Frage — und dasselbe gilt für eine Förderung:
 >
 > | Frage | Sicht | Wo die Position steht |
 > | --- | --- | --- |
 > | „Was hat der Monat gekostet und eingebracht?" | Cockpit, Monatsbericht, Jahresbericht-PDF, CSV-Export, Sensor `netto_ertrag_euro` | **Ertragsseite** — Aufwand bzw. Ertrag des Zeitraums, unverändert |
 > | „Wie lange dauert es, bis sich das rechnet?" | ROI, Amortisation, HA-Sensoren, Finanzbericht-PDF | **Kapitaleinsatz** (Nenner): Ausgabe **+**, Ertrag **−** |
 >
-> **Warum:** vorher wurden sonstige Ausgaben im Zähler über die Laufzeit
-> **annualisiert**. Eine einmalige Reparatur von 3.000 € an einer Wärmepumpe
-> (Einsparung 1.235 €/Jahr) verlängerte die Amortisation dadurch von **8,1 auf
-> 42,6 Jahre**, in der Jahressicht erschien das Gerät als *nie amortisiert* —
-> und die Zahl driftete jedes Folgejahr weiter, ohne dass etwas passierte. Im
-> Nenner ergibt dieselbe Reparatur **10,5 Jahre**. Bei laufenden Kosten
-> (Wartung) liefert die kumulative Rechnung sogar exakt dasselbe Ergebnis wie
-> vorher (`K + 180n = 1235n ⇒ n = 9,5`).
+> **Warum:** eine einmalige Ausgabe, im Zähler über die Laufzeit **annualisiert**, verlängert die Amortisation
+> unverhältnismäßig und lässt die Zahl jedes Folgejahr weiterdriften, ohne dass etwas passiert; im **Nenner** zählt sie
+> einmal. Bei laufenden Kosten (Wartung) liefern beide Rechnungen dasselbe Ergebnis.
 >
-> **Sonstige *Erträge* stehen seit 2026-08-10 im Nenner** (Bauschritt 7 —
+> **Sonstige *Erträge* stehen ebenfalls im Nenner** (Bauschritt 7 —
 > die Vollkostenrechnung ist damit vollständig). Eine Position im
 > Monatsabschluss ist per Form **einmal** geflossen; sie zu mitteln und in
 > jedes künftige Jahr zu verlängern unterstellt eine Wiederholung, die niemand
-> behauptet hat (spiegelbildlich zur Ausgabenseite, seit demselben Tag). Eine
+> behauptet hat (spiegelbildlich zur Ausgabenseite). Eine
 > THG-Quote oder eine Förderung **mindert deshalb das eingesetzte Kapital**,
 > statt eine künftige Jahres-Ersparnis zu erhöhen. In der **Zeitraum-Bilanz**
 > bleibt sie unverändert stehen — dort ist sie ein Ertrag des Zeitraums.
 >
 > **Warum nicht schon mit F-19:** ein *wiederkehrender* Ertrag `E` im Nenner
 > ergibt `(K − E·n) ÷ Z`, eine Zahl, die jedes Jahr schrumpft und irgendwann
-> negativ wird. Voraussetzung war deshalb ein **Ort für wiederkehrende
-> Erträge**, und den gibt es seit demselben Tag gleich zweimal: **„Ertrag/Jahr
+> negativ wird. Wiederkehrende Erträge haben deshalb einen eigenen **Ort im
+> Zähler**, zweimal: **„Ertrag/Jahr
 > (€)"** an der Investition (Wallbox/Sonstiges) und **„Einspeise-Erlös (€)"**
 > bei *Sonstiges/Erzeuger*, per HA-Sensor monatsgenau befüllbar. Praktischer
 > Fall: wer zwei Wechselrichter mit **verschiedenen Einspeisetarifen** betreibt
 > (eedc kennt genau **einen** Einspeisesatz je Anlage), pflegt den zweiten
 > Erlös dort — beide Felder sind wiederkehrend gemeint und wirken im **Zähler**.
 > Die monatliche Handpflege bleibt möglich, beschreibt aber die Vergangenheit
-> und mindert seither den Kapitaleinsatz; der Daten-Checker weist auf den
+> und mindert den Kapitaleinsatz; der Daten-Checker weist auf den
 > besseren Ort hin, wenn derselbe Posten mehrfach auftaucht.
 >
 > ⚠ **Der Nenner kann dadurch unter die Anschaffungskosten fallen** — das ist
@@ -2956,36 +2923,28 @@ Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitna
 > weder eine Reparatur noch eine Förderung gehört dort hinein. Gesichert durch
 > `test_kapitaleinsatz_vier_sichten_symmetrie.py` (**Regression**, vier Sichten +
 > beide Seiten des Bruchs, **beide Erfassungsorte** — an der Investition und auf
-> der Monatsdaten-Zeile). ⚠ Die zweite Hälfte kam erst am 2026-08-10 dazu: bis
-> dahin trugen anlagenweit erfasste Ausgaben **nur** die HA-Sensoren, und die
-> Fixture konnte das nicht sehen, weil sie die Position komponentengebunden
-> anlegt.
+> der Monatsdaten-Zeile).
 
 > **Jede Ersparnis wird mit IHRER eigenen Laufzeit hochgerechnet.** Die
 > HA-Sensoren `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre`
-> teilten bis 2026-08-09 **alles** durch die Monatszahl der *Anlage* — auch die
-> Wärmepumpen- und E-Auto-Ersparnis. Eine 2025 nachgerüstete Komponente wurde
-> dadurch anteilig verdünnt, während ihre Kosten voll im Nenner standen. An
-> einer vermessenen Anlage (31 Anlagenmonate, Wärmepumpe 25, zweiter Wagen
-> **12**) waren dadurch mindestens **3,1 Jahre reine Verdünnung**: **26,4 statt
-> höchstens 23,3 Jahre** — eine Schranke, keine Schätzung, denn kein Posten lief
-> länger als 25 Monate. Jetzt bringt jeder Posten seine eigene Monatszahl mit,
-> und der Sensor-Rechenweg schreibt sie aus.
+> teilen nicht alles durch die Monatszahl der *Anlage*: jeder Posten (auch Wärmepumpen- und E-Auto-Ersparnis)
+> bringt seine eigene Monatszahl mit — eine nachgerüstete Komponente wird nicht verdünnt, während ihre Kosten voll im
+> Nenner stehen —, und der Sensor-Rechenweg schreibt sie aus.
 
 **Und zwei verschiedene Amortisations-Angaben — Modell neben Messung:**
 
 | Angabe | Wo | Grundlage |
 |---|---|---|
 | **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
-| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`; der Jahresbericht-PDF übernimmt die Zahl der Kachel (`get_finanz_prognose`, seit 12.10.2026 — vorher rechnete er `(Netto − Betriebskosten) ÷ Mehrkosten` selbst, ohne WP- und E-Auto-Ersparnis, N-699): im Gesamtzeitraum bis heute, im **Einzeljahr kumuliert bis zum 31.12. des Berichtsjahres** (`stichtag`: Investitionen mit Anschaffung bis zum Stichtag, Monatswerte und Monats-Fakten bis zu seinem Monat — ein Stand 31.12.2024 kennt kein 2025 gekauftes Auto). |
-| **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** (seit 2026-08-09). Vorher rechnete das PDF `Gesamt-Anschaffung ÷ Σ einsparung_prognose_jahr` — beide Seiten trugen nicht: der Nenner war die Gesamt- statt der relevanten Kosten, und der Zähler ein Feld **ohne Schreiber** (in keinem Formular, keinem Import, keinem Update-Schema). In der Praxis stand dort deshalb „—". Seit 2026-08-10 ist das Feld als **„Ertrag/Jahr"** pflegbar (Wallbox/Sonstiges) — die Amortisation kommt trotzdem weiter aus dem ROI-Dashboard, damit alle vier Sichten dieselbe Zahl nennen. |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`; der Jahresbericht-PDF übernimmt die Zahl der Kachel (`get_finanz_prognose`, N-699): im Gesamtzeitraum bis heute, im **Einzeljahr kumuliert bis zum 31.12. des Berichtsjahres** (`stichtag`: Investitionen mit Anschaffung bis zum Stichtag, Monatswerte und Monats-Fakten bis zu seinem Monat — ein Stand 31.12.2024 kennt kein 2025 gekauftes Auto). |
+| **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** — sie kommt aus dem ROI-Dashboard, damit alle vier Sichten dieselbe Zahl nennen (auch neben dem pflegbaren **„Ertrag/Jahr"** an Wallbox/Sonstiges). |
 | **Amortisation (HA-Sensor)** | `sensor.*_amortisation_jahre` | `Kapitaleinsatz ÷ Jahres-Ersparnis`, wobei die Jahres-Ersparnis aus der **gemessenen Historie** annualisiert wird — je Posten mit seiner eigenen Laufzeit. Trägt denselben Nenner wie die drei anderen, aber einen Ist- statt Modell-Zähler; die Zahl liegt deshalb je nach Anlage über oder unter der Modell-Sicht. |
 
 > Die beiden ersten beantworten dieselbe Frage verschieden — „laut Rechnung in 9,2 Jahren" gegen
 > „4.800 € von 12.000 € sind drin". Das ist gewollt und in beiden Tooltips ausgeschrieben; Bedingung
 > ist der **gemeinsame Nenner**, sonst ließen sich die Zahlen nicht ineinander überführen.
 
-> **Die Break-Even-Kurve ist eine Kalender-Treppe (seit 2026-09-18, N-525).** Jede ROI-Zeile
+> **Die Break-Even-Kurve ist eine Kalender-Treppe (N-525).** Jede ROI-Zeile
 > zählt ihre Mehrkosten und ihre Netto-Jahres-Einsparung ab ihrem eigenen Anschaffungsjahr (ein
 > PV-System ab seiner ersten Komponente, seine Kosten je Komponente gestuft), sonstige Ausgaben
 > erhöhen und sonstige Erträge mindern den Kapitaleinsatz im Jahr ihrer Buchung. Das
@@ -2995,13 +2954,8 @@ Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitna
 > `core/berechnungen/kapitalrechnung.py::amortisations_verlauf`; der Client zeichnet die Reihe.
 > Die **Dauer** in Jahren bleibt Modell A (Kapitaleinsatz ÷ heutige Jahres-Einsparung); Dauer und
 > Jahr fallen nur bei einer Anlage zusammen, die auf einmal gebaut wurde.
->
-> *Bis dahin* stand hier: „Verteilen sich die Anschaffungen über mehrere Jahre, ist das
-> ausgewiesene Amortisationsjahr optimistisch (der Anker ist die erste Anschaffung, die Kosten
-> sind die Summe)." Das war die benannte Näherung, die der Kurve seit v4.0.1 unter dem Text stand
-> (Radiocarbonat, T89667 #342).
 
-> **Jede Dauer nennt ihre Annahme (seit 2026-08-10).** Der Fortschritt unterstellt
+> **Jede Dauer nennt ihre Annahme.** Der Fortschritt unterstellt
 > nichts, die Dauer **muss** etwas unterstellen — gewählt ist **Modell A**
 > („es geht nie wieder etwas kaputt", Begründung und die verworfenen Modelle B/C
 > in [`KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md) §5).
@@ -3025,11 +2979,12 @@ Gesamt-ROI, in der Dauer und in der Treppe, während die Annahme-Zeile sie mitna
 
 ### 3.7 USt auf Eigenverbrauch
 
-**SoT:** `core/berechnungen/ust_eigenverbrauch.py` (Berechnungs-Layer, ADR-001)
+**SoT:** `core/berechnungen/ust_eigenverbrauch.py` (Berechnungs-Layer, ADR-001); welche Investitionen, Monate und
+Mengen eingehen, wählt **ein** Eingang für alle Sichten: `services/ust_satz.py` (N-601)
 **Bedingung:** Nur wenn `Anlage.steuerliche_behandlung == "regelbesteuerung"`
 
 Die Selbstkosten je kWh sind eine **Jahresgröße**. Gerechnet wird deshalb **je
-Kalenderjahr** und summiert — auch wenn die Sicht einen mehrjährigen Zeitraum zeigt:
+Kalenderjahr** und summiert — auch wenn die Sicht einen mehrjährigen Zeitraum zeigt (N-130):
 
 ```
 Bemessungsgrundlage  = Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)
@@ -3045,16 +3000,15 @@ USt_Eigenverbrauch   = Σ USt_j
 
 | Feld | Quelle |
 |------|--------|
-| `Bemessungsgrundlage` | **Mehrkosten** je Investition, geklemmt bei 0 — nicht die Vollkosten. Der volle Kaufpreis eines E-Autos gehört nicht in die Selbstkosten des PV-Stroms; maßgeblich ist, was er gegenüber der Alternative gekostet hat |
-| `Betriebskosten_Jahr` | Σ(Investition.betriebskosten_jahr) |
-| `Monate_j` | Monate des Jahres `j`, die im ausgewerteten Zeitraum liegen (1–12). Ein angeschnittenes Jahr trägt anteilig AfA — sonst stünden zwölf Monate Abschreibung gegen sieben Monate Ertrag |
-| `PV_Erzeugung_j` | PV-Erzeugung des Jahres `j` aus den Monats-Fakten |
+| `Bemessungsgrundlage` | **Mehrkosten** je Investition, geklemmt bei 0 — nicht die Vollkosten (N-129). Der volle Kaufpreis eines E-Autos gehört nicht in die Selbstkosten des PV-Stroms; maßgeblich ist, was er gegenüber der Alternative gekostet hat. Es zählen die im Jahr `j` aktiven Investitionen (`ist_aktiv_im_zeitraum`, N-601) |
+| `Betriebskosten_Jahr` | Σ(Investition.betriebskosten_jahr) derselben im Jahr `j` aktiven Investitionen (N-601) |
+| `Monate_j` | Monate des Jahres `j` im ausgewerteten Zeitraum, die eine Zählerzeile mit erfassten Netzfeldern (N-736) und einen aktiven Erzeuger tragen (1–12). Ein angeschnittenes Jahr trägt anteilig AfA — sonst stünden zwölf Monate Abschreibung gegen sieben Monate Ertrag |
+| `PV_Erzeugung_j` | PV-Erzeugung derselben Monate aus den Monats-Fakten |
+| `Eigenverbrauch_j` | Σ der Monats-Eigenverbräuche derselben Monate, ohne bewertbare Wandlungsverluste (N-588) |
 | `USt_Satz` | `Anlage.ust_satz_prozent` (DE: 19, AT: 20, CH: 8.1) |
 
 **Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen — Cockpit, Jahresbericht-PDF,
-HA-Export, Aussichten und (seit 2026-08-04, Fund **N-22**) auch *Auswertungen →
-Finanzen* + *Tabelle*. Bis dahin behauptete dieser Satz den Abzug für die
-Auswertungen bereits, während der Client dort ohne ihn rechnete.
+HA-Export, Aussichten und *Auswertungen → Finanzen* + *Tabelle* (N-22).
 
 > **Je Monat verteilt (Auswertungen):** die Formel ist linear im Eigenverbrauch,
 > deshalb trägt jeder Monat `EV_m × Selbstkosten_je_kWh × USt_Satz`. Der Nenner der
@@ -3063,31 +3017,18 @@ Auswertungen bereits, während der Client dort ohne ihn rechnete.
 > und Jahresertrag lassen sich keinem Tag zuordnen; bei Regelbesteuerung gilt daher
 > Σ Tage ≠ Monat beim Netto-Ertrag (dieselbe bewusste Asymmetrie wie bei CO₂).
 >
-> **Historie (2026-08-04, Funde N-129/N-130):** Bis dahin standen im Baum *vier*
-> Bemessungsgrundlagen nebeneinander — vier Sichten die Vollkosten, das Cockpit eine
-> zusammengesetzte Summe, die als einzige `anschaffungskosten_alternativ` nicht las.
-> Und die Sichten übergaben die Erzeugung ihres **gesamten Zeitraums** als
-> „Jahres-Erzeugung": bei Filter „alle Jahre" stand eine mehrjährige Menge im Nenner
-> gegen eine Ein-Jahres-Abschreibung, die USt fiel um den Faktor der Jahresanzahl zu
-> niedrig aus. Beides ist mit dem Layer-SoT aufgelöst.
+> **Ein Eigenverbrauch für alle Sichten (N-131/N-375):** der **Netzpunkt**-Eigenverbrauch — `finanz_zeile_eingabe`
+> rechnet ihn aus `erzeugung.hinter_zaehler_kwh`, also inklusive eines sonstigen Erzeugers (Mini-BHKW).
 >
-> ✅ **Seit 2026-09-03 geht hier nichts mehr auseinander.** Bis dahin setzten Cockpit und
-> HA-Export den **Netzpunkt**-Eigenverbrauch ein (inklusive eines sonstigen Erzeugers),
-> Jahresbericht, Aussichten und die Monatszeile dagegen den **Finanz**-Eigenverbrauch
-> (PV allein) — bei einer Anlage mit Mini-BHKW nannten die beiden Gruppen deshalb
-> verschiedene USt-Beträge. Mit der Umstellung von `finanz_zeile_eingabe` auf
-> `erzeugung.hinter_zaehler_kwh` liegen **alle** auf dem Netzpunkt-Eigenverbrauch.
-> Register **N-131** / **N-375**.
->
-> ⚠ **Was dagegen offen bleibt** (Register **N-376**): Die Selbstkosten je kWh teilen die
+> ⚠ **Benannte Grenze (N-376):** Die Selbstkosten je kWh teilen die
 > Kosten **aller** Investitionen durch die Erzeugung der **PV allein** — Zähler und Nenner
 > zählen verschiedene Grundgesamtheiten.
 
 ### 3.8 CO2-Bilanz
 
 **Endpoint:** `GET /api/cockpit/nachhaltigkeit/{anlage_id}`
-**Sichten:** Cockpit → Jahr/Gesamt, Block „CO₂-Bilanz" (seit 2026-07-31) ·
-Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisation" (seit 2026-07-31).
+**Sichten:** Cockpit → Jahr/Gesamt, Block „CO₂-Bilanz" ·
+Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisation".
 
 #### Eine Definition — wer sie bildet und wer sie liest
 
@@ -3096,21 +3037,14 @@ Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisa
 | **Bildet** die Zahl (einzige erlaubte Stelle) | `core/calculations.py::berechne_co2_bilanz` (ADR-001, DI-2) |
 | **Liefert** sie je Monat aus | `GET /api/cockpit/nachhaltigkeit/{id}` (`co2_pv_kg` · `co2_wp_kg` · `co2_emob_kg` · `co2_gesamt_kg` · `co2_kumuliert_kg`) |
 | **Zeigt** sie | Cockpit → Jahr (`v4/JahrCo2Chart.tsx`) · Auswertungen → CO₂ (`v4/AuswertungenCo2V4.tsx`, über `useAuswertungBasis().co2`) · HA-Sensor „CO₂ Einsparung" · PDF-Jahresbericht · WP-Dashboard |
-| **Rechnet nicht** | der Client. `CO2_FAKTOR_KG_KWH` darf dort nur noch *angezeigt* werden (`× 1000` → g/kWh); gewächtert von `npm run check:co2-roh` (Baseline 0) |
+| **Rechnet nicht** | der Client. `CO2_FAKTOR_KG_KWH` darf dort nur *angezeigt* werden (`× 1000` → g/kWh); gewächtert von `npm run check:co2-roh` (Baseline 0) |
 
-> **Warum das ausgeschrieben dasteht (N-21, 2026-07-31).** Bis dahin standen im Produkt
-> **drei** CO₂-Zahlen für denselben Monat: die kanonische im Cockpit — und zwei
-> Überlebende der DI-2-Ablösung, die `Erzeugung × 0,38` rechneten, also auch der
-> **eingespeisten** kWh die volle Netzstrom-Vermeidung gutschrieben und weder
-> Wärmepumpe noch E-Mobilität kannten (`pages/auswertung/types.ts` im Client,
-> `services/energie_profil/tage_werte.py` im Backend — ein Spiegelpaar, Monatstabelle
-> und Tagestabelle). Beide sind auf den Kanon umgestellt. Das war **keine
-> Definitionsfrage, sondern eine unvollendete Migration.**
->
-> **Die letzten zwei (N-647, 10.10.2026):** die PV-Zeile in **Auswertungen → ROI** (`investitionen/roi_pv.py`)
-> und die Monatskennzahlen von `GET /monatsdaten/{id}` (`core/calculations.py::berechne_monatskennzahlen`)
-> rechneten noch `Erzeugung × 0,38`. Beide nehmen jetzt `berechne_co2_bilanz(...).co2_pv_kg` auf dem
-> Eigenverbrauch ohne Wandlungsverluste (§1). Die ROI-Zeile rechnet die **Module** (das Balkonkraftwerk hat eine
+> **Keine Sicht rechnet `Erzeugung × 0,38` (N-21, N-647).** Das schriebe auch der **eingespeisten** kWh die volle
+> Netzstrom-Vermeidung gut und kennte weder Wärmepumpe noch E-Mobilität. Die Tagestabelle
+> (`services/energie_profil/tage_werte.py`), die PV-Zeile in **Auswertungen → ROI** (`investitionen/roi_pv.py`) und die
+> Monatskennzahlen von `GET /monatsdaten/{id}` (`core/calculations.py::berechne_monatskennzahlen`) nehmen
+> `berechne_co2_bilanz(...).co2_pv_kg` auf dem Eigenverbrauch ohne Wandlungsverluste (§1); die Monatstabelle
+> (`pages/auswertung/types.ts`) liest `co2_pv_kg` aus diesem Endpoint. Die ROI-Zeile rechnet die **Module** (das Balkonkraftwerk hat eine
 > eigene Zeile), hochgerechnet auf zwölf Monate wie ihre Ersparnis. Gewächtert von ADR-002/P15: jede
 > `× CO2_FAKTOR_STROM_KG_KWH` in Routen und Services trägt den Beleg oder steht klassifiziert (Komponenten-Bilanzen
 > DI-1, die synthetische BKW-Pauschale).
@@ -3150,23 +3084,22 @@ addiert, wäre über die Granularitäten nicht summierbar.
 
 ```
 CO2_PV    = Eigenverbrauch * 0.38                    (vermiedener Netzstrom)
-CO2_WP    = (WP_Wärme / 0.9 * 0.201) - (WP_Strom * 0.38)  (vs. Gasheizung)
+CO2_WP    = (WP_Wärme / 0.9 * 0.201) - ((WP_Strom - Kühlstrom) * 0.38)  (vs. Gasheizung; Kühlstrom ersetzt keine Heizung, #263 K-2)
 CO2_E-Mob = (Benzin_L * 2.37) - ((Netz_Ladung + PV_Ladung) * 0.38)  (vs. Benziner — die ganze Heimladung, N-672)
+            - Fossil_getankt_L * 2.37                               (Plug-in-Hybrid, #331; sonst 0)
 CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 ```
 
-> ⭐ **Eine kWh ist einmal CO₂ (N-672, 11.10.2026).** `CO2_PV` schreibt den ganzen Eigenverbrauch als vermiedenen
-> Netzstrom gut — die PV-Ladung des E-Autos steckt darin. Bis dahin stand hier `(Ladung − PV_Ladung) × 0,38`: die
-> PV-Ladung galt zusätzlich als CO₂-frei und zählte doppelt (an einer Beispielanlage mit 200 kWh PV-Ladung 507,5 statt
-> 431,5 kg). Dieselbe Regel wie beim Geld (§3.2) und bei der Wärmepumpe (ganzer WP-Strom, N-459).
+> ⭐ **Eine kWh ist einmal CO₂ (N-672).** `CO2_PV` schreibt den ganzen Eigenverbrauch als vermiedenen
+> Netzstrom gut — die PV-Ladung des E-Autos steckt darin und gilt in `CO2_E-Mob` nicht noch einmal als CO₂-frei.
+> Dieselbe Regel wie beim Geld (§3.2) und bei der Wärmepumpe (ganzer WP-Strom, N-459).
 
 > **Kanonische CO₂-Helfer (SoT `core/calculations.py`, DI-1/DI-2):** Diese Bilanz läuft über **genau eine**
 > Helfer-Familie — `berechne_co2_bilanz` (setzt PV + WP + E-Mob zusammen), intern `co2_wp_ersparnis_kg`
 > (WP: vermiedenes Gas MINUS WP-Strom-CO₂; der **Gas-Wirkungsgrad η_gas = 0,90** kommt aus
 > `WP_WIRKUNGSGRAD_GAS_DEFAULT`) und `co2_emob_ersparnis_kg`. **Cockpit-CO₂-Kachel, HA-Export-Sensor
 > „CO₂ Einsparung", WP-Dashboard und der PDF-Jahresbericht** rufen dieselben Helfer auf und zeigen daher
-> **denselben Wert** (vorher rechneten einzelne Pfade `pv_erzeugung × f_strom` bzw. eigene WP-Formeln →
-> Drift). Die WP- und E-Mob-Komponente werden für die Summe bei 0 geklammert (negative Einzelwerte
+> **denselben Wert**. Die WP- und E-Mob-Komponente werden für die Summe bei 0 geklammert (negative Einzelwerte
 > kürzen die Gesamtbilanz nicht). Erzeuger unter **„Sonstiges"** (BHKW, Windrad, Wasserkraft) speisen hinter
 > denselben Zähler: ihr selbst verbrauchter Strom steckt im Eigenverbrauch und zählt deshalb — wie im Geldwert
 > (§3.2) — auch im CO₂-PV-Anteil als **vermiedener Netzstrom** (0,38 kg/kWh); CO₂ folgt der Geldregel (P15).
@@ -3176,11 +3109,16 @@ CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 
 #### Äquivalente
 
+Antwortfelder `aequivalent_baeume`, `aequivalent_auto_km`, `aequivalent_fluege_km` von `GET /api/cockpit/nachhaltigkeit`:
+
 ```
 Bäume          = CO2_gesamt / 20       (kg/Baum/Jahr)
 Auto-km        = CO2_gesamt / 0.12     (kg/km)
 Flug-km        = CO2_gesamt / 0.25     (kg/km)
 ```
+
+Diese Antwortfelder liest heute keine Sicht; *Auswertungen → CO₂* bildet seine Äquivalente im Client mit eigenen Faktoren
+(`frontend/src/v4/AuswertungenCo2V4.tsx`) — eine Anzeige-Ableitung, benannte Grenze: zwei Faktorensätze, der sichtbare ist der des Clients.
 
 ### 3.9 PV-String SOLL-IST Vergleich
 
