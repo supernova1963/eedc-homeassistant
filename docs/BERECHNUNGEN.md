@@ -1863,7 +1863,8 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 ### 3.5 Wärmepumpe-Einsparung
 
 **Funktion:** `berechne_waermepumpe_einsparung()` in `core/calculations.py`
-**Verwendet in:** ROI-Dashboard (`investitionen.py`)
+**Verwendet in:** ROI-Dashboard (`GET /api/investitionen/roi/{anlage_id}`, Paket `api/routes/investitionen/`; Aufruf in
+`roi_standalone.py::_wp_bewertung`)
 
 > #### Die Strommenge eines Geräts — **der Gesamtzähler ist die Menge** (K1/K3)
 >
@@ -1875,7 +1876,7 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > ```
 > Menge_kWh = stromverbrauch_kwh                          , wenn gepflegt          (K1)
 >           = Strom Heizen + Strom Warmwasser
->             + gemessene Betriebsart-Teilmengen          , sonst — oder wenn der
+>             + gemessene funktionsfremde Teilmengen       , sonst — oder wenn der
 >                                                           Gesamtzähler darunter liegt
 > Rest_kWh  = Menge − (Strom Heizen + Strom Warmwasser + gemessene Teilmengen) ≥ 0
 > ```
@@ -1912,11 +1913,21 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > weder `heizenergie_kwh` noch `waerme_kwh` steht (Gruppe `wp_waerme`). Wortlaut und Handgriffe:
 > [HANDBUCH_DATEN_CHECKER §4.3.7](HANDBUCH_DATEN_CHECKER.md#437-wärmepumpe).
 >
-> ⛔ **Bis zum 14.09.2026 galt eine erste Stufe davor:** War die feine Aufteilung vollständig,
-> wurde der Gesamtzähler verworfen — *„sonst zählte derselbe Strom zweimal"*. Der Satz stimmte für
-> die Doppelzählung und war für die Menge falsch; was der Gesamtzähler **mehr** misst, fiel aus
-> Strom, Kosten, CO₂ und Arbeitszahl-Nenner heraus (gemessen an einer realen Anlage: 145 von
-> 2193 kWh im Jahr). *Doppelzählung entsteht beim **Addieren**, nicht beim **Ersetzen**.*
+> ⛔ **Eine vollständige feine Aufteilung verwirft den Gesamtzähler nicht** (K1): was er **mehr** misst, gehört zu Strom,
+> Kosten, CO₂ und Arbeitszahl-Nenner. *Doppelzählung entsteht beim **Addieren**, nicht beim **Ersetzen**.*
+
+#### Die Achsen Strom Heizen und Strom Warmwasser des Monats
+
+`WpFakten.strom_heizen_kwh` und `.strom_warmwasser_kwh` sind die Summe der Zeilenfelder `strom_heizen_kwh` bzw.
+`strom_warmwasser_kwh` über die Wärmepumpen-Zeilen des Monats (`imd_monatsaggregat.py::imd_typ_beitrag` →
+`monats_fakten/roh.py::_RohMonat._falte_wp`). Die Summe filtert nicht: auch ein Warmwasser-Strom an einem Gerät ohne
+Warmwasser-Achse ist über den Zähler geflossen — gefiltert wird die Wärme (N-379), nicht der Strom. **Summanden der Menge**
+sind die Felder nur mit dem Kennzeichen *Getrennte Strommessung* (`summanden_gelten`): ohne Gesamtzähler ist die Menge ihre
+Summe plus die gemessenen **funktionsfremden** Teilmengen (Kühlen, Lüften, Entfeuchten — W-16; ein gemessener Heiz-Betriebsart-Zähler
+stünde doppelt zu `strom_heizen_kwh`; `wp_strom.py::wp_feine_summe_kwh`), mit Gesamtzähler stehen sie unter ihm, und der Rest heißt *nicht
+aufgeteilt* (K5, Kasten oben). `WpFakten.hat_split` sagt, ob ein Gerät des Monats das Kennzeichen trägt; nur dann zeigt die
+Monatstabelle Strom Heizen und Strom Warmwasser (`monatsdaten_aggregiert.py`). Ein fehlender Wert zählt 0; ob eine Achse
+gemessen ist (auch als 0), sagen `strom_heizen_gemessen`/`strom_warmwasser_gemessen` — ein ODER über die Geräte (N-479).
 
 > #### Die gemessene Wärme eines Geräts — **Gesamtwert vor Summanden** (Regel D1)
 >
@@ -1924,10 +1935,12 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > Wärmemenge auswertet, bekommt sie von dort — Monats-Fakten, Komponenten-Hub, HA-Export,
 > Community-Payload, der Tag, die anlagenweiten Alternativkosten
 > (`core/berechnungen/alternativkosten.py` ⇒ Aussichten · ROI · Jahres-Ersparnis des HA-Exports),
-> die thermische Gewichtung der WP-Prognose (`api/routes/aussichten/finanz_prognose.py`), die Komponenten-Zeile
-> „Ersparnis vs. Alternative“ in *Cockpit → Monat*, die Monatsspalte „WP Wärme“ in *Auswertungen → Tabelle*
-> (`monatsdaten_aggregiert._zeile_komponenten` ⇒ `wp_waerme_kwh`; bis N-778, 7.11.2026, summierte dort der Client die
-> beiden Achsen) und die Nicht-DB-Quellen des laufenden Monats (MQTT · Connector · HA-Statistik).
+> die thermische Gewichtung der WP-Prognose (gebildet in `api/routes/aussichten/finanz_rueckblick.py`, gelesen von
+> `finanz_prognose.py`), die Komponenten-Zeile „Ersparnis vs. Alternative“ in *Cockpit → Monat*, die Monatsspalte „WP Wärme“
+> in *Auswertungen → Tabelle* (`monatsdaten_aggregiert._zeile_komponenten` ⇒ `wp_waerme_kwh`, N-778), die Zahlen je Gerät
+> (`services/waermepumpe_kennzahlen_je_geraet.py`), der Wärme/Klima-Block in *Cockpit → Monat* (`aktueller_monat/waerme.py`),
+> der Daten-Checker (`daten_checker/waermepumpe.py`) und die Nicht-DB-Quellen des laufenden Monats (MQTT · Connector ·
+> HA-Statistik) — belegt am Grep `waerme_gesamt_kwh(`.
 >
 > ```
 > Wärme_kWh = waerme_kwh            , wenn gepflegt        (EIN gemeinsamer Wärmemengenzähler)
@@ -1940,30 +1953,42 @@ invertiert angeschlossener Wallbox-Sensor im V2H-Haushalt gehört deshalb über 
 > (`geraete_mit_gesamtwaerme`) und laufendem Monat; der Daten-Checker meldet den Fall (Meldung „‚Wärme gesamt‘ ist 0, Heizwärme +
 > Warmwasser-Wärme sind größer“, Warnung). Festgeschrieben in `test_n391_gesamtwaerme.py::test_k13_gemessene_null_ist_kein_gesamtwert`.
 >
-> ⚠ **Die vier zuletzt genannten standen bis zum 14.09.2026 nicht in dieser Liste — und lasen die
-> Regel auch nicht** (N-391c). An einem Gerät mit gemeinsamem Wärmemengenzähler war die thermische
-> Menge dort 0; die Jahresformel lieferte damit **−300 € statt 33,33 €** (der WP-Strom wurde weiter
-> belastet, die Gas-Ersparnis daneben fiel weg), die Zeile in *Cockpit → Monat* entstand gar nicht,
-> und der laufende Monat zeigte keine Wärme. **Diese Liste ist deshalb Teil der Regel, nicht ihre
-> Illustration:** Wer eine Wärmemenge liest, steht hier — oder er liest falsch.
+> ⚠ **Diese Liste ist Teil der Regel, nicht ihre Illustration** (N-391c): Wer eine Wärmemenge liest, steht hier — oder er
+> liest falsch; eine Sicht ohne D1 sieht an einem Gerät mit gemeinsamem Wärmemengenzähler die Wärme 0.
 >
 > ⛔ **`waerme_kwh` ist nie ein dritter Summand.** Wer Gesamtzähler **und** Aufteilung pflegt, zählte
-> sonst 3000 + 2100 + 900. Und die Regel fällt **je Gerät vor** dem Summieren: auf Anlagensummen
+> sonst Gesamtwert und Aufteilung zusammen. Und die Regel fällt **je Gerät vor** dem Summieren: auf Anlagensummen
 > angewandt verschwände die Aufteilung des zweiten Geräts hinter dem Gesamtwert des ersten
 > (N-391b, ADR-002/P4).
 >
 > **Warum der Gesamtwert gewinnt (K1):** Die Gesamtmenge ist die Messung; jede Aufteilung steht
-> daneben, nie an ihrer Stelle. ⚠ **Bewusst die Gegenrichtung zur Stromseite** (`wp_strom_stufe`):
-> Dort gewinnt die vollständige feine Aufteilung, weil das Kennzeichen *Getrennte Strommessung*
-> erklärt, dass die zwei Zähler zusammen das Ganze sind. Auf der Wärmeseite gibt es keine solche
-> Erklärung.
+> daneben, nie an ihrer Stelle. **Dieselbe Richtung wie auf der Stromseite** (K1/K3, `wp_strom_stufe` Regel 1): auch dort
+> ist der Gesamtzähler die Menge und die Aufteilung steht darunter. Nur dort tritt die Aufteilung an seine Stelle, wenn er mehr
+> als die Toleranz unter ihr liegt; auf der Wärmeseite gilt der Gesamtwert auch dann, und der Daten-Checker meldet den
+> Widerspruch (N-391, Kasten oben).
 >
-> **Folge für die Kennzahlen je Funktion (N-391, 14.09.2026):** Trägt `waerme_kwh` die Wärme, gibt
-> es für die Funktionen ohne eigenen Wärmewert **keine** Arbeitszahl, sondern den Grund
-> *„Wärme nicht je Funktion gemessen"*. Vorher landete ein gemeinsamer Zähler mangels Feld unter
-> *Heizwärme*, und bei getrennter Strommessung entstand daraus `Gesamtwärme ÷ Heizstrom` — gemessen
-> 5,0 statt 3,0. Wer Gesamtwert **und** Aufteilung pflegt, behält seine Funktions-Zahlen: sie sind
-> gemessen und tragen dieselbe Abgrenzung.
+> **Folge für die Kennzahlen je Funktion (N-391):** Trägt `waerme_kwh` die Wärme, gibt es für die Funktionen ohne eigenen
+> Wärmewert **keine** Arbeitszahl, sondern den Grund *„Wärme nicht je Funktion gemessen"* — ein gemeinsamer Zähler ist keine
+> Heizwärme, und `Gesamtwärme ÷ Heizstrom` wäre keine Kennzahl. Wer Gesamtwert **und** Aufteilung pflegt, behält seine
+> Funktions-Zahlen: sie sind gemessen und tragen dieselbe Abgrenzung.
+
+#### Die Achsen Heizwärme und Warmwasser des Monats
+
+Die **Heizwärme** einer Zeile liest `core/berechnungen/waermepumpe_kennzahl.py::heizwaerme_kwh` (N-398): `heizenergie_kwh`,
+sonst der Legacy-Name `heizung_kwh` (der erste Wert > 0, bitgleich zu `get_wp_heizenergie_kwh`), sonst die gemessene
+*Nutzenergie Heizbetrieb* (`betriebsart_nutzenergie_heizen_kwh`, Gerätefeld vor Σ Innengeräte), sonst keine Angabe. Eine
+gepflegte 0 in einem der ersten beiden Felder ist eine Messung und verdrängt die Nutzenergie (F-42); addiert wird nichts. Die
+**Warmwasser-Wärme** liest `core/field_definitions/reader.py::get_wp_warmwasser_kwh` (N-379): `warmwasser_kwh`, aber nur, wenn
+das Gerät die Größe laut Registry hat (`groesse_gibt_es_am_geraet`) — eine Split-Klimaanlage hat keinen Warmwasserkreis, ein
+dort gespeicherter Wert zählt 0 und bleibt stehen (der Daten-Checker benennt ihn).
+
+`WpFakten.heizung_kwh` und `.warmwasser_kwh` sind die Summe dieser Werte über die Wärmepumpen-Zeilen des Monats
+(`imd_typ_beitrag` → `roh.py::_RohMonat._falte_wp`). **Ohne gemessene Achse keine Angabe** (N-673, `bau.py::_wp_fakten`): misst
+kein Gerät des Monats die Achse, ist der Wert `None` — eine Wärmepumpe nur mit Gesamtwärme hat keine Heizwärme 0, sondern eine
+unbekannte Aufteilung; eine gemessene 0 bleibt 0. Gemessen heißt: eine Stufe der Lesetür trägt einen Wert bzw. die Zeile trägt
+einen Warmwasser-Wert an einem Gerät mit dieser Achse (`hat_wp_warmwasser_wert`); die Marke ist ein ODER über die Geräte
+(N-479). Wer summiert, liest `or 0.0` und fragt die Marke. Beide Achsen sind die Summanden der Wärme nach D1, nie neben
+`waerme_kwh` addiert (Kasten oben).
 
 #### 3 Effizienz-Modi
 
@@ -2004,25 +2029,21 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 
 > ### ⛔ Der WP-Strom trägt den vollen Netztarif — auch der Teil aus der eigenen PV
 >
-> **Hier stand bis zum 13.09.2026 ein `Netz_Anteil = 1 − pv_anteil_prozent/100`** in
-> **beiden** Formeln, Kosten wie CO₂. Er ist ersatzlos entfallen, und mit ihm die
-> versteckte 50-%-Konstante `WP_PV_ANTEIL_DEFAULT`, die dieselbe Größe an zwei weiteren
-> Stellen anders bildete.
+> **Kein `Netz_Anteil`-Abschlag** in Kosten oder CO₂ und keine PV-Anteil-Konstante (S1b, `core/calculations.py`): der
+> ganze WP-Strom trägt den Strompreis und den CO₂-Faktor.
 >
 > **Der Grund ist keine Vereinfachung, sondern ADR-002/P9:** Der PV-Strom, den die
 > Wärmepumpe verbraucht, ist auf der **PV-Seite** bereits gutgeschrieben — im Geld als
 > **Eigenverbrauch** (er wird dort mit dem Netzbezugspreis bewertet), im CO₂ als
 > **vermiedener Netzstrom**. Ihn in der Wärmepumpen-Rechnung ein zweites Mal abzuziehen,
-> zählte dieselbe Kilowattstunde doppelt. Am Zahlenbeispiel: PV 1.000 kWh, davon 300 kWh
-> in die Wärmepumpe, Rest eingespeist, Netz 30 ct, Einspeisung 8 ct, Gas-Alternative
-> 500 €. Wahr sind 556 € Jahresnutzen; mit PV-Abschlag wies eedc 646 € aus.
+> zählte dieselbe Kilowattstunde doppelt.
 >
 > Das Feld **„PV-Anteil (%)"** am Gerät bleibt und beantwortet eine **Mengenfrage**
 > („wie viel des WP-Stroms kam aus der eigenen Anlage?"). Es speist genau zwei Stellen:
 > den Eigenverbrauchs-Fallback der Prognose und die Zuordnung des Eigenverbrauchs auf das
 > einzelne Gerät. Es beantwortet **keine Preisfrage**.
 >
-> **Seit N-770 (30.10.2026) gilt der Satz auch mit eigenem WP-Tarif genau:** misst die Anlage den Netzbezug zum
+> **Mit eigenem WP-Tarif gilt der Satz genau, wenn N gemessen ist (N-770):** misst die Anlage den Netzbezug zum
 > WP-Tarif, wird der PV-Strom der Wärmepumpe auf der PV-Seite zum **WP-Tarif** gutgeschrieben (Abschnitt N-767 unten) —
 > die WP-Kosten bleiben WP-Strom × WP-Tarif, und die kWh ist weiter einmal Geld.
 >
@@ -2031,8 +2052,8 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > Jahr*, HA-Sensor je Gerät), anlagenweite Alternativkosten
 > (`core/berechnungen/alternativkosten.py`), die Jahresformel der Prognose
 > (`api/routes/aussichten/finanz_prognose.py`) und diese Planungsformel hier. Die CO₂-Zeile trifft sich
-> dabei mit dem gemessenen Pfad `co2_wp_ersparnis_kg`, der schon immer den vollen Strom
-> belastete (ADR-001/DI-1).
+> dabei mit dem gemessenen Pfad `co2_wp_ersparnis_kg`, der den vollen Strom
+> belastet (ADR-001/DI-1).
 >
 > #### Mit eigenem Wärmepumpen-Tarif — Netzbezug zum WP-Tarif oder Grenze (N-767, N-770)
 >
@@ -2040,7 +2061,7 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > Wärmepumpe*, dessen Arbeitspreis vom allgemeinen abweicht, tun sie das nicht mehr. Je Monat ist der WP-Strom
 > **S = P + N** — P aus der PV, N aus dem Netz; Haushaltstarif H, WP-Tarif W:
 >
-> | Größe | ohne Messung von N | mit gemessenem N (seit N-770, 30.10.2026) |
+> | Größe | ohne Messung von N | mit gemessenem N (N-770) |
 > | --- | --- | --- |
 > | Stromrechnung | Netzbezug × H — zu hoch um N·(H−W) | (Netzbezug − N) × H + N × W |
 > | EV-Ersparnis | EV × H — zu hoch um P·(H−W) | (EV − P) × H + P × W, P = S − N |
@@ -2055,15 +2076,14 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > Mehrere Wärmepumpen: N je Gerät, im Monat summiert; fehlt N an einem Gerät mit Strom > 0, gilt der Monat als nicht
 > gemessen (keine Mischung aus gemessen und geschätzt). Klemme: N auf `[0, min(S, Netzbezug)]` (§3.1). Bildungsstelle
 > `monats_fakten/tarif.py::komponenten_anteile`, Formel `finanz_aggregat.bewerte_eigenverbrauch` (P auf den bewerteten
-> Eigenverbrauch begrenzt, P15-Grundmenge unverändert). Zahlenbeispiel (Januar 2025, r28, H 30 ct, W 22 ct): S 426,7,
-> N 256 ⇒ P 170,7 kWh; EV-Ersparnis −13,66 €, Stromrechnung −20,48 €, Ergebnis +6,82 €.
+> Eigenverbrauch begrenzt, P15-Grundmenge unverändert).
 >
 > **Ohne Messung bleibt es bei der Grenze** — sie hängt dann am Messpunkt. Sitzt die Wärmepumpe hinter dem Messpunkt, an
 > dem eedc Netzbezug und Einspeisung liest (Netzanschluss), stehen die Ersparnis um P·(H−W) und die Stromrechnung um
 > N·(H−W) zu hoch, zusammen höchstens S·|H−W|; liest eedc am Hauszähler einer Kaskade, steckt der PV-Anteil der
 > Wärmepumpe in der „Einspeisung". Eine Zuteilung (etwa WP-Strom × Eigenverbrauchsquote) wäre erfundene Genauigkeit —
-> deshalb die Messgröße statt einer Schätzung (Gernot 30.10.2026). Der **Daten-Checker** (Kategorie *Strompreise – eigener
-> WP-/Wallbox-Tarif*, seit E4 31.10.2026) nennt Monate ohne das Feld mit der Obergrenze für Ersparnis UND Stromrechnung
+> deshalb die Messgröße statt einer Schätzung (Entscheid Gernot, N-767). Der **Daten-Checker** (Kategorie *Strompreise – eigener
+> WP-/Wallbox-Tarif*, E4) nennt Monate ohne das Feld mit der Obergrenze für Ersparnis UND Stromrechnung
 > zusammen (S × |H − W| der ungemessenen Monate der letzten zwölf) und dem Rat «Netzbezug zum WP-Tarif zuordnen»; still,
 > wenn jeder Monat mit WP-Strom gemessen ist. Dazu WARNING bei N > S (2 %) bzw. N > Netzbezug (geklemmte Monate) und INFO,
 > wenn derselbe Sensor in «Stromverbrauch» und im Feld steht (paralleler Zähler: der Netzbezug der Anlage muss ihn
@@ -2073,15 +2093,13 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 
 > **Wirkungsgrad der Altanlage (η_alt):** `Gesamtwärmebedarf` ist **abgegebene Wärme**, nicht Brennstoff — das Eingabefeld heißt „Heizwärmebedarf (kWh/Jahr) — aus Energieausweis", und derselbe Wert wird oben durch die JAZ geteilt (JAZ = Wärme/Strom). Ein Kessel muss dafür `Wärme / η` verfeuern; `Alter_Preis` ist der Preis je kWh **Brennstoff** (so steht er auf der Rechnung). Die Umrechnung macht der Layer-SoT `gas_kosten_altanlage`, die η-Wahl der Resolver `alter_wirkungsgrad` — beide in `core/berechnungen/alternativkosten.py`.
 >
-> Bis v4.0.1 fehlte die η-Rückrechnung in diesem Pfad: die ROI-Seite wies für dieselbe Wärmepumpe eine niedrigere Ersparnis (und CO₂-Einsparung) aus als Aussichten, HA-Export und WP-Dashboard, die alle über `gas_kosten_altanlage` laufen. **Die fixen Zusatzkosten werden nicht durch η geteilt** — sie sind keine Energie.
+> Dieselbe Rückrechnung gilt für die CO₂-Zeile und in Aussichten, HA-Export und WP-Dashboard (alle über `gas_kosten_altanlage`). **Die fixen Zusatzkosten werden nicht durch η geteilt** — sie sind keine Energie.
 >
-> **Strom-Direktheizung:** η = 1,0. Eine Widerstandsheizung (Nachtspeicher, Infrarot) setzt Strom verlustfrei in Wärme um; ihr einen Kesselverlust anzurechnen, würde die WP-Ersparnis überhöhen. Die η-Wahl lag vorher an vier Stellen dupliziert vor und kannte diesen Fall nirgends.
+> **Strom-Direktheizung:** η = 1,0. Eine Widerstandsheizung (Nachtspeicher, Infrarot) setzt Strom verlustfrei in Wärme um; ihr einen Kesselverlust anzurechnen, würde die WP-Ersparnis überhöhen.
 
-> **Diese Rechnung braucht zwei gepflegte Angaben — sonst läuft sie nicht.** ⚠ **Bis 2026-08-16 stand hier das Gegenteil:** „Split-Klimaanlagen (`wp_art = luft_luft`) durchlaufen diese Rechnung gar nicht … ein Luft-Luft-Gerät ersetzt in aller Regel keine Heizung." **Diese Prämisse ist gefallen** — eine Luft-Luft-Wärmepumpe kann sehr wohl eine Gasheizung ersetzen, und viele Anwender heizen damit. Der echte Defekt war nie die Bauart, sondern eine **erfundene Eingabe**: Weil `Heizwärmebedarf`/`Warmwasserbedarf` Defaults hatten (12.000/3.000 kWh), kam die Formel nie ohne Ergebnis heraus — bei den übrigen Standardwerten rund **1.100 €/Jahr** und **2.210 kg CO₂/Jahr** Ersparnis gegen eine Gasheizung, die es nie gab, inklusive Beitrag zu den Anlagen-Summen. **Heute gilt stattdessen:** (1) Ist beim **ersetzten Energieträger** „Nichts ersetzt (Neubau)" gewählt, wird **weder Ersparnis noch CO₂-Ersparnis** konstruiert — für **jede** Wärmepumpenart, nicht nur für Klimaanlagen; das war der Neubau-Fall, der bis dahin still eine Gaskessel-Ersparnis bekam. (2) Ist **kein Wärmebedarf gepflegt**, gibt es keinen Default mehr; die ROI-Zeile trägt „—" und `nicht_bewertet` samt Begründung. Eine halb gepflegte Angabe zählt entsprechend halb (nur Warmwasser gepflegt ⇒ Heizwärme 0). (3) **Bestandsschutz ohne Migration:** Steht an einer Luft-Luft-WP noch **exakt** die alte Vorbelegung 12.000/3.000, zählt sie als offene Frage statt als Antwort — sie war seit v4.0.6 unsichtbar und damit nicht korrigierbar. Bei klassischen Wärmepumpen bleibt sie eine Schätzung und wird gerechnet. Die **gemessenen** Pfade (`services/wp_wirtschaftlichkeit.py`, `co2_wp_ersparnis_kg`, Aussichten, JAZ/COP) haben zusätzlich weiterhin ihren `wp_waerme_kwh <= 0`-Wächter. (4) **Eine Achse, die es am Gerät nicht gibt, geht mit 0 ein** (14.09.2026, WK-15c): Eine **Brauchwasser**-Wärmepumpe gibt keine Heizwärme ab, eine **Split-Klimaanlage** hat keinen Warmwasserkreis (N-304) — der jeweils andere Bedarf wird vor der Formel auf 0 gesetzt, auch wenn eine Zahl im Feld steht. Gemessen an einer Brauchwasser-WP mit der Formular-Vorbelegung: **714,29 €/Jahr und 1.721 kg CO₂** gegenüber **142,86 € und 344 kg** — 571 € Ersparnis für Wärme, die das Gerät nie liefert. Steht auf den geltenden Achsen **nur** die Vorbelegung, greift (3); steht dort gar nichts, greift (2). SoT der Unterscheidung: `core/berechnungen/alternativkosten.py::ersetzt_keine_heizung` für (1) und `field_definitions/bedingungen.py::feld_urteil` für (3) und (4) — **die Registry entscheidet je Achse, nicht die Bauart** (ADR-002/P13). Die Layer-Formel `berechne_waermepumpe_einsparung` bleibt davon unberührt: Sie rechnet, was der Aufrufer ihr gibt.
+> **Diese Rechnung braucht zwei gepflegte Angaben — sonst läuft sie nicht.** Die Bauart entscheidet das nicht: auch eine Luft-Luft-Wärmepumpe kann eine Gasheizung ersetzen; ausgeschlossen wird allein eine **erfundene Eingabe**. (1) Ist beim **ersetzten Energieträger** „Nichts ersetzt (Neubau)" gewählt, wird **weder Ersparnis noch CO₂-Ersparnis** konstruiert — für **jede** Wärmepumpenart (N-88). (2) Ist **kein Wärmebedarf gepflegt**, gibt es keinen Default; die ROI-Zeile trägt „—" und `nicht_bewertet` samt Begründung. Eine halb gepflegte Angabe zählt entsprechend halb (nur Warmwasser gepflegt ⇒ Heizwärme 0). (3) **Bestandsschutz ohne Migration:** Steht an einer Luft-Luft-WP noch **exakt** die alte Vorbelegung 12.000/3.000, zählt sie als offene Frage statt als Antwort — sie war im Formular unsichtbar und damit nicht korrigierbar. Bei klassischen Wärmepumpen bleibt sie eine Schätzung und wird gerechnet. Die **gemessenen** Pfade (`services/wp_wirtschaftlichkeit.py`, `co2_wp_ersparnis_kg`, Aussichten, JAZ/COP) haben zusätzlich ihren `wp_waerme_kwh <= 0`-Wächter. (4) **Eine Achse, die es am Gerät nicht gibt, geht mit 0 ein** (WK-15c): Eine **Brauchwasser**-Wärmepumpe gibt keine Heizwärme ab, eine **Split-Klimaanlage** hat keinen Warmwasserkreis (N-304) — der jeweils andere Bedarf wird vor der Formel auf 0 gesetzt, auch wenn eine Zahl im Feld steht. Steht auf den geltenden Achsen **nur** die Vorbelegung, greift (3); steht dort gar nichts, greift (2). SoT der Unterscheidung: `core/berechnungen/alternativkosten.py::ersetzt_keine_heizung` für (1) und `field_definitions/bedingungen.py::feld_urteil` für (3) und (4) — **die Registry entscheidet je Achse, nicht die Bauart** (ADR-002/P13). Die Layer-Formel `berechne_waermepumpe_einsparung` bleibt davon unberührt: Sie rechnet, was der Aufrufer ihr gibt.
 
-> ⚠ **Punkt (1) galt bis 2026-08-29 nur je Gerät, nicht in den anlagenweiten Sichten** — und der häufigste Fall fiel genau durch diese Lücke. Wer neben einer Wärmepumpe, die eine Gasheizung ersetzt hat, eine **Split-Klimaanlage** betreibt (in eedc ebenfalls eine Wärmepumpe, meist mit „Nichts ersetzt (Neubau)"), bekam auch deren Wärme als vermiedenes Gas gutgeschrieben: Die Sperre griff erst, wenn **keine einzige** Wärmepumpe etwas ersetzt hatte. Betroffen waren die **CO₂-Ersparnis im Jahresbericht** — bei zwei gleich großen Geräten war sie **doppelt so hoch** (2.458 statt 1.229 kg/Jahr, an einer nachgestellten Anlage gemessen) — und die **Alternativkosten-Ersparnis in der Jahresprognose** unter *Auswertungen → Aussichten*, dort mit umgekehrtem Vorzeichen: Der Strom des Neubau-Geräts wurde von der Ersparnis der ersetzenden Wärmepumpe abgezogen (1.057 → 704 €/Jahr, ebenfalls nachgestellt).
->
-> **Heute gilt Punkt (1) überall.** Der fossile Vergleich rechnet auf beiden Seiten mit **den Geräten, die etwas ersetzt haben** — dieselbe Grundmenge im Zähler wie im Abzug. Die Mengen der Anlage (Stromverbrauch, gelieferte Wärme) bleiben davon unberührt; kleiner wird allein die **Grundmenge des Vergleichs**. SoT sind die Teilmengen `WpFakten.waerme_mit_ersatz_kwh` / `strom_mit_ersatz_kwh` aus der Monats-Fakten-Schicht (ADR-002/P10).
+> **Punkt (1) gilt auch in den anlagenweiten Sichten** — CO₂-Ersparnis im Jahresbericht und Alternativkosten-Ersparnis der Jahresprognose unter *Auswertungen → Aussichten*: Der fossile Vergleich rechnet auf beiden Seiten mit **den Geräten, die etwas ersetzt haben** — dieselbe Grundmenge im Zähler wie im Abzug. Eine Split-Klimaanlage mit „Nichts ersetzt (Neubau)" neben einer Wärmepumpe, die eine Gasheizung ersetzt hat, bekommt keine vermiedene Gas-Wärme gutgeschrieben, und ihr Strom mindert die Ersparnis der anderen nicht. Die Mengen der Anlage (Stromverbrauch, gelieferte Wärme) bleiben davon unberührt; kleiner wird allein die **Grundmenge des Vergleichs**. SoT sind die Teilmengen `WpFakten.waerme_mit_ersatz_kwh` / `strom_mit_ersatz_kwh` aus der Monats-Fakten-Schicht (ADR-002/P10).
 >
 > **Faltung der Teilmengen** (`monats_fakten/roh.py::_RohMonat._falte_wp`, N-256): je WP-Zeile gehen Strom und Wärme
 > zusätzlich in die `*_mit_ersatz`-Summen, wenn das Gerät eine Heizung ersetzt hat (`not ersetzt_keine_heizung(ersetzter
@@ -2091,9 +2109,14 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 > ⭐ **Warum Teilsummen und keine Sperre.** Die *Arbeitszahl* wird bei gemischten Bauarten gesperrt, weil ein Quotient über zwei Maßstäbe keine Aussage hat. Eine *CO₂-Menge* dagegen ist additiv — für sie genügt die Teilsumme. **Kennzahlen trennen wir je Bauart, Mengen summieren wir.**
 
 
-> **Alternativ-Zusatzkosten (v3.21.0, #141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Wird in **fünf** Berechnungs-Pfaden berücksichtigt: Aussichten historisch + Prognose, HA-Sensor-Export inkl. WP-Sensor, PDF-Jahresbericht, Investitions-Vorschau. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`). **Seit 05.09.2026 auch im Monats-Layer** (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — bis dahin wiesen diese Sichten für dieselbe Wärmepumpe eine um die anteiligen Zusatzkosten niedrigere Ersparnis aus als Export und Aussichten (gemessen an einem Monat mit 120 €/Jahr: 166,67 € gegen 176,67 €).
+> **Alternativ-Zusatzkosten (#141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Berücksichtigt in Aussichten (historisch und Prognose), im HA-Sensor-Export inkl. WP-Sensor, im PDF-Jahresbericht, in der Investitions-Vorschau und im Monats-Layer (`berechne_wp_ersparnis`: Komponenten-Hub, Cockpit → Monat/Jahr, Vorjahresvergleich, Komponenten-Zeitreihe) — überall dieselbe Ersparnis. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`).
 
 #### Eingabefelder
+
+Die Monats-Messgrößen der Wärmepumpe (Strom, Wärme, Achsen, Betriebsarten) stehen in der
+[Übersicht der Größen §1](UEBERSICHT-GROESSEN.md#1-eingabefelder) und in der [Sensor-Referenz §4](SENSOR-REFERENZ.md#4-wärmepumpe);
+ihre Monatsregeln stehen oben. Diese Planungsrechnung liest die Investitions-Parameter (`core/investition_parameter.py`,
+`PARAM_WAERMEPUMPE_DEFAULTS`):
 
 | Feld | Parameter-Key | Default |
 |------|--------------|---------|
@@ -2103,9 +2126,9 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 | SCOP Warmwasser | `scop_warmwasser` | 3.2 |
 | COP Heizung | `cop_heizung` | 3.9 |
 | COP Warmwasser | `cop_warmwasser` | 3.0 |
-| Heizwärmebedarf | `heizwaermebedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 12000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft` seit 2026-08-16, `brauchwasser` seit 14.09.2026). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
-| Warmwasserbedarf | `warmwasserbedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 3000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft` seit 2026-08-16, `brauchwasser` seit 14.09.2026). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
-| PV-Anteil | `pv_anteil_prozent` | 30, wenn nie eingetragen — im Formular **nicht vorbelegt** (N-572, 27.09.2026); ein geleertes Feld bleibt leer und nimmt das Gerät aus dem Prognose-Mittel (s. „`WP_PV_Anteil`" in §4.4) |
+| Heizwärmebedarf | `heizwaermebedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 12000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft`, `brauchwasser`). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
+| Warmwasserbedarf | `warmwasserbedarf_kwh` | **kein Default mehr** in der ROI-Rechnung; im Formular Vorbelegung 3000 — **nicht** vorbelegt, wo dem Gerät eine der beiden Wärme-Achsen fehlt (`luft_luft`, `brauchwasser`). Zählt nur auf einer Achse, die es am Gerät gibt, s. (4) oben |
+| PV-Anteil | `pv_anteil_prozent` | 30, wenn nie eingetragen — im Formular **nicht vorbelegt** (N-572); ein geleertes Feld bleibt leer und nimmt das Gerät aus dem Prognose-Mittel (s. „`WP_PV_Anteil`" in §4.4) |
 | Alter Energieträger | `alter_energietraeger` | `gas` |
 | Alter Preis | `alter_preis_cent_kwh` | 12 (Fallback wenn `Monatsdaten.gaspreis_cent_kwh` leer) |
 | Alternativ-Zusatzkosten | `alternativ_zusatzkosten_jahr` | 0 (€/Jahr) |
@@ -2122,8 +2145,7 @@ mitschreibt (`TagesEnergieProfil.betriebsmodus_je_wp`, seit S2).
 > wo die Integration ihn liefert (D2). ⚠ **Verfeinern heißt nicht verwerfen** — der Ist-Betrieb
 > schlägt den Modus nur, wo er eine **Richtung** nennt (`heating`/`cooling`/`drying`/`fan`) oder
 > `off`. **`idle` (Leerlauf) nennt keine und fällt deshalb auf den eingestellten Modus zurück**
-> (#399, 28.08.2026; davor ergab es `unbestimmt`, und bei einem taktenden Inverter-Gerät fiel
-> damit der Großteil des Stroms in *nicht aufgeteilt*). Ohne Richtung im Modus — Automatik
+> (#399 — sonst fiele bei einem taktenden Inverter-Gerät der Großteil des Stroms in *nicht aufgeteilt*). Ohne Richtung im Modus — Automatik
 > (`heat_cool`/`auto`) oder gar kein Modus — bleibt es `unbestimmt`; geraten wird nicht.
 
 ```text
@@ -2133,10 +2155,12 @@ je Tag d, je Gerät i:
   kwh[modus] += roh_h × faktor_d                          # Stunden OHNE Modus: nur in den Nenner
 
 je Monat (ein Gerät):
-  modus_strom_heizen_kwh  = Σ_d kwh[heizen]
-  modus_strom_kuehlen_kwh = Σ_d kwh[kuehlen]
-  modus_abdeckung_h       = Σ_d Stunden mit Modus-Signal
-  nicht_aufgeteilt        = Bezug − heizen − kuehlen      # NIE gespeichert
+  modus_strom_heizen_kwh     = Σ_d kwh[heizen]
+  modus_strom_warmwasser_kwh = Σ_d kwh[warmwasser]                 # N-336
+  modus_strom_kuehlen_kwh    = Σ_d kwh[kuehlen]
+  modus_abdeckung_h          = Σ_d Stunden mit Modus-Signal
+  modus_nicht_aufgeteilt_kwh = max(0; modus_strom_bezug_kwh − heizen − warmwasser − kuehlen
+                                      − lueften − entfeuchten)     # Property, NIE gespeichert
 
 anlagenweit (mehrere Geräte, gleicher Zeitraum):
   modus_strom_*_kwh       = Σ_i  je Gerät                 # Mengen: addieren
@@ -2145,6 +2169,16 @@ anlagenweit (mehrere Geräte, gleicher Zeitraum):
 
 SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus_split_monat.py`
 (Lader) · `…/modus_split_schreiben.py` (Schreiber, Schritt 4 des Monatsabschlusses).
+
+**Die Teilmengen der Monatszeile** liest `core/berechnungen/betriebsart_gemessen.py::modus_strom_zeile` — *gemessen schlägt
+abgeleitet*, ganz oder gar nicht je Zeile (F-56). **Abgeleitet** (der Modus-Split oben bzw. der Kanal E4d unten) trägt die
+Zeile Heizen, Warmwasser (N-336) und Kühlen (`MODUS_STROM_FELD`). **Gemessen** — sobald ein Betriebsart-Strom-Zähler einen Wert
+trägt — gelten die Betriebsart-Zähler Heizen, Kühlen, Lüften und Entfeuchten (Gerätefeld vor Σ Innengeräte); Warmwasser kommt
+dort aus dem Summanden `strom_warmwasser_kwh` und Heizen ohne eigenen Zähler aus `strom_heizen_kwh`, beides nur mit dem
+Kennzeichen *Getrennte Strommessung* (N-766). Lüften und Entfeuchten gibt es deshalb nur im gemessenen Zweig.
+`WpFakten.modus_strom_warmwasser_kwh`, `.modus_strom_lueften_kwh` und `.modus_strom_entfeuchten_kwh` sind wie Heizen und Kühlen
+die Summe je Zeile über die Geräte (`imd_typ_beitrag` → `roh.py::_RohMonat._falte_wp`). Altmonate ohne das Warmwasser-Feld
+behalten den Anteil im Rest — eedc rechnet die Historie nicht nach.
 
 > **Teilmengen, keine Summanden.** `stromverbrauch_kwh` bleibt die einzige Bilanzgröße; die zwei
 > Anteile werden **ausgewiesen und nie addiert** (Präzedenz `ladung_pv_kwh` bei der Wallbox).
@@ -2165,10 +2199,8 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > auch Wärmepumpen **ohne** Modus-Sensor; ihr Verbrauch erschiene sonst als unbeobachtete Zeit der
 > Klimaanlage. Bezug ist `WpFakten.modus_strom_bezug_kwh` — der Strom nur der Geräte mit Split.
 >
-> ⭐ **Und genau deshalb nennt die Anzeige diesen Bezug seit v4.0.29 (W-17b).** Die Kachel „Strom
-> verbraucht" zeigt `strom_kwh`, der Balken darunter beschreibt `modus_strom_bezug_kwh` — bei
-> einem Melder 30 gegen 284 kWh. Beide Zahlen waren richtig, nur stand nirgends, dass es zwei
-> verschiedene Grundmengen sind. Die Zeile „Aufgeteilte Menge" erscheint, sobald sie abweichen.
+> ⭐ **Und genau deshalb nennt die Anzeige diesen Bezug (W-17b).** Die Kachel „Strom verbraucht" zeigt `strom_kwh`, der Balken
+> darunter beschreibt `modus_strom_bezug_kwh` — zwei verschiedene Grundmengen. Die Zeile „Aufgeteilte Menge" erscheint, sobald sie abweichen.
 
 > **Eine Menge ist additiv, ein Zeitraum nicht (W-17).** `modus_abdeckung_h` wird über **Tage**
 > summiert und über **Geräte** maximiert. Zwei Wärmepumpen, die dieselben 18 Stunden liefen,
@@ -2180,7 +2212,7 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > einer Zahl, die zu klein sein kann, und einer, die einen Tag mit 36 Stunden behauptet, ist die
 > Wahl keine Geschmacksfrage.
 
-> **Strom je Betriebsart aus Zeitraum-Differenzen (HA-Bauform E4d, Stand 06.10.2026).** Mit Home Assistant (bzw. der
+> **Strom je Betriebsart aus Zeitraum-Differenzen (HA-Bauform E4d).** Mit Home Assistant (bzw. der
 > eigenen Summe aus MQTT) führt eedc für jede Wärmepumpe mit Betriebsart-Signal und **ohne** eigene Betriebsart-Zähler
 > einen **abgeleiteten Kanal** je Betriebsart (`services/kanal/modus_strom.py`):
 >
@@ -2196,6 +2228,12 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 > Ein Zeitraum nennt die Aufteilung damit als **ein Δ** je Kanal, wie jede andere Menge. Die Regel der Stunde steht im
 > Layer (`modus_split.modus_strom_der_stunde`). Wechselt die Betriebsart innerhalb einer Stunde, teilt der Kanal nach der
 > Verweildauer; die Tagesebene oben gibt die ganze Stunde dem länger gelaufenen Modus.
+>
+> **Lüften und Entfeuchten sind erfasst, nicht bewertet** (Konzept Wärme/Klima §5.4, D11; `modus_split.py::MODUS_STROM_ERFASST`):
+> der Kanal führt alle fünf Betriebsarten, in die Monatszeile überträgt die WP-Gruppe aber nur Heizen, Warmwasser und Kühlen
+> (`MODUS_STROM_FELD`, `kanal/wp_leser.py`). Kein Leser faltet den abgeleiteten Lüftungs- oder Entfeuchtungsstrom in eine Zahl;
+> er bleibt im Rest des Monats. `modus_strom_lueften_kwh`/`_entfeuchten_kwh` der Monats-Fakten kommen nur aus gemessenen
+> Betriebsart-Zählern (Teilmengen der Monatszeile, oben).
 >
 > * **Monat ohne Abschluss:** deckt die **WP-Gruppe** (alle Strom-, Wärme- und Betriebsart-Zähler der aktiven
 >   Wärmepumpen und die abgeleiteten Kanäle, `kanal/wp_leser.py`) den Monat, nehmen die Monats-Fakten und *Cockpit →
@@ -2235,7 +2273,7 @@ SoT: `core/berechnungen/modus_split.py` (rein) · `services/energie_profil/modus
 
 #### 3.5b-E1b Die **Systemarbeitszahl der Wärmeerzeugung** — die Zahl der ANLAGE (14.09.2026)
 
-Neben der Arbeitszahl **eines Geräts** gibt es seit v4.0.45 eine zweite, anders
+Neben der Arbeitszahl **eines Geräts** gibt es eine zweite, anders
 benannte Größe für die **Anlage**:
 
 ```text
@@ -2255,11 +2293,6 @@ derselbe wie dort — **E7/Option A**, also der **Abzug** und nicht die Menge.
 > Ergebnis ist eine **untere Schranke** und wird so gezeigt: **„≥ 3,25"**, mit
 > dem Satz *„<Gerät>: Strom ohne Wärmemessung enthalten"*. ADR-002/**P4**
 > verbietet eine *falsche* Zahl, nicht eine *wahre Schranke*.
->
-> **Nachgerechnet am Melder-Fall** (dietmar1968, 14.09.2026): AZ Heizung 3,94 ×
-> 1188 kWh + AZ Warmwasser 2,84 × 843 kWh = **7075 kWh** Wärme; Gesamtstrom
-> **2193 kWh**, davon **17 kWh** Klima-Kühlen ⇒ 7075 ÷ 2176 = **3,25** — genau
-> die Zahl, die sein eigenes Dashboard nennt.
 >
 > ⛔ **In der Gegenrichtung gibt es keine Schranke.** Steht im **Zähler** Wärme,
 > deren Strom fehlt, kippt die Zahl nach **oben**; dort sperren
@@ -2291,15 +2324,13 @@ Funktions-Eingänge  = Monatszeile, wenn sie eine Menge trägt — sonst Faltung
   denselben Ausschnitt, gibt es keinen Versatz. Bewusst **nicht** aus „Tagen mit Wert" erkannt: das kann „das Gerät
   stand" nicht von „der Sensor fehlte" unterscheiden.
 * **Ersatz leerer Gerätekennzahlen** (HA-Bauform E4d, N-472/A-5): Den Dienst `lade_kennzahlen_je_geraet` speisen die
-  Monatszeilen, die es im laufenden Monat nicht gibt — die Tabelle *Zahlen je Gerät* blieb leer, während Kachel und
-  Verlauf darüber dieselben Tage zeigten. Ersetzt wird nur, was leer ist; die Kanal-Zeile geht der Tagesebene vor.
-* **S5 anlagenweit** (WK-16i, N-503): Die Eingänge der Funktions-Arbeitszahlen und die Deckung je Funktion kamen bis
-  15.09.2026 nur aus den Monats-Fakten — im laufenden Monat stand deshalb „Strom nicht getrennt je Funktion gemessen"
-  über einer Tabelle mit 5,58 und 3,32. Die Faltung der Geräte-Mengen steht an einer Stelle
+  Monatszeilen, die es im laufenden Monat nicht gibt; ersetzt wird nur, was leer ist, und die Kanal-Zeile geht der Tagesebene vor.
+* **S5 anlagenweit** (WK-16i, N-503): Die Eingänge der Funktions-Arbeitszahlen und die Deckung je Funktion kommen aus der
+  Monatszeile, wenn sie eine Menge trägt, sonst aus der Faltung der Geräte-Mengen — sie steht an einer Stelle
   (`services/waerme_klima_block.py::funktions_eingaenge_der_anlage`).
 
 Die Systemarbeitszahl bekommt die **sperrende** Kette ohne die beiden Schranken-Glieder (Bauarten gemischt, Geräte
-ohne Wärme): Anwender-Angabe, Zeitraum-Versatz, verschiedene Geräte. Code-Orte seit RF-67 (5.11.2026): die
+ohne Wärme): Anwender-Angabe, Zeitraum-Versatz, verschiedene Geräte. Code-Orte (RF-67): die
 Phase `_wp_abgrenzung` (R2-Lagen, S5, SOLL §3.2b, Schranken-Eingang, sperrende Kette), `_kennzahlen_aus_kanal_zeilen`
 und `_kennzahlen_aus_tagesebene`; Proben `test_rf67_aktueller_monat_pv_strings_phasen.py`.
 
@@ -2327,8 +2358,7 @@ sonst *„nicht alle Geräte melden Zusatzheizung"*; der Hub rechnet je Gerät.
 
 > ⛔ **Keine Wirkung auf Mengen, Ersparnis, CO₂, Community oder HA-Sensoren.** Der Heizstab-Strom ist eine Teilmenge
 > des Gerätestroms (kein Komponenten-Beitrag, keine Bilanz-Kategorie); die Hauptzahl bleibt die Zahl, die eedc
-> bewertet. Beispiel (#432): Wärme 26 kWh, Strom 6 kWh, davon 0,4 kWh Heizstab ⇒ Hauptzahl 4,33, ohne
-> Zusatzheizung 25,6 ÷ 5,6 = **4,57**; mit 1 kWh Kühlstrom im Strom ⇒ 25,6 ÷ 4,6.
+> bewertet (#432).
 
 #### 3.5b-A Die **Achsen des Geräts** entscheiden über die Funktions-Arbeitszahl (WK-16h, 15.09.2026)
 
@@ -2347,7 +2377,7 @@ sonst *„nicht alle Geräte melden Zusatzheizung"*; der Hub rechnet je Gerät.
 2. Gilt genau **eine** Achse und hat die eigene Rechnung keinen Wert, tritt die
    **Gesamt-Arbeitszahl** an ihre Stelle: Strom und Wärme sind per Bauart dieser
    Funktion zugeordnet.
-3. Sonst rechnet der Pfad wie bisher — **bitgleich** zum Stand vor WK-16h.
+3. Sonst gilt die eigene Rechnung der Funktion (§3.5d).
 
 > ⭐ **Die Grund-Rangfolge fällt daraus heraus, ohne zweite Regel.** An einem
 > Ein-Achsen-Gerät ohne Wärmemengenzähler sagt die Gesamtzahl *„kein
@@ -2414,9 +2444,10 @@ Preis(Segment, Zeitraum)  = Kosten × 100 / kWh      (mengengewichtet)
 ```
 
 ⭐ **Der Preis kommt aus den Monats-Fakten und wird nicht selbst aufgelöst**
-(ADR-002/**P8**): `wp_preis_cent` ist die ganze Kaskade — Wärmepumpen-Sondertarif →
-allgemeiner Tarif → Zeitfenster (HT/NT, über den gemessenen Netzbezug gewichtet) →
-Default, je zum **Monatsersten**. Der Tagespfad rechnet mit demselben Wert
+(ADR-002/**P8**): `TarifFakten.wp_preis_cent` mit den Tarifen zum **Monatsersten** — mit **eigenem** Wärmepumpen-Tarif
+dessen Kaskade (WP-Tarif, mit Zeitfenstern über den Netzbezug des Hauses gewichtet, `monats_fakten/tarif.py::_komponenten_preis`);
+**ohne** ihn hängt die Wärmepumpe am Hauszähler und trägt dessen Preis mit der ganzen Kaskade — abgerechneter Monats-Ø →
+gemessener Ø → Zeitfenster → Stammpreis (N-663). Der Tagespfad rechnet
 (*„Tagestarif = Monatstarif je Tag"*), und genau deshalb steht hier eine Quelle statt
 zweier. Über ein Jahr wird **je Monat** gerechnet; der gezeigte Preis ist der
 mengengewichtete Mittelwert, damit `kWh × Preis = Kosten` aufgeht (**A6**).
@@ -2464,20 +2495,15 @@ sieben Formeln).
 
 > ⚠ **Kühlen ersetzt keine Heizung (Konzept E-B).** `berechne_wp_ersparnis` und
 > `co2_wp_ersparnis_kg` nehmen `strom_kuehlen_kwh` aus dem Vergleich heraus; die Kosten bleiben in
-> `wp_kosten_euro` und werden als `kuehl_kosten_euro` eigens ausgewiesen. Ohne diese Trennung
-> gemessen: **−45,04 €** Ersparnis und **−52 kg** CO₂ für eine Klimaanlage, die im Winter geheizt
-> und im Sommer gekühlt hat (nachher +2,48 € / +8,2 kg). Default 0.0 ⇒ ohne Split unverändert.
+> `wp_kosten_euro` und werden als `kuehl_kosten_euro` eigens ausgewiesen. Default 0.0 ⇒ ohne Split unverändert.
 >
-> ⭐ **Dieselbe Abgrenzung gilt für die Arbeitszahl — seit W-14 (26.08.2026).** Bis dahin nannte
-> dieser Kasten nur Ersparnis und CO₂, und das war keine Unvollständigkeit im Text, sondern im
-> Code: **Die Arbeitszahl war die einzige der drei Größen, an der niemand nachgezogen hatte.** Ein
-> Gerät, das im Sommer kühlt, sah dadurch aus wie eine schlechte Heizung.
+> ⭐ **Dieselbe Abgrenzung gilt für die Arbeitszahl (W-14)** — sonst sähe ein Gerät, das im Sommer kühlt, aus wie eine
+> schlechte Heizung.
 >
-> ⭐ **Und sie gilt für alle Funktionen ohne bewertete Nutzenergie — seit E4 (26.08.2026).**
+> ⭐ **Und sie gilt für alle Funktionen ohne bewertete Nutzenergie (E4).**
 > `arbeitszahl(..., strom_funktionsfremd_kwh=…)` bekommt heute **Kühlen + Lüften + Entfeuchten**
 > aus einer einzigen Größe: `WpFakten.modus_strom_funktionsfremd_kwh` bzw.
-> `ModusStromZeile.funktionsfremd_kwh`. *Eine Größe statt drei Summanden an vier Aufrufern — die
-> Aufzählung war die Bauform, an der W-14 entstanden ist.* **Abgezogen, nicht gesperrt:** die
+> `ModusStromZeile.funktionsfremd_kwh` — eine Größe statt drei Summanden an jedem Aufrufer. **Abgezogen, nicht gesperrt:** die
 > Mengen bleiben in jeder Bilanz, es ändert sich allein der Nenner.
 >
 > ⭐ **Und abgezogen wird nur, was im Nenner steht — SOLL §4.1, „Ergänzung zu E7"
@@ -2492,10 +2518,8 @@ sieben Formeln).
 > | F5 ohne Gesamtzähler, **mit gemessenem** Betriebsart-Zähler | ja — die Menge addiert ihn zu den Achsen (**W-16**) | ganz (**W-16b**) |
 > | F5 ohne Gesamtzähler, **abgeleiteter** Modus-Split | **nein** — der Split *verteilt* `strom_heizen_kwh + strom_warmwasser_kwh` | **0** |
 >
-> ⭐ **Die zweite und die vierte Zeile hießen bis zum 14.09.2026 „feine Achse unvollständig" bzw.
-> „und vollständiger feiner Achse".** Seit WK-16d entscheidet nicht mehr die Vollständigkeit der
-> Achse, sondern ob es einen Gesamtzähler gibt — er ist dann die Menge (K1), auch neben zwei
-> gepflegten Achsen. Die Regel selbst ist unverändert: *abgezogen wird, was im Nenner steht.*
+> ⭐ **Es entscheidet, ob es einen Gesamtzähler gibt, nicht die Vollständigkeit der Achse** (WK-16d) — er ist dann die Menge
+> (K1), auch neben zwei gepflegten Achsen.
 >
 > **Warum das keine Ausnahme, sondern derselbe Grundsatz ist:** SOLL-§9-**E7** begründet an der
 > Kategorie, dass eine *Verteilung* kein Nenner sein darf — *„eine Verteilung erbt jede Unschärfe
@@ -2517,21 +2541,16 @@ sieben Formeln).
 > ⚠ **Die Funktions-Arbeitszahlen sind unberührt** (E7): Ihr Nenner ist der gemessene F5-Zähler,
 > dort wird nichts abgezogen.
 >
-> ✅ **Der Community-Vergleich zieht mit — beide Lücken geschlossen** (13.09.2026). Hier stand bis
-> dahin, dass der **Community-Server** nur den Kühlstrom kennt (Feld `wp_strom_kuehlen_kwh`) und
-> deshalb zweimal abweicht: Wer *Lüften* oder *Entfeuchten* getrennt misst, sah dort eine niedrigere
-> Arbeitszahl als im eigenen Cockpit, und seit Option A sah eine F5-Anlage mit **abgeleitetem** Split
-> dort die höhere (der Server bildete seinen Nenner selbst als `Stromverbrauch −
-> wp_strom_kuehlen_kwh`). Beides löst **ein** neues Feld: `wp_strom_funktionsfremd_abzug_kwh` trägt
-> die volle Definition (Kühlen · Lüften · Entfeuchten) **und** die Bedingung, weil eedc den fertigen
-> **Abzug** schickt statt einer Menge, aus der der Server einen bilden müsste.
+> ✅ **Der Community-Vergleich rechnet denselben Nenner:** eedc schickt `wp_strom_funktionsfremd_abzug_kwh` — die volle
+> Definition (Kühlen · Lüften · Entfeuchten) **und** die Bedingung, also den fertigen **Abzug** statt einer Menge, aus der der
+> Server einen bilden müsste.
 >
 > ⚠ **`wp_strom_kuehlen_kwh` bleibt unverändert die Menge** und wird weiter gesendet — sie ist die
 > Auskunft über den Kühlbetrieb des Monats, und der Server wertet Mengen getrennt von Kennzahlen
-> aus. Abgezogen wird sie dort nur noch, wenn das neue Feld fehlt (ältere eedc-Version).
+> aus. Abgezogen wird sie dort nur, wenn `wp_strom_funktionsfremd_abzug_kwh` fehlt (ältere eedc-Version).
 >
-> ⚠ **Wirksam wird es mit dem Server-Update**, und rückwirkend erst beim nächsten vollständigen
-> Teilen: Bereits übertragene Monate tragen das Feld nicht und rechnen bis dahin wie bisher.
+> ⚠ Monate, die ohne das Feld übertragen wurden, rechnen dort mit dem Kühlstrom-Abzug, bis sie erneut vollständig geteilt
+> werden.
 
 
 
@@ -2539,28 +2558,23 @@ sieben Formeln).
 
 Neben dem Modus-Split gibt es einen zweiten Weg zu einer **abgeleiteten** Wärme: der Vorschlag im
 Monatsabschluss (`vorschlag_service`), der für *Heizwärme* und *Warmwasser-Wärme* `Strom × gepflegte
-JAZ` anbietet (bzw. SCOP/COP je Funktion nach `effizienz_modus`). Seit B1 gilt dafür die Regel aus
-`core/berechnungen/waerme_vorschlag.py` — SOLL Wärme/Klima §6, Präzisierung F2–F5:
+JAZ` anbietet (bzw. SCOP/COP je Funktion nach `effizienz_modus`). Es gilt die Regel aus
+`core/berechnungen/waerme_vorschlag.py` (B1) — SOLL Wärme/Klima §6, Präzisierung F2–F5:
 
 | Feld | Basis-Strom | Sprosse | wenn nicht … |
 | --- | --- | --- | --- |
 | **Heizwärme** | gemessener Heizbetrieb `betriebsart_strom_heizen_kwh` | F4 | … dann `strom_heizen_kwh` (getrennte Messung, F5), sonst **kein Vorschlag** |
 | **Warmwasser-Wärme** | `strom_warmwasser_kwh` (getrennte Messung, F5) | F5 | ohne getrennte Strommessung **kein Vorschlag** — die Menge steckt im Vorschlag *Wärme gesamt* |
-| **Wärme gesamt** (`waerme_kwh`) | `stromverbrauch_kwh` (F2) — **nur ohne getrennte Strommessung und ohne fremde Spur** in der Zeile: kein gemessener Kühl-/Lüft-/Entfeucht-Strom, keine Kältemenge, kein getrennter Warmwasser-Strom | F2 | sonst **kein Vorschlag**. Seit N-391 (14.09.2026) steht der F2-Zweig hier und nicht mehr unter *Heizwärme*, und er braucht die gepflegte **JAZ** — eine Funktions-Arbeitszahl (SCOP/COP) auf dem Gesamtstrom ergäbe eine Menge, die keine Funktion beschreibt |
+| **Wärme gesamt** (`waerme_kwh`) | `stromverbrauch_kwh` (F2) — **nur ohne getrennte Strommessung und ohne fremde Spur** in der Zeile: kein gemessener Kühl-/Lüft-/Entfeucht-Strom, keine Kältemenge, kein getrennter Warmwasser-Strom | F2 | sonst **kein Vorschlag**. Der F2-Zweig steht hier, nicht unter *Heizwärme* (N-391), und er braucht die gepflegte **JAZ** — eine Funktions-Arbeitszahl (SCOP/COP) auf dem Gesamtstrom ergäbe eine Menge, die keine Funktion beschreibt |
 
 **Der Vorschlag trägt die Marke `jaz_vorschlag`** (`REGEL_JAZ_VORSCHLAG`, zweite Regel neben
 `jaz_modus_split`): der Client meldet sie beim Übernehmen zurück (`abgeleitet_felder`), die
 Provenance behält sie, und `heizwaerme_ist_abgeleitet` / `warmwasser_ist_abgeleitet` sperren die
-Arbeitszahl (`wp_waerme_abgeleitet` zählt seit B1 **beide** Funktionen). Multiplizieren (Ersparnis,
+Arbeitszahl (`wp_waerme_abgeleitet` zählt **beide** Funktionen, B1). Multiplizieren (Ersparnis,
 CO₂) bleibt erlaubt — mit Kennzeichnung. Die Beschreibung des Vorschlags sagt es dem Anwender:
 *„Geschätzt: 254 kWh (Strom Heizbetrieb) × JAZ 3,5 — keine Messung"*.
 
-**Was das repariert (gemessen am Code vom 05.09.2026):** (1) ohne getrennte Strommessung wurden
-**beide** Wärmefelder aus dem Gesamtstrom vorgeschlagen — „Lücken füllen" übernahm beide, die
-Gesamtwärme stand doppelt in der Zeile; (2) an einer Klimaanlage mit Betriebsart-Zählern rechnete
-der Dienst `E_gesamt × JAZ` — 254 kWh Kühlstrom wurden 889 kWh „Warmwasser" (dietmar1968, T89667
-#295); (3) der übernommene Vorschlag stand als `manual:form` ohne Marke in der Zeile und galt jeder
-Lesestelle als Messung. ⚠ **Die Bauart entscheidet hier nichts** (R1, ADR-002/P13): ob der
+⚠ **Die Bauart entscheidet hier nichts** (R1, ADR-002/P13): ob der
 Gesamtstrom der Heizstrom ist, sagt die Beleglage der Zeile, nicht `wp_art`. Proben:
 `test_waerme_vorschlag_b1.py`.
 
@@ -2586,15 +2600,11 @@ km aus Jahresfahrleistung       = round(jahresfahrleistung_km / 12, 0)          
     nur bei gepflegter Jahresfahrleistung > 0
 ```
 
-Code-Orte (RF-84, 5.11.2026): `_wp_vorschlaege` (Wärme mit `_arbeitszahl`, Gesamtstrom) · `_speicher_ladepreis` ·
+Code-Orte (RF-84): `_wp_vorschlaege` (Wärme mit `_arbeitszahl`, Gesamtstrom) · `_speicher_ladepreis` ·
 `_eauto_km` (Tachostand, Jahresfahrleistung). Proben: `test_vorschlag_ladepreis_r15_2.py`, `test_407_tachostand.py`,
 `test_rf83_community_vorschlag_korrektur_phasen.py`.
-#### 3.5d Arbeitszahl je Funktion und die Arbeitszahl Kühlen (W-4 · W-5)
 
-⛔ **Dieser Abschnitt fehlte bis zum 27.08.2026 vollständig** — beide Größen waren gebaut und in
-keiner Referenz beschrieben. Aufgefallen beim Prüfauftrag „§3.5c gegen W-4/W-5 halten": Der
-Kasten darüber war richtig, aber er beschreibt eine *dritte* Regel. *Ein Dokument, das niemand
-gegen den Code hält, produziert beides — vergessene Arbeit und erfundene Arbeit.*
+#### 3.5d Arbeitszahl je Funktion und die Arbeitszahl Kühlen (W-4 · W-5)
 
 **Alle vier Arbeitszahlen kommen aus derselben Funktion** (`core/berechnungen/waermepumpe_kennzahl.py`),
 und das ist der Punkt: Was für eine gilt, gilt für alle.
@@ -2611,7 +2621,7 @@ Arbeitszahl Kühlen     = nutzenergie_kuehlen_kwh ÷ betriebsart_strom_kuehlen_k
 | **je Funktion** (W-4) | `getrennte_strommessung` **und** die zugehörige Wärmemenge | `GRUND_STROM_NICHT_JE_FUNKTION` |
 | **Kühlen** (W-5) | Kühlstrom **und** Kältemengenzähler | `GRUND_KEINE_KAELTEMENGE` · `"kein Kühlbetrieb in diesem Zeitraum"` · nur Tag: `GRUND_KEINE_KAELTE_ABGEGEBEN` (Zähler meldet 0 bei Kühlstrom > 0) |
 
-> **Kühlen am Tag — seit Bauschnitt 6 (11.09.2026).** Die Kältemenge eines Tages kommt aus
+> **Kühlen am Tag (Bauschnitt 6).** Die Kältemenge eines Tages kommt aus
 > `get_tagesdetail_kwh` (`wp_kaelte_kwh`) — **Gerätefeld, sonst Σ Innengeräte, nie addiert**
 > (`geraetefeld_oder_innengeraete`, dieselbe Regel wie der Monat), im **Fenster der Tageszeile**
 > wie der Kühlstrom (N-435). Der Kühlstrom ist der des Tages-Stapels. ⚠ **Die Geräte-Deckung
@@ -2629,7 +2639,7 @@ nur er — `arbeitszahl_je_funktion` liest `abgrenzung_verletzt` allein ohne die
 Geräte» erreicht die Funktionen dort als Deckung je Funktion (beidseitig gezählt), «verschiedene Monate» im Jahr als
 Perioden je Funktion — nicht über die N-441-Glieder der Kette.
 
-> **R2/Bauart — neu am 28.08.2026** (`GRUND_BAUARTEN_GEMISCHT`, SOLL §5): Trägt ein Block eine
+> **R2/Bauart** (`GRUND_BAUARTEN_GEMISCHT`, SOLL §5): Trägt ein Block eine
 > Luft-Wasser-Wärmepumpe **und** eine Luft-Luft-Split-Klimaanlage, gibt es **keine gemeinsame
 > Kennzahl** — verschiedene Nutzenergie, verschiedene Vergleichsmaßstäbe. Die **Mengen** bleiben
 > summiert (§5: *„Mengen dürfen nebeneinander stehen, eine gemeinsame JAZ nicht"*), und im
@@ -2637,11 +2647,7 @@ Perioden je Funktion — nicht über die N-441-Glieder der Kette.
 > (`ist_luft_luft_waermepumpe`), nicht aus einer Messreihe — damit ist es nach
 > `waerme_deckt_nicht_alle_geraete` die **zweite** Lage, die eedc selbst erkennt. Sie steht
 > **vor** ihr in der Reihenfolge: Der allgemeinere Grund riete zu einem Wärmemengenzähler, den
-> eine Split-Klimaanlage bauartbedingt nicht haben kann. **Genau daran ist W-4 entstanden:** Die Funktions-Kennzahlen
-wurden an einer eigenen Stelle gerechnet und kannten die Sperren nicht. Ein Heizstab auf dem
-WP-Zähler ließ die Gesamtzahl mit Begründung verschwinden, während „JAZ Heizen" unbeeindruckt
-danebenstand — *dieselbe Anlage, zwei Aussagen*. Dazu stand dort eine **0**, wo „unbekannt"
-gemeint war (ADR-002/P4).
+> eine Split-Klimaanlage bauartbedingt nicht haben kann.
 
 > **Die Bauart-Zählung der Monats-Fakten** (`monats_fakten/roh.py::_RohMonat._falte_wp`): je WP-Zeile mit
 > Strom > 0 zählt das Gerät als Split-Klimaanlage (`ist_luft_luft_waermepumpe`) **oder** als klassische Wärmepumpe —
@@ -2660,7 +2666,14 @@ gemeint war (ADR-002/P4).
 > Faktor zurück, mit dem gerechnet wurde — dieselbe Zirkularität, die §3.5c für die abgeleitete
 > Heizwärme beschreibt, nur auf der Kälte-Achse.
 
-> **Die Tageszahlen von *Cockpit → Tag*** (`api/routes/energie_profil/tag.py::get_tag_detail`, Phasen seit RF-71). Neben
+**Nutzenergie Lüften und Entfeuchten** (`WpFakten.nutzenergie_lueften_kwh`, `.nutzenergie_entfeuchten_kwh`; E4, N-398): je
+Zeile `core/berechnungen/betriebsart_gemessen.py::nutzenergie_ohne_kennzahl_kwh` — Gerätefeld `betriebsart_nutzenergie_lueften_kwh`
+bzw. `…_entfeuchten_kwh`, sonst Σ Innengeräte, nie addiert (`_aufgeloest`); der Monat ist die Summe je Zeile über die Geräte
+(`roh.py::_RohMonat._falte_wp`), ohne Zähler 0. Es sind **Mengen ohne Kennzahl** — die Nutzenergie Heizen trägt die Heizwärme
+nach D1, die Kältemenge die Arbeitszahl Kühlen, Lüften und Entfeuchten keine: eedc kennt ihren Nutzen nicht (erfasst, nicht
+bewertet). Die Mengenzeile erscheint nur mit Zahl (*Cockpit → Monat/Jahr*, Komponenten-Hub).
+
+> **Die Tageszahlen von *Cockpit → Tag*** (`api/routes/energie_profil/tag.py::get_tag_detail`, Phasen RF-71). Neben
 > den vier Arbeitszahlen trägt die Tag-Antwort drei Größen, deren Regel nur dort steht:
 >
 > ```text
@@ -2716,14 +2729,11 @@ Betriebsart-Zähler *Heizen* scheidet zusätzlich aus, weil er den Warmwasser-St
 (Stundenmittel) und Stufe 2 (Tages-Min/Max) ja, **Stufe 3 (gepflegter
 `Monatsdaten.durchschnittstemperatur`) nein**. `max(0; 15 − T)` ist **konvex** — in einem
 Übergangsmonat mit Tagen beidseits der Heizgrenze unterschätzt der Weg über den Monatsmittelwert die
-Summe. An der Demo-Anlage im Mai 2026 gemessen: **30,1 Kd** täglich gegen **22,1 Kd** aus dem Ø, also
-**−26,6 %**. Ein Monat, der nur einen gepflegten Ø trägt, bekommt deshalb keine Kd, sondern den Grund.
+Summe. Ein Monat, der nur einen gepflegten Ø trägt, bekommt deshalb keine Kd, sondern den Grund.
 
 **Die Zahl ist eine SAISON-Größe, nie ein Monatsquotient** (Entscheid K-3): Grundlast,
 Warmwasser-Beimischung und Takt-Verluste skalieren nicht mit den Heizgradtagen und dominieren den
-Übergangsmonat. An derselben Maschine gemessen: November **0,531**, Mai **3,889** kWh/Kd — **Faktor
-7,3**, der nichts über die Wärmepumpe aussagt; im Juni gibt es überhaupt keinen Nenner (0 Kd). Über
-ein Saison-Fenster verschwindet der Effekt (Winter 25/26: 0,554 · Heizperiode 25/26: 0,592). Die
+Übergangsmonat; im Sommer gibt es gar keinen Nenner (0 Kd). Über ein Saison-Fenster verschwindet der Effekt. Die
 Fenster-Summe wird **neu gerechnet, nie gemittelt** (SOLL §5), und ein Monat geht nur ein, wenn er
 **Heizgradtage und Heizstrom** trägt.
 
@@ -2734,7 +2744,7 @@ Heizgradtage. **Eine normierte Arbeitszahl gibt es nicht** — sie ist bereits e
 #### 3.5g Steuerungs-Sensoren der Wärmepumpe (HA-Export E2/P4/P7/P8)
 
 **Orchestrator:** `api/routes/ha_export/investition_sensoren.py::_wp_steuerung_und_plan` (je Wärmepumpe, gerufen von
-`_wp_sensoren`; Phasen seit RF-76, 5.11.2026) · **gemeinsamer Eingang:** der Fenster-Kontext
+`_wp_sensoren`; Phasen RF-76) · **gemeinsamer Eingang:** der Fenster-Kontext
 `services/ha_export_fenster.py::FensterKontext` (einmal je Anlage aus Prognose, Preis und Bezugspreisen) · **Formeln:**
 `core/berechnungen/fenster.py` (`bestes_fenster`, `kosten_profil`, `verteile_auf_guenstigste`) über
 `ha_export_fenster.fenster_fuer_menge` · **Anwender-Referenz:** `docs/SENSOR-REFERENZ.md`, «Stufe 3 je Gerät — Fenster mit

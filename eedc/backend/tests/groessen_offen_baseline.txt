@@ -13,16 +13,6 @@ kennwert:wp_betriebszeit_min
 kennwert:zaehler:<id>
 monatsgroesse:MonatsFakt.jahr
 monatsgroesse:MonatsFakt.monat
-monatsgroesse:TarifFakten.wp_preis_cent
-monatsgroesse:WpFakten.heizung_kwh
-monatsgroesse:WpFakten.modus_strom_entfeuchten_kwh
-monatsgroesse:WpFakten.modus_strom_lueften_kwh
-monatsgroesse:WpFakten.modus_strom_warmwasser_kwh
-monatsgroesse:WpFakten.nutzenergie_entfeuchten_kwh
-monatsgroesse:WpFakten.nutzenergie_lueften_kwh
-monatsgroesse:WpFakten.strom_heizen_kwh
-monatsgroesse:WpFakten.strom_warmwasser_kwh
-monatsgroesse:WpFakten.warmwasser_kwh
 sensor:eedc_prognose_heute_rollend_kwh
 sensor:wp_betriebsstunden
 sensor:wp_kompressor_starts

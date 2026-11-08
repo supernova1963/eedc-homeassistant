@@ -234,6 +234,9 @@ monatsgroesse:
   "TarifFakten.wallbox_preis_effektiv_cent":
     abschnitt: "BERECHNUNGEN.md#welcher-strompreis-die-ladung-bewertet-f-18--adr-002p8"
     test: "backend/tests/test_monats_fakten_schicht.py"
+  "TarifFakten.wp_preis_cent":
+    abschnitt: "BERECHNUNGEN.md#35b-v-verteilung-des-wärmeklima-stroms-und-kosten-je-funktion-wk-16c-14092026"
+    test: "backend/tests/test_n663_wp_preis_flex_monatsdurchschnitt.py"
   "WpFakten.geraete_luft_luft":
     abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
     test: "backend/tests/test_rf61_monats_fakten_phasen.py"
@@ -243,10 +246,15 @@ monatsgroesse:
   "WpFakten.heizstab_kwh":
     abschnitt: "BERECHNUNGEN.md#35b-h-die-arbeitszahl-ohne-zusatzheizung--ausweis-zahl-neben-der-hauptzahl-p-433-3-25102026"
     test: "backend/tests/test_p433_3_s2_heizstab_zusatzheizung.py"
+  "WpFakten.heizung_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-achsen-heizwärme-und-warmwasser-des-monats"
+    test: "backend/tests/test_n673_aufteilung_keine_angabe.py"
   "WpFakten.modus_abdeckung_h":
     abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
     test: "backend/tests/test_263_k2_modus_split.py"
   "WpFakten.modus_strom_bezug_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+  "WpFakten.modus_strom_entfeuchten_kwh":
     abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
   "WpFakten.modus_strom_funktionsfremd_abzug_kwh":
     abschnitt: "BERECHNUNGEN.md#35c-abgeleitete-heizwärme-und-die-jaz-sperre-263-k-2-konzept-3435"
@@ -259,12 +267,23 @@ monatsgroesse:
     abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
     test: "backend/tests/test_263_k2_modus_split.py"
     hinweis: "Gemessene Betriebsart-Zähler schlagen den abgeleiteten Split je Zeile (`betriebsart_gemessen.modus_strom_zeile`)."
+  "WpFakten.modus_strom_lueften_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+  "WpFakten.modus_strom_warmwasser_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_n766_summanden_neben_betriebsart_zaehler.py"
   "WpFakten.netz_eigener_tarif_kwh":
     abschnitt: "BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770"
     test: "backend/tests/test_n770_netzbezug_komponenten_tarif.py"
+  "WpFakten.nutzenergie_entfeuchten_kwh":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
   "WpFakten.nutzenergie_kuehlen_kwh":
     abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
     test: "backend/tests/test_kanal_wp_gleichheit.py"
+  "WpFakten.nutzenergie_lueften_kwh":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+  "WpFakten.strom_heizen_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-achsen-strom-heizen-und-strom-warmwasser-des-monats"
   "WpFakten.strom_kwh":
     abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
     test: "backend/tests/test_k3_gesamtzaehler_ist_die_menge.py"
@@ -275,6 +294,8 @@ monatsgroesse:
   "WpFakten.strom_nicht_aufgeteilt_kwh":
     abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
     test: "backend/tests/test_k3_gesamtzaehler_ist_die_menge.py"
+  "WpFakten.strom_warmwasser_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-achsen-strom-heizen-und-strom-warmwasser-des-monats"
   "WpFakten.waerme_abgeleitet_kwh":
     abschnitt: "BERECHNUNGEN.md#35d-der-wärme-vorschlag-im-monatsabschluss-strom-derselben-funktion--jaz-gekennzeichnet-b1-05092026"
   "WpFakten.waerme_kwh":
@@ -284,6 +305,9 @@ monatsgroesse:
     abschnitt: "BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770"
     test: "backend/tests/test_co2_grundmenge_mit_ersatz_n256.py"
     hinweis: "Regel im Kasten «Faltung der Teilmengen (N-256)» unter diesem Abschnitt."
+  "WpFakten.warmwasser_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-achsen-heizwärme-und-warmwasser-des-monats"
+    test: "backend/tests/test_n673_aufteilung_keine_angabe.py"
   "WpGeraetFakten.strom_kuehlen_kwh":
     abschnitt: "BERECHNUNGEN.md#wp-ersparnis-im-cockpit--σ-der-gerätezeilen-je-monat"
     hinweis: "Je Gerät; Teilmenge von `strom_kwh`, die Anlagensumme ist `WpFakten.modus_strom_kuehlen_kwh`."

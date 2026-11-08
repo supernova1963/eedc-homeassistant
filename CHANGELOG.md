@@ -122,7 +122,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Leser am Code richtiggestellt (ROI-Dashboard im Paket `api/routes/investitionen/`, Leser des Monats-Kraftstoffpreises,
   Wallbox-Regel der Monatsebene in `entscheide_emob_heimladung`); neue Regel-Absätze für Ladung, Entladung und Netzladung
   des Speichers (mit Tageswert-Rückfall #427) und für Kilometer, V2H und Ladevorgänge des E-Autos (Maximum aus Wallbox- und
-  Auto-Seite) — sieben Monatsgrößen, drei Kennwerte und ein Sensor mehr mit Regel-Abschnitt, Baseline 36 → 25.
+  Auto-Seite) — sieben Monatsgrößen, drei Kennwerte und ein Sensor mehr mit Regel-Abschnitt, Baseline 36 → 25. Ebenso §3.5
+  (U5d): Chronik und Messbeispiele gestrichen, am Code richtiggestellt (WP-Preis der Kosten je Funktion nach N-663, Rest
+  «nicht aufgeteilt» abzüglich aller fünf Betriebsarten, Lüften und Entfeuchten erfasst, nicht bewertet, Wärmeseite in
+  derselben Richtung wie die Stromseite, ROI-Aufrufer); neue Regel-Absätze für die Achsen Heizwärme und Warmwasser (Lesetüren
+  N-398/N-379, keine Angabe ohne gemessene Achse N-673), Strom Heizen und Strom Warmwasser, die Teilmengen Warmwasser, Lüften
+  und Entfeuchten und die Nutzenergie Lüften und Entfeuchten — zehn Monatsgrößen mehr mit Regel-Abschnitt, Baseline 25 → 15.
 
 ## [4.2.2] - 2026-11-06
 
