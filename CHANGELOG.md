@@ -97,7 +97,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Hand-Bausteine `docs/sensor-referenz/` plus erzeugte Tabellen der Eingabefelder (Registry, Kanal-Katalog, Sichten aus
   `core/feld_auswertungen.py`) und der Export-Sensoren (Beschreibungen als `hinweis` in der Hand-Datei); 16 Eingabefelder
   und 13 Export-Sensoren stehen damit erstmals in der Referenz, der Erzeuger bricht ab, wenn eine Zeile fehlt oder doppelt
-  steht.
+  steht. Monatsgrößen mit Regel-Abschnitt und Test verknüpft (U4); 39 ohne Regel-Abschnitt bleiben benannt in der
+  Baseline.
 
 ## [4.2.2] - 2026-11-06
 

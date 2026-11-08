@@ -26,7 +26,203 @@
 
 eingabefeld: {}
 
-monatsgroesse: {}
+monatsgroesse:
+  "BkwFakten.erzeugung_je_investition":
+    abschnitt: "BERECHNUNGEN.md#was-eine-string-zeile-ist--die-erzeuger-abgrenzung-f-10"
+    test: "backend/tests/test_bkw_parent_pv_module_n266.py"
+    hinweis: "Je Balkonkraftwerk; ein an Modul-Kinder abtretendes BKW fehlt, im Tageswert-Rückfall bleibt das Feld leer."
+  "BkwFakten.erzeugung_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "BkwFakten.rest_eigenverbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EegFakten.neg_preis_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.dienstlich_gemessen_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+  "EmobFakten.dienstlich_gemessen_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+  "EmobFakten.dienstlich_ladung_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "EmobFakten.dienstlich_ladung_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "EmobFakten.dienstliche_ladekosten_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_n633_sieben_sichten_eine_zahl.py"
+    code_ort: "backend.services.monats_fakten.bau::_dienstliche_ladekosten"
+  "EmobFakten.extern_euro":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_n555_fahrverbrauch_bleibt_fahrverbrauch.py"
+  "EmobFakten.extern_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_n555_fahrverbrauch_bleibt_fahrverbrauch.py"
+  "EmobFakten.fahrverbrauch_je_fahrzeug":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    hinweis: "Je Fahrzeug; die Summe ist `EmobFakten.fahrverbrauch_kwh`."
+  "EmobFakten.fahrverbrauch_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_n555_fahrverbrauch_bleibt_fahrverbrauch.py"
+  "EmobFakten.ladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.ladung_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_n555_stufe2_messung_je_auto.py"
+  "EmobFakten.ladung_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.rest_netz_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.rest_pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#heimladung-und-fahrverbrauch--zwei-verschiedene-mengen-ab-n-555"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "EmobFakten.wallbox_ladung_alle_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_n770_netzbezug_komponenten_tarif.py"
+  "EmobFakten.wallbox_netz_eigener_tarif_kwh":
+    abschnitt: "BERECHNUNGEN.md#eingabefelder"
+    test: "backend/tests/test_n770_netzbezug_komponenten_tarif.py"
+  "EmobFakten.wallbox_netzladung_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "ErzeugungFakten.bkw_aus_anlagenwert_je_investition":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n664_n671_bkw_hub_aus_fakten.py"
+    hinweis: "Je Balkonkraftwerk (`{investition_id: kWh}`); die Summe ist `bkw_aus_anlagenwert_kwh`."
+  "ErzeugungFakten.bkw_aus_anlagenwert_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n533_ha_import_anlagen_pv_zaehler.py"
+  "ErzeugungFakten.bkw_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n664_n671_bkw_hub_aus_fakten.py"
+  "ErzeugungFakten.hinter_zaehler_kwh":
+    abschnitt: "BERECHNUNGEN.md#formeln"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "ErzeugungFakten.pv_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_n621_bkw_anteil_am_anlagenwert.py"
+  "ErzeugungFakten.pv_module_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "ErzeugungFakten.wandlungsverluste_bezug_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_wandlungsverluste_anzeige.py"
+  "ErzeugungFakten.wandlungsverluste_kwh":
+    abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
+    test: "backend/tests/test_wandlungsverluste_anzeige.py"
+  "SonstigesFakten.anlage_ausgaben_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    hinweis: "Nur die Positionen der Anlage-Ebene (`Monatsdaten.sonstige_positionen`); sie stecken schon in `ausgaben_euro`."
+  "SonstigesFakten.anlage_ertraege_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    hinweis: "Nur die Positionen der Anlage-Ebene (`Monatsdaten.sonstige_positionen`); sie stecken schon in `ertraege_euro`."
+  "SonstigesFakten.ausgaben_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesFakten.einspeise_erloes_euro":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    test: "backend/tests/test_abgabe_an_dritte_vier_sichten.py"
+  "SonstigesFakten.ertraege_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesFakten.netto_euro":
+    abschnitt: "BERECHNUNGEN.md#310-sonstige-positionen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "SonstigesGeraetFakten.einspeise_erloes_euro":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    hinweis: "Je Gerät (`SonstigesFakten.je_geraet`); die Anlagensumme ist `SonstigesFakten.einspeise_erloes_euro`."
+  "SpeicherFakten.netzladung_gewicht_kwh":
+    abschnitt: "BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis"
+  "SpeicherFakten.netzladung_preis_summe_cent_kwh":
+    abschnitt: "BERECHNUNGEN.md#der-nutzen-in-euro--spread-nicht-voll-strompreis"
+  "TarifFakten.einspeiseverguetung_cent":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "TarifFakten.gaspreis_cent_kwh":
+    abschnitt: "BERECHNUNGEN.md#wp-ersparnis-historisch-in-finanzen"
+  "TarifFakten.grundpreis_euro_monat":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    test: "backend/tests/test_n769_grundpreis_komponenten_tarif.py"
+  "TarifFakten.kraftstoffpreis_euro":
+    abschnitt: "BERECHNUNGEN.md#dynamischer-kraftstoffpreis-ab-v3170"
+  "TarifFakten.netzbezug_preis_cent":
+    abschnitt: "BERECHNUNGEN.md#dynamischer-tarif--monatlicher-ø-strompreis"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "TarifFakten.netzbezug_stammpreis_cent":
+    abschnitt: "BERECHNUNGEN.md#dynamischer-tarif--monatlicher-ø-strompreis"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+    hinweis: "Stufen 3–4 der Kaskade (Zeitfenster, sonst Arbeitspreis), ohne abgerechneten und gemessenen Monats-Ø."
+  "TarifFakten.wallbox_preis_cent":
+    abschnitt: "BERECHNUNGEN.md#welcher-strompreis-die-ladung-bewertet-f-18--adr-002p8"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+    hinweis: "Stufen 3–4 der Wallbox-Kaskade ohne Monats-Ø; mit Monats-Ø ist es `wallbox_preis_effektiv_cent`."
+  "TarifFakten.wallbox_preis_effektiv_cent":
+    abschnitt: "BERECHNUNGEN.md#welcher-strompreis-die-ladung-bewertet-f-18--adr-002p8"
+    test: "backend/tests/test_monats_fakten_schicht.py"
+  "WpFakten.geraete_luft_luft":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "WpFakten.geraete_luft_wasser":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_rf61_monats_fakten_phasen.py"
+  "WpFakten.heizstab_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-h-die-arbeitszahl-ohne-zusatzheizung--ausweis-zahl-neben-der-hauptzahl-p-433-3-25102026"
+    test: "backend/tests/test_p433_3_s2_heizstab_zusatzheizung.py"
+  "WpFakten.modus_abdeckung_h":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_263_k2_modus_split.py"
+  "WpFakten.modus_strom_bezug_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+  "WpFakten.modus_strom_funktionsfremd_abzug_kwh":
+    abschnitt: "BERECHNUNGEN.md#35c-abgeleitete-heizwärme-und-die-jaz-sperre-263-k-2-konzept-3435"
+    test: "backend/tests/test_n445_nachtrag_pfad_abzug.py"
+  "WpFakten.modus_strom_heizen_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_263_k2_modus_split.py"
+    hinweis: "Gemessene Betriebsart-Zähler schlagen den abgeleiteten Split je Zeile (`betriebsart_gemessen.modus_strom_zeile`)."
+  "WpFakten.modus_strom_kuehlen_kwh":
+    abschnitt: "BERECHNUNGEN.md#35b-modus-split-heizen-und-kühlen-trennen-263-k-2"
+    test: "backend/tests/test_263_k2_modus_split.py"
+    hinweis: "Gemessene Betriebsart-Zähler schlagen den abgeleiteten Split je Zeile (`betriebsart_gemessen.modus_strom_zeile`)."
+  "WpFakten.netz_eigener_tarif_kwh":
+    abschnitt: "BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770"
+    test: "backend/tests/test_n770_netzbezug_komponenten_tarif.py"
+  "WpFakten.nutzenergie_kuehlen_kwh":
+    abschnitt: "BERECHNUNGEN.md#35d-arbeitszahl-je-funktion-und-die-arbeitszahl-kühlen-w-4--w-5"
+    test: "backend/tests/test_kanal_wp_gleichheit.py"
+  "WpFakten.strom_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    test: "backend/tests/test_k3_gesamtzaehler_ist_die_menge.py"
+  "WpFakten.strom_mit_ersatz_kwh":
+    abschnitt: "BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770"
+    test: "backend/tests/test_co2_grundmenge_mit_ersatz_n256.py"
+    hinweis: "Regel im Kasten «Faltung der Teilmengen (N-256)» unter diesem Abschnitt."
+  "WpFakten.strom_nicht_aufgeteilt_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    test: "backend/tests/test_k3_gesamtzaehler_ist_die_menge.py"
+  "WpFakten.waerme_abgeleitet_kwh":
+    abschnitt: "BERECHNUNGEN.md#35d-der-wärme-vorschlag-im-monatsabschluss-strom-derselben-funktion--jaz-gekennzeichnet-b1-05092026"
+  "WpFakten.waerme_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
+    test: "backend/tests/test_n391_gesamtwaerme.py"
+  "WpFakten.waerme_mit_ersatz_kwh":
+    abschnitt: "BERECHNUNGEN.md#mit-eigenem-wärmepumpen-tarif--netzbezug-zum-wp-tarif-oder-grenze-n-767-n-770"
+    test: "backend/tests/test_co2_grundmenge_mit_ersatz_n256.py"
+    hinweis: "Regel im Kasten «Faltung der Teilmengen (N-256)» unter diesem Abschnitt."
+  "WpGeraetFakten.strom_kuehlen_kwh":
+    abschnitt: "BERECHNUNGEN.md#wp-ersparnis-im-cockpit--σ-der-gerätezeilen-je-monat"
+    hinweis: "Je Gerät; Teilmenge von `strom_kwh`, die Anlagensumme ist `WpFakten.modus_strom_kuehlen_kwh`."
+  "WpGeraetFakten.strom_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-strommenge-eines-geräts--der-gesamtzähler-ist-die-menge-k1k3"
+    hinweis: "Je Gerät (`WpFakten.je_geraet`); die Anlagensumme ist `WpFakten.strom_kwh`."
+  "WpGeraetFakten.waerme_kwh":
+    abschnitt: "BERECHNUNGEN.md#die-gemessene-wärme-eines-geräts--gesamtwert-vor-summanden-regel-d1"
+    hinweis: "Je Gerät (`WpFakten.je_geraet`); die Anlagensumme ist `WpFakten.waerme_kwh`."
 
 kennwert:
   "autarkie":
