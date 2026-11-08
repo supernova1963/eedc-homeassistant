@@ -98,44 +98,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
-- **Übersicht der Größen, erzeugt (Bauplan U1):** `docs/UEBERSICHT-GROESSEN.md` nennt jede Größe von eedc in einer Zeile —
-  106 Eingabefelder, 104 Monatsgrößen, 76 Kennwerte der Tabelle (74 + 2 Familien), 86 Export-Sensoren — mit den Spalten aus
-  dem Code (Kanal, Bedarf, Bau-Funktion, Backend-Feld, Formel). Erzeuger `eedc/backend/tests/groessen_uebersicht.py`
-  (`./scripts/groessen-uebersicht.sh`), Hand-Datei `groessen_hand.yaml` für Regel-Abschnitt und Test, Wächter
-  `test_groessen_uebersicht.py` (Datei aktuell, Hand-Datei gültig, Baseline nur schrumpfend, Anker-Probe aller Verweise auf
-  BERECHNUNGEN und SENSOR-REFERENZ). Zwei tote Anker repariert (WAS-IST-NEU → §4.1c, Handbuch Prognosen →
-  Backward-Slot-Konvention). Neu in der In-App-Hilfe und auf der Website unter Referenz bzw. Dokumentation; Kennwerte und
-  Export-Sensoren mit Regel-Abschnitt und Test verknüpft (U2). `docs/SENSOR-REFERENZ.md` ist jetzt ebenfalls erzeugt (U3):
-  Hand-Bausteine `docs/sensor-referenz/` plus erzeugte Tabellen der Eingabefelder (Registry, Kanal-Katalog, Sichten aus
-  `core/feld_auswertungen.py`) und der Export-Sensoren (Beschreibungen als `hinweis` in der Hand-Datei); 16 Eingabefelder
-  und 13 Export-Sensoren stehen damit erstmals in der Referenz, der Erzeuger bricht ab, wenn eine Zeile fehlt oder doppelt
-  steht. Monatsgrößen mit Regel-Abschnitt und Test verknüpft (U4); 39 ohne Regel-Abschnitt bleiben benannt in der
-  Baseline. BERECHNUNGEN Kap. 1–2, §3.1, §3.9–3.11 auf Regeln gekürzt (U5a): Chronik gestrichen, Feld-Tabelle → Verweis auf
-  die Übersicht, veraltete Sätze am Code richtiggestellt (Konstanten-Orte und Vorgabewerte, Paketpfade, CO₂-Zeile der
-  Monatskennzahlen nach N-647, Wirkung der Speicher-Kopplung, Community-Ausrichtung); neue Regel-Absätze für die
-  Zähler-Füllregel (N-736/N-751), die BKW-Messgrößen und die Kategorie-Weiche der Sonstiges-Geräte — 20 Monatsgrößen mehr
-  mit Regel-Abschnitt, Baseline 56 → 36. Ebenso §3.2 und §3.6–3.8 (U5b): Chronik und Zahlenbeispiele gestrichen, veraltete
-  Sätze am Code richtiggestellt (WP-Preis ohne eigenen WP-Tarif = Preis des Hauszählers mit Monats-Ø nach N-663, Cockpit-
-  Übersicht: Netto-Ertrag, kumulative Ersparnis und Investitionssumme nach Ergebnis-Leiter und N-137, anlagenweite
-  Positionen im Kapitaleinsatz, Kraftstoffpreis des Monats im Cockpit, Plug-in-Hybrid und Kühlstrom in Ersparnis und
-  CO₂-Formel, Eingang der USt nach N-601). Ebenso §3.3 und §3.4 (U5c): Chronik und Messbeispiele gestrichen, Aufrufer und
-  Leser am Code richtiggestellt (ROI-Dashboard im Paket `api/routes/investitionen/`, Leser des Monats-Kraftstoffpreises,
-  Wallbox-Regel der Monatsebene in `entscheide_emob_heimladung`); neue Regel-Absätze für Ladung, Entladung und Netzladung
-  des Speichers (mit Tageswert-Rückfall #427) und für Kilometer, V2H und Ladevorgänge des E-Autos (Maximum aus Wallbox- und
-  Auto-Seite) — sieben Monatsgrößen, drei Kennwerte und ein Sensor mehr mit Regel-Abschnitt, Baseline 36 → 25. Ebenso §3.5
-  (U5d): Chronik und Messbeispiele gestrichen, am Code richtiggestellt (WP-Preis der Kosten je Funktion nach N-663, Rest
-  «nicht aufgeteilt» abzüglich aller fünf Betriebsarten, Lüften und Entfeuchten erfasst, nicht bewertet, Wärmeseite in
-  derselben Richtung wie die Stromseite, ROI-Aufrufer); neue Regel-Absätze für die Achsen Heizwärme und Warmwasser (Lesetüren
-  N-398/N-379, keine Angabe ohne gemessene Achse N-673), Strom Heizen und Strom Warmwasser, die Teilmengen Warmwasser, Lüften
-  und Entfeuchten und die Nutzenergie Lüften und Entfeuchten — zehn Monatsgrößen mehr mit Regel-Abschnitt, Baseline 25 → 15.
-  Ebenso Kap. 4–7 (U5e): Chronik, Melder- und Messbeispiele gestrichen, am Code richtiggestellt (Stunden-Überschuss und
-  -Defizit aus PV gegen Hausverbrauch, Tagesspitzen aus der HA-Langzeitstatistik bzw. den Leistungswerten, Formel der
-  Kurzfrist-Route mit der horizontalen Globalstrahlung, Solar Forecast ML als Home-Assistant-Integration ohne Einwertung,
-  Live-Route, Wärmepumpen- und E-Auto-Ersparnis der Finanz-Prognose nach §3.4/§3.5, Tarif-Rückfall über den gemeinsamen
-  Zähler, Trägergeräte der PV-System-Gruppierung nach F-33, Gaspreis-Vorgabe 12 ct statt „10 ct“, Fehlerbilder des
-  Debugging-Leitfadens); neue Regel-Sätze für den nachgeführten Tageswert der Prognose, die Grundlast des Tages und die
-  Betriebsstunden der Wärmepumpe — zwei Kennwerte und drei Sensoren mehr mit Regel-Abschnitt, Baseline 15 → 10.
-  BERECHNUNGEN ist damit vollständig auf Regeln gekürzt (U5a–e).
+- **Übersicht der Größen (Bauplan U1–U6, 7./8.11.2026):** Jede Größe von eedc steht in einer aus dem Code erzeugten Übersicht
+  (`docs/UEBERSICHT-GROESSEN.md`) — 106 Eingabefelder, 104 Monatsgrößen, 76 Kennwerte der Tabelle und 86 Export-Sensoren, je mit
+  Herkunft, Code-Ort, Regel-Abschnitt in BERECHNUNGEN und dem Test, der sie hält. `docs/SENSOR-REFERENZ.md` und
+  `docs/MQTT_INBOUND.md` sind ebenfalls erzeugt: Prosa in Bausteinen (`docs/sensor-referenz/`, `docs/mqtt-inbound/`), jede Tabelle
+  vollständig aus den Quellen (Feld-Registry, Kanal-Katalog, Sichten, Export-Sensoren, Topic-Registry und MQTT-Leser); der Erzeuger
+  bricht ab, wenn eine Zeile fehlt oder doppelt steht. Alle drei Seiten stehen in der In-App-Hilfe und auf der Website. Erzeuger
+  `eedc/backend/tests/groessen_uebersicht.py` (`./scripts/groessen-uebersicht.sh`), Hand-Wissen nur in `groessen_hand.yaml`, Wächter
+  `test_groessen_uebersicht.py` (Dateien aktuell, Hand-Datei gültig, Anker-Probe aller Verweise, Baseline nur schrumpfend). Die
+  Berechnungsreferenz ist auf Regeln und Grenzen gekürzt (5385 → 5110 Zeilen): Chronik und Messbeispiele gestrichen, Feld-Tabellen
+  durch Verweise auf die Übersicht ersetzt, keine Überschrift entfallen, kein Verweis tot; wo ein Satz nicht mehr zum Code passte, ist
+  er mit Beleg richtiggestellt (u. a. WP-Preis nach N-663, Stunden-Überschuss ohne Speicherladung, Tagesspitzen aus der
+  Langzeitstatistik, Trägergeräte der ROI-Gruppierung nach F-33, Gaspreis-Vorgabe 12 ct), und Regeln, die bisher nur im Code standen,
+  haben einen Absatz bekommen (Kategorie-Weiche der Sonstiges-Geräte, Zähler-Füllregel, Achsen der Wärmepumpe, Speicher- und
+  E-Auto-Mengen des Monats, Grundlast des Tages, Netto-Bilanz der Werte-Tabelle). Damit tragen 102 von 104 Monatsgrößen, 71 von
+  76 Kennwerten und alle 86 Export-Sensoren einen Regel-Abschnitt; die Baseline fiel von 266 auf 7 (Wetter-Messgrößen, Zählerstände,
+  Jahr und Monat, Ladung der E-Auto-Seite). CLAUDE.md: eine Größe zuerst in der Übersicht nachschlagen, dann im Code.
 
 ## [4.2.2] - 2026-11-06
 

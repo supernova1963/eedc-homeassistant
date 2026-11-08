@@ -1,12 +1,9 @@
 # Größen ohne Hand-Eintrag mit `abschnitt` (groessen_hand.yaml) — nur schrumpfend (Bauplan «Übersicht der Größen»).
 # Neu schreiben (nach einem Hand-Eintrag): scripts/groessen-uebersicht.sh --baseline
 # Eine Zeile je Schlüssel: <ebene>:<schlüssel>, sortiert.
-kennwert:abgabe_dritte
 kennwert:eauto_ladung
 kennwert:globalstrahlung
-kennwert:netto_bilanz
 kennwert:sonnenstunden
-kennwert:sonstiges_verbrauch
 kennwert:temperatur_avg_c
 kennwert:zaehler:<id>
 monatsgroesse:MonatsFakt.jahr

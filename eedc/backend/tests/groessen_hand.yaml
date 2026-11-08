@@ -325,6 +325,10 @@ monatsgroesse:
     test: "backend/tests/test_n736_fakten_netzfeld_nicht_erfasst.py"
 
 kennwert:
+  "abgabe_dritte":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_abgabe_an_dritte_anzeige.py"
+    hinweis: "Monat aus `SonstigesFakten.abgabe_kwh` (leer bei 0); der Tag (`sonstiges_abgabe`) aus `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — dieselbe Kategorie `abgabe`, eine Zahl je Gerät."
   "autarkie":
     abschnitt: "BERECHNUNGEN.md#formeln"
     test: "backend/tests/test_aggregiert_eigenverbrauch_v2h_304.py"
@@ -403,6 +407,9 @@ kennwert:
   "negative_preis_stunden":
     abschnitt: "BERECHNUNGEN.md#tageszusammenfassung-tageszusammenfassung"
     test: "backend/tests/test_einspeise_erloes.py"
+  "netto_bilanz":
+    abschnitt: "BERECHNUNGEN.md#finanzielle-kennzahlen"
+    test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
   "netto_ertrag":
     abschnitt: "BERECHNUNGEN.md#die-ergebnis-leiter--monat-jahr-und-gesamt-aus-einer-rechnung-seit-03102026"
     test: "backend/tests/test_monatsdaten_aggregiert_finanzen.py"
@@ -431,6 +438,10 @@ kennwert:
   "sonstiges_erzeugung":
     abschnitt: "BERECHNUNGEN.md#formeln"
     test: "backend/tests/test_sonstiges_spalten_tag_und_monat.py"
+  "sonstiges_verbrauch":
+    abschnitt: "BERECHNUNGEN.md#energie-der-sonstiges-geräte--die-kategorie-weiche"
+    test: "backend/tests/test_sonstiges_spalten_tag_und_monat.py"
+    hinweis: "Monat aus `SonstigesFakten.verbrauch_kwh` (nur mit Verbraucher-Zeile); der Tag aus `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — Richtung aus der Kategorie, eine leere Kategorie zählt am Tag als Verbraucher."
   "speicher_effizienz":
     abschnitt: "BERECHNUNGEN.md#round-trip-wirkungsgrad-η--soc-korrigiert-nicht-roh"
     test: "backend/tests/test_speicher_wirkungsgrad_symmetrie.py"

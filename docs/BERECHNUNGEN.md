@@ -1,8 +1,10 @@
 # eedc Berechnungsreferenz
 
-Dieses Dokument beschreibt alle Berechnungsketten im eedc-System: von den Eingabefeldern
-über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
-und zum Verständnis der Datenflüsse.
+Dieses Dokument beschreibt die **Regeln und Grenzen** der Berechnungen in eedc: wie eine Größe gebildet wird,
+welche Quelle Vorrang hat und wo eine Zahl bewusst fehlt. Es dient als Referenz zur Fehlersuche und zum Verständnis der
+Datenflüsse. **Welche Größen es gibt** — Bedeutung, Einheit, Herkunft, Code-Ort und der Test, der sie hält — steht je Größe
+in einer Zeile in der aus dem Code erzeugten [Übersicht der Größen](UEBERSICHT-GROESSEN.md); deren Spalte «Regel» verweist
+hierher. Fund- und Issue-Nummern im Text (N-…, F-…, #…) nennen die Herkunft einer Regel.
 
 > **Fachliche Fassung für Anwender:** Die Wärmepumpen-, Klimaanlagen- und Heizstab-Formeln aus §3.5 sind in [Wärme & Klima](HANDBUCH_WAERME_KLIMA.md) ohne Formelzeichen beschrieben — samt der Frage, warum eine Arbeitszahl verschwindet.
 
@@ -777,6 +779,19 @@ Rendite (%)         = Kumulative_Ersparnis / Investition_gesamt * 100   (Antwort
                       Investition_gesamt = relevante Kosten (Mehrkosten, N-137; s. „Investitionskosten" unten)
                       Investition_gesamt im Einzeljahr: nur Investitionen mit Anschaffung ≤ 31.12. (N-720)
 ```
+
+**Netto-Bilanz der Werte-Tabelle** (Kennwert `netto_bilanz`; *Auswertungen → Tabelle* und *Cockpit → Tag*) = Netto-Ertrag −
+Netzbezugskosten. Sie ist eine eigene Größe der Tabelle, **keine** Stufe der Ergebnis-Leiter: ohne WP- und E-Mob-Ersparnis und ohne
+Betriebskosten (benannte Ausnahme im Wächter `test_ergebnis_leiter_nur_im_layer.py`). **Monat**
+(`api/routes/monatsdaten_aggregiert.py::_zeile_bilanz_und_geld`, Feld `netto_bilanz_euro`): Netto-Ertrag = Stufe 1 der Leiter mit
+Sonstigen Positionen (A1), Dienstlichen Ladekosten (N-633) und USt-Anteil (N-588); Netzbezugskosten = die Stromrechnung des Monats
+samt Grundgebühr und Komponenten-Tarifen (`monats_fakten.stromrechnung_euro`, N-770); auf Cent gerundet. Sind Einspeisung oder
+Netzbezug des Monats nicht erfasst, bleibt das Feld leer wie die Geldfelder der Zeile, die aus Einspeisung oder Netzbezug folgen
+(`monatsdaten.py::_NETZ_ABHAENGIGE_FELDER`; Erlös eigener Satz, Dienstliche Ladekosten und USt bleiben stehen — N-736, §1 «Einspeisung
+und Netzbezug des Monats»). **Tag** (`services/energie_profil/tage_werte.py::_geld_spalten`, Feld `netto_bilanz`): Netto-Ertrag ohne USt-Anteil und ohne
+Dienstliche Ladekosten, Netzbezugskosten = Σ der Slot-Kosten des Tages (`strompreis_aggregator.slot_kosten_aus_zeilen` über
+`tage_werte.py::_slot_kosten_der_bestandstage`/`_slot_kosten_der_kanal_tage`, ohne Grundgebühr) — Σ Tage ≠ Monat. Fehlt eine Seite (Netzbezug nicht erfasst, keine Stundenzeilen, kein Eigenverbrauch), ist der Wert
+leer statt 0 (T89667 #162); gerundet wird erst in der Anzeige. Die Spalte summiert über die gezeigten Monate bzw. Tage.
 
 > **`BKW_Rest_Eigenverbrauch` entsteht in der Faltung der Monats-Fakten** (`monats_fakten/roh.py::_RohMonat._falte_bkw`,
 > ADR-002/P9): je BKW-Zeile entscheidet `bkw_finanz_beitrag`, welcher Wert die Finanz-Zeile trägt — mit erfasster

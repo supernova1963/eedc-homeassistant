@@ -20,6 +20,7 @@
 > | die Monatszeile als **eine** Schicht (P10) | [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md) |
 > | die Fläche Wärme/Klima (Heizen · Warmwasser · Kühlen), #263 als Kapitel 8 | [KONZEPT-WAERME-KLIMA.md](KONZEPT-WAERME-KLIMA.md) |
 > | Formeln je Kennzahl | [BERECHNUNGEN.md](BERECHNUNGEN.md) |
+> | jede Größe in einer Zeile — Bedeutung, Herkunft, Code-Ort, Regel, Test (aus dem Code erzeugt) | [UEBERSICHT-GROESSEN.md](UEBERSICHT-GROESSEN.md) |
 > | Einrichtung, Befehle, Gates, Dateibestand | [DEVELOPMENT.md](DEVELOPMENT.md) |
 >
 > Dieses Dokument beschreibt die **Gesamtsicht**: Schichten, Datenmodell, Services,

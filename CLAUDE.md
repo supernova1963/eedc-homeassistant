@@ -84,6 +84,12 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
 
 ## Code-Regeln, die bleiben (kurz; Begründung im Archiv)
 
+- **Übersicht zuerst, dann Code-Ort:** eine Größe zuerst in `docs/UEBERSICHT-GROESSEN.md` nachschlagen (Bedeutung, Herkunft,
+  Code-Ort, Regel-Anker, Test). Die drei erzeugten Referenzen (`UEBERSICHT-GROESSEN.md`, `SENSOR-REFERENZ.md`, `MQTT_INBOUND.md`) nie
+  von Hand ändern; nach Änderungen an ihren Quellen (u. a. Feld-Registry, `feld_auswertungen.py`, Kanal-Katalog, `monats_fakten/fakten*.py`,
+  `lib/werte/registry.ts`, `ha_sensors_export.py`, `mqtt_topic_registry.py`, BERECHNUNGEN-Überschriften, Bausteine `docs/sensor-referenz/`,
+  `docs/mqtt-inbound/`) `./scripts/groessen-uebersicht.sh && ./scripts/sync-help.sh` (der Wächter sagt es sonst). Hand-Wissen nur in
+  `groessen_hand.yaml`.
 - **Monatsgrößen nur aus den Monats-Fakten** (`services/monats_fakten/`, ADR-002/P10) — nie `InvestitionMonatsdaten` selbst falten.
 - **`Monatsdaten.pv_erzeugung_kwh` nur über `lade_pv_je_monat`/`pv_summe_je_monat` lesen** (P7), nie programmatisch füllen.
 - **Kennwerte über `core/investition_kennwerte.py`** (`get_erzeuger_kwp` statt `inv.leistung_kwp`, P3-a).
