@@ -1,11 +1,27 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { readFileSync } from 'node:fs';
+import remarkDokuLinks from './scripts/remark-doku-links.mjs';
+
+const BASE = '/eedc-homeassistant';
+
+// Slug-Liste (Quelldatei → Website-Slug), geschrieben von scripts/sync-docs.sh (prebuild).
+// Das Remark-Plugin schreibt damit die Verweise DATEI.md#anker der Doku auf die Website-Seite um.
+let dokuSlugs;
+try {
+	dokuSlugs = JSON.parse(readFileSync(new URL('./src/doku-slugs.json', import.meta.url), 'utf8'));
+} catch (fehler) {
+	throw new Error(`src/doku-slugs.json fehlt oder ist kaputt — erst \`bash scripts/sync-docs.sh\` ausführen (${fehler instanceof Error ? fehler.message : fehler})`);
+}
 
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://supernova1963.github.io',
-	base: '/eedc-homeassistant',
+	base: BASE,
+	markdown: {
+		remarkPlugins: [[remarkDokuLinks, { base: BASE, slugs: dokuSlugs }]],
+	},
 	integrations: [
 		starlight({
 			title: 'EEDC',

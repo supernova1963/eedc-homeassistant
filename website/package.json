@@ -7,6 +7,7 @@
     "start": "astro dev",
     "prebuild": "bash scripts/sync-docs.sh",
     "build": "bash scripts/build-retry.sh",
+    "postbuild": "node scripts/check-links.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

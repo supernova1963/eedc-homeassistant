@@ -35,6 +35,8 @@
 
 **Feld-Hinweise und Daten-Checker: genauer, was eedc mit deinen Werten tut.** Die Hinweise unter den Eingabefeldern sagen jetzt mehr: Wetterwerte holt eedc in Deutschland von Bright Sky (DWD), sonst von Open-Meteo, und nur in ein leeres Feld; die Speicher-Ladung schließt die Netzladung ein; den Ø-Ladepreis schlägt der Monatsabschluss vor; an der Ladeleistung des E-Autos steht, dass eedc sie neben einer Wallbox einmal zählt, an der Wallbox. Steht unter „Wärme gesamt“ einer Wärmepumpe eine 0, während Heizwärme und Warmwasser-Wärme Werte tragen, meldet der Daten-Checker das jetzt — eedc rechnet dann mit den Einzelwerten, und meist hat der Wärmemengenzähler im Monat nichts geliefert. In der Sensor-Referenz sind zwei Aussagen richtiggestellt (Vormittag/Nachmittag-Prognose, E-Auto-Ladeleistung). [Sensor-Referenz](SENSOR-REFERENZ.md)
 
+**Website: Verweise zwischen den Doku-Seiten funktionieren.** Auf der eedc-Website führten Verweise von einer Doku-Seite auf eine andere — etwa aus der Berechnungsreferenz ins Handbuch — ins Leere. Jetzt öffnen sie die Website-Seite an der richtigen Stelle; Verweise auf Konzept-Dokumente ohne eigene Website-Seite führen zur Quelle auf GitHub. In der Hilfe im Programm funktionierten diese Verweise schon.
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)

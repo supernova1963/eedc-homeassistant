@@ -30,4 +30,4 @@ eedc ist ein Community-Projekt. Beiträge sind willkommen:
 
 - [GitHub Repository](https://github.com/supernova1963/eedc-homeassistant)
 - [Issues & Feature-Requests](https://github.com/supernova1963/eedc-homeassistant/issues)
-- [Entwickler-Dokumentation](/eedc-homeassistant/docs/entwicklung/)
+- [Entwickler-Dokumentation](/eedc-homeassistant/entwicklung/)

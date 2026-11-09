@@ -41,3 +41,5 @@ src/content/docs/architektur.md
 src/content/docs/entwicklung.md
 src/content/docs/setup-devmachine.md
 src/content/docs/changelog.md
+# Slug-Liste für scripts/remark-doku-links.mjs, ebenfalls aus sync-docs.sh
+src/doku-slugs.json

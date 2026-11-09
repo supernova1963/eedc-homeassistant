@@ -1040,6 +1040,13 @@ editiert:
 | Website (Astro Starlight, GitHub Pages) | `website/scripts/sync-docs.sh` (läuft als `prebuild` **im `website/`-Verzeichnis**) | `website/src/content/docs/` ist **gitignored** |
 | In-App-Hilfe | **`scripts/sync-help.sh`** | die Kopien sind **versioniert** und gehören in denselben Commit |
 
+**Verweise auf der Website:** Beim Build schreibt `website/scripts/remark-doku-links.mjs` jeden Verweis
+`DATEI.md#anker` auf die Website-Seite um (Slug-Liste `website/src/doku-slugs.json`, erzeugt von `sync-docs.sh` aus
+dessen Array `DOCS`); Dateien ohne Website-Seite (ADR, Konzepte, `archive/`, `CLAUDE.md`) führen zur Quelle auf GitHub —
+`docs/*.md` bleiben GitHub-tauglich, dort wird nichts umgeschrieben. Der Wächter `website/scripts/check-links.mjs` läuft als
+`postbuild` nach `npm run build` (lokal und in CI) und macht übrig gebliebene `.md`-Verweise und tote Seitenlinks rot;
+Anker ohne Ziel zählt er nur.
+
 **Nach jeder Doku-Arbeit `scripts/sync-help.sh` laufen lassen und die Kopien mitcommitten** —
 sonst zeigt die Hilfe im Add-on einen anderen Text als das Repo. Die In-App-Hilfe ist kein Archiv:
 [WAS-IST-NEU.md](WAS-IST-NEU.md) wird darin **zurückgeblättert**, ein überholter Satz in einem alten

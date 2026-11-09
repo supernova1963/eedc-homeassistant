@@ -25,9 +25,9 @@ declare -A DOCS=(
   ["HANDBUCH_ENERGIEPROFIL.md"]="handbuch-energieprofil.md|Modul: Energieprofil|Stundengenaues Energieprofil – wo es in v4 liegt"
   ["HANDBUCH_PROGNOSEN.md"]="handbuch-prognosen.md|Modul: Prognosen|Vorschau, Genauigkeit und Prognosequellen"
   ["HANDBUCH_WAERME_KLIMA.md"]="handbuch-waerme-klima.md|Modul: Wärme & Klima|Wärmepumpe, Klimaanlage und Heizstab: welcher Zähler welche Kennzahl möglich macht"
-  ["SENSOR-REFERENZ.md"]="sensor-referenz.md|Sensor-Referenz|HA-Export-Sensoren und MQTT-Topics im Überblick"
+  ["SENSOR-REFERENZ.md"]="sensor-referenz.md|Sensor-Referenz|Feldnamen, Einheiten und Anforderungen der Eingabefelder und die HA-Export-Sensoren (Tabellen aus dem Code erzeugt)"
   ["MQTT_INBOUND.md"]="mqtt-inbound.md|MQTT-Inbound|Jedes MQTT-Topic, das eedc erwartet, je Gerätetyp — mit Payload, Beispielen und Presets (Tabellen aus dem Code erzeugt)"
-  ["BERECHNUNGEN.md"]="berechnungen.md|Berechnungsreferenz|Formeln und Berechnungsgrundlagen aller Kennzahlen"
+  ["BERECHNUNGEN.md"]="berechnungen.md|Berechnungsreferenz|Regeln und Grenzen der Berechnungen: wie eine Größe gebildet wird, welche Quelle Vorrang hat und wo eine Zahl bewusst fehlt"
   ["UEBERSICHT-GROESSEN.md"]="uebersicht-groessen.md|Übersicht der Größen|Jede Größe von eedc in einer Zeile: Eingabefelder, Monatsgrößen, Kennwerte, Export-Sensoren (aus dem Code erzeugt)"
   ["GLOSSAR.md"]="glossar.md|Glossar|Begriffserklärungen und Support-Informationen"
   ["WAS-IST-NEU.md"]="was-ist-neu.md|Was ist neu|Was sich pro Version für dich als Anwender geändert hat"
@@ -65,5 +65,20 @@ done
 
 # Changelog separat (von Repository-Root)
 sync_file "$CHANGELOG" "changelog.md" "Changelog" "Alle Änderungen und Versionshistorie von eedc"
+
+# Slug-Liste für scripts/remark-doku-links.mjs (Quelldatei → Website-Slug). Einzige Quelle ist das
+# Array DOCS oben; die JSON-Datei ist generiert und gitignored. Das Plugin schreibt damit die
+# Verweise DATEI.md#anker der Doku beim Build auf die Website-Seite um.
+SLUGS="src/doku-slugs.json"
+{
+  echo "{"
+  while IFS= read -r src; do
+    IFS='|' read -r target _ <<< "${DOCS[$src]}"
+    printf '  "%s": "%s",\n' "$src" "${target%.md}"
+  done < <(printf '%s\n' "${!DOCS[@]}" | LC_ALL=C sort)
+  printf '  "%s": "%s"\n' "CHANGELOG.md" "changelog"
+  echo "}"
+} > "$SLUGS"
+echo "  ✓ $SLUGS ($(( ${#DOCS[@]} + 1 )) Slugs)"
 
 echo "✓ Docs sync complete ($(( ${#DOCS[@]} + 1 )) files)"
