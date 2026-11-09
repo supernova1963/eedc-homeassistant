@@ -796,7 +796,7 @@ PROGNOSE_SENSOREN = [
         unit="kWh",
         icon="mdi:sun-clock",
         category=SensorCategory.PROGNOSE,
-        formel="Heute bereits erzeugt + eedc-Prognose der verbleibenden Stunden — folgt dem IST, anders als die reine Tagesprognose",
+        formel="Heute bereits erzeugt + eedc-Prognose der verbleibenden Stunden × Nachführ-Faktor aus dem gemessenen Vormittag — folgt dem IST, anders als die reine Tagesprognose",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -805,7 +805,7 @@ PROGNOSE_SENSOREN = [
         unit="kWh",
         icon="mdi:solar-power",
         category=SensorCategory.PROGNOSE,
-        formel="eedc-Prognose der verbleibenden Stunden heute, laufende Stunde anteilig nach Restminuten (OpenMeteo × Korrekturprofil-Kaskade)",
+        formel="eedc-Prognose der verbleibenden Stunden heute, laufende Stunde anteilig nach Restminuten (OpenMeteo × Korrekturprofil-Kaskade) × Nachführ-Faktor aus dem gemessenen Vormittag",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -941,6 +941,7 @@ PROGNOSE_SENSOREN = [
         category=SensorCategory.PROGNOSE,
         formel=(
             "SoC-Simulation ab aktuellem Speicherstand: Uhrzeit, zu der der Speicher voll ist. "
+            "PV = eedc-Prognose-Slots ab dem Start × Nachführ-Faktor aus dem gemessenen Vormittag (wie Rest heute). "
             "Verbrauchsannahme = gewichtetes 8-Wochen-Profil (Attribute profil_typ, profil_stufe, "
             "profil_tage, verbrauch_annahme_kwh) — ein anderes Modell als "
             "eedc_verbrauchsprognose_heute_kwh."

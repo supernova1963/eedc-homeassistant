@@ -535,8 +535,10 @@ def _prognose_sensorwert(sensor, prognose):
         zusatz.update(_korrektur_attribute(prognose.get("korrektur_nutzen")))
     elif sensor.key == "eedc_prognose_heute_rollend_kwh":
         value = prognose["heute_rollend_kwh"]
+        zusatz = _nachfuehr_attribute(prognose)
     elif sensor.key == "eedc_prognose_rest_today_kwh":
         value = prognose["rest_today_kwh"]
+        zusatz = _nachfuehr_attribute(prognose, mit_rest_modell=True)
     elif sensor.key == "eedc_prognose_day_plus_1_kwh":
         value = prognose["day_plus_1_kwh"]
         if prognose.get("stundenprofil_day_plus_1"):
@@ -572,6 +574,17 @@ def _prognose_sensorwert(sensor, prognose):
     elif sensor.key == "eedc_verbrauchsprognose_morgen_kwh":
         value, zusatz = _verbrauchsprognose_morgen_sensorwert(prognose)
     return value, zusatz
+
+
+def _nachfuehr_attribute(prognose, *, mit_rest_modell: bool = False) -> dict:
+    """Päckchen CC (Nachführung «Rest heute»): ``nachfuehr_faktor`` (beide Sensoren) und ``rest_modell_kwh`` (nur «Rest
+    heute») — leer ohne Stundenprofil (der Kanon setzt dann keinen Faktor)."""
+    zusatz: dict = {}
+    if prognose.get("nachfuehr_faktor") is not None:
+        zusatz["nachfuehr_faktor"] = prognose["nachfuehr_faktor"]
+    if mit_rest_modell and prognose.get("rest_modell_kwh") is not None:
+        zusatz["rest_modell_kwh"] = prognose["rest_modell_kwh"]
+    return zusatz
 
 
 def _korrektur_attribute(nutzen) -> dict:

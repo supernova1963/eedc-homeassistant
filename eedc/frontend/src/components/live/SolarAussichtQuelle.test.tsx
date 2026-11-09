@@ -94,3 +94,25 @@ describe('Die Zahlen folgen der gewählten Quelle', () => {
     expect(screen.queryByText('eedc')).not.toBeInTheDocument()
   })
 })
+
+describe('Nachführung «Rest heute» (Päckchen CC)', () => {
+  const mitRest = (over: Record<string, unknown>) => ({
+    ...basis, pv_prognose_kwh: 24.6, pv_prognose_rest_kwh: 14.2,
+    pv_prognose_heute_rollend_kwh: 26.2, ...over,
+  } as unknown as LiveWetterResponse)
+
+  it('nennt den gesenkten Rest, wenn das Backend eine Prozentzahl liefert', () => {
+    render(<SolarAussicht3Tage prognose3Tage={drei} wetter={mitRest({ pv_prognose_nachfuehr_prozent: -23 })} heutePvKwh={12} />)
+    expect(screen.getByText('Rest nach dem bisherigen Tag um 23 % gesenkt')).toBeInTheDocument()
+  })
+
+  it('nennt den angehobenen Rest', () => {
+    render(<SolarAussicht3Tage prognose3Tage={drei} wetter={mitRest({ pv_prognose_nachfuehr_prozent: 18 })} heutePvKwh={12} />)
+    expect(screen.getByText('Rest nach dem bisherigen Tag um 18 % angehoben')).toBeInTheDocument()
+  })
+
+  it('schweigt ohne Prozentzahl (unter ±5 % oder fremde Quelle)', () => {
+    render(<SolarAussicht3Tage prognose3Tage={drei} wetter={mitRest({ pv_prognose_nachfuehr_prozent: null })} heutePvKwh={12} />)
+    expect(screen.queryByText(/Rest nach dem bisherigen Tag/)).not.toBeInTheDocument()
+  })
+})

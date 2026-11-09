@@ -77,6 +77,7 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         from backend.services.prognose_kanon import kanon_tagesprognose
         from backend.services.verbrauch_prognose_service import get_verbrauch_prognose
         from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
+        from backend.core.berechnungen.prognose_nachfuehrung import slots_nachgefuehrt
 
         heute = date.today()
 
@@ -152,8 +153,12 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
         if speicher_kap > 0 and akt_soc is not None and sim_start is not None:
             vp = await get_verbrauch_prognose(anlage.id, heute, db)
             verbrauch_stunden = vp["stunden_kw"] if vp else [0.0] * 24
+            # Päckchen CC (H-N2, Entscheid Master): die Simulation ab `sim_start` folgt dem nachgeführten Rest — die Slots
+            # ab dem Startslot × Nachführ-Faktor (1,0 ⇒ bitgleich); `stundenprofil_heute` bleibt das Modell.
             sim = simuliere_speicher_tag(
-                pv_stunden=stunden_kwh_heute,
+                pv_stunden=slots_nachgefuehrt(
+                    stunden_kwh_heute, getattr(prognose, "nachfuehr_faktor", None), sim_start,
+                ),
                 verbrauch_stunden=verbrauch_stunden,
                 speicher_kap_kwh=speicher_kap,
                 start_soc_prozent=akt_soc,
@@ -202,6 +207,10 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             # verwechselt, hat wieder zwei Wahrheiten — deshalb heißt der Sensor
             # ausdrücklich „(nachgeführt)".
             "heute_rollend_kwh": prognose.heute_rollend_kwh,
+            # Päckchen CC (Nachführung «Rest heute»): `rest_today_kwh` = Modell-Rest × Faktor — Attribute an «Rest heute»
+            # und «heute (nachgeführt)».
+            "nachfuehr_faktor": getattr(prognose, "nachfuehr_faktor", None),
+            "rest_modell_kwh": getattr(prognose, "rest_modell_kwh", None),
             "ist_bisher_kwh": prognose.ist_bisher_kwh,
             # N-544: bis wohin die IST-Summe reicht (hoechster gemessener
             # Backward-Slot). P6 summiert das SOLL bis genau dorthin — eine

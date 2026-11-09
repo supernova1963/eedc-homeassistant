@@ -319,7 +319,18 @@ def ist_profil(
     ``tageswert_kwh`` ist hier die **rohe, ungerundete** Slot-Summe (≥ 0.0) — der
     Vergleich-Tab braucht sie unverändert für die ``verbleibend``-Rechnung und
     rundet erst an der Response-Grenze (verhaltensneutral zum Inline-Stand).
+
+    ⭐ **Raster (N-784, 9.11.2026):** die Slots sind **Backward** (Slot ``h`` =
+    ``[h-1, h)``) wie jede Prognose-Reihe, neben die sie gelegt werden. Eine
+    Mischzeile eines Kanal-Tags (``raster == "beginn"``, Zeile ``h`` = ``[h, h+1)``)
+    liegt über ``slot_konvention.backward_slot_der_zeile`` auf Slot ``h + 1``; ihre
+    Stunde 23 ist Slot 0 des Folgetags und fällt aus dem Profil (nach
+    Sonnenuntergang, 0 PV) — ihre Energie zählt im ``tageswert_kwh`` weiter mit
+    (der Kalendertag des Kanal-Tags wie *Cockpit → Tag*). Bis N-784 lag die
+    Mischzeile index-gleich: das IST stand eine Stunde vor seiner Prognose, und
+    die N-544-Grenze (``ist_bisher_bis_slot``) endete eine Stunde zu früh.
     """
+    from backend.core.berechnungen.slot_konvention import backward_slot_der_zeile
     from backend.core.berechnungen.spannen import (
         tag_traegt_vortagsenergie,
         zeile_gebuendelt,
@@ -331,16 +342,20 @@ def ist_profil(
     buendel: list[int] = []
     tageswert = 0.0
     for row in ist_rows:
-        present.append(row.stunde)
+        if row.pv_kw is not None:
+            tageswert += row.pv_kw
+        tag, slot = backward_slot_der_zeile(row)
+        if tag != getattr(row, "datum", None):
+            continue  # Stunde 23 eines Kanal-Tags = Slot 0 des Folgetags
+        present.append(slot)
         if row.pv_kw is None:
-            slots[row.stunde] = None
+            slots[slot] = None
             continue
-        tageswert += row.pv_kw
         if zeile_gebuendelt(row, "pv"):
-            buendel.append(row.stunde)
-            slots[row.stunde] = None
+            buendel.append(slot)
+            slots[slot] = None
             continue
-        slots[row.stunde] = round(row.pv_kw, 2)
+        slots[slot] = round(row.pv_kw, 2)
     unvollstaendig = (
         tag_traegt_vortagsenergie(ist_rows, "pv")
         or bool(verworfen and "pv" in verworfen)

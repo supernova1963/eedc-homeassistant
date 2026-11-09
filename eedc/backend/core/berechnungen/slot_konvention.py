@@ -450,6 +450,24 @@ def bestandszeile_fuer_stundenbeginn(datum: date, stunde: int) -> tuple[date, in
     return datum, stunde + 1
 
 
+def backward_slot_der_zeile(zeile: Any) -> tuple[date, int]:
+    """``(datum, slot)`` des **Backward-Slots**, den die Stundenzeile trägt — für beide Zeilenarten (N-784, 9.11.2026).
+
+    ⭐ **Die EINE Paarungsstelle für Leser, die eine Zeile aus ``stunden_der_tage`` neben eine Backward-Reihe legen**
+    (Prognose-Slots, Lern-SOLL, Verbrauchsprofil gegen PV-Slots):
+
+    * Mischzeile eines Kanal-Tags (``raster == "beginn"``, Zeile ``h`` = ``[h, h+1)``): ``bestandszeile_fuer_stundenbeginn``
+      — Slot ``h + 1``, für ``h = 23`` Slot 0 des **Folgetags**.
+    * Bestandszeile (Backward-Slot ``s`` = ``[s-1, s)``): ``(datum, stunde)`` unverändert.
+
+    Bis N-784 legten ``prognose_adapter.ist_profil`` und die zwei Verbrauchsprofil-Bauer die Mischzeilen index-gleich ab —
+    an einem Kanal-Tag stand das IST eine Stunde vor seiner Prognose (Peak IST 12 gegen Slot 13, gemessen 5./6.11.2026).
+    """
+    if ist_beginn_raster(zeile):
+        return bestandszeile_fuer_stundenbeginn(zeile.datum, zeile.stunde)
+    return getattr(zeile, "datum", None), zeile.stunde
+
+
 def stundenbeginn_der_zeile(zeile: Any) -> int:
     """Die Wanduhr-Stunde, mit der die Zeile BEGINNT — für beide Zeilenarten (Monats-Stundensichten, S4-R-3b).
 

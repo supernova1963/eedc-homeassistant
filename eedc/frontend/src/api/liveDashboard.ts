@@ -240,6 +240,15 @@ export interface LiveWetterResponse {
   pv_prognose_heute_rollend_kwh: number | null
   /** Was heute bis jetzt tatsächlich erzeugt wurde. */
   pv_ist_bisher_kwh: number | null
+  /** Päckchen CC: Nachführ-Faktor aus dem gemessenen Vormittag (1,0 = Modell); null, wenn der Rest einer anderen
+   *  Quelle folgt. `pv_prognose_rest_kwh` = `pv_prognose_rest_modell_kwh` × Faktor. */
+  pv_prognose_nachfuehr_faktor?: number | null
+  /** Päckchen CC: dieselbe Verschiebung in ganzen Prozent — nur ab ±5 %, sonst null (Satz in «Solar-Aussicht»). */
+  pv_prognose_nachfuehr_prozent?: number | null
+  /** Päckchen CC: der Rest aus dem Modell, vor der Nachführung. */
+  pv_prognose_rest_modell_kwh?: number | null
+  /** Päckchen CC: Σ Prognose-Slots bis zur IST-Grenze — der Nenner des Faktors. */
+  pv_prognose_soll_bisher_kwh?: number | null
   /** ADR-002 P4 (N-690): gesetzt, wenn Tageswert/PV-Kurve von heute aus einem
    *  unvollständigen Wetterabruf stammen — der Wert bleibt, die Antwort sagt es. */
   pv_prognose_hinweis?: string | null

@@ -196,8 +196,15 @@ async def _profil_from_db(
     Kein HA-Call, kein Netzwerk — reine DB-Abfrage. Überlebt jeden Neustart.
     Liefert Daten ab dem Moment, wo der Scheduler täglich aggregiert hat.
 
-    ``TagesEnergieProfil.stunde`` ist bereits ein Backward-Slot (der Aggregator
-    schreibt ihn über ``lts_boundary_index``) — hier wird nichts umgerechnet.
+    Das Profil ist **Backward** (Slot ``h`` = ``[h-1, h)``) — es läuft neben den
+    PV-Slots des Kanons (Live-Chart, ``ha_export_fenster``, Überschuss-Sensor).
+    Die Bestandszeile ``TagesEnergieProfil.stunde`` ist schon ein Backward-Slot
+    (der Aggregator schreibt ihn über ``lts_boundary_index``); die **Mischzeile
+    eines Kanal-Tags** (``raster == "beginn"``, Zeile ``h`` = ``[h, h+1)``) liegt
+    über ``slot_konvention.backward_slot_der_zeile`` auf Slot ``h + 1`` (N-784;
+    bis dahin stand hier «hier wird nichts umgerechnet», und der Verbrauch eines
+    Kanal-Tags lag eine Stunde zu früh). Ihre Stunde 23 ist Slot 0 des
+    Folgetags; die von gestern 23 Uhr gehört zu heute und bleibt draußen.
 
     ⭐ **N-594: Warmwasser und Kühlen als Teilmengen der WP-Reihe.** Die
     Temperaturkorrektur der Prognose skaliert nur, was von der Außentemperatur
@@ -258,10 +265,14 @@ async def _profil_from_db(
         Investition.anlage_id == anlage_id, Investition.typ == "waermepumpe", aktiv_jetzt(),
     ))).all()) == 1
 
+    from backend.core.berechnungen.slot_konvention import backward_slot_der_zeile
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 
     for row in rows:
-        datum, stunde, verbrauch_kw = row.datum, row.stunde, row.verbrauch_kw
+        datum, stunde = backward_slot_der_zeile(row)
+        if datum >= heute:
+            continue  # Stunde 23 von gestern (Kanal-Tag) = Slot 0 von heute
+        verbrauch_kw = row.verbrauch_kw
         waermepumpe_kw, temperatur_c = row.waermepumpe_kw, row.temperatur_c
         if verbrauch_kw is None:
             continue

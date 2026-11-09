@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
+from backend.core.berechnungen.prognose_nachfuehrung import nachfuehr_prozent
 from backend.services.korrekturprofil_lookup import lookup_korrekturfaktor
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.wetter.utils import (
@@ -73,6 +74,11 @@ class _PrognoseZahlen:
     kanon_rollend: Optional[float] = None
     #: Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — ``{ausgesetzt, mae_kaskade_prozent, mae_roh_prozent, tage}``.
     korrektur_status: Optional[dict] = None
+    #: Päckchen CC (Nachführung «Rest heute»): Faktor, Modell-Rest und SOLL bis zur IST-Grenze des Kanons — nur solange
+    #: ``rest`` dem Kanon folgt; der Rest-Schritt einer fremden Quelle setzt sie auf ``None``.
+    nachfuehr_faktor: Optional[float] = None
+    rest_modell: Optional[float] = None
+    soll_bisher: Optional[float] = None
 
 
 @dataclass
@@ -277,6 +283,9 @@ async def _kanon_zahlen(db, anlage, profil: list[dict], pv_prognose: Optional[fl
     return _PrognoseZahlen(
         kanon_heute, pv_prognose, pv_prognose_rest, pv_prognose_rollend, pv_ist_bisher,
         kanon_rollend=pv_prognose_rollend, korrektur_status=_korrektur_status(kanon),
+        nachfuehr_faktor=getattr(kanon, "nachfuehr_faktor", None) if kanon is not None else None,
+        rest_modell=getattr(kanon, "rest_modell_kwh", None) if kanon is not None else None,
+        soll_bisher=getattr(kanon, "soll_bisher_kwh", None) if kanon is not None else None,
     )
 
 
@@ -569,6 +578,9 @@ def _rest_der_quelle(pq, stand: _QuellenStand, zahlen: _PrognoseZahlen, now) -> 
     # mit SEINER Formel (`rest_aus_slots`, #339) auf FREMDEN Slots.
     quelle_tagesprofile = stand.quelle_tagesprofile
     quelle_hat_profil = bool(quelle_tagesprofile and quelle_tagesprofile[0])
+    if not pq.ist_eedc:
+        # Päckchen CC: die Nachführung gilt dem eedc-Rest — folgt der Rest einer anderen Quelle, steht kein Faktor da.
+        zahlen.nachfuehr_faktor = zahlen.rest_modell = zahlen.soll_bisher = None
     if quelle_hat_profil and not pq.ist_eedc:
         from backend.services.prognose_kanon import rest_aus_slots
         zahlen.rest = rest_aus_slots(quelle_tagesprofile[0], now)
@@ -775,6 +787,12 @@ def _antwort(
         # die nachgeführte Zahl oben und diese klein daneben.
         "pv_prognose_heute_rollend_kwh": zahlen.rollend,
         "pv_ist_bisher_kwh": zahlen.ist_bisher,
+        # Päckchen CC (Nachführung «Rest heute»): `pv_prognose_rest_kwh` = Modell-Rest × Faktor; None, wenn der Rest
+        # einer anderen Quelle als eedc folgt.
+        "pv_prognose_nachfuehr_faktor": zahlen.nachfuehr_faktor,
+        "pv_prognose_nachfuehr_prozent": nachfuehr_prozent(zahlen.nachfuehr_faktor),
+        "pv_prognose_rest_modell_kwh": zahlen.rest_modell,
+        "pv_prognose_soll_bisher_kwh": zahlen.soll_bisher,
         # Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» (None, wenn er nicht lief).
         "korrektur_status": zahlen.korrektur_status,
         # N-690 (P4): stammen Tageswert/PV-Kurve aus einem unvollständigen

@@ -3751,10 +3751,38 @@ Wärmepumpen-Art) · `_monatswerte` (SOLL-Jahr, Monatswerte).
 > **Heute nachgeführt** (`KanonPrognose.heute_rollend_kwh`, Sensor `eedc_prognose_heute_rollend_kwh`) = **bereits erzeugt**
 > + **Rest heute**. Bereits erzeugt ist gemessen: Σ der PV-Stunden von heute über `kanal_stunden.stunden_der_tage` (an einem
 > Kanal-Tag die Mischzeilen, wie *Prognosen → Vergleich*) — es hängt an keiner Prognose und bleibt auch stehen, wenn der
-> Wetterabruf ausfällt. Rest heute = Σ der korrigierten Slots nach der laufenden Stunde plus die laufende Stunde anteilig
-> nach den verstrichenen Minuten (`prognose_kanon.rest_aus_slots`, #339, Backward-Slots). Ohne Stundenprofil des Tages gibt
-> es keinen Rest und keinen nachgeführten Wert (`None`, auch bei teilweise ausgefallenem Fan-out). Der Tageswert
-> `…_heute_kwh` folgt OpenMeteo, der nachgeführte dem IST; *bereits erzeugt + Rest = nachgeführt* (#401).
+> Wetterabruf ausfällt. **Raster (N-784):** `prognose_adapter.ist_profil` legt jede Zeile auf ihren **Backward-Slot**
+> (`slot_konvention.backward_slot_der_zeile`): eine Mischzeile (Beginn-Raster, Zeile h = [h, h+1)) auf Slot h + 1, ihre
+> Stunde 23 auf Slot 0 des Folgetags (aus dem Profil, im Tageswert); eine Bestandszeile bleibt. Damit ist die IST-Grenze
+> `ist_bisher_bis_slot` (N-544, der höchste Slot mit Messwert) an jedem Tag ein Backward-Index, und Stundenvergleich,
+> Abweichungs-Ampel und Nachführung paaren IST und Prognose an derselben Stunde. Dieselbe Paarung nehmen die
+> Verbrauchsprofil-Bauer (`verbrauch_prognose_service`, `live_verbrauchsprofil_service._profil_from_db`) und das
+> Korrekturprofil (`lade_ist_wetter_stunden`).
+>
+> **Rest heute** = der **Modell-Rest** — Σ der korrigierten Slots nach der laufenden Stunde plus die laufende Stunde anteilig
+> nach den verstrichenen Minuten (`prognose_kanon.rest_aus_slots`, #339, Backward-Slots; `KanonPrognose.rest_modell_kwh`) —
+> **× Nachführ-Faktor** aus dem gemessenen Vormittag (Phase `prognose_kanon._nachfuehrung`, Formeln in
+> `core/berechnungen/prognose_nachfuehrung.py`):
+>
+>     SOLL bisher = Σ Slots bis einschließlich ist_bisher_bis_slot   (soll_bisher_kwh, N-544 — dieselbe Summe wie die Ampel)
+>     r = IST bisher ÷ SOLL bisher      w = SOLL bisher ÷ SOLL Tag (Σ Slots)
+>     f = clip(1 + (r − 1)·√w, 0,4, 1,6)
+>
+> `f = 1,0` ohne IST-Messung, bei SOLL bisher < 1 kWh oder w < 10 % (Annahmen: Morgen-Rauschen; ebenso die Klemme 0,4…1,6).
+> Herkunft: Backtest Winterborn 1.9.–8.11.2026 (69 Tage) — MAE des Tagesendwerts im Okt/Nov um 10–14 Uhr
+> 28,6/24,7/19,7/14,6/10,6 % ⇒ 24,4/19,6/17,5/12,6/9,4 %, Nebeltage halbiert, September ≤ 1,5 Punkte schlechter um 10 Uhr.
+> `KanonPrognose.nachfuehr_faktor` (gerundet 3 Stellen; `None` ohne Profil), `soll_bisher_kwh`; Live `pv_prognose_nachfuehr_faktor`,
+> `pv_prognose_nachfuehr_prozent` (`round((f − 1)·100)`, nur ab ±5 %, Satz der Solar-Aussicht), `pv_prognose_rest_modell_kwh`,
+> `pv_prognose_soll_bisher_kwh` — mit Solcast/SFML als gewählter Quelle folgt der Live-Rest dieser Quelle und die Felder sind
+> `None`; HA-Attribute `nachfuehr_faktor` (beide Sensoren) und `rest_modell_kwh` («Rest heute»). **Folgen** dem nachgeführten
+> Rest: «Rest heute», «heute (nachgeführt)», die Live-Kopfzahl, der Mittagsstand des Genauigkeits-Trackings und «Speicher voll
+> um» samt `eedc_speicher_voll_um_ts` und End-SoC — die Simulation des HA-Exports bekommt die Slots ab `sim_start` × `f`
+> (`prognose_nachfuehrung.slots_nachgefuehrt`, Entscheid Master H-N2; die Tagesprognose-Route `energie_profil/prognose.py`
+> simuliert weiter mit dem Modellprofil). **Bleiben Modell:** «PV-Prognose heute» samt Stundenprofil, Vormittag/Nachmittag, Day-Ahead- und Abendstand, der Abregelungs-Rest
+> (`eedc_abregelung_heute_kwh.rest_heute_kwh` — die Kappung `max(0, P − Grenze)` skaliert nicht linear mit einem Faktor), die
+> Abweichungs-Ampel (sie ist der Eingang, keine Ausgabe der Nachführung). Ohne Stundenprofil des Tages gibt es keinen Rest und keinen nachgeführten Wert
+> (`None`, auch bei teilweise ausgefallenem Fan-out). Der Tageswert `…_heute_kwh` folgt OpenMeteo, der nachgeführte dem
+> IST; *bereits erzeugt + Rest = nachgeführt* (#401).
 >
 > **Fällt der Kanon aus** (kein OpenMeteo-Ergebnis, keine kWp, Zieltag jenseits des Abruf-Horizonts),
 > springt ein Ersatz-Weg ein — er **fächert ebenfalls je Orientierungsgruppe auf** (ADR-002/P1: kein
@@ -4038,14 +4066,14 @@ festen **Zeitpunkts** (Query `zeitpunkt`, Standard `day_ahead`; Auswahl in
 
 | Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Mittag (first-write ab 12:00) | Abend (eingefrorener Tageswert) |
 | --- | --- | --- | --- |
-| eedc | `pv_prognose_stundenprofil` — die angezeigte Kanon-Reihe | `pv_prognose_eedc_mittag_kwh` = `heute_rollend_kwh` (IST bisher + Rest) | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
+| eedc | `pv_prognose_stundenprofil` — die angezeigte Kanon-Reihe | `pv_prognose_eedc_mittag_kwh` = `heute_rollend_kwh` (IST bisher + nachgeführter Rest) | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
 | OpenMeteo | `lern_soll_stundenprofil_kwh` — roh, **gekappt** | `pv_prognose_om_mittag_kwh` = `KanonTag.om_kwh` des Laufs — roh, **gekappt** | `pv_prognose_final_kwh`, Fallback `pv_prognose_kwh` — roh, **ungekappt** |
 | Solcast | `solcast_prognose_stundenprofil` | `solcast_mittag_kwh` (per Satellit nachgeführt) | `solcast_prognose_kwh` (letzter Schreiber, per Satellit nachgeführt) |
 | SFML (nur Wert, keine Kennzahl) | `sfml_prognose_stundenprofil` | `sfml_mittag_kwh` (nur die Live-Sicht schreibt) | `sfml_prognose_kwh` |
 
 **Mittag** ist der Stand des ersten Laufs ab 12:00 lokal (`live_wetter._mittag_einfrieren`, je Spalte first-write): der
 Prefetch läuft alle 45 Minuten und schreibt also bis 12:45, die Live-Sicht schreibt, wenn sie vorher geöffnet wird. Er
-vergleicht, was die Quellen um die Tagesmitte wissen — eedc das gemessene IST des Vormittags plus den Rest, Solcast
+vergleicht, was die Quellen um die Tagesmitte wissen — eedc das gemessene IST des Vormittags plus den nachgeführten Rest, Solcast
 seine Satelliten-Nachführung, OpenMeteo den Modelllauf. Rückwärts leer («nicht erhoben»).
 
 Ohne aufgezeichneten Stand `None` („nicht erhoben"), kein Rückfall auf den anderen Zeitpunkt; ein Profil mit Σ ≤ 0 gilt
@@ -4063,10 +4091,10 @@ haben (Layer `prognose_genauigkeit.beste_quelle`; SFML nicht — Tom-HA-Regel; b
 
 **SOLL bis zur IST-Grenze (Päckchen CC).** Die Abweichungs-Ampel (`eedc_prognose_abweichung_heute_prozent`) summiert das
 SOLL über `core/berechnungen/prognose_nachfuehrung.soll_bisher_kwh` (Σ Slots bis einschließlich `ist_bisher_bis_slot`,
-N-544, Zahl unverändert). Im selben Modul steht der Nachführ-Faktor für «Rest heute» (`nachfuehr_faktor`,
-`f = clip(1 + (r − 1)·√w, 0,4, 1,6)`, Backtest Winterborn 1.9.–8.11.2026); **im Kanon ist er noch nicht verdrahtet** —
-die Ausrichtungs-Probe ergab, dass an einem Kanal-Tag das IST im Beginn-Raster und das Prognose-Profil im
-Backward-Raster indexiert sind (eine Stunde Versatz); die Entscheidung dazu steht aus.
+N-544). Im selben Modul steht der Nachführ-Faktor für «Rest heute» (`nachfuehr_faktor`, `f = clip(1 + (r − 1)·√w, 0,4,
+1,6)`, Backtest Winterborn 1.9.–8.11.2026) — verdrahtet im Kanon (Kasten «Heute nachgeführt» oben). Die Grenze ist seit
+N-784 an jedem Tag ein Backward-Index: an einem Kanal-Tag lag das IST bis dahin im Beginn-Raster (eine Stunde vor dem
+Prognose-Slot), und die Ampel verglich das IST mit dem SOLL bis eine Stunde vorher (5.11.2026 12:30: +95 % statt +16 %).
 
 #### Asymmetrie-Diagnostik (v3.23.3, #151 Variante B)
 

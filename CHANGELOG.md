@@ -11,6 +11,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Prognose: an Tagen aus dem HA-Spiegel lagen gemessene Stunden eine Stunde vor ihrer Prognose.** An diesen Tagen ordnete
+  eedc die Stunde 11–12 Uhr dem Prognose-Wert 10–11 Uhr zu. Sichtbar im Stundenvergleich unter *Auswertungen → Prognose*
+  (die gemessene Kurve stand eine Stunde früher als die Prognose, der Mittag 12 statt 13 Uhr) und in der
+  Abweichungs-Ampel der HA-Sensoren (`eedc_prognose_abweichung_heute_prozent`): sie verglich das bisher Erzeugte mit der
+  Prognose bis eine Stunde vorher und meldete am Vormittag zu viel — an einem klaren Tag um 12:30 +95 % statt +16 %.
+  Dieselbe Verschiebung hatte das gelernte Verbrauchsprofil an diesen Tagen (gestrichelte Verbrauchsprognose im
+  Live-Chart, «PV-Überschuss heute», «Speicher voll um»): es lag eine Stunde zu früh. Jetzt liegt jede Stunde auf ihrem
+  Prognose-Wert (N-784).
 - **Cockpit → Live, Tagesverlauf über MQTT: die Ladeleistung von Wallbox und E-Auto zählt einmal, wie über Home
   Assistant.** Lieferten Wallbox und E-Auto ihre Ladeleistung je über ein eigenes MQTT-Topic, standen beide im
   Verbrauchs-Stapel — dieselbe Ladung zweimal, der Gipfel um die Ladeleistung zu hoch. Jetzt trägt sie die Wallbox, wenn
@@ -119,6 +127,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **PV-Prognose «Rest heute» und «heute (nachgeführt)» folgen dem gemessenen Vormittag.** Sobald ein Zehntel der
+  Tagesprognose vorbei ist, vergleicht eedc das bisher Erzeugte mit der Prognose bis zur selben Stunde und führt den Rest
+  des Tages nach — gedämpft, solange erst wenig vom Tag vorbei ist, höchstens auf das 0,4- bis 1,6-Fache. An einem
+  Nebeltag sinkt der Rest damit am Vormittag statt erst am Abend; an einem Tag, der die Prognose trifft, ändert sich
+  nichts. Gemessen an einer Anlage über Oktober und November: der Fehler der Tageszahl um 11 Uhr sinkt von 24,7 % auf
+  19,6 %. Die Sensoren `eedc_prognose_rest_today_kwh` und `eedc_prognose_heute_rollend_kwh` heißen weiter so und tragen
+  das Attribut `nachfuehr_faktor` (1,0 = unverändert), «Rest heute» dazu `rest_modell_kwh` (der Rest ohne Nachführung);
+  Automationen sehen eine bessere Zahl, keinen neuen Sensor. «Speicher voll um» (und `eedc_speicher_voll_um_ts`) rechnet die
+  Stunden ab jetzt mit derselben nachgeführten Prognose. *Cockpit → Live* sagt unter «verbleibend» in einem Satz, um
+  wie viel der Rest gesenkt oder angehoben ist (ab 5 %). Unverändert bleiben «PV-Prognose heute» mit seinem
+  Stundenprofil, die Vormittag-/Nachmittag-Sensoren, der Abregelungs-Rest und die Abweichungs-Ampel (sie ist der
+  Eingang der Nachführung).
 - **API `GET /api/cockpit/nachhaltigkeit`: die CO₂-Äquivalente rechnen wie die Auswertung.** `aequivalent_baeume` nimmt
   jetzt 12,5 kg CO₂ je Baum und Jahr (bisher 20 kg) und `aequivalent_fluege_km` 0,23 kg je Flug-km (bisher 0,25 kg;
   ein Kurzstreckenflug = 1000 km = 230 kg) — dieselben Zahlen, die Auswertungen → CO₂ zeigt; neu sind `aequivalent_fluege`,
@@ -135,8 +155,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   gerundet wie im Einzeljahr.
 - **Auswertungen → Prognose, Genauigkeits-Tracking: dritter Zeitpunkt „Mittag".** Neben Day-Ahead und Abend vergleicht der
   Umschalter jetzt auch den Stand um die Tagesmitte: eedc hält ihn beim ersten Prognose-Lauf ab 12 Uhr fest (spätestens
-  12:45) — für eedc das bis Mittag gemessene IST plus die Prognose für den Rest, für Solcast den per Satellit
-  nachgeführten Wert, für OpenMeteo den Modelllauf. Ältere Tage zeigen „nicht erhoben".
+  12:45) — für eedc das bis Mittag gemessene IST plus den nach dem Vormittag nachgeführten Rest, für Solcast den per
+  Satellit nachgeführten Wert, für OpenMeteo den Modelllauf. Ältere Tage zeigen „nicht erhoben".
 - **Prognose-Korrektur nur, wenn sie hilft.** eedc vergleicht jeden Tag den mittleren Fehler seiner korrigierten
   Day-Ahead-Prognose der letzten 30 Tage mit dem der rohen OpenMeteo-Prognose. Ist die Korrektur mehr als 2 Prozentpunkte
   schlechter (ab 14 vergleichbaren Tagen), setzt eedc sie aus und zeigt die rohe Prognose — in der App und in den
@@ -178,13 +198,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen CC Nachlauf (9.11.2026): Raster-Paarung, Nachführung, Wächter «Dateilänge».** Eine Paarungsstelle
+  `slot_konvention.backward_slot_der_zeile` (Mischzeile eines Kanal-Tags ⇒ Slot h + 1, Stunde 23 ⇒ Slot 0 des Folgetags;
+  Bestandszeile unverändert) für `prognose_adapter.ist_profil` (Kanon, Prognosen-Vergleich), die Verbrauchsprofil-Bauer
+  `verbrauch_prognose_service.get_verbrauch_prognose` und `live_verbrauchsprofil_service._profil_from_db` und die Referenz
+  `korrekturprofil_aggregator.lade_ist_wetter_stunden` (N-784). Kanon-Phase `_nachfuehrung` (`KanonPrognose.nachfuehr_faktor`,
+  `soll_bisher_kwh`, `rest_modell_kwh`), Speicher-Simulation des HA-Exports über `prognose_nachfuehrung.slots_nachgefuehrt`, Live-Felder `pv_prognose_nachfuehr_faktor`, `pv_prognose_nachfuehr_prozent`,
+  `pv_prognose_rest_modell_kwh`, `pv_prognose_soll_bisher_kwh`, Layer `prognose_nachfuehrung.nachfuehr_prozent`. Wächter
+  «Dateilänge» (900 netto-Codezeilen je Datei, Maß wie `komplexitaet.py`): `backend/tests/test_dateilaenge.py` mit
+  `dateilaenge_baseline.txt` (10 Dateien) und `npm run check:dateilaenge` mit `frontend/dateilaenge-baseline.txt`
+  (5 Dateien) — keine neue Datei darüber, Bestand höchstens + 2 %, Baselines schrumpfen nur. Tests
+  `test_n784_ist_auf_dem_backward_slot.py`, Ergänzungen in `test_prognose_nachfuehrung.py`.
+
 - **Päckchen CC (9.11.2026): Prognose-Genauigkeit «Mittag», Korrektur-Wächter, Quellen-Empfehlung.** Fünf Spalten in
   `tages_zusammenfassung` (`pv_prognose_eedc_mittag_kwh`, `pv_prognose_om_mittag_kwh`, `solcast_mittag_kwh`,
   `sfml_mittag_kwh` — first-write ab 12:00 über `live_wetter._mittag_einfrieren`; `pv_prognose_kaskade_stundenprofil` —
   first-write, immer die Kaskaden-Reihe), Migration und beide Rettungslisten. Neue Layer-Module
   `core/berechnungen/prognose_korrektur_nutzen.py` (Regel mit Hysterese) und `core/berechnungen/prognose_nachfuehrung.py`
-  (Nachführ-Faktor, SOLL bis zur IST-Grenze — die Abweichungs-Ampel liest `soll_bisher_kwh`, Zahl unverändert; der Faktor
-  ist im Kanon noch nicht verdrahtet), Service `services/prognose_korrektur_nutzen.py` (Tagescache), Kanon-Weiche
+  (Nachführ-Faktor, SOLL bis zur IST-Grenze — die Abweichungs-Ampel liest `soll_bisher_kwh`), Service `services/prognose_korrektur_nutzen.py` (Tagescache), Kanon-Weiche
   (`KanonPrognose.korrektur_ausgesetzt`/`korrektur_nutzen`, `KanonTag.kaskade_stundenprofil_kwh`), Layer
   `prognose_genauigkeit.beste_quelle`; Antwortfelder `korrektur_status` (Live, Genauigkeit), `beste_quelle`,
   `beste_quelle_mae_prozent`, `prognose_quelle`; PV-Strings `vergleich_grund`. Tests `test_prognose_nachfuehrung.py`,

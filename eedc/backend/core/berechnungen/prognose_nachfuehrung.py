@@ -33,6 +33,9 @@ NACHFUEHR_KLEMME: tuple[float, float] = (0.4, 1.6)
 NACHFUEHR_MIN_SOLL_KWH: float = 1.0
 #: Annahme: unter 10 % des Tages-SOLL (früher Morgen) bleibt der Rest das Modell.
 NACHFUEHR_MIN_ANTEIL: float = 0.10
+#: Annahme: ab ±5 % Verschiebung nennt die Live-Sicht die Nachführung in einem Satz — darunter ist es Rauschen
+#: (dieselbe Schwelle wie der Abweichungs-Hinweis daneben).
+NACHFUEHR_HINWEIS_AB: float = 0.05
 
 
 def nachfuehr_faktor(
@@ -77,3 +80,29 @@ def rest_nachgefuehrt_kwh(rest_modell_kwh: Optional[float], faktor: float) -> Op
     if rest_modell_kwh is None:
         return None
     return round(rest_modell_kwh * faktor, 1)
+
+
+def nachfuehr_prozent(faktor: Optional[float], *, ab: float = NACHFUEHR_HINWEIS_AB) -> Optional[int]:
+    """Die Verschiebung des Rests in ganzen Prozent ``round((f − 1) · 100)`` — ``None`` ohne Faktor oder unter ``ab``.
+
+    Für den Satz der Live-Sicht («Rest nach dem bisherigen Tag um 18 % gesenkt»); der Client zeigt, er rechnet nicht.
+    """
+    if faktor is None or abs(faktor - 1.0) < ab:
+        return None
+    return round((faktor - 1.0) * 100)
+
+
+def slots_nachgefuehrt(
+    slots: Optional[Sequence[Optional[float]]], faktor: Optional[float], ab_slot: Optional[int],
+) -> Optional[list[Optional[float]]]:
+    """Die Prognose-Slots ab ``ab_slot`` × ``faktor``, davor unverändert — die Eingangsreihe der Speicher-Simulation
+    («Speicher voll um», Entscheid Master H-N2: sie folgt dem nachgeführten Rest wie «Rest heute»).
+
+    ``None``-Slots bleiben ``None``; ohne Faktor, ohne Startslot oder bei ``faktor == 1.0`` dieselbe Reihe (bitgleich).
+    """
+    if slots is None:
+        return None
+    if faktor is None or ab_slot is None or faktor == 1.0:
+        return list(slots)
+    return [v if (v is None or h < ab_slot) else v * faktor for h, v in enumerate(slots)]
+

@@ -70,6 +70,9 @@ async def get_verbrauch_prognose(
 
     # HA-Bauform S5 (S5-R1): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Verbrauch wie
     # Cockpit → Tag, Stunde = Beginn), sonst die Stundenzeile; der Filter `verbrauch_kw IS NOT NULL` steht hier.
+    # N-784: das Profil ist **Backward** (Index h = [h-1, h)) — es läuft neben den PV-Slots des Kanons durch
+    # `simuliere_speicher_tag`. Eine Mischzeile liegt deshalb über `backward_slot_der_zeile` auf Slot h + 1 (Stunde 23 ⇒
+    # Slot 0 des Folgetags; nach `bis` gehört sie nicht zum Lernfenster).
     from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     rows = [r for r in await stunden_der_tage(db, anlage_id, von, bis, felder=("verbrauch_kw",))
@@ -84,6 +87,7 @@ async def get_verbrauch_prognose(
     ziel_ist_werktag = ziel_wt < 5
 
     # Gruppiere nach Datum → {datum: {stunde: verbrauch_kw}}
+    from backend.core.berechnungen.slot_konvention import backward_slot_der_zeile
     from backend.core.berechnungen.spannen import verbrauch_gebuendelt
 
     tage: dict[date, dict[int, float]] = defaultdict(dict)
@@ -91,7 +95,10 @@ async def get_verbrauch_prognose(
         # Zählerlücken wie HA (§2): gebündelte Stunde ist keine Stundenmenge.
         if verbrauch_gebuendelt(r):
             continue
-        tage[r.datum][r.stunde] = r.verbrauch_kw
+        tag, slot = backward_slot_der_zeile(r)
+        if tag > bis:
+            continue
+        tage[tag][slot] = r.verbrauch_kw
 
     # Filtere nur Tage mit >= 20 Stunden (Qualitätsfilter)
     vollstaendige_tage = {d: stunden for d, stunden in tage.items() if len(stunden) >= 20}

@@ -250,9 +250,9 @@ async def lade_ist_wetter_stunden(db: AsyncSession, anlage_id: int, tage) -> lis
     Aus ``stunden_der_tage`` (S5-R1): an einem Kanal-Tag die Mischzeilen (PV wie *Cockpit → Tag*, Wetter aus der
     Bestandszeile der Stunde, S4-R-3b), sonst die Stundenzeile. Gepaart wird mit Reihen im **Backward-Slot** (Lern-SOLL,
     Day-Ahead-Profil ``Index h = [h-1, h)``, Sonnenstand ``solar_position_lokal`` in Slot-Mitte): eine Mischzeile liegt über
-    ``slot_konvention.bestandszeile_fuer_stundenbeginn`` auf dem Slot ihrer Stunde (Stunde 23 ⇒ Slot 0 des Folgetags) —
+    ``slot_konvention.backward_slot_der_zeile`` auf dem Slot ihrer Stunde (Stunde 23 ⇒ Slot 0 des Folgetags) —
     das Raster übernimmt die Paarung, die eine Umrechnung wie ``strompreis_aggregator.slot_kosten_aus_zeilen``."""
-    from backend.core.berechnungen.slot_konvention import bestandszeile_fuer_stundenbeginn, ist_beginn_raster
+    from backend.core.berechnungen.slot_konvention import backward_slot_der_zeile
     from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     tage = set(tage)
@@ -262,7 +262,7 @@ async def lade_ist_wetter_stunden(db: AsyncSession, anlage_id: int, tage) -> lis
     for z in await stunden_der_tage(db, anlage_id, min(tage), max(tage), felder=_IST_WETTER_FELDER):
         if z.datum not in tage:
             continue
-        datum, slot = bestandszeile_fuer_stundenbeginn(z.datum, z.stunde) if ist_beginn_raster(z) else (z.datum, z.stunde)
+        datum, slot = backward_slot_der_zeile(z)
         out.append((datum, slot, z.pv_kw, z.bewoelkung_prozent, z.niederschlag_mm, z.wetter_code, z.spannen))
     return out
 

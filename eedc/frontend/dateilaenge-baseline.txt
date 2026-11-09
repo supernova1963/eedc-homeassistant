@@ -1,0 +1,7 @@
+# Bestand der Client-Dateien mit mehr als 900 netto-Codezeilen — darf nur schrumpfen.
+# Neu schreiben: cd eedc/frontend && node scripts/check-dateilaenge.mjs --baseline. Format: netto<TAB>pfad (relativ zu src/)
+1148	components/forms/MonatsdatenForm.tsx
+1004	components/live/EnergieFlussBackground.tsx
+1225	components/prognose/PrognoseVergleichTeile.tsx
+1129	pages/HAExportSettingsTeile.tsx
+1063	pages/community/CommunityKomponentenTeile.tsx

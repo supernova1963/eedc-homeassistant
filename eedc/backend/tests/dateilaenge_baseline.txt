@@ -1,0 +1,12 @@
+# Bestand der Produktivdateien mit mehr als 900 netto-Codezeilen — darf nur schrumpfen.
+# Neu schreiben: siehe test_dateilaenge.py (Docstring). Format: netto<TAB>datei (relativ zu backend/)
+936	api/routes/aktueller_monat/__init__.py
+1261	api/routes/datenquellen.py
+910	services/daten_checker/energieprofil.py
+1127	services/daten_checker/monatsdaten.py
+1144	services/energie_profil/aggregator.py
+989	services/ha_sensors_export.py
+1068	services/ha_statistics_service.py
+914	services/kanal/schreiber.py
+906	services/pdf/builders/jahresbericht.py
+1061	services/repair_orchestrator.py

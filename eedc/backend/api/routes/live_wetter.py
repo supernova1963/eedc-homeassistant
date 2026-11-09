@@ -190,8 +190,18 @@ class LiveWetterResponse(BaseModel):
     pv_prognose_kwh: Optional[float] = None
     #: Σ der Prognose-Slots ab jetzt (laufende Stunde anteilig) — der GEMESSENE
     #: Rest, nicht die Differenz zur Tagesprognose. Pendant zu
-    #: `sonnenstunden_rest` (rapahl-PN 2026-08-23).
+    #: `sonnenstunden_rest` (rapahl-PN 2026-08-23). Bei der Quelle eedc
+    #: nachgeführt: Modell-Rest × `pv_prognose_nachfuehr_faktor` (Päckchen CC).
     pv_prognose_rest_kwh: Optional[float] = None
+    #: Päckchen CC: Nachführ-Faktor aus dem gemessenen Vormittag (1,0 = Modell) — `None`, wenn der Rest einer anderen
+    #: Quelle folgt oder kein Stundenprofil vorliegt.
+    pv_prognose_nachfuehr_faktor: Optional[float] = None
+    #: Päckchen CC: dieselbe Verschiebung in ganzen Prozent (`(f − 1)·100`) — nur ab ±5 %, sonst `None` (Satz der Live-Sicht).
+    pv_prognose_nachfuehr_prozent: Optional[int] = None
+    #: Päckchen CC: der Rest aus dem Modell, vor der Nachführung.
+    pv_prognose_rest_modell_kwh: Optional[float] = None
+    #: Päckchen CC: Σ Prognose-Slots bis zur IST-Grenze (N-544) — der Nenner des Faktors.
+    pv_prognose_soll_bisher_kwh: Optional[float] = None
     #: IST bisher + Rest. Ergänzt `pv_prognose_kwh`, ersetzt ihn NICHT — jener
     #: bleibt der kanonische Wert, der überall dieselbe Zahl trägt.
     pv_prognose_heute_rollend_kwh: Optional[float] = None

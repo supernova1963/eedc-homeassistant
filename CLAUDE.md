@@ -105,6 +105,8 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
   Einheitenumrechnung, Zähler, Summen, Verteilung nach Anteil und die Monats-Fakten selbst (ADR-002/P10).
 - **Kognitive Komplexität:** Schwelle 50 je Funktion, keine über 100; Wächter `backend/tests/test_kognitive_komplexitaet.py`
   mit Baseline, die nur schrumpft (Neuschreiben per Befehl im Docstring). Ein Neuzugang über 50 wird aufgeteilt (Bauform RF-1).
+  Datei-Kriterium 900 netto-Codezeilen: keine neue Datei darüber, eine Bestandsdatei wächst höchstens 2 % — Wächter
+  `backend/tests/test_dateilaenge.py` und `npm run check:dateilaenge`, Baselines schrumpfen nur.
 - **Abhängigkeiten:** Absicht in `backend/requirements.txt`, ausgeliefert wird `requirements.lock` (Anleitung im Kopf der
   txt; nach jeder Änderung neu erzeugen). Das Standalone-Dockerfile liegt im Spiegel `eedc` und braucht dieselbe Änderung von Hand.
 

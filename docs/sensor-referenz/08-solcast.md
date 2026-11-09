@@ -44,7 +44,9 @@ Die Sensoren stehen mit Einheit, Formel und Hinweisen in der erzeugten Tabelle [
 > sich nur, wenn OpenMeteo einen neuen Modelllauf liefert. `…_heute_rollend_kwh` beantwortet
 > *worauf läuft der Tag tatsächlich hinaus* — er zieht die schon gemessenen Stunden heran und
 > reagiert damit auf einen Tag, der besser oder schlechter läuft als vorhergesagt.
-> `…_rest_today_kwh` ist der reine Rest. **Ihre Differenz ist keine sinnvolle Größe:**
+> `…_rest_today_kwh` ist der Rest, nachgeführt aus dem gemessenen Vormittag (Attribut
+> `nachfuehr_faktor`; `rest_modell_kwh` ist der Rest ohne Nachführung). **Die Differenz
+> `…_heute_kwh` − `…_heute_rollend_kwh` ist keine sinnvolle Größe:**
 > `…_heute_kwh` enthält für die vergangenen Stunden die *Vorhersage*, nicht die Messung.
 >
 > **Warum diese Sensoren kein `device_class` tragen.** Sie liefern kWh, sind aber **keine

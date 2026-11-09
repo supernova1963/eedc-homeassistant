@@ -152,6 +152,11 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
           const verbleibenKwh = i === 0 && !nachSonnenuntergang
             ? wetter?.pv_prognose_rest_kwh ?? null
             : null
+          // Päckchen CC: der Rest folgt dem gemessenen Vormittag (Nachführ-Faktor) — ein Satz, sobald er den Rest um
+          // mindestens 5 % verschiebt (das Backend liefert die Prozentzahl nur dann).
+          const nachfuehrProzent = verbleibenKwh != null && verbleibenKwh > 0
+            ? wetter?.pv_prognose_nachfuehr_prozent ?? null
+            : null
           // Rainers zweiter Punkt: „Mit dem realen Restwert könnte auch gleich
           // eine %-tuale Abweichung des Tages angezeigt werden." Genau das —
           // der nachgeführte Tageswert (IST bisher + Rest) gegen die
@@ -237,6 +242,12 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                       : ''}
                   </span>
                 ) : null}
+                {nachfuehrProzent != null && (
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500"
+                        title="eedc vergleicht das bisher Gemessene mit der Prognose bis zur selben Stunde und führt den Rest des Tages nach — gedämpft, solange erst ein kleiner Teil des Tages vorbei ist.">
+                    {`Rest nach dem bisherigen Tag um ${Math.abs(nachfuehrProzent)} % ${nachfuehrProzent < 0 ? 'gesenkt' : 'angehoben'}`}
+                  </span>
+                )}
               </div>
               <span className="text-right text-xs w-28">
                 {hasVmNm ? (

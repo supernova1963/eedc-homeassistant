@@ -154,9 +154,12 @@ class KanonPrognose:
     """Kanonische Prognose über mehrere Tage. ``tage[i]`` = heute + i Tage."""
 
     tage: list[Optional[KanonTag]]
-    rest_heute_kwh: Optional[float]    # laufende Stunde anteilig + Σ Slots danach (#339)
+    #: Rest des Tages: laufende Stunde anteilig + Σ Slots danach (#339), **nachgeführt** — × `nachfuehr_faktor` aus dem
+    #: gemessenen Vormittag (Päckchen CC, `core/berechnungen/prognose_nachfuehrung.py`); `rest_modell_kwh` ist der
+    #: ungedämpfte Modell-Rest.
+    rest_heute_kwh: Optional[float]
     ist_bisher_kwh: Optional[float]    # IST heute bis jetzt (TagesEnergieProfil)
-    heute_rollend_kwh: Optional[float]  # ist_bisher + rest_heute
+    heute_rollend_kwh: Optional[float]  # ist_bisher + rest_heute (nachgeführt)
     skalar_fallback: Optional[float]   # Legacy-Lernfaktor (Diagnose/Fallback)
     #: ⭐ **Bis zu welchem Backward-Slot `ist_bisher_kwh` reicht** (N-544,
     #: 22.09.2026) — der höchste Slot, der einen Messwert beigesteuert hat, oder
@@ -175,6 +178,13 @@ class KanonPrognose:
     korrektur_ausgesetzt: bool = False
     #: Päckchen CC: der Wächter-Stand (beide MAE der letzten 30 Tage, Tage, Zustand) — `None`, wenn er nicht lief.
     korrektur_nutzen: Optional[KorrekturNutzen] = None
+    #: Päckchen CC (Nachführung «Rest heute»): der Faktor `f = clip(1 + (r − 1)·√w, 0,4, 1,6)` aus IST bisher gegen
+    #: SOLL bis zur IST-Grenze — 1,0 ohne IST-Messung oder unterhalb der Schwellen; `None` ohne Stundenprofil.
+    nachfuehr_faktor: Optional[float] = None
+    #: Päckchen CC: Σ Prognose-Slots bis einschließlich `ist_bisher_bis_slot` (N-544-Regel) — `None` ohne Grenze/Profil.
+    soll_bisher_kwh: Optional[float] = None
+    #: Päckchen CC: der Rest aus dem Modell (#339, ungedämpft) — `rest_heute_kwh` = dieser × `nachfuehr_faktor`.
+    rest_modell_kwh: Optional[float] = None
 
 
 # Untergrenze des Kanon-Horizonts: so viele Tage, wie der weitest blickende
@@ -849,7 +859,7 @@ async def _prognose_mit_heute(
 ) -> KanonPrognose:
     """Die Tage plus die rollenden „heute"-Größen (IST bisher, Rest, nachgeführt)."""
     # Rollende „heute"-Größen aus den korrigierten Slots + IST.
-    rest_heute = ist_bisher = heute_rollend = None
+    rest_heute = ist_bisher = heute_rollend = ist_roh = None
     ist_bis_slot: Optional[int] = None
     heute_tag = tage[0] if tage else None
     if heute_tag is not None:
@@ -867,11 +877,14 @@ async def _prognose_mit_heute(
 
         ist_zeilen = await stunden_der_tage(db, anlage.id, heute, heute, felder=("pv_kw",))
         ist_p = ist_profil(ist_zeilen, jetzt_stunde=now.hour, datum=heute)
-        ist_bisher = round(ist_p.tageswert_kwh or 0.0, 1)
+        ist_roh = ist_p.tageswert_kwh or 0.0
+        ist_bisher = round(ist_roh, 1)
         # N-544: bis wohin reicht diese Summe? Der hoechste Slot, der einen
         # Messwert beigesteuert hat — `ist_profil` summiert jede Zeile mit
         # `pv_kw`, unabhaengig von `now.hour`. Wer eine SOLL-Summe daneben
         # stellt (P6), braucht genau diese Grenze und nicht die Uhr.
+        # N-784: `ist_profil` legt die Mischzeilen eines Kanal-Tags auf den
+        # Backward-Slot — die Grenze ist damit an jedem Tag ein Backward-Index.
         ist_bis_slot = max(
             [h for h, v in enumerate(ist_p.slots_kw) if v is not None]
             # Zählerlücken wie HA: ein gebündelter Slot trägt Energie in der
@@ -879,14 +892,10 @@ async def _prognose_mit_heute(
             + list(ist_p.buendel_stunden),
             default=None,
         )
+    nf = _Nachfuehrung()
     if heute_tag is not None and heute_tag.profil is not None:
-        slots = heute_tag.profil.stunden_kwh
-        # #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-
-        # Konvention (#144): Slot N = Energie [N-1, N), also ist slots[now.hour]
-        # bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den
-        # frac-Term sinkt der Rest nur einmal je Stunde in EINEM Sprung (bei
-        # kleinen Anlagen 5–8 kWh) statt gleichmäßig.
-        rest_heute = rest_aus_slots(slots, now)
+        nf = _nachfuehrung(heute_tag.profil.stunden_kwh, now, ist_roh, ist_bis_slot)
+        rest_heute = nf.rest_kwh
         heute_rollend = round((ist_bisher or 0.0) + rest_heute, 1)
 
     return KanonPrognose(
@@ -896,6 +905,49 @@ async def _prognose_mit_heute(
         heute_rollend_kwh=heute_rollend,
         skalar_fallback=skalar,
         ist_bisher_bis_slot=ist_bis_slot,
+        nachfuehr_faktor=nf.faktor,
+        soll_bisher_kwh=nf.soll_bisher_kwh,
+        rest_modell_kwh=nf.rest_modell_kwh,
+    )
+
+
+@dataclass
+class _Nachfuehrung:
+    """Ergebnis von `_nachfuehrung` — ohne Stundenprofil alles `None`."""
+    rest_kwh: Optional[float] = None
+    rest_modell_kwh: Optional[float] = None
+    faktor: Optional[float] = None
+    soll_bisher_kwh: Optional[float] = None
+
+
+def _nachfuehrung(slots, now, ist_roh: Optional[float], ist_bis_slot: Optional[int]) -> _Nachfuehrung:
+    """Rest heute aus dem Modell (#339) und nachgeführt aus dem gemessenen Vormittag (Päckchen CC, Variante K).
+
+    #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-Konvention (#144): Slot N = Energie [N-1, N),
+    also ist slots[now.hour] bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den frac-Term sinkt
+    der Rest nur einmal je Stunde in EINEM Sprung (bei kleinen Anlagen 5–8 kWh) statt gleichmäßig.
+
+    Nachführung: SOLL bisher = Σ Slots bis einschließlich der IST-Grenze (N-544, `soll_bisher_kwh` — dieselbe Summe wie
+    die Abweichungs-Ampel), SOLL Tag = Σ Slots, `f = nachfuehr_faktor(IST, SOLL bisher, SOLL Tag)` mit dem ungerundeten
+    IST (`ist_roh`); ohne IST-Messung (`ist_bis_slot is None`) ist `f = 1,0` und der Rest bleibt das Modell. Formeln im
+    Layer `core/berechnungen/prognose_nachfuehrung.py`.
+    """
+    from backend.core.berechnungen.prognose_nachfuehrung import (
+        nachfuehr_faktor,
+        rest_nachgefuehrt_kwh,
+        soll_bisher_kwh,
+    )
+
+    rest_modell = rest_aus_slots(slots, now)
+    soll_bisher = soll_bisher_kwh(slots, ist_bis_slot)
+    faktor = nachfuehr_faktor(
+        ist_roh if ist_bis_slot is not None else None, soll_bisher, sum(float(v or 0.0) for v in slots),
+    )
+    return _Nachfuehrung(
+        rest_kwh=rest_nachgefuehrt_kwh(rest_modell, faktor),
+        rest_modell_kwh=rest_modell,
+        faktor=round(faktor, 3),
+        soll_bisher_kwh=round(soll_bisher, 2) if soll_bisher is not None else None,
     )
 
 
