@@ -25,9 +25,9 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 
 > **Was der Modus bezweckt (Gernot 15.10.):** Token sparen an zwei Stellen — die Session verspricht Meldern nicht mehr schnell
 > eedc-Lösungen für externe Probleme, Sonderlocken und Erweiterungswünsche, und Gernot hält sich mit neuen Ideen zurück.
-> **Fehlerbeseitigung läuft weiter. Das Konzept «eedc nach HA-Bauform» (S3–S5) und die 97 xfail-Matrixzellen, die daran hängen,
-> werden weitergeführt** — mit dem Stufen-Apparat des Konzepts (Golden Master über die Kopien, Lab, Nachmessung), weil eine Stufe
-> jede Tages-/Stundenzahl anfasst. Der Modus ist kein Stopp, sondern eine Bremse für Zusagen und Neuvorhaben.
+> **Fehlerbeseitigung läuft weiter.** Das Konzept «eedc nach HA-Bauform» ist gebaut (S1–S5, Releases 4.1.3 · 4.1.8 · 4.1.9; die
+> Matrix-xfail sind abgebaut). Eine künftige Bauform-Etappe behält den Stufen-Apparat (Golden Master über die Kopien, Lab,
+> Nachmessung), weil sie jede Tages-/Stundenzahl anfasst. Der Modus ist kein Stopp, sondern eine Bremse für Zusagen und Neuvorhaben.
 >
 > **Präzisiert 23.10.2026 (Gernot, bis auf Widerruf): die Bremse gilt nur nach außen** — Zusagen, Melder-Antworten, Sonderlocken,
 > Erweiterungswünsche. Intern entscheidet Gernot je Vorhaben über den Einsatz des Budgets; «keine Refactoring-Serie» (Nr. 1) heißt
@@ -39,8 +39,6 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
    (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 11.10.: 0 offen). Keine zweite Liste neben dem Register. Wünsche
    stehen in #110 «Gesammelt» ohne Termin.
    Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, keine neuen Vorhaben aus dem Index.
-   **Ausnahme (15.10.):** die HA-Bauform-Stufen S3–S5 nach `plans/konzept-eedc-nach-ha-bauform.md` §7 — je Stufe ein Bauplan
-   (Fable), Go Gernot, dann Etappen wie E0–E4f.
 2. **Fund nur bei Wirkung:** falsche Zahl, die ein Anwender sieht · Absturz · Datenverlust. Sonst Antwort oder Handgriff.
    **Die Register-Disziplin gilt unverändert** (Gernot 10.10.): kein Eintrag ohne Analyse am HEAD, drei Tore (gemessen · abgeglichen ·
    Folge nennbar und „schon gedeckt?"), Klassen-Dreifrage, Band, Einwertung durch den Master und Entscheid Gernot — vorher ist es
