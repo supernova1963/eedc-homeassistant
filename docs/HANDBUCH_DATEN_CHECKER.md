@@ -27,6 +27,7 @@
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
+   9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
@@ -108,7 +109,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne Langzeitstatistik*, am 24.10.2026 *Strompreise – eigener Wärmepumpen-Tarif* und *Betriebsmodus – unbekannter Wert*; am 10.10.2026 waren es 33, davor stand hier 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **zwölf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen) und steht deshalb nur einmal in der Tabelle.
+eedc prüft **38 Kategorien** (Stand 9.11.2026, gezählt an `CheckKategorie`; die Tabelle führt 36 davon — *E-Mobilität – unbekannter Zustand* und *E-Mobilität – Fahrzeug der Steuerung unbekannt* sind noch nicht beschrieben; am 25.10.2026 stand hier 36, am 10.10.2026 33, davor 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **zwölf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen, Zeile 12a) und zählt deshalb einmal.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -130,6 +131,7 @@ eedc prüft **36 Kategorien** (Stand 25.10.2026; dazugekommen ist *Sensor ohne L
 | 10 | **Datenquellen – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
+| 12a | Datenquelle – aktiver Pfad: Status (§4.9a) | greift — OK, wenn die Tageswerte aus der HA-Statistik oder dem HA-Spiegel (Kanal) kommen, sonst ein Hinweis mit der Quelle | greift als Hinweis „Standalone-Modus aktiv“ (keine HA-Verbindung) |
 | 13 | **Zeitzone – Abweichung zu HA** (§4.12) | greift | **wird übersprungen** (keine HA-Verbindung) |
 | 14 | Sonstige Positionen – wiederkehrend (§4.13) | greift | greift |
 | 15 | Sonstige Positionen – Doppelerfassung (§4.13) | greift | greift |
@@ -742,6 +744,25 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 | **Alle N kWh-Sensor(en) in HA-Long-Term-Statistics verfügbar** | ✅ OK | Jeder zugeordnete kWh-Sensor liefert LTS — Reparatur-Werkzeuge wirken auf alle Felder. | – |
 
 > **Wichtige Lektion:** Frühere Hinweistexte sagten „vergangene Tage bleiben leer". Das ist irreführend, weil HA-Long-Term-Statistics ohnehin erst ab Aktivierung von `state_class` angelegt werden — vor der Aktivierung existieren keine Werte zum Holen, egal auf welchem Weg du den Zähler in Ordnung bringst. Der eigentliche Schmerzpunkt ist daher: ohne `state_class` **wirken die Reparatur-Werkzeuge in der Energieprofil-Pflege nicht**. Ab Aktivierung läuft's lückenfrei, davor bleibt's leer.
+
+---
+
+### 4.9a Datenquellen – Status (Kategorie „Datenquelle – aktiver Pfad“) <a name="49a-datenquellen--status"></a>
+
+> **Variantenhinweis:** Die Kategorie meldet in beiden Varianten genau einen Befund: welcher Weg die Tages- und Stundenwerte zuletzt
+> geschrieben hat. Im **HA Add-on** ist das die HA-Langzeitstatistik oder der HA-Spiegel (Kanal-Tag), im **Standalone-Betrieb** der
+> Snapshot-Pfad.
+
+**Was wird geprüft:** die Herkunft der jüngsten Tageszeile mit Stundenwerten (die häufigste Quelle ihrer Felder) und ob Home Assistant
+erreichbar ist.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **HA-Statistics als Source-of-Truth aktiv** | ✅ OK | Die Tageswerte kommen direkt aus der HA-Langzeitstatistik; Σ Stunden = Tag. | – |
+| **HA-Spiegel (Kanal) als Quelle aktiv** | ✅ OK | Tag und Stunde kommen aus dem gespiegelten HA-Zähler (Kanal-Tag); Σ Stunden = Tag. | – |
+| **Noch keine Tageswerte aggregiert** | ℹ️ INFO | HA ist erreichbar, aber es gibt noch keine Tageszeile mit Stundenwerten — direkt nach der Einrichtung normal. | Bleibt es dabei: die kWh-Zähler in Einstellungen → Datenquellen zuordnen; zurückliegende Tage holt „Lücken aus HA-LTS nachfüllen". |
+| **HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle** | ℹ️ INFO | Die jüngste Tageszeile stammt aus einem anderen Weg (z. B. `auto:monatsabschluss`); die Meldung nennt Datum und Quelle. | Den Tag neu aggregieren (Reparatur-Werkbank) — danach gilt die HA-Quelle. |
+| **Standalone-Modus aktiv (kein HA-LTS)** | ℹ️ INFO | Keine HA-Langzeitstatistik erreichbar; die Werte entstehen aus den 5-Minuten-Snapshots. | Standalone: keine Aktion. HA Add-on: HA-Verbindung prüfen. |
 
 ---
 

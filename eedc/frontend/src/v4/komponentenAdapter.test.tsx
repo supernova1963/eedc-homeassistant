@@ -1118,12 +1118,18 @@ describe('KOMPONENTEN_ADAPTER — Wirtschaftlichkeit + „nicht bewertet" (P2/P4
     getBalkonkraftwerkDashboard.mockResolvedValue([{
       investition: inv({ typ: 'balkonkraftwerk' }),
       zusammenfassung: { gesamt_erzeugung_kwh: 800, gesamt_eigenverbrauch_kwh: 700, gesamt_einspeisung_kwh: 100,
-        gesamt_ersparnis_euro: 291, co2_ersparnis_kg: 368, eigenverbrauch_quote_prozent: 88, spezifischer_ertrag_kwh_kwp: 1278 },
+        gesamt_ersparnis_euro: 291, co2_ersparnis_kg: 368, eigenverbrauch_quote_prozent: 88, spezifischer_ertrag_kwh_kwp: 1278,
+        // Päckchen Z2: Wert und Annahme-Satz kommen aus dem Backend; bewusst ≠ 100 × 0,08, damit ein Client-Rest auffiele.
+        entgangener_erloes_euro: 7.5, entgangener_erloes_annahme_cent: 7.5 },
       monatsdaten: [],
       monatsreihe: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
     expect(g.wirtschaftlichkeit?.posten).toHaveLength(1)
     expect(g.wirtschaftlichkeit?.hinweis).toContain('entgangener Erlös')
+    expect(g.wirtschaftlichkeit?.hinweis).toContain('7,50 € (7.5 ct/kWh)')
+    const kachel = g.kennzahlen?.kpis.find((x) => x.title === 'Entgangener Erlös')
+    expect(kachel?.value).toBe('7,50')
+    expect(kachel?.formel).toBe('Einspeisung × 7.5 ct/kWh')
   })
 })

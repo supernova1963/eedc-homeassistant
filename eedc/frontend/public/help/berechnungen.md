@@ -259,10 +259,15 @@ Eine Backend-Größe des Monats gibt es für sie nicht, eine neue braucht Regel-
 | --- | --- | --- |
 | `spezErtrag` (M2) | `pv_erzeugung_kwh ÷ anlagen_kwp` (`lib/calculations.ts::calcSpezifischerErtrag`) | Der Sensor `spezifischer_ertrag_kwh_kwp` ist **aufs Jahr normiert** (§3.1, `core/berechnungen/spez_ertrag.py`) — eine andere Größe; der Tageswert steht in `tage_werte.py` ohne Layer-Funktion. |
 | `ev_ersparnis` (M2) | `ev_ersparnis_euro + bkw_ersparnis_euro` | Das Finanz-Aggregat weist beide Posten getrennt aus (§3.2); eine Summe beider gibt es im Backend nicht. |
-| `wallbox_pv_anteil` (M2, mit `eauto_pv_anteil`) | `wallbox_ladung_pv_kwh ÷ wallbox_ladung_kwh × 100` | Die Layer-Quote `pv_anteil_gemessen_prozent` rundet auf ganze Prozent, die Tabelle zeigt eine Stelle; der Fall wechselt mit der Layer-Funktion des PV-Anteils. |
+| `wallbox_pv_anteil` (M2, mit `eauto_pv_anteil`) | `wallbox_ladung_pv_kwh ÷ wallbox_ladung_kwh × 100` | Die eine Layer-Funktion des PV-Anteils (`pv_anteil_ladung.pv_anteil_prozent`, Päckchen Z1b) kennt die Rundung als Parameter (`stellen`); der Client wechselt mit dem Päckchen Z-Client. |
 
 Seit Päckchen Y nicht mehr darunter: die **CO₂-Äquivalente** (§3.8 «Äquivalente», Layer `co2_aequivalente`) und die
 **Speicher-Effizienz** des Monats (`speicher_effizienz_prozent`, Layer `speicher_wirkungsgrad` auf Ladung und Entladung der Zeile, §3.3).
+
+**Eine Formel, ein Ort — gewächtert (Päckchen Z3, 9.11.2026):** eine neue Rechenstelle außerhalb des Layers (Quote oder
+Differenz zweier Mengen, Menge × Preis oder × Literal, Preis ÷ Menge, im Client auch Menge ÷ Leistung) macht
+`backend/tests/test_dezentrale_rechenstellen.py` bzw. `npm run check:rechenstellen` rot; der Bestand steht in einer Baseline,
+die nur schrumpft (ADR-001).
 
 ---
 
@@ -615,11 +620,19 @@ Balkonkraftwerk + **sonstige Erzeuger** (z. B. Mini-BHKW); würde ein Erzeuger i
 > Systemzeile bei. Die Zeile trägt Name und Typ ihres Kopfes (kein „PV-System" mit fremdem Namen), und ein zugeordnetes Modul-Kind
 > trägt keine Aufforderung „(ohne WR) — bitte zuordnen".
 >
-> ⚠ **Die pauschale BKW-Schätzung bleibt eine Schätzung** (0,9 kWh/Wp, 80 % Eigenverbrauch) und greift nur für ein Balkonkraftwerk
+> ⚠ **Die pauschale BKW-Schätzung bleibt eine Schätzung** (0,9 kWh/Wp, 80 % Eigenverbrauch / 20 % Einspeisung — Pauschale und Anzeige lesen
+> das Paar `BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG`/`BKW_EINSPEISE_ANTEIL_SCHAETZUNG` aus `core/berechnungen/bkw_finanz.py`) und greift nur für ein Balkonkraftwerk
 > ohne Modul-Kinder — dort, wo keine gemessenen Modulwerte existieren (#381). Ist gar keine Leistung gepflegt (weder `leistung_kwp`
 > noch `parameter.kwp`/`leistung_kwp` noch `leistung_wp × anzahl`, `get_bkw_kwp` = 0), rechnet die Pauschale mit **800 Wp**, und die
 > Zeile nennt diese Leistung im Hinweis („Balkonkraftwerk 800 Wp") — eine Annahme, keine Messung (N-273;
 > `roi.py::_bkw_pauschal_beitrag`, Anzeige `roi_standalone.py::_bkw_bewertung`).
+>
+> **«Entgangener Erlös» im Balkonkraftwerk-Hub — Annahme 8 ct/kWh.** Ein Balkonkraftwerk ohne Anmeldung als EEG-Anlage bekommt für
+> seine Einspeisung nichts; die Kachel «Entgangener Erlös» und der Hinweis unter der Wirtschaftlichkeit zeigen rechnerisch, was sie
+> zum Satz einer kleinen Anlage wert wäre: `Einspeisung × 8 ct/kWh` (`BKW_UNVERGUETET_ANNAHME_CENT` in `core/berechnungen/bkw_finanz.py`,
+> gerechnet über `einspeise_erloes_euro` in `dashboard_balkonkraftwerk.py`, Felder `entgangener_erloes_euro` und
+> `entgangener_erloes_annahme_cent`; bis Päckchen Z2 rechnete der Client). Kein Posten der Wirtschaftlichkeit, nur ein Hinweis.
+> Grenze: der Satz ist fest — er folgt weder dem gepflegten Tarif noch dem Jahr der Inbetriebnahme.
 
 **Auch die PDF-Berichte rechnen so:** alle Bilanz-Pfade (Cockpit, Monatsbericht, Live, PDF-Jahresbericht, HA-Sensoren) nehmen für
 Eigenverbrauch, Autarkie und EV-Quote dieselbe Gesamterzeugung hinter dem Zähler.
@@ -3706,6 +3719,12 @@ und korrigiert je Stunden-Slot (Lernfaktor als gröbste Stufe, §4.1c).
 > Modulen und tiefstehender Wintersonne ist sie 2–3× höher als die horizontale GHI (`shortwave_radiation`) — ein GHI-basierter
 > „theoretischer Ertrag" läge im Winter systematisch zu niedrig (PR-Werte > 1). Die Tagesformel oben rechnet weiter mit der GHI.
 
+> **Ersatzweg ohne Stundenwerte — Annahme GTI ≈ GHI × 1,1.** Ergibt die stündliche GTI-Rechnung eines Prognose-Tags keinen
+> Ertrag, schätzt `solar_forecast_service._prognose_tag` ihn aus der Tagessumme der Globalstrahlung: `GTI = GHI × 1,1`
+> («~10 % mehr durch optimale Neigung», Konstante `GTI_AUS_GHI_FAKTOR`), dann `Ertrag = GTI × kWp × (1 − Verluste)`.
+> Eine Annahme, keine Messung — sie kennt weder Neigung noch Ausrichtung der Anlage (Grenze: bei steilen Modulen im Winter
+> liegt die echte GTI deutlich höher, s. o.).
+
 > **Multi-String / PV-Parameter-Quelle (v3.20.2/v3.20.3):** kWp, Neigung und Azimut werden über den Helper `services/pv_orientation.py` gelesen, der in dieser Reihenfolge prüft: Top-Level-Spalte der Investition → `parameter.{neigung,ausrichtung}_grad` (Zahl) → `parameter.{neigung,ausrichtung}` (Zahl oder String mit Mapping `{"süd": 0, "ost": -90, "west": 90, ...}`) → Default. Damit liefern alle drei Prognose-Pfade (Energieprofil-Tagesprognose, Aussichten-Kurzfrist, Prefetch-Cache) identische Eingabe-Parameter an Open-Meteo.
 
 #### Wettermodell-Kaskade
@@ -5020,7 +5039,7 @@ seine Hülle); Schreiber `services/kanal/schreiber.py` (Kern `_schreibe_betriebs
 *Kopfzahl der Wallbox-Karte «Heute» (P-433-2b K4) — eine Quote zweier gemessener Mengen, keine Schätzung.*
 
 ```
-pv_anteil_prozent = round( ladung_pv_kwh ÷ ladung_kwh × 100 )      (core/berechnungen/pv_anteil_ladung.pv_anteil_gemessen_prozent)
+pv_anteil_prozent = round( ladung_pv_kwh ÷ ladung_kwh × 100 )      (core/berechnungen/pv_anteil_ladung.pv_anteil_prozent, stellen=0, nur_gemessen)
 ```
 
 **Eingänge, beide aus den Tageswerten derselben Wallbox (ein Pfad, Ü5):** `ladung_kwh` = Tageswert `wallbox_<id>` aus

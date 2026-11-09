@@ -314,6 +314,42 @@ def erzeugung_hinter_zaehler_kwh(*erzeuger_kwh: Optional[float]) -> float:
     return sum(float(x or 0.0) for x in erzeuger_kwh)
 
 
+# ─── Legacy-Spalten der Monatszeile: Direkt- und Eigenverbrauch (Päckchen Z1e) ──────
+
+
+def direktverbrauch_legacy_kwh(
+    pv_kwh: float, einspeisung_kwh: float, ladung_kwh: float, *, negativ_als_none: bool = False,
+) -> Optional[float]:
+    """Direktverbrauch der **Legacy-Spalte** ``Monatsdaten.direktverbrauch_kwh`` = PV − Einspeisung − Speicherladung.
+
+    Eine Formel für die vier Schreibstellen (Päckchen Z1e, 9.11.2026): ``api/routes/monatsdaten.py`` (create/update),
+    ``api/routes/import_export/csv_operations.py::_bilanz`` und ``services/import_parsers/fronius_solarweb.py``
+    (ohne Speicher: ``ladung_kwh=0``). Der Aufrufer löst ``None`` selbst auf (``or 0``, Summen-Ersatz) — die Funktion
+    rechnet nur.
+
+    Standard ``max(0, …)`` (negativ ⇒ 0, ganzzahlig ``0`` wie bisher); ``negativ_als_none=True`` ⇒ ``None`` statt 0
+    (Fronius-Import: eine negative Differenz ist keine Aussage, die Zelle bleibt leer — N-714).
+
+    Leser der Legacy-Spalten: PDF-Monatsbericht (``pdf/builders/monatsbericht.py``), Frontend-Typen
+    (``api/cockpit.ts``, ``api/aktuellerMonat.ts``, ``api/monatsdaten.ts``). ⚠ Nicht die Fakten-Größe
+    ``kennzahlen.eigenverbrauch_kwh`` der Monats-Fakten (ADR-002/P10) und nicht die Bewertungsmenge
+    ``eigenverbrauch_ohne_verluste_kwh`` (P15) — PV liest der Aufrufer über die Spalte, wie bisher (P7-Ausnahmen).
+    """
+    differenz = pv_kwh - einspeisung_kwh - ladung_kwh
+    if negativ_als_none:
+        return differenz if differenz >= 0 else None
+    return max(0, differenz)
+
+
+def eigenverbrauch_legacy_kwh(direktverbrauch_kwh: float, entladung_kwh: float) -> float:
+    """Eigenverbrauch der **Legacy-Spalte** ``Monatsdaten.eigenverbrauch_kwh`` = Direktverbrauch + Speicherentladung.
+
+    Partner von :func:`direktverbrauch_legacy_kwh` (dieselben Schreibstellen, ohne Fronius — der Import ohne Speicher
+    schreibt den Direktverbrauch als Eigenverbrauch). ``None`` löst der Aufrufer auf (``or 0``).
+    """
+    return direktverbrauch_kwh + entladung_kwh
+
+
 def summe_waermepumpe_kwh(komponenten_kwh: Optional[dict]) -> float:
     """Σ aller `waermepumpe_<id>`-Keys (immer ≥ 0, elektrischer Verbrauch)."""
     return _summe_prefix(komponenten_kwh, WAERMEPUMPE_KOMPONENTEN_PREFIXE)

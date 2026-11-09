@@ -88,6 +88,9 @@ from backend.core.berechnungen.datenquellen import (
     teilzeitraum_felder,
 )
 from backend.core.berechnungen.bkw_finanz import (
+    BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG,
+    BKW_EINSPEISE_ANTEIL_SCHAETZUNG,
+    BKW_UNVERGUETET_ANNAHME_CENT,
     BkwEigenverbrauchsAnteil,
     BkwFinanzBeitrag,
     bkw_eigenverbrauch_anteil,
@@ -256,7 +259,7 @@ from backend.core.berechnungen.pv_anteil_ladung import (
     REGEL_EINSPEISE_DECKUNG,
     AbgeleiteterLadeAnteil,
     leite_pv_anteil_ab,
-    pv_anteil_gemessen_prozent,
+    pv_anteil_prozent,
 )
 from backend.core.berechnungen.pv_verteilung import (
     QUELLE_FEHLT as PV_QUELLE_FEHLT,
@@ -433,6 +436,9 @@ __all__ = [
     "bkw_finanz_beitrag",
     "BkwEigenverbrauchsAnteil",
     "bkw_eigenverbrauch_anteil",
+    "BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG",
+    "BKW_EINSPEISE_ANTEIL_SCHAETZUNG",
+    "BKW_UNVERGUETET_ANNAHME_CENT",
     "DienstlicheLadekosten",
     "DienstlicheLadungZeile",
     "berechne_dienstliche_ladekosten",
@@ -440,7 +446,7 @@ __all__ = [
     "einspeise_erloes_euro",
     "AbgeleiteterLadeAnteil",
     "leite_pv_anteil_ab",
-    "pv_anteil_gemessen_prozent",
+    "pv_anteil_prozent",
     "REGEL_EINSPEISE_DECKUNG",
     "FinanzAggregat",
     "FinanzMonatsZeile",

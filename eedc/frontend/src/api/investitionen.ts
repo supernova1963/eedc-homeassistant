@@ -747,6 +747,10 @@ export interface BalkonkraftwerkDashboardResponse {
     ersparnis_eigenverbrauch_euro: number
     erloes_einspeisung_euro: number
     gesamt_ersparnis_euro: number
+    /** Päckchen Z2: «entgangener Erlös» der unvergüteten Einspeisung (Hinweis, kein Posten) — Backend rechnet
+     *  `gesamt_einspeisung_kwh × entgangener_erloes_annahme_cent ÷ 100` (Layer `BKW_UNVERGUETET_ANNAHME_CENT`). */
+    entgangener_erloes_euro: number
+    entgangener_erloes_annahme_cent: number
     // CO2
     co2_ersparnis_kg: number
     anzahl_monate: number

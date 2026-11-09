@@ -29,6 +29,7 @@ from backend.core import zustands_kanon
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.core.berechnungen.erzeuger_traeger import bkw_restwerte
+from backend.core.berechnungen.kennzahlen import autarkie_prozent, eigenverbrauchsquote_prozent
 from backend.core.berechnungen.temperatur import spreizung_k
 from backend.services.pv_orientation import ausrichtung_label
 from backend.services.live_sensor_config import (
@@ -1151,8 +1152,10 @@ def _autarkie_gauges(
         eigenverbrauch_kw = max(0.0, direktverbrauch_kw + bat_entladung_kw - b.abgabe_w / 1000)
         gesamt_verbrauch_kw = eigenverbrauch_kw + (netzbezug_w or 0) / 1000
 
+        # Päckchen Z1a: die Quoten sind dimensionslos — die Layer-Helper rechnen auch mit kW; gekappt und gerundet
+        # wird hier (``round(min(…, 100), 0)``), deshalb die Eigenverbrauchsquote ungekappt aus dem Layer.
         if gesamt_verbrauch_kw > 0:
-            autarkie = eigenverbrauch_kw / gesamt_verbrauch_kw * 100
+            autarkie = autarkie_prozent(eigenverbrauch_kw, gesamt_verbrauch_kw)
             b.gauges.append({
                 "key": "autarkie",
                 "label": "Autarkie",
@@ -1163,7 +1166,7 @@ def _autarkie_gauges(
             })
 
         if erzeugung_kw > 0:
-            ev_quote = eigenverbrauch_kw / erzeugung_kw * 100
+            ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch_kw, erzeugung_kw, kappen=False)
             b.gauges.append({
                 "key": "eigenverbrauch",
                 "label": "Eigenverbr.",

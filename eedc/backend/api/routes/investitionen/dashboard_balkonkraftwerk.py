@@ -25,7 +25,9 @@ from backend.services.monats_fakten import (
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.services.finanz_zeilen import ev_preis_je_monat
 from backend.core.berechnungen import (
+    BKW_UNVERGUETET_ANNAHME_CENT,
     abgetretene_bkw_ids,
+    einspeise_erloes_euro,
     imd_typ_beitrag,
     eigenverbrauchsquote_prozent,
     speicher_wirkungsgrad,
@@ -323,6 +325,12 @@ async def get_balkonkraftwerk_dashboard(
         # Wird nur als Info angezeigt, nicht als Erlös
         erloes_einspeisung = 0  # BKW-Einspeisung ist unvergütet
         gesamt_ersparnis = ersparnis_eigenverbrauch
+        # Päckchen Z2: der «entgangene Erlös» der unvergüteten Einspeisung — rechnerisch zum Annahme-Satz des Layers
+        # (`BKW_UNVERGUETET_ANNAHME_CENT`), auf der Einspeisung, die die Kachel zeigt (gerundet wie im Response).
+        # Nur ein Hinweis, kein Posten. Bis Z2 rechnete der Client `Einspeisung × 0.08`.
+        entgangener_erloes = einspeise_erloes_euro(
+            round(gesamt_einspeisung, 1), None, BKW_UNVERGUETET_ANNAHME_CENT,
+        ).erloes_euro
 
         # CO2-Einsparung für Eigenverbrauch — dieselbe Menge wie die Ersparnis.
         # Der Kanon rechnet CO₂-PV auf dem EIGENVERBRAUCH (`berechne_co2_bilanz`,
@@ -369,6 +377,8 @@ async def get_balkonkraftwerk_dashboard(
             'ersparnis_eigenverbrauch_euro': round(ersparnis_eigenverbrauch, 2),
             'erloes_einspeisung_euro': round(erloes_einspeisung, 2),  # 0 bei BKW (unvergütet)
             'gesamt_ersparnis_euro': round(gesamt_ersparnis, 2),
+            'entgangener_erloes_euro': round(entgangener_erloes, 2),  # Hinweis, kein Posten (Päckchen Z2)
+            'entgangener_erloes_annahme_cent': BKW_UNVERGUETET_ANNAHME_CENT,
             # CO2
             'co2_ersparnis_kg': round(co2_ersparnis, 1),
             'anzahl_monate': len(monatsdaten),

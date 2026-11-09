@@ -26,6 +26,7 @@ from backend.core.calculations import (
 # Alias: das Response-Feld unten heißt genauso wie die Funktion.
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
 from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
+from backend.core.berechnungen.energie import direktverbrauch_legacy_kwh, eigenverbrauch_legacy_kwh
 from backend.services.ust_satz import grundgesamtheit as ust_grundgesamtheit, ust_satz_des_jahres
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.utils.sonstige_positionen import ist_gueltige_position
@@ -1057,8 +1058,9 @@ async def create_monatsdaten(
 
     # Berechnete Felder (werden berechnet wenn pv_erzeugung vorhanden)
     if md.pv_erzeugung_kwh is not None:
-        md.direktverbrauch_kwh = max(0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0))
-        md.eigenverbrauch_kwh = md.direktverbrauch_kwh + (md.batterie_entladung_kwh or 0)
+        md.direktverbrauch_kwh = direktverbrauch_legacy_kwh(
+            md.pv_erzeugung_kwh, md.einspeisung_kwh, (md.batterie_ladung_kwh or 0))
+        md.eigenverbrauch_kwh = eigenverbrauch_legacy_kwh(md.direktverbrauch_kwh, (md.batterie_entladung_kwh or 0))
         md.gesamtverbrauch_kwh = md.eigenverbrauch_kwh + md.netzbezug_kwh
     elif md.einspeisung_kwh > 0 or md.netzbezug_kwh > 0:
         # Fallback: Gesamtverbrauch kann geschätzt werden
@@ -1313,11 +1315,11 @@ async def update_monatsdaten(
     # geschlagen, schlägt aber legacy:unknown und fallback.
     new_computed: dict[str, Optional[float]] = {}
     if md.pv_erzeugung_kwh is not None:
-        new_computed["direktverbrauch_kwh"] = max(
-            0, md.pv_erzeugung_kwh - md.einspeisung_kwh - (md.batterie_ladung_kwh or 0)
+        new_computed["direktverbrauch_kwh"] = direktverbrauch_legacy_kwh(
+            md.pv_erzeugung_kwh, md.einspeisung_kwh, (md.batterie_ladung_kwh or 0)
         )
-        new_computed["eigenverbrauch_kwh"] = (
-            new_computed["direktverbrauch_kwh"] + (md.batterie_entladung_kwh or 0)
+        new_computed["eigenverbrauch_kwh"] = eigenverbrauch_legacy_kwh(
+            new_computed["direktverbrauch_kwh"], (md.batterie_entladung_kwh or 0)
         )
         new_computed["gesamtverbrauch_kwh"] = new_computed["eigenverbrauch_kwh"] + md.netzbezug_kwh
     elif md.einspeisung_kwh > 0 or md.netzbezug_kwh > 0:

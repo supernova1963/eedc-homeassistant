@@ -32,6 +32,7 @@ from backend.core.field_definitions import (
 )
 from backend.services.provenance import seed_provenance, write_with_provenance
 from backend.core.berechnungen.preis_reihe import ist_dynamisch
+from backend.core.berechnungen.energie import direktverbrauch_legacy_kwh, eigenverbrauch_legacy_kwh
 
 from .schemas import ImportResult, CSVTemplateInfo
 from .helpers import (
@@ -854,8 +855,8 @@ def _bilanz(
     eigenverbrauch = None
     gesamtverbrauch = None
     if pv_erzeugung is not None:
-        direktverbrauch = max(0, pv_erzeugung - einspeisung - batterie_ladung_for_calc)
-        eigenverbrauch = direktverbrauch + batterie_entladung_for_calc
+        direktverbrauch = direktverbrauch_legacy_kwh(pv_erzeugung, einspeisung, batterie_ladung_for_calc)
+        eigenverbrauch = eigenverbrauch_legacy_kwh(direktverbrauch, batterie_entladung_for_calc)
         gesamtverbrauch = eigenverbrauch + netzbezug
     elif einspeisung > 0 or netzbezug > 0:
         gesamtverbrauch = netzbezug + einspeisung

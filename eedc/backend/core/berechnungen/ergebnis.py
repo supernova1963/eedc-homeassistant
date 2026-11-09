@@ -368,8 +368,23 @@ def mittel(werte: Iterable[Optional[float]]) -> Optional[float]:
     return s / len(vorhanden)
 
 
-def quote(zaehler: Optional[float], nenner: Optional[float], faktor: float = 100) -> Optional[float]:
+def quote(
+    zaehler: Optional[float],
+    nenner: Optional[float],
+    faktor: float = 100,
+    *,
+    nur_positiver_nenner: bool = False,
+) -> Optional[float]:
+    """Quote ``zaehler ÷ nenner × faktor`` — die eine Quotienten-Formel des Layers (Päckchen Z1, «eine Formel, ein Ort»).
+
+    ``None`` («keine Aussage»), wenn ein Operand fehlt oder der Nenner 0 ist. ``nur_positiver_nenner=True`` macht auch
+    einen negativen Nenner zu ``None`` — die Regel der Aufrufer, die vor Z1 ``… if nenner > 0 else …`` inline rechneten
+    (Prognose-Erreichung, gewichteter Ø-Preis, Netzladeanteil, PV-Anteil der Ladung). ``faktor=1`` liefert den Anteil
+    0…1 (``x × 1`` ist bitgleich ``x``). Ungerundet, ungeklemmt — Rundung und Kappung bleiben beim Aufrufer.
+    """
     if zaehler is None or nenner is None or nenner == 0:
+        return None
+    if nur_positiver_nenner and nenner < 0:
         return None
     return zaehler / nenner * faktor
 

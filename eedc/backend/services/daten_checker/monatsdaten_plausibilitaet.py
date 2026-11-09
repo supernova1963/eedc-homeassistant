@@ -27,6 +27,13 @@ PV_MAX_KWH_PRO_KWP = {
 }
 
 
+#: Toleranz der Prüfung «mehr PV verwendet als erzeugt?» (Einspeisung + Speicherladung aus PV gegen die Erzeugung):
+#: mindestens 5 kWh, sonst 2 % der Monatserzeugung — Zählerstände werden je Quelle gerundet, und die drei Zahlen kommen
+#: aus verschiedenen Sensoren mit eigenen Messfehlern (Päckchen Z2, 9.11.2026 benannt; Handbuch Daten-Checker §4.5).
+_TOLERANZ_MIN_KWH = 5.0
+_TOLERANZ_ANTEIL = 0.02
+
+
 #: Prüfung 0 (N-734): je Netzfeld, wofür es gebraucht wird — eine Liste für den Monat mit und ohne Zeile (N-751).
 _NETZFELDER_PRUEFUNG_0 = (
     ("einspeisung_erfasst", "Einspeisung", "Eigenverbrauch und Autarkie"),
@@ -504,7 +511,7 @@ class MonatsdatenPlausibilitaetChecks:
             stapel = md.einspeisung_kwh + pv_ladung_speicher
             # Toleranz: Zählerstände werden je Quelle gerundet, und die drei
             # Zahlen kommen aus verschiedenen Sensoren mit eigenen Messfehlern.
-            toleranz = max(5.0, pv_erzeugung * 0.02)
+            toleranz = max(_TOLERANZ_MIN_KWH, pv_erzeugung * _TOLERANZ_ANTEIL)
             if stapel > pv_erzeugung + toleranz:
                 vorspann = await _hole_nachzug_hinweis()
                 ergebnisse.append(CheckErgebnis(

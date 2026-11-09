@@ -23,6 +23,7 @@ from collections import defaultdict
 from io import StringIO
 from typing import Optional
 
+from backend.core.berechnungen.energie import direktverbrauch_legacy_kwh
 from .base import PortalExportParser, ParsedMonthData, ParserInfo, monat_hat_wert_ueber_null, monatswert
 from .registry import register_parser
 from .sma_sunny_portal import _normalize, _parse_float
@@ -375,8 +376,9 @@ def _monatsdaten(monthly: dict[tuple[int, int], dict[str, float]]) -> list[Parse
         # Eigenverbrauch: direkt (auch 0) oder — ohne Zelle — berechnet (Erzeugung - Einspeisung)
         eigenverbrauch = monatswert(data, "eigenverbrauch")
         if eigenverbrauch is None and "pv_erzeugung" in data and "einspeisung" in data:
-            differenz = data["pv_erzeugung"] - data["einspeisung"]
-            eigenverbrauch = round(differenz, 2) if differenz >= 0 else None
+            # Päckchen Z1e: die Legacy-Formel des Layers, ohne Speicher (Ladung 0), negativ ⇒ keine Aussage.
+            direkt = direktverbrauch_legacy_kwh(data["pv_erzeugung"], data["einspeisung"], 0, negativ_als_none=True)
+            eigenverbrauch = round(direkt, 2) if direkt is not None else None
 
         result.append(ParsedMonthData(
             jahr=jahr,

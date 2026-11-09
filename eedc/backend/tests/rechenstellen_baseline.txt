@@ -1,0 +1,32 @@
+# Rechenstellen außerhalb des Layers (Gestalten E/E E-E E*G E*L G/E G-G, Routen/Services, ohne einheit/zaehler/
+# layer-aufruf) — darf nur schrumpfen. Neu schreiben: siehe werkzeug_rechenstellen.py. Format: schluessel<TAB>gestalt
+api/routes/cockpit/pv_strings.py::_pruefe_prognose_plausibilitaet::/::prognose.jahresertrag_kwh,prognose.spezifischer_ertrag_kwh_kwp	E/E
+api/routes/data_import.py::_wallbox_verbrauch::-::monat_input.wallbox_ladung_kwh,monat_input.wallbox_ladung_pv_kwh	E-E
+api/routes/ha_export/investition_sensoren.py::_emob_ersparnis_text::-::strom_kosten,extern_euro_sensor	G-G
+api/routes/ha_export/investition_sensoren.py::_sonstiges_sensoren::/::geraet.bezug_pv_kwh,geraet.verbrauch_kwh	E/E
+api/routes/import_export/csv_operations.py::_batterie_legacy_gegen_speicher_summe::-::batterie_entladung_explicit,summen['batterie_entladung_sum']	E-E
+api/routes/import_export/csv_operations.py::_batterie_legacy_gegen_speicher_summe::-::batterie_ladung_explicit,summen['batterie_ladung_sum']	E-E
+api/routes/import_export/csv_operations.py::_export_zeilen::-::summen['ausgaben_euro'],summen['ertraege_euro']	G-G
+api/routes/import_export/csv_operations.py::_pv_erzeugung::-::pv_erzeugung_explicit,pv_erzeugung	E-E
+api/routes/import_export/demo_data.py::_demo_monat_bkw::*::bkw_erzeugung,0.3	E*L
+api/routes/import_export/demo_data.py::_demo_monat_bkw::*::bkw_erzeugung,0.95	E*L
+api/routes/import_export/demo_data.py::_demo_monat_bkw::*::bkw_speicher_ladung,0.92	E*L
+api/routes/investitionen/dashboard_balkonkraftwerk.py::_monatswert::-::erzeugung,ev_kwh	E-E
+api/routes/investitionen/dashboard_speicher.py::_speicher_summen::*::preis,netzladung	E*G
+api/routes/monatsdaten_aggregiert.py::_zeile_bilanz_und_geld::-::netto_ertrag,netzbezug_kosten	E-E
+services/daten_checker/datenquelle/quellen.py::QuellenChecks._drift_pv_achse::-::eedc_kwh,ha_kwh	E-E
+services/daten_checker/stammdaten.py::StammdatenChecks._check_speicher_kapazitaet_einheit::-::wh,kap_kwh	E-E
+services/daten_checker/wp_tarif.py::_feld_fehlt::*::menge,differenz_cent	E*G
+services/daten_checker/wp_tarif.py::_feld_fehlt::-::haushalt_cent,komp_cent	G-G
+services/eauto_wirtschaftlichkeit.py::aufgeloester_strompreis_cent::*::menge,preis	E*G
+services/emob_ladebloecke.py::Ladeblock.netz_kwh::-::self.kwh,self.pv_kwh	E-E
+services/emob_ladebloecke.py::block_monate::/::kwh,b.kwh	E/E
+services/kanal/stunden_leser.py::klemm_der_stunde::-::k.pv.geraete_kwh,k.pv.verteilter_rest_kwh	E-E
+services/monats_fakten/fakten.py::SpeicherFakten.netzladung_preis_cent::/::self.netzladung_preis_summe_cent_kwh,self.netzladung_gewicht_kwh	E/E
+services/monats_fakten/fakten_wp.py::WpFakten.modus_nicht_aufgeteilt_kwh::-::self.modus_strom_bezug_kwh,self.modus_strom_heizen_kwh	E-E
+services/monats_fakten/netzladung_tage.py::netzladung_aus_tagen::*::kwh,preis	E*G
+services/monats_fakten/tarif.py::NetzanteilZumTarif.euro::*::self.kwh,self.cent	E*G
+services/pdf/builders/finanzbericht.py::build_finanzbericht_context::-::summe_alt_kosten,summe_kosten	G-G
+services/pdf/builders/jahresbericht.py::_string_zeile::-::ist_kwh,prognose_kwh	E-E
+services/strompreis_aggregator.py::SlotKosten.abdeckung_menge::/::self.menge_bewertet_kwh,self.menge_gesamt_kwh	E/E
+services/waerme_verteilung.py::_Sammler.nimm::*::kwh,preis_cent	E*G

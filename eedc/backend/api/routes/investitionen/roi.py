@@ -28,6 +28,7 @@ from backend.core.investition_kennwerte import (
     get_speicher_kopplung_gepflegt,
     get_speicher_nutzbare_kapazitaet_kwh,
 )
+from backend.core.berechnungen.bkw_finanz import BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG, BKW_EINSPEISE_ANTEIL_SCHAETZUNG
 from backend.core.berechnungen.erzeuger_traeger import traegt_erzeugungsgroessen_selbst
 from backend.api.deps import get_db
 from backend.utils.investition_value import param_zahl
@@ -443,9 +444,9 @@ def _bkw_pauschal_beitrag(
     leistung_wp = kwp * 1000 if kwp else 800
     # Vereinfachte Berechnung: ca. 0.9 kWh/Wp/Jahr in Deutschland
     jahres_ertrag = leistung_wp * 0.9
-    # 80% Eigenverbrauch typisch bei Balkonkraftwerk
-    eigenverbrauch = jahres_ertrag * 0.8
-    einspeisung = jahres_ertrag * 0.2
+    # 80 % Eigenverbrauch / 20 % Einspeisung — das Annahme-Paar im Layer (`bkw_finanz.py`, Päckchen Z2)
+    eigenverbrauch = jahres_ertrag * BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG
+    einspeisung = jahres_ertrag * BKW_EINSPEISE_ANTEIL_SCHAETZUNG
 
     # §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh = None bei dieser
     # synthetischen BKW-Schätzung → volle Einspeisung (verhaltensneutral).

@@ -12,7 +12,8 @@ Maintainer-Entscheid (2026-06-14): die **Eigenverbrauchsquote wird überall auf
 Aussichten-Forecast), was rechnerisch >100 % zeigen konnte. Das ist ein
 Bugfix, release-note-pflichtig.
 
-Bewusst NICHT migriert: die `live_*`-Sites (kW statt kWh). ⚠ Hier stand bis
+Die `live_*`-Sites (kW statt kWh) rufen seit Päckchen Z1a (9.11.2026) dieselben Helfer —
+die Quoten sind dimensionslos, kW-Eingänge sind erlaubt. ⚠ Hier stand bis
 18.09.2026 auch `energie_profil/views.py` („Tages-Autarkie mess-seitig, offener
 IA-V4-Phase-1A-Produktentscheid“) — Monatsauswertung und Tagesprognose rufen
 längst die beiden Helfer hier; beim Umzug der Datei in Module (Vorlage 4)
@@ -36,17 +37,24 @@ def autarkie_prozent(eigenverbrauch_kwh: float, gesamtverbrauch_kwh: float) -> f
     return eigenverbrauch_kwh / gesamtverbrauch_kwh * 100
 
 
-def eigenverbrauchsquote_prozent(eigenverbrauch_kwh: float, pv_erzeugung_kwh: float) -> float:
+def eigenverbrauchsquote_prozent(
+    eigenverbrauch_kwh: float, pv_erzeugung_kwh: float, *, kappen: bool = True
+) -> float:
     """Eigenverbrauchsquote in % = Eigenverbrauch / PV-Erzeugung × 100, **auf
     100 % gecappt**.
 
     Cap (Maintainer-Entscheid 2026-06-14): Drift zwischen Eigenverbrauchs- und
     Erzeugungs-Quelle kann rechnerisch >100 % ergeben — das ist nie eine echte
     Quote. 0.0 wenn keine Erzeugung. Ungerundet.
+
+    ``kappen=False`` (Päckchen Z1a): der Live-Gauge (``live_komponenten_builder._autarkie_gauges``)
+    kappt selbst mit ``round(min(quote, 100), 0)`` — mit vorgekappter Quote käme dort bei Kappung
+    ``100.0`` statt ``100`` heraus (Typ der JSON-Zahl, GM bitgleich). Die Zahl ist dieselbe.
     """
     if pv_erzeugung_kwh <= 0:
         return 0.0
-    return min(eigenverbrauch_kwh / pv_erzeugung_kwh * 100, 100.0)
+    quote = eigenverbrauch_kwh / pv_erzeugung_kwh * 100
+    return min(quote, 100.0) if kappen else quote
 
 
 def spezifischer_ertrag_kwh_kwp(

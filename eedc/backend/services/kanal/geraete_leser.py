@@ -33,6 +33,7 @@ from typing import Any, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.models.kanal import ART_SUM
 from backend.services.kanal.abgeleitet import EMOB_TYPEN, abgeleitet_key, lade_auswahl, verfuegbarkeit
 from backend.services.kanal.fenster import kalendermonatsfenster, monate, monatsgrenzen
@@ -67,9 +68,10 @@ class GruppeZeitraum:
     @property
     def quote(self) -> Optional[float]:
         """Der PV-Anteil der Heimladung im Zeitraum (0…1) — ``None`` ohne abzuleitende Ladung („keine Aussage")."""
-        if not self.kanal or self.abgeleitet_ladung_kwh <= 0:
+        if not self.kanal:
             return None
-        return max(0.0, min(1.0, self.abgeleitet_pv_kwh / self.abgeleitet_ladung_kwh))
+        anteil = pv_anteil_prozent(self.abgeleitet_pv_kwh, self.abgeleitet_ladung_kwh, faktor=1)  # Layer, Z1b
+        return None if anteil is None else max(0.0, min(1.0, anteil))
 
 
 @dataclass(frozen=True)

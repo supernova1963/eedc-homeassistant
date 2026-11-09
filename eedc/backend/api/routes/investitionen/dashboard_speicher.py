@@ -41,6 +41,7 @@ from backend.services.speicher_wirtschaftlichkeit import (
     wirkungsgrad_ist_fuer_speicher,
 )
 from backend.core.field_definitions import get_speicher_netzladung_kwh
+from backend.core.berechnungen.ergebnis import quote
 from backend.core.berechnungen import (
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
@@ -210,10 +211,11 @@ async def _effektive_preise(db, anlage_id, strompreis_cent, einspeiseverguetung_
         gew_preis_sum += m_tarif.netzbezug_preis_cent * (m.netzbezug_kwh or 0)
         gew_einspeise_sum += m_tarif.einspeiseverguetung_cent * (m.netzbezug_kwh or 0)
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
-    eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent
-    eff_einspeise_cent = (
-        gew_einspeise_sum / gew_kwh_sum if gew_kwh_sum > 0 else einspeiseverguetung_cent
-    )
+    # Päckchen Z1d: der mengengewichtete Ø ist die Layer-Quote (dieselbe Rechenstelle wie der Strompreis-Aggregator).
+    _eff_bezug = quote(gew_preis_sum, gew_kwh_sum, 1, nur_positiver_nenner=True)
+    _eff_einspeise = quote(gew_einspeise_sum, gew_kwh_sum, 1, nur_positiver_nenner=True)
+    eff_strompreis_cent = _eff_bezug if _eff_bezug is not None else strompreis_cent
+    eff_einspeise_cent = _eff_einspeise if _eff_einspeise is not None else einspeiseverguetung_cent
     return eff_strompreis_cent, eff_einspeise_cent
 
 

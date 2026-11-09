@@ -5,7 +5,7 @@ Was hier gesichert wird, und warum jede Gruppe existiert:
 1. **Katalog O7** (K4-3, Halt H2): ``km_gefahren``/``ladevorgaenge`` tragen Spiegel/Mitschrift (Katalog-Korrektur), und der
    Spiegel folgt der ``counter_map`` — ein km-Zähler mit ``quellen``-Wahl HA wird gespiegelt, eine Zuordnung nur über
    ``felder`` nicht (vorbestehende Grenze). Die übrigen Zuweisungen bleiben (Sprengsatz S7 über den Kanal-Dump).
-2. **Layer** (K4-4, Halt H1): ``pv_anteil_gemessen_prozent`` — Quote zweier gemessener Mengen, ``None`` ohne Aussage;
+2. **Layer** (K4-4, Halt H1): ``pv_anteil_prozent`` (bis Päckchen Z1b ``pv_anteil_gemessen_prozent``) — Quote zweier gemessener Mengen, ``None`` ohne Aussage;
    dieselbe Zahl wie ``ist_pv_ladeanteil_prozent`` auf denselben Mengen.
 3. **Fahrt heute** (K4-2): Σ Zuwachs der Kanal-Stunden; die erste Kanalzeile (Tachostand) zählt 0 (S4).
 4. **Tag-Detail** ``emob_heute`` (K4-4/K4-5): Kopfzahl nur gemessen (S3), nur mit beiden Mengen, nur ``pv ≤ ladung``,
@@ -25,7 +25,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_gemessen_prozent
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.models.kanal import ART_STAND, FAMILIE_MITSCHRIFT, FAMILIE_SPIEGEL
 from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
 # Am Dateikopf, damit die Tabelle im Schema der `db`-Fixture steht, auch wenn eine Probe einzeln läuft.
@@ -108,7 +108,7 @@ def test_spiegel_folgt_der_counter_map_quellen_ha_ja_felder_allein_nein():
     (1.0, 0.0, None), (1.0, -2.0, None), (6.0, 5.0, None), (-0.5, 5.0, None),
 ])
 def test_pv_anteil_gemessen_prozent(pv, ladung, soll):
-    assert pv_anteil_gemessen_prozent(pv, ladung) == soll
+    assert pv_anteil_prozent(pv, ladung, stellen=0, nur_gemessen=True) == soll
 
 
 async def test_pv_anteil_gemessen_gleich_ist_pv_ladeanteil_auf_denselben_mengen(db, monkeypatch):
@@ -124,7 +124,7 @@ async def test_pv_anteil_gemessen_gleich_ist_pv_ladeanteil_auf_denselben_mengen(
             return _f
         monkeypatch.setattr(ableitungen, "lade_monats_fakten", _fakten)
         ist = await ableitungen.ist_pv_ladeanteil_prozent(db, 1)
-        assert pv_anteil_gemessen_prozent(pv, ladung) == round(ist), (pv, ladung, ist)
+        assert pv_anteil_prozent(pv, ladung, stellen=0, nur_gemessen=True) == round(ist), (pv, ladung, ist)
 
 
 # ═══ 3 · Fahrt heute (K4-2) ═══════════════════════════════════════════════════

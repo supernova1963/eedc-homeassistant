@@ -127,6 +127,29 @@ async def test_zeile_aus_ha_statistics_bleibt_ok(monkeypatch):
     assert b.meldung == "HA-Statistics als Source-of-Truth aktiv"
 
 
+async def test_kanal_tag_ist_ok_nicht_aeltere_quelle(monkeypatch):
+    """Z4 (9.11.2026): ein Kanal-Tag (HA-Spiegel, ``TZ_QUELLE_KANAL`` = ``auto:kanal_tag``) ist die heutige Quelle der
+    HA-Bauform — OK mit eigener Meldung, nicht die Dauer-INFO «Aggregate aus älterer Quelle … heilt sich», die nie
+    eintrat. ``auto:monatsabschluss`` bleibt INFO (Test darüber)."""
+    from backend.services.snapshot.boundary_range import TZ_QUELLE_KANAL
+
+    b = await _befund(_FakeDb(_tz_zeile(TZ_QUELLE_KANAL)), monkeypatch, ha_verfuegbar=True)
+
+    assert TZ_QUELLE_KANAL == "auto:kanal_tag"
+    assert b.kategorie == CheckKategorie.DATENQUELLE_STATUS.value
+    assert b.schwere == CheckSeverity.OK.value
+    assert b.meldung == "HA-Spiegel (Kanal) als Quelle aktiv"
+    assert "älterer Quelle" not in b.meldung
+    assert "auto:kanal_tag" not in b.details
+
+
+async def test_kanal_tag_ohne_ha_bleibt_standalone(monkeypatch):
+    """Gegenprobe zu Z4: ohne erreichbares HA bleibt es beim Standalone-Zweig, auch mit Kanal-Herkunft."""
+    b = await _befund(_FakeDb(_tz_zeile("auto:kanal_tag")), monkeypatch, ha_verfuegbar=False)
+
+    assert b.meldung == "Standalone-Modus aktiv (kein HA-LTS)"
+
+
 async def test_ohne_ha_bleibt_es_der_standalone_hinweis(monkeypatch):
     """Gegenprobe: ohne erreichbare Recorder-DB gilt weiterhin der
     Standalone-Zweig — auch dann, wenn es keine Tageszeile gibt. Der neue

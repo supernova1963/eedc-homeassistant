@@ -41,6 +41,8 @@
 
 **Referenzen: MQTT-Inbound und Sensor-Referenz genauer.** Die Abschnitte zu Zustand und Sitzung der E-Mobilität und zu den Themen je Gerät tragen kein „ab der nächsten Version“ mehr (seit 4.2.0 da), und die Sensor-Referenz sagt jetzt klar, wann ein Tagessensor passt: als Tageswert-Feld (etwa „Ladung heute“ am Speicher) ja, als Zählerstand über MQTT nein — dort liefert eedc nach dem nächtlichen Rücksprung keinen Wert; über Home Assistant ist beides in Ordnung.
 
+**Daten-Checker: Tage aus dem HA-Spiegel sind die aktuelle Quelle.** Bekommst du deine Tage aus dem gespiegelten Home-Assistant-Zähler, meldet die Kategorie «Datenquellen – Status» jetzt OK statt dauerhaft „Aggregate aus älterer Quelle“ — der Hinweis hätte sich nie von selbst erledigt.
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)

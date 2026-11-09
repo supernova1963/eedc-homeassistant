@@ -181,9 +181,11 @@ class QuellenChecks:
         """Etappe 4 v3.31.0: zeigt, welcher Datenquellen-Pfad für die Energie-
         Aggregate aktiv ist.
 
-        Drei Konstellationen:
+        Konstellationen:
           a) HA-LTS aktiv (HA-Add-on-Modus, sensor_mapping vorhanden) →
              externe Statistics-Quelle, höchste Genauigkeit (Σ Hourly == Daily)
+          a') HA-Spiegel (Kanal-Tag, `TZ_QUELLE_KANAL`, seit HA-Bauform S3/S5) →
+             ebenfalls OK, Σ Stunden = Tag per Konstruktion (Z4, 9.11.2026)
           b) Snapshot-Fallback (HA-LTS verfügbar, aber Aggregat-Provenance
              noch auf älteren Quellen) → typischer Zustand nach Upgrade,
              heilt sich mit nächstem Auto-Vollbackfill
@@ -194,6 +196,7 @@ class QuellenChecks:
         Diagnose, keine Beschönigung. Memory `project_etappe_4_ha_lts_sot.md`.
         """
         from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.snapshot.boundary_range import TZ_QUELLE_KANAL
         from backend.models.tages_energie_profil import TagesZusammenfassung
 
         kat = CheckKategorie.DATENQUELLE_STATUS.value
@@ -240,6 +243,18 @@ class QuellenChecks:
                     "Energie-Aggregate werden direkt aus den HA-Long-Term-"
                     "Statistics gelesen. Stunden- und Tageswerte sind konsistent "
                     "(Σ Stundenwerte = Tagessumme per Konstruktion)."
+                ),
+            )]
+        if ha_lts_verfuegbar and letzte_source == TZ_QUELLE_KANAL:
+            # Z4 (9.11.2026): seit der HA-Bauform (S3/S5) schreibt ein Kanal-Tag `auto:kanal_tag` als Herkunft — Tag und
+            # Stunde kommen aus dem gespiegelten HA-Zähler. Bis dahin fiel er in den Zweig «ältere Quelle» darunter, und
+            # jeder HA-Anwender mit Kanal-Tagen sah dauerhaft eine INFO, die sich «mit dem nächsten Lauf» heilen sollte.
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="HA-Spiegel (Kanal) als Quelle aktiv",
+                details=(
+                    "Tag und Stunde kommen aus dem gespiegelten HA-Zähler (Kanal-Tag). Stunden- und Tageswerte "
+                    "sind konsistent (Σ Stunden = Tag per Konstruktion)."
                 ),
             )]
         if ha_lts_verfuegbar and tz is None:

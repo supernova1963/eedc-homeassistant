@@ -8,6 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.core.berechnungen.ergebnis import quote
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
@@ -115,7 +116,7 @@ async def get_prognose_vs_ist(
         ist_kwh = ist_pro_monat.get(monat, 0)
         abweichung = ist_kwh - prog_kwh
         abweichung_pct = (abweichung / prog_kwh * 100) if prog_kwh > 0 else None
-        perf_ratio = (ist_kwh / prog_kwh) if prog_kwh > 0 else None
+        perf_ratio = quote(ist_kwh, prog_kwh, 1, nur_positiver_nenner=True)  # Layer, Päckchen Z1c
 
         monatswerte.append(MonatsvergleichItem(
             monat=monat,
@@ -131,7 +132,7 @@ async def get_prognose_vs_ist(
 
     jahres_abweichung = ist_summe - prognose_summe
     jahres_abweichung_pct = (jahres_abweichung / prognose_summe * 100) if prognose_summe > 0 else None
-    jahres_perf_ratio = (ist_summe / prognose_summe) if prognose_summe > 0 else None
+    jahres_perf_ratio = quote(ist_summe, prognose_summe, 1, nur_positiver_nenner=True)  # Layer, Päckchen Z1c
 
     return PrognoseVsIstResponse(
         anlage_id=anlage_id,

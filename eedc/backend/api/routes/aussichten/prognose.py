@@ -10,6 +10,7 @@ GET /api/aussichten/langfristig/{anlage_id} — Monate aus PVGIS-TMY und Trend
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import bad_request
+from backend.core.berechnungen.ergebnis import quote
 from backend.api.deps import get_db
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.monats_fakten import lade_monats_fakten
@@ -175,7 +176,7 @@ async def get_langfrist_prognose(
             soll_kwh = pvgis_monatswerte.get(monat, 0)
 
             if soll_kwh > 0 and ist_kwh > 0:
-                pr = ist_kwh / soll_kwh
+                pr = quote(ist_kwh, soll_kwh, 1)  # Layer, Päckchen Z1c (Nenner > 0 durch die Bedingung)
                 if monat not in monatliche_pr:
                     monatliche_pr[monat] = []
                 monatliche_pr[monat].append(pr)

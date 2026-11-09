@@ -62,6 +62,8 @@ Eingangsebene (5-Min-Overlays) hilft nur dort, wo der Zähler selbst feiner ist.
 from dataclasses import dataclass
 from typing import Final, Optional
 
+from backend.core.berechnungen.ergebnis import quote
+
 #: Ladung unterhalb dieser Schwelle (kWh je Stunde) gilt als Rauschen und wird
 #: übersprungen — sie trägt weder zum PV- noch zum Netz-Anteil bei.
 _LADUNG_EPSILON: Final[float] = 0.001
@@ -269,19 +271,37 @@ def leite_pv_anteil_ab(
     )
 
 
-def pv_anteil_gemessen_prozent(pv_kwh: Optional[float], ladung_kwh: Optional[float]) -> Optional[int]:
-    """PV-Anteil einer Ladung aus **zwei gemessenen Mengen** in ganzen Prozent (P-433-2b K4, K4-4, Halt H1).
+def pv_anteil_prozent(
+    pv_kwh: Optional[float],
+    ladung_kwh: Optional[float],
+    *,
+    faktor: float = 100.0,
+    stellen: Optional[int] = None,
+    nur_gemessen: bool = False,
+) -> Optional[float]:
+    """PV-Anteil einer Ladung = PV-Teil ÷ Ladung × ``faktor`` — die **eine** Funktion dafür (Päckchen Z1b, 9.11.2026).
 
-    Die Quote ``PV-Ladezähler ÷ Ladezähler`` — anders als ``leite_pv_anteil_ab`` (Schätzung aus der Netzbilanz je
-    Stunde) keine Ableitung. Leser: Tag-Detail ``emob_heute`` (Kopfzahl «PV-Anteil heute» der Wallbox-Karte).
+    Die Quote zweier Mengen (gemessen oder aus der Schätzung gespeichert) — anders als ``leite_pv_anteil_ab``
+    (Schätzung aus der Netzbilanz je Stunde) keine Ableitung. Vor Z1b stand sie sechsmal inline (``pv / ladung``):
+    Cockpit-Übersicht (E-Mobilität), HA-Export ``e_auto_pv_anteil_prozent``, Heimlade-Phasen (Wallbox-Monatsanteil),
+    Kanal-Gruppenquote ``GruppeZeitraum.quote``, Pool des aktuellen Monats; dazu die Kopfzahl «PV-Anteil heute»
+    (P-433-2b K4, K4-4, Halt H1 — bis Z1b ``pv_anteil_gemessen_prozent``).
 
-    ``None`` («keine Aussage», nie 0 %): ``ladung_kwh`` fehlt oder ist ≤ 0, ``pv_kwh`` fehlt oder ist negativ, oder
-    ``pv_kwh > ladung_kwh`` (Zähler-Drift; keine Kopfzahl, kein Checker — E-K4-5). Sonst ``round(pv ÷ ladung × 100)``.
+    ``None`` («keine Aussage», nie 0 %): ein Operand fehlt oder ``ladung_kwh ≤ 0``. Mit ``nur_gemessen=True``
+    zusätzlich bei ``pv_kwh < 0`` oder ``pv_kwh > ladung_kwh`` (Zähler-Drift; keine Kopfzahl, kein Checker — E-K4-5).
 
-    ⚠ Zwei weitere Quoten gemessener Mengen stehen (noch) außerhalb des Layers: ``monats_fakten/ableitungen.
-    ist_pv_ladeanteil_prozent`` (Σ PV ÷ Σ Ladung, ungerundet) und ``api/routes/investitionen/dashboard_wallbox.py``
-    (``wb_pv_anteil``). Sie bleiben in K4 unberührt (Nebenfund; Konsolidierung ist ein eigenes Päckchen).
+    ``faktor`` 100 (Prozent) oder 1 (Anteil 0…1). ``stellen``: ``None`` ungerundet, ``0`` ganze Zahl (``int``),
+    ``n > 0`` ``round(wert, n)``. Klemmung auf 0…1 (Kanal-Gruppenquote) bleibt beim Aufrufer.
+
+    ⚠ Zwei weitere Quoten gemessener Mengen stehen außerhalb: ``monats_fakten/ableitungen.ist_pv_ladeanteil_prozent``
+    (Σ PV ÷ Σ Ladung in den Monats-Fakten — der Ort der Monatsgrößen, ADR-002/P10) und
+    ``api/routes/investitionen/dashboard_wallbox.py`` (``wb_pv_anteil``) — nicht Teil von Z1b.
     """
-    if ladung_kwh is None or ladung_kwh <= 0 or pv_kwh is None or pv_kwh < 0 or pv_kwh > ladung_kwh:
+    if pv_kwh is None or ladung_kwh is None or ladung_kwh <= 0:
         return None
-    return int(round(pv_kwh / ladung_kwh * 100))
+    if nur_gemessen and (pv_kwh < 0 or pv_kwh > ladung_kwh):
+        return None
+    wert = quote(pv_kwh, ladung_kwh, faktor)
+    if wert is None or stellen is None:
+        return wert
+    return int(round(wert)) if stellen == 0 else round(wert, stellen)

@@ -50,6 +50,10 @@ SECONDS_TO_HOURS = 1 / 3600
 # Korrekturfaktoren (DEFAULT_SYSTEM_LOSSES: zentral in pv_orientation.py)
 TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch für Silizium)
 SNOW_LOSS_FACTOR = 0.1  # 10% Verlust bei Schnee
+#: Ersatzweg eines Prognose-Tags ohne Stundenwerte (``_prognose_tag``): GTI ≈ GHI × 1,1 — «~10 % mehr durch optimale
+#: Neigung». Eine **Annahme** (Päckchen Z2, 9.11.2026 benannt; BERECHNUNGEN §4.1): sie kennt weder Neigung noch
+#: Ausrichtung der Anlage und gilt nur, wenn die stündliche Rechnung keinen Ertrag ergab.
+GTI_AUS_GHI_FAKTOR = 1.1
 
 # Timezone für Solar-Noon-Berechnung
 _BERLIN_TZ = ZoneInfo("Europe/Berlin")
@@ -1069,7 +1073,7 @@ def _prognose_tag(
         rad_mj = tr.daily_radiation[i] or 0
         ghi_kwh = rad_mj * MJ_TO_KWH
         # Grobe GTI-Schätzung aus GHI (abhängig von Neigung)
-        gti_kwh = ghi_kwh * 1.1  # ~10% mehr durch optimale Neigung
+        gti_kwh = ghi_kwh * GTI_AUS_GHI_FAKTOR  # Annahme, s. Konstante
         ertrag = gti_kwh * kwp * (1 - system_losses)
 
     sonnenstunden = 0

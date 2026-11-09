@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Iterable, Optional
 
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.core.field_definitions import traegt_heimlade_wert
 from backend.services.eauto_wirtschaftlichkeit import (
     ART_GEMESSEN,
@@ -142,7 +143,7 @@ def _wallbox_des_monats(
             or wallbox_quelle
         )
     )
-    wb_pv_anteil = (wb.pv_kwh / wb.ladung_kwh) if wb.ladung_kwh > 0 else None
+    wb_pv_anteil = pv_anteil_prozent(wb.pv_kwh, wb.ladung_kwh, faktor=1)  # Layer (Anteil 0…1), Päckchen Z1b
     return wb, wallbox_hat_wert, wb_pv_anteil
 
 

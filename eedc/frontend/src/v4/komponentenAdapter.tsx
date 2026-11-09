@@ -948,13 +948,13 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpi(BKW_KPI.spezErtrag, n0(z.spezifischer_ertrag_kwh_kwp), 'kWh/kWp'),
         ],
         // ① IST-Summary-Karten: CO₂, Eigenverbrauch-Summe, Einspeisung, entgangener
-        //    Erlös (Einspeisung × 8 ct/kWh — wie IST, unvergütete BKW-Einspeisung).
+        //    Erlös (unvergütete BKW-Einspeisung; Wert und Annahme-Satz rechnet das Backend, Päckchen Z2).
         kennzahlen: {
           titel: 'Kennzahlen', kpis: [
             k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'Eigenverbrauch × 0,4 kg/kWh' }),
             k('Eigenverbrauch', n0(z.gesamt_eigenverbrauch_kwh), 'kWh', 'green', Zap),
             k('Einspeisung', n0(z.gesamt_einspeisung_kwh), 'kWh', 'orange', TrendingUp, { subtitle: 'unvergütet' }),
-            k('Entgangener Erlös', n2(z.gesamt_einspeisung_kwh * 0.08), '€', 'gray', Euro, { formel: 'Einspeisung × 8 ct/kWh' }),
+            k('Entgangener Erlös', n2(z.entgangener_erloes_euro), '€', 'gray', Euro, { formel: `Einspeisung × ${z.entgangener_erloes_annahme_cent} ct/kWh` }),
           ],
         },
         aufteilung: z.gesamt_erzeugung_kwh > 0 ? {
@@ -975,7 +975,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         wirtschaftlichkeit: (z.gesamt_ersparnis_euro ?? 0) > 0 ? {
           posten: [{ label: 'Eigenverbrauchs-Ersparnis', euro: z.gesamt_ersparnis_euro, farbe: SEG.ev, hinweis: 'vermiedener Netzbezug' }],
           hinweis: (z.gesamt_einspeisung_kwh ?? 0) > 0
-            ? `Einspeisung unvergütet — entgangener Erlös rechnerisch ${n2(z.gesamt_einspeisung_kwh * 0.08)} € (8 ct/kWh).`
+            ? `Einspeisung unvergütet — entgangener Erlös rechnerisch ${n2(z.entgangener_erloes_euro)} € (${z.entgangener_erloes_annahme_cent} ct/kWh).`
             : undefined,
         } : undefined,
         // ③ Sub-Komponente: integrierter Speicher (Eigenschaft des BKW-Wirts).

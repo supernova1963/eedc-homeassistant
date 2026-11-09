@@ -34,6 +34,7 @@ from backend.core.berechnungen.speicher import (
     soc_spanne,
     vollzyklen,
 )
+from backend.core.berechnungen.ergebnis import quote
 from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.speicher_potential import (
     SOC_VOLL_PROZENT,
@@ -93,9 +94,8 @@ class MonatsPotential:
     @property
     def netz_ladung_anteil_prozent(self) -> Optional[float]:
         """Anteil der Ladung, der höchstens aus dem Netz kam. `None` ohne Ladung."""
-        if self.ladung_kwh <= 0:
-            return None
-        return min(100.0, self.netz_ladung_kwh / self.ladung_kwh * 100.0)
+        anteil = quote(self.netz_ladung_kwh, self.ladung_kwh, 100.0, nur_positiver_nenner=True)  # Layer, Z1d
+        return None if anteil is None else min(100.0, anteil)
 
 
 @dataclass

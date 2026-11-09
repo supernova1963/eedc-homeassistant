@@ -24,6 +24,7 @@ from typing import Optional
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.ergebnis import quote
 from backend.core.berechnungen.slot_konvention import forward_werte_je_backward_zeile
 from backend.core.berechnungen.zeittarif import (
     gewichteter_arbeitspreis_aus_zellen,
@@ -179,6 +180,12 @@ class StrompreisAggregat:
         return 60
 
 
+def _gewichteter_cent(summe_kosten: float, summe_kwh: float) -> Optional[float]:
+    """Σ(Preis × kWh) ÷ Σ kWh auf 2 Stellen, ``None`` ohne Menge — die Layer-Quote (Päckchen Z1d), hier nur gerundet."""
+    wert = quote(summe_kosten, summe_kwh, 1, nur_positiver_nenner=True)
+    return None if wert is None else round(wert, 2)
+
+
 async def berechne_monats_durchschnittspreis(
     anlage_id: int, jahr: int, monat: int, db: AsyncSession
 ) -> Optional[StrompreisAggregat]:
@@ -237,7 +244,7 @@ async def berechne_monats_durchschnittspreis(
     tage_im_monat = monthrange(jahr, monat)[1]
     sollstunden = tage_im_monat * 24
 
-    gewichtet = round(summe_kosten / summe_kwh, 2) if summe_kwh > 0 else None
+    gewichtet = _gewichteter_cent(summe_kosten, summe_kwh)
     arithmetisch = round(summe_preise / n, 2) if n > 0 else 0.0
 
     return StrompreisAggregat(
@@ -245,9 +252,7 @@ async def berechne_monats_durchschnittspreis(
         arithmetisch_cent=arithmetisch,
         abgedeckte_stunden=n,
         sollstunden=sollstunden,
-        ev_gewichtet_cent=(
-            round(summe_ev_kosten / summe_ev_kwh, 2) if summe_ev_kwh > 0 else None
-        ),
+        ev_gewichtet_cent=_gewichteter_cent(summe_ev_kosten, summe_ev_kwh),
     )
 
 
@@ -370,13 +375,11 @@ async def lade_preis_aggregate_je_monat(
         if n <= 0:
             continue
         je_monat[(jahr, monat)] = StrompreisAggregat(
-            gewichtet_cent=round(summe_kosten / summe_kwh, 2) if summe_kwh > 0 else None,
+            gewichtet_cent=_gewichteter_cent(summe_kosten, summe_kwh),
             arithmetisch_cent=round(summe_preise / n, 2),
             abgedeckte_stunden=n,
             sollstunden=monthrange(jahr, monat)[1] * 24,
-            ev_gewichtet_cent=(
-                round(summe_ev_kosten / summe_ev, 2) if summe_ev > 0 else None
-            ),
+            ev_gewichtet_cent=_gewichteter_cent(summe_ev_kosten, summe_ev),
         )
     je_monat.update({m: a for m, a in aus_kanal.items() if a is not None})
     return PreisMessung(anlage_id, je_monat)

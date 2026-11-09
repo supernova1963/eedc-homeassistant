@@ -299,11 +299,6 @@ async def quoten_und_pvgis(
     else:
         basis_ev_quote = avg_hist_ev_quote  # Wird nur für Monate ohne hist. Daten genutzt
 
-    # Speicher-Effizienz (Entladung/Ladung)
-    speicher_effizienz = 0.90  # Default 90%
-    if gesamt_speicher_ladung > 0:
-        speicher_effizienz = min(0.95, gesamt_speicher_entladung / gesamt_speicher_ladung)
-
     # Komponentenbeiträge pro Monat (für Anzeige-Felder in der Prognose)
     speicher_ev_erhohung_monat = gesamt_speicher_entladung / anzahl_monate_hist if speicher else 0
     v2h_beitrag_monat = gesamt_v2h / anzahl_monate_hist if e_autos else 0

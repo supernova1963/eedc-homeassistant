@@ -85,6 +85,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   der Berechnungsreferenz ins Handbuch öffnet jetzt die Handbuch-Seite an der richtigen Stelle; Verweise auf Konzept-Dokumente,
   die keine Website-Seite haben, führen zur Quelle auf GitHub. Ein Prüfschritt beim Bau der Website meldet künftig jeden
   Verweis, der ins Leere führen würde.
+- **Daten-Checker, «Datenquellen – Status»: Tage aus dem HA-Spiegel gelten als aktuelle Quelle.** Wer Tage aus dem
+  gespiegelten Home-Assistant-Zähler bekommt, sah dauerhaft den Hinweis „Aggregate aus älterer Quelle … 'auto:kanal_tag'“,
+  der sich „mit dem nächsten Lauf“ heilen sollte und es nie tat. Jetzt meldet die Kategorie dort OK („HA-Spiegel (Kanal) als
+  Quelle aktiv“); Tage aus einer wirklich älteren Quelle (etwa dem Monatsabschluss) bleiben ein Hinweis wie bisher.
 
 ### Added
 
@@ -102,6 +106,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   jetzt 12,5 kg CO₂ je Baum und Jahr (bisher 20 kg) und `aequivalent_fluege_km` 0,23 kg je Flug-km (bisher 0,25 kg;
   ein Kurzstreckenflug = 1000 km = 230 kg) — dieselben Zahlen, die Auswertungen → CO₂ zeigt; neu sind `aequivalent_fluege`,
   je Monat `co2_aequivalente` und einmal `co2_faktoren`. In der Oberfläche ändert sich keine Zahl.
+- **Balkonkraftwerk-Hub: den «entgangenen Erlös» der unvergüteten Einspeisung rechnet das Backend.** Die Zahl ist
+  dieselbe (Einspeisung × 8 ct/kWh); neu liefert `GET /api/investitionen/dashboard/balkonkraftwerk/{anlage_id}` die Felder
+  `entgangener_erloes_euro` und `entgangener_erloes_annahme_cent`, die Kachel und der Hinweis zeigen sie.
 - **Handbuch: eedc-Karte auf dem Wandtablet (Fully Kiosk, eingeschränkter Benutzer) und „Tag reparieren“ im Daten-Checker
   genauer beschrieben** — Kategorien ohne Fehler und Warnungen starten zugeklappt, und an Tagen aus dem HA-Spiegel kommt eine
   Korrektur in Home Assistant nicht über den Knopf, sondern über den nächtlichen Abgleich oder „HA-Spiegel jetzt abgleichen“.
@@ -127,6 +134,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen Z (9.11.2026): Doppelformeln in den Layer, Wächter «Rechenstellen».** Live-Autarkie und -Eigenverbrauchsquote
+  rufen `kennzahlen.autarkie_prozent`/`eigenverbrauchsquote_prozent` (neu `kappen=False`, der Gauge kappt selbst); der PV-Anteil
+  einer Ladung hat eine Funktion `pv_anteil_ladung.pv_anteil_prozent` (Faktor, Rundung, «nur gemessen» als Parameter; ersetzt
+  `pv_anteil_gemessen_prozent`) für Cockpit-Übersicht, HA-Export, Heimlade-Phasen, Kanal-Gruppenquote und aktuellen Monat;
+  Prognose-Erreichung, gewichteter Ø-Preis (Speicher-Hub, Strompreis-Aggregator) und Netzladeanteil rufen `ergebnis.quote`
+  (neu `nur_positiver_nenner`); die Legacy-Spalten Direkt-/Eigenverbrauch der Monatszeile schreiben vier Stellen über
+  `energie.direktverbrauch_legacy_kwh`/`eigenverbrauch_legacy_kwh`. Alle Zahlen bitgleich (Golden Master). Benannt: BKW-Schätzung
+  80 % / 20 % (`bkw_finanz.BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG`/`BKW_EINSPEISE_ANTEIL_SCHAETZUNG`), GTI ≈ GHI × 1,1 (`GTI_AUS_GHI_FAKTOR`), Checker-Toleranz 5 kWh / 2 %.
+  Neue Wächter `test_dezentrale_rechenstellen.py` und `npm run check:rechenstellen`: eine neue Rechenstelle außerhalb des Layers
+  ist rot, die Baselines (Backend 30, Client 46 Stellen) schrumpfen nur. Gestrichen: eine ungelesene Speicher-Effizienz in der
+  Finanz-Prognose (`aussichten/finanz_eingaenge.py`).
 - **Päckchen Y (9.11.2026): CO₂-Äquivalente im Layer, Speicher-η des Monats aus dem Backend.** Bäume, Auto-km, Flüge und
   Flug-km bildet `core/berechnungen/co2_aequivalente.py` (eine Formel, ein Ort; Flug = 1000 km × 0,23 kg/km); die Route liefert
   sie je Monat und gesamt, Auswertungen → CO₂ summiert nur noch und nimmt die Methodik-Zahlen aus `co2_faktoren` (vorher eigene

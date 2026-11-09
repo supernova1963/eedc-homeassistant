@@ -54,6 +54,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+#: Annahme der **pauschalen** BKW-Schätzung ohne Messung, ein **Paar**: 80 % der Jahreserzeugung werden selbst
+#: verbraucht, 20 % eingespeist (Päckchen Z2, 9.11.2026 benannt; vorher Literale ``0.8``/``0.2`` in
+#: ``roi.py::_bkw_pauschal_beitrag`` und ``0.8`` in ``roi_standalone.py::_bkw_bewertung``). Eine Annahme, keine
+#: Messung — sie greift nur für ein Balkonkraftwerk ohne Modul-Kinder und ohne Monatswerte (BERECHNUNGEN «Die
+#: pauschale BKW-Schätzung bleibt eine Schätzung», #381). Gemessene Monate rechnen mit :func:`bkw_eigenverbrauch_anteil`.
+BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG = 0.8
+#: Das Gegenstück zu :data:`BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG` — bewusst eine eigene Konstante und nicht
+#: ``1 − BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG``: in Gleitkomma ergibt ``1 - 0.8`` ``0.19999999999999996``, die
+#: Einspeisung der Pauschale bliebe damit nicht bitgleich zum Bestand (``× 0.2``). Beide ändern sich nur zusammen.
+BKW_EINSPEISE_ANTEIL_SCHAETZUNG = 0.2
+
+#: Annahme für den **entgangenen Erlös** der unvergüteten BKW-Einspeisung im Balkonkraftwerk-Hub: 8 ct/kWh
+#: (Päckchen Z2, 9.11.2026 aus dem Client geholt — vorher ``Einspeisung × 0.08`` in ``v4/komponentenAdapter.tsx``).
+#: Ein Balkonkraftwerk ohne Anmeldung als EEG-Anlage bekommt keine Vergütung; die Zahl zeigt rechnerisch, was die
+#: Einspeisung zum Satz einer kleinen Anlage wert wäre. Kein Posten der Wirtschaftlichkeit, nur ein Hinweis —
+#: Grenze: der Satz ist fest und folgt weder dem gepflegten Tarif noch dem Jahr der Inbetriebnahme.
+BKW_UNVERGUETET_ANNAHME_CENT = 8
+
 
 @dataclass(frozen=True)
 class BkwFinanzBeitrag:

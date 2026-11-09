@@ -40,6 +40,7 @@ from backend.core.calculations import (
     berechne_waermepumpe_einsparung,
     berechne_roi,
 )
+from backend.core.berechnungen.bkw_finanz import BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_v2h_ersparnis
 from backend.core.berechnungen.kapitalrechnung import (
     annahme_dauer_text,
@@ -540,7 +541,7 @@ def _bkw_bewertung(ctx: _StandaloneKontext, inv) -> tuple[float, float, dict]:
         strompreis_cent=ctx.strompreis_cent,
         einspeiseverguetung_cent=ctx.einspeiseverguetung_cent,
     )
-    eigenverbrauch = jahres_ertrag * 0.8
+    eigenverbrauch = jahres_ertrag * BKW_EIGENVERBRAUCH_ANTEIL_SCHAETZUNG  # Annahme im Layer (Päckchen Z2)
 
     detail = {
         'leistung_wp': leistung_wp,

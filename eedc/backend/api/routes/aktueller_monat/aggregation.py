@@ -26,6 +26,7 @@ from backend.core.field_definitions import (
     wp_strom_aufteilung,
 )
 from backend.core.investition_parameter import ist_dienstlich
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.core.berechnungen.pv_verteilung import PvModul, bkw_kinder_luecken_kwh, gesamt_pv_kwh
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.berechnungen.anlagen_kwp import BKW_TYP, PV_MODUL_TYP
@@ -620,9 +621,9 @@ def emob_heimladung_pool(
         # dieser Zweig nicht (die Tagesebene liest die Schicht).
         pv_quote=(
             _kanal_quote if _kanal_gedeckt
-            else gespeichert.ladung_pv_kwh / gespeichert.ladung_kwh
+            else pv_anteil_prozent(gespeichert.ladung_pv_kwh, gespeichert.ladung_kwh, faktor=1)  # Layer, Z1b
             if gespeichert is not None and gespeichert_quelle == QUELLE_SCHAETZUNG
-            and gespeichert.ladung_anteil_abgeleitet and gespeichert.ladung_kwh > 0
+            and gespeichert.ladung_anteil_abgeleitet
             else None
         ),
     )

@@ -13,6 +13,7 @@ from backend.core.zahlenformat import fmt_zahl
 from backend.core.berechnungen import heizwaerme_ist_abgeleitet
 from backend.core.berechnungen.imd_monatsaggregat import imd_typ_beitrag
 from backend.core.berechnungen.fenster import verteile_auf_guenstigste
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.services.daten_checker.kuehl_zaehler import hat_kuehl_zaehler
 from backend.core.berechnungen.waermepumpe_kennzahl import (
     abgrenzungs_grund,
@@ -368,7 +369,7 @@ async def _emob_sensorwert(
             zusatz = {"quelle": effizienz.quelle}
     elif key == "e_auto_pv_anteil_prozent":
         if s.gesamt_ladung > 0:
-            value = s.gesamt_pv_ladung / s.gesamt_ladung * 100
+            value = pv_anteil_prozent(s.gesamt_pv_ladung, s.gesamt_ladung)  # Layer, Päckchen Z1b
             berechnung = f"{fmt_zahl(s.gesamt_pv_ladung, 0)} / {fmt_zahl(s.gesamt_ladung, 0)} × 100"
     elif key == "e_auto_ersparnis_vs_benzin_euro":
         if s.gesamt_km > 0:

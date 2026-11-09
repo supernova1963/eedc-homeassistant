@@ -843,7 +843,7 @@ class EmobHeuteZeile(BaseModel):
     """P-433-2b K4 (K4-5, Karten «Heute» E-Mobilität): die Tagesmengen eines Geräts — jeder Wert nur mit Wert (P4).
 
     Wallbox: ``ladung_kwh`` (Tageswert ``wallbox_<id>`` aus ``komponenten_der_tage``), ``ladung_pv_kwh`` (gemessener
-    PV-Ladezähler, nur ohne Grund), ``pv_anteil_prozent`` (Layer ``pv_anteil_gemessen_prozent``, nur mit beiden Mengen).
+    PV-Ladezähler, nur ohne Grund), ``pv_anteil_prozent`` (Layer ``pv_anteil_prozent``, ganze Prozent, nur mit beiden gemessenen Mengen).
     E-Auto: ``km`` / ``fahrverbrauch_kwh`` (Σ Zuwachs der Kanal-Stunden ``inv:<id>:km_gefahren`` / ``verbrauch_kwh``,
     ``kanal_stunden.fahrt_je_tag``), ``ladung_kwh`` aus ``eauto_<id>`` nur ohne deckende Wallbox. Mengen auf 0,1
     gerundet, Anteil ganzzahlig. Der Client rechnet nichts."""

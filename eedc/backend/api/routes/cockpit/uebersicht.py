@@ -33,6 +33,7 @@ from backend.core.berechnungen import (
 )
 from backend.core.berechnungen import betriebskosten_im_zeitraum, relevante_kosten_aus_investitionen
 from backend.core.berechnungen.ergebnis import ErgebnisEingang, berechne_ergebnis, quote_paarweise
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.core.berechnungen.pv_verteilung import (
     eigenverbrauch_ohne_verluste_kwh,
     verluste_grund_zeitraum,
@@ -1122,7 +1123,7 @@ def _emob_anzeige(k: _Kontext, emob_ladung: float, emob_pv_ladung: float):
         and not ist_dienstlich(i)
     ]
     hat_emobilitaet = len(emob_invs) > 0
-    emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
+    emob_pv_anteil = pv_anteil_prozent(emob_pv_ladung, emob_ladung)  # Layer, Päckchen Z1b
     return hat_emobilitaet, emob_pv_anteil
 
 
