@@ -64,3 +64,11 @@ export function bkwAnteilHerkunft(monatsreihe: readonly { erzeugung_quelle?: str
 export function pvVerteiltHerkunft(bezug: string, hinweis?: string | null): WertHerkunft {
   return { ...PV_MODUL_VERTEILT_HERKUNFT, bezug, hinweis: hinweis || PV_MODUL_VERTEILT_HERKUNFT.hinweis }
 }
+
+/** Päckchen CC: die Herkunftszeile der String-Platzierung — je Fall aus dem Backend (`vergleich_grund`). Hat ein Modul im
+ *  Zeitraum gar keinen Wert (`nicht_alle_werte`, etwa vor der Anschaffung), ist nichts nach kWp gerechnet: dann das
+ *  Zeichen «offen» statt «geschätzt (kWp-Anteil)». Sonst wie {@link pvVerteiltHerkunft}. */
+export function pvVergleichHerkunft(bezug: string, hinweis?: string | null, grund?: string | null): WertHerkunft {
+  if (grund === 'nicht_alle_werte') return { zustand: 'fehlt', bezug, hinweis: hinweis ?? undefined }
+  return pvVerteiltHerkunft(bezug, hinweis)
+}

@@ -532,6 +532,7 @@ def _prognose_sensorwert(sensor, prognose):
         value = prognose["heute_kwh"]
         if prognose.get("stundenprofil_heute"):
             zusatz = {"stundenprofil_kwh": prognose["stundenprofil_heute"]}
+        zusatz.update(_korrektur_attribute(prognose.get("korrektur_nutzen")))
     elif sensor.key == "eedc_prognose_heute_rollend_kwh":
         value = prognose["heute_rollend_kwh"]
     elif sensor.key == "eedc_prognose_rest_today_kwh":
@@ -571,6 +572,17 @@ def _prognose_sensorwert(sensor, prognose):
     elif sensor.key == "eedc_verbrauchsprognose_morgen_kwh":
         value, zusatz = _verbrauchsprognose_morgen_sensorwert(prognose)
     return value, zusatz
+
+
+def _korrektur_attribute(nutzen) -> dict:
+    """Päckchen CC: der Wächter «Korrektur nur, wenn sie hilft» am Sensor `eedc_prognose_heute_kwh` — leer ohne Stand."""
+    if nutzen is None:
+        return {}
+    return {
+        "korrektur_ausgesetzt": nutzen.ausgesetzt,
+        "korrektur_mae_30_prozent": nutzen.mae_kaskade_prozent,
+        "roh_mae_30_prozent": nutzen.mae_roh_prozent,
+    }
 
 
 def _speicher_voll_um_sensorwert(prognose):

@@ -74,6 +74,17 @@ def _kanal_merken_leer():
 
 
 @pytest.fixture(autouse=True)
+def _korrektur_nutzen_leer():
+    """Päckchen CC: der Tagescache des Wächters «Korrektur nur, wenn sie hilft» (``services/prognose_korrektur_nutzen.py``)
+    hängt an der Anlagen-ID — ein Worker öffnet viele Datenbanken mit derselben ID 1. Jeder Test beginnt kalt."""
+    from backend.services import prognose_korrektur_nutzen
+
+    prognose_korrektur_nutzen.cache_leeren()
+    yield
+    prognose_korrektur_nutzen.cache_leeren()
+
+
+@pytest.fixture(autouse=True)
 def _wetter_cache_ohne_l2_persist(monkeypatch):
     """`main.py` setzt beim Lifespan-Start `wetter.cache._loop_running = True`, und
     niemand setzte es zurück — im selben Worker feuerte danach JEDER Prognose-Test

@@ -102,13 +102,12 @@ export function auslastungAus(s: Pick<SpeicherSumme, 'entladung' | 'auslastungsB
 }
 
 /** Solar-Anteil der Fußzeile — der Jahr-Kopf (`cockpit/jahr.kopf`, dieselbe Faltung wie die Kacheln darüber) trägt
- *  ihn als Feld (Päckchen BB, Layer `speicher_bilanz.speicher_solaranteil_prozent`; bis dahin rechnete diese Sicht
- *  `max(0, Ladung − Netz) ÷ Ladung` selbst). Die Fußzeile zeigt «—», solange im Jahr keine Netzladung über 0 erfasst
- *  ist — die Anzeigeregel von vorher (Σ 0 heißt hier «nicht gepflegt»), die Monatszeilen zeigen bei gemessenen 0 kWh
- *  100 %. */
+ *  ihn als Feld (Päckchen BB, Layer `speicher_bilanz.speicher_solaranteil_prozent`). Seit Päckchen CC dieselbe Regel wie
+ *  die Monatszeilen (ADR-002/P4 «0 ist ein Wert»): gemessene 0 kWh Netzladung im Jahr ⇒ 100 %, keine erfasste Netzladung
+ *  ⇒ «—» (das Feld ist dann `null`, die Faltung `summe` liefert `null` nur, wenn kein Monat einen Wert trägt). Bis dahin
+ *  zeigte der Fuß «—», solange die Jahressumme 0 war. */
 export function solarAnteilFuss(kopf: AktuellerMonatResponse | null | undefined): number | null {
-  if (!kopf || !kopf.speicher_ladung_netz_kwh) return null
-  return kopf.speicher_solaranteil_prozent ?? null
+  return kopf?.speicher_solaranteil_prozent ?? null
 }
 
 const pct = (v: number | null, stellen = 0) => v == null ? LEER : `${fmtZahl(v, stellen)} %`

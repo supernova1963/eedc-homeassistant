@@ -80,6 +80,19 @@ RANKING_TEILWEISE_VERTEILT = (
     "Erzeugungs-Sensor (Einstellungen → Sensor-Zuordnung)."
 )
 
+# Päckchen CC (Kleineres aus BB4): ein String hat im Zeitraum GAR KEINEN Wert (`fehlt`, etwa vor seiner Anschaffung),
+# verteilt ist nichts. Die Sperre bleibt — ohne Werte aller Strings gibt es keine Platzierung —, aber der Satz oben
+# («ein Teil ist anteilig verteilt») stimmte dort nicht (r28/r27 2023). `{zeitraum}`: «in diesem Jahr» / «im Zeitraum».
+RANKING_NICHT_ALLE_WERTE = (
+    "Nicht alle Module haben {zeitraum} Werte (etwa vor ihrer Anschaffung) — eine Platzierung einzelner Strings "
+    "ist damit nicht möglich."
+)
+
+#: Päckchen CC: warum es keine Platzierung gibt — die Anzeige wählt danach ihr Zeichen (kWp-Anteil oder «offen»).
+VERGLEICH_GRUND_VERTEILT = "verteilt"
+VERGLEICH_GRUND_TEILWEISE_VERTEILT = "teilweise_verteilt"
+VERGLEICH_GRUND_NICHT_ALLE_WERTE = "nicht_alle_werte"
+
 
 
 # F-34: Das Monats-SOLL einer Zeile wird auf ihre Laufzeit im Anschaffungs-/
@@ -115,29 +128,38 @@ def _rollup_quelle(quellen: Iterable[str]) -> str:
 
 def _ranking(
     kandidaten: list[tuple[str, Optional[float], str]],
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    *,
+    zeitraum: str = "in diesem Jahr",
+) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """Bester/schwächster String — nur bei durchgängig gemessenen IST-Werten.
 
     Args:
         kandidaten: ``[(bezeichnung, performance_ratio, ist_quelle), …]``.
+        zeitraum: Zeitangabe im Satz «Nicht alle Module haben … Werte» (Jahresroute / Laufzeit).
 
     Returns:
-        ``(bester, schlechtester, hinweis)``. Ist auch nur ein String nicht
-        gemessen, bleibt die Platzierung leer und stattdessen steht der
-        Erklärsatz {@link RANKING_NICHT_MOEGLICH} in ``hinweis`` — im Mischfall
-        (mindestens ein String gemessen) {@link RANKING_TEILWEISE_VERTEILT} (N-653).
+        ``(bester, schlechtester, hinweis, grund)``. Ist auch nur ein String nicht
+        gemessen, bleibt die Platzierung leer und stattdessen steht ein Erklärsatz in
+        ``hinweis``, je Fall: ist ein String nach kWp verteilt, {@link RANKING_NICHT_MOEGLICH} —
+        im Mischfall (mindestens ein String gemessen) {@link RANKING_TEILWEISE_VERTEILT} (N-653);
+        ist nichts verteilt, aber ein String ohne jeden Wert (``fehlt``), {@link RANKING_NICHT_ALLE_WERTE}
+        (Päckchen CC). ``grund`` benennt den Fall (``VERGLEICH_GRUND_*``) für die Anzeige.
     """
     if len(kandidaten) <= 1:
-        return None, None, None
-    if any(quelle != PV_QUELLE_GEMESSEN for _, _, quelle in kandidaten):
-        teilweise = any(quelle == PV_QUELLE_GEMESSEN for _, _, quelle in kandidaten)
-        return None, None, RANKING_TEILWEISE_VERTEILT if teilweise else RANKING_NICHT_MOEGLICH
+        return None, None, None, None
+    quellen = [quelle for _, _, quelle in kandidaten]
+    if any(quelle != PV_QUELLE_GEMESSEN for quelle in quellen):
+        if PV_QUELLE_VERTEILT not in quellen:
+            return None, None, RANKING_NICHT_ALLE_WERTE.format(zeitraum=zeitraum), VERGLEICH_GRUND_NICHT_ALLE_WERTE
+        if PV_QUELLE_GEMESSEN in quellen:
+            return None, None, RANKING_TEILWEISE_VERTEILT, VERGLEICH_GRUND_TEILWEISE_VERTEILT
+        return None, None, RANKING_NICHT_MOEGLICH, VERGLEICH_GRUND_VERTEILT
     mit_perf = [(name, perf) for name, perf, _ in kandidaten if perf]
     if not mit_perf:
-        return None, None, None
+        return None, None, None, None
     sortiert = sorted(mit_perf, key=lambda x: x[1] or 0, reverse=True)
     schlechtester = sortiert[-1][0] if len(sortiert) > 1 else None
-    return sortiert[0][0], schlechtester, None
+    return sortiert[0][0], schlechtester, None, None
 
 
 async def _lade_ist_je_modul(
@@ -291,6 +313,8 @@ class PVStringsResponse(BaseModel):
     # bei verteilten Werten keine Platzierung gibt (None = Ranking gültig).
     ist_quelle: str = PV_QUELLE_FEHLT
     vergleich_hinweis: Optional[str] = None
+    #: Päckchen CC: der Fall hinter `vergleich_hinweis` — ``verteilt`` · ``teilweise_verteilt`` · ``nicht_alle_werte``.
+    vergleich_grund: Optional[str] = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -379,6 +403,8 @@ class PVStringsGesamtlaufzeitResponse(BaseModel):
     schlechtester_string: Optional[str]
     ist_quelle: str = PV_QUELLE_FEHLT
     vergleich_hinweis: Optional[str] = None
+    #: Päckchen CC: der Fall hinter `vergleich_hinweis` — ``verteilt`` · ``teilweise_verteilt`` · ``nicht_alle_werte``.
+    vergleich_grund: Optional[str] = None
 
 
 # RF-70 (5.11.2026, Bauform RF-1): die Route ist ein Orchestrator — Kopf (Anlage, Erzeuger ohne aktiv-Filter #123 mit
@@ -490,7 +516,7 @@ async def get_pv_strings(
 
     abweichung_gesamt = ist_gesamt - prognose_gesamt
     abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt * 100) if prognose_gesamt > 0 else None
-    bester_string, schlechtester_string, vergleich_hinweis = _ranking(
+    bester_string, schlechtester_string, vergleich_hinweis, vergleich_grund = _ranking(
         [(s.bezeichnung, s.performance_ratio_jahr, s.ist_quelle) for s in strings_data]
     )
 
@@ -504,7 +530,7 @@ async def get_pv_strings(
         abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
         strings=strings_data, bester_string=bester_string, schlechtester_string=schlechtester_string,
         ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
-        vergleich_hinweis=vergleich_hinweis,
+        vergleich_hinweis=vergleich_hinweis, vergleich_grund=vergleich_grund,
     )
 
 
@@ -686,8 +712,8 @@ async def get_pv_strings_gesamtlaufzeit(
 
     abweichung_gesamt = ist_gesamt_total - prognose_gesamt_total
     abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt_total * 100) if prognose_gesamt_total > 0 else None
-    bester_string, schlechtester_string, vergleich_hinweis = _ranking(
-        [(s.bezeichnung, s.performance_ratio_gesamt, s.ist_quelle) for s in strings_data]
+    bester_string, schlechtester_string, vergleich_hinweis, vergleich_grund = _ranking(
+        [(s.bezeichnung, s.performance_ratio_gesamt, s.ist_quelle) for s in strings_data], zeitraum="im Zeitraum",
     )
 
     return PVStringsGesamtlaufzeitResponse(
@@ -703,7 +729,7 @@ async def get_pv_strings_gesamtlaufzeit(
         strings=strings_data, saisonal_aggregiert=saisonal_aggregiert,
         bester_string=bester_string, schlechtester_string=schlechtester_string,
         ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
-        vergleich_hinweis=vergleich_hinweis,
+        vergleich_hinweis=vergleich_hinweis, vergleich_grund=vergleich_grund,
     )
 
 

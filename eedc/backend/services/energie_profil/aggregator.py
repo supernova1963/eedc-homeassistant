@@ -69,6 +69,12 @@ _PROGNOSE_FELDER_RETTEN: tuple[str, ...] = (
     # `pv_prognose_stundenprofil` oben, nur mit anderem Inhalt.
     "lern_soll_stundenprofil_kwh",
     "lern_soll_kwh",
+    # Päckchen CC: Stand «Mittag» je Quelle und die Kaskaden-Reihe des Korrektur-Wächters.
+    "pv_prognose_eedc_mittag_kwh",
+    "pv_prognose_om_mittag_kwh",
+    "solcast_mittag_kwh",
+    "sfml_mittag_kwh",
+    "pv_prognose_kaskade_stundenprofil",
 )
 
 

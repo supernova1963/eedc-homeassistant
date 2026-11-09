@@ -68,6 +68,11 @@ class _PrognoseZahlen:
     rest: Optional[float]
     rollend: Optional[float]
     ist_bisher: Optional[float]
+    #: Päckchen CC: der rollende eedc-Wert des Kanons — bleibt stehen, wenn ``rollend`` der gewählten Quelle folgt
+    #: (Stand «Mittag» der eedc-Spalte im Genauigkeits-Tracking).
+    kanon_rollend: Optional[float] = None
+    #: Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — ``{ausgesetzt, mae_kaskade_prozent, mae_roh_prozent, tage}``.
+    korrektur_status: Optional[dict] = None
 
 
 @dataclass
@@ -106,6 +111,9 @@ class _PersistenzAuftrag:
     pv_final_sonne_unter: bool
     lern_stundenprofil: Optional[list]
     lern_kwh: Optional[float]
+    #: Päckchen CC: die Kaskaden-Reihe (first-write) und der Stand «Mittag» je Quelle (first-write ab 12:00).
+    kaskade_stundenprofil: Optional[list] = None
+    mittag_werte: Optional[dict] = None
 
 
 # ── Stunden ──────────────────────────────────────────────────────────────────
@@ -266,7 +274,23 @@ async def _kanon_zahlen(db, anlage, profil: list[dict], pv_prognose: Optional[fl
             pv_prognose = kanon_heute.eedc_kwh
         if kanon_heute.profil is not None:
             _export_slots_ins_profil(profil, kanon_heute.profil.stundenprofil_export_kwh)
-    return _PrognoseZahlen(kanon_heute, pv_prognose, pv_prognose_rest, pv_prognose_rollend, pv_ist_bisher)
+    return _PrognoseZahlen(
+        kanon_heute, pv_prognose, pv_prognose_rest, pv_prognose_rollend, pv_ist_bisher,
+        kanon_rollend=pv_prognose_rollend, korrektur_status=_korrektur_status(kanon),
+    )
+
+
+def _korrektur_status(kanon) -> Optional[dict]:
+    """Päckchen CC: der Wächter-Stand für die Antwort — ``None``, wenn der Wächter nicht lief."""
+    nutzen = getattr(kanon, "korrektur_nutzen", None) if kanon is not None else None
+    if nutzen is None:
+        return None
+    return {
+        "ausgesetzt": nutzen.ausgesetzt,
+        "mae_kaskade_prozent": nutzen.mae_kaskade_prozent,
+        "mae_roh_prozent": nutzen.mae_roh_prozent,
+        "tage": nutzen.tage,
+    }
 
 
 #: N-690 (ADR-002 P4): der Satz, den die Antwort trägt, wenn die eedc-Werte von
@@ -635,6 +659,7 @@ def _prognose_quelle_tage(
 
 def _persistenz_auftrag(
     anlage, now, kanon_heute, pv_stundenprofil: Optional[list], stand: _QuellenStand,
+    kanon_rollend: Optional[float] = None,
 ) -> Optional[_PersistenzAuftrag]:
     """Was `_speichere_prognose` bekommt — ``None``, wenn es nichts zu speichern gibt."""
     # Prognose für Lernfaktor-Berechnung + SFML + Solcast speichern (fire-and-forget).
@@ -696,8 +721,21 @@ def _persistenz_auftrag(
             or lern_kwh is not None):
         return _PersistenzAuftrag(
             om_prognose, om_stundenprofil, pv_final_sonne_unter, lern_stundenprofil, lern_kwh,
+            # Päckchen CC: die Kaskade (unvollständiger Fan-out ⇒ nichts einfrieren, #306) und der Stand «Mittag».
+            kaskade_stundenprofil=None if om_unvollstaendig else kanon_heute.kaskade_stundenprofil_kwh,
+            mittag_werte=_mittag_werte(kanon_heute, kanon_rollend, stand),
         )
     return None
+
+
+def _mittag_werte(kanon_heute, kanon_rollend: Optional[float], stand: _QuellenStand) -> dict:
+    """Päckchen CC: die Werte je Mittag-Spalte — eedc rollend (Kanon), OpenMeteo Modell-Tageswert (gekappt), Solcast, SFML."""
+    return {
+        "pv_prognose_eedc_mittag_kwh": kanon_rollend,
+        "pv_prognose_om_mittag_kwh": kanon_heute.om_kwh if kanon_heute is not None else None,
+        "solcast_mittag_kwh": stand.solcast_kwh,
+        "sfml_mittag_kwh": stand.sfml_kwh,
+    }
 
 
 # ── Antwort ──────────────────────────────────────────────────────────────────
@@ -737,6 +775,8 @@ def _antwort(
         # die nachgeführte Zahl oben und diese klein daneben.
         "pv_prognose_heute_rollend_kwh": zahlen.rollend,
         "pv_ist_bisher_kwh": zahlen.ist_bisher,
+        # Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» (None, wenn er nicht lief).
+        "korrektur_status": zahlen.korrektur_status,
         # N-690 (P4): stammen Tageswert/PV-Kurve aus einem unvollständigen
         # lokalen Fan-out, sagt die Antwort es selbst (s. `_teilsumme_hinweis`).
         "pv_prognose_hinweis": teilsumme_hinweis,

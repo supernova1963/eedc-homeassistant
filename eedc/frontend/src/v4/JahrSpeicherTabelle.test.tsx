@@ -65,10 +65,11 @@ describe('Solar-Anteil (Päckchen BB: aus dem Backend)', () => {
     expect(z.solaranteil).toBeNull()
   })
 
-  it('die Fußzeile liest den Jahr-Kopf und zeigt «—», solange im Jahr keine Netzladung über 0 erfasst ist', () => {
+  it('die Fußzeile liest den Jahr-Kopf wie die Zeile: gemessene 0 ⇒ 100 %, kein Wert ⇒ «—»', () => {
     expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: 250, speicher_solaranteil_prozent: 75 }))).toBe(75)
-    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: 0, speicher_solaranteil_prozent: 100 }))).toBeNull()
-    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: null }))).toBeNull()
+    // Päckchen CC: gemessene 0 kWh Netzladung ⇒ 100 % wie die Monatszeile (ADR-002/P4), kein Wert ⇒ «—».
+    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: 0, speicher_solaranteil_prozent: 100 }))).toBe(100)
+    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: null, speicher_solaranteil_prozent: null }))).toBeNull()
     expect(solarAnteilFuss(null)).toBeNull()
   })
 })

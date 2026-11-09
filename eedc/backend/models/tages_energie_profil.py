@@ -258,6 +258,15 @@ class TagesZusammenfassung(Base):
     # `pv_prognose_final_kwh` (`pv_prognose_final_at`). Leser: Genauigkeits-Tracking, Zeitpunkt «Abend». Rückwärts
     # leer (NULL = «nicht erhoben»): der Kanon-Tageswert rollt, ein früherer Abendstand ist nirgends aufgezeichnet.
     pv_prognose_eedc_final_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Päckchen CC: der Stand «Mittag» je Quelle — first-write ab 12:00 lokal (`live_wetter._mittag_einfrieren`; Prefetch
+    # alle 45 min ⇒ erster Schreiber bis 12:45, SFML nur die Live-Sicht). eedc = `KanonPrognose.heute_rollend_kwh` (IST bisher
+    # + Rest), OpenMeteo = Modell-Tageswert des Laufs (`KanonTag.om_kwh`, gekappt — dieselbe Skala wie Σ
+    # `lern_soll_stundenprofil_kwh`), Solcast `solcast_kwh` (tagsüber per Satellit nachgeführt), SFML `sfml_kwh`. Leser:
+    # Genauigkeits-Tracking, Zeitpunkt «Mittag». Rückwärts leer (NULL = «nicht erhoben»), kein Backfill.
+    pv_prognose_eedc_mittag_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pv_prognose_om_mittag_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    solcast_mittag_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sfml_mittag_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Solar Forecast ML Tagesprognose (kWh): Von SFML-Sensor gelesene ML-Prognose.
     # Für Phase 2: Cockpit-Vergleich EEDC vs. ML vs. IST.
@@ -310,6 +319,12 @@ class TagesZusammenfassung(Base):
     #
     # First-write-wins wie die Vorhersage-Profile (Day-Ahead-Charakter).
     lern_soll_stundenprofil_kwh: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Päckchen CC (Wächter «Korrektur nur, wenn sie hilft»): **immer** die Kaskaden-Reihe (korrigiert + gekappt, 24
+    # Backward-Slots), first-write-wins wie `pv_prognose_stundenprofil` — unabhängig davon, ob der Kanon die Korrektur
+    # gerade aussetzt. `pv_prognose_stundenprofil` bleibt «was eedc gezeigt hat» (N-782); ist die Korrektur ausgesetzt,
+    # trägt jenes die Rohreihe und dieses die Kaskade, gegen die der Wächter weiter misst. Rückwärts leer: der Wächter
+    # liest dann `pv_prognose_stundenprofil` (bis zur Spalte identisch, weil nie ausgesetzt).
+    pv_prognose_kaskade_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # Σ der Lern-SOLL-Slots (= `KanonTag.om_kwh`, dieselbe `om_slots`-Quelle) —
     # das Tages-SOLL der Skalar-Stufe. Letzter Schreiber gewinnt (der Tageswert
     # rollt mit OpenMeteo mit, wie `pv_prognose_kwh`).

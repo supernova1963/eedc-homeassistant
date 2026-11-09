@@ -225,3 +225,23 @@ async def test_anschaffungsdatum_grenze_bleibt(db):
 
     jahr = await get_pv_strings(anlage_id=anlage.id, jahr=2026, db=db)
     assert _ist_je_string(jahr) == {"Alt": 1000.0, "Neu": 0.0}
+
+
+def test_cc_ranking_satz_je_fall():
+    """Päckchen CC (Kleineres aus BB4): hat ein String im Jahr GAR KEINEN Wert (`fehlt`, vor der Anschaffung) und ist
+    nichts verteilt, bleibt die Sperre — der Satz nennt aber den Grund («nicht alle Module haben … Werte») statt
+    «ein Teil ist anteilig verteilt» (r28/r27 2023). Die übrigen Fälle unverändert; `grund` benennt den Fall."""
+    from backend.api.routes.cockpit.pv_strings import (
+        RANKING_NICHT_ALLE_WERTE, VERGLEICH_GRUND_NICHT_ALLE_WERTE, VERGLEICH_GRUND_TEILWEISE_VERTEILT,
+        VERGLEICH_GRUND_VERTEILT, _ranking,
+    )
+    from backend.core.berechnungen import PV_QUELLE_FEHLT
+
+    g, v, f = PV_QUELLE_GEMESSEN, PV_QUELLE_VERTEILT, PV_QUELLE_FEHLT
+    assert _ranking([("A", 1.0, g), ("B", None, f)]) == (
+        None, None, RANKING_NICHT_ALLE_WERTE.format(zeitraum="in diesem Jahr"), VERGLEICH_GRUND_NICHT_ALLE_WERTE,
+    )
+    assert "im Zeitraum" in _ranking([("A", 1.0, g), ("B", None, f)], zeitraum="im Zeitraum")[2]
+    assert _ranking([("A", 1.0, g), ("B", 0.9, v)])[2:] == (RANKING_TEILWEISE_VERTEILT, VERGLEICH_GRUND_TEILWEISE_VERTEILT)
+    assert _ranking([("A", 1.0, v), ("B", 0.9, f)])[2:] == (RANKING_NICHT_MOEGLICH, VERGLEICH_GRUND_VERTEILT)
+    assert _ranking([("A", 1.0, g), ("B", 0.9, g)]) == ("A", "B", None, None)

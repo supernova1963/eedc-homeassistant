@@ -133,6 +133,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   angeschafftes Balkonkraftwerk) — bisher stand dann der Satz „Nicht alle Module haben gemessene Werte", obwohl alle
   gemessen sind. Sind Werte anteilig verteilt, bleibt der Satz. Der CSV-Export dieses Modus trägt die Werte jetzt
   gerundet wie im Einzeljahr.
+- **Auswertungen → Prognose, Genauigkeits-Tracking: dritter Zeitpunkt „Mittag".** Neben Day-Ahead und Abend vergleicht der
+  Umschalter jetzt auch den Stand um die Tagesmitte: eedc hält ihn beim ersten Prognose-Lauf ab 12 Uhr fest (spätestens
+  12:45) — für eedc das bis Mittag gemessene IST plus die Prognose für den Rest, für Solcast den per Satellit
+  nachgeführten Wert, für OpenMeteo den Modelllauf. Ältere Tage zeigen „nicht erhoben".
+- **Prognose-Korrektur nur, wenn sie hilft.** eedc vergleicht jeden Tag den mittleren Fehler seiner korrigierten
+  Day-Ahead-Prognose der letzten 30 Tage mit dem der rohen OpenMeteo-Prognose. Ist die Korrektur mehr als 2 Prozentpunkte
+  schlechter (ab 14 vergleichbaren Tagen), setzt eedc sie aus und zeigt die rohe Prognose — in der App und in den
+  HA-Sensoren —, bis sie wieder hilft. Gelernt wird weiter. *Auswertungen → Prognose* sagt es in einer Kopfzeile, der
+  Sensor „PV-Prognose heute" trägt die Attribute `korrektur_ausgesetzt`, `korrektur_mae_30_prozent`, `roh_mae_30_prozent`.
+- **Auswertungen → Prognose: welche Quelle an deiner Anlage am besten trifft.** Unter den Kennzahlen des
+  Genauigkeits-Trackings steht je Zeitpunkt die Quelle mit dem kleinsten mittleren Fehler (ab 14 Tagen mit Werten); liegt
+  Solcast vorn und ist nicht deine Quelle, nennt der Satz den Weg in die Einstellungen.
+- **PV-Strings: der Satz zur fehlenden Platzierung nennt den richtigen Grund.** Hat ein String in einem Jahr gar keine
+  Werte (etwa vor seiner Anschaffung), gibt es für das Jahr weiter keine Platzierung — der Satz lautet jetzt „Nicht alle
+  Module haben in diesem Jahr Werte" statt „ein Teil ist anteilig verteilt", und das Zeichen davor ist „offen" statt
+  „geschätzt (kWp-Anteil)".
+- **Cockpit → Jahr, Speicher-Tabelle: die Fußzeile „Solar-Anteil" wie die Monatszeilen.** Ist im Jahr eine Netzladung von
+  0 kWh erfasst, zeigt die Fußzeile 100 % (bisher „—"); ohne erfasste Netzladung bleibt „—".
+- **Cockpit → Tag: ein Hinweis, wenn das Tagesdetail nicht geladen ist.** Fehlt es (Ladefehler), stehen Speicher-Bilanz
+  und E-Mobilität ohne Werte — jetzt sagt die Sicht das, statt die Blöcke still leer zu lassen.
 - **Handbuch: eedc-Karte auf dem Wandtablet (Fully Kiosk, eingeschränkter Benutzer) und „Tag reparieren“ im Daten-Checker
   genauer beschrieben** — Kategorien ohne Fehler und Warnungen starten zugeklappt, und an Tagen aus dem HA-Spiegel kommt eine
   Korrektur in Home Assistant nicht über den Knopf, sondern über den nächtlichen Abgleich oder „HA-Spiegel jetzt abgleichen“.
@@ -157,6 +177,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Überschrift (Verweise auf die frühere Energieprofil-Sicht auf „Wo ist X hin?“).
 
 ### Intern
+
+- **Päckchen CC (9.11.2026): Prognose-Genauigkeit «Mittag», Korrektur-Wächter, Quellen-Empfehlung.** Fünf Spalten in
+  `tages_zusammenfassung` (`pv_prognose_eedc_mittag_kwh`, `pv_prognose_om_mittag_kwh`, `solcast_mittag_kwh`,
+  `sfml_mittag_kwh` — first-write ab 12:00 über `live_wetter._mittag_einfrieren`; `pv_prognose_kaskade_stundenprofil` —
+  first-write, immer die Kaskaden-Reihe), Migration und beide Rettungslisten. Neue Layer-Module
+  `core/berechnungen/prognose_korrektur_nutzen.py` (Regel mit Hysterese) und `core/berechnungen/prognose_nachfuehrung.py`
+  (Nachführ-Faktor, SOLL bis zur IST-Grenze — die Abweichungs-Ampel liest `soll_bisher_kwh`, Zahl unverändert; der Faktor
+  ist im Kanon noch nicht verdrahtet), Service `services/prognose_korrektur_nutzen.py` (Tagescache), Kanon-Weiche
+  (`KanonPrognose.korrektur_ausgesetzt`/`korrektur_nutzen`, `KanonTag.kaskade_stundenprofil_kwh`), Layer
+  `prognose_genauigkeit.beste_quelle`; Antwortfelder `korrektur_status` (Live, Genauigkeit), `beste_quelle`,
+  `beste_quelle_mae_prozent`, `prognose_quelle`; PV-Strings `vergleich_grund`. Tests `test_prognose_nachfuehrung.py`,
+  `test_prognose_korrektur_nutzen.py`, Ergänzungen in `test_genauigkeit_zeitpunkt.py` und `test_pv_strings_kwp_verteilung.py`.
 
 - **Päckchen BB (9.11.2026): Speicher-Bilanz und Tag-Felder aus dem Backend.** Bilanz, Verlust, Wirkungsverluste (mit ihren
   zwei Teilen und der Kappung des Netz-Anteils) und Solar-Anteil des Speichers stehen als Felder an *Cockpit → Monat/Jahr*

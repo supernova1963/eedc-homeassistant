@@ -3604,6 +3604,11 @@ Strings ohne Performance Ratio (ohne Prognose, ohne SOLL) oder mit 0 zählen nic
 leer, ohne Hinweis. Ist auch nur ein String verteilt statt gemessen, steht statt der Platzierung der Erklärsatz —
 im Mischfall (mindestens ein String gemessen) der Satz „Nicht alle Module haben gemessene Werte …" (N-653), sonst
 „Die Werte je Modul sind nicht gemessen …" (A4/E3, s. oben „Der kWp-Anteil ist ein Prognose-, kein Ertragsschlüssel").
+Ist nichts verteilt, aber ein String hat im Zeitraum **gar keinen** Wert (`fehlt`, etwa ein Jahr vor seiner Anschaffung),
+bleibt die Sperre — der Satz lautet dann „Nicht alle Module haben in diesem Jahr (bzw. im Zeitraum) Werte …" (Päckchen CC;
+bis dahin stand dort der Mischfall-Satz „ein Teil ist anteilig verteilt", der nicht zutraf). Das Feld `vergleich_grund`
+(`verteilt` · `teilweise_verteilt` · `nicht_alle_werte`) sagt der Anzeige, welches Zeichen sie setzt («geschätzt
+(kWp-Anteil)» bzw. «offen»).
 
 ### 3.10 Sonstige Positionen
 
@@ -3984,6 +3989,33 @@ neuen Datenpunkten erreicht ist (Keep-Regel N-547, §6b). Code-Orte (RF-85): `_t
 `_stufe_sonnenstand` (beide über `_flache_faktoren`) · `_stufe_stunde` (Kaskade `_stunde_zelle`) · `_stufe_skalar`
 · `_ergebnis`.
 
+#### Korrektur nur, wenn sie hilft
+
+Die Korrektur (Kaskade oben) soll die OpenMeteo-Rohprognose **verbessern**. Ein Wächter prüft das je Anlage einmal am
+Tag (`services/prognose_korrektur_nutzen.korrektur_nutzen`, Tagescache; Regel im Layer
+`core/berechnungen/prognose_korrektur_nutzen.korrektur_aussetzen`) über die letzten 30 Tage vor heute, Zeitpunkt
+Day-Ahead:
+
+```
+je Tag (ohne Zählerlücken-Tage, IST > 0,5 kWh):  e_kaskade = (Σ Kaskaden-Reihe − IST) ÷ IST
+                                                  e_roh     = (Σ lern_soll_stundenprofil_kwh − IST) ÷ IST
+gepaart nur Tage, an denen beide einen Fehler haben;  MAE_kaskade, MAE_roh wie im Genauigkeits-Tracking
+aussetzen,          wenn MAE_kaskade > MAE_roh + 2 Punkte
+wieder einschalten, wenn MAE_kaskade ≤ MAE_roh + 2 − 1 Punkte;  dazwischen bleibt der Zustand des Vortags
+nie aussetzen unter 14 gepaarten Tagen und nie ohne beide MAE
+```
+
+Kaskaden-Reihe ist `pv_prognose_kaskade_stundenprofil` (first-write wie die übrigen Day-Ahead-Profile, **immer** die
+Kaskade); für Tage vor dieser Spalte die gezeigte Reihe `pv_prognose_stundenprofil` (bis dahin identisch, weil nie
+ausgesetzt). **Ausgesetzt** heißt: der Kanon rechnet für alle Tage des Horizonts mit Faktor 1,0 (die gekappte Rohreihe;
+ohne Stundenprofil der Tageswert ohne Skalar) — Tageswert, Stundenprofil, Rest, Sensoren und `pv_prognose_stundenprofil`
+zeigen dann OpenMeteo roh. Die Kaskade wird trotzdem gerechnet und eingefroren, damit der Wächter weiter misst und die
+Korrektur von selbst wieder einschaltet. **Das Lernen ist unberührt:** der Aggregator lernt weiter gegen das Lern-SOLL.
+Toleranz, Hysterese und Mindesttage sind Annahmen (Konzept 9.11.2026 §7, Zielmarke Z1 «nie dauerhaft schlechter als
+OpenMeteo roh»). Sichtbar: Live-Antwort `korrektur_status`, Genauigkeits-Antwort `korrektur_status` (Kopfzeile in
+*Auswertungen → Prognose*, Block ④, nur wenn ausgesetzt), HA-Attribute `korrektur_ausgesetzt`,
+`korrektur_mae_30_prozent`, `roh_mae_30_prozent` am Sensor `eedc_prognose_heute_kwh`.
+
 #### Genauigkeits-Tracking: MAE + MBE getrennt (v3.22.0, #151)
 
 Über alle Tage mit gleichzeitig verfügbarer Prognose und IST werden zwei Kennzahlen pro Quelle (OM, eedc, Solcast) berechnet, auf **vorzeichenbehafteten relativen Fehlern**:
@@ -4000,15 +4032,21 @@ MBE = Ø  err_rel      # Mean Bias Error — systematischer Bias
 | **MAE** | Wie weit liegen Prognose und IST im Schnitt auseinander, **unabhängig von der Richtung**? Maß für Streuung/Schwankungsbreite. |
 | **MBE** | Liegt die Quelle im Mittel **über** (positiv) oder **unter** (negativ) dem IST? Bias ist neutral gefärbt — Vorzeichen ist Information, keine Wertung. |
 
-**Welcher Prognosewert (N-782, 9.11.2026).** `Prognose_kWh` ist je Quelle der Stand eines festen **Zeitpunkts**
-(Query `zeitpunkt`, Standard `day_ahead`; Auswahl in `services/prognose_genauigkeit_service.prognosen_zum_zeitpunkt`):
+**Welcher Prognosewert (N-782, 9.11.2026; «Mittag» seit Päckchen CC).** `Prognose_kWh` ist je Quelle der Stand eines
+festen **Zeitpunkts** (Query `zeitpunkt`, Standard `day_ahead`; Auswahl in
+`services/prognose_genauigkeit_service.prognosen_zum_zeitpunkt`):
 
-| Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Abend (eingefrorener Tageswert) |
-| --- | --- | --- |
-| eedc | `pv_prognose_stundenprofil` — die angezeigte, korrigierte Kanon-Reihe | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
-| OpenMeteo | `lern_soll_stundenprofil_kwh` — roh, **gekappt** | `pv_prognose_final_kwh`, Fallback `pv_prognose_kwh` — roh, **ungekappt** |
-| Solcast | `solcast_prognose_stundenprofil` | `solcast_prognose_kwh` (letzter Schreiber, per Satellit nachgeführt) |
-| SFML (nur Wert, keine Kennzahl) | `sfml_prognose_stundenprofil` | `sfml_prognose_kwh` |
+| Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Mittag (first-write ab 12:00) | Abend (eingefrorener Tageswert) |
+| --- | --- | --- | --- |
+| eedc | `pv_prognose_stundenprofil` — die angezeigte Kanon-Reihe | `pv_prognose_eedc_mittag_kwh` = `heute_rollend_kwh` (IST bisher + Rest) | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
+| OpenMeteo | `lern_soll_stundenprofil_kwh` — roh, **gekappt** | `pv_prognose_om_mittag_kwh` = `KanonTag.om_kwh` des Laufs — roh, **gekappt** | `pv_prognose_final_kwh`, Fallback `pv_prognose_kwh` — roh, **ungekappt** |
+| Solcast | `solcast_prognose_stundenprofil` | `solcast_mittag_kwh` (per Satellit nachgeführt) | `solcast_prognose_kwh` (letzter Schreiber, per Satellit nachgeführt) |
+| SFML (nur Wert, keine Kennzahl) | `sfml_prognose_stundenprofil` | `sfml_mittag_kwh` (nur die Live-Sicht schreibt) | `sfml_prognose_kwh` |
+
+**Mittag** ist der Stand des ersten Laufs ab 12:00 lokal (`live_wetter._mittag_einfrieren`, je Spalte first-write): der
+Prefetch läuft alle 45 Minuten und schreibt also bis 12:45, die Live-Sicht schreibt, wenn sie vorher geöffnet wird. Er
+vergleicht, was die Quellen um die Tagesmitte wissen — eedc das gemessene IST des Vormittags plus den Rest, Solcast
+seine Satelliten-Nachführung, OpenMeteo den Modelllauf. Rückwärts leer («nicht erhoben»).
 
 Ohne aufgezeichneten Stand `None` („nicht erhoben"), kein Rückfall auf den anderen Zeitpunkt; ein Profil mit Σ ≤ 0 gilt
 als nicht erhoben (Nullreihe = keine Daten). Ausreißer-Markierung (#296) und MAE/MBE/Asymmetrie rechnen mit den Werten
@@ -4016,6 +4054,19 @@ des gewählten Zeitpunkts. Bis N-782 war eedc hier `OM-Endwert × heutiger Skala
 Tage. Die HA-Abweichungs-Ampel (`eedc_mae_prozent`) nimmt den eedc-Day-Ahead-Stand; ohne Day-Ahead-Profile keine Reihe
 und keine Schwelle (P4). Benannte Grenze: OpenMeteo wechselt mit dem Zeitpunkt zwischen gekappter und ungekappter
 Größe (an Anlagen ohne AC-Grenze gleich).
+
+**Quellen-Empfehlung (Päckchen CC).** Die Antwort trägt je Zeitpunkt `beste_quelle` und `beste_quelle_mae_prozent`: die
+Quelle mit der kleinsten MAE unter eedc, OpenMeteo und Solcast, die im Zeitraum mindestens **14 Tage** mit Tagesfehler
+haben (Layer `prognose_genauigkeit.beste_quelle`; SFML nicht — Tom-HA-Regel; bei gleicher MAE eedc). Unter 14 Tagen
+`None`. Die Wahl trifft das Backend, der Client zeigt den Satz; ist Solcast vorn und nicht die gewählte Quelle
+(`prognose_quelle`, Einstellung), nennt er den Weg *Einstellungen → Stammdaten → Anlage* («PV-Prognose-Quelle»).
+
+**SOLL bis zur IST-Grenze (Päckchen CC).** Die Abweichungs-Ampel (`eedc_prognose_abweichung_heute_prozent`) summiert das
+SOLL über `core/berechnungen/prognose_nachfuehrung.soll_bisher_kwh` (Σ Slots bis einschließlich `ist_bisher_bis_slot`,
+N-544, Zahl unverändert). Im selben Modul steht der Nachführ-Faktor für «Rest heute» (`nachfuehr_faktor`,
+`f = clip(1 + (r − 1)·√w, 0,4, 1,6)`, Backtest Winterborn 1.9.–8.11.2026); **im Kanon ist er noch nicht verdrahtet** —
+die Ausrichtungs-Probe ergab, dass an einem Kanal-Tag das IST im Beginn-Raster und das Prognose-Profil im
+Backward-Raster indexiert sind (eine Stunde Versatz); die Entscheidung dazu steht aus.
 
 #### Asymmetrie-Diagnostik (v3.23.3, #151 Variante B)
 

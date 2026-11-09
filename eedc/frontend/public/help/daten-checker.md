@@ -109,7 +109,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 ## 3. Verfügbarkeit nach Installationsvariante <a name="3-verfuegbarkeit-nach-installationsvariante"></a>
 
-eedc prüft **38 Kategorien** (Stand 9.11.2026, gezählt an `CheckKategorie`; die Tabelle führt 36 davon — *E-Mobilität – unbekannter Zustand* und *E-Mobilität – Fahrzeug der Steuerung unbekannt* sind noch nicht beschrieben; am 25.10.2026 stand hier 36, am 10.10.2026 33, davor 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **zwölf** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen, Zeile 12a) und zählt deshalb einmal.
+eedc prüft **38 Kategorien** (Stand 9.11.2026, gezählt an `CheckKategorie`; seit 9.11.2026 führt die Tabelle alle 38 — am 25.10.2026 stand hier 36, am 10.10.2026 33, davor 26 — die Zahl war mit den jüngeren Kategorien nicht mitgewachsen). Die meisten greifen in jeder Installation identisch; **vierzehn** hängen an Voraussetzungen, die je nach Installation gegeben sind oder nicht — sie sind unten fett markiert. Die Kategorie *Datenquelle – aktiver Pfad* trägt zwei Befund-Familien (Zeile 12 und die Statusmeldungen der Datenquellen, Zeile 12a) und zählt deshalb einmal.
 
 | # | Kategorie | HA Add-on | Standalone (Docker / native) |
 |---|-----------|-----------|------------------------------|
@@ -150,6 +150,8 @@ eedc prüft **38 Kategorien** (Stand 9.11.2026, gezählt an `CheckKategorie`; di
 | 26 | Verbrauchszähler – Zählerstände (§4.23) | greift | greift |
 | 27 | Vergleichspreise – Ø Benzinpreis (§4.24) | greift | greift |
 | 28 | Wetterwerte – fehlende Monatswerte (§4.25) | greift | greift |
+| 29 | **E-Mobilität – unbekannter Zustand** ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)) | nur wenn ein Zustand der E-Mobilität (Ladezustand, Lademodus, Fahrzeug-Ladezustand, Standort) zugeordnet ist — gelesen wird der aktuelle HA-Zustand | nur wenn ein Zustand zugeordnet ist — gelesen wird der letzte MQTT-Wert |
+| 30 | **E-Mobilität – Fahrzeug der Steuerung unbekannt** ([Einstellungen §7.10](HANDBUCH_EINSTELLUNGEN.md#710-zustand-und-sitzung-e-mobilität)) | nur wenn „Fahrzeug am Ladepunkt“ an einer Wallbox zugeordnet ist | nur wenn „Fahrzeug am Ladepunkt“ zugeordnet ist (MQTT) |
 
 ### Was bedeutet „wird übersprungen"?
 

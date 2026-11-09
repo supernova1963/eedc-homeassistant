@@ -381,6 +381,8 @@ export interface PVStringsResponse {
   ist_quelle: PVIstQuelle
   /** Erklärt, warum es keine Platzierung gibt (null = Ranking gültig). */
   vergleich_hinweis: string | null
+  // Päckchen CC: der Fall hinter `vergleich_hinweis` (Backend) — 'verteilt' · 'teilweise_verteilt' · 'nicht_alle_werte'
+  vergleich_grund?: string | null
   /** Päckchen BB4: spezifischer Ertrag des Zeitraums = IST gesamt ÷ Anlagen-kWp (Backend, Layer
    *  `kennzahlen.spezifischer_ertrag_kwh_kwp`); `null` ohne kWp. */
   spezifischer_ertrag_kwh_kwp?: number | null
@@ -480,6 +482,8 @@ export interface PVStringsGesamtlaufzeitResponse {
   ist_quelle: PVIstQuelle
   /** Erklärt, warum es keine Platzierung gibt (null = Ranking gültig). */
   vergleich_hinweis: string | null
+  // Päckchen CC: der Fall hinter `vergleich_hinweis` (Backend) — 'verteilt' · 'teilweise_verteilt' · 'nicht_alle_werte'
+  vergleich_grund?: string | null
 }
 
 // =============================================================================

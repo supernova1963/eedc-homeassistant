@@ -5,7 +5,7 @@ Zwei Dinge stehen hier, und beide brauchen die Auswertung *Prognosen → Genauig
 HA-Exports (S3/P6, ``eedc_mae_prozent``) — damit beide dieselbe Zahl nennen:
 
 1. :func:`prognosen_zum_zeitpunkt` — der Prognosewert je Quelle für einen vergangenen Tag,
-   zu einem von zwei **Zeitpunkten** (N-782):
+   zu einem von drei **Zeitpunkten** (N-782, «Mittag» seit Päckchen CC):
 
    * ``day_ahead`` — Σ der gespeicherten first-write-Stundenprofile: eedc
      ``pv_prognose_stundenprofil`` (die gezeigte, korrigierte Kanon-Reihe), OpenMeteo
@@ -13,6 +13,10 @@ HA-Exports (S3/P6, ``eedc_mae_prozent``) — damit beide dieselbe Zahl nennen:
      SFML ``sfml_prognose_stundenprofil``. eedc, OpenMeteo und Solcast schreibt der Prefetch im
      ersten Lauf nach Mitternacht (bis 00:45; Solcast erst seit N-782 — davor beim ersten Aufruf
      der Live-Sicht), SFML nur die Live-Sicht beim ersten Aufruf des Tages.
+   * ``mittag`` (Päckchen CC) — der Stand beim ersten Lauf ab 12:00 lokal (Prefetch bis 12:45 oder die Live-Sicht):
+     eedc ``pv_prognose_eedc_mittag_kwh`` (IST bisher + Rest des Kanons), OpenMeteo ``pv_prognose_om_mittag_kwh``
+     (Modell-Tageswert des Laufs, gekappt), Solcast ``solcast_mittag_kwh`` (per Satellit nachgeführt), SFML
+     ``sfml_mittag_kwh``. Ab dem Päckchen erhoben, ältere Tage ``None``.
    * ``abend`` — die eingefrorenen Abendstände: OpenMeteo ``pv_prognose_final_kwh`` (Fallback
      ``pv_prognose_kwh``, roh und **ungekappt**), eedc ``pv_prognose_eedc_final_kwh`` (seit N-782),
      Solcast ``solcast_prognose_kwh`` (letzter Schreiber, tagsüber per Satellit nachgeführt),
@@ -48,9 +52,9 @@ from backend.models.tages_energie_profil import TagesZusammenfassung
 
 logger = logging.getLogger(__name__)
 
-#: Die zwei Zeitpunkte des Genauigkeits-Trackings (N-782). Day-Ahead ist der Standard: er vergleicht
-#: gleich lange Vorlaufzeiten; der Abendstand von Solcast ist per Satellit nachgeführt.
-Zeitpunkt = Literal["day_ahead", "abend"]
+#: Die drei Zeitpunkte des Genauigkeits-Trackings (N-782; «Mittag» seit Päckchen CC). Day-Ahead ist der Standard: er
+#: vergleicht gleich lange Vorlaufzeiten; der Mittags- und der Abendstand von Solcast sind per Satellit nachgeführt.
+Zeitpunkt = Literal["day_ahead", "mittag", "abend"]
 ZEITPUNKT_STANDARD: Zeitpunkt = "day_ahead"
 
 
@@ -80,8 +84,15 @@ class TagesPrognosen:
 def prognosen_zum_zeitpunkt(tz: TagesZusammenfassung, zeitpunkt: str) -> TagesPrognosen:
     """Die Prognosewerte eines vergangenen Tages zum gewählten Zeitpunkt (Modul-Kopf).
 
-    Jeder Wert, der nicht ``"abend"`` ist, gilt als Day-Ahead (der Standard der Route).
+    Jeder Wert, der nicht ``"abend"`` oder ``"mittag"`` ist, gilt als Day-Ahead (der Standard der Route).
     """
+    if zeitpunkt == "mittag":
+        return TagesPrognosen(
+            openmeteo_kwh=tz.pv_prognose_om_mittag_kwh,
+            eedc_kwh=tz.pv_prognose_eedc_mittag_kwh,
+            solcast_kwh=tz.solcast_mittag_kwh,
+            sfml_kwh=tz.sfml_mittag_kwh,
+        )
     if zeitpunkt == "abend":
         # Prognose-Kanon §6: der konvergenz-gefrorene Endwert hat Vorrang, solange ein Tag
         # noch nicht final ist der rollende Wert — die Vorrangregel aus der Zeit vor N-782.

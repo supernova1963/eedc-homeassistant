@@ -50,6 +50,12 @@ def test_rettungsliste_deckt_alle_prognose_felder():
         "lern_soll_kwh",
         # N-782: Abendstand der eedc-Prognose (friert mit `pv_prognose_final_at` ein).
         "pv_prognose_eedc_final_kwh",
+        # Päckchen CC: Stand «Mittag» je Quelle und die Kaskaden-Reihe des Korrektur-Wächters.
+        "pv_prognose_eedc_mittag_kwh",
+        "pv_prognose_om_mittag_kwh",
+        "solcast_mittag_kwh",
+        "sfml_mittag_kwh",
+        "pv_prognose_kaskade_stundenprofil",
     }
     fehlend = vom_wetter_endpoint_geschrieben - set(_PROGNOSE_FELDER_RETTEN)
     assert not fehlend, (

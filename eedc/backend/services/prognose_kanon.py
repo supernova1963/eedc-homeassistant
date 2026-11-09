@@ -59,6 +59,7 @@ from backend.core.berechnungen.prognose_korrektur import (
     KorrigiertesTagesprofil,
     korrigiere_tagesprofil,
 )
+from backend.core.berechnungen.prognose_korrektur_nutzen import KorrekturNutzen
 from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.tages_energie_profil import TagesEnergieProfil
@@ -116,6 +117,10 @@ class KanonTag:
     abregelung_om_stundenprofil_kwh: Optional[list] = None
     #: `{grenz_id: kW}` — die Grenzen, an denen gekappt wurde.
     grenzen_kw: Optional[dict] = None
+    #: Päckchen CC (Wächter «Korrektur nur, wenn sie hilft»): die 24 Export-Slots der **Kaskaden**-Reihe — immer gerechnet,
+    #: auch wenn der Wächter die Korrektur aussetzt und `profil` dann die Rohreihe trägt. Persistiert als
+    #: `pv_prognose_kaskade_stundenprofil`, damit der Wächter weiter gegen die Kaskade messen kann. `None` ohne Stundenprofil.
+    kaskade_stundenprofil_kwh: Optional[list] = None
 
     @property
     def roh_kwh(self) -> Optional[float]:
@@ -166,6 +171,10 @@ class KanonPrognose:
     #: vergleicht er 13 IST-Stunden gegen 14 SOLL-Stunden und meldet morgens
     #: eine Abweichung, die es nicht gibt.
     ist_bisher_bis_slot: Optional[int] = None
+    #: Päckchen CC: hat der Wächter die Korrektur ausgesetzt (Faktor 1,0 auf allen Slots des Horizonts)?
+    korrektur_ausgesetzt: bool = False
+    #: Päckchen CC: der Wächter-Stand (beide MAE der letzten 30 Tage, Tage, Zustand) — `None`, wenn er nicht lief.
+    korrektur_nutzen: Optional[KorrekturNutzen] = None
 
 
 # Untergrenze des Kanon-Horizonts: so viele Tage, wie der weitest blickende
@@ -401,6 +410,8 @@ async def kanon_tagesprognose(
     # mit 12-kW-Grenze −12,4 %). `None`, solange zu wenige Tage ein
     # `lern_soll_kwh` tragen — dann bleibt es beim bisherigen Verhalten.
     skalar_gekappt = await _get_lernfaktor_gekappt(anlage.id, db)
+    # Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — je Tag einmal gemessen (Tagescache im Service).
+    nutzen = await _korrektur_nutzen(db, anlage.id, heute)
 
     # #347/#354: AC-Grenze. Sie kann dem Erzeuger selbst gehören (BKW) oder
     # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
@@ -415,12 +426,30 @@ async def kanon_tagesprognose(
         tagesdaten=tagesdaten, invs=invs, gruppen=gruppen, gewichte=gewichte,
         by_datum=by_datum, skalar=skalar, skalar_gekappt=skalar_gekappt,
         grenzen=grenzen, kappung_aktiv=kappung_aktiv,
+        korrektur_ausgesetzt=bool(nutzen is not None and nutzen.ausgesetzt),
     )
     tage: list[Optional[KanonTag]] = []
     for offset in range(days):
         tage.append(await _kanon_tag(db, anlage, kx, offset))
 
-    return await _prognose_mit_heute(db, anlage, heute, tage, skalar)
+    prognose = await _prognose_mit_heute(db, anlage, heute, tage, skalar)
+    prognose.korrektur_ausgesetzt = kx.korrektur_ausgesetzt
+    prognose.korrektur_nutzen = nutzen
+    return prognose
+
+
+async def _korrektur_nutzen(db, anlage_id: int, heute: date) -> Optional[KorrekturNutzen]:
+    """Der Wächter-Stand (Päckchen CC) — ``None``, wenn er nicht ermittelt werden konnte (dann gilt die Korrektur).
+
+    Aufruf über das Modul (``pkn.korrektur_nutzen``) — Monkeypatch-fähig wie ``_get_lernfaktor``.
+    """
+    from backend.services import prognose_korrektur_nutzen as pkn
+
+    try:
+        return await pkn.korrektur_nutzen(db, anlage_id, heute)
+    except Exception as e:  # der Kanon darf am Wächter nicht sterben
+        logger.warning("Korrektur-Wächter übersprungen (Anlage %s): %s: %s", anlage_id, type(e).__name__, e)
+        return None
 
 
 @dataclass
@@ -439,6 +468,8 @@ class _KanonKontext:
     skalar_gekappt: Optional[float]
     grenzen: dict
     kappung_aktiv: bool
+    #: Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — `True` ⇒ Faktor 1,0 auf allen Tagen des Horizonts.
+    korrektur_ausgesetzt: bool = False
 
 
 @dataclass
@@ -762,9 +793,15 @@ async def _korrigierter_tag(
         # N-551: `om_slots` sind die **gekappten** Slots ⇒ der Rückfall für
         # Stunden ohne Korrekturprofil ist der auf der gekappten Basis
         # gelernte Faktor (sonst der bisherige Roh-Faktor).
-        profil = korrigiere_tagesprofil(
+        kaskade = korrigiere_tagesprofil(
             s.om_slots, faktoren,
             fallback_faktor=kx.skalar_gekappt if kx.skalar_gekappt is not None else kx.skalar,
+        )
+        # Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — ausgesetzt ⇒ Faktor 1,0 (die gekappte Rohreihe).
+        # Die Kaskade ist trotzdem gerechnet; sie reist als `kaskade_stundenprofil_kwh` zur Persistenz.
+        profil = (
+            korrigiere_tagesprofil(s.om_slots, [None] * 24, fallback_faktor=None)
+            if kx.korrektur_ausgesetzt else kaskade
         )
         eedc_kwh = profil.tageswert_kwh
         om_kwh = round(sum(s.om_slots), 1)
@@ -774,14 +811,14 @@ async def _korrigierter_tag(
     else:
         # OpenMeteo-Schätzpfad (Tagessumme ohne Hourly): Tages-Ertrag ×
         # Skalar, kein Profil (bisheriges Verhalten, eedc_prognose_service).
-        profil = None
+        profil = kaskade = None
         # ⚠ **Hier bleibt der ROHE Faktor** (N-551): `pv_ertrag_sum` ist der
         # ungekappte OpenMeteo-Tagesertrag — dieselbe Basis, auf der der
         # Skalar gelernt wurde. Der gekappte Faktor gehört nur dorthin, wo
         # die Reihe selbst gekappt ist (Stundenpfad oben).
-        eedc_kwh = (
-            round(s.pv_ertrag_sum * (kx.skalar or 1.0), 1) if s.pv_ertrag_sum else None
-        )
+        # Päckchen CC: ausgesetzte Korrektur ⇒ auch hier Faktor 1,0.
+        faktor = 1.0 if kx.korrektur_ausgesetzt else (kx.skalar or 1.0)
+        eedc_kwh = round(s.pv_ertrag_sum * faktor, 1) if s.pv_ertrag_sum else None
         om_kwh = round(s.pv_ertrag_sum, 1) if s.pv_ertrag_sum else None
         vm_kwh = nm_kwh = None
 
@@ -803,6 +840,7 @@ async def _korrigierter_tag(
             [round(v, 3) for v in s.abregelung_slots] if (kappen and s.has_hourly) else None
         ),
         grenzen_kw=(s.grenzen_kw or None) if kappen else None,
+        kaskade_stundenprofil_kwh=list(kaskade.stundenprofil_export_kwh) if kaskade is not None else None,
     )
 
 

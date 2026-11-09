@@ -254,6 +254,7 @@ async def _prefetch_for_anlage(
     # Open-Meteo-Cache-Key bedeuten KÖNNTE. Der Kanon-Horizont hat seinen SoT
     # in `prognose_kanon.KANON_MIN_DAYS`, und dort gehört er hin.
     kanon_heute = None
+    kanon = None
     try:
         from backend.services.prognose_kanon import (
             KANON_MIN_DAYS, kanon_tagesprognose,
@@ -281,6 +282,14 @@ async def _prefetch_for_anlage(
         kanon_heute.om_stundenprofil_kwh if hat_lern_reihe else None
     )
     lern_kwh = kanon_heute.om_kwh if hat_lern_reihe else None
+    # Päckchen CC: die Kaskaden-Reihe des Korrektur-Wächters (first-write) und der Stand «Mittag» (first-write ab 12:00
+    # lokal; der Prefetch läuft alle 45 min, der erste Lauf nach 12:00 friert also bis 12:45 ein). SFML liest nur die Live-Sicht.
+    kaskade_stundenprofil = kanon_heute.kaskade_stundenprofil_kwh if kanon_nutzbar else None
+    mittag_werte = {
+        "pv_prognose_eedc_mittag_kwh": kanon.heute_rollend_kwh if kanon is not None else None,
+        "pv_prognose_om_mittag_kwh": kanon_heute.om_kwh if kanon_nutzbar else None,
+        "solcast_mittag_kwh": solcast_kwh,
+    }
 
     if (om_heute_kwh is not None or solcast_kwh is not None
             or pv_stundenprofil is not None or lern_kwh is not None):
@@ -295,6 +304,8 @@ async def _prefetch_for_anlage(
                 solcast_stundenprofil=solcast_stundenprofil,
                 lern_stundenprofil=lern_stundenprofil,
                 lern_kwh=lern_kwh,
+                kaskade_stundenprofil=kaskade_stundenprofil,
+                mittag_werte=mittag_werte,
             )
         except Exception as e:
             logger.warning(f"Prefetch Prognose-Persistierung Anlage {anlage.id}: {e}")

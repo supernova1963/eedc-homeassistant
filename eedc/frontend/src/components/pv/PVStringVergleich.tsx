@@ -19,7 +19,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
 import { Parkbar } from '../park'
 import { HerkunftZeile } from '../blocks'
-import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
+import { pvVergleichHerkunft } from '../../lib/pvHerkunft'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl, formatProzent } from '../../lib'
 import { mitAnzahl } from '../../lib/plural'
@@ -313,7 +313,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           Wortlaut-SoT aus `lib/pvHerkunft`. Dieselbe Zeile wie am Verlauf-Chart. */}
       {(data.ist_quelle === 'verteilt' || data.vergleich_hinweis) && (
         <Parkbar id="info:pv-herkunft" titel="Herkunft der Werte">
-          <HerkunftZeile herkunft={pvVerteiltHerkunft('IST je Modul', data.vergleich_hinweis)} />
+          <HerkunftZeile herkunft={pvVergleichHerkunft('IST je Modul', data.vergleich_hinweis, data.vergleich_grund)} />
         </Parkbar>
       )}
 

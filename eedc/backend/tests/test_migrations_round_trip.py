@@ -5,7 +5,7 @@ sechs Module unter ``services/migrations/`` haben Tests. Der ``ALTER TABLE ADD
 COLUMN``-Block in ``core/database.py`` hatte keinen — damals **86 ergänzte Spalten
 über zehn Tabellen** (mechanisch gezählt 2026-08-24 über die literalen
 Anweisungen *und* die ``new_columns``-Schleifen; der Plan sagte „>30", die
-reine Textzählung liefert 46). Stand 2026-11-09: **109 Spalten in 15 Tabellen** (N-782: +1)
+reine Textzählung liefert 46). Stand 2026-11-09: **114 Spalten in 15 Tabellen** (N-782: +1, Päckchen CC: +5)
 (Päckchen Y: 16 nachgetragen, die der Round-Trip bis dahin nicht prüfte).
 
 **Warum das die riskanteste ungedeckte Fläche der Suite ist.** Der Block läuft
@@ -45,7 +45,7 @@ from backend.models import (  # noqa: F401  (Seiteneffekt: Registrierung)
     settings as _settings_model, strompreis, tages_energie_profil,
 )
 
-#: Was der Migrationsblock je Tabelle ergänzt — Stand 2026-11-09: 109 Spalten in 15 Tabellen (N-782: +1), mechanisch
+#: Was der Migrationsblock je Tabelle ergänzt — Stand 2026-11-09: 114 Spalten in 15 Tabellen (N-782: +1, Päckchen CC: +5), mechanisch
 #: erhoben (je Modellspalte einzeln weggelassen ⇒ ergänzt ``run_migrations`` sie wieder?), nicht über den Text.
 #: ⚠ Diese Liste ist zugleich Fixture (was weggelassen wird) und Behauptung
 #: (was danach da sein muss). Wer eine Spalte ergänzt, trägt sie hier ein.
@@ -100,9 +100,10 @@ ERGAENZTE_SPALTEN: dict[str, list[str]] = {
         "gti_summe_wh_m2", "komponenten_kwh",
         "komponenten_starts", "kraftstoffpreis_euro", "lern_soll_kwh",
         "lern_soll_stundenprofil_kwh", "nachtrag", "negative_preis_stunden",
-        "pv_prognose_eedc_final_kwh", "pv_prognose_final_at", "pv_prognose_final_kwh", "pv_prognose_kwh",
-        "pv_prognose_stundenprofil", "sfml_prognose_kwh",
-        "sfml_prognose_stundenprofil", "solcast_p10_kwh", "solcast_p90_kwh",
+        "pv_prognose_eedc_final_kwh", "pv_prognose_eedc_mittag_kwh", "pv_prognose_final_at",
+        "pv_prognose_final_kwh", "pv_prognose_kaskade_stundenprofil", "pv_prognose_kwh",
+        "pv_prognose_om_mittag_kwh", "pv_prognose_stundenprofil", "sfml_mittag_kwh", "sfml_prognose_kwh",
+        "sfml_prognose_stundenprofil", "solcast_mittag_kwh", "solcast_p10_kwh", "solcast_p90_kwh",
         "solcast_prognose_kwh", "solcast_prognose_stundenprofil",
         "source_provenance", "verworfen",
     ],
@@ -220,7 +221,7 @@ class TestDieFixtureSelbst:
 
 
 class TestRoundTrip:
-    """Aus dem Alt-Schema wird das heutige — 109 Spalten über 15 Tabellen (Stand 2026-11-09)."""
+    """Aus dem Alt-Schema wird das heutige — 114 Spalten über 15 Tabellen (Stand 2026-11-09)."""
 
     @pytest.mark.asyncio
     async def test_alle_ergaenzten_spalten_kommen_an(self, tmp_path):

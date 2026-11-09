@@ -304,6 +304,14 @@ Zwei Dinge gehören dazu:
 - **Die Wechselrichter-Grenze zählt nicht als Fehler.** Wenn deine Module mittags mehr liefern, als der Wechselrichter abgeben darf, fehlt diese Energie im IST — aber nicht, weil die Prognose falsch lag. eedc vergleicht deshalb gegen die **gekappte** Rohprognose.
 - **Die Umstellung wirkt über Nächte.** Jeder Bereich (Stunde bzw. Sonnenstand) behält seinen bisherigen Faktor, bis genug neue Vergleichstage für ihn aufgelaufen sind — es geht nichts verloren, und es springt nichts. Bereiche, die eine Jahreszeit lang nicht vorkommen, wandern entsprechend später mit.
 
+#### Korrektur nur, wenn sie hilft
+
+Die Korrektur soll die rohe Wetterprognose **verbessern**. Ob sie das tut, prüft eedc jeden Tag selbst: über die letzten 30 Tage vergleicht es den mittleren Fehler (MAE) der korrigierten Day-Ahead-Prognose mit dem der rohen OpenMeteo-Prognose. Liegt die Korrektur **mehr als 2 Prozentpunkte schlechter**, setzt eedc sie aus und zeigt die rohe Prognose — in der App, im Stundenprofil und in den HA-Sensoren. Wieder eingeschaltet wird sie, sobald sie höchstens noch 1 Punkt schlechter ist (dazwischen bleibt der bisherige Zustand, damit sie nicht von Tag zu Tag hin- und herspringt). Unter 14 vergleichbaren Tagen setzt eedc nie aus.
+
+**Was du siehst:** nur wenn die Korrektur ausgesetzt ist, steht in *Auswertungen → Prognose* über dem Genauigkeits-Tracking eine Kopfzeile, z. B. *„Korrektur ausgesetzt — die letzten 30 Tage war die Korrektur schlechter als OpenMeteo roh (MAE 24 % gegen 21 %); eedc zeigt bis auf Weiteres den Rohwert"*. Der Sensor „PV-Prognose heute" trägt die Attribute `korrektur_ausgesetzt`, `korrektur_mae_30_prozent` und `roh_mae_30_prozent`.
+
+**Was weiterläuft:** das Lernen. eedc rechnet die Korrektur auch im ausgesetzten Zustand jeden Tag mit, hält sie fest und lernt weiter — so merkt der Wächter von selbst, wenn sie wieder hilft. Für den Vergleich braucht er die Tagesreihe der rohen Prognose; an Installationen, die sie noch nicht aufgezeichnet haben, bleibt die Korrektur einfach an.
+
 ---
 
 ## 6. Genauigkeits-Tracking (MAE & Bias)
@@ -326,9 +334,10 @@ Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Inform
 
 Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie stark und an wie vielen Tagen die Prognose *über* bzw. *unter* dem IST lag. So wird z. B. ein reiner Vormittags-Bias sichtbar.
 
-> **Welcher Prognosewert geht in die Genauigkeit ein? — der Umschalter „Zeitpunkt: Day-Ahead | Abend".** Jede Prognose ändert sich über den Tag: der Anzeige-Wert rollt mit dem Wetterdienst mit, und Solcast führt seinen Tageswert tagsüber sogar per **Satellit** nach — abends weiß Solcast also schon, wie der Tag gelaufen ist. Ein fairer Vergleich braucht deshalb für alle Quellen **denselben Zeitpunkt**:
+> **Welcher Prognosewert geht in die Genauigkeit ein? — der Umschalter „Zeitpunkt: Day-Ahead | Mittag | Abend".** Jede Prognose ändert sich über den Tag: der Anzeige-Wert rollt mit dem Wetterdienst mit, und Solcast führt seinen Tageswert tagsüber sogar per **Satellit** nach — abends weiß Solcast also schon, wie der Tag gelaufen ist. Ein fairer Vergleich braucht deshalb für alle Quellen **denselben Zeitpunkt**:
 >
 > - **Day-Ahead** (Standard) — der Stand in der Nacht, bevor der Tag beginnt: die Summe des Stundenprofils, das eedc beim ersten Prognose-Abruf des Tages festhält. Für **eedc, OpenMeteo und Solcast** ist das der erste Lauf nach Mitternacht (spätestens 00:45). **SFML** hält eedc beim ersten Aufruf der Live-Sicht des Tages fest — ebenso **Solcast an Tagen vor dem Update auf diese Version**. Day-Ahead vergleicht gleich lange Vorlaufzeiten und ist deshalb die Zahl, an der sich die Quellen messen lassen.
+> - **Mittag** — der Stand um die Tagesmitte: eedc hält ihn beim ersten Prognose-Lauf ab 12:00 fest (der Hintergrund-Abruf läuft alle 45 Minuten, der Stand ist also spätestens um 12:45 da; öffnest du die Live-Sicht vorher, schon dann). Für **eedc** ist es die Zahl „Tag läuft auf ~X kWh hinaus" — das bis Mittag **gemessene** IST plus die Prognose für den Rest; für **Solcast** der per Satellit nachgeführte Tageswert; für **OpenMeteo** der Modelllauf um diese Zeit. Mittag zeigt, wie gut eine Quelle den Tag einschätzt, wenn der Vormittag schon gelaufen ist. Den Mittagsstand zeichnet eedc erst ab dieser Version auf — ältere Tage zeigen „nicht erhoben".
 > - **Abend** — der nach Sonnenuntergang eingefrorene Stand: der Tageswert rollt mit, bis der Tag konvergiert ist, und wird dann festgeschrieben. Bei Solcast enthält er die Satelliten-Nachführung des Tages; ein Abend-Vergleich zeigt also, wie gut eine Quelle **nachgeführt** hat, nicht wie gut sie **vorhergesagt** hat.
 >
 > **Die eedc-Spalte ist die Prognose, die eedc an dem Tag angezeigt hat** (der eine Rechenweg aus [§2.2](#22-eedc-kalibriert--die-default-quelle), mit Korrekturprofil). Bis zu dieser Version stand dort die OpenMeteo-Prognose mal dem *heutigen* Lernfaktor, rückwirkend für alle Tage — eine Zahl, die eedc an keinem dieser Tage gezeigt hat. Den eedc-Abendstand zeichnet eedc erst ab dieser Version auf; ältere Tage zeigen im Zeitpunkt „Abend" für eedc „nicht erhoben". Die Day-Ahead-Profile liegen dagegen auch für zurückliegende Tage vor.
@@ -336,6 +345,8 @@ Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie st
 > ⚠ **OpenMeteo wechselt mit dem Zeitpunkt die Größe** (benannte Grenze): Day-Ahead ist an Anlagen mit AC-Grenze die an der Wechselrichter-Leistung **gekappte** Rohreihe, der Abendstand die **ungekappte** Roh-Tagessumme. An Anlagen ohne Kappung ist es dieselbe Größe.
 >
 > Die Abweichungs-Ampel der HA-Sensoren (`mae_30_tage_prozent`) rechnet mit dem eedc-Day-Ahead-Stand — ohne aufgezeichnete Day-Ahead-Profile gibt es keine Schwelle und keine Ampel.
+
+**Welche Quelle trifft an deiner Anlage am besten?** Unter den Kennzahlen steht je Zeitpunkt ein Satz, z. B. *„Zum Zeitpunkt Day-Ahead trifft an dieser Anlage **Solcast** am besten (MAE 12,8 % gegen eedc 15,5 %)"*. eedc vergleicht dafür eedc, OpenMeteo und Solcast über die Tage des gewählten Zeitraums — erst ab **14 Tagen** mit Werten, sonst steht der Satz nicht da (SFML bleibt wie oben außen vor). Liegt Solcast vorn und ist nicht deine gewählte Quelle, nennt der Satz den Weg: Solcast kann unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) als „PV-Prognose-Quelle“ gewählt werden. eedc empfiehlt die bessere Quelle, statt sie zu verschweigen.
 
 ---
 
@@ -362,7 +373,8 @@ Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + zugeordnete PV-Zähler** si
 | Symptom | Ursache | Was tun |
 |---------|---------|---------|
 | **eedc-Spalte leer / „X von 7 Tagen"** | noch keine 7 verwertbaren IST-Tage | abwarten — eedc zeigt solange die OpenMeteo-Basis. Prüfen, dass der PV-Zähler zugeordnet ist. |
-| **eedc im Genauigkeits-Tracking deutlich schlechter als Solcast** | im Zeitpunkt „Abend" enthält Solcast die Satelliten-Nachführung des Tages — eedc nicht | auf **Day-Ahead** umschalten: dort vergleichen beide gleich lange Vorlaufzeiten. Day-Ahead liegen eedc und Solcast typischerweise in derselben Liga. |
+| **eedc im Genauigkeits-Tracking deutlich schlechter als Solcast** | im Zeitpunkt „Abend" enthält Solcast die Satelliten-Nachführung des Tages — eedc nicht | auf **Day-Ahead** umschalten: dort vergleichen beide gleich lange Vorlaufzeiten. Day-Ahead liegen eedc und Solcast typischerweise in derselben Liga. Der Zeitpunkt **Mittag** zeigt, wo eedc mit dem gemessenen Vormittag steht. |
+| **Kopfzeile „Korrektur ausgesetzt"** | die gelernte Korrektur war in den letzten 30 Tagen schlechter als die rohe Wetterprognose | nichts zu tun — eedc zeigt so lange die rohe Prognose und schaltet die Korrektur von selbst wieder ein, sobald sie wieder hilft ([§5.3](#53-das-korrekturprofil-sonnenstand--wetter)). |
 | **Prognose systematisch zu hoch/niedrig** | falsche Ausrichtung/Neigung, oder Lernfaktor noch im Aufbau | Ausrichtung/Neigung je String korrekt pflegen; Bias im Genauigkeits-Tracking beobachten — das Korrekturprofil zieht nach. |
 | **Vormittags daneben, Tagessumme stimmt** | OpenMeteo-Tagesgang-Bias; ein Skalar korrigiert nur die Summe | das Sonnenstand-×-Wetter-Korrekturprofil greift hier — sichtbar in der Heatmap und der Asymmetrie-Diagnose. |
 | **Performance Ratio > 1** | nur bei alten Versionen (GHI statt GTI) | auf aktuelle Version updaten; danach betroffene Tage neu aggregieren. |

@@ -372,14 +372,30 @@ export interface GenauigkeitsResponse {
   ausreisser_schwelle_prozent?: number
   // N-782: welcher Prognosestand je Quelle in `tage` und den Kennzahlen steht
   zeitpunkt?: GenauigkeitsZeitpunkt
+  // Päckchen CC: Quellen-Empfehlung — die Quelle mit der kleinsten MAE zu diesem Zeitpunkt (≥ 14 Tage Werte), im Backend gewählt
+  beste_quelle?: 'eedc' | 'openmeteo' | 'solcast' | null
+  beste_quelle_mae_prozent?: number | null
+  // Päckchen CC: die in der Anlage gewählte Prognosequelle (Einstellung)
+  prognose_quelle?: string | null
+  // Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» (letzte 30 Tage, Day-Ahead)
+  korrektur_status?: KorrekturStatus | null
+}
+
+/** Päckchen CC: Stand des Wächters «Korrektur nur, wenn sie hilft» — `ausgesetzt` ⇒ eedc zeigt die Rohprognose. */
+export interface KorrekturStatus {
+  ausgesetzt: boolean
+  mae_kaskade_prozent: number | null
+  mae_roh_prozent: number | null
+  tage: number
 }
 
 /**
  * Zeitpunkt des Genauigkeits-Trackings (N-782): `day_ahead` = gespeicherte
  * Stundenprofile (eedc/OpenMeteo/Solcast bis 00:45, SFML beim ersten Aufruf der
- * Live-Sicht), `abend` = nach Sonnenuntergang eingefrorene Tageswerte.
+ * Live-Sicht), `mittag` = Stand beim ersten Lauf ab 12:00 (Päckchen CC),
+ * `abend` = nach Sonnenuntergang eingefrorene Tageswerte.
  */
-export type GenauigkeitsZeitpunkt = 'day_ahead' | 'abend'
+export type GenauigkeitsZeitpunkt = 'day_ahead' | 'mittag' | 'abend'
 
 // =============================================================================
 // API Functions

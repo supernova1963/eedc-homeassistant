@@ -17,7 +17,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
 import { HerkunftZeile, type KpiStripItem } from '../blocks'
-import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
+import { pvVergleichHerkunft } from '../../lib/pvHerkunft'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import {
@@ -47,7 +47,7 @@ export function laufzeitAlsJahr(r: PVStringsGesamtlaufzeitResponse): PVStringsRe
     abweichung_gesamt_kwh: r.abweichung_gesamt_kwh, abweichung_gesamt_prozent: r.abweichung_gesamt_prozent,
     spezifischer_ertrag_kwh_kwp: r.spezifischer_ertrag_zeitraum_kwh_kwp ?? null,
     bester_string: r.bester_string, schlechtester_string: r.schlechtester_string,
-    ist_quelle: r.ist_quelle, vergleich_hinweis: r.vergleich_hinweis,
+    ist_quelle: r.ist_quelle, vergleich_hinweis: r.vergleich_hinweis, vergleich_grund: r.vergleich_grund,
     strings: r.strings.map((s) => ({
       investition_id: s.investition_id, bezeichnung: s.bezeichnung, leistung_kwp: s.leistung_kwp,
       ausrichtung: s.ausrichtung, neigung_grad: s.neigung_grad, wechselrichter_id: null,
@@ -189,7 +189,7 @@ export function PvStringBestSchlecht({ data }: { data: PVStringsResponse }) {
   // denselben spezifischen Ertrag — dann gibt es keine Platzierung, sondern die
   // Erklärung warum (Backend-Satz, dieselbe Zeile wie im Komponenten-Hub).
   if (data.vergleich_hinweis) {
-    return <HerkunftZeile herkunft={pvVerteiltHerkunft('IST je Modul', data.vergleich_hinweis)} />
+    return <HerkunftZeile herkunft={pvVergleichHerkunft('IST je Modul', data.vergleich_hinweis, data.vergleich_grund)} />
   }
   return (
     <div className="flex flex-wrap gap-3">

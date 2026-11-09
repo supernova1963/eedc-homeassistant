@@ -12,7 +12,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, date, timedelta
-from typing import Optional, List
+from typing import Literal, Optional, List
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -269,8 +269,18 @@ class GenauigkeitsResponse(BaseModel):
     # Schwelle in % (für UI-Text)
     ausreisser_schwelle_prozent: float = 50.0
     #: N-782: welcher Prognosestand je Quelle in `tage` und den Kennzahlen steht —
-    #: ``day_ahead`` (gespeicherte Stundenprofile) oder ``abend`` (eingefrorene Abendstände).
+    #: ``day_ahead`` (gespeicherte Stundenprofile), ``mittag`` (Stand ab 12:00, Päckchen CC) oder ``abend``
+    #: (eingefrorene Abendstände).
     zeitpunkt: Zeitpunkt = ZEITPUNKT_STANDARD
+    #: Päckchen CC (Quellen-Empfehlung): die Quelle mit der kleinsten MAE zu diesem Zeitpunkt unter denen mit mindestens
+    #: 14 Tagen Werten (eedc, OpenMeteo, Solcast — SFML nicht, Tom-HA-Regel); ``None`` bei zu wenig Tagen.
+    beste_quelle: Optional[Literal["eedc", "openmeteo", "solcast"]] = None
+    beste_quelle_mae_prozent: Optional[float] = None
+    #: Päckchen CC: die in der Anlage gewählte Prognosequelle (``eedc``/``solcast``/``sfml``, Einstellung) — für den Satz
+    #: «kann als Quelle gewählt werden».
+    prognose_quelle: Optional[str] = None
+    #: Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — ``{ausgesetzt, mae_kaskade_prozent, mae_roh_prozent, tage}``.
+    korrektur_status: Optional[dict] = None
 
 
 # =============================================================================
@@ -1153,8 +1163,8 @@ async def get_prognosen_genauigkeit(
     Tage-Liste, MAE/MBE, Asymmetrie und Ausreißer-Markierung rechnen mit den Werten des gewählten
     Zeitpunkts.
     """
-    # Direktaufrufe ohne Parameter (Tests) bekommen das Query-Objekt — alles außer "abend" ist Day-Ahead.
-    zeitpunkt = "abend" if zeitpunkt == "abend" else ZEITPUNKT_STANDARD
+    # Direktaufrufe ohne Parameter (Tests) bekommen das Query-Objekt — alles außer "abend"/"mittag" ist Day-Ahead.
+    zeitpunkt = zeitpunkt if zeitpunkt in ("abend", "mittag") else ZEITPUNKT_STANDARD
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -1306,4 +1316,27 @@ async def get_prognosen_genauigkeit(
         anzahl_ausreisser=anzahl_ausreisser,
         ausreisser_schwelle_prozent=AUSREISSER_SCHWELLE,
         zeitpunkt=zeitpunkt,
+        **await _empfehlung_und_status(db, anlage, eedc_signed, om_signed, sc_signed),
     )
+
+
+async def _empfehlung_und_status(db: AsyncSession, anlage, eedc_signed, om_signed, sc_signed) -> dict:
+    """Päckchen CC: Quellen-Empfehlung (Layer ``beste_quelle``), gewählte Quelle und Wächter-Stand für Block ④."""
+    from backend.core.berechnungen.prognose_genauigkeit import beste_quelle
+    from backend.services.prognose_korrektur_nutzen import korrektur_nutzen
+
+    # eedc zuerst: bei gleicher MAE empfiehlt eedc keinen Wechsel.
+    beste = beste_quelle({"eedc": eedc_signed, "openmeteo": om_signed, "solcast": sc_signed})
+    nutzen = await korrektur_nutzen(db, anlage.id, date.today())
+    return {
+        "beste_quelle": beste[0] if beste else None,
+        "beste_quelle_mae_prozent": beste[1] if beste else None,
+        # die GEWÄHLTE Quelle (Einstellung), nicht die nach einem Rückfall wirksame — der Satz nennt die Einstellung.
+        "prognose_quelle": getattr(anlage, "prognose_quelle", None) or "eedc",
+        "korrektur_status": {
+            "ausgesetzt": nutzen.ausgesetzt,
+            "mae_kaskade_prozent": nutzen.mae_kaskade_prozent,
+            "mae_roh_prozent": nutzen.mae_roh_prozent,
+            "tage": nutzen.tage,
+        },
+    }

@@ -15,6 +15,9 @@ Geprüft wird:
 5. Der Prefetch friert das Solcast-Profil des Tages ein — über das Datum, nicht über ``hourly_kw``.
 6. ``eedc_mae_prozent`` ohne Lernfaktor; ohne Day-Ahead-Profile ``(None, 0)``.
 7. Das neue Feld steht in beiden Prognose-Feldlisten (Neu-Aggregation rettet es).
+8. Päckchen CC: Zeitpunkt «Mittag» — first-write ab 12:00 je Spalte, Lesen und Kennzahlen; die Kaskaden-Reihe des
+   Korrektur-Wächters first-write; die neuen Spalten in beiden Feldlisten.
+9. Päckchen CC: Quellen-Empfehlung — erst ab 14 Tagen, je Zeitpunkt, SFML nicht.
 
 Schwestern: ``test_genauigkeit_ausreisser_296.py``, ``test_genauigkeit_pv_only.py``,
 ``test_genauigkeit_wetter_296.py`` (dieselbe Route), ``test_prognose_kanon.py`` (Einfrier-Regel des OM-Endwerts),
@@ -358,3 +361,118 @@ def test_eedc_abendstand_in_beiden_prognose_feldlisten():
     assert "pv_prognose_eedc_final_kwh" in _PROGNOSE_FELDER_RETTEN
     assert "pv_prognose_eedc_final_kwh" in _TZ_SCHREIBFELDER_PROGNOSE
     assert "pv_prognose_eedc_final_kwh" in TagesZusammenfassung.__table__.columns
+
+
+# ── 8 · Päckchen CC: Zeitpunkt «Mittag» ─────────────────────────────────────
+
+_MITTAG = {
+    "pv_prognose_eedc_mittag_kwh": 41.0,
+    "pv_prognose_om_mittag_kwh": 45.0,
+    "solcast_mittag_kwh": 39.0,
+    "sfml_mittag_kwh": 43.0,
+}
+
+
+def _um(stunde: int, minute: int = 0):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime(2026, 11, 9, stunde, minute, tzinfo=ZoneInfo("Europe/Berlin"))
+
+
+async def test_mittag_first_write_ab_zwoelf(db, sitzung_ist_testdb):
+    """11:59 schreibt nicht, 12:10 schreibt, 13:00 überschreibt nicht — je Spalte, solange sie leer ist."""
+    import backend.api.routes.live_wetter as lw
+
+    a = await factories.anlage(db)
+    tag = HEUTE
+    await lw._speichere_prognose(a.id, tag, 20.0, mittag_werte=_MITTAG, jetzt=_um(11, 59))
+    zeile = await _zeile(db, a.id, tag)
+    assert all(getattr(zeile, f) is None for f in _MITTAG), "vor 12:00 kein Mittagsstand"
+    await lw._speichere_prognose(
+        a.id, tag, 20.0, jetzt=_um(12, 10),
+        mittag_werte={**_MITTAG, "sfml_mittag_kwh": None},   # SFML hat im ersten Lauf nichts (Prefetch liest es nicht)
+    )
+    zeile = await _zeile(db, a.id, tag)
+    assert zeile.pv_prognose_eedc_mittag_kwh == 41.0 and zeile.pv_prognose_om_mittag_kwh == 45.0
+    assert zeile.solcast_mittag_kwh == 39.0 and zeile.sfml_mittag_kwh is None
+    await lw._speichere_prognose(
+        a.id, tag, 20.0, jetzt=_um(13, 0),
+        mittag_werte={k: v + 10 for k, v in _MITTAG.items()},
+    )
+    zeile = await _zeile(db, a.id, tag)
+    assert zeile.pv_prognose_eedc_mittag_kwh == 41.0, "13:00 überschreibt nicht"
+    assert zeile.sfml_mittag_kwh == 53.0, "eine leere Spalte füllt der nächste Lauf (je Spalte first-write)"
+
+
+async def test_mittag_beim_anlegen_der_zeile(db, sitzung_ist_testdb):
+    import backend.api.routes.live_wetter as lw
+
+    a = await factories.anlage(db)
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, mittag_werte=_MITTAG, jetzt=_um(12, 30))
+    zeile = await _zeile(db, a.id, HEUTE)
+    assert zeile.pv_prognose_eedc_mittag_kwh == 41.0 and zeile.sfml_mittag_kwh == 43.0
+
+
+async def test_mittag_nimmt_die_mittagsstaende(db, uhr):
+    a = await factories.anlage(db)
+    await _voller_tag(db, a.id, **_MITTAG)
+    r = await _route(db, a.id, "mittag")
+    tag = r.tage[0]
+    assert r.zeitpunkt == "mittag"
+    assert (tag.eedc_kwh, tag.openmeteo_kwh, tag.solcast_kwh, tag.sfml_kwh) == (41.0, 45.0, 39.0, 43.0)
+    # Kennzahlen aus demselben Stand: eedc (41 − 40) ÷ 40 = 2,5 %, OpenMeteo 12,5 %, Solcast −2,5 %.
+    assert r.eedc_mae_prozent == 2.5 and r.openmeteo_mae_prozent == 12.5 and r.solcast_mbe_prozent == -2.5
+
+
+async def test_tag_ohne_mittag_ist_nicht_erhoben(db, uhr):
+    a = await factories.anlage(db)
+    await _voller_tag(db, a.id)
+    r = await _route(db, a.id, "mittag")
+    tag = r.tage[0]
+    assert (tag.eedc_kwh, tag.openmeteo_kwh, tag.solcast_kwh, tag.sfml_kwh) == (None, None, None, None)
+    assert r.eedc_mae_prozent is None and r.anzahl_tage == 1
+
+
+async def test_kaskade_first_write_wie_die_profile(db, sitzung_ist_testdb):
+    import backend.api.routes.live_wetter as lw
+
+    a = await factories.anlage(db)
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, kaskade_stundenprofil=_profil(22.0))
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, kaskade_stundenprofil=_profil(30.0))
+    assert sum((await _zeile(db, a.id, HEUTE)).pv_prognose_kaskade_stundenprofil) == 22.0
+
+
+def test_mittag_und_kaskade_in_beiden_prognose_feldlisten():
+    from backend.api.routes.live_wetter import _TZ_SCHREIBFELDER_PROGNOSE
+    from backend.services.energie_profil.aggregator import _PROGNOSE_FELDER_RETTEN
+
+    for feld in (*_MITTAG, "pv_prognose_kaskade_stundenprofil"):
+        assert feld in _PROGNOSE_FELDER_RETTEN and feld in _TZ_SCHREIBFELDER_PROGNOSE
+        assert feld in TagesZusammenfassung.__table__.columns
+
+
+# ── 9 · Päckchen CC: Quellen-Empfehlung ─────────────────────────────────────
+
+
+async def test_beste_quelle_erst_ab_14_tagen(db, uhr):
+    a = await factories.anlage(db)
+    for i in range(1, 14):
+        await _voller_tag(db, a.id, datum=HEUTE - timedelta(days=i))
+    r = await _route(db, a.id, "day_ahead")
+    assert r.beste_quelle is None and r.beste_quelle_mae_prozent is None, "13 Tage reichen nicht"
+    await _voller_tag(db, a.id, datum=HEUTE - timedelta(days=14))
+    r = await _route(db, a.id, "day_ahead")
+    # eedc 5 %, OpenMeteo 10 %, Solcast 20 % — SFML (2,5 %) zählt nicht (Tom-HA-Regel).
+    assert r.beste_quelle == "eedc" and r.beste_quelle_mae_prozent == 5.0
+    assert r.prognose_quelle == "eedc"
+
+
+async def test_beste_quelle_folgt_dem_zeitpunkt(db, uhr):
+    a = await factories.anlage(db)
+    for i in range(1, 15):
+        await _voller_tag(db, a.id, datum=HEUTE - timedelta(days=i), **_MITTAG)
+    r = await _route(db, a.id, "mittag")
+    assert r.beste_quelle == "eedc" and r.beste_quelle_mae_prozent == 2.5
+    r = await _route(db, a.id, "abend")
+    # Abend: OpenMeteo 36 (10 %), eedc 39 (2,5 %), Solcast 38 (5 %).
+    assert r.beste_quelle == "eedc"

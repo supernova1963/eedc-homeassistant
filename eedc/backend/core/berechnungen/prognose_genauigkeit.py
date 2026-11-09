@@ -62,3 +62,26 @@ def mbe_prozent(fehler: Sequence[float]) -> Optional[float]:
     """Mittlerer **vorzeichenbehafteter** Fehler (Bias), auf eine Nachkommastelle."""
     werte = list(fehler)
     return round(sum(werte) / len(werte), 1) if werte else None
+
+
+#: Päckchen CC (Quellen-Empfehlung): so viele Tage mit Tagesfehler braucht eine Quelle, bevor sie verglichen wird.
+BESTE_QUELLE_MIN_TAGE: int = 14
+
+
+def beste_quelle(
+    fehler_je_quelle: dict[str, Sequence[float]], *, min_tage: int = BESTE_QUELLE_MIN_TAGE,
+) -> Optional[tuple[str, float]]:
+    """``(Quelle, MAE)`` der Quelle mit der kleinsten MAE unter denen mit mindestens ``min_tage`` Tagesfehlern.
+
+    ``None``, wenn keine Quelle genug Tage hat. Gleichstand: die erste in der Reihenfolge des Dicts (der Aufrufer legt
+    eedc zuerst — bei gleicher MAE empfiehlt eedc keinen Wechsel).
+    """
+    beste: Optional[tuple[str, float]] = None
+    for quelle, fehler in fehler_je_quelle.items():
+        werte = list(fehler)
+        if len(werte) < min_tage:
+            continue
+        mae = mae_prozent(werte)
+        if mae is not None and (beste is None or mae < beste[1]):
+            beste = (quelle, mae)
+    return beste

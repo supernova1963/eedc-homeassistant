@@ -106,6 +106,12 @@ _TZ_SCHREIBFELDER_PROGNOSE: tuple[str, ...] = (
     # Snapshot und die Korrekturprofil-Heatmap blieb monatelang leer.
     "lern_soll_stundenprofil_kwh",
     "lern_soll_kwh",
+    # Päckchen CC: Stand «Mittag» je Quelle (first-write ab 12:00) und die Kaskaden-Reihe des Korrektur-Wächters.
+    "pv_prognose_eedc_mittag_kwh",
+    "pv_prognose_om_mittag_kwh",
+    "solcast_mittag_kwh",
+    "sfml_mittag_kwh",
+    "pv_prognose_kaskade_stundenprofil",
 )
 
 logger = logging.getLogger(__name__)
@@ -158,6 +164,14 @@ class VerbrauchsStunde(BaseModel):
     pv_ml_prognose_kw: Optional[float] = None  # Solar Forecast ML (optional)
 
 
+class KorrekturStatus(BaseModel):
+    """Päckchen CC: der Stand des Wächters «Korrektur nur, wenn sie hilft» (letzte 30 Tage, Day-Ahead)."""
+    ausgesetzt: bool = False
+    mae_kaskade_prozent: Optional[float] = None
+    mae_roh_prozent: Optional[float] = None
+    tage: int = 0
+
+
 class LiveWetterResponse(BaseModel):
     anlage_id: int
     verfuegbar: bool
@@ -183,6 +197,8 @@ class LiveWetterResponse(BaseModel):
     pv_prognose_heute_rollend_kwh: Optional[float] = None
     #: Was heute bis jetzt tatsächlich erzeugt wurde (aus dem Tagesprofil).
     pv_ist_bisher_kwh: Optional[float] = None
+    #: Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — `None`, wenn er nicht lief.
+    korrektur_status: Optional[KorrekturStatus] = None
     #: ADR-002 P4 (N-690): gesetzt, wenn Tageswert/PV-Kurve von heute aus einem
     #: unvollständigen Multi-String-Fan-out stammen (der Kanon hat sie nicht
     #: ersetzt). Der Wert bleibt stehen — die Antwort sagt es nur selbst.
@@ -1061,6 +1077,24 @@ def _profil_einfrierbar(profil: list[float] | None) -> bool:
     )
 
 
+#: Päckchen CC: ab dieser lokalen Stunde gilt ein Lauf als Stand «Mittag» (first-write je Spalte).
+MITTAG_AB_STUNDE = 12
+
+
+def _mittag_einfrieren(tz: TagesZusammenfassung, jetzt_lokal: datetime, werte: Optional[dict]) -> None:
+    """First-write ab 12:00 lokal für die vier Mittag-Spalten (Päckchen CC) — je Spalte, solange sie leer ist.
+
+    ``werte``: ``{spalte: kWh}`` (``pv_prognose_eedc_mittag_kwh``, ``pv_prognose_om_mittag_kwh``, ``solcast_mittag_kwh``,
+    ``sfml_mittag_kwh``). Vor 12:00 schreibt nichts; der erste Lauf danach (Prefetch alle 45 min ⇒ bis 12:45, oder die
+    Live-Sicht) friert ein, spätere Läufe überschreiben nicht. ``None`` ist «nicht erhoben» und bleibt leer.
+    """
+    if not werte or jetzt_lokal.hour < MITTAG_AB_STUNDE:
+        return
+    for feld, wert in werte.items():
+        if wert is not None and getattr(tz, feld) is None:
+            setattr(tz, feld, wert)
+
+
 def _day_ahead_profile_einfrieren(tz: TagesZusammenfassung, profile: dict[str, list[float] | None]) -> None:
     """First-write-wins für die Stundenprofile (Day-Ahead-Snapshot) einer bestehenden Tageszeile.
 
@@ -1087,6 +1121,9 @@ async def _speichere_prognose(
     pv_final_sonne_unter: bool = False,
     lern_stundenprofil: list[float] | None = None,
     lern_kwh: float | None = None,
+    kaskade_stundenprofil: list[float] | None = None,
+    mittag_werte: dict | None = None,
+    jetzt: datetime | None = None,
 ):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
@@ -1125,6 +1162,10 @@ async def _speichere_prognose(
     `solcast_stundenprofil` wird nur mit 24 Slots und Σ > 0 eingefroren: der
     Solcast-Dienst liefert ohne Heute-Profil 24 × 0,0 (`solcast_service`), und
     eine eingefrorene Nullreihe hieße „Solcast sagte 0 kWh voraus".
+
+    Päckchen CC — `kaskade_stundenprofil` (first-write wie die übrigen Profile, Spalte
+    `pv_prognose_kaskade_stundenprofil`: immer die Kaskaden-Reihe, auch wenn der Wächter die Korrektur
+    aussetzt) und `mittag_werte` (`_mittag_einfrieren`: first-write ab 12:00 lokal, `jetzt` injizierbar für Proben).
     """
     from backend.core.database import get_session
     from backend.core.berechnungen import soll_final_einfrieren
@@ -1133,6 +1174,7 @@ async def _speichere_prognose(
     eedc_abend_kwh = profil_tageswert_kwh(pv_stundenprofil)
     if not _profil_einfrierbar(solcast_stundenprofil):
         solcast_stundenprofil = None
+    jetzt_lokal = jetzt or datetime.now(ZoneInfo("Europe/Berlin"))
 
     try:
         async with get_session() as db:
@@ -1195,7 +1237,9 @@ async def _speichere_prognose(
                     # Day-Ahead-Gedanke), Tagessumme rollend (unten) — sie ist das SOLL
                     # der Skalar-Stufe und soll dem konvergierenden OM-Tageswert folgen.
                     "lern_soll_stundenprofil_kwh": lern_stundenprofil,
+                    "pv_prognose_kaskade_stundenprofil": kaskade_stundenprofil,
                 })
+                _mittag_einfrieren(tz, jetzt_lokal, mittag_werte)
                 if lern_kwh is not None:
                     tz.lern_soll_kwh = lern_kwh
             else:
@@ -1219,9 +1263,11 @@ async def _speichere_prognose(
                     sfml_prognose_stundenprofil=sfml_stundenprofil,
                     lern_soll_stundenprofil_kwh=lern_stundenprofil,
                     lern_soll_kwh=lern_kwh,
+                    pv_prognose_kaskade_stundenprofil=kaskade_stundenprofil,
                     stunden_verfuegbar=0,
                     datenquelle="wetter_prognose",
                 )
+                _mittag_einfrieren(tz, jetzt_lokal, mittag_werte)
                 db.add(tz)
                 await db.flush()
                 # Pro Source nur die non-None Felder markieren — sonst würde
@@ -1489,7 +1535,9 @@ async def get_live_wetter(
         quelle_hat_profil = _rest_der_quelle(pq, stand, zahlen, now)
         prognose_quelle_tage = _prognose_quelle_tage(pq, anlage, stand, pv_prognose_aktiv)
 
-        auftrag = _persistenz_auftrag(anlage, now, zahlen.kanon_heute, pv_stundenprofil, stand)
+        auftrag = _persistenz_auftrag(
+            anlage, now, zahlen.kanon_heute, pv_stundenprofil, stand, kanon_rollend=zahlen.kanon_rollend,
+        )
         if auftrag is not None:
             asyncio.create_task(
                 _speichere_prognose(
@@ -1503,6 +1551,8 @@ async def get_live_wetter(
                     pv_final_sonne_unter=auftrag.pv_final_sonne_unter,
                     lern_stundenprofil=auftrag.lern_stundenprofil,
                     lern_kwh=auftrag.lern_kwh,
+                    kaskade_stundenprofil=auftrag.kaskade_stundenprofil,
+                    mittag_werte=auftrag.mittag_werte,
                 )
             )
 

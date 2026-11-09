@@ -200,3 +200,41 @@ describe('N-782 — Genauigkeits-Tracking: Zeitpunkt «Day-Ahead | Abend»', () 
     expect(mobilText(container)).toContain('nicht erhoben')
   })
 })
+
+describe('Päckchen CC — Zeitpunkt «Mittag», Quellen-Empfehlung, Korrektur-Wächter', () => {
+  it('bietet «Mittag» als dritten Zeitpunkt an und erklärt ihn', () => {
+    const gesetzt: string[] = []
+    const v = { ...vmVon(), setGenauigkeitsZeitpunkt: (z: string) => gesetzt.push(z) } as unknown as PrognoseVergleichVM
+    const { getByRole, container } = render(<PvgGenauigkeitsTracking vm={v} />)
+    fireEvent.click(within(getByRole('group', { name: 'Zeitpunkt' })).getByRole('button', { name: 'Mittag' }))
+    expect(gesetzt).toEqual(['mittag'])
+    expect(container.textContent).toContain('Mittag = der Stand um 12 Uhr')
+  })
+
+  it('nennt die beste Quelle aus dem Backend und den Weg zu Solcast, wenn Solcast nicht gewählt ist', () => {
+    const g = genauigkeit({ beste_quelle: 'solcast', beste_quelle_mae_prozent: 12.8, eedc_mae_prozent: 15.5, prognose_quelle: 'eedc' })
+    const { container } = render(<PvgGenauigkeitsTracking vm={vmVon({}, g)} />)
+    expect(container.textContent).toContain('Zum Zeitpunkt Day-Ahead trifft an dieser Anlage Solcast am besten (MAE 12,8 % gegen eedc 15,5 %).')
+    expect(container.textContent).toContain('Solcast kann unter Einstellungen')
+  })
+
+  it('ohne Zusatz, wenn eedc vorn ist oder Solcast schon gewählt — ohne Empfehlung kein Satz', () => {
+    const vorn = render(<PvgGenauigkeitsTracking vm={vmVon({}, genauigkeit({ beste_quelle: 'eedc', beste_quelle_mae_prozent: 6.0 }))} />)
+    expect(vorn.container.textContent).toContain('trifft an dieser Anlage eedc am besten (MAE 6,0 %).')
+    vorn.unmount()
+    const gewaehlt = render(<PvgGenauigkeitsTracking vm={vmVon({}, genauigkeit({ beste_quelle: 'solcast', beste_quelle_mae_prozent: 5.0, prognose_quelle: 'solcast' }))} />)
+    expect(gewaehlt.container.textContent).not.toContain('Solcast kann unter Einstellungen')
+    gewaehlt.unmount()
+    const ohne = render(<PvgGenauigkeitsTracking vm={vmVon()} />)
+    expect(ohne.container.textContent).not.toContain('am besten')
+  })
+
+  it('zeigt die Kopfzeile des Wächters nur, wenn die Korrektur ausgesetzt ist', () => {
+    const aus = genauigkeit({ korrektur_status: { ausgesetzt: true, mae_kaskade_prozent: 24.0, mae_roh_prozent: 21.0, tage: 30 } })
+    const { container, unmount } = render(<PvgGenauigkeitsTracking vm={vmVon({}, aus)} />)
+    expect(container.textContent).toContain('Korrektur ausgesetzt — die letzten 30 Tage war die Korrektur schlechter als OpenMeteo roh (MAE 24,0 % gegen 21,0 %)')
+    unmount()
+    const an = genauigkeit({ korrektur_status: { ausgesetzt: false, mae_kaskade_prozent: 18.0, mae_roh_prozent: 21.0, tage: 30 } })
+    expect(render(<PvgGenauigkeitsTracking vm={vmVon({}, an)} />).container.textContent).not.toContain('Korrektur ausgesetzt')
+  })
+})

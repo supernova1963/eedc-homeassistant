@@ -394,6 +394,14 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         <div className="flex-1 min-w-0 space-y-4">
           <TagHeader datum={angezeigterTag} laedtTag={laedtTag} laufend={istHeute} tag={tag} onReload={laden} reloading={reloading} />
 
+          {/* Päckchen CC: `tag-detail` wird mit `.catch` geladen — fehlt es bei vorhandener Tag-Zeile, fehlen Speicher-Bilanz,
+              Wirkungsverluste und E-Mobilität im Hub. Das sagt die Sicht, statt still leere Blöcke zu zeigen. */}
+          {!error && !loading && tag && !tagDetail && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Tagesdetail nicht geladen — Speicher und E-Mobilität ohne Werte. Neu laden über den Knopf im Kopf.
+            </p>
+          )}
+
           {error ? (
             // B8-Fehler-Baustein (S15): refetch räumt error ab + refetcht alle Quellen.
             <FehlerZustand text={error} onRetry={laden} />

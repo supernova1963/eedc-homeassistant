@@ -682,7 +682,10 @@ async def _abweichungs_ampel(*, anlage, db, sensor_values, prognose, heute, jetz
         bis_index = max(0, jetzt_stunde)
     else:
         bis_index = max(0, int(bis_slot) + 1)
-    soll = sum(float(v or 0.0) for v in stundenprofil[:bis_index])
+    # Die Summe selbst steht im Layer (Päckchen CC): dieselbe Funktion bildet das SOLL der Nachführung «Rest heute».
+    from backend.core.berechnungen.prognose_nachfuehrung import soll_bisher_kwh
+
+    soll = soll_bisher_kwh(stundenprofil, bis_index - 1) or 0.0
     if soll <= 0:
         return   # vor Sonnenaufgang ist jede Prozentzahl eine Division durch fast 0
 

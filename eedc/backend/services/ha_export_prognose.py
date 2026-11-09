@@ -207,6 +207,8 @@ async def berechne_prognose_export(db, anlage, *, skip_jitter: bool = False) -> 
             # Backward-Slot). P6 summiert das SOLL bis genau dorthin — eine
             # Quelle statt zweier Grenzen.
             "ist_bisher_bis_slot": prognose.ist_bisher_bis_slot,
+            # Päckchen CC: Wächter «Korrektur nur, wenn sie hilft» — Attribute am Sensor «PV-Prognose heute».
+            "korrektur_nutzen": getattr(prognose, "korrektur_nutzen", None),
             "heute_vormittag_kwh": _haelften(0)[0],
             "heute_nachmittag_kwh": _haelften(0)[1],
             "morgen_vormittag_kwh": _haelften(1)[0],

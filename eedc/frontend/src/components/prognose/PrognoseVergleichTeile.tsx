@@ -1018,13 +1018,51 @@ export function PvgHeatmap({ vm }: { vm: PrognoseVergleichVM }) {
 // ── N-782: Zeitpunkt des Genauigkeits-Trackings ───────────────────────────────
 const ZEITPUNKT_OPTIONEN: { key: GenauigkeitsZeitpunkt; label: string }[] = [
   { key: 'day_ahead', label: 'Day-Ahead' },
+  { key: 'mittag', label: 'Mittag' },
   { key: 'abend', label: 'Abend' },
 ]
-const ZEITPUNKT_LABEL: Record<GenauigkeitsZeitpunkt, string> = { day_ahead: 'Day-Ahead', abend: 'Abend' }
+const ZEITPUNKT_LABEL: Record<GenauigkeitsZeitpunkt, string> = { day_ahead: 'Day-Ahead', mittag: 'Mittag', abend: 'Abend' }
 const ZEITPUNKT_HINWEIS =
   'Day-Ahead = Stand in der Nacht: eedc, OpenMeteo und Solcast bis 00:45; SFML beim ersten Aufruf der Live-Sicht, ' +
-  'ebenso Solcast an Tagen vor dem Update auf diese Version · Abend = nach Sonnenuntergang eingefrorener Stand; ' +
-  'Solcast führt seinen Tageswert tagsüber per Satellit nach.'
+  'ebenso Solcast an Tagen vor dem Update auf diese Version · Mittag = der Stand um 12 Uhr (erster Lauf bis 12:45): ' +
+  'eedc nachgeführt aus dem gemessenen Vormittag, Solcast nachgeführt per Satellit, OpenMeteo der Modelllauf · ' +
+  'Abend = nach Sonnenuntergang eingefrorener Stand; Solcast führt seinen Tageswert tagsüber per Satellit nach.'
+
+/** Päckchen CC: Anzeigename der Quellen in der Empfehlung (die Wahl selbst trifft das Backend). */
+const QUELLEN_NAME: Record<'eedc' | 'openmeteo' | 'solcast', string> = { eedc: 'eedc', openmeteo: 'OpenMeteo', solcast: 'Solcast' }
+
+/** Päckchen CC (Quellen-Empfehlung): ein Satz unter den Kennzahlen — welche Quelle zu diesem Zeitpunkt am besten trifft. */
+function PvgQuellenEmpfehlung({ genauigkeit, zeitpunkt }: { genauigkeit: GenauigkeitsResponse; zeitpunkt: GenauigkeitsZeitpunkt }) {
+  const beste = genauigkeit.beste_quelle
+  const mae = genauigkeit.beste_quelle_mae_prozent
+  if (!beste || mae == null) return null
+  const eedcMae = genauigkeit.eedc_mae_prozent
+  const vergleich = beste !== 'eedc' && eedcMae != null ? ` gegen eedc ${fmtZahl(eedcMae, 1)} %` : ''
+  const wahlSatz = beste === 'solcast' && genauigkeit.prognose_quelle !== 'solcast'
+    ? ' Solcast kann unter Einstellungen → Stammdaten → Anlage («PV-Prognose-Quelle») gewählt werden.'
+    : ''
+  return (
+    <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+      Zum Zeitpunkt {ZEITPUNKT_LABEL[zeitpunkt]} trifft an dieser Anlage <strong>{QUELLEN_NAME[beste]}</strong> am besten
+      {' '}(MAE {fmtZahl(mae, 1)} %{vergleich}).{wahlSatz}
+    </p>
+  )
+}
+
+/** Päckchen CC: Kopfzeile des Wächters «Korrektur nur, wenn sie hilft» — nur, wenn die Korrektur ausgesetzt ist. */
+function PvgKorrekturAusgesetzt({ genauigkeit }: { genauigkeit: GenauigkeitsResponse }) {
+  const k = genauigkeit.korrektur_status
+  if (!k?.ausgesetzt) return null
+  const maeText = k.mae_kaskade_prozent != null && k.mae_roh_prozent != null
+    ? ` (MAE ${fmtZahl(k.mae_kaskade_prozent, 1)} % gegen ${fmtZahl(k.mae_roh_prozent, 1)} %)`
+    : ''
+  return (
+    <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+      Korrektur ausgesetzt — die letzten 30 Tage war die Korrektur schlechter als OpenMeteo roh{maeText}; eedc zeigt bis
+      auf Weiteres den Rohwert.
+    </p>
+  )
+}
 
 /** Eine Prognose ohne aufgezeichneten Stand — gedimmt, damit sie nicht wie 0 gelesen wird. */
 function NichtErhoben() {
@@ -1082,6 +1120,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
           </SimpleTooltip>
         </div>
       </div>
+      <PvgKorrekturAusgesetzt genauigkeit={genauigkeit} />
       <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">{ZEITPUNKT_HINWEIS}</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         {vm.genauigkeitsModus === 'kompakt' ? (
@@ -1098,6 +1137,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
           </>
         )}
       </div>
+      <PvgQuellenEmpfehlung genauigkeit={genauigkeit} zeitpunkt={vm.genauigkeitsZeitpunkt} />
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
         MAPE/Bias oben über {genauigkeit.anzahl_tage} {genauigkeit.anzahl_tage === 1 ? 'Tag' : 'Tage'} mit Daten{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: {Math.min(7, genauigkeit.tage.length) === 1 ? 'letzter Tag' : `letzte ${Math.min(7, genauigkeit.tage.length)} Tage`}
       </div>
