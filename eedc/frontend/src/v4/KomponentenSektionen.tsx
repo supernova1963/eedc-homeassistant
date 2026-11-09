@@ -379,23 +379,22 @@ function WasNochMoeglich({ zeilen }: { zeilen: WpMoeglichZeile[] }) {
  *  Stunde mit 2,0 kWh Netzladung und 1,5 kWh Entladung liefert netto 0,5 kWh.
  *  Das ist **N-197** und wird dort gelöst, nicht hier — hier wird es gesagt. */
 function speicherWirkungsverluste(d: AktuellerMonatResponse) {
-  if (d.speicher_ladung_kwh == null || d.speicher_entladung_kwh == null) return null
-  if (d.speicher_ladung_kwh <= d.speicher_entladung_kwh) return null
-  if (d.einspeise_preis_cent == null && d.netzbezug_preis_cent == null) return null
-  const verlust_kwh = d.speicher_ladung_kwh - d.speicher_entladung_kwh
-  const netz_kwh = d.speicher_ladung_netz_kwh ?? 0
-  const roh_netz = d.speicher_ladung_kwh > 0 ? netz_kwh / d.speicher_ladung_kwh : 0
-  const anteil_netz = Math.min(1, roh_netz)
-  const gekappt = roh_netz > 1
-  const anteil_pv = 1 - anteil_netz
+  // Päckchen BB: Betrag und seine zwei Teile kommen fertig aus dem Backend (Layer `speicher_bilanz`, Monat/Jahr als
+  // `computed_field`, Tag aus `tag-detail`) — der Client nennt nur die Faktoren. `null` heißt: kein Verlust
+  // (Ladung ≤ Entladung) oder kein Preis.
+  const euro = d.speicher_wirkungsverluste_euro
+  if (euro == null) return null
+  const pvKwh = d.speicher_verlust_pv_kwh ?? 0
+  const netzKwh = d.speicher_verlust_netz_kwh ?? 0
+  const gekappt = d.speicher_netzladung_anteil_gekappt === true
+  // Die Preise der Herleitung — dieselben, mit denen das Backend rechnet (Ø-Bezugspreis vor Tarif).
   const eins_p = d.einspeise_preis_cent ?? 0
   const bez_p = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent ?? 0
-  const euro = (verlust_kwh * anteil_pv * eins_p) / 100 + (verlust_kwh * anteil_netz * bez_p) / 100
   const teile: string[] = []
-  if (anteil_pv > 0 && eins_p > 0) teile.push(`${fmt(verlust_kwh * anteil_pv, 1)} kWh × ${fmtCalc(eins_p, 2)} ct (entg. Einspeisung)`)
-  if (anteil_netz > 0 && bez_p > 0) teile.push(`${fmt(verlust_kwh * anteil_netz, 1)} kWh × ${fmtCalc(bez_p, 2)} ct (Netzbezug)`)
+  if (pvKwh > 0 && eins_p > 0) teile.push(`${fmt(pvKwh, 1)} kWh × ${fmtCalc(eins_p, 2)} ct (entg. Einspeisung)`)
+  if (netzKwh > 0 && bez_p > 0) teile.push(`${fmt(netzKwh, 1)} kWh × ${fmtCalc(bez_p, 2)} ct (Netzbezug)`)
   const grund = gekappt
-    ? `Netz-Anteil auf 100 % begrenzt — Netzladung (${fmt(netz_kwh, 1)} kWh) größer als die Netto-Ladung des Tages (${fmt(d.speicher_ladung_kwh, 1)} kWh): Ladung und Entladung in derselben Stunde`
+    ? `Netz-Anteil auf 100 % begrenzt — Netzladung (${fmt(d.speicher_ladung_netz_kwh ?? 0, 1)} kWh) größer als die Netto-Ladung des Tages (${fmt(d.speicher_ladung_kwh, 1)} kWh): Ladung und Entladung in derselben Stunde`
     : null
   return { euro, teile, gekappt, grund }
 }
@@ -718,8 +717,9 @@ export function baueKomponentenBloecke(
         </span>
       ),
     })
-    if (hat(d.speicher_ladung_kwh) && hat(d.speicher_entladung_kwh)) {
-      const bilanz = d.speicher_entladung_kwh! - d.speicher_ladung_kwh!
+    if (hat(d.speicher_bilanz_kwh)) {
+      // Päckchen BB: Entladung − Ladung aus dem Backend (Layer `speicher_bilanz`).
+      const bilanz = d.speicher_bilanz_kwh!
       // E3 (R3b, Gernot 2026-07-05): Amber = dokumentierte HINWEIS-Rolle
       // („negativ, aber kein Fehler") — eine negative Speicher-Bilanz ist
       // physikalisch normal (Wirkungsgrad), bewusst NICHT Kosten-/Signal-Rot.
@@ -1184,12 +1184,13 @@ export function baueKomponentenBloecke(
   // dort (und bei älteren Antworten) ist sie die Heimladung.
   const emobGesamt = d.emob_ladung_gesamt_kwh ?? d.emob_ladung_kwh
   if (hat(emobGesamt) || hat(d.emob_km)) {
-    const pvAnteil = hat(d.emob_ladung_pv_kwh) && d.emob_ladung_kwh
-      ? (d.emob_ladung_pv_kwh! / d.emob_ladung_kwh) * 100 : null
-    // PV-Anteil/Netz-Anteil sind auf Tag mit Sensor erhebbar (tagDetail);
-    // km und Verbrauch/100km haben keinen Tages-Sensor und stehen deshalb als
-    // „—" mit Grund in den Kacheln unten, statt wegzufallen
-    // ([[feedback_sensor_ableitbar_nicht_weglassen]]).
+    // Päckchen BB2: der PV-Anteil (Heim) kommt fertig aus dem Backend (Monat/Jahr `computed_field`, Tag aus dem
+    // Tagesdetail; Layer `pv_anteil_ladung`) — hier nur formatiert.
+    const pvAnteil = d.emob_pv_anteil_prozent ?? null
+    // PV-Anteil/Netz-Anteil sind auf Tag mit Sensor erhebbar (tagDetail), die
+    // Strecke mit dem Kilometer-Kanal des E-Autos; Verbrauch/100km gibt es nur im
+    // Monat und steht deshalb als „—" mit Grund in der Kachel unten, statt
+    // wegzufallen ([[feedback_sensor_ableitbar_nicht_weglassen]]).
     //
     // ⛔ **Hier standen bis 29.08.2026 zusätzlich `extern`, `V2H` und
     // `Ersparnis` — alle drei falsch** (N-348, beim Messen des WP-Befunds
@@ -1221,9 +1222,9 @@ export function baueKomponentenBloecke(
           ? undefined
           : tagHinweis(pvAnteil != null, 'PV-Ladesensor (ladung_pv) der Wallbox/dem Auto zuordnen.') },
       { ...EAUTO_KPI.gefahren, value: fmt(d.emob_km), unit: 'km',
-        hinweis: tagHinweis(hat(d.emob_km), 'Kein Tages-Kilometersensor — Strecke nur im Monatsabschluss erfassbar.') },
+        hinweis: tagHinweis(hat(d.emob_km), 'Keine Tages-Strecke — sie kommt aus dem Kilometer-Sensor des E-Autos (Sensor-Zuordnung).') },
       { ...EAUTO_KPI.verbrauch, value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km',
-        hinweis: tagHinweis(d.emob_verbrauch_100km != null, 'Folgt aus der Tages-Strecke — kein Tages-Sensor.') },
+        hinweis: tagHinweis(d.emob_verbrauch_100km != null, 'Verbrauch je 100 km nur im Monat.') },
     ]
     // Lade-Herkunft + V2H als Detailzeilen — Netz-Anteil tagesgenau (tagDetail),
     // extern aus dem Monats-Handeintrag, V2H im Monat aus dem Abschluss und am Tag

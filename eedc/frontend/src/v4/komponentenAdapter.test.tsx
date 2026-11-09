@@ -67,7 +67,9 @@ describe('KOMPONENTEN_ADAPTER', () => {
     getSpeicherDashboard.mockResolvedValue([{
       investition: inv({ typ: 'speicher' }),
       zusammenfassung: { vollzyklen: 312, effizienz_prozent: 90, ist_wirkungsgrad_prozent: 92,
-        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, arbitrage_kwh: 500, ersparnis_euro: 286 },
+        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, arbitrage_kwh: 500, ersparnis_euro: 286,
+        // Päckchen BB: die Kacheln-Größen rechnet das Backend (Layer `speicher_bilanz`) — der Adapter liest sie.
+        pv_ladung_kwh: 4000, verlust_kwh: 400 },
       monatsdaten: [
         { jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } },
         { jahr: 2025, monat: 10, verbrauch_daten: { ladung_kwh: 80, entladung_kwh: 70 } },
@@ -113,13 +115,14 @@ describe('KOMPONENTEN_ADAPTER', () => {
       investition: inv({ typ: 'speicher' }),
       zusammenfassung: { vollzyklen: 312, effizienz_prozent: 80, ist_wirkungsgrad_prozent: 80,
         param_wirkungsgrad_prozent: 90, eta_degradation_alarm: true, durchsatz_inkonsistent: true,
-        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, zyklen_pro_monat: 26, arbitrage_kwh: 0, ersparnis_euro: 286 },
+        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, zyklen_pro_monat: 26, arbitrage_kwh: 0, ersparnis_euro: 286,
+        verlust_kwh: 400, pv_ladung_kwh: 4500 },
       monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
     // η-Kachel rot bei Degradations-Alarm
     expect(g.status[1].color).toBe('red')
-    // Kennzahlen-Strip: Ladung/Entladung gesamt, Zyklen/Monat, Verlust (4500−4100=400)
+    // Kennzahlen-Strip: Ladung/Entladung gesamt, Zyklen/Monat, Verlust (Backend-Feld `verlust_kwh`)
     expect(titles(g.kennzahlen!.kpis)).toEqual(['Ladung gesamt', 'Entladung gesamt', 'Zyklen/Monat', 'Verlust'])
     expect(g.kennzahlen!.kpis[3].value).toBe('400')
     // Zwei Alarme (Degradation + Durchsatz-Invariante)
@@ -634,7 +637,9 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     getSpeicherDashboard.mockResolvedValue([{
       investition: inv({ id: 5, typ: 'speicher', parent_investition_id: 10 }),
       zusammenfassung: { vollzyklen: 100, effizienz_prozent: 90, gesamt_entladung_kwh: 1000, gesamt_ladung_kwh: 1000,
-        ersparnis_euro: 100, arbitrage_faehig: true, arbitrage_kwh: 200, arbitrage_avg_preis_cent: 12, arbitrage_gewinn_euro: 30 },
+        ersparnis_euro: 100, arbitrage_faehig: true, arbitrage_kwh: 200, arbitrage_avg_preis_cent: 12, arbitrage_gewinn_euro: 30,
+        // Päckchen BB: Menge × Ø-Ladepreis im Backend (`netzladung_kosten_euro`).
+        netzladung_kosten_euro: 24, verlust_kwh: 0, pv_ladung_kwh: 800 },
       monatsdaten: [],
     }])
     list.mockResolvedValue([inv({ id: 10, typ: 'wechselrichter', bezeichnung: 'WR Nord' })])
@@ -642,7 +647,7 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.sekundaer?.titel).toBe('Arbitrage (Netzladung)')
     // R16-D-i: KPI „Anteil an Ladung" entfernt (redundant zum Balken „Ladung nach Quelle").
     expect(titles(g.sekundaer!.kpis)).toEqual(['Netzladung', 'Ø Ladepreis', 'Netzladung-Kosten', 'Arbitrage-Gewinn'])
-    // R15-5a: Kosten = 200 kWh × 12 ct ÷ 100 = 24 € — reiner Ausweis (in Netzbezug-Kosten enthalten)
+    // R15-5a: Kosten = 200 kWh × 12 ct ÷ 100 = 24 € (Backend) — reiner Ausweis (in Netzbezug-Kosten enthalten)
     const kosten = g.sekundaer!.kpis.find((x) => x.title === 'Netzladung-Kosten')!
     expect(kosten.value).toBe('24,00')
     expect(kosten.subtitle).toContain('enthalten')

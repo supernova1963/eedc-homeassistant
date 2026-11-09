@@ -9,11 +9,14 @@
  *
  * Datenherkunft (kein neuer Endpoint):
  *  - Speicher (Ladung/Entladung/η/Zyklen), WP-Strom, Finanzen → direkt aus
- *    `TagWerte` (backend-aggregiert, kein Drift).
- *  - BKW / E-Mobilität / Sonstiges-Energie → Tagessumme der Stunden-`komponenten`
+ *    `TagWerte` (backend-aggregiert, kein Drift); Speicher-Bilanz und Wirkungsverluste
+ *    aus `tagDetail` (Päckchen BB — dieselbe Tag-Zeile, im Backend gerechnet).
+ *  - BKW / Sonstiges-Energie → Tagessumme der Stunden-`komponenten`
  *    je Serie, klassifiziert über die backend-gelieferte `SerieInfo`
- *    (`komponenten_kwh`-Tagesrollup ist für manche Tage leer → Stunden sind die
- *    robuste Quelle, wie schon die IST-„Tagesdetail"-KPIs).
+ *    (`komponenten_kwh`-Tagesrollup ist für manche Tage leer → Stunden sind der
+ *    Rückfall, der Zählerpfad aus `TagWerte` hat Vorrang).
+ *  - E-Mobilität → Ladung, PV-Anteil und km des Tages fertig aus `tagDetail`
+ *    (Päckchen BB2, N-783: Zählerpfad vor Leistungspfad, im Backend).
  *
  * Tagesgenau erhebbar (D1 „maximal erheben", SPEC-COCKPIT-TAG-JAHR Abschnitt F)
  * und über `tagDetail` (Endpoint `tag-detail`) zugespielt: WP-Strom-Split
@@ -60,14 +63,13 @@ export function baueTagAlsMonat(
   // WP-Counter pro Tag (Issue #136/#238): Tagessumme der Stundenwerte (anlagenweit).
   const wpStartsTag = stunden.reduce((a, s) => a + (s.wp_starts_anzahl ?? 0), 0)
   const wpBetriebsstundenTag = stunden.reduce((a, s) => a + (s.wp_betriebsstunden ?? 0), 0)
-  let bkw = 0, emob = 0, sonstErz = 0, sonstVerb = 0, sonstAbg = 0
+  let bkw = 0, sonstErz = 0, sonstVerb = 0, sonstAbg = 0
   // Pro-Gerät-Liste (Tag): je Serie ein Gerät — Tag kennt nur Erzeugung/Verbrauch
   // (kein Eigenverbrauch-/Bezug-Split auf Stundenebene).
   const sonstigesGeraete: SonstigesGeraet[] = []
   for (const s of serien) {
     const v = tagessumme(s.key)
     if (s.typ === 'balkonkraftwerk') bkw += Math.max(0, v)
-    else if (s.kategorie === 'wallbox' || s.kategorie === 'eauto') emob += Math.abs(v)
     else if (s.kategorie === 'sonstige') {
       if (s.seite === 'quelle') {
         const e = Math.max(0, v); sonstErz += e
@@ -90,10 +92,6 @@ export function baueTagAlsMonat(
   // Tagesbilanz ab. Der Leistungspfad bleibt der Rückfall für Tage ohne Zähler
   // (Rollup leer: `tag.bkw` = 0, `tag.sonstiges_*` = null — der Server fällt
   // selbst schon auf die Stunden zurück, `tage_werte.py`).
-  // ⚠ E-Mobilität bleibt hier bewusst auf den Stunden: `TagWerte` trägt keinen
-  // Zählerpfad-Tageswert für die Ladung, und die Heimlade-Zuordnung (Auto vor Wallbox,
-  // N-555) gehört nicht in diese Datei. Ausnahme V2H (#110): die Rückspeisung ist eine
-  // Tagesgröße aus dem Zählerpfad (`tag.v2h_entladung`) — keine Stunde trägt sie.
   bkw = tag.bkw > 0 ? tag.bkw : bkw
   sonstErz = tag.sonstiges_erzeugung ?? sonstErz
   sonstVerb = tag.sonstiges_verbrauch ?? sonstVerb
@@ -114,6 +112,14 @@ export function baueTagAlsMonat(
     speicher_ladung_netz_kwh: tagDetail?.speicher_ladung_netz_kwh ?? null,
     speicher_effektiver_ladepreis_cent: tagDetail?.speicher_effektiver_ladepreis_cent ?? null,
     speicher_effektiver_ladepreis_quelle: tagDetail?.speicher_effektiver_ladepreis_quelle ?? null,
+    // Päckchen BB: Bilanz und Wirkungsverluste des Tages rechnet das Backend aus derselben Tag-Zeile (Layer
+    // `speicher_bilanz`) — hier nur durchgereicht. Ohne Tagesdetail fehlen beide Zeilen.
+    speicher_bilanz_kwh: tagDetail?.speicher_bilanz_kwh ?? null,
+    speicher_wirkungsverluste_euro: tagDetail?.speicher_wirkungsverluste_euro ?? null,
+    speicher_verlust_pv_kwh: tagDetail?.speicher_verlust_pv_kwh ?? null,
+    speicher_verlust_netz_kwh: tagDetail?.speicher_verlust_netz_kwh ?? null,
+    speicher_netzladung_anteil_prozent: tagDetail?.speicher_netzladung_anteil_prozent ?? null,
+    speicher_netzladung_anteil_gekappt: tagDetail?.speicher_netzladung_anteil_gekappt ?? null,
     // Wärmepumpe — Tages-Strom + Tages-Counter (Starts/Betriebsstunden, period-
     // neutraler Slot `*_summe_monat`) + tagesgenauer Strom-Split Heizung/Warmwasser
     // + thermische Wärme (tagDetail, nur mit Wärmemengenzähler → sonst null/„—").
@@ -204,12 +210,14 @@ export function baueTagAlsMonat(
     wp_modus_gemessen: tagDetail?.wp_modus_gemessen ?? null,
     wp_starts_summe_monat: wpStartsTag > 0 ? wpStartsTag : null,
     wp_betriebsstunden_summe_monat: wpBetriebsstundenTag > 0 ? wpBetriebsstundenTag : null,
-    // E-Mobilität / BKW / Sonstiges — Tagessumme aus Stunden; PV-/Netz-Anteil der
-    // Ladung tagesgenau aus tagDetail (nur mit Sensor → sonst null/„—"). km/Verbrauch/€
-    // haben keinen Tages-Sensor → bleiben null/„—". V2H (#110) kommt als Tagesgröße aus
-    // dem Zählerpfad (TagWerte); ohne V2H-Zähler „—" (geteilte Zeile „V2H-Rückspeisung").
+    // E-Mobilität — Ladung, PV-Anteil (Heim) und km des Tages kommen fertig aus tagDetail (Päckchen BB2, N-783:
+    // Zählerpfad vor Leistungspfad, private Geräte wie der Monat); ohne Tagesdetail „—". PV-/Netz-Anteil der Ladung
+    // nur mit Sensor. Verbrauch je 100 km und € nur im Monat → null/„—". V2H (#110) kommt als Tagesgröße aus dem
+    // Zählerpfad (TagWerte); ohne V2H-Zähler „—" (geteilte Zeile „V2H-Rückspeisung").
     emob_v2h_kwh: tag.v2h_entladung ?? null,
-    emob_ladung_kwh: pos(emob),
+    emob_ladung_kwh: tagDetail?.emob_ladung_kwh ?? null,
+    emob_pv_anteil_prozent: tagDetail?.emob_pv_anteil_prozent ?? null,
+    emob_km: tagDetail?.emob_km ?? null,
     emob_ladung_pv_kwh: tagDetail?.emob_ladung_pv_kwh ?? null,
     emob_ladung_netz_kwh: tagDetail?.emob_ladung_netz_kwh ?? null,
     bkw_erzeugung_kwh: pos(bkw),

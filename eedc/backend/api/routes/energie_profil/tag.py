@@ -203,28 +203,122 @@ async def _mit_emob_heute(db, anlage, investitionen_by_id, datum, tagesdetail) -
     ``komponenten_der_tage`` (die eine Mischung, E-Mob-Gruppe), gemessene PV-Ladung aus ``werte_je_inv`` (nur, wenn
     ``grund_je_feld`` für ``emob_ladung_pv_kwh`` leer ist: «nur gemessen», P2), Fahrt aus ``fahrt_je_tag``. Eigene
     Phase wie ``_mit_emob_betrieb``; eine Zeile nur mit mindestens einem Wert."""
-    # Die Gruppe über den benannten Tagesleser, nicht aus der Lese-Schicht (Wächter `test_kanal_lesen_waechter.py`).
-    from backend.services.energie_profil.kanal_stunden import GRUPPE_EMOB, fahrt_je_tag, komponenten_der_tage
-    from backend.services.snapshot.komponenten_beitraege import wallbox_deckt_ladung_ab
+    from backend.services.energie_profil.kanal_stunden import fahrt_je_tag
 
-    geraete = sorted((i for i, inv in investitionen_by_id.items()
-                      if inv.typ in ("wallbox", "e-auto") and inv.ist_aktiv_an(datum)), key=int)
+    geraete = _emob_geraete(investitionen_by_id, datum)
     if not geraete:
         return []
-    komp = (await komponenten_der_tage(db, anlage.id, datum, datum, gruppen=(GRUPPE_EMOB,))).get(datum) or {}
+    komp, deckt = await _emob_komp_und_deckung(db, anlage, investitionen_by_id, datum)
     pv_je_inv = ({} if tagesdetail.grund_je_feld.get("emob_ladung_pv_kwh")
                  else tagesdetail.werte_je_inv.get("emob_ladung_pv_kwh") or {})
     fahrt = await fahrt_je_tag(db, anlage, investitionen_by_id, datum)
-    deckt = wallbox_deckt_ladung_ab(
-        investitionen_by_id.values(), anlage.sensor_mapping, datum=datum,
-        ist_verfuegbar=lambda i, _f: f"wallbox_{i.id}" in komp,
-    ) or wallbox_deckt_ladung_ab(investitionen_by_id.values(), anlage.sensor_mapping, datum=datum)
     zeilen = [
         _emob_heute_wallbox(i, komp, pv_je_inv) if investitionen_by_id[i].typ == "wallbox"
         else _emob_heute_eauto(i, komp, fahrt, deckt)
         for i in geraete
     ]
     return [z for z in zeilen if z.model_dump(exclude={"investition_id", "typ"}, exclude_none=True)]
+
+
+def _emob_geraete(investitionen_by_id: dict, datum: date, *, nur_privat: bool = False) -> list[str]:
+    """Die am ``datum`` aktiven Wallboxen und E-Autos (Ids, numerisch sortiert) — geteilt von ``_mit_emob_heute`` (alle
+    Geräte, Karten «Heute») und ``_emob_ladung_tag`` (``nur_privat``: ohne Dienstgeräte, ``ist_dienstlich`` — die
+    Gerätemenge der Heimladung von *Cockpit → Monat* und ``tage-werte.wallbox_ladung``; Päckchen BB2, N-783)."""
+    from backend.core.investition_parameter import ist_dienstlich
+
+    return sorted((i for i, inv in investitionen_by_id.items()
+                   if inv.typ in ("wallbox", "e-auto") and inv.ist_aktiv_an(datum)
+                   and not (nur_privat and ist_dienstlich(inv))), key=int)
+
+
+async def _emob_komp_und_deckung(db, anlage, investitionen_by_id: dict, datum: date) -> tuple[dict, bool]:
+    """Die Tageswerte der E-Mob-Gruppe aus ``komponenten_der_tage`` (die eine Mischung) und ob eine Wallbox die Ladung
+    abdeckt (W3/N-555: dann zählt ``eauto_<id>`` nicht) — geteilt von ``_mit_emob_heute`` und ``_emob_ladung_tag``."""
+    # Die Gruppe über den benannten Tagesleser, nicht aus der Lese-Schicht (Wächter `test_kanal_lesen_waechter.py`).
+    from backend.services.energie_profil.kanal_stunden import GRUPPE_EMOB, komponenten_der_tage
+    from backend.services.snapshot.komponenten_beitraege import wallbox_deckt_ladung_ab
+
+    komp = (await komponenten_der_tage(db, anlage.id, datum, datum, gruppen=(GRUPPE_EMOB,))).get(datum) or {}
+    deckt = wallbox_deckt_ladung_ab(
+        investitionen_by_id.values(), anlage.sensor_mapping, datum=datum,
+        ist_verfuegbar=lambda i, _f: f"wallbox_{i.id}" in komp,
+    ) or wallbox_deckt_ladung_ab(investitionen_by_id.values(), anlage.sensor_mapping, datum=datum)
+    return komp, deckt
+
+
+def _emob_ladung_zaehler(geraete: list[str], investitionen_by_id: dict, komp: dict, deckt: bool) -> Optional[float]:
+    """Zählerpfad der Tagesladung (BB2): Σ ``|wallbox_<id>|`` der Wallboxen plus ``|eauto_<id>|`` der E-Autos nur ohne
+    deckende Wallbox (N-555) — dieselben Schlüssel und derselbe Betrag wie ``emob_heute`` (``_betrag``, K4-N1).
+    ``None``, wenn keiner der Schlüssel am Tag steht (dann gilt der Leistungspfad)."""
+    werte = []
+    for i in geraete:
+        if investitionen_by_id[i].typ == "wallbox":
+            key = f"wallbox_{i}"
+        elif not deckt:
+            key = f"eauto_{i}"
+        else:
+            continue
+        if komp.get(key) is not None:
+            werte.append(_betrag(komp[key]))
+    return sum(werte) if werte else None
+
+
+def _emob_ladung_leistung(zeilen: list, geraete: list[str], investitionen_by_id: dict, datum: date) -> Optional[float]:
+    """Leistungspfad der Tagesladung (BB2, Rückfall): je Serie ``wallbox``/``eauto`` der Geräte die Σ der Stunden-
+    ``komponenten`` (dieselben Zeilen und Schlüssel wie ``/stunden``), davon der Betrag, summiert — Reihenfolge und
+    Betrag je Serien-Summe wie bis dahin der Client (``TagKomponenten.tsx``: ``Math.abs`` der Tagessumme). Die
+    N-555-Serienregel beim Lesen (``emob_auto_verdraengt``): Bestandsstunden vor dem 25.9.2026 können Wallbox- und
+    E-Auto-Serie derselben Ladung tragen. ``None`` ohne Serie."""
+    from backend.services.live_sensor_config import emob_auto_verdraengt
+    from ._shared import _key_to_serie_info
+
+    inv_map = {int(i): inv for i, inv in investitionen_by_id.items()}
+    serien = []
+    for key in sorted({k for z in zeilen for k in (z.komponenten or {})}):
+        info = _key_to_serie_info(key, inv_map)
+        if info and info["kategorie"] in ("wallbox", "eauto") and key.split("_")[1] in geraete:
+            serien.append((info["kategorie"], key.split("_")[1], key))
+    if not serien:
+        return None
+    if emob_auto_verdraengt(((kat, i) for kat, i, _ in serien), investitionen_by_id, datum):
+        serien = [s for s in serien if s[0] != "eauto"]
+    summe = 0
+    for _, _, key in serien:
+        serie = 0
+        for z in zeilen:
+            wert = (z.komponenten or {}).get(key)
+            serie += wert if wert is not None else 0
+        summe += abs(serie)
+    return summe
+
+
+async def _emob_ladung_tag(ctx: "_TagKontext") -> None:
+    """Phase von ``get_tag_detail`` (Päckchen BB2, N-783): die Ladung des Tages für den Block «E-Mobilität» —
+    **Zählerpfad hat Vorrang, Leistungspfad ist der Rückfall** («Zählerlücken wie HA», wie BKW und Sonstiges am Tag),
+    über die privaten, am Tag aktiven Geräte (Heimladung wie *Cockpit → Monat*). Bis dahin summierte der Client nur die
+    Stunden-Serien, und der Block fehlte an jedem Tag ohne Leistungspfad-Komponente der Wallbox (Produktiv-Box 108 von
+    130 Ladetagen). Dazu ``emob_km`` = Σ der gefahrenen km der privaten E-Autos (``fahrt_je_tag``, wie ``emob_heute``).
+    Ohne Ladung > 0 bleibt ``emob_ladung_kwh`` leer (der Tag ohne Ladung zeigt keinen Block, wie bisher)."""
+    from backend.services.energie_profil.kanal_stunden import fahrt_je_tag
+    from .serien import zeilen_der_stunden_sicht
+
+    geraete = _emob_geraete(ctx.investitionen_by_id, ctx.datum, nur_privat=True)
+    if not geraete:
+        return
+    komp, deckt = await _emob_komp_und_deckung(ctx.db, ctx.anlage, ctx.investitionen_by_id, ctx.datum)
+    ladung, quelle = _emob_ladung_zaehler(geraete, ctx.investitionen_by_id, komp, deckt), "zaehler"
+    if ladung is None:
+        _vortag, zeilen = await zeilen_der_stunden_sicht(ctx.db, ctx.anlage.id, ctx.datum)
+        ladung, quelle = _emob_ladung_leistung(zeilen, geraete, ctx.investitionen_by_id, ctx.datum), "leistung"
+    mit_ladung = ladung is not None and ladung > 0
+    autos = [i for i in geraete if ctx.investitionen_by_id[i].typ == "e-auto"]
+    fahrt = await fahrt_je_tag(ctx.db, ctx.anlage, ctx.investitionen_by_id, ctx.datum) if autos else {}
+    km = [fahrt[i]["km"] for i in autos if (fahrt.get(i) or {}).get("km") is not None]
+    ctx.emob_felder = dict(
+        emob_ladung_kwh=ladung if mit_ladung else None,
+        emob_ladung_quelle=quelle if mit_ladung else None,
+        emob_km=sum(km) if km else None,
+    )
 
 @dataclass
 class _TagKontext:
@@ -284,6 +378,10 @@ class _TagKontext:
     # ── _arbeitszahl_je_funktion ──
     wp_az_funktion_tag: Any = None
     wp_az_kuehlen_tag: Any = None
+    # ── _speicher_und_soll (Päckchen BB) ──
+    bb_felder: dict = field(default_factory=dict)
+    # ── _emob_ladung_tag (Päckchen BB2, N-783) ──
+    emob_felder: dict = field(default_factory=dict)
 
 
 # RF-71 (Serie „Funktion vor Datei", Bauform RF-1): ``get_tag_detail`` ist ein Orchestrator — Laden, dann je
@@ -293,7 +391,9 @@ class _TagKontext:
 # und Heizwärme je Gerät, D1, Layer) · ``_geraete_mengen`` (D-Sicht 3) · ``_funktions_deckung`` (SOLL §3.2b, Nenner
 # ``_nenner_der_funktion``, R2 Kühlen) · ``_abgrenzung_tag`` (R2/Bauart, R2 §4.2 Fall 1, N-441, §3.2b je Funktion) ·
 # ``_schranke_und_kasten`` (E1b, W-18-Kurzform, R-5/N-492, Systemarbeitszahl) · ``_arbeitszahl_je_funktion`` (N-348,
-# Kühlen) · ``_antwort``. Der Docstring der Route ist ihre OpenAPI-Beschreibung und bleibt deshalb wortgleich; die
+# Kühlen) · ``_speicher_und_soll`` (Päckchen BB: Speicher-Bilanz/Wirkungsverluste, SOLL-Erreichung aus der Tag-Zeile von
+# ``tage-werte``) · ``_emob_ladung_tag`` (BB2/N-783: Ladung des Tages, Zählerpfad vor Leistungspfad, privat; km) ·
+# ``_antwort``. Der Docstring der Route ist ihre OpenAPI-Beschreibung und bleibt deshalb wortgleich; die
 # Form steht hier als Kommentar (Lehre S7). Keine Layer-Formel ist in die Route gewandert (ADR-001).
 @router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
 async def get_tag_detail(
@@ -319,6 +419,8 @@ async def get_tag_detail(
     await _abgrenzung_tag(ctx)
     _schranke_und_kasten(ctx)
     _arbeitszahl_je_funktion(ctx)
+    await _speicher_und_soll(ctx)
+    await _emob_ladung_tag(ctx)
     return await _antwort(ctx)
 
 
@@ -354,6 +456,36 @@ async def _tag_laden(db: AsyncSession, anlage_id: int, datum: date) -> _TagKonte
     return _TagKontext(
         db=db, anlage=anlage, datum=datum, investitionen_by_id=investitionen_by_id, eingaenge=_eingaenge,
         tagesdetail=_tagesdetail, detail=_tagesdetail.werte, grund=_grund, eff=eff,
+    )
+
+
+async def _speicher_und_soll(ctx: _TagKontext) -> None:
+    """Phase von ``get_tag_detail`` (Päckchen BB, Z-Client-Halte H1/H3): Speicher-Bilanz und Wirkungsverluste des Tages
+    sowie die SOLL-Erreichung — Eingänge aus der Tag-Zeile von ``tage-werte`` (``baue_tage_werte`` für genau diesen
+    Tag, dieselbe Zeile, die *Cockpit → Tag* anzeigt), Netzladung und Preise aus dieser Antwort, Formeln im Layer.
+    Bis dahin rechnete der Client (``KomponentenSektionen.tsx``, ``TagBilanz.tsx``) aus zwei Antworten."""
+    from backend.core.berechnungen.ergebnis import quote
+    from backend.core.berechnungen.speicher_bilanz import speicher_bilanz_kwh, speicher_wirkungsverluste
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    zeile = next((z for z in await baue_tage_werte(ctx.db, ctx.anlage, ctx.datum, ctx.datum)
+                  if z.datum == ctx.datum), None)
+    if zeile is None:
+        return
+    einspeise = ctx.tarif.einspeiseverguetung_cent if ctx.tarif is not None else None
+    bezug = ctx.netzbezug_preis_tag
+    wv = speicher_wirkungsverluste(
+        zeile.speicher_ladung, zeile.speicher_entladung, ctx.detail.get("speicher_ladung_netz_kwh"),
+        einspeise, bezug, ein_preis_bekannt=einspeise is not None or bezug is not None,
+    )
+    ctx.bb_felder = dict(
+        speicher_bilanz_kwh=speicher_bilanz_kwh(zeile.speicher_ladung, zeile.speicher_entladung),
+        speicher_wirkungsverluste_euro=wv.euro if wv else None,
+        speicher_verlust_pv_kwh=wv.verlust_pv_kwh if wv else None,
+        speicher_verlust_netz_kwh=wv.verlust_netz_kwh if wv else None,
+        speicher_netzladung_anteil_prozent=wv.anteil_netz * 100 if wv else None,
+        speicher_netzladung_anteil_gekappt=wv.gekappt if wv else None,
+        soll_erreichung_prozent=quote(zeile.erzeugung, ctx.soll_pv, nur_positiver_nenner=True),
     )
 
 
@@ -1242,6 +1374,8 @@ async def _antwort(ctx: _TagKontext) -> TagDetailResponse:
         einspeise_preis_cent=tarif.einspeiseverguetung_cent,
         netzbezug_preis_cent=ctx.netzbezug_preis_tag,
         netzbezug_preis_herkunft=ctx.netzbezug_preis_herkunft_tag,
+        **ctx.bb_felder,
+        **ctx.emob_felder,
     )
 
 @router.get("/{anlage_id}/tag-status", response_model=TagStatusResponse)

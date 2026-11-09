@@ -34,6 +34,7 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     aggregiere_speicher_ist,
     berechne_speicher_ersparnis,
     ist_eta_degradation_alarm,
+    netzladung_kosten_euro,
 )
 from backend.services.speicher_wirtschaftlichkeit import (
     berechne_effektiver_ladepreis,
@@ -42,6 +43,7 @@ from backend.services.speicher_wirtschaftlichkeit import (
 )
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.berechnungen.ergebnis import quote
+from backend.core.berechnungen.speicher_bilanz import speicher_pv_ladung_kwh, speicher_verlust_kwh
 from backend.core.berechnungen import (
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
@@ -79,6 +81,18 @@ class SpeicherMonatsWert(BaseModel):
     vollzyklen: Optional[float]
 
 
+class SpeicherJahresWert(BaseModel):
+    """Ein Jahr der Speicher-Jahresbilanz (Päckchen BB): Σ der ``monatsreihe`` des Jahres, Verlust = Ladung − Entladung,
+    nie < 0 (Layer ``speicher_bilanz.speicher_verlust_kwh``) — «Ladung = Entladung + Verlust». Bis dahin faltete der
+    Client (``SpeicherJahresbilanz.tsx``)."""
+    jahr: int
+    pv_ladung_kwh: float
+    netzladung_kwh: float
+    entladung_kwh: float
+    ladung_gesamt_kwh: float
+    verlust_kwh: float
+
+
 class SpeicherDashboardResponse(BaseModel):
     """Speicher Dashboard Daten."""
     investition: InvestitionResponse
@@ -86,6 +100,8 @@ class SpeicherDashboardResponse(BaseModel):
     #: N-641/N-642: die bewertete Monatsreihe — Hub-Verlauf und Jahresbilanz lesen sie statt
     #: ``monatsdaten[].verbrauch_daten``.
     monatsreihe: list[SpeicherMonatsWert] = []
+    #: Päckchen BB: die Jahresbilanz (Block «Vergleich») aus derselben Reihe, aufsteigend nach Jahr.
+    jahresbilanz: list[SpeicherJahresWert] = []
     zusammenfassung: dict[str, Any]
     # Gleitende 12-Monats-Effizienz (carry-over-immun) — ersetzt die naive
     # Pro-Monats-Effizienz, die durch den SoC-Übertrag >100 % zappeln konnte.
@@ -349,11 +365,14 @@ async def _speicher_dashboard(ctx: _SpeicherKontext, speicher) -> SpeicherDashbo
     }
 
     _tep_kpis(zusammenfassung, ctx.eff_ladepreis, eta_ist, params)
+    _hub_kacheln(zusammenfassung)
+    monatsreihe = _monatsreihe(s.hub_reihe, kapazitaet)
 
     return SpeicherDashboardResponse(
         investition=speicher,
         monatsdaten=monatsdaten,
-        monatsreihe=_monatsreihe(s.hub_reihe, kapazitaet),
+        monatsreihe=monatsreihe,
+        jahresbilanz=_jahresbilanz(monatsreihe),
         zusammenfassung=zusammenfassung,
         effizienz_verlauf=[asdict(m) for m in verlauf],
     )
@@ -561,6 +580,40 @@ def _tep_kpis(zusammenfassung: dict, eff_ladepreis, eta_ist, params) -> None:
             ist_wirkungsgrad_prozent=eta_ist.wirkungsgrad_prozent,
             param_wirkungsgrad_prozent=wirkungsgrad_param,
         )
+
+
+def _hub_kacheln(zusammenfassung: dict) -> None:
+    """Päckchen BB (Z-Client-Halt H1): die drei Kacheln des Speicher-Hubs, die bis dahin der Client rechnete
+    (``komponentenAdapter.tsx``) — aus den **gerundeten** Feldern der Zusammenfassung, wie der Client sie las, damit die
+    Anzeige bitgleich bleibt: «Verlust» = Ladung − Entladung (ungeklemmt), «Netzladung-Kosten» = Netzladung × Ø-Ladepreis
+    (``effektiver_ladepreis_cent``, sonst ``arbitrage_avg_preis_cent``; ohne Preis ``None``), Segment «PV-Ladung» =
+    Ladung − Netzladung."""
+    ladung = zusammenfassung['gesamt_ladung_kwh']
+    netz = zusammenfassung['arbitrage_kwh']
+    preis = zusammenfassung.get('effektiver_ladepreis_cent')
+    if preis is None:
+        preis = zusammenfassung['arbitrage_avg_preis_cent']
+    zusammenfassung['verlust_kwh'] = speicher_verlust_kwh(ladung, zusammenfassung['gesamt_entladung_kwh'])
+    zusammenfassung['netzladung_kosten_euro'] = netzladung_kosten_euro(netz, preis)
+    zusammenfassung['pv_ladung_kwh'] = speicher_pv_ladung_kwh(ladung, netz)
+
+
+def _jahresbilanz(monatsreihe: list[SpeicherMonatsWert]) -> list[SpeicherJahresWert]:
+    """Σ der Monatsreihe je Jahr (Reihenfolge der Reihe), Verlust über den Layer (nie < 0), aufsteigend nach Jahr."""
+    summen: dict[int, list[float]] = {}
+    for mw in monatsreihe:
+        y = summen.setdefault(mw.jahr, [0, 0, 0, 0])
+        y[0] += mw.pv_ladung_kwh
+        y[1] += mw.netzladung_kwh
+        y[2] += mw.entladung_kwh
+        y[3] += mw.ladung_kwh
+    return [
+        SpeicherJahresWert(
+            jahr=jahr, pv_ladung_kwh=pv, netzladung_kwh=netz, entladung_kwh=ent, ladung_gesamt_kwh=lad,
+            verlust_kwh=speicher_verlust_kwh(lad, ent, nur_positiv=True),
+        )
+        for jahr, (pv, netz, ent, lad) in sorted(summen.items())
+    ]
 
 
 def _monatsreihe(

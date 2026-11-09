@@ -499,7 +499,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         id: 'speicher-verlauf', title: 'Speicher im Jahr', ...BLOCK_IDENTITAET.werte,
         summary: `${mitAnzahl(speicherZeilen.length, 'Monat', 'Monate')} mit Speicher-Bewegung`,
         defaultOpen: false,
-        render: () => <JahrSpeicherTabelle monate={jahrAntworten} />,
+        render: () => <JahrSpeicherTabelle monate={jahrAntworten} kopf={jahrData} />,
       }] : []),
       // #377 — Verbrauchszähler: nur wenn wirklich einer gepflegt ist.
       ...(zaehlerstaende && zaehlerstaende.length > 0 && !zaehlerParkIds(zaehlerstaende).every((id) => park.istGeparkt(id)) ? [{

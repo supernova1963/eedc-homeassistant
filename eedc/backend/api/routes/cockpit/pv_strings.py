@@ -292,6 +292,14 @@ class PVStringsResponse(BaseModel):
     ist_quelle: str = PV_QUELLE_FEHLT
     vergleich_hinweis: Optional[str] = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def spezifischer_ertrag_kwh_kwp(self) -> Optional[float]:
+        """Spezifischer Ertrag des Jahres über alle Strings (Päckchen BB4) = IST gesamt ÷ Anlagen-kWp (Layer
+        `kennzahlen.spezifischer_ertrag_kwh_kwp`, ungerundet) — Kachel «Spez. Ertrag Ø» und Fußzeile der String-Tabelle;
+        bis dahin rechnete der Client (`PvStringsTeile.tsx`). Ohne kWp `None`."""
+        return spezifischer_ertrag_kwh_kwp(self.ist_gesamt_kwh, self.anlagen_leistung_kwp)
+
 
 class PVStringJahreswert(BaseModel):
     jahr: int
@@ -311,6 +319,16 @@ class PVStringSaisonalwert(BaseModel):
     anzahl_jahre: int
 
 
+class PVStringMonatSumme(BaseModel):
+    """Ein Kalendermonat eines Strings, **summiert** über alle Jahre der Laufzeit (Päckchen BB4) — der Monatsverlauf
+    «Summe aller Jahre» in *Auswertungen → Prognose*. SOLL je Jahr wie die Jahressicht (`_string_jahreswert`: nur
+    Monate mit IST, F-34 im Lauf-Monat), nicht das Saisonal-Mittel."""
+    monat: int
+    monat_name: str
+    prognose_summe_kwh: float
+    ist_summe_kwh: float
+
+
 class PVStringGesamtlaufzeit(BaseModel):
     investition_id: int
     bezeichnung: str
@@ -327,6 +345,10 @@ class PVStringGesamtlaufzeit(BaseModel):
     ist_quelle: str = PV_QUELLE_FEHLT
     jahreswerte: list[PVStringJahreswert]
     saisonalwerte: list[PVStringSaisonalwert]
+    #: Päckchen BB4: IST − SOLL der Laufzeit (kWh), wie `abweichung_jahr_kwh` der Jahressicht.
+    abweichung_gesamt_kwh: float = 0.0
+    #: Päckchen BB4: je Kalendermonat Σ SOLL/IST über die Jahre (Monatsverlauf «Summe aller Jahre»).
+    monatswerte_summe: list[PVStringMonatSumme] = []
 
 
 class PVStringsGesamtlaufzeitResponse(BaseModel):
@@ -791,11 +813,14 @@ def _string_gesamtlaufzeit(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, mod
     string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
     modul_prognose = ctx.prognose_per_modul.get(modul.id)
     modul_quellen: list[str] = []
+    soll_summe_je_monat: dict[int, float] = {m: 0 for m in range(1, 13)}
 
     for jahr in ctx.jahre:
-        jahreswert, prognose_jahr, ist_jahr = _string_jahreswert(
+        jahreswert, prognose_jahr, ist_jahr, soll_je_monat = _string_jahreswert(
             ctx, sammler, modul, modul_kwp, modul_prognose, jahr, string_saisonal,
         )
+        for monat, soll in soll_je_monat.items():
+            soll_summe_je_monat[monat] += soll
         jahreswerte.append(jahreswert)
         # Jahre ohne PV-Quelle zählen für den Modul-Rollup nicht mit (sonst
         # zöge ein leeres Jahr die Herkunft der Laufzeit auf „fehlt").
@@ -806,7 +831,8 @@ def _string_gesamtlaufzeit(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, mod
 
     saisonalwerte = _string_saisonalwerte(ctx, sammler, modul, modul_kwp, modul_prognose, string_saisonal)
 
-    abweichung_gesamt_pct = ((ist_string_gesamt - prognose_string_gesamt) / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
+    abweichung_gesamt = ist_string_gesamt - prognose_string_gesamt
+    abweichung_gesamt_pct = (abweichung_gesamt / prognose_string_gesamt * 100) if prognose_string_gesamt > 0 else None
     perf_ratio_gesamt = (ist_string_gesamt / prognose_string_gesamt) if prognose_string_gesamt > 0 else None
     spez_ertrag = (ist_string_gesamt / modul_kwp) if modul_kwp > 0 else None
     return PVStringGesamtlaufzeit(
@@ -820,6 +846,14 @@ def _string_gesamtlaufzeit(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, mod
         spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
         ist_quelle=_rollup_quelle(modul_quellen),
         jahreswerte=jahreswerte, saisonalwerte=saisonalwerte,
+        abweichung_gesamt_kwh=round(abweichung_gesamt, 1),
+        monatswerte_summe=[
+            PVStringMonatSumme(
+                monat=m, monat_name=MONATSNAMEN[m], prognose_summe_kwh=round(soll_summe_je_monat[m], 1),
+                ist_summe_kwh=round(string_saisonal[m]["ist_summe"], 1),
+            )
+            for m in range(1, 13)
+        ],
     ), prognose_string_gesamt, ist_string_gesamt
 
 
@@ -827,7 +861,8 @@ def _string_jahreswert(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, 
                        string_saisonal: dict[int, dict]):
     """Ein Jahr eines Strings: SOLL, IST, Herkunft und die Saisonal-Zählung (RF-31).
 
-    Rückgabe ``(PVStringJahreswert, prognose_jahr, ist_jahr)``; schreibt ``string_saisonal`` und
+    Rückgabe ``(PVStringJahreswert, prognose_jahr, ist_jahr, soll_je_monat)`` — ``soll_je_monat`` das SOLL je Monat mit
+    IST (Päckchen BB4: Σ über die Jahre = Monatsverlauf «Summe aller Jahre»); schreibt ``string_saisonal`` und
     ``sammler.saisonal_jahre`` fort.
     """
     md_by_inv, ist_quellen, nenner_je_monat = ctx.md_by_inv, ctx.ist_quellen, ctx.nenner_je_monat
@@ -836,14 +871,14 @@ def _string_jahreswert(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, 
     # dann summiert — sonst trüge das Anschaffungsjahr denselben
     # schiefen Vergleich wie die Monatssicht.
     if modul_prognose is not None:
-        prognose_jahr = sum(
-            soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
+        soll_je_monat = {
+            m: soll_im_laufmonat(modul_prognose.get(m, 0), modul, jahr, m)
             for m in months_with_data_year
-        )
+        }
     else:
         # N-613: je Monat der Nenner der Menge, die in diesem Monat trägt.
-        prognose_jahr = sum(
-            soll_im_laufmonat(
+        soll_je_monat = {
+            m: soll_im_laufmonat(
                 ctx.prognose_monate.get(m, 0) * (
                     modul_kwp / nenner_je_monat[(jahr, m)]
                     if nenner_je_monat[(jahr, m)] > 0 else 0
@@ -851,7 +886,9 @@ def _string_jahreswert(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, 
                 modul, jahr, m,
             )
             for m in months_with_data_year
-        )
+        }
+    # BB4: dieselbe Summe in derselben Reihenfolge wie bis dahin der Generator über `months_with_data_year`.
+    prognose_jahr = sum(soll_je_monat.values())
     ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
     abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
     perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
@@ -871,7 +908,7 @@ def _string_jahreswert(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, 
             string_saisonal[monat]["ist_summe"] += ist_monat
             string_saisonal[monat]["anzahl"] += 1
             sammler.saisonal_jahre[monat].setdefault(_familie(modul, ctx.abgetreten), set()).add(jahr)
-    return jahreswert, prognose_jahr, ist_jahr
+    return jahreswert, prognose_jahr, ist_jahr, soll_je_monat
 
 
 def _string_saisonalwerte(ctx: _LaufzeitKontext, sammler: _SaisonalSammler, modul, modul_kwp, modul_prognose,

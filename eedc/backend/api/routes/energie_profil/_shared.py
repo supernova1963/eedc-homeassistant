@@ -18,6 +18,7 @@ from backend.services.waerme_klima_block import (
 
 from backend.core.berechnungen.energie import V2H_KOMPONENTEN_PREFIX
 from backend.core.berechnungen.kennzahlen import netto_kwh
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import netzladung_kosten_euro
 from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
 from backend.models.investition import Investition
@@ -994,6 +995,26 @@ class TagDetailResponse(BaseModel):
     # E-Mobilität PV-/Netz-Anteil der Ladung — Tages-Boundary-Diff (nur bei Sensor).
     emob_ladung_pv_kwh: Optional[float] = None
     emob_ladung_netz_kwh: Optional[float] = None
+    # ── Päckchen BB2 (N-783, 9.11.2026): die Ladung des Tages für den Block «E-Mobilität» (Ladung gesamt / PV-Anteil
+    # (Heim)) — bis dahin summierte der Client nur die Stunden-Serien (`TagKomponenten.tsx::baueTagAlsMonat`) und der
+    # Block fehlte an jedem Tag ohne Leistungspfad-Komponente der Wallbox. Regel `tag.py::_emob_ladung_tag`: Zählerpfad
+    # (`komponenten_der_tage`) hat Vorrang, Leistungspfad (Σ der Stunden-Serien wie `/stunden`, N-555 beim Lesen) ist
+    # der Rückfall — «Zählerlücken wie HA», wie BKW und Sonstiges am Tag. Gerätemenge privat wie *Cockpit → Monat*
+    # (Heimladung); die Karte «Heute» (`emob_heute`) bleibt je Gerät inklusive dienstlich. Ungerundet; ohne Ladung
+    # (`> 0`) `None`.
+    emob_ladung_kwh: Optional[float] = None
+    #: Woher `emob_ladung_kwh` stammt: `zaehler` | `leistung`; `None` ohne Wert.
+    emob_ladung_quelle: Optional[Literal["zaehler", "leistung"]] = None
+    #: Gefahrene km des Tages = Σ `emob_heute.km` der privaten E-Autos (ungerundet); `None` ohne Kilometer-Kanal.
+    emob_km: Optional[float] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def emob_pv_anteil_prozent(self) -> Optional[float]:
+        """PV-Anteil (Heim) der Ladung des Tages = `emob_ladung_pv_kwh` ÷ `emob_ladung_kwh` × 100 (Päckchen BB2;
+        Layer `pv_anteil_ladung.pv_anteil_prozent`, ungerundet — der Client formatiert ganze Prozent)."""
+        return pv_anteil_prozent(self.emob_ladung_pv_kwh, self.emob_ladung_kwh)
+
     #: P-433-2b K3: «Betrieb heute» der Wallboxen und E-Autos — je Gerät und Mitschrift-Feld eine Zeile, nur Geräte mit
     #: mindestens einer Zeile der Mitschrift (nur der Tag; Monat/Jahr kennen das Feld nicht).
     emob_betrieb: list[EmobBetriebZeile] = Field(default_factory=list)
@@ -1060,6 +1081,21 @@ class TagDetailResponse(BaseModel):
     #: ein gemessener Tages-Ø und ein verteilter Monatswert sehen sonst gleich
     #: aus.
     netzbezug_preis_herkunft: Optional[str] = None
+    # ── Päckchen BB (9.11.2026, Z-Client-Halte H1/H3): was der Client bis dahin aus `tage-werte` (Erzeugung,
+    # Ladung/Entladung) und den Feldern oben selbst rechnete. Die Eingänge aus der Tag-Zeile von `tage-werte`
+    # (`baue_tage_werte` für genau diesen Tag — dieselbe Zeile, die die Sicht anzeigt), Formeln im Layer
+    # `speicher_bilanz` bzw. `ergebnis.quote`; ungerundet, der Client formatiert. Ohne Speicher-Bewegung `None`.
+    #: Entladung − Ladung (Zeile «Bilanz» der Speicher-Details).
+    speicher_bilanz_kwh: Optional[float] = None
+    #: Wirkungsverluste (Opportunitätskosten) — nur bei Ladung > Entladung und mit Einspeise- oder Bezugspreis des Tages.
+    speicher_wirkungsverluste_euro: Optional[float] = None
+    speicher_verlust_pv_kwh: Optional[float] = None
+    speicher_verlust_netz_kwh: Optional[float] = None
+    speicher_netzladung_anteil_prozent: Optional[float] = None
+    #: N-444/K2: Netz-Anteil auf 100 % begrenzt (Netzladung brutto > Ladung netto).
+    speicher_netzladung_anteil_gekappt: Optional[bool] = None
+    #: SOLL-Erreichung des Tages = Erzeugung (`tage-werte`) ÷ `soll_pv_kwh` × 100; ohne Erzeugung oder SOLL `None`.
+    soll_erreichung_prozent: Optional[float] = None
     #: Welche **Geräte** hinter den anlagenweiten Summen dieses Tages stecken,
     #: je Typ und beim Namen genannt — dieselbe Form wie in der Monatssicht
     #: (`aktueller_monat.py`), damit die geteilte Blockfabrik im Frontend sie

@@ -42,7 +42,11 @@ function renderBlock(bloecke: Block[], id: string) {
   return render(node)
 }
 
-/** Der Tag aus der Backend-Fixture, ohne die beiden strittigen Größen. */
+/** Der Tag aus der Backend-Fixture, ohne die beiden strittigen Größen.
+ *
+ * Päckchen BB: Betrag, Teile und Kappung der Wirkungsverluste rechnet seitdem das Backend (Layer
+ * `speicher_bilanz`, bitgleich zur früheren Client-Formel — `test_bb_speicher_tag_felder.py`); die Fälle tragen die
+ * Felder deshalb so, wie die Antwort sie liefert. */
 const TAG_SPEICHER = {
   speicher_ladung_kwh: 4.0,
   speicher_entladung_kwh: 3.0,
@@ -50,11 +54,19 @@ const TAG_SPEICHER = {
   netzbezug_preis_cent: 32,
 } as Partial<AktuellerMonatResponse>
 
+/** «Nach dem Bau» (Netzladung 0 aus dem Fenster der Tageszeile): 1,0 kWh Verlust, ganz PV ⇒ 1,0 × 8 ct. */
+const NACH_FELDER = {
+  speicher_ladung_netz_kwh: 0.0, speicher_bilanz_kwh: -1.0, speicher_wirkungsverluste_euro: 0.08,
+  speicher_verlust_pv_kwh: 1.0, speicher_verlust_netz_kwh: 0, speicher_netzladung_anteil_gekappt: false,
+} as Partial<AktuellerMonatResponse>
+
 describe('N-444 · Speicher-Wirkungsverluste', () => {
   it('VOR dem Bau: Netzladung aus [0,24) sprengt ihren Bezug — Kappung, 0,32 €', () => {
     // 6,0 ÷ 4,0 = 1,5 → Math.min(1, …) = 1,0 ⇒ Verlust 1,0 kWh × 32 ct.
     const bloecke = baueKomponentenBloecke(
-      d({ ...TAG_SPEICHER, speicher_ladung_netz_kwh: 6.0 }),
+      d({ ...TAG_SPEICHER, speicher_ladung_netz_kwh: 6.0, speicher_bilanz_kwh: -1.0,
+          speicher_wirkungsverluste_euro: 0.32, speicher_verlust_pv_kwh: 0, speicher_verlust_netz_kwh: 1.0,
+          speicher_netzladung_anteil_gekappt: true }),
     )
     renderBlock(bloecke, 'k-speicher')
     expect(screen.getByText('−0,32 €')).toBeInTheDocument()
@@ -65,7 +77,7 @@ describe('N-444 · Speicher-Wirkungsverluste', () => {
   it('NACH dem Bau: beide Größen aus einem Fenster — 0,08 €', () => {
     // 0,0 ÷ 4,0 = 0 ⇒ Verlust 1,0 kWh × 8 ct entgangene Einspeisung.
     const bloecke = baueKomponentenBloecke(
-      d({ ...TAG_SPEICHER, speicher_ladung_netz_kwh: 0.0 }),
+      d({ ...TAG_SPEICHER, ...NACH_FELDER }),
     )
     renderBlock(bloecke, 'k-speicher')
     expect(screen.getByText('−0,08 €')).toBeInTheDocument()
@@ -76,7 +88,8 @@ describe('N-444 · Speicher-Wirkungsverluste', () => {
     // −0,5 kWh. Der Nenner kennt nur das Netto, der Zähler zählt brutto.
     const bloecke = baueKomponentenBloecke(
       d({ ...TAG_SPEICHER, speicher_ladung_kwh: 0.5, speicher_entladung_kwh: 0.2,
-          speicher_ladung_netz_kwh: 2.0 }),
+          speicher_ladung_netz_kwh: 2.0, speicher_bilanz_kwh: -0.3, speicher_wirkungsverluste_euro: (0.3 * 32) / 100,
+          speicher_verlust_pv_kwh: 0, speicher_verlust_netz_kwh: 0.3, speicher_netzladung_anteil_gekappt: true }),
     )
     renderBlock(bloecke, 'k-speicher')
     // Verlust 0,3 kWh × 100 % Netz × 32 ct = 0,10 € — die Kappung greift.
@@ -92,7 +105,7 @@ describe('N-444 · Speicher-Wirkungsverluste', () => {
 
   it('GEGENPROBE — ohne Kappung steht kein Grund im Tooltip', () => {
     const bloecke = baueKomponentenBloecke(
-      d({ ...TAG_SPEICHER, speicher_ladung_netz_kwh: 0.0 }),
+      d({ ...TAG_SPEICHER, ...NACH_FELDER }),
     )
     renderBlock(bloecke, 'k-speicher')
     fireEvent.mouseEnter(screen.getByText('Wirkungsverluste (Opportunitätskosten)'))
@@ -103,12 +116,14 @@ describe('N-444 · Speicher-Wirkungsverluste', () => {
   })
 })
 
+// Päckchen BB2: den PV-Anteil rechnet seitdem das Backend (`emob_pv_anteil_prozent`, Layer `pv_anteil_ladung`,
+// bitgleich zur früheren Client-Formel — `test_bb_speicher_tag_felder.py`); die Fälle tragen das Feld wie die Antwort.
 describe('N-444 · PV-Anteil der E-Mobilität', () => {
   it('VOR dem Bau: Teile aus [0,24) über einem Ganzen aus der Tageszeile', () => {
     // Nachtladung 8,0 kWh aus dem Netz nach 23 Uhr: der Zähler sieht sie,
     // die Tageszeile nicht ⇒ „Netz-Anteil 8,0 kWh" unter „Ladung gesamt 9,0".
     const bloecke = baueKomponentenBloecke(
-      d({ emob_ladung_kwh: 9.0, emob_ladung_pv_kwh: 9.0, emob_ladung_netz_kwh: 8.0 }),
+      d({ emob_ladung_kwh: 9.0, emob_ladung_pv_kwh: 9.0, emob_ladung_netz_kwh: 8.0, emob_pv_anteil_prozent: 100 }),
     )
     renderBlock(bloecke, 'k-emob')
     expect(screen.getByText('Ladung · Netz-Anteil')).toBeInTheDocument()
@@ -119,7 +134,8 @@ describe('N-444 · PV-Anteil der E-Mobilität', () => {
 
   it('NACH dem Bau: PV + Netz decken die Ladung', () => {
     const bloecke = baueKomponentenBloecke(
-      d({ emob_ladung_kwh: 17.0, emob_ladung_pv_kwh: 9.0, emob_ladung_netz_kwh: 8.0 }),
+      d({ emob_ladung_kwh: 17.0, emob_ladung_pv_kwh: 9.0, emob_ladung_netz_kwh: 8.0,
+        emob_pv_anteil_prozent: (9.0 / 17.0) * 100 }),
     )
     renderBlock(bloecke, 'k-emob')
     // 9,0 ÷ 17,0 = 52,9 % → gerundet 53

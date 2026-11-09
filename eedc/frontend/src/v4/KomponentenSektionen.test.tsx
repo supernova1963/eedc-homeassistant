@@ -146,6 +146,9 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
     const bloecke = baueKomponentenBloecke(d({
       speicher_ladung_kwh: 100, speicher_entladung_kwh: 90, speicher_ladung_netz_kwh: 0,
       einspeise_preis_cent: 8, netzbezug_preis_cent: 30,
+      // Päckchen BB: Bilanz und Wirkungsverluste so, wie das Backend sie liefert (Layer `speicher_bilanz`).
+      speicher_bilanz_kwh: -10, speicher_wirkungsverluste_euro: 0.8, speicher_verlust_pv_kwh: 10,
+      speicher_verlust_netz_kwh: 0, speicher_netzladung_anteil_gekappt: false,
     }))
     renderBlock(bloecke, 'k-speicher')
     // F-22: „davon" ist Pflicht — die Netzladung ist eine TEILMENGE der Ladung

@@ -327,7 +327,8 @@ export interface PVStringMonat {
   monat_name: string
   prognose_kwh: number
   ist_kwh: number
-  abweichung_kwh: number
+  /** `null` im Verlauf «Summe aller Jahre» (Päckchen BB4: dort nur SOLL und IST je Monat). */
+  abweichung_kwh: number | null
   abweichung_prozent: number | null
   performance_ratio: number | null
   ist_quelle: PVIstQuelle
@@ -380,6 +381,9 @@ export interface PVStringsResponse {
   ist_quelle: PVIstQuelle
   /** Erklärt, warum es keine Platzierung gibt (null = Ranking gültig). */
   vergleich_hinweis: string | null
+  /** Päckchen BB4: spezifischer Ertrag des Zeitraums = IST gesamt ÷ Anlagen-kWp (Backend, Layer
+   *  `kennzahlen.spezifischer_ertrag_kwh_kwp`); `null` ohne kWp. */
+  spezifischer_ertrag_kwh_kwp?: number | null
 }
 
 // =============================================================================
@@ -404,6 +408,14 @@ export interface PVStringSaisonalwert {
   anzahl_jahre: number
 }
 
+/** Päckchen BB4: ein Kalendermonat eines Strings, summiert über alle Jahre (Monatsverlauf «Summe aller Jahre»). */
+export interface PVStringMonatSumme {
+  monat: number
+  monat_name: string
+  prognose_summe_kwh: number
+  ist_summe_kwh: number
+}
+
 export interface PVStringGesamtlaufzeit {
   investition_id: number
   bezeichnung: string
@@ -426,6 +438,11 @@ export interface PVStringGesamtlaufzeit {
 
   // Saisonale Werte (Jan-Dez)
   saisonalwerte: PVStringSaisonalwert[]
+
+  /** Päckchen BB4: IST − SOLL der Laufzeit (kWh). Fehlt bei älteren Backends. */
+  abweichung_gesamt_kwh?: number
+  /** Päckchen BB4: je Kalendermonat Σ SOLL/IST über die Jahre. Fehlt bei älteren Backends. */
+  monatswerte_summe?: PVStringMonatSumme[]
 }
 
 export interface PVStringsGesamtlaufzeitResponse {

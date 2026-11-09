@@ -811,10 +811,12 @@ HUB_LESER_QUELLTEXT: dict[str, tuple[str, ...]] = {
         "zyklen: m.vollzyklen ?? 0",
         "const arbitrageAktiv = z.arbitrage_faehig && z.arbitrage_kwh > 0",
     ),
+    # Päckchen BB (9.11.2026): Σ je Jahr faltet das Backend (`dashboard_speicher._jahresbilanz` über
+    # `monatsreihe[].netzladung_kwh` usw.), die Komponente benennt die Felder von `jahresbilanz` nur um.
     "components/speicher/SpeicherJahresbilanz.tsx": (
-        "y.pvLadung += mw.pv_ladung_kwh",
-        "y.netzLadung += mw.netzladung_kwh",
-        "y.ladungGesamt += mw.ladung_kwh",
+        "pvLadung: j.pv_ladung_kwh",
+        "netzLadung: j.netzladung_kwh",
+        "ladungGesamt: j.ladung_gesamt_kwh",
     ),
     "components/waermepumpe/WaermepumpeCharts.tsx": (
         "heizung: m.heizung_kwh",
@@ -907,7 +909,8 @@ async def miss_hub(db, aid: int, ids: dict, form: Form) -> dict:
                 "entladung": lambda r: _js_oder_0(r["r"].get("entladung_kwh")),
                 "arbitrage": lambda r: _js_oder_0(r["r"].get("netzladung_kwh")),
                 "zyklen": lambda r: _js_oder_0(r["r"].get("vollzyklen")),           # `m.vollzyklen ?? 0`
-                # SpeicherJahresbilanz.tsx `prepSpeicherJahresbilanz`
+                # SpeicherJahresbilanz.tsx `prepSpeicherJahresbilanz` — seit Päckchen BB Σ im Backend
+                # (`dashboard_speicher._jahresbilanz`) über denselben Schlüssel der Reihe
                 "jb_netz": lambda r: _js_oder_0(r["r"].get("netzladung_kwh")),
                 # Lesetüren auf derselben Zeile (Soll)
                 "tuer_netzladung": lambda r: get_speicher_netzladung_kwh(r["vd"]),

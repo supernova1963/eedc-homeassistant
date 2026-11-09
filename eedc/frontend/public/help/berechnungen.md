@@ -254,7 +254,7 @@ Die **Sicht** (Spalte „Wo in v4") folgt der Achsen-Navigation (Cockpit = Zeit-
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/trend/{id}` | Degradation, Jahresvergleich |
 | [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen) | `GET /api/aussichten/finanzen/{id}` | Amortisations-Fortschritt, Prognose |
 
-**Anzeige-Ableitungen im Client (benannte Grenzen, Stand Päckchen Z-Client 9.11.2026).** Der Client rechnet nichts (ADR-001) —
+**Anzeige-Ableitungen im Client (benannte Grenzen, Stand Päckchen BB 9.11.2026).** Der Client rechnet nichts (ADR-001) —
 bis auf zwei Kennwerte der Werte-Tabelle, die er im Monat aus zwei Feldern der Antwort von `GET /api/monatsdaten/aggregiert`
 bildet (`pages/auswertung/types.ts::createMonatsZeitreihe`); der Tag kommt bei beiden fertig aus `services/energie_profil/tage_werte.py`.
 Eine Backend-Größe des Monats gibt es für sie nicht, eine neue braucht Regel-Abschnitt und Entscheid:
@@ -267,10 +267,15 @@ Eine Backend-Größe des Monats gibt es für sie nicht, eine neue braucht Regel-
 Seit Päckchen Y nicht mehr darunter: die **CO₂-Äquivalente** (§3.8 «Äquivalente», Layer `co2_aequivalente`) und die
 **Speicher-Effizienz** des Monats (`speicher_effizienz_prozent`, Layer `speicher_wirkungsgrad` auf Ladung und Entladung der Zeile, §3.3);
 seit Päckchen Z-Client der **Wallbox-PV-Anteil** (`wallbox_pv_anteil_prozent`, Layer `pv_anteil_prozent` auf den zwei Feldern der Zeile,
-ungerundet — die Tabelle rundet und mittelt, §3.4 «PV-Anteil der Heimladung»).
+ungerundet — die Tabelle rundet und mittelt, §3.4 «PV-Anteil der Heimladung»); seit Päckchen BB die **Speicher-Bilanz**
+(Bilanz, Verlust, Wirkungsverluste, Netzlade-Kosten, PV-Ladung, Solar-Anteil, Jahresbilanz — Layer `speicher_bilanz`, §3.3
+«Speicher-Bilanz») und die **SOLL-Erreichung des Tages** (`tag-detail.soll_erreichung_prozent`, §3.5d «Die Tageszahlen von *Cockpit → Tag*»);
+im Nachlauf von Päckchen BB der **PV-Anteil (Heim) der E-Mobilität** (`emob_pv_anteil_prozent` an Monat/Jahr und am Tagesdetail,
+Layer `pv_anteil_prozent`; am Tag samt der Ladung selbst, «Ladung des Tages» bei *Fahrt heute*) und der **spezifische Ertrag der
+PV-Strings** (Jahr: `pv-strings.spezifischer_ertrag_kwh_kwp`, «alle Jahre»: die Laufzeit-Route, §3.9 «Alle Jahre»).
 
 **Die übrigen Rechenstellen der Sichten** stehen in der Baseline des Wächters (`frontend/rechenstellen-baseline.txt`, Stand
-Päckchen Z-Client: 36) und haben einen dieser Gründe:
+Päckchen BB: 23) und haben einen dieser Gründe:
 
 | Grund | Stellen |
 | --- | --- |
@@ -279,7 +284,6 @@ Päckchen Z-Client: 36) und haben einen dieser Gründe:
 | **Vergleichs-Delta / Sortierung** — Abstand zweier gelieferter Werte | Community (`CommunityPVErtragTeile.tsx` 3, `CommunityRegionalTeile.tsx` 4, `CommunityTrendsTeile.tsx`), `StrompreiseTeile.tsx` (Preis-Delta), `SpeicherSizingIST.tsx` (Delta zur Basis) |
 | **Balkenbreite** — Geometrie | `AussichtTeile.tsx` (2) |
 | **Live-Auslastung kW ÷ kWp** — die PV-Gruppe faltet der Client aus ihren Mitgliedern (`energieFlussLayout.ts`), ein Feld je Komponente deckte sie nicht | `EnergieFluss.tsx` (Kachel-Tooltip), `GruppenListeOverlay.tsx` |
-| **offen (Halt Päckchen Z-Client, Entscheid ausstehend)** | Speicher: Wirkungsverluste, Bilanz, Verlust, Netzlade-Kosten, PV-Ladung, Solaranteil, Jahresbilanz (`KomponentenSektionen.tsx` 3, `komponentenAdapter.tsx` 3, `JahrSpeicherTabelle.tsx`, `SpeicherJahresbilanz.tsx`) · E-Mobilität PV-Anteil (`KomponentenSektionen.tsx`) · Tag SOLL-Erreichung und Ø-Preis-Rückfall (`TagBilanz.tsx` 2) · spezifischer Ertrag «alle Jahre» (`PvStringsTeile.tsx` 2) |
 
 **Eine Formel, ein Ort — gewächtert (Päckchen Z3, 9.11.2026):** eine neue Rechenstelle außerhalb des Layers (Quote oder
 Differenz zweier Mengen, Menge × Preis oder × Literal, Preis ÷ Menge, im Client auch Menge ÷ Leistung) macht
@@ -1616,6 +1620,23 @@ Zwei Pfade, in dieser Reihenfolge:
 > sondern ein Erfassungsfehler — meist `ladung_kwh` als reine PV-Ladung gepflegt
 > (#281). `ladung_netz_kwh` ⊆ `ladung_kwh` ist Vertrag, kein zweiter Posten.
 
+**Speicher-Bilanz (Päckchen BB, 9.11.2026)** — Layer `core/berechnungen/speicher_bilanz.py`; bis dahin rechnete der Client sie
+an acht Stellen. Die Antworten tragen das Ergebnis als Feld, der Client zeigt:
+
+| Größe | Formel | Feld (Antwort) |
+| --- | --- | --- |
+| Bilanz | Entladung − Ladung (negativ ist der Normalfall) | `speicher_bilanz_kwh` — *Cockpit → Monat/Jahr* (`computed_field` an `AktuellerMonatResponse`: Monat, Jahr-Kopf, Jahr-Monate), *Cockpit → Tag* (`tag-detail`) |
+| Wirkungsverluste € | Verlust × PV-Anteil × Einspeisepreis ÷ 100 + Verlust × Netz-Anteil × Bezugspreis ÷ 100; nur bei Ladung > Entladung und mit Einspeise- oder Tarif-Bezugspreis; Bezugspreis = Ø-Bezugspreis des Monats, sonst Tarif (am Tag: Preis des Tages); Netz-Anteil = Netzladung ÷ Ladung, auf 1 gekappt (`speicher_netzladung_anteil_gekappt`, N-444/K2) | `speicher_wirkungsverluste_euro` mit den Teilen `speicher_verlust_pv_kwh` / `speicher_verlust_netz_kwh`, `speicher_netzladung_anteil_prozent` — dieselben Antworten |
+| Verlust | Ladung − Entladung, nie < 0 | `speicher_verlust_kwh` (Monat/Jahr), `jahresbilanz[].verlust_kwh` (Speicher-Hub, Σ der `monatsreihe` je Jahr) |
+| Verlust (Hub-Kachel) | Ladung − Entladung **ungeklemmt** aus den gerundeten Summen (bei vertauschten Zählern negativ, daneben der Hinweis «Durchsatz inkonsistent») | `dashboard/speicher.zusammenfassung.verlust_kwh` |
+| PV-Ladung (Hub) | Ladung − Netzladung | `zusammenfassung.pv_ladung_kwh` (die Monatsreihe klemmt je Monat auf 0) |
+| Netzladung-Kosten (Hub) | Netzladung × Ø-Ladepreis ÷ 100 (`effektiver_ladepreis_cent`, sonst `arbitrage_avg_preis_cent`; ohne Preis kein Wert) | `zusammenfassung.netzladung_kosten_euro` (Layer `speicher_wirtschaftlichkeit.netzladung_kosten_euro`) |
+| Solar-Anteil der Ladung | max(0, Ladung − Netzladung) ÷ Ladung × 100; ohne erfasste Netzladung kein Wert (P4) | `speicher_solaranteil_prozent` — Speicher-Tabelle in *Cockpit → Jahr*; die Fußzeile liest den Jahr-Kopf und zeigt «—», solange im Jahr keine Netzladung über 0 erfasst ist |
+
+Am Tag kommen Ladung und Entladung aus der Tag-Zeile von `tage-werte` (`baue_tage_werte` für genau diesen Tag, Phase
+`tag.py::_speicher_und_soll`) — dieselbe Zeile, die die Sicht anzeigt. Proben: `test_bb_speicher_tag_felder.py` (Layer bitgleich
+zur früheren Client-Formel), Vitest `bbSpeicherBackendFelder.test.tsx`.
+
 ### 3.4 E-Auto-Einsparung
 
 **Funktion:** `berechne_eauto_einsparung()` in `core/calculations.py`
@@ -2752,6 +2773,8 @@ bewertet). Die Mengenzeile erscheint nur mit Zahl (*Cockpit → Monat/Jahr*, Kom
 >                         (baue_finanz_zeile mit der Monatsdaten-Zeile; bei dynamischem Tarif ihr abgerechneter Monats-Ø);
 >                         Herkunft = die des Slot-Tags, ohne Slot-Tag None (SOLL P-2; dieselbe Quelle wie die
 >                         Tages-Tabelle, sonst die F-18-Klasse)                                — Phase _tag_preis
+> SOLL-Erreichung (Tag) = Erzeugung der Tag-Zeile von tage-werte ÷ Tages-SOLL PV × 100 (ergebnis.quote, nur mit SOLL > 0
+>                         und Erzeugung; Päckchen BB — bis dahin teilte der Client zwei Antworten)  — Phase _speicher_und_soll
 > Nenner je Funktion    = Strom Heizen bzw. Warmwasser aus der Faltung funktions_eingaenge_der_anlage, wo sie > 0 trägt,
 >                         sonst der Tageswert samt seiner None-heit (_nenner_der_funktion — nur die Faltung kennt die
 >                         Ein-Achsen-Regel R-4); Zähler = die Tagessumme (aufgelöste Heizwärme D1, Warmwasser)
@@ -3551,7 +3574,23 @@ Ertragsanteil und spezifischer Ertrag bleiben, und die Sicht zeigt sie (#350).
 
 **Anlagenzeile der Gesamtlaufzeit** (`GET /cockpit/pv-strings-gesamtlaufzeit`, Spalte/Karte «kWh/kWp»): `spezifischer_ertrag_zeitraum_kwh_kwp`
 = IST gesamt ÷ Anlagen-kWp über `kennzahlen.spezifischer_ertrag_kwh_kwp` — der Wert **der ganzen Laufzeit, nicht aufs Jahr normiert**
-(anders als der Sensor `spezifischer_ertrag_kwh_kwp`, §3.1). Seit Päckchen Z-Client; vorher im Client.
+(anders als der Sensor `spezifischer_ertrag_kwh_kwp`, §3.1). Seit Päckchen Z-Client; vorher im Client. Die Jahressicht trägt
+dasselbe als `spezifischer_ertrag_kwh_kwp` am Kopf von `GET /cockpit/pv-strings` (IST des Jahres ÷ Anlagen-kWp, Päckchen BB4).
+
+**Alle Jahre** (*Auswertungen → Prognose*, Jahr = «Alle Jahre», Päckchen BB4): Kacheln, String-Tabelle, Balken, Platzierung und
+Monatsverlauf «Summe aller Jahre» lesen `GET /cockpit/pv-strings-gesamtlaufzeit` (der Client benennt nur um,
+`PvStringsTeile.tsx::laufzeitAlsJahr`) — bis dahin faltete der Client die Jahres-Antworten (Σ gerundeter Jahre). Dazu trägt
+jeder String `abweichung_gesamt_kwh` (IST − SOLL) und `monatswerte_summe[]`:
+
+```
+prognose_summe_kwh(Monat) = Σ über die Jahre des Monats-SOLL der Jahressicht (nur Monate mit IST, F-34 im Lauf-Monat)
+ist_summe_kwh(Monat)      = Σ über die Jahre des Monats-IST
+```
+
+Das ist **die Summe**, nicht das Saisonal-Mittel (`saisonalwerte`, ohne F-34 und über die Monate, in denen der String aktiv war).
+Die Platzierung entscheidet `_ranking` über die Laufzeit-Quelle je String (ein verteiltes Jahr macht ihn «verteilt»); ein Jahr,
+in dem ein String noch keinen Wert hatte (`fehlt`), sperrt sie nicht — anders als die Jahressicht jenes Jahres. Der Mehrjahres-Chart
+(Performance je Jahr) liest weiter die Jahres-Antworten selbst.
 
 **Bester und schwächster String** (`api/routes/cockpit/pv_strings.py::_ranking`, beide Sichten):
 
@@ -4408,7 +4447,8 @@ aussagekräftigste gewinnt; ein Grund nur für Keys ohne Wert). Proben: `test_rf
 
 Betroffen sind die Detailwerte in *Cockpit → Tag*: die Netzladung des Speichers („davon aus dem Netz
 (Arbitrage)") und die PV-/Netz-Anteile der E-Mobilität — Zähler und Bezug im selben Fenster, sonst fehlte die Ladung
-zwischen 23 und 24 Uhr im einen Tag und tauchte im anderen auf. Der Client kappt den Netz-Anteil auf 100 % (der Zähler ist
+zwischen 23 und 24 Uhr im einen Tag und tauchte im anderen auf. Die Wirkungsverluste kappen den Netz-Anteil auf 100 % (Layer
+`speicher_bilanz.netzladung_anteil`, seit Päckchen BB im Backend; der Zähler ist
 eine **Brutto**-Menge, der Bezug eine **Netto**-Menge — eine Stunde mit 2,0 kWh Netzladung und 1,5 kWh Entladung ergibt
 netto 0,5 kWh); greift die Kappung, nennt der Formel-Tooltip der Zeile „Wirkungsverluste" den Grund
 ([ADR-002/P4](ADR-002-WURZELMUSTER.md)).
@@ -5138,6 +5178,30 @@ Tag der Rückkehr in «Gefahren heute» (in der Stunde der nächsten Meldung; wi
 Fahrverbrauch. Der Kanal entsteht aus HA (Spiegel der Langzeitstatistik, mit Datenquellen-Wahl HA) oder aus MQTT (Mitschrift des
 Stands); eine Zuordnung nur im Sensor-Mapping ohne Datenquellen-Wahl wird nicht gespiegelt (vorbestehend, alle Zähler).
 Anzeige, keine Menge der Monats-Fakten: die Monatskilometer kommen weiter aus dem Monatsabschluss.
+
+### Ladung des Tages (Block «E-Mobilität», *Cockpit → Tag*)
+
+*Päckchen BB2 (Fund N-783, 9.11.2026) — die Zahl «Ladung gesamt» und «PV-Anteil (Heim)» des Blocks am Tag.*
+
+```
+Zählerpfad  = Σ |wallbox_<id>| der privaten, am Tag aktiven Wallboxen aus komponenten_der_tage
+              + Σ |eauto_<id>| der privaten E-Autos, nur ohne deckende Wallbox (N-555)
+Leistungspfad (nur, wenn der Zählerpfad keinen Schlüssel trägt)
+            = Σ über die Serien wallbox/eauto derselben Geräte | Σ Stunden komponenten[key] |
+              (Zeilen wie /stunden; N-555 beim Lesen: steht eine Wallbox-Serie, fällt die E-Auto-Serie)
+emob_ladung_kwh        = der gewählte Pfad, nur > 0 (sonst kein Wert — der Tag ohne Ladung zeigt keinen Block)
+emob_ladung_quelle     = zaehler | leistung
+emob_pv_anteil_prozent = emob_ladung_pv_kwh ÷ emob_ladung_kwh × 100   (pv_anteil_ladung.pv_anteil_prozent, ungerundet)
+emob_km                = Σ km_heute der privaten E-Autos (Fahrt heute)
+```
+
+**Zählerpfad hat Vorrang, der Leistungspfad ist der Rückfall** — «Zählerlücken wie HA», dieselbe Regel wie Balkonkraftwerk und
+Sonstiges am Tag. Bis dahin summierte der Client nur die Stunden-Serien (`TagKomponenten.tsx::baueTagAlsMonat`): an einem Tag mit
+Wallbox-Zähler, aber ohne Leistungspfad-Komponente, fehlte der Block (Produktiv-Box 108 von 130 Ladetagen). **Gerätemenge privat**
+(`ist_dienstlich` nein) wie *Cockpit → Monat* (Heimladung) und `tage-werte.wallbox_ladung`; die Karten «Heute» (`emob_heute`,
+*PV-Anteil heute*, *Fahrt heute*) bleiben **je Gerät** und zeigen auch Dienstgeräte. Phase `tag.py::_emob_ladung_tag`, Zeilen über
+`serien.py::zeilen_der_stunden_sicht`; Monat und Jahr tragen `emob_pv_anteil_prozent` als `computed_field` an
+`AktuellerMonatResponse`. Proben: `test_bb_speicher_tag_felder.py`, Vitest `bbSpeicherBackendFelder.test.tsx`.
 
 ### Monats-Rollup (rollup_month)
 

@@ -568,7 +568,8 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                 ? `${n1(z.vollzyklen)} Vollzyklen ÷ ${z.anzahl_monate} ${z.anzahl_monate === 1 ? 'Monat' : 'Monate'}`
                 : undefined,
             }),
-            k('Verlust', n0(z.gesamt_ladung_kwh - z.gesamt_entladung_kwh), 'kWh', 'gray', TrendingUp, { formel: 'Ladung − Entladung' }),
+            // Päckchen BB: die Differenz kommt aus dem Backend (`zusammenfassung.verlust_kwh`, Layer `speicher_bilanz`).
+            k('Verlust', n0(z.verlust_kwh), 'kWh', 'gray', TrendingUp, { formel: 'Ladung − Entladung' }),
           ],
         },
         // ① Sekundär: Arbitrage (Netzladung) — schlanker Hinweis, Tiefe in #142/B11 (K-O2).
@@ -577,7 +578,8 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpis: [
             k('Netzladung', n0(z.arbitrage_kwh), 'kWh', 'red', Zap),
             k('Ø Ladepreis', n1(nlPreis), 'ct/kWh', 'yellow', Euro),
-            k('Netzladung-Kosten', nlPreis != null ? n2((z.arbitrage_kwh * nlPreis) / 100) : '—', '€', 'red', Euro, {
+            // Päckchen BB: Menge × Ø-Ladepreis im Backend (`zusammenfassung.netzladung_kosten_euro`); ohne Preis null.
+            k('Netzladung-Kosten', z.netzladung_kosten_euro != null ? n2(z.netzladung_kosten_euro) : '—', '€', 'red', Euro, {
               subtitle: 'in den Netzbezug-Kosten enthalten',
               formel: 'Netzladung × Ø Ladepreis — reiner Ausweis, kein zusätzlicher Kostenposten',
             }),
@@ -618,7 +620,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         } as KompStruktur,
         aufteilung: z.gesamt_ladung_kwh > 0 ? {
           titel: 'Ladung nach Quelle', segmente: [
-            { label: 'PV-Ladung', wert: z.gesamt_ladung_kwh - (z.arbitrage_kwh ?? 0), farbe: SEG.pv },
+            { label: 'PV-Ladung', wert: z.pv_ladung_kwh, farbe: SEG.pv },
             { label: 'Netz-Ladung', wert: z.arbitrage_kwh ?? 0, farbe: SEG.netz },
           ],
         } : undefined,

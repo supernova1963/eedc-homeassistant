@@ -49,13 +49,19 @@ describe('#427 · Netzladung im laufenden Monat aus den Tagen', () => {
 
   it('Wandlungsverluste: mit der Netzladung aus den Tagen anteilig zum Bezugspreis (Nebenbefund mitgelöst)', () => {
     // Vorher (Menge null ⇒ 0): 2 kWh × 8 ct = 0,16 €. Jetzt: 3 ÷ 10 Netz-Anteil ⇒ 1,4 × 8 ct + 0,6 × 32 ct = 0,30 €.
-    renderBlock(baueKomponentenBloecke(d({ ...MONAT, speicher_ladung_netz_kwh: null })), 'k-speicher')
+    // Päckchen BB: der Betrag kommt aus dem Backend (Layer `speicher_bilanz`) — die Fälle tragen ihn wie die Antwort.
+    renderBlock(baueKomponentenBloecke(d({
+      ...MONAT, speicher_ladung_netz_kwh: null,
+      speicher_wirkungsverluste_euro: (2 * 1 * 8) / 100, speicher_verlust_pv_kwh: 2, speicher_verlust_netz_kwh: 0,
+    })), 'k-speicher')
     expect(screen.getByText('−0,16 €')).toBeInTheDocument()
   })
 
   it('… und mit 3 kWh aus den Tagen', () => {
     renderBlock(baueKomponentenBloecke(d({
       ...MONAT, speicher_ladung_netz_kwh: 3, speicher_ladung_netz_herkunft: 'tageswerte',
+      speicher_wirkungsverluste_euro: (1.4 * 8) / 100 + (0.6 * 32) / 100, speicher_verlust_pv_kwh: 1.4,
+      speicher_verlust_netz_kwh: 0.6,
     })), 'k-speicher')
     expect(screen.getByText('−0,30 €')).toBeInTheDocument()
   })

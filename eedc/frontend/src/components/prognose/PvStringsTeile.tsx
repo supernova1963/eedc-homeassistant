@@ -19,13 +19,51 @@ import { useLegendenToggle } from '../../hooks'
 import { HerkunftZeile, type KpiStripItem } from '../blocks'
 import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
 import { exportToCSV } from '../../utils/export'
-import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
+import { cockpitApi, PVStringsResponse, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import {
   SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, HILFSLINIE_DASH,
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
   xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 import { mitAnzahl } from '../../lib/plural'
+
+/** Die Jahres-Antworten für den Mehrjahres-Chart (Block ③) — ein Jahr ohne Antwort wird übersprungen. */
+async function ladeJahre(anlageId: number, jahre: number[]): Promise<Map<number, PVStringsResponse>> {
+  const dataMap = new Map<number, PVStringsResponse>()
+  for (const jahr of jahre) {
+    try { dataMap.set(jahr, await cockpitApi.getPVStrings(anlageId, jahr)) } catch { /* Jahr übersprungen */ }
+  }
+  return dataMap
+}
+
+/** Päckchen BB4: Laufzeit-Antwort → `PVStringsResponse`-Form der geteilten Teile — reine Umbenennung, keine Rechnung.
+ *  Die Zeilen sind die Träger der ganzen Laufzeit (N-613: ein BKW, das seine Erzeugung später an Modul-Kinder
+ *  abgetreten hat, steht mit seinen Jahren drin). */
+export function laufzeitAlsJahr(r: PVStringsGesamtlaufzeitResponse): PVStringsResponse {
+  return {
+    anlage_id: r.anlage_id, jahr: r.letztes_jahr, hat_prognose: r.hat_prognose, prognose_warnung: r.prognose_warnung,
+    anlagen_leistung_kwp: r.anlagen_leistung_kwp,
+    prognose_gesamt_kwh: r.prognose_gesamt_kwh, ist_gesamt_kwh: r.ist_gesamt_kwh,
+    abweichung_gesamt_kwh: r.abweichung_gesamt_kwh, abweichung_gesamt_prozent: r.abweichung_gesamt_prozent,
+    spezifischer_ertrag_kwh_kwp: r.spezifischer_ertrag_zeitraum_kwh_kwp ?? null,
+    bester_string: r.bester_string, schlechtester_string: r.schlechtester_string,
+    ist_quelle: r.ist_quelle, vergleich_hinweis: r.vergleich_hinweis,
+    strings: r.strings.map((s) => ({
+      investition_id: s.investition_id, bezeichnung: s.bezeichnung, leistung_kwp: s.leistung_kwp,
+      ausrichtung: s.ausrichtung, neigung_grad: s.neigung_grad, wechselrichter_id: null,
+      wechselrichter_name: s.wechselrichter_name,
+      prognose_jahr_kwh: s.prognose_gesamt_kwh, ist_jahr_kwh: s.ist_gesamt_kwh,
+      abweichung_jahr_kwh: s.abweichung_gesamt_kwh ?? 0, abweichung_jahr_prozent: s.abweichung_gesamt_prozent,
+      performance_ratio_jahr: s.performance_ratio_gesamt, spezifischer_ertrag_kwh_kwp: s.spezifischer_ertrag_kwh_kwp,
+      ist_quelle: s.ist_quelle,
+      monatswerte: (s.monatswerte_summe ?? []).map((m) => ({
+        monat: m.monat, monat_name: m.monat_name, prognose_kwh: m.prognose_summe_kwh, ist_kwh: m.ist_summe_kwh,
+        // Je Monat zeigt der Verlauf «Summe aller Jahre» nur SOLL und IST; die Monats-Kennzahlen gibt es nur im Jahr.
+        abweichung_kwh: null, abweichung_prozent: null, performance_ratio: null, ist_quelle: s.ist_quelle,
+      })),
+    })),
+  }
+}
 
 export interface PvStringsVM {
   loading: boolean
@@ -46,75 +84,17 @@ export function usePvStrings(anlageId: number, selectedYear: number | 'all', ver
     setError(null)
     try {
       if (selectedYear === 'all') {
-        const dataMap = new Map<number, PVStringsResponse>()
-        for (const jahr of verfuegbareJahre) {
-          try { dataMap.set(jahr, await cockpitApi.getPVStrings(anlageId, jahr)) } catch { /* Jahr übersprungen */ }
-        }
+        // Päckchen BB4: «Alle Jahre» liest die Laufzeit-Route — Summen, Abweichung, PR, Ranking-Sperre (A4/b1),
+        // spezifischer Ertrag und der Monatsverlauf «Summe aller Jahre» kommen fertig aus dem Backend; der Adapter
+        // benennt nur um. Bis dahin faltete der Client die Jahres-Antworten (Σ gerundeter Jahre).
+        const [laufzeit, dataMap] = await Promise.all([
+          cockpitApi.getPVStringsGesamtlaufzeit(anlageId),
+          ladeJahre(anlageId, verfuegbareJahre),
+        ])
+        // Der Mehrjahres-Chart (Block ③) zeigt je Jahr PR je String und den Anlagen-Kopf des Jahres — die
+        // Jahres-Antworten selbst, ohne Faltung.
         setMultiYearData(dataMap)
-        if (dataMap.size > 0) {
-          const firstYearData = dataMap.get(verfuegbareJahre[0])
-          if (firstYearData) {
-            // N-613: Die Zeilen sind nicht in jedem Jahr dieselben — ein Balkonkraftwerk,
-            // das seine Erzeugung erst später an Modul-Kinder abgetreten hat, steht nur in
-            // den Jahren, in denen es selbst trägt. Deshalb die Vereinigung über alle Jahre
-            // (in Jahresreihenfolge), nicht die Zeilen des ersten Jahres: sonst fehlte seine
-            // Erzeugung im Gesamtwert. Sind die Zeilen überall gleich, ist das dieselbe Liste.
-            const zeilen: PVStringsResponse['strings'] = []
-            const gesehen = new Set<number>()
-            for (const jahr of verfuegbareJahre) {
-              for (const s of dataMap.get(jahr)?.strings ?? []) {
-                if (!gesehen.has(s.investition_id)) { gesehen.add(s.investition_id); zeilen.push(s) }
-              }
-            }
-            const aggStrings = zeilen.map(s => {
-              let totalPrognose = 0, totalIst = 0
-              dataMap.forEach((yearData) => {
-                const sd = yearData.strings.find(ys => ys.investition_id === s.investition_id)
-                if (sd) { totalPrognose += sd.prognose_jahr_kwh; totalIst += sd.ist_jahr_kwh }
-              })
-              const abweichung = totalPrognose > 0 ? ((totalIst - totalPrognose) / totalPrognose) * 100 : null
-              return {
-                ...s,
-                prognose_jahr_kwh: totalPrognose, ist_jahr_kwh: totalIst,
-                abweichung_jahr_prozent: abweichung, abweichung_jahr_kwh: totalIst - totalPrognose,
-                performance_ratio_jahr: totalPrognose > 0 ? totalIst / totalPrognose : null,
-                spezifischer_ertrag_kwh_kwp: s.leistung_kwp > 0 ? totalIst / s.leistung_kwp : null,
-                monatswerte: s.monatswerte.map((m, mIdx) => {
-                  let mp = 0, mi = 0
-                  dataMap.forEach((yearData) => {
-                    const sd = yearData.strings.find(ys => ys.investition_id === s.investition_id)
-                    if (sd && sd.monatswerte[mIdx]) { mp += sd.monatswerte[mIdx].prognose_kwh; mi += sd.monatswerte[mIdx].ist_kwh }
-                  })
-                  return { ...m, prognose_kwh: mp, ist_kwh: mi }
-                }),
-              }
-            })
-            const totalP = aggStrings.reduce((s, x) => s + x.prognose_jahr_kwh, 0)
-            const totalI = aggStrings.reduce((s, x) => s + x.ist_jahr_kwh, 0)
-            const sortedByPerf = [...aggStrings].filter(s => s.performance_ratio_jahr !== null)
-              .sort((a, b) => (b.performance_ratio_jahr || 0) - (a.performance_ratio_jahr || 0))
-            // A4/b1: Das „alle Jahre"-Aggregat entsteht hier im Client — die
-            // Ranking-Sperre des Backends muss deshalb hier mitgezogen werden,
-            // sonst käme die Platzierung über diesen Pfad zurück. Ein einziges
-            // verteiltes Jahr genügt (konservativer Rollup wie im Backend).
-            const jahresDaten = [...dataMap.values()]
-            const istQuelle = jahresDaten.some(d => d.ist_quelle === 'verteilt')
-              ? 'verteilt' as const
-              : jahresDaten.every(d => d.ist_quelle === 'gemessen') ? 'gemessen' as const : 'fehlt' as const
-            const hinweis = istQuelle === 'gemessen'
-              ? null
-              : (jahresDaten.find(d => d.vergleich_hinweis)?.vergleich_hinweis ?? null)
-            setData({
-              ...firstYearData, strings: aggStrings,
-              prognose_gesamt_kwh: totalP, ist_gesamt_kwh: totalI, abweichung_gesamt_kwh: totalI - totalP,
-              abweichung_gesamt_prozent: totalP > 0 ? ((totalI - totalP) / totalP) * 100 : null,
-              ist_quelle: istQuelle,
-              vergleich_hinweis: hinweis,
-              bester_string: hinweis ? null : (sortedByPerf[0]?.bezeichnung || null),
-              schlechtester_string: hinweis ? null : (sortedByPerf[sortedByPerf.length - 1]?.bezeichnung || null),
-            })
-          }
-        }
+        setData(laufzeitAlsJahr(laufzeit))
       } else {
         setData(await cockpitApi.getPVStrings(anlageId, selectedYear))
       }
@@ -160,7 +140,8 @@ export function pvStringsKpiItems(data: PVStringsResponse, zeitraumLabel?: strin
   const ref = Math.max(data.prognose_gesamt_kwh, data.ist_gesamt_kwh)
   const e = (v: number) => formatEnergie(v, ref)
   const abwProz = data.abweichung_gesamt_prozent || 0
-  const spez = data.anlagen_leistung_kwp > 0 ? data.ist_gesamt_kwh / data.anlagen_leistung_kwp : 0
+  // Päckchen BB4: IST ÷ Anlagen-kWp kommt fertig aus dem Backend (Jahr: `computed_field`, alle Jahre: Laufzeit-Route).
+  const spez = data.spezifischer_ertrag_kwh_kwp ?? 0
   return [
     {
       title: 'SOLL (Prognose)', value: e(data.prognose_gesamt_kwh).wert, unit: e(data.prognose_gesamt_kwh).einheit,
@@ -352,7 +333,7 @@ export function PvStringTabelle({ data }: { data: PVStringsResponse }) {
                 <td className={`${ZELLE} text-right ${(data.abweichung_gesamt_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {(data.abweichung_gesamt_prozent || 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? formatProzent(data.abweichung_gesamt_prozent).text : '0 %'}
                 </td>
-                <td className={`${ZELLE} text-right text-purple-600`}>{fmtZahl(data.anlagen_leistung_kwp > 0 ? data.ist_gesamt_kwh / data.anlagen_leistung_kwp : 0, 0)}</td>
+                <td className={`${ZELLE} text-right text-purple-600`}>{fmtZahl(data.spezifischer_ertrag_kwh_kwp ?? 0, 0)}</td>
               </tr>
             </TableFoot>
           )}

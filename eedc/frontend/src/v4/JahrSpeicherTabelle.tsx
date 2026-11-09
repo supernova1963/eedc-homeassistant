@@ -35,6 +35,8 @@ export interface SpeicherZeile {
   vollzyklen: number | null
   auslastungsBasis: number | null
   ersparnis: number | null
+  /** Solar-Anteil der Ladung in % aus dem Backend (`speicher_solaranteil_prozent`, Päckchen BB). */
+  solaranteil: number | null
 }
 
 /** Σ über eine Zeilenmenge — die Grundlage von Fuß- und Saisonzeile. */
@@ -62,6 +64,7 @@ export function baueSpeicherZeilen(monate: AktuellerMonatResponse[]): SpeicherZe
       vollzyklen: m.speicher_vollzyklen,
       auslastungsBasis: m.speicher_auslastungs_basis_kwh,
       ersparnis: m.speicher_ersparnis_euro,
+      solaranteil: m.speicher_solaranteil_prozent ?? null,
     }))
     .sort((a, b) => (b.jahr - a.jahr) || (b.monat - a.monat))
 }
@@ -98,10 +101,14 @@ export function auslastungAus(s: Pick<SpeicherSumme, 'entladung' | 'auslastungsB
   return s.entladung / s.auslastungsBasis * 100
 }
 
-/** Solar-Anteil der Ladung in % — `null`, wenn keine Netzladung erfasst ist. */
-export function solarAnteil(ladung: number, netzladung: number | null): number | null {
-  if (netzladung == null || ladung <= 0) return null
-  return Math.max(0, (ladung - netzladung)) / ladung * 100
+/** Solar-Anteil der Fußzeile — der Jahr-Kopf (`cockpit/jahr.kopf`, dieselbe Faltung wie die Kacheln darüber) trägt
+ *  ihn als Feld (Päckchen BB, Layer `speicher_bilanz.speicher_solaranteil_prozent`; bis dahin rechnete diese Sicht
+ *  `max(0, Ladung − Netz) ÷ Ladung` selbst). Die Fußzeile zeigt «—», solange im Jahr keine Netzladung über 0 erfasst
+ *  ist — die Anzeigeregel von vorher (Σ 0 heißt hier «nicht gepflegt»), die Monatszeilen zeigen bei gemessenen 0 kWh
+ *  100 %. */
+export function solarAnteilFuss(kopf: AktuellerMonatResponse | null | undefined): number | null {
+  if (!kopf || !kopf.speicher_ladung_netz_kwh) return null
+  return kopf.speicher_solaranteil_prozent ?? null
 }
 
 const pct = (v: number | null, stellen = 0) => v == null ? LEER : `${fmtZahl(v, stellen)} %`
@@ -146,7 +153,7 @@ export function jahrSpeicherParkIds(monate: AktuellerMonatResponse[]): string[] 
   return ids
 }
 
-export function JahrSpeicherTabelle({ monate }: { monate: AktuellerMonatResponse[] }) {
+export function JahrSpeicherTabelle({ monate, kopf }: { monate: AktuellerMonatResponse[]; kopf?: AktuellerMonatResponse | null }) {
   const zeilen = baueSpeicherZeilen(monate)
   if (zeilen.length === 0) return null
 
@@ -178,7 +185,7 @@ export function JahrSpeicherTabelle({ monate }: { monate: AktuellerMonatResponse
                   {z.vollzyklen == null ? LEER : fmtZahl(z.vollzyklen, 1)}
                 </td>
                 <td className={`${ZELLE} text-right text-gray-900 dark:text-white tabular-nums`}>
-                  {pct(solarAnteil(z.ladung, z.netzladung))}
+                  {pct(z.solaranteil)}
                 </td>
                 <td className={`${ZELLE} text-right text-gray-900 dark:text-white tabular-nums`}>
                   {pct(auslastungAus({ entladung: z.entladung, auslastungsBasis: z.auslastungsBasis ?? 0 }), 1)}
@@ -198,7 +205,7 @@ export function JahrSpeicherTabelle({ monate }: { monate: AktuellerMonatResponse
                 {gesamt.vollzyklen == null ? LEER : fmtZahl(gesamt.vollzyklen, 1)}
               </td>
               <td className={`${ZELLE} text-right text-gray-900 dark:text-white tabular-nums`}>
-                {pct(solarAnteil(gesamt.ladung, gesamt.netzladung || null))}
+                {pct(solarAnteilFuss(kopf))}
               </td>
               <td className={`${ZELLE} text-right text-gray-900 dark:text-white tabular-nums`}>
                 {pct(auslastungAus(gesamt), 1)}

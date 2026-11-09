@@ -291,8 +291,13 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
   kein einzeln erfasstes Gerät erklärt
 - **Stundenwerte-Tabelle** mit den Spalten **Gesamtverbrauch** (= Eigenverbrauch + Netzbezug) und **Restverbrauch**
   (= Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige erfasste Verbraucher); die Formel steht im Tooltip des Spaltenkopfs
-- **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
+- **Tagesbilanz** als Kennzahl-Strip (Summen des Tages) — die Kachel **„Ø-Preis Netz“** zeigt den Netzbezugspreis des
+  Tages; fehlen die Tagesdetails (Ladefehler), steht dort „—“ statt eines aus gerundeten Anzeigewerten zurückgerechneten Preises
 - Detail-Sektionen je nach vorhandenen Komponenten
+- Der Block **E-Mobilität** zeigt die Ladung des Tages, sobald sie gemessen ist: aus dem Ladezähler der Wallbox, sonst aus
+  ihrem Leistungsverlauf — gezählt werden deine privaten Geräte wie im Monat (die Karten „Heute" im E-Mobilitäts-Hub zeigen
+  dagegen jedes Gerät einzeln, auch einen Dienstwagen). Mit einem Kilometer-Sensor am E-Auto steht dort auch die Strecke des
+  Tages; den Verbrauch je 100 km gibt es nur im Monat
 - Im Block **Wärme/Klima** heißt die Arbeitszahl-Kachel am Tag **„AZ heute"**; mit zugeordnetem Vorlauf/Rücklauf
   steht dort das Element **„Temperaturen"** (Vorlauf, Rücklauf, Spreizung und Warmwasser je Stunde, darüber Ø Vorlauf
   und Ø Spreizung der Betriebsstunden, Gerätewahl ab zwei Wärmepumpen) — einzeln parkbar wie jedes Element

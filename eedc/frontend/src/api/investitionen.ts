@@ -600,11 +600,24 @@ export interface SpeicherMonatsWert {
   vollzyklen: number | null
 }
 
+/** Ein Jahr der Speicher-Jahresbilanz (Päckchen BB): Σ der `monatsreihe`, Verlust = Ladung − Entladung, nie < 0 —
+ *  im Backend gefaltet (Layer `speicher_bilanz`), der Client zeigt. */
+export interface SpeicherJahresWert {
+  jahr: number
+  pv_ladung_kwh: number
+  netzladung_kwh: number
+  entladung_kwh: number
+  ladung_gesamt_kwh: number
+  verlust_kwh: number
+}
+
 export interface SpeicherDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
-  /** N-641/N-642: Hub-Verlauf und Jahresbilanz lesen diese Reihe, nicht `monatsdaten[].verbrauch_daten`. */
+  /** N-641/N-642: der Hub-Verlauf liest diese Reihe, nicht `monatsdaten[].verbrauch_daten`. */
   monatsreihe: SpeicherMonatsWert[]
+  /** Päckchen BB: die Jahresbilanz (Block «Vergleich»), aufsteigend nach Jahr. */
+  jahresbilanz: SpeicherJahresWert[]
   zusammenfassung: {
     gesamt_ladung_kwh: number
     gesamt_entladung_kwh: number
@@ -639,6 +652,11 @@ export interface SpeicherDashboardResponse {
     eta_degradation_alarm?: boolean
     // Invariante: Σentladung > Σladung kumulativ (physikalisch unmöglich).
     durchsatz_inkonsistent?: boolean
+    // Päckchen BB (Layer `speicher_bilanz`, aus den gerundeten Feldern darüber): Kachel «Verlust» (Ladung − Entladung,
+    // ungeklemmt), «Netzladung-Kosten» (Netzladung × Ø-Ladepreis, ohne Preis null), Segment «PV-Ladung».
+    verlust_kwh: number
+    netzladung_kosten_euro: number | null
+    pv_ladung_kwh: number
   }
   // Gleitende 12-Monats-Effizienz (carry-over-immun) — siehe SpeicherBlock.
   effizienz_verlauf: { jahr: number; monat: number; effizienz_prozent: number | null; fenster_monate: number }[]

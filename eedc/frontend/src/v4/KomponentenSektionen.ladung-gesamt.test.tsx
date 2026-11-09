@@ -34,7 +34,8 @@ function emobBlock(over: Partial<AktuellerMonatResponse>, periode: 'tag' | 'mona
 }
 
 const MAERZ: Partial<AktuellerMonatResponse> = {
-  emob_ladung_kwh: 250, emob_ladung_pv_kwh: 100, emob_ladung_netz_kwh: 150,
+  // Päckchen BB2: «PV-Anteil (Heim)» = 100 ÷ 250 kommt als Feld aus dem Backend (auf die Heimladung bezogen).
+  emob_ladung_kwh: 250, emob_ladung_pv_kwh: 100, emob_ladung_netz_kwh: 150, emob_pv_anteil_prozent: 40,
   emob_ladung_extern_kwh: 50, emob_ladung_gesamt_kwh: 300, emob_km: 1500,
   hat_emobilitaet: true,
 }

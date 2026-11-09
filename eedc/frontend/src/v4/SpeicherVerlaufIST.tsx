@@ -67,6 +67,6 @@ export function SpeicherVergleichIST({ anlageId, inv, melde }: { anlageId: numbe
   useEffect(() => { if (leer) melde?.(KEINE) }, [leer, melde])
   if (loading) return <Lade />
   if (!ds || ds.monatsreihe.length === 0) return <Leer text="Keine Jahresdaten erfasst." />
-  // N-641/N-642: die bewertete Monatsreihe (dieselbe Rechnung wie die Kacheln), nicht `verbrauch_daten`.
-  return <SpeicherJahresbilanz monatsreihe={ds.monatsreihe} embed melde={melde} />
+  // Päckchen BB: die Jahresbilanz faltet das Backend aus der bewerteten Monatsreihe (N-641/N-642).
+  return <SpeicherJahresbilanz jahresbilanz={ds.jahresbilanz ?? []} embed melde={melde} />
 }

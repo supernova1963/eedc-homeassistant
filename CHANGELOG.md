@@ -43,6 +43,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   zudem jetzt im ersten Prognose-Abruf nach Mitternacht fest, wie eedc und OpenMeteo, statt erst beim ersten Aufruf der
   Live-Sicht (N-782).
 
+- **Cockpit → Tag: der Block „E-Mobilität" steht an jedem Tag mit gemessener Ladung.** Bisher erschien er nur an Tagen,
+  an denen die Wallbox einen Leistungsverlauf lieferte; an Tagen, die nur der Ladezähler kannte, fehlte er (auf einer
+  Anlage 108 von 130 Ladetagen). Jetzt kommt die Ladung des Tages aus dem Ladezähler, sonst aus dem Leistungsverlauf —
+  gezählt wie im Monat über die privaten Geräte, mit dem PV-Anteil daneben. Mit einem Kilometer-Sensor am E-Auto zeigt der
+  Block auch die Strecke des Tages (N-783).
 - **Vollbackfill und Reparatur-Werkbank ohne Energie-Statistik: ein Balkonkraftwerk zählt neben seinen messenden Modulen
   nicht doppelt.** Die Stunden-Leistungskurve aus der Home-Assistant-Langzeitstatistik nahm Balkonkraftwerk und Module
   nebeneinander (0,8 + 0,4 + 0,4 ⇒ 1,6 statt 0,8 kW). Jetzt trägt das Balkonkraftwerk je Stunde nur, was seine Module nicht
@@ -121,6 +126,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Balkonkraftwerk-Hub: den «entgangenen Erlös» der unvergüteten Einspeisung rechnet das Backend.** Die Zahl ist
   dieselbe (Einspeisung × 8 ct/kWh); neu liefert `GET /api/investitionen/dashboard/balkonkraftwerk/{anlage_id}` die Felder
   `entgangener_erloes_euro` und `entgangener_erloes_annahme_cent`, die Kachel und der Hinweis zeigen sie.
+- **Auswertungen → Prognose, PV-Strings bei „Alle Jahre": die Zahlen kommen aus der Laufzeit-Rechnung.** Summen,
+  Abweichung, spezifischer Ertrag und der Monatsverlauf sind dieselben wie in *Komponenten → PV-Strings* (Gesamtlaufzeit);
+  bisher addierte die Oberfläche die gerundeten Jahreswerte, die angezeigten Zahlen sind gleich geblieben. Neu: „Beste/
+  Schwächste Performance" erscheint auch, wenn ein String in einem frühen Jahr noch keine Werte hatte (etwa ein später
+  angeschafftes Balkonkraftwerk) — bisher stand dann der Satz „Nicht alle Module haben gemessene Werte", obwohl alle
+  gemessen sind. Sind Werte anteilig verteilt, bleibt der Satz. Der CSV-Export dieses Modus trägt die Werte jetzt
+  gerundet wie im Einzeljahr.
 - **Handbuch: eedc-Karte auf dem Wandtablet (Fully Kiosk, eingeschränkter Benutzer) und „Tag reparieren“ im Daten-Checker
   genauer beschrieben** — Kategorien ohne Fehler und Warnungen starten zugeklappt, und an Tagen aus dem HA-Spiegel kommt eine
   Korrektur in Home Assistant nicht über den Knopf, sondern über den nächtlichen Abgleich oder „HA-Spiegel jetzt abgleichen“.
@@ -146,6 +158,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen BB (9.11.2026): Speicher-Bilanz und Tag-Felder aus dem Backend.** Bilanz, Verlust, Wirkungsverluste (mit ihren
+  zwei Teilen und der Kappung des Netz-Anteils) und Solar-Anteil des Speichers stehen als Felder an *Cockpit → Monat/Jahr*
+  (`speicher_bilanz_kwh`, `speicher_verlust_kwh`, `speicher_wirkungsverluste_euro`, `speicher_verlust_pv_kwh`,
+  `speicher_verlust_netz_kwh`, `speicher_netzladung_anteil_prozent`, `speicher_netzladung_anteil_gekappt`,
+  `speicher_solaranteil_prozent`) und am Tagesdetail (dazu `soll_erreichung_prozent`, Ladung/Entladung/Erzeugung aus der Tag-Zeile
+  von `tage-werte`); der Speicher-Hub liefert «Verlust», «Netzladung-Kosten», «PV-Ladung» (`verlust_kwh`,
+  `netzladung_kosten_euro`, `pv_ladung_kwh`) und die Jahresbilanz (`jahresbilanz`). Neuer Layer `core/berechnungen/speicher_bilanz.py`.
+  Sichtbare Zahlen unverändert (Probe auf den Demo-Kopien: alte Client-Formel = neues Feld, 0 Abweichungen; Golden Master nur
+  neue Felder). Einzige sichtbare Änderung: ohne Tagesdetail zeigt die Tages-Kachel «Ø-Preis Netz» „—" statt eines aus zwei
+  gerundeten Werten zurückgerechneten Preises. Client-Baseline des Wächters `check:rechenstellen` 36 → 26.
+- **Päckchen BB, Nachlauf (9.11.2026): E-Mobilität am Tag und PV-Strings «alle Jahre» aus dem Backend.** `tag-detail` liefert
+  `emob_ladung_kwh` (Zählerpfad aus `komponenten_der_tage` vor dem Leistungspfad der Stunden, private Geräte, N-555 beim Lesen),
+  `emob_ladung_quelle`, `emob_km` und `emob_pv_anteil_prozent`; `AktuellerMonatResponse` (Monat, Jahr-Kopf, Jahr-Monate) trägt
+  `emob_pv_anteil_prozent` als `computed_field` (Layer `pv_anteil_ladung`). `GET /cockpit/pv-strings` trägt
+  `spezifischer_ertrag_kwh_kwp`, `GET /cockpit/pv-strings-gesamtlaufzeit` je String `abweichung_gesamt_kwh` und
+  `monatswerte_summe`; der Modus «alle Jahre» liest die Laufzeit-Route über einen Adapter (der Mehrjahres-Chart liest weiter die
+  Jahre). Die Stundenzeilen von `/stunden` lädt `serien.py::zeilen_der_stunden_sicht` (geteilt mit dem Tagesdetail).
+  Client-Baseline des Wächters `check:rechenstellen` 26 → 23.
 - **Päckchen Z-Client (9.11.2026): Anzeige-Zahlen aus dem Backend statt aus dem Client.** Zehn Rechenstellen der Sichten lesen
   jetzt Felder der Antwort (Layer-Funktion, als `computed_field` am Antwortmodell aus dessen eigenen Feldern): Balkonkraftwerk
   Einspeisung und EV-Quote (`bkw_einspeisung_kwh`, `bkw_eigenverbrauch_quote_prozent`), PV-Anteil je Sonstiges-Verbraucher

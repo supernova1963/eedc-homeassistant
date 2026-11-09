@@ -83,6 +83,36 @@ async def get_komponenten_serien(
             serien.append(SerieInfo(**info))
     return serien
 
+async def zeilen_der_stunden_sicht(db: AsyncSession, anlage_id: int, datum: date) -> tuple[list, list]:
+    """Die Stundenzeilen, die ``/stunden`` zeigt: ``(vortag, rows)`` — aus ``get_stundenwerte`` herausgelöst (Päckchen
+    BB2, N-783), damit der Leistungspfad-Rückfall der Tagesladung im Tag-Detail (``tag.py::_emob_ladung_tag``) dieselbe
+    Zeilenmenge liest wie die Stundentabelle und bis dahin der Client.
+
+    N-553: der Ladestand jeder Zeile kommt aus ihrer **Vorzeile** — dieselbe Regel wie in den Rechnungen (N-387,
+    `slot_konvention`). Dafür wird der Vortag mitgeladen: ohne seine Stunde 23 bekäme Slot 0 dieses Tages keinen Wert,
+    und das wäre eine Lücke, die es in den Daten nicht gibt. HA-Bauform S4 (S4-R-3b): und der Folgetag — an einem
+    Kanal-Tag trägt seine Zeile 0 die Backward-Bahnen der Stunde 23 (`slot_konvention.bestandszeile_fuer_stundenbeginn`).
+    Eine Abfrage, ein Tag mehr. HA-Bauform E-S3-2: an einem Tag mit Kanal-Gruppe tragen die Mengen der Kanal-Gruppen
+    HAs `change` je Stunde (Mischzeilen, `energie_profil/kanal_stunden.py`, Stunde = Beginn seit S4); Wetter, Zählwerke
+    und `komponenten` bleiben aus der Stundenzeile (S3-R6), nach Bahnen gepaart (S4-R-3b). Ohne Kanal-Gruppe: die
+    Stundenzeilen des Tages unverändert."""
+    from backend.services.energie_profil.kanal_stunden import stunden_des_tages
+
+    result = await db.execute(
+        select(TagesEnergieProfil)
+        .where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= datum - timedelta(days=1),
+            TagesEnergieProfil.datum <= datum + timedelta(days=1),
+        )
+        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    )
+    alle = result.scalars().all()
+    vortag = [z for z in alle if z.datum < datum]
+    rows = await stunden_des_tages(db, anlage_id, datum, [z for z in alle if z.datum >= datum])
+    return vortag, rows
+
+
 @router.get("/{anlage_id}/stunden", response_model=StundenAntwort)
 async def get_stundenwerte(
     anlage_id: int,
@@ -101,30 +131,9 @@ async def get_stundenwerte(
     if not result.scalar_one_or_none():
         raise not_found("Anlage", anlage_id)
 
-    # N-553: der Ladestand jeder Zeile kommt aus ihrer **Vorzeile** — dieselbe
-    # Regel wie in den Rechnungen (N-387, `slot_konvention`). Dafür wird der
-    # Vortag mitgeladen: ohne seine Stunde 23 bekäme Slot 0 dieses Tages keinen
-    # Wert, und das wäre eine Lücke, die es in den Daten nicht gibt.
-    # HA-Bauform S4 (S4-R-3b): und der Folgetag — an einem Kanal-Tag trägt seine Zeile 0 die Backward-Bahnen der
-    # Stunde 23 (`slot_konvention.bestandszeile_fuer_stundenbeginn`). Eine Abfrage, ein Tag mehr.
-    result = await db.execute(
-        select(TagesEnergieProfil)
-        .where(
-            TagesEnergieProfil.anlage_id == anlage_id,
-            TagesEnergieProfil.datum >= datum - timedelta(days=1),
-            TagesEnergieProfil.datum <= datum + timedelta(days=1),
-        )
-        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
-    )
-    alle = result.scalars().all()
-    vortag = [z for z in alle if z.datum < datum]
-    # HA-Bauform E-S3-2: an einem Tag mit Kanal-Gruppe tragen die Mengen der Kanal-Gruppen HAs `change` je Stunde
-    # (Mischzeilen, `energie_profil/kanal_stunden.py`, Stunde = Beginn seit S4); Wetter, Zählwerke und `komponenten`
-    # bleiben aus der Stundenzeile (S3-R6), nach Bahnen gepaart (S4-R-3b). Ohne Kanal-Gruppe: die Stundenzeilen des
-    # Tages unverändert.
-    from backend.services.energie_profil.kanal_stunden import aus_kanal_gruppe, stunden_des_tages
+    from backend.services.energie_profil.kanal_stunden import aus_kanal_gruppe
 
-    rows = await stunden_des_tages(db, anlage_id, datum, [z for z in alle if z.datum >= datum])
+    vortag, rows = await zeilen_der_stunden_sicht(db, anlage_id, datum)
     # SoC je Zeile über die EINE Paarung (N-553/N-387): Bestandszeilen aus der Vorzeile (der Vortag liefert Slot 0),
     # Mischzeilen (Beginn-Raster) zeilengleich — `forward_werte_je_backward_zeile` fragt das Attribut `raster`.
     soc_je_zeile = forward_werte_je_backward_zeile([*vortag, *rows], "soc_prozent")[len(vortag):]

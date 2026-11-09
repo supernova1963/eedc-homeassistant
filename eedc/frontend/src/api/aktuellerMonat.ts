@@ -217,6 +217,23 @@ export interface AktuellerMonatResponse {
   /** Σ Speicher-Ersparnis des Zeitraums (Spread-SoT) — dieselbe Zahl wie in
    *  den T-Konto-Zeilen, dort aufgesammelt statt zweitgerechnet. */
   speicher_ersparnis_euro: number | null
+  /** Päckchen BB (Layer `speicher_bilanz`, `computed_field` aus den Feldern dieser Antwort — Monat, Jahr-Kopf,
+   *  Jahr-Monate; am Tag aus `tag-detail`): der Client zeigt, er rechnet nicht. Optional, weil ältere Antworten sie
+   *  nicht tragen und der Tag sie aus dem Tagesdetail durchreicht. */
+  /** Entladung − Ladung. */
+  speicher_bilanz_kwh?: number | null
+  /** Ladung − Entladung, nie < 0. */
+  speicher_verlust_kwh?: number | null
+  /** Wirkungsverluste (Opportunitätskosten) — nur bei Ladung > Entladung und mit Preis. */
+  speicher_wirkungsverluste_euro?: number | null
+  /** Verlust × PV-Anteil bzw. × Netz-Anteil — die zwei Teile der Herleitung. */
+  speicher_verlust_pv_kwh?: number | null
+  speicher_verlust_netz_kwh?: number | null
+  speicher_netzladung_anteil_prozent?: number | null
+  /** N-444/K2: Netz-Anteil auf 100 % begrenzt. */
+  speicher_netzladung_anteil_gekappt?: boolean | null
+  /** Solar-Anteil der Ladung in % (Speicher-Tabelle in Cockpit → Jahr); ohne Netzladung `null`. */
+  speicher_solaranteil_prozent?: number | null
 
   // Komponenten — Wärmepumpe
   wp_strom_kwh: number | null
@@ -376,6 +393,8 @@ export interface AktuellerMonatResponse {
   /** N-557: die Menge hinter `emob_verbrauch_100km` — damit ein Zeitraum
    *  Σ Monatswerte ÷ Σ km bilden kann (Backend `eauto_effizienz_zeitraum`, Jahresroute). */
   emob_verbrauch_basis_kwh?: number | null
+  /** Päckchen BB2: «PV-Anteil (Heim)» = PV-Ladung ÷ Heimladung × 100, ungerundet (Backend, Layer `pv_anteil_ladung`). */
+  emob_pv_anteil_prozent?: number | null
   hat_emobilitaet: boolean
 
   // Komponenten — BKW

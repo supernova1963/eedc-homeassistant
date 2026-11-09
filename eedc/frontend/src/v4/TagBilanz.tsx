@@ -87,13 +87,16 @@ export function baueTagKpis(
    *  kommt wie `netzbezugPreisCent` — `TagWerte` (die Tabellenzeile) trägt ihn
    *  nicht. */
   netzbezugPreisHerkunft?: TagDetailPreisHerkunft,
+  /** SOLL-Erreichung des Tages (`tagDetail.soll_erreichung_prozent`, Päckchen BB): Erzeugung ÷ SOLL im Backend
+   *  aus derselben Tag-Zeile (`ergebnis.quote`) — bis dahin teilte hier der Client zwei Antworten. */
+  sollErreichungProzent?: number | null,
 ): KpiStripItem[] {
   // Ohne erfasste Tages-Erzeugung bleibt das SOLL stehen, die Erfüllung aber
   // leer — sonst stünde dort „0 %" für einen Tag, an dem nur nichts gemessen
-  // wurde (Forum kaba-kakao 2026-08-07).
+  // wurde (Forum kaba-kakao 2026-08-07). Das Backend liefert dann `null`.
   const sollTxt = sollPvKwh != null && sollPvKwh > 0
-    ? (t.erzeugung != null
-        ? `SOLL ${fmtKwh(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %`
+    ? (sollErreichungProzent != null
+        ? `SOLL ${fmtKwh(sollPvKwh)} kWh · ${fmt(sollErreichungProzent)} %`
         : `SOLL ${fmtKwh(sollPvKwh)} kWh`)
     : null
   const spezTxt = t.spezErtrag != null ? `${fmt(t.spezErtrag, 2)} kWh/kWp` : null
@@ -134,20 +137,21 @@ export function baueTagKpis(
       ergebnis: kosten != null ? `= ${fmtCalc(kosten, 2)} €` : undefined,
     })
   }
-  // Hier bleibt `> 0` richtig: der Tages-Ø-Preis wird aus Kosten ÷ Menge
-  // abgeleitet und ist ohne Bezugsmenge undefiniert (0/0). Im Monat trägt die
-  // gleichnamige Kachel dagegen den Tarif-/Ø-Preis, der auch ohne Bezug existiert.
+  // Die Kachel steht nur an einem Tag mit Netzbezug (wie bisher; im Monat trägt
+  // die gleichnamige Kachel den Tarif-/Ø-Preis auch ohne Bezug).
   if (t.netzbezug != null && t.netzbezug > 0 && t.netzbezug_kosten != null) {
     // Der Tarif schlägt den Quotienten (Melder Knallfrosch, T89667 #163): Die
     // Kachel teilte zwei bereits gerundete Zahlen und zeigte an einem Tag mit
     // 0,19 kWh Netzbezug 31,6 ct/kWh, während dieselbe Seite die EV-Ersparnis
     // mit ~29,5 ct rechnete. Beides war derselbe Tarif — nur einmal über die
-    // Rundung gelaufen. Der Quotient bleibt als Rückfall für Antworten ohne
-    // Tagesdetail.
+    // Rundung gelaufen.
+    // ⛔ Päckchen BB (Z-Client-Halt H3, Empfehlung A): der Rückfall auf diesen
+    // Quotienten für Antworten ohne Tagesdetail ist gestrichen — ohne Tarif
+    // steht «—», keine Rekonstruktion aus gerundeten Anzeigewerten.
     const ausTarif = netzbezugPreisCent != null
     kostenKpis.push({
       title: 'Ø-Preis Netz',
-      value: fmtCalc(ausTarif ? netzbezugPreisCent : (t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'),
+      value: fmtCalc(ausTarif ? netzbezugPreisCent : null, 1, '—'),
       unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmtKwh(t.netzbezug)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
@@ -157,7 +161,7 @@ export function baueTagKpis(
       // mitgeschrieben sind (SOLL Flex-Tarife P-2). Der Satz nennt jetzt die
       // Herkunft, die das Backend mitliefert (H-1) — ein gemessener Tages-Ø
       // und ein über den Monat verteilter Wert sehen sonst gleich aus.
-      formel: ausTarif ? tagesPreisFormel(netzbezugPreisHerkunft) : 'Netzbezug-Kosten ÷ Netzbezug',
+      formel: ausTarif ? tagesPreisFormel(netzbezugPreisHerkunft) : 'Tarif des Tages nicht geladen (Tagesdetail fehlt)',
     })
   }
 

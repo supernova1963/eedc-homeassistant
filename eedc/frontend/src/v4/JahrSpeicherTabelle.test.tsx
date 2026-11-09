@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  baueSpeicherZeilen, summiereSpeicher, auslastungAus, solarAnteil, jahrSpeicherParkIds,
+  baueSpeicherZeilen, summiereSpeicher, auslastungAus, solarAnteilFuss, jahrSpeicherParkIds,
 } from './JahrSpeicherTabelle'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { aktuellerMonat } from '../test/factories'
@@ -51,15 +51,25 @@ describe('Auslastung', () => {
   })
 })
 
-describe('Solar-Anteil', () => {
-  it('rechnet den Netz-Rest heraus', () => {
-    expect(solarAnteil(1000, 250)).toBeCloseTo(75, 1)
+describe('Solar-Anteil (Päckchen BB: aus dem Backend)', () => {
+  it('die Monatszeile zeigt das Feld der Antwort — der Client rechnet nicht', () => {
+    // 42 lässt sich aus 1000/250 nicht ableiten: stünde hier eine Rechnung, käme 75 heraus.
+    const [z] = baueSpeicherZeilen([
+      monat(1, { speicher_ladung_kwh: 1000, speicher_entladung_kwh: 900, speicher_ladung_netz_kwh: 250, speicher_solaranteil_prozent: 42 }),
+    ])
+    expect(z.solaranteil).toBe(42)
   })
 
-  it('ist ohne erfasste Netzladung unbekannt statt 100 %', () => {
-    // Eine Anlage, die die Netzladung gar nicht pflegt, hat nicht „0 % Netz" —
-    // sie hat keine Angabe. 100 % wäre eine Behauptung (P4).
-    expect(solarAnteil(1000, null)).toBeNull()
+  it('ohne Feld (keine Netzladung erfasst) unbekannt statt 100 %', () => {
+    const [z] = baueSpeicherZeilen([monat(1, { speicher_ladung_kwh: 1000, speicher_entladung_kwh: 900 })])
+    expect(z.solaranteil).toBeNull()
+  })
+
+  it('die Fußzeile liest den Jahr-Kopf und zeigt «—», solange im Jahr keine Netzladung über 0 erfasst ist', () => {
+    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: 250, speicher_solaranteil_prozent: 75 }))).toBe(75)
+    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: 0, speicher_solaranteil_prozent: 100 }))).toBeNull()
+    expect(solarAnteilFuss(monat(1, { speicher_ladung_netz_kwh: null }))).toBeNull()
+    expect(solarAnteilFuss(null)).toBeNull()
   })
 })
 

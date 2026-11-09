@@ -395,6 +395,15 @@ export interface TagDetail {
   speicher_ladung_netz_kosten_euro?: number | null
   emob_ladung_pv_kwh: number | null
   emob_ladung_netz_kwh: number | null
+  /** Päckchen BB2 (N-783) — Ladung des Tages für den Block «E-Mobilität»: Zählerpfad vor Leistungspfad (Rückfall),
+   *  private Geräte wie der Monat; ungerundet, `null` ohne Ladung. Fehlt bei älteren Backends. */
+  emob_ladung_kwh?: number | null
+  /** Woher `emob_ladung_kwh` stammt (`zaehler` | `leistung`), `null` ohne Wert. */
+  emob_ladung_quelle?: 'zaehler' | 'leistung' | null
+  /** PV-Anteil (Heim) der Tagesladung in %, ungerundet (Layer `pv_anteil_ladung`). */
+  emob_pv_anteil_prozent?: number | null
+  /** Gefahrene km des Tages (Σ der privaten E-Autos), ungerundet; `null` ohne Kilometer-Kanal. */
+  emob_km?: number | null
   /** P-433-2b K3 — «Betrieb heute» der Wallboxen und E-Autos: je Gerät und mitgeschriebenem Zustandsfeld eine Zeile
    *  (nur Tag). Fehlt bei älteren Backends. */
   emob_betrieb?: EmobBetriebZeile[]
@@ -435,6 +444,16 @@ export interface TagDetail {
   /** Woher der Preis daneben stammt (H-1): `gemessen` · `gemischt` ·
    *  `abgerechnet` (über den Monat verteilt) · `vertrag` · `keine`. */
   netzbezug_preis_herkunft?: 'gemessen' | 'gemischt' | 'abgerechnet' | 'vertrag' | 'keine' | null
+  /** Päckchen BB: Speicher-Bilanz und Wirkungsverluste des Tages (Layer `speicher_bilanz`, Ladung/Entladung aus der
+   *  Tag-Zeile von `tage-werte`) — dieselben Felder wie die Monatssicht; `baueTagAlsMonat` reicht sie durch. */
+  speicher_bilanz_kwh?: number | null
+  speicher_wirkungsverluste_euro?: number | null
+  speicher_verlust_pv_kwh?: number | null
+  speicher_verlust_netz_kwh?: number | null
+  speicher_netzladung_anteil_prozent?: number | null
+  speicher_netzladung_anteil_gekappt?: boolean | null
+  /** SOLL-Erreichung des Tages in % = Erzeugung (`tage-werte`) ÷ `soll_pv_kwh`; ohne Erzeugung `null`. */
+  soll_erreichung_prozent?: number | null
   /** Welche **Geräte** hinter den anlagenweiten Tagessummen stecken, je Typ.
    *  Speist den `GeraeteHinweis` („Aggregiert aus: …"), der ab zwei Geräten
    *  erscheint — dieselbe Form wie in Monat und Jahr.
