@@ -790,9 +790,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       // wird nicht automatisch überschrieben (P3b, `lib/erfassungZustand.ts`;
       // derselbe Satz steht am Prefill weiter oben).
       //
-      // ⭐ Der Feld-Hinweis der Globalstrahlung versprach das ohnehin schon
-      // („…, wenn nicht manuell gepflegt") — die Regel macht ihn wahr, statt
-      // ihn umschreiben zu müssen. Wer einen Wert ersetzen will, leert das
+      // ⭐ Der Feld-Hinweis von Globalstrahlung und Sonnenstunden sagt dasselbe
+      // („… — nur in ein leeres Feld; ein selbst eingetragener Wert bleibt
+      // stehen", `core/field_definitions/registry.py`). Wer einen Wert ersetzen will, leert das
       // Feld und klickt erneut; ein zweiter Knopfzustand wäre eine Bedienung
       // mehr für einen Fall, den das leere Feld schon löst.
       const ergebnis = WETTER_AUTOFILL_FELDER.map(({ feld, label, ausAntwort }) => {

@@ -245,7 +245,7 @@ Die **Sicht** (Spalte „Wo in v4") folgt der Achsen-Navigation (Cockpit = Zeit-
 | [Komponenten → PV-Anlage](HANDBUCH_BEDIENUNG.md#32-pv-anlage) | `GET /api/cockpit/pv-strings/{id}?jahr=` | SOLL vs IST pro String |
 | [Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi) | `GET /api/investitionen/roi/{id}` | ROI%, Amortisation pro System |
 | [Auswertungen → Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) | `GET /api/monatsdaten/aggregiert/{id}` | Spalten-Explorer, Vorjahres-Delta |
-| [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/kurzfristig/{id}` | 7-Tage PV-Prognose (**ohne** SFML — `api/routes/aussichten/` kennt die Quellenwahl nicht) |
+| — (nur API, ohne Aufrufer in der Oberfläche) | `GET /api/aussichten/kurzfristig/{id}` | 7-Tage PV-Prognose (**ohne** SFML — `api/routes/aussichten/` kennt die Quellenwahl nicht) |
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/langfristig/{id}` | 12-Monats-Prognose |
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/trend/{id}` | Degradation, Jahresvergleich |
 | [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen) | `GET /api/aussichten/finanzen/{id}` | Amortisations-Fortschritt, Prognose |
@@ -3568,6 +3568,13 @@ Die Monatsgrößen, je Anlagensumme und je Gerät gleich:
 - **Eigenverbrauch** und **Einspeisung** (`eigenverbrauch_kwh`, `einspeisung_kwh`) — die Erzeugerseite: Zweige `erzeuger` und leer.
 - **Bezug PV** und **Bezug Netz** (`bezug_pv_kwh`, `bezug_netz_kwh`) — die Verbraucherseite: Zweige `verbraucher` und leer.
 
+**Am Tag** (`TagesZusammenfassung.komponenten_kwh`, `TagesEnergieProfil.komponenten`) trägt jedes Gerät **eine** Zahl; die Weiche
+dort ist `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — Richtung aus der Kategorie, Menge als Betrag (das Vorzeichen
+unterscheidet sich je Schreibpfad). `erzeuger` ⇒ Erzeugung, `abgabe` ⇒ Abgabe, **eine leere Kategorie zählt am Tag als Verbrauch**
+(dieselbe Vorgabe, mit der beide Tages-Schreibpfade den Wert erzeugen); `zaehler` und `speicher` zählen am Tag nicht (beim Speicher
+ist die eine Zahl ein Netto-Wert). Der Monat nimmt bei leerer Kategorie **beide** Felder (`SonstigesFakten`, Zeile «leer» oben) —
+dort stehen Erzeugung und Verbrauch getrennt gepflegt.
+
 ---
 
 ### 3.11 Community-Datensatz: abgeleitete Stammdaten
@@ -3938,6 +3945,16 @@ Wenn >= 2 Jahre mit jeweils >= 6 Monaten Daten:
     2. Fehlende Monate mit TMY * PR ergänzen
     3. Degradation aus ergänzten Jahreswerten ableiten
 ```
+
+**Kappung und Zuverlässigkeit** (`api/routes/aussichten/trend.py::_degradation_kappen`, beide Strategien)
+```
+Degradation > 0 (Ertrag gestiegen)  ⇒  Degradation = 0,0
+                                        Hinweis + „Ertragssteigerung durch Wetterschwankungen, keine messbare Degradation"
+Datenjahre = vollständige Jahre (Primär) | ergänzte Jahre (TMY-Fallback)
+Datenjahre ≥ 3  ⇒  degradation_zuverlaessig = true
+sonst           ⇒  false, Hinweis + „Wert mit Vorsicht interpretieren (min. 3 Jahre empfohlen)"
+```
+Eine Ertragssteigerung ist physikalisch keine negative Degradation, sondern Wetter — deshalb 0 statt eines positiven Werts.
 
 ### 4.4 Finanz-Prognose & Amortisation
 

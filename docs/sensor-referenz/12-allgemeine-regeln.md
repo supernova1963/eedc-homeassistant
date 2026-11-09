@@ -2,9 +2,13 @@
 
 ### Tagessensoren (Utility Meter)
 
-HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **eedc unterstützt das** — sowohl in der HA-History-Auswertung als auch in MQTT Energy Snapshots. Der Monatswechsel-Reset (negativer Delta) wird automatisch erkannt: `end_val` wird dann direkt als Tageswert verwendet.
+HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **Über HA ist das folgenlos:** eedc liest den
+reset-bereinigten `sum`-Wert der Langzeitstatistik, ein Tagessensor taugt dort wie ein fortlaufender Zähler.
 
-**Empfehlung:** Für MQTT Energy Topics sind Tagessensoren (HA Utility Meter) ideal — sie liefern direkt den Tageswert ohne Delta-Berechnung.
+**Über MQTT Energy Topics nicht als Zählerquelle:** eedc bildet Tag und Monat aus der Differenz zweier Stände; einen
+Rücksprung dazwischen erkennt es und liefert dann **keinen Wert** statt einer hochgerechneten Menge (#341, Legende
+„Tagessensor"). Für MQTT deshalb den **fortlaufenden Stand** senden (`utility_meter` mit Zurücksetzen „nie").
+Ein Feld mit Sensortyp „Tagessensor" (Tageswert-Feld, z. B. Speicher „Ladung heute") erwartet dagegen genau den Tageswert.
 
 ### Vorzeichen-Konvention
 

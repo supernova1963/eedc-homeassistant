@@ -420,11 +420,23 @@ async def _lern_soll_saeen(ds) -> None:
     await ds.db.commit()
 
 
+def _kein_wetter_archiv(monkeypatch) -> None:
+    """Wetter-IST (Open-Meteo-Archiv) am Rand gestellt: keine Antwort, wie sonst der blockierte Abruf — das Neu-Aggregieren
+    der Bestandstage (``_kanal_loeschen``) trägt dann kein Wetter, die geprüften IST-Stunden hängen nicht daran."""
+    from backend.services.energie_profil import _helpers
+
+    async def _kein_abruf(*_a, **_k):
+        raise RuntimeError("Wetter-Archiv im Test nicht erreichbar")
+
+    monkeypatch.setattr(_helpers, "_fetch_wetter", _kein_abruf)
+
+
 async def test_korrekturprofil_stunden_auf_dem_slot(uhr, monkeypatch):
     """L9/L24 (M01): die IST-Stunden des Korrekturprofils und der Stratifizierung kommen am Kanal-Tag aus den
     Mischzeilen und liegen auf dem Slot des Lern-SOLL (Stunde ``h`` ⇒ ``(D, h+1)``, Stunde 23 ⇒ ``(D+1, 0)``); das
     Tages-IST der Skalar-Stufe ist Σ der Mischzeilen; ohne Kanal dieselben Zeilen und Faktoren wie mit dem heutigen
     Lader."""
+    _kein_wetter_archiv(monkeypatch)
     from backend.api.routes import korrekturprofil as route
     from backend.services import korrekturprofil_aggregator as ka
 
@@ -475,6 +487,7 @@ async def test_prognose_leser_pv_ist_am_kanal_tag(uhr, monkeypatch):
     """L11/L12/L14 (M01): MAE des HA-Exports, *Prognosen → Genauigkeit* und Lernfaktor nehmen das PV-IST am Kanal-Tag aus
     ``kanal_tage`` (``pv_ist_je_tag``); die IST-Stunden von heute (Prognosen → Vergleich) kommen aus der Ladefunktion;
     ohne Kanal dieselben Ergebnisse wie mit der Tageszeile."""
+    _kein_wetter_archiv(monkeypatch)
     from backend.api.routes import live_wetter, prognosen
     from backend.services import prognose_genauigkeit_service as pg
 

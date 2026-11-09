@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import httpx
 
+import backend.services.ha_integration_aufloeser as aufl
 import backend.services.prognose_discovery as disc
 
 
@@ -54,6 +55,17 @@ def _patch_ha(monkeypatch, states):
         lambda: _FakeHA(),
     )
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: _FakeClient(states))
+
+    # Menge und Registry der Integration: «nicht beantwortbar» (None) — die Kaskade fällt auf die Präfix-/Namens-
+    # Stufen zurück, wie zuvor über den gescheiterten Template-POST und den blockierten Websocket-Handshake.
+    async def _keine_menge(domain):
+        return None
+
+    async def _keine_registry():
+        return None
+
+    monkeypatch.setattr(aufl, "integration_entity_ids", _keine_menge)
+    monkeypatch.setattr(aufl, "entity_registry_unique_ids", _keine_registry)
     disc.invalidate_cache()
 
 

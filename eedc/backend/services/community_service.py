@@ -139,7 +139,6 @@ class _CommunityKontext:
     anlage_id: int
     investitionen: Sequence[Investition]
     region: str
-    hat_speicher: bool
     hat_waermepumpe: bool
     hat_eauto: bool
     hat_wallbox: bool
@@ -207,7 +206,6 @@ async def _stammdaten(db: AsyncSession, anlage: Anlage, anlage_id: int) -> _Comm
     investitionen = result.scalars().all()
 
     # Ausstattung ermitteln (Typ-Namen aus InvestitionTyp Enum)
-    hat_speicher = any(inv.typ == "speicher" for inv in investitionen)
     hat_waermepumpe = any(inv.typ == "waermepumpe" for inv in investitionen)
     hat_eauto = any(inv.typ == "e-auto" for inv in investitionen)
     hat_wallbox = any(inv.typ == "wallbox" for inv in investitionen)
@@ -232,7 +230,6 @@ async def _stammdaten(db: AsyncSession, anlage: Anlage, anlage_id: int) -> _Comm
         anlage_id=anlage_id,
         investitionen=investitionen,
         region=region,
-        hat_speicher=hat_speicher,
         hat_waermepumpe=hat_waermepumpe,
         hat_eauto=hat_eauto,
         hat_wallbox=hat_wallbox,

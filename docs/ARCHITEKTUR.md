@@ -817,8 +817,8 @@ Beides kommt **aufbereitet** aus `services/monats_fakten/` (s. §7 „Lese-Schic
 #### Aussichten (Prognosen)
 
 ```
-GET /api/aussichten/kurzfristig/{anlage_id}   # 7-Tage Wetterprognose
-GET /api/aussichten/wetter/{anlage_id}        # Wetterdaten für Prognose
+GET /api/aussichten/kurzfristig/{anlage_id}   # 7-Tage Wetterprognose — ohne Aufrufer in der Oberfläche (nur API)
+GET /api/aussichten/wetter/{anlage_id}        # Wetterdaten für Prognose — ohne Aufrufer in der Oberfläche (nur API)
 GET /api/aussichten/langfristig/{anlage_id}   # 12-Monats-Prognose (PVGIS)
 GET /api/aussichten/trend/{anlage_id}         # Trend-Analyse + Degradation
 GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation

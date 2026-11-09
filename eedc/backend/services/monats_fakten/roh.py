@@ -88,7 +88,6 @@ class _RohMonat:
         #: Verwechslung, die `hat_sonstigen_erzeuger` auf der anderen Seite
         #: verhindert (P4).
         self.hat_sonstigen_verbraucher = False
-        self.pv_je_modul_roh: dict[int, float] = {}
         self.bkw_je_investition: dict[int, float] = {}
         self.bkw_erzeugung = 0.0
         self.bkw_eigenverbrauch = 0.0
@@ -349,7 +348,8 @@ class _RohMonat:
         Form (RF-62, Bauform RF-1): ``falte`` ist das Dienstwagen-Tor, die Typ-Weiche und die Finanz-Summen; je Typ eine
         Phase derselben Klasse — ``_falte_bkw`` (N-266/N-621, P9), ``_falte_speicher`` (Netzladung, gewichteter
         Ladepreis), ``_falte_wp`` (Mengen, Modus-Strom, ``*_mit_ersatz``, Geräte-Regel, Bauart- und Funktions-Zählung),
-        ``_falte_emob`` (privat/dienstlich, N-555), ``_falte_pv_modul`` (nur Kandidatur) und ``_falte_sonstiges``.
+        ``_falte_emob`` (privat/dienstlich, N-555) und ``_falte_sonstiges``. Ein ``pv-module`` zählt hier nur zur
+        Monats-Kandidatur (``typen_mit_zeile``); sein Wert kommt aus der P7-Auflösung.
         """
         b = imd_typ_beitrag(inv, data, source_provenance)
         # Dienstwagen zählen NICHT als Beitrag: sie sind aus dem E-Mob-Pool der
@@ -367,8 +367,6 @@ class _RohMonat:
             self._falte_wp(inv, b)
         elif inv.typ in ("e-auto", "wallbox"):
             self._falte_emob(inv, data, b, source_provenance)
-        elif inv.typ == "pv-module":
-            self._falte_pv_modul(inv, b)
         elif inv.typ == "sonstiges":
             self._falte_sonstiges(inv, b)
 
@@ -624,11 +622,6 @@ class _RohMonat:
         else:
             self.wallbox_ladedaten.append(data)
             self.wallbox_ladedaten_ids.append(inv.id)
-
-    def _falte_pv_modul(self, inv, b) -> None:
-        """PV-Modul — RF-62, Phase von ``falte``."""
-        # Nur zur Monats-Kandidatur; der WERT kommt aus der P7-Auflösung.
-        self.pv_je_modul_roh[inv.id] = b.pv_erzeugung
 
     def _falte_sonstiges(self, inv, b) -> None:
         """Sonstiges: die acht Mengen als Summe und je Gerät, Erlös-Marke je Gerät, Erzeuger-/Verbraucher-Marke (P4) —

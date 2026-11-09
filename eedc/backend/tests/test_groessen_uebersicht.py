@@ -372,7 +372,7 @@ def test_c_mqtt_inbound_ist_aktuell():
 def test_d_mqtt_inbound_anker_sind_belegt(anker):
     """Hilfe und Sensor-Referenz verweisen auf zwei Anker von MQTT_INBOUND — beide stehen in den Bausteinen."""
     verweise = [v for v in gu.anker_verweise(gu.verweis_dateien()) if v[2] == "MQTT_INBOUND.md"]
-    assert {a for *_r, a in verweise} >= {"topic-struktur", "zustand-und-sitzung-der-e-mobilitaet-ab-der-naechsten-version"}
+    assert {a for *_r, a in verweise} >= {"topic-struktur", "zustand-und-sitzung-der-e-mobilität"}
     assert not gu.tote_anker(verweise, anker)
 
 

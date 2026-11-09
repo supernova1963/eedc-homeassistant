@@ -537,7 +537,6 @@ async def import_json(
     - Importiert alle verknüpften Daten (Strompreise, Investitionen, Monatsdaten, PVGIS)
     """
     warnungen: list[str] = []
-    fehler: list[str] = []
     importiert = {
         "strompreise": 0,
         "investitionen": 0,

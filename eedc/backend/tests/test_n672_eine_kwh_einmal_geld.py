@@ -31,6 +31,22 @@ from sqlalchemy import select
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
 
+
+@pytest.fixture(autouse=True)
+def _kein_markt_und_gti(monkeypatch):
+    """Börsenpreis (aWATTar) und GTI-Prognose (Open-Meteo) am Rand gestellt: keine Antwort (None), wie sonst der
+    blockierte Abruf — die geprüften E-Auto-/CO₂-Regeln hängen an keinem der beiden (HA-Export und Aussichten fragen
+    sie nebenbei ab)."""
+    from backend.services import solar_forecast_service as sfs
+    from backend.services import strompreis_markt_service as sms
+
+    async def _kein_abruf(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(sms, "fetch_marktpreise", _kein_abruf)
+    monkeypatch.setattr(sfs, "fetch_gti_forecast", _kein_abruf)
+
+
 JAHR = 2025
 PV_KWH, EINSPEISUNG_KWH = 1000.0, 400.0
 LADUNG_KWH, LADUNG_PV_KWH = 400.0, 200.0

@@ -14,7 +14,8 @@
 |--------|-----------|
 | **Momentan** | Aktueller Messwert zum Zeitpunkt der Abfrage (z.B. aktuelle Leistung in W) |
 | **Kumulativ** | Zählerstand der stetig steigt (z.B. Stromzähler in kWh). Delta wird berechnet. |
-| **Tagessensor** | Kumulativer Sensor der täglich um 0:00 auf 0 zurückgesetzt wird (HA Utility Meter). ⛔ **Als Zählerquelle nicht geeignet:** eedc erkennt den Rücksprung und liefert für Tag wie Monat **keinen Wert**, statt zwei Stände abzuziehen, die zu verschiedenen Zählerläufen gehören. Hochgerechnet wird bewusst nicht — der Fehlbetrag ginge immer nach unten und sähe im Monatsabschluss aus wie eine Messung. **Nimm den fortlaufenden Stand** (`utility_meter` mit Zurücksetzen „nie"). ⚠ Über HA ist das folgenlos, dort kommt der reset-bereinigte `sum`-Wert; es betrifft **rohe MQTT-Stände**. |
+| **Tagessensor** | Kumulativer Sensor, der täglich um 0:00 auf 0 zurückgesetzt wird (HA Utility Meter). Er hat zwei Rollen. **Als Tageswert-Feld** (Sensortyp „Tagessensor", z. B. Speicher „Ladung heute") ist er der erwartete Typ. **Als Quelle eines Zählerstands** über **rohe MQTT-Stände** ⛔ nicht geeignet: eedc erkennt den Rücksprung und liefert für Tag wie Monat **keinen Wert**, statt zwei Stände abzuziehen, die zu verschiedenen Zählerläufen gehören (#341). Hochgerechnet wird bewusst nicht — der Fehlbetrag ginge immer nach unten und sähe im Monatsabschluss aus wie eine Messung. **Nimm dort den fortlaufenden Stand** (`utility_meter` mit Zurücksetzen „nie"). Über HA ist der Rücksprung folgenlos, dort kommt der reset-bereinigte `sum`-Wert. |
+| **Kumulativ oder Tagessensor** | Ein Energiefeld mit eigenem Kanal: über HA genügt beides (eedc liest den reset-bereinigten `sum`-Wert der Langzeitstatistik), über MQTT nur der fortlaufende Stand — siehe „Tagessensor". |
 | **Counter** | Kumulativer Anzahl-Zähler (Total-Increasing, kein kWh). Wird strikt von kWh-Feldern getrennt — siehe „Counter vs. kWh" unten. |
 | **Bidirektional** | Positiv/negativ kodiert die Richtung (z.B. +Ladung/−Entladung) |
 | **`state_class`** | HA-Attribut. `total_increasing`/`total` markieren kumulative Sensoren — von HA in Long-Term Statistics persistiert. Sensoren ohne `state_class` haben **keine** LTS-Einträge → für kWh-Felder ungeeignet (siehe „LTS-Verfügbarkeit"). |
@@ -1205,9 +1206,13 @@ Poolpumpe mit 0,5 kW schon.
 
 ### Tagessensoren (Utility Meter)
 
-HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **eedc unterstützt das** — sowohl in der HA-History-Auswertung als auch in MQTT Energy Snapshots. Der Monatswechsel-Reset (negativer Delta) wird automatisch erkannt: `end_val` wird dann direkt als Tageswert verwendet.
+HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **Über HA ist das folgenlos:** eedc liest den
+reset-bereinigten `sum`-Wert der Langzeitstatistik, ein Tagessensor taugt dort wie ein fortlaufender Zähler.
 
-**Empfehlung:** Für MQTT Energy Topics sind Tagessensoren (HA Utility Meter) ideal — sie liefern direkt den Tageswert ohne Delta-Berechnung.
+**Über MQTT Energy Topics nicht als Zählerquelle:** eedc bildet Tag und Monat aus der Differenz zweier Stände; einen
+Rücksprung dazwischen erkennt es und liefert dann **keinen Wert** statt einer hochgerechneten Menge (#341, Legende
+„Tagessensor"). Für MQTT deshalb den **fortlaufenden Stand** senden (`utility_meter` mit Zurücksetzen „nie").
+Ein Feld mit Sensortyp „Tagessensor" (Tageswert-Feld, z. B. Speicher „Ladung heute") erwartet dagegen genau den Tageswert.
 
 ### Vorzeichen-Konvention
 

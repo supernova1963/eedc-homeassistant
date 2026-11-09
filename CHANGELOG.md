@@ -110,9 +110,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Berechnungen §3.5:** die Abgrenzung je Funktion der Wärmepumpen-Kennzahlen beschrieben, wie der Code sie liest — je
   Funktion gilt in Monat, Jahr und Tag der Grund aus `abgrenzung_je_funktion`; die anlagenweite Kette (mit „verschiedene
   Geräte/Monate“, N-441) sperrt die Gesamtzahl. Keine Zahl ändert sich.
+- **MQTT-Inbound und Sensor-Referenz (Referenzen):** die Abschnitte zu Zustand und Sitzung der E-Mobilität und zu den
+  Themen je Gerät mit Umlauten und ohne „ab der nächsten Version“ (seit 4.2.0 ausgeliefert); die Legende der
+  Sensor-Referenz unterscheidet den Tagessensor als Tageswert-Feld (der erwartete Typ) von einem Tagessensor als Quelle
+  eines Zählerstands über MQTT (kein Wert nach einem Rücksprung, #341), die Regel „Tagessensoren“ ist daran angeglichen.
+- **Berechnungen:** die Tagesregel der Sonstiges-Geräte (eine leere Kategorie zählt am Tag als Verbrauch, der Monat nimmt
+  beide Felder) und die Kappung der Degradation (eine Ertragssteigerung zählt als 0, zuverlässig ab drei Datenjahren)
+  stehen jetzt in §3.10 bzw. §4.3; `GET /api/aussichten/kurzfristig` und `/wetter` sind als reine API-Routen ohne Aufrufer
+  in der Oberfläche vermerkt.
+- **Website:** 56 Verweise aus „Was ist neu“, Glossar und den Handbüchern mit alten Kapitelnummern führen auf die heutige
+  Überschrift (Verweise auf die frühere Energieprofil-Sicht auf „Wo ist X hin?“).
 
 ### Intern
 
+- **Päckchen X «Kleineres» (9.11.2026):** drei ungelesene Stellen entfernt (`_CommunityKontext.hat_speicher`,
+  `_RohMonat.pv_je_modul_roh` samt leerer Phase, die `fehler`-Liste im JSON-Import); `GET /monatsdaten/{id}` reicht den
+  Kennzahlen Ladung und Entladung des Speichers aus den Monats-Fakten statt aus den Legacy-Spalten `batterie_*` (P10; die
+  Antwort hat keinen Leser in der Oberfläche, Test `test_kennzahlen_speicher_aus_fakt.py`); sieben Tests stellen ihre
+  Außenquellen selbst (HA-Registry/Template der SFML-Discovery, Open-Meteo-Archiv, aWATTar, GTI-Prognose) — der
+  Netz-Blocker meldet für sie keinen Zugriff mehr; Frontend `getKurzfristPrognose`/`getWetterVorhersage` samt Typen ohne
+  Aufrufer entfernt (die Routen bleiben); der Website-Wächter `check-links.mjs` schaltet Anker ohne Ziel rot und listet sie
+  mit `--anker` vollständig.
 - **Übersicht der Größen (Bauplan U1–U6, 7./8.11.2026):** Jede Größe von eedc steht in einer aus dem Code erzeugten Übersicht
   (`docs/UEBERSICHT-GROESSEN.md`) — 106 Eingabefelder, 104 Monatsgrößen, 76 Kennwerte der Tabelle und 86 Export-Sensoren, je mit
   Herkunft, Code-Ort, Regel-Abschnitt in BERECHNUNGEN und dem Test, der sie hält. `docs/SENSOR-REFERENZ.md` und

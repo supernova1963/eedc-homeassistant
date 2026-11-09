@@ -5,9 +5,11 @@
 //             docs/*.md verweist GitHub-tauglich auf DATEI.md; scripts/remark-doku-links.mjs schreibt das beim
 //             Build um. Steht danach noch ein .md-href im HTML, führt er auf der Website ins Leere.
 //   (b) ROT:  interner Seitenlink /eedc-homeassistant/<pfad>/ ohne dist/<pfad>/index.html (oder Datei dist/<pfad>).
-//   (c) ZAHL: Anker-Links auf interne Seiten, deren Ziel-HTML weder id="…" noch name="…" mit dem Anker trägt —
-//             wird gezählt und mit den häufigsten Zielen ausgegeben, macht den Build aber nicht rot.
-// Exit 1 bei (a) oder (b), mit Liste (Datei → href, höchstens 50 Zeilen). Nur node:fs/node:path.
+//   (c) ROT:  Anker-Links auf interne Seiten, deren Ziel-HTML weder id="…" noch name="…" mit dem Anker trägt —
+//             der Anker-Teil eines Quellverweises nennt eine Überschrift, die es (so) nicht mehr gibt (Päckchen X6).
+// Exit 1 bei (a), (b) oder (c), mit Liste (Datei → href, höchstens 50 Zeilen). Nur node:fs/node:path.
+// `--anker` listet jede Fundstelle von (c) vollständig: Quellseite → href → fehlender Anker
+//   (`node scripts/check-links.mjs --anker` nach einem Build).
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +18,7 @@ const BASE = '/eedc-homeassistant';
 const WEBSITE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(WEBSITE, 'dist');
 const MAX_ZEILEN = 50;
+const ANKER_LISTE = process.argv.includes('--anker');
 
 if (!existsSync(DIST)) {
   console.error(`✗ check-links: ${DIST} fehlt — erst bauen`);
@@ -78,6 +81,7 @@ const rotSeite = [];
 let ankerLinks = 0;
 let ankerLinksQuer = 0; // davon auf eine andere Seite
 const ankerFehlt = new Map();
+const ankerFehltStellen = []; // (c) je Fundstelle: Quellseite → href → fehlender Anker
 let ankerFehltSumme = 0;
 let ankerFehltQuer = 0;
 
@@ -122,6 +126,7 @@ for (const datei of dateien) {
         if (quer) ankerFehltQuer += 1;
         const schluessel = `${relative(DIST, ziel).split(sep).join('/')}#${dekodiert(anker)}`;
         ankerFehlt.set(schluessel, (ankerFehlt.get(schluessel) ?? 0) + 1);
+        ankerFehltStellen.push(`${rel} → ${href} → #${dekodiert(anker)}`);
       }
     }
   }
@@ -131,16 +136,27 @@ const anteil = ankerLinks ? ((100 * ankerFehltSumme) / ankerLinks).toFixed(1) : 
 console.log(`check-links: ${dateien.length} HTML-Seiten geprüft`);
 console.log(`  (a) .md-Verweise:        ${rotMd.length}`);
 console.log(`  (b) tote Seitenlinks:    ${rotSeite.length}`);
-console.log(`  (c) Anker ohne Ziel-ID:  ${ankerFehltSumme} von ${ankerLinks} Anker-Links (${anteil} %, nicht rot)`);
+console.log(`  (c) Anker ohne Ziel-ID:  ${ankerFehltSumme} von ${ankerLinks} Anker-Links (${anteil} %)`);
 console.log(`      davon seitenübergreifend: ${ankerFehltQuer} von ${ankerLinksQuer}`);
 if (ankerFehlt.size) {
   const top = [...ankerFehlt.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 10);
   for (const [ziel, n] of top) console.log(`      ${String(n).padStart(4)}  ${ziel}`);
 }
+if (ANKER_LISTE) {
+  console.log(`  --anker: ${ankerFehltStellen.length} Fundstellen (Quellseite → href → fehlender Anker)`);
+  for (const zeile of ankerFehltStellen) console.log(`    ${zeile}`);
+}
 
-const rot = [...rotMd.map((z) => `(a) ${z}`), ...rotSeite.map((z) => `(b) ${z}`)];
+const rot = [
+  ...rotMd.map((z) => `(a) ${z}`),
+  ...rotSeite.map((z) => `(b) ${z}`),
+  ...ankerFehltStellen.map((z) => `(c) ${z}`),
+];
 if (rot.length) {
-  console.error(`✗ check-links rot: ${rotMd.length} .md-Verweise, ${rotSeite.length} tote Seitenlinks`);
+  console.error(
+    `✗ check-links rot: ${rotMd.length} .md-Verweise, ${rotSeite.length} tote Seitenlinks, ` +
+      `${ankerFehltSumme} Anker ohne Ziel`,
+  );
   for (const zeile of rot.slice(0, MAX_ZEILEN)) console.error(`  ${zeile}`);
   if (rot.length > MAX_ZEILEN) console.error(`  … und ${rot.length - MAX_ZEILEN} weitere`);
   process.exit(1);

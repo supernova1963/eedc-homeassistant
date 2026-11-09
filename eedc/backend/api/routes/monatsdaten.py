@@ -947,8 +947,9 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         einspeisung_kwh=md.einspeisung_kwh,
         netzbezug_kwh=md.netzbezug_kwh,
         pv_erzeugung_kwh=pv_kwh or 0,
-        batterie_ladung_kwh=md.batterie_ladung_kwh or 0,
-        batterie_entladung_kwh=md.batterie_entladung_kwh or 0,
+        # Speicher aus den Monats-Fakten (P10), nicht aus den Legacy-Spalten `md.batterie_*`, die kein Service mehr schreibt.
+        batterie_ladung_kwh=(_fakt.speicher.ladung_kwh or 0) if _fakt is not None else 0,
+        batterie_entladung_kwh=(_fakt.speicher.entladung_kwh or 0) if _fakt is not None else 0,
         # #392: Monatswert der variablen Vergütung vor dem Stammwert —
         # dieselbe Bauform wie der Flex-Ø beim Netzbezug darunter.
         einspeiseverguetung_cent=resolve_einspeise_preis_cent(

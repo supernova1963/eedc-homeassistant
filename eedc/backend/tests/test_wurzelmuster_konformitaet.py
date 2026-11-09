@@ -3103,12 +3103,9 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/erzeuger_ziel.py::loese_ziel",
 
     # ── 3b. Sie IMPLEMENTIEREN die Abtretung, statt sie anzuwenden ─────────
-    # `monats_fakten/roh.py::falte` bekommt die abgetretenen IDs als Argument
-    # (`abgetretene_bkw`, vom Aufrufer über `abgetretene_bkw_ids` erhoben) und
-    # setzt für sie Erzeugung UND Rest-Eigenverbrauch auf 0. Der Selektor würde
-    # die Zeile ganz verwerfen — dann verlöre das BKW auch die Größen, die es
-    # NICHT abtritt (Speicher-Beiträge seines Akkus).
-    "backend/services/monats_fakten/roh.py::falte",
+    # (`monats_fakten/roh.py::falte` stand hier bis Päckchen X, 9.11.2026: seit die leere `pv-module`-Phase entfallen
+    # ist, vergleicht `falte` den Typ nicht mehr getrennt auf beide Erzeuger und bildet die Menge nicht — die Abtretung
+    # in `_falte_bkw` über `abgetretene_bkw` ist unverändert.)
     # `pv_monatswerte.py::_lade_bkw_aggregate` ist die GEGENRICHTUNG: sie sucht
     # gezielt die abtretenden BKW, um deren Monatswert als Lückenfüller der
     # Kinder zu verwenden (P7, Stufe 2). Ein Selektor davor lieferte immer `{}`.

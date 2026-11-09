@@ -7,7 +7,7 @@
 import { api } from './client'
 
 // =============================================================================
-// Kurzfrist-Prognose Types
+// Tages-Prognose Types (Prognosen → Vergleich, `openmeteo_tage`)
 // =============================================================================
 
 export interface TagesPrognose {
@@ -23,22 +23,6 @@ export interface TagesPrognose {
   niederschlag_mm: number | null
   bewoelkung_prozent: number | null
   wetter_symbol: string
-}
-
-export interface KurzfristPrognose {
-  anlage_id: number
-  anlagenname: string
-  anlagenleistung_kwp: number
-  prognose_zeitraum: {
-    von: string | null
-    bis: string | null
-  }
-  summe_kwh: number
-  durchschnitt_kwh_tag: number
-  tageswerte: TagesPrognose[]
-  datenquelle: string
-  abgerufen_am: string
-  system_losses_prozent: number
 }
 
 // =============================================================================
@@ -113,30 +97,6 @@ export interface TrendAnalyseResponse {
   saisonale_muster: SaisonaleMuster
   degradation: Degradation
   datenquellen: string[]
-}
-
-// =============================================================================
-// Wetter-Vorhersage Types
-// =============================================================================
-
-export interface WetterVorhersageTag {
-  datum: string
-  temperatur_max_c: number | null
-  temperatur_min_c: number | null
-  niederschlag_mm: number | null
-  sonnenstunden: number | null
-  bewoelkung_prozent: number | null
-  wetter_symbol: string
-}
-
-export interface WetterVorhersage {
-  anlage_id: number
-  standort: {
-    latitude: number
-    longitude: number
-  }
-  tage: WetterVorhersageTag[]
-  abgerufen_am: string
 }
 
 // =============================================================================
@@ -415,13 +375,6 @@ export interface GenauigkeitsResponse {
 
 export const aussichtenApi = {
   /**
-   * Holt die Kurzfrist-PV-Prognose (7-16 Tage).
-   */
-  async getKurzfristPrognose(anlageId: number, tage: number = 14): Promise<KurzfristPrognose> {
-    return api.get<KurzfristPrognose>(`/aussichten/kurzfristig/${anlageId}?tage=${tage}`)
-  },
-
-  /**
    * Holt die Langfrist-PV-Prognose (Monate).
    */
   async getLangfristPrognose(anlageId: number, monate: number = 12): Promise<LangfristPrognose> {
@@ -433,13 +386,6 @@ export const aussichtenApi = {
    */
   async getTrendAnalyse(anlageId: number, jahre: number = 3): Promise<TrendAnalyseResponse> {
     return api.get<TrendAnalyseResponse>(`/aussichten/trend/${anlageId}?jahre=${jahre}`)
-  },
-
-  /**
-   * Holt die reine Wettervorhersage ohne PV-Berechnung.
-   */
-  async getWetterVorhersage(anlageId: number, tage: number = 7): Promise<WetterVorhersage> {
-    return api.get<WetterVorhersage>(`/aussichten/wetter/${anlageId}?tage=${tage}`)
   },
 
   /**

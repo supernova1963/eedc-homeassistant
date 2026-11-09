@@ -1,4 +1,7 @@
-"""Block 3 — Helper-Unit-Tests für Autarkie / Eigenverbrauchsquote / spez. Ertrag."""
+"""Block 3 — Helper-Unit-Tests für Autarkie / Eigenverbrauchsquote / spez. Ertrag.
+
+Schwesterdatei: test_kennzahlen_speicher_aus_fakt.py (Monatskennzahlen der Route `GET /monatsdaten/{id}`).
+"""
 
 from __future__ import annotations
 

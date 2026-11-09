@@ -70,7 +70,7 @@ ruff check backend                                    # Lint-Gate (F + E9, eedc/
 python -m pytest backend/tests/<berührte Dateien> -q  # plus die Wächter: backend/tests/test_wurzelmuster_konformitaet.py
 cd eedc/frontend && npm run lint && npx tsc --noEmit && npm run test
 ./scripts/sync-help.sh && (cd website && npm run build)   # nur bei Doku-Änderung
-# Volle Backend-Suite (≈ 9 min, -n 3) am Ende jedes Päckchens, Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
+# Volle Backend-Suite (≈ 25 min mit `-n 6` auf der 8-Kern-Box, `-n 3` ≈ 28 min; Stand 9.11.2026, 12 107 Tests) am Ende jedes Päckchens, Ausgabe `| tail -3`; CI fährt sie beim Release-Push in UTC und Auckland.
 # Summenzeile = `N passed` und sonst nichts — skipped/xfailed/warnings sind Arbeitsvorrat, kein Normalstand (Gernot 24.10.2026);
 # benannte Matrix-Grenzen zählen grün und stehen im Register der Matrixdatei (test_pv_achse_matrix.py::URSACHE/ROT).
 ```
