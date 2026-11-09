@@ -194,6 +194,7 @@ async def _prefetch_for_anlage(
     solcast_kwh = None
     solcast_p10 = None
     solcast_p90 = None
+    solcast_stundenprofil = None
     try:
         from backend.services.solcast_service import get_solcast_forecast
         solcast = await get_solcast_forecast(anlage)
@@ -201,6 +202,18 @@ async def _prefetch_for_anlage(
             solcast_kwh = solcast.daily_kwh
             solcast_p10 = solcast.daily_p10_kwh
             solcast_p90 = solcast.daily_p90_kwh
+            # N-782: der Day-Ahead-Schnappschuss von Solcast entsteht hier, im
+            # ersten Lauf nach Mitternacht (bis 00:45) — wie eedc und das
+            # Lern-SOLL darunter. Bis dahin schrieb ihn nur die Live-Sicht beim
+            # ersten Aufruf des Tages, ohne Aufruf blieb er leer. ⚠ Über das
+            # **Datum** (`profil_fuer(heute)`), nicht über `hourly_kw`: das ist
+            # die Heute-Sicht zum Zeitpunkt des Abrufs, und der Solcast-Cache
+            # (bis 2 h) reicht über Mitternacht — `hourly_kw` wäre um 00:05 das
+            # Profil von gestern, und first-write-wins hielte es fest. Eine
+            # Nullreihe friert `_speichere_prognose` nicht ein.
+            heute_profil = solcast.profil_fuer(heute)
+            if heute_profil is not None:
+                solcast_stundenprofil = list(heute_profil.p50)
     except Exception as e:
         logger.debug(f"Prefetch Solcast für Anlage {anlage.id}: {e}")
 
@@ -279,6 +292,7 @@ async def _prefetch_for_anlage(
                 solcast_p10_kwh=solcast_p10,
                 solcast_p90_kwh=solcast_p90,
                 pv_stundenprofil=pv_stundenprofil,
+                solcast_stundenprofil=solcast_stundenprofil,
                 lern_stundenprofil=lern_stundenprofil,
                 lern_kwh=lern_kwh,
             )

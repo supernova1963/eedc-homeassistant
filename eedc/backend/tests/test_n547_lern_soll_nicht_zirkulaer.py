@@ -30,7 +30,7 @@ Abgedeckt:
   (d) Übergangsregel an den REALEN Gates (SW 10, Skalar 7, Ende nach 365 Tagen)
   (e) Migration idempotent + Ü1-Rettung über `aggregate_day`
   (f) gesäte AC-Grenze: die Lern-SOLL-Slots liegen **unter** der Grenze
-  (g) die drei `pv_prognose_kwh`-Leser bleiben unberührt (roher Eingang)
+  (g) das Lern-SOLL fasst die Genauigkeits-Schwelle nicht an (seit N-782: sie liest die Vorhersage)
 """
 
 from __future__ import annotations
@@ -411,29 +411,33 @@ async def test_d5_altbestand_ueberlebt_den_ersten_lauf_ohne_lern_soll(db):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# (g) Die drei `pv_prognose_kwh`-Leser bleiben unberührt
+# (g) Das Lern-SOLL fasst die Genauigkeits-Schwelle nicht an
 # ══════════════════════════════════════════════════════════════════════════
 
-async def test_g_genauigkeits_schwelle_rechnet_weiter_mit_dem_rohen_tageswert(db):
-    """W1: `pv_prognose_kwh` ist und bleibt der ROHE Tageswert, und die drei
-    Leser multiplizieren ihn mit dem Legacy-Lernfaktor. Die neuen Felder
-    daneben ändern daran nichts — geprüft am HA-Export-Pfad
-    (`prognose_genauigkeit_service`), der die Abweichungs-Ampel speist."""
+async def test_g_genauigkeits_schwelle_liest_die_vorhersage_nicht_das_lern_soll(db):
+    """Die Abweichungs-Ampel des HA-Exports (`prognose_genauigkeit_service`) misst die **Vorhersage**
+    (`pv_prognose_stundenprofil`, Day-Ahead) gegen das IST — das Lern-SOLL daneben (roh, gekappt) und der
+    Legacy-Lernfaktor fassen sie nicht an.
+
+    ⛔ Bis N-782 (9.11.2026) prüfte dieser Test das Gegenteil: „rechnet weiter mit dem rohen Tageswert ×
+    Legacy-Faktor". Genau das war der Fund — der Skalar wurde rückwirkend auf alle Tage gelegt und war nicht die
+    Prognose, die eedc gezeigt hat. Die Absicht des Tests (die N-547-Felder verschieben den Leser nicht) bleibt.
+    """
     import backend.api.routes.live_wetter as lw
     from backend.services import prognose_genauigkeit_service as pgs
 
     anlage = await _anlage(db)
-    roh, lernfaktor, ist = 100.0, 0.9, 81.0   # eedc = 90 ⇒ Fehler (90-81)/81
+    roh, vorhersage, ist = 100.0, 90.0, 81.0   # Fehler (90 − 81) ÷ 81
 
     async def _fake_lernfaktor(anlage_id, db_, quelle="openmeteo"):
-        return lernfaktor
+        return 1.3   # wirkte er, läge eedc bei 130
 
     for i in range(1, 6):
         db.add(TagesZusammenfassung(
             anlage_id=anlage.id, datum=HEUTE - timedelta(days=i),
             pv_prognose_kwh=roh,
-            # dieselbe Zeile trägt jetzt zusätzlich das GEKAPPTE Lern-SOLL —
-            # es darf den Leser nicht anfassen.
+            pv_prognose_stundenprofil=[0.0] * 12 + [vorhersage] + [0.0] * 11,
+            # dieselbe Zeile trägt das GEKAPPTE Lern-SOLL — es darf den Leser nicht anfassen.
             lern_soll_kwh=roh * 0.7,
             lern_soll_stundenprofil_kwh=_roh_profil(),
             komponenten_kwh={"pv_1": ist},
@@ -448,11 +452,10 @@ async def test_g_genauigkeits_schwelle_rechnet_weiter_mit_dem_rohen_tageswert(db
     finally:
         lw._get_lernfaktor = orig
 
-    erwartet = round(abs((roh * lernfaktor - ist) / ist) * 100, 1)  # der Layer rundet auf 1
+    erwartet = round(abs((vorhersage - ist) / ist) * 100, 1)  # der Layer rundet auf 1
     assert n == 5
     assert mae == pytest.approx(erwartet, abs=0.05), (
-        f"MAE {mae} statt {erwartet} — der Leser rechnet nicht mehr mit dem "
-        "rohen Tageswert × Legacy-Faktor."
+        f"MAE {mae} statt {erwartet} — der Leser nimmt nicht die Day-Ahead-Vorhersage."
     )
 
 

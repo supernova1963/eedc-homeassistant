@@ -13,10 +13,11 @@
  * `sm:hidden`) und dass die Karten dieselben Zahlen tragen wie die Tabelle.
  * Der Hinweistext selbst darf nirgends mehr vorkommen — das ist die Zusage.
  *
- * Dazu N-128: die relative Abweichung ist gekappt.
+ * Dazu N-128: die relative Abweichung ist gekappt, und N-782: der Zeitpunkt-Umschalter des
+ * Genauigkeits-Trackings samt «nicht erhoben» (Backend-Seite: `test_genauigkeit_zeitpunkt.py`).
  */
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent, within } from '@testing-library/react'
 
 import {
   PvgKpiMatrix, Pvg7TageTabelle, PvgGenauigkeitsTracking, PrognoseVergleichVM,
@@ -64,9 +65,11 @@ const vmVon = (over: Partial<PrognosenVergleich> = {}, g?: GenauigkeitsResponse)
   genauigkeit: g ?? genauigkeit(),
   genauigkeitsTage: 7,
   genauigkeitsModus: 'kompakt',
+  genauigkeitsZeitpunkt: 'day_ahead',
   ausreisserAusblenden: false,
   setGenauigkeitsTage: () => {},
   setGenauigkeitsModus: () => {},
+  setGenauigkeitsZeitpunkt: () => {},
   setAusreisserAusblenden: () => {},
   anlageId: 1,
   reload: () => {},
@@ -165,5 +168,35 @@ describe('N-128 — die relative Abweichung ist gekappt', () => {
 
     expect(container.textContent).toContain('(5 %)')
     expect(container.textContent).not.toContain('> 999 %')
+  })
+})
+
+describe('N-782 — Genauigkeits-Tracking: Zeitpunkt «Day-Ahead | Abend»', () => {
+  it('zeigt den Umschalter mit Day-Ahead als gewähltem Stand und reicht den Wechsel an das VM', () => {
+    const gesetzt: string[] = []
+    const v = { ...vmVon(), setGenauigkeitsZeitpunkt: (z: string) => gesetzt.push(z) } as unknown as PrognoseVergleichVM
+    const { getByRole } = render(<PvgGenauigkeitsTracking vm={v} />)
+    const gruppe = getByRole('group', { name: 'Zeitpunkt' })
+    expect(within(gruppe).getByRole('button', { name: 'Day-Ahead' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(within(gruppe).getByRole('button', { name: 'Abend' }))
+    expect(gesetzt).toEqual(['abend'])
+  })
+
+  it('erklärt, was die zwei Zeitpunkte messen — und hängt die eedc-Spalte an keinen Lernfaktor', () => {
+    const { container } = render(<PvgGenauigkeitsTracking vm={vmVon({ eedc_lernfaktor: null })} />)
+    expect(container.textContent).toContain('Day-Ahead = Stand in der Nacht')
+    expect(container.textContent).toContain('per Satellit')
+    expect(container.textContent).not.toContain('Lernfaktor noch nicht verfügbar')
+  })
+
+  it('zeigt einen Tag ohne aufgezeichneten Stand als «nicht erhoben», in Tabelle und Karte', () => {
+    const g = genauigkeit({
+      tage: [
+        { datum: '2026-08-04', openmeteo_kwh: 11.0, eedc_kwh: null, solcast_kwh: 10.2, ist_kwh: 10.5, ist_ausreisser: false },
+      ],
+    } as Partial<GenauigkeitsResponse>)
+    const { container } = render(<PvgGenauigkeitsTracking vm={vmVon({}, g)} />)
+    expect(breitContainer(container)?.textContent).toContain('nicht erhoben')
+    expect(mobilText(container)).toContain('nicht erhoben')
   })
 })

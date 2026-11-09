@@ -89,6 +89,8 @@ _TZ_SCHREIBFELDER_PROGNOSE: tuple[str, ...] = (
     "pv_prognose_kwh",
     "pv_prognose_final_kwh",
     "pv_prognose_final_at",
+    # N-782: Abendstand der eedc-Prognose (Kanon), friert mit `pv_prognose_final_at` ein.
+    "pv_prognose_eedc_final_kwh",
     "sfml_prognose_kwh",
     "solcast_prognose_kwh",
     "solcast_p10_kwh",
@@ -1046,6 +1048,31 @@ async def _get_lernfaktor_gekappt(
     return result.faktor_gekappt
 
 
+def _profil_einfrierbar(profil: list[float] | None) -> bool:
+    """Ein Stundenprofil taugt als Day-Ahead-Schnappschuss: 24 Slots und Σ > 0 (N-782).
+
+    Eine Reihe aus lauter Nullen ist kein Prognosestand, sondern „keine Daten" —
+    `solcast_service` füllt so die Heute-Slots, wenn die Quelle für heute kein
+    Profil liefert. First-write-wins würde sie für den ganzen Tag festhalten.
+    """
+    return (
+        profil is not None and len(profil) == 24
+        and sum(v for v in profil if v is not None) > 0
+    )
+
+
+def _day_ahead_profile_einfrieren(tz: TagesZusammenfassung, profile: dict[str, list[float] | None]) -> None:
+    """First-write-wins für die Stundenprofile (Day-Ahead-Snapshot) einer bestehenden Tageszeile.
+
+    Bewusst kein Provenance-Anschluss: das sind interne Caches, die nach festem
+    Pattern bleiben (siehe `_provenance_helpers` Skip-Liste). Herausgezogen aus
+    `_speichere_prognose` (N-782, Komplexitäts-Schwelle 50).
+    """
+    for feld, profil in profile.items():
+        if profil is not None and getattr(tz, feld) is None:
+            setattr(tz, feld, profil)
+
+
 async def _speichere_prognose(
     anlage_id: int,
     datum: date,
@@ -1089,9 +1116,23 @@ async def _speichere_prognose(
     Sonnenuntergang fix) — dann wird `pv_prognose_final_at` gesetzt und der
     Wert nicht mehr überschrieben. Der Anzeige-Wert `pv_prognose_kwh` bleibt
     rollend (drei-Größen-Modell).
+
+    N-782 — `pv_prognose_eedc_final_kwh`: der **Abendstand der eedc-Prognose**
+    (Kanon) = Σ der aktuellen korrigierten Reihe `pv_stundenprofil`, die beide
+    Aufrufer bei jedem Lauf übergeben. Rollt mit und friert mit derselben Regel
+    ein wie `pv_prognose_final_kwh` — geschrieben, solange `pv_prognose_final_at`
+    vor dem Lauf leer war (der einfrierende Lauf schreibt also noch).
+    `solcast_stundenprofil` wird nur mit 24 Slots und Σ > 0 eingefroren: der
+    Solcast-Dienst liefert ohne Heute-Profil 24 × 0,0 (`solcast_service`), und
+    eine eingefrorene Nullreihe hieße „Solcast sagte 0 kWh voraus".
     """
     from backend.core.database import get_session
     from backend.core.berechnungen import soll_final_einfrieren
+    from backend.services.prognose_genauigkeit_service import profil_tageswert_kwh
+
+    eedc_abend_kwh = profil_tageswert_kwh(pv_stundenprofil)
+    if not _profil_einfrierbar(solcast_stundenprofil):
+        solcast_stundenprofil = None
 
     try:
         async with get_session() as db:
@@ -1104,6 +1145,9 @@ async def _speichere_prognose(
             tz = result.scalar_one_or_none()
 
             if tz:
+                # N-782: vor dem OM-Block gemessen — der Lauf, der dort einfriert,
+                # schreibt den eedc-Abendstand noch (dieselbe Regel, derselbe Lauf).
+                eedc_noch_offen = tz.pv_prognose_final_at is None
                 # UPDATE-Pfad: pro Feld via Resolver mit eigener Source-Klasse,
                 # damit SFML/Solcast-spezifische Schreib-Pfade (Quellenwahl-
                 # Roadmap Schritt 4) sich später disjunkt einfügen können.
@@ -1126,6 +1170,8 @@ async def _speichere_prognose(
                             tz.pv_prognose_final_at = datetime.now(
                                 ZoneInfo("Europe/Berlin")
                             ).isoformat()
+                if eedc_abend_kwh is not None and eedc_noch_offen:
+                    tz.pv_prognose_eedc_final_kwh = eedc_abend_kwh
                 if sfml_kwh is not None:
                     await write_with_provenance(
                         db, tz, "sfml_prognose_kwh", sfml_kwh,
@@ -1141,22 +1187,15 @@ async def _speichere_prognose(
                             db, tz, feld, wert,
                             source=_SOLCAST_SOURCE, writer=_SOLCAST_WRITER,
                         )
-                # First-write-wins für Stundenprofile (Day-Ahead-Snapshot) —
-                # bewusst kein Provenance-Anschluss: das sind interne Caches,
-                # die nach festem Pattern bleiben (siehe _provenance_helpers
-                # Skip-Liste).
-                if pv_stundenprofil is not None and tz.pv_prognose_stundenprofil is None:
-                    tz.pv_prognose_stundenprofil = pv_stundenprofil
-                if solcast_stundenprofil is not None and tz.solcast_prognose_stundenprofil is None:
-                    tz.solcast_prognose_stundenprofil = solcast_stundenprofil
-                if sfml_stundenprofil is not None and tz.sfml_prognose_stundenprofil is None:
-                    tz.sfml_prognose_stundenprofil = sfml_stundenprofil
-                # N-547: Lern-SOLL. Stundenreihe first-write-wins (derselbe
-                # Day-Ahead-Gedanke), Tagessumme rollend — sie ist das SOLL der
-                # Skalar-Stufe und soll dem konvergierenden OM-Tageswert folgen.
-                if (lern_stundenprofil is not None
-                        and tz.lern_soll_stundenprofil_kwh is None):
-                    tz.lern_soll_stundenprofil_kwh = lern_stundenprofil
+                _day_ahead_profile_einfrieren(tz, {
+                    "pv_prognose_stundenprofil": pv_stundenprofil,
+                    "solcast_prognose_stundenprofil": solcast_stundenprofil,
+                    "sfml_prognose_stundenprofil": sfml_stundenprofil,
+                    # N-547: Lern-SOLL. Stundenreihe first-write-wins (derselbe
+                    # Day-Ahead-Gedanke), Tagessumme rollend (unten) — sie ist das SOLL
+                    # der Skalar-Stufe und soll dem konvergierenden OM-Tageswert folgen.
+                    "lern_soll_stundenprofil_kwh": lern_stundenprofil,
+                })
                 if lern_kwh is not None:
                     tz.lern_soll_kwh = lern_kwh
             else:
@@ -1170,6 +1209,7 @@ async def _speichere_prognose(
                     pv_prognose_kwh=prognose_kwh,
                     pv_prognose_final_kwh=prognose_kwh,
                     pv_prognose_final_at=_final_at,
+                    pv_prognose_eedc_final_kwh=eedc_abend_kwh,
                     sfml_prognose_kwh=sfml_kwh,
                     solcast_prognose_kwh=solcast_kwh,
                     solcast_p10_kwh=solcast_p10_kwh,

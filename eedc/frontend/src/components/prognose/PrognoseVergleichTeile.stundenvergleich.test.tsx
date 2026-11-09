@@ -375,7 +375,7 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
   }
 
   it('Genauigkeits-Tracking annotiert absolut mit Prozent in Klammern', () => {
-    const vm = { data: daten(), genauigkeit: genauigkeit(), ausreisserAusblenden: false } as PrognoseVergleichVM
+    const vm = { data: daten(), genauigkeit: genauigkeit(), ausreisserAusblenden: false, genauigkeitsZeitpunkt: 'day_ahead' } as PrognoseVergleichVM
     const { container } = render(<PvgGenauigkeitsTracking vm={vm} />)
     const z = zellen(container.querySelector('tbody tr') as Element)
 
@@ -562,7 +562,7 @@ describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', ()
   } as unknown as GenauigkeitsResponse)
 
   const alleVier = (data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse) => {
-    const vm = { data, genauigkeit, genauigkeitsTage: 7, ausreisserAusblenden: false } as PrognoseVergleichVM
+    const vm = { data, genauigkeit, genauigkeitsTage: 7, ausreisserAusblenden: false, genauigkeitsZeitpunkt: 'day_ahead' } as PrognoseVergleichVM
     return {
       quellen: spaltenplan(render(<PvgKpiMatrix vm={vm} />).container),
       stunden: spaltenplan(render(<Pvg24hTabelle vm={vm} />).container),
@@ -643,7 +643,7 @@ describe('Spaltenflucht: alle Quellen-Tabellen tragen denselben Spaltenplan', ()
           sfml_stundenprofil: profil(TAGESGANG),
         })
       : daten()
-    const vm = { data, genauigkeit: genauigkeitFix(), genauigkeitsTage: 7, ausreisserAusblenden: false } as PrognoseVergleichVM
+    const vm = { data, genauigkeit: genauigkeitFix(), genauigkeitsTage: 7, ausreisserAusblenden: false, genauigkeitsZeitpunkt: 'day_ahead' } as PrognoseVergleichVM
     const soll = prognoseSpaltenplan({ hasSolcast: true, hasSfml: mitSfml }).length
     for (const [name, el] of [
       ['Quellen-Genauigkeit', <PvgKpiMatrix vm={vm} />],

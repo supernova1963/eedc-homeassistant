@@ -89,7 +89,7 @@ Als operative Prognosequelle stehen zur Wahl:
 
 **Ist SFML deine gewählte Quelle, siehst du sie im Vergleich — als Wert, nicht als Note.** Der Stundenvergleich, der 7-Tage-Vergleich und der Tagesverlauf zeigen dann eine zusätzliche **SFML**-Spalte bzw. -Kurve: sonst fehlte dir in dieser Sicht ausgerechnet die Zahl, mit der eedc bei dir tatsächlich rechnet.
 
-**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — und im **Genauigkeits-Tracking** (MAE/Bias und die Tagestabelle darunter) erscheint SFML gar nicht. eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für zurückliegende Tage führt eedc über SFML deshalb auch keine Mitschrift, weshalb die SFML-Spalte im 7-Tage-Vergleich für die Vergangenheit „—" zeigt. Das ist so gewollt — kein Fehler.
+**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — im **Genauigkeits-Tracking** steht SFML seit #401 nur als Wertspalte, ohne MAE/Bias und ohne Ausreißer-Markierung; sein Day-Ahead-Stand ist der erste Aufruf der Live-Sicht an dem Tag (§6). eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für einen zurückliegenden Tag gibt es einen SFML-Wert nur, wenn die Live-Sicht an dem Tag aufgerufen wurde — sonst zeigt die SFML-Spalte im 7-Tage-Vergleich „—". Das ist so gewollt — kein Fehler.
 
 > Bis v4.0.8 blieb SFML in diesen Sichten **ganz** außen vor. Das war eine gröbere Regel als nötig: Wert und Bewertung standen damals in derselben Tabellenzelle, „anzeigen ohne zu bewerten" gab es also nicht. Seit Wert und **Δ** getrennte Spalten haben, geht beides.
 
@@ -320,13 +320,22 @@ Faustregel für die Deutung:
 - **|Bias| ≪ MAE** → die Prognose streut, aber im Mittel stimmt sie → reines Wetterrauschen, ein Lernfaktor hilft kaum.
 - **|Bias| ≈ MAE** → systematischer Versatz → genau hier wirkt der Lernfaktor / das Korrekturprofil.
 
-Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander; sie bleibt auch dann stabil und lesbar, wenn für eedc noch kein Lernfaktor vorliegt (dann bleibt nur die eedc-Spalte leer).
+Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander. Fehlt für einen Tag der aufgezeichnete Stand einer Quelle, steht dort gedimmt **„nicht erhoben"** — kein Strich, der wie 0 aussieht, und keine nachträglich gerechnete Zahl.
 
 **Die Tagestabelle darunter spricht dieselbe Sprache wie der Stundenvergleich:** je Quelle eine Wert- und eine **Δ**-Spalte, die Abweichung absolut in kWh mit der relativen Angabe in Klammern. Bis v4.0.8 stand hier nur der relative Wert („+16 %") — dieselben vier Tage, die auch im 7-Tage-Vergleich stehen, wurden damit auf einer Seite in zwei verschiedenen Sprachen beschrieben.
 
 Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie stark und an wie vielen Tagen die Prognose *über* bzw. *unter* dem IST lag. So wird z. B. ein reiner Vormittags-Bias sichtbar.
 
-> **Welcher Prognosewert geht in die Genauigkeit ein?** Der **Anzeige**-Wert rollt über den Tag mit OpenMeteo mit — für den Tagesabschluss wäre ein Zwischenstand vom Mittag aber irreführend. Das Genauigkeits-Tracking nutzt deshalb einen **eigenen, eingefrorenen Endwert**: er rollt mit, bis OpenMeteo für den Tag (nach Sonnenuntergang) konvergiert ist, und wird dann festgeschrieben. So vergleicht das Ranking IST immer gegen den *fertigen* Tagesforecast, während die Anzeige rollend bleibt.
+> **Welcher Prognosewert geht in die Genauigkeit ein? — der Umschalter „Zeitpunkt: Day-Ahead | Abend".** Jede Prognose ändert sich über den Tag: der Anzeige-Wert rollt mit dem Wetterdienst mit, und Solcast führt seinen Tageswert tagsüber sogar per **Satellit** nach — abends weiß Solcast also schon, wie der Tag gelaufen ist. Ein fairer Vergleich braucht deshalb für alle Quellen **denselben Zeitpunkt**:
+>
+> - **Day-Ahead** (Standard) — der Stand in der Nacht, bevor der Tag beginnt: die Summe des Stundenprofils, das eedc beim ersten Prognose-Abruf des Tages festhält. Für **eedc, OpenMeteo und Solcast** ist das der erste Lauf nach Mitternacht (spätestens 00:45). **SFML** hält eedc beim ersten Aufruf der Live-Sicht des Tages fest — ebenso **Solcast an Tagen vor dem Update auf diese Version**. Day-Ahead vergleicht gleich lange Vorlaufzeiten und ist deshalb die Zahl, an der sich die Quellen messen lassen.
+> - **Abend** — der nach Sonnenuntergang eingefrorene Stand: der Tageswert rollt mit, bis der Tag konvergiert ist, und wird dann festgeschrieben. Bei Solcast enthält er die Satelliten-Nachführung des Tages; ein Abend-Vergleich zeigt also, wie gut eine Quelle **nachgeführt** hat, nicht wie gut sie **vorhergesagt** hat.
+>
+> **Die eedc-Spalte ist die Prognose, die eedc an dem Tag angezeigt hat** (der eine Rechenweg aus [§2.2](#22-eedc-kalibriert--die-default-quelle), mit Korrekturprofil). Bis zu dieser Version stand dort die OpenMeteo-Prognose mal dem *heutigen* Lernfaktor, rückwirkend für alle Tage — eine Zahl, die eedc an keinem dieser Tage gezeigt hat. Den eedc-Abendstand zeichnet eedc erst ab dieser Version auf; ältere Tage zeigen im Zeitpunkt „Abend" für eedc „nicht erhoben". Die Day-Ahead-Profile liegen dagegen auch für zurückliegende Tage vor.
+>
+> ⚠ **OpenMeteo wechselt mit dem Zeitpunkt die Größe** (benannte Grenze): Day-Ahead ist an Anlagen mit AC-Grenze die an der Wechselrichter-Leistung **gekappte** Rohreihe, der Abendstand die **ungekappte** Roh-Tagessumme. An Anlagen ohne Kappung ist es dieselbe Größe.
+>
+> Die Abweichungs-Ampel der HA-Sensoren (`mae_30_tage_prozent`) rechnet mit dem eedc-Day-Ahead-Stand — ohne aufgezeichnete Day-Ahead-Profile gibt es keine Schwelle und keine Ampel.
 
 ---
 
@@ -353,6 +362,7 @@ Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + zugeordnete PV-Zähler** si
 | Symptom | Ursache | Was tun |
 |---------|---------|---------|
 | **eedc-Spalte leer / „X von 7 Tagen"** | noch keine 7 verwertbaren IST-Tage | abwarten — eedc zeigt solange die OpenMeteo-Basis. Prüfen, dass der PV-Zähler zugeordnet ist. |
+| **eedc im Genauigkeits-Tracking deutlich schlechter als Solcast** | im Zeitpunkt „Abend" enthält Solcast die Satelliten-Nachführung des Tages — eedc nicht | auf **Day-Ahead** umschalten: dort vergleichen beide gleich lange Vorlaufzeiten. Day-Ahead liegen eedc und Solcast typischerweise in derselben Liga. |
 | **Prognose systematisch zu hoch/niedrig** | falsche Ausrichtung/Neigung, oder Lernfaktor noch im Aufbau | Ausrichtung/Neigung je String korrekt pflegen; Bias im Genauigkeits-Tracking beobachten — das Korrekturprofil zieht nach. |
 | **Vormittags daneben, Tagessumme stimmt** | OpenMeteo-Tagesgang-Bias; ein Skalar korrigiert nur die Summe | das Sonnenstand-×-Wetter-Korrekturprofil greift hier — sichtbar in der Heatmap und der Asymmetrie-Diagnose. |
 | **Performance Ratio > 1** | nur bei alten Versionen (GHI statt GTI) | auf aktuelle Version updaten; danach betroffene Tage neu aggregieren. |
@@ -372,4 +382,4 @@ Die Vergleichssicht ruft alle Quellen **parallel** ab. Hängt eine Quelle (Solca
 
 ---
 
-*Letzte Aktualisierung: 2026-07-25 (v4.0)*
+*Letzte Aktualisierung: 2026-11-09 (Genauigkeits-Tracking: Zeitpunkt Day-Ahead/Abend, eedc-Spalte = angezeigte Prognose)*

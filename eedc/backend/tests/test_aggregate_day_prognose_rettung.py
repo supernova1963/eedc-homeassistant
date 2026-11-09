@@ -48,6 +48,8 @@ def test_rettungsliste_deckt_alle_prognose_felder():
         # Liste gegen Liste und merkt nicht, wenn BEIDE ein Feld verlieren.
         "lern_soll_stundenprofil_kwh",
         "lern_soll_kwh",
+        # N-782: Abendstand der eedc-Prognose (friert mit `pv_prognose_final_at` ein).
+        "pv_prognose_eedc_final_kwh",
     }
     fehlend = vom_wetter_endpoint_geschrieben - set(_PROGNOSE_FELDER_RETTEN)
     assert not fehlend, (

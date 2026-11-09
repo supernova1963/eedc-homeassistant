@@ -3682,7 +3682,7 @@ Wärmepumpen-Art) · `_monatswerte` (SOLL-Jahr, Monatswerte).
 > Hinweis auf die Teilsumme — nicht das Log (ADR-002/P4). Dasselbe gilt, wenn gar keine Prognose
 > vorliegt: 24 Nullen werden als „keine Prognose" ausgewiesen, nicht als Prognose „0 kWh".
 >
-> **Genauigkeits-Endwert (§6).** Das Genauigkeits-Ranking vergleicht IST gegen `TagesZusammenfassung.pv_prognose_final_kwh` (Fallback `pv_prognose_kwh`): dieser rollt mit, bis OpenMeteo für den Tag nach Sonnenuntergang konvergiert ist (`core/berechnungen/prognose_final.soll_final_einfrieren`), und wird dann via `pv_prognose_final_at` eingefroren. Der Anzeige-Wert bleibt rollend (Drei-Größen-Modell: Anzeige rollend · Lern-Snapshot gefroren · Tracking-Endwert konvergenz-gefroren).
+> **Genauigkeits-Endwert (§6).** Das Genauigkeits-Ranking vergleicht IST gegen `TagesZusammenfassung.pv_prognose_final_kwh` (Fallback `pv_prognose_kwh`): dieser rollt mit, bis OpenMeteo für den Tag nach Sonnenuntergang konvergiert ist (`core/berechnungen/prognose_final.soll_final_einfrieren`), und wird dann via `pv_prognose_final_at` eingefroren. Der Anzeige-Wert bleibt rollend (Drei-Größen-Modell: Anzeige rollend · Lern-Snapshot gefroren · Tracking-Endwert konvergenz-gefroren). Seit N-782 ist das der OpenMeteo-Wert des Zeitpunkts „Abend"; daneben friert `pv_prognose_eedc_final_kwh` (Σ der korrigierten Kanon-Reihe) mit derselben Regel ein — Abschnitt „Genauigkeits-Tracking" unten.
 
 ### 4.1 Kurzfrist-Prognose (7-16 Tage)
 
@@ -3862,7 +3862,7 @@ faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)
 
 > ⚠ **Der Skalar-Lernfaktor hier ist der LEGACY-Faktor** (`live_wetter._get_lernfaktor_detail`) und liest `pv_prognose_kwh`, also die **ungekappte** Rohprognose. Die Skalar-Stufe des **Korrekturprofils** (Stufe 4 der Kaskade) rechnet seit N-547 gegen `lern_soll_kwh`, also gegen die **gekappte** Summe.
 >
-> ⭐ **Es gibt ihn deshalb ZWEIMAL — einmal je Bezugsgröße (N-551).** Ein auf der rohen Prognose gelernter Faktor rechnete auf einer an der Wechselrichter-Grenze **gekappten** Reihe die Abregelung ein zweites Mal heraus; ein bloßer Nenner-Tausch wäre falsch, denn **fünf** Leser wenden denselben Faktor auf die **rohe** Basis an (Genauigkeits-Tracking, Prognosen-Vergleich, Energieprofil-Tages-SOLL, Tagesprognose, Kanon-Schätzpfad). Darum: `faktor` = Σ IST / Σ `pv_prognose_kwh`; daneben `faktor_gekappt` = Σ IST / Σ `lern_soll_kwh` über die Tage **derselben** Kaskadenstufe, die das Feld tragen (Gate ≥ 7 Tage, sonst kein zweiter Faktor). Den gekappten nimmt **nur** der Kanon-Fallback, die Stelle, die auf gekappte Slots trifft. Ohne Kappung sind beide Zahlen gleich.
+> ⭐ **Es gibt ihn deshalb ZWEIMAL — einmal je Bezugsgröße (N-551).** Ein auf der rohen Prognose gelernter Faktor rechnete auf einer an der Wechselrichter-Grenze **gekappten** Reihe die Abregelung ein zweites Mal heraus; ein bloßer Nenner-Tausch wäre falsch, denn **vier** Leser wenden denselben Faktor auf die **rohe** Basis an (Prognosen-Vergleich, Energieprofil-Tages-SOLL, Tagesprognose, Kanon-Schätzpfad; das Genauigkeits-Tracking bis N-782 als fünfter). Darum: `faktor` = Σ IST / Σ `pv_prognose_kwh`; daneben `faktor_gekappt` = Σ IST / Σ `lern_soll_kwh` über die Tage **derselben** Kaskadenstufe, die das Feld tragen (Gate ≥ 7 Tage, sonst kein zweiter Faktor). Den gekappten nimmt **nur** der Kanon-Fallback, die Stelle, die auf gekappte Slots trifft. Ohne Kappung sind beide Zahlen gleich.
 
 eedc nutzt eine **saisonale Kaskade** mit den jeweils vorhandenen Daten:
 
@@ -3924,6 +3924,23 @@ MBE = Ø  err_rel      # Mean Bias Error — systematischer Bias
 |---|---|
 | **MAE** | Wie weit liegen Prognose und IST im Schnitt auseinander, **unabhängig von der Richtung**? Maß für Streuung/Schwankungsbreite. |
 | **MBE** | Liegt die Quelle im Mittel **über** (positiv) oder **unter** (negativ) dem IST? Bias ist neutral gefärbt — Vorzeichen ist Information, keine Wertung. |
+
+**Welcher Prognosewert (N-782, 9.11.2026).** `Prognose_kWh` ist je Quelle der Stand eines festen **Zeitpunkts**
+(Query `zeitpunkt`, Standard `day_ahead`; Auswahl in `services/prognose_genauigkeit_service.prognosen_zum_zeitpunkt`):
+
+| Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Abend (eingefrorener Tageswert) |
+| --- | --- | --- |
+| eedc | `pv_prognose_stundenprofil` — die angezeigte, korrigierte Kanon-Reihe | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
+| OpenMeteo | `lern_soll_stundenprofil_kwh` — roh, **gekappt** | `pv_prognose_final_kwh`, Fallback `pv_prognose_kwh` — roh, **ungekappt** |
+| Solcast | `solcast_prognose_stundenprofil` | `solcast_prognose_kwh` (letzter Schreiber, per Satellit nachgeführt) |
+| SFML (nur Wert, keine Kennzahl) | `sfml_prognose_stundenprofil` | `sfml_prognose_kwh` |
+
+Ohne aufgezeichneten Stand `None` („nicht erhoben"), kein Rückfall auf den anderen Zeitpunkt; ein Profil mit Σ ≤ 0 gilt
+als nicht erhoben (Nullreihe = keine Daten). Ausreißer-Markierung (#296) und MAE/MBE/Asymmetrie rechnen mit den Werten
+des gewählten Zeitpunkts. Bis N-782 war eedc hier `OM-Endwert × heutiger Skalar-Lernfaktor`, rückwirkend für alle
+Tage. Die HA-Abweichungs-Ampel (`eedc_mae_prozent`) nimmt den eedc-Day-Ahead-Stand; ohne Day-Ahead-Profile keine Reihe
+und keine Schwelle (P4). Benannte Grenze: OpenMeteo wechselt mit dem Zeitpunkt zwischen gekappter und ungekappter
+Größe (an Anlagen ohne AC-Grenze gleich).
 
 #### Asymmetrie-Diagnostik (v3.23.3, #151 Variante B)
 
@@ -4962,7 +4979,7 @@ Architektur trennt Counter-Felder strikt von kWh-Feldern in `KUMULATIVE_COUNTER_
 
 Zwei JSON-Felder in `TagesZusammenfassung` (`pv_prognose_stundenprofil`, `solcast_prognose_stundenprofil`) speichern den ersten OpenMeteo-/Solcast-Forecast des Tages als 24-Werte-Liste in kWh (Backward-Slot). First-write-wins: spätere Aufrufe am selben Tag überschreiben das Profil nicht. Leser: Genauigkeit und Stratifizierung (Tabelle im Lern-SOLL-Abschnitt unten); das Korrekturprofil lernt nicht gegen diesen Schnappschuss, sondern gegen das Lern-SOLL (N-547). Bei gewählter SFML-Quelle kommt `sfml_prognose_stundenprofil` dazu (§4.1b). Speicher ~80 KB/Jahr/Anlage.
 
-**Geschrieben wird der Schnappschuss vom Prefetch-Job** (N-547; alle 45 min, erster Lauf nach Mitternacht; Schreibstelle `api/routes/live_wetter.py`) — unabhängig vom Seitenbesuch. Derselbe Lauf schreibt das Lern-SOLL (unten), aus dem die Stufen 1–3 der Kaskade lernen.
+**Geschrieben wird der Schnappschuss vom Prefetch-Job** (N-547; alle 45 min, erster Lauf nach Mitternacht; Schreibstelle `api/routes/live_wetter.py`) — unabhängig vom Seitenbesuch. Derselbe Lauf schreibt das Lern-SOLL (unten), aus dem die Stufen 1–3 der Kaskade lernen, und seit N-782 das Solcast-Profil (über das Datum, `SolcastForecast.profil_fuer`, weil der Solcast-Cache über Mitternacht reicht). Das SFML-Profil schreibt nur die Live-Sicht beim ersten Aufruf des Tages, ebenso Solcast vor N-782. Ein Profil aus lauter Nullen wird nicht eingefroren.
 
 #### Das Lern-SOLL des Korrekturprofils (N-547, gebaut 22.09.2026)
 
@@ -4977,7 +4994,7 @@ Zwei Felderpaare, zwei Fragen:
 
 **Warum gekappt.** Die AC-Grenze des Wechselrichters ist keine Prognoseabweichung, sondern eine physikalische Schranke: oberhalb von ihr *kann* die Anlage nicht liefern. Ein ungekapptes SOLL schriebe diesen Deckel als dauerhaften Fehler in die Mittagsfaktoren.
 
-**Warum der Tageswert `pv_prognose_kwh` roh und UNgekappt bleibt.** Seine drei Leser (Genauigkeits-Tracking, HA-Abweichungs-Ampel, Tages-SOLL im Energieprofil) multiplizieren ihn mit dem Legacy-Lernfaktor; sie erwarten die rohe Lage. Beide Schreiber (Prefetch und Live) schreiben ihn roh (`KanonTag.roh_kwh` = `om_kwh + abregelung_om_kwh`, N-547).
+**Warum der Tageswert `pv_prognose_kwh` roh und UNgekappt bleibt.** Sein Leser Tages-SOLL im Energieprofil multipliziert ihn mit dem Legacy-Lernfaktor und erwartet die rohe Lage; das Genauigkeits-Tracking zeigt ihn im Zeitpunkt „Abend" als OpenMeteo-Rohwert (Fallback hinter `pv_prognose_final_kwh`) ohne Faktor. Bis N-782 multiplizierten auch Genauigkeits-Tracking und HA-Abweichungs-Ampel ihn mit dem Faktor. Beide Schreiber (Prefetch und Live) schreiben ihn roh (`KanonTag.roh_kwh` = `om_kwh + abregelung_om_kwh`, N-547).
 
 **Übergang ohne Bruch (kein Backfill).** Die neuen Felder entstehen ab dem Update; Bestandszeilen bleiben NULL. Damit der erste nächtliche Lauf nicht jeden Bin mit einem leeren Pool überschreibt, gilt je Bin: **der neue Wert ersetzt den alten erst, wenn er das Gate seiner Stufe mit NEUEN Datenpunkten erreicht** (Sonnenstand×Wetter 10 h, Sonnenstand 15 h, Stunde Σ 50 h je Monat, Skalar 7 Tage — dieselben Schwellen, die der Lookup anwendet). Beim Skalar gehören `tage_eingegangen` und `faktor_skalar` zum gehaltenen Wert, sonst fiele Stufe 4 aus. Die Marke je Bin steht in `Korrekturprofil.lern_basis_pro_bin` (`"alt"` | `"neu"`), der Beginn in `lern_umstellung_am`; nach **365 Tagen** endet die Regel (sonst bliebe ein saisonal nie wieder belegter Bin für immer auf seinem alten Wert).
 

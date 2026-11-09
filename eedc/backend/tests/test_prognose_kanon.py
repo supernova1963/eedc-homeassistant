@@ -936,7 +936,8 @@ async def test_genauigkeit_liest_final_wert(db, _patch):
     ))
     await db.flush()
 
-    resp = await get_prognosen_genauigkeit(anlage.id, tage=30, db=db)
+    # N-782: der Endwert ist der Abendstand — Zeitpunkt «abend».
+    resp = await get_prognosen_genauigkeit(anlage.id, tage=30, ausreisser_ausblenden=False, zeitpunkt="abend", db=db)
     eintrag = next(e for e in resp.tage if e.datum == vortag.isoformat())
     # openmeteo_kwh spiegelt den Endwert (14.0), NICHT den rollenden 10.0.
     assert eintrag.openmeteo_kwh == pytest.approx(14.0)

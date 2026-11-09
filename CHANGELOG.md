@@ -30,6 +30,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Bezugspreis − Einspeisevergütung wie Komponenten-Hub und Aussichten — die Energie hätte sonst eingespeist werden
   können. Betrifft nur Anlagen mit gepflegter V2H-Jahresmenge ohne eigenen Entladepreis; ein gepflegter Entladepreis gilt
   wie bisher (N-781).
+- **Auswertungen → Prognose, Genauigkeits-Tracking: die eedc-Spalte zeigt die Prognose, die eedc an dem Tag angezeigt
+  hat.** Bisher stand dort die OpenMeteo-Prognose mal dem *heutigen* Lernfaktor, rückwirkend für alle Tage — eedc
+  erschien dadurch schlechter, als es vorhergesagt hatte. Neu ist der Umschalter **„Zeitpunkt: Day-Ahead | Abend"**:
+  Solcast führt seinen Tageswert tagsüber per Satellit nach, ein fairer Vergleich braucht für alle Quellen denselben
+  Stand. Day-Ahead (Standard) ist der Stand in der Nacht, Abend der nach Sonnenuntergang eingefrorene; ohne
+  aufgezeichneten Stand steht „nicht erhoben". Die Abweichungs-Ampel der HA-Sensoren (`mae_30_tage_prozent`) rechnet
+  ebenfalls mit dem eedc-Day-Ahead-Stand (N-782).
+- **Prognose-Aufzeichnung: ein Solcast-Tagesprofil ohne Daten wird nicht mehr als 0 kWh gespeichert.** Lieferte Solcast
+  für heute kein Stundenprofil, hielt eedc beim ersten Aufruf der Live-Sicht eine Reihe aus lauter Nullen als
+  Tagesprofil fest; jetzt bleibt der Tag ohne Profil, bis eine echte Reihe kommt. Das Solcast-Tagesprofil hält eedc
+  zudem jetzt im ersten Prognose-Abruf nach Mitternacht fest, wie eedc und OpenMeteo, statt erst beim ersten Aufruf der
+  Live-Sicht (N-782).
 
 - **Vollbackfill und Reparatur-Werkbank ohne Energie-Statistik: ein Balkonkraftwerk zählt neben seinen messenden Modulen
   nicht doppelt.** Die Stunden-Leistungskurve aus der Home-Assistant-Langzeitstatistik nahm Balkonkraftwerk und Module

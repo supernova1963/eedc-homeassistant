@@ -40,7 +40,7 @@ from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
 from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.prognose_kanon import kanon_tagesprognose, pv_invs_im_horizont
-from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
+from backend.api.routes.live_wetter import _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.prognose_adapter import (
     StundenProfil,
@@ -51,6 +51,11 @@ from backend.services.prognose_adapter import (
     solcast_profil,
 )
 from backend.services.prognose_router import resolve_prognose_quelle
+from backend.services.prognose_genauigkeit_service import (
+    ZEITPUNKT_STANDARD,
+    Zeitpunkt,
+    prognosen_zum_zeitpunkt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +268,9 @@ class GenauigkeitsResponse(BaseModel):
     anzahl_ausreisser: int = 0
     # Schwelle in % (für UI-Text)
     ausreisser_schwelle_prozent: float = 50.0
+    #: N-782: welcher Prognosestand je Quelle in `tage` und den Kennzahlen steht —
+    #: ``day_ahead`` (gespeicherte Stundenprofile) oder ``abend`` (eingefrorene Abendstände).
+    zeitpunkt: Zeitpunkt = ZEITPUNKT_STANDARD
 
 
 # =============================================================================
@@ -1129,15 +1137,24 @@ async def get_prognosen_genauigkeit(
         default=False,
         description="Ausreißer-Tage (große Abweichung) aus MAE/MBE ausschließen (#296 #9, Default aus)",
     ),
+    zeitpunkt: Zeitpunkt = Query(
+        default=ZEITPUNKT_STANDARD,
+        description="Welcher Prognosestand je Quelle: day_ahead (gespeicherte Stundenprofile, Stand bis 00:45) "
+                    "oder abend (eingefrorene Abendstände) — N-782",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Genauigkeits-Tracking: Prognose vs. IST für die letzten N Tage.
 
-    Nutzt TagesZusammenfassung:
-    - pv_prognose_kwh (OpenMeteo) vs. IST (aus komponenten_kwh)
-    - solcast_prognose_kwh vs. IST
+    Die Prognosewerte je Quelle und Zeitpunkt kommen aus
+    ``prognose_genauigkeit_service.prognosen_zum_zeitpunkt`` (N-782): die eedc-Spalte ist die
+    Prognose, die eedc an dem Tag gezeigt hat — nicht mehr OpenMeteo × heutiger Lernfaktor.
+    Tage-Liste, MAE/MBE, Asymmetrie und Ausreißer-Markierung rechnen mit den Werten des gewählten
+    Zeitpunkts.
     """
+    # Direktaufrufe ohne Parameter (Tests) bekommen das Query-Objekt — alles außer "abend" ist Day-Ahead.
+    zeitpunkt = "abend" if zeitpunkt == "abend" else ZEITPUNKT_STANDARD
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -1184,9 +1201,6 @@ async def get_prognosen_genauigkeit(
         bew = sum(bews) / len(bews) if bews else None
         wetter_pro_tag[d] = wetter_symbol_aus_tag(mittag_code, bew, _nieder.get(d))
 
-    # Lernfaktor für EEDC-Genauigkeit (immer OpenMeteo-basiert)
-    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle="openmeteo")
-
     eintraege = []
     om_signed = []  # vorzeichenbehaftete relative Fehler (Prognose - IST) / IST * 100
     eedc_signed = []
@@ -1215,21 +1229,14 @@ async def get_prognosen_genauigkeit(
     for tz in tage_daten:
         ist_kwh = ist_je_tag.get(tz.datum)
 
-        # Prognose-Kanon §6: der Tracking-Vergleichswert ist der
-        # konvergenz-gefrorene `pv_prognose_final_kwh` (Fallback auf den
-        # rollenden `pv_prognose_kwh`, solange ein Tag noch nicht final ist) —
-        # damit der Tagesabschluss nicht aus einem Mid-Correction-Snapshot
-        # gerechnet wird (Rainer-Sonderbefund §6).
-        forecast_kwh = (
-            tz.pv_prognose_final_kwh
-            if tz.pv_prognose_final_kwh is not None
-            else tz.pv_prognose_kwh
-        )
-
-        # EEDC = OpenMeteo × Lernfaktor (historisch)
-        eedc_kwh = None
-        if lernfaktor is not None and forecast_kwh and forecast_kwh > 0:
-            eedc_kwh = forecast_kwh * lernfaktor
+        # N-782: die Werte des gewählten Zeitpunkts je Quelle — Day-Ahead aus den gespeicherten
+        # first-write-Stundenprofilen, Abend aus den eingefrorenen Tageswerten (Prognose-Kanon §6:
+        # OpenMeteo `pv_prognose_final_kwh`, Fallback rollend). Bis N-782 stand hier für eedc
+        # `forecast_kwh × lernfaktor` mit dem HEUTIGEN Skalar, rückwirkend für alle Tage.
+        prog = prognosen_zum_zeitpunkt(tz, zeitpunkt)
+        forecast_kwh = prog.openmeteo_kwh
+        eedc_kwh = prog.eedc_kwh
+        solcast_kwh = prog.solcast_kwh
 
         # Vorzeichenbehaftete relative Tagesfehler je Quelle (nur bei brauchbarem IST)
         # ⭐ Seit 21.09.2026 aus dem Layer (`relativer_tagesfehler_prozent`): die
@@ -1239,7 +1246,7 @@ async def get_prognosen_genauigkeit(
         # galt hier fuer alle drei Quellen gemeinsam und gilt dort ebenso.
         om_err = relativer_tagesfehler_prozent(forecast_kwh, ist_kwh)
         eedc_err = relativer_tagesfehler_prozent(eedc_kwh, ist_kwh)
-        sc_err = relativer_tagesfehler_prozent(tz.solcast_prognose_kwh, ist_kwh)
+        sc_err = relativer_tagesfehler_prozent(solcast_kwh, ist_kwh)
 
         abweichungen = [abs(e) for e in (om_err, eedc_err, sc_err) if e is not None]
         ist_ausreisser = bool(abweichungen) and max(abweichungen) > AUSREISSER_SCHWELLE
@@ -1250,8 +1257,8 @@ async def get_prognosen_genauigkeit(
             datum=tz.datum.isoformat(),
             openmeteo_kwh=round(forecast_kwh, 1) if forecast_kwh is not None else None,
             eedc_kwh=round(eedc_kwh, 1) if eedc_kwh is not None else None,
-            solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh is not None else None,
-            sfml_kwh=round(tz.sfml_prognose_kwh, 1) if tz.sfml_prognose_kwh is not None else None,
+            solcast_kwh=round(solcast_kwh, 1) if solcast_kwh is not None else None,
+            sfml_kwh=round(prog.sfml_kwh, 1) if prog.sfml_kwh is not None else None,
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,
             wetter_symbol=wetter_pro_tag.get(tz.datum),
             temperatur_max_c=round(tz.temperatur_max_c) if tz.temperatur_max_c is not None else None,
@@ -1298,4 +1305,5 @@ async def get_prognosen_genauigkeit(
         anzahl_tage=len(eintraege),
         anzahl_ausreisser=anzahl_ausreisser,
         ausreisser_schwelle_prozent=AUSREISSER_SCHWELLE,
+        zeitpunkt=zeitpunkt,
     )

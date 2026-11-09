@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Optional
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -189,7 +188,9 @@ async def _seed_prognose_tage(db, aid, heute, *, buendel_tag: date):
         if d == buendel_tag + timedelta(days=1):
             ist = 15.0
             db.add(_tep(aid, d, 1, pv_kw=5.0, spannen={"pv": 5}))
-        db.add(_tz(aid, d, pv_prognose_kwh=10.0, komponenten_kwh={"pv_1": ist}))
+        # N-782: die eedc-Reihe der Ampel ist das Day-Ahead-Profil (Σ 10 kWh), nicht OM × Lernfaktor.
+        db.add(_tz(aid, d, pv_prognose_kwh=10.0, pv_prognose_stundenprofil=[0.0] * 12 + [10.0] + [0.0] * 11,
+                   komponenten_kwh={"pv_1": ist}))
     await db.commit()
 
 
@@ -211,8 +212,7 @@ async def test_genauigkeit_service_laesst_d_und_d_plus_1_aus(db):
     a = await _anlage(db)
     heute = date(2026, 5, 20)
     await _seed_prognose_tage(db, a.id, heute, buendel_tag=heute - timedelta(days=5))
-    with patch("backend.api.routes.live_wetter._get_lernfaktor", new=AsyncMock(return_value=1.0)):
-        mae, n = await eedc_mae_prozent(db, a.id, heute=heute, tage=30)
+    mae, n = await eedc_mae_prozent(db, a.id, heute=heute, tage=30)
     assert (mae, n) == (0.0, 8)
 
 
@@ -222,8 +222,7 @@ async def test_genauigkeit_route_laesst_d_und_d_plus_1_aus_der_mae(db):
     a = await _anlage(db)
     heute = date.today()
     await _seed_prognose_tage(db, a.id, heute, buendel_tag=heute - timedelta(days=5))
-    with patch("backend.api.routes.prognosen._get_lernfaktor", new=AsyncMock(return_value=None)):
-        r = await get_prognosen_genauigkeit(a.id, tage=30, ausreisser_ausblenden=False, db=db)
+    r = await get_prognosen_genauigkeit(a.id, tage=30, ausreisser_ausblenden=False, zeitpunkt="abend", db=db)
     assert r.openmeteo_mae_prozent == 0.0
     assert r.anzahl_tage == 10                               # die Tage bleiben sichtbar
 

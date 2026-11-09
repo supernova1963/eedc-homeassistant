@@ -367,7 +367,16 @@ export interface GenauigkeitsResponse {
   anzahl_tage: number
   anzahl_ausreisser?: number
   ausreisser_schwelle_prozent?: number
+  // N-782: welcher Prognosestand je Quelle in `tage` und den Kennzahlen steht
+  zeitpunkt?: GenauigkeitsZeitpunkt
 }
+
+/**
+ * Zeitpunkt des Genauigkeits-Trackings (N-782): `day_ahead` = gespeicherte
+ * Stundenprofile (eedc/OpenMeteo/Solcast bis 00:45, SFML beim ersten Aufruf der
+ * Live-Sicht), `abend` = nach Sonnenuntergang eingefrorene Tageswerte.
+ */
+export type GenauigkeitsZeitpunkt = 'day_ahead' | 'abend'
 
 // =============================================================================
 // API Functions
@@ -405,8 +414,11 @@ export const aussichtenApi = {
   /**
    * Holt das Genauigkeits-Tracking (Prognose vs. IST).
    */
-  async getPrognosenGenauigkeit(anlageId: number, tage: number = 30, ausreisserAusblenden: boolean = false): Promise<GenauigkeitsResponse> {
-    return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}&ausreisser_ausblenden=${ausreisserAusblenden}`)
+  async getPrognosenGenauigkeit(
+    anlageId: number, tage: number = 30, ausreisserAusblenden: boolean = false,
+    zeitpunkt: GenauigkeitsZeitpunkt = 'day_ahead',
+  ): Promise<GenauigkeitsResponse> {
+    return api.get<GenauigkeitsResponse>(`/aussichten/prognosen/${anlageId}/genauigkeit?tage=${tage}&ausreisser_ausblenden=${ausreisserAusblenden}&zeitpunkt=${zeitpunkt}`)
   },
 
   /**

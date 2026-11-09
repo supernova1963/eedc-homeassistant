@@ -24,7 +24,7 @@ import { useLegendenToggle } from '../../hooks'
 import { alsAngezeigt } from '../../lib/werte'
 import { Parkbar } from '../park'
 import {
-  aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag, Tageshaelfte,
+  aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, GenauigkeitsZeitpunkt, AsymmetrieEintrag, Tageshaelfte,
 } from '../../api/aussichten'
 import { energieProfilApi } from '../../api/energie_profil'
 import { getStratifizierung, StratifizierungResponse, Wetterklasse, wetterBackfill } from '../../api/korrekturprofil'
@@ -146,6 +146,10 @@ export interface PrognoseVergleichVM {
   setGenauigkeitsModus: (m: 'kompakt' | 'diagnostisch') => void
   genauigkeitsTage: number
   setGenauigkeitsTage: (t: number) => void
+  // N-782: welcher Prognosestand je Quelle im Genauigkeits-Tracking (und in den
+  // zurückliegenden Zeilen des 7-Tage-Vergleichs) steht.
+  genauigkeitsZeitpunkt: GenauigkeitsZeitpunkt
+  setGenauigkeitsZeitpunkt: (z: GenauigkeitsZeitpunkt) => void
   ausreisserAusblenden: boolean
   setAusreisserAusblenden: (v: boolean) => void
   backfillRunning: boolean
@@ -164,6 +168,7 @@ export function usePrognoseVergleich(anlageId: number): PrognoseVergleichVM {
   const [reloadTick, setReloadTick] = useState(0)
   const [genauigkeitsModus, setGenauigkeitsModus] = useState<'kompakt' | 'diagnostisch'>('kompakt')
   const [genauigkeitsTage, setGenauigkeitsTage] = useState(10)
+  const [genauigkeitsZeitpunkt, setGenauigkeitsZeitpunkt] = useState<GenauigkeitsZeitpunkt>('day_ahead')
   const [ausreisserAusblenden, setAusreisserAusblenden] = useState(false)
   const [backfillRunning, setBackfillRunning] = useState(false)
   const [backfillResult, setBackfillResult] = useState<string | null>(null)
@@ -223,15 +228,16 @@ export function usePrognoseVergleich(anlageId: number): PrognoseVergleichVM {
 
   useEffect(() => {
     let cancelled = false
-    aussichtenApi.getPrognosenGenauigkeit(anlageId, genauigkeitsTage, ausreisserAusblenden)
+    aussichtenApi.getPrognosenGenauigkeit(anlageId, genauigkeitsTage, ausreisserAusblenden, genauigkeitsZeitpunkt)
       .then(acc => { if (!cancelled) setGenauigkeit(acc) })
       .catch(() => { if (!cancelled) setGenauigkeit(null) })
     return () => { cancelled = true }
-  }, [anlageId, genauigkeitsTage, ausreisserAusblenden, reloadTick])
+  }, [anlageId, genauigkeitsTage, ausreisserAusblenden, genauigkeitsZeitpunkt, reloadTick])
 
   return {
     loading, error, data, genauigkeit, stratifizierung, anlageId,
     genauigkeitsModus, setGenauigkeitsModus, genauigkeitsTage, setGenauigkeitsTage,
+    genauigkeitsZeitpunkt, setGenauigkeitsZeitpunkt,
     ausreisserAusblenden, setAusreisserAusblenden,
     backfillRunning, backfillResult, backfillError, handleWetterBackfill,
     reload: () => setReloadTick(t => t + 1),
@@ -1009,10 +1015,25 @@ export function PvgHeatmap({ vm }: { vm: PrognoseVergleichVM }) {
   return <KorrekturprofilHeatmapCard anlageId={vm.anlageId} />
 }
 
+// ── N-782: Zeitpunkt des Genauigkeits-Trackings ───────────────────────────────
+const ZEITPUNKT_OPTIONEN: { key: GenauigkeitsZeitpunkt; label: string }[] = [
+  { key: 'day_ahead', label: 'Day-Ahead' },
+  { key: 'abend', label: 'Abend' },
+]
+const ZEITPUNKT_LABEL: Record<GenauigkeitsZeitpunkt, string> = { day_ahead: 'Day-Ahead', abend: 'Abend' }
+const ZEITPUNKT_HINWEIS =
+  'Day-Ahead = Stand in der Nacht: eedc, OpenMeteo und Solcast bis 00:45; SFML beim ersten Aufruf der Live-Sicht, ' +
+  'ebenso Solcast an Tagen vor dem Update auf diese Version · Abend = nach Sonnenuntergang eingefrorener Stand; ' +
+  'Solcast führt seinen Tageswert tagsüber per Satellit nach.'
+
+/** Eine Prognose ohne aufgezeichneten Stand — gedimmt, damit sie nicht wie 0 gelesen wird. */
+function NichtErhoben() {
+  return <span className="font-sans text-[10px] text-gray-400 dark:text-gray-500">nicht erhoben</span>
+}
+
 export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
   const { genauigkeit } = vm
   if (!genauigkeit || genauigkeit.anzahl_tage === 0) return null
-  const lf = vm.data?.eedc_lernfaktor ?? null
   // Dieselben Quellen-Flags wie die zwei Tabellen weiter oben — ohne sie
   // fluchtet diese Tabelle nur zufällig (rapahl, PN 16.08.2026).
   const hasSolcast = vm.data?.solcast_verfuegbar === true
@@ -1042,6 +1063,14 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
             value={vm.genauigkeitsModus}
             onChange={(k) => vm.setGenauigkeitsModus(k as 'kompakt' | 'diagnostisch')}
           />
+          {/* N-782: welcher Prognosestand je Quelle verglichen wird — Day-Ahead
+              vergleicht gleich lange Vorlaufzeiten (Standard). */}
+          <SegmentControl
+            ariaLabel="Zeitpunkt" size="sm"
+            optionen={ZEITPUNKT_OPTIONEN}
+            value={vm.genauigkeitsZeitpunkt}
+            onChange={(k) => vm.setGenauigkeitsZeitpunkt(k as GenauigkeitsZeitpunkt)}
+          />
           <SimpleTooltip text={`Ausreißer = Tage, an denen eine Quelle > ${fmtZahl(genauigkeit.ausreisser_schwelle_prozent ?? 50, 0)} % daneben lag (z. B. Sensor-Aussetzer). Standardmäßig bleiben sie in der Statistik — gerade Schlechtprognose-Tage haben Erkenntniswert. Hier optional ausblenden.`}>
             <span className={`inline-block select-none ${(genauigkeit.anzahl_ausreisser ?? 0) === 0 ? 'opacity-50' : ''}`}>
               <Checkbox
@@ -1053,17 +1082,18 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
           </SimpleTooltip>
         </div>
       </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2 mb-3">{ZEITPUNKT_HINWEIS}</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         {vm.genauigkeitsModus === 'kompakt' ? (
           <>
             <MaeMbeCard label="OpenMeteo" mae={genauigkeit.openmeteo_mae_prozent} mbe={genauigkeit.openmeteo_mbe_prozent} color={Q.openmeteo} />
-            <MaeMbeCard label="eedc" mae={genauigkeit.eedc_mae_prozent} mbe={genauigkeit.eedc_mbe_prozent} color={Q.eedc} hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined} />
+            <MaeMbeCard label="eedc" mae={genauigkeit.eedc_mae_prozent} mbe={genauigkeit.eedc_mbe_prozent} color={Q.eedc} />
             <MaeMbeCard label="Solcast" mae={genauigkeit.solcast_mae_prozent} mbe={genauigkeit.solcast_mbe_prozent} color={Q.solcast} />
           </>
         ) : (
           <>
             <AsymmetrieCard label="OpenMeteo" asym={genauigkeit.openmeteo_asymmetrie} color={Q.openmeteo} />
-            <AsymmetrieCard label="eedc" asym={genauigkeit.eedc_asymmetrie} color={Q.eedc} hint={lf == null ? 'Lernfaktor noch nicht verfügbar' : undefined} />
+            <AsymmetrieCard label="eedc" asym={genauigkeit.eedc_asymmetrie} color={Q.eedc} />
             <AsymmetrieCard label="Solcast" asym={genauigkeit.solcast_asymmetrie} color={Q.solcast} />
           </>
         )}
@@ -1076,7 +1106,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
           const ausgeschlossen = vm.ausreisserAusblenden && tag.ist_ausreisser
           const quellen: { label: string; klasse: string; wert: number | null }[] = [
             { label: 'OpenMeteo', klasse: Q.openmeteo, wert: tag.openmeteo_kwh },
-            { label: 'eedc', klasse: lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500', wert: tag.eedc_kwh },
+            { label: 'eedc', klasse: Q.eedc, wert: tag.eedc_kwh },
             { label: 'Solcast', klasse: Q.solcast, wert: tag.solcast_kwh },
           ]
           return (
@@ -1097,7 +1127,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
               zeilen={quellen.map((q) => ({
                 label: q.label,
                 klasse: q.klasse,
-                wert: q.wert !== null ? fmtZahl(q.wert, 1) : '—',
+                wert: q.wert !== null ? fmtZahl(q.wert, 1) : <NichtErhoben />,
                 zusatz: q.wert !== null && tag.ist_kwh !== null
                   ? <Abweichung prognose={q.wert} ist={tag.ist_kwh} gemessen stellen={1} />
                   : null,
@@ -1117,10 +1147,10 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
               <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Datum</th>
               <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OpenMeteo</th>
               <AbweichungKopf quelle="OpenMeteo" klasse={Q.openmeteo} />
-              <th className={`${KOPF_ZELLE} text-right ${lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500'}`}>
-                <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `eedc = OpenMeteo × Lernfaktor ${fmtZahl(lf, 3)}`}><span>eedc</span></SimpleTooltip>
+              <th className={`${KOPF_ZELLE} text-right ${Q.eedc}`}>
+                <SimpleTooltip text="eedc = die Prognose, die eedc an dem Tag angezeigt hat (Korrekturprofil-Kaskade) — zum gewählten Zeitpunkt"><span>eedc</span></SimpleTooltip>
               </th>
-              <AbweichungKopf quelle="eedc" klasse={lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500'} />
+              <AbweichungKopf quelle="eedc" klasse={Q.eedc} />
               {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>}
               {hasSolcast && <AbweichungKopf quelle="Solcast" klasse={Q.solcast} />}
               {hasSfml && <th className={`${KOPF_ZELLE} text-right ${Q.sfml}`}>SFML</th>}
@@ -1137,9 +1167,10 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
                     {formatDatum(tag.datum)}
                     {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAE/MBE ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
                   </td>
-                  <PvgPrognoseZelle wert={tag.openmeteo_kwh} ist={tag.ist_kwh} stellen={1} />
-                  <PvgPrognoseZelle wert={tag.eedc_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />
-                  {hasSolcast && <PvgPrognoseZelle wert={tag.solcast_kwh} ist={tag.ist_kwh} stellen={1} leerGedimmt />}
+                  {/* N-782: ohne aufgezeichneten Stand «nicht erhoben» (gedimmt), nie ein Strich, der wie 0 aussieht. */}
+                  <PvgPrognoseZelle wert={tag.openmeteo_kwh} ist={tag.ist_kwh} stellen={1} leerText={<NichtErhoben />} />
+                  <PvgPrognoseZelle wert={tag.eedc_kwh} ist={tag.ist_kwh} stellen={1} leerText={<NichtErhoben />} />
+                  {hasSolcast && <PvgPrognoseZelle wert={tag.solcast_kwh} ist={tag.ist_kwh} stellen={1} leerText={<NichtErhoben />} />}
                   {/* ⚠ NICHT `PvgPrognoseZelle`: die rendert ZWEI Zellen (Wert +
                       Abweichung), und SFML hat im Spaltenplan nur EINE
                       (`if (hasSfml) gewichte.push(G.wert)` — anders als eedc und
@@ -1210,15 +1241,17 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
  * `leerGedimmt` = ein fehlender Wert heißt hier „diese Quelle gibt es nicht"
  * (kein Lernfaktor, kein Solcast) und nicht „Messlücke".
  */
-function PvgPrognoseZelle({ wert, ist, klasse = '', stellen = 2, leerGedimmt = false, gemessen = true, wertKlasse = '', extra }: {
+function PvgPrognoseZelle({ wert, ist, klasse = '', stellen = 2, leerGedimmt = false, gemessen = true, wertKlasse = '', extra, leerText }: {
   wert: number | null; ist: number | null; klasse?: string; stellen?: number
   leerGedimmt?: boolean; gemessen?: boolean; wertKlasse?: string; extra?: React.ReactNode
+  /** Inhalt der leeren Zelle statt des Strichs (N-782: «nicht erhoben» im Genauigkeits-Tracking). */
+  leerText?: React.ReactNode
 }) {
   return (
     <>
       <td className={`${ZELLE} text-right font-mono ${klasse}`}>
         {wert === null
-          ? (leerGedimmt ? <span className="text-gray-400 dark:text-gray-500">—</span> : '—')
+          ? (leerText ?? (leerGedimmt ? <span className="text-gray-400 dark:text-gray-500">—</span> : '—'))
           : <span className={wertKlasse}>{fmtZahl(wert, stellen)}</span>}
         {wert !== null && extra}
       </td>
@@ -1348,7 +1381,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   const vergleichsTage = vergleichsTageVon(data, genauigkeit, hasEedc)
   return (
     <Card>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich{genauigkeit && genauigkeit.tage.length > 0 && <span className="text-sm font-normal text-gray-500 ml-2">(zurückliegende Tage: Stand {ZEITPUNKT_LABEL[vm.genauigkeitsZeitpunkt]}, wie im Genauigkeits-Tracking)</span>}</h3>
       <MobilKarten>
         {vergleichsTage.map((tag) => {
           const ref = tag.ist_kwh

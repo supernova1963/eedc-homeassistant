@@ -56,6 +56,8 @@ _PROGNOSE_FELDER_RETTEN: tuple[str, ...] = (
     "pv_prognose_kwh",
     "pv_prognose_final_kwh",
     "pv_prognose_final_at",
+    # N-782: Abendstand der eedc-Prognose (Kanon), friert mit `pv_prognose_final_at` ein.
+    "pv_prognose_eedc_final_kwh",
     "sfml_prognose_kwh",
     "solcast_prognose_kwh",
     "solcast_p10_kwh",

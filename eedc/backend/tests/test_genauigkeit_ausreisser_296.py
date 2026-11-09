@@ -24,9 +24,10 @@ async def _make_anlage(db: AsyncSession) -> int:
 
 async def _call(anlage_id: int, db: AsyncSession, ausreisser_ausblenden: bool = False):
     from backend.api.routes.prognosen import get_prognosen_genauigkeit
+    # N-782: die Fälle tragen Tageswerte (`pv_prognose_kwh`), also den Abendstand.
     return await get_prognosen_genauigkeit(
         anlage_id=anlage_id, tage=30,
-        ausreisser_ausblenden=ausreisser_ausblenden, db=db,
+        ausreisser_ausblenden=ausreisser_ausblenden, zeitpunkt="abend", db=db,
     )
 
 

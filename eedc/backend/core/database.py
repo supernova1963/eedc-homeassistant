@@ -1029,6 +1029,11 @@ def _migrate_tages_zusammenfassung_spalten(connection, inspector) -> None:
         connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_kwh FLOAT'))
     if 'pv_prognose_final_at' not in existing_columns:
         connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_at VARCHAR(40)'))
+    # N-782: Abendstand der eedc-Prognose (Kanon) fürs Genauigkeits-Tracking.
+    # Rückwärts leer (NULL = «nicht erhoben»), kein Backfill: der Kanon-Tageswert
+    # rollt, ein früherer Abendstand ist nirgends aufgezeichnet.
+    if 'pv_prognose_eedc_final_kwh' not in existing_columns:
+        connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_eedc_final_kwh FLOAT'))
     # N-141 Weg (c): abgeleiteter PV-/Netz-Anteil der Heimladung.
     # Rein additiv — Bestandszeilen bleiben NULL, und NULL heißt
     # „keine Aussage". Damit gibt es KEINE rückwirkende Änderung an

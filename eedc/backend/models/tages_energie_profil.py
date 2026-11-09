@@ -253,6 +253,11 @@ class TagesZusammenfassung(Base):
     # gerechnet wird. Der Anzeige-Wert bleibt rollend (drei-Größen-Modell).
     pv_prognose_final_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pv_prognose_final_at: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    # N-782: der Abendstand der **eedc**-Prognose (Kanon, korrigiert) — Σ der korrigierten Stundenreihe, die
+    # `_speichere_prognose` bei jedem Lauf übergeben bekommt; rollt mit und friert mit derselben Regel ein wie
+    # `pv_prognose_final_kwh` (`pv_prognose_final_at`). Leser: Genauigkeits-Tracking, Zeitpunkt «Abend». Rückwärts
+    # leer (NULL = «nicht erhoben»): der Kanon-Tageswert rollt, ein früherer Abendstand ist nirgends aufgezeichnet.
+    pv_prognose_eedc_final_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Solar Forecast ML Tagesprognose (kWh): Von SFML-Sensor gelesene ML-Prognose.
     # Für Phase 2: Cockpit-Vergleich EEDC vs. ML vs. IST.
@@ -270,8 +275,10 @@ class TagesZusammenfassung(Base):
     # `pv_prognose_stundenprofil` ist die korrigierte eedc-Vorhersage; Leser ist die Wetter-Stratifizierung der
     # Stunden-Genauigkeit (`api/routes/korrekturprofil.py::stratifizierung_endpoint`, Auswertungen → Prognose, Block
     # Genauigkeit). Das Korrekturprofil lernt nicht daraus, sondern gegen das unkorrigierte Lern-SOLL
-    # `lern_soll_stundenprofil_kwh` (N-547). `solcast_prognose_stundenprofil` wird geschrieben und bei der
-    # Neu-Aggregation erhalten, aber von keiner Sicht gelesen.
+    # `lern_soll_stundenprofil_kwh` (N-547). Seit N-782 liest das Genauigkeits-Tracking (Zeitpunkt «Day-Ahead») die
+    # Tagessummen aller vier Profile (eedc, Solcast, SFML, Lern-SOLL als OpenMeteo). Erster Schreiber: der Prefetch
+    # (alle 45 min, also bis 00:45) für eedc, Lern-SOLL und — seit N-782 — Solcast; SFML nur die Live-Sicht beim
+    # ersten Aufruf des Tages.
     pv_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     solcast_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # SFML/Tom-HA echtes Stundenprofil (24 kWh-Slots, Backward) — bei gewählter

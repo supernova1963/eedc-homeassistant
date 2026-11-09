@@ -515,6 +515,8 @@ async def test_p6_ampel_mit_schwelle(db, monkeypatch):
         db.add(TagesZusammenfassung(
             anlage_id=anlage.id, datum=heute - timedelta(days=i),
             pv_prognose_final_kwh=11.0, komponenten_kwh={"pv_1": 10.0},
+            # N-782: die eedc-Reihe der Ampel ist das Day-Ahead-Profil (Σ 11 kWh).
+            pv_prognose_stundenprofil=[0.0] * 12 + [11.0] + [0.0] * 11,
         ))
     await db.commit()
 
