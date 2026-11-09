@@ -98,6 +98,11 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
 - **Design:** keine Hex-Farben außerhalb `lib/colors.ts` (`npm run check:design` = 0); eine Komponenten-Klasse = eine SoT-Komponente;
   Typ-Reihenfolge `INVESTITION_TYP_ORDER`; „eedc" klein; „% " mit Leerzeichen.
 - **Zeitzone:** eedc folgt HA, kein Pin. **Legacy `ha_sensor_*`-Spalten** bleiben im Model.
+- **Rechenstellen (seit Päckchen Z, 9.11.2026):** in Routen, Services und Sichten entsteht keine neue Formel der Gestalten Quote, Differenz oder Produkt
+  zweier Fach-Größen, Menge × Preis, Menge × Zahl — sie gehört in `core/berechnungen/` (Backend) bzw. als Feld in die Antwort (Client zeigt). Wächter
+  `backend/tests/test_dezentrale_rechenstellen.py` (Werkzeug `werkzeug_rechenstellen.py`, Baseline `rechenstellen_baseline.txt`) und
+  `npm run check:rechenstellen` (`frontend/rechenstellen-baseline.txt`); beide Baselines schrumpfen nur, ein verwaister Eintrag ist rot. Erlaubt bleiben
+  Einheitenumrechnung, Zähler, Summen, Verteilung nach Anteil und die Monats-Fakten selbst (ADR-002/P10).
 - **Kognitive Komplexität:** Schwelle 50 je Funktion, keine über 100; Wächter `backend/tests/test_kognitive_komplexitaet.py`
   mit Baseline, die nur schrumpft (Neuschreiben per Befehl im Docstring). Ein Neuzugang über 50 wird aufgeteilt (Bauform RF-1).
 - **Abhängigkeiten:** Absicht in `backend/requirements.txt`, ausgeliefert wird `requirements.lock` (Anleitung im Kopf der
