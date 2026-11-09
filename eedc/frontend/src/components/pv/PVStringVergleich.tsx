@@ -576,7 +576,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   : []),
                 {
                   label: 'kWh/kWp',
-                  wert: data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—',
+                  wert: data.spezifischer_ertrag_zeitraum_kwh_kwp != null ? fmtZahl(data.spezifischer_ertrag_zeitraum_kwh_kwp, 0) : '—',
                 },
               ]}
             />
@@ -666,7 +666,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                     verschieden gewichtet — ein Mittelwert daraus wäre erfunden. */}
                 {hatPrognose && <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>}
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
-                  {data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}
+                  {data.spezifischer_ertrag_zeitraum_kwh_kwp != null ? fmtZahl(data.spezifischer_ertrag_zeitraum_kwh_kwp, 0) : '—'}
                 </td>
               </tr>
             </TableFoot>

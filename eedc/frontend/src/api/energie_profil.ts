@@ -390,6 +390,9 @@ export interface TagDetail {
   speicher_ladung_netz_kwh: number | null
   speicher_effektiver_ladepreis_cent: number | null
   speicher_effektiver_ladepreis_quelle: string | null
+  /** Päckchen Z-Client: Kosten der Netzladung des Tages = Menge × Ø-Ladepreis (die zwei Felder darüber, Layer
+   *  `speicher_wirtschaftlichkeit.netzladung_kosten_euro`), fertig aus dem Backend; `null` ohne Preis. */
+  speicher_ladung_netz_kosten_euro?: number | null
   emob_ladung_pv_kwh: number | null
   emob_ladung_netz_kwh: number | null
   /** P-433-2b K3 — «Betrieb heute» der Wallboxen und E-Autos: je Gerät und mitgeschriebenem Zustandsfeld eine Zeile
@@ -610,6 +613,9 @@ export interface TagesPrognose {
    *  die Verbrauchsprognose fehlt (< 3 vollständige Tage, frische Installation).
    *  Der Grund steht dann in `hinweise`; die Anzeige zeigt „—". */
   verbrauch_summe_kwh: number | null
+  /** Päckchen Z-Client: «Netto» des Tages = PV − Verbrauch (Überschuss +, Defizit −; Layer `kennzahlen.netto_kwh`
+   *  auf den zwei Summen darüber), fertig aus dem Backend; `null` ohne Verbrauchsprognose. */
+  netto_summe_kwh?: number | null
   netzbezug_summe_kwh: number | null
   einspeisung_summe_kwh: number | null
   eigenverbrauch_kwh: number | null

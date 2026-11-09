@@ -25,7 +25,7 @@ from typing import Any, Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from backend.core.exceptions import not_found
 from backend.core.berechnungen.erzeuger_traeger import (
@@ -50,6 +50,7 @@ from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.pv_monatswerte import lade_pv_je_monat
 from backend.core.berechnungen import soll_im_laufmonat
+from backend.core.berechnungen.kennzahlen import spezifischer_ertrag_kwh_kwp
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
@@ -342,6 +343,14 @@ class PVStringsGesamtlaufzeitResponse(BaseModel):
     ist_gesamt_kwh: float
     abweichung_gesamt_kwh: float
     abweichung_gesamt_prozent: Optional[float]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def spezifischer_ertrag_zeitraum_kwh_kwp(self) -> Optional[float]:
+        """Spezifischer Ertrag der Laufzeit (Päckchen Z-Client) = IST gesamt ÷ Anlagen-kWp, **nicht** aufs Jahr
+        normiert (anders als der Export-Sensor `spezifischer_ertrag_kwh_kwp`); Layer `spezifischer_ertrag_kwh_kwp`."""
+        return spezifischer_ertrag_kwh_kwp(self.ist_gesamt_kwh, self.anlagen_leistung_kwp)
+
     strings: list[PVStringGesamtlaufzeit]
     saisonal_aggregiert: list[PVStringSaisonalwert]
     bester_string: Optional[str]

@@ -55,6 +55,9 @@ export interface LangfristPrognose {
     bis: string | null
   }
   jahresprognose_kwh: number
+  /** Päckchen Z-Client: spezifischer Ertrag der Prognose = Jahresprognose ÷ kWp (Layer
+   *  `kennzahlen.spezifischer_ertrag_kwh_kwp`); `null` ohne kWp. */
+  spezifischer_ertrag_zeitraum_kwh_kwp?: number | null
   monatswerte: MonatsPrognose[]
   trend_analyse: TrendAnalyse
   datenquellen: string[]

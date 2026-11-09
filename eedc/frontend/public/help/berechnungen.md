@@ -198,6 +198,10 @@ Summen der Felder `eigenverbrauch_kwh`, `speicher_ladung_kwh` und `speicher_entl
 abgetreten hat oder einen Anteil am Anlagenwert bekommt; dort fallen nur Erzeugung und Rest-Eigenverbrauch weg.
 `eigenverbrauch_gemessen_kwh` ist der rohe Wert für die Anzeige; die Finanz-Zeile nimmt `rest_eigenverbrauch_kwh` (P9, §3.2 „Finanzielle
 Kennzahlen").
+Aus dem angezeigten Paar Erzeugung/Eigenverbrauch bildet die Cockpit-Antwort (Monat, Jahr-Kopf nach der Faltung, Jahr-Monate) **Einspeisung**
+`bkw_einspeisung_kwh` = Erzeugung − Eigenverbrauch und **EV-Quote** `bkw_eigenverbrauch_quote_prozent` = Eigenverbrauch ÷ Erzeugung × 100
+(`core/berechnungen/bkw_finanz.py`, `computed_field` am Antwortmodell; ohne Eigenverbrauch — etwa am Tag — fehlen beide). Seit Päckchen
+Z-Client (9.11.2026); vorher rechnete der Block Balkonkraftwerk sie im Client.
 
 > **Lesequelle der Monatsgrößen ist `services/monats_fakten/::lade_monats_fakten`** (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)).
 > Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw.
@@ -250,19 +254,32 @@ Die **Sicht** (Spalte „Wo in v4") folgt der Achsen-Navigation (Cockpit = Zeit-
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/trend/{id}` | Degradation, Jahresvergleich |
 | [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen) | `GET /api/aussichten/finanzen/{id}` | Amortisations-Fortschritt, Prognose |
 
-**Anzeige-Ableitungen im Client (benannte Grenzen, Stand Päckchen Y 9.11.2026).** Der Client rechnet nichts (ADR-001) —
-bis auf drei Kennwerte der Werte-Tabelle, die er im Monat aus zwei Feldern der Antwort von `GET /api/monatsdaten/aggregiert`
-bildet (`pages/auswertung/types.ts::createMonatsZeitreihe`); der Tag kommt bei allen fertig aus `services/energie_profil/tage_werte.py`.
+**Anzeige-Ableitungen im Client (benannte Grenzen, Stand Päckchen Z-Client 9.11.2026).** Der Client rechnet nichts (ADR-001) —
+bis auf zwei Kennwerte der Werte-Tabelle, die er im Monat aus zwei Feldern der Antwort von `GET /api/monatsdaten/aggregiert`
+bildet (`pages/auswertung/types.ts::createMonatsZeitreihe`); der Tag kommt bei beiden fertig aus `services/energie_profil/tage_werte.py`.
 Eine Backend-Größe des Monats gibt es für sie nicht, eine neue braucht Regel-Abschnitt und Entscheid:
 
 | Kennwert | Client-Bildung im Monat | Warum (noch) kein Backend-Feld |
 | --- | --- | --- |
 | `spezErtrag` (M2) | `pv_erzeugung_kwh ÷ anlagen_kwp` (`lib/calculations.ts::calcSpezifischerErtrag`) | Der Sensor `spezifischer_ertrag_kwh_kwp` ist **aufs Jahr normiert** (§3.1, `core/berechnungen/spez_ertrag.py`) — eine andere Größe; der Tageswert steht in `tage_werte.py` ohne Layer-Funktion. |
 | `ev_ersparnis` (M2) | `ev_ersparnis_euro + bkw_ersparnis_euro` | Das Finanz-Aggregat weist beide Posten getrennt aus (§3.2); eine Summe beider gibt es im Backend nicht. |
-| `wallbox_pv_anteil` (M2, mit `eauto_pv_anteil`) | `wallbox_ladung_pv_kwh ÷ wallbox_ladung_kwh × 100` | Die eine Layer-Funktion des PV-Anteils (`pv_anteil_ladung.pv_anteil_prozent`, Päckchen Z1b) kennt die Rundung als Parameter (`stellen`); der Client wechselt mit dem Päckchen Z-Client. |
 
 Seit Päckchen Y nicht mehr darunter: die **CO₂-Äquivalente** (§3.8 «Äquivalente», Layer `co2_aequivalente`) und die
-**Speicher-Effizienz** des Monats (`speicher_effizienz_prozent`, Layer `speicher_wirkungsgrad` auf Ladung und Entladung der Zeile, §3.3).
+**Speicher-Effizienz** des Monats (`speicher_effizienz_prozent`, Layer `speicher_wirkungsgrad` auf Ladung und Entladung der Zeile, §3.3);
+seit Päckchen Z-Client der **Wallbox-PV-Anteil** (`wallbox_pv_anteil_prozent`, Layer `pv_anteil_prozent` auf den zwei Feldern der Zeile,
+ungerundet — die Tabelle rundet und mittelt, §3.4 «PV-Anteil der Heimladung»).
+
+**Die übrigen Rechenstellen der Sichten** stehen in der Baseline des Wächters (`frontend/rechenstellen-baseline.txt`, Stand
+Päckchen Z-Client: 36) und haben einen dieser Gründe:
+
+| Grund | Stellen |
+| --- | --- |
+| **Vorzeichen / Richtung** — kein Fachwert, nur «bezieht» oder «speist ein» | `EnergieFluss.tsx::netzRichtung`, `TagVerlaufChart.tsx::baueChartDaten` |
+| **Hinweis-Delta / Bedingung** — die Differenz wird nicht als Zahl gezeigt, sie entscheidet nur, ob ein Satz erscheint (die Zahlen daneben kommen aus der Antwort) | `SolarAussicht3Tage.tsx` (2), `waermeVerteilung.ts::verteilungHinweise` (2), Wärmepumpe «Aufgeteilte Menge X von Y kWh» (`KomponentenSektionen.tsx` 2, `WaermepumpeModusSplit.tsx`; W-17b, §3.5e) |
+| **Vergleichs-Delta / Sortierung** — Abstand zweier gelieferter Werte | Community (`CommunityPVErtragTeile.tsx` 3, `CommunityRegionalTeile.tsx` 4, `CommunityTrendsTeile.tsx`), `StrompreiseTeile.tsx` (Preis-Delta), `SpeicherSizingIST.tsx` (Delta zur Basis) |
+| **Balkenbreite** — Geometrie | `AussichtTeile.tsx` (2) |
+| **Live-Auslastung kW ÷ kWp** — die PV-Gruppe faltet der Client aus ihren Mitgliedern (`energieFlussLayout.ts`), ein Feld je Komponente deckte sie nicht | `EnergieFluss.tsx` (Kachel-Tooltip), `GruppenListeOverlay.tsx` |
+| **offen (Halt Päckchen Z-Client, Entscheid ausstehend)** | Speicher: Wirkungsverluste, Bilanz, Verlust, Netzlade-Kosten, PV-Ladung, Solaranteil, Jahresbilanz (`KomponentenSektionen.tsx` 3, `komponentenAdapter.tsx` 3, `JahrSpeicherTabelle.tsx`, `SpeicherJahresbilanz.tsx`) · E-Mobilität PV-Anteil (`KomponentenSektionen.tsx`) · Tag SOLL-Erreichung und Ø-Preis-Rückfall (`TagBilanz.tsx` 2) · spezifischer Ertrag «alle Jahre» (`PvStringsTeile.tsx` 2) |
 
 **Eine Formel, ein Ort — gewächtert (Päckchen Z3, 9.11.2026):** eine neue Rechenstelle außerhalb des Layers (Quote oder
 Differenz zweier Mengen, Menge × Preis oder × Literal, Preis ÷ Menge, im Client auch Menge ÷ Leistung) macht
@@ -1246,6 +1263,11 @@ Die Werte-Tabelle zeigt die Netzladung im Monat als `speicher_netzladung_kwh` = 
 (`monatsdaten_aggregiert.py::_zeile_komponenten`), sobald der Monat eine Speicher- oder BKW-Zeile oder Speicher-Tageswerte
 trägt (`monatsdaten.py`, `hat_speicher_imd`).
 
+**Kosten der Netzladung am Tag** (Kachel «Batterieladung Netz», Cockpit → Tag): `speicher_ladung_netz_kosten_euro` des Tagesdetails =
+`speicher_ladung_netz_kwh × speicher_effektiver_ladepreis_cent ÷ 100` — genau die zwei Faktoren, die die Kachel nennt
+(`core/berechnungen/speicher_wirtschaftlichkeit.py::netzladung_kosten_euro`, ungerundet; ohne Preis `None`, auch bei 0 kWh). Anders als die
+Monats-Kette `berechne_netzladung_kosten` (TEP → IMD → Bezugspreis, 0 kWh ⇒ 0 €). Seit Päckchen Z-Client; vorher im Client.
+
 #### Vollzyklen — eine Definition für alle Sichten
 
 ```
@@ -1532,7 +1554,8 @@ Die Leserichtung geht nur netto → brutto und
 wieder vom Pflegezustand abhängig machte.
 
 **Nebenwirkung der Vorschau, die dazugehört:** dieselbe Simulation liefert auch Einspeisung,
-Eigenverbrauch und Autarkie des Vorschautags. Ein kleinerer Puffer nimmt weniger Überschuss auf —
+Eigenverbrauch und Autarkie des Vorschautags (die Σ-Zeile «Netto» der Tabelle ist `netto_summe_kwh` = PV-Summe − Verbrauchssumme der
+Antwort, `kennzahlen.netto_kwh` — Überschuss +, Defizit −, vor dem Speicher; seit Päckchen Z-Client, vorher im Client). Ein kleinerer Puffer nimmt weniger Überschuss auf —
 mehr geht ins Netz, die Autarkie sinkt, „Speicher voll" kommt früher (in Stundenauflösung nicht an jedem Tag
 sichtbar). Der **Eigenverbrauch** (Direktverbrauch + Entladung, N-635) sinkt nur, wenn der kleinere Speicher den Abend
 nicht mehr trägt; trägt er ihn, bleibt er gleich.
@@ -1847,6 +1870,10 @@ aggregiert wurden, tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „
 
 ⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden, trifft keine
 Rechnung die einzelne Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
+
+**Werte-Tabelle (Spalte «Wallbox PV-Anteil», Monat):** `wallbox_pv_anteil_prozent` der Zeile von `GET /monatsdaten/aggregiert` =
+`wallbox_ladung_pv_kwh ÷ wallbox_ladung_kwh × 100` auf den zwei (auf 0,1 kWh gerundeten) Feldern der Zeile, über
+`pv_anteil_prozent` ungerundet — die Tabelle rundet auf eine Stelle und mittelt über Jahre (`aggregation: 'avg'`). Seit Päckchen Z-Client.
 
 #### Welcher Strompreis die Ladung bewertet (F-18 · ADR-002/P8)
 
@@ -3522,6 +3549,10 @@ Spez. Ertrag (kWh/kWp) = IST_Jahr / Modul_kWp
 **Ohne aktive PVGIS-Prognose** entfallen Abweichung und Performance Ratio (`None`); IST,
 Ertragsanteil und spezifischer Ertrag bleiben, und die Sicht zeigt sie (#350).
 
+**Anlagenzeile der Gesamtlaufzeit** (`GET /cockpit/pv-strings-gesamtlaufzeit`, Spalte/Karte «kWh/kWp»): `spezifischer_ertrag_zeitraum_kwh_kwp`
+= IST gesamt ÷ Anlagen-kWp über `kennzahlen.spezifischer_ertrag_kwh_kwp` — der Wert **der ganzen Laufzeit, nicht aufs Jahr normiert**
+(anders als der Sensor `spezifischer_ertrag_kwh_kwp`, §3.1). Seit Päckchen Z-Client; vorher im Client.
+
 **Bester und schwächster String** (`api/routes/cockpit/pv_strings.py::_ranking`, beide Sichten):
 
 ```
@@ -3609,6 +3640,11 @@ Die Monatsgrößen, je Anlagensumme und je Gerät gleich:
 - **Verbrauch** (`verbrauch_kwh`) — Zweige `verbraucher` und leer.
 - **Eigenverbrauch** und **Einspeisung** (`eigenverbrauch_kwh`, `einspeisung_kwh`) — die Erzeugerseite: Zweige `erzeuger` und leer.
 - **Bezug PV** und **Bezug Netz** (`bezug_pv_kwh`, `bezug_netz_kwh`) — die Verbraucherseite: Zweige `verbraucher` und leer.
+
+Der **PV-Anteil** eines Verbrauchers im Cockpit (Kachel je Gerät, Monat und Jahr) ist `pv_anteil_prozent` der Gerätezeile =
+Bezug PV ÷ (Bezug PV + Bezug Netz) × 100 auf den Werten, die die Zeile trägt (`pv_anteil_ladung.bezug_pv_anteil_prozent`; ein fehlender
+Teil zählt 0, ohne Bezug `None`). Seit Päckchen Z-Client; vorher im Client. ⚠ Das Attribut `pv_anteil_prozent` des HA-Sensors
+`sonstiges_verbrauch_monat_kwh` teilt durch den **Verbrauch** (`ha_export/investition_sensoren.py`) — eine andere Bezugsgröße.
 
 **Am Tag** (`TagesZusammenfassung.komponenten_kwh`, `TagesEnergieProfil.komponenten`) trägt jedes Gerät **eine** Zahl; die Weiche
 dort ist `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — Richtung aus der Kategorie, Menge als Betrag (das Vorzeichen
@@ -3972,6 +4008,9 @@ Tageshälften (Vormittag/Nachmittag) werden nicht hart bei 12:00 Uhr Clockzeit g
 ### 4.2 Langfrist-Prognose (12 Monate)
 
 **Endpoint:** `GET /api/aussichten/langfristig/{anlage_id}`
+
+Die Kachel «Spez. Ertrag (Prognose)» (Cockpit → Aussicht) liest `spezifischer_ertrag_zeitraum_kwh_kwp` = Jahresprognose ÷ kWp
+(`kennzahlen.spezifischer_ertrag_kwh_kwp`; seit Päckchen Z-Client, vorher im Client).
 
 ```
 PVGIS_kWh     = PVGISPrognose.monatswerte[monat].e_m

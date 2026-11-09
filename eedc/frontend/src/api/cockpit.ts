@@ -446,6 +446,9 @@ export interface PVStringsGesamtlaufzeitResponse {
   ist_gesamt_kwh: number
   abweichung_gesamt_kwh: number
   abweichung_gesamt_prozent: number | null
+  /** Päckchen Z-Client: spezifischer Ertrag der Laufzeit = IST gesamt ÷ Anlagen-kWp (Layer
+   *  `kennzahlen.spezifischer_ertrag_kwh_kwp`, **nicht** aufs Jahr normiert); `null` ohne kWp. */
+  spezifischer_ertrag_zeitraum_kwh_kwp?: number | null
 
   // Einzelne Strings
   strings: PVStringGesamtlaufzeit[]

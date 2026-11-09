@@ -135,7 +135,7 @@ describe('N-444/K3 · die KPI „Batterieladung Netz" nennt beide Herkünfte', (
   it('die Formel sagt Zähler UND Ladestunden, nicht nur „Netzladung"', () => {
     const k = baueTagKpis(
       tagWerte('2026-07-25', { erzeugung: 7 }), null, null,
-      { kwh: 2.5, preis_cent: 22.5 },
+      { kwh: 2.5, preis_cent: 22.5, kosten_euro: 0.5625 },
     ).find((x) => x.title === 'Batterieladung Netz')!
     expect(k).toBeDefined()
     expect(k.formel).toMatch(/Netzladungs-Zähler/)

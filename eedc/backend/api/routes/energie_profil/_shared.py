@@ -9,7 +9,7 @@ import re
 from datetime import date
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from backend.services.waerme_klima_block import (
     WpGeraetZeile,
@@ -17,6 +17,8 @@ from backend.services.waerme_klima_block import (
 )
 
 from backend.core.berechnungen.energie import V2H_KOMPONENTEN_PREFIX
+from backend.core.berechnungen.kennzahlen import netto_kwh
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import netzladung_kosten_euro
 from backend.core.field_definitions import SONSTIGES_KATEGORIE_UNGEPFLEGT
 from backend.models.investition import Investition
 
@@ -981,6 +983,14 @@ class TagDetailResponse(BaseModel):
     # Speicher effektiver Netz-Ladepreis (stundengewichtet, Tagesspanne).
     speicher_effektiver_ladepreis_cent: Optional[float] = None
     speicher_effektiver_ladepreis_quelle: Optional[str] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def speicher_ladung_netz_kosten_euro(self) -> Optional[float]:
+        """Kosten der Netzladung des Tages (Päckchen Z-Client) = die zwei Felder darüber, Layer
+        `netzladung_kosten_euro` — Kachel «Batterieladung Netz» in Cockpit → Tag; ohne Preis `None`."""
+        return netzladung_kosten_euro(self.speicher_ladung_netz_kwh, self.speicher_effektiver_ladepreis_cent)
+
     # E-Mobilität PV-/Netz-Anteil der Ladung — Tages-Boundary-Diff (nur bei Sensor).
     emob_ladung_pv_kwh: Optional[float] = None
     emob_ladung_netz_kwh: Optional[float] = None
@@ -1139,6 +1149,14 @@ class TagesPrognoseResponse(BaseModel):
     # Zusammenfassung
     pv_summe_kwh: float
     verbrauch_summe_kwh: Optional[float] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def netto_summe_kwh(self) -> Optional[float]:
+        """«Netto» des Tages (Päckchen Z-Client) = PV-Summe − Verbrauchssumme dieser Antwort (Überschuss +,
+        Defizit −; Layer `kennzahlen.netto_kwh`); ohne Verbrauchsprognose `None`."""
+        return netto_kwh(self.pv_summe_kwh, self.verbrauch_summe_kwh)
+
     netzbezug_summe_kwh: Optional[float] = None
     einspeisung_summe_kwh: Optional[float] = None
     eigenverbrauch_kwh: Optional[float] = None

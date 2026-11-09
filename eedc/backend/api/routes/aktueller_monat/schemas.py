@@ -9,9 +9,11 @@ Pakets, ohne einen Zyklus zu bilden.
 
 from datetime import datetime
 from typing import NamedTuple, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from backend.services.waerme_klima_block import WpGeraetZeile, WpMoeglichZeile
 from backend.core.berechnungen import anteilig, autarkie_prozent, einspeise_erloes_euro
+from backend.core.berechnungen import bkw_finanz as _bkw
+from backend.core.berechnungen import pv_anteil_ladung as _pv_anteil
 from backend.services.wp_wirtschaftlichkeit import wp_ersparnis_berechnung
 
 
@@ -103,6 +105,13 @@ class SonstigesGeraet(BaseModel):
     verbrauch_kwh: Optional[float] = None
     bezug_pv_kwh: Optional[float] = None
     bezug_netz_kwh: Optional[float] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def pv_anteil_prozent(self) -> Optional[float]:
+        """PV-Anteil des Bezugs (Päckchen Z-Client): aus den zwei Feldern DIESER Zeile, so wie die Antwort sie trägt
+        (Monat gerundet, Jahr nach `runde_rand`) — der Client zeigt. Layer `bezug_pv_anteil_prozent`."""
+        return _pv_anteil.bezug_pv_anteil_prozent(self.bezug_pv_kwh, self.bezug_netz_kwh)
 
 
 class ErgebnisPostenWert(BaseModel):
@@ -430,6 +439,18 @@ class AktuellerMonatResponse(BaseModel):
     bkw_erzeugung_kwh: Optional[float] = None
     bkw_eigenverbrauch_kwh: Optional[float] = None
     hat_balkonkraftwerk: bool = False
+
+    # Päckchen Z-Client (9.11.2026): Einspeisung und EV-Quote des Balkonkraftwerks aus den zwei Feldern DIESER Antwort
+    # (Monat, Jahr-Kopf nach der Faltung, Jahr-Monate) — Layer `bkw_finanz`; bis dahin rechnete der Client sie.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def bkw_einspeisung_kwh(self) -> Optional[float]:
+        return _bkw.bkw_einspeisung_kwh(self.bkw_erzeugung_kwh, self.bkw_eigenverbrauch_kwh)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def bkw_eigenverbrauch_quote_prozent(self) -> Optional[float]:
+        return _bkw.bkw_eigenverbrauch_quote_prozent(self.bkw_erzeugung_kwh, self.bkw_eigenverbrauch_kwh)
 
     # Komponenten — Sonstiges
     sonstiges_erzeugung_kwh: Optional[float] = None    # Erzeuger-Typ

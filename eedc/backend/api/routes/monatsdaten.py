@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
@@ -26,6 +26,7 @@ from backend.core.calculations import (
 # Alias: das Response-Feld unten heißt genauso wie die Funktion.
 from backend.core.berechnungen.anlagen_kwp import anlagen_kwp as berechne_anlagen_kwp
 from backend.core.berechnungen.pv_verteilung import wandlungsverluste_prozent
+from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 from backend.core.berechnungen.energie import direktverbrauch_legacy_kwh, eigenverbrauch_legacy_kwh
 from backend.services.ust_satz import grundgesamtheit as ust_grundgesamtheit, ust_satz_des_jahres
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
@@ -386,6 +387,15 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # Aggregiert aus InvestitionMonatsdaten - Wallbox
     wallbox_ladung_kwh: Optional[float]
     wallbox_ladung_pv_kwh: Optional[float]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def wallbox_pv_anteil_prozent(self) -> Optional[float]:
+        """PV-Anteil der Wallbox-Ladung (Päckchen Z-Client) aus den zwei Feldern dieser Zeile, so wie sie die Antwort
+        trägt (auf 0,1 kWh gerundet) — Spalte «Wallbox PV-Anteil» der Werte-Tabelle; ungerundet, die Tabelle rundet
+        und mittelt (`aggregation: 'avg'`). Layer `pv_anteil_prozent`."""
+        return pv_anteil_prozent(self.wallbox_ladung_pv_kwh, self.wallbox_ladung_kwh)
+
     # Berechnet
     direktverbrauch_kwh: Optional[float]
     eigenverbrauch_kwh: Optional[float]

@@ -84,3 +84,18 @@ def spezifischer_ertrag_kwh_kwp(
     if not leistung_kwp or leistung_kwp <= 0:
         return None
     return erzeugung_kwh / leistung_kwp
+
+
+def netto_kwh(
+    erzeugung_kwh: Optional[float], verbrauch_kwh: Optional[float]
+) -> Optional[float]:
+    """«Netto» eines Zeitraums = Erzeugung − Verbrauch: Überschuss (+) oder Defizit (−), vor dem Speicher
+    (Päckchen Z-Client, 9.11.2026).
+
+    Die Σ-Zeile «Netto» der Tagesprognose (*Auswertungen → Energieprofil*, Prognose) auf den beiden Tagessummen der
+    Antwort; bis dahin rechnete der Client sie. ``None``, sobald ein Operand fehlt (ohne Verbrauchsprognose, A28).
+    Ungerundet — die Summen sind es schon.
+    """
+    if erzeugung_kwh is None or verbrauch_kwh is None:
+        return None
+    return erzeugung_kwh - verbrauch_kwh

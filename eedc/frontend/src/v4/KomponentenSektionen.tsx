@@ -1253,10 +1253,10 @@ export function baueKomponentenBloecke(
 
   // ── Balkonkraftwerk ───────────────────────────────────────────────────────
   if (hat(d.bkw_erzeugung_kwh)) {
-    const einsp = hat(d.bkw_erzeugung_kwh) && hat(d.bkw_eigenverbrauch_kwh)
-      ? d.bkw_erzeugung_kwh! - d.bkw_eigenverbrauch_kwh! : null
-    const evQuote = d.bkw_erzeugung_kwh && hat(d.bkw_eigenverbrauch_kwh)
-      ? (d.bkw_eigenverbrauch_kwh! / d.bkw_erzeugung_kwh) * 100 : null
+    // Päckchen Z-Client: Einspeisung und EV-Quote kommen fertig aus dem Backend (Layer `bkw_finanz`) — der Client
+    // zeigt. Die Tagessicht kennt keinen BKW-Eigenverbrauch; dort fehlen beide Felder ⇒ „—" wie bisher.
+    const einsp = d.bkw_einspeisung_kwh ?? null
+    const evQuote = d.bkw_eigenverbrauch_quote_prozent ?? null
     // Erzeugung ist tagesgenau (Stundensumme). Eigenverbrauch/Einspeisung brauchen
     // den EV-Split — BKW hat selten einen eigenen Zähler → „—" wo nicht vorhanden
     // (korrekt, kein Weglassen; Gernot 2026-06-24, [[feedback_sensor_ableitbar_nicht_weglassen]]).
@@ -1307,8 +1307,8 @@ export function baueKomponentenBloecke(
     return ks
   }
   const verbraucherKpis = (g: SonstigesGeraet): KpiStripItem[] => {
-    const bezugGesamt = (g.bezug_pv_kwh ?? 0) + (g.bezug_netz_kwh ?? 0)
-    const pvAnteil = bezugGesamt > 0 ? ((g.bezug_pv_kwh ?? 0) / bezugGesamt) * 100 : null
+    // Päckchen Z-Client: der PV-Anteil des Bezugs kommt fertig aus dem Backend (Layer `bezug_pv_anteil_prozent`).
+    const pvAnteil = g.pv_anteil_prozent ?? null
     const ks: KpiStripItem[] = [{ ...SONSTIGES_VERBRAUCHER_KPI.verbrauch, value: fmt(g.verbrauch_kwh), unit: 'kWh' }]
     if (pvAnteil != null) ks.push({
       ...SONSTIGES_VERBRAUCHER_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',

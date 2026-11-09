@@ -76,7 +76,7 @@ export function baueTagKpis(
   t: TagWerte,
   vt: TagWerte | null,
   sollPvKwh?: number | null,
-  netzladung?: { kwh?: number | null; preis_cent?: number | null },
+  netzladung?: { kwh?: number | null; preis_cent?: number | null; kosten_euro?: number | null },
   /** Tarif des Tages (`tagDetail.netzbezug_preis_cent`, bei flexiblem Tarif der
    *  Monats-Ø) — dieselbe Zahl, mit der das Backend die Tages-Netzbezugskosten
    *  bildet. Sie ist der Ø-Preis; der Quotient Kosten ÷ Menge ist nur seine
@@ -111,7 +111,9 @@ export function baueTagKpis(
   // woanders nachsehen, ob wirklich nichts lief (Rainer-PN 2026-07-25).
   const kostenKpis: KpiStripItem[] = []
   if (netzladung?.kwh != null) {
-    const kosten = netzladung.preis_cent != null ? (netzladung.kwh * netzladung.preis_cent) / 100 : null
+    // Päckchen Z-Client: die Kosten kommen fertig aus dem Backend (`tagDetail.speicher_ladung_netz_kosten_euro`,
+    // Menge × Ø-Ladepreis im Layer) — der Client zeigt sie und nennt die Faktoren.
+    const kosten = netzladung.kosten_euro ?? null
     const preisTxt = netzladung.preis_cent != null ? ` · Ø ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh` : ''
     kostenKpis.push({
       title: 'Batterieladung Netz',

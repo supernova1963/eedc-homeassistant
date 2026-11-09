@@ -297,6 +297,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       const kpiItems = baueTagKpis(tag, vortag, tagDetail?.soll_pv_kwh, {
         kwh: tagDetail?.speicher_ladung_netz_kwh,
         preis_cent: tagDetail?.speicher_effektiver_ladepreis_cent,
+        kosten_euro: tagDetail?.speicher_ladung_netz_kosten_euro,
       }, tagDetail?.netzbezug_preis_cent, tagDetail?.netzbezug_preis_herkunft).map((k) => ({
         ...k,
         parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,

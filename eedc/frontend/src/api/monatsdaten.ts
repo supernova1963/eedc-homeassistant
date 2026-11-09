@@ -179,6 +179,9 @@ export interface AggregierteMonatsdaten {
   eauto_km: number | null
   wallbox_ladung_kwh: number | null
   wallbox_ladung_pv_kwh: number | null
+  /** Päckchen Z-Client: PV-Anteil der Wallbox-Ladung = die zwei Felder darüber (Layer `pv_anteil_prozent`).
+   *  Optional: ältere Server liefern das Feld nicht. */
+  wallbox_pv_anteil_prozent?: number | null
   // ── Tabellen-Spalten (28.10.2026) — fertig aus dem Backend (`monatsdaten_aggregiert._zeile_emob_zusatz`/
   // `_zeile_wp_zusatz`). Mengen ohne Gemessen-Marke «nur mit Wert» wie Cockpit → Monat; `null` = «—».
   // Optional: ältere Server liefern die Felder nicht.

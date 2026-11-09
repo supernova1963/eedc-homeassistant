@@ -40,15 +40,24 @@ describe('baueTagKpis — Kosten-Kacheln', () => {
   })
 
   it('zeigt 0,00 € wenn ein Ladepreis bekannt ist, aber nichts geladen wurde', () => {
-    const k = kachel(baueTagKpis(tag(), null, null, { kwh: 0, preis_cent: 22.5 }), 'Batterieladung Netz')!
+    const k = kachel(baueTagKpis(tag(), null, null, { kwh: 0, preis_cent: 22.5, kosten_euro: 0 }), 'Batterieladung Netz')!
     expect(k.value).toBe('0,00')
     expect(k.subtitle).toBe('0,0 kWh · Ø 22,5 ct/kWh')
   })
 
   it('rechnet bei echter Netzladung wie bisher', () => {
-    const k = kachel(baueTagKpis(tag(), null, null, { kwh: 2.5, preis_cent: 22.5 }), 'Batterieladung Netz')!
+    // Päckchen Z-Client: die Kosten kommen aus `tagDetail.speicher_ladung_netz_kosten_euro` (Layer
+    // `netzladung_kosten_euro`: 2,5 kWh × 22,5 ct = 0,5625 €) — der Client zeigt sie und nennt die Faktoren.
+    const k = kachel(baueTagKpis(tag(), null, null, { kwh: 2.5, preis_cent: 22.5, kosten_euro: 0.5625 }), 'Batterieladung Netz')!
     expect(k.value).toBe('0,56')
     expect(k.ergebnis).toBe('= 0,56 €')
+    expect(k.berechnung).toBe('2,5 kWh × 22,5 ct/kWh')
+  })
+
+  it('Päckchen Z-Client: der Client rechnet die Kosten nicht selbst — ohne Backend-Feld „—"', () => {
+    const k = kachel(baueTagKpis(tag(), null, null, { kwh: 2.5, preis_cent: 22.5 }), 'Batterieladung Netz')!
+    expect(k.value).toBe('—')
+    expect(k.ergebnis).toBeUndefined()
   })
 
   it('ohne Speicher (kwh null / kein tagDetail) bleibt die Kachel aus', () => {

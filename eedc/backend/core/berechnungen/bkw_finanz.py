@@ -54,6 +54,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.core.berechnungen.ergebnis import quote
+
 #: Annahme der **pauschalen** BKW-Schätzung ohne Messung, ein **Paar**: 80 % der Jahreserzeugung werden selbst
 #: verbraucht, 20 % eingespeist (Päckchen Z2, 9.11.2026 benannt; vorher Literale ``0.8``/``0.2`` in
 #: ``roi.py::_bkw_pauschal_beitrag`` und ``0.8`` in ``roi_standalone.py::_bkw_bewertung``). Eine Annahme, keine
@@ -193,3 +195,29 @@ def bkw_eigenverbrauch_anteil(
         bewertbar=True,
         quelle="anteilig",
     )
+
+
+def bkw_einspeisung_kwh(
+    erzeugung_kwh: float | None, eigenverbrauch_kwh: float | None
+) -> float | None:
+    """Einspeisung eines Balkonkraftwerks im Zeitraum = Erzeugung − Eigenverbrauch (Päckchen Z-Client, 9.11.2026).
+
+    Die Zahl der Kachel «Einspeisung» im Block Balkonkraftwerk (Cockpit Monat/Jahr); bis dahin rechnete der Client sie
+    (``KomponentenSektionen.tsx``). ``None`` («keine Aussage»), sobald ein Operand fehlt — die Tagessicht kennt keinen
+    BKW-Eigenverbrauch. Ungerundet und ungeklemmt wie die Client-Rechnung (Eigenverbrauch > Erzeugung bleibt sichtbar).
+    """
+    if erzeugung_kwh is None or eigenverbrauch_kwh is None:
+        return None
+    return erzeugung_kwh - eigenverbrauch_kwh
+
+
+def bkw_eigenverbrauch_quote_prozent(
+    erzeugung_kwh: float | None, eigenverbrauch_kwh: float | None
+) -> float | None:
+    """Eigenverbrauchsquote eines Balkonkraftwerks = Eigenverbrauch ÷ Erzeugung × 100 (Päckchen Z-Client, 9.11.2026).
+
+    Untertitel «… % EV-Quote» der Kachel Eigenverbrauch. ``None`` ohne Eigenverbrauch oder ohne (bzw. bei 0)
+    Erzeugung — die Quote zweier Mengen über ``ergebnis.quote``. Nicht zu verwechseln mit ``bkw_eigenverbrauch_anteil``
+    oben (Zuordnung des Anlagen-Eigenverbrauchs auf ein Gerät).
+    """
+    return quote(eigenverbrauch_kwh, erzeugung_kwh)

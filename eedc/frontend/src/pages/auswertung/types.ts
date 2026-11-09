@@ -234,12 +234,11 @@ export function createMonatsZeitreihe(
     // E-Auto: null = kein aktives E-Auto.
     const eauto_km = md.eauto_km
     const eauto_ladung = md.eauto_ladung_kwh
-    // Wallbox-Durchsatz + PV-Anteil (PV-Anteil ableitbar aus den beiden Roh-Feldern).
+    // Wallbox-Durchsatz + PV-Anteil. Päckchen Z-Client: der PV-Anteil kommt fertig aus der Antwort (Layer
+    // `pv_anteil_ladung.pv_anteil_prozent` auf den zwei Feldern der Zeile) — bis dahin stand hier die Quote.
     const wallbox_ladung = md.wallbox_ladung_kwh
     const wallbox_pv_ladung = md.wallbox_ladung_pv_kwh
-    const wallbox_pv_anteil = (wallbox_pv_ladung != null && wallbox_ladung != null && wallbox_ladung > 0)
-      ? (wallbox_pv_ladung / wallbox_ladung) * 100
-      : null
+    const wallbox_pv_anteil = md.wallbox_pv_anteil_prozent ?? null
     const eauto_pv_anteil = wallbox_pv_anteil // gleicher PV-Anteil (Wallbox = Lade-Pfad des E-Autos)
 
     // CO₂: nachgeschlagen, nicht gerechnet (N-21). Der Kanon steht im Backend

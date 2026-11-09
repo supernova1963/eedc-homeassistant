@@ -146,6 +146,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen Z-Client (9.11.2026): Anzeige-Zahlen aus dem Backend statt aus dem Client.** Zehn Rechenstellen der Sichten lesen
+  jetzt Felder der Antwort (Layer-Funktion, als `computed_field` am Antwortmodell aus dessen eigenen Feldern): Balkonkraftwerk
+  Einspeisung und EV-Quote (`bkw_einspeisung_kwh`, `bkw_eigenverbrauch_quote_prozent`), PV-Anteil je Sonstiges-Verbraucher
+  (`pv_anteil_prozent`) in Cockpit Monat und Jahr; Kosten der Netzladung am Tag (`speicher_ladung_netz_kosten_euro`); spezifischer
+  Ertrag der PV-Strings über die Laufzeit und der Langfrist-Prognose (`spezifischer_ertrag_zeitraum_kwh_kwp`); «Netto» der
+  Tagesprognose (`netto_summe_kwh`); Wallbox-PV-Anteil der Werte-Tabelle (`wallbox_pv_anteil_prozent`). Neue Layer-Funktionen
+  `bkw_finanz.bkw_einspeisung_kwh`/`bkw_eigenverbrauch_quote_prozent`, `pv_anteil_ladung.bezug_pv_anteil_prozent`,
+  `kennzahlen.netto_kwh`, `speicher_wirtschaftlichkeit.netzladung_kosten_euro`. Sichtbare Zahlen unverändert (Probe auf den
+  Demo-Kopien: alte Client-Formel = neues Feld, 0 Abweichungen; Golden Master nur neue Felder). Client-Baseline des Wächters
+  `check:rechenstellen` 46 → 36.
 - **Päckchen Z (9.11.2026): Doppelformeln in den Layer, Wächter «Rechenstellen».** Live-Autarkie und -Eigenverbrauchsquote
   rufen `kennzahlen.autarkie_prozent`/`eigenverbrauchsquote_prozent` (neu `kappen=False`, der Gauge kappt selbst); der PV-Anteil
   einer Ladung hat eine Funktion `pv_anteil_ladung.pv_anteil_prozent` (Faktor, Rundung, «nur gemessen» als Parameter; ersetzt

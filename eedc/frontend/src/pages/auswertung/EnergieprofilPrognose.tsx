@@ -379,14 +379,15 @@ export function PrognoseTabelle({ daten, ohneCaption, istStunden, aktuelleStunde
                 {daten.verbrauch_summe_kwh != null ? fmtZahl(daten.verbrauch_summe_kwh, 1) : <Dash />}
               </td>
               <td className={`${ZELLE} text-right tabular-nums ${
-                daten.verbrauch_summe_kwh == null
+                daten.netto_summe_kwh == null
                   ? ''
-                  : daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0
+                  : daten.netto_summe_kwh >= 0
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-red-600 dark:text-red-400'
               }`}>
-                {daten.verbrauch_summe_kwh != null
-                  ? fmtZahl(daten.pv_summe_kwh - daten.verbrauch_summe_kwh, 1)
+                {/* Päckchen Z-Client: das Netto des Tages kommt fertig aus dem Backend (`netto_summe_kwh`). */}
+                {daten.netto_summe_kwh != null
+                  ? fmtZahl(daten.netto_summe_kwh, 1)
                   : <Dash />}
               </td>
               <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>

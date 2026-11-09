@@ -400,3 +400,19 @@ def berechne_netzladung_kosten(
         preis_cent=round(preis, 2),
         quelle=quelle,
     )
+
+
+def netzladung_kosten_euro(
+    netzladung_kwh: Optional[float], preis_cent: Optional[float]
+) -> Optional[float]:
+    """Kosten einer Netzladung = Menge × Ø-Ladepreis ÷ 100 — die Kachel «Batterieladung Netz» des Tages
+    (Päckchen Z-Client, 9.11.2026).
+
+    Anders als ``berechne_netzladung_kosten`` (Monat: Preis-Kette TEP → IMD → Bezugspreis, 0 kWh ⇒ 0 €, gerundet)
+    rechnet sie mit **genau dem** Preis, den die Kachel daneben nennt (``speicher_effektiver_ladepreis_cent`` des
+    Tagesdetails), ohne Kette und ungerundet: ohne Preis ``None`` («—»), auch bei 0 kWh. Bis dahin stand die
+    Multiplikation im Client (``TagBilanz.tsx``).
+    """
+    if netzladung_kwh is None or preis_cent is None:
+        return None
+    return netzladung_kwh * preis_cent / 100

@@ -5,7 +5,9 @@
 # die Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
+
+from backend.core.berechnungen.kennzahlen import spezifischer_ertrag_kwh_kwp
 
 
 # =============================================================================
@@ -61,6 +63,14 @@ class LangfristPrognoseResponse(BaseModel):
     anlagenleistung_kwp: float
     prognose_zeitraum: dict
     jahresprognose_kwh: float
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def spezifischer_ertrag_zeitraum_kwh_kwp(self) -> Optional[float]:
+        """Spezifischer Ertrag der Prognose (Päckchen Z-Client) = Jahresprognose ÷ kWp; Layer
+        `spezifischer_ertrag_kwh_kwp` (Kachel «Spez. Ertrag (Prognose)» in Cockpit → Aussicht)."""
+        return spezifischer_ertrag_kwh_kwp(self.jahresprognose_kwh, self.anlagenleistung_kwp)
+
     monatswerte: List[MonatsPrognoseSchema]
     trend_analyse: TrendAnalyseSchema
     datenquellen: List[str]

@@ -482,7 +482,8 @@ kennwert:
     test: "backend/tests/test_tabellen_spalten.py"
   "wallbox_pv_anteil":
     abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
-    hinweis: "Rechnet der Client: `wallbox_ladung_pv_kwh` ÷ `wallbox_ladung_kwh` × 100 (`types.ts::createMonatsZeitreihe`)."
+    test: "backend/tests/test_z_client_felder.py"
+    hinweis: "Monat fertig aus dem Backend: `wallbox_pv_anteil_prozent` der Zeile von `GET /monatsdaten/aggregiert` (Layer `pv_anteil_ladung.pv_anteil_prozent` auf `wallbox_ladung_pv_kwh` und `wallbox_ladung_kwh`, ungerundet; seit Päckchen Z-Client — vorher rechnete ihn der Client). `eauto_pv_anteil` ist derselbe Wert."
   "wallbox_pv_ladung":
     abschnitt: "BERECHNUNGEN.md#pv-anteil-der-heimladung-gemessen-sonst-abgeleitet-ab-2026-08-08-n-141"
     test: "backend/tests/test_block1_imd_aggregat_charnetz.py"

@@ -58,6 +58,9 @@ export interface SonstigesGeraet {
   verbrauch_kwh?: number | null
   bezug_pv_kwh?: number | null
   bezug_netz_kwh?: number | null
+  /** Päckchen Z-Client: PV-Anteil des Bezugs (PV ÷ (PV + Netz) × 100, Layer `pv_anteil_ladung.bezug_pv_anteil_prozent`),
+   *  fertig aus dem Backend. `null`/fehlend ohne Bezug (die Tagessicht kennt den Split nicht). */
+  pv_anteil_prozent?: number | null
   /** §9.2 — Abgabe an Dritte (kategorie 'abgabe'). */
   abgabe_kwh?: number | null
   erloes_euro?: number | null
@@ -378,6 +381,10 @@ export interface AktuellerMonatResponse {
   // Komponenten — BKW
   bkw_erzeugung_kwh: number | null
   bkw_eigenverbrauch_kwh: number | null
+  /** Päckchen Z-Client: Einspeisung des Balkonkraftwerks = Erzeugung − Eigenverbrauch und die EV-Quote
+   *  (Layer `bkw_finanz`), fertig aus dem Backend; `null`/fehlend ohne Eigenverbrauch (Tag). */
+  bkw_einspeisung_kwh?: number | null
+  bkw_eigenverbrauch_quote_prozent?: number | null
   hat_balkonkraftwerk: boolean
 
   // Komponenten — Sonstiges

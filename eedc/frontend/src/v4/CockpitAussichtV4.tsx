@@ -93,7 +93,8 @@ function kurzKpis(p: SolarPrognose, eedcHeute?: number | null): KpiStripItem[] {
 
 function langKpis(p: LangfristPrognose): KpiStripItem[] {
   const t = p.trend_analyse
-  const spez = p.anlagenleistung_kwp > 0 ? p.jahresprognose_kwh / p.anlagenleistung_kwp : 0
+  // Päckchen Z-Client: der spezifische Ertrag kommt fertig aus dem Backend (Layer `spezifischer_ertrag_kwh_kwp`).
+  const spez = p.spezifischer_ertrag_zeitraum_kwh_kwp ?? 0
   return [
     { title: 'Jahresprognose', value: p.jahresprognose_kwh.toLocaleString('de-DE'), unit: 'kWh', color: 'yellow', icon: Zap },
     { title: 'Spez. Ertrag (Prognose)', value: fmtZahl(spez, 0), unit: 'kWh/kWp', color: 'blue', icon: Sun },

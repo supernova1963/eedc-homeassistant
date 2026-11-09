@@ -305,3 +305,15 @@ def pv_anteil_prozent(
     if wert is None or stellen is None:
         return wert
     return int(round(wert)) if stellen == 0 else round(wert, stellen)
+
+
+def bezug_pv_anteil_prozent(bezug_pv_kwh: Optional[float], bezug_netz_kwh: Optional[float]) -> Optional[float]:
+    """PV-Anteil eines Verbrauchers = PV-Bezug ÷ (PV-Bezug + Netz-Bezug) × 100 (Päckchen Z-Client, 9.11.2026).
+
+    Die Kachel «PV-Anteil» je Sonstiges-Verbraucher (Cockpit Monat/Jahr). Ein fehlender Teil zählt 0; ohne Bezug
+    (Summe ≤ 0) ``None``. Über ``pv_anteil_prozent`` — dieselbe Quote, der Nenner ist hier die Summe der zwei Teile.
+    ⚠ Das HA-Attribut ``pv_anteil_prozent`` am Sensor ``sonstiges_verbrauch_monat_kwh`` teilt durch den Verbrauch
+    (``ha_export/investition_sensoren.py``) — eine andere Bezugsgröße, nicht Teil dieses Päckchens.
+    """
+    pv = bezug_pv_kwh or 0.0
+    return pv_anteil_prozent(pv, pv + (bezug_netz_kwh or 0.0))
