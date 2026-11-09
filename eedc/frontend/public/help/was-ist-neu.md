@@ -37,6 +37,8 @@
 
 **Website: Verweise zwischen den Doku-Seiten funktionieren.** Auf der eedc-Website führten Verweise von einer Doku-Seite auf eine andere — etwa aus der Berechnungsreferenz ins Handbuch — ins Leere. Jetzt öffnen sie die Website-Seite an der richtigen Stelle; Verweise auf Konzept-Dokumente ohne eigene Website-Seite führen zur Quelle auf GitHub. In der Hilfe im Programm funktionierten diese Verweise schon.
 
+**Handbuch: Wandtablet und „Tag reparieren“.** Die eedc-Karte läuft bei Anwendern auch im Fully Kiosk Browser auf einem Android-Wandtablet, mit einem eingeschränkten Home-Assistant-Benutzer — das steht jetzt im Handbuch. Im Daten-Checker starten Kategorien ohne Fehler und Warnungen zugeklappt; die Drift-Prüfung mit ihrem Knopf „Tag reparieren“ findest du also erst nach einem Klick auf ihre Kategorie. An Tagen aus dem HA-Spiegel ändert dieser Knopf nichts an den Werten aus dem Spiegel: Hast du einen Wert in Home Assistant korrigiert, übernimmt eedc ihn beim nächtlichen Abgleich um 02:45 — oder sofort mit „HA-Spiegel jetzt abgleichen“ in der Reparatur-Werkbank. [Handbuch Daten-Checker §4.17](HANDBUCH_DATEN_CHECKER.md#417-datenquellen-drift)
+
 ## v4.2.2 — 6. November 2026
 
 **Standalone und MQTT: der laufende Tag zählt mit den Zählern.** Ohne Statistik aus Home Assistant nahm eedc für heute die aufsummierte Leistung eines Geräts statt seines Zählers — an der Wärmepumpe etwa 2,0 statt 2,75 kWh, und der laufende Monat zeigte diese Zahl, bis am nächsten Tag der Zählerwert kam. Jetzt steht schon heute die Menge aus den Zählerständen da. [Handbuch Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)

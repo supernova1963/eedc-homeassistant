@@ -105,7 +105,7 @@ Jede Anzeige mit einem ⤢ hat eine solche Adresse — die Liste oben sind nur d
   url: <Adresse aus „Link / Einbetten">
   ```
 
-  Geprüft haben wir die eedc-Karte im Browser; in der Home-Assistant-App auf Handy oder Tablet steht die Prüfung noch aus.
+  Geprüft haben wir die eedc-Karte im Browser. Anwender nutzen sie auf einem Android-Wandtablet im **Fully Kiosk Browser**, auch mit einem **eingeschränkten Home-Assistant-Benutzer** — die Karte braucht keine Administrator-Rechte. In der Home-Assistant-App auf Handy oder Tablet ist sie weiter ungeprüft; ebenso die freie Kiosk-App [Kiosk Satellite](https://kiosksatellite.com), eine Alternative zu Fully Kiosk.
 - **Bleibst du bei der Webseiten-Karte:** nach einem Neustart einmal **eedc** in der Seitenleiste öffnen und das Dashboard neu laden. Danach hält die Verbindung — im Test war eine Karte auch nach einer Viertelstunde ohne geöffnetes Panel noch erreichbar und ließ sich neu laden. Zeigt die Karte stattdessen einen eedc-Fehler wie „nicht erreichbar", ist das Add-on gerade nicht da (Neustart, Update); sie holt sich die Anzeige beim nächsten Abruf von selbst.
 - **Chart ⇄ Tabelle und die Zeitraum-Auswahl bleiben bedienbar.** In den Bilanzen blätterst du also auch in der Karte durch Tage, Monate oder Jahre.
 - **Geparktes bleibt geparkt — und in der Karte lässt sich nichts zurückholen** (der Parkplatz liegt außerhalb des Vollbilds). Schneide die Anzeige deshalb **vorher** in eedc zu; beim Börsenpreis-Block etwa lassen sich einzelne Kennzahlen und die Kurve getrennt parken. Geparkt wird pro Gerät und Browser: Ein Wandtablet kann eine andere Auswahl zeigen als dein Rechner.
