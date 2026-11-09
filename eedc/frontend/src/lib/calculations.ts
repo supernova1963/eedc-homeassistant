@@ -23,10 +23,11 @@ export function calcSpezifischerErtrag(erzeugung: number, kwp: number | null | u
 
 /* Speicher-Effizienz stand hier bis zum 17.08.2026 als `calcSpeicherEffizienz`
  * — ein roher, ungekappter Quotient, also eine zweite Definition neben dem
- * Layer-SoT `core/berechnungen/speicher_wirkungsgrad.py`. Sie ist ersetzt
- * durch `lib/speicherWirkungsgrad.ts::speicherWirkungsgrad`, der dieselbe
- * Rechnung mit Obergrenze UND der Herkunft der Aussage liefert (N-252).
- * Der Wächter `check:speicher-eta-roh` hält die Stelle frei. */
+ * Layer-SoT `core/berechnungen/speicher_wirkungsgrad.py`. Sie war ersetzt
+ * durch den Client-Spiegel `lib/speicherWirkungsgrad.ts` (N-252); seit
+ * Päckchen Y (9.11.2026) liefert `/monatsdaten/aggregiert` den Monatswert
+ * fertig (`speicher_effizienz_prozent`), der Spiegel ist aufgelöst — der Layer
+ * ist die einzige Stelle. */
 
 // ENTFERNT 2026-09-02 (ADR-002/P12): `calcCOP` war der Frontend-Spiegel von
 // `core/berechnungen/waermepumpe_kennzahl.py::arbeitszahl` — nur ohne dessen

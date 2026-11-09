@@ -2,10 +2,11 @@
 
 **Was bisher fehlte.** Alle neun benannten ``_migrate_*``-Funktionen und die
 sechs Module unter ``services/migrations/`` haben Tests. Der ``ALTER TABLE ADD
-COLUMN``-Block in ``core/database.py`` hatte keinen — **86 ergänzte Spalten
+COLUMN``-Block in ``core/database.py`` hatte keinen — damals **86 ergänzte Spalten
 über zehn Tabellen** (mechanisch gezählt 2026-08-24 über die literalen
 Anweisungen *und* die ``new_columns``-Schleifen; der Plan sagte „>30", die
-reine Textzählung liefert 46).
+reine Textzählung liefert 46). Stand 2026-11-09: **108 Spalten in 15 Tabellen**
+(Päckchen Y: 16 nachgetragen, die der Round-Trip bis dahin nicht prüfte).
 
 **Warum das die riskanteste ungedeckte Fläche der Suite ist.** Der Block läuft
 genau einmal je Anwender-Installation, beim ersten Start nach dem Update, gegen
@@ -44,8 +45,8 @@ from backend.models import (  # noqa: F401  (Seiteneffekt: Registrierung)
     settings as _settings_model, strompreis, tages_energie_profil,
 )
 
-#: Was der Migrationsblock je Tabelle ergänzt — Stand 2026-08-24, mechanisch
-#: über `ALTER TABLE … ADD COLUMN` **und** die `new_columns`-Schleifen erhoben.
+#: Was der Migrationsblock je Tabelle ergänzt — Stand 2026-11-09: 108 Spalten in 15 Tabellen, mechanisch
+#: erhoben (je Modellspalte einzeln weggelassen ⇒ ergänzt ``run_migrations`` sie wieder?), nicht über den Text.
 #: ⚠ Diese Liste ist zugleich Fixture (was weggelassen wird) und Behauptung
 #: (was danach da sein muss). Wer eine Spalte ergänzt, trägt sie hier ein.
 ERGAENZTE_SPALTEN: dict[str, list[str]] = {
@@ -68,12 +69,14 @@ ERGAENZTE_SPALTEN: dict[str, list[str]] = {
         "sonderkosten_euro", "sonstige_positionen", "ueberschuss_kwh",
         # Etappe 3d P1/P2 — eigener Block, nicht in `new_columns`
         "source_provenance", "source_hash",
+        # v4.0.6 (PN 90128) — `_migrate_geprueft_gegen_spalten`
+        "geprueft_gegen",
     ],
     "investitionen": [
         "ausrichtung", "graue_last_kg", "ha_entity_id", "leistung_kwp",
         "neigung_grad", "stilllegungsdatum",
     ],
-    "investition_monatsdaten": ["source_provenance", "source_hash"],
+    "investition_monatsdaten": ["source_provenance", "source_hash", "geprueft_gegen"],
     "strompreise": [
         "einspeisung_variabel", "verwendung", "zaehlergebuehr_euro_jahr",
     ],
@@ -86,21 +89,28 @@ ERGAENZTE_SPALTEN: dict[str, list[str]] = {
     "infothek_eintraege": ["ansprechpartner_id", "in_anlagendoku"],
     "tages_energie_profil": [
         "betriebsmodus_je_wp", "bewoelkung_prozent", "boersenpreis_cent",
-        "komponenten", "niederschlag_mm", "soc_je_speicher", "strompreis_cent",
-        "waermepumpe_kw", "wallbox_kw", "wetter_code", "wp_betriebsstunden",
+        "komponenten", "niederschlag_mm", "soc_je_speicher", "spannen",
+        "strompreis_cent", "waermepumpe_kw", "wallbox_kw", "wetter_code", "wp_betriebsstunden",
         "wp_starts_anzahl", "source_provenance",
     ],
     "tages_zusammenfassung": [
         "boersenpreis_avg_cent", "boersenpreis_min_cent",
         "einspeisung_neg_preis_kwh", "emob_ladung_netz_abgeleitet_kwh",
-        "emob_ladung_pv_abgeleitet_kwh", "komponenten_kwh",
-        "komponenten_starts", "kraftstoffpreis_euro", "negative_preis_stunden",
+        "emob_ladung_pv_abgeleitet_kwh", "emob_ladung_speicher_abgeleitet_kwh",
+        "gti_summe_wh_m2", "komponenten_kwh",
+        "komponenten_starts", "kraftstoffpreis_euro", "lern_soll_kwh",
+        "lern_soll_stundenprofil_kwh", "nachtrag", "negative_preis_stunden",
         "pv_prognose_final_at", "pv_prognose_final_kwh", "pv_prognose_kwh",
         "pv_prognose_stundenprofil", "sfml_prognose_kwh",
         "sfml_prognose_stundenprofil", "solcast_p10_kwh", "solcast_p90_kwh",
         "solcast_prognose_kwh", "solcast_prognose_stundenprofil",
-        "source_provenance",
+        "source_provenance", "verworfen",
     ],
+    # Vier Tabellen mit eigenem Leiter-Schritt, die bis 9.11.2026 hier fehlten.
+    "korrekturprofile": ["lern_basis_pro_bin", "lern_umstellung_am"],
+    "emob_ladebloecke": ["speicher_kwh"],
+    "kanal_quelle": ["verworfen_ts"],
+    "mqtt_live_snapshots": ["max", "min", "ts_unix"],
 }
 
 
@@ -210,7 +220,7 @@ class TestDieFixtureSelbst:
 
 
 class TestRoundTrip:
-    """Aus dem Alt-Schema wird das heutige — 86 Spalten über zehn Tabellen."""
+    """Aus dem Alt-Schema wird das heutige — 108 Spalten über 15 Tabellen (Stand 2026-11-09)."""
 
     @pytest.mark.asyncio
     async def test_alle_ergaenzten_spalten_kommen_an(self, tmp_path):

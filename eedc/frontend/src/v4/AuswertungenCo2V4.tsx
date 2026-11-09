@@ -59,10 +59,9 @@ import { AnlageLeer } from './OnboardingLeer'
 import { mitAnzahl } from '../lib/plural'
 
 const SICHT_KEY = 'v4-auswertungen-co2'
-// Anschauliche Äquivalenz-Faktoren (kg CO₂).
-const KG_PRO_BAUM_JAHR = 12.5
-const KG_PRO_AUTO_KM = 0.12
-const KG_PRO_FLUG = 230
+// Päckchen Y (9.11.2026): die Äquivalenz-Faktoren (Baum, Auto-km, Flug) standen hier als eigene Konstanten, und die
+// Sicht rechnete `gesamtCo2 ÷ Faktor`. Jetzt bildet sie der Layer (`core/berechnungen/co2_aequivalente.py`), die Route
+// liefert sie je Monat (`co2_aequivalente`) und die Faktoren für die Texte (`co2_faktoren`); hier wird nur summiert.
 
 /** Ein Monatspunkt der Charts — alle Zahlen aus dem Backend-Kanon übernommen. */
 export interface Co2MonatsPunkt {
@@ -78,6 +77,10 @@ export interface Co2MonatsPunkt {
   co2Pv: number
   co2Wp: number
   co2Emob: number
+  // Päckchen Y: Äquivalente des Monats aus dem Layer — summiert, nie gerechnet.
+  baeume: number
+  autoKm: number
+  fluege: number
 }
 
 /**
@@ -110,6 +113,9 @@ export function baueCo2Monatsreihe(
       co2Pv: m.co2_pv_kg,
       co2Wp: m.co2_wp_kg,
       co2Emob: m.co2_emob_kg,
+      baeume: m.co2_aequivalente.baeume,
+      autoKm: m.co2_aequivalente.auto_km,
+      fluege: m.co2_aequivalente.fluege,
     }))
 }
 
@@ -155,6 +161,13 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
     wp: zeitreihe.reduce((s, z) => s + z.co2Wp, 0),
     emob: zeitreihe.reduce((s, z) => s + z.co2Emob, 0),
   }), [zeitreihe])
+  // Päckchen Y: die Äquivalente des Zeitraums sind die Summe der Monats-Äquivalente (linear, wie die kg).
+  const aequivalente = useMemo(() => ({
+    baeume: zeitreihe.reduce((s, z) => s + z.baeume, 0),
+    autoKm: zeitreihe.reduce((s, z) => s + z.autoKm, 0),
+    fluege: zeitreihe.reduce((s, z) => s + z.fluege, 0),
+  }), [zeitreihe])
+  const faktoren = basis.co2.faktoren
   const graueLast = co2Amort?.graue_last_gesamt_kg ?? 0
 
   // R18-3c: Amortisation IMMER auf der GESAMT-Historie — die graue Last ist eine
@@ -177,9 +190,11 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
 
   const bloecke: Block[] = useMemo(() => {
     const fc = formatCo2(gesamtCo2)
-    const baeume = gesamtCo2 / KG_PRO_BAUM_JAHR
-    const autoKm = gesamtCo2 / KG_PRO_AUTO_KM
-    const fluege = gesamtCo2 / KG_PRO_FLUG
+    const { baeume, autoKm, fluege } = aequivalente
+    // Die Faktoren nur als angezeigte Zahl (Methodik-Text) — `× 1000` ist die Einheiten-Umrechnung kg → g.
+    const kgJeBaum = faktoren ? fmtZahl(faktoren.kg_co2_je_baum_jahr, 1) : '—'
+    const gJeAutoKm = faktoren ? fmtZahl(faktoren.kg_co2_je_auto_km * 1000, 0) : '—'
+    const kgJeFlug = faktoren ? fmtZahl(faktoren.kg_co2_je_flug, 0) : '—'
 
     // ① Bilanz-KPIs (R2: CO₂ via formatCo2; Äquivalente in Basiseinheit, kein Tsd-Transform).
     const bilanzKpis: KpiStripItem[] = [
@@ -197,20 +212,20 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       {
         title: 'Bäume äquivalent', value: fmtZahl(baeume, 0), unit: 'Bäume/Jahr', color: 'green', icon: Leaf,
         subtitle: 'Bindungsleistung', parkId: 'kpi:baeume',
-        formel: 'CO₂-Einsparung ÷ 12,5 kg/Baum/Jahr',
-        berechnung: `${fmtZahl(gesamtCo2, 0)} kg ÷ 12,5 kg`, ergebnis: `= ${fmtZahl(baeume, 0)} Bäume`,
+        formel: `CO₂-Einsparung ÷ ${kgJeBaum} kg/Baum/Jahr`,
+        berechnung: `${fmtZahl(gesamtCo2, 0)} kg ÷ ${kgJeBaum} kg`, ergebnis: `= ${fmtZahl(baeume, 0)} Bäume`,
       },
       {
         title: 'Auto-km vermieden', value: fmtZahl(autoKm, 0), unit: 'km', color: 'cyan', icon: Leaf,
-        subtitle: 'bei 120 g CO₂/km', parkId: 'kpi:autokm',
-        formel: 'CO₂-Einsparung ÷ 120 g/km',
-        berechnung: `${fmtZahl(gesamtCo2 * 1000, 0)} g ÷ 120 g/km`, ergebnis: `= ${fmtZahl(autoKm, 0)} km`,
+        subtitle: `bei ${gJeAutoKm} g CO₂/km`, parkId: 'kpi:autokm',
+        formel: `CO₂-Einsparung ÷ ${gJeAutoKm} g/km`,
+        berechnung: `${fmtZahl(gesamtCo2 * 1000, 0)} g ÷ ${gJeAutoKm} g/km`, ergebnis: `= ${fmtZahl(autoKm, 0)} km`,
       },
       {
         title: 'Kurzstreckenflüge', value: fmtZahl(fluege, 1), unit: 'Flüge', color: 'cyan', icon: Leaf,
         subtitle: 'à 1000 km', parkId: 'kpi:fluege',
-        formel: 'CO₂-Einsparung ÷ 230 kg/Flug',
-        berechnung: `${fmtZahl(gesamtCo2, 0)} kg ÷ 230 kg`, ergebnis: `= ${fmtZahl(fluege, 1)} Flüge`,
+        formel: `CO₂-Einsparung ÷ ${kgJeFlug} kg/Flug`,
+        berechnung: `${fmtZahl(gesamtCo2, 0)} kg ÷ ${kgJeFlug} kg`, ergebnis: `= ${fmtZahl(fluege, 1)} Flüge`,
       },
     ]
 
@@ -398,7 +413,7 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       ...(blockAmort && sichtbar(amortIds) ? [blockAmort] : []),
       ...(sichtbar(basisIds) ? [blockBasis] : []),
     ]
-  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, anteile, klimapositiv, co2Amort, basis.jahr, schmal, park, basis.co2.wpVorbehalt])
+  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, anteile, aequivalente, faktoren, klimapositiv, co2Amort, basis.jahr, schmal, park, basis.co2.wpVorbehalt])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).

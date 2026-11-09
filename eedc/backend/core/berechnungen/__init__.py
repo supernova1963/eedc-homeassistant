@@ -25,6 +25,8 @@ Submodule:
 - `counter` — Counter-Aggregate (WP-Starts/Betriebsstunden): Stunden-Σ aus
   Tages-Boundary-Diff ableiten + Pflicht-Invariante (Variante 2-light)
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
+- `co2_aequivalente` — CO₂-Menge in Bäumen, Auto-km, Kurzstreckenflügen, Flug-km
+  (Faktoren mit Herkunft; Route `/cockpit/nachhaltigkeit` je Monat und gesamt, Päckchen Y)
 - `speicher` — Speicher-Effizienz (gleitend, carry-over-immun)
 - `spez_ertrag` — spezifischer Ertrag annualisiert (saisonal gewichtet,
   per-Monat-aktives kWp) — Cockpit-Kachel == HA-Export-Sensor
@@ -55,6 +57,12 @@ from backend.core.berechnungen.alternativkosten import (
     ersetzt_keine_heizung,
     ERSETZT_NICHTS,
     gas_kosten_altanlage,
+)
+from backend.core.berechnungen.co2_aequivalente import (
+    CO2_FAKTOREN,
+    Co2Aequivalente,
+    Co2Faktoren,
+    co2_aequivalente,
 )
 from backend.core.berechnungen.co2_amortisation import (
     QUELLE_DEFAULT,
@@ -401,6 +409,10 @@ __all__ = [
     "ERSETZT_NICHTS",
     "gas_kosten_altanlage",
     "QUELLE_OVERRIDE",
+    "CO2_FAKTOREN",
+    "Co2Aequivalente",
+    "Co2Faktoren",
+    "co2_aequivalente",
     "QUELLE_DEFAULT",
     "QUELLE_FEHLT",
     "QUELLE_KEIN_DEFAULT",

@@ -98,6 +98,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **API `GET /api/cockpit/nachhaltigkeit`: die CO₂-Äquivalente rechnen wie die Auswertung.** `aequivalent_baeume` nimmt
+  jetzt 12,5 kg CO₂ je Baum und Jahr (bisher 20 kg) und `aequivalent_fluege_km` 0,23 kg je Flug-km (bisher 0,25 kg;
+  ein Kurzstreckenflug = 1000 km = 230 kg) — dieselben Zahlen, die Auswertungen → CO₂ zeigt; neu sind `aequivalent_fluege`,
+  je Monat `co2_aequivalente` und einmal `co2_faktoren`. In der Oberfläche ändert sich keine Zahl.
 - **Handbuch: eedc-Karte auf dem Wandtablet (Fully Kiosk, eingeschränkter Benutzer) und „Tag reparieren“ im Daten-Checker
   genauer beschrieben** — Kategorien ohne Fehler und Warnungen starten zugeklappt, und an Tagen aus dem HA-Spiegel kommt eine
   Korrektur in Home Assistant nicht über den Knopf, sondern über den nächtlichen Abgleich oder „HA-Spiegel jetzt abgleichen“.
@@ -123,6 +127,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen Y (9.11.2026): CO₂-Äquivalente im Layer, Speicher-η des Monats aus dem Backend.** Bäume, Auto-km, Flüge und
+  Flug-km bildet `core/berechnungen/co2_aequivalente.py` (eine Formel, ein Ort; Flug = 1000 km × 0,23 kg/km); die Route liefert
+  sie je Monat und gesamt, Auswertungen → CO₂ summiert nur noch und nimmt die Methodik-Zahlen aus `co2_faktoren` (vorher eigene
+  Konstanten im Client, ein zweiter Satz mit ÷ 20 in der Route). `check:co2-roh` hat eine zweite Regel (keine Faktor-Konstante,
+  keine CO₂-Größe × | ÷ Zahl außer `× 1000`, keine Literale 12,5/230 in CO₂-Dateien), der P15-Wächter prüft CO₂-Größen mit
+  Zahl-Literal in `api/routes/`. `GET /monatsdaten/aggregiert` liefert `speicher_effizienz_prozent` (Layer
+  `speicher_wirkungsgrad` auf Ladung/Entladung der Zeile); die Werte-Tabelle rechnet den η des Monats nicht mehr selbst —
+  N-252: Spiegel aufgelöst, Layer ist die einzige Stelle (`lib/speicherWirkungsgrad.ts` samt Test und
+  `test_speicher_wirkungsgrad_symmetrie.py` entfernt).
+  Drei Anzeige-Ableitungen bleiben benannt (BERECHNUNGEN §1 Schicht 3). `test_migrations_round_trip.py` prüft jetzt 108
+  ergänzte Spalten in 15 Tabellen (bisher 92 in 11; 16 Spalten der Migration standen nicht in der Liste).
 - **Päckchen X «Kleineres» (9.11.2026):** drei ungelesene Stellen entfernt (`_CommunityKontext.hat_speicher`,
   `_RohMonat.pv_je_modul_roh` samt leerer Phase, die `fehler`-Liste im JSON-Import); `GET /monatsdaten/{id}` reicht den
   Kennzahlen Ladung und Entladung des Speichers aus den Monats-Fakten statt aus den Legacy-Spalten `batterie_*` (P10; die

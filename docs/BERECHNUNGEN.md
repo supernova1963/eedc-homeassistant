@@ -250,6 +250,20 @@ Die **Sicht** (Spalte „Wo in v4") folgt der Achsen-Navigation (Cockpit = Zeit-
 | [Cockpit → Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) | `GET /api/aussichten/trend/{id}` | Degradation, Jahresvergleich |
 | [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen) | `GET /api/aussichten/finanzen/{id}` | Amortisations-Fortschritt, Prognose |
 
+**Anzeige-Ableitungen im Client (benannte Grenzen, Stand Päckchen Y 9.11.2026).** Der Client rechnet nichts (ADR-001) —
+bis auf drei Kennwerte der Werte-Tabelle, die er im Monat aus zwei Feldern der Antwort von `GET /api/monatsdaten/aggregiert`
+bildet (`pages/auswertung/types.ts::createMonatsZeitreihe`); der Tag kommt bei allen fertig aus `services/energie_profil/tage_werte.py`.
+Eine Backend-Größe des Monats gibt es für sie nicht, eine neue braucht Regel-Abschnitt und Entscheid:
+
+| Kennwert | Client-Bildung im Monat | Warum (noch) kein Backend-Feld |
+| --- | --- | --- |
+| `spezErtrag` (M2) | `pv_erzeugung_kwh ÷ anlagen_kwp` (`lib/calculations.ts::calcSpezifischerErtrag`) | Der Sensor `spezifischer_ertrag_kwh_kwp` ist **aufs Jahr normiert** (§3.1, `core/berechnungen/spez_ertrag.py`) — eine andere Größe; der Tageswert steht in `tage_werte.py` ohne Layer-Funktion. |
+| `ev_ersparnis` (M2) | `ev_ersparnis_euro + bkw_ersparnis_euro` | Das Finanz-Aggregat weist beide Posten getrennt aus (§3.2); eine Summe beider gibt es im Backend nicht. |
+| `wallbox_pv_anteil` (M2, mit `eauto_pv_anteil`) | `wallbox_ladung_pv_kwh ÷ wallbox_ladung_kwh × 100` | Die Layer-Quote `pv_anteil_gemessen_prozent` rundet auf ganze Prozent, die Tabelle zeigt eine Stelle; der Fall wechselt mit der Layer-Funktion des PV-Anteils. |
+
+Seit Päckchen Y nicht mehr darunter: die **CO₂-Äquivalente** (§3.8 «Äquivalente», Layer `co2_aequivalente`) und die
+**Speicher-Effizienz** des Monats (`speicher_effizienz_prozent`, Layer `speicher_wirkungsgrad` auf Ladung und Entladung der Zeile, §3.3).
+
 ---
 
 ## 2. Konstanten
@@ -3102,16 +3116,31 @@ CO2_gesamt = CO2_PV + max(0, CO2_WP) + max(0, CO2_E-Mob)
 
 #### Äquivalente
 
-Antwortfelder `aequivalent_baeume`, `aequivalent_auto_km`, `aequivalent_fluege_km` von `GET /api/cockpit/nachhaltigkeit`:
+**Eine Formel, ein Ort (DI-2, Päckchen Y 9.11.2026):** `core/berechnungen/co2_aequivalente.py::co2_aequivalente(co2_kg)` bildet
+aus einer CO₂-Menge vier Anschauungsgrößen; `None` und negative Mengen ergeben 0.
 
 ```
-Bäume          = CO2_gesamt / 20       (kg/Baum/Jahr)
-Auto-km        = CO2_gesamt / 0.12     (kg/km)
-Flug-km        = CO2_gesamt / 0.25     (kg/km)
+Bäume          = CO2 / KG_CO2_JE_BAUM_JAHR                         (12,5 kg je Baum und Jahr)
+Auto-km        = CO2 / KG_CO2_JE_AUTO_KM                           (0,12 kg je km = 120 g/km)
+Flug-km        = CO2 / KG_CO2_JE_FLUG_KM                           (0,23 kg je Flug-km)
+Flüge          = CO2 / (KG_CO2_JE_FLUG_KM × KM_JE_KURZSTRECKENFLUG) (0,23 kg/km × 1000 km = 230 kg je Kurzstreckenflug)
 ```
 
-Diese Antwortfelder liest heute keine Sicht; *Auswertungen → CO₂* bildet seine Äquivalente im Client mit eigenen Faktoren
-(`frontend/src/v4/AuswertungenCo2V4.tsx`) — eine Anzeige-Ableitung, benannte Grenze: zwei Faktorensätze, der sichtbare ist der des Clients.
+Flug und Flug-km hängen an denselben zwei Konstanten; die 1000 km sind die der Kachel-Unterzeile «à 1000 km». **Herkunft der
+Faktoren — eine Annahme:** die Anschauungswerte der Auswertung seit dem 3.2.2026 (Commit `a3884af5c`: «Ein Baum bindet ca.
+12.5 kg CO2/Jahr», «ca. 120g CO2/km»); eine Literaturquelle nennt weder der Code noch die Historie. Es sind Größenordnungen zum
+Veranschaulichen, keine Bilanzgrößen.
+
+`GET /api/cockpit/nachhaltigkeit` liefert je Monat `co2_aequivalente` (`baeume`, `auto_km`, `fluege`, `fluege_km`, ungerundet,
+aus dem angezeigten Monatswert `co2_gesamt_kg`), gesamt `aequivalent_baeume`, `aequivalent_auto_km`, `aequivalent_fluege_km`
+(ganzzahlig abgeschnitten) und `aequivalent_fluege` (eine Stelle) sowie einmal `co2_faktoren` (die fünf Faktoren für
+Methodik-Texte). *Auswertungen → CO₂* summiert die Monats-Äquivalente des gewählten Zeitraums — alle vier Größen sind
+linear, die Summe der Monate ist das Äquivalent der Summe — und nimmt die Zahlen der Methodik-Texte aus `co2_faktoren`.
+Bis Päckchen Y rechnete die Sicht mit eigenen Konstanten im Client und die Route mit ÷ 20 (Bäume) und ÷ 0,25 (Flug-km) —
+zwei Faktorensätze; `aequivalent_baeume` und `aequivalent_fluege_km` rechnen seitdem mit den Faktoren der Auswertung. Gewächtert: `npm run check:co2-roh` Regel 2 (keine
+Faktor-Konstante, keine CO₂-Größe × | ÷ Zahl außer `× 1000`, keine Literale 12,5/230 in CO₂-Dateien) und
+`test_wurzelmuster_konformitaet.py::test_p15_co2_faktor_in_routen_und_services_nur_mit_beleg` (CO₂-Größe × | ÷ Zahl in
+`api/routes/`).
 
 ### 3.9 PV-String SOLL-IST Vergleich
 

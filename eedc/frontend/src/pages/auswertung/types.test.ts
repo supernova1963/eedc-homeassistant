@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest'
 import { createMonatsZeitreihe } from './types'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
-import { monatsZeile } from '../../test/factories'
+import { CO2_AEQUIVALENTE_NULL, monatsZeile } from '../../test/factories'
 
 const md = (over: Partial<AggregierteMonatsdaten> = {}) =>
   monatsZeile(2026, 5, {
@@ -99,6 +99,7 @@ describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
     jahr: 2026, monat: 5, monat_name: 'Mai',
     co2_pv_kg: 190, co2_wp_kg: 60, co2_emob_kg: 40,
     co2_gesamt_kg: 290, co2_kumuliert_kg: 290, autarkie_prozent: 71.4,
+    co2_aequivalente: CO2_AEQUIVALENTE_NULL,
     ...over,
   })
 
@@ -172,5 +173,21 @@ describe('WP Wärme (Monat) — fertig aus der Antwort nach D1 (N-778)', () => {
   it('ohne Feld bleibt die Zelle leer, eine gemessene 0 bleibt 0', () => {
     expect(createMonatsZeitreihe([md({ wp_heizung_kwh: 60, wp_warmwasser_kwh: 35 })])[0].wp_waerme).toBeNull()
     expect(createMonatsZeitreihe([md({ wp_waerme_kwh: 0 })])[0].wp_waerme).toBe(0)
+  })
+})
+
+describe('createMonatsZeitreihe — Speicher-η kommt aus der Antwort (Päckchen Y, Y3)', () => {
+  it('liest `speicher_effizienz_prozent`, statt Entladung ÷ Ladung zu rechnen', () => {
+    // Bewusst NICHT 80 ÷ 100: wer wieder rechnet statt zu lesen, fällt auf.
+    const [z] = createMonatsZeitreihe([md({
+      speicher_ladung_kwh: 100, speicher_entladung_kwh: 80, speicher_effizienz_prozent: 91.5,
+    })])
+    expect(z.speicher_effizienz).toBe(91.5)
+    expect(z.speicher_effizienz).not.toBe(80)
+  })
+
+  it('ohne Wert in der Antwort bleibt die Zelle leer', () => {
+    const [z] = createMonatsZeitreihe([md({ speicher_ladung_kwh: 100, speicher_entladung_kwh: 80 })])
+    expect(z.speicher_effizienz).toBeNull()
   })
 })

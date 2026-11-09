@@ -8,7 +8,6 @@ import {
   COLORS, CHART_COLORS, TYP_COLORS,
   calcSpezifischerErtrag,
 } from '../../lib'
-import { speicherWirkungsgrad } from '../../lib/speicherWirkungsgrad'
 
 // Re-Export für Rückwärtskompatibilität (bestehende Imports brechen nicht)
 export { COLORS, CHART_COLORS, TYP_COLORS, TYP_LABELS }
@@ -202,15 +201,12 @@ export function createMonatsZeitreihe(
     const spezErtrag = calcSpezifischerErtrag(erzeugung, md.anlagen_kwp ?? anlage?.leistung_kwp)
 
     // Speicher: null = keine Speicher-Komponente aktiv (Backend liefert null).
-    // Der η kommt aus dem Spiegel des Layer-SoT (N-252) — hier steht er je
-    // EINZELNEM Monat, also in genau dem Fall, in dem der Ladestand-Übertrag
-    // über die Monatsgrenze am stärksten wirkt. Ohne SoC-Messung ist ein
-    // Quotient über 100 % deshalb kein Wert, sondern eine fehlende Aussage.
+    // Päckchen Y (Y3): der η kommt fertig aus der Antwort (Layer `speicher_wirkungsgrad`, N-252). Bis dahin stand hier
+    // der Client-Spiegel `speicherWirkungsgrad(ladung, entladung)` (`lib/speicherWirkungsgrad.ts`, aufgelöst) — dieselbe
+    // Regel (über 100 % ohne SoC-Messung kein Wert), jetzt an einer Stelle.
     const speicher_ladung = md.speicher_ladung_kwh
     const speicher_entladung = md.speicher_entladung_kwh
-    const speicher_effizienz = (speicher_ladung != null && speicher_entladung != null)
-      ? speicherWirkungsgrad(speicher_ladung, speicher_entladung).prozent
-      : null
+    const speicher_effizienz = md.speicher_effizienz_prozent ?? null
 
     // Wärmepumpe: null = WP in dem Monat nicht aktiv bzw. nicht gemessen.
     const wp_heizung = md.wp_heizung_kwh

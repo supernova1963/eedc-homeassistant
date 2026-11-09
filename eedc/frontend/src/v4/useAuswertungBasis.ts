@@ -82,6 +82,8 @@ export function useAuswertungBasis(anlageId: number | undefined | null) {
     gesamtKg: co2Q.data?.co2_gesamt_kg ?? 0,
     /** B6/Y-4: Vorbehalt an der WP-CO₂ (Wärme geschätzt · zweiter Erzeuger), aus dem Layer. */
     wpVorbehalt: co2Q.data?.co2_wp_vorbehalt ?? null,
+    /** Päckchen Y: Faktoren der Äquivalente aus dem Layer — für die Methodik-Texte, nie zum Rechnen. */
+    faktoren: co2Q.data?.co2_faktoren ?? null,
     loading: co2Q.loading,
     error: co2Q.error,
     refresh: co2Q.refetch,

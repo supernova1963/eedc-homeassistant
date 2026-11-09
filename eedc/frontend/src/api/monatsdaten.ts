@@ -156,6 +156,9 @@ export interface AggregierteMonatsdaten {
   speicher_ladung_kwh: number | null
   speicher_entladung_kwh: number | null
   speicher_netzladung_kwh: number | null
+  /** Päckchen Y: Round-Trip-η des Monats aus dem Layer (`speicher_wirkungsgrad`), aus Ladung/Entladung dieser Zeile —
+   *  `null` ohne Speicher, unter der Mindest-Ladung oder über 100 % (nicht ermittelbar). */
+  speicher_effizienz_prozent?: number | null
   wp_strom_kwh: number | null
   wp_strom_heizen_kwh: number | null  // #191: nur befüllt wenn getrennte_strommessung
   wp_strom_warmwasser_kwh: number | null  // #191: nur befüllt wenn getrennte_strommessung

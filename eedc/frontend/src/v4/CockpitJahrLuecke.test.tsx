@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, fireEvent, within } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit } from '../api/cockpit'
-import { cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
+import { CO2_FAKTOREN_NULL, cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 const bis = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
@@ -106,7 +106,8 @@ vi.mock('../api/aktuellerMonat', () => ({
 }))
 const leereNachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 0, co2_pv_kg: 0, co2_wp_kg: 0, co2_emob_kg: 0,
-  aequivalent_baeume: 0, aequivalent_auto_km: 0, aequivalent_fluege_km: 0,
+  aequivalent_baeume: 0, aequivalent_auto_km: 0, aequivalent_fluege: 0, aequivalent_fluege_km: 0,
+  co2_faktoren: CO2_FAKTOREN_NULL,
   autarkie_durchschnitt_prozent: 0, monatswerte: [],
 }
 vi.mock('../api/cockpit', () => ({

@@ -2118,13 +2118,31 @@ def _p15_co2_faktor_ohne_beleg(baeume) -> list[str]:
             if _P15_BELEG not in a and f"{o}::{f}" not in P15_CO2_FAKTOR_KLASSIFIZIERT]
 
 
+# Päckchen Y (9.11.2026): die dritte Form — eine CO₂-Größe mit einem Zahl-Literal in einer Route (`co2_gesamt / 20`
+# für «Bäume»). Äquivalente bildet `core/berechnungen/co2_aequivalente.py`; `× | ÷ 1000` (kg ↔ g/t) bleibt erlaubt.
+def _p15_co2_zahl_literal_in_routen(baeume) -> list[str]:
+    def name(k):
+        return k.id if isinstance(k, ast.Name) else k.attr if isinstance(k, ast.Attribute) else ""
+    out = []
+    for ort, quelltext, baum in baeume:
+        if ort.startswith(("backend/api/routes/", "probe")):
+            out += [f"{ort}:{k.lineno} → {ast.get_source_segment(quelltext, k)}" for k in ast.walk(baum)
+                    if isinstance(k, ast.BinOp) and isinstance(k.op, (ast.Mult, ast.Div)) and any(
+                        "co2" in name(a).lower() and isinstance(b, ast.Constant)
+                        and type(b.value) in (int, float) and b.value != 1000
+                        for a, b in ((k.left, k.right), (k.right, k.left)))]
+    return out
+
+
 def test_p15_co2_faktor_in_routen_und_services_nur_mit_beleg():
-    offen = _p15_co2_faktor_ohne_beleg(_p15_baeume())
+    baeume = list(_p15_baeume())
+    offen = _p15_co2_faktor_ohne_beleg(baeume) + _p15_co2_zahl_literal_in_routen(baeume)
     assert offen == [], (
-        f"{len(offen)} `× CO2_FAKTOR_STROM_KG_KWH` ohne Beleg: {offen}\n"
+        f"{len(offen)} `× CO2_FAKTOR_STROM_KG_KWH` ohne Beleg oder CO₂-Größe × | ÷ Zahl in einer Route: {offen}\n"
         "Die CO₂-Einsparung der Anlage entsteht in `berechne_co2_bilanz` auf dem Eigenverbrauch ohne Wandlungsverluste "
         "(ADR-001/DI-2, ADR-002/P15) — eine Route rechnet sie nicht selbst (N-647: `Erzeugung × 0,38`). "
-        "Komponenten-Bilanzen mit eigener Regel (DI-1) gehören klassifiziert in `P15_CO2_FAKTOR_KLASSIFIZIERT`."
+        "Komponenten-Bilanzen mit eigener Regel (DI-1) gehören klassifiziert in `P15_CO2_FAKTOR_KLASSIFIZIERT`. "
+        "Äquivalente (Bäume, Auto-km, Flüge) bildet `core/berechnungen/co2_aequivalente.py` (Päckchen Y)."
     )
 
 
@@ -2140,6 +2158,8 @@ def test_p15_co2_faktor_gegenprobe():
         "probe.py:2 (get_x) → erzeugung_jahr * CO2_FAKTOR_STROM_KG_KWH"]
     gut = "def get_x():\n    co2 = eigenverbrauch_ohne_verluste_bkw_kwh * CO2_FAKTOR_STROM_KG_KWH\n"
     assert _p15_co2_faktor_ohne_beleg([("probe.py", gut, ast.parse(gut))]) == []
+    roh_aeq = "baeume = int(co2_gesamt / 20)\nt = co2.gesamt_kg / 1000\n"
+    assert _p15_co2_zahl_literal_in_routen([("probe.py", roh_aeq, ast.parse(roh_aeq))]) == ["probe.py:1 → co2_gesamt / 20"]
 
 
 def test_p15_gegenprobe_ein_roher_aufruf_wird_rot():

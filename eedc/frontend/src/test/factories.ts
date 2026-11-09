@@ -31,7 +31,7 @@
  * Bestandsdatei umhängt, prüft ihre Fallzahl vor und nach dem Eingriff.
  */
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
-import type { CockpitJahr, JahrVergleich } from '../api/cockpit'
+import type { CockpitJahr, Co2Aequivalente, Co2Faktoren, JahrVergleich } from '../api/cockpit'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -343,3 +343,13 @@ export function jahrVergleich(jahr: number, over: Partial<JahrVergleich> = {}): 
     ...over,
   }
 }
+
+/** Päckchen Y: Nullstellung der CO₂-Äquivalente eines Monats (`NachhaltigkeitMonat.co2_aequivalente`). */
+export const CO2_AEQUIVALENTE_NULL = {
+  baeume: 0, auto_km: 0, fluege: 0, fluege_km: 0,
+} satisfies Co2Aequivalente
+
+/** Päckchen Y: Nullstellung der Äquivalenz-Faktoren (`Nachhaltigkeit.co2_faktoren`). */
+export const CO2_FAKTOREN_NULL = {
+  kg_co2_je_baum_jahr: 0, kg_co2_je_auto_km: 0, kg_co2_je_flug_km: 0, km_je_kurzstreckenflug: 0, kg_co2_je_flug: 0,
+} satisfies Co2Faktoren

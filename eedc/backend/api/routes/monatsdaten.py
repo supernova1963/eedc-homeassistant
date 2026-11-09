@@ -353,6 +353,9 @@ class AggregierteMonatsdatenResponse(BaseModel):
     speicher_ladung_kwh: Optional[float]  # Summe alle Speicher
     speicher_entladung_kwh: Optional[float]  # Summe alle Speicher
     speicher_netzladung_kwh: Optional[float]  # Anteil Netzladung an speicher_ladung_kwh (R17/Verlauf)
+    #: Päckchen Y: Round-Trip-η des Monats (Layer `speicher_wirkungsgrad`, ohne ΔSoC) aus den beiden Mengen der Zeile;
+    #: ``None`` ohne Speicher, unter der Mindest-Ladung oder über 100 % (nicht ermittelbar).
+    speicher_effizienz_prozent: Optional[float] = None
     # Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
     wp_strom_kwh: Optional[float]
     wp_strom_heizen_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)

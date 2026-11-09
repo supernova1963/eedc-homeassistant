@@ -71,7 +71,8 @@ vi.mock('../api/aktuellerMonat', () => ({
 }))
 const leereNachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 0, co2_pv_kg: 0, co2_wp_kg: 0, co2_emob_kg: 0,
-  aequivalent_baeume: 0, aequivalent_auto_km: 0, aequivalent_fluege_km: 0,
+  aequivalent_baeume: 0, aequivalent_auto_km: 0, aequivalent_fluege: 0, aequivalent_fluege_km: 0,
+  co2_faktoren: CO2_FAKTOREN_NULL,
   autarkie_durchschnitt_prozent: 0, monatswerte: [],
 }
 /** Die Jahresroute: hier nur der Kopf (die Proben lesen Verlauf und Rail aus der Monatsreihe). */
@@ -95,7 +96,7 @@ vi.mock('../api/cockpit', () => ({
 
 import CockpitJahrV4 from './CockpitJahrV4'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
-import { aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
+import { CO2_FAKTOREN_NULL, aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
 
 function renderView() {
   return renderMitProvidern(<CockpitJahrV4 anlageId={1} />)

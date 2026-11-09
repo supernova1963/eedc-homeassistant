@@ -193,6 +193,26 @@ export interface NachhaltigkeitMonat {
   co2_kumuliert_kg: number
   /** N-736: `null` = Einspeisung oder Netzbezug des Monats nicht erfasst — Autarkie nicht ermittelbar. */
   autarkie_prozent: number | null
+  /** Päckchen Y: Äquivalente von `co2_gesamt_kg` aus dem Layer (`core/berechnungen/co2_aequivalente.py`), ungerundet —
+   *  linear, der Client summiert sie über die Monate wie die kg. */
+  co2_aequivalente: Co2Aequivalente
+}
+
+/** Eine CO₂-Menge in Anschauungsgrößen — gebildet im Backend, nie im Client (`check:co2-roh`, Regel 2). */
+export interface Co2Aequivalente {
+  baeume: number
+  auto_km: number
+  fluege: number
+  fluege_km: number
+}
+
+/** Die Faktoren der Äquivalente — nur für Methodik-Texte, nie zum Rechnen. */
+export interface Co2Faktoren {
+  kg_co2_je_baum_jahr: number
+  kg_co2_je_auto_km: number
+  kg_co2_je_flug_km: number
+  km_je_kurzstreckenflug: number
+  kg_co2_je_flug: number
 }
 
 export interface Nachhaltigkeit {
@@ -203,7 +223,9 @@ export interface Nachhaltigkeit {
   co2_emob_kg: number
   aequivalent_baeume: number
   aequivalent_auto_km: number
+  aequivalent_fluege: number
   aequivalent_fluege_km: number
+  co2_faktoren: Co2Faktoren
   monatswerte: NachhaltigkeitMonat[]
   autarkie_durchschnitt_prozent: number
   /** B6/Y-4: Vorbehalt an der WP-CO₂ (Wärme geschätzt · zweiter Erzeuger) — dieselben Worte wie unter der Ersparnis. */

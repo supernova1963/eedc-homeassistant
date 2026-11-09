@@ -36,7 +36,7 @@ const H = vi.hoisted(() => ({
   angehalten: new Set<number>(),
 }))
 
-import { aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
+import { CO2_AEQUIVALENTE_NULL, CO2_FAKTOREN_NULL, aktuellerMonat, cockpitJahr, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 import { _clearSwrCacheForTests } from '../hooks/useApiData'
 
@@ -65,12 +65,13 @@ const co2Monat = (jahr: number, monat: number): NachhaltigkeitMonat => ({
   jahr, monat, monat_name: String(monat),
   co2_pv_kg: CO2_PV_JE_MONAT[jahr], co2_wp_kg: 20, co2_emob_kg: 10,
   co2_gesamt_kg: CO2_PV_JE_MONAT[jahr] + 30, co2_kumuliert_kg: 1000,
-  autarkie_prozent: 66,
+  autarkie_prozent: 66, co2_aequivalente: CO2_AEQUIVALENTE_NULL,
 })
 
 const nachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 1000, co2_pv_kg: 700, co2_wp_kg: 200, co2_emob_kg: 100,
-  aequivalent_baeume: 50, aequivalent_auto_km: 8000, aequivalent_fluege_km: 4000,
+  aequivalent_baeume: 50, aequivalent_auto_km: 8000, aequivalent_fluege: 0, aequivalent_fluege_km: 4000,
+  co2_faktoren: CO2_FAKTOREN_NULL,
   autarkie_durchschnitt_prozent: 66,
   monatswerte: [2024, 2025].flatMap((j) => MONATE_JE_JAHR[j].map((m) => co2Monat(j, m))),
 }

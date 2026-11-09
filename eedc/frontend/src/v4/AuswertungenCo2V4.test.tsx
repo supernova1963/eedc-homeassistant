@@ -23,6 +23,8 @@
  * Serien, Sortierung, kumuliert nicht nachaddiert).
  */
 import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import type { NachhaltigkeitMonat } from '../api/cockpit'
@@ -54,14 +56,20 @@ const co2Monate: NachhaltigkeitMonat[] = [
     jahr: 2024, monat: 11, monat_name: 'November',
     co2_pv_kg: 400, co2_wp_kg: 100, co2_emob_kg: 50,
     co2_gesamt_kg: 550, co2_kumuliert_kg: 550, autarkie_prozent: 60,
+    // Päckchen Y: Äquivalente bewusst NICHT kg ÷ alter Faktor (550 ÷ 12,5 = 44) — die Sicht muss sie lesen, nicht rechnen.
+    co2_aequivalente: { baeume: 11, auto_km: 1000, fluege: 0.5, fluege_km: 2200 },
   },
   {
     jahr: 2025, monat: 5, monat_name: 'Mai',
     co2_pv_kg: 1200, co2_wp_kg: 200, co2_emob_kg: 100,
     co2_gesamt_kg: 1500, co2_kumuliert_kg: 2050, autarkie_prozent: 70,
+    co2_aequivalente: { baeume: 31, auto_km: 3000, fluege: 1.2, fluege_km: 6000 },
   },
 ]
-const CO2_BASIS = { monate: co2Monate, gesamtKg: 2050, loading: false, error: null, refresh: vi.fn() }
+const CO2_FAKTOREN = {
+  kg_co2_je_baum_jahr: 12.5, kg_co2_je_auto_km: 0.12, kg_co2_je_flug_km: 0.23, km_je_kurzstreckenflug: 1000, kg_co2_je_flug: 230,
+}
+const CO2_BASIS = { monate: co2Monate, gesamtKg: 2050, faktoren: CO2_FAKTOREN, loading: false, error: null, refresh: vi.fn() }
 
 const basisMock = {
   daten: [monat2024, monat2025], loading: false, strompreis: null, alleTarife: [],
@@ -118,6 +126,9 @@ describe('AuswertungenCo2V4 (Sub 2)', () => {
     //   genau der Defekt. Die Probe war also nur wahr, WEIL der Fehler da war;
     //   sie ist damit zugleich der Beleg, dass er Anwender erreicht hat.
     expect(screen.getByText('1 Monat')).toBeInTheDocument()
+    // Päckchen Y: die Äquivalente folgen demselben Filter — nur Mai 2025 (31 Bäume), nicht die Summe 42.
+    expect(screen.getAllByText('31').length).toBeGreaterThan(0)
+    expect(screen.queryByText('42')).toBeNull()
     cleanup()
     Object.assign(basisMock, { jahr: 'alle', gefiltert: [monat2024, monat2025] })
   })
@@ -157,6 +168,26 @@ describe('AuswertungenCo2V4 (Sub 2)', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
     cleanup()
     Object.assign(basisMock, { co2: CO2_BASIS })
+  })
+})
+
+describe('AuswertungenCo2V4 — Päckchen Y: Äquivalente aus der Antwort, keine Faktor-Konstante', () => {
+  it('zeigt Bäume, Auto-km und Flüge als Summe der Monats-Äquivalente der Antwort', async () => {
+    render(<AuswertungenCo2V4 basis={basis()} />)
+    await screen.findByText('CO₂-Bilanz & Wirkung')
+    // Σ der Antwort: 11 + 31 Bäume, 1.000 + 3.000 km, 0,5 + 1,2 Flüge.
+    expect(screen.getAllByText('42').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('4.000').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1,7').length).toBeGreaterThan(0)
+    // Gegenprobe auf die alte Client-Rechnung 2.050 kg ÷ 12,5 / ÷ 0,12 / ÷ 230.
+    expect(screen.queryByText('164')).toBeNull()
+    expect(screen.queryByText('17.083')).toBeNull()
+    expect(screen.queryByText('8,9')).toBeNull()
+  })
+
+  it('die Sicht trägt keine Äquivalenz-Faktoren mehr im Quelltext', () => {
+    const quelle = readFileSync(join(process.cwd(), 'src/v4/AuswertungenCo2V4.tsx'), 'utf8')
+    expect(quelle).not.toMatch(/\bKG_PRO_|\b12[.,]5\b|\b230\b/)
   })
 })
 

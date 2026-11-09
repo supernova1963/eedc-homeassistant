@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent } from '@testing-library/react'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { Nachhaltigkeit, NachhaltigkeitMonat } from '../api/cockpit'
-import { aktuellerMonat, cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
+import { CO2_AEQUIVALENTE_NULL, CO2_FAKTOREN_NULL, aktuellerMonat, cockpitJahr, jahrVergleich, monatsZeile } from '../test/factories'
 import { renderMitProvidern, stubMatchMedia } from '../test/render'
 
 // Zwei vergangene Jahre (2024/2025) → Default = neuestes mit Daten = 2025
@@ -87,12 +87,13 @@ const co2Monat = (jahr: number, monat: number, pv: number, kumuliert: number): N
   jahr, monat, monat_name: String(monat),
   co2_pv_kg: pv, co2_wp_kg: 20, co2_emob_kg: 10,
   co2_gesamt_kg: pv + 30, co2_kumuliert_kg: kumuliert,
-  autarkie_prozent: 66,
+  autarkie_prozent: 66, co2_aequivalente: CO2_AEQUIVALENTE_NULL,
 })
 
 const nachhaltigkeit: Nachhaltigkeit = {
   anlage_id: 1, co2_gesamt_kg: 1000, co2_pv_kg: 700, co2_wp_kg: 200, co2_emob_kg: 100,
-  aequivalent_baeume: 50, aequivalent_auto_km: 8000, aequivalent_fluege_km: 4000,
+  aequivalent_baeume: 50, aequivalent_auto_km: 8000, aequivalent_fluege: 0, aequivalent_fluege_km: 4000,
+  co2_faktoren: CO2_FAKTOREN_NULL,
   autarkie_durchschnitt_prozent: 66,
   monatswerte: [
     co2Monat(2024, 11, 100, 130),

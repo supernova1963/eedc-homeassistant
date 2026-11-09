@@ -674,6 +674,7 @@ def test_dienstliche_ladung_nur_im_layer_bewertet():
 # Anzeige, keine CO₂-Menge) und ein ganzzahliger Faktor.
 ALLOWED_CO2_LITERAL_FILES = {
     "core/calculations.py",   # die Definitionen `CO2_FAKTOR_*`
+    "core/berechnungen/co2_aequivalente.py",   # die Definitionen `KG_CO2_JE_*` der Äquivalente (Päckchen Y)
 }
 
 

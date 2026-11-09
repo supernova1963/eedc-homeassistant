@@ -796,7 +796,7 @@ deckungsgleich.
 ```
 GET /api/cockpit/uebersicht/{anlage_id}?jahr=2025       # Haupt-Dashboard
 GET /api/cockpit/prognose-vs-ist/{anlage_id}             # PVGIS SOLL vs IST
-GET /api/cockpit/nachhaltigkeit/{anlage_id}              # CO2-Bilanz — die EINE CO₂-Quelle: Cockpit/Jahr + Auswertungen/CO₂ (ganze Historie, kein ?jahr=)
+GET /api/cockpit/nachhaltigkeit/{anlage_id}              # CO2-Bilanz — die EINE CO₂-Quelle: Cockpit/Jahr + Auswertungen/CO₂ (ganze Historie, kein ?jahr=); Äquivalente je Monat + Faktoren (Layer co2_aequivalente)
 GET /api/cockpit/komponenten-zeitreihe/{anlage_id}       # Komponenten-Zeitreihen
 GET /api/cockpit/pv-strings/{anlage_id}                  # String-Vergleich (Jahres-Ansicht)
 GET /api/cockpit/pv-strings-gesamtlaufzeit/{anlage_id}   # String-Vergleich (Gesamtlaufzeit)
@@ -889,7 +889,7 @@ GET /api/monatsdaten/aggregiert/{anlage_id}?jahr=2025[&inkl_ohne_zaehlerzeile=tr
 Liefert Monatsdaten mit allen Komponenten-Summen:
 - Zählerwerte aus Monatsdaten (Einspeisung, Netzbezug)
 - PV-Erzeugung aggregiert aus allen PV-Modulen
-- Speicher-Daten (Ladung, Entladung)
+- Speicher-Daten (Ladung, Entladung, Round-Trip-η `speicher_effizienz_prozent` aus dem Layer)
 - WP/E-Auto/Wallbox-Daten
 - Berechnete Kennzahlen (Direktverbrauch, Eigenverbrauch, Autarkie)
 

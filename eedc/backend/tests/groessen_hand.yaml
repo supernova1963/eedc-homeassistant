@@ -444,8 +444,8 @@ kennwert:
     hinweis: "Monat aus `SonstigesFakten.verbrauch_kwh` (nur mit Verbraucher-Zeile); der Tag aus `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — Richtung aus der Kategorie, eine leere Kategorie zählt am Tag als Verbraucher."
   "speicher_effizienz":
     abschnitt: "BERECHNUNGEN.md#round-trip-wirkungsgrad-η--soc-korrigiert-nicht-roh"
-    test: "backend/tests/test_speicher_wirkungsgrad_symmetrie.py"
-    hinweis: "Den Monat rechnet der Client aus `speicher_ladung_kwh` und `speicher_entladung_kwh` (`lib/speicherWirkungsgrad.ts`, Spiegel des Layers); der Tag kommt fertig aus `tage_werte.py`."
+    test: "backend/tests/test_n252_speicher_wirkungsgrad_deckung.py"
+    hinweis: "Monat und Tag fertig aus dem Backend, beide über den Layer `speicher_wirkungsgrad`: der Monat aus Ladung und Entladung der Zeile (`monatsdaten_aggregiert._zeile_komponenten`, seit Päckchen Y — vorher rechnete ihn der Client), der Tag aus `tage_werte.py`."
   "speicher_entladung":
     abschnitt: "BERECHNUNGEN.md#schicht-1-rohdaten-eingabe"
     test: "backend/tests/test_block1_imd_aggregat_charnetz.py"

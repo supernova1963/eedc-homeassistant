@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from backend.api.deps import get_db
 from backend.models.investition import Investition
-from backend.core.berechnungen import eigenverbrauch_ohne_verluste_kwh
+from backend.core.berechnungen import CO2_FAKTOREN, co2_aequivalente, eigenverbrauch_ohne_verluste_kwh
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.eauto_wirtschaftlichkeit import (
     fossil_getankte_liter,
@@ -40,6 +40,23 @@ from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
+
+
+class Co2AequivalenteMonat(BaseModel):
+    """Äquivalente einer CO₂-Menge (Layer ``co2_aequivalente``), ungerundet — der Client summiert sie linear."""
+    baeume: float
+    auto_km: float
+    fluege: float
+    fluege_km: float
+
+
+class Co2FaktorenAntwort(BaseModel):
+    """Die Faktoren der Äquivalente (``CO2_FAKTOREN``) — für die Methodik-Texte des Clients."""
+    kg_co2_je_baum_jahr: float
+    kg_co2_je_auto_km: float
+    kg_co2_je_flug_km: float
+    km_je_kurzstreckenflug: float
+    kg_co2_je_flug: float
 
 
 class NachhaltigkeitMonat(BaseModel):
@@ -55,6 +72,8 @@ class NachhaltigkeitMonat(BaseModel):
     #: N-736: ``None`` = der Monat hat eine Zählerzeile, aber Einspeisung oder Netzbezug sind nicht erfasst
     #: (``meta.netz_erfasst``) — die Autarkie ist dann nicht ermittelbar und zählt nicht in den Durchschnitt.
     autarkie_prozent: Optional[float]
+    #: Päckchen Y: Äquivalente von ``co2_gesamt_kg`` (dem gerundeten Monatswert, den der Client auch summiert).
+    co2_aequivalente: Co2AequivalenteMonat
 
 
 class NachhaltigkeitResponse(BaseModel):
@@ -64,9 +83,13 @@ class NachhaltigkeitResponse(BaseModel):
     co2_pv_kg: float
     co2_wp_kg: float
     co2_emob_kg: float
+    # Päckchen Y (9.11.2026): aus dem Layer ``co2_aequivalente`` — Bäume seit dann ÷ 12,5 kg statt ÷ 20 (der Satz
+    # der Auswertung); ganzzahlig abgeschnitten wie bisher, Flüge auf eine Stelle.
     aequivalent_baeume: int
     aequivalent_auto_km: int
+    aequivalent_fluege: float
     aequivalent_fluege_km: int
+    co2_faktoren: Co2FaktorenAntwort
     monatswerte: list[NachhaltigkeitMonat]
     autarkie_durchschnitt_prozent: float
     # B6/Y-4 (05.09.2026, SOLL §6 Präzisierung): die WP-CO₂ aus geschätzter Wärme
@@ -188,6 +211,8 @@ async def get_nachhaltigkeit(
             autarkie_summe += autarkie
             autarkie_count += 1
 
+        co2_monat_angezeigt = round(co2_monat, 1)
+        aeq_monat = co2_aequivalente(co2_monat_angezeigt)
         monatswerte.append(NachhaltigkeitMonat(
             jahr=fakt.jahr,
             monat=fakt.monat,
@@ -195,9 +220,13 @@ async def get_nachhaltigkeit(
             co2_pv_kg=round(co2_pv, 1),
             co2_wp_kg=round(co2_wp, 1),
             co2_emob_kg=round(co2_emob, 1),
-            co2_gesamt_kg=round(co2_monat, 1),
+            co2_gesamt_kg=co2_monat_angezeigt,
             co2_kumuliert_kg=round(co2_kumuliert, 1),
             autarkie_prozent=round(autarkie, 1) if autarkie is not None else None,
+            co2_aequivalente=Co2AequivalenteMonat(
+                baeume=aeq_monat.baeume, auto_km=aeq_monat.auto_km,
+                fluege=aeq_monat.fluege, fluege_km=aeq_monat.fluege_km,
+            ),
         ))
 
         co2_pv_total += co2_pv
@@ -212,6 +241,7 @@ async def get_nachhaltigkeit(
         ),
     ) if co2_wp_total > 0 else None
     autarkie_avg = autarkie_summe / autarkie_count if autarkie_count > 0 else 0
+    aeq = co2_aequivalente(co2_gesamt)
 
     return NachhaltigkeitResponse(
         anlage_id=anlage_id,
@@ -219,9 +249,11 @@ async def get_nachhaltigkeit(
         co2_pv_kg=round(co2_pv_total, 1),
         co2_wp_kg=round(co2_wp_total, 1),
         co2_emob_kg=round(co2_emob_total, 1),
-        aequivalent_baeume=int(co2_gesamt / 20),
-        aequivalent_auto_km=int(co2_gesamt / 0.12),
-        aequivalent_fluege_km=int(co2_gesamt / 0.25),
+        aequivalent_baeume=int(aeq.baeume),
+        aequivalent_auto_km=int(aeq.auto_km),
+        aequivalent_fluege=round(aeq.fluege, 1),
+        aequivalent_fluege_km=int(aeq.fluege_km),
+        co2_faktoren=Co2FaktorenAntwort(**vars(CO2_FAKTOREN)),
         monatswerte=monatswerte,
         autarkie_durchschnitt_prozent=round(autarkie_avg, 1),
         co2_wp_vorbehalt=co2_wp_vorbehalt,

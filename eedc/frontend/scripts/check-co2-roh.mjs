@@ -45,6 +45,21 @@
  * die Einheiten-Umrechnung stieg aus, bevor der Operator DAVOR geprüft wurde.
  * Wer die Liste fortschreibt, misst neu — eine Grenze ohne Probe ist eine
  * Behauptung.
+ *
+ * **Regel 2 (Päckchen Y, 9.11.2026): der Client bildet aus einer CO₂-Menge
+ * keine Äquivalente.** Bäume, Auto-km und Flüge kommen aus dem Layer
+ * (`core/berechnungen/co2_aequivalente.py`) über `/cockpit/nachhaltigkeit` —
+ * je Monat `co2_aequivalente`, die Faktoren als `co2_faktoren` für die Texte.
+ * Bis dahin rechnete `v4/AuswertungenCo2V4.tsx` `gesamtCo2 ÷ KG_PRO_*` mit
+ * eigenen Konstanten (zweiter Faktorensatz neben der Route). Verstoß ist
+ * (a) eine Konstante `KG_PRO_*`/`KG_CO2_*`, (b) `<co2-Größe> * | / <Zahl>`
+ * oder `<Zahl> * | / <co2-Größe>` — außer `* 1000` (kg → g, wie oben), (c) ein
+ * Literal `12.5`/`12,5`/`230` in einer Datei mit `co2` im Pfad. Testdateien
+ * sind ausgenommen. **Grenzen, gemessen:** eine Größe ohne `co2` im Namen
+ * (`kg / 12.5`) und Konstanten anderer Schreibweise laufen an (b)/(a) vorbei;
+ * (c) sieht nur Dateien mit `co2` im Pfad. **Probe (9.11.2026):** die alte
+ * Konstante `KG_PRO_BAUM_JAHR = 12.5` samt `gesamtCo2 / KG_PRO_BAUM_JAHR`
+ * wieder eingesetzt ⇒ rot mit Datei:Zeile; ausgebaut ⇒ grün.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -132,9 +147,30 @@ for (const f of quellDateien(join(ROOT, 'src'))) {
   }
 }
 
+// Regel 2 — Äquivalente (Päckchen Y). Ein Treffer je Zeile und Regel genügt.
+const R2 = [
+  ['(a) Faktor-Konstante KG_PRO_*/KG_CO2_*', /\b(?:KG_PRO|KG_CO2)_[A-Z0-9_]+\b/],
+  ['(b) CO₂-Größe × | ÷ Zahl', /[\w.]*co2[\w.]*\s*[*/]\s*\d|(?<![\w.])\d[\d.]*\s*[*/]\s*[\w.]*co2/i],
+]
+const R2_LITERAL = ['(c) Äquivalenz-Literal 12,5/230 in einer CO₂-Datei', /(?<![\w.,])(?:12[.,]5|230)(?![\w]|[.,]\d)/]
+for (const f of quellDateien(join(ROOT, 'src'))) {
+  const datei = rel(f)
+  if (/\.test\.tsx?$/.test(datei) || datei.startsWith('src/test/')) continue
+  const regeln = /co2/i.test(datei) ? [...R2, R2_LITERAL] : R2
+  stripImports(stripComments(readFileSync(f, 'utf8'))).split('\n').forEach((text, i) => {
+    for (const [regel, muster] of regeln) {
+      const ohneUmrechnung = text.replace(/co2[\w.]*\s*\*\s*1000\b/gi, '')
+      if (muster.test(regel.startsWith('(b)') ? ohneUmrechnung : text)) {
+        verstoesse.push({ datei, zeile: i + 1, text: text.trim(), regel })
+      }
+    }
+  })
+}
+
 if (verstoesse.length) {
   for (const v of verstoesse) {
-    console.error(`✗ CO₂-Menge im Client gerechnet: ${v.datei}:${v.zeile} — ${v.text}`)
+    const was = v.regel ? `Äquivalent im Client gebildet ${v.regel}` : 'CO₂-Menge im Client gerechnet'
+    console.error(`✗ ${was}: ${v.datei}:${v.zeile} — ${v.text}`)
   }
   console.error(
     `\ncheck:co2-roh — ${verstoesse.length} Abweichung(en).\n` +
@@ -142,11 +178,13 @@ if (verstoesse.length) {
     'ADR-001/DI-2): Eigenverbrauch × Strommix + Wärmepumpe + E-Mobilität.\n' +
     'Der Client liest sie aus `/cockpit/nachhaltigkeit` — im Auswertungen-Sockel ' +
     'liegt sie als `basis.co2` bereit, in Cockpit/Jahr als `NachhaltigkeitMonat`.\n' +
-    `Erlaubt bleibt allein die Anzeige des Faktors selbst (\`${FAKTOR} * 1000\` → g/kWh).`,
+    `Erlaubt bleibt allein die Anzeige des Faktors selbst (\`${FAKTOR} * 1000\` → g/kWh).\n` +
+    'Äquivalente (Bäume, Auto-km, Flüge) bildet `core/berechnungen/co2_aequivalente.py`; der Client summiert ' +
+    'die Monatswerte `co2_aequivalente` und nimmt die Faktoren für Texte aus `co2_faktoren` (Regel 2).',
   )
   process.exit(1)
 }
 
 console.log(
-  `✓ check:co2-roh — 0 CO₂-Rechnungen im Client (${geprueft} Vorkommen von ${FAKTOR} geprüft).`,
+  `✓ check:co2-roh — 0 CO₂-Rechnungen und 0 Äquivalent-Bildungen im Client (${geprueft} Vorkommen von ${FAKTOR} geprüft).`,
 )
