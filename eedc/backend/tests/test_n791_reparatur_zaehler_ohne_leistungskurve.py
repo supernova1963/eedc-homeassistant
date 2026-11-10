@@ -327,6 +327,48 @@ async def test_a_lk_reparatur_schreibt_zaehlerwerte_und_laesst_den_leistungsverl
         assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
 
 
+async def _plan_ausfuehren(lage: _Lage, operation: str, params: dict) -> dict:
+    """E3 (W-11): eine Aktion über die eine Mechanik — Orchestrator ``plan`` + ``execute``."""
+    from backend.services import repair_orchestrator as ro
+    from backend.services.kanal import merken
+
+    merken.invalidiere(lage.aid)
+    async with lage.sitzungen() as db:
+        p = await ro.plan(ro.RepairOperationRequest(anlage_id=lage.aid, operation=ro.RepairOperationType(operation),
+                                                    params=params), db)
+        return (await ro.execute(p.plan_id, db)).operation_summary
+
+
+async def test_w11_bereich_ueber_plan_und_ausfuehren_behebt_die_drift(tmp_path):
+    """W-11 (E3), «Tage neu aufbauen» (``REAGGREGATE_RANGE``) an einem Bestandstag: nach dem Lauf ist die Drift still."""
+    async with _lk(tmp_path) as lage:
+        assert len(await _drift_wp(lage)) == 1
+        await _plan_ausfuehren(lage, "reaggregate_range", {"von": D2.isoformat(), "bis": D2.isoformat()})
+        assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
+
+
+async def test_w11_aus_home_assistant_neu_uebernehmen_ueber_plan_und_ausfuehren(tmp_path):
+    """W-11 (E3), «Aus Home Assistant neu übernehmen» (``SPIEGEL_ABGLEICH_TAG``) mit den Parametern des Befunds: der Plan
+    fragt Home Assistant nicht, der Lauf gleicht den Spiegel ab und baut den Tag — die Drift ist still, genau eine
+    Zeile ``repair``."""
+    from backend.models.activity_log import ActivityLog
+    from backend.services.daten_checker import DatenChecker
+
+    async with _lk(tmp_path) as lage:
+        with patch("backend.core.database.get_session", lage.sitzungen):
+            async with lage.sitzungen() as db:
+                with _heute_fest():
+                    erg = await DatenChecker(db)._check_datenquelle_drift(await lage.anlage(db))
+            (e,) = [e for e in erg if "weichen von HA-Statistics ab" in e.meldung]
+            assert e.action_kind == "spiegel_abgleich_tag"
+            await _plan_ausfuehren(lage, e.action_kind, e.action_params)
+            assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
+        async with lage.sitzungen() as db:
+            zeilen = (await db.execute(select(ActivityLog).where(ActivityLog.kategorie.in_(
+                ["repair", "ha_statistics"])))).scalars().all()
+        assert [z.kategorie for z in zeilen] == ["repair"]
+
+
 async def test_a2_lk_mit_leistungszuordnung(tmp_path):
     """Dieselbe Lage an einer Anlage mit Leistungszuordnung (der Weg ohne nachgestellte Aggregationsquelle):
     Leistungssensor ohne Verlauf und ohne Statistik."""

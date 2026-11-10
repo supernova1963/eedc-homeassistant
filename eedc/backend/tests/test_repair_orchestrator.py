@@ -12,6 +12,8 @@ Akzeptanz-Tests (Konzept Sektion 5 + 8 Päckchen 4):
   4. plan_lookup nach Expiry → LookupError beim Execute
   5. Doppel-Execute → LookupError beim zweiten Aufruf
   6. RESET_CLOUD_IMPORT mit providers-Filter → nur passende Felder
+
+Schwesterdateien: test_repair_operationen_checker.py (die vier Operationen der Daten-Checker-Knöpfe, E3).
 """
 
 from __future__ import annotations

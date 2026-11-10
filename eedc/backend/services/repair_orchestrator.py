@@ -80,6 +80,11 @@ class RepairOperationType(str, Enum):
     #: feldgenau) — `services/verwerfen_vor_quellbeginn.py`.
     VERWERFEN_VOR_QUELLBEGINN = "verwerfen_vor_quellbeginn"
     SOLCAST_REWRITE = "solcast_rewrite"
+    #: E3 Daten-Checker (Konzept §3.2): Plan/Ausführen in `services/repair_operationen_checker.py`.
+    TEMPERATUR_AUS_MESSUNG = "temperatur_aus_messung"
+    FELDWERT_ENTFERNEN = "feldwert_entfernen"
+    GERAETEWERTE_LOESCHEN = "geraetewerte_loeschen"
+    SPIEGEL_ABGLEICH_TAG = "spiegel_abgleich_tag"
 
 
 # Maximaler Zeitbereich für REAGGREGATE_RANGE pro Lauf.
@@ -1573,8 +1578,9 @@ async def plan(req: RepairOperationRequest, db: AsyncSession) -> RepairPlan:
         await _plan_solcast_rewrite(req, db)
         # Unreachable wegen NotImplementedError, hilft mypy
         raise NotImplementedError
-    else:
-        raise ValueError(f"Unbekannte Operation: {req.operation}")
+    else:  # E3: die Operationen der Daten-Checker-Knöpfe (unbekannte ⇒ ValueError dort)
+        from backend.services.repair_operationen_checker import plan_operation
+        estimated, warnings, op_preview = await plan_operation(req, db)
 
     # tz-aware UTC: Pydantic serialisiert dann mit `+00:00`-Marker, damit
     # Frontend `new Date(iso)` korrekt interpretiert (sonst wird naive UTC
@@ -1650,8 +1656,9 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         summary = await _execute_verwerfen_vor_quellbeginn(req, db)
     elif req.operation == RepairOperationType.SOLCAST_REWRITE:
         raise NotImplementedError("SOLCAST_REWRITE ist Päckchen 6")
-    else:
-        raise ValueError(f"Unbekannte Operation: {req.operation}")
+    else:  # E3: die Operationen der Daten-Checker-Knöpfe
+        from backend.services.repair_operationen_checker import execute_operation
+        summary = await execute_operation(req, db)
 
     audit_log_ids = await _audit_ids_since(db, audit_marker)
 

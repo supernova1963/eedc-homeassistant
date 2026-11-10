@@ -20,7 +20,7 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import {
-  BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY,
+  BLOCK_IDENTITAET, STATUS_COLORS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY,
   parameterAnzeigeName, parameterWertLabel,
 } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
@@ -39,7 +39,10 @@ import { ueberblickGeparkt } from '../components/komponenten/ueberblick/ueberbli
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
 import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
-import { SEVERITY_CONFIG, type CheckSchwere } from '../config/datenCheckerKategorien'
+import BefundHandgriff from '../components/datenchecker/BefundHandgriff'
+import LoesungswegPanel from '../components/datenchecker/LoesungswegPanel'
+import type { ReparaturMeldung } from '../pages/datenCheckerMeldungen'
+import { type CheckSchwere } from '../config/datenCheckerKategorien'
 import type { Investition } from '../types'
 import type { InfothekEintrag } from '../types/infothek'
 
@@ -350,30 +353,21 @@ function InfothekBlock({ invs }: { invs: Investition[] }) {
   )
 }
 
-/** Eine Daten-Checker-Befund-Zeile (Severity-Icon + Meldung + optionale Details). */
-function BefundRow({ e }: { e: CheckErgebnis }) {
-  const cfg = SEVERITY_CONFIG[e.schwere]
-  const Icon = cfg?.icon ?? STATUS_ICONS.warnung
-  return (
-    <li className="flex items-start gap-2 text-sm">
-      <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cfg?.colorClass ?? 'text-gray-400 dark:text-gray-500'}`} />
-      <div className="min-w-0">
-        <span className="text-gray-700 dark:text-gray-300">{e.meldung}</span>
-        {e.details && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>}
-      </div>
-    </li>
-  )
-}
-
 /** Daten-Checker-Block (#243): komponenten-zuordenbare Qualitäts-Befunde dieser
  *  Komponente (Stammdaten/Monatsdaten je Gerät), gefiltert über die vom Backend
- *  gesetzte `investition_id`. Bewusst dünn & read-only: anlagenweite Werte-
- *  Anomalien (Plausibilität/Drift, zeitpunkt-/reparatur-gebunden, K-B5) bleiben
- *  draußen und sind über den Cross-Link zur vollen Daten-Checker-Werkbank
- *  (inkl. Reparatur-Aktionen) erreichbar. */
-function DatenCheckerBlock({ anlageId, invs }: { anlageId: number; invs: Investition[] }) {
+ *  gesetzte `investition_id`. Seit E3 mit denselben Handgriffen wie der Daten-Checker
+ *  (`BefundHandgriff`: Aktion mit Vorschau, Sprung, Lösungsweg als Dialog); anlagenweite
+ *  Werte-Anomalien (Plausibilität/Drift, K-B5) bleiben draußen und sind über den
+ *  Cross-Link zum vollen Daten-Checker erreichbar. */
+export function DatenCheckerBlock({ anlageId, invs }: { anlageId: number; invs: Investition[] }) {
   const [befunde, setBefunde] = useState<CheckErgebnis[]>([])
   const [loading, setLoading] = useState(true)
+  // E3 (Entscheid Konzept §11 Nr. 2, Gegenprüfung Ü7): der Hub trägt dieselben Handgriffe wie der Daten-Checker
+  // (`BefundHandgriff`) — nach «Anwenden» lädt der Block neu (`refreshKey`), der Satz des Laufs steht darüber.
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [vorgangAktiv, setVorgangAktiv] = useState(false)
+  const [meldung, setMeldung] = useState<ReparaturMeldung | null>(null)
+  const [loesungsweg, setLoesungsweg] = useState<CheckErgebnis | null>(null)
 
   // Stabiler Primitiv-Key (id 0 = PV-UI-Aggregat ohne eigene Befunde).
   const idKey = invs.filter((i) => i.id !== 0).map((i) => i.id).join(',')
@@ -395,7 +389,7 @@ function DatenCheckerBlock({ anlageId, invs }: { anlageId: number; invs: Investi
       })
       .catch(() => { if (!ab) { setBefunde([]); setLoading(false) } })
     return () => { ab = true }
-  }, [anlageId, idKey])
+  }, [anlageId, idKey, refreshKey])
 
   return (
     <div className="space-y-3">
@@ -409,9 +403,21 @@ function DatenCheckerBlock({ anlageId, invs }: { anlageId: number; invs: Investi
         <p className="text-sm text-gray-500 dark:text-gray-400">Keine offenen Befunde für diese Komponente.</p>
       ) : (
         <ul className="space-y-2">
-          {befunde.map((e, i) => <BefundRow key={`${e.kategorie}-${i}`} e={e} />)}
+          {befunde.map((e, i) => (
+            <li key={`${e.kategorie}-${i}`}>
+              <BefundHandgriff befund={e} anlageId={anlageId} kompakt gesperrt={vorgangAktiv} onVorgang={setVorgangAktiv}
+                onErgebnis={(m) => { setMeldung(m); setRefreshKey((k) => k + 1) }} onLoesungsweg={setLoesungsweg} />
+            </li>
+          ))}
         </ul>
       )}
+      {meldung && (
+        <p className={`text-sm ${meldung.art === 'fehler' ? 'text-red-600 dark:text-red-400'
+          : meldung.art === 'hinweis' ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'}`}>
+          {meldung.text}
+        </p>
+      )}
+      {loesungsweg && <LoesungswegPanel befund={loesungsweg} als="dialog" onClose={() => setLoesungsweg(null)} />}
       <p className="text-xs text-gray-400 dark:text-gray-500">
         Zeitpunktbezogene Werte-Auffälligkeiten (Ausreißer, Lücken einzelner Tage) und ihre Reparatur
         liegen in der <span className="font-medium">Daten-Checker</span>-Werkbank.

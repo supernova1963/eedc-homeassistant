@@ -232,7 +232,7 @@ def _teile_gross() -> dp._Teile:
     t = dp._Teile(kopf=["- eedc-Version: x"], anlage=["- a"], komponenten=["- k"], zuordnungen=["- z"] * 50,
                   strompreise=["- s"])
     t.checker_kopf = ["- Zusammenfassung"]
-    t.checker = [("- [ok] x — " + "o" * 300, True) for _ in range(30)] + [("- [warning] y", False)]
+    t.checker = [("k", "ok", "- [ok] x — " + "o" * 300) for _ in range(30)] + [("k", "warning", "- [warning] y")]
     t.spiegel = [("- basis:pv (kWh, sum)", ["  - Abschnitt " + "s" * 200] * 10)]
     t.tagesreihen = [("2026-10", ["- " + "t" * 200] * 31), ("2026-09", ["- " + "t" * 200] * 31)]
     t.log = ["- " + "l" * 290] * 30
@@ -245,19 +245,89 @@ def test_w9_kuerzungsfolge_bis_zur_grenze():
     kopie, groessen, k_kopie = dp.setze_zusammen(t, "T", "kopie")
     assert len(datei.encode()) > dp.GRENZE_KOPIE_BYTES and k_datei == []
     assert len(kopie.encode()) <= dp.GRENZE_KOPIE_BYTES
-    folge = ["Log weggelassen", "Tagesreihen nur 1 Monat", "Spiegel-Abschnitte weggelassen", "Checker-OK-Zeilen weggelassen"]
+    folge = ["Log weggelassen", "Tagesreihen nur 1 Monat", "Spiegel-Abschnitte weggelassen", "Checker-OK-Zeilen weggelassen",
+             "Zuordnungen nur Felder mit Quelle", "Komponenten ohne Parameter", "Checker nur WARNING/ERROR"]
     assert len(k_kopie) >= 2 and k_kopie == folge[:len(k_kopie)]
     assert f"- Kürzungen: {', '.join(k_kopie)}" in kopie
     assert "#### 2026-10" in kopie and "#### 2026-09" not in kopie
     assert sorted(groessen) == list(range(1, 14))
 
 
-def test_w9_harter_schnitt_als_letzte_stufe():
+def test_w9_ganze_abschnitte_vor_dem_harten_schnitt():
+    """E3.0: reichen die weichen Stufen nicht, fallen ganze Abschnitte von hinten nach Priorität weg — der Text bleibt
+    ganz, der Kopf nennt jeden Wegfall."""
     t = _teile_gross()
     t.zuordnungen = ["- " + "z" * 500] * 60
     kopie, _, k = dp.setze_zusammen(t, "T", "kopie")
+    assert len(kopie.encode()) <= dp.GRENZE_KOPIE_BYTES and not kopie.endswith("… (abgeschnitten)\n")
+    assert k[-1] == "Abschnitt 4 Zuordnungen weggelassen" and "Abschnitt 5 Strompreise weggelassen" in k
+    assert not any(x.startswith(("Abschnitt 13", "Abschnitt 11")) for x in k), "schon von den weichen Stufen geleert"
+    assert f"- Kürzungen: {', '.join(k)}" in kopie
+    assert set(dp.WEGFALL_REIHENFOLGE).isdisjoint(dp.NIE_WEG) and len(_ueberschriften(kopie)) == 13
+
+
+def test_w9_harter_schnitt_als_letzte_stufe():
+    t = _teile_gross()
+    t.protokoll = ["- " + "p" * 500] * 60  # Abschnitt 8 fällt nie weg
+    kopie, _, k = dp.setze_zusammen(t, "T", "kopie")
     assert len(kopie.encode()) <= dp.GRENZE_KOPIE_BYTES
     assert k[-1] == f"am Ende abgeschnitten bei {dp.GRENZE_KOPIE_BYTES} Bytes" and kopie.endswith("… (abgeschnitten)\n")
+
+
+def _teile_lab_aehnlich() -> dp._Teile:
+    """Lab-ähnliche Anlage (Lab rc29, Winterborn: 36 Befunde, 71 Zuordnungszeilen, Datei ≈ 39 KB): Befunde und Zuordnungen
+    laufen durch dieselben Zeilen-Bauer wie das echte Paket (``_checker_zeilen``, ``zuordnungen_zeilen``)."""
+    from backend.services.daten_checker import CheckKategorie
+    from backend.services.daten_checker.handgriffe import HANDGRIFFE
+
+    kats = [k.value for k in CheckKategorie][:12]
+    codes = list(HANDGRIFFE)[:36]
+    schweren = ["warning"] * 6 + ["info"] * 18 + ["ok"] * 12
+    befunde = [CheckErgebnis(kategorie=kats[i % 12], schwere=schweren[i], code=codes[i],
+                             meldung=f"Befund {i}: " + "Meldungstext mit Zahl 12,5 kWh und Monat 10/2026 " * 2,
+                             werte={"monat": "2026-10", "kwh": 12.5 + i, "tage": i, "anteil": 0.25})
+               for i in range(36)]
+    result = DatenCheckResult(anlage_id=1, anlage_name="Winterborn", ergebnisse=befunde,
+                              zusammenfassung={"error": 0, "warning": 6, "info": 18, "ok": 12})
+    gruppen = [{"id": f"g{g}", "titel": f"Gruppe {g}", "felder": [
+        {"id": f"inv:{g}:feld_nummer_{f}_kwh", "label": f"Feld {f} der Gruppe {g} (Zählerstand)", "einheit": "kWh",
+         "quelle": "ha_connector" if g * 14 + f < 71 else "keine",
+         "ha_entity": f"sensor.winterborn_geraet_{g}_feld_{f}_energie" if g * 14 + f < 71 else None,
+         "bedarf": "pflicht" if f == 0 else "optional"} for f in range(14)]} for g in range(8)]
+    t = dp._Teile(kopf=["- eedc-Version: x"] * 9, anlage=["- " + "a" * 60] * 12)
+    t.komponenten = ["- #1 Wärmepumpe «Haus» · aktiv ja · 2020-01-01 … offen · Parameter " + "p=1, " * 30] * 10
+    t.komponenten_kurz = ["- #1 Wärmepumpe «Haus» · aktiv ja · 2020-01-01 … offen"] * 10
+    t.zuordnungen = dp.zuordnungen_zeilen(gruppen, set())
+    t.zuordnungen_kurz = dp.zuordnungen_zeilen(gruppen, set(), kurz=True)
+    t.strompreise = ["- #1 allgemein · fix · gültig 2024-01-01 … offen · Arbeitspreis 32.5 ct/kWh"] * 3
+    t.checker_kopf, t.checker, t.checker_fuss = dp._checker_zeilen(result, True)
+    t.spiegel = [(f"- basis:feld_{i} (kWh, sum): 2000 Stunden, 2026-08-01 00:00 … 2026-11-10 12:00",
+                  ["  - Abschnitt spiegel sensor.winterborn gültig ab 2026-08-01 00:00"] * 2) for i in range(15)]
+    t.protokoll = ["- 2026-11-10 02:45 · scheduler · ok · Kanalstatistik: Konsistenzlauf — " + "x" * 60] * 20
+    t.kanal_tage = ["- Kanal-Tage (aus dem HA-Spiegel): 2026-08-12 … 2026-11-10 (91)"] * 3
+    t.monate = ["- 2026-10 · Quelle manuell · Abschluss ja · Feldmaske " + "feld_kwh, " * 12] * 30
+    t.tagesreihen = [(m, ["- 2026-10-01 · ha_statistics · " + "k" * 120] * 31) for m in ("2026-10", "2026-09")]
+    t.zeitplaene = ["- Job · nächster Lauf 2026-11-11 02:45 · letzter Lauf 2026-11-10 02:45 ok"] * 12
+    t.log = ["- 2026-11-10 12:00 WARNING backend.x: " + "l" * 220] * 30
+    return t
+
+
+def test_w9_lab_aehnliche_anlage_behaelt_die_diagnose_abschnitte():
+    """E3.0 (Lab rc29): die Kopieren-Fassung einer Lab-ähnlichen Anlage bleibt ≤ 20 000 B und enthält die Abschnitte
+    1, 6, 7, 8, 12 vollständig; der Kopf nennt die Kürzungen; die Datei bleibt ungekürzt."""
+    t = _teile_lab_aehnlich()
+    assert len([z for z in t.zuordnungen if z.startswith("- inv:")]) >= 70 and len(t.checker) == 36
+    datei, _, k_datei = dp.setze_zusammen(t, "T", "datei")
+    kopie, groessen, k = dp.setze_zusammen(t, "T", "kopie")
+    assert len(datei.encode()) > 30_000 and k_datei == [] and "- Kürzungen: keine" in datei
+    assert len(kopie.encode()) <= dp.GRENZE_KOPIE_BYTES and not kopie.endswith("… (abgeschnitten)\n")
+    assert k and f"- Kürzungen: {', '.join(k)}" in kopie
+    abschnitte = dict(re.findall(r"^## (\d+)\. .+\n((?:(?!## \d).*\n)*)", kopie, re.M))
+    for nr in (1, 6, 7, 8, 12):
+        assert "weggelassen (Kürzung)" not in abschnitte[str(nr)], nr
+    assert "2026-11-10 02:45 · scheduler" in abschnitte["8"] and "- Job · nächster Lauf" in abschnitte["12"]
+    assert all(f"] {c} — " in abschnitte["6"] for _, sw, z in t.checker if sw == "warning"
+               for c in [z.split("] ")[1].split(" ")[0]])
 
 
 async def test_w9_kopie_der_fixture_unter_der_grenze_mit_kopfzeile(db):
@@ -296,7 +366,7 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
         kategorie="datenquelle_drift", schwere="info",
         meldung="2026-11-02: PV 123.909,6 → HA 13,7 kWh (Δ −123.895,9 kWh, −100,0 %)",
         altlink="/einstellungen/daten?block=energieprofil&karte=werkbank",
-        action=Aktion("spiegel_abgleich_tag", {"anlage_id": a.id, "datum": "2026-11-02"}, "Aus Home Assistant neu übernehmen"),
+        action=Aktion("spiegel_abgleich_tag", {"datum": "2026-11-02"}),
         code="drift_tag", werte={"datum": "2026-11-02", "achse": "pv", "eedc": 123909.6, "ha": 13.7, "delta": -123895.9,
                                  "prozent": -99.99},
     )
@@ -314,8 +384,8 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
     # (1) Version und Betriebsart
     assert f"- eedc-Version: {APP_VERSION}" in t and "- Betriebsart: Standalone" in t
     # (2) welche Drift-Zeile, mit beiden Werten
-    drift_zeile = next(z for z in t.splitlines() if "code drift_tag" in z)
-    assert '"eedc":123909.6' in drift_zeile and '"ha":13.7' in drift_zeile and "Aktion spiegel_abgleich_tag" in drift_zeile
+    drift_zeile = next(z for z in t.splitlines() if z.startswith("- [info] drift_tag — "))
+    assert '"eedc":123909.6' in drift_zeile and '"ha":13.7' in drift_zeile and "### datenquelle_drift" in t
     # (3) lief der Nachtlauf, mit welchem Ergebnis
     assert "2026-11-10 02:45 · scheduler · ok · Kanalstatistik: Konsistenzlauf — alle Abschnitte stimmen" in t
     assert "Wetter: fremde Zeile" not in t
@@ -335,7 +405,7 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
 async def test_monate_aus_befunden_und_angefragt(db):
     e = [CheckErgebnis(kategorie="x", schwere="warning", meldung="m", werte={"von": "2026-08-30", "bis": "2026-09-02"}),
          CheckErgebnis(kategorie="x", schwere="ok", meldung="m", werte={"datum": "2026-10-01"}),
-         CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("x", {"datum": "2026-07-04"}, "x"))]
+         CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("x", {"datum": "2026-07-04"}))]
     assert dp.monate_aus_befunden(e) == [(2026, 9), (2026, 8), (2026, 7)]
     a = await _anlage(db)
     t = (await dp.baue_paket(db, a.id, monate=[(2026, 1), (2026, 10), (2026, 9)], jetzt=JETZT)).text

@@ -52,7 +52,7 @@ async def test_pv_toter_tag_mit_einspeisung_wird_genannt(db):
     assert e.meldung.startswith("1 Tag(e) mit mehr Einspeisung als Erzeugung")
     assert "2026-05-03: Einspeisung 8,0 kWh, PV 0,0 kWh" in e.details
     assert e.action_kind == "reaggregate_range"
-    assert e.action_params == {"anlage_id": a.id, "von": "2026-05-03", "bis": "2026-05-03"}
+    assert e.action_params == {"von": "2026-05-03", "bis": "2026-05-03"}
 
 
 @pytest.mark.asyncio

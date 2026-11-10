@@ -34,7 +34,8 @@ class ZielResponse(BaseModel):
 
 
 class AktionResponse(BaseModel):
-    """E2: Inline-Handgriff eines Befunds; `action_*` sind daraus abgeleitet."""
+    """E2: Inline-Handgriff eines Befunds; `action_*` sind daraus abgeleitet. E3: Plan/Execute-Form (`operation` =
+    Reparatur-Operation, `params` = Plan-Parameter); `label` ist der Knopf-Text aus dem Katalog."""
     operation: str
     params: dict
     label: str
@@ -113,7 +114,7 @@ async def daten_check(
                 werte=e.werte,
                 code=e.code,
                 ziel=ZielResponse(**vars(e.ziel)) if e.ziel else None,
-                action=AktionResponse(**vars(e.action)) if e.action else None,
+                action=AktionResponse(**vars(e.action), label=e.action_label) if e.action else None,
             )
             for e in result.ergebnisse
         ],

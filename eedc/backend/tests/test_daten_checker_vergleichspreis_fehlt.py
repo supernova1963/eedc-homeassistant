@@ -106,8 +106,33 @@ async def test_offener_monat_meldet_warnung_mit_reparatur(db):
     # Der Knopf ist der Punkt: der Reparatur-Pfad existierte, war aber nur über
     # die Reparatur-Werkbank erreichbar.
     assert e.action_kind == "kraftstoffpreis_backfill"
-    assert e.action_params == {"anlage_id": anlage.id}
+    assert e.action_params == {"scope": "monats"}  # E3: Plan-Parameter von KRAFTSTOFFPREIS_BACKFILL
     assert e.action_label
+
+
+async def test_w11_benzinpreise_nachtragen_ueber_plan_und_ausfuehren(db, monkeypatch):
+    """W-11 (E3): der Knopf «Benzinpreise nachtragen» geht über ``plan`` → ``execute`` mit den Parametern des Befunds;
+    danach meldet die Prüfung den Monat nicht mehr (Wochenpreise ohne Netz)."""
+    from backend.services import kraftstoff_preis_service as kps
+    from backend.services.repair_orchestrator import (
+        RepairOperationRequest, RepairOperationType, _reset_state_for_tests, execute, plan,
+    )
+
+    async def _preise(_land, force_refresh=False):
+        return [(date(2026, 6, 1), 1.81), (date(2026, 6, 29), 1.79)]
+
+    monkeypatch.setattr(kps, "get_kraftstoffpreise", _preise)
+    _reset_state_for_tests()
+    anlage = await _seed(db, mit_eauto=True)
+    await _add_monat(db, anlage.id, 2026, 6, preis=None)
+    await db.commit()
+    (e,) = await _run(db, anlage)
+    p = await plan(RepairOperationRequest(anlage_id=anlage.id, operation=RepairOperationType(e.action_kind),
+                                          params=e.action_params), db)
+    assert p.estimated_changes == {"monats_offen": 1}
+    await execute(p.plan_id, db)
+    nachher = await _run(db, anlage)
+    assert [x.schwere for x in nachher] == [CheckSeverity.OK.value], [x.meldung for x in nachher]
 
 
 async def test_monate_vor_der_anschaffung_zaehlen_nicht(db):

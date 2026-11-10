@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, RefreshCw, Trash2, Wrench } from 'lucide-react'
 
-import { Alert, Button, Card, Input, Select, DatumFeld, Checkbox } from '../ui'
+import { Alert, Button, Card, Input, Select, DatumFeld, Checkbox, MonatPicker } from '../ui'
 import {
   KANAL_ABGLEICH_BESCHREIBUNG,
   OPERATION_META,
@@ -49,6 +49,7 @@ import {
   ROHDATEN_LOESCH_BESCHREIBUNG,
 } from '../../pages/datenCheckerMeldungen'
 import { mitAnzahl } from '../../lib/plural'
+import { useWerkbankPlanAusUrl } from '../../hooks/useWerkbankPlanAusUrl'
 import { VERWERFEN_LEER, VerwerfenParams, verwerfenParams, type VerwerfenWerte } from './VerwerfenParams'
 
 /** Deutscher Name eines Vorschau-/Ergebnis-Zählers; unbekannte Schlüssel
@@ -90,6 +91,8 @@ interface OperationParamsState {
   providers: string  // Komma-Liste, leer = alle
   // verwerfen_vor_quellbeginn (HA-Bauform S3, E-S3-5)
   verwerfen: VerwerfenWerte
+  // geraetewerte_loeschen (E3): `YYYY-MM`
+  monat: string
 }
 
 const DEFAULT_PARAMS: OperationParamsState = {
@@ -101,6 +104,7 @@ const DEFAULT_PARAMS: OperationParamsState = {
   scope: 'beides',
   providers: '',
   verwerfen: VERWERFEN_LEER,
+  monat: '',
 }
 
 const WORKBENCH_OPERATIONS = OPERATION_META.filter((o) => o.inWorkbench)
@@ -149,6 +153,9 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anlageId])
 
+  // E3: «Details in der Werkbank» aus dem Daten-Checker — der vorhandene Plan (`plan=<id>`) erscheint in der Vorschau.
+  useWerkbankPlanAusUrl(anlageId, (p) => { setSelectedOp(p.operation); setExecuteResult(null); setPlan(p) })
+
   // #235 detLAN: Bei Parameter-Änderung Execute-Result-Banner verwerfen,
   // sonst bleibt der "Plan erstellen"-Button hinter dem letzten Result
   // versteckt (`!plan && !executeResult`-Bedingung) und User muss
@@ -158,7 +165,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     setError(null)
   }, [
     params.datum, params.von, params.bis, params.mit_resnap,
-    params.range_confirmed, params.scope, params.providers, params.verwerfen,
+    params.range_confirmed, params.scope, params.providers, params.verwerfen, params.monat,
   ])
 
   // Operation-Wechsel: Plan-Vorschau + Result zurücksetzen
@@ -227,14 +234,23 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
       }
       case 'verwerfen_vor_quellbeginn':
         return verwerfenParams(params.verwerfen)
+      case 'spiegel_abgleich_tag':
+        return { datum: params.datum }
+      case 'geraetewerte_loeschen': {
+        const [jahr, monat] = params.monat.split('-')
+        return { jahr: Number(jahr), monat: Number(monat) }
+      }
       default:
         return {}
     }
   }
 
   const validateParams = (): string | null => {
-    if (selectedOp === 'reaggregate_day' && !params.datum) {
+    if ((selectedOp === 'reaggregate_day' || selectedOp === 'spiegel_abgleich_tag') && !params.datum) {
       return 'Bitte einen Tag auswählen.'
+    }
+    if (selectedOp === 'geraetewerte_loeschen' && !params.monat) {
+      return 'Bitte einen Monat auswählen.'
     }
     if (selectedOp === 'verwerfen_vor_quellbeginn' && (!params.verwerfen.kanal || !params.verwerfen.datum)) {
       return 'Bitte ein Feld mit Sensortausch und den Zeitpunkt wählen.'
@@ -595,6 +611,20 @@ function OperationParamsEditor({ anlageId, operation, params, setParams, disable
       </div>
     )
   }
+  if (operation === 'spiegel_abgleich_tag') {
+    return (
+      <DatumFeld label="Tag" value={params.datum} onChange={(v) => setParams((p) => ({ ...p, datum: v }))} disabled={disabled} />
+    )
+  }
+  if (operation === 'geraetewerte_loeschen') {
+    return (
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monat</label>
+        <MonatPicker value={params.monat} onChange={(v) => setParams((p) => ({ ...p, monat: v }))} disabled={disabled}
+          ariaLabel="Monat ohne Zählerzeile" />
+      </div>
+    )
+  }
   if (operation === 'vollbackfill') {
     return (
       <div className="grid grid-cols-2 gap-2 items-start">
@@ -668,6 +698,9 @@ function PlanPreviewBlock({
 }: PlanPreviewProps) {
   const totalDiff = plan.diff_total_count
   const truncated = totalDiff > plan.diff_preview.length
+  // E3 (Gegenprüfung Ü4): ein Plan «nichts zu tun» (z. B. Monat hat noch eine Zählerzeile) zeigt seinen Satz und bietet
+  // kein Ausführen an — wie der Vorschau-Kasten im Daten-Checker.
+  const nichtsZuTun = typeof plan.operation_preview?.nichts_zu_tun === 'string' ? plan.operation_preview.nichts_zu_tun : null
 
   return (
     <div className="mt-4 border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/40 dark:bg-amber-900/10">
@@ -688,6 +721,8 @@ function PlanPreviewBlock({
         ))}
       </div>
 
+      {nichtsZuTun && <p className="mb-3 text-sm text-gray-800 dark:text-gray-200">{nichtsZuTun}</p>}
+
       {/* Warnungen */}
       {plan.warnings.length > 0 && (
         <ul className="mb-3 space-y-1">
@@ -707,12 +742,12 @@ function PlanPreviewBlock({
 
       {/* Aktionen */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button onClick={onExecute} disabled={executeRunning}>
+        {!nichtsZuTun && <Button onClick={onExecute} disabled={executeRunning}>
           {executeRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="max-sm:hidden h-4 w-4 mr-2" />}
           {totalDiff > 0
             ? `Diese ${totalDiff} ${totalDiff === 1 ? 'Änderung' : 'Änderungen'} anwenden`
             : 'Operation ausführen'}
-        </Button>
+        </Button>}
         <Button variant="ghost" size="sm" onClick={onDiscard} disabled={executeRunning}>
           Plan verwerfen
         </Button>

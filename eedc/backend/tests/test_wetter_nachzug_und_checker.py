@@ -310,10 +310,26 @@ async def test_checker_meldet_fehlende_strahlungswerte(db):
     assert zeilen, [e.meldung for e in await _befunde(db, a.id)]
     e = zeilen[0]
     assert "Wetterreihe nachziehen" in e.details
-    # ⛔ Kein Inline-Knopf: der Nachzug ERSETZT vorhandene Werte, und die
-    # Vorschau muss vorher sagen, wie viele. Die Zeile führt zur Werkbank.
-    assert e.action_kind is None, e.action_kind
+    # Der Nachzug ERSETZT vorhandene Werte, und die Vorschau muss vorher sagen,
+    # wie viele — seit E3 geht der Knopf über Plan → Vorschau-Kasten → «Anwenden».
+    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
     assert e.link
+
+
+@pytest.mark.asyncio
+async def test_w11_wetterreihe_nachziehen_ueber_plan_und_ausfuehren(db, brightsky):
+    """W-11 (E3): «Wetterreihe nachziehen» über ``plan`` → ``execute`` mit den Parametern des Befunds; danach ist die
+    Zeile «Globalstrahlung oder Sonnenstunden fehlen» still (Archive ohne Netz, Fixture ``brightsky``)."""
+    from backend.services.repair_orchestrator import _reset_state_for_tests, execute, plan
+
+    _reset_state_for_tests()
+    a = await _anlage(db, [_vormonat(HEUTE)])
+    (e,) = [e for e in await _befunde(db, a.id) if "Globalstrahlung oder Sonnenstunden" in e.meldung]
+    p = await plan(RepairOperationRequest(anlage_id=a.id, operation=RepairOperationType(e.action_kind),
+                                          params=e.action_params), db)
+    assert p.estimated_changes["monate_ohne_werte"] == 1
+    await execute(p.plan_id, db)
+    assert not [x for x in await _befunde(db, a.id) if "Globalstrahlung oder Sonnenstunden" in x.meldung]
 
 
 @pytest.mark.asyncio
@@ -353,7 +369,7 @@ async def test_checker_meldet_eine_gemischte_reihe(db):
     e = zeilen[0]
     assert "1 Monat(e)" in e.meldung
     assert "Open-Meteo" in e.details and "Bright Sky" in e.details
-    assert e.action_kind is None, e.action_kind
+    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
 
 
 @pytest.mark.asyncio
@@ -433,8 +449,8 @@ async def test_checker_meldet_werte_ohne_festgehaltene_quelle(db):
     # ⛔ Die Zeile darf NICHT behaupten, die Reihe sei gemischt — sie weiß es nicht.
     assert "nicht mehr" in e.details and "feststellen" in e.details
     assert "stammen aus einer anderen" not in e.meldung
-    # Kein Inline-Knopf: derselbe Lauf ersetzt, was schon dasteht.
-    assert e.action_kind is None, e.action_kind
+    # E3: Aktion mit Vorschau — derselbe Lauf ersetzt, was schon dasteht; der Plan nennt es vorher.
+    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
     assert e.link
 
 

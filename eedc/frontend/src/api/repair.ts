@@ -20,6 +20,11 @@ export type RepairOperationType =
   | 'reset_cloud_import'
   | 'verwerfen_vor_quellbeginn'
   | 'solcast_rewrite'
+  // E3 Daten-Checker (backend `services/repair_operationen_checker.py`)
+  | 'temperatur_aus_messung'
+  | 'feldwert_entfernen'
+  | 'geraetewerte_loeschen'
+  | 'spiegel_abgleich_tag'
 
 /** Hard-Cap im Backend (REAGGREGATE_RANGE_MAX_DAYS). UI muss vorab gaten. */
 export const REAGGREGATE_RANGE_MAX_DAYS = 31
@@ -145,6 +150,38 @@ export const OPERATION_META: OperationMeta[] = [
       'Kein Rückweg: die Vorschau sagt, was danach weg ist.',
     inWorkbench: true,
   },
+  // E3 Daten-Checker: die Knöpfe der Befunde als Operationen (Labels wörtlich wie `repair_protokoll.OPERATION_LABELS`,
+  // Vitest-Spiegel `src/test/operation-labels.test.ts`).
+  {
+    type: 'temperatur_aus_messung',
+    label: 'Temperatur aus Messung übernehmen',
+    description:
+      'Trägt die Ø Temperatur in Monate ohne Wert ein — aus deinen eigenen Messwerten (Stundenmittel, sonst Tages-Min/Max), ' +
+      'ohne Netzabruf. Gepflegte Werte bleiben unberührt.',
+    inWorkbench: true,
+  },
+  {
+    type: 'geraetewerte_loeschen',
+    label: 'Messwerte ohne Monatszeile entfernen',
+    description:
+      'Entfernt die Messwerte einzelner Geräte eines Monats, der keine Zählerzeile mehr hat — endgültig. ' +
+      'Wer die Werte behalten will, erfasst den Monat neu; dann gehören sie wieder dazu.',
+    inWorkbench: true,
+  },
+  {
+    type: 'spiegel_abgleich_tag',
+    label: 'Aus Home Assistant neu übernehmen',
+    description:
+      'Übernimmt die Zählerstatistik eines Tages neu aus Home Assistant und baut den Tag danach auf — ' +
+      'wirksam, wenn du dort korrigiert hast.',
+    inWorkbench: true,
+  },
+  {
+    type: 'feldwert_entfernen',
+    label: 'Wert in nicht geführtem Feld entfernen',
+    description: 'Entfernt einen gespeicherten Wert aus einem Feld, das das Gerät nicht führt — endgültig (Knopf im Daten-Checker).',
+    inWorkbench: false,
+  },
   {
     type: 'reaggregate_today',
     label: 'Heutigen Tag neu aggregieren',
@@ -177,17 +214,6 @@ export interface KanalAbgleichErgebnis {
   gekuerzt: { key: string; ha_erste_ts: number; behalten: number }[]
   uebersprungen: Record<string, number>
   fehler: number
-  meldung: string
-}
-
-/** N-790 (ottokar): «Aus Home Assistant neu übernehmen» im Daten-Checker — der Abgleich (Felder wie
- *  `KanalAbgleichErgebnis`), danach die Neu-Aggregation des Tages (Felder von `reaggregate-tag`; scheitert sie,
- *  `status: "fehler"` mit `fehler`) und ein Satz `meldung` in Anwender-Sprache. */
-export interface SpiegelAbgleichTagErgebnis {
-  anlage_id: number
-  datum: string
-  abgleich: KanalAbgleichErgebnis
-  reaggregation: { status: string; datum: string; fehler?: string }
   meldung: string
 }
 
@@ -235,8 +261,4 @@ export const repairApi = {
   /** HA-Spiegel jetzt abgleichen (direkter Pfad ohne Plan, wie das Löschen). */
   kanalAbgleich: (anlageId: number): Promise<KanalAbgleichErgebnis> =>
     api.post(`/energie-profil/${anlageId}/kanal-abgleich`),
-
-  /** N-790: Abgleich mit der HA-Statistik, danach den Tag neu aufbauen (Knopf der Drift-Befunde im Daten-Checker). */
-  spiegelAbgleichTag: (anlageId: number, datum: string): Promise<SpiegelAbgleichTagErgebnis> =>
-    api.post(`/energie-profil/${anlageId}/spiegel-abgleich-tag`, { datum }),
 }

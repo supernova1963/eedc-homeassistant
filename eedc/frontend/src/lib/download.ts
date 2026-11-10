@@ -23,3 +23,14 @@ export async function downloadFile(url: string, filename: string): Promise<void>
   document.body.removeChild(a)
   URL.revokeObjectURL(blobUrl)
 }
+
+/**
+ * Läuft eedc im Rahmen von Home Assistant (Ingress-Pfad oder eingebettet, z. B. Companion-App)? Dort öffnet ein
+ * `_blank`-Fenster extern **ohne** Ingress-Sitzung ⇒ 401 (derselbe Grund wie oben). Genutzt vom Lösungsweg-Panel
+ * (E3 Daten-Checker, Entscheid Konzept §11 Nr. 10): «In eigenem Fenster öffnen» nur außerhalb dieses Rahmens.
+ */
+export function istImHaRahmen(
+  ort: Pick<Location, 'pathname'> = window.location, fenster: Pick<Window, 'self' | 'top'> = window,
+): boolean {
+  return ort.pathname.includes('/api/hassio_ingress/') || fenster.self !== fenster.top
+}

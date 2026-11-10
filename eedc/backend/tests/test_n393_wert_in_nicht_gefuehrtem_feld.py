@@ -86,10 +86,7 @@ async def test_klimaanlage_warmwasser_bekommt_eine_meldung_mit_handgriff(db):
     assert "Warmwasserkreis" in e.meldung
     assert e.action_kind == "feldwert_entfernen"
     assert e.action_label == "Wert entfernen"
-    assert e.action_params == {
-        "investition_id": klima.id, "feld": "warmwasser_kwh",
-        "label": "Warmwasser-Wärme", "monate": ["06/2026"],
-    }
+    assert e.action_params == {"investition_id": klima.id, "feld": "warmwasser_kwh"}  # E3: Plan-Parameter
     assert "„Wert entfernen“" in e.details, "der genannte Weg ist der Knopf, kein Umtragen"
     assert "umträgst" not in e.details, "der alte Weg ins Leere darf nicht mehr genannt werden"
     assert e.investition_id == klima.id
@@ -105,7 +102,11 @@ async def test_mehrere_monate_ergeben_eine_meldung_und_alle_monate_in_der_aktion
     )
     befunde = _befunde(db, klima)
     assert len(befunde) == 1
-    assert befunde[0].action_params["monate"] == ["05/2026", "06/2026"]
+    # E3: die Monate stehen im Plan der Operation FELDWERT_ENTFERNEN (Vorschau), nicht mehr in der Aktion.
+    from backend.services.repair_orchestrator import RepairOperationRequest, RepairOperationType, plan
+    p = await plan(RepairOperationRequest(anlage_id=klima.anlage_id, operation=RepairOperationType.FELDWERT_ENTFERNEN,
+                                          params=befunde[0].action_params), db)
+    assert p.operation_preview["monate"] == ["05/2026", "06/2026"]
     assert "2 Monat(en)" in befunde[0].meldung
 
 

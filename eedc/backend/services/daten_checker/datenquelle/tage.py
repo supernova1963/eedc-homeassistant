@@ -327,10 +327,9 @@ class TageChecks:
                 else HEUTE_DATENQUELLEN
             ),
             action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren") if reparatur_moeglich else None,
+            }) if reparatur_moeglich else None,
             code="tageswerte_fehlen_tage",
             werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
                    "komponenten": betroffene_keys, "reparatur_moeglich": reparatur_moeglich,
@@ -356,7 +355,7 @@ class TageChecks:
                     "Tages- und Stundenwerte, nicht die Monatswerte."
                 ),
                 altlink=HEUTE_ENERGIEPROFIL,
-                action=Aktion("reaggregate_day", {"anlage_id": anlage.id, "datum": datum_.isoformat()}, "Tag reparieren"),
+                action=Aktion("reaggregate_day", {"datum": datum_.isoformat()}),
                 code="tageswerte_fehlen_tag",
                 werte={"datum": datum_.isoformat(), "ha_kwh": dict(sorted(fehlend.items()))},
             ))

@@ -78,6 +78,7 @@ def test_altfelder_sind_abgeleitet():
     assert e.link == "/einstellungen/investitionen"
     e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", ziel=ziel_komponente(7, feld="aktiv"), altlink=KEIN_LINK)
     assert e.link is None
-    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("reaggregate_day", {"datum": "d"}, "L"))
+    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("reaggregate_day", {"datum": "d"}))
+    # E3: der Knopf-Text kommt aus dem Katalog (`handgriffe.knopf_text`), nicht vom Erzeuger.
     assert (e.action_kind, e.action_params, e.action_label, e.link, e.klasse) == (
-        "reaggregate_day", {"datum": "d"}, "L", None, "aktion")
+        "reaggregate_day", {"datum": "d"}, "Tag neu aufbauen", None, "aktion")

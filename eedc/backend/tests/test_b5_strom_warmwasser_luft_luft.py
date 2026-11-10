@@ -379,7 +379,8 @@ async def test_der_checker_benennt_den_unmoeglichen_warmwasser_wert(db):
     # war ein Weg ins Leere — das Feld ist an der Klimaanlage nicht erreichbar.
     assert treffer[0].action_kind == "feldwert_entfernen"
     assert treffer[0].action_params["feld"] == "warmwasser_kwh"
-    assert treffer[0].action_params["monate"] == ["01/2025"]
+    assert treffer[0].action_params == {"investition_id": treffer[0].investition_id, "feld": "warmwasser_kwh"}
+    assert "01/2025" in treffer[0].meldung + (treffer[0].details or "")  # die Monate nennt Text und Vorschau (E3)
 
 
 async def test_der_checker_schweigt_wenn_die_klimaanlage_kein_warmwasser_hat(db):

@@ -52,23 +52,35 @@ from ._shared import logger
 router = APIRouter()
 
 
+async def _tag_ohne_eigenen_lauf(req: RepairOperationRequest, db: AsyncSession) -> dict:
+    """Neu-Aggregation eines Tages als **Teil** eines anderen Laufs (E3: Operation ``SPIEGEL_ABGLEICH_TAG``): dieselben
+    zwei Schritte wie ``plan()`` + ``execute()`` (Prüfung, dann Lauf), aber ohne zweiten Plan im Werkbank-Verlauf und ohne
+    zweite Protokollzeile — die Zeile schreibt der äußere Lauf (W-12: eine Zeile je Lauf)."""
+    await orch._plan_reaggregate_day(req, db)
+    return await orch._execute_reaggregate_day(req, db)
+
+
 async def _run_via_orchestrator(
     db: AsyncSession,
     *,
     anlage_id: Optional[int],
     operation: RepairOperationType,
     params: dict,
+    eigener_lauf: bool = True,
 ) -> dict:
     """Wrapper-Helper: plan() + execute() + heave die alten Response-Felder.
 
     Wirft HTTPException bei domänen-spezifischen Fehlern (404 wenn Anlage
     fehlt, 400 bei ValueError, 500 bei sonstigen). Damit verhalten sich
-    die Wrapper wie die alten Direkt-Endpoints.
+    die Wrapper wie die alten Direkt-Endpoints. ``eigener_lauf=False`` (nur
+    ``REAGGREGATE_DAY``): ``_tag_ohne_eigenen_lauf`` statt plan() + execute().
     """
     try:
         req = RepairOperationRequest(
             anlage_id=anlage_id, operation=operation, params=params,
         )
+        if not eigener_lauf:
+            return await _tag_ohne_eigenen_lauf(req, db)
         plan_obj = await orch.plan(req, db)
         result = await orch.execute(plan_obj.plan_id, db)
     except LookupError as e:
@@ -198,12 +210,21 @@ async def reaggregate_tag(
     Wärmepumpe nichts holen konnte, stand vorher nirgends und war von
     „PV-Wert unverändert" nicht unterscheidbar (Forum simon42 #89667/83).
     """
+    return await tag_neu_aufbauen_antwort(db, anlage_id, datum, mit_resnap)
+
+
+async def tag_neu_aufbauen_antwort(
+    db: AsyncSession, anlage_id: int, datum: date, mit_resnap: bool, *, eigener_lauf: bool = True,
+) -> dict:
+    """Die Antwort von ``reaggregate-tag`` (PV-Tagessumme vor/nach, Komponenten, Quelle). ``eigener_lauf=False``: als
+    Teil eines anderen Laufs ohne eigenen Plan und ohne eigene Protokollzeile (E3, ``SPIEGEL_ABGLEICH_TAG``)."""
     pv_kwh_alt = await _pv_tagessumme(db, anlage_id, datum)
     summary = await _run_via_orchestrator(
         db,
         anlage_id=anlage_id,
         operation=RepairOperationType.REAGGREGATE_DAY,
         params={"datum": datum.isoformat(), "mit_resnap": mit_resnap},
+        eigener_lauf=eigener_lauf,
     )
     pv_kwh_neu = await _pv_tagessumme(db, anlage_id, datum)
     stunden_mit_messdaten = await _stunden_mit_messdaten(db, anlage_id, datum)
@@ -715,18 +736,16 @@ async def spiegel_abgleich_tag(
     Antwort: ``abgleich`` (Felder von ``kanal-abgleich``), ``reaggregation`` (Felder von ``reaggregate-tag``; scheitert
     sie, ``status: "fehler"`` mit ``fehler`` — der Abgleich ist dann schon geschehen und bleibt), ``datum`` und ein
     Satz ``meldung``. Unbekannte Anlage ⇒ 404, HA nicht erreichbar ⇒ 503 (vor der Neu-Aggregation).
+
+    Seit E3 ist der Lauf ``spiegel_abgleich_tag_lauf`` zugleich die Ausführung der Reparatur-Operation
+    ``SPIEGEL_ABGLEICH_TAG`` (der Knopf im Daten-Checker geht über Plan → Vorschau → Ausführen); diese Route bleibt für
+    Skripte und schreibt wie bisher die Zeile ``ha_statistics`` und die Zeile ``repair`` der Neu-Aggregation.
     """
     from backend.services.activity_service import log_activity
 
     datum = body.datum
-    abgleich, erg = await _kanal_abgleich_lauf(db, anlage_id)
-    reaggregation_fehler: Optional[str] = None
-    try:
-        reaggregation = await reaggregate_tag(anlage_id, datum=datum, mit_resnap=True, db=db)
-    except HTTPException as e:
-        reaggregation_fehler = str(e.detail)
-        reaggregation = {"status": "fehler", "datum": datum.isoformat(), "fehler": reaggregation_fehler}
-    meldung = _abgleich_tag_meldung(abgleich, datum, reaggregation_fehler, reaggregation.get("quelle_text"))
+    antwort, erg, reaggregation_fehler = await spiegel_abgleich_tag_lauf(db, anlage_id, datum)
+    abgleich, meldung = antwort["abgleich"], antwort["meldung"]
 
     await log_activity(
         kategorie="ha_statistics",
@@ -742,8 +761,26 @@ async def spiegel_abgleich_tag(
         anlage_id=anlage_id,
         db=db,
     )
-    return {"anlage_id": anlage_id, "datum": datum.isoformat(), "abgleich": abgleich,
-            "reaggregation": reaggregation, "meldung": meldung}
+    return antwort
+
+
+async def spiegel_abgleich_tag_lauf(
+    db: AsyncSession, anlage_id: int, datum: date, *, eigener_lauf: bool = True,
+) -> tuple[dict, object, Optional[str]]:
+    """Abgleich mit der HA-Statistik, danach der Tag neu aufgebaut — die Antwort der Route ``spiegel-abgleich-tag``,
+    das Ergebnis des Abgleichs (``None`` ohne Spiegel) und der Fehler der Neu-Aggregation. Gemeinsam für die Route und
+    die Operation ``SPIEGEL_ABGLEICH_TAG`` (``eigener_lauf=False``: die Neu-Aggregation ohne eigenen Plan und ohne
+    eigene Protokollzeile; die Zeile schreibt der Orchestrator)."""
+    abgleich, erg = await _kanal_abgleich_lauf(db, anlage_id)
+    reaggregation_fehler: Optional[str] = None
+    try:
+        reaggregation = await tag_neu_aufbauen_antwort(db, anlage_id, datum, True, eigener_lauf=eigener_lauf)
+    except HTTPException as e:
+        reaggregation_fehler = str(e.detail)
+        reaggregation = {"status": "fehler", "datum": datum.isoformat(), "fehler": reaggregation_fehler}
+    meldung = _abgleich_tag_meldung(abgleich, datum, reaggregation_fehler, reaggregation.get("quelle_text"))
+    return ({"anlage_id": anlage_id, "datum": datum.isoformat(), "abgleich": abgleich,
+             "reaggregation": reaggregation, "meldung": meldung}, erg, reaggregation_fehler)
 
 
 @router.delete("/rohdaten")

@@ -95,7 +95,7 @@ Das Energieprofil rechnet nur so gut wie seine zugeordneten Datenquellen. Die Zu
 
 Alle Pflege-Funktionen liegen unter **Einstellungen → Daten → Energieprofil-Pflege**. eedc bietet bewusst **keinen** großen „Alles-heilen"-Knopf, sondern gezielte, nachvollziehbare Werkzeuge mit Vorschau — lieber einen konkreten Tag prüfen und reparieren als blind alles überschreiben.
 
-**Verlauf und Protokoll.** Neben der Auswahl (mobil darunter) zeigt die Werkbank den **„Verlauf der letzten … Reparaturen"** — er lebt nur im Speicher und ist nach einem Neustart von eedc leer. Dauerhaft steht jeder ausgeführte Lauf in *Einstellungen → System → Protokolle*, Reiter **Aktivitäten**, Kategorie **„Reparatur"**: welche Operation, für welchen Tag oder Zeitraum, mit welchen Änderungen — auch die Knöpfe **„Tag reparieren"** und **„Aus Home Assistant neu übernehmen"** im Daten-Checker. Ein Lauf, der mit einer Fehlermeldung endet, schreibt keine Zeile.
+**Verlauf und Protokoll.** Neben der Auswahl (mobil darunter) zeigt die Werkbank den **„Verlauf der letzten … Reparaturen"** — er lebt nur im Speicher und ist nach einem Neustart von eedc leer. Dauerhaft steht jeder ausgeführte Lauf in *Einstellungen → System → Protokolle*, Reiter **Aktivitäten**, Kategorie **„Reparatur"**: welche Operation, für welchen Tag oder Zeitraum, mit welchen Änderungen — auch die Knöpfe im Daten-Checker (**„Tag neu aufbauen"**, **„Aus Home Assistant neu übernehmen"** …), je Lauf eine Zeile. Ein Lauf, der mit einer Fehlermeldung endet, schreibt keine Zeile.
 
 Die **Reparatur-Werkbank** bündelt die Operationen mit ihren echten Bezeichnungen:
 
@@ -140,6 +140,15 @@ Die **Reparatur-Werkbank** bündelt die Operationen mit ihren echten Bezeichnung
 > **Ein langjähriges Mittel wird nie geschrieben.** Antwortet kein messendes Archiv, bleibt der Monat unberührt und die Vorschau nennt die Zahl. Ein Durchschnitt über viele Jahre machte ein schwaches Jahr unsichtbar — also genau das, was diese Funktion sichtbar machen soll.
 >
 > **Für reine Lücken brauchst du sie nicht:** einmal täglich füllt eedc von allein, was in einem abgeschlossenen Monat fehlt — **nur** Lücken, nie etwas Vorhandenes.
+
+**Die Knöpfe des Daten-Checkers sind Werkbank-Operationen** (Plan → Vorschau → Ausführen). Vier sind dazugekommen; die Werkbank bietet drei davon zur Auswahl an, die vierte entsteht nur am Befund:
+
+- **„Temperatur aus Messung übernehmen"** — trägt die Ø Temperatur in Monate ohne Wert ein, aus deinen eigenen Messwerten (Stundenmittel, sonst Tages-Min/Max), ohne Netzabruf; gepflegte Werte bleiben unberührt. Die Vorschau nennt die Monate, die die Messreihe erreicht.
+- **„Messwerte ohne Monatszeile entfernen"** — nur hier in der Werkbank: entfernt die Messwerte einzelner Geräte eines Monats, dessen Zählerzeile fehlt (Monat auswählen). Endgültig; sind Zählerstände darunter, sagt die Vorschau, dass der Folgemonat dann gegen den vorletzten Stand rechnet. Hat der Monat noch eine Zählerzeile, sagt die Vorschau „nichts zu tun" — dann gehört er über „Monatsdaten löschen". Am Befund im Daten-Checker steht stattdessen „Monat erfassen".
+- **„Aus Home Assistant neu übernehmen"** — gleicht die Zählerstatistik eines Tages mit Home Assistant ab und baut den Tag danach auf (Tag auswählen); wirksam, wenn du dort korrigiert hast. Die Vorschau fragt Home Assistant nicht, sie nennt die Zähler aus dem HA-Spiegel und ihre letzte gespeicherte Stunde. Ein Lauf schreibt **eine** Zeile „Reparatur" ins Protokoll.
+- **„Wert in nicht geführtem Feld entfernen"** — der Knopf „Wert entfernen" eines Befunds (nicht in der Auswahl der Werkbank): entfernt einen gespeicherten Wert aus einem Feld, das das Gerät nicht führt, in allen Monaten; endgültig. Ist das Feld am Gerät vorgesehen, sagt die Vorschau „nichts zu tun".
+
+**„Details in der Werkbank"** im Vorschau-Kasten des Daten-Checkers öffnet die Werkbank mit genau diesem Plan (Adresse `…&plan=<id>`) — mit Hinweisen und Verlauf; ausführen kannst du ihn dort oder im Daten-Checker.
 
 Der **Gefahrenbereich** „Energieprofil-Daten löschen" entfernt Stunden- und Tageswerte (Monatsdaten bleiben erhalten). Der Scheduler holt die **Messwerte** anschließend aus der HA-Langzeitstatistik zurück — **aber nur so weit, wie deine HA-Statistik reicht**; nach einem Recorder-Purge, Sensor-Umbau oder einer Neuinstallation ist sie oft kürzer als dein gepflegtes Profil, und ältere Tage bleiben dann weg. Die **aufgezeichneten PV-Prognosen** (`pv_prognose_final_kwh` und die Solcast-/ML-Werte, Grundlage des Genauigkeits-Vergleichs) sind Aufzeichnungen eines vergangenen Zeitpunkts — sie lassen sich nicht neu berechnen und sind endgültig verloren. Ebenso die **Betriebsart** einer Wärmepumpe oder Klimaanlage für alle Tage, die Home Assistant nicht mehr im Verlauf hat (Standard rund zehn Tage) — sie steht nur in diesen Stundenwerten. Nur nutzen, wenn ein Neuaufbau wirklich gewollt ist.
 

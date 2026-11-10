@@ -126,14 +126,14 @@ async def test_vorzeichen_konflikt_erkannt():
     re_ = range_eintraege[0]
     assert re_.schwere == "warning"
     assert re_.action_params == {
-        "anlage_id": 1, "von": test_datum.isoformat(), "bis": test_datum.isoformat(),
+        "von": test_datum.isoformat(), "bis": test_datum.isoformat(),
     }, f"params: {re_.action_params}"
-    assert re_.action_label == "Zeitraum neu aggregieren"
+    assert re_.action_label == "Tage neu aufbauen"
 
     day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
     assert len(day_eintraege) == 1, f"Erwartet 1 Einzeltag-Eintrag, bekommen {len(day_eintraege)}"
     assert day_eintraege[0].action_params == {
-        "anlage_id": 1, "datum": test_datum.isoformat(),
+        "datum": test_datum.isoformat(),
     }
 
 

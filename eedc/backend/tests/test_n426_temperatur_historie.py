@@ -143,8 +143,11 @@ async def test_die_aktion_nennt_nur_die_erreichbaren_monate(db):
 
     assert e.action_kind == "temperatur_aus_messung"
     assert e.action_label == "Temperatur aus Messung übernehmen"
-    assert e.action_params["anlage_id"] == a.id
-    assert e.action_params["monate"] == ["01/2026", "02/2026"]
+    # E3 (Ü5): die Operation füllt alle erreichbaren Monate ohne Parameter; die Monate nennt der Plan.
+    assert e.action_params == {}
+    from backend.services.repair_orchestrator import RepairOperationRequest, RepairOperationType, plan
+    p = await plan(RepairOperationRequest(anlage_id=a.id, operation=RepairOperationType.TEMPERATUR_AUS_MESSUNG), db)
+    assert p.operation_preview["monate"] == ["01/2026", "02/2026"]
 
 
 @pytest.mark.asyncio

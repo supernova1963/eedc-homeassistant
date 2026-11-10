@@ -189,16 +189,16 @@ async def test_basis_zaehler_leer_wird_gemeldet():
     assert re_.kategorie == _KAT
     assert re_.schwere == "warning"
     assert re_.action_params == {
-        "anlage_id": 1, "von": tag.isoformat(), "bis": tag.isoformat(),
+        "von": tag.isoformat(), "bis": tag.isoformat(),
     }, f"params: {re_.action_params}"
-    assert re_.action_label == "Zeitraum neu aggregieren"
+    assert re_.action_label == "Tage neu aufbauen"
     # Reichweite muss benannt sein: Tag/Stunden ja, Monatswerte nein.
     assert "NICHT die Monatswerte" in re_.details, re_.details
     assert "Statistik-Import" in re_.details, re_.details
 
     day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
     assert len(day_eintraege) == 1, f"Erwartet 1 Einzeltag, bekommen {len(day_eintraege)}"
-    assert day_eintraege[0].action_params == {"anlage_id": 1, "datum": tag.isoformat()}
+    assert day_eintraege[0].action_params == {"datum": tag.isoformat()}
     # Die Meldung nennt, was HA hat — sonst ist der Knopf ein Blindflug.
     assert "22,0 kWh" in day_eintraege[0].meldung, day_eintraege[0].meldung
 

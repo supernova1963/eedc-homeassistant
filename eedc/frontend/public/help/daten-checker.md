@@ -68,8 +68,14 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **KPI-Karten** oben: Gesamtzahl Fehler / Warnungen / Hinweise / OK über alle Kategorien.
 - **Monatsdaten-Abdeckung**: Fortschrittsbalken „X von Y Monaten erfasst" ab Installationsdatum bis Vormonat.
 - **Klappbare Kategorie-Sektionen**: Jede Kategorie zeigt im Kopf eine Sammel-Bewertung (z. B. *„2 Warnungen, 1 Hinweis"* oder *OK*) und enthält die Einzelbefunde. Kategorien mit Fehlern oder Warnungen starten aufgeklappt, alle anderen zugeklappt — auch solche, die nur Hinweise tragen, selbst wenn daran ein Reparatur-Knopf steht (etwa die Drift-Prüfung [§4.17](#417-datenquellen-drift)). Der Kopf nennt die Zahl der Hinweise; ein Klick darauf öffnet die Kategorie.
-- **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details und „Beheben"-Link zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
+- **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details, dem Link **„Lösungsweg“** und rechts **einem** Knopf — dem Handgriff des Befunds:
+  - **Ändert eedc etwas** (z. B. „Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine **Vorschau** unter der Zeile: eine Zeile, was sich ändert (etwa „Monate erhalten eine Ø Temperatur: 7 (09/2025, …)“), darunter die Hinweise der Reparatur-Werkbank. Erst **„Anwenden“** führt aus; **„Abbrechen“** verwirft die Vorschau. Danach steht über der Liste ein Satz, was geschehen ist, und der Daten-Checker prüft neu. Lösch-Aktionen tragen in der Vorschau das Wort **„endgültig“** und einen roten Knopf; eine zusätzliche Rückfrage gibt es nicht. Ist nichts zu tun (etwa weil das Feld am Gerät vorgesehen ist), sagt die Vorschau das und bietet kein „Anwenden“. „Aus Home Assistant neu übernehmen“ nennt dazu die Bedingung: wirksam, wenn du in Home Assistant korrigiert hast. Die Vorschau gilt eine Stunde („gültig bis …“); **„Details in der Werkbank“** öffnet sie in der Reparatur-Werkbank. Es läuft immer nur ein Vorgang.
+  - **Musst du etwas eintragen oder auswählen**, führt **„Beheben“** zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
+  - **Ist nichts zu tun oder liegt der Weg außerhalb von eedc**, öffnet **„Was gilt“** den Lösungsweg.
+- **Lösungsweg:** Der Link öffnet den Abschnitt dieses Handbuchs zur Kategorie des Befunds **neben der Liste** (auf dem Handy als Fenster) — der Befund bleibt sichtbar, während du die Schritte abarbeitest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; in der Home-Assistant-App (und hinter dem Ingress) fehlt dieser Knopf, weil ein eigenes Fenster dort ohne Anmeldung öffnen würde.
 - **Kopfzeile**: **Aktualisieren** prüft neu; **Diagnose-Paket** öffnet den Text für eine Rückfrage im Forum oder auf GitHub ([unten](#diagnose-paket)).
+
+Die Komponenten-Seiten (Block **Daten-Qualität**) zeigen die Befunde ihres Geräts mit denselben Knöpfen.
 
 > Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege, Plug-in-Hybrid ohne bestimmbaren Fahranteil). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
 
@@ -87,8 +93,11 @@ die Tageswerte der betroffenen Monate (höchstens zwei), Zeitpläne und die letz
 - **Bearbeiten:** Das Textfeld ist bearbeitbar. Es enthält Entity-Namen, Standort und Preise — entferne, was du nicht
   teilen willst, bevor du kopierst.
 - **Kopieren** übernimmt den Text aus dem Fenster in die Zwischenablage. Diese Fassung bleibt unter 20 KB; ist sie
-  größer, lässt eedc nacheinander das Log, den zweiten Monat der Tageswerte, die Spiegel-Abschnitte und die OK-Zeilen
-  weg — was gekürzt ist, steht im Kopf unter „Kürzungen“.
+  größer, kürzt eedc nacheinander: das Log, den zweiten Monat der Tageswerte, die Spiegel-Abschnitte, die OK-Zeilen,
+  die Zuordnungen auf Felder mit Quelle, die Komponenten auf ihre Kennwerte (ohne Parameter), die Befunde auf Warnungen
+  und Fehler (Hinweise als Zahl) und zuletzt die Tageswerte ganz. Reicht das nicht, fallen ganze Abschnitte weg —
+  Strompreise, Monate, Komponenten, Kanal-Tage, Zuordnungen, Anlage, in dieser Reihenfolge; **Kopf, Befunde, HA-Spiegel,
+  Nachtlauf und Reparaturen sowie Zeitpläne bleiben immer**. Was gekürzt ist, steht im Kopf unter „Kürzungen“.
 - **Als Datei herunterladen** speichert die ungekürzte Fassung als `.md`-Datei.
 
 Zugangsdaten enthält das Paket nie: keine Token, keine Passwörter, keine Adresse einer Home-Assistant-Verbindung, nicht

@@ -895,8 +895,12 @@ Token, Passwörter, `connector_config` (nur `connector_id`), `solcast_config`, `
 (Wächter W-7 in `tests/test_diagnose_paket.py`). Die Zuordnungen liest es über
 `services/datenquellen_felder.py::zuordnungen_lesen` — die vier lesenden Phasen der Route
 `GET /api/datenquellen/{id}/felder`, die nach ihnen weiter selbst `_festschreiben` und `_verfuegbarkeit` ruft
-(Schnitt E1, Antwort bitgleich, GM `datenquellen-felder`). Die Kopieren-Fassung ist hart ≤ 20 000 Bytes
-(Kürzungsfolge Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen, im Kopf benannt).
+(Schnitt E1, Antwort bitgleich, GM `datenquellen-felder`). Die Kopieren-Fassung ist hart ≤ 20 000 Bytes: weiche
+Stufen Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen → Zuordnungen nur mit Quelle → Komponenten
+ohne Parameter → Checker nur WARNING/ERROR → Tagesreihen ganz weg; danach ganze Abschnitte von hinten nach Priorität
+(`WEGFALL_REIHENFOLGE` 13 · 11 · 5 · 10 · 3 · 9 · 4 · 2, nie `NIE_WEG` 1 · 6 · 7 · 8 · 12), erst zuletzt der Schnitt am
+Textende; jede Stufe steht im Kopf (E3.0 nach Lab rc29). Abschnitt 6 seit E3: Kategorie als Gruppenkopf, je Zeile
+`[schwere] code — Meldung · werte`, die Klasse nur, wenn die Laufzeit-Klasse vom Katalog abweicht.
 
 #### Daten-Checker: Befund-Schlüssel, Ziel-Bauer, Katalog (E2 10.11.2026)
 
@@ -916,6 +920,30 @@ der **Katalog** `services/daten_checker/handgriffe.py`. Die Antwort `GET /api/sy
 `ziel`, `action` zusätzlich. Wächter: W-1/W-3 `tests/test_daten_checker_codes.py`, W-2/W-6
 `tests/test_daten_checker_ziele.py`, W-8 `tests/test_daten_checker_texte_fixtures.py` (Fixtures je Code der
 HA-gebundenen Kategorien unter `tests/fixtures/daten_checker_texte/`).
+
+#### Daten-Checker: Aktion mit Vorschau, eine Mechanik (E3 10.11.2026)
+
+Jede **Aktion** eines Befunds ist eine Reparatur-Operation in **Plan/Execute-Form**: `Aktion.operation` ist ein Wert von
+`RepairOperationType`, `Aktion.params` die Plan-Parameter ohne `anlage_id`; `action_label` kommt aus dem Katalog
+(`handgriffe.KNOPF_JE_OPERATION`, Wächter W-4 `tests/test_daten_checker_texte.py`: keine Mechanik-Wörter im Knopf und in
+der Vorschau-Zeile). Der Client (`components/datenchecker/BefundHandgriff.tsx`, eine Komponente für Daten-Checker und
+Komponenten-Hub) ruft `POST /api/repair/plan` → `VorschauKasten` (eine Zeile aus `estimated_changes` über
+`REPARATUR_AENDERUNG_LABELS`, Werkbank-Warnungen unverändert, «endgültig» bei Lösch-Operationen, «nichts zu tun» ohne
+Anwenden) → `POST /api/repair/execute/{plan_id}`; keine Wrapper-Route, kein `window.confirm` (W-10
+`npm run check:eine-mechanik`). Vier Operationen kamen dazu, im eigenen Modul `services/repair_operationen_checker.py`
+(der Orchestrator trägt nur Enum-Werte und den Verweis im `else`-Zweig von `plan`/`execute`): `TEMPERATUR_AUS_MESSUNG`,
+`FELDWERT_ENTFERNEN`, `GERAETEWERTE_LOESCHEN` (nur Werkbank) und `SPIEGEL_ABGLEICH_TAG` (Plan **ohne** HA aus `kanal`,
+`kanal_quelle`, `kanal_statistik`; Ausführen = `api/routes/energie_profil/repair.py::spiegel_abgleich_tag_lauf` mit
+`eigener_lauf=False`, eine Zeile `repair` je Lauf). Ihre Logik liegt in `services/monatsdaten_pflege.py`
+(`geraetewerte_loeschen`, `feldwert_entfernen`, `temperatur_aus_messung` + lesende `*_lage` für den Plan) — dieselben
+Funktionen rufen die drei Monatsdaten-Routen (Antworten bitgleich); die 409-Fälle der Routen meldet der Plan als
+`operation_preview.nichts_zu_tun`. **Kanal-Lage-Weiche** (R7): `REAGGREGATE_*` nur über Bestandstage
+(`DatenChecker._weiche_bereich`, `datenquelle/quellen.py::_aktion_aeltere_quelle`), an Kanal-Tagen mit HA-Spiegel
+`SPIEGEL_ABGLEICH_TAG`, ohne Spiegel kein Knopf; W-11 `tests/test_daten_checker_handgriff_wirkt.py` hält je Operation
+einen Wirkungs-Beleg (plan → execute → Befund weg oder anders). Das **Lösungsweg-Panel**
+(`components/datenchecker/LoesungswegPanel.tsx`) zeigt den Handbuch-Abschnitt der Kategorie
+(`config/datenCheckerKategorien.ts::loesungswegAnker`) neben der Liste; «In eigenem Fenster öffnen» nur außerhalb des
+HA-Rahmens (`lib/download.ts::istImHaRahmen`). Die Werkbank liest `plan=<id>` (`hooks/useWerkbankPlanAusUrl.ts`).
 
 #### Aggregierte Monatsdaten
 

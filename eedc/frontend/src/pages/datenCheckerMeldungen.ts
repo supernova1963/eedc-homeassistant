@@ -6,8 +6,15 @@
  * `baueTagKpis`) und die Seite kein react-refresh-Treffer wird.
  */
 import type { ReaggregateBereichResponse, ReaggregateTagResponse } from '../api/energie_profil'
-import type { SpiegelAbgleichTagErgebnis } from '../api/repair'
 import { fmtZahl, formatDatum } from '../lib'
+
+/** N-790: Antwort von «Aus Home Assistant neu übernehmen» (Route `spiegel-abgleich-tag` bzw. `operation_summary` der
+ *  Operation `SPIEGEL_ABGLEICH_TAG`, E3) — nur die Felder, die die Rückmeldung liest. */
+export interface SpiegelAbgleichTagErgebnis {
+  abgleich: { fehler: number }
+  reaggregation: { status: string; datum?: string; fehler?: string }
+  meldung: string
+}
 
 export type MeldungsArt = 'ok' | 'hinweis' | 'fehler'
 

@@ -70,9 +70,9 @@ def test_zaehlerstand_bekommt_den_hinweis_auf_den_folgemonat():
     assert "Gaszähler" in e.details
     assert "Anfangsstand des Folgemonats" in e.details, e.details
     assert "zwei Monate als einen" in e.details, e.details
-    # Der Knopf bleibt — gesagt, nicht verboten.
-    assert e.action_kind == "geraetewerte_loeschen"
-    assert e.action_params["hat_zaehler"] is True
+    # E3 (W6): der Handgriff ist «Monat erfassen»; das Löschen ist die Werkbank-Operation, deren Vorschau den
+    # Zählerstand-Satz trägt (`test_repair_operationen_checker.py`) — gesagt, nicht verboten.
+    assert e.action_kind is None and e.ziel is not None
 
 
 def test_ohne_zaehler_bleibt_der_text_wie_er_war():
@@ -84,7 +84,6 @@ def test_ohne_zaehler_bleibt_der_text_wie_er_war():
     e = ergebnisse[0]
     assert "Anfangsstand des Folgemonats" not in e.details
     assert "Zählerstände" not in e.details
-    assert e.action_params["hat_zaehler"] is False
 
 
 def test_gemischter_monat_nennt_nur_die_zaehler_beim_namen():
@@ -93,7 +92,6 @@ def test_gemischter_monat_nennt_nur_die_zaehler_beim_namen():
     ergebnisse = _run([_pv_inv(), _zaehler_inv()])
     assert len(ergebnisse) == 1
     e = ergebnisse[0]
-    assert e.action_params["hat_zaehler"] is True
     hinweis = e.details.split("Achtung:")[1]
     assert "Gaszähler" in hinweis
     assert "Dach Süd" not in hinweis, hinweis

@@ -28,6 +28,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   übernehmen“ im Daten-Checker (N-793).
 - **Der nächtliche Abgleich der Kanalstatistik protokolliert jede Nacht je Anlage mit HA-Spiegel, auch wenn nichts
   abweicht** — mit der Zahl der geprüften Abschnitte (N-794).
+- **Daten-Checker: jede Reparatur zeigt vorher, was sie ändert, und fragt dann „Anwenden“ — kein Knopf führt mehr
+  sofort aus; der Link „Lösungsweg“ an jedem Befund öffnet die Schritte neben der Liste.** Lösch-Aktionen sagen
+  „endgültig“ statt einer Rückfrage; „Wetterreihe nachziehen“, „Tag neu aufbauen“ und „Tage neu aufbauen“ stehen jetzt
+  direkt am Befund. „Messwerte ohne Monatszeile entfernen“ gibt es nur noch in der Reparatur-Werkbank — am Befund steht
+  „Monat erfassen“. Die Komponenten-Seiten tragen dieselben Knöpfe. Das Diagnose-Paket bleibt auch bei großen Anlagen
+  vollständig in den Abschnitten, die eine Antwort braucht (Kopf, Befunde, HA-Spiegel, Nachtlauf, Zeitpläne).
 
 ### Intern
 

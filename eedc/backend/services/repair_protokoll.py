@@ -39,6 +39,11 @@ OPERATION_LABELS = {
     "delete_monatsdaten": "Monatsdaten löschen",
     "reset_cloud_import": "Cloud-Import-Werte zurücksetzen",
     "verwerfen_vor_quellbeginn": "Werte vor dem Sensorbeginn verwerfen",
+    # E3 Daten-Checker (`repair_operationen_checker.py`); Vitest-Spiegel `src/test/operation-labels.test.ts`.
+    "temperatur_aus_messung": "Temperatur aus Messung übernehmen",
+    "feldwert_entfernen": "Wert in nicht geführtem Feld entfernen",
+    "geraetewerte_loeschen": "Messwerte ohne Monatszeile entfernen",
+    "spiegel_abgleich_tag": "Aus Home Assistant neu übernehmen",
 }
 
 
@@ -52,8 +57,8 @@ def _bereich(params: dict[str, Any]) -> str:
 
 
 def _details(summary: dict[str, Any], actual: dict[str, int]) -> str:
-    """Anwender-Satz der Operation (`quelle_text`), sonst die Zähler aus `actual_changes`."""
-    satz = summary.get("quelle_text")
+    """Anwender-Satz der Operation (`quelle_text`; E3: `meldung` des Spiegel-Abgleichs), sonst die Zähler."""
+    satz = summary.get("quelle_text") or summary.get("meldung")
     if isinstance(satz, str) and satz:
         return satz
     return "Änderungen: " + " · ".join(f"{k} {v}" for k, v in actual.items())

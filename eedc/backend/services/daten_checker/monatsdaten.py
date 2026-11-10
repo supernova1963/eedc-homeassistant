@@ -374,18 +374,9 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 # `?erfassen=YYYY-MM`, wie die Status-Fusszeile). Der bisherige
                 # Link zeigte auf die Liste — dort steht der Monat zwar als
                 # offene Zeile, der Anwender musste ihn aber selbst suchen.
+                # E3 (Gegenprüfung W6, Teil B Nr 73): EIN Handgriff — «Monat erfassen»; das Löschen der Gerätewerte
+                # bleibt der Ausnahmeweg der Reparatur-Werkbank («Messwerte ohne Monatszeile entfernen»).
                 ziel=ziel_monat(jahr, monat),
-                # `hat_zaehler` trägt die Datenart bis in die Rückfrage vor dem
-                # Löschen (N-312). Der Deep-Link-Weg kennt keine
-                # `Monatsdaten`-Zeile — genau die fehlt ja —, also gibt es für
-                # diesen Monat auch kein `GET /{id}/geraetewerte`, aus dem der
-                # Client die Auskunft holen könnte. Sie muss mitreisen.
-                action=Aktion("geraetewerte_loeschen", {
-                    "anlage_id": anlage.id,
-                    "jahr": jahr,
-                    "monat": monat,
-                    "hat_zaehler": bool(zaehler),
-                }, "Messwerte entfernen"),
             ))
 
         return ergebnisse
@@ -786,12 +777,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 details=details,
                 investition_id=inv.id,
                 altlink=heute_monat(labels[0]),
-                action=Aktion("feldwert_entfernen", {
-                    "investition_id": inv.id,
-                    "feld": key,
-                    "label": label,
-                    "monate": labels,
-                }, "Wert entfernen"),
+                action=Aktion("feldwert_entfernen", {"investition_id": inv.id, "feld": key}),
             ))
         return ergebnisse
 
@@ -1656,13 +1642,13 @@ class ErfassungsortChecks:
                 "laufende Monat bleibt draußen, weil die Archive ihn noch nicht "
                 f"vollständig haben. Betroffen: {beispiele}."
             ),
-            # ⛔ Hier steht bewusst KEINE Inline-Aktion, obwohl es die Operation
-            # gibt. Der Nachzug ERSETZT vorhandene Werte — und
-            # `write_with_provenance` verlangt im Docstring ausdrücklich, dass
-            # der Aufrufer dem Anwender vorher sagt, was ersetzt wird. Ein
-            # Ein-Klick-Knopf könnte das nicht; die Vorschau der
-            # Reparatur-Werkbank nennt die Zahl, bevor etwas passiert.
-            altlink=HEUTE_ENERGIEPROFIL,
+            # Der Nachzug ERSETZT vorhandene Werte — und `write_with_provenance`
+            # verlangt, dass der Aufrufer dem Anwender vorher sagt, was ersetzt
+            # wird. Seit E3 (Konzept Daten-Checker §3.2, §5) geht jede Aktion über
+            # Plan → Vorschau-Kasten → «Anwenden»: der Plan nennt die Zahl der
+            # ersetzten Monate, bevor etwas passiert. Bis dahin stand hier
+            # bewusst keine Inline-Aktion.
+            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 3b: die Quelle steht nirgends ─────────────────────────────────
@@ -1729,9 +1715,9 @@ class ErfassungsortChecks:
                 "bleibt dabei draußen, weil die Archive ihn noch nicht "
                 f"vollständig haben. Betroffen: {beispiele}."
             ),
-            # Kein Inline-Knopf, aus demselben Grund wie bei den Nachbarzeilen:
-            # derselbe Lauf ersetzt, was schon dasteht.
-            altlink=HEUTE_ENERGIEPROFIL,
+            # Aktion mit Vorschau wie bei der Nachbarzeile (E3): derselbe Lauf
+            # ersetzt, was schon dasteht — der Plan nennt es vorher.
+            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 2: Strahlung und Sonnenstunden ────────────────────────────────
@@ -1781,9 +1767,9 @@ class ErfassungsortChecks:
                 "Archive liefern ihn erst ein paar Tage nach Monatsende. "
                 f"Betroffen: {beispiele}."
             ),
-            # Kein Inline-Knopf, aus demselben Grund wie oben: derselbe Lauf
-            # ersetzt auch, was schon dasteht.
-            altlink=HEUTE_ENERGIEPROFIL,
+            # Aktion mit Vorschau wie oben (E3): derselbe Lauf ersetzt auch, was
+            # schon dasteht — der Plan nennt es vorher.
+            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 1: die Ø-Temperatur (N-426-Nachtrag, unverändert) ─────────────
@@ -1888,10 +1874,8 @@ class ErfassungsortChecks:
                 "Tages-Min/Max) — bereits gepflegte Werte bleiben unberührt."
             ),
             altlink=heute_monat(_mm(offen[0])),
-            action=Aktion("temperatur_aus_messung", {
-                "anlage_id": anlage.id,
-                "monate": [_mm(md) for md in erreichbar],
-            }, "Temperatur aus Messung übernehmen"),
+            # Ü5: die Operation füllt alle erreichbaren Monate — ohne Parameter; die Monate nennt die Vorschau.
+            action=Aktion("temperatur_aus_messung", {}),
         )]
 
     def _check_erfassungsort_positionen(self, anlage: Anlage) -> list[CheckErgebnis]:

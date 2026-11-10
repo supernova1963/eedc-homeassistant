@@ -229,13 +229,9 @@ async def test_daten_checker_meldet_den_verwaisten_rest(db):
     ]
     assert len(treffer) == 1, f"kein Befund: {ergebnisse}"
     assert "06/2024" in treffer[0].meldung
-    # Ohne Reparatur-Weg wäre es ein Hinweis, den niemand auflösen kann (P-6).
-    assert treffer[0].action_kind == "geraetewerte_loeschen"
-    assert treffer[0].action_params == {
-        "anlage_id": anlage.id, "jahr": 2024, "monat": 6,
-        # N-312: die Datenart reist mit — dieser Monat trägt keinen Zähler.
-        "hat_zaehler": False,
-    }
+    # Ohne Weg wäre es ein Hinweis, den niemand auflösen kann (P-6). Seit E3 (Gegenprüfung W6) ist der eine
+    # Handgriff «Monat erfassen»; das Löschen bleibt die Werkbank-Operation GERAETEWERTE_LOESCHEN.
+    assert treffer[0].action_kind is None
 
     # Der Link führt in das Formular GENAU dieses Monats (12.08.). Vorher zeigte
     # er auf die Monatsdaten-Liste — dort steht der Monat zwar als offene Zeile,

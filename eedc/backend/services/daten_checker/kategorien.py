@@ -321,10 +321,12 @@ class Ziel:
 
 @dataclass
 class Aktion:
-    """Inline-Handgriff eines Befunds (Etappe E2) — `action_kind`/`action_params`/`action_label` werden daraus abgeleitet."""
+    """Inline-Handgriff eines Befunds in **Plan/Execute-Form** (Etappe E3, Konzept §3.1 R6): `operation` ist ein Wert von
+    `repair_orchestrator.RepairOperationType`, `params` sind die Plan-Parameter ohne `anlage_id` (die Anlage trägt der
+    Prüflauf). Der Client ruft `POST /api/repair/plan` → Vorschau → `POST /api/repair/execute/{plan_id}`.
+    `action_kind`/`action_params` werden daraus abgeleitet, `action_label` aus dem Katalog (`handgriffe.knopf_text`)."""
     operation: str
     params: dict
-    label: str
 
 
 #: Parameter, die die Zielseiten HEUTE lesen (Konzept §3.3 Spalte «heute gelesen») — nur sie gehen in den abgeleiteten `link`.
@@ -389,7 +391,12 @@ class CheckErgebnis:
 
     @property
     def action_label(self) -> Optional[str]:
-        return self.action.label if self.action else None
+        """Knopf-Text aus dem Katalog (E3, W-4): je Operation ein Text in Anwender-Sprache."""
+        if self.action is None:
+            return None
+        from backend.services.daten_checker.handgriffe import knopf_text
+
+        return knopf_text(self.action.operation)
 
     @property
     def klasse(self) -> str:
@@ -451,13 +458,12 @@ LINK_ENERGIEPROFIL = "/einstellungen/daten?block=energieprofil&karte=werkbank"
 # (Abgleich mit der HA-Statistik, danach der Tag neu aufgebaut); «Tag reparieren» allein liest an einem Kanal-Tag
 # denselben Spiegel, der die Abweichung trägt.
 AKTION_SPIEGEL_ABGLEICH_TAG = "spiegel_abgleich_tag"
-LABEL_SPIEGEL_ABGLEICH_TAG = "Aus Home Assistant neu übernehmen"
 
 
 def aktion_spiegel_abgleich_tag(anlage_id: int, datum) -> Aktion:
-    """Die Aktion «Aus Home Assistant neu übernehmen» eines ``CheckErgebnis`` (``datum``: ``date``)."""
-    return Aktion(AKTION_SPIEGEL_ABGLEICH_TAG, {"anlage_id": anlage_id, "datum": datum.isoformat()},
-                  LABEL_SPIEGEL_ABGLEICH_TAG)
+    """Die Aktion «Aus Home Assistant neu übernehmen» eines ``CheckErgebnis`` (``datum``: ``date``) — Operation
+    ``SPIEGEL_ABGLEICH_TAG`` (E3, ``services/repair_operationen_checker.py``). ``anlage_id`` bleibt Argument der Aufrufer."""
+    return Aktion(AKTION_SPIEGEL_ABGLEICH_TAG, {"datum": datum.isoformat()})
 
 
 def link_monat_erfassen(label: str) -> str:

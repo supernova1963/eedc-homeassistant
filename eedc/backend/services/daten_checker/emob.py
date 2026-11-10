@@ -700,10 +700,9 @@ class EmobChecks:
             details=f"{details} Größte Fälle: {beispiele}.",
             altlink=HEUTE_ENERGIEPROFIL,
             action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren"),
+            }),
         )]
 
     async def _check_vergleichspreis_fehlt(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -796,7 +795,7 @@ class EmobChecks:
                 f"Betroffen: {beispiele}."
             ),
             altlink=HEUTE_ENERGIEPROFIL,
-            action=Aktion("kraftstoffpreis_backfill", {"anlage_id": anlage.id}, "Vergleichspreise nachpflegen"),
+            action=Aktion("kraftstoffpreis_backfill", {"scope": "monats"}),
         )]
 
 

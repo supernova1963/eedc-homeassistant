@@ -218,7 +218,7 @@ def test_w6_ein_dritter_eintrag_waere_rot():
 
 
 def test_ziel_und_aktion_zugleich_gezaehlt():
-    """In E2 behalten die Erzeuger ihr heutiges Verhalten; «nie `action` und `ziel`» greift erst mit E3/E4.
-    Heute trägt genau eine Stelle beides (Nr 73 `geraetewerte_ohne_monatszeile`: Monat erfassen + Werkbank-Löschen)."""
+    """«Nie `action` und `ziel`» (R2): seit E3 trägt keine Stelle mehr beides — Nr 73 `geraetewerte_ohne_monatszeile`
+    hat nur noch den Sprung «Monat erfassen», das Löschen ist die Werkbank-Operation `GERAETEWERTE_LOESCHEN` (W6)."""
     beide = Counter(s.code for s in stellen() if "ziel" in s.kw and "action" in s.kw)
-    assert beide == {"geraetewerte_ohne_monatszeile": 1}
+    assert beide == Counter()

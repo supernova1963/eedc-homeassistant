@@ -107,7 +107,7 @@ async def test_a_pv_achse_mit_spiegel_traegt_den_handgriff(uhr, monkeypatch):
     (e,) = [e for e in erg if e.meldung.startswith(TAG.isoformat())]
     assert e.action_kind == AKTION
     assert e.action_label == LABEL
-    assert e.action_params == {"anlage_id": ds.aid, "datum": TAG.isoformat()}
+    assert e.action_params == {"datum": TAG.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Hast du in Home Assistant korrigiert, ist das der Weg." in e.details
     assert "Tag reparieren" not in e.details
@@ -124,7 +124,7 @@ async def test_a_komponenten_achse_mit_spiegel_traegt_den_handgriff(uhr, monkeyp
     assert e.investition_id == 3
     assert e.action_kind == AKTION
     assert e.action_label == LABEL
-    assert e.action_params == {"anlage_id": ds.aid, "datum": TAG.isoformat()}
+    assert e.action_params == {"datum": TAG.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Tag reparieren" not in e.details
 
@@ -139,7 +139,7 @@ async def test_a_ohne_spiegel_bleibt_tag_reparieren(uhr, monkeypatch):
     zeilen = [e for e in erg if e.action_kind]
     assert zeilen, [e.meldung for e in erg]
     assert {e.action_kind for e in zeilen} == {"reaggregate_day"}
-    assert {e.action_label for e in zeilen} == {"Tag reparieren"}
+    assert {e.action_label for e in zeilen} == {"Tag neu aufbauen"}  # E3: Knopf-Text aus dem Katalog
     assert any("„Tag reparieren“" in (e.details or "") for e in zeilen)
 
 
@@ -171,7 +171,7 @@ async def test_b_zaehlersprung_traegt_den_handgriff(db):
     rueckkehr = datetime.fromtimestamp(z[23][0]).date()
     assert e.action_kind == AKTION
     assert e.action_label == LABEL
-    assert e.action_params == {"anlage_id": a.id, "datum": rueckkehr.isoformat()}
+    assert e.action_params == {"datum": rueckkehr.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Reparatur-Werkbank" not in e.details
     assert "Wert anpassen" in e.details and "Monatsabschluss neu" in e.details
@@ -186,7 +186,7 @@ async def test_b_rueckgang_traegt_den_handgriff(db):
     (e,) = await _Pruefer(db)._check_ha_rueckgang(a)
     assert e.action_kind == AKTION
     assert e.action_label == LABEL
-    assert e.action_params == {"anlage_id": a.id, "datum": RUECKGANG_STUNDE.date().isoformat()}
+    assert e.action_params == {"datum": RUECKGANG_STUNDE.date().isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "nächtlichen Abgleich" in e.details and "Monatsabschluss neu" in e.details
 
@@ -251,6 +251,43 @@ async def test_c_kette_spiegel_veraltet_route_gleicht_ab_und_der_befund_verschwi
     assert eintraege[0].details == antwort["meldung"]
 
 
+async def test_c_kette_ueber_plan_und_ausfuehren(uhr, monkeypatch):
+    """E3: derselbe Handgriff über die eine Mechanik — ``POST /repair/plan`` (Operation ``SPIEGEL_ABGLEICH_TAG`` mit den
+    Parametern des Befunds, ohne HA) → ``execute``; danach ist der Befund still, die Antwort ist die der Route, und es
+    steht genau eine Zeile ``repair`` und keine Zeile ``ha_statistics`` im Protokoll (W-12)."""
+    from backend.models.activity_log import ActivityLog
+    from backend.services.repair_orchestrator import (
+        RepairOperationRequest, RepairOperationType, _reset_state_for_tests, execute, plan,
+    )
+
+    _reset_state_for_tests()
+    async with kg.datenstand("achsen", "M05", "HA") as ds:
+        form = kg._form("achsen", "M05")
+        ab = _ts(TAG, 12)
+        await _spiegel_veraltet(ds, "inv:3:stromverbrauch_kwh", ab, 10.0)
+        monkeypatch.setattr("backend.core.database.get_session", _sitzungen_von(ds))
+
+        async def _ohne_boerse(*_a, **_k):
+            return None
+
+        monkeypatch.setattr("backend.services.strompreis_markt_service.fetch_marktpreise", _ohne_boerse)
+        with am.umgebung(form, ds.svc):
+            (e,) = [e for e in await _drift(ds) if "weichen von HA-Statistics ab" in e.meldung]
+            p = await plan(RepairOperationRequest(anlage_id=ds.aid, operation=RepairOperationType(e.action_kind),
+                                                  params=e.action_params), ds.db)
+            assert p.operation_preview["hat_spiegel"] is True and p.estimated_changes["spiegel_kanaele"] >= 1
+            r = await execute(p.plan_id, ds.db)
+            nachher = await _drift(ds)
+        zeilen = (await ds.db.execute(select(ActivityLog).where(ActivityLog.anlage_id == ds.aid))).scalars().all()
+
+    assert [(k["key"], k["ab_ts"]) for k in r.operation_summary["abgleich"]["korrigiert"]] == [
+        ("inv:3:stromverbrauch_kwh", ab)]
+    assert r.operation_summary["meldung"].startswith("Statistik aus Home Assistant neu übernommen, 1 Kanal ab ")
+    assert [x.schwere for x in nachher] == ["ok"], [x.meldung for x in nachher]
+    assert [z.kategorie for z in zeilen if z.kategorie in ("repair", "ha_statistics")] == ["repair"]
+    assert [z.details for z in zeilen if z.kategorie == "repair"] == [r.operation_summary["meldung"]]
+
+
 async def test_c_kette_mit_gelungener_neu_aggregation(uhr, monkeypatch):
     """Dieselbe Kette, die Neu-Aggregation gelingt (``aggregate_day`` des Tages wie im Produkt, mit der Leistungskurve der
     Matrix statt der Route): Satz «Tag … neu aufgebaut», Protokoll erfolgreich, kein Befund mehr."""
@@ -262,12 +299,12 @@ async def test_c_kette_mit_gelungener_neu_aggregation(uhr, monkeypatch):
         monkeypatch.setattr("backend.core.database.get_session", _sitzungen_von(ds))
         gerufen: list = []
 
-        async def _tag(anlage_id, datum, mit_resnap=True, db=None):
+        async def _tag(db_, anlage_id, datum, mit_resnap=True, *, eigener_lauf=True):
             gerufen.append(datum)
             await kg.neu_aggregieren(ds, tage=[datum])
             return {"status": "ok", "datum": datum.isoformat()}
 
-        monkeypatch.setattr(repair, "reaggregate_tag", _tag)
+        monkeypatch.setattr(repair, "tag_neu_aufbauen_antwort", _tag)
         with am.umgebung(form, ds.svc):
             antwort = await repair.spiegel_abgleich_tag(
                 ds.aid, repair.SpiegelAbgleichTagRequest(datum=TAG.isoformat()), db=ds.db)
@@ -294,12 +331,12 @@ async def test_d_ohne_spiegel_nur_die_neu_aggregation(db, monkeypatch):
 
     gerufen: list = []
 
-    async def _tag(anlage_id, datum, mit_resnap=True, db=None):
+    async def _tag(db_, anlage_id, datum, mit_resnap=True, *, eigener_lauf=True):
         gerufen.append((anlage_id, datum, mit_resnap))
         return {"status": "ok", "datum": datum.isoformat()}
 
     monkeypatch.setattr("backend.services.kanal.konsistenz.konsistenz_anlage", _nie)
-    monkeypatch.setattr(repair, "reaggregate_tag", _tag)
+    monkeypatch.setattr(repair, "tag_neu_aufbauen_antwort", _tag)
     antwort = await repair.spiegel_abgleich_tag(
         anlage.id, repair.SpiegelAbgleichTagRequest(datum="2026-11-02"), db=db)
     assert antwort["abgleich"]["hat_spiegel"] is False
@@ -331,7 +368,7 @@ async def test_e_ha_nicht_erreichbar_ist_503_ohne_neu_aggregation(db, monkeypatc
         raise AssertionError("ohne Abgleich keine Neu-Aggregation")
 
     monkeypatch.setattr("backend.services.kanal.konsistenz.konsistenz_anlage", _lauf)
-    monkeypatch.setattr(repair, "reaggregate_tag", _nie)
+    monkeypatch.setattr(repair, "tag_neu_aufbauen_antwort", _nie)
     with pytest.raises(HTTPException) as e:
         await repair.spiegel_abgleich_tag(anlage.id, repair.SpiegelAbgleichTagRequest(datum="2026-11-02"), db=db)
     assert e.value.status_code == 503

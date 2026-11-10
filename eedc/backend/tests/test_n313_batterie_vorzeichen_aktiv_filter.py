@@ -184,4 +184,4 @@ async def test_echter_vorzeichen_konflikt_wird_weiter_gemeldet():
     einzel = [e for e in ergebnisse if e.action_kind == "reaggregate_day"]
     assert len(bereich) == 1, f"Erwartet 1 Bereichs-Eintrag, bekommen {ergebnisse}"
     assert len(einzel) == 1, f"Erwartet 1 Einzeltag-Eintrag, bekommen {einzel}"
-    assert einzel[0].action_params == {"anlage_id": 1, "datum": _TAG.isoformat()}
+    assert einzel[0].action_params == {"datum": _TAG.isoformat()}

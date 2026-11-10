@@ -161,10 +161,7 @@ async def test_abgabe_mit_alter_erzeugung_ergibt_eine_meldung_mit_angebot(db):
     )
     assert e.action_kind == "feldwert_entfernen"
     assert e.action_label == "Wert entfernen"
-    assert e.action_params == {
-        "investition_id": inv.id, "feld": "erzeugung_kwh", "label": "Erzeugung",
-        "monate": ["04/2026", "05/2026", "06/2026", "07/2026", "08/2026"],
-    }
+    assert e.action_params == {"investition_id": inv.id, "feld": "erzeugung_kwh"}  # E3: Plan-Parameter
     assert e.details.startswith("04/2026, 05/2026, 06/2026, 07/2026, 08/2026. ")
     assert "Der Wert zählt in keiner Bilanz." in e.details
     assert "„Abgabe (kWh)“" in e.details, "das Angebot nennt das Ziel-Feld"
@@ -230,7 +227,7 @@ async def test_der_gesamtlauf_des_checkers_traegt_die_meldung(db):
     treffer = [e for e in result.ergebnisse if e.action_kind == "feldwert_entfernen"]
     assert len(treffer) == 1
     assert treffer[0].action_params["feld"] == "erzeugung_kwh"
-    assert len(treffer[0].action_params["monate"]) == 5
+    assert treffer[0].action_params == {"investition_id": treffer[0].investition_id, "feld": "erzeugung_kwh"}
 
 
 # ── Der Endpunkt ─────────────────────────────────────────────────────────────
@@ -337,9 +334,7 @@ async def test_legacy_feld_ohne_registry_label_wird_gemeldet_und_entfernt(db):
     e = befunde[0]
     assert e.meldung.startswith("Allg. Strom: Verbrauch in 1 Monat(en) gespeichert")
     assert e.action_kind == "feldwert_entfernen"
-    assert e.action_params == {
-        "investition_id": inv.id, "feld": "verbrauch_kwh", "label": "Verbrauch", "monate": ["06/2026"],
-    }
+    assert e.action_params == {"investition_id": inv.id, "feld": "verbrauch_kwh"}
     assert "„Abgabe (kWh)“" in e.details, "Verbrauch ist eine Hauptgröße"
     antwort = await delete_feldwert_nicht_gefuehrt(inv.id, "verbrauch_kwh", db=db)
     assert antwort["entfernt"] == 1

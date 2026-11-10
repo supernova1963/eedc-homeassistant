@@ -31,7 +31,7 @@ from backend.core.berechnungen.energie import direktverbrauch_legacy_kwh, eigenv
 from backend.services.ust_satz import grundgesamtheit as ust_grundgesamtheit, ust_satz_des_jahres
 from backend.services.strompreis_aggregator import lade_preis_aggregate_je_monat
 from backend.utils.sonstige_positionen import ist_gueltige_position
-from backend.core.field_definitions import basis_feld_key, get_feld_hinweise, groesse_gibt_es_am_geraet
+from backend.core.field_definitions import get_feld_hinweise
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_einspeise_preis_cent,
@@ -58,6 +58,7 @@ from backend.services.provenance import (
     write_with_provenance,
 )
 from backend.services.mitteltemperatur import lade_monatsmittel_temperatur
+from backend.services.monatsdaten_pflege import MANUAL_WRITER as _MANUAL_WRITER
 from backend.services.wetter.monatswerte import WETTER_MONATSFELDER
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 from backend.api.routes.monatsdaten_aggregiert import (
@@ -76,8 +77,7 @@ from backend.api.routes.monatsdaten_aggregiert import (
 logger = logging.getLogger(__name__)
 
 
-# Source-Tag-Konstanten (Etappe 3d Päckchen 3)
-_MANUAL_WRITER = "monatsdaten_form"
+# Source-Tag-Konstanten (Etappe 3d Päckchen 3); der manuelle Writer steht seit E3 in `services/monatsdaten_pflege.py`.
 _AUTO_WRITER = "monatsdaten_compute"
 
 # Berechnete Aggregate werden serverseitig aus User-Eingaben abgeleitet.
@@ -1388,64 +1388,16 @@ async def get_geraetewerte_des_monats(
 async def delete_verwaiste_geraetewerte(
     anlage_id: int, jahr: int, monat: int, db: AsyncSession = Depends(get_db, scope="function")
 ) -> dict:
-    """Löscht die Gerätewerte eines Monats **ohne** Zählerzeile (#349).
-
-    Der Gegenstand ist ein Monat, der in keiner Liste mehr auftaucht: seine
-    `Monatsdaten`-Zeile ist gelöscht, die Messwerte je Komponente stehen noch.
-    Genau dieser Rest weist einen erneuten Import ab — und weil der Monat
-    nirgends erscheint, gibt es keine Zeile, über die man ihn aufräumen könnte.
-    Deshalb hängt der Weg am Daten-Checker, der ihn meldet.
-
-    ⚠ Bewusst eng: Existiert die Zählerzeile noch, passiert **nichts** — dann
-    ist der Monat normal sichtbar und gehört über den Lösch-Dialog behandelt,
-    der beides zusammen anbietet. Ein zweiter Weg zum selben Ziel wäre genau
-    die Drift, aus der dieser Befund entstanden ist.
+    """Löscht die Gerätewerte eines Monats **ohne** Zählerzeile (#349) — Logik in
+    ``services/monatsdaten_pflege.geraetewerte_loeschen`` (E3; dieselbe Funktion führt die Reparatur-Operation
+    «Messwerte ohne Monatszeile entfernen» der Werkbank aus). Zählerzeile vorhanden ⇒ 409.
     """
-    md_vorhanden = (await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        )
-    )).scalar_one_or_none()
+    from backend.services import monatsdaten_pflege as pflege
 
-    if md_vorhanden is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Der Monat {monat:02d}/{jahr} hat noch eine Zählerzeile. "
-                "Bitte über „Monatsdaten löschen“ entfernen — dort lassen sich "
-                "die Gerätewerte in einem Zug mitlöschen."
-            ),
-        )
-
-    from backend.services.monat_loeschen import (
-        _geraetewerte_des_monats,
-        beschreibe_geraetewerte_des_monats,
-    )
-    from backend.services.provenance import log_delete
-
-    beschreibung = await beschreibe_geraetewerte_des_monats(db, anlage_id, jahr, monat)
-    zeilen = await _geraetewerte_des_monats(db, anlage_id, jahr, monat)
-
-    for imd in zeilen:
-        log_delete(
-            db, imd,
-            source="manual:form",
-            writer=_MANUAL_WRITER,
-            decision_reason=(
-                f"verwaiste Gerätewerte {jahr}-{monat:02d} gelöscht (#349) — "
-                "keine Monatsdaten-Zeile vorhanden"
-            ),
-        )
-        await db.delete(imd)
-
-    await db.commit()
-    return {
-        "jahr": jahr, "monat": monat,
-        "geloescht": len(zeilen),
-        "komponenten": [k["bezeichnung"] for k in beschreibung],
-    }
+    try:
+        return await pflege.geraetewerte_loeschen(db, anlage_id, jahr, monat)
+    except pflege.PflegeKonflikt as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.delete(
@@ -1454,143 +1406,34 @@ async def delete_verwaiste_geraetewerte(
 async def delete_feldwert_nicht_gefuehrt(
     investition_id: int, feld: str, db: AsyncSession = Depends(get_db, scope="function")
 ) -> dict:
-    """Entfernt einen gespeicherten Wert aus einem Feld, das das Gerät nicht führt (N-393).
-
-    Der Gegenstand ist ein Wert, an den der Anwender nicht mehr herankommt: Das
-    Feld hat eine harte Bedingung (`INVESTITION_FELDER[...]["bedingung"]`), die
-    am Gerät nicht mehr erfüllt ist — der Monatsabschluss zeigt es nicht, ein
-    erneuter Abschluss merged je Sub-Key und lässt den Altwert stehen. Der
-    Daten-Checker meldet den Zustand (`_check_werte_in_nicht_gefuehrten_feldern`)
-    und bietet diesen Weg als Inline-Aktion an. Entfernt wird der Wert in
-    **allen** Monaten dieses Geräts, in denen die Größe nicht existiert — je
-    Monat ein Audit-Eintrag (`remove_json_subkey_with_provenance`).
-
-    ⚠ Bewusst eng, wie `delete_verwaiste_geraetewerte` (#349): Führt das Gerät
-    das Feld, passiert **nichts** (409) — dann ist es im Monatsabschluss
-    erreichbar und gehört dort geleert. Ein zweiter Weg zum selben Ziel wäre
-    genau die Drift, aus der dieser Befund entstanden ist.
+    """Entfernt einen gespeicherten Wert aus einem Feld, das das Gerät nicht führt (N-393) — Logik in
+    ``services/monatsdaten_pflege.feldwert_entfernen`` (E3; dieselbe Funktion führt die Reparatur-Operation «Wert
+    entfernen» aus, den Knopf des Daten-Checkers). Unbekanntes Gerät ⇒ 404, Feld am Gerät vorgesehen ⇒ 409.
     """
-    inv = (await db.execute(
-        select(Investition).where(Investition.id == investition_id)
-    )).scalar_one_or_none()
-    if inv is None:
-        raise not_found("Investition", investition_id)
+    from backend.services import monatsdaten_pflege as pflege
 
-    basis = basis_feld_key(feld)
-    if groesse_gibt_es_am_geraet(inv.typ, basis, inv.parameter or {}):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Das Feld „{feld}“ ist an diesem Gerät vorgesehen und im "
-                "Monatsabschluss erreichbar — bitte dort leeren."
-            ),
-        )
-
-    from backend.services.provenance import remove_json_subkey_with_provenance
-
-    zeilen = (await db.execute(
-        select(InvestitionMonatsdaten)
-        .where(InvestitionMonatsdaten.investition_id == investition_id)
-        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-    )).scalars().all()
-
-    entfernt: list[dict] = []
-    for imd in zeilen:
-        if feld not in (imd.verbrauch_daten or {}):
-            continue
-        alter_wert = await remove_json_subkey_with_provenance(
-            db, imd, "verbrauch_daten", feld,
-            source="manual:form", writer=_MANUAL_WRITER,
-            decision_reason=(
-                f"Wert in nicht geführtem Feld entfernt (N-393) — "
-                f"{inv.typ} führt „{feld}“ nach seinen Einstellungen nicht"
-            ),
-        )
-        entfernt.append({"jahr": imd.jahr, "monat": imd.monat, "wert": alter_wert})
-
-    await db.commit()
-    return {
-        "investition_id": investition_id,
-        "feld": feld,
-        "entfernt": len(entfernt),
-        "monate": entfernt,
-    }
+    try:
+        return await pflege.feldwert_entfernen(db, investition_id, feld)
+    except pflege.PflegeNichtGefunden as e:
+        raise not_found(e.entity, e.id)
+    except pflege.PflegeKonflikt as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.post("/anlage/{anlage_id}/temperatur-aus-messung")
 async def temperatur_aus_messung_uebernehmen(
     anlage_id: int, db: AsyncSession = Depends(get_db, scope="function")
 ) -> dict:
-    """Füllt leere Ø-Temperaturen aus der eigenen Messreihe (N-426-Nachtrag).
-
-    Der Gegenstand ist eine **Historie**, die niemand mehr von Hand aufmacht:
-    Zwischen dem IA-V4-Flip (25.07.2026) und WK-03 (13.09.2026) gab es keinen
-    Wetter-Auto-Fill; jeder in dieser Zeit abgeschlossene Monat trägt in
-    ``Monatsdaten.durchschnittstemperatur`` ``NULL``. Der zurückgebaute
-    Auto-Fill wirkt nur nach vorn — für die Vergangenheit gibt es diesen Weg,
-    angeboten als Inline-Aktion am Daten-Checker (Bauform N-393).
-
-    ⛔ **Nur Lücken, nie ein gepflegter Wert (P3b).** Geschrieben wird
-    ausschließlich, wo das Feld ``None`` ist; alles andere bleibt unberührt.
-    Der Schreibweg ist ``write_with_provenance``, jeder gesetzte Wert steht
-    damit im Audit-Log.
-
-    ⚠ **Quelle ``manual:form``, und das ist bewusst so** — wie beim
-    Nachbar-Knopf ``feldwert_entfernen`` (N-393). Es ist eine **vom Anwender
-    ausgelöste** Aktion (SOURCE_LABELS: *„User-Eingabe oder User-bestätigte
-    Aktion"*), und derselbe Wert, den er sich im Monatsformular per Auto-Fill
-    holt und speichert, landet ebenfalls als ``manual:form`` in der Zeile. Zwei
-    Labels für denselben Wert, je nachdem welchen Knopf jemand gedrückt hat,
-    wären die Drift. ``repair`` bleibt dem Repair-Orchestrator vorbehalten, der
-    die Hierarchie durchbricht — hier gibt es nichts zu durchbrechen, das Feld
-    ist leer.
-
-    ⛔ **Nur, was die Messreihe hergibt, und kein Netzabruf.**
-    ``lade_monatsmittel_temperatur`` **ohne** ``gepflegt_je_monat`` ist Stufe 1
-    (Stundenmittel) und Stufe 2 (Tages-Min/Max) der Vorrangkette — die dritte
-    ist das Feld selbst, und ein Provider-Abruf je Monat ist bewusst **kein**
-    Teil dieser Aktion: er gehört in den Monat, den der Anwender öffnet
-    ([[feedback_kein_grosser_heiler_knopf]]).
-
-    ⭐ **Idempotent.** Ein zweiter Lauf findet nichts mehr — die Monate, die er
-    gefüllt hat, sind nicht mehr leer.
+    """Füllt leere Ø-Temperaturen aus der eigenen Messreihe (N-426-Nachtrag) — Logik und Begründung in
+    ``services/monatsdaten_pflege.temperatur_aus_messung`` (E3; dieselbe Funktion führt die Reparatur-Operation
+    «Temperatur aus Messung übernehmen» aus, den Knopf des Daten-Checkers). Unbekannte Anlage ⇒ 404.
     """
-    anlage = (await db.execute(
-        select(Anlage).where(Anlage.id == anlage_id)
-    )).scalar_one_or_none()
-    if anlage is None:
-        raise not_found("Anlage", anlage_id)
+    from backend.services import monatsdaten_pflege as pflege
 
-    messreihe = await lade_monatsmittel_temperatur(db, anlage_id)
-
-    zeilen = (await db.execute(
-        select(Monatsdaten)
-        .where(Monatsdaten.anlage_id == anlage_id,
-               Monatsdaten.durchschnittstemperatur.is_(None))
-        .order_by(Monatsdaten.jahr, Monatsdaten.monat)
-    )).scalars().all()
-
-    gefuellt: list[dict] = []
-    for md in zeilen:
-        wert = messreihe.get((md.jahr, md.monat))
-        if wert is None:
-            continue
-        ergebnis = await write_with_provenance(
-            db, md, "durchschnittstemperatur", float(wert),
-            source="manual:form", writer=_MANUAL_WRITER,
-        )
-        if ergebnis.applied:
-            gefuellt.append(
-                {"jahr": md.jahr, "monat": md.monat, "wert": float(wert)}
-            )
-
-    await db.commit()
-    return {
-        "anlage_id": anlage_id,
-        "gefuellt": len(gefuellt),
-        "offen": len(zeilen) - len(gefuellt),
-        "monate": gefuellt,
-    }
+    try:
+        return await pflege.temperatur_aus_messung(db, anlage_id)
+    except pflege.PflegeNichtGefunden as e:
+        raise not_found(e.entity, e.id)
 
 
 @router.delete("/{monatsdaten_id}", status_code=status.HTTP_204_NO_CONTENT)

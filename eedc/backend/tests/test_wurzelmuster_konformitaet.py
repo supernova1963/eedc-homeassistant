@@ -2270,7 +2270,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # N-393 (05.09.2026): LÖSCHPFAD. Entfernt einen Sub-Key aus `verbrauch_daten`
     # in Monaten, in denen das Gerät die Größe nicht führt — liest die Zeilen nur,
     # um zu wissen, WO der Schlüssel steht; keine Monatsgröße wird gebildet.
-    "backend/api/routes/monatsdaten.py::delete_feldwert_nicht_gefuehrt",
+    # E3 (10.11.2026): wörtlich aus der Route `delete_feldwert_nicht_gefuehrt` in den Service geschnitten (Route und
+    # Reparatur-Operation FELDWERT_ENTFERNEN rufen ihn); `feldwert_lage` ist dieselbe Lesung ohne Schreiben (Plan).
+    "backend/services/monatsdaten_pflege.py::feldwert_entfernen",
+    "backend/services/monatsdaten_pflege.py::feldwert_lage",
     "backend/services/import_writer.py::upsert_investition_monatsdaten_with_provenance",
     # Zählt, wie viele Werte der Überschreiben-Haken ersetzen würde (12.08.,
     # #349). Der Gegenstand ist die **Provenance** der Zeilen, nicht ihr

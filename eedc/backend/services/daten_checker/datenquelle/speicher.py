@@ -179,10 +179,9 @@ class SpeicherChecks:
             ),
             details=summen_details,
             action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren"),
+            }),
             code="batterie_vorzeichen_tage",
             werte={"tage": len(konflikt_tage), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
                    "bereich_von": range_von.isoformat(), "aelter_ausserhalb": rest_aelter},
@@ -199,7 +198,7 @@ class SpeicherChecks:
                     "Einzelnen Tag neu aus HA-Statistics aggregieren — schreibt das "
                     "Batterie-Netto in der korrigierten Richtung (ENTLADUNG positiv)."
                 ),
-                action=Aktion("reaggregate_day", {"anlage_id": anlage.id, "datum": d.isoformat()}, "Tag reparieren"),
+                action=Aktion("reaggregate_day", {"datum": d.isoformat()}),
                 code="batterie_vorzeichen_tag", werte={"datum": d.isoformat()},
             ))
         if len(konflikt_tage) > MAX_EINZEL:
@@ -333,8 +332,7 @@ class SpeicherChecks:
             ),
             details=details,
             action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren"),
+            }),
         )]

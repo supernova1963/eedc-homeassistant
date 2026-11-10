@@ -86,7 +86,23 @@ def _drift_aktion(ctx: _DriftKontext, datum_: date) -> Aktion:
     der Tag neu aufgebaut), ohne Spiegel «Tag reparieren» (Neu-Aggregation des Tages) wie bisher."""
     if ctx.hat_spiegel:
         return aktion_spiegel_abgleich_tag(ctx.anlage.id, datum_)
-    return Aktion("reaggregate_day", {"anlage_id": ctx.anlage.id, "datum": datum_.isoformat()}, "Tag reparieren")
+    return Aktion("reaggregate_day", {"datum": datum_.isoformat()})
+
+
+async def _aktion_aeltere_quelle(db, anlage_id: int, letzter: date) -> Optional[Aktion]:
+    """«Tage neu aufbauen» der Zeile «Aggregate aus älterer Quelle» (E3, Teil B Nr 20; Kanal-Lage-Weiche R7): das jüngste
+    Fenster ≤ ``REAGGREGATE_RANGE_MAX_DAYS`` bis zum gemeldeten Tag (höchstens gestern — der laufende Tag ist nicht
+    stabil), nur über **Bestandstage** (``bilanz_leser.kanal_tage``); ohne Bestandstag kein Knopf."""
+    from backend.services.kanal.bilanz_leser import kanal_tage
+    from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
+
+    bis = min(letzter, date.today() - timedelta(days=1))
+    von = bis - timedelta(days=REAGGREGATE_RANGE_MAX_DAYS - 1)
+    kanal = await kanal_tage(db, anlage_id, von, bis)
+    bestand = [von + timedelta(days=i) for i in range((bis - von).days + 1) if von + timedelta(days=i) not in kanal]
+    if not bestand:
+        return None
+    return Aktion("reaggregate_range", {"von": bestand[0].isoformat(), "bis": bestand[-1].isoformat()})
 
 
 class QuellenChecks:
@@ -336,7 +352,7 @@ class QuellenChecks:
                     "werden (nächster Monatsabschluss oder Tag-Reparatur), "
                     "gilt HA-LTS als Source-of-Truth."
                 ),
-                altlink=HEUTE_ENERGIEPROFIL,
+                altlink=HEUTE_ENERGIEPROFIL, action=await _aktion_aeltere_quelle(self.db, anlage.id, tz.datum),
             )]
         # HA-LTS nicht verfügbar → Standalone-Modus (Docker ohne HA-Verbindung
         # oder fehlende HA-Recorder-URL)

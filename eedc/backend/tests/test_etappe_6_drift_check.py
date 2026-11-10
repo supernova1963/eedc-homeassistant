@@ -168,9 +168,9 @@ async def test_drift_ueber_schwelle_eintrag_mit_action():
     assert len(info_eintraege) == 1, f"Erwartet 1 INFO-Eintrag, bekommen {len(info_eintraege)}"
     eintrag = info_eintraege[0]
     assert eintrag.action_kind == "reaggregate_day", f"action_kind: {eintrag.action_kind}"
-    assert eintrag.action_params == {"anlage_id": 1, "datum": test_datum.isoformat()}, \
+    assert eintrag.action_params == {"datum": test_datum.isoformat()}, \
         f"action_params: {eintrag.action_params}"
-    assert eintrag.action_label == "Tag reparieren"
+    assert eintrag.action_label == "Tag neu aufbauen"
     assert test_datum.isoformat() in eintrag.meldung
     assert "35,0" in eintrag.meldung and "38,0" in eintrag.meldung
 

@@ -19,8 +19,10 @@ nie die Rohspalte), ``anlagen.versorger_daten``, ``community_hash``, E-Mail, Fot
 Datenbank. Anlage und Komponenten laufen über Allowlists; Log-Zeilen werden von URLs und Token-Mustern bereinigt.
 
 **Größe** (Entscheid Gernot 10.11.2026, Konzept §11 Nr. 4): die Datei ist ungekürzt; die Kopieren-Fassung ist hart
-≤ ``GRENZE_KOPIE_BYTES``. Kürzungsfolge: Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen; jede
-Kürzung steht im Kopf. Gemessen E0 §(6): simon42 (Discourse 2026.7.3) erlaubt ``max_post_length`` = 150 000 Zeichen — die
+≤ ``GRENZE_KOPIE_BYTES``. Kürzungsfolge (E3.0 nach Lab rc29): Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte →
+Checker-OK-Zeilen → Zuordnungen nur Felder mit Quelle → Komponenten ohne Parameter → Checker nur WARNING/ERROR → Tagesreihen
+ganz weg; danach fallen ganze Abschnitte von hinten nach Priorität weg (13, 11, 5, 10, 3, 9, 4, 2 — nie 1, 6, 7, 8, 12), erst
+zuletzt schneidet der Text am Ende. Jede Kürzung steht im Kopf. Gemessen E0 §(6): simon42 (Discourse 2026.7.3) erlaubt ``max_post_length`` = 150 000 Zeichen — die
 Grenze bleibt trotzdem bei 20 KB (Lesbarkeit einer PN, nicht das Forum-Limit).
 """
 
@@ -53,6 +55,17 @@ KANAL_FENSTER_TAGE = 90
 TAGESREIHEN_MONATE = 2
 PROTOKOLL_ZEILEN = 10
 LOG_ZEILEN = 30
+
+#: Die 13 Abschnitte (Konzept §8.2) — Nummer → Name.
+ABSCHNITT_NAMEN = {
+    1: "Kopf", 2: "Anlage", 3: "Komponenten", 4: "Zuordnungen", 5: "Strompreise", 6: "Daten-Checker", 7: "HA-Spiegel",
+    8: "Nachtlauf und Reparaturen", 9: "Kanal-Tage", 10: "Monate", 11: "Tagesreihen", 12: "Zeitpläne",
+    13: "Log (WARNING und höher)",
+}
+#: Harter Schnitt (E3.0, Lab rc29): ganze Abschnitte fallen von hinten nach Priorität weg — nie 1 Kopf, 6 Daten-Checker,
+#: 7 HA-Spiegel, 8 Nachtlauf/Reparaturen, 12 Zeitpläne (die Diagnose-Abschnitte). Erst danach schneidet der Text am Ende.
+WEGFALL_REIHENFOLGE = (13, 11, 5, 10, 3, 9, 4, 2)
+NIE_WEG = frozenset({1, 6, 7, 8, 12})
 
 #: Abschnitt 2 — die Spalten der Anlage, die ins Paket dürfen (Allowlist; alles andere bleibt draußen).
 ANLAGE_SPALTEN = (
@@ -90,18 +103,33 @@ class Kuerzung:
     tage_monate: int = TAGESREIHEN_MONATE
     spiegel_abschnitte: bool = True
     ok_zeilen: bool = True
+    # E3.0 (Lab rc29): weitere weiche Stufen vor dem harten Schnitt.
+    zuordnungen_voll: bool = True
+    komponenten_parameter: bool = True
+    checker_info: bool = True
+    #: Abschnitte, die der harte Schnitt ganz weglässt (Reihenfolge ``WEGFALL_REIHENFOLGE``).
+    weggelassen: tuple[int, ...] = ()
     hart: bool = False
 
     def texte(self) -> list[str]:
         out = []
         if not self.log:
             out.append("Log weggelassen")
-        if self.tage_monate < TAGESREIHEN_MONATE:
+        if self.tage_monate == 0:
+            out.append("Tagesreihen weggelassen")
+        elif self.tage_monate < TAGESREIHEN_MONATE:
             out.append(f"Tagesreihen nur {self.tage_monate} Monat")
         if not self.spiegel_abschnitte:
             out.append("Spiegel-Abschnitte weggelassen")
         if not self.ok_zeilen:
             out.append("Checker-OK-Zeilen weggelassen")
+        if not self.zuordnungen_voll:
+            out.append("Zuordnungen nur Felder mit Quelle")
+        if not self.komponenten_parameter:
+            out.append("Komponenten ohne Parameter")
+        if not self.checker_info:
+            out.append("Checker nur WARNING/ERROR")
+        out.extend(f"Abschnitt {nr} {ABSCHNITT_NAMEN[nr]} weggelassen" for nr in self.weggelassen)
         if self.hart:
             out.append(f"am Ende abgeschnitten bei {GRENZE_KOPIE_BYTES} Bytes")
         return out
@@ -115,9 +143,13 @@ class _Teile:
     anlage: list[str] = field(default_factory=list)
     komponenten: list[str] = field(default_factory=list)
     zuordnungen: list[str] = field(default_factory=list)
+    #: Kurzformen für die Kürzungsstufen (``None`` ⇒ wie die Vollform).
+    komponenten_kurz: Optional[list[str]] = None
+    zuordnungen_kurz: Optional[list[str]] = None
     strompreise: list[str] = field(default_factory=list)
     checker_kopf: list[str] = field(default_factory=list)
-    checker: list[tuple[str, bool]] = field(default_factory=list)
+    #: je Befund (Kategorie, Schwere, Zeile) — Abschnitt 6 gruppiert nach Kategorie.
+    checker: list[tuple[str, str, str]] = field(default_factory=list)
     checker_fuss: list[str] = field(default_factory=list)
     spiegel: list[tuple[str, list[str]]] = field(default_factory=list)
     protokoll: list[str] = field(default_factory=list)
@@ -269,13 +301,15 @@ def _kennwert(inv: Investition) -> str:
     return ""
 
 
-async def _komponenten(db: AsyncSession, anlage_id: int) -> list[str]:
+async def _komponenten(db: AsyncSession, anlage_id: int) -> tuple[list[str], list[str]]:
+    """Abschnitt 3: Vollform (mit Parameter-Liste) und Kurzform (ohne, Kürzungsstufe E3.0)."""
     from backend.utils.investition_filter import sort_investitionen_nach_typ
 
     invs = sort_investitionen_nach_typ((await db.execute(
         select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
     erlaubt = _parameter_erlaubt()
-    out = []
+    out: list[str] = []
+    kurz: list[str] = []
     for inv in invs:
         params = {k: v for k, v in sorted((inv.parameter or {}).items())
                   if k in erlaubt and isinstance(v, (str, int, float, bool)) and v != ""}
@@ -286,10 +320,11 @@ async def _komponenten(db: AsyncSession, anlage_id: int) -> list[str]:
             teile.append(f"gehört zu #{inv.parent_investition_id}")
         if (kw := _kennwert(inv)):
             teile.append(kw)
+        kurz.append("- " + " · ".join(teile))
         if params:
             teile.append("Parameter " + ", ".join(f"{k}={_kurz(v)}" for k, v in params.items()))
         out.append("- " + " · ".join(teile))
-    return out or ["- keine"]
+    return out or ["- keine"], kurz or ["- keine"]
 
 
 async def _strompreise(db: AsyncSession, anlage_id: int) -> list[str]:
@@ -312,8 +347,12 @@ def _ziel(e: dict) -> str:
     return ""
 
 
-def _zuordnung_feld(f: dict, neu: set[str]) -> str:
-    zeile = f"- {f['id']} «{_zeile(f.get('label'))}» [{f.get('einheit') or '—'}]: {f.get('quelle')}{_ziel(f)}"
+def _zuordnung_feld(f: dict, neu: set[str], kurz: bool = False) -> str:
+    """Eine Feldzeile; ``kurz`` (Kürzungsstufe E3.0) ohne Label und Einheit — der Schlüssel nennt das Feld."""
+    if kurz:
+        zeile = f"- {f['id']}: {f.get('quelle')}{_ziel(f)}"
+    else:
+        zeile = f"- {f['id']} «{_zeile(f.get('label'))}» [{f.get('einheit') or '—'}]: {f.get('quelle')}{_ziel(f)}"
     if f["id"] in neu:
         zeile += " (aufgelöst, nicht gespeichert)"
     if f.get("bedarf") == "pflicht":
@@ -324,18 +363,28 @@ def _zuordnung_feld(f: dict, neu: set[str]) -> str:
     return zeile
 
 
-async def _zuordnungen(db: AsyncSession, anlage_id: int) -> list[str]:
-    from backend.services.datenquellen_felder import QUELLE_KEINE, zuordnungen_lesen
+async def _zuordnungen(db: AsyncSession, anlage_id: int) -> tuple[list[str], list[str]]:
+    from backend.services.datenquellen_felder import zuordnungen_lesen
 
     ctx, gruppen = await zuordnungen_lesen(db, anlage_id)
     neu = set(ctx.neu_persistieren)
+    return zuordnungen_zeilen(gruppen, neu), zuordnungen_zeilen(gruppen, neu, kurz=True)
+
+
+def zuordnungen_zeilen(gruppen: list[dict], neu: set[str], kurz: bool = False) -> list[str]:
+    """Abschnitt 4 aus den Gruppen von ``zuordnungen_lesen``. Vollform: Felder mit Quelle und Pflichtfelder; Kurzform
+    (Kürzungsstufe E3.0): nur Felder mit Quelle, ohne Label und Einheit. Felder ohne Quelle stehen je Gruppe als eine
+    Zählzeile."""
+    from backend.services.datenquellen_felder import QUELLE_KEINE
+
     beispiel = next((f.get("standard_topic") for g in gruppen for f in g["felder"] if f.get("standard_topic")), None)
     out = [f"Standard-Topics (Quelle mqtt_inbound_standard) nach dem Muster {beispiel or '—'}"]
     for g in gruppen:
-        felder = [f for f in g["felder"] if f.get("quelle") != QUELLE_KEINE or f.get("bedarf") == "pflicht"]
+        felder = [f for f in g["felder"]
+                  if f.get("quelle") != QUELLE_KEINE or (f.get("bedarf") == "pflicht" and not kurz)]
         ohne = len(g["felder"]) - len(felder)
         out.append(f"### {_zeile(g.get('titel'))} ({g.get('id')})")
-        out.extend(_zuordnung_feld(f, neu) for f in felder)
+        out.extend(_zuordnung_feld(f, neu, kurz) for f in felder)
         for thema in g.get("themen") or []:
             for e in thema.get("eintraege") or []:
                 if e.get("quelle") != QUELLE_KEINE:
@@ -347,17 +396,26 @@ async def _zuordnungen(db: AsyncSession, anlage_id: int) -> list[str]:
 
 # ─── Abschnitt 6: Daten-Checker ──────────────────────────────────────────────────────────────────────────────────
 
-def _handgriff(e) -> str:
-    if e.action_kind:
-        return f"Aktion {e.action_kind} «{e.action_label or ''}» {_json(e.action_params or {})}"
-    if e.link:
-        return f"Sprung {e.link}"
-    return "Auskunft"
+#: Laufzeit-Klasse, die der Katalog-Klasse entspricht, obwohl der Name anders ist (OK-Zeile und V2-Restzeile tragen
+#: keinen Handgriff — zur Laufzeit «auskunft»).
+_KLASSE_GLEICH = {("ok", "auskunft"), ("entfaellt", "auskunft")}
 
 
-def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[str, bool]], list[str]]:
-    from backend.services.daten_checker import CheckKategorie
+def _klasse(e) -> str:
+    """`` · Klasse <Laufzeit> (Katalog <Soll>)`` nur, wenn die Laufzeit-Klasse vom Katalog abweicht — sonst steht sie im
+    Katalog (``handgriffe.py``), und der Handgriff-Pfad steht im Code (E3.0: Abschnitt 6 kompakter)."""
     from backend.services.daten_checker.handgriffe import handgriff
+
+    soll = handgriff(e.code)
+    if soll is None or soll.klasse == e.klasse or (soll.klasse, e.klasse) in _KLASSE_GLEICH:
+        return ""
+    return f" · Klasse {e.klasse} (Katalog {soll.klasse})"
+
+
+def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[str, str, str]], list[str]]:
+    """Abschnitt 6: Kopf, je Befund ``(Kategorie, Schwere, Zeile)`` mit Zeile ``- [schwere] code — Meldung · werte``,
+    Fuß (nicht ausgeführte Prüfungen)."""
+    from backend.services.daten_checker import CheckKategorie
 
     z = result.zusammenfassung
     kopf = [f"- Zusammenfassung: error {z.get('error', 0)} · warning {z.get('warning', 0)} · info {z.get('info', 0)} · "
@@ -369,17 +427,13 @@ def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[s
     for e in result.ergebnisse:
         schwere = getattr(e.schwere, "value", e.schwere)
         kategorie = getattr(e.kategorie, "value", e.kategorie)
-        teile = [f"- [{schwere}] {kategorie}"]
-        if e.code:
-            teile.append(f"code {e.code}")
+        zeile = f"- [{schwere}] {e.code or '—'}"
         if e.investition_id is not None:
-            teile.append(f"Gerät #{e.investition_id}")
-        zeile = " · ".join(teile) + f" — {_zeile(e.meldung)}"
+            zeile += f" · Gerät #{e.investition_id}"
+        zeile += f" — {_zeile(e.meldung)}"
         if e.werte:
             zeile += f" · werte {_json(e.werte)}"
-        soll = handgriff(e.code)
-        zeile += f" · Handgriff: {_handgriff(e)}" + (f" · Klasse {soll.klasse}" if soll else "")
-        zeilen.append((zeile, schwere == "ok"))
+        zeilen.append((kategorie, schwere, zeile + _klasse(e)))
     gesehen = {getattr(e.kategorie, "value", e.kategorie) for e in result.ergebnisse}
     fuss = ["Nicht ausgeführt oder ohne Befund:"]
     for k in CheckKategorie:
@@ -554,27 +608,44 @@ def _log() -> list[str]:
 
 # ─── Zusammensetzen und Kürzen ──────────────────────────────────────────────────────────────────────────────────
 
+_WEG = ["- weggelassen (Kürzung)"]
+
+
+def _checker_abschnitt(t: _Teile, k: Kuerzung) -> list[str]:
+    """Abschnitt 6: Kategorie als Gruppenkopf, darunter die Befunde; OK- bzw. INFO-Zeilen als Zählzeile, wenn gekürzt."""
+    behalten = [(kat, sw, z) for kat, sw, z in t.checker
+                if (k.ok_zeilen or sw != "ok") and (k.checker_info or sw != "info")]
+    out = list(t.checker_kopf)
+    for kat in dict.fromkeys(kat for kat, _, _ in behalten):
+        out.append(f"### {kat}")
+        out.extend(z for kat2, _, z in behalten if kat2 == kat)
+    if not k.ok_zeilen:
+        out.append(f"- ({sum(1 for _, sw, _ in t.checker if sw == 'ok')} OK-Zeilen weggelassen)")
+    if not k.checker_info:
+        out.append(f"- ({sum(1 for _, sw, _ in t.checker if sw == 'info')} INFO-Zeilen weggelassen)")
+    return out + t.checker_fuss
+
+
 def _abschnitte(t: _Teile, k: Kuerzung) -> list[tuple[int, str, list[str]]]:
     spiegel: list[str] = []
     for kopf, quellen in t.spiegel:
         spiegel.append(kopf)
         if k.spiegel_abschnitte:
             spiegel.extend(quellen)
-    checker = t.checker_kopf + [z for z, ok in t.checker if k.ok_zeilen or not ok]
-    if not k.ok_zeilen:
-        checker.append(f"- ({sum(1 for _, ok in t.checker if ok)} OK-Zeilen weggelassen)")
     reihen: list[str] = []
     for monat, zeilen in t.tagesreihen[:k.tage_monate]:
         reihen += [f"#### {monat}", *zeilen]
+    if not reihen:
+        reihen = _WEG if t.tagesreihen else ["- keine betroffenen Monate"]
     kopf = t.kopf + [f"- Kürzungen: {', '.join(k.texte()) or 'keine'}"]
-    return [
-        (1, "Kopf", kopf), (2, "Anlage", t.anlage), (3, "Komponenten", t.komponenten), (4, "Zuordnungen", t.zuordnungen),
-        (5, "Strompreise", t.strompreise), (6, "Daten-Checker", checker + t.checker_fuss),
-        (7, "HA-Spiegel", spiegel or ["- kein HA-Spiegel (keine Kanäle)"]), (8, "Nachtlauf und Reparaturen", t.protokoll),
-        (9, "Kanal-Tage", t.kanal_tage), (10, "Monate", t.monate),
-        (11, "Tagesreihen", reihen or ["- keine betroffenen Monate"]), (12, "Zeitpläne", t.zeitplaene),
-        (13, "Log (WARNING und höher)", t.log if k.log else ["- weggelassen (Kürzung)"]),
-    ]
+    inhalt = {
+        1: kopf, 2: t.anlage,
+        3: t.komponenten if k.komponenten_parameter or t.komponenten_kurz is None else t.komponenten_kurz,
+        4: t.zuordnungen if k.zuordnungen_voll or t.zuordnungen_kurz is None else t.zuordnungen_kurz,
+        5: t.strompreise, 6: _checker_abschnitt(t, k), 7: spiegel or ["- kein HA-Spiegel (keine Kanäle)"],
+        8: t.protokoll, 9: t.kanal_tage, 10: t.monate, 11: reihen, 12: t.zeitplaene, 13: t.log if k.log else _WEG,
+    }
+    return [(nr, ABSCHNITT_NAMEN[nr], _WEG if nr in k.weggelassen else inhalt[nr]) for nr in ABSCHNITT_NAMEN]
 
 
 def _text(titel: str, abschnitte: list[tuple[int, str, list[str]]]) -> tuple[str, dict[int, int]]:
@@ -587,16 +658,32 @@ def _text(titel: str, abschnitte: list[tuple[int, str, list[str]]]) -> tuple[str
     return "".join(teile), groessen
 
 
+#: Weiche Stufen der Kopieren-Fassung in dieser Reihenfolge (Konzept §8.2; E3.0 erweitert nach Lab rc29).
+WEICHE_STUFEN = (
+    dict(log=False), dict(tage_monate=1), dict(spiegel_abschnitte=False), dict(ok_zeilen=False),
+    dict(zuordnungen_voll=False), dict(komponenten_parameter=False), dict(checker_info=False), dict(tage_monate=0),
+)
+
+
 def setze_zusammen(t: _Teile, titel: str, fassung: str) -> tuple[str, dict[int, int], list[str]]:
-    """Datei: ungekürzt. Kopie: Kürzungsfolge bis ≤ ``GRENZE_KOPIE_BYTES``; als letzte Stufe ein harter Schnitt."""
+    """Datei: ungekürzt. Kopie: weiche Stufen bis ≤ ``GRENZE_KOPIE_BYTES``, danach ganze Abschnitte von hinten nach
+    Priorität (``WEGFALL_REIHENFOLGE``, nie ``NIE_WEG``); erst als letzte Stufe ein harter Schnitt am Textende."""
     k = Kuerzung()
     text, groessen = _text(titel, _abschnitte(t, k))
     if fassung != "kopie":
         return text, groessen, k.texte()
-    for stufe in (dict(log=False), dict(tage_monate=1), dict(spiegel_abschnitte=False), dict(ok_zeilen=False)):
+    for stufe in WEICHE_STUFEN:
         if len(text.encode("utf-8")) <= GRENZE_KOPIE_BYTES:
             break
         k = replace(k, **stufe)
+        text, groessen = _text(titel, _abschnitte(t, k))
+    # Harter Schnitt: Abschnitt für Abschnitt; 13 (Log) und 11 (Tagesreihen) sind nach den weichen Stufen schon leer.
+    schon_weg = {13} if not k.log else set()
+    schon_weg |= {11} if k.tage_monate == 0 else set()
+    for nr in (n for n in WEGFALL_REIHENFOLGE if n not in schon_weg):
+        if len(text.encode("utf-8")) <= GRENZE_KOPIE_BYTES:
+            break
+        k = replace(k, weggelassen=(*k.weggelassen, nr))
         text, groessen = _text(titel, _abschnitte(t, k))
     if len(text.encode("utf-8")) > GRENZE_KOPIE_BYTES:
         k = replace(k, hart=True)
@@ -622,8 +709,8 @@ async def baue_paket(
         raise LookupError(f"Anlage {anlage_id} nicht gefunden")
     info = await ha_info(db)
     t = _Teile(anlage=_anlage(anlage))
-    t.komponenten = await _komponenten(db, anlage_id)
-    t.zuordnungen = await _zuordnungen(db, anlage_id)
+    t.komponenten, t.komponenten_kurz = await _komponenten(db, anlage_id)
+    t.zuordnungen, t.zuordnungen_kurz = await _zuordnungen(db, anlage_id)
     t.strompreise = await _strompreise(db, anlage_id)
     result = await DatenChecker(db).check_anlage(anlage_id)
     t.checker_kopf, t.checker, t.checker_fuss = _checker_zeilen(result, bool(info["kind"]))

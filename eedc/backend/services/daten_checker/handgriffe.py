@@ -232,3 +232,27 @@ HANDGRIFFE: dict[str, Handgriff] = {
 def handgriff(code: Optional[str]) -> Optional[Handgriff]:
     """Katalog-Zeile eines Codes (None für einen Befund ohne Code)."""
     return HANDGRIFFE.get(code) if code else None
+
+
+#: Knopf-Text je Operation einer Aktion (Etappe E3, Konzept §3.1 R4, Wächter W-4): Verb in Anwender-Sprache, keine
+#: Mechanik-Wörter. Der Katalog führt je Code den Text seiner Teil-B-Operation; trägt ein Befund nach der Kanal-Lage-Weiche
+#: (R7) eine andere Operation (Drift ohne Spiegel ⇒ Tag neu aufbauen), gilt der Text dieser Operation.
+#: `CheckErgebnis.action_label` ist daraus abgeleitet.
+KNOPF_JE_OPERATION: dict[str, str] = {
+    "reaggregate_day": "Tag neu aufbauen",
+    "reaggregate_range": "Tage neu aufbauen",
+    "spiegel_abgleich_tag": "Aus Home Assistant neu übernehmen",
+    "kraftstoffpreis_backfill": "Benzinpreise nachtragen",
+    "wetter_backfill": "Wetterreihe nachziehen",
+    "temperatur_aus_messung": "Temperatur aus Messung übernehmen",
+    "feldwert_entfernen": "Wert entfernen",
+}
+
+
+def knopf_text(operation: Optional[str]) -> Optional[str]:
+    """Knopf-Text einer Aktion (``None`` für eine Operation ohne Checker-Knopf)."""
+    return KNOPF_JE_OPERATION.get(operation) if operation else None
+
+#: Wörter der Mechanik (Konzept §3.1 R4, Wächter W-4): verboten im Knopf-Text und in der einen Vorschau-Zeile je
+#: Operation — erlaubt in den Werkbank-Warnungen, die der Vorschau-Kasten unverändert zeigt (Gegenprüfung Ü3).
+MECHANIK_WOERTER = ("spiegel", "kanal", "lts", "statistics", "snapshot", "aggregier", "provenance", "resnap")

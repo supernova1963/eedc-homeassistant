@@ -9,41 +9,27 @@
  * Zahlen de-DE über `fmtZahl`.
  */
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { v3RouteZuV4 } from '../config/v3ZuV4Route'
 import {
   RefreshCw, XCircle, AlertTriangle, Info,
-  CheckCircle, ChevronRight, ChevronDown, Wrench, FileText,
+  CheckCircle, ChevronRight, ChevronDown, FileText,
 } from 'lucide-react'
 import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
-import { energieProfilApi } from '../api/energie_profil'
-import { monatsdatenApi } from '../api/monatsdaten'
-import { repairApi } from '../api/repair'
 import DiagnosePaketDialog from '../components/datenchecker/DiagnosePaketDialog'
-import {
-  baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueSpiegelAbgleichMeldung, baueTagesMeldung,
-  type ReparaturMeldung,
-} from './datenCheckerMeldungen'
-import { fmtZahl, formatDatum } from '../lib'
+import BefundHandgriff from '../components/datenchecker/BefundHandgriff'
+import LoesungswegPanel from '../components/datenchecker/LoesungswegPanel'
+import type { ReparaturMeldung } from './datenCheckerMeldungen'
+import { useSchmaleAchse } from '../hooks/useSchmaleAchse'
+import { fmtZahl } from '../lib'
 import {
   KATEGORIE_LABELS as kategorieLabels,
   KATEGORIE_REIHENFOLGE as kategorieReihenfolge,
-  SEVERITY_CONFIG,
-  type CheckSchwere,
 } from '../config/datenCheckerKategorien'
 
 // ─── Severity-Helfer ──────────────────────────────────────────────────────────
 // Kategorie-Labels/-Reihenfolge + Severity-Config sind SoT in
 // config/datenCheckerKategorien.ts (geteilt mit dem IA-V4-Komponenten-Hub).
-
-function severityIcon(schwere: string) {
-  const cfg = SEVERITY_CONFIG[schwere as CheckSchwere]
-  if (!cfg) return null
-  const Icon = cfg.icon
-  return <Icon className={`h-4 w-4 ${cfg.colorClass} flex-shrink-0`} />
-}
 
 function severityBadge(counts: Record<string, number>) {
   const parts: string[] = []
@@ -64,37 +50,25 @@ function KategorieSektion({
   kategorie,
   ergebnisse,
   defaultOpen,
-  onReaggregate,
-  onReaggregateBereich,
-  onGeraetewerteLoeschen,
-  onKraftstoffpreiseNachpflegen,
-  onTemperaturAusMessung,
-  onFeldwertEntfernen,
-  onSpiegelAbgleichTag,
-  reparaturBusy,
+  anlageId,
+  vorgangAktiv,
+  onVorgang,
+  onErgebnis,
+  onLoesungsweg,
 }: {
   kategorie: string
   ergebnisse: CheckErgebnis[]
   defaultOpen: boolean
-  onReaggregate?: (anlageId: number, datum: string) => Promise<void>
-  onReaggregateBereich?: (anlageId: number, von: string, bis: string) => Promise<void>
-  onGeraetewerteLoeschen?: (
-    anlageId: number, jahr: number, monat: number, hatZaehler?: boolean,
-  ) => Promise<void>
-  onKraftstoffpreiseNachpflegen?: (anlageId: number) => Promise<void>
-  onTemperaturAusMessung?: (anlageId: number) => Promise<void>
-  onFeldwertEntfernen?: (investitionId: number, feld: string, label: string, monate: string[]) => Promise<void>
-  onSpiegelAbgleichTag?: (anlageId: number, datum: string) => Promise<void>
-  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
+  anlageId: number
+  /** E3: ein Vorgang zur Zeit (Vorschau offen oder Lauf) — die übrigen Knöpfe sind gesperrt. */
+  vorgangAktiv: boolean
+  onVorgang: (aktiv: boolean) => void
+  onErgebnis: (m: ReparaturMeldung) => void
+  onLoesungsweg: (befund: CheckErgebnis) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
-  const navigate = useNavigate()
-  // „Beheben"-Links auf den re-kategorisierten V4-Reiter umbiegen; Ziele ohne
-  // V4-Kategorie (z. B. /monatsabschluss/…) bleiben unveraendert.
-  // ⚠ Der Checker rendert AUF /einstellungen/daten. Ein Ziel, das dorthin
-  // umgeleitet wird, muss einen Query tragen, den die Seite liest — sonst
-  // navigiert der Knopf auf die aktuelle Seite und tut nichts (T89667 #268).
-  // Der Backend-Waechter dazu: test_daten_checker_beheben_links_wirken.py.
+  // E3 (Konzept §5): jede Zeile rendert `BefundHandgriff` — ein Knopf je Befund (Aktion mit Vorschau · Sprung ·
+  // Auskunft) und der Text-Link «Lösungsweg». Keine eigenen Handler (Wächter W-10, `npm run check:eine-mechanik`).
 
   const counts = useMemo(() => {
     const c = { error: 0, warning: 0, info: 0, ok: 0 }
@@ -136,210 +110,24 @@ function KategorieSektion({
 
       {open && (
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
-          {ergebnisse.map((e, i) => {
-            const actionAnlageId = e.action_kind === 'reaggregate_day'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const actionDatum = e.action_kind === 'reaggregate_day'
-              ? String(e.action_params?.datum ?? '') : undefined
-            const reparaturKey = actionAnlageId && actionDatum
-              ? `${actionAnlageId}:${actionDatum}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-            const isReparaturBusy = reparaturKey && reparaturBusy === reparaturKey
-
-            // v3.45.9: Bereichs-Reparatur (Batterie-Vorzeichen-Historie).
-            const rangeAnlageId = e.action_kind === 'reaggregate_range'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const rangeVon = e.action_kind === 'reaggregate_range'
-              ? String(e.action_params?.von ?? '') : undefined
-            const rangeBis = e.action_kind === 'reaggregate_range'
-              ? String(e.action_params?.bis ?? '') : undefined
-            const rangeKey = rangeAnlageId && rangeVon && rangeBis
-              ? `${rangeAnlageId}:${rangeVon}:${rangeBis}` : null
-            const isRangeBusy = rangeKey && reparaturBusy === rangeKey
-
-            // #349: Messwerte ohne Zählerzeile entfernen.
-            const gwAnlageId = e.action_kind === 'geraetewerte_loeschen'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const gwJahr = e.action_kind === 'geraetewerte_loeschen'
-              ? Number(e.action_params?.jahr) : undefined
-            const gwMonat = e.action_kind === 'geraetewerte_loeschen'
-              ? Number(e.action_params?.monat) : undefined
-            // N-312: Trägt der Monat einen Zählerstand? Der Stand ist der
-            // Anfangswert des Folgemonats — die Rückfrage muss das sagen.
-            const gwHatZaehler = e.action_kind === 'geraetewerte_loeschen'
-              ? e.action_params?.hat_zaehler === true : false
-            const gwKey = gwAnlageId && gwJahr && gwMonat
-              ? `${gwAnlageId}:${gwJahr}-${gwMonat}` : null
-            const isGwBusy = gwKey && reparaturBusy === gwKey
-
-            // #394: Ø-Benzinpreise aus dem EU Oil Bulletin nachpflegen.
-            const kpAnlageId = e.action_kind === 'kraftstoffpreis_backfill'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const kpKey = kpAnlageId ? `${kpAnlageId}:kraftstoffpreis` : null
-            const isKpBusy = kpKey && reparaturBusy === kpKey
-
-            // N-426-Nachtrag: Ø-Temperatur aus der eigenen Messreihe nachtragen.
-            const tempAnlageId = e.action_kind === 'temperatur_aus_messung'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const tempKey = tempAnlageId ? `${tempAnlageId}:temperatur` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-            const isTempBusy = tempKey && reparaturBusy === tempKey
-
-            // N-393: Wert in einem Feld, das das Gerät nicht mehr führt.
-            const fwInvId = e.action_kind === 'feldwert_entfernen'
-              ? Number(e.action_params?.investition_id) : undefined
-            const fwFeld = e.action_kind === 'feldwert_entfernen'
-              ? String(e.action_params?.feld ?? '') : undefined
-            const fwLabel = e.action_kind === 'feldwert_entfernen'
-              ? String(e.action_params?.label ?? fwFeld ?? '') : ''
-            const fwMonate = e.action_kind === 'feldwert_entfernen' && Array.isArray(e.action_params?.monate)
-              ? (e.action_params?.monate as unknown[]).map(String) : []
-            const fwKey = fwInvId && fwFeld ? `${fwInvId}:${fwFeld}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-            const isFwBusy = fwKey && reparaturBusy === fwKey
-
-            // N-790: Abgleich mit der HA-Statistik + Tag neu aufbauen (Drift, Zählersprung, Rückgang).
-            const spAnlageId = e.action_kind === 'spiegel_abgleich_tag'
-              ? Number(e.action_params?.anlage_id) : undefined
-            const spDatum = e.action_kind === 'spiegel_abgleich_tag'
-              ? String(e.action_params?.datum ?? '') : undefined
-            const spKey = spAnlageId && spDatum
-              ? `${spAnlageId}:spiegel:${spDatum}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-            const isSpBusy = spKey && reparaturBusy === spKey
-
-            return (
-              <div
-                key={i}
-                className="flex items-start gap-3 px-4 py-2.5"
-              >
-                <div className="mt-0.5">{severityIcon(e.schwere)}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800 dark:text-gray-200">{e.meldung}</p>
-                  {e.details && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 whitespace-pre-line">{e.details}</p>
-                  )}
-                </div>
-                {e.action_kind === 'reaggregate_day' && onReaggregate && actionAnlageId && actionDatum && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onReaggregate(actionAnlageId, actionDatum)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isReparaturBusy}
-                  >
-                    {!isReparaturBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Tag reparieren'}
-                  </Button>
-                )}
-                {e.action_kind === 'spiegel_abgleich_tag' && onSpiegelAbgleichTag && spAnlageId && spDatum && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onSpiegelAbgleichTag(spAnlageId, spDatum)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isSpBusy}
-                  >
-                    {!isSpBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Aus Home Assistant neu übernehmen'}
-                  </Button>
-                )}
-                {e.action_kind === 'reaggregate_range' && onReaggregateBereich && rangeAnlageId && rangeVon && rangeBis && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onReaggregateBereich(rangeAnlageId, rangeVon, rangeBis)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isRangeBusy}
-                  >
-                    {!isRangeBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Zeitraum neu aggregieren'}
-                  </Button>
-                )}
-                {e.action_kind === 'geraetewerte_loeschen' && onGeraetewerteLoeschen
-                  && gwAnlageId && gwJahr && gwMonat && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onGeraetewerteLoeschen(gwAnlageId, gwJahr, gwMonat, gwHatZaehler)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isGwBusy}
-                  >
-                    {!isGwBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Messwerte entfernen'}
-                  </Button>
-                )}
-                {e.action_kind === 'feldwert_entfernen' && onFeldwertEntfernen
-                  && fwInvId && fwFeld && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onFeldwertEntfernen(fwInvId, fwFeld, fwLabel, fwMonate)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isFwBusy}
-                  >
-                    {!isFwBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Wert entfernen'}
-                  </Button>
-                )}
-                {e.action_kind === 'temperatur_aus_messung' && onTemperaturAusMessung
-                  && tempAnlageId && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onTemperaturAusMessung(tempAnlageId)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isTempBusy}
-                  >
-                    {!isTempBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Temperatur aus Messung übernehmen'}
-                  </Button>
-                )}
-                {e.action_kind === 'kraftstoffpreis_backfill' && onKraftstoffpreiseNachpflegen
-                  && kpAnlageId && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => onKraftstoffpreiseNachpflegen(kpAnlageId)}
-                    disabled={!!reparaturBusy}
-                    loading={!!isKpBusy}
-                  >
-                    {!isKpBusy && <Wrench className="h-3 w-3 mr-1" />}
-                    {e.action_label ?? 'Vergleichspreise nachpflegen'}
-                  </Button>
-                )}
-                {e.link && !e.action_kind && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="flex-shrink-0"
-                    onClick={() => navigate(v3RouteZuV4(e.link!) ?? e.link!)}
-                  >
-                    Beheben
-                    <ChevronRight className="h-3 w-3 ml-0.5" />
-                  </Button>
-                )}
-              </div>
-            )
-          })}
+          {ergebnisse.map((e, i) => (
+            <BefundHandgriff
+              key={i}
+              befund={e}
+              anlageId={anlageId}
+              gesperrt={vorgangAktiv}
+              onVorgang={onVorgang}
+              onErgebnis={onErgebnis}
+              onLoesungsweg={onLoesungsweg}
+            />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Verwaltung (Prüf-Lauf + KPI + Abdeckung + Kategorien + Reparatur) ─────────
+// ─── Verwaltung (Prüf-Lauf + KPI + Abdeckung + Kategorien + Lösungsweg) ───────
 
 /**
  * Voller Daten-Checker. Genau eine Einbettung: der Katalog-Block `datenchecker`
@@ -353,200 +141,19 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [diagnoseOffen, setDiagnoseOffen] = useState(false)
-  const [reparaturBusy, setReparaturBusy] = useState<string | null>(null)
+  // E3: ein Vorgang zur Zeit (Vorschau offen oder Lauf) und der offene Lösungsweg.
+  const [vorgangAktiv, setVorgangAktiv] = useState(false)
+  const [loesungsweg, setLoesungsweg] = useState<CheckErgebnis | null>(null)
   // `hinweis` (bernstein) ist der dritte Zustand, den es braucht: der Lauf ist
   // durchgelaufen, hat aber nichts (oder nur teilweise etwas) geschrieben —
-  // weder Erfolg noch Fehler. Ohne ihn stand „aggregiert" auch dann da, wenn
-  // kein einziger Tag verwertbare Daten hatte.
+  // weder Erfolg noch Fehler.
   const [reparaturMessage, setReparaturMessage] = useState<ReparaturMeldung | null>(null)
+  const schmal = useSchmaleAchse()
 
-  // Etappe 6 v3.31.1: Per-Tag-Reparatur über bestehenden reaggregate-tag-Endpoint.
-  const handleReaggregateDay = async (anlageId: number, datum: string) => {
-    const key = `${anlageId}:${datum}`
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const result = await energieProfilApi.reaggregateTag(anlageId, datum, true)
-      // Rückmeldung aus dem TATSÄCHLICHEN Lauf (SoT: baueTagesMeldung, dieselbe
-      // Datei wie der Bereichs-Pfad) — `status: "ok"` heißt nur „durchgelaufen".
-      // Die PV-Tagessumme vor/nach bleibt darin erhalten (#290-Frage „hat sich
-      // etwas bewegt?"), ergänzt um die Aussage je Komponente (N-58).
-      setReparaturMessage(baueTagesMeldung(result, datum))
-      // Daten-Checker neu laden → Eintrag verschwindet, wenn Drift jetzt unter Schwelle
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : `Reparatur für ${formatDatum(datum)} fehlgeschlagen`,
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  // N-790 (ottokar): an einem Kanal-Tag liest der Tag den HA-Spiegel — der
-  // Knopf gleicht ihn mit der HA-Statistik ab und baut den Tag danach neu auf.
-  // Rückmeldung = der Satz des Backends; danach läuft der Checker neu.
-  const handleSpiegelAbgleichTag = async (anlageId: number, datum: string) => {
-    const key = `${anlageId}:spiegel:${datum}` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await repairApi.spiegelAbgleichTag(anlageId, datum)
-      setReparaturMessage(baueSpiegelAbgleichMeldung(r))
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : `Übernahme aus Home Assistant für ${formatDatum(datum)} fehlgeschlagen`,
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  // v3.45.9: Bereichs-Reparatur (Batterie-Vorzeichen-Historie) über den
-  // bestehenden reaggregate-bereich-Endpoint (max 31 Tage/Lauf, Cap im Backend).
-  const handleReaggregateBereich = async (anlageId: number, von: string, bis: string) => {
-    const key = `${anlageId}:${von}:${bis}`
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await energieProfilApi.reaggregateBereich(anlageId, von, bis, true)
-      // Rückmeldung aus den TATSÄCHLICHEN Zählern (SoT: baueBereichsMeldung) —
-      // `status: "ok"` heißt nur „durchgelaufen", nicht „etwas geschrieben".
-      setReparaturMessage(baueBereichsMeldung(r, von, bis))
-      // Daten-Checker neu laden → Einträge verschwinden, wenn der Konflikt weg ist.
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : `Reaggregation ${von}–${bis} fehlgeschlagen`,
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  // #349: Messwerte eines Monats entfernen, dessen Zählerzeile gelöscht wurde.
-  // Die einzige Aktion dieser Seite, die Daten **löscht** — deshalb mit
-  // Rückfrage, und die Rückfrage nennt den Monat statt „diesen Eintrag".
-  const handleGeraetewerteLoeschen = async (
-    anlageId: number, jahr: number, monat: number, hatZaehler = false,
-  ) => {
-    const key = `${anlageId}:${jahr}-${monat}`
-    const monatText = `${String(monat).padStart(2, '0')}/${jahr}`
-    // N-312: Bei einem Zählerstand trifft das Löschen nicht nur diesen Monat.
-    // Der Stand ist der Anfangswert des Folgemonats — fällt er weg, rechnet
-    // der nächste Monat gegen den vorletzten Stand und weist zwei Monate als
-    // einen aus, ohne Hinweis. Gesagt wird es, verboten nicht.
-    const zaehlerSatz = hatZaehler
-      ? '\n\nDarunter ist mindestens ein Zählerstand. Ein Stand ist kein ' +
-        'Monatswert, sondern der Anfangswert des Folgemonats: Entfernst du ihn, ' +
-        'rechnet der nächste Monat gegen den vorletzten Stand und zeigt zwei ' +
-        'Monate als einen. Für Zähler ist Nachtragen der richtige Weg.'
-      : ''
-    if (!window.confirm(
-      `Messwerte einzelner Komponenten für ${monatText} endgültig entfernen?\n\n` +
-      'Der Monat hat keine Zählerzeile mehr. Wenn du die Werte behalten willst, ' +
-      'erfasse den Monat stattdessen neu — dann gehören sie wieder dazu.' +
-      zaehlerSatz
-    )) return
-
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await monatsdatenApi.deleteVerwaisteGeraetewerte(anlageId, jahr, monat)
-      setReparaturMessage({
-        art: r.geloescht > 0 ? 'ok' : 'hinweis',
-        text: r.geloescht > 0
-          ? `${monatText}: ${r.geloescht} Messwert-Zeile(n) entfernt (${r.komponenten.join(', ')}).`
-          : `${monatText}: es war nichts mehr zu entfernen.`,
-      })
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : `${monatText} konnte nicht bereinigt werden`,
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  // N-393: Wert aus einem Feld entfernen, das das Gerät nicht mehr führt.
-  // Zweite Aktion dieser Seite, die Daten **löscht** — deshalb mit Rückfrage,
-  // und die Rückfrage nennt Feld und jeden Monat (die Aktion nimmt alle mit).
-  const handleFeldwertEntfernen = async (
-    investitionId: number, feld: string, label: string, monate: string[],
-  ) => {
-    const key = `${investitionId}:${feld}` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-    if (!window.confirm(baueFeldwertRueckfrage(label, monate))) return
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await monatsdatenApi.deleteFeldwertNichtGefuehrt(investitionId, feld)
-      setReparaturMessage(baueFeldwertMeldung(label, r))
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : `„${label}“ konnte nicht entfernt werden`,
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  const handleTemperaturAusMessung = async (anlageId: number) => {
-    const key = `${anlageId}:temperatur` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await monatsdatenApi.temperaturAusMessung(anlageId)
-      setReparaturMessage({
-        art: r.gefuellt > 0 ? 'ok' : 'hinweis',
-        text: r.gefuellt > 0
-          ? `${r.gefuellt} Monat(e) haben jetzt eine Ø Temperatur aus deinen eigenen Messwerten.`
-            + (r.offen > 0
-                ? ` Für ${r.offen} weitere reicht die Messreihe nicht zurück — dort hilft „Wetterdaten holen“ im Monat selbst.`
-                : '')
-          : 'Es war nichts nachzutragen — für die offenen Monate reicht die Messreihe nicht zurück.',
-      })
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : 'Die Ø Temperatur konnte nicht nachgetragen werden',
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
-  }
-
-  const handleKraftstoffpreiseNachpflegen = async (anlageId: number) => {
-    const key = `${anlageId}:kraftstoffpreis` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
-    setReparaturBusy(key)
-    setReparaturMessage(null)
-    try {
-      const r = await energieProfilApi.kraftstoffpreisBackfillMonats(anlageId)
-      setReparaturMessage({
-        art: r.aktualisiert > 0 ? 'ok' : 'hinweis',
-        text: r.aktualisiert > 0
-          ? `${r.aktualisiert} Monat(e) haben jetzt einen Ø-Benzinpreis (Quelle: EU Weekly Oil Bulletin, ${r.land}).`
-          : (r.fehler
-              ? `Es konnten keine Preise geladen werden: ${r.fehler}`
-              : 'Es war nichts nachzupflegen.'),
-      })
-      setRefreshKey(k => k + 1)
-    } catch (e) {
-      setReparaturMessage({
-        art: 'fehler',
-        text: e instanceof Error ? e.message : 'Vergleichspreise konnten nicht nachgepflegt werden',
-      })
-    } finally {
-      setReparaturBusy(null)
-    }
+  // Nach «Anwenden»: der Satz des Laufs, dann prüft der Checker neu (der Befund verschwindet oder ändert sich, W-11).
+  const nachDemLauf = (m: ReparaturMeldung) => {
+    setReparaturMessage(m)
+    setRefreshKey(k => k + 1)
   }
 
   // Check laden wenn Anlage ausgewählt / neu angefordert
@@ -683,7 +290,8 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
             </div>
           )}
 
-          {/* Kategorien */}
+          {/* Kategorien — E3: mit offenem Lösungsweg zweispaltig (Panel neben der Liste), auf dem Handy als Dialog. */}
+          <div className={loesungsweg && !schmal ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] items-start' : ''}>
           <div className="space-y-3">
             {kategorieReihenfolge.map((kat) => {
               const items = grouped[kat]
@@ -695,17 +303,18 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
                   kategorie={kat}
                   ergebnisse={items}
                   defaultOpen={hasIssues}
-                  onReaggregate={handleReaggregateDay}
-                  onReaggregateBereich={handleReaggregateBereich}
-                  onGeraetewerteLoeschen={handleGeraetewerteLoeschen}
-                  onKraftstoffpreiseNachpflegen={handleKraftstoffpreiseNachpflegen}
-                  onTemperaturAusMessung={handleTemperaturAusMessung}
-                  onFeldwertEntfernen={handleFeldwertEntfernen}
-                  onSpiegelAbgleichTag={handleSpiegelAbgleichTag}
-                  reparaturBusy={reparaturBusy}
+                  anlageId={anlageId}
+                  vorgangAktiv={vorgangAktiv}
+                  onVorgang={setVorgangAktiv}
+                  onErgebnis={nachDemLauf}
+                  onLoesungsweg={setLoesungsweg}
                 />
               )
             })}
+          </div>
+          {loesungsweg && (
+            <LoesungswegPanel befund={loesungsweg} als={schmal ? 'dialog' : 'einschub'} onClose={() => setLoesungsweg(null)} />
+          )}
           </div>
         </>
       )}

@@ -40,7 +40,7 @@ from backend.core.berechnungen import (
     PV_STATUS_FEHLT,
 )
 
-from .kategorien import Aktion, CheckErgebnis, CheckKategorie, CheckSeverity
+from .kategorien import Aktion, CheckErgebnis, CheckKategorie, CheckSeverity, aktion_spiegel_abgleich_tag
 from .ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL, HEUTE_MONATSDATEN, KEIN_LINK, ziel_datenquelle, ziel_monat_label
 from backend.core.zahlenformat import fmt_zahl
 
@@ -899,10 +899,9 @@ class EnergieprofilChecks:
             details=details,
             altlink=HEUTE_ENERGIEPROFIL if reparatur_moeglich else HEUTE_DATENQUELLEN,
             action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren") if reparatur_moeglich else None,
+            }) if reparatur_moeglich else None,
         )]
 
     async def _check_tage_ohne_kanal_deckung(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -985,15 +984,14 @@ class EnergieprofilChecks:
         Häufige Ursachen: PV-Zähler liefert nicht (steht auf 0), Einspeisung und
         Netzbezug vertauscht, Vorzeichen eines kombinierten Netz-Sensors
         umgekehrt. Eine Zeile je Anlage mit Tagesliste; Reparaturweg wie E7
-        („Zeitraum neu aggregieren" über das jüngste Fenster), nachdem die
+        («Tage neu aufbauen» über das jüngste Fenster der Bestandstage, Kanal-Lage-Weiche
+        `_weiche_bereich`, E3), nachdem die
         Zuordnung geprüft ist.
 
         Die Tageswerte liest ``_tagesbilanzen`` (HA-Bauform S3, E-S3-3): an einem Kanal-Tag die Bilanz des
         Tages-Lesers (Weg 2, kein Deckel), sonst die Stundenzeilen wie bisher.
         """
-        from datetime import timedelta as _td
         from backend.services.energie_profil.kanal_stunden import verworfen_der_tage
-        from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
 
         # HA-Bauform S5 (E-S5-2, Wächter S5-R6): die Regelmarken über die Lesestelle — jede Marke, auch die leere (R9),
         # ungemischt (``kanal=()``): an einem Kanal-Tag liest ``_tagesbilanzen`` die Bilanz des Tages-Lesers, die Marke
@@ -1015,7 +1013,6 @@ class EnergieprofilChecks:
 
         befunde.sort(key=lambda t: t[0], reverse=True)
         neuester, aeltester = befunde[0][0], befunde[-1][0]
-        range_von = max(aeltester, neuester - _td(days=REAGGREGATE_RANGE_MAX_DAYS - 1))
         liste = "; ".join(
             f"{d.isoformat()}: Einspeisung {fmt_zahl(e, 1)} kWh, "
             f"PV {fmt_zahl(p, 1) if p is not None else '—'} kWh, Entladung {fmt_zahl(x, 1)} kWh"
@@ -1040,12 +1037,26 @@ class EnergieprofilChecks:
                 "(Einstellungen → Datenquellen), danach die Tage neu aggregieren."
             ),
             altlink=HEUTE_ENERGIEPROFIL,
-            action=Aktion("reaggregate_range", {
-                "anlage_id": anlage.id,
-                "von": range_von.isoformat(),
-                "bis": neuester.isoformat(),
-            }, "Zeitraum neu aggregieren"),
+            action=await self._weiche_bereich(anlage, [b[0] for b in befunde]),
         )]
+
+    async def _weiche_bereich(self, anlage: Anlage, tage: list) -> Optional[Aktion]:
+        """Kanal-Lage-Weiche (E3, Konzept §3.1 R7) einer Bereichs-Zeile: «Tage neu aufbauen» nur über die
+        **Bestandstage** (jüngstes Fenster ≤ ``REAGGREGATE_RANGE_MAX_DAYS``); liegen alle Tage auf Kanal-Tagen
+        (``_bilanz_kanal_tage``), mit HA-Spiegel «Aus Home Assistant neu übernehmen» am jüngsten Tag, sonst kein
+        Knopf (Auskunft). Liest die Kanal-Lage, rechnet nichts."""
+        from datetime import timedelta as _td
+        from backend.services.kanal.konsistenz import spiegel_quellen_anzahl
+        from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
+
+        kanal = await self._bilanz_kanal_tage(anlage, tage)
+        bestand = sorted(d for d in tage if d not in kanal)
+        if bestand:
+            von = max(bestand[0], bestand[-1] - _td(days=REAGGREGATE_RANGE_MAX_DAYS - 1))
+            return Aktion("reaggregate_range", {"von": von.isoformat(), "bis": bestand[-1].isoformat()})
+        if await spiegel_quellen_anzahl(self.db, anlage.id):
+            return aktion_spiegel_abgleich_tag(anlage.id, max(tage))
+        return None
 
     #: Achse → Anzeigename in der Tagesliste des Nachtrag-Hinweises (N-567).
     _NACHTRAG_ACHSEN_LABEL = {"pv": "PV", "einspeisung": "Einspeisung"}
@@ -1202,6 +1213,9 @@ class EnergieprofilChecks:
                     f"Behebung: 'Tag neu aggregieren' für genau diesen Tag (Reload-Symbol "
                     f"in der Tagesliste) — repariert SensorSnapshots + Aggregate in einem Schritt."
                 ),
+                # E3 (Kanal-Lage-Weiche R7): «Tag neu aufbauen» — `_spike_tage` liest nur Bestandstage
+                # (`_spike_stundenzeilen`), an einem Kanal-Tag entsteht dieser Befund nicht.
+                action=Aktion("reaggregate_day", {"datum": datum_spike.isoformat()}),
                 altlink=HEUTE_ENERGIEPROFIL, code="counter_spike_tag", werte={"datum": datum_spike.isoformat(), "stunden": len(spikes), "schwelle_kw": schwelle_kw, "kwp": kwp, "spikes": [{"stunde": s, "feld": f, "kw": w} for s, f, w in spikes]},  # E1: angehängt (Dateilänge)
             ))
 

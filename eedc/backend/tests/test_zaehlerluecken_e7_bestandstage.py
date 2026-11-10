@@ -56,7 +56,7 @@ async def test_p20_drei_tage_ohne_marke_eine_zeile_mit_zahl_und_reparaturweg(db)
     assert e.kategorie == CheckKategorie.ENERGIEPROFIL_ABDECKUNG
     assert e.meldung.startswith("3 Tag(e) sind vor dem Umbau gerechnet")
     assert e.action_kind == "reaggregate_range"
-    assert e.action_params == {"anlage_id": a.id, "von": "2026-05-10", "bis": "2026-05-12"}
+    assert e.action_params == {"von": "2026-05-10", "bis": "2026-05-12"}
 
 
 @pytest.mark.asyncio

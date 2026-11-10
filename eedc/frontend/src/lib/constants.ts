@@ -274,6 +274,22 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   stundenzeilen_geleert: 'Stundenzeilen geleert',
   tageszeilen_geleert: 'Tageszeilen geleert',
   felder_geleert: 'Werte geleert',
+  // E3 Daten-Checker: Vorschau-Zähler der Aktionen (eine Zeile im Vorschau-Kasten; Wächter W-4 —
+  // keine Mechanik-Wörter, `backend/tests/test_daten_checker_texte.py`).
+  anzahl_tage: 'Tage neu aufgebaut',
+  tage_mit_bestehender_zusammenfassung: 'davon mit gespeicherten Tageswerten',
+  monats_offen: 'Monate erhalten einen Benzinpreis',
+  tages_offen: 'Tage erhalten einen Benzinpreis',
+  monate_gesamt: 'abgeschlossene Monate',
+  monate_mit_werten: 'davon mit Wetterwerten (werden ersetzt)',
+  monate_ohne_werte: 'davon ohne Wetterwerte',
+  monate_temperatur_gefuellt: 'Monate erhalten eine Ø Temperatur',
+  monate_ohne_temperatur: 'Monate ohne Ø Temperatur',
+  monate_wert_entfernt: 'Monate verlieren den Wert',
+  geraetewerte_zeilen_geloescht: 'Gerätewerte entfernt',
+  spiegel_kanaele: 'Zähler aus Home Assistant',
+  spiegel_abschnitte: 'Zeitabschnitte',
+  tage_neu_aufgebaut: 'Tag neu aufgebaut',
 }
 
 export const WIRKUNGSGRAD_QUELLE_LABELS: Record<string, string> = {

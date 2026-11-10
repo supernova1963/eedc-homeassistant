@@ -20,6 +20,7 @@
     "check:co2-roh": "node scripts/check-co2-roh.mjs",
     "check:rechenstellen": "node scripts/check-rechenstellen.mjs",
     "check:dateilaenge": "node scripts/check-dateilaenge.mjs",
+    "check:eine-mechanik": "node scripts/check-eine-mechanik.mjs",
     "check:ergebnis-roh": "node scripts/check-ergebnis-roh.mjs",
     "check:begriffe": "node scripts/check-begriffe.mjs",
     "check:cop-roh": "node scripts/check-cop-roh.mjs",

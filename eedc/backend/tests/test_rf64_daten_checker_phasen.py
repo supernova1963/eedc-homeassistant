@@ -203,7 +203,7 @@ async def test_rf64_je_komponente_ein_eintrag_schlimmster_tag_groesste_zuerst():
     assert erg[0].meldung.startswith("WP: 1 Tag(e) weichen von HA-Statistics ab (größte Abweichung " + T0.isoformat())
     d_schlimm = (T0 + timedelta(days=1)).isoformat()
     assert erg[1].meldung.startswith(f"Box: 3 Tag(e) weichen von HA-Statistics ab (größte Abweichung {d_schlimm}")
-    assert erg[1].action_params == {"anlage_id": 1, "datum": d_schlimm}
+    assert erg[1].action_params == {"datum": d_schlimm}
     assert "an 3 Tag(en)" in erg[1].details
 
 
