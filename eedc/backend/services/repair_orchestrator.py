@@ -1670,6 +1670,9 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
         audit_log_ids=audit_log_ids,
         operation_summary=summary,
     )
+    # N-793: je Lauf eine Zeile im Aktivitätsprotokoll, in dieser Sitzung (eigenes Modul, Dateilänge).
+    from backend.services.repair_protokoll import protokolliere_lauf
+    await protokolliere_lauf(plan_obj, summary, actual, db)
 
     async with _lock:
         _results[plan_id] = result

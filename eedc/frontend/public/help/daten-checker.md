@@ -413,6 +413,8 @@ Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Eins
 
 **Was wird geprüft:** Pro vorhandenem Monatsdaten-Eintrag werden Pflichtfelder, Werte-Ranges, logische Konsistenz und (sobald verfügbar) Vergleich gegen Vorjahresmonat sowie PVGIS-Prognose geprüft. Die PV-Maximum-Prüfung nutzt eine **dynamische Obergrenze** aus PVGIS-Soll × aktueller Performance Ratio × 1,45 (sobald 6+ Monate Historie verfügbar) — sonst statisches Maximum nach Monat und kWp. Der 1,45-Faktor deckt die natürliche Monatsvariation ab.
 
+**„Beheben" an einem dieser Befunde** öffnet den betroffenen Monat unter *Einstellungen → Daten → Monatsdaten* zum Bearbeiten („Monatsdaten bearbeiten"); nur für einen Monat ohne Zeile öffnet sich „Monatsdaten erfassen" *(bis v4.2.3 öffnete sich auch für einen erfassten Monat das Erfassen-Formular, dessen Speichern mit „existieren bereits" endete)*.
+
 #### Pflichtfelder
 
 | Meldung | Severity | Bedeutung | Behebung |
@@ -993,7 +995,7 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 
 > **Tage aus dem HA-Spiegel bzw. den eigenen Zählerständen:** dort nimmt eedc PV, Einspeisung, Netzbezug und Speicher selbst aus dem Spiegel — die eedc-Seite des Vergleichs *ist* dann die Zahl von Home Assistant, eine Abweichung der alten gespeicherten Tageszeile wird nicht mehr gemeldet (*Cockpit → Tag* zeigt sie ohnehin nicht). Wallbox, E-Auto, Wärmepumpe und sonstige Geräte kommen an einem solchen Tag ebenfalls aus ihren Kanälen, wenn sie dort welche haben; nur ein Gerät ohne Kanal-Wert liest die Prüfung aus der gespeicherten Tageszeile. Was aus dem Spiegel kommt, schreibt eedc nicht in die Tageszeile — deshalb ändert ein Neu-Aggregieren daran nichts; an einer Anlage mit HA-Spiegel trägt die Zeile darum „Aus Home Assistant neu übernehmen" (zuerst der Abgleich mit Home Assistant, dann der Tag).
 >
-> **Nach einer Korrektur in Home Assistant** (etwa unter *Entwicklerwerkzeuge → Statistik*) trägt der Spiegel bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Sofort geht es mit **„Aus Home Assistant neu übernehmen"** an der Zeile (oder „HA-Spiegel jetzt abgleichen" in der Reparatur-Werkbank, [§6](#reparatur-werkzeuge-in-der-energieprofil-pflege) — dort ohne den Tag neu aufzubauen).
+> **Nach einer Korrektur in Home Assistant** (etwa unter *Entwicklerwerkzeuge → Statistik*) trägt der Spiegel bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Ob der Abgleich gelaufen ist, steht in *Einstellungen → System → Protokolle* (Reiter **Aktivitäten**, Kategorie **„Scheduler-Jobs"**): eine Zeile je Nacht und Anlage mit HA-Spiegel, auch wenn nichts abweicht. Sofort geht es mit **„Aus Home Assistant neu übernehmen"** an der Zeile (oder „HA-Spiegel jetzt abgleichen" in der Reparatur-Werkbank, [§6](#reparatur-werkzeuge-in-der-energieprofil-pflege) — dort ohne den Tag neu aufzubauen).
 >
 > **Verglichen wird nur, was HA für den Tag auch liefern konnte.** Ein Zähler ohne Summen-Spalte (§4.9) taucht hier nicht als Lücke auf — sonst meldete der Vergleich Phantom-Drift und böte einen Knopf an, der korrekte Werte mit 0 überschreibt.
 >

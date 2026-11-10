@@ -13,7 +13,7 @@
  * aufgelöste `anlageId` (kein interner Anlage-Guard) und – im Mehr-Anlagen-Fall –
  * einen `kopfZusatz` (Anlage-Auswahl) in die Kopfleiste. Zahlen de-DE über `fmtZahl`.
  */
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, PenLine, ArrowRight } from 'lucide-react'
 import { Button, Card, Checkbox, Modal, EmptyState, Alert, Select } from '../components/ui'
@@ -352,20 +352,32 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
     }
   }
 
-  // B5-Deep-Link: die V4-Fusszeile navigiert mit `?erfassen=YYYY-MM` hierher →
-  // Form für den offenen Monat öffnen. Param danach entfernen, damit Reload/Zurück
-  // ihn nicht erneut auslöst. EinstellungenV4 klappt parallel den Block auf.
+  // B5-Deep-Link: die V4-Fusszeile und «Beheben» im Daten-Checker navigieren mit
+  // `?erfassen=YYYY-MM` hierher → Form für den Monat öffnen. Param danach entfernen,
+  // damit Reload/Zurück ihn nicht erneut auslöst. EinstellungenV4 klappt parallel den
+  // Block auf.
+  // N-792: der Effekt wartet, bis die Monatsliste geladen ist — vorher kennt
+  // `oeffneMonat` keine Zeile und wählte für einen vorhandenen Monat das Formular
+  // «erfassen» (Speichern ⇒ 409 «existieren bereits»). Der Ref öffnet je Parameter-
+  // wert einmal (Muster `?bearbeiten=` in EinstellungenV4) und gibt ihn frei, sobald
+  // der Parameter weg ist.
   const [searchParams, setSearchParams] = useSearchParams()
+  const erfassenRoh = searchParams.get('erfassen')
+  const erfassenGeoeffnetRef = useRef<string | null>(null)
   useEffect(() => {
-    const roh = searchParams.get('erfassen')
-    if (!roh) return
-    const [j, m] = roh.split('-').map(Number)
+    if (!erfassenRoh) {
+      erfassenGeoeffnetRef.current = null
+      return
+    }
+    if (loading || erfassenGeoeffnetRef.current === erfassenRoh) return
+    erfassenGeoeffnetRef.current = erfassenRoh
+    const [j, m] = erfassenRoh.split('-').map(Number)
     if (j && m >= 1 && m <= 12) oeffneMonat(j, m)
     const next = new URLSearchParams(searchParams)
     next.delete('erfassen')
     setSearchParams(next, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
+  }, [erfassenRoh, loading, monatsdaten, searchParams])
 
   // Prüfe ob Legacy-Daten existieren.
   // F-31: getrennt gezählt, weil die beiden Fälle verschiedene Handlungen

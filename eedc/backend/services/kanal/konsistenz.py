@@ -249,10 +249,33 @@ async def spiegel_quellen_anzahl(db, anlage_id: int) -> int:
     )).scalar_one())
 
 
+def _protokoll_aktion(erg: KonsistenzErgebnis) -> str:
+    """Aktionstext der Nachtlauf-Zeile — Fehler vor Korrektur vor Kürzung vor dem stillen Fall (N-794)."""
+    if erg.fehler:
+        return "Kanalstatistik: Konsistenzlauf unvollständig"
+    if erg.korrigiert:
+        return "Kanalstatistik: Spiegel an HA angeglichen"
+    if erg.gekuerzt:
+        return "Kanalstatistik: HA hält nicht mehr die ganze Spiegel-Historie"
+    return "Kanalstatistik: Konsistenzlauf — alle Abschnitte stimmen mit HA überein"
+
+
+def _protokoll_details(erg: KonsistenzErgebnis) -> str:
+    """Ein Satz zur Zeile: bei Abweichung wie bisher (neu gespiegelt · gekürzt · Fehler), im stillen Fall die Zähler."""
+    if not (erg.korrigiert or erg.fehler or erg.gekuerzt):
+        return (f"{erg.abschnitte} Abschnitte in {erg.kanaele} Kanälen geprüft · gleich {erg.gleich} · korrigiert 0 · "
+                f"gekürzt 0 · Fehler 0")
+    return (f"{len(erg.korrigiert)} Abschnitt(e) ab der ersten Abweichung neu gespiegelt"
+            + (f", {len(erg.gekuerzt)} Abschnitt(e) ohne HAs Anfang (älterer Spiegel bleibt)" if erg.gekuerzt else "")
+            + (f", {erg.fehler} Fehler" if erg.fehler else ""))
+
+
 async def konsistenz_alle(sitzungen: Sitzungen, *, ha_svc=None) -> list[KonsistenzErgebnis]:
     """Der Tages-Nachlauf (eigener Job, ``scheduler.kanal_konsistenz_job``): alle Anlagen.
 
-    Eine Korrektur oder ein Fehler geht ins Aktivitätsprotokoll, in der Sitzung, die es schreibt (N-532).
+    Jeder Lauf geht je Anlage mit HA-Spiegel (mindestens ein geprüfter Abschnitt) ins Aktivitätsprotokoll, auch
+    ohne Abweichung (N-794: eine stille Nacht war nicht von einem ausgefallenen Lauf zu unterscheiden); eine Anlage
+    ohne Spiegel-Abschnitt (Standalone) bleibt ohne Zeile. Geschrieben in der Sitzung, die es schreibt (N-532).
     """
     from backend.models.anlage import Anlage
     from backend.services.activity_service import log_activity
@@ -263,20 +286,16 @@ async def konsistenz_alle(sitzungen: Sitzungen, *, ha_svc=None) -> list[Konsiste
     for aid in ids:
         erg = await konsistenz_anlage(sitzungen, aid, ha_svc=ha_svc)
         out.append(erg)
-        if erg.korrigiert or erg.fehler or erg.gekuerzt:
+        if erg.abschnitte > 0 or erg.korrigiert or erg.fehler or erg.gekuerzt:
             async with sitzungen() as db:
                 await log_activity(
                     kategorie="scheduler",
-                    aktion=("Kanalstatistik: Konsistenzlauf unvollständig" if erg.fehler
-                            else "Kanalstatistik: Spiegel an HA angeglichen" if erg.korrigiert
-                            else "Kanalstatistik: HA hält nicht mehr die ganze Spiegel-Historie"),
+                    aktion=_protokoll_aktion(erg),
                     erfolg=erg.fehler == 0,
-                    details=(f"{len(erg.korrigiert)} Abschnitt(e) ab der ersten Abweichung neu gespiegelt"
-                             + (f", {len(erg.gekuerzt)} Abschnitt(e) ohne HAs Anfang (älterer Spiegel bleibt)"
-                                if erg.gekuerzt else "")
-                             + (f", {erg.fehler} Fehler" if erg.fehler else "")),
+                    details=_protokoll_details(erg),
                     details_json={"korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
-                                  "uebersprungen": erg.uebersprungen},
+                                  "uebersprungen": erg.uebersprungen, "kanaele": erg.kanaele,
+                                  "abschnitte": erg.abschnitte, "gleich": erg.gleich, "fehler": erg.fehler},
                     anlage_id=aid, db=db,
                 )
     return out

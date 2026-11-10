@@ -243,9 +243,16 @@ async def test_monate_mit_abschluss_bleiben_unberuehrt(db):
         assert maerz and all(nachher[tabelle][pk] == vorher[tabelle][pk] for pk in maerz)
 
 
+def _ohne_orchestrator_zeilen(alles: dict) -> dict:
+    """N-793: die Orchestrator-Zeile je Lauf (erkennbar an `details_json["plan_id"]`) aus dem Stand nehmen."""
+    return {**alles, "activity_log": {pk: z for pk, z in alles["activity_log"].items()
+                                      if "plan_id" not in json.loads(z["details_json"] or "{}")}}
+
+
 async def test_zweiter_lauf_aendert_nichts_und_sagt_es(db):
     ids = await _saat(db)
     await execute((await plan(_req(ids["aid"]), db)).plan_id, db)
+    await db.flush()                                     # der Roh-Dump (text) flusht nicht von selbst
     stand = await _alles(db)
     p2 = await plan(_req(ids["aid"]), db)
     assert p2.estimated_changes["kanalzeilen"] == 0 and p2.estimated_changes["bestand_tage"] == 0
@@ -253,15 +260,27 @@ async def test_zweiter_lauf_aendert_nichts_und_sagt_es(db):
     r2 = await execute(p2.plan_id, db)
     assert (r2.actual_changes["kanalzeilen_geloescht"], r2.actual_changes["felder_geleert"],
             r2.actual_changes["quellen_markiert"]) == (0, 0, 0)
-    assert await _alles(db) == stand                     # auch kein zweiter Aktivitätseintrag
+    await db.flush()
+    nachher = await _alles(db)
+    # kein zweiter Detaileintrag; die Orchestrator-Zeile je Lauf kommt von N-793
+    assert _ohne_orchestrator_zeilen(nachher) == _ohne_orchestrator_zeilen(stand)
+    neu = [json.loads(z["details_json"]) for pk, z in nachher["activity_log"].items() if pk not in stand["activity_log"]]
+    assert [d.get("plan_id") for d in neu] == [str(p2.plan_id)]
+    assert sum(1 for z in nachher["activity_log"].values() if "kanal" in json.loads(z["details_json"] or "{}")) == 1
 
 
 async def test_aktivitaet_in_derselben_sitzung(db):
     ids = await _saat(db)
-    await execute((await plan(_req(ids["aid"]), db)).plan_id, db)
-    log = (await db.execute(select(ActivityLog))).scalars().all()
-    assert len(log) == 1 and log[0].kategorie == "repair" and log[0].anlage_id == ids["aid"]
-    assert "Einspeisung" in log[0].aktion and log[0].details_json["kanal"] == "basis:einspeisung"
+    p = await plan(_req(ids["aid"]), db)
+    await execute(p.plan_id, db)
+    log = (await db.execute(select(ActivityLog))).scalars().all()      # dieselbe Sitzung, ohne Commit
+    assert len(log) == 2                                 # Detailzeile + Orchestrator-Zeile je Lauf (N-793)
+    detail = [z for z in log if (z.details_json or {}).get("kanal") == "basis:einspeisung"]
+    orchestrator = [z for z in log if "plan_id" in (z.details_json or {})]
+    assert len(detail) == 1 and "Einspeisung" in detail[0].aktion and detail[0].kategorie == "repair"
+    assert len(orchestrator) == 1 and orchestrator[0].kategorie == "repair"
+    assert orchestrator[0].details_json["plan_id"] == str(p.plan_id)
+    assert all(z.anlage_id == ids["aid"] for z in log)
 
 
 async def test_geraetefeld_leert_nur_den_tageswert_der_leistungspfad_bleibt(db):

@@ -230,12 +230,48 @@ async def test_korrektur_steht_im_aktivitaetsprotokoll(ha, datei):
     svc, _ = ha
     sitzungen, _pfad, aid, _ = datei
     await nachfuellen_spiegel(sitzungen, aid, jetzt=JETZT, ha_svc=svc)
-    await konsistenz_alle(sitzungen, ha_svc=svc)              # gleich ⇒ kein Eintrag
+    await konsistenz_alle(sitzungen, ha_svc=svc)              # gleich ⇒ eine stille Zeile (N-794)
     _verschiebe(svc, _EINSP_MID, _ts(ZEIT + timedelta(days=9)), -480.0)
     await konsistenz_alle(sitzungen, ha_svc=svc)
     async with sitzungen() as s:
-        log = [(x.aktion, x.erfolg, x.anlage_id) for x in (await s.execute(select(ActivityLog))).scalars().all()]
-    assert log == [("Kanalstatistik: Spiegel an HA angeglichen", True, aid)]
+        log = [(x.aktion, x.erfolg, x.anlage_id)
+               for x in (await s.execute(select(ActivityLog).order_by(ActivityLog.id))).scalars().all()]
+    assert log == [("Kanalstatistik: Konsistenzlauf — alle Abschnitte stimmen mit HA überein", True, aid),
+                   ("Kanalstatistik: Spiegel an HA angeglichen", True, aid)]
+
+
+async def test_stille_nacht_hinterlaesst_eine_zeile_mit_den_zaehlern(ha, datei):
+    """N-794: Anlage mit Spiegel-Abschnitten, keine Abweichung ⇒ genau eine Zeile je Lauf, mit Abschnittszahl."""
+    from backend.models.activity_log import ActivityLog
+
+    svc, _ = ha
+    sitzungen, _pfad, aid, _ = datei
+    await nachfuellen_spiegel(sitzungen, aid, jetzt=JETZT, ha_svc=svc)
+    erg = (await konsistenz_alle(sitzungen, ha_svc=svc))[0]
+    assert erg.abschnitte > 0 and erg.korrigiert == [] and erg.gekuerzt == [] and erg.fehler == 0
+    async with sitzungen() as s:
+        log = (await s.execute(select(ActivityLog))).scalars().all()
+    assert len(log) == 1
+    z = log[0]
+    assert (z.kategorie, z.aktion, z.erfolg, z.anlage_id) == (
+        "scheduler", "Kanalstatistik: Konsistenzlauf — alle Abschnitte stimmen mit HA überein", True, aid)
+    assert z.details_json["abschnitte"] == erg.abschnitte
+    assert (z.details_json["kanaele"], z.details_json["gleich"], z.details_json["fehler"]) == (
+        erg.kanaele, erg.gleich, 0)
+    assert z.details == (f"{erg.abschnitte} Abschnitte in {erg.kanaele} Kanälen geprüft · gleich {erg.gleich} · "
+                         f"korrigiert 0 · gekürzt 0 · Fehler 0")
+
+
+async def test_anlage_ohne_spiegel_abschnitt_bleibt_ohne_zeile(ha, datei):
+    """Master-Entscheid N-794: ohne geprüften Abschnitt (Standalone, kein HA-Spiegel) keine Zeile — kein Rauschen."""
+    from backend.models.activity_log import ActivityLog
+
+    svc, _ = ha
+    sitzungen, _pfad, _aid, _ = datei
+    erg = await konsistenz_alle(sitzungen, ha_svc=svc)           # ohne Nachfüllen: kein Spiegel
+    assert [e.abschnitte for e in erg] == [0]
+    async with sitzungen() as s:
+        assert (await s.execute(select(ActivityLog))).scalars().all() == []
 
 
 

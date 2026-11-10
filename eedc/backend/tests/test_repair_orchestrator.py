@@ -158,6 +158,87 @@ async def test_execute_reset_cloud_import_writes_null_and_repair(db):
     assert prov.get("einspeisung_kwh", {}).get("source") == "repair"
 
 
+# ── N-793: je Lauf eine Zeile im Aktivitätsprotokoll ────────────────────────
+
+
+async def _orchestrator_zeilen(db: AsyncSession) -> list:
+    from backend.models.activity_log import ActivityLog
+    zeilen = (await db.execute(select(ActivityLog).where(ActivityLog.kategorie == "repair"))).scalars().all()
+    return [z for z in zeilen if "plan_id" in (z.details_json or {})]
+
+
+async def test_execute_schreibt_genau_eine_protokollzeile(db):
+    """W-12 (N-793): ein Execute ⇒ genau eine neue Zeile aus dem Orchestrator, in derselben Sitzung (N-532)."""
+    anlage = await _make_anlage(db)
+    await _seed_cloud_md(db, anlage.id, 2026, 4)
+    assert await _orchestrator_zeilen(db) == []
+    req = RepairOperationRequest(anlage_id=anlage.id, operation=RepairOperationType.RESET_CLOUD_IMPORT, params={})
+    plan_obj = await plan(req, db)
+    assert await _orchestrator_zeilen(db) == []              # die Vorschau schreibt nichts
+    result = await execute(plan_obj.plan_id, db)
+
+    zeilen = await _orchestrator_zeilen(db)
+    assert len(zeilen) == 1
+    z = zeilen[0]
+    assert z.details_json["plan_id"] == str(plan_obj.plan_id)
+    assert z.details_json["operation"] == "reset_cloud_import"
+    assert z.details_json["actual_changes"] == result.actual_changes
+    assert z.anlage_id == anlage.id and z.erfolg is True
+    assert z.aktion == "Reparatur: Cloud-Import-Werte zurücksetzen — —"
+    assert z.details.startswith("Änderungen: ")
+
+
+async def test_protokollzeile_nennt_den_bereich_und_den_anwender_satz():
+    """Bereich aus den Parametern (Datum ISO), Anwender-Satz der Operation vor den Zählern."""
+    from types import SimpleNamespace
+
+    from backend.services import repair_protokoll as rp
+
+    aufrufe: list[dict] = []
+
+    class _Sitzung:
+        def add(self, eintrag):
+            aufrufe.append({"aktion": eintrag.aktion, "details": eintrag.details, "json": eintrag.details_json})
+
+    plan_obj = SimpleNamespace(
+        plan_id=uuid.uuid4(), anlage_id=3, operation=RepairOperationType.REAGGREGATE_RANGE,
+        operation_params={"von": date(2026, 1, 3), "bis": "2026-01-09", "mit_resnap": True},
+    )
+    await rp.protokolliere_lauf(plan_obj, {}, {"erfolgreich": 7}, _Sitzung())
+    plan_obj.operation, plan_obj.operation_params = RepairOperationType.REAGGREGATE_DAY, {"datum": "2026-11-02"}
+    await rp.protokolliere_lauf(plan_obj, {"quelle_text": "Zählerwerte aus Home Assistant."}, {}, _Sitzung())
+
+    assert aufrufe[0]["aktion"] == "Reparatur: Mehrere Tage neu aggregieren — 2026-01-03 – 2026-01-09"
+    assert aufrufe[0]["json"]["params"]["von"] == "2026-01-03"
+    assert aufrufe[0]["details"] == "Änderungen: erfolgreich 7"
+    assert aufrufe[1]["aktion"] == "Reparatur: Tag neu aggregieren — 2026-11-02"
+    assert aufrufe[1]["details"] == "Zählerwerte aus Home Assistant."
+
+
+async def test_wrapper_route_und_werkbank_route_protokollieren(db, monkeypatch):
+    """Routen-Beleg (N-793): «Kraftstoffpreise nachpflegen» über die Wrapper-Route (`_run_via_orchestrator`, wie die
+    Knöpfe im Daten-Checker) und ein Werkbank-Lauf über `POST /api/repair/execute/{plan_id}` — je eine Zeile."""
+    from backend.api.routes.energie_profil.repair import kraftstoffpreis_backfill_tages
+    from backend.api.routes.repair import execute_plan
+    from backend.services import kraftstoff_preis_service as kps
+
+    async def _ohne_netz(anlage_id, land, db):
+        return {"aktualisiert": 0}
+
+    monkeypatch.setattr(kps, "backfill_kraftstoffpreise", _ohne_netz)
+    anlage = await _make_anlage(db)
+    await kraftstoffpreis_backfill_tages(anlage.id, db=db)
+    zeilen = await _orchestrator_zeilen(db)
+    assert [(z.aktion, z.anlage_id) for z in zeilen] == [("Reparatur: Kraftstoffpreise nachpflegen — —", anlage.id)]
+
+    await _seed_cloud_md(db, anlage.id, 2026, 4)
+    plan_obj = await plan(RepairOperationRequest(
+        anlage_id=anlage.id, operation=RepairOperationType.RESET_CLOUD_IMPORT, params={}), db)
+    await execute_plan(plan_obj.plan_id, db=db)
+    zeilen = await _orchestrator_zeilen(db)
+    assert len(zeilen) == 2 and str(plan_obj.plan_id) in {z.details_json["plan_id"] for z in zeilen}
+
+
 async def test_force_override_breaks_manual_hierarchy(db):
     """RESET muss auch manual:form-Felder zurücksetzen können (force_override).
 

@@ -112,6 +112,8 @@ async def get_activity_kategorien():
         {"id": "ha_export", "label": "HA-Export"},
         # N-560: Anlegen, Löschen und Ändern (Typ · Aktiv · Anschaffung · Stilllegung) einer Komponente.
         {"id": "investitionen", "label": "Komponenten"},
+        # N-793: Läufe der Reparatur-Werkbank und ihrer Knöpfe im Daten-Checker (je Lauf eine Zeile).
+        {"id": "repair", "label": "Reparatur"},
     ]
 
 

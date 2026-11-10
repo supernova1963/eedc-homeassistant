@@ -9,6 +9,12 @@
 
 ---
 
+## Unveröffentlicht
+
+**Daten-Checker: „Beheben“ öffnet einen erfassten Monat zum Bearbeiten.** Führte ein Befund zu einem Monat, den du schon erfasst hast (etwa eine Plausibilitäts-Meldung), öffnete „Beheben“ bisher ein neues Formular „Monatsdaten erfassen“ — dessen Speichern endete mit „existieren bereits“. Jetzt öffnet sich der Monat zum Bearbeiten; nur ein fehlender Monat öffnet das Erfassen-Formular. → [Daten-Checker: Monatsdaten – Plausibilität](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet)
+
+**Protokoll: Reparaturen und der nächtliche Abgleich hinterlassen eine Zeile.** Jeder Lauf der Reparatur-Werkbank — auch „Tag reparieren“ und „Aus Home Assistant neu übernehmen“ im Daten-Checker — steht jetzt in *Einstellungen → System → Protokolle*, Reiter **Aktivitäten**, Kategorie **„Reparatur“**, mit Operation, Tag oder Zeitraum und Änderungen; der Verlauf in der Werkbank war nach einem Neustart leer. Der nächtliche Abgleich mit dem HA-Spiegel (02:45) schreibt je Anlage mit HA-Spiegel jede Nacht eine Zeile unter **„Scheduler-Jobs“**, auch wenn nichts abweicht. → [Energieprofil: Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) · [Einstellungen: Protokolle](HANDBUCH_EINSTELLUNGEN.md#84-protokolle)
+
 ## v4.2.3 — 10. November 2026
 
 **Daten-Checker: «Aus Home Assistant neu übernehmen» behebt eine Abweichung zu Home Assistant.** Zeigte der Daten-Checker einen Tag mit einem anderen Wert als in Home Assistant — etwa einen Zählersprung, den du in Home Assistant schon korrigiert hattest —, half „Tag reparieren" nicht: der Knopf baute den Tag aus derselben Kopie der Statistik neu auf, die den alten Wert trug. Jetzt trägt die Zeile den Knopf **„Aus Home Assistant neu übernehmen"**: er holt die Statistik neu und baut den Tag danach auf, der Tag zeigt dann, was Home Assistant zeigt. Dieselbe Hilfe bieten die Meldungen zu Zählersprung und Rückgang in der Home-Assistant-Statistik. eedc übernimmt nur, was Home Assistant hat, und löscht nichts. → [Daten-Checker: Drift zu Home Assistant](HANDBUCH_DATEN_CHECKER.md#417-datenquellen-drift)

@@ -466,7 +466,7 @@ if [ "$WARTE_RC" = "0" ]; then
     echo -e "  Beide Repos getaggt + gepusht, Image für amd64 und aarch64 bereit."
     echo -e "  Das GitHub-Release erstellt der Workflow im selben Lauf."
     echo ""
-    echo -e "${YELLOW}  Nächster Schritt: ~/.claude/plans/auftrag-nachlauf-nach-release.md${NC}"
+    echo -e "${YELLOW}  Nächster Schritt: ~/.claude/plans/STAND.md${NC}"
     echo ""
 else
     echo -e "${YELLOW}  Der Versions-Bump, die Commits und die Tags sind vollständig durch —${NC}"
