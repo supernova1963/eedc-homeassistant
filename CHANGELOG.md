@@ -9,6 +9,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Daten-Checker: Knopf „Diagnose-Paket“** — ein Text mit Version, Anlage, Zuordnungen, Befunden, Nachtlauf- und
+  Reparatur-Protokoll zum Kopieren oder Herunterladen; Zugangsdaten enthält er nie. Zu finden unter *Einstellungen →
+  Daten → Daten-Checker*, neben „Aktualisieren“. Die Kopier-Fassung bleibt unter 20 KB und passt in eine Forum-PN.
+
 ### Fixed
 
 - **Daten-Checker: „Beheben“ an einem Befund zu einem bereits erfassten Monat öffnet diesen Monat zum Bearbeiten (Melder

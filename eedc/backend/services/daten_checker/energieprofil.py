@@ -1142,7 +1142,7 @@ class EnergieprofilChecks:
                 "Dieselbe Form hat ein Zählersprung nach einer Nacht ohne Erzeugung; stimmt eine "
                 "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle."
             ),
-            link=LINK_ENERGIEPROFIL,
+            link=LINK_ENERGIEPROFIL, code="nachtrag_nach_eingefrorenem_zaehler", werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(), "nach_lts": len(lts), "nach_zaehler": len(zaehler)},  # E1: angehängt (Dateilänge)
         )]
 
     async def _check_energieprofil_plausibilitaet(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -1208,7 +1208,7 @@ class EnergieprofilChecks:
                     f"Behebung: 'Tag neu aggregieren' für genau diesen Tag (Reload-Symbol "
                     f"in der Tagesliste) — repariert SensorSnapshots + Aggregate in einem Schritt."
                 ),
-                link=LINK_ENERGIEPROFIL,
+                link=LINK_ENERGIEPROFIL, code="counter_spike_tag", werte={"datum": datum_spike.isoformat(), "stunden": len(spikes), "schwelle_kw": schwelle_kw, "kwp": kwp, "spikes": [{"stunde": s, "feld": f, "kw": w} for s, f, w in spikes]},  # E1: angehängt (Dateilänge)
             ))
 
         return ergebnisse

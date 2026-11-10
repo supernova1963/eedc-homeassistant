@@ -241,6 +241,13 @@ class HaZaehlersprungChecks:
             # eine Meldung mit Aktion zeigt keinen «Beheben»-Link, der Link bleibt für Leser ohne Knopf.
             link=LINK_ENERGIEPROFIL,
             **aktion_spiegel_abgleich_tag(anlage.id, datetime.fromtimestamp(funde[0].rueckkehr_ts).date()),
+            # E1 (Diagnose-Paket): die Zahlen der Meldung und der genannten Sprünge strukturiert, ohne neue Rechnung.
+            code="ha_zaehlersprung",
+            werte={"spruenge": len(funde), "fenster_tage": FENSTER_TAGE, "funde": [
+                {"sensor": f.statistic_id,
+                 "stunde": datetime.fromtimestamp(f.rueckkehr_ts).isoformat(timespec="minutes"),
+                 "menge_kwh": round(f.menge_kwh, 3), "stand_vorher": f.stand_vorher, "stand_reset": f.stand_reset}
+                for f in funde[:BEISPIELE]]},
         )]
 
 

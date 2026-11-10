@@ -1668,11 +1668,11 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
 P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Endpoint `/aktuell/{anlage_id}` — „aktuell" IST die Frage.
     "backend/api/routes/strompreise.py::get_aktueller_strompreis_fuer",
-    # Entscheidet, ob die Preis-Felder angeboten werden (Vertragsart heute).
-    "backend/api/routes/datenquellen.py::_basis_preis_eintraege",
+    # Entscheidet, ob die Preis-Felder angeboten werden (Vertragsart heute). Seit E1 (10.11.2026) im Service der /felder-Phasen.
+    "backend/services/datenquellen_felder.py::_basis_preis_eintraege",
     # N-770/N-771 (F1): ob «Netzbezug zum WP-/Wallbox-Tarif» in der ersten Reihe steht — eigener Tarif heute (Feld-
     # struktur der Zuordnungsfläche, wie die Preis-Felder darüber); der Monatsabschluss fragt mit Stichtag.
-    "backend/api/routes/datenquellen.py::_nach_eigenem_tarif",
+    "backend/services/datenquellen_felder.py::_nach_eigenem_tarif",
     # Spaltenstruktur von Vorlage und Export nach heutiger Vertragsart.
     "backend/api/routes/import_export/csv_operations.py::get_csv_template_info",
     # RF-60 (5.11.2026): der Export lädt den Tarif in seiner Kopf-Phase (bis dahin `::export_csv`) — dieselbe Ladung, die
@@ -2229,6 +2229,9 @@ _P10_SCHICHT = "backend/services/monats_fakten/"   # seit Vorlage 10 (19.09.2026
 
 #: Schreib-, Import-, Migrations- und Checker-Pfade + reine Durchreicher.
 P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
+    # E1 (10.11.2026): das Diagnose-Paket (Abschnitt 10 «Monate») liest nur, WELCHE Gerätezeilen es je Monat gibt
+    # (Jahr, Monat, Investitions-ID) — keine Größe, keine Faltung; dieselbe Klasse wie die Checker-Pfade.
+    "backend/services/diagnose_paket.py::_monate",
     # Die P7-Auflösung selbst — die Schicht ruft sie, sie ist ihr Unterbau.
     "backend/services/pv_monatswerte.py::lade_pv_je_monat",
     # N-771 F11 (E4, 31.10.2026): der Checker vergleicht in den ROHEN Wallbox-Zeilen den gepflegten evcc-Anteil mit dem
@@ -3054,6 +3057,9 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # „Ist das ein PV-Erzeuger?" zählt nichts und kann nichts doppeln. Der
     # Selektor davor würde die Frage nicht beantworten, sondern verschieben.
     "backend/main.py::get_database_stats",                 # zählt GERÄTE
+    # E1 (10.11.2026): das Diagnose-Paket zeigt je Gerät seinen Kennwert (kWp über `get_erzeuger_kwp`) — eine Sicht je
+    # Investition, keine Σ über die Menge.
+    "backend/services/diagnose_paket.py::_kennwert",
     "backend/services/monats_fakten/roh.py::_erzeuger_aktiv",  # „war einer aktiv?"
     "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
     "backend/api/routes/monatsdaten.py::_legacy_hinweis",  # `pv_ziel_aktiv`

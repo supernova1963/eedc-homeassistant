@@ -69,8 +69,32 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **Monatsdaten-Abdeckung**: Fortschrittsbalken „X von Y Monaten erfasst" ab Installationsdatum bis Vormonat.
 - **Klappbare Kategorie-Sektionen**: Jede Kategorie zeigt im Kopf eine Sammel-Bewertung (z. B. *„2 Warnungen, 1 Hinweis"* oder *OK*) und enthält die Einzelbefunde. Kategorien mit Fehlern oder Warnungen starten aufgeklappt, alle anderen zugeklappt — auch solche, die nur Hinweise tragen, selbst wenn daran ein Reparatur-Knopf steht (etwa die Drift-Prüfung [§4.17](#417-datenquellen-drift)). Der Kopf nennt die Zahl der Hinweise; ein Klick darauf öffnet die Kategorie.
 - **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details und „Beheben"-Link zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
+- **Kopfzeile**: **Aktualisieren** prüft neu; **Diagnose-Paket** öffnet den Text für eine Rückfrage im Forum oder auf GitHub ([unten](#diagnose-paket)).
 
 > Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege, Plug-in-Hybrid ohne bestimmbaren Fahranteil). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
+
+### Diagnose-Paket <a name="diagnose-paket"></a>
+
+Wenn du im Forum oder auf GitHub nach Hilfe fragst, schick das Diagnose-Paket mit:
+**Einstellungen → Daten → Daten-Checker → Diagnose-Paket → Kopieren.**
+
+Der Knopf öffnet ein Fenster mit einem Text (Markdown) in 13 Abschnitten: Kopf (eedc-Version, Betriebsart Add-on oder
+Standalone, Home Assistant erreichbar und seine Version, Zeitzone), Anlage, Komponenten mit ihren Fach-Parametern,
+Zuordnungen je Feld (Quelle und Sensor), Strompreise, alle Befunde des Daten-Checkers (auch die OK-Zeilen, ohne die langen
+Erklärtexte), HA-Spiegel, Nachtlauf und Reparaturen aus dem Aktivitätsprotokoll, Kanal-Tage der letzten 90 Tage, Monate,
+die Tageswerte der betroffenen Monate (höchstens zwei), Zeitpläne und die letzten Warnungen aus dem Log.
+
+- **Bearbeiten:** Das Textfeld ist bearbeitbar. Es enthält Entity-Namen, Standort und Preise — entferne, was du nicht
+  teilen willst, bevor du kopierst.
+- **Kopieren** übernimmt den Text aus dem Fenster in die Zwischenablage. Diese Fassung bleibt unter 20 KB; ist sie
+  größer, lässt eedc nacheinander das Log, den zweiten Monat der Tageswerte, die Spiegel-Abschnitte und die OK-Zeilen
+  weg — was gekürzt ist, steht im Kopf unter „Kürzungen“.
+- **Als Datei herunterladen** speichert die ungekürzte Fassung als `.md`-Datei.
+
+Zugangsdaten enthält das Paket nie: keine Token, keine Passwörter, keine Adresse einer Home-Assistant-Verbindung, nicht
+die Zugangsdaten eines Geräte-Connectors (nur seinen Namen), keinen Solcast-Schlüssel, keine Versorger-Daten wie die
+Kundennummer. eedc schickt das Paket nirgendwohin — du entscheidest, wem du es gibst. Erstellt wird es nur lesend:
+eedc ändert dabei nichts und gleicht nichts mit Home Assistant ab.
 
 ### Wann sollte ich den Daten-Checker nutzen?
 

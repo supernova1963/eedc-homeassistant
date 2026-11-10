@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { v3RouteZuV4 } from '../config/v3ZuV4Route'
 import {
   RefreshCw, XCircle, AlertTriangle, Info,
-  CheckCircle, ChevronRight, ChevronDown, Wrench,
+  CheckCircle, ChevronRight, ChevronDown, Wrench, FileText,
 } from 'lucide-react'
 import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
@@ -21,6 +21,7 @@ import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '..
 import { energieProfilApi } from '../api/energie_profil'
 import { monatsdatenApi } from '../api/monatsdaten'
 import { repairApi } from '../api/repair'
+import DiagnosePaketDialog from '../components/datenchecker/DiagnosePaketDialog'
 import {
   baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueSpiegelAbgleichMeldung, baueTagesMeldung,
   type ReparaturMeldung,
@@ -351,6 +352,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [diagnoseOffen, setDiagnoseOffen] = useState(false)
   const [reparaturBusy, setReparaturBusy] = useState<string | null>(null)
   // `hinweis` (bernstein) ist der dritte Zustand, den es braucht: der Lauf ist
   // durchgelaufen, hat aber nichts (oder nur teilweise etwas) geschrieben —
@@ -580,17 +582,25 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">{kopfZusatz}</div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { setResult(null); setRefreshKey(k => k + 1) }}
-          disabled={loading}
-          title="Aktualisieren"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Aktualisieren
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* E1: Diagnose-Paket zum Kopieren oder Herunterladen (Konzept Daten-Checker §8.3). */}
+          <Button variant="secondary" size="sm" onClick={() => setDiagnoseOffen(true)} title="Diagnose-Paket">
+            <FileText className="h-4 w-4 mr-2" />
+            Diagnose-Paket
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { setResult(null); setRefreshKey(k => k + 1) }}
+            disabled={loading}
+            title="Aktualisieren"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Aktualisieren
+          </Button>
+        </div>
       </div>
+      <DiagnosePaketDialog isOpen={diagnoseOffen} onClose={() => setDiagnoseOffen(false)} anlageId={anlageId} />
 
       {error && (
         <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">

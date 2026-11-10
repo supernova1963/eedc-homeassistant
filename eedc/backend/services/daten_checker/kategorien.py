@@ -315,6 +315,12 @@ class CheckErgebnis:
     # (Plausibilität, Drift, Provenance) lassen es bewusst None — die gehören
     # in den Reparatur-Pfad, nicht in den Hub.
     investition_id: Optional[int] = None
+    # Etappe E1 «Diagnose-Paket» (10.11.2026, Konzept Daten-Checker §3.1 R5): die Zahlen der Meldung zusätzlich
+    # strukturiert — für das Diagnose-Paket und die Zahlen-Invarianz des Text-Golden-Masters; keine neue Rechnung,
+    # nur Werte, die der Erzeuger für seinen Text ohnehin hat. `code` = Befund-Schlüssel (Erhebung Teil B); in E1 an
+    # den Melder-Erzeugern, ab E2 an allen.
+    werte: Optional[dict] = None
+    code: Optional[str] = None
 
 
 @dataclass

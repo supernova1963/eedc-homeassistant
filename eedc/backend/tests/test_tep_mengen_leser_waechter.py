@@ -68,6 +68,9 @@ ERLAUBT: dict[str, str] = {
     "services/repair_orchestrator.py": "Werkbank-Reparatur (repair*)",
     "services/verwerfen_vor_quellbeginn.py": "Werkbank «Werte vor dem Sensorbeginn verwerfen» (schreibt die Zeilen)",
     "api/routes/energie_profil/diagnose.py::get_debug_rohdaten": "zeigt bewusst die gespeicherte Zeile (§10a)",
+    "services/diagnose_paket.py::_tagesreihe": (
+        "Diagnose-Paket E1, Abschnitt 11: zeigt bewusst die gespeicherte Tageszeile neben der Lesart Kanal/Bestand "
+        "(wie get_debug_rohdaten; Konzept Daten-Checker §8.2 Nr 11)"),
     "services/energie_profil/rollup.py": "Schreiber S5b (Monats-Rollup, §10a)",
     "services/energie_profil/archiv_nachzug.py": "Schreiber S5b (PR beim Archiv-Nachzug, §10a)",
     # Sichten-Mischpfade (O-3, §10f): sie mischen an einem Kanal-Tag selbst (mische_komponenten/mische_verworfen) und

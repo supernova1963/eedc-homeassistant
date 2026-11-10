@@ -185,6 +185,9 @@ class SpeicherChecks:
                 "bis": neuester.isoformat(),
             },
             action_label="Zeitraum neu aggregieren",
+            code="batterie_vorzeichen_tage",
+            werte={"tage": len(konflikt_tage), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
+                   "bereich_von": range_von.isoformat(), "aelter_ausserhalb": rest_aelter},
         ))
 
         # 2) Einzeltag-Einträge (bestehender reaggregate_day-Pfad) — bis 15 Tage,
@@ -201,6 +204,7 @@ class SpeicherChecks:
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": d.isoformat()},
                 action_label="Tag reparieren",
+                code="batterie_vorzeichen_tag", werte={"datum": d.isoformat()},
             ))
         if len(konflikt_tage) > MAX_EINZEL:
             rest = len(konflikt_tage) - MAX_EINZEL

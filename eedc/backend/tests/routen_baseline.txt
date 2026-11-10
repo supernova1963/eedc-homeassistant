@@ -192,6 +192,7 @@ GET /api/strompreise/{strompreis_id}
 GET /api/system/activities
 GET /api/system/activities/kategorien
 GET /api/system/daten-check/{anlage_id}
+GET /api/system/diagnose-paket/{anlage_id}
 GET /api/system/log-level
 GET /api/system/logs
 GET /api/updates/check

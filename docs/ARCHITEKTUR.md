@@ -876,9 +876,27 @@ GET  /api/monatsabschluss/historie/{anlage_id}          # Letzte Abschlüsse
 #### Scheduler API
 
 ```
-GET  /api/scheduler                               # Scheduler-Status
+GET  /api/scheduler                               # Scheduler-Status (je Job next_run, seit E1 auch last_run/last_ok)
 POST /api/scheduler/monthly-snapshot              # Manueller Monatswechsel-Trigger
 ```
+
+`last_run`/`last_ok` hält `EEDCScheduler._merke_lauf` (Listener auf `EVENT_JOB_EXECUTED`/`EVENT_JOB_ERROR`) **nur im
+Speicher** — nach einem Neustart steht dort `null`, bis der Job wieder gelaufen ist.
+
+#### Diagnose-Paket (Daten-Checker, E1 10.11.2026)
+
+```
+GET  /api/system/diagnose-paket/{anlage_id}?fassung=datei|kopie&monate=JJJJ-MM,…   # text/markdown, Anhang
+```
+
+Route `api/routes/daten_checker.py::diagnose_paket`, Service `services/diagnose_paket.py::baue_paket` — **nur lesend**:
+13 Abschnitte mit der Kopfmarke `<!-- eedc-diagnose v1 -->`, Allowlists für Anlage-Spalten und Komponenten-Parameter, nie
+Token, Passwörter, `connector_config` (nur `connector_id`), `solcast_config`, `versorger_daten`, `community_hash`
+(Wächter W-7 in `tests/test_diagnose_paket.py`). Die Zuordnungen liest es über
+`services/datenquellen_felder.py::zuordnungen_lesen` — die vier lesenden Phasen der Route
+`GET /api/datenquellen/{id}/felder`, die nach ihnen weiter selbst `_festschreiben` und `_verfuegbarkeit` ruft
+(Schnitt E1, Antwort bitgleich, GM `datenquellen-felder`). Die Kopieren-Fassung ist hart ≤ 20 000 Bytes
+(Kürzungsfolge Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen, im Kopf benannt).
 
 #### Aggregierte Monatsdaten
 

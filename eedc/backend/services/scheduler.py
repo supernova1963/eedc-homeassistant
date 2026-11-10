@@ -16,6 +16,7 @@ try:
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
     from apscheduler.jobstores.memory import MemoryJobStore
+    from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
     SCHEDULER_AVAILABLE = True
 except ImportError:
     SCHEDULER_AVAILABLE = False
@@ -75,6 +76,12 @@ class EEDCScheduler:
     def __init__(self):
         self._scheduler: Optional["AsyncIOScheduler"] = None
         self._running = False
+        # E1 (Diagnose-Paket): Ende und Erfolg des letzten Laufs je Job — nur im Speicher, ein Neustart leert es.
+        self._letzte_laeufe: dict[str, tuple[datetime, bool]] = {}
+
+    def _merke_lauf(self, ereignis) -> None:
+        """Listener für EVENT_JOB_EXECUTED/EVENT_JOB_ERROR: Zeitpunkt des Lauf-Endes und Erfolg je Job-ID."""
+        self._letzte_laeufe[ereignis.job_id] = (datetime.now(), ereignis.exception is None)
 
     @property
     def is_available(self) -> bool:
@@ -106,6 +113,7 @@ class EEDCScheduler:
                 jobstores={"default": MemoryJobStore()},
                 timezone="Europe/Berlin",
             )
+            self._scheduler.add_listener(self._merke_lauf, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
             # Monatswechsel-Snapshot: Am 1. jeden Monats um 00:01
             # N-123 (geprueft 2026-09-01): Der Job rechnet nichts — er schreibt
@@ -470,10 +478,13 @@ class EEDCScheduler:
 
         jobs = []
         for job in self._scheduler.get_jobs():
+            lauf = self._letzte_laeufe.get(job.id)
             jobs.append({
                 "id": job.id,
                 "name": job.name,
                 "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+                "last_run": lauf[0].isoformat(timespec="seconds") if lauf else None,
+                "last_ok": lauf[1] if lauf else None,
             })
 
         return {

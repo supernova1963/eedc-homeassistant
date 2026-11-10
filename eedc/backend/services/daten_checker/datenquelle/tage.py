@@ -333,6 +333,11 @@ class TageChecks:
                 "bis": neuester.isoformat(),
             } if reparatur_moeglich else None,
             action_label="Zeitraum neu aggregieren" if reparatur_moeglich else None,
+            code="tageswerte_fehlen_tage",
+            werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
+                   "komponenten": betroffene_keys, "reparatur_moeglich": reparatur_moeglich,
+                   "bereich_von": range_von.isoformat(), "aelter_ausserhalb": rest_aelter,
+                   "ungeprueft": ungeprueft},
         ))
 
         if not reparatur_moeglich:
@@ -356,6 +361,8 @@ class TageChecks:
                 action_kind="reaggregate_day",
                 action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
                 action_label="Tag reparieren",
+                code="tageswerte_fehlen_tag",
+                werte={"datum": datum_.isoformat(), "ha_kwh": dict(sorted(fehlend.items()))},
             ))
         if len(befunde) > MAX_EINZEL:
             rest = len(befunde) - MAX_EINZEL

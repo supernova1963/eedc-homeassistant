@@ -1140,6 +1140,8 @@ Das zentrale Werkzeug zur Fehlersuche — zwei Tabs, Debug-Umschalter und Neusta
 
 **Support-Workflow:** Debug an → Problem reproduzieren → System-Logs (Level WARNING, Modul-Filter) → Aktivitäten prüfen → Logs kopieren → in Issue einfügen → Debug wieder aus.
 
+Für eine Rückfrage im Forum reicht meist das **Diagnose-Paket** (*Einstellungen → Daten → Daten-Checker → Diagnose-Paket*): es trägt die letzten Nachtlauf- und Reparatur-Zeilen aus den Aktivitäten und die letzten Warnungen aus den System-Logs schon mit, dazu Version, Zuordnungen und Befunde — ohne Zugangsdaten ([Daten-Checker: Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)).
+
 ---
 
 ## 9. Hintergrund: Energieprofile & Snapshot-Architektur

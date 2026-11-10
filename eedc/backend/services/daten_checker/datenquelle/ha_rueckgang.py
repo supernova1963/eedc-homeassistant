@@ -198,6 +198,15 @@ class HaRueckgangChecks:
             link=None,
             # N-790: der Schritt nach der Korrektur in HA als Knopf (Abgleich + Tag des ersten Funds neu aufgebaut).
             **aktion_spiegel_abgleich_tag(anlage.id, funde[0].tag),
+            # E1 (Diagnose-Paket): die Zahlen der Meldung und der genannten Funde strukturiert, ohne neue Rechnung.
+            code="ha_zaehler_rueckgang",
+            werte={"tage": len(funde), "funde": [
+                {"sensor": r.statistic_id, "tag": r.tag.isoformat(), "menge_kwh": round(r.menge_kwh, 3),
+                 "stunden": len(r.stunden),
+                 "groesste_stunde": datetime.fromtimestamp(r.groesste_stunde).isoformat(timespec="minutes"),
+                 "zugeordnet_bis": (None if r.zugeordnet_bis is None
+                                    else datetime.fromtimestamp(r.zugeordnet_bis).date().isoformat())}
+                for r in funde[:BEISPIELE]]},
         )]
 
 

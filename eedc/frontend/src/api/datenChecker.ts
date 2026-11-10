@@ -39,6 +39,9 @@ export interface CheckErgebnis {
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —
   // erlaubt dem Komponenten-Hub, Befunde je Gerät zu filtern.
   investition_id?: number
+  // E1 «Diagnose-Paket»: die Zahlen der Meldung strukturiert und der Befund-Schlüssel (an den Melder-Erzeugern).
+  werte?: Record<string, unknown> | null
+  code?: string | null
 }
 
 export interface MonatsdatenAbdeckung {
@@ -60,8 +63,35 @@ export interface DatenCheckResponse {
   monatsdaten_abdeckung?: MonatsdatenAbdeckung
 }
 
+/** E1: Fassung des Diagnose-Pakets — `datei` ungekürzt, `kopie` höchstens 20 KB (Kürzung steht im Kopf). */
+export type DiagnosePaketFassung = 'datei' | 'kopie'
+
+export interface DiagnosePaket {
+  text: string
+  dateiname: string
+}
+
+/** Adresse des Diagnose-Pakets (relativ wie `api/client.ts`, damit Ingress greift). */
+export function diagnosePaketUrl(anlageId: number, fassung: DiagnosePaketFassung, monate?: string[]): string {
+  const q = new URLSearchParams({ fassung })
+  if (monate && monate.length > 0) q.set('monate', monate.join(','))
+  return `./api/system/diagnose-paket/${anlageId}?${q.toString()}`
+}
+
 export const datenCheckerApi = {
   async check(anlageId: number): Promise<DatenCheckResponse> {
     return api.get<DatenCheckResponse>(`/system/daten-check/${anlageId}`)
+  },
+
+  /** Das Diagnose-Paket als Text (Markdown) samt Dateiname aus dem Anhang-Kopf. */
+  async diagnosePaket(anlageId: number, fassung: DiagnosePaketFassung, monate?: string[]): Promise<DiagnosePaket> {
+    const res = await fetch(diagnosePaketUrl(anlageId, fassung, monate))
+    if (!res.ok) {
+      const detail = await res.json().catch(() => null)
+      throw new Error(detail?.detail || `HTTP ${res.status}`)
+    }
+    const kopf = res.headers.get('content-disposition') ?? ''
+    const name = /filename="([^"]+)"/.exec(kopf)?.[1] ?? `eedc_diagnose_${anlageId}.md`
+    return { text: await res.text(), dateiname: name }
   },
 }

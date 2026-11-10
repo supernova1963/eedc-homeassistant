@@ -493,6 +493,7 @@ class QuellenChecks:
                     f"Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren "
                     f"(Datumsbereich aktiv wählen, keine automatische Sammel-Aktion)."
                 ),
+                code="drift_weitere_tage", werte={"weitere_tage": rest, "angezeigt_hoechstens": 20},
             ))
 
         return ergebnisse
@@ -675,6 +676,9 @@ class QuellenChecks:
                 details=details,
                 link=LINK_ENERGIEPROFIL,
                 **_drift_aktion(ctx, datum_),
+                code="drift_tag",
+                werte={"datum": datum_.isoformat(), "achse": "pv", "eedc": eedc, "ha": ha, "delta": delta_signed,
+                       "prozent": rel_signed},
             ))
 
         return ergebnisse, rest
@@ -737,6 +741,9 @@ class QuellenChecks:
                 investition_id=(
                     int(rest_id) if rest_id.isdigit() else None
                 ),
+                code="drift_komponente",
+                werte={"komponente": key, "tage": len(tage), "datum": datum_.isoformat(), "eedc": eedc, "ha": ha,
+                       "delta": delta_signed, "prozent": rel_signed},
             ))
 
         return ergebnisse
