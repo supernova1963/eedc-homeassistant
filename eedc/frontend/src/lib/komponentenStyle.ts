@@ -180,6 +180,17 @@ export const SONSTIGES_ZAEHLER_KPI = {
   verbrauch: { title: 'Verbrauch',   icon: Zap,   color: 'gray' as const },
 } as const satisfies Record<string, KpiStyle>
 
+/** Sonstiges/Abgabe an Dritte (§9.2, #443/N-785): Abgabe · Erlös · Monate.
+ *
+ *  Keine Ersparnis- und keine CO₂-Kachel: eine Abgabe ist kein Eigenverbrauch,
+ *  und ihr Erlös ist ein eigener Satz, den eedc nur kennt, wenn er gepflegt ist.
+ *  Farbe der Menge neutral (gray) wie die Komponenten-Identität `sonstiges`. */
+export const SONSTIGES_ABGABE_KPI = {
+  abgabe: { title: 'Abgabe', icon: ArrowUpFromLine, color: 'gray'  as const },
+  erloes: { title: 'Erlös',  icon: Euro,            color: 'green' as const },
+  monate: { title: 'Monate', icon: Hash,            color: 'gray'  as const },
+} as const satisfies Record<string, KpiStyle>
+
 /** Sonstiges/Speicher: Ladung · Entladung · Effizienz · Ersparnis */
 export const SONSTIGES_SPEICHER_KPI = {
   ladung:    { title: 'Ladung',    icon: Battery,    color: 'purple' as const },

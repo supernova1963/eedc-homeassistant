@@ -3687,8 +3687,10 @@ Die Monatsgrößen, je Anlagensumme und je Gerät gleich:
 
 Der **PV-Anteil** eines Verbrauchers im Cockpit (Kachel je Gerät, Monat und Jahr) ist `pv_anteil_prozent` der Gerätezeile =
 Bezug PV ÷ (Bezug PV + Bezug Netz) × 100 auf den Werten, die die Zeile trägt (`pv_anteil_ladung.bezug_pv_anteil_prozent`; ein fehlender
-Teil zählt 0, ohne Bezug `None`). Seit Päckchen Z-Client; vorher im Client. ⚠ Das Attribut `pv_anteil_prozent` des HA-Sensors
-`sonstiges_verbrauch_monat_kwh` teilt durch den **Verbrauch** (`ha_export/investition_sensoren.py`) — eine andere Bezugsgröße.
+Teil zählt 0, ohne Bezug `None`). Seit Päckchen Z-Client; vorher im Client. Dieselbe Definition trägt das Attribut
+`pv_anteil_prozent` des HA-Sensors `sonstiges_verbrauch_monat_kwh` (laufender Monat, eine Nachkommastelle;
+`ha_export/investition_sensoren.py`, seit Päckchen DD 10.11.2026 — bis dahin teilte es durch den Verbrauch, gleich, solange
+Verbrauch = Bezug PV + Bezug Netz).
 
 **Am Tag** (`TagesZusammenfassung.komponenten_kwh`, `TagesEnergieProfil.komponenten`) trägt jedes Gerät **eine** Zahl; die Weiche
 dort ist `core/berechnungen/energie.py::sonstiges_kwh_je_richtung` — Richtung aus der Kategorie, Menge als Betrag (das Vorzeichen

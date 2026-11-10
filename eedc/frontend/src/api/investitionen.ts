@@ -787,13 +787,24 @@ export interface SonstigesMonatsWert {
   nicht_aufgeteilt_kwh: number
 }
 
+/** #443/N-785: ein Monat eines Geräts der Kategorie *Abgabe an Dritte* — aus den Monats-Fakten des Backends. */
+export interface SonstigesAbgabeMonat {
+  jahr: number
+  monat: number
+  abgabe_kwh: number
+  /** gepflegter Erlös des Monats; `null`, wenn keiner gepflegt ist (eine gepflegte 0 bleibt 0). */
+  erloes_euro: number | null
+}
+
 export interface SonstigesDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
   /** N-645: Verlauf und Vergleich eines Verbrauchers lesen diese Reihe; leer für Erzeuger, Speicher und Zähler. */
   monatsreihe: SonstigesMonatsWert[]
+  /** #443/N-785: Verlauf und Vergleich eines Abgabe-Geräts lesen diese Reihe; leer für jede andere Kategorie. */
+  abgabe_monatsreihe?: SonstigesAbgabeMonat[]
   zusammenfassung: {
-    kategorie: 'erzeuger' | 'verbraucher' | 'speicher' | 'zaehler'
+    kategorie: 'erzeuger' | 'verbraucher' | 'abgabe' | 'speicher' | 'zaehler'
     beschreibung: string
     // Erzeuger-Felder
     gesamt_erzeugung_kwh?: number
@@ -831,6 +842,12 @@ export interface SonstigesDashboardResponse {
     /** `false` = nicht bewertbar, nicht bloß unbekannt. */
     bewertet?: boolean
     nicht_bewertet_grund?: string
+    // Abgabe-Felder (#443/N-785) — ohne `ersparnis_*`/`co2_*`: eine Abgabe ist kein Eigenverbrauch.
+    gesamt_abgabe_kwh?: number
+    /** Σ der gepflegten Erlöse; `null`, wenn kein Monat einen trägt. */
+    erloes_abgabe_euro?: number | null
+    monate_mit_erloes?: number
+    monate_mit_abgabe?: number
     // Gemeinsame Felder
     gesamt_ersparnis_euro?: number
     co2_ersparnis_kg?: number

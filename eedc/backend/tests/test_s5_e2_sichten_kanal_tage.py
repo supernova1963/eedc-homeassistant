@@ -259,7 +259,7 @@ async def test_ist_heute_ohne_marke_leeres_dict(db, monkeypatch):
 
     gesehen = {}
 
-    def _ist_profil(rows, *, jetzt_stunde, datum, verworfen):
+    def _ist_profil(rows, *, datum, verworfen):
         gesehen["verworfen"] = verworfen
         return SimpleNamespace(tageswert_kwh=0.0, unvollstaendig=False, stunden=[])
 

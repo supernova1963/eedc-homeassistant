@@ -438,6 +438,19 @@ async def test_p9_liefert_erst_den_geraetesensor_dann_das_fenster(db):
     assert fenster_sv.zusatz_attribute["menge_kwh"] > 0
 
 
+async def test_p9_pv_anteil_wie_das_cockpit_pv_durch_pv_plus_netz(db):
+    """Päckchen DD (10.11.2026, Entscheid Gernot): das Attribut ``pv_anteil_prozent`` hat die Definition der
+    Cockpit-Kachel — PV-Bezug ÷ (PV-Bezug + Netz-Bezug), Layer ``bezug_pv_anteil_prozent``. Ein Verbrauch, den PV und
+    Netz nicht ganz aufteilen (120 gegen 60 + 30), ergab bis dahin 60/120 = 50 %; jetzt 60/90 = 66,7 %."""
+    anlage = await _anlage(db)
+    inv = await _geraet(db, anlage, "sonstiges", {"kategorie": "verbraucher"}, {(HEUTE.year, HEUTE.month): {
+        "verbrauch_sonstig_kwh": 120.0, "bezug_pv_kwh": 60.0, "bezug_netz_kwh": 30.0,
+    }})
+    monat_sv = _sv(await _rechne(db, inv, _ctx(stunde=0)), "sonstiges_verbrauch_monat_kwh")
+    assert monat_sv.value == pytest.approx(120.0)
+    assert monat_sv.zusatz_attribute["pv_anteil_prozent"] == pytest.approx(66.7)
+
+
 async def test_p9_erzeuger_bekommt_keinen_verbraucher_sensor(db):
     """Die Kategorie entscheidet — ein BHKW ist kein verschiebbarer Verbraucher."""
     heute = HEUTE

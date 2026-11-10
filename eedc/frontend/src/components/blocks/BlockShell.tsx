@@ -46,6 +46,7 @@ export function BlockShell({
   persistKey,
   fokusKopf,
   oeffneBeimMount,
+  oeffnenAnlass,
   voranstellen,
   einbettenZusatz,
 }: {
@@ -60,6 +61,10 @@ export function BlockShell({
    *  Monatsabschluss öffnet den Monatsdaten-Block, damit dessen Form sichtbar
    *  wird. Ändert sich der Wert, wird erneut aufgeklappt. */
   oeffneBeimMount?: string
+  /** #440: Anlass des Öffnens — der `location.key` der Navigation. Ändert er sich, klappt {@link oeffneBeimMount}
+   *  erneut auf, auch wenn der Block-Parameter gleich blieb (zweiter Klick auf «Beheben», nachdem der Anwender den
+   *  Block wieder zugeklappt hat). Der gemerkte Klapp-Zustand ändert sich dabei nur um diesen einen Block. */
+  oeffnenAnlass?: string
   /** P-433-2 (E-P2-7): Block-IDs, die als NEUE ID **vorn** statt hinten in eine
    *  gespeicherte Reihenfolge kommen — ein Block, den das Konzept „oberster Block"
    *  nennt («Überblick»), stünde bei Bestandsanwendern sonst unten (die
@@ -93,7 +98,8 @@ export function BlockShell({
   })
   // B5-Deep-Link: gewünschten Block beim Landen/Änderung aufklappen (überstimmt
   // den gemerkten „zu"-Zustand), damit ein extern angesteuerter Block (mit seiner
-  // Form/Inhalt) tatsächlich mountet.
+  // Form/Inhalt) tatsächlich mountet. #440: auch bei jeder neuen Navigation
+  // (`oeffnenAnlass`), nicht nur bei geändertem Parameter.
   useEffect(() => {
     if (!oeffneBeimMount) return
     setZu((prev) => {
@@ -102,7 +108,7 @@ export function BlockShell({
       next.delete(oeffneBeimMount)
       return next
     })
-  }, [oeffneBeimMount])
+  }, [oeffneBeimMount, oeffnenAnlass])
 
   const [fokusState, setFokus] = useState<string | null>(null)
   // FD-1: Ein `#/<sicht>?fokus=<block-id>` öffnet diesen Block beim Laden — als

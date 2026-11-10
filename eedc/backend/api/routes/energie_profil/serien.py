@@ -20,7 +20,7 @@ from backend.core.berechnungen import (
 )
 from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 from backend.core.berechnungen.slot_konvention import (
-    RASTER_BEGINN, RASTER_ENDE, forward_werte_je_backward_zeile, ist_beginn_raster,
+    RASTER_BEGINN, RASTER_ENDE, backward_slot_der_zeile, forward_werte_je_backward_zeile, ist_beginn_raster,
 )
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
@@ -249,7 +249,10 @@ async def get_wochenmuster(
 
     Aggregiert TagesEnergieProfil-Werte über den Zeitraum und berechnet
     pro Wochentag (0=Mo … 6=So) × Stunde den Mittelwert.
-    Basis für den Wochenvergleich-Chart im Energieprofil-Tab.
+
+    ``stunde`` ist der **Backward-Slot** (Slot ``h`` = ``[h-1, h)``, wie die Stundenzeile): an einem Kanal-Tag legt
+    ``slot_konvention.backward_slot_der_zeile`` die Mischzeile auf ihren Slot (N-786). ⚠ Die Route hat derzeit keinen
+    Konsumenten im Client (``api/energie_profil.ts::getWochenmuster`` wird nicht gerufen, gemessen 10.11.2026).
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     if not result.scalar_one_or_none():
@@ -272,8 +275,14 @@ async def get_wochenmuster(
     tage_set: dict[tuple[int, int], set] = defaultdict(set)
 
     for r in rows:
-        wt = r.datum.weekday()
-        key = (wt, r.stunde)
+        # N-786 (Päckchen DD, 10.11.2026): EINE Zelle = EIN Backward-Slot. Eine Mischzeile eines Kanal-Tags (Zeile h =
+        # [h, h+1)) liegt auf Slot h+1, ihre Stunde 23 auf Slot 0 des Folgetags (Wochentag wechselt); die Bestandszeile
+        # bleibt, wie sie ist. Bis dahin mischte die Zelle beide Raster, wenn das Fenster Kanal- und Bestandstage trug.
+        tag, slot = backward_slot_der_zeile(r)
+        if tag > bis:
+            continue        # Stunde 23 des letzten Kanal-Tags gehört zu Slot 0 nach dem Fenster (wie bei der Stundenzeile)
+        wt = tag.weekday()
+        key = (wt, slot)
         # M-1 (a): eine gebündelte Zeile (Spanne > 1 auf der Achse des Felds) wertet das Feld nicht; ein Tag zählt in
         # `anzahl_tage`, wenn die Stunde ein gewertetes Feld trägt — oder gar keins und kein gebündeltes (wie bisher).
         gewertet = verworfen = False
@@ -287,7 +296,7 @@ async def get_wochenmuster(
             acc[key][field].append(val)
             gewertet = True
         if gewertet or not verworfen:
-            tage_set[key].add(r.datum)
+            tage_set[key].add(tag)
 
     punkte: list[WochenmusterPunkt] = []
     for (wt, stunde) in sorted(acc.keys()):

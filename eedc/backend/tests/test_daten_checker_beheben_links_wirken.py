@@ -24,7 +24,9 @@ Navigation etwas **bewirkt** — genau diese Lücke schließt dieser Test.
 
 * `?block=<katalog-id>` klappt einen Katalog-Block auf (`EinstellungenV4.tsx`),
 * `?erfassen=YYYY-MM` klappt den Monatsdaten-Block auf **und** öffnet die
-  Erfassung dieses Monats (`MonatsdatenTeile.tsx`).
+  Erfassung dieses Monats (`MonatsdatenTeile.tsx`),
+* `&karte=<name>` springt im aufgeklappten Block zur Karte `data-karte="<name>"`
+  (#440: die Reparatur-Werkbank am Ende der Energieprofil-Pflege).
 
 Beide ändern die URL gegenüber der aktuellen Seite, also wirkt die Navigation
 auch von der Daten-Fläche auf sich selbst.
@@ -57,7 +59,7 @@ EIGENE_KATEGORIE = "daten"
 
 # Query-Parameter, die `/einstellungen/daten` tatsächlich auswertet. Wer hier
 # einen ergänzt, ergänzt ihn zuerst im Frontend — sonst ist der Link wieder tot.
-WIRKSAME_PARAMETER = ("block=", "erfassen=")
+WIRKSAME_PARAMETER = ("block=", "erfassen=", "karte=")
 
 
 def _alt_routen_auf_die_daten_flaeche() -> set[str]:
@@ -204,3 +206,23 @@ async def test_n734_fehler_verlinken_die_erfassung_des_monats(db):
 
     assert len(netz) == 2
     assert {e.link for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}"}
+
+
+def test_werkbank_link_traegt_die_karte():
+    """#440 (gruaGit): der Link der Energieprofil-Pflege führt bis zur Reparatur-Werkbank — Block UND Karte.
+
+    Ohne `karte=` klappte der Block auf, die Werkbank lag aber an seinem Ende; auf Notebook und Handy sah der Klick
+    wirkungslos aus. Gegenstücke im Client: `data-karte="werkbank"` (`pages/EnergieprofilTeile.tsx`) und der Leser
+    des Parameters (`v4/EinstellungenV4.tsx` → `hooks/useKarteAnspringen.ts`).
+    """
+    from backend.services.daten_checker.kategorien import LINK_ENERGIEPROFIL
+
+    pfad, _, query = LINK_ENERGIEPROFIL.lstrip("/").partition("?")
+    assert pfad == f"einstellungen/{EIGENE_KATEGORIE}"
+    teile = dict(t.split("=", 1) for t in query.split("&"))
+    assert teile == {"block": "energieprofil", "karte": "werkbank"}
+
+    frontend = BACKEND.parent / "frontend" / "src"
+    assert 'data-karte="werkbank"' in (frontend / "pages" / "EnergieprofilTeile.tsx").read_text(encoding="utf-8")
+    einstellungen = (frontend / "v4" / "EinstellungenV4.tsx").read_text(encoding="utf-8")
+    assert "searchParams.get('karte')" in einstellungen and "useKarteAnspringen(" in einstellungen

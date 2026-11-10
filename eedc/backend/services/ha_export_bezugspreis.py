@@ -232,7 +232,7 @@ async def _boersenmittel_monat(
     abdeckung = gedeckt / len(mit_bezug)
 
     if abdeckung < MINDEST_ABDECKUNG:
-        nachgeholt = await _hole_boerse_nach(db, anlage, jahr, monat, von, bis, boerse_je)
+        nachgeholt = await _hole_boerse_nach(db, anlage, jahr, monat, von, bis, boerse_je, kanal_tage)
         if nachgeholt:
             gedeckt = sum(1 for k in mit_bezug if k in boerse_je)
             abdeckung = gedeckt / len(mit_bezug)
@@ -245,8 +245,14 @@ async def _boersenmittel_monat(
     return mittel, f"{gedeckt} von {len(mit_bezug)} Bezugsstunden"
 
 
-async def _hole_boerse_nach(db, anlage, jahr, monat, von, bis, boerse_je: dict) -> bool:
+async def _hole_boerse_nach(db, anlage, jahr, monat, von, bis, boerse_je: dict, kanal_tage=frozenset()) -> bool:
     """Fehlende Börsentage **einmal je Monat und Prozess** über die Markt-API nachholen.
+
+    **Kanal-Weiche (N-788, Päckchen DD 10.11.2026)** — dieselbe wie im Hauptpfad von ``_boersenmittel_monat``: an einem
+    Kanal-Tag (``kanal_tage``, Mischzeilen im Beginn-Raster) paart der Preis der Stunde ``h`` den Bezug derselben
+    Wanduhr-Stunde, Ziel ``(tag, h)`` ohne Verschiebung; an einem Bestandstag wie bisher der Backward-Slot ``h + 1``
+    (Slot 24 = Slot 0 des Folgetags), der nie auf einen Kanal-Tag fällt. Gezählt am 10.11.2026: Produktiv fester Tarif
+    (der Pfad läuft nur bei dynamischem Tarif), Kopien ohne Kanal-Tage — Zahlen unverändert.
 
     ⚠ **Höchstens einmal.** Ein Monat, für den die API nichts mehr hergibt
     (aWATTar hält kein unbegrenztes Archiv), würde sonst bei **jedem**
@@ -277,15 +283,26 @@ async def _hole_boerse_nach(db, anlage, jahr, monat, von, bis, boerse_je: dict) 
         if preise:
             geholt += 1
             for h, p in preise.items():
-                slot = forward_stunde_zu_backward_slot(int(h))
-                ziel = (tag, slot) if slot < 24 else (tag + timedelta(days=1), 0)
-                boerse_je.setdefault(ziel, float(p))
+                ziel = _nachhol_ziel(tag, int(h), kanal_tage)
+                if ziel is not None:
+                    boerse_je.setdefault(ziel, float(p))
         tag += timedelta(days=1)
     logger.info(
         "Bezugspreis: %d Börsentage für %04d-%02d nachgeholt (Anlage %s)",
         geholt, jahr, monat, anlage.id,
     )
     return geholt > 0
+
+
+def _nachhol_ziel(tag: date, stunde: int, kanal_tage) -> Optional[tuple[date, int]]:
+    """Wohin der nachgeholte Marktpreis der Stunde ``stunde`` (forward, Wanduhr ``[h, h+1)``) gehört — die Weiche des
+    Hauptpfads in ``_boersenmittel_monat``: Kanal-Tag ⇒ ``(tag, h)``; sonst Backward-Slot ``h + 1``, ``None``, wenn der
+    Slot auf einen Kanal-Tag fiele (dort trägt jede Stunde ihren eigenen Preis)."""
+    if tag in kanal_tage:
+        return tag, stunde
+    slot = forward_stunde_zu_backward_slot(stunde)
+    ziel = (tag, slot) if slot < 24 else (tag + timedelta(days=1), 0)
+    return None if ziel[0] in kanal_tage else ziel
 
 
 async def _aufschlag_aus_abrechnung(db, anlage, tarif, *, heute: date) -> Optional[Aufschlag]:

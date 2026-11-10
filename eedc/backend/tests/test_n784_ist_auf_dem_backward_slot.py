@@ -57,7 +57,7 @@ def test_helfer_mischzeile_auf_den_folgeslot_bestand_unveraendert():
 def test_ist_profil_kanal_tag_peak_auf_dem_peak_der_prognose():
     """5.11.2026: der Peak des IST liegt nach N-784 auf dem Peak-Slot der Prognose (13), nicht eine Stunde davor."""
     zeilen = [_misch(TAG, h, IST_5_11.get(h, 0.0)) for h in range(24)]
-    p = ist_profil(zeilen, jetzt_stunde=20, datum=TAG)
+    p = ist_profil(zeilen, datum=TAG)
     slots = [v or 0.0 for v in p.slots_kw]
     assert max(range(24), key=lambda h: slots[h]) == 13 == max(range(24), key=lambda h: PROGNOSE_5_11[h])
     assert slots[8] == 0.03 and slots[17] == 1.61, "erstes/letztes Licht: Stunde h ⇒ Slot h + 1"
@@ -70,7 +70,7 @@ def test_ist_profil_grenze_ist_ein_backward_index():
     from backend.core.berechnungen.prognose_nachfuehrung import soll_bisher_kwh
 
     zeilen = [_misch(TAG, h, IST_5_11.get(h, 0.0)) for h in range(12)]
-    p = ist_profil(zeilen, jetzt_stunde=12, datum=TAG)
+    p = ist_profil(zeilen, datum=TAG)
     bis = max(h for h, v in enumerate(p.slots_kw) if v is not None)
     assert bis == 12
     assert soll_bisher_kwh(PROGNOSE_5_11, bis) == pytest.approx(18.57)
@@ -83,7 +83,7 @@ def test_ist_profil_grenze_ist_ein_backward_index():
 
 def test_ist_profil_stunde_23_faellt_aus_dem_profil_zaehlt_im_tag():
     zeilen = [_misch(TAG, h, 0.5 if h in (10, 23) else 0.0) for h in range(24)]
-    p = ist_profil(zeilen, jetzt_stunde=23, datum=TAG)
+    p = ist_profil(zeilen, datum=TAG)
     assert p.slots_kw[11] == 0.5 and 0 not in p.present_stunden
     assert p.tageswert_kwh == pytest.approx(1.0), "die Energie der Stunde 23 bleibt im Kalendertag des Kanal-Tags"
 
@@ -91,14 +91,14 @@ def test_ist_profil_stunde_23_faellt_aus_dem_profil_zaehlt_im_tag():
 def test_ist_profil_buendel_auf_dem_backward_slot():
     zeilen = [_misch(TAG, h, 0.0) for h in range(10)] + [
         SimpleNamespace(datum=TAG, stunde=10, pv_kw=3.0, raster="beginn", spannen={"pv": 3})]
-    p = ist_profil(zeilen, jetzt_stunde=12, datum=TAG)
+    p = ist_profil(zeilen, datum=TAG)
     assert p.buendel_stunden == (11,) and p.slots_kw[11] is None
 
 
 def test_ist_profil_bestandstag_bitgleich():
     """Regression: ohne Kanal-Tag (keine Mischzeile) dieselben Slots wie bis N-784 — index-gleich."""
     zeilen = [SimpleNamespace(datum=TAG, stunde=h, pv_kw=round(0.1 * h, 2), spannen=None) for h in range(24)]
-    p = ist_profil(zeilen, jetzt_stunde=23, datum=TAG)
+    p = ist_profil(zeilen, datum=TAG)
     assert list(p.slots_kw) == [round(0.1 * h, 2) for h in range(24)]
     assert list(p.present_stunden) == list(range(24))
 

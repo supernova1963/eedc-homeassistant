@@ -117,7 +117,7 @@ def test_solcast_fehlende_slots_mit_null_gefuellt():
 
 def test_ist_intervall_05_06_in_slot_6():
     rows = [_IstRow(6, 2.5)]
-    p = ist_profil(rows, jetzt_stunde=12, datum=DATUM)
+    p = ist_profil(rows, datum=DATUM)
     assert p.slots_kw[6] == 2.5
     assert p.present_stunden == (6,)
     assert p.quelle == "ist"
@@ -125,7 +125,7 @@ def test_ist_intervall_05_06_in_slot_6():
 
 def test_ist_none_toleranz_und_unvollstaendig_flag(monkeypatch=None):
     rows = [_IstRow(0, 1.0), _IstRow(1, 2.0), _IstRow(3, None), _IstRow(4, 4.0)]
-    p = ist_profil(rows, jetzt_stunde=5, datum=DATUM)
+    p = ist_profil(rows, datum=DATUM)
     assert p.slots_kw[3] is None, "Datenlücke muss None bleiben (#135)"
     assert p.present_stunden == (0, 1, 3, 4)
     assert p.tageswert_kwh == 7.0  # 1+2+4, None fließt nicht ein
@@ -138,16 +138,16 @@ def test_ist_none_toleranz_und_unvollstaendig_flag(monkeypatch=None):
 
 
 def test_ist_luecke_in_aktueller_stunde_nicht_geflaggt():
-    # Stunde 5 == jetzt_stunde → HA-Hourly-Row-Verzögerung, nicht als Loch werten.
+    # Stunde 5 = laufende Stunde → HA-Hourly-Row-Verzögerung, nicht als Loch werten.
     rows = [_IstRow(4, 4.0), _IstRow(5, None)]
-    p = ist_profil(rows, jetzt_stunde=5, datum=DATUM)
+    p = ist_profil(rows, datum=DATUM)
     assert p.unvollstaendig is False
     assert p.tageswert_kwh == 4.0
 
 
 def test_ist_tageswert_roh_ungerundet():
     rows = [_IstRow(7, 1.234), _IstRow(8, 2.345)]
-    p = ist_profil(rows, jetzt_stunde=12, datum=DATUM)
+    p = ist_profil(rows, datum=DATUM)
     assert p.tageswert_kwh == 1.234 + 2.345  # roh, nicht gerundet
 
 
@@ -259,7 +259,7 @@ def test_symmetrie_alle_quellen_intervall_05_06_in_slot_6():
     hk[6] = 3.0
     sc = solcast_profil(_solcast(hk))
     # IST
-    ist = ist_profil([_IstRow(6, 2.5)], jetzt_stunde=12)
+    ist = ist_profil([_IstRow(6, 2.5)])
 
     assert om.slots_kw[6] > 0
     assert sc.slots_kw[6] > 0
@@ -342,7 +342,7 @@ def test_golden_ist_inline_aequivalenz():
         alt_profil.append((row.stunde, round(row.pv_kw, 2)))
         alt_sum += row.pv_kw
 
-    p = ist_profil(rows, jetzt_stunde=jetzt)
+    p = ist_profil(rows)
     neu_profil = [(h, p.slots_kw[h]) for h in p.present_stunden]
     assert neu_profil == alt_profil
     assert p.tageswert_kwh == alt_sum

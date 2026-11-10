@@ -240,8 +240,7 @@ def test_b3_gemessene_null_ist_eine_messung():
     entschied `ist_heute_kwh > 0` — und machte aus jeder gemessenen Null eine
     fehlende Angabe.
     """
-    profil = ist_profil([_Row(h, 0.0) for h in range(24)], jetzt_stunde=23,
-                        datum=date(2025, 12, 21))
+    profil = ist_profil([_Row(h, 0.0) for h in range(24)], datum=date(2025, 12, 21))
     assert profil.tageswert_kwh == 0.0
     assert profil.hat_messung is True
 
@@ -254,12 +253,11 @@ def test_b3_ohne_jeden_zaehler_bleibt_es_eine_luecke():
     eine Anlage ohne PV-Zähler mit „0,0 kWh IST" beschriftet statt mit „—":
     aus einem zu strengen Prüfer wäre ein falscher Wert geworden.
     """
-    profil = ist_profil([], jetzt_stunde=12, datum=date(2025, 6, 1))
+    profil = ist_profil([], datum=date(2025, 6, 1))
     assert profil.tageswert_kwh == 0.0        # NICHT None — das ist der Punkt
     assert profil.hat_messung is False
 
-    nur_luecken = ist_profil([_Row(h, None) for h in range(24)], jetzt_stunde=23,
-                             datum=date(2025, 6, 1))
+    nur_luecken = ist_profil([_Row(h, None) for h in range(24)], datum=date(2025, 6, 1))
     assert nur_luecken.tageswert_kwh == 0.0
     assert nur_luecken.hat_messung is False
 
@@ -268,7 +266,7 @@ def test_b3_eine_gemessene_stunde_genuegt():
     """Träger-Semantik wie `TagesBilanz.pv_erfasst`: EINE Stunde reicht."""
     profil = ist_profil(
         [_Row(h, None) for h in range(23)] + [_Row(23, 0.0)],
-        jetzt_stunde=23, datum=date(2025, 6, 1),
+        datum=date(2025, 6, 1),
     )
     assert profil.hat_messung is True
 

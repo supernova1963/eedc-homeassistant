@@ -1372,7 +1372,7 @@ Diese Werkzeuge laufen über die **Reparatur-Werkbank** unter Einstellungen → 
 ### Wo erscheint der Daten-Checker noch?
 
 - **In-App-Hilfe** (Menüpunkt Hilfe): Diese Doku ist dort als kuratiertes Hilfe-Dokument verfügbar.
-- **„Beheben"-Links innerhalb der App**: Befund-Zeilen verlinken direkt zur betroffenen Einstellungs-Kachel — kein Suchen in den Kategorien nötig.
+- **„Beheben"-Links innerhalb der App**: Befund-Zeilen verlinken direkt zur betroffenen Einstellungs-Kachel — kein Suchen in den Kategorien nötig. Befunde, deren Handgriff in der **Reparatur-Werkbank** liegt (Wetterreihe nachziehen, Tag neu aggregieren, HA-Spiegel abgleichen …), klappen die Energieprofil-Pflege auf **und springen bis zur Werkbank** an ihrem Ende — auch beim zweiten Klick, wenn du den Block inzwischen wieder zugeklappt hast; andere Blöcke bleiben, wie du sie gelassen hast.
 - **Komponenten-Achse**: Jede [Komponenten-Sicht](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse) hat einen Block **Daten-Qualität** mit den offenen Daten-Checker-Befunden genau dieser Komponente und Sprung zur Reparatur-Werkbank.
 - **Aktivitäten-Log** (Einstellungen → System → Protokolle, Tab *Aktivitäten*): Bestimmte Befund-Kategorien (z. B. Connector-Test-Ergebnisse) finden sich auch dort historisch.
 

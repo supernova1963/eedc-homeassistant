@@ -29,17 +29,19 @@ import {
   pvVerteiltHerkunft, PV_MODUL_TEILWEISE_VERTEILT_HINWEIS, KWP_ANTEIL_GESCHAETZT, BKW_KWP_ANTEIL_HINWEIS,
   BKW_ABGETRETEN_HINWEIS,
 } from '../lib/pvHerkunft'
-import { istZaehlerKategorie } from '../lib/fieldDefinitions'
+import { istAbgabeKategorie, istZaehlerKategorie } from '../lib/fieldDefinitions'
 import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
-import { investitionenApi, type InvestitionMonatsdaten, type SonstigesMonatsWert } from '../api/investitionen'
+import {
+  investitionenApi, type InvestitionMonatsdaten, type SonstigesAbgabeMonat, type SonstigesMonatsWert,
+} from '../api/investitionen'
 import { istRestZeile, speicherUnterzeile } from '../components/eauto/EAutoCharts'
 import { wandlungsverlusteVerlaufZeile, type Unterzeile } from '../lib/wandlungsverluste'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   PV_ANLAGE_KPI, SPEICHER_KPI, WP_KPI, EAUTO_KPI, WALLBOX_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI, SONSTIGES_SPEICHER_KPI,
-  SONSTIGES_ZAEHLER_KPI,
+  SONSTIGES_ZAEHLER_KPI, SONSTIGES_ABGABE_KPI,
   type KpiStyle, type KomponentenColor,
 } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
@@ -201,6 +203,28 @@ function verbraucherVerlauf(reihe: SonstigesMonatsWert[]): KompGeraet['verlauf']
 function verbraucherJahre(reihe: SonstigesMonatsWert[]): { jahr: number; summe: number }[] {
   const m = new Map<number, number>()
   for (const r of reihe) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, r.verbrauch_kwh))
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
+}
+
+/** #443/N-785: Verlauf eines Abgabe-Geräts — die Abgabe je Monat aus `abgabe_monatsreihe` (Monats-Fakten des
+ *  Backends), eine Balkenreihe in der Identitätsfarbe `sonstiges`. Ein Alt-Monat, der seinen Wert noch im Feld
+ *  Erzeugung trägt, steht hier mit 0 — wie in der Bilanz. */
+function abgabeVerlauf(reihe: SonstigesAbgabeMonat[]): KompGeraet['verlauf'] {
+  if (!reihe.length) return undefined
+  const sortiert = [...reihe].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+  return {
+    bars: [{ key: 'abgabe', label: 'Abgabe', farbe: KOMPONENTEN_FARBEN['sonstiges'].hex }],
+    rows: sortiert.map((m) => ({
+      name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(2)}`,
+      abgabe: Math.max(0, m.abgabe_kwh),
+    })),
+  }
+}
+
+/** #443/N-785: Jahressummen der Abgabe aus der Reihe des Backends (der Client summiert nur). */
+function abgabeJahre(reihe: SonstigesAbgabeMonat[]): { jahr: number; summe: number }[] {
+  const m = new Map<number, number>()
+  for (const r of reihe) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, r.abgabe_kwh))
   return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
 }
 
@@ -997,7 +1021,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   sonstiges: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSonstigesDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe }) => {
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe, abgabe_monatsreihe }) => {
         // Kategorie-Badge (Selektor-Differenzierung, SoT-Map R3b S7) + Sonderkosten-Alert (IST-getreu).
         const selektorBadge = SONSTIGES_KATEGORIE_LABELS[z.kategorie] ?? 'Sonstiges'
         const hinweise: KompGeraet['hinweise'] = (z.sonderkosten_euro ?? 0) > 0
@@ -1069,6 +1093,33 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             wirtschaftlichkeit: (z.ersparnis_euro ?? 0) > 0 ? {
               posten: [{ label: 'Eigenverbrauchs-Ersparnis', euro: z.ersparnis_euro, farbe: SEG.ev }],
             } : undefined,
+          }
+        }
+        if (istAbgabeKategorie(z.kategorie)) {
+          // #443/N-785 — Abgabe an Dritte (§9.2): weder Eigenverbrauch noch Netz-Einspeisung. Bis 4.2.2 fiel das Gerät
+          // hier in die Erzeuger-Sicht (Erzeugung «—», Verlauf aus `erzeugung_kwh`). Keine Ersparnis- und keine CO₂-
+          // Kachel; der Erlös steht nur, wenn er am Gerät gepflegt ist (sonst «nicht bewertet» mit dem Backend-Grund).
+          const abgabeReihe = abgabe_monatsreihe ?? []
+          const erloes = z.erloes_abgabe_euro ?? null
+          return {
+            inv, label: inv.bezeichnung, selektorBadge, hinweise,
+            monatswerte: md.length,
+            status: [
+              kpi(SONSTIGES_ABGABE_KPI.abgabe, n0(z.gesamt_abgabe_kwh), 'kWh'),
+              z.bewertet
+                ? kpi(SONSTIGES_ABGABE_KPI.erloes, n2(erloes), '€')
+                : unbewertet(SONSTIGES_ABGABE_KPI.erloes, 'Erlös am Gerät nicht gepflegt'),
+              kpi(SONSTIGES_ABGABE_KPI.monate, n0(z.monate_mit_abgabe), ''),
+            ],
+            verlauf: abgabeVerlauf(abgabeReihe),
+            vergleich: abgabeReihe.length ? {
+              label: 'Abgabe', einheit: 'kWh', farbe: KOMPONENTEN_FARBEN['sonstiges'].hex,
+              jahre: abgabeJahre(abgabeReihe),
+            } : undefined,
+            // Wirtschaftlichkeit = der gepflegte Erlös als EIN Posten; ohne Erlös der Grund aus dem Backend.
+            wirtschaftlichkeit: (erloes ?? 0) > 0
+              ? { posten: [{ label: 'Erlös aus der Abgabe', euro: erloes, farbe: KOMPONENTEN_FARBEN['sonstiges'].bg }] }
+              : z.bewertet ? undefined : { posten: [], nichtBewertet: z.nicht_bewertet_grund ?? '' },
           }
         }
         if (istZaehlerKategorie(z.kategorie)) {

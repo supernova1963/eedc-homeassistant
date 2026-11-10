@@ -912,7 +912,7 @@ function HistorieHinweisBlock({
           type="button"
           variant="secondary"
           size="sm"
-          onClick={() => { window.location.hash = '#/einstellungen/daten?block=energieprofil' }}
+          onClick={() => { window.location.hash = '#/einstellungen/daten?block=energieprofil&karte=werkbank' }}
         >
           Zur Reparatur-Werkbank
         </Button>

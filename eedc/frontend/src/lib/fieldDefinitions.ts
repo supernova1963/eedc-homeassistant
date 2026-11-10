@@ -238,6 +238,14 @@ const SONSTIGES_FELDER: Record<string, FeldDefinition[]> = {
     { feld: 'bezug_pv_kwh',         label: 'davon PV',   einheit: 'kWh' },
     { feld: 'bezug_netz_kwh',        label: 'davon Netz', einheit: 'kWh' },
   ],
+  // §9.2 — Abgabe an Dritte (#443/N-785). Spiegel von
+  // `field_definitions/registry.py::INVESTITION_FELDER["sonstiges"]["abgabe"]`; bis 4.2.2 fehlte der Schlüssel,
+  // das Formular zeichnete für ein Abgabe-Gerät nur den Erlös (mit dem Erzeuger-Label) und verwarf den
+  // Sensor-Vorschlag zu `abgabe_kwh`. Wächter: `backend/tests/test_feldlisten_spiegel_sonstiges.py`.
+  abgabe: [
+    { feld: 'abgabe_kwh',            label: 'Abgabe', einheit: 'kWh' },
+    { feld: 'einspeise_erloes_euro', label: 'Erlös',  einheit: '€', placeholder: 'z. B. 42.30' },
+  ],
   speicher: [
     { feld: 'erzeugung_kwh',        label: 'Erzeugung/Entladung',einheit: 'kWh' },
     { feld: 'verbrauch_sonstig_kwh',label: 'Verbrauch/Ladung',   einheit: 'kWh' },
@@ -436,7 +444,10 @@ const SONSTIGES_FELDER_UNGEPFLEGT: FeldDefinition[] = (() => {
     // neben den Strom-Feldern verleitet dazu, dort einen Gassensor
     // zuzuordnen. Das ist der N-244-Schaden mit anderem Vorzeichen.
     // Spiegel von `_sonstiges_felder_ungepflegt()` im Backend.
-    ...Object.keys(SONSTIGES_FELDER).filter(k => k !== 'verbraucher' && !istZaehlerKategorie(k)),
+    // #443: die Abgabe-Kategorie ebenso — ihr Feld als Verbrauch gelesen ist N-244 mit anderem Vorzeichen.
+    ...Object.keys(SONSTIGES_FELDER).filter(
+      k => k !== 'verbraucher' && !istZaehlerKategorie(k) && !istAbgabeKategorie(k),
+    ),
   ]
   const gesehen = new Set<string>()
   const out: FeldDefinition[] = []

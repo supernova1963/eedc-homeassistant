@@ -876,7 +876,7 @@ async def _prognose_mit_heute(
         from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
         ist_zeilen = await stunden_der_tage(db, anlage.id, heute, heute, felder=("pv_kw",))
-        ist_p = ist_profil(ist_zeilen, jetzt_stunde=now.hour, datum=heute)
+        ist_p = ist_profil(ist_zeilen, datum=heute)
         ist_roh = ist_p.tageswert_kwh or 0.0
         ist_bisher = round(ist_roh, 1)
         # N-544: bis wohin reicht diese Summe? Der hoechste Slot, der einen

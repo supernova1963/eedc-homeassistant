@@ -814,7 +814,7 @@ sensor:
   "sonstiges_verbrauch_monat_kwh":
     abschnitt: "SENSOR-REFERENZ.md#stufe-3-je-gerät--fenster-mit-betrag"
     test: "backend/tests/test_s3_geraete_fenster.py"
-    hinweis: "Stromverbrauch dieses Geräts im **laufenden** Monat. Attribute: `pv_anteil_prozent`, `bezug_pv_kwh`, `bezug_netz_kwh`. ⭐ **Das ist neu und zugleich Stufe 1:** Für Pool, Sauna, Trockner oder einen Heizstab mit eigenem Zähler exportierte eedc bisher **keinen einzigen Energiewert**"
+    hinweis: "Stromverbrauch dieses Geräts im **laufenden** Monat. Attribute: `pv_anteil_prozent` (Bezug PV ÷ (Bezug PV + Bezug Netz), dieselbe Definition wie die Kachel «PV-Anteil» im Cockpit; seit 10.11.2026, vorher ÷ Verbrauch), `bezug_pv_kwh`, `bezug_netz_kwh`. ⭐ **Das ist neu und zugleich Stufe 1:** Für Pool, Sauna, Trockner oder einen Heizstab mit eigenem Zähler exportierte eedc bisher **keinen einzigen Energiewert**"
   "speicher_effizienz_prozent":
     abschnitt: "BERECHNUNGEN.md#round-trip-wirkungsgrad-η--soc-korrigiert-nicht-roh"
     test: "backend/tests/test_n252_speicher_wirkungsgrad_deckung.py"

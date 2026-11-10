@@ -11,6 +11,23 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Komponenten → Sonstiges zeigt Geräte der Kategorie «Abgabe an Dritte» als das, was sie sind (#443, Melder
+  rilmor-mhrs).** Ein Abgabe-Gerät (Mieterstrom, Allgemeinstrom, Nachbarhaus) erschien dort bisher als Erzeuger mit
+  leerer Erzeugung bzw. mit Ladung, Entladung und Ersparnis 0. Jetzt stehen da die **Abgabe** (kWh), der **Erlös** (die
+  Summe deiner gepflegten Erlöse; ohne gepflegten Erlös „nicht bewertet") und die Zahl der **Monate** mit Abgabe; Verlauf
+  und Vergleich zeigen die Abgabe je Monat und Jahr, die Wirtschaftlichkeit den Posten „Erlös aus der Abgabe". Eine
+  Ersparnis- oder CO₂-Kachel gibt es bewusst nicht. Das **Monatsabschluss-Formular** bietet für ein Abgabe-Gerät jetzt
+  das Feld **„Abgabe (kWh)"** und das Feld **„Erlös (€)"** — bisher fehlte die Abgabe, und der Vorschlag eines
+  zugeordneten Sensors ging beim Abschluss verloren. Monate vor der Umstellung der Kategorie tragen ihren Wert noch im
+  Feld *Erzeugung* und zählen als 0 — nachtragen unter *Einstellungen → Daten → Monatsdaten*, Monat öffnen, Feld
+  „Abgabe (kWh)" (N-785).
+- **Daten-Checker: «Beheben» führt bis zur Reparatur-Werkbank (#440, gruaGit).** Die Wetterquellen-Prüfung und alle
+  anderen Befunde, deren Handgriff in der Reparatur-Werkbank liegt, klappten die Energieprofil-Pflege auf — die Werkbank
+  liegt aber an ihrem Ende, und auf Notebook und Handy sah der Klick wirkungslos aus; ein zweiter Klick tat gar nichts.
+  Jetzt öffnet «Beheben» den Block (auch, wenn du ihn inzwischen wieder zugeklappt hast) und springt zur Werkbank; die
+  übrigen Blöcke bleiben, wie du sie gelassen hast. Dasselbe gilt für den Knopf „Zur Reparatur-Werkbank" auf der
+  Datenquellen-Seite.
+
 - **Prognose: an Tagen aus dem HA-Spiegel lagen gemessene Stunden eine Stunde vor ihrer Prognose.** An diesen Tagen ordnete
   eedc die Stunde 11–12 Uhr dem Prognose-Wert 10–11 Uhr zu. Sichtbar im Stundenvergleich unter *Auswertungen → Prognose*
   (die gemessene Kurve stand eine Stunde früher als die Prognose, der Mittag 12 statt 13 Uhr) und in der
@@ -127,6 +144,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
+- **HA-Sensor «Verbrauch … Monat» eines sonstigen Verbrauchers: das Attribut `pv_anteil_prozent` rechnet wie die
+  Cockpit-Kachel «PV-Anteil».** PV-Bezug ÷ (PV-Bezug + Netz-Bezug) statt PV-Bezug ÷ Verbrauch. Gleich, solange PV- und
+  Netz-Bezug den Verbrauch ganz aufteilen; misst das Gerät nur einen Teil, zeigt das Attribut jetzt denselben Wert wie
+  das Cockpit.
 - **PV-Prognose «Rest heute» und «heute (nachgeführt)» folgen dem gemessenen Vormittag.** Sobald ein Zehntel der
   Tagesprognose vorbei ist, vergleicht eedc das bisher Erzeugte mit der Prognose bis zur selben Stunde und führt den Rest
   des Tages nach — gedämpft, solange erst wenig vom Tag vorbei ist, höchstens auf das 0,4- bis 1,6-Fache. An einem
@@ -198,6 +219,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen DD (10.11.2026): sauberer Stand vor dem Release.** Route `GET /investitionen/dashboard/sonstiges` mit eigenem
+  Zweig für `ist_abgabe_kategorie` (`_abgabe_dashboard`: `gesamt_abgabe_kwh`, `erloes_abgabe_euro`, `monate_mit_erloes`,
+  `monate_mit_abgabe`, `bewertet`/`nicht_bewertet_grund`, Reihe `abgabe_monatsreihe` aus den Monats-Fakten; der
+  Zähler-Zweig als `_zaehler_zusammenfassung` herausgelöst, bitgleich), Client-Feldliste `SONSTIGES_FELDER.abgabe` und
+  Ausschluss aus der Liste für ungepflegte Geräte wie im Backend, Wächter `test_feldlisten_spiegel_sonstiges.py`
+  (Kategorien, Feldnamen in Reihenfolge, Labels; rot am Stand davor) (N-785). `LINK_ENERGIEPROFIL` trägt
+  `&karte=werkbank`, `BlockShell.oeffnenAnlass` (`location.key`), Hook `useKarteAnspringen`, Anker
+  `data-karte="werkbank"`; Wächter `test_daten_checker_beheben_links_wirken.py` kennt `karte=` (#440). Raster-Geschwister
+  von N-784, beide ohne gemessene Zahlenänderung: Wochenmuster-Route legt Zeilen über `backward_slot_der_zeile` ab (N-786,
+  die Route hat keinen Client-Konsumenten), Börsen-Nachholpfad `_hole_boerse_nach` mit Kanal-Weiche wie der Hauptpfad
+  (N-788). HA-Attribut
+  `pv_anteil_prozent` über `pv_anteil_ladung.bezug_pv_anteil_prozent` — Rechenstellen-Baseline Backend 30 → 29.
+  `prognose_adapter.ist_profil`: ungelesener Parameter `jetzt_stunde` entfernt.
 - **Päckchen CC Nachlauf (9.11.2026): Raster-Paarung, Nachführung, Wächter «Dateilänge».** Eine Paarungsstelle
   `slot_konvention.backward_slot_der_zeile` (Mischzeile eines Kanal-Tags ⇒ Slot h + 1, Stunde 23 ⇒ Slot 0 des Folgetags;
   Bestandszeile unverändert) für `prognose_adapter.ist_profil` (Kanon, Prognosen-Vergleich), die Verbrauchsprofil-Bauer

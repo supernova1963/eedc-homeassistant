@@ -155,11 +155,14 @@ export function EnergieprofilPflege({
       )}
 
 
-      {/* Reparatur-Werkbank (Etappe 3d Päckchen 4) — Plan + Execute + Verlauf */}
-      <RepairWorkbench
-        anlageId={anlageId}
-        anlagenname={anlagenname}
-      />
+      {/* Reparatur-Werkbank (Etappe 3d Päckchen 4) — Plan + Execute + Verlauf. #440: `data-karte` ist das Ziel des
+          Daten-Checker-Links `?block=energieprofil&karte=werkbank` (useKarteAnspringen in EinstellungenV4). */}
+      <div data-karte="werkbank" className="scroll-mt-4">
+        <RepairWorkbench
+          anlageId={anlageId}
+          anlagenname={anlagenname}
+        />
+      </div>
     </div>
   )
 }

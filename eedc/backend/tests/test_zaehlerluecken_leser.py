@@ -165,13 +165,13 @@ def test_ist_profil_buendel_aus_dem_stundenvergleich_energie_in_der_summe():
 
     d = date(2026, 5, 15)
     rows = [_R(d, 9, 1.0, None), _R(d, 12, 6.0, {"pv": 3}), _R(d, 13, 2.0, None)]
-    p = ist_profil(rows, jetzt_stunde=20, datum=d)
+    p = ist_profil(rows, datum=d)
     assert p.slots_kw[12] is None and p.buendel_stunden == (12,)
     assert p.tageswert_kwh == 9.0
     assert p.unvollstaendig is False                         # inneres Bündel
     mitternacht = [_R(d, 2, 3.0, {"pv": 6})] + rows
-    assert ist_profil(mitternacht, jetzt_stunde=20, datum=d).unvollstaendig is True
-    assert ist_profil(rows, jetzt_stunde=20, datum=d, verworfen={"pv": 5.0}).unvollstaendig is True
+    assert ist_profil(mitternacht, datum=d).unvollstaendig is True
+    assert ist_profil(rows, datum=d, verworfen={"pv": 5.0}).unvollstaendig is True
 
 
 # ── Lernfaktor · Genauigkeit (Service + Route) · Checker PR ──────────────

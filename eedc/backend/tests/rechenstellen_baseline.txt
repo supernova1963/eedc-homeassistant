@@ -3,7 +3,6 @@
 api/routes/cockpit/pv_strings.py::_pruefe_prognose_plausibilitaet::/::prognose.jahresertrag_kwh,prognose.spezifischer_ertrag_kwh_kwp	E/E
 api/routes/data_import.py::_wallbox_verbrauch::-::monat_input.wallbox_ladung_kwh,monat_input.wallbox_ladung_pv_kwh	E-E
 api/routes/ha_export/investition_sensoren.py::_emob_ersparnis_text::-::strom_kosten,extern_euro_sensor	G-G
-api/routes/ha_export/investition_sensoren.py::_sonstiges_sensoren::/::geraet.bezug_pv_kwh,geraet.verbrauch_kwh	E/E
 api/routes/import_export/csv_operations.py::_batterie_legacy_gegen_speicher_summe::-::batterie_entladung_explicit,summen['batterie_entladung_sum']	E-E
 api/routes/import_export/csv_operations.py::_batterie_legacy_gegen_speicher_summe::-::batterie_ladung_explicit,summen['batterie_ladung_sum']	E-E
 api/routes/import_export/csv_operations.py::_export_zeilen::-::summen['ausgaben_euro'],summen['ertraege_euro']	G-G

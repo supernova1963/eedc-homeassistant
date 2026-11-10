@@ -14,7 +14,7 @@
  * (Schritt 4) folgt separat.
  */
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Home, X, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
@@ -30,6 +30,7 @@ import {
 } from '../pages/InvestitionenTeile'
 import DatenquellenZuordnung from '../components/live/DatenquellenZuordnung'
 import { useEinstellungenStatus, type KachelStatus } from '../hooks/useEinstellungenStatus'
+import { useKarteAnspringen } from '../hooks/useKarteAnspringen'
 import { EinstellungenModalHost, type WizardKey } from './EinstellungenModalHost'
 import { useOeffneWizard } from './wizardHost'
 
@@ -179,13 +180,18 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   // ist seine Form nicht gemountet). MonatsdatenVerwaltung liest denselben Param.
   // Konzept #192 B ergänzt den allgemeinen Fall: `?block=<id>` klappt einen
   // beliebigen Katalog-Block auf. Der Historie-Hinweis der Datenquellen-Fläche
-  // schickt damit auf `daten?block=energieprofil` (Reparatur-Werkbank) — ohne
+  // schickt damit auf `daten?block=energieprofil&karte=werkbank` (Reparatur-Werkbank, #440) — ohne
   // ihn läge der Anwender in einer Kategorie mit zugeklappten Blöcken und
   // müsste raten, welcher gemeint ist.
   const [searchParams] = useSearchParams()
   const erfassenBlock = searchParams.get('erfassen')
     ? 'monatsdaten'
     : (searchParams.get('block') || undefined)
+  // #440 (gruaGit): `?karte=<name>` springt zur Karte mit `data-karte="<name>"` im aufgeklappten Block — die
+  // Reparatur-Werkbank liegt am Ende der Energieprofil-Pflege. `location.key` ist bei jeder Navigation neu, auch auf
+  // dieselbe Adresse: ein zweiter Klick auf «Beheben» klappt erneut auf und scrollt erneut.
+  const { key: navigationsKey } = useLocation()
+  const karte = searchParams.get('karte') || undefined
 
   const ctx: InhaltCtx = {
     oeffneWizard: globalOeffne ?? setOffenerWizard,
@@ -194,6 +200,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   }
 
   const suchModus = suche.trim().length > 0
+  useKarteAnspringen(suchModus ? undefined : karte, navigationsKey)
   // Kategorie „Komponenten" ist datengetrieben (ein Block pro Investitionstyp) und hat
   // KEINE statischen Katalog-Einträge → eigener Zweig (nur außerhalb der Suche; die Suche
   // läuft weiter über den statischen Katalog).
@@ -301,6 +308,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
               bloecke={bloecke}
               sortierbar={!suchModus}
               oeffneBeimMount={suchModus ? undefined : erfassenBlock}
+              oeffnenAnlass={navigationsKey}
             />
           ) : (
             <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">

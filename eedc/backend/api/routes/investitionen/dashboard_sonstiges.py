@@ -25,6 +25,7 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_speic
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.field_definitions import (
     get_sonstiges_verbrauch_kwh,
+    ist_abgabe_kategorie,
     ist_gepflegte_sonstiges_kategorie,
     ist_zaehler_kategorie,
 )
@@ -63,6 +64,21 @@ class SonstigesMonatsWert(BaseModel):
     nicht_aufgeteilt_kwh: float
 
 
+class SonstigesAbgabeMonat(BaseModel):
+    """Ein Monat eines Geräts der Kategorie *Abgabe an Dritte* (§9.2, #443/N-785) — aus den Monats-Fakten.
+
+    Eine **eigene** Reihe statt ``SonstigesMonatsWert`` zu erweitern: dessen Pflichtfelder (Verbrauch, PV-/Netz-Bezug,
+    nicht aufgeteilt) hätte ein Abgabe-Gerät mit 0 füllen müssen — eine 0 dort wäre die Behauptung «kein Verbrauch»
+    über ein Gerät, das gar keinen Verbrauch führt (Muster des Zähler-Zweigs).
+    """
+    jahr: int
+    monat: int
+    #: ``fakt.sonstiges.je_geraet[inv].abgabe_kwh`` — Alt-Monate mit ``erzeugung_kwh`` statt ``abgabe_kwh`` tragen 0
+    abgabe_kwh: float
+    #: gepflegter Erlös des Monats in €; ``None``, wenn im Monat keiner gepflegt ist (eine gepflegte 0 bleibt 0)
+    erloes_euro: Optional[float] = None
+
+
 class SonstigesDashboardResponse(BaseModel):
     """Sonstiges Dashboard Daten."""
     investition: InvestitionResponse
@@ -70,6 +86,9 @@ class SonstigesDashboardResponse(BaseModel):
     #: N-645: die bewertete Monatsreihe eines Verbrauchers — Hub-Verlauf und -Vergleich lesen sie statt
     #: ``monatsdaten[].verbrauch_daten``. Leer für Erzeuger, Speicher und Zähler.
     monatsreihe: list[SonstigesMonatsWert] = []
+    #: #443/N-785: die Abgabe je Monat eines Geräts der Kategorie *Abgabe an Dritte* (Monats-Fakten, P10). Leer für
+    #: jede andere Kategorie.
+    abgabe_monatsreihe: list[SonstigesAbgabeMonat] = []
     zusammenfassung: dict[str, Any]
 
 def _monatsverbrauch_aus_verlauf(fenster) -> list[dict]:
@@ -242,6 +261,13 @@ async def get_sonstiges_dashboard(
 
         gesamt_sonstige_netto = gesamt_sonstige_ertraege - gesamt_sonstige_ausgaben
 
+        if ist_abgabe_kategorie(kategorie):
+            dashboards.append(await _abgabe_dashboard(
+                db, anlage_id, inv, monatsdaten, kategorie, beschreibung,
+                gesamt_sonstige_ertraege, gesamt_sonstige_ausgaben, gesamt_sonstige_netto,
+            ))
+            continue
+
         # Beide Preisseiten je Monat, EIN Aufruf: bei den Kategorien
         # `erzeuger` und `speicher` gehen sie gemeinsam in eine Formel
         # (Eigenverbrauch gegen Einspeisung bzw. der Spread), und zwei
@@ -307,69 +333,10 @@ async def get_sonstiges_dashboard(
             }
 
         elif ist_zaehler_kategorie(kategorie):
-            # #377 — ein Zähler wird ERFASST, nicht BEWERTET.
-            #
-            # ⚠ **Ohne diesen Zweig fiele er in den Speicher-Zweig darunter**
-            # (`else`) und bekäme eine Effizienz aus Ladung/Entladung, die er
-            # nicht hat, sowie eine Ersparnis aus einem Spread, den es für Gas
-            # nicht gibt — vier Nullen, die wie eine Aussage aussehen. Genau
-            # das ist der v4.0.17-Befund bei der Klimaanlage, und die Antwort
-            # ist dieselbe: **„nicht bewertet" sagen, statt Nullen zu zeigen.**
-            #
-            # Eine Wirtschaftlichkeit ist hier nicht bloß unbekannt, sie ist
-            # nicht anwendbar: Gas- und Wasserkosten sind Haushaltskosten und
-            # gehören nicht in die Bewertung der PV-Anlage (Präzedenz: der
-            # Einspeise-Erlös eines Fremd-Erzeugers, `field_definitions.py`).
-            zaehler_fenster = next(
-                (
-                    z for z in await lade_zaehlerstaende(
-                        db, anlage_id,
-                        datetime(1970, 1, 1), datetime.now(),
-                        mit_verlauf=True, nur_aktive=False,
-                    )
-                    if z.investition_id == inv.id
-                ),
-                None,
+            zusammenfassung = await _zaehler_zusammenfassung(
+                db, anlage_id, inv, kategorie, beschreibung, gesamt_sonstige_ertraege, gesamt_sonstige_ausgaben,
+                gesamt_sonstige_netto, len(monatsdaten),
             )
-            zusammenfassung = {
-                'kategorie': kategorie,
-                'beschreibung': beschreibung,
-                'zaehler_art': zaehler_art(inv),
-                'einheit': zaehler_einheit(inv),
-                'stand_anfang': zaehler_fenster.stand_anfang if zaehler_fenster else None,
-                'stand_ende': zaehler_fenster.stand_ende if zaehler_fenster else None,
-                'differenz': zaehler_fenster.differenz if zaehler_fenster else None,
-                'anfang_vollstaendig': (
-                    zaehler_fenster.anfang_vollstaendig if zaehler_fenster else True
-                ),
-                'verlauf': [
-                    {'zeitpunkt': p.zeitpunkt.isoformat(), 'stand': p.stand}
-                    for p in (zaehler_fenster.verlauf if zaehler_fenster else [])
-                ],
-                # Der Verbrauch JE MONAT — die Differenz zweier aufeinander
-                # folgender Stände.
-                #
-                # ⚑ **Warum das Backend sie rechnet und nicht der Hub:** Ein
-                # Zählerstand ist eine Bestandsgröße, sein Verbrauch eine
-                # Flussgröße — das ist ein Wechsel der Größenart, keine
-                # Formatierung. Im Client gerechnet gäbe es die Rechnung
-                # „Ende − Anfang" ein zweites Mal, und die zweite läuft
-                # irgendwann anders (die P10-Klasse).
-                'monatsverbrauch': _monatsverbrauch_aus_verlauf(zaehler_fenster),
-                # Bewusst KEINE der `gesamt_*`-, `ersparnis_*`- oder
-                # `co2_*`-Größen: Ein Feld mit 0 wäre eine Behauptung.
-                'bewertet': False,
-                'nicht_bewertet_grund': (
-                    "Ein Verbrauchszähler wird in eedc erfasst und angezeigt, aber "
-                    "nicht bewertet: Gas, Wasser oder Heizöl sind Haushaltskosten "
-                    "und gehören nicht in die Wirtschaftlichkeit der PV-Anlage."
-                ),
-                'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
-                'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
-                'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
-                'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
-                'anzahl_monate': len(monatsdaten),
-            }
 
         else:  # speicher
             # Layer-SoT statt eigener Division (N-252) — dieselbe Zahl wie
@@ -432,4 +399,143 @@ def _verbraucher_monatswert(md, d: dict) -> SonstigesMonatsWert:
         bezug_pv_kwh=pv,
         bezug_netz_kwh=netz,
         nicht_aufgeteilt_kwh=max(0.0, verbrauch - pv - netz),
+    )
+
+
+async def _zaehler_zusammenfassung(
+    db: AsyncSession, anlage_id: int, inv, kategorie: str, beschreibung: str,
+    gesamt_sonstige_ertraege: float, gesamt_sonstige_ausgaben: float, gesamt_sonstige_netto: float,
+    anzahl_monate: int,
+) -> dict[str, Any]:
+    """Die Zusammenfassung eines Verbrauchszählers (#377) — aus ``get_sonstiges_dashboard`` herausgelöst (#443: der
+    Abgabe-Zweig kam hinzu, die Route bleibt unter der Komplexitäts-Schwelle); der Inhalt ist unverändert."""
+    # #377 — ein Zähler wird ERFASST, nicht BEWERTET.
+    #
+    # ⚠ **Ohne diesen Zweig fiele er in den Speicher-Zweig darunter**
+    # (`else`) und bekäme eine Effizienz aus Ladung/Entladung, die er
+    # nicht hat, sowie eine Ersparnis aus einem Spread, den es für Gas
+    # nicht gibt — vier Nullen, die wie eine Aussage aussehen. Genau
+    # das ist der v4.0.17-Befund bei der Klimaanlage, und die Antwort
+    # ist dieselbe: **„nicht bewertet" sagen, statt Nullen zu zeigen.**
+    #
+    # Eine Wirtschaftlichkeit ist hier nicht bloß unbekannt, sie ist
+    # nicht anwendbar: Gas- und Wasserkosten sind Haushaltskosten und
+    # gehören nicht in die Bewertung der PV-Anlage (Präzedenz: der
+    # Einspeise-Erlös eines Fremd-Erzeugers, `field_definitions.py`).
+    zaehler_fenster = next(
+        (
+            z for z in await lade_zaehlerstaende(
+                db, anlage_id,
+                datetime(1970, 1, 1), datetime.now(),
+                mit_verlauf=True, nur_aktive=False,
+            )
+            if z.investition_id == inv.id
+        ),
+        None,
+    )
+    return {
+        'kategorie': kategorie,
+        'beschreibung': beschreibung,
+        'zaehler_art': zaehler_art(inv),
+        'einheit': zaehler_einheit(inv),
+        'stand_anfang': zaehler_fenster.stand_anfang if zaehler_fenster else None,
+        'stand_ende': zaehler_fenster.stand_ende if zaehler_fenster else None,
+        'differenz': zaehler_fenster.differenz if zaehler_fenster else None,
+        'anfang_vollstaendig': (
+            zaehler_fenster.anfang_vollstaendig if zaehler_fenster else True
+        ),
+        'verlauf': [
+            {'zeitpunkt': p.zeitpunkt.isoformat(), 'stand': p.stand}
+            for p in (zaehler_fenster.verlauf if zaehler_fenster else [])
+        ],
+        # Der Verbrauch JE MONAT — die Differenz zweier aufeinander
+        # folgender Stände.
+        #
+        # ⚑ **Warum das Backend sie rechnet und nicht der Hub:** Ein
+        # Zählerstand ist eine Bestandsgröße, sein Verbrauch eine
+        # Flussgröße — das ist ein Wechsel der Größenart, keine
+        # Formatierung. Im Client gerechnet gäbe es die Rechnung
+        # „Ende − Anfang" ein zweites Mal, und die zweite läuft
+        # irgendwann anders (die P10-Klasse).
+        'monatsverbrauch': _monatsverbrauch_aus_verlauf(zaehler_fenster),
+        # Bewusst KEINE der `gesamt_*`-, `ersparnis_*`- oder
+        # `co2_*`-Größen: Ein Feld mit 0 wäre eine Behauptung.
+        'bewertet': False,
+        'nicht_bewertet_grund': (
+            "Ein Verbrauchszähler wird in eedc erfasst und angezeigt, aber "
+            "nicht bewertet: Gas, Wasser oder Heizöl sind Haushaltskosten "
+            "und gehören nicht in die Wirtschaftlichkeit der PV-Anlage."
+        ),
+        'sonderkosten_euro': round(gesamt_sonstige_ausgaben, 2),
+        'sonstige_ertraege_euro': round(gesamt_sonstige_ertraege, 2),
+        'sonstige_ausgaben_euro': round(gesamt_sonstige_ausgaben, 2),
+        'sonstige_netto_euro': round(gesamt_sonstige_netto, 2),
+        'anzahl_monate': anzahl_monate,
+    }
+
+
+#: #443/N-785: warum die Abgabe ohne gepflegten Erlös nicht bewertet ist — derselbe Satz für Hub und Antwort.
+ABGABE_NICHT_BEWERTET_GRUND = (
+    "Abgabe an Dritte ist kein Eigenverbrauch; ein Erlös steht nur, wenn er am Gerät gepflegt ist."
+)
+
+
+async def _abgabe_dashboard(
+    db: AsyncSession, anlage_id: int, inv, monatsdaten: list, kategorie: str, beschreibung: str,
+    ertraege: float, ausgaben: float, netto: float,
+) -> SonstigesDashboardResponse:
+    """Ein Gerät der Kategorie *Abgabe an Dritte* (§9.2) — eigener Zweig (#443, N-785, Melder rilmor-mhrs).
+
+    Bis 4.2.2 fiel die Kategorie in den Speicher-Zweig (``else``): Ladung 0, Entladung 0, Effizienz leer, Ersparnis 0 —
+    vier Zahlen über ein Gerät, das weder lädt noch spart. Jetzt: die Abgabe (kWh) und der **gepflegte** Erlös.
+
+    ⛔ **Mengen aus den Monats-Fakten** (ADR-002/P10: ``sonstiges.je_geraet[inv].abgabe_kwh`` / ``einspeise_erloes_euro``
+    / ``hat_einspeise_erloes``), nicht aus ``verbrauch_daten`` gefaltet. Ein Alt-Monat, der seinen Wert noch im Feld
+    ``erzeugung_kwh`` trägt (Umstellung der Kategorie), zählt dort als 0 — wie in der Bilanz (``imd_typ_beitrag``).
+
+    Bewusst **keine** ``ersparnis_*``-/``co2_*``-Größen und **keine** Preisseite: eine Abgabe ist kein Eigenverbrauch,
+    und ihr Erlös ist ein eigener Satz, den eedc nicht kennt (Muster des Zähler-Zweigs: eine 0 wäre eine Behauptung).
+    ``bewertet`` ist wahr, sobald ein Monat einen Erlös trägt (auch eine gepflegte 0 — «unentgeltlich abgegeben»);
+    ``monate_mit_erloes`` zählt diese Monate (F-20: eigene Monatszahl je Posten). Die sonstigen Positionen
+    (``ertraege``/``ausgaben``/``netto``) faltet der Aufrufer wie für jede Kategorie.
+    """
+    from backend.services.monats_fakten import lade_monats_fakten
+
+    reihe: list[SonstigesAbgabeMonat] = []
+    if monatsdaten:
+        fakten = await lade_monats_fakten(
+            db, anlage_id,
+            von=(monatsdaten[0].jahr, monatsdaten[0].monat), bis=(monatsdaten[-1].jahr, monatsdaten[-1].monat),
+        )
+        je_monat = {(f.jahr, f.monat): (f.sonstiges.je_geraet or {}).get(inv.id) for f in fakten}
+        for md in monatsdaten:
+            g = je_monat.get((md.jahr, md.monat))
+            reihe.append(SonstigesAbgabeMonat(
+                jahr=md.jahr, monat=md.monat,
+                abgabe_kwh=g.abgabe_kwh if g is not None else 0.0,
+                erloes_euro=g.einspeise_erloes_euro if g is not None and g.hat_einspeise_erloes else None,
+            ))
+
+    erloese = [m.erloes_euro for m in reihe if m.erloes_euro is not None]
+    zusammenfassung: dict[str, Any] = {
+        'kategorie': kategorie,
+        'beschreibung': beschreibung,
+        'gesamt_abgabe_kwh': round(sum(m.abgabe_kwh for m in reihe), 1),
+        'erloes_abgabe_euro': round(sum(erloese), 2) if erloese else None,
+        'monate_mit_erloes': len(erloese),
+        'monate_mit_abgabe': sum(1 for m in reihe if m.abgabe_kwh > 0),
+        'bewertet': bool(erloese),
+        'sonderkosten_euro': round(ausgaben, 2),
+        'sonstige_ertraege_euro': round(ertraege, 2),
+        'sonstige_ausgaben_euro': round(ausgaben, 2),
+        'sonstige_netto_euro': round(netto, 2),
+        'anzahl_monate': len(monatsdaten),
+    }
+    if not erloese:
+        zusammenfassung['nicht_bewertet_grund'] = ABGABE_NICHT_BEWERTET_GRUND
+    return SonstigesDashboardResponse(
+        investition=inv,
+        monatsdaten=monatsdaten,
+        abgabe_monatsreihe=reihe,
+        zusammenfassung=zusammenfassung,
     )

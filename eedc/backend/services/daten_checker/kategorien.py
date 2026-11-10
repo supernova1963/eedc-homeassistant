@@ -360,7 +360,11 @@ LINK_INTEGRATION = "/einstellungen/integration"
 # `MonatsdatenTeile.tsx:344`). Beide tragen einen Query, den die Seite liest —
 # deshalb wirkt die Navigation auch von der Seite auf sich selbst.
 LINK_MONATSDATEN = "/einstellungen/daten?block=monatsdaten"
-LINK_ENERGIEPROFIL = "/einstellungen/daten?block=energieprofil"
+# #440 (gruaGit, 10.11.2026): `&karte=werkbank` springt im aufgeklappten Block zur Reparatur-Werkbank
+# (`data-karte="werkbank"`, `useKarteAnspringen`). Jede Meldung mit diesem Link nennt als Handgriff eine Operation
+# der Werkbank (Tag/Bereich neu aggregieren, Wetterreihe nachziehen, Wetterquelle festhalten, Benzinpreise,
+# HA-Spiegel); die Werkbank liegt am Ende des Blocks — ohne Sprung sah der Klick auf «Beheben» wirkungslos aus.
+LINK_ENERGIEPROFIL = "/einstellungen/daten?block=energieprofil&karte=werkbank"
 
 
 def link_monat_erfassen(label: str) -> str:

@@ -296,7 +296,7 @@ def sfml_profil(slots_kw, datum: date | None = None) -> StundenProfil:
 
 
 def ist_profil(
-    ist_rows, jetzt_stunde: int, datum: date | None = None,
+    ist_rows, datum: date | None = None,
     verworfen: dict | None = None,
 ) -> StundenProfil:
     """Normalisiert IST-Stundenzeilen (``TagesEnergieProfil`` für heute) zu einem
@@ -313,8 +313,8 @@ def ist_profil(
     Tag steht zu hoch) oder bei ``verworfen.pv`` der Tageszeile. Eine fehlende
     Stunde allein macht den Tag nicht mehr unvollständig: ihre Energie steht in
     der nächsten belegten Stunde, wie im HA-Dashboard. (Bis zum Umbau setzte
-    jede Lücke einer abgelaufenen Stunde das Flag; ``jetzt_stunde`` bleibt als
-    Parameter für die Aufrufer stehen.)
+    jede Lücke einer abgelaufenen Stunde das Flag; der Parameter ``jetzt_stunde``,
+    den nur diese Regel las, ist seit Päckchen DD (10.11.2026) entfernt.)
 
     ``tageswert_kwh`` ist hier die **rohe, ungerundete** Slot-Summe (≥ 0.0) — der
     Vergleich-Tab braucht sie unverändert für die ``verbleibend``-Rechnung und
