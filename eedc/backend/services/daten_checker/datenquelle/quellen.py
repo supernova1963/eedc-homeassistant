@@ -16,12 +16,12 @@ from backend.core.berechnungen import PV_KOMPONENTEN_PREFIXE
 from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
+    Aktion,
     CheckSeverity,
-    LINK_DATENQUELLEN,
-    LINK_ENERGIEPROFIL,
     _quelle_label,
     aktion_spiegel_abgleich_tag,
 )
+from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL
 from backend.core.zahlenformat import fmt_zahl, fmt_pct
 
 logger = logging.getLogger(__name__)
@@ -81,13 +81,12 @@ def _bestand_tag(ctx: _DriftKontext, datum_: date, schluessel: str | None = None
     return gruppe not in ctx.kanal_gruppen.get(datum_, ())
 
 
-def _drift_aktion(ctx: _DriftKontext, datum_: date) -> dict:
+def _drift_aktion(ctx: _DriftKontext, datum_: date) -> Aktion:
     """Der Handgriff einer Drift-Zeile (N-790): mit HA-Spiegel «Aus Home Assistant neu übernehmen» (Abgleich, danach
     der Tag neu aufgebaut), ohne Spiegel «Tag reparieren» (Neu-Aggregation des Tages) wie bisher."""
     if ctx.hat_spiegel:
         return aktion_spiegel_abgleich_tag(ctx.anlage.id, datum_)
-    return {"action_kind": "reaggregate_day", "action_params": {"anlage_id": ctx.anlage.id, "datum": datum_.isoformat()},
-            "action_label": "Tag reparieren"}
+    return Aktion("reaggregate_day", {"anlage_id": ctx.anlage.id, "datum": datum_.isoformat()}, "Tag reparieren")
 
 
 class QuellenChecks:
@@ -150,7 +149,7 @@ class QuellenChecks:
 
         if not konflikte:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="provenance_ok",
                 meldung=f"Keine Quellen-Konflikte in den letzten {days} Tagen",
             )]
 
@@ -207,7 +206,7 @@ class QuellenChecks:
         details = "\n".join(details_lines)
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            kategorie=kat, schwere=CheckSeverity.INFO.value, code="provenance_konflikte",
             meldung=(
                 f"{len(konflikte)} Felder hatten in den letzten {days} Tagen "
                 f"Werte aus mehreren Quellen — der Resolver hat automatisch die "
@@ -277,7 +276,7 @@ class QuellenChecks:
             "external:ha_statistics:hourly", "external:ha_statistics:daily",
         ):
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="datenquelle_ha_lts_ok",
                 meldung="HA-Statistics als Source-of-Truth aktiv",
                 details=(
                     "Energie-Aggregate werden direkt aus den HA-Long-Term-"
@@ -290,7 +289,7 @@ class QuellenChecks:
             # Stunde kommen aus dem gespiegelten HA-Zähler. Bis dahin fiel er in den Zweig «ältere Quelle» darunter, und
             # jeder HA-Anwender mit Kanal-Tagen sah dauerhaft eine INFO, die sich «mit dem nächsten Lauf» heilen sollte.
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="datenquelle_kanal_ok",
                 meldung="HA-Spiegel (Kanal) als Quelle aktiv",
                 details=(
                     "Tag und Stunde kommen aus dem gespiegelten HA-Zähler (Kanal-Tag). Stunden- und Tageswerte "
@@ -307,7 +306,7 @@ class QuellenChecks:
             # nicht „falsche Quelle", sondern „noch nichts da"; ein Anwender,
             # der nach der Quelle sucht, sucht am falschen Ort.
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="datenquelle_noch_keine_tageswerte",
                 meldung="Noch keine Tageswerte aggregiert",
                 details=(
                     "HA-Statistics ist erreichbar, aber es liegt noch keine "
@@ -320,14 +319,14 @@ class QuellenChecks:
                     "Zurückliegende Tage holt „Lücken aus HA-LTS nachfüllen“ "
                     "in der Reparatur-Werkbank."
                 ),
-                link=LINK_DATENQUELLEN,
+                altlink=HEUTE_DATENQUELLEN,
             )]
         if ha_lts_verfuegbar:
             # HA verfügbar, aber Aggregate aus älterem Pfad — typisch nach
             # Upgrade auf v3.31.0 vor erstem Reaggregations-Lauf. Ab hier ist
             # `tz` garantiert vorhanden (der Zweig darüber fängt None ab).
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="datenquelle_aggregate_aeltere_quelle",
                 meldung="HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle",
                 details=(
                     "HA-Statistics ist verfügbar, die Tageszusammenfassung "
@@ -337,12 +336,12 @@ class QuellenChecks:
                     "werden (nächster Monatsabschluss oder Tag-Reparatur), "
                     "gilt HA-LTS als Source-of-Truth."
                 ),
-                link=LINK_ENERGIEPROFIL,
+                altlink=HEUTE_ENERGIEPROFIL,
             )]
         # HA-LTS nicht verfügbar → Standalone-Modus (Docker ohne HA-Verbindung
         # oder fehlende HA-Recorder-URL)
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            kategorie=kat, schwere=CheckSeverity.INFO.value, code="betriebsart_standalone",
             meldung="Standalone-Modus aktiv (kein HA-LTS)",
             details=(
                 "Keine HA-Long-Term-Statistics verfügbar — Energie-Aggregate "
@@ -457,7 +456,7 @@ class QuellenChecks:
 
         if not ctx.drift_pro_tag and not ctx.drift_komponente:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="drift_ok",
                 meldung="Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
                 details=(
                     "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-"
@@ -674,8 +673,8 @@ class QuellenChecks:
                     f"{fmt_pct(rel_signed, 1, vorzeichen=True)})"
                 ),
                 details=details,
-                link=LINK_ENERGIEPROFIL,
-                **_drift_aktion(ctx, datum_),
+                altlink=HEUTE_ENERGIEPROFIL,
+                action=_drift_aktion(ctx, datum_),
                 code="drift_tag",
                 werte={"datum": datum_.isoformat(), "achse": "pv", "eedc": eedc, "ha": ha, "delta": delta_signed,
                        "prozent": rel_signed},
@@ -736,8 +735,8 @@ class QuellenChecks:
                     f"auf einmal: Einstellungen → Daten → Energieprofil → "
                     f"Reparatur-Werkbank."
                 ),
-                link=LINK_ENERGIEPROFIL,
-                **_drift_aktion(ctx, datum_),
+                altlink=HEUTE_ENERGIEPROFIL,
+                action=_drift_aktion(ctx, datum_),
                 investition_id=(
                     int(rest_id) if rest_id.isdigit() else None
                 ),

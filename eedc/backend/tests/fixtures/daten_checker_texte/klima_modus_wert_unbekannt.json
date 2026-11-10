@@ -1,0 +1,14 @@
+{
+ "code": "klima_modus_wert_unbekannt",
+ "faelle": {
+  "4": {
+   "kategorie": "klima_modus_wert",
+   "schwere": "info",
+   "meldung": "„Nibe S1255“: Betriebsmodus-Sensor liefert „heating“ — diesen Wert kennt eedc nicht",
+   "details": "Der Betriebsmodus-Sensor sensor.wp_prioritaet liefert gerade „heating“. Diesen Wert kennt eedc nicht und zählt die Stunden als unbestimmt — ihr Strom steht unter „nicht aufgeteilt“. Verstanden werden: Heizen (heat, heizen) · Warmwasser (warmwasser, brauchwasser, trinkwasser, dhw, hot_water, water_heating) · Kühlen (cool, kuehlen, kühlen) · Entfeuchten (dry, entfeuchten) · Lüften (fan_only, lueften, lüften) · Aus (off, aus); als unbestimmt gezählt: auto, heat_cool, automatik. Groß-/Kleinschreibung ist egal. Der Weg: in Home Assistant einen Template-Sensor anlegen, der aus deinen Werten einen dieser Texte macht, und ihn hier zuordnen (Vorlage und Werte-Tabelle im Handbuch „Wärme & Klima“, Schritt 4, Weg B). Die Aufteilung beginnt mit dem neuen Sensor; Stunden davor bleiben, wie sie sind.",
+   "code": "klima_modus_wert_unbekannt",
+   "klasse_katalog": "auskunft",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

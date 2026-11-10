@@ -1,0 +1,23 @@
+{
+ "code": "tageswerte_ok",
+ "faelle": {
+  "33": {
+   "kategorie": "tageswerte_fehlen",
+   "schwere": "ok",
+   "meldung": "Alle Tage mit zugeordnetem Zähler tragen Werte (letzte 90 Tage)",
+   "details": "Für jeden zugeordneten kWh-Zähler steht in der gespeicherten Tages-Zusammenfassung ein Wert. Tage, an denen die Zuordnung zwar steht, aber nie aggregiert wurde, würden hier mit einem Reparatur-Knopf erscheinen.",
+   "code": "tageswerte_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  },
+  "34": {
+   "kategorie": "tageswerte_fehlen",
+   "schwere": "ok",
+   "meldung": "Keine reparierbaren Tages-Lücken gefunden (letzte 90 Tage)",
+   "details": "1 Tag(e) tragen für einen zugeordneten Zähler keinen Wert — die HA-Langzeitstatistik liefert für diese Tage aber ebenfalls nichts. eedc reicht nur so weit zurück wie HA selbst; solche Lücken sind keine Fehlfunktion, sondern lassen sich nicht mehr füllen.",
+   "code": "tageswerte_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

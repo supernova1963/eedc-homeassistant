@@ -1,0 +1,14 @@
+{
+ "code": "emob_zustand_wert_unbekannt",
+ "faelle": {
+  "50": {
+   "kategorie": "emob_zustand_wert",
+   "schwere": "info",
+   "meldung": "„SMA eCharger 22“: Ladezustand liefert „charging_paused“ — diesen Wert kennt eedc nicht",
+   "details": "Der Sensor sensor.wb_status für „Ladezustand“ liefert gerade „charging_paused“. Diesen Wert kennt eedc nicht und zeigt deshalb keinen Zustand an. Verstanden werden: Kein Fahrzeug (kein_fahrzeug, not_connected) · Verbunden (verbunden, sleep_mode) · Wartet (wartet) · Lädt (laedt, active_mode) · Fertig (fertig) · Gesperrt (gesperrt, station_locked) · Fehler (fehler, station_fault). Groß-/Kleinschreibung ist egal. Der Weg: in Home Assistant einen Template-Sensor anlegen, der aus deinen Werten eines dieser Wörter macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Bedienung“, Abschnitt E-Mobilität).",
+   "code": "emob_zustand_wert_unbekannt",
+   "klasse_katalog": "auskunft",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

@@ -33,6 +33,7 @@ from typing import Optional
 from backend.core.zahlenformat import fmt_datum, fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN
 
 #: So viele volle Tage in Folge ohne Δ, bevor ein Zähler als „steht" gilt — ein einzelner Tag ohne Erzeugung ist im
 #: Winter normal, drei mit wachsender Gegengröße nicht.
@@ -158,7 +159,7 @@ class ZaehlerStehtChecks:
             mengen.append(f"Strings {fmt_zahl(gegen['strings'], 1)} kWh")
         return CheckErgebnis(
             kategorie=CheckKategorie.PV_ZAEHLER_STEHT.value,
-            schwere=CheckSeverity.WARNING,
+            schwere=CheckSeverity.WARNING, code="pv_zaehler_steht",
             meldung=(f"PV-Zähler {zaehler} {wann}, {obwohl} — Tag und Monat zeigen deshalb unplausible Werte; "
                      "Sensor in Home Assistant prüfen"),
             details=(
@@ -170,7 +171,7 @@ class ZaehlerStehtChecks:
                 "Werte, zählen die folgenden Tage richtig. Eine Nulleinspeisung, autarke Tage oder Schnee auf den "
                 "Modulen lösen diese Meldung nicht aus."
             ),
-            link="/einstellungen/datenquellen",
+            altlink=HEUTE_DATENQUELLEN,
         )
 
 __all__ = [

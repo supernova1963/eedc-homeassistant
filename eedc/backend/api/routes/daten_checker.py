@@ -25,6 +25,21 @@ router = APIRouter()
 # Schemas
 # =============================================================================
 
+class ZielResponse(BaseModel):
+    """E2: Sprung-Ziel eines Befunds (`services/daten_checker/ziele.py`); der Client liest bis E4 weiter `link`."""
+    bereich: str
+    block: Optional[str] = None
+    params: dict = {}
+    anker: Optional[str] = None
+
+
+class AktionResponse(BaseModel):
+    """E2: Inline-Handgriff eines Befunds; `action_*` sind daraus abgeleitet."""
+    operation: str
+    params: dict
+    label: str
+
+
 class CheckErgebnisResponse(BaseModel):
     kategorie: str
     schwere: str
@@ -41,6 +56,9 @@ class CheckErgebnisResponse(BaseModel):
     # E1 «Diagnose-Paket»: die Zahlen der Meldung strukturiert und der Befund-Schlüssel (optional, Altfelder unverändert).
     werte: Optional[dict] = None
     code: Optional[str] = None
+    # E2 (Befund-Schlüssel, Ziel-Bauer): Ziel und Aktion zusätzlich; Altfelder unverändert (abgeleitet).
+    ziel: Optional[ZielResponse] = None
+    action: Optional[AktionResponse] = None
 
 
 class MonatsdatenAbdeckungResponse(BaseModel):
@@ -94,6 +112,8 @@ async def daten_check(
                 investition_id=e.investition_id,
                 werte=e.werte,
                 code=e.code,
+                ziel=ZielResponse(**vars(e.ziel)) if e.ziel else None,
+                action=AktionResponse(**vars(e.action)) if e.action else None,
             )
             for e in result.ergebnisse
         ],

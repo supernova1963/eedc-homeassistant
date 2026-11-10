@@ -29,6 +29,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Der nächtliche Abgleich der Kanalstatistik protokolliert jede Nacht je Anlage mit HA-Spiegel, auch wenn nichts
   abweicht** — mit der Zahl der geprüften Abschnitte (N-794).
 
+### Intern
+
+- **Daten-Checker: jeder Befund trägt einen festen Schlüssel und sein Ziel aus einem Ziel-Bauer**, der jeden Feld-Schlüssel
+  gegen die Registry prüft; ein Katalog hält je Schlüssel Knopf-Text, Handbuch-Anker und Klasse. Sichtbar ändert sich
+  nichts; das Diagnose-Paket nennt an jedem Befund den Schlüssel und die Klasse (Kopfmarke v2).
+
 ## [4.2.3] - 2026-11-10
 
 Daten-Checker mit wirksamen Handgriffen und drei Melder-Fälle aus Forum und GitHub: Eine Abweichung zu Home Assistant lässt sich mit einem Knopf beheben, „Tag reparieren“ schreibt korrigierte Zählerwerte auch ohne Leistungskurve, „Beheben“ führt bis zur Reparatur-Werkbank, und alte Werte nach einem Kategoriewechsel unter Sonstiges werden gemeldet. Geräte der Kategorie „Abgabe an Dritte“ haben im Komponenten-Hub und im Monatsabschluss ihre eigene Sicht. Die PV-Prognose lernt aus dem Vormittag, kennt den Zeitpunkt „Mittag“, prüft ihre eigene Korrektur und empfiehlt die beste Quelle; an Tagen aus dem HA-Spiegel liegt jede gemessene Stunde auf ihrer Prognose. Der Block E-Mobilität steht an jedem Ladetag, und viele Anzeigen rechnet jetzt das Backend statt der Browser.

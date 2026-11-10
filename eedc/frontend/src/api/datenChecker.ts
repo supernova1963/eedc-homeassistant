@@ -42,6 +42,25 @@ export interface CheckErgebnis {
   // E1 «Diagnose-Paket»: die Zahlen der Meldung strukturiert und der Befund-Schlüssel (an den Melder-Erzeugern).
   werte?: Record<string, unknown> | null
   code?: string | null
+  // E2 «Befund-Schlüssel, Ziel-Bauer»: Sprung-Ziel und Aktion zusätzlich (Backend `ziele.py`). Der Client liest bis E3/E4
+  // weiter `link`/`action_*` — beide sind daraus abgeleitet und unverändert.
+  ziel?: CheckZiel | null
+  action?: CheckAktion | null
+}
+
+/** Sprung-Ziel eines Befunds (Bereich der Einstellungen, Block, Deep-Link-Parameter, Anker). */
+export interface CheckZiel {
+  bereich: string
+  block?: string | null
+  params: Record<string, unknown>
+  anker?: string | null
+}
+
+/** Inline-Handgriff eines Befunds (Operation, Parameter, Knopf-Beschriftung). */
+export interface CheckAktion {
+  operation: string
+  params: Record<string, unknown>
+  label: string
 }
 
 export interface MonatsdatenAbdeckung {

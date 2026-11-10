@@ -4,9 +4,9 @@ Daten-Checker — Enums, Dataclasses & gemeinsame Labels.
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 
 # ─── Enums & Dataclasses ────────────────────────────────────────────────────
@@ -294,20 +294,71 @@ class CheckKategorie(str, Enum):
     VERGLEICHSPREIS_FEHLT = "vergleichspreis_fehlt"
 
 
+class _KeinLink:
+    """Marke für `CheckErgebnis.altlink`: heute **kein** Link, obwohl Teil B ein Ziel setzt (E2, bis E4)."""
+
+    def __repr__(self) -> str:
+        return "KEIN_LINK"
+
+
+KEIN_LINK = _KeinLink()
+
+
+@dataclass
+class Ziel:
+    """Sprung-Ziel eines Befunds (Etappe E2, Konzept Daten-Checker §3.1 R2/§3.3) — gebaut nur über `ziele.py`.
+
+    `bereich` = Einstellungs-Kategorie (`einstellungenKatalog.tsx`) bzw. `komponenten-hub`; `block` = Block-Id im Bereich;
+    `params` = Deep-Link-Parameter (heute gelesen: `erfassen`, `bearbeiten`, `karte`, Hub-`geraet`; neu bis E4: `feld`,
+    `geraet`, `tarif`, `neu`, `art`, `ab`, `plan`); `anker` = das Element, auf dem der Sprung landen soll (Formular-Name,
+    Feld-Schlüssel oder `data-karte`).
+    """
+    bereich: str
+    block: Optional[str] = None
+    params: dict = field(default_factory=dict)
+    anker: Optional[str] = None
+
+
+@dataclass
+class Aktion:
+    """Inline-Handgriff eines Befunds (Etappe E2) — `action_kind`/`action_params`/`action_label` werden daraus abgeleitet."""
+    operation: str
+    params: dict
+    label: str
+
+
+#: Parameter, die die Zielseiten HEUTE lesen (Konzept §3.3 Spalte «heute gelesen») — nur sie gehen in den abgeleiteten `link`.
+HEUTE_GELESEN = ("block", "erfassen", "bearbeiten", "karte")
+
+
+def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:
+    """Der Link, den die Oberfläche heute aus einem `Ziel` liest (E2: heutige Lesart; E4 nimmt die neuen Parameter auf)."""
+    if ziel is None:
+        return None
+    if ziel.bereich == "komponenten-hub":
+        return f"/komponenten/{ziel.block}?geraet={ziel.params['geraet']}"
+    teile = [f"block={ziel.block}"] if ziel.block and "erfassen" not in ziel.params else []
+    teile += [f"{k}={ziel.params[k]}" for k in HEUTE_GELESEN[1:] if ziel.params.get(k) is not None]
+    if ziel.bereich == "datenquellen":
+        teile = []
+    return f"/einstellungen/{ziel.bereich}" + (f"?{'&'.join(teile)}" if teile else "")
+
+
 @dataclass
 class CheckErgebnis:
+    """Ein Befund. Die Altfelder `link` und `action_*` sind **abgeleitet** (Etappe E2, Wächter W-3): `link` aus `altlink`
+    (heutiger Link bis E4; `KEIN_LINK` ⇒ None), sonst aus `ziel` nach der heutigen Lesart; `action_*` aus `action`.
+    Kein Erzeuger setzt sie selbst."""
     kategorie: str
     schwere: str
     meldung: str
     details: Optional[str] = None
-    link: Optional[str] = None
-    # Etappe 6 v3.31.1: optionale Inline-Reparatur-Action.
-    # action_kind="reaggregate_day" + action_params={"anlage_id", "datum"}
-    # → Frontend rendert Knopf, der `/api/energie-profil/{id}/reaggregate-tag`
-    # ruft. Alle anderen Kategorien lassen diese Felder None.
-    action_kind: Optional[str] = None
-    action_params: Optional[dict] = None
-    action_label: Optional[str] = None
+    # E2: Sprung-Ziel (Teil B) bzw. Inline-Handgriff; die Klasse ist abgeleitet (Aktion · Sprung · Auskunft).
+    ziel: Optional[Ziel] = None
+    action: Optional[Aktion] = None
+    # E2 → E4: der heutige Link, wo das Teil-B-Ziel ihn nicht bitgleich ergibt (benannte Werte aus `ziele.py`,
+    # schrumpfende Baseline `tests/daten_checker_altlink_baseline.txt`). E4 leert das Feld — das sind die Weg-Korrekturen.
+    altlink: Optional[Union[str, _KeinLink]] = None
     # IA-V4 #243: optionale Komponenten-Zuordnung. Nur komponenten-bezogene
     # Checks (Stammdaten/Monatsdaten/Energieprofil-Abdeckung/E-Mob-Pflege je
     # Investition) füllen das Feld, damit der Komponenten-Hub seine Befunde
@@ -317,10 +368,33 @@ class CheckErgebnis:
     investition_id: Optional[int] = None
     # Etappe E1 «Diagnose-Paket» (10.11.2026, Konzept Daten-Checker §3.1 R5): die Zahlen der Meldung zusätzlich
     # strukturiert — für das Diagnose-Paket und die Zahlen-Invarianz des Text-Golden-Masters; keine neue Rechnung,
-    # nur Werte, die der Erzeuger für seinen Text ohnehin hat. `code` = Befund-Schlüssel (Erhebung Teil B); in E1 an
-    # den Melder-Erzeugern, ab E2 an allen.
+    # nur Werte, die der Erzeuger für seinen Text ohnehin hat. `code` = Befund-Schlüssel (Erhebung Teil B), seit E2
+    # an jedem Erzeuger (Wächter W-1, Katalog `handgriffe.py`).
     werte: Optional[dict] = None
     code: Optional[str] = None
+
+    @property
+    def link(self) -> Optional[str]:
+        if self.altlink is not None:
+            return None if self.altlink is KEIN_LINK else self.altlink
+        return link_aus_ziel(self.ziel)
+
+    @property
+    def action_kind(self) -> Optional[str]:
+        return self.action.operation if self.action else None
+
+    @property
+    def action_params(self) -> Optional[dict]:
+        return self.action.params if self.action else None
+
+    @property
+    def action_label(self) -> Optional[str]:
+        return self.action.label if self.action else None
+
+    @property
+    def klasse(self) -> str:
+        """Laufzeit-Klasse (R2): Aktion vor Sprung vor Auskunft. Der Katalog führt die Soll-Klasse je Code."""
+        return "aktion" if self.action else ("sprung" if self.ziel else "auskunft")
 
 
 @dataclass
@@ -380,13 +454,10 @@ AKTION_SPIEGEL_ABGLEICH_TAG = "spiegel_abgleich_tag"
 LABEL_SPIEGEL_ABGLEICH_TAG = "Aus Home Assistant neu übernehmen"
 
 
-def aktion_spiegel_abgleich_tag(anlage_id: int, datum) -> dict:
-    """Die drei Aktionsfelder eines ``CheckErgebnis`` für «Aus Home Assistant neu übernehmen» (``datum``: ``date``)."""
-    return {
-        "action_kind": AKTION_SPIEGEL_ABGLEICH_TAG,
-        "action_params": {"anlage_id": anlage_id, "datum": datum.isoformat()},
-        "action_label": LABEL_SPIEGEL_ABGLEICH_TAG,
-    }
+def aktion_spiegel_abgleich_tag(anlage_id: int, datum) -> Aktion:
+    """Die Aktion «Aus Home Assistant neu übernehmen» eines ``CheckErgebnis`` (``datum``: ``date``)."""
+    return Aktion(AKTION_SPIEGEL_ABGLEICH_TAG, {"anlage_id": anlage_id, "datum": datum.isoformat()},
+                  LABEL_SPIEGEL_ABGLEICH_TAG)
 
 
 def link_monat_erfassen(label: str) -> str:

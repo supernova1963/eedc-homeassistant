@@ -1,0 +1,14 @@
+{
+ "code": "ha_zaehlersprung",
+ "faelle": {
+  "3": {
+   "kategorie": "ha_zaehlersprung",
+   "schwere": "warning",
+   "meldung": "1 Zählersprung/-sprünge in der Home-Assistant-Statistik — Tag und Monat zeigen sie mit",
+   "details": "Ein Sensor hat kurz 0 gemeldet und ist danach auf seinen alten Stand zurückgekehrt. Home Assistant hält das für einen Neubeginn des Zählers und rechnet beim Zurückkehren den ganzen Zählerstand als Verbrauch bzw. Erzeugung dieser Stunde. eedc übernimmt die Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt — der Sprung steht deshalb in Tag, Monat und Jahr. Gefunden in den letzten 30 Tagen: sensor.pv_gesamt am 10.06.2026, Stunde ab 23:00: +5.020,0 kWh (Stand 5.020,0 → 0,0 → zurück). Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol „Wert anpassen“ die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus Home Assistant neu übernehmen“. Hast du den Monat schon mit dem Sprung gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu.",
+   "code": "ha_zaehlersprung",
+   "klasse_katalog": "aktion",
+   "klasse_laufzeit": "aktion"
+  }
+ }
+}

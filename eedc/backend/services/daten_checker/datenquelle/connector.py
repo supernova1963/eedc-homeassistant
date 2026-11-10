@@ -11,8 +11,8 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
-    LINK_INTEGRATION,
 )
+from backend.services.daten_checker.ziele import HEUTE_INTEGRATION, ziel_block
 
 
 def _letzter_abruf_satz(config: dict) -> str:
@@ -136,7 +136,7 @@ class ConnectorChecks:
         )
         return [CheckErgebnis(
             kategorie=CheckKategorie.DATENQUELLE_STATUS.value,
-            schwere=CheckSeverity.WARNING.value,
+            schwere=CheckSeverity.WARNING.value, code="connector_monatswert_fehlt",
             meldung=(
                 f"Connector „{geraet}“ liefert für "
                 f"{heute.month:02d}/{heute.year} keinen Wert"
@@ -146,5 +146,5 @@ class ConnectorChecks:
                 "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn "
                 f"nötig. {bestand} {weg}"
             ),
-            link=LINK_INTEGRATION,
+            ziel=ziel_block("integration", "import-buendel"), altlink=HEUTE_INTEGRATION,
         )]

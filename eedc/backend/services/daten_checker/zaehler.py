@@ -44,7 +44,8 @@ from backend.services.zaehlerstaende import (
     zaehler_einheit,
 )
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN
+from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .ziele import HEUTE_KOMPONENTEN, ziel_datenquelle, ziel_komponente
 from backend.core.zahlenformat import fmt_zahl
 
 #: Wie viele Brüche je Gerät namentlich genannt werden, bevor gezählt wird.
@@ -112,7 +113,7 @@ class ZaehlerChecks:
         """
         if punkte:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="zaehlerstand_ablesungen_ok",
                 meldung=f"{name}: {len(punkte)} Zählerstand-Ablesung(en) erfasst",
             )]
 
@@ -123,7 +124,7 @@ class ZaehlerChecks:
             return []
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING,
+            kategorie=kat, schwere=CheckSeverity.WARNING, code="zaehlerstand_kein_stand",
             meldung=f"{name}: kein Zählerstand erfasst",
             details=(
                 "Für diesen Zähler liegt kein einziger Stand vor — weder aus "
@@ -136,7 +137,7 @@ class ZaehlerChecks:
                 "Für einen Gas- oder Wasserzähler ohne Fernauslesung ist der "
                 "zweite Weg der vorgesehene."
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_datenquelle(geraet=inv.id, feld="zaehlerstand"),
         )]
 
     # ─── 2. Läuft die Reihe rückwärts? ───────────────────────────────────
@@ -170,7 +171,7 @@ class ZaehlerChecks:
             liste += f" (+{len(brueche) - MAX_GENANNTE_BRUECHE} weitere)"
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING,
+            kategorie=kat, schwere=CheckSeverity.WARNING, code="zaehlerstand_reihe_bruch",
             meldung=(
                 f"{name}: der Stand ist {len(brueche)}-mal gefallen — "
                 "die Reihe hat einen Bruch"
@@ -195,7 +196,7 @@ class ZaehlerChecks:
                 "kaputt. Über Einstellungen → Daten → „Tag neu berechnen“ zieht "
                 "eedc die Historie nach, soweit Home Assistant sie noch hat."
             ),
-            link="/einstellungen/komponenten",
+            altlink=HEUTE_KOMPONENTEN,
         )]
 
     # ─── 3. Auf inaktiv gesetzt, obwohl Ablesungen da sind ───────────────
@@ -221,7 +222,7 @@ class ZaehlerChecks:
             return []
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO,
+            kategorie=kat, schwere=CheckSeverity.INFO, code="zaehler_nicht_aktiv",
             meldung=f"{name}: auf „nicht aktiv“ gesetzt — {len(punkte)} Ablesung(en) ausgeblendet",
             details=(
                 "Der Haken „aktiv“ ist entfernt. In eedc heißt das „wie "
@@ -237,5 +238,5 @@ class ZaehlerChecks:
                 "historisch verschwinden, ist alles in Ordnung — dann bleibt "
                 "dieser Hinweis stehen, ohne dass etwas zu tun ist."
             ),
-            link=f"/einstellungen/komponenten?bearbeiten={inv.id}",
+            ziel=ziel_komponente(inv.id, feld="aktiv"),
         )]

@@ -7,7 +7,7 @@
 import logging
 from sqlalchemy import select
 from backend.models.anlage import Anlage
-from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from backend.services.daten_checker.kategorien import Aktion, CheckErgebnis, CheckKategorie, CheckSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class SpeicherChecks:
             if not hat_batterie:
                 return []  # Keine Batterie-Aktivität → Kategorie nicht zeigen
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="batterie_vorzeichen_ok",
                 meldung="Batterie-Vorzeichen in der Historie konsistent (letzte 90 Tage)",
                 details=(
                     "Gespeichertes Batterie-Tagesnetto und frischer HA-Statistics-"
@@ -178,13 +178,11 @@ class SpeicherChecks:
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=summen_details,
-            action_kind="reaggregate_range",
-            action_params={
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            },
-            action_label="Zeitraum neu aggregieren",
+            }, "Zeitraum neu aggregieren"),
             code="batterie_vorzeichen_tage",
             werte={"tage": len(konflikt_tage), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
                    "bereich_von": range_von.isoformat(), "aelter_ausserhalb": rest_aelter},
@@ -201,15 +199,13 @@ class SpeicherChecks:
                     "Einzelnen Tag neu aus HA-Statistics aggregieren — schreibt das "
                     "Batterie-Netto in der korrigierten Richtung (ENTLADUNG positiv)."
                 ),
-                action_kind="reaggregate_day",
-                action_params={"anlage_id": anlage.id, "datum": d.isoformat()},
-                action_label="Tag reparieren",
+                action=Aktion("reaggregate_day", {"anlage_id": anlage.id, "datum": d.isoformat()}, "Tag reparieren"),
                 code="batterie_vorzeichen_tag", werte={"datum": d.isoformat()},
             ))
         if len(konflikt_tage) > MAX_EINZEL:
             rest = len(konflikt_tage) - MAX_EINZEL
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="batterie_vorzeichen_weitere",
                 meldung=(
                     f"… plus {rest} weitere(r) Tag(e) — am besten per "
                     f"„Zeitraum neu aggregieren“."
@@ -293,7 +289,7 @@ class SpeicherChecks:
 
         if not alt_tage:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="soc_ok",
                 meldung=(
                     f"Ladestand aller {len(mit_soc)} Speicher wird in der Historie "
                     f"getrennt geführt"
@@ -329,18 +325,16 @@ class SpeicherChecks:
             )
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            kategorie=kat, schwere=CheckSeverity.WARNING.value, code="soc_nur_ein_speicher_tage",
             meldung=(
                 f"{len(alt_tage)} Tag(e) kennen nur den Ladestand eines von "
                 f"{len(mit_soc)} Speichern ({aeltester.isoformat()} … "
                 f"{neuester.isoformat()})"
             ),
             details=details,
-            action_kind="reaggregate_range",
-            action_params={
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            },
-            action_label="Zeitraum neu aggregieren",
+            }, "Zeitraum neu aggregieren"),
         )]

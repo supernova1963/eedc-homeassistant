@@ -1,0 +1,14 @@
+{
+ "code": "drift_ok",
+ "faelle": {
+  "22": {
+   "kategorie": "datenquelle_drift",
+   "schwere": "ok",
+   "meldung": "Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)",
+   "details": "Geprüft wurde die PV-Tagessumme gegen die HA-Statistics-Tagessumme — und zusätzlich jede andere zugeordnete Komponente einzeln (Wallbox, E-Auto, Wärmepumpe, Sonstiges). Schwelle je Vergleich: ≥ 2 kWh UND ≥ 5 % Abweichung gleichzeitig — kleinere Boundary-Drift wird bewusst ignoriert. Der Speicher steht nicht in dieser Liste: sein Tages-Netto darf 0 sein, und sein Vorzeichen hat eine eigene Prüfung.",
+   "code": "drift_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

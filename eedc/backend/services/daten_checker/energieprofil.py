@@ -40,10 +40,8 @@ from backend.core.berechnungen import (
     PV_STATUS_FEHLT,
 )
 
-from .kategorien import (
-    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
-    LINK_ENERGIEPROFIL, LINK_MONATSDATEN, link_monat_erfassen,
-)
+from .kategorien import Aktion, CheckErgebnis, CheckKategorie, CheckSeverity
+from .ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL, HEUTE_MONATSDATEN, KEIN_LINK, ziel_datenquelle, ziel_monat_label
 from backend.core.zahlenformat import fmt_zahl
 
 
@@ -274,7 +272,7 @@ class EnergieprofilChecks:
 
         if fehlende_basis and manuelle_quelle:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="basis_zaehler_manuell_ok",
                 meldung=f"Basis-Zähler über {manuelle_quelle} befüllt",
                 details=(
                     f"Einspeisung/Netzbezug ohne Zuordnung, aber die "
@@ -285,7 +283,7 @@ class EnergieprofilChecks:
             ))
         elif fehlende_basis:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="basis_zaehler_fehlt",
                 meldung=f"Kein Basis-Zähler für: {', '.join(fehlende_basis)}",
                 details=(
                     "Ohne kumulative kWh-Zähler bleibt der bilanzielle Verbrauch im "
@@ -294,11 +292,11 @@ class EnergieprofilChecks:
                     "Einstellungen → Datenquellen die kWh-Zeilen belegen (nicht "
                     "nur die Watt-Zeilen)."
                 ),
-                link=LINK_DATENQUELLEN,
+                ziel=ziel_datenquelle(feld="einspeisung_kwh" if fehlende_basis[0] == "Einspeisung" else "netzbezug_kwh"),
             ))
         else:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="basis_zaehler_ok",
                 meldung="Basis-Zähler (Einspeisung + Netzbezug) gemappt",
             ))
 
@@ -532,7 +530,7 @@ class EnergieprofilChecks:
                 for name, typ, fehlend in fehlend_pro_komponente
             ]
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="komponenten_ohne_zaehler",
                 meldung=(
                     f"{len(fehlend_pro_komponente)} von {gesamt} "
                     "Komponenten ohne vollständige kWh-Zähler-Abdeckung"
@@ -555,7 +553,7 @@ class EnergieprofilChecks:
                     "Summe) einen kWh-Zähler daraus. Details: "
                     + "; ".join(details_parts)
                 ),
-                link=LINK_DATENQUELLEN,
+                ziel=ziel_datenquelle(),
             ))
         if kind_count > 0:
             # F-39/E1: eigene Zeile statt Verrechnung mit `aggregat_count` — der
@@ -563,7 +561,7 @@ class EnergieprofilChecks:
             # Anlagen-Gesamtzähler), und diese Zeile ist die einzige Stelle, an
             # der der Anwender sieht, warum er nichts tun muss.
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="bkw_ueber_module_ok",
                 meldung=(
                     f"{kind_count} Balkonkraftwerk(e) über die zugeordneten "
                     f"PV-Module gedeckt"
@@ -579,12 +577,12 @@ class EnergieprofilChecks:
             # "Alle" nur wenn keine andere Quelle / kein Fehlend daneben steht
             prefix = "Alle " if (quelle_count == 0 and not fehlend_pro_komponente) else ""
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="komponenten_zaehler_ok",
                 meldung=f"{prefix}{gemappt_count} aktiven Komponenten haben kWh-Zähler gemappt",
             ))
         if aggregat_count > 0:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="erzeuger_ueber_anlagenzaehler_ok",
                 meldung=(
                     f"{aggregat_count} Erzeuger über den Anlagen-Zählerstand "
                     "abgedeckt"
@@ -596,11 +594,11 @@ class EnergieprofilChecks:
                     "Zähler. Dann aber alle: sobald einer gemessen wird, zählt "
                     "für Tag und Stunde nur noch, was je Erzeuger gemessen ist."
                 ),
-                link=LINK_DATENQUELLEN,
+                altlink=HEUTE_DATENQUELLEN,
             ))
         if quelle_count > 0:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="komponenten_manuell_ok",
                 meldung=f"{quelle_count} Komponente(n) über {manuelle_quelle} befüllt",
                 details=(
                     f"Keine Zuordnung nötig — die Monatsdaten dieser "
@@ -694,7 +692,7 @@ class EnergieprofilChecks:
 
         return [CheckErgebnis(
             kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="komponenten_ohne_zusatzzaehler",
             meldung=f"{len(offen)} Komponente(n) ohne Zusatz-Zähler für Tageswerte",
             details=(
                 "Diese Werte lassen sich nur aus einem eigenen kumulativen Zähler "
@@ -704,7 +702,7 @@ class EnergieprofilChecks:
                 "getrennte PV-Ladungsmessung sind Zusatz-Messstellen, die längst "
                 "nicht jede Anlage hat. Offen: " + "; ".join(offen)
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_datenquelle(),
         )]
 
     # ─── Counter-Spikes: EINE Ermittlung, zwei Leser ──────────────────────
@@ -892,21 +890,19 @@ class EnergieprofilChecks:
             )
         return [CheckErgebnis(
             kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="tage_vor_umbau_ohne_regelmarke",
             meldung=(
                 (f"{len(tage)} Tag(e)" if n_bestand is None else f"{len(tage)} von {n_bestand} Bestandstagen")
                 + f" sind vor dem Umbau gerechnet (keine Regelmarke) "
                 f"— {aeltester.isoformat()} … {neuester.isoformat()}"
             ),
             details=details,
-            link=LINK_ENERGIEPROFIL if reparatur_moeglich else LINK_DATENQUELLEN,
-            action_kind="reaggregate_range" if reparatur_moeglich else None,
-            action_params={
+            altlink=HEUTE_ENERGIEPROFIL if reparatur_moeglich else HEUTE_DATENQUELLEN,
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            } if reparatur_moeglich else None,
-            action_label="Zeitraum neu aggregieren" if reparatur_moeglich else None,
+            }, "Zeitraum neu aggregieren") if reparatur_moeglich else None,
         )]
 
     async def _check_tage_ohne_kanal_deckung(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -934,7 +930,7 @@ class EnergieprofilChecks:
             return []
         return [CheckErgebnis(
             kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="tage_ohne_kanal_deckung",
             meldung=(
                 f"{_tage_text(len(ohne))} ohne Kanal-Deckung — Mengen aus den gespeicherten Stundenwerten "
                 f"({ohne[0].isoformat()} … {ohne[-1].isoformat()})"
@@ -1029,7 +1025,7 @@ class EnergieprofilChecks:
             liste += f"; … und {len(befunde) - 10} weitere"
         return [CheckErgebnis(
             kategorie=CheckKategorie.ENERGIEPROFIL_PLAUSIBILITAET,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="einspeisung_groesser_erzeugung_tage",
             meldung=(
                 f"{len(befunde)} Tag(e) mit mehr Einspeisung als Erzeugung "
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
@@ -1043,14 +1039,12 @@ class EnergieprofilChecks:
                 "kombinierten Netz-Sensors ist umgekehrt. Zuerst die Zuordnung prüfen "
                 "(Einstellungen → Datenquellen), danach die Tage neu aggregieren."
             ),
-            link=LINK_ENERGIEPROFIL,
-            action_kind="reaggregate_range",
-            action_params={
+            altlink=HEUTE_ENERGIEPROFIL,
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            },
-            action_label="Zeitraum neu aggregieren",
+            }, "Zeitraum neu aggregieren"),
         )]
 
     #: Achse → Anzeigename in der Tagesliste des Nachtrag-Hinweises (N-567).
@@ -1142,7 +1136,7 @@ class EnergieprofilChecks:
                 "Dieselbe Form hat ein Zählersprung nach einer Nacht ohne Erzeugung; stimmt eine "
                 "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle."
             ),
-            link=LINK_ENERGIEPROFIL, code="nachtrag_nach_eingefrorenem_zaehler", werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(), "nach_lts": len(lts), "nach_zaehler": len(zaehler)},  # E1: angehängt (Dateilänge)
+            altlink=HEUTE_ENERGIEPROFIL, code="nachtrag_nach_eingefrorenem_zaehler", werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(), "nach_lts": len(lts), "nach_zaehler": len(zaehler)},  # E1: angehängt (Dateilänge)
         )]
 
     async def _check_energieprofil_plausibilitaet(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -1187,7 +1181,7 @@ class EnergieprofilChecks:
 
         if not spike_tage:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="counter_spikes_ok",
                 meldung=f"Keine Counter-Spikes in den letzten 30 Tagen (Schwelle: {fmt_zahl(schwelle_kw, 1)} kW = {fmt_zahl(kwp, 1)} kWp × 1.5)",
             ))
             return ergebnisse
@@ -1208,7 +1202,7 @@ class EnergieprofilChecks:
                     f"Behebung: 'Tag neu aggregieren' für genau diesen Tag (Reload-Symbol "
                     f"in der Tagesliste) — repariert SensorSnapshots + Aggregate in einem Schritt."
                 ),
-                link=LINK_ENERGIEPROFIL, code="counter_spike_tag", werte={"datum": datum_spike.isoformat(), "stunden": len(spikes), "schwelle_kw": schwelle_kw, "kwp": kwp, "spikes": [{"stunde": s, "feld": f, "kw": w} for s, f, w in spikes]},  # E1: angehängt (Dateilänge)
+                altlink=HEUTE_ENERGIEPROFIL, code="counter_spike_tag", werte={"datum": datum_spike.isoformat(), "stunden": len(spikes), "schwelle_kw": schwelle_kw, "kwp": kwp, "spikes": [{"stunde": s, "feld": f, "kw": w} for s, f, w in spikes]},  # E1: angehängt (Dateilänge)
             ))
 
         return ergebnisse
@@ -1351,7 +1345,7 @@ class EnergieprofilChecks:
             # Befund jetzt den Weg zurück statt nur den Zustand. Kein zweiter
             # Check daneben — der Zustand war hier schon abgedeckt.
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.ERROR,
+                kategorie=kat, schwere=CheckSeverity.ERROR, code="pv_erzeugung_fehlt_monate",
                 meldung=f"PV-Erzeugung fehlt in {len(fehlt)} Monat(en)",
                 details=(
                     "Keine PV-Quelle (weder Pro-Modul-Werte noch ein "
@@ -1362,21 +1356,21 @@ class EnergieprofilChecks:
                     "beide schreiben die Werte je Modul. Ohne zugeordneten "
                     "Sensor müssen die Werte von Hand nachgetragen werden."
                 ),
-                link=link_monat_erfassen(fehlt[0]),
+                ziel=ziel_monat_label(fehlt[0], feld="erzeugung_kwh"),
             ))
         if teil_luecke:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="pv_erzeugung_unvollstaendig",
                 meldung=f"PV-Erzeugung unvollständig in {len(teil_luecke)} Monat(en)",
                 details=(
                     "Nur ein Teil der Strings erfasst und kein Gesamtwert zum "
                     f"Verteilen hinterlegt: {_monate(teil_luecke)}"
                 ),
-                link=link_monat_erfassen(teil_luecke[0]),
+                ziel=ziel_monat_label(teil_luecke[0], feld="erzeugung_kwh"),
             ))
         if verteilt:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.INFO, code="pv_erzeugung_geschaetzt",
                 meldung=f"PV-Erzeugung über kWp-Anteil geschätzt in {len(verteilt)} Monat(en)",
                 details=(
                     "Gesamtwert wird anteilig nach kWp auf die Strings verteilt — "
@@ -1385,11 +1379,11 @@ class EnergieprofilChecks:
                 # Kein `?erfassen=`: hier fehlt nichts, der Gesamtwert wird nur
                 # verteilt. Der Block genügt, ein geöffnetes Formular wäre eine
                 # Handlungsaufforderung, die die Meldung gar nicht stellt.
-                link=LINK_MONATSDATEN,
+                altlink=HEUTE_MONATSDATEN,
             ))
         if not fehlt and not teil_luecke and not verteilt and ok_count:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="pv_erzeugung_ok",
                 meldung=f"PV-Erzeugung: Monatsdaten vollständig ({ok_count} Monate)",
             ))
 
@@ -1529,7 +1523,7 @@ class EnergieprofilChecks:
                 tage = ", ".join(d.isoformat() for d in sorted(verdeckt_durch_spike, reverse=True)[:5])
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat,
-                    schwere=CheckSeverity.INFO.value,
+                    schwere=CheckSeverity.INFO.value, code="pv_ueber_erfassung_spike_ueberdeckt",
                     meldung=(
                         f"{len(verdeckt_durch_spike)} auffällige(r) Tag(e) fallen mit "
                         f"Counter-Spikes zusammen — kein Doppelerfassungs-Verdacht"
@@ -1566,7 +1560,7 @@ class EnergieprofilChecks:
 
         ergebnisse.append(CheckErgebnis(
             kategorie=kat,
-            schwere=CheckSeverity.WARNING.value,
+            schwere=CheckSeverity.WARNING.value, code="pv_ueber_erfassung_verdacht", ziel=ziel_datenquelle(feld="pv_gesamt"), altlink=KEIN_LINK,
             meldung="Verdacht auf PV-Doppelerfassung (PR > 1 oder spez. Ertrag zu hoch)",
             details=(
                 f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen:\n"

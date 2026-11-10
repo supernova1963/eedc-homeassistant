@@ -42,8 +42,8 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
-    LINK_DATENQUELLEN,
 )
+from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, ziel_datenquelle
 
 _KUEHL_FELDER = {BETRIEBSART_STROM_FELD[KUEHLEN], BETRIEBSART_NUTZENERGIE_FELD[KUEHLEN]}
 
@@ -241,7 +241,7 @@ class KlimaChecks:
 def _meldung_unbekannter_wert(kat: str, inv, entity: str, zustand: str) -> CheckErgebnis:
     """Das INFO je Gerät — die Werte-Liste kommt aus dem Kanon, nicht aus diesem Text."""
     return CheckErgebnis(
-        kategorie=kat, schwere=CheckSeverity.INFO.value,
+        kategorie=kat, schwere=CheckSeverity.INFO.value, code="klima_modus_wert_unbekannt",
         meldung=(
             f"„{inv.bezeichnung}“: Betriebsmodus-Sensor liefert „{zustand}“ — "
             f"diesen Wert kennt eedc nicht"
@@ -255,7 +255,7 @@ def _meldung_unbekannter_wert(kat: str, inv, entity: str, zustand: str) -> Check
             f"(Vorlage und Werte-Tabelle im Handbuch „Wärme & Klima“, Schritt 4, Weg B). Die "
             f"Aufteilung beginnt mit dem neuen Sensor; Stunden davor bleiben, wie sie sind."
         ),
-        link=LINK_DATENQUELLEN,
+        altlink=HEUTE_DATENQUELLEN,
         investition_id=inv.id,
     )
 
@@ -342,7 +342,7 @@ def _geschaetzter_kuehlanteil(
         ):
             continue
         geschaetzter_kuehlanteil.append(CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            kategorie=kat, schwere=CheckSeverity.INFO.value, code="klima_kuehlanteil_geschaetzt",
             meldung=(
                 f"„{i.bezeichnung}“: Kühlanteil wird geschätzt — "
                 f"es fehlt ein Stromzähler für den Kühlbetrieb"
@@ -363,7 +363,7 @@ def _geschaetzter_kuehlanteil(
                 "Das ist freiwillig — ohne die Zuordnung bleibt alles wie "
                 "bisher."
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_datenquelle(geraet=i.id, feld="betriebsart_strom_kuehlen_kwh"),
             investition_id=i.id,
         ))
     return geschaetzter_kuehlanteil
@@ -470,7 +470,7 @@ def _ok_meldung(kat: str, klimas: list, zustand: dict) -> CheckErgebnis:
         )
         titel = "Betriebsmodus ist zugeordnet"
     return CheckErgebnis(
-        kategorie=kat, schwere=CheckSeverity.OK.value,
+        kategorie=kat, schwere=CheckSeverity.OK.value, code="klima_modus_ok",
         meldung=(
             f"{titel} bei {'allen ' if len(klimas) > 1 else ''}"
             f"{len(klimas)} heizend-kühlenden Gerät(en)"
@@ -482,7 +482,7 @@ def _ok_meldung(kat: str, klimas: list, zustand: dict) -> CheckErgebnis:
 def _meldungen_mehrdeutig(kat: str, mehrdeutig: list) -> list[CheckErgebnis]:
     """N-340: je Gerät mit Modus-Zuordnung, aber ohne eindeutige Quelle, ein INFO mit zwei Wegen."""
     return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO.value,
+            kategorie=kat, schwere=CheckSeverity.INFO.value, code="klima_modus_quellen_mehrdeutig",
             meldung=(
                 f"„{i.bezeichnung}“: mehrere verschiedene Modus-Quellen — "
                 f"eedc teilt den Strom nicht auf"
@@ -505,7 +505,7 @@ def _meldungen_mehrdeutig(kat: str, mehrdeutig: list) -> list[CheckErgebnis]:
                 "Bis dahin bleibt alles wie bisher, der Stromverbrauch zählt "
                 "vollständig."
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_datenquelle(geraet=i.id, feld="betriebsmodus"),
             investition_id=i.id,
         ) for i in mehrdeutig]
 
@@ -513,7 +513,7 @@ def _meldungen_mehrdeutig(kat: str, mehrdeutig: list) -> list[CheckErgebnis]:
 def _meldungen_gar_nicht(kat: str, gar_nicht: list) -> list[CheckErgebnis]:
     """Je Gerät ohne jeden Weg zur Aufteilung ein INFO mit dem Handgriff „Betriebsmodus zuordnen"."""
     return [CheckErgebnis(
-        kategorie=kat, schwere=CheckSeverity.INFO.value,
+        kategorie=kat, schwere=CheckSeverity.INFO.value, code="klima_modus_nicht_zugeordnet",
         meldung=(
             f"„{i.bezeichnung}“: Betriebsmodus nicht zugeordnet — "
             f"Heiz- und Kühlstrom bleiben zusammen"
@@ -531,6 +531,6 @@ def _meldungen_gar_nicht(kat: str, gar_nicht: list) -> list[CheckErgebnis]:
             "Ein Hinweis zur Erwartung: Die Aufteilung beginnt mit der "
             "Zuordnung und lässt sich nicht rückwirkend nachtragen."
         ),
-        link=LINK_DATENQUELLEN,
+        ziel=ziel_datenquelle(geraet=i.id, feld="betriebsmodus"),
         investition_id=i.id,
     ) for i in gar_nicht]

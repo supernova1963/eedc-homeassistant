@@ -1,0 +1,14 @@
+{
+ "code": "batterie_vorzeichen_ok",
+ "faelle": {
+  "27": {
+   "kategorie": "batterie_vorzeichen_historie",
+   "schwere": "ok",
+   "meldung": "Batterie-Vorzeichen in der Historie konsistent (letzte 90 Tage)",
+   "details": "Gespeichertes Batterie-Tagesnetto und frischer HA-Statistics-Read zeigen in dieselbe Richtung (ENTLADUNG positiv). Tage, die vor dem Vorzeichen-Fix (v3.45.7) aggregiert wurden, würden hier mit umgekehrtem Vorzeichen erscheinen.",
+   "code": "batterie_vorzeichen_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

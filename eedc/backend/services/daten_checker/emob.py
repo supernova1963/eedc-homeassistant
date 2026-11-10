@@ -11,15 +11,18 @@ from sqlalchemy import select
 from backend.models.anlage import Anlage
 
 from .kategorien import (
-    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN, LINK_ENERGIEPROFIL,
+    Aktion, CheckErgebnis, CheckKategorie, CheckSeverity,
+)
+from .ziele import (
+    HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL, HEUTE_INVESTITIONEN, KEIN_LINK, ziel_datenquelle, ziel_komponente,
+    ziel_monat,
 )
 from backend.core import zustands_kanon
 from backend.core.field_definitions import ist_text_feld
 from backend.core.investition_parameter import kennung_in_steuerung
 from backend.core.zahlenformat import fmt_zahl
 
-#: Ziel des Handgriffs «Kennung am E-Auto eintragen» (P-433-2b K2a) — die Stammdaten der Investitionen.
-LINK_INVESTITIONEN = "/einstellungen/investitionen"
+#: Ziel des Handgriffs «Kennung am E-Auto eintragen» (P-433-2b K2a): das Formular des E-Autos (`ziele.ziel_komponente`).
 
 
 class EmobChecks:
@@ -306,7 +309,7 @@ class EmobChecks:
             )
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat,
-                schwere=CheckSeverity.WARNING.value,
+                schwere=CheckSeverity.WARNING.value, code="emob_autos_mehr_als_wallbox", ziel=ziel_monat(ueberschuss_monate[0][0], ueberschuss_monate[0][1], feld="ladung_kwh"), altlink=KEIN_LINK,
                 meldung="Die Autos haben zusammen mehr zu Hause geladen, als die Wallbox gemessen hat",
                 details=(
                     f"In {len(ueberschuss_monate)} Monaten der letzten "
@@ -323,7 +326,7 @@ class EmobChecks:
             liste = ", ".join(f"{m:02d}/{j}" for j, m in monate[:3])
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat,
-                schwere=CheckSeverity.INFO.value,
+                schwere=CheckSeverity.INFO.value, code="emob_dienstwagen_heimladung_fehlt", ziel=ziel_monat(monate[-1][0], monate[-1][1], geraet=i, feld="ladung_kwh"), altlink=KEIN_LINK,
                 meldung=f"Heimladung am Dienstwagen „{name.get(i, i)}“ fehlt",
                 details=(
                     f"Die private Wallbox hat geladen und der Dienstwagen ist gefahren "
@@ -414,7 +417,7 @@ class EmobChecks:
         MAX_EINZEL = 10
         for inv_id, name, jahr, monat, gesamt_f, pv_f in treffer[:MAX_EINZEL]:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING.value,
+                kategorie=kat, schwere=CheckSeverity.WARNING.value, code="emob_pv_ladung_groesser_gesamt",
                 meldung=(
                     f"{name}: PV-Ladung größer als Gesamtladung "
                     f"({monat:02d}/{jahr}: {fmt_zahl(pv_f, 1)} kWh von {fmt_zahl(gesamt_f, 1)} kWh)"
@@ -427,14 +430,14 @@ class EmobChecks:
                     "hast. Welcher der beiden Werte stimmt, kann eedc nicht "
                     "wissen: Trage den Monat noch einmal nach."
                 ),
-                link=f"/einstellungen/daten?erfassen={jahr}-{monat:02d}",
+                ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="ladung_pv_kwh"),
                 investition_id=inv_id,
             ))
 
         if len(treffer) > MAX_EINZEL:
             rest = len(treffer) - MAX_EINZEL
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="emob_weitere_monate",
                 meldung=f"… plus {rest} weitere(r) Monat(e) mit demselben Widerspruch",
             ))
 
@@ -489,7 +492,7 @@ class EmobChecks:
 
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat,
-                schwere=CheckSeverity.WARNING.value,
+                schwere=CheckSeverity.WARNING.value, code="phev_anteil_unbestimmt", ziel=ziel_komponente(inv.id, parameter="elektrischer_fahranteil_prozent", typ="e-auto"), altlink=KEIN_LINK,
                 meldung=(
                     f"{inv.bezeichnung}: Verbrenner-Verbrauch gepflegt, aber "
                     "der elektrische Fahranteil ist nicht bestimmbar"
@@ -560,7 +563,7 @@ class EmobChecks:
                         if typ_by_id.get(i) == "e-auto")
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat,
-                schwere=CheckSeverity.WARNING.value,
+                schwere=CheckSeverity.WARNING.value, code="emob_gleicher_sensor_wallbox_eauto", ziel=ziel_datenquelle(geraet=int(min((i for i in inv_ids if typ_by_id.get(i) == "e-auto"), key=int)), feld="ladung_kwh"), altlink=KEIN_LINK,
                 meldung="Gleicher Sensor an Wallbox und E-Auto zugeordnet",
                 details=(
                     f"Die Entity „{eid}“ ist sowohl der Wallbox "
@@ -648,7 +651,7 @@ class EmobChecks:
 
         if not befunde:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="emob_doppelzaehlung_ok",
                 meldung=(
                     f"Keine doppelt gezählten Ladetage in den letzten "
                     f"{self.EMOB_DOPPEL_FENSTER_TAGE} Tagen"
@@ -689,20 +692,18 @@ class EmobChecks:
                                     reverse=True)[:3]
         )
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            kategorie=kat, schwere=CheckSeverity.WARNING.value, code="emob_doppelzaehlung_tage",
             meldung=(
                 f"{len(befunde)} Tag(e) zählen dieselbe Ladung doppelt "
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=f"{details} Größte Fälle: {beispiele}.",
-            link=LINK_ENERGIEPROFIL,
-            action_kind="reaggregate_range",
-            action_params={
+            altlink=HEUTE_ENERGIEPROFIL,
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            },
-            action_label="Zeitraum neu aggregieren",
+            }, "Zeitraum neu aggregieren"),
         )]
 
     async def _check_vergleichspreis_fehlt(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -768,7 +769,7 @@ class EmobChecks:
 
         if not offen:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="vergleichspreis_ok",
                 meldung="Alle Monate mit E-Auto tragen einen Ø-Benzinpreis",
             )]
 
@@ -780,7 +781,7 @@ class EmobChecks:
             beispiele += f" … {_mm(offen[-1])}"
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            kategorie=kat, schwere=CheckSeverity.WARNING.value, code="vergleichspreis_fehlt",
             meldung=(
                 f"{len(offen)} Monat(e) ohne Ø-Benzinpreis "
                 f"({_mm(offen[0])} … {_mm(offen[-1])})"
@@ -794,10 +795,8 @@ class EmobChecks:
                 "offenen Monate; bestehende Werte bleiben unberührt. "
                 f"Betroffen: {beispiele}."
             ),
-            link=LINK_ENERGIEPROFIL,
-            action_kind="kraftstoffpreis_backfill",
-            action_params={"anlage_id": anlage.id},
-            action_label="Vergleichspreise nachpflegen",
+            altlink=HEUTE_ENERGIEPROFIL,
+            action=Aktion("kraftstoffpreis_backfill", {"anlage_id": anlage.id}, "Vergleichspreise nachpflegen"),
         )]
 
 
@@ -807,7 +806,7 @@ def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft:
 
     feld_label = FELD_LABELS.get(feld, feld)
     return CheckErgebnis(
-        kategorie=CheckKategorie.EMOB_ZUSTAND_WERT.value, schwere=CheckSeverity.INFO.value,
+        kategorie=CheckKategorie.EMOB_ZUSTAND_WERT.value, schwere=CheckSeverity.INFO.value, code="emob_zustand_wert_unbekannt",
         meldung=f"„{name}“: {feld_label} liefert „{roh}“ — diesen Wert kennt eedc nicht",
         details=(
             f"{herkunft} für „{feld_label}“ liefert gerade „{roh}“. Diesen Wert kennt eedc nicht und zeigt deshalb "
@@ -815,7 +814,7 @@ def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft:
             f"egal. Der Weg: in Home Assistant einen Template-Sensor anlegen, der aus deinen Werten eines dieser Wörter "
             f"macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Bedienung“, Abschnitt E-Mobilität)."
         ),
-        link=LINK_DATENQUELLEN,
+        altlink=HEUTE_DATENQUELLEN,
         investition_id=inv_id,
     )
 
@@ -823,7 +822,7 @@ def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft:
 def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str) -> CheckErgebnis:
     """Das INFO je Wallbox (P-433-2b K2a, K2-10): Rohtext der Steuerung + Handgriff «Kennung am E-Auto eintragen»."""
     return CheckErgebnis(
-        kategorie=CheckKategorie.EMOB_KENNUNG_UNBEKANNT.value, schwere=CheckSeverity.INFO.value,
+        kategorie=CheckKategorie.EMOB_KENNUNG_UNBEKANNT.value, schwere=CheckSeverity.INFO.value, code="emob_kennung_unbekannt",
         meldung=f"„{name}“: die Steuerung meldet „{text}“ — kein E-Auto trägt diese Kennung",
         details=(
             f"Die Steuerung an „{name}“ meldet gerade das Fahrzeug „{text}“. Kein E-Auto dieser Anlage trägt diesen "
@@ -832,6 +831,6 @@ def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str) -> CheckE
             f"Steuerung“ genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist egal). "
             f"Ist es ein fremdes Fahrzeug, ist nichts zu tun."
         ),
-        link=LINK_INVESTITIONEN,
+        ziel=ziel_komponente(inv_id, parameter="kennung_in_steuerung", typ="e-auto"), altlink=HEUTE_INVESTITIONEN,
         investition_id=inv_id,
     )

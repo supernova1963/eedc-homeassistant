@@ -34,14 +34,15 @@ from backend.services.provenance import ABGELEITET_SUMME_ACHSEN
 from backend.services.monats_fakten import netzfeld_ist_erfasst
 
 from .kategorien import (
+    Aktion,
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
-    LINK_DATENQUELLEN,
-    LINK_MONATSDATEN,
     MonatsdatenAbdeckung,
-    link_monat_erfassen,
-    LINK_ENERGIEPROFIL,
+)
+from .ziele import (
+    HEUTE_ENERGIEPROFIL, HEUTE_INVESTITIONEN, HEUTE_MONATSABSCHLUSS, HEUTE_MONATSDATEN, heute_monat, ziel_block,
+    ziel_datenquelle, ziel_komponente, ziel_monat, ziel_monat_label,
 )
 from backend.core.zahlenformat import fmt_zahl
 from .monatsdaten_plausibilitaet import (
@@ -363,7 +364,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "diese Geräte trage den Monat nach, statt zu entfernen."
                 )
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="geraetewerte_ohne_monatszeile",
                 meldung=(
                     f"{monat:02d}/{jahr}: Messwerte von {len(komponenten)} "
                     "Komponente(n) ohne Monatszeile"
@@ -373,20 +374,18 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 # `?erfassen=YYYY-MM`, wie die Status-Fusszeile). Der bisherige
                 # Link zeigte auf die Liste — dort steht der Monat zwar als
                 # offene Zeile, der Anwender musste ihn aber selbst suchen.
-                link=f"/einstellungen/daten?erfassen={jahr}-{monat:02d}",
-                action_kind="geraetewerte_loeschen",
+                ziel=ziel_monat(jahr, monat),
                 # `hat_zaehler` trägt die Datenart bis in die Rückfrage vor dem
                 # Löschen (N-312). Der Deep-Link-Weg kennt keine
                 # `Monatsdaten`-Zeile — genau die fehlt ja —, also gibt es für
                 # diesen Monat auch kein `GET /{id}/geraetewerte`, aus dem der
                 # Client die Auskunft holen könnte. Sie muss mitreisen.
-                action_params={
+                action=Aktion("geraetewerte_loeschen", {
                     "anlage_id": anlage.id,
                     "jahr": jahr,
                     "monat": monat,
                     "hat_zaehler": bool(zaehler),
-                },
-                action_label="Messwerte entfernen",
+                }, "Messwerte entfernen"),
             ))
 
         return ergebnisse
@@ -399,9 +398,9 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 
         if not monatsdaten:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="keine_monatsdaten",
                 meldung="Keine Monatsdaten vorhanden",
-                link=LINK_MONATSDATEN,
+                ziel=ziel_block("daten", "monatsdaten"),
             ))
             self._abdeckung = MonatsdatenAbdeckung(vorhanden=0, erwartet=0, prozent=0)
             return ergebnisse
@@ -458,7 +457,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 
         if not fehlende:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="monate_vollstaendig_ok",
                 meldung=f"Alle {len(erwartete)} Monate vollständig",
             ))
         else:
@@ -475,18 +474,18 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             # genau dieses Monats.
             for jahr, monat in fehlende[:12]:
                 ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    kategorie=kat, schwere=CheckSeverity.ERROR, code="monat_fehlt",
                     meldung=f"{monat:02d}/{jahr} fehlt",
-                    # N-739 (a): Deep-Link öffnet die Erfassung des fehlenden Monats (s. `md_link` unten).
-                    link=link_monat_erfassen(f"{monat:02d}/{jahr}"),
+                    # N-739 (a): Deep-Link öffnet die Erfassung des fehlenden Monats (Ziel-Bauer `ziel_monat`).
+                    ziel=ziel_monat(jahr, monat),
                 ))
             if len(fehlende) > 12:
                 ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    kategorie=kat, schwere=CheckSeverity.ERROR, code="monate_fehlen_weitere",
                     meldung=f"... und {len(fehlende) - 12} weitere Monate fehlen",
                     # Sammelzeile über viele Monate — kein einzelner Monat, den
                     # ein `?erfassen=` sinnvoll aufschlagen könnte.
-                    link=LINK_MONATSDATEN,
+                    altlink=HEUTE_MONATSDATEN,
                 ))
 
         return ergebnisse
@@ -558,9 +557,8 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
 
         for md in monatsdaten:
             prefix = f"{md.monat:02d}/{md.jahr}"
-            # N-739 (a): `/monatsabschluss/…` leitet im v4-Frontend ohne `?erfassen=` auf die Daten-Fläche um
-            # (`App.tsx`, `v3ZuV4Route.ts`) — der Monat öffnete sich nicht; der Deep-Link öffnet seine Erfassung.
-            md_link = link_monat_erfassen(prefix)
+            # N-739 (a): `/monatsabschluss/…` leitet im v4-Frontend ohne `?erfassen=` auf die Daten-Fläche um — die
+            # Prüfungen springen über `ziel_monat_label(prefix, …)` in die Erfassung des Monats (E2: Ziel-Bauer).
 
             # PV-Erzeugung des Monats aus dem Read-time-SoT (Messwerte +
             # Aggregat-Lückenfüllung). `None` heißt „nicht auflösbar", nicht
@@ -575,37 +573,37 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             einspeisung_erfasst = netzfeld_ist_erfasst(md, "einspeisung_kwh")
             netzbezug_erfasst = netzfeld_ist_erfasst(md, "netzbezug_kwh")
             ergebnisse += _netzfelder_nicht_erfasst(
-                kat, prefix, md_link, einspeisung_erfasst=einspeisung_erfasst, netzbezug_erfasst=netzbezug_erfasst,
+                kat, prefix, einspeisung_erfasst=einspeisung_erfasst, netzbezug_erfasst=netzbezug_erfasst,
             )
             ergebnisse += _batterie_legacy_fehlt(
-                kat, prefix, md_link, md, hat_speicher=hat_speicher,
+                kat, prefix, md, hat_speicher=hat_speicher,
                 speicher_aktiv_monate=speicher_aktiv_monate, speicher_imd_monate=speicher_imd_monate,
             )
             ergebnisse += _speicher_entladung_fehlt(
-                kat, prefix, md_link, md, speicher_ohne_entladung=speicher_ohne_entladung,
+                kat, prefix, md, speicher_ohne_entladung=speicher_ohne_entladung,
             )
-            ergebnisse += _negative_werte(kat, prefix, md_link, md, pv_erzeugung=pv_erzeugung)
+            ergebnisse += _negative_werte(kat, prefix, md, pv_erzeugung=pv_erzeugung)
             ergebnisse += _pv_ueber_maximum(
-                kat, prefix, md_link, md, pv_erzeugung=pv_erzeugung, gesamt_kwp=gesamt_kwp,
+                kat, prefix, md, pv_erzeugung=pv_erzeugung, gesamt_kwp=gesamt_kwp,
                 pvgis_monat_map=pvgis_monat_map, pr=pr, pr_count=pr_count,
             )
             ergebnisse += await self._erzeugung_gegen_verwendung(
-                kat, prefix, md_link, anlage, md, pv_erzeugung=pv_erzeugung,
+                kat, prefix, anlage, md, pv_erzeugung=pv_erzeugung,
                 speicher_imd_bat=speicher_imd_bat, speicher_imd_netzladung=speicher_imd_netzladung,
             )
             ergebnisse += _beide_kernfelder_null(
-                kat, prefix, md_link, md,
+                kat, prefix, md,
                 einspeisung_erfasst=einspeisung_erfasst, netzbezug_erfasst=netzbezug_erfasst,
             )
-            ergebnisse += self._vorjahressprung(kat, prefix, md_link, anlage, md, md_map=md_map)
+            ergebnisse += self._vorjahressprung(kat, prefix, anlage, md, md_map=md_map)
             ergebnisse += _energiebilanz_negativ(
-                kat, prefix, md_link, md, pv_erzeugung=pv_erzeugung,
+                kat, prefix, md, pv_erzeugung=pv_erzeugung,
                 speicher_imd_bat=speicher_imd_bat, hat_speicher=hat_speicher,
             )
 
         if not ergebnisse:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="monatsdaten_plausi_ok",
                 meldung="Keine Auffälligkeiten in den Monatsdaten",
             ))
 
@@ -651,14 +649,14 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if len(fehlend) > 6:
                 monate_str += f" (+{len(fehlend) - 6} weitere)"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=schwere,
+                kategorie=kat, schwere=schwere, code="geraet_feld_fehlt_monate",
                 meldung=f"{name}: {feld_label} fehlt in {len(fehlend)} Monat(en)",
                 details=monate_str,
-                link=link_monat_erfassen(fehlend[0]),
+                ziel=ziel_monat_label(fehlend[0], geraet=inv.id, feld=pflicht_feld),
             ))
         else:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="geraet_monate_ok",
                 meldung=f"{name}: Monatsdaten vollständig ({len(erwartete)} Monate)",
             ))
 
@@ -783,19 +781,17 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 )
 
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.INFO, code="feldwert_nicht_gefuehrt",
                 meldung=meldung,
                 details=details,
                 investition_id=inv.id,
-                link=link_monat_erfassen(labels[0]),
-                action_kind="feldwert_entfernen",
-                action_label="Wert entfernen",
-                action_params={
+                altlink=heute_monat(labels[0]),
+                action=Aktion("feldwert_entfernen", {
                     "investition_id": inv.id,
                     "feld": key,
                     "label": label,
                     "monate": labels,
-                },
+                }, "Wert entfernen"),
             ))
         return ergebnisse
 
@@ -896,7 +892,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if len(widerspruch_monate) > 6:
                 monate_str += f" … (+{len(widerspruch_monate) - 6})"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_heiz_kuehl_groesser_gesamt",
                 meldung=(
                     f"{name}: Heiz- und Kühlstrom zusammen größer als der "
                     f"Gesamtverbrauch ({monate_str})"
@@ -912,7 +908,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "falls sie nicht passt. Die Energiebilanz ist nicht "
                     "betroffen: dort zählt immer der Gesamtwert."
                 ),
-                link="/monatsabschluss",
+                ziel=ziel_monat_label(widerspruch_monate[0], geraet=inv.id, feld="stromverbrauch_kwh"), altlink=HEUTE_MONATSABSCHLUSS,
                 investition_id=inv.id,
             ))
 
@@ -954,7 +950,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if len(waerme_widerspruch) > 6:
                 _w_monate += f" … (+{len(waerme_widerspruch) - 6})"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_gesamtwaerme_kleiner_teile",
                 meldung=(
                     f"{name}: Gesamtwärme kleiner als Heizwärme + "
                     f"Warmwasser-Wärme ({_w_monate})"
@@ -972,7 +968,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "und die beiden Einzelfelder bleiben leer; mit getrennten "
                     "Zählern ist es umgekehrt."
                 ),
-                link=link_monat_erfassen(waerme_widerspruch[0]),
+                ziel=ziel_monat_label(waerme_widerspruch[0], geraet=inv.id, feld="waerme_kwh"),
                 investition_id=inv.id,
             ))
 
@@ -1003,7 +999,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         if len(null_monate) > 6:
             _monate += f" … (+{len(null_monate) - 6})"
         ergebnisse.append(CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.WARNING,
+            kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_waerme_gesamt_null",
             meldung=(
                 f"{name}: „Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer ({_monate})"
             ),
@@ -1016,7 +1012,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 "und Warmwasser zusammen, gehört sein Monatswert unter „Wärme gesamt“; mit getrennten "
                 "Zählern bleibt das Feld leer."
             ),
-            link=link_monat_erfassen(null_monate[0]),
+            ziel=ziel_monat_label(null_monate[0], geraet=inv.id, feld="waerme_kwh"),
             investition_id=inv.id,
         ))
 
@@ -1099,7 +1095,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if len(strom_widerspruch) > 6:
                 _s_monate += f" … (+{len(strom_widerspruch) - 6})"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_gesamtzaehler_kleiner_achsen",
                 meldung=(
                     f"{name}: Gesamtzähler kleiner als die Summe der Achsen "
                     f"({_s_monate})"
@@ -1117,7 +1113,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "welcher Zähler welchen Wert liefert."
                     + _handgriff(strom_widerspruch)
                 ),
-                link=link_monat_erfassen(strom_widerspruch[0]),
+                ziel=ziel_monat_label(strom_widerspruch[0], geraet=inv.id, feld="stromverbrauch_kwh"),
                 investition_id=inv.id,
             ))
         if rest_auffaellig:
@@ -1126,7 +1122,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 _r_monate += f" … (+{len(rest_auffaellig) - 6})"
             _beispiel = max(rest_auffaellig, key=lambda e: e[1] / e[2])
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.INFO, code="wp_gesamtzaehler_mehr_als_achsen",
                 meldung=(
                     f"{name}: Der Gesamtzähler misst deutlich mehr als die "
                     f"Achsen — misst er nur die Wärmepumpe? ({_r_monate})"
@@ -1148,7 +1144,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "nichts, wenn der Zähler stimmt."
                     + _handgriff([m for m, _, _ in rest_auffaellig])
                 ),
-                link=LINK_DATENQUELLEN,
+                ziel=ziel_datenquelle(geraet=inv.id, feld="stromverbrauch_kwh"),
                 investition_id=inv.id,
             ))
 
@@ -1243,10 +1239,10 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             else:
                 strom_label = "Strom Heizen/Warmwasser"
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_strom_fehlt_monate",
                 meldung=f"{name}: {strom_label} fehlt in {len(fehlend_strom)} Monat(en)",
                 details=_monate(fehlend_strom),
-                link=link_monat_erfassen(fehlend_strom[0]),
+                ziel=ziel_monat_label(fehlend_strom[0], geraet=inv.id, feld="strom_heizen_kwh" if getrennte_strommessung else "stromverbrauch_kwh"),
             ))
 
         # Je Seite eine Meldung — sie können nebeneinander stehen, ohne dasselbe
@@ -1278,7 +1274,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if not labels:
                 continue
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_seite_fehlt_monate",
                 meldung=f"{name}: {seite} fehlt in {len(labels)} Monat(en)",
                 details=(
                     f"{_monate(labels)}. {waerme_satz} eedc bildet jede "
@@ -1295,16 +1291,16 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "unter Einstellungen → Datenquellen zu."
                 ),
                 investition_id=inv.id,
-                link=link_monat_erfassen(labels[0]),
+                ziel=ziel_monat_label(labels[0], geraet=inv.id, feld="strom_heizen_kwh" if seite == "Strom Heizen" else "strom_warmwasser_kwh"),
             ))
 
         if fehlend_heiz:
             monate_str = _monate(fehlend_heiz)
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.INFO, code="wp_heizwaerme_fehlt_monate",
                 meldung=f"{name}: Heizwärme fehlt in {len(fehlend_heiz)} Monat(en)",
                 details=monate_str,
-                link=link_monat_erfassen(fehlend_heiz[0]),
+                ziel=ziel_monat_label(fehlend_heiz[0], geraet=inv.id, feld="heizenergie_kwh"),
             ))
 
         # N-379 stand bis 05.09.2026 HIER als Klima-Sonderfall („Warmwasser an einer
@@ -1319,7 +1315,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         if not (fehlend_strom or fehlend_strom_heizen
                 or fehlend_strom_ww or fehlend_heiz):
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK,
+                kategorie=kat, schwere=CheckSeverity.OK, code="wp_monate_ok",
                 meldung=f"{name}: Monatsdaten vollständig ({len(erwartete)} Monate)",
             ))
 
@@ -1409,7 +1405,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     )
                 ergebnisse.append(CheckErgebnis(
                     kategorie=CheckKategorie.INVESTITIONEN,
-                    schwere=CheckSeverity.WARNING,
+                    schwere=CheckSeverity.WARNING, code="monatsabschluss_hinweis_geraet",
                     meldung=meldung,
                     details=(
                         f"{warum} Zwei Wege: Prüfe den Stromverbrauch dieses Monats im "
@@ -1418,7 +1414,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                         "richtig zugeordnet ist. Nach dem Korrigieren den Monat erneut "
                         "speichern, dann rechnet eedc die Aufteilung neu."
                     ),
-                    link="/monatsabschluss",
+                    ziel=ziel_monat(imd.jahr, imd.monat, geraet=inv.id), altlink=HEUTE_MONATSABSCHLUSS,
                     investition_id=inv.id,
                 ))
         return ergebnisse
@@ -1643,7 +1639,7 @@ class ErfassungsortChecks:
 
         return [CheckErgebnis(
             kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
             meldung=(
                 f"{len(abweichend)} Monat(e) stammen aus einer anderen "
                 "Wetterquelle als die aktuelle Wahl"
@@ -1666,7 +1662,7 @@ class ErfassungsortChecks:
             # der Aufrufer dem Anwender vorher sagt, was ersetzt wird. Ein
             # Ein-Klick-Knopf könnte das nicht; die Vorschau der
             # Reparatur-Werkbank nennt die Zahl, bevor etwas passiert.
-            link=LINK_ENERGIEPROFIL,
+            altlink=HEUTE_ENERGIEPROFIL,
         )]
 
     # ── Zeile 3b: die Quelle steht nirgends ─────────────────────────────────
@@ -1712,7 +1708,7 @@ class ErfassungsortChecks:
 
         return [CheckErgebnis(
             kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
             meldung=(
                 f"{len(ohne)} abgeschlossene(r) Monat(e) tragen keine "
                 "festgehaltene Wetterquelle"
@@ -1735,7 +1731,7 @@ class ErfassungsortChecks:
             ),
             # Kein Inline-Knopf, aus demselben Grund wie bei den Nachbarzeilen:
             # derselbe Lauf ersetzt, was schon dasteht.
-            link=LINK_ENERGIEPROFIL,
+            altlink=HEUTE_ENERGIEPROFIL,
         )]
 
     # ── Zeile 2: Strahlung und Sonnenstunden ────────────────────────────────
@@ -1771,7 +1767,7 @@ class ErfassungsortChecks:
 
         return [CheckErgebnis(
             kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO,
+            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
             meldung=(
                 f"Globalstrahlung oder Sonnenstunden fehlen in "
                 f"{len(offen)} Monat(en)"
@@ -1787,7 +1783,7 @@ class ErfassungsortChecks:
             ),
             # Kein Inline-Knopf, aus demselben Grund wie oben: derselbe Lauf
             # ersetzt auch, was schon dasteht.
-            link=LINK_ENERGIEPROFIL,
+            altlink=HEUTE_ENERGIEPROFIL,
         )]
 
     # ── Zeile 1: die Ø-Temperatur (N-426-Nachtrag, unverändert) ─────────────
@@ -1828,7 +1824,7 @@ class ErfassungsortChecks:
         if not offen:
             if monatsdaten:
                 return [CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.OK,
+                    kategorie=kat, schwere=CheckSeverity.OK, code="temperatur_ok",
                     meldung=(
                         f"Alle {len(monatsdaten)} erfassten Monate tragen eine "
                         "Ø Temperatur"
@@ -1861,7 +1857,7 @@ class ErfassungsortChecks:
 
         if not erreichbar:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO,
+                kategorie=kat, schwere=CheckSeverity.INFO, code="temperatur_fehlt_ohne_messreihe",
                 meldung=f"Ø Temperatur fehlt in {len(offen)} Monat(en)",
                 details=(
                     f"{gemeinsam} Für keinen dieser Monate reicht die eigene "
@@ -1869,11 +1865,11 @@ class ErfassungsortChecks:
                     "Monatsabschluss zu öffnen und „Wetterdaten holen“ zu "
                     "drücken; eedc holt den Wert dann aus dem Wetter-Archiv."
                 ),
-                link=link_monat_erfassen(_mm(offen[0])),
+                ziel=ziel_monat_label(_mm(offen[0])),
             )]
 
         return [CheckErgebnis(
-            kategorie=kat, schwere=CheckSeverity.INFO,
+            kategorie=kat, schwere=CheckSeverity.INFO, code="temperatur_aus_messung_moeglich",
             meldung=(
                 f"Ø Temperatur fehlt in {len(offen)} Monat(en), "
                 f"für {len(erreichbar)} davon reicht die Messreihe"
@@ -1891,13 +1887,11 @@ class ErfassungsortChecks:
                 "deinen eigenen Messwerten nach (Stundenmittel, sonst "
                 "Tages-Min/Max) — bereits gepflegte Werte bleiben unberührt."
             ),
-            link=link_monat_erfassen(_mm(offen[0])),
-            action_kind="temperatur_aus_messung",
-            action_label="Temperatur aus Messung übernehmen",
-            action_params={
+            altlink=heute_monat(_mm(offen[0])),
+            action=Aktion("temperatur_aus_messung", {
                 "anlage_id": anlage.id,
                 "monate": [_mm(md) for md in erreichbar],
-            },
+            }, "Temperatur aus Messung übernehmen"),
         )]
 
     def _check_erfassungsort_positionen(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -1957,7 +1951,7 @@ class ErfassungsortChecks:
 
                 if jahresbetrag and anzahl >= DOPPELERFASSUNG_AB_MONATEN:
                     ergebnisse.append(CheckErgebnis(
-                        kategorie=kat_doppel, schwere=CheckSeverity.INFO.value,
+                        kategorie=kat_doppel, schwere=CheckSeverity.INFO.value, code="position_doppelerfassung",
                         meldung=(
                             f"{inv.bezeichnung}: „{bezeichnung}“ steht in {anzahl} Monaten "
                             f"im Monatsabschluss, obwohl {feld} gepflegt ist"
@@ -1969,12 +1963,12 @@ class ErfassungsortChecks:
                             f"zählt derselbe Betrag doppelt. Entweder den Jahresbetrag anpassen "
                             f"oder die Monatspositionen entfernen."
                         ),
-                        link="/einstellungen/investitionen",
+                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"), altlink=HEUTE_INVESTITIONEN,
                         investition_id=inv.id,
                     ))
                 elif not jahresbetrag and anzahl >= WIEDERHOLUNG_AB_MONATEN:
                     ergebnisse.append(CheckErgebnis(
-                        kategorie=kat, schwere=CheckSeverity.INFO.value,
+                        kategorie=kat, schwere=CheckSeverity.INFO.value, code="position_wiederkehrend",
                         meldung=(
                             f"{inv.bezeichnung}: „{bezeichnung}“ steht in {anzahl} Monaten "
                             f"im Monatsabschluss — das sieht wiederkehrend aus"
@@ -1985,7 +1979,7 @@ class ErfassungsortChecks:
                             f"Amortisation; im Monatsabschluss wirkt er nur in der Bilanz des "
                             f"Monats, in dem er steht. Einmaliges bleibt richtig, wo es ist."
                         ),
-                        link="/einstellungen/investitionen",
+                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"), altlink=HEUTE_INVESTITIONEN,
                         investition_id=inv.id,
                     ))
 

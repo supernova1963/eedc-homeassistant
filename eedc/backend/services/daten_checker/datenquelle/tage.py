@@ -11,10 +11,10 @@ from backend.core.berechnungen import PV_KOMPONENTEN_PREFIXE
 from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
+    Aktion,
     CheckSeverity,
-    LINK_DATENQUELLEN,
-    LINK_ENERGIEPROFIL,
 )
+from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL
 from backend.core.zahlenformat import fmt_zahl
 
 logger = logging.getLogger(__name__)
@@ -178,7 +178,7 @@ class TageChecks:
 
         if not kandidaten:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="tageswerte_ok",
                 meldung="Alle Tage mit zugeordnetem Zähler tragen Werte (letzte 90 Tage)",
                 details=(
                     "Für jeden zugeordneten kWh-Zähler steht in der gespeicherten "
@@ -225,7 +225,7 @@ class TageChecks:
 
         if not befunde:
             return [CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK.value,
+                kategorie=kat, schwere=CheckSeverity.OK.value, code="tageswerte_ok",
                 meldung="Keine reparierbaren Tages-Lücken gefunden (letzte 90 Tage)",
                 details=(
                     f"{len(kandidaten)} Tag(e) tragen für einen zugeordneten Zähler "
@@ -322,17 +322,15 @@ class TageChecks:
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=summen_details,
-            link=(
-                LINK_ENERGIEPROFIL if reparatur_moeglich
-                else LINK_DATENQUELLEN
+            altlink=(
+                HEUTE_ENERGIEPROFIL if reparatur_moeglich
+                else HEUTE_DATENQUELLEN
             ),
-            action_kind="reaggregate_range" if reparatur_moeglich else None,
-            action_params={
+            action=Aktion("reaggregate_range", {
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            } if reparatur_moeglich else None,
-            action_label="Zeitraum neu aggregieren" if reparatur_moeglich else None,
+            }, "Zeitraum neu aggregieren") if reparatur_moeglich else None,
             code="tageswerte_fehlen_tage",
             werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(),
                    "komponenten": betroffene_keys, "reparatur_moeglich": reparatur_moeglich,
@@ -357,17 +355,15 @@ class TageChecks:
                     "Einzelnen Tag aus HA-Statistics nachaggregieren — schreibt "
                     "Tages- und Stundenwerte, nicht die Monatswerte."
                 ),
-                link=LINK_ENERGIEPROFIL,
-                action_kind="reaggregate_day",
-                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
-                action_label="Tag reparieren",
+                altlink=HEUTE_ENERGIEPROFIL,
+                action=Aktion("reaggregate_day", {"anlage_id": anlage.id, "datum": datum_.isoformat()}, "Tag reparieren"),
                 code="tageswerte_fehlen_tag",
                 werte={"datum": datum_.isoformat(), "ha_kwh": dict(sorted(fehlend.items()))},
             ))
         if len(befunde) > MAX_EINZEL:
             rest = len(befunde) - MAX_EINZEL
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="tageswerte_fehlen_weitere",
                 meldung=(
                     f"… plus {rest} weitere(r) Tag(e) — am besten per "
                     f"„Zeitraum neu aggregieren“."

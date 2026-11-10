@@ -34,6 +34,7 @@ from backend.models.settings import Settings
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services import diagnose_paket as dp
 from backend.services.daten_checker import CheckErgebnis, DatenCheckResult, DatenChecker
+from backend.services.daten_checker.kategorien import Aktion
 from backend.tests import factories
 
 JETZT = datetime(2026, 11, 10, 12, 0)
@@ -294,8 +295,8 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
     drift = CheckErgebnis(
         kategorie="datenquelle_drift", schwere="info",
         meldung="2026-11-02: PV 123.909,6 → HA 13,7 kWh (Δ −123.895,9 kWh, −100,0 %)",
-        link="/einstellungen/daten?block=energieprofil&karte=werkbank", action_kind="spiegel_abgleich_tag",
-        action_params={"anlage_id": a.id, "datum": "2026-11-02"}, action_label="Aus Home Assistant neu übernehmen",
+        altlink="/einstellungen/daten?block=energieprofil&karte=werkbank",
+        action=Aktion("spiegel_abgleich_tag", {"anlage_id": a.id, "datum": "2026-11-02"}, "Aus Home Assistant neu übernehmen"),
         code="drift_tag", werte={"datum": "2026-11-02", "achse": "pv", "eedc": 123909.6, "ha": 13.7, "delta": -123895.9,
                                  "prozent": -99.99},
     )
@@ -334,7 +335,7 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
 async def test_monate_aus_befunden_und_angefragt(db):
     e = [CheckErgebnis(kategorie="x", schwere="warning", meldung="m", werte={"von": "2026-08-30", "bis": "2026-09-02"}),
          CheckErgebnis(kategorie="x", schwere="ok", meldung="m", werte={"datum": "2026-10-01"}),
-         CheckErgebnis(kategorie="x", schwere="info", meldung="m", action_params={"datum": "2026-07-04"})]
+         CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("x", {"datum": "2026-07-04"}, "x"))]
     assert dp.monate_aus_befunden(e) == [(2026, 9), (2026, 8), (2026, 7)]
     a = await _anlage(db)
     t = (await dp.baue_paket(db, a.id, monate=[(2026, 1), (2026, 10), (2026, 9)], jetzt=JETZT)).text
@@ -430,7 +431,8 @@ def test_melder_erzeuger_tragen_code_und_werte(datei):
     for n in ast.walk(ast.parse(pfad.read_text(encoding="utf-8"))):
         if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "CheckErgebnis":
             kw = {k.arg: k.value for k in n.keywords}
-            if isinstance(kw.get("code"), ast.Constant):
+            # Seit E2 trägt jeder Erzeuger `code=` (W-1); `werte` tragen die Melder-Erzeuger dieser Liste.
+            if isinstance(kw.get("code"), ast.Constant) and kw["code"].value in _ERZEUGER[datei]:
                 assert "werte" in kw, (datei, kw["code"].value)
                 gefunden.append(kw["code"].value)
     assert gefunden == _ERZEUGER[datei]

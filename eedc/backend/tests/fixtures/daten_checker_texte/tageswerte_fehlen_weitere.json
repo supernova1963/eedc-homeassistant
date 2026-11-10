@@ -1,0 +1,14 @@
+{
+ "code": "tageswerte_fehlen_weitere",
+ "faelle": {
+  "37": {
+   "kategorie": "tageswerte_fehlen",
+   "schwere": "info",
+   "meldung": "… plus 2 weitere(r) Tag(e) — am besten per „Zeitraum neu aggregieren“.",
+   "details": null,
+   "code": "tageswerte_fehlen_weitere",
+   "klasse_katalog": "entfaellt",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

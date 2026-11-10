@@ -1,0 +1,14 @@
+{
+ "code": "tageswerte_fehlen_tag",
+ "faelle": {
+  "36": {
+   "kategorie": "tageswerte_fehlen",
+   "schwere": "warning",
+   "meldung": "2026-03-30: keine Tageswerte, HA hat Einspeisung 22,0 kWh, Netzbezug 3,4 kWh",
+   "details": "Einzelnen Tag aus HA-Statistics nachaggregieren — schreibt Tages- und Stundenwerte, nicht die Monatswerte.",
+   "code": "tageswerte_fehlen_tag",
+   "klasse_katalog": "aktion",
+   "klasse_laufzeit": "aktion"
+  }
+ }
+}

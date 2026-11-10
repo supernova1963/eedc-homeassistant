@@ -890,13 +890,32 @@ GET  /api/system/diagnose-paket/{anlage_id}?fassung=datei|kopie&monate=JJJJ-MM,�
 ```
 
 Route `api/routes/daten_checker.py::diagnose_paket`, Service `services/diagnose_paket.py::baue_paket` — **nur lesend**:
-13 Abschnitte mit der Kopfmarke `<!-- eedc-diagnose v1 -->`, Allowlists für Anlage-Spalten und Komponenten-Parameter, nie
+13 Abschnitte mit der Kopfmarke `<!-- eedc-diagnose v2 -->` (v2 seit E2: Abschnitt 6 nennt je Befund `code` und die Soll-Klasse des Katalogs), Allowlists für Anlage-Spalten und Komponenten-Parameter, nie
 Token, Passwörter, `connector_config` (nur `connector_id`), `solcast_config`, `versorger_daten`, `community_hash`
 (Wächter W-7 in `tests/test_diagnose_paket.py`). Die Zuordnungen liest es über
 `services/datenquellen_felder.py::zuordnungen_lesen` — die vier lesenden Phasen der Route
 `GET /api/datenquellen/{id}/felder`, die nach ihnen weiter selbst `_festschreiben` und `_verfuegbarkeit` ruft
 (Schnitt E1, Antwort bitgleich, GM `datenquellen-felder`). Die Kopieren-Fassung ist hart ≤ 20 000 Bytes
 (Kürzungsfolge Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen, im Kopf benannt).
+
+#### Daten-Checker: Befund-Schlüssel, Ziel-Bauer, Katalog (E2 10.11.2026)
+
+Jeder Befund (`services/daten_checker/kategorien.py::CheckErgebnis`) trägt einen **Befund-Schlüssel** `code` (Dauer-Name,
+Erhebung Teil B; 194 Erzeuger, 188 Codes — sechs Zusammenlegungen tragen den Code ihres Partners) und optional ein
+**Ziel** (`Ziel`: Bereich, Block, Parameter, Anker) bzw. eine **Aktion** (`Aktion`: Operation, Parameter, Beschriftung).
+Ziele entstehen nur im **Ziel-Bauer** `services/daten_checker/ziele.py` (`ziel_monat`, `ziel_monat_label`,
+`ziel_komponente`, `ziel_datenquelle`, `ziel_datenquelle_schluessel`, `ziel_tarif`, `ziel_anlage`, `ziel_werkbank`,
+`ziel_block`); jeder Bauer prüft das Feld gegen die Registry (Monats-/Datenquellen-Felder, Investitions-Spalten bzw.
+Parameter je Typ, Anlage-, Tarif-, Solarprognose-Spalten) und die Block-Id gegen `BLOCK_IDS` (= `einstellungenKatalog.tsx`,
+Vitest `sprungziele-blockids.test.ts`). Die **Altfelder** `link`, `action_kind`, `action_params`, `action_label` sind
+abgeleitete Properties: `link` = `altlink` (heutiger Link bis E4, benannte Werte `HEUTE_*`/`KEIN_LINK`, schrumpfende
+Baseline `tests/daten_checker_altlink_baseline.txt`) oder die heutige Lesart von `ziel` (`link_aus_ziel`: nur `block`,
+`erfassen`, `bearbeiten`, `karte`). Die **Klasse** ist abgeleitet (Aktion · Sprung · Auskunft, `CheckErgebnis.klasse`);
+die Soll-Klasse je Code, Knopf-Text, Handbuch-Anker und die Allowlist «Auskunft trotz WARNING» (genau zwei Codes) hält
+der **Katalog** `services/daten_checker/handgriffe.py`. Die Antwort `GET /api/system/daten-check/{id}` trägt `code`,
+`ziel`, `action` zusätzlich. Wächter: W-1/W-3 `tests/test_daten_checker_codes.py`, W-2/W-6
+`tests/test_daten_checker_ziele.py`, W-8 `tests/test_daten_checker_texte_fixtures.py` (Fixtures je Code der
+HA-gebundenen Kategorien unter `tests/fixtures/daten_checker_texte/`).
 
 #### Aggregierte Monatsdaten
 

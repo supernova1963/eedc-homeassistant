@@ -1,0 +1,14 @@
+{
+ "code": "energie_slot_leistungssensor",
+ "faelle": {
+  "125": {
+   "kategorie": "sensor_mapping_einheit",
+   "schwere": "warning",
+   "meldung": "Energie-Slot „Einspeisung\" trägt einen Leistungssensor (Einheit W)",
+   "details": "In einen Energie-Slot gehört ein kumulativer kWh-Zähler, kein Leistungssensor (W/kW). Aus einem Leistungssensor lässt sich die Energie nur näherungsweise per Integration ableiten (ungenauer, anfällig für Lücken). Bitte für „Einspeisung\" einen kWh-Zähler wählen; aktuell: sensor.einsp_leistung.",
+   "code": "energie_slot_leistungssensor",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

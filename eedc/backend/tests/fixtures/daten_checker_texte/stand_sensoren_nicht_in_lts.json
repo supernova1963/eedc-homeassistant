@@ -1,0 +1,14 @@
+{
+ "code": "stand_sensoren_nicht_in_lts",
+ "faelle": {
+  "121": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "warning",
+   "meldung": "1 Zählerstand-Sensor(en) nicht in HA-Long-Term-Statistics",
+   "details": "Für diese Sensoren führt Home Assistant keine Langzeitstatistik — meist fehlt `state_class`. eedc liest den Zählerstand stündlich genau dort, deshalb wird für diese Zähler **gar kein Stand** mitgeschrieben: Anfang, Ende und Verbrauch des Zeitraums bleiben leer, und zwar ohne dass sonst etwas darauf hinweist. Lösung: in Home Assistant unter Einstellungen → Geräte & Dienste → Helfer für diesen Sensor `state_class` ergänzen (z. B. per `customize`), oder einen Sensor wählen, der sie mitbringt. Ein Zählerstand ist eine Bestandsgröße — eedc liest ihn aus dem Sensor-Zustand und rechnet ihn nicht um. **`total_increasing` oder ein Verbrauchszähler-Helfer sind dafür nicht nötig**; `measurement` genügt. Vergangenes sammelt Home Assistant nicht nach: die Reihe beginnt ab der Umstellung. Betroffen: Gas: Zählerstand (s.gas)",
+   "code": "stand_sensoren_nicht_in_lts",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

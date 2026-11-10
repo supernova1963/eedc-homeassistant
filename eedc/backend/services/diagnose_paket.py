@@ -1,7 +1,8 @@
 """
 Diagnose-Paket — ein Text, aus dem wir Version, Lage und den wirksamen Schritt lesen (Etappe E1, Konzept Daten-Checker §8).
 
-Markdown mit fester Abschnittsfolge (Konzept §8.2, 13 Abschnitte) und der Kopfmarke ``<!-- eedc-diagnose v1 -->``. Der Anwender
+Markdown mit fester Abschnittsfolge (Konzept §8.2, 13 Abschnitte) und der Kopfmarke ``<!-- eedc-diagnose v2 -->`` (v2 seit E2:
+Befund-Schlüssel und Handgriff-Klasse je Befund). Der Anwender
 kopiert es in eine PN oder ein Issue (Einstellungen → Daten → Daten-Checker → Diagnose-Paket); eedc überträgt nichts.
 
 **Nur lesend.** Kein Abgleich mit HA, kein Festschreiben, keine Protokollzeile: die Zuordnungen kommen aus
@@ -44,7 +45,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.tages_energie_profil import TagesZusammenfassung
 
-KOPFMARKE = "<!-- eedc-diagnose v1 -->"
+KOPFMARKE = "<!-- eedc-diagnose v2 -->"
 #: Harte Grenze der Kopieren-Fassung in Bytes (UTF-8). 20 000 statt 20 480: hält beide Lesarten von «20 KB».
 GRENZE_KOPIE_BYTES = 20_000
 #: Fenster der Kanal-Tage (Abschnitt 9) und Zahl der Monate der Tagesreihen (Abschnitt 11).
@@ -356,6 +357,7 @@ def _handgriff(e) -> str:
 
 def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[str, bool]], list[str]]:
     from backend.services.daten_checker import CheckKategorie
+    from backend.services.daten_checker.handgriffe import handgriff
 
     z = result.zusammenfassung
     kopf = [f"- Zusammenfassung: error {z.get('error', 0)} · warning {z.get('warning', 0)} · info {z.get('info', 0)} · "
@@ -375,7 +377,9 @@ def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[s
         zeile = " · ".join(teile) + f" — {_zeile(e.meldung)}"
         if e.werte:
             zeile += f" · werte {_json(e.werte)}"
-        zeilen.append((zeile + f" · Handgriff: {_handgriff(e)}", schwere == "ok"))
+        soll = handgriff(e.code)
+        zeile += f" · Handgriff: {_handgriff(e)}" + (f" · Klasse {soll.klasse}" if soll else "")
+        zeilen.append((zeile, schwere == "ok"))
     gesehen = {getattr(e.kategorie, "value", e.kategorie) for e in result.ergebnisse}
     fuss = ["Nicht ausgeführt oder ohne Befund:"]
     for k in CheckKategorie:

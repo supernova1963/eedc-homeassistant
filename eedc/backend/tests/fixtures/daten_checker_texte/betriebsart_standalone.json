@@ -1,0 +1,14 @@
+{
+ "code": "betriebsart_standalone",
+ "faelle": {
+  "116": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "info",
+   "meldung": "HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen",
+   "details": null,
+   "code": "betriebsart_standalone",
+   "klasse_katalog": "auskunft",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

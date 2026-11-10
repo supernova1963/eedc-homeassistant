@@ -1,0 +1,14 @@
+{
+ "code": "emob_kennung_unbekannt",
+ "faelle": {
+  "51": {
+   "kategorie": "emob_kennung_unbekannt",
+   "schwere": "info",
+   "meldung": "„SMA eCharger 22“: die Steuerung meldet „fremd“ — kein E-Auto trägt diese Kennung",
+   "details": "Die Steuerung an „SMA eCharger 22“ meldet gerade das Fahrzeug „fremd“. Kein E-Auto dieser Anlage trägt diesen Namen als „Kennung in der Steuerung“, deshalb zeigt die Wallbox-Karte nur „Fahrzeug der Steuerung unbekannt“. Der Weg: beim passenden E-Auto unter Einstellungen → Investitionen die „Kennung in der Steuerung“ genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist egal). Ist es ein fremdes Fahrzeug, ist nichts zu tun.",
+   "code": "emob_kennung_unbekannt",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

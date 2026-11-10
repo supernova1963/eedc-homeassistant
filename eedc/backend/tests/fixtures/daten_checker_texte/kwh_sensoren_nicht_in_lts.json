@@ -1,0 +1,14 @@
+{
+ "code": "kwh_sensoren_nicht_in_lts",
+ "faelle": {
+  "117": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "warning",
+   "meldung": "1 kWh-Sensor(en) nicht in HA-Long-Term-Statistics",
+   "details": "Diese Sensoren haben kein state_class — typisch bei Modbus-Roh-Werten oder Hersteller-Integrationen ohne Metadaten. Folgen: die Korrektur-Werkzeuge in der Datenverwaltung (Vollbackfill, Verlauf nachrechnen, Per-Tag-Reaggregation) wirken auf diese Sensoren nicht — sie lesen alle aus HA's LTS. Jeder Aussetzer ist permanent verloren, vergangene Monate bleiben leer. Lösung: in Home Assistant unter Einstellungen → Geräte & Dienste → Helfer einen Verbrauchszähler auf diesen Sensor anlegen, Zurücksetzen „nie“ (ohne Zyklus) — der Helfer bringt die nötigen Statistik-Angaben mit und behält seinen Namen auch nach einem Gerätetausch. Seine Historie beginnt bei null: vergangene Monate sammelt Home Assistant nicht nach. Alternativ einen anderen Sensor mit state_class=total_increasing wählen (oder, wer die YAML ohnehin pflegt, state_class per customize ergänzen). Betroffen: Basis: Einspeisung (s.e_out)",
+   "code": "kwh_sensoren_nicht_in_lts",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

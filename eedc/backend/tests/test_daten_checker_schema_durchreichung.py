@@ -23,7 +23,10 @@ def test_alle_dataclass_felder_im_response_schema():
     Verhindert Wiederholung des v3.31.1-Bugs (Schema-Drift zwischen
     Service-Dataclass und API-Response).
     """
-    dataclass_felder = {f.name for f in fields(CheckErgebnis)}
+    # E2: `altlink` ist das Übergangsfeld bis E4 und erreicht den Client als abgeleiteter `link`; die abgeleiteten
+    # Altfelder (`link`, `action_*`) sind Properties und gehören ebenso ins Schema.
+    dataclass_felder = {f.name for f in fields(CheckErgebnis)} - {"altlink"}
+    dataclass_felder |= {"link", "action_kind", "action_params", "action_label"}
     response_felder = set(CheckErgebnisResponse.model_fields.keys())
 
     fehlend = dataclass_felder - response_felder

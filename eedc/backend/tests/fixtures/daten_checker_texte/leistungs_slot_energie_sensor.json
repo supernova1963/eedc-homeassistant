@@ -1,0 +1,14 @@
+{
+ "code": "leistungs_slot_energie_sensor",
+ "faelle": {
+  "124": {
+   "kategorie": "sensor_mapping_einheit",
+   "schwere": "error",
+   "meldung": "Leistungs-Slot „Einspeisung (Live)\" trägt einen Energie-Sensor (Einheit kWh)",
+   "details": "In einen Leistungs-Slot gehört ein Leistungssensor (W/kW), kein kWh-Zähler. Der Zählerstand wird sonst als Momentanleistung gelesen (z. B. 7130 kWh → 7130 W) — im Live-Energiefluss kippt dadurch der berechnete Restverbrauch (klemmt auf 0). Bitte für „Einspeisung (Live)\" einen Leistungssensor (W/kW) wählen; aktuell: sensor.einsp_zaehler.",
+   "code": "leistungs_slot_energie_sensor",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

@@ -1,0 +1,14 @@
+{
+ "code": "kwh_ohne_summen_spalte",
+ "faelle": {
+  "119": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "warning",
+   "meldung": "1 kWh-Sensor(en) ohne Summen-Spalte — Tages- und Stundenwerte bleiben leer",
+   "details": "Diese Sensoren stehen in HA's Langzeitstatistik, aber ohne Summen-Spalte: ihr `state_class` ist `measurement` statt `total_increasing`. Damit führt HA nur Mittel-/Min-/Max-Werte und keine Zählerstände — eedc kann daraus keine Stunden- und Tagesdeltas bilden. Die Live-Ansicht ist NICHT betroffen, sie rechnet aus den Watt-Sensoren; deshalb sieht man dort Werte, während Cockpit → Tag und die Stundenwerte auf 0 stehen. Lösung: in Home Assistant unter Einstellungen → Geräte & Dienste → Helfer einen Verbrauchszähler auf diesen Sensor anlegen, Zurücksetzen „nie“ (ohne Zyklus) — er führt die Summen-Spalte, die eedc braucht, und der zugeordnete Sensor wird dann der Helfer. Seine Historie beginnt bei null: Vergangenes sammelt Home Assistant nicht nach. Wer die YAML ohnehin pflegt, kann stattdessen `state_class: total_increasing` per `customize` setzen (HA-Neustart nötig). Danach die Tage über die Reparatur-Werkbank neu berechnen — HA sammelt die Summenwerte erst ab der Umstellung. Betroffen: Basis: Netzbezug (s.e_in)",
+   "code": "kwh_ohne_summen_spalte",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "sprung"
+  }
+ }
+}

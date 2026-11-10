@@ -1,0 +1,14 @@
+{
+ "code": "zeitzone_abweichung",
+ "faelle": {
+  "39": {
+   "kategorie": "zeitzone_abweichung",
+   "schwere": "warning",
+   "meldung": "eedc und Home Assistant rechnen mit verschiedenen Zeitzonen (2 Stunden Unterschied)",
+   "details": "Home Assistant steht auf Asia/Tokyo (UTC+9), eedc läuft 2 Stunden hinter dieser Zeit (UTC+7). Rund um Mitternacht werden Stundenwerte dadurch dem falschen Tag zugeordnet. eedc läuft in einem eigenen Container. Setze dort die Umgebungsvariable TZ=Asia/Tokyo (in docker-compose.yml unter environment) und starte den Container neu. Bereits gespeicherte Tage ändern sich davon nicht — die lassen sich anschließend über die Datenverwaltung neu berechnen.",
+   "code": "zeitzone_abweichung",
+   "klasse_katalog": "sprung",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}

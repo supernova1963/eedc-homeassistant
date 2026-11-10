@@ -41,6 +41,7 @@ from backend.core.field_definitions import (
 from backend.models.anlage import Anlage
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .ziele import HEUTE_INVESTITIONEN, ziel_monat
 from backend.core.zahlenformat import fmt_zahl
 
 
@@ -162,7 +163,7 @@ class WaermepumpeChecks:
         treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
         for inv_id, name, jahr, monat, wert in treffer[: self.MAX_EINZEL]:
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING.value,
+                kategorie=kat, schwere=CheckSeverity.WARNING.value, code="wp_arbeitszahl_zu_hoch",
                 meldung=(
                     f"{name}: Arbeitszahl {fmt_zahl(wert, 1)} im {monat:02d}/{jahr} — "
                     "höher, als eine Wärmepumpe leisten kann"
@@ -180,14 +181,14 @@ class WaermepumpeChecks:
                     "Kilowattstunden bleiben davon unberührt — sie sind richtig "
                     "und zählen in allen Mengen weiter mit."
                 ),
-                link="/einstellungen/investitionen",
+                ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="waerme_kwh"), altlink=HEUTE_INVESTITIONEN,
                 investition_id=inv_id,
             ))
 
         if len(treffer) > self.MAX_EINZEL:
             rest = len(treffer) - self.MAX_EINZEL
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                kategorie=kat, schwere=CheckSeverity.INFO.value, code="wp_arbeitszahl_weitere",
                 meldung=f"… plus {rest} weitere(r) Monat(e) mit derselben Auffälligkeit",
             ))
 

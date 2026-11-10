@@ -14,8 +14,8 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
-    LINK_DATENQUELLEN,
 )
+from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, ziel_block
 from backend.core.zahlenformat import fmt_zahl
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,7 @@ class ZeitzoneChecks:
 
         return [CheckErgebnis(
             kategorie=kat,
-            schwere=CheckSeverity.WARNING.value,
+            schwere=CheckSeverity.WARNING.value, code="zeitzone_abweichung",
             meldung=(
                 f"eedc und Home Assistant rechnen mit verschiedenen Zeitzonen "
                 f"({betrag_text} Unterschied)"
@@ -131,5 +131,5 @@ class ZeitzoneChecks:
                 "die lassen sich anschließend über die Datenverwaltung neu "
                 "berechnen."
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_block("system", "protokolle") if kind == HA_APP else None, altlink=HEUTE_DATENQUELLEN,
         )]

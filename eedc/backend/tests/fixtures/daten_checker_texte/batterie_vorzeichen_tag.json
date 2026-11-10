@@ -1,0 +1,14 @@
+{
+ "code": "batterie_vorzeichen_tag",
+ "faelle": {
+  "29": {
+   "kategorie": "batterie_vorzeichen_historie",
+   "schwere": "warning",
+   "meldung": "2026-03-30: Batterie-Vorzeichen vertauscht",
+   "details": "Einzelnen Tag neu aus HA-Statistics aggregieren — schreibt das Batterie-Netto in der korrigierten Richtung (ENTLADUNG positiv).",
+   "code": "batterie_vorzeichen_tag",
+   "klasse_katalog": "aktion",
+   "klasse_laufzeit": "aktion"
+  }
+ }
+}

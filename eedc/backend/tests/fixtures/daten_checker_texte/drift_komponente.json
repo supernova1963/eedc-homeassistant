@@ -1,0 +1,14 @@
+{
+ "code": "drift_komponente",
+ "faelle": {
+  "25": {
+   "kategorie": "datenquelle_drift",
+   "schwere": "info",
+   "meldung": "Box: 1 Tag(e) weichen von HA-Statistics ab (größte Abweichung 2026-03-05: 10,0 → 15,0 kWh, Δ +5,0 kWh, +33,3 %)",
+   "details": "Für diese Komponente steht in deiner Tages-Zusammenfassung an 1 Tag(en) ein anderer Wert als in den HA-Statistics. Diese Werte tragen die Wirtschaftlichkeits- und CO₂-Rechnung mit. „Tag reparieren“ schreibt den Tag 2026-03-05 aus HA-Statistics neu; für alle Tage auf einmal: Einstellungen → Daten → Energieprofil → Reparatur-Werkbank.",
+   "code": "drift_komponente",
+   "klasse_katalog": "aktion",
+   "klasse_laufzeit": "aktion"
+  }
+ }
+}

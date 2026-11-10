@@ -12,8 +12,8 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
-    LINK_DATENQUELLEN,
 )
+from backend.services.daten_checker.ziele import ziel_datenquelle_schluessel
 from backend.core.zahlenformat import fmt_zahl
 
 
@@ -196,7 +196,7 @@ class RuecksprungChecks:
 
         return [CheckErgebnis(
             kategorie=kat,
-            schwere=CheckSeverity.WARNING,
+            schwere=CheckSeverity.WARNING, code="zaehler_ruecksprung",
             meldung=meldung,
             details=(
                 f"Ein Zählerstand muss fortlaufend steigen. Bei diesen Feldern "
@@ -212,5 +212,5 @@ class RuecksprungChecks:
                 f"eedc bildet Tag, Monat und Jahr daraus selbst — und exakt. "
                 f"Betroffen: {namen}"
             ),
-            link=LINK_DATENQUELLEN,
+            ziel=ziel_datenquelle_schluessel(_key),
         )]

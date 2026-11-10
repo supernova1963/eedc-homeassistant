@@ -195,9 +195,8 @@ class HaRueckgangChecks:
             ),
             # Kein „Beheben"-Link — dieselbe Begründung wie `ha_sprung` (Lab 4.1.3-rc1): die Korrektur liegt in Home
             # Assistant, die Checker-Links navigieren nur innerhalb von eedc. Der Weg steht im Text.
-            link=None,
             # N-790: der Schritt nach der Korrektur in HA als Knopf (Abgleich + Tag des ersten Funds neu aufgebaut).
-            **aktion_spiegel_abgleich_tag(anlage.id, funde[0].tag),
+            action=aktion_spiegel_abgleich_tag(anlage.id, funde[0].tag),
             # E1 (Diagnose-Paket): die Zahlen der Meldung und der genannten Funde strukturiert, ohne neue Rechnung.
             code="ha_zaehler_rueckgang",
             werte={"tage": len(funde), "funde": [

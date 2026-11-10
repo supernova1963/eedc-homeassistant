@@ -1,0 +1,23 @@
+{
+ "code": "stand_sensoren_ok",
+ "faelle": {
+  "122": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "ok",
+   "meldung": "Alle 1 Zählerstand-Sensor(en) in HA-Long-Term-Statistics verfügbar",
+   "details": "Eine Summen-Spalte wird hier bewusst nicht verlangt — ein Zählerstand kommt aus dem Sensor-Zustand, nicht aus einer Verbrauchssumme.",
+   "code": "stand_sensoren_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  },
+  "123": {
+   "kategorie": "sensor_mapping_lts",
+   "schwere": "ok",
+   "meldung": "Alle 4 kWh-Sensor(en) im Mapping in HA-Long-Term-Statistics verfügbar",
+   "details": null,
+   "code": "stand_sensoren_ok",
+   "klasse_katalog": "ok",
+   "klasse_laufzeit": "auskunft"
+  }
+ }
+}
