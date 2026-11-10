@@ -7,7 +7,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.2.3] - 2026-11-10
+
+Daten-Checker mit wirksamen Handgriffen und drei Melder-Fälle aus Forum und GitHub: Eine Abweichung zu Home Assistant lässt sich mit einem Knopf beheben, „Tag reparieren“ schreibt korrigierte Zählerwerte auch ohne Leistungskurve, „Beheben“ führt bis zur Reparatur-Werkbank, und alte Werte nach einem Kategoriewechsel unter Sonstiges werden gemeldet. Geräte der Kategorie „Abgabe an Dritte“ haben im Komponenten-Hub und im Monatsabschluss ihre eigene Sicht. Die PV-Prognose lernt aus dem Vormittag, kennt den Zeitpunkt „Mittag“, prüft ihre eigene Korrektur und empfiehlt die beste Quelle; an Tagen aus dem HA-Spiegel liegt jede gemessene Stunde auf ihrer Prognose. Der Block E-Mobilität steht an jedem Ladetag, und viele Anzeigen rechnet jetzt das Backend statt der Browser.
 
 ### Fixed
 

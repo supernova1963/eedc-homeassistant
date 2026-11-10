@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** November 2026 (v4.2.2)
+> **Stand:** November 2026 (v4.2.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unreleased
+## v4.2.3 — 10. November 2026
 
 **Daten-Checker: «Aus Home Assistant neu übernehmen» behebt eine Abweichung zu Home Assistant.** Zeigte der Daten-Checker einen Tag mit einem anderen Wert als in Home Assistant — etwa einen Zählersprung, den du in Home Assistant schon korrigiert hattest —, half „Tag reparieren" nicht: der Knopf baute den Tag aus derselben Kopie der Statistik neu auf, die den alten Wert trug. Jetzt trägt die Zeile den Knopf **„Aus Home Assistant neu übernehmen"**: er holt die Statistik neu und baut den Tag danach auf, der Tag zeigt dann, was Home Assistant zeigt. Dieselbe Hilfe bieten die Meldungen zu Zählersprung und Rückgang in der Home-Assistant-Statistik. eedc übernimmt nur, was Home Assistant hat, und löscht nichts. → [Daten-Checker: Drift zu Home Assistant](HANDBUCH_DATEN_CHECKER.md#417-datenquellen-drift)
 
