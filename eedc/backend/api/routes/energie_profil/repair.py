@@ -18,6 +18,7 @@ Endpunkt-Inventar:
   POST   /api/energie-profil/{anlage_id}/vollbackfill — Lückenfüller HA-LTS (additiv)
   POST   /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill[/tages|/monats]
   POST   /api/energie-profil/{anlage_id}/kanal-abgleich — HA-Spiegel jetzt abgleichen (Lauf des Nachtjobs 02:45)
+  POST   /api/energie-profil/{anlage_id}/spiegel-abgleich-tag — Abgleich + Neu-Aggregation eines Tages (N-790)
 
 DELETE-Endpoints bleiben direkt (Bulk-Delete, kein Plan-Mehrwert; Konzept
 Sektion 5.2: "DELETE bleibt direkt, schreibt aber Audit-Log").
@@ -27,6 +28,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -580,6 +582,44 @@ def _abgleich_meldung(erg) -> str:
     return satz
 
 
+async def _kanal_abgleich_lauf(db: AsyncSession, anlage_id: int) -> tuple[dict, object]:
+    """Der Lauf hinter «HA-Spiegel jetzt abgleichen» — gemeinsam für ``kanal-abgleich`` und ``spiegel-abgleich-tag``.
+
+    Ruft ``kanal/konsistenz.konsistenz_anlage`` mit denselben kurzen eigenen Sitzungen wie der Nachtjob (``get_session``),
+    damit kein HA-Abruf in einer offenen Schreib-Transaktion liegt. Antwort-Felder wie ``kanal-abgleich`` und das
+    Ergebnis des Laufs (``None`` ohne Spiegel). Unbekannte Anlage ⇒ 404, HA nicht erreichbar ⇒ 503. Schreibt kein
+    Aktivitätsprotokoll — das tut die Route, die den Lauf ruft.
+    """
+    from backend.core.database import get_session
+    from backend.services.kanal.konsistenz import konsistenz_anlage, spiegel_quellen_anzahl
+
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage")
+
+    if not await spiegel_quellen_anzahl(db, anlage_id):
+        return {
+            "anlage_id": anlage_id, "hat_spiegel": False, "kanaele": 0, "abschnitte": 0, "gleich": 0,
+            "korrigiert": [], "gekuerzt": [], "uebersprungen": {}, "fehler": 0,
+            "meldung": ("Für diese Anlage führt eedc keinen HA-Spiegel — ohne Zähler aus der "
+                        "Home-Assistant-Statistik gibt es nichts abzugleichen."),
+        }, None
+
+    erg = await konsistenz_anlage(get_session, anlage_id)
+    if erg.uebersprungen.get("ha_nicht_erreichbar"):
+        raise HTTPException(
+            status_code=503,
+            detail="Home Assistant ist nicht erreichbar — der Abgleich braucht die HA-Langzeitstatistik.",
+        )
+    return {
+        "anlage_id": anlage_id, "hat_spiegel": True,
+        "kanaele": erg.kanaele, "abschnitte": erg.abschnitte, "gleich": erg.gleich,
+        "korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
+        "uebersprungen": erg.uebersprungen, "fehler": erg.fehler,
+        "meldung": _abgleich_meldung(erg),
+    }, erg
+
+
 @router.post("/{anlage_id}/kanal-abgleich")
 async def kanal_abgleich(
     anlage_id: int,
@@ -588,71 +628,115 @@ async def kanal_abgleich(
     """HA-Spiegel jetzt abgleichen — derselbe Lauf wie der Nachtjob 02:45, für EINE Anlage (MartyBr, simon42 #429).
 
     Der Nachtjob (``scheduler.kanal_konsistenz_job`` → ``kanal/konsistenz.konsistenz_alle``) ruft je Anlage
-    ``konsistenz_anlage``; diese Route ruft genau sie, mit denselben kurzen eigenen Sitzungen (``get_session``),
-    damit kein HA-Abruf in einer offenen Schreib-Transaktion liegt. Wozu: nach einer Korrektur in Home Assistant
-    (Entwicklerwerkzeuge → Statistik → „Wert anpassen") zeigten die Tages-Kennzahlen bis zum nächsten Morgen den
-    alten Spiegel.
+    ``konsistenz_anlage``; diese Route ruft genau sie (``_kanal_abgleich_lauf``), mit denselben kurzen eigenen Sitzungen
+    (``get_session``), damit kein HA-Abruf in einer offenen Schreib-Transaktion liegt. Wozu: nach einer Korrektur in
+    Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen") zeigten die Tages-Kennzahlen bis zum nächsten
+    Morgen den alten Spiegel.
 
     Antwort: die Zähler des Laufs (``kanaele``, ``abschnitte``, ``gleich``, ``korrigiert`` je Kanal mit erster
     abweichender Stunde und Zeilenzahl, ``gekuerzt``, ``uebersprungen``, ``fehler``) und ein Satz ``meldung``.
     Ohne Spiegel (Standalone, kein HA-Zähler) ⇒ ``hat_spiegel: false``, kein HA-Aufruf. HA nicht erreichbar ⇒ 503.
     """
-    from backend.core.database import get_session
-    from backend.models.kanal import ART_STAND, ART_SUM, FAMILIE_SPIEGEL, Kanal, KanalQuelle
     from backend.services.activity_service import log_activity
-    from backend.services.kanal.konsistenz import konsistenz_anlage
 
-    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
-    if not anlage:
-        raise not_found("Anlage")
+    antwort, erg = await _kanal_abgleich_lauf(db, anlage_id)
+    if erg is None:
+        return antwort
 
-    # Dieselbe Auswahl wie `konsistenz_anlage` (Kanäle der Art sum/stand, Spiegel-Quellen mit Entity).
-    spiegel_quellen = (await db.execute(
-        select(func.count())
-        .select_from(KanalQuelle)
-        .join(Kanal, Kanal.id == KanalQuelle.kanal_id)
-        .where(
-            Kanal.anlage_id == anlage_id,
-            Kanal.art.in_([ART_SUM, ART_STAND]),
-            KanalQuelle.familie == FAMILIE_SPIEGEL,
-            KanalQuelle.statistic_id.is_not(None),
-        )
-    )).scalar_one()
-    if not spiegel_quellen:
-        return {
-            "anlage_id": anlage_id, "hat_spiegel": False, "kanaele": 0, "abschnitte": 0, "gleich": 0,
-            "korrigiert": [], "gekuerzt": [], "uebersprungen": {}, "fehler": 0,
-            "meldung": ("Für diese Anlage führt eedc keinen HA-Spiegel — ohne Zähler aus der "
-                        "Home-Assistant-Statistik gibt es nichts abzugleichen."),
-        }
-
-    erg = await konsistenz_anlage(get_session, anlage_id)
-    if erg.uebersprungen.get("ha_nicht_erreichbar"):
-        raise HTTPException(
-            status_code=503,
-            detail="Home Assistant ist nicht erreichbar — der Abgleich braucht die HA-Langzeitstatistik.",
-        )
-
-    meldung = _abgleich_meldung(erg)
     await log_activity(
         kategorie="ha_statistics",
         aktion=("HA-Spiegel von Hand abgeglichen: unvollständig" if erg.fehler
                 else "HA-Spiegel von Hand abgeglichen: an HA angeglichen" if erg.korrigiert
                 else "HA-Spiegel von Hand abgeglichen: keine Abweichung"),
         erfolg=erg.fehler == 0,
-        details=meldung,
+        details=antwort["meldung"],
         details_json={"korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
                       "uebersprungen": erg.uebersprungen, "fehler": erg.fehler},
         anlage_id=anlage_id,
         db=db,
     )
-    return {
-        "anlage_id": anlage_id, "hat_spiegel": True,
-        "kanaele": erg.kanaele, "abschnitte": erg.abschnitte, "gleich": erg.gleich,
-        "korrigiert": erg.korrigiert, "gekuerzt": erg.gekuerzt,
-        "uebersprungen": erg.uebersprungen, "fehler": erg.fehler,
-        "meldung": meldung,
-    }
+    return antwort
+
+
+def _anzahl_kanaele(n: int) -> str:
+    return f"{n} Kanal" if n == 1 else f"{n} Kanäle"
+
+
+def _abgleich_tag_meldung(abgleich: dict, datum: date, reaggregation_fehler: Optional[str] = None) -> str:
+    """Ein Satz in Anwender-Sprache für «Aus Home Assistant neu übernehmen» (N-790) — nur aus den Antworten der Läufe."""
+    from datetime import datetime as _dt
+
+    tag = (f"Tag {datum.strftime('%d.%m.%Y')} neu aufgebaut" if reaggregation_fehler is None
+           else f"den Tag {datum.strftime('%d.%m.%Y')} konnte eedc nicht neu aufbauen ({reaggregation_fehler})")
+    if not abgleich["hat_spiegel"]:
+        return f"Für diese Anlage übernimmt eedc keine Statistik aus Home Assistant — {tag}."
+    korrigiert = abgleich["korrigiert"]
+    if korrigiert:
+        ab = _dt.fromtimestamp(min(int(k["ab_ts"]) for k in korrigiert)).strftime("%d.%m. %H:%M")
+        satz = (f"Statistik aus Home Assistant neu übernommen, {_anzahl_kanaele(len(korrigiert))} ab {ab} "
+                f"korrigiert; {tag}.")
+    else:
+        satz = f"Statistik aus Home Assistant geprüft — nichts zu korrigieren, {tag}."
+    if abgleich["gekuerzt"]:
+        satz += (f" Home Assistant hat für {_anzahl_kanaele(len(abgleich['gekuerzt']))} keinen Anfang mehr — "
+                 "ältere Werte bleiben.")
+    if abgleich["fehler"]:
+        satz += (f" {_anzahl_kanaele(abgleich['fehler'])} konnten nicht geprüft werden (Home Assistant unterwegs "
+                 "nicht erreichbar?) — dort wurde nichts geändert.")
+    return satz
+
+
+class SpiegelAbgleichTagRequest(BaseModel):
+    datum: date
+
+
+@router.post("/{anlage_id}/spiegel-abgleich-tag")
+async def spiegel_abgleich_tag(
+    anlage_id: int,
+    body: SpiegelAbgleichTagRequest,
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """«Aus Home Assistant neu übernehmen» — der Handgriff der Drift-, Zählersprung- und Rückgang-Befunde (N-790,
+    Melder ottokar, simon42 PN T95600).
+
+    An einem Kanal-Tag liest der Tag seine Mengen aus dem HA-Spiegel, und ``aggregate_day`` schreibt dort keine
+    Mengen (``mengen_weiche``) — «Tag reparieren» allein konnte eine Drift gegen HA nie beheben. Diese Route verkettet
+    die zwei bestehenden Läufe: zuerst den Abgleich (``_kanal_abgleich_lauf``, derselbe wie «HA-Spiegel jetzt
+    abgleichen»; er übernimmt nur, was Home Assistant hat, und löscht nichts), danach die Neu-Aggregation des Tages
+    (``reaggregate_tag``, wie «Tag reparieren»). Ohne Spiegel nur die Neu-Aggregation.
+
+    Antwort: ``abgleich`` (Felder von ``kanal-abgleich``), ``reaggregation`` (Felder von ``reaggregate-tag``; scheitert
+    sie, ``status: "fehler"`` mit ``fehler`` — der Abgleich ist dann schon geschehen und bleibt), ``datum`` und ein
+    Satz ``meldung``. Unbekannte Anlage ⇒ 404, HA nicht erreichbar ⇒ 503 (vor der Neu-Aggregation).
+    """
+    from backend.services.activity_service import log_activity
+
+    datum = body.datum
+    abgleich, erg = await _kanal_abgleich_lauf(db, anlage_id)
+    reaggregation_fehler: Optional[str] = None
+    try:
+        reaggregation = await reaggregate_tag(anlage_id, datum=datum, mit_resnap=True, db=db)
+    except HTTPException as e:
+        reaggregation_fehler = str(e.detail)
+        reaggregation = {"status": "fehler", "datum": datum.isoformat(), "fehler": reaggregation_fehler}
+    meldung = _abgleich_tag_meldung(abgleich, datum, reaggregation_fehler)
+
+    await log_activity(
+        kategorie="ha_statistics",
+        aktion=("Aus Home Assistant neu übernommen: ohne HA-Spiegel" if erg is None
+                else "Aus Home Assistant neu übernommen: unvollständig" if erg.fehler
+                else "Aus Home Assistant neu übernommen: an HA angeglichen" if erg.korrigiert
+                else "Aus Home Assistant neu übernommen: keine Abweichung"),
+        erfolg=(erg is None or erg.fehler == 0) and reaggregation_fehler is None,
+        details=meldung,
+        details_json={"datum": datum.isoformat(), "korrigiert": abgleich["korrigiert"],
+                      "gekuerzt": abgleich["gekuerzt"], "uebersprungen": abgleich["uebersprungen"],
+                      "fehler": abgleich["fehler"], "reaggregation_fehler": reaggregation_fehler},
+        anlage_id=anlage_id,
+        db=db,
+    )
+    return {"anlage_id": anlage_id, "datum": datum.isoformat(), "abgleich": abgleich,
+            "reaggregation": reaggregation, "meldung": meldung}
 
 
 @router.delete("/rohdaten")

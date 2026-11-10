@@ -626,8 +626,9 @@ Spitzen-Prüfung (§4.7) an einem Tag aus dem HA-Spiegel etwas.
 
 **Reparatur in Home Assistant:** *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol „Wert anpassen"
 die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die korrigierte Statistik beim
-nächtlichen Abgleich (02:45) von selbst ab — oder sofort: der **„Beheben"**-Knopf des Befunds führt in die
-Energieprofil-Pflege, dort in der Reparatur-Werkbank **„HA-Spiegel jetzt abgleichen"** wählen. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
+nächtlichen Abgleich (02:45) von selbst ab — oder sofort mit dem Knopf **„Aus Home Assistant neu übernehmen"** am
+Befund: er holt die Statistik aus Home Assistant neu (derselbe Lauf wie „HA-Spiegel jetzt abgleichen" in der
+Reparatur-Werkbank) und baut danach den Tag des ersten genannten Funds neu auf. Hast du einen betroffenen Monat schon gespeichert („Aus HA laden" oder
 Import), übernimm ihn danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von allein.
 
 ---
@@ -657,11 +658,12 @@ steigt die Summe.
 
 **Reparatur in Home Assistant:** wie beim Sprung — *Entwicklerwerkzeuge → Statistik* → den Sensor suchen → beim Symbol
 „Wert anpassen" die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht die korrigierte
-Statistik beim nächtlichen Abgleich (02:45) von selbst ab. Einen Monat, den du mit dem Rückgang schon gespeichert hast
+Statistik beim nächtlichen Abgleich (02:45) von selbst ab — oder sofort mit dem Knopf **„Aus Home Assistant neu
+übernehmen"** am Befund (wie beim Sprung, §4.8b). Einen Monat, den du mit dem Rückgang schon gespeichert hast
 („Aus HA laden" oder Import), übernimm danach im Monatsabschluss neu — ein gespeicherter Monat ändert sich nicht von
 allein. Lädst du einen solchen Monat mit „Aus HA laden" in einen Monat, der schon Daten hat, nennt der Vergleichsdialog die
-Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben Weg. eedc verwirft den Rückgang nicht selbst und hat keinen Reparatur-Knopf dafür: die Quelle ist die Statistik in
-Home Assistant.
+Felder mit negativem Wert unter „Rückgang in Home Assistant" und denselben Weg. eedc verwirft den Rückgang nicht selbst: die Quelle ist die Statistik in
+Home Assistant, und der Knopf übernimmt nur, was Home Assistant hat.
 
 **Sensor ersetzt?** Stammt ein Rückgang von einem Sensor, den du inzwischen durch einen neuen ersetzt hast, zählen seine Werte weiter, und die Meldung kennzeichnet ihn mit „(Vorgänger-Sensor, zugeordnet bis TT.MM.JJJJ)“. Statt in Home Assistant zu korrigieren, kannst du dann mit der Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen“ seine Werte vor dem Beginn des neuen Sensors entfernen (*Einstellungen → Daten → Energieprofil-Pflege*, [Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)); die Meldung verschwindet dann.
 
@@ -985,19 +987,19 @@ Hintergrund: [Issue #263](https://github.com/supernova1963/eedc-homeassistant/is
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **N Tag(e) weichen von HA-Statistics ab** (PV) | ℹ️ INFO | Für diese Tage liegen eedc und HA bei der **PV-Tagessumme** um **mindestens 2 kWh und mindestens 5 %** auseinander. Beide Schwellen zusammen, damit Rundungs-Unterschiede still bleiben. Die Details nennen je Tag beide Zahlen. | Je Tag steht ein Knopf **„Tag reparieren"** daneben (die Kategorie startet zugeklappt, weil Drift ein Hinweis ist — siehe [§1](#aufbau-der-ergebnis-fläche)). Er baut den Tag neu auf wie *„Tag neu aggregieren"* in der Reparatur-Werkbank ([§5.6](#56-counter-spike-im-tagesprofil-reparieren)); das ändert die Zahl an Tagen aus eedcs eigenen Stundenwerten. An einem Tag aus dem HA-Spiegel ändert er sie nicht (Kasten unten). Massen-Reparaturen gibt es bewusst nur in der Reparatur-Werkbank, damit sie aktiv gewählt werden. |
-| **\[Gerät\]: N Tag(e) weichen von HA-Statistics ab** | ℹ️ INFO | Dieselbe Frage für **eine** Komponente, mit denselben beiden Schwellen. **Ein Eintrag je Gerät**, nicht je Tag — genannt wird der Tag mit der größten Abweichung, samt beider Zahlen. | Der Knopf **„Tag reparieren"** baut den genannten Tag neu auf, wie in der PV-Zeile — an einem Tag aus dem HA-Spiegel ändert er den Wert eines Geräts nicht, das dort aus seinem Kanal kommt (Kasten unten). Für alle Tage des Geräts: Reparatur-Werkbank. |
+| **N Tag(e) weichen von HA-Statistics ab** (PV) | ℹ️ INFO | Für diese Tage liegen eedc und HA bei der **PV-Tagessumme** um **mindestens 2 kWh und mindestens 5 %** auseinander. Beide Schwellen zusammen, damit Rundungs-Unterschiede still bleiben. Die Details nennen je Tag beide Zahlen. | Je Tag steht ein Knopf daneben (die Kategorie startet zugeklappt, weil Drift ein Hinweis ist — siehe [§1](#aufbau-der-ergebnis-fläche)). Liest eedc deine Anlage aus der Statistik von Home Assistant (HA-Spiegel), heißt er **„Aus Home Assistant neu übernehmen"**: er holt die Statistik neu und baut den Tag danach auf — der Tag zeigt dann, was Home Assistant zeigt. Hast du in Home Assistant korrigiert, ist das der Weg. Ohne HA-Spiegel heißt er **„Tag reparieren"** und baut den Tag neu auf wie *„Tag neu aggregieren"* in der Reparatur-Werkbank ([§5.6](#56-counter-spike-im-tagesprofil-reparieren)). Massen-Reparaturen gibt es bewusst nur in der Reparatur-Werkbank, damit sie aktiv gewählt werden. |
+| **\[Gerät\]: N Tag(e) weichen von HA-Statistics ab** | ℹ️ INFO | Dieselbe Frage für **eine** Komponente, mit denselben beiden Schwellen. **Ein Eintrag je Gerät**, nicht je Tag — genannt wird der Tag mit der größten Abweichung, samt beider Zahlen. | Derselbe Knopf wie in der PV-Zeile, für den genannten Tag: **„Aus Home Assistant neu übernehmen"** holt die Statistik neu (das korrigiert jeden Tag aus dem HA-Spiegel, nicht nur den genannten) und baut den Tag danach auf; ohne HA-Spiegel **„Tag reparieren"** — für alle Tage des Geräts dann die Reparatur-Werkbank. |
 | **Keine signifikanten Abweichungen zu HA-Statistics (letzte 90 Tage)** | ✅ OK | eedc und HA sind sich auf beiden Achsen einig. | — |
 
-> **Tage aus dem HA-Spiegel bzw. den eigenen Zählerständen:** dort nimmt eedc PV, Einspeisung, Netzbezug und Speicher selbst aus dem Spiegel — die eedc-Seite des Vergleichs *ist* dann die Zahl von Home Assistant, eine Abweichung der alten gespeicherten Tageszeile wird nicht mehr gemeldet (*Cockpit → Tag* zeigt sie ohnehin nicht). Wallbox, E-Auto, Wärmepumpe und sonstige Geräte kommen an einem solchen Tag ebenfalls aus ihren Kanälen, wenn sie dort welche haben; nur ein Gerät ohne Kanal-Wert liest die Prüfung aus der gespeicherten Tageszeile. Was aus dem Spiegel kommt, schreibt eedc nicht in die Tageszeile — deshalb ändert „Tag reparieren" daran nichts.
+> **Tage aus dem HA-Spiegel bzw. den eigenen Zählerständen:** dort nimmt eedc PV, Einspeisung, Netzbezug und Speicher selbst aus dem Spiegel — die eedc-Seite des Vergleichs *ist* dann die Zahl von Home Assistant, eine Abweichung der alten gespeicherten Tageszeile wird nicht mehr gemeldet (*Cockpit → Tag* zeigt sie ohnehin nicht). Wallbox, E-Auto, Wärmepumpe und sonstige Geräte kommen an einem solchen Tag ebenfalls aus ihren Kanälen, wenn sie dort welche haben; nur ein Gerät ohne Kanal-Wert liest die Prüfung aus der gespeicherten Tageszeile. Was aus dem Spiegel kommt, schreibt eedc nicht in die Tageszeile — deshalb ändert ein Neu-Aggregieren daran nichts; an einer Anlage mit HA-Spiegel trägt die Zeile darum „Aus Home Assistant neu übernehmen" (zuerst der Abgleich mit Home Assistant, dann der Tag).
 >
-> **Nach einer Korrektur in Home Assistant** (etwa unter *Entwicklerwerkzeuge → Statistik*) trägt der Spiegel bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Sofort geht es mit **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank ([§6](#reparatur-werkzeuge-in-der-energieprofil-pflege)).
+> **Nach einer Korrektur in Home Assistant** (etwa unter *Entwicklerwerkzeuge → Statistik*) trägt der Spiegel bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Sofort geht es mit **„Aus Home Assistant neu übernehmen"** an der Zeile (oder „HA-Spiegel jetzt abgleichen" in der Reparatur-Werkbank, [§6](#reparatur-werkzeuge-in-der-energieprofil-pflege) — dort ohne den Tag neu aufzubauen).
 >
 > **Verglichen wird nur, was HA für den Tag auch liefern konnte.** Ein Zähler ohne Summen-Spalte (§4.9) taucht hier nicht als Lücke auf — sonst meldete der Vergleich Phantom-Drift und böte einen Knopf an, der korrekte Werte mit 0 überschreibt.
 >
 > **Und je Gerät nur, was auf beiden Seiten einen Wert hat.** Liefert HA für ein Gerät einen Wert und die gespeicherte Tageszeile nicht, ist das eine **Lücke** und gehört §4.10 *Energieprofil – fehlende Tageswerte* — kein zweiter Turm über denselben Sachverhalt. Die PV-Tagessumme vergleicht die Prüfung dagegen, sobald eine der beiden Seiten mehr als 0 kWh trägt. Der **Speicher** (`batterie_*`) steht in keiner der beiden Achsen: Sein Tages-Netto darf legitim ~0 sein, und sein Vorzeichen hat mit §4.21 *Batterie-Vorzeichen in der Historie* eine eigene Prüfung.
 >
-> **Höchstens 20 PV-Tage, und je Tag nur, was an diesem Tag in Betrieb war.** Die PV-Zeilen stehen nach der Größe der Abweichung; die 20 größten erscheinen einzeln, der Rest gesammelt als **„… plus N weitere Tag(e) mit Drift"** mit dem Weg in die Reparatur-Werkbank. Die HA-Seite liest an jedem Tag nur die Sensoren der Komponenten, die an diesem Tag in Betrieb waren (Anschaffung, Stilllegung, „aktiv") — ein später angeschafftes oder stillgelegtes Modul erzeugt so keine Abweichung, die kein „Tag reparieren" auflösen könnte.
+> **Höchstens 20 PV-Tage, und je Tag nur, was an diesem Tag in Betrieb war.** Die PV-Zeilen stehen nach der Größe der Abweichung; die 20 größten erscheinen einzeln, der Rest gesammelt als **„… plus N weitere Tag(e) mit Drift"** mit dem Weg in die Reparatur-Werkbank. Die HA-Seite liest an jedem Tag nur die Sensoren der Komponenten, die an diesem Tag in Betrieb waren (Anschaffung, Stilllegung, „aktiv") — ein später angeschafftes oder stillgelegtes Modul erzeugt so keine Abweichung, die kein Knopf auflösen könnte.
 
 ---
 

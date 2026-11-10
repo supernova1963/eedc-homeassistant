@@ -180,6 +180,17 @@ export interface KanalAbgleichErgebnis {
   meldung: string
 }
 
+/** N-790 (ottokar): «Aus Home Assistant neu übernehmen» im Daten-Checker — der Abgleich (Felder wie
+ *  `KanalAbgleichErgebnis`), danach die Neu-Aggregation des Tages (Felder von `reaggregate-tag`; scheitert sie,
+ *  `status: "fehler"` mit `fehler`) und ein Satz `meldung` in Anwender-Sprache. */
+export interface SpiegelAbgleichTagErgebnis {
+  anlage_id: number
+  datum: string
+  abgleich: KanalAbgleichErgebnis
+  reaggregation: { status: string; datum: string; fehler?: string }
+  meldung: string
+}
+
 /** MartyBr (simon42 #429): ein Satz, wann man den Abgleich braucht. */
 export const KANAL_ABGLEICH_BESCHREIBUNG =
   'Nach einer Korrektur in Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): ' +
@@ -224,4 +235,8 @@ export const repairApi = {
   /** HA-Spiegel jetzt abgleichen (direkter Pfad ohne Plan, wie das Löschen). */
   kanalAbgleich: (anlageId: number): Promise<KanalAbgleichErgebnis> =>
     api.post(`/energie-profil/${anlageId}/kanal-abgleich`),
+
+  /** N-790: Abgleich mit der HA-Statistik, danach den Tag neu aufbauen (Knopf der Drift-Befunde im Daten-Checker). */
+  spiegelAbgleichTag: (anlageId: number, datum: string): Promise<SpiegelAbgleichTagErgebnis> =>
+    api.post(`/energie-profil/${anlageId}/spiegel-abgleich-tag`, { datum }),
 }

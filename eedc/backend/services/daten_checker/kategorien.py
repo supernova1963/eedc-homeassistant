@@ -366,6 +366,22 @@ LINK_MONATSDATEN = "/einstellungen/daten?block=monatsdaten"
 # HA-Spiegel); die Werkbank liegt am Ende des Blocks — ohne Sprung sah der Klick auf «Beheben» wirkungslos aus.
 LINK_ENERGIEPROFIL = "/einstellungen/daten?block=energieprofil&karte=werkbank"
 
+# N-790 (ottokar, simon42 PN T95600): der Handgriff der Befunde «eedc ≠ Home Assistant» an einer Anlage mit HA-Spiegel —
+# Drift (beide Achsen), Zählersprung, Rückgang. Der Knopf ruft `POST /api/energie-profil/{id}/spiegel-abgleich-tag`
+# (Abgleich mit der HA-Statistik, danach der Tag neu aufgebaut); «Tag reparieren» allein liest an einem Kanal-Tag
+# denselben Spiegel, der die Abweichung trägt.
+AKTION_SPIEGEL_ABGLEICH_TAG = "spiegel_abgleich_tag"
+LABEL_SPIEGEL_ABGLEICH_TAG = "Aus Home Assistant neu übernehmen"
+
+
+def aktion_spiegel_abgleich_tag(anlage_id: int, datum) -> dict:
+    """Die drei Aktionsfelder eines ``CheckErgebnis`` für «Aus Home Assistant neu übernehmen» (``datum``: ``date``)."""
+    return {
+        "action_kind": AKTION_SPIEGEL_ABGLEICH_TAG,
+        "action_params": {"anlage_id": anlage_id, "datum": datum.isoformat()},
+        "action_label": LABEL_SPIEGEL_ABGLEICH_TAG,
+    }
+
 
 def link_monat_erfassen(label: str) -> str:
     """`"MM/YYYY"` → Deep-Link, der die Erfassung genau dieses Monats öffnet.

@@ -6,6 +6,7 @@
  * `baueTagKpis`) und die Seite kein react-refresh-Treffer wird.
  */
 import type { ReaggregateBereichResponse, ReaggregateTagResponse } from '../api/energie_profil'
+import type { SpiegelAbgleichTagErgebnis } from '../api/repair'
 import { fmtZahl, formatDatum } from '../lib'
 
 export type MeldungsArt = 'ok' | 'hinweis' | 'fehler'
@@ -218,4 +219,16 @@ export function baueRohdatenLoeschMeldung(
       'Langzeitstatistik zurückreicht. Aufgezeichnete PV-Prognosen kommen ' +
       'nicht zurück.',
   }
+}
+
+/**
+ * N-790: Rückmeldung zu «Aus Home Assistant neu übernehmen». Den Satz baut das
+ * Backend aus den tatsächlichen Läufen (`meldung`); hier fällt nur die Art:
+ * «ok», wenn der Abgleich vollständig lief und der Tag neu aufgebaut ist, sonst
+ * «hinweis» (ein Kanal nicht geprüft, oder der Tag-Lauf scheiterte — der
+ * Abgleich ist dann trotzdem geschehen).
+ */
+export function baueSpiegelAbgleichMeldung(r: SpiegelAbgleichTagErgebnis): ReparaturMeldung {
+  const vollstaendig = r.abgleich.fehler === 0 && r.reaggregation.status === 'ok'
+  return { art: vollstaendig ? 'ok' : 'hinweis', text: r.meldung }
 }

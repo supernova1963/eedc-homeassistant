@@ -11,6 +11,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Daten-Checker: eine Abweichung zu Home Assistant lässt sich jetzt mit einem Knopf beheben (Melder ottokar,
+  simon42).** Stand im Daten-Checker ein Tag mit einem anderen Wert als in Home Assistant (zum Beispiel ein
+  Zählersprung der Wärmepumpe, den du in Home Assistant längst korrigiert hattest), bot die Zeile „Tag reparieren" an —
+  der Knopf baute den Tag aus derselben Kopie der Home-Assistant-Statistik neu auf, die den alten Wert trug, und der
+  Wert blieb stehen, so oft du auch klicktest. Jetzt heißt der Knopf an solchen Zeilen **„Aus Home Assistant neu
+  übernehmen"**: er holt die Statistik aus Home Assistant neu und baut den Tag danach auf — der Tag zeigt dann, was
+  Home Assistant zeigt. Denselben Knopf tragen die Meldungen „Zählersprung" und „Rückgang" in der
+  Home-Assistant-Statistik, für den Schritt nach deiner Korrektur in Home Assistant. Ohne Home-Assistant-Statistik bleibt
+  „Tag reparieren". eedc übernimmt dabei nur, was Home Assistant hat, und löscht nichts (N-790).
 - **Komponenten → Sonstiges zeigt Geräte der Kategorie «Abgabe an Dritte» als das, was sie sind (#443, Melder
   rilmor-mhrs).** Ein Abgabe-Gerät (Mieterstrom, Allgemeinstrom, Nachbarhaus) erschien dort bisher als Erzeuger mit
   leerer Erzeugung bzw. mit Ladung, Entladung und Ersparnis 0. Jetzt stehen da die **Abgabe** (kWh), der **Erlös** (die
@@ -227,6 +236,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Überschrift (Verweise auf die frühere Energieprofil-Sicht auf „Wo ist X hin?“).
 
 ### Intern
+
+- **Päckchen EE (10.11.2026): Drift-Befund mit wirksamem Handgriff (N-790).** Neue Route
+  `POST /api/energie-profil/{anlage_id}/spiegel-abgleich-tag` (Body `{datum}`): ruft den Lauf von `kanal-abgleich`
+  (jetzt gemeinsam in `_kanal_abgleich_lauf`, `konsistenz_anlage` mit `get_session`) und danach `reaggregate_tag`;
+  Antwort `abgleich` + `reaggregation` (scheitert sie, `status: "fehler"` statt 500 — der Abgleich ist dann geschehen) +
+  Satz `meldung` (`_abgleich_tag_meldung`); 404/503 wie `kanal-abgleich`, ein Eintrag im Aktivitätsprotokoll. Die
+  Auswahl «Anlage hat Spiegel» liegt in `kanal/konsistenz.spiegel_quellen_anzahl` (eine DB-Abfrage, Leser: beide
+  Routen und der Drift-Check). Aktion `spiegel_abgleich_tag` («Aus Home Assistant neu übernehmen»,
+  `kategorien.aktion_spiegel_abgleich_tag`) an den Drift-Zeilen beider Achsen bei Anlagen mit Spiegel (ohne Spiegel
+  `reaggregate_day` wie bisher), am Zählersprung- und Rückgang-Befund mit dem Tag des ersten Funds. Frontend: Handler
+  in `DatenCheckerTeile.tsx`, `repairApi.spiegelAbgleichTag`, Art der Rückmeldung `baueSpiegelAbgleichMeldung`. Tests
+  `test_n790_drift_handgriff.py` (u. a. die Kette auf der Achsen-Matrix M05: Spiegel veraltet ⇒ Befund ⇒ Route ⇒ kein
+  Befund; «Tag reparieren» allein lässt ihn stehen), Vitest `DatenCheckerTeile.spiegel.test.tsx`.
 
 - **Päckchen DD-Nachlauf (10.11.2026): N-393-Regel für *Sonstiges* (N-789, #443).** `groesse_gibt_es_am_geraet`
   beantwortet für `sonstiges` die Frage über den Lesepfad der Kategorie: `reader.sonstiges_gelesene_felder` (Feldliste

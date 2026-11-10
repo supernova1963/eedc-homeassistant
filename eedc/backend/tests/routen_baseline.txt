@@ -235,6 +235,7 @@ POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill/monats
 POST /api/energie-profil/{anlage_id}/kraftstoffpreis-backfill/tages
 POST /api/energie-profil/{anlage_id}/reaggregate-bereich
 POST /api/energie-profil/{anlage_id}/reaggregate-tag
+POST /api/energie-profil/{anlage_id}/spiegel-abgleich-tag
 POST /api/energie-profil/{anlage_id}/vollbackfill
 POST /api/ha-statistics/import/{anlage_id}
 POST /api/ha/export/mqtt/abwahl

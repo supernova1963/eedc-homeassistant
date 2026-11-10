@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.models.investition import Investition
 from backend.services.daten_checker import DatenChecker, CheckKategorie
@@ -98,6 +98,9 @@ async def _run(tz_list, invs, ha_func):
     ), patch(
         "backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
         new=_bestand_komponenten(tz_list),
+    ), patch(
+        # N-790: eine Anlage ohne HA-Spiegel — die Drift-Zeilen tragen «Tag reparieren».
+        "backend.services.kanal.konsistenz.spiegel_quellen_anzahl", new=AsyncMock(return_value=0),
     ):
         return await DatenChecker(db)._check_datenquelle_drift(_anlage())
 

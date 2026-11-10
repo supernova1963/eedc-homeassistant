@@ -25,8 +25,9 @@ letzten ``FENSTER_TAGE`` — keine HA-Abfrage.
 
 ⛔ **Kein Reparatur-Knopf in eedc.** Die Quelle ist HAs Statistik; korrigiert wird dort (Entwicklerwerkzeuge →
 Statistik → „Wert anpassen"), und eedc zieht über den nächtlichen Konsistenzlauf (``kanal/konsistenz.py``, 02:45)
-selbst nach — oder sofort über „HA-Spiegel jetzt abgleichen" in der Reparatur-Werkbank (MartyBr, simon42 #429:
-derselbe Lauf, von Hand; er korrigiert nichts in eedc, er übernimmt HAs Korrektur). Monate, die mit dem Sprung schon gespeichert wurden („Aus HA laden", Sammelimport — Entscheid D3),
+selbst nach — oder sofort über den Knopf der Meldung «Aus Home Assistant neu übernehmen» (N-790: derselbe Lauf wie
+„HA-Spiegel jetzt abgleichen" in der Werkbank, MartyBr #429, danach der Tag des ersten Funds neu aufgebaut; er
+korrigiert nichts in eedc, er übernimmt HAs Korrektur). Monate, die mit dem Sprung schon gespeichert wurden („Aus HA laden", Sammelimport — Entscheid D3),
 bleiben gespeichert, bis der Anwender sie neu übernimmt; der Text sagt es.
 """
 
@@ -45,6 +46,7 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
+    aktion_spiegel_abgleich_tag,
 )
 
 #: Prüffenster in Tagen — ein Monat, die Frage, um die es geht (wie ``ruecksprung.RUECKSPRUNG_FENSTER_TAGE``).
@@ -226,9 +228,8 @@ class HaZaehlersprungChecks:
                 f"Gefunden in den letzten {FENSTER_TAGE} Tagen: {namen}. "
                 "Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
                 "„Wert anpassen“ die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht "
-                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — sofort geht es danach "
-                "unter Einstellungen → Daten → Energieprofil-Pflege → Reparatur-Werkbank mit „HA-Spiegel jetzt "
-                "abgleichen“. Hast du den Monat schon "
+                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus "
+                "Home Assistant neu übernehmen“. Hast du den Monat schon "
                 "mit dem Sprung gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu."
             ),
             # Der Knopf zeigt auf die Energieprofil-Pflege (MartyBr, simon42 #429): dort liegt seit Päckchen N
@@ -236,7 +237,10 @@ class HaZaehlersprungChecks:
             # eedc-Datenquellen — das war bis zum Lab-Durchlauf 4.1.3-rc1 (07.10.2026) so und falsch, an der
             # Zuordnung ist nichts falsch. Auf HAs Werkzeug selbst kann der Knopf nicht zeigen
             # (`DatenCheckerTeile.tsx` navigiert nur innerhalb von eedc); der erste Schritt steht im Text.
+            # N-790: der zweite Schritt ist seitdem der Knopf selbst (Abgleich + Tag des ersten Funds neu aufgebaut);
+            # eine Meldung mit Aktion zeigt keinen «Beheben»-Link, der Link bleibt für Leser ohne Knopf.
             link=LINK_ENERGIEPROFIL,
+            **aktion_spiegel_abgleich_tag(anlage.id, datetime.fromtimestamp(funde[0].rueckkehr_ts).date()),
         )]
 
 

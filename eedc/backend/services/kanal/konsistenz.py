@@ -228,6 +228,27 @@ async def konsistenz_anlage(sitzungen: Sitzungen, anlage_id: int, *, ha_svc=None
     return erg
 
 
+async def spiegel_quellen_anzahl(db, anlage_id: int) -> int:
+    """Wie viele Spiegel-Quellen mit Entity die Kanäle der Art ``sum``/``stand`` einer Anlage tragen — dieselbe Auswahl
+    wie ``konsistenz_anlage`` (``abschnitte``). 0 ⇒ die Anlage hat keinen HA-Spiegel, ein Abgleich hätte nichts zu tun.
+
+    Eine DB-Abfrage, kein HA-Aufruf. Leser: die Route «HA-Spiegel jetzt abgleichen» (``kanal-abgleich``), die Route
+    ``spiegel-abgleich-tag`` und der Daten-Checker (welchen Handgriff ein Drift-Befund trägt, N-790)."""
+    from sqlalchemy import func
+
+    return int((await db.execute(
+        select(func.count())
+        .select_from(KanalQuelle)
+        .join(Kanal, Kanal.id == KanalQuelle.kanal_id)
+        .where(
+            Kanal.anlage_id == anlage_id,
+            Kanal.art.in_([ART_SUM, ART_STAND]),
+            KanalQuelle.familie == FAMILIE_SPIEGEL,
+            KanalQuelle.statistic_id.is_not(None),
+        )
+    )).scalar_one())
+
+
 async def konsistenz_alle(sitzungen: Sitzungen, *, ha_svc=None) -> list[KonsistenzErgebnis]:
     """Der Tages-Nachlauf (eigener Job, ``scheduler.kanal_konsistenz_job``): alle Anlagen.
 

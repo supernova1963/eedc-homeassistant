@@ -40,7 +40,9 @@ der Zeile, ``H``.
 
 ⛔ **Kein Reparatur-Knopf, kein Verwerfen in eedc.** Die Quelle ist HAs Statistik; korrigiert wird dort
 (Entwicklerwerkzeuge → Statistik → „Wert anpassen"), und eedc zieht über den nächtlichen Konsistenzlauf
-(``kanal/konsistenz.py``, 02:45) selbst nach — seine Prüfstelle vergleicht ab dem Abschnittsbeginn und halbiert
+(``kanal/konsistenz.py``, 02:45) selbst nach — oder sofort über den Knopf der Meldung «Aus Home Assistant neu
+übernehmen» (N-790: derselbe Lauf, von Hand, danach der Tag des ersten Funds neu aufgebaut; er übernimmt HAs
+Korrektur) — seine Prüfstelle vergleicht ab dem Abschnittsbeginn und halbiert
 über den ganzen Abschnitt, ein alter Monat ist also eingeschlossen (gelesen im Code; im Lab belegt ist eine Korrektur
 vom Vortag, Journal 08.10.2026 05:40). Monate, die mit dem Rückgang schon gespeichert wurden („Aus HA laden",
 Sammelimport — Entscheid D3), bleiben gespeichert, bis der Anwender sie neu übernimmt; der Text sagt es. Kein Link
@@ -61,6 +63,7 @@ from backend.services.daten_checker.kategorien import (
     CheckErgebnis,
     CheckKategorie,
     CheckSeverity,
+    aktion_spiegel_abgleich_tag,
 )
 
 #: Unterhalb dieser Abnahme (kWh) ist ein fallender Kanalwert Rundungsrauschen der Gleitkomma-Summe (Docstring).
@@ -179,7 +182,8 @@ class HaRueckgangChecks:
                 f"Einspeisezähler laufen nur nach oben, jede Richtung hat ihr eigenes Feld. Gefunden: {namen}. "
                 "Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
                 "„Wert anpassen“ die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht "
-                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab. Hast du den Monat schon "
+                "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus "
+                "Home Assistant neu übernehmen“. Hast du den Monat schon "
                 "mit dem Rückgang gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu."
                 + (
                     # #429 (jedema1805): die Zeilen eines ersetzten Sensors zählen weiter — der Text sagt es.
@@ -192,6 +196,8 @@ class HaRueckgangChecks:
             # Kein „Beheben"-Link — dieselbe Begründung wie `ha_sprung` (Lab 4.1.3-rc1): die Korrektur liegt in Home
             # Assistant, die Checker-Links navigieren nur innerhalb von eedc. Der Weg steht im Text.
             link=None,
+            # N-790: der Schritt nach der Korrektur in HA als Knopf (Abgleich + Tag des ersten Funds neu aufgebaut).
+            **aktion_spiegel_abgleich_tag(anlage.id, funde[0].tag),
         )]
 
 

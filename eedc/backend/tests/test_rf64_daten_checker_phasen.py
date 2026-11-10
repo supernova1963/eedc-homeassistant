@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -82,7 +82,9 @@ async def _drift(eedc_je_tag: dict, ha_je_tag, invs: list, aufrufe: list | None 
     with patch("backend.services.ha_statistics_service.get_ha_statistics_service",
                return_value=SimpleNamespace(is_available=True)), \
             patch("backend.services.snapshot.lts_aggregator.get_komponenten_tageskwh_lts", side_effect=_lts), \
-            patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage", new=_komp):
+            patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage", new=_komp), \
+            patch("backend.services.kanal.konsistenz.spiegel_quellen_anzahl",   # N-790: Anlage ohne HA-Spiegel
+                  new=AsyncMock(return_value=0)):
         return await DatenChecker(db)._check_datenquelle_drift(SimpleNamespace(id=1, sensor_mapping={}))
 
 

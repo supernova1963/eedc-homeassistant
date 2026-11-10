@@ -103,6 +103,8 @@ def _build_checker(tz_list, invs_list, ha_tageskwh_func, ha_available=True):
               side_effect=_ha_lts),
         patch("backend.services.energie_profil.kanal_stunden.komponenten_der_tage",
               new=_bestand_komponenten(tz_list)),
+        # N-790: eine Anlage ohne HA-Spiegel — die Drift-Zeilen tragen «Tag reparieren».
+        patch("backend.services.kanal.konsistenz.spiegel_quellen_anzahl", new=AsyncMock(return_value=0)),
     ]
     return checker, patches
 

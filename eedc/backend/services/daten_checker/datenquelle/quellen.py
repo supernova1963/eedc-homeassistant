@@ -20,6 +20,7 @@ from backend.services.daten_checker.kategorien import (
     LINK_DATENQUELLEN,
     LINK_ENERGIEPROFIL,
     _quelle_label,
+    aktion_spiegel_abgleich_tag,
 )
 from backend.core.zahlenformat import fmt_zahl, fmt_pct
 
@@ -48,6 +49,26 @@ class _DriftKontext:
     # Der LTS-Read ist das Teure an dieser Prüfung. Er wird EINMAL gefahren
     # und aufgehoben — die zweite Achse liest nicht noch einmal.
     ha_komp_je_tag: dict[date, dict] = field(default_factory=dict)
+    # N-790: trägt die Anlage einen HA-Spiegel (``kanal/konsistenz.spiegel_quellen_anzahl``, eine DB-Abfrage je Lauf,
+    # nur wenn es Drift gibt)? Dann tragen die Zeilen «Aus Home Assistant neu übernehmen», sonst «Tag reparieren».
+    hat_spiegel: bool = False
+
+
+#: N-790: der Details-Text einer Drift-Tageszeile an einer Anlage mit HA-Spiegel (die Zahlen stehen in der Meldung).
+_TEXT_SPIEGEL_TAG = (
+    "Für diesen Tag steht in eedc ein anderer Wert als in Home Assistant. „Aus Home Assistant neu übernehmen“ holt die "
+    "Statistik dieses Zählers neu und baut den Tag danach auf — der Tag zeigt dann, was Home Assistant zeigt. Hast du in "
+    "Home Assistant korrigiert, ist das der Weg."
+)
+
+
+def _drift_aktion(ctx: _DriftKontext, datum_: date) -> dict:
+    """Der Handgriff einer Drift-Zeile (N-790): mit HA-Spiegel «Aus Home Assistant neu übernehmen» (Abgleich, danach
+    der Tag neu aufgebaut), ohne Spiegel «Tag reparieren» (Neu-Aggregation des Tages) wie bisher."""
+    if ctx.hat_spiegel:
+        return aktion_spiegel_abgleich_tag(ctx.anlage.id, datum_)
+    return {"action_kind": "reaggregate_day", "action_params": {"anlage_id": ctx.anlage.id, "datum": datum_.isoformat()},
+            "action_label": "Tag reparieren"}
 
 
 class QuellenChecks:
@@ -431,6 +452,11 @@ class QuellenChecks:
                 ),
             )]
 
+        # N-790 (ottokar): an einem Kanal-Tag liest der Tag den HA-Spiegel — «Tag reparieren» liest denselben Spiegel und
+        # kann die Drift nicht beheben. Mit Spiegel trägt die Zeile den Abgleich + Neu-Aggregation des Tages.
+        from backend.services.kanal.konsistenz import spiegel_quellen_anzahl
+
+        ctx.hat_spiegel = await spiegel_quellen_anzahl(self.db, anlage.id) > 0
         ergebnisse, rest = self._drift_tageszeilen(ctx)
         ergebnisse.extend(self._drift_komponentenzeilen(ctx))
 
@@ -597,8 +623,9 @@ class QuellenChecks:
 
     @staticmethod
     def _drift_tageszeilen(ctx: _DriftKontext) -> tuple[list[CheckErgebnis], int]:
-        """Die Tageszeilen der ersten Achse samt «Tag reparieren»; dazu die Zahl der über 20 hinaus weggelassenen Tage."""
-        anlage, kat, drift_pro_tag = ctx.anlage, ctx.kat, ctx.drift_pro_tag
+        """Die Tageszeilen der ersten Achse samt Handgriff (mit HA-Spiegel «Aus Home Assistant neu übernehmen», sonst
+        «Tag reparieren», N-790); dazu die Zahl der über 20 hinaus weggelassenen Tage."""
+        kat, drift_pro_tag = ctx.kat, ctx.drift_pro_tag
 
         # Sortierung nach |Δ| desc, max 20 Einträge
         drift_pro_tag.sort(key=lambda x: abs(x[1] - x[2]), reverse=True)
@@ -609,7 +636,7 @@ class QuellenChecks:
         for datum_, eedc, ha in gekuerzt:
             delta_signed = ha - eedc
             rel_signed = (delta_signed / max(eedc, ha)) * 100 if max(eedc, ha) > 0 else 0.0
-            details = (
+            details = _TEXT_SPIEGEL_TAG if ctx.hat_spiegel else (
                 f"Dein eedc-Wert für {datum_.isoformat()} ist {fmt_zahl(eedc, 2)} kWh PV-Erzeugung. "
                 f"Die HA-Statistics liefert für denselben Tag {fmt_zahl(ha, 2)} kWh. "
                 f"Mit „Tag reparieren“ schreibt eedc den Wert aus HA-Statistics "
@@ -624,9 +651,7 @@ class QuellenChecks:
                 ),
                 details=details,
                 link=LINK_ENERGIEPROFIL,
-                action_kind="reaggregate_day",
-                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
-                action_label="Tag reparieren",
+                **_drift_aktion(ctx, datum_),
             ))
 
         return ergebnisse, rest
@@ -634,7 +659,7 @@ class QuellenChecks:
     @staticmethod
     def _drift_komponentenzeilen(ctx: _DriftKontext) -> list[CheckErgebnis]:
         """Die Zeilen der zweiten Achse (N-201): je Komponente EIN Eintrag, die größte Abweichung zuerst."""
-        anlage, kat, alle_invs, drift_komponente = ctx.anlage, ctx.kat, ctx.alle_invs, ctx.drift_komponente
+        kat, alle_invs, drift_komponente = ctx.kat, ctx.alle_invs, ctx.drift_komponente
 
         # N-201: je Komponente EIN Eintrag — mit dem schlimmsten Tag als
         # Beleg und als Reparatur-Ziel. Dreißig gleichlautende Tageszeilen für
@@ -665,6 +690,12 @@ class QuellenChecks:
                     f"{fmt_pct(rel_signed, 1, vorzeichen=True)})"
                 ),
                 details=(
+                    f"Für diese Komponente steht in eedc an {len(tage)} Tag(en) ein anderer Wert als in "
+                    f"Home Assistant. Diese Werte tragen die Wirtschaftlichkeits- und CO₂-Rechnung mit. "
+                    f"„Aus Home Assistant neu übernehmen“ holt die Statistik dieses Zählers neu und baut den Tag "
+                    f"{datum_.isoformat()} danach auf — die Tage zeigen dann, was Home Assistant zeigt. Hast du in "
+                    f"Home Assistant korrigiert, ist das der Weg."
+                ) if ctx.hat_spiegel else (
                     f"Für diese Komponente steht in deiner Tages-Zusammenfassung "
                     f"an {len(tage)} Tag(en) ein anderer Wert als in den "
                     f"HA-Statistics. Diese Werte tragen die Wirtschaftlichkeits- "
@@ -674,9 +705,7 @@ class QuellenChecks:
                     f"Reparatur-Werkbank."
                 ),
                 link=LINK_ENERGIEPROFIL,
-                action_kind="reaggregate_day",
-                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
-                action_label="Tag reparieren",
+                **_drift_aktion(ctx, datum_),
                 investition_id=(
                     int(rest_id) if rest_id.isdigit() else None
                 ),

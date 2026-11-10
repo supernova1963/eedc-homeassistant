@@ -28,8 +28,12 @@ export interface CheckErgebnis {
   // die zwischen dem V4-Flip und WK-03 ohne Auto-Fill abgeschlossen wurden,
   // aus der eigenen Messreihe nachtragen. Additiv wie der Benzinpreis-Backfill:
   // schreibt nur, wo NULL steht, und nur so weit die Reihe zurückreicht.
+  // N-790: 'spiegel_abgleich_tag' — «Aus Home Assistant neu übernehmen» an
+  // Drift-, Zählersprung- und Rückgang-Befunden einer Anlage mit HA-Spiegel:
+  // erst der Abgleich mit der HA-Statistik, dann der Tag neu aufgebaut.
   action_kind?: 'reaggregate_day' | 'reaggregate_range' | 'geraetewerte_loeschen'
     | 'kraftstoffpreis_backfill' | 'feldwert_entfernen' | 'temperatur_aus_messung'
+    | 'spiegel_abgleich_tag'
   action_params?: Record<string, unknown>
   action_label?: string
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —

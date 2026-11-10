@@ -20,7 +20,11 @@ import { KPICard } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import { energieProfilApi } from '../api/energie_profil'
 import { monatsdatenApi } from '../api/monatsdaten'
-import { baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueTagesMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
+import { repairApi } from '../api/repair'
+import {
+  baueBereichsMeldung, baueFeldwertMeldung, baueFeldwertRueckfrage, baueSpiegelAbgleichMeldung, baueTagesMeldung,
+  type ReparaturMeldung,
+} from './datenCheckerMeldungen'
 import { fmtZahl, formatDatum } from '../lib'
 import {
   KATEGORIE_LABELS as kategorieLabels,
@@ -65,6 +69,7 @@ function KategorieSektion({
   onKraftstoffpreiseNachpflegen,
   onTemperaturAusMessung,
   onFeldwertEntfernen,
+  onSpiegelAbgleichTag,
   reparaturBusy,
 }: {
   kategorie: string
@@ -78,6 +83,7 @@ function KategorieSektion({
   onKraftstoffpreiseNachpflegen?: (anlageId: number) => Promise<void>
   onTemperaturAusMessung?: (anlageId: number) => Promise<void>
   onFeldwertEntfernen?: (investitionId: number, feld: string, label: string, monate: string[]) => Promise<void>
+  onSpiegelAbgleichTag?: (anlageId: number, datum: string) => Promise<void>
   reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -188,6 +194,15 @@ function KategorieSektion({
             const fwKey = fwInvId && fwFeld ? `${fwInvId}:${fwFeld}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
             const isFwBusy = fwKey && reparaturBusy === fwKey
 
+            // N-790: Abgleich mit der HA-Statistik + Tag neu aufbauen (Drift, Zählersprung, Rückgang).
+            const spAnlageId = e.action_kind === 'spiegel_abgleich_tag'
+              ? Number(e.action_params?.anlage_id) : undefined
+            const spDatum = e.action_kind === 'spiegel_abgleich_tag'
+              ? String(e.action_params?.datum ?? '') : undefined
+            const spKey = spAnlageId && spDatum
+              ? `${spAnlageId}:spiegel:${spDatum}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
+            const isSpBusy = spKey && reparaturBusy === spKey
+
             return (
               <div
                 key={i}
@@ -212,6 +227,20 @@ function KategorieSektion({
                   >
                     {!isReparaturBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Tag reparieren'}
+                  </Button>
+                )}
+                {e.action_kind === 'spiegel_abgleich_tag' && onSpiegelAbgleichTag && spAnlageId && spDatum && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
+                    onClick={() => onSpiegelAbgleichTag(spAnlageId, spDatum)}
+                    disabled={!!reparaturBusy}
+                    loading={!!isSpBusy}
+                  >
+                    {!isSpBusy && <Wrench className="h-3 w-3 mr-1" />}
+                    {e.action_label ?? 'Aus Home Assistant neu übernehmen'}
                   </Button>
                 )}
                 {e.action_kind === 'reaggregate_range' && onReaggregateBereich && rangeAnlageId && rangeVon && rangeBis && (
@@ -347,6 +376,27 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
       setReparaturMessage({
         art: 'fehler',
         text: e instanceof Error ? e.message : `Reparatur für ${formatDatum(datum)} fehlgeschlagen`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
+
+  // N-790 (ottokar): an einem Kanal-Tag liest der Tag den HA-Spiegel — der
+  // Knopf gleicht ihn mit der HA-Statistik ab und baut den Tag danach neu auf.
+  // Rückmeldung = der Satz des Backends; danach läuft der Checker neu.
+  const handleSpiegelAbgleichTag = async (anlageId: number, datum: string) => {
+    const key = `${anlageId}:spiegel:${datum}` /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      const r = await repairApi.spiegelAbgleichTag(anlageId, datum)
+      setReparaturMessage(baueSpiegelAbgleichMeldung(r))
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : `Übernahme aus Home Assistant für ${formatDatum(datum)} fehlgeschlagen`,
       })
     } finally {
       setReparaturBusy(null)
@@ -641,6 +691,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
                   onKraftstoffpreiseNachpflegen={handleKraftstoffpreiseNachpflegen}
                   onTemperaturAusMessung={handleTemperaturAusMessung}
                   onFeldwertEntfernen={handleFeldwertEntfernen}
+                  onSpiegelAbgleichTag={handleSpiegelAbgleichTag}
                   reparaturBusy={reparaturBusy}
                 />
               )
