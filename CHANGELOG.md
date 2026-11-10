@@ -20,6 +20,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Home Assistant zeigt. Denselben Knopf tragen die Meldungen „Zählersprung" und „Rückgang" in der
   Home-Assistant-Statistik, für den Schritt nach deiner Korrektur in Home Assistant. Ohne Home-Assistant-Statistik bleibt
   „Tag reparieren". eedc übernimmt dabei nur, was Home Assistant hat, und löscht nichts (N-790).
+- **«Tag reparieren» schreibt einen korrigierten Zählerwert auch ohne Leistungskurve (Melder ottokar, simon42).** Hatte
+  Home Assistant für einen Tag keine Leistungswerte mehr im Verlauf (älter als die Aufbewahrung, oder kein
+  Leistungssensor), blieb ein Tag mit einem falschen Gerätewert stehen — etwa der Erstwert-Sprung eines neuen
+  Wärmepumpen-Zählers (123.909,6 kWh), den du in Home Assistant längst korrigiert hattest; die Reparatur meldete „Der Tag
+  bleibt unverändert". Jetzt schreiben „Tag reparieren", „Aus Home Assistant neu übernehmen" und *„Tag neu aggregieren"*
+  in der Reparatur-Werkbank die Gerätewerte aus der Zählerstatistik von Home Assistant neu und lassen den gespeicherten
+  Leistungsverlauf stehen; die Rückmeldung sagt das. Hat auch die Zählerstatistik nichts, bleibt der Tag wie bisher
+  unverändert (N-791).
 - **Komponenten → Sonstiges zeigt Geräte der Kategorie «Abgabe an Dritte» als das, was sie sind (#443, Melder
   rilmor-mhrs).** Ein Abgabe-Gerät (Mieterstrom, Allgemeinstrom, Nachbarhaus) erschien dort bisher als Erzeuger mit
   leerer Erzeugung bzw. mit Ladung, Entladung und Ersparnis 0. Jetzt stehen da die **Abgabe** (kWh), der **Erlös** (die
@@ -237,6 +245,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- N-791: Stufe 3 der Werkbank (`repair_orchestrator._reparatur_aggregat`) läuft mit `aggregate_day(zaehler_erhalt=True)`
+  — trägt die Kurve keinen Leistungswert und der Tag Gerätewerte, schreibt der Lauf nur mit der Zählertabelle der
+  HA-Langzeitstatistik (`external:ha_statistics:hourly`, nicht der Snapshot-Rückfall), lässt `TagesEnergieProfil.komponenten`
+  (mit alter Herkunft) und die Tages-Peaks stehen (`energie_profil/zaehler_erhalt.py`, `hole_tagesverlauf` Fall d) und
+  meldet die Quelle `zaehler_erhalt` mit `quelle_text` (Werkbank-Ergebnis, `reaggregate-tag`, `spiegel-abgleich-tag`).
+  Stufe 3 hängt dafür nicht mehr an `extract_live_config`. Drift-Zeilen an Bestand-Tagen (Gruppe nicht aus dem Spiegel,
+  `kanal_gruppen_der_tage`) tragen den Bestand-Text. Nachtlauf, Monatsabschluss, Kanal-Weiche unverändert (GM energie-profil).
 - **Päckchen EE (10.11.2026): Drift-Befund mit wirksamem Handgriff (N-790).** Neue Route
   `POST /api/energie-profil/{anlage_id}/spiegel-abgleich-tag` (Body `{datum}`): ruft den Lauf von `kanal-abgleich`
   (jetzt gemeinsam in `_kanal_abgleich_lauf`, `konsistenz_anlage` mit `get_session`) und danach `reaggregate_tag`;

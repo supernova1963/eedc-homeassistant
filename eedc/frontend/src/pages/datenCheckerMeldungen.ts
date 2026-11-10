@@ -86,6 +86,15 @@ export function baueTagesMeldung(
   r: Partial<ReaggregateTagResponse>,
   datumIso: string,
 ): ReparaturMeldung {
+  // N-791: der Satz zur Quelle (Tag ohne Leistungskurve: Zähler neu, Verlauf bleibt) steht hinter jeder Fassung.
+  const m = baueTagesMeldungOhneQuelle(r, datumIso)
+  return r.quelle_text ? { art: m.art, text: `${m.text} ${r.quelle_text}` } : m
+}
+
+function baueTagesMeldungOhneQuelle(
+  r: Partial<ReaggregateTagResponse>,
+  datumIso: string,
+): ReparaturMeldung {
   // Anzeige-Datum de-DE (`check:de-de`): die Meldung wird seit F-2 auch in
   // Cockpit/Tag gezeigt und ist damit im Scharf-Scope des Wächters.
   const datumDe = formatDatum(datumIso)

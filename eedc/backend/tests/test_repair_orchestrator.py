@@ -404,7 +404,10 @@ async def test_execute_reaggregate_range_iterates_and_commits_per_day(db):
     assert summary["erfolgreich"] == 5  # 7 - 1 keine_daten - 1 fehler
     assert summary["keine_daten"] == 1
     assert summary["fehlgeschlagen"] == 1
-    assert len(aufruf_daten) == 7  # auch nach Fehler weiter
+    # auch nach Fehler weiter: jeder Tag läuft. N-791: ein Tag ohne Ergebnis (4/3) läuft zusätzlich durch Stufe 3
+    # (Zähler aus HA ohne Leistungskurve), die nicht mehr an der Live-Zuordnung hängt — daher die Tage, nicht die Aufrufe.
+    assert sorted(set(aufruf_daten)) == [date(2026, 4, d) for d in range(1, 8)]
+    assert aufruf_daten.count(date(2026, 4, 3)) == 2
     # Fehler-Details enthalten die zwei betroffenen Tage. Der Grund nennt jetzt
     # den ZUSTAND, nicht pauschal „keine_daten": liefert der reguläre Weg nichts,
     # versucht die Reparatur es über HA-LTS — und diese Test-Anlage hat gar keine

@@ -326,6 +326,8 @@ async def _plan_reaggregate_day(
 #: Präfix der Rückgabe von ``_reparatur_aggregat``, wenn der Lauf den Tag stehen lässt (N-596).
 #: Form ``"unveraendert:<LTS-Grund>"`` — ``teile_reparatur_quelle`` trennt beides wieder.
 QUELLE_UNVERAENDERT = "unveraendert"
+#: N-791: Zähler aus der HA-Statistik neu geschrieben, gespeicherter Leistungsverlauf stehen gelassen.
+QUELLE_ZAEHLER_ERHALT = "zaehler_erhalt"
 
 
 def teile_reparatur_quelle(quelle: str) -> tuple[str, Optional[str]]:
@@ -391,13 +393,22 @@ async def _reparatur_aggregat(
     damit neu (leere Gerätewerte), und dieser Rückfall griff nie. Seit N-596 steigt
     ein `MANUAL_REPAIR`-Lauf bei einer Kurve ohne Leistungswert aus (Stufe 1 ⇒
     `None`), die Langzeitstatistik wird versucht (Stufe 2), und erst wenn auch sie
-    nichts hat, läuft Stufe 3 mit `leere_kurve_erlaubt=True`: ein Tag mit
-    gespeicherten Gerätewerten bleibt stehen, ein Tag ohne wird wie bisher aus den
-    Zählern geschrieben (keine Verschlechterung gegenüber vorher).
+    nichts hat, läuft Stufe 3 mit `leere_kurve_erlaubt=True`: ein Tag ohne
+    gespeicherte Gerätewerte wird wie bisher aus den Zählern geschrieben (keine
+    Verschlechterung gegenüber vorher).
+
+    ⭐ N-791 (Melder ottokar): Stufe 3 läuft dazu mit `zaehler_erhalt=True` — ein Tag MIT
+    gespeicherten Gerätewerten wird aus der Zählertabelle der HA-Langzeitstatistik neu
+    geschrieben, der gespeicherte Leistungsverlauf bleibt stehen
+    (`energie_profil/zaehler_erhalt.py`). Liefert auch die Zählertabelle nichts (oder nur
+    eedcs eigene Stände), bleibt der Tag stehen wie bisher (`unveraendert_text`). Dafür
+    hängt Stufe 3 nicht mehr an einer Live-Zuordnung: sie entscheidet nur noch
+    `leere_kurve_erlaubt` (Tag ohne Gerätewerte aus Zählern wie bisher, F-26-Grund unten).
 
     Returns:
         (TagesZusammenfassung | None, quelle) — `quelle` ist
         „historie" · „lts" · „zaehler" (aus Zählern neu, ohne Leistungskurve) ·
+        „zaehler_erhalt" (Zähler neu aus HA, Leistungsverlauf stehen gelassen, N-791) ·
         „unveraendert:<LTS-Grund>" (Tag stehen gelassen, s. `teile_reparatur_quelle`)
         oder — wenn es den Tag noch gar nicht gibt — der LTS-Grund, warum auch der
         Rückfall nichts holen konnte.
@@ -422,17 +433,21 @@ async def _reparatur_aggregat(
         # am F-26-Ausstieg gescheitert (keine MQTT-Energie) oder lief als MQTT-Energie
         # an der N-596-Prüfung vorbei (`hole_tagesverlauf`; seit Standalone-Gleichstand
         # S3 kann die Kurve dort aus MQTT kommen) — Stufe 3 wäre derselbe Lauf.
+        # N-791: der Zähler-Fall (`zaehler_erhalt`) hängt nicht daran — er schreibt nur mit
+        # der HA-Zählertabelle; die Live-Zuordnung von `ermittle_aggregations_quelle` zählt
+        # auch Zustandsfelder, `extract_live_config` nicht (Klima nur mit Betriebsart).
         from backend.services.live_sensor_config import extract_live_config
 
         basis_live, inv_live_map, _, _ = extract_live_config(anlage)
-        if basis_live or inv_live_map:
-            zusammenfassung = await aggregate_day(
-                anlage, datum, db,
-                source=Source.MANUAL_REPAIR,
-                leere_kurve_erlaubt=True,
-            )
-            if zusammenfassung is not None:
-                return zusammenfassung, "zaehler"
+        zusammenfassung = await aggregate_day(
+            anlage, datum, db,
+            source=Source.MANUAL_REPAIR,
+            leere_kurve_erlaubt=bool(basis_live or inv_live_map),
+            zaehler_erhalt=True,
+        )
+        if zusammenfassung is not None:
+            return zusammenfassung, (
+                QUELLE_ZAEHLER_ERHALT if getattr(zusammenfassung, "leistung_erhalten", False) else "zaehler")
         if await _tag_gespeichert(anlage, datum, db):
             return None, f"{QUELLE_UNVERAENDERT}:{lts_grund}"
         return None, lts_grund
@@ -552,10 +567,14 @@ async def _execute_reaggregate_day(
         )
         raise RuntimeError(f"Aggregation für {datum} nicht möglich — {erklaerung}")
 
+    from backend.services.energie_profil.zaehler_erhalt import SATZ_ZAEHLER_ERHALT
+
     return {
         "datum": datum.isoformat(),
         "stunden_verfuegbar": zusammenfassung.stunden_verfuegbar,
         "quelle": quelle,
+        # N-791: der Satz in Anwender-Sprache (Werkbank, «Tag reparieren», «Aus Home Assistant neu übernehmen»).
+        "quelle_text": SATZ_ZAEHLER_ERHALT if quelle == QUELLE_ZAEHLER_ERHALT else None,
         **await _komponenten_rueckmeldung(db, anlage, datum, zusammenfassung),
     }
 

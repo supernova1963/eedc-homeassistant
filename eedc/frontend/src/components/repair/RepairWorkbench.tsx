@@ -903,7 +903,10 @@ function summarizeResult(result: RepairResult): string {
   parts.push(`${audit} Audit-Log-Eintrag${audit === 1 ? '' : 'e'}`)
   const meta = OPERATION_META.find((o) => o.type === result.operation)
   const opLabel = meta?.label ?? result.operation
-  return `${opLabel} ausgeführt: ${parts.join(' · ')}.`
+  // N-791: der Satz zur Quelle aus dem Backend (Tag ohne Leistungskurve: Zähler neu, Verlauf bleibt).
+  const quelleText = result.operation_summary?.quelle_text
+  const satz = typeof quelleText === 'string' && quelleText ? ` ${quelleText}` : ''
+  return `${opLabel} ausgeführt: ${parts.join(' · ')}.${satz}`
 }
 
 

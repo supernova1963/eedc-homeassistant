@@ -52,6 +52,9 @@ class _DriftKontext:
     # N-790: trägt die Anlage einen HA-Spiegel (``kanal/konsistenz.spiegel_quellen_anzahl``, eine DB-Abfrage je Lauf,
     # nur wenn es Drift gibt)? Dann tragen die Zeilen «Aus Home Assistant neu übernehmen», sonst «Tag reparieren».
     hat_spiegel: bool = False
+    # N-791: je Tag die Gruppen mit Wahl ``kanal`` (``kanal_gruppen_der_tage``, nur mit Spiegel und Drift geladen) —
+    # an einem Bestand-Tag der Gruppe sagt der Text, dass ein gespeicherter Leistungsverlauf stehen bleibt.
+    kanal_gruppen: dict = field(default_factory=dict)
 
 
 #: N-790: der Details-Text einer Drift-Tageszeile an einer Anlage mit HA-Spiegel (die Zahlen stehen in der Meldung).
@@ -60,6 +63,22 @@ _TEXT_SPIEGEL_TAG = (
     "Statistik dieses Zählers neu und baut den Tag danach auf — der Tag zeigt dann, was Home Assistant zeigt. Hast du in "
     "Home Assistant korrigiert, ist das der Weg."
 )
+
+
+#: N-791: der Details-Text an einem Bestand-Tag (die Gruppe liest den Tag nicht aus dem HA-Spiegel) — die Aktion ist
+#: dieselbe; die Neu-Aggregation schreibt den Tag aus der Zählerstatistik, auch ohne Leistungskurve.
+_TEXT_BESTAND_TAG = (
+    "Für diesen Tag steht in eedc ein anderer Wert als in Home Assistant. „Aus Home Assistant neu übernehmen“ holt die "
+    "Zählerstatistik dieses Tages neu und baut Tag und Gerätewerte; ein gespeicherter Leistungsverlauf bleibt stehen."
+)
+
+
+def _bestand_tag(ctx: _DriftKontext, datum_: date, schluessel: str | None = None) -> bool:
+    """Liest die Gruppe (Bilanz bzw. die des Geräte-Schlüssels) an ``datum_`` aus dem Bestand statt aus dem Spiegel?"""
+    from backend.services.energie_profil.kanal_stunden import GRUPPE_BILANZ, gruppen_der_schluessel
+
+    gruppe = gruppen_der_schluessel([schluessel])[-1] if schluessel else GRUPPE_BILANZ
+    return gruppe not in ctx.kanal_gruppen.get(datum_, ())
 
 
 def _drift_aktion(ctx: _DriftKontext, datum_: date) -> dict:
@@ -457,6 +476,10 @@ class QuellenChecks:
         from backend.services.kanal.konsistenz import spiegel_quellen_anzahl
 
         ctx.hat_spiegel = await spiegel_quellen_anzahl(self.db, anlage.id) > 0
+        if ctx.hat_spiegel:   # N-791: Bestand- oder Kanal-Tag je Gruppe (der Text der Zeile)
+            from backend.services.energie_profil.kanal_stunden import kanal_gruppen_der_tage
+
+            ctx.kanal_gruppen = await kanal_gruppen_der_tage(self.db, anlage.id, von, bis)
         ergebnisse, rest = self._drift_tageszeilen(ctx)
         ergebnisse.extend(self._drift_komponentenzeilen(ctx))
 
@@ -636,7 +659,7 @@ class QuellenChecks:
         for datum_, eedc, ha in gekuerzt:
             delta_signed = ha - eedc
             rel_signed = (delta_signed / max(eedc, ha)) * 100 if max(eedc, ha) > 0 else 0.0
-            details = _TEXT_SPIEGEL_TAG if ctx.hat_spiegel else (
+            details = (_TEXT_BESTAND_TAG if _bestand_tag(ctx, datum_) else _TEXT_SPIEGEL_TAG) if ctx.hat_spiegel else (
                 f"Dein eedc-Wert für {datum_.isoformat()} ist {fmt_zahl(eedc, 2)} kWh PV-Erzeugung. "
                 f"Die HA-Statistics liefert für denselben Tag {fmt_zahl(ha, 2)} kWh. "
                 f"Mit „Tag reparieren“ schreibt eedc den Wert aus HA-Statistics "
@@ -690,6 +713,11 @@ class QuellenChecks:
                     f"{fmt_pct(rel_signed, 1, vorzeichen=True)})"
                 ),
                 details=(
+                    f"Für diese Komponente steht in eedc an {len(tage)} Tag(en) ein anderer Wert als in "
+                    f"Home Assistant. Diese Werte tragen die Wirtschaftlichkeits- und CO₂-Rechnung mit. "
+                    f"„Aus Home Assistant neu übernehmen“ holt die Zählerstatistik des Tages {datum_.isoformat()} "
+                    f"neu und baut Tag und Gerätewerte; ein gespeicherter Leistungsverlauf bleibt stehen."
+                ) if ctx.hat_spiegel and _bestand_tag(ctx, datum_, key) else (
                     f"Für diese Komponente steht in eedc an {len(tage)} Tag(en) ein anderer Wert als in "
                     f"Home Assistant. Diese Werte tragen die Wirtschaftlichkeits- und CO₂-Rechnung mit. "
                     f"„Aus Home Assistant neu übernehmen“ holt die Statistik dieses Zählers neu und baut den Tag "

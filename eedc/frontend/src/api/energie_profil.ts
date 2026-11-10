@@ -716,6 +716,10 @@ export interface ReaggregateTagResponse {
   komponenten_geschrieben: number
   /** Namen der Komponenten, für die der Lauf nichts schreiben konnte. */
   komponenten_ohne_wert: string[]
+  /** N-791: woher der Lauf schrieb (`historie` · `lts` · `zaehler` · `zaehler_erhalt`). Fehlt bei älteren Backends. */
+  quelle?: string | null
+  /** N-791: Satz in Anwender-Sprache zur Quelle (nur `zaehler_erhalt`) — das Backend baut ihn, der Client zeigt ihn. */
+  quelle_text?: string | null
 }
 
 /**

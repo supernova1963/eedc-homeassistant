@@ -226,6 +226,10 @@ async def reaggregate_tag(
         # HA-Bauform S5 (E-S5-3): an einem Kanal-Tag die Gruppen, deren Mengen der Lauf leer lässt (der Tag liest sie
         # aus dem HA-Spiegel bzw. den eigenen Zählerständen).
         "kanal_gruppen": summary.get("kanal_gruppen", []),
+        # N-791: woher der Lauf schrieb, und an einem Tag ohne Leistungskurve der Satz «Gerätewerte aus der
+        # Home-Assistant-Statistik neu geschrieben; der gespeicherte Leistungsverlauf blieb stehen.»
+        "quelle": summary.get("quelle"),
+        "quelle_text": summary.get("quelle_text"),
     }
 
 
@@ -662,14 +666,17 @@ def _anzahl_kanaele(n: int) -> str:
     return f"{n} Kanal" if n == 1 else f"{n} Kanäle"
 
 
-def _abgleich_tag_meldung(abgleich: dict, datum: date, reaggregation_fehler: Optional[str] = None) -> str:
-    """Ein Satz in Anwender-Sprache für «Aus Home Assistant neu übernehmen» (N-790) — nur aus den Antworten der Läufe."""
+def _abgleich_tag_meldung(abgleich: dict, datum: date, reaggregation_fehler: Optional[str] = None,
+                          quelle_text: Optional[str] = None) -> str:
+    """Ein Satz in Anwender-Sprache für «Aus Home Assistant neu übernehmen» (N-790) — nur aus den Antworten der Läufe;
+    ``quelle_text`` (N-791) hängt den Satz der Neu-Aggregation an (Tag ohne Leistungskurve: Zähler neu, Verlauf bleibt)."""
     from datetime import datetime as _dt
 
     tag = (f"Tag {datum.strftime('%d.%m.%Y')} neu aufgebaut" if reaggregation_fehler is None
            else f"den Tag {datum.strftime('%d.%m.%Y')} konnte eedc nicht neu aufbauen ({reaggregation_fehler})")
+    quelle = f" {quelle_text}" if quelle_text else ""
     if not abgleich["hat_spiegel"]:
-        return f"Für diese Anlage übernimmt eedc keine Statistik aus Home Assistant — {tag}."
+        return f"Für diese Anlage übernimmt eedc keine Statistik aus Home Assistant — {tag}.{quelle}"
     korrigiert = abgleich["korrigiert"]
     if korrigiert:
         ab = _dt.fromtimestamp(min(int(k["ab_ts"]) for k in korrigiert)).strftime("%d.%m. %H:%M")
@@ -683,7 +690,7 @@ def _abgleich_tag_meldung(abgleich: dict, datum: date, reaggregation_fehler: Opt
     if abgleich["fehler"]:
         satz += (f" {_anzahl_kanaele(abgleich['fehler'])} konnten nicht geprüft werden (Home Assistant unterwegs "
                  "nicht erreichbar?) — dort wurde nichts geändert.")
-    return satz
+    return satz + quelle
 
 
 class SpiegelAbgleichTagRequest(BaseModel):
@@ -719,7 +726,7 @@ async def spiegel_abgleich_tag(
     except HTTPException as e:
         reaggregation_fehler = str(e.detail)
         reaggregation = {"status": "fehler", "datum": datum.isoformat(), "fehler": reaggregation_fehler}
-    meldung = _abgleich_tag_meldung(abgleich, datum, reaggregation_fehler)
+    meldung = _abgleich_tag_meldung(abgleich, datum, reaggregation_fehler, reaggregation.get("quelle_text"))
 
     await log_activity(
         kategorie="ha_statistics",

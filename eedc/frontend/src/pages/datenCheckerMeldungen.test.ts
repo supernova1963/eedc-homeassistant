@@ -144,6 +144,24 @@ describe('baueTagesMeldung', () => {
     expect(m.text).toContain(`Tag ${DATUM_DE} aus HA-Statistics neu aggregiert.`)
     expect(m.text).toContain('Wärmepumpe')
   })
+
+  it('N-791: hängt den Satz zur Quelle an (Tag ohne Leistungskurve: Zähler neu, Verlauf bleibt)', () => {
+    const satz = 'Gerätewerte aus der Home-Assistant-Statistik neu geschrieben; der gespeicherte Leistungsverlauf blieb stehen.'
+    const m = baueTagesMeldung(
+      {
+        status: 'ok', pv_kwh_alt: 4.2, pv_kwh_neu: 4.2,
+        komponenten_erwartet: 1, komponenten_geschrieben: 1, komponenten_ohne_wert: [],
+        quelle: 'zaehler_erhalt', quelle_text: satz,
+      },
+      DATUM,
+    )
+    expect(m.art).toBe('ok')
+    expect(m.text).toBe(
+      `Tag ${DATUM_DE}: PV-Wert blieb 4,2 kWh (keine Änderung). Alle 1 zugeordneten Komponenten tragen einen Wert. ${satz}`,
+    )
+    expect(baueTagesMeldung({ status: 'ok', pv_kwh_alt: 30, pv_kwh_neu: 30, quelle: 'historie', quelle_text: null }, DATUM).text)
+      .toBe(`Tag ${DATUM_DE}: PV-Wert blieb 30,0 kWh (keine Änderung).`)
+  })
 })
 
 // N-393 — „Wert entfernen" an einem Feld, das das Gerät nicht mehr führt.

@@ -38,6 +38,9 @@ from backend.services.energie_profil._provenance_helpers import (
 )
 from backend.services.energie_profil.mengen_weiche import KEINE_WEICHE, Weiche, mengen_weiche
 from backend.services.energie_profil.source import Source
+from backend.services.energie_profil.zaehler_erhalt import (
+    lese_leistungsbahnen, peaks_erhalten, setze_leistungsverlauf, zaehlertabelle_traegt,
+)
 from backend.services.provenance import write_with_provenance
 from backend.utils.investition_filter import aktiv_am_tag
 
@@ -192,6 +195,9 @@ class StundenKontext:
     # HA-Bauform S5 (E-S5-3, S5-R2): was an diesem Tag leer bleibt — an einem Kanal-Tag die Mengen der Gruppen mit
     # Wahl ``kanal`` (``mengen_weiche``), an einem Bestandstag nichts.
     weiche: Weiche = KEINE_WEICHE
+    # N-791: der gespeicherte Leistungsverlauf eines Werkbank-Laufs «Zähler neu» (``zaehler_erhalt.Leistungserhalt``),
+    # sonst ``None``.
+    leistungserhalt: object = None
 
 
 @dataclass
@@ -512,6 +518,7 @@ def verarbeite_stunde(
     kontext.weiche.stunde(profil)
     db.add(profil)
     seed_tep_provenance(profil, writer=auto_writer, source=kontext.kwh_source_label)
+    setze_leistungsverlauf(profil, kontext.leistungserhalt)
     # N-595 (S4): ein gerettetes Feld behält seine ALTE Herkunft — es wurde nicht in
     # diesem Lauf gemessen. Bewusst NACH dem Seed, der es sonst mit dem Lauf-Label
     # stempelte (dieselbe Reihenfolge-Regel wie der TZ-Restore, #299).
@@ -605,6 +612,7 @@ async def hole_tagesverlauf(
     source: Optional[Source] = None,
     leere_kurve_erlaubt: bool = False,
     nur_mit_verlauf: bool = False,
+    zaehler_erhalt: bool = False,
 ) -> Optional[tuple]:
     """Eingang und Rohverlauf — Prefetch-Zweig, Live-Zweig, synthetische Slots.
 
@@ -628,6 +636,11 @@ async def hole_tagesverlauf(
        ohne Gerätewerte hat nichts zu verlieren, und eine Anlage, deren Leistungssensoren
        keine Historie haben (Recorder-Ausschluss, umbenannte Entity), friert sonst nach dem
        ersten Lauf des Tages ein.
+    d) N-791 (Melder ottokar): mit ``zaehler_erhalt`` (nur Werkbank, Stufe 3 nach leerem LTS-Rückfall) steigt der
+       Lauf in a) und b) nicht aus, sondern meldet ``nur_zaehler``: ``aggregate_day`` schreibt den Tag nur, wenn die
+       Zählertabelle des Tages aus der HA-Langzeitstatistik trägt, und lässt dabei den gespeicherten Leistungsverlauf
+       stehen (``zaehler_erhalt.py``). Der N-596-Schutz galt dem «leer ersetzen», nicht dem «aus der Statistik richtig
+       ersetzen» — ein Tag mit falschem Gerätewert blieb sonst genau deshalb stehen, weil er einen hatte.
 
     ⭐ HA-Bauform E4f (Bauplan §9 B1, R-13): mit ``nur_mit_verlauf`` gilt c) NICHT — eine Kurve
     ohne Leistungswert liefert ``None``, auch für einen Tag ohne Zeilen. Das ist die Grenze der
@@ -638,7 +651,7 @@ async def hole_tagesverlauf(
     Verlauf, der verfallen könnte.
 
     Returns:
-        ``(serien, punkte_raw, vortagsrand_raw, synthetische_slots)`` oder ``None``.
+        ``(serien, punkte_raw, vortagsrand_raw, synthetische_slots, nur_zaehler)`` oder ``None``.
     """
     from backend.services.energie_profil._helpers import _tage_zurueck
 
@@ -700,6 +713,7 @@ async def hole_tagesverlauf(
         return None
     else:
         synthetische_slots = False
+    nur_zaehler = False
 
     # ── N-596: Kurve ohne Leistungswert (s. Docstring a/b/c) ──────────────
     # Nicht bei MQTT-Energie ohne Leistungszuordnung (`has_mqtt_energy` ist nur
@@ -719,20 +733,23 @@ async def hole_tagesverlauf(
                 "Aufbewahrung) — fehlender Tag wird nicht angelegt"
             )
             return None
-        if source is not None and source.is_manual_repair() and not leere_kurve_erlaubt:
+        werkbank = source is not None and source.is_manual_repair()
+        if werkbank and not (leere_kurve_erlaubt or zaehler_erhalt):
             logger.info(
                 f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert "
                 "(HA-Verlauf vermutlich gepurgt) — Werkbank versucht die Langzeitstatistik"
             )
             return None
-        if await _tag_hat_geraetewerte(anlage, datum, db):
-            logger.info(
-                f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert (HA-Verlauf vermutlich "
-                "gepurgt) — gespeicherte Gerätewerte bleiben stehen, Tag nicht neu geschrieben"
-            )
-            return None
+        if (werkbank and not leere_kurve_erlaubt) or await _tag_hat_geraetewerte(anlage, datum, db):
+            if not zaehler_erhalt:
+                logger.info(
+                    f"Anlage {anlage.id}, {datum}: Leistungskurve ohne Wert (HA-Verlauf vermutlich "
+                    "gepurgt) — gespeicherte Gerätewerte bleiben stehen, Tag nicht neu geschrieben"
+                )
+                return None
+            nur_zaehler = True   # d) N-791: entscheidet ``aggregate_day`` an der Zählertabelle
 
-    return serien, punkte_raw, vortagsrand_raw, synthetische_slots
+    return serien, punkte_raw, vortagsrand_raw, synthetische_slots, nur_zaehler
 
 
 def bucket_nach_slot(
@@ -2002,6 +2019,7 @@ async def aggregate_day(
     prefetched_tagesverlauf: Optional[dict] = None,
     leere_kurve_erlaubt: bool = False,
     nur_mit_verlauf: bool = False,
+    zaehler_erhalt: bool = False,
 ) -> Optional[TagesZusammenfassung]:
     """
     Aggregiert Energiedaten eines Tages und speichert sie persistent.
@@ -2052,6 +2070,10 @@ async def aggregate_day(
             trägt die Leistungskurve keinen Wert — der Tag liegt außerhalb der
             Recorder-Aufbewahrung —, wird nichts geschrieben (``None``), auch nicht aus den
             Zählern (s. ``hole_tagesverlauf``).
+        zaehler_erhalt: N-791, nur für die Werkbank (Stufe 3 nach leerem LTS-Rückfall): trägt die Kurve keinen
+            Leistungswert und der Tag gespeicherte Gerätewerte, wird er nur geschrieben, wenn die Zählertabelle aus
+            der HA-Langzeitstatistik trägt — Zählergrößen neu, Leistungsverlauf und Peaks bleiben stehen
+            (``zaehler_erhalt.py``); der transiente Marker ``leistung_erhalten`` sagt es dem Aufrufer.
 
     Returns:
         TagesZusammenfassung oder ``None`` — bei Fehler, ohne Quelle (F-26) oder wenn eine Kurve
@@ -2067,11 +2089,11 @@ async def aggregate_day(
     rohdaten = await hole_tagesverlauf(
         anlage, datum, db, prefetched_tagesverlauf,
         source=source, leere_kurve_erlaubt=leere_kurve_erlaubt,
-        nur_mit_verlauf=nur_mit_verlauf,
+        nur_mit_verlauf=nur_mit_verlauf, zaehler_erhalt=zaehler_erhalt,
     )
     if rohdaten is None:
         return None
-    serien, punkte_raw, vortagsrand_raw, synthetische_slots = rohdaten
+    serien, punkte_raw, vortagsrand_raw, synthetische_slots, nur_zaehler = rohdaten
 
     stunden_buckets = bucket_nach_slot(punkte_raw, vortagsrand_raw, synthetische_slots)
     punkte = mittel_je_stunde(stunden_buckets)
@@ -2089,6 +2111,12 @@ async def aggregate_day(
         wp_starts_pro_stunde, wp_betriebsstunden_pro_stunde, komponenten_starts,
         tages_tabelle,
     ) = await lade_zaehler_und_counter(anlage, datum, db)
+    leistungserhalt = None
+    if nur_zaehler:   # N-791 (``hole_tagesverlauf`` d): nur mit der Zählertabelle aus HA, vor jedem Schreiben
+        if not zaehlertabelle_traegt(kwh_source_label, kwh_pro_stunde):
+            logger.info(f"Anlage {anlage.id}, {datum}: ohne Leistungskurve und ohne HA-Zählertabelle — Tag bleibt")
+            return None
+        leistungserhalt = await lese_leistungsbahnen(anlage.id, datum, db)
 
     # ── N-555 Stufe 3: Ladeblöcke (Konzept 7.2 Regel 9, Anhang D) ──────────
     # Direkt nach der Slot-Tabelle des Tages: Blöcke der Sprünge an D bilden und in
@@ -2154,6 +2182,7 @@ async def aggregate_day(
         wp_betriebsstunden_pro_stunde=wp_betriebsstunden_pro_stunde,
         gerettete_herkunft=gerettete_herkunft,
         weiche=weiche,
+        leistungserhalt=leistungserhalt,
     )
 
     for punkt in punkte:
@@ -2170,6 +2199,7 @@ async def aggregate_day(
     pv_marken = await komponenten_tagesgesamt_und_peaks(
         anlage, datum, db, invs_by_id, kwh_source_label, akku, tages_tabelle,
     )
+    peaks_erhalten(leistungserhalt, akku, preserved_felder, preserved_quellen)
 
     zusammenfassung, lade_anteil, tz_source_label = baue_zusammenfassung(
         anlage, datum, akku,
@@ -2204,6 +2234,8 @@ async def aggregate_day(
         preserved_quellen=preserved_quellen,
     )
     weiche.herkunft(zusammenfassung)
+    # Transienter Marker (nicht persistiert) für die Werkbank-Rückmeldung (N-791): Zähler neu, Leistungsverlauf erhalten.
+    zusammenfassung.leistung_erhalten = bool(leistungserhalt and (leistungserhalt.komponenten or leistungserhalt.peaks))
 
     await pruefe_invarianten(anlage, datum, db, zusammenfassung, invs_by_id)
 
