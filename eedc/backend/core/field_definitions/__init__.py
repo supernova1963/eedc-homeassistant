@@ -181,6 +181,7 @@ from backend.core.field_definitions.auswahl import (  # noqa: F401 — Re-Export
     SONSTIGES_ABGABE_KATEGORIE,
     ist_abgabe_kategorie,
     SONSTIGES_ABGABE_LABEL,
+    SONSTIGES_KATEGORIE_LABEL,
     ZAEHLERSTAND_FELD,
     ist_zaehler_kategorie,
     ist_gepflegte_sonstiges_kategorie,
@@ -200,6 +201,7 @@ from backend.core.field_definitions.reader import (  # noqa: F401 — Re-Export
     netzladung_des_zaehlers,
     SONSTIGES_VERBRAUCH_FELDER,
     sonstiges_feld_reihenfolge,
+    SONSTIGES_FELDER_BEKANNT,
     get_sonstiges_verbrauch_kwh,
 )
 from backend.core.field_definitions.heimladung import (  # noqa: F401 — Re-Export
@@ -324,6 +326,7 @@ __all__ = [
     'SONSTIGES_ABGABE_KATEGORIE',
     'ist_abgabe_kategorie',
     'SONSTIGES_ABGABE_LABEL',
+    'SONSTIGES_KATEGORIE_LABEL',
     'ZAEHLERSTAND_FELD',
     'ist_zaehler_kategorie',
     'ist_gepflegte_sonstiges_kategorie',
@@ -350,6 +353,7 @@ __all__ = [
     'ist_heim_gesamt',
     'SONSTIGES_VERBRAUCH_FELDER',
     'sonstiges_feld_reihenfolge',
+    'SONSTIGES_FELDER_BEKANNT',
     'get_sonstiges_verbrauch_kwh',
     'FEINE_STROM_FELDER',
     'WP_GESAMT_STROM_FELDER',

@@ -389,6 +389,18 @@ def ist_abgabe_kategorie(kategorie: Optional[str]) -> bool:
 #: Code, der Anzeigename kommt aus der Kategorie.
 SONSTIGES_ABGABE_LABEL: Final[str] = "Abgabe an Dritte"
 
+#: Anzeigename jeder gepflegten *Sonstiges*-Kategorie — für Meldungen in Anwender-Sprache statt des Registry-Schlüssels
+#: (N-789: der Daten-Checker nennt die Kategorie, die ein Feld nicht führt). Jeder Schlüssel von
+#: ``INVESTITION_FELDER["sonstiges"]`` braucht hier einen Eintrag — `test_feldlisten_spiegel_sonstiges.py` hält das fest,
+#: damit eine neue Kategorie nicht wieder als Schlüssel erscheint.
+SONSTIGES_KATEGORIE_LABEL: Final[dict[str, str]] = {
+    "erzeuger": "Erzeuger",
+    "verbraucher": "Verbraucher",
+    "abgabe": SONSTIGES_ABGABE_LABEL,
+    "speicher": "Speicher",
+    "zaehler": "Zähler",
+}
+
 #: Der eine Feldname der Kategorie — ausgeschrieben statt aus der Registry
 #: gezogen, weil dieses Projekt von der Grep-Barkeit lebt. Dass beide
 #: übereinstimmen, hält `test_377_zaehlerstaende.py` fest.

@@ -671,7 +671,20 @@ def groesse_gibt_es_am_geraet(
     „das Gerät hat die Größe nicht" sind verschiedene Lagen — die erste gehört
     dem Daten-Checker, die zweite hierher. Wer diese Funktion für eine fehlende
     Messung benutzt, blendet gute Daten aus (Entscheid 29.08., Total-Fall).
+
+    ⭐ ***Sonstiges* fragt den Lesepfad seiner Kategorie (N-789, #443).** Dort ist die Registry ein Dict je
+    Kategorie, keine Liste mit ``bedingung`` — bis 10.11.2026 lief die Schleife darunter ins fail-open, und
+    «Wert entfernen» (N-393) wies jedes Sonstiges-Feld mit 409 ab: rilmor-mhrs' Abgabe-Geräte trugen ihre
+    Alt-Monate in ``erzeugung_kwh``, die seit 4.0.41 in keiner Bilanz zählen, ohne Hinweis und ohne Weg.
+    Die Antwort ist dieselbe Frage an die bestehende Registry: ``False`` genau dann, wenn die Kategorie
+    gepflegt ist und **kein** Pfad das Feld liest (``reader.sonstiges_gelesene_felder`` — Feldliste ∪ Tag ∪
+    Monatszweig; der Wächter ``test_n789_sonstiges_totes_feld.py`` misst die Leser selbst). Ohne gepflegte
+    Kategorie und für ein unbekanntes Feld bleibt es bei ``True``.
     """
+    if typ == "sonstiges":
+        # Lokal: `reader` importiert dieses Modul.
+        from backend.core.field_definitions.reader import sonstiges_feld_wird_gelesen
+        return sonstiges_feld_wird_gelesen(feld, parameter)
     for eintrag in INVESTITION_FELDER.get(typ) or ():
         if not isinstance(eintrag, dict) or eintrag.get("feld") != feld:
             continue

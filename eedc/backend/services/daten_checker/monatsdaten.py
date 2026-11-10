@@ -21,6 +21,7 @@ from backend.core.field_definitions import (
     groesse_gibt_es_am_geraet,
     wp_strom_aufteilung,
 )
+from .nicht_gefuehrte_felder import label_je_feld_nicht_gefuehrt, text_sonstiges_totes_feld
 from backend.core.berechnungen.erzeuger_traeger import erzeuger_traeger
 from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.monats_luecken import ermittle_start_anker
@@ -705,19 +706,20 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         durch ein anderes Gerät, z. B. Heimladung bei vorhandener Wallbox) —
         dort gewinnt ein anderer Weg, die Größe existiert weiter.
 
+        ⭐ ***Sonstiges* (N-789, #443).** Dort ist die Registry ein Dict je
+        Kategorie, und die Regel kehrte bis 10.11.2026 leer zurück — Alt-Monate
+        in ``erzeugung_kwh`` an einem Abgabe-Gerät (rilmor-mhrs) zählten in keiner
+        Bilanz, ohne Hinweis. Kandidaten sind hier alle dem Helfer bekannten
+        Sonstiges-Felder (``SONSTIGES_FELDER_BEKANNT``; Label des ersten Treffers,
+        Rückfall kanonisches Geschwister bzw. Schlüssel), sobald die Kategorie
+        gepflegt ist; ob
+        ein Feld tot ist, entscheidet allein ``groesse_gibt_es_am_geraet`` (der
+        Lesepfad der Kategorie) — keine zweite Regel.
+
         Eine ``0`` löst nichts aus: sie ist keine Aussage über das Gerät und
         rechnet nirgends mit.
         """
-        felder = INVESTITION_FELDER.get(inv.typ)
-        if not isinstance(felder, list):
-            return []
-        # Nur Felder mit harter Bedingung können am Gerät fehlen — alle anderen
-        # spart die Lesetür unten ohnehin aus, die Vorprüfung hält den Lauf kurz.
-        label_je_feld = {
-            f["feld"]: f.get("label", f["feld"])
-            for f in felder
-            if isinstance(f, dict) and f.get("bedingung")
-        }
+        label_je_feld = label_je_feld_nicht_gefuehrt(inv.typ, param)
         if not label_je_feld:
             return []
 
@@ -743,7 +745,12 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             if len(labels) > 6:
                 monate_str += f" (+{len(labels) - 6} weitere)"
 
-            if inv.typ == "waermepumpe" and basis_feld_key(key) == "warmwasser_kwh":
+            if inv.typ == "sonstiges":
+                # N-789 (#443): die Kategorie entscheidet, nicht ein Schalter.
+                meldung, details = text_sonstiges_totes_feld(
+                    name, basis_feld_key(key), label, len(labels), monate_str, param.get("kategorie"),
+                )
+            elif inv.typ == "waermepumpe" and basis_feld_key(key) == "warmwasser_kwh":
                 # Der Ursprungsfall (N-379): die Klimaanlage. Der Kühlbetrieb ist
                 # das wahrscheinlichste Ziel des Werts — als Angebot, nicht als Urteil.
                 meldung = (

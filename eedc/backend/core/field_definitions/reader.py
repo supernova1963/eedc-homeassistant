@@ -5,8 +5,11 @@
 # alle Namen weiter, die Aufrufer und Tests bisher aus dem Modul importierten.
 
 from typing import Mapping, Optional
-from backend.core.field_definitions.auswahl import ist_abgabe_kategorie, ist_zaehler_kategorie
+from backend.core.field_definitions.auswahl import (
+    ist_abgabe_kategorie, ist_gepflegte_sonstiges_kategorie, ist_zaehler_kategorie,
+)
 from backend.core.field_definitions.bedingungen import groesse_gibt_es_am_geraet
+from backend.core.field_definitions.registry import INVESTITION_FELDER
 
 
 # =============================================================================
@@ -274,6 +277,61 @@ def sonstiges_feld_reihenfolge(kategorie: str | None) -> tuple[str, ...]:
     if kategorie == "erzeuger":
         return ("erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER)
     return (*SONSTIGES_VERBRAUCH_FELDER, "erzeugung_kwh")
+
+# Die Felder, die der **Monatszweig** (`core/berechnungen/imd_monatsaggregat.py::imd_typ_beitrag`, Zweig
+# `sonstiges`) je Kategorie behält — der dritte Lesepfad neben der Feldliste der Kategorie und
+# `sonstiges_feld_reihenfolge` (Tag). Eine gepflegte Kategorie ohne eigene Weiche dort (heute `speicher`) läuft in den
+# Site-3-Zweig «alles mitnehmen» (`_SONSTIGES_MONAT_OHNE_WEICHE`). Abgeschrieben, nicht abgeleitet: der Layer importiert
+# diese Fassade, nicht umgekehrt — deshalb hält `test_n789_sonstiges_totes_feld.py` beide Seiten gegeneinander.
+_SONSTIGES_MONAT_FELDER: dict[str, tuple[str, ...]] = {
+    "zaehler": (),
+    "abgabe": ("abgabe_kwh", "einspeise_erloes_euro"),
+    "erzeuger": ("erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER, "eigenverbrauch_kwh", "einspeisung_kwh",
+                 "einspeise_erloes_euro"),
+    "verbraucher": (*SONSTIGES_VERBRAUCH_FELDER, "bezug_pv_kwh", "bezug_netz_kwh"),
+}
+_SONSTIGES_MONAT_OHNE_WEICHE: tuple[str, ...] = (
+    "erzeugung_kwh", *SONSTIGES_VERBRAUCH_FELDER, "eigenverbrauch_kwh", "einspeisung_kwh",
+    "bezug_pv_kwh", "bezug_netz_kwh", "einspeise_erloes_euro",
+)
+
+#: Jedes Feld, das ein *Sonstiges*-Gerät überhaupt tragen kann (Vereinigung der Kategorie-Listen, der Ersatzgruppe
+#: und der Monatszweige). Ein Feld außerhalb ist **unbekannt** und gilt als vorhanden (fail-open, wie
+#: `groesse_gibt_es_am_geraet`).
+SONSTIGES_FELDER_BEKANNT: frozenset[str] = frozenset(
+    {f["feld"] for liste in INVESTITION_FELDER["sonstiges"].values() for f in liste}
+    | set(SONSTIGES_VERBRAUCH_FELDER)
+    | {f for felder in _SONSTIGES_MONAT_FELDER.values() for f in felder}
+    | set(_SONSTIGES_MONAT_OHNE_WEICHE)
+)
+
+def sonstiges_gelesene_felder(kategorie: str | None) -> Optional[frozenset[str]]:
+    """Welche Felder liest **irgendein** Pfad an einem *Sonstiges*-Gerät dieser Kategorie? (N-789, #443)
+
+    Der eine Ort für die Antwort: Feldliste der Kategorie (Monatsabschluss, Zählerstand-Pfad) ∪
+    `sonstiges_feld_reihenfolge` (Tag) ∪ die Felder, die der Monatszweig behält (`_SONSTIGES_MONAT_FELDER`).
+    **Maßstab ist der Lesepfad, nicht die Feldliste:** der Erzeuger liest `verbrauch_sonstig_kwh`/`verbrauch_kwh`
+    als Ersatz (N-667), Abgabe und Erzeuger lesen `einspeise_erloes_euro` — diese Felder sind lebendig, auch wo die
+    Liste sie nicht anbietet.
+
+    ``None`` heißt «alles wird gelesen»: ohne gepflegte Kategorie nimmt der Monat beide Richtungen mit (Site-3).
+    """
+    if not ist_gepflegte_sonstiges_kategorie(kategorie):
+        return None
+    return frozenset(
+        {f["feld"] for f in INVESTITION_FELDER["sonstiges"][kategorie]}
+        | set(sonstiges_feld_reihenfolge(kategorie))
+        | set(_SONSTIGES_MONAT_FELDER.get(kategorie, _SONSTIGES_MONAT_OHNE_WEICHE))
+    )
+
+def sonstiges_feld_wird_gelesen(feld: str, parameter: Optional[dict]) -> bool:
+    """Die *Sonstiges*-Antwort von `groesse_gibt_es_am_geraet`: ``False`` genau dann, wenn die Kategorie gepflegt
+    ist und kein Pfad das (bekannte) Feld liest — siehe `sonstiges_gelesene_felder`."""
+    kategorie = parameter.get("kategorie") if isinstance(parameter, dict) else None
+    gelesen = sonstiges_gelesene_felder(kategorie)
+    if gelesen is None or feld not in SONSTIGES_FELDER_BEKANNT:
+        return True
+    return feld in gelesen
 
 def get_sonstiges_verbrauch_kwh(data: dict) -> float:
     """Sonstiges-Verbraucher-Energie. Liest `verbrauch_sonstig_kwh` (kanonisch),

@@ -1118,7 +1118,7 @@ Für sonstige **Erzeuger** — ein BHKW, ein Windrad, eine kleine Wasserkraftanl
 >
 > **Unter *Komponenten → Sonstiges*** zeigt ein Abgabe-Gerät drei Kennzahlen: **Abgabe** (kWh über den Gesamtzeitraum), **Erlös** (die Summe deiner gepflegten Erlöse — ohne gepflegten Erlös steht dort „nicht bewertet") und **Monate** (Monate mit Abgabe). Der Verlauf zeigt die Abgabe je Monat, der Vergleich ihre Jahressummen, die Wirtschaftlichkeit den Posten *„Erlös aus der Abgabe"*. Eine Ersparnis- oder CO₂-Kachel gibt es bewusst nicht: abgegebener Strom ist kein Eigenverbrauch. Im **Monatsabschluss** hat ein Abgabe-Gerät die Felder **„Abgabe (kWh)"** und **„Erlös (€)"**; ein zugeordneter Sensor füllt die Abgabe vor.
 >
-> ⚠ **Monate vor der Umstellung** tragen ihren Wert noch im Feld *Erzeugung* — eedc liest ihn für ein Abgabe-Gerät nicht, Verlauf und Bilanz zeigen dort 0. Nachtragen: unter *Einstellungen → Daten → Monatsdaten* den Monat öffnen und den Wert ins Feld **„Abgabe (kWh)"** eintragen.
+> ⚠ **Monate vor der Umstellung** tragen ihren Wert noch im Feld *Erzeugung* — eedc liest ihn für ein Abgabe-Gerät nicht, Verlauf und Bilanz zeigen dort 0. Nachtragen: unter *Einstellungen → Daten → Monatsdaten* den Monat öffnen und den Wert ins Feld **„Abgabe (kWh)"** eintragen. Der **Daten-Checker** nennt dir diese Monate und bietet an der Meldung **„Wert entfernen"** an — damit verschwindet der alte Wert aus dem Feld *Erzeugung*, nachdem du ihn umgetragen hast. eedc löscht und verschiebt nichts von allein.
 >
 > ### ⛔ Was eedc bei Abgabe an Dritte weiterhin nicht kann
 >

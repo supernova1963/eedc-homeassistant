@@ -21,6 +21,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   zugeordneten Sensors ging beim Abschluss verloren. Monate vor der Umstellung der Kategorie tragen ihren Wert noch im
   Feld *Erzeugung* und zählen als 0 — nachtragen unter *Einstellungen → Daten → Monatsdaten*, Monat öffnen, Feld
   „Abgabe (kWh)" (N-785).
+- **Daten-Checker: alte Werte an Geräten unter *Sonstiges* nach einem Wechsel der Kategorie (#443, Melder
+  rilmor-mhrs).** Wer ein Gerät von „Erzeuger" auf „Abgabe an Dritte" (oder auf eine andere Kategorie) umgestellt hat,
+  trug die alten Monate noch im Feld *Erzeugung* — eedc liest das Feld für die neue Kategorie nicht, der Wert zählt in
+  keiner Bilanz, und der Daten-Checker sagte nichts dazu; der Knopf „Wert entfernen" lehnte jedes Feld eines
+  Sonstiges-Geräts ab. Jetzt meldet der Daten-Checker je Feld einmal die Monate mit so einem Wert und bietet „Wert
+  entfernen" an; bei „Abgabe an Dritte" steht an *Erzeugung* oder *Verbrauch* dazu, wie du die Menge vorher ins Feld
+  „Abgabe (kWh)" überträgst. Felder,
+  die eedc für die Kategorie liest — etwa *Verbrauch* an einem Erzeuger ohne *Erzeugung* —, bleiben still. eedc löscht
+  und verschiebt nichts von allein (N-789).
 - **Daten-Checker: «Beheben» führt bis zur Reparatur-Werkbank (#440, gruaGit).** Die Wetterquellen-Prüfung und alle
   anderen Befunde, deren Handgriff in der Reparatur-Werkbank liegt, klappten die Energieprofil-Pflege auf — die Werkbank
   liegt aber an ihrem Ende, und auf Notebook und Handy sah der Klick wirkungslos aus; ein zweiter Klick tat gar nichts.
@@ -219,6 +228,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Intern
 
+- **Päckchen DD-Nachlauf (10.11.2026): N-393-Regel für *Sonstiges* (N-789, #443).** `groesse_gibt_es_am_geraet`
+  beantwortet für `sonstiges` die Frage über den Lesepfad der Kategorie: `reader.sonstiges_gelesene_felder` (Feldliste
+  der Kategorie ∪ `sonstiges_feld_reihenfolge` ∪ die Felder, die der Monatszweig von `imd_typ_beitrag` behält),
+  `False` nur bei gepflegter Kategorie und bekanntem, ungelesenem Feld; vorher fail-open. Damit nimmt
+  `delete_feldwert_nicht_gefuehrt` tote Sonstiges-Felder an (409 bleibt für gelesene). Checker
+  `_check_werte_in_nicht_gefuehrten_feldern` mit Sonstiges-Zweig (Kandidaten und Text in
+  `daten_checker/nicht_gefuehrte_felder.py`: Kategorie-Anzeigename aus `SONSTIGES_KATEGORIE_LABEL`, Label-Rückfall für
+  `verbrauch_kwh` auf das kanonische Geschwister, Abgabe-Angebot nur an den Hauptgrößen). Wächter `test_n789_sonstiges_totes_feld.py`: misst je gepflegter Kategorie
+  Monat, Tag und Zählerstand-Pfad und hält die Menge der toten Felder gegen den Helfer. Die erwarteten MQTT-Topics
+  (`daten_checker/sensoren.py`) bleiben unverändert. `test_feldlisten_spiegel_sonstiges.py`: jede Kategorie hat einen
+  Anzeigenamen.
 - **Päckchen DD (10.11.2026): sauberer Stand vor dem Release.** Route `GET /investitionen/dashboard/sonstiges` mit eigenem
   Zweig für `ist_abgabe_kategorie` (`_abgabe_dashboard`: `gesamt_abgabe_kwh`, `erloes_abgabe_euro`, `monate_mit_erloes`,
   `monate_mit_abgabe`, `bewertet`/`nicht_bewertet_grund`, Reihe `abgabe_monatsreihe` aus den Monats-Fakten; der

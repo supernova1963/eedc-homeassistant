@@ -91,3 +91,14 @@ def test_abgabe_nicht_in_der_liste_fuer_ungepflegte_geraete():
     start = text.index("const SONSTIGES_FELDER_UNGEPFLEGT")
     block = text[start:text.index("})()", start)]
     assert "!istZaehlerKategorie(k)" in block and "!istAbgabeKategorie(k)" in block, block
+
+
+def test_jede_kategorie_hat_einen_anzeigenamen():
+    """N-789 (Master-Entscheid 10.11.2026): jede Backend-Kategorie hat ein Label in Anwender-Sprache
+    (``SONSTIGES_KATEGORIE_LABEL``) — der Daten-Checker nennt sie in Meldungen; eine neue Kategorie erschiene sonst
+    als Registry-Schlüssel. Kein Abgleich mit Client-Texten."""
+    from backend.core.field_definitions import SONSTIGES_ABGABE_LABEL, SONSTIGES_KATEGORIE_LABEL
+
+    fehlend = [k for k in INVESTITION_FELDER["sonstiges"] if not SONSTIGES_KATEGORIE_LABEL.get(k)]
+    assert not fehlend, f"Kategorie ohne Anzeigenamen in SONSTIGES_KATEGORIE_LABEL: {fehlend}"
+    assert SONSTIGES_KATEGORIE_LABEL["abgabe"] == SONSTIGES_ABGABE_LABEL
