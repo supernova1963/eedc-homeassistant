@@ -26,7 +26,7 @@ router = APIRouter()
 # =============================================================================
 
 class ZielResponse(BaseModel):
-    """E2: Sprung-Ziel eines Befunds (`services/daten_checker/ziele.py`); der Client liest bis E4 weiter `link`."""
+    """E2: Sprung-Ziel eines Befunds (`services/daten_checker/ziele.py`); `link` ist seit E4 daraus mit allen Parametern gebildet."""
     bereich: str
     block: Optional[str] = None
     params: dict = {}

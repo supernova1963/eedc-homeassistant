@@ -622,7 +622,7 @@ async def test_p9_checker_meldet_nicht_gespeicherte_aufteilung(db, monatsstrom, 
     m = treffer[0]
     assert m.schwere == "warning"
     assert "08/2026" in m.meldung and "zusammen 10,0 kWh" in m.meldung and erwartet in m.meldung
-    assert m.link == "/monatsabschluss"
+    assert m.link == f"/einstellungen/daten?erfassen=2026-08&geraet={wp.id}"  # E4: der Monat am Gerät, nicht die Alt-Route
     assert m.investition_id == wp.id
 
 

@@ -51,11 +51,11 @@ def _details_mit_zeile(feld: str, folge: str) -> str:
     return (
         f"eedc braucht für jeden Monat einen erfassten Wert für {feld} — auch 0 ist ein Wert. "
         f"Für diesen Monat steht keiner in der Monatszeile (etwa nach einem Import, der nur "
-        f"Wallbox- oder PV-Werte enthielt). Cockpit → Monat nimmt ihn dann aus der HA-Statistik, "
-        f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats in Cockpit → Monat "
-        f"und Cockpit → Jahr leer. "
+        f"Wallbox- oder PV-Werte enthielt). Die Monatsansicht im Cockpit nimmt ihn dann aus der HA-Statistik, "
+        f"sofern dort ein Zähler zugeordnet ist; sonst bleiben {folge} des Monats in der Monats- "
+        f"und der Jahresansicht im Cockpit leer. "
         # N-736: die Fakten-Sichten nehmen den Monat aus der Bilanz (`meta.netz_erfasst`), statt mit 0 zu rechnen.
-        f"Übersicht, Jahresbericht, HA-Sensoren, Auswertungen → Tabelle und Aussichten → Finanzen "
+        f"Übersicht, Jahresbericht, HA-Sensoren, die Tabelle der Auswertungen und die Finanz-Aussicht "
         f"lassen den Monat bis dahin aus Eigenverbrauch, Autarkie, Ersparnis und CO₂ heraus (seine "
         f"PV-Erzeugung zählen sie weiter), der Community-Upload teilt ihn nicht; tragen die Tageswerte "
         f"des Monats das Feld, können sie es von dort nehmen. "
@@ -70,8 +70,8 @@ def _details_ohne_zeile(feld: str, folge: str) -> str:
     return (
         f"eedc braucht für jeden Monat einen erfassten Wert für {feld} — auch 0 ist ein Wert. Für diesen Monat gibt "
         f"es keinen Monatsabschluss, und an keinem seiner Tage hat ein Zähler {feld} gemessen; eedc rechnet das Feld "
-        f"deshalb nicht als 0: {folge} des Monats bleiben in Cockpit → Monat und Cockpit → Jahr leer („–“). "
-        f"Abhilfe: Datenquelle zuordnen (Einstellungen → Datenquellen — der Zähler zählt ab dann) oder den Monat im "
+        f"deshalb nicht als 0: {folge} des Monats bleiben in der Monats- und der Jahresansicht im Cockpit leer („–“). "
+        f"Abhilfe: Datenquelle zuordnen (der Zähler zählt ab dann) oder den Monat im "
         f"Monatsabschluss pflegen — ein leeres Feld ist keine 0."
     )
 
@@ -166,7 +166,7 @@ def _speicher_index(
     # Lücke gerade verdeckt: zwei Speicher, einer davon vollständig, und
     # die Summe sieht heil aus. Der Anwender muss wissen, an welchem Gerät
     # das Feld fehlt — er füllt es dort.
-    speicher_ohne_entladung: dict[tuple[int, int], list[tuple[str, float]]] = {}
+    speicher_ohne_entladung: dict[tuple[int, int], list[tuple[str, float, int]]] = {}
     for inv in anlage.investitionen:
         if inv.typ == "speicher" and inv.aktiv:
             start = (inv.anschaffungsdatum.year, inv.anschaffungsdatum.month) if inv.anschaffungsdatum else None
@@ -198,7 +198,7 @@ def _speicher_index(
                     and _aktiv_im(imd_key)
                 ):
                     speicher_ohne_entladung.setdefault(imd_key, []).append(
-                        (inv.bezeichnung or f"#{inv.id}", float(ladung))
+                        (inv.bezeichnung or f"#{inv.id}", float(ladung), inv.id)
                     )
                 if ladung is not None or entladung is not None:
                     key = imd_key
@@ -263,7 +263,7 @@ def _speicher_entladung_fehlt(
     # beide: `speicher_ohne_entladung` ist nur befüllt, wo eine
     # IMD-Zeile mit Ladung existiert, und dann ist der Monat in
     # `speicher_imd_monate`.
-    for geraet, ladung_kwh in speicher_ohne_entladung.get((md.jahr, md.monat), []):
+    for geraet, ladung_kwh, inv_id in speicher_ohne_entladung.get((md.jahr, md.monat), []):
         ergebnisse.append(CheckErgebnis(
             kategorie=kat, schwere=CheckSeverity.WARNING, code="md_geraet_entladung_fehlt",
             meldung=(
@@ -274,7 +274,7 @@ def _speicher_entladung_fehlt(
                 "Ohne Entladung gibt es keinen gemessenen Wirkungsgrad "
                 "und keine Speicher-Ersparnis"
             ),
-            ziel=ziel_monat_label(prefix, feld="entladung_kwh"),
+            ziel=ziel_monat_label(prefix, geraet=inv_id, feld="entladung_kwh"),
         ))
     return ergebnisse
 

@@ -8,8 +8,10 @@ Menüweg-Pfeil «→». Geprüft werden
 * die Beschriftungen der Vorschau-Zähler, die die Operationen der Checker-Knöpfe liefern (``REPARATUR_AENDERUNG_LABELS`` in
   ``frontend/src/lib/constants.ts``) — jeder Schlüssel hat eine;
 * die Satzteile der Vorschau-Zeile im Client (``frontend/src/components/datenchecker/vorschauZeile.ts``).
-**Ausgenommen:** die Werkbank-Warnungen (``RepairPlan.warnings``), die der Kasten unverändert zeigt (Ü3). Meldungen und
-Details folgen in E4 (Menüwege raus; Allowlist der acht Werteübergänge, Erhebung Teil A Aufgabe 2).
+**Ausgenommen:** die Werkbank-Warnungen (``RepairPlan.warnings``), die der Kasten unverändert zeigt (Ü3).
+**Seit E4 auch Meldung und Details** (Konzept §2 Nr 4, §3.1 R4): kein eedc-Menüweg «Bereich → …» in einem Text-Literal der
+Erzeuger — der Knopf ist der Weg. Erlaubt bleiben die drei Home-Assistant-Wege (``HA_WEGE``) und Werteübergänge
+(«Stand a → b», «PV x → HA y», «7130 kWh → 7130 W» — kein Bereichsname vor dem Pfeil).
 
 Schwesterdateien: ``test_daten_checker_codes.py`` (W-1), ``test_daten_checker_ziele.py`` (W-2/W-6),
 ``test_daten_checker_handgriff_wirkt.py`` (W-11), ``test_repair_operationen_checker.py``.
@@ -82,6 +84,58 @@ def test_satzteile_der_vorschau_zeile_ohne_mechanik():
     for s in saetze:
         assert _verstoesse(s) == [], s
     assert "endgültig" in quelle and "wirksam, wenn du in Home Assistant korrigiert hast" in quelle
+
+
+# ── E4: Menüwege in Meldung/Details (Erhebung Teil A Aufgabe 2: 24 Wortlaute an 56 Stellen) ─────────────────────────
+
+CHECKER = Path(__file__).resolve().parents[1] / "services" / "daten_checker"
+#: Wege in der Oberfläche von Home Assistant — eedc kann dorthin nicht springen, der Text ist der Weg (M10, M23, M24).
+HA_WEGE = (
+    "Einstellungen → Geräte & Dienste → Helfer",
+    "Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol",
+    "Helfer → „Integral-Sensor“",
+)
+#: Ein Bereich bzw. Block der eedc-Oberfläche vor einem Pfeil = Menüweg.
+MENUEWEG = re.compile(
+    r"(Einstellungen|Cockpit|Aussichten?|Auswertungen|Komponenten|Investitionen|Stammdaten|Anlage|Strompreise|"
+    r"Solarprognose|Daten|Datenquellen|Datenverwaltung|Integration|Energieprofil(-Pflege)?|Reparatur-Werkbank|"
+    r"Monatsdaten|System)\s*(→|->)"
+)
+
+
+def _menuewege(text: str) -> list[str]:
+    for weg in HA_WEGE:
+        text = text.replace(weg, "")
+    return [m.group(0) for m in MENUEWEG.finditer(text)]
+
+
+def _text_literale():
+    """Alle Text-Literale der Erzeuger (Konstanten und f-String-Teile, ohne Docstrings und Kommentare)."""
+    import ast
+
+    for pfad in sorted(CHECKER.rglob("*.py")):
+        baum = ast.parse(pfad.read_text(encoding="utf-8"))
+        doc = {id(n.body[0].value) for n in ast.walk(baum)
+               if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.body
+               and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
+        for n in ast.walk(baum):
+            if isinstance(n, ast.JoinedStr):
+                yield pfad.name, n.lineno, "".join(v.value if isinstance(v, ast.Constant) else "{}" for v in n.values)
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in doc:
+                yield pfad.name, n.lineno, n.value
+
+
+def test_meldung_und_details_ohne_menueweg():
+    verstoss = [f"{d}:{z} {_menuewege(t)}" for d, z, t in _text_literale() if _menuewege(t)]
+    assert not verstoss, "Menüweg im Befund-Text — der Knopf ist der Weg (Konzept §3.1 R4):\n  " + "\n  ".join(verstoss)
+
+
+def test_menueweg_waechter_hat_zaehne():
+    assert _menuewege("unter Einstellungen → Datenquellen zuordnen") == ["Einstellungen →"]
+    assert _menuewege("Cockpit → Jahr und Aussichten → Finanzen") == ["Cockpit →", "Aussichten →"]
+    assert _menuewege("in Home Assistant unter Einstellungen → Geräte & Dienste → Helfer einen Zähler") == []
+    assert _menuewege("Stand 12 → 3 → zurück; 7130 kWh → 7130 W; PV {} → HA {}") == []
+    assert sum(1 for _ in _text_literale()) > 500
 
 
 def test_der_waechter_hat_zaehne():

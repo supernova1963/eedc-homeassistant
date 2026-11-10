@@ -36,10 +36,10 @@ vi.mock('../hooks', () => ({
 
 // Das Formular selbst ist hier nicht Gegenstand — die Probe prüft, WELCHES sich öffnet (Titel + Zeile).
 vi.mock('../components/forms', () => ({
-  MonatsdatenForm: ({ monatsdaten, voreingestellterMonat }: {
-    monatsdaten?: { id: number }; voreingestellterMonat?: { jahr: number; monat: number } | null
+  MonatsdatenForm: ({ monatsdaten, voreingestellterMonat, fokusFeld }: {
+    monatsdaten?: { id: number }; voreingestellterMonat?: { jahr: number; monat: number } | null; fokusFeld?: string | null
   }) => (
-    <div data-testid="formular">
+    <div data-testid="formular" data-fokus={fokusFeld ?? ''}>
       {monatsdaten ? `bearbeiten ${monatsdaten.id}` : `erfassen ${voreingestellterMonat?.monat}/${voreingestellterMonat?.jahr}`}
     </div>
   ),
@@ -71,9 +71,9 @@ function Ort() {
   return <span data-testid="ort">{ort.search}</span>
 }
 
-function zeige() {
+function zeige(adresse = '/einstellungen/daten?erfassen=2026-01') {
   render(
-    <MemoryRouter initialEntries={['/einstellungen/daten?erfassen=2026-01']}>
+    <MemoryRouter initialEntries={[adresse]}>
       <Routes>
         <Route path="/einstellungen/daten" element={<><MonatsdatenVerwaltung anlageId={1} /><Ort /></>} />
       </Routes>
@@ -118,5 +118,21 @@ describe('Deep-Link ?erfassen= wartet auf die Monatsliste (N-792)', () => {
     expect(screen.queryByText('Monatsdaten bearbeiten')).toBeNull()
     expect(screen.queryByText(/Monatsdaten erfassen/)).toBeNull()
     expect(screen.queryByTestId('formular')).toBeNull()
+  })
+
+  it('D (E4): `geraet` und `feld` gehen als Sprung-Ziel ans Formular, alle drei Parameter verschwinden', async () => {
+    zeige('/einstellungen/daten?erfassen=2026-01&geraet=3&feld=ladung_kwh')
+    expect(screen.getByTestId('ort').textContent).toBe('?erfassen=2026-01&geraet=3&feld=ladung_kwh')
+    liefere([JANUAR, DEZEMBER])
+    await screen.findByText('Monatsdaten bearbeiten')
+    expect(screen.getByTestId('formular').getAttribute('data-fokus')).toContain('inv-3-ladung_kwh')
+    await waitFor(() => expect(screen.getByTestId('ort').textContent).toBe(''))
+  })
+
+  it('E (E4): `geraet` allein springt zum ersten Feld des Geräts', async () => {
+    zeige('/einstellungen/daten?erfassen=2026-01&geraet=3')
+    liefere([JANUAR])
+    await screen.findByText('Monatsdaten bearbeiten')
+    expect(screen.getByTestId('formular').getAttribute('data-fokus')).toBe('[data-feld^="inv-3-"]')
   })
 })

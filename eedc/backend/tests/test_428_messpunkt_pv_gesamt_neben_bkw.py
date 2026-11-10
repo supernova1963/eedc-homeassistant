@@ -54,8 +54,9 @@ async def _meldungen(db, a) -> list:
 async def test_konstellation_428_bekommt_den_hinweis(db):
     a = await _anlage(db)
     (e,) = await _meldungen(db, a)
-    assert getattr(e.schwere, "value", e.schwere) == "info" and e.link == "/einstellungen/datenquellen"
-    assert "Misst er nur den Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu" in e.details
+    # E4 (Teil B Nr 13, Konzept §3.4): Auskunft — kein Sprung-Link; der Weg steht im Text, ohne Menüweg.
+    assert getattr(e.schwere, "value", e.schwere) == "info" and e.link is None
+    assert "Misst er nur den Wechselrichter, ordne ihn in den Datenquellen dem PV-Modul als Erzeugungszähler zu" in e.details
     assert "Balkon" in e.details and "Süddach" in e.details
 
 

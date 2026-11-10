@@ -237,7 +237,8 @@ def _mqtt_meldungen(befunde):
 
 @pytest.mark.asyncio
 async def test_ausweg_nennt_integration_statt_der_v3_navigation(db, _inbound_laeuft):
-    """Jede MQTT-Meldung weist nach Einstellungen → Integration — Text UND Link."""
+    """Jede MQTT-Meldung nennt den Schalter in der MQTT-Broker-Verbindung — seit E4 ohne Menüweg; der Knopf führt
+    nach Teil B Nr 113/114 auf die Datenquellen (dort stellt man ein Feld auf «Keine»)."""
     anlage = Anlage(anlagenname="Haus", leistung_kwp=10.0, sensor_mapping={})
     db.add(anlage)
     await db.flush()
@@ -251,9 +252,9 @@ async def test_ausweg_nennt_integration_statt_der_v3_navigation(db, _inbound_lae
         # Der Weg, den es nicht mehr gibt — in keiner Schreibweise.
         assert "Daten → Einrichtung" not in details, b.meldung
         assert "MQTT-Inbound deaktivieren" not in details, b.meldung
-        # Der Weg, den es gibt.
-        assert "Einstellungen → Integration" in details, b.meldung
-        assert b.link == LINK_INTEGRATION, b.meldung
+        # Der Weg, den es gibt (E4: als Name, nicht als Menüweg).
+        assert "MQTT-Broker-Verbindung" in details and "→" not in details, b.meldung
+        assert b.link.startswith("/einstellungen/datenquellen"), b.meldung
 
 
 @pytest.mark.asyncio
@@ -280,8 +281,8 @@ async def test_auch_die_subscriber_info_weist_nach_integration(db, monkeypatch):
     assert treffer, "Gegenprobe: die INFO-Meldung muss hier entstehen"
     for b in treffer:
         assert "Daten → Einrichtung" not in (b.details or "")
-        assert "Einstellungen → Integration" in (b.details or "")
-        assert b.link == LINK_INTEGRATION
+        assert "MQTT-Broker-Verbindung" in (b.details or "")
+        assert b.link == LINK_INTEGRATION + "?block=mqtt-broker"
 
 
 # ─── #425 (gruaGit): die Wallbox-Regel gilt auch für die Topic-Erwartung ────
@@ -565,8 +566,7 @@ async def test_warntext_nennt_den_handgriff_keine(db, _inbound_laeuft):
     await db.flush()
     details = await _betroffene(db, anlage)
     assert details, "Gegenprobe: ohne Befund prüft dieser Test nichts"
-    assert "Einstellungen → Datenquellen" in details
-    assert "„Keine“" in details
+    assert "in den Datenquellen auf „Keine“" in details
     # Entscheid 13.10.2026: der Text sagt, warum ein optionales Feld fehlt.
     assert "Optionale Felder erwartet eedc hier nur" in details
 

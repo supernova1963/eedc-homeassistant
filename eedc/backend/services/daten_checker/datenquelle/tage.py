@@ -14,7 +14,6 @@ from backend.services.daten_checker.kategorien import (
     Aktion,
     CheckSeverity,
 )
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL
 from backend.core.zahlenformat import fmt_zahl
 
 logger = logging.getLogger(__name__)
@@ -282,7 +281,7 @@ class TageChecks:
         )
         if reparatur_moeglich:
             summen_details += (
-                f" „Zeitraum neu aggregieren“ holt {range_von.isoformat()} bis "
+                f" „Tage neu aufbauen“ holt {range_von.isoformat()} bis "
                 f"{neuester.isoformat()} aus HA-Statistics nach "
                 f"(max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
             )
@@ -292,8 +291,8 @@ class TageChecks:
                 "braucht zusätzlich eine Leistungs-Zuordnung (W), und dieser "
                 "Anlage ist keine zugeordnet. Der Zählerstand allein genügt ihm "
                 "nicht. Deshalb steht hier bewusst kein Knopf — er würde "
-                "durchlaufen und nichts schreiben. Zuerst unter Einstellungen → "
-                "Datenquellen einen Leistungssensor zuordnen (z. B. „Netz-"
+                "durchlaufen und nichts schreiben. Zuerst in den Datenquellen "
+                "einen Leistungssensor zuordnen (z. B. „Netz-"
                 "Leistung“), danach erscheint die Reparatur hier."
             )
         if rest_aelter > 0:
@@ -310,7 +309,7 @@ class TageChecks:
         summen_details += (
             " Reichweite: die Tagesreparatur heilt Tages- und Stundenwerte, "
             "NICHT die Monatswerte. Für abgeschlossene Monate anschließend "
-            "Einstellungen → Integration → Statistik-Import: „Vorschau laden“ — "
+            "im Statistik-Import „Vorschau laden“ — "
             "bereits belegte Monate stehen dort unter „Konflikte“ und sind zum "
             "Überschreiben vorausgewählt, also vor dem Import einmal durchsehen."
         )
@@ -322,10 +321,6 @@ class TageChecks:
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=summen_details,
-            altlink=(
-                HEUTE_ENERGIEPROFIL if reparatur_moeglich
-                else HEUTE_DATENQUELLEN
-            ),
             action=Aktion("reaggregate_range", {
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
@@ -354,7 +349,6 @@ class TageChecks:
                     "Einzelnen Tag aus HA-Statistics nachaggregieren — schreibt "
                     "Tages- und Stundenwerte, nicht die Monatswerte."
                 ),
-                altlink=HEUTE_ENERGIEPROFIL,
                 action=Aktion("reaggregate_day", {"datum": datum_.isoformat()}),
                 code="tageswerte_fehlen_tag",
                 werte={"datum": datum_.isoformat(), "ha_kwh": dict(sorted(fehlend.items()))},
@@ -365,7 +359,7 @@ class TageChecks:
                 kategorie=kat, schwere=CheckSeverity.INFO.value, code="tageswerte_fehlen_weitere",
                 meldung=(
                     f"… plus {rest} weitere(r) Tag(e) — am besten per "
-                    f"„Zeitraum neu aggregieren“."
+                    f"„Tage neu aufbauen“."
                 ),
             ))
 

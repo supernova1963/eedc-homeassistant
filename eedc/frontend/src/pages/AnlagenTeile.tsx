@@ -9,13 +9,15 @@
  * eingebetteten Voll-Formulars. Der Aufrufer wickelt: V3 = Seiten-Layout,
  * V4 = BlockShell-Block. Zahlen de-DE (`fmtZahl`).
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Edit, Trash2, Sun, MapPin, Download, FolderOpen } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, LoadingSpinner, Alert, DestructiveActionDialog } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import AnlageForm from '../components/forms/AnlageForm'
 import DokumentationsDialog from '../components/DokumentationsDialog'
-import { useAnlagen } from '../hooks'
+import { useAnlagen, useSelectedAnlage } from '../hooks'
+import { useSprungParameter } from '../hooks/useSprungParameter'
+import { SprungFeldKontext, feldSelektor, useAufFeldSpringen } from '../lib/sprungFeld'
 import { importApi } from '../api/import'
 import { downloadFile, fmtZahl } from '../lib'
 import type { Anlage, AnlageCreate } from '../types'
@@ -62,6 +64,9 @@ function AnlageAktionen({ anlage, onDokumente, onEdit, onDelete }: {
   )
 }
 
+/** Sprung-Parameter des Anlage-Blocks (E4, W-5): das Feld der gewählten Anlage. */
+const ANLAGE_SPRUNG = ['feld'] as const
+
 /**
  * Voller Anlagen-Manager (Liste ALLER Anlagen). Wird von der IST-Seite (V3-Hülle)
  * und dem V4-Stammdaten-Block geteilt.
@@ -72,6 +77,19 @@ export function AnlagenVerwaltung() {
   const [editingAnlage, setEditingAnlage] = useState<Anlage | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Anlage | null>(null)
   const [dokumenteAnlage, setDokumenteAnlage] = useState<Anlage | null>(null)
+  // E4 (Daten-Checker «Sprung aufs Feld»): `?block=anlage&feld=<spalte>` öffnet die gewählte Anlage zum Bearbeiten und
+  // springt auf das Feld. Eine Lesestelle; der Parameter verschwindet danach.
+  const { selectedAnlageId } = useSelectedAnlage()
+  const [sprung, sprungFertig] = useSprungParameter(ANLAGE_SPRUNG, !loading, 'anlage')
+  useEffect(() => {
+    if (!sprung?.feld) return
+    const ziel = anlagen.find((a) => a.id === selectedAnlageId) ?? anlagen[0]
+    if (ziel) setEditingAnlage(ziel)
+    else sprungFertig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sprung])
+  const sprungSelektor = sprung?.feld ? feldSelektor(sprung.feld) : null
+  useAufFeldSpringen(sprungSelektor, sprungFertig)
 
   const handleCreate = async (data: AnlageCreate) => {
     await createAnlage(data)
@@ -232,11 +250,13 @@ export function AnlagenVerwaltung() {
         size="lg"
       >
         {editingAnlage && (
+          <SprungFeldKontext.Provider value={sprungSelektor}>
           <AnlageForm
             anlage={editingAnlage}
             onSubmit={handleUpdate}
             onCancel={() => setEditingAnlage(null)}
           />
+          </SprungFeldKontext.Provider>
         )}
       </Modal>
 

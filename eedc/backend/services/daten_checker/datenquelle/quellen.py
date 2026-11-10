@@ -21,7 +21,6 @@ from backend.services.daten_checker.kategorien import (
     _quelle_label,
     aktion_spiegel_abgleich_tag,
 )
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, HEUTE_ENERGIEPROFIL
 from backend.core.zahlenformat import fmt_zahl, fmt_pct
 
 logger = logging.getLogger(__name__)
@@ -330,12 +329,11 @@ class QuellenChecks:
                     "der Einrichtung ist das normal — die Aggregation läuft "
                     "stündlich, die ersten Werte stehen also innerhalb einer "
                     "Stunde bereit. Bleibt es dabei, fehlt meist die Zuordnung "
-                    "der kWh-Zähler (Einstellungen → Datenquellen — es müssen "
-                    "die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen). "
+                    "der kWh-Zähler in den Datenquellen (es müssen die "
+                    "kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen). "
                     "Zurückliegende Tage holt „Lücken aus HA-LTS nachfüllen“ "
                     "in der Reparatur-Werkbank."
                 ),
-                altlink=HEUTE_DATENQUELLEN,
             )]
         if ha_lts_verfuegbar:
             # HA verfügbar, aber Aggregate aus älterem Pfad — typisch nach
@@ -352,7 +350,7 @@ class QuellenChecks:
                     "werden (nächster Monatsabschluss oder Tag-Reparatur), "
                     "gilt HA-LTS als Source-of-Truth."
                 ),
-                altlink=HEUTE_ENERGIEPROFIL, action=await _aktion_aeltere_quelle(self.db, anlage.id, tz.datum),
+                action=await _aktion_aeltere_quelle(self.db, anlage.id, tz.datum),
             )]
         # HA-LTS nicht verfügbar → Standalone-Modus (Docker ohne HA-Verbindung
         # oder fehlende HA-Recorder-URL)
@@ -504,8 +502,8 @@ class QuellenChecks:
                 meldung=f"… plus {rest} weitere Tag(e) mit Drift",
                 details=(
                     f"Anzeige auf die 20 Tage mit größtem |Δ| begrenzt. "
-                    f"Für alle Drift-Tage auf einmal: Einstellungen → Daten → "
-                    f"Energieprofil → Reparatur-Werkbank → Bereich neu aggregieren "
+                    f"Für alle Drift-Tage auf einmal: in der Reparatur-Werkbank "
+                    f"„Mehrere Tage neu aggregieren“ "
                     f"(Datumsbereich aktiv wählen, keine automatische Sammel-Aktion)."
                 ),
                 code="drift_weitere_tage", werte={"weitere_tage": rest, "angezeigt_hoechstens": 20},
@@ -678,7 +676,7 @@ class QuellenChecks:
             details = (_TEXT_BESTAND_TAG if _bestand_tag(ctx, datum_) else _TEXT_SPIEGEL_TAG) if ctx.hat_spiegel else (
                 f"Dein eedc-Wert für {datum_.isoformat()} ist {fmt_zahl(eedc, 2)} kWh PV-Erzeugung. "
                 f"Die HA-Statistics liefert für denselben Tag {fmt_zahl(ha, 2)} kWh. "
-                f"Mit „Tag reparieren“ schreibt eedc den Wert aus HA-Statistics "
+                f"Mit „Tag neu aufbauen“ schreibt eedc den Wert aus HA-Statistics "
                 f"in deine Tages-Zusammenfassung."
             )
             ergebnisse.append(CheckErgebnis(
@@ -689,7 +687,6 @@ class QuellenChecks:
                     f"{fmt_pct(rel_signed, 1, vorzeichen=True)})"
                 ),
                 details=details,
-                altlink=HEUTE_ENERGIEPROFIL,
                 action=_drift_aktion(ctx, datum_),
                 code="drift_tag",
                 werte={"datum": datum_.isoformat(), "achse": "pv", "eedc": eedc, "ha": ha, "delta": delta_signed,
@@ -746,12 +743,11 @@ class QuellenChecks:
                     f"Für diese Komponente steht in deiner Tages-Zusammenfassung "
                     f"an {len(tage)} Tag(en) ein anderer Wert als in den "
                     f"HA-Statistics. Diese Werte tragen die Wirtschaftlichkeits- "
-                    f"und CO₂-Rechnung mit. „Tag reparieren“ schreibt den Tag "
+                    f"und CO₂-Rechnung mit. „Tag neu aufbauen“ schreibt den Tag "
                     f"{datum_.isoformat()} aus HA-Statistics neu; für alle Tage "
-                    f"auf einmal: Einstellungen → Daten → Energieprofil → "
+                    f"auf einmal: „Mehrere Tage neu aggregieren“ in der "
                     f"Reparatur-Werkbank."
                 ),
-                altlink=HEUTE_ENERGIEPROFIL,
                 action=_drift_aktion(ctx, datum_),
                 investition_id=(
                     int(rest_id) if rest_id.isdigit() else None

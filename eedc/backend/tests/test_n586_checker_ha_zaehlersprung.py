@@ -401,9 +401,8 @@ async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):
     # Der Link zeigt nicht auf eedcs Datenquellen (Lab 4.1.3-rc1: dort ist nichts falsch), sondern auf die
     # Energieprofil-Pflege. Der Schritt nach der Korrektur in HA (#429, „HA-Spiegel jetzt abgleichen") ist seit N-790
     # der Knopf der Meldung selbst: «Aus Home Assistant neu übernehmen» (Abgleich + Tag neu aufgebaut).
-    from backend.services.daten_checker.kategorien import LINK_DATENQUELLEN, LINK_ENERGIEPROFIL
-    assert e.link == LINK_ENERGIEPROFIL
-    assert e.link != LINK_DATENQUELLEN
+    # E4: eine Aktion trägt keinen Link mehr (Teil B Nr 3; das Übergangsfeld `altlink` ist entfallen).
+    assert e.link is None
     assert e.action_kind == "spiegel_abgleich_tag"
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     # Außerhalb des Fensters (30 Tage) kein Befund.

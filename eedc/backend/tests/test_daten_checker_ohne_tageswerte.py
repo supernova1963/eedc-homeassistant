@@ -99,7 +99,8 @@ async def test_ohne_jede_tageszeile_meldet_der_check_genau_das(monkeypatch):
     # Hinweis ohne Weg) — Zuordnung der kWh-Zähler bzw. Nachfüllen.
     assert "Datenquellen" in b.details
     assert "kWh" in b.details
-    assert b.link
+    # E4 (Teil B Nr 19): Auskunft — kein Sprung-Knopf; «Was gilt» öffnet den Lösungsweg, der Weg steht im Text.
+    assert b.link is None
 
 
 async def test_zeile_aus_aelterer_quelle_meldet_weiterhin_die_quelle(monkeypatch):

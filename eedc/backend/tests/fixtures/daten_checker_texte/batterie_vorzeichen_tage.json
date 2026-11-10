@@ -5,7 +5,7 @@
    "kategorie": "batterie_vorzeichen_historie",
    "schwere": "warning",
    "meldung": "40 Tag(e) mit vertauschtem Batterie-Vorzeichen (2026-02-19 … 2026-03-30)",
-   "details": "40 Tag(e) zwischen 2026-02-19 und 2026-03-30 wurden vor dem Vorzeichen-Fix (v3.45.7) aggregiert und tragen das Batterie-Netto in vertauschter Richtung (Laden/Entladen verdreht). Die Live-Ansicht ist NICHT betroffen — nur die gespeicherte Historie. „Zeitraum neu aggregieren“ rechnet 2026-02-28 bis 2026-03-30 aus HA-Statistics neu (max. 31 Tage/Lauf). 9 ältere(r) Tag(e) liegen außerhalb des Fensters — nach dem Lauf erneut prüfen oder einzeln reparieren.",
+   "details": "40 Tag(e) zwischen 2026-02-19 und 2026-03-30 wurden vor dem Vorzeichen-Fix (v3.45.7) aggregiert und tragen das Batterie-Netto in vertauschter Richtung (Laden/Entladen verdreht). Die Live-Ansicht ist NICHT betroffen — nur die gespeicherte Historie. „Tage neu aufbauen“ rechnet 2026-02-28 bis 2026-03-30 aus HA-Statistics neu (max. 31 Tage/Lauf). 9 ältere(r) Tag(e) liegen außerhalb des Fensters — nach dem Lauf erneut prüfen oder einzeln reparieren.",
    "code": "batterie_vorzeichen_tage",
    "klasse_katalog": "aktion",
    "klasse_laufzeit": "aktion"

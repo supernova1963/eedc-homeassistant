@@ -333,7 +333,8 @@ async def test_ohne_leistungssensor_kein_knopf():
     assert "Leistungs-Zuordnung" in d, d
     # Der Weg raus muss dabeistehen, nicht nur die Absage.
     assert "Datenquellen" in d, d
-    assert result[0].link == "/einstellungen/datenquellen", result[0].link
+    # E4 (Teil B Nr 35, Konzept §3.4): ohne Knopf ist der Befund eine Auskunft — kein Link, der Text nennt den Weg.
+    assert result[0].link is None, result[0].link
 
 
 async def test_standalone_mqtt_energie_erlaubt_die_reparatur():

@@ -345,6 +345,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           <div ref={setFeldRef('anschaffungsdatum')}>
             <DatumFeld
               label="Anschaffungsdatum"
+              name="anschaffungsdatum"
               value={formData.anschaffungsdatum}
               onChange={(v) => {
                 markTouched('anschaffungsdatum')
@@ -413,7 +414,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             hint="Herstellungs-CO2 (Datenblatt). Leer = Richtwert nach Typ/Größe (PV 1000 kg/kWp, Speicher 85 kg/kWh, WP 1100 kg, E-Auto 5000 kg)."
           />
         </div>
-        <div className="mt-4">
+        <div className="mt-4" data-feld="aktiv">
           <SchalterZeile
             checked={formData.aktiv}
             onChange={(an) => setFormData(prev => ({ ...prev, aktiv: an }))}

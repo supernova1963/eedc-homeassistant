@@ -313,7 +313,7 @@ async def test_checker_meldet_fehlende_strahlungswerte(db):
     # Der Nachzug ERSETZT vorhandene Werte, und die Vorschau muss vorher sagen,
     # wie viele — seit E3 geht der Knopf über Plan → Vorschau-Kasten → «Anwenden».
     assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
-    assert e.link
+    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr
 
 
 @pytest.mark.asyncio
@@ -451,7 +451,7 @@ async def test_checker_meldet_werte_ohne_festgehaltene_quelle(db):
     assert "stammen aus einer anderen" not in e.meldung
     # E3: Aktion mit Vorschau — derselbe Lauf ersetzt, was schon dasteht; der Plan nennt es vorher.
     assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
-    assert e.link
+    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr
 
 
 @pytest.mark.asyncio

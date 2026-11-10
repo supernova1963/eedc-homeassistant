@@ -188,8 +188,8 @@ class HaRueckgangChecks:
                 + (
                     # #429 (jedema1805): die Zeilen eines ersetzten Sensors zählen weiter — der Text sagt es.
                     " Stammt der Rückgang von einem Sensor, den du inzwischen ersetzt hast, entfernt die "
-                    "Werkbank-Operation „Werte vor dem Sensorbeginn verwerfen“ seine Werte vor dem Beginn des neuen "
-                    "Sensors (Einstellungen → Daten → Energieprofil-Pflege); die Meldung verschwindet dann."
+                    "Operation „Werte vor dem Sensorbeginn verwerfen“ der Reparatur-Werkbank seine Werte vor dem Beginn "
+                    "des neuen Sensors; die Meldung verschwindet dann."
                     if any(r.zugeordnet_bis is not None for r in funde) else ""
                 )
             ),

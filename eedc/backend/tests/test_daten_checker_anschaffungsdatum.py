@@ -50,7 +50,7 @@ async def test_fehlendes_anschaffungsdatum_ist_ein_fehler(db):
     assert treffer[0].schwere == CheckSeverity.ERROR
     # Sprung direkt in das Formular der Komponente, nicht nur auf die Liste.
     inv_id = anlage.investitionen[0].id
-    assert treffer[0].link == f"/einstellungen/komponenten?bearbeiten={inv_id}"
+    assert treffer[0].link == f"/einstellungen/komponenten?bearbeiten={inv_id}&feld=anschaffungsdatum"
 
 
 async def test_mit_anschaffungsdatum_kein_befund(db):

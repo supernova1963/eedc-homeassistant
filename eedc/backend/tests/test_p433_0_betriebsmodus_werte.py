@@ -202,7 +202,8 @@ async def test_meldet_den_unbekannten_wert_mit_der_werte_liste(db, monkeypatch):
 
     assert len(ergebnisse) == 1, [e.meldung for e in ergebnisse]
     e = ergebnisse[0]
-    assert (e.kategorie, e.schwere, e.investition_id, e.link) == (_KAT, "info", inv.id, LINK_DATENQUELLEN)
+    # E4 (Teil B Nr 4, Konzept §3.4): Auskunft — der Weg (Template-Sensor in HA) steht im Text, kein Sprung-Link.
+    assert (e.kategorie, e.schwere, e.investition_id, e.link) == (_KAT, "info", inv.id, None)
     assert "„heating“" in e.meldung and "Nibe S1255" in e.meldung
     assert _MODUS in e.details
     assert betriebsmodus_werte_klartext() in e.details, "die Liste kommt aus dem Kanon"

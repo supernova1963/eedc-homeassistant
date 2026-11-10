@@ -97,9 +97,9 @@ async def test_noahs_fall_haelfte_der_modulsumme_meldet(db):
     warnungen = _warnungen(await _run(db, anlage_id))
     assert len(warnungen) == 1
     assert "15,62" in warnungen[0].meldung and "31,24" in warnungen[0].meldung
-    # Der Anwender muss beide Wege sehen — eedc leitet nichts ab.
-    assert "Einstellungen" in warnungen[0].details
-    assert "Investitionen" in warnungen[0].details
+    # Der Anwender muss beide Wege sehen — eedc leitet nichts ab (E4: ohne Menüweg; der Knopf öffnet die Anlage).
+    assert "Anlagenleistung der Anlage" in warnungen[0].details
+    assert "PV-Module in den Komponenten" in warnungen[0].details
 
 
 async def test_bkw_eingerechnet_gilt_als_zulaessige_konvention(db):

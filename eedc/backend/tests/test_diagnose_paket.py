@@ -365,7 +365,6 @@ async def test_akte_probe_sechs_fragen(db, monkeypatch):
     drift = CheckErgebnis(
         kategorie="datenquelle_drift", schwere="info",
         meldung="2026-11-02: PV 123.909,6 → HA 13,7 kWh (Δ −123.895,9 kWh, −100,0 %)",
-        altlink="/einstellungen/daten?block=energieprofil&karte=werkbank",
         action=Aktion("spiegel_abgleich_tag", {"datum": "2026-11-02"}),
         code="drift_tag", werte={"datum": "2026-11-02", "achse": "pv", "eedc": 123909.6, "ha": 13.7, "delta": -123895.9,
                                  "prozent": -99.99},

@@ -6,7 +6,7 @@ Baseline neu schreiben (nur wenn Stellen WEGFALLEN; sie wächst nie — ein neue
     cd eedc && backend/venv/bin/python -m backend.tests.werkzeug_daten_checker_stellen --baseline
 
 Format je Zeile: ``datei::code#n<TAB>altlink-Ausdruck<TAB>Grund``; Grund ∈ ``GRUENDE`` (warum das Teil-B-Ziel den heutigen
-Link nicht bitgleich ergibt). E4 leert die Datei — das sind die sichtbaren Weg-Korrekturen.
+Link nicht bitgleich ergibt). E4 hat die Datei geleert und `CheckErgebnis.altlink` entfernt — sie bleibt leer (Wächter W-2).
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ def baseline_lesen() -> Counter:
 
 def baseline_schreiben() -> None:
     zeilen = sorted(altlink_schluessel(stellen()).elements())
-    kopf = ("# Übergangsfeld `altlink=` an Daten-Checker-Erzeugern (Etappe E2 → E4) — darf nur schrumpfen.\n"
+    kopf = ("# Übergangsfeld `altlink=` an Daten-Checker-Erzeugern (Etappe E2 → E4) — seit E4 leer, das Feld ist entfallen.\n"
             "# Neu schreiben: python -m backend.tests.werkzeug_daten_checker_stellen --baseline. "
             "Format: datei::code#n<TAB>altlink<TAB>Grund\n")
     BASELINE.write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")

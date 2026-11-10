@@ -299,7 +299,8 @@ async def test_heizwaermebedarf_hinweis_bleibt_wo_es_eine_heiz_achse_gibt(db):
         assert treffer[0].meldung == "WP (waermepumpe): Heizwärmebedarf nicht gesetzt"
         assert treffer[0].details == "Wird für Jahres-Einsparungsschätzung verwendet (kWh/Jahr)"
         assert treffer[0].schwere == "info"
-        assert treffer[0].link == "/einstellungen/investitionen"
+        assert treffer[0].link.startswith("/einstellungen/komponenten?bearbeiten=")
+        assert treffer[0].link.endswith("&feld=heizwaermebedarf_kwh")
 
 
 @pytest.mark.asyncio
@@ -326,7 +327,8 @@ async def test_brauchwasser_wp_wird_nach_ihrer_eigenen_achse_gefragt(db):
     assert len(treffer) == 1
     assert treffer[0].meldung == "WP (waermepumpe): Warmwasserbedarf nicht gesetzt"
     assert treffer[0].schwere == "info"
-    assert treffer[0].link == "/einstellungen/investitionen"
+    assert treffer[0].link.startswith("/einstellungen/komponenten?bearbeiten=")
+    assert treffer[0].link.endswith("&feld=warmwasserbedarf_kwh")
     assert "Heiz-Achse" in treffer[0].details, "der Hinweis sagt, warum die andere Frage ausbleibt"
     # Der Gesamtbedarf aus einem Import beantwortet dieselbe Frage.
     befunde_gesamt = await _stammdaten_befunde(db, {**BRAUCHWASSER, "waermebedarf_kwh": 1800})

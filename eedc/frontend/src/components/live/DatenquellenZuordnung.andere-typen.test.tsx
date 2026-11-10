@@ -8,6 +8,8 @@
  * **erzeugt am Code vor E3** (HEAD `0edd0cfb`), danach gleich. Themen-Kacheln (4.2.0, TH-E1) schrieben sie neu: einzige
  * Änderung sind die zwei Blöcke «Themen» an Wallbox und E-Auto (Geräte mit «Überblick»); ohne sie ist die Datei bitgleich.
  * Nachlauf 4.2.1 N4 (2.11.2026) schrieb sie neu: einzige Änderung ist die Hinweiszeile `THEMEN_HINWEIS` in diesen zwei Blöcken.
+ * E4 (10.11.2026, Daten-Checker «Sprung aufs Feld») schrieb sie neu: einzige Änderungen sind die Anker `data-feld` an jeder
+ * Feldzeile und ein `<div data-geraet>` um jede Geräte-Sektion (4); ohne sie ist die Datei bitgleich.
  *
  * Wer die Fläche für diese Typen absichtlich ändert, schreibt die Datei neu und schickt den Diff mit:
  *

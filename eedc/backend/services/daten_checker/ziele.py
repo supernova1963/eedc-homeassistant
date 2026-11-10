@@ -22,28 +22,19 @@ Registry-Quellen (eine je Ziel-Art):
 `BLOCK_IDS` ist die Block-Tabelle wörtlich aus `frontend/src/config/einstellungenKatalog.tsx` (Kategorie → Block-Ids);
 der Vitest `src/test/sprungziele-blockids.test.ts` liest diese Datei und vergleicht — eine Wahrheit.
 
-**Übergang bis E4 — `altlink`:** wo das Teil-B-Ziel den heutigen Link nicht bitgleich ergibt (andere Route, andere
-gelesene Parameter, heute kein Link, Klasse ohne Ziel), trägt der Befund zusätzlich `altlink=` mit einem der benannten
-Werte unten (`HEUTE_*`, `heute_monat`, `KEIN_LINK`). Kein freier String an einer Erzeuger-Stelle; die Zahl der Stellen
-hält die schrumpfende Baseline `tests/daten_checker_altlink_baseline.txt`. E4 leert sie — das sind die Weg-Korrekturen.
+**`link`** entsteht in `kategorien.link_aus_ziel` aus dem `Ziel` mit allen Parametern des Schemas (E4; das Übergangsfeld
+`altlink` aus E2 ist mit E4 entfallen, seine Baseline `tests/daten_checker_altlink_baseline.txt` ist leer). Jede Zielseite liest
+jeden Parameter, den ein Bauer hier für sie erzeugt (Wächter W-5, Export `tests/fixtures/sprungziele.json`).
 """
 
 from functools import lru_cache
 from typing import Optional
 
-from .kategorien import (
-    KEIN_LINK,
-    LINK_DATENQUELLEN,
-    LINK_ENERGIEPROFIL,
-    LINK_INTEGRATION,
-    LINK_MONATSDATEN,
-    Ziel,
-    link_monat_erfassen,
-)
+from .kategorien import Ziel
 
 __all__ = [
-    "BLOCK_IDS", "KEIN_LINK", "ziel_anlage", "ziel_block", "ziel_datenquelle", "ziel_komponente", "ziel_monat",
-    "ziel_datenquelle_schluessel", "ziel_monat_label", "ziel_tarif", "ziel_werkbank", "heute_monat",
+    "BLOCK_IDS", "WIZARDS", "ziel_anlage", "ziel_block", "ziel_datenquelle", "ziel_komponente", "ziel_monat",
+    "ziel_datenquelle_schluessel", "ziel_monat_label", "ziel_tarif", "ziel_werkbank",
 ]
 
 #: Kategorie → Block-Ids, wörtlich aus `einstellungenKatalog.tsx` (`komponenten` ist datengetrieben, ohne Katalog-Block).
@@ -56,24 +47,6 @@ BLOCK_IDS: dict[str, tuple[str, ...]] = {
     "datenquellen": ("datenquellen",),
     "system": ("demo-daten", "allgemein", "backup", "protokolle"),
 }
-
-# ─── Heutige Links (Übergang bis E4; nur für `altlink=`) ─────────────────────────────────────────────────────────
-HEUTE_DATENQUELLEN = LINK_DATENQUELLEN
-HEUTE_ENERGIEPROFIL = LINK_ENERGIEPROFIL
-HEUTE_MONATSDATEN = LINK_MONATSDATEN
-HEUTE_INTEGRATION = LINK_INTEGRATION
-HEUTE_INVESTITIONEN = "/einstellungen/investitionen"
-HEUTE_KOMPONENTEN = "/einstellungen/komponenten"
-HEUTE_ANLAGE = "/einstellungen/anlage"
-HEUTE_STROMPREISE = "/einstellungen/strompreise"
-HEUTE_SOLARPROGNOSE = "/einstellungen/solarprognose"
-HEUTE_MONATSABSCHLUSS = "/monatsabschluss"
-
-
-def heute_monat(label: str) -> str:
-    """Heutiger Monats-Link aus `"MM/YYYY"` (mit dem Rückfall auf den Block) — nur für `altlink=`."""
-    return link_monat_erfassen(label)
-
 
 # ─── Registries ───────────────────────────────────────────────────────────────────────────────────────────────
 def _spalten(modell) -> frozenset[str]:
@@ -134,7 +107,7 @@ def ziel_monat(jahr: int, monat: int, geraet: Optional[int] = None, feld: Option
 
 def ziel_monat_label(label: str, geraet: Optional[int] = None, feld: Optional[str] = None) -> Ziel:
     """Wie `ziel_monat`, aus dem Anzeige-Label `"MM/YYYY"`; eine andere Form fällt auf den Monatsdaten-Block zurück
-    (Laufzeit-Rohwert, H-E2-1: dieselbe Regel wie `link_monat_erfassen`)."""
+    (Laufzeit-Rohwert, H-E2-1: dieselbe Regel wie `kategorien.link_monat_erfassen`)."""
     teile = (label or "").split("/")
     if len(teile) == 2 and teile[0].isdigit() and teile[1].isdigit():
         return ziel_monat(int(teile[1]), int(teile[0]), geraet=geraet, feld=feld)
@@ -157,23 +130,31 @@ def ziel_komponente(inv_id: Optional[int] = None, feld: Optional[str] = None, ne
         if typ not in _parameter_je_typ() or inv_id is None:
             raise ValueError("Daten-Checker-Ziel: Jahresbilanz braucht Typ und Gerät")
         return Ziel("komponenten-hub", typ, {"geraet": inv_id})
+    if inv_id is None and (feld is not None or parameter is not None):
+        raise ValueError("Daten-Checker-Ziel: ein Komponenten-Feld braucht das Gerät (`bearbeiten=`), sonst gibt es kein Formular")
     name = f"param_{parameter}" if parameter is not None else feld
     return Ziel("komponenten", None, _ohne_none(bearbeiten=inv_id, feld=parameter or feld, neu=neu), anker=name)
 
 
 def ziel_datenquelle(feld: Optional[str] = None, geraet: Optional[int] = None) -> Ziel:
-    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (beides erst ab E4 gelesen)."""
+    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (gelesen seit E4)."""
     _monatsfeld(feld)
     return Ziel("datenquellen", None, _ohne_none(geraet=geraet, feld=feld), anker=feld)
 
 
 def ziel_datenquelle_schluessel(schluessel: str) -> Ziel:
     """Wie `ziel_datenquelle`, aus einem gespeicherten Sensor-Schlüssel `inv:<id>:<feld>` bzw. `<präfix>:<feld>`
-    (Laufzeit-Rohwert, H-E2-1). Ein Feld, das die Registry nicht kennt (Alt-Name), fällt weg — der Befund bleibt."""
+    (Laufzeit-Rohwert, H-E2-1). Ein Basis-Zähler heißt im Mapping `pv_gesamt`/`einspeisung`/`netzbezug`, auf der
+    Datenquellen-Fläche `pv_gesamt_kwh` … (`datenquellen_mapping_sync.BASIS_ENERGY_FELD`, E4: der Anker der Fläche).
+    Ein Feld, das die Registry nicht kennt (Alt-Name), fällt weg — der Befund bleibt."""
+    from backend.services.datenquellen_mapping_sync import BASIS_ENERGY_FELD
     teile = (schluessel or "").split(":")
     geraet = int(teile[1]) if len(teile) == 3 and teile[0] == "inv" and teile[1].isdigit() else None
+    feld = teile[-1] or None
+    if geraet is None and feld is not None:
+        feld = {basis: fid for fid, basis in BASIS_ENERGY_FELD.items()}.get(feld, feld)
     try:
-        return ziel_datenquelle(feld=teile[-1] or None, geraet=geraet)
+        return ziel_datenquelle(feld=feld, geraet=geraet)
     except ValueError:
         return ziel_datenquelle(geraet=geraet)
 
@@ -197,12 +178,21 @@ def ziel_werkbank(karte: str = "werkbank", plan: Optional[str] = None) -> Ziel:
     return Ziel("daten", "energieprofil", _ohne_none(karte=karte, plan=plan), anker=karte)
 
 
-def ziel_block(bereich: str, block: str, karte: Optional[str] = None, feld: Optional[str] = None) -> Ziel:
-    """Reines Block-Ziel (Protokolle, Integration, Solarprognose …); `feld=` nur an der Solarprognose."""
+#: Assistenten, die ein Ziel öffnen darf (`wizard=`, E4): Schlüssel aus `frontend/src/v4/wizardHost.ts::WizardKey`, je
+#: nur in ihrem Block (Import-Assistenten-Bündel, `einstellungenKatalog.tsx::ImportBuendelInhalt`).
+WIZARDS = {"connector": ("integration", "import-buendel")}
+
+
+def ziel_block(bereich: str, block: str, karte: Optional[str] = None, feld: Optional[str] = None,
+               wizard: Optional[str] = None) -> Ziel:
+    """Reines Block-Ziel (Protokolle, Integration, Solarprognose …); `feld=` nur an der Solarprognose, `wizard=` öffnet
+    einen Assistenten des Blocks (`WIZARDS`)."""
     if block not in BLOCK_IDS.get(bereich, ()):
         raise ValueError(f"Daten-Checker-Ziel: Block {bereich}/{block} steht nicht im Einstellungs-Katalog")
+    if wizard is not None and WIZARDS.get(wizard) != (bereich, block):
+        raise ValueError(f"Daten-Checker-Ziel: Assistent {wizard!r} gehört nicht zu {bereich}/{block}")
     if feld is not None:
         if (bereich, block) != ("stammdaten", "solarprognose"):
             raise ValueError(f"Daten-Checker-Ziel: Block {bereich}/{block} kennt kein Feld")
         _pruefe(feld, _modell_spalten()["solarprognose"], "Solarprognose-Spalten")
-    return Ziel(bereich, block, _ohne_none(karte=karte, feld=feld), anker=feld or karte)
+    return Ziel(bereich, block, _ohne_none(karte=karte, feld=feld, wizard=wizard), anker=feld or karte or wizard)

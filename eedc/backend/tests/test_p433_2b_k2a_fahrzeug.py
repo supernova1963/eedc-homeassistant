@@ -378,7 +378,8 @@ async def test_checker_kennung_unbekannt_mit_rohtext(db, monkeypatch):
     m = erg[0]
     assert m.kategorie == "emob_kennung_unbekannt" and m.schwere == "info" and m.investition_id == wb.id
     assert "„fremd“" in m.meldung and "SMA eCharger 22" in m.meldung
-    assert "Kennung in der Steuerung" in m.details and m.link == "/einstellungen/investitionen"
+    assert "Kennung in der Steuerung" in m.details
+    assert m.link.startswith("/einstellungen/komponenten?bearbeiten=") and m.link.endswith("&feld=kennung_in_steuerung")
     # Der Zustands-Check («fremder Wert») nimmt das Textfeld aus — ein Name ist kein unbekannter Kanon-Wert.
     assert await (await _checker(db))._check_emob_zustand_wert(anlage) == []
 

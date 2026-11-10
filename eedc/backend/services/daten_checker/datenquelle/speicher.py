@@ -162,7 +162,7 @@ class SpeicherChecks:
             f"{neuester.isoformat()} wurden vor dem Vorzeichen-Fix (v3.45.7) "
             f"aggregiert und tragen das Batterie-Netto in vertauschter Richtung "
             f"(Laden/Entladen verdreht). Die Live-Ansicht ist NICHT betroffen — "
-            f"nur die gespeicherte Historie. „Zeitraum neu aggregieren“ rechnet "
+            f"nur die gespeicherte Historie. „Tage neu aufbauen“ rechnet "
             f"{range_von.isoformat()} bis {neuester.isoformat()} aus HA-Statistics "
             f"neu (max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
         )
@@ -207,7 +207,7 @@ class SpeicherChecks:
                 kategorie=kat, schwere=CheckSeverity.INFO.value, code="batterie_vorzeichen_weitere",
                 meldung=(
                     f"… plus {rest} weitere(r) Tag(e) — am besten per "
-                    f"„Zeitraum neu aggregieren“."
+                    f"„Tage neu aufbauen“."
                 ),
             ))
 
@@ -314,7 +314,7 @@ class SpeicherChecks:
             f"welches, entschied die Reihenfolge der Zuordnung. Betroffen sind die "
             f"Vollzyklen dieser Tage, die SoC-Hübe und die Speicher-Auswertungen im "
             f"Komponenten-Hub; Erzeugung, Verbrauch und Netzbezug sind es NICHT. "
-            f"„Zeitraum neu aggregieren“ rechnet {range_von.isoformat()} bis "
+            f"„Tage neu aufbauen“ rechnet {range_von.isoformat()} bis "
             f"{neuester.isoformat()} neu (max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
         )
         if rest_aelter > 0:

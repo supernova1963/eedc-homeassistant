@@ -41,7 +41,6 @@ from backend.core.field_definitions import (
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.models.data_provenance_log import DataProvenanceLog
 from backend.services.daten_checker import DatenChecker
-from backend.services.daten_checker.kategorien import link_monat_erfassen
 from backend.services.zaehlerstaende import ist_zaehler_investition
 
 _SONSTIGES = INVESTITION_FELDER["sonstiges"]
@@ -165,9 +164,9 @@ async def test_abgabe_mit_alter_erzeugung_ergibt_eine_meldung_mit_angebot(db):
     assert e.details.startswith("04/2026, 05/2026, 06/2026, 07/2026, 08/2026. ")
     assert "Der Wert zählt in keiner Bilanz." in e.details
     assert "„Abgabe (kWh)“" in e.details, "das Angebot nennt das Ziel-Feld"
-    assert "Einstellungen → Daten → Monatsdaten" in e.details
+    assert "→" not in e.details, "E4: kein Menüweg im Text — der Monatsabschluss ist das Ziel"
     assert e.details.endswith("eedc löscht und verschiebt nichts von allein.")
-    assert e.link == link_monat_erfassen("04/2026")
+    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr (das Übergangsfeld `altlink` ist entfallen)
     assert e.investition_id == inv.id
 
 

@@ -503,7 +503,7 @@ def test_e_ohne_spiegel_bleibt_tag_reparieren():
     ctx = _ctx(kanal_gruppen={}, hat_spiegel=False)
     (tag,), _ = QuellenChecks._drift_tageszeilen(ctx)
     assert tag.action_kind == "reaggregate_day"
-    assert "Tag reparieren" in tag.details
+    assert "Tag neu aufbauen" in tag.details  # E4: Text = Knopf-Text des Katalogs
 
 
 # ── (f) Rückmeldung: Werkbank-Route und «Aus Home Assistant neu übernehmen» ─

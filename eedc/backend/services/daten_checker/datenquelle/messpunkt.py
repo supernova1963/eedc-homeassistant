@@ -44,7 +44,7 @@ from backend.core.berechnungen.pv_verteilung import (
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, HEUTE_INVESTITIONEN, ziel_datenquelle, ziel_komponente
+from backend.services.daten_checker.ziele import ziel_datenquelle, ziel_komponente
 
 #: (b) Ab dieser Differenz (Prozent der Σ Strings) zählt der Anlagenzähler „mehr als die Strings" — darunter ist es
 #: Zählertoleranz und Ablesezeitpunkt.
@@ -119,7 +119,7 @@ class MesspunktChecks:
                     "dem Speicher). eedc zeigt die Differenz als Wandlungsverluste, zieht sie aber nicht von Ersparnis, "
                     "USt und CO₂ ab. Prüfe unter Datenquellen, welcher Sensor im Feld „PV gesamt (kWh)“ steht."
                 ),
-                ziel=ziel_datenquelle(feld="pv_gesamt"),
+                ziel=ziel_datenquelle(feld="pv_gesamt_kwh"),
             ))
         if bkw_aussen:
             out.append(CheckErgebnis(
@@ -134,7 +134,7 @@ class MesspunktChecks:
                     "nichts als Wandlungsverluste ab — sonst wäre die Ersparnis des Balkonkraftwerks weg. Misst dein "
                     "Anlagenzähler das Balkonkraftwerk doch mit, prüfe den Zähler des Balkonkraftwerks."
                 ),
-                ziel=ziel_datenquelle(feld="pv_gesamt"),
+                ziel=ziel_datenquelle(feld="pv_gesamt_kwh"),
             ))
         if mehr:
             out.append(CheckErgebnis(
@@ -148,7 +148,7 @@ class MesspunktChecks:
                     "Wechselrichter) oder ein String-Zähler misst zu wenig. eedc rechnet mit der Summe der Strings; "
                     "Wandlungsverluste gibt es in diesen Monaten keine."
                 ),
-                ziel=ziel_datenquelle(feld="pv_gesamt"),
+                ziel=ziel_datenquelle(feld="pv_gesamt_kwh"),
             ))
         if dc_gepflegt or dc_angenommen:
             text = (
@@ -169,7 +169,7 @@ class MesspunktChecks:
                 meldung=("Bei DC-gekoppeltem Speicher misst der AC-Zähler die Batterie mit — Verluste werden "
                          "angezeigt, nicht bewertet"),
                 details=text,
-                ziel=ziel_komponente(parameter="kopplung", typ="speicher"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(),
             ))
         out.extend(await self._messpunkt_volleinspeisung(anlage, kanal))
         return out
@@ -216,10 +216,9 @@ class MesspunktChecks:
                 f"({', '.join(sorted(i.bezeichnung or f'#{i.id}' for i in bkw_mit))}); den Rest nach dem Zähler des "
                 "Balkonkraftwerks verteilt eedc auf die PV-Module ohne eigenen Zähler "
                 f"({', '.join(sorted(i.bezeichnung or f'#{i.id}' for i in module_ohne))}). Misst er nur den "
-                "Wechselrichter, ordne ihn dem PV-Modul als Erzeugungszähler zu (Einstellungen → Datenquellen); sonst "
+                "Wechselrichter, ordne ihn in den Datenquellen dem PV-Modul als Erzeugungszähler zu; sonst "
                 "fehlt die Erzeugung der Balkonkraftwerke in PV gesamt."
             ),
-            altlink=HEUTE_DATENQUELLEN,
         )]
 
     async def _messpunkt_volleinspeisung(self, anlage: Anlage, kanal: dict) -> list[CheckErgebnis]:
@@ -250,7 +249,7 @@ class MesspunktChecks:
                 "den AC-Ertragszähler deines Wechselrichters (Gesamtertrag nach dem Wechselrichter) als „PV gesamt "
                 "(kWh)“ zu, dann kennt eedc die Wandlungsverluste und rechnet keine Ersparnis aus ihnen."
             ),
-            ziel=ziel_datenquelle(feld="pv_gesamt"),
+            ziel=ziel_datenquelle(feld="pv_gesamt_kwh"),
         )]
 
 

@@ -25,7 +25,7 @@ from backend.core.investition_kennwerte import (
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 from .ziele import (
-    HEUTE_ANLAGE, HEUTE_INVESTITIONEN, HEUTE_SOLARPROGNOSE, HEUTE_STROMPREISE, ziel_anlage, ziel_block, ziel_datenquelle,
+    ziel_anlage, ziel_block, ziel_datenquelle,
     ziel_komponente, ziel_tarif,
 )
 from backend.core.zahlenformat import fmt_zahl
@@ -135,7 +135,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     "am Anfang der Historie fällt dann nicht auf. Trage die "
                     "Inbetriebnahme deiner Anlage ein."
                 ),
-                ziel=ziel_anlage("installationsdatum"), altlink=HEUTE_ANLAGE,
+                ziel=ziel_anlage("installationsdatum"),
             ))
         else:
             ergebnisse.append(CheckErgebnis(
@@ -186,7 +186,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                         "obwohl dort bereits Strom erzeugt wurde. Korrigiere das Datum, "
                         "das nicht stimmt — meist das Installationsdatum der Anlage."
                     ),
-                    ziel=ziel_anlage("installationsdatum"), altlink=HEUTE_ANLAGE,
+                    ziel=ziel_anlage("installationsdatum"),
                 ))
 
             # E4b: Geräte, die KEINE Erzeuger sind und älter als die Anlage. Das
@@ -225,7 +225,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                         "Datiere nicht das Gerät um — die Anschaffungshistorie ginge "
                         "verloren."
                     ),
-                    ziel=ziel_anlage("installationsdatum"), altlink=HEUTE_ANLAGE,
+                    ziel=ziel_anlage("installationsdatum"),
                 ))
 
         # Leistung kWp
@@ -234,7 +234,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 kategorie=kat, schwere=CheckSeverity.ERROR, code="anlagenleistung_fehlt",
                 meldung="Anlagenleistung fehlt oder ist 0",
                 details="Leistung in kWp ist für alle Berechnungen erforderlich",
-                ziel=ziel_anlage("leistung_kwp"), altlink=HEUTE_ANLAGE,
+                ziel=ziel_anlage("leistung_kwp"),
             ))
         else:
             ergebnisse.append(CheckErgebnis(
@@ -248,7 +248,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 kategorie=kat, schwere=CheckSeverity.INFO, code="standort_fehlt",
                 meldung="Keine Koordinaten hinterlegt",
                 details="Koordinaten werden für die PVGIS-Solarprognose benötigt",
-                ziel=ziel_anlage("latitude"), altlink=HEUTE_ANLAGE,
+                ziel=ziel_anlage("latitude"),
             ))
 
         # Standort für Community-Vergleich
@@ -257,7 +257,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 kategorie=kat, schwere=CheckSeverity.INFO, code="standort_fehlt",
                 meldung="Kein Standort hinterlegt (Ort/PLZ)",
                 details="Wird für den Community-Benchmark-Vergleich nach Region benötigt",
-                ziel=ziel_anlage("standort_ort"), altlink=HEUTE_ANLAGE,
+                ziel=ziel_anlage("standort_ort"),
             ))
 
         # PV-Module vorhanden. Filter respektiert Stilllegungsdatum (#608
@@ -283,7 +283,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     kategorie=kat, schwere=CheckSeverity.ERROR, code="keine_pv_module",
                     meldung="Keine PV-Module als Investition angelegt",
                     details="PV-Module werden für Erzeugungs-Auswertung benötigt",
-                    ziel=ziel_komponente(neu="pv-module"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(neu="pv-module"),
                 ))
         else:
             # Σ der installierten Modulleistung (DC) — **ohne** Balkonkraftwerk.
@@ -339,7 +339,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                             f"{int(anzahl)} Module × {int(wp)} Wp = {fmt_zahl(berechnet, 2)} kWp, "
                             f"eingetragen: {fmt_zahl(gepflegt, 2)} kWp"
                         ),
-                        ziel=ziel_komponente(modul.id, parameter="anzahl_module", typ="pv-module"), altlink=HEUTE_INVESTITIONEN,
+                        ziel=ziel_komponente(modul.id, parameter="anzahl_module", typ="pv-module"),
                     ))
 
         # Performance Ratio Hinweis (PVGIS-Systemverluste ggf. zu hoch)
@@ -361,7 +361,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     f"(Performance Ratio: {fmt_zahl(pr, 2)} über {pr_count} Monate). Die "
                     f"{fmt_zahl(system_losses, 0)}% sind eine Annahme der Prognose, keine Messung. "
                     f"Wirksam wird eine Änderung erst mit einem neuen PVGIS-Abruf "
-                    f"(Solarprognose → „Neue Prognose abrufen“ → „Speichern & Aktivieren“). "
+                    f"(in der Solarprognose „Neue Prognose abrufen“, dann „Speichern & Aktivieren“). "
                     f"Folge: das SOLL steigt, deshalb sinken Performance Ratio und "
                     f"SOLL-Erfüllung in Prognose-vs-IST und im Jahresbericht — die "
                     f"IST-Werte bleiben unverändert. Die bisherige Prognose bleibt als "
@@ -369,7 +369,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     f"Prognose bewusst als konservative Untergrenze behält, lässt sie "
                     f"stehen."
                 ),
-                ziel=ziel_block("stammdaten", "solarprognose", feld="system_losses"), altlink=HEUTE_SOLARPROGNOSE,
+                ziel=ziel_block("stammdaten", "solarprognose", feld="system_losses"),
             ))
 
         return ergebnisse
@@ -437,10 +437,10 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 "Community-Vergleich. Solange beide auseinanderlaufen, "
                 "vergleichst du dich dort mit einer anderen Anlagengröße als "
                 "der, die du auswertest. Korrigiere den Wert, der nicht stimmt: "
-                "die Anlagenleistung unter „Einstellungen → Anlage“ oder die "
-                "Leistung der einzelnen Module unter „Investitionen“."
+                "die Anlagenleistung der Anlage oder die "
+                "Leistung der einzelnen PV-Module in den Komponenten."
             ),
-            ziel=ziel_anlage("leistung_kwp"), altlink=HEUTE_ANLAGE,
+            ziel=ziel_anlage("leistung_kwp"),
         )]
 
     def _check_dc_ac_verhaeltnis(
@@ -505,7 +505,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     f"„Leistung (kWp)“-Feld versehentlich die Wechselrichter-"
                     f"Leistung statt der Modulleistung?"
                 ),
-                ziel=ziel_komponente(wr.id, parameter="max_leistung_kw", typ="wechselrichter"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(wr.id, parameter="max_leistung_kw", typ="wechselrichter"),
             ))
 
         return ergebnisse
@@ -540,7 +540,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 kategorie=kat, schwere=CheckSeverity.ERROR, code="kein_strompreis",
                 meldung="Kein Strompreis vorhanden",
                 details="Strompreise sind für Finanz-Auswertungen und ROI-Berechnungen erforderlich",
-                ziel=ziel_tarif(neu=True), altlink=HEUTE_STROMPREISE,
+                ziel=ziel_tarif(neu=True),
             ))
             return ergebnisse
 
@@ -618,7 +618,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     "gestaffelter EEG-Vergütung den nach kWp gewichteten Mischsatz, "
                     "denn eedc rechnet flat mit dem Wert."
                 ),
-                ziel=ziel_tarif(gratis_tarife[0].id, feld="einspeiseverguetung_cent_kwh"), altlink=HEUTE_STROMPREISE,
+                ziel=ziel_tarif(gratis_tarife[0].id, feld="einspeiseverguetung_cent_kwh"),
             ))
 
         # ── Monate MIT DATEN vor dem ersten Tarif ────────────────────────────
@@ -663,7 +663,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     f"Gültig-ab-Datum auf den Beginn der Daten zurücksetzen; die "
                     f"Auswertungen rechnen sofort neu."
                 ),
-                ziel=ziel_tarif(tarife[0].id, feld="gueltig_ab"), altlink=HEUTE_STROMPREISE,
+                ziel=ziel_tarif(tarife[0].id, feld="gueltig_ab"),
             ))
 
         # ── Lücken ZWISCHEN Tarifen ──────────────────────────────────────────
@@ -683,7 +683,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING, code="strompreis_luecke",
                         meldung=f"Strompreis-Lücke: {start.strftime('%d.%m.%Y')} bis {tarif.gueltig_ab.strftime('%d.%m.%Y')}",
-                        ziel=ziel_tarif(neu_art="allgemein", ab=start.isoformat()), altlink=HEUTE_STROMPREISE,
+                        ziel=ziel_tarif(neu_art="allgemein", ab=start.isoformat()),
                     ))
                 # Nächster erwarteter Start (Tag nach gueltig_bis)
                 if tarif.gueltig_bis:
@@ -757,7 +757,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     "löschen oder sein Gültig-ab-Datum anpassen; danach ist die "
                     "Wahl eindeutig."
                 ),
-                ziel=ziel_tarif(gleich[0].id), altlink=HEUTE_STROMPREISE,
+                ziel=ziel_tarif(gleich[0].id),
             ))
 
         # ⛔ **Hier stand am 11.09.2026 zwischenzeitlich ein Hinweis
@@ -805,7 +805,6 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     "hat, muss nichts tun: die Rechnung stimmt dann bereits, und "
                     "dieser Hinweis bleibt als Information stehen."
                 ),
-                altlink=HEUTE_STROMPREISE,
             ))
         # Ladetarif hängt an der Verwendung `wallbox` — „e-auto" gibt es als
         # Verwendung nicht (`Strompreis.verwendung`: allgemein | waermepumpe |
@@ -825,7 +824,6 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 details="E-Auto/Wallbox vorhanden – bei eigenem Ladetarif einen "
                         "Strompreis mit Verwendung „Wallbox“ ergänzen. Ohne ihn "
                         "rechnet eedc die Ladung mit dem allgemeinen Tarif.",
-                altlink=HEUTE_STROMPREISE,
             ))
 
         # Plausibilität der Werte
@@ -837,7 +835,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     kategorie=kat, schwere=CheckSeverity.WARNING, code="arbeitspreis_ungewoehnlich",
                     meldung=f"Arbeitspreis ungewöhnlich: {fmt_zahl(preis, 1)} ct/kWh ({name})",
                     details="Erwarteter Bereich: 5–80 ct/kWh",
-                    ziel=ziel_tarif(tarif.id, feld="netzbezug_arbeitspreis_cent_kwh"), altlink=HEUTE_STROMPREISE,
+                    ziel=ziel_tarif(tarif.id, feld="netzbezug_arbeitspreis_cent_kwh"),
                 ))
 
             verg = tarif.einspeiseverguetung_cent_kwh
@@ -846,7 +844,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                     kategorie=kat, schwere=CheckSeverity.WARNING, code="einspeiseverguetung_ungewoehnlich",
                     meldung=f"Einspeisevergütung ungewöhnlich: {fmt_zahl(verg, 1)} ct/kWh ({name})",
                     details="Erwarteter Bereich: 0–30 ct/kWh",
-                    ziel=ziel_tarif(tarif.id, feld="einspeiseverguetung_cent_kwh"), altlink=HEUTE_STROMPREISE,
+                    ziel=ziel_tarif(tarif.id, feld="einspeiseverguetung_cent_kwh"),
                 ))
 
         return ergebnisse
@@ -926,7 +924,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 "und die Wirtschaftlichkeit des Speichers gegen einen Nenner, den "
                 "es nicht gibt."
             ),
-            ziel=ziel_komponente(inv.id, parameter="kapazitaet_kwh", typ="speicher"), altlink=HEUTE_INVESTITIONEN,
+            ziel=ziel_komponente(inv.id, parameter="kapazitaet_kwh", typ="speicher"),
             investition_id=inv.id,
         ))
         return ergebnisse
@@ -996,11 +994,11 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
             details=(
                 f"Zugeordnet: {felder}. Diese Zähler zählt eedc erst als Teile des Wärmepumpen-Stroms, wenn der Schalter "
                 "„Getrennte Strommessung (Heizen / Warmwasser)“ an ist — bis dahin bleibt Heizen/Warmwasser leer und der "
-                f"ganze Strom erscheint als „nicht aufgeteilt“. Einschalten unter Einstellungen → Komponenten → "
-                f"{inv.bezeichnung or name} → bearbeiten. "
+                f"ganze Strom erscheint als „nicht aufgeteilt“. Einschalten in der Wärmepumpe "
+                f"„{inv.bezeichnung or name}“. "
                 "Wer bewusst nur den Gesamtzähler nutzt, löst die beiden Zuordnungen stattdessen."
             ),
-            ziel=ziel_komponente(inv.id, parameter="getrennte_strommessung", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+            ziel=ziel_komponente(inv.id, parameter="getrennte_strommessung", typ="waermepumpe"),
         )]
 
     def _check_wechselrichter_pv_altbestand(
@@ -1064,7 +1062,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
         teile.append(
             "So gehoert es zugeordnet: Misst du je String, dann am jeweiligen "
             "PV-Modul. Hast du nur einen Zaehler fuer die ganze Anlage, dann "
-            "unter Einstellungen -> Datenquellen in der Gruppe Anlage (Basis) "
+            "in den Datenquellen in der Gruppe Anlage (Basis) "
             "bei PV-Erzeugung Zaehlerstand -- eedc verteilt die Menge dann "
             "nach kWp auf deine Module. "
             "Die alte Zuordnung kannst du danach entfernen; sie bleibt so "
@@ -1117,7 +1115,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 "und den Zähler als „Abgabe“ zuordnen — eedc zieht die Menge dann "
                 "vom Eigenverbrauch ab. Der Erlös bleibt dein Feld."
             ),
-            ziel=ziel_komponente(inv.id, parameter="kategorie", typ="sonstiges"), altlink=HEUTE_INVESTITIONEN,
+            ziel=ziel_komponente(inv.id, parameter="kategorie", typ="sonstiges"),
         ))
         return ergebnisse
 
@@ -1180,7 +1178,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 "Die bereits gepflegten Monatswerte bleiben erhalten und werden "
                 "weiter angezeigt — es geht nichts verloren."
             ),
-            ziel=ziel_datenquelle(geraet=inv.id), altlink=HEUTE_INVESTITIONEN,
+            ziel=ziel_datenquelle(geraet=inv.id),
         ))
         return ergebnisse
 
@@ -1203,7 +1201,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO, code="keine_aktiven_investitionen",
                 meldung="Keine aktiven Investitionen vorhanden",
-                ziel=ziel_komponente(neu="pv-module"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(neu="pv-module"),
             ))
             return ergebnisse
 

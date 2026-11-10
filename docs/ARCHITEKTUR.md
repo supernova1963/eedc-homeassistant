@@ -912,14 +912,33 @@ Ziele entstehen nur im **Ziel-Bauer** `services/daten_checker/ziele.py` (`ziel_m
 `ziel_block`); jeder Bauer prüft das Feld gegen die Registry (Monats-/Datenquellen-Felder, Investitions-Spalten bzw.
 Parameter je Typ, Anlage-, Tarif-, Solarprognose-Spalten) und die Block-Id gegen `BLOCK_IDS` (= `einstellungenKatalog.tsx`,
 Vitest `sprungziele-blockids.test.ts`). Die **Altfelder** `link`, `action_kind`, `action_params`, `action_label` sind
-abgeleitete Properties: `link` = `altlink` (heutiger Link bis E4, benannte Werte `HEUTE_*`/`KEIN_LINK`, schrumpfende
-Baseline `tests/daten_checker_altlink_baseline.txt`) oder die heutige Lesart von `ziel` (`link_aus_ziel`: nur `block`,
-`erfassen`, `bearbeiten`, `karte`). Die **Klasse** ist abgeleitet (Aktion · Sprung · Auskunft, `CheckErgebnis.klasse`);
+abgeleitete Properties: `link` = die **volle Lesart** von `ziel` (`link_aus_ziel`, seit E4 alle Parameter des Schemas
+`kategorien.ZIEL_PARAMETER`; das Übergangsfeld `altlink` aus E2 ist entfallen, seine Baseline leer). Die **Klasse** ist abgeleitet (Aktion · Sprung · Auskunft, `CheckErgebnis.klasse`);
 die Soll-Klasse je Code, Knopf-Text, Handbuch-Anker und die Allowlist «Auskunft trotz WARNING» (genau zwei Codes) hält
 der **Katalog** `services/daten_checker/handgriffe.py`. Die Antwort `GET /api/system/daten-check/{id}` trägt `code`,
 `ziel`, `action` zusätzlich. Wächter: W-1/W-3 `tests/test_daten_checker_codes.py`, W-2/W-6
 `tests/test_daten_checker_ziele.py`, W-8 `tests/test_daten_checker_texte_fixtures.py` (Fixtures je Code der
 HA-gebundenen Kategorien unter `tests/fixtures/daten_checker_texte/`).
+
+#### Daten-Checker: Sprung aufs Feld (E4 10.11.2026)
+
+Ein **Sprung** landet auf dem Feld, nicht auf der Seite (Konzept §3.3). Der Link trägt die Parameter des Ziels
+(`erfassen`, `bearbeiten`, `neu`, `tarif`, `art`, `ab`, `geraet`, `feld`, `karte`, `plan`, `wizard`; `block` außer bei
+`erfassen` und der Datenquellen-Fläche). Jede Zielseite liest ihre Parameter an **einer** Stelle über
+`hooks/useSprungParameter.ts` (liest, sobald die Liste geladen ist, entfernt die Parameter danach; `nurBeiBlock`
+trennt die Blöcke einer Kategorie): Komponenten · Datenquellen (durchgereicht als Prop) · Assistent in `v4/EinstellungenV4.tsx`,
+Monatsdaten in `hooks/useMonatErfassenDeepLink.ts` (aus `MonatsdatenTeile.tsx` gezogen, N-792 unverändert), Strompreise
+`pages/StrompreiseTeile.tsx`, Anlage `pages/AnlagenTeile.tsx`, Solarprognose `pages/PVGISSettingsTeile.tsx`; `block`/`karte`
+liest `EinstellungenV4`, `plan` die Werkbank, Hub-`geraet` `useDeepLinkFokus`. Der Sprung selbst ist
+`lib/sprungFeld.ts`: `feldSelektor` (`name`, `name="param_…"`, `data-feld`), `useAufFeldSpringen` (wartet ≤ 5 s, scrollt,
+fokussiert — bestehende Fokus-Optik) und `SprungFeldKontext`, mit dem `FormSection variant="erweitert"` und
+`CollapsibleSection` offen starten, solange ein Sprung läuft (dann sind alle zugeklappten Abschnitte des Formulars offen;
+der Kontext endet mit dem Sprung). Die Datenquellen-Fläche leitet den Block `dq-<typ>` aus Gerät bzw. Feld ab
+(`sprungZielAus`, Innengeräte-Suffix über `basisFeldKey`); Feldzeilen tragen `data-feld={f.id}`, Geräte-Sektionen
+`data-geraet`. Wächter **W-5**: der Export `backend/tests/fixtures/sprungziele.json` (je Zielseite die Parameter aller
+Ziel-Varianten, erzeugt in `tests/test_daten_checker_beheben_links_wirken.py`, dort auch «jede Route lebt, kein Alt-Pfad»)
+gegen die Lesestellen je Seite im Vitest `src/test/sprungziele.test.ts`. Texte: kein Menüweg in Meldung/Details außer den
+drei Home-Assistant-Wegen (W-4 `tests/test_daten_checker_texte.py::test_meldung_und_details_ohne_menueweg`).
 
 #### Daten-Checker: Aktion mit Vorschau, eine Mechanik (E3 10.11.2026)
 

@@ -6,7 +6,8 @@
  * Knopf aus der Klasse des Befunds:
  * - **Aktion** (`action_kind`): Klick 1 `repairApi.plan` ⇒ `VorschauKasten` unter der Zeile; «Anwenden» ⇒
  *   `repairApi.execute` ⇒ Ergebnis-Satz an den Aufrufer, der neu prüft. Fehler ⇒ roter Satz, der Befund bleibt.
- * - **Sprung** (`link`): «Beheben» ⇒ `navigate(link)` (E4 schaltet auf `ziel` um).
+ * - **Sprung** (`link`): «Beheben» ⇒ `navigate(link)`. Seit E4 trägt `link` alle Parameter des Ziels (Feld, Gerät,
+ *   Tarif …) und nie eine Alt-Route — deshalb kein `v3RouteZuV4` mehr (der warf die Query weg, Konzept §3.3 S1).
  * - **Auskunft** (weder noch, nicht OK): «Was gilt» ⇒ das Lösungsweg-Panel.
  * Ein Vorgang zur Zeit (`gesperrt`). **Eine Mechanik** (Wächter W-10, `npm run check:eine-mechanik`): keine Wrapper-
  * Route, nur Plan/Ausführen.
@@ -17,7 +18,6 @@ import { ChevronRight, Wrench } from 'lucide-react'
 import { Button, InlineAktion } from '../ui'
 import type { CheckErgebnis } from '../../api/datenChecker'
 import { repairApi, type RepairOperationType, type RepairPlan } from '../../api/repair'
-import { v3RouteZuV4 } from '../../config/v3ZuV4Route'
 import { SEVERITY_CONFIG, type CheckSchwere } from '../../config/datenCheckerKategorien'
 import type { ReparaturMeldung } from '../../pages/datenCheckerMeldungen'
 import VorschauKasten from './VorschauKasten'
@@ -101,7 +101,7 @@ export default function BefundHandgriff({
   } else if (e.link) {
     handgriff = (
       <Button type="button" variant="ghost" size="sm" className="flex-shrink-0"
-        onClick={() => navigate(v3RouteZuV4(e.link!) ?? e.link!)}>
+        onClick={() => navigate(e.link!)}>
         Beheben
         <ChevronRight className="h-3 w-3 ml-0.5" />
       </Button>

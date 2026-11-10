@@ -346,6 +346,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               Setup-Wizard, für neue Anlagen; den Bestand holt der Daten-Checker. */}
           <DatumFeld
             label="Inbetriebnahme (Anlage)"
+            name="installationsdatum"
             value={formData.installationsdatum}
             onChange={(v) => setFormData(prev => ({ ...prev, installationsdatum: v }))}
             warnung={formData.installationsdatum

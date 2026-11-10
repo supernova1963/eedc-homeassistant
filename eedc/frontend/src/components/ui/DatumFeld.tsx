@@ -21,6 +21,7 @@ export function DatumFeld({
   hint,
   warnung,
   disabled = false,
+  name,
 }: {
   label: string
   /** `YYYY-MM-DD` oder leer. */
@@ -45,9 +46,11 @@ export function DatumFeld({
   warnung?: string
   /** Feld deaktivieren (z. B. während eines Reparatur-Laufs). */
   disabled?: boolean
+  /** Anker `data-feld` für den Sprung aufs Feld (E4, `lib/sprungFeld.ts`) — nur das Attribut, keine Logik. */
+  name?: string
 }) {
   return (
-    <div className="w-full">
+    <div className="w-full" data-feld={name}>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}

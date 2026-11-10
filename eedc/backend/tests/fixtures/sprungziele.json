@@ -1,0 +1,50 @@
+{
+ "_kopf": "Erzeugt von backend/tests/test_daten_checker_beheben_links_wirken.py (E4, W-5) — nicht von Hand ändern.",
+ "seiten": {
+  "einstellungen/daten": [
+   "erfassen",
+   "feld",
+   "geraet"
+  ],
+  "einstellungen/daten#monatsdaten": [
+   "block"
+  ],
+  "einstellungen/datenquellen": [
+   "feld",
+   "geraet"
+  ],
+  "einstellungen/integration#import-buendel": [
+   "block",
+   "wizard"
+  ],
+  "einstellungen/integration#mqtt-broker": [
+   "block"
+  ],
+  "einstellungen/komponenten": [
+   "bearbeiten",
+   "feld",
+   "neu"
+  ],
+  "einstellungen/stammdaten#anlage": [
+   "block",
+   "feld"
+  ],
+  "einstellungen/stammdaten#solarprognose": [
+   "block",
+   "feld"
+  ],
+  "einstellungen/stammdaten#strompreise": [
+   "ab",
+   "art",
+   "block",
+   "feld",
+   "tarif"
+  ],
+  "einstellungen/system#protokolle": [
+   "block"
+  ],
+  "komponenten/speicher": [
+   "geraet"
+  ]
+ }
+}

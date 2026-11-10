@@ -5,7 +5,7 @@
    "kategorie": "tageswerte_fehlen",
    "schwere": "warning",
    "meldung": "17 Tag(e) ohne Werte trotz zugeordnetem Zähler (2026-03-14 … 2026-03-30)",
-   "details": "17 Tag(e) zwischen 2026-03-14 und 2026-03-30 tragen keinen Wert für: Einspeisung, Netzbezug. Die HA-Langzeitstatistik hat für dieselben Tage Werte — die Zuordnung stand damals nur noch nicht, deshalb hat nie ein Lauf sie aufgeschrieben. „Zeitraum neu aggregieren“ holt 2026-03-14 bis 2026-03-30 aus HA-Statistics nach (max. 31 Tage/Lauf). Reichweite: die Tagesreparatur heilt Tages- und Stundenwerte, NICHT die Monatswerte. Für abgeschlossene Monate anschließend Einstellungen → Integration → Statistik-Import: „Vorschau laden“ — bereits belegte Monate stehen dort unter „Konflikte“ und sind zum Überschreiben vorausgewählt, also vor dem Import einmal durchsehen.",
+   "details": "17 Tag(e) zwischen 2026-03-14 und 2026-03-30 tragen keinen Wert für: Einspeisung, Netzbezug. Die HA-Langzeitstatistik hat für dieselben Tage Werte — die Zuordnung stand damals nur noch nicht, deshalb hat nie ein Lauf sie aufgeschrieben. „Tage neu aufbauen“ holt 2026-03-14 bis 2026-03-30 aus HA-Statistics nach (max. 31 Tage/Lauf). Reichweite: die Tagesreparatur heilt Tages- und Stundenwerte, NICHT die Monatswerte. Für abgeschlossene Monate anschließend im Statistik-Import „Vorschau laden“ — bereits belegte Monate stehen dort unter „Konflikte“ und sind zum Überschreiben vorausgewählt, also vor dem Import einmal durchsehen.",
    "code": "tageswerte_fehlen_tage",
    "klasse_katalog": "aktion",
    "klasse_laufzeit": "aktion"

@@ -7,9 +7,10 @@
  * `strompreise`/`solarprognose` → **stammdaten**; `sensor-mapping`/`mqtt-inbound` →
  * **datenquellen**; `investitionen` → **komponenten**).
  *
- * Nutzung: geteilte Bausteine, die dynamische Alt-Route-Strings verlinken (z. B. die
- * „Beheben"-Links des Daten-Checkers, `CheckErgebnis.link`, oder der Setup-Wizard-
- * Absprung), biegen über {@link v3RouteZuV4} auf den passenden V4-Reiter um.
+ * Nutzung: geteilte Bausteine, die dynamische Alt-Route-Strings verlinken (der Setup-Wizard-Absprung, der Tages-Status
+ * `TagLeerGrund`), biegen über {@link v3RouteZuV4} auf den passenden V4-Reiter um. Die „Beheben"-Links des
+ * Daten-Checkers brauchen sie seit E4 nicht mehr: der Ziel-Bauer erzeugt keine Alt-Route, und ihre Query trägt den
+ * Sprung aufs Feld (hier würde sie verworfen).
  *
  * **SoT-Abgleich:** die Kategorie-Zuordnung spiegelt `EINSTELLUNGEN_KATALOG`
  * (`route`→`kategorie`); ein Konsistenz-Test (`v3ZuV4Route.test.ts`) sichert gegen

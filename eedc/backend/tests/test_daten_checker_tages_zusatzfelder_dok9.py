@@ -72,7 +72,7 @@ async def test_waermepumpe_ohne_waermemengenzaehler_wird_als_info_genannt(db):
     assert len(treffer) == 1
     assert treffer[0].schwere == CheckSeverity.INFO, "WARNING wäre Nörgeln"
     assert "Vitocal: Heizwärme, Warmwasser" in treffer[0].details
-    assert "Cockpit → Tag" in treffer[0].details
+    assert "Tagesansicht im Cockpit" in treffer[0].details
 
 
 async def test_split_klimaanlage_wird_nicht_nach_waermemengenzaehler_gefragt(db):

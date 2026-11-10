@@ -218,7 +218,7 @@ async def test_fehlendes_installationsdatum_ist_ein_fehler(db):
     # Der Grund steht dabei -- die alte Begruendung ("fuer die
     # Vollstaendigkeitspruefung") sagte nicht, was daran schiefgeht.
     assert "Einspeisung und Netzbezug" in treffer[0].details
-    assert treffer[0].link == "/einstellungen/anlage"
+    assert treffer[0].link == "/einstellungen/stammdaten?block=anlage&feld=installationsdatum"
 
 
 async def test_gepflegtes_installationsdatum_meldet_ok(db):

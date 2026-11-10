@@ -20,6 +20,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Daten-Checker: „Beheben“ an einem Befund zu einem bereits erfassten Monat öffnet diesen Monat zum Bearbeiten (Melder
   ottokar, simon42).** Bisher öffnete sich ein neues Formular „Monatsdaten erfassen“, dessen Speichern mit „existieren
   bereits“ endete (N-792).
+- **Daten-Checker: „Beheben“ führt auf das betroffene Feld** — Datenquellen-Zuordnung mit aufgeklapptem Gerät und
+  markiertem Feld, Komponenten-Formular mit fokussiertem Feld (auch in zugeklappten Abschnitten), Strompreise mit
+  vorbelegtem neuem Tarif oder dem betroffenen Tarif, Anlage-Stammdaten, Solarprognose, Monatsabschluss mit dem Feld des
+  Geräts, der Geräte-Connector öffnet direkt. Acht Befunde nannten bisher einen Menüweg, den es so nicht gibt, einer ein
+  Ziel, das fehlt — die Texte nennen keinen Weg mehr, der Knopf ist der Weg; Wege in Home Assistant stehen weiter im
+  Text. Die Texte sagen jetzt dasselbe wie die Knöpfe („Tag neu aufbauen“, „Tage neu aufbauen“). Befunde mit einem
+  Reparatur-Knopf oder ohne eigenen Handgriff zeigen kein „Beheben“ mehr, sondern den Knopf bzw. „Was gilt“.
 
 ### Changed
 

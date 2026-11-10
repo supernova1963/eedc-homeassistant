@@ -15,7 +15,7 @@ from backend.services.daten_checker.kategorien import (
     CheckKategorie,
     CheckSeverity,
 )
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, ziel_block
+from backend.services.daten_checker.ziele import ziel_block
 from backend.core.zahlenformat import fmt_zahl
 
 logger = logging.getLogger(__name__)
@@ -128,8 +128,8 @@ class ZeitzoneChecks:
                 f"({_offset_text(eigen_offset)}). Rund um Mitternacht werden "
                 "Stundenwerte dadurch dem falschen Tag zugeordnet. "
                 f"{weg} Bereits gespeicherte Tage ändern sich davon nicht — "
-                "die lassen sich anschließend über die Datenverwaltung neu "
+                "die lassen sich anschließend in der Reparatur-Werkbank neu "
                 "berechnen."
             ),
-            ziel=ziel_block("system", "protokolle") if kind == HA_APP else None, altlink=HEUTE_DATENQUELLEN,
+            ziel=ziel_block("system", "protokolle") if kind == HA_APP else None,
         )]

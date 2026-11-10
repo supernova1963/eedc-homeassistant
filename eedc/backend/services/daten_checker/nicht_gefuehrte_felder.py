@@ -80,8 +80,8 @@ def text_sonstiges_totes_feld(
     if ist_abgabe_kategorie(kategorie) and feld in _ABGABE_HAUPTGROESSEN:
         ausweg = (
             f"Stammt er aus der Zeit vor der Umstellung auf „{SONSTIGES_ABGABE_LABEL}“, "
-            "trage die Menge im Monatsabschluss in „Abgabe (kWh)“ ein (Einstellungen → "
-            "Daten → Monatsdaten) und entferne den alten Wert mit „Wert entfernen“."
+            "trage die Menge im Monatsabschluss in „Abgabe (kWh)“ ein "
+            "und entferne den alten Wert mit „Wert entfernen“."
         )
     else:
         ausweg = (

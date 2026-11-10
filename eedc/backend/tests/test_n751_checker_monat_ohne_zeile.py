@@ -74,9 +74,9 @@ async def test_rat_nennt_datenquelle_und_monatsabschluss(db):
     a = await _juli_nur_tage(db, einspeisung=False, netzbezug=True)
     erg = await DatenChecker(db).check_anlage(a.id)
     e = next(e for e in erg.ergebnisse if e.meldung.startswith("07/2026: Einspeisung nicht erfasst"))
-    assert "Datenquelle zuordnen (Einstellungen → Datenquellen" in e.details
+    assert "Datenquelle zuordnen (der Zähler zählt ab dann)" in e.details
     assert "den Monat im Monatsabschluss pflegen" in e.details
-    assert "Cockpit → Monat und Cockpit → Jahr" in e.details
+    assert "in der Monats- und der Jahresansicht im Cockpit" in e.details
     assert e.link and "2026-07" in e.link
 
 
@@ -88,7 +88,8 @@ async def test_n734_text_mit_zeile_meint_monat_und_jahr(db):
     await db.commit()
     erg = await DatenChecker(db).check_anlage(a.id)
     e = next(e for e in erg.ergebnisse if e.meldung == "07/2026: Einspeisung nicht erfasst")
-    assert "sonst bleiben Eigenverbrauch und Autarkie des Monats in Cockpit → Monat und Cockpit → Jahr leer" in e.details
+    assert ("sonst bleiben Eigenverbrauch und Autarkie des Monats in der Monats- und der Jahresansicht im Cockpit leer"
+            in e.details)
 
 
 async def test_keine_doppelmeldung_wenn_die_tagesebene_die_zeile_ergaenzt(db):

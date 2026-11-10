@@ -59,7 +59,9 @@ EIGENE_KATEGORIE = "daten"
 
 # Query-Parameter, die `/einstellungen/daten` tatsächlich auswertet. Wer hier
 # einen ergänzt, ergänzt ihn zuerst im Frontend — sonst ist der Link wieder tot.
-WIRKSAME_PARAMETER = ("block=", "erfassen=", "karte=")
+# E4: dazu `feld=`/`geraet=` (Monatsdaten, `hooks/useMonatErfassenDeepLink.ts`); die Lesestellen je Seite prüft W-5
+# (`frontend/src/test/sprungziele.test.ts` gegen den Export `fixtures/sprungziele.json` unten).
+WIRKSAME_PARAMETER = ("block=", "erfassen=", "karte=", "feld=", "geraet=")
 
 
 def _alt_routen_auf_die_daten_flaeche() -> set[str]:
@@ -205,7 +207,9 @@ async def test_n734_fehler_verlinken_die_erfassung_des_monats(db):
     netz = [e for e in erg if "nicht erfasst" in e.meldung]
 
     assert len(netz) == 2
-    assert {e.link for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}"}
+    # E4: der Sprung landet auf dem Feld des Monats (volle Lesart, `feld=`).
+    assert {e.link for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=einspeisung_kwh",
+                                      f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=netzbezug_kwh"}
 
 
 def test_werkbank_link_traegt_die_karte():
@@ -226,3 +230,70 @@ def test_werkbank_link_traegt_die_karte():
     assert 'data-karte="werkbank"' in (frontend / "pages" / "EnergieprofilTeile.tsx").read_text(encoding="utf-8")
     einstellungen = (frontend / "v4" / "EinstellungenV4.tsx").read_text(encoding="utf-8")
     assert "searchParams.get('karte')" in einstellungen and "useKarteAnspringen(" in einstellungen
+
+
+# ── E4 (Wächter W-5, Bauplan §4): jedes Ziel des Ziel-Bauers — Route lebt, kein Alt-Pfad, Export für die Lesestellen ──
+#
+# Jede Bauer-Stelle der Erzeuger wird mit ihren Literalen ausgeführt (dieselbe Ausführung wie W-2,
+# `test_daten_checker_ziele.py`); aus jedem `Ziel` entsteht der Link der vollen Lesart (`kategorien.link_aus_ziel`).
+# Der Export `fixtures/sprungziele.json` hält je Zielseite (`<pfad>#<block>`) die Parameter, die ein Link dorthin
+# trägt — der Vitest `src/test/sprungziele.test.ts` prüft, dass die Zielseite jeden davon liest.
+# Neu schreiben: cd eedc && EEDC_FIXTURES_SCHREIBEN=1 backend/venv/bin/python -m pytest \
+#     backend/tests/test_daten_checker_beheben_links_wirken.py -k sprungziele
+import json  # noqa: E402
+import os  # noqa: E402
+
+SPRUNGZIELE = Path(__file__).resolve().parent / "fixtures" / "sprungziele.json"
+KATALOG_TS = BACKEND.parent / "frontend" / "src" / "config" / "einstellungenKatalog.tsx"
+
+
+def _alle_links() -> list[str]:
+    from backend.services.daten_checker import ziele
+    from backend.services.daten_checker.kategorien import link_aus_ziel
+    from backend.tests.test_daten_checker_ziele import _aufruf_varianten, _bauer_aufrufe, _module
+
+    return sorted({link_aus_ziel(getattr(ziele, n.func.id)(*a, **kw))
+                   for rel, n in _bauer_aufrufe() for a, kw in _aufruf_varianten(n.func.id, n, _module(rel))})
+
+
+def _seite(link: str) -> tuple[str, list[str]]:
+    pfad, _, query = link.lstrip("/").partition("?")
+    teile = dict(t.split("=", 1) for t in query.split("&") if t)
+    return pfad + (f"#{teile['block']}" if "block" in teile else ""), sorted(teile)
+
+
+def _export() -> dict:
+    seiten: dict[str, set[str]] = {}
+    for link in _alle_links():
+        seite, parameter = _seite(link)
+        seiten.setdefault(seite, set()).update(parameter)
+    return {"_kopf": "Erzeugt von backend/tests/test_daten_checker_beheben_links_wirken.py (E4, W-5) — nicht von Hand ändern.",
+            "seiten": {s: sorted(p) for s, p in sorted(seiten.items())}}
+
+
+def test_sprungziele_export_ist_aktuell():
+    neu = json.dumps(_export(), ensure_ascii=False, indent=1) + "\n"
+    if os.environ.get("EEDC_FIXTURES_SCHREIBEN") == "1":
+        SPRUNGZIELE.write_text(neu, encoding="utf-8")
+    assert SPRUNGZIELE.exists() and SPRUNGZIELE.read_text(encoding="utf-8") == neu, (
+        "fixtures/sprungziele.json ist veraltet — neu schreiben (Befehl im Kommentar oben), dann den Vitest "
+        "src/test/sprungziele.test.ts laufen lassen")
+
+
+def test_jedes_ziel_fuehrt_auf_eine_lebende_route():
+    """Kein Link auf eine Alt-Route (`v3ZuV4Route.ts`), jede Einstellungs-Kategorie existiert im Katalog, jeder Link auf
+    die eigene Seite trägt einen wirksamen Parameter (E4, Konzept §3.3 S1)."""
+    kategorien = set(re.findall(r"\{ key: '([a-z]+)', label:", KATALOG_TS.read_text(encoding="utf-8")))
+    assert {"stammdaten", "komponenten", "daten", "integration", "datenquellen", "system"} <= kategorien
+    alt = {r for r, _ in re.findall(r"'(einstellungen/[a-z-]+)':\s*'([a-z]+)'", V3_MAP_TS.read_text(encoding="utf-8"))}
+    falsch = []
+    for link in _alle_links():
+        pfad, _, query = link.lstrip("/").partition("?")
+        if pfad.startswith("komponenten/"):
+            continue
+        if pfad in alt - {f"einstellungen/{k}" for k in kategorien} or pfad.split("/", 1)[-1] not in kategorien:
+            falsch.append(link)
+        elif pfad == f"einstellungen/{EIGENE_KATEGORIE}" and not any(p in query for p in WIRKSAME_PARAMETER):
+            falsch.append(link)
+    assert not falsch, falsch
+    assert len(_alle_links()) > 50

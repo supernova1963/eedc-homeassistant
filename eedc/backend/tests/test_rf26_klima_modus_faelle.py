@@ -152,7 +152,7 @@ _DETAILS = {
         'aus der Summe der beiden anderen Zähler schätzen. Die Mengen stimmen weiterhin: Verbrauch, Kosten '
         'und CO₂ rechnen mit dem vollen Strom. Nur die Aufteilung nach Betriebsart ist eine Verteilung und '
         'keine Messung, und deshalb kürzt sie die Arbeitszahl nicht. Ordne „Strom Kühlbetrieb“ zu, dann liest '
-        'eedc ab, statt zu verteilen: Einstellungen → Datenquellen, beim Gerät das Feld „Strom Kühlbetrieb“. '
+        'eedc ab, statt zu verteilen. '
         'Das ist freiwillig — ohne die Zuordnung bleibt alles wie bisher.'
     ),
     'B': (
@@ -171,7 +171,7 @@ _DETAILS = {
         'Dieses Gerät heizt und kühlt über denselben Zähler. eedc sieht deshalb nur eine Zahl und kann nicht '
         'sagen, welcher Teil des Stroms ins Heizen ging und welcher ins Kühlen — aus den vorhandenen Werten '
         'lässt sich das nicht nachrechnen. Ordne dafür die climate-Entität des Geräts zu (in Home Assistant '
-        'meist „climate.…“, sie zeigt Heizen/Kühlen/Aus): Einstellungen → Datenquellen, beim Gerät das Feld '
+        'meist „climate.…“, sie zeigt Heizen/Kühlen/Aus) — beim Gerät das Feld '
         '„Betriebsmodus“. Das ist freiwillig — ohne die Zuordnung bleibt alles wie bisher, der Stromverbrauch '
         'zählt vollständig. Ein Hinweis zur Erwartung: Die Aufteilung beginnt mit der Zuordnung und lässt '
         'sich nicht rückwirkend nachtragen.'
@@ -253,11 +253,15 @@ ERWARTET = {
 }
 
 
+#: E4: der Sprung landet auf dem Feld des Geräts (Teil B Nr 5, 7, 8) — `ziel_datenquelle(geraet, feld)`.
+_FELD = {"A": "betriebsart_strom_kuehlen_kwh", "B": "betriebsmodus", "C": "betriebsmodus"}
+
+
 def _erwartete_meldung(art: str, text: str, inv_id):
     if art in _TITEL:
         return dict(kategorie=CheckKategorie.KLIMA_MODUS_SENSOR, schwere=CheckSeverity.INFO, meldung=f"„{text}“: {_TITEL[art]}",
-                    details=_DETAILS[art], link=LINK_DATENQUELLEN, action_kind=None, action_params=None, action_label=None,
-                    investition_id=inv_id)
+                    details=_DETAILS[art], link=f"{LINK_DATENQUELLEN}?geraet={inv_id}&feld={_FELD[art]}",
+                    action_kind=None, action_params=None, action_label=None, investition_id=inv_id)
     return dict(kategorie=CheckKategorie.KLIMA_MODUS_SENSOR, schwere=CheckSeverity.OK, meldung=text, details=_DETAILS[art],
                 link=None, action_kind=None, action_params=None, action_label=None, investition_id=None)
 

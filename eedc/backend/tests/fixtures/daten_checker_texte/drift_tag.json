@@ -5,7 +5,7 @@
    "kategorie": "datenquelle_drift",
    "schwere": "info",
    "meldung": "2026-03-23: PV 50,0 → HA 75,0 kWh (Δ +25,0 kWh, +33,3 %)",
-   "details": "Dein eedc-Wert für 2026-03-23 ist 50,00 kWh PV-Erzeugung. Die HA-Statistics liefert für denselben Tag 75,00 kWh. Mit „Tag reparieren“ schreibt eedc den Wert aus HA-Statistics in deine Tages-Zusammenfassung.",
+   "details": "Dein eedc-Wert für 2026-03-23 ist 50,00 kWh PV-Erzeugung. Die HA-Statistics liefert für denselben Tag 75,00 kWh. Mit „Tag neu aufbauen“ schreibt eedc den Wert aus HA-Statistics in deine Tages-Zusammenfassung.",
    "code": "drift_tag",
    "klasse_katalog": "aktion",
    "klasse_laufzeit": "aktion"

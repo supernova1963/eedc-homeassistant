@@ -68,16 +68,15 @@ def test_w3_kein_erzeuger_schreibt_altfelder_nachtraeglich():
 
 
 def test_altfelder_sind_abgeleitet():
-    from backend.services.daten_checker.kategorien import KEIN_LINK, Aktion, CheckErgebnis
-    from backend.services.daten_checker.ziele import HEUTE_INVESTITIONEN, ziel_komponente, ziel_monat
+    from backend.services.daten_checker.kategorien import Aktion, CheckErgebnis
+    from backend.services.daten_checker.ziele import ziel_komponente, ziel_monat
 
     e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", ziel=ziel_monat(2026, 5, geraet=3, feld="ladung_kwh"))
-    assert e.link == "/einstellungen/daten?erfassen=2026-05" and e.klasse == "sprung"
-    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", ziel=ziel_komponente(7, feld="aktiv"),
-                      altlink=HEUTE_INVESTITIONEN)
-    assert e.link == "/einstellungen/investitionen"
-    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", ziel=ziel_komponente(7, feld="aktiv"), altlink=KEIN_LINK)
-    assert e.link is None
+    assert e.link == "/einstellungen/daten?erfassen=2026-05&geraet=3&feld=ladung_kwh" and e.klasse == "sprung"
+    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", ziel=ziel_komponente(7, feld="aktiv"))
+    assert e.link == "/einstellungen/komponenten?bearbeiten=7&feld=aktiv"
+    e = CheckErgebnis(kategorie="x", schwere="info", meldung="m")
+    assert e.link is None and e.klasse == "auskunft"
     e = CheckErgebnis(kategorie="x", schwere="info", meldung="m", action=Aktion("reaggregate_day", {"datum": "d"}))
     # E3: der Knopf-Text kommt aus dem Katalog (`handgriffe.knopf_text`), nicht vom Erzeuger.
     assert (e.action_kind, e.action_params, e.action_label, e.link, e.klasse) == (

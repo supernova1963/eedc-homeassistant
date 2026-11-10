@@ -628,6 +628,19 @@ Der Daten-Checker prüft die Qualität deiner Daten in mehreren Kategorien — v
 
 > **Vollständige Doku** mit allen Kategorien, Befund-Tabellen und Behebungs-Workflows: **[Daten-Checker-Handbuch](HANDBUCH_DATEN_CHECKER.md)**.
 
+**„Beheben" landet auf dem Feld.** Der Knopf trägt die Stelle in der Adresse (`#/einstellungen/…?…`); jede Zielseite liest ihre Parameter einmal und entfernt sie danach — ein Neuladen oder „Zurück" öffnet nichts erneut:
+
+| Ziel | Parameter | Wirkung |
+| --- | --- | --- |
+| Datenquellen | `geraet=<Id>`, `feld=<Feld>` | Block des Gerätetyps und das Gerät aufgeklappt, die Feldzeile markiert (auch in „Weitere Größen erfassen") |
+| Komponenten | `bearbeiten=<Id>`, `feld=<Feld>` · `neu=<Typ>` | Formular des Geräts bzw. „neu" des Typs; der Cursor steht im Feld, zugeklappte Abschnitte des Formulars sind dabei offen |
+| Monatsdaten | `erfassen=JJJJ-MM`, `geraet=<Id>`, `feld=<Feld>` | der Monat (vorhanden ⇒ Bearbeiten), dort das Feld des Geräts |
+| Stammdaten | `block=strompreise&tarif=<Id>`·`tarif=neu&art=<Verwendung>&ab=<Datum>` · `block=anlage&feld=…` · `block=solarprognose&feld=system_losses` | Tarif am Feld bzw. neuer Tarif vorbelegt · gewählte Anlage am Feld · „Neue Prognose abrufen" an den Systemverlusten |
+| Integration | `block=import-buendel&wizard=connector` | der Geräte-Connector öffnet |
+| alle Kategorien | `block=<Block>` · `karte=werkbank` | Block aufklappen · zur Reparatur-Werkbank springen |
+
+Die Hervorhebung ist der gewohnte Fokus des Eingabefelds, keine eigene Farbe. Die Daten-Checker-Texte nennen keine Menüwege in eedc mehr — der Knopf ist der Weg.
+
 ### 5.4 Ersteinrichtung
 
 Ein geführter Assistent, der Anlage, Datenquellen und Strompreise in einem Durchlauf abfragt — die **Pflege-Route** für später. Sie ist getrennt vom **First-Run-Setup-Wizard**, der einmalig vor der App läuft (in v4-Optik) und in [Teil I: Installation](HANDBUCH_INSTALLATION.md) beschrieben ist.

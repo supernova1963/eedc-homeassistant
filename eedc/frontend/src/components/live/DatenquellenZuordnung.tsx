@@ -56,6 +56,7 @@ import {
   betriebsartBloecke, blockStatus, investitionIdDerGruppe, statusAufschluesselung, statusKontext,
 } from './datenquellenBetriebsart'
 import { funktionsKopf } from '../../lib/funktionsFarben'
+import { basisFeldKey, useAufFeldSpringen } from '../../lib/sprungFeld'
 import {
   datenquellenApi,
   VERBINDUNG_GEAENDERT_EVENT,
@@ -195,7 +196,42 @@ interface TypCluster {
   geraete: DatenquelleGruppe[]
 }
 
-export default function DatenquellenZuordnung() {
+/** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`). */
+export interface DatenquellenSprung {
+  geraet?: string
+  feld?: string
+}
+
+/**
+ * Ziel eines Sprungs: die Gruppe des Geräts (`inv:<geraet>`) bzw. — ohne Gerät — die Gruppe mit dem Feld (Basis zuerst),
+ * und darin das Feld: zuerst wörtlich, sonst über den Basis-Key (Innengeräte-Suffix, `basisFeldKey`). `null` ohne Treffer.
+ */
+export function sprungZielAus(
+  gruppen: DatenquelleGruppe[], sprung: DatenquellenSprung | null,
+): { gruppe: DatenquelleGruppe; feld: DatenquelleFeld | null } | null {
+  if (!sprung || (!sprung.geraet && !sprung.feld)) return null
+  const kandidaten = sprung.geraet
+    ? gruppen.filter((g) => g.id === `inv:${sprung.geraet}`)
+    : [...gruppen].sort((a, b) => Number(b.typ === 'basis') - Number(a.typ === 'basis'))
+  const ziel = sprung.feld
+  for (const passt of [(f: DatenquelleFeld) => f.feld === ziel,
+    (f: DatenquelleFeld) => basisFeldKey(f.feld) === basisFeldKey(ziel ?? '')]) {
+    for (const g of kandidaten) {
+      const f = ziel ? g.felder.find(passt) : undefined
+      if (f) return { gruppe: g, feld: f }
+    }
+  }
+  return sprung.geraet && kandidaten[0] ? { gruppe: kandidaten[0], feld: null } : null
+}
+
+export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, oeffneBlock, oeffnenAnlass }: {
+  /** E4: Gerät aufklappen und Feld markieren (Deep-Link, gelesen in `EinstellungenV4`). */
+  sprung?: DatenquellenSprung | null
+  onSprungFertig?: () => void
+  /** `?block=dq-<typ>` (gelesen in `EinstellungenV4`) — klappt den Block auf wie im Katalog. */
+  oeffneBlock?: string
+  oeffnenAnlass?: string
+} = {}) {
   const { selectedAnlageId } = useSelectedAnlage()
   const [gruppen, setGruppen] = useState<DatenquelleGruppe[]>([])
   const [verfuegbarkeit, setVerfuegbarkeit] = useState<DatenquellenVerfuegbarkeit>(VERFUEGBARKEIT_DEFAULT)
@@ -273,6 +309,23 @@ export default function DatenquellenZuordnung() {
       })
       .catch(() => {})
   }, [selectedAnlageId])
+
+  // E4 (1)–(3): Sprung aufs Gerät/Feld — Block auf, Geräte-Sektion auf (bleibt offen), «Weitere Größen» auf, wenn das
+  // Feld dort steht; dann zur Feldzeile (`data-feld`) bzw. zum Gerät (`data-geraet`) mit der bestehenden Fokus-Optik.
+  const sprungZiel = useMemo(() => (loading ? null : sprungZielAus(gruppen, sprung)), [loading, gruppen, sprung])
+  const [sprungGruppe, setSprungGruppe] = useState<string | null>(null)
+  useEffect(() => {
+    if (sprung && !loading && !sprungZiel) onSprungFertig?.()
+    if (!sprungZiel) return
+    setSprungGruppe(sprungZiel.gruppe.id)
+    if (sprungZiel.feld?.erweitert) setOffeneErweiterung((prev) => new Set(prev).add(sprungZiel.gruppe.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sprungZiel, sprung, loading])
+  const sprungInv = sprungZiel ? investitionIdDerGruppe(sprungZiel.gruppe) : null
+  useAufFeldSpringen(
+    sprungZiel?.feld ? `[data-feld="${sprungZiel.feld.id}"]` : sprungInv != null ? `[data-geraet="${sprungInv}"]` : null,
+    onSprungFertig,
+  )
 
   // P-433-2b K4: Presets nur mit MQTT-Broker (ohne ihn gibt es kein Gateway). Ein Fehler lässt die Knöpfe weg.
   useEffect(() => {
@@ -450,7 +503,7 @@ export default function DatenquellenZuordnung() {
     const offenePflicht = f.bedarf === 'pflicht' && istKeine
     const hinweisOffen = offeneHinweise.has(f.id) || offenePflicht
     return (
-      <div key={f.id} className="flex flex-col gap-1.5 py-2 sm:flex-row sm:items-center sm:gap-3">
+      <div key={f.id} data-feld={f.id} className="flex flex-col gap-1.5 py-2 sm:flex-row sm:items-center sm:gap-3">
         <div className={`min-w-0 sm:flex-1 ${istKeine && !offenePflicht ? 'opacity-60' : ''}`}>
           <div className="flex items-center gap-1">
             <span className="text-sm text-gray-800 dark:text-gray-200">{label}</span>
@@ -772,17 +825,20 @@ export default function DatenquellenZuordnung() {
           : (
             <div className="space-y-2">
               {tc.geraete.map((g) => (
+                <div key={g.id} data-geraet={investitionIdDerGruppe(g) ?? undefined}>
                 <FormSection
-                  key={g.id}
+                  // E4: das angesprungene Gerät klappt auf (Neuaufbau mit `defaultOpen`) und bleibt offen.
+                  key={sprungGruppe === g.id ? `${g.id}:sprung` : g.id}
                   title={g.titel}
                   variant="erweitert"
                   ebene="geraet"
-                  defaultOpen={tc.geraete.length === 1}
+                  defaultOpen={tc.geraete.length === 1 || sprungGruppe === g.id}
                   statusSlot={geraetBadge(g)}
                 >
                   {presetKnopf(presetsFuerTyp(presets, g.typ), investitionIdDerGruppe(g), g.titel)}
                   {g.typ === TYP_NACH_BETRIEBSART ? betriebsartAbschnitte(g) : abschnitte(g.id, g.felder, themenBlock(g))}
                 </FormSection>
+                </div>
               ))}
             </div>
           )
@@ -790,8 +846,9 @@ export default function DatenquellenZuordnung() {
     }
     // ⛔ JEDER Zustand, den `render` liest, MUSS hier stehen — sonst friert die
     // render-Closure ihn ein (BlockShell rendert die memoisierten Blöcke). Das
-    // sind heute vier: `verfuegbarkeit` (Button-Gating), `offeneHinweise` (Q3),
-    // `offeneErweiterung` (R1, über `abschnitte`) und seit P-433-2b K4 `presets` (Knopf «Preset anwenden …»).
+    // sind heute fünf: `verfuegbarkeit` (Button-Gating), `offeneHinweise` (Q3),
+    // `offeneErweiterung` (R1, über `abschnitte`), seit P-433-2b K4 `presets` (Knopf «Preset anwenden …») und seit E4
+    // `sprungGruppe` (das angesprungene Gerät klappt auf).
     //
     // ⚠ Die Liste kann sich NICHT selbst prüfen: `exhaustive-deps` verlangt hier
     // `abschnitte` und `geraetBadge` — bei jedem Render neu gebaute Funktionen,
@@ -804,7 +861,7 @@ export default function DatenquellenZuordnung() {
     // Verhaltenstest `DatenquellenZuordnung.erweiterung.test.tsx` hält das Auf-
     // klappen fest, wenn die Erinnerung wieder nicht reicht.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung, presets, selectedAnlageId, neuLaden])
+  }), [cluster, verfuegbarkeit, offeneHinweise, offeneErweiterung, presets, selectedAnlageId, neuLaden, sprungGruppe])
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-gray-400">wird geladen …</p>
   if (fehler) return <p className="text-sm text-red-600 dark:text-red-400">{fehler}</p>
@@ -827,7 +884,8 @@ export default function DatenquellenZuordnung() {
         />
       )}
 
-      <BlockShell persistKey="v4-einst-datenquellen" bloecke={[...bloecke, topicBlock]} />
+      <BlockShell persistKey="v4-einst-datenquellen" bloecke={[...bloecke, topicBlock]}
+        oeffneBeimMount={oeffneBlock ?? (sprungZiel ? `dq-${sprungZiel.gruppe.typ}` : undefined)} oeffnenAnlass={oeffnenAnlass} />
 
       {gatewayFeld && selectedAnlageId != null && (
         <DatenquellenGatewayPicker

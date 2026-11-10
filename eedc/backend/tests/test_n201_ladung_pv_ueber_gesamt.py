@@ -61,7 +61,7 @@ def test_der_gemessene_anlassfall_wird_gemeldet():
     assert "100.5" in e.meldung.replace(",", ".")
     assert "86.0" in e.meldung.replace(",", ".")
     assert e.investition_id == 7, "Der Befund gehört an sein Gerät (Komponenten-Hub)."
-    assert e.link == "/einstellungen/daten?erfassen=2026-06"
+    assert e.link == "/einstellungen/daten?erfassen=2026-06&geraet=7&feld=ladung_pv_kwh"  # E4: Sprung aufs Feld
     # Kein Reparatur-Knopf: eedc kann nicht wissen, welcher Wert stimmt.
     assert e.action_kind is None
 

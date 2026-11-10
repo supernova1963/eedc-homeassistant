@@ -1,5 +1,6 @@
 import { ElementType, ReactNode, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useSprungOffen } from '../../lib/sprungFeld'
 
 /**
  * FormSection — thematische Formular-Sektion (Style-Guide Teil D, S1/S2).
@@ -15,6 +16,9 @@ import { ChevronDown } from 'lucide-react'
  * `ebene='typ'` = primäre Rahmung (Shading, fett), `ebene='geraet'` = untergeordnet
  * (flach, kein Box-in-Box, Teil-D S4). KEINE zweite Block-Art
  * ([[feedback_kpicard_drei_versionen]]).
+ *
+ * E4 (Daten-Checker «Sprung aufs Feld», `lib/sprungFeld.ts`): solange im Teilbaum ein Sprung aufs Feld läuft, startet
+ * eine aufklappbare Sektion offen — sonst stünde das Ziel-Feld nicht im DOM.
  */
 interface FormSectionProps {
   title: ReactNode
@@ -43,7 +47,8 @@ export default function FormSection({
   statusSlot, ebene = 'typ', children, className = '',
 }: FormSectionProps) {
   const collapsible = variant === 'erweitert'
-  const [open, setOpen] = useState<boolean>(defaultOpen ?? !collapsible)
+  const sprung = useSprungOffen()
+  const [open, setOpen] = useState<boolean>(sprung || (defaultOpen ?? !collapsible))
   const flach = ebene === 'geraet'
 
   if (collapsible) {

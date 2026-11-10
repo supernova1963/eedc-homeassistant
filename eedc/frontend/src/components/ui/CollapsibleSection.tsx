@@ -1,5 +1,6 @@
-import { ReactNode, useState, useEffect } from 'react'
+import { ReactNode, useState, useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useSprungOffen } from '../../lib/sprungFeld'
 
 interface Props {
   /** Eindeutiger Schlüssel für die LocalStorage-Persistenz des Offen/Zu-Status. */
@@ -15,6 +16,7 @@ interface Props {
 /**
  * Aufklappbare Card-Sektion. Status persistiert pro `storageKey` in localStorage,
  * sodass der User seine Anordnung beim nächsten Besuch wiederfindet.
+ * E4 (`lib/sprungFeld.ts`): ein laufender Sprung aufs Feld öffnet die Sektion, ohne das als Wahl zu merken.
  */
 export default function CollapsibleSection({
   storageKey,
@@ -25,7 +27,9 @@ export default function CollapsibleSection({
   className = '',
 }: Props) {
   const fullKey = `eedc-collapse-${storageKey}`
+  const sprung = useRef(useSprungOffen())
   const [open, setOpen] = useState<boolean>(() => {
+    if (sprung.current) return true
     try {
       const stored = localStorage.getItem(fullKey)
       if (stored === 'open') return true
@@ -35,6 +39,7 @@ export default function CollapsibleSection({
   })
 
   useEffect(() => {
+    if (sprung.current) return
     try { localStorage.setItem(fullKey, open ? 'open' : 'closed') } catch { /* ignore */ }
   }, [fullKey, open])
 
@@ -43,7 +48,7 @@ export default function CollapsibleSection({
       <div className="flex items-center justify-between gap-2 px-6 py-3">
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
+          onClick={() => { sprung.current = false; setOpen(o => !o) }}
           aria-expanded={open}
           className="flex items-center gap-2 flex-1 text-left text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
         >

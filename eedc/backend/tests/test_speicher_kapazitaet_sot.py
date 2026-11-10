@@ -278,7 +278,8 @@ async def test_daten_checker_weist_den_fehlenden_wert_aus(db):
 
     treffer = [e for e in ergebnisse if "Kapazität" in e.meldung]
     assert len(treffer) == 1, f"Meldung fehlt — E16 wäre ungedeckt. Gefunden: {[e.meldung for e in ergebnisse]}"
-    assert treffer[0].link == "/einstellungen/investitionen"
+    assert treffer[0].link.startswith("/einstellungen/komponenten?bearbeiten=")
+    assert treffer[0].link.endswith("&feld=kapazitaet_kwh")
 
 
 async def test_community_datensatz_meldet_null_statt_zehn(db):

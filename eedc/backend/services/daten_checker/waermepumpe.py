@@ -41,7 +41,7 @@ from backend.core.field_definitions import (
 from backend.models.anlage import Anlage
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
-from .ziele import HEUTE_INVESTITIONEN, ziel_monat
+from .ziele import ziel_monat
 from backend.core.zahlenformat import fmt_zahl
 
 
@@ -181,7 +181,7 @@ class WaermepumpeChecks:
                     "Kilowattstunden bleiben davon unberührt — sie sind richtig "
                     "und zählen in allen Mengen weiter mit."
                 ),
-                ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="waerme_kwh"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="waerme_kwh"),
                 investition_id=inv_id,
             ))
 

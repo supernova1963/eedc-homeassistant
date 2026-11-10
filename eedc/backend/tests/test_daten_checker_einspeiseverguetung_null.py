@@ -84,7 +84,8 @@ async def test_null_verguetung_bei_erfasster_einspeisung_wird_gemeldet(db):
     # Und der Text nennt die Rechenfolge, statt zu fordern.
     assert "rechnet den Einspeise-Erlös" in treffer[0].details
     assert "Trag den Satz" not in treffer[0].details
-    assert treffer[0].link == "/einstellungen/strompreise"
+    assert treffer[0].link.startswith("/einstellungen/stammdaten?block=strompreise&tarif=")
+    assert treffer[0].link.endswith("&feld=einspeiseverguetung_cent_kwh")
 
 
 async def test_null_verguetung_ohne_einspeisung_schweigt(db):

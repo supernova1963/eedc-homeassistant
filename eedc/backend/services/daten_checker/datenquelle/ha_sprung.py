@@ -47,7 +47,6 @@ from backend.services.daten_checker.kategorien import (
     CheckSeverity,
     aktion_spiegel_abgleich_tag,
 )
-from backend.services.daten_checker.ziele import HEUTE_ENERGIEPROFIL
 
 #: Prüffenster in Tagen — ein Monat, die Frage, um die es geht (wie ``ruecksprung.RUECKSPRUNG_FENSTER_TAGE``).
 FENSTER_TAGE = 30
@@ -239,7 +238,6 @@ class HaZaehlersprungChecks:
             # (`DatenCheckerTeile.tsx` navigiert nur innerhalb von eedc); der erste Schritt steht im Text.
             # N-790: der zweite Schritt ist seitdem der Knopf selbst (Abgleich + Tag des ersten Funds neu aufgebaut);
             # eine Meldung mit Aktion zeigt keinen «Beheben»-Link, der Link bleibt für Leser ohne Knopf.
-            altlink=HEUTE_ENERGIEPROFIL,
             action=aktion_spiegel_abgleich_tag(anlage.id, datetime.fromtimestamp(funde[0].rueckkehr_ts).date()),
             # E1 (Diagnose-Paket): die Zahlen der Meldung und der genannten Sprünge strukturiert, ohne neue Rechnung.
             code="ha_zaehlersprung",

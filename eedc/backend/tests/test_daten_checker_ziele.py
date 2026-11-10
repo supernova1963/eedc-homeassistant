@@ -2,8 +2,9 @@
 
 W-2: kein `/einstellungen/`-Literal und keine `LINK_*`-Konstante in einem Erzeuger; jedes Ziel entsteht über den
 Ziel-Bauer (`ziele.py`); **jeder Feld-Schlüssel steht in der Registry** — jede Bauer-Stelle wird mit ihren Literalen
-ausgeführt, ein unbekannter Schlüssel wirft (Sprengsatz S1); Block-Ids aus `BLOCK_IDS`. Das Übergangsfeld `altlink=`
-trägt nur benannte Werte und hält eine schrumpfende Baseline (`daten_checker_altlink_baseline.txt`, E4 leert sie).
+ausgeführt, ein unbekannter Schlüssel wirft (Sprengsatz S1); Block-Ids aus `BLOCK_IDS`. Das Übergangsfeld `altlink=` ist
+seit E4 entfallen, seine Baseline (`daten_checker_altlink_baseline.txt`) ist leer und bleibt es. Dass jede Zielseite die
+erzeugten Parameter liest, prüft W-5 (`test_daten_checker_sprungziele.py` + Vitest `src/test/sprungziele.test.ts`).
 W-6: Auskunft ohne WARNING/ERROR — außer genau zwei Codes mit Grund (Allowlist).
 
 Schwesterdateien: test_daten_checker_codes.py (W-1/W-3), test_daten_checker_texte_fixtures.py (W-8),
@@ -156,19 +157,40 @@ def test_sprengsatz_s1_unbekannter_schluessel_wirft():
         ziele.ziel_block("system", "protokolle", feld="system_losses")
 
 
-def test_heutige_lesart_des_links():
+def test_volle_lesart_des_links():
+    """E4: `link` trägt alle Parameter des Ziel-Schemas (`kategorien.ZIEL_PARAMETER`); Datenquellen ohne Katalog-Block."""
     from backend.services.daten_checker.kategorien import LINK_ENERGIEPROFIL, LINK_MONATSDATEN, link_aus_ziel
     assert link_aus_ziel(ziele.ziel_werkbank()) == LINK_ENERGIEPROFIL
     assert link_aus_ziel(ziele.ziel_block("daten", "monatsdaten")) == LINK_MONATSDATEN
-    assert link_aus_ziel(ziele.ziel_monat_label("Mai 2026", feld="ladung_kwh")) == LINK_MONATSDATEN
-    assert link_aus_ziel(ziele.ziel_monat_label("05/2026", geraet=4, feld="ladung_kwh")) == "/einstellungen/daten?erfassen=2026-05"
-    assert link_aus_ziel(ziele.ziel_datenquelle(geraet=4, feld="betriebsmodus-3")) == "/einstellungen/datenquellen"
-    assert link_aus_ziel(ziele.ziel_komponente(9, parameter="jaz", typ="waermepumpe")) == "/einstellungen/komponenten?bearbeiten=9"
-    assert link_aus_ziel(ziele.ziel_tarif(neu_art="allgemein", ab="2026-01-01")) == "/einstellungen/stammdaten?block=strompreise"
+    assert link_aus_ziel(ziele.ziel_monat_label("Mai 2026", feld="ladung_kwh")) == "/einstellungen/daten?block=monatsdaten&feld=ladung_kwh"
+    assert (link_aus_ziel(ziele.ziel_monat_label("05/2026", geraet=4, feld="ladung_kwh"))
+            == "/einstellungen/daten?erfassen=2026-05&geraet=4&feld=ladung_kwh")
+    assert (link_aus_ziel(ziele.ziel_datenquelle(geraet=4, feld="betriebsmodus-3"))
+            == "/einstellungen/datenquellen?geraet=4&feld=betriebsmodus-3")
+    assert (link_aus_ziel(ziele.ziel_komponente(9, parameter="jaz", typ="waermepumpe"))
+            == "/einstellungen/komponenten?bearbeiten=9&feld=jaz")
+    assert link_aus_ziel(ziele.ziel_komponente(neu="pv-module")) == "/einstellungen/komponenten?neu=pv-module"
+    assert (link_aus_ziel(ziele.ziel_tarif(neu_art="allgemein", ab="2026-01-01"))
+            == "/einstellungen/stammdaten?block=strompreise&tarif=neu&art=allgemein&ab=2026-01-01")
+    assert (link_aus_ziel(ziele.ziel_tarif(3, feld="gueltig_ab"))
+            == "/einstellungen/stammdaten?block=strompreise&tarif=3&feld=gueltig_ab")
+    assert link_aus_ziel(ziele.ziel_anlage("installationsdatum")) == "/einstellungen/stammdaten?block=anlage&feld=installationsdatum"
     assert link_aus_ziel(ziele.ziel_block("system", "protokolle")) == "/einstellungen/system?block=protokolle"
+    assert (link_aus_ziel(ziele.ziel_block("integration", "import-buendel", wizard="connector"))
+            == "/einstellungen/integration?block=import-buendel&wizard=connector")
     assert link_aus_ziel(ziele.ziel_komponente(5, typ="speicher", jahresbilanz=True)) == "/komponenten/speicher?geraet=5"
-    # Ein gespeicherter Schlüssel mit Alt-Namen verliert nur das Feld (Laufzeit-Rohwert, H-E2-1).
+    # Ein gespeicherter Schlüssel mit Alt-Namen verliert nur das Feld (Laufzeit-Rohwert, H-E2-1); ein Basis-Zähler heißt
+    # auf der Datenquellen-Fläche `<key>_kwh` (E4).
     assert ziele.ziel_datenquelle_schluessel("inv:5:kein_feld_xyz").params == {"geraet": 5}
+    assert ziele.ziel_datenquelle_schluessel("basis:pv_gesamt").params == {"feld": "pv_gesamt_kwh"}
+    assert ziele.ziel_datenquelle_schluessel("").params == {}
+
+
+def test_feld_ohne_formular_und_fremder_assistent_werfen():
+    with pytest.raises(ValueError):
+        ziele.ziel_komponente(parameter="kopplung", typ="speicher")      # ein Feld braucht das Gerät
+    with pytest.raises(ValueError):
+        ziele.ziel_block("system", "protokolle", wizard="connector")
 
 
 # ─── Übergangsfeld altlink: schrumpfende Baseline ─────────────────────────────────────────────────────────────
@@ -185,6 +207,13 @@ def test_altlink_baseline_ohne_waise():
 
 def test_altlink_gruende_benannt():
     assert {z.split("\t")[2] for z in baseline_lesen()} <= set(GRUENDE)
+
+
+def test_altlink_ist_seit_e4_leer():
+    """E4: die Baseline ist leer und das Übergangsfeld entfallen — jeder Link entsteht aus dem Ziel (W-2/W-5)."""
+    from backend.services.daten_checker.kategorien import CheckErgebnis
+    assert sum(baseline_lesen().values()) == 0
+    assert "altlink" not in CheckErgebnis.__dataclass_fields__
 
 
 # ─── W-6: Auskunft ohne WARNING/ERROR ────────────────────────────────────────────────────────────────────────

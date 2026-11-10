@@ -41,7 +41,7 @@ from .kategorien import (
     MonatsdatenAbdeckung,
 )
 from .ziele import (
-    HEUTE_ENERGIEPROFIL, HEUTE_INVESTITIONEN, HEUTE_MONATSABSCHLUSS, HEUTE_MONATSDATEN, heute_monat, ziel_block,
+    ziel_block,
     ziel_datenquelle, ziel_komponente, ziel_monat, ziel_monat_label,
 )
 from backend.core.zahlenformat import fmt_zahl
@@ -149,7 +149,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             f"summieren sich bereits auf {fmt_zahl(tages_pv, 0)} kWh PV, der gespeicherte "
             f"Monatswert steht aber bei {fmt_zahl(monats_pv, 0)} kWh. Die Tage wurden also "
             f"nachgetragen oder repariert, der Monatswert nie nachgezogen. "
-            f"Weg dorthin: Einstellungen → Integration → Statistik-Import, "
+            f"Weg dorthin: im Statistik-Import "
             f"„Vorschau laden“ — bereits belegte Monate stehen dort unter "
             f"„Konflikte“ und sind zum Überschreiben vorausgewählt, also vor "
             f"dem Import einmal durchsehen. "
@@ -388,10 +388,15 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
         kat = CheckKategorie.MONATSDATEN_VOLLSTAENDIGKEIT
 
         if not monatsdaten:
+            # E4 (E2 ⚑4): Sprung auf den ersten erwarteten Monat — derselbe Anker wie unten (`ermittle_start_anker`).
+            erster = ermittle_start_anker(
+                anlage.installationsdatum,
+                [inv.anschaffungsdatum for inv in anlage.investitionen if inv.typ in PV_ERZEUGER_TYPEN], set(),
+            )
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="keine_monatsdaten",
                 meldung="Keine Monatsdaten vorhanden",
-                ziel=ziel_block("daten", "monatsdaten"),
+                ziel=ziel_monat(erster[0], erster[1]) if erster else ziel_block("daten", "monatsdaten"),
             ))
             self._abdeckung = MonatsdatenAbdeckung(vorhanden=0, erwartet=0, prozent=0)
             return ergebnisse
@@ -476,7 +481,6 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     meldung=f"... und {len(fehlende) - 12} weitere Monate fehlen",
                     # Sammelzeile über viele Monate — kein einzelner Monat, den
                     # ein `?erfassen=` sinnvoll aufschlagen könnte.
-                    altlink=HEUTE_MONATSDATEN,
                 ))
 
         return ergebnisse
@@ -776,7 +780,6 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                 meldung=meldung,
                 details=details,
                 investition_id=inv.id,
-                altlink=heute_monat(labels[0]),
                 action=Aktion("feldwert_entfernen", {"investition_id": inv.id, "feld": key}),
             ))
         return ergebnisse
@@ -894,7 +897,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "falls sie nicht passt. Die Energiebilanz ist nicht "
                     "betroffen: dort zählt immer der Gesamtwert."
                 ),
-                ziel=ziel_monat_label(widerspruch_monate[0], geraet=inv.id, feld="stromverbrauch_kwh"), altlink=HEUTE_MONATSABSCHLUSS,
+                ziel=ziel_monat_label(widerspruch_monate[0], geraet=inv.id, feld="stromverbrauch_kwh"),
                 investition_id=inv.id,
             ))
 
@@ -1126,7 +1129,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "Steuerung und Umwälzpumpen laufen auf keiner der beiden "
                     "Achsen. Es kann aber auch heißen, dass am Gesamtzähler "
                     "noch etwas anderes hängt als die Wärmepumpe. Prüf das "
-                    "unter Einstellungen → Datenquellen; ändern musst du "
+                    "in den Datenquellen; ändern musst du "
                     "nichts, wenn der Zähler stimmt."
                     + _handgriff([m for m, _, _ in rest_auffaellig])
                 ),
@@ -1274,7 +1277,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     "nach — die Arbeitszahlen stehen danach mit vollständigem "
                     "Nenner da, ohne dass du sonst etwas tun musst. Soll dieser "
                     "Zähler künftig von allein mitlaufen, ordne ihn zusätzlich "
-                    "unter Einstellungen → Datenquellen zu."
+                    "in den Datenquellen zu."
                 ),
                 investition_id=inv.id,
                 ziel=ziel_monat_label(labels[0], geraet=inv.id, feld="strom_heizen_kwh" if seite == "Strom Heizen" else "strom_warmwasser_kwh"),
@@ -1396,11 +1399,11 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     details=(
                         f"{warum} Zwei Wege: Prüfe den Stromverbrauch dieses Monats im "
                         "Monatsabschluss (stimmt er, oder fehlt ein Zähler?) — oder prüfe "
-                        "unter Einstellungen → Datenquellen, ob die Leistung des Geräts "
+                        "in den Datenquellen, ob die Leistung des Geräts "
                         "richtig zugeordnet ist. Nach dem Korrigieren den Monat erneut "
                         "speichern, dann rechnet eedc die Aufteilung neu."
                     ),
-                    ziel=ziel_monat(imd.jahr, imd.monat, geraet=inv.id), altlink=HEUTE_MONATSABSCHLUSS,
+                    ziel=ziel_monat(imd.jahr, imd.monat, geraet=inv.id),
                     investition_id=inv.id,
                 ))
         return ergebnisse
@@ -1648,7 +1651,7 @@ class ErfassungsortChecks:
             # Plan → Vorschau-Kasten → «Anwenden»: der Plan nennt die Zahl der
             # ersetzten Monate, bevor etwas passiert. Bis dahin stand hier
             # bewusst keine Inline-Aktion.
-            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
+            action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 3b: die Quelle steht nirgends ─────────────────────────────────
@@ -1717,7 +1720,7 @@ class ErfassungsortChecks:
             ),
             # Aktion mit Vorschau wie bei der Nachbarzeile (E3): derselbe Lauf
             # ersetzt, was schon dasteht — der Plan nennt es vorher.
-            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
+            action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 2: Strahlung und Sonnenstunden ────────────────────────────────
@@ -1769,7 +1772,7 @@ class ErfassungsortChecks:
             ),
             # Aktion mit Vorschau wie oben (E3): derselbe Lauf ersetzt auch, was
             # schon dasteht — der Plan nennt es vorher.
-            altlink=HEUTE_ENERGIEPROFIL, action=Aktion("wetter_backfill", {}),
+            action=Aktion("wetter_backfill", {}),
         )]
 
     # ── Zeile 1: die Ø-Temperatur (N-426-Nachtrag, unverändert) ─────────────
@@ -1873,7 +1876,6 @@ class ErfassungsortChecks:
                 "deinen eigenen Messwerten nach (Stundenmittel, sonst "
                 "Tages-Min/Max) — bereits gepflegte Werte bleiben unberührt."
             ),
-            altlink=heute_monat(_mm(offen[0])),
             # Ü5: die Operation füllt alle erreichbaren Monate — ohne Parameter; die Monate nennt die Vorschau.
             action=Aktion("temperatur_aus_messung", {}),
         )]
@@ -1947,7 +1949,7 @@ class ErfassungsortChecks:
                             f"zählt derselbe Betrag doppelt. Entweder den Jahresbetrag anpassen "
                             f"oder die Monatspositionen entfernen."
                         ),
-                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"), altlink=HEUTE_INVESTITIONEN,
+                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"),
                         investition_id=inv.id,
                     ))
                 elif not jahresbetrag and anzahl >= WIEDERHOLUNG_AB_MONATEN:
@@ -1963,7 +1965,7 @@ class ErfassungsortChecks:
                             f"Amortisation; im Monatsabschluss wirkt er nur in der Bilanz des "
                             f"Monats, in dem er steht. Einmaliges bleibt richtig, wo es ist."
                         ),
-                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"), altlink=HEUTE_INVESTITIONEN,
+                        ziel=ziel_komponente(inv.id, feld="betriebskosten_jahr"),
                         investition_id=inv.id,
                     ))
 

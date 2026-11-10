@@ -191,7 +191,7 @@ async def test_warnung_verweist_auf_datenquellen_flaeche(db):
     mit_link = [r for r in ergebnisse if r.link]
     assert mit_link, "Abdeckungs-Warnungen sollen einen Sprungpunkt tragen"
     for r in mit_link:
-        assert r.link == "/einstellungen/datenquellen", (
+        assert r.link.startswith("/einstellungen/datenquellen"), (
             f"Link muss auf die Datenquellen-Fläche zeigen, war: {r.link}"
         )
         assert "Sensor-Mapping-Wizard" not in (r.details or ""), (

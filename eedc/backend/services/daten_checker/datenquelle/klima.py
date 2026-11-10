@@ -43,7 +43,7 @@ from backend.services.daten_checker.kategorien import (
     CheckKategorie,
     CheckSeverity,
 )
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN, ziel_datenquelle
+from backend.services.daten_checker.ziele import ziel_datenquelle
 
 _KUEHL_FELDER = {BETRIEBSART_STROM_FELD[KUEHLEN], BETRIEBSART_NUTZENERGIE_FELD[KUEHLEN]}
 
@@ -255,7 +255,6 @@ def _meldung_unbekannter_wert(kat: str, inv, entity: str, zustand: str) -> Check
             f"(Vorlage und Werte-Tabelle im Handbuch „Wärme & Klima“, Schritt 4, Weg B). Die "
             f"Aufteilung beginnt mit dem neuen Sensor; Stunden davor bleiben, wie sie sind."
         ),
-        altlink=HEUTE_DATENQUELLEN,
         investition_id=inv.id,
     )
 
@@ -358,8 +357,7 @@ def _geschaetzter_kuehlanteil(
                 "Betriebsart ist eine Verteilung und keine Messung, und "
                 "deshalb kürzt sie die Arbeitszahl nicht. "
                 "Ordne „Strom Kühlbetrieb“ zu, dann liest eedc ab, statt zu "
-                "verteilen: Einstellungen → Datenquellen, beim Gerät das "
-                "Feld „Strom Kühlbetrieb“. "
+                "verteilen. "
                 "Das ist freiwillig — ohne die Zuordnung bleibt alles wie "
                 "bisher."
             ),
@@ -524,8 +522,8 @@ def _meldungen_gar_nicht(kat: str, gar_nicht: list) -> list[CheckErgebnis]:
             "des Stroms ins Heizen ging und welcher ins Kühlen — aus den "
             "vorhandenen Werten lässt sich das nicht nachrechnen. "
             "Ordne dafür die climate-Entität des Geräts zu (in Home Assistant "
-            "meist „climate.…“, sie zeigt Heizen/Kühlen/Aus): Einstellungen → "
-            "Datenquellen, beim Gerät das Feld „Betriebsmodus“. "
+            "meist „climate.…“, sie zeigt Heizen/Kühlen/Aus) — beim Gerät das "
+            "Feld „Betriebsmodus“. "
             "Das ist freiwillig — ohne die Zuordnung bleibt alles wie bisher, "
             "der Stromverbrauch zählt vollständig. "
             "Ein Hinweis zur Erwartung: Die Aufteilung beginnt mit der "

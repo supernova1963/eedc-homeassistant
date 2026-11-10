@@ -23,6 +23,7 @@ import ZustandLegende from './ZustandLegende'
 import AbschlussReview, { type ReviewWarnung } from './AbschlussReview'
 import type { SonstigePosition } from './sections/types'
 import { haBasisWert } from '../../lib/haVergleich'
+import { SprungFeldKontext, useAufFeldSpringen } from '../../lib/sprungFeld'
 
 interface MonatsdatenFormProps {
   monatsdaten?: Monatsdaten | null
@@ -45,6 +46,10 @@ interface MonatsdatenFormProps {
       felder: Array<{ feld: string; wert: number | null; sensor_id?: string }>
     }>
   } | null
+  /** E4 (Daten-Checker «Sprung aufs Feld»): Selektor des Felds, auf das das Formular nach dem Laden springt
+   *  (`hooks/useMonatErfassenDeepLink`); `onFokusFertig` meldet den erledigten Sprung. */
+  fokusFeld?: string | null
+  onFokusFertig?: () => void
 }
 
 export interface MonatsdatenSubmitData {
@@ -190,7 +195,9 @@ function pvBerechnetQuellen(
   return teile.length ? aufzaehlung(teile) : (hatPVModule ? 'PV-Modulen' : 'Wechselrichtern')
 }
 
-export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat }: MonatsdatenFormProps) {
+export default function MonatsdatenForm({
+  monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat, fokusFeld = null, onFokusFertig,
+}: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
 
@@ -700,6 +707,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const springeZuFeld = (feld: string) => {
     document.querySelector(`[data-feld="${feld}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
+  // E4: wie `springeZuFeld`, aber auch auf `name`-Felder und erst, wenn der Status die Felder gerendert hat.
+  useAufFeldSpringen(status ? fokusFeld : null, onFokusFertig)
   const springeZuOffen = () => {
     document.querySelector('[data-erfassung-offen]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
@@ -1008,6 +1017,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   }
 
   return (
+    <SprungFeldKontext.Provider value={fokusFeld}>
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && <Alert type="error">{error}</Alert>}
 
@@ -1519,5 +1529,6 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </Button>
       </div>
     </form>
+    </SprungFeldKontext.Provider>
   )
 }

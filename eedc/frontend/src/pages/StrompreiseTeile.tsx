@@ -7,12 +7,14 @@
  * Zahlen de-DE (`fmtZahl`), Preis-Farben aus der Zentrale (`GELD_TEXT_CLASS`:
  * Netzbezug = Kosten, Einspeisung = Erlös).
  */
-import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection, SegmentMehrfach } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { SchalterZeile } from '../components/forms/sections/SchalterZeile'
 import { useAnlage, useStrompreise } from '../hooks'
+import { useSprungParameter } from '../hooks/useSprungParameter'
+import { SprungFeldKontext, feldSelektor, useAufFeldSpringen } from '../lib/sprungFeld'
 import { GELD_TEXT_CLASS, fmtZahl, heuteIso, monatsersterVon, EINSPEISEVERGUETUNG_FLAT_HINWEIS, verwendungLabel } from '../lib'
 import type { Strompreis, StrompreisVerwendung, StrompreisZeitfenster } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
@@ -128,6 +130,13 @@ export function useStrompreiseTeile(anlageId?: number): StrompreiseTeileDaten {
     strompreise, loading, error, sorted, aktuelleIds, aktuellerStandard, aktiveSpezialtarife,
     createStrompreis, updateStrompreis, deleteStrompreis,
   }
+}
+
+/** Sprung-Parameter der Strompreise (E4, Konzept §3.3): `tarif=<id>` bzw. `tarif=neu&art=<verwendung>&ab=<datum>`, `feld`. */
+const STROMPREIS_SPRUNG = ['tarif', 'art', 'ab', 'feld'] as const
+
+function gueltigeVerwendung(art: string | undefined): StrompreisVerwendung | undefined {
+  return VERWENDUNG_OPTIONEN.find((o) => o.value === art)?.value
 }
 
 // ─── Sektion: Info-Box aktueller Tarif ────────────────────────────────────────
@@ -378,7 +387,7 @@ export function StrompreiseVerwaltung({
   kopfZusatz?: ReactNode
 }) {
   const {
-    sorted, aktuelleIds, aktuellerStandard, aktiveSpezialtarife, error,
+    sorted, aktuelleIds, aktuellerStandard, aktiveSpezialtarife, error, loading,
     createStrompreis, updateStrompreis, deleteStrompreis,
   } = useStrompreiseTeile(anlageId)
   const { anlage } = useAnlage(anlageId)
@@ -395,11 +404,30 @@ export function StrompreiseVerwaltung({
   const [deleteConfirm, setDeleteConfirm] = useState<Strompreis | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
+  // E4 (Daten-Checker «Sprung aufs Feld»): eine Lesestelle; `tarif=<id>` öffnet den Tarif zum Bearbeiten,
+  // `tarif=neu` legt mit Verwendung (`art`) und Beginn (`ab`) vorbelegt an; `feld` springt im Formular aufs Feld.
+  const [sprung, sprungFertig] = useSprungParameter(STROMPREIS_SPRUNG, !loading, 'strompreise')
+  const [neuVorbelegung, setNeuVorbelegung] = useState<{ art?: StrompreisVerwendung; ab?: string } | null>(null)
+  useEffect(() => {
+    if (!sprung) return
+    const ziel = sorted.find((s) => String(s.id) === sprung.tarif)
+    if (ziel) setEditingStrompreis(ziel)
+    else if (sprung.tarif === 'neu') {
+      setNeuVorbelegung({ art: gueltigeVerwendung(sprung.art), ab: sprung.ab })
+      setShowForm(true)
+    }
+    if (!sprung.feld || !(ziel || sprung.tarif === 'neu')) sprungFertig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sprung])
+  const sprungSelektor = sprung?.feld ? feldSelektor(sprung.feld) : null
+  useAufFeldSpringen(sprungSelektor, sprungFertig)
+
   const handleCreate = async (data: StrompreisCreate) => {
     try {
       setFormError(null)
       await createStrompreis(data)
       setShowForm(false)
+      setNeuVorbelegung(null)
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Fehler beim Erstellen')
     }
@@ -455,16 +483,17 @@ export function StrompreiseVerwaltung({
       {/* Create Modal */}
       <Modal
         isOpen={showForm}
-        onClose={() => { setShowForm(false); setFormError(null) }}
+        onClose={() => { setShowForm(false); setFormError(null); setNeuVorbelegung(null) }}
         title="Neuen Tarif anlegen"
         size="lg"
       >
         <StrompreisForm
           anlageId={anlageId}
           onCreate={handleCreate}
-          onCancel={() => { setShowForm(false); setFormError(null) }}
+          onCancel={() => { setShowForm(false); setFormError(null); setNeuVorbelegung(null) }}
           error={formError}
-          gueltigAbVorbelegung={gueltigAbVorbelegung}
+          gueltigAbVorbelegung={neuVorbelegung?.ab || gueltigAbVorbelegung}
+          verwendungVorbelegung={neuVorbelegung?.art}
         />
       </Modal>
 
@@ -476,6 +505,7 @@ export function StrompreiseVerwaltung({
         size="lg"
       >
         {editingStrompreis && (
+          <SprungFeldKontext.Provider value={sprungSelektor}>
           <StrompreisForm
             strompreis={editingStrompreis}
             anlageId={editingStrompreis.anlage_id}
@@ -483,6 +513,7 @@ export function StrompreiseVerwaltung({
             onCancel={() => { setEditingStrompreis(null); setFormError(null) }}
             error={formError}
           />
+          </SprungFeldKontext.Provider>
         )}
       </Modal>
 
@@ -529,6 +560,8 @@ interface StrompreisFormProps {
    * (`StrompreiseStep`), die Einzelseite folgt jetzt derselben Mechanik.
    */
   gueltigAbVorbelegung?: string
+  /** E4: Verwendung eines neuen Tarifs aus dem Sprung `tarif=neu&art=<verwendung>` (Daten-Checker); sonst «allgemein». */
+  verwendungVorbelegung?: StrompreisVerwendung
 }
 
 const VERWENDUNG_OPTIONEN: readonly { value: StrompreisVerwendung; label: string; description: string }[] = [
@@ -698,7 +731,7 @@ function ZeitfensterFelder({ fenster, onChange, hochtarifCent }: {
 
 
 export function StrompreisForm({
-  strompreis, anlageId, onCreate, onUpdate, onCancel, error, gueltigAbVorbelegung,
+  strompreis, anlageId, onCreate, onUpdate, onCancel, error, gueltigAbVorbelegung, verwendungVorbelegung,
 }: StrompreisFormProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -715,7 +748,7 @@ export function StrompreisForm({
     gueltig_ab: strompreis?.gueltig_ab || gueltigAbVorbelegung || new Date().toISOString().split('T')[0],
     gueltig_bis: strompreis?.gueltig_bis || '',
     vertragsart: strompreis?.vertragsart || '',
-    verwendung: (strompreis?.verwendung || 'allgemein') as StrompreisVerwendung,
+    verwendung: (strompreis?.verwendung || verwendungVorbelegung || 'allgemein') as StrompreisVerwendung,
     // #392: „Einspeisevergütung wechselt monatlich" (z. B. OeMAG-Marktpreis)
     einspeisung_variabel: strompreis?.einspeisung_variabel || false,
   })
@@ -949,6 +982,7 @@ export function StrompreisForm({
         <div ref={(el) => { feldRefs.current.gueltig_ab = el }}>
           <DatumFeld
             label="Gültig ab"
+            name="gueltig_ab"
             value={formData.gueltig_ab}
             onChange={(v) => { setFormData(prev => ({ ...prev, gueltig_ab: v })); markTouched('gueltig_ab') }}
             required

@@ -33,7 +33,6 @@ from typing import Optional
 from backend.core.zahlenformat import fmt_datum, fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
-from backend.services.daten_checker.ziele import HEUTE_DATENQUELLEN
 
 #: So viele volle Tage in Folge ohne Δ, bevor ein Zähler als „steht" gilt — ein einzelner Tag ohne Erzeugung ist im
 #: Winter normal, drei mit wachsender Gegengröße nicht.
@@ -166,12 +165,11 @@ class ZaehlerStehtChecks:
                 f"Über {n} volle Tage hat sich der Stand des Anlagenzählers nicht bewegt, während im selben Zeitraum "
                 f"{' und '.join(mengen)} dazukamen. Ohne Erzeugung kann das nicht sein — meist liefert der Sensor "
                 "einen eingefrorenen Wert (Integration hängt, Gerät nicht erreichbar, Zähler zurückgesetzt). eedc "
-                "rechnet in diesen Tagen mit „keine Erzeugung“; deshalb zeigen Cockpit → Tag und Monat z. B. eine "
-                "negative Autarkie. Prüfe den Sensor in Home Assistant (bzw. das MQTT-Topic); liefert er wieder "
+                "rechnet in diesen Tagen mit „keine Erzeugung“; deshalb zeigen Tages- und Monatsansicht im Cockpit z. B. "
+                "eine negative Autarkie. Prüfe den Sensor in Home Assistant (bzw. das MQTT-Topic); liefert er wieder "
                 "Werte, zählen die folgenden Tage richtig. Eine Nulleinspeisung, autarke Tage oder Schnee auf den "
                 "Modulen lösen diese Meldung nicht aus."
             ),
-            altlink=HEUTE_DATENQUELLEN,
         )
 
 __all__ = [

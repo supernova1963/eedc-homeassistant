@@ -74,7 +74,8 @@ async def test_importierte_monate_ohne_tarif_werden_gemeldet(db):
     assert "3 Monat(e)" in meldungen[0]
     treffer = next(r for r in ergebnisse if "vor dem ersten Tarif" in r.meldung)
     assert "30 ct/kWh" in (treffer.details or "")
-    assert treffer.link == "/einstellungen/strompreise"
+    assert treffer.link.startswith("/einstellungen/stammdaten?block=strompreise&tarif=")
+    assert treffer.link.endswith("&feld=gueltig_ab")
     # Schwere ist Teil der Zusage (Gernot, 2026-08-15): ein geratener Preis auf
     # gemessenen Mengen ist ein **Fehler**, keine Randnotiz — Netto-Ertrag, ROI
     # und Jahresbericht dieser Monate tragen sonst eine Zahl, die nicht aus den

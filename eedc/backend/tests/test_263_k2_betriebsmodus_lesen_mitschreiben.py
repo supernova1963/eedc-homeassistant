@@ -662,7 +662,8 @@ async def test_s1_checker_meldet_die_klimaanlage_ohne_modus_sensor(db):
     e = ergebnisse[0]
     assert e.schwere == "info"
     assert "Wohnzimmer" in e.meldung
-    assert e.link == "/einstellungen/datenquellen"
+    # E4: der Sprung landet auf dem Feld «Betriebsmodus» des Geräts.
+    assert e.link == f"/einstellungen/datenquellen?geraet={e.investition_id}&feld=betriebsmodus"
     assert e.investition_id is not None
     # Der Weg gehört in den Text, und die Erwartung auch: es gibt kein Backfill.
     assert "Betriebsmodus" in e.details

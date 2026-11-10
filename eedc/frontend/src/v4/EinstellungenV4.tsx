@@ -13,7 +13,7 @@
  * vorhandene Signale, kein 2. Severity-Kanon); der Voll-Ausbau der neuen Kacheln
  * (Schritt 4) folgt separat.
  */
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Home, X, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
@@ -25,12 +25,15 @@ import { Alert, Button, Input } from '../components/ui'
 import { useHAAvailable, useHAVerbunden } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
+import type { InvestitionTyp } from '../types'
 import {
   useInvestitionenVerwaltung, TYP_ICON_STYLE, TypNeuButton, TypGeraeteListe,
 } from '../pages/InvestitionenTeile'
 import DatenquellenZuordnung from '../components/live/DatenquellenZuordnung'
 import { useEinstellungenStatus, type KachelStatus } from '../hooks/useEinstellungenStatus'
 import { useKarteAnspringen } from '../hooks/useKarteAnspringen'
+import { useSprungParameter } from '../hooks/useSprungParameter'
+import { SprungFeldKontext, feldSelektor, useAufFeldSpringen } from '../lib/sprungFeld'
 import { EinstellungenModalHost, type WizardKey } from './EinstellungenModalHost'
 import { useOeffneWizard } from './wizardHost'
 
@@ -41,6 +44,13 @@ import {
   EINSTELLUNGEN_KATEGORIEN, eintraegeDerKategorie, fehlendeHAVoraussetzung, sucheEintraege,
   type EinstellungEintrag, type InhaltCtx, type KategorieKey,
 } from '../config/einstellungenKatalog'
+
+/** Sprung-Parameter der Komponenten (E4, Konzept §3.3) und der Datenquellen-Fläche (Gerät aufklappen, Feld markieren). */
+const KOMPONENTEN_SPRUNG = ['bearbeiten', 'neu', 'feld'] as const
+const DATENQUELLEN_SPRUNG = ['geraet', 'feld'] as const
+const WIZARD_SPRUNG = ['wizard'] as const
+/** Assistenten, die ein Sprung öffnen darf (`wizard=`, Backend `ziele.WIZARDS`). */
+const SPRUNG_WIZARDS: readonly WizardKey[] = ['connector']
 
 /**
  * Icon + Farbe je Badge-Status — beides aus dem Status-Kanon (STATUS_ICONS +
@@ -80,21 +90,20 @@ function KomponentenEinstellungen() {
 
   // Deep-Link `?bearbeiten=<id>` (Muster wie `?erfassen=`): der Daten-Checker
   // verlinkt damit direkt auf die Komponente, der etwas fehlt — sonst muss der
-  // Nutzer sie in sieben Typ-Blöcken selbst suchen.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const bearbeitenId = searchParams.get('bearbeiten')
-  const geoeffnetRef = useRef<string | null>(null)
+  // Nutzer sie in sieben Typ-Blöcken selbst suchen. E4: `?neu=<typ>` legt eine Komponente des Typs an, `&feld=<key>`
+  // springt im Formular auf das Feld (`lib/sprungFeld.ts`; zugeklappte Abschnitte starten dabei offen). Eine
+  // Lesestelle, die Parameter verschwinden nach dem Öffnen (ein Schließen öffnet nichts erneut).
+  const [sprung, sprungFertig] = useSprungParameter(KOMPONENTEN_SPRUNG, !v.loading)
   useEffect(() => {
-    if (!bearbeitenId || v.loading || geoeffnetRef.current === bearbeitenId) return
-    const ziel = v.investitionen.find((i) => String(i.id) === bearbeitenId)
-    if (!ziel) return
-    geoeffnetRef.current = bearbeitenId
-    v.oeffneBearbeiten(ziel)
-    // Parameter entfernen, damit ein späteres Schließen das Modal nicht erneut öffnet.
-    const next = new URLSearchParams(searchParams)
-    next.delete('bearbeiten')
-    setSearchParams(next, { replace: true })
-  }, [bearbeitenId, v, searchParams, setSearchParams])
+    if (!sprung) return
+    const ziel = v.investitionen.find((i) => String(i.id) === sprung.bearbeiten)
+    if (ziel) v.oeffneBearbeiten(ziel)
+    else if (sprung.neu && (INVESTITION_TYP_ORDER as readonly string[]).includes(sprung.neu)) v.oeffneNeu(sprung.neu as InvestitionTyp)
+    if (!sprung.feld || !(ziel || sprung.neu)) sprungFertig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sprung])
+  const sprungSelektor = sprung?.feld ? feldSelektor(sprung.feld) : null
+  useAufFeldSpringen(sprungSelektor, sprungFertig)
 
   if (selectedAnlageId == null) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
@@ -132,7 +141,7 @@ function KomponentenEinstellungen() {
       {/* D14-2 (detLAN #113): Klapp-Zustand wird wieder gemerkt — die A3-Flüchtigkeit
           (immer alles zu beim Betreten) ist damit zurückgenommen. */}
       <BlockShell persistKey="v4-einst-komponenten" bloecke={bloecke} />
-      {v.modals}
+      <SprungFeldKontext.Provider value={sprungSelektor}>{v.modals}</SprungFeldKontext.Provider>
     </div>
   )
 }
@@ -201,6 +210,14 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
 
   const suchModus = suche.trim().length > 0
   useKarteAnspringen(suchModus ? undefined : karte, navigationsKey)
+  // E4 (Connector, Teil B Nr 1): `?wizard=<key>` öffnet den Assistenten des Blocks einmal; der Parameter verschwindet.
+  const [wizardSprung, wizardFertig] = useSprungParameter(WIZARD_SPRUNG, !suchModus)
+  useEffect(() => {
+    const w = wizardSprung?.wizard as WizardKey | undefined
+    if (w && SPRUNG_WIZARDS.includes(w)) ctx.oeffneWizard(w)
+    if (wizardSprung) wizardFertig()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardSprung])
   // Kategorie „Komponenten" ist datengetrieben (ein Block pro Investitionstyp) und hat
   // KEINE statischen Katalog-Einträge → eigener Zweig (nur außerhalb der Suche; die Suche
   // läuft weiter über den statischen Katalog).
@@ -210,6 +227,8 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   // zu hüllen (sonst BlockShell in BlockShell). Ihr Katalog-Eintrag bleibt für
   // Suche/Route/Ampel; im Suchmodus rendert er wie jeder andere Treffer.
   const istDatenquellen = !suchModus && kategorie === 'datenquellen'
+  // E4 (1)–(3): die Datenquellen-Fläche ist kein Katalog-Block — Gerät und Feld liest diese Stelle und reicht sie durch.
+  const [dqSprung, dqFertig] = useSprungParameter(DATENQUELLEN_SPRUNG, istDatenquellen)
   const eintraege: EinstellungEintrag[] = suchModus ? sucheEintraege(suche) : eintraegeDerKategorie(kategorie)
 
   const bloecke: Block[] = eintraege.map((e) => {
@@ -299,7 +318,8 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
           {istKomponenten ? (
             <KomponentenEinstellungen />
           ) : istDatenquellen ? (
-            <DatenquellenZuordnung />
+            <DatenquellenZuordnung sprung={dqSprung} onSprungFertig={dqFertig}
+              oeffneBlock={erfassenBlock} oeffnenAnlass={navigationsKey} />
           ) : bloecke.length > 0 ? (
             // D14-2: Klapp-Zustand pro Kategorie gemerkt (A3-Flüchtigkeit zurückgenommen).
             <BlockShell

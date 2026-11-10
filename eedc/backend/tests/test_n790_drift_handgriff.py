@@ -140,7 +140,7 @@ async def test_a_ohne_spiegel_bleibt_tag_reparieren(uhr, monkeypatch):
     assert zeilen, [e.meldung for e in erg]
     assert {e.action_kind for e in zeilen} == {"reaggregate_day"}
     assert {e.action_label for e in zeilen} == {"Tag neu aufbauen"}  # E3: Knopf-Text aus dem Katalog
-    assert any("„Tag reparieren“" in (e.details or "") for e in zeilen)
+    assert any("„Tag neu aufbauen“" in (e.details or "") for e in zeilen)  # E4: Text = Knopf-Text des Katalogs
 
 
 # ── (b) Zählersprung und Rückgang ────────────────────────────────────────────

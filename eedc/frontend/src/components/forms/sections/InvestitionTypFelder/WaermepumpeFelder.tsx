@@ -390,12 +390,14 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
             />
           </div>
 
+          <div data-feld="getrennte_strommessung">
           <SchalterZeile
             checked={paramData.getrennte_strommessung === 'true'}
             onChange={(an) => setParam('getrennte_strommessung', an ? 'true' : 'false')}
             label="Getrennte Strommessung (Heizen / Warmwasser)"
             hint="Aktivieren wenn separate Stromzähler für Heizung und Warmwasser vorhanden sind. Ermöglicht getrennte COP-Berechnung."
           />
+          </div>
         </div>
       </FormSection>
 

@@ -207,11 +207,11 @@ async def test_a_warmwasser_waerme_ohne_warmwasser_strom_wird_gemeldet(db):
     # N-456: Seit die Zuordnungs-Fläche dasselbe Feld als Pflicht führt, darf
     # der Text auch dorthin verweisen — vorher hätte er den Anwender auf eine
     # Fläche geschickt, die ihm sagt, es sei nichts einzutragen.
-    assert "Einstellungen → Datenquellen" in strom[0].details, (
+    assert "in den Datenquellen zu" in strom[0].details, (  # E4: ohne Menüweg-Pfeil
         "Der zweite Weg gehört dazu, seit er nicht mehr ins Leere führt (N-456)."
     )
     assert strom[0].details.index("Monatsabschluss") < strom[0].details.index(
-        "Einstellungen → Datenquellen"
+        "in den Datenquellen zu"
     ), "Erst der Weg, der die VERGANGENEN Monate füllt — eine Zuordnung wirkt nach vorn."
     assert strom[0].link, "Der Weg zum Nachtragen gehört dazu."
     assert strom[0].investition_id, "Ohne sie hängt der Befund an keinem Gerät."

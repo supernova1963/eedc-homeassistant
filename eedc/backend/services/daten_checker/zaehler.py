@@ -45,7 +45,7 @@ from backend.services.zaehlerstaende import (
 )
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
-from .ziele import HEUTE_KOMPONENTEN, ziel_datenquelle, ziel_komponente
+from .ziele import ziel_datenquelle, ziel_komponente
 from backend.core.zahlenformat import fmt_zahl
 
 #: Wie viele Brüche je Gerät namentlich genannt werden, bevor gezählt wird.
@@ -131,7 +131,7 @@ class ZaehlerChecks:
                 "einem Sensor noch von Hand. In Cockpit, Komponenten und den "
                 "Tabellen steht deshalb überall „—“. "
                 "Zwei Wege führen heraus, beide sind gleichwertig: einen Sensor "
-                "unter Einstellungen → Datenquellen zuordnen (dann schreibt eedc "
+                "in den Datenquellen zuordnen (dann schreibt eedc "
                 "den Stand stündlich mit), oder den Zählerstand beim "
                 "Monatsabschluss ablesen und im Feld „Zählerstand“ eintragen. "
                 "Für einen Gas- oder Wasserzähler ohne Fernauslesung ist der "
@@ -193,10 +193,9 @@ class ZaehlerChecks:
                 "Zähler die Verbrauchssumme von Home Assistant mit statt des "
                 "Zählerstands. Lag die Summe höher, fällt die Reihe an genau "
                 "einer Stelle — an der Umstellung, einmalig, und es ist nichts "
-                "kaputt. Über Einstellungen → Daten → „Tag neu berechnen“ zieht "
-                "eedc die Historie nach, soweit Home Assistant sie noch hat."
+                "kaputt. Mit „Mehrere Tage neu aggregieren“ in der Reparatur-Werkbank "
+                "zieht eedc die Historie nach, soweit Home Assistant sie noch hat."
             ),
-            altlink=HEUTE_KOMPONENTEN,
         )]
 
     # ─── 3. Auf inaktiv gesetzt, obwohl Ablesungen da sind ───────────────

@@ -44,7 +44,7 @@ from backend.core.field_definitions import (
 )
 
 from .kategorien import CheckErgebnis, CheckSeverity
-from .ziele import HEUTE_INVESTITIONEN, HEUTE_MONATSDATEN, ziel_komponente
+from .ziele import ziel_komponente
 from backend.core.zahlenformat import fmt_zahl
 
 
@@ -125,14 +125,14 @@ class StammdatenInvestitionenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="pv_leistung_kwp_fehlt",
                 meldung=f"{name}: Leistung (kWp) fehlt",
-                ziel=ziel_komponente(inv.id, feld="leistung_kwp"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, feld="leistung_kwp"),
             ))
         if not inv.ausrichtung or inv.neigung_grad is None:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO, code="pv_ausrichtung_fehlt",
                 meldung=f"{name}: Ausrichtung/Neigung fehlt",
                 details="Wird für PVGIS-Solarprognose benötigt",
-                ziel=ziel_komponente(inv.id, feld="ausrichtung"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, feld="ausrichtung"),
             ))
         # PV-Erzeugungs-Vollständigkeit: anlagenweit in
         # _check_pv_erzeugung (kWp-Verteilung) — hier NICHT pro Modul
@@ -149,7 +149,7 @@ class StammdatenInvestitionenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="bkw_leistung_wp_fehlt",
                 meldung=f"{name}: Leistung (Wp) fehlt",
-                ziel=ziel_komponente(inv.id, parameter="leistung_wp", typ="balkonkraftwerk"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="leistung_wp", typ="balkonkraftwerk"),
             ))
         # #347: Überbelegung ist beim BKW der Normalfall. Ohne gepflegte
         # Wechselrichter-Leistung kappt die Prognose nicht und rechnet
@@ -172,7 +172,7 @@ class StammdatenInvestitionenChecks:
                     "an 600 W Wechselrichter) fällt sie dadurch zu hoch aus. "
                     "Mit gepflegtem Wert wird stündlich gekappt."
                 ),
-                ziel=ziel_komponente(inv.id, parameter="wechselrichter_leistung_w", typ="balkonkraftwerk"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="wechselrichter_leistung_w", typ="balkonkraftwerk"),
             ))
         # N-651: „PV-Erzeugung fehlt" nur, wenn weder ein eigener Wert noch ein Anlagenwert
         # (`Monatsdaten.pv_erzeugung_kwh`, der Anlagenzähler) den Monat trägt. Ohne eigenen Zähler bekommt das
@@ -204,7 +204,7 @@ class StammdatenInvestitionenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="speicher_kapazitaet_fehlt",
                 meldung=f"{name}: Kapazität (kWh) fehlt",
-                ziel=ziel_komponente(inv.id, parameter="kapazitaet_kwh", typ="speicher"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="kapazitaet_kwh", typ="speicher"),
             ))
         ergebnisse.extend(
             self._check_speicher_kapazitaet_einheit(
@@ -244,7 +244,7 @@ class StammdatenInvestitionenChecks:
                         "gepflegter Monatswert ersetzt ihn nicht: der misst, "
                         "was war, dieser schätzt, was kommt."
                     ),
-                    ziel=ziel_komponente(inv.id, parameter="lade_durchschnittspreis_cent", typ="speicher"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id, parameter="lade_durchschnittspreis_cent", typ="speicher"),
                 ))
             if not param.get("entlade_vermiedener_preis_cent"):
                 ergebnisse.append(CheckErgebnis(
@@ -257,7 +257,7 @@ class StammdatenInvestitionenChecks:
                         "und ROI in die Zukunft; gemessene Monatswerte "
                         "ersetzen ihn nicht."
                     ),
-                    ziel=ziel_komponente(inv.id, parameter="entlade_vermiedener_preis_cent", typ="speicher"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id, parameter="entlade_vermiedener_preis_cent", typ="speicher"),
                 ))
         ergebnisse.extend(self._check_investition_monatsdaten(
             inv, name, "ladung_kwh", "Speicher-Ladung", CheckSeverity.WARNING, monatsdaten,
@@ -287,7 +287,7 @@ class StammdatenInvestitionenChecks:
                 details=bericht.details,
                 # Kumulativ über die ganze Historie — es gibt keinen
                 # einen Monat, der aufzuschlagen wäre.
-                ziel=ziel_komponente(inv.id, typ="speicher", jahresbilanz=True), altlink=HEUTE_MONATSDATEN,
+                ziel=ziel_komponente(inv.id, typ="speicher", jahresbilanz=True),
             ))
 
         # F-22 (rapahl-PN 2026-08-08, seine ZWEITE zu diesem Thema):
@@ -334,7 +334,7 @@ class StammdatenInvestitionenChecks:
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="speicher_entladung_groesser_ladung",
                 meldung=f"{name}: Entladung übersteigt Ladung (kumulativ)",
                 details=_hinweis,
-                ziel=ziel_komponente(inv.id, typ="speicher", jahresbilanz=True), altlink=HEUTE_MONATSDATEN,
+                ziel=ziel_komponente(inv.id, typ="speicher", jahresbilanz=True),
             ))
         return ergebnisse
 
@@ -356,14 +356,14 @@ class StammdatenInvestitionenChecks:
                 kategorie=kat, schwere=CheckSeverity.INFO, code="eauto_fahrleistung_fehlt",
                 meldung=f"{name}: Fahrleistung/Verbrauch fehlt",
                 details="Wird für E-Auto Einsparungs-Berechnung benötigt",
-                ziel=ziel_komponente(inv.id, parameter="jahresfahrleistung_km", typ="e-auto"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="jahresfahrleistung_km", typ="e-auto"),
             ))
         if inv.anschaffungskosten_alternativ is None:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="eauto_alternativkosten_fehlen",
                 meldung=f"{name}: Alternativkosten (Verbrenner) fehlen",
                 details="Werden für ROI-Berechnung benötigt (Vergleich mit Verbrenner-Alternative)",
-                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_alternativ"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_alternativ"),
             ))
         # ⛔ HIER STAND EIN PRÜFER „V2H aktiv, aber Entladepreis fehlt"
         # — er ist mit #397 ERSATZLOS ENTFALLEN, und zwar bewusst.
@@ -419,7 +419,7 @@ class StammdatenInvestitionenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="wallbox_ladeleistung_fehlt",
                 meldung=f"{name}: Ladeleistung (kW) fehlt",
-                ziel=ziel_komponente(inv.id, parameter="max_ladeleistung_kw", typ="wallbox"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="max_ladeleistung_kw", typ="wallbox"),
             ))
         ergebnisse.extend(self._check_investition_monatsdaten(
             inv, name, "ladung_kwh", "Ladung gesamt", CheckSeverity.INFO, monatsdaten,
@@ -435,7 +435,7 @@ class StammdatenInvestitionenChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="geraet_leistung_kw_fehlt",
                 meldung=f"{name}: Leistung (kW) fehlt",
-                ziel=ziel_komponente(inv.id, parameter="max_leistung_kw", typ="wechselrichter"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="max_leistung_kw", typ="wechselrichter"),
             ))
         ergebnisse.extend(self._check_wechselrichter_pv_altbestand(
             inv, name, anlage.sensor_mapping or {},
@@ -500,7 +500,7 @@ class StammdatenInvestitionenChecks:
                     "Alternative (z. B. im Neubau), trag 0 ein; das ist eine "
                     "gültige Antwort und lässt den Hinweis verschwinden."
                 ),
-                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_alternativ"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_alternativ"),
             ))
 
         # Welche Wärme-Achsen hat dieses Gerät? — **die Registry
@@ -526,14 +526,14 @@ class StammdatenInvestitionenChecks:
                     kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_jaz_fehlt",
                     meldung=f"{name}: JAZ nicht gesetzt",
                     details="Jahresarbeitszahl wird für COP-Berechnung der Heizenergie benötigt",
-                    ziel=ziel_komponente(inv.id, parameter="jaz", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id, parameter="jaz", typ="waermepumpe"),
                 ))
             elif not (1.5 <= jaz <= 7.0):
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_jaz_unplausibel",
                     meldung=f"{name}: JAZ unplausibel ({fmt_zahl(jaz, 1)})",
                     details="Typischer Bereich: 1,5–7,0 (Luft-WP ca. 2,5–4,5, Sole-WP ca. 3,5–5,5)",
-                    ziel=ziel_komponente(inv.id, parameter="jaz", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id, parameter="jaz", typ="waermepumpe"),
                 ))
         elif effizienz_modus in ("scop", "getrennte_cops"):
             # WK-15c/N-1: gefragt wird nur nach Achsen, die es am Gerät
@@ -551,7 +551,7 @@ class StammdatenInvestitionenChecks:
                     kategorie=kat, schwere=CheckSeverity.WARNING, code="wp_stammdatum_hinweis",
                     meldung=f"{name}: {meldung}",
                     details=details,
-                    ziel=ziel_komponente(inv.id), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id),
                 ))
 
         # Alter Energieträger / Preis für Vergleichsrechnung
@@ -565,7 +565,7 @@ class StammdatenInvestitionenChecks:
                     "ersetzten Heizung benötigt (#411: der Träger ist "
                     "gepflegt — Gas, Öl oder Strom-Direktheizung)."
                 ),
-                ziel=ziel_komponente(inv.id, parameter="alter_preis_cent_kwh", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, parameter="alter_preis_cent_kwh", typ="waermepumpe"),
             ))
 
         # Wärmebedarf für Jahres-Einsparungsschätzung
@@ -614,7 +614,7 @@ class StammdatenInvestitionenChecks:
                         kategorie=kat, schwere=CheckSeverity.INFO, code="wp_heizwaermebedarf_fehlt",
                         meldung=f"{name}: Heizwärmebedarf nicht gesetzt",
                         details="Wird für Jahres-Einsparungsschätzung verwendet (kWh/Jahr)",
-                        ziel=ziel_komponente(inv.id, parameter="heizwaermebedarf_kwh", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+                        ziel=ziel_komponente(inv.id, parameter="heizwaermebedarf_kwh", typ="waermepumpe"),
                     ))
             # Ohne Heiz-Achse **fällt die Frage nicht weg, sie wechselt
             # die Achse.** Dieselbe Schätzung läuft für ein solches Gerät
@@ -644,7 +644,7 @@ class StammdatenInvestitionenChecks:
                         "(kWh/Jahr). Nach dem Heizwärmebedarf fragt eedc "
                         "an diesem Gerät nicht — es hat keine Heiz-Achse."
                     ),
-                    ziel=ziel_komponente(inv.id, parameter="warmwasserbedarf_kwh", typ="waermepumpe"), altlink=HEUTE_INVESTITIONEN,
+                    ziel=ziel_komponente(inv.id, parameter="warmwasserbedarf_kwh", typ="waermepumpe"),
                 ))
 
         # Monatsdaten-Vollständigkeit der WP prüfen
@@ -704,6 +704,6 @@ class StammdatenInvestitionenChecks:
                 kategorie=kat, schwere=CheckSeverity.INFO, code="anschaffungskosten_fehlen",
                 meldung=f"{name}: Anschaffungskosten fehlen",
                 details="Werden für ROI-Berechnung benötigt",
-                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_gesamt"), altlink=HEUTE_INVESTITIONEN,
+                ziel=ziel_komponente(inv.id, feld="anschaffungskosten_gesamt"),
             ))
         return ergebnisse

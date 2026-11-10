@@ -237,7 +237,7 @@ async def test_checker_meldungstext_nennt_voraussetzung_und_handgriff(db):
     assert netz.details.index("HA-Statistik-Import") < netz.details.index("Monatsabschluss")
     assert "ein leeres Feld ist keine 0" in netz.details
     # N-739 (a): `/monatsabschluss/…` öffnete im v4-Frontend den Monat nicht.
-    assert netz.link == f"/einstellungen/daten?erfassen={J}-{M:02d}"
+    assert netz.link == f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=netzbezug_kwh"  # E4: Sprung auf das Feld
 
 
 # ── Der Helfer selbst ───────────────────────────────────────────────────────────────────────────────────────────

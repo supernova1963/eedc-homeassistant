@@ -14,6 +14,8 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
 import { ChartLegende, LoadingSpinner, Alert, Button, Input } from '../components/ui'
 import { useLegendenToggle } from '../hooks'
+import { useSprungParameter } from '../hooks/useSprungParameter'
+import { SprungFeldKontext, feldSelektor, useAufFeldSpringen } from '../lib/sprungFeld'
 import { Parkbar } from '../components/park'
 import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi } from '../api'
@@ -33,6 +35,9 @@ const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug',
  * V4-Stammdaten-Block geteilt. `anlageId` ist bereits aufgelöst; `anlage` liefert
  * die Geokoordinaten; `kopfZusatz` (z. B. Anlage-Auswahl) wandert in die Kopfleiste.
  */
+/** Sprung-Parameter des Solarprognose-Blocks (E4, W-5): `feld=system_losses`. */
+const SOLARPROGNOSE_SPRUNG = ['feld'] as const
+
 export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
   anlageId: number
   anlage?: Anlage
@@ -57,6 +62,12 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
 
   // Parameter für Vorschau
   const [systemLosses, setSystemLosses] = useState(14)
+
+  // E4 (Daten-Checker «Sprung aufs Feld»): `?block=solarprognose&feld=system_losses` öffnet «Neue Prognose abrufen» und
+  // springt auf die Systemverluste. Eine Lesestelle; der Parameter verschwindet danach.
+  const [sprung, sprungFertig] = useSprungParameter(SOLARPROGNOSE_SPRUNG, true, 'solarprognose')
+  const sprungSelektor = sprung?.feld ? feldSelektor(sprung.feld) : null
+  useAufFeldSpringen(sprungSelektor, sprungFertig)
 
   const loadData = useCallback(async () => {
     if (!anlageId) return
@@ -165,6 +176,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
   const hatKoordinaten = anlage?.latitude && anlage?.longitude
 
   return (
+    <SprungFeldKontext.Provider value={sprungSelektor}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -349,6 +361,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
             <div className="grid md:grid-cols-2 gap-4 items-end">
               <Input
                 label="Systemverluste (%)"
+                name="system_losses"
                 type="number"
                 value={systemLosses}
                 onChange={(e) => setSystemLosses(parseFloat(e.target.value) || 14)}
@@ -802,5 +815,6 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
         </>
       )}
     </div>
+    </SprungFeldKontext.Provider>
   )
 }

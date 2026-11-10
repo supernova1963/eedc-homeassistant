@@ -252,7 +252,7 @@ async def test_inaktiver_zaehler_mit_ablesungen_bekommt_den_hinweis(db):
     assert "auch nicht für die Vergangenheit" in hinweise[0].details
     assert "Stilllegungsdatum" in hinweise[0].details
     # Der Hinweis führt in das Formular GENAU dieses Geräts.
-    assert hinweise[0].link == f"/einstellungen/komponenten?bearbeiten={inv.id}"
+    assert hinweise[0].link == f"/einstellungen/komponenten?bearbeiten={inv.id}&feld=aktiv"
 
 
 @pytest.mark.asyncio

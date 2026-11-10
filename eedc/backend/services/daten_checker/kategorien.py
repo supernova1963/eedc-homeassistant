@@ -6,7 +6,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 
 
 # ─── Enums & Dataclasses ────────────────────────────────────────────────────
@@ -294,24 +294,14 @@ class CheckKategorie(str, Enum):
     VERGLEICHSPREIS_FEHLT = "vergleichspreis_fehlt"
 
 
-class _KeinLink:
-    """Marke für `CheckErgebnis.altlink`: heute **kein** Link, obwohl Teil B ein Ziel setzt (E2, bis E4)."""
-
-    def __repr__(self) -> str:
-        return "KEIN_LINK"
-
-
-KEIN_LINK = _KeinLink()
-
-
 @dataclass
 class Ziel:
     """Sprung-Ziel eines Befunds (Etappe E2, Konzept Daten-Checker §3.1 R2/§3.3) — gebaut nur über `ziele.py`.
 
     `bereich` = Einstellungs-Kategorie (`einstellungenKatalog.tsx`) bzw. `komponenten-hub`; `block` = Block-Id im Bereich;
-    `params` = Deep-Link-Parameter (heute gelesen: `erfassen`, `bearbeiten`, `karte`, Hub-`geraet`; neu bis E4: `feld`,
-    `geraet`, `tarif`, `neu`, `art`, `ab`, `plan`); `anker` = das Element, auf dem der Sprung landen soll (Formular-Name,
-    Feld-Schlüssel oder `data-karte`).
+    `params` = Deep-Link-Parameter (Schema Konzept §3.3: `erfassen`, `bearbeiten`, `neu`, `tarif`, `art`, `ab`, `geraet`,
+    `feld`, `karte`, `plan`, `wizard`; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
+    `anker` = das Element, auf dem der Sprung landen soll (Formular-Name, Feld-Schlüssel oder `data-karte`).
     """
     bereich: str
     block: Optional[str] = None
@@ -329,27 +319,28 @@ class Aktion:
     params: dict
 
 
-#: Parameter, die die Zielseiten HEUTE lesen (Konzept §3.3 Spalte «heute gelesen») — nur sie gehen in den abgeleiteten `link`.
-HEUTE_GELESEN = ("block", "erfassen", "bearbeiten", "karte")
+#: Parameter des Ziel-Schemas in der Reihenfolge, in der sie im Link stehen (Konzept §3.3; E4: volle Lesart). Jede Zielseite
+#: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
+#: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
+ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:
-    """Der Link, den die Oberfläche heute aus einem `Ziel` liest (E2: heutige Lesart; E4 nimmt die neuen Parameter auf)."""
+    """Der Link eines `Ziel` (E4: alle Parameter des Schemas). `block=` entfällt, wo `erfassen` den Monatsdaten-Block
+    selbst aufklappt; die Datenquellen-Fläche leitet ihren Block aus `geraet`/`feld` ab (kein Katalog-Block)."""
     if ziel is None:
         return None
     if ziel.bereich == "komponenten-hub":
         return f"/komponenten/{ziel.block}?geraet={ziel.params['geraet']}"
     teile = [f"block={ziel.block}"] if ziel.block and "erfassen" not in ziel.params else []
-    teile += [f"{k}={ziel.params[k]}" for k in HEUTE_GELESEN[1:] if ziel.params.get(k) is not None]
-    if ziel.bereich == "datenquellen":
-        teile = []
+    teile += [f"{k}={ziel.params[k]}" for k in ZIEL_PARAMETER if ziel.params.get(k) is not None]
     return f"/einstellungen/{ziel.bereich}" + (f"?{'&'.join(teile)}" if teile else "")
 
 
 @dataclass
 class CheckErgebnis:
-    """Ein Befund. Die Altfelder `link` und `action_*` sind **abgeleitet** (Etappe E2, Wächter W-3): `link` aus `altlink`
-    (heutiger Link bis E4; `KEIN_LINK` ⇒ None), sonst aus `ziel` nach der heutigen Lesart; `action_*` aus `action`.
+    """Ein Befund. Die Altfelder `link` und `action_*` sind **abgeleitet** (Etappe E2, Wächter W-3): `link` aus `ziel`
+    (seit E4 alle Parameter, `link_aus_ziel`), `action_*` aus `action`.
     Kein Erzeuger setzt sie selbst."""
     kategorie: str
     schwere: str
@@ -358,9 +349,6 @@ class CheckErgebnis:
     # E2: Sprung-Ziel (Teil B) bzw. Inline-Handgriff; die Klasse ist abgeleitet (Aktion · Sprung · Auskunft).
     ziel: Optional[Ziel] = None
     action: Optional[Aktion] = None
-    # E2 → E4: der heutige Link, wo das Teil-B-Ziel ihn nicht bitgleich ergibt (benannte Werte aus `ziele.py`,
-    # schrumpfende Baseline `tests/daten_checker_altlink_baseline.txt`). E4 leert das Feld — das sind die Weg-Korrekturen.
-    altlink: Optional[Union[str, _KeinLink]] = None
     # IA-V4 #243: optionale Komponenten-Zuordnung. Nur komponenten-bezogene
     # Checks (Stammdaten/Monatsdaten/Energieprofil-Abdeckung/E-Mob-Pflege je
     # Investition) füllen das Feld, damit der Komponenten-Hub seine Befunde
@@ -377,8 +365,6 @@ class CheckErgebnis:
 
     @property
     def link(self) -> Optional[str]:
-        if self.altlink is not None:
-            return None if self.altlink is KEIN_LINK else self.altlink
         return link_aus_ziel(self.ziel)
 
     @property

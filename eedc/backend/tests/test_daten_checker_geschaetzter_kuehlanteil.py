@@ -126,7 +126,7 @@ async def test_der_hinweis_traegt_den_handgriff_und_keinen_akzeptiert_knopf(db):
 
     assert "schätzen" in b.details            # was eedc rechnet
     assert "Strom Kühlbetrieb" in b.details   # der Handgriff
-    assert "Datenquellen" in b.details
+    assert b.link.endswith("&feld=betriebsart_strom_kuehlen_kwh")  # E4: der Knopf ist der Weg, kein Menüweg im Text
     assert "Mengen stimmen weiterhin" in b.details  # was sich NICHT ändert (K1)
     assert b.link
 

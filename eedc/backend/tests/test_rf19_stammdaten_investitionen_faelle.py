@@ -27,7 +27,9 @@ from backend.models.investition import InvestitionMonatsdaten
 from backend.services.daten_checker import DatenChecker
 from backend.services.daten_checker.kategorien import CheckKategorie, CheckSeverity
 
-_MONATSDATEN_LINK = "/einstellungen/daten?block=monatsdaten"
+# E4: Sprung in den Komponenten-Hub des Speichers (Jahresbilanz, Teil B Nr 165/166) statt auf den Monatsdaten-Block.
+def _hub_link(anlage) -> str:
+    return f"/komponenten/speicher?geraet={anlage.investitionen[0].id}"
 
 
 async def _anlage_mit(db, typ: str, parameter: dict, daten_je_monat: dict[int, dict] | None = None) -> Anlage:
@@ -65,7 +67,7 @@ async def test_f1_netzladung_ueber_gesamtladung_kumulativ(db):
     treffer = _treffer(erg, "G (speicher): Netzladung übersteigt Gesamtladung (kumulativ)")
     assert len(treffer) == 1, [r.meldung for r in erg]
     t = treffer[0]
-    assert (t.kategorie, t.schwere, t.link) == (CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, _MONATSDATEN_LINK)
+    assert (t.kategorie, t.schwere, t.link) == (CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, _hub_link(anlage))
     assert t.details.startswith("Kumulierte Netzladung (") and t.details.endswith("(Issue #281).")
     assert t.investition_id == anlage.investitionen[0].id
     assert not [r for r in erg if "Entladung übersteigt Ladung" in r.meldung]
@@ -109,7 +111,7 @@ async def test_f2a_entladung_ueber_ladung_mit_netzladung(db):
     treffer = _treffer(erg, "G (speicher): Entladung übersteigt Ladung (kumulativ)")
     assert len(treffer) == 1, [r.meldung for r in erg]
     t = treffer[0]
-    assert (t.kategorie, t.schwere, t.link) == (CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, _MONATSDATEN_LINK)
+    assert (t.kategorie, t.schwere, t.link) == (CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, _hub_link(anlage))
     assert t.details == (
         "Über die gesamte Historie stehen 130,0 kWh Entladung gegen 100,0 kWh Ladung (130 %). "
         "Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat. "
@@ -149,8 +151,8 @@ async def test_f3_jaz_unplausibel(db):
     treffer = _treffer(erg, "G (waermepumpe): JAZ unplausibel (8,2)")
     assert len(treffer) == 1, [r.meldung for r in erg]
     t = treffer[0]
-    assert (t.kategorie, t.schwere, t.link) == (
-        CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, "/einstellungen/investitionen",
+    assert (t.kategorie, t.schwere, t.link) == (  # E4: Sprung auf das Feld «JAZ» des Geräts
+        CheckKategorie.INVESTITIONEN, CheckSeverity.WARNING, f"/einstellungen/komponenten?bearbeiten={anlage.investitionen[0].id}&feld=jaz",
     )
     assert t.details == "Typischer Bereich: 1,5–7,0 (Luft-WP ca. 2,5–4,5, Sole-WP ca. 3,5–5,5)"
     assert t.investition_id == anlage.investitionen[0].id
