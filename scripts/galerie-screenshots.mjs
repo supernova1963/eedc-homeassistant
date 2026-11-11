@@ -404,14 +404,19 @@ const ANSICHTEN = [
   },
   // Galerie Hubs vollständig (1.11.2026): Datenquellen je Hub-Gerät — nur der Block des Typs offen (Klappzustand
   // vorbelegt, `BlockShell` `eedc-bloecke:<Sicht>` = {zu: [...]}), das Gerät aufgeklappt, darin der Block «Themen»
-  // mit den Galerie-Themen (`themen: true`, §1 d). Im Nachzug §1a fahren, damit «Inbound» wählbar steht.
+  // mit den Galerie-Themen (`themen: true`, §1 d). Im Nachzug §1a fahren, damit «Inbound» wählbar steht
+  // («Preset anwenden …» erscheint nur mit eingetragenem Broker).
+  // ⚠ «THEMEN» in Großbuchstaben: der Blockkopf ist CSS-`uppercase` (`DatenquellenThemen.tsx`), und `innerText`
+  //   liefert den umgewandelten Text. Bis 4.2.0 stand «Themen» zusätzlich im Hinweis («Karte «Themen»») und
+  //   verdeckte das; seit dem Hinweis-Text aus 4.2.1 meldete die Prüfung rot, obwohl der Block im Bild steht
+  //   (gemessen 11.11.2026, Galerie-Lauf zu 4.3.0).
   ...[
     { name: 'datenquellen_waermepumpe', typ: 'waermepumpe', geraet: 'Daikin Altherma',
-      pflicht: ['Gerät gesamt', 'Heizen', 'Themen', 'Anlagenstatus', 'Service'] },
+      pflicht: ['Gerät gesamt', 'Heizen', 'THEMEN', 'Anlagenstatus', 'Service'] },
     { name: 'datenquellen_wallbox', typ: 'wallbox', geraet: null,
-      pflicht: ['Zustands-Chip', 'Preset anwenden', 'Themen', 'Ladepunkt', 'Ladeplan (evcc)'] },
+      pflicht: ['Zustands-Chip', 'Preset anwenden', 'THEMEN', 'Ladepunkt', 'Ladeplan (evcc)'] },
     { name: 'datenquellen_eauto', typ: 'e-auto', geraet: 'Tesla Model 3',
-      pflicht: ['Zustands-Chip', 'Themen', 'Fahrzeugzustand', 'Klima'] },
+      pflicht: ['Zustands-Chip', 'THEMEN', 'Fahrzeugzustand', 'Klima'] },
   ].map(({ name, typ, geraet, pflicht }) => ({
     name,
     route: '#/einstellungen/datenquellen',
