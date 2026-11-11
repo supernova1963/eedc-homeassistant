@@ -972,7 +972,9 @@ HA-Rahmens (`lib/download.ts::istImHaRahmen`). Die Werkbank liest `plan=<id>` (`
 `knopf` (Knopf-Text aller drei Klassen, `handgriffe.knopf_fuer`: Aktion aus der Operation, Sprung aus dem Katalog bzw.
 `knopf_sprung` eines Aktion-Codes ohne Reparaturweg, Auskunft «Was gilt», OK ohne), `gruppe` (V2, gesetzt nach dem
 Prüflauf von `services/daten_checker/gruppen.py` aus `handgriffe.GRUPPEN`: Titel mit Zahl, Glied aus `werte.datum` bzw.
-`ziel.params.erfassen`, `weitere` = über der Anzeige-Grenze des Erzeugers — die früheren Restzeilen sind entfallen) und in der
+`ziel.params.erfassen`, `weitere` = über der Anzeige-Grenze des Erzeugers — die früheren Restzeilen sind entfallen; seit E6.B
+gilt die Grenze der Geräte-Gruppen je Gerät, `gruppen.je_geraet_begrenzt` in `emob.py`/`waermepumpe.py`, Test
+`tests/test_daten_checker_grenze_je_geraet.py`) und in der
 Antwort `nicht_ausfuehrbar` (V4: Abbruchpfade der Erzeuger melden sich über `_CheckHelpers._nicht_ausfuehrbar_merken`).
 Sechs Erzeuger sind in ihren Ziel-Code aufgegangen (V3; die Drift-Zeilen leben in `datenquelle/drift_zeilen.py`): 182 Codes
 an 182 Stellen. **Client.** `pages/DatenCheckerTeile.tsx` (Kopf mit `SchwereChips`, Kategorie offen nach K1 =
@@ -984,7 +986,10 @@ Website reiner Text). **Quelle des Handbuchs §3/§4:** `docs/daten-checker/<cod
 (`--pruefen` = 0 Änderungen); Wächter W-13 `tests/test_daten_checker_loesungswege.py` (je Code eine Datei, Menüwege nur aus
 dem Einstellungs-Katalog oder den drei HA-Wegen, `eedc:`-Schritte über einen Ziel-Bauer). W-11 hält je Aktions-Code einen
 Wirkungs-Test (`WIRKUNG_JE_CODE`). Reparatur: `actual_changes` nur Mengen (`repair_protokoll.mengen`), ein Plan «nichts zu
-tun» wird nicht ausgeführt (`NichtsZuTun` ⇒ 409, keine Zeile).
+tun» wird nicht ausgeführt (`NichtsZuTun` ⇒ 409, keine Zeile). `zusammenfassung` zählt jeden Befund genau einmal, auch ein
+Glied einer Gruppe (pytest `test_daten_checker_basisdaten_schwere.py::test_zusammenfassung_ist_die_zaehlung_der_befunde_je_schwere`,
+E6.B). **Text-Golden-Master** `daten-checker` (Aufzeichnung der Antworten auf vier Kopien, Klassen-Werkzeug) begleitet jede
+Etappe; er ist kalenderabhängig und wird am Tag des Vergleichs aufgezeichnet.
 
 #### Aggregierte Monatsdaten
 

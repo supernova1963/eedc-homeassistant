@@ -80,13 +80,15 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **Gruppenzeilen:** Gleiche Befunde (etwa fehlende Monate, Tage mit Abweichung zu Home Assistant) stehen als **eine**
   Zeile mit einem Glied je Monat bzw. Tag — *„7 Monate fehlen: 01/2026 · 02/2026 · …“*. Ein Glied handelt genau für
   sich (öffnet den Monat bzw. zeigt die Vorschau für den Tag); der Knopf rechts handelt am ersten Glied. Hat eedc über
-  eine Grenze hinaus weitere gezählt, steht *„+ n weitere“* dabei.
+  eine Grenze hinaus weitere gezählt, steht *„+ n weitere“* dabei. Befunde eines Geräts (PV-Ladung größer als
+  Gesamtladung, unplausibel hohe Arbeitszahl) stehen **je Gerät** in einer eigenen Zeile; die Grenze gilt je Gerät, jedes
+  Gerät zeigt seine Monate und seine eigene Zahl.
 - **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details, dem Link **„Lösungsweg“** und rechts **einem**
   Knopf, der sagt, was er tut <a name="sprung-aufs-feld"></a>:
   - **Ändert eedc etwas** (z. B. „Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine **Vorschau** unter der Zeile: eine Zeile, was sich ändert (etwa „Monate erhalten eine Ø Temperatur: 7 (09/2025, …)“), darunter die Hinweise der Reparatur-Werkbank. Erst **„Anwenden“** führt aus; **„Abbrechen“** verwirft die Vorschau. Danach steht über der Liste ein Satz, was geschehen ist, und der Daten-Checker prüft neu. Lösch-Aktionen tragen in der Vorschau das Wort **„endgültig“** und einen roten Knopf; eine zusätzliche Rückfrage gibt es nicht. Ist nichts zu tun (etwa weil das Feld am Gerät vorgesehen ist), sagt die Vorschau das und bietet kein „Anwenden“. „Aus Home Assistant neu übernehmen“ nennt dazu die Bedingung: wirksam, wenn du in Home Assistant korrigiert hast. Die Vorschau gilt eine Stunde („gültig bis …“); **„Details in der Werkbank“** öffnet sie in der Reparatur-Werkbank. Es läuft immer nur ein Vorgang.
   - **Musst du etwas eintragen oder auswählen**, führt der Knopf auf das betroffene **Feld** — er heißt nach dem Ziel, etwa „Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif bearbeiten“, „Anlage bearbeiten“: in der **Datenquellen-Zuordnung** klappen Block und Gerät auf, die Feldzeile ist markiert (auch in „Weitere Größen erfassen“); im **Komponenten-Formular** steht der Cursor im Feld — liegt es in einem zugeklappten Abschnitt (etwa „Weitere Angaben & Kosten“ oder „Netzladung & Arbitrage“), öffnet er sich; beim Sprung sind alle zugeklappten Abschnitte dieses Formulars offen. Unter **Strompreise** öffnet sich der betroffene Tarif am Feld oder „Neuen Tarif anlegen“ mit Verwendung und Beginn vorbelegt (etwa für eine Lücke); unter **Anlage** die gewählte Anlage am Feld (z. B. Inbetriebnahme), unter **Solarprognose** „Neue Prognose abrufen“ an den Systemverlusten; im **Monatsabschluss** der Monat am Feld des Geräts. Der Geräte-Connector öffnet direkt. Kennt der Befund das Gerät nicht (etwa eine Summe über alle Autos), landet der Knopf beim ersten passenden Gerät bzw. auf der Seite. Fehlt einem Reparatur-Befund die Quelle (keine Leistungs-Zuordnung), heißt sein Knopf „Sensor zuordnen“ und führt zur fehlenden Zuordnung.
   - **Ist nichts zu tun oder liegt der Weg außerhalb von eedc**, öffnet **„Was gilt“** den Lösungsweg. Ein Weg in **Home Assistant** (Entwicklerwerkzeuge, Statistik, „Wert anpassen“; Helfer; `state_class`) steht im Text des Befunds; Wege in eedc nennt der Text nicht — der Knopf ist der Weg.
-- **Lösungsweg:** Der Link öffnet **den Abschnitt dieses Befunds** ([alle Befunde](#alle-befunde)) **neben der Liste** (auf dem Handy als Fenster): *Was eedc sieht* · *Lösungsweg* in nummerierten Schritten — Schritte in eedc sind anklickbar, Schritte in Home Assistant stehen als Text, der letzte ist *Erneut prüfen* — · *Was ohne Handlung gilt*. Bei Abweichungen zu Home Assistant steht zuletzt „Diagnose-Paket kopieren und melden“. Das Fenster bleibt beim Scrollen neben der Liste stehen und holt sich ins Bild, auch wenn du es aus der letzten Kategorie öffnest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; innerhalb von Home Assistant (Seitenmenü oder App) fehlt dieser Knopf, weil ein eigenes Fenster dort keine Anmeldung hätte — direkt geöffnet (Port 8099) gibt es ihn.
+- **Lösungsweg:** Der Link öffnet **den Abschnitt dieses Befunds** ([alle Befunde](#alle-befunde)) **neben der Liste** (auf dem Handy als Fenster): *Was eedc sieht* · *Lösungsweg* in nummerierten Schritten — Schritte in eedc sind anklickbar, Schritte in Home Assistant stehen als Text, der letzte ist *Erneut prüfen* — · *Was ohne Handlung gilt*. Bei Abweichungen zu Home Assistant ist der letzte Schritt, das Diagnose-Paket zu kopieren und mit deiner Frage zu melden. Das Fenster bleibt beim Scrollen neben der Liste stehen und holt sich ins Bild, auch wenn du es aus der letzten Kategorie öffnest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; innerhalb von Home Assistant (Seitenmenü oder App) fehlt dieser Knopf, weil ein eigenes Fenster dort keine Anmeldung hätte — direkt geöffnet (Port 8099) gibt es ihn.
 
 Die Komponenten-Seiten (Block **Daten-Qualität**) zeigen die Befunde ihres Geräts mit denselben Knöpfen.
 
@@ -410,7 +412,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 > **Wo die Zuordnung entsteht:** Welche Quelle (HA-Sensor / MQTT / Connector) welches Feld speist, legst du zentral unter [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) fest — die feld-zentrische Zuordnungs-Fläche hat die früheren getrennten Assistenten „Sensor-Mapping" und „MQTT-Inbound" abgelöst. Die Verbindungen (HA-Token, MQTT-Broker) richtest du unter [Einstellungen → Integration](HANDBUCH_EINSTELLUNGEN.md#6-integration) ein.
 >
-> **Vom Befund zur Zuordnung:** „Beheben“ an einem Befund der Kategorien 7, 9, 10 oder 16 öffnet die Datenquellen-Zuordnung beim betroffenen Gerät mit markiertem Feld ([Sprung aufs Feld](#sprung-aufs-feld)); in Home Assistant liegt der Weg (Helfer, `state_class`, „Wert anpassen“) im Text des Befunds.
+> **Vom Befund zur Zuordnung:** Der Sprung-Knopf an einem Befund der Kategorien 7, 9, 10 oder 16 (etwa „Sensor zuordnen“) öffnet die Datenquellen-Zuordnung beim betroffenen Gerät mit markiertem Feld ([Sprung aufs Feld](#sprung-aufs-feld)); in Home Assistant liegt der Weg (Helfer, `state_class`, „Wert anpassen“) im Text des Befunds.
 
 ---
 
@@ -4569,13 +4571,13 @@ Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* vers
 
 ### 5.3 Monatsdaten-Lücken aufholen
 
-**Symptom:** Befunde aus §4.4 *„MM/JJJJ fehlt"* oder *„… und N weitere Monate fehlen"*.
+**Symptom:** Befunde aus §4.4 *„MM/JJJJ fehlt"*, ab zwei Monaten als Gruppenzeile *„N Monate fehlen: …"*.
 
 **Drei Wege, je nach Lückengröße:**
 
 | Anzahl fehlender Monate | Empfohlener Weg |
 |------------------------|-----------------|
-| 1–3 Monate | Monatsdaten-Formular pro Monat (Klick auf den „Beheben"-Link führt direkt dorthin). |
+| 1–3 Monate | Monatsdaten-Formular pro Monat (der Knopf „Monat erfassen" bzw. ein Klick auf den Monat in der Gruppenzeile führt direkt dorthin). |
 | 4+ Monate, HA-Add-on | Statistik-Import nutzen — holt mehrere Monate aus HA-LTS auf einmal. Siehe [HANDBUCH_EINSTELLUNGEN.md §6.4](HANDBUCH_EINSTELLUNGEN.md#64-statistik-import). Voraussetzung: §4.9 ist OK (state_class gesetzt). |
 | Bestehende Daten aus anderem System | CSV-Import über Einstellungen → Integration → Import-Assistenten (Template via Download-Link im Import-Overlay). |
 
@@ -4655,7 +4657,7 @@ Der Daten-Checker ist Diagnose, nicht Behebung. Er **zeigt** Probleme und verlin
 | §4.7 Energieprofil-Plausibilität | Reparatur-Werkbank: *„Tag neu aggregieren"* bzw. *„Mehrere Tage neu aggregieren"* (zieht Snapshots frisch + baut Aggregate neu) |
 | §4.8 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Broker-Verbindung |
 | §4.9 Datenquellen – HA-Statistics | HA-Helfer „Verbrauchszähler" (ohne Zyklus), ersatzweise `customize` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
-| §4.10 Fehlende Tageswerte | Knopf am Befund: *„Zeitraum neu aggregieren"* / *„Tag reparieren"*; ohne Leistungs-Zuordnung zuerst Einstellungen → Datenquellen |
+| §4.10 Fehlende Tageswerte | Knopf am Befund: *„Tage neu aufbauen"* / *„Tag neu aufbauen"* (mit Vorschau); ohne Leistungs-Zuordnung *„Sensor zuordnen"* (Einstellungen → Datenquellen) |
 
 ### Reparatur-Werkzeuge in der Energieprofil-Pflege
 
@@ -4674,7 +4676,7 @@ Diese Werkzeuge laufen über die **Reparatur-Werkbank** unter Einstellungen → 
 ### Wo erscheint der Daten-Checker noch?
 
 - **In-App-Hilfe** (Menüpunkt Hilfe): Diese Doku ist dort als kuratiertes Hilfe-Dokument verfügbar.
-- **„Beheben"-Links innerhalb der App**: Befund-Zeilen verlinken direkt zur betroffenen Einstellungs-Kachel — kein Suchen in den Kategorien nötig. Befunde, deren Handgriff in der **Reparatur-Werkbank** liegt (Wetterreihe nachziehen, Tag neu aggregieren, HA-Spiegel abgleichen …), klappen die Energieprofil-Pflege auf **und springen bis zur Werkbank** an ihrem Ende — auch beim zweiten Klick, wenn du den Block inzwischen wieder zugeklappt hast; andere Blöcke bleiben, wie du sie gelassen hast.
+- **Knöpfe an den Befunden**: Ein Sprung-Knopf („Gerät bearbeiten", „Sensor zuordnen", „Monat erfassen" …) führt direkt auf das betroffene Feld ([Sprung aufs Feld](#sprung-aufs-feld)) — kein Suchen in den Kategorien nötig. Eine Reparatur („Wetterreihe nachziehen", „Tag neu aufbauen", „Aus Home Assistant neu übernehmen" …) zeigt zuerst die Vorschau am Befund; **„Details in der Werkbank"** öffnet sie in der **Reparatur-Werkbank**.
 - **Komponenten-Achse**: Jede [Komponenten-Sicht](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse) hat einen Block **Daten-Qualität** mit den offenen Daten-Checker-Befunden genau dieser Komponente und Sprung zur Reparatur-Werkbank.
 - **Aktivitäten-Log** (Einstellungen → System → Protokolle, Tab *Aktivitäten*): Bestimmte Befund-Kategorien (z. B. Connector-Test-Ergebnisse) finden sich auch dort historisch.
 

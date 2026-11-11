@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { Button, Input, Select, SegmentControl } from '../components/ui'
 import { useCopyFeedback } from '../hooks'
-import { useNeustartWarten } from '../hooks/useNeustartWarten'
+import { NEUSTART_LAEUFT, useNeustartWarten } from '../hooks/useNeustartWarten'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
 import { mitAnzahl } from '../lib/plural'
@@ -520,10 +520,8 @@ export function ProtokolleVerwaltung() {
 
   const handleRestart = async () => {
     if (!confirm('eedc wirklich neu starten? Die Verbindung wird kurz unterbrochen.')) return
-    try {
-      await systemLogsApi.restart()
-    } catch { /* Verbindung bricht ab — erwartet */ }
-    neustart.warten()  // E5.7 L5: auf eedc warten, dann neu laden — statt endlos zu drehen
+    // E5.7 L5: auf eedc warten, dann neu laden — statt endlos zu drehen. E6.B G1: der Hinweis steht vor dem Aufruf.
+    await neustart.warten(() => systemLogsApi.restart())
   }
 
   const tabs = [
@@ -576,6 +574,7 @@ export function ProtokolleVerwaltung() {
           </Button>
         </div>
       </div>
+      {neustart.wartet && <p className="text-sm text-gray-600 dark:text-gray-400" role="status">{NEUSTART_LAEUFT}</p>}
       {neustart.hinweis && <p className="text-sm text-amber-700 dark:text-amber-300" role="status">{neustart.hinweis}</p>}
 
       {/* Tab Content */}

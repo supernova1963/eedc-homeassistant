@@ -25,6 +25,10 @@ from backend.models.investition import Investition
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from backend.services.daten_checker import DatenChecker, CheckKategorie
+# Vorimport (E6.B N1): `lts_aggregator` bindet `get_ha_statistics_service` beim Import. Ohne diese Zeile
+# importiert erst der zweite Patch in `_build_checker` das Modul — während der erste Patch aktiv ist — und die
+# Bindung bleibt nach `stop()` die MagicMock (rot in einer später laufenden Datei, z. B. test_n791_…).
+import backend.services.snapshot.lts_aggregator  # noqa: F401,E402
 
 
 def _make_tz(datum: date, pv_kwh: float):

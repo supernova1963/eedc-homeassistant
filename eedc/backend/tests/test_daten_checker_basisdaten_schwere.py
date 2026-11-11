@@ -120,6 +120,28 @@ async def test_sammelzeile_ab_dem_13_fehlenden_monat_ist_ebenfalls_fehler(db):
     assert glieder[0].gruppe.titel == f"{gesamt} Monate fehlen" and glieder[0].gruppe.weitere == gesamt - 12
 
 
+
+async def test_zusammenfassung_ist_die_zaehlung_der_befunde_je_schwere(db):
+    """E6.B N4: `zusammenfassung` zählt jeden Befund genau einmal — auch ein Glied einer Gruppenzeile.
+
+    Die Gruppenzeile (E5 V2) ist Beschriftung, kein zusätzlicher Befund; die Zahl je Schwere bleibt die
+    Zahl der Zeilen der Antwort. Vor E6 fing einen Doppelzähler nur der Text-Golden-Master
+    (Nachmessung E6 Sprengsatz S6: `zusammenfassung[e.schwere] += 2 if e.gruppe else 1`).
+    """
+    anlage_id = await _anlage(
+        db,
+        installationsdatum=date(2020, 1, 1),
+        geraete=[("pv-module", date(2020, 1, 1))],
+        monate=[(2020, 1)],
+    )
+    ergebnis = await DatenChecker(db).check_anlage(anlage_id)
+
+    assert any(e.gruppe for e in ergebnis.ergebnisse), "der Lauf braucht eine Gruppenzeile"
+    zaehlung = {s.value: 0 for s in CheckSeverity}
+    for e in ergebnis.ergebnisse:
+        zaehlung[CheckSeverity(e.schwere).value] += 1
+    assert ergebnis.zusammenfassung == zaehlung
+
 # ─── (b) Geraet aelter als die Anlage ───────────────────────────────────────
 
 async def test_aelteres_geraet_wird_als_auskunft_gemeldet(db):

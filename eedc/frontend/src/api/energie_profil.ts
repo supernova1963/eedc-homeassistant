@@ -963,16 +963,6 @@ export const energieProfilApi = {
   reaggregateTagPreview: (anlageId: number, datum: string, signal?: AbortSignal): Promise<ReaggregatePreviewResponse> =>
     api.get(`/energie-profil/${anlageId}/reaggregate-tag/preview?datum=${datum}`, { signal }),
 
-  // v3.45.9: Bereichs-Reaggregation (max 31 Tage/Lauf) — Bulk-Reparatur z. B.
-  // der Batterie-Vorzeichen-Historie aus dem Daten-Checker.
-  // Die Zähler sind getypt, weil `status: "ok"` NICHT heißt, dass Werte
-  // geschrieben wurden: `aggregate_day` liefert `None`, wenn es für den Tag
-  // keine Kurvendaten findet — dann steht `erfolgreich: 0, keine_daten: n`
-  // bei HTTP 200. Am 2026-07-30 E2E gemessen; der Aufrufer MUSS das auswerten,
-  // sonst meldet die Oberfläche einen Erfolg, den es nicht gab.
-  reaggregateBereich: (anlageId: number, von: string, bis: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<ReaggregateBereichResponse> =>
-    api.post(`/energie-profil/${anlageId}/reaggregate-bereich?von=${von}&bis=${bis}&mit_resnap=${mitResnap}`, undefined, { signal }),
-
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),
 
@@ -981,9 +971,6 @@ export const energieProfilApi = {
 
   kraftstoffpreisBackfillTages: (anlageId: number): Promise<KraftstoffpreisBackfillResult> =>
     api.post(`/energie-profil/${anlageId}/kraftstoffpreis-backfill/tages`),
-
-  kraftstoffpreisBackfillMonats: (anlageId: number): Promise<KraftstoffpreisBackfillResult> =>
-    api.post(`/energie-profil/${anlageId}/kraftstoffpreis-backfill/monats`),
 
   deleteRohdaten: (): Promise<ProfildatenLoeschResult> =>
     api.delete(`/energie-profil/rohdaten`),

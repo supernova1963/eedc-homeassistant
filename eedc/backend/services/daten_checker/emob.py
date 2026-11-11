@@ -4,13 +4,13 @@ Daten-Checker — E-Mob-Pool-Pflege & Sensor-Doppelmapping (`EmobChecks`).
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
-from collections import Counter
 from datetime import date, timedelta
 
 from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 
+from .gruppen import je_geraet_begrenzt
 from .kategorien import (
     Aktion, CheckErgebnis, CheckKategorie, CheckSeverity,
 )
@@ -424,9 +424,9 @@ class EmobChecks:
 
         # Datums-Listen absteigend (Regel 0a), Gerät als zweites Kriterium.
         treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
-        MAX_EINZEL = 10
-        weitere = Counter(t[0] for t in treffer[MAX_EINZEL:])  # E5 V2: statt Restzeile `weitere` an der Gruppenzeile
-        for inv_id, name, jahr, monat, gesamt_f, pv_f in treffer[:MAX_EINZEL]:
+        # E5 V2 + E6.B N5: höchstens 10 Monate je Gerät, die übrigen als `weitere` an seiner Gruppenzeile.
+        auswahl, weitere = je_geraet_begrenzt(treffer, 10)
+        for inv_id, name, jahr, monat, gesamt_f, pv_f in auswahl:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING.value, code="emob_pv_ladung_groesser_gesamt",
                 meldung=(

@@ -325,48 +325,6 @@ export const monatsdatenApi = {
   },
 
   /**
-   * Messwerte eines Monats OHNE Zählerzeile entfernen (#349).
-   * Nur für den Daten-Checker-Weg: existiert die Zeile noch, antwortet das
-   * Backend mit 409 und verweist auf den Lösch-Dialog.
-   */
-  async deleteVerwaisteGeraetewerte(anlageId: number, jahr: number, monat: number): Promise<{
-    jahr: number
-    monat: number
-    geloescht: number
-    komponenten: string[]
-  }> {
-    return api.delete(`/monatsdaten/geraetewerte/${anlageId}/${jahr}/${monat}`)
-  },
-
-  /**
-   * Wert aus einem Feld entfernen, das das Gerät nicht (mehr) führt (N-393).
-   * Nur für den Daten-Checker-Weg: führt das Gerät das Feld, antwortet das
-   * Backend mit 409 und verweist auf den Monatsabschluss.
-   */
-  async deleteFeldwertNichtGefuehrt(investitionId: number, feld: string): Promise<{
-    investition_id: number
-    feld: string
-    entfernt: number
-    monate: { jahr: number; monat: number; wert: number | null }[]
-  }> {
-    return api.delete(`/monatsdaten/investition/${investitionId}/feld/${encodeURIComponent(feld)}`)
-  },
-
-  /**
-   * Ø-Temperatur der leeren Monate aus der eigenen Messreihe nachtragen
-   * (N-426-Nachtrag). Füllt **nur Lücken** und nur Monate, die die Reihe
-   * erreicht; ein zweiter Lauf findet nichts mehr.
-   */
-  async temperaturAusMessung(anlageId: number): Promise<{
-    anlage_id: number
-    gefuellt: number
-    offen: number
-    monate: { jahr: number; monat: number; wert: number }[]
-  }> {
-    return api.post(`/monatsdaten/anlage/${anlageId}/temperatur-aus-messung`, {})
-  },
-
-  /**
    * Aggregierte Monatsdaten abrufen
    * PV-Erzeugung und Speicher-Daten werden aus InvestitionMonatsdaten summiert
    *

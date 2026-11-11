@@ -24,7 +24,6 @@ haben und trotzdem einen Wärmemengenzähler an der falschen Stelle. Die zwei
 Meldungen können nebeneinander stehen, ohne dasselbe zu sagen.
 """
 
-from collections import Counter
 from backend.core.berechnungen.betriebsart_gemessen import (
     funktionsfremd_abzug_kwh,
     modus_strom_zeile,
@@ -41,6 +40,7 @@ from backend.core.field_definitions import (
 )
 from backend.models.anlage import Anlage
 
+from .gruppen import je_geraet_begrenzt
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 from .ziele import ziel_monat
 from backend.core.zahlenformat import fmt_zahl
@@ -57,7 +57,7 @@ class WaermepumpeChecks:
     #: eedc schon früher, warum sie auffällig ist.
     ARBEITSZAHL_AUFFAELLIG = 7.0
 
-    #: Höchstens so viele Einzelmonate nennen — der Rest wird gezählt.
+    #: Höchstens so viele Einzelmonate **je Gerät** nennen — der Rest wird gezählt (E6.B N5).
     MAX_EINZEL = 6
 
     def _check_wp_arbeitszahl_unplausibel(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -163,9 +163,9 @@ class WaermepumpeChecks:
         # Datums-Listen absteigend (Regel 0a), Gerät als zweites Kriterium.
         treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
         # E5 V2: keine Restzeile mehr — die über der Grenze weggelassenen Monate je Gerät stehen als `weitere` an der
-        # Gruppenzeile (`gruppen.py`).
-        weitere = Counter(t[0] for t in treffer[self.MAX_EINZEL:])
-        for inv_id, name, jahr, monat, wert in treffer[: self.MAX_EINZEL]:
+        # Gruppenzeile (`gruppen.py`); E6.B N5: die Grenze gilt je Gerät.
+        auswahl, weitere = je_geraet_begrenzt(treffer, self.MAX_EINZEL)
+        for inv_id, name, jahr, monat, wert in auswahl:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING.value, code="wp_arbeitszahl_zu_hoch",
                 meldung=(
