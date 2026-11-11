@@ -7,6 +7,108 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+## [4.3.0] - 2026-11-11
+
+Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatur zeigt vorher, was sie ändert, ein Sprung landet auf dem betroffenen Feld, und „Was gilt“ erklärt, was ohne Handlung gilt. Zu jedem Befund gibt es den Lösungsweg in Schritten, oben steht „Das kannst du jetzt tun“, bestandene Prüfungen und gleiche Befunde sind zusammengefasst. Neu ist das Diagnose-Paket: ein Text mit allem, was eine Antwort im Forum oder auf GitHub braucht, ohne Zugangsdaten. Reparaturen und der nächtliche Abgleich mit Home Assistant stehen im Aktivitätsprotokoll, und „Neustart“ zeigt, dass eedc neu startet, und lädt die Seite danach von selbst.
+
+### Added
+
+- **Daten-Checker: „Diagnose-Paket“** — der Knopf im Kopf des Daten-Checkers (*Einstellungen → Daten → Daten-Checker*,
+  neben „Aktualisieren“) öffnet einen Text mit Version, Anlage, Komponenten, Zuordnungen, Strompreisen, allen Befunden,
+  den Werten aus Home Assistant, Nachtlauf und Reparaturen. „Kopieren“ übernimmt ihn für eine Frage im Forum oder auf
+  GitHub; diese Fassung bleibt unter 20 KB — bei großen Anlagen kürzt eedc zuerst das Entbehrliche, Kopf, Befunde,
+  Werte aus Home Assistant, Nachtlauf, Reparaturen und Zeitpläne bleiben immer. „Als Datei herunterladen“ speichert die
+  ungekürzte Fassung. Den Text kannst du vor dem Kopieren bearbeiten; Zugangsdaten enthält er nie, und eedc schickt ihn
+  nirgendwohin. In der Home-Assistant-App steht unter dem Knopf „Speichert die App keine Datei:
+  Kopieren und in eine Notiz einfügen.“
+- **Daten-Checker: „Lösungsweg“ an jedem Befund** — öffnet neben der Liste (auf dem Handy als Fenster) die Schritte für
+  genau diesen Befund: was eedc sieht, was du tust (Schritte in eedc zum Anklicken, Wege in Home Assistant als Text,
+  zuletzt erneut prüfen) und was gilt, wenn du nichts tust. Bei Abweichungen zu Home Assistant ist der letzte Schritt,
+  das Diagnose-Paket zu kopieren und mit deiner Frage zu melden. Das Fenster bleibt beim Scrollen neben der Liste und
+  holt sich ins Bild, auch aus der letzten Kategorie. Im Browser öffnet „In eigenem Fenster öffnen“ den Abschnitt in
+  einem eigenen Tab; innerhalb von Home Assistant fehlt dieser Knopf, ein Satz sagt warum. Dieselben Texte stehen im
+  Handbuch „Daten-Checker“.
+- **Daten-Checker: oben „Das kannst du jetzt tun“** — alle Befunde mit einem Reparatur-Knopf aus allen Kategorien in
+  einer Leiste, mit denselben Knöpfen wie in ihrer Kategorie.
+
+### Changed
+
+- **Daten-Checker: jede Reparatur zeigt vorher, was sie ändert.** Kein Knopf führt mehr sofort aus: der erste Klick
+  zeigt unter der Zeile, was sich ändert; erst „Anwenden“ führt aus, „Abbrechen“ verwirft. Lösch-Aktionen sagen
+  „endgültig“ und tragen einen roten Knopf statt einer Rückfrage; ist nichts zu tun, sagt die Vorschau das und bietet
+  kein „Anwenden“. „Details in der Werkbank“ öffnet die Vorschau in der Reparatur-Werkbank. „Wetterreihe nachziehen“,
+  „Tag neu aufbauen“ und „Tage neu aufbauen“ stehen jetzt direkt am Befund; „Messwerte ohne Monatszeile entfernen“ gibt
+  es nur noch in der Reparatur-Werkbank — am Befund steht „Monat erfassen“. Die Komponenten-Seiten (Block
+  „Daten-Qualität“) tragen dieselben Knöpfe.
+- **Daten-Checker: ein Knopf je Befund, mit seinem Namen, und ein Sprung landet auf dem Feld.** Jeder Knopf heißt nach
+  dem, was er tut — „Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif
+  bearbeiten“, „Anlage bearbeiten“, „Was gilt“ … In der Datenquellen-Zuordnung klappen Block und Gerät auf und die
+  Feldzeile ist markiert; im Komponenten-Formular steht der Cursor im Feld, auch in einem zugeklappten Abschnitt; unter
+  Strompreise öffnet sich der betroffene Tarif oder ein neuer, vorbelegter Tarif; dazu die Anlage-Stammdaten, die
+  Solarprognose und der Monatsabschluss am Feld des Geräts; der Geräte-Connector öffnet direkt. Befunde fehlender
+  Tageswerte ohne Reparaturweg führen mit „Sensor zuordnen“ zur fehlenden Zuordnung.
+- **Daten-Checker übersichtlicher: weniger Zeilen.**
+  - Bestandene Prüfungen stehen nicht mehr in der Liste; am Ende jeder Kategorie klappt „n Prüfungen bestanden“ sie
+    auf. Kategorien mit einem Fehler, einer Warnung oder einem Reparatur-Knopf stehen offen, die übrigen zu.
+  - Gleiche Befunde stehen als eine Zeile mit Gliedern — etwa „7 Monate fehlen: 01/2026 · 02/2026 · …“; ein Klick auf
+    einen Monat öffnet genau diesen. Die Zeilen „… plus n weitere“ sind entfallen, die Zahl steht in der Gruppenzeile;
+    Befunde eines Geräts (PV-Ladung größer als Gesamtladung, unplausibel hohe Arbeitszahl) stehen je Gerät, jedes Gerät
+    mit seinen Monaten und seiner eigenen Zahl.
+  - Sechs Doppelungen sind zusammengelegt: Wetterquelle anders · Wetterquelle nicht festgehalten · Strahlung fehlt ist
+    eine Zeile mit dem Knopf „Wetterreihe nachziehen“; Koordinaten und Ort/PLZ sind ein Standort-Befund; Tageswerte und
+    die Sensoren in Home Assistant haben je eine bestandene Prüfung statt zwei; im Standalone-Betrieb sagt die Zeile zur
+    Betriebsart, dass die Prüfungen gegen Home Assistant nicht laufen, und der Kopf nennt „n Prüfungen nicht ausführbar
+    (Standalone / MQTT-Import aus)“.
+  - **Die Zahl der Hinweise im Kopf, in der Fußzeile und im Status der Einstellungen sinkt dadurch** — es fehlt keine
+    Prüfung, nur die doppelten Zeilen.
+- **Reparatur-Werkbank und Daten-Checker: jeder ausgeführte Lauf steht im Aktivitätsprotokoll** (*Einstellungen → System
+  → Protokolle*, Kategorie „Reparatur“) und überlebt damit einen Neustart — auch „Tag neu aufbauen“ und „Aus Home
+  Assistant neu übernehmen“ im Daten-Checker.
+- **Der nächtliche Abgleich mit der Statistik von Home Assistant steht jede Nacht im Aktivitätsprotokoll** — je Anlage,
+  die Werte aus Home Assistant übernimmt, auch wenn nichts abweicht, mit der Zahl der geprüften Abschnitte.
+
+### Fixed
+
+- **Daten-Checker: der Knopf an einem Befund zu einem bereits erfassten Monat öffnet diesen Monat zum Bearbeiten
+  (Melder ottokar, simon42).** Bisher öffnete sich ein neues Formular „Monatsdaten erfassen“, dessen Speichern mit
+  „existieren bereits“ endete.
+- **Daten-Checker: acht Befunde nannten einen Menüweg, den es so nicht gibt, einer ein Ziel, das fehlt.** Die Texte
+  nennen keinen Weg in eedc mehr — der Knopf ist der Weg; Wege in Home Assistant stehen weiter im Text. Die Texte sagen
+  dasselbe wie die Knöpfe („Tag neu aufbauen“, „Tage neu aufbauen“).
+- **Daten-Checker: der Hinweis zur fehlenden Ø Temperatur nennt den richtigen Knopf** — im Monatsabschluss heißt er
+  „Auto-Fill“ (unter „Wetterdaten (optional)“), nicht „Wetterdaten holen“.
+- **System → Protokolle: „Neustart“ zeigt sofort, dass eedc neu startet, und lädt die Seite danach von selbst.** Nach dem
+  Klick steht am Knopf „Startet neu...“ und darunter „eedc startet neu — die Seite lädt gleich von selbst.“; sobald eedc
+  wieder antwortet, lädt die Seite neu. Bisher drehte der Knopf endlos. Dauert es länger als anderthalb Minuten, steht
+  dort „Der Neustart dauert länger als erwartet — Seite neu laden.“ und der Knopf ist wieder frei.
+- **Daten-Checker: fünf Knöpfe landen jetzt dort, wo es ihr Feld gibt.** „Kennung eintragen“ öffnet das E-Auto (bisher
+  die Wallbox, an der es das Feld nicht gibt); „Zuordnung prüfen“ bei der evcc-Netzladung öffnet die Wallbox, beim
+  gemeinsamen Zähler von Wärmepumpe und Wallbox das Feld an der Wärmepumpe (bisher das erste Gerät mit einem Feld
+  „Netzladung“, etwa den Speicher); „Monat öffnen“ bei fehlender Batterie-Ladung/-Entladung springt in die Zeile des
+  Speichers; „Zuordnung prüfen“ bei „Netzbezug zum WP-/Wallbox-Tarif größer als …“ öffnet das betroffene Gerät statt des
+  ersten mit diesem Feld.
+- **Daten-Checker: ein gesetzter „Fremdanteil auf den Zählern“ nimmt die Warnung „Arbeitszahl höher, als eine
+  Wärmepumpe leisten kann“ zurück** — wie es das Handbuch versprach; die Auswertungen zeigen statt der Zahl den Grund.
+- **Daten-Checker: „Heizwärme fehlt“ erscheint nicht mehr, wenn die Heizwärme als „Nutzenergie Heizbetrieb“ erfasst
+  ist.**
+- **Daten-Checker: Lösungswege und Hinweistexte berichtigt** — Schwellen, Fenster und Bedingungen stehen
+  jetzt so da, wie eedc prüft (etwa „um mehr als 0,5 kWh“, „in den letzten 180 Tagen“); Aussagen wie „rechnet keine
+  Einsparung“, wo eedc mit Vorgaben rechnet, sind richtiggestellt. Ein Bereich bis heute lässt sich nicht neu aufbauen —
+  die Vorschau sagt das jetzt in einem Satz.
+
+### Intern
+
+- **Daten-Checker:** jeder Befund trägt einen festen Schlüssel (`code`), sein Ziel aus dem Ziel-Bauer
+  (`services/daten_checker/ziele.py`, jeder Feld-Schlüssel gegen die Registry geprüft) und seinen Knopf aus dem Katalog
+  (`handgriffe.py`); die Antwort trägt `knopf`, `gruppe` und `nicht_ausfuehrbar`, die Altfelder `link`/`action_*` sind
+  entfallen. Aktionen laufen über Plan → Ausführen der Reparatur-Werkbank (ein Plan „nichts zu tun“ wird nicht
+  ausgeführt, 409); die Anzeige-Grenze der Geräte-Befunde gilt je Gerät. Das Handbuch „Daten-Checker“ §3/§4 ist erzeugt
+  (`scripts/daten-checker-handbuch.py` aus `docs/daten-checker/<code>.md`, eine Datei je Befund); Wächter W-1 … W-14
+  (W-14: ein Sprungziel zeigt nur auf ein Feld, das es am Gerätetyp gibt).
+  Diagnose-Paket Kopfmarke v3.
+
 ## [4.2.3] - 2026-11-10
 
 Daten-Checker mit wirksamen Handgriffen und drei Melder-Fälle aus Forum und GitHub: Eine Abweichung zu Home Assistant lässt sich mit einem Knopf beheben, „Tag reparieren“ schreibt korrigierte Zählerwerte auch ohne Leistungskurve, „Beheben“ führt bis zur Reparatur-Werkbank, und alte Werte nach einem Kategoriewechsel unter Sonstiges werden gemeldet. Geräte der Kategorie „Abgabe an Dritte“ haben im Komponenten-Hub und im Monatsabschluss ihre eigene Sicht. Die PV-Prognose lernt aus dem Vormittag, kennt den Zeitpunkt „Mittag“, prüft ihre eigene Korrektur und empfiehlt die beste Quelle; an Tagen aus dem HA-Spiegel liegt jede gemessene Stunde auf ihrer Prognose. Der Block E-Mobilität steht an jedem Ladetag, und viele Anzeigen rechnet jetzt das Backend statt der Browser.
