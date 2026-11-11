@@ -50,18 +50,17 @@ export default function MarkdownDoc({ markdown, linkComponent }: MarkdownDocProp
             {children}
           </blockquote>
         ),
-        code: ({ inline, children, ...props }: { inline?: boolean; children?: ReactNode } & React.HTMLAttributes<HTMLElement>) =>
-          inline ? (
-            <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 text-sm rounded font-mono text-primary-700 dark:text-primary-300" {...props}>
-              {children}
-            </code>
-          ) : (
-            <code className="block" {...props}>
-              {children}
-            </code>
-          ),
+        // react-markdown ≥ 9 reicht kein `inline` mehr durch — die frühere Weiche `inline ? … : <code className="block">`
+        // setzte deshalb JEDEN Inline-Code als eigenen Block (Lesehinweis «Was ist neu», Lösungswege, Handbücher;
+        // gesehen 11.11.2026). Jetzt: `code` ist immer die Inline-Form, ein Code-Block steckt in `pre`, das sein
+        // `code`-Kind zurücksetzt.
+        code: ({ children, className }) => (
+          <code className={`px-1 py-0.5 bg-gray-100 dark:bg-gray-700 text-sm rounded font-mono text-primary-700 dark:text-primary-300 ${className ?? ''}`}>
+            {children}
+          </code>
+        ),
         pre: ({ children }) => (
-          <pre className="my-4 p-3 bg-gray-100 dark:bg-gray-900 rounded overflow-x-auto text-sm font-mono text-gray-800 dark:text-gray-200">
+          <pre className="my-4 p-3 bg-gray-100 dark:bg-gray-900 rounded overflow-x-auto text-sm font-mono text-gray-800 dark:text-gray-200 [&>code]:block [&>code]:p-0 [&>code]:bg-transparent dark:[&>code]:bg-transparent [&>code]:text-inherit dark:[&>code]:text-inherit [&>code]:rounded-none">
             {children}
           </pre>
         ),

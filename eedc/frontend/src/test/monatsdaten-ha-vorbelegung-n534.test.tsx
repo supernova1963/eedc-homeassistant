@@ -129,6 +129,19 @@ describe('Formular-Vorbelegung aus HA (N-534, N-622)', () => {
     expect(herkunft?.textContent).toContain('PV-Modulen')
   })
 
+  it('ein sonstiger Erzeuger (BHKW) zählt nicht zur „PV-Erzeugung (berechnet)" — dieselbe Zahl wie die Monatsdaten-Tabelle (11.11.2026)', async () => {
+    const bhkw: Investition = { ...inv(4, 'sonstiges', 'Mini-BHKW', 0), parameter: { kategorie: 'erzeuger' } }
+    zustand.invs = [...SUED_WEST_BKW, bhkw]
+    zustand.rows = [...MODUL_ZEILEN, { investition_id: 3, verbrauch_daten: { pv_erzeugung_kwh: 70 } },
+      { investition_id: 4, verbrauch_daten: { erzeugung_kwh: 30 } }]
+    await oeffne({ ha: false, monatsdaten: monat() })
+    await waitFor(() => expect(screen.getByText('PV-Erzeugung (berechnet)')).toBeTruthy())
+    const herkunft = [...document.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Aus '))
+    expect(herkunft?.textContent).toBe('Aus PV-Modulen und Balkonkraftwerk: 1.000,0 kWh')   // 550 + 380 + 70, ohne die 30
+    expect(document.body.textContent).not.toContain('1.030,0')
+    expect(document.body.textContent).not.toContain('sonstigen Erzeugern')
+  })
+
   it('gespeichert wird, was in der Zeile steht — auch ein geänderter Wert', async () => {
     zustand.invs = SUED_WEST_BKW
     const onSubmit = await oeffne({ ha: true })

@@ -1698,9 +1698,9 @@ class ErfassungsortChecks:
             f"{len(ohne)} abgeschlossene(r) Monat(e) tragen keine festgehaltene Wetterquelle",
             (
                 "Bei diesen Monaten steht nicht dabei, von welchem Wetterdienst "
-                "Globalstrahlung und Sonnenstunden stammen. **Ob alle aus "
+                "Globalstrahlung und Sonnenstunden stammen. Ob alle aus "
                 "derselben Quelle kommen, lässt sich damit nicht mehr "
-                "feststellen** — und das ist keine Kleinigkeit: Open-Meteo und "
+                "feststellen — und das ist keine Kleinigkeit: Open-Meteo und "
                 "Bright Sky (DWD) messen Sonnenstunden um den Faktor 1,6–2,0 "
                 "verschieden. Stammen einzelne Monate aus der jeweils anderen "
                 "Quelle, sähe ein Jahr schwach aus, weil die Quelle gewechselt "

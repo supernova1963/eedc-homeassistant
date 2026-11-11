@@ -9,6 +9,14 @@
 
 ---
 
+## Unveröffentlicht
+
+**Monatsdaten: eine PV-Erzeugung je Monat.** Hat deine Anlage einen sonstigen Erzeuger (etwa ein BHKW), zählte das Formular eines Monats seine Erzeugung in „PV-Erzeugung (berechnet)“ mit — die Monatsdaten-Tabelle zeigt die PV-Erzeugung ohne ihn. Jetzt steht im Formular dieselbe Zahl wie in der Tabelle; der sonstige Erzeuger behält seine eigene Zeile. Gespeichert wurde die Summe nie. → [Einstellungen: Monatsdaten](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss)
+
+**Hilfe und Daten-Checker lesen sich wieder glatt.** Code im Fließtext (etwa `?doc=was-ist-neu` oben auf dieser Seite) steht wieder in der Zeile, statt als eigener Absatz auszubrechen — in der Hilfe, den Handbüchern, der Hilfe im Einrichtungs-Assistenten und im Lösungsweg-Fenster. Vier Befunde des Daten-Checkers und der Hinweis zu „Strom Heizbetrieb“ usw. in der Datenquellen-Zuordnung zeigen keine Sternchen mehr.
+
+---
+
 ## v4.3.0 — 11. November 2026
 
 **Daten-Checker: ein Knopf je Befund, der sagt, was er tut.** Jeder Befund trägt rechts **einen** Knopf mit seinem Namen. Ändert eedc etwas („Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine Vorschau; musst du etwas eintragen oder auswählen, springt der Knopf auf das Feld („Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif bearbeiten“, „Anlage bearbeiten“); ist nichts zu tun oder liegt der Weg in Home Assistant, erklärt **„Was gilt“**, was gilt. Die Komponenten-Seiten (Block „Daten-Qualität“) tragen dieselben Knöpfe. → [Daten-Checker: Aufbau der Ergebnis-Fläche](HANDBUCH_DATEN_CHECKER.md#aufbau-der-ergebnis-fläche)

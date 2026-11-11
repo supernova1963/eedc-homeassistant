@@ -147,6 +147,44 @@ def test_der_waechter_hat_zaehne():
     assert _verstoesse("Tag neu aufbauen") == []
 
 
+# ── Klartext-Flächen ohne Markdown-Fettdruck (11.11.2026, Beobachtung beim Galerie-Lauf) ───────────────────────────
+# Die Befund-Zeile zeigt Meldung und Details als Klartext (`BefundHandgriff.tsx`, `whitespace-pre-line`), die
+# Datenquellen-Auswahl den Feld-Hinweis der Registry ebenso (`DatenquellenHaPicker.tsx`) — ein «**…**» stand dort als
+# Sternchen im Satz (Wetterreihe, Zählerbruch, Zähler nicht aktiv, Zählerstand ohne Langzeitstatistik, Strom je
+# Betriebsart). Hervorhebung trägt hier der Satz, nicht die Auszeichnung.
+
+
+def _registry_hinweise():
+    import backend.core.field_definitions.registry as registry
+
+    def _lauf(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "hinweis" and isinstance(v, str):
+                    yield v
+                else:
+                    yield from _lauf(v)
+        elif isinstance(o, (list, tuple)):
+            for v in o:
+                yield from _lauf(v)
+
+    for name in dir(registry):
+        if name.isupper():
+            yield from _lauf(getattr(registry, name))
+
+
+def test_meldung_und_details_ohne_fettdruck():
+    verstoss = [f"{d}:{z}" for d, z, t in _text_literale() if "**" in t]
+    assert not verstoss, "«**» im Befund-Text — die Zeile zeigt Klartext:\n  " + "\n  ".join(verstoss)
+
+
+def test_feld_hinweise_der_registry_ohne_fettdruck():
+    hinweise = list(_registry_hinweise())
+    assert len(hinweise) > 100 and any("Teilmenge des Gesamtverbrauchs" in h for h in hinweise)
+    verstoss = [h[:80] for h in hinweise if "**" in h]
+    assert not verstoss, "«**» im Feld-Hinweis — die Datenquellen-Auswahl zeigt Klartext:\n  " + "\n  ".join(verstoss)
+
+
 # ── Lösungsweg-Anker (E3, Konzept §3.5): Katalog, Client-Tabelle und Handbuch gleich ──────────────────────────────
 
 KATEGORIEN_TS = FRONTEND / "config" / "datenCheckerKategorien.ts"

@@ -9,6 +9,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Monatsdaten: „PV-Erzeugung (berechnet)“ zählt einen sonstigen Erzeuger nicht mehr mit** — im Formular eines Monats
+  stand die Erzeugung eines sonstigen Erzeugers (etwa eines BHKW) in der PV-Summe, die Monatsdaten-Tabelle zeigt die
+  PV-Erzeugung ohne ihn; derselbe Monat hatte so zwei „PV-Erzeugungen“. Jetzt zeigt das Formular dieselbe Zahl wie die
+  Tabelle — aus PV-Modulen bzw. Wechselrichtern und Balkonkraftwerk —, der Wert des sonstigen Erzeugers steht in seiner
+  eigenen Zeile. Gespeichert wurde die Summe nie, es ändert sich nur die Anzeige.
+- **Hilfe in der App: Code im Fließtext steht wieder in der Zeile** — Stellen wie `?doc=was-ist-neu` im Lesehinweis von
+  „Was ist neu“ oder Feldnamen in den Lösungswegen des Daten-Checkers brachen als eigener Absatz aus dem Satz. Betroffen
+  waren die Hilfe mit allen Handbüchern, die Hilfe im Einrichtungs-Assistenten und das Lösungsweg-Fenster.
+- **Daten-Checker und Datenquellen: keine Sternchen im Text** — die Befunde zur nicht festgehaltenen Wetterquelle, zu
+  einem gefallenen Zählerstand, zu einem Zähler auf „nicht aktiv“ und zu Zählerstand-Sensoren ohne Langzeitstatistik
+  sowie der Hinweis zu „Strom Heizbetrieb“, „Strom Kühlbetrieb“ usw. in der Datenquellen-Zuordnung zeigten
+  Hervorhebungen als „**…**“.
+
 ## [4.3.0] - 2026-11-11
 
 Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatur zeigt vorher, was sie ändert, ein Sprung landet auf dem betroffenen Feld, und „Was gilt“ erklärt, was ohne Handlung gilt. Zu jedem Befund gibt es den Lösungsweg in Schritten, oben steht „Das kannst du jetzt tun“, bestandene Prüfungen und gleiche Befunde sind zusammengefasst. Neu ist das Diagnose-Paket: ein Text mit allem, was eine Antwort im Forum oder auf GitHub braucht, ohne Zugangsdaten. Reparaturen und der nächtliche Abgleich mit Home Assistant stehen im Aktivitätsprotokoll, und „Neustart“ zeigt, dass eedc neu startet, und lädt die Seite danach von selbst.

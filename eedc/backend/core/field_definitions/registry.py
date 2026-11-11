@@ -137,13 +137,13 @@ OPTIONALE_FELDER = [
 # `bedingungs_urteil`).
 _BETRIEBSART_HINWEIS_STROM = (
     "Elektrische Energie, die dieses Gerät im {label} verbraucht hat (kWh, "
-    "kumulativer Zähler oder Tagessensor). **Teilmenge** des Gesamtverbrauchs — "
+    "kumulativer Zähler oder Tagessensor). Teilmenge des Gesamtverbrauchs — "
     "eedc addiert sie nie dazu. Liegt dieser Wert vor, hat er Vorrang vor der "
     "Aufteilung, die eedc sonst aus dem Betriebsmodus ableitet — und zwar "
-    "für **alle** Betriebsarten dieses Monats: sobald hier ein Zähler steht, "
+    "für alle Betriebsarten dieses Monats: sobald hier ein Zähler steht, "
     "zählt für dieses Gerät nur noch Gemessenes. Eine Betriebsart ohne Zähler "
     "erscheint dann unter „nicht aufgeteilt“. "
-    "In Home Assistant bekommt man ihn mit einem **Utility Meter** (Helfer) auf "
+    "In Home Assistant bekommt man ihn mit einem Utility Meter (Helfer) auf "
     "den Energie-Sensor des Geräts, mit einem Tarif je Betriebsart. "
     "⚠ An Multisplit-Geräten misst kein Innengerät seinen eigenen Anteil: Was "
     "dort als Verbrauch erscheint, ist der Anteil des Außengeräts, der dem "

@@ -181,17 +181,16 @@ const aufzaehlung = (teile: string[]): string =>
     ? (teile[0] ?? '')
     : `${teile.slice(0, -1).join(', ')} und ${teile[teile.length - 1]}`
 
-/** N-654: Woraus „PV-Erzeugung (berechnet)" besteht — die Summe enthält neben Modulen bzw.
- *  Wechselrichtern auch Balkonkraftwerk und sonstige Erzeuger (BHKW). Genannt wird jede Gruppe,
- *  die zur Summe beiträgt; ohne Beitrag bleibt es bei der bisherigen Modul-/WR-Angabe. */
+/** N-654: Woraus „PV-Erzeugung (berechnet)" besteht — Module bzw. Wechselrichter und das Balkonkraftwerk.
+ *  Genannt wird jede Gruppe, die zur Summe beiträgt; ohne Beitrag bleibt es bei der Modul-/WR-Angabe.
+ *  Sonstige Erzeuger (BHKW) gehören seit 11.11.2026 nicht mehr hinein (siehe `berechneteWerte`). */
 function pvBerechnetQuellen(
-  beitrag: { pvModule: number; bkw: number; sonstige: number },
+  beitrag: { pvModule: number; bkw: number },
   hatPVModule: boolean,
 ): string {
   const teile: string[] = []
   if (beitrag.pvModule > 0) teile.push(hatPVModule ? 'PV-Modulen' : 'Wechselrichtern')
   if (beitrag.bkw > 0) teile.push('Balkonkraftwerk')
-  if (beitrag.sonstige > 0) teile.push('sonstigen Erzeugern')
   return teile.length ? aufzaehlung(teile) : (hatPVModule ? 'PV-Modulen' : 'Wechselrichtern')
 }
 
@@ -533,8 +532,8 @@ export default function MonatsdatenForm({
     let batterieEntladung = 0
     let pvErzeugung = 0
     // N-654: welche Erzeuger-Gruppen tragen zur Summe bei — die Beschriftung nennt sie
-    // (bis 10.10.2026 stand dort „Aus PV-Modulen", auch mit Balkonkraftwerk/BHKW in der Summe).
-    const beitrag = { pvModule: 0, bkw: 0, sonstige: 0 }
+    // (bis 10.10.2026 stand dort „Aus PV-Modulen", auch mit Balkonkraftwerk in der Summe).
+    const beitrag = { pvModule: 0, bkw: 0 }
 
     aktiveInvestitionen.forEach(inv => {
       const daten = investitionsDaten[inv.id]
@@ -554,12 +553,11 @@ export default function MonatsdatenForm({
           batterieLadung += parseFloat(daten.speicher_ladung_kwh) || 0
           batterieEntladung += parseFloat(daten.speicher_entladung_kwh) || 0
         }
-      } else if (inv.typ === 'sonstiges' && inv.parameter?.kategorie === 'erzeuger') {
-        // Sonstige Erzeuger zur PV-Erzeugung addieren
-        const wert = parseFloat(daten.erzeugung_kwh) || 0
-        pvErzeugung += wert
-        beitrag.sonstige += wert
       }
+      // Sonstige Erzeuger (BHKW, Windrad) zählen NICHT zur PV-Erzeugung (11.11.2026): eedc führt sie überall
+      // getrennt (`ErzeugungFakten.pv_kwh` ohne `sonstige_erzeuger_kwh`), die Monatsdaten-Tabelle zeigt die PV-Zahl
+      // ohne sie — mit ihnen hieß hier eine andere Zahl „PV-Erzeugung“ (Demo Juni 2026: 1.990,1 statt 1.960,1 kWh).
+      // Ihr Wert steht in der eigenen Zeile des Geräts.
     })
 
     return { batterieLadung, batterieEntladung, pvErzeugung, beitrag }
