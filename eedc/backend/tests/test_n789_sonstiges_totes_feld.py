@@ -22,6 +22,7 @@ wird hier rot.
 """
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op, befund_params
 from dataclasses import asdict
 from datetime import date
 from types import SimpleNamespace
@@ -158,15 +159,15 @@ async def test_abgabe_mit_alter_erzeugung_ergibt_eine_meldung_mit_angebot(db):
         "Allg. Strom: Erzeugung in 5 Monat(en) gespeichert — ein Gerät der "
         "Kategorie «Abgabe an Dritte» führt das Feld nicht"
     )
-    assert e.action_kind == "feldwert_entfernen"
-    assert e.action_label == "Wert entfernen"
-    assert e.action_params == {"investition_id": inv.id, "feld": "erzeugung_kwh"}  # E3: Plan-Parameter
+    assert befund_op(e) == "feldwert_entfernen"
+    assert e.knopf == "Wert entfernen"
+    assert befund_params(e) == {"investition_id": inv.id, "feld": "erzeugung_kwh"}  # E3: Plan-Parameter
     assert e.details.startswith("04/2026, 05/2026, 06/2026, 07/2026, 08/2026. ")
     assert "Der Wert zählt in keiner Bilanz." in e.details
     assert "„Abgabe (kWh)“" in e.details, "das Angebot nennt das Ziel-Feld"
     assert "→" not in e.details, "E4: kein Menüweg im Text — der Monatsabschluss ist das Ziel"
     assert e.details.endswith("eedc löscht und verschiebt nichts von allein.")
-    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr (das Übergangsfeld `altlink` ist entfallen)
+    assert befund_link(e) is None  # E4: eine Aktion trägt keinen Link mehr (das Übergangsfeld `altlink` ist entfallen)
     assert e.investition_id == inv.id
 
 
@@ -180,7 +181,7 @@ async def test_andere_kategorie_bekommt_den_allgemeinen_ausweg(db):
     befunde = _befunde(db, inv)
     assert len(befunde) == 1
     e = befunde[0]
-    assert e.action_params["feld"] == "einspeisung_kwh"
+    assert befund_params(e)["feld"] == "einspeisung_kwh"
     assert "Kategorie «Verbraucher»" in e.meldung, "Anwender-Sprache, nicht der Registry-Schlüssel"
     assert "Abgabe (kWh)" not in e.details
     assert "stelle die Kategorie zurück" in e.details
@@ -223,10 +224,10 @@ async def test_der_gesamtlauf_des_checkers_traegt_die_meldung(db):
     """(f) Der Aufruf aus ``stammdaten.py`` erreicht auch *Sonstiges*."""
     anlage, _ = await _anlage_mit(db, parameter={"kategorie": "abgabe"}, monate=_ROBERT)
     result = await DatenChecker(db).check_anlage(anlage.id)
-    treffer = [e for e in result.ergebnisse if e.action_kind == "feldwert_entfernen"]
+    treffer = [e for e in result.ergebnisse if befund_op(e) == "feldwert_entfernen"]
     assert len(treffer) == 1
-    assert treffer[0].action_params["feld"] == "erzeugung_kwh"
-    assert treffer[0].action_params == {"investition_id": treffer[0].investition_id, "feld": "erzeugung_kwh"}
+    assert befund_params(treffer[0])["feld"] == "erzeugung_kwh"
+    assert befund_params(treffer[0]) == {"investition_id": treffer[0].investition_id, "feld": "erzeugung_kwh"}
 
 
 # ── Der Endpunkt ─────────────────────────────────────────────────────────────
@@ -314,7 +315,7 @@ async def test_abgabe_angebot_nur_an_hauptgroessen(db):
         db, parameter={"kategorie": "abgabe"},
         monate={5: {"erzeugung_kwh": 40.0, "einspeisung_kwh": 12.0}},
     )
-    befunde = {e.action_params["feld"]: e for e in _befunde(db, inv)}
+    befunde = {befund_params(e)["feld"]: e for e in _befunde(db, inv)}
     assert set(befunde) == {"erzeugung_kwh", "einspeisung_kwh"}
     assert "„Abgabe (kWh)“" in befunde["erzeugung_kwh"].details
     assert "„Abgabe (kWh)“" not in befunde["einspeisung_kwh"].details
@@ -332,8 +333,8 @@ async def test_legacy_feld_ohne_registry_label_wird_gemeldet_und_entfernt(db):
     assert len(befunde) == 1
     e = befunde[0]
     assert e.meldung.startswith("Allg. Strom: Verbrauch in 1 Monat(en) gespeichert")
-    assert e.action_kind == "feldwert_entfernen"
-    assert e.action_params == {"investition_id": inv.id, "feld": "verbrauch_kwh"}
+    assert befund_op(e) == "feldwert_entfernen"
+    assert befund_params(e) == {"investition_id": inv.id, "feld": "verbrauch_kwh"}
     assert "„Abgabe (kWh)“" in e.details, "Verbrauch ist eine Hauptgröße"
     antwort = await delete_feldwert_nicht_gefuehrt(inv.id, "verbrauch_kwh", db=db)
     assert antwort["entfernt"] == 1

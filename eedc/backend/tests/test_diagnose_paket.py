@@ -486,7 +486,8 @@ async def test_route_markdown_anhang_404_422(db):
 _ERZEUGER = {
     "datenquelle/ha_rueckgang.py": ["ha_zaehler_rueckgang"],
     "datenquelle/ha_sprung.py": ["ha_zaehlersprung"],
-    "datenquelle/quellen.py": ["drift_weitere_tage", "drift_tag", "drift_komponente"],
+    # E5: die Drift-Zeilen stehen in `drift_zeilen.py`, die Restzeile `drift_weitere_tage` ist entfallen (V2).
+    "datenquelle/drift_zeilen.py": ["drift_tag", "drift_komponente"],
     "datenquelle/speicher.py": ["batterie_vorzeichen_tage", "batterie_vorzeichen_tag"],
     "datenquelle/tage.py": ["tageswerte_fehlen_tage", "tageswerte_fehlen_tag"],
     "energieprofil.py": ["nachtrag_nach_eingefrorenem_zaehler", "counter_spike_tag"],

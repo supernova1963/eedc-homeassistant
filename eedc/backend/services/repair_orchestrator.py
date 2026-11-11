@@ -1627,6 +1627,9 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
             raise LookupError(f"Plan {plan_id} bereits ausgeführt")
         if plan_obj.expires_at <= datetime.now(timezone.utc):
             raise TimeoutError(f"Plan {plan_id} abgelaufen")
+    from backend.services.repair_protokoll import NichtsZuTun, mengen
+    if plan_obj.operation_preview.get("nichts_zu_tun"):  # E5: kein Lauf, keine Zeile (Route: 409)
+        raise NichtsZuTun(str(plan_obj.operation_preview["nichts_zu_tun"]))
 
     req = RepairOperationRequest(
         anlage_id=plan_obj.anlage_id,
@@ -1662,11 +1665,7 @@ async def execute(plan_id: UUID, db: AsyncSession) -> RepairResult:
 
     audit_log_ids = await _audit_ids_since(db, audit_marker)
 
-    actual: dict[str, int] = {}
-    for k, v in summary.items():
-        if isinstance(v, int):
-            actual[k] = v
-    actual["audit_log_count"] = len(audit_log_ids)
+    actual = {**mengen(summary), "audit_log_count": len(audit_log_ids)}
 
     result = RepairResult(
         plan_id=plan_id,

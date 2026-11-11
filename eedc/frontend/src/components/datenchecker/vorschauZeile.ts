@@ -67,7 +67,7 @@ export function ergebnisMeldung(result: RepairResult, knopf: string): ReparaturM
       return {
         art: 'ok',
         text: `${gefuellt} Monat(e) haben jetzt eine Ø Temperatur aus deinen eigenen Messwerten.`
-          + (offen > 0 ? ` Für ${offen} weitere reicht die Messreihe nicht zurück — dort hilft „Wetterdaten holen“ im Monat selbst.` : ''),
+          + (offen > 0 ? ` Für ${offen} weitere reicht die Messreihe nicht zurück — dort hilft „Auto-Fill“ unter „Wetterdaten (optional)“ im Monat selbst.` : ''),
       }
     }
     case 'kraftstoffpreis_backfill': {

@@ -22,6 +22,7 @@ Der Handgriff gehört an die Meldung: Bauform #349 (`geraetewerte_loeschen`).
 """
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date
 
 import pytest
@@ -84,9 +85,9 @@ async def test_klimaanlage_warmwasser_bekommt_eine_meldung_mit_handgriff(db):
     assert len(befunde) == 1
     e = befunde[0]
     assert "Warmwasserkreis" in e.meldung
-    assert e.action_kind == "feldwert_entfernen"
-    assert e.action_label == "Wert entfernen"
-    assert e.action_params == {"investition_id": klima.id, "feld": "warmwasser_kwh"}  # E3: Plan-Parameter
+    assert befund_op(e) == "feldwert_entfernen"
+    assert e.knopf == "Wert entfernen"
+    assert befund_params(e) == {"investition_id": klima.id, "feld": "warmwasser_kwh"}  # E3: Plan-Parameter
     assert "„Wert entfernen“" in e.details, "der genannte Weg ist der Knopf, kein Umtragen"
     assert "umträgst" not in e.details, "der alte Weg ins Leere darf nicht mehr genannt werden"
     assert e.investition_id == klima.id
@@ -105,7 +106,7 @@ async def test_mehrere_monate_ergeben_eine_meldung_und_alle_monate_in_der_aktion
     # E3: die Monate stehen im Plan der Operation FELDWERT_ENTFERNEN (Vorschau), nicht mehr in der Aktion.
     from backend.services.repair_orchestrator import RepairOperationRequest, RepairOperationType, plan
     p = await plan(RepairOperationRequest(anlage_id=klima.anlage_id, operation=RepairOperationType.FELDWERT_ENTFERNEN,
-                                          params=befunde[0].action_params), db)
+                                          params=befund_params(befunde[0])), db)
     assert p.operation_preview["monate"] == ["05/2026", "06/2026"]
     assert "2 Monat(en)" in befunde[0].meldung
 
@@ -130,8 +131,8 @@ async def test_die_klasse_reicht_ueber_die_klimaanlage_hinaus_speicher_netzladun
     befunde = _befunde(db, sp)
     assert len(befunde) == 1
     e = befunde[0]
-    assert e.action_kind == "feldwert_entfernen"
-    assert e.action_params["feld"] == "ladung_netz_kwh"
+    assert befund_op(e) == "feldwert_entfernen"
+    assert befund_params(e)["feld"] == "ladung_netz_kwh"
     assert "führt das Feld nicht mehr" in e.meldung
     assert "Warmwasserkreis" not in e.meldung, "der Klima-Text gehört nur zur Klimaanlage"
     assert "zurück" in e.details, "der Ausweg „Einstellung zurückstellen“ muss genannt sein"
@@ -176,9 +177,9 @@ async def test_der_gesamtlauf_des_checkers_traegt_die_meldung(db):
         monate={3: {"ladung_kwh": 300.0, "ladung_netz_kwh": 40.0}},
     )
     result = await DatenChecker(db).check_anlage(anlage.id)
-    treffer = [e for e in result.ergebnisse if e.action_kind == "feldwert_entfernen"]
+    treffer = [e for e in result.ergebnisse if befund_op(e) == "feldwert_entfernen"]
     assert len(treffer) == 1
-    assert treffer[0].action_params["feld"] == "ladung_netz_kwh"
+    assert befund_params(treffer[0])["feld"] == "ladung_netz_kwh"
 
 
 # ── Der Endpunkt ─────────────────────────────────────────────────────────────

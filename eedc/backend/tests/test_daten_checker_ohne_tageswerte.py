@@ -26,6 +26,7 @@ werden gestellt, damit der Test ohne DB und ohne HA läuft
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op, befund_params
 from datetime import date
 from types import SimpleNamespace
 
@@ -100,7 +101,7 @@ async def test_ohne_jede_tageszeile_meldet_der_check_genau_das(monkeypatch):
     assert "Datenquellen" in b.details
     assert "kWh" in b.details
     # E4 (Teil B Nr 19): Auskunft — kein Sprung-Knopf; «Was gilt» öffnet den Lösungsweg, der Weg steht im Text.
-    assert b.link is None
+    assert befund_link(b) is None
 
 
 async def test_zeile_aus_aelterer_quelle_meldet_weiterhin_die_quelle(monkeypatch):
@@ -119,7 +120,7 @@ async def test_zeile_aus_aelterer_quelle_meldet_weiterhin_die_quelle(monkeypatch
     assert "2026-08-04" in b.details
     assert "auto:monatsabschluss" in b.details
     assert "vom ?" not in b.details
-    assert (b.action_kind, b.action_params) == ("reaggregate_range", {"von": "2026-07-05", "bis": "2026-08-04"})
+    assert (befund_op(b), befund_params(b)) == ("reaggregate_range", {"von": "2026-07-05", "bis": "2026-08-04"})
 
 
 async def test_zeile_aus_ha_statistics_bleibt_ok(monkeypatch):

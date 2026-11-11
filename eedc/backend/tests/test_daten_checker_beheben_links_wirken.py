@@ -43,6 +43,7 @@ Knopf etwas?*) und `test_daten_checker_hinweise_mit_folge.py` (der Meldungstext
 selbst). Kein zweiter Turm: keine der beiden prüft ein Link-Ziel.
 """
 
+from backend.tests.werkzeug_befund import befund_link
 import re
 from pathlib import Path
 
@@ -208,7 +209,7 @@ async def test_n734_fehler_verlinken_die_erfassung_des_monats(db):
 
     assert len(netz) == 2
     # E4: der Sprung landet auf dem Feld des Monats (volle Lesart, `feld=`).
-    assert {e.link for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=einspeisung_kwh",
+    assert {befund_link(e) for e in netz} == {f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=einspeisung_kwh",
                                       f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=netzbezug_kwh"}
 
 
@@ -262,13 +263,31 @@ def _seite(link: str) -> tuple[str, list[str]]:
     return pfad + (f"#{teile['block']}" if "block" in teile else ""), sorted(teile)
 
 
+def _alle_ziele() -> list[dict]:
+    """E5: je Bauer-Variante das Ziel und sein Pfad (`link_aus_ziel`) — der Client bildet den Pfad selbst
+    (`frontend/src/lib/zielPfad.ts`, Vitest `zielPfad.test.ts`), seit die Antwort kein `link` mehr trägt (W-3)."""
+    from dataclasses import asdict
+
+    from backend.services.daten_checker import ziele
+    from backend.services.daten_checker.kategorien import link_aus_ziel
+    from backend.tests.test_daten_checker_ziele import _aufruf_varianten, _bauer_aufrufe, _module
+
+    paare = {}
+    for rel, n in _bauer_aufrufe():
+        for a, kw in _aufruf_varianten(n.func.id, n, _module(rel)):
+            z = getattr(ziele, n.func.id)(*a, **kw)
+            paare[link_aus_ziel(z)] = asdict(z)
+    paare["/komponenten/speicher?geraet=1"] = asdict(ziele.ziel_komponente(1, typ="speicher", jahresbilanz=True))
+    return [{"ziel": z, "pfad": p} for p, z in sorted(paare.items())]
+
+
 def _export() -> dict:
     seiten: dict[str, set[str]] = {}
     for link in _alle_links():
         seite, parameter = _seite(link)
         seiten.setdefault(seite, set()).update(parameter)
     return {"_kopf": "Erzeugt von backend/tests/test_daten_checker_beheben_links_wirken.py (E4, W-5) — nicht von Hand ändern.",
-            "seiten": {s: sorted(p) for s, p in sorted(seiten.items())}}
+            "seiten": {s: sorted(p) for s, p in sorted(seiten.items())}, "pfade": _alle_ziele()}
 
 
 def test_sprungziele_export_ist_aktuell():

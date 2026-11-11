@@ -19,6 +19,7 @@ test_zaehlerluecken_tagesregel.py (Aufbau `aggregate_day` über die LTS).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -213,7 +214,7 @@ async def test_tageszeile_traegt_nachtrag_und_checker_nennt_den_tag(db):
     assert "Aus der HA-Langzeitstatistik gerechnet" in e.details
     assert "eedc folgt hier Home Assistant: die Menge stand in HA in derselben Stunde" in e.details
     assert "in der der Zähler sie gemeldet hat" not in e.details
-    assert e.action_kind is None                          # nur benennen, kein Knopf
+    assert befund_op(e) is None                          # nur benennen, kein Knopf
     assert D_MINUS_1.isoformat() not in e.details
 
 

@@ -24,6 +24,7 @@ diesem festen Zeitpunkt — damit ist die Probe in jeder Zeitzone dieselbe.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from datetime import datetime, timedelta
 
 import pytest
@@ -101,7 +102,7 @@ async def test_reset_zaehler_wird_gemeldet_mit_beleg(db):
     assert "fortlaufenden Stand" in b.details
     assert "nie" in b.details
     # ⛔ Kein Reparatur-Knopf: eedc kann den Ruecksprung nicht heilen.
-    assert b.action_kind is None
+    assert befund_op(b) is None
 
 
 @pytest.mark.asyncio

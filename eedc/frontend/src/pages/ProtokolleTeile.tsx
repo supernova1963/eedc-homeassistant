@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { Button, Input, Select, SegmentControl } from '../components/ui'
 import { useCopyFeedback } from '../hooks'
+import { useNeustartWarten } from '../hooks/useNeustartWarten'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
 import { mitAnzahl } from '../lib/plural'
@@ -501,7 +502,7 @@ function AktivitaetenTab() {
 export function ProtokolleVerwaltung() {
   const [activeTab, setActiveTab] = useState<'logs' | 'activities'>('logs')
   const [logLevel, setLogLevel] = useState<string>('INFO')
-  const [restarting, setRestarting] = useState(false)
+  const neustart = useNeustartWarten()
 
   useEffect(() => {
     systemLogsApi.getLogLevel().then((r) => setLogLevel(r.level)).catch(() => {})
@@ -519,10 +520,10 @@ export function ProtokolleVerwaltung() {
 
   const handleRestart = async () => {
     if (!confirm('eedc wirklich neu starten? Die Verbindung wird kurz unterbrochen.')) return
-    setRestarting(true)
     try {
       await systemLogsApi.restart()
     } catch { /* Verbindung bricht ab — erwartet */ }
+    neustart.warten()  // E5.7 L5: auf eedc warten, dann neu laden — statt endlos zu drehen
   }
 
   const tabs = [
@@ -567,14 +568,15 @@ export function ProtokolleVerwaltung() {
             variant="ghost"
             size="sm"
             onClick={handleRestart}
-            disabled={restarting}
+            disabled={neustart.wartet}
             title="eedc neu starten"
           >
-            <RotateCw className={`h-4 w-4 mr-1.5 ${restarting ? 'animate-spin' : ''}`} />
-            {restarting ? 'Startet neu...' : 'Neustart'}
+            <RotateCw className={`h-4 w-4 mr-1.5 ${neustart.wartet ? 'animate-spin' : ''}`} />
+            {neustart.wartet ? 'Startet neu...' : 'Neustart'}
           </Button>
         </div>
       </div>
+      {neustart.hinweis && <p className="text-sm text-amber-700 dark:text-amber-300" role="status">{neustart.hinweis}</p>}
 
       {/* Tab Content */}
       {activeTab === 'logs' ? <SystemLogsTab /> : <AktivitaetenTab />}

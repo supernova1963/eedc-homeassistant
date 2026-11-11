@@ -21,6 +21,7 @@ Geräte-Wechsel sind kein Alt-Bestand, an ihnen gab es nur einen Speicher.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 import pytest
 
 from backend.core.berechnungen.speicher import anlagen_soc_prozent
@@ -200,7 +201,7 @@ async def test_checker_meldet_alt_tage_einer_mehrspeicher_anlage(db):
     assert len(befunde) == 1
     assert befunde[0].schwere == "warning"
     assert "2 Tag(e)" in befunde[0].meldung
-    assert befunde[0].action_kind == "reaggregate_range", "der Knopf steht daneben"
+    assert befund_op(befunde[0]) == "reaggregate_range", "der Knopf steht daneben"
     assert "Erzeugung, Verbrauch und Netzbezug sind es NICHT" in befunde[0].details
 
 

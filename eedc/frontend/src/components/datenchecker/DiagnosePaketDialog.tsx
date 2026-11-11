@@ -2,15 +2,20 @@
  * Diagnose-Paket (Etappe E1, Konzept Daten-Checker §8.3) — Dialog im Kopf des Daten-Checkers.
  *
  * Zeigt die Kopieren-Fassung (höchstens 20 KB) in einem bearbeitbaren Textfeld: der Anwender kann schwärzen, was er
- * nicht teilen will, und kopiert dann genau diesen Text. «Als Datei herunterladen» holt die ungekürzte Datei-Fassung
- * über `lib/download.ts` (fetch + Blob — in der Companion-App bleibt die Ingress-Sitzung erhalten).
+ * nicht teilen will, und kopiert dann genau diesen Text. «Als Datei herunterladen» holt die ungekürzte Datei-Fassung:
+ * außerhalb von Home Assistant über `lib/download.ts` (fetch + Blob), **im HA-Rahmen** (E5.7 L4) per direkter Navigation
+ * auf die Datei-Adresse — die Route sendet `Content-Disposition: attachment`, die Seite bleibt stehen; Blob-Downloads kamen
+ * in der Companion-App nicht an (Gernot, Lab rc29). Darunter immer der Hinweis auf das Kopieren.
  */
 import { useEffect, useState } from 'react'
 import { Copy, Download } from 'lucide-react'
 import { Alert, Button, LoadingSpinner, Modal, Textarea } from '../ui'
 import { datenCheckerApi, diagnosePaketUrl } from '../../api/datenChecker'
 import { useCopyFeedback } from '../../hooks/useCopyFeedback'
-import { downloadFile } from '../../lib/download'
+import { downloadFile, istImHaRahmen } from '../../lib/download'
+
+/** E5.7 L4: der Weg, wenn die App keine Datei speichert (Companion-App, manche Foren nehmen keine Datei). */
+export const DATEI_HINWEIS = 'Speichert die App keine Datei: Kopieren und in eine Notiz einfügen.'
 
 export const DIAGNOSE_HINWEIS =
   'Enthält Entity-Namen, Standort und Preise — entferne, was du nicht teilen willst. Zugangsdaten enthält es nie.'
@@ -46,6 +51,10 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
 
   const herunterladen = async () => {
     setFehler(null)
+    if (istImHaRahmen()) {
+      window.location.assign(diagnosePaketUrl(anlageId, 'datei'))
+      return
+    }
     try {
       await downloadFile(diagnosePaketUrl(anlageId, 'datei'), dateiname || `eedc_diagnose_${anlageId}.md`)
     } catch (e) {
@@ -80,6 +89,7 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
             {istKopiert() ? 'Kopiert' : 'Kopieren'}
           </Button>
         </div>
+        <p className="text-right text-xs text-gray-500 dark:text-gray-400" data-testid="datei-hinweis">{DATEI_HINWEIS}</p>
       </div>
     </Modal>
   )

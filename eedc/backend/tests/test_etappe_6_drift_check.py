@@ -17,6 +17,7 @@ Testet:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 
@@ -167,10 +168,10 @@ async def test_drift_ueber_schwelle_eintrag_mit_action():
     info_eintraege = [r for r in result if r.schwere == "info"]
     assert len(info_eintraege) == 1, f"Erwartet 1 INFO-Eintrag, bekommen {len(info_eintraege)}"
     eintrag = info_eintraege[0]
-    assert eintrag.action_kind == "reaggregate_day", f"action_kind: {eintrag.action_kind}"
-    assert eintrag.action_params == {"datum": test_datum.isoformat()}, \
-        f"action_params: {eintrag.action_params}"
-    assert eintrag.action_label == "Tag neu aufbauen"
+    assert befund_op(eintrag) == "reaggregate_day", f"action_kind: {befund_op(eintrag)}"
+    assert befund_params(eintrag) == {"datum": test_datum.isoformat()}, \
+        f"action_params: {befund_params(eintrag)}"
+    assert eintrag.knopf == "Tag neu aufbauen"
     assert test_datum.isoformat() in eintrag.meldung
     assert "35,0" in eintrag.meldung and "38,0" in eintrag.meldung
 
@@ -196,7 +197,7 @@ async def test_sortierung_nach_delta_desc():
         for p in patches:
             p.stop()
 
-    info_eintraege = [r for r in result if r.schwere == "info" and r.action_kind == "reaggregate_day"]
+    info_eintraege = [r for r in result if r.schwere == "info" and befund_op(r) == "reaggregate_day"]
     # 1.5 kWh ist 4.8 % → unter 5 %-Schwelle → nicht enthalten
     assert len(info_eintraege) == 2, f"Erwartet 2, bekommen {len(info_eintraege)}: {[e.meldung for e in info_eintraege]}"
     # Erster Eintrag = Δ=6 (größer)
@@ -226,11 +227,11 @@ async def test_max_20_eintraege_plus_rest_hinweis():
         for p in patches:
             p.stop()
 
-    action_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    action_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(action_eintraege) == 20, f"Erwartet 20 Action-Einträge, bekommen {len(action_eintraege)}"
-    rest_hinweis = [r for r in result if r.action_kind is None and "weitere" in r.meldung]
-    assert len(rest_hinweis) == 1, f"Erwartet 1 Rest-Hinweis, bekommen {len(rest_hinweis)}"
-    assert "5 weitere" in rest_hinweis[0].meldung, f"Rest: {rest_hinweis[0].meldung}"
+    # E5 V2: statt der Restzeile «… plus 5 weitere» trägt jede Tageszeile `werte.weitere = 5` (Gruppenzeile).
+    assert not [r for r in result if befund_op(r) is None and "weitere" in r.meldung]
+    assert {r.werte["weitere"] for r in action_eintraege} == {5}
 
 
 async def test_ha_lts_nicht_verfuegbar_leer():

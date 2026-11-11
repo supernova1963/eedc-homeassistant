@@ -12,6 +12,7 @@ Nutzer sie nicht in allen Typ-Blöcken suchen muss.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 from sqlalchemy import select
@@ -50,7 +51,7 @@ async def test_fehlendes_anschaffungsdatum_ist_ein_fehler(db):
     assert treffer[0].schwere == CheckSeverity.ERROR
     # Sprung direkt in das Formular der Komponente, nicht nur auf die Liste.
     inv_id = anlage.investitionen[0].id
-    assert treffer[0].link == f"/einstellungen/komponenten?bearbeiten={inv_id}&feld=anschaffungsdatum"
+    assert befund_link(treffer[0]) == f"/einstellungen/komponenten?bearbeiten={inv_id}&feld=anschaffungsdatum"
 
 
 async def test_mit_anschaffungsdatum_kein_befund(db):

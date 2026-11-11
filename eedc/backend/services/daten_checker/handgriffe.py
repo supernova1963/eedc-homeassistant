@@ -8,8 +8,12 @@ Abschnitt der Kategorie) und — nur für Auskünfte mit WARNING/ERROR — der A
 genau zwei). Die Laufzeit-Klasse eines Befunds ist **abgeleitet** (`CheckErgebnis.klasse`: Aktion · Sprung · Auskunft);
 bis E3/E4 behalten die Erzeuger ihr heutiges Verhalten, die Soll-Klasse steht nur hier.
 
-188 Codes in E2: 194 Erzeuger − 6 Zusammenlegungen (sie tragen den Code ihres Partners, Teil B «Erzeuger geht in den
-genannten Code»). Die 6 Restzeilen (Klasse `ENTFAELLT`) bestehen bis E5 und tragen ihren eigenen Code — 182 nach E5.
+**182 Codes seit E5** (Konzept §6): 194 Erzeuger − 6 Zusammenlegungen (V3: der Partner-Erzeuger ist entfallen, seine Zahlen
+steht in der Zeile des Ziel-Codes) − 6 Restzeilen «… plus n weitere» (V2: entfallen, n steht als `weitere` in der
+Gruppenzeile, `GRUPPEN`). Je Klasse: Sprung 117 · Aktion 18 · Auskunft 17 · OK 30.
+
+`knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
+Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
 """
 
 from dataclasses import dataclass
@@ -19,8 +23,9 @@ AKTION = "aktion"
 SPRUNG = "sprung"
 AUSKUNFT = "auskunft"
 OK = "ok"
-ENTFAELLT = "entfaellt"  # V2-Restzeile, entfällt in E5 (Zahl wandert in die Gruppenzeile)
-KLASSEN = (AKTION, SPRUNG, AUSKUNFT, OK, ENTFAELLT)
+KLASSEN = (AKTION, SPRUNG, AUSKUNFT, OK)
+#: Knopf-Text jeder Auskunft (Konzept §3.4): öffnet den Lösungsweg des Codes.
+WAS_GILT = "Was gilt"
 
 
 @dataclass(frozen=True)
@@ -29,13 +34,13 @@ class Handgriff:
     knopf: Optional[str]
     handbuch_anker: Optional[str]
     allowlist_grund: Optional[str] = None
+    #: E5 (E4 ⚑1, Master-Entscheid): Knopf eines Aktion-Codes, wenn der Erzeuger im Zweig ohne Reparaturweg auf das fehlende
+    #: Feld springt (Laufzeit-Klasse Sprung).
+    knopf_sprung: Optional[str] = None
 
 
 #: Auskunft trotz WARNING/ERROR — genau diese zwei, mit Grund (Konzept §3.4; ein dritter Eintrag ist rot, W-6).
 ALLOWLIST_AUSKUNFT_WARNUNG = ("pv_zaehler_steht", "zaehlerstand_reihe_bruch")
-
-#: Codes ohne eigenen Handbuch-Abschnitt (bis E5, dann Lösungsweg-Datei je Code).
-OHNE_HANDBUCH_ANKER = ("emob_zustand_wert_unbekannt", "emob_kennung_unbekannt")
 
 HANDGRIFFE: dict[str, Handgriff] = {
     'connector_monatswert_fehlt': Handgriff(SPRUNG, 'Zum Connector', '411-geraete-connector-ohne-monatswert'),  # Nr 1
@@ -60,34 +65,30 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'datenquelle_aggregate_aeltere_quelle': Handgriff(AKTION, 'Tage neu aufbauen', '49a-datenquellen--status'),  # Nr 20
     'betriebsart_standalone': Handgriff(AUSKUNFT, 'Was gilt', '49a-datenquellen--status'),  # Nr 21
     'drift_ok': Handgriff(OK, None, '417-datenquellen-drift'),  # Nr 22
-    'drift_weitere_tage': Handgriff(ENTFAELLT, None, '417-datenquellen-drift'),  # Nr 23
     'drift_tag': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '417-datenquellen-drift'),  # Nr 24
     'drift_komponente': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '417-datenquellen-drift'),  # Nr 25
     'zaehler_ruecksprung': Handgriff(SPRUNG, 'Sensor wechseln', '48a-zaehlerstaende--ruecksprung'),  # Nr 26
     'batterie_vorzeichen_ok': Handgriff(OK, None, '421-batterie-vorzeichen-historie'),  # Nr 27
     'batterie_vorzeichen_tage': Handgriff(AKTION, 'Tage neu aufbauen', '421-batterie-vorzeichen-historie'),  # Nr 28
     'batterie_vorzeichen_tag': Handgriff(AKTION, 'Tag neu aufbauen', '421-batterie-vorzeichen-historie'),  # Nr 29
-    'batterie_vorzeichen_weitere': Handgriff(ENTFAELLT, None, '421-batterie-vorzeichen-historie'),  # Nr 30
     'soc_ok': Handgriff(OK, None, '422-ladestand-mehrere-speicher'),  # Nr 31
     'soc_nur_ein_speicher_tage': Handgriff(AKTION, 'Tage neu aufbauen', '422-ladestand-mehrere-speicher'),  # Nr 32
     'tageswerte_ok': Handgriff(OK, None, '410-energieprofil--fehlende-tageswerte'),  # Nr 33
-    'tageswerte_fehlen_tage': Handgriff(AKTION, 'Tage neu aufbauen', '410-energieprofil--fehlende-tageswerte'),  # Nr 35
+    'tageswerte_fehlen_tage': Handgriff(AKTION, 'Tage neu aufbauen', '410-energieprofil--fehlende-tageswerte', knopf_sprung='Sensor zuordnen'),  # Nr 35
     'tageswerte_fehlen_tag': Handgriff(AKTION, 'Tag neu aufbauen', '410-energieprofil--fehlende-tageswerte'),  # Nr 36
-    'tageswerte_fehlen_weitere': Handgriff(ENTFAELLT, None, '410-energieprofil--fehlende-tageswerte'),  # Nr 37
     'pv_zaehler_steht': Handgriff(AUSKUNFT, 'Was gilt', '48e-pv--zaehler-steht', 'Entscheid Gernot (N-662): die Anzeige bleibt, der Befund benennt die Ursache — Sensor oder Gerät prüfen; eedc kann den eingefrorenen Zähler nicht heilen (Konzept §3.4).'),  # Nr 38
     'zeitzone_abweichung': Handgriff(SPRUNG, 'Zum Neustart', '412-zeitzone--abweichung-zu-home-assistant'),  # Nr 39
     'emob_autos_mehr_als_wallbox': Handgriff(SPRUNG, 'Monat öffnen', '439-heimladung-je-auto'),  # Nr 40
     'emob_dienstwagen_heimladung_fehlt': Handgriff(SPRUNG, 'Monat öffnen', '439-heimladung-je-auto'),  # Nr 41
     'emob_pv_ladung_groesser_gesamt': Handgriff(SPRUNG, 'Monat öffnen', '45-monatsdaten--plausibilitaet'),  # Nr 42
-    'emob_weitere_monate': Handgriff(ENTFAELLT, None, '45-monatsdaten--plausibilitaet'),  # Nr 43
     'phev_anteil_unbestimmt': Handgriff(SPRUNG, 'Gerät bearbeiten', '420-phev-anteil'),  # Nr 44
     'emob_gleicher_sensor_wallbox_eauto': Handgriff(SPRUNG, 'Zuordnung prüfen', '439-heimladung-je-auto'),  # Nr 45
     'emob_doppelzaehlung_ok': Handgriff(OK, None, '419-ladung-doppelt-gezaehlt'),  # Nr 46
     'emob_doppelzaehlung_tage': Handgriff(AKTION, 'Tage neu aufbauen', '419-ladung-doppelt-gezaehlt'),  # Nr 47
     'vergleichspreis_ok': Handgriff(OK, None, '424-vergleichspreise-benzinpreis'),  # Nr 48
     'vergleichspreis_fehlt': Handgriff(AKTION, 'Benzinpreise nachtragen', '424-vergleichspreise-benzinpreis'),  # Nr 49
-    'emob_zustand_wert_unbekannt': Handgriff(AUSKUNFT, 'Was gilt', None),  # Nr 50
-    'emob_kennung_unbekannt': Handgriff(SPRUNG, 'Kennung eintragen', None),  # Nr 51
+    'emob_zustand_wert_unbekannt': Handgriff(AUSKUNFT, 'Was gilt', '426-e-mobilitaet--unbekannter-zustand'),  # Nr 50
+    'emob_kennung_unbekannt': Handgriff(SPRUNG, 'Kennung eintragen', '427-e-mobilitaet--fahrzeug-unbekannt'),  # Nr 51
     'basis_zaehler_manuell_ok': Handgriff(OK, None, '46-energieprofil--zaehler-abdeckung'),  # Nr 52
     'basis_zaehler_fehlt': Handgriff(SPRUNG, 'Sensor zuordnen', '46-energieprofil--zaehler-abdeckung'),  # Nr 53
     'basis_zaehler_ok': Handgriff(OK, None, '46-energieprofil--zaehler-abdeckung'),  # Nr 54
@@ -97,7 +98,7 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'erzeuger_ueber_anlagenzaehler_ok': Handgriff(OK, None, '46-energieprofil--zaehler-abdeckung'),  # Nr 58
     'komponenten_manuell_ok': Handgriff(OK, None, '46-energieprofil--zaehler-abdeckung'),  # Nr 59
     'komponenten_ohne_zusatzzaehler': Handgriff(SPRUNG, 'Sensor zuordnen', '46-energieprofil--zaehler-abdeckung'),  # Nr 60
-    'tage_vor_umbau_ohne_regelmarke': Handgriff(AKTION, 'Tage neu aufbauen', '46-energieprofil--zaehler-abdeckung'),  # Nr 61
+    'tage_vor_umbau_ohne_regelmarke': Handgriff(AKTION, 'Tage neu aufbauen', '46-energieprofil--zaehler-abdeckung', knopf_sprung='Sensor zuordnen'),  # Nr 61
     'tage_ohne_kanal_deckung': Handgriff(AUSKUNFT, 'Was gilt', '46-energieprofil--zaehler-abdeckung'),  # Nr 62
     'einspeisung_groesser_erzeugung_tage': Handgriff(AKTION, 'Tage neu aufbauen', '47-energieprofil--plausibilitaet'),  # Nr 63
     'nachtrag_nach_eingefrorenem_zaehler': Handgriff(AUSKUNFT, 'Was gilt', '47-energieprofil--plausibilitaet'),  # Nr 64
@@ -113,7 +114,6 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'keine_monatsdaten': Handgriff(SPRUNG, 'Monat erfassen', '44-monatsdaten--vollstaendigkeit'),  # Nr 74
     'monate_vollstaendig_ok': Handgriff(OK, None, '44-monatsdaten--vollstaendigkeit'),  # Nr 75
     'monat_fehlt': Handgriff(SPRUNG, 'Monat erfassen', '44-monatsdaten--vollstaendigkeit'),  # Nr 76
-    'monate_fehlen_weitere': Handgriff(ENTFAELLT, None, '44-monatsdaten--vollstaendigkeit'),  # Nr 77
     'monatsdaten_plausi_ok': Handgriff(OK, None, '45-monatsdaten--plausibilitaet'),  # Nr 78
     'geraet_feld_fehlt_monate': Handgriff(SPRUNG, 'Monat öffnen', '43-investitionen'),  # Nr 79
     'geraet_monate_ok': Handgriff(OK, None, '43-investitionen'),  # Nr 80
@@ -212,7 +212,6 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'anschaffungsdatum_fehlt': Handgriff(SPRUNG, 'Gerät bearbeiten', '43-investitionen'),  # Nr 178
     'anschaffungskosten_fehlen': Handgriff(SPRUNG, 'Gerät bearbeiten', '43-investitionen'),  # Nr 179
     'wp_arbeitszahl_zu_hoch': Handgriff(SPRUNG, 'Monat öffnen', '45-monatsdaten--plausibilitaet'),  # Nr 180
-    'wp_arbeitszahl_weitere': Handgriff(ENTFAELLT, None, '45-monatsdaten--plausibilitaet'),  # Nr 181
     'wp_tarif_wallbox_netzbezug_zaehlt_nicht': Handgriff(SPRUNG, 'Tarif bearbeiten', '42a-eigener-waermepumpen-tarif'),  # Nr 182
     'paralleler_zaehler': Handgriff(SPRUNG, 'Zuordnung prüfen', '42a-eigener-waermepumpen-tarif'),  # Nr 183
     'evcc_netzladung_abweichung': Handgriff(SPRUNG, 'Zuordnung prüfen', '42a-eigener-waermepumpen-tarif'),  # Nr 184
@@ -252,6 +251,57 @@ KNOPF_JE_OPERATION: dict[str, str] = {
 def knopf_text(operation: Optional[str]) -> Optional[str]:
     """Knopf-Text einer Aktion (``None`` für eine Operation ohne Checker-Knopf)."""
     return KNOPF_JE_OPERATION.get(operation) if operation else None
+
+
+def knopf_fuer(befund) -> Optional[str]:
+    """Der Knopf-Text eines Befunds nach seiner Laufzeit-Klasse (E5.7 L1, ein Feld für alle drei Klassen): Aktion ⇒ Text
+    der Operation; Sprung ⇒ Katalog-Text (`knopf_sprung` bei einem Aktion-Code ohne Reparaturweg); Auskunft ⇒ «Was gilt»;
+    OK ⇒ kein Knopf. ``None`` bei einem Sprung ohne Katalog-Text — der Wächter W-4 macht das rot."""
+    if getattr(befund.schwere, "value", befund.schwere) == "ok":
+        return None
+    if befund.action is not None:
+        return knopf_text(befund.action.operation)
+    if befund.ziel is not None:
+        hg = handgriff(befund.code)
+        if hg is None:
+            return None
+        return hg.knopf if hg.klasse == SPRUNG else hg.knopf_sprung
+    return WAS_GILT
+
+
+@dataclass(frozen=True)
+class GruppenVorlage:
+    """Wortlaut einer Gruppenzeile (E5 V2): ``titel`` mit ``{n}`` = Zahl der Befunde (Glieder + weitere); ``glied`` nennt,
+    woraus das Glied entsteht (``datum`` aus ``werte.datum``, ``monat`` aus ``ziel.params.erfassen``); ``je`` trennt die
+    Gruppen (``investition_id`` bzw. ``feld`` des Ziels)."""
+    titel: str
+    glied: str
+    details: Optional[str] = None
+    je: tuple[str, ...] = ()
+
+
+#: Codes, deren Befunde die Oberfläche als **eine** Zeile mit Gliedern zeigt (Konzept §6 V2; Teil B «V2 Gruppe»). Die
+#: Restzeilen der Erzeuger (Teil B Nr 23, 30, 37, 43, 77, 181) sind entfallen — ihre Zahl steht als ``werte.weitere``.
+GRUPPEN: dict[str, GruppenVorlage] = {
+    "monat_fehlt": GruppenVorlage(
+        "{n} Monate fehlen", "monat",
+        "Der Jahreswert und der Community-Vergleich bleiben ohne sie unvollständig. Ein Monat öffnet seine Erfassung."),
+    "drift_tag": GruppenVorlage(
+        "{n} Tage weichen von Home Assistant ab", "datum",
+        "Ein Tag zeigt, was der Knopf an diesem Tag ändert; die größten Abweichungen stehen vorn."),
+    "batterie_vorzeichen_tag": GruppenVorlage(
+        "{n} Tage mit vertauschtem Batterie-Vorzeichen", "datum", "Ein Tag baut genau diesen Tag neu auf."),
+    "tageswerte_fehlen_tag": GruppenVorlage(
+        "{n} Tage ohne Tageswerte, Home Assistant hat Werte", "datum", "Ein Tag baut genau diesen Tag neu auf."),
+    "emob_pv_ladung_groesser_gesamt": GruppenVorlage(
+        "{n} Monate: PV-Ladung größer als Gesamtladung", "monat",
+        "Ein Monat öffnet seine Erfassung am Feld der PV-Ladung.", je=("investition_id",)),
+    "wp_arbeitszahl_zu_hoch": GruppenVorlage(
+        "{n} Monate mit unplausibel hoher Arbeitszahl", "monat",
+        "Ein Monat öffnet seine Erfassung an der Wärmemenge.", je=("investition_id",)),
+    "md_feld_nicht_erfasst": GruppenVorlage(
+        "{n} Monate ohne Pflichtwert", "monat", "Ein Monat öffnet seine Erfassung am fehlenden Feld.", je=("feld",)),
+}
 
 #: Wörter der Mechanik (Konzept §3.1 R4, Wächter W-4): verboten im Knopf-Text und in der einen Vorschau-Zeile je
 #: Operation — erlaubt in den Werkbank-Warnungen, die der Vorschau-Kasten unverändert zeigt (Gegenprüfung Ü3).

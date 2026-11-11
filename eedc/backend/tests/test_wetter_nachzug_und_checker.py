@@ -50,6 +50,7 @@ derselben Checker-Kategorie).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op, befund_params
 from datetime import date
 
 import pytest
@@ -312,8 +313,8 @@ async def test_checker_meldet_fehlende_strahlungswerte(db):
     assert "Wetterreihe nachziehen" in e.details
     # Der Nachzug ERSETZT vorhandene Werte, und die Vorschau muss vorher sagen,
     # wie viele — seit E3 geht der Knopf über Plan → Vorschau-Kasten → «Anwenden».
-    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
-    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr
+    assert (befund_op(e), befund_params(e)) == ("wetter_backfill", {}), befund_op(e)
+    assert befund_link(e) is None  # E4: eine Aktion trägt keinen Link mehr
 
 
 @pytest.mark.asyncio
@@ -325,8 +326,8 @@ async def test_w11_wetterreihe_nachziehen_ueber_plan_und_ausfuehren(db, brightsk
     _reset_state_for_tests()
     a = await _anlage(db, [_vormonat(HEUTE)])
     (e,) = [e for e in await _befunde(db, a.id) if "Globalstrahlung oder Sonnenstunden" in e.meldung]
-    p = await plan(RepairOperationRequest(anlage_id=a.id, operation=RepairOperationType(e.action_kind),
-                                          params=e.action_params), db)
+    p = await plan(RepairOperationRequest(anlage_id=a.id, operation=RepairOperationType(befund_op(e)),
+                                          params=befund_params(e)), db)
     assert p.estimated_changes["monate_ohne_werte"] == 1
     await execute(p.plan_id, db)
     assert not [x for x in await _befunde(db, a.id) if "Globalstrahlung oder Sonnenstunden" in x.meldung]
@@ -369,7 +370,7 @@ async def test_checker_meldet_eine_gemischte_reihe(db):
     e = zeilen[0]
     assert "1 Monat(e)" in e.meldung
     assert "Open-Meteo" in e.details and "Bright Sky" in e.details
-    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
+    assert (befund_op(e), befund_params(e)) == ("wetter_backfill", {}), befund_op(e)
 
 
 @pytest.mark.asyncio
@@ -450,8 +451,8 @@ async def test_checker_meldet_werte_ohne_festgehaltene_quelle(db):
     assert "nicht mehr" in e.details and "feststellen" in e.details
     assert "stammen aus einer anderen" not in e.meldung
     # E3: Aktion mit Vorschau — derselbe Lauf ersetzt, was schon dasteht; der Plan nennt es vorher.
-    assert (e.action_kind, e.action_params) == ("wetter_backfill", {}), e.action_kind
-    assert e.link is None  # E4: eine Aktion trägt keinen Link mehr
+    assert (befund_op(e), befund_params(e)) == ("wetter_backfill", {}), befund_op(e)
+    assert befund_link(e) is None  # E4: eine Aktion trägt keinen Link mehr
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ Self-contained:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -76,9 +77,9 @@ async def test_doppelt_getragene_tage_warnen_mit_bereichs_knopf():
     result = await _run(rows, _anlage())
     warn = [e for e in result if e.kategorie == _KAT and e.schwere == "warning"]
     assert warn, f"WARNING erwartet, bekam: {[(e.kategorie, e.schwere) for e in result]}"
-    assert warn[0].action_kind == "reaggregate_range"
-    assert warn[0].action_params["von"] == d1.isoformat()
-    assert warn[0].action_params["bis"] == d2.isoformat()
+    assert befund_op(warn[0]) == "reaggregate_range"
+    assert befund_params(warn[0])["von"] == d1.isoformat()
+    assert befund_params(warn[0])["bis"] == d2.isoformat()
     assert "2 Tag" in warn[0].meldung
 
 
@@ -121,5 +122,5 @@ async def test_span_ueber_max_begrenzt_bereich_und_nennt_rest():
     result = await _run(rows, _anlage())
     warn = [e for e in result if e.kategorie == _KAT][0]
     erwartet_von = max(alt, neu - timedelta(days=REAGGREGATE_RANGE_MAX_DAYS - 1))
-    assert warn.action_params["von"] == erwartet_von.isoformat()
+    assert befund_params(warn)["von"] == erwartet_von.isoformat()
     assert "außerhalb des" in warn.details

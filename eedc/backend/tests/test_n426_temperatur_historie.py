@@ -21,6 +21,7 @@ wäre es ein Kreislauf, und eine Prüfung mit Netzabruf hätte eine Nebenwirkung
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date
 
 import pytest
@@ -141,10 +142,10 @@ async def test_die_aktion_nennt_nur_die_erreichbaren_monate(db):
     )
     e = (await _befunde(db, a.id))[0]
 
-    assert e.action_kind == "temperatur_aus_messung"
-    assert e.action_label == "Temperatur aus Messung übernehmen"
+    assert befund_op(e) == "temperatur_aus_messung"
+    assert e.knopf == "Temperatur aus Messung übernehmen"
     # E3 (Ü5): die Operation füllt alle erreichbaren Monate ohne Parameter; die Monate nennt der Plan.
-    assert e.action_params == {}
+    assert befund_params(e) == {}
     from backend.services.repair_orchestrator import RepairOperationRequest, RepairOperationType, plan
     p = await plan(RepairOperationRequest(anlage_id=a.id, operation=RepairOperationType.TEMPERATUR_AUS_MESSUNG), db)
     assert p.operation_preview["monate"] == ["01/2026", "02/2026"]
@@ -161,8 +162,8 @@ async def test_ohne_erreichbare_monate_gibt_es_keinen_knopf(db):
     e = (await _befunde(db, a.id))[0]
 
     assert e.meldung == "Ø Temperatur fehlt in 2 Monat(en)"
-    assert e.action_kind is None
-    assert "Wetterdaten holen" in e.details
+    assert befund_op(e) is None
+    assert "„Auto-Fill“" in e.details  # E5: der Knopf heißt im Monatsabschluss «Auto-Fill»
 
 
 @pytest.mark.asyncio
@@ -172,7 +173,7 @@ async def test_alle_monate_gepflegt_ergibt_eine_ok_zeile(db):
 
     assert len(befunde) == 1
     assert befunde[0].schwere == "ok"
-    assert befunde[0].action_kind is None
+    assert befund_op(befunde[0]) is None
 
 
 # ═══ Klausel 2 — die Aktion füllt genau die erreichbaren Lücken ═════════════
@@ -243,7 +244,7 @@ async def test_nach_der_aktion_meldet_der_checker_die_restlichen(db):
 
     nachher = (await _befunde(db, a.id))[0]
     assert nachher.meldung == "Ø Temperatur fehlt in 1 Monat(en)"
-    assert nachher.action_kind is None, (
+    assert befund_op(nachher) is None, (
         "Für den letzten Monat reicht die Reihe nicht — dann darf auch kein "
         "Knopf mehr dastehen."
     )
@@ -267,7 +268,7 @@ async def test_ein_gepflegter_monat_macht_keinen_anderen_erreichbar(db):
 
     befunde = await _befunde(db, a.id)
     assert befunde[0].meldung == "Ø Temperatur fehlt in 1 Monat(en)"
-    assert befunde[0].action_kind is None
+    assert befund_op(befunde[0]) is None
 
     ergebnis = await temperatur_aus_messung_uebernehmen(a.id, db)
     assert ergebnis["gefuellt"] == 0

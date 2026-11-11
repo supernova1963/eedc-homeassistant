@@ -26,9 +26,10 @@ export interface HelpDoc {
 export const HELP_BASE = 'help/' // relativ — Vite base ist './'
 export const DEFAULT_SLUG = 'benutzerhandbuch'
 
-/** Ergebnis des Link-Rewrites: intern (`?doc=`), Anker (`#`) oder extern. */
+/** Ergebnis des Link-Rewrites: intern (`?doc=`), Anker (`#`), App-Ziel (`eedc:/…`, E5) oder extern. */
 export type LinkRewrite =
   | { type: 'internal'; target: string }
+  | { type: 'app'; target: string }
   | { type: 'anchor'; target: string }
   | { type: 'external'; target: string }
 
@@ -143,6 +144,9 @@ export function useHelpKatalog(
   const rewriteLink = useMemo(() => {
     return (href: string | undefined): LinkRewrite => {
       if (!href) return { type: 'external', target: '#' }
+      // E5 (Lösungsweg je Code): ein Schritt in eedc als `eedc:/einstellungen/…` — der Pfad eines Ziel-Bauers (Wächter
+      // W-13); in der App ein Sprung, auf der Website reiner Text (remark-doku-links).
+      if (href.startsWith('eedc:/')) return { type: 'app', target: href.slice('eedc:'.length) }
       if (href.startsWith('#')) return { type: 'anchor', target: href }
       // Absolute URLs (http/https/mailto/…) immer extern
       if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return { type: 'external', target: href }
@@ -192,6 +196,17 @@ export function makeHelpLinkComponent(opts: {
             const [params, hash] = target.replace(/^\?/, '').split('#')
             navigate(`${basePath}?${params}${hash ? '#' + hash : ''}`)
           }}
+          className="text-primary-600 dark:text-primary-400 hover:underline"
+        >
+          {children}
+        </a>
+      )
+    }
+    if (type === 'app') {
+      return (
+        <a
+          href={`#${target}`}
+          onClick={(e) => { e.preventDefault(); navigate(target) }}
           className="text-primary-600 dark:text-primary-400 hover:underline"
         >
           {children}

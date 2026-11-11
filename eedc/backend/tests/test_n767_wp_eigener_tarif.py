@@ -10,6 +10,7 @@ Differenz (zwei Tarife, WP-Monate innerhalb UND außerhalb des Fensters). Prüfd
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op
 from datetime import date
 
 from sqlalchemy import select
@@ -77,7 +78,7 @@ async def test_info_mit_obergrenze_aus_fenster_und_differenz(db):
 
     assert len(ergebnisse) == 1, [e.meldung for e in ergebnisse]
     e = ergebnisse[0]
-    assert (e.kategorie, e.schwere, e.link, e.action_kind) == (_KAT, "info", None, None)
+    assert (e.kategorie, e.schwere, befund_link(e), befund_op(e)) == (_KAT, "info", None, None)
     assert "22,00 ct gegen 30,00 ct" in e.meldung
     assert "bis zu 96 €" in e.meldung
     assert "1.200 kWh" in e.details and "8,00 ct" in e.details

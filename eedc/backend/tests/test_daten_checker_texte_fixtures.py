@@ -2,8 +2,8 @@
 
 Die Texte der **HA-gebundenen** Befunde erscheinen auf den Standalone-Kopien des Text-Golden-Masters nie — sie hält je
 Code eine eingefrorene Fixture `fixtures/daten_checker_texte/<code>.json` (Kategorie, Schwere, Meldung, Details, Code,
-Soll-Klasse aus dem Katalog, Laufzeit-Klasse). 12 Kategorien, 30 Erzeuger, 28 Codes (33/34 → `tageswerte_ok`,
-122/123 → `stand_sensoren_ok` teilen den Code; 116 trägt `betriebsart_standalone`). Je Erzeuger ein Fall gegen Fake-HA —
+Soll-Klasse aus dem Katalog, Laufzeit-Klasse). 12 Kategorien, seit E5 25 Fälle, 24 Codes (33/34 sind zwei Wortlaute von
+`tageswerte_ok`; Restzeilen und Nr 116/123 entfallen, V2/V3). Je Erzeuger ein Fall gegen Fake-HA —
 die Szenarien nehmen die Helfer der Tests, die den Text bisher hielten. Fehlt eine Fixture ⇒ rot; weicht der Text ab ⇒ rot.
 
 Fixtures neu schreiben (nur, wenn eine Etappe Texte bewusst ändert — E2 ändert keine):
@@ -199,25 +199,27 @@ async def _batterie_konflikt(db, mp):
     return await _batterie(40, -4.0, 4.0, mp)
 
 
-#: (Nr Teil B, Code, Szenario) — die 30 Erzeuger der 12 HA-gebundenen Kategorien (E0 (2)).
+#: (Nr Teil B, Code, Szenario) — die Erzeuger der 12 HA-gebundenen Kategorien (E0 (2)). E5: die Restzeilen Nr 23, 30, 37
+#: (V2) und die übersprungene LTS-Prüfung Nr 116 (V3 ⇒ Kopfzeile «nicht ausführbar», V4) sind entfallen, Nr 123 ist in
+#: Nr 122 aufgegangen (eine OK-Zeile mit beiden Zahlen). 33/34 bleiben zwei Wortlaute EINER Stelle.
 FAELLE = [
-    (22, "drift_ok", _drift_ok), (23, "drift_weitere_tage", _drift_kappung), (24, "drift_tag", _drift_kappung),
+    (22, "drift_ok", _drift_ok), (24, "drift_tag", _drift_kappung),
     (25, "drift_komponente", _drift_kappung), (3, "ha_zaehlersprung", _ha_sprung), (2, "ha_zaehler_rueckgang", _ha_rueckgang),
-    (39, "zeitzone_abweichung", _zeitzone), (116, "betriebsart_standalone", _lts_ohne_ha),
+    (39, "zeitzone_abweichung", _zeitzone),
     (117, "kwh_sensoren_nicht_in_lts", _lts_befunde), (118, "counter_ohne_state_class", _lts_befunde),
     (119, "kwh_ohne_summen_spalte", _lts_befunde), (120, "counter_ohne_summen_spalte", _lts_befunde),
     (121, "stand_sensoren_nicht_in_lts", _lts_befunde), (122, "stand_sensoren_ok", _lts_ok),
-    (123, "stand_sensoren_ok", _lts_ok), (124, "leistungs_slot_energie_sensor", _einheit_energie_im_leistungsslot),
+    (124, "leistungs_slot_energie_sensor", _einheit_energie_im_leistungsslot),
     (125, "energie_slot_leistungssensor", _einheit_leistung_im_energieslot), (4, "klima_modus_wert_unbekannt", _klima_modus_wert),
     (50, "emob_zustand_wert_unbekannt", _emob_zustand), (111, "sensor_ohne_langzeitstatistik", _sensor_ohne_lts),
     (33, "tageswerte_ok", _tageswerte_alle_da), (34, "tageswerte_ok", _tageswerte_ha_hat_nichts),
     (35, "tageswerte_fehlen_tage", _tageswerte_luecken), (36, "tageswerte_fehlen_tag", _tageswerte_luecken),
-    (37, "tageswerte_fehlen_weitere", _tageswerte_luecken), (27, "batterie_vorzeichen_ok", _batterie_ok),
+    (27, "batterie_vorzeichen_ok", _batterie_ok),
     (28, "batterie_vorzeichen_tage", _batterie_konflikt), (29, "batterie_vorzeichen_tag", _batterie_konflikt),
-    (30, "batterie_vorzeichen_weitere", _batterie_konflikt), (51, "emob_kennung_unbekannt", _emob_kennung),
+    (51, "emob_kennung_unbekannt", _emob_kennung),
 ]
 #: Je Code mit mehreren Erzeugern: welcher Treffer des Szenarios zu welcher Nr gehört (Reihenfolge der Ausgabe).
-_INDEX = {123: 1}
+_INDEX: dict = {}
 
 
 def _eintrag(e) -> dict:
@@ -228,9 +230,16 @@ def _eintrag(e) -> dict:
             "klasse_katalog": soll.klasse if soll else None, "klasse_laufzeit": e.klasse}
 
 
-def test_dreissig_faelle_zwoelf_kategorien_achtundzwanzig_codes():
-    assert len(FAELLE) == 30 and len({nr for nr, _c, _s in FAELLE}) == 30
-    assert len({c for _n, c, _s in FAELLE}) == 28
+def test_fuenfundzwanzig_faelle_vierundzwanzig_codes():
+    """E5: 30 − 3 Restzeilen − Nr 116 − Nr 123 = 25 Fälle, 28 − 4 = 24 Codes (12 Kategorien unverändert)."""
+    assert len(FAELLE) == 25 and len({nr for nr, _c, _s in FAELLE}) == 25
+    assert len({c for _n, c, _s in FAELLE}) == 24
+
+
+async def test_lts_ohne_ha_ohne_eigene_zeile(db, monkeypatch):
+    """E5 V3/V4 (Teil B Nr 116 ⇒ 21): ohne Home Assistant steht in der Kategorie keine Zeile «übersprungen» mehr — die
+    Prüfung zählt der Kopf als nicht ausführbar (`test_daten_checker_verdichtung.py`)."""
+    assert await _lts_ohne_ha(db, monkeypatch) == []
 
 
 def test_jede_fixture_existiert_und_keine_waise():

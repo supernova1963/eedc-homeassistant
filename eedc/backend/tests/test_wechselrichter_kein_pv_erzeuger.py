@@ -13,6 +13,7 @@ drei PV-Quellen inaktiv, keine wirksam; die Live-Kachel fiel auf die
 Trapez-Hochrechnung zurueck (+31 %).
 """
 
+from backend.tests.werkzeug_befund import befund_link
 import pytest
 from datetime import date
 
@@ -164,7 +165,7 @@ class TestDatenCheckerNenntDieAltzuordnung:
             self._wr(), "WR", mapping)
         assert len(r) == 1
         assert r[0].schwere == "warning"
-        assert "datenquellen" in r[0].link
+        assert "datenquellen" in befund_link(r[0])
 
     def test_auch_ein_reiner_monatswert_wird_gemeldet(self):
         r = self._checker()._check_wechselrichter_pv_altbestand(

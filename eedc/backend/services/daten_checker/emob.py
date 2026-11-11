@@ -4,6 +4,7 @@ Daten-Checker — E-Mob-Pool-Pflege & Sensor-Doppelmapping (`EmobChecks`).
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
+from collections import Counter
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -424,6 +425,7 @@ class EmobChecks:
         # Datums-Listen absteigend (Regel 0a), Gerät als zweites Kriterium.
         treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
         MAX_EINZEL = 10
+        weitere = Counter(t[0] for t in treffer[MAX_EINZEL:])  # E5 V2: statt Restzeile `weitere` an der Gruppenzeile
         for inv_id, name, jahr, monat, gesamt_f, pv_f in treffer[:MAX_EINZEL]:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING.value, code="emob_pv_ladung_groesser_gesamt",
@@ -440,14 +442,7 @@ class EmobChecks:
                     "wissen: Trage den Monat noch einmal nach."
                 ),
                 ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="ladung_pv_kwh"),
-                investition_id=inv_id,
-            ))
-
-        if len(treffer) > MAX_EINZEL:
-            rest = len(treffer) - MAX_EINZEL
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value, code="emob_weitere_monate",
-                meldung=f"… plus {rest} weitere(r) Monat(e) mit demselben Widerspruch",
+                investition_id=inv_id, werte={"weitere": weitere[inv_id]} if weitere[inv_id] else None,
             ))
 
         return ergebnisse

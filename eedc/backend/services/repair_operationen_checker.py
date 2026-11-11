@@ -16,8 +16,8 @@ trägt nur die Enum-Werte und den Verweis auf ``plan_operation``/``execute_opera
 
 **«Nichts zu tun» statt 409** (Gegenprüfung Ü4): wo die Route mit 409 antwortet (Feld am Gerät vorgesehen, Monat hat
 noch eine Zählerzeile) bzw. wo nichts zu ändern ist, meldet der Plan ``operation_preview["nichts_zu_tun"]`` mit dem Satz;
-der Vorschau-Kasten zeigt ihn ohne «Anwenden». Wird ein Konflikt-Plan trotzdem ausgeführt, wirft der Lauf
-``ValueError`` (400) und schreibt nichts; «nichts zu ändern» läuft idempotent mit 0. **Protokoll:** die eine Zeile ``repair`` schreibt ``repair_orchestrator.execute()`` (W-12); der Lauf der
+der Vorschau-Kasten zeigt ihn ohne «Anwenden». Seit E5 lehnt ``repair_orchestrator.execute()`` jeden solchen Plan ab
+(``repair_protokoll.NichtsZuTun`` ⇒ 409, kein Lauf, keine Protokollzeile). **Protokoll:** die eine Zeile ``repair`` schreibt ``repair_orchestrator.execute()`` (W-12); der Lauf der
 Spiegel-Operation baut den Tag ohne eigenen Plan und ohne eigene Zeile (``eigener_lauf=False``).
 
 Werkbank-Warnung nur beim Löschen von Zählerständen (N-312); die eine Vorschau-Zeile in Anwender-Sprache baut der Client aus ``estimated_changes``

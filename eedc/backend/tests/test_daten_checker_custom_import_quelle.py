@@ -12,6 +12,7 @@ Datenquelle → OK(Quelle), (3) sonst → WARNING (unverändertes Verhalten).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 from sqlalchemy import select
@@ -188,11 +189,11 @@ async def test_warnung_verweist_auf_datenquellen_flaeche(db):
     checker = DatenChecker(db)
     ergebnisse = checker._check_energieprofil_abdeckung(anlage, monatsdaten)
 
-    mit_link = [r for r in ergebnisse if r.link]
+    mit_link = [r for r in ergebnisse if befund_link(r)]
     assert mit_link, "Abdeckungs-Warnungen sollen einen Sprungpunkt tragen"
     for r in mit_link:
-        assert r.link.startswith("/einstellungen/datenquellen"), (
-            f"Link muss auf die Datenquellen-Fläche zeigen, war: {r.link}"
+        assert befund_link(r).startswith("/einstellungen/datenquellen"), (
+            f"Link muss auf die Datenquellen-Fläche zeigen, war: {befund_link(r)}"
         )
         assert "Sensor-Mapping-Wizard" not in (r.details or ""), (
             "Der Wizard existiert seit v4.0.0 nicht mehr"

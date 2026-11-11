@@ -8,7 +8,7 @@
  * `spiegel-abgleich-tag` ruft der Checker nicht mehr. Schwesterdatei: `components/datenchecker/BefundHandgriff.test.tsx`.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const check = vi.fn()
@@ -37,10 +37,14 @@ const DRIFT = {
   kategorie: 'datenquelle_drift', schwere: 'info',
   meldung: 'Wärmepumpe: 1 Tag(e) weichen von HA-Statistics ab (größte Abweichung 2026-11-02: 123.909,6 → 13,7 kWh)',
   details: 'Für diese Komponente steht in eedc an 1 Tag(en) ein anderer Wert als in Home Assistant.',
-  link: '/einstellungen/daten?block=energieprofil&karte=werkbank',
-  action_kind: 'spiegel_abgleich_tag',
-  action_params: { datum: '2026-11-02' },
-  action_label: 'Aus Home Assistant neu übernehmen',
+  code: 'drift_komponente',
+  action: { operation: 'spiegel_abgleich_tag', params: { datum: '2026-11-02' }, label: 'Aus Home Assistant neu übernehmen' },
+  knopf: 'Aus Home Assistant neu übernehmen',
+}
+
+/** E5 K2: jede Aktion steht oben in der Leiste «Das kannst du jetzt tun» (und in ihrer Kategorie, K1 offen). */
+async function leiste() {
+  return within(await screen.findByTestId('handgriff-leiste'))
 }
 
 const PLAN = {
@@ -79,9 +83,7 @@ describe('Daten-Checker: «Aus Home Assistant neu übernehmen» (N-790, E3: Plan
         abgleich: { fehler: 0 }, reaggregation: { status: 'ok', datum: '2026-11-02' } },
     })
     renderVerwaltung()
-    // Ein INFO-Befund klappt seine Kategorie nicht von selbst auf.
-    fireEvent.click(await screen.findByText('Datenquelle – Drift zu HA-Statistics'))
-    fireEvent.click(await screen.findByRole('button', { name: /Aus Home Assistant neu übernehmen/ }))
+    fireEvent.click((await leiste()).getByRole('button', { name: /Aus Home Assistant neu übernehmen/ }))
     await waitFor(() => expect(plan).toHaveBeenCalledWith({
       anlage_id: 7, operation: 'spiegel_abgleich_tag', params: { datum: '2026-11-02' },
     }))
@@ -98,18 +100,16 @@ describe('Daten-Checker: «Aus Home Assistant neu übernehmen» (N-790, E3: Plan
     plan.mockResolvedValue({ plan: PLAN, expires_in_seconds: 3600 })
     execute.mockRejectedValue(new Error('Home Assistant ist nicht erreichbar'))
     renderVerwaltung()
-    fireEvent.click(await screen.findByText('Datenquelle – Drift zu HA-Statistics'))
-    fireEvent.click(await screen.findByRole('button', { name: /Aus Home Assistant neu übernehmen/ }))
+    fireEvent.click((await leiste()).getByRole('button', { name: /Aus Home Assistant neu übernehmen/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Anwenden' }))
     expect(await screen.findByText('Home Assistant ist nicht erreichbar')).toBeTruthy()
-    expect(screen.getByText(DRIFT.meldung)).toBeTruthy()
+    expect(screen.getAllByText(DRIFT.meldung).length).toBeGreaterThan(0)
   })
 
   it('«Lösungsweg» öffnet das Panel neben der Liste', async () => {
     check.mockResolvedValue(antwort([DRIFT]))
     renderVerwaltung()
-    fireEvent.click(await screen.findByText('Datenquelle – Drift zu HA-Statistics'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Lösungsweg' }))
+    fireEvent.click((await leiste()).getByRole('button', { name: 'Lösungsweg' }))
     expect(await screen.findByTestId('loesungsweg-panel')).toBeTruthy()
   })
 })

@@ -32,6 +32,7 @@ N-57 (Forum simon42 #89667/83, dietmar1968) — der Check darf nur anbieten, was
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
@@ -183,22 +184,22 @@ async def test_basis_zaehler_leer_wird_gemeldet():
     result, reads = await _run_check(_make_anlage(), tz_list, [_make_inv()], ha_func)
     assert reads == 1, f"Nur der eine Verdachts-Tag darf HA kosten, waren {reads}"
 
-    range_eintraege = [r for r in result if r.action_kind == "reaggregate_range"]
+    range_eintraege = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(range_eintraege) == 1, f"Erwartet 1 Bereichs-Eintrag, bekommen {result}"
     re_ = range_eintraege[0]
     assert re_.kategorie == _KAT
     assert re_.schwere == "warning"
-    assert re_.action_params == {
+    assert befund_params(re_) == {
         "von": tag.isoformat(), "bis": tag.isoformat(),
-    }, f"params: {re_.action_params}"
-    assert re_.action_label == "Tage neu aufbauen"
+    }, f"params: {befund_params(re_)}"
+    assert re_.knopf == "Tage neu aufbauen"
     # Reichweite muss benannt sein: Tag/Stunden ja, Monatswerte nein.
     assert "NICHT die Monatswerte" in re_.details, re_.details
     assert "Statistik-Import" in re_.details, re_.details
 
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) == 1, f"Erwartet 1 Einzeltag, bekommen {len(day_eintraege)}"
-    assert day_eintraege[0].action_params == {"datum": tag.isoformat()}
+    assert befund_params(day_eintraege[0]) == {"datum": tag.isoformat()}
     # Die Meldung nennt, was HA hat — sonst ist der Knopf ein Blindflug.
     assert "22,0 kWh" in day_eintraege[0].meldung, day_eintraege[0].meldung
 
@@ -209,13 +210,13 @@ async def test_fehlende_tageszeile_wird_gemeldet():
     ha_func = lambda d: {"einspeisung": 20.0, "netzbezug": 2.0, "pv_7": 30.0}
     result, _ = await _run_check(_make_anlage(), _volle_zeilen(2), [_make_inv()], ha_func)
 
-    range_eintraege = [r for r in result if r.action_kind == "reaggregate_range"]
+    range_eintraege = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(range_eintraege) == 1, f"Erwartet Befund, bekommen {result}"
     # PV taucht in der Aufzählung auf (Bezeichnung statt Roh-Key)
     assert "Dach Süd" in range_eintraege[0].details, range_eintraege[0].details
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) >= 1
-    assert any(d.action_params["datum"] == tag.isoformat() for d in day_eintraege)
+    assert any(befund_params(d)["datum"] == tag.isoformat() for d in day_eintraege)
 
 
 async def test_ha_liefert_nichts_kein_befund():
@@ -230,7 +231,7 @@ async def test_ha_liefert_nichts_kein_befund():
     ha_func = lambda d: {}
     result, _ = await _run_check(_make_anlage(), tz_list, [_make_inv()], ha_func)
 
-    assert not any(r.action_kind for r in result), f"Kein Knopf erwartet: {result}"
+    assert not any(befund_op(r) for r in result), f"Kein Knopf erwartet: {result}"
     assert len(result) == 1 and result[0].schwere == "ok", result
     assert "nicht mehr füllen" in result[0].details, result[0].details
 
@@ -260,7 +261,7 @@ async def test_pv_null_auf_vorhandener_zeile_ist_drift_check_turf():
     result, reads = await _run_check(_make_anlage(), tz_list, [_make_inv()], ha_func)
 
     assert reads == 0, f"Kein LTS-Read nötig, waren {reads}"
-    assert not any(r.action_kind for r in result), f"Kein Knopf erwartet: {result}"
+    assert not any(befund_op(r) for r in result), f"Kein Knopf erwartet: {result}"
     assert len(result) == 1 and result[0].schwere == "ok", result
 
 
@@ -293,18 +294,19 @@ async def test_span_groesser_31_fenster_begrenzt():
     ha_func = lambda d: {"einspeisung": 22.0, "netzbezug": 3.0, "pv_7": 30.0}
     result, _ = await _run_check(_make_anlage(), tz_list, [_make_inv()], ha_func)
 
-    range_eintraege = [r for r in result if r.action_kind == "reaggregate_range"]
+    range_eintraege = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(range_eintraege) == 1
-    params = range_eintraege[0].action_params
+    params = befund_params(range_eintraege[0])
     neuester = today - timedelta(days=1)
     assert params["bis"] == neuester.isoformat()
     assert params["von"] == (neuester - timedelta(days=30)).isoformat(), params["von"]
     assert "ältere" in range_eintraege[0].details
 
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) == 15, f"Erwartet 15 Einzeltage, bekommen {len(day_eintraege)}"
-    rest_hinweise = [r for r in result if r.action_kind is None and "weitere" in r.meldung]
-    assert len(rest_hinweise) == 1
+    # E5 V2: keine Restzeile mehr — die übrigen 25 Tage stehen als `werte.weitere` an jedem Glied.
+    assert not [r for r in result if befund_op(r) is None and "weitere" in r.meldung]
+    assert {r.werte.get("weitere") for r in day_eintraege} == {25}
 
 
 async def test_ohne_leistungssensor_kein_knopf():
@@ -325,16 +327,17 @@ async def test_ohne_leistungssensor_kein_knopf():
     )
 
     assert result, "Der Befund selbst muss bleiben"
-    assert not any(r.action_kind for r in result), \
-        f"Kein Knopf erwartet, bekommen {[r.action_kind for r in result]}"
+    assert not any(befund_op(r) for r in result), \
+        f"Kein Knopf erwartet, bekommen {[befund_op(r) for r in result]}"
     assert len(result) == 1, f"Keine Einzeltag-Zeilen ohne Reparatur-Pfad: {result}"
     d = result[0].details
     assert "NICHT möglich" in d, d
     assert "Leistungs-Zuordnung" in d, d
     # Der Weg raus muss dabeistehen, nicht nur die Absage.
     assert "Datenquellen" in d, d
-    # E4 (Teil B Nr 35, Konzept §3.4): ohne Knopf ist der Befund eine Auskunft — kein Link, der Text nennt den Weg.
-    assert result[0].link is None, result[0].link
+    # E5 (E4 ⚑1, Master-Entscheid): ohne Reparaturweg springt der Befund auf die fehlende Leistungs-Zuordnung.
+    assert befund_link(result[0]) == "/einstellungen/datenquellen?feld=netzbezug_w", befund_link(result[0])
+    assert (result[0].klasse, result[0].knopf) == ("sprung", "Sensor zuordnen")
 
 
 async def test_standalone_mqtt_energie_erlaubt_die_reparatur():
@@ -353,7 +356,7 @@ async def test_standalone_mqtt_energie_erlaubt_die_reparatur():
         _make_anlage(mit_live=False), tz_list, [_make_inv()], ha_func,
         mqtt_energie=True,
     )
-    assert any(r.action_kind == "reaggregate_range" for r in result), \
+    assert any(befund_op(r) == "reaggregate_range" for r in result), \
         f"Mit MQTT-Energie muss der Knopf da sein: {result}"
 
 
@@ -368,7 +371,7 @@ async def test_lts_read_cap_wird_benannt():
     result, reads = await _run_check(_make_anlage(), tz_list, [_make_inv()], ha_func)
 
     assert reads == 45, f"Erwartet 45 LTS-Reads (Cap), waren {reads}"
-    summe = [r for r in result if r.action_kind == "reaggregate_range"][0]
+    summe = [r for r in result if befund_op(r) == "reaggregate_range"][0]
     assert "noch nicht gegen HA geprüft" in summe.details, summe.details
     assert "45" in summe.details
 
@@ -382,7 +385,7 @@ async def test_vor_inbetriebnahme_nicht_gemeldet():
 
     # Nur gestern + vorgestern sind prüfbar, nicht 90 Tage.
     assert reads == 2, f"Erwartet 2 LTS-Reads ab Inbetriebnahme, waren {reads}"
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) == 2, f"Erwartet 2 Einzeltage, bekommen {len(day_eintraege)}"
 
 
@@ -420,12 +423,12 @@ async def test_inaktive_komponente_wird_nicht_gemeldet():
     ha_func = lambda d: {"waermepumpe_8": 6.0, "waermepumpe_9": 4.0}
     result, reads = await _run_check(anlage, tz_list, invs, ha_func)
 
-    summe = [r for r in result if r.action_kind == "reaggregate_range"]
+    summe = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(summe) == 1, f"Die aktive WP muss weiter gemeldet werden: {result}"
     assert "WP neu" in summe[0].details, summe[0].details
     assert "WP alt" not in summe[0].details, \
         f"Die inaktive WP darf nicht auftauchen: {summe[0].details}"
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert all("WP alt" not in d.meldung for d in day_eintraege), \
         [d.meldung for d in day_eintraege]
     assert reads == 45, f"Verdachtstage bleiben (aktive WP), waren {reads}"
@@ -447,8 +450,8 @@ async def test_anschaffung_mitten_im_fenster():
     result, reads = await _run_check(anlage, tz_list, invs, ha_func)
 
     assert reads == 5, f"Nur die 5 Tage ab Anschaffung dürfen HA kosten, waren {reads}"
-    tage = {r.action_params["datum"] for r in result
-            if r.action_kind == "reaggregate_day"}
+    tage = {befund_params(r)["datum"] for r in result
+            if befund_op(r) == "reaggregate_day"}
     erwartet = {(today - timedelta(days=i)).isoformat() for i in range(1, 6)}
     assert tage == erwartet, f"Gemeldete Tage: {sorted(tage)}"
 
@@ -467,8 +470,8 @@ async def test_stilllegung_mitten_im_fenster_inklusiv():
     result, reads = await _run_check(anlage, tz_list, invs, ha_func)
 
     assert reads == 4, f"Erwartet 4 aktive Tage (8…5 zurück), waren {reads}"
-    tage = {r.action_params["datum"] for r in result
-            if r.action_kind == "reaggregate_day"}
+    tage = {befund_params(r)["datum"] for r in result
+            if befund_op(r) == "reaggregate_day"}
     assert (today - timedelta(days=5)).isoformat() in tage, \
         f"Stilllegungstag ist inklusiv: {sorted(tage)}"
     assert (today - timedelta(days=4)).isoformat() not in tage, \
@@ -493,5 +496,5 @@ async def test_dietmars_konstellation_kein_knopf():
     result, reads = await _run_check(anlage, tz_list, invs, ha_func)
 
     assert reads == 0, f"Nichts versprochen → nichts abzufragen, waren {reads}"
-    assert not any(r.action_kind for r in result), f"Kein Knopf erwartet: {result}"
+    assert not any(befund_op(r) for r in result), f"Kein Knopf erwartet: {result}"
     assert len(result) == 1 and result[0].schwere == "ok", result

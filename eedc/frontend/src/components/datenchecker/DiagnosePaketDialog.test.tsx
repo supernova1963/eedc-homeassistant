@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import DiagnosePaketDialog, { DIAGNOSE_HINWEIS } from './DiagnosePaketDialog'
+import DiagnosePaketDialog, { DATEI_HINWEIS, DIAGNOSE_HINWEIS } from './DiagnosePaketDialog'
 
 const kopiere = vi.fn()
 vi.mock('../../hooks/useCopyFeedback', () => ({
@@ -12,7 +12,8 @@ vi.mock('../../hooks/useCopyFeedback', () => ({
 }))
 // `downloadFile` wird ersetzt: die echte Fassung klickt einen `<a download>` (jsdom kennt keine Navigation).
 const download = vi.fn().mockResolvedValue(undefined)
-vi.mock('../../lib/download', () => ({ downloadFile: (...a: unknown[]) => download(...a) }))
+const imHaRahmen = vi.fn(() => false)
+vi.mock('../../lib/download', () => ({ downloadFile: (...a: unknown[]) => download(...a), istImHaRahmen: () => imHaRahmen() }))
 const paket = vi.fn()
 vi.mock('../../api/datenChecker', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/datenChecker')>()),
@@ -23,6 +24,7 @@ describe('DiagnosePaketDialog', () => {
   beforeEach(() => {
     kopiere.mockClear()
     download.mockClear()
+    imHaRahmen.mockReturnValue(false)
     paket.mockReset().mockResolvedValue({ text: '<!-- eedc-diagnose v1 -->\n# Paket', dateiname: 'eedc_diagnose_Haus_2026-11-10.md' })
   })
 
@@ -48,6 +50,23 @@ describe('DiagnosePaketDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Als Datei herunterladen/ }))
     await waitFor(() => expect(download).toHaveBeenCalledWith(
       './api/system/diagnose-paket/7?fassung=datei', 'eedc_diagnose_Haus_2026-11-10.md'))
+  })
+
+  it('E5.7 L4: im HA-Rahmen kein fetch, sondern Navigation auf die Datei-Adresse; der Hinweis steht immer da', async () => {
+    imHaRahmen.mockReturnValue(true)
+    const assign = vi.fn()
+    const vorher = window.location
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...vorher, assign } })
+    try {
+      render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+      await screen.findByRole('textbox')
+      expect(screen.getByTestId('datei-hinweis').textContent).toBe(DATEI_HINWEIS)
+      fireEvent.click(screen.getByRole('button', { name: /Als Datei herunterladen/ }))
+      expect(assign).toHaveBeenCalledWith('./api/system/diagnose-paket/7?fassung=datei')
+      expect(download).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: vorher })
+    }
   })
 
   it('lädt nichts, solange der Dialog zu ist', () => {

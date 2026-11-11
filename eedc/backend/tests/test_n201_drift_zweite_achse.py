@@ -29,6 +29,7 @@ die hier abgegrenzt wird).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -127,7 +128,7 @@ async def test_wallbox_drift_wird_gemeldet_und_beim_namen_genannt():
     e = treffer[0]
     assert e.kategorie == _KAT
     assert "5 Tag(e)" in e.meldung, e.meldung
-    assert e.action_kind == "reaggregate_day"
+    assert befund_op(e) == "reaggregate_day"
     assert e.investition_id == 7, "Der Befund gehört an sein Gerät."
     # Die PV-Achse bleibt still — sie stimmt ja.
     assert not any("PV" in x.meldung for x in ergebnisse), [x.meldung for x in ergebnisse]
@@ -182,7 +183,7 @@ async def test_nicht_gelesen_ist_nicht_null_auch_auf_der_zweiten_achse():
         tz_list, [_inv(3, "pv-module"), _inv(5, "waermepumpe", "Vitocal")], ha_func,
     )
     assert len(ergebnisse) == 1 and ergebnisse[0].schwere == "ok", ergebnisse
-    assert not any(e.action_kind == "reaggregate_day" for e in ergebnisse)
+    assert not any(befund_op(e) == "reaggregate_day" for e in ergebnisse)
 
 
 async def test_kleine_abweichung_bleibt_unter_der_schwelle():

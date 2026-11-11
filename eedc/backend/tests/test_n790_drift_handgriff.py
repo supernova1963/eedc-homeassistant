@@ -23,6 +23,7 @@ Recorder-Statistik, Juni/Juli 2026 Kanal-Tage, «heute» fest). Schwesterdateien
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 
@@ -105,9 +106,9 @@ async def test_a_pv_achse_mit_spiegel_traegt_den_handgriff(uhr, monkeypatch):
         await _spiegel_veraltet(ds, "inv:1:pv_erzeugung_kwh", _ts(TAG, 12), 10.0)
         erg = await _drift(ds)
     (e,) = [e for e in erg if e.meldung.startswith(TAG.isoformat())]
-    assert e.action_kind == AKTION
-    assert e.action_label == LABEL
-    assert e.action_params == {"datum": TAG.isoformat()}
+    assert befund_op(e) == AKTION
+    assert e.knopf == LABEL
+    assert befund_params(e) == {"datum": TAG.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Hast du in Home Assistant korrigiert, ist das der Weg." in e.details
     assert "Tag reparieren" not in e.details
@@ -122,9 +123,9 @@ async def test_a_komponenten_achse_mit_spiegel_traegt_den_handgriff(uhr, monkeyp
         erg = await _drift(ds)
     (e,) = [e for e in erg if "weichen von HA-Statistics ab" in e.meldung]
     assert e.investition_id == 3
-    assert e.action_kind == AKTION
-    assert e.action_label == LABEL
-    assert e.action_params == {"datum": TAG.isoformat()}
+    assert befund_op(e) == AKTION
+    assert e.knopf == LABEL
+    assert befund_params(e) == {"datum": TAG.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Tag reparieren" not in e.details
 
@@ -136,10 +137,10 @@ async def test_a_ohne_spiegel_bleibt_tag_reparieren(uhr, monkeypatch):
         _ha(monkeypatch, komp)
         await _tz_setzen(ds, [TAG], komponenten_kwh={k: v / 2 for k, v in komp[TAG].items()})
         erg = await _drift(ds)
-    zeilen = [e for e in erg if e.action_kind]
+    zeilen = [e for e in erg if befund_op(e)]
     assert zeilen, [e.meldung for e in erg]
-    assert {e.action_kind for e in zeilen} == {"reaggregate_day"}
-    assert {e.action_label for e in zeilen} == {"Tag neu aufbauen"}  # E3: Knopf-Text aus dem Katalog
+    assert {befund_op(e) for e in zeilen} == {"reaggregate_day"}
+    assert {e.knopf for e in zeilen} == {"Tag neu aufbauen"}  # E3: Knopf-Text aus dem Katalog
     assert any("„Tag neu aufbauen“" in (e.details or "") for e in zeilen)  # E4: Text = Knopf-Text des Katalogs
 
 
@@ -169,9 +170,9 @@ async def test_b_zaehlersprung_traegt_den_handgriff(db):
 
     (e,) = await _Pruefer(db)._check_ha_zaehlersprung(a, jetzt=JETZT)
     rueckkehr = datetime.fromtimestamp(z[23][0]).date()
-    assert e.action_kind == AKTION
-    assert e.action_label == LABEL
-    assert e.action_params == {"datum": rueckkehr.isoformat()}
+    assert befund_op(e) == AKTION
+    assert e.knopf == LABEL
+    assert befund_params(e) == {"datum": rueckkehr.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Reparatur-Werkbank" not in e.details
     assert "Wert anpassen" in e.details and "Monatsabschluss neu" in e.details
@@ -184,9 +185,9 @@ async def test_b_rueckgang_traegt_den_handgriff(db):
     a = await _a(db)
     await _kanal(db, a, "basis:netzbezug", "sensor.netzbezug", _r(rueckgaenge={RUECKGANG_STUNDE: 540.0}))
     (e,) = await _Pruefer(db)._check_ha_rueckgang(a)
-    assert e.action_kind == AKTION
-    assert e.action_label == LABEL
-    assert e.action_params == {"datum": RUECKGANG_STUNDE.date().isoformat()}
+    assert befund_op(e) == AKTION
+    assert e.knopf == LABEL
+    assert befund_params(e) == {"datum": RUECKGANG_STUNDE.date().isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "nächtlichen Abgleich" in e.details and "Monatsabschluss neu" in e.details
 
@@ -229,10 +230,10 @@ async def test_c_kette_spiegel_veraltet_route_gleicht_ab_und_der_befund_verschwi
         with am.umgebung(form, ds.svc):
             vorher = await _drift(ds)
             (e,) = [e for e in vorher if "weichen von HA-Statistics ab" in e.meldung]
-            assert e.action_kind == AKTION and e.action_params["datum"] == TAG.isoformat()
+            assert befund_op(e) == AKTION and befund_params(e)["datum"] == TAG.isoformat()
 
             antwort = await spiegel_abgleich_tag(
-                ds.aid, SpiegelAbgleichTagRequest(datum=e.action_params["datum"]), db=ds.db)
+                ds.aid, SpiegelAbgleichTagRequest(datum=befund_params(e)["datum"]), db=ds.db)
             nachher = await _drift(ds)
         eintraege = (await ds.db.execute(select(ActivityLog).where(
             ActivityLog.anlage_id == ds.aid, ActivityLog.kategorie == "ha_statistics"))).scalars().all()
@@ -273,8 +274,8 @@ async def test_c_kette_ueber_plan_und_ausfuehren(uhr, monkeypatch):
         monkeypatch.setattr("backend.services.strompreis_markt_service.fetch_marktpreise", _ohne_boerse)
         with am.umgebung(form, ds.svc):
             (e,) = [e for e in await _drift(ds) if "weichen von HA-Statistics ab" in e.meldung]
-            p = await plan(RepairOperationRequest(anlage_id=ds.aid, operation=RepairOperationType(e.action_kind),
-                                                  params=e.action_params), ds.db)
+            p = await plan(RepairOperationRequest(anlage_id=ds.aid, operation=RepairOperationType(befund_op(e)),
+                                                  params=befund_params(e)), ds.db)
             assert p.operation_preview["hat_spiegel"] is True and p.estimated_changes["spiegel_kanaele"] >= 1
             r = await execute(p.plan_id, ds.db)
             nachher = await _drift(ds)

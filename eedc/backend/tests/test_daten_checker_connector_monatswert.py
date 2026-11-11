@@ -31,6 +31,7 @@ Fixtures an die Produktion anzugleichen — nicht das Prädikat aufzuweichen.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import datetime, timedelta, timezone
 
 from backend.models import Anlage
@@ -78,7 +79,7 @@ async def test_ein_snapshot_meldet_den_wortlaut_der_route():
     # E5: der geprüfte 404-Text der Route ist die Quelle des Hinweises.
     assert "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn" in b.details
     assert "1 Snapshot" in b.details
-    assert b.link
+    assert befund_link(b)
 
 
 async def test_zwei_umrahmende_snapshots_kein_befund():

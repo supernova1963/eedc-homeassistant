@@ -19,6 +19,7 @@ ausdrücklich als N-201 fest.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -61,9 +62,9 @@ def test_der_gemessene_anlassfall_wird_gemeldet():
     assert "100.5" in e.meldung.replace(",", ".")
     assert "86.0" in e.meldung.replace(",", ".")
     assert e.investition_id == 7, "Der Befund gehört an sein Gerät (Komponenten-Hub)."
-    assert e.link == "/einstellungen/daten?erfassen=2026-06&geraet=7&feld=ladung_pv_kwh"  # E4: Sprung aufs Feld
+    assert befund_link(e) == "/einstellungen/daten?erfassen=2026-06&geraet=7&feld=ladung_pv_kwh"  # E4: Sprung aufs Feld
     # Kein Reparatur-Knopf: eedc kann nicht wissen, welcher Wert stimmt.
-    assert e.action_kind is None
+    assert befund_op(e) is None
 
 
 def test_stimmige_zeile_schweigt():
@@ -101,7 +102,7 @@ def test_andere_geraetetypen_bleiben_aussen_vor():
 
 
 def test_viele_monate_werden_gedeckelt():
-    """12 widersprüchliche Monate → 10 Einzelmeldungen plus ein Rest-Hinweis."""
+    """12 widersprüchliche Monate → 10 Einzelmeldungen; E5 V2: die übrigen 2 als `werte.weitere` (keine Restzeile)."""
     inv = _inv(7, "wallbox", "Wallbox Garage", [
         _imd(2026, m, ladung_kwh=10.0, ladung_pv_kwh=30.0) for m in range(1, 13)
     ])
@@ -109,6 +110,6 @@ def test_viele_monate_werden_gedeckelt():
     warnungen = [e for e in ergebnisse if e.schwere == "warning"]
     rest = [e for e in ergebnisse if e.schwere == "info"]
     assert len(warnungen) == 10, f"Erwartet 10, bekommen {len(warnungen)}"
-    assert len(rest) == 1 and "2 weitere" in rest[0].meldung
+    assert rest == [] and {e.werte["weitere"] for e in warnungen} == {2}
     # Neueste zuerst (Regel 0a: Datums-Listen absteigend).
     assert "12/2026" in warnungen[0].meldung

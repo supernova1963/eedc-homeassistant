@@ -22,6 +22,7 @@ test_p433_2_datenquellen_betriebsart.py (Fixture der Client-Probe), test_p433_0_
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 import pytest
@@ -285,7 +286,7 @@ async def test_meldet_je_geraet_die_sensoren_ohne_measurement(db, monkeypatch):
                     MATHEK["heizstab_leistung_w"]: "total"})
     (e,) = await _meldungen(db, anlage, monkeypatch, fake)
     # E4 (Teil B Nr 111, Konzept §3.4): Auskunft — der Weg (`state_class` in HA) steht im Text, kein Sprung-Link.
-    assert (e.kategorie, e.schwere, e.investition_id, e.link) == (_KAT, CheckSeverity.INFO.value, inv.id, None)
+    assert (e.kategorie, e.schwere, e.investition_id, befund_link(e)) == (_KAT, CheckSeverity.INFO.value, inv.id, None)
     assert e.meldung == "„Nibe S1255“: 2 Sensor(en) ohne Langzeitstatistik — Live ja, Tagesverlauf nein"
     assert "Rücklauf (sensor.return_line_bt3_30008)" in e.details
     assert "Leistung Zusatzheizung (sensor.power_internal_additional_heat_31028)" in e.details

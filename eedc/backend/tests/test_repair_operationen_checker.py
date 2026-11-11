@@ -19,6 +19,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
+
+from backend.services.repair_protokoll import NichtsZuTun
 from sqlalchemy import select, text
 
 from backend.models import Anlage, Monatsdaten
@@ -110,7 +112,8 @@ async def test_feldwert_am_geraet_vorgesehen_ist_nichts_zu_tun(db):
                                             investition_id=inv.id, feld="warmwasser_kwh"))
     assert p.estimated_changes == {} and "im Monatsabschluss erreichbar" in p.operation_preview["nichts_zu_tun"]
     vorher = await _dump(db)
-    with pytest.raises(ValueError, match="Nichts zu tun"):
+    # E5: ein Plan «nichts zu tun» wird nicht ausgeführt (`NichtsZuTun` ⇒ Route 409), keine Protokollzeile.
+    with pytest.raises(NichtsZuTun, match="im Monatsabschluss erreichbar"):
         await execute(p.plan_id, db)
     await db.rollback()
     assert {t: v for t, v in (await _dump(db)).items() if t != "activity_log"} == \
@@ -150,8 +153,9 @@ async def test_geraetewerte_mit_zaehlerzeile_ist_nichts_zu_tun(db):
     await db.commit()
     p = await _plan_ohne_schreiben(db, _req(a.id, RepairOperationType.GERAETEWERTE_LOESCHEN, jahr=2024, monat=6))
     assert "hat noch eine Zählerzeile" in p.operation_preview["nichts_zu_tun"]
-    with pytest.raises(ValueError, match="Nichts zu tun"):
+    with pytest.raises(NichtsZuTun, match="hat noch eine Zählerzeile"):
         await execute(p.plan_id, db)
+    assert await _repair_zeilen(db) == []
 
 
 # ── SPIEGEL_ABGLEICH_TAG (Plan ohne HA; Ausführen = Lauf der Route) ────────────────────────────────────────────

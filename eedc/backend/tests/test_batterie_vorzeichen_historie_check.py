@@ -16,6 +16,7 @@ Testet:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
@@ -121,18 +122,18 @@ async def test_vorzeichen_konflikt_erkannt():
     ha_func = lambda d: {"batterie_5": 4.0}  # frisch, ENTLADUNG positiv
     result = await _run_check(tz_list, [_make_inv()], ha_func)
 
-    range_eintraege = [r for r in result if r.action_kind == "reaggregate_range"]
+    range_eintraege = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(range_eintraege) == 1, f"Erwartet 1 Bereichs-Eintrag, bekommen {result}"
     re_ = range_eintraege[0]
     assert re_.schwere == "warning"
-    assert re_.action_params == {
+    assert befund_params(re_) == {
         "von": test_datum.isoformat(), "bis": test_datum.isoformat(),
-    }, f"params: {re_.action_params}"
-    assert re_.action_label == "Tage neu aufbauen"
+    }, f"params: {befund_params(re_)}"
+    assert re_.knopf == "Tage neu aufbauen"
 
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) == 1, f"Erwartet 1 Einzeltag-Eintrag, bekommen {len(day_eintraege)}"
-    assert day_eintraege[0].action_params == {
+    assert befund_params(day_eintraege[0]) == {
         "datum": test_datum.isoformat(),
     }
 
@@ -146,7 +147,7 @@ async def test_gleiche_richtung_magnitude_drift_kein_konflikt():
 
     assert len(result) == 1, f"Erwartet nur OK-Eintrag, bekommen {result}"
     assert result[0].schwere == "ok"
-    assert not any(r.action_kind for r in result)
+    assert not any(befund_op(r) for r in result)
 
 
 async def test_kein_batterie_netto_leer():
@@ -172,9 +173,9 @@ async def test_span_groesser_31_fenster_begrenzt():
     ha_func = lambda d: {"batterie_5": 4.0}
     result = await _run_check(tz_list, [_make_inv()], ha_func)
 
-    range_eintraege = [r for r in result if r.action_kind == "reaggregate_range"]
+    range_eintraege = [r for r in result if befund_op(r) == "reaggregate_range"]
     assert len(range_eintraege) == 1
-    params = range_eintraege[0].action_params
+    params = befund_params(range_eintraege[0])
     neuester = today - timedelta(days=1)
     erwartet_von = neuester - timedelta(days=30)  # 31-Tage-Fenster (max 31 Tage)
     assert params["bis"] == neuester.isoformat()
@@ -182,7 +183,9 @@ async def test_span_groesser_31_fenster_begrenzt():
     # Rest-Hinweis im Summen-Detail
     assert "ältere" in range_eintraege[0].details
     # Einzeltag-Einträge auf 15 begrenzt + Rest-Hinweis-Eintrag
-    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    day_eintraege = [r for r in result if befund_op(r) == "reaggregate_day"]
     assert len(day_eintraege) == 15, f"Erwartet 15 Einzeltage, bekommen {len(day_eintraege)}"
-    rest_hinweise = [r for r in result if r.action_kind is None and "weitere" in r.meldung]
-    assert len(rest_hinweise) == 1
+    # E5 V2: keine Restzeile mehr — die übrigen Tage stehen als `werte.weitere` an jedem Glied.
+    assert not [r for r in result if befund_op(r) is None and "weitere" in r.meldung]
+    weitere = {r.werte.get("weitere") for r in day_eintraege}
+    assert len(weitere) == 1 and weitere.pop() > 0

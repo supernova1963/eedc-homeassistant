@@ -16,6 +16,7 @@ die ein Anwender tatsächlich sieht:
    ([[feedback_kein_grosser_heiler_knopf]]).
 """
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 from sqlalchemy import select
@@ -217,7 +218,7 @@ async def test_gepflegter_weg_b_bekommt_den_hinweis_mit_handlung(db):
     assert "03/2025 bis 05/2025" in hinweis.details
     assert "Speicher" in hinweis.details and "Gehört zu" in hinweis.details
     assert "bleiben erhalten" in hinweis.details
-    assert hinweis.link
+    assert befund_link(hinweis)
 
 
 async def test_ohne_gepflegte_akku_werte_kein_hinweis(db):

@@ -186,7 +186,7 @@ async def test_execute_schreibt_genau_eine_protokollzeile(db):
     assert z.details_json["operation"] == "reset_cloud_import"
     assert z.details_json["actual_changes"] == result.actual_changes
     assert z.anlage_id == anlage.id and z.erfolg is True
-    assert z.aktion == "Reparatur: Cloud-Import-Werte zurücksetzen — —"
+    assert z.aktion == "Reparatur: Cloud-Import-Werte zurücksetzen"  # E5: ohne Bereich endet die Aktion nicht auf «— —»
     assert z.details.startswith("Änderungen: ")
 
 
@@ -231,7 +231,7 @@ async def test_wrapper_route_und_werkbank_route_protokollieren(db, monkeypatch):
     anlage = await _make_anlage(db)
     await kraftstoffpreis_backfill_tages(anlage.id, db=db)
     zeilen = await _orchestrator_zeilen(db)
-    assert [(z.aktion, z.anlage_id) for z in zeilen] == [("Reparatur: Kraftstoffpreise nachpflegen — —", anlage.id)]
+    assert [(z.aktion, z.anlage_id) for z in zeilen] == [("Reparatur: Kraftstoffpreise nachpflegen", anlage.id)]
 
     await _seed_cloud_md(db, anlage.id, 2026, 4)
     plan_obj = await plan(RepairOperationRequest(
@@ -648,3 +648,31 @@ async def test_die_schluessel_der_vorschau_sind_der_vertrag_mit_der_anzeige(db):
         "boundaries_changed", "slots_changed", "counter_fields_changed"
     }, (f"Die Schlüssel haben sich geändert: {sorted(p.estimated_changes)} — "
         "die Label-Map im Client zieht nicht von allein nach")
+
+
+def test_e5_actual_changes_nur_mengen():
+    """E5 (Nachmessung E3 ⚑5): Kennungen, Kalenderangaben und Wahrheitswerte der Operations-Antwort sind keine Mengen —
+    sie stehen weder in der Ergebnis- noch in der Protokollzeile."""
+    from backend.services.repair_protokoll import mengen
+
+    antwort = {"anlage_id": 1, "investition_id": 7, "monatsdaten_id": 3, "jahr": 2026, "monat": 5, "erfolg": True,
+               "gefuellt": 2, "geloescht": 0, "satz": "x", "monate": ["05/2026"]}
+    assert mengen(antwort) == {"gefuellt": 2, "geloescht": 0}
+
+
+async def test_e5_execute_nichts_zu_tun_ist_409_ohne_zeile(db, monkeypatch):
+    """E5: ein Plan «nichts zu tun» ⇒ Route 409 mit dem Satz, kein Lauf, keine Protokollzeile."""
+    from fastapi import HTTPException
+
+    from backend.api.routes.repair import execute_plan
+    from backend.services import repair_orchestrator as orch
+
+    anlage = await _make_anlage(db)
+    req = RepairOperationRequest(anlage_id=anlage.id, operation=RepairOperationType.RESET_CLOUD_IMPORT, params={})
+    plan_obj = await plan(req, db)
+    plan_obj.operation_preview["nichts_zu_tun"] = "Es gibt nichts zurückzusetzen."
+    with pytest.raises(HTTPException) as e:
+        await execute_plan(plan_obj.plan_id, db=db)
+    assert e.value.status_code == 409 and "Es gibt nichts zurückzusetzen." in e.value.detail
+    assert await _orchestrator_zeilen(db) == []
+    assert plan_obj.plan_id not in orch._results

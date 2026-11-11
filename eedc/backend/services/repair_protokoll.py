@@ -47,13 +47,29 @@ OPERATION_LABELS = {
 }
 
 
+class NichtsZuTun(Exception):
+    """E5 (Nachmessung E3 ⚑): ein Plan «nichts zu tun» (``operation_preview["nichts_zu_tun"]``) wird nicht ausgeführt —
+    die Route antwortet 409 mit dem Satz des Plans, und es entsteht keine Protokollzeile."""
+
+
+#: Ganzzahlen einer Operations-Antwort, die keine Mengen sind (E5, Nachmessung E3 ⚑5): Kennungen und Kalenderangaben.
+_KEINE_MENGE = ("jahr", "monat")
+
+
+def mengen(summary: dict[str, Any]) -> dict[str, int]:
+    """Die Mengen einer Operations-Antwort für ``actual_changes`` (Ergebnis- und Protokollzeile): Ganzzahlen ohne
+    Kennungen (``…_id``), Kalenderangaben und Wahrheitswerte."""
+    return {k: v for k, v in summary.items()
+            if isinstance(v, int) and not isinstance(v, bool) and not k.endswith("_id") and k not in _KEINE_MENGE}
+
+
 def _bereich(params: dict[str, Any]) -> str:
-    """Datum oder «von – bis» aus den Parametern, sonst «—»."""
+    """« — Datum» bzw. « — von – bis» aus den Parametern, sonst leer (die Aktion endet nie auf «— —»)."""
     if params.get("datum"):
-        return str(params["datum"])
+        return f" — {params['datum']}"
     if params.get("von") or params.get("bis"):
-        return f"{params.get('von') or '…'} – {params.get('bis') or '…'}"
-    return "—"
+        return f" — {params.get('von') or '…'} – {params.get('bis') or '…'}"
+    return ""
 
 
 def _details(summary: dict[str, Any], actual: dict[str, int]) -> str:
@@ -75,7 +91,7 @@ async def protokolliere_lauf(
     }
     await log_activity(
         kategorie="repair",
-        aktion=f"Reparatur: {OPERATION_LABELS.get(op, op)} — {_bereich(params)}",
+        aktion=f"Reparatur: {OPERATION_LABELS.get(op, op)}{_bereich(params)}",
         erfolg=True,
         details=_details(summary, actual),
         details_json={

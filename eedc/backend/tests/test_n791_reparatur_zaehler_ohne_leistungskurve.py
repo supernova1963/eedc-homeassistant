@@ -21,6 +21,7 @@ Nachtlauf bleibt · (d) Lauf L mit Leistungskurve · (e) Drift-Zeilen Bestand/Ka
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 import time as _zeit
 from contextlib import ExitStack, asynccontextmanager, contextmanager
 from datetime import date, datetime, timedelta
@@ -360,8 +361,8 @@ async def test_w11_aus_home_assistant_neu_uebernehmen_ueber_plan_und_ausfuehren(
                 with _heute_fest():
                     erg = await DatenChecker(db)._check_datenquelle_drift(await lage.anlage(db))
             (e,) = [e for e in erg if "weichen von HA-Statistics ab" in e.meldung]
-            assert e.action_kind == "spiegel_abgleich_tag"
-            await _plan_ausfuehren(lage, e.action_kind, e.action_params)
+            assert befund_op(e) == "spiegel_abgleich_tag"
+            await _plan_ausfuehren(lage, befund_op(e), befund_params(e))
             assert await _drift_wp(lage) == [], "Drift-Check ohne Zeile"
         async with lage.sitzungen() as db:
             zeilen = (await db.execute(select(ActivityLog).where(ActivityLog.kategorie.in_(
@@ -456,14 +457,14 @@ def _ctx(*, kanal_gruppen: dict, hat_spiegel: bool = True):
 
 
 def test_e_bestand_tag_traegt_den_handgriff_und_den_bestand_text():
-    from backend.services.daten_checker.datenquelle.quellen import QuellenChecks
+    from backend.services.daten_checker.datenquelle.drift_zeilen import drift_komponentenzeilen, drift_tageszeilen
 
     ctx = _ctx(kanal_gruppen={})
-    (tag,), _ = QuellenChecks._drift_tageszeilen(ctx)
-    (komp,) = QuellenChecks._drift_komponentenzeilen(ctx)
+    (tag,) = drift_tageszeilen(ctx)
+    (komp,) = drift_komponentenzeilen(ctx)
     for e in (tag, komp):
-        assert e.action_kind == "spiegel_abgleich_tag"
-        assert e.action_label == "Aus Home Assistant neu übernehmen"
+        assert befund_op(e) == "spiegel_abgleich_tag"
+        assert e.knopf == "Aus Home Assistant neu übernehmen"
         assert "Zählerstatistik" in e.details and "baut Tag und Gerätewerte" in e.details
         assert "ein gespeicherter Leistungsverlauf bleibt stehen" in e.details
         assert "derzeit" not in e.details
@@ -475,34 +476,38 @@ def test_e_bestand_tag_traegt_den_handgriff_und_den_bestand_text():
 
 
 def test_e_kanal_tag_unveraendert():
-    from backend.services.daten_checker.datenquelle.quellen import _TEXT_SPIEGEL_TAG, QuellenChecks
+    from backend.services.daten_checker.datenquelle.drift_zeilen import (
+        _TEXT_SPIEGEL_TAG, drift_komponentenzeilen, drift_tageszeilen,
+    )
 
     ctx = _ctx(kanal_gruppen={D2: ("bilanz", "wp")})
-    (tag,), _ = QuellenChecks._drift_tageszeilen(ctx)
-    (komp,) = QuellenChecks._drift_komponentenzeilen(ctx)
+    (tag,) = drift_tageszeilen(ctx)
+    (komp,) = drift_komponentenzeilen(ctx)
     assert tag.details == _TEXT_SPIEGEL_TAG
     assert "Hast du in Home Assistant korrigiert, ist das der Weg." in komp.details
-    assert tag.action_kind == komp.action_kind == "spiegel_abgleich_tag"
+    assert befund_op(tag) == befund_op(komp) == "spiegel_abgleich_tag"
 
 
 def test_e_wp_bestand_an_einem_bilanz_kanal_tag():
     """Georgs 2.11.: Bilanz aus den Kanälen, Wärmepumpe Bestand — die Tageszeile (PV) liest den Spiegel, die
     WP-Zeile den Bestand."""
-    from backend.services.daten_checker.datenquelle.quellen import _TEXT_SPIEGEL_TAG, QuellenChecks
+    from backend.services.daten_checker.datenquelle.drift_zeilen import (
+        _TEXT_SPIEGEL_TAG, drift_komponentenzeilen, drift_tageszeilen,
+    )
 
     ctx = _ctx(kanal_gruppen={D2: ("bilanz",)})
-    (tag,), _ = QuellenChecks._drift_tageszeilen(ctx)
-    (komp,) = QuellenChecks._drift_komponentenzeilen(ctx)
+    (tag,) = drift_tageszeilen(ctx)
+    (komp,) = drift_komponentenzeilen(ctx)
     assert tag.details == _TEXT_SPIEGEL_TAG
     assert "ein gespeicherter Leistungsverlauf bleibt stehen" in komp.details
 
 
 def test_e_ohne_spiegel_bleibt_tag_reparieren():
-    from backend.services.daten_checker.datenquelle.quellen import QuellenChecks
+    from backend.services.daten_checker.datenquelle.drift_zeilen import drift_komponentenzeilen, drift_tageszeilen
 
     ctx = _ctx(kanal_gruppen={}, hat_spiegel=False)
-    (tag,), _ = QuellenChecks._drift_tageszeilen(ctx)
-    assert tag.action_kind == "reaggregate_day"
+    (tag,) = drift_tageszeilen(ctx)
+    assert befund_op(tag) == "reaggregate_day"
     assert "Tag neu aufbauen" in tag.details  # E4: Text = Knopf-Text des Katalogs
 
 

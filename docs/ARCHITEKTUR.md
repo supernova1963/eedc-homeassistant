@@ -964,6 +964,28 @@ einen Wirkungs-Beleg (plan → execute → Befund weg oder anders). Das **Lösun
 (`config/datenCheckerKategorien.ts::loesungswegAnker`) neben der Liste; «In eigenem Fenster öffnen» nur außerhalb des
 HA-Rahmens (`lib/download.ts::istImHaRahmen`). Die Werkbank liest `plan=<id>` (`hooks/useWerkbankPlanAusUrl.ts`).
 
+#### Daten-Checker: Verdichtung, Klapp-Regel, Lösungsweg je Code (E5 11.11.2026)
+
+**Antwort.** `CheckErgebnis` trägt seit E5 keine Altfelder mehr (`link`, `action_*` — W-3 `tests/test_daten_checker_codes.py`,
+`tests/test_daten_checker_schema_durchreichung.py`); der Client bildet den Pfad aus `ziel` (`lib/zielPfad.ts`, Wortlaut von
+`kategorien.link_aus_ziel`; Vitest `zielPfad.test.ts` gegen den Export `tests/fixtures/sprungziele.json` → `pfade`). Neu sind
+`knopf` (Knopf-Text aller drei Klassen, `handgriffe.knopf_fuer`: Aktion aus der Operation, Sprung aus dem Katalog bzw.
+`knopf_sprung` eines Aktion-Codes ohne Reparaturweg, Auskunft «Was gilt», OK ohne), `gruppe` (V2, gesetzt nach dem
+Prüflauf von `services/daten_checker/gruppen.py` aus `handgriffe.GRUPPEN`: Titel mit Zahl, Glied aus `werte.datum` bzw.
+`ziel.params.erfassen`, `weitere` = über der Anzeige-Grenze des Erzeugers — die früheren Restzeilen sind entfallen) und in der
+Antwort `nicht_ausfuehrbar` (V4: Abbruchpfade der Erzeuger melden sich über `_CheckHelpers._nicht_ausfuehrbar_merken`).
+Sechs Erzeuger sind in ihren Ziel-Code aufgegangen (V3; die Drift-Zeilen leben in `datenquelle/drift_zeilen.py`): 182 Codes
+an 182 Stellen. **Client.** `pages/DatenCheckerTeile.tsx` (Kopf mit `SchwereChips`, Kategorie offen nach K1 =
+`befundZeilen.kategorieOffen`, OK gefaltet), `components/datenchecker/HandgriffLeiste.tsx` (K2), `BefundGruppe.tsx` (V2) und
+`BefundHandgriff.tsx` teilen die eine Mechanik `useBefundAktion.ts` (W-10). Das Lösungsweg-Panel schneidet den Abschnitt des
+Codes aus dem Handbuch (`loesungswegAbschnitt.ts`), Schritte `eedc:/…` navigieren (`useHelpKatalog`, Typ `app`; auf der
+Website reiner Text). **Quelle des Handbuchs §3/§4:** `docs/daten-checker/<code>.md` (je Code «Was eedc sieht» · «Lösungsweg»
+· «Was ohne Handlung gilt») und `docs/daten-checker/abschnitte/` (Einleitungen), Generator `scripts/daten-checker-handbuch.py`
+(`--pruefen` = 0 Änderungen); Wächter W-13 `tests/test_daten_checker_loesungswege.py` (je Code eine Datei, Menüwege nur aus
+dem Einstellungs-Katalog oder den drei HA-Wegen, `eedc:`-Schritte über einen Ziel-Bauer). W-11 hält je Aktions-Code einen
+Wirkungs-Test (`WIRKUNG_JE_CODE`). Reparatur: `actual_changes` nur Mengen (`repair_protokoll.mengen`), ein Plan «nichts zu
+tun» wird nicht ausgeführt (`NichtsZuTun` ⇒ 409, keine Zeile).
+
 #### Aggregierte Monatsdaten
 
 ```

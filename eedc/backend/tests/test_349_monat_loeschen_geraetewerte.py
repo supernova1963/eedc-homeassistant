@@ -23,6 +23,7 @@ Diese Proben halten alle drei fest, jede mit ihrer Gegenprobe.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op
 from datetime import date
 
 import pytest
@@ -231,12 +232,12 @@ async def test_daten_checker_meldet_den_verwaisten_rest(db):
     assert "06/2024" in treffer[0].meldung
     # Ohne Weg wäre es ein Hinweis, den niemand auflösen kann (P-6). Seit E3 (Gegenprüfung W6) ist der eine
     # Handgriff «Monat erfassen»; das Löschen bleibt die Werkbank-Operation GERAETEWERTE_LOESCHEN.
-    assert treffer[0].action_kind is None
+    assert befund_op(treffer[0]) is None
 
     # Der Link führt in das Formular GENAU dieses Monats (12.08.). Vorher zeigte
     # er auf die Monatsdaten-Liste — dort steht der Monat zwar als offene Zeile,
     # der Anwender musste ihn aber selbst finden.
-    assert treffer[0].link == "/einstellungen/daten?erfassen=2024-06", treffer[0].link
+    assert befund_link(treffer[0]) == "/einstellungen/daten?erfassen=2024-06", befund_link(treffer[0])
 
     # Und die Meldung behauptet die Ursache NICHT mehr: derselbe Zustand
     # entsteht auch durch einen HA-Import ohne Zähler-Sensoren, nicht nur durch

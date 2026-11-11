@@ -5,6 +5,7 @@ Erzeugung einschließlich Balkonkraftwerk; sitzt er am Wechselrichter, fehlt das
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 import pytest
@@ -55,7 +56,7 @@ async def test_konstellation_428_bekommt_den_hinweis(db):
     a = await _anlage(db)
     (e,) = await _meldungen(db, a)
     # E4 (Teil B Nr 13, Konzept §3.4): Auskunft — kein Sprung-Link; der Weg steht im Text, ohne Menüweg.
-    assert getattr(e.schwere, "value", e.schwere) == "info" and e.link is None
+    assert getattr(e.schwere, "value", e.schwere) == "info" and befund_link(e) is None
     assert "Misst er nur den Wechselrichter, ordne ihn in den Datenquellen dem PV-Modul als Erzeugungszähler zu" in e.details
     assert "Balkon" in e.details and "Süddach" in e.details
 

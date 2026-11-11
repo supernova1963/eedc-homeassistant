@@ -17,6 +17,13 @@ from backend.models.pvgis_prognose import PVGISPrognose
 class _CheckHelpers:
     """Geteilte Lookup-/Berechnungs-Hilfen für die Check-Mixins."""
 
+    def _nicht_ausfuehrbar_merken(self, pruefung: str, grund: str) -> None:
+        """E5 V4 (Konzept §6): eine Prüfung, die in dieser Installation nicht laufen kann (Abbruchpfad ohne Befund) — die
+        Oberfläche zählt sie im Kopf «n Prüfungen nicht ausführbar (…)». Ohne Prüflauf-Liste (Teiltests) still."""
+        liste = getattr(self, "_nicht_ausfuehrbar", None)
+        if liste is not None:
+            liste.append({"pruefung": pruefung, "grund": grund})
+
     def _calculate_performance_ratio(
         self,
         pv_erzeugung_map: dict[tuple[int, int], float],

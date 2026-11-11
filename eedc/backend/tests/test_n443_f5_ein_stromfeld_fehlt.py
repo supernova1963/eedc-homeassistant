@@ -29,6 +29,7 @@ Self-contained:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 import pytest
@@ -213,7 +214,7 @@ async def test_a_warmwasser_waerme_ohne_warmwasser_strom_wird_gemeldet(db):
     assert strom[0].details.index("Monatsabschluss") < strom[0].details.index(
         "in den Datenquellen zu"
     ), "Erst der Weg, der die VERGANGENEN Monate füllt — eine Zuordnung wirkt nach vorn."
-    assert strom[0].link, "Der Weg zum Nachtragen gehört dazu."
+    assert befund_link(strom[0]), "Der Weg zum Nachtragen gehört dazu."
     assert strom[0].investition_id, "Ohne sie hängt der Befund an keinem Gerät."
     # Die Heiz-Seite ist vollständig — sie darf nicht mitgemeldet werden.
     assert "Strom Heizen fehlt" not in " ".join(e.meldung for e in ergebnisse)

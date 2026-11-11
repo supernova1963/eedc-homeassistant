@@ -1,0 +1,14 @@
+<!-- anker: 49-sensor-mapping--ha-statistics -->
+### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
+
+> **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; der Kopf des Daten-Checkers zählt die Prüfung dann als nicht ausführbar (siehe §4.9a). Funktional wird die analoge Drift-Erkennung im Standalone-Betrieb über §4.8 *MQTT-Topic-Abdeckung* abgedeckt. Ist Home Assistant im Add-on zwischenzeitlich nicht erreichbar, wird die Kategorie ebenso übersprungen — dann die [HA-Verbindung](HANDBUCH_EINSTELLUNGEN.md#62-ha-verbindung) unter *Einstellungen → Integration → HA-Verbindung* prüfen.
+
+**Was wird geprüft:** Liefert jeder zugeordnete HA-Sensor tatsächlich Long-Term-Statistics nach Home Assistant? Geprüft werden alle zugeordneten kWh-Felder — Einspeisung, Netzbezug, **PV Erzeugung Gesamt** und die Komponenten-Felder —, die Zähler-Felder (z. B. WP-Kompressor-Starts) und die Zählerstand-Felder. Reine Live-Felder (W, %, °C) bleiben außen vor, sie lesen den Momentanwert und brauchen keine Statistik. Beim Gesamt-PV-Zähler prüft eedc die **Zuordnung**, nicht ob die Rechnung ihn diesen Monat gerade liest: fällt ein String-Sensor aus, wird er unmittelbar wieder zur einzigen Quelle. Sensoren ohne `state_class` haben keine LTS-Einträge, und damit greifen die **Reparatur-Werkzeuge in der Energieprofil-Pflege** (Lücken aus HA-LTS nachfüllen, Tag/Bereich neu aggregieren) nicht — sie lesen alle aus HA-LTS. Live-Anzeigen funktionieren weiter (über `state`), aber jeder Aussetzer im Snapshot-Pfad ist permanent verloren, weil er nicht aus LTS nachgeholt werden kann.
+
+Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter — damit lassen sich z. B. Nibe-Roh-Counter ohne Metadaten zuordnen, aber genau dieser Spielraum verlangt nach dieser Prüfkategorie. (Der Picker warnt beim Zuordnen bereits vor fehlender Langzeitstatistik — siehe [HANDBUCH_EINSTELLUNGEN.md §7.6](HANDBUCH_EINSTELLUNGEN.md#76-validierung--probleme-je-feld).)
+
+**Der übliche Weg ist ein Verbrauchszähler-Helfer in Home Assistant** (§5.1), angelegt unter *Einstellungen → Geräte & Dienste → Helfer*, **ohne Zyklus**: Er bringt die Statistik-Angaben und die Summen-Spalte mit. Ein **Zählerstand** ist eine Bestandsgröße und kommt aus dem Sensor-Zustand — für ihn genügt `state_class: measurement`, eine Summen-Spalte braucht er nicht.
+
+> **Wichtige Lektion:** Frühere Hinweistexte sagten „vergangene Tage bleiben leer". Das ist irreführend, weil HA-Long-Term-Statistics ohnehin erst ab Aktivierung von `state_class` angelegt werden — vor der Aktivierung existieren keine Werte zum Holen, egal auf welchem Weg du den Zähler in Ordnung bringst. Der eigentliche Schmerzpunkt ist daher: ohne `state_class` **wirken die Reparatur-Werkzeuge in der Energieprofil-Pflege nicht**. Ab Aktivierung läuft's lückenfrei, davor bleibt's leer.
+
+---

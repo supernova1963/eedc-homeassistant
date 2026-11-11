@@ -25,6 +25,7 @@ Proben:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date
 
 from sqlalchemy import select
@@ -87,7 +88,7 @@ async def test_alle_monate_gepflegt_meldet_ok(db):
     ergebnisse = await _run(db, anlage)
     assert len(ergebnisse) == 1
     assert ergebnisse[0].schwere == CheckSeverity.OK.value
-    assert ergebnisse[0].action_kind is None
+    assert befund_op(ergebnisse[0]) is None
 
 
 async def test_offener_monat_meldet_warnung_mit_reparatur(db):
@@ -105,9 +106,9 @@ async def test_offener_monat_meldet_warnung_mit_reparatur(db):
     assert "06/2026" in e.meldung
     # Der Knopf ist der Punkt: der Reparatur-Pfad existierte, war aber nur über
     # die Reparatur-Werkbank erreichbar.
-    assert e.action_kind == "kraftstoffpreis_backfill"
-    assert e.action_params == {"scope": "monats"}  # E3: Plan-Parameter von KRAFTSTOFFPREIS_BACKFILL
-    assert e.action_label
+    assert befund_op(e) == "kraftstoffpreis_backfill"
+    assert befund_params(e) == {"scope": "monats"}  # E3: Plan-Parameter von KRAFTSTOFFPREIS_BACKFILL
+    assert e.knopf
 
 
 async def test_w11_benzinpreise_nachtragen_ueber_plan_und_ausfuehren(db, monkeypatch):
@@ -127,8 +128,8 @@ async def test_w11_benzinpreise_nachtragen_ueber_plan_und_ausfuehren(db, monkeyp
     await _add_monat(db, anlage.id, 2026, 6, preis=None)
     await db.commit()
     (e,) = await _run(db, anlage)
-    p = await plan(RepairOperationRequest(anlage_id=anlage.id, operation=RepairOperationType(e.action_kind),
-                                          params=e.action_params), db)
+    p = await plan(RepairOperationRequest(anlage_id=anlage.id, operation=RepairOperationType(befund_op(e)),
+                                          params=befund_params(e)), db)
     assert p.estimated_changes == {"monats_offen": 1}
     await execute(p.plan_id, db)
     nachher = await _run(db, anlage)

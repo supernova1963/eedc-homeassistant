@@ -4,6 +4,7 @@ Tageswerten — ERROR je Feld, mit Rat; keine Doppelmeldung für Monate mit Zeil
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from backend.models import Monatsdaten
 from backend.services.daten_checker import DatenChecker
 from backend.services.daten_checker.kategorien import CheckKategorie
@@ -77,7 +78,7 @@ async def test_rat_nennt_datenquelle_und_monatsabschluss(db):
     assert "Datenquelle zuordnen (der Zähler zählt ab dann)" in e.details
     assert "den Monat im Monatsabschluss pflegen" in e.details
     assert "in der Monats- und der Jahresansicht im Cockpit" in e.details
-    assert e.link and "2026-07" in e.link
+    assert befund_link(e) and "2026-07" in befund_link(e)
 
 
 async def test_n734_text_mit_zeile_meint_monat_und_jahr(db):

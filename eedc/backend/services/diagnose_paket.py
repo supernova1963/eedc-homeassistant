@@ -1,8 +1,9 @@
 """
 Diagnose-Paket — ein Text, aus dem wir Version, Lage und den wirksamen Schritt lesen (Etappe E1, Konzept Daten-Checker §8).
 
-Markdown mit fester Abschnittsfolge (Konzept §8.2, 13 Abschnitte) und der Kopfmarke ``<!-- eedc-diagnose v2 -->`` (v2 seit E2:
-Befund-Schlüssel und Handgriff-Klasse je Befund). Der Anwender
+Markdown mit fester Abschnittsfolge (Konzept §8.2, 13 Abschnitte) und der Kopfmarke ``<!-- eedc-diagnose v3 -->`` (v2 seit E2:
+Befund-Schlüssel und Handgriff-Klasse je Befund; v3 seit E5: Abschnitt 6 mit Kategorie-Köpfen, ohne Altfelder, mit den
+nicht ausführbaren Prüfungen). Der Anwender
 kopiert es in eine PN oder ein Issue (Einstellungen → Daten → Daten-Checker → Diagnose-Paket); eedc überträgt nichts.
 
 **Nur lesend.** Kein Abgleich mit HA, kein Festschreiben, keine Protokollzeile: die Zuordnungen kommen aus
@@ -47,7 +48,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.tages_energie_profil import TagesZusammenfassung
 
-KOPFMARKE = "<!-- eedc-diagnose v2 -->"
+KOPFMARKE = "<!-- eedc-diagnose v3 -->"
 #: Harte Grenze der Kopieren-Fassung in Bytes (UTF-8). 20 000 statt 20 480: hält beide Lesarten von «20 KB».
 GRENZE_KOPIE_BYTES = 20_000
 #: Fenster der Kanal-Tage (Abschnitt 9) und Zahl der Monate der Tagesreihen (Abschnitt 11).
@@ -396,9 +397,9 @@ def zuordnungen_zeilen(gruppen: list[dict], neu: set[str], kurz: bool = False) -
 
 # ─── Abschnitt 6: Daten-Checker ──────────────────────────────────────────────────────────────────────────────────
 
-#: Laufzeit-Klasse, die der Katalog-Klasse entspricht, obwohl der Name anders ist (OK-Zeile und V2-Restzeile tragen
-#: keinen Handgriff — zur Laufzeit «auskunft»).
-_KLASSE_GLEICH = {("ok", "auskunft"), ("entfaellt", "auskunft")}
+#: Laufzeit-Klasse, die der Katalog-Klasse entspricht, obwohl der Name anders ist (eine OK-Zeile trägt keinen Handgriff —
+#: zur Laufzeit «auskunft»).
+_KLASSE_GLEICH = {("ok", "auskunft")}
 
 
 def _klasse(e) -> str:
@@ -435,7 +436,8 @@ def _checker_zeilen(result, ha_verbunden: bool) -> tuple[list[str], list[tuple[s
             zeile += f" · werte {_json(e.werte)}"
         zeilen.append((kategorie, schwere, zeile + _klasse(e)))
     gesehen = {getattr(e.kategorie, "value", e.kategorie) for e in result.ergebnisse}
-    fuss = ["Nicht ausgeführt oder ohne Befund:"]
+    fuss = [f"Nicht ausführbar: {n['pruefung']} ({n['grund']})" for n in getattr(result, "nicht_ausfuehrbar", [])]
+    fuss.append("Nicht ausgeführt oder ohne Befund:")
     for k in CheckKategorie:
         if k.value in gesehen:
             continue
@@ -553,12 +555,12 @@ async def _monate(db: AsyncSession, anlage_id: int) -> list[str]:
 
 
 def monate_aus_befunden(ergebnisse) -> list[tuple[int, int]]:
-    """Die betroffenen Monate (jüngste zuerst) aus Datumsangaben in ``werte`` und ``action_params`` der Befunde ≠ OK."""
+    """Die betroffenen Monate (jüngste zuerst) aus Datumsangaben in ``werte`` und den Plan-Parametern der Aktion der Befunde ≠ OK."""
     gefunden: set[tuple[int, int]] = set()
     for e in ergebnisse:
         if getattr(e.schwere, "value", e.schwere) == "ok":
             continue
-        for quelle in (e.werte or {}, e.action_params or {}):
+        for quelle in (e.werte or {}, e.action.params if e.action else {}):
             for schluessel in ("datum", "tag", "von", "bis", "bereich_von"):
                 wert = quelle.get(schluessel)
                 if isinstance(wert, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", wert):

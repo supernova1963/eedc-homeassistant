@@ -28,6 +28,7 @@ from sqlalchemy import event
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.daten_checker import DatenChecker
+from backend.tests.werkzeug_befund import befund_link, befund_op, befund_params
 from backend.services.daten_checker.kategorien import CheckKategorie, CheckSeverity, LINK_DATENQUELLEN
 
 # ── Fälle (wortgleich aus der Fall-Probe der Vorlage RF-26) ─────────────────────────────────────────────────────
@@ -261,9 +262,9 @@ def _erwartete_meldung(art: str, text: str, inv_id):
     if art in _TITEL:
         return dict(kategorie=CheckKategorie.KLIMA_MODUS_SENSOR, schwere=CheckSeverity.INFO, meldung=f"„{text}“: {_TITEL[art]}",
                     details=_DETAILS[art], link=f"{LINK_DATENQUELLEN}?geraet={inv_id}&feld={_FELD[art]}",
-                    action_kind=None, action_params=None, action_label=None, investition_id=inv_id)
+                    action_kind=None, action_params=None, investition_id=inv_id)
     return dict(kategorie=CheckKategorie.KLIMA_MODUS_SENSOR, schwere=CheckSeverity.OK, meldung=text, details=_DETAILS[art],
-                link=None, action_kind=None, action_params=None, action_label=None, investition_id=None)
+                link=None, action_kind=None, action_params=None, investition_id=None)
 
 
 async def _lauf(db, geraete, sensor_mapping):
@@ -305,8 +306,9 @@ async def test_fall(db, name):
     geraete, sensor_mapping = FAELLE[name]
     res, params = await _lauf(db, geraete, sensor_mapping)
     zeilen, abfragen = ERWARTET[name]
-    ist = [dict(kategorie=e.kategorie, schwere=e.schwere, meldung=e.meldung, details=e.details, link=e.link,
-                action_kind=e.action_kind, action_params=e.action_params, action_label=e.action_label,
+    # E5: die Altfelder sind entfallen — Pfad, Operation und Parameter aus `ziel`/`action` (`werkzeug_befund`).
+    ist = [dict(kategorie=e.kategorie, schwere=e.schwere, meldung=e.meldung, details=e.details, link=befund_link(e),
+                action_kind=befund_op(e), action_params=befund_params(e),
                 investition_id=e.investition_id) for e in res]
     assert ist == [_erwartete_meldung(*z) for z in zeilen]
     assert [tuple(p) for p in params] == [(1, "waermepumpe"), *abfragen]

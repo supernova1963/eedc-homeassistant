@@ -249,5 +249,12 @@ def test_w6_ein_dritter_eintrag_waere_rot():
 def test_ziel_und_aktion_zugleich_gezaehlt():
     """«Nie `action` und `ziel`» (R2): seit E3 trägt keine Stelle mehr beides — Nr 73 `geraetewerte_ohne_monatszeile`
     hat nur noch den Sprung «Monat erfassen», das Löschen ist die Werkbank-Operation `GERAETEWERTE_LOESCHEN` (W6)."""
-    beide = Counter(s.code for s in stellen() if "ziel" in s.kw and "action" in s.kw)
-    assert beide == Counter()
+    beide = [s for s in stellen() if "ziel" in s.kw and "action" in s.kw]
+    # E5 (E4 ⚑1, Master-Entscheid): zwei Aktion-Codes springen im Zweig ohne Reparaturweg auf das fehlende Feld — an der
+    # Stelle stehen beide Schlüsselwörter, aber zur Laufzeit nie beide: `action=… if B else None`, `ziel=… if not B else None`.
+    assert Counter(s.code for s in beide) == Counter({"tageswerte_fehlen_tage": 1, "tage_vor_umbau_ohne_regelmarke": 1})
+    for s in beide:
+        a, z = s.kw["action"], s.kw["ziel"]
+        assert isinstance(a, ast.IfExp) and isinstance(z, ast.IfExp), s.code
+        assert ast.unparse(z.test) == f"not {ast.unparse(a.test)}", s.code
+        assert ast.unparse(a.orelse) == ast.unparse(z.orelse) == "None", s.code

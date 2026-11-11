@@ -27,6 +27,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Ziel, das fehlt — die Texte nennen keinen Weg mehr, der Knopf ist der Weg; Wege in Home Assistant stehen weiter im
   Text. Die Texte sagen jetzt dasselbe wie die Knöpfe („Tag neu aufbauen“, „Tage neu aufbauen“). Befunde mit einem
   Reparatur-Knopf oder ohne eigenen Handgriff zeigen kein „Beheben“ mehr, sondern den Knopf bzw. „Was gilt“.
+- **System → Protokolle: „Neustart“ dreht nicht mehr endlos.** Nach dem Klick wartet die Seite, bis eedc wieder antwortet,
+  und lädt sich dann neu; dauert es länger als anderthalb Minuten, steht dort „Der Neustart dauert länger als erwartet —
+  Seite neu laden.“ und der Knopf ist wieder frei.
+- **Daten-Checker: der Hinweis zur fehlenden Ø Temperatur nennt den richtigen Knopf** — im Monatsabschluss heißt er
+  „Auto-Fill“ (unter „Wetterdaten (optional)“), nicht „Wetterdaten holen“.
 
 ### Changed
 
@@ -41,12 +46,38 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   direkt am Befund. „Messwerte ohne Monatszeile entfernen“ gibt es nur noch in der Reparatur-Werkbank — am Befund steht
   „Monat erfassen“. Die Komponenten-Seiten tragen dieselben Knöpfe. Das Diagnose-Paket bleibt auch bei großen Anlagen
   vollständig in den Abschnitten, die eine Antwort braucht (Kopf, Befunde, HA-Spiegel, Nachtlauf, Zeitpläne).
+- **Daten-Checker übersichtlicher: weniger Zeilen, ein Knopf mit klarem Namen, oben „Das kannst du jetzt tun“.**
+  - Bestandene Prüfungen stehen nicht mehr in der Liste; der Kopf jeder Kategorie zählt sie („3 Prüfungen bestanden“,
+    zum Aufklappen).
+  - Gleiche Befunde stehen als eine Zeile mit Gliedern — etwa „7 Monate fehlen: 01/2026 · 02/2026 · …“; ein Klick auf
+    einen Monat öffnet genau diesen. Die Zeilen „… plus n weitere“ sind entfallen, die Zahl steht in der Gruppenzeile.
+  - Sechs Doppelungen sind zusammengelegt: Wetterquelle anders · Wetterquelle nicht festgehalten · Strahlung fehlt ist eine
+    Zeile mit einem Knopf „Wetterreihe nachziehen“; Koordinaten und Ort/PLZ ein Standort-Befund; je eine OK-Zeile für
+    Tageswerte und für die Sensoren in der Statistik; die Zeile „HA Long-Term-Statistics nicht erreichbar“ steht nicht mehr
+    — der Kopf nennt stattdessen „n Prüfungen nicht ausführbar (Standalone / MQTT-Import aus)“.
+  - **Die Zahl der Hinweise im Kopf, in der Fußzeile und im Status der Einstellungen sinkt dadurch** — es fehlt keine
+    Prüfung, nur die doppelten Zeilen.
+  - Oben steht „Das kannst du jetzt tun“: alle Befunde mit einem Reparatur-Knopf aus allen Kategorien. Kategorien mit
+    einem Fehler, einer Warnung oder einem Reparatur-Knopf stehen offen, die übrigen zu.
+  - Jeder Knopf trägt seinen Namen („Gerät bearbeiten“, „Monat erfassen“, „Sensor zuordnen“, „Was gilt“ …) statt
+    „Beheben“. Befunde ohne Reparaturweg bei fehlenden Tageswerten führen mit „Sensor zuordnen“ zur fehlenden Zuordnung.
+  - **Der „Lösungsweg“ zeigt je Befund die Schritte** — was eedc sieht, was du tust (Schritte in eedc zum Anklicken,
+    Wege in Home Assistant als Text), was gilt, wenn du nichts tust; bei Abweichungen zu Home Assistant zuletzt
+    „Diagnose-Paket kopieren und melden“. Das Fenster bleibt beim Scrollen neben der Liste und holt sich ins Bild, auch
+    aus der letzten Kategorie; innerhalb von Home Assistant erklärt ein Satz, warum es kein eigenes Fenster gibt.
+  - Diagnose-Paket: in der Home-Assistant-App lädt „Als Datei herunterladen“ die Datei direkt; darunter steht der
+    Hinweis „Speichert die App keine Datei: Kopieren und in eine Notiz einfügen.“
 
 ### Intern
 
 - **Daten-Checker: jeder Befund trägt einen festen Schlüssel und sein Ziel aus einem Ziel-Bauer**, der jeden Feld-Schlüssel
   gegen die Registry prüft; ein Katalog hält je Schlüssel Knopf-Text, Handbuch-Anker und Klasse. Sichtbar ändert sich
   nichts; das Diagnose-Paket nennt an jedem Befund den Schlüssel und die Klasse (Kopfmarke v2).
+- **Daten-Checker E5:** die Antwort trägt `knopf`, `gruppe` und `nicht_ausfuehrbar`; die Altfelder `link`/`action_*` sind
+  entfallen (der Client bildet den Pfad aus `ziel`). Das Handbuch „Daten-Checker“ §3/§4 ist erzeugt
+  (`scripts/daten-checker-handbuch.py` aus `docs/daten-checker/<code>.md`, eine Datei je Befund); Wächter W-13
+  (Lösungswege) und W-11 je Aktions-Code. Reparatur-Protokoll ohne Kennungen in den Änderungen; ein Plan „nichts zu tun“
+  wird nicht ausgeführt (409). Diagnose-Paket Kopfmarke v3 (nicht ausführbare Prüfungen in Abschnitt 6).
 
 ## [4.2.3] - 2026-11-10
 

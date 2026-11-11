@@ -25,6 +25,7 @@ NICHT zum Umdatieren des Geraets raten.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 import re
 from datetime import date
 
@@ -95,7 +96,7 @@ async def test_fehlender_monat_ist_ein_fehler(db):
         [(e.meldung, e.schwere) for e in fehlend]
     # P-6: jede Meldung nennt den aufloesenden Schritt — die Erfassung genau dieses Monats
     # (N-739 a: `/monatsabschluss/…` leitete im v4-Frontend ohne `?erfassen=` um, der Monat öffnete sich nicht).
-    assert all(e.link and "/einstellungen/daten?erfassen=" in e.link for e in fehlend)
+    assert all(befund_link(e) and "/einstellungen/daten?erfassen=" in befund_link(e) for e in fehlend)
 
 
 async def test_sammelzeile_ab_dem_13_fehlenden_monat_ist_ebenfalls_fehler(db):
@@ -111,9 +112,12 @@ async def test_sammelzeile_ab_dem_13_fehlenden_monat_ist_ebenfalls_fehler(db):
     )
     ergebnisse = (await DatenChecker(db).check_anlage(anlage_id)).ergebnisse
 
-    sammel = _mit(ergebnisse, "weitere Monate fehlen")
-    assert len(sammel) == 1, [e.meldung for e in ergebnisse]
-    assert sammel[0].schwere == CheckSeverity.ERROR
+    # E5 V2: keine Sammelzeile mehr — 12 Glieder (ERROR), die übrigen Monate als `weitere` an der Gruppenzeile.
+    glieder = [e for e in ergebnisse if e.code == "monat_fehlt"]
+    assert len(glieder) == 12 and all(e.schwere == CheckSeverity.ERROR for e in glieder)
+    assert not _mit(ergebnisse, "weitere Monate fehlen")
+    gesamt = 12 + glieder[0].werte["weitere"]
+    assert glieder[0].gruppe.titel == f"{gesamt} Monate fehlen" and glieder[0].gruppe.weitere == gesamt - 12
 
 
 # ─── (b) Geraet aelter als die Anlage ───────────────────────────────────────
@@ -218,7 +222,7 @@ async def test_fehlendes_installationsdatum_ist_ein_fehler(db):
     # Der Grund steht dabei -- die alte Begruendung ("fuer die
     # Vollstaendigkeitspruefung") sagte nicht, was daran schiefgeht.
     assert "Einspeisung und Netzbezug" in treffer[0].details
-    assert treffer[0].link == "/einstellungen/stammdaten?block=anlage&feld=installationsdatum"
+    assert befund_link(treffer[0]) == "/einstellungen/stammdaten?block=anlage&feld=installationsdatum"
 
 
 async def test_gepflegtes_installationsdatum_meldet_ok(db):
@@ -276,4 +280,4 @@ async def test_beide_kernfelder_0_sagt_was_ohne_handlung_gilt(db):
     # ... und das ist der Satz, der P-6 aufloest.
     assert "nichts zu tun" in treffer[0].details
     assert "Inselbetrieb" in treffer[0].details
-    assert treffer[0].link
+    assert befund_link(treffer[0])

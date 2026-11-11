@@ -23,6 +23,7 @@ test_s5_stunden_der_tage.py (die Lesestelle selbst).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 import datetime as _dt
 from contextlib import contextmanager
 from datetime import date
@@ -333,7 +334,7 @@ async def test_info_tage_ohne_kanal_deckung_nennt_zahl_aeltesten_und_juengsten(u
     assert e.kategorie == CheckKategorie.ENERGIEPROFIL_ABDECKUNG and e.schwere == "info"
     assert e.meldung == ("2 Tage ohne Kanal-Deckung — Mengen aus den gespeicherten Stundenwerten "
                          "(2026-05-20 … 2026-05-21)")
-    assert e.action_kind is None and "Mit Kanal-Deckung: 33 Tag(e)" in e.details
+    assert befund_op(e) is None and "Mit Kanal-Deckung: 33 Tag(e)" in e.details
 
 
 async def test_info_ohne_lesart1_tage_still(uhr):

@@ -20,6 +20,7 @@ Schwester: ``test_n735_formular_neuanlage_provenance.py`` (die Formular-Neuanlag
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 
 import pytest
@@ -237,7 +238,7 @@ async def test_checker_meldungstext_nennt_voraussetzung_und_handgriff(db):
     assert netz.details.index("HA-Statistik-Import") < netz.details.index("Monatsabschluss")
     assert "ein leeres Feld ist keine 0" in netz.details
     # N-739 (a): `/monatsabschluss/…` öffnete im v4-Frontend den Monat nicht.
-    assert netz.link == f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=netzbezug_kwh"  # E4: Sprung auf das Feld
+    assert befund_link(netz) == f"/einstellungen/daten?erfassen={J}-{M:02d}&feld=netzbezug_kwh"  # E4: Sprung auf das Feld
 
 
 # ── Der Helfer selbst ───────────────────────────────────────────────────────────────────────────────────────────

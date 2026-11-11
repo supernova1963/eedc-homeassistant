@@ -1,13 +1,14 @@
 /**
  * LoesungswegPanel — der Lösungsweg eines Befunds neben der Liste (Etappe E3, Konzept §3.5, Entscheid §11 Nr. 10).
  *
- * Zeigt das Handbuch «Daten-Checker» (`/hilfe?doc=daten-checker`) über die geteilte Hilfe-Mechanik
- * (`useHelpKatalog` + `MarkdownDoc`) und springt zum Abschnitt des Befunds (`loesungswegAnker`: bis E5 der Abschnitt der
- * Kategorie). Der Befund bleibt sichtbar: als seitlicher Einschub neben der Liste (`als="einschub"`), auf dem Handy und
- * im Komponenten-Hub als Dialog (`als="dialog"`).
+ * Zeigt aus dem Handbuch «Daten-Checker» (`/hilfe?doc=daten-checker`, geteilte Hilfe-Mechanik `useHelpKatalog` +
+ * `MarkdownDoc`) **den Abschnitt des Codes** (seit E5 erzeugt aus `docs/daten-checker/<code>.md`: «Was eedc sieht» ·
+ * «Lösungsweg» · «Was ohne Handlung gilt»); fehlt er, das Kapitel am Anker der Kategorie. Schritte in eedc sind Links
+ * (`eedc:/…` ⇒ Sprung). Der Befund bleibt sichtbar: als seitlicher Einschub neben der Liste (`als="einschub"`), auf dem
+ * Handy und im Komponenten-Hub als Dialog (`als="dialog"`).
  *
  * «In eigenem Fenster öffnen» nur **außerhalb** von Home Assistant: in der Companion-App bzw. hinter dem Ingress öffnet
- * ein `_blank`-Fenster extern ohne Ingress-Sitzung (401, `lib/download.ts`); dort steht stattdessen der Hinweis.
+ * ein `_blank`-Fenster extern ohne Ingress-Sitzung (401, `lib/download.ts`); dort steht stattdessen der Hinweis (E5.7 L3).
  */
 import { useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -18,8 +19,12 @@ import type { CheckErgebnis } from '../../api/datenChecker'
 import { KATEGORIE_LABELS, loesungswegAnker } from '../../config/datenCheckerKategorien'
 import { makeHelpLinkComponent, scrollToHashInArticle, useHelpKatalog } from '../../hooks/useHelpKatalog'
 import { istImHaRahmen } from '../../lib/download'
+import { abschnittFuerCode } from './loesungswegAbschnitt'
 
 export const LOESUNGSWEG_DOC = 'daten-checker'
+/** E5.7 L3: der Hinweis innerhalb von Home Assistant — er deckt Browser über das HA-Seitenmenü und die Companion-App. */
+export const HINWEIS_IM_HA_RAHMEN =
+  'Innerhalb von Home Assistant nur hier im Panel — ein eigenes Fenster hätte keine Anmeldung. Direkt geöffnet (Port 8099) gibt es den Knopf.'
 
 export default function LoesungswegPanel({ befund, als, onClose }: {
   befund: CheckErgebnis
@@ -36,6 +41,7 @@ export default function LoesungswegPanel({ befund, als, onClose }: {
     [rewriteLink, navigate, scrollToHash],
   )
   const imHaRahmen = istImHaRahmen()
+  const abschnitt = useMemo(() => (content ? abschnittFuerCode(content, befund.code) : null), [content, befund.code])
   const titel = `Lösungsweg: ${KATEGORIE_LABELS[befund.kategorie] ?? befund.kategorie}`
 
   const inhalt = (
@@ -44,7 +50,7 @@ export default function LoesungswegPanel({ befund, als, onClose }: {
       <div className="flex flex-wrap items-center gap-2">
         {imHaRahmen ? (
           <span className="text-xs text-gray-500 dark:text-gray-400" data-testid="loesungsweg-hinweis">
-            Im Panel öffnen — in der Home-Assistant-App öffnet ein eigenes Fenster ohne Anmeldung.
+            {HINWEIS_IM_HA_RAHMEN}
           </span>
         ) : (
           <Button variant="secondary" size="sm"
@@ -58,7 +64,7 @@ export default function LoesungswegPanel({ befund, als, onClose }: {
         data-testid="loesungsweg-inhalt">
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         {loading && !content && <p className="text-sm text-gray-500 dark:text-gray-400">Lade …</p>}
-        {content && <MarkdownDoc markdown={content} linkComponent={linkComponent} />}
+        {content && <MarkdownDoc markdown={abschnitt ?? content} linkComponent={linkComponent} />}
       </div>
     </div>
   )

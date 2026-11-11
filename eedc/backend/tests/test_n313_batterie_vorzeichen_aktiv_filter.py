@@ -29,6 +29,7 @@ in der Meldung). *Eine gleich aussehende Zeile ist kein gleicher Befund.*
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
@@ -159,7 +160,7 @@ async def test_stillgelegter_speicher_kippt_das_vorzeichen_nicht():
         "Ein am Stichtag stillgelegter Speicher darf das Vorzeichen nicht "
         f"kippen — gemeldet wurde: {[w.meldung for w in warnungen]}"
     )
-    assert not any(e.action_kind == "reaggregate_range" for e in ergebnisse)
+    assert not any(befund_op(e) == "reaggregate_range" for e in ergebnisse)
     assert "6" not in gesehen["invs"], (
         "Der stillgelegte Speicher wurde an den LTS-Read durchgereicht — "
         "genau der Weg, über den er auf die HA-Seite gelangt."
@@ -180,8 +181,8 @@ async def test_echter_vorzeichen_konflikt_wird_weiter_gemeldet():
         {"batterie_5": 4.0},
     )
 
-    bereich = [e for e in ergebnisse if e.action_kind == "reaggregate_range"]
-    einzel = [e for e in ergebnisse if e.action_kind == "reaggregate_day"]
+    bereich = [e for e in ergebnisse if befund_op(e) == "reaggregate_range"]
+    einzel = [e for e in ergebnisse if befund_op(e) == "reaggregate_day"]
     assert len(bereich) == 1, f"Erwartet 1 Bereichs-Eintrag, bekommen {ergebnisse}"
     assert len(einzel) == 1, f"Erwartet 1 Einzeltag-Eintrag, bekommen {einzel}"
-    assert einzel[0].action_params == {"datum": _TAG.isoformat()}
+    assert befund_params(einzel[0]) == {"datum": _TAG.isoformat()}

@@ -88,12 +88,17 @@ async def execute_plan(
     HTTP-Status:
       404 — plan_id unbekannt oder bereits ausgeführt
       410 — Plan abgelaufen
+      409 — Plan «nichts zu tun» (E5): kein Lauf, keine Protokollzeile
       400 — Operation rejected ValueError
       501 — Operation noch nicht implementiert (z. B. SOLCAST_REWRITE)
       500 — sonstige Operations-Fehler
     """
+    from backend.services.repair_protokoll import NichtsZuTun
+
     try:
         result = await orch.execute(plan_id, db)
+    except NichtsZuTun as e:
+        raise HTTPException(status_code=409, detail=f"Nichts zu tun: {e}")
     except TimeoutError as e:
         raise HTTPException(status_code=410, detail=str(e))
     except LookupError as e:

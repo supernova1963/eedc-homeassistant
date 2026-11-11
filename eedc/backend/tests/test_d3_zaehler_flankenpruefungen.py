@@ -7,6 +7,7 @@ eine spätere Sitzung sie sonst neu herleiten müsste.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from datetime import date, timedelta
 
 import pytest
@@ -348,7 +349,7 @@ async def test_stillgelegtes_modul_erzeugt_keine_phantom_drift(db, monkeypatch):
     # ⚠ Das Signal ist der **Reparatur-Knopf**, nicht die Schwere: die
     # Drift-Einträge sind INFO. Eine Probe auf `WARNING` wäre hier
     # gegenstandslos — sie bliebe auch ohne den Fix grün (Beweis-Familie).
-    drift = [e for e in erg if e.action_kind == "reaggregate_day"]
+    drift = [e for e in erg if befund_op(e) == "reaggregate_day"]
     assert drift == [], [e.meldung for e in erg]
     assert len(erg) == 1 and erg[0].schwere == CheckSeverity.OK.value, [
         e.meldung for e in erg
@@ -367,6 +368,6 @@ async def test_echte_drift_einer_aktiven_komponente_bleibt(db, monkeypatch):
 
     erg = await DatenChecker(db)._check_datenquelle_drift(await _geladen(db, a.id))
 
-    drift = [e for e in erg if e.action_kind == "reaggregate_day"]
+    drift = [e for e in erg if befund_op(e) == "reaggregate_day"]
     assert len(drift) == 1, [e.meldung for e in erg]
     assert "55,0" in drift[0].meldung, drift[0].meldung

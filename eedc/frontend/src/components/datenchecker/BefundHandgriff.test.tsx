@@ -24,7 +24,7 @@ vi.mock('../../api/repair', async (orig) => ({
 vi.mock('../../api/datenChecker', () => ({ datenCheckerApi: { check: (...a: unknown[]) => check(...a) } }))
 vi.mock('../../hooks/useHelpKatalog', async (orig) => ({
   ...(await orig<typeof import('../../hooks/useHelpKatalog')>()),
-  useHelpKatalog: () => ({ docs: [], grouped: [], activeDoc: undefined, content: '## Abschnitt\n\nSchritte', loading: false,
+  useHelpKatalog: () => ({ docs: [], grouped: [], activeDoc: undefined, content: '## Abschnitt\n\nSchritte\n\n#### Temperatur <a name="temperatur_aus_messung_moeglich"></a>\n\n1. Schritt eins\n\n#### Anderer Code <a name="x"></a>\n\nfremd', loading: false,
     error: null, rewriteLink: () => ({ type: 'external', target: '#' }) }),
 }))
 
@@ -36,9 +36,14 @@ import type { RepairPlan } from '../../api/repair'
 
 const TEMP: CheckErgebnis = {
   kategorie: 'wetterwert_fehlt', schwere: 'info', meldung: 'Ø Temperatur fehlt in 3 Monat(en), für 2 davon reicht die Messreihe',
-  details: null, link: '/einstellungen/daten?erfassen=2026-01', action_kind: 'temperatur_aus_messung', action_params: {},
-  action_label: 'Temperatur aus Messung übernehmen', investition_id: null,
+  details: null, ziel: null, action: { operation: 'temperatur_aus_messung', params: {}, label: 'Temperatur aus Messung übernehmen' },
+  knopf: 'Temperatur aus Messung übernehmen', investition_id: null,
 } as unknown as CheckErgebnis
+
+/** E5: der Handgriff steht in `action` bzw. `ziel`, der Knopf-Text in `knopf` (die Altfelder sind entfallen). */
+function aktion(operation: string, knopf: string, params: Record<string, unknown> = {}): CheckErgebnis {
+  return { ...TEMP, action: { operation, params, label: knopf }, knopf }
+}
 
 function planVon(over: Partial<RepairPlan>): RepairPlan {
   return {
@@ -108,7 +113,7 @@ describe('BefundHandgriff', () => {
   it('Lösch-Operation: «endgültig» in der Zeile und ein roter Knopf', async () => {
     plan.mockResolvedValue({ plan: planVon({ operation: 'feldwert_entfernen', estimated_changes: { monate_wert_entfernt: 2 },
       operation_preview: { endgueltig: true, monate: ['05/2026', '06/2026'] } }), expires_in_seconds: 3600 })
-    zeile({ ...TEMP, action_kind: 'feldwert_entfernen', action_label: 'Wert entfernen' } as CheckErgebnis)
+    zeile(aktion('feldwert_entfernen', 'Wert entfernen'))
     fireEvent.click(screen.getByRole('button', { name: /Wert entfernen/ }))
     expect(await screen.findByText(/Monate verlieren den Wert: 2 \(05\/2026, 06\/2026\) — endgültig/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Anwenden' }).className).toContain('bg-red-600')
@@ -118,8 +123,7 @@ describe('BefundHandgriff', () => {
     plan.mockResolvedValue({ plan: planVon({ operation: 'spiegel_abgleich_tag',
       estimated_changes: { spiegel_kanaele: 1, spiegel_abschnitte: 1, tage_neu_aufgebaut: 1 },
       operation_preview: { hat_spiegel: true } }), expires_in_seconds: 3600 })
-    zeile({ ...TEMP, action_kind: 'spiegel_abgleich_tag', action_label: 'Aus Home Assistant neu übernehmen',
-      action_params: { datum: '2026-11-02' } } as CheckErgebnis)
+    zeile(aktion('spiegel_abgleich_tag', 'Aus Home Assistant neu übernehmen', { datum: '2026-11-02' }))
     fireEvent.click(screen.getByRole('button', { name: /Aus Home Assistant neu übernehmen/ }))
     expect(await screen.findByText(/wirksam, wenn du in Home Assistant korrigiert hast/)).toBeTruthy()
   })
@@ -136,16 +140,25 @@ describe('BefundHandgriff', () => {
     expect(onErgebnis).not.toHaveBeenCalled()
   })
 
-  it('Sprung: «Beheben» navigiert zum Link, ohne Plan', () => {
-    zeile({ ...TEMP, action_kind: null, action_label: null, link: '/einstellungen/daten?erfassen=2026-01' } as unknown as CheckErgebnis)
-    fireEvent.click(screen.getByRole('button', { name: /Beheben/ }))
+  it('Sprung: der Knopf trägt den Katalog-Text (E5.7 L1, kein «Beheben») und navigiert zum Ziel, ohne Plan', () => {
+    zeile({ ...TEMP, action: null, knopf: 'Monat erfassen',
+      ziel: { bereich: 'daten', block: 'monatsdaten', params: { erfassen: '2026-01' } } } as unknown as CheckErgebnis)
+    expect(screen.queryByRole('button', { name: /Beheben/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Monat erfassen/ }))
     expect(screen.getByTestId('ort').textContent).toBe('/einstellungen/daten?erfassen=2026-01')
     expect(plan).not.toHaveBeenCalled()
   })
 
+  it('Sprung am Gerät: «Gerät bearbeiten» (E5.7 L1, JAZ-Zeile)', () => {
+    zeile({ ...TEMP, action: null, knopf: 'Gerät bearbeiten', kategorie: 'investitionen',
+      ziel: { bereich: 'komponenten', block: null, params: { bearbeiten: 4, feld: 'param_jaz' } } } as unknown as CheckErgebnis)
+    fireEvent.click(screen.getByRole('button', { name: /Gerät bearbeiten/ }))
+    expect(screen.getByTestId('ort').textContent).toBe('/einstellungen/komponenten?bearbeiten=4&feld=param_jaz')
+  })
+
   it('Auskunft: «Was gilt» öffnet den Lösungsweg; jede offene Zeile trägt den Link «Lösungsweg»', () => {
     const onLoesungsweg = vi.fn()
-    const auskunft = { ...TEMP, schwere: 'warning', action_kind: null, action_label: null, link: null } as unknown as CheckErgebnis
+    const auskunft = { ...TEMP, schwere: 'warning', action: null, knopf: 'Was gilt', ziel: null } as unknown as CheckErgebnis
     zeile(auskunft, { onLoesungsweg })
     fireEvent.click(screen.getByRole('button', { name: 'Was gilt' }))
     fireEvent.click(screen.getByRole('button', { name: 'Lösungsweg' }))
@@ -181,7 +194,23 @@ describe('LoesungswegPanel', () => {
     window.history.replaceState(null, '', '/api/hassio_ingress/abc/')
     panel()
     expect(screen.queryByRole('button', { name: /In eigenem Fenster öffnen/ })).toBeNull()
-    expect(screen.getByTestId('loesungsweg-hinweis').textContent).toContain('Im Panel öffnen')
+    // E5.7 L3: ein Satz für Browser über das HA-Seitenmenü und die Companion-App, mit dem Weg zum Knopf.
+    expect(screen.getByTestId('loesungsweg-hinweis').textContent).toBe(
+      'Innerhalb von Home Assistant nur hier im Panel — ein eigenes Fenster hätte keine Anmeldung. Direkt geöffnet (Port 8099) gibt es den Knopf.')
+  })
+
+  it('mit Code: der Abschnitt des Codes, Fenster-Knopf am Anker des Codes (E5)', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <LoesungswegPanel befund={{ ...TEMP, code: 'temperatur_aus_messung_moeglich' }} als="einschub" onClose={() => undefined} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByTestId('loesungsweg-inhalt').textContent).toContain('Schritt eins')
+    expect(screen.getByTestId('loesungsweg-inhalt').textContent).not.toContain('Anderer Code')
+    fireEvent.click(screen.getByRole('button', { name: /In eigenem Fenster öffnen/ }))
+    expect(open).toHaveBeenCalledWith('#/hilfe?doc=daten-checker#temperatur_aus_messung_moeglich', '_blank', 'noopener')
+    open.mockRestore()
   })
 })
 

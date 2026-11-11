@@ -32,6 +32,7 @@ erwartet, wäre im Winter rot.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -103,7 +104,7 @@ async def test_abweichender_offset_wird_als_warnung_gemeldet(monkeypatch):
     assert "Europe/Berlin" in b.details
     # Der Hinweis muss auflösbar sein — Daten-Checker-Doktrin (P-6). E4 (Teil B Nr 39): im Add-on springt der Knopf zum
     # Neustart (System → Protokolle); mit einer Token-Verbindung ist es eine Auskunft — der Weg steht im Text.
-    assert b.link is None and "Container" in b.details
+    assert befund_link(b) is None and "Container" in b.details
     # Und er darf nicht behaupten, gespeicherte Tage würden mit repariert.
     assert "Bereits gespeicherte Tage ändern sich davon nicht" in b.details
 

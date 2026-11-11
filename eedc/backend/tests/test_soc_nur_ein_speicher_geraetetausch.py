@@ -43,6 +43,7 @@ zählt nicht zur heutigen Ausstattung).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -153,7 +154,7 @@ async def test_tage_mit_zwei_aktiven_speichern_bleiben_ein_befund():
     warnungen = [e for e in ergebnisse if e.schwere == "warning"]
     assert len(warnungen) == 1, "der echte Alt-Bestand muss gemeldet bleiben"
     assert "1 Tag(e)" in warnungen[0].meldung
-    assert warnungen[0].action_kind == "reaggregate_range"
+    assert befund_op(warnungen[0]) == "reaggregate_range"
 
 
 async def test_gemischte_menge_zaehlt_nur_die_tage_nach_dem_wechsel():

@@ -24,6 +24,7 @@ haben und trotzdem einen Wärmemengenzähler an der falschen Stelle. Die zwei
 Meldungen können nebeneinander stehen, ohne dasselbe zu sagen.
 """
 
+from collections import Counter
 from backend.core.berechnungen.betriebsart_gemessen import (
     funktionsfremd_abzug_kwh,
     modus_strom_zeile,
@@ -161,6 +162,9 @@ class WaermepumpeChecks:
 
         # Datums-Listen absteigend (Regel 0a), Gerät als zweites Kriterium.
         treffer.sort(key=lambda t: (-t[2], -t[3], t[1]))
+        # E5 V2: keine Restzeile mehr — die über der Grenze weggelassenen Monate je Gerät stehen als `weitere` an der
+        # Gruppenzeile (`gruppen.py`).
+        weitere = Counter(t[0] for t in treffer[self.MAX_EINZEL:])
         for inv_id, name, jahr, monat, wert in treffer[: self.MAX_EINZEL]:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING.value, code="wp_arbeitszahl_zu_hoch",
@@ -182,14 +186,7 @@ class WaermepumpeChecks:
                     "und zählen in allen Mengen weiter mit."
                 ),
                 ziel=ziel_monat(jahr, monat, geraet=inv_id, feld="waerme_kwh"),
-                investition_id=inv_id,
-            ))
-
-        if len(treffer) > self.MAX_EINZEL:
-            rest = len(treffer) - self.MAX_EINZEL
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value, code="wp_arbeitszahl_weitere",
-                meldung=f"… plus {rest} weitere(r) Monat(e) mit derselben Auffälligkeit",
+                investition_id=inv_id, werte={"weitere": weitere[inv_id]} if weitere[inv_id] else None,
             ))
 
         return ergebnisse

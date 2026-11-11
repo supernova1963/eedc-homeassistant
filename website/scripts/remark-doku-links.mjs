@@ -8,7 +8,8 @@
 //   - Datei mit Website-Seite  → `${base}/${slug}/` + Anker
 //   - Datei ohne Website-Seite → Quelle auf GitHub (blob/main/docs/<pfad> bzw. blob/main/<datei> für
 //     Dateien im Repo-Wurzelverzeichnis wie ../CLAUDE.md), Anker bleibt
-// Absolute URLs (http:, https:, mailto:, //…, /…) und reine Anker (#…) bleiben unangetastet.
+// Absolute URLs (http:, https:, mailto:, //…, /…) und reine Anker (#…) bleiben unangetastet; `eedc:`-Links (Schritte in
+// der App, Lösungswege des Daten-Checkers) werden zu ihrem Text.
 // Der Wächter scripts/check-links.mjs (postbuild) macht übrig gebliebene .md-Verweise rot.
 
 const GITHUB_QUELLE = 'https://github.com/supernova1963/eedc-homeassistant/blob/main';
@@ -62,7 +63,13 @@ export default function remarkDokuLinks({ base, slugs }) {
         const neu = dokuZiel(knoten.url, kontext);
         if (neu !== null) knoten.url = neu;
       }
-      if (Array.isArray(knoten.children)) knoten.children.forEach(besuche);
+      if (Array.isArray(knoten.children)) {
+        // E5 Daten-Checker: ein Schritt in eedc (`[Text](eedc:/einstellungen/…)`) navigiert nur in der App — auf der
+        // Website bleibt sein Text stehen, der Link entfällt.
+        knoten.children = knoten.children.flatMap((kind) =>
+          kind.type === 'link' && typeof kind.url === 'string' && kind.url.startsWith('eedc:') ? kind.children : [kind]);
+        knoten.children.forEach(besuche);
+      }
     };
     besuche(tree);
   };

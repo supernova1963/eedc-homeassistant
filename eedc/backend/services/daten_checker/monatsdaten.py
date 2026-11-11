@@ -468,19 +468,14 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             # ist ein fehlender Monat ab dem Anker kein Schönheitsfehler.
             # Der auflösende Schritt steht im Link (P-6): der Monatsabschluss
             # genau dieses Monats.
+            # E5 V2: höchstens 12 Glieder; die übrigen stehen als `weitere` an der Gruppenzeile (früher eine Restzeile).
+            weitere = max(0, len(fehlende) - 12)
             for jahr, monat in fehlende[:12]:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR, code="monat_fehlt",
                     meldung=f"{monat:02d}/{jahr} fehlt",
                     # N-739 (a): Deep-Link öffnet die Erfassung des fehlenden Monats (Ziel-Bauer `ziel_monat`).
-                    ziel=ziel_monat(jahr, monat),
-                ))
-            if len(fehlende) > 12:
-                ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.ERROR, code="monate_fehlen_weitere",
-                    meldung=f"... und {len(fehlende) - 12} weitere Monate fehlen",
-                    # Sammelzeile über viele Monate — kein einzelner Monat, den
-                    # ein `?erfassen=` sinnvoll aufschlagen könnte.
+                    ziel=ziel_monat(jahr, monat), werte={"weitere": weitere} if weitere else None,
                 ))
 
         return ergebnisse
@@ -1488,9 +1483,19 @@ class ErfassungsortChecks:
         """
         lage = self._wetterquellen_lage(anlage, monatsdaten)
         ergebnisse = await self._check_temperatur_fehlt(anlage, monatsdaten)
-        ergebnisse += self._check_strahlungswerte_fehlen(anlage, monatsdaten)
-        ergebnisse += self._check_wetterquelle_uneinheitlich(lage)
-        ergebnisse += self._check_wetterquelle_nicht_festgehalten(lage)
+        # E5 V3 (Teil B Nr 92 + 93 + 94): Zeile 2, 3 und 4 sind EIN Befund mit EINER Aktion (`WETTER_BACKFILL` holt
+        # Strahlung und Sonnenstunden aller abgeschlossenen Monate von der gewählten Quelle) — die drei Zahlen stehen darin.
+        teile = {k: t for k, t in (("monate_ohne_strahlung", self._wetter_teil_strahlung(monatsdaten)),
+                                   ("monate_andere_quelle", self._wetter_teil_uneinheitlich(lage)),
+                                   ("monate_ohne_quelle", self._wetter_teil_ohne_label(lage))) if t}
+        if teile:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=CheckKategorie.WETTERWERT_FEHLT, schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
+                meldung=" · ".join(t[0] for t in teile.values()), details="\n\n".join(t[1] for t in teile.values()),
+                # Der Nachzug ERSETZT vorhandene Werte — `write_with_provenance` verlangt, dass der Anwender vorher erfährt,
+                # was ersetzt wird: seit E3 über Plan → Vorschau-Kasten → «Anwenden» (der Plan nennt die Monate).
+                action=Aktion("wetter_backfill", {}), werte={k: t[2] for k, t in teile.items()},
+            ))
         return ergebnisse
 
     # ── Zeile 3: die Quelle einer Reihe ─────────────────────────────────────
@@ -1601,9 +1606,9 @@ class ErfassungsortChecks:
             fremde=fremde, ohne_label=ohne_label,
         )
 
-    def _check_wetterquelle_uneinheitlich(
+    def _wetter_teil_uneinheitlich(
         self, lage: "ErfassungsortChecks._WetterquellenLage"
-    ) -> list[CheckErgebnis]:
+    ) -> Optional[tuple[str, str, int]]:
         """Monate, deren Wetterwert von einem ANDEREN Anbieter stammt.
 
         ⚠ **Was diese Zeile NICHT kann, und das gehört dazu:** Sie sieht nur,
@@ -1612,11 +1617,12 @@ class ErfassungsortChecks:
         **unbekannter**, nicht **anderer** Herkunft, und wird hier nicht
         gezählt. Eine Prüfung, die eine fehlende Angabe als Abweichung meldete,
         erzeugte eine Zahl, die niemand nachvollziehen kann. Für genau diese
-        Monate gibt es die Schwester-Zeile `_check_wetterquelle_nicht_festgehalten`.
+        Monate gibt es den Schwester-Teil `_wetter_teil_ohne_label`. Liefert (Meldung, Details, Zahl) — die Zeile baut
+        `_check_wetterwert_fehlt` (E5 V3).
         """
         abweichend, erwartet = lage.abweichend, lage.erwartet
         if not abweichend or erwartet is None:
-            return []
+            return None
 
         def _mm(md: Monatsdaten) -> str:
             return f"{md.monat:02d}/{md.jahr}"
@@ -1626,14 +1632,9 @@ class ErfassungsortChecks:
             beispiele += f" (+{len(abweichend) - 6} weitere)"
         namen = ", ".join(sorted(_ANBIETER_NAMEN.get(q, q) for q in lage.fremde))
 
-        return [CheckErgebnis(
-            kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
-            meldung=(
-                f"{len(abweichend)} Monat(e) stammen aus einer anderen "
-                "Wetterquelle als die aktuelle Wahl"
-            ),
-            details=(
+        return (
+            f"{len(abweichend)} Monat(e) stammen aus einer anderen Wetterquelle als die aktuelle Wahl",
+            (
                 f"Diese Monate tragen Werte von {namen}, während eedc heute "
                 f"{_ANBIETER_NAMEN.get(erwartet, erwartet)} fragt. Die beiden "
                 "messen nicht gleich: bei der Globalstrahlung liegen sie 12–16 % "
@@ -1645,20 +1646,14 @@ class ErfassungsortChecks:
                 "laufende Monat bleibt draußen, weil die Archive ihn noch nicht "
                 f"vollständig haben. Betroffen: {beispiele}."
             ),
-            # Der Nachzug ERSETZT vorhandene Werte — und `write_with_provenance`
-            # verlangt, dass der Aufrufer dem Anwender vorher sagt, was ersetzt
-            # wird. Seit E3 (Konzept Daten-Checker §3.2, §5) geht jede Aktion über
-            # Plan → Vorschau-Kasten → «Anwenden»: der Plan nennt die Zahl der
-            # ersetzten Monate, bevor etwas passiert. Bis dahin stand hier
-            # bewusst keine Inline-Aktion.
-            action=Aktion("wetter_backfill", {}),
-        )]
+            len(abweichend),
+        )
 
     # ── Zeile 3b: die Quelle steht nirgends ─────────────────────────────────
 
-    def _check_wetterquelle_nicht_festgehalten(
+    def _wetter_teil_ohne_label(
         self, lage: "ErfassungsortChecks._WetterquellenLage"
-    ) -> list[CheckErgebnis]:
+    ) -> Optional[tuple[str, str, int]]:
         """Monate mit Strahlungswerten, deren Herkunft nirgends festgehalten ist.
 
         ⭐ **Warum es diese Zeile braucht — an einer echten Anlage gemessen
@@ -1686,7 +1681,7 @@ class ErfassungsortChecks:
         """
         ohne = lage.ohne_label
         if not ohne:
-            return []
+            return None
 
         def _mm(md: Monatsdaten) -> str:
             return f"{md.monat:02d}/{md.jahr}"
@@ -1695,14 +1690,9 @@ class ErfassungsortChecks:
         if len(ohne) > 6:
             beispiele += f" (+{len(ohne) - 6} weitere)"
 
-        return [CheckErgebnis(
-            kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
-            meldung=(
-                f"{len(ohne)} abgeschlossene(r) Monat(e) tragen keine "
-                "festgehaltene Wetterquelle"
-            ),
-            details=(
+        return (
+            f"{len(ohne)} abgeschlossene(r) Monat(e) tragen keine festgehaltene Wetterquelle",
+            (
                 "Bei diesen Monaten steht nicht dabei, von welchem Wetterdienst "
                 "Globalstrahlung und Sonnenstunden stammen. **Ob alle aus "
                 "derselben Quelle kommen, lässt sich damit nicht mehr "
@@ -1718,16 +1708,12 @@ class ErfassungsortChecks:
                 "bleibt dabei draußen, weil die Archive ihn noch nicht "
                 f"vollständig haben. Betroffen: {beispiele}."
             ),
-            # Aktion mit Vorschau wie bei der Nachbarzeile (E3): derselbe Lauf
-            # ersetzt, was schon dasteht — der Plan nennt es vorher.
-            action=Aktion("wetter_backfill", {}),
-        )]
+            len(ohne),
+        )
 
     # ── Zeile 2: Strahlung und Sonnenstunden ────────────────────────────────
 
-    def _check_strahlungswerte_fehlen(
-        self, anlage: Anlage, monatsdaten: list[Monatsdaten]
-    ) -> list[CheckErgebnis]:
+    def _wetter_teil_strahlung(self, monatsdaten: list[Monatsdaten]) -> Optional[tuple[str, str, int]]:
         """Abgeschlossene Monate ohne Globalstrahlung oder Sonnenstunden.
 
         ⛔ **Der laufende Monat bleibt draußen** — dieselbe Begründung wie beim
@@ -1745,7 +1731,7 @@ class ErfassungsortChecks:
             if md.globalstrahlung_kwh_m2 is None or md.sonnenstunden is None
         ]
         if not offen:
-            return []
+            return None
 
         def _mm(md: Monatsdaten) -> str:
             return f"{md.monat:02d}/{md.jahr}"
@@ -1754,14 +1740,9 @@ class ErfassungsortChecks:
         if len(offen) > 6:
             beispiele += f" (+{len(offen) - 6} weitere)"
 
-        return [CheckErgebnis(
-            kategorie=CheckKategorie.WETTERWERT_FEHLT,
-            schwere=CheckSeverity.INFO, code="wetterreihe_nachziehen",
-            meldung=(
-                f"Globalstrahlung oder Sonnenstunden fehlen in "
-                f"{len(offen)} Monat(en)"
-            ),
-            details=(
+        return (
+            f"Globalstrahlung oder Sonnenstunden fehlen in {len(offen)} Monat(en)",
+            (
                 "Beide Größen sagen, wie viel Sonne ein Monat überhaupt hatte — "
                 "ohne sie lässt sich ein schwaches Jahr nicht von einer "
                 "schwachen Anlage unterscheiden. „Wetterreihe nachziehen“ holt "
@@ -1770,10 +1751,8 @@ class ErfassungsortChecks:
                 "Archive liefern ihn erst ein paar Tage nach Monatsende. "
                 f"Betroffen: {beispiele}."
             ),
-            # Aktion mit Vorschau wie oben (E3): derselbe Lauf ersetzt auch, was
-            # schon dasteht — der Plan nennt es vorher.
-            action=Aktion("wetter_backfill", {}),
-        )]
+            len(offen),
+        )
 
     # ── Zeile 1: die Ø-Temperatur (N-426-Nachtrag, unverändert) ─────────────
 
@@ -1851,8 +1830,8 @@ class ErfassungsortChecks:
                 details=(
                     f"{gemeinsam} Für keinen dieser Monate reicht die eigene "
                     "Messreihe zurück — dort hilft nur, den Monat im "
-                    "Monatsabschluss zu öffnen und „Wetterdaten holen“ zu "
-                    "drücken; eedc holt den Wert dann aus dem Wetter-Archiv."
+                    "Monatsabschluss zu öffnen und unter „Wetterdaten (optional)“ "
+                    "„Auto-Fill“ zu drücken; eedc holt den Wert dann aus dem Wetter-Archiv."
                 ),
                 ziel=ziel_monat_label(_mm(offen[0])),
             )]
@@ -1870,7 +1849,7 @@ class ErfassungsortChecks:
                 "bereits gepflegte Werte bleiben unberührt. Für die "
                 f"übrigen {len(offen) - len(erreichbar)} reicht die Reihe nicht "
                 "zurück; dort hilft nur, den Monat im Monatsabschluss zu öffnen "
-                "und „Wetterdaten holen“ zu drücken."
+                "und unter „Wetterdaten (optional)“ „Auto-Fill“ zu drücken."
                 if len(erreichbar) < len(offen) else
                 f"{gemeinsam} „Temperatur aus Messung übernehmen“ trägt sie aus "
                 "deinen eigenen Messwerten nach (Stundenmittel, sonst "

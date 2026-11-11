@@ -32,6 +32,7 @@ Vorlage: ``plans/vorlage-n596-gepurgte-tage-nicht-leer-schreiben.md`` (P1–P13)
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from contextlib import ExitStack, contextmanager
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
@@ -622,7 +623,7 @@ async def test_p9_checker_meldet_nicht_gespeicherte_aufteilung(db, monatsstrom, 
     m = treffer[0]
     assert m.schwere == "warning"
     assert "08/2026" in m.meldung and "zusammen 10,0 kWh" in m.meldung and erwartet in m.meldung
-    assert m.link == f"/einstellungen/daten?erfassen=2026-08&geraet={wp.id}"  # E4: der Monat am Gerät, nicht die Alt-Route
+    assert befund_link(m) == f"/einstellungen/daten?erfassen=2026-08&geraet={wp.id}"  # E4: der Monat am Gerät, nicht die Alt-Route
     assert m.investition_id == wp.id
 
 

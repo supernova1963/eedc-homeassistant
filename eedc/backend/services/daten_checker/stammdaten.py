@@ -242,23 +242,7 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 meldung=f"Anlagenleistung: {anlage.leistung_kwp} kWp",
             ))
 
-        # Koordinaten für PVGIS
-        if anlage.latitude is None or anlage.longitude is None:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO, code="standort_fehlt",
-                meldung="Keine Koordinaten hinterlegt",
-                details="Koordinaten werden für die PVGIS-Solarprognose benötigt",
-                ziel=ziel_anlage("latitude"),
-            ))
-
-        # Standort für Community-Vergleich
-        if not anlage.standort_ort and not anlage.standort_plz:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO, code="standort_fehlt",
-                meldung="Kein Standort hinterlegt (Ort/PLZ)",
-                details="Wird für den Community-Benchmark-Vergleich nach Region benötigt",
-                ziel=ziel_anlage("standort_ort"),
-            ))
+        ergebnisse.extend(_standort_befund(anlage, kat))
 
         # PV-Module vorhanden. Filter respektiert Stilllegungsdatum (#608
         # MartyBr): String-Verlegung zwischen Wechselrichtern wird über
@@ -823,7 +807,8 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 meldung="Kein Ladetarif hinterlegt",
                 details="E-Auto/Wallbox vorhanden – bei eigenem Ladetarif einen "
                         "Strompreis mit Verwendung „Wallbox“ ergänzen. Ohne ihn "
-                        "rechnet eedc die Ladung mit dem allgemeinen Tarif.",
+                        "rechnet eedc die Ladung mit dem allgemeinen Tarif. Wer keinen "
+                        "eigenen Ladetarif hat, muss nichts tun — die Rechnung stimmt dann bereits.",
             ))
 
         # Plausibilität der Werte
@@ -1249,3 +1234,23 @@ class StammdatenChecks(StammdatenInvestitionenChecks):
                 _e.investition_id = inv.id
 
         return ergebnisse
+
+
+def _standort_befund(anlage, kat) -> list[CheckErgebnis]:
+    """Standort: Koordinaten (PVGIS) und Ort/PLZ (Community-Vergleich) — E5 V3 (Teil B Nr 132 + 133): eine Zeile."""
+    ohne_koord = anlage.latitude is None or anlage.longitude is None
+    ohne_ort = not anlage.standort_ort and not anlage.standort_plz
+    if not (ohne_koord or ohne_ort):
+        return []
+    gruende = [g for g, fehlt in (
+        ("Koordinaten werden für die PVGIS-Solarprognose benötigt", ohne_koord),
+        ("Ort/PLZ wird für den Community-Benchmark-Vergleich nach Region benötigt", ohne_ort),
+    ) if fehlt]
+    return [CheckErgebnis(
+        kategorie=kat, schwere=CheckSeverity.INFO, code="standort_fehlt",
+        meldung=("Kein Standort hinterlegt (Koordinaten, Ort/PLZ)" if ohne_koord and ohne_ort
+                 else "Keine Koordinaten hinterlegt" if ohne_koord else "Kein Standort hinterlegt (Ort/PLZ)"),
+        details=("Wird für den Community-Benchmark-Vergleich nach Region benötigt" if not ohne_koord
+                 else "; ".join(gruende)),
+        ziel=ziel_anlage(feld="latitude" if ohne_koord else "standort_ort"),
+    )]

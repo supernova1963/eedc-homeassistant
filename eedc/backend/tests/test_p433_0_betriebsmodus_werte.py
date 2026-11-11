@@ -14,6 +14,7 @@ Schwesterdateien: test_p433_2_datenquellen_betriebsart.py (Betriebsart je Feld d
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op
 from datetime import date
 
 import pytest
@@ -203,12 +204,12 @@ async def test_meldet_den_unbekannten_wert_mit_der_werte_liste(db, monkeypatch):
     assert len(ergebnisse) == 1, [e.meldung for e in ergebnisse]
     e = ergebnisse[0]
     # E4 (Teil B Nr 4, Konzept §3.4): Auskunft — der Weg (Template-Sensor in HA) steht im Text, kein Sprung-Link.
-    assert (e.kategorie, e.schwere, e.investition_id, e.link) == (_KAT, "info", inv.id, None)
+    assert (e.kategorie, e.schwere, e.investition_id, befund_link(e)) == (_KAT, "info", inv.id, None)
     assert "„heating“" in e.meldung and "Nibe S1255" in e.meldung
     assert _MODUS in e.details
     assert betriebsmodus_werte_klartext() in e.details, "die Liste kommt aus dem Kanon"
     assert "nicht aufgeteilt" in e.details and "Weg B" in e.details
-    assert e.action_kind is None, "kein Reparatur-Knopf"
+    assert befund_op(e) is None, "kein Reparatur-Knopf"
 
 
 async def test_eine_quelle_an_zwei_geraeten_meldet_je_geraet(db, monkeypatch):

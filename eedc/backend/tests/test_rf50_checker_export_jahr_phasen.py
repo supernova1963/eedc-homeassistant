@@ -26,6 +26,7 @@ Doubles (Muster ``test_n451_monatspfad_k3.py``), die Export-Phase gestellte Prei
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import date
 from types import SimpleNamespace
 
@@ -118,7 +119,7 @@ def test_rf50_gesamtwaerme_unter_den_achsen_und_toleranz():
     })
     w = _meldungen(erg, "Gesamtwärme kleiner als Heizwärme + Warmwasser-Wärme")
     assert len(w) == 1 and "(03/2025)" in w[0].meldung and w[0].schwere == CheckSeverity.WARNING
-    assert w[0].link is not None and w[0].investition_id == 7
+    assert befund_link(w[0]) is not None and w[0].investition_id == 7
 
 
 _WAERME_NULL = "„Wärme gesamt“ ist 0, Heizwärme + Warmwasser-Wärme sind größer"
@@ -131,7 +132,7 @@ def test_t_gesamtwaerme_null_neben_achsen_eigene_warnung():
                                           "heizenergie_kwh": 800.0, "warmwasser_kwh": 300.0}})
     w = _meldungen(erg, _WAERME_NULL)
     assert len(w) == 1 and w[0].meldung.endswith("(03/2025)") and w[0].schwere == CheckSeverity.WARNING
-    assert w[0].link is not None and w[0].investition_id == 7
+    assert befund_link(w[0]) is not None and w[0].investition_id == 7
     assert "mit den beiden Einzelwerten" in w[0].details
     assert _meldungen(erg, "Gesamtwärme kleiner als Heizwärme + Warmwasser-Wärme") == []
 

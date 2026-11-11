@@ -25,6 +25,7 @@ Was ausdrücklich DRIN bleiben muss:
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 import re
 
 import pytest
@@ -254,7 +255,7 @@ async def test_ausweg_nennt_integration_statt_der_v3_navigation(db, _inbound_lae
         assert "MQTT-Inbound deaktivieren" not in details, b.meldung
         # Der Weg, den es gibt (E4: als Name, nicht als Menüweg).
         assert "MQTT-Broker-Verbindung" in details and "→" not in details, b.meldung
-        assert b.link.startswith("/einstellungen/datenquellen"), b.meldung
+        assert befund_link(b).startswith("/einstellungen/datenquellen"), b.meldung
 
 
 @pytest.mark.asyncio
@@ -282,7 +283,7 @@ async def test_auch_die_subscriber_info_weist_nach_integration(db, monkeypatch):
     for b in treffer:
         assert "Daten → Einrichtung" not in (b.details or "")
         assert "MQTT-Broker-Verbindung" in (b.details or "")
-        assert b.link == LINK_INTEGRATION + "?block=mqtt-broker"
+        assert befund_link(b) == LINK_INTEGRATION + "?block=mqtt-broker"
 
 
 # ─── #425 (gruaGit): die Wallbox-Regel gilt auch für die Topic-Erwartung ────

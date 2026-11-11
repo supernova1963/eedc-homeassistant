@@ -139,8 +139,8 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
 ]
 
 /**
- * Lösungsweg-Anker je Kategorie (E3, Konzept §3.5): der Abschnitt in `HANDBUCH_DATEN_CHECKER.md`, den das
- * Lösungsweg-Panel öffnet — bis E5 der Abschnitt der **Kategorie** (E5: eine Datei je Code). Dieselben Anker trägt der
+ * Lösungsweg-Anker je Kategorie (E3, Konzept §3.5): der Abschnitt der Kategorie in `HANDBUCH_DATEN_CHECKER.md` — der
+ * Rückfall des Lösungsweg-Panels für einen Befund ohne Code (seit E5 öffnet es am Anker des Codes). Dieselben Anker trägt der
  * Katalog `backend/services/daten_checker/handgriffe.py` je Code; der Wächter
  * `backend/tests/test_daten_checker_texte.py` hält beide und das Handbuch gleich. Kategorien ohne eigenen
  * Abschnitt (E2 ⚑3) fallen auf das Kapitel 4 zurück.
@@ -179,19 +179,15 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   position_doppelerfassung: '413-sonstige-positionen--der-erfassungsort',
   klima_modus_sensor: '414-klimaanlage--betriebsmodus',
   klima_modus_wert: '414a-betriebsmodus--unbekannter-wert',
-  emob_zustand_wert: '4-kategorien-im-detail',
-  emob_kennung_unbekannt: '4-kategorien-im-detail',
+  emob_zustand_wert: '426-e-mobilitaet--unbekannter-zustand',
+  emob_kennung_unbekannt: '427-e-mobilitaet--fahrzeug-unbekannt',
   wp_eigener_tarif: '42a-eigener-waermepumpen-tarif',
   zaehlerstand_reihe: '423-verbrauchszaehler-zaehlerstaende',
   vergleichspreis_fehlt: '424-vergleichspreise-benzinpreis',
 }
 
-/** Codes mit eigenem Abschnitt außerhalb ihrer Kategorie (wie im Katalog). */
-export const CODE_ANKER: Record<string, string> = {
-  connector_monatswert_fehlt: '411-geraete-connector-ohne-monatswert',
-}
-
 /** Der Anker des Lösungswegs eines Befunds (Code vor Kategorie, Rückfall Kapitel 4). */
 export function loesungswegAnker(kategorie: string, code?: string | null): string {
-  return (code && CODE_ANKER[code]) || KATEGORIE_ANKER[kategorie] || '4-kategorien-im-detail'
+  // E5: jeder Code hat seinen Abschnitt im Handbuch (`docs/daten-checker/<code>.md`, Anker = Code); ohne Code die Kategorie.
+  return code || KATEGORIE_ANKER[kategorie] || '4-kategorien-im-detail'
 }

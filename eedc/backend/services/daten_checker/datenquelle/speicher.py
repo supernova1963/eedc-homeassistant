@@ -190,6 +190,7 @@ class SpeicherChecks:
         # 2) Einzeltag-Einträge (bestehender reaggregate_day-Pfad) — bis 15 Tage,
         #    neueste zuerst (Datums-Listen Default absteigend, Regel 0a).
         MAX_EINZEL = 15
+        weitere = max(0, len(konflikt_tage) - MAX_EINZEL)  # E5 V2: statt Restzeile `weitere` an der Gruppenzeile
         for d in sorted(konflikt_tage, reverse=True)[:MAX_EINZEL]:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING.value,
@@ -199,18 +200,9 @@ class SpeicherChecks:
                     "Batterie-Netto in der korrigierten Richtung (ENTLADUNG positiv)."
                 ),
                 action=Aktion("reaggregate_day", {"datum": d.isoformat()}),
-                code="batterie_vorzeichen_tag", werte={"datum": d.isoformat()},
+                code="batterie_vorzeichen_tag",
+                werte={"datum": d.isoformat(), **({"weitere": weitere} if weitere else {})},
             ))
-        if len(konflikt_tage) > MAX_EINZEL:
-            rest = len(konflikt_tage) - MAX_EINZEL
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO.value, code="batterie_vorzeichen_weitere",
-                meldung=(
-                    f"… plus {rest} weitere(r) Tag(e) — am besten per "
-                    f"„Tage neu aufbauen“."
-                ),
-            ))
-
         return ergebnisse
 
     async def _check_soc_nur_ein_speicher(self, anlage: Anlage) -> list[CheckErgebnis]:

@@ -314,7 +314,7 @@ class Aktion:
     """Inline-Handgriff eines Befunds in **Plan/Execute-Form** (Etappe E3, Konzept §3.1 R6): `operation` ist ein Wert von
     `repair_orchestrator.RepairOperationType`, `params` sind die Plan-Parameter ohne `anlage_id` (die Anlage trägt der
     Prüflauf). Der Client ruft `POST /api/repair/plan` → Vorschau → `POST /api/repair/execute/{plan_id}`.
-    `action_kind`/`action_params` werden daraus abgeleitet, `action_label` aus dem Katalog (`handgriffe.knopf_text`)."""
+    Der Knopf-Text kommt aus dem Katalog (`handgriffe.knopf_text`, `CheckErgebnis.knopf`)."""
     operation: str
     params: dict
 
@@ -338,10 +338,23 @@ def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:
 
 
 @dataclass
+class Gruppe:
+    """Gruppenzeile eines Befunds (Etappe E5, Konzept §6 V2): gleiche Befunde eines Codes (je Gerät/Feld) stehen in der
+    Oberfläche als **eine** Zeile mit Gliedern — jedes Glied bleibt ein Befund mit eigenem Handgriff (Zählung unverändert).
+    Gebildet nach dem Prüflauf in `gruppen.py`; `titel`/`details` aus dem Katalog (`handgriffe.GRUPPEN`), `glied` aus dem
+    Datum bzw. Monat des Befunds, `weitere` = Befunde über der Anzeige-Grenze des Erzeugers (die frühere Restzeile)."""
+    schluessel: str
+    titel: str
+    glied: str
+    weitere: int = 0
+    details: Optional[str] = None
+
+
+@dataclass
 class CheckErgebnis:
-    """Ein Befund. Die Altfelder `link` und `action_*` sind **abgeleitet** (Etappe E2, Wächter W-3): `link` aus `ziel`
-    (seit E4 alle Parameter, `link_aus_ziel`), `action_*` aus `action`.
-    Kein Erzeuger setzt sie selbst."""
+    """Ein Befund. Der Handgriff steht in `ziel` (Sprung) bzw. `action` (Aktion); die Altfelder `link`/`action_*` sind mit
+    Etappe E5 entfallen (Wächter W-3). `knopf` ist der Knopf-Text aller drei Klassen, abgeleitet aus Katalog und Klasse
+    (E5.7 L1); `gruppe` setzt der Gruppenbau nach dem Prüflauf (E5 V2). Kein Erzeuger setzt `knopf` oder `gruppe`."""
     kategorie: str
     schwere: str
     meldung: str
@@ -362,32 +375,20 @@ class CheckErgebnis:
     # an jedem Erzeuger (Wächter W-1, Katalog `handgriffe.py`).
     werte: Optional[dict] = None
     code: Optional[str] = None
-
-    @property
-    def link(self) -> Optional[str]:
-        return link_aus_ziel(self.ziel)
-
-    @property
-    def action_kind(self) -> Optional[str]:
-        return self.action.operation if self.action else None
-
-    @property
-    def action_params(self) -> Optional[dict]:
-        return self.action.params if self.action else None
-
-    @property
-    def action_label(self) -> Optional[str]:
-        """Knopf-Text aus dem Katalog (E3, W-4): je Operation ein Text in Anwender-Sprache."""
-        if self.action is None:
-            return None
-        from backend.services.daten_checker.handgriffe import knopf_text
-
-        return knopf_text(self.action.operation)
+    gruppe: Optional[Gruppe] = None
 
     @property
     def klasse(self) -> str:
         """Laufzeit-Klasse (R2): Aktion vor Sprung vor Auskunft. Der Katalog führt die Soll-Klasse je Code."""
         return "aktion" if self.action else ("sprung" if self.ziel else "auskunft")
+
+    @property
+    def knopf(self) -> Optional[str]:
+        """Knopf-Text des einen Handgriffs (E5.7 L1): Aktion aus der Operation, Sprung aus dem Katalog, Auskunft «Was gilt»,
+        OK ohne Knopf (`handgriffe.knopf_fuer`)."""
+        from backend.services.daten_checker.handgriffe import knopf_fuer
+
+        return knopf_fuer(self)
 
 
 @dataclass
@@ -404,6 +405,9 @@ class DatenCheckResult:
     ergebnisse: list[CheckErgebnis]
     zusammenfassung: dict
     monatsdaten_abdeckung: Optional[MonatsdatenAbdeckung] = None
+    # E5 V4: Prüfungen, die in dieser Installation nicht laufen können (Abbruchpfade der Erzeuger: kein Home Assistant,
+    # MQTT-Import aus) — je `{"pruefung": …, "grund": …}`; die Oberfläche zählt sie im Kopf.
+    nicht_ausfuehrbar: list = field(default_factory=list)
 
 
 # ─── Konstanten / Labels ───────────────────────────────────────────────────

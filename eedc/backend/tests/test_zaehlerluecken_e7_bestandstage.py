@@ -11,6 +11,7 @@ die Marke immer), test_batterie_vorzeichen_historie_check.py (dieselbe Bauform
 """
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
@@ -55,8 +56,8 @@ async def test_p20_drei_tage_ohne_marke_eine_zeile_mit_zahl_und_reparaturweg(db)
     e = erg[0]
     assert e.kategorie == CheckKategorie.ENERGIEPROFIL_ABDECKUNG
     assert e.meldung.startswith("3 Tag(e) sind vor dem Umbau gerechnet")
-    assert e.action_kind == "reaggregate_range"
-    assert e.action_params == {"von": "2026-05-10", "bis": "2026-05-12"}
+    assert befund_op(e) == "reaggregate_range"
+    assert befund_params(e) == {"von": "2026-05-10", "bis": "2026-05-12"}
 
 
 @pytest.mark.asyncio
@@ -74,8 +75,8 @@ async def test_p20_mehr_als_31_tage_knopf_auf_das_juengste_fenster(db):
         e = (await DatenChecker(db)._check_bestandstage_ohne_regelmarke(a))[0]
     assert e.meldung.startswith("40 Tag(e)")
     neuester = TAG + timedelta(days=39)
-    assert e.action_params["bis"] == neuester.isoformat()
-    assert e.action_params["von"] == (neuester - timedelta(days=30)).isoformat()
+    assert befund_params(e)["bis"] == neuester.isoformat()
+    assert befund_params(e)["von"] == (neuester - timedelta(days=30)).isoformat()
     assert "9 ältere(r) Tag(e)" in e.details
 
 
@@ -84,7 +85,7 @@ async def test_p20_ohne_datenquelle_kein_knopf(db):
     a = await _anlage(db, {TAG: None})
     with _quelle(vorhanden=False):
         e = (await DatenChecker(db)._check_bestandstage_ohne_regelmarke(a))[0]
-    assert e.action_kind is None
+    assert befund_op(e) is None
 
 
 def test_p20_pruefung_ist_im_lauf_eingehaengt():

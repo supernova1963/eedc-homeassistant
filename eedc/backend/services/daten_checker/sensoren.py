@@ -263,6 +263,7 @@ class SensorChecks:
                 setting and setting.value and setting.value.get("enabled")
             )
             if not inbound_enabled_in_settings:
+                self._nicht_ausfuehrbar_merken("MQTT-Topic-Abdeckung", "MQTT-Import aus")
                 return []
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO, code="mqtt_subscriber_laeuft_nicht",
@@ -573,10 +574,9 @@ class SensorChecks:
 
         ha_service = get_ha_statistics_service()
         if not ha_service.is_available:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.INFO, code="betriebsart_standalone",
-                meldung="HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen",
-            ))
+            # E5 V3 (Teil B Nr 116 ⇒ 21): keine eigene Zeile mehr — die Lage nennt `betriebsart_standalone` (Datenquelle –
+            # aktiver Pfad), die Kopfzeile zählt die Prüfung als nicht ausführbar (V4, Gegenprüfung N3).
+            self._nicht_ausfuehrbar_merken("Sensoren gegen die Langzeitstatistik", "Standalone")
             return ergebnisse
 
         # Summen-fähig statt nur „vorhanden" (2026-07-29): ein Sensor mit
@@ -887,29 +887,21 @@ class SensorChecks:
                 ziel=ziel_datenquelle_schluessel(ctx.orte.get(stand_missing[0][0], "")),
             ))
 
-        if stand_sensors and not stand_missing:
-            ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.OK, code="stand_sensoren_ok",
-                meldung=(
-                    f"Alle {len(stand_sensors)} Zählerstand-Sensor(en) in "
-                    "HA-Long-Term-Statistics verfügbar"
-                ),
-                details=(
-                    "Eine Summen-Spalte wird hier bewusst nicht verlangt — ein "
-                    "Zählerstand kommt aus dem Sensor-Zustand, nicht aus einer "
-                    "Verbrauchssumme."
-                ),
-            ))
-
+        # E5 V3 (Teil B Nr 122 + 123): eine OK-Zeile für Zählerstand- und kWh-Sensoren; beide Zahlen stehen darin.
+        teile = []
         if kwh_sensors and not kwh_missing and not kwh_ohne_sum:
+            teile.append(f"{len(kwh_sensors)} kWh-Sensor(en)")
+        if stand_sensors and not stand_missing:
+            teile.append(f"{len(stand_sensors)} Zählerstand-Sensor(en)")
+        if teile:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK, code="stand_sensoren_ok",
-                meldung=(
-                    f"Alle {len(kwh_sensors)} kWh-Sensor(en) im Mapping in "
-                    "HA-Long-Term-Statistics verfügbar"
-                ),
+                meldung=f"Alle {' und '.join(teile)} in HA-Long-Term-Statistics verfügbar",
+                details=(
+                    "Für einen Zählerstand wird bewusst keine Summen-Spalte verlangt — er kommt aus dem "
+                    "Sensor-Zustand, nicht aus einer Verbrauchssumme."
+                ) if stand_sensors and not stand_missing else None,
             ))
-
 
         return ergebnisse
 

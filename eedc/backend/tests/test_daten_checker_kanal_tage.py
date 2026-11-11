@@ -23,6 +23,7 @@ test_n586_checker_ha_zaehlersprung.py (die Spiegel-Meldung).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_params
 import inspect
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -93,7 +94,7 @@ async def test_e7_kanal_tage_zaehlen_nicht_und_die_zeile_nennt_von_n_bestandstag
             (e,) = await DatenChecker(ds.db)._check_bestandstage_ohne_regelmarke(await _anlage(ds))
     assert e.meldung == ("1 von 2 Bestandstagen sind vor dem Umbau gerechnet (keine Regelmarke) "
                          "— 2026-05-20 … 2026-05-20")
-    assert e.action_params == {"von": "2026-05-20", "bis": "2026-05-20"}
+    assert befund_params(e) == {"von": "2026-05-20", "bis": "2026-05-20"}
 
 
 async def test_e7_nur_kanal_tage_ohne_marke_bleibt_still(uhr):

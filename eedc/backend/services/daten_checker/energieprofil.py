@@ -902,6 +902,8 @@ class EnergieprofilChecks:
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
             }) if reparatur_moeglich else None,
+            # E5 (E4 ⚑1, Master-Entscheid): ohne Quelle springt der Befund auf die fehlende Zuordnung (Leistung am Netz).
+            ziel=ziel_datenquelle(feld="netzbezug_w") if not reparatur_moeglich else None,
         )]
 
     async def _check_tage_ohne_kanal_deckung(self, anlage: Anlage) -> list[CheckErgebnis]:
@@ -1144,7 +1146,8 @@ class EnergieprofilChecks:
                 "erzeugt werden kann. Sie zählt im Tag und im Monat mit. "
                 + " ".join(teile) + " "
                 "Dieselbe Form hat ein Zählersprung nach einer Nacht ohne Erzeugung; stimmt eine "
-                "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle."
+                "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle — in Home Assistant "
+                "korrigierst du sie in den Entwicklerwerkzeugen unter „Statistik“ mit „Wert anpassen“."
             ),
             code="nachtrag_nach_eingefrorenem_zaehler", werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(), "nach_lts": len(lts), "nach_zaehler": len(zaehler)},  # E1: angehängt (Dateilänge)
         )]
@@ -1389,7 +1392,8 @@ class EnergieprofilChecks:
                 meldung=f"PV-Erzeugung über kWp-Anteil geschätzt in {len(verteilt)} Monat(en)",
                 details=(
                     "Gesamtwert wird anteilig nach kWp auf die Strings verteilt — "
-                    f"Pro-String-Genauigkeit eingeschränkt: {_monate(verteilt)}"
+                    f"Pro-String-Genauigkeit eingeschränkt: {_monate(verteilt)}. Ohne Handlung bleibt das so: die Summe "
+                    "stimmt, nur die Aufteilung je String ist geschätzt; genauer wird sie mit einem Zähler je String."
                 ),
                 # Kein `?erfassen=`: hier fehlt nichts, der Gesamtwert wird nur
                 # verteilt. Der Block genügt, ein geöffnetes Formular wäre eine

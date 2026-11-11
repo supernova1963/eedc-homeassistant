@@ -23,6 +23,7 @@ Komponente ``ist_zaehler`` bekommt (zweiter Testblock).
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -72,7 +73,7 @@ def test_zaehlerstand_bekommt_den_hinweis_auf_den_folgemonat():
     assert "zwei Monate als einen" in e.details, e.details
     # E3 (W6): der Handgriff ist «Monat erfassen»; das Löschen ist die Werkbank-Operation, deren Vorschau den
     # Zählerstand-Satz trägt (`test_repair_operationen_checker.py`) — gesagt, nicht verboten.
-    assert e.action_kind is None and e.ziel is not None
+    assert befund_op(e) is None and e.ziel is not None
 
 
 def test_ohne_zaehler_bleibt_der_text_wie_er_war():

@@ -21,7 +21,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 CHECKER_DIR = BACKEND / "services" / "daten_checker"
 BASELINE = Path(__file__).resolve().parent / "daten_checker_altlink_baseline.txt"
 #: Dateien, die keine Erzeuger sind: die Dataclass und die Ableitung, der Ziel-Bauer, der Katalog.
-KEINE_ERZEUGER = {"kategorien.py", "ziele.py", "handgriffe.py"}
+KEINE_ERZEUGER = {"kategorien.py", "ziele.py", "handgriffe.py", "gruppen.py"}
 GRUENDE = ("anderer_pfad", "andere_parameter", "heute_kein_link", "klasse_ohne_ziel")
 #: Ziel-Bauer → Pfad, den die Oberfläche heute liest (für den Grund «anderer Pfad» vs. «andere Parameter»).
 _PFAD_DES_BAUERS = {

@@ -46,5 +46,874 @@
   "komponenten/speicher": [
    "geraet"
   ]
- }
+ },
+ "pfade": [
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {},
+    "anker": null
+   },
+   "pfad": "/einstellungen/daten?block=monatsdaten"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "feld": "batterie_entladung_kwh"
+    },
+    "anker": "batterie_entladung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&feld=batterie_entladung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "feld": "batterie_ladung_kwh"
+    },
+    "anker": "batterie_ladung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&feld=batterie_ladung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "feld": "einspeisung_kwh"
+    },
+    "anker": "einspeisung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&feld=einspeisung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "feld": "netzbezug_kwh"
+    },
+    "anker": "netzbezug_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&feld=netzbezug_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "feld": "pv_erzeugung_kwh"
+    },
+    "anker": "pv_erzeugung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&feld=pv_erzeugung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "entladung_kwh"
+    },
+    "anker": "entladung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=entladung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "heizenergie_kwh"
+    },
+    "anker": "heizenergie_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=heizenergie_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "ladung_kwh"
+    },
+    "anker": "ladung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=ladung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "ladung_pv_kwh"
+    },
+    "anker": "ladung_pv_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=ladung_pv_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "pv_erzeugung_kwh"
+    },
+    "anker": "pv_erzeugung_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=pv_erzeugung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "strom_heizen_kwh"
+    },
+    "anker": "strom_heizen_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=strom_heizen_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "strom_warmwasser_kwh"
+    },
+    "anker": "strom_warmwasser_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=strom_warmwasser_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "stromverbrauch_kwh"
+    },
+    "anker": "stromverbrauch_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=stromverbrauch_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
+    "block": "monatsdaten",
+    "params": {
+     "erfassen": "2026-01",
+     "geraet": 1,
+     "feld": "waerme_kwh"
+    },
+    "anker": "waerme_kwh"
+   },
+   "pfad": "/einstellungen/daten?erfassen=2026-01&geraet=1&feld=waerme_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "einspeisung_kwh"
+    },
+    "anker": "einspeisung_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=einspeisung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "ladung_netz_kwh"
+    },
+    "anker": "ladung_netz_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=ladung_netz_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "netzbezug_eigener_tarif_kwh"
+    },
+    "anker": "netzbezug_eigener_tarif_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=netzbezug_eigener_tarif_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "netzbezug_kwh"
+    },
+    "anker": "netzbezug_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=netzbezug_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "netzbezug_w"
+    },
+    "anker": "netzbezug_w"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=netzbezug_w"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "feld": "pv_gesamt_kwh"
+    },
+    "anker": "pv_gesamt_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?feld=pv_gesamt_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "betriebsart_strom_kuehlen_kwh"
+    },
+    "anker": "betriebsart_strom_kuehlen_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=betriebsart_strom_kuehlen_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "betriebsmodus"
+    },
+    "anker": "betriebsmodus"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=betriebsmodus"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "ladung_kwh"
+    },
+    "anker": "ladung_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=ladung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "ladung_netz_kwh"
+    },
+    "anker": "ladung_netz_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=ladung_netz_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "netzbezug_eigener_tarif_kwh"
+    },
+    "anker": "netzbezug_eigener_tarif_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=netzbezug_eigener_tarif_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "pv_erzeugung_kwh"
+    },
+    "anker": "pv_erzeugung_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=pv_erzeugung_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "stromverbrauch_kwh"
+    },
+    "anker": "stromverbrauch_kwh"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=stromverbrauch_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "feld": "zaehlerstand"
+    },
+    "anker": "zaehlerstand"
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&feld=zaehlerstand"
+  },
+  {
+   "ziel": {
+    "bereich": "integration",
+    "block": "import-buendel",
+    "params": {
+     "wizard": "connector"
+    },
+    "anker": "connector"
+   },
+   "pfad": "/einstellungen/integration?block=import-buendel&wizard=connector"
+  },
+  {
+   "ziel": {
+    "bereich": "integration",
+    "block": "mqtt-broker",
+    "params": {},
+    "anker": null
+   },
+   "pfad": "/einstellungen/integration?block=mqtt-broker"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {},
+    "anker": null
+   },
+   "pfad": "/einstellungen/komponenten"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "aktiv"
+    },
+    "anker": "aktiv"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=aktiv"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "alter_preis_cent_kwh"
+    },
+    "anker": "param_alter_preis_cent_kwh"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=alter_preis_cent_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "anschaffungsdatum"
+    },
+    "anker": "anschaffungsdatum"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=anschaffungsdatum"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "anschaffungskosten_alternativ"
+    },
+    "anker": "anschaffungskosten_alternativ"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=anschaffungskosten_alternativ"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "anschaffungskosten_gesamt"
+    },
+    "anker": "anschaffungskosten_gesamt"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=anschaffungskosten_gesamt"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "anzahl_module"
+    },
+    "anker": "param_anzahl_module"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=anzahl_module"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "ausrichtung"
+    },
+    "anker": "ausrichtung"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=ausrichtung"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "betriebskosten_jahr"
+    },
+    "anker": "betriebskosten_jahr"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=betriebskosten_jahr"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "elektrischer_fahranteil_prozent"
+    },
+    "anker": "param_elektrischer_fahranteil_prozent"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=elektrischer_fahranteil_prozent"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "entlade_vermiedener_preis_cent"
+    },
+    "anker": "param_entlade_vermiedener_preis_cent"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=entlade_vermiedener_preis_cent"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "getrennte_strommessung"
+    },
+    "anker": "param_getrennte_strommessung"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=getrennte_strommessung"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "heizwaermebedarf_kwh"
+    },
+    "anker": "param_heizwaermebedarf_kwh"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=heizwaermebedarf_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "jahresfahrleistung_km"
+    },
+    "anker": "param_jahresfahrleistung_km"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=jahresfahrleistung_km"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "jaz"
+    },
+    "anker": "param_jaz"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=jaz"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "kapazitaet_kwh"
+    },
+    "anker": "param_kapazitaet_kwh"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=kapazitaet_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "kategorie"
+    },
+    "anker": "param_kategorie"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=kategorie"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "kennung_in_steuerung"
+    },
+    "anker": "param_kennung_in_steuerung"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=kennung_in_steuerung"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "lade_durchschnittspreis_cent"
+    },
+    "anker": "param_lade_durchschnittspreis_cent"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=lade_durchschnittspreis_cent"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "leistung_kwp"
+    },
+    "anker": "leistung_kwp"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=leistung_kwp"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "leistung_wp"
+    },
+    "anker": "param_leistung_wp"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=leistung_wp"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "max_ladeleistung_kw"
+    },
+    "anker": "param_max_ladeleistung_kw"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=max_ladeleistung_kw"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "max_leistung_kw"
+    },
+    "anker": "param_max_leistung_kw"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=max_leistung_kw"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "warmwasserbedarf_kwh"
+    },
+    "anker": "param_warmwasserbedarf_kwh"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=warmwasserbedarf_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "bearbeiten": 1,
+     "feld": "wechselrichter_leistung_w"
+    },
+    "anker": "param_wechselrichter_leistung_w"
+   },
+   "pfad": "/einstellungen/komponenten?bearbeiten=1&feld=wechselrichter_leistung_w"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten",
+    "block": null,
+    "params": {
+     "neu": "pv-module"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/komponenten?neu=pv-module"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "anlage",
+    "params": {
+     "feld": "installationsdatum"
+    },
+    "anker": "installationsdatum"
+   },
+   "pfad": "/einstellungen/stammdaten?block=anlage&feld=installationsdatum"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "anlage",
+    "params": {
+     "feld": "latitude"
+    },
+    "anker": "latitude"
+   },
+   "pfad": "/einstellungen/stammdaten?block=anlage&feld=latitude"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "anlage",
+    "params": {
+     "feld": "leistung_kwp"
+    },
+    "anker": "leistung_kwp"
+   },
+   "pfad": "/einstellungen/stammdaten?block=anlage&feld=leistung_kwp"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "anlage",
+    "params": {
+     "feld": "standort_ort"
+    },
+    "anker": "standort_ort"
+   },
+   "pfad": "/einstellungen/stammdaten?block=anlage&feld=standort_ort"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "solarprognose",
+    "params": {
+     "feld": "system_losses"
+    },
+    "anker": "system_losses"
+   },
+   "pfad": "/einstellungen/stammdaten?block=solarprognose&feld=system_losses"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": 1
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=1"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": 1,
+     "feld": "einspeiseverguetung_cent_kwh"
+    },
+    "anker": "einspeiseverguetung_cent_kwh"
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=1&feld=einspeiseverguetung_cent_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": 1,
+     "feld": "gueltig_ab"
+    },
+    "anker": "gueltig_ab"
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=1&feld=gueltig_ab"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": 1,
+     "feld": "netzbezug_arbeitspreis_cent_kwh"
+    },
+    "anker": "netzbezug_arbeitspreis_cent_kwh"
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=1&feld=netzbezug_arbeitspreis_cent_kwh"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": "neu"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=neu"
+  },
+  {
+   "ziel": {
+    "bereich": "stammdaten",
+    "block": "strompreise",
+    "params": {
+     "tarif": "neu",
+     "art": "allgemein",
+     "ab": "2026-01-01"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/stammdaten?block=strompreise&tarif=neu&art=allgemein&ab=2026-01-01"
+  },
+  {
+   "ziel": {
+    "bereich": "system",
+    "block": "protokolle",
+    "params": {},
+    "anker": null
+   },
+   "pfad": "/einstellungen/system?block=protokolle"
+  },
+  {
+   "ziel": {
+    "bereich": "komponenten-hub",
+    "block": "speicher",
+    "params": {
+     "geraet": 1
+    },
+    "anker": null
+   },
+   "pfad": "/komponenten/speicher?geraet=1"
+  }
+ ]
 }

@@ -13,6 +13,7 @@ Jede Probe hier hält einen dieser Fälle fest, jede mit ihrer Gegenprobe.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link, befund_op
 from datetime import date, datetime
 
 import pytest
@@ -170,7 +171,7 @@ async def test_gefallener_stand_wird_erklaert_nicht_geheilt(db):
     assert "31.03.2025" in b.details, b.details
     assert "1.260" in b.details and "40" in b.details
     # ⛔ Kein Reparatur-Knopf: eedc weiß nicht, welcher Stand gilt.
-    assert b.action_kind is None
+    assert befund_op(b) is None
     # Der Weg steht drin, und zwar vollständig — inklusive der Falle,
     # den Haken „aktiv" statt des Stilllegungsdatums zu benutzen.
     assert "Stilllegungsdatum" in b.details
@@ -252,7 +253,7 @@ async def test_inaktiver_zaehler_mit_ablesungen_bekommt_den_hinweis(db):
     assert "auch nicht für die Vergangenheit" in hinweise[0].details
     assert "Stilllegungsdatum" in hinweise[0].details
     # Der Hinweis führt in das Formular GENAU dieses Geräts.
-    assert hinweise[0].link == f"/einstellungen/komponenten?bearbeiten={inv.id}&feld=aktiv"
+    assert befund_link(hinweise[0]) == f"/einstellungen/komponenten?bearbeiten={inv.id}&feld=aktiv"
 
 
 @pytest.mark.asyncio

@@ -35,6 +35,7 @@ bleiben muss.
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 import re
 from datetime import date
 from pathlib import Path
@@ -278,8 +279,8 @@ async def test_daten_checker_weist_den_fehlenden_wert_aus(db):
 
     treffer = [e for e in ergebnisse if "Kapazität" in e.meldung]
     assert len(treffer) == 1, f"Meldung fehlt — E16 wäre ungedeckt. Gefunden: {[e.meldung for e in ergebnisse]}"
-    assert treffer[0].link.startswith("/einstellungen/komponenten?bearbeiten=")
-    assert treffer[0].link.endswith("&feld=kapazitaet_kwh")
+    assert befund_link(treffer[0]).startswith("/einstellungen/komponenten?bearbeiten=")
+    assert befund_link(treffer[0]).endswith("&feld=kapazitaet_kwh")
 
 
 async def test_community_datensatz_meldet_null_statt_zehn(db):

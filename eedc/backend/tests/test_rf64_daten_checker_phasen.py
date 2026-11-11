@@ -29,6 +29,7 @@ keine Uhr: die Methoden bekommen ungespeicherte Model-Objekte und eine gestellte
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_op, befund_params
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -89,7 +90,7 @@ async def _drift(eedc_je_tag: dict, ha_je_tag, invs: list, aufrufe: list | None 
 
 
 def _tageszeilen(erg):
-    return [e for e in erg if e.action_kind == "reaggregate_day" and e.investition_id is None]
+    return [e for e in erg if befund_op(e) == "reaggregate_day" and e.investition_id is None]
 
 
 async def test_rf64_schwelle_beide_kanten_gleichzeitig_achse_1():
@@ -99,7 +100,7 @@ async def test_rf64_schwelle_beide_kanten_gleichzeitig_achse_1():
     ha = {d1: 40.0, d2: 50.0, d3: 20.0}
     erg = await _drift(eedc, lambda d, _i: {"pv_3": ha[d]}, [_inv(3, "pv-module")])
     zeilen = _tageszeilen(erg)
-    assert [z.action_params["datum"] for z in zeilen] == [d1.isoformat()]
+    assert [befund_params(z)["datum"] for z in zeilen] == [d1.isoformat()]
     assert zeilen[0].meldung == f"{d1.isoformat()}: PV 38,0 → HA 40,0 kWh (Δ +2,0 kWh, +5,0 %)"
 
 
@@ -122,7 +123,7 @@ async def test_rf64_achse_1_eine_seite_null_meldet_beide_null_nicht():
     eedc = {d1: {"pv_3": 0.0}, d2: {"netzbezug": 3.0}, d3: {"pv_3": 0.0}}
     ha = {d1: {"pv_3": 30.0}, d2: {"pv_3": 30.0}, d3: {"pv_3": 0.0}}
     erg = await _drift(eedc, lambda d, _i: ha[d], [_inv(3, "pv-module")])
-    assert [z.action_params["datum"] for z in _tageszeilen(erg)] == [d1.isoformat(), d2.isoformat()]
+    assert [befund_params(z)["datum"] for z in _tageszeilen(erg)] == [d1.isoformat(), d2.isoformat()]
 
 
 async def test_rf64_achse_1_nur_lts_lesbare_pv_keys():
@@ -170,12 +171,13 @@ async def test_rf64_lts_read_einmal_je_tag_und_fehler_ueberspringt_den_tag():
     eedc = {d1: {"pv_3": 30.0, "wallbox_5": 30.0}, d2: {"pv_3": 1.0, "wallbox_5": 1.0}}
     erg = await _drift(eedc, _ha, [_inv(3, "pv-module"), _inv(5, "wallbox", "Box")], aufrufe)
     assert [a[0] for a in aufrufe] == [d1, d2]
-    assert [e.action_params["datum"] for e in erg] == [d1.isoformat(), d1.isoformat()]
+    assert [befund_params(e)["datum"] for e in erg] == [d1.isoformat(), d1.isoformat()]
     assert erg[1].meldung.startswith("Box: 1 Tag(e)")
 
 
 async def test_rf64_kappung_20_und_reihenfolge_tage_komponenten_rest():
-    """23 Drift-Tage ⇒ 20 Tageszeilen nach |Δ| absteigend, dann die Komponentenzeile, zuletzt «… plus 3 weitere»."""
+    """23 Drift-Tage ⇒ 20 Tageszeilen nach |Δ| absteigend, dann die Komponentenzeile; E5 V2: statt der Restzeile
+    «… plus 3 weitere» trägt jede Tageszeile `werte.weitere = 3` (Gruppenzeile)."""
     eedc, ha = {}, {}
     for i in range(23):
         d = T0 + timedelta(days=i)
@@ -184,11 +186,10 @@ async def test_rf64_kappung_20_und_reihenfolge_tage_komponenten_rest():
     erg = await _drift(eedc, lambda d, _i: ha[d], [_inv(3, "pv-module"), _inv(5, "wallbox", "Box")])
     tage = _tageszeilen(erg)
     assert len(tage) == 20
-    assert [z.action_params["datum"] for z in tage] == [(T0 + timedelta(days=i)).isoformat() for i in range(22, 2, -1)]
-    assert len(erg) == 22
+    assert [befund_params(z)["datum"] for z in tage] == [(T0 + timedelta(days=i)).isoformat() for i in range(22, 2, -1)]
+    assert len(erg) == 21
     assert erg[20].investition_id == 5 and erg[20].meldung.startswith("Box: 1 Tag(e)")
-    assert erg[21].meldung == "… plus 3 weitere Tag(e) mit Drift"
-    assert erg[21].action_kind is None
+    assert all(z.werte["weitere"] == 3 for z in tage) and "weitere" not in erg[20].werte
 
 
 async def test_rf64_je_komponente_ein_eintrag_schlimmster_tag_groesste_zuerst():
@@ -203,7 +204,7 @@ async def test_rf64_je_komponente_ein_eintrag_schlimmster_tag_groesste_zuerst():
     assert erg[0].meldung.startswith("WP: 1 Tag(e) weichen von HA-Statistics ab (größte Abweichung " + T0.isoformat())
     d_schlimm = (T0 + timedelta(days=1)).isoformat()
     assert erg[1].meldung.startswith(f"Box: 3 Tag(e) weichen von HA-Statistics ab (größte Abweichung {d_schlimm}")
-    assert erg[1].action_params == {"datum": d_schlimm}
+    assert befund_params(erg[1]) == {"datum": d_schlimm}
     assert "an 3 Tag(en)" in erg[1].details
 
 
@@ -350,9 +351,9 @@ async def test_rf66_summen_faehig_statt_vorhanden_stand_ohne_summe_ist_ok(monkey
         (CheckSeverity.OK, "Alle 1 Zählerstand-Sensor(en) in HA-Long-Term-Statistics verfügbar"),
     ]
     erg = await _lts(_lts_anlage(), _Ha(), monkeypatch)
+    # E5 V3 (Teil B Nr 122 + 123): eine OK-Zeile mit beiden Zahlen.
     assert [e.meldung for e in erg] == [
-        "Alle 1 Zählerstand-Sensor(en) in HA-Long-Term-Statistics verfügbar",
-        "Alle 4 kWh-Sensor(en) im Mapping in HA-Long-Term-Statistics verfügbar",
+        "Alle 4 kWh-Sensor(en) und 1 Zählerstand-Sensor(en) in HA-Long-Term-Statistics verfügbar",
     ]
 
 
@@ -398,11 +399,10 @@ async def test_rf66_sammelregeln(monkeypatch):
 
 
 async def test_rf66_leer_ohne_mapping_ohne_sensoren_und_info_ohne_ha(monkeypatch):
-    """Ohne Mapping und ohne prüfbaren Sensor keine Zeile; ohne HA ein INFO statt einer Prüfung."""
+    """Ohne Mapping und ohne prüfbaren Sensor keine Zeile; ohne HA (E5 V3/V4) ebenfalls keine Zeile — die Prüfung zählt der
+    Kopf als nicht ausführbar."""
     assert await _lts(_anlage([], {}), _Ha(), monkeypatch) == []
     assert await _lts(_anlage([], {"basis": {"strompreis": _s("s.p")}}), _Ha(), monkeypatch) == []
     weg = SimpleNamespace(is_available=False)
     erg = await _lts(_anlage([], {"basis": {"einspeisung": _s("s.e")}}), weg, monkeypatch)
-    assert [(e.schwere, e.meldung) for e in erg] == [
-        (CheckSeverity.INFO, "HA Long-Term-Statistics nicht erreichbar — Mapping-Prüfung übersprungen"),
-    ]
+    assert erg == []

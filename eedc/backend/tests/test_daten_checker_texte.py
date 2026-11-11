@@ -4,7 +4,7 @@ Der Knopf eines Befunds und die **eine** Vorschau-Zeile je Operation sprechen An
 ``handgriffe.MECHANIK_WOERTER`` (Spiegel, Kanal, LTS, Statistics, Snapshot, aggregier, Provenance, Resnap) und kein
 Menüweg-Pfeil «→». Geprüft werden
 * die Knopf-Texte des Katalogs (``HANDGRIFFE[*].knopf``) und je Operation (``KNOPF_JE_OPERATION``, daraus
-  ``CheckErgebnis.action_label``);
+  ``CheckErgebnis.knopf``);
 * die Beschriftungen der Vorschau-Zähler, die die Operationen der Checker-Knöpfe liefern (``REPARATUR_AENDERUNG_LABELS`` in
   ``frontend/src/lib/constants.ts``) — jeder Schlüssel hat eine;
 * die Satzteile der Vorschau-Zeile im Client (``frontend/src/components/datenchecker/vorschauZeile.ts``).
@@ -57,6 +57,9 @@ def _labels() -> dict[str, str]:
 @pytest.mark.parametrize("code", sorted(c for c, h in HANDGRIFFE.items() if h.knopf))
 def test_knopf_text_des_katalogs_ohne_mechanik(code):
     assert _verstoesse(HANDGRIFFE[code].knopf) == [], (code, HANDGRIFFE[code].knopf)
+    # E5.7 L1: auch der Sprung-Knopf eines Aktion-Codes ohne Reparaturweg (`knopf_sprung`) und nie das alte «Beheben».
+    assert _verstoesse(HANDGRIFFE[code].knopf_sprung or "") == [], (code, HANDGRIFFE[code].knopf_sprung)
+    assert HANDGRIFFE[code].knopf != "Beheben"
 
 
 def test_knopf_text_je_operation_ohne_mechanik_und_im_katalog():
@@ -174,16 +177,13 @@ def test_jede_kategorie_hat_einen_anker_im_handbuch():
     tabelle = _ts_tabelle("KATEGORIE_ANKER")
     assert set(tabelle) == {k.value for k in CheckKategorie}
     vorhanden = _handbuch_anker()
-    fehlt = sorted({a for a in (*tabelle.values(), *_ts_tabelle("CODE_ANKER").values()) if a not in vorhanden})
+    fehlt = sorted({a for a in tabelle.values() if a not in vorhanden})
     assert not fehlt, fehlt
 
 
-def test_katalog_anker_stehen_in_der_client_tabelle():
-    """Jeder Anker des Katalogs ist ein Kategorie-Anker der Client-Tabelle oder ein benannter Code-Anker (bis E5)."""
-    erlaubt = set(_ts_tabelle("KATEGORIE_ANKER").values())
-    code_anker = _ts_tabelle("CODE_ANKER")
-    for code, h in HANDGRIFFE.items():
-        if code in code_anker:
-            assert h.handbuch_anker == code_anker[code], code
-        elif h.handbuch_anker:
-            assert h.handbuch_anker in erlaubt, (code, h.handbuch_anker)
+def test_jeder_code_hat_seinen_anker_im_handbuch():
+    """E5: das Lösungsweg-Panel öffnet am Anker des Codes (`loesungswegAnker` = Code); den Abschnitt erzeugt
+    `scripts/daten-checker-handbuch.py` aus `docs/daten-checker/<code>.md` (W-13)."""
+    vorhanden = _handbuch_anker()
+    fehlt = sorted(c for c in HANDGRIFFE if c not in vorhanden)
+    assert not fehlt, fehlt

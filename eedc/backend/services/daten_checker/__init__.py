@@ -33,6 +33,7 @@ from .kategorien import (
     DatenCheckResult,
 )
 from ._helpers import _CheckHelpers
+from .gruppen import gruppen_bilden
 from backend.models.tages_energie_profil import TagesEnergieProfil
 from .stammdaten import StammdatenChecks
 from .monatsdaten import ErfassungsortChecks, MonatsdatenChecks
@@ -65,6 +66,7 @@ class DatenChecker(
     def __init__(self, db):
         self.db = db
         self._abdeckung: Optional[MonatsdatenAbdeckung] = None
+        self._nicht_ausfuehrbar: list[dict] = []
 
     async def check_anlage(self, anlage_id: int) -> DatenCheckResult:
         """Führt alle Prüfungen für eine Anlage durch."""
@@ -192,6 +194,9 @@ class DatenChecker(
         # Energieprofil-Abdeckung (Begründung in `zaehler.py`).
         ergebnisse.extend(await self._check_zaehlerstaende(anlage))
 
+        # E5 V2: Gruppenzeilen (Beschriftung je Glied, Zählung unverändert).
+        gruppen_bilden(ergebnisse)
+
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}
         for e in ergebnisse:
@@ -203,6 +208,7 @@ class DatenChecker(
             ergebnisse=ergebnisse,
             zusammenfassung=zusammenfassung,
             monatsdaten_abdeckung=self._abdeckung,
+            nicht_ausfuehrbar=list(self._nicht_ausfuehrbar),
         )
 
     async def _hat_stundenwerte(self, anlage: Anlage) -> bool:

@@ -8,6 +8,7 @@ sind kein Rückgang. Keine Probe liest die Uhr: die Prüfung hat kein Zeitfenste
 
 from __future__ import annotations
 
+from backend.tests.werkzeug_befund import befund_link
 from datetime import datetime, timedelta
 
 import pytest
@@ -87,7 +88,7 @@ async def test_ein_rueckgang_vor_16_monaten_ist_genau_eine_meldung_mit_menge_und
     assert "Wert anpassen" in e.details and "nächtlichen Abgleich" in e.details
     assert "Monatsabschluss neu" in e.details
     # Kein „Beheben"-Knopf: die Korrektur liegt in HA (wie N-586, Lab 4.1.3-rc1).
-    assert e.link is None
+    assert befund_link(e) is None
 
 
 async def test_ohne_rueckgang_keine_meldung(db):
