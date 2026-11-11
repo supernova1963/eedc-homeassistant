@@ -434,6 +434,74 @@ const ANSICHTEN = [
     pflicht,
     titel: `Einstellungen → Datenquellen, ${typ} mit dem Block „Themen"`,
   })),
+  // ── Daten · Datenqualität · Support (Galerie zu 4.3.0, Wunsch Gernot 11.11.2026) ─────────────────────────────
+  // Die Kategorie «Daten» startet mit allen Blöcken zu; `block=<Katalog-Id>` klappt genau einen auf (Deep-Link-Öffner
+  // der BlockShell, derselbe Weg wie die Sprungziele des Daten-Checkers). `aufklappen: false`, damit die Kategorien
+  // im Daten-Checker ihrer eigenen Klapp-Regel folgen (offen ⇔ Fehler/Warnung/Reparatur-Knopf) — so sieht es der
+  // Anwender. Die Demo-Anlage der Kopie hat Lücken (sieben Monate fehlen, Ø Temperatur fehlt): genau das zeigt der
+  // Daten-Checker; der Text der Galerie sagt das. Klickziele über `data-testid="befund-zeile"` (BefundHandgriff.tsx).
+  {
+    name: 'daten_monatsdaten',
+    route: '#/einstellungen/daten?block=monatsdaten',
+    aufklappen: false,
+    hoehe: 'auto',
+    zielBlock: 'Monatsdaten',
+    pflicht: ['Monatsdaten', 'Nächster offener'],
+    titel: 'Einstellungen → Daten → Monatsdaten',
+  },
+  {
+    name: 'daten_monatsabschluss',
+    route: '#/einstellungen/daten?erfassen=2026-06',
+    aufklappen: false,
+    hoehe: 'auto',
+    pflicht: ['Monatsdaten bearbeiten', 'Juni', 'E-Auto'],
+    titel: 'Einstellungen → Daten → Monatsdaten: ein Monat mit den Zeilen je Gerät',
+  },
+  {
+    // Ein Bild für Leiste, Kategorien und Lösungsweg: das Panel steht NEBEN der Kategorien-Liste (unterhalb der Leiste,
+    // `DatenCheckerTeile.tsx` Raster `lg:grid-cols-[…_26rem]`) — bei 1000 px Höhe läge es nach dem Hochrollen außerhalb.
+    name: 'datenqualitaet_checker',
+    route: '#/einstellungen/daten?block=datenchecker',
+    aufklappen: false,
+    fenster: { width: 1400, height: 2000 },
+    klick: '[data-testid="befund-zeile"]:has-text("Ø Temperatur fehlt") button:has-text("Lösungsweg")',
+    pflicht: ['Das kannst du jetzt tun', 'Diagnose-Paket', 'Was eedc sieht', 'Was ohne Handlung gilt', 'Prüfungen bestanden'],
+    titel: 'Einstellungen → Daten → Daten-Checker mit offenem Lösungsweg',
+  },
+  {
+    name: 'datenqualitaet_vorschau',
+    route: '#/einstellungen/daten?block=datenchecker',
+    aufklappen: false,
+    fenster: { width: 1400, height: 1100 },
+    // ⚠ Nur die Vorschau öffnen, nie «Anwenden» — der Plan schreibt nichts (Werkbank plan → execute).
+    klick: '[data-testid="befund-zeile"]:has-text("Ø Temperatur fehlt") button:has-text("Temperatur aus Messung übernehmen")',
+    pflicht: ['Anwenden', 'Abbrechen', 'Monate erhalten eine Ø Temperatur'],
+    titel: 'Daten-Checker: eine Reparatur zeigt vorher, was sie ändert',
+  },
+  {
+    name: 'datenqualitaet_werkbank',
+    route: '#/einstellungen/daten?block=energieprofil',
+    aufklappen: false,
+    hoehe: 'auto',
+    zielBlock: 'Energieprofil-Pflege',
+    pflicht: ['Datenbestand', 'Reparatur-Werkbank', 'Plan erstellen'],
+    titel: 'Einstellungen → Daten → Energieprofil-Pflege mit der Reparatur-Werkbank',
+  },
+  {
+    name: 'support_diagnose_paket',
+    route: '#/einstellungen/daten?block=datenchecker',
+    aufklappen: false,
+    klick: 'button:has-text("Diagnose-Paket")',
+    pflicht: ['Kopieren', 'Als Datei herunterladen', 'Zugangsdaten enthält es nie'],
+    titel: 'Daten-Checker → Diagnose-Paket',
+  },
+  {
+    name: 'support_handbuch',
+    route: '#/hilfe?doc=daten-checker',
+    aufklappen: false,
+    pflicht: ['Handbuch', 'Daten-Checker', 'Inhaltsverzeichnis'],
+    titel: 'Hilfe → Handbuch Daten-Checker',
+  },
   {
     name: 'deeplink_karte',
     // FD-1 (docs/KONZEPT-FOKUS-DEEPLINK.md): so sieht der Block als

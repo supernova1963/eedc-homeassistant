@@ -1,6 +1,6 @@
 ---
 title: Galerie
-description: Wie eedc mit gepflegten Daten aussieht – dreiundzwanzig Ansichten in hell und dunkel
+description: Wie eedc mit gepflegten Daten aussieht – dreißig Ansichten in hell und dunkel
 ---
 
 import cockpitMainLight from '../../assets/screenshots/cockpit_main.webp';
@@ -49,11 +49,27 @@ import datenquellenLight from '../../assets/screenshots/einstellungen_datenquell
 import datenquellenDark from '../../assets/screenshots/einstellungen_datenquellen-dark.webp';
 import deeplinkLight from '../../assets/screenshots/deeplink_karte.webp';
 import deeplinkDark from '../../assets/screenshots/deeplink_karte-dark.webp';
+import monatsdatenLight from '../../assets/screenshots/daten_monatsdaten.webp';
+import monatsdatenDark from '../../assets/screenshots/daten_monatsdaten-dark.webp';
+import monatsabschlussLight from '../../assets/screenshots/daten_monatsabschluss.webp';
+import monatsabschlussDark from '../../assets/screenshots/daten_monatsabschluss-dark.webp';
+import checkerLight from '../../assets/screenshots/datenqualitaet_checker.webp';
+import checkerDark from '../../assets/screenshots/datenqualitaet_checker-dark.webp';
+import vorschauLight from '../../assets/screenshots/datenqualitaet_vorschau.webp';
+import vorschauDark from '../../assets/screenshots/datenqualitaet_vorschau-dark.webp';
+import werkbankLight from '../../assets/screenshots/datenqualitaet_werkbank.webp';
+import werkbankDark from '../../assets/screenshots/datenqualitaet_werkbank-dark.webp';
+import diagnoseLight from '../../assets/screenshots/support_diagnose_paket.webp';
+import diagnoseDark from '../../assets/screenshots/support_diagnose_paket-dark.webp';
+import handbuchLight from '../../assets/screenshots/support_handbuch.webp';
+import handbuchDark from '../../assets/screenshots/support_handbuch-dark.webp';
 
 Alle Bilder auf dieser Seite stammen aus einer **Demo-Anlage** – erfundene Geräte, erfundene
 Zählerstände, erfundener Standort. Es sind **keine echten Anlagen- oder Verbrauchsdaten** von
-Anwendern zu sehen. Die Demo-Anlage ist bewusst gut gepflegt: so sieht eedc aus, wenn die
-Datenquellen sitzen und die Monate vollständig sind.
+Anwendern zu sehen. Die Demo-Anlage ist gut gepflegt: so sieht eedc aus, wenn die Datenquellen
+sitzen. Ein paar Lücken hat sie trotzdem – einige Monate sind noch offen, einigen fehlt die
+Ø Temperatur –, und genau die zeigen die Abschnitte [Daten](#daten) und
+[Datenqualität](#datenqualität).
 
 :::note[Hell und dunkel]
 Jedes Bild gibt es zweimal. Welches du siehst, entscheidet die Farbvorliebe deines Geräts –
@@ -370,6 +386,103 @@ Dashboards.
 
 Ein Feld, eine Quelle: unter *Einstellungen → Datenquellen* bekommt jedes eedc-Feld genau einen
 HA-Sensor, ein MQTT-Topic oder einen Geräte-Connector – mit Prüfung je Feld.
+
+---
+
+## Daten
+
+### Monatsdaten
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={monatsdatenDark.src} />
+  <img src={monatsdatenLight.src} alt="eedc Einstellungen → Daten → Monatsdaten: ein Monat je Zeile" />
+</picture>
+
+Unter *Einstellungen → Daten → Monatsdaten* steht jeder Monat als Zeile – Einspeisung, Netzbezug,
+PV-Erzeugung, Eigenverbrauch, Autarkie. Offene Monate tragen „offen“ und den Knopf „Erfassen“,
+„Nächster offener“ führt zum nächsten offenen Monat, und unter „Spalten“ wählst du, was die
+Tabelle zeigt.
+
+### Ein Monat im Monatsabschluss
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={monatsabschlussDark.src} />
+  <img src={monatsabschlussLight.src} alt="eedc Monatsdaten bearbeiten: Zähler der Anlage und je Gerät eine Zeile" />
+</picture>
+
+Ein Monat öffnet sich zum Bearbeiten: oben die Zähler der Anlage, darunter je Gerät seine Zeile –
+hier das E-Auto mit gefahrenen Kilometern, Heimladung und sonstigen Erträgen und Ausgaben, dazu
+Wallbox, Wärmepumpe und Speicher. Der Kopf zählt, was „fertig“ ist, was du „prüfen“ solltest und
+was noch „offen“ ist; ein Wert aus einem Sensor trägt „gemessen“, ein geschätzter sagt es.
+
+---
+
+## Datenqualität
+
+### Der Daten-Checker
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={checkerDark.src} />
+  <img src={checkerLight.src} alt="eedc Daten-Checker: oben „Das kannst du jetzt tun“, darunter die Kategorien, rechts der Lösungsweg zu einem Befund" />
+</picture>
+
+Der Daten-Checker (*Einstellungen → Daten → Daten-Checker*) prüft die Anlage und sagt, was fehlt
+oder nicht zusammenpasst. Oben steht „Das kannst du jetzt tun“: alle Befunde mit einem
+Reparatur-Knopf. Darunter die Kategorien – offen steht, wo es etwas zu tun gibt; gleiche Befunde
+stehen in einer Zeile („7 Monate fehlen“, ein Klick auf einen Monat öffnet genau diesen), bestandene
+Prüfungen hinter „n Prüfungen bestanden“. Jeder Befund hat einen **Lösungsweg** – was eedc sieht,
+was du tust, was gilt, wenn du nichts tust –, hier rechts neben der Liste.
+
+### Erst die Vorschau, dann „Anwenden“
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={vorschauDark.src} />
+  <img src={vorschauLight.src} alt="eedc Daten-Checker: Vorschau einer Reparatur mit „Anwenden“ und „Abbrechen“" />
+</picture>
+
+Kein Knopf führt sofort aus. Der erste Klick zeigt unter dem Befund, was sich ändern wird – hier
+„Monate erhalten eine Ø Temperatur: 7“. Erst „Anwenden“ schreibt, „Abbrechen“ verwirft die
+Vorschau.
+
+### Energieprofil-Pflege und Reparatur-Werkbank
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={werkbankDark.src} />
+  <img src={werkbankLight.src} alt="eedc Energieprofil-Pflege: Datenbestand und Reparatur-Werkbank" />
+</picture>
+
+Unter *Einstellungen → Daten → Energieprofil-Pflege* steht, wie viele Stunden-, Tages- und
+Monatswerte eedc für die Anlage hat und wie viele Tage abgedeckt sind. Die Reparatur-Werkbank
+darunter ist das Werkzeug für alles, was über einen einzelnen Befund hinausgeht: Operation wählen,
+„Plan erstellen“, die Vorschau lesen, dann ausführen.
+
+---
+
+## Support
+
+### Das Diagnose-Paket
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={diagnoseDark.src} />
+  <img src={diagnoseLight.src} alt="eedc Diagnose-Paket: Text zum Kopieren oder Herunterladen" />
+</picture>
+
+Eine Frage im Forum oder auf GitHub? „Diagnose-Paket“ im Daten-Checker stellt zusammen, was eine
+Antwort braucht: Version, Anlage, Komponenten, Zuordnungen, Strompreise und alle Befunde.
+Zugangsdaten enthält es nie, und eedc schickt den Text nirgendwohin. Du kannst ihn vor dem
+Kopieren bearbeiten; „Kopieren“ übernimmt die kurze Fassung für einen Beitrag, „Als Datei
+herunterladen“ speichert die vollständige.
+
+### Hilfe in der App
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={handbuchDark.src} />
+  <img src={handbuchLight.src} alt="eedc Hilfe: Handbuch Daten-Checker mit Inhaltsverzeichnis" />
+</picture>
+
+Hinter dem Fragezeichen oben rechts liegen die Handbücher in der App – hier „Daten-Checker“ mit
+allen Befunden und ihren Lösungswegen, dieselben Texte wie am Befund. „Was ist neu“ zeigt je
+Version, was sich für dich geändert hat. Für Fehlermeldungen und Wünsche: [Support](/eedc-homeassistant/support/).
 
 ---
 
