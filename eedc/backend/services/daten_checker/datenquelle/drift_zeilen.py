@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 #: N-790: der Details-Text einer Drift-Tageszeile an einer Anlage mit HA-Spiegel (die Zahlen stehen in der Meldung).
 _TEXT_SPIEGEL_TAG = (
     "Für diesen Tag steht in eedc ein anderer Wert als in Home Assistant. „Aus Home Assistant neu übernehmen“ holt die "
-    "Statistik dieses Zählers neu und baut den Tag danach auf — der Tag zeigt dann, was Home Assistant zeigt. Hast du in "
-    "Home Assistant korrigiert, ist das der Weg."
+    "Statistik aller gespiegelten Zähler der Anlage ab der ersten Abweichung neu und baut den Tag danach auf — der Tag "
+    "zeigt dann, was Home Assistant zeigt. Hast du in Home Assistant korrigiert, ist das der Weg."
 )
 
 
@@ -132,9 +132,9 @@ def drift_komponentenzeilen(ctx: "_DriftKontext") -> list[CheckErgebnis]:
             ) if ctx.hat_spiegel and _bestand_tag(ctx, datum_, key) else (
                 f"Für diese Komponente steht in eedc an {len(tage)} Tag(en) ein anderer Wert als in "
                 f"Home Assistant. Diese Werte tragen die Wirtschaftlichkeits- und CO₂-Rechnung mit. "
-                f"„Aus Home Assistant neu übernehmen“ holt die Statistik dieses Zählers neu und baut den Tag "
-                f"{datum_.isoformat()} danach auf — die Tage zeigen dann, was Home Assistant zeigt. Hast du in "
-                f"Home Assistant korrigiert, ist das der Weg."
+                f"„Aus Home Assistant neu übernehmen“ holt die Statistik aller gespiegelten Zähler der Anlage ab "
+                f"der ersten Abweichung neu und baut den Tag {datum_.isoformat()} danach auf — die Tage zeigen dann, "
+                f"was Home Assistant zeigt. Hast du in Home Assistant korrigiert, ist das der Weg."
             ) if ctx.hat_spiegel else (
                 f"Für diese Komponente steht in deiner Tages-Zusammenfassung "
                 f"an {len(tage)} Tag(en) ein anderer Wert als in den "

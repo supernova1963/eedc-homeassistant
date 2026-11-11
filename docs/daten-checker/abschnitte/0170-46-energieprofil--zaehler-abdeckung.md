@@ -28,9 +28,10 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 |---------------|------------------------------|
 | PV-Module, Balkonkraftwerk | `pv_erzeugung_kwh` |
 | Speicher | `ladung_kwh`, `entladung_kwh` |
-| Wärmepumpe | `stromverbrauch_kwh` |
+| Wärmepumpe | `stromverbrauch_kwh`; mit «Getrennte Strommessung» stattdessen `strom_heizen_kwh` und `strom_warmwasser_kwh` (an einer Split-Klimaanlage nur Heizen) |
 | Wallbox, E-Auto | `ladung_kwh` |
-| Wechselrichter, Sonstiges | (keine — werden übersprungen) |
+| Sonstiges | das Zählerfeld seiner Kategorie (Verbraucher, Erzeuger, Abgabe an Dritte); ein Verbrauchszähler (Gas, Wasser, Heizöl) wird übersprungen |
+| Wechselrichter | (keine — wird übersprungen) |
 
 > **Was hier „zugeordnet“ heißt — auch MQTT.** Ein Feld trägt einen Zähler, wenn
 >
@@ -51,8 +52,9 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 > ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
 
 > **Wer hier ausgenommen ist:** **Split-Klimaanlagen** (Wärmepumpenart *Luft-Luft*) werden nicht nach Wärme gefragt, eine
-> **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird übersprungen, wenn eine **Wallbox** existiert
-> (dort wird die Heimladung geführt) oder wenn es als **Dienstwagen** markiert ist. Stillgelegte und inaktive Komponenten
+> **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird für den Ladezähler übersprungen, wenn eine
+> **Wallbox mit eigenem kWh-Zähler** in Betrieb ist (dort wird die Heimladung geführt; für die PV-Ladung als Zusatzfeld
+> genügt eine Wallbox), oder wenn es als **Dienstwagen** markiert ist. Stillgelegte und inaktive Komponenten
 > zählen nicht mit. Ein **Balkonkraftwerk, an dem PV-Module hängen**, braucht keinen eigenen Zähler — die Module tragen
 > seine Erzeugung.
 

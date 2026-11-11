@@ -1,8 +1,9 @@
 # Kapazität des Speichers fehlt
 
 ## Was eedc sieht
-Dem Speicher fehlt die Kapazität in kWh. Sie ist die Bezugsgröße für Vollzyklen, Wirkungsgrad und die Skalierung des
-Ladestands in der Live-Anzeige.
+Dem Speicher fehlt die Kapazität in kWh. Sie ist die Bezugsgröße der Vollzyklen; die Korrektur des Wirkungsgrads über
+den Ladestand und der Ladestand in der Live-Anzeige nutzen die «Nutzbare Kapazität (kWh)» und greifen nur ohne sie auf
+diese Kapazität zurück.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich beim Feld «Kapazität (kWh)».

@@ -8,4 +8,6 @@ und — über die ganze Geschichte — ob Netzladung und Entladung zur Ladung pa
 **Warum eedc für Arbitrage eine Angabe braucht:** Arbitrage lebt davon, dass dieselbe Kilowattstunde zu verschiedenen
 Uhrzeiten verschieden viel kostet — und ein eedc-Tarif kennt keine Uhrzeit. Die beiden Preisfelder «Ø Ladepreis» und
 «Ø Entladepreis» stehen im Formular des Speichers unter «Netzladung & Arbitrage», sobald «Arbitrage-fähig» an ist. Wer
-einen dynamischen Tarif (Tibber, aWATTar, EPEX) angebunden hat: dort zieht eedc den stundengenauen Preis vor.
+einen dynamischen Tarif (Tibber, aWATTar, EPEX) angebunden hat: dort zieht eedc für die gemessenen Monate den
+stundengenauen Preis vor; Prognose und Amortisation rechnen weiter mit den beiden Preisen am Speicher, deshalb fragt der
+Checker sie trotzdem.

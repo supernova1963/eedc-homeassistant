@@ -8,8 +8,9 @@ E-Mobilität behält die Netzladung bis zur Ladung. Häufige Ursache: ein parall
 fehlt.
 
 ## Lösungsweg
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich am Feld für den Netzbezug zum
-   Tarif.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Gerät
+   (Wärmepumpe bzw. Wallbox; beim gemeinsamen Zähler die Wärmepumpe) am Feld für den Netzbezug zum Tarif; ist nicht
+   eindeutig, welches Gerät es trägt, öffnet sie sich ohne Feld.
 2. Hängt das Gerät an einem eigenen Zähler neben dem Hauszähler, muss der Netzbezug der Anlage beide enthalten:
    Netzbezug der Anlage = Hauszähler + Zähler des Geräts. Den
    [Netzbezug der Anlage](eedc:/einstellungen/datenquellen?feld=netzbezug_kwh) entsprechend zuordnen.

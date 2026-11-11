@@ -225,6 +225,16 @@ def test_rf50_heizwaerme_fehlt_und_ok_zeile():
     assert [e.meldung for e in ok] == ["WP: Monatsdaten vollständig (1 Monate)"]
 
 
+def test_d5_heizwaerme_ueber_nutzenergie_heizbetrieb_fehlt_nicht():
+    """E6.D D5: wer die Heizwärme je Betriebsart misst («Nutzenergie Heizbetrieb»), hat nichts nachzutragen — dieselbe
+    Weiche (`heizwaerme_kwh`, D1) wie die Schwester-Prüfung «Strom Heizen fehlt»; vorher stand «Heizwärme fehlt»."""
+    erg = _pruefe(LW_GESAMT, {(2025, 3): {"stromverbrauch_kwh": 200.0, "betriebsart_nutzenergie_heizen_kwh": 800.0}})
+    assert _meldungen(erg, "Heizwärme fehlt") == []
+    assert [e.meldung for e in erg] == ["WP: Monatsdaten vollständig (1 Monate)"]
+    # Gegenprobe: ohne jede Heizwärme bleibt der Befund.
+    assert len(_meldungen(_pruefe(LW_GESAMT, {(2025, 3): {"stromverbrauch_kwh": 200.0}}), "Heizwärme fehlt")) == 1
+
+
 def test_rf50_ohne_erwartete_monate_keine_meldung():
     assert DatenChecker(None)._check_wp_monatsdaten(_Inv(LW_GESAMT, {}), "WP", LW_GESAMT, []) == []
 

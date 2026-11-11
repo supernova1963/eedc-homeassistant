@@ -77,7 +77,8 @@ async def test_ein_snapshot_meldet_den_wortlaut_der_route():
     assert b.kategorie == CheckKategorie.DATENQUELLE_STATUS.value
     assert "E3DC S10" in b.meldung
     # E5: der geprüfte 404-Text der Route ist die Quelle des Hinweises.
-    assert "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn" in b.details
+    # E6.D D2: die Regel von `_calc_month_delta` — zwei verschiedene Stände, der erste vor dem Monat oder im Monat.
+    assert "Nötig sind zwei verschiedene Snapshots: der erste vor dem Monat oder im Monat" in b.details
     assert "1 Snapshot" in b.details
     assert befund_link(b)
 

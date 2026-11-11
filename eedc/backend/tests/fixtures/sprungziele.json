@@ -261,34 +261,21 @@
    "ziel": {
     "bereich": "datenquellen",
     "block": null,
+    "params": {},
+    "anker": null
+   },
+   "pfad": "/einstellungen/datenquellen"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
     "params": {
      "feld": "einspeisung_kwh"
     },
     "anker": "einspeisung_kwh"
    },
    "pfad": "/einstellungen/datenquellen?feld=einspeisung_kwh"
-  },
-  {
-   "ziel": {
-    "bereich": "datenquellen",
-    "block": null,
-    "params": {
-     "feld": "ladung_netz_kwh"
-    },
-    "anker": "ladung_netz_kwh"
-   },
-   "pfad": "/einstellungen/datenquellen?feld=ladung_netz_kwh"
-  },
-  {
-   "ziel": {
-    "bereich": "datenquellen",
-    "block": null,
-    "params": {
-     "feld": "netzbezug_eigener_tarif_kwh"
-    },
-    "anker": "netzbezug_eigener_tarif_kwh"
-   },
-   "pfad": "/einstellungen/datenquellen?feld=netzbezug_eigener_tarif_kwh"
   },
   {
    "ziel": {
@@ -369,18 +356,6 @@
     "anker": "ladung_kwh"
    },
    "pfad": "/einstellungen/datenquellen?geraet=1&feld=ladung_kwh"
-  },
-  {
-   "ziel": {
-    "bereich": "datenquellen",
-    "block": null,
-    "params": {
-     "geraet": 1,
-     "feld": "ladung_netz_kwh"
-    },
-    "anker": "ladung_netz_kwh"
-   },
-   "pfad": "/einstellungen/datenquellen?geraet=1&feld=ladung_netz_kwh"
   },
   {
    "ziel": {

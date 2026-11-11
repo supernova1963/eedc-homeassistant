@@ -3,7 +3,8 @@
 ## Was eedc sieht
 Das Fahrzeug trägt einen Verbrauch in l/100 km, hat also einen Verbrennungsmotor. Um die Kilometer in elektrisch und
 mit Kraftstoff gefahren aufzuteilen, braucht eedc eine von zwei Angaben: den monatlich erfassten Verbrauch in kWh
-(gemessen) oder einen gepflegten elektrischen Fahranteil in % (geschätzt). Für die genannten Monate fehlen beide.
+(gemessen) oder einen gepflegten elektrischen Fahranteil in % (geschätzt). In mindestens zwei Monaten mit gefahrenen
+Kilometern fehlen beide; ein einzelner solcher Monat wird nicht gemeldet, ein Dienstwagen nicht geprüft.
 Einen Richtwert erfindet eedc nicht — deshalb steht der Befund hier.
 
 ## Lösungsweg

@@ -14,7 +14,7 @@ Ursachen: der Netz-Zähler ist bei «Ladung» zugeordnet, oder «Ladung» wurde 
 3. Von Hand gepflegte Monate unter *Einstellungen → Daten → Monatsdaten* berichtigen: «Ladung» enthält die gesamte
    Ladung, die Netzladung ist ein Teil davon.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Summe der Netzladung
-   nicht mehr über der Summe der Ladung liegt.
+   die Summe der Ladung um höchstens 2 % plus 0,1 kWh übersteigt (Spielraum für einen Monatsübergang am Rand).
 
 ## Was ohne Handlung gilt
 Die Speicher-Auswertungen rechnen mit den widersprüchlichen Mengen; der PV-Anteil der Ladung stimmt nicht.

@@ -369,7 +369,7 @@ async def test_der_checker_benennt_den_unmoeglichen_warmwasser_wert(db):
     )
     treffer = [e for e in befunde if _WARMWASSER_MELDUNG in e.meldung]
     assert len(treffer) == 1, "genau eine Meldung, nicht je Monat eine"
-    assert "Nutzenergie Kuehlbetrieb" in treffer[0].details, (
+    assert "Nutzenergie Kühlbetrieb" in treffer[0].details, (
         "P-6: der Weg gehört dazu, nicht nur der Vorwurf"
     )
     assert "bleibt unverändert stehen" in treffer[0].details, (

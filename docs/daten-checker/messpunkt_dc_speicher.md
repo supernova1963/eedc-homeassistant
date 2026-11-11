@@ -7,7 +7,8 @@ eingetragen, nimmt eedc DC an, sobald der Speicher einem Wechselrichter zugeordn
 die Kopplung fehlt.
 
 ## Lösungsweg
-1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich.
+1. Am Befund **«Gerät bearbeiten»** klicken — die Seite «Komponenten» öffnet sich; dort beim Speicher das Stift-Symbol
+   «Bearbeiten» klicken.
 2. Im Feld «Kopplung» eintragen, wie dein Speicher angeschlossen ist: «AC-gekoppelt» oder «DC-gekoppelt». Speichern.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — mit «AC-gekoppelt» verschwindet die Zeile; mit «DC-gekoppelt»
    bleibt sie als Auskunft stehen.

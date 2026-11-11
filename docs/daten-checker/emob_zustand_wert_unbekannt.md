@@ -1,8 +1,9 @@
 # Zustand der E-Mobilität mit unbekanntem Wert
 
 ## Was eedc sieht
-Ein zugeordneter Zustand der E-Mobilität (Ladezustand, Lademodus, Fahrzeug-Ladezustand oder Standort) liefert gerade
-einen Wert, den eedc nicht kennt. eedc zeigt dann keinen Zustand an. Die Details nennen den gelieferten Wert und die
+Ein zugeordneter Zustand der E-Mobilität («Ladezustand», «Lademodus», «Ladezustand (Fahrzeug)», «Zu Hause» oder eines
+der Felder «evcc: Fahrzeug verbunden», «evcc: lädt», «evcc: Laden freigegeben») liefert gerade einen Wert, den eedc nicht
+kennt. eedc zeigt dann keinen Zustand an. Die Details nennen den gelieferten Wert und die
 Wörter, die eedc versteht; Groß-/Kleinschreibung ist egal.
 
 ## Lösungsweg

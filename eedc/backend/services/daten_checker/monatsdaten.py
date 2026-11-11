@@ -749,7 +749,7 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
                     f"{monate_str}. Der Wert zählt nicht als Wärme dieses Geräts: er "
                     "würde sonst eine Ersparnis gegenüber der Heizung ausweisen, die "
                     "das Gerät nie erzeugt hat. Stammt er aus dem Kühlbetrieb, gehört "
-                    "er in „Nutzenergie Kuehlbetrieb“ — dann rechnet eedc daraus die "
+                    "er in „Nutzenergie Kühlbetrieb“ — dann rechnet eedc daraus die "
                     "Arbeitszahl Kühlen. Im Monatsabschluss ist das Feld an einer "
                     "Klimaanlage nicht mehr erreichbar; der gespeicherte Wert bleibt "
                     "unverändert stehen, bis du ihn mit „Wert entfernen“ löschst. "
@@ -1205,7 +1205,11 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             # Ihn trotzdem anzumahnen wäre die N-86-Klasse: dieselbe Anlage,
             # zwei Flächen, gegenteilige Aussage (die Zuordnungs-Fläche sagt für
             # dieses Feld bereits „bereits zugeordnet").
-            if (heiz_erwartet and daten.get("heizenergie_kwh") is None
+            #
+            # E6.D D5: die Heizwärme über **dieselbe Weiche** wie die Schwester-Prüfung darüber (D1, `heizwaerme_kwh`:
+            # Gerätefeld → Legacy-Name → Nutzenergie Heizbetrieb) — wer seine Heizwärme je Betriebsart misst, hat
+            # nichts nachzutragen.
+            if (heiz_erwartet and heizwaerme_kwh(daten) is None
                     and daten.get("waerme_kwh") is None):
                 fehlend_heiz.append(label)
 
@@ -1893,16 +1897,20 @@ class ErfassungsortChecks:
                 bezeichnung = anzeige_name[schluessel]
                 anzahl = len(monate)
 
+                erloes_monatsfeld = False
                 if richtung == "ertrag":
                     jahresbetrag = inv.einsparung_prognose_jahr
                     feld = "Ertrag/Jahr (€)"
                     # Bauschritt 9: für einen Erzeuger gibt es seit 2026-08-10
-                    # den besseren Ort — „Einspeise-Erlös (€)" nimmt den echten
-                    # Monatswert aus einem HA-Sensor, statt einen Jahresbetrag
-                    # zu schätzen. Der Hinweis nennt deshalb DAS Feld, sonst
-                    # schickt er genau den Fall aus §9 auf den zweitbesten Weg.
-                    if (inv.parameter or {}).get("kategorie") == "erzeuger":
-                        feld = "Einspeise-Erlös (€)"
+                    # den besseren Ort — das Feld „Einspeise-Erlös" nimmt den
+                    # echten Monatswert aus einem HA-Sensor, statt einen
+                    # Jahresbetrag zu schätzen. Der Hinweis nennt deshalb DAS
+                    # Feld, sonst schickt er genau den Fall aus §9 auf den
+                    # zweitbesten Weg. ⚠ E6.D D2: es ist ein **Monatsfeld** des
+                    # Geräts im Monatsabschluss (Registry `sonstiges/erzeuger`),
+                    # kein Feld der Komponente — `feld` bleibt der Name des
+                    # Jahresbetrags, den `jahresbetrag` liest.
+                    erloes_monatsfeld = (inv.parameter or {}).get("kategorie") == "erzeuger"
                     # ⚠ Kein Hinweis ohne Ort: das Ertragsfeld gibt es nur bei
                     # Wallbox und Sonstiges (`ERTRAGSFELD_TYPEN`). Bei allen
                     # anderen Typen rechnet eedc die Jahres-Einsparung selbst —
@@ -1939,6 +1947,12 @@ class ErfassungsortChecks:
                             f"im Monatsabschluss — das sieht wiederkehrend aus"
                         ),
                         details=(
+                            "Ein Erlös, der wiederkommt, gehört bei einem Erzeuger als "
+                            "Monatswert in das Feld „Einspeise-Erlös“ dieses Geräts im "
+                            "Monatsabschluss — am besten aus einem Sensor, dann schlägt eedc "
+                            "den Wert dort vor —, nicht als Jahresbetrag an die Komponente. "
+                            "Einmaliges bleibt richtig, wo es ist."
+                            if erloes_monatsfeld else
                             f"Ein Betrag, der jedes Jahr wiederkommt, gehört als {feld} an die "
                             f"Komponente. Dort wirkt er auch in der Prognose und in der "
                             f"Amortisation; im Monatsabschluss wirkt er nur in der Bilanz des "

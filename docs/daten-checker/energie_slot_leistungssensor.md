@@ -11,4 +11,5 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt
-eedc rechnet die Energie dieses Felds weiter näherungsweise aus der Leistung.
+Aus dem Leistungssensor in diesem Feld entsteht kein Stunden- und kein Tageswert; nur wo eine Watt-Zeile mit einem
+Leistungssensor belegt ist, schätzt eedc die Tagesenergie aus dessen Verlauf.

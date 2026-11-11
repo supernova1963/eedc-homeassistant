@@ -4,8 +4,8 @@
 Für diese Monate gibt es gar keine PV-Quelle — weder einen Wert je PV-Modul noch einen Gesamtwert der Anlage. Ohne
 PV-Erzeugung fehlen Eigenverbrauch, Autarkie und Ersparnis dieser Monate. Geprüft wird anlagenweit, nicht je Modul: ein
 einziger Gesamtwert deckt alle Strings ab. Bei Anlagen mit eigenem Zähler am Balkonkraftwerk kann ein Monat auch ohne
-dein Zutun leer sein — eine frühere Start-Migration hat dort den Gesamtwert mitgeleert; was sich retten lässt, steht im
-Handbuch unter «Was ist neu».
+dein Zutun leer sein — eine frühere Start-Migration hat dort den Gesamtwert mitgeleert. Zurückholen kann eedc ihn nicht;
+die Schritte unten füllen die Monate neu.
 
 ## Lösungsweg
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich beim Feld

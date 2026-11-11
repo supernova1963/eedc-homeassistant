@@ -4,6 +4,8 @@
 In den genannten Monaten liegt der Anlagenzähler (Feld „PV gesamt“) um mehr als 2 % über der Summe der String-Zähler.
 Nach dem Wechselrichter kann nicht mehr ankommen, als die Strings davor liefern — meist zählt der Anlagenzähler eine
 weitere Quelle mit (ein Balkonkraftwerk, ein zweiter Wechselrichter), oder ein String-Zähler misst zu wenig.
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat und jede PV-Quelle einen eigenen Zähler.
+Bei einem DC-gekoppelten Speicher schweigt die Prüfung: Der Anlagenzähler zählt dann die Netzladung der Batterie mit.
 
 ## Lösungsweg
 1. Am Befund **«Zur Zuordnung»** klicken — die Datenquellen-Zuordnung öffnet sich beim Anlagenzähler

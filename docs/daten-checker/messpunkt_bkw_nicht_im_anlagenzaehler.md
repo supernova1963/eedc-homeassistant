@@ -1,10 +1,11 @@
 # Der Anlagenzähler misst das Balkonkraftwerk offenbar nicht
 
 ## Was eedc sieht
-In den genannten Monaten ist die Differenz zwischen den Zählern der PV-Quellen und dem Anlagenzähler (Feld „PV gesamt“)
-fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). Das Balkonkraftwerk speist dann offenbar an einer
-Stelle ein, die der Anlagenzähler nicht sieht. Neben großen Strings kann ein sehr kleines Balkonkraftwerk diese Schwelle
-auch mit echten Verlusten erreichen.
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat, jede PV-Quelle einen eigenen Zähler und
+das Balkonkraftwerk Erzeugung. In den genannten Monaten ist die Differenz zwischen den Zählern der PV-Quellen und dem
+Anlagenzähler (Feld „PV gesamt“) fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). Das
+Balkonkraftwerk speist dann offenbar an einer Stelle ein, die der Anlagenzähler nicht sieht. Neben großen Strings kann
+ein sehr kleines Balkonkraftwerk diese Schwelle auch mit echten Verlusten erreichen.
 
 ## Lösungsweg
 1. Am Befund **«Zur Zuordnung»** klicken — die Datenquellen-Zuordnung öffnet sich beim Anlagenzähler

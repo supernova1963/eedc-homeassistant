@@ -6,8 +6,9 @@ sehr hohe Sätze sind meist ein Eingabefehler.
 
 ## Lösungsweg
 1. Am Befund **«Tarif bearbeiten»** klicken — der Tarif öffnet sich am Feld «Einspeisevergütung (ct/kWh)».
-2. Den Satz in Cent je kWh eintragen und **«Speichern»**. Bei Direktvermarktung mit wechselnder Vergütung eine
-   sinnvolle Schätzung eintragen oder «Einspeisevergütung wechselt monatlich» einschalten.
+2. Den Satz in Cent je kWh eintragen und **«Speichern»**. Bei Direktvermarktung mit wechselnder Vergütung
+   «Einspeisevergütung wechselt monatlich» einschalten **und** als Satz eine Schätzung zwischen 0 und 30 ct/kWh
+   eintragen — der Schalter allein lässt die Zeile stehen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden. Ist der Satz wirklich so, bleibt
    sie stehen.
 

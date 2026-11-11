@@ -7,8 +7,8 @@ frischen Abruf aus Home Assistant: beide zeigen in entgegengesetzte Richtungen. 
 Tages-Historie, nicht die Live-Ansicht. Die Zeile nennt Zahl und Zeitraum der Tage.
 
 ## Lösungsweg
-1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut höchstens 31 Tage
-   neu auf, die jüngsten zuerst.
+1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut das jüngste Fenster
+   von höchstens 31 Tagen neu auf — jeden Tag darin, auch die ohne Befund.
 2. Nennen die Details ältere Tage außerhalb dieses Fensters: nach dem Lauf erneut prüfen und den Knopf noch einmal
    nutzen, oder einen einzelnen Tag in der Zeile «… Tage mit vertauschtem Batterie-Vorzeichen» anklicken.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch ältere Tage.

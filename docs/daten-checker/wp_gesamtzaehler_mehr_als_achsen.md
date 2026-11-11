@@ -12,7 +12,8 @@ Fehler: eedc weiß nicht, was am Zähler hängt, und behauptet es nicht.
 2. Prüfen, ob der zugeordnete Sensor nur die Wärmepumpe misst. Stimmt er, ist nichts zu tun.
 3. Sagt die Meldung, dass der Gesamtwert aus dem Monatsformular stammt, kann er ein stehen gebliebener alter Stand sein:
    im Monatsabschluss das Feld «Stromverbrauch» leeren und speichern — eedc rechnet ihn dann aus Heizen und Warmwasser.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — stimmt der Zähler, bleibt die Zeile als Auskunft stehen.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — stimmt der Zähler, bleibt die Zeile als Hinweis mit dem
+   Knopf «Zuordnung prüfen» stehen; sie ist eine Frage, kein Fehler.
 
 ## Was ohne Handlung gilt
 Der Rest steht weiter als „nicht aufgeteilt“; Verbrauch, Kosten und CO₂ rechnen mit dem vollen Gesamtzähler.

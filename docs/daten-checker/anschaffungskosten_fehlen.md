@@ -2,6 +2,8 @@
 
 ## Was eedc sieht
 Der Komponente fehlen die Anschaffungskosten. Wirtschaftlichkeit und Amortisation rechnen ohne sie mit 0 €.
+Verbrauchszähler (Sonstiges mit der Kategorie «Verbrauchszähler (Gas, Wasser, Heizöl — wird nur erfasst)») sind
+ausgenommen — sie werden erfasst, nicht bewertet.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular dieser Komponente öffnet sich beim Feld

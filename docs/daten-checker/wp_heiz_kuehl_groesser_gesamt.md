@@ -2,8 +2,9 @@
 
 ## Was eedc sieht
 Die Aufteilung des Wärmepumpen-Stroms nach Heizen und Kühlen ist ein Teil des Gesamtverbrauchs — zusammen kann sie ihn
-nicht übersteigen. In den genannten Monaten tut sie es; meist, weil der Gesamtwert nachträglich kleiner eingetragen wurde
-als die schon gespeicherte Aufteilung. Die Energiebilanz ist nicht betroffen, dort zählt immer der Gesamtwert.
+nicht übersteigen. In den genannten Monaten übersteigt sie ihn um mehr als 0,5 kWh; meist, weil der Gesamtwert
+nachträglich kleiner eingetragen wurde als die schon gespeicherte Aufteilung. Die Energiebilanz ist nicht betroffen,
+dort zählt immer der Gesamtwert.
 
 ## Lösungsweg
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich beim Feld

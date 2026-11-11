@@ -17,4 +17,5 @@ davon, kein zweiter Posten daneben.
    nicht mehr über der Summe der Ladung liegt.
 
 ## Was ohne Handlung gilt
-eedc kappt den Wirkungsgrad nicht; die Speicher-Sichten zeigen ihn über 100 %.
+Die Speicher-Sichten zeigen für solche Zeiträume keinen Wirkungsgrad oder höchstens 100 %, und unter «Komponenten» steht
+beim Speicher ein Warnhinweis; nur diese Zeile nennt den Überschuss als Zahl.

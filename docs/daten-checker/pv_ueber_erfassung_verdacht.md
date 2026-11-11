@@ -1,8 +1,9 @@
 # Verdacht auf PV-Doppelerfassung
 
 ## Was eedc sieht
-An mindestens drei der letzten 30 Tage liefert die Anlage mehr, als physikalisch plausibel ist: eine Performance Ratio
-über 1,05 oder ein Tagesertrag über 7 kWh je kWp. Der häufigste Grund ist dieselbe Erzeugung zweimal gezählt — etwa ein
+In den letzten 30 Tagen liefert die Anlage mehr, als physikalisch plausibel ist: eine Performance Ratio über 1,05 an
+mindestens drei Tagen und mindestens 20 % der Tage mit Performance Ratio, oder ein Tagesertrag über 7 kWh je kWp an
+mindestens drei Tagen. Der häufigste Grund ist dieselbe Erzeugung zweimal gezählt — etwa ein
 String-Sensor und der Summenzähler der Anlage, beide zugeordnet, oder ein Wechselrichter-Zähler, der ein Balkonkraftwerk
 schon mitmisst, das zusätzlich zugeordnet ist. Die Performance Ratio steigt aber auch, wenn der Vergleichsmaßstab zu
 klein ist: die eingetragene kWp oder die Einstrahlung. Tage mit bekanntem Zählersprung sind schon herausgerechnet.
@@ -16,8 +17,8 @@ klein ist: die eingetragene kWp oder die Einstrahlung. Tage mit bekanntem Zähle
    Neigung rechnet eedc mit einer Einstrahlung, die nicht zu deinem Dach passt.
 3. Liegen die auffälligen Tage alle in den letzten fünf Tagen und sind es trübe Tage: abwarten. Die Einstrahlung dieser
    Tage ist noch vorläufig und an bewölkten Tagen zu klein; eedc holt den endgültigen Wert selbst nach.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald weniger als drei Tage
-   auffallen.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald keine der beiden
+   Bedingungen mehr erfüllt ist.
 
 ## Was ohne Handlung gilt
 eedc kürzt nichts: welche Zuordnung richtig ist, entscheidest du. Ist die Erzeugung tatsächlich doppelt gezählt, fallen

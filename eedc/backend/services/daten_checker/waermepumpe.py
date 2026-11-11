@@ -29,10 +29,12 @@ from backend.core.berechnungen.betriebsart_gemessen import (
     modus_strom_zeile,
 )
 from backend.core.berechnungen.waermepumpe_kennzahl import (
+    abgrenzungs_grund,
     arbeitszahl,
     heizwaerme_kwh,
     waerme_gesamt_kwh,
 )
+from backend.core.investition_parameter import abgrenzung_stoerung
 from backend.core.field_definitions import (
     get_wp_strom_kwh,
     get_wp_warmwasser_kwh,
@@ -112,6 +114,10 @@ class WaermepumpeChecks:
             if inv.typ != "waermepumpe":
                 continue
             name = inv.bezeichnung or f"#{inv.id}"
+            # E6.D D4: die Anwender-Angabe «Abgrenzung» (Fremdstrom/Fremdwärme) geht wie in der Anzeige
+            # (`waermepumpe_kennzahlen_je_geraet`, Monat je Gerät) als Grund in den Layer — dann gibt es keine Zahl,
+            # und die Meldung entfällt (Docstring oben: «Abgrenzung verletzt … ist der Fall bereits behandelt»).
+            abgrenzung = abgrenzungs_grund(abgrenzung_stoerung=abgrenzung_stoerung(inv))
             for imd in inv.monatsdaten:
                 daten = imd.verbrauch_daten or {}
                 # N-450: **mit `params`** — sonst nimmt die Lesetür den
@@ -151,6 +157,7 @@ class WaermepumpeChecks:
                         # dieselbe nennen).
                         hat_split=nenner_ist_feine_summe(daten, params),
                     ),
+                    abgrenzung_verletzt=abgrenzung,
                 )
                 if az.wert is None:
                     continue

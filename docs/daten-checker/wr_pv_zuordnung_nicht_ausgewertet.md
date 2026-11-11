@@ -12,7 +12,9 @@ liest — die Live-Anzeige rechnet dann aus der Leistung hoch und kann deutlich 
    für die ganze Anlage, in der Gruppe «Anlage (Basis)» — eedc verteilt die Menge dann nach kWp auf deine Module.
 3. Danach die alte Zuordnung am Wechselrichter entfernen (Quelle «Keine»); sie bleibt sichtbar, bis du sie löschst.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange am Wechselrichter eine Zuordnung oder
-   ein gepflegter PV-Monatswert steht.
+   ein gepflegter PV-Monatswert steht. Einen solchen Monatswert kannst du nicht mehr ändern oder entfernen: der
+   Monatsabschluss zeigt das Feld am Wechselrichter nicht mehr, und der Daten-Checker bietet dafür kein «Wert entfernen».
+   Steht er, bleibt die Zeile — er zählt trotzdem nirgends mit.
 
 ## Was ohne Handlung gilt
 Der Sensor am Wechselrichter und sein Monatswert zählen nirgends; die PV-Erzeugung kommt allein aus Modulen und

@@ -10,7 +10,7 @@ schätzt, was kommt.
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich im Abschnitt
    «Netzladung & Arbitrage» beim Feld «Ø Ladepreis (ct/kWh)».
 2. Den Preis eintragen, zu dem der Speicher im Niedrigtarif-Fenster lädt (etwa bei negativen Börsenpreisen), und
-   speichern.
+   speichern. Trag einen Wert über 0 ct/kWh ein: 0 zählt hier als nicht eingetragen, die Zeile bliebe stehen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt

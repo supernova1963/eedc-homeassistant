@@ -1,9 +1,9 @@
 # Heizwärme der Wärmepumpe fehlt
 
 ## Was eedc sieht
-Die abgegebene Wärme fehlt — weder «Heizwärme» noch «Wärme gesamt» ist eingetragen. Ohne sie gibt es für diese Monate
-keine gemessene Arbeitszahl und keinen COP-Vergleich. Der Strom bleibt vollständig erfasst, die Stromauswertung ist
-unberührt. Gefragt wird nur an Geräten, an denen eedc eine Heiz-Achse erwartet; an einer Split-Klimaanlage und an einer
+Die abgegebene Wärme fehlt — weder «Heizwärme» noch «Wärme gesamt» noch die «Nutzenergie Heizbetrieb» ist eingetragen.
+Ohne sie gibt es für diese Monate keine gemessene Arbeitszahl und keinen COP-Vergleich. Über den Strom sagt diese Zeile
+nichts — fehlt er, nennt ihn eine eigene Zeile. Gefragt wird nur an Geräten, an denen eedc eine Heiz-Achse erwartet; an einer Split-Klimaanlage und an einer
 Brauchwasser-Wärmepumpe nicht.
 
 ## Lösungsweg
@@ -15,4 +15,4 @@ Brauchwasser-Wärmepumpe nicht.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die nachgetragenen Monate sind aus der Zeile verschwunden.
 
 ## Was ohne Handlung gilt
-Arbeitszahl und COP zeigen für diese Monate „—“ statt einer Scheinzahl; die Stromauswertung ist vollständig.
+Arbeitszahl und COP zeigen für diese Monate „—“ statt einer Scheinzahl.

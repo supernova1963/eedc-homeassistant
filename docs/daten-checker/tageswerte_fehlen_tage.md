@@ -1,10 +1,10 @@
 # Tage ohne Werte trotz zugeordnetem Zähler
 
 ## Was eedc sieht
-In den letzten 90 Tagen gibt es Tage, an denen ein Zähler zugeordnet ist und die Langzeitstatistik von Home Assistant einen
-Wert hat, die gespeicherte Tageszeile in eedc aber leer ist. Das ist der typische Fall nach einer nachträglich korrigierten
-Zuordnung: Die Zuordnung steht heute, für die Tage davor hat sie nie jemand aufgeschrieben. Die Meldung nennt den Zeitraum,
-die Details die betroffenen Komponenten.
+In den letzten 90 Tagen gibt es Tage, an denen ein Zähler zugeordnet ist und die Langzeitstatistik von Home Assistant
+für ihn mindestens 1 kWh hat, die gespeicherte Tageszeile in eedc aber leer ist. Das ist der typische Fall nach einer
+nachträglich korrigierten Zuordnung: Die Zuordnung steht heute, für die Tage davor hat sie nie jemand aufgeschrieben.
+Die Meldung nennt den Zeitraum, die Details die betroffenen Komponenten.
 
 ## Lösungsweg
 1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Tage aus der Statistik

@@ -1,9 +1,9 @@
 # Wärme gesamt ist 0, die Einzelwerte nicht
 
 ## Was eedc sieht
-In diesen Monaten steht unter «Wärme gesamt» eine 0, während «Heizwärme» und «Warmwasser-Wärme» Werte tragen. eedc
-rechnet hier mit den beiden Einzelwerten. Häufigster Grund: Der Wärmemengenzähler hat im Monat keinen neuen Stand
-geliefert — keine Statistik in Home Assistant, eingefroren oder erst seit kurzem zugeordnet.
+In diesen Monaten steht unter «Wärme gesamt» eine 0, während «Heizwärme» und «Warmwasser-Wärme» zusammen mehr als
+0,5 kWh tragen. eedc rechnet hier mit den beiden Einzelwerten. Häufigster Grund: Der Wärmemengenzähler hat im Monat
+keinen neuen Stand geliefert — keine Statistik in Home Assistant, eingefroren oder erst seit kurzem zugeordnet.
 
 ## Lösungsweg
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich bei den

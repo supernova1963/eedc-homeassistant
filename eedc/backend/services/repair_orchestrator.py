@@ -639,8 +639,8 @@ async def _plan_reaggregate_range(
     if bis < von:
         raise ValueError(f"bis ({bis}) liegt vor von ({von})")
     if bis >= date.today():
-        raise ValueError(
-            f"bis ({bis}) muss vor heute liegen — laufender Tag ist Snapshot-instabil"
+        raise ValueError(  # E6.D D6: der Satz erreicht den Anwender im Vorschau-Kasten des Daten-Checkers (W-4)
+            f"Der Bereich reicht bis heute ({bis:%d.%m.%Y}). Der laufende Tag lässt sich erst morgen neu aufbauen."
         )
     anzahl_tage = (bis - von).days + 1
     if anzahl_tage > REAGGREGATE_RANGE_MAX_DAYS:

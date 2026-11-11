@@ -2,7 +2,9 @@
 
 ## Was eedc sieht
 Ein Zählerstand läuft nicht rückwärts — in dieser Reihe fällt er an einer oder mehreren Stellen (die Details nennen
-sie). Für einen Zeitraum über eine solche Stelle hinweg zeigt eedc deshalb keine Differenz statt einer negativen Menge.
+bis zu drei mit Datum und beiden Ständen, weitere werden gezählt). Liegt der Stand am Ende eines Zeitraums unter dem
+am Anfang, zeigt eedc deshalb keine Differenz statt einer negativen Menge; ein Bruch mitten im Zeitraum, nach dem der
+Stand wieder über den Anfang steigt, bleibt in der Differenz unsichtbar.
 eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden Stände gilt.
 
 ## Lösungsweg
@@ -20,7 +22,8 @@ eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden S
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren»
    zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt weniger Stellen; ein
-   Bruch aus einem Zählerwechsel bleibt stehen, bis der alte Zähler stillgelegt ist.
+   Bruch aus einem Zählerwechsel bleibt auch nach der Stilllegung stehen — die Zeile erklärt ihn weiterhin, solange
+   die Reihe des alten Zählers den niedrigeren Stand enthält.
 
 ## Was ohne Handlung gilt
 Für Zeiträume über eine Bruchstelle zeigt eedc für diesen Zähler keine Differenz; Zeiträume davor und danach rechnen

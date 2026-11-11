@@ -14,8 +14,8 @@ zweite Grund.
    *Einstellungen → Komponenten → Wärmepumpe* das Gerät bearbeiten und im Feld «Fremdanteil auf den Zählern» die
    passende Lage wählen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach einer Berichtigung ist der Monat aus der Zeile
-   verschwunden. Mit dem Fremdanteil allein bleibt die Zeile stehen; die Auswertungen der Wärmepumpe zeigen dann statt
-   der Arbeitszahl den Grund.
+   verschwunden; mit gesetztem Fremdanteil verschwindet die Zeile für dieses Gerät ebenso, und die Auswertungen der
+   Wärmepumpe zeigen statt der Arbeitszahl den Grund.
 
 ## Was ohne Handlung gilt
 Die erfassten Kilowattstunden bleiben unberührt und zählen in allen Mengen weiter mit. Über einer Arbeitszahl von 10

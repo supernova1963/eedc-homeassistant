@@ -12,10 +12,12 @@ gemischt ist — nur, dass es sich nicht mehr feststellen lässt; das ist der No
 1. Unter *Einstellungen → Stammdaten → Anlage* prüfen, ob die
    [«Wetterdaten-Quelle»](eedc:/einstellungen/stammdaten?block=anlage&feld=wetter_provider) die ist, die du willst —
    von ihr holt eedc die Werte.
-2. Am Befund **«Wetterreihe nachziehen»** klicken, die Vorschau lesen und **«Anwenden»**. eedc holt Globalstrahlung
-   und Sonnenstunden aller abgeschlossenen Monate von dieser Quelle und **ersetzt** dabei vorhandene Werte, auch von Hand
-   gesetzte — die Vorschau nennt vorher, wie viele Monate betroffen sind. Der laufende Monat bleibt draußen.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; danach trägt jeder Monat seine Quelle.
+2. Am Befund **«Wetterreihe nachziehen»** klicken, die Vorschau lesen und **«Anwenden»**. eedc holt Globalstrahlung,
+   Sonnenstunden und Ø Temperatur aller abgeschlossenen Monate von dieser Quelle (die Ø Temperatur zuerst aus deinen
+   Messwerten) und **ersetzt** dabei vorhandene Werte aller drei Felder, auch von Hand gesetzte — die Vorschau nennt
+   vorher, wie viele Monate betroffen sind. Der laufende Monat bleibt draußen.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald jeder abgeschlossene
+   Monat Werte mit Quelle trägt; Monate, für die kein messendes Archiv deinen Ort erreicht, bleiben in der Zeile stehen.
 
 ## Was ohne Handlung gilt
 Einmal täglich füllt eedc nur fehlende Werte abgeschlossener Monate von der gewählten Quelle nach; was dasteht, bleibt.

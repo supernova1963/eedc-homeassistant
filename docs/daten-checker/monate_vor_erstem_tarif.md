@@ -1,9 +1,9 @@
 # Monate vor dem ersten Tarif
 
 ## Was eedc sieht
-Es gibt erfasste Monate, die vor dem «Gültig ab» deines ältesten Tarifs liegen; die Zeile nennt ihre Zahl und den
-Tarifbeginn. Diese Monate rechnen nicht mit deinem Preis, sondern mit der Vorbelegung von eedc (bzw. mit einem im Monat
-gepflegten Durchschnittspreis).
+Es gibt erfasste Monate, deren Monatserster vor dem «Gültig ab» deines ältesten Tarifs liegt — ein Tarif ab dem 15.
+zählt erst für den Folgemonat; die Zeile nennt ihre Zahl und den Tarifbeginn. Diese Monate rechnen nicht mit deinem
+Preis, sondern mit der Vorbelegung von eedc (bzw. mit einem im Monat gepflegten Durchschnittspreis).
 
 ## Lösungsweg
 1. Am Befund **«Tarif bearbeiten»** klicken — der älteste Tarif öffnet sich am Feld «Gültig ab».

@@ -3,9 +3,9 @@
 ## Was eedc sieht
 Für den Monat ist mehr Einspeisung erfasst als PV-Erzeugung — du kannst nicht mehr einspeisen, als du erzeugst. Häufigste
 Ursache: Einspeisungs- und Netzbezugs-Sensor sind vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist
-umgekehrt. Ebenso häufig ist die Erzeugung nur teilweise erfasst (ein String fehlt in den Komponenten). Summieren sich die
-Tageswerte schon deutlich höher als der Monatswert, sagen das die Details zuerst: dann wurde der Monat nach einer
-Reparatur der Tage nie nachgezogen.
+umgekehrt. Ebenso häufig ist die Erzeugung nur teilweise erfasst (ein String fehlt in den Komponenten). Liegen die
+Tageswerte zusammen um mehr als 20 % und zugleich mehr als 20 kWh (die größere der beiden Grenzen) über dem
+Monatswert, sagen das die Details zuerst: dann wurde der Monat nach einer Reparatur der Tage nie nachgezogen.
 
 ## Lösungsweg
 1. Nennen die Details höhere Tageswerte: im

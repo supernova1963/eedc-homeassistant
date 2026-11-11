@@ -1,10 +1,10 @@
 # eedc und Home Assistant rechnen mit verschiedenen Zeitzonen
 
 ## Was eedc sieht
-eedc und Home Assistant liegen um mindestens eine Stunde auseinander. Verglichen wird der aktuelle Abstand zur Weltzeit, nicht
-der Name der Zeitzone. Die Details nennen die Zeitzone von Home Assistant und den Abstand. Rund um Mitternacht landen
-Stundenwerte dadurch im falschen Tag — betroffen sind alle Tageswerte: Tagesansicht im Cockpit, Energieprofil,
-Tagesabschlüsse.
+eedc und Home Assistant liegen zeitlich auseinander — jede Abweichung zählt, auch eine halbe Stunde. Verglichen wird der
+aktuelle Abstand zur Weltzeit, nicht der Name der Zeitzone. Die Details nennen die Zeitzone von Home Assistant und den
+Abstand. Rund um Mitternacht landen Stundenwerte dadurch im falschen Tag — betroffen sind alle Tageswerte: Tagesansicht
+im Cockpit, Energieprofil, Tagesabschlüsse.
 
 ## Lösungsweg
 1. Als Add-on: am Befund **«Zum Neustart»** klicken — die [Protokolle](eedc:/einstellungen/system?block=protokolle)

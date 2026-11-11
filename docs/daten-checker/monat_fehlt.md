@@ -1,7 +1,8 @@
 # Monat fehlt
 
 ## Was eedc sieht
-Für einen abgeschlossenen Monat ab der Inbetriebnahme gibt es keinen Monatsabschluss — Einspeisung und Netzbezug fehlen.
+Für einen abgeschlossenen Monat ab der Inbetriebnahme (ohne sie: ab dem ältesten Anschaffungsdatum eines PV-Moduls oder
+Balkonkraftwerks, sonst ab dem ersten erfassten Monat) gibt es keinen Monatsabschluss — Einspeisung und Netzbezug fehlen.
 Ohne sie gibt es keine Bilanz: eedc kann nicht sagen, woher der Strom eines Geräts kam, und rechnet den Monat weder in den
 Jahreswert noch in den Community-Vergleich. Mehrere fehlende Monate stehen als eine Zeile «n Monate fehlen» mit einem
 Glied je Monat; über zwölf hinaus nennt die Zeile die Zahl der weiteren.

@@ -6,7 +6,8 @@ nennt die Zahl der Ablesungen.
 
 ## Lösungsweg
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange der Zähler Stände liefert.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange der Zähler Stände liefert.
 
 ## Was ohne Handlung gilt
 eedc zeigt für jeden Zeitraum die Differenz aus Ende minus Anfang. Ein Verbrauchszähler geht bewusst in keine Bewertung

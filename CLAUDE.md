@@ -43,6 +43,10 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
    **Die Register-Disziplin gilt unverändert** (Gernot 10.10.): kein Eintrag ohne Analyse am HEAD, drei Tore (gemessen · abgeglichen ·
    Folge nennbar und „schon gedeckt?"), Klassen-Dreifrage, Band, Einwertung durch den Master und Entscheid Gernot — vorher ist es
    `verdacht`. Keine Sammelaufnahme, keine Sammelkategorie, kein Doku-Abschnitt ohne Genehmigung. Reduziert ist nur der Bau-Apparat (Nr. 3).
+   **Melder-Antwort beginnt beim Daten-Checker (Gernot 11.11.2026):** erst prüfen, ob ein Befund mit Lösungsweg (`code` im Katalog
+   `services/daten_checker/handgriffe.py`, Datei `docs/daten-checker/<code>.md`, Handbuch «Daten-Checker» §4) den Fall deckt, und den Melder
+   darauf verweisen — Handgriff mit dem Knopf-Text, Schritte des Lösungswegs. Deckt kein Befund den Fall und hat er Wirkung, gehört zum Fix
+   **ein neuer Befund** (Code, Ziel oder Aktion, Lösungsweg-Datei, Wächter W-1/W-2/W-13/W-14), nicht nur die Korrektur.
 3. **Ein Fund-Päckchen = eine Opus-Sitzung** (3–5 Punkte), ohne Vorlage, ohne Gegenprüfung, ohne Nachmessung, ohne Golden Master,
    ohne neue Matrix-Form, ohne neuen Wächter. Bestehende Wächter und Matrizen laufen in CI mit. **Eine Bauform-Etappe** behält
    den Apparat des Bauplans (Golden Master, Lab, `nachmesser-fable`).

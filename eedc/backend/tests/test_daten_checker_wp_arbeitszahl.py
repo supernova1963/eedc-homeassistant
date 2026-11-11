@@ -204,3 +204,29 @@ def test_e7_der_pruefer_kuerzt_keinen_gemessenen_f5_nenner():
         "Der Prüfer hat den abgeleiteten Kühlanteil vom gemessenen F5-Nenner "
         "abgezogen — Option A verbietet genau das."
     )
+
+
+# ── E6.D D4: der gesetzte Fremdanteil entlastet die Meldung ─────────────────────
+#
+# Der Docstring des Prüfers verspricht seit Paket b: *„Gibt der Layer einen Grund statt eines Werts zurück (Abgrenzung
+# verletzt …), ist der Fall bereits behandelt."* Bis E6.D übergab der Aufruf `abgrenzung_verletzt` nicht — die Warnung
+# blieb stehen, obwohl der Anwender den vorgesehenen Weg «Abgrenzung» am Gerät gegangen war (Lesedurchgang 11.11.2026,
+# Code-Verdacht 6). Die Anzeige (`waermepumpe_kennzahlen_je_geraet`) übergibt den Grund aus derselben Angabe.
+
+#: Ein Gaskessel speist denselben Heizkreis (SOLL §3.2b A7): 1200 kWh Wärme gegen 100 kWh Strom ⇒ Arbeitszahl 12.
+BIVALENT = {"stromverbrauch_kwh": 100.0, "heizenergie_kwh": 1200.0}
+
+
+def test_d4_ohne_fremdanteil_meldet_die_zahl():
+    (m,) = WaermepumpeChecks()._check_wp_arbeitszahl_unplausibel(_anlage(BIVALENT))
+    assert m.code == "wp_arbeitszahl_zu_hoch" and "12" in m.meldung
+
+
+@pytest.mark.parametrize("abgrenzung", ["fremdwaerme", "fremdstrom"])
+def test_d4_mit_fremdanteil_entfaellt_die_meldung(abgrenzung):
+    assert WaermepumpeChecks()._check_wp_arbeitszahl_unplausibel(_anlage(BIVALENT, {"abgrenzung": abgrenzung})) == []
+
+
+def test_d4_unbekannter_wert_entlastet_nicht():
+    """Ein Wert, den das Formular nicht setzen kann, ist keine Angabe (`abgrenzung_stoerung` ⇒ ``None``)."""
+    assert len(WaermepumpeChecks()._check_wp_arbeitszahl_unplausibel(_anlage(BIVALENT, {"abgrenzung": "gas"}))) == 1

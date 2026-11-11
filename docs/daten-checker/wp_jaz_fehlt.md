@@ -1,8 +1,8 @@
 # Jahresarbeitszahl der Wärmepumpe fehlt
 
 ## Was eedc sieht
-Als «Berechnungsmodus für Effizienz» ist die Jahresarbeitszahl gewählt, aber keine eingetragen. Ohne sie lässt sich die
-Heizenergie aus dem Strom nicht berechnen und damit keine Einsparung.
+Als «Berechnungsmodus für Effizienz» ist die Jahresarbeitszahl gewählt, aber keine eingetragen. Ohne sie leitet eedc aus
+dem gemessenen Heizstrom keine Heizwärme ab; die Prognose der Jahres-Einsparung rechnet ersatzweise mit 3,5.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wärmepumpe öffnet sich beim Feld
@@ -11,4 +11,5 @@ Heizenergie aus dem Strom nicht berechnen und damit keine Einsparung.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt
-Die Einsparung der Wärmepumpe aus der Jahresarbeitszahl bleibt ungerechnet.
+Ohne gemessene Wärme bleibt die Heizwärme der Wärmepumpe leer; die Prognose der Jahres-Einsparung rechnet mit der
+Vorgabe 3,5 statt mit deiner Jahresarbeitszahl.

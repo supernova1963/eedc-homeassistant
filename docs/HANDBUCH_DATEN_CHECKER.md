@@ -490,10 +490,10 @@ keine Bilanz und keine Meldung.
 #### Gerät älter als die Anlage <a name="geraet_aelter_als_anlage"></a>
 
 **Was eedc sieht**
-Ein Gerät, das kein Erzeuger ist (E-Auto, Wallbox, Wärmepumpe, Speicher, Sonstiges), wurde vor der Inbetriebnahme der
-Anlage angeschafft. Das ist normal und kein Fehler — man hatte das Auto vor der PV-Anlage. Die Zeile meldet die
-Datenlage: Für die Monate davor gibt es keine Einspeisungs- und Netzbezugswerte und damit keine Bilanz; eedc kann dort
-nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
+Ein Gerät, das kein PV-Erzeuger ist (E-Auto, Wallbox, Wärmepumpe, Speicher, Wechselrichter, Sonstiges), wurde vor der
+Inbetriebnahme der Anlage angeschafft. Das ist normal und kein Fehler — man hatte das Auto vor der PV-Anlage. Die Zeile
+meldet die Datenlage: Für die Monate davor gibt es keine Einspeisungs- und Netzbezugswerte und damit keine Bilanz; eedc
+kann dort nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
 
 **Lösungsweg**
 1. Hast du Zählerwerte aus dieser Zeit: unter
@@ -511,8 +511,10 @@ fordert eedc nicht ein.
 #### Anlagenleistung fehlt <a name="anlagenleistung_fehlt"></a>
 
 **Was eedc sieht**
-An der Anlage ist keine Leistung in kWp eingetragen (oder 0). Sie ist die Bezugsgröße für Soll-/Ist-Vergleiche, den
-spezifischen Ertrag und die PVGIS-Plausibilität.
+An der Anlage ist keine Leistung in kWp eingetragen (oder 0). Sind PV-Module oder ein Balkonkraftwerk angelegt, rechnen
+spezifischer Ertrag, Performance Ratio und Plausibilität mit deren Summe; die Anlagenleistung ist dann der Wert für den
+Community-Vergleich, die Berichte und die Beschriftung «PV Gesamt» — und der Rückfall, solange keine Erzeuger angelegt
+sind.
 
 **Lösungsweg**
 1. Am Befund **«Anlage bearbeiten»** klicken — das Anlagen-Formular öffnet sich am Feld «Leistung (kWp)».
@@ -522,8 +524,8 @@ spezifischen Ertrag und die PVGIS-Plausibilität.
    Prüfungen.
 
 **Was ohne Handlung gilt**
-Alle Kennzahlen, die durch die Anlagenleistung teilen, bleiben leer oder falsch; der Community-Vergleich kennt deine
-Anlagengröße nicht.
+Ohne angelegte Erzeuger bleiben die Kennzahlen, die durch die Anlagenleistung teilen, leer; mit Erzeugern rechnen sie mit
+deren Summe. Der Community-Vergleich kennt deine Anlagengröße nicht.
 
 #### Anlagenleistung eingetragen <a name="anlagenleistung_ok"></a>
 
@@ -535,7 +537,8 @@ An der Anlage ist eine Leistung in kWp eingetragen; die Zeile nennt sie.
 2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt unter den bestandenen Prüfungen.
 
 **Was ohne Handlung gilt**
-eedc rechnet die Kennzahlen mit dieser Leistung.
+eedc rechnet die Kennzahlen mit der Summe deiner Erzeuger-Komponenten; diese Leistung gilt nur ohne Erzeuger als Rückfall
+und ist der Wert für den Community-Vergleich und die Berichte.
 
 #### Standort fehlt <a name="standort_fehlt"></a>
 
@@ -580,13 +583,15 @@ Es sind PV-Module als Komponenten angelegt; die Zeile nennt ihre Summe in kWp un
 2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt unter den bestandenen Prüfungen.
 
 **Was ohne Handlung gilt**
-eedc rechnet spezifischen Ertrag und Prognose mit dieser Modulsumme.
+eedc rechnet spezifischen Ertrag und Prognose mit der Summe aller aktiven Erzeuger — ein Balkonkraftwerk zählt dort mit,
+auch wenn die Zeile nur die Modulsumme nennt.
 
 #### Modul-Details passen nicht zur Leistung <a name="modul_details_passen_nicht"></a>
 
 **Was eedc sieht**
-An einem PV-Modul ergibt «Anzahl Module» × «Leistung pro Modul (Wp)» eine andere Leistung als im Feld «Leistung (kWp)»
-steht; die Zeile nennt beide Werte. Einer der drei Einträge stimmt nicht.
+An einem PV-Modul weicht «Anzahl Module» × «Leistung pro Modul (Wp)» um mehr als 0,1 kWp vom Feld «Leistung (kWp)» ab;
+die Zeile nennt beide Werte. Geprüft wird nur, wenn «Anzahl Module» und «Leistung pro Modul (Wp)» beide eingetragen
+sind. Einer der drei Einträge stimmt nicht.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular dieses PV-Moduls öffnet sich bei «Anzahl Module».
@@ -619,10 +624,10 @@ und lässt sich wieder aktivieren.
 #### Anlagenleistung passt nicht zu den Modulen <a name="anlagenleistung_passt_nicht_zu_modulen"></a>
 
 **Was eedc sieht**
-Die «Leistung (kWp)» der Anlage weicht von der Summe deiner PV-Module ab (mit oder ohne Balkonkraftwerk gerechnet). eedc
-rechnet spezifischen Ertrag, Performance Ratio und die Plausibilitätsprüfungen mit der Modulsumme; die Anlagenleistung
-geht an den Community-Vergleich. Solange beide auseinanderliegen, vergleichst du dich dort mit einer anderen
-Anlagengröße als der, die du auswertest.
+Die «Leistung (kWp)» der Anlage weicht um mehr als 0,1 kWp von der Summe deiner aktiven PV-Module ab — sowohl ohne als
+auch mit Balkonkraftwerk gerechnet. eedc rechnet spezifischen Ertrag, Performance Ratio und die Plausibilitätsprüfungen
+mit der Modulsumme; die Anlagenleistung geht an den Community-Vergleich. Solange beide auseinanderliegen, vergleichst du
+dich dort mit einer anderen Anlagengröße als der, die du auswertest.
 
 **Lösungsweg**
 1. Am Befund **«Anlage bearbeiten»** klicken — das Anlagen-Formular öffnet sich am Feld «Leistung (kWp)».
@@ -696,9 +701,10 @@ eedc rechnet Kosten und Erlöse mit diesen Tarifen.
 #### Einspeisung wird mit 0 ct/kWh gerechnet <a name="einspeisung_null_cent"></a>
 
 **Was eedc sieht**
-Mindestens ein Tarif trägt 0 ct/kWh Einspeisevergütung, und in seinem Zeitraum ist Einspeisung erfasst (ab 50 kWh im
-Jahr). eedc rechnet den Einspeise-Erlös so, wie es im Tarif steht — in Cockpit, Amortisation und Jahresbericht bleibt er
-0 €. Ein neuer Tarif startet mit 0; eedc rät den Satz bewusst nicht.
+Mindestens ein Tarif der Verwendung «Standard (allgemein)», bei dem «Einspeisevergütung wechselt monatlich» nicht
+eingeschaltet ist, trägt 0 ct/kWh Einspeisevergütung, und in seinem Zeitraum ist Einspeisung erfasst (auf ein Jahr
+hochgerechnet ab 50 kWh). eedc rechnet den Einspeise-Erlös so, wie es im Tarif steht — in Cockpit, Amortisation und
+Jahresbericht bleibt er 0 €. Ein neuer Tarif startet mit 0; eedc rät den Satz bewusst nicht.
 
 **Lösungsweg**
 1. Ist deine Einspeisung wirklich unvergütet (Nulleinspeisung, Volleinspeisung ohne Vergütung, ausgelaufene
@@ -715,9 +721,9 @@ Der Einspeise-Erlös dieser Zeiträume bleibt 0 €; alles andere rechnet unver�
 #### Monate vor dem ersten Tarif <a name="monate_vor_erstem_tarif"></a>
 
 **Was eedc sieht**
-Es gibt erfasste Monate, die vor dem «Gültig ab» deines ältesten Tarifs liegen; die Zeile nennt ihre Zahl und den
-Tarifbeginn. Diese Monate rechnen nicht mit deinem Preis, sondern mit der Vorbelegung von eedc (bzw. mit einem im Monat
-gepflegten Durchschnittspreis).
+Es gibt erfasste Monate, deren Monatserster vor dem «Gültig ab» deines ältesten Tarifs liegt — ein Tarif ab dem 15.
+zählt erst für den Folgemonat; die Zeile nennt ihre Zahl und den Tarifbeginn. Diese Monate rechnen nicht mit deinem
+Preis, sondern mit der Vorbelegung von eedc (bzw. mit einem im Monat gepflegten Durchschnittspreis).
 
 **Lösungsweg**
 1. Am Befund **«Tarif bearbeiten»** klicken — der älteste Tarif öffnet sich am Feld «Gültig ab».
@@ -734,9 +740,9 @@ entsprechend ab.
 #### Lücke zwischen Tarifen <a name="strompreis_luecke"></a>
 
 **Was eedc sieht**
-Ab der Inbetriebnahme der Anlage gibt es einen Zeitraum, für den kein Tarif gilt — zwischen zwei aufeinanderfolgenden
-Tarifen oder vor dem ersten. Die Zeile nennt Anfang und Ende. Für diese Monate fehlt dein Strompreis in der
-Kostenrechnung.
+Ab dem früheren von Inbetriebnahme der Anlage und erstem erfassten Monat gibt es einen Zeitraum, für den kein Tarif gilt
+— zwischen zwei aufeinanderfolgenden Tarifen oder vor dem ersten. Die Zeile nennt Anfang und Ende. Für diese Monate
+fehlt dein Strompreis in der Kostenrechnung.
 
 **Lösungsweg**
 1. Am Befund **«Tarif anlegen»** klicken — das Formular «Neuen Tarif anlegen» öffnet sich mit «Gültig ab» am Beginn der
@@ -747,7 +753,9 @@ Kostenrechnung.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Monate der Lücke rechnen ohne deinen Preis; Kosten und Ersparnis dieser Monate stimmen nicht.
+Die Monate der Lücke rechnen nicht mit deinem Tarif, sondern mit der Vorbelegung von eedc — Netzbezug 30 ct/kWh,
+Einspeisung 8,2 ct/kWh (bzw. mit im Monat gepflegten Durchschnittspreisen); Kosten und Ersparnis dieser Monate weichen
+entsprechend ab.
 
 #### Zeittarif ohne Stundenwerte <a name="zeittarif_ohne_stundenwerte"></a>
 
@@ -811,7 +819,8 @@ nicht eingetragen“ unterscheiden — deshalb sagt die Zeile, womit gerechnet w
 **Lösungsweg**
 1. Ohne eigenen Ladetarif: nichts zu tun — die Rechnung stimmt bereits.
 2. Mit eigenem Ladetarif: unter [Strompreise](eedc:/einstellungen/stammdaten?block=strompreise) **«Neuer Tarif»**,
-   Verwendung «Wallbox (Spezialtarif)», Preise und «Gültig ab» eintragen, **«Anlegen»**.
+   Verwendung «Wallbox (Spezialtarif)», Preise und «Gültig ab» eintragen, **«Anlegen»**. Hängen Wärmepumpe und Wallbox
+   an einem Zähler: Verwendung «Wärmepumpe und Wallbox (gemeinsamer Zähler)».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach Schritt 2 ist die Zeile verschwunden; ohne Ladetarif
    bleibt sie als Auskunft stehen.
 
@@ -841,8 +850,9 @@ sehr hohe Sätze sind meist ein Eingabefehler.
 
 **Lösungsweg**
 1. Am Befund **«Tarif bearbeiten»** klicken — der Tarif öffnet sich am Feld «Einspeisevergütung (ct/kWh)».
-2. Den Satz in Cent je kWh eintragen und **«Speichern»**. Bei Direktvermarktung mit wechselnder Vergütung eine
-   sinnvolle Schätzung eintragen oder «Einspeisevergütung wechselt monatlich» einschalten.
+2. Den Satz in Cent je kWh eintragen und **«Speichern»**. Bei Direktvermarktung mit wechselnder Vergütung
+   «Einspeisevergütung wechselt monatlich» einschalten **und** als Satz eine Schätzung zwischen 0 und 30 ct/kWh
+   eintragen — der Schalter allein lässt die Zeile stehen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden. Ist der Satz wirklich so, bleibt
    sie stehen.
 
@@ -874,7 +884,8 @@ aller Wallboxen als Gerätemenge.
 **Was eedc sieht**
 Für Wärmepumpe und Wallbox gilt ein gemeinsamer Tarif (ein Zähler vor beiden Geräten). Den gemeinsamen Netzbezug trägt
 das Feld «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)» an der Wärmepumpe. An der Wallbox ist zusätzlich
-«Netzbezug zum Wallbox-Tarif» zugeordnet — dieser Wert zählt in der Stromrechnung nicht, er stünde sonst doppelt.
+«Netzbezug zum Wallbox-Tarif» zugeordnet oder in einer Monatszeile der letzten zwölf abgeschlossenen Monate gefüllt —
+dieser Wert zählt in der Stromrechnung nicht, er stünde sonst doppelt.
 
 **Lösungsweg**
 1. Am Befund **«Tarif bearbeiten»** klicken — der gemeinsame Tarif öffnet sich. Prüfen, ob er stimmt: Haben die Geräte
@@ -882,7 +893,8 @@ das Feld «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)» an der Wärme
 2. Stimmt der gemeinsame Tarif: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) die Zuordnung
    «Netzbezug zum Wallbox-Tarif» an der Wallbox lösen und den gemeinsamen Zähler an der Wärmepumpe zuordnen (Handbuch
    «Wärme & Klima», Schritt 6b).
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald weder eine Zuordnung noch
+   ein Monatswert der letzten zwölf abgeschlossenen Monate das Feld an der Wallbox trägt.
 
 **Was ohne Handlung gilt**
 eedc rechnet den gemeinsamen Netzbezug von der Wärmepumpe; der Wert an der Wallbox bleibt in der Stromrechnung
@@ -913,13 +925,14 @@ eigenen Tarif wird darauf begrenzt.
 
 **Was eedc sieht**
 Die Wallbox trägt in den genannten Monaten neben «Netzbezug zum Wallbox-Tarif» einen PV-/Netz-Anteil der Ladung (etwa
-aus evcc), und beide nennen eine andere Netzladung (mehr als 0,5 kWh bzw. 2 % Unterschied). eedc rechnet mit dem
+aus evcc), und beide nennen eine andere Netzladung (Unterschied um mehr als 0,5 kWh und zugleich mehr als 2 % der
+Ladung — die größere der beiden Grenzen). eedc rechnet mit dem
 Zähler des Versorgers: Netzladung = Netzbezug zum Wallbox-Tarif, PV-Ladung = Ladung minus Netzladung — für Ersparnis,
 Heimladekosten und Stromrechnung.
 
 **Lösungsweg**
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wallbox am Feld für die
-   Netzladung.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wallbox (ein eigenes Feld
+   für die Netzladung gibt es dort nicht; der PV-/Netz-Anteil steht in der Monatszeile der Wallbox).
 2. Prüfen, ob beide Sensoren dieselbe Wallbox messen. Misst einer ein anderes Gerät oder einen anderen Zeitraum, die
    Zuordnung berichtigen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Monate neu erfasst sind
@@ -939,7 +952,8 @@ das andere Gerät — dann ist es kein gemeinsamer Zähler mehr.
 **Lösungsweg**
 1. Am Befund **«Tarif bearbeiten»** klicken — der eigene Tarif des Geräts öffnet sich.
 2. Hängen beide Geräte hinter einem Zähler: beim eigenen Tarif «Gültig bis» auf den Tag vor dem gemeinsamen Tarif
-   setzen (oder ihn löschen) und **«Speichern»**. Haben die Geräte wirklich getrennte Zähler, stattdessen den
+   setzen und **«Speichern»**; löschen nur, wenn er nie allein gegolten hat (sonst ändern sich die Stromrechnungen der
+   Monate davor). Haben die Geräte wirklich getrennte Zähler, stattdessen den
    gemeinsamen Tarif beenden und für das andere Gerät einen eigenen anlegen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
@@ -972,7 +986,9 @@ evcc bzw. Tagesquote) größer als «Netzbezug zum WP-/Wallbox-Tarif (gemeinsame
 auf den gemeinsamen Netzbezug; der Wärmepumpe bleibt dann kein Netzanteil.
 
 **Lösungsweg**
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich am Feld für die Netzladung.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wärmepumpe am Feld
+   «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)»; ist nicht eindeutig, welche Wärmepumpe den gemeinsamen Zähler
+   trägt, öffnet sie sich ohne Feld.
 2. Den gemeinsamen Zähler prüfen (Zähler vor beiden Geräten minus Zähler danach) und die Netzladung der Wallbox: misst
    ihr Sensor wirklich nur Netzstrom dieser Wallbox?
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Monate neu erfasst sind.
@@ -1012,8 +1028,9 @@ zusammen. Mehr, als das Gerät verbraucht, kann der Versorger nicht zum eigenen 
 den Monat auf den Verbrauch; die Herleitung zeigt es als «begrenzt».
 
 **Lösungsweg**
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich am Feld für den Netzbezug zum
-   Tarif.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Gerät
+   (Wärmepumpe bzw. Wallbox; beim gemeinsamen Zähler die Wärmepumpe) am Feld für den Netzbezug zum Tarif; ist nicht
+   eindeutig, welches Gerät es trägt, öffnet sie sich ohne Feld.
 2. Prüfen, ob dort der richtige Sensor steht: der Zähler des Versorgers, also Zähler vor dem Gerät minus Zähler nach dem
    Gerät — und ob der Verbrauch des Geräts vollständig zugeordnet ist.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Monate neu erfasst sind.
@@ -1031,8 +1048,9 @@ E-Mobilität behält die Netzladung bis zur Ladung. Häufige Ursache: ein parall
 fehlt.
 
 **Lösungsweg**
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich am Feld für den Netzbezug zum
-   Tarif.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Gerät
+   (Wärmepumpe bzw. Wallbox; beim gemeinsamen Zähler die Wärmepumpe) am Feld für den Netzbezug zum Tarif; ist nicht
+   eindeutig, welches Gerät es trägt, öffnet sie sich ohne Feld.
 2. Hängt das Gerät an einem eigenen Zähler neben dem Hauszähler, muss der Netzbezug der Anlage beide enthalten:
    Netzbezug der Anlage = Hauszähler + Zähler des Geräts. Den
    [Netzbezug der Anlage](eedc:/einstellungen/datenquellen?feld=netzbezug_kwh) entsprechend zuordnen.
@@ -1046,7 +1064,8 @@ parallele Zähler darin fehlt.
 
 **Was wird geprüft:** Je aktive Komponente die Pflicht- und Plausibilitätsangaben ihres Typs, danach je Komponententyp
 die Vollständigkeit der monatlichen Verbrauchs- bzw. Erzeugungswerte ab dem Anschaffungsdatum. Anschaffungsdatum und
--kosten werden für alle Typen geprüft. Die PV-Erzeugung wird anlagenweit geprüft, nicht je Modul.
+-kosten werden für alle Typen geprüft — Ausnahmen: ein Dienstwagen bekommt keine dieser Prüfungen, ein Verbrauchszähler
+keine Kosten-Frage. Die PV-Erzeugung wird anlagenweit geprüft, nicht je Modul.
 
 **Wohin die Knöpfe führen:** «Gerät bearbeiten» öffnet das Formular der Komponente beim fehlenden Feld
 (*Einstellungen → Komponenten*); «Monat öffnen» öffnet den Monatsabschluss des ersten betroffenen Monats beim Feld des
@@ -1063,8 +1082,8 @@ Wert in einem Feld, das das Gerät danach nicht führt, wird eigens gemeldet und
 Für diese Monate gibt es gar keine PV-Quelle — weder einen Wert je PV-Modul noch einen Gesamtwert der Anlage. Ohne
 PV-Erzeugung fehlen Eigenverbrauch, Autarkie und Ersparnis dieser Monate. Geprüft wird anlagenweit, nicht je Modul: ein
 einziger Gesamtwert deckt alle Strings ab. Bei Anlagen mit eigenem Zähler am Balkonkraftwerk kann ein Monat auch ohne
-dein Zutun leer sein — eine frühere Start-Migration hat dort den Gesamtwert mitgeleert; was sich retten lässt, steht im
-Handbuch unter «Was ist neu».
+dein Zutun leer sein — eine frühere Start-Migration hat dort den Gesamtwert mitgeleert. Zurückholen kann eedc ihn nicht;
+die Schritte unten füllen die Monate neu.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich beim Feld
@@ -1162,11 +1181,12 @@ keine 0.
 #### Monatsdaten eines Geräts vollständig <a name="geraet_monate_ok"></a>
 
 **Was eedc sieht**
-Alle Pflicht-Monatsfelder dieses Geräts sind ab dem Anschaffungsdatum für jeden Monat erfasst.
+Alle Pflicht-Monatsfelder dieses Geräts sind für jeden erfassten Monat der Anlage ab dem Anschaffungsmonat gefüllt.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt grün, solange jeder Monat seinen Wert hat.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange jeder Monat seinen Wert hat.
 
 **Was ohne Handlung gilt**
 Die Auswertungen des Geräts rechnen mit vollständigen Monaten.
@@ -1200,8 +1220,9 @@ Der Wert bleibt gespeichert, zählt aber nirgends mit. eedc löscht und verschie
 
 **Was eedc sieht**
 Die Aufteilung des Wärmepumpen-Stroms nach Heizen und Kühlen ist ein Teil des Gesamtverbrauchs — zusammen kann sie ihn
-nicht übersteigen. In den genannten Monaten tut sie es; meist, weil der Gesamtwert nachträglich kleiner eingetragen wurde
-als die schon gespeicherte Aufteilung. Die Energiebilanz ist nicht betroffen, dort zählt immer der Gesamtwert.
+nicht übersteigen. In den genannten Monaten übersteigt sie ihn um mehr als 0,5 kWh; meist, weil der Gesamtwert
+nachträglich kleiner eingetragen wurde als die schon gespeicherte Aufteilung. Die Energiebilanz ist nicht betroffen,
+dort zählt immer der Gesamtwert.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich beim Feld
@@ -1218,10 +1239,10 @@ widersprüchlich.
 #### Wärme gesamt kleiner als die Einzelwerte <a name="wp_gesamtwaerme_kleiner_teile"></a>
 
 **Was eedc sieht**
-«Wärme gesamt» ist die Wärme des ganzen Geräts — Heizung und Warmwasser zusammen. In diesen Monaten steht dort weniger als
-in «Heizwärme» und «Warmwasser-Wärme» zusammen; einer der Werte meint also etwas anderes als gedacht, häufig ist die
-Heizwärme unter «Wärme gesamt» gelandet. eedc rechnet mit der Gesamtwärme — Wärmemenge, Arbeitszahl, Ersparnis und CO₂
-dieser Monate fallen deshalb zu niedrig aus.
+«Wärme gesamt» ist die Wärme des ganzen Geräts — Heizung und Warmwasser zusammen. In diesen Monaten steht dort um mehr als
+0,5 kWh weniger als in «Heizwärme» und «Warmwasser-Wärme» zusammen; einer der Werte meint also etwas anderes als
+gedacht, häufig ist die Heizwärme unter «Wärme gesamt» gelandet. eedc rechnet mit der Gesamtwärme — Wärmemenge,
+Arbeitszahl, Ersparnis und CO₂ dieser Monate fallen deshalb zu niedrig aus.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich bei den
@@ -1238,9 +1259,9 @@ eedc rechnet weiter mit der zu kleinen Gesamtwärme; Arbeitszahl, Ersparnis und 
 #### Wärme gesamt ist 0, die Einzelwerte nicht <a name="wp_waerme_gesamt_null"></a>
 
 **Was eedc sieht**
-In diesen Monaten steht unter «Wärme gesamt» eine 0, während «Heizwärme» und «Warmwasser-Wärme» Werte tragen. eedc
-rechnet hier mit den beiden Einzelwerten. Häufigster Grund: Der Wärmemengenzähler hat im Monat keinen neuen Stand
-geliefert — keine Statistik in Home Assistant, eingefroren oder erst seit kurzem zugeordnet.
+In diesen Monaten steht unter «Wärme gesamt» eine 0, während «Heizwärme» und «Warmwasser-Wärme» zusammen mehr als
+0,5 kWh tragen. eedc rechnet hier mit den beiden Einzelwerten. Häufigster Grund: Der Wärmemengenzähler hat im Monat
+keinen neuen Stand geliefert — keine Statistik in Home Assistant, eingefroren oder erst seit kurzem zugeordnet.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten betroffenen Monats öffnet sich bei den
@@ -1288,7 +1309,8 @@ Fehler: eedc weiß nicht, was am Zähler hängt, und behauptet es nicht.
 2. Prüfen, ob der zugeordnete Sensor nur die Wärmepumpe misst. Stimmt er, ist nichts zu tun.
 3. Sagt die Meldung, dass der Gesamtwert aus dem Monatsformular stammt, kann er ein stehen gebliebener alter Stand sein:
    im Monatsabschluss das Feld «Stromverbrauch» leeren und speichern — eedc rechnet ihn dann aus Heizen und Warmwasser.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — stimmt der Zähler, bleibt die Zeile als Auskunft stehen.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — stimmt der Zähler, bleibt die Zeile als Hinweis mit dem
+   Knopf «Zuordnung prüfen» stehen; sie ist eine Frage, kein Fehler.
 
 **Was ohne Handlung gilt**
 Der Rest steht weiter als „nicht aufgeteilt“; Verbrauch, Kosten und CO₂ rechnen mit dem vollen Gesamtzähler.
@@ -1335,9 +1357,9 @@ Die Gesamt-Arbeitszahl dieser Monate rechnet mit einem unvollständigen Nenner u
 #### Heizwärme der Wärmepumpe fehlt <a name="wp_heizwaerme_fehlt_monate"></a>
 
 **Was eedc sieht**
-Die abgegebene Wärme fehlt — weder «Heizwärme» noch «Wärme gesamt» ist eingetragen. Ohne sie gibt es für diese Monate
-keine gemessene Arbeitszahl und keinen COP-Vergleich. Der Strom bleibt vollständig erfasst, die Stromauswertung ist
-unberührt. Gefragt wird nur an Geräten, an denen eedc eine Heiz-Achse erwartet; an einer Split-Klimaanlage und an einer
+Die abgegebene Wärme fehlt — weder «Heizwärme» noch «Wärme gesamt» noch die «Nutzenergie Heizbetrieb» ist eingetragen.
+Ohne sie gibt es für diese Monate keine gemessene Arbeitszahl und keinen COP-Vergleich. Über den Strom sagt diese Zeile
+nichts — fehlt er, nennt ihn eine eigene Zeile. Gefragt wird nur an Geräten, an denen eedc eine Heiz-Achse erwartet; an einer Split-Klimaanlage und an einer
 Brauchwasser-Wärmepumpe nicht.
 
 **Lösungsweg**
@@ -1349,17 +1371,18 @@ Brauchwasser-Wärmepumpe nicht.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die nachgetragenen Monate sind aus der Zeile verschwunden.
 
 **Was ohne Handlung gilt**
-Arbeitszahl und COP zeigen für diese Monate „—“ statt einer Scheinzahl; die Stromauswertung ist vollständig.
+Arbeitszahl und COP zeigen für diese Monate „—“ statt einer Scheinzahl.
 
 #### Monatsdaten der Wärmepumpe vollständig <a name="wp_monate_ok"></a>
 
 **Was eedc sieht**
-Strom (bei getrennter Messung beide Seiten) und Wärme der Wärmepumpe sind ab dem Anschaffungsdatum für jeden Monat
-erfasst.
+Strom (bei getrennter Messung beide Seiten) und Wärme der Wärmepumpe sind für jeden erfassten Monat der Anlage ab dem
+Anschaffungsmonat eingetragen.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt grün, solange jeder Monat seine Werte hat.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange jeder Monat seine Werte hat.
 
 **Was ohne Handlung gilt**
 Verbrauch, Arbeitszahl und Ersparnis der Wärmepumpe rechnen mit vollständigen Monaten.
@@ -1453,7 +1476,9 @@ liest — die Live-Anzeige rechnet dann aus der Leistung hoch und kann deutlich 
    für die ganze Anlage, in der Gruppe «Anlage (Basis)» — eedc verteilt die Menge dann nach kWp auf deine Module.
 3. Danach die alte Zuordnung am Wechselrichter entfernen (Quelle «Keine»); sie bleibt sichtbar, bis du sie löschst.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange am Wechselrichter eine Zuordnung oder
-   ein gepflegter PV-Monatswert steht.
+   ein gepflegter PV-Monatswert steht. Einen solchen Monatswert kannst du nicht mehr ändern oder entfernen: der
+   Monatsabschluss zeigt das Feld am Wechselrichter nicht mehr, und der Daten-Checker bietet dafür kein «Wert entfernen».
+   Steht er, bleibt die Zeile — er zählt trotzdem nirgends mit.
 
 **Was ohne Handlung gilt**
 Der Sensor am Wechselrichter und sein Monatswert zählen nirgends; die PV-Erzeugung kommt allein aus Modulen und
@@ -1507,7 +1532,8 @@ Die Anlage hat keine aktive Komponente. Cockpit, Wirtschaftlichkeit und alle Auf
 1. Am Befund **«Komponente anlegen»** klicken — das Formular für neue PV-Module öffnet sich.
 2. Mindestens PV-Module oder ein Balkonkraftwerk anlegen (Balkonkraftwerk unter
    *Einstellungen → Komponenten → Balkonkraftwerk* mit «+») und speichern. Gibt es die Komponente schon, aber nicht
-   aktiv: sie bearbeiten und «Aktiv (in Berechnungen berücksichtigen)» einschalten.
+   aktiv: sie bearbeiten, «Aktiv (in Berechnungen berücksichtigen)» einschalten und prüfen, ob das «Anschaffungsdatum»
+   in der Zukunft oder das «Stilllegungsdatum (optional)» in der Vergangenheit liegt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
@@ -1538,13 +1564,15 @@ Diesen PV-Modulen fehlt Ausrichtung oder Neigung. Beides braucht die PVGIS-Solar
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Prognose rechnet für diese Module mit den Vorgaben der Anlage.
+Die Prognose rechnet für diese Module bei fehlender Ausrichtung mit Süd, bei fehlender Neigung mit 35°.
 
 #### Leistung des Balkonkraftwerks fehlt <a name="bkw_leistung_wp_fehlt"></a>
 
 **Was eedc sieht**
 Dem Balkonkraftwerk fehlt die Leistung pro Modul in Wp. Ohne sie (mal Modulanzahl) ist die kWp-Summe der Anlage
-unvollständig, und der kWp-Anteil des Balkonkraftwerks an einem Gesamtwert lässt sich nicht bestimmen.
+unvollständig, solange dem Balkonkraftwerk keine PV-Module zugeordnet sind, und der kWp-Anteil des Balkonkraftwerks an
+einem Gesamtwert lässt sich nicht bestimmen. Mit zugeordneten Modulen zählt deren Summe; der Hinweis bleibt trotzdem,
+bis «Leistung pro Modul (Wp)» eingetragen ist.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Balkonkraftwerks öffnet sich beim Feld
@@ -1553,12 +1581,14 @@ unvollständig, und der kWp-Anteil des Balkonkraftwerks an einem Gesamtwert läs
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die kWp-Summe der Anlage fehlt um das Balkonkraftwerk.
+Ohne zugeordnete PV-Module fehlt die kWp-Summe der Anlage um das Balkonkraftwerk; mit zugeordneten Modulen zählt deren
+Summe.
 
 #### Wechselrichter-Leistung des Balkonkraftwerks fehlt <a name="wr_leistung_fehlt"></a>
 
 **Was eedc sieht**
-Am Balkonkraftwerk fehlt die Leistung seines Wechselrichters; die Meldung nennt die Leistung der Module. Ohne die
+Am Balkonkraftwerk fehlt die Leistung seines Wechselrichters, und die Module leisten zusammen mehr als 800 W (die
+typische Einspeisegrenze; darunter meldet eedc nichts); die Meldung nennt die Leistung der Module. Ohne die
 Wechselrichter-Leistung rechnet die Prognose mit der vollen Modulleistung — bei Überbelegung (etwa 1.260 W Module an
 600 W Wechselrichter) fällt sie zu hoch aus. Mit gepflegtem Wert kappt eedc die Prognose stündlich.
 
@@ -1574,8 +1604,9 @@ Die Prognose des Balkonkraftwerks rechnet ungekappt mit der Modulleistung.
 #### Kapazität des Speichers fehlt <a name="speicher_kapazitaet_fehlt"></a>
 
 **Was eedc sieht**
-Dem Speicher fehlt die Kapazität in kWh. Sie ist die Bezugsgröße für Vollzyklen, Wirkungsgrad und die Skalierung des
-Ladestands in der Live-Anzeige.
+Dem Speicher fehlt die Kapazität in kWh. Sie ist die Bezugsgröße der Vollzyklen; die Korrektur des Wirkungsgrads über
+den Ladestand und der Ladestand in der Live-Anzeige nutzen die «Nutzbare Kapazität (kWh)» und greifen nur ohne sie auf
+diese Kapazität zurück.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich beim Feld «Kapazität (kWh)».
@@ -1597,7 +1628,7 @@ schätzt, was kommt.
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich im Abschnitt
    «Netzladung & Arbitrage» beim Feld «Ø Ladepreis (ct/kWh)».
 2. Den Preis eintragen, zu dem der Speicher im Niedrigtarif-Fenster lädt (etwa bei negativen Börsenpreisen), und
-   speichern.
+   speichern. Trag einen Wert über 0 ct/kWh ein: 0 zählt hier als nicht eingetragen, die Zeile bliebe stehen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
@@ -1613,7 +1644,8 @@ Wirtschaftlichkeit in die Zukunft. Gemessene Monatswerte ersetzen ihn nicht.
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich im Abschnitt
    «Netzladung & Arbitrage» beim Feld «Ø Entladepreis (ct/kWh)».
-2. Den vermiedenen Preis zur Spitzenlastzeit eintragen und speichern.
+2. Den vermiedenen Preis zur Spitzenlastzeit eintragen und speichern. Trag einen Wert über 0 ct/kWh ein: 0 zählt hier
+   als nicht eingetragen, die Zeile bliebe stehen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
@@ -1635,7 +1667,7 @@ Ursachen: der Netz-Zähler ist bei «Ladung» zugeordnet, oder «Ladung» wurde 
 3. Von Hand gepflegte Monate unter *Einstellungen → Daten → Monatsdaten* berichtigen: «Ladung» enthält die gesamte
    Ladung, die Netzladung ist ein Teil davon.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Summe der Netzladung
-   nicht mehr über der Summe der Ladung liegt.
+   die Summe der Ladung um höchstens 2 % plus 0,1 kWh übersteigt (Spielraum für einen Monatsübergang am Rand).
 
 **Was ohne Handlung gilt**
 Die Speicher-Auswertungen rechnen mit den widersprüchlichen Mengen; der PV-Anteil der Ladung stimmt nicht.
@@ -1659,13 +1691,14 @@ davon, kein zweiter Posten daneben.
    nicht mehr über der Summe der Ladung liegt.
 
 **Was ohne Handlung gilt**
-eedc kappt den Wirkungsgrad nicht; die Speicher-Sichten zeigen ihn über 100 %.
+Die Speicher-Sichten zeigen für solche Zeiträume keinen Wirkungsgrad oder höchstens 100 %, und unter «Komponenten» steht
+beim Speicher ein Warnhinweis; nur diese Zeile nennt den Überschuss als Zahl.
 
 #### Fahrleistung oder Verbrauch des E-Autos fehlt <a name="eauto_fahrleistung_fehlt"></a>
 
 **Was eedc sieht**
-Am E-Auto ist weder die Jahresfahrleistung noch der Verbrauch je 100 km eingetragen. Ohne sie lässt sich die Ersparnis
-gegenüber einem Verbrenner nicht berechnen. Dienstwagen werden nicht geprüft.
+Am E-Auto ist weder die Jahresfahrleistung noch der Verbrauch je 100 km eingetragen. Ohne sie rechnet die Ersparnis
+gegenüber einem Verbrenner mit Vorgaben statt mit deinen Angaben. Dienstwagen werden nicht geprüft.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des E-Autos öffnet sich beim Feld
@@ -1674,27 +1707,31 @@ gegenüber einem Verbrenner nicht berechnen. Dienstwagen werden nicht geprüft.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Ersparnis des E-Autos gegenüber einem Verbrenner bleibt ungerechnet.
+Die Prognose der Ersparnis gegenüber einem Verbrenner rechnet mit den Vorgaben 15.000 km im Jahr und 18 kWh je 100 km
+statt mit deinen Angaben.
 
 #### Alternativkosten des E-Autos fehlen <a name="eauto_alternativkosten_fehlen"></a>
 
 **Was eedc sieht**
-Am E-Auto fehlen die Anschaffungskosten eines vergleichbaren Verbrenners. Ohne sie rechnet eedc die Amortisation nicht
-gegen die Verbrenner-Alternative. Dienstwagen werden nicht geprüft.
+Am E-Auto fehlen die Anschaffungskosten eines vergleichbaren Verbrenners. Ohne sie rechnet die Amortisation mit den
+vollen Anschaffungskosten des E-Autos als Mehrkosten; die Ersparnis gegenüber dem Verbrenner rechnet eedc davon
+unabhängig. Dienstwagen werden nicht geprüft.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des E-Autos öffnet sich beim Feld «Alternative Kosten (€)».
-2. Die geschätzten Anschaffungskosten eines vergleichbaren Verbrenners eintragen und speichern.
+2. Die geschätzten Anschaffungskosten eines vergleichbaren Verbrenners eintragen und speichern. Gab es keine
+   Verbrenner-Alternative, trag 0 ein — das ist eine gültige Antwort.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Wirtschaftlichkeit des E-Autos rechnet ohne Vergleich mit einem Verbrenner.
+Die Amortisation des E-Autos rechnet mit den vollen Anschaffungskosten; die Ersparnis gegenüber dem Verbrenner wird
+weiter gerechnet.
 
 #### Ladeleistung der Wallbox fehlt <a name="wallbox_ladeleistung_fehlt"></a>
 
 **Was eedc sieht**
-An der Wallbox ist keine maximale Ladeleistung in kW eingetragen. Auslegung und Ladeprofile lassen sich ohne sie nicht
-plausibilisieren.
+An der Wallbox ist keine maximale Ladeleistung in kW eingetragen. eedc nennt sie bei der Wallbox, in der
+Anlagendokumentation und im Community-Vergleich; keine Auswertung rechnet mit ihr.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wallbox öffnet sich beim Feld «Max. Ladeleistung (kW)».
@@ -1702,13 +1739,14 @@ plausibilisieren.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Sichten der Wallbox, die die Ladeleistung brauchen, bleiben ohne Bezugsgröße.
+Die Anlagendokumentation lässt die Ladeleistung weg, der Community-Vergleich bekommt keine; alle Zahlen der
+Auswertungen bleiben gleich.
 
 #### Leistung des Wechselrichters fehlt <a name="geraet_leistung_kw_fehlt"></a>
 
 **Was eedc sieht**
-Am Wechselrichter ist keine AC-Nennleistung in kW eingetragen. Ohne sie rechnen die Auslastung des Wechselrichters und
-der Kopf des Cockpits nicht.
+Am Wechselrichter ist keine AC-Nennleistung in kW eingetragen. Ohne sie begrenzt die Prognose die Module an diesem
+Wechselrichter nicht auf seine Leistung, und die Prüfung der Modulleistung gegen den Wechselrichter entfällt.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Wechselrichters öffnet sich beim Feld
@@ -1717,7 +1755,8 @@ der Kopf des Cockpits nicht.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Auslastung des Wechselrichters bleibt ungerechnet.
+Die Prognose rechnet für die Module an diesem Wechselrichter mit ihrer vollen Leistung, die Prüfung der Modulleistung
+gegen den Wechselrichter entfällt, und unter «Komponenten» steht am Wechselrichter keine kW-Angabe.
 
 #### Alternativkosten der Wärmepumpe fehlen <a name="wp_alternativkosten_fehlen"></a>
 
@@ -1739,8 +1778,8 @@ Die Amortisation rechnet mit den vollen Anschaffungskosten der Wärmepumpe.
 #### Jahresarbeitszahl der Wärmepumpe fehlt <a name="wp_jaz_fehlt"></a>
 
 **Was eedc sieht**
-Als «Berechnungsmodus für Effizienz» ist die Jahresarbeitszahl gewählt, aber keine eingetragen. Ohne sie lässt sich die
-Heizenergie aus dem Strom nicht berechnen und damit keine Einsparung.
+Als «Berechnungsmodus für Effizienz» ist die Jahresarbeitszahl gewählt, aber keine eingetragen. Ohne sie leitet eedc aus
+dem gemessenen Heizstrom keine Heizwärme ab; die Prognose der Jahres-Einsparung rechnet ersatzweise mit 3,5.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wärmepumpe öffnet sich beim Feld
@@ -1749,7 +1788,8 @@ Heizenergie aus dem Strom nicht berechnen und damit keine Einsparung.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Einsparung der Wärmepumpe aus der Jahresarbeitszahl bleibt ungerechnet.
+Ohne gemessene Wärme bleibt die Heizwärme der Wärmepumpe leer; die Prognose der Jahres-Einsparung rechnet mit der
+Vorgabe 3,5 statt mit deiner Jahresarbeitszahl.
 
 #### Jahresarbeitszahl der Wärmepumpe unplausibel <a name="wp_jaz_unplausibel"></a>
 
@@ -1770,9 +1810,11 @@ eedc rechnet mit dem eingetragenen Wert; Heizenergie und Einsparung fallen entsp
 #### SCOP- oder COP-Werte der Wärmepumpe fehlen <a name="wp_stammdatum_hinweis"></a>
 
 **Was eedc sieht**
-Als «Berechnungsmodus für Effizienz» ist SCOP (EU-Energielabel) oder getrennte COPs gewählt, aber ein Wert fehlt; ohne ihn
-rechnet eedc keine Einsparung. Gefragt wird nur nach Achsen, die es am Gerät gibt: An einer Brauchwasser-Wärmepumpe heißt
-die Meldung „SCOP Warmwasser fehlt“ bzw. „COP Warmwasser fehlt“, an einer Split-Klimaanlage umgekehrt „… Heizung fehlt“.
+Als «Berechnungsmodus für Effizienz» ist SCOP (EU-Energielabel) oder getrennte COPs gewählt, aber ein Wert fehlt; die
+Prognose der Jahres-Einsparung rechnet dann mit einer Vorgabe, und fehlt der Heizungs-Wert, leitet eedc aus dem
+gemessenen Heizstrom keine Heizwärme ab. Gefragt wird nur nach Achsen, die es am Gerät gibt: An einer
+Brauchwasser-Wärmepumpe heißt die Meldung „SCOP Warmwasser fehlt“ bzw. „COP Warmwasser fehlt“, an einer
+Split-Klimaanlage umgekehrt „… Heizung fehlt“.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wärmepumpe öffnet sich.
@@ -1782,7 +1824,8 @@ die Meldung „SCOP Warmwasser fehlt“ bzw. „COP Warmwasser fehlt“, an eine
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Einsparung der Wärmepumpe bleibt ungerechnet.
+Die Prognose der Jahres-Einsparung rechnet mit den Vorgaben SCOP 4,5 (Heizung) / 3,2 (Warmwasser) bzw. COP 3,9 / 3,0.
+Fehlt der Heizungs-Wert, bleibt die Heizwärme der Wärmepumpe ohne gemessene Wärme leer.
 
 #### Alter Energiepreis der Wärmepumpe fehlt <a name="wp_alter_energiepreis_fehlt"></a>
 
@@ -1804,10 +1847,11 @@ Die Einsparung gegenüber der alten Heizung rechnet mit einem Standardpreis stat
 #### Heizwärmebedarf der Wärmepumpe fehlt <a name="wp_heizwaermebedarf_fehlt"></a>
 
 **Was eedc sieht**
-An der Wärmepumpe ist kein Jahres-Heizwärmebedarf eingetragen. Ohne ihn rechnet die Jahres-Einsparungsschätzung gar
-nicht; die Zeile der Wirtschaftlichkeit trägt dann „Nicht bewertet“ samt Begründung. Gefragt wird nur an Geräten mit
-Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heizen. Der Hinweis bleibt aus, wenn bei
-«Alter Energieträger» «Nichts ersetzt (Neubau)» gewählt ist.
+An der Wärmepumpe ist kein Jahres-Heizwärmebedarf eingetragen. Ist auch kein «Warmwasserbedarf (kWh/Jahr)» gepflegt,
+rechnet die Jahres-Einsparungsschätzung gar nicht; die Zeile der Wirtschaftlichkeit trägt dann „Nicht bewertet“ samt
+Begründung. Mit gepflegtem Warmwasserbedarf rechnet sie allein aus diesem und fällt zu niedrig aus. Gefragt wird nur an
+Geräten mit Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heizen. Der Hinweis bleibt aus,
+wenn bei «Alter Energieträger» «Nichts ersetzt (Neubau)» gewählt ist.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wärmepumpe öffnet sich beim Feld
@@ -1817,7 +1861,8 @@ Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heiz
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Die Jahres-Einsparung der Wärmepumpe bleibt „Nicht bewertet“.
+Die Jahres-Einsparung der Wärmepumpe bleibt „Nicht bewertet“, solange auch kein Warmwasserbedarf gepflegt ist; sonst
+rechnet sie allein aus dem Warmwasserbedarf.
 
 #### Warmwasserbedarf der Wärmepumpe fehlt <a name="wp_warmwasserbedarf_fehlt"></a>
 
@@ -1853,6 +1898,8 @@ Die Komponente zählt in allen Zeiträumen mit, auch vor ihrer Anschaffung; die 
 
 **Was eedc sieht**
 Der Komponente fehlen die Anschaffungskosten. Wirtschaftlichkeit und Amortisation rechnen ohne sie mit 0 €.
+Verbrauchszähler (Sonstiges mit der Kategorie «Verbrauchszähler (Gas, Wasser, Heizöl — wird nur erfasst)») sind
+ausgenommen — sie werden erfasst, nicht bewertet.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular dieser Komponente öffnet sich beim Feld
@@ -1876,7 +1923,7 @@ Monatswerte füllen der Statistik-Import (*Einstellungen → Integration → Sta
 
 #### 4.3.2 Balkonkraftwerk
 
-Am Balkonkraftwerk prüft eedc Leistung pro Modul und Modulanzahl, die Leistung des Wechselrichters (für die
+Am Balkonkraftwerk prüft eedc die Leistung pro Modul (Wp), die Leistung des Wechselrichters (für die
 Prognose) und die monatliche Erzeugung. Ein Balkonkraftwerk ohne eigenen Zähler bekommt seinen kWp-Anteil am
 PV-Gesamtwert der Anlage; ein Monat mit gespeichertem Gesamtwert gilt deshalb nicht als Lücke. Ein Balkonkraftwerk mit
 zugeordneten PV-Modulen ist selbst ein Gesamtwert für seine Module. Ein Akku am Balkonkraftwerk gehört als eigene
@@ -1891,7 +1938,9 @@ und — über die ganze Geschichte — ob Netzladung und Entladung zur Ladung pa
 **Warum eedc für Arbitrage eine Angabe braucht:** Arbitrage lebt davon, dass dieselbe Kilowattstunde zu verschiedenen
 Uhrzeiten verschieden viel kostet — und ein eedc-Tarif kennt keine Uhrzeit. Die beiden Preisfelder «Ø Ladepreis» und
 «Ø Entladepreis» stehen im Formular des Speichers unter «Netzladung & Arbitrage», sobald «Arbitrage-fähig» an ist. Wer
-einen dynamischen Tarif (Tibber, aWATTar, EPEX) angebunden hat: dort zieht eedc den stundengenauen Preis vor.
+einen dynamischen Tarif (Tibber, aWATTar, EPEX) angebunden hat: dort zieht eedc für die gemessenen Monate den
+stundengenauen Preis vor; Prognose und Amortisation rechnen weiter mit den beiden Preisen am Speicher, deshalb fragt der
+Checker sie trotzdem.
 
 #### 4.3.4 E-Auto (privat)
 
@@ -1934,8 +1983,8 @@ kaufen müssen? Gab es keine Alternative, ist 0 eine gültige Antwort.
 
 #### 4.3.8 Allgemein (alle Komponententypen)
 
-Für jede Komponente prüft eedc Anschaffungsdatum und Anschaffungskosten — das Datum begrenzt jede Auswertung und ist der
-Startpunkt der Amortisation — sowie die Vollständigkeit ihrer Pflicht-Monatsfelder ab dem Anschaffungsdatum. Ohne
+Für jede Komponente außer einem Dienstwagen prüft eedc das Anschaffungsdatum — es begrenzt jede Auswertung und ist der
+Startpunkt der Amortisation —, die Anschaffungskosten für jede außer einem Verbrauchszähler, sowie die Vollständigkeit ihrer Pflicht-Monatsfelder ab dem Anschaffungsdatum. Ohne
 aktive Komponente bleiben Cockpit und Wirtschaftlichkeit leer.
 
 #### 4.3.9 E-Auto + Wallbox – Heimladung je Auto <a name="439-heimladung-je-auto"></a>
@@ -1953,9 +2002,10 @@ löst deshalb keinen Befund aus.
 
 **Was eedc sieht**
 In den genannten Monaten der letzten zwölf übersteigen die eigenen Heimlade-Werte der Autos (privat und dienstlich)
-die Ladung der Wallbox um mehr als 10 kWh bzw. 10 %. Mögliche Ursachen: Streudaten am Auto, eine Quelle am Auto, die
-auch das Laden unterwegs zählt, oder ein Auto, das an der Steckdose statt an der Wallbox geladen hat. Der Rest der
-Wallbox, der sonst an Autos ohne eigene Messung geht, ist in diesen Monaten 0.
+die Ladung der Wallbox um mehr als 10 kWh und zugleich mehr als 10 % (die größere der beiden Grenzen). Mögliche
+Ursachen: Streudaten am Auto, eine Quelle am Auto, die auch das Laden unterwegs zählt, oder ein Auto, das an der
+Steckdose statt an der Wallbox geladen hat. Der Rest der Wallbox, der sonst an Autos ohne eigene Messung geht, ist in
+diesen Monaten 0.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten genannten Monats öffnet sich am Feld
@@ -1977,8 +2027,8 @@ es gibt keine dienstliche Wallbox in Betrieb). Lädt er zu Hause, zählt seine L
 dienstlich.
 
 **Lösungsweg**
-1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des letzten genannten Monats öffnet sich am Feld
-   «Heim: gesamt» des Dienstwagens.
+1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ältesten betroffenen Monats öffnet sich am
+   Feld «Heim: gesamt» des Dienstwagens; die Details nennen höchstens die drei jüngsten Monate.
 2. Seine Heimladung eintragen («Heim: gesamt» oder «Heim: PV» und «Heim: Netz»). Lädt er nur beim Arbeitgeber,
    **0** eintragen — 0 ist ein Wert. Dasselbe für die übrigen genannten Monate.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
@@ -1991,17 +2041,18 @@ hoch.
 
 **Was eedc sieht**
 Derselbe Sensor ist der Wallbox und dem E-Auto zugeordnet; die Zeile nennt Sensor und Geräte. Beide messen damit
-denselben Ladestrom — in Monats- und Jahreswerten wird die Ladung doppelt gezählt (im Live-Energiefluss nicht).
+denselben Ladestrom. In Monat und Jahr zählt eedc die Ladung einmal (das E-Auto trägt seine Messung, für die Wallbox
+bleibt kein Rest) — die Zuordnung ist trotzdem falsch.
 
 **Lösungsweg**
 1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim E-Auto am Feld der Ladung.
 2. Die Zuordnung an einem der beiden Geräte lösen. Faustregel: Die Wallbox misst den Stromfluss, das E-Auto trägt
    Nutzung und Kilometer — meist bleibt der Sensor an der Wallbox.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden. Schon gespeicherte Monate mit der
-   doppelten Ladung im Monatsabschluss neu übernehmen.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-Ladung, Ladekosten und Ersparnis stehen in Monat und Jahr doppelt.
+Ein weiteres Auto ohne eigene Messung bekommt von dieser Wallbox keine Heimladung, und die Sichten je Gerät zeigen
+denselben Ladestrom an Wallbox und E-Auto.
 
 ### 4.4 Monatsdaten – Vollständigkeit <a name="44-monatsdaten--vollstaendigkeit"></a>
 
@@ -2033,7 +2084,9 @@ Es gibt keinen einzigen Monat mit Einspeisung und Netzbezug. Cockpit, Aussicht, 
 bleiben leer.
 
 **Lösungsweg**
-1. Am Befund **«Monat erfassen»** klicken — der Monatsabschluss des ersten Monats ab der Inbetriebnahme öffnet sich.
+1. Am Befund **«Monat erfassen»** klicken — der Monatsabschluss des ersten Monats ab der «Inbetriebnahme (Anlage)»
+   öffnet sich; ohne dieses Datum der Monat des ältesten Anschaffungsdatums eines PV-Moduls oder Balkonkraftwerks, sonst
+   die Monatsdaten-Liste.
 2. Einspeisung und Netzbezug eintragen (auch 0 ist ein Wert) und speichern. Mit zugeordneten Zählern in Home Assistant
    holt [«Monatsdaten aus HA-Statistik laden»](eedc:/einstellungen/integration?block=ha-statistik-import) viele Monate
    auf einmal; vorhandene Daten liest unter [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten)
@@ -2047,12 +2100,14 @@ Ohne Monate gibt es keine Bilanz, keine Jahreswerte und keinen Vergleich; eedc s
 #### Alle Monate vollständig <a name="monate_vollstaendig_ok"></a>
 
 **Was eedc sieht**
-Von der Inbetriebnahme der Anlage bis zum Vormonat ist jeder Monat erfasst; die Zeile nennt ihre Zahl. Ob die Felder
+Von der Inbetriebnahme der Anlage (ohne sie: ab dem ältesten Anschaffungsdatum eines PV-Moduls oder Balkonkraftwerks,
+sonst ab dem ersten erfassten Monat) bis zum Vormonat ist jeder Monat erfasst; die Zeile nennt ihre Zahl. Ob die Felder
 innerhalb der Monate vollständig sind, prüft die Plausibilität der Monatsdaten.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt unter den bestandenen Prüfungen.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange kein Monat fehlt.
 
 **Was ohne Handlung gilt**
 Jahreswerte, Amortisation und Community-Vergleich rechnen mit allen Monaten.
@@ -2060,7 +2115,8 @@ Jahreswerte, Amortisation und Community-Vergleich rechnen mit allen Monaten.
 #### Monat fehlt <a name="monat_fehlt"></a>
 
 **Was eedc sieht**
-Für einen abgeschlossenen Monat ab der Inbetriebnahme gibt es keinen Monatsabschluss — Einspeisung und Netzbezug fehlen.
+Für einen abgeschlossenen Monat ab der Inbetriebnahme (ohne sie: ab dem ältesten Anschaffungsdatum eines PV-Moduls oder
+Balkonkraftwerks, sonst ab dem ersten erfassten Monat) gibt es keinen Monatsabschluss — Einspeisung und Netzbezug fehlen.
 Ohne sie gibt es keine Bilanz: eedc kann nicht sagen, woher der Strom eines Geräts kam, und rechnet den Monat weder in den
 Jahreswert noch in den Community-Vergleich. Mehrere fehlende Monate stehen als eine Zeile «n Monate fehlen» mit einem
 Glied je Monat; über zwölf hinaus nennt die Zeile die Zahl der weiteren.
@@ -2137,10 +2193,10 @@ als «Monatsdaten erfassen». **Ein leeres Feld ist keine 0:** eedc rechnet nur 
 #### PV-Ladung größer als Gesamtladung <a name="emob_pv_ladung_groesser_gesamt"></a>
 
 **Was eedc sieht**
-An einer Wallbox oder einem E-Auto ist für den Monat die aus PV geladene Menge größer als die gesamte Ladung. Die
-PV-Ladung ist ein Teil der Gesamtladung und kann nicht größer sein. eedc rechnet in dieser Lage mit PV + Netz weiter und
-legt den eingetragenen Gesamtwert beiseite — die Ladung, die du siehst, ist dann nicht die, die du erfasst hast. Welcher
-der beiden Werte stimmt, kann eedc nicht wissen.
+An einer Wallbox oder einem E-Auto ist für den Monat die aus PV geladene Menge um mehr als 0,1 kWh größer als die
+gesamte Ladung. Die PV-Ladung ist ein Teil der Gesamtladung und kann nicht größer sein. eedc rechnet in dieser Lage mit
+PV + Netz weiter und legt den eingetragenen Gesamtwert beiseite — die Ladung, die du siehst, ist dann nicht die, die du
+erfasst hast. Welcher der beiden Werte stimmt, kann eedc nicht wissen.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss dieses Monats öffnet sich beim genannten Gerät.
@@ -2150,8 +2206,8 @@ der beiden Werte stimmt, kann eedc nicht wissen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Zeile verschwunden.
 
 **Was ohne Handlung gilt**
-In deinen Auswertungen steht keine falsche Zahl: eedc rechnet mit PV + Netz. Der eingetragene Gesamtwert bleibt aber
-beiseitegelegt, bis einer der beiden Werte berichtigt ist.
+eedc zeigt als Ladung PV + Netz (ohne eingetragenen Netz-Anteil also den PV-Wert); stimmt der PV-Wert nicht, ist auch
+die gezeigte Ladung falsch. Der eingetragene Gesamtwert bleibt beiseitegelegt, bis einer der beiden Werte berichtigt ist.
 
 #### Keine Auffälligkeiten in den Monatsdaten <a name="monatsdaten_plausi_ok"></a>
 
@@ -2199,13 +2255,13 @@ Eine aktive Speicher-Komponente ist vorhanden, aber für den Monat ist keine Bat
 wird der Gesamtverbrauch des Monats falsch berechnet.
 
 **Lösungsweg**
-1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich zum Bearbeiten.
-2. Beim Speicher das Feld «Ladung» eintragen und speichern.
+1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich zum Bearbeiten, beim Speicher am Feld «Ladung».
+2. Beim Speicher «Ladung» und «Entladung» eintragen und speichern — die Ladung allein löst den Folgebefund «Entladung
+   an einem Speicher nicht erfasst» aus.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Zeile verschwunden.
 
 **Was ohne Handlung gilt**
-Der Gesamtverbrauch des Monats rechnet ohne die Ladung und steht damit falsch; die Energiebilanz kann dadurch sogar
-negativ werden.
+Der Gesamtverbrauch des Monats rechnet ohne die Ladung und steht damit zu hoch.
 
 #### Batterie-Entladung nicht erfasst <a name="md_batterie_entladung_fehlt"></a>
 
@@ -2214,7 +2270,7 @@ Eine aktive Speicher-Komponente ist vorhanden, aber für den Monat ist keine Bat
 Batterie-Daten wird der Gesamtverbrauch des Monats falsch berechnet.
 
 **Lösungsweg**
-1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich zum Bearbeiten.
+1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich zum Bearbeiten, beim Speicher am Feld «Entladung».
 2. Beim Speicher das Feld «Entladung» eintragen und speichern.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Zeile verschwunden.
 
@@ -2254,10 +2310,10 @@ eedc rechnet mit dem negativen Wert; Bilanz, Eigenverbrauch und alles, was darau
 #### PV-Erzeugung ungewöhnlich hoch <a name="md_pv_ungewoehnlich_hoch"></a>
 
 **Was eedc sieht**
-Die PV-Erzeugung des Monats liegt über der Obergrenze. Mit mindestens sechs Monaten Historie ist das die
-PVGIS-Prognose × Performance Ratio × 1,45 (mindestens PVGIS × 1,5), sonst ein festes Maximum nach Monat und kWp; die
-Details nennen die verwendete Schwelle. Häufigste echte Ursache ist eine Doppelerfassung: dieselbe Erzeugung an zwei
-Stellen zugeordnet.
+Die PV-Erzeugung des Monats liegt über der Obergrenze. Liegt eine PVGIS-Prognose vor, ist das
+PVGIS × Performance Ratio × 1,45 (ab sechs Monaten Historie), mindestens aber PVGIS × 1,5; ohne PVGIS-Prognose gilt ein
+festes Maximum je Monat und kWp. Die Details nennen die verwendete Schwelle. Häufigste echte Ursache ist eine
+Doppelerfassung: dieselbe Erzeugung an zwei Stellen zugeordnet.
 
 **Lösungsweg**
 1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich bei der PV-Erzeugung. Wert prüfen: Eingabefehler,
@@ -2313,9 +2369,9 @@ Gesamtverbrauch, Eigenverbrauch und Autarkie des Monats stehen falsch.
 **Was eedc sieht**
 Für den Monat ist mehr Einspeisung erfasst als PV-Erzeugung — du kannst nicht mehr einspeisen, als du erzeugst. Häufigste
 Ursache: Einspeisungs- und Netzbezugs-Sensor sind vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist
-umgekehrt. Ebenso häufig ist die Erzeugung nur teilweise erfasst (ein String fehlt in den Komponenten). Summieren sich die
-Tageswerte schon deutlich höher als der Monatswert, sagen das die Details zuerst: dann wurde der Monat nach einer
-Reparatur der Tage nie nachgezogen.
+umgekehrt. Ebenso häufig ist die Erzeugung nur teilweise erfasst (ein String fehlt in den Komponenten). Liegen die
+Tageswerte zusammen um mehr als 20 % und zugleich mehr als 20 kWh (die größere der beiden Grenzen) über dem
+Monatswert, sagen das die Details zuerst: dann wurde der Monat nach einer Reparatur der Tage nie nachgezogen.
 
 **Lösungsweg**
 1. Nennen die Details höhere Tageswerte: im
@@ -2383,8 +2439,8 @@ zweite Grund.
    *Einstellungen → Komponenten → Wärmepumpe* das Gerät bearbeiten und im Feld «Fremdanteil auf den Zählern» die
    passende Lage wählen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach einer Berichtigung ist der Monat aus der Zeile
-   verschwunden. Mit dem Fremdanteil allein bleibt die Zeile stehen; die Auswertungen der Wärmepumpe zeigen dann statt
-   der Arbeitszahl den Grund.
+   verschwunden; mit gesetztem Fremdanteil verschwindet die Zeile für dieses Gerät ebenso, und die Auswertungen der
+   Wärmepumpe zeigen statt der Arbeitszahl den Grund.
 
 **Was ohne Handlung gilt**
 Die erfassten Kilowattstunden bleiben unberührt und zählen in allen Mengen weiter mit. Über einer Arbeitszahl von 10
@@ -2419,9 +2475,10 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 |---------------|------------------------------|
 | PV-Module, Balkonkraftwerk | `pv_erzeugung_kwh` |
 | Speicher | `ladung_kwh`, `entladung_kwh` |
-| Wärmepumpe | `stromverbrauch_kwh` |
+| Wärmepumpe | `stromverbrauch_kwh`; mit «Getrennte Strommessung» stattdessen `strom_heizen_kwh` und `strom_warmwasser_kwh` (an einer Split-Klimaanlage nur Heizen) |
 | Wallbox, E-Auto | `ladung_kwh` |
-| Wechselrichter, Sonstiges | (keine — werden übersprungen) |
+| Sonstiges | das Zählerfeld seiner Kategorie (Verbraucher, Erzeuger, Abgabe an Dritte); ein Verbrauchszähler (Gas, Wasser, Heizöl) wird übersprungen |
+| Wechselrichter | (keine — wird übersprungen) |
 
 > **Was hier „zugeordnet“ heißt — auch MQTT.** Ein Feld trägt einen Zähler, wenn
 >
@@ -2442,8 +2499,9 @@ dem Energieprofil. Live-Anzeigen aus den Leistungs-Sensoren (W) funktionieren we
 > ab der Zuordnung. Frühere Tage lassen sich in der Reparatur-Werkbank nachrechnen.
 
 > **Wer hier ausgenommen ist:** **Split-Klimaanlagen** (Wärmepumpenart *Luft-Luft*) werden nicht nach Wärme gefragt, eine
-> **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird übersprungen, wenn eine **Wallbox** existiert
-> (dort wird die Heimladung geführt) oder wenn es als **Dienstwagen** markiert ist. Stillgelegte und inaktive Komponenten
+> **Brauchwasser-Wärmepumpe** nicht nach Heizwärme. Das **E-Auto** wird für den Ladezähler übersprungen, wenn eine
+> **Wallbox mit eigenem kWh-Zähler** in Betrieb ist (dort wird die Heimladung geführt; für die PV-Ladung als Zusatzfeld
+> genügt eine Wallbox), oder wenn es als **Dienstwagen** markiert ist. Stillgelegte und inaktive Komponenten
 > zählen nicht mit. Ein **Balkonkraftwerk, an dem PV-Module hängen**, braucht keinen eigenen Zähler — die Module tragen
 > seine Erzeugung.
 
@@ -2520,7 +2578,8 @@ Auswertungen leer.
 
 **Was ohne Handlung gilt**
 Die Auswertungen dieser Komponenten bleiben leer; fehlt der Zähler an einem Speicher oder einer PV-Erzeugung, stehen
-Gesamtverbrauch und Grundlast zu niedrig. Ein Feld, für das du ausdrücklich «Keine» gewählt hast, bleibt deine Absage.
+Gesamtverbrauch und Grundlast zu niedrig. Ein Feld, für das du «Keine» gewählt hast, zählt als ohne Zähler — die Zeile
+bleibt dann stehen.
 
 #### Balkonkraftwerk über die PV-Module gedeckt <a name="bkw_ueber_module_ok"></a>
 
@@ -2552,12 +2611,14 @@ Das Energieprofil rechnet je Komponente mit den zugeordneten Zählern.
 
 **Was eedc sieht**
 Der PV-Zählerstand der ganzen Anlage versorgt Monat, Tag und Stunde als Summe. Es fehlt nur die Aufschlüsselung je
-Erzeuger — dafür braucht jeder einzelne einen eigenen Zähler. Dann aber alle: sobald einer gemessen wird, zählt für Tag
-und Stunde nur noch, was je Erzeuger gemessen ist.
+Erzeuger — dafür braucht jeder einzelne einen eigenen Zähler. Misst nur ein Teil der Erzeuger, trägt weiter der
+Anlagenzähler die Summe des Tages; erst wenn alle Erzeuger den ganzen Tag messen, rechnet eedc Tag und Stunde aus den
+Einzelzählern.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt grün, solange der Anlagenzähler zugeordnet ist.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange der Anlagenzähler zugeordnet ist.
 
 **Was ohne Handlung gilt**
 eedc rechnet die PV-Erzeugung als Summe aus dem Anlagenzähler, ohne Aufteilung je Erzeuger.
@@ -2600,7 +2661,8 @@ Die Monatsauswertungen sind nicht betroffen. Nur die genannten Tageswerte bleibe
 eedc rechnet eine fehlende Stunde aus Home Assistant heute wie das Energie-Dashboard: ihre Energie steht in der Stunde
 danach, und die Tagesansicht im Cockpit zeigt Eigenverbrauch, Autarkie und Gesamtverbrauch auch an solchen Tagen. Die
 genannten Tage wurden vor dieser Umstellung gerechnet und zeigen dort noch „—“. Gezählt werden nur Tage mit eigenen
-Stundenwerten; Tage, deren Mengen aus der Langzeitstatistik von Home Assistant kommen, brauchen das nicht.
+Stundenwerten; Tage, deren Mengen aus der Langzeitstatistik von Home Assistant oder aus den gespeicherten
+Zählerständen kommen, brauchen das nicht.
 
 **Lösungsweg**
 1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc rechnet die jüngsten Tage neu,
@@ -2639,7 +2701,8 @@ Diese Tage rechnen weiter mit den gespeicherten Stunden- und Tageswerten.
 **Was wird geprüft:** Enthalten die Tagesprofile der letzten 30 Tage Stundenwerte, die physikalisch unmöglich sind?
 Konkret: PV oder Einspeisung einer Stunde größer als die Anlagenleistung × 1,5. Das tritt typisch nach einem Neustart
 während des Tages auf, wenn ein verzerrter Zählerstand gespeichert wurde. Dazu kommen zwei Tagesprüfungen: Tage mit mehr
-Einspeisung als Erzeugung und Tage mit einem Nachtrag nach eingefrorenem Zähler.
+Einspeisung als Erzeugung plus Speicher-Entladung (Toleranz 0,5 kWh) und Tage mit einem Nachtrag nach eingefrorenem
+Zähler.
 
 **Schwelle:** Anlagen-kWp × 1,5. Eine Aufdach-PV-Anlage erzeugt selbst bei optimalem Sonnenstand nicht mehr als etwa
 1500 W je kWp — Werte darüber sind Rechen- oder Messfehler, keine Naturereignisse.
@@ -2649,15 +2712,18 @@ Lücke in Home Assistant (in der Stundentabelle beschriftet „enthält n Stunde
 unverändertem Stand, gilt kWp × 1,5 × Stunden seit der letzten Änderung (höchstens 24 Stunden) — sonst würde jeder echte
 Nachtrag als unmöglicher Wert gemeldet. Dieselbe Regel entscheidet beim Rechnen der Tage, ob eine Menge verworfen wird.
 
-> **Tage aus der Langzeitstatistik von Home Assistant.** Die Prüfung auf unmögliche Stundenwerte (und mit ihr der
-> Verdacht auf PV-Doppelerfassung, [§4.18](#418-pv-doppelerfassung)) schaut nur auf Tage aus eigenen Stundenwerten. An
+> **Tage aus der Langzeitstatistik von Home Assistant.** Die Prüfung auf unmögliche Stundenwerte schaut nur auf Tage aus
+> eigenen Stundenwerten; der Verdacht auf PV-Doppelerfassung ([§4.18](#418-pv-doppelerfassung)) zählt für den
+> spezifischen Tagesertrag auch Tage aus der Langzeitstatistik (die PV wie in der Tagesansicht im Cockpit), nur die
+> Performance Ratio bleibt die der gespeicherten Tageszeile. An
 > einem Tag, dessen Mengen aus der Langzeitstatistik kommen, ist eine hohe Stunde die Zahl von Home Assistant, wie im
 > Energie-Dashboard; ein Sprung mit dem typischen Muster (Sensor fällt kurz auf 0 und kehrt zurück) meldet
 > [§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant). **Ein reiner Sprung ohne dieses Muster** bekommt an einem
 > solchen Tag **keinen** Befund: prüfe ihn in Home Assistant unter *Entwicklerwerkzeuge → Statistik* und berichtige ihn
 > dort.
 
-> **Ältere Tage** (über 30 Tage) werden nicht geprüft: dort stehen meist schon berichtigte Werte, und für den aktuellen
+> **Ältere Tage** (über 30 Tage) prüft die Stundenwert-Prüfung nicht — die beiden Tagesprüfungen (Einspeisung über
+> Erzeugung, Nachtrag) sehen alle gespeicherten Tage: dort stehen meist schon berichtigte Werte, und für den aktuellen
 > Lernfaktor zählen sie nicht mehr. Wer ältere Tage trotzdem reparieren will, nutzt in der Reparatur-Werkbank
 > «Mehrere Tage neu aggregieren» über den entsprechenden Bereich — das reicht so weit zurück wie die Langzeitstatistik
 > von Home Assistant.
@@ -2675,9 +2741,11 @@ vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist umgekehrt.
 **Lösungsweg**
 1. Zuerst die Zuordnung prüfen: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) nachsehen, ob der
    PV-Zähler liefert und ob Einspeisung und Netzbezug richtig herum zugeordnet sind; Fehler dort berichtigen.
-2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** (höchstens 31 Tage je Lauf).
-   Kommen die Tage aus der Statistik von Home Assistant, heißt der Knopf **«Aus Home Assistant neu übernehmen»** — dann
-   vorher die Statistik in Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen. Steht am Befund nur
+2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc baut die Tage aus
+   eigenen Stundenwerten neu (höchstens 31 Tage je Lauf). Kommen alle Tage aus der Statistik von Home Assistant, heißt
+   der Knopf **«Aus Home Assistant neu übernehmen»** und übernimmt nur den jüngsten Tag — dann vorher die Statistik in
+   Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen; nach dem erneuten Prüfen steht der Knopf am
+   nächsten Tag. Steht am Befund nur
    **«Was gilt»**, kommen die Mengen aus eedcs eigenen Zählerständen; dann wirkt die berichtigte Zuordnung auf die
    folgenden Tage.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die berichtigten Tage sind aus der Zeile verschwunden.
@@ -2722,8 +2790,9 @@ Die Stundenwerte der letzten 30 Tage gehen so in Tag, Monat und Lernfaktor ein.
 #### Unmöglicher Stundenwert an einem Tag <a name="counter_spike_tag"></a>
 
 **Was eedc sieht**
-Dieser Tag enthält mindestens eine Stunde, in der PV oder Einspeisung über der Schwelle liegt (Anlagenleistung × 1,5) —
-so viel erzeugt keine Anlage in einer Stunde. Häufige Ursache ist ein Neustart während des Tages, bei dem ein verzerrter
+Dieser Tag enthält mindestens eine Stunde, in der PV oder Einspeisung über der Schwelle liegt (Anlagenleistung × 1,5 je
+Stunde; trägt die Stunde die Energie einer Lücke von n Stunden, gilt die n-fache Schwelle) — so viel erzeugt keine Anlage
+in dieser Zeit. Häufige Ursache ist ein Neustart während des Tages, bei dem ein verzerrter
 Zählerstand gespeichert wurde. Die Details nennen Stunde und Wert. Geprüft werden die letzten 30 Tage, und nur Tage aus
 eigenen Stundenwerten.
 
@@ -2737,7 +2806,8 @@ eigenen Stundenwerten.
    Counter-Spikes in den letzten 30 Tagen».
 
 **Was ohne Handlung gilt**
-Die überhöhte Stunde bleibt im Tag stehen und zählt in Tag, Monat und Lernfaktor mit.
+Die überhöhte Stunde bleibt im Tag stehen und zählt im Tag und im Lernfaktor mit; in den Monat geht sie nur ein, wenn der
+Monat keinen eigenen Monatswert hat.
 
 ### 4.8 MQTT-Topic-Abdeckung <a name="48-mqtt-topic-abdeckung"></a>
 
@@ -2787,15 +2857,16 @@ Wie ein Topic eingerichtet wird, steht im Handbuch Einstellungen,
 #### MQTT-Empfang eingeschaltet, aber nicht verbunden <a name="mqtt_subscriber_laeuft_nicht"></a>
 
 **Was eedc sieht**
-Der Empfang über MQTT ist eingeschaltet, aber eedc konnte beim letzten Start keine Verbindung zum Broker aufbauen — etwa
-weil der Broker nicht erreichbar ist oder die Zugangsdaten nicht stimmen. Über MQTT kommen dann keine Werte an.
+Der Empfang über MQTT ist eingeschaltet, aber er läuft nicht — meist, weil eedc beim letzten Start keine Verbindung zum
+Broker aufbauen konnte, etwa weil der Broker nicht erreichbar ist oder die Zugangsdaten nicht stimmen. Über MQTT kommen
+dann keine Werte an.
 
 **Lösungsweg**
 1. Am Befund **«Zur Verbindung»** klicken — die MQTT-Broker-Verbindung öffnet sich.
 2. Broker-Adresse und Zugangsdaten prüfen und speichern. Brauchst du keine Daten über MQTT, dort den Schalter «Daten über
    MQTT empfangen (Import)» ausschalten.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; mit ausgeschaltetem Empfang
-   erscheint die ganze Prüfung nicht mehr.
+   zählt der Kopf des Daten-Checkers die Prüfung als «nicht ausführbar (MQTT-Import aus)».
 
 **Was ohne Handlung gilt**
 Über MQTT kommen keine Live-Werte und keine Zählerstände an; Felder, die nur über MQTT versorgt werden, bleiben leer.
@@ -2803,11 +2874,11 @@ weil der Broker nicht erreichbar ist oder die Zugangsdaten nicht stimmen. Über 
 #### MQTT-Topics erwartet, nie empfangen <a name="mqtt_topics_nie_empfangen"></a>
 
 **Was eedc sieht**
-Die Verbindung zum Broker steht, aber für die genannten Topics hat noch keine Quelle Daten geliefert. Die Meldung nennt
-bis zu sechs Topics mit vollem Pfad — erst der Pfad sagt, an welchem Gerät das Feld fehlt. Erwartet werden nur Felder, die
-über MQTT kommen sollen: die Pflichtfelder eines Geräts (in den Datenquellen rot markiert) und optionale Felder, denen du
-MQTT oder ein Gateway als Quelle zugeordnet hast. Felder mit gespeicherter Quelle «Keine» oder einem Sensor aus Home
-Assistant zählen nicht.
+Die Verbindung zum Broker steht, aber für die genannten Topics hat noch keine Quelle Daten geliefert. Die Zeile nennt
+die Zahl, die Details bis zu sechs Topics mit vollem Pfad — erst der Pfad sagt, an welchem Gerät das Feld fehlt.
+Erwartet werden nur Felder, die über MQTT kommen sollen: die Pflichtfelder eines Geräts (in den Datenquellen rot
+markiert) und optionale Felder, denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Felder mit gespeicherter
+Quelle «Keine» oder einem Sensor aus Home Assistant zählen nicht.
 
 **Lösungsweg**
 1. Am Befund **«Topics prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim ersten betroffenen Gerät.
@@ -2827,9 +2898,10 @@ Die Felder dieser Topics bleiben leer; was aus ihnen rechnet, fehlt in Live-Anze
 #### MQTT-Topics mit veralteten Werten <a name="mqtt_topics_veraltet"></a>
 
 **Was eedc sieht**
-Die genannten Topics wurden schon empfangen, aber ihr letzter Wert ist älter als erlaubt: Live-Topics sollten innerhalb von
-2 Minuten, Energie-Topics innerhalb von 10 Minuten neu kommen. Die Meldung nennt je Topic das Alter in Minuten. Meist
-läuft die Publisher-Automation nicht mehr oder hat ihre Quelle verloren (etwa ein Wechselrichter offline).
+Die genannten Topics wurden schon empfangen, aber ihr letzter Wert ist älter als erlaubt: Live-Topics sollten innerhalb
+von 2 Minuten, Energie-Topics innerhalb von 10 Minuten neu kommen. Die Zeile nennt die Zahl, die Details bis zu fünf
+Topics mit ihrem Alter in Minuten. Meist läuft die Publisher-Automation nicht mehr oder hat ihre Quelle verloren (etwa
+ein Wechselrichter offline).
 
 **Lösungsweg**
 1. Am Befund **«Topics prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim ersten betroffenen Gerät.
@@ -2841,8 +2913,8 @@ läuft die Publisher-Automation nicht mehr oder hat ihre Quelle verloren (etwa e
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die wieder frischen Topics sind aus der Zeile verschwunden.
 
 **Was ohne Handlung gilt**
-eedc nutzt nur, was ankommt: ab dem letzten Empfang fehlen die Werte dieser Topics, in der Live-Anzeige wie in den
-Mengen von Tag und Monat.
+eedc nutzt nur, was ankommt: in der Live-Anzeige bleibt der zuletzt empfangene Wert als aktueller Wert stehen; in den
+Mengen von Tag und Monat kommt ab dem letzten Empfang nichts mehr hinzu.
 
 #### Alle erwarteten MQTT-Topics aktuell <a name="mqtt_ok"></a>
 
@@ -2851,7 +2923,8 @@ Die Verbindung zum Broker steht, und alle erwarteten Topics liefern frische Wert
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt grün, solange die Topics regelmäßig kommen.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange die Topics regelmäßig kommen.
 
 **Was ohne Handlung gilt**
 eedc liest Live-Werte und Zählerstände aus den empfangenen Topics.
@@ -2908,7 +2981,8 @@ Ständen.
 **Was ohne Handlung gilt**
 Für ein solches Feld liefert eedc keinen Wert: im Monatsabschluss steht kein Vorschlag, in der Monatsansicht im Cockpit
 bleibt der gespeicherte Wert stehen. Rechnet eedc das Feld über eine eigene Summe (die Meldung sagt das), stimmen Tag,
-Monat und Jahr trotzdem; nicht verlässlich bleiben dann „heute“ und „gestern“ im Live-Bereich. eedc rechnet den
+Monat und Jahr trotzdem; nicht verlässlich bleiben dann „heute“ und „gestern“ im Live-Bereich sowie die Tageswerte
+der Geräte aus der Zeit, bevor eedc diese eigene Summe führte. eedc rechnet den
 fehlenden Teil nicht hoch — er steht in keinem Stand.
 
 ### 4.8b Zählerstände – Sprung in Home Assistant <a name="48b-zaehlerstaende--sprung-in-home-assistant"></a>
@@ -3049,6 +3123,7 @@ Speicher.
 #### Anlagenzähler und String-Zähler messen verschiedene Dinge <a name="messpunkt_anlagenzaehler_vs_strings"></a>
 
 **Was eedc sieht**
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat und jede PV-Quelle einen eigenen Zähler.
 In den genannten Monaten liegt die Summe der String-Zähler um mehr als 10 % über dem Anlagenzähler (Feld „PV gesamt“).
 Wechselrichterverluste dieser Höhe sind nicht plausibel — meist misst der Anlagenzähler nicht dieselbe Anlage wie die
 Strings: ein String fehlt in ihm, oder er misst nach dem Speicher. eedc zeigt die Differenz als Wandlungsverluste,
@@ -3070,10 +3145,11 @@ Umsatzsteuer und CO₂ rechnen ohne Abzug. Bilanz, Autarkie und Eigenverbrauchsq
 #### Der Anlagenzähler misst das Balkonkraftwerk offenbar nicht <a name="messpunkt_bkw_nicht_im_anlagenzaehler"></a>
 
 **Was eedc sieht**
-In den genannten Monaten ist die Differenz zwischen den Zählern der PV-Quellen und dem Anlagenzähler (Feld „PV gesamt“)
-fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). Das Balkonkraftwerk speist dann offenbar an einer
-Stelle ein, die der Anlagenzähler nicht sieht. Neben großen Strings kann ein sehr kleines Balkonkraftwerk diese Schwelle
-auch mit echten Verlusten erreichen.
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat, jede PV-Quelle einen eigenen Zähler und
+das Balkonkraftwerk Erzeugung. In den genannten Monaten ist die Differenz zwischen den Zählern der PV-Quellen und dem
+Anlagenzähler (Feld „PV gesamt“) fast so groß wie die Erzeugung des Balkonkraftwerks (mindestens 80 %). Das
+Balkonkraftwerk speist dann offenbar an einer Stelle ein, die der Anlagenzähler nicht sieht. Neben großen Strings kann
+ein sehr kleines Balkonkraftwerk diese Schwelle auch mit echten Verlusten erreichen.
 
 **Lösungsweg**
 1. Am Befund **«Zur Zuordnung»** klicken — die Datenquellen-Zuordnung öffnet sich beim Anlagenzähler
@@ -3094,6 +3170,8 @@ Differenz wird angezeigt, aber nicht bewertet.
 In den genannten Monaten liegt der Anlagenzähler (Feld „PV gesamt“) um mehr als 2 % über der Summe der String-Zähler.
 Nach dem Wechselrichter kann nicht mehr ankommen, als die Strings davor liefern — meist zählt der Anlagenzähler eine
 weitere Quelle mit (ein Balkonkraftwerk, ein zweiter Wechselrichter), oder ein String-Zähler misst zu wenig.
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat und jede PV-Quelle einen eigenen Zähler.
+Bei einem DC-gekoppelten Speicher schweigt die Prüfung: Der Anlagenzähler zählt dann die Netzladung der Batterie mit.
 
 **Lösungsweg**
 1. Am Befund **«Zur Zuordnung»** klicken — die Datenquellen-Zuordnung öffnet sich beim Anlagenzähler
@@ -3115,7 +3193,8 @@ eingetragen, nimmt eedc DC an, sobald der Speicher einem Wechselrichter zugeordn
 die Kopplung fehlt.
 
 **Lösungsweg**
-1. Am Befund **«Gerät bearbeiten»** klicken — das Formular des Speichers öffnet sich.
+1. Am Befund **«Gerät bearbeiten»** klicken — die Seite «Komponenten» öffnet sich; dort beim Speicher das Stift-Symbol
+   «Bearbeiten» klicken.
 2. Im Feld «Kopplung» eintragen, wie dein Speicher angeschlossen ist: «AC-gekoppelt» oder «DC-gekoppelt». Speichern.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — mit «AC-gekoppelt» verschwindet die Zeile; mit «DC-gekoppelt»
    bleibt sie als Auskunft stehen.
@@ -3134,8 +3213,9 @@ Zähler. Die Meldung nennt beide. Ein Modul, das zum Balkonkraftwerk selbst geh�
 **Lösungsweg**
 1. Klären, was dein Anlagenzähler misst (der Knopf **«Was gilt»** am Befund öffnet diesen Text): Zählt er die ganze
    Erzeugung einschließlich Balkonkraftwerk, stimmt die Rechnung, und es ist nichts zu tun.
-2. Misst er nur den Wechselrichter: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) denselben Sensor
-   beim PV-Modul im Feld „PV-Erzeugung“ zuordnen. Sonst fehlt die Erzeugung der Balkonkraftwerke in PV gesamt.
+2. Misst er nur den Wechselrichter: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) den Sensor aus
+   „PV-Erzeugung Zählerstand“ herausnehmen und beim PV-Modul im Feld „PV-Erzeugung“ zuordnen — ein Sensor in zwei
+   Feldern zählt doppelt. Sonst fehlt die Erzeugung der Balkonkraftwerke in PV gesamt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein PV-Modul ohne eigenen Zähler neben
    dem Anlagenzähler steht.
 
@@ -3210,7 +3290,7 @@ einzelner stehender String lösen diese Meldung nicht aus.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
-> **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; der Kopf des Daten-Checkers zählt die Prüfung dann als nicht ausführbar (siehe §4.9a). Funktional wird die analoge Drift-Erkennung im Standalone-Betrieb über §4.8 *MQTT-Topic-Abdeckung* abgedeckt. Ist Home Assistant im Add-on zwischenzeitlich nicht erreichbar, wird die Kategorie ebenso übersprungen — dann die [HA-Verbindung](HANDBUCH_EINSTELLUNGEN.md#62-ha-verbindung) unter *Einstellungen → Integration → HA-Verbindung* prüfen.
+> **Variantenhinweis:** Diese Kategorie greift nur im **HA Add-on**. Im Standalone-Betrieb gibt es keine HA-Long-Term-Statistics; der Kopf des Daten-Checkers zählt die Prüfung dann als nicht ausführbar (siehe §4.9a). Im Standalone-Betrieb gibt es keine Entsprechung dieser Prüfung; §4.8 *MQTT-Topic-Abdeckung* prüft nur, ob die Topics ankommen. Ist Home Assistant im Add-on zwischenzeitlich nicht erreichbar, wird die Kategorie ebenso übersprungen — dann die [HA-Verbindung](HANDBUCH_EINSTELLUNGEN.md#62-ha-verbindung) unter *Einstellungen → Integration → HA-Verbindung* prüfen.
 
 **Was wird geprüft:** Liefert jeder zugeordnete HA-Sensor tatsächlich Long-Term-Statistics nach Home Assistant? Geprüft werden alle zugeordneten kWh-Felder — Einspeisung, Netzbezug, **PV Erzeugung Gesamt** und die Komponenten-Felder —, die Zähler-Felder (z. B. WP-Kompressor-Starts) und die Zählerstand-Felder. Reine Live-Felder (W, %, °C) bleiben außen vor, sie lesen den Momentanwert und brauchen keine Statistik. Beim Gesamt-PV-Zähler prüft eedc die **Zuordnung**, nicht ob die Rechnung ihn diesen Monat gerade liest: fällt ein String-Sensor aus, wird er unmittelbar wieder zur einzigen Quelle. Sensoren ohne `state_class` haben keine LTS-Einträge, und damit greifen die **Reparatur-Werkzeuge in der Energieprofil-Pflege** (Lücken aus HA-LTS nachfüllen, Tag/Bereich neu aggregieren) nicht — sie lesen alle aus HA-LTS. Live-Anzeigen funktionieren weiter (über `state`), aber jeder Aussetzer im Snapshot-Pfad ist permanent verloren, weil er nicht aus LTS nachgeholt werden kann.
 
@@ -3329,13 +3409,15 @@ Für diese Zähler bleibt der Stand leer. Vergangenes sammelt Home Assistant nic
 #### Alle kWh- und Zählerstand-Sensoren in der Langzeitstatistik <a name="stand_sensoren_ok"></a>
 
 **Was eedc sieht**
-Jeder zugeordnete kWh-Sensor und jeder Zählerstand-Sensor steht in der Langzeitstatistik von Home Assistant; die Zeile nennt
-die Zahlen. Für die kWh-Sensoren wirken damit die Reparatur-Werkzeuge auf alle Felder. Für einen Zählerstand wird bewusst keine Summen-Spalte verlangt
-— er kommt aus dem Sensor-Zustand, nicht aus einer Verbrauchssumme.
+Die Zeile erscheint für die Gruppe, die vollständig in der Langzeitstatistik von Home Assistant steht — kWh-Sensoren,
+Zählerstand-Sensoren oder beide; die Zeile nennt die Zahlen. Die Zähler-Felder (Kompressor-Starts, Betriebsstunden)
+zählt sie nicht mit. Für die kWh-Sensoren wirken damit die Reparatur-Werkzeuge auf alle Felder. Für einen Zählerstand
+wird bewusst keine Summen-Spalte verlangt — er kommt aus dem Sensor-Zustand, nicht aus einer Verbrauchssumme.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht weiter als bestanden im Kopf ihrer Kategorie.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie.
 
 **Was ohne Handlung gilt**
 eedc liest Zählerstände und Mengen weiter aus der Statistik von Home Assistant; Lücken lassen sich von dort nachholen.
@@ -3382,8 +3464,8 @@ Tag und Stunde kommen weiter aus dem gespiegelten Zähler.
 
 **Was eedc sieht**
 Home Assistant ist erreichbar, aber es gibt noch keine Tageszeile mit Stundenwerten. Direkt nach der Einrichtung ist das
-normal — die ersten Werte entstehen mit dem nächsten Lauf. Bleibt es dabei, fehlt meist die Zuordnung der kWh-Zähler: Es
-müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
+normal — die ersten Werte stehen innerhalb einer Stunde bereit. Bleibt es dabei, fehlt meist die Zuordnung der
+kWh-Zähler: Es müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
 
 **Lösungsweg**
 1. Nach der Einrichtung zuerst den nächsten Lauf abwarten.
@@ -3406,8 +3488,9 @@ aufgebaut sind, gilt sie als Quelle.
 
 **Lösungsweg**
 1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc baut die jüngsten Tage bis zum
-   genannten Tag (höchstens 31 Tage, höchstens bis gestern) aus der Statistik neu auf; Tage, die eedc schon direkt aus Home
-   Assistant führt, fasst der Knopf nicht an.
+   genannten Tag (höchstens 31 Tage, höchstens bis gestern) aus der Statistik neu auf. Der Bereich beginnt und endet an
+   einem Tag aus eedcs eigener Erfassung; Tage dazwischen, die eedc direkt aus Home Assistant führt, behalten ihre
+   Mengen — die Vorschau nennt sie.
 2. Steht am Befund kein solcher Knopf, gibt es in diesem Fenster keinen Tag, den eedc neu aufbauen müsste. Einen einzelnen
    Tag baut in der [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) die Operation «Tag neu
    aggregieren» neu auf.
@@ -3415,8 +3498,8 @@ aufgebaut sind, gilt sie als Quelle.
    Assistant als aktive Quelle.
 
 **Was ohne Handlung gilt**
-Die Tage behalten ihre Werte aus der älteren Quelle. Der nächste Monatsabschluss oder eine Tag-Reparatur baut sie aus der
-Statistik neu auf.
+Die Tage behalten ihre Werte aus der älteren Quelle; der Monatsabschluss rechnet nur Tage nach, die noch fehlen. Neu baut
+sie erst «Tage neu aufbauen» am Befund oder «Tag neu aggregieren» in der Reparatur-Werkbank.
 
 #### Betrieb ohne Langzeitstatistik von Home Assistant <a name="betriebsart_standalone"></a>
 
@@ -3473,10 +3556,10 @@ Tage, für die auch Home Assistant nichts hat, bleiben leer; sie lassen sich nic
 #### Tage ohne Werte trotz zugeordnetem Zähler <a name="tageswerte_fehlen_tage"></a>
 
 **Was eedc sieht**
-In den letzten 90 Tagen gibt es Tage, an denen ein Zähler zugeordnet ist und die Langzeitstatistik von Home Assistant einen
-Wert hat, die gespeicherte Tageszeile in eedc aber leer ist. Das ist der typische Fall nach einer nachträglich korrigierten
-Zuordnung: Die Zuordnung steht heute, für die Tage davor hat sie nie jemand aufgeschrieben. Die Meldung nennt den Zeitraum,
-die Details die betroffenen Komponenten.
+In den letzten 90 Tagen gibt es Tage, an denen ein Zähler zugeordnet ist und die Langzeitstatistik von Home Assistant
+für ihn mindestens 1 kWh hat, die gespeicherte Tageszeile in eedc aber leer ist. Das ist der typische Fall nach einer
+nachträglich korrigierten Zuordnung: Die Zuordnung steht heute, für die Tage davor hat sie nie jemand aufgeschrieben.
+Die Meldung nennt den Zeitraum, die Details die betroffenen Komponenten.
 
 **Lösungsweg**
 1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Tage aus der Statistik
@@ -3537,9 +3620,9 @@ Assistant Werte hat.
 #### Geräte-Connector liefert für den laufenden Monat keinen Wert <a name="connector_monatswert_fehlt"></a>
 
 **Was eedc sieht**
-Ein Connector-Wert ist immer die Differenz zweier gespeicherter Zählerstände — einer vor dem Monatsbeginn, einer danach.
-Für den laufenden Monat fehlt einer davon: Entweder gibt es bisher erst einen Zählerstand, oder der jüngste ist mehrere
-Tage alt, weil der tägliche Abruf nichts Neues bringt. Die Details nennen den Bestand und wann der Abruf zuletzt lief. In
+Ein Connector-Wert ist immer die Differenz zweier verschiedener gespeicherter Zählerstände — der erste vor dem Monat oder
+im Monat, der zweite im Monat oder danach. Für den laufenden Monat fehlt der zweite: Entweder gibt es bisher erst einen
+Zählerstand, oder der jüngste ist mindestens zwei Tage alt, weil der tägliche Abruf nichts Neues bringt. Die Details nennen den Bestand und wann der Abruf zuletzt lief. In
 der Monatsansicht im Cockpit fehlt der Connector dann als Quelle, ohne dass es sonst jemand sagt.
 
 **Lösungsweg**
@@ -3547,8 +3630,8 @@ der Monatsansicht im Cockpit fehlt der Connector dann als Quelle, ohne dass es s
 2. Prüfen, ob das Gerät im Netz erreichbar ist und die Zugangsdaten noch gelten, dann mit **«Jetzt ablesen»** den Zähler
    von Hand ablesen. Scheitert der Abruf, steht der Grund dort und im Aktivitätsprotokoll unter
    [Protokolle](eedc:/einstellungen/system?block=protokolle), Reiter «Aktivitäten».
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — sobald im Monat ein zweiter Zählerstand vorliegt, ist die Zeile
-   verschwunden.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — sobald für den Monat ein zweiter, davon verschiedener
+   Zählerstand vorliegt, ist die Zeile verschwunden.
 
 **Was ohne Handlung gilt**
 Der tägliche Abruf läuft bei jedem eingerichteten Connector um 3:30 Uhr weiter, er lässt sich weder ein- noch ausschalten;
@@ -3569,10 +3652,10 @@ kommt ein neuer Zählerstand dazu, verschwindet der Befund von selbst. Bis dahin
 #### eedc und Home Assistant rechnen mit verschiedenen Zeitzonen <a name="zeitzone_abweichung"></a>
 
 **Was eedc sieht**
-eedc und Home Assistant liegen um mindestens eine Stunde auseinander. Verglichen wird der aktuelle Abstand zur Weltzeit, nicht
-der Name der Zeitzone. Die Details nennen die Zeitzone von Home Assistant und den Abstand. Rund um Mitternacht landen
-Stundenwerte dadurch im falschen Tag — betroffen sind alle Tageswerte: Tagesansicht im Cockpit, Energieprofil,
-Tagesabschlüsse.
+eedc und Home Assistant liegen zeitlich auseinander — jede Abweichung zählt, auch eine halbe Stunde. Verglichen wird der
+aktuelle Abstand zur Weltzeit, nicht der Name der Zeitzone. Die Details nennen die Zeitzone von Home Assistant und den
+Abstand. Rund um Mitternacht landen Stundenwerte dadurch im falschen Tag — betroffen sind alle Tageswerte: Tagesansicht
+im Cockpit, Energieprofil, Tagesabschlüsse.
 
 **Lösungsweg**
 1. Als Add-on: am Befund **«Zum Neustart»** klicken — die [Protokolle](eedc:/einstellungen/system?block=protokolle)
@@ -3608,7 +3691,8 @@ Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.
 
 **Was eedc sieht**
 An der Komponente ist ein Jahresbetrag hinterlegt (die Meldung nennt das Feld, die Details den Betrag), und derselbe Posten
-steht zusätzlich in mehreren Monaten im Monatsabschluss. Der Jahresbetrag wirkt jedes Jahr — der Betrag zählt damit doppelt.
+steht zusätzlich in mindestens zwei Monaten im Monatsabschluss. Der Jahresbetrag wirkt jedes Jahr — der Betrag zählt
+damit doppelt.
 
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Komponente öffnet sich im Abschnitt «Weitere Angaben & Kosten».
@@ -3631,8 +3715,10 @@ Wiederholung, nie an der Bedeutung der Bezeichnung.
 **Lösungsweg**
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Komponente öffnet sich im Abschnitt «Weitere Angaben & Kosten».
 2. Den Betrag dort als Jahresbetrag eintragen: Ausgaben unter «Betriebskosten/Jahr (€)», Erträge unter «Ertrag/Jahr (€)»
-   (das Feld gibt es nur bei Wallbox und Sonstiges). Nennt die Meldung «Einspeise-Erlös (€)», gehört der Erlös eines Erzeugers
-   dorthin. Danach die Monatspositionen entfernen, damit der Betrag nicht doppelt zählt.
+   (das Feld gibt es nur bei Wallbox und Sonstiges). Nennen die Details das Feld «Einspeise-Erlös», gehört der Erlös eines
+   Erzeugers (Sonstiges) als Monatswert in dieses Feld des Geräts im Monatsabschluss — am besten aus einem Sensor, dann
+   schlägt eedc den Wert dort vor —, nicht als Jahresbetrag an die Komponente. Danach die Monatspositionen entfernen,
+   damit der Betrag nicht doppelt zählt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
@@ -3809,7 +3895,8 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 **Was ohne Handlung gilt**
-eedc rechnet die Energie dieses Felds weiter näherungsweise aus der Leistung.
+Aus dem Leistungssensor in diesem Feld entsteht kein Stunden- und kein Tageswert; nur wo eine Watt-Zeile mit einem
+Leistungssensor belegt ist, schätzt eedc die Tagesenergie aus dessen Verlauf.
 
 ### 4.15a Sensor ohne Langzeitstatistik <a name="415a-sensor-ohne-langzeitstatistik"></a>
 
@@ -3817,7 +3904,7 @@ eedc rechnet die Energie dieses Felds weiter näherungsweise aus der Leistung.
 
 **Warum das zählt:** Den aktuellen Wert zeigt eedc aus dem Sensor-Zustand — live und im Überblick des Wärmepumpen-Hubs. **Stündliche Mittelwerte** übernimmt eedc dagegen aus der Langzeitstatistik von Home Assistant (rückwirkend, so weit sie zurückreicht), und die führt HA nur für Sensoren mit `state_class: measurement`. Ohne sie bleibt der Tagesverlauf dieser Werte leer, ohne dass es sonst jemand sagt.
 
-> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn HA den Sensor gerade nicht liefert, an stillgelegten Geräten und für Felder, deren Quelle MQTT ist — dort schreibt eedc die Stundenmittel selbst aus seiner 5-Minuten-Mitschrift, eine Langzeitstatistik braucht es nicht ([Wärme & Klima, Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)). Ist einem Feld ein HA-Sensor **und** dasselbe MQTT-Topic zugeordnet, gilt der HA-Sensor — fehlt ihm die Langzeitstatistik, bleibt die Meldung, und eedc schreibt das Topic nicht stattdessen mit. Die Warmwasser-Temperatur prüft diese Kategorie nicht.
+> **Wann die Meldung schweigt:** ohne Verbindung zu Home Assistant, wenn HA den Sensor gerade nicht liefert, an stillgelegten Geräten und für Felder, deren Quelle MQTT ist — dort schreibt eedc die Stundenmittel selbst aus seiner 5-Minuten-Mitschrift, eine Langzeitstatistik braucht es nicht ([Wärme & Klima, Schritt 6](HANDBUCH_WAERME_KLIMA.md#schritt-6--live-werte-optional)). Entscheidend ist die gespeicherte Quellenwahl des Felds: steht sie auf MQTT, prüft eedc den HA-Sensor nicht; ohne Quellenwahl gilt der HA-Sensor — fehlt ihm die Langzeitstatistik, bleibt die Meldung, und eedc schreibt das Topic nicht stattdessen mit. Die Warmwasser-Temperatur prüft diese Kategorie nicht.
 
 ---
 
@@ -3846,7 +3933,7 @@ Live-Wert und Überblick funktionieren weiter; der Tagesverlauf dieser Werte ble
 
 ### 4.16 Quellen-Konflikte <a name="416-quellen-konflikte"></a>
 
-**Was wird geprüft:** Gab es in den letzten Tagen Felder, für die **mehr als eine** Quelle einen Wert geliefert hat — etwa ein HA-Sensor und zusätzlich ein MQTT-Topic?
+**Was wird geprüft:** Gab es in den letzten 30 Tagen Felder, für die **mehr als eine** Quelle einen Wert geschrieben hat — etwa eine Eingabe von Hand und der Monatsabschluss, oder die HA-Statistik und eine Reparatur?
 
 **Warum das zählt:** Es ist kein Fehler. eedc hat sich bereits entschieden: Bei mehreren Quellen für dasselbe Feld gewinnt die höherwertige, und der angezeigte Wert stammt von ihr. Der Hinweis sagt nur, dass es die Konkurrenz gibt — nützlich, wenn eine Zahl anders aussieht als erwartet.
 
@@ -3868,18 +3955,19 @@ Jeder angezeigte Wert stammt aus der einen Quelle, die für sein Feld geschriebe
 #### Felder mit Werten aus mehreren Quellen <a name="provenance_konflikte"></a>
 
 **Was eedc sieht**
-Für einige Felder haben in den letzten Tagen zwei oder mehr Quellen einen Wert geliefert — etwa ein Home-Assistant-Sensor und
-zusätzlich ein MQTT-Topic. Die Details nennen je Treffer den Ort (Monatsdaten, Tagesdaten oder die Komponente), das Feld, den
-Zeitraum und die beteiligten Quellen. Das ist kein Fehler: Bei mehreren Quellen für dasselbe Feld gewinnt die höherwertige,
-und der angezeigte Wert stammt von ihr.
+Für einige Felder haben in den letzten 30 Tagen zwei oder mehr Quellen einen Wert geliefert — etwa eine Eingabe von Hand
+und der Monatsabschluss, oder die HA-Statistik und eine Reparatur. Die Details nennen je Treffer den Ort (Monatsdaten,
+Tagesdaten oder die Komponente), das Feld, den Zeitraum und die beteiligten Quellen. Das ist kein Fehler: Bei mehreren
+Quellen für dasselbe Feld gewinnt die höherwertige, und der angezeigte Wert stammt von ihr.
 
 **Lösungsweg**
 1. Nichts zu tun — eedc hat bereits entschieden. Der Hinweis ist nützlich, wenn eine Zahl anders aussieht als erwartet: Die
    Details sagen, welche Quellen am Feld konkurriert haben.
-2. Willst du die zweite Quelle nicht, entfernst du sie in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen)
-   am genannten Feld.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange im Prüfzeitraum mehr als eine Quelle an
-   einem Feld geschrieben hat; nach dem Entfernen einer Quelle verschwindet sie, wenn der Zeitraum ohne Konkurrenz ist.
+2. Zu entfernen gibt es nichts: Die Quellen sind die Wege, auf denen ein Wert geschrieben wurde (Eingabe von Hand,
+   Monatsabschluss, HA-Statistik, Reparatur, Import) — keine Zuordnung. Der Hinweis zeigt nur, welche davon am Feld
+   nacheinander geschrieben haben.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, bis in den letzten 30 Tagen keine zwei Quellen
+   mehr an demselben Feld geschrieben haben.
 
 **Was ohne Handlung gilt**
 Der angezeigte Wert kommt weiter aus der höchstprioren Quelle. Der Hinweis ist kein Auftrag und hat keinen
@@ -3956,8 +4044,8 @@ tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbo
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
    *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»**.
-   Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik dieses Zählers neu
-   (das wirkt auf alle seine Tage) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
+   Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik aller gespiegelten
+   Zähler der Anlage neu (ab der ersten abweichenden Stunde) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
    den genannten Tag neu; für alle Tage des Geräts auf einmal: in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — das Gerät ist aus der Liste verschwunden oder nennt weniger Tage.
@@ -3967,8 +4055,9 @@ melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
 
 **Was ohne Handlung gilt**
 Die Tage behalten ihren Wert in eedc; Tagesansicht, Monat, Wirtschaftlichkeit und CO₂-Bilanz rechnen damit. Hast du in
-Home Assistant korrigiert und liest eedc die Anlage aus dessen Statistik, verschwindet die Zeile nach dem nächtlichen
-Abgleich um 02:45 von selbst.
+Home Assistant korrigiert und liest eedc die Anlage aus dessen Statistik, verschwindet die Zeile an Tagen, die eedc für
+dieses Gerät aus der Statistik liest, nach dem nächtlichen Abgleich um 02:45 von selbst; an älteren Tagen (Gerätewert aus
+der gespeicherten Tageszeile) erst nach **«Aus Home Assistant neu übernehmen»**.
 
 ### 4.18 PV-Doppelerfassung (Verdacht) <a name="418-pv-doppelerfassung"></a>
 
@@ -4006,8 +4095,9 @@ Doppelerfassung entsteht daraus nicht.
 #### Verdacht auf PV-Doppelerfassung <a name="pv_ueber_erfassung_verdacht"></a>
 
 **Was eedc sieht**
-An mindestens drei der letzten 30 Tage liefert die Anlage mehr, als physikalisch plausibel ist: eine Performance Ratio
-über 1,05 oder ein Tagesertrag über 7 kWh je kWp. Der häufigste Grund ist dieselbe Erzeugung zweimal gezählt — etwa ein
+In den letzten 30 Tagen liefert die Anlage mehr, als physikalisch plausibel ist: eine Performance Ratio über 1,05 an
+mindestens drei Tagen und mindestens 20 % der Tage mit Performance Ratio, oder ein Tagesertrag über 7 kWh je kWp an
+mindestens drei Tagen. Der häufigste Grund ist dieselbe Erzeugung zweimal gezählt — etwa ein
 String-Sensor und der Summenzähler der Anlage, beide zugeordnet, oder ein Wechselrichter-Zähler, der ein Balkonkraftwerk
 schon mitmisst, das zusätzlich zugeordnet ist. Die Performance Ratio steigt aber auch, wenn der Vergleichsmaßstab zu
 klein ist: die eingetragene kWp oder die Einstrahlung. Tage mit bekanntem Zählersprung sind schon herausgerechnet.
@@ -4021,8 +4111,8 @@ klein ist: die eingetragene kWp oder die Einstrahlung. Tage mit bekanntem Zähle
    Neigung rechnet eedc mit einer Einstrahlung, die nicht zu deinem Dach passt.
 3. Liegen die auffälligen Tage alle in den letzten fünf Tagen und sind es trübe Tage: abwarten. Die Einstrahlung dieser
    Tage ist noch vorläufig und an bewölkten Tagen zu klein; eedc holt den endgültigen Wert selbst nach.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald weniger als drei Tage
-   auffallen.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald keine der beiden
+   Bedingungen mehr erfüllt ist.
 
 **Was ohne Handlung gilt**
 eedc kürzt nichts: welche Zuordnung richtig ist, entscheidest du. Ist die Erzeugung tatsächlich doppelt gezählt, fallen
@@ -4030,7 +4120,7 @@ Eigenverbrauch, Autarkie, Ersparnis und CO₂-Bilanz zu gut aus.
 
 ### 4.19 Ladung doppelt gezählt (Wallbox + E-Auto) <a name="419-ladung-doppelt-gezaehlt"></a>
 
-**Was wird geprüft:** Gibt es gespeicherte Tage, an denen **Wallbox und E-Auto dieselbe Ladung** tragen?
+**Was wird geprüft:** Gibt es in den letzten 180 Tagen gespeicherte Tage, an denen **Wallbox und E-Auto beide mindestens 1 kWh Ladung** tragen?
 
 **Warum das zählt:** Wer sein Auto zu Hause lädt, hat oft beide Geräte erfasst — die Wallbox misst, das Auto meldet. Beide Zahlen zu addieren verdoppelt den Verbrauch. eedc kennt die Regel inzwischen (*trägt die Wallbox die Ladeenergie, ist sie die Quelle*), aber **bereits gespeicherte** Tage tragen die alte Rechnung weiter.
 
@@ -4041,13 +4131,14 @@ Eigenverbrauch, Autarkie, Ersparnis und CO₂-Bilanz zu gut aus.
 #### Keine doppelt gezählte Ladung <a name="emob_doppelzaehlung_ok"></a>
 
 **Was eedc sieht**
-Kein gespeicherter Tag im Prüfzeitraum trägt dieselbe Heimladung zweimal — einmal an der Wallbox und einmal am E-Auto.
+An keinem gespeicherten Tag der letzten 180 tragen Wallbox und E-Auto beide eine Ladung von mindestens 1 kWh.
 Das heißt „geprüft, soweit Tageswerte vorliegen“: Tage ohne gespeicherte Werte der Geräte kann die Prüfung nicht
 ansehen.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange kein Tag die Ladung doppelt trägt.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange kein Tag die Ladung doppelt trägt.
 
 **Was ohne Handlung gilt**
 Jede Heimladung steht an den geprüften Tagen einmal in der Bilanz.
@@ -4055,14 +4146,17 @@ Jede Heimladung steht an den geprüften Tagen einmal in der Bilanz.
 #### Tage zählen dieselbe Ladung doppelt <a name="emob_doppelzaehlung_tage"></a>
 
 **Was eedc sieht**
-An diesen gespeicherten Tagen tragen Wallbox und E-Auto beide dieselbe Heimladung, die Ladung steht also zweimal in der
-Bilanz. eedc zählt eine Ladung inzwischen nur noch einmal (trägt die Wallbox die Ladeenergie, ist sie die Quelle) —
+An diesen gespeicherten Tagen der letzten 180 tragen Wallbox und E-Auto beide eine Ladung von mindestens 1 kWh, die
+Ladung steht also zweimal in der Bilanz. eedc zählt eine Ladung inzwischen nur noch einmal (trägt die Wallbox die Ladeenergie, ist sie die Quelle) —
 diese Tage wurden aber vorher geschrieben und bleiben so, bis sie neu berechnet werden. Die Details nennen die Menge und
 die größten Fälle mit beiden Beträgen.
 
 **Lösungsweg**
-1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut höchstens 31 Tage
-   neu auf, die jüngsten zuerst; er berichtigt Tages- und Stundenwerte, nicht die Monatswerte.
+1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut das jüngste Fenster
+   von höchstens 31 Tagen neu auf — jeden Tag darin, auch die ohne Befund; er berichtigt Tages- und Stundenwerte, nicht
+   die Monatswerte. Werte, die nur per MQTT ankamen, und Strompreis-Sensordaten ohne Gegenstück in Home Assistant gehen
+   dabei verloren — die Vorschau nennt es. Ist der jüngste betroffene Tag heute, lehnt die Vorschau ab («Der laufende
+   Tag lässt sich erst morgen neu aufbauen.») — dann morgen erneut.
 2. Nennen die Details ältere Tage außerhalb dieses Fensters: nach dem Lauf erneut prüfen und den Knopf noch einmal nutzen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch ältere Tage.
 
@@ -4083,7 +4177,8 @@ gespeicherte Werte nie ungefragt — deshalb läuft die Berichtigung nicht von s
 **Was eedc sieht**
 Das Fahrzeug trägt einen Verbrauch in l/100 km, hat also einen Verbrennungsmotor. Um die Kilometer in elektrisch und
 mit Kraftstoff gefahren aufzuteilen, braucht eedc eine von zwei Angaben: den monatlich erfassten Verbrauch in kWh
-(gemessen) oder einen gepflegten elektrischen Fahranteil in % (geschätzt). Für die genannten Monate fehlen beide.
+(gemessen) oder einen gepflegten elektrischen Fahranteil in % (geschätzt). In mindestens zwei Monaten mit gefahrenen
+Kilometern fehlen beide; ein einzelner solcher Monat wird nicht gemeldet, ein Dienstwagen nicht geprüft.
 Einen Richtwert erfindet eedc nicht — deshalb steht der Befund hier.
 
 **Lösungsweg**
@@ -4104,7 +4199,8 @@ dadurch zu gut aus.
 
 **Warum das zählt:** Ältere eedc-Versionen schrieben das Batterie-Netto bei der Tagesberechnung in umgekehrter Richtung. Der Fehler steht in bereits gespeicherten Tagen, bis sie neu berechnet werden. **Die Live-Ansicht ist nicht betroffen** — sie hat einen eigenen Weg. Betroffen sind Energieprofil und Tages-Historie.
 
-Erkannt wird das am **Datensignal**, nicht am Datum: Der gespeicherte Tageswert wird gegen einen frischen Abruf verglichen. Zeigen beide in entgegengesetzte Richtungen, ist der Tag mit der alten Logik gerechnet. Eine Zeile nennt alle Tage samt Zeitraum und baut sie in Fenstern von höchstens 31 Tagen neu auf; die Zeile «n Tage mit vertauschtem Batterie-Vorzeichen» bietet daneben jeden Tag einzeln an.
+Erkannt wird das am **Datensignal**, nicht am Datum: Der gespeicherte Tageswert wird gegen einen frischen Abruf verglichen. Zeigen beide in entgegengesetzte Richtungen, ist der Tag mit der alten Logik gerechnet. Eine Zeile nennt alle Tage samt Zeitraum und baut sie in Fenstern von höchstens 31 Tagen neu auf; die Zeile «n Tage mit vertauschtem Batterie-Vorzeichen» bietet daneben bis zu 15 Tage einzeln an (die neuesten zuerst, die
+übrigen zählt sie); geprüft werden die letzten 90 Tage.
 
 > **Liest eedc deine Anlage aus der Statistik von Home Assistant,** kommt das Speicher-Netto an solchen Tagen von dort (wie in der Tagesansicht im Cockpit); ein vertauschtes Vorzeichen der alten gespeicherten Tageszeile wird dann nicht mehr gemeldet.
 >
@@ -4135,8 +4231,8 @@ frischen Abruf aus Home Assistant: beide zeigen in entgegengesetzte Richtungen. 
 Tages-Historie, nicht die Live-Ansicht. Die Zeile nennt Zahl und Zeitraum der Tage.
 
 **Lösungsweg**
-1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut höchstens 31 Tage
-   neu auf, die jüngsten zuerst.
+1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut das jüngste Fenster
+   von höchstens 31 Tagen neu auf — jeden Tag darin, auch die ohne Befund.
 2. Nennen die Details ältere Tage außerhalb dieses Fensters: nach dem Lauf erneut prüfen und den Knopf noch einmal
    nutzen, oder einen einzelnen Tag in der Zeile «… Tage mit vertauschtem Batterie-Vorzeichen» anklicken.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch ältere Tage.
@@ -4195,8 +4291,8 @@ Die Tage stammen aus der Zeit vor der Korrektur dieser Rechnung. Betroffen sind 
 Speicher-Auswertungen; Erzeugung, Verbrauch und Netzbezug sind es nicht.
 
 **Lösungsweg**
-1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut höchstens 31 Tage
-   neu auf, die jüngsten zuerst.
+1. Am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»**. Ein Lauf baut das jüngste Fenster
+   von höchstens 31 Tagen neu auf — jeden Tag darin, auch die ohne Befund.
 2. Nennen die Details ältere Tage außerhalb dieses Fensters: nach dem Lauf erneut prüfen und den Knopf noch einmal nutzen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch ältere Tage.
 
@@ -4226,7 +4322,8 @@ nennt die Zahl der Ablesungen.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange der Zähler Stände liefert.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange der Zähler Stände liefert.
 
 **Was ohne Handlung gilt**
 eedc zeigt für jeden Zeitraum die Differenz aus Ende minus Anfang. Ein Verbrauchszähler geht bewusst in keine Bewertung
@@ -4254,7 +4351,9 @@ eedc zeigt für diesen Zähler überall „—“. Andere Zahlen sind nicht ber�
 
 **Was eedc sieht**
 Ein Zählerstand läuft nicht rückwärts — in dieser Reihe fällt er an einer oder mehreren Stellen (die Details nennen
-sie). Für einen Zeitraum über eine solche Stelle hinweg zeigt eedc deshalb keine Differenz statt einer negativen Menge.
+bis zu drei mit Datum und beiden Ständen, weitere werden gezählt). Liegt der Stand am Ende eines Zeitraums unter dem
+am Anfang, zeigt eedc deshalb keine Differenz statt einer negativen Menge; ein Bruch mitten im Zeitraum, nach dem der
+Stand wieder über den Anfang steigt, bleibt in der Differenz unsichtbar.
 eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden Stände gilt.
 
 **Lösungsweg**
@@ -4272,7 +4371,8 @@ eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden S
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) mit «Mehrere Tage neu aggregieren»
    zieht eedc die Historie nach, soweit Home Assistant sie noch hat.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt weniger Stellen; ein
-   Bruch aus einem Zählerwechsel bleibt stehen, bis der alte Zähler stillgelegt ist.
+   Bruch aus einem Zählerwechsel bleibt auch nach der Stilllegung stehen — die Zeile erklärt ihn weiterhin, solange
+   die Reihe des alten Zählers den niedrigeren Stand enthält.
 
 **Was ohne Handlung gilt**
 Für Zeiträume über eine Bruchstelle zeigt eedc für diesen Zähler keine Differenz; Zeiträume davor und danach rechnen
@@ -4380,10 +4480,12 @@ gemischt ist — nur, dass es sich nicht mehr feststellen lässt; das ist der No
 1. Unter *Einstellungen → Stammdaten → Anlage* prüfen, ob die
    [«Wetterdaten-Quelle»](eedc:/einstellungen/stammdaten?block=anlage&feld=wetter_provider) die ist, die du willst —
    von ihr holt eedc die Werte.
-2. Am Befund **«Wetterreihe nachziehen»** klicken, die Vorschau lesen und **«Anwenden»**. eedc holt Globalstrahlung
-   und Sonnenstunden aller abgeschlossenen Monate von dieser Quelle und **ersetzt** dabei vorhandene Werte, auch von Hand
-   gesetzte — die Vorschau nennt vorher, wie viele Monate betroffen sind. Der laufende Monat bleibt draußen.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; danach trägt jeder Monat seine Quelle.
+2. Am Befund **«Wetterreihe nachziehen»** klicken, die Vorschau lesen und **«Anwenden»**. eedc holt Globalstrahlung,
+   Sonnenstunden und Ø Temperatur aller abgeschlossenen Monate von dieser Quelle (die Ø Temperatur zuerst aus deinen
+   Messwerten) und **ersetzt** dabei vorhandene Werte aller drei Felder, auch von Hand gesetzte — die Vorschau nennt
+   vorher, wie viele Monate betroffen sind. Der laufende Monat bleibt draußen.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald jeder abgeschlossene
+   Monat Werte mit Quelle trägt; Monate, für die kein messendes Archiv deinen Ort erreicht, bleiben in der Zeile stehen.
 
 **Was ohne Handlung gilt**
 Einmal täglich füllt eedc nur fehlende Werte abgeschlossener Monate von der gewählten Quelle nach; was dasteht, bleibt.
@@ -4398,10 +4500,12 @@ dem Wetter-Archiv.
 
 **Lösungsweg**
 1. Nichts zu tun — die Prüfung ist bestanden.
-2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange kein Monat ohne Wert ist.
+2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Prüfung steht hinter «n Prüfungen bestanden» am Fuß ihrer
+   Kategorie, solange kein Monat ohne Wert ist.
 
 **Was ohne Handlung gilt**
-Neue Monate füllt eedc beim Abschließen selbst; ein von Hand gesetzter Wert wird nicht überschrieben.
+Leere Ø Temperaturen abgeschlossener Monate füllt eedc einmal täglich von selbst (zuerst aus deiner Messreihe, sonst
+aus dem Wetter-Archiv; nur mit hinterlegten Koordinaten der Anlage); ein gesetzter Wert wird nicht überschrieben.
 
 #### Ø Temperatur fehlt — keine eigene Messreihe <a name="temperatur_fehlt_ohne_messreihe"></a>
 
@@ -4438,12 +4542,13 @@ beide Zahlen.
 2. Für die übrigen Monate (die Details nennen sie): den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen, im Abschnitt «Wetterdaten (optional)» auf
    «Auto-Fill» klicken und speichern — eedc holt den Wert dann aus dem Wetter-Archiv.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch die übrigen Monate.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; bleiben Monate ohne
+   eigene Messwerte, steht statt ihrer die Zeile «Ø Temperatur fehlt in n Monat(en)» mit dem Knopf «Monat öffnen».
 
 **Was ohne Handlung gilt**
-Einmal täglich versucht eedc, leere Wetterfelder abgeschlossener Monate von der an der Anlage gewählten Quelle zu
-füllen; ein Monat, für den sie an deinem Ort keinen gemessenen Wert liefert, bleibt ohne Ø Temperatur. Keine Kennzahl
-rechnet heute mit dem Feld.
+Einmal täglich füllt eedc leere Ø Temperaturen abgeschlossener Monate von selbst — zuerst aus deinen Messwerten, sonst
+aus dem Archiv der an der Anlage gewählten Quelle; Voraussetzung sind hinterlegte Koordinaten der Anlage. Der Knopf
+erledigt es sofort. Keine Kennzahl rechnet heute mit dem Feld.
 
 ### 4.26 E-Mobilität – unbekannter Zustand <a name="426-e-mobilitaet--unbekannter-zustand"></a>
 
@@ -4452,8 +4557,9 @@ rechnet heute mit dem Feld.
 #### Zustand der E-Mobilität mit unbekanntem Wert <a name="emob_zustand_wert_unbekannt"></a>
 
 **Was eedc sieht**
-Ein zugeordneter Zustand der E-Mobilität (Ladezustand, Lademodus, Fahrzeug-Ladezustand oder Standort) liefert gerade
-einen Wert, den eedc nicht kennt. eedc zeigt dann keinen Zustand an. Die Details nennen den gelieferten Wert und die
+Ein zugeordneter Zustand der E-Mobilität («Ladezustand», «Lademodus», «Ladezustand (Fahrzeug)», «Zu Hause» oder eines
+der Felder «evcc: Fahrzeug verbunden», «evcc: lädt», «evcc: Laden freigegeben») liefert gerade einen Wert, den eedc nicht
+kennt. eedc zeigt dann keinen Zustand an. Die Details nennen den gelieferten Wert und die
 Wörter, die eedc versteht; Groß-/Kleinschreibung ist egal.
 
 **Lösungsweg**
@@ -4482,9 +4588,10 @@ Steuerung“ trägt. Die Wallbox-Karte zeigt dann nur „Fahrzeug der Steuerung 
 Namen.
 
 **Lösungsweg**
-1. Am Befund **«Kennung eintragen»** klicken — das Formular eines E-Autos öffnet sich am Feld
-   «Kennung in der Steuerung (evcc vehicleName, openWB Fahrzeug)».
-2. Beim passenden E-Auto den Namen genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist
+1. Am Befund **«Kennung eintragen»** klicken — mit genau einem E-Auto öffnet sich sein Formular am Feld
+   «Kennung in der Steuerung (evcc vehicleName, openWB Fahrzeug)»; mit mehreren E-Autos öffnet sich die Seite
+   «Komponenten» — dort beim passenden E-Auto das Stift-Symbol «Bearbeiten» klicken.
+2. Am E-Auto den Namen genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist
    egal), und speichern. Ist es ein fremdes Fahrzeug, ist nichts zu tun.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; bei einem fremden Fahrzeug bleibt
    sie, solange es am Ladepunkt steht.

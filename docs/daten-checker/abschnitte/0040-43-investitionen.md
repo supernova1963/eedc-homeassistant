@@ -3,7 +3,8 @@
 
 **Was wird geprüft:** Je aktive Komponente die Pflicht- und Plausibilitätsangaben ihres Typs, danach je Komponententyp
 die Vollständigkeit der monatlichen Verbrauchs- bzw. Erzeugungswerte ab dem Anschaffungsdatum. Anschaffungsdatum und
--kosten werden für alle Typen geprüft. Die PV-Erzeugung wird anlagenweit geprüft, nicht je Modul.
+-kosten werden für alle Typen geprüft — Ausnahmen: ein Dienstwagen bekommt keine dieser Prüfungen, ein Verbrauchszähler
+keine Kosten-Frage. Die PV-Erzeugung wird anlagenweit geprüft, nicht je Modul.
 
 **Wohin die Knöpfe führen:** «Gerät bearbeiten» öffnet das Formular der Komponente beim fehlenden Feld
 (*Einstellungen → Komponenten*); «Monat öffnen» öffnet den Monatsabschluss des ersten betroffenen Monats beim Feld des

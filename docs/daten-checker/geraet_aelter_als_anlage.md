@@ -1,10 +1,10 @@
 # Gerät älter als die Anlage
 
 ## Was eedc sieht
-Ein Gerät, das kein Erzeuger ist (E-Auto, Wallbox, Wärmepumpe, Speicher, Sonstiges), wurde vor der Inbetriebnahme der
-Anlage angeschafft. Das ist normal und kein Fehler — man hatte das Auto vor der PV-Anlage. Die Zeile meldet die
-Datenlage: Für die Monate davor gibt es keine Einspeisungs- und Netzbezugswerte und damit keine Bilanz; eedc kann dort
-nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
+Ein Gerät, das kein PV-Erzeuger ist (E-Auto, Wallbox, Wärmepumpe, Speicher, Wechselrichter, Sonstiges), wurde vor der
+Inbetriebnahme der Anlage angeschafft. Das ist normal und kein Fehler — man hatte das Auto vor der PV-Anlage. Die Zeile
+meldet die Datenlage: Für die Monate davor gibt es keine Einspeisungs- und Netzbezugswerte und damit keine Bilanz; eedc
+kann dort nicht sagen, ob der Strom gekauft oder selbst erzeugt war.
 
 ## Lösungsweg
 1. Hast du Zählerwerte aus dieser Zeit: unter

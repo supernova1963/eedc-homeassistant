@@ -399,7 +399,10 @@ async def test_plan_reaggregate_range_rejects_invalid_bounds(db):
                     "bis": heute.isoformat()},
         ), db)
     except ValueError as e:
-        assert "vor heute" in str(e), str(e)
+        # E6.D D6: ein Satz für den Vorschau-Kasten des Daten-Checkers, ohne Mechanik-Wort (W-4).
+        assert "Der laufende Tag lässt sich erst morgen neu aufbauen" in str(e), str(e)
+        from backend.services.daten_checker.handgriffe import MECHANIK_WOERTER
+        assert not [w for w in MECHANIK_WOERTER if w in str(e).lower()], str(e)
     else:
         raise AssertionError("ValueError für bis=heute erwartet")
 

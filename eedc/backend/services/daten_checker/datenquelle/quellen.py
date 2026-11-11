@@ -314,9 +314,10 @@ class QuellenChecks:
                     "HA-Statistics ist verfügbar, die Tageszusammenfassung "
                     f"vom {tz.datum.isoformat()} wurde aber noch "
                     f"aus '{letzte_source or 'unbekannt'}' geschrieben. "
-                    "Sobald diese Tage neu aus HA-Statistics aggregiert "
-                    "werden (nächster Monatsabschluss oder Tag-Reparatur), "
-                    "gilt HA-LTS als Source-of-Truth."
+                    "Diese Tage behalten ihre Werte — der Monatsabschluss "
+                    "rechnet nur Tage nach, die noch fehlen. Erst wenn sie "
+                    "neu aus HA-Statistics aufgebaut sind (Knopf an diesem "
+                    "Befund), gilt HA-LTS als Source-of-Truth."
                 ),
                 action=await _aktion_aeltere_quelle(self.db, anlage.id, tz.datum),
             )]

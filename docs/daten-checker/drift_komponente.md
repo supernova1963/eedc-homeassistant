@@ -10,8 +10,8 @@ tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbo
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
    *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»**.
-   Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik dieses Zählers neu
-   (das wirkt auf alle seine Tage) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
+   Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik aller gespiegelten
+   Zähler der Anlage neu (ab der ersten abweichenden Stunde) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur
    den genannten Tag neu; für alle Tage des Geräts auf einmal: in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — das Gerät ist aus der Liste verschwunden oder nennt weniger Tage.
@@ -21,5 +21,6 @@ melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
 
 ## Was ohne Handlung gilt
 Die Tage behalten ihren Wert in eedc; Tagesansicht, Monat, Wirtschaftlichkeit und CO₂-Bilanz rechnen damit. Hast du in
-Home Assistant korrigiert und liest eedc die Anlage aus dessen Statistik, verschwindet die Zeile nach dem nächtlichen
-Abgleich um 02:45 von selbst.
+Home Assistant korrigiert und liest eedc die Anlage aus dessen Statistik, verschwindet die Zeile an Tagen, die eedc für
+dieses Gerät aus der Statistik liest, nach dem nächtlichen Abgleich um 02:45 von selbst; an älteren Tagen (Gerätewert aus
+der gespeicherten Tageszeile) erst nach **«Aus Home Assistant neu übernehmen»**.

@@ -88,8 +88,9 @@ async def test_anlagenzaehler_deckt_alle_erzeuger(db):
         + "\n".join(f"  {r.schwere.value}: {r.meldung}" for r in ergebnisse)
     )
     assert treffer[0].meldung.startswith("2 Erzeuger"), treffer[0].meldung
-    # Der Text muss den Preis nennen, sonst führt er in die Alles-oder-nichts-Falle.
-    assert "sobald einer gemessen wird" in (treffer[0].details or "")
+    # Der Text nennt die Präzedenz je Tag (#406, `pv_tages_praezedenz.waehle_pv_quelle`) — E6.D D2: nicht mehr die
+    # Alles-oder-nichts-Regel «sobald einer gemessen wird», die seit #406 nicht mehr gilt.
+    assert "erst wenn alle Erzeuger den ganzen Tag messen" in (treffer[0].details or "")
 
 
 async def test_teilbelegung_ist_keine_luecke_mehr(db):

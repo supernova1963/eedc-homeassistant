@@ -2,7 +2,8 @@
 
 ## Was eedc sieht
 An der Komponente ist ein Jahresbetrag hinterlegt (die Meldung nennt das Feld, die Details den Betrag), und derselbe Posten
-steht zusätzlich in mehreren Monaten im Monatsabschluss. Der Jahresbetrag wirkt jedes Jahr — der Betrag zählt damit doppelt.
+steht zusätzlich in mindestens zwei Monaten im Monatsabschluss. Der Jahresbetrag wirkt jedes Jahr — der Betrag zählt
+damit doppelt.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Komponente öffnet sich im Abschnitt «Weitere Angaben & Kosten».

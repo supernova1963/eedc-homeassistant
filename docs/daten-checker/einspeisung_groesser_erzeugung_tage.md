@@ -9,9 +9,11 @@ vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist umgekehrt.
 ## Lösungsweg
 1. Zuerst die Zuordnung prüfen: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) nachsehen, ob der
    PV-Zähler liefert und ob Einspeisung und Netzbezug richtig herum zugeordnet sind; Fehler dort berichtigen.
-2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** (höchstens 31 Tage je Lauf).
-   Kommen die Tage aus der Statistik von Home Assistant, heißt der Knopf **«Aus Home Assistant neu übernehmen»** — dann
-   vorher die Statistik in Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen. Steht am Befund nur
+2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc baut die Tage aus
+   eigenen Stundenwerten neu (höchstens 31 Tage je Lauf). Kommen alle Tage aus der Statistik von Home Assistant, heißt
+   der Knopf **«Aus Home Assistant neu übernehmen»** und übernimmt nur den jüngsten Tag — dann vorher die Statistik in
+   Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen; nach dem erneuten Prüfen steht der Knopf am
+   nächsten Tag. Steht am Befund nur
    **«Was gilt»**, kommen die Mengen aus eedcs eigenen Zählerständen; dann wirkt die berichtigte Zuordnung auf die
    folgenden Tage.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die berichtigten Tage sind aus der Zeile verschwunden.

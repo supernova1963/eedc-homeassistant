@@ -9,4 +9,4 @@ Diesen PV-Modulen fehlt Ausrichtung oder Neigung. Beides braucht die PVGIS-Solar
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt
-Die Prognose rechnet für diese Module mit den Vorgaben der Anlage.
+Die Prognose rechnet für diese Module bei fehlender Ausrichtung mit Süd, bei fehlender Neigung mit 35°.

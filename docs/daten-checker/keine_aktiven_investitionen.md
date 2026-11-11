@@ -7,7 +7,8 @@ Die Anlage hat keine aktive Komponente. Cockpit, Wirtschaftlichkeit und alle Auf
 1. Am Befund **«Komponente anlegen»** klicken — das Formular für neue PV-Module öffnet sich.
 2. Mindestens PV-Module oder ein Balkonkraftwerk anlegen (Balkonkraftwerk unter
    *Einstellungen → Komponenten → Balkonkraftwerk* mit «+») und speichern. Gibt es die Komponente schon, aber nicht
-   aktiv: sie bearbeiten und «Aktiv (in Berechnungen berücksichtigen)» einschalten.
+   aktiv: sie bearbeiten, «Aktiv (in Berechnungen berücksichtigen)» einschalten und prüfen, ob das «Anschaffungsdatum»
+   in der Zukunft oder das «Stilllegungsdatum (optional)» in der Vergangenheit liegt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt

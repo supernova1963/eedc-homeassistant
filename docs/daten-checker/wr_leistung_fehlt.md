@@ -1,7 +1,8 @@
 # Wechselrichter-Leistung des Balkonkraftwerks fehlt
 
 ## Was eedc sieht
-Am Balkonkraftwerk fehlt die Leistung seines Wechselrichters; die Meldung nennt die Leistung der Module. Ohne die
+Am Balkonkraftwerk fehlt die Leistung seines Wechselrichters, und die Module leisten zusammen mehr als 800 W (die
+typische Einspeisegrenze; darunter meldet eedc nichts); die Meldung nennt die Leistung der Module. Ohne die
 Wechselrichter-Leistung rechnet die Prognose mit der vollen Modulleistung — bei Überbelegung (etwa 1.260 W Module an
 600 W Wechselrichter) fällt sie zu hoch aus. Mit gepflegtem Wert kappt eedc die Prognose stündlich.
 

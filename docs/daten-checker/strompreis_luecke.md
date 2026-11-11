@@ -1,9 +1,9 @@
 # Lücke zwischen Tarifen
 
 ## Was eedc sieht
-Ab der Inbetriebnahme der Anlage gibt es einen Zeitraum, für den kein Tarif gilt — zwischen zwei aufeinanderfolgenden
-Tarifen oder vor dem ersten. Die Zeile nennt Anfang und Ende. Für diese Monate fehlt dein Strompreis in der
-Kostenrechnung.
+Ab dem früheren von Inbetriebnahme der Anlage und erstem erfassten Monat gibt es einen Zeitraum, für den kein Tarif gilt
+— zwischen zwei aufeinanderfolgenden Tarifen oder vor dem ersten. Die Zeile nennt Anfang und Ende. Für diese Monate
+fehlt dein Strompreis in der Kostenrechnung.
 
 ## Lösungsweg
 1. Am Befund **«Tarif anlegen»** klicken — das Formular «Neuen Tarif anlegen» öffnet sich mit «Gültig ab» am Beginn der
@@ -14,4 +14,6 @@ Kostenrechnung.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt
-Die Monate der Lücke rechnen ohne deinen Preis; Kosten und Ersparnis dieser Monate stimmen nicht.
+Die Monate der Lücke rechnen nicht mit deinem Tarif, sondern mit der Vorbelegung von eedc — Netzbezug 30 ct/kWh,
+Einspeisung 8,2 ct/kWh (bzw. mit im Monat gepflegten Durchschnittspreisen); Kosten und Ersparnis dieser Monate weichen
+entsprechend ab.

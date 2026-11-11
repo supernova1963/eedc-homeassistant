@@ -19,4 +19,5 @@ Auswertungen leer.
 
 ## Was ohne Handlung gilt
 Die Auswertungen dieser Komponenten bleiben leer; fehlt der Zähler an einem Speicher oder einer PV-Erzeugung, stehen
-Gesamtverbrauch und Grundlast zu niedrig. Ein Feld, für das du ausdrücklich «Keine» gewählt hast, bleibt deine Absage.
+Gesamtverbrauch und Grundlast zu niedrig. Ein Feld, für das du «Keine» gewählt hast, zählt als ohne Zähler — die Zeile
+bleibt dann stehen.

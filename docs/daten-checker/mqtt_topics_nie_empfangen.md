@@ -1,11 +1,11 @@
 # MQTT-Topics erwartet, nie empfangen
 
 ## Was eedc sieht
-Die Verbindung zum Broker steht, aber für die genannten Topics hat noch keine Quelle Daten geliefert. Die Meldung nennt
-bis zu sechs Topics mit vollem Pfad — erst der Pfad sagt, an welchem Gerät das Feld fehlt. Erwartet werden nur Felder, die
-über MQTT kommen sollen: die Pflichtfelder eines Geräts (in den Datenquellen rot markiert) und optionale Felder, denen du
-MQTT oder ein Gateway als Quelle zugeordnet hast. Felder mit gespeicherter Quelle «Keine» oder einem Sensor aus Home
-Assistant zählen nicht.
+Die Verbindung zum Broker steht, aber für die genannten Topics hat noch keine Quelle Daten geliefert. Die Zeile nennt
+die Zahl, die Details bis zu sechs Topics mit vollem Pfad — erst der Pfad sagt, an welchem Gerät das Feld fehlt.
+Erwartet werden nur Felder, die über MQTT kommen sollen: die Pflichtfelder eines Geräts (in den Datenquellen rot
+markiert) und optionale Felder, denen du MQTT oder ein Gateway als Quelle zugeordnet hast. Felder mit gespeicherter
+Quelle «Keine» oder einem Sensor aus Home Assistant zählen nicht.
 
 ## Lösungsweg
 1. Am Befund **«Topics prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich beim ersten betroffenen Gerät.

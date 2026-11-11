@@ -81,6 +81,20 @@ Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatu
   Klick steht am Knopf „Startet neu...“ und darunter „eedc startet neu — die Seite lädt gleich von selbst.“; sobald eedc
   wieder antwortet, lädt die Seite neu. Bisher drehte der Knopf endlos. Dauert es länger als anderthalb Minuten, steht
   dort „Der Neustart dauert länger als erwartet — Seite neu laden.“ und der Knopf ist wieder frei.
+- **Daten-Checker: fünf Knöpfe landen jetzt dort, wo es ihr Feld gibt.** „Kennung eintragen“ öffnet das E-Auto (bisher
+  die Wallbox, an der es das Feld nicht gibt); „Zuordnung prüfen“ bei der evcc-Netzladung öffnet die Wallbox, beim
+  gemeinsamen Zähler von Wärmepumpe und Wallbox das Feld an der Wärmepumpe (bisher das erste Gerät mit einem Feld
+  „Netzladung“, etwa den Speicher); „Monat öffnen“ bei fehlender Batterie-Ladung/-Entladung springt in die Zeile des
+  Speichers; „Zuordnung prüfen“ bei „Netzbezug zum WP-/Wallbox-Tarif größer als …“ öffnet das betroffene Gerät statt des
+  ersten mit diesem Feld.
+- **Daten-Checker: ein gesetzter „Fremdanteil auf den Zählern“ nimmt die Warnung „Arbeitszahl höher, als eine
+  Wärmepumpe leisten kann“ zurück** — wie es das Handbuch versprach; die Auswertungen zeigen statt der Zahl den Grund.
+- **Daten-Checker: „Heizwärme fehlt“ erscheint nicht mehr, wenn die Heizwärme als „Nutzenergie Heizbetrieb“ erfasst
+  ist.**
+- **Daten-Checker: Lösungswege und Hinweistexte berichtigt** — Schwellen, Fenster und Bedingungen stehen
+  jetzt so da, wie eedc prüft (etwa „um mehr als 0,5 kWh“, „in den letzten 180 Tagen“); Aussagen wie „rechnet keine
+  Einsparung“, wo eedc mit Vorgaben rechnet, sind richtiggestellt. Ein Bereich bis heute lässt sich nicht neu aufbauen —
+  die Vorschau sagt das jetzt in einem Satz.
 
 ### Intern
 
@@ -89,7 +103,8 @@ Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatu
   (`handgriffe.py`); die Antwort trägt `knopf`, `gruppe` und `nicht_ausfuehrbar`, die Altfelder `link`/`action_*` sind
   entfallen. Aktionen laufen über Plan → Ausführen der Reparatur-Werkbank (ein Plan „nichts zu tun“ wird nicht
   ausgeführt, 409); die Anzeige-Grenze der Geräte-Befunde gilt je Gerät. Das Handbuch „Daten-Checker“ §3/§4 ist erzeugt
-  (`scripts/daten-checker-handbuch.py` aus `docs/daten-checker/<code>.md`, eine Datei je Befund); Wächter W-1 … W-13.
+  (`scripts/daten-checker-handbuch.py` aus `docs/daten-checker/<code>.md`, eine Datei je Befund); Wächter W-1 … W-14
+  (W-14: ein Sprungziel zeigt nur auf ein Feld, das es am Gerätetyp gibt).
   Diagnose-Paket Kopfmarke v3.
 
 ## [4.2.3] - 2026-11-10

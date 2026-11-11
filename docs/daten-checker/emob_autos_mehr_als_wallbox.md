@@ -2,9 +2,10 @@
 
 ## Was eedc sieht
 In den genannten Monaten der letzten zwölf übersteigen die eigenen Heimlade-Werte der Autos (privat und dienstlich)
-die Ladung der Wallbox um mehr als 10 kWh bzw. 10 %. Mögliche Ursachen: Streudaten am Auto, eine Quelle am Auto, die
-auch das Laden unterwegs zählt, oder ein Auto, das an der Steckdose statt an der Wallbox geladen hat. Der Rest der
-Wallbox, der sonst an Autos ohne eigene Messung geht, ist in diesen Monaten 0.
+die Ladung der Wallbox um mehr als 10 kWh und zugleich mehr als 10 % (die größere der beiden Grenzen). Mögliche
+Ursachen: Streudaten am Auto, eine Quelle am Auto, die auch das Laden unterwegs zählt, oder ein Auto, das an der
+Steckdose statt an der Wallbox geladen hat. Der Rest der Wallbox, der sonst an Autos ohne eigene Messung geht, ist in
+diesen Monaten 0.
 
 ## Lösungsweg
 1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ersten genannten Monats öffnet sich am Feld

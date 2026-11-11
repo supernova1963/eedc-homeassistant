@@ -6,8 +6,8 @@ es gibt keine dienstliche Wallbox in Betrieb). Lädt er zu Hause, zählt seine L
 dienstlich.
 
 ## Lösungsweg
-1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des letzten genannten Monats öffnet sich am Feld
-   «Heim: gesamt» des Dienstwagens.
+1. Am Befund **«Monat öffnen»** klicken — der Monatsabschluss des ältesten betroffenen Monats öffnet sich am
+   Feld «Heim: gesamt» des Dienstwagens; die Details nennen höchstens die drei jüngsten Monate.
 2. Seine Heimladung eintragen («Heim: gesamt» oder «Heim: PV» und «Heim: Netz»). Lädt er nur beim Arbeitgeber,
    **0** eintragen — 0 ist ein Wert. Dasselbe für die übrigen genannten Monate.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.

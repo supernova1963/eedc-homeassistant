@@ -591,8 +591,10 @@ class EnergieprofilChecks:
                     "Der PV-Zählerstand der ganzen Anlage versorgt Monat, Tag "
                     "und Stunde als Summe. Was fehlt, ist die Aufschlüsselung "
                     "je Erzeuger — dafür braucht jeder einzelne einen eigenen "
-                    "Zähler. Dann aber alle: sobald einer gemessen wird, zählt "
-                    "für Tag und Stunde nur noch, was je Erzeuger gemessen ist."
+                    "Zähler. Misst nur ein Teil der Erzeuger, trägt weiter der "
+                    "Anlagen-Zählerstand die Summe des Tages; erst wenn alle "
+                    "Erzeuger den ganzen Tag messen, rechnet eedc Tag und "
+                    "Stunde aus den Einzelzählern."
                 ),
             ))
         if quelle_count > 0:

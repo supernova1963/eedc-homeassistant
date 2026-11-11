@@ -5,6 +5,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
 from datetime import date, timedelta
+from typing import Optional
 
 from sqlalchemy import select
 
@@ -137,13 +138,17 @@ class EmobChecks:
         if not wallboxen:
             return []
         kennungen = {k for inv in aktiv if inv.typ == "e-auto" and (k := kennung_in_steuerung(inv)) is not None}
+        # E6.D D3: das Feld «Kennung in der Steuerung» steht am E-Auto, nicht an der Wallbox — der Sprung zeigt auf das
+        # einzige aktive E-Auto; mit mehreren (oder keinem) kennt der Erzeuger das Auto nicht ⇒ Komponenten-Übersicht.
+        eautos = [inv.id for inv in aktiv if inv.typ == "e-auto"]
+        eauto_id = eautos[0] if len(eautos) == 1 else None
         werte = await _erhebe_emob(anlage, {inv_id: "wallbox" for inv_id in wallboxen})
         out: list[CheckErgebnis] = []
         for (inv_id, feld), text in sorted(werte.items()):
             if not ist_text_feld(feld, "wallbox") or text == "":
                 continue
             if zustands_kanon.text_schluessel(text) not in kennungen:
-                out.append(_meldung_emob_kennung_unbekannt(wallboxen[inv_id].bezeichnung, inv_id, text))
+                out.append(_meldung_emob_kennung_unbekannt(wallboxen[inv_id].bezeichnung, inv_id, text, eauto_id))
         return out
 
     # ⭐ N-555 Stufe 2 (Konzept Heimladung/Fahrverbrauch 7.2, Regel 7): die Pflegeprüfung
@@ -525,8 +530,10 @@ class EmobChecks:
         einer Wallbox- als auch einer E-Auto-Investition zugeordnet, messen beide
         denselben Ladestrom. Der Live-Energiefluss dedupliziert das (Wallbox-
         Priorität), aber die Monats-/Stunden-Aggregation poolt nur über
-        `parent_investition_id` — ohne gesetzten Link zählt sie die Ladung
-        DOPPELT (#314-Untersuchung). Deterministische Diagnose aus dem
+        `parent_investition_id` — ohne gesetzten Link zählte sie die Ladung
+        DOPPELT (#314-Untersuchung); seit N-555 (Regel 2,
+        `emob_heimladung_phasen._rest_der_wallbox`) einmal, aber dem falschen
+        Gerät zugeteilt (E6.D D2). Deterministische Diagnose aus dem
         `sensor_mapping`: lenkt den Anwender darauf, eine der beiden Zuordnungen
         zu entfernen. Brücke vor Phase 2a (kanonische Quelle),
         docs/KONZEPT-WALLBOX-EAUTO.md.
@@ -572,11 +579,15 @@ class EmobChecks:
                 details=(
                     f"Die Entity „{eid}“ ist sowohl der Wallbox "
                     f"({', '.join(wb)}) als auch dem E-Auto ({', '.join(ea)}) "
-                    "zugeordnet — beide messen denselben Ladestrom. In Monats-/"
-                    "Jahresauswertungen wird die Ladung dadurch doppelt gezählt "
-                    "(im Live-Energiefluss nicht). Bitte die Zuordnung an einer "
-                    "der beiden Investitionen entfernen — Faustregel: die Wallbox "
-                    "misst den Stromfluss, das E-Auto trägt Nutzung/Kilometer."
+                    "zugeordnet — beide messen denselben Ladestrom. In Monat "
+                    "und Jahr zählt eedc die Ladung einmal (das E-Auto trägt "
+                    "seine Messung, für die Wallbox bleibt kein Rest); die "
+                    "Zuordnung ist trotzdem falsch: ein weiteres Auto ohne "
+                    "eigene Messung bekommt von dieser Wallbox keine Heimladung, "
+                    "und die Sichten je Gerät zeigen denselben Ladestrom an "
+                    "beiden. Bitte die Zuordnung an einer der beiden "
+                    "Investitionen entfernen — Faustregel: die Wallbox misst den "
+                    "Stromfluss, das E-Auto trägt Nutzung/Kilometer."
                 ),
             ))
         return ergebnisse
@@ -813,14 +824,17 @@ def _meldung_emob_zustand(name: str, inv_id: int, feld: str, roh: str, herkunft:
             f"{herkunft} für „{feld_label}“ liefert gerade „{roh}“. Diesen Wert kennt eedc nicht und zeigt deshalb "
             f"keinen Zustand an. Verstanden werden: {zustands_kanon.werte_klartext(feld)}. Groß-/Kleinschreibung ist "
             f"egal. Der Weg: in Home Assistant einen Template-Sensor anlegen, der aus deinen Werten eines dieser Wörter "
-            f"macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Bedienung“, Abschnitt E-Mobilität)."
+            f"macht, und ihn hier zuordnen (Werte-Tabelle im Handbuch „Einstellungen“, Abschnitt „Zustand und Sitzung (E-Mobilität)“)."
         ),
         investition_id=inv_id,
     )
 
 
-def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str) -> CheckErgebnis:
-    """Das INFO je Wallbox (P-433-2b K2a, K2-10): Rohtext der Steuerung + Handgriff «Kennung am E-Auto eintragen»."""
+def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str, eauto_id: Optional[int] = None) -> CheckErgebnis:
+    """Das INFO je Wallbox (P-433-2b K2a, K2-10): Rohtext der Steuerung + Handgriff «Kennung am E-Auto eintragen».
+
+    Der Befund gehört zur Wallbox (``investition_id``), der Sprung zum E-Auto (E6.D D3, Wächter W-14): mit genau einem
+    aktiven E-Auto dessen Formular am Feld, sonst die Komponenten-Übersicht."""
     return CheckErgebnis(
         kategorie=CheckKategorie.EMOB_KENNUNG_UNBEKANNT.value, schwere=CheckSeverity.INFO.value, code="emob_kennung_unbekannt",
         meldung=f"„{name}“: die Steuerung meldet „{text}“ — kein E-Auto trägt diese Kennung",
@@ -831,6 +845,7 @@ def _meldung_emob_kennung_unbekannt(name: str, inv_id: int, text: str) -> CheckE
             f"Steuerung“ genau so eintragen, wie die Steuerung das Fahrzeug nennt (Groß-/Kleinschreibung ist egal). "
             f"Ist es ein fremdes Fahrzeug, ist nichts zu tun."
         ),
-        ziel=ziel_komponente(inv_id, parameter="kennung_in_steuerung", typ="e-auto"),
+        ziel=(ziel_komponente(eauto_id, parameter="kennung_in_steuerung", typ="e-auto") if eauto_id is not None
+              else ziel_komponente()),
         investition_id=inv_id,
     )

@@ -14,9 +14,10 @@ beide Zahlen.
 2. Für die übrigen Monate (die Details nennen sie): den Monat unter
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen, im Abschnitt «Wetterdaten (optional)» auf
    «Auto-Fill» klicken und speichern — eedc holt den Wert dann aus dem Wetter-Archiv.
-3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden oder nennt nur noch die übrigen Monate.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden; bleiben Monate ohne
+   eigene Messwerte, steht statt ihrer die Zeile «Ø Temperatur fehlt in n Monat(en)» mit dem Knopf «Monat öffnen».
 
 ## Was ohne Handlung gilt
-Einmal täglich versucht eedc, leere Wetterfelder abgeschlossener Monate von der an der Anlage gewählten Quelle zu
-füllen; ein Monat, für den sie an deinem Ort keinen gemessenen Wert liefert, bleibt ohne Ø Temperatur. Keine Kennzahl
-rechnet heute mit dem Feld.
+Einmal täglich füllt eedc leere Ø Temperaturen abgeschlossener Monate von selbst — zuerst aus deinen Messwerten, sonst
+aus dem Archiv der an der Anlage gewählten Quelle; Voraussetzung sind hinterlegte Koordinaten der Anlage. Der Knopf
+erledigt es sofort. Keine Kennzahl rechnet heute mit dem Feld.

@@ -2,8 +2,8 @@
 
 ## Was eedc sieht
 Home Assistant ist erreichbar, aber es gibt noch keine Tageszeile mit Stundenwerten. Direkt nach der Einrichtung ist das
-normal — die ersten Werte entstehen mit dem nächsten Lauf. Bleibt es dabei, fehlt meist die Zuordnung der kWh-Zähler: Es
-müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
+normal — die ersten Werte stehen innerhalb einer Stunde bereit. Bleibt es dabei, fehlt meist die Zuordnung der
+kWh-Zähler: Es müssen die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen.
 
 ## Lösungsweg
 1. Nach der Einrichtung zuerst den nächsten Lauf abwarten.

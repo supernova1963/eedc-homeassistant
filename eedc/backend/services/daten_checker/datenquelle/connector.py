@@ -142,8 +142,9 @@ class ConnectorChecks:
             ),
             details=(
                 f"Nicht genügend Snapshots für {heute.month:02d}/{heute.year}. "
-                "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn "
-                f"nötig. {bestand} {weg}"
+                "Nötig sind zwei verschiedene Snapshots: der erste vor dem "
+                "Monat oder im Monat, der zweite im Monat oder danach. "
+                f"{bestand} {weg}"
             ),
             ziel=ziel_block("integration", "import-buendel", wizard="connector"),
         )]

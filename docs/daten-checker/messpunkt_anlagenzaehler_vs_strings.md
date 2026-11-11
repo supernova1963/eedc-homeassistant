@@ -1,6 +1,7 @@
 # Anlagenzähler und String-Zähler messen verschiedene Dinge
 
 ## Was eedc sieht
+Geprüft werden abgeschlossene Monate, in denen der Anlagenzähler einen Wert hat und jede PV-Quelle einen eigenen Zähler.
 In den genannten Monaten liegt die Summe der String-Zähler um mehr als 10 % über dem Anlagenzähler (Feld „PV gesamt“).
 Wechselrichterverluste dieser Höhe sind nicht plausibel — meist misst der Anlagenzähler nicht dieselbe Anlage wie die
 Strings: ein String fehlt in ihm, oder er misst nach dem Speicher. eedc zeigt die Differenz als Wandlungsverluste,

@@ -9,8 +9,9 @@ Zähler. Die Meldung nennt beide. Ein Modul, das zum Balkonkraftwerk selbst geh�
 ## Lösungsweg
 1. Klären, was dein Anlagenzähler misst (der Knopf **«Was gilt»** am Befund öffnet diesen Text): Zählt er die ganze
    Erzeugung einschließlich Balkonkraftwerk, stimmt die Rechnung, und es ist nichts zu tun.
-2. Misst er nur den Wechselrichter: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) denselben Sensor
-   beim PV-Modul im Feld „PV-Erzeugung“ zuordnen. Sonst fehlt die Erzeugung der Balkonkraftwerke in PV gesamt.
+2. Misst er nur den Wechselrichter: in der [Datenquellen-Zuordnung](eedc:/einstellungen/datenquellen) den Sensor aus
+   „PV-Erzeugung Zählerstand“ herausnehmen und beim PV-Modul im Feld „PV-Erzeugung“ zuordnen — ein Sensor in zwei
+   Feldern zählt doppelt. Sonst fehlt die Erzeugung der Balkonkraftwerke in PV gesamt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein PV-Modul ohne eigenen Zähler neben
    dem Anlagenzähler steht.
 

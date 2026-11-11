@@ -354,8 +354,11 @@ async def _gz_anlage(db, *, feld_an_wallbox: bool = False, eigener_wp: bool = Fa
     await db.flush()
     seed_provenance(md, source="manual:form", writer="test", fields=["einspeisung_kwh", "netzbezug_kwh"])
     await db.commit()
+    # Wie `DatenChecker.check_anlage`: Tarife UND Investitionen geladen (E6.D D3 liest die Wärmepumpe des gemeinsamen
+    # Zählers aus `anlage.investitionen`).
     return (await db.execute(
-        select(Anlage).options(selectinload(Anlage.strompreise)).where(Anlage.id == anlage.id)
+        select(Anlage).options(selectinload(Anlage.strompreise), selectinload(Anlage.investitionen))
+        .where(Anlage.id == anlage.id)
     )).scalar_one()
 
 

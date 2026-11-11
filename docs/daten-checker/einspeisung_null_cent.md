@@ -1,9 +1,10 @@
 # Einspeisung wird mit 0 ct/kWh gerechnet
 
 ## Was eedc sieht
-Mindestens ein Tarif trägt 0 ct/kWh Einspeisevergütung, und in seinem Zeitraum ist Einspeisung erfasst (ab 50 kWh im
-Jahr). eedc rechnet den Einspeise-Erlös so, wie es im Tarif steht — in Cockpit, Amortisation und Jahresbericht bleibt er
-0 €. Ein neuer Tarif startet mit 0; eedc rät den Satz bewusst nicht.
+Mindestens ein Tarif der Verwendung «Standard (allgemein)», bei dem «Einspeisevergütung wechselt monatlich» nicht
+eingeschaltet ist, trägt 0 ct/kWh Einspeisevergütung, und in seinem Zeitraum ist Einspeisung erfasst (auf ein Jahr
+hochgerechnet ab 50 kWh). eedc rechnet den Einspeise-Erlös so, wie es im Tarif steht — in Cockpit, Amortisation und
+Jahresbericht bleibt er 0 €. Ein neuer Tarif startet mit 0; eedc rät den Satz bewusst nicht.
 
 ## Lösungsweg
 1. Ist deine Einspeisung wirklich unvergütet (Nulleinspeisung, Volleinspeisung ohne Vergütung, ausgelaufene

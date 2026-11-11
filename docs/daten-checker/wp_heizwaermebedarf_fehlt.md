@@ -1,10 +1,11 @@
 # Heizwärmebedarf der Wärmepumpe fehlt
 
 ## Was eedc sieht
-An der Wärmepumpe ist kein Jahres-Heizwärmebedarf eingetragen. Ohne ihn rechnet die Jahres-Einsparungsschätzung gar
-nicht; die Zeile der Wirtschaftlichkeit trägt dann „Nicht bewertet“ samt Begründung. Gefragt wird nur an Geräten mit
-Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heizen. Der Hinweis bleibt aus, wenn bei
-«Alter Energieträger» «Nichts ersetzt (Neubau)» gewählt ist.
+An der Wärmepumpe ist kein Jahres-Heizwärmebedarf eingetragen. Ist auch kein «Warmwasserbedarf (kWh/Jahr)» gepflegt,
+rechnet die Jahres-Einsparungsschätzung gar nicht; die Zeile der Wirtschaftlichkeit trägt dann „Nicht bewertet“ samt
+Begründung. Mit gepflegtem Warmwasserbedarf rechnet sie allein aus diesem und fällt zu niedrig aus. Gefragt wird nur an
+Geräten mit Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heizen. Der Hinweis bleibt aus,
+wenn bei «Alter Energieträger» «Nichts ersetzt (Neubau)» gewählt ist.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Wärmepumpe öffnet sich beim Feld
@@ -14,4 +15,5 @@ Heiz-Achse — eine Split-Klimaanlage behält die Frage, weil viele mit ihr heiz
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt
-Die Jahres-Einsparung der Wärmepumpe bleibt „Nicht bewertet“.
+Die Jahres-Einsparung der Wärmepumpe bleibt „Nicht bewertet“, solange auch kein Warmwasserbedarf gepflegt ist; sonst
+rechnet sie allein aus dem Warmwasserbedarf.

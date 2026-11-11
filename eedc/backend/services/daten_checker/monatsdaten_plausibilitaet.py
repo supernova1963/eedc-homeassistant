@@ -138,7 +138,7 @@ def _speicher_index(
 ) -> tuple[
     dict[tuple[int, int], tuple[float, float]],
     dict[tuple[int, int], float],
-    set[tuple[int, int]],
+    dict[tuple[int, int], int],
     dict[tuple[int, int], list[tuple[str, float]]],
 ]:
     """Speicher je Monat aus den Gerätezeilen: Ladung/Entladung, Netzladung, aktive Monate, Ladung ohne Entladung je Gerät."""
@@ -152,7 +152,8 @@ def _speicher_index(
     # noch nicht stillgelegt). Verhindert Warnungen für Monate VOR der ersten
     # Batterie-Installation (Issue #226 JanKgh: PV seit 11/2021, Speicher erst
     # ab 11/2022 — der Datenchecker monierte Batterie-Daten für 11/2021).
-    speicher_aktiv_monate: set[tuple[int, int]] = set()
+    # E6.D D3: je Monat der aktive Speicher mit der kleinsten Id — das Sprungziel der Legacy-Warnung (Wächter W-14).
+    speicher_aktiv_monate: dict[tuple[int, int], int] = {}
     # (e') Ladung erfasst, Entladung fehlt — JE GERÄT, nicht aggregiert.
     #
     # ⭐ Die Warnung darunter („Batterie-Entladung nicht erfasst") gibt es
@@ -182,7 +183,7 @@ def _speicher_index(
                 md_key = (md.jahr, md.monat)
                 if not _aktiv_im(md_key):
                     continue
-                speicher_aktiv_monate.add(md_key)
+                speicher_aktiv_monate[md_key] = min(inv.id, speicher_aktiv_monate.get(md_key, inv.id))
             for imd in inv.monatsdaten:
                 daten = imd.verbrauch_daten or {}
                 ladung = daten.get("ladung_kwh")
@@ -219,9 +220,11 @@ def _speicher_index(
 
 def _batterie_legacy_fehlt(
     kat, prefix: str, md: Monatsdaten, *,
-    hat_speicher: bool, speicher_aktiv_monate: set, speicher_imd_monate: set,
+    hat_speicher: bool, speicher_aktiv_monate: dict, speicher_imd_monate: set,
 ) -> list[CheckErgebnis]:
-    """Batterie-Felder der Monatszeile fehlen (Legacy-Pfad, nur ohne Gerätezeilen im Monat)."""
+    """Batterie-Felder der Monatszeile fehlen (Legacy-Pfad, nur ohne Gerätezeilen im Monat). Die Felder «Batterie Ladung/
+    Entladung» der Monatszeile zeigt das Formular nur ohne Speicher (`MonatsdatenForm.tsx`, Abschnitt «Batterie
+    (optional)»); mit Speicher springt der Knopf in dessen Gerätezeile (E6.D D3, Wächter W-14)."""
     ergebnisse: list[CheckErgebnis] = []
     if (
         hat_speicher
@@ -234,14 +237,14 @@ def _batterie_legacy_fehlt(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="md_batterie_ladung_fehlt",
                 meldung=f"{prefix}: Batterie-Ladung nicht erfasst (Speicher vorhanden)",
                 details="Ohne Batterie-Daten wird der Gesamtverbrauch falsch berechnet",
-                ziel=ziel_monat_label(prefix, feld="batterie_ladung_kwh"),
+                ziel=ziel_monat_label(prefix, geraet=speicher_aktiv_monate[(md.jahr, md.monat)], feld="ladung_kwh"),
             ))
         if md.batterie_entladung_kwh is None:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="md_batterie_entladung_fehlt",
                 meldung=f"{prefix}: Batterie-Entladung nicht erfasst (Speicher vorhanden)",
                 details="Ohne Batterie-Daten wird der Gesamtverbrauch falsch berechnet",
-                ziel=ziel_monat_label(prefix, feld="batterie_entladung_kwh"),
+                ziel=ziel_monat_label(prefix, geraet=speicher_aktiv_monate[(md.jahr, md.monat)], feld="entladung_kwh"),
             ))
     return ergebnisse
 

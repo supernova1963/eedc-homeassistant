@@ -6,7 +6,9 @@ evcc bzw. Tagesquote) größer als «Netzbezug zum WP-/Wallbox-Tarif (gemeinsame
 auf den gemeinsamen Netzbezug; der Wärmepumpe bleibt dann kein Netzanteil.
 
 ## Lösungsweg
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich am Feld für die Netzladung.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wärmepumpe am Feld
+   «Netzbezug zum WP-/Wallbox-Tarif (gemeinsamer Zähler)»; ist nicht eindeutig, welche Wärmepumpe den gemeinsamen Zähler
+   trägt, öffnet sie sich ohne Feld.
 2. Den gemeinsamen Zähler prüfen (Zähler vor beiden Geräten minus Zähler danach) und die Netzladung der Wallbox: misst
    ihr Sensor wirklich nur Netzstrom dieser Wallbox?
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Monate neu erfasst sind.

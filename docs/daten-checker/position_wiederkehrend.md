@@ -9,8 +9,10 @@ Wiederholung, nie an der Bedeutung der Bezeichnung.
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular der Komponente öffnet sich im Abschnitt «Weitere Angaben & Kosten».
 2. Den Betrag dort als Jahresbetrag eintragen: Ausgaben unter «Betriebskosten/Jahr (€)», Erträge unter «Ertrag/Jahr (€)»
-   (das Feld gibt es nur bei Wallbox und Sonstiges). Nennt die Meldung «Einspeise-Erlös (€)», gehört der Erlös eines Erzeugers
-   dorthin. Danach die Monatspositionen entfernen, damit der Betrag nicht doppelt zählt.
+   (das Feld gibt es nur bei Wallbox und Sonstiges). Nennen die Details das Feld «Einspeise-Erlös», gehört der Erlös eines
+   Erzeugers (Sonstiges) als Monatswert in dieses Feld des Geräts im Monatsabschluss — am besten aus einem Sensor, dann
+   schlägt eedc den Wert dort vor —, nicht als Jahresbetrag an die Komponente. Danach die Monatspositionen entfernen,
+   damit der Betrag nicht doppelt zählt.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt

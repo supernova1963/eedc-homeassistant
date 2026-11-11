@@ -1,10 +1,10 @@
 # Anlagenleistung passt nicht zu den Modulen
 
 ## Was eedc sieht
-Die «Leistung (kWp)» der Anlage weicht von der Summe deiner PV-Module ab (mit oder ohne Balkonkraftwerk gerechnet). eedc
-rechnet spezifischen Ertrag, Performance Ratio und die Plausibilitätsprüfungen mit der Modulsumme; die Anlagenleistung
-geht an den Community-Vergleich. Solange beide auseinanderliegen, vergleichst du dich dort mit einer anderen
-Anlagengröße als der, die du auswertest.
+Die «Leistung (kWp)» der Anlage weicht um mehr als 0,1 kWp von der Summe deiner aktiven PV-Module ab — sowohl ohne als
+auch mit Balkonkraftwerk gerechnet. eedc rechnet spezifischen Ertrag, Performance Ratio und die Plausibilitätsprüfungen
+mit der Modulsumme; die Anlagenleistung geht an den Community-Vergleich. Solange beide auseinanderliegen, vergleichst du
+dich dort mit einer anderen Anlagengröße als der, die du auswertest.
 
 ## Lösungsweg
 1. Am Befund **«Anlage bearbeiten»** klicken — das Anlagen-Formular öffnet sich am Feld «Leistung (kWp)».

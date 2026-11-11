@@ -51,10 +51,12 @@ async def _anlage(db, *, wp_cent: float | None, allgemein_cent: float = 30.0, wp
                                       verbrauch_daten={"stromverbrauch_kwh": strom}))
     await db.commit()
     return (await db.execute(
-        select(Anlage).options(selectinload(Anlage.strompreise)).where(Anlage.id == anlage.id)
+        select(Anlage).options(selectinload(Anlage.strompreise), selectinload(Anlage.investitionen)).where(Anlage.id == anlage.id)
     )).scalar_one()
 
 
+# Wie `DatenChecker.check_anlage`: Tarife UND Investitionen geladen (E6.D D3/H-E6-11: das Sprungziel nennt das Gerät aus
+# `anlage.investitionen`).
 async def _pruefe(db, anlage):
     return await DatenChecker(db)._check_wp_eigener_tarif(anlage, heute=_HEUTE)
 
@@ -190,7 +192,7 @@ async def _anlage_wallbox(db, *, evcc_netz: float | None, n: float | None):
         db.add(InvestitionMonatsdaten(investition_id=wb.id, jahr=jahr, monat=monat, verbrauch_daten=d))
     await db.commit()
     return (await db.execute(
-        select(Anlage).options(selectinload(Anlage.strompreise)).where(Anlage.id == anlage.id)
+        select(Anlage).options(selectinload(Anlage.strompreise), selectinload(Anlage.investitionen)).where(Anlage.id == anlage.id)
     )).scalar_one()
 
 

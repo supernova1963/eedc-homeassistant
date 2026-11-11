@@ -2,13 +2,14 @@
 
 ## Was eedc sieht
 Die Wallbox trägt in den genannten Monaten neben «Netzbezug zum Wallbox-Tarif» einen PV-/Netz-Anteil der Ladung (etwa
-aus evcc), und beide nennen eine andere Netzladung (mehr als 0,5 kWh bzw. 2 % Unterschied). eedc rechnet mit dem
+aus evcc), und beide nennen eine andere Netzladung (Unterschied um mehr als 0,5 kWh und zugleich mehr als 2 % der
+Ladung — die größere der beiden Grenzen). eedc rechnet mit dem
 Zähler des Versorgers: Netzladung = Netzbezug zum Wallbox-Tarif, PV-Ladung = Ladung minus Netzladung — für Ersparnis,
 Heimladekosten und Stromrechnung.
 
 ## Lösungsweg
-1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wallbox am Feld für die
-   Netzladung.
+1. Am Befund **«Zuordnung prüfen»** klicken — die Datenquellen-Zuordnung öffnet sich bei der Wallbox (ein eigenes Feld
+   für die Netzladung gibt es dort nicht; der PV-/Netz-Anteil steht in der Monatszeile der Wallbox).
 2. Prüfen, ob beide Sensoren dieselbe Wallbox messen. Misst einer ein anderes Gerät oder einen anderen Zeitraum, die
    Zuordnung berichtigen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden, sobald die Monate neu erfasst sind

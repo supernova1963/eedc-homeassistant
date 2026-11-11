@@ -9,4 +9,5 @@ Es sind PV-Module als Komponenten angelegt; die Zeile nennt ihre Summe in kWp un
 2. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt unter den bestandenen Prüfungen.
 
 ## Was ohne Handlung gilt
-eedc rechnet spezifischen Ertrag und Prognose mit dieser Modulsumme.
+eedc rechnet spezifischen Ertrag und Prognose mit der Summe aller aktiven Erzeuger — ein Balkonkraftwerk zählt dort mit,
+auch wenn die Zeile nur die Modulsumme nennt.

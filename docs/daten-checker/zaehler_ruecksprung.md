@@ -19,5 +19,6 @@ Ständen.
 ## Was ohne Handlung gilt
 Für ein solches Feld liefert eedc keinen Wert: im Monatsabschluss steht kein Vorschlag, in der Monatsansicht im Cockpit
 bleibt der gespeicherte Wert stehen. Rechnet eedc das Feld über eine eigene Summe (die Meldung sagt das), stimmen Tag,
-Monat und Jahr trotzdem; nicht verlässlich bleiben dann „heute“ und „gestern“ im Live-Bereich. eedc rechnet den
+Monat und Jahr trotzdem; nicht verlässlich bleiben dann „heute“ und „gestern“ im Live-Bereich sowie die Tageswerte
+der Geräte aus der Zeit, bevor eedc diese eigene Summe führte. eedc rechnet den
 fehlenden Teil nicht hoch — er steht in keinem Stand.

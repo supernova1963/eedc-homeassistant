@@ -1,8 +1,9 @@
 # Modul-Details passen nicht zur Leistung
 
 ## Was eedc sieht
-An einem PV-Modul ergibt «Anzahl Module» × «Leistung pro Modul (Wp)» eine andere Leistung als im Feld «Leistung (kWp)»
-steht; die Zeile nennt beide Werte. Einer der drei Einträge stimmt nicht.
+An einem PV-Modul weicht «Anzahl Module» × «Leistung pro Modul (Wp)» um mehr als 0,1 kWp vom Feld «Leistung (kWp)» ab;
+die Zeile nennt beide Werte. Geprüft wird nur, wenn «Anzahl Module» und «Leistung pro Modul (Wp)» beide eingetragen
+sind. Einer der drei Einträge stimmt nicht.
 
 ## Lösungsweg
 1. Am Befund **«Gerät bearbeiten»** klicken — das Formular dieses PV-Moduls öffnet sich bei «Anzahl Module».

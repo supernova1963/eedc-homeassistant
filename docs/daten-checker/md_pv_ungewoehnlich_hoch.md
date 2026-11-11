@@ -1,10 +1,10 @@
 # PV-Erzeugung ungewöhnlich hoch
 
 ## Was eedc sieht
-Die PV-Erzeugung des Monats liegt über der Obergrenze. Mit mindestens sechs Monaten Historie ist das die
-PVGIS-Prognose × Performance Ratio × 1,45 (mindestens PVGIS × 1,5), sonst ein festes Maximum nach Monat und kWp; die
-Details nennen die verwendete Schwelle. Häufigste echte Ursache ist eine Doppelerfassung: dieselbe Erzeugung an zwei
-Stellen zugeordnet.
+Die PV-Erzeugung des Monats liegt über der Obergrenze. Liegt eine PVGIS-Prognose vor, ist das
+PVGIS × Performance Ratio × 1,45 (ab sechs Monaten Historie), mindestens aber PVGIS × 1,5; ohne PVGIS-Prognose gilt ein
+festes Maximum je Monat und kWp. Die Details nennen die verwendete Schwelle. Häufigste echte Ursache ist eine
+Doppelerfassung: dieselbe Erzeugung an zwei Stellen zugeordnet.
 
 ## Lösungsweg
 1. Am Befund **«Monat öffnen»** klicken — der Monat öffnet sich bei der PV-Erzeugung. Wert prüfen: Eingabefehler,
