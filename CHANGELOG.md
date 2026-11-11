@@ -9,6 +9,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-11-11
+
 Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatur zeigt vorher, was sie ändert, ein Sprung landet auf dem betroffenen Feld, und „Was gilt“ erklärt, was ohne Handlung gilt. Zu jedem Befund gibt es den Lösungsweg in Schritten, oben steht „Das kannst du jetzt tun“, bestandene Prüfungen und gleiche Befunde sind zusammengefasst. Neu ist das Diagnose-Paket: ein Text mit allem, was eine Antwort im Forum oder auf GitHub braucht, ohne Zugangsdaten. Reparaturen und der nächtliche Abgleich mit Home Assistant stehen im Aktivitätsprotokoll, und „Neustart“ zeigt, dass eedc neu startet, und lädt die Seite danach von selbst.
 
 ### Added

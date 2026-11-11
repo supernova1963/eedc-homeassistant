@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** November 2026 (v4.2.3)
+> **Stand:** November 2026 (v4.3.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unveröffentlicht
+## v4.3.0 — 11. November 2026
 
 **Daten-Checker: ein Knopf je Befund, der sagt, was er tut.** Jeder Befund trägt rechts **einen** Knopf mit seinem Namen. Ändert eedc etwas („Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine Vorschau; musst du etwas eintragen oder auswählen, springt der Knopf auf das Feld („Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif bearbeiten“, „Anlage bearbeiten“); ist nichts zu tun oder liegt der Weg in Home Assistant, erklärt **„Was gilt“**, was gilt. Die Komponenten-Seiten (Block „Daten-Qualität“) tragen dieselben Knöpfe. → [Daten-Checker: Aufbau der Ergebnis-Fläche](HANDBUCH_DATEN_CHECKER.md#aufbau-der-ergebnis-fläche)
 
