@@ -59,7 +59,7 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 4. **Fable nur zur Triage** auf Gernots Ruf, kurz.
 5. **Commit je Päckchen mit expliziten Pfaden** (nie `git add -A`); **kein Push, kein Tag außerhalb von `scripts/release.sh`** (Gernot
    10.10.: mehrere Repos, nur das Release hält sie gleich; «pushen ohne taggen» hat Probleme gemacht). Volle Backend-Suite lokal am Ende
-   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release, wenn ein Melder-Fix drin ist, sonst quartalsweise — per `scripts/release.sh <version>` auf Gernots Wort.
+   jedes Päckchens mit gekürzter Ausgabe (`| tail -3`). Release, wenn ein Melder-Fix drin ist, sonst derzeit monatlich (Gernot 12.11.2026) — per `scripts/release.sh <version>` auf Gernots Wort.
 6. **Nichts öffentlich ohne Go** — Issue-Kommentare, Foren-Texte, #110-Änderungen legt die Session vor, Gernot entscheidet (GitHub
    darf die Session nach dem Go selbst posten; Foren postet Gernot).
 7. **Doku gehört zum Fix:** CHANGELOG `[Unreleased]`, `docs/WAS-IST-NEU.md`, betroffenes Handbuch; `./scripts/sync-help.sh` spiegelt.
