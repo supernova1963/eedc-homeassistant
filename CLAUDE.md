@@ -35,7 +35,10 @@ Version: [CHANGELOG.md](CHANGELOG.md) (oberster Abschnitt) bzw. `eedc/backend/co
 > Golden Master je Funktion, Fable-Nachmessung je Sitzung, Gegenprüfung bei Wächter-Berührung).
 
 1. **Eingang nur Melder** (GitHub-Issues, simon42-Forum T89667, photovoltaikforum T258098, community-smarthome T10057, PN — **Gernot
-   liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten**) **und das Fundregister**
+   liest die Kanäle selbst und gibt den Beitrag weiter; keine routinemäßigen Melder-Sweeps durch Agenten** — **Ausnahme (Gernot 13.11.2026):**
+   das Diagnose-Postfach wird zu Sitzungsbeginn lesend geprüft; jede Änderung — als gelesen markieren, eine bearbeitete Mail in den Ordner
+   «erledigt» verschieben, löschen — und jede weitere Aufgabe am Postfach (etwa antworten) nur nach Gernots OK; Werkzeug und Zugang im Memory
+   `reference_diagnose_postfach`) **und das Fundregister**
    (`~/.claude/plans/fundregister.yaml` — das EINE Register; Stand 11.10.: 0 offen). Keine zweite Liste neben dem Register. Wünsche
    stehen in #110 «Gesammelt» ohne Termin.
    Keine Matrix-Sweeps, keine Beobachtungsliste abarbeiten, keine Refactoring-Serie, keine neuen Vorhaben aus dem Index.
