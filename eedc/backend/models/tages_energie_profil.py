@@ -258,7 +258,7 @@ class TagesZusammenfassung(Base):
     # `pv_prognose_final_kwh` (`pv_prognose_final_at`). Leser: Genauigkeits-Tracking, Zeitpunkt «Abend». Rückwärts
     # leer (NULL = «nicht erhoben»): der Kanon-Tageswert rollt, ein früherer Abendstand ist nirgends aufgezeichnet.
     pv_prognose_eedc_final_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # Päckchen CC: der Stand «Mittag» je Quelle — first-write ab 12:00 lokal (`live_wetter._mittag_einfrieren`; Prefetch
+    # Päckchen CC: der Stand «Mittag» je Quelle — first-write 12:00–13:59 lokal (N-800; `live_wetter._mittag_einfrieren`; Prefetch
     # alle 45 min ⇒ erster Schreiber bis 12:45, SFML nur die Live-Sicht). eedc = `KanonPrognose.heute_rollend_kwh` (IST bisher
     # + Rest), OpenMeteo = Modell-Tageswert des Laufs (`KanonTag.om_kwh`, gekappt — dieselbe Skala wie Σ
     # `lern_soll_stundenprofil_kwh`), Solcast `solcast_kwh` (tagsüber per Satellit nachgeführt), SFML `sfml_kwh`. Leser:

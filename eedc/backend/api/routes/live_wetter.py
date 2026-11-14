@@ -1089,20 +1089,29 @@ def _profil_einfrierbar(profil: list[float] | None) -> bool:
 
 #: Päckchen CC: ab dieser lokalen Stunde gilt ein Lauf als Stand «Mittag» (first-write je Spalte).
 MITTAG_AB_STUNDE = 12
+#: N-800: bis vor diese lokale Stunde gehört ein Lauf noch zum Stand «Mittag» — das Fenster 12:00–13:59 fasst mindestens
+#: zwei Prefetch-Läufe (alle 45 min). Ein späterer erster Lauf (Ausfall über Mittag) ist kein Mittag-Stand und schreibt nicht.
+MITTAG_BIS_STUNDE = 14
 
 
 def _mittag_einfrieren(tz: TagesZusammenfassung, jetzt_lokal: datetime, werte: Optional[dict]) -> None:
-    """First-write ab 12:00 lokal für die vier Mittag-Spalten (Päckchen CC) — je Spalte, solange sie leer ist.
+    """First-write im Mittag-Fenster 12:00–13:59 lokal für die vier Mittag-Spalten (Päckchen CC, N-800) — je Spalte,
+    solange sie leer ist.
 
     ``werte``: ``{spalte: kWh}`` (``pv_prognose_eedc_mittag_kwh``, ``pv_prognose_om_mittag_kwh``, ``solcast_mittag_kwh``,
-    ``sfml_mittag_kwh``). Vor 12:00 schreibt nichts; der erste Lauf danach (Prefetch alle 45 min ⇒ bis 12:45, oder die
-    Live-Sicht) friert ein, spätere Läufe überschreiben nicht. ``None`` ist «nicht erhoben» und bleibt leer.
+    ``sfml_mittag_kwh``). Vor 12:00 und ab 14:00 schreibt nichts; der erste Lauf im Fenster (Prefetch alle 45 min ⇒ bis
+    12:45, oder die Live-Sicht) friert ein, spätere Läufe überschreiben nicht. ``None`` ist «nicht erhoben» und bleibt
+    leer. N-800: ein eedc-Stand ≤ 0 ist ebenfalls «nicht erhoben» (dieselbe Regel wie der Abendstand, Σ ≤ 0 = keine
+    Daten) — ``heute_rollend_kwh`` ist ohne IST-Stunden nach Sonnenuntergang 0,0, das ist kein Prognosestand.
     """
-    if not werte or jetzt_lokal.hour < MITTAG_AB_STUNDE:
+    if not werte or not (MITTAG_AB_STUNDE <= jetzt_lokal.hour < MITTAG_BIS_STUNDE):
         return
     for feld, wert in werte.items():
-        if wert is not None and getattr(tz, feld) is None:
-            setattr(tz, feld, wert)
+        if wert is None or getattr(tz, feld) is not None:
+            continue
+        if feld == "pv_prognose_eedc_mittag_kwh" and wert <= 0:
+            continue
+        setattr(tz, feld, wert)
 
 
 def _day_ahead_profile_einfrieren(tz: TagesZusammenfassung, profile: dict[str, list[float] | None]) -> None:
@@ -1175,7 +1184,7 @@ async def _speichere_prognose(
 
     Päckchen CC — `kaskade_stundenprofil` (first-write wie die übrigen Profile, Spalte
     `pv_prognose_kaskade_stundenprofil`: immer die Kaskaden-Reihe, auch wenn der Wächter die Korrektur
-    aussetzt) und `mittag_werte` (`_mittag_einfrieren`: first-write ab 12:00 lokal, `jetzt` injizierbar für Proben).
+    aussetzt) und `mittag_werte` (`_mittag_einfrieren`: first-write 12:00–13:59 lokal, `jetzt` injizierbar für Proben).
     """
     from backend.core.database import get_session
     from backend.core.berechnungen import soll_final_einfrieren

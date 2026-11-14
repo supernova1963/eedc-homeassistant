@@ -1012,8 +1012,11 @@ class TagDetailResponse(BaseModel):
     @property
     def emob_pv_anteil_prozent(self) -> Optional[float]:
         """PV-Anteil (Heim) der Ladung des Tages = `emob_ladung_pv_kwh` ÷ `emob_ladung_kwh` × 100 (Päckchen BB2;
-        Layer `pv_anteil_ladung.pv_anteil_prozent`, ungerundet — der Client formatiert ganze Prozent)."""
-        return pv_anteil_prozent(self.emob_ladung_pv_kwh, self.emob_ladung_kwh)
+        Layer `pv_anteil_ladung.pv_anteil_prozent`, ungerundet — der Client formatiert ganze Prozent).
+
+        N-801: `gedeckelt` wie die Wallbox-Zeile von `emob_heute` — PV-Ladung (Tagesdetail) und Ladung (Komponenten-
+        Zähler) sind zwei Zähler; ein PV-Teil ≥ Ladung ist 100 % (bis 14.11.2026 standen hier z. B. 140 %)."""
+        return pv_anteil_prozent(self.emob_ladung_pv_kwh, self.emob_ladung_kwh, gedeckelt=True)
 
     #: P-433-2b K3: «Betrieb heute» der Wallboxen und E-Autos — je Gerät und Mitschrift-Feld eine Zeile, nur Geräte mit
     #: mindestens einer Zeile der Mitschrift (nur der Tag; Monat/Jahr kennen das Feld nicht).

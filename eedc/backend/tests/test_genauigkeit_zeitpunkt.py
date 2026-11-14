@@ -413,6 +413,49 @@ async def test_mittag_beim_anlegen_der_zeile(db, sitzung_ist_testdb):
     assert zeile.pv_prognose_eedc_mittag_kwh == 41.0 and zeile.sfml_mittag_kwh == 43.0
 
 
+async def test_mittag_spaeter_erster_lauf_schreibt_nicht(db, sitzung_ist_testdb):
+    """N-800: der erste Lauf erst ab 14:00 (Ausfall über Mittag) ist kein Mittag-Stand — alle Spalten bleiben leer;
+    13:59 liegt noch im Fenster."""
+    import backend.api.routes.live_wetter as lw
+
+    a = await factories.anlage(db)
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, mittag_werte=_MITTAG, jetzt=_um(17, 41))
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, mittag_werte=_MITTAG, jetzt=_um(14, 0))
+    zeile = await _zeile(db, a.id, HEUTE)
+    assert all(getattr(zeile, f) is None for f in _MITTAG), "ab 14:00 kein Mittagsstand"
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, mittag_werte=_MITTAG, jetzt=_um(13, 59))
+    zeile = await _zeile(db, a.id, HEUTE)
+    assert zeile.pv_prognose_eedc_mittag_kwh == 41.0 and zeile.sfml_mittag_kwh == 43.0
+
+
+async def test_mittag_eedc_null_wird_nicht_geschrieben(db, sitzung_ist_testdb):
+    """N-800: «IST bisher 0 + Rest 0» ist kein Prognosestand — die eedc-Spalte bleibt leer, die übrigen schreiben;
+    ein späterer Lauf im Fenster mit echtem Stand füllt sie."""
+    import backend.api.routes.live_wetter as lw
+
+    a = await factories.anlage(db)
+    await lw._speichere_prognose(
+        a.id, HEUTE, 20.0, jetzt=_um(12, 5), mittag_werte={**_MITTAG, "pv_prognose_eedc_mittag_kwh": 0.0},
+    )
+    zeile = await _zeile(db, a.id, HEUTE)
+    assert zeile.pv_prognose_eedc_mittag_kwh is None
+    assert zeile.pv_prognose_om_mittag_kwh == 45.0 and zeile.solcast_mittag_kwh == 39.0
+    await lw._speichere_prognose(a.id, HEUTE, 20.0, mittag_werte=_MITTAG, jetzt=_um(12, 50))
+    assert (await _zeile(db, a.id, HEUTE)).pv_prognose_eedc_mittag_kwh == 41.0
+
+
+async def test_mittag_gespeicherte_eedc_null_ist_nicht_erhoben(db, uhr):
+    """N-800: Bestandszeilen mit eedc-Mittag 0,0 (12.11.2026) lesen sich als «nicht erhoben» — die übrigen Quellen
+    des Tages bleiben sichtbar, MAE zählt den Tag für eedc nicht."""
+    a = await factories.anlage(db)
+    await _voller_tag(db, a.id, **{**_MITTAG, "pv_prognose_eedc_mittag_kwh": 0.0})
+    r = await _route(db, a.id, "mittag")
+    tag = r.tage[0]
+    assert tag.eedc_kwh is None
+    assert (tag.openmeteo_kwh, tag.solcast_kwh, tag.sfml_kwh) == (45.0, 39.0, 43.0)
+    assert r.eedc_mae_prozent is None and r.openmeteo_mae_prozent == 12.5
+
+
 async def test_mittag_nimmt_die_mittagsstaende(db, uhr):
     a = await factories.anlage(db)
     await _voller_tag(db, a.id, **_MITTAG)

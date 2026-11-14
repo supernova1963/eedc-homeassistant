@@ -277,7 +277,7 @@ def pv_anteil_prozent(
     *,
     faktor: float = 100.0,
     stellen: Optional[int] = None,
-    nur_gemessen: bool = False,
+    gedeckelt: bool = False,
 ) -> Optional[float]:
     """PV-Anteil einer Ladung = PV-Teil ÷ Ladung × ``faktor`` — die **eine** Funktion dafür (Päckchen Z1b, 9.11.2026).
 
@@ -287,8 +287,11 @@ def pv_anteil_prozent(
     Kanal-Gruppenquote ``GruppeZeitraum.quote``, Pool des aktuellen Monats; dazu die Kopfzahl «PV-Anteil heute»
     (P-433-2b K4, K4-4, Halt H1 — bis Z1b ``pv_anteil_gemessen_prozent``).
 
-    ``None`` («keine Aussage», nie 0 %): ein Operand fehlt oder ``ladung_kwh ≤ 0``. Mit ``nur_gemessen=True``
-    zusätzlich bei ``pv_kwh < 0`` oder ``pv_kwh > ladung_kwh`` (Zähler-Drift; keine Kopfzahl, kein Checker — E-K4-5).
+    ``None`` («keine Aussage», nie 0 %): ein Operand fehlt oder ``ladung_kwh ≤ 0``. Mit ``gedeckelt=True`` (die Tages-
+    Quoten zweier Zähler: Kopfkachel *Cockpit → Tag* und Wallbox-Zeile «PV-Anteil heute») zusätzlich bei ``pv_kwh < 0``;
+    ein PV-Teil ≥ Ladung ergibt dort **100 %** (bzw. 1), ohne Toleranz und ohne Leerwert — der Überhang ist die
+    Auflösung zweier Zähler (gemessen 14.11.2026: 1–4 Wh bei 0,01–0,03 kWh Ladung), der gelieferte Wert wird nicht
+    angezweifelt (N-801, Entscheid Gernot 14.11.2026; hebt E-K4-5 «Zähler-Drift ⇒ keine Zahl» auf).
 
     ``faktor`` 100 (Prozent) oder 1 (Anteil 0…1). ``stellen``: ``None`` ungerundet, ``0`` ganze Zahl (``int``),
     ``n > 0`` ``round(wert, n)``. Klemmung auf 0…1 (Kanal-Gruppenquote) bleibt beim Aufrufer.
@@ -299,8 +302,10 @@ def pv_anteil_prozent(
     """
     if pv_kwh is None or ladung_kwh is None or ladung_kwh <= 0:
         return None
-    if nur_gemessen and (pv_kwh < 0 or pv_kwh > ladung_kwh):
-        return None
+    if gedeckelt:
+        if pv_kwh < 0:
+            return None
+        pv_kwh = min(pv_kwh, ladung_kwh)
     wert = quote(pv_kwh, ladung_kwh, faktor)
     if wert is None or stellen is None:
         return wert

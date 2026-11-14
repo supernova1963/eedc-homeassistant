@@ -100,13 +100,17 @@ class QuellenChecks:
         #     '{"anlage_id": <id>, ...}'
         #   - investition_monatsdaten: '{"investition_id": <id>, ...}' für jede
         #     Investition der Anlage
-        anlage_needle = f'"anlage_id": {anlage.id}'
-        inv_needles = [f'"investition_id": {iid}' for iid in inv_ids]
+        # N-802: jede Nadel endet mit dem Trennzeichen des Natural Keys (`,` vor dem
+        # nächsten Feld bzw. `}` am Ende, Serialisierung `services/provenance.py::_row_pk_json`)
+        # — ohne Abschluss traf `"anlage_id": 1` auch die Anlagen 10–19 (ebenso Geräte).
+        needles = [
+            f'"{schluessel}": {wert}{ende}'
+            for schluessel, wert in [("anlage_id", anlage.id), *(("investition_id", iid) for iid in inv_ids)]
+            for ende in (",", "}")
+        ]
 
         from sqlalchemy import or_
-        row_filter = DataProvenanceLog.row_pk_json.contains(anlage_needle)
-        for needle in inv_needles:
-            row_filter = or_(row_filter, DataProvenanceLog.row_pk_json.contains(needle))
+        row_filter = or_(*(DataProvenanceLog.row_pk_json.contains(n) for n in needles))
 
         stmt = (
             select(

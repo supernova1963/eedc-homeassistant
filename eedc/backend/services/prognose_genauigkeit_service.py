@@ -13,10 +13,10 @@ HA-Exports (S3/P6, ``eedc_mae_prozent``) — damit beide dieselbe Zahl nennen:
      SFML ``sfml_prognose_stundenprofil``. eedc, OpenMeteo und Solcast schreibt der Prefetch im
      ersten Lauf nach Mitternacht (bis 00:45; Solcast erst seit N-782 — davor beim ersten Aufruf
      der Live-Sicht), SFML nur die Live-Sicht beim ersten Aufruf des Tages.
-   * ``mittag`` (Päckchen CC) — der Stand beim ersten Lauf ab 12:00 lokal (Prefetch bis 12:45 oder die Live-Sicht):
+   * ``mittag`` (Päckchen CC) — der Stand beim ersten Lauf 12:00–13:59 lokal (Prefetch bis 12:45 oder die Live-Sicht):
      eedc ``pv_prognose_eedc_mittag_kwh`` (IST bisher + Rest des Kanons), OpenMeteo ``pv_prognose_om_mittag_kwh``
      (Modell-Tageswert des Laufs, gekappt), Solcast ``solcast_mittag_kwh`` (per Satellit nachgeführt), SFML
-     ``sfml_mittag_kwh``. Ab dem Päckchen erhoben, ältere Tage ``None``.
+     ``sfml_mittag_kwh``. Ab dem Päckchen erhoben, ältere Tage ``None``; ein eedc-Stand ≤ 0 ist ``None`` (N-800).
    * ``abend`` — die eingefrorenen Abendstände: OpenMeteo ``pv_prognose_final_kwh`` (Fallback
      ``pv_prognose_kwh``, roh und **ungekappt**), eedc ``pv_prognose_eedc_final_kwh`` (seit N-782),
      Solcast ``solcast_prognose_kwh`` (letzter Schreiber, tagsüber per Satellit nachgeführt),
@@ -87,9 +87,12 @@ def prognosen_zum_zeitpunkt(tz: TagesZusammenfassung, zeitpunkt: str) -> TagesPr
     Jeder Wert, der nicht ``"abend"`` oder ``"mittag"`` ist, gilt als Day-Ahead (der Standard der Route).
     """
     if zeitpunkt == "mittag":
+        # N-800: ein gespeicherter eedc-Mittagsstand ≤ 0 ist «nicht erhoben» (Regel des Abendstands, Σ ≤ 0 = keine
+        # Daten) — heilt Bestandszeilen, in denen ein später erster Lauf «IST bisher 0 + Rest 0» festgehalten hat.
+        eedc_mittag = tz.pv_prognose_eedc_mittag_kwh
         return TagesPrognosen(
             openmeteo_kwh=tz.pv_prognose_om_mittag_kwh,
-            eedc_kwh=tz.pv_prognose_eedc_mittag_kwh,
+            eedc_kwh=eedc_mittag if eedc_mittag is not None and eedc_mittag > 0 else None,
             solcast_kwh=tz.solcast_mittag_kwh,
             sfml_kwh=tz.sfml_mittag_kwh,
         )

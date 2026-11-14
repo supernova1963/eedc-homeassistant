@@ -15,6 +15,14 @@
 
 **Hilfe und Daten-Checker lesen sich wieder glatt.** Code im Fließtext (etwa `?doc=was-ist-neu` oben auf dieser Seite) steht wieder in der Zeile, statt als eigener Absatz auszubrechen — in der Hilfe, den Handbüchern, der Hilfe im Einrichtungs-Assistenten und im Lösungsweg-Fenster. Vier Befunde des Daten-Checkers und der Hinweis zu „Strom Heizbetrieb“ usw. in der Datenquellen-Zuordnung zeigen keine Sternchen mehr.
 
+**Prognose-Genauigkeit: der Mittagsstand ist ein Mittagsstand.** Den Zeitpunkt „Mittag“ hält eedc nur noch zwischen 12 und 14 Uhr fest. Lief eedc über Mittag nicht, etwa weil Home Assistant aus war, bleibt der Tag „nicht erhoben“ – bisher stand dort der Stand vom Nachmittag oder Abend, für eedc auch 0,0 kWh. Ein schon gespeicherter eedc-Mittagsstand von 0 kWh zeigt „—“. → [Prognosen: Genauigkeits-Tracking](HANDBUCH_PROGNOSEN.md#6-genauigkeits-tracking-mae--bias)
+
+**E-Mobilität am Tag: PV-Anteil höchstens 100 %.** Ist die PV-Ladung eines Tages etwas größer als die Ladung – zwei Zähler mit unterschiedlicher Auflösung –, zeigte *Cockpit → Tag* unter „PV-Anteil (Heim)“ Werte wie 140 %, und die Wallbox-Karte „Heute“ zeigte keinen PV-Anteil. Beide zeigen dann jetzt 100 %. → [Bedienung: Wallbox](HANDBUCH_BEDIENUNG.md#36-wallbox)
+
+**Daten-Checker „Quellen-Konflikte“ zählt nur die eigene Anlage.** Mit mehreren Anlagen zählte der Hinweis bei Anlage 1 auch Konflikte der Anlagen 10 bis 19 mit, ebenso bei den Geräten.
+
+**Backup: keine Zugangsdaten der Cloud-Importe in der Datei.** „Backup als JSON herunterladen“ lässt Benutzername, Passwort und Schlüssel der Cloud-Importe jetzt weg – der Restore hat sie nie übernommen; die Verbindungen richtest du nach dem Restore wie bisher neu ein. Der Hinweis unter dem Knopf nennt jetzt auch, dass die Datei mit der Datenquellen-Zuordnung den Solcast-API-Schlüssel enthält. → [Einstellungen: Backup](HANDBUCH_EINSTELLUNGEN.md#83-backup)
+
 ---
 
 ## v4.3.0 — 11. November 2026

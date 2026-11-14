@@ -1022,7 +1022,8 @@ Selektor, die Kacheln wechseln mit):
   PV-Ladezähler, etwa beim SMA eCharger), steht oben groß der **PV-Anteil heute** („67 %") mit der Herleitung
   („9,8 kWh PV ÷ 14,7 kWh") — beide Zahlen aus den Tageswerten dieser Wallbox, nichts geschätzt. Darunter Ladung heute
   (Tageswert aus dem Zähler, ohne ihn aus der Live-Leistung — derselbe Wert wie im Energiefluss) und PV-Ladung heute „(Anlage)". Fehlt eine der
-  beiden Mengen oder ist der PV-Wert größer als die Ladung (Zähler-Drift), heißt die Karte „Heute" und hat keine Kopfzahl.
+  beiden Mengen, heißt die Karte „Heute" und hat keine Kopfzahl. Ist der PV-Wert größer als die Ladung (zwei Zähler mit
+  unterschiedlicher Auflösung), steht dort 100 %.
   evcc liefert keinen PV-Ladezähler — seinen Solaranteil zeigt eedc nicht. Misst die Wallbox „Heim: PV" und „Heim: Netz"
   getrennt, aber keinen Gesamtzähler, gibt es keinen Tageswert der Wallbox und damit keine Kopfzahl.
 - **„Betrieb heute":** wie viele Stunden die Wallbox heute **geladen** hat, **verbunden** war, **gewartet** hat oder **fertig**

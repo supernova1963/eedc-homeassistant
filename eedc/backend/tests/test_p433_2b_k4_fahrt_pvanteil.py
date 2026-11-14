@@ -105,10 +105,11 @@ def test_spiegel_folgt_der_counter_map_quellen_ha_ja_felder_allein_nein():
 
 @pytest.mark.parametrize("pv, ladung, soll", [
     (9.8, 14.7, 67), (0.0, 5.0, 0), (5.0, 5.0, 100), (None, 5.0, None), (1.0, None, None),
-    (1.0, 0.0, None), (1.0, -2.0, None), (6.0, 5.0, None), (-0.5, 5.0, None),
+    (1.0, 0.0, None), (1.0, -2.0, None), (6.0, 5.0, 100), (5.014, 5.0, 100), (98.078, 0.4, 100), (-0.5, 5.0, None),
 ])
 def test_pv_anteil_gemessen_prozent(pv, ladung, soll):
-    assert pv_anteil_prozent(pv, ladung, stellen=0, nur_gemessen=True) == soll
+    """N-801 (Gernot 14.11.2026): PV-Teil ≥ Ladung ist 100 % — keine Toleranz, kein Leerwert (hebt E-K4-5 auf)."""
+    assert pv_anteil_prozent(pv, ladung, stellen=0, gedeckelt=True) == soll
 
 
 async def test_pv_anteil_gemessen_gleich_ist_pv_ladeanteil_auf_denselben_mengen(db, monkeypatch):
@@ -124,7 +125,7 @@ async def test_pv_anteil_gemessen_gleich_ist_pv_ladeanteil_auf_denselben_mengen(
             return _f
         monkeypatch.setattr(ableitungen, "lade_monats_fakten", _fakten)
         ist = await ableitungen.ist_pv_ladeanteil_prozent(db, 1)
-        assert pv_anteil_prozent(pv, ladung, stellen=0, nur_gemessen=True) == round(ist), (pv, ladung, ist)
+        assert pv_anteil_prozent(pv, ladung, stellen=0, gedeckelt=True) == round(ist), (pv, ladung, ist)
 
 
 # ═══ 3 · Fahrt heute (K4-2) ═══════════════════════════════════════════════════
@@ -220,11 +221,12 @@ async def test_kopfzahl_nur_gemessen_geschaetzter_pv_zaehler_traegt_keine(db):
     assert (z.ladung_kwh, z.ladung_pv_kwh, z.pv_anteil_prozent) == (14.7, None, None)
 
 
-async def test_kopfzahl_pv_groesser_ladung_keine(db):
+async def test_kopfzahl_pv_groesser_ladung_hundert(db):
+    """N-801: PV-Teil > Ladung ⇒ 100 % (bis 14.11.2026 keine Kopfzahl, E-K4-5); die Mengen bleiben, wie geliefert."""
     a, wb, _auto = await _anlage_emob(db)
     await _tz(db, a.id, {f"wallbox_{wb.id}": 8.0})
     z = (await _heute(db, a, _detail({str(wb.id): 9.8})))[wb.id]
-    assert (z.ladung_kwh, z.ladung_pv_kwh, z.pv_anteil_prozent) == (8.0, 9.8, None)
+    assert (z.ladung_kwh, z.ladung_pv_kwh, z.pv_anteil_prozent) == (8.0, 9.8, 100)
 
 
 async def test_kopfzahl_nie_aus_dem_live_pfad(db, monkeypatch):

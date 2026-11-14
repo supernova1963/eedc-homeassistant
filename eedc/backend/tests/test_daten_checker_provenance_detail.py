@@ -140,3 +140,44 @@ async def test_alte_konflikte_ausserhalb_fenster_ignoriert(db):
 
     e = _konflikt(await _run_check(db, aid))
     assert e.schwere == CheckSeverity.OK.value
+
+
+async def test_n802_fremde_anlage_und_fremdes_geraet_zaehlen_nicht(db):
+    """N-802: der Filter traf `"anlage_id": 1` auch in `{"anlage_id": 10, …}` (ebenso `"investition_id": 1` in 10–19).
+    Anlage 1 mit Gerät 1 und Anlage 10 mit Gerät 10, Konflikte nur bei Anlage 10 → Anlage 1 meldet «keine Konflikte»;
+    mit einem eigenen Konflikt zählt sie genau den einen. Die Schlüssel wie `services/provenance.py::_row_pk_json`."""
+    import json
+
+    from backend.services.provenance import _NATURAL_KEYS
+
+    db.add(Anlage(id=1, anlagenname="Eins", leistung_kwp=10.0, standort_land="DE"))
+    db.add(Anlage(id=10, anlagenname="Zehn", leistung_kwp=10.0, standort_land="DE"))
+    await db.flush()
+    db.add(Investition(id=1, anlage_id=1, typ="speicher", bezeichnung="Speicher Eins"))
+    db.add(Investition(id=10, anlage_id=10, typ="speicher", bezeichnung="Speicher Zehn"))
+    await db.flush()
+
+    def pk(table: str, **werte) -> str:
+        return json.dumps({f: werte.get(f) for f in _NATURAL_KEYS[table]}, default=str)
+
+    fremd = [
+        ("monatsdaten", pk("monatsdaten", anlage_id=10, jahr=2026, monat=4), "einspeisung_kwh"),
+        ("tages_zusammenfassung", pk("tages_zusammenfassung", anlage_id=10, datum="2026-04-02"), "pv_prognose_kwh"),
+        ("investition_monatsdaten", pk("investition_monatsdaten", investition_id=10, jahr=2026, monat=4), "ladung_kwh"),
+    ]
+    for table, pk_json, feld in fremd:
+        for quelle in ("manual:form", "external:ha_statistics"):
+            await _log(db, table=table, pk_json=pk_json, field=feld, source=quelle)
+    await db.commit()
+
+    e = _konflikt(await _run_check(db, 1))
+    assert e.schwere == CheckSeverity.OK.value, e.details
+    e10 = _konflikt(await _run_check(db, 10))
+    assert e10.meldung.startswith("3 Felder"), "die Anlage 10 sieht ihre eigenen drei Konflikte"
+
+    eigen = pk("investition_monatsdaten", investition_id=1, jahr=2026, monat=4)
+    for quelle in ("manual:form", "external:ha_statistics"):
+        await _log(db, table="investition_monatsdaten", pk_json=eigen, field="ladung_kwh", source=quelle)
+    await db.commit()
+    e = _konflikt(await _run_check(db, 1))
+    assert e.meldung.startswith("1 Felder") and "Speicher Eins" in e.details and "Speicher Zehn" not in e.details

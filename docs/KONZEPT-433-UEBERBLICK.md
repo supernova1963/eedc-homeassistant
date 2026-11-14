@@ -137,7 +137,7 @@ Wechsel-Zähler: ja) · **D5** (Standort mitschreiben: ja) · **D6** (Option A a
 Grundlage: Definitions-Blatt §1 (P2) und §2 (Kilometerstand, Gefahren/Fahrverbrauch heute), K2b-Hinweis H4 (Presets ohne
 Oberfläche seit 13.08.2026); Bauplan K4 (intern) mit Entscheiden **E-K4-1** (Katalog für `km_gefahren` und `ladevorgaenge`) ·
 **E-K4-2** (Tag-Detail vor Live) · **E-K4-3** (Preset ersetzt) · **E-K4-4** (erste Kanalzeile zählt 0) · **E-K4-5** (keine
-Kopfzahl bei `pv > ladung`), nach den Halten H1/H2 (Master 28.10.2026).
+Kopfzahl bei `pv > ladung` — aufgehoben 14.11.2026, N-801: `pv ≥ ladung` ergibt 100 %), nach den Halten H1/H2 (Master 28.10.2026).
 
 | Nr. | Entscheid |
 | --- | --- |

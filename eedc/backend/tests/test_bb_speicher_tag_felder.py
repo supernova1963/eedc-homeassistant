@@ -262,7 +262,29 @@ def test_bb2_pv_anteil_feld_bitgleich_zur_alten_client_formel(saat):
         erwartet = _client_pv_anteil(pv, ladung)
         assert _monat(emob_ladung_pv_kwh=pv, emob_ladung_kwh=ladung).emob_pv_anteil_prozent == erwartet
         tag = TagDetailResponse.model_construct(emob_ladung_pv_kwh=pv, emob_ladung_kwh=ladung)
+        # N-801: der Tag ist seitdem gedeckelt — PV-Teil ≥ Ladung ⇒ 100 %, PV < 0 ⇒ keine Aussage.
+        if erwartet is not None and pv < 0:
+            erwartet = None
+        elif erwartet is not None and pv > ladung:
+            erwartet = 100.0
         assert tag.emob_pv_anteil_prozent == erwartet
+
+
+@pytest.mark.parametrize("pv, ladung, soll", [
+    (0.014, 0.01, 100.0),       # 7.6./22.8.2026 Produktiv: 140 % ⇒ 100
+    (98.078, 0.4, 100.0),       # 15.7.2026 Produktiv: 24 519,5 % ⇒ 100 (Herkunft der 98 kWh: N-803, getrennt)
+    (-0.5, 5.0, None),          # negativer PV-Teil bleibt «keine Aussage»
+    (4.0, 10.0, 40.0),          # unter der Ladung unverändert
+    (4.0, 0.0, None),
+])
+def test_n801_tag_pv_anteil_gedeckelt(pv, ladung, soll):
+    """N-801 (Entscheid Gernot 14.11.2026): Kopfkachel «PV-Anteil (Heim)» in *Cockpit → Tag* endet bei 100 % — ohne
+    Toleranz, ohne Leerwert; der Untertitel zeigt weiter die gelieferte PV-Menge (Feld unverändert)."""
+    from backend.api.routes.energie_profil._shared import TagDetailResponse
+
+    tag = TagDetailResponse(datum="2026-07-15", emob_ladung_kwh=ladung, emob_ladung_pv_kwh=pv)
+    assert tag.emob_pv_anteil_prozent == soll
+    assert tag.model_dump()["emob_pv_anteil_prozent"] == soll and tag.emob_ladung_pv_kwh == pv
 
 
 # ═══ Nachlauf BB4: PV-Strings «alle Jahre» aus der Laufzeit-Route (Entscheid Master Option B) ═══

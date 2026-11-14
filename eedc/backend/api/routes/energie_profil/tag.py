@@ -177,7 +177,7 @@ def _betrag(wert: Optional[float]) -> Optional[float]:
 
 def _emob_heute_wallbox(inv_id: str, komp: dict, pv_je_inv: dict) -> EmobHeuteZeile:
     """Die Wallbox-Zeile von ``emob_heute`` (K4-4): Tagesladung, gemessene PV-Ladung und ihr Anteil über die eine
-    Layer-Formel ``pv_anteil_prozent`` (ganze Prozent, nur gemessen) — beide Mengen aus dem Tag-Detail, nie aus dem
+    Layer-Formel ``pv_anteil_prozent`` (ganze Prozent, gedeckelt: PV-Teil ≥ Ladung = 100, N-801) — beide Mengen aus dem Tag-Detail, nie aus dem
     Live-Pfad (Ü5)."""
     from backend.core.berechnungen.pv_anteil_ladung import pv_anteil_prozent
 
@@ -185,7 +185,7 @@ def _emob_heute_wallbox(inv_id: str, komp: dict, pv_je_inv: dict) -> EmobHeuteZe
     pv = pv_je_inv.get(inv_id)
     return EmobHeuteZeile(
         investition_id=int(inv_id), typ="wallbox", ladung_kwh=_gerundet(ladung), ladung_pv_kwh=_gerundet(pv),
-        pv_anteil_prozent=pv_anteil_prozent(pv, ladung, stellen=0, nur_gemessen=True))
+        pv_anteil_prozent=pv_anteil_prozent(pv, ladung, stellen=0, gedeckelt=True))
 
 
 def _emob_heute_eauto(inv_id: str, komp: dict, fahrt: dict, wallbox_deckt: bool) -> EmobHeuteZeile:

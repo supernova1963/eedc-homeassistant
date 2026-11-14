@@ -1138,7 +1138,7 @@ Zum Ausprobieren ohne echte Daten: generiert eine „Demo-Anlage" mit realistisc
 
 Vollständiger **JSON-Export** einer Anlage und **Drag-&-Drop-Restore** — inline im Block (kein separater Assistent):
 
-- **Enthalten:** Anlage-Stammdaten (inkl. MaStR-ID, Versorger), Datenquellen-Zuordnungen, alle Komponenten mit Monatsdaten, Strompreise, PVGIS-Prognosen, Monatsdaten inkl. Wetter und sonstige Positionen.
+- **Enthalten:** Anlage-Stammdaten (inkl. MaStR-ID, Versorger), Datenquellen-Zuordnungen (mit ihnen der Solcast-API-Schlüssel), alle Komponenten mit Monatsdaten, Strompreise, PVGIS-Prognosen, Monatsdaten inkl. Wetter und sonstige Positionen. Die Zugangsdaten der Cloud-Importe sind nicht enthalten.
 - **Restore:** optional „Überschreiben" (sonst wird bei gleichem Namen ein Suffix ergänzt).
 
 > **Nach dem Restore:** Komponenten-IDs ändern sich beim Import — prüfe die Datenquellen-Zuordnungen (und den MQTT-Export) und speichere sie bei Bedarf erneut. Die MQTT-Topic-Abdeckung im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) zeigt sofort, ob deine Publisher noch zu den Topic-Pfaden passen.

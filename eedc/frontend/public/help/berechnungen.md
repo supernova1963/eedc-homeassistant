@@ -4066,15 +4066,19 @@ MBE = Ø  err_rel      # Mean Bias Error — systematischer Bias
 festen **Zeitpunkts** (Query `zeitpunkt`, Standard `day_ahead`; Auswahl in
 `services/prognose_genauigkeit_service.prognosen_zum_zeitpunkt`):
 
-| Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Mittag (first-write ab 12:00) | Abend (eingefrorener Tageswert) |
+| Quelle | Day-Ahead (Σ des first-write-Stundenprofils) | Mittag (first-write 12:00–13:59) | Abend (eingefrorener Tageswert) |
 | --- | --- | --- | --- |
 | eedc | `pv_prognose_stundenprofil` — die angezeigte Kanon-Reihe | `pv_prognose_eedc_mittag_kwh` = `heute_rollend_kwh` (IST bisher + nachgeführter Rest) | `pv_prognose_eedc_final_kwh` (ab N-782, älter NULL) |
 | OpenMeteo | `lern_soll_stundenprofil_kwh` — roh, **gekappt** | `pv_prognose_om_mittag_kwh` = `KanonTag.om_kwh` des Laufs — roh, **gekappt** | `pv_prognose_final_kwh`, Fallback `pv_prognose_kwh` — roh, **ungekappt** |
 | Solcast | `solcast_prognose_stundenprofil` | `solcast_mittag_kwh` (per Satellit nachgeführt) | `solcast_prognose_kwh` (letzter Schreiber, per Satellit nachgeführt) |
 | SFML (nur Wert, keine Kennzahl) | `sfml_prognose_stundenprofil` | `sfml_mittag_kwh` (nur die Live-Sicht schreibt) | `sfml_prognose_kwh` |
 
-**Mittag** ist der Stand des ersten Laufs ab 12:00 lokal (`live_wetter._mittag_einfrieren`, je Spalte first-write): der
-Prefetch läuft alle 45 Minuten und schreibt also bis 12:45, die Live-Sicht schreibt, wenn sie vorher geöffnet wird. Er
+**Mittag** ist der Stand des ersten Laufs im Fenster 12:00 bis vor 14:00 lokal (`live_wetter._mittag_einfrieren`,
+`MITTAG_AB_STUNDE`/`MITTAG_BIS_STUNDE`, je Spalte first-write): der Prefetch läuft alle 45 Minuten und schreibt also bis
+12:45, die Live-Sicht schreibt, wenn sie vorher geöffnet wird. Ein erster Lauf ab 14:00 (Ausfall über Mittag) schreibt nicht —
+der Tag bleibt «nicht erhoben» (N-800). Ein eedc-Stand ≤ 0 gilt wie beim Abendstand als nicht erhoben: er wird nicht
+geschrieben, und ein gespeicherter Wert ≤ 0 liest sich als `None` (`heute_rollend_kwh` ist ohne IST-Stunden nach
+Sonnenuntergang 0,0). Er
 vergleicht, was die Quellen um die Tagesmitte wissen — eedc das gemessene IST des Vormittags plus den nachgeführten Rest, Solcast
 seine Satelliten-Nachführung, OpenMeteo den Modelllauf. Rückwärts leer («nicht erhoben»).
 
@@ -5216,7 +5220,7 @@ seine Hülle); Schreiber `services/kanal/schreiber.py` (Kern `_schreibe_betriebs
 *Kopfzahl der Wallbox-Karte «Heute» (P-433-2b K4) — eine Quote zweier gemessener Mengen, keine Schätzung.*
 
 ```
-pv_anteil_prozent = round( ladung_pv_kwh ÷ ladung_kwh × 100 )      (core/berechnungen/pv_anteil_ladung.pv_anteil_prozent, stellen=0, nur_gemessen)
+pv_anteil_prozent = round( min(ladung_pv_kwh, ladung_kwh) ÷ ladung_kwh × 100 )   (core/berechnungen/pv_anteil_ladung.pv_anteil_prozent, stellen=0, gedeckelt)
 ```
 
 **Eingänge, beide aus den Tageswerten derselben Wallbox (ein Pfad, Ü5):** `ladung_kwh` = Tageswert `wallbox_<id>` aus
@@ -5227,9 +5231,11 @@ Kopfzahl. Nie der Live-Tageswert (`heute_kwh_pro_komponente`) gegen das Tag-Deta
 Leistungspfad (Live-Leistung ohne Zähler), trägt er das Vorzeichen der Senke (negativ); eedc nimmt für „Ladung heute" (Wallbox
 und E-Auto) den **Betrag** — dieselbe Regel wie die Tage-Ansicht.
 
-**Kein Wert** („keine Aussage", nie 0 %): ohne eine der beiden Mengen, bei `ladung_kwh ≤ 0`, bei negativem PV-Wert und bei
-`ladung_pv_kwh > ladung_kwh` (Zähler-Drift; keine Kopfzahl, kein eigener Checker-Hinweis — der Rücksprung-Checker deckt die
-Zähler). Die Herleitung „9,8 kWh PV ÷ 14,7 kWh" steht aus denselben zwei Zahlen darunter.
+**Kein Wert** („keine Aussage", nie 0 %): ohne eine der beiden Mengen, bei `ladung_kwh ≤ 0` und bei negativem PV-Wert.
+**`ladung_pv_kwh ≥ ladung_kwh` ergibt 100 %** — ohne Toleranz und ohne Leerwert (N-801, Entscheid Gernot 14.11.2026; bis dahin
+«Zähler-Drift ⇒ keine Kopfzahl», E-K4-5, aufgehoben): PV-Ladung und Ladung kommen aus zwei Zählern, der Überhang ist ihre
+Auflösung (gemessen an der Produktiv-Anlage: 1–4 Wh bei 0,01–0,03 kWh Ladung an fünf von 156 Ladetagen), und eedc zweifelt den
+gelieferten Wert nicht an. Die Herleitung „9,8 kWh PV ÷ 14,7 kWh" steht aus denselben zwei (gelieferten) Zahlen darunter.
 
 **Abgrenzung.** `leite_pv_anteil_ab` (§3.4) **schätzt** den PV-Teil einer Ladung aus Netzbezug und Einspeisung je Stunde
 (Einspeise-Deckung) und bleibt der Weg für Wallboxen ohne PV-Ladezähler; die Kopfzahl zeigt ihn nicht. Dieselbe Quote
@@ -5272,7 +5278,7 @@ Leistungspfad (nur, wenn der Zählerpfad keinen Schlüssel trägt)
               (Zeilen wie /stunden; N-555 beim Lesen: steht eine Wallbox-Serie, fällt die E-Auto-Serie)
 emob_ladung_kwh        = der gewählte Pfad, nur > 0 (sonst kein Wert — der Tag ohne Ladung zeigt keinen Block)
 emob_ladung_quelle     = zaehler | leistung
-emob_pv_anteil_prozent = emob_ladung_pv_kwh ÷ emob_ladung_kwh × 100   (pv_anteil_ladung.pv_anteil_prozent, ungerundet)
+emob_pv_anteil_prozent = min(emob_ladung_pv_kwh, emob_ladung_kwh) ÷ emob_ladung_kwh × 100   (pv_anteil_prozent, ungerundet, gedeckelt)
 emob_km                = Σ km_heute der privaten E-Autos (Fahrt heute)
 ```
 
@@ -5283,6 +5289,12 @@ Wallbox-Zähler, aber ohne Leistungspfad-Komponente, fehlte der Block (Produktiv
 *PV-Anteil heute*, *Fahrt heute*) bleiben **je Gerät** und zeigen auch Dienstgeräte. Phase `tag.py::_emob_ladung_tag`, Zeilen über
 `serien.py::zeilen_der_stunden_sicht`; Monat und Jahr tragen `emob_pv_anteil_prozent` als `computed_field` an
 `AktuellerMonatResponse`. Proben: `test_bb_speicher_tag_felder.py`, Vitest `bbSpeicherBackendFelder.test.tsx`.
+
+**Gedeckelt bei 100 % (N-801, 14.11.2026)** — dieselbe Regel wie [PV-Anteil heute](#pv-anteil-heute): PV-Ladung (Tagesdetail,
+PV-Ladezähler) und Ladung (Komponenten-Zähler) sind zwei Zähler; ein PV-Teil ≥ Ladung ist 100 %, ein negativer PV-Teil keine
+Aussage. Der Untertitel «… kWh PV» zeigt weiter die gelieferte PV-Menge. Monat und Jahr (`AktuellerMonatResponse`, Cockpit-
+Übersicht, Komponenten-Zeitreihe, Wallbox-Dashboard) bleiben ungedeckelt — dort ist an der Produktiv-Box und den Kopien
+kanal/r27/r28 kein Wert über 100 % gemessen. Probe: `test_bb_speicher_tag_felder.py::test_n801_tag_pv_anteil_gedeckelt`.
 
 ### Monats-Rollup (rollup_month)
 

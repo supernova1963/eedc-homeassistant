@@ -23,6 +23,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   einem gefallenen Zählerstand, zu einem Zähler auf „nicht aktiv“ und zu Zählerstand-Sensoren ohne Langzeitstatistik
   sowie der Hinweis zu „Strom Heizbetrieb“, „Strom Kühlbetrieb“ usw. in der Datenquellen-Zuordnung zeigten
   Hervorhebungen als „**…**“.
+- **Prognose-Genauigkeit, Zeitpunkt „Mittag“: kein Abend-Stand mehr als Mittag** — lief eedc über Mittag nicht (etwa weil
+  Home Assistant aus war), hielt der erste Lauf am Nachmittag oder Abend seinen Stand als „Mittag“ fest, für eedc dann auch
+  0,0 kWh. eedc hält den Mittagsstand jetzt nur zwischen 12 und 14 Uhr fest; danach bleibt der Tag „nicht erhoben“. Ein schon
+  gespeicherter eedc-Mittagsstand von 0 kWh zeigt „—“ statt 0,0.
+- **E-Mobilität am Tag: PV-Anteil höchstens 100 %** — war die PV-Ladung eines Tages etwas größer als die Ladung (zwei
+  Zähler mit unterschiedlicher Auflösung), zeigte *Cockpit → Tag* im Block „E-Mobilität“ unter „PV-Anteil (Heim)“ Werte
+  wie 140 %, und die Wallbox-Karte „Heute“ zeigte gar keinen PV-Anteil. Beide zeigen dann jetzt 100 %.
+- **Daten-Checker „Quellen-Konflikte“: nur noch die eigene Anlage** — mit mehreren Anlagen zählte der Hinweis bei Anlage 1
+  auch Konflikte der Anlagen 10 bis 19 mit (ebenso bei den Geräten), aus „Keine Quellen-Konflikte“ konnte so ein Hinweis
+  werden.
+- **Backup ohne Zugangsdaten der Cloud-Importe** — „Backup als JSON herunterladen“ schrieb Benutzername, Passwort und
+  Schlüssel der Cloud-Importe (etwa Viessmann, Fronius, EcoFlow) in die Datei, obwohl der Restore sie nicht übernimmt. Sie
+  fehlen jetzt in der Datei. Der Hinweis unter dem Knopf und das Handbuch nennen jetzt, dass die Datei mit der
+  Datenquellen-Zuordnung auch den Solcast-API-Schlüssel enthält.
 
 ## [4.3.0] - 2026-11-11
 

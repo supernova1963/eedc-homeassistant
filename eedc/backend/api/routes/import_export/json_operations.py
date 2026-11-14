@@ -28,6 +28,7 @@ from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 
 from backend.services.provenance import seed_provenance
+from backend.services.cloud_import.quellen import CONFIG_KEY as CLOUD_IMPORT_KEY
 
 from .schemas import JSONImportResult
 from .helpers import _parse_date, _parse_datetime
@@ -201,11 +202,23 @@ InvestitionExport.model_rebuild()
 # =============================================================================
 
 def _sanitize_connector_config(config: dict | None) -> dict | None:
-    """Entfernt Passwort aus connector_config für den Export."""
+    """Entfernt Zugangsdaten aus connector_config für den Export.
+
+    Das Passwort oberster Ebene (Geräte-Connector) und je Cloud-Import-Quelle die ``credentials`` (Viessmann-, Fronius-,
+    EcoFlow-Zugang; Liste oder Alt-Form als ein Objekt, ``services/cloud_import/quellen.py``) — der Rest des Eintrags
+    bleibt. Der Import setzt ``connector_config`` ohnehin auf ``None`` (Connector nach dem Import neu einrichten).
+    """
     if not config:
         return None
     sanitized = dict(config)
     sanitized.pop("password", None)
+    cloud = sanitized.get(CLOUD_IMPORT_KEY)
+    if isinstance(cloud, list):
+        sanitized[CLOUD_IMPORT_KEY] = [
+            {k: v for k, v in e.items() if k != "credentials"} if isinstance(e, dict) else e for e in cloud
+        ]
+    elif isinstance(cloud, dict):
+        sanitized[CLOUD_IMPORT_KEY] = {k: v for k, v in cloud.items() if k != "credentials"}
     # Snapshots enthalten keine sensiblen Daten, werden mitexportiert
     return sanitized
 
