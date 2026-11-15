@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** November 2026 (v4.3.0)
+> **Stand:** November 2026 (v4.3.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,9 +9,9 @@
 
 ---
 
-## Unveröffentlicht
+## v4.3.1 — 15. November 2026
 
-**Diagnose-Paket: eine Datei mit den Daten deiner Anlage.** Bitten wir dich in unserer Antwort im Forum oder auf GitHub um das Diagnose-Paket, stellt „Diagnose-Paket“ im Kopf des Daten-Checkers einen Auszug der Daten dieser Anlage als ZIP-Datei zusammen — Geräte, Tarife, Zuordnungen, Monats-, Tages- und Stundenwerte, Notizen, Protokolle und Prüfergebnisse, dazu ein lesender Abgleich mit Home Assistant. Das Fenster zeigt vorher mit den Zahlen dieses Pakets, was drin ist, und was nicht: keine Zugangsdaten, keine Straße, keine Fotos. „Herunterladen“ speichert die Datei; solange der Download läuft, dreht sich im Knopf ein Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen, und „Schließen“ schließt es; du schickst sie per E-Mail an die Adresse aus unserer Antwort, über etwa 10 MB als Freigabe-Link eines Cloud-Speichers. Das Fenster sagt, dass eedc die Datei nicht verschickt und sie nicht verschlüsselt ist. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu. Den Text zum Kopieren gibt es nicht mehr. Auf dem iPhone in der Home-Assistant-App öffnet ein Tipp auf den Dateinamen nach dem Herunterladen das Teilen-Blatt („In Dateien sichern“ oder gleich per Mail). → [Daten-Checker: Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)
+**Diagnose-Paket: eine Datei mit den Daten deiner Anlage.** Bitten wir dich in unserer Antwort im Forum oder auf GitHub um das Diagnose-Paket, stellt „Diagnose-Paket“ im Kopf des Daten-Checkers einen Auszug der Daten dieser Anlage als ZIP-Datei zusammen — Geräte, Tarife, Zuordnungen, Monats-, Tages- und Stundenwerte, Notizen, Protokolle und Prüfergebnisse, dazu ein lesender Abgleich mit Home Assistant. Das Fenster zeigt vorher mit den Zahlen dieses Pakets, was drin ist, und was nicht: keine Zugangsdaten, keine Straße, keine Fotos. „Herunterladen“ speichert die Datei: im Knopf dreht sich ein Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen und blendet „Schließen“ ein. Die Datei schickst du per E-Mail an die Adresse aus unserer Antwort, über etwa 10 MB als Freigabe-Link eines Cloud-Speichers. Das Fenster sagt, dass eedc die Datei nicht verschickt und sie nicht verschlüsselt ist. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu. Den Text zum Kopieren gibt es nicht mehr. Auf dem iPhone in der Home-Assistant-App öffnet ein Tipp auf den Dateinamen nach dem Herunterladen das Teilen-Blatt („In Dateien sichern“ oder gleich per Mail). → [Daten-Checker: Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)
 
 **Daten-Checker: Balkonkraftwerk-Schritte nur mit Balkonkraftwerk.** Beim „Verdacht auf PV-Doppelerfassung“ nennen die Details die Ursache am Balkonkraftwerk und die Prüfschritte dazu nur noch, wenn deine Anlage eines hat. Die Prüfung schaut auf genau die letzten 30 Tage, wie es im Text steht.
 

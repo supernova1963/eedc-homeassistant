@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-11-15
+
+Das Diagnose-Paket ist jetzt eine ZIP-Datei mit einem Auszug der Daten deiner Anlage: Das Fenster zeigt vorher, was drin ist und was nicht, und bestätigt den Download. Dazu Korrekturen am Daten-Checker (Balkonkraftwerk-Schritte, Quellen-Konflikte), an der Prognose-Genauigkeit, am PV-Anteil der E-Mobilität, am Monatsformular, an der Hilfe und am Backup.
+
 ### Changed
 
 - **Daten-Checker: das Diagnose-Paket ist jetzt eine Datei mit den Daten der Anlage** — „Diagnose-Paket“ im Kopf des
@@ -16,15 +20,13 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Monats-, Tages- und Stundenwerte, Notizen, Protokolle und die Prüfergebnisse, dazu ein Abgleich der aus Home Assistant
   gespiegelten Werte mit Home Assistant (nur lesend, eedc ändert dabei nichts). Das Fenster zeigt vorher, was drin ist —
   mit den Zahlen dieses Pakets — und was nicht: keine Zugangsdaten, keine Straße, keine Fotos, keine Infothek, keine
-  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei; solange der Download
-  läuft, dreht sich im Knopf ein Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen, und „Schließen“
-  schließt es; du schickst sie, wenn wir
-  dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser Antwort, über etwa
-  10 MB als Freigabe-Link eines Cloud-Speichers. Das Fenster sagt, dass eedc die Datei nicht verschickt und sie nicht
-  verschlüsselt ist. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu.
-  Der Text zum Kopieren entfällt. In der Home-Assistant-App auf iPhone und iPad lädt eedc die Datei so, dass sie sich
-  über das Teilen-Blatt sichern oder verschicken lässt. Die Lösungswege des Daten-Checkers und die Handbücher sagen es
-  so.
+  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei: im Knopf dreht sich ein
+  Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen und blendet „Schließen“ ein. Du schickst die
+  Datei, wenn wir dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser
+  Antwort, über etwa 10 MB als Freigabe-Link eines Cloud-Speichers; eedc selbst verschickt nichts, und die Datei ist
+  nicht verschlüsselt. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu. Der Text zum Kopieren
+  entfällt. In der Home-Assistant-App auf iPhone und iPad lädt eedc die Datei so, dass sie sich über das Teilen-Blatt
+  sichern oder verschicken lässt. Die Lösungswege des Daten-Checkers und die Handbücher sagen es so.
 
 ### Fixed
 
