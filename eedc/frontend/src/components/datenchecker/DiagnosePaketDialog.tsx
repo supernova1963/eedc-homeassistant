@@ -77,6 +77,9 @@ function Versand({ paket }: { paket: DiagnosePaketBereit }) {
           ? 'Schick die Datei per E-Mail an die Adresse aus unserer Antwort — nicht öffentlich posten.'
           : 'Die Datei ist zu groß für eine E-Mail: lege sie in einen Cloud-Speicher (etwa Dropbox oder Google Drive) und schick den Freigabe-Link an die Adresse aus unserer Antwort — nicht öffentlich posten.'}
       </p>
+      <p data-testid="versand-hinweis">
+        eedc verschickt die Datei nicht — den Weg zu uns wählst du. Die Datei ist nicht verschlüsselt.
+      </p>
     </div>
   )
 }

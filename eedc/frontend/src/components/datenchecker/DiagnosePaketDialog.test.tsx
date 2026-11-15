@@ -27,6 +27,8 @@ vi.mock('../../api/datenChecker', async (importOriginal) => ({
 }))
 
 const URL_A = './api/system/diagnose-paket/7?marke=m-a'
+/** Zusatz Versand-Hinweis (Entscheid Gernot 15.11.2026): steht bei beiden Versandwegen. */
+const VERSAND_HINWEIS = 'eedc verschickt die Datei nicht — den Weg zu uns wählst du. Die Datei ist nicht verschlüsselt.'
 
 function paket(teil: Partial<DiagnosePaketBereit> = {}): DiagnosePaketBereit {
   return {
@@ -104,12 +106,14 @@ describe('DiagnosePaketDialog', () => {
     const { unmount } = render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
     expect((await screen.findByTestId('versand-satz')).textContent).toBe(
       'Schick die Datei per E-Mail an die Adresse aus unserer Antwort — nicht öffentlich posten.')
+    expect(screen.getByTestId('versand-hinweis').textContent).toBe(VERSAND_HINWEIS)
     unmount()
     bereitstellen.mockResolvedValue(paket({ versandweg: 'freigabe_link', bytes: 12_000_000, megabyte: 12 }))
     render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
     expect((await screen.findByTestId('versand-satz')).textContent).toBe(
       'Die Datei ist zu groß für eine E-Mail: lege sie in einen Cloud-Speicher (etwa Dropbox oder Google Drive) und '
       + 'schick den Freigabe-Link an die Adresse aus unserer Antwort — nicht öffentlich posten.')
+    expect(screen.getByTestId('versand-hinweis').textContent).toBe(VERSAND_HINWEIS)
     expect(screen.getByText('Größe: 12,0 MB')).toBeTruthy()
   })
 

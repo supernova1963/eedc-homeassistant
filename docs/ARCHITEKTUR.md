@@ -910,7 +910,9 @@ Routen `api/routes/daten_checker.py::diagnose_paket_bereitstellen` / `::diagnose
   Marke, nie Rohtext.
 - `lage.py`: Kopf (Version, Betriebsart, HA, Zeitzone, Start), Daten-Checker (Serialisierung der Route,
   `services/daten_checker/antwort.py::checker_antwort`), Zuordnungen (`services/datenquellen_felder.py::zuordnungen_lesen`
-  ohne Festschreiben), Zeitpläne, Log-Puffer (bereinigt, ohne `sqlalchemy.*`), Einstellungs-Allowlist; je Teil eigene
+  ohne Festschreiben), Zeitpläne, Log-Puffer (bereinigt, nur die Logger der Positivliste `backend`, `uvicorn`,
+  `apscheduler` — `aiosqlite`, `sqlalchemy.*` und andere Fremd-Logger tragen bei Log-Stufe debug Zellwerte),
+  Einstellungs-Allowlist; je Teil eigene
   Sitzung, Zeitgrenze nur um einen solchen Teil. `ha_abgleich.py`: je Spiegel-Abschnitt `kanal/konsistenz.py::
   pruefe_abschnitt_lesend` (der Nachtlauf schreibt, das Paket nie), bei Abweichung HAs Stundenzeilen ab der ersten
   abweichenden Stunde (≤ 744).

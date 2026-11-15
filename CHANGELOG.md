@@ -18,7 +18,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   mit den Zahlen dieses Pakets — und was nicht: keine Zugangsdaten, keine Straße, keine Fotos, keine Infothek, keine
   Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei; du schickst sie, wenn wir
   dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser Antwort, über etwa
-  10 MB als Freigabe-Link eines Cloud-Speichers. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu.
+  10 MB als Freigabe-Link eines Cloud-Speichers. Das Fenster sagt, dass eedc die Datei nicht verschickt und sie nicht
+  verschlüsselt ist. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu.
   Der Text zum Kopieren entfällt. In der Home-Assistant-App auf iPhone und iPad lädt eedc die Datei so, dass sie sich
   über das Teilen-Blatt sichern oder verschicken lässt. Die Lösungswege des Daten-Checkers und die Handbücher sagen es
   so.

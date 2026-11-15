@@ -7,7 +7,8 @@ JSON; ``connector_config``/``sensor_mapping``/``parameter``/``details_json``/``s
 Allowlist und Geheimnissen; Provenance mit ``__row__``, ``{"id": …}`` und Anlage 10. Zeilen werden roh per ``sqlite3``
 geschrieben (die Speicherform steht so, wie sie in der Datei liegt). Keine Probe liest die Uhr.
 
-Schwesterdateien: test_diagnose_paket.py, test_diagnose_paket_register.py, test_diagnose_paket_ha_abgleich.py.
+Dazu F4 (bleibender Text und Freitext-Spalten ohne Zugangsdaten, ``bereinige_zugang``) und F5 (Stammdaten-Präfixe ohne Wert) der Korrektur
+nach der Nachmessung. Schwesterdateien: test_diagnose_paket.py, test_diagnose_paket_register.py, test_diagnose_paket_ha_abgleich.py.
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import backend.models as _models
 from backend.core.database import Base
 from backend.services.diagnose_paket import auszug as az
+from backend.services.diagnose_paket import bereinigung
 from backend.services.diagnose_paket import register as reg
 from backend.services.diagnose_paket.bereinigung import MARKE_RE, Sammler, filtere_json
 
@@ -96,7 +98,7 @@ def _sensor_mapping(a: int) -> str:
         "investitionen": {str(10 + a): {"felder": {"x": {"strategie": "sensor", "sensor_id": "sensor.x"}},
                                         "live": {"betriebsmodus": "select.wp_modus"}}},
         "quellen": {"basis_energy_pv": {"quelle": "ha_connector", "entity_id": "sensor.pv"}},
-        "invertieren": ["basis_energy_pv"], "historie_hinweis": {"felder": [{"id": "f", "label": "Feld"}], "seit": "2026-01-01"},
+        "invertieren": {"basis_energy_pv": True}, "historie_hinweis": {"felder": [{"id": "f", "label": "Feld"}], "seit": "2026-01-01"},
         "live_sensors": {"pv": "sensor.pv_w"},
         "solcast_config": {"modus": "api", "api_key": f"{SPRENG}-key", "resource_ids": [f"{SPRENG}-res"]},
         "seriennummer": FREMDE_ZAHL, "aktiv": True, "leer": None,
@@ -159,7 +161,7 @@ def _ketten_zeilen(con: sqlite3.Connection, a: int) -> None:
         "korrekturprofile": dict(bin_definition='{"wetterklassen": ["klar", "bewölkt"], "variante": "v2"}', faktoren=5),
         "kanal_nachfuellung": dict(ergebnis='{"grund": "fertig", "zeilen": 3}'),
         "emob_ladebloecke": dict(stunden='[{"beginn": "2026-10-03 10:00", "kwh": 1.5}]'),
-        "pvgis_prognosen": dict(latitude=50.12348, longitude=8.9, monatswerte="[1.0, 2.0]"),
+        "pvgis_prognosen": dict(latitude=50.12348, longitude=8.9, monatswerte='[{"monat": 10, "e_m": 120.5}]'),
         "data_provenance_log": dict(row_pk_json=json.dumps({"anlage_id": a, "jahr": 2026, "monat": 10}),
                                     writer=f"{SPRENG}@example.org", input_hash="abc"),
         "kanal_statistik": dict(start_ts=1_700_000_000 + a, familie="spiegel"),
@@ -470,6 +472,88 @@ def test_allowlist_fremde_zahl_nur_in_parameter(voll_datei_db, monkeypatch):
     monkeypatch.setitem(reg.REGISTER, "anlagen", replace(reg.REGISTER["anlagen"], spalten={
         **reg.REGISTER["anlagen"].spalten, "connector_config": replace(cs, fremde_zahlen_bleiben=True)}))
     assert str(FREMDE_ZAHL) in "\n".join(texte(auszug_zip(voll_datei_db.pfad)[0]).values())
+
+
+#: F4: Zugangsdaten im Freitext unter benannten Text-Schlüsseln und in Freitext-Spalten (Nachmessung ``spreng1.py``).
+F4_SAAT = {
+    "url": f"https://u:{SPRENG}-url@h/pfad", "zugang": f"user:{SPRENG}-zg@host.local",
+    "passwort": f"Portal https://portal.example.org/anlage Passwort: {SPRENG}-pw zwei", "notiz": f"Portal-Passwort: {SPRENG}-notiz",
+    "mqtt": f"token={SPRENG}-mqtt", "bez": f"Bearer {SPRENG}-bez"}
+#: Gewöhnliche URL und E-Mail-Adresse im Freitext bleiben stehen (Vorgabe Gernot 15.11.2026).
+F4_BLEIBT = {"label": "kontakt melder@example.org", "kosten": "Rechnung von service@example.org, https://portal.example.org/r/1"}
+
+
+def _f4_saen(con: sqlite3.Connection) -> None:
+    sm = json.loads(_sensor_mapping(1))
+    sm["basis"]["pv"]["sensor_id"] = F4_SAAT["url"]
+    sm["historie_hinweis"]["felder"][0]["label"] = F4_BLEIBT["label"]
+    cc = json.loads(_connector_config())
+    cc["last_fetch"] = F4_SAAT["zugang"]
+    par = json.loads(_parameter())
+    par["beschreibung"] = F4_SAAT["passwort"]
+    con.execute("UPDATE anlagen SET sensor_mapping = ?, connector_config = ? WHERE id = 1", (json.dumps(sm), json.dumps(cc)))
+    con.execute("UPDATE investitionen SET parameter = ? WHERE id = 11", (json.dumps(par),))
+    con.execute("UPDATE monatsdaten SET notizen = ?, sonderkosten_beschreibung = ? WHERE anlage_id = 1",
+                (F4_SAAT["notiz"], F4_BLEIBT["kosten"]))
+    con.execute("UPDATE mqtt_gateway_mappings SET beschreibung = ? WHERE anlage_id = 1", (F4_SAAT["mqtt"],))
+    con.execute("UPDATE investition_monatsdaten SET verbrauch_daten = ? WHERE investition_id = 11",
+                (json.dumps({"ladung_kwh": 1.5, "sonstige_positionen": [{"bezeichnung": F4_SAAT["bez"]}]}),))
+    con.commit()
+
+
+def test_f4_bleibender_text_ohne_zugangsdaten(voll_datei_db, monkeypatch):
+    """F4 (enger, Vorgabe Gernot 15.11.2026): bleibender Freitext — Text-Blätter unter benannten Schlüsseln jeder JSON-Spalte
+    und die Freitext-Spalten des Registers — läuft durch ``bereinige_zugang``: Token, Passwörter, Benutzer:Passwort vor dem
+    ``@`` gehen; gewöhnliche URLs und E-Mail-Adressen bleiben stehen. ``text_bereinigt`` zählt die Zellen.
+    Zähne: ``bereinige_zugang`` aus ⇒ die Saat steht im Paket."""
+    con = voll_datei_db.roh()
+    _f4_saen(con)
+    con.close()
+    daten, erg = auszug_zip(voll_datei_db.pfad)
+    alles = "\n".join(texte(daten).values())
+    assert SPRENG not in alles
+    assert all(v in alles for v in F4_BLEIBT.values()) and "https://portal.example.org/anlage" in alles
+    for ort in ("anlagen.sensor_mapping", "anlagen.connector_config", "investitionen.parameter",
+                "investition_monatsdaten.verbrauch_daten", "monatsdaten.notizen", "mqtt_gateway_mappings.beschreibung"):
+        assert erg.sammler.text_bereinigt.get(ort) == 1, ort
+    assert "monatsdaten.sonderkosten_beschreibung" not in erg.sammler.text_bereinigt
+    m = mitglieder(daten)
+    an = m["anlagen"]
+    sm = json.loads(an["zeilen"][0][an["spalten"].index("sensor_mapping")])
+    assert sm["basis"]["pv"]["sensor_id"] == "https://<geschwärzt>@h/pfad"
+    assert sm["quellen"]["basis_energy_pv"]["entity_id"] == "sensor.pv"
+    inv = m["investitionen"]
+    assert json.loads(inv["zeilen"][0][inv["spalten"].index("parameter")])["ausrichtung"] == "Süd"
+    monkeypatch.setattr(bereinigung, "bereinige_zugang", lambda t: t)
+    monkeypatch.setattr(az, "bereinige_zugang", lambda t: t)
+    roh = "\n".join(texte(auszug_zip(voll_datei_db.pfad)[0]).values())
+    assert [k for k, v in F4_SAAT.items() if v not in roh] == []
+
+
+def test_f5_stammdaten_praefix_ohne_wert(voll_datei_db, monkeypatch):
+    """F5: in ``investitionen.parameter`` behalten ``stamm_*``, ``ansprechpartner_*``, ``wartung_*`` (außerhalb der Allowlist)
+    keinen Wert, gleich welchen Typs — auch keine JSON-Zahl und keinen Wahrheitswert; eine andere fremde Zahl bleibt (G2).
+    Zähne: Präfixe leer ⇒ die Zahlen stehen im Paket."""
+    zahlen = {"stamm_seriennummer": 4829130007, "ansprechpartner_telefon": 4829130008,
+              "wartung_vertragsnummer": 4829130009.0}
+    par = {**json.loads(_parameter()), **zahlen, "stamm_anmeldung_netzbetreiber": True, "stamm_leer": None}
+    con = voll_datei_db.roh()
+    con.execute("UPDATE investitionen SET parameter = ? WHERE id = 11", (json.dumps(par),))
+    con.commit()
+    con.close()
+    daten, erg = auszug_zip(voll_datei_db.pfad)
+    alles = "\n".join(texte(daten).values())
+    assert not any(str(int(z)) in alles for z in zahlen.values()) and str(PARAMETER_ZAHL) in alles
+    inv = mitglieder(daten)["investitionen"]
+    p = json.loads(inv["zeilen"][0][inv["spalten"].index("parameter")])
+    assert (p["stamm_seriennummer"], p["ansprechpartner_telefon"], p["wartung_vertragsnummer"]) == (
+        "⟨ersetzt:zahl:10⟩", "⟨ersetzt:zahl:10⟩", "⟨ersetzt:zahl:12⟩")
+    assert p["stamm_anmeldung_netzbetreiber"] == "⟨ersetzt:bool:4⟩" and p["stamm_leer"] is None
+    assert MARKE_RE.fullmatch(p["stamm_anmeldung_netzbetreiber"])
+    assert set(zahlen) <= erg.sammler.json_unbekannt["investitionen.parameter"]
+    monkeypatch.setattr(bereinigung, "STAMMDATEN_PRAEFIXE", ())
+    alles = "\n".join(texte(auszug_zip(voll_datei_db.pfad)[0]).values())
+    assert all(str(int(z)) in alles for z in zahlen.values())
 
 
 def test_g2_gegenprobe_text_schluessel_laesst_text_durch():

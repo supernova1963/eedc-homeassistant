@@ -8,6 +8,7 @@
   gelöscht — die Android-App ruft die Adresse zweimal (WebView bricht ab, der Download-Manager lädt vollständig, S0). Ein
   Abbruch des Clients ist kein Fehler.
 * Ablauf: Zeitgeber ``loop.call_later`` + Prüfung bei jedem Abruf (Uhr-Naht ``uhr``) + Aufräumen beim Start.
+* Die Marke wird als UTF-8-Bytes verglichen — eine Marke mit Nicht-ASCII-Zeichen ist ungültig (404), kein Fehler (F7).
 """
 
 from __future__ import annotations
@@ -117,7 +118,8 @@ def ersetze(anlage_id: int, pfad: Path, dateiname: str, felder: dict, *, uhr: Op
 def gueltig(anlage_id: int, marke: str, *, uhr: Optional[Callable[[], float]] = None) -> Optional[Eintrag]:
     """Der Eintrag, wenn die Marke gilt (gleiche Marke, nicht abgelaufen, Datei da) — sonst ``None``."""
     e = _EINTRAEGE.get(anlage_id)
-    if e is None or not marke or not secrets.compare_digest(e.marke, marke):
+    # F7: als UTF-8-Bytes vergleichen — ``compare_digest`` wirft bei Nicht-ASCII-Text (sonst 500 statt 404).
+    if e is None or not marke or not secrets.compare_digest(e.marke.encode("utf-8"), marke.encode("utf-8", "replace")):
         return None
     if (uhr or UHR)() - e.erstellt > GUELTIG_S or not e.pfad.is_file():
         _ablaufen(anlage_id, e.marke)

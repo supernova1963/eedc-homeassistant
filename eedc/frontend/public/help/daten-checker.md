@@ -145,9 +145,10 @@ den Geräte-Stammdaten, Versorger-Daten wie die Kundennummer.
 vergleicht das Paket den Spiegel mit Home Assistant und hält fest, ob beides gleich ist und ab wann nicht. eedc ändert
 dabei nichts — weder in seinen Daten noch in Home Assistant. Ist Home Assistant nicht erreichbar, steht das im Paket.
 
-eedc schickt das Paket nirgendwohin — du entscheidest, wem du es gibst. Für eine Analyse durch uns schick das
-Diagnose-Paket, nicht den JSON-Export oder ein Backup: die sind zum Sichern und Wiederherstellen da und enthalten dafür
-auch Zugangsdaten wie den Solcast-Schlüssel.
+eedc verschickt die Datei nicht — den Weg zu uns wählst du. Die Datei ist nicht verschlüsselt. Wer sie zusätzlich
+schützen möchte, packt sie vorher in ein kennwortgeschütztes Archiv und nennt uns das Kennwort auf einem anderen Weg.
+Für eine Analyse durch uns schick das Diagnose-Paket, nicht den JSON-Export oder ein Backup: die sind zum Sichern und
+Wiederherstellen da und enthalten dafür auch Zugangsdaten wie den Solcast-Schlüssel.
 
 ### Wann sollte ich den Daten-Checker nutzen?
 

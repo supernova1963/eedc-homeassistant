@@ -6,6 +6,7 @@
 * Spalten = Register ∩ ``PRAGMA table_info`` ohne ``raus`` — nie ein Bezeichner, den ``PRAGMA`` nicht kennt (SQLite liest einen
   unbekannten Bezeichner in Anführungszeichen als Text). Filterspalte fehlt ⇒ Teilfehler ``filterspalte_fehlt``, keine Abfrage.
 * Werte so, wie ``sqlite3`` sie liefert (keine ``detect_types``); Klassen nach Register; ``bytes`` ⇒ Teilfehler der Tabelle.
+  Freitext-Spalten (``Spalte.freitext``) laufen durch ``bereinige_zugang`` (F4: Token und Passwörter bleiben draußen).
 * Mitglied ``tabellen/<t>.json``: ``{"spalten":[…],"zeilen":[`` ⏎ je Zeile eine Liste ⏎ ``]}``, ``fetchmany(5000)``.
 
 Rohes SQL auf ``tages_energie_profil`` steht hier mit Grund in ``tests/test_tep_mengen_leser_waechter.py`` (der Auszug liest
@@ -21,7 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
-from backend.services.diagnose_paket.bereinigung import Sammler, bereinige_log, filtere_json, schwaerze_email
+from backend.services.diagnose_paket.bereinigung import (Sammler, bereinige_log, bereinige_zugang, filtere_json,
+                                                         schwaerze_email)
 from backend.services.diagnose_paket.register import NIE, PROFIL_DIAGNOSE, REGISTER, Spalte, Tabelle
 
 BLOCK = 5000
@@ -175,7 +177,19 @@ def _zellen_wandler(t: str, spalten: list[str], koordinaten: dict, erg: AuszugEr
             out.append((i, lambda v: bereinige_log(v) if isinstance(v, str) else v))
         elif s.klasse == "bereinigt:email":
             out.append((i, lambda v: schwaerze_email(v) if isinstance(v, str) else v))
+        elif s.freitext:
+            out.append((i, lambda v, ort=ort: _freitext(v, ort, erg)))
     return out
+
+
+def _freitext(v: Any, ort: str, erg: AuszugErgebnis) -> Any:
+    """Freitext-Spalte des Registers (F4): Text durch ``bereinige_zugang``, eine Änderung zählt in ``text_bereinigt``."""
+    if not isinstance(v, str):
+        return v
+    neu = bereinige_zugang(v)
+    if neu != v:
+        erg.sammler.zaehle(erg.sammler.text_bereinigt, ort)
+    return neu
 
 
 def _zaehle_notizen(t: str, spalten: list[str], zeile: tuple, erg: AuszugErgebnis) -> None:

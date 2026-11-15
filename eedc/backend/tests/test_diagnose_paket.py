@@ -5,14 +5,18 @@ Was hier gehalten wird:
 * **W-7 (c)** — keine Geheimnisse: gesät in jede ``raus``-Spalte (aus dem Register iteriert), ``solcast_config.api_key``,
   ``connector_config.{password, host, username, seriennummer, cloud_import[].credentials}``, alle 8 ``settings``-Schlüssel,
   ``parameter.{oberflaeche_url, stamm_seriennummer, ansprechpartner_email}``, ``activity_log`` (Ü3-Formen), Log-Puffer,
-  **SQL-Echo** (K4), ``writer`` mit E-Mail, die ``NIE``-Tabellen ⇒ in keinem Mitglied ``SPRENGSATZ``; ein JSON-Schlüssel auf
-  einem Schlüsselwort steht nur als ``source_hash``/``input_hash``, als Name einer Einstellung der Allowlist oder mit dem Wert
-  ``<geschwärzt>`` (Ergänzung zum Bauplan, s. ``_schluessel_im_paket``);
+  **SQL-Echo** (K4), Zeilen von ``aiosqlite`` und einem unbekannten Fremd-Logger (F1, Positivliste der Logger), ``writer`` mit
+  E-Mail, die ``NIE``-Tabellen ⇒ in keinem Mitglied ``SPRENGSATZ``, alle Lage-Teile laufen (``teilfehler == []``, F2); ein
+  JSON-Schlüssel auf einem Schlüsselwort steht nur als ``source_hash``/``input_hash``, als Name einer Einstellung der Allowlist
+  oder mit dem Wert ``<geschwärzt>`` (Ergänzung zum Bauplan, s. ``_schluessel_im_paket``); Debug-Modus mit echtem
+  ``UPDATE`` über aiosqlite (F1); Zähne: Positivliste «alles», ``lage.zuordnungen`` roh;
+* ``bereinige_log``: Formen der Wortliste (F3), Idempotenz, Entity-IDs/Topics/Modi/Zeiten bleiben;
 * **S5** — zweimal bereitstellen ⇒ Datenbank unverändert (Dump vor/nach), ``sensor_mapping`` bitgleich; Gegenprobe ``/felder``;
 * Akte-Probe (Fall ottokar) auf JSON; Testpunkte 1–4; N-797; Einstellungen-Allowlist; Log ohne ``sqlalchemy.*``;
 * Zeitgrenze des Checkers als Teilfehler (K9), eigene Sitzung je Lage-Teil;
 * Routen (Variante A): bereitstellen, herunterladen, ``&pruefen=1`` 204/404, Bau wirft ⇒ 500 ohne Datei, Tabelle wirft ⇒
   Paket kommt; Ablage je Anlage, Ablauf nach 15 Minuten, je Datenbank (K7); Marke gilt mehrfach, Abbruch lässt die Datei stehen;
+  Marke mit Nicht-ASCII ⇒ 404 (F7);
 * K1: der Auszug öffnet jede Pfadform der Einstellung; der Standardweg ohne ``db_pfad``;
 * Scheduler ``last_run``; ``code`` + ``werte`` an den Melder-Erzeugern (AST).
 
@@ -29,6 +33,7 @@ import logging
 import re
 import sqlite3
 import zipfile
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -47,7 +52,7 @@ from backend.services.daten_checker import CheckErgebnis, DatenChecker, DatenChe
 from backend.services.daten_checker.kategorien import Aktion
 from backend.services.diagnose_paket import ablage, lage, paket
 from backend.services.diagnose_paket import register as reg
-from backend.services.diagnose_paket.bereinigung import bereinige_log
+from backend.services.diagnose_paket.bereinigung import bereinige_log, bereinige_zugang
 from backend.tests import factories
 from backend.tests import pv_achse_matrix as mx
 from backend.tests.test_diagnose_paket_auszug import SPRENG, voll_datei_db  # noqa: F401 — Fixture
@@ -295,7 +300,18 @@ def _schluessel_im_paket(mitglieder: dict[str, bytes]) -> list[str]:
     return out
 
 
+def _lage_teile_lauffaehig(voll) -> None:
+    """F2: das abgeschnittene JSON der G1-Speicherform (``spannen``) bricht das ORM-Laden des Daten-Checkers — ein
+    Geheimnis-Lauf braucht alle Lage-Teile (``teilfehler == []``), sonst sähe der Scan ``lage.daten_checker`` nur als
+    Fehlertext."""
+    con = voll.roh()
+    con.execute("UPDATE tages_energie_profil SET spannen = ? WHERE spannen = ?", ('{"a": 1}', '{"a": '))
+    con.commit()
+    con.close()
+
+
 def _w7_saat(voll) -> None:
+    _lage_teile_lauffaehig(voll)
     con = voll.roh()
     for t, tab in reg.REGISTER.items():
         for s, sp in tab.spalten.items():
@@ -324,8 +340,18 @@ def _w7_saat(voll) -> None:
     con.close()
 
 
+#: F1: Zeilen von Fremd-Loggern mit gesätem Zellwert ohne Schlüsselwort — nur die Positivliste hält sie draußen.
+FREMD_LOG = (
+    ("aiosqlite", "executing functools.partial(<built-in method execute of sqlite3.Connection object>, "
+                  f"'UPDATE anlagen SET standort_strasse=?, mastr_id=? WHERE anlagen.id = ?', ('{SPRENG}-Strasse 7', "
+                  f"'{SPRENG}-MaStR', 1))"),
+    ("fremd_bibliothek.unbekannt", f"Gerät gefunden: {SPRENG}-fremd Musterweg 5"),
+)
+
+
 def _w7_log(echo: bool = True) -> None:
-    """Log-Puffer mit URL/Token und — bei Log-Stufe debug — dem SQL-Echo (K4)."""
+    """Log-Puffer mit URL/Token, Zeilen von Fremd-Loggern (``aiosqlite``, unbekannt — F1) und — bei Log-Stufe debug — dem
+    SQL-Echo (K4)."""
     from backend.core.log_buffer import get_log_buffer
 
     puffer = get_log_buffer()
@@ -333,6 +359,13 @@ def _w7_log(echo: bool = True) -> None:
     lg.addHandler(puffer)
     lg.warning(f"Remote-HA nicht erreichbar: http://127.0.0.1:9/{SPRENG} token={SPRENG}-log Bearer {SPRENG}-b")
     lg.removeHandler(puffer)
+    for name, zeile in FREMD_LOG:
+        fremd = logging.getLogger(name)
+        fremd.addHandler(puffer)
+        try:
+            fremd.warning(zeile)
+        finally:
+            fremd.removeHandler(puffer)
     echo_lg = logging.getLogger("sqlalchemy.engine.Engine")
     stufe = echo_lg.level
     echo_lg.setLevel(logging.INFO)
@@ -350,17 +383,21 @@ async def test_w7_kein_geheimnis_im_paket(voll_datei_db):
     _w7_saat(voll_datei_db)
     _w7_log()
     felder = await _bereit(voll_datei_db)
+    # F2: alle Lage-Teile laufen — der Scan sieht `lage.daten_checker` und `lage.zuordnungen` wirklich.
+    assert felder["teilfehler"] == []
     mitglieder = _zip(1)
     funde = [n for n, roh in mitglieder.items() if SPRENG.encode() in roh]
     assert funde == []
     assert SPRENG not in json.dumps(felder, ensure_ascii=False)
     assert _schluessel_im_paket(mitglieder) == []
     lg = json.loads(mitglieder["lage.json"])
+    assert "ergebnisse" in lg["daten_checker"] and lg["zuordnungen"]["gruppen"]
     assert lg["einstellungen"].get("sperre_secret") == {"vorhanden": True}, lg["einstellungen"]
     assert lg["einstellungen"]["ha_remote"] == {"eingerichtet": True, "enabled": True}
     assert lg["einstellungen"]["wetter_altbestand_nachzug"] == {"1": {"bis": "2026-01-01"}}
-    assert json.loads(mitglieder["inhalt.json"])["log_ausgelassen"] >= 2
+    assert json.loads(mitglieder["inhalt.json"])["log_ausgelassen"] >= 2 + len(FREMD_LOG)
     assert any("<url>" in z["message"] for z in lg["log"])
+    assert not {z["logger_name"] for z in lg["log"]} & {n for n, _ in FREMD_LOG}
     # Die Sentinel-Spalten stehen gar nicht im Paket.
     an = json.loads(mitglieder["tabellen/anlagen.json"])["spalten"]
     assert not {"standort_strasse", "mastr_id", "community_hash", "versorger_daten"} & set(an)
@@ -382,10 +419,87 @@ def test_w7c_scan_findet_gesaetes():
     assert _schluessel_im_paket(erlaubt) == []
 
 
-async def test_w7c_sprengsatz_echo_filter_aus(voll_datei_db, monkeypatch):
-    monkeypatch.setattr(lage, "LOG_AUSGESCHLOSSEN", "kein_logger_heisst_so")
+async def test_w7c_sprengsatz_positivliste_alles(voll_datei_db, monkeypatch):
+    """Zähne F1/K4: die Positivliste auf «alles» ⇒ SQL-Echo, ``aiosqlite``-Zeile und Fremd-Logger stehen im Paket."""
+    monkeypatch.setattr(lage, "logger_im_paket", lambda name: True)
     _w7_log()
     await _bereit(voll_datei_db)
+    roh = _zip(1)["lage.json"].decode("utf-8")
+    assert f"{SPRENG}-Strasse 5" in roh and f"{SPRENG}-Strasse 7" in roh and f"{SPRENG}-fremd" in roh
+
+
+def test_log_positivliste():
+    for name in ("backend", "backend.services.scheduler", "uvicorn", "uvicorn.error", "uvicorn.access", "apscheduler",
+                 "apscheduler.executors.default"):
+        assert lage.logger_im_paket(name), name
+    for name in ("aiosqlite", "sqlalchemy", "sqlalchemy.engine.Engine", "httpx", "root", "", "backendx", "uvicornx",
+                 "fremd_bibliothek.unbekannt"):
+        assert not lage.logger_im_paket(name), name
+
+
+async def test_w7c_debug_aiosqlite_update_nicht_im_paket(voll_datei_db, monkeypatch):
+    """F1 (Nachmessung ``spreng1.py``): Root-Logger auf DEBUG wie der «Debug-Modus» (``PUT /api/system/log-level?level=DEBUG``),
+    ein echtes ``UPDATE`` über aiosqlite ⇒ der Logger ``aiosqlite`` trägt Straße und MaStR im Puffer; im Paket steht keiner
+    der Werte. Zähne: Positivliste auf «alles» ⇒ die Werte stehen in ``lage.json``."""
+    from backend.core.log_buffer import get_log_buffer
+
+    _lage_teile_lauffaehig(voll_datei_db)
+    puffer, root = get_log_buffer(), logging.getLogger()
+    # Bei DEBUG füllt der Paketbau selbst den 500er-Puffer mit `aiosqlite`-Zeilen und verdrängt die UPDATE-Zeile, bevor der
+    # Log-Teil liest (gemessen) — für die Probe ein größerer Puffer, damit sie Zähne hat (`gesehen`).
+    monkeypatch.setattr(puffer, "_buffer", deque(puffer._buffer, maxlen=50_000))
+    monkeypatch.setattr(puffer, "capacity", 50_000)
+    stufe, haengt = root.level, puffer in root.handlers
+    if not haengt:
+        root.addHandler(puffer)
+    root.setLevel(logging.DEBUG)
+    try:
+        async with voll_datei_db.sitzungen() as s:
+            await s.execute(text("UPDATE anlagen SET standort_strasse = :s, mastr_id = :m WHERE id = 1"),
+                            {"s": f"{SPRENG}-AIO-Strasse 5", "m": f"{SPRENG}-AIO-MaStR"})
+        im_puffer = [e for e in puffer.get_entries(limit=puffer.capacity) if f"{SPRENG}-AIO" in e["message"]]
+        assert im_puffer and {e["logger_name"] for e in im_puffer} <= {"aiosqlite", "sqlalchemy.engine.Engine"}
+        echt, gesehen = lage.log_zeilen, []
+
+        def _mit_blick(erg):
+            # Steht die Zeile noch im Puffer, wenn der Log-Teil liest? (sonst wäre die Probe ohne Zähne)
+            gesehen.append(any(f"{SPRENG}-AIO" in e["message"] for e in puffer.get_entries(limit=puffer.capacity)))
+            return echt(erg)
+
+        monkeypatch.setattr(lage, "log_zeilen", _mit_blick)
+        felder = await _bereit(voll_datei_db)
+        assert felder["teilfehler"] == [] and gesehen == [True]
+        mitglieder = _zip(1)
+        assert [n for n, roh in mitglieder.items() if f"{SPRENG}-AIO".encode() in roh] == []
+        assert json.loads(mitglieder["inhalt.json"])["log_ausgelassen"] >= len(im_puffer)
+        monkeypatch.setattr(lage, "logger_im_paket", lambda name: True)
+        await _bereit(voll_datei_db)
+        assert gesehen == [True, True] and f"{SPRENG}-AIO".encode() in _zip(1)["lage.json"]
+    finally:
+        root.setLevel(stufe)
+        if not haengt:
+            root.removeHandler(puffer)
+
+
+async def test_w7c_sprengsatz_zuordnungen_roh(voll_datei_db, monkeypatch):
+    """Zähne F2: gibt ``lage.zuordnungen`` roh ``sensor_mapping``/``connector_config``/``standort_strasse`` aus, findet der
+    Geheimnis-Lauf das — er sieht den Teil also wirklich (vorher stand er nur als Fehlertext im Paket)."""
+    echt = lage.zuordnungen
+
+    async def _roh(sitzungen, anlage_id, erg):
+        out = await echt(sitzungen, anlage_id, erg)
+        con = voll_datei_db.roh()
+        try:
+            out["roh"] = list(con.execute("SELECT sensor_mapping, connector_config, standort_strasse FROM anlagen "
+                                          "WHERE id = ?", (anlage_id,)).fetchone())
+        finally:
+            con.close()
+        return out
+
+    monkeypatch.setattr(lage, "zuordnungen", _roh)
+    _w7_saat(voll_datei_db)
+    felder = await _bereit(voll_datei_db)
+    assert felder["teilfehler"] == []
     assert SPRENG.encode() in _zip(1)["lage.json"]
 
 
@@ -397,14 +511,48 @@ def test_log_bereinigung():
 @pytest.mark.parametrize("probe", [
     '{"password": "SPRENGSATZ"}', "{'token': 'SPRENGSATZ'}",
     """[parameters: ('{"enabled": true, "password": "SPRENGSATZ"}', 1)]""", "pw=SPRENGSATZ", "pw: SPRENGSATZ",
-    "Bearer SPRENGSATZ", "https://u:SPRENGSATZ@h/", "kontakt SPRENGSATZ@example.org", "credential=SPRENGSATZ"])
+    "Bearer SPRENGSATZ", "https://u:SPRENGSATZ@h/", "kontakt SPRENGSATZ@example.org", "credential=SPRENGSATZ",
+    # F3 (Nachmessung): Formen, die die Wortliste meint
+    "Passwort: zwei SPRENGSATZ", "password: erstes SPRENGSATZ", "Authorization: Basic SPRENGSATZNTE=",
+    "basic SPRENGSATZ", "x-api-key: SPRENGSATZ", "api-key=SPRENGSATZ", "api_key=SPRENGSATZ", "Kennwort: SPRENGSATZ",
+    "pwd=SPRENGSATZ", "pass=SPRENGSATZ", "PWD: SPRENGSATZ", "user:SPRENGSATZ@broker:1883", "u:SPRENGSATZ@192.168.1.5",
+    'access_token": "SPRENGSATZ"', "SUPERVISOR_TOKEN=SPRENGSATZ", '"apiKey":"SPRENGSATZ"'])
 def test_log_bereinigung_ue3_formen(probe):
     assert SPRENG not in bereinige_log(probe)
 
 
+#: Texte, die stehen bleiben müssen: Entity-IDs, Topics, Betriebsmodi, Zeitangaben mit «:», Kanal-Schlüssel (F3/F4).
+STEHT = ("sensor.pv_leistung", "select.wp_betriebsmodus", "Heizen", "inv:14:stromverbrauch_kwh", "basis:pv_gesamt",
+         "eedc/anlage/1/pv_leistung_w", "homeassistant/sensor/eedc_1/state", "2026-10-03T12:00:00", "12:30", "06:00–22:00",
+         "2026-10-03 14:05:06.123456", "Wärmepumpe Keller", "sensor.solcast_api_key_status", "Pass", "Passat 2.0 TDI",
+         "Bypass offen", "Kompass", "pwm_signal")
+
+
 def test_log_bereinigung_laesst_entity_und_modus_stehen():
-    for t in ("sensor.pv_leistung", "select.wp_betriebsmodus", "Heizen", "inv:14:stromverbrauch_kwh"):
-        assert bereinige_log(t) == t
+    for t in STEHT:
+        assert bereinige_log(t) == t, t
+
+
+@pytest.mark.parametrize("probe", [
+    "Passwort: zwei worte", "Authorization: Basic abc==", "x-api-key: k", "token token token x", "a Token b Token",
+    "user:geheim@broker:1883", "Fehler bei https://u:p@h/ token=abc Authorization: Bearer xyz", "pass=a pwd=b pw=c",
+    "kontakt a.b@example.org, Kennwort: x y", '[parameters: (\'{"enabled": true, "password": "S"}\', 1)]',
+    "<geschwärzt>@broker", "<url> <e-mail>", *STEHT])
+def test_log_bereinigung_idempotent(probe):
+    """G3: der Filter ist idempotent — auch nach F3/F4 (``bereinige_log`` und ``bereinige_zugang``)."""
+    for fn in (bereinige_log, bereinige_zugang):
+        einmal = fn(probe)
+        assert fn(einmal) == einmal, fn.__name__
+
+
+def test_bereinige_zugang_laesst_url_und_mail_stehen():
+    """F4 (enger): Zugangsdaten gehen, gewöhnliche URL und E-Mail-Adresse bleiben; Entity-IDs, Topics, Zeiten bleiben."""
+    for t in ("https://portal.example.org/anlage?id=3", "kontakt melder@example.org", *STEHT):
+        assert bereinige_zugang(t) == t, t
+    assert bereinige_zugang("https://u:SPRENGSATZ@h/x") == "https://<geschwärzt>@h/x"
+    for t in ("Passwort: SPRENGSATZ zwei", "token=SPRENGSATZ", "Bearer SPRENGSATZ", "user:SPRENGSATZ@broker:1883",
+              "x-api-key: SPRENGSATZ", "pwd=SPRENGSATZ"):
+        assert SPRENG not in bereinige_zugang(t), t
 
 
 # ─── S5: bereitstellen schreibt nichts ───────────────────────────────────────────────────────────────────────
@@ -667,6 +815,20 @@ async def test_pruefen_204_404(datei_anlage, standard_auf):
         with pytest.raises(HTTPException) as e:
             await diagnose_paket(aid, marke=m, pruefen=True)
         assert e.value.status_code == 404
+
+
+async def test_marke_nicht_ascii_ist_404(datei_anlage, standard_auf):
+    """F7: eine Marke mit Nicht-ASCII-Zeichen ⇒ 404 (vorher ``TypeError`` aus ``compare_digest`` ⇒ 500); auch ohne Prüfabruf."""
+    from backend.api.routes.daten_checker import diagnose_paket, diagnose_paket_bereitstellen
+
+    standard_auf(datei_anlage)
+    marke = (await diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]
+    for m in ("ä", marke[:-1] + "ä", "‮" + marke, "\ud800"):
+        for pruefen in (True, False):
+            with pytest.raises(HTTPException) as e:
+                await diagnose_paket(datei_anlage.aid, marke=m, pruefen=pruefen)
+            assert e.value.status_code == 404
+    assert ablage.gueltig(datei_anlage.aid, marke) is not None
 
 
 async def test_g5_bau_wirft_500_keine_datei(datei_anlage, standard_auf, monkeypatch, tmp_path):

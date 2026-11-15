@@ -1,9 +1,11 @@
 """Lage zur Laufzeit des Diagnose-Pakets v4 — ``lage.json`` (Bauplan §3.3, §3.7; Testpunkte 1 und 3, K4, K9).
 
 Teile: ``kopf`` · ``daten_checker`` (dieselbe Serialisierung wie die Route, ``checker_antwort``) · ``zuordnungen``
-(``zuordnungen_lesen`` ohne Festschreiben) · ``zeitplaene`` · ``log`` (ganzer Puffer ohne die Logger ``sqlalchemy.*`` — das
-SQL-Echo bei Log-Stufe ``debug`` trägt Zellwerte jeder Tabelle; ihre Anzahl steht in ``inhalt.json.log_ausgelassen``) ·
-``einstellungen`` (Allowlist ``register.EINSTELLUNGEN``) · ``ha_abgleich``. ``schema`` setzt ``paket.py`` aus dem Auszug.
+(``zuordnungen_lesen`` ohne Festschreiben) · ``zeitplaene`` · ``log`` (Puffer, **nur Logger der Positivliste**
+``LOG_POSITIVLISTE`` — bei Log-Stufe ``debug`` tragen Fremd-Logger wie ``aiosqlite`` und ``sqlalchemy.*`` die Parameter jeder
+Anweisung, also Zellwerte jeder Tabelle; jede andere Zeile zählt in ``inhalt.json.log_ausgelassen``, Korrektur F1) ·
+``einstellungen`` (Allowlist ``register.EINSTELLUNGEN``) · ``ha_abgleich``.
+``schema`` setzt ``paket.py`` aus dem Auszug.
 
 Jeder Teil mit Datenbank liest in **eigener** Sitzung (nie in der Routen-Sitzung) und rollt sie am Ende zurück — das Paket
 schreibt nichts. Eine Zeitgrenze (``asyncio.wait_for``) gibt es nur um einen solchen Teil; ein Abbruch lässt die übrigen
@@ -27,8 +29,17 @@ from backend.services.diagnose_paket.bereinigung import bereinige_log
 from backend.services.diagnose_paket.register import EINSTELLUNGEN, PROFIL_DIAGNOSE
 
 CHECKER_ZEITGRENZE_S = 120
-#: Logger, deren Zeilen nie ins Paket gehen (SQL-Echo, K4).
-LOG_AUSGESCHLOSSEN = "sqlalchemy"
+#: Logger, deren Zeilen ins Paket gehen (je Name selbst und seine Kinder): eedc-eigene Module (``logging.getLogger(__name__)``
+#: unter ``backend``), der Server (``uvicorn``, ``uvicorn.error``, ``uvicorn.access``) und der Zeitplaner, den eedc nutzt
+#: (``services/scheduler.py`` startet APScheduler; Job-Fehler meldet die Bibliothek unter ``apscheduler.*``). Alles andere —
+#: ``aiosqlite`` und ``sqlalchemy.*`` (SQL samt Parametern bei Log-Stufe ``debug``), ``httpx``, unbekannte Fremd-Logger —
+#: bleibt draußen (Korrektur F1; vorher nur ``sqlalchemy.*`` ausgeschlossen).
+LOG_POSITIVLISTE = ("backend", "uvicorn", "apscheduler")
+
+
+def logger_im_paket(name: str) -> bool:
+    """Gehört die Zeile des Loggers ``name`` ins Paket (Positivliste, je Name und Kinder)?"""
+    return any(name == p or name.startswith(p + ".") for p in LOG_POSITIVLISTE)
 
 
 @dataclass
@@ -125,14 +136,14 @@ async def zeitplaene() -> dict:
 
 
 def log_zeilen(erg: LageErgebnis) -> list[dict]:
-    """Der ganze Puffer (neueste zuerst), ohne ``sqlalchemy``/``sqlalchemy.*``; jede Meldung bereinigt."""
+    """Der Puffer (neueste zuerst), nur Logger der Positivliste (``logger_im_paket``); jede Meldung bereinigt."""
     from backend.core.log_buffer import get_log_buffer
 
     puffer = get_log_buffer()
     out = []
     for e in puffer.get_entries(limit=puffer.capacity):
         name = e.get("logger_name") or ""
-        if name == LOG_AUSGESCHLOSSEN or name.startswith(LOG_AUSGESCHLOSSEN + "."):
+        if not logger_im_paket(name):
             erg.log_ausgelassen += 1
             continue
         out.append({"timestamp": e.get("timestamp"), "level": e.get("level"), "logger_name": name,
