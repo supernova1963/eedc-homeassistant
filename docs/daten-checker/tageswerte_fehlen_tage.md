@@ -20,8 +20,9 @@ Die Meldung nennt den Zeitraum, die Details die betroffenen Komponenten.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die nachgeholten Tage sind aus der Zeile verschwunden; nennt die
    Meldung ältere oder noch nicht geprüfte Tage, den Knopf ein weiteres Mal anwenden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 ## Was ohne Handlung gilt
 Die Tage bleiben in eedc leer: Tagesansicht im Cockpit, Stundenwerte und Energieprofil zeigen für sie nichts, obwohl Home

@@ -9,8 +9,28 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Daten-Checker: das Diagnose-Paket ist jetzt eine Datei mit den Daten der Anlage** — „Diagnose-Paket“ im Kopf des
+  Daten-Checkers stellt einen Auszug der Daten dieser Anlage als ZIP-Datei zusammen: Geräte, Tarife, Zuordnungen, alle
+  Monats-, Tages- und Stundenwerte, Notizen, Protokolle und die Prüfergebnisse, dazu ein Abgleich der aus Home Assistant
+  gespiegelten Werte mit Home Assistant (nur lesend, eedc ändert dabei nichts). Das Fenster zeigt vorher, was drin ist —
+  mit den Zahlen dieses Pakets — und was nicht: keine Zugangsdaten, keine Straße, keine Fotos, keine Infothek, keine
+  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei; du schickst sie, wenn wir
+  dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser Antwort, über etwa
+  10 MB als Freigabe-Link eines Cloud-Speichers. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu.
+  Der Text zum Kopieren entfällt. In der Home-Assistant-App auf iPhone und iPad lädt eedc die Datei so, dass sie sich
+  über das Teilen-Blatt sichern oder verschicken lässt. Die Lösungswege des Daten-Checkers und die Handbücher sagen es
+  so.
+
 ### Fixed
 
+- **Daten-Checker „Verdacht auf PV-Doppelerfassung“: Balkonkraftwerk-Schritte nur mit Balkonkraftwerk** — die Details
+  nannten an jeder Anlage eine Ursache am Balkonkraftwerk, den Schritt „in den Datenquellen den Block des
+  Balkonkraftwerks“ prüfen und eine Test-Variante mit der BKW-Zuordnung, auch ohne Balkonkraftwerk. Diese Zeilen stehen
+  jetzt nur noch, wenn die Anlage eines hat. Die Zeile mit der Performance Ratio nennt die Tage „mit
+  Performance-Ratio-Wert“, und beide Prüfungen (Doppelerfassung und Counter-Spikes) schauen auf genau die letzten 30 Tage,
+  wie es im Text steht (bisher 31).
 - **Monatsdaten: „PV-Erzeugung (berechnet)“ zählt einen sonstigen Erzeuger nicht mehr mit** — im Formular eines Monats
   stand die Erzeugung eines sonstigen Erzeugers (etwa eines BHKW) in der PV-Summe, die Monatsdaten-Tabelle zeigt die
   PV-Erzeugung ohne ihn; derselbe Monat hatte so zwei „PV-Erzeugungen“. Jetzt zeigt das Formular dieselbe Zahl wie die

@@ -492,7 +492,7 @@ const ANSICHTEN = [
     route: '#/einstellungen/daten?block=datenchecker',
     aufklappen: false,
     klick: 'button:has-text("Diagnose-Paket")',
-    pflicht: ['Kopieren', 'Als Datei herunterladen', 'Zugangsdaten enthält es nie'],
+    pflicht: ['Herunterladen', 'Stundenwerte', 'Nicht drin: Zugangsdaten'],
     titel: 'Daten-Checker → Diagnose-Paket',
   },
   {

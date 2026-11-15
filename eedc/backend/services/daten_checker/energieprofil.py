@@ -154,6 +154,8 @@ class EnergieprofilChecks:
     PR_PLAUSI_SCHWELLE = 1.05
     PR_PLAUSI_MINDESTTAGE = 3
     PR_PLAUSI_MINDEST_ANTEIL = 0.20
+    # N-798: ein Fenster für PR- und Counter-Spike-Prüfung — 30 Kalendertage einschließlich heute (`bis − (N − 1)`),
+    # wie es beide Texte und Lösungswege sagen.
     PR_PLAUSI_FENSTER_TAGE = 30
     SPEZ_TAGES_ERTRAG_OBERGRENZE_KWH_PRO_KWP = 7.0
 
@@ -1190,14 +1192,14 @@ class EnergieprofilChecks:
         # Nur die letzten 30 Tage prüfen (ältere Tage sind oft schon korrigiert
         # oder nicht mehr relevant für aktuelle Lernfaktor-Basis)
         bis = date.today()
-        von = bis - timedelta(days=30)
+        von = bis - timedelta(days=self.PR_PLAUSI_FENSTER_TAGE - 1)
 
         spike_tage = await self._spike_tage(anlage, von, bis, kwp)
 
         if not spike_tage:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK, code="counter_spikes_ok",
-                meldung=f"Keine Counter-Spikes in den letzten 30 Tagen (Schwelle: {fmt_zahl(schwelle_kw, 1)} kW = {fmt_zahl(kwp, 1)} kWp × 1.5)",
+                meldung=f"Keine Counter-Spikes in den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen (Schwelle: {fmt_zahl(schwelle_kw, 1)} kW = {fmt_zahl(kwp, 1)} kWp × 1.5)",
             ))
             return ergebnisse
 
@@ -1457,7 +1459,9 @@ class EnergieprofilChecks:
             return ergebnisse  # Stammdaten-Check meldet das schon
 
         bis = date.today()
-        von = bis - timedelta(days=self.PR_PLAUSI_FENSTER_TAGE)
+        von = bis - timedelta(days=self.PR_PLAUSI_FENSTER_TAGE - 1)
+        # N-798: die Prüfschritte zum Balkonkraftwerk nur, wenn die Anlage eines hat (wie `stammdaten.py`).
+        hat_bkw = any(i.typ == "balkonkraftwerk" and i.ist_aktiv_an(bis) for i in anlage.investitionen)
 
         result = await self.db.execute(
             select(TagesZusammenfassung).where(
@@ -1569,7 +1573,7 @@ class EnergieprofilChecks:
             beispiele = ", ".join(f"{d.isoformat()}: PR={fmt_zahl(pr, 2)}" for d, pr in pr_recent)
             marker_zeilen.append(
                 f"Performance Ratio > {self.PR_PLAUSI_SCHWELLE} an "
-                f"{anzahl_pr_drueber} von {tage_mit_pr} Tagen ({beispiele})"
+                f"{anzahl_pr_drueber} von {tage_mit_pr} Tagen mit Performance-Ratio-Wert ({beispiele})"
             )
         if spez_signal:
             beispiele = ", ".join(f"{d.isoformat()}: {fmt_zahl(s, 1)} kWh/kWp" for d, s in spez_recent)
@@ -1586,10 +1590,11 @@ class EnergieprofilChecks:
                 f"Diagnose-Marker aus den letzten {self.PR_PLAUSI_FENSTER_TAGE} Tagen:\n"
                 + "\n".join(f"• {zeile}" for zeile in marker_zeilen) + "\n\n"
                 "Mögliche Ursachen — welche zutrifft, weiß eedc nicht:\n"
-                "• Der WR-Smart-Meter misst AC-seitig nach dem Einspeisepunkt "
-                "eines Balkonkraftwerks — die BKW-Erzeugung ist im WR-Wert "
-                "bereits enthalten, ein separates BKW-Mapping zählt sie nochmal.\n"
-                "• Ein Sensor ist zweimal zugeordnet (Anlage und Komponente).\n"
+                + ("• Der WR-Smart-Meter misst AC-seitig nach dem Einspeisepunkt "
+                   "eines Balkonkraftwerks — die BKW-Erzeugung ist im WR-Wert "
+                   "bereits enthalten, ein separates BKW-Mapping zählt sie nochmal.\n"
+                   if hat_bkw else "")
+                + "• Ein Sensor ist zweimal zugeordnet (Anlage und Komponente).\n"
                 "• Die eingetragene kWp ist zu niedrig — dann ist nicht die "
                 "Erzeugung zu hoch, sondern der Vergleichsmaßstab zu klein.\n"
                 "• Die Einstrahlung ist zu klein angesetzt — die Performance "
@@ -1600,12 +1605,13 @@ class EnergieprofilChecks:
                 "brauchbaren Strahlungswerte liefert. Prüfen: Standort der "
                 "Anlage, Ausrichtung und Neigung der PV-Module.\n\n"
                 "Tage mit bekanntem Counter-Spike sind hier bereits "
-                "herausgerechnet (#385).\n\n"
-                "Prüfen: in den Datenquellen der Block des "
-                "Balkonkraftwerks.\n"
-                "Test-Variante: die BKW-Zuordnung temporär auf „keine“ setzen "
-                "und schauen, "
-                "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
+                "herausgerechnet (#385)."
+                + ("\n\nPrüfen: in den Datenquellen den Block des "
+                   "Balkonkraftwerks.\n"
+                   "Test-Variante: die BKW-Zuordnung temporär auf „keine“ setzen "
+                   "und schauen, "
+                   "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
+                   if hat_bkw else "")
             ),
         ))
 

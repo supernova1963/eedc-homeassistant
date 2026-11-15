@@ -3,8 +3,8 @@
 Jeder Code des Katalogs (`handgriffe.HANDGRIFFE`) hat eine Datei `docs/daten-checker/<code>.md` mit Titel und den drei
 Abschnitten «Was eedc sieht» · «Lösungsweg» (nummerierte Schritte, der letzte «Erneut prüfen») · «Was ohne Handlung gilt»;
 Melde-Situationen (`drift_*`, `ha_zaehlersprung`, `ha_zaehler_rueckgang`, `tageswerte_fehlen_*`) nennen zuletzt das
-Diagnose-Paket — Kopieren vor Datei (E5.7 L6). Daraus und aus den Abschnitts-Einleitungen `docs/daten-checker/abschnitte/`
-erzeugt `scripts/daten-checker-handbuch.py` das Handbuch §3/§4 — ein Lauf ändert nichts (kein Hand-Rest).
+Diagnose-Paket — auf unsere Bitte «Herunterladen» und an die Adresse aus unserer Antwort schicken (Diagnose-Paket v4).
+Daraus und aus den Abschnitts-Einleitungen `docs/daten-checker/abschnitte/` erzeugt `scripts/daten-checker-handbuch.py` das Handbuch §3/§4 — ein Lauf ändert nichts (kein Hand-Rest).
 
 **Menüwege** (Methode Erhebung Teil A Aufgabe 2 als Test): ein Weg steht kursiv `*A → B → C*`; er beginnt mit einem der drei
 Home-Assistant-Wege (HA-Allowlist) oder ist `Einstellungen → <Bereich> [→ <Block>]` mit Bereich und Block aus
@@ -126,8 +126,11 @@ def test_titel_drei_abschnitte_und_schritte(code):
     assert "Erneut prüfen" in schritte[-1], f"{code}: der letzte Schritt ist «Erneut prüfen»"
     if code in MELDE_CODES:
         rest = teile["Lösungsweg"]
-        assert "Diagnose-Paket" in rest and re.search(r"Kopieren", rest), f"{code}: Melde-Situation ohne Diagnose-Paket"
-        assert rest.index("Kopieren") < rest.index("Datei") if "Datei" in rest else True, f"{code}: Kopieren vor Datei"
+        # Diagnose-Paket v4 (Bauplan §4 W-13): Frage im Forum/auf GitHub, das Paket auf unsere Bitte herunterladen und an die
+        # Adresse aus unserer Antwort schicken — kein «Kopieren» mehr.
+        for teil in ("Diagnose-Paket", "«Herunterladen»", "Adresse aus unserer Antwort"):
+            assert teil in rest, f"{code}: Melde-Situation ohne «{teil}»"
+        assert "Kopieren" not in rest, f"{code}: «Kopieren» gibt es im Diagnose-Paket nicht mehr"
 
 
 def test_melde_situationen_sind_bekannt():

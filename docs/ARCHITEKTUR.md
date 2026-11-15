@@ -883,24 +883,51 @@ POST /api/scheduler/monthly-snapshot              # Manueller Monatswechsel-Trig
 `last_run`/`last_ok` hält `EEDCScheduler._merke_lauf` (Listener auf `EVENT_JOB_EXECUTED`/`EVENT_JOB_ERROR`) **nur im
 Speicher** — nach einem Neustart steht dort `null`, bis der Job wieder gelaufen ist.
 
-#### Diagnose-Paket (Daten-Checker, E1 10.11.2026)
+#### Diagnose-Paket v4 (Daten-Checker; Datenauszug als ZIP, 15.11.2026)
 
 ```
-GET  /api/system/diagnose-paket/{anlage_id}?fassung=datei|kopie&monate=JJJJ-MM,…   # text/markdown, Anhang
+GET  /api/system/diagnose-paket/{anlage_id}/bereitstellen           # baut die ZIP, antwortet mit Paket-Feldern (synchron)
+GET  /api/system/diagnose-paket/{anlage_id}?marke=…[&pruefen=1]     # application/zip, Anhang · mit pruefen=1: 204/404 ohne Body
 ```
 
-Route `api/routes/daten_checker.py::diagnose_paket`, Service `services/diagnose_paket.py::baue_paket` — **nur lesend**:
-13 Abschnitte mit der Kopfmarke `<!-- eedc-diagnose v2 -->` (v2 seit E2: Abschnitt 6 nennt je Befund `code` und die Soll-Klasse des Katalogs), Allowlists für Anlage-Spalten und Komponenten-Parameter, nie
-Token, Passwörter, `connector_config` (nur `connector_id`), `solcast_config`, `versorger_daten`, `community_hash`
-(Wächter W-7 in `tests/test_diagnose_paket.py`). Die Zuordnungen liest es über
-`services/datenquellen_felder.py::zuordnungen_lesen` — die vier lesenden Phasen der Route
-`GET /api/datenquellen/{id}/felder`, die nach ihnen weiter selbst `_festschreiben` und `_verfuegbarkeit` ruft
-(Schnitt E1, Antwort bitgleich, GM `datenquellen-felder`). Die Kopieren-Fassung ist hart ≤ 20 000 Bytes: weiche
-Stufen Log → Tagesreihen 2 → 1 Monat → Spiegel-Abschnitte → Checker-OK-Zeilen → Zuordnungen nur mit Quelle → Komponenten
-ohne Parameter → Checker nur WARNING/ERROR → Tagesreihen ganz weg; danach ganze Abschnitte von hinten nach Priorität
-(`WEGFALL_REIHENFOLGE` 13 · 11 · 5 · 10 · 3 · 9 · 4 · 2, nie `NIE_WEG` 1 · 6 · 7 · 8 · 12), erst zuletzt der Schnitt am
-Textende; jede Stufe steht im Kopf (E3.0 nach Lab rc29). Abschnitt 6 seit E3: Kategorie als Gruppenkopf, je Zeile
-`[schwere] code — Meldung · werte`, die Klasse nur, wenn die Laufzeit-Klasse vom Katalog abweicht.
+Routen `api/routes/daten_checker.py::diagnose_paket_bereitstellen` / `::diagnose_paket`, Paket `services/diagnose_paket/` —
+**nur lesend**. Beide GET, weil die Einstellungs-Sperre nach Methode greift (ein Paket entsteht auch bei gesetzter PIN).
+**Variante A (synchron)** nach der HA-Messung S0: Ingress ließ 300 s Wartezeit am Desktop und in beiden Apps durch.
+
+- `paket.py::bereitstellen` baut `eedc_diagnose_<Anlage>_<Datum>.zip` — `tabellen/<t>.json` (alphabetisch, je Zeile eine
+  Liste, Werte wie `sqlite3` sie liefert, JSON-Spalten als gespeicherter Text) → `lage.json` → `inhalt.json` zuletzt
+  (`vollstaendig`) — in `….zip.teil` und ersetzt atomar. Antwort: `marke`, `dateiname`, `bytes`, `megabyte`, `gueltig_s`
+  (900), `versandweg` (`email` bis 10 MB, sonst `freigabe_link`), `inhalt` (Zähler der Inhaltsliste), `teilfehler`. Wirft
+  der Bau ⇒ 500 mit `detail`, keine Datei; eine Tabelle oder ein Lage-Teil, die werfen, stehen in `inhalt.json`.
+- `auszug.py`: eigene Verbindung `Path(db).resolve().as_uri() + "?mode=ro"`, **eine** Lese-Transaktion im Thread,
+  Spalten = Register ∩ `PRAGMA table_info`, Filter je Tabelle nach der **Filterart** des Registers (`anlage`,
+  `ueber:<eltern>.<spalte>`, `natural_key`, `anlage_oder_null`, `ganz` nur `migrations`); fehlt die Filterspalte ⇒
+  Teilfehler, keine Abfrage.
+- `register.py`: Spalten-Register (Profil «Diagnose») — jede Spalte jeder Tabelle mit Klasse (`rein`, `raus`, `gerundet`,
+  `bereinigt:*`, `allowlist`), sonst Tabelle unter `NIE` (`settings` nur über die Einstellungs-Allowlist, Fotos, Infothek,
+  `api_cache`); jede JSON-Spalte mit **Blatt-Regel** (`text_schluessel`, `text_unter`): ein Text-Blatt bleibt nur unter
+  einem genannten Schlüssel, sonst Marke `⟨ersetzt:…⟩` (`bereinigung.py::filtere_json`, idempotent); unlesbares JSON wird
+  Marke, nie Rohtext.
+- `lage.py`: Kopf (Version, Betriebsart, HA, Zeitzone, Start), Daten-Checker (Serialisierung der Route,
+  `services/daten_checker/antwort.py::checker_antwort`), Zuordnungen (`services/datenquellen_felder.py::zuordnungen_lesen`
+  ohne Festschreiben), Zeitpläne, Log-Puffer (bereinigt, ohne `sqlalchemy.*`), Einstellungs-Allowlist; je Teil eigene
+  Sitzung, Zeitgrenze nur um einen solchen Teil. `ha_abgleich.py`: je Spiegel-Abschnitt `kanal/konsistenz.py::
+  pruefe_abschnitt_lesend` (der Nachtlauf schreibt, das Paket nie), bei Abweichung HAs Stundenzeilen ab der ersten
+  abweichenden Stunde (≤ 744).
+- `ablage.py`: Verzeichnis je Datenbank unter dem Temp-Verzeichnis (nicht `/data`, sonst in HA-Sicherungen), ein Eintrag
+  je Anlage, die Marke gilt **mehrfach** bis zum Ablauf (15 min) oder Ersatz, die Datei wird beim Herunterladen nie
+  gelöscht (die Android-App ruft die Adresse zweimal); Aufräumen beim Start.
+- Dialog `frontend/src/components/datenchecker/DiagnosePaketDialog.tsx`: stellt beim Öffnen bereit, zeigt die Inhaltsliste;
+  «Herunterladen» außerhalb des HA-Rahmens und im HA-Rahmen auf iPhone/iPad über `lib/download.ts::downloadFile`
+  (`istAppleMobil`), im HA-Rahmen sonst Prüfabruf `&pruefen=1` und dann `window.location.assign` (ein 404 ersetzte sonst
+  die Seite); nach `gueltig_s` «Neu zusammenstellen».
+
+Wächter **W-7** (a) Vollständigkeit des Registers gegen die MetaData, kein `rein` auf einem Schlüsselwort
+(`tests/test_diagnose_paket_register.py`) · (b) Blatt-Regel je JSON-Spalte, `details_json`-Schlüssel aus dem Code,
+Lese-Schlüssel überstehen den Auszug (`…_register.py`, `tests/test_diagnose_paket_auszug.py`) · (c) Muster-Scan des
+entpackten Pakets auf gesäte Geheimnisse inkl. SQL-Echo (`tests/test_diagnose_paket.py`) · (d) eine Anlage: keine Zeile
+der anderen Anlage je Tabelle (`…_auszug.py`). HA-Abgleich `tests/test_diagnose_paket_ha_abgleich.py`. Die frühere
+Größengrenze W-9 der Markdown-Fassung v3 entfällt mit ihr.
 
 #### Daten-Checker: Befund-Schlüssel, Ziel-Bauer, Katalog (E2 10.11.2026)
 

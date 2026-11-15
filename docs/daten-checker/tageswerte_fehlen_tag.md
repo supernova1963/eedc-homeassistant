@@ -12,8 +12,9 @@ einem Glied je Tag; jedes Glied baut genau diesen Tag neu auf.
    [Statistik-Import](eedc:/einstellungen/integration?block=ha-statistik-import) mit **«Vorschau laden»** neu übernehmen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist aus der Zeile verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 ## Was ohne Handlung gilt
 Der Tag bleibt in eedc leer; Tagesansicht im Cockpit, Stundenwerte und Energieprofil zeigen für ihn nichts, obwohl Home

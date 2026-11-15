@@ -88,38 +88,66 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
   - **Ändert eedc etwas** (z. B. „Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine **Vorschau** unter der Zeile: eine Zeile, was sich ändert (etwa „Monate erhalten eine Ø Temperatur: 7 (09/2025, …)“), darunter die Hinweise der Reparatur-Werkbank. Erst **„Anwenden“** führt aus; **„Abbrechen“** verwirft die Vorschau. Danach steht über der Liste ein Satz, was geschehen ist, und der Daten-Checker prüft neu. Lösch-Aktionen tragen in der Vorschau das Wort **„endgültig“** und einen roten Knopf; eine zusätzliche Rückfrage gibt es nicht. Ist nichts zu tun (etwa weil das Feld am Gerät vorgesehen ist), sagt die Vorschau das und bietet kein „Anwenden“. „Aus Home Assistant neu übernehmen“ nennt dazu die Bedingung: wirksam, wenn du in Home Assistant korrigiert hast. Die Vorschau gilt eine Stunde („gültig bis …“); **„Details in der Werkbank“** öffnet sie in der Reparatur-Werkbank. Es läuft immer nur ein Vorgang.
   - **Musst du etwas eintragen oder auswählen**, führt der Knopf auf das betroffene **Feld** — er heißt nach dem Ziel, etwa „Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif bearbeiten“, „Anlage bearbeiten“: in der **Datenquellen-Zuordnung** klappen Block und Gerät auf, die Feldzeile ist markiert (auch in „Weitere Größen erfassen“); im **Komponenten-Formular** steht der Cursor im Feld — liegt es in einem zugeklappten Abschnitt (etwa „Weitere Angaben & Kosten“ oder „Netzladung & Arbitrage“), öffnet er sich; beim Sprung sind alle zugeklappten Abschnitte dieses Formulars offen. Unter **Strompreise** öffnet sich der betroffene Tarif am Feld oder „Neuen Tarif anlegen“ mit Verwendung und Beginn vorbelegt (etwa für eine Lücke); unter **Anlage** die gewählte Anlage am Feld (z. B. Inbetriebnahme), unter **Solarprognose** „Neue Prognose abrufen“ an den Systemverlusten; im **Monatsabschluss** der Monat am Feld des Geräts. Der Geräte-Connector öffnet direkt. Kennt der Befund das Gerät nicht (etwa eine Summe über alle Autos), landet der Knopf beim ersten passenden Gerät bzw. auf der Seite. Fehlt einem Reparatur-Befund die Quelle (keine Leistungs-Zuordnung), heißt sein Knopf „Sensor zuordnen“ und führt zur fehlenden Zuordnung.
   - **Ist nichts zu tun oder liegt der Weg außerhalb von eedc**, öffnet **„Was gilt“** den Lösungsweg. Ein Weg in **Home Assistant** (Entwicklerwerkzeuge, Statistik, „Wert anpassen“; Helfer; `state_class`) steht im Text des Befunds; Wege in eedc nennt der Text nicht — der Knopf ist der Weg.
-- **Lösungsweg:** Der Link öffnet **den Abschnitt dieses Befunds** ([alle Befunde](#alle-befunde)) **neben der Liste** (auf dem Handy als Fenster): *Was eedc sieht* · *Lösungsweg* in nummerierten Schritten — Schritte in eedc sind anklickbar, Schritte in Home Assistant stehen als Text, der letzte ist *Erneut prüfen* — · *Was ohne Handlung gilt*. Bei Abweichungen zu Home Assistant ist der letzte Schritt, das Diagnose-Paket zu kopieren und mit deiner Frage zu melden. Das Fenster bleibt beim Scrollen neben der Liste stehen und holt sich ins Bild, auch wenn du es aus der letzten Kategorie öffnest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; innerhalb von Home Assistant (Seitenmenü oder App) fehlt dieser Knopf, weil ein eigenes Fenster dort keine Anmeldung hätte — direkt geöffnet (Port 8099) gibt es ihn.
+- **Lösungsweg:** Der Link öffnet **den Abschnitt dieses Befunds** ([alle Befunde](#alle-befunde)) **neben der Liste** (auf dem Handy als Fenster): *Was eedc sieht* · *Lösungsweg* in nummerierten Schritten — Schritte in eedc sind anklickbar, Schritte in Home Assistant stehen als Text, der letzte ist *Erneut prüfen* — · *Was ohne Handlung gilt*. Bei Abweichungen zu Home Assistant ist der letzte Schritt, deine Frage im Forum oder auf GitHub zu stellen — um das Diagnose-Paket bitten wir dich dort, wenn wir es brauchen. Das Fenster bleibt beim Scrollen neben der Liste stehen und holt sich ins Bild, auch wenn du es aus der letzten Kategorie öffnest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; innerhalb von Home Assistant (Seitenmenü oder App) fehlt dieser Knopf, weil ein eigenes Fenster dort keine Anmeldung hätte — direkt geöffnet (Port 8099) gibt es ihn.
 
 Die Komponenten-Seiten (Block **Daten-Qualität**) zeigen die Befunde ihres Geräts mit denselben Knöpfen.
 
 ### Diagnose-Paket <a name="diagnose-paket"></a>
 
-Wenn du im Forum oder auf GitHub nach Hilfe fragst, schick das Diagnose-Paket mit:
-**Einstellungen → Daten → Daten-Checker → Diagnose-Paket → Kopieren.**
+Das Diagnose-Paket ist ein Auszug der Daten **einer Anlage**, damit wir eine Frage an deinen Daten nachvollziehen können.
+Stell deine Frage zuerst im Forum oder auf GitHub; **lade das Paket erst herunter, wenn wir dich in unserer Antwort darum
+bitten**, und schick es an die Adresse aus dieser Antwort — nie öffentlich posten.
 
-Der Knopf öffnet ein Fenster mit einem Text (Markdown) in 13 Abschnitten: Kopf (eedc-Version, Betriebsart Add-on oder
-Standalone, Home Assistant erreichbar und seine Version, Zeitzone), Anlage, Komponenten mit ihren Fach-Parametern,
-Zuordnungen je Feld (Quelle und Sensor), Strompreise, alle Befunde des Daten-Checkers (auch die OK-Zeilen, ohne die langen
-Erklärtexte), HA-Spiegel, Nachtlauf und Reparaturen aus dem Aktivitätsprotokoll, Kanal-Tage der letzten 90 Tage, Monate,
-die Tageswerte der betroffenen Monate (höchstens zwei), Zeitpläne und die letzten Warnungen aus dem Log.
+**So geht's:**
 
-- **Bearbeiten:** Das Textfeld ist bearbeitbar. Es enthält Entity-Namen, Standort und Preise — entferne, was du nicht
-  teilen willst, bevor du kopierst.
-- **Kopieren** übernimmt den Text aus dem Fenster in die Zwischenablage. Diese Fassung bleibt unter 20 KB; ist sie
-  größer, kürzt eedc nacheinander: das Log, den zweiten Monat der Tageswerte, die Spiegel-Abschnitte, die OK-Zeilen,
-  die Zuordnungen auf Felder mit Quelle, die Komponenten auf ihre Kennwerte (ohne Parameter), die Befunde auf Warnungen
-  und Fehler (Hinweise als Zahl) und zuletzt die Tageswerte ganz. Reicht das nicht, fallen ganze Abschnitte weg —
-  Strompreise, Monate, Komponenten, Kanal-Tage, Zuordnungen, Anlage, in dieser Reihenfolge; **Kopf, Befunde, HA-Spiegel,
-  Nachtlauf und Reparaturen sowie Zeitpläne bleiben immer**. Was gekürzt ist, steht im Kopf unter „Kürzungen“.
-- **Als Datei herunterladen** speichert die ungekürzte Fassung als `.md`-Datei. Innerhalb von Home Assistant (Seitenmenü
-  oder App) lädt eedc die Datei direkt über ihre Adresse. Speichert die App keine Datei, kopiere den Text und füge ihn in
-  eine Notiz ein — so steht es auch unter dem Knopf. Für ein Forum ist **Kopieren** der Weg (viele Foren nehmen keine
-  Datei als Anhang); auf GitHub lässt sich die `.md`-Datei anhängen.
+1. *Einstellungen → Daten → Daten-Checker* öffnen und im Kopf **«Diagnose-Paket»** wählen.
+2. eedc stellt das Paket zusammen (*„Diagnose-Paket wird zusammengestellt …“*); bei einer großen Anlage dauert das eine
+   Weile. Danach zeigt das Fenster, was drin ist — mit den Zahlen dieses Pakets — und die Größe.
+3. **«Herunterladen»** speichert die Datei `eedc_diagnose_<Anlage>_<Datum>.zip`.
+4. Bis etwa 10 MB: die Datei **per E-Mail** an die Adresse aus unserer Antwort schicken. Darüber sagt das Fenster es dir:
+   die Datei in einen **Cloud-Speicher** legen (etwa Dropbox oder Google Drive) und den **Freigabe-Link** an diese Adresse
+   schicken.
 
-Zugangsdaten enthält das Paket nie: keine Token, keine Passwörter, keine Adresse einer Home-Assistant-Verbindung, nicht
-die Zugangsdaten eines Geräte-Connectors (nur seinen Namen), keinen Solcast-Schlüssel, keine Versorger-Daten wie die
-Kundennummer. eedc schickt das Paket nirgendwohin — du entscheidest, wem du es gibst. Erstellt wird es nur lesend:
-eedc ändert dabei nichts und gleicht nichts mit Home Assistant ab.
+**Auf dem iPhone oder iPad in der Home-Assistant-App** liegt die Datei nach «Herunterladen» nicht sofort in *Dateien*:
+
+1. Nach «Herunterladen» erscheint ein grüner Haken und ein Knopf mit dem Dateinamen.
+2. Den Knopf antippen — das Teilen-Blatt öffnet sich.
+3. **«In Dateien sichern»** wählen oder direkt eine Mail-App, um die Datei gleich zu verschicken.
+
+**Auf Android** (App oder Browser) liegt die Datei nach «Herunterladen» in *Downloads*.
+
+**Das Paket gilt 15 Minuten.** Danach steht im Fenster *„Das Paket ist abgelaufen.“* und statt «Herunterladen» der Knopf
+**«Neu zusammenstellen»**. Ist das Paket beim Herunterladen schon abgelaufen (oder eedc wurde zwischendurch neu
+gestartet), sagt das Fenster *„Das Paket ist abgelaufen — es wird neu zusammengestellt.“* und stellt es neu bereit;
+danach noch einmal «Herunterladen». Kann eedc das Paket nicht erstellen, steht der Grund im Fenster, dazu «Neu
+zusammenstellen». Fehlt ein Teil (etwa eine Tabelle, die sich nicht lesen ließ), nennt das Fenster ihn; das Paket ist
+trotzdem brauchbar, der Grund steht darin.
+
+**Drin ist** (so steht es auch im Fenster):
+
+- Standort: Ort, PLZ, Koordinaten auf zwei Nachkommastellen gerundet
+- Anlagenname, Geräte, Tarife, Kosten und steuerliche Einordnung
+- Zuordnungen mit Entity-Namen und MQTT-Topics — sie können Seriennummern tragen
+- Monatswerte, Tageswerte und Stundenwerte — Stundenwerte zeigen, wann jemand zu Hause ist
+- eigene Notizen und Beschreibungen
+- Protokolle und Prüfergebnisse **der ganzen Installation** — mit Netzwerkadressen von Broker und Geräten und
+  Gerätekennungen wie Seriennummern; bei mehreren Anlagen auch Zeilen zu den anderen
+
+Dazu der Stand von eedc: Version, Betriebsart (Add-on oder Standalone), ob Home Assistant erreichbar ist und seine
+Version, seit wann eedc läuft, die Zeitzone (im Add-on die Zeitzone von Home Assistant), die Ergebnisse des
+Daten-Checkers, die Zeitpläne und die letzten Zeilen des Protokolls.
+
+**Nicht drin:** Zugangsdaten (keine Token, keine Passwörter, keine Adresse einer Home-Assistant-Verbindung, nicht die
+Zugangsdaten eines Geräte-Connectors, kein Solcast-Schlüssel), Straße, Fotos, Infothek, Kontakt- und Vertragsangaben aus
+den Geräte-Stammdaten, Versorger-Daten wie die Kundennummer.
+
+**Abgleich mit Home Assistant — nur lesend:** Für jede Zuordnung, die eedc aus der Statistik von Home Assistant spiegelt,
+vergleicht das Paket den Spiegel mit Home Assistant und hält fest, ob beides gleich ist und ab wann nicht. eedc ändert
+dabei nichts — weder in seinen Daten noch in Home Assistant. Ist Home Assistant nicht erreichbar, steht das im Paket.
+
+eedc schickt das Paket nirgendwohin — du entscheidest, wem du es gibst. Für eine Analyse durch uns schick das
+Diagnose-Paket, nicht den JSON-Export oder ein Backup: die sind zum Sichern und Wiederherstellen da und enthalten dafür
+auch Zugangsdaten wie den Solcast-Schlüssel.
 
 ### Wann sollte ich den Daten-Checker nutzen?
 
@@ -3030,8 +3058,9 @@ von Home Assistant sie zeigt — der Sprung steht deshalb in Tag, Monat und Jahr
    gespeicherter Monat ändert sich nicht von allein.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Sprung ist aus der Liste verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet
@@ -3094,8 +3123,9 @@ wird die ganze übernommene Statistik, nicht nur die letzten 30 Tage.
    gespeicherter Monat ändert sich nicht von allein.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist aus der Liste verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Der Rückgang zieht Tag, Monat und Jahr nach unten. eedc verwirft ihn nicht selbst: die Quelle ist die Statistik in Home
@@ -3575,8 +3605,9 @@ Die Meldung nennt den Zeitraum, die Details die betroffenen Komponenten.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die nachgeholten Tage sind aus der Zeile verschwunden; nennt die
    Meldung ältere oder noch nicht geprüfte Tage, den Knopf ein weiteres Mal anwenden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Die Tage bleiben in eedc leer: Tagesansicht im Cockpit, Stundenwerte und Energieprofil zeigen für sie nichts, obwohl Home
@@ -3596,8 +3627,9 @@ einem Glied je Tag; jedes Glied baut genau diesen Tag neu auf.
    [Statistik-Import](eedc:/einstellungen/integration?block=ha-statistik-import) mit **«Vorschau laden»** neu übernehmen.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist aus der Zeile verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Der Tag bleibt in eedc leer; Tagesansicht im Cockpit, Stundenwerte und Energieprofil zeigen für ihn nichts, obwohl Home
@@ -4025,8 +4057,9 @@ die größten Abweichungen vorn.
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Tag ist aus der Zeile verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Der Tag behält seinen Wert in eedc; Tagesansicht, Monat und alles, was daraus rechnet, nutzen ihn. Home Assistant und
@@ -4050,8 +4083,9 @@ tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbo
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — das Gerät ist aus der Liste verschwunden oder nennt weniger Tage.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 **Was ohne Handlung gilt**
 Die Tage behalten ihren Wert in eedc; Tagesansicht, Monat, Wirtschaftlichkeit und CO₂-Bilanz rechnen damit. Hast du in

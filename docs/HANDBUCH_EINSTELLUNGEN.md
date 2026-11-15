@@ -624,7 +624,7 @@ Diese Kachel enthält **nur die Pflege-Funktionen** des Energieprofils; die **An
 
 ### 5.3 Daten-Checker
 
-Der Daten-Checker prüft die Qualität deiner Daten in mehreren Kategorien — von Stammdaten und Strompreisen über Plausibilität der Monatsdaten bis zu Datenquellen-Konsistenz und HA-Long-Term-Statistics-Verfügbarkeit der zugeordneten Sensoren. Pro Befund gibt es Severity (❌ ERROR / ⚠️ WARNING / ℹ️ INFO / ✅ OK), erklärenden Text, den Link „Lösungsweg" und **einen** Knopf, der sagt, was er tut: eine Reparatur mit Vorschau und „Anwenden", einen Sprung auf die betroffene Stelle („Gerät bearbeiten", „Monat erfassen", „Sensor zuordnen" …) oder „Was gilt". Oben stehen unter „Das kannst du jetzt tun" alle Befunde mit einem Reparatur-Knopf; im Kopf öffnet „Diagnose-Paket" den Text für eine Frage im Forum oder auf GitHub. Der Prüf-Lauf und die Reparatur-Werkbank laufen inline im Block.
+Der Daten-Checker prüft die Qualität deiner Daten in mehreren Kategorien — von Stammdaten und Strompreisen über Plausibilität der Monatsdaten bis zu Datenquellen-Konsistenz und HA-Long-Term-Statistics-Verfügbarkeit der zugeordneten Sensoren. Pro Befund gibt es Severity (❌ ERROR / ⚠️ WARNING / ℹ️ INFO / ✅ OK), erklärenden Text, den Link „Lösungsweg" und **einen** Knopf, der sagt, was er tut: eine Reparatur mit Vorschau und „Anwenden", einen Sprung auf die betroffene Stelle („Gerät bearbeiten", „Monat erfassen", „Sensor zuordnen" …) oder „Was gilt". Oben stehen unter „Das kannst du jetzt tun" alle Befunde mit einem Reparatur-Knopf; im Kopf stellt „Diagnose-Paket" einen Auszug der Daten dieser Anlage zum Herunterladen bereit — den schickst du, wenn wir dich in unserer Antwort auf deine Frage im Forum oder auf GitHub darum bitten ([Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)). Der Prüf-Lauf und die Reparatur-Werkbank laufen inline im Block.
 
 > **Vollständige Doku** mit allen Kategorien, Befund-Tabellen und Behebungs-Workflows: **[Daten-Checker-Handbuch](HANDBUCH_DATEN_CHECKER.md)**.
 
@@ -1139,6 +1139,7 @@ Zum Ausprobieren ohne echte Daten: generiert eine „Demo-Anlage" mit realistisc
 Vollständiger **JSON-Export** einer Anlage und **Drag-&-Drop-Restore** — inline im Block (kein separater Assistent):
 
 - **Enthalten:** Anlage-Stammdaten (inkl. MaStR-ID, Versorger), Datenquellen-Zuordnungen (mit ihnen der Solcast-API-Schlüssel), alle Komponenten mit Monatsdaten, Strompreise, PVGIS-Prognosen, Monatsdaten inkl. Wetter und sonstige Positionen. Die Zugangsdaten der Cloud-Importe sind nicht enthalten.
+- **Für eine Analyse durch uns** schick das [Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket), nicht den JSON-Export oder ein Backup: die sind zum Sichern und Wiederherstellen da und enthalten dafür auch Zugangsdaten wie den Solcast-Schlüssel.
 - **Restore:** optional „Überschreiben" (sonst wird bei gleichem Namen ein Suffix ergänzt).
 
 > **Nach dem Restore:** Komponenten-IDs ändern sich beim Import — prüfe die Datenquellen-Zuordnungen (und den MQTT-Export) und speichere sie bei Bedarf erneut. Die MQTT-Topic-Abdeckung im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) zeigt sofort, ob deine Publisher noch zu den Topic-Pfaden passen.
@@ -1153,7 +1154,7 @@ Das zentrale Werkzeug zur Fehlersuche — zwei Tabs, Debug-Umschalter und Neusta
 
 **Support-Workflow:** Debug an → Problem reproduzieren → System-Logs (Level WARNING, Modul-Filter) → Aktivitäten prüfen → Logs kopieren → in Issue einfügen → Debug wieder aus.
 
-Für eine Rückfrage im Forum reicht meist das **Diagnose-Paket** (*Einstellungen → Daten → Daten-Checker → Diagnose-Paket*): es trägt die letzten Nachtlauf- und Reparatur-Zeilen aus den Aktivitäten und die letzten Warnungen aus den System-Logs schon mit, dazu Version, Zuordnungen und Befunde — ohne Zugangsdaten ([Daten-Checker: Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)).
+Bitten wir dich auf eine Frage im Forum oder auf GitHub um das **Diagnose-Paket** (*Einstellungen → Daten → Daten-Checker → Diagnose-Paket*), trägt es die Aktivitäten und die letzten Zeilen der System-Logs schon mit, dazu Version, Zuordnungen, Befunde und die Werte der Anlage — ohne Zugangsdaten; du schickst es an die Adresse aus unserer Antwort ([Daten-Checker: Diagnose-Paket](HANDBUCH_DATEN_CHECKER.md#diagnose-paket)).
 
 ---
 

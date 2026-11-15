@@ -78,19 +78,43 @@ export interface DatenCheckResponse {
   nicht_ausfuehrbar?: NichtAusfuehrbar[]
 }
 
-/** E1: Fassung des Diagnose-Pakets — `datei` ungekürzt, `kopie` höchstens 20 KB (Kürzung steht im Kopf). */
-export type DiagnosePaketFassung = 'datei' | 'kopie'
-
-export interface DiagnosePaket {
-  text: string
-  dateiname: string
+/** Diagnose-Paket v4: Zähler der Inhaltsliste (Zeilen je Gruppe, Bauplan §3.4) — der Dialog zeigt sie, rechnet nichts. */
+export interface DiagnosePaketInhalt {
+  geraete: number
+  tarife: number
+  zuordnungen: number
+  monatswerte: number
+  tageswerte: number
+  stundenwerte: number
+  notizen: number
+  protokollzeilen: number
+  protokollzeilen_ohne_anlage: number
+  befunde: number
 }
 
-/** Adresse des Diagnose-Pakets (relativ wie `api/client.ts`, damit Ingress greift). */
-export function diagnosePaketUrl(anlageId: number, fassung: DiagnosePaketFassung, monate?: string[]): string {
-  const q = new URLSearchParams({ fassung })
-  if (monate && monate.length > 0) q.set('monate', monate.join(','))
-  return `./api/system/diagnose-paket/${anlageId}?${q.toString()}`
+/** Antwort von `…/bereitstellen`: das Paket liegt fertig bereit und lässt sich mit `marke` herunterladen (gültig `gueltig_s`). */
+export interface DiagnosePaketBereit {
+  marke: string
+  dateiname: string
+  bytes: number
+  megabyte: number
+  gueltig_s: number
+  versandweg: 'email' | 'freigabe_link'
+  inhalt: DiagnosePaketInhalt
+  teilfehler: string[]
+}
+
+/** Adresse der bereitgestellten Datei (relativ wie `api/client.ts`, damit Ingress greift). */
+export function diagnosePaketUrl(anlageId: number, marke: string): string {
+  return `./api/system/diagnose-paket/${anlageId}?marke=${encodeURIComponent(marke)}`
+}
+
+/** Prüfabruf vor dem Herunterladen im HA-Rahmen: `true` bei 204 (Marke gültig), `false` bei 404 (abgelaufen, ersetzt, Neustart). */
+export async function diagnosePaketPruefen(anlageId: number, marke: string): Promise<boolean> {
+  const res = await fetch(`${diagnosePaketUrl(anlageId, marke)}&pruefen=1`)
+  if (res.status === 204) return true
+  if (res.status === 404) return false
+  throw new Error(`HTTP ${res.status}`)
 }
 
 export const datenCheckerApi = {
@@ -98,15 +122,8 @@ export const datenCheckerApi = {
     return api.get<DatenCheckResponse>(`/system/daten-check/${anlageId}`)
   },
 
-  /** Das Diagnose-Paket als Text (Markdown) samt Dateiname aus dem Anhang-Kopf. */
-  async diagnosePaket(anlageId: number, fassung: DiagnosePaketFassung, monate?: string[]): Promise<DiagnosePaket> {
-    const res = await fetch(diagnosePaketUrl(anlageId, fassung, monate))
-    if (!res.ok) {
-      const detail = await res.json().catch(() => null)
-      throw new Error(detail?.detail || `HTTP ${res.status}`)
-    }
-    const kopf = res.headers.get('content-disposition') ?? ''
-    const name = /filename="([^"]+)"/.exec(kopf)?.[1] ?? `eedc_diagnose_${anlageId}.md`
-    return { text: await res.text(), dateiname: name }
+  /** Diagnose-Paket v4 bereitstellen (synchron, Variante A): baut die ZIP-Datei und antwortet mit Marke und Inhaltsliste. */
+  async diagnosePaketBereitstellen(anlageId: number): Promise<DiagnosePaketBereit> {
+    return api.get<DiagnosePaketBereit>(`/system/diagnose-paket/${anlageId}/bereitstellen`)
   },
 }

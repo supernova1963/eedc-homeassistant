@@ -168,7 +168,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
           {result && !loading && <KopfZeile result={result} stand={stand} />}
         </div>
         <div className="flex items-center gap-2">
-          {/* E1: Diagnose-Paket zum Kopieren oder Herunterladen (Konzept Daten-Checker §8.3). */}
+          {/* Diagnose-Paket v4: Auszug der Anlage als ZIP zum Herunterladen (Konzept Diagnose-Paket v4). */}
           <Button variant="secondary" size="sm" onClick={() => setDiagnoseOffen(true)} title="Diagnose-Paket">
             <FileText className="h-4 w-4 mr-2" />
             Diagnose-Paket

@@ -18,8 +18,9 @@ von Home Assistant sie zeigt — der Sprung steht deshalb in Tag, Monat und Jahr
    gespeicherter Monat ändert sich nicht von allein.
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Sprung ist aus der Liste verschwunden.
 
-Bleibt der Befund danach: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Kopieren»** und mit deiner Frage
-melden (Forum oder GitHub); «Als Datei herunterladen» ist der zweite Weg.
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
 
 ## Was ohne Handlung gilt
 Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet

@@ -15,7 +15,9 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from backend.models import Anlage
+import pytest
+
+from backend.models import Anlage, Investition
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.services.daten_checker import (
     CheckKategorie,
@@ -105,10 +107,18 @@ async def test_pr_zu_geringer_anteil_kein_eintrag(db):
     assert _pv_ergebnis(ergebnisse) == []
 
 
-async def test_pr_dauerhaft_drueber_warnung(db):
-    """5 von 10 Tagen mit PR > 1.05 (50 %) → Warnung."""
+@pytest.mark.parametrize("mit_bkw", [True, False])
+async def test_pr_dauerhaft_drueber_warnung(db, mit_bkw):
+    """5 von 10 Tagen mit PR > 1.05 (50 %) → Warnung.
+
+    N-798: die Prüfschritte zum Balkonkraftwerk (Ursachen-Zeile, «Prüfen: … den Block des Balkonkraftwerks», Test-Variante)
+    stehen nur, wenn die Anlage ein aktives Balkonkraftwerk hat; der Marker nennt die Tage mit Performance-Ratio-Wert.
+    """
     aid = await _seed_anlage(db)
     today = date.today()
+    if mit_bkw:
+        db.add(Investition(anlage_id=aid, typ="balkonkraftwerk", bezeichnung="Balkon",
+                           anschaffungsdatum=today - timedelta(days=400)))
     werte = [1.22, 1.20, 1.18, 1.15, 1.10, 0.9, 0.85, 0.92, 0.88, 0.95]
     for i, pr in enumerate(werte):
         await _add_tag(db, aid, today - timedelta(days=i), pr=pr)
@@ -118,11 +128,21 @@ async def test_pr_dauerhaft_drueber_warnung(db):
     pv = _pv_ergebnis(ergebnisse)
     assert len(pv) == 1
     e = pv[0]
+    details = e.details or ""
     assert e.schwere == CheckSeverity.WARNING.value
-    assert "Doppelerfassung" in e.meldung or "Doppelerfassung" in (e.details or "")
-    assert "BKW" in (e.details or "")
+    assert "Doppelerfassung" in e.meldung or "Doppelerfassung" in details
+    assert "an 5 von 10 Tagen mit Performance-Ratio-Wert" in details
+    if mit_bkw:
+        assert "BKW" in details
+        assert "den Block des Balkonkraftwerks" in details
+        assert "Test-Variante" in details
+    else:
+        assert "BKW" not in details
+        assert "Balkonkraftwerk" not in details
+        assert "Test-Variante" not in details
+        assert details.endswith("herausgerechnet (#385).")
     # Höchstwerte in Details
-    assert "1,22" in (e.details or "")
+    assert "1,22" in details
 
 
 async def test_spez_ertrag_signal_ohne_pr(db):
