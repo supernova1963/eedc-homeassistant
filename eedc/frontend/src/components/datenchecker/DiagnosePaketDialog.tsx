@@ -18,7 +18,7 @@
  * kein Signal vom Gerät — aber eedc zählt, wie oft die Datei **ganz** gesendet wurde (`ausgeliefert`, ein abgebrochener
  * Abruf zählt nicht; die Android-App ruft zweimal, das WebView bricht ab): der Dialog merkt sich den Stand vor
  * `location.assign` und fragt alle 1,5 s nach, höchstens 90 s. Steigt der Zähler ⇒ «Heruntergeladen: <Dateiname>»,
- * sonst der Satz «Der Download läuft im Hintergrund …» — als Kasten über der Knopfzeile. Danach steht «Schließen» neben «Herunterladen»; das Fenster
+ * sonst der Satz «Der Download läuft im Hintergrund …». Danach steht «Schließen» neben «Herunterladen»; das Fenster
  * schließt nie von selbst (der Versand-Satz muss lesbar bleiben). Schließen oder Abbau beendet die Abfrage.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -92,21 +92,15 @@ async function ausloesen(anlageId: number, paket: DiagnosePaketBereit, signal: A
   return aufAbschlussWarten(anlageId, paket.marke, stand.ausgeliefert, signal)
 }
 
-/** Steht **über** der Knopfzeile (Lab rc37, iPhone: unter den Knöpfen lag die Zeile außerhalb des sichtbaren Bereichs). */
 function Rueckmeldung({ ergebnis }: { ergebnis: Ergebnis }) {
+  const klasse = 'text-sm text-gray-600 dark:text-gray-400 text-right'
   if (ergebnis.art === 'fertig') {
-    return (
-      <Alert type="success">
-        <span data-testid="download-fertig">Heruntergeladen: {ergebnis.dateiname}</span>
-      </Alert>
-    )
+    return <p data-testid="download-fertig" className={klasse}>Heruntergeladen: {ergebnis.dateiname}</p>
   }
   return (
-    <Alert type="info">
-      <span data-testid="download-hintergrund">
-        Der Download läuft im Hintergrund. Die Datei {ergebnis.dateiname} liegt gleich in deinen Downloads.
-      </span>
-    </Alert>
+    <p data-testid="download-hintergrund" className={klasse}>
+      Der Download läuft im Hintergrund. Die Datei {ergebnis.dateiname} liegt gleich in deinen Downloads.
+    </p>
   )
 }
 
@@ -274,7 +268,6 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
         )}
         {downloadFehler && <Alert type="error">{downloadFehler}</Alert>}
         {abgelaufen && <p className="text-sm text-gray-600 dark:text-gray-400">{TEXT_ABGELAUFEN}</p>}
-        {ergebnis && !abgelaufen && <Rueckmeldung ergebnis={ergebnis} />}
         <div className="flex flex-wrap justify-end gap-2">
           {!laedt && (fehler || abgelaufen) && (
             <Button variant="secondary" size="sm" onClick={neuZusammenstellen}>
@@ -294,6 +287,7 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
             </Button>
           )}
         </div>
+        {ergebnis && !abgelaufen && <Rueckmeldung ergebnis={ergebnis} />}
       </div>
     </Modal>
   )
