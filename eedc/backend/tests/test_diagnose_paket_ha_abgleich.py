@@ -65,8 +65,12 @@ async def test_g4_versatz_ab_t_hoechstens_744(ha, datei):  # noqa: F811
     _verschiebe(svc, _EINSP_MID, t, -480.0)
     a = _je_key(await hab.ha_abgleich(sitzungen, aid, ha_svc=svc))["basis:einspeisung"]
     assert a["gleich"] is False and a["erste_abweichung"] == t
-    # Fenster 744 Stunden ab t; darin liegen die 48 Stunden der Fixture-Lücke ohne HA-Zeile ⇒ 696 Zeilen.
-    assert hab.HA_ZEILEN_MAX == 744 and len(a["ha_zeilen"]) == 744 - 48
+    # Fenster 744 Stunden ab t; darin fehlen die 48 Stunden der Fixture-Lücke ohne HA-Zeile. Die Fixture schreitet in
+    # naiven Ortsstunden: liegt im Fenster ein Wechsel auf Winterzeit (Pacific/Auckland, 5.4.2026), fehlt ihr dort eine
+    # weitere Stunde — die Erwartung zählt deshalb die HA-Zeilen der Fixture im Fenster (CI Auckland, v4.3.1).
+    erwartet = sum(1 for ts in ha[1]["sensor.einsp"] if t <= ts < t + hab.HA_ZEILEN_MAX * 3600)
+    assert hab.HA_ZEILEN_MAX == 744 and erwartet in (744 - 48, 744 - 49)
+    assert len(a["ha_zeilen"]) == erwartet
     assert int(a["ha_zeilen"][0]["start_ts"]) == t
     assert int(a["ha_zeilen"][-1]["start_ts"]) == t + 743 * 3600
 
