@@ -12,8 +12,14 @@
  *   die Route sendet `Content-Disposition: attachment`, die Seite bleibt stehen. Ohne Prüfabruf ersetzte ein 404
  *   (abgelaufen, ersetzt, Neustart) die eedc-Seite ohne Text (K8).
  * Der Client vergleicht keine Größen (Ingress sendet ab 10 MB `chunked` statt `Content-Length`).
- * Nach dem Auslösen steht unter dem Knopf «Download gestartet: <Dateiname>» (Lab rc35, Android: ohne Rückmeldung
- * wirkte der Knopf ohne Funktion); während des Auslösens ist der Knopf gesperrt.
+ *
+ * Abschluss-Meldung (Lab rc36, Wunsch Gernot): während des Downloads dreht der Kreisel im Knopf, der Knopf ist gesperrt.
+ * Auf dem Blob-Weg ist der Download fertig, wenn `downloadFile` zurückkommt. Auf dem Navigationsweg bekommt die Seite
+ * kein Signal vom Gerät — aber eedc zählt, wie oft die Datei **ganz** gesendet wurde (`ausgeliefert`, ein abgebrochener
+ * Abruf zählt nicht; die Android-App ruft zweimal, das WebView bricht ab): der Dialog merkt sich den Stand vor
+ * `location.assign` und fragt alle 1,5 s nach, höchstens 90 s. Steigt der Zähler ⇒ «Heruntergeladen: <Dateiname>»,
+ * sonst der Satz «Der Download läuft im Hintergrund …». Danach steht «Schließen» neben «Herunterladen»; das Fenster
+ * schließt nie von selbst (der Versand-Satz muss lesbar bleiben). Schließen oder Abbau beendet die Abfrage.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw } from 'lucide-react'
@@ -27,6 +33,13 @@ import { fmtZahl } from '../../lib/einheiten'
 
 export const TEXT_ABGELAUFEN_NEU = 'Das Paket ist abgelaufen — es wird neu zusammengestellt.'
 export const TEXT_ABGELAUFEN = 'Das Paket ist abgelaufen.'
+/** Navigationsweg: Abstand der Prüfabrufe und höchste Wartezeit auf das Ende des Downloads. */
+export const ABFRAGE_MS = 1500
+export const WARTEZEIT_MS = 90_000
+
+/** Ausgang eines Downloads: fertig · ohne Signal im Hintergrund · Marke nicht bereit · still (abgebrochen, 404 beim Warten). */
+type Ende = 'fertig' | 'hintergrund' | 'abgelaufen' | 'still'
+type Ergebnis = { art: 'fertig' | 'hintergrund'; dateiname: string }
 
 interface Props {
   isOpen: boolean
@@ -39,16 +52,56 @@ function perNavigation(): boolean {
   return istImHaRahmen() && !istAppleMobil()
 }
 
-/** Löst den Download aus; `false` heißt: die Marke ist nicht mehr bereit (Prüfabruf 404, Navigationsweg). */
-async function ausloesen(anlageId: number, paket: DiagnosePaketBereit): Promise<boolean> {
-  const url = diagnosePaketUrl(anlageId, paket.marke)
-  if (perNavigation()) {
-    if (!(await diagnosePaketPruefen(anlageId, paket.marke))) return false
-    window.location.assign(url)
-    return true
+/** Wartet `ms`; `false`, wenn vorher abgebrochen (der Zeitgeber wird dann gelöscht). */
+function warten(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) { resolve(false); return }
+    const abbrechen = () => { clearTimeout(zeitgeber); resolve(false) }
+    const zeitgeber = setTimeout(() => { signal.removeEventListener('abort', abbrechen); resolve(true) }, ms)
+    signal.addEventListener('abort', abbrechen, { once: true })
+  })
+}
+
+/** Navigationsweg: fragt nach, bis eedc eine weitere vollständige Auslieferung zählt (`vorher`), höchstens `WARTEZEIT_MS`. */
+async function aufAbschlussWarten(anlageId: number, marke: string, vorher: number, signal: AbortSignal): Promise<Ende> {
+  const bis = Date.now() + WARTEZEIT_MS
+  while (Date.now() < bis) {
+    if (!(await warten(ABFRAGE_MS, signal))) return 'still'
+    let stand
+    try {
+      stand = await diagnosePaketPruefen(anlageId, marke)
+    } catch {
+      continue                               // ein gestörter Prüfabruf beendet das Warten nicht
+    }
+    if (signal.aborted || !stand.gueltig) return 'still'     // 404 beim Warten: die Ablauf-Logik greift
+    if (stand.ausgeliefert > vorher) return 'fertig'
   }
-  await downloadFile(url, paket.dateiname)
-  return true
+  return 'hintergrund'
+}
+
+/** Löst den Download aus und wartet auf sein Ende; `abgelaufen` heißt: die Marke ist nicht mehr bereit (Prüfabruf 404). */
+async function ausloesen(anlageId: number, paket: DiagnosePaketBereit, signal: AbortSignal): Promise<Ende> {
+  const url = diagnosePaketUrl(anlageId, paket.marke)
+  if (!perNavigation()) {
+    await downloadFile(url, paket.dateiname)
+    return 'fertig'
+  }
+  const stand = await diagnosePaketPruefen(anlageId, paket.marke)
+  if (!stand.gueltig) return 'abgelaufen'
+  window.location.assign(url)
+  return aufAbschlussWarten(anlageId, paket.marke, stand.ausgeliefert, signal)
+}
+
+function Rueckmeldung({ ergebnis }: { ergebnis: Ergebnis }) {
+  const klasse = 'text-sm text-gray-600 dark:text-gray-400 text-right'
+  if (ergebnis.art === 'fertig') {
+    return <p data-testid="download-fertig" className={klasse}>Heruntergeladen: {ergebnis.dateiname}</p>
+  }
+  return (
+    <p data-testid="download-hintergrund" className={klasse}>
+      Der Download läuft im Hintergrund. Die Datei {ergebnis.dateiname} liegt gleich in deinen Downloads.
+    </p>
+  )
 }
 
 function Inhaltsliste({ paket }: { paket: DiagnosePaketBereit }) {
@@ -106,10 +159,16 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
   const [hinweis, setHinweis] = useState<string | null>(null)
   const [abgelaufen, setAbgelaufen] = useState(false)
   const [laeuft, setLaeuft] = useState(false)
-  const [gestartet, setGestartet] = useState<string | null>(null)
+  const [ergebnis, setErgebnis] = useState<Ergebnis | null>(null)
   // Laufnummer: nur die Antwort des jüngsten Bereitstellens im offenen Dialog zählt (Schließen/erneutes Öffnen).
   const lauf = useRef(0)
   const zeitgeber = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Laufender Download: Schließen, Abbau und neues Bereitstellen brechen sein Warten ab (kein Zeitgeber, kein setState danach).
+  const download = useRef<AbortController | null>(null)
+  const downloadAus = () => {
+    download.current?.abort()
+    download.current = null
+  }
 
   const zeitgeberAus = () => {
     if (zeitgeber.current !== null) clearTimeout(zeitgeber.current)
@@ -118,10 +177,12 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
 
   const bereitstellen = useCallback(async () => {
     zeitgeberAus()
+    downloadAus()
+    setLaeuft(false)
     setLaedt(true)
     setFehler(null)
     setDownloadFehler(null)
-    setGestartet(null)
+    setErgebnis(null)
     setAbgelaufen(false)
     setPaket(null)
     const nr = ++lauf.current
@@ -147,6 +208,7 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
     return () => {
       lauf.current += 1
       zeitgeberAus()
+      downloadAus()
     }
   }, [isOpen, bereitstellen])
 
@@ -159,18 +221,22 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
     if (!paket || laeuft) return
     setHinweis(null)
     setDownloadFehler(null)
-    setGestartet(null)
+    setErgebnis(null)
     setLaeuft(true)
-    const nr = lauf.current
+    const steuerung = new AbortController()
+    download.current = steuerung
+    let ende: Ende | 'fehler' | 'nicht_bereit'
     try {
-      if (!(await ausloesen(anlageId, paket))) neuWeilAbgelaufen()
-      else if (nr === lauf.current) setGestartet(paket.dateiname)
+      ende = await ausloesen(anlageId, paket, steuerung.signal)
     } catch (e) {
-      if (e instanceof DownloadFehler && e.status === 404) neuWeilAbgelaufen()
-      else setDownloadFehler('Die Datei konnte nicht heruntergeladen werden.')
-    } finally {
-      setLaeuft(false)
+      ende = e instanceof DownloadFehler && e.status === 404 ? 'nicht_bereit' : 'fehler'
     }
+    if (steuerung.signal.aborted) return            // geschlossen, abgebaut oder neu bereitgestellt: nichts mehr setzen
+    download.current = null
+    setLaeuft(false)
+    if (ende === 'abgelaufen' || ende === 'nicht_bereit') neuWeilAbgelaufen()
+    else if (ende === 'fehler') setDownloadFehler('Die Datei konnte nicht heruntergeladen werden.')
+    else if (ende !== 'still') setErgebnis({ art: ende, dateiname: paket.dateiname })
   }
 
   const neuZusammenstellen = () => {
@@ -209,18 +275,19 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
               Neu zusammenstellen
             </Button>
           )}
+          {!laedt && ergebnis && !abgelaufen && (
+            <Button variant="secondary" size="sm" onClick={onClose}>
+              Schließen
+            </Button>
+          )}
           {!laedt && paket && !abgelaufen && (
-            <Button size="sm" onClick={herunterladen} disabled={laeuft}>
-              <Download className="h-4 w-4 mr-2" />
+            <Button size="sm" onClick={herunterladen} loading={laeuft}>
+              {!laeuft && <Download className="h-4 w-4 mr-2" />}
               Herunterladen
             </Button>
           )}
         </div>
-        {gestartet && !abgelaufen && (
-          <p data-testid="download-gestartet" className="text-sm text-gray-600 dark:text-gray-400 text-right">
-            Download gestartet: {gestartet}
-          </p>
-        )}
+        {ergebnis && !abgelaufen && <Rueckmeldung ergebnis={ergebnis} />}
       </div>
     </Modal>
   )

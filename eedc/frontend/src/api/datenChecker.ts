@@ -109,12 +109,22 @@ export function diagnosePaketUrl(anlageId: number, marke: string): string {
   return `./api/system/diagnose-paket/${anlageId}?marke=${encodeURIComponent(marke)}`
 }
 
-/** Prüfabruf vor dem Herunterladen im HA-Rahmen: `true` bei 204 (Marke gültig), `false` bei 404 (abgelaufen, ersetzt, Neustart). */
-export async function diagnosePaketPruefen(anlageId: number, marke: string): Promise<boolean> {
+/** Antwort des Prüfabrufs: `gueltig` (Marke bereit) und `ausgeliefert` (so oft lieferte eedc die Datei vollständig aus). */
+export interface DiagnosePaketPruefung {
+  gueltig: boolean
+  ausgeliefert: number
+}
+
+/**
+ * Prüfabruf (`&pruefen=1`): 200 mit `{ausgeliefert}` ⇒ gültig; 404 ⇒ nicht mehr bereit (abgelaufen, ersetzt, Neustart).
+ * Der Zähler steigt erst, wenn eedc die Datei ganz gesendet hat — der Dialog erkennt daran das Ende des Downloads.
+ */
+export async function diagnosePaketPruefen(anlageId: number, marke: string): Promise<DiagnosePaketPruefung> {
   const res = await fetch(`${diagnosePaketUrl(anlageId, marke)}&pruefen=1`)
-  if (res.status === 204) return true
-  if (res.status === 404) return false
-  throw new Error(`HTTP ${res.status}`)
+  if (res.status === 404) return { gueltig: false, ausgeliefert: 0 }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const daten = (await res.json()) as { ausgeliefert: number }
+  return { gueltig: true, ausgeliefert: daten.ausgeliefert }
 }
 
 export const datenCheckerApi = {

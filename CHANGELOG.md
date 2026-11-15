@@ -16,8 +16,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Monats-, Tages- und Stundenwerte, Notizen, Protokolle und die Prüfergebnisse, dazu ein Abgleich der aus Home Assistant
   gespiegelten Werte mit Home Assistant (nur lesend, eedc ändert dabei nichts). Das Fenster zeigt vorher, was drin ist —
   mit den Zahlen dieses Pakets — und was nicht: keine Zugangsdaten, keine Straße, keine Fotos, keine Infothek, keine
-  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei, und das Fenster bestätigt
-  den Start des Downloads mit dem Dateinamen; du schickst sie, wenn wir
+  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei; solange der Download
+  läuft, dreht sich im Knopf ein Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen, und „Schließen“
+  schließt es; du schickst sie, wenn wir
   dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser Antwort, über etwa
   10 MB als Freigabe-Link eines Cloud-Speichers. Das Fenster sagt, dass eedc die Datei nicht verschickt und sie nicht
   verschlüsselt ist. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu.

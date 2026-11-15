@@ -887,7 +887,7 @@ Speicher** — nach einem Neustart steht dort `null`, bis der Job wieder gelaufe
 
 ```
 GET  /api/system/diagnose-paket/{anlage_id}/bereitstellen           # baut die ZIP, antwortet mit Paket-Feldern (synchron)
-GET  /api/system/diagnose-paket/{anlage_id}?marke=…[&pruefen=1]     # application/zip, Anhang · mit pruefen=1: 204/404 ohne Body
+GET  /api/system/diagnose-paket/{anlage_id}?marke=…[&pruefen=1]     # application/zip, Anhang · mit pruefen=1: 200 {"ausgeliefert": n} / 404
 ```
 
 Routen `api/routes/daten_checker.py::diagnose_paket_bereitstellen` / `::diagnose_paket`, Paket `services/diagnose_paket/` —
@@ -918,11 +918,18 @@ Routen `api/routes/daten_checker.py::diagnose_paket_bereitstellen` / `::diagnose
   abweichenden Stunde (≤ 744).
 - `ablage.py`: Verzeichnis je Datenbank unter dem Temp-Verzeichnis (nicht `/data`, sonst in HA-Sicherungen), ein Eintrag
   je Anlage, die Marke gilt **mehrfach** bis zum Ablauf (15 min) oder Ersatz, die Datei wird beim Herunterladen nie
-  gelöscht (die Android-App ruft die Adresse zweimal); Aufräumen beim Start.
+  gelöscht (die Android-App ruft die Adresse zweimal); Aufräumen beim Start. `ausgeliefert` zählt je Marke die
+  **vollständigen** Auslieferungen: die Download-Route (`_DateiMitAbschluss`) lauscht neben dem Senden auf
+  `http.disconnect` und zählt erst nach dem letzten Stück — uvicorn verwirft Sendungen nach einem Abbruch still, eine
+  `BackgroundTask` zählte ihn mit; Teilabrufe (`Range`) zählen nicht. «Vollständig» heißt an den Server übergeben (Puffer
+  von Netz und Ingress sieht eedc nicht).
 - Dialog `frontend/src/components/datenchecker/DiagnosePaketDialog.tsx`: stellt beim Öffnen bereit, zeigt die Inhaltsliste;
   «Herunterladen» außerhalb des HA-Rahmens und im HA-Rahmen auf iPhone/iPad über `lib/download.ts::downloadFile`
   (`istAppleMobil`), im HA-Rahmen sonst Prüfabruf `&pruefen=1` und dann `window.location.assign` (ein 404 ersetzte sonst
-  die Seite); nach `gueltig_s` «Neu zusammenstellen».
+  die Seite); nach `gueltig_s` «Neu zusammenstellen». Abschluss-Meldung: Kreisel im gesperrten Knopf, bis `downloadFile`
+  zurückkommt bzw. — auf dem Navigationsweg — der Prüfabruf (alle 1,5 s, höchstens 90 s) einen höheren `ausgeliefert`-Stand
+  meldet als vor `location.assign`; dann «Heruntergeladen: …», ohne Signal «Der Download läuft im Hintergrund …», dazu
+  «Schließen»; nie automatisches Schließen.
 
 Wächter **W-7** (a) Vollständigkeit des Registers gegen die MetaData, kein `rein` auf einem Schlüsselwort
 (`tests/test_diagnose_paket_register.py`) · (b) Blatt-Regel je JSON-Spalte, `details_json`-Schlüssel aus dem Code,

@@ -8,6 +8,9 @@
   gelöscht — die Android-App ruft die Adresse zweimal (WebView bricht ab, der Download-Manager lädt vollständig, S0). Ein
   Abbruch des Clients ist kein Fehler.
 * Ablauf: Zeitgeber ``loop.call_later`` + Prüfung bei jedem Abruf (Uhr-Naht ``uhr``) + Aufräumen beim Start.
+* ``ausgeliefert`` zählt die **vollständigen** Auslieferungen der Datei (Start 0, ein neues Paket beginnt bei 0); die
+  Download-Route erhöht ihn erst, wenn die Antwort ganz gesendet ist — ein vom Client abgebrochener Abruf zählt nicht. Der
+  Prüfabruf nennt den Stand; der Dialog erkennt daran, dass der Download auf dem Navigationsweg fertig ist (Lab rc36).
 * Die Marke wird als UTF-8-Bytes verglichen — eine Marke mit Nicht-ASCII-Zeichen ist ungültig (404), kein Fehler (F7).
 """
 
@@ -41,6 +44,7 @@ class Eintrag:
     erstellt: float
     felder: dict = field(default_factory=dict)
     zeitgeber: Optional[asyncio.TimerHandle] = None
+    ausgeliefert: int = 0
 
 
 _EINTRAEGE: dict[int, Eintrag] = {}
@@ -125,3 +129,10 @@ def gueltig(anlage_id: int, marke: str, *, uhr: Optional[Callable[[], float]] = 
         _ablaufen(anlage_id, e.marke)
         return None
     return e
+
+
+def zaehle_auslieferung(anlage_id: int, marke: str) -> None:
+    """Eine vollständige Auslieferung zählen — nur für den Eintrag, dessen Marke abgerufen wurde (ersetzt ⇒ nichts)."""
+    e = _EINTRAEGE.get(anlage_id)
+    if e is not None and e.marke == marke:
+        e.ausgeliefert += 1

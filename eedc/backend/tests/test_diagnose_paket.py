@@ -14,9 +14,10 @@ Was hier gehalten wird:
 * **S5** — zweimal bereitstellen ⇒ Datenbank unverändert (Dump vor/nach), ``sensor_mapping`` bitgleich; Gegenprobe ``/felder``;
 * Akte-Probe (Fall ottokar) auf JSON; Testpunkte 1–4; N-797; Einstellungen-Allowlist; Log ohne ``sqlalchemy.*``;
 * Zeitgrenze des Checkers als Teilfehler (K9), eigene Sitzung je Lage-Teil;
-* Routen (Variante A): bereitstellen, herunterladen, ``&pruefen=1`` 204/404, Bau wirft ⇒ 500 ohne Datei, Tabelle wirft ⇒
-  Paket kommt; Ablage je Anlage, Ablauf nach 15 Minuten, je Datenbank (K7); Marke gilt mehrfach, Abbruch lässt die Datei stehen;
-  Marke mit Nicht-ASCII ⇒ 404 (F7);
+* Routen (Variante A): bereitstellen, herunterladen, ``&pruefen=1`` 200 ``{ausgeliefert}``/404, Bau wirft ⇒ 500 ohne Datei,
+  Tabelle wirft ⇒ Paket kommt; Ablage je Anlage, Ablauf nach 15 Minuten, je Datenbank (K7); Marke gilt mehrfach, Abbruch lässt
+  die Datei stehen; Marke mit Nicht-ASCII ⇒ 404 (F7); Zähler der vollständigen Auslieferungen (Abschluss-Meldung, Lab rc36):
+  zwei ganze Abrufe ⇒ 2, ein Abbruch mitten im Senden zählt nicht (Zähne: ``BackgroundTask`` zählte ihn), neue Marke ⇒ 0;
 * K1: der Auszug öffnet jede Pfadform der Einstellung; der Standardweg ohne ``db_pfad``;
 * Scheduler ``last_run``; ``code`` + ``werte`` an den Melder-Erzeugern (AST).
 
@@ -805,12 +806,12 @@ async def test_route_bereitstellen_und_herunterladen(datei_anlage, standard_auf)
     assert e.value.status_code == 404
 
 
-async def test_pruefen_204_404(datei_anlage, standard_auf):
+async def test_pruefen_200_zaehler_404(datei_anlage, standard_auf):
     from backend.api.routes.daten_checker import diagnose_paket, diagnose_paket_bereitstellen
 
     standard_auf(datei_anlage)
     marke = (await diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]
-    assert (await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True)).status_code == 204
+    assert await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 0}
     for aid, m in ((datei_anlage.aid, "falsch"), (datei_anlage.aid, ""), (999999, marke)):
         with pytest.raises(HTTPException) as e:
             await diagnose_paket(aid, marke=m, pruefen=True)
@@ -978,8 +979,94 @@ async def test_abgebrochener_abruf_laesst_datei_stehen(datei_anlage, standard_au
     with pytest.raises(OSError):
         await r(scope, _empfang, _senden)
     assert b"".join(gesendet) != voll                          # abgebrochen, nicht vollständig
+    assert await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 0}
     status, koerper = await _abrufen(await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=False))
     assert (status, koerper) == (200, voll)
+    assert await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 1}
+
+
+# ─── Abschluss-Meldung (Lab rc36): Zähler der vollständigen Auslieferungen ───────────────────────────────────────
+
+async def test_zaehler_zwei_vollstaendige_abrufe_ergeben_zwei(datei_anlage, standard_auf):
+    from backend.api.routes.daten_checker import diagnose_paket, diagnose_paket_bereitstellen
+
+    standard_auf(datei_anlage)
+    marke = (await diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]
+    for n in (1, 2):
+        assert (await _abrufen(await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=False)))[0] == 200
+        assert await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": n}
+    neu = (await diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]          # neues Paket beginnt bei 0
+    assert await diagnose_paket(datei_anlage.aid, marke=neu, pruefen=True) == {"ausgeliefert": 0}
+    ablage.zaehle_auslieferung(datei_anlage.aid, marke)                              # ersetzte Marke zählt nichts
+    assert await diagnose_paket(datei_anlage.aid, marke=neu, pruefen=True) == {"ausgeliefert": 0}
+
+
+async def _abbruch_wie_uvicorn(antwort) -> list:
+    """Client trennt nach zwei Stücken; wie uvicorn wirft ``send`` danach nicht, sondern verwirft still, und ``receive``
+    meldet ``http.disconnect`` — die Antwort läuft scheinbar zu Ende (gemessen am echten uvicorn, Bericht Nachtrag S2)."""
+    antwort.chunk_size = 64
+    gesendet: list = []
+    getrennt = asyncio.Event()
+
+    async def _empfang():
+        await getrennt.wait()
+        return {"type": "http.disconnect"}
+
+    async def _senden(nachricht):
+        if getrennt.is_set():
+            return
+        if nachricht["type"] == "http.response.body":
+            gesendet.append(nachricht["body"])
+            if len(gesendet) == 2:
+                getrennt.set()
+                await asyncio.sleep(0)
+
+    await antwort({"type": "http", "method": "GET", "headers": [], "http_version": "1.1"}, _empfang, _senden)
+    return gesendet
+
+
+async def test_abbruch_mitten_im_senden_zaehlt_nicht(datei_anlage, standard_auf, monkeypatch):
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    from backend.api.routes import daten_checker as dc
+
+    standard_auf(datei_anlage)
+    marke = (await dc.diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]
+    voll = Path(ablage._EINTRAEGE[datei_anlage.aid].pfad).read_bytes()
+    assert len(voll) > 64 * 4
+    gesendet = await _abbruch_wie_uvicorn(await dc.diagnose_paket(datei_anlage.aid, marke=marke, pruefen=False))
+    assert b"".join(gesendet) != voll
+    assert await dc.diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 0}
+    assert ablage._EINTRAEGE[datei_anlage.aid].pfad.is_file()
+    # Zähne: die naheliegende Technik (``BackgroundTask`` an der ``FileResponse``) zählte denselben Abbruch mit.
+    monkeypatch.setattr(dc, "_DateiMitAbschluss",
+                        lambda *a, bei_abschluss, **k: FileResponse(*a, background=BackgroundTask(bei_abschluss), **k))
+    await _abbruch_wie_uvicorn(await dc.diagnose_paket(datei_anlage.aid, marke=marke, pruefen=False))
+    assert await dc.diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 1}
+
+
+async def test_teilabruf_zaehlt_nicht(datei_anlage, standard_auf):
+    """Ein Teilabruf (``Range``) ist keine vollständige Auslieferung."""
+    from backend.api.routes.daten_checker import diagnose_paket, diagnose_paket_bereitstellen
+
+    standard_auf(datei_anlage)
+    marke = (await diagnose_paket_bereitstellen(datei_anlage.aid))["marke"]
+    r = await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=False)
+    status: list = []
+
+    async def _empfang():
+        await asyncio.sleep(10)
+        return {"type": "http.disconnect"}
+
+    async def _senden(nachricht):
+        if nachricht["type"] == "http.response.start":
+            status.append(nachricht["status"])
+
+    await r({"type": "http", "method": "GET", "headers": [(b"range", b"bytes=0-9")], "http_version": "1.1"},
+            _empfang, _senden)
+    assert status == [206]
+    assert await diagnose_paket(datei_anlage.aid, marke=marke, pruefen=True) == {"ausgeliefert": 0}
 
 
 # ─── K1: Pfadformen, Standardweg ─────────────────────────────────────────────────────────────────────────────
