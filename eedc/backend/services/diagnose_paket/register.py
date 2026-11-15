@@ -92,7 +92,9 @@ EINSTELLUNGEN = {
     "wetter_altbestand_nachzug": ("<anlage_id>",),
 }
 
-_PROVENANCE_TS = frozenset({"source", "writer", "at", "input_hash", "abgeleitet"})
+#: ``gruppen``: Liste fester Gruppennamen aus dem Code (``aggregate_day`` an Kanal-Tagen, ``snapshot/boundary_range.py``) —
+#: zeigt, welche Gruppen eines Tages aus den Kanälen kommen (Register-Nachtrag nach dem ersten echten Paket, Master 15.11.).
+_PROVENANCE_TS = frozenset({"source", "writer", "at", "input_hash", "abgeleitet", "gruppen"})
 
 
 @dataclass(frozen=True)
@@ -167,9 +169,14 @@ REGISTER: dict[str, Tabelle] = {
         standort_strasse=_RAUS, mastr_id=_RAUS, community_hash=_RAUS, latitude=_RUND, longitude=_RUND,
         horizont_daten=_LEER,
         versorger_daten=Spalte("raus", json=True),
+        # `updated_at`: ISO-Zeitstempel, maschinengeschrieben (`datetime.now().isoformat()` der bis N-241 offenen Schreibtür
+        # `api/routes/sensor_mapping.py`; am HEAD Altbestand) — Register-Nachtrag, Master 15.11.
+        # `solcast_config` bleibt außerhalb der Allowlist (Marke; Konzept: fällt heraus).
         sensor_mapping=_js("allowlist",
-                           ober=("basis", "investitionen", "quellen", "invertieren", "historie_hinweis", "live_sensors"),
-                           ts=("sensor_id", "strategie", "quelle", "entity_id", "id", "label", "name", "seit"),
+                           ober=("basis", "investitionen", "quellen", "invertieren", "historie_hinweis", "live_sensors",
+                                 "updated_at"),
+                           ts=("sensor_id", "strategie", "quelle", "entity_id", "id", "label", "name", "seit",
+                               "updated_at"),
                            tu=("live", "live_sensors")),
         connector_config=_js("allowlist", ober=("connector_id", "field_inv_map", "last_fetch", "meter_snapshots"),
                              ts=("connector_id", "last_fetch", "timestamp"))),
@@ -202,8 +209,10 @@ REGISTER: dict[str, Tabelle] = {
         "anlage",
         "id anlage_id investition_id quelle profil_typ bin_definition faktoren datenpunkte_pro_bin tage_eingegangen "
         "aktualisiert_am faktor_skalar lern_basis_pro_bin lern_umstellung_am",
+        # `lern_basis_pro_bin`: Bin-Schlüssel → maschinengeschriebene Statusmarke (`korrekturprofil_aggregator.py` schreibt nur
+        # «alt»/«neu»), kein Anwendertext ⇒ Text unter jedem Schlüssel; er läuft als `"*"` durch `bereinige_log` (Master 15.11.).
         bin_definition=_js(ts=("wetterklassen", "saisonbin", "variante")), faktoren=_LEER, datenpunkte_pro_bin=_LEER,
-        lern_basis_pro_bin=_LEER),
+        lern_basis_pro_bin=_js(ts=("*",))),
     "migrations": _tab("ganz", "name applied_at"),
     "monatsdaten": _tab(
         "anlage",

@@ -138,7 +138,7 @@ def test_w7b_jede_json_spalte_hat_eine_blattregel():
             assert sp.oberschluessel, (t, s)
     mit_regel = [(t, s) for t, s in json_spalten if reg.REGISTER[t].spalten[s].text_schluessel
                  or reg.REGISTER[t].spalten[s].text_unter]
-    assert len(mit_regel) == 14
+    assert len(mit_regel) == 15          # 14 (Bauplan §3.2) + `korrekturprofile.lern_basis_pro_bin` (Register-Nachtrag 15.11.)
     # Fremde Oberschlüssel-Zahlen bleiben nur in `investitionen.parameter` (Konzept §4.2, Einwertung Master S1).
     assert [(t, s) for t, s in json_spalten if reg.REGISTER[t].spalten[s].fremde_zahlen_bleiben] == [
         ("investitionen", "parameter")]
@@ -319,6 +319,22 @@ def test_w7b_lese_schluessel_ueberstehen_den_auszug():
     assert len(gefunden) >= 12, sorted(gefunden)
     assert {"neigung", "neigung_grad", "ausrichtung", "ausrichtung_grad"} <= gefunden
     assert gefunden - reg.PARAMETER_ALLOWLIST == set(), sorted(gefunden - reg.PARAMETER_ALLOWLIST)
+
+
+def test_w7b_provenance_gruppen_aus_dem_code():
+    """Register-Nachtrag 15.11.: ``gruppen`` in ``_PROVENANCE_TS`` ist der Provenance-Schlüssel, den ``aggregate_day`` an
+    Kanal-Tagen schreibt (``energie_profil/mengen_weiche.py``, Dict-Literal) — fällt er dort weg, ist der Eintrag verwaist."""
+    baum = _quelle("services/energie_profil/mengen_weiche.py")
+    schluessel = {k.value for d in ast.walk(baum) if isinstance(d, ast.Dict) for k in d.keys
+                  if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    assert "gruppen" in schluessel
+    for t in ("investition_monatsdaten", "monatsdaten", "tages_energie_profil", "tages_zusammenfassung"):
+        assert "gruppen" in reg.REGISTER[t].spalten["source_provenance"].text_schluessel, t
+    sm = reg.REGISTER["anlagen"].spalten["sensor_mapping"]
+    assert "updated_at" in sm.oberschluessel and "updated_at" in sm.text_schluessel
+    assert "solcast_config" not in sm.oberschluessel          # bleibt Marke (Entscheid Master 15.11.)
+    assert reg.REGISTER["korrekturprofile"].spalten["lern_basis_pro_bin"].text_schluessel == {"*"}
+    assert "sonderkosten_notiz" not in reg.REGISTER["investition_monatsdaten"].spalten["verbrauch_daten"].text_schluessel
 
 
 def test_w7b_sprengsatz_lese_schluessel():

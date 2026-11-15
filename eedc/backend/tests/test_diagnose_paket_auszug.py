@@ -582,6 +582,68 @@ def test_g2_schluesselwort_schluessel_geschwaerzt():
                    "input_hash": 3}
 
 
+#: Register-Nachtrag nach dem ersten echten Paket (Entscheid Master 15.11.2026): je Schlüssel eine Zelle in der Form des
+#: Schreibers — sie muss bitgleich durch den Filter gehen, ohne Namen in `json_unbekannt` und ohne `text_bereinigt`.
+NACHTRAG_BLEIBT = {
+    ("anlagen", "sensor_mapping", "updated_at"): json.dumps(
+        {"basis": {"pv": {"strategie": "sensor", "sensor_id": "sensor.pv"}}, "updated_at": "2026-11-15T10:04:05.123456"}),
+    ("korrekturprofile", "lern_basis_pro_bin", "*"): json.dumps(
+        {"110_30_klar": "alt", "110_30_diffus": "neu", "6_13": "alt", "value": "neu"}),
+    ("tages_zusammenfassung", "source_provenance", "gruppen"): json.dumps(
+        {"pv_erzeugung_kwh": {"source": "auto:kanal_tag", "writer": "aggregate_day", "at": "2026-11-15T00:10:00",
+                              "gruppen": ["bilanz", "emob"]}}),
+}
+
+
+@pytest.mark.parametrize("t, s, schluessel", sorted(NACHTRAG_BLEIBT), ids=lambda x: str(x))
+def test_nachtrag_schluessel_bleibt_stehen(t, s, schluessel):
+    zelle = NACHTRAG_BLEIBT[(t, s, schluessel)]
+    sammler = Sammler()
+    assert filtere_json(reg.REGISTER[t].spalten[s], zelle, sammler, f"{t}.{s}") == zelle
+    assert sammler.json_unbekannt == {} and sammler.text_bereinigt == {} and sammler.json_unlesbar == {}
+
+
+def test_nachtrag_gruppen_in_jeder_provenance_spalte():
+    """`gruppen` steht in `_PROVENANCE_TS` — damit in jeder `source_provenance`-Spalte (eine Konstante, vier Spalten)."""
+    zelle = NACHTRAG_BLEIBT[("tages_zusammenfassung", "source_provenance", "gruppen")]
+    for t in ("investition_monatsdaten", "monatsdaten", "tages_energie_profil", "tages_zusammenfassung"):
+        assert filtere_json(reg.REGISTER[t].spalten["source_provenance"], zelle) == zelle, t
+
+
+def test_nachtrag_zaehne_ohne_eintrag_wird_marke():
+    """Zähne: ohne den Nachtrag würde jeder der drei Schlüssel wieder Marke und Name in `json_unbekannt`."""
+    sm = reg.REGISTER["anlagen"].spalten["sensor_mapping"]
+    ohne = {
+        ("anlagen", "sensor_mapping", "updated_at"): replace(
+            sm, oberschluessel=sm.oberschluessel - {"updated_at"}, text_schluessel=sm.text_schluessel - {"updated_at"}),
+        ("korrekturprofile", "lern_basis_pro_bin", "*"): replace(
+            reg.REGISTER["korrekturprofile"].spalten["lern_basis_pro_bin"], text_schluessel=frozenset()),
+        ("tages_zusammenfassung", "source_provenance", "gruppen"): replace(
+            reg.REGISTER["tages_zusammenfassung"].spalten["source_provenance"],
+            text_schluessel=reg.REGISTER["tages_zusammenfassung"].spalten["source_provenance"].text_schluessel - {"gruppen"}),
+    }
+    for (t, s, schluessel), sp in ohne.items():
+        sammler = Sammler()
+        aus = filtere_json(sp, NACHTRAG_BLEIBT[(t, s, schluessel)], sammler, f"{t}.{s}")
+        assert "⟨ersetzt:" in json.dumps(json.loads(aus), ensure_ascii=False), (t, s)
+        assert sammler.json_unbekannt.get(f"{t}.{s}"), (t, s)
+
+
+def test_nachtrag_marken_bleiben():
+    """Entscheid Master 15.11.: `sensor_mapping.solcast_config` und `verbrauch_daten.sonderkosten_notiz` bleiben Marke
+    (Konzept: `solcast_config` fällt heraus; die Notiz ist Anwender-Freitext)."""
+    faelle = {
+        ("anlagen", "sensor_mapping"): (json.dumps({"solcast_config": {"modus": "api"}}), "solcast_config"),
+        ("investition_monatsdaten", "verbrauch_daten"): (json.dumps({"ladung_kwh": 1.5, "sonderkosten_notiz": "x"}),
+                                                         "sonderkosten_notiz"),
+    }
+    for (t, s), (zelle, name) in faelle.items():
+        sammler = Sammler()
+        aus = json.loads(filtere_json(reg.REGISTER[t].spalten[s], zelle, sammler, f"{t}.{s}"))
+        assert isinstance(aus[name], str) and MARKE_RE.fullmatch(aus[name]), (t, s, aus[name])
+        assert name in sammler.json_unbekannt[f"{t}.{s}"], (t, s)
+
+
 def _treffer(zellen: list) -> list:
     return [z for z in zellen if isinstance(z, str) and SPRENG in z]
 
