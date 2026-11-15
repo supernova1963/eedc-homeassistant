@@ -9,6 +9,60 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-11-15
+
+Das Diagnose-Paket ist jetzt eine ZIP-Datei mit einem Auszug der Daten deiner Anlage: Das Fenster zeigt vorher, was drin ist und was nicht, und bestätigt den Download. Dazu Korrekturen am Daten-Checker (Balkonkraftwerk-Schritte, Quellen-Konflikte), an der Prognose-Genauigkeit, am PV-Anteil der E-Mobilität, am Monatsformular, an der Hilfe und am Backup.
+
+### Changed
+
+- **Daten-Checker: das Diagnose-Paket ist jetzt eine Datei mit den Daten der Anlage** — „Diagnose-Paket“ im Kopf des
+  Daten-Checkers stellt einen Auszug der Daten dieser Anlage als ZIP-Datei zusammen: Geräte, Tarife, Zuordnungen, alle
+  Monats-, Tages- und Stundenwerte, Notizen, Protokolle und die Prüfergebnisse, dazu ein Abgleich der aus Home Assistant
+  gespiegelten Werte mit Home Assistant (nur lesend, eedc ändert dabei nichts). Das Fenster zeigt vorher, was drin ist —
+  mit den Zahlen dieses Pakets — und was nicht: keine Zugangsdaten, keine Straße, keine Fotos, keine Infothek, keine
+  Kontakt- und Vertragsangaben aus den Geräte-Stammdaten. „Herunterladen“ speichert die Datei: im Knopf dreht sich ein
+  Kreisel, danach meldet das Fenster „Heruntergeladen“ mit dem Dateinamen und blendet „Schließen“ ein. Du schickst die
+  Datei, wenn wir dich in unserer Antwort im Forum oder auf GitHub darum bitten, per E-Mail an die Adresse aus dieser
+  Antwort, über etwa 10 MB als Freigabe-Link eines Cloud-Speichers; eedc selbst verschickt nichts, und die Datei ist
+  nicht verschlüsselt. Das Paket läuft nach 15 Minuten ab, „Neu zusammenstellen“ baut es neu. Der Text zum Kopieren
+  entfällt. In der Home-Assistant-App auf iPhone und iPad lädt eedc die Datei so, dass sie sich über das Teilen-Blatt
+  sichern oder verschicken lässt. Die Lösungswege des Daten-Checkers und die Handbücher sagen es so.
+
+### Fixed
+
+- **Daten-Checker „Verdacht auf PV-Doppelerfassung“: Balkonkraftwerk-Schritte nur mit Balkonkraftwerk** — die Details
+  nannten an jeder Anlage eine Ursache am Balkonkraftwerk, den Schritt „in den Datenquellen den Block des
+  Balkonkraftwerks“ prüfen und eine Test-Variante mit der BKW-Zuordnung, auch ohne Balkonkraftwerk. Diese Zeilen stehen
+  jetzt nur noch, wenn die Anlage eines hat. Die Zeile mit der Performance Ratio nennt die Tage „mit
+  Performance-Ratio-Wert“, und beide Prüfungen (Doppelerfassung und Counter-Spikes) schauen auf genau die letzten 30 Tage,
+  wie es im Text steht (bisher 31).
+- **Monatsdaten: „PV-Erzeugung (berechnet)“ zählt einen sonstigen Erzeuger nicht mehr mit** — im Formular eines Monats
+  stand die Erzeugung eines sonstigen Erzeugers (etwa eines BHKW) in der PV-Summe, die Monatsdaten-Tabelle zeigt die
+  PV-Erzeugung ohne ihn; derselbe Monat hatte so zwei „PV-Erzeugungen“. Jetzt zeigt das Formular dieselbe Zahl wie die
+  Tabelle — aus PV-Modulen bzw. Wechselrichtern und Balkonkraftwerk —, der Wert des sonstigen Erzeugers steht in seiner
+  eigenen Zeile. Gespeichert wurde die Summe nie, es ändert sich nur die Anzeige.
+- **Hilfe in der App: Code im Fließtext steht wieder in der Zeile** — Stellen wie `?doc=was-ist-neu` im Lesehinweis von
+  „Was ist neu“ oder Feldnamen in den Lösungswegen des Daten-Checkers brachen als eigener Absatz aus dem Satz. Betroffen
+  waren die Hilfe mit allen Handbüchern, die Hilfe im Einrichtungs-Assistenten und das Lösungsweg-Fenster.
+- **Daten-Checker und Datenquellen: keine Sternchen im Text** — die Befunde zur nicht festgehaltenen Wetterquelle, zu
+  einem gefallenen Zählerstand, zu einem Zähler auf „nicht aktiv“ und zu Zählerstand-Sensoren ohne Langzeitstatistik
+  sowie der Hinweis zu „Strom Heizbetrieb“, „Strom Kühlbetrieb“ usw. in der Datenquellen-Zuordnung zeigten
+  Hervorhebungen als „**…**“.
+- **Prognose-Genauigkeit, Zeitpunkt „Mittag“: kein Abend-Stand mehr als Mittag** — lief eedc über Mittag nicht (etwa weil
+  Home Assistant aus war), hielt der erste Lauf am Nachmittag oder Abend seinen Stand als „Mittag“ fest, für eedc dann auch
+  0,0 kWh. eedc hält den Mittagsstand jetzt nur zwischen 12 und 14 Uhr fest; danach bleibt der Tag „nicht erhoben“. Ein schon
+  gespeicherter eedc-Mittagsstand von 0 kWh zeigt „—“ statt 0,0.
+- **E-Mobilität am Tag: PV-Anteil höchstens 100 %** — war die PV-Ladung eines Tages etwas größer als die Ladung (zwei
+  Zähler mit unterschiedlicher Auflösung), zeigte *Cockpit → Tag* im Block „E-Mobilität“ unter „PV-Anteil (Heim)“ Werte
+  wie 140 %, und die Wallbox-Karte „Heute“ zeigte gar keinen PV-Anteil. Beide zeigen dann jetzt 100 %.
+- **Daten-Checker „Quellen-Konflikte“: nur noch die eigene Anlage** — mit mehreren Anlagen zählte der Hinweis bei Anlage 1
+  auch Konflikte der Anlagen 10 bis 19 mit (ebenso bei den Geräten), aus „Keine Quellen-Konflikte“ konnte so ein Hinweis
+  werden.
+- **Backup ohne Zugangsdaten der Cloud-Importe** — „Backup als JSON herunterladen“ schrieb Benutzername, Passwort und
+  Schlüssel der Cloud-Importe (etwa Viessmann, Fronius, EcoFlow) in die Datei, obwohl der Restore sie nicht übernimmt. Sie
+  fehlen jetzt in der Datei. Der Hinweis unter dem Knopf und das Handbuch nennen jetzt, dass die Datei mit der
+  Datenquellen-Zuordnung auch den Solcast-API-Schlüssel enthält.
+
 ## [4.3.0] - 2026-11-11
 
 Der Daten-Checker hat je Befund einen Knopf, der sagt, was er tut: eine Reparatur zeigt vorher, was sie ändert, ein Sprung landet auf dem betroffenen Feld, und „Was gilt“ erklärt, was ohne Handlung gilt. Zu jedem Befund gibt es den Lösungsweg in Schritten, oben steht „Das kannst du jetzt tun“, bestandene Prüfungen und gleiche Befunde sind zusammengefasst. Neu ist das Diagnose-Paket: ein Text mit allem, was eine Antwort im Forum oder auf GitHub braucht, ohne Zugangsdaten. Reparaturen und der nächtliche Abgleich mit Home Assistant stehen im Aktivitätsprotokoll, und „Neustart“ zeigt, dass eedc neu startet, und lädt die Seite danach von selbst.
