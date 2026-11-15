@@ -104,7 +104,7 @@ bitten**, und schick es an die Adresse aus dieser Antwort — nie öffentlich po
 2. eedc stellt das Paket zusammen (*„Diagnose-Paket wird zusammengestellt …“*); bei einer großen Anlage dauert das eine
    Weile. Danach zeigt das Fenster, was drin ist — mit den Zahlen dieses Pakets — und die Größe.
 3. **«Herunterladen»** speichert die Datei `eedc_diagnose_<Anlage>_<Datum>.zip`. Solange der Download läuft, dreht sich
-   im Knopf ein Kreisel; ist er fertig, steht unter dem Knopf *„Heruntergeladen: …“* mit dem Dateinamen. Kommt nach
+   im Knopf ein Kreisel; ist er fertig, meldet das Fenster über den Knöpfen *„Heruntergeladen: …“* mit dem Dateinamen. Kommt nach
    anderthalb Minuten noch keine Bestätigung, steht dort *„Der Download läuft im Hintergrund. Die Datei … liegt gleich in
    deinen Downloads.“* Danach schließt **«Schließen»** das Fenster — es bleibt offen, bis du es schließt. Wo die Datei
    liegt, steht unten für iPhone/iPad und Android.
