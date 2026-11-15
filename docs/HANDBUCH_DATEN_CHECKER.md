@@ -103,7 +103,8 @@ bitten**, und schick es an die Adresse aus dieser Antwort — nie öffentlich po
 1. *Einstellungen → Daten → Daten-Checker* öffnen und im Kopf **«Diagnose-Paket»** wählen.
 2. eedc stellt das Paket zusammen (*„Diagnose-Paket wird zusammengestellt …“*); bei einer großen Anlage dauert das eine
    Weile. Danach zeigt das Fenster, was drin ist — mit den Zahlen dieses Pakets — und die Größe.
-3. **«Herunterladen»** speichert die Datei `eedc_diagnose_<Anlage>_<Datum>.zip`.
+3. **«Herunterladen»** speichert die Datei `eedc_diagnose_<Anlage>_<Datum>.zip`. Das Fenster bestätigt es unter dem Knopf
+   mit *„Download gestartet: …“* und dem Dateinamen; wo die Datei dann liegt, steht unten für iPhone/iPad und Android.
 4. Bis etwa 10 MB: die Datei **per E-Mail** an die Adresse aus unserer Antwort schicken. Darüber sagt das Fenster es dir:
    die Datei in einen **Cloud-Speicher** legen (etwa Dropbox oder Google Drive) und den **Freigabe-Link** an diese Adresse
    schicken.

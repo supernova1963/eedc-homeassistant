@@ -12,6 +12,8 @@
  *   die Route sendet `Content-Disposition: attachment`, die Seite bleibt stehen. Ohne Prüfabruf ersetzte ein 404
  *   (abgelaufen, ersetzt, Neustart) die eedc-Seite ohne Text (K8).
  * Der Client vergleicht keine Größen (Ingress sendet ab 10 MB `chunked` statt `Content-Length`).
+ * Nach dem Auslösen steht unter dem Knopf «Download gestartet: <Dateiname>» (Lab rc35, Android: ohne Rückmeldung
+ * wirkte der Knopf ohne Funktion); während des Auslösens ist der Knopf gesperrt.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw } from 'lucide-react'
@@ -35,6 +37,18 @@ interface Props {
 /** Im HA-Rahmen lädt die Seite per Navigation — außer auf iPhone/iPad, dort nur der Blob-Weg (S0). */
 function perNavigation(): boolean {
   return istImHaRahmen() && !istAppleMobil()
+}
+
+/** Löst den Download aus; `false` heißt: die Marke ist nicht mehr bereit (Prüfabruf 404, Navigationsweg). */
+async function ausloesen(anlageId: number, paket: DiagnosePaketBereit): Promise<boolean> {
+  const url = diagnosePaketUrl(anlageId, paket.marke)
+  if (perNavigation()) {
+    if (!(await diagnosePaketPruefen(anlageId, paket.marke))) return false
+    window.location.assign(url)
+    return true
+  }
+  await downloadFile(url, paket.dateiname)
+  return true
 }
 
 function Inhaltsliste({ paket }: { paket: DiagnosePaketBereit }) {
@@ -91,6 +105,8 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
   const [downloadFehler, setDownloadFehler] = useState<string | null>(null)
   const [hinweis, setHinweis] = useState<string | null>(null)
   const [abgelaufen, setAbgelaufen] = useState(false)
+  const [laeuft, setLaeuft] = useState(false)
+  const [gestartet, setGestartet] = useState<string | null>(null)
   // Laufnummer: nur die Antwort des jüngsten Bereitstellens im offenen Dialog zählt (Schließen/erneutes Öffnen).
   const lauf = useRef(0)
   const zeitgeber = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,6 +121,7 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
     setLaedt(true)
     setFehler(null)
     setDownloadFehler(null)
+    setGestartet(null)
     setAbgelaufen(false)
     setPaket(null)
     const nr = ++lauf.current
@@ -139,20 +156,20 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
   }
 
   const herunterladen = async () => {
-    if (!paket) return
+    if (!paket || laeuft) return
     setHinweis(null)
     setDownloadFehler(null)
-    const url = diagnosePaketUrl(anlageId, paket.marke)
+    setGestartet(null)
+    setLaeuft(true)
+    const nr = lauf.current
     try {
-      if (perNavigation()) {
-        if (await diagnosePaketPruefen(anlageId, paket.marke)) window.location.assign(url)
-        else neuWeilAbgelaufen()
-        return
-      }
-      await downloadFile(url, paket.dateiname)
+      if (!(await ausloesen(anlageId, paket))) neuWeilAbgelaufen()
+      else if (nr === lauf.current) setGestartet(paket.dateiname)
     } catch (e) {
       if (e instanceof DownloadFehler && e.status === 404) neuWeilAbgelaufen()
       else setDownloadFehler('Die Datei konnte nicht heruntergeladen werden.')
+    } finally {
+      setLaeuft(false)
     }
   }
 
@@ -193,12 +210,17 @@ export default function DiagnosePaketDialog({ isOpen, onClose, anlageId }: Props
             </Button>
           )}
           {!laedt && paket && !abgelaufen && (
-            <Button size="sm" onClick={herunterladen}>
+            <Button size="sm" onClick={herunterladen} disabled={laeuft}>
               <Download className="h-4 w-4 mr-2" />
               Herunterladen
             </Button>
           )}
         </div>
+        {gestartet && !abgelaufen && (
+          <p data-testid="download-gestartet" className="text-sm text-gray-600 dark:text-gray-400 text-right">
+            Download gestartet: {gestartet}
+          </p>
+        )}
       </div>
     </Modal>
   )

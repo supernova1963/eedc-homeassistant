@@ -1,7 +1,8 @@
 /**
  * Diagnose-Paket-Dialog v4 (Bauplan §5 S2 Schritt 3): Bereitstellen beim Öffnen (Variante A, synchron), Inhaltsliste,
  * Versand-Satz nach `versandweg`, Weg des Herunterladens (außerhalb des HA-Rahmens und auf dem iPhone `downloadFile`,
- * im HA-Rahmen sonst Prüfabruf + Navigation), abgelaufene Marke (K8), `gueltig_s`, Teilfehler.
+ * im HA-Rahmen sonst Prüfabruf + Navigation), abgelaufene Marke (K8), `gueltig_s`, Teilfehler, Rückmeldung
+ * «Download gestartet: …» und gesperrter Knopf während des Auslösens (Lab rc35).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -196,6 +197,92 @@ describe('DiagnosePaketDialog', () => {
     await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
     expect(download.mock.calls[0]).toEqual([URL_A, 'eedc_diagnose_Haus_2026-11-15.zip'])
     expect(screen.queryByText('Die Datei konnte nicht heruntergeladen werden.')).toBeNull()
+  })
+
+  // Rückmeldung nach dem Auslösen (Lab rc35, Android: ohne sie wirkte «Herunterladen» ohne Funktion).
+  const GESTARTET = 'Download gestartet: eedc_diagnose_Haus_2026-11-15.zip'
+
+  it('Rückmeldung im HA-Rahmen nach Prüfabruf 204', async () => {
+    haRahmenMitNavigation()
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect((await screen.findByTestId('download-gestartet')).textContent).toBe(GESTARTET)
+    expect(assign).toHaveBeenCalledWith(URL_A)
+  })
+
+  it('Rückmeldung auf dem Blob-Weg nach Erfolg', async () => {
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect((await screen.findByTestId('download-gestartet')).textContent).toBe(GESTARTET)
+    expect(download).toHaveBeenCalledTimes(1)
+  })
+
+  it('keine Rückmeldung bei 404 im HA-Rahmen (neu bereitstellen)', async () => {
+    haRahmenMitNavigation()
+    pruefen.mockResolvedValueOnce(false)
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect(await screen.findByText(TEXT_ABGELAUFEN_NEU)).toBeTruthy()
+    await waitFor(() => expect(bereitstellen).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: /Herunterladen/ })).toBeTruthy()
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+  })
+
+  it('keine Rückmeldung bei 404 auf dem Blob-Weg; nach Erfolg verschwindet sie beim nächsten Fehler', async () => {
+    const { DownloadFehler } = await import('../../lib/download')
+    download.mockRejectedValueOnce(new DownloadFehler('Diagnose-Paket nicht (mehr) bereit', 404))
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect(await screen.findByText(TEXT_ABGELAUFEN_NEU)).toBeTruthy()
+    await waitFor(() => expect(bereitstellen).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect((await screen.findByTestId('download-gestartet')).textContent).toBe(GESTARTET)
+
+    download.mockRejectedValueOnce(new DownloadFehler('HTTP 500', 500))
+    fireEvent.click(screen.getByRole('button', { name: /Herunterladen/ }))
+    expect(await screen.findByText('Die Datei konnte nicht heruntergeladen werden.')).toBeTruthy()
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+  })
+
+  it('keine Rückmeldung bei anderem Fehler', async () => {
+    const { DownloadFehler } = await import('../../lib/download')
+    download.mockRejectedValueOnce(new DownloadFehler('HTTP 500', 500))
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect(await screen.findByText('Die Datei konnte nicht heruntergeladen werden.')).toBeTruthy()
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+  })
+
+  it('Knopf während des Auslösens gesperrt, danach wieder frei', async () => {
+    let fertig: () => void = () => {}
+    download.mockImplementationOnce(() => new Promise<void>((r) => { fertig = r }))
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    const knopf = await screen.findByRole('button', { name: /Herunterladen/ }) as HTMLButtonElement
+    fireEvent.click(knopf)
+    await waitFor(() => expect(knopf.disabled).toBe(true))
+    fireEvent.click(knopf)
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+    fertig()
+    expect((await screen.findByTestId('download-gestartet')).textContent).toBe(GESTARTET)
+    expect(knopf.disabled).toBe(false)
+    fireEvent.click(knopf)
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(2))
+  })
+
+  it('Rückmeldung verschwindet beim Ablauf und bleibt nach «Neu zusammenstellen» weg', async () => {
+    bereitstellen.mockResolvedValueOnce(paket({ gueltig_s: 0.5 }))
+    render(<DiagnosePaketDialog isOpen onClose={() => {}} anlageId={7} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Herunterladen/ }))
+    expect((await screen.findByTestId('download-gestartet')).textContent).toBe(GESTARTET)
+    expect(await screen.findByText(TEXT_ABGELAUFEN, undefined, { timeout: 3000 })).toBeTruthy()
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Neu zusammenstellen/ }))
+    expect(await screen.findByRole('button', { name: /Herunterladen/ })).toBeTruthy()
+    expect(bereitstellen).toHaveBeenCalledTimes(2)
+    expect(screen.queryByTestId('download-gestartet')).toBeNull()
   })
 
   it('keine Ersatzweg-Zeile', async () => {
