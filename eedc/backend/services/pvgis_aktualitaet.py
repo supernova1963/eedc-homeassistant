@@ -94,6 +94,12 @@ TOLERANZ_GRAD = 0.15
 TOLERANZ_KOORDINATE = 0.0001
 
 
+def koordinate_gleich(a: float, b: float) -> bool:
+    """Zwei Werte einer Koordinate gelten als derselbe Ort (``TOLERANZ_KOORDINATE``) — Leser: «Standort geändert» hier
+    und das Diagnose-Paket (eine Prognose-Koordinate am Ort der Anlage bekommt deren gerundeten Wert, Konzept v4 Q1)."""
+    return abs(a - b) <= TOLERANZ_KOORDINATE
+
+
 @dataclass
 class PrognoseAbweichung:
     """Warum die gespeicherte Prognose nicht mehr zur Anlage passt.
@@ -210,9 +216,9 @@ async def pruefe_prognose(
 
     # 3. Standort — eine korrigierte Koordinate verschiebt die Einstrahlung.
     if anlage.latitude is not None and anlage.longitude is not None:
-        if (
-            abs(anlage.latitude - prognose.latitude) > TOLERANZ_KOORDINATE
-            or abs(anlage.longitude - prognose.longitude) > TOLERANZ_KOORDINATE
+        if not (
+            koordinate_gleich(anlage.latitude, prognose.latitude)
+            and koordinate_gleich(anlage.longitude, prognose.longitude)
         ):
             gruende.append("Standort geändert")
 

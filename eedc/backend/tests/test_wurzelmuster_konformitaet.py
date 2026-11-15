@@ -2229,9 +2229,6 @@ _P10_SCHICHT = "backend/services/monats_fakten/"   # seit Vorlage 10 (19.09.2026
 
 #: Schreib-, Import-, Migrations- und Checker-Pfade + reine Durchreicher.
 P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
-    # E1 (10.11.2026): das Diagnose-Paket (Abschnitt 10 «Monate») liest nur, WELCHE Gerätezeilen es je Monat gibt
-    # (Jahr, Monat, Investitions-ID) — keine Größe, keine Faltung; dieselbe Klasse wie die Checker-Pfade.
-    "backend/services/diagnose_paket.py::_monate",
     # Die P7-Auflösung selbst — die Schicht ruft sie, sie ist ihr Unterbau.
     "backend/services/pv_monatswerte.py::lade_pv_je_monat",
     # N-771 F11 (E4, 31.10.2026): der Checker vergleicht in den ROHEN Wallbox-Zeilen den gepflegten evcc-Anteil mit dem
@@ -3060,9 +3057,6 @@ P11_AUSNAHMEN: frozenset[str] = frozenset({
     # „Ist das ein PV-Erzeuger?" zählt nichts und kann nichts doppeln. Der
     # Selektor davor würde die Frage nicht beantworten, sondern verschieben.
     "backend/main.py::get_database_stats",                 # zählt GERÄTE
-    # E1 (10.11.2026): das Diagnose-Paket zeigt je Gerät seinen Kennwert (kWp über `get_erzeuger_kwp`) — eine Sicht je
-    # Investition, keine Σ über die Menge.
-    "backend/services/diagnose_paket.py::_kennwert",
     "backend/services/monats_fakten/roh.py::_erzeuger_aktiv",  # „war einer aktiv?"
     "backend/api/routes/monatsabschluss/views.py::get_naechster_monat",
     "backend/api/routes/monatsdaten.py::_legacy_hinweis",  # `pv_ziel_aktiv`

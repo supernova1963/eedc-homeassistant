@@ -142,14 +142,88 @@ async def _pruefe_abschnitt(
     return rechts
 
 
+@dataclass
+class AbschnittBefund:
+    """Ergebnis der lesenden Prüfung eines Spiegel-Abschnitts (``pruefe_abschnitt_lesend``) — Leser: der Nachtlauf
+    (``konsistenz_anlage``, schreibt danach) und das Diagnose-Paket (``services/diagnose_paket/ha_abgleich.py``, nur lesend).
+
+    ``grund``: ``ha_kennt_sensor_nicht`` · ``ohne_summe`` · ``ha_ohne_zeilen`` (dann ist nichts verglichen). ``gekuerzt``:
+    ``{key, ha_erste_ts, behalten}``, wenn HA den Anfang nicht mehr hält (verglichen ab HAs erster Zeile). ``fehler``: die
+    Ausnahme der Halbierung (HA unterwegs weg) — der Nachtlauf wirft sie nach dem Vermerk von ``gekuerzt`` weiter."""
+    zeilen_spiegel: int
+    faktor: Optional[float] = None
+    zeilen_ha: Optional[int] = None
+    grund: Optional[str] = None
+    gekuerzt: Optional[dict] = None
+    erste_abweichung: Optional[int] = None
+    fehler: Optional[BaseException] = None
+
+
+async def _spiegel_zeilen(sitzungen: Sitzungen, kanal: Kanal, ab) -> list[tuple[int, Optional[float], Optional[float]]]:
+    async with sitzungen() as db:
+        bed = [KanalStatistik.kanal_id == kanal.id, KanalStatistik.familie == FAMILIE_SPIEGEL,
+               KanalStatistik.start_ts >= ab.von]
+        if ab.bis is not None:
+            bed.append(KanalStatistik.start_ts < ab.bis)
+        return [(int(r[0]), r[1], r[2]) for r in (await db.execute(
+            select(KanalStatistik.start_ts, KanalStatistik.sum, KanalStatistik.state)
+            .where(and_(*bed)).order_by(KanalStatistik.start_ts)
+        )).all()]
+
+
+async def pruefe_abschnitt_lesend(sitzungen: Sitzungen, kanal: Kanal, ab, ha_svc) -> Optional[AbschnittBefund]:
+    """Einen Spiegel-Abschnitt gegen HA prüfen, **ohne zu schreiben** — ``None``, wenn der Abschnitt keine Spiegelzeile hat.
+
+    Spiegelzeilen, Einheitenfaktor (``ohne_summe``), Kennzahlen (``ha_kennt_sensor_nicht``/``ha_ohne_zeilen``),
+    ``ha_historie_gekuerzt``, dann ``_pruefe_abschnitt`` (über den Modulnamen; ``test_kanal_abgeleitet.py`` patcht ihn).
+    Vier HA-Abfragen je gleichem Abschnitt wie bisher. Fehler vor der Halbierung werfen; ein Fehler der Halbierung steht in
+    ``fehler``.
+    """
+    from backend.services.kanal.schreiber import _mengen_faktor
+
+    zeilen = await _spiegel_zeilen(sitzungen, kanal, ab)
+    if not zeilen:
+        return None
+    bef = AbschnittBefund(zeilen_spiegel=len(zeilen))
+    meta_lauf = await asyncio.to_thread(ha_svc.get_stundenzeilen_mehrere, {ab.eid: zeilen[-1][0] - 1}, zeilen[-1][0])
+    if ab.eid not in meta_lauf:
+        _pruefe_erreichbar(ha_svc)
+        bef.grund = "ha_kennt_sensor_nicht"
+        return bef
+    bef.faktor = 1.0 if kanal.art == ART_STAND else _mengen_faktor(meta_lauf[ab.eid][0])
+    if bef.faktor is None:
+        bef.grund = "ohne_summe"
+        return bef
+    kz = await asyncio.to_thread(ha_svc.get_stundenzeilen_kennzahlen, ab.eid, zeilen[0][0] - 1, zeilen[-1][0])
+    if kz is None:
+        _pruefe_erreichbar(ha_svc)
+        bef.grund = "ha_kennt_sensor_nicht"
+        return bef
+    bef.zeilen_ha = kz["anzahl"]
+    if not kz["anzahl"]:
+        bef.grund = "ha_ohne_zeilen"       # Schutz: keine Historie wegwerfen
+        return bef
+    if kz["erste_ts"] is not None and int(round(kz["erste_ts"])) > zeilen[0][0]:
+        # HA hält den Anfang nicht mehr (z. B. „alte Statistik löschen" nach einem Einheitenwechsel):
+        # verglichen wird erst ab HAs erster Zeile, darunter bleibt der Spiegel stehen.
+        ha_erste = int(round(kz["erste_ts"]))
+        bef.gekuerzt = {"key": kanal.key, "ha_erste_ts": ha_erste, "behalten": sum(1 for z in zeilen if z[0] < ha_erste)}
+        zeilen = [z for z in zeilen if z[0] >= ha_erste]
+    try:
+        bef.erste_abweichung = await _pruefe_abschnitt(kanal, ab.eid, zeilen, ha_svc, bef.faktor)
+    except Exception as e:  # noqa: BLE001 — der Aufrufer entscheidet (Nachtlauf: Fehler zählen; Paket: Grund)
+        bef.fehler = e
+    return bef
+
+
 async def konsistenz_anlage(sitzungen: Sitzungen, anlage_id: int, *, ha_svc=None) -> KonsistenzErgebnis:
     """Alle Spiegel-Kanäle einer Anlage gegen HA prüfen und ab der ersten Abweichung neu spiegeln.
 
     Vier HA-Abfragen je gleichem Abschnitt (Einheit, Kennzahlen des Abschnitts, Prüfstelle am Ende = Kennzahlen
     + letzte Zeile). Wird HA unterwegs unerreichbar, bricht der Abschnitt als Fehler ab, ohne etwas zu ändern.
+    Geprüft wird lesend in ``pruefe_abschnitt_lesend``; geschrieben wird nur hier (``neu_spiegeln``, ``verwerfe_ab``).
     """
     from backend.services.ha_statistics_service import get_ha_statistics_service
-    from backend.services.kanal.schreiber import _mengen_faktor
 
     ha_svc = ha_svc or get_ha_statistics_service()
     erg = KonsistenzErgebnis(anlage_id)
@@ -169,51 +243,23 @@ async def konsistenz_anlage(sitzungen: Sitzungen, anlage_id: int, *, ha_svc=None
         erg.kanaele += 1
         for ab in teile:
             try:
-                async with sitzungen() as db:
-                    bed = [KanalStatistik.kanal_id == kanal.id, KanalStatistik.familie == FAMILIE_SPIEGEL,
-                           KanalStatistik.start_ts >= ab.von]
-                    if ab.bis is not None:
-                        bed.append(KanalStatistik.start_ts < ab.bis)
-                    zeilen = [(int(r[0]), r[1], r[2]) for r in (await db.execute(
-                        select(KanalStatistik.start_ts, KanalStatistik.sum, KanalStatistik.state)
-                        .where(and_(*bed)).order_by(KanalStatistik.start_ts)
-                    )).all()]
-                if not zeilen:
+                bef = await pruefe_abschnitt_lesend(sitzungen, kanal, ab, ha_svc)
+                if bef is None:
                     continue
                 erg.abschnitte += 1
-                meta_lauf = await asyncio.to_thread(
-                    ha_svc.get_stundenzeilen_mehrere, {ab.eid: zeilen[-1][0] - 1}, zeilen[-1][0])
-                if ab.eid not in meta_lauf:
-                    _pruefe_erreichbar(ha_svc)
-                    erg.zaehle("ha_kennt_sensor_nicht")
+                if bef.grund:
+                    erg.zaehle(bef.grund)
                     continue
-                faktor = 1.0 if kanal.art == ART_STAND else _mengen_faktor(meta_lauf[ab.eid][0])
-                if faktor is None:
-                    erg.zaehle("ohne_summe")
-                    continue
-                kz = await asyncio.to_thread(ha_svc.get_stundenzeilen_kennzahlen, ab.eid,
-                                             zeilen[0][0] - 1, zeilen[-1][0])
-                if kz is None:
-                    _pruefe_erreichbar(ha_svc)
-                    erg.zaehle("ha_kennt_sensor_nicht")
-                    continue
-                if not kz["anzahl"]:
-                    erg.zaehle("ha_ohne_zeilen")       # Schutz: keine Historie wegwerfen
-                    continue
-                if kz["erste_ts"] is not None and int(round(kz["erste_ts"])) > zeilen[0][0]:
-                    # HA hält den Anfang nicht mehr (z. B. „alte Statistik löschen" nach einem Einheitenwechsel):
-                    # verglichen wird erst ab HAs erster Zeile, darunter bleibt der Spiegel stehen.
-                    ha_erste = int(round(kz["erste_ts"]))
+                if bef.gekuerzt:
                     erg.zaehle("ha_historie_gekuerzt")
-                    erg.gekuerzt.append({"key": kanal.key, "ha_erste_ts": ha_erste,
-                                         "behalten": sum(1 for z in zeilen if z[0] < ha_erste)})
-                    zeilen = [z for z in zeilen if z[0] >= ha_erste]
-                t0 = await _pruefe_abschnitt(kanal, ab.eid, zeilen, ha_svc, faktor)
-                if t0 is None:
+                    erg.gekuerzt.append(bef.gekuerzt)
+                if bef.fehler is not None:
+                    raise bef.fehler
+                if bef.erste_abweichung is None:
                     erg.gleich += 1
                     continue
-                n = await neu_spiegeln(sitzungen, kanal.id, t0, ha_svc=ha_svc)
-                erg.korrigiert.append({"key": kanal.key, "ab_ts": t0, "zeilen": n})
+                n = await neu_spiegeln(sitzungen, kanal.id, bef.erste_abweichung, ha_svc=ha_svc)
+                erg.korrigiert.append({"key": kanal.key, "ab_ts": bef.erste_abweichung, "zeilen": n})
             except Exception as e:  # noqa: BLE001 — ein Kanal hält die übrigen nicht auf
                 erg.fehler += 1
                 logger.warning("Kanal-Konsistenzlauf %s (Anlage %s): %s: %s",

@@ -94,6 +94,8 @@ from backend.api.routes import (
     sperre,
 )
 from backend.core.log_buffer import setup_log_buffer
+from backend.core.laufzeit import merke_start
+from backend.services.diagnose_paket.ablage import raeume_beim_start as raeume_diagnose_ablage
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.core.berechnungen import PV_ERZEUGER_TYPEN
@@ -510,6 +512,8 @@ async def lifespan(app: FastAPI):
     # Startup
     print("EEDC Backend startet...")
     setup_log_buffer()
+    merke_start()
+    raeume_diagnose_ablage()
     await init_db()
     print("Datenbank initialisiert.")
 
