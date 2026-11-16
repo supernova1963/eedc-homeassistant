@@ -264,7 +264,7 @@ def stundenzeilen_mit_kanaelen(zeilen: Sequence[Any], kanal_stunden_je_tag: Mapp
 # ── Die eine Ladefunktion der Stundenleser (HA-Bauform S5, Etappe E-S5-1; Bauplan S5 §3 (A), §4 S5-R1) ──────────────
 #
 # Jeder Leser, der Stundenmengen braucht (Speicher-Simulation, Ladepreis, Ladeblöcke, Verbrauchs-/Korrekturprofil,
-# Preis-Aggregator, Grundlast, Prognose-IST, Wochenmuster …), holt seine Stundenzeilen hier statt mit einem eigenen
+# Preis-Aggregator, Grundlast, Prognose-IST …), holt seine Stundenzeilen hier statt mit einem eigenen
 # `select(TagesEnergieProfil)`: an einem Kanal-Tag der Bilanz die Mischzeilen (Kanal-Mengen + Bahnen der Stundenzeile,
 # S4-R-3b), an jedem anderen Tag die Stundenzeile unverändert. Damit rechnet jede Kennzahl an einem Kanal-Tag mit
 # denselben Stunden wie *Cockpit → Tag* (`tage-werte`), und an einem Bestandstag bekommt der Leser dieselbe Zeile wie

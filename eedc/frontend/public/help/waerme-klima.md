@@ -110,7 +110,7 @@ Diese Tabelle ist der Kern dieses Handbuchs. Sie beantwortet die Frage, die fast
 | **Arbeitszahl Heizen / Warmwasser getrennt** | getrennte Strommessung **und** getrennte Wärmemengen | „—" mit Grund *„Strom nicht getrennt je Funktion gemessen"* — **außer** dein Gerät hat nur eine der beiden Funktionen, dann steht dort seine Gesamtzahl (s. Lage F) |
 | **Arbeitszahl Kühlen** | *Strom Kühlbetrieb* **und** *Nutzenergie Kühlbetrieb* (Kältemengenzähler) | „—" mit Grund *„kein Kältemengenzähler zugeordnet"* |
 | **Aufteilung Heizen/Kühlen/Lüften/Entfeuchten** | entweder **gemessene** Betriebsart-Zähler **oder** ein *Betriebsmodus*-Sensor, den eedc laufend mitliest | der Block fehlt ganz — und zwar bewusst, statt vier Nullen zu zeigen |
-| **Ersparnis vs. Alternative** | gemessene oder abgeleitete Wärme **und** ein Alt-Preis am Gerät | die Kachel erscheint gar nicht. ⚠ In *Cockpit → **Tag*** gibt es sie **nie**: eedc rechnet die Ersparnis monatsweise, weil die Zusatzkosten der Altanlage Monatsgrößen sind. Der Monat und das Jahr zeigen sie |
+| **Ersparnis vs. Alternative** | gemessene oder abgeleitete Wärme **und** ein Alt-Preis am Gerät | die Kachel erscheint gar nicht. ⚠ In *Cockpit → **Tag*** gibt es sie **nie**: eedc rechnet die Ersparnis monatsweise, weil die Zusatzkosten der Vergleichsheizung Monatsgrößen sind. Der Monat und das Jahr zeigen sie |
 | **CO₂-Einsparung** | Stromverbrauch und Wärme | der Wärmepumpen-Anteil fehlt in der Bilanz |
 | **Kompressor-Starts / Betriebsstunden** | ein *Total-Increasing*-Zähler dafür | die Kacheln erscheinen gar nicht |
 | **Tages**werte statt nur Monatswerte | dieselben Zähler — aber **fortlaufend mitgeschrieben** | „—" mit Grund, siehe Kasten |
@@ -157,11 +157,12 @@ eedc erwartet **fortlaufend steigende Zählerstände** („total increasing"). E
 
 ---
 
-> ⚑ **„Alternative" ist die Heizung, die du ersetzt hast** — am Gerät gepflegt als *Gas*, *Öl*
-> oder *Strom (Direktheizung)*. eedc rechnet mit dem Wirkungsgrad des jeweiligen Trägers (0,90 ·
-> 0,85 · 1,00) und mit deinem Preis. Bis 4.0.43 stand über der Zahl unbedingt „vs. Gas", auch wenn
-> du Öl gepflegt hattest — die Rechnung stimmte, die Beschriftung nicht. Wo mehrere Wärmepumpen in
-> **einer** Zahl zusammengefasst sind, kann sie ohnehin keinem einzelnen Träger folgen.
+> ⚑ **„Alternative" ist die Heizung, die du stattdessen angeschafft hättest — bei einem Tausch der
+> neue Kessel, nicht der alte.** Am Gerät gepflegt als *Gas*, *Öl* oder *Strom (Direktheizung)*.
+> eedc rechnet mit dem Wirkungsgrad des jeweiligen Trägers (0,90 · 0,85 · 1,00) und mit deinem Preis.
+> Bis 4.0.43 stand über der Zahl unbedingt „vs. Gas", auch wenn du Öl gepflegt hattest — die Rechnung
+> stimmte, die Beschriftung nicht. Wo mehrere Wärmepumpen in **einer** Zahl zusammengefasst sind,
+> kann sie ohnehin keinem einzelnen Träger folgen.
 
 ## 3. Was eedc bewusst *nicht* sagt
 
@@ -405,7 +406,7 @@ Alles läuft über **Einstellungen → Datenquellen**. Dort steht je Gerät eine
 
 > **„Nicht angeboten" heißt nicht „gesperrt".** Alles Übrige liegt unter **„Weitere Größen erfassen"** und rückt nach oben, sobald du dort einen Sensor einträgst. Die einzige echte Ausnahme ist **Warmwasser an einer Luft-Luft-Klimaanlage**: Den Kreis gibt es dort nicht.
 >
-> ⚑ **Hast du dort früher einmal einen Wert gepflegt, ist er nicht verloren — er zählt nur nicht mehr als Wärme des Geräts.** Bis 2026 floss ein solcher Altwert in *Wärme erzeugt*, in die Arbeitszahl und in die Ersparnis gegenüber der alten Heizung; das war eine Ersparnis für Wärme, die eine Klimaanlage nicht abgibt. Der **Daten-Checker** nennt dir jeden betroffenen Monat. Stammt der Wert aus dem **Kühlbetrieb**, gehört er unter *Nutzenergie Kühlbetrieb* — daraus rechnet eedc deine **Arbeitszahl Kühlen**. **eedc verschiebt und löscht nichts von allein**, der gespeicherte Wert bleibt stehen, bis du ihn umträgst.
+> ⚑ **Hast du dort früher einmal einen Wert gepflegt, ist er nicht verloren — er zählt nur nicht mehr als Wärme des Geräts.** Bis 2026 floss ein solcher Altwert in *Wärme erzeugt*, in die Arbeitszahl und in die Ersparnis gegenüber der Vergleichsheizung; das war eine Ersparnis für Wärme, die eine Klimaanlage nicht abgibt. Der **Daten-Checker** nennt dir jeden betroffenen Monat. Stammt der Wert aus dem **Kühlbetrieb**, gehört er unter *Nutzenergie Kühlbetrieb* — daraus rechnet eedc deine **Arbeitszahl Kühlen**. **eedc verschiebt und löscht nichts von allein**, der gespeicherte Wert bleibt stehen, bis du ihn umträgst.
 
 > ⚑ **Und was du gar nicht führst, verschwindet von selbst aus der Anzeige.** Hat eine Wärmepumpe **nie** einen Warmwasser-Wert getragen und ist auch kein Warmwasser-Zähler zugeordnet, zeigt der Block *Wärme nach Zweck* im Komponenten-Hub keine Warmwasser-Achse mehr — weder Balken noch Spalte noch Legendeneintrag. Das ist der Fall, wenn deine Heizungs-Wärmepumpe nur heizt und eine **eigene Brauchwasser-Wärmepumpe** daneben das Warmwasser macht. Du musst dafür nichts einstellen, und sobald du einen Zähler zuordnest oder einen Wert pflegst, ist die Achse wieder da. **Ein einziger gepflegter Monat genügt — auch mit dem Wert 0**: Dann ist die Null eine Messung und keine Leerstelle.
 >

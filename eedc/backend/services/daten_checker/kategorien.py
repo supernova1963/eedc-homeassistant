@@ -473,12 +473,27 @@ def link_monat_erfassen(label: str) -> str:
 # Safi105 #301). Die technischen Source-Strings aus core/source_priority.py
 # (z. B. "manual:form", "external:cloud_import:fronius_solarweb") sollen dem
 # Anwender als „manuell" / „Cloud-Import (Fronius)" begegnen.
+#: Herkünfte, die eedc selbst schreibt (`core/source_priority.py`), als Anwender-Wort (Päckchen «Kleineres» 16.11.2026,
+#: N3): `auto:kanal_tag` ist die Tageszeile eines Tags aus dem gespiegelten HA-Zähler — die Oberfläche nennt das
+#: «HA-Spiegel»; `legacy:unknown` ist der Bestand der Erst-Migration ohne bekannte Herkunft. `fallback:*` vergibt kein
+#: Produktivpfad (Kommentar dort) und bleibt ohne Wort.
+_QUELLE_WORT = {
+    "auto:monatsabschluss": "Monatsabschluss",
+    "auto:kanal_tag": "HA-Spiegel",
+    "auto:preserve_restore": "Wiederherstellung",
+    "auto:demo_data": "Demo-Daten",
+    "legacy:unknown": "Altbestand",
+}
+
+
 def _quelle_label(source: str) -> str:
     s = (source or "").strip()
     if not s:
         return ""
     if s == "repair":
         return "Reparatur"
+    if s in _QUELLE_WORT:
+        return _QUELLE_WORT[s]
     if s.startswith("manual:"):
         return "manuell"
     if s.startswith("external:ha_statistics"):

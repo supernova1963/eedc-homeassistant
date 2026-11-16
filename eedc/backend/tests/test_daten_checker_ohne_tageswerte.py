@@ -118,7 +118,7 @@ async def test_zeile_aus_aelterer_quelle_meldet_weiterhin_die_quelle(monkeypatch
 
     assert b.meldung == "HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle"
     assert "2026-08-04" in b.details
-    assert "auto:monatsabschluss" in b.details
+    assert "'Monatsabschluss'" in b.details  # N3 (16.11.2026): Anwender-Wort statt Rohquelle
     assert "vom ?" not in b.details
     assert (befund_op(b), befund_params(b)) == ("reaggregate_range", {"von": "2026-07-05", "bis": "2026-08-04"})
 

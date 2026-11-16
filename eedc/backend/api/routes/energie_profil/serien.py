@@ -2,13 +2,11 @@
 
 GET /api/energie-profil/{anlage_id}/komponenten-serien — `komponenten_kwh`-Keys eines Zeitraums als SerieInfo
 GET /api/energie-profil/{anlage_id}/stunden            — 24 Stundenwerte eines Tages
-GET /api/energie-profil/{anlage_id}/wochenmuster       — Ø-Tagesprofil je Wochentag
 """
 # Reiner Umzug aus `api/routes/energie_profil/views.py` (18.09.2026, Vorlage 4 des Refactorings grosser
 # Dateien): Code 1:1 uebernommen, kein Verhaltenswechsel. Die Fassade `views.py` haengt den Router ein und
 # exportiert die Endpunkt-Namen weiter, die Aufrufer und Tests bisher von dort importierten.
 
-from collections import defaultdict
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, and_
@@ -18,9 +16,8 @@ from backend.core.berechnungen import (
     WALLBOX_KOMPONENTEN_PREFIXE,
     geraete_spalte_kw,
 )
-from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 from backend.core.berechnungen.slot_konvention import (
-    RASTER_BEGINN, RASTER_ENDE, backward_slot_der_zeile, forward_werte_je_backward_zeile, ist_beginn_raster,
+    RASTER_BEGINN, RASTER_ENDE, forward_werte_je_backward_zeile, ist_beginn_raster,
 )
 from backend.core.exceptions import bad_request, not_found
 from backend.api.deps import get_db
@@ -31,7 +28,6 @@ from ._shared import (
     SerieInfo,
     StundenAntwort,
     StundenWertResponse,
-    WochenmusterPunkt,
     _key_to_serie_info,
 )
 
@@ -221,95 +217,3 @@ async def get_stundenwerte(
     return StundenAntwort(
         stunden=stunden, serien=serien, soc_zuletzt_prozent=soc_zuletzt,
     )
-
-#: Die Mengen des Wochenmusters — zugleich Lade-Hinweis für `stunden_der_tage` (HA-Bauform S5-R1).
-_WOCHENMUSTER_FELDER = ("pv_kw", "verbrauch_kw", "netzbezug_kw", "einspeisung_kw", "batterie_kw")
-#: Feld → Achse der Spanne (``spannen._SPALTE_JE_ACHSE`` umgekehrt); ``verbrauch_kw`` über ``verbrauch_gebuendelt``.
-_ACHSE_DES_FELDS = {"pv_kw": "pv", "netzbezug_kw": "netzbezug", "einspeisung_kw": "einspeisung", "batterie_kw": "batterie"}
-
-
-def _gebuendelt(r, feld: str) -> bool:
-    """M-1 (a) (HA-Bauform S5, Bauplan §10c): trägt die Zeile auf der Achse des Felds mehr als eine reale Stunde (Spanne,
-    Zählerlücken wie HA)? Dann ist sie keine Stichprobe dieser Stunde und fällt aus dem Mittel — wie Grundlast,
-    Verbrauchsprofil und Ladepreis (``zeile_gebuendelt``/``verbrauch_gebuendelt``)."""
-    if feld == "verbrauch_kw":
-        return verbrauch_gebuendelt(r)
-    return zeile_gebuendelt(r, _ACHSE_DES_FELDS[feld])
-
-
-@router.get("/{anlage_id}/wochenmuster", response_model=list[WochenmusterPunkt])
-async def get_wochenmuster(
-    anlage_id: int,
-    von: date = Query(..., description="Startdatum (inklusiv)"),
-    bis: date = Query(..., description="Enddatum (inklusiv)"),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Gibt durchschnittliche Stundenprofile je Wochentag zurück.
-
-    Aggregiert TagesEnergieProfil-Werte über den Zeitraum und berechnet
-    pro Wochentag (0=Mo … 6=So) × Stunde den Mittelwert.
-
-    ``stunde`` ist der **Backward-Slot** (Slot ``h`` = ``[h-1, h)``, wie die Stundenzeile): an einem Kanal-Tag legt
-    ``slot_konvention.backward_slot_der_zeile`` die Mischzeile auf ihren Slot (N-786). ⚠ Die Route hat derzeit keinen
-    Konsumenten im Client (``api/energie_profil.ts::getWochenmuster`` wird nicht gerufen, gemessen 10.11.2026).
-    """
-    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    if not result.scalar_one_or_none():
-        raise not_found("Anlage", anlage_id)
-
-    if (bis - von).days > 366:
-        raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
-
-    # HA-Bauform S5 (§3 (A) 25): die Stunden aus `stunden_der_tage` — an einem Kanal-Tag die Mischzeilen (Mengen wie
-    # Cockpit → Tag, Stunde = Beginn), sonst die Stundenzeile.
-    from backend.services.energie_profil.kanal_stunden import stunden_der_tage
-
-    rows = await stunden_der_tage(db, anlage_id, von, bis, felder=_WOCHENMUSTER_FELDER)
-
-    # Aggregation in Python: {(wochentag, stunde) → {field: [values]}}
-    # date.weekday(): 0=Mo, 1=Di, …, 6=So
-    acc: dict[tuple[int, int], dict[str, list[float]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
-    tage_set: dict[tuple[int, int], set] = defaultdict(set)
-
-    for r in rows:
-        # N-786 (Päckchen DD, 10.11.2026): EINE Zelle = EIN Backward-Slot. Eine Mischzeile eines Kanal-Tags (Zeile h =
-        # [h, h+1)) liegt auf Slot h+1, ihre Stunde 23 auf Slot 0 des Folgetags (Wochentag wechselt); die Bestandszeile
-        # bleibt, wie sie ist. Bis dahin mischte die Zelle beide Raster, wenn das Fenster Kanal- und Bestandstage trug.
-        tag, slot = backward_slot_der_zeile(r)
-        if tag > bis:
-            continue        # Stunde 23 des letzten Kanal-Tags gehört zu Slot 0 nach dem Fenster (wie bei der Stundenzeile)
-        wt = tag.weekday()
-        key = (wt, slot)
-        # M-1 (a): eine gebündelte Zeile (Spanne > 1 auf der Achse des Felds) wertet das Feld nicht; ein Tag zählt in
-        # `anzahl_tage`, wenn die Stunde ein gewertetes Feld trägt — oder gar keins und kein gebündeltes (wie bisher).
-        gewertet = verworfen = False
-        for field in _WOCHENMUSTER_FELDER:
-            val = getattr(r, field)
-            if val is None:
-                continue
-            if _gebuendelt(r, field):
-                verworfen = True
-                continue
-            acc[key][field].append(val)
-            gewertet = True
-        if gewertet or not verworfen:
-            tage_set[key].add(tag)
-
-    punkte: list[WochenmusterPunkt] = []
-    for (wt, stunde) in sorted(acc.keys()):
-        felder = acc[(wt, stunde)]
-        punkte.append(WochenmusterPunkt(
-            wochentag=wt,
-            stunde=stunde,
-            pv_kw=round(sum(felder["pv_kw"]) / len(felder["pv_kw"]), 3) if felder.get("pv_kw") else None,
-            verbrauch_kw=round(sum(felder["verbrauch_kw"]) / len(felder["verbrauch_kw"]), 3) if felder.get("verbrauch_kw") else None,
-            netzbezug_kw=round(sum(felder["netzbezug_kw"]) / len(felder["netzbezug_kw"]), 3) if felder.get("netzbezug_kw") else None,
-            einspeisung_kw=round(sum(felder["einspeisung_kw"]) / len(felder["einspeisung_kw"]), 3) if felder.get("einspeisung_kw") else None,
-            batterie_kw=round(sum(felder["batterie_kw"]) / len(felder["batterie_kw"]), 3) if felder.get("batterie_kw") else None,
-            anzahl_tage=len(tage_set[(wt, stunde)]),
-        ))
-
-    return punkte

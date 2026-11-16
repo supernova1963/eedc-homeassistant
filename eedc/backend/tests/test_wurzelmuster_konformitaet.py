@@ -1469,6 +1469,11 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Empfängername, damit die Freistellung kein anderes `md` der Datei mitnimmt. RF-19: die BKW-Prüfung steht seitdem
     # im Schwestermodul `stammdaten_investitionen.py` (Phase `_check_typ_balkonkraftwerk`).
     "backend/services/daten_checker/stammdaten_investitionen.py::anlagenzeile",
+    # Päckchen «Kleineres» 16.11.2026 (N1 b, W-14): das Sprungziel «PV-Erzeugung» eines Monats fragt, OB ein Anlagenwert
+    # gespeichert ist — ohne ihn zeigt das Monatsformular bei PV-Modulen nur «PV-Erzeugung (berechnet)» ohne Eingabefeld
+    # (`gespeicherterPvGesamt`), der Knopf springt dann in die Modulzeile. Diagnose über das Feld (Vorhandensein, keine
+    # Menge), dieselbe Rolle wie `anlagenzeile` oben; eigener Empfängername (`pv_erzeugung_ziel(…, anlagenzeile, …)`).
+    "backend/services/daten_checker/monatsdaten_plausibilitaet.py::anlagenzeile",
     # Drei Rollen in einer Datei, alle drei gedeckt (Granularität ist
     # `modul::empfänger`, feiner geht die Allowlist nicht). **Zeilennummern
     # bewusst weggelassen** — sie standen hier und waren schon vor dem

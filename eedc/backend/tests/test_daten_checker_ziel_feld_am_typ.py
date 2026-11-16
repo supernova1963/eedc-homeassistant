@@ -12,6 +12,10 @@ dem es ihr Feld nicht gibt — der Sprung (`lib/sprungFeld.ts`) wartet dann fün
 4. `md_batterie_ladung_fehlt`/`…_entladung_fehlt` zeigten auf «Batterie Ladung/Entladung» der Monatszeile — das Formular
    zeigt sie nur **ohne** Speicher (`MonatsdatenForm.tsx`, Abschnitt «Batterie (optional)»), der Befund setzt einen voraus.
 
+Nachtrag (Päckchen «Kleineres» 16.11.2026, N1): 5. `md_feld_negativ` «Batterie-Ladung/-Entladung» mit aktivem Speicher
+(wie 4); 6. «PV-Erzeugung» ohne Gerät bei aktiven PV-Modulen ohne gespeicherten Anlagenwert (`md_feld_negativ`,
+`md_pv_ungewoehnlich_hoch`, `md_mehr_pv_verwendet_als_erzeugt`) — dort steht «PV-Erzeugung (berechnet)» ohne Eingabefeld.
+
 W-2 (`test_daten_checker_ziele.py`) prüft, dass ein Feld-Schlüssel in **irgendeiner** Registry steht; W-5 prüft, dass die
 Zielseite den Parameter liest. Keiner fragt, ob das Feld **an diesem Gerät** steht — genau diese Lücke schließt W-14.
 
@@ -62,6 +66,10 @@ BAUER_MIT_FELD = ("ziel_datenquelle", "ziel_monat", "ziel_monat_label")
 #: Basisfelder des Monatsabschlusses, die das Formular nur zeigt, solange kein Gerät des Typs aktiv ist
 #: (`MonatsdatenForm.tsx`: `{!hatSpeicher && (<FormSection title="Batterie (optional)">…`).
 BASIS_NUR_OHNE_TYP = {"batterie_ladung_kwh": "speicher", "batterie_entladung_kwh": "speicher"}
+#: Basisfelder des Monatsabschlusses, die das Formular bei aktivem Gerät des Typs nur zeigt, wenn die Monatszeile einen
+#: Wert trägt (`MonatsdatenForm.tsx`: mit PV-Modulen «PV-Erzeugung (berechnet)» ohne Eingabefeld, die Zeile «PV-Gesamtwert
+#: der Anlage» nur mit gespeichertem Wert; Nachtrag Päckchen «Kleineres» 16.11.2026, N1 b).
+BASIS_MIT_TYP_NUR_MIT_WERT = {"pv_erzeugung_kwh": "pv-module"}
 #: ⚑ Benannte Ausnahmen (datei, code) → Grund. Nur schrumpfen; ein Eintrag ohne Treffer ist rot.
 AUSNAHMEN: dict[tuple[str, str], str] = {}
 #: (H-E6-11 ⇒ Option A, Master 11.11.2026: die zwei Ausnahmen `tarif_mengenfeld_groesser_als_menge`/`_rest` sind entfallen —
@@ -92,14 +100,19 @@ def _geraete_typen(feld: str) -> frozenset[str]:
     return _typen_je_feld().get(feld, frozenset()) - {TYP_ANLAGE}
 
 
-def verstoss_ohne_geraet(feld: str, *, monat: bool, aktive_typen: Optional[set[str]] = None) -> Optional[str]:
-    """Ziel mit Feld ohne Gerät: Basisfeld der Fläche oder genau ein Gerätetyp — sonst der Grund."""
+def verstoss_ohne_geraet(feld: str, *, monat: bool, aktive_typen: Optional[set[str]] = None,
+                         gespeichert: frozenset[str] = frozenset()) -> Optional[str]:
+    """Ziel mit Feld ohne Gerät: Basisfeld der Fläche oder genau ein Gerätetyp — sonst der Grund. `gespeichert` = Felder
+    der Monatszeile mit Wert (Laufzeit)."""
     from backend.core.field_definitions.keys import basis_feld_key
     b = basis_feld_key(feld)
     if b in _basis()[1 if monat else 0]:
         nur_ohne = BASIS_NUR_OHNE_TYP.get(b) if monat else None
         if nur_ohne is not None and aktive_typen is not None and nur_ohne in aktive_typen:
             return f"Feld {feld!r} zeigt das Formular nur ohne Gerät des Typs {nur_ohne!r} — die Anlage hat eines"
+        nur_wert = BASIS_MIT_TYP_NUR_MIT_WERT.get(b) if monat else None
+        if nur_wert is not None and aktive_typen is not None and nur_wert in aktive_typen and b not in gespeichert:
+            return f"Feld {feld!r} zeigt das Formular mit Gerät des Typs {nur_wert!r} nur mit gespeichertem Monatswert"
         return None
     typen = _geraete_typen(b)
     if len(typen) == 1:
@@ -107,7 +120,8 @@ def verstoss_ohne_geraet(feld: str, *, monat: bool, aktive_typen: Optional[set[s
     return f"Feld {feld!r} ohne Gerät liegt an {sorted(typen) or 'keinem Typ'} — der Sprung findet kein bestimmtes Feld"
 
 
-def verstoss(ziel: Optional[Ziel], typ_je_id: dict[int, str], aktive_typen: set[str]) -> Optional[str]:
+def verstoss(ziel: Optional[Ziel], typ_je_id: dict[int, str], aktive_typen: set[str],
+             gespeichert: frozenset[str] = frozenset()) -> Optional[str]:
     """Der Grund, warum `ziel` auf ein Feld zeigt, das es am Ziel nicht gibt — oder ``None``."""
     from backend.core.field_definitions.keys import basis_feld_key
     from backend.services.daten_checker.ziele import _modell_spalten, _parameter_je_typ
@@ -129,7 +143,7 @@ def verstoss(ziel: Optional[Ziel], typ_je_id: dict[int, str], aktive_typen: set[
         return None
     geraet = p.get("geraet")
     if geraet is None:
-        return verstoss_ohne_geraet(feld, monat=monat, aktive_typen=aktive_typen)
+        return verstoss_ohne_geraet(feld, monat=monat, aktive_typen=aktive_typen, gespeichert=gespeichert)
     typ = typ_je_id[int(geraet)]
     return None if typ in _geraete_typen(basis_feld_key(feld)) else f"Feld {feld!r} gibt es am Typ {typ!r} nicht"
 
@@ -385,6 +399,72 @@ def test_w14_fall4_batterie_legacy_springt_in_die_geraetezeile():
     assert gruende == [], gruende
     assert [e.ziel.params for e in erg] == [{"erfassen": "2025-03", "geraet": 5, "feld": "ladung_kwh"},
                                             {"erfassen": "2025-03", "geraet": 5, "feld": "entladung_kwh"}]
+
+
+def _md(**werte):
+    basis = dict(jahr=2025, monat=6, einspeisung_kwh=None, netzbezug_kwh=None, pv_erzeugung_kwh=None,
+                 batterie_ladung_kwh=None, batterie_entladung_kwh=None)
+    return SimpleNamespace(**{**basis, **werte})
+
+
+def test_w14_fall5_batterie_negativ_mit_speicher_springt_in_die_geraetezeile():
+    """N1 a (Nachtrag «Kleineres» 16.11.2026): `md_feld_negativ` für «Batterie-Ladung/-Entladung» zeigte auf die Felder der
+    Monatszeile — mit aktivem Speicher zeigt das Formular sie nicht. Jetzt die Gerätezeile des Speichers (wie Fall 4);
+    ohne Speicher bleibt die Monatszeile."""
+    from backend.services.daten_checker.monatsdaten_plausibilitaet import _negative_werte, _speicher_index
+
+    sp = SimpleNamespace(id=5, typ="speicher", aktiv=True, anschaffungsdatum=date(2025, 1, 1), stilllegungsdatum=None,
+                         monatsdaten=[], parameter={})
+    md = _md(batterie_ladung_kwh=-2.0, batterie_entladung_kwh=-1.0)
+    _bat, _netz, aktiv_monate, _ohne = _speicher_index(SimpleNamespace(investitionen=[sp]), [md])
+    erg = _negative_werte("monatsdaten", "06/2025", md, pv_erzeugung=None,
+                          speicher_geraet=aktiv_monate.get((2025, 6)))
+    assert [e.code for e in erg] == ["md_feld_negativ", "md_feld_negativ"]
+    assert [verstoss(e.ziel, {5: "speicher"}, {"speicher"}) for e in erg] == [None, None]
+    assert [e.ziel.params for e in erg] == [{"erfassen": "2025-06", "geraet": 5, "feld": "ladung_kwh"},
+                                            {"erfassen": "2025-06", "geraet": 5, "feld": "entladung_kwh"}]
+    # Zähne: das alte Ziel (Monatszeile) ist mit Speicher rot; ohne Speicher bleibt es und ist grün.
+    alt = _negative_werte("monatsdaten", "06/2025", md, pv_erzeugung=None)
+    assert all(verstoss(e.ziel, {5: "speicher"}, {"speicher"}) is not None for e in alt)
+    assert [verstoss(e.ziel, {}, set()) for e in alt] == [None, None]
+
+
+def test_w14_fall6_pv_berechnet_springt_in_die_modulzeile():
+    """N1 b: «PV-Erzeugung» ohne Gerät zeigte auf die Monatszeile — mit aktiven PV-Modulen und ohne gespeicherten
+    Anlagenwert steht dort «PV-Erzeugung (berechnet)» ohne Eingabefeld. Jetzt die Zeile des ersten aktiven Moduls; mit
+    gespeichertem Wert die Zeile «PV-Gesamtwert»; nur ein Wechselrichter ⇒ der Monat ohne Feld."""
+    from backend.models.investition import Investition
+    from backend.services.daten_checker.monatsdaten_plausibilitaet import (
+        PV_MONATSZEILE, PvSprung, _negative_werte, _pv_ueber_maximum, pv_sprung,
+    )
+
+    m9 = Investition(id=9, typ="pv-module", anschaffungsdatum=date(2024, 1, 1))
+    m7 = Investition(id=7, typ="pv-module", anschaffungsdatum=date(2024, 1, 1))
+    spaeter = Investition(id=3, typ="pv-module", anschaffungsdatum=date(2025, 7, 1))
+    typen = {9: "pv-module", 7: "pv-module", 3: "pv-module"}
+    md = _md()
+    pv = pv_sprung(md, [m9, spaeter, m7])
+    assert pv == PvSprung(geraet=7)
+    (neg,) = _negative_werte("monatsdaten", "06/2025", md, pv_erzeugung=-3.0, pv=pv)
+    (hoch,) = _pv_ueber_maximum("monatsdaten", "06/2025", md, pv_erzeugung=9999.0, gesamt_kwp=10.0,
+                                pvgis_monat_map={}, pr=1.0, pr_count=0, pv=pv)
+    for e in (neg, hoch):
+        assert e.ziel.params == {"erfassen": "2025-06", "geraet": 7, "feld": "pv_erzeugung_kwh"}
+        assert verstoss(e.ziel, typen, {"pv-module"}) is None
+    # Zähne: das alte Ziel ist bei aktiven Modulen ohne gespeicherten Wert rot.
+    (alt,) = _negative_werte("monatsdaten", "06/2025", md, pv_erzeugung=-3.0)
+    assert verstoss(alt.ziel, typen, {"pv-module"}) is not None
+    # Gespeicherter Anlagenwert ⇒ Zeile «PV-Gesamtwert» der Monatszeile.
+    md_wert = _md(pv_erzeugung_kwh=812.0)
+    assert pv_sprung(md_wert, [m9, m7]) == PV_MONATSZEILE
+    (mit_wert,) = _negative_werte("monatsdaten", "06/2025", md_wert, pv_erzeugung=-3.0, pv=PV_MONATSZEILE)
+    assert mit_wert.ziel.params == {"erfassen": "2025-06", "feld": "pv_erzeugung_kwh"}
+    assert verstoss(mit_wert.ziel, typen, {"pv-module"}, frozenset({"pv_erzeugung_kwh"})) is None
+    # Nur ein Wechselrichter ⇒ der Monat (sein Feld zeigt der Monatsabschluss nicht).
+    wr = Investition(id=4, typ="wechselrichter", anschaffungsdatum=date(2024, 1, 1))
+    assert pv_sprung(md, [wr]) == PvSprung(ohne_feld=True)
+    (nur_wr,) = _negative_werte("monatsdaten", "06/2025", md, pv_erzeugung=-3.0, pv=PvSprung(ohne_feld=True))
+    assert nur_wr.ziel.params == {"erfassen": "2025-06"}
 
 
 @pytest.mark.parametrize("code", ["emob_kennung_unbekannt", "evcc_netzladung_abweichung",

@@ -14,7 +14,6 @@ GET /api/energie-profil/{anlage_id}/tag-status — warum ein Tag leer ist, und w
 
 GET /api/energie-profil/{anlage_id}/komponenten-serien — `komponenten_kwh`-Keys eines Zeitraums als SerieInfo
 GET /api/energie-profil/{anlage_id}/stunden            — 24 Stundenwerte eines Tages
-GET /api/energie-profil/{anlage_id}/wochenmuster       — Ø-Tagesprofil je Wochentag
 
 GET /api/energie-profil/{anlage_id}/monat — Heatmap + KPIs + Peaks + Kategorien (auch Quelle des Monatsberichts)
 
@@ -56,7 +55,6 @@ from backend.api.routes.energie_profil.serien import (  # noqa: F401 — Re-Expo
     router as _serien_router,
     get_komponenten_serien,
     get_stundenwerte,
-    get_wochenmuster,
 )
 from backend.api.routes.energie_profil.monat import (  # noqa: F401 — Re-Export
     router as _monat_router,
@@ -96,7 +94,6 @@ __all__ = [
     "get_tag_status",
     "get_komponenten_serien",
     "get_stundenwerte",
-    "get_wochenmuster",
     "ENERGIE_KATEGORIEN",
     "get_monatsauswertung",
     "get_debug_rohdaten",

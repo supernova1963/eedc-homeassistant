@@ -9,7 +9,6 @@
   HAs Lückenregel legt die Menge in Stunde 12) zeigt im Wärme-Verlauf ``None``; Stunde 12 trägt die Energie, Σ = Balken.
 * **W-3** (S5-R7): der Wärme-Verlauf liest an einem WP-Kanal-Tag den Modus-Split aus dem abgeleiteten Kanal wie
   *Cockpit → Tag* — auch wenn die Modus-Spur der Stundenzeilen etwas anderes sagt.
-* **M-1 (a) Wochenmuster**: gebündelte Zeilen (Spanne > 1) fallen aus dem Mittel; ohne Bündel unverändert.
 * **M-1 (b) ``_ist_heute``**: ohne Marke ``{}``.
 * **Werkbank-Vorschau** (§7, S5a-Fassung): eine Zeile mit den Kanal-Gruppen eines Kanal-Tags, keine an einem Bestandstag.
 
@@ -214,41 +213,6 @@ def test_w3_splits_mit_kanal_kanal_gewinnt_sonst_die_modus_spur():
     kanal = {"1": ModusSplit(kwh_je_modus={"heizen": 3.0}, abdeckung_h=20.0), "3": ModusSplit(kwh_je_modus={})}
     out = splits_mit_kanal(spur, kanal)
     assert out == {"2": spur["2"], "1": kanal["1"]}
-
-
-# ── M-1 (a): Wochenmuster ohne gebündelte Zeilen ─────────────────────────────
-
-
-def _zeile(d: date, stunde: int, pv: float, spannen=None):
-    return SimpleNamespace(datum=d, stunde=stunde, pv_kw=pv, verbrauch_kw=None, netzbezug_kw=None,
-                           einspeisung_kw=None, batterie_kw=None, spannen=spannen)
-
-
-async def _wochenmuster(db, monkeypatch, zeilen):
-    from backend.api.routes.energie_profil.serien import get_wochenmuster
-    from backend.services.energie_profil import kanal_stunden
-
-    async def _stunden(*a, **k):
-        return zeilen
-
-    monkeypatch.setattr(kanal_stunden, "stunden_der_tage", _stunden)
-    a = Anlage(anlagenname="Wochenmuster", leistung_kwp=10.0)
-    db.add(a)
-    await db.commit()
-    return await get_wochenmuster(a.id, von=date(2026, 6, 1), bis=date(2026, 6, 30), db=db)
-
-
-async def test_wochenmuster_tagesstand_kanal_keine_punkte_statt_eines_buendels(db, monkeypatch):
-    """Ein Tagesstand-Kanal (eine Zeile je Tag mit Spanne 23) gab bis M-1 in Stunde 22 den ganzen Tag als «kW»."""
-    zeilen = [_zeile(date(2026, 6, 1), 22, 35.9, {"pv": 23}), _zeile(date(2026, 6, 1), 23, 0.0)]
-    punkte = await _wochenmuster(db, monkeypatch, zeilen)
-    assert [(p.stunde, p.pv_kw, p.anzahl_tage) for p in punkte] == [(23, 0.0, 1)]
-
-
-async def test_wochenmuster_ohne_buendel_unveraendert(db, monkeypatch):
-    zeilen = [_zeile(date(2026, 6, 1), 12, 4.0), _zeile(date(2026, 6, 8), 12, 2.0), _zeile(date(2026, 6, 8), 13, None)]
-    punkte = await _wochenmuster(db, monkeypatch, zeilen)
-    assert [(p.wochentag, p.stunde, p.pv_kw, p.anzahl_tage) for p in punkte] == [(0, 12, 3.0, 2)]
 
 
 # ── M-1 (b): `_ist_heute` ohne Marke `{}` ────────────────────────────────────

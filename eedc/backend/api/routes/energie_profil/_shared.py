@@ -209,18 +209,6 @@ class StundenAntwort(BaseModel):
     soc_zuletzt_prozent: Optional[float] = None
 
 
-class WochenmusterPunkt(BaseModel):
-    """Durchschnittlicher Stundenwert pro Wochentag."""
-    wochentag: int      # 0=Mo, 1=Di, …, 6=So
-    stunde: int         # 0–23
-    pv_kw: Optional[float] = None
-    verbrauch_kw: Optional[float] = None
-    netzbezug_kw: Optional[float] = None
-    einspeisung_kw: Optional[float] = None
-    batterie_kw: Optional[float] = None
-    anzahl_tage: int = 0
-
-
 class HeatmapZelle(BaseModel):
     """Eine Zelle der Monats-Heatmap (Tag × Stunde)."""
     tag: int          # 1..31

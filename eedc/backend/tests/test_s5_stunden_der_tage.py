@@ -226,7 +226,7 @@ async def test_gemischter_bereich_ohne_doppelzaehlung(uhr):
 def _leser_m04(ds, tarif):
     """Die Leser auf der Form M04 (zwei Speicher, Netzladung, Flex-Tarif mit Preissensor) — Name → Aufruf."""
     from backend.api.routes.aktueller_monat.vergleich import _load_grundlast_nacht_kw
-    from backend.api.routes.energie_profil.serien import get_komponenten_serien, get_wochenmuster
+    from backend.api.routes.energie_profil.serien import get_komponenten_serien
     from backend.services import strompreis_aggregator as sa
     from backend.services.energie_profil.vergleichstage import tage_ohne_tagesvergleich
     from backend.services.speicher_potential_service import lade_potential_auswertung
@@ -246,13 +246,12 @@ def _leser_m04(ds, tarif):
         "L7 Verbrauchsprognose": lambda: get_verbrauch_prognose(aid, date(2026, 6, 25), db),
         "L20 Grundlast Nacht": lambda: _load_grundlast_nacht_kw(aid, 2026, 6, db),
         "L23 Tagesvergleich": lambda: tage_ohne_tagesvergleich(db, aid, "pv", von=VON, bis=BIS),
-        "L25 Wochenmuster": lambda: get_wochenmuster(anlage_id=aid, von=VON, bis=BIS, db=db),
         "L26 Komponenten-Serien": lambda: get_komponenten_serien(anlage_id=aid, von=VON, bis=BIS, db=db),
     }
 
 
 #: Leser, deren Stunden durch `stunden_der_tage` laufen (L26 liest nur Tagesmengen).
-_STUNDEN_LESER = ("L1", "L3", "L4", "L5", "L7", "L20", "L23", "L25")
+_STUNDEN_LESER = ("L1", "L3", "L4", "L5", "L7", "L20", "L23")
 #: Monats-Preisleser, deren Kanal-Monat der Kosten-Kanal deckt (HA-Bauform E4e) — sie fragen dort keine Stunden.
 _UEBER_KOSTEN_KANAL = ("L5 Preis-Aggregat", "L5 Monats-Ø")
 

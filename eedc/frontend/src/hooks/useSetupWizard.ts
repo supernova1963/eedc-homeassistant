@@ -143,7 +143,7 @@ interface UseSetupWizardReturn {
 
   // Anlage
   createAnlage: (data: AnlageCreateData) => Promise<void>
-  geocodeAddress: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number; erkanntes_land: string | null } | null>
+  geocodeAddress: (plz: string, ort?: string, strasse?: string) => Promise<{ latitude: number; longitude: number; erkanntes_land: string | null } | null>
 
   // Strompreise
   createStrompreis: (data: StrompreisCreateData) => Promise<void>

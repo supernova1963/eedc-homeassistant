@@ -5,7 +5,7 @@ Vor v3.27 lebte der gesamte Endpoint-Bestand in einer einzigen
 `routes/energie_profil.py`. Im Zuge der Etappe-3d-Päckchen-4-Refactor-Tail
 wurde der File in zwei Verantwortlichkeits-Slices zerlegt:
 
-  - views.py  → Read-Endpoints (tage / stunden / wochenmuster / monat /
+  - views.py  → Read-Endpoints (tage / stunden / monat /
                 debug-rohdaten / verfuegbare-monate / stats /
                 reaggregate-tag/preview / kraftstoffpreis-status / tagesprognose)
   - repair.py → Repair- / Write-Endpoints (delete-rohdaten,

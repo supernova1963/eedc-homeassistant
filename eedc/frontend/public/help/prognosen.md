@@ -13,7 +13,7 @@
 3. [Wo die Prognosen in der App erscheinen](#3-wo-die-prognosen-in-der-app-erscheinen)
 4. [Die Physik dahinter — GTI, Ausrichtung, Wettermodell](#4-die-physik-dahinter--gti-ausrichtung-wettermodell)
 5. [Lernfaktor & Korrekturprofil — wie eedc dazulernt](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)
-6. [Genauigkeits-Tracking (MAE & Bias)](#6-genauigkeits-tracking-mae--bias)
+6. [Genauigkeits-Tracking (MAPE & Bias)](#6-genauigkeits-tracking-mape--bias)
 7. [Was du konfigurieren musst (Abhängigkeiten)](#7-was-du-konfigurieren-musst-abhängigkeiten)
 8. [Bekannte Probleme & Fehlerbilder](#8-bekannte-probleme--fehlerbilder)
 
@@ -89,7 +89,7 @@ Als operative Prognosequelle stehen zur Wahl:
 
 **Ist SFML deine gewählte Quelle, siehst du sie im Vergleich — als Wert, nicht als Note.** Der Stundenvergleich, der 7-Tage-Vergleich und der Tagesverlauf zeigen dann eine zusätzliche **SFML**-Spalte bzw. -Kurve: sonst fehlte dir in dieser Sicht ausgerechnet die Zahl, mit der eedc bei dir tatsächlich rechnet.
 
-**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — im **Genauigkeits-Tracking** steht SFML seit #401 nur als Wertspalte, ohne MAE/Bias und ohne Ausreißer-Markierung; sein Day-Ahead-Stand ist der erste Aufruf der Live-Sicht an dem Tag (§6). eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für einen zurückliegenden Tag gibt es einen SFML-Wert nur, wenn die Live-Sicht an dem Tag aufgerufen wurde — sonst zeigt die SFML-Spalte im 7-Tage-Vergleich „—". Das ist so gewollt — kein Fehler.
+**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — im **Genauigkeits-Tracking** steht SFML seit #401 nur als Wertspalte, ohne MAPE/Bias und ohne Ausreißer-Markierung; sein Day-Ahead-Stand ist der erste Aufruf der Live-Sicht an dem Tag (§6). eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für einen zurückliegenden Tag gibt es einen SFML-Wert nur, wenn die Live-Sicht an dem Tag aufgerufen wurde — sonst zeigt die SFML-Spalte im 7-Tage-Vergleich „—". Das ist so gewollt — kein Fehler.
 
 > Bis v4.0.8 blieb SFML in diesen Sichten **ganz** außen vor. Das war eine gröbere Regel als nötig: Wert und Bewertung standen damals in derselben Tabellenzelle, „anzeigen ohne zu bewerten" gab es also nicht. Seit Wert und **Δ** getrennte Spalten haben, geht beides.
 
@@ -181,7 +181,7 @@ Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-is
 - **Korrekturprofil-Stratifizierung:** stündliche Day-Ahead-Genauigkeit nach Wetterklasse.
 - **Tagesverlauf-Chart:** Stundenlinien IST / eedc / Solcast / OpenMeteo (Solcast mit p10/p90-Band).
 - **24-Stunden- und 7-Tage-Vergleichstabellen** mit Abweichungs-Badges (siehe unten).
-- **Genauigkeits-Tracking** (siehe [§6](#6-genauigkeits-tracking-mae--bias)).
+- **Genauigkeits-Tracking** (siehe [§6](#6-genauigkeits-tracking-mape--bias)).
 - **Korrekturprofil-Heatmap:** Sonnenstand (Azimut × Höhe) × Wetterklasse als Farbkacheln — rein diagnostisch.
 - **Sonnenangebot:** Globalstrahlung (Balken, kWh/m²) und Sonnenstunden (Linie, h) je Monat — siehe unten.
 
@@ -306,9 +306,9 @@ Zwei Dinge gehören dazu:
 
 #### Korrektur nur, wenn sie hilft
 
-Die Korrektur soll die rohe Wetterprognose **verbessern**. Ob sie das tut, prüft eedc jeden Tag selbst: über die letzten 30 Tage vergleicht es den mittleren Fehler (MAE) der korrigierten Day-Ahead-Prognose mit dem der rohen OpenMeteo-Prognose. Liegt die Korrektur **mehr als 2 Prozentpunkte schlechter**, setzt eedc sie aus und zeigt die rohe Prognose — in der App, im Stundenprofil und in den HA-Sensoren. Wieder eingeschaltet wird sie, sobald sie höchstens noch 1 Punkt schlechter ist (dazwischen bleibt der bisherige Zustand, damit sie nicht von Tag zu Tag hin- und herspringt). Unter 14 vergleichbaren Tagen setzt eedc nie aus.
+Die Korrektur soll die rohe Wetterprognose **verbessern**. Ob sie das tut, prüft eedc jeden Tag selbst: über die letzten 30 Tage vergleicht es den mittleren prozentualen Fehler (MAPE) der korrigierten Day-Ahead-Prognose mit dem der rohen OpenMeteo-Prognose. Liegt die Korrektur **mehr als 2 Prozentpunkte schlechter**, setzt eedc sie aus und zeigt die rohe Prognose — in der App, im Stundenprofil und in den HA-Sensoren. Wieder eingeschaltet wird sie, sobald sie höchstens noch 1 Punkt schlechter ist (dazwischen bleibt der bisherige Zustand, damit sie nicht von Tag zu Tag hin- und herspringt). Unter 14 vergleichbaren Tagen setzt eedc nie aus.
 
-**Was du siehst:** nur wenn die Korrektur ausgesetzt ist, steht in *Auswertungen → Prognose* über dem Genauigkeits-Tracking eine Kopfzeile, z. B. *„Korrektur ausgesetzt — die letzten 30 Tage war die Korrektur schlechter als OpenMeteo roh (MAE 24 % gegen 21 %); eedc zeigt bis auf Weiteres den Rohwert"*. Der Sensor „PV-Prognose heute" trägt die Attribute `korrektur_ausgesetzt`, `korrektur_mae_30_prozent` und `roh_mae_30_prozent`.
+**Was du siehst:** nur wenn die Korrektur ausgesetzt ist, steht in *Auswertungen → Prognose* über dem Genauigkeits-Tracking eine Kopfzeile, z. B. *„Korrektur ausgesetzt — die letzten 30 Tage war die Korrektur schlechter als OpenMeteo roh (MAPE 24 % gegen 21 %); eedc zeigt bis auf Weiteres den Rohwert"*. Der Sensor „PV-Prognose heute" trägt die Attribute `korrektur_ausgesetzt`, `korrektur_mae_30_prozent` und `roh_mae_30_prozent`.
 
 **Was weiterläuft:** das Lernen. eedc rechnet die Korrektur auch im ausgesetzten Zustand jeden Tag mit, hält sie fest und lernt weiter — so merkt der Wächter von selbst, wenn sie wieder hilft. Für den Vergleich braucht er die Tagesreihe der rohen Prognose; an Installationen, die sie noch nicht aufgezeichnet haben, bleibt die Korrektur einfach an.
 
@@ -320,27 +320,27 @@ Das Korrekturprofil lernt über Wochen; es weiß am Morgen nicht, dass **heute**
 - Der Rest wird mit einem **Faktor** skaliert — **gedämpft**, solange erst wenig vom Tag vorbei ist (ein trüber Morgen sagt wenig über den Nachmittag), und höchstens auf das **0,4- bis 1,6-Fache**. Trifft der Tag die Prognose, bleibt der Faktor 1,0.
 - Gemessen an einer Anlage von September bis November: um 11 Uhr sinkt der Fehler der Tageszahl im Oktober/November von rund 25 % auf rund 20 %, an Nebeltagen auf die Hälfte.
 
-**Was du siehst:** In *Cockpit → Live* (Solar-Aussicht) folgen „verbleibend" und die Kopfzahl „Tag läuft auf ~X kWh hinaus" dem nachgeführten Rest; verschiebt die Nachführung den Rest um mindestens 5 %, steht darunter ein Satz wie *„Rest nach dem bisherigen Tag um 23 % gesenkt"*. Die HA-Sensoren **„PV-Prognose Rest heute"** und **„PV-Prognose heute (nachgeführt)"** tragen den nachgeführten Wert und das Attribut `nachfuehr_faktor`; „Rest heute" zusätzlich `rest_modell_kwh`, den Rest ohne Nachführung. Der Zeitpunkt **Mittag** im Genauigkeits-Tracking ([§6](#6-genauigkeits-tracking-mae--bias)) hält diesen nachgeführten Stand fest, und der Sensor **„Speicher voll um"** rechnet die Stunden ab jetzt mit derselben nachgeführten Prognose.
+**Was du siehst:** In *Cockpit → Live* (Solar-Aussicht) folgen „verbleibend" und die Kopfzahl „Tag läuft auf ~X kWh hinaus" dem nachgeführten Rest; verschiebt die Nachführung den Rest um mindestens 5 %, steht darunter ein Satz wie *„Rest nach dem bisherigen Tag um 23 % gesenkt"*. Die HA-Sensoren **„PV-Prognose Rest heute"** und **„PV-Prognose heute (nachgeführt)"** tragen den nachgeführten Wert und das Attribut `nachfuehr_faktor`; „Rest heute" zusätzlich `rest_modell_kwh`, den Rest ohne Nachführung. Der Zeitpunkt **Mittag** im Genauigkeits-Tracking ([§6](#6-genauigkeits-tracking-mape--bias)) hält diesen nachgeführten Stand fest, und der Sensor **„Speicher voll um"** rechnet die Stunden ab jetzt mit derselben nachgeführten Prognose.
 
 **Was bleibt, wie es ist:** „PV-Prognose heute" und sein Stundenprofil (die Prognose, an der morgens geplant und abends gemessen wird), die Vormittag-/Nachmittag-Sensoren, der Abregelungs-Rest (die Kappung an der Wechselrichter-Grenze skaliert nicht mit einem Faktor) und die Abweichungs-Ampel — sie ist der Vergleich, aus dem die Nachführung entsteht. Mit Solcast oder SFML als gewählter Quelle folgt der Rest in der Live-Sicht dieser Quelle; die Nachführung gilt dem eedc-Rest (die HA-Sensoren rechnen immer mit eedc).
 
 ---
 
-## 6. Genauigkeits-Tracking (MAE & Bias)
+## 6. Genauigkeits-Tracking (MAPE & Bias)
 
 eedc trennt zwei Fehlerarten — das ist entscheidend für die Deutung:
 
 | Kennzahl | Bedeutung |
 |----------|-----------|
-| **MAE** (Mean Absolute Error) | wie groß die **Streuung** ist — im Mittel daneben, egal in welche Richtung. |
+| **MAPE** (Mean Absolute Percentage Error) | wie groß die **Streuung** ist — im Mittel daneben, egal in welche Richtung, in % vom IST des Tages. |
 | **Bias / MBE** (Mean Bias Error) | der **systematische** Versatz. **Positiv = Prognose war zu hoch**, negativ = zu niedrig. |
 
 Faustregel für die Deutung:
 
-- **|Bias| ≪ MAE** → die Prognose streut, aber im Mittel stimmt sie → reines Wetterrauschen, ein Lernfaktor hilft kaum.
-- **|Bias| ≈ MAE** → systematischer Versatz → genau hier wirkt der Lernfaktor / das Korrekturprofil.
+- **|Bias| ≪ MAPE** → die Prognose streut, aber im Mittel stimmt sie → reines Wetterrauschen, ein Lernfaktor hilft kaum.
+- **|Bias| ≈ MAPE** → systematischer Versatz → genau hier wirkt der Lernfaktor / das Korrekturprofil.
 
-Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander. Fehlt für einen Tag der aufgezeichnete Stand einer Quelle, steht dort gedimmt **„nicht erhoben"** — kein Strich, der wie 0 aussieht, und keine nachträglich gerechnete Zahl.
+Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAPE und Bias für OpenMeteo, eedc und Solcast nebeneinander. Fehlt für einen Tag der aufgezeichnete Stand einer Quelle, steht dort gedimmt **„nicht erhoben"** — kein Strich, der wie 0 aussieht, und keine nachträglich gerechnete Zahl.
 
 **Die Tagestabelle darunter spricht dieselbe Sprache wie der Stundenvergleich:** je Quelle eine Wert- und eine **Δ**-Spalte, die Abweichung absolut in kWh mit der relativen Angabe in Klammern. Bis v4.0.8 stand hier nur der relative Wert („+16 %") — dieselben vier Tage, die auch im 7-Tage-Vergleich stehen, wurden damit auf einer Seite in zwei verschiedenen Sprachen beschrieben.
 
@@ -358,7 +358,7 @@ Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie st
 >
 > Die Abweichungs-Ampel der HA-Sensoren (`mae_30_tage_prozent`) rechnet mit dem eedc-Day-Ahead-Stand — ohne aufgezeichnete Day-Ahead-Profile gibt es keine Schwelle und keine Ampel.
 
-**Welche Quelle trifft an deiner Anlage am besten?** Unter den Kennzahlen steht je Zeitpunkt ein Satz, z. B. *„Zum Zeitpunkt Day-Ahead trifft an dieser Anlage **Solcast** am besten (MAE 12,8 % gegen eedc 15,5 %)"*. eedc vergleicht dafür eedc, OpenMeteo und Solcast über die Tage des gewählten Zeitraums — erst ab **14 Tagen** mit Werten, sonst steht der Satz nicht da (SFML bleibt wie oben außen vor). Liegt Solcast vorn und ist nicht deine gewählte Quelle, nennt der Satz den Weg: Solcast kann unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) als „PV-Prognose-Quelle“ gewählt werden. eedc empfiehlt die bessere Quelle, statt sie zu verschweigen.
+**Welche Quelle trifft an deiner Anlage am besten?** Unter den Kennzahlen steht je Zeitpunkt ein Satz, z. B. *„Zum Zeitpunkt Day-Ahead trifft an dieser Anlage **Solcast** am besten (MAPE 12,8 % gegen eedc 15,5 %)"*. eedc vergleicht dafür eedc, OpenMeteo und Solcast über die Tage des gewählten Zeitraums — erst ab **14 Tagen** mit Werten, sonst steht der Satz nicht da (SFML bleibt wie oben außen vor). Liegt Solcast vorn und ist nicht deine gewählte Quelle, nennt der Satz den Weg: Solcast kann unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) als „PV-Prognose-Quelle“ gewählt werden. eedc empfiehlt die bessere Quelle, statt sie zu verschweigen.
 
 ---
 

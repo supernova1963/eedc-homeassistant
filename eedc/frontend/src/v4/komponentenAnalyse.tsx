@@ -59,7 +59,7 @@ export const KOMPONENTEN_ANALYSE: Record<string, KompAnalyse> = {
   // wiederverwendete IST-Komponente, self-fetch über anlageId.
   'pv-module': {
     // D4 „beides": scoped SOLL/IST pro String hier (Embed) + Cross-Link auf die
-    // volle Prognose-Analyse (Quellen-Vergleich/MAE-MAPE) in Auswertungen/Prognose.
+    // volle Prognose-Analyse (Quellen-Vergleich/MAPE-Bias) in Auswertungen/Prognose.
     // D3 (Gernot 2026-07-09): Badges + dieser Cross-Link je EIGENE Parkbar; der
     // Cross-Link (immer sichtbar) wird der von PVStringVergleich gemeldeten ID-Menge
     // beigemischt, damit der Block erst weg ist, wenn AUCH der Link geparkt ist.
@@ -69,7 +69,7 @@ export const KOMPONENTEN_ANALYSE: Record<string, KompAnalyse> = {
           melde={melde ? (ids) => melde([...ids, 'link:pv-prognose']) : undefined} />
         <Parkbar id="link:pv-prognose" titel="Cross-Link volle Prognose-Analyse">
           <a href="#/auswertungen/prognose" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
-            <ExternalLink className="h-4 w-4" /> Volle Prognose-Analyse (Quellen-Vergleich, MAE/MAPE) →
+            <ExternalLink className="h-4 w-4" /> Volle Prognose-Analyse (Quellen-Vergleich, MAPE/Bias) →
           </a>
         </Parkbar>
       </div>

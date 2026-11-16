@@ -372,7 +372,7 @@ export interface GenauigkeitsResponse {
   ausreisser_schwelle_prozent?: number
   // N-782: welcher Prognosestand je Quelle in `tage` und den Kennzahlen steht
   zeitpunkt?: GenauigkeitsZeitpunkt
-  // Päckchen CC: Quellen-Empfehlung — die Quelle mit der kleinsten MAE zu diesem Zeitpunkt (≥ 14 Tage Werte), im Backend gewählt
+  // Päckchen CC: Quellen-Empfehlung — die Quelle mit der kleinsten MAPE zu diesem Zeitpunkt (≥ 14 Tage Werte), im Backend gewählt
   beste_quelle?: 'eedc' | 'openmeteo' | 'solcast' | null
   beste_quelle_mae_prozent?: number | null
   // Päckchen CC: die in der Anlage gewählte Prognosequelle (Einstellung)

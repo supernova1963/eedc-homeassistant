@@ -429,9 +429,12 @@ class StammdatenInvestitionenChecks:
     def _check_typ_wechselrichter(
         self, kat, inv, name: str, param: dict, anlage: Anlage,
     ) -> list[CheckErgebnis]:
-        """Wechselrichter: Leistung (Kanon und Alt-Name) und PV-Altbestand (#388)."""
+        """Wechselrichter: Leistung (Kanon, Alt-Name, Spalte) und PV-Altbestand (#388)."""
         ergebnisse: list[CheckErgebnis] = []
-        if not param.get("max_leistung_kw") and not param.get("leistung_ac_kw"):
+        # Päckchen «Kleineres» 16.11.2026 (N4): derselbe Kennwert, mit dem die Prognose kappt — er fällt auf die Spalte
+        # `leistung_kwp` zurück (Setup-Wizard und Import schreiben sie). Bis dahin las der Befund nur die Parameter und
+        # meldete «Leistung fehlt», während eedc mit einem Wert rechnete.
+        if get_wr_grenze_kw(inv) is None:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="geraet_leistung_kw_fehlt",
                 meldung=f"{name}: Leistung (kW) fehlt",

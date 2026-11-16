@@ -7,7 +7,7 @@
 > | Punkt | Entscheid 13.10.2026 |
 > | --- | --- |
 > | **Cockpit → Jahr: Stellung «Gesamt» über alle Jahre** (aus #395 Punkt 2, OB73-gif) | **nicht gebaut** — Einwertung in [§1](#1-cockpit-jahr-stellung-gesamt). Auslöser bleibt ein Melder, der die Gesamtsicht braucht; dann ist zuerst die Konzeptfrage in §1.4 zu entscheiden. |
-> | **V2H: der Tageswert der Entladung fehlt** | **wird gebaut** — als eigenes Päckchen nach v4.1.7, ohne Termin. Entscheide und Bauplan in [§2](#2-v2h-tageswert). |
+> | **V2H: der Tageswert der Entladung fehlt** | **gebaut** (`2ce068fae`), ausgeliefert mit v4.1.7; siehe [§2.7](#27-gates-und-zeitpunkt). Entscheide und Bauplan in [§2](#2-v2h-tageswert). |
 >
 > Zeilenangaben beziehen sich auf den Stand nach Päckchen M3 (13.10.2026). Wer den Bauplan ausführt, misst sie am HEAD nach.
 

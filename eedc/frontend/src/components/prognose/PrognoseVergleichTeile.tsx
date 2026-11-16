@@ -1044,7 +1044,7 @@ function PvgQuellenEmpfehlung({ genauigkeit, zeitpunkt }: { genauigkeit: Genauig
   return (
     <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
       Zum Zeitpunkt {ZEITPUNKT_LABEL[zeitpunkt]} trifft an dieser Anlage <strong>{QUELLEN_NAME[beste]}</strong> am besten
-      {' '}(MAE {fmtZahl(mae, 1)} %{vergleich}).{wahlSatz}
+      {' '}(MAPE {fmtZahl(mae, 1)} %{vergleich}).{wahlSatz}
     </p>
   )
 }
@@ -1054,7 +1054,7 @@ function PvgKorrekturAusgesetzt({ genauigkeit }: { genauigkeit: GenauigkeitsResp
   const k = genauigkeit.korrektur_status
   if (!k?.ausgesetzt) return null
   const maeText = k.mae_kaskade_prozent != null && k.mae_roh_prozent != null
-    ? ` (MAE ${fmtZahl(k.mae_kaskade_prozent, 1)} % gegen ${fmtZahl(k.mae_roh_prozent, 1)} %)`
+    ? ` (MAPE ${fmtZahl(k.mae_kaskade_prozent, 1)} % gegen ${fmtZahl(k.mae_roh_prozent, 1)} %)`
     : ''
   return (
     <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
@@ -1205,7 +1205,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
                   <td className={ZELLE} aria-hidden="true" />
                   <td className={`${ZELLE} text-gray-900 dark:text-white`}>
                     {formatDatum(tag.datum)}
-                    {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAE/MBE ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
+                    {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAPE/Bias ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
                   </td>
                   {/* N-782: ohne aufgezeichneten Stand «nicht erhoben» (gedimmt), nie ein Strich, der wie 0 aussieht. */}
                   <PvgPrognoseZelle wert={tag.openmeteo_kwh} ist={tag.ist_kwh} stellen={1} leerText={<NichtErhoben />} />

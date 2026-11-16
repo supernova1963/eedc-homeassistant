@@ -8,7 +8,7 @@ eine Funktion je Prüfung, in der Reihenfolge des Orchestrators. Meldung, Schwer
 jeder Zeile sind Anwender-Verträge; die Reihenfolge der Meldungen ergibt sich aus der Aufrufreihenfolge.
 """
 
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.zahlenformat import fmt_zahl
@@ -38,6 +38,40 @@ _TOLERANZ_ANTEIL = 0.02
 #: Feld-Schlüssel der Anzeige-Namen dieser Prüfungen — für das Sprung-Ziel (`ziele.ziel_monat_label`, Etappe E2).
 _FELD_KEY = {"Einspeisung": "einspeisung_kwh", "Netzbezug": "netzbezug_kwh", "PV-Erzeugung": "pv_erzeugung_kwh",
              "Batterie-Ladung": "batterie_ladung_kwh", "Batterie-Entladung": "batterie_entladung_kwh"}
+#: «Batterie Ladung/Entladung» der Monatszeile zeigt das Formular nur ohne Speicher — mit Speicher springt der Knopf in
+#: dessen Gerätezeile wie `_batterie_legacy_fehlt` (Wächter W-14).
+_SPEICHER_FELD = {"Batterie-Ladung": "ladung_kwh", "Batterie-Entladung": "entladung_kwh"}
+
+
+class PvSprung(NamedTuple):
+    """Wohin der Knopf eines Befunds zur PV-Erzeugung eines Monats springt (Wächter W-14): `geraet` = Zeile dieses
+    PV-Moduls, sonst `ohne_feld` = nur der Monat, sonst das Feld «PV-Erzeugung» der Monatszeile."""
+    geraet: Optional[int] = None
+    ohne_feld: bool = False
+
+
+#: Ohne Kenntnis des Monats: das Feld der Monatszeile (das bisherige Ziel).
+PV_MONATSZEILE = PvSprung()
+
+
+def pv_sprung(anlagenzeile: Monatsdaten, investitionen) -> PvSprung:
+    """Sprungziel «PV-Erzeugung» eines Monats, das es im Formular gibt (Wächter W-14). Ohne gespeicherten Anlagenwert
+    zeigt `MonatsdatenForm.tsx` bei aktiven PV-Modulen die Summe als «PV-Erzeugung (berechnet)» ohne Eingabefeld — dann
+    springt der Knopf in die Zeile des ersten aktiven PV-Moduls; mit nur einem Wechselrichter (dessen Feld der
+    Monatsabschluss nicht mehr zeigt) in den Monat. Steht ein Anlagenwert, gibt es die Zeile «PV-Gesamtwert».
+
+    Die Frage handelt VOM gespeicherten Feld (Vorhandensein, keine Menge — wie `MonatsdatenForm.tsx`
+    `gespeicherterPvGesamt`); eigener Empfängername für die P7-Freistellung, wie `anlagenzeile` in N-651."""
+    if anlagenzeile.pv_erzeugung_kwh is not None:
+        return PV_MONATSZEILE
+    jahr, monat = anlagenzeile.jahr, anlagenzeile.monat
+    aktiv = [i for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)]
+    module = sorted(i.id for i in aktiv if i.typ == "pv-module")
+    if module:
+        return PvSprung(geraet=module[0])
+    if any(i.typ == "wechselrichter" for i in aktiv):
+        return PvSprung(ohne_feld=True)
+    return PV_MONATSZEILE
 
 
 #: Prüfung 0 (N-734): je Netzfeld, wofür es gebraucht wird — eine Liste für den Monat mit und ohne Zeile (N-751).
@@ -284,9 +318,11 @@ def _speicher_entladung_fehlt(
 
 def _negative_werte(
     kat, prefix: str, md: Monatsdaten, *,
-    pv_erzeugung: Optional[float],
+    pv_erzeugung: Optional[float], speicher_geraet: Optional[int] = None, pv: PvSprung = PV_MONATSZEILE,
 ) -> list[CheckErgebnis]:
-    """Prüfung 1: negative Werte."""
+    """Prüfung 1: negative Werte. Sprungziel W-14: «Batterie-Ladung/-Entladung» mit aktivem Speicher (`speicher_geraet`)
+    in dessen Gerätezeile — das Formular zeigt die Felder der Monatszeile nur ohne Speicher, wie
+    `_batterie_legacy_fehlt`; «PV-Erzeugung» nach `pv` (`pv_sprung`)."""
     ergebnisse: list[CheckErgebnis] = []
     # 1. Negative Werte
     for feld, wert in [
@@ -300,7 +336,14 @@ def _negative_werte(
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.ERROR, code="md_feld_negativ",
                 meldung=f"{prefix}: {feld} ist negativ ({fmt_zahl(wert, 1)} kWh)",
-                ziel=ziel_monat_label(prefix, feld=_FELD_KEY[feld]),
+                ziel=(
+                    ziel_monat_label(prefix, geraet=speicher_geraet, feld=_SPEICHER_FELD[feld])
+                    if feld in _SPEICHER_FELD and speicher_geraet is not None
+                    else ziel_monat_label(prefix, geraet=pv.geraet, feld="pv_erzeugung_kwh")
+                    if feld == "PV-Erzeugung" and pv.geraet is not None
+                    else ziel_monat_label(prefix) if feld == "PV-Erzeugung" and pv.ohne_feld
+                    else ziel_monat_label(prefix, feld=_FELD_KEY[feld])
+                ),
             ))
     return ergebnisse
 
@@ -308,6 +351,7 @@ def _negative_werte(
 def _pv_ueber_maximum(
     kat, prefix: str, md: Monatsdaten, *,
     pv_erzeugung: Optional[float], gesamt_kwp: float, pvgis_monat_map: dict, pr: float, pr_count: int,
+    pv: PvSprung = PV_MONATSZEILE,
 ) -> list[CheckErgebnis]:
     """Prüfung 2: PV-Erzeugung über der Obergrenze (PVGIS × Performance Ratio, sonst statisch)."""
     ergebnisse: list[CheckErgebnis] = []
@@ -340,7 +384,11 @@ def _pv_ueber_maximum(
                 kategorie=kat, schwere=CheckSeverity.WARNING, code="md_pv_ungewoehnlich_hoch",
                 meldung=f"{prefix}: PV-Erzeugung ungewöhnlich hoch ({fmt_zahl(pv_erzeugung, 0)} kWh)",
                 details=details,
-                ziel=ziel_monat_label(prefix, feld="pv_erzeugung_kwh"),
+                ziel=(
+                    ziel_monat_label(prefix, geraet=pv.geraet, feld="pv_erzeugung_kwh") if pv.geraet is not None
+                    else ziel_monat_label(prefix) if pv.ohne_feld
+                    else ziel_monat_label(prefix, feld="pv_erzeugung_kwh")
+                ),
             ))
     return ergebnisse
 
@@ -448,6 +496,7 @@ class MonatsdatenPlausibilitaetChecks:
     async def _erzeugung_gegen_verwendung(
         self, kat, prefix: str, anlage: Anlage, md: Monatsdaten, *,
         pv_erzeugung: Optional[float], speicher_imd_bat: dict, speicher_imd_netzladung: dict,
+        pv: PvSprung = PV_MONATSZEILE,
     ) -> list[CheckErgebnis]:
         """Prüfungen 3 und 3b mit dem gemeinsamen, faulen Nachzug-Hinweis (eine Tageswert-Abfrage je Monat höchstens)."""
         ergebnisse: list[CheckErgebnis] = []
@@ -543,7 +592,11 @@ class MonatsdatenPlausibilitaetChecks:
                         "darüber meist zusätzlich). Rein diagnostisch — es wird "
                         "nichts automatisch korrigiert."
                     ),
-                    ziel=ziel_monat_label(prefix, feld="pv_erzeugung_kwh"),
+                    ziel=(
+                        ziel_monat_label(prefix, geraet=pv.geraet, feld="pv_erzeugung_kwh") if pv.geraet is not None
+                        else ziel_monat_label(prefix) if pv.ohne_feld
+                        else ziel_monat_label(prefix, feld="pv_erzeugung_kwh")
+                    ),
                 ))
         return ergebnisse
 

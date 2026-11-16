@@ -54,6 +54,7 @@ from .monatsdaten_plausibilitaet import (
     _netzfelder_nicht_erfasst,
     _netzfelder_nicht_erfasst_ohne_zeile,
     _pv_ueber_maximum,
+    pv_sprung,
     _speicher_entladung_fehlt,
     _speicher_index,
 )
@@ -572,14 +573,19 @@ class MonatsdatenChecks(MonatsdatenPlausibilitaetChecks):
             ergebnisse += _speicher_entladung_fehlt(
                 kat, prefix, md, speicher_ohne_entladung=speicher_ohne_entladung,
             )
-            ergebnisse += _negative_werte(kat, prefix, md, pv_erzeugung=pv_erzeugung)
+            # W-14: Sprungziele, die es im Formular dieses Monats gibt (Speicher-Gerätezeile, PV-Modul-Zeile).
+            pv = pv_sprung(md, anlage.investitionen)
+            ergebnisse += _negative_werte(
+                kat, prefix, md, pv_erzeugung=pv_erzeugung,
+                speicher_geraet=speicher_aktiv_monate.get((md.jahr, md.monat)), pv=pv,
+            )
             ergebnisse += _pv_ueber_maximum(
                 kat, prefix, md, pv_erzeugung=pv_erzeugung, gesamt_kwp=gesamt_kwp,
-                pvgis_monat_map=pvgis_monat_map, pr=pr, pr_count=pr_count,
+                pvgis_monat_map=pvgis_monat_map, pr=pr, pr_count=pr_count, pv=pv,
             )
             ergebnisse += await self._erzeugung_gegen_verwendung(
                 kat, prefix, anlage, md, pv_erzeugung=pv_erzeugung,
-                speicher_imd_bat=speicher_imd_bat, speicher_imd_netzladung=speicher_imd_netzladung,
+                speicher_imd_bat=speicher_imd_bat, speicher_imd_netzladung=speicher_imd_netzladung, pv=pv,
             )
             ergebnisse += _beide_kernfelder_null(
                 kat, prefix, md,

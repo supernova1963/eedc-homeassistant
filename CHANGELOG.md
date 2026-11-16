@@ -9,6 +9,36 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Auswertungen → Prognose: die Abweichung heißt überall „MAPE“** — die Kachel nannte die mittlere prozentuale
+  Abweichung oben „MAPE“, der Satz zur besten Quelle, die Kopfzeile „Korrektur ausgesetzt“ und der Hinweis am Ausreißer
+  dieselbe Zahl „MAE“. Jetzt steht überall „MAPE“ (Mittel der täglichen Abweichung in Prozent vom IST); die Zahlen
+  bleiben gleich. Das Handbuch Prognosen und die Berechnungs-Referenz sagen es ebenso.
+- **API: die Route `GET /api/energie-profil/{anlage_id}/wochenmuster` entfällt.** Die Oberfläche hat sie nie gerufen;
+  wer sie über die API genutzt hat, bekommt jetzt 404.
+
+### Fixed
+
+- **Anlage bearbeiten: die Koordinaten aus der Adresse berücksichtigen die Straße.** Das Formular ermittelte Breiten-
+  und Längengrad nur aus PLZ und Ort — der Punkt lag damit in der Ortsmitte, je nach Gemeinde einige hundert Meter bis
+  Kilometer vom Haus entfernt. Jetzt geht die Straße mit wie im Einrichtungs-Assistenten, und auch das Verlassen des
+  Felds „Straße“ ermittelt die Koordinaten. Von Hand eingetragene oder schon gespeicherte Koordinaten überschreibt eedc
+  weiterhin nicht.
+- **Daten-Checker: zwei Knöpfe führen wieder zu einem Feld.** „Batterie-Ladung/-Entladung ist negativ“ sprang bei einer
+  Anlage mit Speicher zu Feldern, die das Monatsformular mit Speicher nicht zeigt — jetzt in die Zeile des Speichers.
+  Befunde zur PV-Erzeugung eines Monats sprangen bei PV-Modulen ohne eigenen Gesamtwert ins Leere, weil dort nur die
+  berechnete Summe steht — jetzt in die Zeile des ersten PV-Moduls.
+- **Daten-Checker: Herkunft in Worten.** Hinweise nennen die Herkunft eines Werts jetzt „Monatsabschluss“,
+  „HA-Spiegel“, „Wiederherstellung“, „Demo-Daten“ oder „Altbestand“ statt der internen Kennung (etwa
+  „auto:monatsabschluss“).
+- **Daten-Checker „Leistung (kW) fehlt“ am Wechselrichter nur noch, wenn eedc wirklich keine Leistung kennt.** Haben
+  Einrichtungs-Assistent oder Import die Leistung in der Leistungsspalte des Geräts abgelegt, rechnet die Prognose
+  damit — der Befund meldete trotzdem „fehlt“.
+- **Texte:** Reparatur-Werkbank „der laufende Tag ist noch nicht abgeschlossen“ statt eines Fachworts; Lösungsweg
+  „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; Handbuch Wärme & Klima: „Alternative“ ist die
+  Heizung, die du stattdessen angeschafft hättest, nicht dein Altgerät.
+
 ## [4.3.1] - 2026-11-15
 
 Das Diagnose-Paket ist jetzt eine ZIP-Datei mit einem Auszug der Daten deiner Anlage: Das Fenster zeigt vorher, was drin ist und was nicht, und bestätigt den Download. Dazu Korrekturen am Daten-Checker (Balkonkraftwerk-Schritte, Quellen-Konflikte), an der Prognose-Genauigkeit, am PV-Anteil der E-Mobilität, am Monatsformular, an der Hilfe und am Backup.

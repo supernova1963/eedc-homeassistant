@@ -193,21 +193,39 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     }
   }, [anlage?.id, formData.latitude, formData.longitude])
 
-  // Auto-Geocoding beim Verlassen der Adresse — füllt Koordinaten NUR wenn leer
-  // (kein Überschreiben manueller/bestehender Werte, Gernot-Vorgabe).
+  // Auto-Geocoding beim Verlassen der Adresse (PLZ, Ort, Straße) — füllt Koordinaten NUR wenn leer
+  // (kein Überschreiben manueller/bestehender Werte, Gernot-Vorgabe). Die Straße geht mit wie im
+  // Setup-Wizard (D2) und präzisiert den Treffer. Ausnahme vom «nur wenn leer»: Koordinaten, die
+  // diese Ermittlung in derselben Bearbeitung selbst eingetragen hat und die seitdem niemand von
+  // Hand geändert hat, ermittelt sie nach einer geänderten Adresse neu — sonst bliebe es bei der
+  // Reihenfolge PLZ → Ort → Straße beim Punkt der PLZ, und die Straße wirkte nie.
+  const autoKoordinaten = useRef<{ lat: string; lon: string; adresse: string } | null>(null)
+  const geoAnfrage = useRef(0)    // nur die jüngste Anfrage trägt ein
   const handleAdresseBlur = async () => {
-    if (formData.latitude || formData.longitude) return
-    if (!formData.standort_plz.trim()) return
+    const plz = formData.standort_plz.trim()
+    if (!plz) return
+    const ort = formData.standort_ort.trim()
+    const strasse = formData.standort_strasse.trim()
+    const adresse = [strasse, plz, ort].join('|')
+    const auto = autoKoordinaten.current
+    const eigene = auto != null && formData.latitude === auto.lat && formData.longitude === auto.lon
+      ? auto : null
+    if ((formData.latitude || formData.longitude) && (eigene == null || eigene.adresse === adresse)) return
+    const nr = ++geoAnfrage.current
     setGeocoding(true)
     try {
-      const res = await anlagenApi.geocode(formData.standort_plz.trim(), formData.standort_ort.trim() || undefined)
-      if (res?.latitude != null && res?.longitude != null) {
+      const res = await anlagenApi.geocode(plz, ort || undefined, strasse || undefined)
+      if (nr === geoAnfrage.current && res?.latitude != null && res?.longitude != null) {
+        const lat = res.latitude.toFixed(6) /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
+        const lon = res.longitude.toFixed(6) /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
         setFormData(prev => {
-          const next = {
-            ...prev,
-            latitude: res.latitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
-            longitude: res.longitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
-          }
+          // Während der Anfrage von Hand eingetragene Koordinaten bleiben stehen.
+          const vorher = autoKoordinaten.current
+          const frei = (!prev.latitude && !prev.longitude)
+            || (vorher != null && prev.latitude === vorher.lat && prev.longitude === vorher.lon)
+          if (!frei) return prev
+          autoKoordinaten.current = { lat, lon, adresse }
+          const next = { ...prev, latitude: lat, longitude: lon }
           // #386: Das erkannte Land übernehmen — dieselbe Regel wie bei den
           // Koordinaten, nur was der Nutzer nicht selbst gesetzt hat. Vorher
           // verwarf das Backend die Länderangabe und eedc stellte für einen
@@ -223,7 +241,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     } catch {
       // still ignorieren — Nutzer kann Koordinaten manuell eintragen
     } finally {
-      setGeocoding(false)
+      if (nr === geoAnfrage.current) setGeocoding(false)
     }
   }
 
@@ -394,6 +412,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             name="standort_strasse"
             value={formData.standort_strasse}
             onChange={handleChange}
+            onBlur={handleAdresseBlur}
             placeholder="z.B. Musterstraße 1"
           />
         </div>

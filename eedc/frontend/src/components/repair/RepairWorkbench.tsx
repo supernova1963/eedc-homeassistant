@@ -267,7 +267,7 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       if (bis >= today) {
-        return 'Enddatum muss vor heute liegen — der laufende Tag ist Snapshot-instabil.'
+        return 'Enddatum muss vor heute liegen — der laufende Tag ist noch nicht abgeschlossen.'
       }
       const tage = Math.round((bis.getTime() - von.getTime()) / 86_400_000) + 1
       if (tage > REAGGREGATE_RANGE_MAX_DAYS) {

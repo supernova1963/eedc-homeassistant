@@ -317,7 +317,7 @@ class QuellenChecks:
                 details=(
                     "HA-Statistics ist verfügbar, die Tageszusammenfassung "
                     f"vom {tz.datum.isoformat()} wurde aber noch "
-                    f"aus '{letzte_source or 'unbekannt'}' geschrieben. "
+                    f"aus '{_quelle_label(letzte_source or '') or 'unbekannt'}' geschrieben. "
                     "Diese Tage behalten ihre Werte — der Monatsabschluss "
                     "rechnet nur Tage nach, die noch fehlen. Erst wenn sie "
                     "neu aus HA-Statistics aufgebaut sind (Knopf an diesem "

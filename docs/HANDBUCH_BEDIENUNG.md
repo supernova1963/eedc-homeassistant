@@ -670,7 +670,7 @@ Die **Aussicht** bündelt alle vorwärtsgerichteten Analysen auf einer Seite. Ü
 
 **Stundenwerte mit IST:** Steht der Tages-Picker auf **heute**, zeigt die Stundentabelle neben der Prognose eine Spalte **PV IST** mit den bereits gemessenen Stunden; die Summenzeile addiert nur das Gemessene, künftige Stunden bleiben leer. Für andere Tage entfällt die Spalte — dort gibt es kein IST.
 
-**Prognose-Vergleich / Genauigkeit:** Die tiefergehende Bewertung mehrerer Prognosequellen (OpenMeteo, eedc kalibriert, Solcast, IST) mit MAE/Bias und Stundenprofilen findest du in [Auswertungen → Prognose](#43-prognose-genauigkeit-gegen-ist).
+**Prognose-Vergleich / Genauigkeit:** Die tiefergehende Bewertung mehrerer Prognosequellen (OpenMeteo, eedc kalibriert, Solcast, IST) mit MAPE/Bias und Stundenprofilen findest du in [Auswertungen → Prognose](#43-prognose-genauigkeit-gegen-ist).
 
 **Langfristig:**
 
@@ -1328,7 +1328,7 @@ Die Vergleichs- und Bewertungsfläche für mehrere PV-Prognosequellen — vier Q
 - **Kennzahl-Matrix Heute / Morgen / Übermorgen** mit VM/NM-Split am astronomischen Solar Noon (proportional)
 - **Stundenprofil-Diagramm** (IST grün, eedc orange, Solcast blau, OpenMeteo gelb)
 - **24-Stunden- und 7-Tage-Vergleich** tabellarisch, mit Wettersymbolen und farbkodierten Δ-Spalten (grün < 15 %, gelb 15–30 %, rot > 30 %)
-- **Genauigkeits-Tracking:** **MAE** (Streuung) und **MBE** (systematischer Bias, neutral gefärbt — Vorzeichen ist Information, keine Wertung). Ein **diagnostischer Modus** trennt Über- und Unterschätzung, sodass Asymmetrien sichtbar werden. Der Umschalter **„Zeitpunkt: Day-Ahead | Mittag | Abend"** legt fest, welcher Stand je Quelle verglichen wird (Standard Day-Ahead; Mittag = der Stand um 12 Uhr); die eedc-Spalte ist die Prognose, die eedc an dem Tag angezeigt hat. Unter den Kennzahlen sagt ein Satz, welche Quelle an deiner Anlage zu diesem Zeitpunkt am besten trifft (ab 14 Tagen); eine Kopfzeile erscheint nur, wenn eedc seine Korrektur ausgesetzt hat, weil sie zuletzt schlechter war als die rohe Wetterprognose — Details im [Handbuch Prognosen §6](HANDBUCH_PROGNOSEN.md#6-genauigkeits-tracking-mae--bias).
+- **Genauigkeits-Tracking:** **MAPE** (Streuung, in % vom IST) und **MBE** (systematischer Bias, neutral gefärbt — Vorzeichen ist Information, keine Wertung). Ein **diagnostischer Modus** trennt Über- und Unterschätzung, sodass Asymmetrien sichtbar werden. Der Umschalter **„Zeitpunkt: Day-Ahead | Mittag | Abend"** legt fest, welcher Stand je Quelle verglichen wird (Standard Day-Ahead; Mittag = der Stand um 12 Uhr); die eedc-Spalte ist die Prognose, die eedc an dem Tag angezeigt hat. Unter den Kennzahlen sagt ein Satz, welche Quelle an deiner Anlage zu diesem Zeitpunkt am besten trifft (ab 14 Tagen); eine Kopfzeile erscheint nur, wenn eedc seine Korrektur ausgesetzt hat, weil sie zuletzt schlechter war als die rohe Wetterprognose — Details im [Handbuch Prognosen §6](HANDBUCH_PROGNOSEN.md#6-genauigkeits-tracking-mape--bias).
 - **Lernfaktor-Status:** Ist der eedc-Lernfaktor noch nicht aktiv, zeigt ein Banner, wie viele der nötigen Tage gesammelt sind. Sobald genug Daten vorliegen, wechselt der Lernfaktor in eine **saisonale Kaskade** (Monatsfaktor ≥ 15 Tage → Quartalsfaktor ≥ 15 Tage → 30-Tage-Fenster).
 - **Reparatur bei IST-Lücke:** Bei unvollständigen IST-Werten erscheint ein ⚠-Symbol; ein Klick listet die fehlenden Stunden und bietet „Tag neu berechnen" (holt fehlende Snapshots nach).
 

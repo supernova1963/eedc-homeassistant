@@ -56,7 +56,7 @@ Die **Stammdaten** beschreiben, was deine Anlage ist und mit welchen Rahmenwerte
 Der Anlage-Block zeigt eine Tabelle deiner Anlagen mit einem Bearbeiten-Modal (auch bei nur einer Anlage). Pro Anlage pflegst du:
 
 - **Name, Adresse, Koordinaten, Bundesland** (das Bundesland speist die regionalen Community-Vergleiche).
-- **Straße & Hausnummer** fließen in die Geokoordinaten-Ermittlung ein (Nominatim versteht „Musterweg 12"); der Standort wird damit exakter, auch wenn Wetter- und PVGIS-Raster grob bleiben.
+- **Straße & Hausnummer** fließen in die Geokoordinaten-Ermittlung ein (Nominatim versteht „Musterweg 12"); der Standort wird damit exakter, auch wenn Wetter- und PVGIS-Raster grob bleiben. Ermittelt wird beim Verlassen der Felder „PLZ“, „Ort“ und „Straße“, solange Breiten- und Längengrad leer sind oder eben erst so ermittelt wurden — eingetragene oder gespeicherte Koordinaten überschreibt eedc nicht; zum Neu-Ermitteln beide leeren.
 - **MaStR-ID** — Marktstammdatenregister-ID mit direktem Link zum Register.
 - **Versorger & Zähler** — Strom-, Gas- und Wasserversorger mit beliebig vielen Zählern (Bezeichnung, Kundennummer, Portal-URL, Zählernummer). Beim Anlegen eines Stromvertrags in der Infothek werden Anbieter, Tarif und Zählernummer aus diesen Versorger-Daten vorbelegt.
 

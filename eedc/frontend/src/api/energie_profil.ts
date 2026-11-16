@@ -51,17 +51,6 @@ export interface StundenAntwort {
   soc_zuletzt_prozent?: number | null
 }
 
-export interface WochenmusterPunkt {
-  wochentag: number   // 0=Mo … 6=So
-  stunde: number
-  pv_kw: number | null
-  verbrauch_kw: number | null
-  netzbezug_kw: number | null
-  einspeisung_kw: number | null
-  batterie_kw: number | null
-  anzahl_tage: number
-}
-
 export interface TagesZusammenfassung {
   datum: string
   ueberschuss_kwh: number | null
@@ -896,9 +885,6 @@ export interface WaermeTemperaturStunden {
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
-
-  getWochenmuster: (anlageId: number, von: string, bis: string): Promise<WochenmusterPunkt[]> =>
-    api.get(`/energie-profil/${anlageId}/wochenmuster?von=${von}&bis=${bis}`),
 
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),

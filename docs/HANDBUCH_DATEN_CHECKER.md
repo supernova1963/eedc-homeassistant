@@ -4414,8 +4414,10 @@ eedc heilt den Bruch nicht selbst: dafür müsste es raten, welcher der beiden S
    die Reihe des alten Zählers den niedrigeren Stand enthält.
 
 **Was ohne Handlung gilt**
-Für Zeiträume über eine Bruchstelle zeigt eedc für diesen Zähler keine Differenz; Zeiträume davor und danach rechnen
-normal. Andere Zahlen sind nicht berührt — der Zähler geht in keine Bewertung ein.
+Liegt der Stand am Ende eines Zeitraums unter dem am Anfang, zeigt eedc für diesen Zähler dort keine Differenz; steigt
+er nach dem Bruch wieder über den Anfang, zeigt eedc die Differenz der beiden Stände, und der Bruch bleibt darin
+unsichtbar. Zeiträume davor und danach rechnen normal, und andere Zahlen sind nicht berührt — der Zähler geht in keine
+Bewertung ein.
 
 #### Verbrauchszähler auf „nicht aktiv“ gesetzt <a name="zaehler_nicht_aktiv"></a>
 

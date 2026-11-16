@@ -99,7 +99,6 @@ GET /api/energie-profil/{anlage_id}/waerme-temperaturen-stunden
 GET /api/energie-profil/{anlage_id}/waerme-verlauf
 GET /api/energie-profil/{anlage_id}/waerme-verlauf-stunden
 GET /api/energie-profil/{anlage_id}/waerme-verteilung
-GET /api/energie-profil/{anlage_id}/wochenmuster
 GET /api/ha-statistics/alle-monatswerte/{anlage_id}
 GET /api/ha-statistics/import-vorschau/{anlage_id}
 GET /api/ha-statistics/monatsanfang/{anlage_id}/{jahr}/{monat}
