@@ -26,8 +26,11 @@ ausgefiltert). Eine Whitelist wäre eine Behauptung, die bei jedem neuen Feld
 still falsch würde — [[feedback_aggregations_drift]].
 
 **Was hier NICHT passiert.** Kein Automatismus, der die Historie nachzieht
-([[feedback_kein_grosser_heiler_knopf]]): der Hinweis benennt den Zustand und
-führt zur Bereichs-Reparatur, die der Anwender selbst auslöst.
+([[feedback_kein_grosser_heiler_knopf]]): der Hinweis benennt den Zustand. Seit
+N-799 S3 (Beipack b, Entscheid Gernot 16.11.2026 zu N-803) rät er keinen
+Teil-Neuaufbau mehr — ein Neuaufbau einzelner Tage holt die Zählerstände mit der
+heutigen Zuordnung und kann bei einem Zähler anderer Höhe selbst einen versetzten
+Abschnitt erzeugen —, sondern führt zum Daten-Checker-Befund ``zaehler_versatz``.
 """
 
 from __future__ import annotations
@@ -90,8 +93,7 @@ def vermerk_ergaenzen(
     danach einen Hinweis sehen, nicht fünf.
 
     ``seit`` bleibt beim **ersten** Eintrag stehen — es ist der Zeitpunkt, ab
-    dem die Werte neu sind, und damit die Grenze, die der Anwender für die
-    Bereichs-Reparatur braucht.
+    dem die Werte neu sind; der Hinweis nennt es dem Anwender.
 
     Der Aufrufer ist für ``flag_modified`` + ``commit`` zuständig.
     """
@@ -111,7 +113,8 @@ def vermerk_ergaenzen(
 def vermerk_leeren(mapping: dict) -> bool:
     """Entfernt den Vermerk (Quittung des Anwenders). True, wenn einer da war.
 
-    ⚠ **Bewusst nicht automatisch nach einer Bereichs-Reparatur.** Die ist auf
+    ⚠ **Bewusst nicht automatisch nach einer Bereichs-Reparatur** (die der Hinweis seit
+    N-799 S3 nicht mehr empfiehlt, die es in der Werkbank aber gibt). Sie ist auf
     31 Tage je Lauf gedeckelt (``repair_orchestrator.REAGGREGATE_RANGE_MAX_DAYS``);
     wer zwei Jahre Historie hat, ist nach einem Lauf gerade am Anfang. Ein
     Vermerk, der dann verschwände, behauptete „erledigt" für einen Zustand, den

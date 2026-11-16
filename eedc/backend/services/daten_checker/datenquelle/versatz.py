@@ -156,7 +156,7 @@ class ZaehlerVersatzChecks:
         invs = await self._versatz_geraete(anlage.id)
         funde = await self._versatz_funde(anlage.id, invs)
         if not funde:
-            return []
+            return [_versatz_ok()]
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.snapshot.writer import _build_counter_map, _stillgelegte_inv_ids
 
@@ -170,7 +170,7 @@ class ZaehlerVersatzChecks:
             aktion, grund = await self._versatz_lage(anlage.id, key, lauf, heute, zuordnung.get(key) if ha_da else None,
                                                      ha_da)
             out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, aktion, grund))
-        return out
+        return out or [_versatz_ok()]
 
     async def _versatz_funde(self, anlage_id: int, invs: dict) -> list[tuple[str, VersatzLauf]]:
         """Je Schlüssel mit HA-Ständen, dessen Tageswert die Tagesansicht aus der Standreihe zeigt
@@ -259,23 +259,42 @@ class ZaehlerVersatzChecks:
     def _versatz_befund(self, name: str, key: str, lauf: VersatzLauf, aktion: Optional[Aktion],
                         grund: str) -> CheckErgebnis:
         meldung, details = _texte(name, lauf, aktion, grund)
-        return CheckErgebnis(
-            kategorie=CheckKategorie.ZAEHLER_VERSATZ.value,
-            schwere=CheckSeverity.WARNING if aktion is not None else CheckSeverity.INFO,
-            meldung=meldung,
-            details=details,
-            action=aktion,
-            code="zaehler_versatz",
-            # E1 (Diagnose-Paket): die Zahlen der Meldung strukturiert, ohne neue Rechnung.
-            werte={
-                "schluessel": key, "lage": grund, "versatz_kwh": round(lauf.versatz_kwh, 3),
-                "sprung": lauf.beginn.bis.isoformat(timespec="minutes"),
-                "rueckgang": lauf.ende.bis.isoformat(timespec="minutes"),
-                "tage_zu_hoch": [d.isoformat() for d in lauf.tage_zu_hoch],
-                "tage_ohne_wert": [d.isoformat() for d in lauf.tage_ohne_wert],
-            },
-        )
+        # E1 (Diagnose-Paket): die Zahlen der Meldung strukturiert, ohne neue Rechnung.
+        return _versatz_zeile(CheckSeverity.WARNING if aktion is not None else CheckSeverity.INFO, meldung, details,
+                              aktion, {
+                                  "schluessel": key, "lage": grund, "versatz_kwh": round(lauf.versatz_kwh, 3),
+                                  "sprung": lauf.beginn.bis.isoformat(timespec="minutes"),
+                                  "rueckgang": lauf.ende.bis.isoformat(timespec="minutes"),
+                                  "tage_zu_hoch": [d.isoformat() for d in lauf.tage_zu_hoch],
+                                  "tage_ohne_wert": [d.isoformat() for d in lauf.tage_ohne_wert],
+                              })
 
 
-__all__ = ["GRUND_ENDET_HEUTE", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "LAGE_HEILBAR", "ZaehlerVersatzChecks",
+#: OK-Zeile (N-799 S3, K7 — Entscheid Master 16.11.2026): ohne Fund steht der Befund unter den bestandenen Prüfungen, damit
+#: der Knopf «Zum Daten-Checker» im Hinweis nach einer geänderten Zuordnung (``befund=zaehler_versatz``) immer den Lösungsweg
+#: öffnet.
+OK_MELDUNG = "Kein versetzter Abschnitt in den gespeicherten Zählerständen"
+OK_DETAILS = ("eedc prüft die gespeicherten Zählerstände der Felder, deren Tageswert die Tagesansicht aus ihnen bildet, auf "
+              "einen Abschnitt, der um einen festen Betrag neben den Ständen davor und danach liegt — etwa nach einem Wechsel "
+              "der Zuordnung. Gefunden wurde keiner; es ist nichts zu tun.")
+
+
+def _versatz_ok() -> CheckErgebnis:
+    return _versatz_zeile(CheckSeverity.OK, OK_MELDUNG, OK_DETAILS, None, {"funde": 0})
+
+
+def _versatz_zeile(schwere: str, meldung: str, details: str, aktion: Optional[Aktion], werte: dict) -> CheckErgebnis:
+    """Die eine Erzeuger-Stelle des Codes (W-1) — Fund (WARNING mit Knopf, INFO ohne) oder OK-Zeile."""
+    return CheckErgebnis(
+        kategorie=CheckKategorie.ZAEHLER_VERSATZ.value,
+        schwere=schwere,
+        meldung=meldung,
+        details=details,
+        action=aktion,
+        code="zaehler_versatz",
+        werte=werte,
+    )
+
+
+__all__ = ["GRUND_ENDET_HEUTE", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "LAGE_HEILBAR", "OK_MELDUNG", "ZaehlerVersatzChecks",
            "aktions_bereich", "in_tagesansicht"]

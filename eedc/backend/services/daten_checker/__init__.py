@@ -44,6 +44,7 @@ from .waermepumpe import WaermepumpeChecks
 from .zaehler import ZaehlerChecks
 from .datenquelle import DatenquelleChecks
 from .wp_tarif import WpTarifChecks
+from .erfassung_stillstand import ErfassungStillstandChecks
 
 
 # ─── Service ─────────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ class DatenChecker(
     ZaehlerChecks,
     DatenquelleChecks,
     WpTarifChecks,
+    ErfassungStillstandChecks,
     _CheckHelpers,
 ):
     """Prüft alle Daten einer Anlage auf Vollständigkeit und Plausibilität."""
@@ -67,6 +69,8 @@ class DatenChecker(
         self.db = db
         self._abdeckung: Optional[MonatsdatenAbdeckung] = None
         self._nicht_ausfuehrbar: list[dict] = []
+        # N-799 S3: die Tage, die der Befund `erfassung_stillstand` nennt — N-567 lässt sie aus.
+        self._erfassung_stillstand_tage: set = set()
 
     async def check_anlage(self, anlage_id: int) -> DatenCheckResult:
         """Führt alle Prüfungen für eine Anlage durch."""
@@ -143,6 +147,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_tage_ohne_kanal_deckung(anlage))
         # Nachträge II: Tage mit mehr Einspeisung als Erzeugung + Entladung.
         ergebnisse.extend(await self._check_einspeisung_ueber_erzeugung(anlage))
+        # N-799 S3: Stunden ohne Stundenwerte (Erfassungs-Stillstand, Lücke) — vor N-567, das dessen Tage auslässt.
+        ergebnisse.extend(await self._check_erfassung_stillstand(anlage))
         # N-567: Nachtrag nach eingefrorenem Zähler — nur benannt (eedc folgt HA).
         ergebnisse.extend(await self._check_nachtrag_nach_eingefrorenem_zaehler(anlage))
         # #425: dieselbe Menge für die Wallbox-Regel der Topic-Erwartung.

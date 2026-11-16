@@ -111,7 +111,7 @@ def test_je_code_eine_datei_und_keine_waise():
     ist = {p.stem for p in QUELLE.glob("*.md")}
     assert set(HANDGRIFFE) - ist == set(), f"Lösungsweg fehlt: {sorted(set(HANDGRIFFE) - ist)}"
     assert ist - set(HANDGRIFFE) == set(), f"Datei ohne Code: {sorted(ist - set(HANDGRIFFE))}"
-    assert len(ist) == len(HANDGRIFFE) == 183  # 16.11.2026: + zaehler_versatz
+    assert len(ist) == len(HANDGRIFFE) == 184  # 16.11.2026: + zaehler_versatz, + erfassung_stillstand (N-799 S3)
 
 
 @pytest.mark.parametrize("code", list(HANDGRIFFE))

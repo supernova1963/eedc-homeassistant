@@ -11,7 +11,8 @@ bis E3/E4 behalten die Erzeuger ihr heutiges Verhalten, die Soll-Klasse steht nu
 **182 Codes seit E5** (Konzept §6): 194 Erzeuger − 6 Zusammenlegungen (V3: der Partner-Erzeuger ist entfallen, seine Zahlen
 steht in der Zeile des Ziel-Codes) − 6 Restzeilen «… plus n weitere» (V2: entfallen, n steht als `weitere` in der
 Gruppenzeile, `GRUPPEN`). Je Klasse: Sprung 117 · Aktion 18 · Auskunft 17 · OK 30. **Seit 16.11.2026 183** (`zaehler_versatz`,
-Aktion 19; ohne Heilweg zur Laufzeit eine Auskunft mit INFO).
+Aktion 19; ohne Heilweg zur Laufzeit eine Auskunft mit INFO); **seit N-799 S3 184** (`erfassung_stillstand`, Auskunft 18; ohne
+Fund eine OK-Zeile desselben Codes, damit der Link `befund=` aus der Tagestabelle immer einen Lösungsweg öffnet).
 
 `knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
 Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
@@ -104,6 +105,7 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'tage_ohne_kanal_deckung': Handgriff(AUSKUNFT, 'Was gilt', '46-energieprofil--zaehler-abdeckung'),  # Nr 62
     'einspeisung_groesser_erzeugung_tage': Handgriff(AKTION, 'Tage neu aufbauen', '47-energieprofil--plausibilitaet'),  # Nr 63
     'nachtrag_nach_eingefrorenem_zaehler': Handgriff(AUSKUNFT, 'Was gilt', '47-energieprofil--plausibilitaet'),  # Nr 64
+    'erfassung_stillstand': Handgriff(AUSKUNFT, 'Was gilt', '47-energieprofil--plausibilitaet'),  # N-799 S3 (16.11.2026); ohne Fund OK-Zeile desselben Codes (Ziel des Links befund=)
     'counter_spikes_ok': Handgriff(OK, None, '47-energieprofil--plausibilitaet'),  # Nr 65
     'counter_spike_tag': Handgriff(AKTION, 'Tag neu aufbauen', '47-energieprofil--plausibilitaet'),  # Nr 66
     'pv_erzeugung_fehlt_monate': Handgriff(SPRUNG, 'Monat öffnen', '43-investitionen'),  # Nr 67

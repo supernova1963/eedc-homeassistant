@@ -195,7 +195,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **39 Kategorien** mit **183 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **39 Kategorien** mit **184 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -259,6 +259,7 @@ eedc prüft **39 Kategorien** mit **183 Befunden** (gezählt an `CheckKategorie`
 | [Tage mit Mengen aus den gespeicherten Stundenwerten](#tage_ohne_kanal_deckung) `tage_ohne_kanal_deckung` | §4.6 | Auskunft | Was gilt |
 | [Tage mit mehr Einspeisung als Erzeugung](#einspeisung_groesser_erzeugung_tage) `einspeisung_groesser_erzeugung_tage` | §4.7 | Aktion | Tage neu aufbauen |
 | [Nachtrag nach eingefrorenem Zähler](#nachtrag_nach_eingefrorenem_zaehler) `nachtrag_nach_eingefrorenem_zaehler` | §4.7 | Auskunft | Was gilt |
+| [Stunden ohne Stundenwerte](#erfassung_stillstand) `erfassung_stillstand` | §4.7 | Auskunft | Was gilt |
 | [Keine unmöglichen Stundenwerte](#counter_spikes_ok) `counter_spikes_ok` | §4.7 | bestanden | — |
 | [Unmöglicher Stundenwert an einem Tag](#counter_spike_tag) `counter_spike_tag` | §4.7 | Aktion | Tag neu aufbauen |
 | [PV-Erzeugung fehlt in Monaten](#pv_erzeugung_fehlt_monate) `pv_erzeugung_fehlt_monate` | §4.3 | Sprung | Monat öffnen |
@@ -2810,6 +2811,67 @@ aus Zählerständen gerechnet ist. Dieselbe Form hat ein Zählersprung nach eine
 Der Nachtrag zählt im Tag und im Monat mit, wie in Home Assistant. Die Menge geht nicht verloren, sie steht nur gebündelt
 in einer Stunde.
 
+#### Stunden ohne Stundenwerte <a name="erfassung_stillstand"></a>
+
+**Was eedc sieht**
+An diesen Tagen hat die Erfassung für einige Stunden keine Stundenwerte geliefert: sie stand still — etwa während Home
+Assistant neu startete oder der Rechner aus war — oder es fehlten Werte. Danach haben die Zähler die Menge dieser Stunden
+auf einmal nachgetragen, und sie steht in einer einzigen Stunde. Die Meldung nennt je Tag die Stunden, die Mengen je
+Zähler und wie eedc Überschuss, Defizit und Direktverbrauch dieses Tages bestimmt hat: aus den Zählerständen gerechnet,
+nicht bestimmbar (die drei Spalten bleiben leer) oder wie an jedem anderen Tag, wenn die nachgetragene Menge kaum PV
+enthält. Reicht ein Ausfall über mehrere Tage, steht die Menge dieser Tage am letzten. Steht die Erfassung so oft still,
+dass es zur Art der Erfassung gehört, sagt die Meldung das in einem Satz. In der Tagestabelle tragen Überschuss, Defizit
+und Direktverbrauch eines solchen Tages das Zeichen «geschätzt»; der Link «Im Daten-Checker nachlesen» öffnet diesen Text,
+auch für Tage, die älter als 90 Tage sind.
+
+**Lösungsweg**
+1. Die genannten Tage ansehen. Ein einzelner Ausfall braucht keine Handlung: die Mengen stimmen, und eedc rechnet die drei
+   Spalten des Tages aus den Zählerständen, so gut es geht.
+2. Steht die Erfassung oft oder lange, die Ursache in Home Assistant suchen: läuft der Rechner durch, startet Home
+   Assistant regelmäßig neu, verliert die Integration des Wechselrichters oder Zählers die Verbindung? Die Stundenwerte
+   eines vergangenen Ausfalls lassen sich nicht nachholen — auch Home Assistant hat sie nicht.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein solcher Tag in den letzten 90 Tagen
+   liegt, und steht danach unter den bestandenen Prüfungen.
+
+**Was ohne Handlung gilt**
+Die Summen stimmen: Erzeugung, Einspeisung, Netzbezug, Verbrauch und Speicher zählen im Tag, im Monat und im Jahr
+vollständig. Die Stundenwerte dieser Stunden lassen sich nicht nachholen; die Menge steht in der Stunde, in der die Zähler
+sie nachgetragen haben. Sichten, die Stunde gegen Stunde stellen, lassen diese Stunden aus: die Verbrauchsprognose und die
+Tagesprognose, die Leistungsspitzen des Monats, die Heatmap, die Auswertungen des Speichers (Speichergröße, Netzladung,
+Ladepreis — dort steht «nicht bestimmbar (Erfassungslücke)») und der Vergleich mit Tagen davor.
+
+Überschuss, Defizit und Direktverbrauch eines solchen Tages sind für diese Stunden aus den Zählerständen gerechnet. Die
+Rechnung hat zwei Vorbehalte, beide mit bekannter Richtung:
+- Lädt der Speicher in diesen Stunden aus dem Netz, sind Überschuss und Defizit um diese Ladung zu hoch und der
+  Direktverbrauch um sie zu niedrig. Ging mehr ins Netz und in den Speicher, als die PV erzeugt hat, nennt die Meldung,
+  wie viel der Speicher mindestens aus dem Netz geladen hat; der Überschuss ist dann auf die PV-Menge begrenzt.
+- Die Rechnung aus Stundenwerten verrechnet je Stunde, was ins Netz und in den Speicher ging (Einspeisung und Ladung), mit
+  dem, was aus dem Netz und aus dem Speicher kam (Netzbezug und Entladung). Für die Stunden des Ausfalls kann die Rechnung
+  aus den Zählerständen das nicht und liegt deshalb etwas darüber: Überschuss und Defizit höchstens zu hoch,
+  Direktverbrauch höchstens zu niedrig. An einer Beispielanlage sind es über ganze Tage gerechnet im Mittel 0,8 kWh
+  je Tag; ein Ausfall von wenigen Stunden liegt darunter, einer über mehrere Tage deutlich darüber.
+
+Können die drei Spalten nicht bestimmt werden — die Zähler haben ihre Mengen nicht für dieselben Stunden nachgetragen, oder
+der Speicher ist für den Tag nur als Saldo von Ladung und Entladung gespeichert —, bleiben sie leer, und die Summe des
+Monats nennt, wie viele Tage ihr fehlen. Der Sensor «Überschuss heute», den eedc an Home Assistant gibt, hat an einem
+solchen Tag keinen Wert (nicht 0). Die Speicher-Auswertung «Hätte mehr Kapazität geholfen?» zählt die Netzladung dieser
+Stunden nicht mit.
+
+Was eedc nicht erkennt oder nicht kennzeichnet:
+- Ohne Zähler für den Netzbezug und mindestens einen weiteren Zähler (PV oder Einspeisung) erkennt eedc keinen Ausfall —
+  ebenso wenig an einer Anlage mit Speicher, wenn Ladung und Entladung des Speichers keine eigenen Zähler haben.
+- Ein Ausfall in der Nacht, nach dem nur ein Zähler eine Menge nachträgt, wird nicht erkannt.
+- Steht nur ein einzelner Zähler, während die übrigen weiterlaufen, ist das kein erkennbarer Ausfall der Erfassung.
+- Ein Ausfall von nur einer Stunde bleibt wie bisher: die Menge zweier Stunden steht in einer.
+- Ein Zähler, der nur in groben Schritten (0,1 kWh oder mehr) meldet, und eine Erfassung, die regelmäßig stehen bleibt,
+  werden nicht gekennzeichnet — dort zählt die nachgetragene Menge als eine Stunde.
+- Tage, die eedc aus eigenen Zählerständen statt aus der Statistik von Home Assistant rechnet, tragen keine Kennzeichnung;
+  dort nennt der Befund «Nachtrag nach eingefrorenem Zähler» eine solche Stunde.
+- Der PV-Anteil einer Heimladung und die Kosten der Stunde, in der die Menge nachgetragen wurde, bleiben eine Näherung:
+  eedc bewertet die Menge mit dem Preis dieser einen Stunde.
+- Ein Ausfall, der länger als 90 Tage dauert, wird nur in seinen letzten 90 Tagen erkannt.
+- Im Diagnose-Paket steht die Kennzeichnung nicht; sie entsteht beim Lesen und lässt sich aus den Daten nachrechnen.
+
 #### Keine unmöglichen Stundenwerte <a name="counter_spikes_ok"></a>
 
 **Was eedc sieht**
@@ -3379,7 +3441,8 @@ Tage, die zu hoch sind oder fehlen. Gespeicherte Monatswerte ändert das nicht.
    Assistant nicht, und wenn die Stände vor oder nach dem Abschnitt nicht zum heute zugeordneten Sensor passen, auch
    nicht, weil neu geholte Stände den Versatz nur an eine andere Stelle schöben. Endet der Abschnitt heute, steht der
    Knopf ab morgen da.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf ist der Befund verschwunden.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf steht der Befund unter den bestandenen
+   Prüfungen («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
 Bleibt der Befund nach dem Klick stehen: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das
 Diagnose-Paket: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei an die Adresse
@@ -3389,6 +3452,14 @@ aus unserer Antwort schicken.
 Die Tageswerte an den genannten Tagen bleiben falsch: am Sprung zu hoch, am Rückgang ohne Wert. eedc stellt sie nicht
 von selbst richtig. Tage, die eedc aus der Statistik von Home Assistant rechnet, und gespeicherte Monatswerte sind nicht
 betroffen.
+
+Was dieser Befund nicht erkennt oder nicht abdeckt:
+- Ein einzelner alter Wechsel, nach dem die Stände nicht wieder zurückgehen, wird nicht erkannt — der Befund braucht den
+  Sprung und den Rückgang um etwa denselben Betrag.
+- Die Netzladung des Speichers liest eedc für jeden Monat, für den keine Monatswerte des Speichers gespeichert sind, aus
+  den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
+- Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
+  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 

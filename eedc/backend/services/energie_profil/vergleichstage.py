@@ -150,10 +150,12 @@ async def tage_ohne_tagesvergleich(
                    if spalte is not None else set())
         # N-799 (E-8): dazu die Tage, an denen ein vor 00:00 begonnener Erfassungs-Stillstand endet — ihre Nachtragszeile
         # trägt die Marke n = k + 1 erst beim Mischen, die Stundenzeile kennt sie nicht.
-        stillstand = await erster_tag_der_fenster_ueber_mitternacht(db, anlage_id, *bereich)
+        # N-799 S3: auch ein Fenster, das erst nach dem Bereich endet (Bereich endet mitten im Fenster) — sein Nachtragstag
+        # wird dafür mitgelesen, die Ausschlüsse unten schneiden auf den Bereich.
+        stillstand = await erster_tag_der_fenster_ueber_mitternacht(db, anlage_id, *bereich, ueber_bis=True)
         fraglich = ({t for z in zeilen for t in (z.datum, z.datum - timedelta(days=1))} | set(marken) | luecken
                     | set(stillstand))
-        kanal = await _kanal_tage_unter(db, anlage_id, *bereich, fraglich)
+        kanal = await _kanal_tage_unter(db, anlage_id, bereich[0], max([bereich[1], *stillstand]), fraglich)
     rows_je_tag: dict[date, list] = defaultdict(list)
     for row in zeilen:
         if row.datum not in kanal:

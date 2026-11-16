@@ -21,7 +21,8 @@ Tage, die zu hoch sind oder fehlen. Gespeicherte Monatswerte ändert das nicht.
    Assistant nicht, und wenn die Stände vor oder nach dem Abschnitt nicht zum heute zugeordneten Sensor passen, auch
    nicht, weil neu geholte Stände den Versatz nur an eine andere Stelle schöben. Endet der Abschnitt heute, steht der
    Knopf ab morgen da.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf ist der Befund verschwunden.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf steht der Befund unter den bestandenen
+   Prüfungen («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
 Bleibt der Befund nach dem Klick stehen: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das
 Diagnose-Paket: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei an die Adresse
@@ -31,3 +32,11 @@ aus unserer Antwort schicken.
 Die Tageswerte an den genannten Tagen bleiben falsch: am Sprung zu hoch, am Rückgang ohne Wert. eedc stellt sie nicht
 von selbst richtig. Tage, die eedc aus der Statistik von Home Assistant rechnet, und gespeicherte Monatswerte sind nicht
 betroffen.
+
+Was dieser Befund nicht erkennt oder nicht abdeckt:
+- Ein einzelner alter Wechsel, nach dem die Stände nicht wieder zurückgehen, wird nicht erkannt — der Befund braucht den
+  Sprung und den Rückgang um etwa denselben Betrag.
+- Die Netzladung des Speichers liest eedc für jeden Monat, für den keine Monatswerte des Speichers gespeichert sind, aus
+  den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
+- Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
+  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch.

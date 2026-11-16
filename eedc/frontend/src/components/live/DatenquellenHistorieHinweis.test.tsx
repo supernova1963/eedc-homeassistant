@@ -98,8 +98,15 @@ describe('Datenquellen-Fläche — Hinweis auf die unberührte Historie', () => 
     expect(screen.getByText(/Netzbezug \(kWh\) · Süd – PV-Erzeugung \(kWh\)/)).toBeInTheDocument()
     // Der Kern der Aussage: die bereits gespeicherten Werte ändern sich NICHT.
     expect(screen.getByText(/stammen weiter aus der vorherigen Zuordnung/)).toBeInTheDocument()
-    // Und der Weg dorthin, statt „melde dich beim Support".
-    expect(screen.getByRole('button', { name: /Reparatur-Werkbank/ })).toBeInTheDocument()
+    // N-799 S3 Beipack (b): kein Rat zu einem Teil-Lauf mehr (der erzeugt bei einem Zähler anderer Höhe selbst einen
+    // versetzten Abschnitt) — der Weg führt zum Befund «versetzter Abschnitt» im Daten-Checker.
+    expect(screen.queryByText(/neu aggregieren/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/31 Tage/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Reparatur-Werkbank/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/Der Daten-Checker prüft, ob dabei ein\s+versetzter Abschnitt entstanden ist/)).toBeInTheDocument()
+    expect(screen.getByText(/Findet er keinen, ist nichts zu tun/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Zum Daten-Checker' }))
+    expect(window.location.hash).toBe('#/einstellungen/daten?block=datenchecker&befund=zaehler_versatz')
   })
 
   it('erscheint sofort nach einer Änderung — ohne Neuladen der Seite', async () => {

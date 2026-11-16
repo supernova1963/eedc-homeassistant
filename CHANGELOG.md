@@ -64,6 +64,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Summe des Zeitraums sagt, wie viele Tage sie enthält bzw. auslässt. Der Ladepreis aus dem Netz sagt an einem solchen Tag
   „nicht bestimmbar (Erfassungslücke)“ statt „keine Netzladung“. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
   er sich auffällig oft (mehr als fünf Mal in 60 Tagen) oder sind die Zähler grob aufgelöst, gilt er nicht als Ausfall.
+  Der neue Daten-Checker-Befund **„Stunden ohne Stundenwerte“** (Energieprofil – Plausibilität) nennt die Tage der letzten
+  90 Tage mit Stunden, Mengen je Zähler und wie Überschuss, Defizit und Direktverbrauch bestimmt sind, und — wenn die
+  Erfassung regelmäßig stehen bleibt — dies in einem Satz; „Was gilt“ erklärt die Vorbehalte der Zähler-Rechnung (Netzladung
+  in diesen Stunden, keine Verrechnung innerhalb der Stunde: Überschuss und Defizit höchstens zu hoch, Direktverbrauch
+  höchstens zu niedrig) und was eedc nicht erkennt. Ohne solchen Tag steht der Befund unter den bestandenen Prüfungen, damit
+  der Link aus der Tagestabelle auch für ältere Tage die Erklärung öffnet. Ging in diesen Stunden mehr ins Netz und in den
+  Speicher, als die PV erzeugt hat, nennt der Satz unter der Tabelle zusätzlich, wie viel der Speicher mindestens aus dem
+  Netz geladen hat; bei einem Ausfall über Mitternacht sagt er, dass die
+  Tage davor für diese Stunden nichts zeigen; der CSV-Export trägt für solche Tage eine Spalte „Kennzeichen“.
 - **Anlage bearbeiten: die Koordinaten aus der Adresse berücksichtigen die Straße.** Das Formular ermittelte Breiten-
   und Längengrad nur aus PLZ und Ort — der Punkt lag damit in der Ortsmitte, je nach Gemeinde einige hundert Meter bis
   Kilometer vom Haus entfernt. Jetzt geht die Straße mit wie im Einrichtungs-Assistenten, und auch das Verlassen des
@@ -73,6 +82,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Anlage mit Speicher zu Feldern, die das Monatsformular mit Speicher nicht zeigt — jetzt in die Zeile des Speichers.
   Befunde zur PV-Erzeugung eines Monats sprangen bei PV-Modulen ohne eigenen Gesamtwert ins Leere, weil dort nur die
   berechnete Summe steht — jetzt in die Zeile des ersten PV-Moduls.
+- **Datenquellen: der Hinweis nach einer geänderten Zuordnung rät keinen Teil-Neuaufbau mehr.** Er empfahl, die
+  zurückliegenden Tage in der Reparatur-Werkbank neu zu rechnen („Mehrere Tage neu aggregieren“, bis zu 31 Tage je Lauf).
+  Zählt der neue Zähler auf einer anderen Höhe als der alte, legt genau das in den gespeicherten Zählerständen einen
+  Abschnitt auf einer anderen Höhe an. Jetzt sagt der Hinweis, dass die bisherigen Werte bleiben, wie sie waren, und dass
+  der Daten-Checker prüft, ob ein versetzter Abschnitt entstanden ist; der Knopf führt dorthin. Findet der Daten-Checker
+  keinen, steht „Zählerstände – versetzter Abschnitt“ jetzt unter den bestandenen Prüfungen.
+- **Daten-Checker „Zählerstände – versetzter Abschnitt“: drei Grenzen benannt.** Der Lösungsweg sagt jetzt, was der
+  Befund nicht erkennt: einen einzelnen alten Wechsel ohne Rückgang; die Netzladung des Speichers in Monaten ohne
+  gespeicherte Monatswerte des Speichers, die eedc aus den gespeicherten Zählerständen liest; und dass ohne Stundenwerte
+  aus Home Assistant jeder Tag aus diesen Ständen rechnet.
+- **Handbuch: „Gesamt“ in *Cockpit → Jahr* ist nicht geplant.** Das Handbuch sagte, eine Selektor-Stellung für die ganze
+  Laufzeit stehe auf der Roadmap; sie ist seit dem 3.11.2026 verworfen. Die volle Laufzeit zeigen Komponenten-Hub,
+  Jahresbericht („Gesamtzeitraum“), Auswertungen („Alle Jahre“) und die Kachel „CO₂ kumuliert“.
 - **Daten-Checker: Herkunft in Worten.** Hinweise nennen die Herkunft eines Werts jetzt „Monatsabschluss“,
   „HA-Spiegel“, „Wiederherstellung“, „Demo-Daten“ oder „Altbestand“ statt der internen Kennung (etwa
   „auto:monatsabschluss“).

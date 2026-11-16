@@ -348,7 +348,7 @@ async def _bilanz_plan(db: AsyncSession, anlage_id: int, datum: date, kz) -> tup
         return Quellenwahl(QUELLE_BESTAND, {"": "keine_faellige_stunde"}, {}), None
     if kz.wahl.quelle != QUELLE_KANAL or kz.komposition is None:
         return kz.wahl, None
-    stamm = await bilanz_leser._stamm(db, anlage_id)
+    stamm = await bilanz_leser.bilanz_stamm(db, anlage_id)
     eintraege = await stamm.eintraege(db, (lambda i: i.ist_aktiv_an(datum)), datum)
     deltas = {e.schluessel: bilanz_leser._gedeckt(kz.wahl.ergebnisse.get(e.schluessel), True)[1] for e in eintraege}
     gewaehlt = resolve_either_or_eintraege(

@@ -1106,7 +1106,7 @@ class EnergieprofilChecks:
         # HA-Bauform S5 (E-S5-2, Bauplan §10f): Kanal-Tage zählen nicht — an einem Tag, dessen Bilanz-Gruppe aus den
         # Kanälen kommt, wirkt kein Deckel; Cockpit → Tag nennt dort HAs Zahl (Lesart-1-Regel, Wächter S5-R6 erlaubt).
         kanal = await self._bilanz_kanal_tage(anlage, [b[0] for b in befunde])
-        befunde = [b for b in befunde if b[0] not in kanal]
+        befunde = [b for b in befunde if b[0] not in kanal and b[0] not in self._erfassung_stillstand_tage]  # N-799 S3
         if not befunde:
             return []
         befunde.sort(key=lambda t: t[0], reverse=True)

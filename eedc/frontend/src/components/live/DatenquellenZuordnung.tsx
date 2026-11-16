@@ -50,6 +50,7 @@ import { STATUS_TEXT_CLASS } from '../../lib/colors'
 // ein blauer Text unter einem Warndreieck wäre die halbe Übernahme.
 import { STATUS_ICONS } from '../../lib/komponentenStyle'
 import { formatDatum } from '../../lib/datum'
+import { befundPfad } from '../../lib/zielPfad'
 import { plural, mitAnzahl } from '../../lib/plural'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
 import {
@@ -938,9 +939,15 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
  * es nur nirgends.
  *
  * Der Block ist **nicht blockierend** und bietet **keinen** Automatismus, der
- * die Vergangenheit nachzieht: er zeigt den Weg zur Bereichs-Reparatur, die der
- * Anwender selbst und in Blöcken auslöst.
+ * die Vergangenheit nachzieht. Seit N-799 S3 (Beipack b) rät er auch keinen
+ * Teil-Neuaufbau mehr: er sagt, dass die bisherigen Werte bleiben, und führt zum
+ * Daten-Checker-Befund «versetzter Abschnitt» (OK-Zeile ohne Fund, K7).
  */
+/** N-799 S3 Beipack (b, Entscheid Gernot 16.11.2026 zu N-803): der Hinweis rät keinen Teil-Lauf mehr — ein Neuaufbau
+ *  einzelner Tage holt die Stände mit der heutigen Zuordnung und kann bei einem Zähler anderer Höhe selbst einen
+ *  versetzten Abschnitt erzeugen. Er verweist auf den Befund, der einen solchen Abschnitt meldet und den Weg nennt. */
+const BEFUND_ZAEHLER_VERSATZ = 'zaehler_versatz'
+
 function HistorieHinweisBlock({
   hinweis, onQuittieren,
 }: {
@@ -958,21 +965,21 @@ function HistorieHinweisBlock({
         <span className="font-medium">{benannt.map((f) => f.label).join(' · ')}</span>
         {rest > 0 && <> und {mitAnzahl(rest, 'weiterem Feld', 'weiteren Feldern')}</>} geändert. Neue Werte kommen ab
         sofort aus der neuen Quelle; die bereits gespeicherten Tages- und Stundenwerte
-        stammen weiter aus der vorherigen Zuordnung.
+        stammen weiter aus der vorherigen Zuordnung. Deine Monatsdaten bleiben unberührt.
       </p>
       <p className="mt-2">
-        Wenn du die zurückliegenden Tage mit der neuen Zuordnung neu rechnen lassen
-        willst, geht das in der Reparatur-Werkbank („Mehrere Tage neu aggregieren", bis zu
-        31 Tage je Lauf). Deine Monatsdaten bleiben dabei unberührt.
+        Zählt der neue Zähler auf einer anderen Höhe als der alte, können in den gespeicherten
+        Zählerständen Abschnitte auf zwei Höhen entstehen. Der Daten-Checker prüft, ob dabei ein
+        versetzter Abschnitt entstanden ist, und nennt dort den Weg. Findet er keinen, ist nichts zu tun.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          onClick={() => { window.location.hash = '#/einstellungen/daten?block=energieprofil&karte=werkbank' }}
+          onClick={() => { window.location.hash = `#${befundPfad(BEFUND_ZAEHLER_VERSATZ)}` }}
         >
-          Zur Reparatur-Werkbank
+          Zum Daten-Checker
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onQuittieren}>
           Verstanden

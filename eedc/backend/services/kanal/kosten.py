@@ -125,9 +125,9 @@ class _TagesAuswahl:
 
 
 async def _auswahl_je_tag(db: AsyncSession, anlage_id: int, tage: list[date]) -> dict[date, _TagesAuswahl]:
-    from backend.services.kanal.bilanz_leser import _stamm, _traeger
+    from backend.services.kanal.bilanz_leser import _traeger, bilanz_stamm
 
-    stamm = await _stamm(db, anlage_id)
+    stamm = await bilanz_stamm(db, anlage_id)
     out: dict[date, _TagesAuswahl] = {}
     for t in tage:
         eintraege = await stamm.eintraege(db, lambda i, t=t: i.ist_aktiv_an(t), t)

@@ -16,6 +16,7 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 from backend.core.berechnungen.slot_konvention import RASTER_BEGINN, slot_start_ts
+from backend.core.zahlenformat import fmt_zahl
 from backend.core.berechnungen.tagesbilanz import (
     PAARUNG_FENSTER, PAARUNG_NICHT_RECHENBAR, URSACHE_SALDIERT, URSACHE_UNGLEICH,
 )
@@ -30,6 +31,12 @@ GRUND_NICHT_RECHENBAR = ("Für die Stunden {zeitraum} haben nur einzelne Zähler
                          "ihre Menge erst danach nachgetragen — die Mengen gehören nicht zu denselben Stunden. Überschuss, "
                          "Defizit und Direktverbrauch lassen sich für diesen Tag nicht bestimmen.")
 #: «nicht rechenbar», Speicher nur als Saldo (Bestandstag): Ladung und Entladung lassen sich nicht trennen.
+#: Mindest-Netzladung (N-799 S3, §7): griff die Begrenzung der Fenster-Rechnung, nennt der Satz sie — der Client zeigt
+#: sie damit überall, wo der Grund steht, ohne selbst zu rechnen.
+GRUND_MINDEST = ("Der Speicher hat in diesen Stunden mindestens {kwh} kWh aus dem Netz geladen; der Überschuss ist auf die "
+                 "PV-Menge begrenzt.")
+#: Ein Fenster, das vor dem Tag beginnt (N-799 S3, §7 «Nulltage»): die Tage davor zeigen für diese Stunden nichts.
+GRUND_MEHRTAEGIG = "Die Menge dieser Stunden steht vollständig an diesem Tag; die Tage davor zeigen für sie nichts."
 GRUND_SALDIERT = ("Für die Stunden {zeitraum} gab es keine Stundenwerte, und der Speicher ist für diesen Tag nur als Saldo "
                   "von Ladung und Entladung gespeichert — Überschuss, Defizit und Direktverbrauch lassen sich für diesen "
                   "Tag nicht bestimmen.")
@@ -79,19 +86,31 @@ def zeitraum_text(tag: date, von: datetime, bis: datetime) -> str:
     return f"vom {von.day}.{von.month}. {_uhr(von)} Uhr bis {bis.day}.{bis.month}. {_uhr(bis)} Uhr"
 
 
+def mindest_satz(bilanz: Any) -> Optional[str]:
+    """Der Satz zur Mindest-Netzladung einer Fenster-Rechnung (ab 0,05 kWh, darunter ist es ein Rundungsrest) — Tageszeile
+    und Daten-Checker-Befund ``erfassung_stillstand`` nennen ihn gleich."""
+    mindest = getattr(bilanz, "mindest_netzladung_kwh", None)
+    if mindest is None or mindest < 0.05:
+        return None
+    return GRUND_MINDEST.format(kwh=fmt_zahl(mindest, 1))
+
+
 def grund_satz(tag: date, bilanz: Any) -> Optional[str]:
     """Der Grund der drei Tagesspalten — ``None`` bei voll gepaartem Tag."""
     paarung = getattr(bilanz, "stundenpaarung", None)
     if paarung not in (PAARUNG_FENSTER, PAARUNG_NICHT_RECHENBAR):
         return None
-    teile = [zeitraum_text(tag, von, bis) for von, bis in zeitraeume(tag, getattr(bilanz, "paarung_zeilen", ()))]
+    fenster = zeitraeume(tag, getattr(bilanz, "paarung_zeilen", ()))
+    teile = [zeitraum_text(tag, von, bis) for von, bis in fenster]
     zeitraum = " und ".join(teile) if teile else "dieses Tages"
+    vortage = [GRUND_MEHRTAEGIG] if any(von.date() < tag for von, _bis in fenster) else []
     if paarung == PAARUNG_FENSTER:
-        return GRUND_FENSTER.format(zeitraum=zeitraum)
+        zusatz = [m] if (m := mindest_satz(bilanz)) else []
+        return " ".join([GRUND_FENSTER.format(zeitraum=zeitraum), *zusatz, *vortage])
     arten = {z[3] for z in getattr(bilanz, "paarung_zeilen", ()) if len(z) > 3}
     if URSACHE_SALDIERT in arten and URSACHE_UNGLEICH not in arten:
-        return GRUND_SALDIERT.format(zeitraum=zeitraum)
-    return GRUND_NICHT_RECHENBAR.format(zeitraum=zeitraum)
+        return " ".join([GRUND_SALDIERT.format(zeitraum=zeitraum), *vortage])
+    return " ".join([GRUND_NICHT_RECHENBAR.format(zeitraum=zeitraum), *vortage])
 
 
 def felder_der_tageszeile(tag: date, bilanz: Any) -> dict:
@@ -111,5 +130,5 @@ def paarung_rechenbar(bilanz: Any) -> bool:
     return getattr(bilanz, "stundenpaarung", None) != PAARUNG_NICHT_RECHENBAR
 
 
-__all__ = ["GRUND_FENSTER", "GRUND_NICHT_RECHENBAR", "GRUND_SALDIERT", "felder_der_tageszeile", "grund_satz", "paarung_rechenbar",
+__all__ = ["GRUND_FENSTER", "GRUND_MEHRTAEGIG", "GRUND_MINDEST", "GRUND_NICHT_RECHENBAR", "GRUND_SALDIERT", "felder_der_tageszeile", "grund_satz", "mindest_satz", "paarung_rechenbar",
            "zeitraeume", "zeitraum_text"]

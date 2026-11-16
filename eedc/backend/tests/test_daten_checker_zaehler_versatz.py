@@ -190,7 +190,23 @@ def _kanal_tage(monkeypatch, je_tag: dict):
 
 
 async def _pruefe(db, a):
-    return await _P(db)._check_zaehler_versatz(a, jetzt=JETZT)
+    """Die Befunde mit Fund (ohne die OK-Zeile, die der Befund ohne Fund liefert — N-799 S3, K7)."""
+    return [e for e in await _P(db)._check_zaehler_versatz(a, jetzt=JETZT) if e.schwere != "ok"]
+
+
+async def test_ohne_fund_eine_ok_zeile(db, ha, monkeypatch):
+    """N-799 S3, K7: ohne Fund liefert der Befund eine OK-Zeile desselben Codes — der Knopf «Zum Daten-Checker» im Hinweis
+    nach einer geänderten Zuordnung (``befund=zaehler_versatz``) öffnet damit immer den Lösungsweg. Mit Fund keine
+    OK-Zeile daneben."""
+    from backend.services.daten_checker.datenquelle.versatz import OK_MELDUNG
+
+    _kanal_tage(monkeypatch, {})
+    a, *_ = await _anlage(db, feld="ladung_kwh")                     # Feld nicht in der Tagesansicht ⇒ kein Fund
+    (e,) = await _P(db)._check_zaehler_versatz(a, jetzt=JETZT)
+    assert (e.code, e.schwere, e.meldung, e.knopf, e.action) == ("zaehler_versatz", "ok", OK_MELDUNG, None, None)
+    b, *_ = await _anlage(db)
+    alle = await _P(db)._check_zaehler_versatz(b, jetzt=JETZT)
+    assert [x.schwere for x in alle] == ["warning"]
 
 
 async def test_lage_heilbar_traegt_tage_neu_aufbauen(db, ha, monkeypatch):

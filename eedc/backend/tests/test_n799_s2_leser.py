@@ -338,8 +338,8 @@ async def test_tagesvergleich_alle_beruehrten_tage(uhr):
         merken.leeren()
         echt = stillstand.erster_tag_der_fenster_ueber_mitternacht
         with pytest.MonkeyPatch.context() as mp:      # Sprengsatz: nur der Nachtragstag (wie S1) ⇒ 13./14.06. fehlen
-            async def _nur_nachtrag(db, aid, von, bis):
-                return {d: d for d in await echt(db, aid, von, bis)}
+            async def _nur_nachtrag(db, aid, von, bis, **kw):
+                return {d: d for d in await echt(db, aid, von, bis, **kw)}
             mp.setattr(stillstand, "erster_tag_der_fenster_ueber_mitternacht", _nur_nachtrag)
             alt = await tage_ohne_tagesvergleich(ds.db, ds.aid, "pv", von=date(2026, 6, 10), bis=date(2026, 6, 20))
     assert {date(2026, 6, 13), date(2026, 6, 14), date(2026, 6, 15), date(2026, 6, 16)} <= aus

@@ -901,15 +901,15 @@ Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter,
 
 **eedc sagt es dir.** Nach einer Änderung erscheint oben auf der Datenquellen-Fläche ein Hinweis mit den geänderten Feldern und dem Datum, ab dem die Werte neu sind. Er blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** quittierst — auch über einen Neustart hinweg, denn die Frage stellt sich oft erst Tage später.
 
-**Wenn du die Vergangenheit nachziehen willst,** führt der Knopf **„Zur Reparatur-Werkbank"** direkt dorthin: *Einstellungen → Daten → Energieprofil-Pflege → Zeitraum neu aggregieren*, in Blöcken von bis zu 31 Tagen je Lauf. Deine **Monatsdaten bleiben unberührt** — neu gerechnet werden nur die Tages- und Stundenwerte.
+**Die bisherigen Werte bleiben, wie sie waren** — auch deine **Monatsdaten** bleiben unberührt. Einen Neuaufbau einzelner Tage empfiehlt der Hinweis nicht: er holt die Zählerstände der Tage mit der **heutigen** Zuordnung, und zählt der neue Zähler auf einer anderen Höhe als der alte, liegen danach die gespeicherten Zählerstände in Abschnitten auf zwei Höhen. Der Daten-Checker prüft, ob dabei ein versetzter Abschnitt entstanden ist (**„Zählerstände – versetzter Abschnitt"**, [Daten-Checker §4.8f](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)), und nennt dort den Weg; findet er keinen, steht der Befund unter den bestandenen Prüfungen, und es ist nichts zu tun. Der Knopf **„Zum Daten-Checker"** im Hinweis führt dorthin.
 
 Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 
-> **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt": ob und wie weit du nachgezogen hast, weißt nur du.
+> **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt".
 
 > ⚑ **Eine Ausnahme, und die ist gewollt: der laufende Tag.** Er wird alle 15 Minuten vollständig neu gerechnet — eine Zuordnung, die du um 22 Uhr anlegst, wirkt dort also binnen einer Viertelstunde für **den ganzen Tag** zurück, nicht erst ab 22 Uhr. Das ist der Grund, warum dieser Abschnitt „nicht rückwirkend" heißt und für heute trotzdem etwas anderes gilt.
 
-> **Für die Zeit vor eedc gilt das nicht.** Wo keine Sensordaten in Home Assistant liegen (etwa Monate, die du aus einer Hersteller-Cloud importiert hast), findet ein neuer Lauf nichts — dort sind die Monatswerte die Datenlage, und die genügen für Cockpit, Auswertungen und Jahresbericht.
+> **Für die Zeit vor eedc gilt das nicht.** Wo keine Sensordaten in Home Assistant liegen (etwa Monate, die du aus einer Hersteller-Cloud importiert hast), gibt es keine Tages- und Stundenwerte, die eine Zuordnung tragen könnten — dort sind die Monatswerte die Datenlage, und die genügen für Cockpit, Auswertungen und Jahresbericht.
 
 ### 7.8 Voraussetzung: die Verbindungen
 

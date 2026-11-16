@@ -286,14 +286,18 @@ async def tage_mit_fenster_ueber_mitternacht(db: AsyncSession, anlage_id: int, v
 
 
 async def erster_tag_der_fenster_ueber_mitternacht(db: AsyncSession, anlage_id: int, von: date,
-                                                   bis: date) -> dict[date, date]:
+                                                   bis: date, *, ueber_bis: bool = False) -> dict[date, date]:
     """Je Nachtragstag D (``von`` … ``bis``) eines vor 00:00 begonnenen markierbaren Fensters der erste Tag, den das
     Fenster berührt (der früheste, wenn mehrere an D enden) — ``vergleichstage`` lässt alle Tage dazwischen aus
-    (N-799 S2, Tagesvergleich: ein Drei-Tage-Lauf lässt nicht nur D und D − 1 aus)."""
+    (N-799 S2, Tagesvergleich: ein Drei-Tage-Lauf lässt nicht nur D und D − 1 aus).
+
+    ``ueber_bis`` (N-799 S3, §7 «Tagesvergleich»): auch Fenster, die im Bereich beginnen und erst nach ``bis`` enden
+    (Nachtragstag D > ``bis``) — ein Bereich, der mitten im Fenster endet (Monats-, Jahresgrenze), lässt die berührten
+    Tage sonst im Vergleich. ``fenster_im_bereich`` liefert solche Fenster ohnehin (bis ``NACHLAUF_TAGE`` nach ``bis``)."""
     out: dict[date, date] = {}
     for f in await fenster_im_bereich(db, anlage_id, von, bis):
         tag = datetime.fromtimestamp(f.nachtrag_ts).date()
-        if f.von_ts < _ts(tag) and von <= tag <= bis:
+        if f.von_ts < _ts(tag) and von <= tag and (ueber_bis or tag <= bis):
             erster = datetime.fromtimestamp(f.von_ts).date()
             out[tag] = min(erster, out.get(tag, erster))
     return out

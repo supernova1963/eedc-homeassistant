@@ -377,6 +377,15 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 > deckt in *Cockpit → Tag* dasselbe Fenster wie „heute" in *Cockpit → Live*. Liegen von einem Zähler für eine Zeit vor
 > der HA-Statistik nur Stände um Mitternacht vor, stimmen die Tagesmengen, und die Stunden zeigen den Tag als eine
 > Spanne („enthält n Stunden").
+>
+> **Stand die Erfassung still, sind drei Werte gerechnet.** Hat Home Assistant einige Stunden lang keine Werte geliefert
+> (der Rechner war aus, Home Assistant startete neu) und tragen die Zähler die Menge danach in einer Stunde nach, rechnet
+> eedc **Überschuss, Defizit und Direktverbrauch** des Tages für diese Stunden aus den Zählerständen statt aus
+> Stundenwerten. Die Bilanz des Tages trägt dann das Zeichen **„geschätzt"** mit einem Satz, der die Stunden nennt — und,
+> wenn in diesen Stunden mehr ins Netz und in den Speicher ging, als die PV erzeugt hat, wie viel der Speicher mindestens aus
+> dem Netz geladen hat —, und den Link **„Im Daten-Checker nachlesen"**. Lassen sich die drei Werte nicht bestimmen, steht „—" mit dem Grund. Die Mengen des Tages (Erzeugung,
+> Einspeisung, Netzbezug, Verbrauch, Speicher) stimmen in beiden Fällen. Was die Rechnung voraussetzt und welche Vorbehalte
+> sie hat: [Daten-Checker, „Stunden ohne Stundenwerte"](HANDBUCH_DATEN_CHECKER.md#erfassung_stillstand).
 
 Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die gespeicherten Stundenwerte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N)), die Stunden eines Tages aus dem HA-Spiegel tragen ihren Beginn — beide sind als Bereich beschriftet. Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md). An einem Tag aus dem HA-Spiegel ändert eine Nachberechnung die gespeicherten Stundenwerte, nicht die Zahlen aus dem Spiegel; eine falsche Zahl dort korrigierst du in Home Assistant ([Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)).
 
@@ -575,7 +584,7 @@ Die **Erfassung** eines Monats (Zählerstände, Monatsabschluss) läuft über da
 
 Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr zusammen — vom Backend über die Monate gerechnet: Mengen und Beträge als Summe, Quoten wie Autarkie aus den Monaten, die beide Größen tragen (steht ein Monat ohne Netzbezugswert im Jahr, sagt der Tooltip „aus 8 von 9 Monaten"). Über den Selektor an der Seite — mobil über die Jahres-Leiste — wählst du das Jahr; die Kennzahlen tragen einen Trend-Pfeil zum Vorjahr.
 
-> **„Gesamt" ist heute kein eigener Zeitraum, sondern steckt in einzelnen Kennzahlen.** Wo eine Zahl über die volle Laufzeit gilt, sagt sie es selbst — die Kachel **CO₂ kumuliert** trägt den Vermerk „gesamte Historie — nicht jahresgebunden" und bleibt beim Jahreswechsel stehen. Eine Selektor-Stellung, die die **ganze Seite** auf die Gesamtlaufzeit umschaltet, gibt es nicht; sie steht auf der Roadmap.
+> **„Gesamt" ist heute kein eigener Zeitraum, sondern steckt in einzelnen Kennzahlen.** Wo eine Zahl über die volle Laufzeit gilt, sagt sie es selbst — die Kachel **CO₂ kumuliert** trägt den Vermerk „gesamte Historie — nicht jahresgebunden" und bleibt beim Jahreswechsel stehen. Eine Selektor-Stellung, die die **ganze Seite** auf die Gesamtlaufzeit umschaltet, gibt es nicht und ist nicht geplant: die volle Laufzeit zeigen je Gerät der **Komponenten-Hub**, für die Anlage der **Jahresbericht** mit „Gesamtzeitraum“, die **Auswertungen** (Finanzen, Energie, Tabelle) mit „Alle Jahre“ und die Kachel **CO₂ kumuliert** hier auf der Seite.
 
 **Hero-Kennzahlen** — die drei wichtigsten Werte prominent, je mit Trend-Pfeil zum Vorjahr:
 
@@ -1404,6 +1413,13 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > Eine nach Nennleistung gerechnete Tageszahl gibt es bewusst nicht — sie wäre von einer Messung
 > nicht zu unterscheiden. Der Stunden-Blick auf denselben Tag liegt in [Cockpit → Tag](#22-tag).
 
+> **Überschuss, Defizit und Direktverbrauch an Tagen mit Erfassungs-Ausfall (Tagesansicht).** Stand die Erfassung an
+> einem Tag einige Stunden still, trägt die Zahl in diesen drei Spalten das Zeichen **„geschätzt"** — für diese Stunden
+> ist sie aus den Zählerständen gerechnet. Unter der Tabelle steht je Tag der Satz mit den Stunden und der Link **„Im
+> Daten-Checker nachlesen"**. Lässt sich ein Tag nicht bestimmen, steht „—"; die Summenzeile sagt, wie viele Tage sie
+> auslässt bzw. wie viele mit Zähler-Rechnung sie enthält. Der CSV-Export trägt für solche Tage die Spalte „Kennzeichen
+> Überschuss/Defizit/Direktverbrauch". Hintergrund: [Daten-Checker, „Stunden ohne Stundenwerte"](HANDBUCH_DATEN_CHECKER.md#erfassung_stillstand).
+>
 > **Sonstiges als Spalte (Monat und Tag).** Der Spalten-Picker führt die Gruppe **„Sonstiges"** mit
 > zwei wählbaren Spalten: **Sonstiges Erzeugung (kWh)** und **Sonstiges Verbrauch (kWh)** — die
 > Summe deiner Geräte vom Typ *Sonstiges*, getrennt nach der bei ihnen gepflegten **Kategorie**

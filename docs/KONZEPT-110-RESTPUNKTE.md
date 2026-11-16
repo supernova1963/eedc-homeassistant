@@ -2,11 +2,12 @@
 
 > **Stand 13.10.2026, Entscheid Gernot.** Dieses Dokument gehört zum Abschnitt «Gesammelt» der Roadmap
 > [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110). Es wertet die zwei dort verbliebenen Punkte am Stand von
-> v4.1.7 ein und legt für einen davon den Bauplan fest. **#110 bleibt offen**, beide Punkte bleiben dort stehen — ohne Termin.
+> v4.1.7 ein und legt für einen davon den Bauplan fest. **#110 bleibt offen.** Der V2H-Tageswert ist gebaut (v4.1.7); die
+> Stellung «Gesamt» ist am **3.11.2026 verworfen** und steht in #110 unter «Verworfen — nicht neu aufrollen».
 >
 > | Punkt | Entscheid 13.10.2026 |
 > | --- | --- |
-> | **Cockpit → Jahr: Stellung «Gesamt» über alle Jahre** (aus #395 Punkt 2, OB73-gif) | **nicht gebaut** — Einwertung in [§1](#1-cockpit-jahr-stellung-gesamt). Auslöser bleibt ein Melder, der die Gesamtsicht braucht; dann ist zuerst die Konzeptfrage in §1.4 zu entscheiden. |
+> | **Cockpit → Jahr: Stellung «Gesamt» über alle Jahre** (aus #395 Punkt 2, OB73-gif) | **verworfen am 3.11.2026** (Entscheid Gernot; in #110 unter «Verworfen») — nicht gebaut, Einwertung in [§1](#1-cockpit-jahr-stellung-gesamt). Die Jahr-Seite bleibt jahresgebunden; die Gesamtlaufzeit steht an anderer Stelle (§1.2). |
 > | **V2H: der Tageswert der Entladung fehlt** | **gebaut** (`2ce068fae`), ausgeliefert mit v4.1.7; siehe [§2.7](#27-gates-und-zeitpunkt). Entscheide und Bauplan in [§2](#2-v2h-tageswert). |
 >
 > Zeilenangaben beziehen sich auf den Stand nach Päckchen M3 (13.10.2026). Wer den Bauplan ausführt, misst sie am HEAD nach.
@@ -54,8 +55,13 @@ Jahre, die USt-Sätze je Jahr (`ust_eigenverbrauch_zeitraum` existiert), und ob 
 
 ### 1.5 Entscheid
 
-**Nicht gebaut.** Aufwandsklasse: mehrere Tage plus Konzeptentscheid — im Pflegebetrieb nur auf einen Melder, der die Gesamtsicht
-braucht. Bis dahin gilt §1.2 als Antwort an Anwender.
+**Nicht gebaut** (13.10.2026). Aufwandsklasse: mehrere Tage plus Konzeptentscheid.
+
+**Verworfen am 3.11.2026** (Entscheid Gernot, in #110 unter «Verworfen — nicht neu aufrollen»): Die Jahr-Seite bleibt jahresgebunden.
+Alles, was sie zeigt, gibt es für die volle Laufzeit an anderer Stelle: je Gerät im **Komponenten-Hub**, für die Anlage im
+**Jahresbericht** mit «Gesamtzeitraum», in den **Auswertungen** (Finanzen, Energie, Tabelle) mit «Alle Jahre» und als **CO₂
+kumuliert** auf der Jahr-Seite selbst. Nur der Vergleich mit Vorjahr und Durchschnitt der übrigen Jahre hat kein Gegenstück, und
+der ergibt über alle Jahre keinen Sinn. §1.2 ist die Antwort an Anwender.
 
 ## 2. V2H-Tageswert
 
@@ -159,3 +165,6 @@ Kein Fund, keine Fund-ID: der Punkt ist ein Wunsch aus #110; der Commit nennt «
   «Gesamt» nicht gebaut; V2H-Tageswert wird gebaut mit E1–E3.
 - **13.10.2026 (abends)** — Gernot hält das Release 4.1.7 an und zieht den V2H-Tageswert vor: gebaut nach O2 und B5-a (Baunotiz §2.4),
   Commit `2ce068fa`; mit v4.1.7 ausgeliefert (Release-Commit `ebe90eb7`). «Gesamt» (§1) bleibt ungebaut.
+- **3.11.2026** — Entscheid Gernot: «Gesamt» (§1) ist verworfen und steht in #110 unter «Verworfen — nicht neu aufrollen»; die
+  Gesamtlaufzeit beantworten Komponenten-Hub, Jahresbericht «Gesamtzeitraum», Auswertungen «Alle Jahre» und CO₂ kumuliert (§1.5).
+  Dieses Dokument nachgezogen am 16.11.2026.

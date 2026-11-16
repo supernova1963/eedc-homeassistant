@@ -6,7 +6,7 @@
  */
 import { exportToCSV } from '../../utils/export'
 import type { WerteMetrik } from './registry'
-import type { WerteZeile } from './zeile'
+import { PAARUNG_SPALTEN, type WerteZeile } from './zeile'
 import { aggregiere } from './aggregate'
 import { vergleichLookup, vergleichsAggregatBasis } from './vergleich'
 
@@ -23,6 +23,14 @@ export interface WerteCsvOptions {
   /** Einheit der Aggregat-Zeile ("Monate" / "Tage"). */
   einheitLabel: string
   dateiname: string
+}
+
+/** N-799 S3 (§7): Spalte «Kennzeichen» der Tagestabelle — nur, wenn eine Zeile eines trägt und eine der drei Spalten
+ *  Überschuss, Defizit, Direktverbrauch exportiert wird; sonst bleibt der Export wie bisher. */
+export const CSV_KENNZEICHEN_KOPF = 'Kennzeichen Überschuss/Defizit/Direktverbrauch'
+export const CSV_KENNZEICHEN: Record<'fenster' | 'nicht_rechenbar', string> = {
+  fenster: 'geschätzt (aus Zählerständen gerechnet)',
+  nicht_rechenbar: 'nicht bestimmbar',
 }
 
 export function exportWerteCsv({
@@ -48,6 +56,8 @@ export function exportWerteCsv({
   // (bewusst NICHT die Anzeige-decimals der Registry: die würden kWh auf 0 NK
   // stutzen — CSV bleibt maschinenlesbar präziser als die Tabelle).
   const rund = (v: number) => Math.round(v * 1e4) / 1e4
+  const mitKennzeichen = rows.some((r) => r.paarung) && metriken.some((m) => PAARUNG_SPALTEN.includes(m.key))
+  if (mitKennzeichen) headers.push(CSV_KENNZEICHEN_KOPF)
 
   const out: (string | number)[][] = rows.map((r) => {
     const prev = vergleich ? vorjahrLookup.get(r.vergleichKey) : undefined
@@ -61,6 +71,7 @@ export function exportWerteCsv({
         zeile.push(v != null && pv != null ? rund(v - pv) : '')
       }
     })
+    if (mitKennzeichen) zeile.push(r.paarung ? CSV_KENNZEICHEN[r.paarung] : '')
     return zeile
   })
 
@@ -80,6 +91,7 @@ export function exportWerteCsv({
       aggZeile.push(v != null && pv != null ? rund(v - pv) : '')
     }
   })
+  if (mitKennzeichen) aggZeile.push('')
   out.push(aggZeile)
 
   exportToCSV(headers, out, dateiname)

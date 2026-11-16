@@ -369,6 +369,26 @@ describe('exportWerteCsv (Schema)', () => {
     expect(out[out.length - 1][0]).toBe('2 Monate')
   })
 
+  it('N-799 S3: Tages-Export trägt die Spalte «Kennzeichen», wenn ein Tag eines hat (sonst nicht)', () => {
+    const drei = [METRIK_BY_KEY['ueberschuss_kwh'], METRIK_BY_KEY['direktverbrauch']]
+    const tage = [tagesZeile(tw('2026-11-11')),
+      tagesZeile(tw('2026-11-12', { stundenpaarung: 'fenster', stundenpaarung_grund: 'Für die Stunden …' })),
+      tagesZeile(tw('2026-11-13', { stundenpaarung: 'nicht_rechenbar', stundenpaarung_grund: 'Für die Stunden …' }))]
+    exportWerteCsv({ rows: tage, vorjahrRows: null, jahrLabel: 'Nov', vergleichLabel: null, metriken: drei, einheitLabel: 'Tage', dateiname: 't.csv' })
+    const [headers, out] = vi.mocked(exportToCSV).mock.calls[0]
+    expect(headers[headers.length - 1]).toBe('Kennzeichen Überschuss/Defizit/Direktverbrauch')
+    expect(out.map((z) => z[z.length - 1])).toEqual(['', 'geschätzt (aus Zählerständen gerechnet)', 'nicht bestimmbar', ''])
+    vi.mocked(exportToCSV).mockClear()
+    exportWerteCsv({ rows: [tagesZeile(tw('2026-11-11'))], vorjahrRows: null, jahrLabel: 'Nov', vergleichLabel: null,
+      metriken: drei, einheitLabel: 'Tage', dateiname: 't.csv' })
+    expect(vi.mocked(exportToCSV).mock.calls[0][0]).not.toContain('Kennzeichen Überschuss/Defizit/Direktverbrauch')
+    // K9: Tage mit Kennzeichen, aber keine der drei Spalten im Export ⇒ keine Spalte.
+    vi.mocked(exportToCSV).mockClear()
+    exportWerteCsv({ rows: tage, vorjahrRows: null, jahrLabel: 'Nov', vergleichLabel: null,
+      metriken: [METRIK_BY_KEY['erzeugung']], einheitLabel: 'Tage', dateiname: 't.csv' })
+    expect(vi.mocked(exportToCSV).mock.calls[0][0]).not.toContain('Kennzeichen Überschuss/Defizit/Direktverbrauch')
+  })
+
   it('Tages-Export nutzt Einheit „Tage"', () => {
     const tage = [tagesZeile(tw('2026-05-10')), tagesZeile(tw('2026-05-11'))]
     exportWerteCsv({ rows: tage, vorjahrRows: null, jahrLabel: 'Mai', vergleichLabel: null, metriken, einheitLabel: 'Tage', dateiname: 't.csv' })
