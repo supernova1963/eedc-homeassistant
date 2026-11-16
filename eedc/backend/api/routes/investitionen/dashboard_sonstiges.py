@@ -24,6 +24,7 @@ from backend.services.zaehlerstaende import lade_zaehlerstaende, zaehler_art, za
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_speicher_ersparnis
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.field_definitions import (
+    get_sonstiges_speicher_kwh,
     get_sonstiges_verbrauch_kwh,
     ist_abgabe_kategorie,
     ist_gepflegte_sonstiges_kategorie,
@@ -79,6 +80,17 @@ class SonstigesAbgabeMonat(BaseModel):
     erloes_euro: Optional[float] = None
 
 
+class SonstigesSpeicherMonat(BaseModel):
+    """Ein Monat eines Geräts der Kategorie *Speicher* — Ladung und Entladung über die eine Feldwahl
+    (``field_definitions.get_sonstiges_speicher_kwh``: Registry-Felder ``verbrauch_sonstig_kwh``/``erzeugung_kwh``, die
+    Altschlüssel ``ladung_kwh``/``entladung_kwh`` als Rückfall). Verlauf und Vergleich des Hubs lesen diese Reihe, nicht
+    ``verbrauch_daten`` — der Client wählt kein Feld."""
+    jahr: int
+    monat: int
+    ladung_kwh: float
+    entladung_kwh: float
+
+
 class SonstigesDashboardResponse(BaseModel):
     """Sonstiges Dashboard Daten."""
     investition: InvestitionResponse
@@ -89,6 +101,8 @@ class SonstigesDashboardResponse(BaseModel):
     #: #443/N-785: die Abgabe je Monat eines Geräts der Kategorie *Abgabe an Dritte* (Monats-Fakten, P10). Leer für
     #: jede andere Kategorie.
     abgabe_monatsreihe: list[SonstigesAbgabeMonat] = []
+    #: Beipack N-799 S1: Ladung/Entladung je Monat eines Geräts der Kategorie *Speicher*. Leer für jede andere Kategorie.
+    speicher_monatsreihe: list[SonstigesSpeicherMonat] = []
     zusammenfassung: dict[str, Any]
 
 def _monatsverbrauch_aus_verlauf(fenster) -> list[dict]:
@@ -228,6 +242,7 @@ async def get_sonstiges_dashboard(
         # altem Tarif den Ø nach unten.
         preis_gewichte: dict[tuple[int, int], float] = {}
         monatsreihe: list[SonstigesMonatsWert] = []
+        speicher_reihe: list[SonstigesSpeicherMonat] = []
 
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
@@ -255,9 +270,14 @@ async def get_sonstiges_dashboard(
                     (d.get('bezug_netz_kwh', 0) or 0) + (d.get('bezug_pv_kwh', 0) or 0)
                 )
             elif kategorie == 'speicher':
-                gesamt_ladung += d.get('ladung_kwh', 0)
-                gesamt_entladung += d.get('entladung_kwh', 0)
-                preis_gewichte[(md.jahr, md.monat)] = d.get('entladung_kwh', 0) or 0
+                # Registry-Felder (Ladung `verbrauch_sonstig_kwh`, Entladung `erzeugung_kwh`) wie Formular und
+                # Monats-Fakten; die Altschlüssel `ladung_kwh`/`entladung_kwh` nur als Rückfall (ein Ort: der Helfer).
+                ladung, entladung = get_sonstiges_speicher_kwh(d)
+                gesamt_ladung += ladung
+                gesamt_entladung += entladung
+                preis_gewichte[(md.jahr, md.monat)] = entladung
+                speicher_reihe.append(SonstigesSpeicherMonat(
+                    jahr=md.jahr, monat=md.monat, ladung_kwh=ladung, entladung_kwh=entladung))
 
         gesamt_sonstige_netto = gesamt_sonstige_ertraege - gesamt_sonstige_ausgaben
 
@@ -376,6 +396,7 @@ async def get_sonstiges_dashboard(
             investition=inv,
             monatsdaten=monatsdaten,
             monatsreihe=monatsreihe,
+            speicher_monatsreihe=speicher_reihe,
             zusammenfassung=zusammenfassung,
         ))
 

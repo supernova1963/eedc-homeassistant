@@ -203,6 +203,8 @@ from backend.core.field_definitions.reader import (  # noqa: F401 — Re-Export
     sonstiges_feld_reihenfolge,
     SONSTIGES_FELDER_BEKANNT,
     get_sonstiges_verbrauch_kwh,
+    SONSTIGES_SPEICHER_ALT_FELDER,
+    get_sonstiges_speicher_kwh,
 )
 from backend.core.field_definitions.heimladung import (  # noqa: F401 — Re-Export
     HEIMLADE_FELDER,
@@ -355,6 +357,8 @@ __all__ = [
     'sonstiges_feld_reihenfolge',
     'SONSTIGES_FELDER_BEKANNT',
     'get_sonstiges_verbrauch_kwh',
+    'SONSTIGES_SPEICHER_ALT_FELDER',
+    'get_sonstiges_speicher_kwh',
     'FEINE_STROM_FELDER',
     'WP_GESAMT_STROM_FELDER',
     'feine_strom_achsen',

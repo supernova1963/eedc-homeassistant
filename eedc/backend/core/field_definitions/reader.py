@@ -345,3 +345,27 @@ def get_sonstiges_verbrauch_kwh(data: dict) -> float:
         if wert:
             return float(wert)
     return 0.0
+
+#: Altbestand-Schlüssel eines *Sonstiges*-Speichers (Ladung, Entladung) — nur noch lesbar als Rückfall. Die Registry
+#: (`registry.py`, Kategorie `speicher`, «diese Feldnamen sind bindend») und die Monats-Fakten (`imd_typ_beitrag`)
+#: führen die Ladung unter `verbrauch_sonstig_kwh` (`SONSTIGES_VERBRAUCH_FELDER`), die Entladung unter `erzeugung_kwh`.
+SONSTIGES_SPEICHER_ALT_FELDER: tuple[str, str] = ("ladung_kwh", "entladung_kwh")
+
+def get_sonstiges_speicher_kwh(data: dict) -> tuple[float, float]:
+    """Ladung und Entladung eines *Sonstiges*-Speichers in kWh — der eine Ort für die Feldwahl.
+
+    Registry-Felder zuerst (Ladung über `get_sonstiges_verbrauch_kwh`, dieselbe Lesart wie die Monats-Fakten;
+    Entladung `erzeugung_kwh`); trägt die Zeile keines davon, die Altbestand-Schlüssel `ladung_kwh`/`entladung_kwh`.
+    Trägt sie beide, gewinnt das Registry-Feld — auch eine gepflegte 0 (`is not None`).
+    """
+    if not data:
+        return 0.0, 0.0
+    alt_ladung, alt_entladung = SONSTIGES_SPEICHER_ALT_FELDER
+    if any(data.get(f) is not None for f in SONSTIGES_VERBRAUCH_FELDER):
+        ladung = get_sonstiges_verbrauch_kwh(data)
+    else:
+        ladung = float(data.get(alt_ladung) or 0.0)
+    entladung = data.get("erzeugung_kwh")
+    if entladung is None:
+        entladung = data.get(alt_entladung)
+    return ladung, float(entladung or 0.0)

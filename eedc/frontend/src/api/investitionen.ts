@@ -796,6 +796,15 @@ export interface SonstigesAbgabeMonat {
   erloes_euro: number | null
 }
 
+/** Beipack N-799 S1: ein Monat eines Geräts der Kategorie *Speicher* — Ladung/Entladung aus der einen Feldwahl des
+ *  Backends (`field_definitions.get_sonstiges_speicher_kwh`); der Client wählt kein Feld aus `verbrauch_daten`. */
+export interface SonstigesSpeicherMonat {
+  jahr: number
+  monat: number
+  ladung_kwh: number
+  entladung_kwh: number
+}
+
 export interface SonstigesDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
@@ -803,6 +812,8 @@ export interface SonstigesDashboardResponse {
   monatsreihe: SonstigesMonatsWert[]
   /** #443/N-785: Verlauf und Vergleich eines Abgabe-Geräts lesen diese Reihe; leer für jede andere Kategorie. */
   abgabe_monatsreihe?: SonstigesAbgabeMonat[]
+  /** Beipack N-799 S1: Verlauf und Vergleich eines Speichers lesen diese Reihe; leer für jede andere Kategorie. */
+  speicher_monatsreihe?: SonstigesSpeicherMonat[]
   zusammenfassung: {
     kategorie: 'erzeuger' | 'verbraucher' | 'abgabe' | 'speicher' | 'zaehler'
     beschreibung: string

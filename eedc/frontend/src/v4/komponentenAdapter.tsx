@@ -34,6 +34,7 @@ import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParamete
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import {
   investitionenApi, type InvestitionMonatsdaten, type SonstigesAbgabeMonat, type SonstigesMonatsWert,
+  type SonstigesSpeicherMonat,
 } from '../api/investitionen'
 import { istRestZeile, speicherUnterzeile } from '../components/eauto/EAutoCharts'
 import { wandlungsverlusteVerlaufZeile, type Unterzeile } from '../lib/wandlungsverluste'
@@ -225,6 +226,26 @@ function abgabeVerlauf(reihe: SonstigesAbgabeMonat[]): KompGeraet['verlauf'] {
 function abgabeJahre(reihe: SonstigesAbgabeMonat[]): { jahr: number; summe: number }[] {
   const m = new Map<number, number>()
   for (const r of reihe) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, r.abgabe_kwh))
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
+}
+
+/** Beipack N-799 S1: Verlauf «Ladung ⟷ Entladung» eines Sonstiges-Speichers aus `speicher_monatsreihe` (die Feldwahl
+ *  steht im Backend: Registry-Felder `verbrauch_sonstig_kwh`/`erzeugung_kwh`, Altschlüssel als Rückfall). Bis hier las der
+ *  Hub `ladung_kwh`/`entladung_kwh` aus `verbrauch_daten` — das Formular schreibt sie nicht, der Verlauf blieb 0. */
+function speicherRows(reihe: SonstigesSpeicherMonat[]): VerlaufRow[] {
+  return [...reihe]
+    .sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+    .map((m) => ({
+      name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(2)}`,
+      ladung: Math.max(0, m.ladung_kwh),
+      entladung: Math.max(0, m.entladung_kwh),
+    }))
+}
+
+/** Beipack N-799 S1: Jahressummen der Entladung aus der Reihe des Backends (der Client summiert nur). */
+function speicherEntladungJahre(reihe: SonstigesSpeicherMonat[]): { jahr: number; summe: number }[] {
+  const m = new Map<number, number>()
+  for (const r of reihe) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, r.entladung_kwh))
   return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
 }
 
@@ -1021,7 +1042,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   sonstiges: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSonstigesDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe, abgabe_monatsreihe }) => {
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md, monatsreihe: reihe, abgabe_monatsreihe, speicher_monatsreihe }) => {
         // Kategorie-Badge (Selektor-Differenzierung, SoT-Map R3b S7) + Sonderkosten-Alert (IST-getreu).
         const selektorBadge = SONSTIGES_KATEGORIE_LABELS[z.kategorie] ?? 'Sonstiges'
         const hinweise: KompGeraet['hinweise'] = (z.sonderkosten_euro ?? 0) > 0
@@ -1079,14 +1100,11 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                 { key: 'ladung', label: 'Ladung', farbe: CHART_COLORS.speicherLadung },
                 { key: 'entladung', label: 'Entladung', farbe: CHART_COLORS.speicherEntladung },
               ],
-              rows: rowsAusMd(md, [
-                { key: 'ladung', wert: (vd) => vd.ladung_kwh },
-                { key: 'entladung', wert: (vd) => vd.entladung_kwh },
-              ]),
+              rows: speicherRows(speicher_monatsreihe ?? []),
             } : undefined,
             vergleich: md.length ? {
               label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
-              jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
+              jahre: speicherEntladungJahre(speicher_monatsreihe ?? []),
             } : undefined,
             // Wirtschaftlichkeit = Ertrags-Zusammensetzung: Ersparnis durch erhöhten
             // Eigenverbrauch — 1 Posten.
