@@ -19,6 +19,9 @@ nur, wenn etwas geschrieben wird, wovon er abhängt; also wird sein Preis je Pro
   Seit S5b tragen die Tageszeilen diese Schlüssel an Kanal-Tagen nicht mehr — jeder Leser von ``komponenten_kwh``
   (Daten-Checker, *Energieprofil → Monat*, Tagesliste, Wärme-Verlauf, Modus-Split) fragt sie dort aus den Kanälen.
 
+Dazu meldet ``kanal/stillstand.py`` (N-799) seinen Speicher der Erfassungs-Stillstände je Monat an (``melde_speicher``):
+dieselbe Invalidierung (i) und dasselbe ``leeren()``; Generation und MQTT-Menge prüft er selbst.
+
 Der Bereichs-Leser ``stunden_leser.kanal_stundentage`` bleibt unverändert und merkt nicht (sein ``KanalStundentag`` hielte
 132 kB je Tag statt 34 kB, gemessen E-S5-1c H-1); ohne Merken bleiben ``wp_werte_der_kanal_tage`` (Wärme-Achsen je
 Gerät) und der Einzeltag ``/stunden``.
@@ -162,6 +165,15 @@ TAGESWAHL = Speicher("tageswahl")
 #: Invalidierung und derselbe Verfall wie die beiden anderen Speicher; Obergrenze ``OBERGRENZE_GERAETE`` (drei Gruppen je Tag).
 GERAETE = Speicher("geraete_tageswerte", obergrenze=lambda: OBERGRENZE_GERAETE)
 SPEICHER = (ADAPTER, TAGESWAHL, GERAETE)
+
+
+def melde_speicher(speicher: Any) -> None:
+    """Einen weiteren Speicher derselben Invalidierung (R7c (i): ``entferne(anlage_id, von, bis)``) und demselben
+    ``leeren()`` unterstellen — N-799: die Fenster des Erfassungs-Stillstands je Monat (``kanal/stillstand.py``), die
+    Generation und die MQTT-Menge prüft er selbst. Einmal je Prozess beim Import des Moduls."""
+    global SPEICHER
+    if speicher not in SPEICHER:
+        SPEICHER = (*SPEICHER, speicher)
 
 
 def leeren() -> None:

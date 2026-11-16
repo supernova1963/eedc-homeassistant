@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.spannen import spanne
+from backend.core.berechnungen.spannen import spannen_gebuendelt
 from backend.core.exceptions import not_found
 from backend.core.database import get_db
 from backend.models.anlage import Anlage
@@ -267,7 +267,7 @@ async def stratifizierung_endpoint(
     for tep_datum, stunde, pv_kw, bw, ns, wc, spannen in ist_stunden:
         if pv_kw is None or pv_kw < 0.05:
             continue  # Nacht / Sensor-Lücke / unter Mess-Schwelle
-        if spanne(spannen, "pv") > 1:
+        if spannen_gebuendelt(spannen, "pv"):
             continue  # Zählerlücken wie HA (§2): gebündelte Stunde ist keine Stichprobe
         prognose_profil = prognose_pro_tag.get(tep_datum)
         if not prognose_profil:

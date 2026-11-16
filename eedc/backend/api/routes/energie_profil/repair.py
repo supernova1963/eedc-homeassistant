@@ -296,11 +296,11 @@ async def _pv_aus_luecke(
     Energie, die HA nachgeliefert hat. ``None``, wenn keine Stunde gebündelt ist.
     HA-Bauform S5 (E-S5-3): die Stunden über die Lesestelle (an einem Kanal-Tag die Mischzeilen mit den Kanal-Spannen).
     """
-    from backend.core.berechnungen.spannen import spanne
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
     from backend.services.energie_profil.kanal_stunden import stunden_der_tage
 
     zeilen = await stunden_der_tage(db, anlage_id, datum, datum, felder=("pv_kw",))
-    summe = sum(z.pv_kw for z in zeilen if z.pv_kw is not None and spanne(z.spannen, "pv") > 1)
+    summe = sum(z.pv_kw for z in zeilen if z.pv_kw is not None and zeile_gebuendelt(z, "pv"))
     return round(summe, 2) if summe > 0 else None
 
 

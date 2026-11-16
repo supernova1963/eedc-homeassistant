@@ -160,7 +160,8 @@ async def stunden_des_tages(db: AsyncSession, anlage_id: int, datum: date, zeile
     k = await kanal_stunden(db, anlage_id, datum)
     if k is None:
         return [z for z in zeilen if z.datum == datum]
-    return mische_stunden(datum, zeilen, *k)
+    from backend.services.energie_profil.stillstand_marke import markiere_stillstand  # N-799: Marke je Aufruf
+    return (await markiere_stillstand(db, anlage_id, {datum: mische_stunden(datum, zeilen, *k)}))[datum]
 
 
 async def stunden_der_kanal_tage(
@@ -183,7 +184,8 @@ async def stunden_der_kanal_tage(
     for d, (gruppensatz, ks) in (await adapter_der_tage(db, anlage_id, tage, gruppen)).items():
         zeilen = [*zeilen_je_tag.get(d, ()), *zeilen_je_tag.get(d + timedelta(days=1), ())]
         out[d] = _mische(d, zeilen, achsen_der_gruppen(gruppensatz), ks)
-    return out
+    from backend.services.energie_profil.stillstand_marke import markiere_stillstand  # N-799: Marke je Aufruf
+    return dict(await markiere_stillstand(db, anlage_id, out))
 
 
 async def adapter_der_tage(db: AsyncSession, anlage_id: int, tage: Sequence[date],
@@ -1525,11 +1527,11 @@ def ladeanteil_der_kanal_stunden(ks: KanalStunden):
     von ``aggregator.verrechne_stunde`` (trägt Ladung, PV oder Netzbezug mehr als eine reale Stunde, geht die Stunde als
     «nicht gedeckt» ein), dann ``leite_pv_anteil_ab``."""
     from backend.core.berechnungen.pv_anteil_ladung import leite_pv_anteil_ab, stunde_aus_bilanzwerten
-    from backend.core.berechnungen.spannen import spanne
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
 
     stunden = []
     for z in ks.zeilen:
-        gebuendelt = any(spanne(z.spannen, a) > 1 for a in ("wallbox", "pv", "netzbezug"))
+        gebuendelt = any(zeile_gebuendelt(z, a) for a in ("wallbox", "pv", "netzbezug"))
         stunden.append(stunde_aus_bilanzwerten(
             ladung=z.wallbox_kw,
             netzbezug=None if gebuendelt else z.netzbezug_kw,

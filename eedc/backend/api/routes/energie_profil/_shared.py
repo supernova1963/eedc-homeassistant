@@ -184,7 +184,9 @@ class StundenWertResponse(BaseModel):
     # dieser Zeile ``n > 1`` reale Stunden trägt (HA hatte die Stunden davor
     # nicht geschrieben; die Energie steht hier wie im HA-Dashboard). ``None``
     # im Regelfall. Die Stundentabelle beschriftet die Zeile damit
-    # („enthält n Stunden"), statt sie als Spitze zu zeigen.
+    # („enthält n Stunden"), statt sie als Spitze zu zeigen. N-799: nach einem
+    # Stillstand der ganzen Erfassung (Kanal-Tag) trägt die Nachtragszeile
+    # ``n = k + 1``, jede Stunde des Stillstands ``n = 0`` („in späterer Zeile").
     spannen: Optional[dict[str, int]] = None
     # HA-Bauform S4 (S4-E2 A): was ``stunde`` meint — ``"beginn"`` = ``[h, h+1)``
     # (Kanal-Tag, HAs ``start_ts``), ``"ende"`` = Backward-Slot ``[h−1, h)``

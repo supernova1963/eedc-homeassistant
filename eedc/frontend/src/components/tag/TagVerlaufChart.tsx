@@ -18,7 +18,7 @@ import { pvRestKw, pvSplitKw, wpRestKw, wpSplitKw } from '../../lib/erzeugerSpal
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 import { stundenBereich } from '../../lib/stundenBereich'
-import { erfassteSenken, spanneDerZeile, type SenkenKey } from './TagWerteTabelle'
+import { erfassteSenken, spanneDerZeile, zeileOhneEigeneMenge, type SenkenKey } from './TagWerteTabelle'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
 function round2(v: number): number {
@@ -167,7 +167,9 @@ export function stundenTooltipLabel(
   const text = String(label ?? '')
   const punkt = chartDaten.find((p) => p.stunde === text)
   const n = typeof punkt?.spanne === 'number' ? punkt.spanne : 1
-  return n > 1 ? `${text} · enthält ${n} Stunden (Lücke in Home Assistant)` : text
+  // N-799: neutral für Lücke und Erfassungs-Stillstand; Spanne 0 = die Stunde trägt keine eigene Menge.
+  if (n === 0) return `${text} · Energie in einer späteren Stunde (Erfassung stand)`
+  return n > 1 ? `${text} · enthält ${n} Stunden (in Home Assistant nachgetragen)` : text
 }
 
 export function baueChartDaten({
@@ -211,7 +213,7 @@ export function baueChartDaten({
     // Stunde ist im Stapel eine Nulllinie).
     const punkt: Record<string, number | string> = {
       stunde:       stundenBereich(h, s?.raster ?? tagesRaster),
-      spanne:       spanneDerZeile(s),
+      spanne:       zeileOhneEigeneMenge(s) ? 0 : spanneDerZeile(s),
       pv:           s?.pv_kw ?? 0,
       bat_pos:      Math.max(0, bat),
       bat_neg:      Math.min(0, bat),

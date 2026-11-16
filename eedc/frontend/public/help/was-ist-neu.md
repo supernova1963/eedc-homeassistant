@@ -11,6 +11,8 @@
 
 ## Unveröffentlicht
 
+**Nach einem Ausfall von Home Assistant: nachgetragene Stunden sind gekennzeichnet.** War Home Assistant (oder die MQTT-Erfassung) einige Stunden aus, trägt es die Energie dieser Stunden danach in einer einzigen Stunde nach. In *Cockpit → Tag* steht an dieser Stunde jetzt „· enthält n h“ und an den stillen Stunden davor „· in späterer Zeile“ – der Tooltip erklärt es. Spitzen und Tagesprofil im Monat, die Verbrauchsprognose für die nächsten Wochen und die Speicher-Auswertungen lassen diese Stunden aus, statt sie als eine sehr starke Stunde zu zählen; Tages- und Monatssummen bleiben gleich. → [Energieprofil](HANDBUCH_ENERGIEPROFIL.md)
+
 **Daten-Checker: versetzte Zählerstände.** Liegen die gespeicherten Zählerstände eines Felds für eine Weile um einen festen Betrag daneben – typisch, wenn eine Zeit lang die Stände eines anderen Sensors gespeichert wurden –, ist der Tageswert am ersten Tag zu hoch und fehlt am letzten. Der Daten-Checker nennt das jetzt mit Gerät, Feld, Zeitraum und den betroffenen Tagen – für die Felder, deren Tageswert die Tagesansicht aus diesen Ständen bildet (etwa die PV-Ladung der Wallbox). Passen die Stände davor und danach zu Home Assistant, stellt „Tage neu aufbauen“ die Tage richtig (höchstens 31 Tage je Klick); sonst sagt „Was gilt“, warum eedc es nicht selbst kann. → [Daten-Checker: Zählerstände – versetzter Abschnitt](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)
 
 **Anlage bearbeiten: Koordinaten mit Straße.** Verlässt du in *Einstellungen → Stammdaten → Anlage* das Feld „PLZ“, „Ort“ oder „Straße“, ermittelt eedc die Koordinaten jetzt mit der Straße wie der Einrichtungs-Assistent – bisher nur aus PLZ und Ort, der Punkt lag dann in der Ortsmitte. Stehen schon Koordinaten im Formular, die du eingetragen hast oder die gespeichert sind, bleiben sie stehen; willst du sie neu ermitteln lassen, leere beide Felder und verlasse dann das Adressfeld. → [Einstellungen: Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage)
@@ -22,6 +24,8 @@
 **Daten-Checker: Herkunft in Worten.** Statt „auto:monatsabschluss“ steht in den Hinweisen „Monatsabschluss“, ebenso „HA-Spiegel“, „Wiederherstellung“, „Demo-Daten“ und „Altbestand“.
 
 **Daten-Checker: „Leistung (kW) fehlt“ am Wechselrichter nur, wenn sie fehlt.** Hat der Einrichtungs-Assistent oder ein Import die Leistung abgelegt, rechnet die Prognose damit – der Hinweis erscheint dann nicht mehr.
+
+**Komponenten → Sonstiges: Speicher mit Ladung und Entladung.** Ein Gerät der Kategorie „Speicher“ zeigt auf seiner Komponentenseite jetzt die Ladung und Entladung, die du im Monatsformular unter „Verbrauch/Ladung“ und „Erzeugung/Entladung“ einträgst, dazu Wirkungsgrad, Ersparnis, den Verlauf je Monat und den Jahresvergleich – bisher stand dort 0. → [Einstellungen: Komponenten](HANDBUCH_EINSTELLUNGEN.md#3-komponenten)
 
 **Texte.** Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.
 

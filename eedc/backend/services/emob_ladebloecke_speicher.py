@@ -30,7 +30,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import batterie_kw_spalte
-from backend.core.berechnungen.spannen import spanne
+from backend.core.berechnungen.spannen import spanne, spannen_gebuendelt
 from backend.models.emob_ladeblock import EmobLadeblock
 from backend.services.emob_ladebloecke import (
     REGEL_SPRUNG_RUECKWAERTS,
@@ -118,7 +118,7 @@ async def fahrzeug_zaehler_snapshot(
 
 def _stunde(beginn: datetime, *, ladung, netzbezug, einspeisung, batterie_spalte,
             spannen) -> WallboxStunde:
-    gebuendelt = any(spanne(spannen, a) > 1 for a in ("wallbox", "pv", "netzbezug"))
+    gebuendelt = any(spannen_gebuendelt(spannen, a) for a in ("wallbox", "pv", "netzbezug"))
     pv_anteil, speicher_anteil = anteile_der_stunde(
         ladung=ladung, netzbezug=netzbezug, einspeisung=einspeisung,
         batterie_spalte=batterie_spalte, gebuendelt=gebuendelt,

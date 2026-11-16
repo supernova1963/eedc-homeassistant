@@ -138,6 +138,26 @@ export function spanneDerZeile(s: StundenWert | undefined): number {
 }
 
 /**
+ * Erfassungs-Stillstand (N-799): der Server markiert die Stunden, in denen die
+ * ganze Erfassung stand, mit Spanne 0 — die Zeile trägt keine eigene Menge,
+ * ihre Energie steht in der Zeile, in der die Erfassung wieder einsetzte (die
+ * trägt die Spanne n > 1). Der Client liest nur die Marke, er rechnet nichts.
+ */
+export function zeileOhneEigeneMenge(s: StundenWert | undefined): boolean {
+  return Object.values(s?.spannen ?? {}).some((n) => n === 0)
+}
+
+/** Tooltip der Zeile, die die Energie mehrerer Stunden trägt — neutral für Lücke und Stillstand. */
+export const TEXT_ZEILE_ENTHAELT = (n: number) =>
+  `Diese Zeile enthält ${n} Stunden: Home Assistant hat die Energie dieser Stunden erst hier eingetragen — `
+  + 'nach einer Lücke oder einem Stillstand der Erfassung, wie im HA-Energie-Dashboard.'
+
+/** Tooltip einer Stunde ohne eigene Menge (Spanne 0). */
+export const TEXT_ZEILE_SPAETER =
+  'Für diese Stunde hat Home Assistant keine eigene Menge erfasst — die Erfassung stand. Die Energie steht in der '
+  + 'Zeile, in der sie wieder einsetzte, wie im HA-Energie-Dashboard.'
+
+/**
  * Σ-Zeile „Gesamtverbrauch" = **der Tageswert vom Server** (R7, Vorlage §2).
  *
  * Der Tag rechnet seinen Verbrauch nach der HA-Formel (PV + Netz + Entladung −
@@ -559,9 +579,18 @@ export function TagWerteTabelle({
                   {spanneDerZeile(s) > 1 && (
                     <span
                       className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500"
-                      title={`Diese Zeile enthält ${spanneDerZeile(s)} Stunden: Home Assistant hatte die Stunden davor nicht geschrieben, die Energie steht hier — wie im HA-Energie-Dashboard.`}
+                      title={TEXT_ZEILE_ENTHAELT(spanneDerZeile(s))}
                     >
                       · enthält {spanneDerZeile(s)} h
+                    </span>
+                  )}
+                  {/* Erfassungs-Stillstand (N-799): die Stunde trägt keine eigene Menge */}
+                  {zeileOhneEigeneMenge(s) && (
+                    <span
+                      className="ml-1 text-[10px] font-normal text-gray-400 dark:text-gray-500"
+                      title={TEXT_ZEILE_SPAETER}
+                    >
+                      · in späterer Zeile
                     </span>
                   )}
                 </td>

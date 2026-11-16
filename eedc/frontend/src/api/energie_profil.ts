@@ -33,7 +33,9 @@ export interface StundenWert {
    *  dieser Zeile n > 1 reale Stunden trägt — HA hatte die Stunden davor nicht
    *  geschrieben, die Energie steht hier wie im HA-Energie-Dashboard. Fehlt
    *  bzw. `null` im Regelfall. Achsen: pv · einspeisung · netzbezug · batterie
-   *  · waermepumpe · wallbox · sonstige. */
+   *  · waermepumpe · wallbox · sonstige. N-799: nach einem Stillstand der ganzen
+   *  Erfassung trägt die Nachtragszeile n = k + 1 und jede Stunde des Stillstands
+   *  n = 0 (keine eigene Menge, `zeileOhneEigeneMenge`). */
   spannen?: Record<string, number> | null
   /** HA-Bauform S4 (S4-E2 A): was `stunde` meint — `"beginn"` = `[h, h+1)` (Kanal-Tag),
    *  `"ende"` = Backward-Slot `[h−1, h)` (Bestandstag). Beschriftung über `stundenBereich`. */

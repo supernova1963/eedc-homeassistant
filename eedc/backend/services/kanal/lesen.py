@@ -607,6 +607,65 @@ async def stunden(db: AsyncSession, kanal: Kanal, von: int, bis: int, *, jetzt: 
     return (await stunden_stapel(db, [kanal], von, bis, jetzt=jetzt))[kanal.key]
 
 
+# ── Zuwachs je Stunde, schlank (N-799: die Fenster-Lesestelle des Erfassungs-Stillstands) ──────────────────────────
+
+_DELTAS_SQL = """
+WITH k(kid) AS (SELECT value FROM json_each(:kanaele)), r AS (
+    SELECT k.kid, (SELECT MAX(s.start_ts) FROM kanal_statistik s WHERE s.kanal_id = k.kid AND s.start_ts < :von
+                   AND s.sum IS NOT NULL) AS vor_ts FROM k
+)
+SELECT r.kid, s.start_ts, s.sum FROM r JOIN kanal_statistik s ON s.kanal_id = r.kid
+    AND s.start_ts >= COALESCE(r.vor_ts, :von) AND s.start_ts < :bis AND s.sum IS NOT NULL
+ORDER BY r.kid, s.start_ts
+"""
+
+
+async def deltas_stapel(db: AsyncSession, kanaele: Sequence[Kanal], von: int,
+                        bis: int) -> dict[str, list[tuple[int, Optional[float], Optional[int]]]]:
+    """Je Mengen-Kanal und belegter Stunde in ``[von, bis)`` ``(start_ts, change, spanne)`` — **dieselben Zahlen wie**
+    ``stunden_stapel`` (HAs ``change`` auch über den Stand vor ``von``, ``sum + offset`` der geltenden Quelle, Spanne =
+    Abstand zum vorigen Stand; ``change``/``spanne`` ``None`` ohne vorigen Stand), aber als Tupel und ohne Abdeckung:
+    die Fenster-Lesestelle des Erfassungs-Stillstands (``kanal/stillstand.py``) liest Monate über mehrere Zähler, und je
+    Zeile ein ``Stundenwert`` samt Offset-Unterabfrage kostete dort die Hälfte der Laufzeit. Zwei Anweisungen (Stände,
+    Quellen-Offsets); Gleichheit mit ``stunden_stapel`` hält ``test_n799_stillstand_lesestelle.py`` fest."""
+    _nur_mengen(kanaele)
+    mengen = [k for k in kanaele if k.art == ART_SUM]
+    if not mengen or bis <= von:
+        return {}
+    ids = json.dumps([k.id for k in mengen])
+    offsets: dict[int, tuple[list[int], list[float]]] = {}
+    for kid, ab, off in (await db.execute(text(
+            'SELECT kanal_id, gueltig_ab, "offset" FROM kanal_quelle WHERE kanal_id IN (SELECT value FROM '
+            'json_each(:kanaele)) ORDER BY kanal_id, gueltig_ab'), {"kanaele": ids})).all():
+        ts_l, off_l = offsets.setdefault(int(kid), ([], []))
+        ts_l.append(int(ab))
+        off_l.append(float(off or 0.0))
+    je: dict[int, list] = {k.id: [] for k in mengen}
+    for kid, ts, roh in (await db.execute(text(_DELTAS_SQL), {"kanaele": ids, "von": von, "bis": bis})).all():
+        je[int(kid)].append((int(ts), float(roh)))
+    return {k.key: _deltas(je[k.id], offsets.get(k.id), von) for k in mengen}
+
+
+def _deltas(zeilen: list[tuple[int, float]], offsets: Optional[tuple[list[int], list[float]]],
+            von: int) -> list[tuple[int, Optional[float], Optional[int]]]:
+    """``(start_ts, change, spanne)`` je Zeile ab ``von`` — die erste Zeile davor ist der Stand vor ``von``."""
+    from bisect import bisect_right
+
+    out: list[tuple[int, Optional[float], Optional[int]]] = []
+    v_ts: Optional[int] = None
+    v_wert = 0.0
+    for ts, roh in zeilen:
+        off = 0.0
+        if offsets:
+            i = bisect_right(offsets[0], ts) - 1
+            off = offsets[1][i] if i >= 0 else 0.0
+        wert = roh + off
+        if ts >= von:
+            out.append((ts, None, None) if v_ts is None else (ts, wert - v_wert, ts - v_ts))
+        v_ts, v_wert = ts, wert
+    return out
+
+
 # ── mittel ──────────────────────────────────────────────────────────────────
 
 def _naechste(op: str, wert: str, richtung: str) -> str:

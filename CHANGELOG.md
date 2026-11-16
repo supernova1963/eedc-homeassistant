@@ -32,6 +32,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Komponenten → Sonstiges: ein Speicher zeigt seine Ladung und Entladung.** Für ein Gerät der Kategorie „Speicher“
+  zeigte die Komponentenseite Ladung und Entladung 0, keinen Wirkungsgrad, keine Ersparnis aus dem Speicher und im Verlauf
+  „Ladung / Entladung“ sowie im Jahresvergleich leere Balken, obwohl die Monatswerte gepflegt waren: sie las zwei alte
+  Feldnamen statt der Felder, die das Monatsformular schreibt („Verbrauch/Ladung“ und „Erzeugung/Entladung“). Jetzt liest
+  sie diese Felder — Monate mit den alten Namen zählen weiter. Die Monatsauswertungen waren nicht betroffen.
+- **Stillstand der Erfassung: die Energie mehrerer Stunden zählt nicht mehr als eine Stunde.** Fällt Home Assistant
+  (oder die MQTT-Erfassung) einige Stunden aus, trägt es die Zählerstände danach ohne Zuwachs nach und schreibt die ganze
+  Energie dieser Stunden in die erste Stunde danach. eedc erkennt diesen Stillstand jetzt an Tagen, deren Werte aus dem
+  HA-Spiegel bzw. den eigenen Zählerständen kommen: in *Cockpit → Tag* steht an der Stunde mit der nachgetragenen Energie
+  „· enthält n h“ und an den stillen Stunden „· in späterer Zeile“ (mit Erklärung im Tooltip, ebenso im Tagesverlauf);
+  Überschuss und Defizit dieser Stunden bleiben leer. Was Stunde gegen Stunde vergleicht, lässt diese Stunden aus: die
+  Spitzen und das typische Tagesprofil in *Cockpit → Monat*, die Verbrauchsprognose (Tagesprognose und HA-Sensoren),
+  Grundlast, Verbrauchsprofil, Lernfaktor der PV-Prognose, Speicher-Potenzial und -Größe sowie der Ladepreis aus dem Netz.
+  Tages- und Monatssummen bleiben gleich. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
+  er sich auffällig oft (mehr als fünf Mal in 60 Tagen) oder sind die Zähler grob aufgelöst, gilt er nicht als Ausfall.
 - **Anlage bearbeiten: die Koordinaten aus der Adresse berücksichtigen die Straße.** Das Formular ermittelte Breiten-
   und Längengrad nur aus PLZ und Ort — der Punkt lag damit in der Ortsmitte, je nach Gemeinde einige hundert Meter bis
   Kilometer vom Haus entfernt. Jetzt geht die Straße mit wie im Einrichtungs-Assistenten, und auch das Verlassen des

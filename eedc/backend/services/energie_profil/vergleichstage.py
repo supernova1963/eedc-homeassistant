@@ -125,6 +125,7 @@ async def tage_ohne_tagesvergleich(
         verworfen_der_tage,
     )
     from backend.services.kanal.bilanz_leser import mische_verworfen
+    from backend.services.kanal.stillstand import tage_mit_fenster_ueber_mitternacht
 
     folgetag = bis + timedelta(days=1) if bis is not None else None
     spalte = _SPALTE.get(achse)
@@ -146,7 +147,11 @@ async def tage_ohne_tagesvergleich(
     if bereich is not None:
         luecken = (await tage_mit_kanal_luecke_ueber_mitternacht(db, anlage_id, *bereich, achse)
                    if spalte is not None else set())
-        fraglich = {t for z in zeilen for t in (z.datum, z.datum - timedelta(days=1))} | set(marken) | luecken
+        # N-799 (E-8): dazu die Tage, an denen ein vor 00:00 begonnener Erfassungs-Stillstand endet — ihre Nachtragszeile
+        # trägt die Marke n = k + 1 erst beim Mischen, die Stundenzeile kennt sie nicht.
+        stillstand = await tage_mit_fenster_ueber_mitternacht(db, anlage_id, *bereich)
+        fraglich = ({t for z in zeilen for t in (z.datum, z.datum - timedelta(days=1))} | set(marken) | luecken
+                    | stillstand)
         kanal = await _kanal_tage_unter(db, anlage_id, *bereich, fraglich)
     rows_je_tag: dict[date, list] = defaultdict(list)
     for row in zeilen:

@@ -56,7 +56,7 @@ from backend.models.korrekturprofil import (
     PROFIL_TYP_STUNDE,
     Korrekturprofil,
 )
-from backend.core.berechnungen.spannen import spanne
+from backend.core.berechnungen.spannen import spannen_gebuendelt
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.wetter.solar_position import (
     AZIMUT_BIN_BREITE_DEFAULT,
@@ -563,7 +563,7 @@ async def _tage_und_snapshots(
         # Zählerlücken wie HA (§2): eine Stunde, deren PV mehr als eine reale
         # Stunde trägt (Energie einer Lücke), ist keine Stunden-Stichprobe für
         # einen Korrekturfaktor — sie fällt hier aus, bleibt in jeder Summe.
-        if spanne(spannen, "pv") > 1:
+        if spannen_gebuendelt(spannen, "pv"):
             continue
         prog_profil = prog_pro_tag.get(datum)
         if not prog_profil:
