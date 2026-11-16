@@ -32,6 +32,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **Wärmepumpe: kein „kein Stromverbrauch erfasst“ mehr für einen Zeitraum ohne Warmwasserbereitung oder Heizbetrieb
+  (#446).** Hatte eine Wärmepumpe mit getrennten Strom- und Wärmezählern an einem Tag noch kein Warmwasser bereitet
+  (Strom und Wärme 0), stand im Kasten „Was noch möglich wäre“ bei diesem Gerät „Arbeitszahl Warmwasser — kein
+  Stromverbrauch erfasst“ mit dem Rat, einen Stromzähler zuzuordnen, obwohl beide Zähler zugeordnet sind. Dasselbe galt
+  für „Arbeitszahl Heizen“ in einem Monat ohne Heizbetrieb, im Jahr und auf der Komponentenseite, wenn das Gerät im
+  ganzen Zeitraum nicht geheizt hat. Jetzt sagt die Zeile des Geräts in *Cockpit → Tag*, *Monat* und *Jahr* und auf der
+  Komponentenseite wie die Anlage „keine Warmwasserbereitung in diesem Zeitraum“ bzw. „kein Heizbetrieb in diesem
+  Zeitraum“, und der Kasten führt dafür keine Zeile. Fehlt der Stromzähler der Funktion wirklich, bleibt der Hinweis mit
+  dem Handgriff. Die Zahlen ändern sich nicht.
 - **Komponenten → Sonstiges: ein Speicher zeigt seine Ladung und Entladung.** Für ein Gerät der Kategorie „Speicher“
   zeigte die Komponentenseite Ladung und Entladung 0, keinen Wirkungsgrad, keine Ersparnis aus dem Speicher und im Verlauf
   „Ladung / Entladung“ sowie im Jahresvergleich leere Balken, obwohl die Monatswerte gepflegt waren: sie las zwei alte

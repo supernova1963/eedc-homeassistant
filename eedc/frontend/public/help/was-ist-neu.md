@@ -25,6 +25,8 @@
 
 **Daten-Checker: „Leistung (kW) fehlt“ am Wechselrichter nur, wenn sie fehlt.** Hat der Einrichtungs-Assistent oder ein Import die Leistung abgelegt, rechnet die Prognose damit – der Hinweis erscheint dann nicht mehr.
 
+**Wärmepumpe: ein Zeitraum ohne Warmwasser oder Heizen ist kein fehlender Zähler (#446).** Hat deine Wärmepumpe mit getrennten Strom- und Wärmezählern an einem Tag (noch) kein Warmwasser bereitet, stand im Kasten „Was noch möglich wäre“ bei ihr „Arbeitszahl Warmwasser — kein Stromverbrauch erfasst“ mit dem Rat, einen Stromzähler zuzuordnen – obwohl die Zähler zugeordnet sind. Dasselbe stand bei „Arbeitszahl Heizen“ in einem Sommermonat. Jetzt steht beim Gerät wie bei der Anlage „keine Warmwasserbereitung in diesem Zeitraum“ bzw. „kein Heizbetrieb in diesem Zeitraum“ – in *Cockpit → Tag*, *Monat* und *Jahr* und auf der Komponentenseite –, und der Kasten führt dafür keine Zeile. Fehlt der Stromzähler wirklich, bleibt der Hinweis. → [Wärme & Klima: Die Gründe, wörtlich](HANDBUCH_WAERME_KLIMA.md#die-gründe-wörtlich)
+
 **Komponenten → Sonstiges: Speicher mit Ladung und Entladung.** Ein Gerät der Kategorie „Speicher“ zeigt auf seiner Komponentenseite jetzt die Ladung und Entladung, die du im Monatsformular unter „Verbrauch/Ladung“ und „Erzeugung/Entladung“ einträgst, dazu Wirkungsgrad, Ersparnis, den Verlauf je Monat und den Jahresvergleich – bisher stand dort 0. → [Einstellungen: Komponenten](HANDBUCH_EINSTELLUNGEN.md#3-komponenten)
 
 **Texte.** Die Reparatur-Werkbank sagt „der laufende Tag ist noch nicht abgeschlossen“; der Lösungsweg „Zählerstand ist gefallen“ sagt genau, wann eedc keine Differenz zeigt; das Handbuch Wärme & Klima sagt, dass „Alternative“ die Heizung ist, die du stattdessen angeschafft hättest – nicht dein Altgerät.

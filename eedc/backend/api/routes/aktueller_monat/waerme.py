@@ -193,6 +193,16 @@ def _kennzahlen_aus_kanal_zeilen(_wp_kennzahlen_je_geraet, kanal_wp_zeilen, _wp_
     return _ersetzt_k
 
 
+def _funktion_gemessen(gemessen) -> dict[str, bool]:
+    """N-805: die vier ``*_gemessen`` von ``mengen_aus_tageswerten`` aus der Menge der an mindestens einem Tag
+    gemessenen Felder (``waerme_verlauf.lade_waerme_monatsmengen_je_geraet``: ein Feld steht darin, sobald ein Tag einen Wert trägt)."""
+    g = set(gemessen)
+    return dict(
+        strom_heizen_gemessen="strom_heizen_kwh" in g, strom_warmwasser_gemessen="strom_warmwasser_kwh" in g,
+        heizung_gemessen="heizung_kwh" in g, warmwasser_gemessen="warmwasser_kwh" in g,
+    )
+
+
 def _kennzahlen_aus_tagesebene(_wp_kennzahlen_je_geraet, _tages_wp_mengen, _wp_invs_fuer_block):
     """N-472/A-5 (RF-67): die Kennzahl eines Geräts ohne Menge aus den Tagesmengen des Monats — Kommentar am Aufruf."""
     from backend.services.waermepumpe_kennzahlen_je_geraet import (
@@ -227,6 +237,9 @@ def _kennzahlen_aus_tagesebene(_wp_kennzahlen_je_geraet, _tages_wp_mengen, _wp_i
             strom_gemessen="strom_kwh" in getattr(_m, "gemessen", ()),
             waerme_gemessen=bool({"waerme_kwh", "heizung_kwh", "warmwasser_kwh"}
                                  & set(getattr(_m, "gemessen", ()))),
+            # N-805 (#446): je Funktion «an mindestens einem Tag des Monats gemessen» (auch 0) — sonst stand in einem
+            # Monat ohne Warmwasserbereitung/Heizbetrieb je Gerät «kein Stromverbrauch erfasst» mit Handgriff.
+            **_funktion_gemessen(getattr(_m, "gemessen", ())),
         )))
     return _ersetzt
 

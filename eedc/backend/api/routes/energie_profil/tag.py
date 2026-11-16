@@ -785,6 +785,15 @@ def _geraete_mengen(ctx: _TagKontext) -> None:
                 modus_strom_kuehlen_kwh=(_b.kuehlen_kwh if _b else 0.0),
                 funktionsfremd_abzug_kwh=(beitrag_abzug_kwh(_b) if _b else 0.0),
                 waerme_ist_gesamt=bool(_wp_gesamtwaerme_je_inv.get(_inv_id_str)),
+                # N-805 (#446): je Gerät und Größe «hat einen Tageswert» (auch 0) — ein Schlüssel in `werte_je_inv`
+                # steht nur, wo der Zähler zugeordnet ist und der Tag Stände trägt (`get_tagesdetail_kwh`). Damit sagt
+                # die Gerätezeile an einem Tag ohne Warmwasserbereitung bzw. ohne Heizbetrieb dasselbe wie die
+                # Anlagenebene (`null_ist_gemessen=True` in `_arbeitszahl_je_funktion`), statt «kein Stromverbrauch
+                # erfasst»; ein Gerät ohne Stromzähler der Funktion behält diesen Satz samt Handgriff.
+                strom_heizen_gemessen=_inv_id_str in _wp_strom_heizen_je_inv,
+                strom_warmwasser_gemessen=_inv_id_str in _wp_strom_ww_je_inv,
+                heizung_gemessen=_inv_id_str in ctx.wp_heizung_je_inv,
+                warmwasser_gemessen=_inv_id_str in _wp_ww_je_inv,
             ),
         ))
     ctx.wp_strom_ohne_waerme_tag, ctx.wp_geraete_ohne_waerme_tag = schranken_eingang(

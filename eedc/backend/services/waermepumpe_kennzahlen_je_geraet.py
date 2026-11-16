@@ -148,6 +148,15 @@ class GeraetMengen:
     #: P-433-3 S2 (#432): Σ gemessener Heizstab-Strom (Teilmenge des Gerätestroms, H-B). ``None`` = keine Zeile
     #: misst ihn — dann gibt es die Ausweis-Zahl „AZ ohne Zusatzheizung" nicht (B2: nur mit Zähler).
     heizstab_kwh: Optional[float] = None
+    #: **N-805 (#446): ist eine 0 der Funktion an DIESEM Gerät gemessen?** — der Eingang
+    #: ``null_ist_gemessen_<funktion>`` von ``arbeitszahl_je_funktion``, je Gerät und Funktion. ``True`` nur, wo
+    #: Strom **und** Wärme dieser Funktion für das Gerät erfasst sind (dieselbe Regel wie Monat und Jahr anlagenweit,
+    #: N-438/S3, H-3). Der Tag füllt sie aus seinen Tageswerten ({@link mengen_aus_tageswerten}), Monat/Jahr/Hub aus
+    #: den Monatszeilen ({@link mengen_aus_monatszeilen}, ODER über die Zeilen wie ``waermepumpe_jahreskennzahlen``).
+    #: ⚠ Sie ändern nur einen **Grund** („kein Heizbetrieb …" statt „kein Stromverbrauch erfasst"), nie eine Zahl —
+    #: der Layer liest sie nur, wo ohnehin keine Arbeitszahl entsteht.
+    null_ist_gemessen_heizen: bool = False
+    null_ist_gemessen_warmwasser: bool = False
 
     @property
     def kein_betrieb(self) -> bool:
@@ -274,6 +283,10 @@ def kennzahlen_aus_mengen(m: GeraetMengen) -> GeraetKennzahlen:
         # Registry und steht an genau einer Stelle (`wp_waerme_achsen`).
         achsen=m.waerme_achsen,
         gesamt=gesamt,
+        # N-805 (#446): am Tag trennt die Geräteebene „gemessen 0" von „nicht erfasst" wie die Anlagenebene — sonst
+        # stand an einem Tag ohne Warmwasserbereitung „kein Stromverbrauch erfasst" mit Handgriff «Datenquellen».
+        null_ist_gemessen_heizen=m.null_ist_gemessen_heizen,
+        null_ist_gemessen_warmwasser=m.null_ist_gemessen_warmwasser,
     )
     kuehlen = arbeitszahl_kuehlen(
         m.kaelte_kwh, m.modus_strom_kuehlen_kwh,
@@ -363,6 +376,7 @@ def mengen_aus_monatszeilen(
     zeilen: list[tuple[float, float]] = []
 
     strom_gemessen = waerme_gemessen = False
+    ng_heizen = ng_warmwasser = False
     heizstab: Optional[float] = None
     for md in monatsdaten:
         d = md.verbrauch_daten or {}
@@ -494,6 +508,17 @@ def mengen_aus_monatszeilen(
             waerme_ist_gesamt_getrennt = (
                 waerme_ist_gesamt_getrennt or bool(d.get('waerme_kwh'))
             )
+            # N-805 (#446): „gemessen 0" je Funktion — dieselbe Regel wie am Tag und anlagenweit
+            # (`waermepumpe_jahreskennzahlen.py`, N-479/N-438/H-3): je Zeile Strom der Funktion gemessen UND (ihre
+            # Wärme gemessen ODER Gesamtzähler), über die Zeilen ODER. Nur Zeilen, die auch in den Quotienten
+            # eingehen (dieselbe Bedingung wie die Summen darüber); «gemessen» aus der einen Lesetür `_b`
+            # (Feld steht in der Zeile, auch mit 0), nicht «Wert > 0».
+            ng_heizen = ng_heizen or (
+                _b.wp_strom_heizen_gemessen and (_b.wp_heizung_gemessen or _b.wp_waerme_ist_gesamt)
+            )
+            ng_warmwasser = ng_warmwasser or (
+                _b.wp_strom_warmwasser_gemessen and (_b.wp_warmwasser_gemessen or _b.wp_waerme_ist_gesamt)
+            )
 
     # ⭐ **N-391/V-1: die SUMME liest wie die Zeile** (D1).
     waerme = sum(w for w, _ in zeilen)
@@ -525,6 +550,8 @@ def mengen_aus_monatszeilen(
         strom_gemessen=strom_gemessen,
         waerme_gemessen=waerme_gemessen,
         heizstab_kwh=heizstab,
+        null_ist_gemessen_heizen=ng_heizen,
+        null_ist_gemessen_warmwasser=ng_warmwasser,
     )
     f = GeraetFaltung(
         modus_heizen_kwh=modus_heizen,
@@ -559,8 +586,20 @@ def mengen_aus_tageswerten(
     waerme_ist_gesamt: bool,
     strom_gemessen: bool = False,
     waerme_gemessen: bool = False,
+    strom_heizen_gemessen: bool = False,
+    strom_warmwasser_gemessen: bool = False,
+    heizung_gemessen: bool = False,
+    warmwasser_gemessen: bool = False,
 ) -> GeraetMengen:
     """Die Mengen **eines Tages** je Gerät — die zweite Herkunft (s. Modulkopf).
+
+    ⭐ **N-805 (#446): die vier ``*_gemessen`` je Funktion.** ``True`` heißt: dieses Gerät hat für die Größe an
+    diesem Tag einen Wert (Zähler zugeordnet, Tag gedeckt — auch 0). Daraus entsteht je Funktion
+    ``null_ist_gemessen_<funktion>`` mit derselben Regel wie Monat und Jahr anlagenweit
+    (``aktueller_monat/komponenten.py``, ``waermepumpe_jahreskennzahlen.py``): Funktions-Strom gemessen **und**
+    Funktions-Wärme gemessen oder ein gemeinsamer Wärmemengenzähler (N-438/S3, H-3). Ohne Stromzähler der Funktion
+    bleibt es bei „kein Stromverbrauch erfasst" mit dem Handgriff. Ein Aufrufer, der über Tage summiert
+    (``aktueller_monat/waerme.py::_kennzahlen_aus_tagesebene``), reicht ein: «an mindestens einem Tag gemessen».
 
     ⚠ **Die Wärme ist am Tag immer gemessen.** Nur ein zugeordneter
     Wärmemengenzähler erreicht den Tagespfad; den abgeleiteten Zweig
@@ -577,6 +616,7 @@ def mengen_aus_tageswerten(
     Funktions-Messung ist. Dieselbe Quelle wie im Monat.
     """
     hat_split = bool((wp.parameter or {}).get("getrennte_strommessung"))
+    _gesamt = waerme_ist_gesamt and hat_split
     return GeraetMengen(
         inv_id=wp.id,
         name=wp.bezeichnung,
@@ -589,7 +629,7 @@ def mengen_aus_tageswerten(
         heizung_getrennt_kwh=heizung_kwh if hat_split else 0.0,
         warmwasser_getrennt_kwh=warmwasser_kwh if hat_split else 0.0,
         hat_getrennte_strommessung=hat_split,
-        waerme_ist_gesamt_getrennt=waerme_ist_gesamt and hat_split,
+        waerme_ist_gesamt_getrennt=_gesamt,
         kaelte_kwh=kaelte_kwh,
         modus_strom_kuehlen_kwh=modus_strom_kuehlen_kwh,
         funktionsfremd_abzug_kwh=funktionsfremd_abzug_kwh,
@@ -602,6 +642,8 @@ def mengen_aus_tageswerten(
         waerme_achsen=wp_waerme_achsen(wp.parameter),
         strom_gemessen=strom_gemessen,
         waerme_gemessen=waerme_gemessen,
+        null_ist_gemessen_heizen=strom_heizen_gemessen and (heizung_gemessen or _gesamt),
+        null_ist_gemessen_warmwasser=strom_warmwasser_gemessen and (warmwasser_gemessen or _gesamt),
     )
 
 
