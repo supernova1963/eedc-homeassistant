@@ -46,6 +46,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   ha_zaehlersprung: 'Zählerstände – Sprung in Home Assistant',
   // N-639: HAs Summe fällt (Anpassung nach unten) — eedc zeigt die negative Menge wie HA und nennt den Weg.
   ha_zaehler_rueckgang: 'Zählerstände – Rückgang in Home Assistant',
+  // Verdacht N-803: ein Abschnitt der eigenen Standreihe liegt um +X versetzt (Stände eines anderen Sensors).
+  zaehler_versatz: 'Zählerstände – versetzter Abschnitt',
   sensor_mapping_lts: 'Datenquellen – HA-Statistics',
   sensor_mapping_einheit: 'Datenquellen – Einheiten (Leistung/Energie)',
   // P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.
@@ -109,6 +111,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'zaehler_ruecksprung',
   'ha_zaehlersprung',
   'ha_zaehler_rueckgang',
+  'zaehler_versatz',
   'sensor_mapping_lts',
   'sensor_mapping_einheit',
   'sensor_ohne_langzeitstatistik',
@@ -157,6 +160,7 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   zaehler_ruecksprung: '48a-zaehlerstaende--ruecksprung',
   ha_zaehlersprung: '48b-zaehlerstaende--sprung-in-home-assistant',
   ha_zaehler_rueckgang: '48c-zaehlerstaende--rueckgang-in-home-assistant',
+  zaehler_versatz: '48f-zaehlerstaende--versetzter-abschnitt',
   sensor_mapping_lts: '49-sensor-mapping--ha-statistics',
   energieprofil_plausibilitaet: '47-energieprofil--plausibilitaet',
   provenance_conflict: '416-quellen-konflikte',

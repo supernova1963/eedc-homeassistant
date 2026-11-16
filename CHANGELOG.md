@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Daten-Checker: „Zählerstände – versetzter Abschnitt“.** Hat eedc eine Zeit lang die Zählerstände eines anderen
+  Sensors gespeichert (etwa nach einem Wechsel der Zuordnung), springt die Reihe um einen festen Betrag nach oben und fällt
+  später um etwa denselben Betrag zurück — am ersten Tag ist der Tageswert zu hoch, am letzten fehlt er („Zähler
+  zurückgesprungen“). Der neue Befund nennt Gerät, Feld, Zeitraum, Höhe des Versatzes und die betroffenen Tage — nur für
+  Felder, deren Tageswert die Tagesansicht aus den gespeicherten Ständen bildet (PV- und Netz-Ladung von Wallbox und E-Auto,
+  Netzladung des Speichers, Wärmepumpen-Zähler, Netzbezug zum eigenen Tarif), und nur, wenn diese Tage ihren Wert wirklich
+  daraus rechnen. Stimmen die Stände vor und nach dem Abschnitt
+  mit Home Assistant überein, holt „Tage neu aufbauen“ die Stände neu (höchstens 31 Tage je Klick, danach nennt der Befund
+  den Rest); sonst sagt der Befund, was gilt. Gespeicherte Monatswerte ändert das nicht.
+
 ### Changed
 
 - **Auswertungen → Prognose: die Abweichung heißt überall „MAPE“** — die Kachel nannte die mittlere prozentuale

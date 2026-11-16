@@ -53,6 +53,11 @@ class CheckKategorie(str, Enum):
     # mit negativem Delta). eedc rechnet wie das HA-Energie-Dashboard ohne Rücksprung-Verwurf — die Stunde steht negativ
     # in Tag und Monat; diese Kategorie benennt sie über den ganzen Spiegel und den Reparaturweg in HA.
     HA_ZAEHLER_RUECKGANG = "ha_zaehler_rueckgang"
+    # Verdacht N-803 (Go Gernot 16.11.2026): in eedcs eigener Standreihe (`sensor_snapshots`) liegt ein Abschnitt um +X
+    # versetzt — Sprung, Weiterlauf auf anderer Höhe, Rückgang um ≈ −X (die Stände eines anderen Sensors, etwa nach einem
+    # Wechsel der Zuordnung). Die Tageswerte an den Rändern sind falsch, wo der Tag über die Standreihe rechnet. Erzeuger
+    # `datenquelle/versatz.py`, Regel `core/berechnungen/zaehler_versatz.py`.
+    ZAEHLER_VERSATZ = "zaehler_versatz"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,

@@ -654,6 +654,14 @@ async def _komponenten_der_tageszeilen(db: AsyncSession, anlage_id: int, von: da
     return dict(res.all())
 
 
+async def kanal_schluessel_des_tages(db: AsyncSession, anlage_id: int, datum: date) -> frozenset[str]:
+    """Die Schlüssel, deren Tagesmenge am Tag ``datum`` aus den Kanälen kommt: die Kanäle jeder Gruppe mit Wahl ``kanal``
+    (``kanal_stundentag`` — dieselbe Wahl je Gruppe wie ``tages_eingaenge``). Ein Zählerfeld, das fehlt, rechnet an dem
+    Tag über die Standreihe (Daten-Checker «Zählerstände – versetzter Abschnitt», ``daten_checker/datenquelle/versatz.py``)."""
+    tag = await kanal_stundentag(db, anlage_id, datum)
+    return frozenset(k for gs in tag.gruppen.values() for k in gs.mengen)
+
+
 async def kanal_gruppen_der_tage(db: AsyncSession, anlage_id: int, von: date, bis: date) -> dict[date, tuple[str, ...]]:
     """Je Tag ``von`` … ``bis`` die Gruppen mit Wahl ``kanal`` (Bilanz, WP, E-Mob, Sonstiges) — EIN Bereichs-Leser
     (``kanal_stundentage``, dieselbe Wahl je Tag und Gruppe wie ``kanal_stundentag``). Tage ohne Kanal-Gruppe fehlen.
@@ -1586,7 +1594,7 @@ __all__ = [
     "achsen_der_gruppen", "adapter_der_tage", "mische_sonstiges", "modus_stunden_aus_kanaelen", "sonstiges_der_kanal_tage", "stunden_der_kanal_tage",
     "wp_komponenten_der_kanal_tage", "kanal_werte_je_inv", "wp_werte_der_kanal_tage",
     "stunden_des_tages", "stundenzeilen_mit_kanaelen", "stunden_der_tage", "gruppen_des_hinweises",
-    "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage", "kanal_gruppen_der_tage",
+    "pv_ist_je_tag", "komponenten_der_tage", "verworfen_der_tage", "kanal_gruppen_der_tage", "kanal_schluessel_des_tages",
     "WpModusTag", "splits_mit_kanal", "wp_modus_der_kanal_tage",
     "KOMPONENTEN_GRUPPEN", "gruppen_der_schluessel", "geraete_komponenten_der_kanal_tage", "geraete_tageswerte_gemerkt", "pv_ertrag_der_kanal_stunden",
     "performance_ratio_des_kanal_tags", "performance_ratio_des_tages", "pv_ertrag_der_stundenzeilen",

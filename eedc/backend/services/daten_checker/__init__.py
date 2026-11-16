@@ -151,6 +151,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_ha_zaehlersprung(anlage))
         # N-639: Rückgang von HAs Summe — über den ganzen Spiegel (ein alter Monat trifft „Aus HA laden" genauso).
         ergebnisse.extend(await self._check_ha_rueckgang(anlage))
+        # Verdacht N-803: ein versetzter Abschnitt in eedcs Standreihe (Stände eines anderen Sensors) — Tageswerte an den Rändern.
+        ergebnisse.extend(await self._check_zaehler_versatz(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         # P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.

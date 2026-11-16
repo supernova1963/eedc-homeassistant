@@ -11,6 +11,8 @@
 
 ## Unveröffentlicht
 
+**Daten-Checker: versetzte Zählerstände.** Liegen die gespeicherten Zählerstände eines Felds für eine Weile um einen festen Betrag daneben – typisch, wenn eine Zeit lang die Stände eines anderen Sensors gespeichert wurden –, ist der Tageswert am ersten Tag zu hoch und fehlt am letzten. Der Daten-Checker nennt das jetzt mit Gerät, Feld, Zeitraum und den betroffenen Tagen – für die Felder, deren Tageswert die Tagesansicht aus diesen Ständen bildet (etwa die PV-Ladung der Wallbox). Passen die Stände davor und danach zu Home Assistant, stellt „Tage neu aufbauen“ die Tage richtig (höchstens 31 Tage je Klick); sonst sagt „Was gilt“, warum eedc es nicht selbst kann. → [Daten-Checker: Zählerstände – versetzter Abschnitt](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)
+
 **Anlage bearbeiten: Koordinaten mit Straße.** Verlässt du in *Einstellungen → Stammdaten → Anlage* das Feld „PLZ“, „Ort“ oder „Straße“, ermittelt eedc die Koordinaten jetzt mit der Straße wie der Einrichtungs-Assistent – bisher nur aus PLZ und Ort, der Punkt lag dann in der Ortsmitte. Stehen schon Koordinaten im Formular, die du eingetragen hast oder die gespeichert sind, bleiben sie stehen; willst du sie neu ermitteln lassen, leere beide Felder und verlasse dann das Adressfeld. → [Einstellungen: Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage)
 
 **Prognose-Genauigkeit: eine Zahl, ein Name.** Die mittlere Abweichung in Prozent heißt jetzt überall „MAPE“ – in der Kachel stand das schon, im Satz zur besten Quelle, in der Kopfzeile „Korrektur ausgesetzt“ und am Ausreißer hieß dieselbe Zahl „MAE“. → [Prognosen: Genauigkeits-Tracking](HANDBUCH_PROGNOSEN.md#6-genauigkeits-tracking-mape--bias)

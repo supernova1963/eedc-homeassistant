@@ -26,6 +26,7 @@
    8c. [Zählerstände – Rückgang in Home Assistant](#48c-zaehlerstaende--rueckgang-in-home-assistant)
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
+   8f. [Zählerstände – versetzter Abschnitt](#48f-zaehlerstaende--versetzter-abschnitt)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -194,7 +195,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **38 Kategorien** mit **182 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **39 Kategorien** mit **183 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -223,6 +224,7 @@ eedc prüft **38 Kategorien** mit **182 Befunden** (gezählt an `CheckKategorie`
 | [Abweichung zu Home Assistant an einem Tag (PV)](#drift_tag) `drift_tag` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Ein Gerät weicht an Tagen von Home Assistant ab](#drift_komponente) `drift_komponente` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung) `zaehler_ruecksprung` | §4.8a | Sprung | Sensor wechseln |
+| [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Aktion | Tage neu aufbauen |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
 | [Ein Tag mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tag) `batterie_vorzeichen_tag` | §4.21 | Aktion | Tag neu aufbauen |
@@ -403,6 +405,7 @@ Die meisten Kategorien greifen in jeder Installation identisch; **vierzehn** hä
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik); der Hinweis zu „PV gesamt“ neben einem Balkonkraftwerk greift aus der Zuordnung | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** (außer dem Zuordnungs-Hinweis) |
 | 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
+| 9f | **Zählerstände – versetzter Abschnitt** (§4.8f) | greift für die Zählerstände, die eedc aus der HA-Statistik gespeichert hat; den Knopf «Tage neu aufbauen» gibt es nur mit erreichbarem Home Assistant | **wird übersprungen** (keine Stände aus HA); Stände aus einer früheren Add-on-Zeit werden geprüft, ohne Knopf |
 | 10 | **Datenquellen – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -3322,6 +3325,70 @@ zurückgesetzt). Geprüft werden die letzten 31 abgeschlossenen Tage.
 eedc rechnet an diesen Tagen mit „keine Erzeugung“ und biegt nichts zurecht; Tages- und Monatsansicht im Cockpit zeigen
 deshalb unplausible Werte, etwa eine negative Autarkie. Nulleinspeisung, autarke Tage, Schnee auf den Modulen oder ein
 einzelner stehender String lösen diese Meldung nicht aus.
+
+### 4.8f Zählerstände – versetzter Abschnitt <a name="48f-zaehlerstaende--versetzter-abschnitt"></a>
+
+eedc merkt sich je Stunde den Stand jedes zugeordneten Zählers und bildet einen Tageswert aus zwei solchen Ständen — dem
+am Tagesbeginn und dem am Tagesende. Gespeichert wird immer der Stand des Sensors, der **in dem Moment** zugeordnet ist.
+Waren eine Zeit lang die Stände eines anderen Sensors in der Reihe (etwa nach einem Wechsel der Zuordnung), liegt ein
+Abschnitt um einen festen Betrag versetzt: am Anfang springt der Stand nach oben, am Ende fällt er um etwa denselben
+Betrag zurück. An diesen Rändern stimmt der Tageswert nicht — am Sprung ist er zu hoch, am Rückgang fehlt er
+(„Zähler zurückgesprungen“). Geprüft wird die ganze gespeicherte Reihe jedes Zählers, dessen Stände aus Home Assistant
+kommen.
+
+**Gemeldet wird nur, was sich auswirkt.** Geprüft werden die Felder, deren Tageswert die Tagesansicht aus diesen
+gespeicherten Ständen bildet: PV- und Netz-Ladung von Wallbox und E-Auto, die Netzladung des Speichers, die Zähler der
+Wärmepumpe und der Netzbezug zum eigenen Tarif. Die übrigen Felder (etwa die Gesamt-Ladung der Wallbox oder die Zähler von
+PV, Netz und Speicher) zeigt eedc aus der gespeicherten Tageszeile oder der Statistik von Home Assistant — dort wirkt ein
+solcher Abschnitt nicht. Rechnet eedc die Rand-Tage eines Felds ohnehin aus der Statistik von Home Assistant (an einem Tag,
+an dem alle Zähler seiner Gruppe dort lückenlos vorliegen), schweigt die Prüfung ebenfalls.
+
+**Was kein Befund ist:** ein Zähler, der auf null oder fast null zurückgesetzt wird (das meldet
+[§4.8a](#48a-zaehlerstaende--ruecksprung) für MQTT); ein einzelner Rückgang ohne vorangehenden Sprung ähnlicher Größe;
+ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Datenlücke von Tagen oder ein Sensorwechsel,
+nach dem der neue Sensor einfach weiterläuft.
+
+**Zwei Lagen.** Stimmen die Stände vor und nach dem Abschnitt mit dem überein, was Home Assistant für den heute
+zugeordneten Sensor führt, holt «Tage neu aufbauen» die Stände des Abschnitts neu und baut die Tage neu auf — höchstens
+31 Tage je Lauf; ein längerer Abschnitt braucht mehrere Klicks. Sonst — ohne Home Assistant, oder wenn auch die Stände
+außerhalb nicht zum heutigen Sensor passen — nennt der Befund nur die betroffenen Tage: neu geholt, entstünde der
+Versatz an anderer Stelle.
+
+---
+
+#### Zählerstände liegen für einen Abschnitt versetzt <a name="zaehler_versatz"></a>
+
+**Was eedc sieht**
+In den gespeicherten Zählerständen eines Felds springt der Stand an einem Tag um einen festen Betrag nach oben, läuft
+auf dieser Höhe weiter und fällt später um etwa denselben Betrag zurück — so sieht es aus, wenn eine Zeit lang die
+Stände eines anderen Sensors gespeichert wurden, etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus
+zwei Zählerständen; an den Rändern des Abschnitts ist er deshalb falsch: am Sprung zu hoch, am Rückgang fehlt er
+(„Zähler zurückgesprungen“). Die Meldung nennt Gerät und Feld, den Abschnitt von bis, die Höhe des Versatzes und die
+Tage, die zu hoch sind oder fehlen. Gespeicherte Monatswerte ändert das nicht.
+
+**Lösungsweg**
+1. Steht am Befund **«Tage neu aufbauen»**: klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Zählerstände
+   der genannten Tage neu aus Home Assistant und baut diese Tage neu auf, höchstens 31 Tage je Lauf. Den Knopf gibt es
+   nur, wenn die Stände vor und nach dem Abschnitt mit dem übereinstimmen, was Home Assistant für den heute zugeordneten
+   Sensor führt — dann heilt der Lauf den Abschnitt. Der Lauf übernimmt für diese Tage die Stände **aller** Zähler der
+   Anlage neu aus Home Assistant und holt Wetter- und Börsenpreis-Werte der Tage neu ab; dafür braucht eedc eine
+   Internetverbindung.
+2. Ist der Abschnitt länger als 31 Tage, nennt der Befund nach dem ersten Lauf den Rest: noch einmal
+   **«Tage neu aufbauen»** und **«Anwenden»**.
+3. Steht am Befund nur **«Was gilt»**: eedc kann den Abschnitt nicht selbst richtigstellen — ohne Verbindung zu Home
+   Assistant nicht, und wenn die Stände vor oder nach dem Abschnitt nicht zum heute zugeordneten Sensor passen, auch
+   nicht, weil neu geholte Stände den Versatz nur an eine andere Stelle schöben. Endet der Abschnitt heute, steht der
+   Knopf ab morgen da.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf ist der Befund verschwunden.
+
+Bleibt der Befund nach dem Klick stehen: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das
+Diagnose-Paket: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei an die Adresse
+aus unserer Antwort schicken.
+
+**Was ohne Handlung gilt**
+Die Tageswerte an den genannten Tagen bleiben falsch: am Sprung zu hoch, am Rückgang ohne Wert. eedc stellt sie nicht
+von selbst richtig. Tage, die eedc aus der Statistik von Home Assistant rechnet, und gespeicherte Monatswerte sind nicht
+betroffen.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 

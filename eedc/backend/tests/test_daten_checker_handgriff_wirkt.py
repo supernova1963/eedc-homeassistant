@@ -91,6 +91,8 @@ WIRKUNG_JE_CODE: dict[str, str] = {
     "tage_vor_umbau_ohne_regelmarke": "test_daten_checker_handgriff_wirkt.py::test_w11_tage_vor_umbau_wirkt",
     "einspeisung_groesser_erzeugung_tage": "test_daten_checker_handgriff_wirkt.py::test_w11_einspeisung_ueber_erzeugung_wirkt",
     "counter_spike_tag": "test_daten_checker_handgriff_wirkt.py::test_w11_counter_spike_wirkt",
+    # Verdacht N-803 (16.11.2026): versetzter Abschnitt der Standreihe, «Tage neu aufbauen» über den Abschnitt.
+    "zaehler_versatz": "test_daten_checker_zaehler_versatz.py::test_w11_zaehler_versatz_wirkt",
 }
 
 
@@ -101,9 +103,9 @@ def _aktions_codes() -> set[str]:
 
 
 def test_w11_je_aktions_code_ein_wirkungs_beleg():
-    """E5.4: jeder Aktions-Code des Katalogs (18) hat einen Wirkungs-Test; jeder Beleg existiert."""
+    """E5.4: jeder Aktions-Code des Katalogs (19 seit 16.11.2026) hat einen Wirkungs-Test; jeder Beleg existiert."""
     codes = _aktions_codes()
-    assert len(codes) == 18
+    assert len(codes) == 19
     fehlt = sorted(codes - set(WIRKUNG_JE_CODE))
     assert not fehlt, f"Aktions-Code ohne Wirkungs-Test je Code (W-11, H-E5-3): {fehlt}"
     assert not set(WIRKUNG_JE_CODE) - codes, f"verwaiste Einträge: {sorted(set(WIRKUNG_JE_CODE) - codes)}"
