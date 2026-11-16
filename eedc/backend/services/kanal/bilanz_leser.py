@@ -111,6 +111,12 @@ async def _stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
     return await gemerkt(db, ("bilanz_stamm", anlage_id), _laden)
 
 
+async def bilanz_stamm(db: AsyncSession, anlage_id: int) -> _Stamm:
+    """Der öffentliche Zugang zu den Stammdaten der Bilanz (``anlage``, ``invs``, ``eintraege``) — für Leser außerhalb
+    dieser Datei (N-799 F12: ``kanal/stillstand.py`` griff auf ``_stamm`` zu)."""
+    return await _stamm(db, anlage_id)
+
+
 def _dc_grund(invs: Iterable, aktiv) -> Optional[str]:
     """Messpunkt-Vertrag (iii) der Wandlungsverluste (N-588): ein im Zeitraum aktiver DC-gekoppelter Speicher —
     ``dc_speicher`` bei gepflegter Kopplung, ``dc_speicher_angenommen``, wenn sie aus der Zuordnung zum Wechselrichter
@@ -501,12 +507,17 @@ def mische_verworfen(verworfen: Optional[dict]) -> dict:
 
 def mische_bilanz(kanal, stunden):
     """B-3/D4: Mengen, Gesamtverbrauch, Eigenverbrauch und Quoten aus dem Kanal-Tag; die stundengepaarten Größen
-    (Direktverbrauch, Überschuss, Defizit), der WP-Strom und die Zahl der Stunden aus den Stundenzeilen."""
+    (Direktverbrauch, Überschuss, Defizit) samt ihrem Kennzeichen (N-799 E-5: ``stundenpaarung``,
+    ``mindest_netzladung_kwh``, ``paarung_zeilen``), der WP-Strom und die Zahl der Stunden aus den Stundenzeilen."""
     return dataclasses.replace(
         kanal, direktverbrauch_kwh=stunden.direktverbrauch_kwh, ueberschuss_kwh=stunden.ueberschuss_kwh,
         defizit_kwh=stunden.defizit_kwh, wp_strom_kwh=stunden.wp_strom_kwh, stunden=stunden.stunden,
         # E4d: mit dem WP-Strom seine Marke „gemessen" (eine gemessene 0 ist erfasst, Bauplan §8a).
         wp_erfasst=getattr(stunden, "wp_erfasst", False),
+        # N-799 E-5: mit den stundengepaarten Größen ihr Kennzeichen (Fenster-Rechnung / nicht rechenbar).
+        stundenpaarung=getattr(stunden, "stundenpaarung", kanal.stundenpaarung),
+        mindest_netzladung_kwh=getattr(stunden, "mindest_netzladung_kwh", None),
+        paarung_zeilen=getattr(stunden, "paarung_zeilen", ()),
     )
 
 
@@ -657,7 +668,7 @@ async def tagesdeltas(
 
 
 __all__ = [
-    "FASSUNG_WEG2", "KanalZeitraum", "TagesDeltas", "als_kanaltag", "als_monatssumme", "bilanz_ziele",
+    "FASSUNG_WEG2", "KanalZeitraum", "TagesDeltas", "als_kanaltag", "als_monatssumme", "bilanz_stamm", "bilanz_ziele",
     "ist_bilanz_schluessel", "tagesdeltas",
     "kanal_kalendermonate", "kanal_kompositionen", "kanal_monate", "kanal_tage", "lade_monats_summen", "mische_bilanz", "mische_komponenten", "mische_verworfen",
     "monate_bilanz", "monatswerte_mit_kanaelen", "tage_bilanz", "waehle_und_komponiere",

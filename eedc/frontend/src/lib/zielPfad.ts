@@ -11,7 +11,7 @@
 import type { CheckZiel } from '../api/datenChecker'
 
 /** Reihenfolge der Parameter im Pfad (`kategorien.ZIEL_PARAMETER`). */
-export const ZIEL_PARAMETER = ['erfassen', 'bearbeiten', 'neu', 'tarif', 'art', 'ab', 'geraet', 'feld', 'karte', 'plan', 'wizard']
+export const ZIEL_PARAMETER = ['erfassen', 'bearbeiten', 'neu', 'tarif', 'art', 'ab', 'geraet', 'feld', 'karte', 'plan', 'wizard', 'befund']
 
 export function zielPfad(ziel: CheckZiel | null | undefined): string | null {
   if (!ziel) return null
@@ -23,3 +23,14 @@ export function zielPfad(ziel: CheckZiel | null | undefined): string | null {
   }
   return `/einstellungen/${ziel.bereich}${teile.length ? `?${teile.join('&')}` : ''}`
 }
+
+/**
+ * N-799 (E-11 c): Sprung auf einen Befund des Daten-Checkers — die Seite klappt seine Kategorie auf und öffnet den
+ * Lösungsweg (`DatenCheckerTeile.tsx`, Parameter `befund`). Backend-Gegenstück `daten_checker/ziele.py::ziel_befund`.
+ */
+export function befundPfad(code: string): string {
+  return zielPfad({ bereich: 'daten', block: 'datenchecker', params: { befund: code } }) as string
+}
+
+/** Der Befund, der den Erfassungs-Stillstand und die Zähler-Rechnung der drei Tagesspalten erklärt (N-799, E-10). */
+export const BEFUND_ERFASSUNG_STILLSTAND = 'erfassung_stillstand'

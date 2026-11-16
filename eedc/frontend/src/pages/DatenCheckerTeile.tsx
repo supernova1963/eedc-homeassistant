@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { RefreshCw, ChevronRight, ChevronDown, FileText } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { LoadingSpinner, Button } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import DiagnosePaketDialog from '../components/datenchecker/DiagnosePaketDialog'
@@ -37,12 +38,14 @@ import {
  * eine Aktion), sonst zugeklappt. OK-Zeilen stehen nicht in der Liste (V1) — der Fuß «n Prüfungen bestanden» klappt sie
  * auf. Gleiche Befunde eines Codes stehen als Gruppenzeile (V2). Jede Zeile hat genau einen Handgriff (W-10).
  */
-function KategorieSektion({ kategorie, ergebnisse, ...handgriff }: HandgriffProps & {
+function KategorieSektion({ kategorie, ergebnisse, fokus, ...handgriff }: HandgriffProps & {
   kategorie: string
   ergebnisse: CheckErgebnis[]
+  /** N-799 (E-11 c): Befund-Code aus dem Link (`befund=`) — seine Kategorie ist offen (auch ein bestandener). */
+  fokus?: string | null
 }) {
-  const [open, setOpen] = useState(() => kategorieOffen(ergebnisse))
-  const [okOffen, setOkOffen] = useState(false)
+  const [open, setOpen] = useState(() => kategorieOffen(ergebnisse) || (!!fokus && ergebnisse.some((e) => e.code === fokus)))
+  const [okOffen, setOkOffen] = useState(() => !!fokus && ergebnisse.some((e) => e.code === fokus && e.schwere === 'ok'))
   const zaehlung = useMemo(() => {
     const c = { error: 0, warning: 0, info: 0, ok: 0 }
     ergebnisse.forEach((e) => { c[e.schwere] = (c[e.schwere] || 0) + 1 })
@@ -119,6 +122,20 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
   useEffect(() => {
     if (loesungsweg && !schmal) panelRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [loesungsweg, schmal])
+
+  // N-799 (E-11 c): `befund=<code>` im Link (Sprung aus einer Tabelle/Tagessicht) — die Kategorie des Befunds ist offen
+  // (`KategorieSektion`), sein Lösungsweg öffnet einmal nach dem ersten Prüflauf. Gibt es den Befund nicht, bleibt es
+  // bei der Seite.
+  const [suchParameter] = useSearchParams()
+  const befundFokus = suchParameter.get('befund')
+  const befundGeoeffnet = useRef(false)
+  useEffect(() => {
+    if (!result || !befundFokus || befundGeoeffnet.current) return
+    befundGeoeffnet.current = true
+    const treffer = result.ergebnisse.find((e) => e.code === befundFokus && e.schwere !== 'ok')
+      ?? result.ergebnisse.find((e) => e.code === befundFokus)
+    if (treffer) setLoesungsweg(treffer)
+  }, [result, befundFokus])
 
   // Nach «Anwenden»: der Satz des Laufs, dann prüft der Checker neu (der Befund verschwindet oder ändert sich, W-11).
   const nachDemLauf = (m: ReparaturMeldung) => {
@@ -247,7 +264,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
           <div className={loesungsweg && !schmal ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] items-start' : ''}>
             <div className="space-y-3">
               {kategorieReihenfolge.map((kat) => grouped[kat]?.length
-                ? <KategorieSektion key={kat} kategorie={kat} ergebnisse={grouped[kat]} {...handgriff} />
+                ? <KategorieSektion key={kat} kategorie={kat} ergebnisse={grouped[kat]} fokus={befundFokus} {...handgriff} />
                 : null)}
             </div>
             {loesungsweg && (

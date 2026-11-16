@@ -9,7 +9,9 @@ export {
   getMonatWert, getTagWert, metrikenFuer, brauchtWaermeTag,
 } from './registry'
 export type { WerteZeile } from './zeile'
-export { monatsZeile, tagesZeile, richteMonateAus } from './zeile'
+export {
+  monatsZeile, tagesZeile, richteMonateAus, PAARUNG_SPALTEN, LINK_DATEN_CHECKER, fensterFussText, ohnePaarungFussText,
+} from './zeile'
 export { vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis } from './vergleich'
 export type { AngezeigtesDelta } from './format'
 export { fmtWert, alsAngezeigt, angezeigtesDelta } from './format'

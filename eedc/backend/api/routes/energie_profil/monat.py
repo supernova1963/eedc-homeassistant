@@ -261,6 +261,8 @@ async def get_monatsauswertung(
         einspeisung_neg_preis_kwh=tz.neg_einsp_summe,
         stunden_fehlend_pv=st.stunden_fehlend_pv,
         stunden_fehlend_verbrauch=st.stunden_fehlend_verbrauch,
+        tage_mit_fenster_rechnung=mb.tage_mit_fenster_rechnung,
+        tage_ohne_stundenpaarung=mb.tage_ohne_stundenpaarung,
     )
 
 
@@ -322,7 +324,9 @@ def _stunde_sammeln(st: _Stunden, r) -> None:
         if 0 <= r.stunde < 5:
             st.nacht_verbrauch.append(verbrauch)
 
-    st.heatmap.append(_heatmap_zelle(r, pv, verbrauch, netzbezug, einspeisung))
+    # N-799 E-7: eine gebündelte Zeile (Lücke, Nachtrag eines Stillstands, Nullzeile) ist keine Stunde der Heatmap.
+    if not verbrauch_gebuendelt(r):
+        st.heatmap.append(_heatmap_zelle(r, pv, verbrauch, netzbezug, einspeisung))
     _stunde_spitzen(st, r)
 
 

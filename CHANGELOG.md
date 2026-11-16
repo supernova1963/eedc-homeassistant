@@ -52,9 +52,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   HA-Spiegel bzw. den eigenen Zählerständen kommen: in *Cockpit → Tag* steht an der Stunde mit der nachgetragenen Energie
   „· enthält n h“ und an den stillen Stunden „· in späterer Zeile“ (mit Erklärung im Tooltip, ebenso im Tagesverlauf);
   Überschuss und Defizit dieser Stunden bleiben leer. Was Stunde gegen Stunde vergleicht, lässt diese Stunden aus: die
-  Spitzen und das typische Tagesprofil in *Cockpit → Monat*, die Verbrauchsprognose (Tagesprognose und HA-Sensoren),
-  Grundlast, Verbrauchsprofil, Lernfaktor der PV-Prognose, Speicher-Potenzial und -Größe sowie der Ladepreis aus dem Netz.
-  Tages- und Monatssummen bleiben gleich. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
+  Spitzen, die Heatmap und das typische Tagesprofil in *Cockpit → Monat*, die Verbrauchsprognose (Tagesprognose und
+  HA-Sensoren), Grundlast, Verbrauchsprofil, Lernfaktor der PV-Prognose, Speicher-Potenzial und -Größe sowie der Ladepreis
+  aus dem Netz; der Tagesvergleich lässt jeden Tag aus, den ein Stillstand über Mitternacht berührt.
+  Die Zählermengen der Tage und Monate (Erzeugung, Einspeisung, Netzbezug, Verbrauch, Speicher) bleiben gleich.
+  **Überschuss, Defizit und Direktverbrauch des Tages** waren an solchen Tagen dagegen falsch
+  (die Mengen mehrerer Stunden wurden wie eine Stunde gegeneinander gerechnet — etwa Überschuss 0 bei 8 kWh Einspeisung):
+  für die Stunden ohne Stundenwerte rechnet eedc sie jetzt aus den Zählerständen. Die Zahl trägt in der Tagestabelle das
+  Zeichen „geschätzt“, darunter steht, für welche Stunden das gilt, mit dem Link „Im Daten-Checker nachlesen“; *Cockpit → Tag*
+  nennt es unter der Bilanz. Passen die nachgetragenen Mengen nicht zu denselben Stunden, steht „—“ mit dem Grund, und die
+  Summe des Zeitraums sagt, wie viele Tage sie enthält bzw. auslässt. Der Ladepreis aus dem Netz sagt an einem solchen Tag
+  „nicht bestimmbar (Erfassungslücke)“ statt „keine Netzladung“. Erkannt wird nur der Stillstand aller Zähler zugleich, ab zwei Stunden; wiederholt
   er sich auffällig oft (mehr als fünf Mal in 60 Tagen) oder sind die Zähler grob aufgelöst, gilt er nicht als Ausfall.
 - **Anlage bearbeiten: die Koordinaten aus der Adresse berücksichtigen die Straße.** Das Formular ermittelte Breiten-
   und Längengrad nur aus PLZ und Ort — der Punkt lag damit in der Ortsmitte, je nach Gemeinde einige hundert Meter bis

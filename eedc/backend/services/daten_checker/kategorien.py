@@ -305,7 +305,7 @@ class Ziel:
 
     `bereich` = Einstellungs-Kategorie (`einstellungenKatalog.tsx`) bzw. `komponenten-hub`; `block` = Block-Id im Bereich;
     `params` = Deep-Link-Parameter (Schema Konzept §3.3: `erfassen`, `bearbeiten`, `neu`, `tarif`, `art`, `ab`, `geraet`,
-    `feld`, `karte`, `plan`, `wizard`; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
+    `feld`, `karte`, `plan`, `wizard`, seit N-799 S2 `befund` — der Sprung auf einen Befund des Checkers; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
     `anker` = das Element, auf dem der Sprung landen soll (Formular-Name, Feld-Schlüssel oder `data-karte`).
     """
     bereich: str
@@ -327,7 +327,8 @@ class Aktion:
 #: Parameter des Ziel-Schemas in der Reihenfolge, in der sie im Link stehen (Konzept §3.3; E4: volle Lesart). Jede Zielseite
 #: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
 #: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
-ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard")
+ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard",
+                  "befund")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:

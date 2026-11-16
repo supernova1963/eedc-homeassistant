@@ -253,6 +253,22 @@ Teilsumme meldete Abweichungen, die es nicht gibt. Damit ist die frühere Regel 
 („Teil-Lücke ohne Aggregat ist Lücke, keine Teilsumme") für die Anzeige-Summe aufgehoben;
 sie war die Ausnahme zu diesem Abschnitt, nicht seine Folge.
 
+**Ein Fall mit bekannter Richtung: die Zähler-Rechnung eines Erfassungs-Stillstands (N-799, 16.11.2026).** Direktverbrauch,
+Überschuss und Defizit eines Tages entstehen je Stunde aus PV und Verbrauch. Steht die Erfassung (HA-Host aus) und trägt
+danach **eine** Stunde die Mengen mehrerer, gibt es für diese Stunden keine Stundenwerte — die Paarung der Mehr-Stunden-Menge
+als eine Stunde wäre falsch, und zwar in unbekannter Höhe (12.11.2026: Überschuss 0 bei 8,3 kWh Einspeisung). eedc rechnet
+diese Stunden stattdessen aus den Zählerständen: Überschuss = min(PV, Einspeisung + Ladung), Direktverbrauch = PV − Überschuss,
+Defizit = Verbrauch − Direktverbrauch (`BERECHNUNGEN.md` «Eingefrorener Stand»). Ihre **Fehlerrichtung ist bekannt**: innerhalb
+des Fensters wird nicht saldiert, Überschuss und Defizit liegen höchstens zu hoch, der Direktverbrauch höchstens zu niedrig;
+Netzladung im Fenster erhöht Überschuss und Defizit um denselben Betrag. Nach der Tabelle oben wird ein solcher Wert also
+**beschriftet**, nicht unterdrückt (Gernot 16.11.2026: «so wenig „—" wie möglich, außer wo Werte tatsächlich fehlen;
+abgeleitete Werte zeigen einen Wert und bekommen einen Daten-Checker-Hinweis»): das Zeichen `geschaetzt` an der Zahl, der Satz
+sichtbar darunter, der Link auf den Befund im Daten-Checker. **Unterdrückt** («—») bleibt nur, wo die Richtung unbekannt ist —
+die Zähler haben ihre Mengen nicht für dieselben Stunden nachgetragen (verschiedene Spannen), oder Ladung und Entladung liegen
+nur saldiert vor. Eine Monatssumme nennt beides im Fuß: «enthält n Tage mit Zähler-Rechnung» bzw. «n Tage sind … nicht enthalten, weil für
+einzelne Stunden die Zähler nicht zusammenpassen». Ein reines PV-Bündel (Wechselrichter ohne Nachtzeilen, Tageszähler) und
+ein Bündel mit PV ≤ 0,1 kWh stellen keinen Tag auf «—» (Korrekturrunde S2, K1).
+
 **Zwei Regeln, die aus §2.5 und §2.4 folgen:**
 
 1. **Eine Differenz erbt die Unvollständigkeit jedes Summanden.** Wer aus zwei

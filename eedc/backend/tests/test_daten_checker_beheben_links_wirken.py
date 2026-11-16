@@ -278,6 +278,9 @@ def _alle_ziele() -> list[dict]:
             z = getattr(ziele, n.func.id)(*a, **kw)
             paare[link_aus_ziel(z)] = asdict(z)
     paare["/komponenten/speicher?geraet=1"] = asdict(ziele.ziel_komponente(1, typ="speicher", jahresbilanz=True))
+    # N-799 S2 (E-11 c): der Sprung auf einen Befund — Ziel-Bauer ohne Erzeuger-Stelle, mit einem bestehenden Code.
+    z = ziele.ziel_befund("zaehler_versatz")
+    paare[link_aus_ziel(z)] = asdict(z)
     return [{"ziel": z, "pfad": p} for p, z in sorted(paare.items())]
 
 

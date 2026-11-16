@@ -150,17 +150,19 @@ def _als_sizing_stunde(zeile: TagesEnergieProfil) -> SizingStunde:
     am Layer (`kalibriere_speicher`).
     """
     # Zählerlücken wie HA (§2): eine gebündelte Batterie- bzw. Netzbezug-Menge
-    # (mehr als eine reale Stunde) ist keine Stundenmenge — wie `None`.
-    from backend.core.berechnungen.spannen import zeile_gebuendelt
+    # (mehr als eine reale Stunde) ist keine Stundenmenge — wie `None`. N-799 E-7: ebenso PV, Einspeisung und der
+    # gebildete Verbrauch (Nachtrag eines Erfassungs-Stillstands, Nullzeilen n = 0) — der Tag fällt damit aus der
+    # Simulation (`_vollstaendige_tage`), statt ein Mehr-Stunden-Bündel als eine Stunde zu simulieren.
+    from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 
     return SizingStunde(
         zeit=datetime.combine(zeile.datum, datetime.min.time())
         + timedelta(hours=zeile.stunde),
-        pv_kwh=zeile.pv_kw,
-        verbrauch_kwh=zeile.verbrauch_kw,
+        pv_kwh=None if zeile_gebuendelt(zeile, "pv") else zeile.pv_kw,
+        verbrauch_kwh=None if verbrauch_gebuendelt(zeile) else zeile.verbrauch_kw,
         soc_prozent=zeile.soc_prozent,
         batterie_kwh=None if zeile_gebuendelt(zeile, "batterie") else zeile.batterie_kw,
-        einspeisung_kwh=zeile.einspeisung_kw,
+        einspeisung_kwh=None if zeile_gebuendelt(zeile, "einspeisung") else zeile.einspeisung_kw,
         netzbezug_kwh=None if zeile_gebuendelt(zeile, "netzbezug") else zeile.netzbezug_kw,
         kw_backward=zeile_traegt_backward_kw(zeile),
     )

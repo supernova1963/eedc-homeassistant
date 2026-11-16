@@ -339,6 +339,11 @@ def abgeschlossen(tag: date, jetzt: int) -> bool:
     return tagesfenster(tag)[1] <= soll_ende(jetzt)
 
 
+def db_marke(db) -> int:
+    """Die Marke der Datenbank einer Sitzung — öffentlicher Zugang für Speicher außerhalb dieser Datei (N-799 F12)."""
+    return _db_marke(db)
+
+
 def _db_marke(db) -> int:
     """Eine Marke je Datenbank-Engine (Proben öffnen viele Datenbanken in einem Prozess)."""
     sitzung = getattr(db, "sync_session", db)

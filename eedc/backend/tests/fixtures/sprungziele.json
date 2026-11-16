@@ -51,6 +51,17 @@
   {
    "ziel": {
     "bereich": "daten",
+    "block": "datenchecker",
+    "params": {
+     "befund": "zaehler_versatz"
+    },
+    "anker": "zaehler_versatz"
+   },
+   "pfad": "/einstellungen/daten?block=datenchecker&befund=zaehler_versatz"
+  },
+  {
+   "ziel": {
+    "bereich": "daten",
     "block": "monatsdaten",
     "params": {},
     "anker": null

@@ -3,7 +3,7 @@ Anlage aus den Bilanz-Zählern des Tagespfads, je Prozess gemerkt.
 
 **Was hier geschieht.** Die Regel steht im Layer (``core/berechnungen/spannen.py::stillstand_fenster``: E-1 mit
 Vorbedingung, Grob- und Häufigkeits-Sperre; ``erbt_marke`` für die Nebenachsen, E-2). Diese Datei liest nur die
-Eingänge: die Bilanz-Zähler der Anlage (``bilanz_leser._stamm`` — jeder Zähler, der an irgendeinem Tag zur Bilanz
+Eingänge: die Bilanz-Zähler der Anlage (``bilanz_leser.bilanz_stamm`` — jeder Zähler, der an irgendeinem Tag zur Bilanz
 gehört; ob er für einen Lauf erfasst ist, sagen seine Zeilen der 30 Tage davor) über die gefragten Monate und
 **``RUECKBLICK_TAGE`` (90) davor** (``lesen.deltas_stapel``: HAs ``change`` und die Spanne je Stunde), dazu je markierbarem
 Fenster die Zähler der Nebenachsen des Nachtragstags (``bilanz_adapter.zaehler_eintraege``). **Die Regel blickt nur
@@ -21,9 +21,11 @@ Investition, Kanal, Quelle geändert), eine andere MQTT-Schlüsselmenge oder ``V
 einer Anfrage zusätzlich der Lade-Kontext. Nichts wird gespeichert (E-8: die Marke entsteht beim Mischen,
 ``energie_profil/stillstand_marke.py``).
 
-**Benannte Grenzen:** ein Stillstand, der länger ist als ``NACHLAUF_TAGE``, trägt an Tagen, die mehr als so viele Tage vor
-seinem Ende liegen, keine Nullzeilen-Marke, wenn der gefragte Bereich vorher endet; einer länger als der Rückblick
-(90 Tage) wird abgeschnitten.
+**Benannte Grenzen:** einer länger als der Rückblick (90 Tage) wird abgeschnitten — sein ``k`` hängt dann am Lesebereich
+(Treffer ≠ Kaltlauf nur für solche Fenster). Bis zu dieser Länge nennt ein Einzeltag dieselben Nullzeilen wie jeder Bereich
+(``NACHLAUF_TAGE``, F3). Die Grob-Sperre blickt 30 Tage zurück: wird ein Zähler erst seit weniger als 30 Tagen grob
+erfasst, enthält der Rückblick noch feine Δ, und die Sperre greift noch nicht (Saat L7) — dort hält meist die
+Häufigkeits-Sperre; sonst trägt das Fenster die Marke (benannte Grenze am Wechselrand).
 
 Schwesterdateien: ``merken.py`` (die Speicher der Tage), ``lesen.py`` (``deltas_stapel``), ``stunden_leser.py``.
 """
@@ -57,7 +59,12 @@ logger = logging.getLogger(__name__)
 #: (``spannen.RUECKBLICK_S``: Häufigkeit 60 Tage + «erfasst»/Grob 30 Tage der gezählten Fenster).
 RUECKBLICK_TAGE = RUECKBLICK_S // 86400
 #: Fenster, die bis zu so viele Tage nach dem gefragten Bereich enden, werden mitgelesen (Nullzeilen am Bereichsende).
-NACHLAUF_TAGE = 7
+#: N-799 F3 (Sitzung 2): so lang wie das längste Fenster, das die Lesestelle unverkürzt findet — Rückblick plus ein
+#: Monat (ein Fenster wird im Block seines Nachtragsmonats mit ``RUECKBLICK_TAGE`` davor gerechnet). Damit nennt ein
+#: Einzeltag dieselben Nullzeilen wie jeder Bereich, der ihn enthält; bis Sitzung 1 standen hier 7 Tage, und ein
+#: Stillstand von mehr als 7 Tagen über eine Monatsgrenze fehlte am Einzeltag. Lesen kostet es nur einmal je Monat
+#: (gemerkt), und Monate nach heute sind leer.
+NACHLAUF_TAGE = RUECKBLICK_TAGE + 31
 #: Die Nebenachsen, die die Marke erben können (E-2).
 NEBENACHSEN = ("waermepumpe", "wallbox", "sonstige", "v2h")
 #: Einträge des Speichers (Monate über alle Anlagen).
@@ -169,7 +176,9 @@ async def _reihen(db: AsyncSession, zaehler: dict[str, tuple[str, Any]], von_ts:
 
 
 def _speicher_aktiv(invs: Iterable[Any]):
-    """``ts`` → hat die Anlage an diesem Tag einen aktiven Speicher? (Vorbedingung E-1)"""
+    """``ts`` → hat die Anlage an diesem Tag einen aktiven Speicher? (Vorbedingung E-1) — Investitionen vom Typ
+    ``speicher``. Benannte Grenze (F12): ein Gerät «Sonstiges» der Kategorie Speicher ist kein Bilanz-Speicher (seine
+    Mengen laufen nicht über die Batterie-Achse) und zählt hier nicht."""
     speicher = [i for i in invs if getattr(i, "typ", None) == "speicher"]
 
     def aktiv(ts: int) -> bool:
@@ -226,13 +235,13 @@ def _bloecke(monate: list[tuple[int, int]]) -> list[list[tuple[int, int]]]:
 
 
 async def _fenster_der_monate(db: AsyncSession, anlage_id: int, monate: list[tuple[int, int]]) -> list[StillstandFenster]:
-    from backend.services.kanal.bilanz_leser import _stamm
+    from backend.services.kanal.bilanz_leser import bilanz_stamm
 
-    stamm = await _stamm(db, anlage_id)
+    stamm = await bilanz_stamm(db, anlage_id)
     zaehler = await _bilanz_zaehler(db, stamm, _letzter(monate[-1]))
     if not zaehler:
         return []
-    marke, mqtt = merken._db_marke(db), await merken.mqtt_schluessel(db, anlage_id)
+    marke, mqtt = merken.db_marke(db), await merken.mqtt_schluessel(db, anlage_id)
     gefunden: dict[tuple[int, int], list] = {}
     fehl = []
     for m in monate:
@@ -273,13 +282,22 @@ async def fenster_im_bereich(db: AsyncSession, anlage_id: int, von: date, bis: d
 async def tage_mit_fenster_ueber_mitternacht(db: AsyncSession, anlage_id: int, von: date, bis: date) -> set[date]:
     """Die Tage ``von`` … ``bis``, an denen ein vor 00:00 begonnenes markierbares Fenster endet (Nachtragsstunde an D,
     Fensterbeginn vor D) — Kandidaten des Tagesvergleichs (``vergleichstage``, E-8)."""
-    out: set[date] = set()
+    return set(await erster_tag_der_fenster_ueber_mitternacht(db, anlage_id, von, bis))
+
+
+async def erster_tag_der_fenster_ueber_mitternacht(db: AsyncSession, anlage_id: int, von: date,
+                                                   bis: date) -> dict[date, date]:
+    """Je Nachtragstag D (``von`` … ``bis``) eines vor 00:00 begonnenen markierbaren Fensters der erste Tag, den das
+    Fenster berührt (der früheste, wenn mehrere an D enden) — ``vergleichstage`` lässt alle Tage dazwischen aus
+    (N-799 S2, Tagesvergleich: ein Drei-Tage-Lauf lässt nicht nur D und D − 1 aus)."""
+    out: dict[date, date] = {}
     for f in await fenster_im_bereich(db, anlage_id, von, bis):
         tag = datetime.fromtimestamp(f.nachtrag_ts).date()
         if f.von_ts < _ts(tag) and von <= tag <= bis:
-            out.add(tag)
+            erster = datetime.fromtimestamp(f.von_ts).date()
+            out[tag] = min(erster, out.get(tag, erster))
     return out
 
 
 __all__ = ["FENSTER", "NACHLAUF_TAGE", "NEBENACHSEN", "RUECKBLICK_TAGE", "fenster_im_bereich", "leeren",
-           "tage_mit_fenster_ueber_mitternacht"]
+           "erster_tag_der_fenster_ueber_mitternacht", "tage_mit_fenster_ueber_mitternacht"]

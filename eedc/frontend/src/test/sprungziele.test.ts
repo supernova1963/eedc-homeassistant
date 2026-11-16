@@ -28,6 +28,8 @@ const LESESTELLEN: Record<string, Lesestelle[]> = {
   'einstellungen/daten': [{ datei: 'hooks/useMonatErfassenDeepLink.ts', liste: 'MONAT_SPRUNG' }],
   'einstellungen/daten#monatsdaten': [BLOCK],
   'einstellungen/daten#energieprofil': [BLOCK, { datei: 'hooks/useWerkbankPlanAusUrl.ts' }],
+  // N-799 S2 (E-11 c): `befund=` — die Daten-Checker-Seite öffnet den Befund (`ziel_befund`, Client `befundPfad`).
+  'einstellungen/daten#datenchecker': [BLOCK, { datei: 'pages/DatenCheckerTeile.tsx' }],
   'einstellungen/datenquellen': [{ datei: 'v4/EinstellungenV4.tsx', liste: 'DATENQUELLEN_SPRUNG' }],
   'einstellungen/integration#import-buendel': [BLOCK, { datei: 'v4/EinstellungenV4.tsx', liste: 'WIZARD_SPRUNG' }],
   'einstellungen/integration#mqtt-broker': [BLOCK],
@@ -42,6 +44,8 @@ const LESESTELLEN: Record<string, Lesestelle[]> = {
 /** Ziel-Bauer ohne Erzeuger-Stelle (heute nur aus Aktionen erreichbar): `ziel_werkbank(karte, plan)`. */
 const OHNE_ERZEUGER: Record<string, string[]> = {
   'einstellungen/daten#energieprofil': ['block', 'karte', 'plan'],
+  // N-799 S2: `ziel_befund(code)` — Verweis aus Tagestabelle und Tagessicht, kein Befund erzeugt ihn.
+  'einstellungen/daten#datenchecker': ['befund', 'block'],
 }
 
 /** Liest die Lesestelle den Parameter? Mit Liste: `const <liste> = [… '<p>' …] as const` und die Liste geht an

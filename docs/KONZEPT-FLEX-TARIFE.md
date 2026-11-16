@@ -408,7 +408,11 @@ ist unbekannt, und eedc erfindet sie nicht (P-4: nie nach unten interpolieren). 
 das bedeutungslos; beim dynamischen Tarif ist der Fehler auf die Lückenstunden begrenzt und in der
 Richtung unbestimmt. Es gibt keinen Code-Zweig dafür: `strompreis_aggregator`,
 `ha_export_bezugspreis`, `aggregator.tages_kennzahlen` und `core/berechnungen/zeittarif.py` lesen
-die Stundenmenge wie jede andere.
+die Stundenmenge wie jede andere. **Erfassungs-Stillstand (N-799, Bauplan E-6, 16.11.2026):** dieselbe Näherung gilt für
+die Nachtragsstunde eines Stillstands — HA holt die Stunden mit unverändertem Stand nach, die Menge steht in **einer** Stunde
+(beim Lesen markiert, n = k + 1). Preis-Kanal und Kosten-Schreiber sehen die Marke nicht (Bauplan G-5); die Menge trägt den
+Preis ihrer Nachtragsstunde. Der **Ladepreis** (Netzladung × Preis, `speicher_wirtschaftlichkeit`) lässt eine gebündelte Zeile
+aus; war sie die einzige mit Netzladung, nennt er «nicht bestimmbar (Erfassungslücke)» statt «keine Netzladung» (F5).
 
 **[A-5] Viertelstunden-Slots.** Dass der Day-Ahead-Markt seit 2025 viertelstündlich rechnet, ist
 Fachkunde, nicht von uns gemessen. Die Slot-Formulierung (§2) macht das Konzept davon unabhängig;

@@ -17,8 +17,10 @@
  * Komponente ist seither nicht mehr der künftige, sondern der geltende SoT.
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
 import { Button, Checkbox, CsvExportButton } from '../ui'
+import ErfassungZustandBadge from '../ui/ErfassungZustandBadge'
 // Tabellen-SoT (Regel T): Container liefert Höhenfenster, klebenden Kopf/Fuß und
 // sichtbare Leisten. Zellen nutzen die exportierte Typo — `TableCell`/`TableHeader`
 // würden hier mit den Farbvarianten (Vorjahr grau, Delta klein) kollidieren.
@@ -28,6 +30,7 @@ import {
   WERTE_GRUPPEN, GRUPPE_LABELS,
   fmtWert, alsAngezeigt, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
   vergleichLookup, vergleichsAggregatBasis, gepaarteVergleichsZeilen,
+  LINK_DATEN_CHECKER, fensterFussText, ohnePaarungFussText,
   type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
 
@@ -290,17 +293,42 @@ export function WerteTabelle({
   // Heute trägt nur `wp_cop` einen Grund (`lib/werte/zeile.ts`); die Sammlung ist
   // trotzdem über alle Metriken gebaut, damit eine zweite Sperre sie umsonst
   // mitbekommt.
+  // N-799 (E-11 b): ein Grund mit Ziel (ein Befund erklärt ihn) gehört zu SEINER Zeile — auch an einem vorhandenen
+  // Wert (gerechnet statt gemessen, Zeichen an der Zelle); die Liste nennt dann die Zeile, die Spalten und den Link.
   const zellGruende = useMemo(() => {
-    const gesehen = new Set<string>()
+    const gesehen = new Map<string, { text: string; ziel: string | null }>()
     for (const r of rows) {
       if (!r.grund) continue
+      const mitZiel = new Map<string, { labels: string[]; ziel: string }>()
       for (const m of aktiveMetriken) {
-        if (r.wert(m.key) != null) continue
         const g = r.grund(m.key)
-        if (g) gesehen.add(`${m.label}: ${g}`)
+        const ziel = r.grundZiel?.(m.key) ?? null
+        if (!g) continue
+        if (ziel) {
+          const e = mitZiel.get(g) ?? { labels: [], ziel }
+          e.labels.push(m.label)
+          mitZiel.set(g, e)
+        } else if (r.wert(m.key) == null) {
+          gesehen.set(`${m.label}: ${g}`, { text: `${m.label}: ${g}`, ziel: null })
+        }
+      }
+      for (const [g, e] of mitZiel) {
+        const text = `${r.label} · ${e.labels.join(', ')}: ${g}`
+        gesehen.set(text, { text, ziel: e.ziel })
       }
     }
-    return [...gesehen]
+    return [...gesehen.values()]
+  }, [rows, aktiveMetriken])
+  // N-799 (E-11 b): Fuß-Hinweis der Summe — welche Tage eine Zähler-Rechnung enthalten bzw. ohne Stunden-Paarung
+  // fehlen (der Client zählt nur, er rechnet nichts). Nur, wenn eine der drei Spalten sichtbar ist.
+  const paarungFuss = useMemo(() => {
+    if (!aktiveMetriken.some((m) => rows.some((r) => r.grundZiel?.(m.key)))) return [] as string[]
+    const fenster = rows.filter((r) => r.paarung === 'fenster').length
+    const ohne = rows.filter((r) => r.paarung === 'nicht_rechenbar').length
+    const saetze: string[] = []
+    if (fenster > 0) saetze.push(fensterFussText(fenster))
+    if (ohne > 0) saetze.push(ohnePaarungFussText(ohne))
+    return saetze
   }, [rows, aktiveMetriken])
   const einheitDativ = granularitaet === 'tag' ? 'Tagen' : 'Monaten'
   const fussGrund = `Die Summenzeile zeigt keinen Vergleich: ${ohneGegenstueck} von ${rows.length} ${einheitDativ} `
@@ -496,20 +524,27 @@ export function WerteTabelle({
                   {aktiveMetriken.map((m) => {
                     const v = r.wert(m.key)
                     // S3: Wo der Layer eine Kennzahl verweigert, traegt die Zelle
-                    // den Grund als Tooltip statt eines nackten „—".
-                    const grund = v == null ? r.grund?.(m.key) ?? undefined : undefined
+                    // den Grund als Tooltip statt eines nackten „—". N-799: ein Grund
+                    // mit Befund-Ziel an einem VORHANDENEN Wert heißt «gerechnet» —
+                    // die Zelle trägt das Zeichen, der Satz steht unter der Tabelle.
+                    const zellGrund = r.grund?.(m.key) ?? undefined
+                    const geschaetzt = v != null && zellGrund != null && !!r.grundZiel?.(m.key)
+                    const grund = v == null || geschaetzt ? zellGrund : undefined
+                    const inhalt = geschaetzt
+                      ? <span className="inline-flex items-center justify-end gap-1">{fmtWert(v, m.decimals)}<ErfassungZustandBadge zustand="geschaetzt" iconOnly className="w-3.5 h-3.5" /></span>
+                      : fmtWert(v, m.decimals)
                     if (zeigeVergleich) {
                       const pv = prev ? prev.wert(m.key) : null
                       return (
                         <Fragment key={m.key}>
-                          <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{fmtWert(v, m.decimals)}</td>
+                          <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{inhalt}</td>
                           <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmtWert(pv, m.decimals)}</td>
                           {/* R19-4b: Gruppen-Trennlinie im Zeilen-Ton (gray-100/800 war im Dark-Mode unsichtbar). */}
                           <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-200 dark:border-gray-700`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                         </Fragment>
                       )
                     }
-                    return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{fmtWert(v, m.decimals)}</td>
+                    return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`} title={grund}>{inhalt}</td>
                   })}
                 </tr>
               )
@@ -554,10 +589,19 @@ export function WerteTabelle({
           Tage sind gemessen, der Monat ist abgerechnet — die Summe der Tage kann vom Monatsbetrag abweichen.
         </p>
       )}
-      {/* N-374: der Grund zu einer leeren Kennzahl-Spalte, sichtbar. */}
+      {/* N-799 (E-11 b): Fuß-Hinweis der Summe zu Tagen mit Zähler-Rechnung bzw. ohne Stunden-Paarung. */}
+      {sorted.length > 1 && paarungFuss.map((s) => (
+        <p key={s} className="text-xs text-gray-500 dark:text-gray-400">{s}</p>
+      ))}
+      {/* N-374: der Grund zu einer leeren Kennzahl-Spalte, sichtbar; N-799: mit Link auf den Befund. */}
       {zellGruende.length > 0 && (
         <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-          {zellGruende.map((g) => <li key={g}>{g}</li>)}
+          {zellGruende.map((g) => (
+            <li key={g.text}>
+              {g.text}
+              {g.ziel && <>{' '}<Link to={g.ziel} className="underline hover:text-gray-700 dark:hover:text-gray-200">{LINK_DATEN_CHECKER}</Link></>}
+            </li>
+          ))}
         </ul>
       )}
     </div>

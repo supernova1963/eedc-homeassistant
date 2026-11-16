@@ -143,6 +143,25 @@ def _als_speicher_stunde(
     )
 
 
+
+def ladung_und_netzladung(zeilen) -> tuple[float, float]:
+    """Σ Ladung und Σ Netzladung über die Stundenzeilen eines Monats. N-799 E-7: die Netzladung paart Ladung und
+    Netzbezug DERSELBEN Stunde — eine gebündelte Zeile (Lücke, Nachtrag eines Stillstands, Nullzeile) trägt sie nicht;
+    die Ladung ist eine Menge und zählt weiter."""
+    from backend.core.berechnungen.spannen import zeile_gebuendelt
+
+    ladung = 0.0
+    netz_ladung = 0.0
+    for zeile in zeilen:
+        batterie = zeile.batterie_kw
+        if batterie is None or batterie >= 0:
+            continue
+        ladung_h = -batterie
+        ladung += ladung_h
+        if not (zeile_gebuendelt(zeile, "batterie") or zeile_gebuendelt(zeile, "netzbezug")):
+            netz_ladung += netz_ladung_stunde_kwh(ladung_h, zeile.netzbezug_kw)
+    return ladung, netz_ladung
+
 async def _entladung_je_monat(
     db: AsyncSession, anlage_id: int, von: date, bis: date
 ) -> dict[tuple[int, int], float]:
@@ -258,15 +277,7 @@ async def lade_potential_auswertung(
 
         # Ladung und Netzladung je Stunde — die Netzladung ist eine Obergrenze
         # (Layer-Docstring), deshalb summiert und nicht am Monat neu gebildet.
-        ladung = 0.0
-        netz_ladung = 0.0
-        for zeile, _soc in monats_zeilen:
-            batterie = zeile.batterie_kw
-            if batterie is None or batterie >= 0:
-                continue
-            ladung_h = -batterie
-            ladung += ladung_h
-            netz_ladung += netz_ladung_stunde_kwh(ladung_h, zeile.netzbezug_kw)
+        ladung, netz_ladung = ladung_und_netzladung(z for z, _soc in monats_zeilen)
 
         spanne: Optional[SocSpanne] = soc_spanne(soc_werte)
         zyklen = vollzyklen(entladung_je_monat.get((jahr, monat)), kapazitaet_brutto_kwh)

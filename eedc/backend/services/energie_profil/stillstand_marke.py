@@ -33,10 +33,12 @@ _OHNE_PAARUNG = ("ueberschuss_kw", "defizit_kw")
 
 def stunden_der_zeile(datum: date, stunde: int) -> tuple[int, ...]:
     """Die echten Stunden (``start_ts``), die die Zeile ``stunde`` eines Kanal-Tags trägt (Beginn-Raster): eine, am
-    Herbst-Umstellungstag für die doppelte Wanduhr-Stunde beide."""
-    erste = datetime(datum.year, datum.month, datum.day, stunde, fold=0).timestamp()
-    zweite = datetime(datum.year, datum.month, datum.day, stunde, fold=1).timestamp()
-    return tuple(sorted({int(erste), int(zweite)}))
+    Herbst-Umstellungstag für die doppelte Wanduhr-Stunde beide, am Frühjahrs-Umstellungstag für die fehlende keine
+    (N-799 F11: ``timestamp()`` einer nicht existenten Wanduhr liefert eine NACHBARstunde — die leere Zeile «2 Uhr» trug
+    sonst die Marke von 1 bzw. 3 Uhr, und ein Nachtrag um 3 Uhr stand in zwei Zeilen; wie ``slot_konvention.slot_start_ts``)."""
+    wand = datetime(datum.year, datum.month, datum.day, stunde)
+    return tuple(sorted({ts for ts in (int(wand.replace(fold=f).timestamp()) for f in (0, 1))
+                         if datetime.fromtimestamp(ts) == wand}))
 
 
 def markiere(datum: date, zeilen: Iterable, fenster: Iterable[StillstandFenster]) -> None:
@@ -52,10 +54,8 @@ def markiere(datum: date, zeilen: Iterable, fenster: Iterable[StillstandFenster]
             continue
         n, achsen = marke
         z.spannen = {**(z.spannen or {}), **{a: n for a in sorted(achsen)}}
-        kanal = object.__getattribute__(z, "_kanal")
         for feld in _OHNE_PAARUNG:
-            if feld in kanal:
-                kanal[feld] = None
+            z.setze_kanal_feld(feld, None)
 
 
 async def markiere_stillstand(db: AsyncSession, anlage_id: int, je_tag: Mapping[date, list]) -> Mapping[date, list]:

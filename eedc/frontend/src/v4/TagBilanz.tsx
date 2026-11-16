@@ -19,6 +19,9 @@ import FormelTooltip from '../components/ui/FormelTooltip'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { VerteilungsBalken } from '../components/blocks'
+import HerkunftZeile from '../components/blocks/HerkunftZeile'
+import { BEFUND_ERFASSUNG_STILLSTAND, befundPfad } from '../lib/zielPfad'
+import { LINK_DATEN_CHECKER } from '../lib/werte'
 import { Parkbar } from '../components/park'
 import { DATENROLLE, AMPEL_TEXT_CLASS } from '../lib'
 import { BilanzKachel } from '../components/blocks/GrundlastSollIstKachel'
@@ -366,6 +369,19 @@ export function TagBilanz({
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {wtStats.count} {wochentagName}{wtStats.count !== 1 ? '-Tagen' : '-Tag'} (letzte 90 Tage)
           </p>
+        )}
+        {/* N-799 (E-11 b): Direktverbrauch, Überschuss, Defizit eines Tages mit Zähler-Rechnung bzw. ohne
+            Stunden-Paarung — sichtbar, mit dem Befund im Daten-Checker (Style-Guide A7). */}
+        {t.stundenpaarung_grund && (
+          <HerkunftZeile
+            className="mt-2"
+            herkunft={{
+              zustand: t.stundenpaarung === 'fenster' ? 'geschaetzt' : 'fehlt',
+              bezug: 'Direktverbrauch, Überschuss, Defizit',
+              hinweis: t.stundenpaarung_grund,
+            }}
+            ziel={{ pfad: befundPfad(BEFUND_ERFASSUNG_STILLSTAND), text: LINK_DATEN_CHECKER }}
+          />
         )}
       </Parkbar>
 

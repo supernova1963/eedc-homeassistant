@@ -98,6 +98,12 @@ class Mischzeile:
             return getattr(object.__getattribute__(self, "_vorwaerts"), name, None)
         return getattr(object.__getattribute__(self, "_zeile"), name, None)
 
+    def setze_kanal_feld(self, name: str, wert) -> None:
+        """Ein Feld setzen, das die Zeile aus den Kanälen trägt (sonst nichts) — N-799: die Marke beim Mischen."""
+        kanal = object.__getattribute__(self, "_kanal")
+        if name in kanal:
+            kanal[name] = wert
+
 
 def aus_kanal_gruppe(zeile: Any, feld: str) -> bool:
     """Trägt die Zeile ``feld`` aus einer Kanal-Gruppe (Mischzeile, Gruppe mit Wahl ``kanal``)? Dann ist ein leerer Wert
@@ -345,14 +351,14 @@ async def _kanal_tage_ab_erstem_stand(db: AsyncSession, anlage_id: int, von: dat
 
 async def kanaele_der_achse(db: AsyncSession, anlage_id: int, von: date, bis: date, achse: str) -> set[str]:
     """Die Kanal-Schlüssel, deren Spannen die Achse ``achse`` einer Mischzeile tragen können: die Zähler mit
-    ``achse_der_kategorie(kategorie) == achse`` — Bilanz-Achsen aus dem Bilanz-Stamm (``bilanz_leser._stamm``, dieselben
+    ``achse_der_kategorie(kategorie) == achse`` — Bilanz-Achsen aus dem Bilanz-Stamm (``bilanz_leser.bilanz_stamm``, dieselben
     Einträge wie ``tage_bilanz``), Geräte-Achsen aus allen Zählern des Tages (``bilanz_adapter.zaehler_eintraege``, wie
     ``stunden_leser._tageszaehler``) — über jede Menge aktiver Investitionen ``von`` … ``bis`` (eine Obermenge je Tag)."""
     from backend.core.berechnungen.spannen import achse_der_kategorie
     from backend.services.kanal.bilanz_adapter import BILANZ_ACHSEN, zaehler_eintraege
-    from backend.services.kanal.bilanz_leser import _stamm
+    from backend.services.kanal.bilanz_leser import bilanz_stamm
 
-    stamm = await _stamm(db, anlage_id)
+    stamm = await bilanz_stamm(db, anlage_id)
     stichtage = {von} | {t for i in stamm.invs for t in (i.anschaffungsdatum,
                          i.stilllegungsdatum + timedelta(days=1) if i.stilllegungsdatum else None)
                          if t is not None and von < t <= bis}
@@ -1548,11 +1554,14 @@ UEBERSCHUSS_FELDER = ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw",
 def _ueberschuss_defizit(zeilen: Sequence[Any], tageszeilen_form: bool) -> tuple[Optional[float], Optional[float]]:
     """Überschuss und Defizit eines Kanal-Tags aus seinen Mischzeilen (``bilanz_aus_stundenrows``, Σ max(0, PV − Verbrauch)
     je Stunde) — ``(None, None)`` ohne PV oder Verbrauch (wie ``tage-werte``). ``tageszeilen_form``: wie ``aggregate_day``
-    sie in die Tageszeile schrieb (zwei Stellen, 0 ⇒ ``None``, ``aggregator.nur_positiv``)."""
-    from backend.core.berechnungen.tagesbilanz import bilanz_aus_stundenrows
+    sie in die Tageszeile schrieb (zwei Stellen, 0 ⇒ ``None``, ``aggregator.nur_positiv``).
+
+    N-799 E-5: ein Tag mit Fenster-Rechnung liefert ihre Werte (Monats-Rollup, ``/tage`` und der HA-Sensor zählen ihn
+    mit); ein Tag «nicht rechenbar» (``PAARUNG_NICHT_RECHENBAR``) liefert ``(None, None)`` — wie ``tage-werte``."""
+    from backend.core.berechnungen.tagesbilanz import PAARUNG_NICHT_RECHENBAR, bilanz_aus_stundenrows
 
     b = bilanz_aus_stundenrows(zeilen)
-    if not (b.pv_erfasst and b.verbrauch_erfasst):
+    if not (b.pv_erfasst and b.verbrauch_erfasst) or b.stundenpaarung == PAARUNG_NICHT_RECHENBAR:
         return None, None
     if not tageszeilen_form:
         return b.ueberschuss_kwh, b.defizit_kwh

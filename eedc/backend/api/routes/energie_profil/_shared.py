@@ -318,6 +318,10 @@ class MonatsAuswertungResponse(BaseModel):
     # Ermöglicht dem Frontend, Warnhinweise zu Datenlücken anzuzeigen.
     stunden_fehlend_pv: int = 0
     stunden_fehlend_verbrauch: int = 0
+    #: N-799 E-5: Tage, deren Überschuss/Defizit/Direktverbrauch eine Fenster-Rechnung aus den Zählerständen enthält
+    #: (in den Summen) — und Tage, an denen die drei nicht rechenbar sind (NICHT in den Summen).
+    tage_mit_fenster_rechnung: int = 0
+    tage_ohne_stundenpaarung: int = 0
 
 
 class TagesZusammenfassungResponse(BaseModel):
@@ -714,6 +718,14 @@ class TagWerteResponse(BaseModel):
     # ── Tag-native Zusatzmetriken (kein Monats-Registry-Pendant) ──
     ueberschuss_kwh: Optional[float] = None
     defizit_kwh: Optional[float] = None
+    #: N-799 E-5/E-11: wie Direktverbrauch, Überschuss und Defizit entstanden sind — ``None`` = jede Stunde gepaart,
+    #: ``"fenster"`` = für die Stunden eines Erfassungs-Stillstands bzw. einer Lücke aus den Zählerständen gerechnet
+    #: (Wert vorhanden, gekennzeichnet), ``"nicht_rechenbar"`` = die drei Spalten sind ``None``. ``stundenpaarung_grund``
+    #: nennt die Stunden in Worten (``services/energie_profil/stundenpaarung.py``); ``mindest_netzladung_kwh`` ist die
+    #: Netzladung, die das Fenster mindestens trug, wenn die Begrenzung des Überschusses griff.
+    stundenpaarung: Optional[Literal["fenster", "nicht_rechenbar"]] = None
+    stundenpaarung_grund: Optional[str] = None
+    mindest_netzladung_kwh: Optional[float] = None
     peak_pv_kw: Optional[float] = None
     peak_netzbezug_kw: Optional[float] = None
     peak_einspeisung_kw: Optional[float] = None

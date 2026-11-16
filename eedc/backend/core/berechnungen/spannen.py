@@ -421,7 +421,12 @@ def _grob_index(reihe: ZaehlerReihe) -> tuple[list[int], list[int]]:
 def _grob(f: StillstandFenster, zaehler: Sequence[str], index: Mapping[str, tuple[list[int], list[int]]]) -> bool:
     """Grob-Sperre: ein erfasster Zähler mit ≥ ``GROB_MIN_POSITIVE`` positiven Δ in den 30 Tagen VOR der Nachtragsstunde
     (diese eingeschlossen), alle Vielfache von 0,1 kWh — ein Zähler in ganzen oder Zehntel-kWh friert in schwachen
-    Stunden ein, ohne dass die Erfassung steht."""
+    Stunden ein, ohne dass die Erfassung steht.
+
+    **Benannte Grenze am Wechselrand** (N-799, Saat L7): wird ein Zähler erst seit weniger als 30 Tagen grob erfasst
+    (Zähler- oder Integrationswechsel), enthält der Rückblick noch feine Δ, und die Sperre greift erst 30 Tage nach dem
+    Wechsel. Dazwischen hält meist die Häufigkeits-Sperre; sonst trägt ein solches Fenster die Marke (eine Fenster-
+    Rechnung an einem Tag, der keine braucht — Richtung bekannt, siehe ``tagesbilanz``)."""
     for key in zaehler:
         ts_pos, nicht_vielfach = index[key]
         lo = bisect_left(ts_pos, f.nachtrag_ts - GROB_RUECK_S)
@@ -446,6 +451,10 @@ def stillstand_fenster(reihen: Mapping[str, ZaehlerReihe], *,
     gleich ob selbst häufig gesperrt, **ohne die grob gesperrten** — ein grober Zähler ist kein Stillstand der Erfassung,
     und seine Fenster sind schon gesperrt; zählten sie mit, sperrten sie den ersten echten Stillstand nach dem Wechsel auf
     einen feinen Zähler. Markiert wird nur ``sperre is None``.
+
+    **Benannte Grenze (F12):** ein Zähler, dessen erste Zeile überhaupt erst im Lauf oder in der Nachtragsstunde liegt (neu
+    zugeordnet, erste Stunde seiner Statistik), ist für diesen Lauf nicht erfasst und bleibt außer Betracht — das Fenster
+    der übrigen Zähler steht unverändert (Probe ``test_n799_s2_leser.py::test_neuer_zaehler_im_lauf_bleibt_ausser_betracht``).
 
     **Nur rückwärts:** das Ergebnis eines Fensters hängt nur von den Zeilen bis zu seiner Nachtragsstunde ab, höchstens
     ``RUECKBLICK_S`` zurück — ein späteres Fenster oder eine spätere Pause ändert ein früheres nie, und wer so viel Rand vor

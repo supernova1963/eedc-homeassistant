@@ -34,7 +34,7 @@ from .kategorien import Ziel
 
 __all__ = [
     "BLOCK_IDS", "WIZARDS", "ziel_anlage", "ziel_block", "ziel_datenquelle", "ziel_komponente", "ziel_monat",
-    "ziel_datenquelle_schluessel", "ziel_monat_label", "ziel_tarif", "ziel_werkbank",
+    "ziel_datenquelle_schluessel", "ziel_monat_label", "ziel_tarif", "ziel_werkbank", "ziel_befund",
 ]
 
 #: Kategorie → Block-Ids, wörtlich aus `einstellungenKatalog.tsx` (`komponenten` ist datengetrieben, ohne Katalog-Block).
@@ -176,6 +176,17 @@ def ziel_anlage(feld: str) -> Ziel:
 def ziel_werkbank(karte: str = "werkbank", plan: Optional[str] = None) -> Ziel:
     """Energieprofil-Pflege, zur Reparatur-Werkbank gesprungen (`karte=werkbank`); `plan=<id>` liest die Werkbank ab E3."""
     return Ziel("daten", "energieprofil", _ohne_none(karte=karte, plan=plan), anker=karte)
+
+
+def ziel_befund(code: str) -> Ziel:
+    """N-799 (E-11 c): der Daten-Checker, aufgeklappt beim Befund ``code`` mit offenem Lösungsweg (``befund=``). Für
+    Verweise AUS Sichten (Tagestabelle, Tagessicht) auf den Befund, der einen gekennzeichneten Wert erklärt — der Client
+    bildet denselben Pfad (``lib/zielPfad.ts::befundPfad``). Nur ein Code aus dem Katalog (``handgriffe.HANDGRIFFE``)."""
+    from .handgriffe import HANDGRIFFE
+
+    if code not in HANDGRIFFE:
+        raise ValueError(f"Daten-Checker-Ziel: Befund {code!r} steht nicht im Katalog")
+    return Ziel("daten", "datenchecker", {"befund": code}, anker=code)
 
 
 #: Assistenten, die ein Ziel öffnen darf (`wizard=`, E4): Schlüssel aus `frontend/src/v4/wizardHost.ts::WizardKey`, je

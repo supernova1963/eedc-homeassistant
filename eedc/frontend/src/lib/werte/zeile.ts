@@ -9,6 +9,10 @@ import { MONAT_KURZ, WT_KURZ } from '../constants'
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 import { getMonatWert, getTagWert } from './registry'
+import { BEFUND_ERFASSUNG_STILLSTAND, befundPfad } from '../zielPfad'
+
+/** N-799: die drei stundengepaarten Tagesspalten — ihr Kennzeichen (`TagWerte.stundenpaarung`) gilt für alle drei. */
+export const PAARUNG_SPALTEN: readonly string[] = ['direktverbrauch', 'ueberschuss_kwh', 'defizit_kwh']
 
 export interface WerteZeile {
   /** Eindeutige Zeilen-ID (React-key). */
@@ -56,6 +60,14 @@ export interface WerteZeile {
    * zu messen. Der Bau bleibt richtig, seine Begruendung ist es jetzt auch.
    */
   grund?: (key: string) => string | null
+  /**
+   * N-799 (E-11 b/c): wohin ein Grund verweist (Pfad auf den Befund im Daten-Checker) — nur Gründe, die ein Befund
+   * erklärt. Ein Grund an einem **vorhandenen** Wert heißt «gerechnet, nicht gemessen» (`WerteTabelle` setzt das Zeichen
+   * `geschaetzt` an die Zelle); die Liste unter der Tabelle nennt dann die Zeile vor dem Satz und den Link.
+   */
+  grundZiel?: (key: string) => string | null
+  /** N-799 (E-11 b): Kennzeichen der drei stundengepaarten Spalten der Zeile (Fuß-Hinweis der Summe). */
+  paarung?: 'fenster' | 'nicht_rechenbar' | null
 }
 
 /** Monats-Zeitreihe → normalisierte Zeile. */
@@ -104,5 +116,26 @@ export function tagesZeile(r: TagWerte): WerteZeile {
     zeitRechts: `${dd}.${mm}.`,
     vergleichKey: y * 10000 + m * 100 + d,
     wert: (key) => getTagWert(r, key),
+    // N-799: Überschuss, Defizit, Direktverbrauch eines Tages mit Fenster-Rechnung bzw. ohne Stunden-Paarung.
+    grund: (key) => (PAARUNG_SPALTEN.includes(key) ? r.stundenpaarung_grund ?? null : null),
+    grundZiel: (key) => (PAARUNG_SPALTEN.includes(key) && r.stundenpaarung_grund
+      ? befundPfad(BEFUND_ERFASSUNG_STILLSTAND) : null),
+    paarung: r.stundenpaarung ?? null,
   }
+}
+
+/** N-799 (E-11 b/c): Link-Text zum Befund, der einen Grund erklärt (Tabelle und Tagessicht). */
+export const LINK_DATEN_CHECKER = 'Im Daten-Checker nachlesen'
+
+/** N-799 (E-11 b): Fuß-Hinweis der Summe — Tage mit Zähler-Rechnung (in der Summe). */
+export function fensterFussText(n: number): string {
+  return `Überschuss, Defizit und Direktverbrauch enthalten ${n} ${n === 1 ? 'Tag' : 'Tage'} mit Zähler-Rechnung `
+    + '(Stunden ohne Stundenwerte, aus den Zählerständen gerechnet).'
+}
+
+/** N-799 (E-11 b): Fuß-Hinweis der Summe — Tage, deren drei Werte nicht bestimmbar sind (nicht in der Summe). Anwender-
+ *  Sprache statt «Stunden-Paarung» (Korrekturrunde S2, F13 a). */
+export function ohnePaarungFussText(n: number): string {
+  return `${n} ${n === 1 ? 'Tag ist' : 'Tage sind'} in Überschuss, Defizit und Direktverbrauch dieser Summe nicht `
+    + 'enthalten, weil für einzelne Stunden die Zähler nicht zusammenpassen.'
 }

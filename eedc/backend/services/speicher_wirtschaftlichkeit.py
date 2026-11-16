@@ -96,6 +96,9 @@ class EffektiverLadepreisErgebnis:
     - `"keine-netzladung"`: TEP-Stunden vorhanden, aber gar keine Netz-Lade-
       Stunde (Speicher rein PV-geladen oder nur entladen). Kein Ladepreis
       ermittelbar — UI zeigt KPI-Box mit Hinweis.
+    - `"erfassungsluecke"` (N-799 F5): keine Netz-Lade-Stunde **außerhalb** gebündelter Zeilen, aber eine gebündelte
+      Zeile (Lücke, Nachtrag eines Erfassungs-Stillstands) trug Ladung bei Netzbezug — ob und zu welchem Preis aus dem
+      Netz geladen wurde, ist nicht bestimmbar. Nicht «keine Netzladung».
     - `"keine-tep-daten"`: keine TEP-Zeilen im Zeitraum (Anlage frisch
       installiert, HA-LTS noch nicht aggregiert). `effektiver_ladepreis_cent`
       ist `None`; UI fällt auf Param-Wert oder blendet KPI aus.
@@ -226,10 +229,17 @@ async def berechne_effektiver_ladepreis(
         if z.datum >= von and z.batterie_kw is not None
         and not zeile_gebuendelt(z, "batterie") and not zeile_gebuendelt(z, "netzbezug")
     ]
+    # N-799 F5: trug eine ausgelassene gebündelte Zeile Ladung bei Netzbezug, ist «keine Netzladung» nicht belegt.
+    luecke_mit_netzladung = any(
+        z.datum >= von and z.batterie_kw is not None and z.batterie_kw < 0
+        and (zeile_gebuendelt(z, "batterie") or zeile_gebuendelt(z, "netzbezug"))
+        and netz_ladung_stunde_kwh(-z.batterie_kw, z.netzbezug_kw) > 0
+        for z in alle
+    )
 
     if not rows:
         return EffektiverLadepreisErgebnis(
-            quelle="keine-tep-daten",
+            quelle="erfassungsluecke" if luecke_mit_netzladung else "keine-tep-daten",
             effektiver_ladepreis_cent=None,
             netz_lade_kwh=0.0,
             netzlade_stunden_mit_preis=0,
@@ -303,7 +313,7 @@ async def berechne_effektiver_ladepreis(
     # Keine Netz-Ladestunden im Fenster (reiner PV-Speicher oder nur Entladung).
     if netzlade_stunden_gesamt == 0:
         return EffektiverLadepreisErgebnis(
-            quelle="keine-netzladung",
+            quelle="erfassungsluecke" if luecke_mit_netzladung else "keine-netzladung",
             effektiver_ladepreis_cent=None,
             netz_lade_kwh=0.0,
             netzlade_stunden_mit_preis=0,

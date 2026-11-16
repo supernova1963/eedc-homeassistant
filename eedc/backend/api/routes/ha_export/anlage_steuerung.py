@@ -26,7 +26,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from backend.core.zahlenformat import fmt_zahl
-from backend.core.berechnungen.spannen import verbrauch_gebuendelt
+from backend.core.berechnungen.spannen import verbrauch_gebuendelt, zeile_gebuendelt
 
 from backend.core.berechnungen.fenster import (
     arbitrage_vorschlag,
@@ -212,6 +212,12 @@ def _ende(zeile) -> str:
     from backend.core.berechnungen.slot_konvention import stundenbeginn_der_zeile
 
     return _hhmm((stundenbeginn_der_zeile(zeile) + 1) % SLOTS_JE_TAG)
+
+
+def netzbezug_stundenmittel(zeilen) -> list:
+    """``(zeile, netzbezug_kw)`` der Stunden mit Netzbezug — Attribute der Netzbezugs-Spitze (E5). N-799 E-7: eine
+    gebündelte Netzbezug-Menge (mehr oder weniger als eine reale Stunde) ist kein Stundenmittel und fällt aus."""
+    return [(z, z.netzbezug_kw) for z in zeilen if z.netzbezug_kw is not None and not zeile_gebuendelt(z, "netzbezug")]
 
 
 def _ueberschuss_jetzt_kw(zeile) -> Optional[float]:
@@ -448,7 +454,7 @@ async def steuerungs_sensoren(
 
     # ── E5 · Netzbezugs-Spitze ──────────────────────────────────────────────
     if tageszeile is not None and tageszeile.peak_netzbezug_kw is not None:
-        mittel = [(z, z.netzbezug_kw) for z in zeilen if z.netzbezug_kw is not None]
+        mittel = netzbezug_stundenmittel(zeilen)
         grundlast = next(
             (sv.value for sv in sensor_values if sv.definition.key == "eedc_grundlast_kw"),
             None,

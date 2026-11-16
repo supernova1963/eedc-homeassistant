@@ -320,15 +320,25 @@ def test_marke_der_stunde():
 @pytest.mark.parametrize("datum", [date(2026, 10, 25), date(2026, 3, 29), date(2026, 4, 5), date(2026, 9, 27)])
 def test_umstellungstag_die_doppelte_stunde_traegt_beide(datum):
     """Am Herbst-Umstellungstag trägt die Zeile der doppelten Wanduhr-Stunde zwei echte Stunden (Kanal-Tag, Stunde 2);
-    ein Fenster, das nur die zweite trifft, markiert sie trotzdem — in jeder Prozesszone (ohne Umstellung eine)."""
+    ein Fenster, das nur die zweite trifft, markiert sie trotzdem — in jeder Prozesszone (ohne Umstellung eine).
+    N-799 S2 F11: am Frühjahrs-Umstellungstag trägt die Zeile der fehlenden Wanduhr-Stunde **keine** echte Stunde (bis
+    S1 lieferte ``timestamp()`` die Nachbarstunden, die leere Zeile trug deren Marke)."""
     from backend.services.energie_profil.stillstand_marke import stunden_der_zeile
 
+    fehlend = 0
     for stunde in range(24):
         ts = stunden_der_zeile(datum, stunde)
-        erste = int(datetime(datum.year, datum.month, datum.day, stunde, fold=0).timestamp())
-        zweite = int(datetime(datum.year, datum.month, datum.day, stunde, fold=1).timestamp())
-        assert ts == tuple(sorted({erste, zweite}))
-        f = StillstandFenster(zweite, zweite + 2 * H, 2, frozenset({"pv"}))
+        wand = datetime(datum.year, datum.month, datum.day, stunde)
+        echt = {t for t in (int(wand.replace(fold=f).timestamp()) for f in (0, 1)) if datetime.fromtimestamp(t) == wand}
+        assert ts == tuple(sorted(echt))
+        if not ts:
+            fehlend += 1
+            f = StillstandFenster(int(wand.replace(fold=0).timestamp()) - H, int(wand.replace(fold=0).timestamp()) + H,
+                                  2, frozenset({"pv"}))
+            assert marke_der_stunde([f], ts) is None          # Sprengsatz: die alte Fassung markierte die leere Zeile
+            continue
+        f = StillstandFenster(ts[-1], ts[-1] + 2 * H, 2, frozenset({"pv"}))
         assert marke_der_stunde([f], ts) == (0, f.achsen)
+    assert fehlend <= 1
     tage = {datetime.fromtimestamp(t).date() for t in stunden_der_zeile(datum, 0)}
     assert tage == {datum} and datum - timedelta(days=1) not in tage

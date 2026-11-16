@@ -914,8 +914,11 @@ async def _get_lernfaktor_detail(
     # ⭐ Zählerlücken wie HA (§2, Ü2): ein Tag um ein Mitternachtsbündel mit
     # Energie (D zu niedrig, D+1 zu hoch) oder mit verworfener PV ist kein
     # Einzeltag für einen Quotienten IST/Prognose — beide fallen aus dem Pool.
+    # N-799 F6: nur der Bereich der Tage mit Prognose — die Fenster-Lesestelle des Erfassungs-Stillstands rechnet
+    # sonst kalt über die ganze Historie der Kanäle (Skalen-Kopie 3,7 s, obwohl die Prognose erst später beginnt).
     from backend.services.energie_profil.vergleichstage import tage_ohne_tagesvergleich
-    _ohne = await tage_ohne_tagesvergleich(db, anlage_id, "pv", bis=heute)
+    _ohne = (await tage_ohne_tagesvergleich(db, anlage_id, "pv", von=min(t.datum for t in alle_tage), bis=heute)
+             if alle_tage else set())
     if _ohne:
         alle_tage = [t for t in alle_tage if t.datum not in _ohne]
     # HA-Bauform S5 (§3 (A) 11–15): das PV-IST an der einen Stelle — an einem Kanal-Tag aus `kanal_tage`.

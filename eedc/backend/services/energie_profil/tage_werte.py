@@ -78,6 +78,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
+from backend.services.energie_profil.stundenpaarung import felder_der_tageszeile, paarung_rechenbar
 from backend.services.energie_profil.tage_werte_zusatz import lade_tabellen_zusatz
 from backend.services.zaehlerstaende import lade_zaehlerstaende
 
@@ -742,9 +743,10 @@ def _energie_spalten(
         gesamtverbrauch=(round(bilanz.gesamtverbrauch_kwh, 3) if bilanz.verbrauch_erfasst else None),
         # Σ min(pv, verbrauch) — braucht beide Achsen, wie die Summe selbst
         # (der Layer zählt nur Stunden mit beiden Werten).
+        # N-799 E-5: «nicht rechenbar» (gebündelte Zeile ohne gemeinsames Fenster) ⇒ keine Aussage, Grund daneben.
         direktverbrauch=(
             round(bilanz.direktverbrauch_kwh, 3)
-            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst and paarung_rechenbar(bilanz) else None
         ),
         # Quoten
         autarkie=_r(autarkie_tag, 1),
@@ -783,12 +785,14 @@ def _tagnative_spalten(*, tag, tz, bilanz, grundlast_kw, neg_preis_kwh, erzeuger
         # Summe 0 aus Mangel an Eingabe, nicht aus Ausgeglichenheit.
         ueberschuss_kwh=(
             round(bilanz.ueberschuss_kwh, 3)
-            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst and paarung_rechenbar(bilanz) else None
         ),
         defizit_kwh=(
             round(bilanz.defizit_kwh, 3)
-            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            if bilanz.pv_erfasst and bilanz.verbrauch_erfasst and paarung_rechenbar(bilanz) else None
         ),
+        # N-799 E-5/E-11: Kennzeichen der drei Spalten, Grund in Worten, Mindest-Netzladung.
+        **felder_der_tageszeile(tag, bilanz),
         peak_pv_kw=(tz.peak_pv_kw if tz else None),
         peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
         grundlast_kw=grundlast_kw,

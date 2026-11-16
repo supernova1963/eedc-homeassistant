@@ -312,6 +312,12 @@ Daraus die drei Klauseln:
 > - **Wortlaut kommt aus einer Quelle:** `lib/pvHerkunft.ts` (kWp-Verteilung, Wortlaut-SoT =
 >   Daten-Checker) bzw. `lib/prognoseHinweise.ts` (Unvollständigkeit aus den Backend-`hinweise`).
 >   Ein `hinweise`-Feld, das keine Sicht rendert, wäre dasselbe Schweigen mit mehr Code.
+> - **Ausnahme «nicht pro Zelle» in `WerteTabelle` (N-799, 16.11.2026):** in der Werte-Tabelle darf ein gerechneter Wert
+>   das Zeichen `geschaetzt` (`ErfassungZustandBadge iconOnly`) **an der Zelle** tragen — die Zeile ist ein Tag, und nur
+>   einzelne Tage sind gerechnet (Zähler-Rechnung eines Erfassungs-Stillstands). Der Erklärsatz steht **sichtbar unter der
+>   Tabelle** (Tag · Spalten: Satz) mit dem Link «Im Daten-Checker nachlesen» auf den Befund (`befund=<code>`), am Hover der
+>   Zelle derselbe Satz. Quelle des Satzes ist die Antwort (`tage-werte`, `stundenpaarung_grund`); der Client rechnet nichts.
+>   Die Tagessicht nennt denselben Satz über `HerkunftZeile` mit demselben Link.
 
 **Betroffene Issues:** Daten-Provenance-/Daten-Checker-Linie, Live-vs-LTS-Konsistenz (#135-Folge).
 

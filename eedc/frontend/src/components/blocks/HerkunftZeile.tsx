@@ -10,16 +10,19 @@
  *
  * Rendert nichts, wenn weder Titel noch Herkunft gesetzt sind.
  */
+import { Link } from 'react-router-dom'
 import ErfassungZustandBadge from '../ui/ErfassungZustandBadge'
 import type { WertHerkunft } from './types'
 
 /** Überschriften-Typografie der Zeile — geteilt von Titel und Bezugs-Label. */
 const LABEL = 'text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider'
 
-export function HerkunftZeile({ herkunft, titel, className = '' }: {
+export function HerkunftZeile({ herkunft, titel, ziel, className = '' }: {
   herkunft?: WertHerkunft
   /** Überschrift links vom Badge (z. B. der Titel des Verteilungsbalkens). */
   titel?: string
+  /** N-799 (E-11 b/c): Link hinter dem Erklärsatz — der Befund im Daten-Checker, der die Herkunft erklärt. */
+  ziel?: { pfad: string; text: string }
   className?: string
 }) {
   if (!titel && !herkunft) return null
@@ -33,7 +36,10 @@ export function HerkunftZeile({ herkunft, titel, className = '' }: {
         {herkunft?.bezug && <span className={LABEL}>{herkunft.bezug}</span>}
       </div>
       {herkunft?.hinweis && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">{herkunft.hinweis}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          {herkunft.hinweis}
+          {ziel && <>{' '}<Link to={ziel.pfad} className="underline hover:text-gray-600 dark:hover:text-gray-300">{ziel.text}</Link></>}
+        </p>
       )}
     </div>
   )

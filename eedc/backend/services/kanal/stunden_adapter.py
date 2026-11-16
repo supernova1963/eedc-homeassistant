@@ -13,7 +13,8 @@ Zählwerke), trägt der Adapter NICHT; der Aufrufer (E-S3-2) mischt sie aus der 
 
 * Mengen aus der Komposition der Stunde (``stunden_leser``, W2 je Stunde): ``pv_kw`` = PV + Erzeuger hinter dem
   Zähler, ``einspeisung_kw``, ``netzbezug_kw``; ``batterie_kw`` über ``stundenbilanz.berechne_batterie_netto_kwh`` und
-  ``energie.batterie_kw_spalte`` (Entladung positiv).
+  ``energie.batterie_kw_spalte`` (Entladung positiv); dazu (N-799 E-4) Ladung und Entladung **getrennt**
+  (``speicher_ladung_kw``/``speicher_entladung_kw``, ``FELDER_SPEICHER_RICHTUNG``) für die Fenster-Rechnung der Tagesbilanz.
 * ``verbrauch_kw`` über ``stundenbilanz.stunden_verbrauch_kwh``, nur wenn die Spannen passen
   (``spannen.verbrauch_spannen_passen``, R6).
 * ``ueberschuss_kw``/``defizit_kw`` über ``tagesbilanz.bilanz_aus_stundenrows`` auf der einen Stunde (S3-R5 — dieselbe
@@ -60,12 +61,16 @@ _STUNDE = 3600
 #: Die Felder der Stundenzeile je Gruppe.
 FELDER_BILANZ = ("pv_kw", "verbrauch_kw", "einspeisung_kw", "netzbezug_kw", "batterie_kw", "ueberschuss_kw",
                  "defizit_kw")
+#: N-799 E-4: Ladung und Entladung der Stunde **getrennt** (aus der Komposition, ``kat_summe``) — die Fenster-Rechnung
+#: der Tagesbilanz braucht beide Richtungen, ``batterie_kw`` ist saldiert. Keine Spalte der Stundenzeile (darum nicht in
+#: ``FELDER_JE_GRUPPE``, das die Mengen-Weiche als TEP-Spalten liest), nur Felder der Kanal-Zeile mit der Bilanz-Gruppe.
+FELDER_SPEICHER_RICHTUNG = ("speicher_ladung_kw", "speicher_entladung_kw")
 FELDER_JE_GRUPPE: dict[str, tuple[str, ...]] = {
     GRUPPE_BILANZ: FELDER_BILANZ, GRUPPE_WP: ("waermepumpe_kw",), GRUPPE_EMOB: ("wallbox_kw",),
     GRUPPE_SONSTIGES: (),
 }
 #: Alle Felder einer Zeile (die Stundenfelder der Spalte, ohne SoC/Preis/Wetter/Zählwerke — S3-R6).
-FELDER = (*FELDER_BILANZ, "waermepumpe_kw", "wallbox_kw", "komponenten", "spannen")
+FELDER = (*FELDER_BILANZ, *FELDER_SPEICHER_RICHTUNG, "waermepumpe_kw", "wallbox_kw", "komponenten", "spannen")
 
 _KATEGORIE_FELD = {"verbrauch_wp": "waermepumpe_kw", "ladung_wallbox": "wallbox_kw", "verbrauch_eauto": "wallbox_kw"}
 
@@ -118,7 +123,7 @@ def _bilanz_der_stunde(tag: KanalStundentag, h: int, spannen: dict[str, int]) ->
     """Die Bilanz-Felder einer Stunde aus ihrer Komposition (Layer-Funktionen, S3-R5)."""
     k = tag.bilanz.kompositionen[h] if tag.bilanz is not None else None
     if k is None:
-        return {f: None for f in FELDER_BILANZ}
+        return {f: None for f in (*FELDER_BILANZ, *FELDER_SPEICHER_RICHTUNG)}
     kat = k.kat_summe
     pv = k.bilanz.erzeugung_kwh if k.bilanz.pv_erfasst else None
     einsp = kat.get("einspeisung")
@@ -134,7 +139,8 @@ def _bilanz_der_stunde(tag: KanalStundentag, h: int, spannen: dict[str, int]) ->
                                                     netzbezug_kw=None, batterie_kw=None, waermepumpe_kw=None)])
         ueberschuss, defizit = b.ueberschuss_kwh, b.defizit_kwh
     return {"pv_kw": pv, "verbrauch_kw": verbrauch, "einspeisung_kw": einsp, "netzbezug_kw": netz,
-            "batterie_kw": batterie_kw_spalte(netto), "ueberschuss_kw": ueberschuss, "defizit_kw": defizit}
+            "batterie_kw": batterie_kw_spalte(netto), "ueberschuss_kw": ueberschuss, "defizit_kw": defizit,
+            "speicher_ladung_kw": ladung, "speicher_entladung_kw": kat.get("entladung_batterie")}
 
 
 def _geraete_der_stunde(gruppen: Sequence[GruppenStunden], h: int, komponenten: dict) -> dict:
@@ -156,6 +162,8 @@ def _geraete_der_stunde(gruppen: Sequence[GruppenStunden], h: int, komponenten: 
 def stunden_aus_kanaelen(tag: KanalStundentag, *, gerundet: bool = True) -> KanalStunden:
     """Die 24 Zeilen eines Kanal-Stundentags (``stunden_leser.kanal_stundentag``) in der Form der Stundenzeile."""
     felder = {f for g in tag.gruppen for f in FELDER_JE_GRUPPE.get(g, ())}
+    if GRUPPE_BILANZ in tag.gruppen:
+        felder |= set(FELDER_SPEICHER_RICHTUNG)
     if tag.gruppen:
         felder |= {"komponenten", "spannen"}
     alle = list(tag.gruppen.values())
@@ -175,4 +183,4 @@ def stunden_aus_kanaelen(tag: KanalStundentag, *, gerundet: bool = True) -> Kana
     return KanalStunden(tag.datum, tuple(zeilen), frozenset(felder), tag.klemm_stunden)
 
 
-__all__ = ["FELDER", "FELDER_BILANZ", "FELDER_JE_GRUPPE", "KanalStunden", "stunden_aus_kanaelen"]
+__all__ = ["FELDER", "FELDER_BILANZ", "FELDER_JE_GRUPPE", "FELDER_SPEICHER_RICHTUNG", "KanalStunden", "stunden_aus_kanaelen"]

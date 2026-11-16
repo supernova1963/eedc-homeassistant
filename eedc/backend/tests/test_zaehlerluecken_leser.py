@@ -357,7 +357,8 @@ async def test_speicher_ladepreis_laesst_gebuendelte_zeile_aus(db):
                 spannen={"batterie": 3, "netzbezug": 3}))
     await db.commit()
     r = await berechne_effektiver_ladepreis(db, anlage_id=a.id, von=d, bis=d)
-    assert r.quelle == "keine-tep-daten"
+    # N-799 F5: die ausgelassene Zeile trug Ladung bei Netzbezug — «nicht bestimmbar», nicht «keine Profildaten».
+    assert r.quelle == "erfassungsluecke" and r.effektiver_ladepreis_cent is None
 
 
 def test_speicher_sizing_und_potential_behandeln_buendel_wie_none():

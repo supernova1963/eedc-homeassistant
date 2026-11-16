@@ -160,8 +160,8 @@ async def test_lauf_ueber_mitternacht_einzeltag_gleich_bereich_und_tagesvergleic
         merken.leeren()
         with pytest.MonkeyPatch.context() as mp:
             async def _keine(*_a, **_k):
-                return set()
-            mp.setattr(stillstand, "tage_mit_fenster_ueber_mitternacht", _keine)
+                return {}
+            mp.setattr(stillstand, "erster_tag_der_fenster_ueber_mitternacht", _keine)
             ohne = await tage_ohne_tagesvergleich(ds.db, ds.aid, "pv", von=d1 - timedelta(days=3),
                                                   bis=d2 + timedelta(days=3))
     for d in (d1, d2):

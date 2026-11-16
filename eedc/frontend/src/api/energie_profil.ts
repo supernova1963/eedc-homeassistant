@@ -169,6 +169,14 @@ export interface TagWerte {
   // Tag-native Zusatzmetriken (kein Monats-Pendant)
   ueberschuss_kwh: number | null
   defizit_kwh: number | null
+  /** N-799: wie Direktverbrauch, Überschuss und Defizit entstanden sind — `null`/fehlend = jede Stunde gepaart,
+   *  `fenster` = für die Stunden eines Erfassungs-Stillstands bzw. einer Lücke aus den Zählerständen gerechnet (Wert da,
+   *  gekennzeichnet), `nicht_rechenbar` = die drei Werte sind `null`. `stundenpaarung_grund` ist der Satz dazu (Backend
+   *  `services/energie_profil/stundenpaarung.py`); `mindest_netzladung_kwh` die Netzladung, die das Fenster mindestens
+   *  trug, wenn der Überschuss auf die PV-Menge begrenzt ist. */
+  stundenpaarung?: 'fenster' | 'nicht_rechenbar' | null
+  stundenpaarung_grund?: string | null
+  mindest_netzladung_kwh?: number | null
   peak_pv_kw: number | null
   peak_netzbezug_kw: number | null
   peak_einspeisung_kw: number | null
@@ -534,6 +542,10 @@ export interface MonatsAuswertung {
   boersenpreis_avg_cent: number | null
   negative_preis_stunden: number | null
   einspeisung_neg_preis_kwh: number | null
+  /** N-799: Tage, deren Überschuss/Defizit/Direktverbrauch eine Zähler-Rechnung enthält (in den Summen), und Tage, an
+   *  denen die drei nicht rechenbar sind (nicht in den Summen). */
+  tage_mit_fenster_rechnung?: number
+  tage_ohne_stundenpaarung?: number
 }
 
 export interface VollbackfillResult {

@@ -220,6 +220,9 @@ export const LADEPREIS_QUELLE_LABELS: Record<string, string> = {
   'kein-dyn-tarif': 'Festpreis-Tarif',
   'datenbasis-zu-duenn': 'Datenbasis dünn',
   'keine-netzladung': 'keine Netzladung',
+  // N-799 F5: die Netzladung stand in einer Stunde nach einer Erfassungslücke (Mengen mehrerer Stunden in einer) —
+  // ob und zu welchem Preis aus dem Netz geladen wurde, ist nicht bestimmbar. NICHT „keine Netzladung".
+  'erfassungsluecke': 'nicht bestimmbar (Erfassungslücke)',
   'keine-tep-daten': 'keine Profildaten',
   'bezugspreis-fallback': 'Bezugspreis',
   'param': 'Parameter',

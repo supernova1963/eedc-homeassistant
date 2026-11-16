@@ -46,6 +46,7 @@ from backend.core.berechnungen.kennzahlen import (
     autarkie_prozent,
     eigenverbrauchsquote_prozent,
 )
+from backend.core.berechnungen.spannen import spanne_roh
 from backend.core.berechnungen.verbrauch import berechne_verbrauchs_kennzahlen
 
 
@@ -163,6 +164,18 @@ class TagesBilanz:
     #: Eigenverbrauch und Autarkie dieser Bilanz steckt (`mit_v2h_entladung`). Tagesgröße aus dem Rollup
     #: (`komponenten_kwh["v2h_<id>"]`) — keine Stunde trägt sie. 0.0 = keine V2H gezählt.
     v2h_entladung_kwh: float = 0.0
+    #: N-799 E-4: wie Direktverbrauch, Überschuss und Defizit entstanden sind — ``PAARUNG_VOLL`` (jede Zeile als eine
+    #: Stunde gepaart), ``PAARUNG_FENSTER`` (mindestens eine gebündelte Zeile aus den Zähler-Mengen ihres Fensters
+    #: gerechnet, `_fenster_beitrag`) oder ``PAARUNG_NICHT_RECHENBAR`` (eine gebündelte Zeile, deren Mengen nicht zu
+    #: einem gemeinsamen Fenster gehören oder deren Batterie saldiert ist — die drei Größen sind keine Aussage).
+    stundenpaarung: str = "voll"
+    #: N-799 E-4: Σ der Mindest-Netzladung der Fenster, in denen die Begrenzung griff (Einspeisung + Ladung > PV);
+    #: ``None``, wenn sie nirgends griff.
+    mindest_netzladung_kwh: Optional[float] = None
+    #: N-799: die gebündelten Zeilen, die das Kennzeichen tragen — je ``(stunde, n, raster, art)`` der Zeile (Raster wie
+    #: ``slot_konvention``, ``None`` = Bestandszeile, backward; art ``fenster``, ``ungleich`` oder ``saldiert``). Der
+    #: Leser nennt daraus die Stunden des Fensters und den passenden Satz.
+    paarung_zeilen: tuple = ()
 
 
 def gesamtverbrauch_ha_formel_kwh(
@@ -281,6 +294,92 @@ class _StundenSummen:
     wp_sum: float = 0.0
     wp_erfasst: bool = False
     n: int = 0
+    paarung: str = "voll"
+    mindest_netzladung: float = 0.0
+    paarung_zeilen: tuple = ()
+
+
+# ── N-799 E-4: gebündelte Zeilen (Erfassungs-Stillstand, Lücken-Bündel) ──────────────────────────────────────────────
+#
+# Eine Zeile, die auf einer Verbrauchs-Achse mehr als eine reale Stunde trägt, ist keine Stunde: ihre Paarung
+# Σ min(PV, Verbrauch) verrechnete die Mengen von n Stunden, als wären sie gleichzeitig angefallen (12.11.2026: 11 Stunden
+# Tag als eine Stunde ⇒ Überschuss 0 bei 8,3 kWh Einspeisung). Der Layer rechnet ihren Beitrag deshalb aus den
+# Zähler-Mengen des Fensters — eine Rechnung mit bekannter Fehlerrichtung (Überschuss und Defizit höchstens zu hoch,
+# Direktverbrauch höchstens zu niedrig: innerhalb des Fensters wird nicht saldiert; Netzladung im Fenster erhöht
+# Überschuss und Defizit um denselben Betrag).
+
+PAARUNG_VOLL = "voll"
+PAARUNG_FENSTER = "fenster"
+PAARUNG_NICHT_RECHENBAR = "nicht_rechenbar"
+#: E-4: bis zu dieser Menge (kWh) auf PV oder Verbrauch wird eine gebündelte Zeile gepaart wie eine Stunde — die
+#: Paarung ist dort exakt (eine der beiden Seiten ist ≈ 0).
+FENSTER_SCHWELLE_KWH = 0.1
+_EPS = 1e-9
+
+#: Art einer Zeile in der Paarung.
+_STUNDE = "stunde"      # gepaart wie bisher (keine Bündelung, oder unter der Schwelle)
+_LEER = "leer"          # Nullzeile eines Stillstands (n = 0): trägt nichts zur Paarung bei
+_FENSTER = "fenster"    # Fenster-Rechnung aus den Zähler-Mengen
+_NICHT = "ungleich"     # nicht rechenbar: die Mengen gehören nicht zu denselben Stunden (ungleiche n)
+_SALDIERT = "saldiert"  # nicht rechenbar: Speicher nur als Saldo, Ladung und Entladung nicht getrennt
+#: Ursache «nicht rechenbar» → Kurzname in ``paarung_zeilen`` (der Leser wählt danach den Satz).
+URSACHE_UNGLEICH = _NICHT
+URSACHE_SALDIERT = _SALDIERT
+
+_RANG = {PAARUNG_VOLL: 0, PAARUNG_FENSTER: 1, PAARUNG_NICHT_RECHENBAR: 2}
+
+
+def _ladung_entladung(r, batt: Optional[float]) -> Optional[tuple[float, float]]:
+    """Ladung und Entladung der Zeile **getrennt** (Kanal-Tag: ``speicher_ladung_kw``/``speicher_entladung_kw`` aus der
+    Komposition der Stunde, ``stunden_adapter``). Ohne Speicher in der Zeile ``(0, 0)``; ein Speicher nur als saldierte
+    Spalte ``batterie_kw`` (Bestandstag) ⇒ ``None`` — die Fenster-Rechnung braucht beide Richtungen."""
+    ladung = getattr(r, "speicher_ladung_kw", None)
+    entladung = getattr(r, "speicher_entladung_kw", None)
+    if ladung is not None or entladung is not None:
+        return float(ladung or 0.0), float(entladung or 0.0)
+    return (0.0, 0.0) if batt is None else None
+
+
+def _paarung_der_zeile(r, pv, verbrauch, einspeisung, netzbezug, batt) -> str:
+    """Art der Zeile in der Paarung (E-4, präzisiert in der Korrekturrunde S2). Maßgeblich sind die n (``spanne_roh``)
+    der Bilanz-Achsen, die in der Zeile einen Wert tragen:
+
+    * alle 1 ⇒ Stunde · eine 0 ⇒ Nullzeile (trägt nichts bei);
+    * **verschieden** ⇒ die Mengen gehören nicht zu einem gemeinsamen Fenster. Ist **nur die PV-Achse** gebündelt
+      (Einspeisung, Netzbezug, Batterie mit n = 1 bzw. ohne n — ein Wechselrichter, der nachts keine Zeilen schreibt,
+      ein Tageszähler), bleibt die Zeile wie bisher (ohne gebildeten Verbrauch nicht gepaart, kein Kennzeichen): ein
+      Zustand der Anlage, kein Erfassungs-Ausfall, und kein tägliches «—». Ist eine andere Bilanz-Achse gebündelt, ist
+      die Zeile **nicht rechenbar**, wenn ihre PV über der Schwelle liegt — bei PV ≤ 0,1 kWh (oder ohne PV) wie bisher;
+    * **gleich > 1** ⇒ unter der Schwelle (PV oder Verbrauch ≤ 0,1 kWh) gepaart wie eine Stunde, sonst Fenster-Rechnung;
+      ohne getrennte Batterie-Richtungen bei einer Batterie-Spalte nicht rechenbar."""
+    spannen = getattr(r, "spannen", None)
+    if not spannen:
+        return _STUNDE
+    n_je = {achse: spanne_roh(spannen, achse) for achse, wert in
+            (("pv", pv), ("einspeisung", einspeisung), ("netzbezug", netzbezug), ("batterie", batt)) if wert is not None}
+    ns = set(n_je.values())
+    if 0 in ns:
+        return _LEER
+    if all(n == 1 for n in ns):
+        return _STUNDE
+    if len(ns) > 1:
+        nur_pv = {a for a, n in n_je.items() if n > 1} == {"pv"}
+        return _NICHT if not nur_pv and pv is not None and pv > FENSTER_SCHWELLE_KWH else _STUNDE
+    if pv is None or verbrauch is None or pv <= FENSTER_SCHWELLE_KWH or verbrauch <= FENSTER_SCHWELLE_KWH:
+        return _STUNDE
+    return _FENSTER if _ladung_entladung(r, batt) is not None else _SALDIERT
+
+
+def _fenster_beitrag(pv: float, verbrauch: float, einspeisung: Optional[float],
+                     ladung: float) -> tuple[float, float, float, float]:
+    """**Die Fenster-Rechnung** einer gebündelten Zeile (E-4) → ``(Überschuss, Defizit, Direktverbrauch,
+    Mindest-Netzladung)``: Überschuss = min(PV, Einspeisung + Ladung) · Direkt = PV − Überschuss · Defizit = Verbrauch −
+    Direkt (= Netzbezug + Entladung, solange nicht begrenzt). Mindest-Netzladung = Einspeisung + Ladung − PV, wenn die
+    Begrenzung griff (mehr ging ins Netz und in den Speicher, als die PV erzeugte), sonst 0."""
+    abfluss = (einspeisung or 0.0) + ladung
+    ueberschuss = min(pv, abfluss)
+    direkt = pv - ueberschuss
+    return ueberschuss, verbrauch - direkt, direkt, max(0.0, abfluss - pv)
 
 
 def _stunden_summen(rows: Iterable[_StundenRow]) -> _StundenSummen:
@@ -309,6 +408,9 @@ def _stunden_summen(rows: Iterable[_StundenRow]) -> _StundenSummen:
     wp_sum = 0.0
     wp_erfasst = False
     n = 0
+    paarung = PAARUNG_VOLL
+    mindest_netzladung = 0.0
+    paarung_zeilen: list = []
 
     for r in rows:
         n += 1
@@ -344,13 +446,23 @@ def _stunden_summen(rows: Iterable[_StundenRow]) -> _StundenSummen:
             wp_sum += wp
             wp_erfasst = True
 
-        if pv is not None and verbrauch is not None:
+        art = _paarung_der_zeile(r, pv, verbrauch, einspeisung, netzbezug, batt)
+        if art == _STUNDE and pv is not None and verbrauch is not None:
             ueberschuss = pv - verbrauch
             if ueberschuss > 0:
                 ueberschuss_sum += ueberschuss
             else:
                 defizit_sum += -ueberschuss
             direkt_sum += min(pv, verbrauch)
+        elif art in (_FENSTER, _NICHT, _SALDIERT):
+            paarung = _bilde_paarung(paarung, art, r, paarung_zeilen)
+            if art == _FENSTER:
+                u_w, d_w, direkt_w, netzladung_w = _fenster_beitrag(
+                    pv, verbrauch, einspeisung, _ladung_entladung(r, batt)[0])
+                ueberschuss_sum += u_w
+                defizit_sum += d_w
+                direkt_sum += direkt_w
+                mindest_netzladung += netzladung_w
 
         if batt is not None:
             if batt < 0:
@@ -368,7 +480,19 @@ def _stunden_summen(rows: Iterable[_StundenRow]) -> _StundenSummen:
         ueberschuss_sum=ueberschuss_sum, defizit_sum=defizit_sum, direkt_sum=direkt_sum,
         batt_lade_sum=batt_lade_sum, batt_entlade_sum=batt_entlade_sum,
         wp_sum=wp_sum, wp_erfasst=wp_erfasst, n=n,
+        paarung=paarung, mindest_netzladung=mindest_netzladung, paarung_zeilen=tuple(paarung_zeilen),
     )
+
+
+def _bilde_paarung(paarung: str, art: str, r, zeilen: list) -> str:
+    """Das Kennzeichen der Bilanz nach einer gebündelten Zeile (der schwerere Zustand gewinnt) — und die Zeile
+    ``(stunde, n, raster, art)`` in ``zeilen`` (n = das größte der Bilanz-Achsen; art = ``fenster`` bzw. die Ursache
+    ``URSACHE_UNGLEICH``/``URSACHE_SALDIERT``)."""
+    spannen = getattr(r, "spannen", None) or {}
+    n = max((spanne_roh(spannen, a) for a in ("pv", "einspeisung", "netzbezug", "batterie")), default=1)
+    zeilen.append((getattr(r, "stunde", None), n, getattr(r, "raster", None), art))
+    neu = PAARUNG_FENSTER if art == _FENSTER else PAARUNG_NICHT_RECHENBAR
+    return neu if _RANG[neu] > _RANG[paarung] else paarung
 
 
 def _eigenverbrauch_je_regel(
@@ -543,6 +667,9 @@ def _bilanz_aus_summen(
         wp_erfasst=s.wp_erfasst,
         regelmarke=regelmarke,
         verworfen=verw,
+        stundenpaarung=s.paarung,
+        mindest_netzladung_kwh=s.mindest_netzladung if s.mindest_netzladung > _EPS else None,
+        paarung_zeilen=s.paarung_zeilen,
     )
 
 
@@ -576,7 +703,13 @@ def bilanz_aus_stundenrows(
       nicht mehr unterdrückt — wie in HA (G3).
 
     Direktverbrauch, Überschuss und Defizit bleiben in beiden Regeln Σ über die
-    Stunden mit (R6-)Verbrauchswert — benannte Teilsummen.
+    Stunden mit (R6-)Verbrauchswert — benannte Teilsummen. **N-799 E-4:** eine Zeile, die
+    auf einer Verbrauchs-Achse mehr als eine reale Stunde trägt (Lücken-Bündel, Nachtrag eines
+    Erfassungs-Stillstands), geht als Fenster-Rechnung aus ihren Zähler-Mengen ein
+    (`_fenster_beitrag`), unter 0,1 kWh PV oder Verbrauch als Stunde. ``nicht_rechenbar``
+    (`stundenpaarung`, der Leser zeigt «—»): ungleiche n, wenn nicht nur die PV-Achse gebündelt ist
+    und die PV der Zeile über 0,1 kWh liegt, oder eine nur saldierte Batterie bei sonst rechenbarer
+    Zeile. Ein reines PV-Bündel (schlafender Wechselrichter) bleibt wie bisher, ohne Kennzeichen.
 
     ``v2h_entladung_kwh`` (#110): die V2H-Tagesgröße aus dem Rollup — nur mit
     Regelmarke wirksam (`mit_v2h_entladung`, dort die Sperren); ``None`` = keine.
@@ -626,6 +759,10 @@ class MonatsBilanz:
     einspeisung_erfasst: bool
     netzbezug_erfasst: bool
     tage: int
+    #: N-799 E-5: Tage, deren Direktverbrauch/Überschuss/Defizit eine Fenster-Rechnung enthält (in den Summen) …
+    tage_mit_fenster_rechnung: int = 0
+    #: … und Tage, deren drei Größen nicht rechenbar sind (``PAARUNG_NICHT_RECHENBAR`` — NICHT in den drei Summen).
+    tage_ohne_stundenpaarung: int = 0
 
 
 def monatsbilanz_aus_tagen(tage: Iterable[TagesBilanz]) -> MonatsBilanz:
@@ -696,6 +833,9 @@ def monatsbilanz_aus_tagen(tage: Iterable[TagesBilanz]) -> MonatsBilanz:
     ev_quote = (
         eigenverbrauchsquote_prozent(ev, pv) if ev is not None and pv > 0 else None
     )
+    # N-799 E-5: die stundengepaarten Größen nur über die Tage, an denen sie eine Aussage sind — ein Tag
+    # «nicht rechenbar» trägt nur die Paarung seiner übrigen Stunden und fiele als zu kleine Zahl in die Summe.
+    gepaart = [t for t in alle_tage if t.stundenpaarung != PAARUNG_NICHT_RECHENBAR]
     return MonatsBilanz(
         erzeugung_kwh=pv,
         einspeisung_kwh=einsp,
@@ -706,12 +846,14 @@ def monatsbilanz_aus_tagen(tage: Iterable[TagesBilanz]) -> MonatsBilanz:
         ev_quote_prozent=ev_quote,
         speicher_ladung_kwh=sum(t.speicher_ladung_kwh for t in alle_tage),
         speicher_entladung_kwh=sum(t.speicher_entladung_kwh for t in alle_tage),
-        direktverbrauch_kwh=sum(t.direktverbrauch_kwh for t in alle_tage),
-        ueberschuss_kwh=sum(t.ueberschuss_kwh for t in alle_tage),
-        defizit_kwh=sum(t.defizit_kwh for t in alle_tage),
+        direktverbrauch_kwh=sum(t.direktverbrauch_kwh for t in gepaart),
+        ueberschuss_kwh=sum(t.ueberschuss_kwh for t in gepaart),
+        defizit_kwh=sum(t.defizit_kwh for t in gepaart),
         wp_strom_kwh=sum(t.wp_strom_kwh for t in alle_tage),
         pv_erfasst=pv_erfasst,
         einspeisung_erfasst=einsp_erfasst,
         netzbezug_erfasst=netz_erfasst,
         tage=len(tage),
+        tage_mit_fenster_rechnung=sum(1 for t in alle_tage if t.stundenpaarung == PAARUNG_FENSTER),
+        tage_ohne_stundenpaarung=len(alle_tage) - len(gepaart),
     )
