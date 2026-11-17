@@ -105,6 +105,10 @@ GRUND_BEGINNT_NACH_VON = "beginnt_nach_von"
 GRUND_ENDET_VOR_BIS = "endet_vor_bis"
 GRUND_FEINER_ALS_SPANNE = "feiner_als_spanne"
 GRUND_KEINE_ZEILE = "keine_zeile"
+#: Sensorwechsel S3 (Bauplan §7 Nr. 7): der Zeitraum berührt einen verworfenen Abschnitt (``kanal_quelle.verworfen_ts``,
+#: Korrektur eines Sensorwechsels bzw. Werkbank «Werte vor dem Sensorbeginn verwerfen») — dort fehlen Werte mit Absicht;
+#: ein Δ über ihn zählte die leere Zeit als 0 und hieße sonst «voll».
+GRUND_VERWORFEN = "verworfen"
 
 
 def soll_ende(jetzt: int) -> int:
@@ -271,7 +275,11 @@ WITH k(kid, art) AS (
 )
 SELECT p.kid, p.j,
     v.start_ts, {_wert_sql('v', 'p.art')}, {_offset_sql('p.kid', 'v.start_ts')},
-    n.start_ts, {_wert_sql('n', 'p.art')}, {_offset_sql('p.kid', 'n.start_ts')}
+    n.start_ts, {_wert_sql('n', 'p.art')}, {_offset_sql('p.kid', 'n.start_ts')},
+    (SELECT q.verworfen_ts FROM kanal_quelle q WHERE q.kanal_id = p.kid AND q.gueltig_ab <= p.t
+        ORDER BY q.gueltig_ab DESC LIMIT 1),
+    (SELECT MIN(q.gueltig_ab) FROM kanal_quelle q WHERE q.kanal_id = p.kid AND q.gueltig_ab > p.t
+        AND q.verworfen_ts IS NOT NULL)
 FROM p
 LEFT JOIN kanal_statistik v ON v.rowid = p.vor_rid
 LEFT JOIN kanal_statistik n ON n.rowid = p.nach_rid
@@ -282,16 +290,27 @@ class _Stand:
     start_ts: int
     roh: float
     offset: float
+    #: Am Zeitpunkt der Abfrage (nicht an dieser Zeile): gilt dort eine verworfene Quelle, und wann beginnt die nächste
+    #: verworfene (§7 Nr. 7) — nur am «nach»-Stand getragen, er ist je Zeitpunkt eindeutig.
+    verworfen_hier: bool = False
+    verworfen_ab: Optional[int] = None
 
     @property
     def ende(self) -> int:
         return self.start_ts + _STUNDE
 
 
-def _stand(ts, roh, offset) -> Optional[_Stand]:
+def _stand(ts, roh, offset, verworfen_hier: bool = False, verworfen_ab=None) -> Optional[_Stand]:
     if ts is None or roh is None:
         return None
-    return _Stand(int(ts), float(roh), float(offset or 0.0))
+    return _Stand(int(ts), float(roh), float(offset or 0.0), verworfen_hier,
+                  None if verworfen_ab is None else int(verworfen_ab))
+
+
+def _beruehrt_verworfen(f: Optional[_Stand], von: int, bis: int) -> bool:
+    """§7 Nr. 7: ``[von, bis)`` berührt einen verworfenen Abschnitt (die Angabe steht am «nach»-Stand von ``von``; ohne ihn
+    gibt es ab ``von`` keine Zeile — dann trägt der Zeitraum ohnehin keinen vollen Wert)."""
+    return f is not None and (f.verworfen_hier or (f.verworfen_ab is not None and f.verworfen_ab < bis))
 
 
 def _kanalwert(art: str, st: Optional[_Stand]) -> Optional[float]:
@@ -310,9 +329,9 @@ async def _randstaende_laden(db: AsyncSession, kanaele: Sequence[Kanal], grenzen
     res = await db.execute(text(_RAND_SQL), {"kanaele": _kanal_json(kanaele), "grenzen": json.dumps(list(grenzen))})
     vor: dict[tuple[int, int], Optional[_Stand]] = {}
     nach: dict[tuple[int, int], Optional[_Stand]] = {}
-    for kid, j, v_ts, v_roh, v_off, n_ts, n_roh, n_off in res.all():
+    for kid, j, v_ts, v_roh, v_off, n_ts, n_roh, n_off, vw_in, vw_naechste in res.all():
         vor[(kid, grenzen[j])] = _stand(v_ts, v_roh, v_off)
-        nach[(kid, grenzen[j])] = _stand(n_ts, n_roh, n_off)
+        nach[(kid, grenzen[j])] = _stand(n_ts, n_roh, n_off, vw_in is not None, vw_naechste)
     return vor, nach
 
 
@@ -400,6 +419,8 @@ def _zeitraum_aus(k: Kanal, von: int, bis: int, a: Optional[_Stand], f: Optional
         grund = GRUND_ENDET_VOR_BIS
     elif rand is not None and rand > bis - von:
         grund = GRUND_FEINER_ALS_SPANNE
+    elif _beruehrt_verworfen(f, von, bis):
+        grund = GRUND_VERWORFEN
     else:
         grund = None
     voll = grund is None

@@ -95,16 +95,23 @@ def tageszeile_ist_rueckwaerts(
     return False
 
 
+async def tageszeile_marken(db, anlage_id: int, datum: date, *, mit_mengen: bool = False):
+    """Die EINE Ladestelle der Marken einer Tageszeile (Sensorwechsel S3, Bauplan §9 Nr. 26): ``(source_provenance,
+    verworfen)`` — mit ``mit_mengen`` dazu ``komponenten_kwh`` (die Tages-Eingänge ``kanal_stunden.tages_eingaenge`` lesen
+    beides in einer Anweisung). Keine Zeile ⇒ ``None``."""
+    from sqlalchemy import select
+
+    from backend.models.tages_energie_profil import TagesZusammenfassung as TZ
+
+    spalten = [TZ.source_provenance, TZ.verworfen] + ([TZ.komponenten_kwh] if mit_mengen else [])
+    return (await db.execute(select(*spalten).where(TZ.anlage_id == anlage_id, TZ.datum == datum))).one_or_none()
+
+
 async def tageszeile_des_tages_ist_rueckwaerts(db, anlage_id: int, datum: date) -> bool:
     """``tageszeile_ist_rueckwaerts`` für die gespeicherte Tageszeile von ``datum`` (keine Zeile ⇒ ``False``) — dieselbe
     Frage wie ``kanal_stunden.tages_eingaenge``; Leser: die Feld-Auskunft «Kanal vor Reihe» (``kanal/feld_leser``,
     Sensorwechsel S2). Liest nur die Marken, keine Menge."""
-    from sqlalchemy import select
-
-    from backend.models.tages_energie_profil import TagesZusammenfassung
-
-    tz = (await db.execute(select(TagesZusammenfassung.source_provenance, TagesZusammenfassung.verworfen).where(
-        TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum == datum))).one_or_none()
+    tz = await tageszeile_marken(db, anlage_id, datum)
     return tageszeile_ist_rueckwaerts(tz[0] if tz else None, tz[1] if tz else None)
 
 

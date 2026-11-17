@@ -276,6 +276,12 @@ async def nachzug_anlage(
 WETTER_ALTBESTAND_KEY = "wetter_altbestand_nachzug"
 
 
+def sonstige_erzeuger_ids_von(invs: Sequence[Investition]) -> set[int]:
+    """Die «Sonstiges»-Erzeuger (BHKW …) — ohne GTI-Bezug, ihr Ertrag zählt nicht in die Performance Ratio. Auch für die
+    Neubildung der Tage einer Korrektur (``zuordnung_wechsel/korrektur_lauf.py``)."""
+    return {i.id for i in invs if i.typ == "sonstiges" and (i.parameter or {}).get("kategorie") == "erzeuger"}
+
+
 def _rund(wert, stellen: int):
     return round(wert, stellen) if wert is not None else None
 
@@ -384,10 +390,7 @@ async def wetter_nachziehen_bereich(
         select(Investition).where(Investition.anlage_id == anlage.id)
     )).scalars().all())
     pv_alle = [i for i in invs if i.typ in ("pv-module", "balkonkraftwerk")]
-    sonstige_erzeuger_ids = {
-        i.id for i in invs
-        if i.typ == "sonstiges" and (i.parameter or {}).get("kategorie") == "erzeuger"
-    }
+    sonstige_erzeuger_ids = sonstige_erzeuger_ids_von(invs)
 
     # ⭐ N-730 (12.10.2026): die Module JE TAG — dieselbe Menge wie `aggregate_day` (`aktiv_am_tag`, Audit §6.4;
     # In-Memory `ist_aktiv_an`, am Stilllegungstag noch aktiv). Bis dahin ging der ganze Bereich mit allen

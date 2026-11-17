@@ -763,11 +763,14 @@ class _Abschnitt:
 
 
 def abschnitte(quellen: list[KanalQuelle]) -> list[_Abschnitt]:
-    """Spiegel-Abschnitte eines Kanals: je Spiegel-Quelle ``[gueltig_ab, nächstes gueltig_ab)``."""
+    """Spiegel-Abschnitte eines Kanals: je Spiegel-Quelle ``[gueltig_ab, nächstes gueltig_ab)``.
+
+    Eine **verworfene** Quelle (``verworfen_ts``) liefert keinen Abschnitt (Sensorwechsel S3, Bauplan §7 Nr. 8): ihre Zeit
+    bleibt leer — der Konsistenzlauf (``neu_spiegeln``) holte sonst die Werte der falschen Quelle zurück."""
     qs = sorted(quellen, key=lambda q: q.gueltig_ab)
     out = []
     for i, q in enumerate(qs):
-        if q.familie == FAMILIE_SPIEGEL and q.statistic_id:
+        if q.familie == FAMILIE_SPIEGEL and q.statistic_id and q.verworfen_ts is None:
             out.append(_Abschnitt(q.statistic_id, q.gueltig_ab, qs[i + 1].gueltig_ab if i + 1 < len(qs) else None))
     return out
 
@@ -787,17 +790,20 @@ async def _wert_am_ende(db: AsyncSession, kanal: Kanal, abschnitt: _Abschnitt) -
 
 async def neu_spiegeln(
     sitzungen: Sitzungen, kanal_id: int, ab_ts: int, *, ha_svc, block_stunden: int = BLOCK_STUNDEN,
+    bis_ts: Optional[int] = None,
 ) -> int:
     """Spiegelzeilen eines Kanals ab ``ab_ts`` durch HAs heutige Zeilen ersetzen. Nie Bestand oder Mitschrift.
 
     Obergrenze ist die letzte Spiegelzeile zum Zeitpunkt des Plans — was danach kommt, schreibt der
-    Stundenlauf. Untergrenze des Löschens ist HAs erste Zeile des Abschnitts: was HA nicht mehr hält, bleibt.
+    Stundenlauf; ``bis_ts`` setzt sie ausdrücklich (die Korrektur eines Sensorwechsels füllt bis zur letzten vollen
+    Stunde, auch wo der Kanal danach keine Spiegelzeile mehr hat). Untergrenze des Löschens ist HAs erste Zeile des
+    Abschnitts: was HA nicht mehr hält, bleibt.
     HA unterwegs unerreichbar ⇒ Fehler, der Block wird nicht angefasst. Returns: Zahl der neu eingefügten Zeilen.
     """
     async with sitzungen() as db:
         kanal = (await db.execute(select(Kanal).where(Kanal.id == kanal_id))).scalar_one()
         quellen = list((await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal_id))).scalars().all())
-        oben = (await db.execute(select(func.max(KanalStatistik.start_ts)).where(and_(
+        oben = bis_ts if bis_ts is not None else (await db.execute(select(func.max(KanalStatistik.start_ts)).where(and_(
             KanalStatistik.kanal_id == kanal_id, KanalStatistik.familie == FAMILIE_SPIEGEL,
         )))).scalar_one_or_none()
     if oben is None or kanal.art not in (ART_SUM, ART_STAND, ART_MEAN):

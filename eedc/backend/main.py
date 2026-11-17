@@ -300,6 +300,13 @@ def _start_scheduler_und_prefetch(_cache_cold: bool, _disable_scheduler: bool) -
             asyncio.create_task(nachfuellen_nach_dem_start())
         except Exception as e:
             logger.debug(f"Kanal-Nachfüllen nicht gestartet: {e}")
+        # Sensorwechsel S3: ein unterbrochener Korrektur-Lauf (Tage neu bilden) setzt beim nächsten Tag fort.
+        try:
+            from backend.services.zuordnung_wechsel.korrektur_lauf import fortsetzen_nach_dem_start
+
+            asyncio.create_task(fortsetzen_nach_dem_start())
+        except Exception as e:
+            logger.debug(f"Korrektur-Läufe nicht fortgesetzt: {e}")
 
 
 async def _start_mqtt_gateway(host, port, mqtt_cfg: dict) -> None:

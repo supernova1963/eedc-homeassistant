@@ -10,10 +10,12 @@ Extrahiert aus `services/energie_profil_service.py` im 3d-Etappenabschluss-Tail
 (2026-05-10). Verhalten unverändert.
 """
 
+import contextvars
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Iterator, Optional
 
 from types import SimpleNamespace
 
@@ -36,6 +38,31 @@ logger = logging.getLogger(__name__)
 def _tage_zurueck(datum: date) -> int:
     """Berechnet tage_zurueck Parameter für get_tagesverlauf()."""
     return (date.today() - datum).days
+
+
+#: Sensorwechsel mit Grund (Bauplan §10 Nr. 32, Entscheid Gernot 17.11.2026): beim Neubilden der Tage einer Korrektur
+#: bleiben Wetter und Börsenpreis, wie sie gespeichert sind — **kein externer Abruf**. Gesetzt (``ohne_abruf``) liefert
+#: ``_get_wetter_ist`` nichts und ``strompreis_markt_service.get_strompreis_stunden`` (der eine Börsenpreis-Abruf: Aggregator
+#: über ``_get_strompreis_stunden``, Tagesverlauf über ``live_tagesverlauf_service``) die gespeicherten Börsenpreise der
+#: Stunden statt aWATTar; ``zuordnung_wechsel/korrektur_lauf.py`` setzt die Wetter- und Preis-Spalten danach auf den Stand
+#: vorher. Ohne den Schalter (Normalbetrieb) ändert sich nichts.
+_GESPEICHERTE_BOERSE: contextvars.ContextVar[Optional[dict[date, dict[int, float]]]] = contextvars.ContextVar(
+    "gespeicherte_boerse", default=None)
+
+
+@contextmanager
+def ohne_abruf(boerse_je_tag: dict[date, dict[int, float]]) -> Iterator[None]:
+    """Wetter und Börsenpreis aus dem Bestand statt aus dem Netz — für die Dauer des Blocks (gilt nur in dieser Aufgabe)."""
+    token = _GESPEICHERTE_BOERSE.set(boerse_je_tag)
+    try:
+        yield
+    finally:
+        _GESPEICHERTE_BOERSE.reset(token)
+
+
+def gespeicherte_boerse() -> Optional[dict[date, dict[int, float]]]:
+    """Im Block ``ohne_abruf``: die gespeicherten Börsenpreise je Tag (``None`` = Normalbetrieb, es wird abgerufen)."""
+    return _GESPEICHERTE_BOERSE.get()
 
 
 async def _get_wetter_ist(
@@ -68,7 +95,7 @@ async def _get_wetter_ist(
             "wetter_code": int,             # WMO weather code
         }}
     """
-    if not anlage.latitude or not anlage.longitude:
+    if not anlage.latitude or not anlage.longitude or _GESPEICHERTE_BOERSE.get() is not None:
         return {}
 
     # Forecast-Endpoint für heute UND die letzten ARCHIVE_LAG_TAGE

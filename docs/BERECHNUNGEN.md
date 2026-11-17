@@ -5173,6 +5173,50 @@ Messblatt S0 M-E) ist der Kanal «voll», trägt das Rückwärtsfenster aber nur
 «gemessen bis 00:00 Uhr» wie bisher; der Bereichs-Leser nimmt an diesen Tagen die Reihe (ohne Rand-Rückfall: kein Wert), wie
 vor dem Vorhaben. Proben: `test_sensorwechsel_s2_kanal_vor_reihe.py`.
 
+#### Korrektur (B-6, Sitzung 3)
+
+«Bisher war der falsche Sensor zugeordnet, seit `falsch_seit`»: für `[falsch_seit, ab)` gilt danach die richtige (heutige) Quelle.
+Ein Lauf (`zuordnung_wechsel/korrektur.py`), heute aufgerufen von der Werkbank «Werte vor dem Sensorbeginn verwerfen»
+(`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Sensors):
+
+```
+1  Wechsel-Zeile        grund = korrektur, falsch_seit_ts, ab_ts; eine Zeile ohne Grund für denselben Wechsel wird aufgehoben
+2  verwerfen in [f, ab) Kanalzeilen nur der Abschnitte, deren Quelle nicht die richtige ist · Zählerstände · MQTT-Rohstände
+                        · Feldschlüssel der Tageszeilen (Tage, deren Fenster ganz im Intervall liegt; Monate mit Abschluss bleiben)
+3  Kanal                w0  = Beginn des falschen Teils, h0 = erste HA-Zeile der richtigen Entität ab w0
+                        Versatz (R2) = Kanalwert am letzten Stand vor w0 − Stand der richtigen Quelle am selben Zeitpunkt
+                                       (führt HA ihn nicht: an h0 — die erste Stunde zählt dann 0); die leere Zeit [w0, h0) zählt 0
+                        eine Quelle [h0, …) mit diesem Versatz; spätere Quellzeilen derselben Entität entfallen, spätere andere
+                        rücken um die Änderung mit; die falsche Quelle bleibt mit verworfen_ts genau über [w0, h0);
+                        gefüllt mit neu_spiegeln ab h0 bis zum Soll-Ende
+   abgeleitete Kanäle   nur die vom Feld abhängigen (Ladezähler der Wallbox-Achse, Netzbezug, Einspeisung ⇒ PV-Anteil der
+                        Heimladung · Strom einer Wärmepumpe ⇒ deren Strom je Betriebsart · Bilanz-/PV-Zähler, Preis ⇒ Kosten ·
+                        Feld ohne bekannte Kategorie ⇒ alle) ab w0 bis zum Ende verworfen und nach dem Füllen im selben Lauf
+                        neu geschrieben (die drei Schreiber des Stundenlaufs) — kein Zeitfenster mit fehlenden Zeilen
+4  Tage                 neu gebildet (wie «Tag neu aggregieren» ohne Neu-Einlesen der Stände), die das Intervall schneiden und
+                        einen Schlüssel des Felds tragen (gleich welcher Herkunft — auch ein schon einmal neu gebildeter Tag)
+                        — auch in Monaten mit Abschluss; der ganze Tag wird neu gebildet («Neubildung des Tages»)
+                        Wetter und Börsenpreis bleiben: kein Abruf (energie_profil/_helpers.ohne_abruf), die Abruf-Spalten
+                        der Tages- und Stundenzeilen tragen danach den Stand vorher, auch ein leerer bleibt leer
+                        Einspeisung bei negativem Preis = gespeicherte Börsenpreise der Stunden × neue Einspeisung (Aggregator)
+                        Performance Ratio = neuer PV-Ertrag ÷ (gespeicherte GTI-Summe × kWp) (performance_ratio_des_tages)
+5  Merker               gemerkte Kanal-Tage und die Wechsel-Merkliste der Sitzung verworfen
+```
+
+**Lesen über einen verworfenen Abschnitt:** ein Zeitraum, der ihn berührt, ist **nicht voll** (`lesen.GRUND_VERWORFEN`) — auch
+in der Feld-Auskunft «Kanal vor Reihe»; der Konsistenzlauf vergleicht und füllt ihn nicht (`nachfuellen.abschnitte`);
+«bewusst leer» prüft die erste Zeile **je Abschnitt** (richtige Zeilen vor `w0` stören nicht); hinter einem verworfenen Abschnitt
+beginnt der Stundenlauf immer eine neue Quelle (MQTT: eine neue Periode, die am Kanalwert vor dem Abschnitt ansetzt).
+**Für die Reihe** heißt Korrektur «verwerfen, dann füllt B-0 aus der richtigen Quelle»: im Intervall liefert `quelle_am` `nachher`,
+das Heilen beim Lesen holt fehlende Ränder von dort (§8 Nr. 16) — vor einem verzeichneten Wechsel stellt sonst kein Schreiber
+eine vorhandene Zeile richtig. **Home Assistant** eingerichtet, aber nicht erreichbar ⇒ der Lauf startet nicht; ohne Home
+Assistant laufen 1, 2 (die abhängigen abgeleiteten Kanäle neu aus den übrigen Eingängen) und 5. **Endgültig:** der Rückweg ist
+eine Sicherung von Home Assistant bzw. ohne Home Assistant der eedc-Datenbank. **Vorschau = Lauf:** die Vorschau zählt die
+Zählerstände bis zum wirksamen `ab_ts` (das spätere einer aufgehobenen Zeile) und nennt dieselben Tage wie der Lauf.
+**Preis der Neubildung alter Tage:** jenseits des Recorder-Verlaufs kommt die Leistung je Stunde danach aus der
+Langzeitstatistik (Stundenmittel) — die Vorschau sagt es. Proben: `test_sensorwechsel_s3_korrektur.py`,
+`test_sensorwechsel_s3ak_proben.py`, `test_kanal_verworfen_bewusst_leer.py`.
+
 ### Tageszusammenfassung (TagesZusammenfassung)
 
 > **Kanal-Tag (S5b, E-S5-3):** `ueberschuss_kwh`/`defizit_kwh` und die `komponenten_kwh`-Schlüssel der Gruppen mit Wahl

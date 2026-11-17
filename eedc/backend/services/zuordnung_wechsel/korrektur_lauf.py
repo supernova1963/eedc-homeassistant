@@ -1,0 +1,207 @@
+"""Schritt 4 der Korrektur: die betroffenen Tage im Hintergrund neu bilden (Sensorwechsel mit Grund, Bauplan B-6 (4), §7 Nr. 10).
+
+**Zustand** je Lauf in ``settings`` unter ``korrektur_lauf:<lauf>`` (kein neues Schema): ``{anlage_id, sensor_key, tage,
+erledigt, status, fehler, behalten, beginn, ende}`` — angelegt in derselben Transaktion wie die Wechsel-Zeile, fortgeschrieben
+nach jedem Tag. Ein Neustart setzt einen Lauf mit ``status = laeuft`` beim nächsten Tag fort (``fortsetzen_nach_dem_start``,
+``main.py``). Je Tag: ``repair_orchestrator._reparatur_aggregat`` (derselbe Weg wie «Tag neu aggregieren», ohne Neu-Einlesen
+der Zählerstände — die Reihe füllt B-0 beim Lesen aus der richtigen Quelle), mit der Zuordnung zum Zeitpunkt (B-0).
+
+**Wetter und Börsenpreis bleiben** (Bauplan §10 Nr. 32, Entscheid Gernot 17.11.2026): der Tag wird **ohne externen Abruf**
+gebildet (``energie_profil._helpers.ohne_abruf`` — kein Open-Meteo, kein aWATTar; der Aggregator bleibt unverändert) und
+danach tragen Tages- und Stundenzeilen in den Abruf-Spalten (``TAG_ABRUF``, ``STUNDE_ABRUF``) **genau** den Stand vorher —
+der gespeicherte Wert gewinnt immer, auch ein leerer bleibt leer. **Die zwei daraus abgeleiteten Spalten folgen den neu
+gebildeten Mengen:** die Einspeisung bei negativem Börsenpreis rechnet der Aggregator selbst aus den gespeicherten
+Börsenpreisen der Stunden (sie gehen ihm statt des Abrufs zu) und den neuen Einspeise-Mengen; die Performance Ratio aus
+der gespeicherten GTI-Summe und dem neuen PV-Ertrag über die eine Stelle für jeden Tag
+(``kanal_stunden.performance_ratio_des_tages``, wie der Archiv-Nachzug) — nach einer Korrektur bleibt nichts aus dem
+falschen Sensor Gerechnetes stehen (§10 Nr. 31).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import date, datetime
+from typing import Any, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+
+logger = logging.getLogger(__name__)
+
+PRAEFIX = "korrektur_lauf:"
+LAEUFT, FERTIG = "laeuft", "fertig"
+
+#: Tageszeile und Stundenzeilen: die Spalten aus Abrufen (Wetter, Börsenpreis) — nach dem Neubilden wie vorher.
+TAG_ABRUF = ("temperatur_min_c", "temperatur_max_c", "strahlung_summe_wh_m2", "gti_summe_wh_m2",
+             "boersenpreis_avg_cent", "boersenpreis_min_cent", "negative_preis_stunden")
+STUNDE_ABRUF = ("temperatur_c", "globalstrahlung_wm2", "bewoelkung_prozent", "niederschlag_mm", "wetter_code",
+                "boersenpreis_cent")
+
+#: Laufende Aufgaben je Lauf (Proben warten darauf).
+_AUFGABEN: dict[str, asyncio.Task] = {}
+
+
+async def anlegen(db: AsyncSession, lauf: str, anlage_id: int, sensor_key: str, tage: list[date]) -> None:
+    from backend.models.settings import Settings
+
+    db.add(Settings(key=PRAEFIX + lauf, value={
+        "anlage_id": anlage_id, "sensor_key": sensor_key, "tage": [d.isoformat() for d in tage], "erledigt": 0,
+        "status": LAEUFT, "fehler": [], "behalten": 0, "beginn": datetime.now().replace(microsecond=0).isoformat(),
+        "ende": None}))
+    await db.flush()
+
+
+async def stand(db: AsyncSession, lauf: str) -> Optional[dict[str, Any]]:
+    """Fortschritt eines Laufs (``None`` = unbekannt)."""
+    from backend.models.settings import Settings
+
+    row = (await db.execute(select(Settings).where(Settings.key == PRAEFIX + lauf))).scalar_one_or_none()
+    return dict(row.value) if row is not None and isinstance(row.value, dict) else None
+
+
+async def _tag_vorher(db: AsyncSession, anlage_id: int, tag: date) -> tuple[Optional[dict], dict[int, dict]]:
+    from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+
+    tz = (await db.execute(select(TagesZusammenfassung).where(
+        TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum == tag))).scalar_one_or_none()
+    stunden = {r.stunde: {k: getattr(r, k) for k in STUNDE_ABRUF} for r in (await db.execute(
+        select(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum == tag)
+    )).scalars().all()}
+    return ({k: getattr(tz, k) for k in TAG_ABRUF} if tz is not None else None), stunden
+
+
+def _wie_vorher(row, alt: dict, spalten) -> int:
+    """Die Spalten auf den Stand vorher setzen (auch leer). Returns: Zahl der Werte, die der Neubau anders hatte."""
+    n = 0
+    for k in spalten:
+        if getattr(row, k) != alt.get(k):
+            setattr(row, k, alt.get(k))
+            n += 1
+    return n
+
+
+async def _performance_ratio(db: AsyncSession, anlage, tag: date, tz, zeilen: list) -> Optional[float]:
+    """Gespeicherte GTI-Summe, neuer PV-Ertrag — dieselbe Stelle wie der Archiv-Nachzug (Kanal-Tag und Bestandstag)."""
+    from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+    from backend.models.investition import Investition
+    from backend.services.energie_profil.archiv_nachzug import sonstige_erzeuger_ids_von
+    from backend.services.energie_profil.kanal_stunden import performance_ratio_des_tages
+
+    invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage.id))).scalars().all())
+    kwp = anlagen_kwp(invs, tag, mit_bkw=True, referenzwert=anlage.leistung_kwp)
+    return await performance_ratio_des_tages(db, anlage, tag, tz.gti_summe_wh_m2, kwp, zeilen=zeilen,
+                                             komponenten_kwh=tz.komponenten_kwh,
+                                             sonstige_erzeuger_ids=sonstige_erzeuger_ids_von(invs))
+
+
+async def _wetter_und_preis_wie_vorher(db: AsyncSession, anlage, tag: date, tz_alt: Optional[dict],
+                                       std_alt: dict[int, dict]) -> int:
+    """Nach dem Neubilden: Abruf-Spalten wie vorher, Performance Ratio aus ihnen neu. Returns: Zahl der gesetzten Werte."""
+    from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+
+    zeilen = list((await db.execute(select(TagesEnergieProfil).where(
+        TagesEnergieProfil.anlage_id == anlage.id, TagesEnergieProfil.datum == tag))).scalars().all())
+    n = sum(_wie_vorher(r, std_alt.get(r.stunde) or {}, STUNDE_ABRUF) for r in zeilen)
+    tz = (await db.execute(select(TagesZusammenfassung).where(
+        TagesZusammenfassung.anlage_id == anlage.id, TagesZusammenfassung.datum == tag))).scalar_one_or_none()
+    if tz is not None:
+        n += _wie_vorher(tz, tz_alt or {}, TAG_ABRUF)
+        await db.flush()
+        tz.performance_ratio = await _performance_ratio(db, anlage, tag, tz, zeilen)
+    return n
+
+
+async def _ein_tag(sitzungen, anlage_id: int, tag: date) -> int:
+    from backend.models.anlage import Anlage
+    from backend.services.energie_profil._helpers import ohne_abruf
+    from backend.services.repair_orchestrator import _reparatur_aggregat
+
+    async with sitzungen() as db:
+        anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
+        if anlage is None:
+            raise LookupError(f"Anlage {anlage_id} gibt es nicht mehr")
+        tz_alt, std_alt = await _tag_vorher(db, anlage_id, tag)
+        boerse = {h: w["boersenpreis_cent"] for h, w in std_alt.items() if w.get("boersenpreis_cent") is not None}
+        with ohne_abruf({tag: boerse}):
+            neu, _quelle = await _reparatur_aggregat(anlage, tag, db)
+        await db.flush()
+        n = 0 if neu is None else await _wetter_und_preis_wie_vorher(db, anlage, tag, tz_alt, std_alt)
+        await db.commit()
+    return n
+
+
+async def _schreibe(sitzungen, lauf: str, **werte) -> dict:
+    from backend.models.settings import Settings
+
+    async with sitzungen() as db:
+        row = (await db.execute(select(Settings).where(Settings.key == PRAEFIX + lauf))).scalar_one()
+        neu = {**(row.value or {}), **werte}
+        row.value = neu
+        flag_modified(row, "value")
+        await db.commit()
+    return neu
+
+
+async def tage_neu_bilden(sitzungen, lauf: str) -> Optional[dict]:
+    """Den Lauf vom nächsten offenen Tag an fortsetzen bis zum Ende (Fortschritt nach jedem Tag)."""
+    from backend.services.kanal import merken
+
+    async with sitzungen() as db:
+        z = await stand(db, lauf)
+    if z is None or z.get("status") != LAEUFT:
+        return z
+    tage = [date.fromisoformat(t) for t in z["tage"]]
+    for i in range(int(z.get("erledigt") or 0), len(tage)):
+        fehler, behalten = list(z.get("fehler") or []), int(z.get("behalten") or 0)
+        try:
+            behalten += await _ein_tag(sitzungen, int(z["anlage_id"]), tage[i])
+        except Exception as e:  # noqa: BLE001 — ein Tag hält die übrigen nicht auf; der Grund steht im Zustand
+            logger.warning("Korrektur %s: Tag %s nicht neu gebildet: %s: %s", lauf, tage[i], type(e).__name__, e)
+            fehler.append({"tag": tage[i].isoformat(), "grund": f"{type(e).__name__}: {e}"})
+        z = await _schreibe(sitzungen, lauf, erledigt=i + 1, fehler=fehler, behalten=behalten)
+    merken.invalidiere(int(z["anlage_id"]))
+    return await _schreibe(sitzungen, lauf, status=FERTIG, ende=datetime.now().replace(microsecond=0).isoformat())
+
+
+def starten(lauf: str, *, sitzungen=None) -> Optional[asyncio.Task]:
+    """Den Lauf als Hintergrund-Aufgabe starten (höchstens eine je Lauf)."""
+    alt = _AUFGABEN.get(lauf)
+    if alt is not None and not alt.done():
+        return None
+
+    async def _lauf() -> None:
+        from backend.core.database import get_session
+
+        try:
+            await tage_neu_bilden(sitzungen or get_session, lauf)
+        except Exception as e:  # noqa: BLE001 — eine Hintergrund-Aufgabe darf den Prozess nicht stören
+            logger.warning("Korrektur %s abgebrochen: %s: %s", lauf, type(e).__name__, e)
+
+    _AUFGABEN[lauf] = asyncio.get_running_loop().create_task(_lauf())
+    return _AUFGABEN[lauf]
+
+
+async def offene_laeufe(db: AsyncSession) -> list[str]:
+    from backend.models.settings import Settings
+
+    return [row.key[len(PRAEFIX):] for row in (await db.execute(
+        select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all()
+        if isinstance(row.value, dict) and row.value.get("status") == LAEUFT]
+
+
+async def fortsetzen_nach_dem_start(*, warte_s: float = 150.0, sitzungen=None) -> list[str]:
+    """Nach dem Start (``main.py``): jeder unterbrochene Lauf setzt beim nächsten Tag fort."""
+    from backend.core.database import get_session
+
+    try:
+        await asyncio.sleep(warte_s)
+        async with (sitzungen or get_session)() as db:
+            laeufe = await offene_laeufe(db)
+        for lauf in laeufe:
+            await tage_neu_bilden(sitzungen or get_session, lauf)
+        return laeufe
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Korrektur-Läufe nach dem Start: %s: %s", type(e).__name__, e)
+        return []

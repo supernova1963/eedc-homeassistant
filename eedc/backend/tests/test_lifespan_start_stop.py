@@ -73,6 +73,7 @@ _HINTERGRUND = [
     "task:_nachsenden",
     "task:kraftstoffpreis_startup_recovery",
     "task:nachfuellen_nach_dem_start",
+    "task:fortsetzen_nach_dem_start",          # Sensorwechsel S3: unterbrochene Korrektur-Läufe fortsetzen
 ]
 
 GESTELLT = {
@@ -393,6 +394,7 @@ FEHLER_EREIGNISSE = [
     "task-fehler:_nachsenden",
     "task-fehler:kraftstoffpreis_startup_recovery",
     "task-fehler:nachfuellen_nach_dem_start",
+    "task-fehler:fortsetzen_nach_dem_start",
     "ruf:_load_mqtt_config",
     "ruf:init_mqtt_inbound_service(127.0.0.1:1883, user=None)",
     "ruf:inbound.start",
@@ -418,6 +420,7 @@ FEHLER_LOG = [
     "DEBUG:Community-Nachsendung nicht gestartet: gestellt:_nachsenden",
     "DEBUG:Kraftstoffpreis-Startlauf nicht gestartet: gestellt:kraftstoffpreis_startup_recovery",
     "DEBUG:Kanal-Nachfüllen nicht gestartet: gestellt:nachfuellen_nach_dem_start",
+    "DEBUG:Korrektur-Läufe nicht fortgesetzt: gestellt:fortsetzen_nach_dem_start",
     "DEBUG:MQTT-Snapshot-Jobs konnten nicht aktiviert werden: gestellt:enable_mqtt_snapshot_jobs",
     "WARNING:MQTT-Gateway: Fehler beim Starten: gestellt:init_mqtt_gateway_service",
     "WARNING:Connector-Bridge: Fehler beim Starten: gestellt:init_connector_mqtt_bridge",
@@ -450,7 +453,7 @@ async def test_fehler_je_schritt_halten_den_start_nicht_an(wegwerf_db, umgebung,
     mp = umgebung
     mp.setattr(main, "asyncio", _AsyncioAmModul(ereignisse, werfen=frozenset({
         "prefetch_all_prognosen", "sensor_snapshot_startup_recovery", "_nachsenden",
-        "kraftstoffpreis_startup_recovery", "nachfuellen_nach_dem_start",
+        "kraftstoffpreis_startup_recovery", "nachfuellen_nach_dem_start", "fortsetzen_nach_dem_start",
     })))
     mp.setattr(sperre, "pruefe_ruecksetzung", _wirft_async("pruefe_ruecksetzung", ereignisse))
     mp.setattr(ha_connection, "aktualisiere_ha_verbindung", _wirft_async("aktualisiere_ha_verbindung", ereignisse))

@@ -62,8 +62,12 @@ NETZ = "basis:netzbezug"
 
 
 @pytest.fixture(autouse=True)
-def _leer():
+def _leer(monkeypatch):
     _reset_state_for_tests()
+    # Sensorwechsel S3: die Werkbank läuft über den Dienst der Korrektur, der fragt, ob Home Assistant eingerichtet ist —
+    # diese Proben sind Standalone (ohne HA wie bisher); eine API-Verbindung, die eine andere Probe am Dienst des Prozesses
+    # hinterlassen hat, gilt hier nicht (gemessen in der vollen Suite 17.11.2026).
+    monkeypatch.setattr("backend.services.zuordnung_wechsel.korrektur.ha_eingerichtet", lambda: False)
 
 
 def _neuer_sensor(svc, sid: str, ab, *, start: float = 0.0) -> int:

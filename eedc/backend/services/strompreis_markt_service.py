@@ -192,6 +192,11 @@ async def get_strompreis_stunden(
     Returns:
         dict {stunde: ct_kwh} oder {} wenn nicht verfügbar
     """
+    from backend.services.energie_profil._helpers import gespeicherte_boerse
+
+    gespeichert = gespeicherte_boerse()
+    if gespeichert is not None:     # Korrektur eines Sensorwechsels (Bauplan §10 Nr. 32): der gespeicherte Preis, kein Abruf
+        return dict(gespeichert.get(datum) or {})
     markt = "AT" if anlage_land and anlage_land.upper() in ("AT", "AUT") else "DE"
     result = await fetch_marktpreise(datum, markt=markt)
     return result or {}

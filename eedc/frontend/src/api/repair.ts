@@ -146,8 +146,9 @@ export const OPERATION_META: OperationMeta[] = [
     label: 'Werte vor dem Sensorbeginn verwerfen',
     description:
       'Nach einem Sensortausch: verwirft für EIN Feld die Werte des alten Sensors vor dem Beginn des neuen — ' +
-      'im HA-Spiegel und in den Stunden- und Tageswerten, nur dieses Feld. Monate mit Abschluss bleiben unberührt. ' +
-      'Kein Rückweg: die Vorschau sagt, was danach weg ist.',
+      'im HA-Spiegel, in den Stunden- und Tageswerten und in den Zählerständen. Mit Home Assistant übernimmt eedc ' +
+      'danach die Geschichte des neuen Sensors, soweit Home Assistant sie führt, und bildet die betroffenen Tage im ' +
+      'Hintergrund neu. Gespeicherte Monatswerte bleiben. Kein Rückweg in eedc: die Vorschau sagt, was danach geschieht.',
     inWorkbench: true,
   },
   // E3 Daten-Checker: die Knöpfe der Befunde als Operationen (Labels wörtlich wie `repair_protokoll.OPERATION_LABELS`,

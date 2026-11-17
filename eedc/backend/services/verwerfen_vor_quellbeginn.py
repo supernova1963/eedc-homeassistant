@@ -1,30 +1,34 @@
-"""Werkbank-Operation «Werte vor dem Sensorbeginn verwerfen» (HA-Bauform S3, E-S3-5; Bauplan §7, Entscheid S3-E2).
+"""Werkbank-Operation «Werte vor dem Sensorbeginn verwerfen» (HA-Bauform S3, E-S3-5; Bauplan §7, Entscheid S3-E2; seit
+Sensorwechsel S3 über den Dienst ``zuordnung_wechsel/korrektur.py``, Konzept S-9).
 
 **Was sie tut.** Für **ein** zugeordnetes Feld (einen Zählerkanal ``basis:<feld>`` bzw. ``inv:<id>:<feld>``) und einen
-Zeitpunkt ``t`` (Vorbelegung: Beginn der jüngsten Quelle = des neuen Sensors) verwirft sie die Werte des alten Sensors
-in **beiden Schichten, feldgenau, ohne eine Zeile zu löschen** (außer den Kanalzeilen der älteren Quellen):
+Zeitpunkt ``t`` (Vorbelegung: Beginn der jüngsten Quelle = des neuen Sensors) erklärt sie alles vor ``t`` als falsch und
+die jüngste Quelle als richtig — eine Korrektur «von Beginn an bis ``t``» (``auftrag``):
 
-* **Kanalschicht** (``services/kanal/verwerfen.py``): ``kanal_statistik``-Zeilen der älteren Quellen mit ``start_ts < t``
-  löschen; die ``kanal_quelle``-Zeilen bleiben als Herkunft mit Marke ``verworfen_ts``.
-* **Bestand** (hier): für die Tage, deren Tagesfenster ganz vor ``t`` liegt, in ``TagesEnergieProfil`` (Stunden) und
-  ``TagesZusammenfassung`` (Tag) **nur die Schlüssel dieses Feldes** leeren, über die Provenance-Schreiber mit Quelle
-  ``verworfen:werkbank``: den ``komponenten_kwh``-Eintrag (Beitragsschicht ``komponenten_beitraege``: genau die Ziel-Schlüssel,
-  in die dieses Feld schreibt), bei ``basis:einspeisung``/``basis:netzbezug`` dazu die Achsenspalte der Stunde und den
-  ``spannen``-Eintrag der Achse; bei ``basis:pv_gesamt`` statt der geteilten Spalte ``pv_kw`` die aus dem Anlagenwert
-  zerlegten Geräte-Einträge (#406-Marke ``kwp_anteil``; ⛔ H-5 im Bericht E-S3-5).
-  **Monate mit Abschluss bleiben unberührt** — eedc erkennt den Abschluss an der ``Monatsdaten``-Zeile des Monats
-  (``monats_fakten/laden.py``: ``monatsdaten_by_ym``; ohne Zeile rechnet der Monat aus den Tagen, Lesart 1).
-* **Bleibt stehen:** Wetter, Prognose, Preise, Betriebsart, SoC, andere Geräte, die abgeleiteten Stundengrößen
-  (``verbrauch_kw``, ``ueberschuss_kw``, ``defizit_kw``) und die Tagesgrößen daraus, die Marken ``verworfen``/``nachtrag``
-  der Tageszeile — und ``TagesEnergieProfil.komponenten``: diese Spalte ist der **Leistungspfad** (Stundenmittel der
-  Leistungssensoren, Bauplan S3-R6 / E-S3-1 H-1), nicht der Wert dieses Zählers (⛔ H-3 im Bericht E-S3-5; die Vorschau
-  nennt, wie viele Stunden des Geräts er trägt).
+* **Kanalschicht** (``services/kanal/korrektur.py``): ``kanal_statistik``-Zeilen der älteren Quellen vor ``t`` löschen.
+* **Bestand** (hier, ``leere_bestand``): für die Tage, deren Tagesfenster ganz vor ``t`` liegt, in ``TagesEnergieProfil``
+  (Stunden) und ``TagesZusammenfassung`` (Tag) **nur die Schlüssel dieses Feldes** leeren, über die Provenance-Schreiber mit
+  Quelle ``verworfen:werkbank``: den ``komponenten_kwh``-Eintrag (Beitragsschicht ``komponenten_beitraege``: genau die
+  Ziel-Schlüssel, in die dieses Feld schreibt), bei ``basis:einspeisung``/``basis:netzbezug`` dazu die Achsenspalte der
+  Stunde und den ``spannen``-Eintrag der Achse; bei ``basis:pv_gesamt`` statt der geteilten Spalte ``pv_kw`` die aus dem
+  Anlagenwert zerlegten Geräte-Einträge (#406-Marke ``kwp_anteil``; ⛔ H-5 im Bericht E-S3-5). **Monate mit Abschluss
+  bleiben dabei unberührt** — eedc erkennt den Abschluss an der ``Monatsdaten``-Zeile des Monats.
+* **Zählerstände** (``sensor_snapshots``) und MQTT-Rohstände dieses Feldes vor ``t``.
 
-**Ein Lauf, idempotent:** der zweite Lauf findet keine Kanalzeile und keinen Schlüssel mehr und sagt «nichts zu
-verwerfen». **Kein Rückweg:** die Vorschau sagt, dass die Werte danach weg sind. Aktivität in derselben Sitzung (N-532).
+**Ohne Home Assistant** (Standalone, MQTT) bleibt es dabei: die Quellen der älteren Abschnitte bleiben als Herkunft mit Marke
+``verworfen_ts``; Wetter, Prognose, Preise, Betriebsart, SoC, andere Geräte, die abgeleiteten Stundengrößen und die Marken
+der Tageszeile bleiben stehen, ebenso ``TagesEnergieProfil.komponenten`` (der **Leistungspfad**, ⛔ H-3 im Bericht E-S3-5).
+**Mit Home Assistant** übernimmt der Dienst danach die Geschichte des jüngsten Sensors: der Kanal beginnt mit seiner ersten
+HA-Zeile (Versatz R2; die Zeit davor bleibt leer, die ältere Quelle dort mit Marke), und die Tage, deren Tageszeile das Feld
+trägt, werden im Hintergrund **ganz** neu gebildet (auch in Monaten mit Abschluss; Wetter und Börsenpreis bleiben). Ist Home
+Assistant eingerichtet, aber nicht erreichbar, startet die Operation nicht.
 
-Schwesterdateien: ``services/kanal/verwerfen.py``, ``services/repair_orchestrator.py`` (``_plan_/_execute_verwerfen_…``),
-Tests ``test_werkbank_verwerfen_vor_quellbeginn.py``, ``test_werkbank_verwerfen_kommt_nicht_zurueck.py``.
+**Ein Lauf:** der zweite Lauf findet keine Kanalzeile und keinen Schlüssel mehr und sagt «nichts zu verwerfen». **Kein
+Rückweg in eedc:** die Vorschau nennt die Sicherung (Home Assistant bzw. eedc-Datenbank). Aktivität in derselben Sitzung (N-532).
+
+Schwesterdateien: ``services/kanal/verwerfen.py``, ``services/kanal/korrektur.py``, ``services/zuordnung_wechsel/korrektur.py``,
+``services/repair_orchestrator.py`` (``_plan_/_execute_verwerfen_…``), Tests ``test_werkbank_verwerfen_vor_quellbeginn.py``,
+``test_werkbank_verwerfen_kommt_nicht_zurueck.py``, ``test_sensorwechsel_s3_korrektur.py``.
 """
 
 from __future__ import annotations
@@ -198,20 +202,29 @@ class BestandZaehlung:
     leistungspfad_stunden: int = 0
 
 
-async def _tep_daten(db: AsyncSession, anlage_id: int, bis_tag: date, ziele: BestandZiele) -> list[date]:
+def _von(spalte, von_tag: Optional[date]):
+    """Untergrenze der Tage (Korrektur eines Sensorwechsels mitten in der Geschichte, Sitzung 3); ``None`` = von Beginn an."""
+    return spalte >= von_tag if von_tag is not None else spalte.is_not(None)
+
+
+async def _tep_daten(db: AsyncSession, anlage_id: int, bis_tag: date, ziele: BestandZiele,
+                     von_tag: Optional[date] = None) -> list[date]:
     bed = _tep_bedingung(ziele)
     if bed is None:
         return []
     return [d for (d,) in (await db.execute(select(TagesEnergieProfil.datum).where(and_(
-        TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum <= bis_tag, bed)))).all()]
+        TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum <= bis_tag,
+        _von(TagesEnergieProfil.datum, von_tag), bed)))).all()]
 
 
-async def _tz_zeilen(db: AsyncSession, anlage_id: int, bis_tag: date, ziele: BestandZiele) -> list[TagesZusammenfassung]:
+async def _tz_zeilen(db: AsyncSession, anlage_id: int, bis_tag: date, ziele: BestandZiele,
+                     von_tag: Optional[date] = None) -> list[TagesZusammenfassung]:
     bed = _tz_bedingung(ziele)
     if bed is None:
         return []
     return list((await db.execute(select(TagesZusammenfassung).where(and_(
-        TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum <= bis_tag, bed))
+        TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum <= bis_tag,
+        _von(TagesZusammenfassung.datum, von_tag), bed))
         .order_by(TagesZusammenfassung.datum))).scalars().all())
 
 
@@ -228,15 +241,15 @@ async def _leistungspfad_stunden(db: AsyncSession, anlage_id: int, bis_tag: date
 
 
 async def zaehle_bestand(db: AsyncSession, anlage_id: int, ziele: BestandZiele, bis_tag: date,
-                         abschluss: frozenset[tuple[int, int]]) -> BestandZaehlung:
+                         abschluss: frozenset[tuple[int, int]], von_tag: Optional[date] = None) -> BestandZaehlung:
     z = BestandZaehlung()
-    for d in await _tep_daten(db, anlage_id, bis_tag, ziele):
+    for d in await _tep_daten(db, anlage_id, bis_tag, ziele, von_tag):
         if _im_abschluss(d, abschluss):
             z.abschluss_tage.add(d)
             continue
         z.tage.add(d)
         z.stundenzeilen += 1
-    for row in await _tz_zeilen(db, anlage_id, bis_tag, ziele):
+    for row in await _tz_zeilen(db, anlage_id, bis_tag, ziele, von_tag):
         if not tz_keys_der_zeile(row, ziele):
             continue
         if _im_abschluss(row.datum, abschluss):
@@ -277,19 +290,20 @@ async def _leere_tz_zeile(db: AsyncSession, row: TagesZusammenfassung, ziele: Be
 
 
 async def leere_bestand(db: AsyncSession, anlage_id: int, ziele: BestandZiele, bis_tag: date,
-                        abschluss: frozenset[tuple[int, int]]) -> dict[str, int]:
-    """Die Schlüssel dieses Feldes in Stunden- und Tageszeilen bis ``bis_tag`` leeren — Monate mit Abschluss ausgenommen."""
+                        abschluss: frozenset[tuple[int, int]], von_tag: Optional[date] = None) -> dict[str, int]:
+    """Die Schlüssel dieses Feldes in Stunden- und Tageszeilen ``von_tag … bis_tag`` leeren — Monate mit Abschluss ausgenommen."""
     out = {"stundenzeilen_geleert": 0, "tageszeilen_geleert": 0, "felder_geleert": 0}
     bed = _tep_bedingung(ziele)
     if bed is not None:
         for row in (await db.execute(select(TagesEnergieProfil).where(and_(
-            TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum <= bis_tag, bed)))).scalars().all():
+            TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum <= bis_tag,
+            _von(TagesEnergieProfil.datum, von_tag), bed)))).scalars().all():
             if _im_abschluss(row.datum, abschluss):
                 continue
             n = await _leere_tep_zeile(db, row, ziele)
             out["stundenzeilen_geleert"] += bool(n)
             out["felder_geleert"] += n
-    for row in await _tz_zeilen(db, anlage_id, bis_tag, ziele):
+    for row in await _tz_zeilen(db, anlage_id, bis_tag, ziele, von_tag):
         if _im_abschluss(row.datum, abschluss):
             continue
         n = await _leere_tz_zeile(db, row, ziele)
@@ -402,41 +416,51 @@ def _spanne(tage: list[date]) -> str:
 
 
 def _monate_text(monate: list[tuple[int, int]]) -> str:
-    """Bis sechs Monate einzeln, sonst «erster … letzter» — die Liste steht vollständig in ``operation_preview``."""
+    """Bis sechs Monate einzeln, sonst «erster bis letzter» — die Liste steht vollständig in ``operation_preview``."""
     namen = [f"{m:02d}/{j}" for j, m in monate]
-    return ", ".join(namen) if len(namen) <= 6 else f"{namen[0]} … {namen[-1]}"
+    return ", ".join(namen) if len(namen) <= 6 else f"{namen[0]} bis {namen[-1]}"
 
 
-def _saetze_kanal(la: Lage) -> list[str]:
+def _saetze_kanal(la: Lage, mit_ha: bool) -> list[str]:
     s = [f"Verworfen werden die Werte von «{la.label}» ({la.key}) vor {_zeit(la.t)} — Beginn der jüngsten Quelle "
          f"{la.kanal.juengste.statistic_id or ''} am {_zeit(la.kanal.juengste.gueltig_ab)}."]
     s += [_quelle_satz(q, la.t) for q in la.kanal.aeltere]
-    if la.kanal.zeilen:
+    if la.kanal.zeilen and mit_ha:
+        s.append(f"Kanal: {fmt_zahl(la.kanal.zeilen)} Stundenzeilen an {fmt_zahl(len(la.kanal.tage))} Tagen "
+                 f"({_spanne(list(la.kanal.tage))}) werden gelöscht; soweit Home Assistant die Geschichte des jüngsten "
+                 "Sensors führt, füllt eedc sie aus ihm neu, die Zeit davor bleibt leer.")
+    elif la.kanal.zeilen:
         s.append(f"Kanal: {fmt_zahl(la.kanal.zeilen)} Stundenzeilen an {fmt_zahl(len(la.kanal.tage))} Tagen "
                  f"({_spanne(list(la.kanal.tage))}) werden gelöscht; die Quellen bleiben als Herkunft mit Marke "
                  "«verworfen am» stehen.")
     return s
 
 
-def _saetze_bestand(la: Lage) -> list[str]:
+def _saetze_bestand(la: Lage, mit_ha: bool) -> list[str]:
+    """Ohne Home Assistant bleibt der Bestand bis auf dieses Feld stehen; mit Home Assistant werden die Tage danach ganz neu
+    gebildet (``zuordnung_wechsel/korrektur.saetze`` sagt es) — Sätze über «bleibt stehen» gelten dann nicht."""
     b, s = la.bestand, []
     if b.tage:
-        s.append(f"Bestand: an {fmt_zahl(len(b.tage))} Tagen ({_spanne(sorted(b.tage))}) werden nur die Werte dieses "
-                 f"Feldes geleert ({fmt_zahl(b.stundenzeilen)} Stundenzeilen, {fmt_zahl(b.tageszeilen)} Tageszeilen) "
-                 "— Wetter, Prognose, Preise, Betriebsart, SoC und andere Geräte bleiben.")
+        s.append(f"Bestand: an {fmt_zahl(len(b.tage))} Tagen ({_spanne(sorted(b.tage))}) werden "
+                 + ("die" if mit_ha else "nur die") + f" Werte dieses Feldes geleert ({fmt_zahl(b.stundenzeilen)} "
+                 f"Stundenzeilen, {fmt_zahl(b.tageszeilen)} Tageszeilen)"
+                 + ("." if mit_ha else " — Wetter, Prognose, Preise, Betriebsart, SoC und andere Geräte bleiben."))
     monate = la.abschluss_monate_betroffen()
-    if monate:
+    if monate and not mit_ha:
         s.append(f"{fmt_zahl(len(monate))} Monat(e) mit Abschluss bleiben im Bestand unberührt: {_monate_text(monate)}.")
     if la.ziele.mitbetroffen:
         s.append(f"Der Tageswert {', '.join(sorted(la.ziele.tz_keys))} trägt auch {', '.join(la.ziele.mitbetroffen)} "
                  "— er wird als Ganzes geleert.")
-    if b.leistungspfad_stunden:
+    if b.leistungspfad_stunden and not mit_ha:
         s.append(f"Die Leistungswerte des Geräts in {fmt_zahl(b.leistungspfad_stunden)} Stundenzeilen kommen von seinem "
                  "Leistungssensor, nicht von diesem Zähler — sie bleiben stehen.")
     return s
 
 
-def _saetze_danach(la: Lage) -> list[str]:
+def _saetze_danach(la: Lage, mit_ha: bool) -> list[str]:
+    """Der Rückweg-Satz kommt aus ``zuordnung_wechsel/korrektur.saetze`` (mit und ohne Home Assistant)."""
+    if mit_ha:
+        return ["Wo Home Assistant für den jüngsten Sensor keine Geschichte führt, hat das Feld danach keinen Wert."]
     s = []
     ohne = la.lesart1_ohne_werte()
     if ohne:
@@ -450,16 +474,14 @@ def _saetze_danach(la: Lage) -> list[str]:
     if mit:
         s.append(f"{fmt_zahl(len(mit))} Tag(e) ({_spanne(mit)}) verlieren ihre Kanalzeilen, ihr Bestand bleibt "
                  "unverändert (Monate mit Abschluss, der angebrochene Tag des Sensorwechsels).")
-    s.append("Kein Rückweg: die verworfenen Werte sind danach weg. «Tag neu aggregieren» für einen Tag davor holt die "
-             "Werte aus den gespeicherten Zählerständen zurück.")
     return s
 
 
-def klartext(la: Lage) -> list[str]:
+def klartext(la: Lage, mit_ha: bool = False) -> list[str]:
     if la.nichts_zu_tun:
         return [f"Nichts zu verwerfen — vor {_zeit(la.t)} tragen weder der Kanal noch der Bestand (außerhalb von Monaten "
                 f"mit Abschluss) Werte von «{la.label}» ({la.key})."]
-    return _saetze_kanal(la) + _saetze_bestand(la) + _saetze_danach(la)
+    return _saetze_kanal(la, mit_ha) + _saetze_bestand(la, mit_ha) + _saetze_danach(la, mit_ha)
 
 
 def geschaetzt(la: Lage) -> dict[str, int]:
@@ -488,29 +510,73 @@ def vorschau_daten(la: Lage) -> dict[str, Any]:
     }
 
 
-# ── Ausführung ──────────────────────────────────────────────────────────────
+# ── Ausführung: derselbe Dienst wie die Korrektur eines Sensorwechsels (Sensorwechsel S3, Konzept S-9) ─────────
 
 
-async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any]) -> dict[str, Any]:
-    """Beide Schichten in EINER Sitzung, ein Commit. Aktivität in derselben Sitzung (N-532)."""
-    from backend.services.activity_service import log_activity
+def _beschreibung(q: kv.QuelleInfo) -> dict:
+    """Eine Kanal-Quelle als Quell-Beschreibung der Wechsel-Zeile (``zuordnung_wechsel/quelle.py``)."""
+    if q.familie == "spiegel" and q.statistic_id:
+        return {"art": "ha", "entity_id": q.statistic_id}
+    return {"art": "mqtt", "mqtt_key": q.statistic_id, "topic": None}
+
+
+def auftrag(la: Lage):
+    """Die Werkbank als Korrektur: von Beginn an falsch bis zum Beginn des jüngsten Sensors (``t``), richtig ist er."""
+    from backend.services.zuordnung_wechsel.korrektur import Auftrag
+
+    vorher = _beschreibung(la.kanal.aeltere[-1]) if la.kanal.aeltere else None
+    return Auftrag(anlage_id=la.anlage.id, sensor_key=la.key, falsch_seit=None, ab=datetime.fromtimestamp(la.t),
+                   vorher=vorher, nachher=_beschreibung(la.kanal.juengste))
+
+
+async def plan_vorschau(db: AsyncSession, anlage_id: int, params: dict[str, Any], *, ha_svc=None):
+    """Vorschau der Werkbank: die Sätze der Werkbank und der Korrektur (``zuordnung_wechsel/korrektur.saetze``)."""
+    from backend.services.zuordnung_wechsel import korrektur as kr
 
     la = await lage(db, anlage_id, params)
-    bestand = await leere_bestand(db, anlage_id, la.ziele, la.bis_tag, la.abschluss)
-    geloescht = await kv.loesche_zeilen(db, la.kanal.kanal_id, la.t)
-    markiert = await kv.markiere_quellen(db, la.kanal.kanal_id, la.t, int(datetime.now().timestamp())) if geloescht else 0
-    summary = {"kanal": la.key, "zeitpunkt": kv.text_aus_zeitpunkt(la.t), "kanalzeilen_geloescht": geloescht,
-               "quellen_markiert": markiert, **bestand}
-    if geloescht or bestand["felder_geleert"]:
-        await log_activity(
-            kategorie="repair", aktion=f"Werte vor dem Sensorbeginn verworfen: {la.label}", erfolg=True,
-            details=(f"{la.key} vor {_zeit(la.t)}: {fmt_zahl(geloescht)} Kanalzeilen gelöscht, "
-                     f"{fmt_zahl(bestand['stundenzeilen_geleert'])} Stunden- und "
-                     f"{fmt_zahl(bestand['tageszeilen_geleert'])} Tageszeilen feldgenau geleert."),
-            details_json=summary, anlage_id=anlage_id, db=db,
-        )
+    nicht = None
+    try:
+        svc = kr.ha_dienst(ha_svc)
+    except kr.KorrekturNichtStartbar as e:
+        svc, nicht = None, str(e)
+    kla = await kr.lage(db, auftrag(la), ha_svc=svc)
+    kla.nicht_startbar = nicht
+    # HA eingerichtet, aber nicht erreichbar: die Sätze beschreiben den Lauf mit Home Assistant (der erst dann startet).
+    saetze = klartext(la, kla.mit_ha or nicht is not None) + ([] if la.nichts_zu_tun and kla.nichts_zu_tun else kr.saetze(kla))
+    return geschaetzt(la), saetze, {**vorschau_daten(la), "korrektur": kr.vorschau_daten(kla)}
+
+
+async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any], *, ha_svc=None) -> dict[str, Any]:
+    """Über den Dienst der Korrektur (Schritte 1, 2, 3, 5 hier; Schritt 4 im Hintergrund), ein Commit. Aktivität in derselben
+    Sitzung (N-532). Home Assistant eingerichtet, aber nicht erreichbar ⇒ ``KorrekturNichtStartbar`` (der Lauf startet nicht)."""
+    from backend.services.activity_service import log_activity
+    from backend.services.zuordnung_wechsel import korrektur as kr
+
+    la = await lage(db, anlage_id, params)
+    svc = kr.ha_dienst(ha_svc)
+    a = auftrag(la)
+    leer = {"kanal": la.key, "zeitpunkt": kv.text_aus_zeitpunkt(la.t), "kanalzeilen_geloescht": 0, "quellen_markiert": 0,
+            "stundenzeilen_geleert": 0, "tageszeilen_geleert": 0, "felder_geleert": 0}
+    if la.nichts_zu_tun and (await kr.lage(db, a, ha_svc=svc)).nichts_zu_tun:
+        await db.commit()
+        return leer
+    erg = await kr.fuehre_aus(db, a, ha_svc=svc)
+    s = erg["summary"]
+    bestand = {k: s[k] for k in ("stundenzeilen_geleert", "tageszeilen_geleert", "felder_geleert")}
+    summary = {"kanal": la.key, "zeitpunkt": kv.text_aus_zeitpunkt(la.t), "kanalzeilen_geloescht": s["kanalzeilen_geloescht"],
+               "quellen_markiert": s["quellen_markiert"], **bestand}
+    await log_activity(
+        kategorie="repair", aktion=f"Werte vor dem Sensorbeginn verworfen: {la.label}", erfolg=True,
+        details=(f"{la.key} vor {_zeit(la.t)}: {fmt_zahl(s['kanalzeilen_geloescht'])} Kanalzeilen gelöscht, "
+                 f"{fmt_zahl(s['stundenzeilen_geleert'])} Stunden- und {fmt_zahl(s['tageszeilen_geleert'])} Tageszeilen "
+                 f"feldgenau geleert, {fmt_zahl(s['zaehlerstaende_geloescht'] + s['rohstaende_geloescht'])} Zählerstände "
+                 f"verworfen, {fmt_zahl(s['tage_neu'])} Tage werden neu gebildet."),
+        details_json=summary, anlage_id=anlage_id, db=db,
+    )
     await db.commit()
-    return summary
+    s = await kr.nach_dem_commit(erg, ha_svc=svc)
+    return {**summary, **{k: s.get(k, 0) for k in ("zaehlerstaende_geloescht", "rohstaende_geloescht", "tage_neu", "lauf",
+                                                    "kanal_neu_gespiegelt")}}
 
 
 # ── Auswahl für die Werkbank (lesende Route) ────────────────────────────────

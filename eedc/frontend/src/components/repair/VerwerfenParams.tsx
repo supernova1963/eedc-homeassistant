@@ -121,8 +121,8 @@ export function VerwerfenParams({ anlageId, werte, onChange, disabled }: Props) 
       )}
       {gewaehlt && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Vorbelegt ist der Beginn des jüngsten Sensors. Verworfen wird nur dieses Feld; Monate mit Abschluss bleiben
-          unberührt. Die Vorschau nennt Quellen, Tage und Monate, bevor etwas geändert wird.
+          Vorbelegt ist der Beginn des jüngsten Sensors. Die Vorschau nennt Quellen, Tage und Monate und was mit ihnen
+          geschieht, bevor etwas geändert wird.
         </p>
       )}
     </div>

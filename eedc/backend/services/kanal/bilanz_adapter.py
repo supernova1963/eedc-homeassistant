@@ -196,6 +196,13 @@ def bilanz_eintraege(eintraege: Iterable[TabellenEintrag]) -> list[TabellenEintr
 # ── Verworfen heißt bewusst leer (HA-Bauform S4, E-S4-3, S4-R-V4; V-H4-4) ───
 
 
+def _erste_im_abschnitt(abschnitt: tuple, erste: Optional[int]) -> Optional[int]:
+    if len(abschnitt) > 3:
+        return abschnitt[3]
+    ab, b = abschnitt[0], abschnitt[1]
+    return erste if erste is not None and erste >= ab and (b is None or erste < b) else None
+
+
 @dataclass(frozen=True)
 class BewusstLeer:
     """Die Kanäle einer Anlage mit mindestens einer verworfenen Quelle (Werkbank «Werte vor dem Sensorbeginn
@@ -214,14 +221,22 @@ class BewusstLeer:
     kanaele: dict = field(default_factory=dict)
 
     def leer(self, key: str, von: int, bis: int) -> bool:
+        """**Erste Zeile je Abschnitt** (Sensorwechsel S3, Bauplan §7 Nr. 9): ein Abschnitt ``(gueltig_ab, bis, verworfen
+        [, erste])`` trägt optional seine erste Zeile; ohne sie gilt die erste Zeile des Kanals, wenn sie in ihm liegt. Bewusst
+        leer ist ``[von, bis)``, wenn jeder dort geltende Abschnitt verworfen ist und keiner vor ``bis`` eine Zeile hat — eine
+        Korrektur mitten in der Geschichte lässt die richtigen Zeilen davor stehen (die Regel «keine Zeile im Kanal vor
+        ``bis``» griff dort nie)."""
         k = self.kanaele.get(key)
         if k is None:
             return False
         erste, abschnitte = k
-        if erste is not None and erste < bis:
+        gelten = [a for a in abschnitte if a[0] < bis and (a[1] is None or a[1] > von)]
+        if not gelten or not all(a[2] for a in gelten):
             return False
-        gelten = [v for ab, b, v in abschnitte if ab < bis and (b is None or b > von)]
-        return bool(gelten) and all(gelten)
+        erster_ab = abschnitte[0][0]
+        if erste is not None and von < erster_ab and erste < min(bis, erster_ab):
+            return False                   # Zeilen vor der ersten Quelle im Zeitraum (gehören keinem Abschnitt)
+        return all(not (z is not None and z < bis) for z in (_erste_im_abschnitt(a, erste) for a in gelten))
 
     def ohne(self, eintraege: list, von: int, bis: int) -> list:
         """Die Einträge (``TabellenEintrag``) ohne die in ``[von, bis)`` bewusst leeren Felder."""
@@ -250,9 +265,16 @@ async def bewusst_leer(db: AsyncSession, anlage_id: int) -> BewusstLeer:
                                        .where(KanalStatistik.kanal_id.in_(ids)).group_by(KanalStatistik.kanal_id))).all())
         out = {}
         for kid, qs in quellen.items():
-            abschnitte = tuple((q.gueltig_ab, qs[i + 1].gueltig_ab if i + 1 < len(qs) else None, q.verworfen_ts is not None)
-                               for i, q in enumerate(qs))
-            out[keys[kid]] = (erste.get(kid), abschnitte)
+            abschnitte = []
+            for i, q in enumerate(qs):
+                b = qs[i + 1].gueltig_ab if i + 1 < len(qs) else None
+                bed = [KanalStatistik.kanal_id == kid, KanalStatistik.start_ts >= q.gueltig_ab]
+                if b is not None:
+                    bed.append(KanalStatistik.start_ts < b)
+                z = (await db.execute(select(func.min(KanalStatistik.start_ts)).where(and_(*bed)))).scalar_one_or_none() \
+                    if q.verworfen_ts is not None else None
+                abschnitte.append((q.gueltig_ab, b, q.verworfen_ts is not None, z))
+            out[keys[kid]] = (erste.get(kid), tuple(abschnitte))
         return BewusstLeer(out)
 
     return await gemerkt(db, ("bewusst_leer", anlage_id), _laden)

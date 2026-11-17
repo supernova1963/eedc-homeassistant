@@ -284,16 +284,18 @@ def _summe_oder_none(werte: list[Optional[float]]) -> Optional[float]:
     return sum(werte)
 
 
-async def verwerfe_ab(db: AsyncSession, anlage_id: int, ab_ts: int) -> int:
+async def verwerfe_ab(db: AsyncSession, anlage_id: int, ab_ts: int, *, nur=None) -> int:
     """Neuaufbau: die Zeilen der abgeleiteten Kanäle ab ``max(ab_ts, aufbaubar_ab)`` löschen — der nächste Stundenlauf
     schreibt sie aus dem korrigierten Spiegel neu. Eine Zeile vor ``aufbaubar_ab`` gibt es nicht; eine davor bleibt
-    ohnehin stehen (Bauplan §2). Returns: Zahl der gelöschten Zeilen."""
-    kanaele = (await db.execute(select(Kanal).where(and_(
+    ohnehin stehen (Bauplan §2). ``nur`` (Schlüssel → bool): nur diese Kanäle — die Korrektur eines Sensorwechsels
+    verwirft nur die vom Feld abhängigen (``kanal/korrektur.abhaengige_abgeleitete``, Bauplan §10 Nr. 34); ohne ``nur``
+    alle (Konsistenzlauf, Nachtrag). Returns: Zahl der gelöschten Zeilen."""
+    kanaele = [k for k in (await db.execute(select(Kanal).where(and_(
         # HA-Bauform E4d: ALLE abgeleiteten Kanäle der Anlage — der PV-Anteil der Heimladung und der Strom je
         # Betriebsart der Wärmepumpe (``modus_strom.py``) rechnen beide aus dem Spiegel; seit E4e auch die
         # Kosten-Kanäle der Anlage (``abgeleitet:basis:…``, ``kosten.py``).
         Kanal.anlage_id == anlage_id, Kanal.key.like("abgeleitet:%"),
-    )))).scalars().all()
+    )))).scalars().all() if nur is None or nur(k.key)]
     n = 0
     for k in kanaele:
         grenze = max(int(ab_ts), int(k.aufbaubar_ab or ab_ts))

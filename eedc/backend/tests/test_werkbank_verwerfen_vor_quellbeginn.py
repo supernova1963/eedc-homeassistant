@@ -62,8 +62,12 @@ def _s(sid: str) -> dict:
 
 
 @pytest.fixture(autouse=True)
-def _leer():
+def _leer(monkeypatch):
     _reset_state_for_tests()
+    # Sensorwechsel S3: die Werkbank läuft über den Dienst der Korrektur, der fragt, ob Home Assistant eingerichtet ist —
+    # diese Proben sind Standalone (ohne HA wie bisher); eine API-Verbindung, die eine andere Probe am Dienst des Prozesses
+    # hinterlassen hat, gilt hier nicht (gemessen in der vollen Suite 17.11.2026).
+    monkeypatch.setattr("backend.services.zuordnung_wechsel.korrektur.ha_eingerichtet", lambda: False)
 
 
 async def _kanal(db, aid, key, quellen, *, art="sum", zeilen=True) -> Kanal:
@@ -165,7 +169,7 @@ async def test_vorschau_schreibt_nichts_und_nennt_quellen_tage_und_abschluss(db)
     assert vor["tage_mit_bestand"] == ["2026-03-31", "2026-04-21"]
     text_ = " ".join(p.warnings)
     for teil in ("sensor.einsp_alt", "sensor.einsp_neu", "21.04.2026 00:00", "01.04.2026 00:00", "03/2026",
-                 "Kein Rückweg", "Wetter, Prognose, Preise"):
+                 "lässt sich in eedc nicht rückgängig machen", "Sicherung der eedc-Datenbank", "Wetter, Prognose, Preise"):
         assert teil in text_, teil
 
 

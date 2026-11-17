@@ -190,6 +190,18 @@ async def loesche_zeilen(db: AsyncSession, kanal_id: int, t: int) -> int:
     return int(res.rowcount or 0)
 
 
+async def loesche_zeilen_zwischen(db: AsyncSession, kanal_id: int, unten: Optional[int], oben: int) -> int:
+    """Die Kanalzeilen in ``[unten, oben)`` löschen (``unten`` ``None`` = von Beginn an) — Korrektur eines Sensorwechsels
+    (``kanal/korrektur.py``, Sensorwechsel S3). Returns: Zahl der gelöschten Zeilen."""
+    bed = [KanalStatistik.kanal_id == kanal_id, KanalStatistik.start_ts < oben]
+    if unten is not None:
+        bed.append(KanalStatistik.start_ts >= unten)
+    res = await db.execute(delete(KanalStatistik).where(and_(*bed)))
+    if res.rowcount:
+        await _merken_verwerfen(db, kanal_id)
+    return int(res.rowcount or 0)
+
+
 async def _merken_verwerfen(db: AsyncSession, kanal_id: int) -> None:
     """HA-Bauform S5 E-S5-1c (S5-R7c i): die gemerkten Kanal-Tage der Anlage verwerfen — ganz, weil die Marke
     «verworfen am» (``bewusst_leer``) jeden Tag der Anlage treffen kann."""

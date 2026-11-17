@@ -365,7 +365,9 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
             staende[key] = st
         zeilen = [_zeile(st.kanal.id, int(round(z["start_ts"])), FAMILIE_SPIEGEL,
                          sum=_mal(z["sum"], faktor), state=_mal(z["state"], faktor)) for z in roh]
-        if st.quelle is None or st.quelle.familie != FAMILIE_SPIEGEL or st.quelle.statistic_id != eid:
+        # Sensorwechsel S3: hinter einem verworfenen Abschnitt (Korrektur) beginnt immer eine neue Quelle.
+        if (st.quelle is None or st.quelle.familie != FAMILIE_SPIEGEL or st.quelle.statistic_id != eid
+                or st.quelle.verworfen_ts is not None):
             await _neue_spiegel_quelle(db, ha_svc, st, eid, zeilen, faktor)
         neue_zeilen.extend(zeilen)
     return await _zeilen_einfuegen(db, neue_zeilen)
@@ -805,7 +807,8 @@ async def _eigene_summe_zeilen(
     for ts, wert in staende:
         je_stunde.setdefault(_stunde_von(ts), []).append(wert)
 
-    neue_quelle = st.quelle is None or st.quelle.familie != FAMILIE_MITSCHRIFT or st.quelle.statistic_id != mqtt_key
+    neue_quelle = (st.quelle is None or st.quelle.familie != FAMILIE_MITSCHRIFT or st.quelle.statistic_id != mqtt_key
+                   or st.quelle.verworfen_ts is not None)   # Sensorwechsel S3: hinter einem verworfenen Abschnitt neu
     letzte = st.letzte if not neue_quelle else None
     vorher: Optional[PeriodenSumme] = None
     if letzte is not None and letzte.state is not None:

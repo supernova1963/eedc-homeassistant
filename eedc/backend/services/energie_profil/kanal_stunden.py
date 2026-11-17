@@ -1046,24 +1046,19 @@ async def tages_eingaenge(db: AsyncSession, anlage, invs_by_id: Mapping[str, Any
     Umschaltstelle Bestand ↔ Kanal dieser Sichten (HA-Bauform S4 E-S4-1, Bauplan §8: «Umschaltstelle = ein Aufruf»)."""
     from sqlalchemy import select
 
-    from backend.models.tages_energie_profil import TagesZusammenfassung
     from backend.services.energie_profil import lade_modus_split_tag
     from backend.services.kanal.bilanz_leser import bilanz_ziele, kanal_tage, mische_komponenten
     from backend.services.snapshot.aggregator import get_betriebsart_strom_tageswerte, get_tagesdetail_kwh
-    from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts
+    from backend.services.snapshot.boundary_range import tageszeile_ist_rueckwaerts, tageszeile_marken
     from backend.services.snapshot.komponenten_beitraege import wallbox_deckt_ladung_ab
 
     # N-434/N-435: die Tageszeile zuerst — ihre Herkunft bestimmt an Bestandstagen das Fenster der WP-Zähler.
-    tz_zeile = (await db.execute(
-        select(TagesZusammenfassung.komponenten_kwh, TagesZusammenfassung.source_provenance,
-               TagesZusammenfassung.verworfen).where(
-            TagesZusammenfassung.anlage_id == anlage.id, TagesZusammenfassung.datum == datum,
-        ))).one_or_none()
-    tz_komp = tz_zeile[0] if tz_zeile else None
+    tz_zeile = await tageszeile_marken(db, anlage.id, datum, mit_mengen=True)
+    tz_komp = tz_zeile[2] if tz_zeile else None
     kanal = (await kanal_tage(db, anlage.id, datum, datum)).get(datum)
     if kanal is not None:
         tz_komp = mische_komponenten(tz_komp, kanal, (await bilanz_ziele(db, anlage.id, [datum]))[datum])
-    rueckwaerts = tageszeile_ist_rueckwaerts(tz_zeile[1] if tz_zeile else None, tz_zeile[2] if tz_zeile else None)
+    rueckwaerts = tageszeile_ist_rueckwaerts(tz_zeile[0] if tz_zeile else None, tz_zeile[1] if tz_zeile else None)
     kanal_tag = kanal is not None
     e = TagesEingaenge(
         tz_komp=tz_komp, rueckwaerts=rueckwaerts,

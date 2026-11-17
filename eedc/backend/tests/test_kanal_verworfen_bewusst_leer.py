@@ -54,6 +54,21 @@ def test_regel_rein():
     assert BewusstLeer().ohne(["e1"], v, n) == ["e1"]
 
 
+def test_regel_erste_zeile_je_abschnitt():
+    """Sensorwechsel S3 (Bauplan §7 Nr. 9): Korrektur mitten in der Geschichte — richtige Zeilen VOR dem verworfenen
+    Abschnitt (erste Zeile des Kanals 100) stören nicht; eine Zeile IM verworfenen Abschnitt vor ``bis`` schon. Gegenprobe:
+    die alte Regel «keine Zeile im Kanal vor ``bis``» nennte den Abschnitt nicht leer."""
+    leer = BewusstLeer({
+        "f": (100, ((0, 1000, False, None), (1000, 1800, True, None), (1800, None, False, None))),
+        "g": (100, ((0, 1000, False, None), (1000, 1800, True, 1200), (1800, None, False, None))),
+    })
+    assert leer.leer("f", 1100, 1700)
+    assert not leer.leer("g", 1100, 1700) and leer.leer("g", 1000, 1150)
+    assert not leer.leer("f", 900, 1700)                 # schneidet einen nicht verworfenen Abschnitt
+    alte_regel = 100 >= 1700                             # «erste Zeile des Kanals vor bis ⇒ benötigt»
+    assert alte_regel is False
+
+
 # ── Bilanz-Gruppe und Werkbank-Auskunft ─────────────────────────────────────
 
 
