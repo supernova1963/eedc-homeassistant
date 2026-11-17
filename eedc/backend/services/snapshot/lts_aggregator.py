@@ -184,11 +184,16 @@ async def lts_tagestabelle(
     if plan is None:
         return None
     zusatz = [z for z in dict.fromkeys(zusatz_schluessel or ()) if z not in eigene]
-    frueher = {eid for je_slot in plan.values() for eid in je_slot.values()}
+    # Sensorwechsel S2 (§8 Nr. 22 b): auch die Heimlade-Zähler je Auto lesen je Slot die Entität zum Stand.
+    zplan = _zusatz_plan(anlage, investitionen_by_id, datum, zusatz, wechsel) if (wechsel and zusatz) else {}
+    zusatz = [z for z in zusatz if zplan.get(z, {}) is not None]
+    frueher = {eid for je_slot in (*plan.values(), *(p for p in zplan.values() if p)) for eid in je_slot.values()}
     sensor_ids = sorted(eigene | set(zusatz) | frueher)
     reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum)
     if plan and not _plan_anwenden(reihen, plan):
         return None
+    _plan_anwenden(reihen, {z: p for z, p in zplan.items() if p and (z in reihen or set(p.values()) & set(reihen))},
+                   streng=False)
     # Nur die eigenen Zähler entscheiden, ob HA den Tag trägt — ein Zusatz-Zähler
     # allein darf den Rückfall auf den Snapshot-Pfad nicht verhindern.
     if not reihen or not any(eid in eigene for eid in reihen):
@@ -227,21 +232,34 @@ def _slot_plan(eintraege: list[TabellenEintrag], wechsel: Optional[dict], datum:
     return plan
 
 
-def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]]) -> bool:
+def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]], *, streng: bool = True) -> bool:
     """Setzt je Slot das Delta der früheren Entität in die Reihe der heutigen (in-place). ``False`` ⇒ HA führt eine
-    frühere Entität nicht (dann bleibt der Tag beim Snapshot-Pfad)."""
+    frühere Entität nicht (dann bleibt der Tag beim Snapshot-Pfad). ``streng=False`` (Heimlade-Zähler, §8 Nr. 22 b): ein
+    Slot einer früheren Entität, die HA nicht führt, fällt weg — nie das Delta der heutigen Entität für ihn."""
     for eid, je_slot in plan.items():
-        if any(alt not in reihen for alt in set(je_slot.values())):
+        if streng and any(alt not in reihen for alt in set(je_slot.values())):
             return False
-        reihe = reihen.get(eid) or reihen[next(iter(je_slot.values()))]
+        reihe = reihen.get(eid) or reihen[next(alt for alt in je_slot.values() if alt in reihen)]
         slots = dict(reihen[eid].slots) if eid in reihen else {}
         for h, alt in je_slot.items():
-            if h in reihen[alt].slots:
+            if alt in reihen and h in reihen[alt].slots:
                 slots[h] = reihen[alt].slots[h]
             else:
                 slots.pop(h, None)
         reihen[eid] = reihe._replace(slots=slots)
     return True
+
+
+def _zusatz_plan(anlage, investitionen_by_id: dict, datum: date, zusatz: list[str],
+                 wechsel: dict) -> dict[str, Optional[dict[int, str]]]:
+    """B-0 für die Heimlade-Zähler je Auto (``zusatz_schluessel`` = heutige Entitäten): ``{Entität: {slot: frühere
+    Entität}}``; ``None`` ⇒ in einem Slot galt eine Quelle außerhalb von HA — der Zähler wird an diesem Tag nicht gelesen."""
+    from backend.services.emob_ladebloecke_speicher import HEIM_GESAMT_FELD, fahrzeug_zaehler_lts
+    from backend.services.zuordnung_wechsel.anwenden import entitaet_je_slot
+
+    inv_je_eid = fahrzeug_zaehler_lts(anlage, investitionen_by_id, datum)
+    return {eid: entitaet_je_slot(wechsel.get(f"inv:{inv_je_eid[eid]}:{HEIM_GESAMT_FELD}"), eid, datum, _SLOTS)
+            for eid in zusatz if eid in inv_je_eid}
 
 
 async def wechsel_kwargs(db: AsyncSession, anlage_id: int) -> dict:
@@ -263,7 +281,7 @@ async def get_hourly_kwh_by_category_lts(
     `lts_tagestabelle` (Format wie `snapshot.aggregator.get_hourly_kwh_by_category`,
     dazu ``spannen`` je Stunde). ``{}``, wenn HA nichts liefert — der Aufrufer
     fällt dann auf den Snapshot-Pfad zurück."""
-    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum)
+    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum, **await wechsel_kwargs(db, anlage.id))
     return tabelle.stunden if tabelle is not None else {}
 
 
@@ -273,6 +291,7 @@ async def get_komponenten_tageskwh_lts(
     datum: date,
     *,
     marken_out: Optional[dict[str, str]] = None,
+    wechsel: Optional[dict] = None,
 ) -> dict[str, float]:
     """Tages-kWh je Komponente aus HA-LTS — **dünner Wrapper** über
     `lts_tagestabelle` (R5, W3: fünf Aufrufer — Tag-Status, drei Daten-Checker,
@@ -287,8 +306,11 @@ async def get_komponenten_tageskwh_lts(
     Lücke (sie steht im nächsten belegten Slot), ohne verworfene Mengen (R3/R4),
     BKW-Key = Σ Rest (E4). Σ Hourly == Daily damit exakt statt nur „aus
     derselben Quelle". Investitionen ohne Wert erscheinen nicht im Dict.
+
+    ``wechsel`` (Sensorwechsel S2, §8 Nr. 22 c): die verzeichneten Wechsel der Anlage (``wechsel_kwargs``) — der Tag liest
+    je Slot die Entität zum Stand wie ``aggregate_day`` (B-0); die Aufrufer (Tag-Status, Daten-Checker) reichen sie durch.
     """
-    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum)
+    tabelle = await lts_tagestabelle(anlage, investitionen_by_id, datum, **({"wechsel": wechsel} if wechsel else {}))
     if tabelle is None:
         return {}
     if marken_out is not None:

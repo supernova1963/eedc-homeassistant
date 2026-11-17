@@ -54,6 +54,8 @@ class _DriftKontext:
     # N-791: je Tag die Gruppen mit Wahl ``kanal`` (``kanal_gruppen_der_tage``, nur mit Spiegel und Drift geladen) —
     # an einem Bestand-Tag der Gruppe sagt der Text, dass ein gespeicherter Leistungsverlauf stehen bleibt.
     kanal_gruppen: dict = field(default_factory=dict)
+    #: Sensorwechsel S2 (§8 Nr. 22 c): die verzeichneten Wechsel für den LTS-Tag (``lts_aggregator.wechsel_kwargs``).
+    wechsel_kw: dict = field(default_factory=dict)
 
 
 async def _aktion_aeltere_quelle(db, anlage_id: int, letzter: date) -> Optional[Aktion]:
@@ -438,8 +440,11 @@ class QuellenChecks:
         )
         alle_invs = list(inv_result.scalars().all())
 
+        from backend.services.snapshot.lts_aggregator import wechsel_kwargs
+
         ctx = _DriftKontext(
             anlage=anlage, kat=kat, tz_list=tz_list, komp_je_tag=komp_je_tag, alle_invs=alle_invs,
+            wechsel_kw=await wechsel_kwargs(self.db, anlage.id),
         )
         await self._drift_pv_achse(ctx)
         self._drift_komponenten_achse(ctx)
@@ -514,7 +519,7 @@ class QuellenChecks:
             }
             try:
                 ha_komp = await get_komponenten_tageskwh_lts(
-                    anlage, invs_by_id, tz.datum,
+                    anlage, invs_by_id, tz.datum, **ctx.wechsel_kw,   # B-0 (§8 Nr. 22 c)
                 )
             except Exception as e:
                 logger.debug(

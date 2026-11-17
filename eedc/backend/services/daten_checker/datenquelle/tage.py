@@ -73,7 +73,7 @@ class TageChecks:
         """
         from datetime import date, timedelta as _td
         from backend.services.ha_statistics_service import get_ha_statistics_service
-        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts, wechsel_kwargs
         from backend.services.snapshot.komponenten_beitraege import (
             erwartete_komponenten_keys, komponenten_key_label,
         )
@@ -210,7 +210,7 @@ class TageChecks:
                 ha_komp = await get_komponenten_tageskwh_lts(
                     anlage,
                     {k: v for k, v in invs_by_id.items() if v.ist_aktiv_an(datum_)},
-                    datum_,
+                    datum_, **await wechsel_kwargs(self.db, anlage.id),   # B-0 (§8 Nr. 22 c)
                 )
             except Exception as e:
                 logger.debug(

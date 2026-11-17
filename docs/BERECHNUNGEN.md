@@ -4528,7 +4528,10 @@ Der Leser je Tag ist `services/snapshot/aggregator.py::get_tagesdetail_kwh` (Pha
 `tagesfenster_fuer` je Gerät, `_typ_summe` überspringt das E-Auto mit Wallbox-Parent oder mit deckender Wallbox (N-555,
 `_wallbox_deckt`) und summiert je Ausgabe-Key über die Geräte des Typs, `_geraet_oder_innengeraete` liest Gerätefeld und
 Innengerät-Kopien (Gerätefeld ODER Σ der Kopien, nie addiert), `_merke_grund`/`_gruende` führen den W-18-Grund (der
-aussagekräftigste gewinnt; ein Grund nur für Keys ohne Wert). Proben: `test_rf71_tag_phasen.py`.
+aussagekräftigste gewinnt; ein Grund nur für Keys ohne Wert). **Kanal vor Reihe** (Sensorwechsel S2, B-5): `_typ_summe` fragt je
+Gerät die Feld-Auskunft `kanal/feld_leser.kanal_feldzeitraeume` über **dasselbe** Fenster; löst der eigene Kanal eines Zählers
+(Gerätefeld oder Innengerät-Kopie) das Fenster voll auf, gilt sein Δ statt der Randstand-Differenz, und die Abdeckungs-Marke
+entsteht aus seinem `gedeckt_von`/`gedeckt_bis` — Abschnitt «Kanal vor Reihe» unten. Proben: `test_rf71_tag_phasen.py`, `test_sensorwechsel_s2_kanal_vor_reihe.py`.
 
 Betroffen sind die Detailwerte in *Cockpit → Tag*: die Netzladung des Speichers („davon aus dem Netz
 (Arbitrage)") und die PV-/Netz-Anteile der E-Mobilität — Zähler und Bezug im selben Fenster, sonst fehlte die Ladung
@@ -4548,7 +4551,8 @@ bzw. den Monats-Fakten und kennen kein Tagesfenster.
 > `[Vortag 23:00, 23:00)`, ein **Kanal-Tag** (`bilanz_leser.kanal_tage`, HA-Bauform S4) im Kalendertag
 > (`tagesfenster_fuer(…, kanal_tag=True)` ⇒ `for_day_total`) — Σ der Tage ≡ Monat (H-3, S4-Nachlauf). Die eine
 > Rechenstelle ist `services/monats_fakten/netzladung_tage.py`: `speicher_netzladung_aus_tagen` (Menge über den
-> Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; ein Tag mit Rücksprung oder
+> Bereichs-Leser, `TAGESDETAIL_AUSGABE` + `TAGESFENSTER_JE_TYP`, nur Tage bis gestern; **Kanal zuerst** je Tag, wo der
+> eigene Kanal des Netzlade-Zählers das Fenster des Tages vom Beginn bis zum Ende deckt — Sensorwechsel S2, §7 Nr. 12; ein Tag mit Rücksprung oder
 > ohne Rand fehlt, ohne Netzlade-Zähler keine Menge) und `netzladung_aus_tagen` (dazu der TEP-gewichtete Ladepreis
 > über `berechne_effektiver_ladepreis`, nur bei dynamischem Tarif ein Wert). Die Monats-Fakten füllen damit
 > `SpeicherFakten.netzladung_kwh` und `netzladung_preis_summe_cent_kwh`/`netzladung_gewicht_kwh` — dieselbe Bedeutung
@@ -4916,8 +4920,12 @@ Stand(Rand)   = der Stand der Reihe, der dem Rand am nächsten liegt (±5 min); 
 Anker (R1)    = fehlt Stand(Beginn) und ist Stand(Ende) da: der letzte Stand der Reihe vor dem Beginn, sonst der letzte
                 Stand beliebig weit zurück (letzter_stand_vor); die Energie der Lücke gehört zu diesem Tag (wie HA)
 Tageswert     = tageswert_aus_reihe(Anker bzw. Stand(Beginn), Stand(Ende), Stände dazwischen) = max(0, Ende − Anfang);
-                Rücksprung (Randdifferenz < −Toleranz oder fallende Folge, auch ein Tagesreset) ⇒ kein Tag
+                Rücksprung (Randdifferenz < −Toleranz oder fallende Folge, auch ein Tagesreset) ⇒ kein Tag;
+                über eine Fortsetzungs-Naht je Abschnitt, dann Σ (tageswert_ueber_abschnitte, «Naht» unten)
                                                                                           — Phase _randstaende
+Kanal zuerst  = nur mit kanal_zuerst (Speicher-Netzladung der Monats-Fakten): je Zähler und Tag das Δ des eigenen
+                Kanals über das Fenster des Tages, wo er es wirklich deckt (gedeckt_von ≤ von und gedeckt_bis ≥ bis —
+                keine Marke möglich, «Kanal vor Reihe» unten); sonst wie oben           — Phase _tageswerte_des_feldes
 Gerät         = Gerätefeld ODER Σ der Innengerät-Kopien (geraetefeld_oder_innengeraete, nie addiert); laufen mehrere
                 (typ, feld) eines Geräts in denselben Ausgabe-Key, addieren sie sich       — Phase _auffalten
 übersprungen  = Gerät None · E-Auto mit Parent (die Wallbox misst die Ladung, sonst Doppelzählung) · Feld ohne Zähler
@@ -4934,9 +4942,12 @@ N-803): die Standreihe läuft mit der heute zugeordneten Entität; ein Abschnitt
 um +X und fällt später um ≈ −X zurück — an den Rand-Tagen ist der Tageswert aus zwei Ständen falsch. **Benannte Grenzen**
 (Entscheid Gernot 16.11.2026): (1) ein **einzelner** alter Wechsel ohne Rückgang an einem Bestandstag wird nicht erkannt
 (die Regel braucht das Paar Sprung/Rückgang); (2) die **Netzladung des Speichers** im Monats-Rückfall — jeder Monat ohne Speicher-Zeile
-(`monats_fakten/laden.py::_netzladung_tage`) — liest immer die Standreihe (`monats_fakten/netzladung_tage.py::
-speicher_netzladung_aus_tagen`, `lade_tageswerte_je_feld`) und geht ohne Deckel in den Monat; (3) Anlagen **ohne HA-Stundenwerte** (Standalone, MQTT) rechnen jeden Tag über die Standreihe — dort
-wirkt ein versetzter Abschnitt an beiden Rändern.
+(`monats_fakten/laden.py::_netzladung_tage`) — liest die Standreihe (`monats_fakten/netzladung_tage.py::
+speicher_netzladung_aus_tagen`, `lade_tageswerte_je_feld`) an jedem Tag, den der eigene Kanal nicht deckt (seit
+Sensorwechsel S2 «Kanal zuerst»), und geht ohne Deckel in den Monat; (3) Anlagen **ohne HA-Stundenwerte** (Standalone, MQTT) rechnen jeden Tag über die Standreihe — dort
+wirkt ein versetzter Abschnitt an beiden Rändern. **Wirkung** (seit Sensorwechsel S2): ein Rand-Tag wirkt nur, wenn die Tagesansicht
+das Feld dort aus der Reihe liest — weder kommt seine Gruppe aus den Kanälen, noch trägt sein eigener Kanal den Tag (dieselbe
+Feld-Auskunft wie *Cockpit → Tag*, `kanal/feld_leser.feld_aus_kanal_am_tag`); trägt der Kanal beide Rand-Tage, schweigt der Befund.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
@@ -5061,6 +5072,106 @@ Tageszusammenfassung (unten).
 - **Stunden-Aggregation IST von Wetter-Samples:** arithmetisches Mittel der 10-Min-Slots (v3.23.6) — konsistent mit der Mean-Konvention der Open-Meteo-Stundenwerte (ein „last"-Wert läge im Live-Heute-Chart ≈ 25 min versetzt).
 - **Batterie-SoC:** HA Sensor History (Stundenmittel) — gefiltert auf `inv.typ == "speicher"`, siehe Vollzyklen-Hinweis unten
 - **Strompreis (zwei Felder):** `strompreis_cent` (Endpreis aus HA-Sensor) + `boersenpreis_cent` (EPEX, immer befüllt)
+
+### Sensorwechsel: Zuordnung zum Zeitpunkt, Naht und Kanal vor Reihe
+
+Vorhaben «Sensorwechsel mit Grund» (Bauplan Fassung 2, Sitzungen 1–2). Ein Wechsel der **wirksamen** Quelle eines Zählerschlüssels
+mit eigenen Werten steht als Zeile in `zuordnung_wechsel` (`erklaert_ts`, `ab_ts` = erste volle Stunde ab der Erklärung,
+`vorher`/`nachher`, `grund` ∈ {`fortsetzung`, `korrektur`, leer}). Ein Stand mit `zeitpunkt ≥ ab_ts` gehört zur neuen Quelle,
+einer davor zur alten.
+
+#### Zuordnung zum Zeitpunkt (B-0)
+
+```
+Quelle(Schlüssel, z) = vorher des frühesten nicht aufgehobenen Wechsels mit ab_ts > z,
+                       bei einer Korrektur in [falsch_seit_ts, ab_ts) deren nachher,
+                       sonst die heutige Zuordnung                       (zuordnung_wechsel/zeitpunkt.py::quelle_am)
+Schreiben für z      = gilt um z die heutige Quelle ⇒ wie bisher (auch das Löschen einer Stunden-Zeile ohne HA-Wert, #184);
+                       sonst füllt der Schreiber NUR fehlende Zeilen aus der Quelle zum Zeitpunkt — eine vorhandene
+                       Stunden- oder Fünf-Minuten-Zeile wird weder überschrieben noch gelöscht (Bauplan §8 Nr. 16);
+                       Quelle unbekannt, «keine» oder außerhalb von HA ⇒ nichts geschrieben, nichts gelöscht
+Fünf-Minuten-Zeile   = gelöscht nur, wo HAs Kurzzeitstatistik die Stunde führt (Probe je Entität und Stunde, §8 Nr. 20)
+LTS-Tag              = je Slot das Delta der Entität, die zum Stand des Slots galt; galt eine Quelle außerhalb von HA ⇒ der
+                       Tag liest den Snapshot-Pfad; Tag-Status und Daten-Checker reichen die Wechsel durch (§8 Nr. 22)
+Heimlade-Zähler      = je Auto und Slot die Entität zum Stand (lts_aggregator._zusatz_plan); galt in einem Slot eine Quelle
+                       außerhalb von HA, wird der Zähler an diesem Tag nicht gelesen (kein Pfadwechsel — der Tag bleibt beim
+                       LTS-Pfad); führt HA eine frühere Entität nicht, fällt ihr Slot weg, nie das Delta der heutigen
+```
+
+Eingehängt an Writer, 5-Minuten-Writer, «Tag neu aggregieren»/Bereich, Startup-Recovery, Self-Healing (`get_snapshot`),
+Live-Rückfall, LTS-Tag (`aggregate_day`, `get_komponenten_tageskwh_lts`) und die Werkbank-Vorschau (Vorschau = Lauf).
+Verzeichnet wird nur ein Schlüssel **mit eigenen Werten** (§8 Nr. 17); bis Sitzung 3 wirkt ein Wechsel ohne Grund für die
+Schreiber wie eine Fortsetzung (§8 Nr. 18). **Grenzen:** ein schon vorhandener fremder Abschnitt bleibt stehen (B-0 verhindert
+neue; die Tagesansicht trägt ihn über «Kanal vor Reihe», wo der Kanal deckt) · vor einem verzeichneten Wechsel stellt «Tag neu
+aggregieren» keine vorhandene Zeile mehr richtig (der Weg ist ab Sitzung 3 die Korrektur) · Feld → «Keine», danach «Tag neu
+aggregieren» eines Tags davor: die Tageszeile verliert den Schlüssel wie vor dem Vorhaben (nicht gebaut, übergeben).
+Proben: `test_sensorwechsel_s1_zeitpunkt.py`, `test_sensorwechsel_s2_b0_rest.py`.
+
+#### Naht einer Fortsetzung (B-3, B-4)
+
+**Regel:** keine Differenz zweier Stände über eine Fortsetzungs-Naht. Naht = `ab_ts` eines nicht aufgehobenen Wechsels mit
+`grund = fortsetzung` (`zeitpunkt.fortsetzungs_naehte`); ein Wechsel **ohne** Grund ist keine Naht — die Leser lesen dort wie
+vor dem Vorhaben. Layer `core/berechnungen/zaehler_naht.py` (`abschnitte`, `ueber_naht`, `zaehlwerk_menge`, `stand_differenz`):
+
+```
+Abschnitte    = die Standfolge [(Rand_von, s0), Stände dazwischen, (Rand_bis, s1)], geteilt an jeder Naht
+                (ein Stand bei oder nach ab_ts beginnt den neuen Abschnitt)
+Tageswert     = Σ tageswert_aus_reihe je Abschnitt (reader.tageswert_ueber_abschnitte); ein Abschnitt mit Rücksprung
+                ⇒ None wie bisher; ein Abschnitt aus einem Stand trägt 0          — Tagesansicht, Bereichs-Leser, delta
+Slot          = über eine Naht (vorher < ab_ts ≤ Stand) 0 — mit Ständen zur vollen Stunde trägt der neue Abschnitt im Slot
+                nichts; keine lineare Füllung (#145) über eine Naht                — snapshot_tagestabelle, Stundenform
+Zählwerk      = Tag: Σ max(0, letzter − erster) je Abschnitt; Stunde: Naht-Slot 0 — Starts, Betriebsstunden
+Zählerstand   = Differenz Σ (letzter − erster) je Abschnitt; ein Paar über eine Naht ist kein Reihenbruch
+                                                                                    — zaehlerstaende.py, Daten-Checker
+MQTT (B-4)    = im Kanal «Eigene Summe» schließen die Stände vor erklaert_ts die alte Periode; ab dem ersten Stand danach
+                eine neue Periode (Nullpunkt) mit neuer kanal_quelle (gueltig_ab = ihre erste Stunde,
+                offset = Kanalwert der alten Periode am Schluss); angewandt, wenn kein Rohstand ab erklaert_ts schon
+                verbraucht ist; gesucht wird eine offene Naht nur ab einem Tag vor dem Laufbeginn (NAHT_SUCHE) — schweigt
+                der neue Publisher länger, trägt der Kanal den Sprung (dann der Nachtrag) (kanal/naht.py;
+                ha_summe_der_periode unverändert)
+Nachtrag      = für schon geschriebene Zeilen: Quellzeile gueltig_ab = H,
+                offset = offset_alt − (Wert der Naht-Zeile − Wert der vorigen Zeile) — die Naht-Stunde ohne Zuwachs,
+                keine Kanalzeile umgeschrieben; spätere Quellzeilen rücken um dieselbe Verschiebung mit (ihr Versatz ist der
+                Kanalwert am Schluss der Vorgängerin — sonst käme der Sprung an ihrer Grenze zurück; bestätigt Master 17.11.); beginnt zwischen voriger Zeile und Naht-Zeile schon eine Quelle
+                (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal
+                (kanal/naht.py::nachtrag_fortsetzung, ohne Oberfläche)
+```
+
+**Benannte Grenze:** die Menge zwischen dem letzten Stand vor und dem ersten Stand ab `ab_ts` zählt nicht (stündliche Stände bis
+1 h, Tagesstände bis 1 Tag je Seite; MQTT: Stände der Naht-Stunde vor dem ersten neuen Stand gehen in den Versatz). Welcher Leser
+die Naht beachtet, wer «Kanal zuerst» liest und wer bewusst nicht, steht im Wächter «Reihen-Leser»
+(`tests/test_reihen_leser_waechter.py`, Einstufung je Lesestelle). Proben: `test_sensorwechsel_s2_naht.py`.
+
+#### Kanal vor Reihe (B-5)
+
+```
+Feld-Auskunft = je Zählerschlüssel (Gerätefeld oder Innengerät-Kopie) und Fenster der Zeitraum seines eigenen
+                Mengen-Kanals (Art sum), wenn Zeitraum.voll (lesen.zeitraum_stapel / zeitraeume_stapel) — kanal/feld_leser.py
+voll          = eine AUFLÖSUNGSREGEL, keine Deckung: über keinen Rand reicht eine Spanne, die größer ist als das Fenster.
+                Ein Kanal mit einem Stand je Tag ist im Fenster [Vortag 23:00, 23:00) «voll» (Spanne 24 h), gedeckt aber
+                nur bis 00:00
+Fenster       = dasselbe, in dem die Reihe an diesem Tag gelesen würde (tagesfenster_fuer mit denselben Argumenten:
+                Bestandstag je Typ, Wallbox/E-Auto/Speicher rückwärts [Vortag 23:00, 23:00); Kanal-Tag Kalendertag)
+Tageswert     = je (Gerät, Feld, Kopie) Kanal-Δ, sonst Randstand-Differenz der Reihe (mit Naht); Gerät = Gerätefeld ODER
+                Σ Kopien; Ausgabe-Schlüssel = Σ Geräte; wallbox_deckt aus der Entscheidung des Tages
+Marke         = folgt der Quelle des Werts (Bauplan §9 Nr. 24): aus dem Kanal seine gedeckt_von/gedeckt_bis nach der Regel
+                der Reihe (ein Stand vor dem Fenster deckt den Tagesbeginn; gedeckt_bis vor dem Fensterende ⇒ «gemessen bis»)
+                — aggregator._kanal_rand_menge; die weiteste Einschränkung über alle gelesenen Felder wie bisher
+Bereichs-Leser = ohne Marke (Speicher-Netzladung der Monats-Fakten, kanal_feldwerte_je_fenster): der Kanal gilt nur bei
+                echter Deckung des Fensters (gedeckt_von ≤ von und gedeckt_bis ≥ bis), sonst die Reihe — weil keine Marke
+                möglich ist, die einen nur bis 00:00 gedeckten Wert benennen könnte (Entscheid H-K4 (a))
+```
+
+Leser: *Cockpit → Tag*, Wärme-Verlauf Stunden und Wärme-Verteilung Tag (`get_tagesdetail_kwh`), die Speicher-Netzladung der
+Monats-Fakten (`netzladung_tage.py`, `kanal_zuerst=True`, nur bei echter Deckung) und die Wirkungs-Prüfung des Befunds `zaehler_versatz`. Die
+Gruppen-Regel der Quellenwahl für Bilanz und Summen bleibt. Ein Kanal, der das Fenster nicht voll trägt (Beginn im Fenster,
+Ende vor dem Fenster-Ende, Spanne über dem Fenster), lässt die Reihe gelten. Gemessen (Produktiv-Sicherung 15.11.): an den
+15 Tagen der Wallbox «Ladung PV» mit Naht oder fremdem Abschnitt (1.7.–10.8.2026) zeigt die Tagesansicht jetzt den HA-Spiegel;
+an den übrigen Bestandstagen mit vollem Kanal ersetzt der Spiegel die auf 3 Nachkommastellen gespeicherten Stände der Reihe
+(höchstens 0,0008 kWh je Tag, 71 Tage); `kanal.db`: an den 183 Fenster-Tagen (ein Stand je Tag, 14.09.2025–23.06.2026,
+Messblatt S0 M-E) ist der Kanal «voll», trägt das Rückwärtsfenster aber nur bis 00:00 — Wert gleich wie aus der Reihe, Marke
+«gemessen bis 00:00 Uhr» wie bisher; der Bereichs-Leser nimmt an diesen Tagen die Reihe (ohne Rand-Rückfall: kein Wert), wie
+vor dem Vorhaben. Proben: `test_sensorwechsel_s2_kanal_vor_reihe.py`.
 
 ### Tageszusammenfassung (TagesZusammenfassung)
 

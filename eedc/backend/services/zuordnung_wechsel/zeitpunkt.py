@@ -53,6 +53,8 @@ class Wechsel:
     grund: Optional[str] = None
     falsch_seit_ts: Optional[datetime] = None
     aufgehoben_durch: Optional[int] = None
+    #: Sekunde der Erklärung (B-4: im MQTT-Kanal schließen die Stände davor die alte Periode).
+    erklaert_ts: Optional[datetime] = None
 
 
 def ab_ts_aus(erklaert_ts: datetime) -> datetime:
@@ -92,13 +94,17 @@ def zuordnung_am(wechsel_je_key: Optional[dict[str, list[Wechsel]]], z: datetime
 
 def _als_wechsel(row) -> Wechsel:
     return Wechsel(row.sensor_key, row.ab_ts, row.vorher, row.nachher, row.grund, row.falsch_seit_ts,
-                   row.aufgehoben_durch)
+                   row.aufgehoben_durch, row.erklaert_ts)
 
 
 async def lade_wechsel(db, anlage_id: int) -> dict[str, list[Wechsel]]:
     """Die verzeichneten Wechsel einer Anlage je Schlüssel — einmal je Sitzung gelesen (``db.info``)."""
     from backend.models.zuordnung_wechsel import ZuordnungWechsel
 
+    if not isinstance(getattr(db, "info", None), dict):
+        # Keine Sitzung (Proben mit einer gestellten Datenbank-Attrappe, seit Sitzung 2 auch über die Reihen-Leser): ohne
+        # Sitzung gibt es keine verzeichneten Wechsel.
+        return {}
     merk = db.info.setdefault(_INFO, {})
     if anlage_id in merk:
         return merk[anlage_id]
@@ -134,6 +140,20 @@ def vergiss(db, anlage_id: Optional[int] = None) -> None:
         merk.clear()
     else:
         merk.pop(anlage_id, None)
+
+
+def naehte_der_fortsetzung(wechsel: Optional[list[Wechsel]]) -> list[datetime]:
+    """Die Nähte eines Schlüssels (Bauplan B-3): ``ab_ts`` jedes nicht aufgehobenen Wechsels mit Grund «Fortsetzung»,
+    aufsteigend. Ein Wechsel ohne Grund ist keine Naht — die Leser lesen dort wie vor diesem Vorhaben (Sitzung 2)."""
+    from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
+
+    return sorted(w.ab_ts for w in (wechsel or ()) if w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None)
+
+
+async def fortsetzungs_naehte(db, anlage_id: int, sensor_key: str) -> list[datetime]:
+    """``naehte_der_fortsetzung`` mit dem Laden der Zeilen (je Sitzung gemerkt, ``lade_wechsel``) — die eine Ladestelle
+    der Reihen-Leser (Wächter «Reihen-Leser»)."""
+    return naehte_der_fortsetzung((await lade_wechsel(db, anlage_id)).get(sensor_key))
 
 
 async def quelle_zum_zeitpunkt(db, anlage_id: int, sensor_key: str, z: datetime) -> Antwort:

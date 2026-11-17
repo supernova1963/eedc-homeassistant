@@ -29,7 +29,9 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.services.snapshot.aggregator import _fill_gaps_linear, stunden_slot_delta
+from backend.core.berechnungen.zaehler_naht import ueber_naht
+from backend.services.snapshot.aggregator import _fill_gaps_linear, _naht_trenner, stunden_slot_delta
+from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 from backend.services.snapshot.boundary_range import BoundaryRange
 from backend.services.snapshot.keys import extract_quellen_energy
 from backend.services.snapshot.reader import get_snapshot
@@ -68,11 +70,15 @@ async def lade_stundenformen(
             )
         if all(v is None for v in staende.values()):
             continue
-        _fill_gaps_linear(staende)
+        naehte = await fortsetzungs_naehte(db, anlage.id, sensor_key)          # Sensorwechsel B-3
+        _fill_gaps_linear(staende, _naht_trenner(rng, naehte))
         slots: list[Optional[float]] = [None] * 24
         for slot_idx, prev_off, curr_off in rng.slot_pairs:
             s0, s1 = staende.get(prev_off), staende.get(curr_off)
             if s0 is None or s1 is None:
+                continue
+            if ueber_naht(rng.boundary_at(prev_off), rng.boundary_at(curr_off), naehte):
+                slots[slot_idx] = 0.0       # B-3: der Naht-Slot zählt nur den neuen Abschnitt — mit Ständen zur vollen Stunde nichts
                 continue
             slots[slot_idx] = stunden_slot_delta(
                 s0, s1, sensor_key=sensor_key, datum=datum, slot_idx=slot_idx,

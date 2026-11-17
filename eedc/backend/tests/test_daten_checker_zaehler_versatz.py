@@ -180,13 +180,21 @@ def ohne_ha(monkeypatch):
 
 
 def _kanal_tage(monkeypatch, je_tag: dict):
-    """Die Tageswahl der Kanal-Schicht gestellt: ``{datum: Schlüssel aus den Kanälen}`` (ohne Eintrag: keiner)."""
+    """Die Tageswahl der Kanal-Schicht gestellt: ``{datum: Schlüssel aus den Kanälen}`` (ohne Eintrag: keiner) — seit
+    Sensorwechsel S2 (B-5) auch die Feld-Auskunft «Kanal vor Reihe» (``feld_leser.feld_aus_kanal_am_tag``): der Spiegel der
+    Proben deckt jeden Tag, ohne die Stellung schwiege jeder Befund. Die Wirkung der echten Feld-Auskunft hält
+    ``test_sensorwechsel_s2_kanal_vor_reihe.py::test_versatz_schweigt_wo_der_eigene_kanal_den_tag_traegt``."""
     import backend.services.energie_profil.kanal_stunden as ks
+    import backend.services.kanal.feld_leser as fl
 
     async def _schluessel(_db, _aid, datum):
         return frozenset(je_tag.get(datum, ()))
 
+    async def _feld(_db, _anlage, _typ, key, datum):
+        return key in je_tag.get(datum, ())
+
     monkeypatch.setattr(ks, "kanal_schluessel_des_tages", _schluessel)
+    monkeypatch.setattr(fl, "feld_aus_kanal_am_tag", _feld)
 
 
 async def _pruefe(db, a):

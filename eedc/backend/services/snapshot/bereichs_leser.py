@@ -73,8 +73,9 @@ from backend.services.snapshot.reader import (
     get_snapshot,
     letzter_stand_vor,
     mqtt_zaehler_keys,
-    tageswert_aus_reihe,
+    tageswert_ueber_abschnitte,
 )
+from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ async def lade_tageswerte_je_feld(
     felder: dict[tuple[str, str], str],
     *,
     rueckwaerts_tage: frozenset[date] | set[date] = frozenset(),
+    kanal_zuerst: bool = False,
 ) -> dict[date, dict[str, float]]:
     """Tages-kWh je Ausgabe-Key über ``[von, bis]`` — die Σ über die Geräte.
 
@@ -134,7 +136,7 @@ async def lade_tageswerte_je_feld(
     """
     je_geraet = await lade_tageswerte_je_geraet(
         db, anlage, investitionen_by_id, von, bis, felder,
-        rueckwaerts_tage=rueckwaerts_tage,
+        rueckwaerts_tage=rueckwaerts_tage, kanal_zuerst=kanal_zuerst,
     )
     return {
         tag: {key: sum(je_inv.values()) for key, je_inv in keys.items()}
@@ -156,6 +158,7 @@ class _BereichKontext:
     fenster_je_tag: dict[date, tuple[datetime, datetime]]
     grenzen: list[datetime]
     ergebnis: dict[date, dict[str, dict[str, float]]] = field(default_factory=dict)
+    kanal_zuerst: bool = False
 
 
 async def lade_tageswerte_je_geraet(
@@ -167,6 +170,7 @@ async def lade_tageswerte_je_geraet(
     felder: dict[tuple[str, str], str],
     *,
     rueckwaerts_tage: frozenset[date] | set[date] = frozenset(),
+    kanal_zuerst: bool = False,
 ) -> dict[date, dict[str, dict[str, float]]]:
     """Tages-kWh je Ausgabe-Key **und Gerät** über ``[von, bis]``.
 
@@ -184,6 +188,9 @@ async def lade_tageswerte_je_geraet(
             ``(typ, mapping-feld) → ausgabe_key``. Der Aufrufer wählt die
             Teilmenge, die er braucht; die **Namen** kommen aus der einen
             Tabelle.
+        kanal_zuerst: **Kanal vor Reihe** (Sensorwechsel B-5, §7 Nr. 12): je Zähler und Tag das Δ seines eigenen
+            Kanals über das Fenster des Tages, wenn der Kanal es voll trägt (``kanal/feld_leser``); sonst die Reihe.
+            Aufrufer mit ``True``: die Speicher-Netzladung der Monats-Fakten (``monats_fakten/netzladung_tage.py``).
         rueckwaerts_tage: Tage, deren Wert im Fenster [Vortag 23:00, 23:00)
             gelesen wird statt [00:00, 24:00) — **N-435**. Das sind die Tage,
             deren Tageszeile ihren Wärmepumpen-Strom aus den HA-LTS-Slots trägt
@@ -210,7 +217,8 @@ async def lade_tageswerte_je_geraet(
     mqtt_keys = await mqtt_zaehler_keys(db, anlage.id)
     fenster_je_tag, grenzen = _tagesfenster(von, bis, rueckwaerts_tage)
     ctx = _BereichKontext(db=db, anlage=anlage, investitionen_map=investitionen_map, quellen_energy=quellen_energy,
-                          mqtt_keys=mqtt_keys, fenster_je_tag=fenster_je_tag, grenzen=grenzen)
+                          mqtt_keys=mqtt_keys, fenster_je_tag=fenster_je_tag, grenzen=grenzen,
+                          kanal_zuerst=kanal_zuerst)
 
     for inv_id_str, inv in investitionen_by_id.items():
         geraet = _geraete_aufloesung(ctx, inv_id_str, inv)
@@ -284,6 +292,11 @@ async def _tageswerte_des_feldes(
         if not feld_hat_zaehler(cfg, sensor_key, ctx.quellen_energy, ctx.mqtt_keys):
             continue
         sensor_id = cfg.get("sensor_id") if isinstance(cfg, dict) else None
+        kanal = (await _kanal_je_tag(ctx, sensor_key)) if ctx.kanal_zuerst else {}
+        if kanal:
+            je_tag_je_key.setdefault(k, {}).update(kanal)
+        if kanal and len(kanal) == len(ctx.fenster_je_tag):
+            continue
 
         reihe = await _reihe_ueber_bereich(
             ctx.db, ctx.anlage.id, sensor_key, ctx.grenzen[0], ctx.grenzen[-1],
@@ -292,12 +305,22 @@ async def _tageswerte_des_feldes(
             ctx.db, ctx.anlage, sensor_key, sensor_id, ctx.quellen_energy, ctx.grenzen, reihe,
         )
         stand_am = dict(zip(ctx.grenzen, staende))
+        naehte = await fortsetzungs_naehte(ctx.db, ctx.anlage.id, sensor_key)
 
         for tag, fenster in ctx.fenster_je_tag.items():
-            wert = await _randstaende(ctx, sensor_key, sensor_id, reihe, stand_am, tag, fenster)
+            if tag in kanal:
+                continue
+            wert = await _randstaende(ctx, sensor_key, sensor_id, reihe, stand_am, tag, fenster, naehte)
             if wert is not None:
                 je_tag_je_key.setdefault(k, {})[tag] = wert
     return je_tag_je_key
+
+
+async def _kanal_je_tag(ctx: _BereichKontext, sensor_key: str) -> dict[date, float]:
+    """Kanal vor Reihe (B-5): je Tag das Kanal-Δ des Zählers über das Fenster des Tages, nur volle Tage."""
+    from backend.services.kanal.feld_leser import kanal_feldwerte_je_fenster
+
+    return (await kanal_feldwerte_je_fenster(ctx.db, ctx.anlage.id, [sensor_key], ctx.fenster_je_tag)).get(sensor_key, {})
 
 
 async def _randstaende(
@@ -308,6 +331,7 @@ async def _randstaende(
     stand_am: dict[datetime, Optional[float]],
     tag: date,
     fenster: tuple[datetime, datetime],
+    naehte: list[datetime],
 ) -> Optional[float]:
     """Ein Tag eines Zählers (RF-57): Randstand-Differenz über das Fenster samt Zwischenständen
     (``tageswert_aus_reihe``); fehlt der Anfangsstand, trägt der Lückenanker R1 (letzter Stand davor, aus der Reihe
@@ -334,9 +358,10 @@ async def _randstaende(
     if s0 is None or s1 is None:
         return None
     zwischen = [
-        w for ts, w in reihe if anker_ts < ts < tages_ende
+        (ts, w) for ts, w in reihe if anker_ts < ts < tages_ende
     ]
-    wert = tageswert_aus_reihe(s0, s1, zwischen)
+    # Sensorwechsel B-3: über eine Fortsetzungs-Naht keine Differenz (ohne Naht wörtlich `tageswert_aus_reihe`).
+    wert = tageswert_ueber_abschnitte([(anker_ts, s0), *zwischen, (tages_ende, s1)], naehte)
     if wert is None:
         logger.debug(
             "Zähler-Rücksprung im Tagesfenster für anlage=%s key=%s "

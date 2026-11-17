@@ -132,7 +132,9 @@ async def baue_tag_status(db: AsyncSession, anlage: Anlage, datum: date) -> TagS
 
     quelle = await ermittle_aggregations_quelle(db, anlage, datum)
 
-    ha_kwh = await _ha_tageswerte(anlage, invs_by_id, datum, erwartete_keys)
+    from backend.services.snapshot.lts_aggregator import wechsel_kwargs
+
+    ha_kwh = await _ha_tageswerte(anlage, invs_by_id, datum, erwartete_keys, await wechsel_kwargs(db, anlage.id))
     if ha_kwh is None:
         return TagStatus(
             lage="keine_ha_statistik",
@@ -243,6 +245,7 @@ async def _ha_tageswerte(
     invs_by_id: dict,
     datum: date,
     erwartete_keys: set[str],
+    wechsel_kw: Optional[dict] = None,
 ) -> Optional[dict[str, float]]:
     """Was hat HA für diesen Tag? ``None`` = **nicht gefragt/nicht erreichbar**.
 
@@ -259,7 +262,7 @@ async def _ha_tageswerte(
     if not get_ha_statistics_service().is_available:
         return None
     try:
-        roh = await get_komponenten_tageskwh_lts(anlage, invs_by_id, datum)
+        roh = await get_komponenten_tageskwh_lts(anlage, invs_by_id, datum, **(wechsel_kw or {}))   # B-0 (§8 Nr. 22 c)
     except Exception as e:  # Netzfehler ≠ „HA hat nichts"
         logger.debug(
             f"Tag-Status Anlage {anlage.id} {datum}: HA-LTS-Read fehlgeschlagen: "

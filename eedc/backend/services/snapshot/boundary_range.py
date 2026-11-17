@@ -95,6 +95,19 @@ def tageszeile_ist_rueckwaerts(
     return False
 
 
+async def tageszeile_des_tages_ist_rueckwaerts(db, anlage_id: int, datum: date) -> bool:
+    """``tageszeile_ist_rueckwaerts`` für die gespeicherte Tageszeile von ``datum`` (keine Zeile ⇒ ``False``) — dieselbe
+    Frage wie ``kanal_stunden.tages_eingaenge``; Leser: die Feld-Auskunft «Kanal vor Reihe» (``kanal/feld_leser``,
+    Sensorwechsel S2). Liest nur die Marken, keine Menge."""
+    from sqlalchemy import select
+
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+
+    tz = (await db.execute(select(TagesZusammenfassung.source_provenance, TagesZusammenfassung.verworfen).where(
+        TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum == datum))).one_or_none()
+    return tageszeile_ist_rueckwaerts(tz[0] if tz else None, tz[1] if tz else None)
+
+
 @dataclass(frozen=True)
 class BoundaryRange:
     """Typed Range über Snapshot-Zeitstempel für eine bestimmte Aggregat-Variante."""

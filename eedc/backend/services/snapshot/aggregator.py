@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.betriebsart_gemessen import (
     geraetefeld_oder_innengeraete,
 )
+from backend.core.berechnungen.zaehler_naht import ueber_naht
 from backend.core.betriebsmodus import BETRIEBSART_NUTZENERGIE_FELD, HEIZEN, KUEHLEN
 from backend.core.field_definitions import FEINE_STROM_FELDER, WP_GESAMT_STROM_FELDER
 from backend.core.tageswert_grund import (
@@ -57,8 +58,9 @@ from backend.services.snapshot.reader import (
     letzter_stand_vor,
     mqtt_zaehler_keys,
     reihe_im_fenster,
-    tageswert_aus_reihe,
+    tageswert_ueber_abschnitte,
 )
+from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 from backend.services.snapshot.tages_tabelle import (
     TabellenEintrag,
     TagesTabelle,
@@ -170,10 +172,14 @@ async def _tageswert_aus_raendern(
     # vor der dieser Docstring warnt. Die Regel selbst steht jetzt als reine
     # Funktion in `reader.tageswert_aus_reihe`; hier wird geladen und
     # protokolliert.
-    zwischenstaende = [w for _ts, w in await reihe_im_fenster(
-        db, anlage_id, sensor_key, ts_start, ts_ende
-    )]
-    wert = tageswert_aus_reihe(s0, s1, zwischenstaende)
+    from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
+
+    reihe = await reihe_im_fenster(db, anlage_id, sensor_key, ts_start, ts_ende)
+    zwischenstaende = [w for _ts, w in reihe]
+    # Sensorwechsel B-3: über eine Fortsetzungs-Naht keine Differenz — Summe der Abschnitte (ohne Naht wörtlich
+    # `tageswert_aus_reihe`).
+    wert = tageswert_ueber_abschnitte([(ts_start, s0), *reihe, (ts_ende, s1)],
+                                      await fortsetzungs_naehte(db, anlage_id, sensor_key))
     if wert is None:
         logger.info(
             f"Zähler-Rücksprung im Tagesfenster für anlage={anlage_id} "
@@ -252,7 +258,27 @@ def stunden_slot_art(s0: float, s1: float) -> tuple[float, str]:
     return max(0.0, d), SLOT_MENGE
 
 
-def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
+def _naht_trenner(rng: BoundaryRange, naehte: list[datetime]):
+    """B-3: ``trennt(a, b)`` für ``_fill_gaps_linear`` — ``None`` ohne Naht (dann bitgleich wie vorher)."""
+    if not naehte:
+        return None
+    return lambda a, b: ueber_naht(rng.boundary_at(a), rng.boundary_at(b), naehte)
+
+
+async def _zaehlwerk_tag(db: AsyncSession, anlage_id: int, sensor_key: str, tag_start: datetime, tag_ende: datetime,
+                         snap_start: float, snap_ende: float) -> float:
+    """Tages-Δ eines Zählwerks (L7): ohne Fortsetzungs-Naht im Tag wörtlich ``Ende − Anfang``; mit Naht je Abschnitt
+    (``zaehler_naht.zaehlwerk_menge`` über die Reihe des Tages, B-3)."""
+    from backend.core.berechnungen.zaehler_naht import zaehlwerk_menge
+
+    naehte = await fortsetzungs_naehte(db, anlage_id, sensor_key)
+    if not ueber_naht(tag_start, tag_ende, naehte):
+        return snap_ende - snap_start
+    reihe = await reihe_im_fenster(db, anlage_id, sensor_key, tag_start, tag_ende)
+    return zaehlwerk_menge([(tag_start, snap_start), *reihe, (tag_ende, snap_ende)], naehte)
+
+
+def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]], trennt=None) -> None:
     """
     Füllt None-Werte in {stunde: wert}-Dict per linearer Interpolation
     zwischen dem letzten und dem nächsten verfügbaren Wert (Issue #145).
@@ -264,6 +290,9 @@ def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
     sinnvolle Schätzung.
 
     Arbeitet in-place.
+
+    ``trennt(a, b)`` (Sensorwechsel B-3): liegt zwischen den Ständen ``a`` und ``b`` eine Fortsetzungs-Naht, wird die
+    Lücke **nicht** gefüllt — eine Gerade über die Naht verteilte den Niveau-Sprung auf die Stunden dazwischen.
     """
     hours_with_values = sorted(h for h, v in snaps_per_hour.items() if v is not None)
     if len(hours_with_values) < 2:
@@ -271,8 +300,8 @@ def _fill_gaps_linear(snaps_per_hour: dict[int, Optional[float]]) -> None:
 
     # Zwischen-Lücken interpolieren (nur solche, die von bekannten Werten eingerahmt sind)
     for a, b in zip(hours_with_values, hours_with_values[1:]):
-        if b - a <= 1:
-            continue  # keine Lücke zwischen a und b
+        if b - a <= 1 or (trennt is not None and trennt(a, b)):
+            continue  # keine Lücke zwischen a und b — oder eine Naht dazwischen (B-3)
         v_a = snaps_per_hour[a]
         v_b = snaps_per_hour[b]
         for h in range(a + 1, b):
@@ -427,7 +456,8 @@ async def snapshot_tagestabelle(
                 db, anlage.id, sk, entity_id, rng.boundary_at(offset),
                 quellen_energy=quellen_energy,
             )
-        _fill_gaps_linear(staende)                       # E1: nur innen
+        naehte = await fortsetzungs_naehte(db, anlage.id, sk)          # B-3
+        _fill_gaps_linear(staende, _naht_trenner(rng, naehte))         # E1: nur innen, nicht über eine Naht
 
         vorher: Optional[tuple[datetime, float]] = None
         if staende.get(-1) is not None:
@@ -444,7 +474,9 @@ async def snapshot_tagestabelle(
                 continue
             ts_h = rng.boundary_at(h)
             if vorher is not None:
-                wert, art = stunden_slot_art(vorher[1], stand)
+                # B-3: der Naht-Slot zählt nur den neuen Abschnitt — mit Ständen zur vollen Stunde nichts.
+                wert, art = ((0.0, SLOT_MENGE) if ueber_naht(vorher[0], ts_h, naehte)
+                             else stunden_slot_art(vorher[1], stand))
                 if art == SLOT_TAGESRESET:
                     tagesreset.add(sk)
                 if round(wert, 3) == 0:
@@ -524,7 +556,7 @@ async def get_daily_counter_deltas_by_inv(
             )
             if snap_start is None or snap_ende is None:
                 continue
-            delta_count = snap_ende - snap_start
+            delta_count = await _zaehlwerk_tag(db, anlage.id, sensor_key, tag_start, tag_ende, snap_start, snap_ende)
             if delta_count < 0:
                 # Counter-Reset (Firmware-Update o.ä.) — als 0 werten, nicht als Lücke
                 logger.warning(
@@ -1295,13 +1327,29 @@ def _abdeckung(ctx: _TagesDetailKontext, menge: "TagesRandMenge") -> None:
         )
 
 
+def _kanal_rand_menge(z) -> "TagesRandMenge":
+    """Sensorwechsel B-5, Bauplan §9 Nr. 24: **die Abdeckungs-Marke folgt der Quelle des Werts.** Kommt der Wert eines
+    Zählers aus dem Kanal (``kanal/feld_leser.kanal_feldzeitraeume``), entsteht seine Marke aus ``gedeckt_von``/
+    ``gedeckt_bis`` des Kanal-Zeitraums nach derselben Regel wie bei der Reihe (``_tagesdetail_boundary_diff_mit_grund``):
+    ein Stand vor dem Fenster deckt den Tagesbeginn (R1), ein letzter Stand vor dem Fensterende nennt «gemessen bis».
+    ``voll`` ist eine Auflösungsregel, keine Deckung — ohne diese Marke verschwiege die Sicht, dass der Wert an einem Tag
+    mit einem Stand je Tag nur bis 00:00 reicht (ADR-002/P4)."""
+    return TagesRandMenge(
+        wert_kwh=z.delta, seit=datetime.fromtimestamp(z.gedeckt_von), bis=datetime.fromtimestamp(z.gedeckt_bis),
+        ab_tagesbeginn=z.gedeckt_von <= z.von, bis_tagesende=z.gedeckt_bis >= z.bis,
+    )
+
+
 async def _geraet_oder_innengeraete(
     ctx: _TagesDetailKontext, inv_id_str: str, feld: str, out_key: str, felder: dict, kandidaten,
-    rng_typ: BoundaryRange,
+    rng_typ: BoundaryRange, kanal: dict,
 ) -> tuple[Optional[float], dict[str, float]]:
     """Phase von ``get_tagesdetail_kwh`` (RF-72): ein Feld EINES Geräts — Gerätefeld und seine Innengerät-Kopien
     je mit Zähler (N-328b) als Randstand-Differenz im Fenster ``rng_typ``, W-18-Grund je fehlendem Feld, Abdeckung;
     dann die EINE Regel ``geraetefeld_oder_innengeraete`` (Gerätefeld ODER Σ Innengeräte, nie addiert).
+    **Kanal vor Reihe** (Sensorwechsel B-5): trägt der eigene Kanal eines Zählers das Fenster voll (``kanal``, aus
+    ``kanal/feld_leser.kanal_feldzeitraeume`` über dasselbe Fenster), gilt sein Δ statt der Randstand-Differenz — je Zähler;
+    die Abdeckungs-Marke dann aus dem Kanal-Zeitraum (``_kanal_rand_menge``, §9 Nr. 24).
     Rückgabe ``(Tageswert des Geräts oder None, gelesene Felder)``."""
     # ⭐ Bauschnitt 6: Gerätefeld UND seine Innengerät-Kopien (Suffix
     # `-<id>`). Bis dahin las diese Schleife allein den exakten Key — ein
@@ -1321,6 +1369,10 @@ async def _geraet_oder_innengeraete(
         # einer Zuordnung, die es gar nicht braucht.
         if not feld_hat_zaehler(cfg, sensor_key, ctx.quellen_energy, ctx.mqtt_keys):
             _merke_grund(ctx, out_key, GRUND_NICHT_ZUGEORDNET)
+            continue
+        if sensor_key in kanal:
+            werte_geraet[k] = kanal[sensor_key].delta
+            _abdeckung(ctx, _kanal_rand_menge(kanal[sensor_key]))      # die Marke folgt der Quelle des Werts (§9 Nr. 24)
             continue
         menge, grund = await ctx.diff(
             sensor_key, cfg.get("sensor_id") if isinstance(cfg, dict) else None,
@@ -1351,11 +1403,19 @@ async def _typ_summe(ctx: _TagesDetailKontext, inv_id_str: str, inv, inv_data: d
     rng_typ = _fenster_je_typ(ctx, typ)
     felder = inv_data.get("felder", {}) or {}
     kandidaten = zaehler_feld_kandidaten(inv_id_str, felder, ctx.mqtt_keys)
+    # Sensorwechsel B-5: die Feld-Auskunft «Kanal vor Reihe» für alle Zähler dieses Geräts über dasselbe Fenster.
+    from backend.services.kanal.feld_leser import kanal_feldzeitraeume
+
+    start_off, end_off = rng_typ.boundary_offsets
+    kanal = await kanal_feldzeitraeume(ctx.db, ctx.anlage.id, [
+        f"inv:{inv_id_str}:{k}" for (t, feld) in TAGESDETAIL_AUSGABE if t == typ
+        for k in (feld, *innengeraet_felder(feld, kandidaten))
+    ], rng_typ.boundary_at(start_off), rng_typ.boundary_at(end_off))
     for (t, feld), out_key in TAGESDETAIL_AUSGABE.items():
         if t != typ:
             continue
         d, werte_geraet = await _geraet_oder_innengeraete(
-            ctx, inv_id_str, feld, out_key, felder, kandidaten, rng_typ,
+            ctx, inv_id_str, feld, out_key, felder, kandidaten, rng_typ, kanal,
         )
         if d is None:
             continue
@@ -1479,6 +1539,7 @@ async def get_hourly_counter_sum_by_feld(
 
     rng = BoundaryRange.for_hourly_slots(datum)
     snaps_per_inv: dict[str, dict[int, Optional[float]]] = {}
+    naehte_je = {sk: await fortsetzungs_naehte(db, anlage.id, sk) for sk, _ in relevant_invs}   # B-3
     for sensor_key, entity_id in relevant_invs:
         snaps: dict[int, Optional[float]] = {}
         for offset in rng.boundary_offsets:
@@ -1509,8 +1570,8 @@ async def get_hourly_counter_sum_by_feld(
             if s0 is None or s1 is None:
                 continue
             d = s1 - s0
-            if d < 0:
-                d = 0  # Counter-Reset → 0 (Warnung wäre redundant zur Tages-Aggregation)
+            if d < 0 or ueber_naht(rng.boundary_at(prev_off), rng.boundary_at(curr_off), naehte_je[sensor_key]):
+                d = 0  # Counter-Reset → 0 (Warnung wäre redundant zur Tages-Aggregation); B-3: Naht-Slot 0
             elif d > MAX_PLAUSIBLE_COUNTER_PER_HOUR:
                 logger.warning(
                     f"Unplausibler Counter-Spike {feld} für anlage={anlage.id} "

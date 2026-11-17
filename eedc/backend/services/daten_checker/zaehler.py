@@ -41,8 +41,10 @@ from backend.services.zaehlerstaende import (
     finde_reihen_brueche,
     lade_zaehler_investitionen,
     lade_zaehler_verlaeufe,
+    sensor_key_fuer,
     zaehler_einheit,
 )
+from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 from .ziele import ziel_datenquelle, ziel_komponente
@@ -92,7 +94,8 @@ class ZaehlerChecks:
 
             ergebnisse.extend(self._zaehler_inaktiv_hinweis(inv, name, punkte, kat))
             ergebnisse.extend(self._zaehler_quelle(inv, name, punkte, kat))
-            ergebnisse.extend(self._zaehler_reihenbruch(name, einheit, punkte, kat))
+            naehte = await fortsetzungs_naehte(self.db, anlage.id, sensor_key_fuer(inv.id))   # Sensorwechsel B-3
+            ergebnisse.extend(self._zaehler_reihenbruch(name, einheit, punkte, kat, naehte))
 
             # Wie in `_check_investitionen`: alle Befunde dieses Geräts ihm
             # zuordnen, damit der Komponenten-Hub sie filtern kann (IA-V4 #243).
@@ -143,7 +146,7 @@ class ZaehlerChecks:
     # ─── 2. Läuft die Reihe rückwärts? ───────────────────────────────────
 
     def _zaehler_reihenbruch(
-        self, name: str, einheit: str, punkte: list, kat,
+        self, name: str, einheit: str, punkte: list, kat, naehte=(),
     ) -> list[CheckErgebnis]:
         """Ein gefallener Stand — erklärt, nicht geheilt (Konzept #377 §4).
 
@@ -156,7 +159,7 @@ class ZaehlerChecks:
         letzten Releases einen Fehler zuzuschreiben, den wir selbst erzeugt
         haben — dieselbe Klasse wie F-60 (v4.0.24).
         """
-        brueche = finde_reihen_brueche(punkte)
+        brueche = finde_reihen_brueche(punkte, naehte)
         if not brueche:
             return []
 

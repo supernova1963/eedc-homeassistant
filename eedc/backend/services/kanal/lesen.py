@@ -460,6 +460,26 @@ async def zeitraum(db: AsyncSession, kanal: Kanal, von: int, bis: int, *, jetzt:
     return (await zeitraum_stapel(db, [kanal], von, bis, jetzt=jetzt))[kanal.key]
 
 
+async def zeitraeume_stapel(
+    db: AsyncSession, kanaele: Sequence[Kanal], fenster: Sequence[tuple[int, int]], *, jetzt: Optional[int] = None,
+) -> dict[str, list[Zeitraum]]:
+    """Je Kanal je Fenster ``(von, bis)`` ein ``Zeitraum`` — die Fenster dürfen sich überlappen oder Lücken lassen
+    (Sensorwechsel S2, B-5: Tage mit verschiedenem Tagesfenster in einem Bereich). Dieselbe Regel wie ``zeitraum``,
+    EINE Anweisung für alle Randstände."""
+    _nur_mengen(kanaele)
+    if not kanaele or not fenster:
+        return {}
+    for von, bis in fenster:
+        _pruefe_grenzen([von, bis])
+    jetzt = _jetzt(jetzt)
+    se = soll_ende(jetzt)
+    punkte = sorted({t for von, bis in fenster for t in (von, bis, min(bis, se))})
+    vor, nach = await _randstaende(db, kanaele, punkte)
+    return {k.key: [_zeitraum_aus(
+        k, von, bis, vor.get((k.id, von)), nach.get((k.id, von)), vor.get((k.id, bis)), nach.get((k.id, bis)),
+        vor.get((k.id, min(bis, se))), nach.get((k.id, min(bis, se))), jetzt) for von, bis in fenster] for k in kanaele}
+
+
 # ── stunden ─────────────────────────────────────────────────────────────────
 
 _STUNDEN_SQL = f"""

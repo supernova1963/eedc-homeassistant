@@ -52,6 +52,8 @@ async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, mo
     * **Ein Kanal-Tag liegt im Kalendertag** (H-3, HA-Bauform S4 R-3a): Cockpit → Tag nimmt an einem Kanal-Tag
       (`bilanz_leser.kanal_tage`) `tagesfenster_fuer(…, kanal_tag=True)` = [00:00, 24:00); dieselbe Weiche hier, sonst
       lägen Monat und Σ der Tage um die Netzladung der Stunde 23–24 Uhr an den Monatsrändern auseinander.
+    * **Kanal vor Reihe** (Sensorwechsel B-5, §7 Nr. 12): trägt der eigene Kanal des Netzlade-Zählers einen Tag voll, gilt
+      sein Δ über dasselbe Fenster (``bereichs_leser`` mit ``kanal_zuerst``); sonst die Reihe wie bisher.
     * **Nur abgelaufene Tage** (bis gestern): der heutige Tag hat seinen rechten Rand noch nicht.
     * **Ein Tag mit Rücksprung oder ohne Rand fehlt** (Bereichs-Leser) — keine 0 als Platzhalter. Ohne zugeordneten
       Netzlade-Zähler oder ohne einen einzigen Tageswert: ``None``. Eine gemessene 0 bleibt 0.
@@ -77,8 +79,11 @@ async def speicher_netzladung_aus_tagen(db, anlage, speicher_invs, jahr: int, mo
 
     bestandstage = frozenset(tage) - frozenset(await kanal_tage(db, anlage.id, von, bis))
     rueckwaerts = bestandstage if TAGESFENSTER_JE_TYP.get("speicher") == "rueckwaerts" else frozenset()
+    # Sensorwechsel B-5 (Bauplan §7 Nr. 12): «Kanal zuerst» — je Tag das Δ des eigenen Kanals über dasselbe Fenster, wo er
+    # den Tag voll trägt; eine Naht oder ein fremder Abschnitt der Reihe zählt dann nicht als Menge.
     je_tag = await lade_tageswerte_je_feld(
         db, anlage, {str(i.id): i for i in speicher_invs}, von, bis, felder, rueckwaerts_tage=rueckwaerts,
+        kanal_zuerst=True,
     )
     werte = [w[ausgabe_key] for w in je_tag.values() if ausgabe_key in w]
     return sum(werte) if werte else None

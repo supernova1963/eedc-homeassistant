@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -270,7 +270,7 @@ class ReihenBruch:
         return self.stand_vorher - self.stand_nachher
 
 
-def finde_reihen_brueche(punkte: list[VerlaufPunkt]) -> list[ReihenBruch]:
+def finde_reihen_brueche(punkte: list[VerlaufPunkt], naehte: Sequence[datetime] = ()) -> list[ReihenBruch]:
     """Jede Stelle, an der die Reihe fällt — **paarweise**, nicht Anfang/Ende.
 
     ⚠ **Das ist bewusst nicht dieselbe Prüfung wie `ZaehlerFenster.
@@ -283,10 +283,15 @@ def finde_reihen_brueche(punkte: list[VerlaufPunkt]) -> list[ReihenBruch]:
 
     Gleichstand ist kein Bruch: ein Zähler, der still steht, ist ein Zähler, der
     still steht.
+
+    ``naehte`` (Sensorwechsel B-3): ein Paar über eine Fortsetzungs-Naht ist kein Bruch — dort beginnt der Zählerstand
+    eines neuen, verzeichneten Zählers (``zuordnung_wechsel.fortsetzungs_naehte``).
     """
+    from backend.core.berechnungen.zaehler_naht import ueber_naht
+
     brueche: list[ReihenBruch] = []
     for vorher, nachher in zip(punkte, punkte[1:]):
-        if nachher.stand < vorher.stand:
+        if nachher.stand < vorher.stand and not ueber_naht(vorher.zeitpunkt, nachher.zeitpunkt, naehte):
             brueche.append(ReihenBruch(
                 zeitpunkt=nachher.zeitpunkt,
                 stand_vorher=vorher.stand,
@@ -331,6 +336,8 @@ async def lade_zaehlerstaende(
 
     ids = [inv.id for inv in zaehler]
     punkte_je_inv = await lade_zaehler_verlaeufe(db, anlage_id, ids, bis=bis)
+    from backend.core.berechnungen.zaehler_naht import stand_differenz
+    from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
     out: list[ZaehlerFenster] = []
     for inv in zaehler:
@@ -364,7 +371,10 @@ async def lade_zaehlerstaende(
                 # Differenz 0 ist hier die richtige Aussage, nicht „unbekannt".
                 fenster.stand_ende = davor[-1].stand
             if fenster.stand_anfang is not None and fenster.stand_ende is not None:
-                roh = fenster.stand_ende - fenster.stand_anfang
+                # Sensorwechsel B-3: über eine Fortsetzungs-Naht keine Differenz — Summe der Abschnitte vom Anfangsstand
+                # bis zum Endstand (ohne Naht wörtlich «Ende − Anfang»).
+                folge = [(p.zeitpunkt, p.stand) for p in (davor[-1:] or drin[:1]) + drin[0 if davor else 1:]]
+                roh = stand_differenz(folge, await fortsetzungs_naehte(db, anlage_id, sensor_key_fuer(inv.id)))
                 if roh < 0:
                     # **Ein Zählerstand läuft nicht rückwärts.** Fällt er doch,
                     # ist nicht die Menge negativ — die *Reihe* ist gebrochen:

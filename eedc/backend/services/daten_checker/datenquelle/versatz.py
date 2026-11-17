@@ -17,8 +17,9 @@ eine Reihe (``_reihe``), nie die ganze Tabelle auf einmal.
 (``in_tagesansicht`` = ``TAGESDETAIL_AUSGABE``, Entscheid Master 16.11.2026 — «Ladung gesamt» der Wallbox liest die Tagesansicht
 aus der Tageszeile, dort stimmte «zu hoch / fehlt» nicht). Ein Befund entsteht nur, wenn an mindestens einem Rand-Tag (Tag des
 ersten Sprungs, Tag des letzten Rückgangs) die Gruppe des Felds nicht aus den Kanälen kommt
-(``kanal_stunden.kanal_schluessel_des_tages``, dieselbe Wahl wie ``tages_eingaenge``). Sind beide Rand-Tage Kanal-Tage für das
-Feld, schweigt die Prüfung.
+(``kanal_stunden.kanal_schluessel_des_tages``, dieselbe Wahl wie ``tages_eingaenge``) **und** der eigene Kanal des Felds den Tag
+nicht trägt (Sensorwechsel B-5 «Kanal vor Reihe»: dieselbe Feld-Auskunft wie die Tagesansicht,
+``kanal/feld_leser.feld_aus_kanal_am_tag``). Liest die Tagesansicht beide Rand-Tage aus Kanälen, schweigt die Prüfung.
 
 **Zwei Lagen, ein Code:**
 
@@ -165,7 +166,7 @@ class ZaehlerVersatzChecks:
         zuordnung = _build_counter_map(anlage, await _stillgelegte_inv_ids(self.db, anlage.id)) if ha_da else {}
         out: list[CheckErgebnis] = []
         for key, lauf in funde:
-            if not await self._versatz_wirkt(anlage.id, key, lauf):
+            if not await self._versatz_wirkt(anlage, key, lauf, invs):
                 continue
             aktion, grund = await self._versatz_lage(anlage.id, key, lauf, heute, zuordnung.get(key) if ha_da else None,
                                                      ha_da)
@@ -194,12 +195,18 @@ class ZaehlerVersatzChecks:
         return [(datetime.fromisoformat(z), w) for z, w in (await self.db.execute(text(_SQL_REIHE), {
             "a": anlage_id, "k": key, "q": SnapshotSource.HA_STATISTICS})).all()]
 
-    async def _versatz_wirkt(self, anlage_id: int, key: str, lauf: VersatzLauf) -> bool:
-        """Rechnet der Tageswert des Felds an mindestens einem Rand-Tag über die Standreihe (Gruppe nicht ``kanal``)?"""
+    async def _versatz_wirkt(self, anlage, key: str, lauf: VersatzLauf, invs: dict) -> bool:
+        """Rechnet der Tageswert des Felds an mindestens einem Rand-Tag über die Standreihe — weder kommt seine Gruppe
+        aus den Kanälen, noch trägt sein eigener Kanal den Tag (Sensorwechsel B-5: dieselbe Feld-Auskunft wie die
+        Tagesansicht, ``kanal/feld_leser.feld_aus_kanal_am_tag``)?"""
         from backend.services.energie_profil.kanal_stunden import kanal_schluessel_des_tages
+        from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
 
+        typ = getattr(invs.get(key.split(":")[1]), "typ", None)
         for tag in sorted(set(lauf.rand_tage)):
-            if key not in await kanal_schluessel_des_tages(self.db, anlage_id, tag):
+            if key in await kanal_schluessel_des_tages(self.db, anlage.id, tag):
+                continue
+            if not await feld_aus_kanal_am_tag(self.db, anlage, typ, key, tag):
                 return True
         return False
 

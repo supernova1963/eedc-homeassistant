@@ -294,6 +294,24 @@ def tageswert_aus_reihe(
     return max(0.0, d)
 
 
+def tageswert_ueber_abschnitte(
+    folge: Sequence[tuple[datetime, float]],
+    naehte: Sequence[datetime],
+    toleranz_kwh: float = TAGESRESET_TOLERANZ_KWH,
+) -> Optional[float]:
+    """{@link tageswert_aus_reihe} über eine Folge mit Rändern ``[(rand_von, s0), *zwischen, (rand_bis, s1)]`` — **je
+    Abschnitt zwischen zwei Fortsetzungs-Nähten** (Sensorwechsel mit Grund, B-3: «keine Differenz zweier Stände über
+    eine Naht», ``core/berechnungen/zaehler_naht.abschnitte``), dann die Summe. Ein Abschnitt mit Rücksprung ⇒ ``None``
+    wie bisher; ein Abschnitt aus einem Stand trägt 0. Ohne Naht in der Folge **wörtlich** ``tageswert_aus_reihe``."""
+    from backend.core.berechnungen.zaehler_naht import abschnitte
+
+    werte = [tageswert_aus_reihe(t[0][1], t[-1][1], [w for _ts, w in t[1:-1]], toleranz_kwh)
+             for t in abschnitte(folge, naehte)]
+    if any(w is None for w in werte):
+        return None
+    return werte[0] if len(werte) == 1 else sum(werte)
+
+
 async def finde_zaehler_ruecksprunge(
     db: AsyncSession,
     anlage_id: int,
@@ -593,10 +611,13 @@ async def delta(
     # geladen und protokolliert. Bis 10.09.2026 stand sie hier ausgeschrieben,
     # ein zweites Mal in `snapshot/aggregator._tageswert_aus_raendern`, und die
     # beiden waren formal schon auseinander (Konstante gegen Literal).
-    zwischenstaende = [w for _ts, w in await reihe_im_fenster(
-        db, anlage_id, sensor_key, von, bis
-    )]
-    wert = tageswert_aus_reihe(snap_von, snap_bis, zwischenstaende)
+    from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
+
+    reihe = await reihe_im_fenster(db, anlage_id, sensor_key, von, bis)
+    zwischenstaende = [w for _ts, w in reihe]
+    # B-3: über eine Fortsetzungs-Naht hinweg keine Differenz (ohne Naht wörtlich `tageswert_aus_reihe`).
+    wert = tageswert_ueber_abschnitte([(von, snap_von), *reihe, (bis, snap_bis)],
+                                      await fortsetzungs_naehte(db, anlage_id, sensor_key))
     if wert is None:
         logger.info(
             f"Zähler-Rücksprung im Fenster für anlage={anlage_id} "

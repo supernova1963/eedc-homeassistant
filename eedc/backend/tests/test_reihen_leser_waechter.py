@@ -1,0 +1,214 @@
+"""Wächter «Reihen-Leser» (Sensorwechsel mit Grund, Bauplan B-5/B-8, Sitzung 2, 17.11.2026).
+
+**Regel.** Jede Stelle, die Stände der Zählerstand-Reihe (``sensor_snapshots``, ``mqtt_energy_snapshots``) liest, steht in
+``REIHEN_LESER`` — mit ihrer **Einstufung** gegenüber einer Naht (B-3: «keine Differenz zweier Stände über eine
+Fortsetzungs-Naht») und dem Grund. Eine neue Lesestelle ohne Eintrag ist rot, ein Eintrag ohne Lesestelle ebenso (verwaist).
+Wer einen neuen Leser schreibt, entscheidet damit sichtbar, wie er mit einer Naht umgeht.
+
+**Einstufungen:**
+
+* ``naht`` — **Naht beachtet**: der Leser bildet seine Menge je Abschnitt (``core/berechnungen/zaehler_naht.py``, Nähte aus
+  ``zuordnung_wechsel.zeitpunkt.fortsetzungs_naehte``).
+* ``kanal`` — **Kanal zuerst** (B-5): der Leser nimmt das Δ des eigenen Kanals, wo er das Fenster voll trägt
+  (``kanal/feld_leser.py``), sonst die Reihe mit Naht.
+* ``bewusst`` — **bewusst nicht**: liest die Reihe **ohne Naht-Schutz**, mit Grund.
+* ``ohne_aufrufer`` — kein Produktiv-Aufrufer (Bauplan §7 Nr. 14: führen, nicht entfernen).
+* ``primitiv`` — Lese-Baustein: liefert Stände, bildet selbst keine Menge (die Einstufung trägt sein Aufrufer).
+* ``schreiber`` — füllt oder schreibt die Reihe, bildet keine Menge (Zuordnung zum Zeitpunkt: B-0).
+* ``stand`` — zeigt einen Stand, keine Differenz.
+
+``ha_spiegel``: die Stelle liest Felder, die einen HA-Spiegel haben können (HA-Zuordnung). **B-8** (Befund «Naht ohne
+verzeichneten Wechsel», Sitzung 4) entfällt genau dann, wenn kein Eintrag ``bewusst`` mit ``ha_spiegel`` bleibt —
+``test_b8_liste_ohne_naht_schutz_mit_ha_spiegel`` hält die heutige Liste fest (Gleichheit, damit jede Änderung sichtbar wird).
+
+**Was er erkennt (AST, Produktivbaum ohne ``tests/``):** einen Aufruf eines Lese-Bausteins (``PRIMITIVE``, Name oder
+Attribut), einen Zugriff auf die Wertspalte ``SensorSnapshot.wert_kwh`` / ``MqttEnergySnapshot.value_kwh`` und SQL-Text
+``FROM``/``JOIN`` auf beide Tabellen — je umschließender Funktion (Modulebene: ``<modul>``). **Nicht erfasst (benannt):** ein
+ORM-Objekt der Reihe, dessen Wert über die Instanz gelesen wird (``row.wert_kwh`` nach ``select(SensorSnapshot)``), und ein
+Leser, der die Reihe nur über das Ergebnis eines eingestuften Lesers sieht (Ladeblöcke über ``TagesTabelle.zusatz_slots`` —
+L13 erbt L5). Gegenprobe je Form im Test.
+
+Vorlage: Leser-Inventar L1–L18 (Messblatt Sitzung 0, ``opus-berichte/SENSORWECHSEL-S0-2026-11-16.md`` M-A); die Leser-Tabelle des
+Berichts Sitzung 2 nennt dieselben Einträge. Schwesterdateien: test_kanal_lesen_waechter.py (wer die Kanal-Lese-Schicht
+importiert), test_tageswert_aus_reihe_ist_die_eine_regel.py.
+"""
+
+from __future__ import annotations
+
+import ast
+import re
+
+from backend.tests.quellbaum import produktivbaum
+
+NAHT, KANAL, BEWUSST, OHNE_AUFRUFER = "naht", "kanal", "bewusst", "ohne_aufrufer"
+PRIMITIV, SCHREIBER, STAND = "primitiv", "schreiber", "stand"
+EINSTUFUNGEN = {NAHT, KANAL, BEWUSST, OHNE_AUFRUFER, PRIMITIV, SCHREIBER, STAND}
+
+#: Lese-Bausteine der Reihe — ihr Aufruf macht die umschließende Funktion zu einer Lesestelle.
+PRIMITIVE = frozenset({
+    "get_snapshot", "reihe_im_fenster", "letzter_stand_vor", "letzter_stand_im_fenster", "erster_stand_im_fenster",
+    "_reihe_ueber_bereich", "_raender_mit_heilung", "lade_zaehler_verlaeufe", "_get_mqtt_snapshot_at",
+    "_get_closest_snapshot", "_get_earliest_snapshot_after", "_db_snap_at",
+})
+SPALTEN = frozenset({("SensorSnapshot", "wert_kwh"), ("MqttEnergySnapshot", "value_kwh")})
+_SQL = re.compile(r"\b(from|join)\s+(sensor_snapshots|mqtt_energy_snapshots)\b", re.IGNORECASE)
+
+#: ``"datei::funktion"`` → ``(Leser-Nr. aus dem Inventar oder «—», Einstufung, ha_spiegel, Grund)``.
+REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
+    # ── Mengen der Tagesansicht und der Tageszeile ──
+    "services/snapshot/aggregator.py::_tageswert_aus_raendern": (
+        "L1/L2", NAHT, True, "Tageswert = Summe der Abschnitte (reader.tageswert_ueber_abschnitte)"),
+    "services/snapshot/aggregator.py::_tagesdetail_boundary_diff_mit_grund": (
+        "L2", NAHT, True, "Ränder und Rückfall; die Menge über _tageswert_aus_raendern. In get_tagesdetail_kwh gilt davor "
+        "Kanal vor Reihe je Zähler (_typ_summe → kanal/feld_leser.kanal_feldwerte) — die 15 Tage der Produktiv-Anlage"),
+    "services/snapshot/aggregator.py::snapshot_tagestabelle": (
+        "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); "
+        "die Heimlade-Slots (zusatz_slots) für die Ladeblöcke (L13) gehen durch dieselbe Schleife"),
+    "services/snapshot/aggregator.py::get_daily_counter_deltas_by_inv": (
+        "L7", NAHT, True, "Zählwerk Tag über _zaehlwerk_tag (zaehler_naht.zaehlwerk_menge)"),
+    "services/snapshot/aggregator.py::_zaehlwerk_tag": (
+        "L7", NAHT, True, "die Abschnitts-Form der Zählwerke (Starts, Betriebsstunden)"),
+    "services/snapshot/aggregator.py::get_hourly_counter_sum_by_feld": (
+        "L8", NAHT, True, "Naht-Slot zählt 0"),
+    "services/snapshot/aggregator.py::_diff": (
+        "—", OHNE_AUFRUFER, True, "Closure von get_komponenten_tageskwh — ohne Produktiv-Aufrufer (Messblatt S0 M-A)"),
+    "services/snapshot/bereichs_leser.py::_tageswerte_des_feldes": (
+        "L3", KANAL, True, "kanal_zuerst=True (Speicher-Netzladung der Monats-Fakten, §7 Nr. 12) — sonst Reihe mit Naht"),
+    "services/snapshot/bereichs_leser.py::_randstaende": (
+        "L3", NAHT, True, "Tageswert je Abschnitt (reader.tageswert_ueber_abschnitte); Wärme-Verlauf (a) liest so"),
+    "services/snapshot/stunden_leser.py::lade_stundenformen": (
+        "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, keine Gerade über eine Naht"),
+    "services/snapshot/reader.py::delta": (
+        "L4", NAHT, True, "Menge über ein Fenster je Abschnitt (MQTT-Monat, Cockpit → Monat)"),
+    "services/snapshot/reader.py::delta_mit_rand": (
+        "L4", NAHT, True, "über delta"),
+    "services/zaehlerstaende.py::lade_zaehlerstaende": (
+        "L9", NAHT, True, "Differenz je Abschnitt (zaehler_naht.stand_differenz)"),
+    "services/daten_checker/zaehler.py::_check_zaehlerstaende": (
+        "L10", NAHT, True, "Bruch über eine Naht ist kein Bruch (finde_reihen_brueche mit Nähten)"),
+    "services/daten_checker/datenquelle/versatz.py::<modul>": (
+        "L12", KANAL, True, "Wirkungs-Prüfung über die Feld-Auskunft (feld_leser.feld_aus_kanal_am_tag); die Erkennung selbst "
+        "sucht genau die Niveau-Sprünge der Reihe (sie ist der Befund, keine Menge)"),
+    "services/kanal/schreiber.py::_eigene_summe": (
+        "L16", NAHT, False, "MQTT «Eigene Summe»: eine Fortsetzung teilt die Periode (kanal/naht.zeilen_mit_naehten, B-4)"),
+    # ── bewusst nicht ──
+    "services/snapshot/reader.py::finde_zaehler_ruecksprunge": (
+        "L11", BEWUSST, False, "Befund zaehler_ruecksprung — nur MQTT-Reihen; ob ein verzeichneter Wechsel ihn stillt, "
+        "entscheidet Sitzung 4 (B-7, Text-GM)"),
+    "services/kanal/nachfuellen.py::_rohstaende": (
+        "L15", BEWUSST, True, "Stände-Nachbau nur vor der ersten Kanalzeile eines Schlüssels, je Kanal einmal; ein "
+        "verzeichneter Wechsel liegt nach der ersten Kanalzeile (Kanäle seit HA-Bauform E2) — eine Naht davor kopiert er wörtlich"),
+    "services/snapshot/reaggregator.py::_counter_delta_alt": (
+        "L14", BEWUSST, True, "Werkbank-Vorschau: Gegenüberstellung alt/neu der gespeicherten Stände, keine Anzeige-Menge"),
+    "services/mqtt_energy_history_service.py::get_tages_kwh": (
+        "L17", BEWUSST, False, "MQTT-Live heute/gestern (Rückgang: der neue Stand zählt als Tageswert) — Live-Wert, nach zwei "
+        "Tagen vorbei; die Menge der Tage trägt der Kanal (B-4)"),
+    "services/live_verbrauchsprofil_service.py::_profil_from_mqtt": (
+        "L18", BEWUSST, False, "Verbrauchsprofil aus 7 Tagen MQTT-Stichproben (Form, keine Menge); eine Naht-Stunde fällt aus"),
+    "api/routes/diagnostics.py::live_snapshot_5min_diagnostics": (
+        "—", BEWUSST, True, "Diagnose-Route: zählt und zeigt Fünf-Minuten-Zeilen, keine Menge"),
+    # ── Bausteine, Schreiber, Stand ──
+    "services/snapshot/reader.py::get_snapshot": ("—", PRIMITIV, True, "ein Stand zum Zeitpunkt, heilt nach B-0"),
+    "services/snapshot/reader.py::reihe_im_fenster": ("—", PRIMITIV, True, "die Stände zwischen zwei Rändern"),
+    "services/snapshot/reader.py::letzter_stand_vor": ("—", PRIMITIV, True, "Lückenanker R1"),
+    "services/snapshot/reader.py::letzter_stand_im_fenster": ("—", PRIMITIV, True, "Rückfall R-4"),
+    "services/snapshot/reader.py::erster_stand_im_fenster": ("—", PRIMITIV, True, "Rückfall R-4 / N-472"),
+    "services/snapshot/reader.py::_get_mqtt_snapshot_at": ("—", PRIMITIV, False, "MQTT-Stand zum Zeitpunkt"),
+    "services/snapshot/reader.py::zaehler_faellt_im_fenster": (
+        "—", OHNE_AUFRUFER, True, "ohne Produktiv-Aufrufer (Messblatt S0 M-A)"),
+    "services/snapshot/reader.py::get_counter_lifetime": ("—", STAND, True, "Zählerstand seit Beginn (WP-Dashboard)"),
+    "services/snapshot/bereichs_leser.py::_reihe_ueber_bereich": ("L3", PRIMITIV, True, "die eine Abfrage des Bereichs"),
+    "services/snapshot/bereichs_leser.py::_raender_mit_heilung": ("L3", PRIMITIV, True, "Ränder mit Heilung"),
+    "services/snapshot/reaggregator.py::_db_snap_at": ("L14", PRIMITIV, True, "gespeicherter Stand der Vorschau"),
+    "services/snapshot/reaggregator.py::_boundaries": ("L14", STAND, True, "Vorschau: Grenzstände alt/neu nebeneinander"),
+    "services/zaehlerstaende.py::lade_zaehler_verlaeufe": ("L9", PRIMITIV, True, "Punktreihe Snapshots + gepflegte Stände"),
+    "services/mqtt_energy_history_service.py::_get_closest_snapshot": ("L17", PRIMITIV, False, "MQTT-Stand"),
+    "services/mqtt_energy_history_service.py::_get_earliest_snapshot_after": ("L17", PRIMITIV, False, "MQTT-Stand"),
+    "services/snapshot/writer.py::snapshot_anlage": ("—", SCHREIBER, True, "Stundenschreiber (B-0)"),
+    "services/snapshot/fallback.py::live_snapshot_if_missing": ("—", SCHREIBER, True, "Live-Rückfall der laufenden Stunde (B-0)"),
+}
+
+#: Die Einträge «liest die Reihe ohne Naht-Schutz» für Felder mit HA-Spiegel — die Liste, an der B-8 entscheidet
+#: (Bauplan §2 B-8: der Bau legt sie Gernot vor). Gleichheit, damit jede Änderung im Diff steht.
+OHNE_NAHT_SCHUTZ_MIT_HA_SPIEGEL = {
+    "services/kanal/nachfuellen.py::_rohstaende",
+    "services/snapshot/reaggregator.py::_counter_delta_alt",
+    "api/routes/diagnostics.py::live_snapshot_5min_diagnostics",
+}
+
+
+def _funktion_von(knoten: ast.AST, eltern: dict) -> str:
+    q = knoten
+    while q in eltern and not isinstance(q, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        q = eltern[q]
+    return q.name if isinstance(q, (ast.FunctionDef, ast.AsyncFunctionDef)) else "<modul>"
+
+
+def ist_lesestelle(n: ast.AST) -> bool:
+    """Ein Knoten, der die Reihe liest (Aufruf eines Bausteins, Wertspalte, SQL-Text)."""
+    if isinstance(n, ast.Call):
+        f = n.func
+        name = f.id if isinstance(f, ast.Name) else (f.attr if isinstance(f, ast.Attribute) else None)
+        return name in PRIMITIVE
+    if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name):
+        return (n.value.id, n.attr) in SPALTEN
+    return isinstance(n, ast.Constant) and isinstance(n.value, str) and bool(_SQL.search(n.value))
+
+
+def lesestellen(quelle: str, rel: str) -> set[str]:
+    """``{"datei::funktion"}`` aller Lesestellen einer Quelldatei."""
+    baum = ast.parse(quelle)
+    eltern = {c: p for p in ast.walk(baum) for c in ast.iter_child_nodes(p)}
+    return {f"{rel}::{_funktion_von(n, eltern)}" for n in ast.walk(baum) if ist_lesestelle(n)}
+
+
+def _alle() -> set[str]:
+    out: set[str] = set()
+    for d in produktivbaum():
+        out |= lesestellen(d.quelle, d.rel)
+    return out
+
+
+def test_jede_lesestelle_ist_eingestuft():
+    gefunden = _alle()
+    neu = sorted(gefunden - set(REIHEN_LESER))
+    verwaist = sorted(set(REIHEN_LESER) - gefunden)
+    assert not neu, ("Neue Lesestelle der Zählerstand-Reihe ohne Einstufung — in REIHEN_LESER eintragen (naht · kanal · "
+                     f"bewusst mit Grund · …): {neu}")
+    assert not verwaist, f"Eintrag ohne Lesestelle (umbenannt oder entfernt) — Eintrag nachziehen: {verwaist}"
+
+
+def test_einstufung_und_grund():
+    for key, (_nr, einstufung, _ha, grund) in REIHEN_LESER.items():
+        assert einstufung in EINSTUFUNGEN, key
+        assert grund.strip(), key
+
+
+def test_b8_liste_ohne_naht_schutz_mit_ha_spiegel():
+    ist = {k for k, (_nr, e, ha, _g) in REIHEN_LESER.items() if e == BEWUSST and ha}
+    assert ist == OHNE_NAHT_SCHUTZ_MIT_HA_SPIEGEL
+
+
+def test_gegenprobe_je_form():
+    """Sprengsatz: je Erkennungs-Form eine Lesestelle in einer erfundenen Datei — jede wird gefunden (und wäre ohne
+    Eintrag rot)."""
+    quelle = '''
+from backend.services.snapshot.reader import get_snapshot
+
+async def neu_aufruf(db):
+    return await get_snapshot(db, 1, "k", None, None)
+
+async def neu_attribut(db):
+    from backend.services import snapshot
+    return await snapshot.reader.reihe_im_fenster(db, 1, "k", None, None)
+
+def neu_spalte():
+    from backend.models.sensor_snapshot import SensorSnapshot
+    return SensorSnapshot.wert_kwh
+
+SQL = "SELECT wert_kwh FROM sensor_snapshots WHERE anlage_id = 1"
+
+def ohne():
+    return "sensor_snapshots ist ein Name, kein SQL"
+'''
+    assert lesestellen(quelle, "x.py") == {"x.py::neu_aufruf", "x.py::neu_attribut", "x.py::neu_spalte", "x.py::<modul>"}

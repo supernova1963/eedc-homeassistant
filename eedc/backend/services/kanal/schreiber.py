@@ -864,6 +864,7 @@ async def _eigene_summe_zeilen(
 
 async def _eigene_summe(db: AsyncSession, k: _Kontext) -> int:
     from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+    from backend.services.kanal.naht import zeilen_mit_naehten
     from backend.services.snapshot.keys import (
         QUELLE_HA_ENERGY,
         QUELLE_KEINE_ENERGY,
@@ -927,9 +928,9 @@ async def _eigene_summe(db: AsyncSession, k: _Kontext) -> int:
     for sensor_key, von in offen.items():
         mk = auswahl[sensor_key]
         staende = [(ts, w) for ts, w in roh.get(mk, ()) if ts >= von]
-        if staende:
-            neue_zeilen.extend(await _eigene_summe_zeilen(
-                db, k, staende_kanal[sensor_key], sensor_key, mk, staende))
+        if staende:   # Sensorwechsel B-4: eine verzeichnete Fortsetzung teilt die Periode (kanal/naht.py)
+            neue_zeilen.extend(await zeilen_mit_naehten(
+                db, k, staende_kanal[sensor_key], sensor_key, mk, staende, von, _eigene_summe_zeilen))
     return await _zeilen_einfuegen(db, neue_zeilen)
 
 

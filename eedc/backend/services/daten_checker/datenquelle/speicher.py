@@ -47,7 +47,7 @@ class SpeicherChecks:
         """
         from datetime import date, timedelta as _td
         from backend.services.ha_statistics_service import get_ha_statistics_service
-        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts, wechsel_kwargs
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
         from backend.core.berechnungen import summe_batterie_netto_kwh
         from backend.models.tages_energie_profil import TagesZusammenfassung
@@ -116,7 +116,7 @@ class SpeicherChecks:
             }
             try:
                 ha_komp = await get_komponenten_tageskwh_lts(
-                    anlage, invs_by_id, tz.datum,
+                    anlage, invs_by_id, tz.datum, **await wechsel_kwargs(self.db, anlage.id),   # B-0 (§8 Nr. 22 c)
                 )
             except Exception as e:
                 logger.debug(
