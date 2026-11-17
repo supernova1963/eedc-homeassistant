@@ -124,6 +124,7 @@ async def lts_tagestabelle(
     datum: date,
     *,
     zusatz_schluessel: Iterable[str] = (),
+    wechsel: Optional[dict] = None,
 ) -> Optional[TagesTabelle]:
     """Stunden **und** Tag eines Tages aus der HA-Slot-Tabelle (R2–R5).
 
@@ -159,6 +160,13 @@ async def lts_tagestabelle(
     Rechnung der Tabelle sieht sie nicht (sie bekommt nur die Slots ihrer Einträge);
     ohne Zusatz ist alles bitgleich wie vorher.
 
+    ``wechsel`` (Sensorwechsel mit Grund, B-0 «Zuordnung zum Zeitpunkt»; ``aggregate_day`` über
+    ``wechsel_kwargs``): je Slot liest ein Zähler die Entität der Quelle, die zum Stand des Slots galt
+    (``zuordnung_wechsel.anwenden.entitaet_je_slot``) — jeder Slot ist das Delta EINER Entität, ein Slot
+    misst nie über eine Naht. Galt in einem Slot eine Quelle außerhalb von HA (MQTT, «keine», unbekannt)
+    oder führt HA die frühere Entität nicht, liest der Tag nicht aus HA (``None`` ⇒ Snapshot-Pfad, dessen
+    Reihe B-0 schützt). Ohne Wechsel bitgleich wie vorher.
+
     Returns:
         ``None``, wenn HA nicht erreichbar ist, kein Zähler zugeordnet ist oder
         HA für keinen davon eine Zeile im Fenster hat — der Aufrufer fällt
@@ -172,9 +180,15 @@ async def lts_tagestabelle(
         return None
 
     eigene = {e.schluessel for e in eintraege}
+    plan = _slot_plan(eintraege, wechsel, datum)
+    if plan is None:
+        return None
     zusatz = [z for z in dict.fromkeys(zusatz_schluessel or ()) if z not in eigene]
-    sensor_ids = sorted(eigene | set(zusatz))
+    frueher = {eid for je_slot in plan.values() for eid in je_slot.values()}
+    sensor_ids = sorted(eigene | set(zusatz) | frueher)
     reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum)
+    if plan and not _plan_anwenden(reihen, plan):
+        return None
     # Nur die eigenen Zähler entscheiden, ob HA den Tag trägt — ein Zusatz-Zähler
     # allein darf den Rückfall auf den Snapshot-Pfad nicht verhindern.
     if not reihen or not any(eid in eigene for eid in reihen):
@@ -193,6 +207,50 @@ async def lts_tagestabelle(
         for eid in zusatz if eid in reihen
     }
     return tabelle
+
+
+#: Slots eines Tages im Backward-Raster (``SensorSlotReihe.slots`` 0..23; Slot h endet mit dem Stand um ``datum`` + h Stunden).
+_SLOTS = range(24)
+
+
+def _slot_plan(eintraege: list[TabellenEintrag], wechsel: Optional[dict], datum: date) -> Optional[dict]:
+    """B-0 je Zähler: ``{heutige Entität: {slot: frühere Entität}}``; ``None`` ⇒ der Tag liest nicht aus HA."""
+    from backend.services.zuordnung_wechsel.anwenden import entitaet_je_slot
+
+    plan: dict[str, dict[int, str]] = {}
+    for e in eintraege:
+        je_slot = entitaet_je_slot((wechsel or {}).get(e.sensor_key), e.schluessel, datum, _SLOTS)
+        if je_slot is None:
+            return None
+        if je_slot:
+            plan[e.schluessel] = je_slot
+    return plan
+
+
+def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]]) -> bool:
+    """Setzt je Slot das Delta der früheren Entität in die Reihe der heutigen (in-place). ``False`` ⇒ HA führt eine
+    frühere Entität nicht (dann bleibt der Tag beim Snapshot-Pfad)."""
+    for eid, je_slot in plan.items():
+        if any(alt not in reihen for alt in set(je_slot.values())):
+            return False
+        reihe = reihen.get(eid) or reihen[next(iter(je_slot.values()))]
+        slots = dict(reihen[eid].slots) if eid in reihen else {}
+        for h, alt in je_slot.items():
+            if h in reihen[alt].slots:
+                slots[h] = reihen[alt].slots[h]
+            else:
+                slots.pop(h, None)
+        reihen[eid] = reihe._replace(slots=slots)
+    return True
+
+
+async def wechsel_kwargs(db: AsyncSession, anlage_id: int) -> dict:
+    """``{"wechsel": …}`` für ``lts_tagestabelle``, wenn die Anlage verzeichnete Wechsel hat — sonst ``{}`` (der Aufruf bleibt
+    dann wörtlich der alte; Proben, die die Tabelle ersetzen, sehen kein neues Argument)."""
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
+
+    wechsel = await lade_wechsel(db, anlage_id)
+    return {"wechsel": wechsel} if wechsel else {}
 
 
 async def get_hourly_kwh_by_category_lts(

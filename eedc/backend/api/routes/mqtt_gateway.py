@@ -179,6 +179,23 @@ async def _reload_gateway(db: AsyncSession) -> dict:
     }
 
 
+async def _wirksam_vorher(db: AsyncSession, anlage_id: int):
+    """Sensorwechsel mit Grund (W4–W6): die Anlage und ihre wirksamen Quellen VOR der Änderung einer Gateway-Zeile — eine
+    Zeile wirkt auch ohne ``quellen``-Eintrag (Rückfall auf den Inbound), Topic, Pfad, Faktor und Offset bewegen die Werte."""
+    from backend.models.anlage import Anlage
+    from backend.services.zuordnung_wechsel.verzeichnen import momentaufnahme
+
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
+    return anlage, (await momentaufnahme(db, anlage) if anlage is not None else {})
+
+
+async def _verzeichne(db: AsyncSession, anlage, vorher) -> None:
+    from backend.services.zuordnung_wechsel.verzeichnen import verzeichne
+
+    if anlage is not None:
+        await verzeichne(db, anlage, vorher)
+
+
 # ─── CRUD Endpoints ──────────────────────────────────────────────────
 
 @router.get("/mqtt/gateway/mappings")
@@ -203,6 +220,7 @@ async def create_mapping(
     db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Neues Gateway-Mapping anlegen."""
+    anlage, wirksam_vorher = await _wirksam_vorher(db, data.anlage_id)
     mapping = MqttGatewayMapping(
         anlage_id=data.anlage_id,
         quell_topic=data.quell_topic,
@@ -220,6 +238,7 @@ async def create_mapping(
     db.add(mapping)
     await db.flush()
     await db.refresh(mapping)
+    await _verzeichne(db, anlage, wirksam_vorher)
 
     # Gateway hot-reload
     reload_result = await _reload_gateway(db)
@@ -244,12 +263,14 @@ async def update_mapping(
     if not mapping:
         raise HTTPException(404, "Mapping nicht gefunden")
 
+    anlage, wirksam_vorher = await _wirksam_vorher(db, mapping.anlage_id)
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(mapping, field, value)
 
     await db.flush()
     await db.refresh(mapping)
+    await _verzeichne(db, anlage, wirksam_vorher)
 
     reload_result = await _reload_gateway(db)
 
@@ -265,8 +286,11 @@ async def delete_mapping(
     db: AsyncSession = Depends(get_db, scope="function"),
 ):
     """Mapping löschen."""
+    zeile = (await db.execute(select(MqttGatewayMapping).where(MqttGatewayMapping.id == mapping_id))).scalar_one_or_none()
+    anlage, wirksam_vorher = await _wirksam_vorher(db, zeile.anlage_id) if zeile is not None else (None, {})
     if await entferne_gateway_zeile(db, mapping_id) is None:
         raise HTTPException(404, "Mapping nicht gefunden")
+    await _verzeichne(db, anlage, wirksam_vorher)
 
     reload_result = await _reload_gateway(db)
 

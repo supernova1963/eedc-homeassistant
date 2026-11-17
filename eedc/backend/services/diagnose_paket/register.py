@@ -151,6 +151,12 @@ _FREI = Spalte(freitext=True)
 _LEER = _js()
 _PROV = _js("bereinigt:email", ts=_PROVENANCE_TS)
 
+#: Eine wirksame Quelle (``zuordnung_wechsel.vorher``/``nachher``): Oberschlüssel der Beschreibung, Text nur unter Art, Entität,
+#: MQTT-Schlüssel, Topic und Pfad.
+_ZUORDNUNG = _js("allowlist",
+                 ober=("art", "entity_id", "mqtt_key", "topic", "payload_typ", "json_pfad", "array_index", "faktor", "offset"),
+                 ts=("art", "entity_id", "mqtt_key", "topic", "payload_typ", "json_pfad"))
+
 REGISTER: dict[str, Tabelle] = {
     "activity_log": _tab(
         "anlage_oder_null", "id timestamp kategorie aktion erfolg details details_json anlage_id",
@@ -269,6 +275,11 @@ REGISTER: dict[str, Tabelle] = {
                               "lern_soll_stundenprofil_kwh", "pv_prognose_kaskade_stundenprofil", "komponenten_kwh",
                               "komponenten_starts", "verworfen", "nachtrag")},
         source_provenance=_PROV),
+    # Sensorwechsel mit Grund (B-1): `vorher`/`nachher` sind wirksame Quellen — dieselbe Klasse wie `anlagen.sensor_mapping`
+    # (Entität und MQTT-Topic als Text, keine Zugangsdaten; Form `services/zuordnung_wechsel/quelle.py`).
+    "zuordnung_wechsel": _tab(
+        "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund falsch_seit_ts herkunft aufgehoben_durch lauf",
+        vorher=_ZUORDNUNG, nachher=_ZUORDNUNG),
 }
 
 

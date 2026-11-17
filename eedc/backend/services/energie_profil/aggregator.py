@@ -1000,7 +1000,7 @@ async def lade_zaehler_und_counter(
         # Ohne Fahrzeug-Zähler ruft der Aggregator die Tabelle genau wie vorher auf.
         _zusatz_lts = _ladebloecke.fahrzeug_zaehler_lts(anlage, invs_by_id, datum)
         lts_tabelle = await lts_aggregator.lts_tagestabelle(
-            anlage, invs_by_id, datum,
+            anlage, invs_by_id, datum, **await lts_aggregator.wechsel_kwargs(db, anlage.id),  # B-0 Sensorwechsel
             **({"zusatz_schluessel": _zusatz_lts} if _zusatz_lts else {}),
         )
     except Exception as e:

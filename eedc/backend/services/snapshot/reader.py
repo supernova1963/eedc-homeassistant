@@ -477,6 +477,16 @@ async def get_snapshot(
     if row is not None:
         return row
 
+    # B-0 (Sensorwechsel mit Grund): geheilt wird nur aus der Quelle, die UM `zeitpunkt` galt — eine frühere HA-Entität
+    # ohne MQTT-Rückfall, eine frühere MQTT-Quelle ohne HA; unbekannt oder «keine» ⇒ nichts schreiben (Messblatt S0 M-B (2):
+    # sonst landete der Stand der heutigen Entität vor dem Wechsel in der Reihe).
+    from backend.services.zuordnung_wechsel.anwenden import heil_quelle
+    from backend.services.zuordnung_wechsel.zeitpunkt import quelle_zum_zeitpunkt
+    heilen, sensor_id, mqtt_erlaubt = heil_quelle(
+        await quelle_zum_zeitpunkt(db, anlage_id, sensor_key, zeitpunkt), sensor_id)
+    if not heilen:
+        return None
+
     # Self-Healing via HA Statistics (wenn HA-Sensor-ID bekannt)
     wert: Optional[float] = None
     quelle: Optional[str] = None
@@ -506,7 +516,7 @@ async def get_snapshot(
                 quelle = SnapshotSource.HA_STATISTICS
 
     # Fallback: MQTT-Energy-Snapshot (Standalone/Docker-Modus)
-    if wert is None:
+    if wert is None and mqtt_erlaubt:
         mqtt_key = _sensor_key_to_mqtt_key(sensor_key)
         if mqtt_key:
             wert = await _get_mqtt_snapshot_at(db, anlage_id, mqtt_key, zeitpunkt)

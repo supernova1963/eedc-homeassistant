@@ -46,6 +46,7 @@ from backend.services.live_sensor_config import (
 )
 from backend.services.mqtt_topic_registry import build_expected_topics
 from backend.services.mqtt_broker_settings import import_aktiviert
+from backend.services.zuordnung_wechsel.verzeichnen import momentaufnahme, verzeichne
 from backend.utils.investition_filter import aktiv_am_tag, sort_investitionen_nach_typ
 # Schnitt `zuordnungen_lesen` (E1, 10.11.2026): die vier lesenden /felder-Phasen samt Helfern leben im Service; hier stehen
 # die Namen, die diese Route und ihre Nachbarn (`datenquellen_themen.py`, Tests) weiter von hier beziehen.
@@ -1053,6 +1054,7 @@ async def set_feld_quelle(
                    "Monatsabschluss von Hand ein.",
         )
 
+    wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund: vor jeder Änderung (W1)
     mapping = dict(anlage.sensor_mapping or {})
     # Themen-Kacheln (4.2.0, G2-1): eine Themen-Kennung muss zu einem Eintrag gehören — sonst 404 statt stiller Ablage.
     ist_thema = _pruefe_themen_eintrag(mapping, field_id)
@@ -1136,6 +1138,7 @@ async def set_feld_quelle(
     )
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
+    await verzeichne(db, anlage, wirksam_vorher)  # jede wirksame Änderung eines Zählerschlüssels, Grund leer
     # N-556: Zuordnen und Wegschalten stehen im Protokoll — in DIESER Sitzung (N-532).
     neu_text = _quelle_klartext(
         quellen.get(field_id),
@@ -1230,6 +1233,7 @@ async def uebernehme_energy_vorschlaege(
             if entity and fid in gueltig:
                 zuordnungen.append((fid, entity))
 
+    wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund (W3)
     mapping = dict(anlage.sensor_mapping or {})
     quellen = dict(mapping.get(QUELLEN_KEY) or {})
     protokoll: list[str] = []
@@ -1244,6 +1248,7 @@ async def uebernehme_energy_vorschlaege(
     mapping[QUELLEN_KEY] = quellen
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
+    await verzeichne(db, anlage, wirksam_vorher)
     # N-556: eine Zeile für die ganze Übernahme, je Feld alt → neu — in DIESER
     # Sitzung (N-532). Ohne Zuordnung (leere Auswahl) keine Handlung, keine Zeile.
     if zuordnungen:

@@ -424,7 +424,7 @@ def _saat(t: str, s: str) -> str:
 def test_g2_je_json_spalte(voll_datei_db):
     con = voll_datei_db.roh()
     spalten = _json_spalten()
-    assert len(spalten) == 35
+    assert len(spalten) == 37        # + `zuordnung_wechsel.vorher`/`nachher` (Sensorwechsel B-1)
     for t, s in spalten:
         ziel = "id" if "id" in reg.REGISTER[t].spalten else reg.REGISTER[t].filterspalte
         wert = (1 if t == "anlagen" else az_ketten_id(t, ziel))

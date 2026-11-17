@@ -63,7 +63,13 @@ async def live_snapshot_if_missing(
     Returns:
         Anzahl geschriebener Live-Snapshots (MQTT-Counter).
     """
+    from backend.services.zuordnung_wechsel.anwenden import mqtt_zum_zeitpunkt
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel, quelle_am
+
     count = 0
+    # B-0 (Sensorwechsel mit Grund): die Startup-Recovery ruft mit der laufenden Stunde — liegt ein Wechsel darin, galt
+    # um `zeitpunkt` die vorige Quelle; der jüngste MQTT-Wert gehört dann nicht dorthin.
+    wechsel = await lade_wechsel(db, anlage.id)
 
     # MQTT-gespeiste Zähler (Standalone-Modus): jüngsten Snapshot der
     # letzten ~10 Min als Live-Wert verwenden. Bei MQTT ist der Topic-Wert
@@ -79,7 +85,7 @@ async def live_snapshot_if_missing(
     )
     for (mqtt_key,) in mqtt_keys_result.all():
         sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
-        if not sensor_key:
+        if not sensor_key or mqtt_zum_zeitpunkt(quelle_am(wechsel.get(sensor_key), zeitpunkt)) is False:
             continue
         existing = await db.execute(
             select(SensorSnapshot.id).where(

@@ -126,6 +126,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     from backend.api.routes.mqtt_gateway import _reload_gateway, entferne_gateway_zeile
     from backend.models.anlage import Anlage
     from backend.services.datenquellen_resolver import ziel_key_ohne_namen
+    from backend.services.zuordnung_wechsel.verzeichnen import momentaufnahme, verzeichne
 
     try:
         mapping_dicts = generate_mappings(req.preset_id, req.anlage_id, req.variablen, req.investition_id)
@@ -135,6 +136,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     if anlage is None:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
 
+    wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund: vor dem Ersetzen der Zeilen (W2)
     # Dasselbe Feld in beiden Schreibweisen (Picker mit Namensteil, Preset in ID-Form) ist dieselbe Zeile.
     ziele = {ziel_key_ohne_namen(md["ziel_key"]) for md in mapping_dicts}
     alte = [mid for mid, zk in (await db.execute(select(MqttGatewayMapping.id, MqttGatewayMapping.ziel_key).where(
@@ -148,6 +150,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     await db.flush()
     gesetzt, ohne_feld = await setze_gateway_quellen(db, anlage, neue)
     flag_modified(anlage, "sensor_mapping")
+    await verzeichne(db, anlage, wirksam_vorher)
     await db.commit()
 
     reload_result = await _reload_gateway(db)

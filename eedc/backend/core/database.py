@@ -1510,6 +1510,11 @@ async def _run_data_migrations() -> None:
             ohne_leser_inbound_stempel_auf_keine,
         )
 
+        # Sensorwechsel mit Grund (Sitzung 1, Teil D): die Zuordnungs-Wechsel aus dem Aktivitäts-Protokoll (seit 25.09.2026)
+        # in `zuordnung_wechsel` überführen — nur sicher wirksame Änderungen mit eigenen Werten. Idempotent, kein HTTP.
+        from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_altbestand
+        await _apply_once("sensorwechsel_s1_altbestand_aus_protokoll", ueberfuehre_altbestand)
+
         # N-545: Die Sensor-Definitionen eines NEUEN Pakets starten bei einer
         # BESTANDSinstallation abgewaehlt (Entscheid Gernot 22.09.2026). Kein
         # `_apply_once` — der Name einer Migration gilt einmal je Installation,
@@ -1556,6 +1561,8 @@ async def init_db():
     # HA-Bauform E1: `kanal` · `kanal_quelle` · `kanal_statistik` — neue Tabellen, gleiche Mechanik.
     # E2: dazu `kanal_nachfuellung` (Marke je Kanal und Entity) im selben Modul.
     from backend.models import kanal  # noqa: F401
+    # Sensorwechsel mit Grund (B-1): `zuordnung_wechsel` — neue Tabelle, gleiche Mechanik.
+    from backend.models import zuordnung_wechsel  # noqa: F401
 
     async with engine.begin() as conn:
         # Migrationen ausführen

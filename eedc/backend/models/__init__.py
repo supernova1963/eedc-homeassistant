@@ -16,6 +16,8 @@ from backend.models.korrekturprofil import Korrekturprofil
 from backend.models.data_provenance_log import DataProvenanceLog
 from backend.models.emob_ladeblock import EmobLadeblock
 from backend.models.kanal import Kanal, KanalNachfuellung, KanalQuelle, KanalStatistik
+# Sensorwechsel mit Grund (B-1): die Zuordnungs-Wechsel je Zählerschlüssel.
+from backend.models.zuordnung_wechsel import ZuordnungWechsel
 
 __all__ = [
     "Anlage",
@@ -43,4 +45,5 @@ __all__ = [
     "KanalQuelle",
     "KanalStatistik",
     "KanalNachfuellung",
+    "ZuordnungWechsel",
 ]

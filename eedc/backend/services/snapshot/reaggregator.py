@@ -268,7 +268,14 @@ async def _boundaries(
     ha_verfuegbar: bool,
     tag_0: datetime,
 ) -> list[dict]:
-    """Je Zähler die 25 Stunden-Grenzen (Vortag 23:00 … 23:00): `alt` aus der DB (± 5 min), `neu` aus HA (± 10 min)."""
+    """Je Zähler die 25 Stunden-Grenzen (Vortag 23:00 … 23:00): `alt` aus der DB (± 5 min), `neu` aus HA (± 10 min).
+
+    B-0 (Sensorwechsel mit Grund, Bauplan §8 Nr. 19 «Vorschau = Lauf»): vor einem verzeichneten Wechsel bleibt eine vorhandene
+    Zeile (`neu` = `alt`), eine fehlende kommt aus der Quelle zum Zeitpunkt (`zuordnung_wechsel.anwenden.vorschau_quelle`)."""
+    from backend.services.zuordnung_wechsel.anwenden import vorschau_quelle
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel, quelle_am
+
+    wechsel = await lade_wechsel(db, anlage.id)
     boundaries: list[dict] = []
 
     # Pro Counter, pro Stunde -1..24: alt aus DB (5min Toleranz), neu aus HA-Stats
@@ -301,10 +308,11 @@ async def _boundaries(
             snap_alt[sensor_key][h] = alt
 
             # neu: HA-Stats lookup (kein Schreiben)
-            neu = None
-            if entity_id and ha_verfuegbar:
+            bleibt, eid = vorschau_quelle(quelle_am(wechsel.get(sensor_key), zp), entity_id, alt)
+            neu = alt if bleibt else None
+            if eid and ha_verfuegbar:
                 neu = ha_svc.get_value_at(
-                    entity_id, zp, toleranz_minuten=10,
+                    eid, zp, toleranz_minuten=10,
                     als_stand=ist_stand_sensor_key(sensor_key),
                 )
             snap_neu[sensor_key][h] = neu
@@ -377,7 +385,8 @@ async def _stunden_alt_neu(
     }
     tabelle_neu = None
     if ha_verfuegbar:
-        tabelle_neu = await _lts_aggregator.lts_tagestabelle(anlage, investitionen_by_id, datum)
+        tabelle_neu = await _lts_aggregator.lts_tagestabelle(  # B-0: die Wechsel wie `aggregate_day`
+            anlage, investitionen_by_id, datum, **await _lts_aggregator.wechsel_kwargs(db, anlage.id))
     if tabelle_neu is None:
         tabelle_neu = await _snapshot_aggregator.snapshot_tagestabelle(
             db, anlage, investitionen_by_id, datum,
@@ -632,6 +641,7 @@ async def resnap_anlage_range(
 
     # 2) 5-Min-Slots (force=True, da Off-by-one-Fix sonst nicht überschreibt)
     if include_5min:
+        kurzzeit_merk: dict = {}   # Reichweiten-Probe je Entität und Stunde einmal im Lauf (Bauplan §8 Nr. 20)
         zp = von_h
         while zp < bis_h:
             # Nur Sub-Hour-Slots :05..:55 (volle Stunden bereits durch Schritt 1)
@@ -641,7 +651,8 @@ async def resnap_anlage_range(
                     break
                 try:
                     n = await snapshot_anlage_5min(
-                        db, anlage, zeitpunkt=slot, force=True, force_resnap=True
+                        db, anlage, zeitpunkt=slot, force=True, force_resnap=True,
+                        kurzzeit_merk=kurzzeit_merk,
                     )
                     fivemin_count += n
                 except Exception as e:

@@ -70,9 +70,10 @@ def _schluesselwort_verstoesse(register: dict) -> list[str]:
 
 def test_w7a_jede_tabelle_und_spalte_hat_eine_klasse():
     assert _abweichungen(_tabellen_der_metadata(), reg.REGISTER) == []
-    assert len(reg.REGISTER) == 23 and len(reg.NIE) == 6
+    assert len(reg.REGISTER) == 24 and len(reg.NIE) == 6
     gesamt = sum(len(c) for c in _tabellen_der_metadata().values()) + 2
-    assert gesamt == 375, gesamt          # 28 Modell-Tabellen, 373 Spalten + migrations (Bauplan §3.2)
+    # 28 Modell-Tabellen, 373 Spalten + migrations (Bauplan §3.2); + `zuordnung_wechsel` (12 Spalten, Sensorwechsel B-1)
+    assert gesamt == 387, gesamt
 
 
 def test_w7a_sprengsatz_neue_spalte():
@@ -127,10 +128,10 @@ def test_w7a_sprengsatz_api_token_rein():
 def test_w7b_jede_json_spalte_hat_eine_blattregel():
     schema = _tabellen_der_metadata()
     json_spalten = [(t, s) for t, tab in reg.REGISTER.items() if t != "migrations" for s in tab.spalten if schema[t][s]]
-    assert len(json_spalten) == 35
+    assert len(json_spalten) == 37        # + `zuordnung_wechsel.vorher`/`nachher` (Sensorwechsel B-1)
     klassen = [reg.REGISTER[t].spalten[s].klasse for t, s in json_spalten]
     assert {k: klassen.count(k) for k in set(klassen)} == {
-        "allowlist": 3, "raus": 1, "bereinigt:struktur": 1, "bereinigt:email": 4, "rein": 26}
+        "allowlist": 5, "raus": 1, "bereinigt:struktur": 1, "bereinigt:email": 4, "rein": 26}
     for t, s in json_spalten:
         sp = reg.REGISTER[t].spalten[s]
         assert sp.json and isinstance(sp.text_schluessel, frozenset) and isinstance(sp.text_unter, frozenset), (t, s)
@@ -138,7 +139,8 @@ def test_w7b_jede_json_spalte_hat_eine_blattregel():
             assert sp.oberschluessel, (t, s)
     mit_regel = [(t, s) for t, s in json_spalten if reg.REGISTER[t].spalten[s].text_schluessel
                  or reg.REGISTER[t].spalten[s].text_unter]
-    assert len(mit_regel) == 15          # 14 (Bauplan §3.2) + `korrekturprofile.lern_basis_pro_bin` (Register-Nachtrag 15.11.)
+    # 14 (Bauplan §3.2) + `korrekturprofile.lern_basis_pro_bin` (Register-Nachtrag 15.11.) + `zuordnung_wechsel.vorher/nachher`
+    assert len(mit_regel) == 17
     # Fremde Oberschlüssel-Zahlen bleiben nur in `investitionen.parameter` (Konzept §4.2, Einwertung Master S1).
     assert [(t, s) for t, s in json_spalten if reg.REGISTER[t].spalten[s].fremde_zahlen_bleiben] == [
         ("investitionen", "parameter")]

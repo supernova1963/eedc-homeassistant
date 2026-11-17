@@ -460,6 +460,9 @@ async def _raeume_innengeraete_zuordnungen(
     # N-561: die Gateway-Zeilen der entfallenen Felder gehen mit — sonst abonniert
     # der Gateway ihr Topic weiter.
     await _entferne_gateway_zeilen(db, gateway_ids)
+    # Sensorwechsel mit Grund (B-1): die verzeichneten Wechsel der entfallenen Innengeräte gehen mit.
+    from backend.services.zuordnung_wechsel.raeumen import raeume_geraet
+    await raeume_geraet(db, inv.anlage_id, inv.id, _betroffen)
 
 
 def _raeume_feld_ablagen(mapping: dict, inv_id: int, betroffen) -> tuple[bool, list[int]]:
@@ -598,6 +601,9 @@ async def delete_investition(investition_id: int, db: AsyncSession = Depends(get
 
     # N-668: Snapshots und Kanäle der Investition — sonst erbt die nächste, die diese ID bekommt, ihre Messreihen.
     snapshots, kanaele = await _entferne_messreihen(db, inv.anlage_id, investition_id)
+    # Sensorwechsel mit Grund (B-1): ebenso die verzeichneten Zuordnungs-Wechsel des Geräts.
+    from backend.services.zuordnung_wechsel.raeumen import raeume_geraet
+    await raeume_geraet(db, inv.anlage_id, investition_id)
 
     # N-560: in DIESER Sitzung (N-532), vor dem Löschen — danach gibt es die
     # Bezeichnung nicht mehr.

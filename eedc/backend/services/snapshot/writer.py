@@ -76,7 +76,8 @@ async def _stillgelegte_inv_ids(db: AsyncSession, anlage_id: int) -> set[str]:
 
 
 def _build_counter_map(
-    anlage, stillgelegte_inv_ids: Optional[set[str]] = None
+    anlage, stillgelegte_inv_ids: Optional[set[str]] = None, *,
+    zeitpunkt: Optional[datetime] = None, wechsel: Optional[dict] = None,
 ) -> dict[str, str]:
     """
     Sammelt alle gemappten kumulativen kWh-Zähler einer Anlage.
@@ -99,6 +100,12 @@ def _build_counter_map(
             Zuordnungen werden übersprungen (s. `_stillgelegte_inv_ids`).
             `None` heißt „nicht gefiltert" und ist das Verhalten bis v4.0.22;
             die Bestandsproben rufen weiterhin ohne dieses Argument auf.
+        zeitpunkt, wechsel: Sensorwechsel mit Grund, B-0 «Zuordnung zum
+            Zeitpunkt» — mit beiden gilt je Schlüssel die Quelle **um
+            ``zeitpunkt``** (``zuordnung_wechsel.lade_wechsel``): eine frühere
+            HA-Entität ersetzt die heutige, eine MQTT-, «keine»- oder unbekannte
+            Quelle nimmt den Schlüssel heraus. Ohne beide (oder ohne Wechsel):
+            die heutige Zuordnung, bitgleich wie vorher.
     """
     sensor_mapping = anlage.sensor_mapping or {}
     result: dict[str, str] = {}
@@ -157,6 +164,9 @@ def _build_counter_map(
         else:  # MQTT-Quellen oder keine → HA-Schreib-Map lässt das Feld aus
             result.pop(sensor_key, None)
 
+    if zeitpunkt is not None and wechsel:
+        from backend.services.zuordnung_wechsel.anwenden import counter_map_zum_zeitpunkt
+        counter_map_zum_zeitpunkt(result, wechsel, zeitpunkt, stillgelegt)
     return result
 
 
@@ -187,6 +197,15 @@ async def _delete_snapshot_if_exists(
         )
     )
     return (result.rowcount or 0) > 0
+
+
+async def _snapshot_vorhanden(db: AsyncSession, anlage_id: int, sensor_key: str, zeitpunkt: datetime) -> bool:
+    """Gibt es für (Schlüssel, Zeitpunkt) schon eine Zeile? (B-0: vor einem verzeichneten Wechsel wird nur gefüllt.)"""
+    return (await db.execute(select(SensorSnapshot.id).where(and_(
+        SensorSnapshot.anlage_id == anlage_id,
+        SensorSnapshot.sensor_key == sensor_key,
+        SensorSnapshot.zeitpunkt == zeitpunkt,
+    )))).scalar_one_or_none() is not None
 
 
 async def _upsert_snapshot(
@@ -265,6 +284,8 @@ async def snapshot_anlage(
     # Lokal-Import, weil reader.py von writer.py importiert (Self-Healing in
     # get_snapshot) — wir wollen keinen zirkulären Top-Level-Import.
     from backend.services.snapshot.reader import _get_mqtt_snapshot_at
+    from backend.services.zuordnung_wechsel.anwenden import mqtt_zum_zeitpunkt
+    from backend.services.zuordnung_wechsel.zeitpunkt import HEUTE, lade_wechsel, quelle_am
 
     if zeitpunkt is None:
         now = datetime.now()
@@ -280,10 +301,20 @@ async def snapshot_anlage(
     # fälschlich als h zu speichern. Falscher Nachbarwert würde Slot-h = 0
     # erzeugen und Slot h+1 = 2-Stunden-Delta als Spike (Forum-Beobachtung
     # Rainer #146, gleicher Mechanismus wie #145 nur in der Job-Schicht).
-    counter_map = _build_counter_map(anlage, await _stillgelegte_inv_ids(db, anlage.id))
+    # B-0 (Sensorwechsel mit Grund, Bauplan §8 Nr. 16): die Quelle UM `zeitpunkt` — vor jedem Schreiben, ein Upsert überschreibt
+    # immer. Gilt dort NICHT die heutige Quelle (vor einem verzeichneten Wechsel, im Korrektur-Intervall), füllt der Lauf nur
+    # eine FEHLENDE Zeile aus der Quelle zum Zeitpunkt; eine vorhandene wird weder überschrieben noch gelöscht (sie kann auf
+    # einem anderen HA-Summenstand derselben Entität stehen oder ein fremder Abschnitt sein, §7 Nr. 5). Gelöscht (force_resnap,
+    # HA None, Spike-Regel #184) wird nur, wo die heutige Quelle gilt (§7 Nr. 3).
+    wechsel = await lade_wechsel(db, anlage.id)
+    counter_map = _build_counter_map(
+        anlage, await _stillgelegte_inv_ids(db, anlage.id), zeitpunkt=zeitpunkt, wechsel=wechsel)
     ha_svc = get_ha_statistics_service()
     if counter_map and ha_svc.is_available:
         for sensor_key, entity_id in counter_map.items():
+            heute = quelle_am(wechsel.get(sensor_key), zeitpunkt) is HEUTE
+            if not heute and await _snapshot_vorhanden(db, anlage.id, sensor_key, zeitpunkt):
+                continue   # B-0: vor dem Wechsel nur füllen
             # `get_value_at` ist synchrones SQLAlchemy gegen die Recorder-DB.
             # Direkt im `async def` aufgerufen hielt es den Event-Loop von eedc
             # an — je Zähler, je Lauf. Bei einer Anlage mit zwanzig Zählern
@@ -300,7 +331,7 @@ async def snapshot_anlage(
                 # prä-#184-Spike (sum=NULL→state-Fallback) nicht persistent
                 # bleibt. aggregate_day sieht dann eine Lücke statt eines
                 # falschen Wertes (Befund Rainer 2026-05-03).
-                if force_resnap:
+                if force_resnap and heute:
                     await _delete_snapshot_if_exists(
                         db, anlage.id, sensor_key, zeitpunkt
                     )
@@ -335,8 +366,12 @@ async def snapshot_anlage(
         if not sensor_key:
             continue
         # C2b: HA- oder keine-zugeordnetes Feld → MQTT-Backup schreibt es nicht.
+        # B-0: galt um `zeitpunkt` eine andere Quelle, entscheidet sie (MQTT ⇒ schreiben, sonst nicht).
+        erlaubt = mqtt_zum_zeitpunkt(quelle_am(wechsel.get(sensor_key), zeitpunkt))
+        if erlaubt is False:
+            continue
         zuord = quellen_energy.get(sensor_key)
-        if zuord and (zuord[0] in QUELLE_HA_ENERGY or zuord[0] == QUELLE_KEINE_ENERGY):
+        if erlaubt is None and zuord and (zuord[0] in QUELLE_HA_ENERGY or zuord[0] == QUELLE_KEINE_ENERGY):
             continue
         # Sensor-Snapshot existiert schon aus HA-Pfad? Dann überspringen
         existing = await db.execute(
@@ -368,6 +403,7 @@ async def snapshot_anlage_5min(
     zeitpunkt: datetime,
     force: bool = False,
     force_resnap: bool = False,
+    kurzzeit_merk: Optional[dict] = None,
 ) -> int:
     """
     Schreibt 5-Min-Counter-Snapshots aus HA short_term_statistics für eine
@@ -387,11 +423,18 @@ async def snapshot_anlage_5min(
         zeitpunkt: Ziel-Slot, typisch floor(now, 5min)
         force: Wenn True, bestehende Slots überschreiben (für Resnap nach
             Service-Bugfixes, siehe resnap_anlage_range).
+        kurzzeit_merk: Merkliste eines Laufs für die Reichweiten-Probe
+            (``_kurzzeit_reicht``, je Entität und Stunde einmal; Bauplan §8 Nr. 20).
 
     Returns:
         Anzahl geschriebener Snapshots.
     """
-    counter_map = _build_counter_map(anlage, await _stillgelegte_inv_ids(db, anlage.id))
+    from backend.services.zuordnung_wechsel.zeitpunkt import HEUTE, lade_wechsel, quelle_am
+
+    # B-0: die Quelle um `zeitpunkt` (wie `snapshot_anlage`; vor dem Wechsel nur füllen, nie löschen, §8 Nr. 16).
+    wechsel = await lade_wechsel(db, anlage.id)
+    counter_map = _build_counter_map(
+        anlage, await _stillgelegte_inv_ids(db, anlage.id), zeitpunkt=zeitpunkt, wechsel=wechsel)
     if not counter_map:
         return 0
 
@@ -401,9 +444,11 @@ async def snapshot_anlage_5min(
 
     count = 0
     for sensor_key, entity_id in counter_map.items():
-        if not force:
+        heute = quelle_am(wechsel.get(sensor_key), zeitpunkt) is HEUTE
+        if not force or not heute:
             # Idempotenz: nicht überschreiben wenn Slot schon belegt ist
             # (z.B. der :05-hourly-Snapshot, oder vorheriger 5-Min-Lauf).
+            # B-0: vor einem verzeichneten Wechsel auch nicht mit `force`.
             existing = await db.execute(
                 select(SensorSnapshot.id).where(
                     and_(
@@ -425,7 +470,9 @@ async def snapshot_anlage_5min(
             entity_id, zeitpunkt, 3, True, ist_stand_sensor_key(sensor_key),
         )
         if wert is None:
-            if force_resnap:
+            # §7 Nr. 3: eine Fünf-Minuten-Zeile, die älter ist, als HAs Kurzzeitstatistik reicht, lässt sich nicht neu
+            # holen — gelöscht wird nur, wenn HA für diese Entität in der Stunde des Slots Kurzzeit-Zeilen führt.
+            if force_resnap and heute and await _kurzzeit_reicht(ha_svc, entity_id, zeitpunkt, kurzzeit_merk):
                 await _delete_snapshot_if_exists(
                     db, anlage.id, sensor_key, zeitpunkt
                 )
@@ -437,6 +484,19 @@ async def snapshot_anlage_5min(
         count += 1
 
     return count
+
+
+async def _kurzzeit_reicht(ha_svc, entity_id: str, zeitpunkt: datetime, merk: Optional[dict]) -> bool:
+    """Führt HA für ``entity_id`` in der Stunde von ``zeitpunkt`` Kurzzeit-Zeilen? Einmal je Entität und Stunde (``merk``
+    eines Laufs, Bauplan §8 Nr. 20). Probe über ``state`` (``als_stand``): auch eine Zeile mit ``sum = NULL``, der #184-Fall,
+    zeigt, dass HA so weit reicht."""
+    stunde = zeitpunkt.replace(minute=0, second=0, microsecond=0)
+    merk = {} if merk is None else merk
+    if (entity_id, stunde) not in merk:
+        merk[(entity_id, stunde)] = await asyncio.to_thread(
+            ha_svc.get_value_at, entity_id, stunde + timedelta(minutes=30), 30, True, True,
+        ) is not None
+    return merk[(entity_id, stunde)]
 
 
 async def cleanup_5min_snapshots(
