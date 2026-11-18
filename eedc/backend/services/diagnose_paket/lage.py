@@ -4,7 +4,7 @@ Teile: ``kopf`` · ``daten_checker`` (dieselbe Serialisierung wie die Route, ``c
 (``zuordnungen_lesen`` ohne Festschreiben) · ``zeitplaene`` · ``log`` (Puffer, **nur Logger der Positivliste**
 ``LOG_POSITIVLISTE`` — bei Log-Stufe ``debug`` tragen Fremd-Logger wie ``aiosqlite`` und ``sqlalchemy.*`` die Parameter jeder
 Anweisung, also Zellwerte jeder Tabelle; jede andere Zeile zählt in ``inhalt.json.log_ausgelassen``, Korrektur F1) ·
-``einstellungen`` (Allowlist ``register.EINSTELLUNGEN``) · ``ha_abgleich``.
+``einstellungen`` (Allowlist ``register.EINSTELLUNGEN``, Präfixe ``register.EINSTELLUNGEN_PRAEFIX``) · ``ha_abgleich``.
 ``schema`` setzt ``paket.py`` aus dem Auszug.
 
 Jeder Teil mit Datenbank liest in **eigener** Sitzung (nie in der Routen-Sitzung) und rollt sie am Ende zurück — das Paket
@@ -26,7 +26,7 @@ from typing import Any, Awaitable, Callable, Optional
 from sqlalchemy import select
 
 from backend.services.diagnose_paket.bereinigung import bereinige_log
-from backend.services.diagnose_paket.register import EINSTELLUNGEN, PROFIL_DIAGNOSE
+from backend.services.diagnose_paket.register import EINSTELLUNGEN, EINSTELLUNGEN_PRAEFIX, PROFIL_DIAGNOSE
 
 CHECKER_ZEITGRENZE_S = 120
 #: Logger, deren Zeilen ins Paket gehen (je Name selbst und seine Kinder): eedc-eigene Module (``logging.getLogger(__name__)``
@@ -173,10 +173,28 @@ async def einstellungen(sitzungen, anlage_id: int, erg: LageErgebnis) -> dict:
         zeilen = (await db.execute(select(Settings.key, Settings.value))).all()
     out = {}
     for key, wert in sorted(zeilen):
+        praefix = next((p for p in EINSTELLUNGEN_PRAEFIX if key.startswith(p)), None)
         if key in EINSTELLUNGEN:
             out[key] = _einstellung(key, wert, anlage_id)
+        elif praefix is not None:
+            zeile = _einstellung_praefix(praefix, wert, anlage_id)
+            if zeile is not None:
+                out[key] = zeile
         else:
             erg.einstellungen_unbekannt.append(key)
+    return out
+
+
+def _einstellung_praefix(praefix: str, v: Any, anlage_id: int) -> Optional[dict]:
+    """Ein Zustand mit Präfix (``EINSTELLUNGEN_PRAEFIX``): nur der Anlage des Pakets; Listen als Anzahl, ein Auftrag als
+    «erledigt?» (keine Kennungen, keine Fehlertexte)."""
+    d = v if isinstance(v, dict) else {}
+    if d.get("anlage_id") != anlage_id:
+        return None
+    out: dict[str, Any] = {}
+    for f in EINSTELLUNGEN_PRAEFIX[praefix]:
+        w = d.get(f)
+        out[f] = len(w) if isinstance(w, list) else ({"erledigt": bool(w.get("erledigt"))} if isinstance(w, dict) else w)
     return out
 
 

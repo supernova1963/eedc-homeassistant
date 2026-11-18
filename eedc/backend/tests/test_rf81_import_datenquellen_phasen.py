@@ -307,5 +307,5 @@ async def test_felder_verfuegbarkeit_der_quell_achsen(db, ohne_aussen, transport
     await db.commit()
     ohne_aussen.update(transport=transport, mqtt=mqtt)
     resp = await dq.get_datenquellen_felder(a.id, db)
-    assert list(resp) == ["anlage_id", "gruppen", "verfuegbarkeit", "historie_hinweis"]
+    assert list(resp) == ["anlage_id", "gruppen", "verfuegbarkeit"]
     assert resp["verfuegbarkeit"] == erwartet

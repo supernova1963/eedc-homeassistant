@@ -30,12 +30,6 @@ from backend.services.datenquellen_mapping_sync import feld_id
 from backend.core.ha_integrations_wissen import analysiere_vorschlaege
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-from backend.services.datenquellen_historie import (
-    ist_echte_aenderung,
-    vermerk_ergaenzen,
-    vermerk_leeren,
-    vermerk_lesen,
-)
 from backend.core.field_definitions import (
     basis_feld_key,
     ist_zustand_feld,
@@ -46,6 +40,7 @@ from backend.services.live_sensor_config import (
 )
 from backend.services.mqtt_topic_registry import build_expected_topics
 from backend.services.mqtt_broker_settings import import_aktiviert
+from backend.services.zuordnung_wechsel import abfrage
 from backend.services.zuordnung_wechsel.verzeichnen import momentaufnahme, verzeichne
 from backend.utils.investition_filter import aktiv_am_tag, sort_investitionen_nach_typ
 # Schnitt `zuordnungen_lesen` (E1, 10.11.2026): die vier lesenden /felder-Phasen samt Helfern leben im Service; hier stehen
@@ -497,7 +492,7 @@ def _quelle_klartext(eintrag: dict | None, topic: str | None = None) -> str:
     """Eine Quelle, wie sie im Aktivitätsprotokoll steht (N-556).
 
     ``None``/``{}`` heißt „kein eigener Eintrag" = Grundeinstellung (MQTT-Inbound
-    auf dem Standard-Topic) — dieselbe Lesart wie `ist_echte_aenderung`.
+    auf dem Standard-Topic).
     """
     q = (eintrag or {}).get("quelle")
     if not q or q == QUELLE_STANDARD:
@@ -509,47 +504,6 @@ def _quelle_klartext(eintrag: dict | None, topic: str | None = None) -> str:
     if q == QUELLE_KEINE:
         return "keine Quelle"
     return str(q)
-
-
-async def _hat_aggregierte_historie(db: AsyncSession, anlage_id: int) -> bool:
-    """Gibt es überhaupt schon gerechnete Tageswerte für diese Anlage?
-
-    Ohne sie ist eine Zuordnung keine *Änderung* der Vergangenheit, sondern
-    ihre Ersteinrichtung — im Setup-Wizard ordnet der Anwender ein Dutzend
-    Felder zu, und ein Hinweis auf eine Historie, die es nicht gibt, wäre
-    reiner Lärm.
-    """
-    from backend.models.tages_energie_profil import TagesZusammenfassung
-
-    return (await db.execute(
-        select(TagesZusammenfassung.id)
-        .where(TagesZusammenfassung.anlage_id == anlage_id)
-        .limit(1)
-    )).scalar_one_or_none() is not None
-
-
-async def _historie_vermerken(
-    db: AsyncSession, anlage: Anlage, mapping: dict, field_id: str,
-) -> None:
-    """Trägt die Zuordnungsänderung in den Historie-Vermerk ein (Konzept #192 B).
-
-    In-place auf `mapping`; der Aufrufer committet ohnehin. Fehlschläge sind
-    hier folgenlos für die Zuordnung selbst — der Vermerk ist ein Hinweis, kein
-    Datenpfad —, deshalb bricht ein Label-Lookup den Speichervorgang nicht ab.
-    """
-    if not await _hat_aggregierte_historie(db, anlage.id):
-        return
-    try:
-        label = await _feld_label(db, anlage, field_id)
-    except Exception:  # pragma: no cover — Anzeige-Detail, nie ein Blocker
-        logger.warning("Label-Auflösung für Historie-Hinweis fehlgeschlagen", exc_info=True)
-        label = field_id
-    vermerk_ergaenzen(
-        mapping,
-        field_id=field_id,
-        label=label,
-        jetzt_iso=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
-    )
 
 
 async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str) -> str | None:
@@ -591,7 +545,7 @@ async def _ist_ohne_leser(db: AsyncSession, anlage: Anlage, field_id: str) -> bo
 async def setze_gateway_quellen(db: AsyncSession, anlage: Anlage, zeilen) -> tuple[int, list[str]]:
     """Setzt für frisch angelegte Gateway-Zeilen (Preset-Apply, P-433-2b K4-8) die Quelle ihres Feldes auf
     ``mqtt_gateway`` — dieselbe Schreibform wie ``set_feld_quelle`` (``quellen[field_id] = {quelle, mapping_id}`` +
-    ``uebernehme_quelle_ins_mapping`` + Historie-Vermerk bei echter Änderung), damit die Fläche «Gateway» mit Topic zeigt
+    ``uebernehme_quelle_ins_mapping``), damit die Fläche «Gateway» mit Topic zeigt
     statt «Inbound».
 
     Die Feld-ID kommt **rückwärts** aus der Topic-Registry (dieselbe Quelle wie ``_standard_topic_suffix``): das Feld,
@@ -616,21 +570,16 @@ async def setze_gateway_quellen(db: AsyncSession, anlage: Anlage, zeilen) -> tup
             feld_je_suffix.setdefault(ziel_key_ohne_namen(parts[2]), _feld_id(e["match_key"]))
     mapping = dict(anlage.sensor_mapping or {})
     quellen = dict(mapping.get(QUELLEN_KEY) or {})
-    gesetzt, ohne, geaendert = 0, [], []
+    gesetzt, ohne = 0, []
     for row in zeilen:
         field_id = feld_je_suffix.get(ziel_key_ohne_namen(row.ziel_key))
         if field_id is None:
             ohne.append(row.ziel_key)
             continue
-        neu = {"quelle": QUELLE_GATEWAY, "mapping_id": row.id}
-        if ist_echte_aenderung(quellen.get(field_id), neu):
-            geaendert.append(field_id)
-        quellen[field_id] = neu
+        quellen[field_id] = {"quelle": QUELLE_GATEWAY, "mapping_id": row.id}
         uebernehme_quelle_ins_mapping(mapping, field_id, QUELLE_GATEWAY, None)
         gesetzt += 1
     mapping[QUELLEN_KEY] = quellen
-    for field_id in geaendert:
-        await _historie_vermerken(db, anlage, mapping, field_id)
     anlage.sensor_mapping = mapping
     return gesetzt, ohne
 
@@ -845,17 +794,11 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     ctx, gruppen = await zuordnungen_lesen(db, anlage_id, ha_aufloesen=_resolve_ha, ha_details=_ha_states_detail)
     await _festschreiben(db, ctx)
     verfuegbarkeit = await _verfuegbarkeit(db, ctx)
-    anlage = ctx.anlage
 
     return {
         "anlage_id": anlage_id,
         "gruppen": gruppen,
         "verfuegbarkeit": verfuegbarkeit,
-        # Konzept #192 B: offener Hinweis auf die unberührte Historie — `None`,
-        # solange keine Zuordnung geändert wurde. Bewusst hier und nicht als
-        # eigener Endpunkt: die Fläche lädt diese Antwort ohnehin, und ein
-        # zweiter Aufruf hätte den Block nur später erscheinen lassen.
-        "historie_hinweis": vermerk_lesen(anlage.sensor_mapping),
     }
 
 
@@ -907,6 +850,10 @@ class QuelleSetRequest(BaseModel):
     offset: float = 0.0
     # Invert ist NICHT mehr Teil der Quellen-Wahl (Datenquellen-V4): eigener
     # /invert-Endpoint + Store `sensor_mapping.invertieren`. Feld hier entfernt.
+    # Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): der Grund einer fragepflichtigen Änderung — `fortsetzung` oder
+    # `korrektur` (dann mit `falsch_seit`, örtliche Zeit; volle Stunde). Ohne Grund lehnt die Route sie mit 422 ab.
+    grund: str | None = None
+    falsch_seit: datetime | None = None
 
 
 class InvertSetRequest(BaseModel):
@@ -927,12 +874,7 @@ async def set_feld_invert(
     """
     from sqlalchemy.orm.attributes import flag_modified
 
-    anlage = (
-        await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    ).scalar_one_or_none()
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
+    anlage = await _anlage_oder_404(db, anlage_id)
     mapping = copy.deepcopy(anlage.sensor_mapping or {})
     invert = dict(mapping.get("invertieren") or {})
     vorher_invertiert = bool(invert.get(field_id)) or legacy_invert_aktiv(mapping, field_id)
@@ -945,12 +887,6 @@ async def set_feld_invert(
         # weiter umgedreht, während der Schalter grau ist (T89667 #378).
         entferne_legacy_invert(mapping, field_id)
     mapping["invertieren"] = invert
-    # Konzept #192 B: das Vorzeichen dreht die Aggregation, wirkt aber erst ab
-    # dem nächsten Lauf — die gespeicherten Tage behalten ihre Richtung. Genau
-    # dieser Fall war der Anlass der Speicher-Vorzeichen-Selbstkorrektur
-    # (v3.45.7); der Hinweis erspart die zweite Runde.
-    if vorher_invertiert != bool(body.invertieren):
-        await _historie_vermerken(db, anlage, mapping, field_id)
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
     # N-556: jede Handlung auf der Fläche steht im Protokoll — in DIESER Sitzung
@@ -969,67 +905,21 @@ async def set_feld_invert(
         db=db,
     )
     await db.commit()
-    return {
-        "field_id": field_id,
-        "invertieren": bool(body.invertieren),
-        # Der Client zeigt den Block ohne zweiten Roundtrip — ein Nachladen der
-        # ganzen Feldliste je Klick wäre teuer, und ein Hinweis, der erst beim
-        # nächsten Seitenaufruf erscheint, käme zu spät.
-        "historie_hinweis": vermerk_lesen(mapping),
-    }
+    return {"field_id": field_id, "invertieren": bool(body.invertieren)}
 
 
-@router.delete("/{anlage_id}/historie-hinweis")
-async def quittiere_historie_hinweis(anlage_id: int, db: AsyncSession = Depends(get_db, scope="function")):
-    """Quittiert den Historie-Hinweis („Verstanden") — Konzept #192 B.
-
-    Bewusst eine Quittung des **Anwenders** und kein „erledigt": ob er die
-    Vergangenheit nachgezogen hat, weiß eedc nicht (die Bereichs-Reparatur
-    läuft in 31-Tage-Blöcken, s. `services/datenquellen_historie.py`).
-    """
-    from sqlalchemy.orm.attributes import flag_modified
-
-    anlage = (
-        await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    ).scalar_one_or_none()
+async def _anlage_oder_404(db: AsyncSession, anlage_id: int) -> Anlage:
+    anlage = (await db.execute(select(Anlage).where(Anlage.id == anlage_id))).scalar_one_or_none()
     if not anlage:
         raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
-
-    mapping = dict(anlage.sensor_mapping or {})
-    entfernt = vermerk_leeren(mapping)
-    if entfernt:
-        anlage.sensor_mapping = mapping
-        flag_modified(anlage, "sensor_mapping")
-        await db.commit()
-    return {"quittiert": entfernt}
+    return anlage
 
 
-@router.post("/{anlage_id}/felder/{field_id}/quelle")
-async def set_feld_quelle(
-    anlage_id: int, field_id: str, body: QuelleSetRequest, db: AsyncSession = Depends(get_db, scope="function")
-):
-    """Setzt die Quelle eines Feldes (genau eine pro Feld, §2d) in sensor_mapping.quellen.
-
-    Bei `mqtt_gateway` (B3.3) wird zusätzlich eine `mqtt_gateway_mappings`-Zeile
-    ge-upsertet (ziel_key = field_id, §2b: eine Quelle/Feld) und ihre `mapping_id`
-    in `quellen[field_id]` referenziert. Beim Wegschalten wird die Zeile **gelöscht**
-    — das ist die bewusste Nutzer-Umschaltung im Picker (kein Waisen-Ballast); das
-    §2h-Prinzip „deaktivieren statt löschen" gilt der **automatischen** B8-Migration
-    (parallele Mappings verlustfrei rückholbar), nicht dieser expliziten Wahl.
-
-    Die Wahl wird IMMER auch in die klassische `sensor_mapping`-Struktur
-    geschrieben (`datenquellen_mapping_sync`) — `quellen` allein ist für alle
-    Leser nur ein Read-Through, die Aufzählung läuft über `basis`/`investitionen`.
-    """
-    from sqlalchemy.orm.attributes import flag_modified
-    from datetime import datetime
-    from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
-    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
-
+async def _quelle_zulaessig(db: AsyncSession, anlage: Anlage, field_id: str, body: QuelleSetRequest) -> str:
+    """Die Riegel der Quellen-Route (400) — dieselben für Schreiben und Prüfen."""
     quelle = (body.quelle or "").strip()
     if quelle not in QUELLEN_ERLAUBT:
         raise HTTPException(status_code=400, detail=f"Unbekannte/nicht verfügbare Quelle: {quelle}")
-
     # Preis-Felder werden ausschließlich als HA-Sensor gelesen (stündlicher
     # LTS-Mittelwert). Ein Gateway-/Inbound-Eintrag würde eine Quelle
     # versprechen, die kein Leser abfragt — die Fläche blendet die Knöpfe
@@ -1039,12 +929,6 @@ async def set_feld_quelle(
             status_code=400,
             detail="Preis-Felder werden nur als HA-Sensor gelesen — MQTT ist hier ohne Wirkung.",
         )
-
-    anlage = (
-        await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    ).scalar_one_or_none()
-    if not anlage:
-        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
     # N-780 (Päckchen U): dieselbe Form für ein Energie-Feld ohne Leser — eedc nähme den MQTT-Wert an, verarbeitete ihn
     # aber nicht. Die Fläche bietet Gateway/Inbound dort nicht an (`nur_ha`); hier der Riegel für den direkten API-Weg.
     if quelle in (QUELLE_STANDARD, QUELLE_GATEWAY) and await _ist_ohne_leser(db, anlage, field_id):
@@ -1053,8 +937,26 @@ async def set_feld_quelle(
             detail="eedc liest dieses Feld nicht über MQTT — ordne einen HA-Sensor zu oder trag den Wert im "
                    "Monatsabschluss von Hand ein.",
         )
+    if body.grund is not None and body.grund not in abfrage.GRUENDE:
+        raise HTTPException(status_code=400, detail=f"Unbekannter Grund: {body.grund}")
+    return quelle
 
-    wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund: vor jeder Änderung (W1)
+
+async def _wende_quelle_an(
+    db: AsyncSession, anlage: Anlage, field_id: str, quelle: str, body: QuelleSetRequest,
+) -> tuple[dict, str, bool]:
+    """Die Änderung selbst (in der Sitzung, ohne Commit) — dieselbe für Schreiben und Prüfen (Vorschau = Lauf).
+
+    Bei `mqtt_gateway` (B3.3) wird eine `mqtt_gateway_mappings`-Zeile ge-upsertet (ziel_key = Standard-Topic-Suffix, §2b:
+    eine Quelle/Feld) und ihre `mapping_id` in `quellen[field_id]` referenziert; beim Wegschalten wird sie **gelöscht**.
+    Die Wahl geht IMMER auch in die klassische `sensor_mapping`-Struktur (`datenquellen_mapping_sync`).
+
+    Returns: ``(quellen-Eintrag vorher, alte Quelle im Klartext, ist Themen-Eintrag)``.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+    from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
+    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
+
     mapping = dict(anlage.sensor_mapping or {})
     # Themen-Kacheln (4.2.0, G2-1): eine Themen-Kennung muss zu einem Eintrag gehören — sonst 404 statt stiller Ablage.
     ist_thema = _pruefe_themen_eintrag(mapping, field_id)
@@ -1078,16 +980,13 @@ async def set_feld_quelle(
         quell_topic = (body.quell_topic or "").strip()
         if not quell_topic:
             raise HTTPException(status_code=400, detail="mqtt_gateway erfordert ein quell_topic")
-        # ziel_key = Standard-Topic-Suffix (nicht field_id!), damit der Gateway-
-        # Wert via eedc/{aid}/{suffix} in den Inbound-Cache fließt (C2a). Fallback
-        # field_id nur, falls das Feld nicht (mehr) in der Registry ist. VOR dem
-        # db.add(row) berechnen — die Query darin würde sonst die halb-gebaute
-        # Zeile (ziel_key=NULL) per Autoflush schreiben.
+        # ziel_key = Standard-Topic-Suffix (nicht field_id!), damit der Gateway-Wert via eedc/{aid}/{suffix} in den
+        # Inbound-Cache fließt (C2a). Fallback field_id nur, falls das Feld nicht (mehr) in der Registry ist. VOR dem
+        # db.add(row) berechnen — die Query darin würde sonst die halb-gebaute Zeile (ziel_key=NULL) per Autoflush schreiben.
         ziel_key = (await _standard_topic_suffix(db, anlage, field_id)) or field_id
-        # Upsert der Gateway-Zeile — bestehende dieses Feldes wiederverwenden.
         row = await _lade_mapping_row(alt_mapping_id)
         if row is None:
-            row = MqttGatewayMapping(anlage_id=anlage_id, erstellt_am=datetime.utcnow())
+            row = MqttGatewayMapping(anlage_id=anlage.id, erstellt_am=datetime.utcnow())
             db.add(row)
         row.quell_topic = quell_topic
         row.ziel_key = ziel_key
@@ -1096,16 +995,15 @@ async def set_feld_quelle(
         row.array_index = body.array_index
         row.faktor = body.faktor
         row.offset = body.offset
-        # Kein Republish-Invert mehr (Datenquellen-V4): Vorzeichen liegt im
-        # quellen-unabhängigen Store, angewendet am Read-Endwert.
+        # Kein Republish-Invert mehr (Datenquellen-V4): Vorzeichen liegt im quellen-unabhängigen Store.
         row.invertieren = False
         row.aktiv = True
         await db.flush()
         await db.refresh(row)
         quellen[field_id] = {"quelle": QUELLE_GATEWAY, "mapping_id": row.id}
     else:
-        # Weg von Gateway → zugehörige Zeile löschen (bewusste Nutzer-Umschaltung).
-        # N-561: derselbe Löschweg wie beim Löschen einer Komponente.
+        # Weg von Gateway → zugehörige Zeile löschen (bewusste Nutzer-Umschaltung; das §2h-Prinzip «deaktivieren statt
+        # löschen» gilt der automatischen B8-Migration). N-561: derselbe Löschweg wie beim Löschen einer Komponente.
         from backend.api.routes.mqtt_gateway import entferne_gateway_zeile
         await entferne_gateway_zeile(db, alt_mapping_id)
         if quelle in QUELLEN_HA:
@@ -1114,36 +1012,91 @@ async def set_feld_quelle(
                 raise HTTPException(status_code=400, detail=f"{quelle} erfordert eine entity_id")
             quellen[field_id] = {"quelle": quelle, "entity_id": entity}
         elif quelle == QUELLE_STANDARD:
-            # Inbound = Grundeinstellung → kein Eintrag nötig (B8-2 materialisiert
-            # bei Bedarf). Invert ist quellen-unabhängig (eigener /invert-Endpoint).
+            # Inbound = Grundeinstellung → kein Eintrag nötig (B8-2 materialisiert bei Bedarf).
             quellen.pop(field_id, None)
         else:  # QUELLE_KEINE
             quellen[field_id] = {"quelle": QUELLE_KEINE}
 
     mapping[QUELLEN_KEY] = quellen
-    # Konzept #192 B: Zuordnungen wirken ab jetzt — die gespeicherten Tages- und
-    # Stundenwerte tragen die Zuordnung ihres Aggregationslaufs. Vermerkt wird
-    # nur eine ECHTE Änderung; ein erneutes Bestätigen derselben Wahl ist keine.
-    # Themen-Kacheln (4.2.0, G2-2): ein Themen-Eintrag hat keine Historie — kein Vermerk.
-    if not ist_thema and ist_echte_aenderung(vorher, quellen.get(field_id)):
-        await _historie_vermerken(db, anlage, mapping, field_id)
-    if ist_thema and quelle in QUELLEN_HA:
-        # Beim ersten HA-Pick übernimmt ein Eintrag mit Vorgabe-Label «Eintrag n» den Klarnamen der Entität.
-        await _thema_label_aus_ha(db, mapping, field_id, (body.entity_id or "").strip())
-    # Klassische Struktur mitschreiben: HA → Sensor-Eintrag, sonst räumen. Ohne
-    # das Räumen spränge die B8-2-Auflösung beim nächsten `/felder` über Stufe 1
-    # („HA-Sensor zugeordnet") zurück auf HA und drehte die Wahl zurück.
-    uebernehme_quelle_ins_mapping(
-        mapping, field_id, quelle, (body.entity_id or "").strip() or None
-    )
+    # Klassische Struktur mitschreiben: HA → Sensor-Eintrag, sonst räumen. Ohne das Räumen spränge die B8-2-Auflösung beim
+    # nächsten `/felder` über Stufe 1 («HA-Sensor zugeordnet») zurück auf HA und drehte die Wahl zurück.
+    uebernehme_quelle_ins_mapping(mapping, field_id, quelle, (body.entity_id or "").strip() or None)
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
-    await verzeichne(db, anlage, wirksam_vorher)  # jede wirksame Änderung eines Zählerschlüssels, Grund leer
+    return vorher, alt_text, ist_thema
+
+
+def _grund_des_felds(body: QuelleSetRequest) -> dict:
+    """Der Grund der Feld-Route gilt für die (einzige) fragepflichtige Änderung dieses Felds."""
+    return {abfrage.ALLE: (body.grund, body.falsch_seit)} if body.grund else {}
+
+
+@router.post("/{anlage_id}/felder/{field_id}/quelle/pruefen")
+async def pruefe_feld_quelle(
+    anlage_id: int, field_id: str, body: QuelleSetRequest, db: AsyncSession = Depends(get_db, scope="function")
+):
+    """Prüft eine Quellen-Änderung, **bevor** der Client sie sendet (Sensorwechsel mit Grund, Bauplan B-2; schreibt nichts).
+
+    Derselbe Body wie `…/quelle`. Die Route macht dieselbe Änderung in der Sitzung, fragt die eine Prüf-Funktion
+    (`zuordnung_wechsel/abfrage.pruefe`) und rollt zurück. Antwort: `grund_erforderlich`, `erster_wert`, `tage`,
+    `stand_alt`, `stand_neu` (dazu `sensor_key`, `label`, `verzeichnet`, `vorgabe_falsch_seit`); mit `grund = korrektur`
+    und `falsch_seit` zusätzlich `korrektur` = die Vorschau des Dienstes (Vorschau = Lauf).
+    """
+    anlage = await _anlage_oder_404(db, anlage_id)
+    quelle = await _quelle_zulaessig(db, anlage, field_id, body)
+    label = await _feld_label(db, anlage, field_id)
+    wirksam_vorher = await momentaufnahme(db, anlage)
+    try:
+        await _wende_quelle_an(db, anlage, field_id, quelle, body)
+        fragen = await abfrage.pruefe(db, anlage, wirksam_vorher, await abfrage.lade_wirksame_quellen(db, anlage))
+        f = fragen[0] if fragen else None
+        out = abfrage.antwort(f, label)
+        out["korrektur"] = None
+        if f is not None and f.grund_erforderlich and body.grund == abfrage.GRUND_KORREKTUR and body.falsch_seit:
+            try:
+                out["korrektur"] = await abfrage.korrektur_vorschau(db, anlage_id, f, body.falsch_seit, datetime.now())
+            except abfrage.GrundFehlt as e:
+                out["korrektur"] = {"saetze": [str(e)], "startbar": False}
+    finally:
+        await db.rollback()
+    return out
+
+
+@router.post("/{anlage_id}/felder/{field_id}/quelle")
+async def set_feld_quelle(
+    anlage_id: int, field_id: str, body: QuelleSetRequest, db: AsyncSession = Depends(get_db, scope="function")
+):
+    """Setzt die Quelle eines Feldes (genau eine pro Feld, §2d) in sensor_mapping.quellen (`_wende_quelle_an`).
+
+    Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): eine fragepflichtige Änderung (eigene Werte, die wirksame Quelle
+    wechselt auf eine mit Werten) braucht `grund` — ohne ihn **422** (der Client fragt vorher über `…/quelle/pruefen`).
+    `fortsetzung`: Wechsel-Zeile mit Grund; `korrektur` (mit `falsch_seit`): der Dienst der Korrektur, danach Füllen und
+    Hintergrund-Lauf (`korrektur` der Antwort nennt den Lauf). Jede wirksame Änderung eines Schlüssels mit eigenen Werten
+    wird verzeichnet.
+    """
+    from backend.services.zuordnung_wechsel.korrektur import KorrekturNichtStartbar
+
+    anlage = await _anlage_oder_404(db, anlage_id)
+    quelle = await _quelle_zulaessig(db, anlage, field_id, body)
+    label = await _feld_label(db, anlage, field_id)
+    wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund: vor jeder Änderung (W1)
+    vorher, alt_text, ist_thema = await _wende_quelle_an(db, anlage, field_id, quelle, body)
+    if ist_thema and quelle in QUELLEN_HA:
+        # Beim ersten HA-Pick übernimmt ein Eintrag mit Vorgabe-Label «Eintrag n» den Klarnamen der Entität.
+        from sqlalchemy.orm.attributes import flag_modified
+        await _thema_label_aus_ha(db, anlage.sensor_mapping, field_id, (body.entity_id or "").strip())
+        flag_modified(anlage, "sensor_mapping")
+    try:
+        vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, _grund_des_felds(body), labels={abfrage.ALLE: label})
+    except (abfrage.GrundFehlt, KorrekturNichtStartbar) as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    quellen = (anlage.sensor_mapping or {}).get(QUELLEN_KEY) or {}
     # N-556: Zuordnen und Wegschalten stehen im Protokoll — in DIESER Sitzung (N-532).
     neu_text = _quelle_klartext(
         quellen.get(field_id),
         (body.quell_topic or "").strip() or None if quelle == QUELLE_GATEWAY else None,
     )
+    zusatz = abfrage.aktivitaet_text(vollzug, {abfrage.ALLE: label})
     await log_activity(
         kategorie="sensor_mapping",
         aktion=(
@@ -1151,13 +1104,14 @@ async def set_feld_quelle(
             else "Datenquelle auf Standard gesetzt" if quelle == QUELLE_STANDARD
             else "Datenquelle zugeordnet"
         ),
-        details=f"{anlage.anlagenname} · {await _feld_label(db, anlage, field_id)}: {alt_text} → {neu_text}",
+        details=f"{anlage.anlagenname} · {label}: {alt_text} → {neu_text}" + (f" · {zusatz}" if zusatz else ""),
         details_json={"field_id": field_id, "vorher": vorher or None,
                       "nachher": quellen.get(field_id)},
         anlage_id=anlage_id,
         db=db,
     )
     await db.commit()
+    await abfrage.nach_dem_commit(vollzug)
 
     # Gateway-Service hot-reloaden, damit die Subscription der Änderung folgt.
     try:
@@ -1170,7 +1124,7 @@ async def set_feld_quelle(
         "gespeichert": True,
         "field_id": field_id,
         "quelle": quelle,
-        "historie_hinweis": vermerk_lesen(mapping),
+        "korrektur": vollzug.zusammenfassung({abfrage.ALLE: label}),
     }
 
 
@@ -1234,10 +1188,14 @@ async def uebernehme_energy_vorschlaege(
                 zuordnungen.append((fid, entity))
 
     wirksam_vorher = await momentaufnahme(db, anlage)  # Sensorwechsel mit Grund (W3)
+    # Sensorwechsel mit Grund (B-2, Sitzung 3b): ein Feld, dessen Änderung einen Grund bräuchte (eigene Werte, die wirksame
+    # Quelle wechselt), ändert die Übernahme nicht — sie überspringt es und nennt es. Geprüft mit derselben Funktion wie die
+    # Feld-Route, an einer Kopie der Zuordnung (es gibt hier keine Gateway-Zeile).
+    zuordnungen, uebersprungen = await _ohne_fragepflichtige(db, anlage, wirksam_vorher, zuordnungen, kind)
     mapping = dict(anlage.sensor_mapping or {})
     quellen = dict(mapping.get(QUELLEN_KEY) or {})
     protokoll: list[str] = []
-    labels = await _feld_labels(db, anlage) if zuordnungen else {}
+    labels = await _feld_labels(db, anlage) if (zuordnungen or uebersprungen) else {}
     for fid, entity in zuordnungen:
         alt_text = _quelle_klartext(quellen.get(fid))
         quellen[fid] = {"quelle": kind, "entity_id": entity}
@@ -1263,4 +1221,27 @@ async def uebernehme_energy_vorschlaege(
     await db.commit()
 
     return {"gespeichert": True, "anzahl": len(zuordnungen),
-            "felder": [fid for fid, _ in zuordnungen]}
+            "felder": [fid for fid, _ in zuordnungen],
+            "uebersprungen": [{"field_id": fid, "label": labels.get(fid, fid)} for fid in uebersprungen]}
+
+
+async def _ohne_fragepflichtige(
+    db: AsyncSession, anlage: Anlage, wirksam_vorher: dict, zuordnungen: list[tuple[str, str]], kind: str,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Die Zuordnungen ohne die, deren Änderung einen Grund bräuchte (``abfrage.pruefe`` an einer Kopie der Zuordnung)."""
+    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
+    from backend.services.snapshot.keys import _energy_field_id_to_sensor_key
+
+    if not zuordnungen:
+        return zuordnungen, []
+    probe = copy.deepcopy(anlage.sensor_mapping or {})
+    quellen = dict(probe.get(QUELLEN_KEY) or {})
+    for fid, entity in zuordnungen:
+        quellen[fid] = {"quelle": kind, "entity_id": entity}
+        uebernehme_quelle_ins_mapping(probe, fid, kind, entity)
+    probe[QUELLEN_KEY] = quellen
+    nachher = await abfrage.lade_wirksame_quellen(db, anlage, probe)
+    fragepflichtig = {f.sensor_key for f in await abfrage.pruefe(db, anlage, wirksam_vorher, nachher, details=False)
+                      if f.grund_erforderlich}
+    bleibt = [(fid, e) for fid, e in zuordnungen if _energy_field_id_to_sensor_key(fid) not in fragepflichtig]
+    return bleibt, [fid for fid, _ in zuordnungen if _energy_field_id_to_sensor_key(fid) in fragepflichtig]

@@ -30,6 +30,11 @@ interface IntegrationStepProps {
 
 type StandaloneWahl = 'offen' | 'remote_ha' | 'nur_mqtt'
 
+/** Sensorwechsel mit Grund: ein Feld mit eigenen Werten wechselt die Quelle nur am Feld, mit dem Grund. */
+export const UEBERSPRUNGEN_SATZ =
+  'Nicht übernommen, weil diese Felder schon eigene Werte haben — wechsle ihre Quelle unter Einstellungen → Datenquellen ' +
+  'am Feld; dort fragt eedc, ob der neue Sensor dasselbe weiter misst oder bisher der falsche zugeordnet war:'
+
 export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: IntegrationStepProps) {
   const haAvailable = useHAAvailable()
   const [wahl, setWahl] = useState<StandaloneWahl>('offen')
@@ -64,6 +69,8 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
   const [vorschlagFehler, setVorschlagFehler] = useState(false)
   const [auswahl, setAuswahl] = useState<Record<string, boolean>>({})
   const [uebernommen, setUebernommen] = useState<number | null>(null)
+  // Sensorwechsel mit Grund (Sitzung 3b): Felder mit eigenen Werten, deren Quelle gewechselt hätte, übernimmt der Wizard nicht.
+  const [uebersprungen, setUebersprungen] = useState<string[]>([])
   const [uebernehmeLaeuft, setUebernehmeLaeuft] = useState(false)
 
   useEffect(() => {
@@ -105,6 +112,7 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
       }
       const r = await datenquellenApi.uebernehmeEnergyVorschlaege(anlageId, basis, investitionen)
       setUebernommen(r.anzahl)
+      setUebersprungen((r.uebersprungen ?? []).map((u) => u.label))
     } catch {
       setUebernommen(null)
     } finally {
@@ -258,6 +266,11 @@ export default function IntegrationStep({ anlageId, onNext, onBack, onSkip }: In
               {uebernommen != null && (
                 <p className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
                   <CheckCircle2 className="w-4 h-4" /> {uebernommen} Zuordnung(en) übernommen.
+                </p>
+              )}
+              {uebersprungen.length > 0 && (
+                <p className="text-sm text-gray-600 dark:text-gray-300" data-uebersprungen>
+                  {UEBERSPRUNGEN_SATZ} {uebersprungen.join(' · ')}
                 </p>
               )}
             </div>

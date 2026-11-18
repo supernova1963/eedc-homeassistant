@@ -31,9 +31,14 @@ vi.mock('../../api/datenquellen', () => {
     VERBINDUNG_GEAENDERT_EVENT: 'eedc:verbindung-geaendert',
     datenquellenApi: {
       getFelder: vi.fn(() => Promise.resolve({
-        anlage_id: 1, gruppen, verfuegbarkeit: { ha: false, mqtt: true, ha_quelle: null }, historie_hinweis: null,
+        anlage_id: 1, gruppen, verfuegbarkeit: { ha: false, mqtt: true, ha_quelle: null },
       })),
-      setQuelle: vi.fn(() => Promise.resolve({ historie_hinweis: null })),
+      pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
+      korrekturLaeufe: vi.fn(() => Promise.resolve([])),
+      korrekturLauf: vi.fn(() => Promise.resolve({
+        lauf: 'L7', sensor_key: 'inv:4:ladung_kwh', status: 'laeuft', tage: 9, erledigt: 2, fehler: [], beginn: null,
+        ende: null, fuellen_offen: false })),
+      setQuelle: vi.fn(() => Promise.resolve({ korrektur: [] })),
       taktCheck: vi.fn(() => Promise.resolve({ geprueft: false })),
     },
   }
@@ -76,6 +81,7 @@ describe('P-433-2b K4 — Preset anwenden', () => {
   })
 
   it('Anwenden mit Vorgaben und Investition, danach lädt die Fläche neu', async () => {
+    vi.spyOn(liveDashboardApi, 'pruefeGatewayPreset').mockResolvedValue({ grund_erforderlich: false, felder: [] })
     const apply = vi.spyOn(liveDashboardApi, 'applyGatewayPreset').mockResolvedValue(
       { preset_id: 'evcc_ladepunkt', erstellt: 1, mappings: [], ersetzt: 0, quelle_gesetzt: 1, ohne_feld: [] })
     const { container } = render(<MemoryRouter><DatenquellenZuordnung /></MemoryRouter>)
@@ -91,6 +97,52 @@ describe('P-433-2b K4 — Preset anwenden', () => {
     await waitFor(() => expect(apply).toHaveBeenCalledWith(
       { preset_id: 'evcc_ladepunkt', anlage_id: 1, variablen: {}, investition_id: 4 }))
     await waitFor(() => expect(vi.mocked(datenquellenApi.getFelder).mock.calls.length).toBe(vorher + 1))
+  })
+
+  it('Sensorwechsel S3b: fragt das Preset einen Grund, öffnet der Dialog — angewendet wird erst mit dem Grund', async () => {
+    const frage = {
+      grund_erforderlich: true, erster_wert: null, tage: 649, stand_alt: 1.0, stand_neu: null,
+      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, vorgabe_falsch_seit: null, korrektur: null,
+    }
+    vi.spyOn(liveDashboardApi, 'pruefeGatewayPreset').mockResolvedValue({ grund_erforderlich: true, felder: [frage] })
+    const apply = vi.spyOn(liveDashboardApi, 'applyGatewayPreset').mockResolvedValue(
+      { preset_id: 'evcc_ladepunkt', erstellt: 1, mappings: [], korrektur: [] })
+    const { container } = render(<MemoryRouter><DatenquellenZuordnung /></MemoryRouter>)
+    fireEvent.click(await screen.findByText(/alle aufklappen/))
+    await waitFor(() => expect(container.querySelector('[data-preset-knopf="4"]')).not.toBeNull())
+    fireEvent.click(container.querySelector('[data-preset-knopf="4"]') as HTMLElement)
+    const dialog = await waitFor(() => document.querySelector('[data-preset-dialog]') as HTMLElement)
+    fireEvent.click(dialog.querySelector('[data-preset-anwenden]') as HTMLElement)
+    await waitFor(() => expect(document.querySelector('[data-sensorwechsel-feld="inv:4:ladung_kwh"]')).not.toBeNull())
+    expect(apply).not.toHaveBeenCalled()
+    fireEvent.click(document.querySelector('input[type="radio"][value="fortsetzung"]') as HTMLElement)
+    fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
+    await waitFor(() => expect(apply).toHaveBeenCalledWith({ preset_id: 'evcc_ladepunkt', anlage_id: 1, variablen: {},
+      investition_id: 4, gruende: { 'inv:4:ladung_kwh': { grund: 'fortsetzung' } } }))
+  })
+
+  it('Sensorwechsel 3b-K (Mutanten F13, F18): der Dialog fragt nur die fragepflichtigen Felder; die Läufe der Antwort zeigen ihren Fortschritt', async () => {
+    const frage = {
+      grund_erforderlich: true, erster_wert: null, tage: 649, stand_alt: 1.0, stand_neu: null,
+      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, vorgabe_falsch_seit: null, korrektur: null,
+    }
+    const ohneFrage = { ...frage, grund_erforderlich: false, sensor_key: 'inv:4:ladung_pv_kwh', label: 'Ladung PV' }
+    vi.spyOn(liveDashboardApi, 'pruefeGatewayPreset').mockResolvedValue({ grund_erforderlich: true, felder: [frage, ohneFrage] })
+    vi.spyOn(liveDashboardApi, 'applyGatewayPreset').mockResolvedValue({ preset_id: 'evcc_ladepunkt', erstellt: 1,
+      mappings: [], korrektur: [{ lauf: 'L7', sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', tage_neu: 9,
+        zaehlerstaende_geloescht: 3 }] })
+    const { container } = render(<MemoryRouter><DatenquellenZuordnung /></MemoryRouter>)
+    fireEvent.click(await screen.findByText(/alle aufklappen/))
+    await waitFor(() => expect(container.querySelector('[data-preset-knopf="4"]')).not.toBeNull())
+    fireEvent.click(container.querySelector('[data-preset-knopf="4"]') as HTMLElement)
+    const dialog = await waitFor(() => document.querySelector('[data-preset-dialog]') as HTMLElement)
+    fireEvent.click(dialog.querySelector('[data-preset-anwenden]') as HTMLElement)
+    await waitFor(() => expect(document.querySelector('[data-sensorwechsel-feld="inv:4:ladung_kwh"]')).not.toBeNull())
+    expect(document.querySelector('[data-sensorwechsel-feld="inv:4:ladung_pv_kwh"]')).toBeNull()
+    fireEvent.click(document.querySelector('input[type="radio"][value="fortsetzung"]') as HTMLElement)
+    fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
+    expect(await screen.findByText('Tage werden im Hintergrund neu gebildet: 2 von 9.')).toBeInTheDocument()
+    expect(datenquellenApi.korrekturLauf).toHaveBeenCalledWith(1, 'L7')
   })
 
   it('Filter und Vorschau sind reine Auswahl/Formatierung', () => {

@@ -899,13 +899,51 @@ Ordnest du einem Feld eine andere Quelle zu (oder kehrst ein Vorzeichen um), gil
 
 Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter, weitere Module, ein Speicher), findet sie in Live und ab dem laufenden Tag überall wieder — in der Vergangenheit aber nicht.
 
-**eedc sagt es dir.** Nach einer Änderung erscheint oben auf der Datenquellen-Fläche ein Hinweis mit den geänderten Feldern und dem Datum, ab dem die Werte neu sind. Er blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** quittierst — auch über einen Neustart hinweg, denn die Frage stellt sich oft erst Tage später.
+**Hat ein Zähler schon eigene Werte, fragt eedc nach dem Grund.** Wechselst du die Quelle eines Zählerfelds, das schon
+eigene Werte hat — anderer HA-Sensor, anderes Gateway-Topic oder anderer Faktor, Gateway statt Inbound —, öffnet sich **vor
+dem Speichern** der Dialog **„Warum wechselt die Quelle?"**. Er nennt, seit wann das Feld Werte hat, und — wo bekannt — den
+letzten Zählerstand der bisherigen und den Zählerstand der neuen Quelle. Zwei Gründe stehen zur Wahl:
 
-**Die bisherigen Werte bleiben, wie sie waren** — auch deine **Monatsdaten** bleiben unberührt. Einen Neuaufbau einzelner Tage empfiehlt der Hinweis nicht: er holt die Zählerstände der Tage mit der **heutigen** Zuordnung, und zählt der neue Zähler auf einer anderen Höhe als der alte, liegen danach die gespeicherten Zählerstände in Abschnitten auf zwei Höhen. Der Daten-Checker prüft, ob dabei ein versetzter Abschnitt entstanden ist (**„Zählerstände – versetzter Abschnitt"**, [Daten-Checker §4.8f](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)), und nennt dort den Weg; findet er keinen, steht der Befund unter den bestandenen Prüfungen, und es ist nichts zu tun. Der Knopf **„Zum Daten-Checker"** im Hinweis führt dorthin.
+- **„Der neue Sensor misst dasselbe weiter (Zähler getauscht, anderer Sensor für dasselbe Gerät)"** — die bisherigen Werte
+  bleiben, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge. Wo eedc aus den gespeicherten
+  Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.
+- **„Bisher war der falsche Sensor zugeordnet"** — du gibst an, seit wann (**„Falsch seit"**, vorbelegt mit dem Beginn der
+  bisherigen Quelle — dem Wechsel, der sie gebracht hat; gezählt wird ab der vollen Stunde). Unter **„Was danach
+  geschieht"** steht, bevor etwas geändert wird, was die Korrektur tut: die Zählerstände dieses Felds aus dieser Zeit werden
+  verworfen; mit Home Assistant übernimmt eedc die Geschichte des richtigen Sensors, soweit Home Assistant sie führt, und
+  bildet die betroffenen Tage im Hintergrund neu (Wetter und Börsenpreis bleiben); gespeicherte Monatswerte bleiben. Führt
+  Home Assistant die Geschichte des richtigen Sensors erst später, nennt die Vorschau ab wann — die Zeit davor hat danach
+  keinen Wert; eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte. Die Korrektur lässt sich in eedc nicht
+  rückgängig machen — der Rückweg ist eine Sicherung von Home Assistant bzw. ohne Home Assistant eine Sicherung der
+  eedc-Datenbank. Ist Home Assistant eingerichtet, aber gerade nicht erreichbar, startet sie nicht. Solange die Tage neu
+  gebildet werden, zeigt die Fläche oben den Fortschritt — auch nach dem Neuladen der Seite. Scheitert das Füllen aus Home
+  Assistant, versucht eedc es jede Stunde und nach jedem Start von selbst wieder.
+
+**„Abbrechen"** lässt die bisherige Zuordnung stehen. Nicht gefragt wird bei einem Feld ohne eigene Werte (etwa der ersten
+Zuordnung), beim Wechsel auf **„Keine"** und bei der Rückkehr zur letzten Quelle mit Werten (Sensor A → „Keine" → wieder A).
+Jeder Wechsel eines Felds mit eigenen Werten wird mit Zeitpunkt und Grund verzeichnet. Dieselbe Frage stellt **„Preset
+anwenden …"** — eine Zeile je Feld. Die **Energie-Dashboard-Vorschläge** im Einrichtungsassistenten übernehmen ein Feld mit
+eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
+
+**Zähler getauscht, die Quelle bleibt dieselbe.** Neben dem Wert eines Zählerfelds steht das Symbol **„Zähler getauscht
+(gleiche Quelle)"**. Du gibst **„Getauscht am"** an; was eedc dann tut, hängt an der Quelle, die zu dieser Zeit galt:
+
+- **Ein Zähler aus Home Assistant:** eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen Sprung beim Tausch
+  berichtigst du dort (Entwicklerwerkzeuge → Statistik, beim Symbol „Wert anpassen" die Stunde des Tauschs wählen und den
+  Zuwachs auf die echte Menge setzen); eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich und trägt selbst
+  nichts ein. Das gilt auch, wenn das Feld heute über MQTT kommt, der Tausch aber in die Zeit fällt, in der es aus Home
+  Assistant kam.
+- **Ein Zähler über MQTT** (und ein Feld ohne Spiegel aus Home Assistant): du klickst **„Eintragen"** — eedc überbrückt
+  den Tausch; der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge, und wo eedc aus den gespeicherten
+  Zählerständen rechnet, zählt die Stunde des Tauschs keinen Zuwachs. Ist die Stunde des Tauschs schon gespeichert, nennt
+  eedc, was sie bisher zählt; danach zählt sie keinen Zuwachs — auch nicht, was in dieser Stunde vor dem Tausch verbraucht
+  wurde.
+- **Vor dem ersten eigenen Wert** des Felds gibt es keinen Sprung zu überbrücken — eedc nennt den ersten Wert und trägt
+  nichts ein; ebenso in einer Zeit, deren Werte eine Korrektur verworfen hat.
 
 Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 
-> **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt".
+> **Ohne Korrektur passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur eine Korrektur im Dialog bildet die betroffenen Tage neu.
 
 > ⚑ **Eine Ausnahme, und die ist gewollt: der laufende Tag.** Er wird alle 15 Minuten vollständig neu gerechnet — eine Zuordnung, die du um 22 Uhr anlegst, wirkt dort also binnen einer Viertelstunde für **den ganzen Tag** zurück, nicht erst ab 22 Uhr. Das ist der Grund, warum dieser Abschnitt „nicht rückwirkend" heißt und für heute trotzdem etwas anderes gilt.
 

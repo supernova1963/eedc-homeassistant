@@ -10,8 +10,8 @@ IA-V4-Flip gefallen; die Zuordnung läuft seither über ``routes/datenquellen.py
 
 Der Grund ist nicht Aufräumen, sondern eine **zweite Schreibtür**: ``POST /{anlage_id}``
 schrieb weiter auf ``Anlage.sensor_mapping``, ohne den Historie-Hinweis auszulösen, den
-``datenquellen.py`` seit Konzept #192 B zeigt („deine Zuordnung ist neu, die gespeicherte
-Historie nicht"). Wer die Alt-Route noch traf — Alt-Client aus dem Browser-Cache, eigenes
+``datenquellen.py`` seit Konzept #192 B zeigte („deine Zuordnung ist neu, die gespeicherte
+Historie nicht"; seit Sensorwechsel S3b fragt die Quellen-Route stattdessen nach dem Grund). Wer die Alt-Route noch traf — Alt-Client aus dem Browser-Cache, eigenes
 Script —, änderte seine Zuordnung stumm. Eine zweite Kopie des Hinweises hätte die Klasse
 verdoppelt statt sie aufzulösen.
 

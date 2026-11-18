@@ -27,8 +27,9 @@ vi.mock('../../api/datenquellen', () => {
       getFelder: vi.fn(() => Promise.resolve({
         gruppen: [geraet(7, 'Speicher Keller'), geraet(8, 'Speicher Garage')],
         verfuegbarkeit: { ha: true, mqtt: false, ha_quelle: 'ha_app' },
-        historie_hinweis: null,
       })),
+      pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
+      korrekturLaeufe: vi.fn(() => Promise.resolve([])),
       setQuelle: vi.fn(() => Promise.resolve()),
       setInvert: vi.fn(() => Promise.resolve()),
     },

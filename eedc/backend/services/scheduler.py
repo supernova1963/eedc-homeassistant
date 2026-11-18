@@ -651,6 +651,13 @@ async def sensor_snapshot_job() -> None:
             nachfuellen_anstossen()
         except Exception as e:
             logger.debug(f"Kanal-Nachfüllen nicht angestoßen: {type(e).__name__}: {e}")
+        # Sensorwechsel mit Grund (Bauplan §11 Nr. 46): offene Korrektur-Läufe (Füllen ausstehend, Tage unterbrochen)
+        # stündlich neu anstoßen — über `korrektur_lauf.starten`, also nie doppelt; auch nach der Sitzung oben.
+        try:
+            from backend.services.zuordnung_wechsel.korrektur_lauf import offene_anstossen
+            offene_anstossen()
+        except Exception as e:
+            logger.debug(f"Korrektur-Läufe nicht angestoßen: {type(e).__name__}: {e}")
 
         if total_snapshots > 0:
             logger.info(

@@ -148,7 +148,7 @@ async def test_quelle_unbekannter_eintrag_ist_404(db):
     assert "quellen" not in (a.sensor_mapping or {}) or not a.sensor_mapping["quellen"]
 
 
-async def test_quelle_setzen_ohne_historie_vermerk_mit_label(db):
+async def test_quelle_setzen_mit_label(db):
     a, inv = await _anlage(db)
     db.add(TagesZusammenfassung(anlage_id=a.id, datum=date(2026, 10, 1)))  # Historie vorhanden
     await db.flush()
@@ -156,17 +156,12 @@ async def test_quelle_setzen_ohne_historie_vermerk_mit_label(db):
     fid = f"inv_thema_{inv.id}_{e_id}"
     antwort = await set_feld_quelle(a.id, fid, QuelleSetRequest(quelle="ha_app", entity_id="lock.carport"), db)
     assert a.sensor_mapping["quellen"][fid] == {"quelle": "ha_app", "entity_id": "lock.carport"}
-    assert antwort["historie_hinweis"] is None, "ein Thema hat keine Historie"
+    assert antwort["korrektur"] == [], "ein Thema hat keinen Zählerschlüssel — nichts zu fragen"
     # Die klassische Struktur bekommt nichts (kein Registry-Feld).
     assert set(a.sensor_mapping["investitionen"][str(inv.id)]) == {"themen"}
     assert (await _protokoll(db))[-1] == (
         "Themen · Ioniq – Fahrzeugzustand · Türen: Standard (MQTT-Inbound) → HA-Sensor lock.carport"
     )
-    # Gegenprobe: ein Feld derselben Anlage bekommt den Vermerk weiter.
-    antwort = await set_feld_quelle(
-        a.id, f"inv_live_{inv.id}_leistung_w", QuelleSetRequest(quelle="ha_app", entity_id="sensor.p"), db,
-    )
-    assert antwort["historie_hinweis"] is not None
 
 
 async def test_erster_ha_pick_uebernimmt_friendly_name(db, monkeypatch):

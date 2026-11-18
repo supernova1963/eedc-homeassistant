@@ -282,6 +282,8 @@ export const REPARATUR_AENDERUNG_LABELS: Record<string, string> = {
   rohstaende_geloescht: 'MQTT-Stände verworfen',
   tage_neu: 'Tage werden neu gebildet',
   kanal_neu_gespiegelt: 'Stunden aus dem neuen Sensor',
+  // Sensorwechsel S3b: ein früher gescheitertes Füllen wird mit dem nächsten Ausführen nachgeholt.
+  fuellen_nachgeholt: 'Füllen nachgeholt',
   // E3 Daten-Checker: Vorschau-Zähler der Aktionen (eine Zeile im Vorschau-Kasten; Wächter W-4 —
   // keine Mechanik-Wörter, `backend/tests/test_daten_checker_texte.py`).
   anzahl_tage: 'Tage neu aufgebaut',

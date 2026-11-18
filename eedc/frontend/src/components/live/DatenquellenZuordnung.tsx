@@ -29,8 +29,8 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
-import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react'
-import { Alert, Button, Card } from '../ui'
+import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle, ChevronRight, ChevronDown, Replace } from 'lucide-react'
+import { Button, Card } from '../ui'
 import FormSection from '../ui/FormSection'
 import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
@@ -49,9 +49,7 @@ import { STATUS_TEXT_CLASS } from '../../lib/colors'
 // Bauschnitt 7: Ton UND Symbol der Schwere `info` kommen aus der SoT (Regel 0a) —
 // ein blauer Text unter einem Warndreieck wäre die halbe Übernahme.
 import { STATUS_ICONS } from '../../lib/komponentenStyle'
-import { formatDatum } from '../../lib/datum'
-import { befundPfad } from '../../lib/zielPfad'
-import { plural, mitAnzahl } from '../../lib/plural'
+import { mitAnzahl } from '../../lib/plural'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
 import {
   betriebsartBloecke, blockStatus, investitionIdDerGruppe, statusAufschluesselung, statusKontext,
@@ -66,8 +64,10 @@ import {
   type BetriebsmodusWerteGruppe,
   type DatenquellenVerfuegbarkeit,
   type GatewayQuelleConfig,
-  type HistorieHinweis,
 } from '../../api/datenquellen'
+import KorrekturFortschritt from './KorrekturFortschritt'
+import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
+import { useQuellenWechsel } from './useQuellenWechsel'
 
 const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quelle: null, mqtt: false }
 
@@ -179,10 +179,6 @@ export function zustandsChipStatus(felder: DatenquelleFeld[]): string | null {
   return 'Zustands-Chip: fehlt'
 }
 
-// Mehr geänderte Felder werden im Historie-Hinweis nicht einzeln benannt; darüber
-// steht „und N weitere". Er soll informieren, nicht das Änderungsprotokoll sein.
-const MAX_BENANNTE_FELDER = 6
-
 // Typ-Icon wie Komponenten; Basis-Block bekommt ein neutrales Zähler-Icon.
 const BASIS_STYLE: { icon: LucideIcon; color: string } = { icon: Gauge, color: 'text-gray-500 dark:text-gray-400' }
 function typStyle(typ: string): { icon: LucideIcon; color: string } {
@@ -242,10 +238,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   const [gatewayFeld, setGatewayFeld] = useState<DatenquelleFeld | null>(null)
   // Offener HA-Sensor-Picker (Feld, für das gerade eine HA-Entity gewählt wird).
   const [haFeld, setHaFeld] = useState<DatenquelleFeld | null>(null)
-  // Konzept #192 B: offener Hinweis auf die unberührte Historie. Kommt vom
-  // Server (Vermerk in `sensor_mapping`) und überlebt damit einen Reload — der
-  // Anwender ändert eine Zuordnung und kommt Tage später wieder.
-  const [historieHinweis, setHistorieHinweis] = useState<HistorieHinweis | null>(null)
+  // Sensorwechsel mit Grund (Sitzung 3b): offener Einstieg «Zähler getauscht (gleiche Quelle)» an einem Feld.
+  const [getauschtFeld, setGetauschtFeld] = useState<DatenquelleFeld | null>(null)
   // P-433-2b K4 (K4-7): die Geräte-Presets des Gateways (nur mit MQTT) und der offene «Preset anwenden…»-Dialog.
   const [presets, setPresets] = useState<MqttPreset[]>([])
   const [presetZiel, setPresetZiel] = useState<{ investitionId: number | null; titel: string; liste: MqttPreset[] } | null>(null)
@@ -280,7 +274,6 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
       .then((r) => {
         setGruppen(r.gruppen)
         setVerfuegbarkeit(r.verfuegbarkeit)
-        setHistorieHinweis(r.historie_hinweis)
       })
       .catch((e) => setFehler(e instanceof Error ? e.message : 'Laden fehlgeschlagen'))
       .finally(() => setLoading(false))
@@ -306,7 +299,6 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
       .then((r) => {
         setGruppen(r.gruppen)
         setVerfuegbarkeit(r.verfuegbarkeit)
-        setHistorieHinweis(r.historie_hinweis)
       })
       .catch(() => {})
   }, [selectedAnlageId])
@@ -362,14 +354,15 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
     })))
   }, [])
 
+  // Sensorwechsel mit Grund (B-2): jede Quellen-Änderung der Fläche geht über die Prüfung; mit eigenen Werten fragt der
+  // Dialog nach dem Grund, bevor etwas gesendet wird (`useQuellenWechsel`, `SensorwechselDialog`).
+  const wechsel = useQuellenWechsel(selectedAnlageId ?? null, setzeFeld, neuLaden)
+  const aendereQuelle = wechsel.aendere
+
   // Direkte Quelle ohne Modal (Inbound / keine).
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {
-    if (selectedAnlageId == null) return
-    setzeFeld(feld.id, { quelle, gateway_topic: null })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle)
-      .then((r) => setHistorieHinweis(r.historie_hinweis))
-      .catch(neuLaden)
-  }, [selectedAnlageId, setzeFeld, neuLaden])
+    aendereQuelle({ feld, quelle, patch: { quelle, gateway_topic: null } })
+  }, [aendereQuelle])
 
   // Der Klick auf eine Quelle WÄHLT sie — er löscht nie. Bis v4.0.0 schaltete ein
   // erneuter Klick auf die aktive Quelle auf „keine" zurück; damit bedeutete
@@ -390,11 +383,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
     const feld = gatewayFeld
     if (selectedAnlageId == null || !feld) return
     setGatewayFeld(null)
-    setzeFeld(feld.id, { quelle: Q_GATEWAY, gateway_topic: config.quell_topic })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, Q_GATEWAY, config)
-      .then((r) => setHistorieHinweis(r.historie_hinweis))
-      .catch(neuLaden)
-  }, [selectedAnlageId, gatewayFeld, setzeFeld, neuLaden])
+    aendereQuelle({ feld, quelle: Q_GATEWAY, gateway: config, patch: { quelle: Q_GATEWAY, gateway_topic: config.quell_topic } })
+  }, [selectedAnlageId, gatewayFeld, aendereQuelle])
 
   const waehleHa = useCallback((f: DatenquelleFeld) => {
     // Immer den Picker öffnen — auch wenn HA bereits aktiv ist. Der Picker zeigt
@@ -411,7 +401,6 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
     const neu = !f.invertieren
     setzeFeld(f.id, { invertieren: neu })
     datenquellenApi.setInvert(selectedAnlageId, f.id, neu)
-      .then((r) => setHistorieHinweis(r.historie_hinweis))
       .catch(neuLaden)
   }, [selectedAnlageId, setzeFeld, neuLaden])
 
@@ -422,20 +411,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
     // Transport (ha_app/ha_connector) bestimmt die aktive HA-Verbindung; der
     // Server validiert ihn ohnehin. Vorschau optimistisch mit derselben Kennung.
     const quelle = verfuegbarkeit.ha_quelle ?? 'ha_app'
-    setzeFeld(feld.id, { quelle, ha_entity: entityId, gateway_topic: null })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle, undefined, entityId)
-      .then((r) => setHistorieHinweis(r.historie_hinweis))
-      .catch(neuLaden)
-  }, [selectedAnlageId, haFeld, verfuegbarkeit.ha_quelle, setzeFeld, neuLaden])
-
-  // Quittung des Anwenders („Verstanden") — sagt NICHT, dass die Vergangenheit
-  // nachgezogen wurde. Optimistisch: der Block verschwindet sofort; scheitert
-  // der Aufruf, holt ihn das nächste Laden zurück.
-  const quittiereHinweis = useCallback(() => {
-    if (selectedAnlageId == null) return
-    setHistorieHinweis(null)
-    datenquellenApi.quittiereHistorieHinweis(selectedAnlageId).catch(neuLaden)
-  }, [selectedAnlageId, neuLaden])
+    aendereQuelle({ feld, quelle, entityId, patch: { quelle, ha_entity: entityId, gateway_topic: null } })
+  }, [selectedAnlageId, haFeld, verfuegbarkeit.ha_quelle, aendereQuelle])
 
   // ── Feld-Zeile ──────────────────────────────────────────────────────────────
   const feldZeile = (f: DatenquelleFeld) => {
@@ -595,6 +572,17 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
         {/* Wert + ±-Invert direkt am Wert (quellen-unabhängige Wert-Eigenschaft). */}
         <div className={`flex items-center justify-end gap-1 sm:w-28 sm:flex-shrink-0 ${istKeine ? 'opacity-60' : ''}`}>
           <span className={`text-sm tabular-nums ${wertTone}`}>{wertText}</span>
+          {f.id.includes('_energy_') && !istKeine && (
+            <Button
+              type="button" variant="ghost" size="icon"
+              className="!h-7 !w-7 !min-h-0 !min-w-0 !p-1"
+              onClick={() => setGetauschtFeld(f)}
+              aria-label={ZG_TITEL} title={`${ZG_TITEL} …`}
+              data-zaehler-getauscht-knopf={f.id}
+            >
+              <Replace className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {zeigInvert && (
             <Button
               type="button"
@@ -878,12 +866,9 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
         dient „Keine". Zugeordnet, aber ohne empfangenen Wert = Hinweis in Amber.
       </p>
 
-      {historieHinweis && (
-        <HistorieHinweisBlock
-          hinweis={historieHinweis}
-          onQuittieren={quittiereHinweis}
-        />
-      )}
+      {wechsel.laeufe.map((l) => (
+        <KorrekturFortschritt key={l.lauf} anlageId={selectedAnlageId} lauf={l.lauf} label={l.label} />
+      ))}
 
       <BlockShell persistKey="v4-einst-datenquellen" bloecke={[...bloecke, topicBlock]}
         oeffneBeimMount={oeffneBlock ?? (sprungZiel ? `dq-${sprungZiel.gruppe.typ}` : undefined)} oeffnenAnlass={oeffnenAnlass} />
@@ -908,7 +893,7 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
           titel={presetZiel.titel}
           presets={presetZiel.liste}
           onClose={() => setPresetZiel(null)}
-          onAngewendet={() => { setPresetZiel(null); neuLaden() }}
+          onAngewendet={(r) => { setPresetZiel(null); wechsel.merkeLaeufe(r.korrektur); neuLaden() }}
         />
       )}
 
@@ -925,67 +910,17 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
           onSpeichern={speichereHa}
         />
       )}
+
+      {wechsel.dialog}
+
+      {getauschtFeld && selectedAnlageId != null && (
+        <ZaehlerGetauschtDialog
+          anlageId={selectedAnlageId}
+          feldId={getauschtFeld.id}
+          feldLabel={getauschtFeld.einheit ? `${getauschtFeld.label} (${getauschtFeld.einheit})` : getauschtFeld.label}
+          onClose={() => { setGetauschtFeld(null); neuLaden() }}
+        />
+      )}
     </div>
   )
 }
-
-/**
- * Hinweis auf die unberührte Historie nach einer Zuordnungsänderung (#192 B).
- *
- * ⚠ **Warum er überhaupt nötig ist:** die gespeicherten Tages- und Stundenwerte
- * tragen die Zuordnung, die zum Zeitpunkt ihres Aggregationslaufs galt. Eine
- * neue Zuordnung wirkt deshalb ab jetzt — rückwirkend ändert sich nichts, bis
- * der Zeitraum neu gerechnet wird. Das galt immer schon; bis 2026-08-13 stand
- * es nur nirgends.
- *
- * Der Block ist **nicht blockierend** und bietet **keinen** Automatismus, der
- * die Vergangenheit nachzieht. Seit N-799 S3 (Beipack b) rät er auch keinen
- * Teil-Neuaufbau mehr: er sagt, dass die bisherigen Werte bleiben, und führt zum
- * Daten-Checker-Befund «versetzter Abschnitt» (OK-Zeile ohne Fund, K7).
- */
-/** N-799 S3 Beipack (b, Entscheid Gernot 16.11.2026 zu N-803): der Hinweis rät keinen Teil-Lauf mehr — ein Neuaufbau
- *  einzelner Tage holt die Stände mit der heutigen Zuordnung und kann bei einem Zähler anderer Höhe selbst einen
- *  versetzten Abschnitt erzeugen. Er verweist auf den Befund, der einen solchen Abschnitt meldet und den Weg nennt. */
-const BEFUND_ZAEHLER_VERSATZ = 'zaehler_versatz'
-
-function HistorieHinweisBlock({
-  hinweis, onQuittieren,
-}: {
-  hinweis: HistorieHinweis
-  onQuittieren: () => void
-}) {
-  const felder = hinweis.felder
-  const benannt = felder.slice(0, MAX_BENANNTE_FELDER)
-  const rest = felder.length - benannt.length
-  return (
-    <Alert type="warning" title="Zuordnung geändert — die bisherigen Werte bleiben, wie sie waren">
-      <p>
-        Seit {formatDatum(hinweis.seit)} {plural(felder.length, 'wurde', 'wurden')} die
-        {' '}{plural(felder.length, 'Datenquelle', 'Datenquellen')} von{' '}
-        <span className="font-medium">{benannt.map((f) => f.label).join(' · ')}</span>
-        {rest > 0 && <> und {mitAnzahl(rest, 'weiterem Feld', 'weiteren Feldern')}</>} geändert. Neue Werte kommen ab
-        sofort aus der neuen Quelle; die bereits gespeicherten Tages- und Stundenwerte
-        stammen weiter aus der vorherigen Zuordnung. Deine Monatsdaten bleiben unberührt.
-      </p>
-      <p className="mt-2">
-        Zählt der neue Zähler auf einer anderen Höhe als der alte, können in den gespeicherten
-        Zählerständen Abschnitte auf zwei Höhen entstehen. Der Daten-Checker prüft, ob dabei ein
-        versetzter Abschnitt entstanden ist, und nennt dort den Weg. Findet er keinen, ist nichts zu tun.
-      </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => { window.location.hash = `#${befundPfad(BEFUND_ZAEHLER_VERSATZ)}` }}
-        >
-          Zum Daten-Checker
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onQuittieren}>
-          Verstanden
-        </Button>
-      </div>
-    </Alert>
-  )
-}
-

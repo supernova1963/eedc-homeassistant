@@ -5075,7 +5075,7 @@ Tageszusammenfassung (unten).
 
 ### Sensorwechsel: Zuordnung zum Zeitpunkt, Naht und Kanal vor Reihe
 
-Vorhaben «Sensorwechsel mit Grund» (Bauplan Fassung 2, Sitzungen 1–2). Ein Wechsel der **wirksamen** Quelle eines Zählerschlüssels
+Vorhaben «Sensorwechsel mit Grund» (Bauplan Fassung 2, Sitzungen 1–3). Ein Wechsel der **wirksamen** Quelle eines Zählerschlüssels
 mit eigenen Werten steht als Zeile in `zuordnung_wechsel` (`erklaert_ts`, `ab_ts` = erste volle Stunde ab der Erklärung,
 `vorher`/`nachher`, `grund` ∈ {`fortsetzung`, `korrektur`, leer}). Ein Stand mit `zeitpunkt ≥ ab_ts` gehört zur neuen Quelle,
 einer davor zur alten.
@@ -5100,8 +5100,9 @@ Heimlade-Zähler      = je Auto und Slot die Entität zum Stand (lts_aggregator.
 
 Eingehängt an Writer, 5-Minuten-Writer, «Tag neu aggregieren»/Bereich, Startup-Recovery, Self-Healing (`get_snapshot`),
 Live-Rückfall, LTS-Tag (`aggregate_day`, `get_komponenten_tageskwh_lts`) und die Werkbank-Vorschau (Vorschau = Lauf).
-Verzeichnet wird nur ein Schlüssel **mit eigenen Werten** (§8 Nr. 17); bis Sitzung 3 wirkt ein Wechsel ohne Grund für die
-Schreiber wie eine Fortsetzung (§8 Nr. 18). **Grenzen:** ein schon vorhandener fremder Abschnitt bleibt stehen (B-0 verhindert
+Verzeichnet wird nur ein Schlüssel **mit eigenen Werten** (§8 Nr. 17); ein Wechsel ohne Grund (Altbestand, → «Keine», A → «Keine»
+→ A) wirkt für die Schreiber wie eine Fortsetzung (§8 Nr. 18) — seit Sitzung 3b fragt die Abfrage (unten) bei jedem anderen
+Wechsel nach dem Grund. **Grenzen:** ein schon vorhandener fremder Abschnitt bleibt stehen (B-0 verhindert
 neue; die Tagesansicht trägt ihn über «Kanal vor Reihe», wo der Kanal deckt) · vor einem verzeichneten Wechsel stellt «Tag neu
 aggregieren» keine vorhandene Zeile mehr richtig (der Weg ist ab Sitzung 3 die Korrektur) · Feld → «Keine», danach «Tag neu
 aggregieren» eines Tags davor: die Tageszeile verliert den Schlüssel wie vor dem Vorhaben (nicht gebaut, übergeben).
@@ -5134,7 +5135,7 @@ Nachtrag      = für schon geschriebene Zeilen: Quellzeile gueltig_ab = H,
                 keine Kanalzeile umgeschrieben; spätere Quellzeilen rücken um dieselbe Verschiebung mit (ihr Versatz ist der
                 Kanalwert am Schluss der Vorgängerin — sonst käme der Sprung an ihrer Grenze zurück; bestätigt Master 17.11.); beginnt zwischen voriger Zeile und Naht-Zeile schon eine Quelle
                 (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal
-                (kanal/naht.py::nachtrag_fortsetzung, ohne Oberfläche)
+                (kanal/naht.py::nachtrag_fortsetzung; Oberfläche seit Sitzung 3b nur über «Zähler getauscht», unten)
 ```
 
 **Benannte Grenze:** die Menge zwischen dem letzten Stand vor und dem ersten Stand ab `ab_ts` zählt nicht (stündliche Stände bis
@@ -5173,11 +5174,49 @@ Messblatt S0 M-E) ist der Kanal «voll», trägt das Rückwärtsfenster aber nur
 «gemessen bis 00:00 Uhr» wie bisher; der Bereichs-Leser nimmt an diesen Tagen die Reihe (ohne Rand-Rückfall: kein Wert), wie
 vor dem Vorhaben. Proben: `test_sensorwechsel_s2_kanal_vor_reihe.py`.
 
+#### Abfrage beim Wechsel (B-2, Sitzung 3b)
+
+```
+gefragt       = der Schlüssel hat eigene Werte (Zählerstände der Reihe oder Kanalzeilen)
+                UND die neue wirksame Quelle kann Werte liefern (alles außer «Keine»)
+                UND sie ist nicht die letzte Quelle mit Werten (die heutige; ist sie «Keine», die letzte verzeichnete
+                mit Werten — A → «Keine» → B fragt, A → «Keine» → A nicht; unbekannt ⇒ gefragt)
+                                                               (zuordnung_wechsel/abfrage.py::pruefe, eine Funktion für alle Wege)
+wirksame Quelle = der Resolver des Schreibers samt Gateway-Zeile (Topic, Pfad, Faktor, Offset — quelle.wirksame_quellen)
+→ «Keine»     = ohne Frage verzeichnet (Grund leer)
+ohne Werte    = weder gefragt noch verzeichnet (§8 Nr. 17)
+```
+
+**Wege:** Feld-Route und Preset lehnen eine gefragte Änderung ohne Grund mit 422 ab; die Prüf-Routen (`…/quelle/pruefen`,
+`…/presets/apply/pruefen`) machen dieselbe Änderung in der Sitzung, fragen dieselbe Funktion und rollen zurück — der Client
+fragt vor dem Senden. `fortsetzung` ⇒ Wechsel-Zeile mit Grund (die Naht oben); `korrektur` mit `falsch_seit` ⇒ der Lauf unten
+mit `ab` = erste volle Stunde ab der Änderung, `falsch_seit` auf die volle Stunde, richtig = die neue Quelle; Vorschau = Lauf
+(derselbe Auftrag, `korrektur.lage`; die Dialog-Vorschau nennt dazu den Kanal: ab wann Home Assistant die Geschichte des
+richtigen Sensors führt, wenn das nach dem Beginn des verworfenen Teils liegt — derselbe Beginn `h0` wie der Lauf —, bzw. dass eine
+MQTT-Quelle keine Geschichte nachholt, §11 Nr. 48). Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
+Gateway-Zeile anlegen/löschen lehnt ab (422). Das Festschreiben beim Lesen (`/felder`, W7), die Stilllegung und Innengeräte (W9)
+sind kein Wechsel. **«Zähler getauscht (gleiche Quelle)»** (`zuordnung_wechsel/zaehler_getauscht.py`) — der Weg folgt der
+**Quelle des Kanals zur Stunde des Tauschs** (größtes `gueltig_ab ≤ Stunde`, §11 Nr. 44): ein (nicht verworfener)
+Spiegel-Abschnitt ⇒ nichts verzeichnet, der Weg ist «Wert anpassen» in Home Assistant (der Spiegel trägt HAs Summe wörtlich, die
+Feld-Auskunft liest ihn — eine Naht nur in der Reihe machte beide uneins, §9 Nr. 26; auch ein **früherer** Spiegel-Abschnitt
+eines heute anders zugeordneten Felds, denn der Konsistenzlauf gleicht jeden nicht verworfenen Spiegel-Abschnitt gegen HA ab);
+Mitschrift (MQTT «Eigene Summe»), die Zeit vor der ersten Quelle des Kanals und ein Feld ohne Kanal, das der Stundenlauf nicht
+aus Home Assistant spiegeln wird (ohne HA-Zuordnung oder ohne Kanal-Art im Katalog) ⇒
+Wechsel-Zeile `fortsetzung` mit `vorher = nachher`, `erklaert_ts` = Zeitpunkt des Tauschs, `ab_ts` = volle Stunde danach; ist die
+Stunde des Tauschs in der Mitschrift schon geschrieben, der Nachtrag oben an der ersten geschriebenen Stunde ab ihr (die Vorschau
+nennt ihren bisherigen Zuwachs aus `lesen.stunden`, §11 Nr. 49); eine verworfene Quelle zur Stunde ⇒ nichts einzutragen (Satz);
+vor dem ersten eigenen Wert (`erster ≥ ab_ts`, Reihe oder Kanal) ⇒ nichts einzutragen, die Antwort nennt den ersten Wert (§11
+Nr. 45); kann der Kanal den Nachtrag dennoch nicht tragen ⇒ 422 mit Satz, nichts bleibt stehen. **Angaben des Dialogs:** die
+Stände sind Zählerstände (Spalte `state` der Kanalzeile bzw. der HA-Stundenzeile, §11 Nr. 47 — nicht HAs Statistik-Summe), ohne
+`state` entfällt die Angabe; die Vorgabe «falsch seit» ist der jüngste Wechsel, der die bisherige Quelle brachte (`nachher` = die
+letzte Quelle mit Werten, kein → «Keine», kein «Zähler getauscht»), sonst der Beginn ihres Abschnitts im Kanal. Proben:
+`test_sensorwechsel_s3b_abfrage.py`, `test_sensorwechsel_s3bk_proben.py`.
+
 #### Korrektur (B-6, Sitzung 3)
 
 «Bisher war der falsche Sensor zugeordnet, seit `falsch_seit`»: für `[falsch_seit, ab)` gilt danach die richtige (heutige) Quelle.
-Ein Lauf (`zuordnung_wechsel/korrektur.py`), heute aufgerufen von der Werkbank «Werte vor dem Sensorbeginn verwerfen»
-(`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Sensors):
+Ein Lauf (`zuordnung_wechsel/korrektur.py`), aufgerufen von der Abfrage (oben) und von der Werkbank «Werte vor dem Sensorbeginn
+verwerfen» (`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Sensors):
 
 ```
 1  Wechsel-Zeile        grund = korrektur, falsch_seit_ts, ab_ts; eine Zeile ohne Grund für denselben Wechsel wird aufgehoben
@@ -5214,8 +5253,16 @@ Assistant laufen 1, 2 (die abhängigen abgeleiteten Kanäle neu aus den übrigen
 eine Sicherung von Home Assistant bzw. ohne Home Assistant der eedc-Datenbank. **Vorschau = Lauf:** die Vorschau zählt die
 Zählerstände bis zum wirksamen `ab_ts` (das spätere einer aufgehobenen Zeile) und nennt dieselben Tage wie der Lauf.
 **Preis der Neubildung alter Tage:** jenseits des Recorder-Verlaufs kommt die Leistung je Stunde danach aus der
-Langzeitstatistik (Stundenmittel) — die Vorschau sagt es. Proben: `test_sensorwechsel_s3_korrektur.py`,
-`test_sensorwechsel_s3ak_proben.py`, `test_kanal_verworfen_bewusst_leer.py`.
+Langzeitstatistik (Stundenmittel) — die Vorschau sagt es. **Robust (Sitzung 3b):** eine wiederholte gleiche Korrektur (gleiche
+richtige Quelle, Intervall von einer Korrektur-Zeile gedeckt) legt keine zweite Zeile an; der Nachlauf nach dem Commit (Füllen
+und abhängige abgeleitete Kanäle) steht als Auftrag im Zustand des Laufs (`settings` `korrektur_lauf:<lauf>`) — scheitert er,
+holt der Lauf ihn vor den Tagen nach; angestoßen wird jeder offene Lauf **stündlich** aus dem Stundenlauf
+(`korrektur_lauf.offene_anstossen`, §11 Nr. 46), nach dem Start und wenn die Werkbank dasselbe Feld noch einmal ausführt (ihre
+Vorschau sagt dann nur, dass das Füllen aussteht, und verwirft nichts weiter); der Fehler «Füllen: …» steht je Lauf einmal (der
+letzte Versuch); höchstens eine Aufgabe je Lauf; fertige Läufe werden nach 30 Tagen aufgeräumt; Fortschritt über
+`GET …/korrektur-lauf/{lauf}`, die laufenden Läufe der Anlage über `GET …/korrektur-laeufe` (die Datenquellen-Fläche zeigt sie
+beim Laden). Proben: `test_sensorwechsel_s3_korrektur.py`, `test_sensorwechsel_s3ak_proben.py`,
+`test_sensorwechsel_s3b_abfrage.py`, `test_kanal_verworfen_bewusst_leer.py`.
 
 ### Tageszusammenfassung (TagesZusammenfassung)
 

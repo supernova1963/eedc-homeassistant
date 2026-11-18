@@ -91,6 +91,7 @@ from backend.api.routes import (
     ha_remote,
     datenquellen,
     datenquellen_themen,
+    sensorwechsel,
     sperre,
 )
 from backend.core.log_buffer import setup_log_buffer
@@ -697,6 +698,8 @@ app.include_router(ha_remote.router, prefix="/api/ha", tags=["HA Remote"])
 app.include_router(datenquellen.router, prefix="/api/datenquellen", tags=["Datenquellen"])
 # Themen-Kacheln (4.2.0, TH-E1): die sechs Themen-Routen am selben Präfix (eigenes Modul).
 app.include_router(datenquellen_themen.router, prefix="/api/datenquellen", tags=["Datenquellen"])
+# Sensorwechsel mit Grund (Sitzung 3b): «Zähler getauscht» und Fortschritt eines Korrektur-Laufs, am selben Präfix.
+app.include_router(sensorwechsel.router, prefix="/api/datenquellen", tags=["Datenquellen"])
 app.include_router(
     mqtt_presets.router, prefix="/api/live", tags=["MQTT Gateway Presets"]
 )

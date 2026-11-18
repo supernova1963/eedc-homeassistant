@@ -3,6 +3,7 @@
  */
 
 import { api } from './client'
+import type { GrundAngabe, KorrekturLaufStart, QuellePruefung } from './datenquellen'
 
 export interface LiveKomponente {
   key: string
@@ -425,6 +426,15 @@ export interface MqttPreset {
 }
 
 /** Antwort von «Preset anwenden» (P-433-2b K4-8: ersetzt je `ziel_key`, setzt die Quelle Gateway). */
+export interface PresetApplyRequest {
+  preset_id: string
+  anlage_id: number
+  variablen: Record<string, string>
+  investition_id?: number
+  /** Grund je Zählerschlüssel einer fragepflichtigen Änderung (Sensorwechsel mit Grund). */
+  gruende?: Record<string, GrundAngabe>
+}
+
 export interface PresetApplyResponse {
   preset_id: string
   erstellt: number
@@ -432,6 +442,8 @@ export interface PresetApplyResponse {
   ersetzt?: number
   quelle_gesetzt?: number
   ohne_feld?: string[]
+  /** Sensorwechsel mit Grund: je Korrektur der Hintergrund-Lauf. */
+  korrektur?: KorrekturLaufStart[]
 }
 
 export interface GatewayMappingCreate {
@@ -622,8 +634,14 @@ export const liveDashboardApi = {
   getGatewayPresets: () =>
     api.get<MqttPreset[]>('/live/mqtt/gateway/presets'),
 
-  applyGatewayPreset: (data: { preset_id: string; anlage_id: number; variablen: Record<string, string>; investition_id?: number }) =>
+  applyGatewayPreset: (data: PresetApplyRequest) =>
     api.post<PresetApplyResponse>(
       '/live/mqtt/gateway/presets/apply', data,
+    ),
+
+  /** Sensorwechsel mit Grund: «Preset anwenden» prüfen, BEVOR gesendet wird (schreibt nichts). */
+  pruefeGatewayPreset: (data: PresetApplyRequest) =>
+    api.post<{ grund_erforderlich: boolean; felder: QuellePruefung[] }>(
+      '/live/mqtt/gateway/presets/apply/pruefen', data,
     ),
 }

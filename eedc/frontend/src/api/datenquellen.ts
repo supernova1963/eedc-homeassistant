@@ -227,26 +227,10 @@ export interface DatenquellenVerfuegbarkeit {
   mqtt: boolean
 }
 
-/** Ein Feld, dessen Zuordnung seit dem letzten Quittieren geändert wurde. */
-export interface HistorieHinweisFeld {
-  id: string
-  label: string
-}
-
-/** Konzept #192 B: Zuordnungen wirken ab jetzt — die gespeicherten Tages- und
- *  Stundenwerte tragen die Zuordnung ihres Aggregationslaufs. `null`, solange
- *  nichts geändert wurde (oder die Anlage noch keine Historie hat). */
-export interface HistorieHinweis {
-  felder: HistorieHinweisFeld[]
-  /** ISO-Zeitpunkt der ERSTEN Änderung seit dem letzten Quittieren. */
-  seit: string
-}
-
 export interface DatenquellenResponse {
   anlage_id: number
   gruppen: DatenquelleGruppe[]
   verfuegbarkeit: DatenquellenVerfuegbarkeit
-  historie_hinweis: HistorieHinweis | null
 }
 
 /** Ein HA-Sensor-Kandidat für den HA-Sensor-Picker (Schritt B). */
@@ -289,8 +273,79 @@ export interface QuelleSaveResult {
   gespeichert: boolean
   field_id: string
   quelle: string
-  /** Konzept #192 B: offener Historie-Hinweis nach dieser Änderung. */
-  historie_hinweis: HistorieHinweis | null
+  /** Sensorwechsel mit Grund: je Korrektur der Hintergrund-Lauf (leer ohne Korrektur). */
+  korrektur: KorrekturLaufStart[]
+}
+
+/** Grund einer fragepflichtigen Quellen-Änderung (Sensorwechsel mit Grund, Bauplan B-2). */
+export type WechselGrund = 'fortsetzung' | 'korrektur'
+
+export interface GrundAngabe {
+  grund: WechselGrund
+  /** Nur bei Korrektur: erste falsche Stunde (örtlich, ISO ohne Zone). */
+  falsch_seit?: string
+}
+
+/** Vorschau des Korrektur-Dienstes (Sätze und Zahlen kommen aus dem Backend — der Client rechnet nichts). */
+export interface KorrekturVorschau {
+  saetze: string[]
+  startbar: boolean
+  zaehlerstaende?: number
+  tage_neu?: string[]
+}
+
+/** Antwort der Prüf-Route je Zählerschlüssel (`…/quelle/pruefen`, `…/presets/apply/pruefen`). */
+export interface QuellePruefung {
+  grund_erforderlich: boolean
+  erster_wert: string | null
+  tage: number
+  stand_alt: number | null
+  stand_neu: number | null
+  sensor_key: string | null
+  label: string | null
+  /** Die Änderung wird verzeichnet (eigene Werte, die wirksame Quelle wechselt). */
+  verzeichnet: boolean
+  vorgabe_falsch_seit: string | null
+  korrektur: KorrekturVorschau | null
+}
+
+export interface KorrekturLaufStart {
+  lauf: string
+  sensor_key: string
+  label: string
+  tage_neu: number
+  zaehlerstaende_geloescht: number
+}
+
+/** Fortschritt eines Korrektur-Laufs (`GET …/korrektur-lauf/{lauf}`). */
+export interface KorrekturLaufStand {
+  lauf: string
+  sensor_key: string | null
+  status: 'laeuft' | 'fertig'
+  tage: number
+  erledigt: number
+  fehler: { tag: string | null; grund: string }[]
+  beginn: string | null
+  ende: string | null
+  fuellen_offen: boolean
+}
+
+/** Ein laufender Korrektur-Lauf der Anlage (`GET …/korrektur-laeufe`) — die Fläche zeigt beim Laden seinen Fortschritt. */
+export interface KorrekturLaufLaufend {
+  lauf: string
+  sensor_key: string | null
+  label: string
+  beginn: string | null
+}
+
+/** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
+export interface ZaehlerGetauschtAntwort {
+  weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich'
+  sensor_key: string | null
+  saetze: string[]
+  eintragen: boolean
+  getauscht_am: string | null
+  eingetragen?: boolean
 }
 
 /** Transform-Konfiguration für eine MQTT-Gateway-Quelle (§2b). */
@@ -354,6 +409,15 @@ function themaPfad(anlageId: number, investitionId: number, themaId: string, ein
   return `${pfad}?investition_id=${investitionId}`
 }
 
+/** Der Body der Quellen-Route — derselbe für Prüfen und Senden (Vorschau = Lauf). */
+function quelleBody(quelle: string, gateway?: GatewayQuelleConfig, entityId?: string, grund?: GrundAngabe) {
+  return {
+    quelle, ...(gateway ?? {}),
+    ...(entityId ? { entity_id: entityId } : {}),
+    ...(grund ? { grund: grund.grund, ...(grund.falsch_seit ? { falsch_seit: grund.falsch_seit } : {}) } : {}),
+  }
+}
+
 export const datenquellenApi = {
   getFelder: (anlageId: number) =>
     api.get<DatenquellenResponse>(`/datenquellen/${anlageId}/felder`),
@@ -363,29 +427,48 @@ export const datenquellenApi = {
    *  NICHT Teil der Quellen-Wahl — dafür `setInvert` (quellen-unabhängig). */
   setQuelle: (
     anlageId: number, fieldId: string, quelle: string,
-    gateway?: GatewayQuelleConfig, entityId?: string,
+    gateway?: GatewayQuelleConfig, entityId?: string, grund?: GrundAngabe,
   ) =>
     api.post<QuelleSaveResult>(
       `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/quelle`,
-      {
-        quelle, ...(gateway ?? {}),
-        ...(entityId ? { entity_id: entityId } : {}),
-      },
+      quelleBody(quelle, gateway, entityId, grund),
     ),
 
-  /** Quittiert den Historie-Hinweis („Verstanden", Konzept #192 B). Sagt NICHT,
-   *  dass die Vergangenheit nachgezogen wurde — das weiß nur der Anwender. */
-  quittiereHistorieHinweis: (anlageId: number) =>
-    api.delete<{ quittiert: boolean }>(`/datenquellen/${anlageId}/historie-hinweis`),
+  /** Sensorwechsel mit Grund: dieselbe Änderung prüfen, BEVOR sie gesendet wird (schreibt nichts). Mit `grund`
+   *  `korrektur` und `falsch_seit` liefert das Backend die Vorschau des Korrektur-Laufs. */
+  pruefeQuelle: (
+    anlageId: number, fieldId: string, quelle: string,
+    gateway?: GatewayQuelleConfig, entityId?: string, grund?: GrundAngabe,
+  ) =>
+    api.post<QuellePruefung>(
+      `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/quelle/pruefen`,
+      quelleBody(quelle, gateway, entityId, grund),
+    ),
+
+  /** Einstieg «Zähler getauscht (gleiche Quelle)»: erst prüfen (Weg und Sätze), dann eintragen. */
+  pruefeZaehlerGetauscht: (anlageId: number, fieldId: string, getauschtAm?: string) =>
+    api.post<ZaehlerGetauschtAntwort>(
+      `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/zaehler-getauscht/pruefen`,
+      getauschtAm ? { getauscht_am: getauschtAm } : {},
+    ),
+  zaehlerGetauscht: (anlageId: number, fieldId: string, getauschtAm?: string) =>
+    api.post<ZaehlerGetauschtAntwort>(
+      `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/zaehler-getauscht`,
+      getauschtAm ? { getauscht_am: getauschtAm } : {},
+    ),
+
+  /** Fortschritt eines Korrektur-Laufs (Dialog und Werkbank). */
+  korrekturLauf: (anlageId: number, lauf: string) =>
+    api.get<KorrekturLaufStand>(`/datenquellen/${anlageId}/korrektur-lauf/${encodeURIComponent(lauf)}`),
+
+  /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
+  korrekturLaeufe: (anlageId: number) =>
+    api.get<KorrekturLaufLaufend[]>(`/datenquellen/${anlageId}/korrektur-laeufe`),
 
   /** Vorzeichen-Umkehr eines Feldes setzen — QUELLEN-UNABHÄNGIG (Wert-Eigenschaft,
    *  gilt für jede Quelle; am Read-Endwert angewendet). */
   setInvert: (anlageId: number, fieldId: string, invertieren: boolean) =>
-    api.post<{
-      field_id: string
-      invertieren: boolean
-      historie_hinweis: HistorieHinweis | null
-    }>(
+    api.post<{ field_id: string; invertieren: boolean }>(
       `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/invert`,
       { invertieren },
     ),
@@ -406,7 +489,11 @@ export const datenquellenApi = {
   uebernehmeEnergyVorschlaege: (
     anlageId: number, basis: Record<string, string>, investitionen: Record<string, Record<string, string>>,
   ) =>
-    api.post<{ gespeichert: boolean; anzahl: number; felder: string[] }>(
+    api.post<{
+      gespeichert: boolean; anzahl: number; felder: string[]
+      /** Sensorwechsel mit Grund: Felder mit eigenen Werten, deren Quelle gewechselt hätte — nicht übernommen. */
+      uebersprungen: { field_id: string; label: string }[]
+    }>(
       `/datenquellen/${anlageId}/energy-vorschlaege/uebernehmen`, { basis, investitionen },
     ),
 

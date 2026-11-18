@@ -15,7 +15,7 @@ legt die drei Teile zusammen, **ohne** sie neu zu entscheiden:
 ``mapping_id`` gehört nicht in die Beschreibung (sie wechselt beim Upsert, ohne dass sich für die Werte etwas ändert); ein
 Topic-Wechsel **derselben** Zeile oder ein Faktor 1 → 0,001 dagegen ändert sie. Keine Zugangsdaten — eine Gateway-Zeile trägt
 keine. Die Prüf-Funktion ``aenderungen`` beantwortet «ändert diese Anfrage die wirksame Quelle eines Schlüssels mit eigenen
-Werten?» (Sitzung 1: nur zum Verzeichnen; die Rückfrage kommt in Sitzung 3).
+Werten?» (Sitzung 1: zum Verzeichnen; seit Sitzung 3b fragt ``abfrage.pruefe`` darauf).
 """
 
 from __future__ import annotations
@@ -112,14 +112,15 @@ def standard_quelle(sensor_key: str) -> dict:
     return {"art": ART_MQTT, "mqtt_key": _sensor_key_to_mqtt_key(sensor_key), "topic": None}
 
 
-async def lade_wirksame_quellen(db, anlage) -> dict[str, dict]:
-    """``wirksame_quellen`` mit den Gateway-Zeilen der Anlage aus der Datenbank (Stand dieser Sitzung)."""
+async def lade_wirksame_quellen(db, anlage, mapping: Optional[dict] = None) -> dict[str, dict]:
+    """``wirksame_quellen`` mit den Gateway-Zeilen der Anlage aus der Datenbank (Stand dieser Sitzung); ``mapping`` statt
+    ``anlage.sensor_mapping`` prüft eine Änderung, bevor sie geschrieben ist (Energie-Vorschläge, Sitzung 3b)."""
     from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
 
     zeilen = (await db.execute(
         select(MqttGatewayMapping).where(MqttGatewayMapping.anlage_id == anlage.id)
     )).scalars().all()
-    return wirksame_quellen(anlage.sensor_mapping, zeilen)
+    return wirksame_quellen(anlage.sensor_mapping if mapping is None else mapping, zeilen)
 
 
 async def hat_eigene_werte(db, anlage_id: int, sensor_key: str, vor: Optional[datetime] = None) -> bool:

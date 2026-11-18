@@ -278,8 +278,7 @@ class ZaehlerVersatzChecks:
 
 
 #: OK-Zeile (N-799 S3, K7 — Entscheid Master 16.11.2026): ohne Fund steht der Befund unter den bestandenen Prüfungen, damit
-#: der Knopf «Zum Daten-Checker» im Hinweis nach einer geänderten Zuordnung (``befund=zaehler_versatz``) immer den Lösungsweg
-#: öffnet.
+#: ein Link mit ``befund=zaehler_versatz`` (``DatenCheckerTeile.tsx``) immer eine Zeile mit dem Lösungsweg findet.
 OK_MELDUNG = "Kein versetzter Abschnitt in den gespeicherten Zählerständen"
 OK_DETAILS = ("eedc prüft die gespeicherten Zählerstände der Felder, deren Tageswert die Tagesansicht aus ihnen bildet, auf "
               "einen Abschnitt, der um einen festen Betrag neben den Ständen davor und danach liegt — etwa nach einem Wechsel "

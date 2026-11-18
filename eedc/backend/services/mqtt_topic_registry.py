@@ -211,8 +211,9 @@ async def build_expected_topics(
             # N-299: Ein Zustandsfeld hat KEINE Einheit, und das ist Absicht
             # (`betriebsmodus`: Heizen/Kuehlen/Aus ist kein Messwert). Die
             # Klammer unbedingt zu setzen schrieb „Betriebsmodus ()" — sichtbar
-            # im Historie-Vermerk der Datenquellen-Flaeche, der dieses Label
-            # ueber `_feld_label` liest. Dieselbe Bildung wie 20 Zeilen tiefer.
+            # im (bis Sensorwechsel S3b gefuehrten) Historie-Vermerk der Datenquellen-
+            # Flaeche; Protokoll und Abfrage lesen dieses Label weiter ueber `_feld_label`.
+            # Dieselbe Bildung wie 20 Zeilen tiefer.
             einheit_str = (
                 f" ({live_feld['einheit']})" if live_feld.get("einheit") else ""
             )

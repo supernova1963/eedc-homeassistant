@@ -15,13 +15,22 @@ Börsenpreisen der Stunden (sie gehen ihm statt des Abrufs zu) und den neuen Ein
 der gespeicherten GTI-Summe und dem neuen PV-Ertrag über die eine Stelle für jeden Tag
 (``kanal_stunden.performance_ratio_des_tages``, wie der Archiv-Nachzug) — nach einer Korrektur bleibt nichts aus dem
 falschen Sensor Gerechnetes stehen (§10 Nr. 31).
+
+**Robustheit (Sitzung 3b, Bauplan §10 Nr. 40):** höchstens **eine** Aufgabe je Lauf — auch das Fortsetzen nach dem Start geht
+über ``starten`` (``_AUFGABEN``). Der **Nachlauf** der Korrektur (Kanal aus Home Assistant füllen, abhängige abgeleitete Kanäle
+neu schreiben) steht als ``fuellen`` im Zustand; scheitert er nach dem Commit, holt ihn der Lauf vor den Tagen nach — bis
+dahin bleibt der Lauf ``laeuft``. Angestoßen wird ein offener Lauf **stündlich** (``offene_anstossen`` aus dem Stundenlauf,
+Bauplan §11 Nr. 46), nach dem Start und wenn die Werkbank denselben Schlüssel noch einmal ausführt; der Fehler «Füllen: …»
+steht je Lauf einmal (der letzte Versuch).
+Fertige Läufe räumt ``aufraeumen`` nach ``AUFBEWAHREN`` weg (beim nächsten Lauf und nach dem Start). Das Diagnose-Paket führt
+die Zustände unter ``EINSTELLUNGEN_PRAEFIX`` (``diagnose_paket/register.py``).
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -32,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 PRAEFIX = "korrektur_lauf:"
 LAEUFT, FERTIG = "laeuft", "fertig"
+#: Wie lange ein fertiger Lauf im Zustand bleibt (die Fortschritts-Route und das Diagnose-Paket lesen ihn).
+AUFBEWAHREN = timedelta(days=30)
 
 #: Tageszeile und Stundenzeilen: die Spalten aus Abrufen (Wetter, Börsenpreis) — nach dem Neubilden wie vorher.
 TAG_ABRUF = ("temperatur_min_c", "temperatur_max_c", "strahlung_summe_wh_m2", "gti_summe_wh_m2",
@@ -41,16 +52,50 @@ STUNDE_ABRUF = ("temperatur_c", "globalstrahlung_wm2", "bewoelkung_prozent", "ni
 
 #: Laufende Aufgaben je Lauf (Proben warten darauf).
 _AUFGABEN: dict[str, asyncio.Task] = {}
+#: Kopf des einen Fehler-Eintrags je Lauf, wenn der Nachlauf (Füllen) scheitert.
+FUELLEN_PRAEFIX = "Füllen: "
 
 
-async def anlegen(db: AsyncSession, lauf: str, anlage_id: int, sensor_key: str, tage: list[date]) -> None:
+async def anlegen(db: AsyncSession, lauf: str, anlage_id: int, sensor_key: str, tage: list[date],
+                  fuellen: Optional[dict] = None) -> None:
+    """Den Zustand anlegen (in der Transaktion der Wechsel-Zeile); ``fuellen`` = der Nachlauf (``korrektur.nachlauf_auftrag``)."""
     from backend.models.settings import Settings
 
+    await aufraeumen(db)
     db.add(Settings(key=PRAEFIX + lauf, value={
         "anlage_id": anlage_id, "sensor_key": sensor_key, "tage": [d.isoformat() for d in tage], "erledigt": 0,
         "status": LAEUFT, "fehler": [], "behalten": 0, "beginn": datetime.now().replace(microsecond=0).isoformat(),
-        "ende": None}))
+        "ende": None, "fuellen": fuellen}))
     await db.flush()
+
+
+async def aufraeumen(db: AsyncSession, jetzt: Optional[datetime] = None) -> int:
+    """Fertige Läufe, deren Ende länger als ``AUFBEWAHREN`` zurückliegt, entfernen. Returns: Zahl der entfernten Zustände."""
+    from backend.models.settings import Settings
+
+    grenze = (jetzt or datetime.now()) - AUFBEWAHREN
+    n = 0
+    for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
+        z = row.value if isinstance(row.value, dict) else {}
+        ende = z.get("ende")
+        if z.get("status") == FERTIG and ende and datetime.fromisoformat(ende) < grenze:
+            await db.delete(row)
+            n += 1
+    if n:
+        await db.flush()
+    return n
+
+
+async def offener_lauf(db: AsyncSession, anlage_id: int, sensor_key: str) -> Optional[str]:
+    """Ein Lauf dieses Schlüssels, dessen Nachlauf (Füllen) noch aussteht — die Werkbank holt ihn beim nächsten Ausführen nach."""
+    from backend.models.settings import Settings
+
+    for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
+        z = row.value if isinstance(row.value, dict) else {}
+        if (z.get("status") == LAEUFT and z.get("anlage_id") == anlage_id and z.get("sensor_key") == sensor_key
+                and isinstance(z.get("fuellen"), dict) and not z["fuellen"].get("erledigt")):
+            return row.key[len(PRAEFIX):]
+    return None
 
 
 async def stand(db: AsyncSession, lauf: str) -> Optional[dict[str, Any]]:
@@ -144,13 +189,52 @@ async def _schreibe(sitzungen, lauf: str, **werte) -> dict:
     return neu
 
 
+def _ist_fuellen_fehler(f: Any) -> bool:
+    return isinstance(f, dict) and f.get("tag") is None and str(f.get("grund") or "").startswith(FUELLEN_PRAEFIX)
+
+
+async def _nachlauf(sitzungen, lauf: str, z: dict) -> tuple[dict, bool]:
+    """Der offene Nachlauf (Füllen, abhängige abgeleitete Kanäle) vor den Tagen. Returns: ``(Zustand, weiter?)`` —
+    scheitert er, steht der Grund unter ``fehler`` und der Lauf bleibt ``laeuft`` (nächster Start, Werkbank)."""
+    from backend.services.zuordnung_wechsel.korrektur import nachlauf_aus_auftrag
+
+    f = z.get("fuellen")
+    if not isinstance(f, dict) or f.get("erledigt"):
+        return z, True
+    try:
+        n = await nachlauf_aus_auftrag(sitzungen, int(z["anlage_id"]), f)
+    except Exception as e:  # noqa: BLE001 — der Grund steht im Zustand, der Lauf bleibt offen
+        logger.warning("Korrektur %s: Füllen nicht möglich: %s: %s", lauf, type(e).__name__, e)
+        # Je Lauf ein Eintrag «Füllen: …» — der letzte Versuch ersetzt den vorigen (stündlicher Anstoß, §11 Nr. 46).
+        fehler = [f for f in (z.get("fehler") or []) if not _ist_fuellen_fehler(f)]
+        fehler.append({"tag": None, "grund": f"{FUELLEN_PRAEFIX}{type(e).__name__}: {e}"})
+        return await _schreibe(sitzungen, lauf, fehler=fehler), False
+    return await _schreibe(sitzungen, lauf, fuellen={**f, "erledigt": True, **n}), True
+
+
+async def nachlauf_erledigt(sitzungen, lauf: str, kanal_neu_gespiegelt: int, abgeleitet_neu: int) -> None:
+    """Der Nachlauf ist gelaufen (direkt nach dem Commit); ohne Tage ist der Lauf damit fertig."""
+    async with sitzungen() as db:
+        z = await stand(db, lauf)
+    if z is None or not isinstance(z.get("fuellen"), dict):
+        return
+    werte: dict[str, Any] = {"fuellen": {**z["fuellen"], "erledigt": True, "kanal_neu_gespiegelt": kanal_neu_gespiegelt,
+                                         "abgeleitet_neu": abgeleitet_neu}}
+    if not z.get("tage"):
+        werte.update(status=FERTIG, ende=datetime.now().replace(microsecond=0).isoformat())
+    await _schreibe(sitzungen, lauf, **werte)
+
+
 async def tage_neu_bilden(sitzungen, lauf: str) -> Optional[dict]:
-    """Den Lauf vom nächsten offenen Tag an fortsetzen bis zum Ende (Fortschritt nach jedem Tag)."""
+    """Den Lauf vom nächsten offenen Tag an fortsetzen bis zum Ende (Fortschritt nach jedem Tag); ein offener Nachlauf zuerst."""
     from backend.services.kanal import merken
 
     async with sitzungen() as db:
         z = await stand(db, lauf)
     if z is None or z.get("status") != LAEUFT:
+        return z
+    z, weiter = await _nachlauf(sitzungen, lauf, z)
+    if not weiter:
         return z
     tage = [date.fromisoformat(t) for t in z["tage"]]
     for i in range(int(z.get("erledigt") or 0), len(tage)):
@@ -191,16 +275,54 @@ async def offene_laeufe(db: AsyncSession) -> list[str]:
         if isinstance(row.value, dict) and row.value.get("status") == LAEUFT]
 
 
+async def laufende_der_anlage(db: AsyncSession, anlage_id: int) -> list[dict[str, Any]]:
+    """Die Läufe einer Anlage mit ``status = laeuft`` (Lese-Route der Datenquellen-Fläche, Bauplan §11 Nr. 50): ``lauf``,
+    ``sensor_key``, ``beginn`` — ältester zuerst. Auch ein Lauf, der nur noch auf das Füllen wartet (Nr. 46)."""
+    from backend.models.settings import Settings
+
+    out = []
+    for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
+        z = row.value if isinstance(row.value, dict) else {}
+        if z.get("status") == LAEUFT and z.get("anlage_id") == anlage_id:
+            out.append({"lauf": row.key[len(PRAEFIX):], "sensor_key": z.get("sensor_key"), "beginn": z.get("beginn")})
+    return sorted(out, key=lambda e: (str(e["beginn"] or ""), e["lauf"]))
+
+
+def offene_anstossen(*, sitzungen=None) -> asyncio.Task:
+    """Vom Stundenlauf gerufen (``scheduler.sensor_snapshot_job``, Bauplan §11 Nr. 46): jeden Lauf mit ``status = laeuft``
+    neu anstoßen — über ``starten``, also nie neben einer Aufgabe, die ihn schon bearbeitet. So holt eedc ein gescheitertes
+    Füllen nach, sobald Home Assistant wieder erreichbar ist, und setzt einen unterbrochenen Lauf fort. Returns die Aufgabe
+    des Anstoßes (Proben warten darauf)."""
+
+    async def _anstoss() -> list[str]:
+        from backend.core.database import get_session
+
+        try:
+            async with (sitzungen or get_session)() as db:
+                laeufe = await offene_laeufe(db)
+            return [lauf for lauf in laeufe if starten(lauf, sitzungen=sitzungen) is not None]
+        except Exception as e:  # noqa: BLE001 — eine Hintergrund-Aufgabe darf den Stundenlauf nicht stören
+            logger.warning("Korrektur-Läufe anstoßen: %s: %s", type(e).__name__, e)
+            return []
+
+    return asyncio.get_running_loop().create_task(_anstoss())
+
+
 async def fortsetzen_nach_dem_start(*, warte_s: float = 150.0, sitzungen=None) -> list[str]:
-    """Nach dem Start (``main.py``): jeder unterbrochene Lauf setzt beim nächsten Tag fort."""
+    """Nach dem Start (``main.py``): jeder unterbrochene Lauf setzt beim nächsten Tag fort — über ``starten``, also nie
+    neben einer Aufgabe, die denselben Lauf schon bearbeitet (``_AUFGABEN``). Fertige alte Läufe werden aufgeräumt."""
     from backend.core.database import get_session
 
     try:
         await asyncio.sleep(warte_s)
         async with (sitzungen or get_session)() as db:
+            await aufraeumen(db)
+            await db.commit()
             laeufe = await offene_laeufe(db)
         for lauf in laeufe:
-            await tage_neu_bilden(sitzungen or get_session, lauf)
+            aufgabe = starten(lauf, sitzungen=sitzungen)
+            if aufgabe is not None:
+                await aufgabe
         return laeufe
     except Exception as e:  # noqa: BLE001
         logger.warning("Korrektur-Läufe nach dem Start: %s: %s", type(e).__name__, e)

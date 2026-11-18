@@ -188,7 +188,6 @@ _BASELINE: frozenset[str] = frozenset({
     "test_daten_checker_zeitzone.py",
     "test_datenquellen_b8_2.py",
     "test_datenquellen_b8_materialisieren.py",
-    "test_datenquellen_historie_hinweis.py",
     "test_datenquellen_invert.py",
     "test_datenquellen_mapping_sync.py",
     "test_datenquellen_p2_assistenz.py",

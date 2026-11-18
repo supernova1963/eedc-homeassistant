@@ -38,6 +38,8 @@ vi.mock('../../api/datenquellen', () => {
         gruppen: [{ id: 'basis', label: 'Anlage (Basis)', typ: 'basis', felder: [f] }],
         verfuegbarkeit: { ha: true, mqtt: false, ha_quelle: 'ha_app' },
       })),
+      pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
+      korrekturLaeufe: vi.fn(() => Promise.resolve([])),
       setQuelle: vi.fn(() => Promise.resolve()),
       setInvert: vi.fn(() => Promise.resolve()),
       // Der Picker lädt beim Öffnen die Sensorliste.
@@ -81,6 +83,8 @@ describe('DatenquellenZuordnung — Quellen-Knöpfe', () => {
 
     fireEvent.click(keineKnopf)
 
-    await waitFor(() => expect(datenquellenApi.setQuelle).toHaveBeenCalledWith(1, feld.id, 'keine'))
+    // Sensorwechsel S3b: erst prüfen (derselbe Body), ohne Frage dann senden — ohne Grund.
+    await waitFor(() => expect(datenquellenApi.setQuelle).toHaveBeenCalledWith(1, feld.id, 'keine', undefined, undefined, undefined))
+    expect(datenquellenApi.pruefeQuelle).toHaveBeenCalledWith(1, feld.id, 'keine', undefined, undefined)
   })
 })

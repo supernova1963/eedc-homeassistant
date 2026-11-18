@@ -7,7 +7,9 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
 
 ## Lösungsweg
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich an diesem Feld.
-2. Dort einen fortlaufenden kWh-Zähler wählen.
+2. Dort einen fortlaufenden kWh-Zähler wählen. Hat das Feld schon eigene Werte, fragt eedc vor dem Speichern
+   **„Warum wechselt die Quelle?"** — hier ist es **„Bisher war der falsche Sensor zugeordnet"**: die Vorschau sagt, welche
+   Werte verworfen und, soweit Home Assistant die Geschichte des Zählers führt, aus ihm neu aufgebaut werden.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 
 ## Was ohne Handlung gilt

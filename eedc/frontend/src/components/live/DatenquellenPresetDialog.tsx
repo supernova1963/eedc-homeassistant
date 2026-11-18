@@ -9,11 +9,17 @@
  * Zeilen (Topic → Beschreibung der Zeile) → «Anwenden» (`liveDashboardApi.applyGatewayPreset`). Das Backend
  * **ersetzt** vorhandene Gateway-Zeilen derselben Felder und setzt die Quelle auf «Gateway» (D-K4-1); der Dialog sagt
  * das vorher. Welche Presets an welchem Gerät stehen, sagt das Backend (`MqttPreset.typen`), keine zweite Tabelle.
+ *
+ * Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): «Anwenden» prüft zuerst (`pruefeGatewayPreset`, schreibt nichts);
+ * ändert das Preset die Quelle eines Zählers mit eigenen Werten, fragt der `SensorwechselDialog` je Feld nach dem Grund,
+ * erst danach wird angewendet.
  */
 import { useMemo, useState } from 'react'
 import { Modal, Input, Button, Alert } from '../ui'
 import { liveDashboardApi } from '../../api/liveDashboard'
-import type { MqttPreset, PresetApplyResponse } from '../../api/liveDashboard'
+import type { MqttPreset, PresetApplyRequest, PresetApplyResponse } from '../../api/liveDashboard'
+import type { GrundAngabe, QuellePruefung } from '../../api/datenquellen'
+import SensorwechselDialog from './SensorwechselDialog'
 
 /** Hinweis vor dem Anwenden (D-K4-1). */
 export const ERSETZEN_HINWEIS = 'Vorhandene Gateway-Zuordnungen derselben Felder werden ersetzt; die Felder stehen danach auf «Gateway».'
@@ -66,17 +72,43 @@ export default function DatenquellenPresetDialog({
     setFehler(null)
   }
 
-  const anwenden = () => {
-    if (!gewaehlt) return
+  const [fragen, setFragen] = useState<QuellePruefung[] | null>(null)
+
+  const anfrage = (gruende?: Record<string, GrundAngabe>): PresetApplyRequest | null => gewaehlt && ({
+    preset_id: gewaehlt.id, anlage_id: anlageId, variablen: werte,
+    ...(investitionId != null ? { investition_id: investitionId } : {}),
+    ...(gruende ? { gruende } : {}),
+  })
+
+  const senden = (gruende?: Record<string, GrundAngabe>) => {
+    const req = anfrage(gruende)
+    if (!req) return
     setLaeuft(true)
     setFehler(null)
-    liveDashboardApi.applyGatewayPreset({
-      preset_id: gewaehlt.id, anlage_id: anlageId, variablen: werte,
-      ...(investitionId != null ? { investition_id: investitionId } : {}),
-    })
-      .then((r) => onAngewendet(r))
+    liveDashboardApi.applyGatewayPreset(req)
+      .then((r) => { setFragen(null); onAngewendet(r) })
       .catch((e) => setFehler(e instanceof Error ? e.message : 'Anwenden fehlgeschlagen'))
       .finally(() => setLaeuft(false))
+  }
+
+  // Erst prüfen: ändert das Preset die Quelle eines Zählers mit eigenen Werten, fragt der Dialog nach dem Grund.
+  const anwenden = () => {
+    const req = anfrage()
+    if (!req) return
+    setLaeuft(true)
+    setFehler(null)
+    liveDashboardApi.pruefeGatewayPreset(req)
+      .then((p) => {
+        if (p.grund_erforderlich) { setLaeuft(false); setFragen(p.felder.filter((f) => f.grund_erforderlich)); return }
+        senden()
+      })
+      .catch((e) => { setLaeuft(false); setFehler(e instanceof Error ? e.message : 'Prüfen fehlgeschlagen') })
+  }
+
+  const vorschau = (key: string, falschSeit: string) => {
+    const req = anfrage({ [key]: { grund: 'korrektur', falsch_seit: falschSeit } })
+    if (!req) return Promise.resolve(null)
+    return liveDashboardApi.pruefeGatewayPreset(req).then((p) => p.felder.find((f) => f.sensor_key === key)?.korrektur ?? null)
   }
 
   return (
@@ -137,6 +169,10 @@ export default function DatenquellenPresetDialog({
           </div>
         )}
       </div>
+      {fragen && (
+        <SensorwechselDialog isOpen fragen={fragen} onVorschau={vorschau} onBestaetigen={(g) => senden(g)}
+          onAbbrechen={() => setFragen(null)} laeuft={laeuft} fehler={fehler} />
+      )}
     </Modal>
   )
 }

@@ -43,6 +43,7 @@ import {
 } from '../../api/repair'
 import { energieProfilApi } from '../../api/energie_profil'
 import { REPARATUR_AENDERUNG_LABELS } from '../../lib/constants'
+import KorrekturFortschritt from '../live/KorrekturFortschritt'
 import {
   baueRohdatenLoeschRueckfrage,
   baueRohdatenLoeschMeldung,
@@ -516,6 +517,12 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
         {executeResult && (
           <div className="mt-4">
             <Alert type="success">{summarizeResult(executeResult)}</Alert>
+            {/* Sensorwechsel S3b: der Hintergrund-Lauf der Korrektur (Tage neu bilden, Füllen nachholen) mit Fortschritt. */}
+            {typeof executeResult.operation_summary?.lauf === 'string' && (
+              <div className="mt-2">
+                <KorrekturFortschritt anlageId={anlageId} lauf={executeResult.operation_summary.lauf} />
+              </div>
+            )}
           </div>
         )}
 

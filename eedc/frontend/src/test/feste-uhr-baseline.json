@@ -10,7 +10,6 @@
   "src/components/live/BoersenpreisBlock.park.test.tsx",
   "src/components/live/BoersenpreisBlock.test.tsx",
   "src/components/live/BoersenpreisChart.test.tsx",
-  "src/components/live/DatenquellenHistorieHinweis.test.tsx",
   "src/components/live/LiveKomponenten.test.tsx",
   "src/components/live/SolarAussichtQuelle.test.tsx",
   "src/components/live/SolarAussichtQuelleFehlt.test.tsx",

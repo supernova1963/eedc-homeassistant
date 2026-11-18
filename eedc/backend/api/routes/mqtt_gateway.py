@@ -189,6 +189,28 @@ async def _wirksam_vorher(db: AsyncSession, anlage_id: int):
     return anlage, (await momentaufnahme(db, anlage) if anlage is not None else {})
 
 
+async def _fragepflichtig(db: AsyncSession, anlage, vorher) -> list:
+    """Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): die Änderungen dieser Gateway-Zeile, die einen Grund bräuchten
+    (``zuordnung_wechsel/abfrage.pruefe``, nach dem ``flush``). Diese Routen tragen keinen Grund — den Wechsel mit Grund
+    macht die Datenquellen-Fläche (Feld-Route)."""
+    from backend.services.zuordnung_wechsel import abfrage
+
+    if anlage is None:
+        return []
+    nachher = await abfrage.lade_wirksame_quellen(db, anlage)
+    return [f for f in await abfrage.pruefe(db, anlage, vorher, nachher, details=False) if f.grund_erforderlich]
+
+
+#: Ablehnung bzw. Nennung, wenn eine Gateway-Zeile die Quelle eines Felds mit eigenen Werten wechseln würde.
+SATZ_GRUND_UEBER_FLAECHE = ("Die Zeile ändert die Quelle von {felder}, und dieses Feld hat eigene Werte. Wechsle die Quelle "
+                            "in den Datenquellen am Feld — dort fragt eedc, ob der neue Sensor dasselbe weiter misst oder "
+                            "bisher der falsche zugeordnet war.")
+
+
+def _schluessel(fragen) -> str:
+    return " · ".join(f.sensor_key for f in fragen)
+
+
 async def _verzeichne(db: AsyncSession, anlage, vorher) -> None:
     from backend.services.zuordnung_wechsel.verzeichnen import verzeichne
 
@@ -238,6 +260,9 @@ async def create_mapping(
     db.add(mapping)
     await db.flush()
     await db.refresh(mapping)
+    fragen = await _fragepflichtig(db, anlage, wirksam_vorher)
+    if fragen:   # W5: lehnt ab (Sitzung 3b)
+        raise HTTPException(422, SATZ_GRUND_UEBER_FLAECHE.format(felder=_schluessel(fragen)))
     await _verzeichne(db, anlage, wirksam_vorher)
 
     # Gateway hot-reload
@@ -255,7 +280,11 @@ async def update_mapping(
     data: MappingUpdate,
     db: AsyncSession = Depends(get_db, scope="function"),
 ):
-    """Bestehendes Mapping bearbeiten."""
+    """Bestehendes Mapping bearbeiten.
+
+    Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): ändert die Bearbeitung die wirksame Quelle eines Felds mit eigenen
+    Werten (Topic, Pfad, Faktor, Offset, Ziel, aktiv), wird sie **übersprungen** — die Zeile bleibt, die Antwort nennt die
+    Schlüssel unter ``uebersprungen`` (der Wechsel mit Grund geht über die Datenquellen-Fläche)."""
     result = await db.execute(
         select(MqttGatewayMapping).where(MqttGatewayMapping.id == mapping_id)
     )
@@ -265,11 +294,23 @@ async def update_mapping(
 
     anlage, wirksam_vorher = await _wirksam_vorher(db, mapping.anlage_id)
     update_data = data.model_dump(exclude_unset=True)
+    alt = {field: getattr(mapping, field) for field in update_data}
     for field, value in update_data.items():
         setattr(mapping, field, value)
 
     await db.flush()
     await db.refresh(mapping)
+    fragen = await _fragepflichtig(db, anlage, wirksam_vorher)
+    if fragen:   # W4: überspringt und nennt (Sitzung 3b) — die Zeile bleibt, wie sie war
+        for field, value in alt.items():
+            setattr(mapping, field, value)
+        await db.flush()
+        return {
+            "mapping": _db_to_response(mapping),
+            "gateway": {"reloaded": False},
+            "uebersprungen": [f.sensor_key for f in fragen],
+            "hinweis": SATZ_GRUND_UEBER_FLAECHE.format(felder=_schluessel(fragen)),
+        }
     await _verzeichne(db, anlage, wirksam_vorher)
 
     reload_result = await _reload_gateway(db)
@@ -277,6 +318,7 @@ async def update_mapping(
     return {
         "mapping": _db_to_response(mapping),
         "gateway": reload_result,
+        "uebersprungen": [],
     }
 
 
@@ -290,6 +332,9 @@ async def delete_mapping(
     anlage, wirksam_vorher = await _wirksam_vorher(db, zeile.anlage_id) if zeile is not None else (None, {})
     if await entferne_gateway_zeile(db, mapping_id) is None:
         raise HTTPException(404, "Mapping nicht gefunden")
+    fragen = await _fragepflichtig(db, anlage, wirksam_vorher)
+    if fragen:   # W6: lehnt ab (Sitzung 3b)
+        raise HTTPException(422, SATZ_GRUND_UEBER_FLAECHE.format(felder=_schluessel(fragen)))
     await _verzeichne(db, anlage, wirksam_vorher)
 
     reload_result = await _reload_gateway(db)

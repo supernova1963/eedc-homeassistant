@@ -1,11 +1,12 @@
 """Sensorwechsel mit Grund, Sitzung 1 — Tabelle ``zuordnung_wechsel`` (B-1), wirksame Quelle, Verzeichnen, Überführung, Räumen.
 
 **Verzeichnet** wird jede Änderung der **wirksamen** Quelle eines Zählerschlüssels (``services/zuordnung_wechsel/quelle.py``:
-HA-Entität · MQTT-Schlüssel mit Topic, Pfad, Faktor, Offset der Gateway-Zeile · «keine»), mit ``grund`` leer und
-``herkunft = wechsel`` — in jedem Schreibweg: Feld-Route (W1), Preset (W2), Energie-Vorschläge (W3), Gateway-Zeile ändern
-(W4), anlegen (W5), löschen (W6). Nicht verzeichnet: die erste Zuordnung (keine eigenen Werte, keine vorige Quelle), ein
-erneutes Speichern derselben Quelle, die klassische Zuordnung, die ``quellen`` nur nachträgt. Sprengsatz je Unterscheidung:
-der alte Maßstab ``ist_echte_aenderung`` (wirft ``mapping_id`` weg) sähe den Topic-Wechsel derselben Zeile nicht.
+HA-Entität · MQTT-Schlüssel mit Topic, Pfad, Faktor, Offset der Gateway-Zeile · «keine»), mit ``herkunft = wechsel`` — in
+jedem Schreibweg: Feld-Route (W1), Preset (W2), Energie-Vorschläge (W3), Gateway-Zeile ändern (W4), anlegen (W5), löschen
+(W6). Nicht verzeichnet: die erste Zuordnung (keine eigenen Werte, keine vorige Quelle), ein erneutes Speichern derselben
+Quelle, die klassische Zuordnung, die ``quellen`` nur nachträgt. **Seit Sitzung 3b** fragt eedc bei einer Änderung mit eigenen
+Werten nach dem Grund (``test_sensorwechsel_s3b_abfrage.py``): die Feld-Route und das Preset tragen hier ``fortsetzung`` (die
+Zeile führt ihn), Energie-Vorschläge und Gateway-``PUT`` überspringen, Gateway-Zeile anlegen/löschen lehnt ab.
 
 **Überführung** aus dem Aktivitäts-Protokoll (``herkunft = altbestand``): nur sicher wirksame Änderungen mit eigenen Werten;
 zweimal = einmal. **Räumen**: Gerät, Innengerät, Anlage (``ON DELETE CASCADE``).
@@ -36,7 +37,6 @@ from backend.models.kanal import Kanal, KanalQuelle, KanalStatistik
 from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.models.zuordnung_wechsel import ZuordnungWechsel
-from backend.services.datenquellen_historie import ist_echte_aenderung
 from backend.services.zuordnung_wechsel.quelle import wirksame_quellen
 
 NETZ = "basis_energy_netzbezug_kwh"
@@ -92,16 +92,16 @@ def test_wirksame_quelle_je_weg():
 
 # ═══ W1 Feld-Route ═════════════════════════════════════════════════════════════════════════════════════════════════════
 
-async def test_w1_ha_wechsel_wird_verzeichnet_grund_leer(db):
+async def test_w1_ha_wechsel_wird_verzeichnet_mit_grund(db):
     a = await _anlage(db)
-    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a")          # erste Zuordnung … aber eigene Werte (MQTT)
+    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a", grund="fortsetzung")   # eigene Werte (MQTT) ⇒ Grund
     await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a")          # dieselbe Wahl erneut: keine Änderung
-    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.b")
+    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.b", grund="fortsetzung")
     z = await _zeilen(db, a.id)
     assert [(w.sensor_key, w.vorher, w.nachher, w.grund, w.herkunft) for w in z] == [
         (NETZ_KEY, {"art": "mqtt", "mqtt_key": "netzbezug_kwh", "topic": None}, {"art": "ha", "entity_id": "sensor.a"},
-         None, "wechsel"),
-        (NETZ_KEY, {"art": "ha", "entity_id": "sensor.a"}, {"art": "ha", "entity_id": "sensor.b"}, None, "wechsel")]
+         "fortsetzung", "wechsel"),
+        (NETZ_KEY, {"art": "ha", "entity_id": "sensor.a"}, {"art": "ha", "entity_id": "sensor.b"}, "fortsetzung", "wechsel")]
     assert z[1].ab_ts == z[1].erklaert_ts.replace(minute=0, second=0) + timedelta(
         hours=0 if z[1].erklaert_ts.minute == z[1].erklaert_ts.second == 0 else 1)
 
@@ -150,7 +150,7 @@ async def test_w1_klassische_zuordnung_ohne_quellen_eintrag(db):
     await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a")          # gleiche Entität ⇒ keine Zeile
     assert await _zeilen(db, a.id) == []
     a2 = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.a"}}})
-    await _quelle(db, a2.id, quelle="ha_app", entity_id="sensor.b")         # andere ⇒ Zeile mit vorher = klassisch
+    await _quelle(db, a2.id, quelle="ha_app", entity_id="sensor.b", grund="fortsetzung")   # andere ⇒ vorher = klassisch
     assert [(w.vorher, w.nachher) for w in await _zeilen(db, a2.id)] == [
         ({"art": "ha", "entity_id": "sensor.a"}, {"art": "ha", "entity_id": "sensor.b"})]
 
@@ -158,16 +158,14 @@ async def test_w1_klassische_zuordnung_ohne_quellen_eintrag(db):
 async def test_w1_gateway_topic_wechsel_derselben_zeile_und_faktor(db):
     a = await _anlage(db, werte=("inv:2:ladung_kwh",))
     fid = "inv_energy_2_ladung_kwh"
-    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/a")
-    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/b")
-    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/b", faktor=0.001)
+    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/a", grund="fortsetzung")
+    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/b", grund="fortsetzung")
+    await _quelle(db, a.id, fid, quelle="mqtt_gateway", quell_topic="evcc/b", faktor=0.001, grund="fortsetzung")
     z = await _zeilen(db, a.id)
     assert [(w.vorher.get("topic"), w.nachher.get("topic"), w.nachher.get("faktor")) for w in z] == [
         (None, "evcc/a", 1.0), ("evcc/a", "evcc/b", 1.0), ("evcc/b", "evcc/b", 0.001)]
-    # Sprengsatz: der alte Maßstab sieht im Topic-Wechsel derselben Zeile nichts.
-    mid = (await db.execute(select(MqttGatewayMapping.id))).scalar_one()
-    assert not ist_echte_aenderung({"quelle": "mqtt_gateway", "mapping_id": mid},
-                                   {"quelle": "mqtt_gateway", "mapping_id": mid})
+    # Der alte Maßstab (``ist_echte_aenderung``, verglich den ``quellen``-Eintrag ohne ``mapping_id``) sah im Topic-Wechsel
+    # derselben Zeile nichts; er ist mit dem Hinweis-Block in Sitzung 3b entfallen.
 
 
 # ═══ W2 Preset · W3 Energie-Vorschläge · W4–W6 Gateway-Zeile ════════════════════════════════════════════════════════════
@@ -178,35 +176,56 @@ async def test_w2_preset_verzeichnet_den_zaehler(db):
     a = await _anlage(db, {"investitionen": {"2": {"felder": {"ladung_kwh": {"strategie": "sensor", "sensor_id": "sensor.wb"}}}},
                            "quellen": {"inv_energy_2_ladung_kwh": {"quelle": "ha_app", "entity_id": "sensor.wb"}}},
                       werte=("inv:2:ladung_kwh",))
-    await apply_preset(ApplyPresetRequest(preset_id="evcc_ladepunkt", anlage_id=a.id, variablen={}, investition_id=2), db)
+    await apply_preset(ApplyPresetRequest(preset_id="evcc_ladepunkt", anlage_id=a.id, variablen={}, investition_id=2,
+                                          gruende={"inv:2:ladung_kwh": {"grund": "fortsetzung"}}), db)
     z = await _zeilen(db, a.id)
     assert [(w.sensor_key, w.vorher, w.nachher["topic"]) for w in z] == [
         ("inv:2:ladung_kwh", {"art": "ha", "entity_id": "sensor.wb"}, "evcc/loadpoints/1/chargeTotalImport")]
 
 
 async def test_w3_energie_vorschlaege(db, monkeypatch):
+    """Seit Sitzung 3b überspringt die Übernahme ein Feld mit eigenen Werten, dessen Quelle wechseln würde (sie nennt es);
+    ein Feld ohne eigene Werte übernimmt sie (nichts verzeichnet, §8 Nr. 17)."""
     from backend.api.routes import datenquellen as dq
 
     async def ha(_db):
         return "http://ha", "tok", "ha_app"
     monkeypatch.setattr(dq, "_resolve_ha", ha)
     a = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.alt"}}})
-    await uebernehme_energy_vorschlaege(a.id, EnergyUebernahmeRequest(basis={"netzbezug": "sensor.neu"}), db)
-    assert [(w.vorher, w.nachher) for w in await _zeilen(db, a.id)] == [
-        ({"art": "ha", "entity_id": "sensor.alt"}, {"art": "ha", "entity_id": "sensor.neu"})]
+    r = await uebernehme_energy_vorschlaege(
+        a.id, EnergyUebernahmeRequest(basis={"netzbezug": "sensor.neu", "einspeisung": "sensor.e"}), db)
+    assert await _zeilen(db, a.id) == []
+    assert r["felder"] == ["basis_energy_einspeisung_kwh"]
+    assert [u["field_id"] for u in r["uebersprungen"]] == [NETZ]
+    assert wirksame_quellen(a.sensor_mapping)[NETZ_KEY] == {"art": "ha", "entity_id": "sensor.alt"}
 
 
 async def test_w4_w5_w6_gateway_zeile_anlegen_aendern_loeschen(db):
+    """Ohne eigene Werte verzeichnet keine der drei Routen etwas (§8 Nr. 17). Mit eigenen Werten (Sitzung 3b): ändern
+    überspringt und nennt, anlegen und löschen lehnen ab (422); eine Änderung ohne Wirkung geht durch."""
+    import pytest
+    from fastapi import HTTPException
+
     from backend.api.routes.mqtt_gateway import MappingCreate, MappingUpdate, create_mapping, delete_mapping, update_mapping
 
-    a = await _anlage(db, werte=("inv:2:ladung_kwh",))
+    a = await _anlage(db, werte=())
     neu = await create_mapping(MappingCreate(anlage_id=a.id, quell_topic="x/1", ziel_key="energy/inv/2/ladung_kwh"), db)
     mid = neu["mapping"]["id"]
-    await update_mapping(mid, MappingUpdate(quell_topic="x/2"), db)
-    await update_mapping(mid, MappingUpdate(beschreibung="nur Text"), db)   # ohne Wirkung ⇒ keine Zeile
-    await delete_mapping(mid, db)
-    z = await _zeilen(db, a.id)
-    assert [(w.vorher.get("topic"), w.nachher.get("topic")) for w in z] == [(None, "x/1"), ("x/1", "x/2"), ("x/2", None)]
+    assert await _zeilen(db, a.id) == []
+    db.add(SensorSnapshot(anlage_id=a.id, sensor_key="inv:2:ladung_kwh", zeitpunkt=datetime(2026, 9, 1, 12), wert_kwh=1.0,
+                          quelle="mqtt"))
+    await db.flush()
+    r = await update_mapping(mid, MappingUpdate(quell_topic="x/2"), db)
+    assert r["uebersprungen"] == ["inv:2:ladung_kwh"] and r["mapping"]["quell_topic"] == "x/1"
+    r = await update_mapping(mid, MappingUpdate(beschreibung="nur Text"), db)   # ohne Wirkung ⇒ geht durch, keine Zeile
+    assert r["uebersprungen"] == [] and r["mapping"]["beschreibung"] == "nur Text"
+    with pytest.raises(HTTPException) as e:
+        await delete_mapping(mid, db)
+    assert e.value.status_code == 422
+    with pytest.raises(HTTPException) as e:
+        await create_mapping(MappingCreate(anlage_id=a.id, quell_topic="x/3", ziel_key="energy/inv/2/ladung_kwh"), db)
+    assert e.value.status_code == 422
+    assert await _zeilen(db, a.id) == []
 
 
 # ═══ Überführung aus dem Protokoll ═════════════════════════════════════════════════════════════════════════════════════
@@ -334,10 +353,10 @@ async def test_merkliste_der_sitzung_sieht_einen_eben_verzeichneten_wechsel(db, 
 
     a = await _anlage(db, werte=(NETZ_KEY, "basis:einspeisung"))
     assert await lade_wechsel(db, a.id) == {}
-    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a")
+    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.a", grund="fortsetzung")
     assert list(await lade_wechsel(db, a.id)) == [NETZ_KEY]
     monkeypatch.setattr(verzeichnen, "merke_neu", lambda *_a: None)
-    await _quelle(db, a.id, "basis_energy_einspeisung_kwh", quelle="ha_app", entity_id="sensor.e")
+    await _quelle(db, a.id, "basis_energy_einspeisung_kwh", quelle="ha_app", entity_id="sensor.e", grund="fortsetzung")
     assert list(await lade_wechsel(db, a.id)) == [NETZ_KEY]                        # Gegenprobe: ohne merke_neu alt
     vergiss(db, a.id)
     assert sorted(await lade_wechsel(db, a.id)) == ["basis:einspeisung", NETZ_KEY]
@@ -408,5 +427,5 @@ async def test_w7_w8_w9_verzeichnen_nicht(db):
     await set_feld_invert(a.id, NETZ, InvertSetRequest(invertieren=True), db)
     await update_investition(2, InvestitionUpdate(stilllegungsdatum=date(2026, 1, 1)), db)
     assert await _zeilen(db, a.id) == []                                              # … und nichts verzeichnet
-    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.b")
+    await _quelle(db, a.id, quelle="ha_app", entity_id="sensor.b", grund="fortsetzung")
     assert len(await _zeilen(db, a.id)) == 1                                          # Gegenprobe

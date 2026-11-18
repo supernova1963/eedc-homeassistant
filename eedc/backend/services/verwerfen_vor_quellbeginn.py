@@ -532,8 +532,13 @@ def auftrag(la: Lage):
 async def plan_vorschau(db: AsyncSession, anlage_id: int, params: dict[str, Any], *, ha_svc=None):
     """Vorschau der Werkbank: die Sätze der Werkbank und der Korrektur (``zuordnung_wechsel/korrektur.saetze``)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel import korrektur_lauf
 
     la = await lage(db, anlage_id, params)
+    if await korrektur_lauf.offener_lauf(db, anlage_id, la.key) is not None:
+        # §11 Nr. 46: ein offener Lauf desselben Felds wird zuerst nachgeholt — nichts weiter wird verworfen (sonst böte die
+        # Vorschau bei A → fälschlich B → A die gültigen Stunden des richtigen Sensors vor «falsch seit» zum Löschen an).
+        return {k: 0 for k in geschaetzt(la)}, [SATZ_FUELLEN_OFFEN], {**vorschau_daten(la), "korrektur": None}
     nicht = None
     try:
         svc = kr.ha_dienst(ha_svc)
@@ -551,15 +556,18 @@ async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any], *
     Sitzung (N-532). Home Assistant eingerichtet, aber nicht erreichbar ⇒ ``KorrekturNichtStartbar`` (der Lauf startet nicht)."""
     from backend.services.activity_service import log_activity
     from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel import korrektur_lauf
 
     la = await lage(db, anlage_id, params)
     svc = kr.ha_dienst(ha_svc)
     a = auftrag(la)
     leer = {"kanal": la.key, "zeitpunkt": kv.text_aus_zeitpunkt(la.t), "kanalzeilen_geloescht": 0, "quellen_markiert": 0,
             "stundenzeilen_geleert": 0, "tageszeilen_geleert": 0, "felder_geleert": 0}
-    if la.nichts_zu_tun and (await kr.lage(db, a, ha_svc=svc)).nichts_zu_tun:
+    # §11 Nr. 46: ein offener Lauf desselben Felds wird nachgeholt, nichts weiter verworfen (wie die Vorschau sagt).
+    if (await korrektur_lauf.offener_lauf(db, anlage_id, la.key) is not None
+            or (la.nichts_zu_tun and (await kr.lage(db, a, ha_svc=svc)).nichts_zu_tun)):
         await db.commit()
-        return leer
+        return await _nachholen(db, anlage_id, la.key, leer)
     erg = await kr.fuehre_aus(db, a, ha_svc=svc)
     s = erg["summary"]
     bestand = {k: s[k] for k in ("stundenzeilen_geleert", "tageszeilen_geleert", "felder_geleert")}
@@ -577,6 +585,22 @@ async def fuehre_aus(db: AsyncSession, anlage_id: int, params: dict[str, Any], *
     s = await kr.nach_dem_commit(erg, ha_svc=svc)
     return {**summary, **{k: s.get(k, 0) for k in ("zaehlerstaende_geloescht", "rohstaende_geloescht", "tage_neu", "lauf",
                                                     "kanal_neu_gespiegelt")}}
+
+
+async def _nachholen(db: AsyncSession, anlage_id: int, key: str, leer: dict[str, Any]) -> dict[str, Any]:
+    """Nichts mehr zu verwerfen, aber das Füllen eines früheren Laufs steht aus (es scheiterte nach dem Commit): der Lauf
+    holt es jetzt nach (Sitzung 3b, Bauplan §10 Nr. 40)."""
+    from backend.services.zuordnung_wechsel import korrektur_lauf
+
+    lauf = await korrektur_lauf.offener_lauf(db, anlage_id, key)
+    if lauf is None:
+        return leer
+    korrektur_lauf.starten(lauf)
+    return {**leer, "lauf": lauf, "fuellen_nachgeholt": 1}
+
+
+SATZ_FUELLEN_OFFEN = ("Das Füllen aus Home Assistant aus dem letzten Lauf steht noch aus — «Operation ausführen» holt es "
+                      "jetzt nach (nichts weiter wird verworfen); sonst versucht eedc es jede Stunde von selbst.")
 
 
 # ── Auswahl für die Werkbank (lesende Route) ────────────────────────────────

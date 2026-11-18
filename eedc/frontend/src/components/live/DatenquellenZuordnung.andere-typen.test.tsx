@@ -69,10 +69,12 @@ vi.mock('../../api/datenquellen', () => {
     VERBINDUNG_GEAENDERT_EVENT: 'eedc:verbindung-geaendert',
     datenquellenApi: {
       getFelder: vi.fn(() => Promise.resolve({
-        anlage_id: 1, gruppen, verfuegbarkeit: { ha: true, mqtt: true, ha_quelle: 'ha_app' }, historie_hinweis: null,
+        anlage_id: 1, gruppen, verfuegbarkeit: { ha: true, mqtt: true, ha_quelle: 'ha_app' },
       })),
-      setQuelle: vi.fn(() => Promise.resolve({ historie_hinweis: null })),
-      setInvert: vi.fn(() => Promise.resolve({ historie_hinweis: null })),
+      pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
+      korrekturLaeufe: vi.fn(() => Promise.resolve([])),
+      setQuelle: vi.fn(() => Promise.resolve({ korrektur: [] })),
+      setInvert: vi.fn(() => Promise.resolve({})),
       haSensoren: vi.fn(() => Promise.resolve({ sensoren: [], vorschlaege: [], integrationen: [], warnungen: {} })),
       taktCheck: vi.fn(() => Promise.resolve({ geprueft: false })),
     },

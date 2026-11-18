@@ -265,6 +265,47 @@ def test_w7b_einstellungen_kennen_jeden_settings_schluessel():
     assert im_code - set(reg.EINSTELLUNGEN) == set()
 
 
+def _settings_praefixe_im_code() -> set[str]:
+    """Präfix-Schlüssel der Tabelle ``settings`` (Sensorwechsel S3b): in Dateien, die ``models.settings`` importieren, jedes
+    ``<Settings>(key=P + …)``, ``<Settings>.key == P + …`` und ``<Settings>.key.like(P + …)`` — ``P`` als Literal oder als
+    modulweite Text-Konstante derselben Datei."""
+    out: set[str] = set()
+    for d in produktivbaum():
+        if "models.settings import" not in ast.unparse(d.baum):
+            continue
+        konst = {t.id: n.value.value for n in d.baum.body if isinstance(n, ast.Assign)
+                 and isinstance(n.value, ast.Constant) and isinstance(n.value.value, str)
+                 for t in n.targets if isinstance(t, ast.Name)}
+
+        def praefix(x: ast.AST) -> set[str]:
+            if not (isinstance(x, ast.BinOp) and isinstance(x.op, ast.Add)):
+                return set()
+            links = x.left
+            if isinstance(links, ast.Constant) and isinstance(links.value, str):
+                return {links.value}
+            return {konst[links.id]} if isinstance(links, ast.Name) and links.id in konst else set()
+
+        for n in ast.walk(d.baum):
+            if isinstance(n, ast.Call) and getattr(n.func, "id", "").startswith("Settings"):
+                out |= set().union(set(), *(praefix(k.value) for k in n.keywords if k.arg == "key"))
+            if (isinstance(n, ast.Compare) and isinstance(n.left, ast.Attribute) and n.left.attr == "key"
+                    and getattr(n.left.value, "id", "").startswith("Settings")):
+                out |= set().union(*map(praefix, n.comparators))
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "like"
+                    and isinstance(n.func.value, ast.Attribute) and n.func.value.attr == "key"):
+                out |= set().union(set(), *map(praefix, n.args))
+    return out
+
+
+def test_w7b_einstellungen_kennen_jeden_settings_praefix():
+    """Ein Zustand unter einem Präfix (``korrektur_lauf:<lauf>``) ist kein «unbekannter» Schlüssel des Pakets mehr: jeder
+    Präfix im Code steht in ``register.EINSTELLUNGEN_PRAEFIX`` (Sensorwechsel S3b, Bauplan §10 Nr. 40)."""
+    im_code = _settings_praefixe_im_code()
+    assert "korrektur_lauf:" in im_code, sorted(im_code)
+    assert im_code - set(reg.EINSTELLUNGEN_PRAEFIX) == set()
+    assert set(reg.EINSTELLUNGEN_PRAEFIX) - im_code == set(), "ein Präfix im Register, den kein Code schreibt"
+
+
 def _parameter_quelle(x: ast.AST) -> bool:
     """``X.parameter``, ``getattr(X, "parameter", …)``, jeweils auch ``… or {}`` und ``dict(…)`` — sonst nichts."""
     if isinstance(x, ast.BoolOp) and isinstance(x.op, ast.Or):

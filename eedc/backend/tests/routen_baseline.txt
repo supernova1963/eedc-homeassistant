@@ -5,7 +5,6 @@ DELETE /api/cloud-import/credentials/{anlage_id}
 DELETE /api/community/delete/{anlage_id}
 DELETE /api/connectors/{anlage_id}
 DELETE /api/custom-import/templates/{name}
-DELETE /api/datenquellen/{anlage_id}/historie-hinweis
 DELETE /api/datenquellen/{anlage_id}/themen/{t_id}
 DELETE /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege/{e_id}
 DELETE /api/energie-profil/rohdaten
@@ -75,6 +74,8 @@ GET /api/custom-import/fields
 GET /api/custom-import/templates
 GET /api/datenquellen/{anlage_id}/felder
 GET /api/datenquellen/{anlage_id}/ha/sensoren
+GET /api/datenquellen/{anlage_id}/korrektur-laeufe
+GET /api/datenquellen/{anlage_id}/korrektur-lauf/{lauf}
 GET /api/diagnostics/live-snapshot-5min
 GET /api/docs
 GET /api/dokumentation/_selftest
@@ -225,6 +226,9 @@ POST /api/datenquellen/mqtt/level
 POST /api/datenquellen/{anlage_id}/energy-vorschlaege/uebernehmen
 POST /api/datenquellen/{anlage_id}/felder/{field_id}/invert
 POST /api/datenquellen/{anlage_id}/felder/{field_id}/quelle
+POST /api/datenquellen/{anlage_id}/felder/{field_id}/quelle/pruefen
+POST /api/datenquellen/{anlage_id}/felder/{field_id}/zaehler-getauscht
+POST /api/datenquellen/{anlage_id}/felder/{field_id}/zaehler-getauscht/pruefen
 POST /api/datenquellen/{anlage_id}/ha/takt-check
 POST /api/datenquellen/{anlage_id}/themen
 POST /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege
@@ -257,6 +261,7 @@ POST /api/korrekturprofil/{anlage_id}/aggregate
 POST /api/korrekturprofil/{anlage_id}/wetter-backfill
 POST /api/live/mqtt/gateway/mappings
 POST /api/live/mqtt/gateway/presets/apply
+POST /api/live/mqtt/gateway/presets/apply/pruefen
 POST /api/live/mqtt/gateway/reload
 POST /api/live/mqtt/gateway/test-topic
 POST /api/live/mqtt/gateway/test-transform

@@ -9,7 +9,8 @@ Ständen.
 
 ## Lösungsweg
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Feld. Dort siehst
-   du, woher der Wert kommt.
+   du, woher der Wert kommt. Wählst du dort eine andere Quelle und hat das Feld schon eigene Werte, fragt eedc vor dem
+   Speichern **„Warum wechselt die Quelle?"** (Handbuch Einstellungen §7.7).
 2. Den fortlaufenden Stand schicken statt des Tageswerts: Kommt der Wert aus einem Helfer von Home Assistant, unter
    *Einstellungen → Geräte & Dienste → Helfer* den Verbrauchszähler öffnen und das Zurücksetzen auf „nie“ (ohne Zyklus)
    stellen. Kommt er aus einer eigenen App oder einem Skript, dort den Lebenszählerstand senden.

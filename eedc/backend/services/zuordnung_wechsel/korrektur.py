@@ -24,7 +24,12 @@ Assistant (Standalone) laufen die Schritte 1, 2 und 5 — nichts wird gefüllt, 
 eedc-Datenbank; die Vorschau sagt es.
 
 Aufrufer: die Werkbank-Operation «Werte vor dem Sensorbeginn verwerfen» (``services/verwerfen_vor_quellbeginn.fuehre_aus``,
-S-9: ``falsch_seit`` offen = von Beginn an, ``ab`` = Beginn des jüngsten Sensors); der Dialog beim Sensorwechsel folgt in 3b.
+S-9: ``falsch_seit`` offen = von Beginn an, ``ab`` = Beginn des jüngsten Sensors) und seit Sitzung 3b der Dialog beim
+Sensorwechsel (``abfrage.vollziehe``: Feld-Route, Preset; ``ab`` = nächste volle Stunde, richtig ist die neue Quelle).
+
+**Robust (Sitzung 3b, Bauplan §10 Nr. 40):** eine wiederholte gleiche Korrektur (gleicher Schlüssel, gleiche richtige Quelle,
+Intervall schon von einer Korrektur-Zeile gedeckt) legt keine zweite Zeile an. Der Nachlauf nach dem Commit (Füllen, abhängige
+abgeleitete Kanäle) steht als Auftrag im Zustand des Laufs (``nachlauf_auftrag``); scheitert er, holt ihn der Lauf nach.
 """
 
 from __future__ import annotations
@@ -245,6 +250,35 @@ def saetze(la: Lage) -> list[str]:
     return s
 
 
+#: Der Kanal in der Dialog-Vorschau (Bauplan §11 Nr. 48; an der Werkbank-Vorschau ausgerichtet).
+SATZ_KANAL_AB = ("Home Assistant führt die Geschichte des richtigen Sensors erst ab {zeit} Uhr — die Zeit davor hat danach "
+                 "keinen Wert.")
+SATZ_KANAL_OHNE_GESCHICHTE = ("Home Assistant führt für den richtigen Sensor in diesem Zeitraum keine Geschichte — das Feld hat "
+                              "dort danach keinen Wert.")
+SATZ_KANAL_MQTT = ("Eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte — von «Falsch seit» bis jetzt hat das Feld "
+                   "danach keinen Wert.")
+
+
+async def kanal_saetze(la: Lage, ha_svc) -> list[str]:
+    """Die Dialog-Vorschau nennt den Kanal (Bauplan §11 Nr. 48): ab wann Home Assistant die Geschichte des richtigen Sensors
+    führt, wenn das nach dem Beginn des verworfenen Teils (``w0``) liegt, und dass eine MQTT-Quelle keine Geschichte
+    nachholt. Derselbe Beginn ``h0`` wie im Lauf (``kanal/korrektur.erste_ha_zeile`` ab ``w0`` bis zum Soll-Ende) —
+    Vorschau = Lauf. Ohne Home Assistant sagt ``SATZ_OHNE_HA`` genug."""
+    from backend.services.kanal.korrektur import erste_ha_zeile, fuell_ende
+
+    if la.nicht_startbar:
+        return []
+    eid = richtige_entitaet(la.auftrag.nachher)
+    if eid is None:
+        return [SATZ_KANAL_MQTT] if (la.kanal.zeilen or la.zaehlerstaende or la.rohstaende) else []
+    if ha_svc is None or la.kanal.w0 is None:
+        return []
+    h0 = await erste_ha_zeile(ha_svc, eid, la.kanal.w0, fuell_ende(int(datetime.now().timestamp())))
+    if h0 is None:
+        return [SATZ_KANAL_OHNE_GESCHICHTE]
+    return [SATZ_KANAL_AB.format(zeit=datetime.fromtimestamp(h0).strftime("%d.%m.%Y %H:%M"))] if h0 > la.kanal.w0 else []
+
+
 def vorschau_daten(la: Lage) -> dict[str, Any]:
     return {
         "zaehlerstaende": la.zaehlerstaende, "rohstaende": la.rohstaende,
@@ -276,13 +310,28 @@ async def wirksames_ab(db: AsyncSession, a: Auftrag, w0: Optional[int]) -> datet
     return max([a.ab] + [w.ab_ts for w in await _ersetzte(db, a, _beginn(a, w0))])
 
 
+async def _gleiche_korrektur(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime) -> Optional[ZuordnungWechsel]:
+    """Eine Korrektur-Zeile, die dieselbe Korrektur schon trägt (gleiche richtige Quelle, Intervall ``[f, ab)`` gedeckt)."""
+    zeilen = (await db.execute(select(ZuordnungWechsel).where(and_(
+        ZuordnungWechsel.anlage_id == a.anlage_id, ZuordnungWechsel.sensor_key == a.sensor_key,
+        ZuordnungWechsel.grund == GRUND_KORREKTUR, ZuordnungWechsel.aufgehoben_durch.is_(None),
+        ZuordnungWechsel.falsch_seit_ts <= f, ZuordnungWechsel.ab_ts >= ab)).order_by(ZuordnungWechsel.id))).scalars().all()
+    return next((w for w in reversed(zeilen) if (w.nachher or {}) == (a.nachher or {})), None)
+
+
 async def _wechsel_zeile(db: AsyncSession, a: Auftrag, jetzt: datetime, lauf: str, w0: Optional[int]) -> ZuordnungWechsel:
-    """Schritt 1 — mit Aufheben einer früheren Zeile ohne Grund für denselben Wechsel."""
+    """Schritt 1 — mit Aufheben einer früheren Zeile ohne Grund für denselben Wechsel; eine wiederholte gleiche Korrektur
+    nimmt ihre Zeile wieder (``lauf`` = der neue Lauf), statt eine zweite anzulegen."""
     from backend.services.zuordnung_wechsel.zeitpunkt import merke_neu, vergiss
 
     f = _beginn(a, w0)
     ersetzt = await _ersetzte(db, a, f)
     ab = max([a.ab] + [w.ab_ts for w in ersetzt])
+    gleich = await _gleiche_korrektur(db, a, f, ab)
+    if gleich is not None:
+        gleich.lauf = lauf
+        await db.flush()
+        return gleich
     row = ZuordnungWechsel(anlage_id=a.anlage_id, sensor_key=a.sensor_key, erklaert_ts=(a.erklaert or jetzt),
                            ab_ts=ab, vorher=a.vorher, nachher=a.nachher, grund=GRUND_KORREKTUR, falsch_seit_ts=f,
                            herkunft=a.herkunft, lauf=lauf)
@@ -338,8 +387,9 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
     if bestand_leeren and (la.von2 is None or la.von2 <= la.bis2):
         bestand = await vq.leere_bestand(db, a.anlage_id, la.ziele, la.bis2, la.abschluss, la.von2)
     tage = la.tage_neu if ha_svc is not None else []
-    if tage:
-        await korrektur_lauf.anlegen(db, lauf, a.anlage_id, a.sensor_key, tage)
+    nach = nachlauf_auftrag(kk, ha_svc, bis_ts, jetzt)
+    if tage or nach is not None:
+        await korrektur_lauf.anlegen(db, lauf, a.anlage_id, a.sensor_key, tage, fuellen=nach)
     merken.invalidiere(a.anlage_id, db=db)                         # Schritt 5
     summary = {"lauf": lauf, "wechsel_id": row.id, "kanalzeilen_geloescht": kk.geloescht,
                "abgeleitet_verworfen": kk.abgeleitet_verworfen,
@@ -369,19 +419,58 @@ def sitzungen_wie(db: AsyncSession, rueckfall):
     return sitzungen
 
 
+def nachlauf_auftrag(kk, ha_svc, bis_ts: int, jetzt: datetime) -> Optional[dict]:
+    """Der Nachlauf nach dem Commit als Auftrag im Zustand des Laufs (``None`` = nichts zu tun): Kanal füllen (mit Home
+    Assistant und einem Beginn der richtigen Quelle) und die verworfenen abhängigen abgeleiteten Kanäle neu schreiben."""
+    fuellen = ha_svc is not None and kk.h0 is not None and kk.kanal_id is not None
+    if not fuellen and not kk.abgeleitet_verworfen:
+        return None
+    return {"kanal_id": kk.kanal_id, "key": kk.key, "w0": kk.w0, "h0": kk.h0 if fuellen else None, "bis_ts": bis_ts,
+            "familien": None if kk.abgeleitet_familien is None else sorted(kk.abgeleitet_familien),
+            "abgeleitet_verworfen": kk.abgeleitet_verworfen, "jetzt": jetzt.isoformat(), "erledigt": False}
+
+
+async def nachlauf_aus_auftrag(sitzungen, anlage_id: int, f: dict) -> dict[str, int]:
+    """Den Nachlauf aus dem Auftrag ausführen (nach dem Commit oder nachgeholt vom Lauf). Returns: die Mengen."""
+    from backend.services.kanal.korrektur import KanalKorrektur, fuelle_kanal, schreibe_abgeleitete_nach
+
+    kk = KanalKorrektur(f["key"], kanal_id=f.get("kanal_id"), w0=f.get("w0"), h0=f.get("h0"),
+                        abgeleitet_familien=None if f.get("familien") is None else frozenset(f["familien"]),
+                        abgeleitet_verworfen=int(f.get("abgeleitet_verworfen") or 0))
+    n = {"kanal_neu_gespiegelt": 0, "abgeleitet_neu": 0}
+    if kk.h0 is not None:
+        svc = ha_dienst(None)
+        if svc is not None:
+            n["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, kk, ha_svc=svc, bis_ts=int(f["bis_ts"]))
+    n["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromisoformat(f["jetzt"])) or 0
+    return n
+
+
 async def nach_dem_commit(ergebnis: dict, *, ha_svc=None, sitzungen=None, starten: bool = True) -> dict[str, Any]:
     """Nach dem Commit des Aufrufers: Kanal füllen (Schritt 3), die abhängigen abgeleiteten Kanäle neu schreiben (§10
-    Nr. 34) und den Hintergrund-Lauf der Tage starten (Schritt 4)."""
+    Nr. 34) und den Hintergrund-Lauf der Tage starten (Schritt 4). Scheitert der Nachlauf, holt ihn der Lauf nach (er steht
+    als ``fuellen`` im Zustand); ``fuellen_offen`` in der Zusammenfassung sagt es dem Aufrufer."""
     from backend.services.kanal.korrektur import fuelle_kanal, schreibe_abgeleitete_nach
     from backend.services.zuordnung_wechsel import korrektur_lauf
 
     s = ergebnis["summary"]
     sitzungen = sitzungen or ergebnis["sitzungen"]
     anlage_id = ergebnis["lage"].auftrag.anlage_id
-    if ha_svc is not None:
-        s["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, ergebnis["kanal"], ha_svc=ha_svc,
-                                                       bis_ts=ergebnis["bis_ts"])
-    s["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, ergebnis["kanal"], ergebnis["jetzt"])
-    if s["tage_neu"] and starten:
+    hat_zustand = bool(s["tage_neu"]) or nachlauf_auftrag(ergebnis["kanal"], ha_svc, ergebnis["bis_ts"],
+                                                          ergebnis["jetzt"]) is not None
+    try:
+        if ha_svc is not None:
+            s["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, ergebnis["kanal"], ha_svc=ha_svc,
+                                                           bis_ts=ergebnis["bis_ts"])
+        s["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, ergebnis["kanal"], ergebnis["jetzt"])
+    except Exception as e:  # noqa: BLE001 — der Lauf holt den Nachlauf nach (Zustand ``fuellen``)
+        logger.warning("Korrektur %s: Füllen nach dem Commit gescheitert, der Lauf holt es nach: %s: %s",
+                       s["lauf"], type(e).__name__, e)
+        s["fuellen_offen"] = True
+    else:
+        if hat_zustand:
+            await korrektur_lauf.nachlauf_erledigt(sitzungen, s["lauf"], s.get("kanal_neu_gespiegelt", 0),
+                                                   s.get("abgeleitet_neu", 0))
+    if hat_zustand and starten and (s["tage_neu"] or s.get("fuellen_offen")):
         korrektur_lauf.starten(s["lauf"], sitzungen=sitzungen)
     return s

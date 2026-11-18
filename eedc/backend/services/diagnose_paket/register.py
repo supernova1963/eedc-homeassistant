@@ -92,6 +92,13 @@ EINSTELLUNGEN = {
     "wetter_altbestand_nachzug": ("<anlage_id>",),
 }
 
+#: ``settings`` mit Schlüssel-Präfix (``<präfix><kennung>``) → was in ``lage.einstellungen`` darf; nur Zustände der Anlage des
+#: Pakets (``anlage_id``), Listen als Anzahl. ``korrektur_lauf:`` — Hintergrund-Lauf einer Korrektur (Sensorwechsel S3a/S3b,
+#: ``services/zuordnung_wechsel/korrektur_lauf.py``).
+EINSTELLUNGEN_PRAEFIX = {
+    "korrektur_lauf:": ("sensor_key", "status", "erledigt", "tage", "fehler", "beginn", "ende", "fuellen"),
+}
+
 #: ``gruppen``: Liste fester Gruppennamen aus dem Code (``aggregate_day`` an Kanal-Tagen, ``snapshot/boundary_range.py``) —
 #: zeigt, welche Gruppen eines Tages aus den Kanälen kommen (Register-Nachtrag nach dem ersten echten Paket, Master 15.11.).
 _PROVENANCE_TS = frozenset({"source", "writer", "at", "input_hash", "abgeleitet", "gruppen"})
