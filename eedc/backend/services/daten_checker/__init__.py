@@ -159,6 +159,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_ha_rueckgang(anlage))
         # Verdacht N-803: ein versetzter Abschnitt in eedcs Standreihe (Stände eines anderen Sensors) — Tageswerte an den Rändern.
         ergebnisse.extend(await self._check_zaehler_versatz(anlage))
+        # Sensorwechsel S4 (B-7): verzeichneter Wechsel ohne Grund, nach dem die Abfrage gefragt hätte — «Grund nachtragen».
+        ergebnisse.extend(await self._check_zuordnung_grund_fehlt(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         # P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.

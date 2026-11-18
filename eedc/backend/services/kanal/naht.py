@@ -14,7 +14,8 @@ Stundenende wieder sendet, bekommt die Naht im nächsten Lauf. Gesucht wird ab e
 **Benannte Grenze:** schweigt der neue Publisher länger als einen Tag, oder hat der Lauf die Naht-Stunde vor der Erklärung
 schon geschrieben, trägt der Kanal den Sprung — dann gilt der Nachtrag.
 
-**Nachtrag** (``nachtrag_fortsetzung``, Dienst ohne Oberfläche; die Oberfläche kommt in Sitzung 4): für schon geschriebene
+**Nachtrag** (``nachtrag_fortsetzung``; Aufrufer: Einstieg «Zähler getauscht» und «Grund nachtragen», Sitzung 4 — auch im
+Nachbau-Abschnitt vor der HA-Statistik, Familie Mitschrift, ``nachfuellen._rohstaende``): für schon geschriebene
 Zeilen eine Quellzeile mit ``gueltig_ab = H`` und ``offset = offset_alt − (wert(H) − wert(vorige Zeile))`` — die
 Naht-Stunde trägt danach keinen Zuwachs, keine Kanalzeile wird umgeschrieben (Rohstände braucht er nicht; sie reichen nur
 31 Tage); spätere Quellzeilen rücken um dieselbe Verschiebung mit. Beginnt an der Naht schon eine Quelle, tut er nichts
@@ -102,7 +103,8 @@ async def zeilen_mit_naehten(db: AsyncSession, k, st, sensor_key: str, mqtt_key:
 async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) -> Optional[float]:
     """Nachtrag einer Fortsetzung für schon geschriebene Zeilen eines MQTT-Kanals (B-4): eine Quellzeile ab ``stunde_ts`` mit
     dem Versatz, der die Naht-Stunde ohne Zuwachs lässt (Kanalwert der Naht-Zeile = Kanalwert der vorigen Zeile). Keine
-    Kanalzeile wird geändert; abgeleitete Kanäle ab der Stunde werden verworfen (der nächste Stundenlauf schreibt sie neu),
+    Kanalzeile wird geändert; die abgeleiteten Kanäle, die aus dem Feld rechnen, werden ab der Stunde verworfen (der nächste
+    Stundenlauf schreibt sie neu; Bauplan §10 Nr. 34 — die übrigen bleiben),
     gemerkte Tage ab dem Vortag.
 
     **Idempotent und über Quellgrenzen richtig** (Bauplan §9 Nr. 25): beginnt zwischen der vorigen Zeile und der Naht-Zeile
@@ -115,6 +117,7 @@ async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) 
     from backend.models.kanal import FAMILIE_MITSCHRIFT, Kanal, KanalQuelle, KanalStatistik
     from backend.services.kanal import merken
     from backend.services.kanal.abgeleitet import verwerfe_ab
+    from backend.services.kanal.korrektur import abhaengige_abgeleitete, gehoert_zu
 
     kanal = await db.get(Kanal, kanal_id)
     quellen = (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal_id)
@@ -140,7 +143,10 @@ async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) 
     db.add(KanalQuelle(kanal_id=kanal_id, gueltig_ab=stunde_ts, familie=quelle.familie,
                        statistic_id=quelle.statistic_id, offset=offset))
     await db.flush()
-    await verwerfe_ab(db, kanal.anlage_id, stunde_ts)
+    # Bauplan §10 Nr. 34: nur die abgeleiteten Kanäle, die aus diesem Feld rechnen (dieselbe Auskunft wie der Kanal-Schritt
+    # der Korrektur, ``kanal/korrektur.abhaengige_abgeleitete``; unbekannter Schlüssel ⇒ alle).
+    familien = await abhaengige_abgeleitete(db, kanal.anlage_id, kanal.key)
+    await verwerfe_ab(db, kanal.anlage_id, stunde_ts, nur=lambda k: gehoert_zu(familien, k))
     for aid, tag in (await merken.tag_des_vorstands(db, [kanal_id], stunde_ts)).items():
         merken.invalidiere(aid, von=tag, db=db)
     return offset

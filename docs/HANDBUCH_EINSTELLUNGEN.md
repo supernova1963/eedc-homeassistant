@@ -937,9 +937,31 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
   den Tausch; der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge, und wo eedc aus den gespeicherten
   Zählerständen rechnet, zählt die Stunde des Tauschs keinen Zuwachs. Ist die Stunde des Tauschs schon gespeichert, nennt
   eedc, was sie bisher zählt; danach zählt sie keinen Zuwachs — auch nicht, was in dieser Stunde vor dem Tausch verbraucht
-  wurde.
+  wurde. Liegt der Tausch vor dem heutigen Tag und hat eedc für jenen Tag schon einen festen Tageswert gespeichert, bleibt
+  der, wie er ist, und kann den Unterschied weiter enthalten. Ein Eintrag lässt sich nicht zurücknehmen — der Dialog sagt
+  beides vor dem Eintragen. Sendet ein anderer Publisher
+  auf **demselben** Topic (etwa ein neues Gerät mit eigenem Zählerstand), bemerkt eedc das nicht von selbst — dieses Symbol
+  ist dann der Weg.
 - **Vor dem ersten eigenen Wert** des Felds gibt es keinen Sprung zu überbrücken — eedc nennt den ersten Wert und trägt
   nichts ein; ebenso in einer Zeit, deren Werte eine Korrektur verworfen hat.
+
+**Grund nachtragen.** Ein Wechsel eines Zählers mit eigenen Werten aus der Zeit, bevor eedc nach dem Grund fragte (oder einer,
+zu dem noch ein Hinweis „Zuordnung geändert" offen war), steht ohne Grund — eedc rechnet über ihn wie früher. Der
+Daten-Checker nennt jeden solchen Wechsel, nach dem eedc heute fragen würde (Befund „Zuordnung geändert, Grund fehlt",
+[Daten-Checker §4.8g](HANDBUCH_DATEN_CHECKER.md#48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt)); sein Knopf
+**„Grund nachtragen"** öffnet hier am Feld denselben Dialog als **„Warum wechselte die Quelle?"** mit dem Zeitpunkt und beiden
+Quellen. „Falsch seit" ist dort mit dem Beginn der Quelle vor dem Wechsel vorbelegt. Eine Korrektur lässt sich nur für den
+jüngsten Wechsel eines Felds nachtragen, solange seine neue Quelle noch zugeordnet ist. Ist der Grund eingetragen, nennt
+der Daten-Checker den Wechsel nicht mehr. Bei einer nachgetragenen Fortsetzung zählt der Unterschied am Tag des Wechsels
+nicht mehr, wo eedc diesen Tag aus seinen gespeicherten Stundenwerten bildet; hat eedc für ihn schon einen festen Tageswert
+gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
+
+**„Fortsetzung" gewählt, aber der bisherige Sensor war doch der falsche?** Bei einem Feld aus Home Assistant ist der Weg die
+Operation **„Werte vor dem Sensorbeginn verwerfen"** in der Reparatur-Werkbank ([§5.2](#52-energieprofil-pflege)) mit
+**„Operation ausführen"**: sie verwirft die Werte dieses Felds vor dem Beginn des neuen Sensors — alles davor, ein „Falsch
+seit" gibt es dort nicht — und hebt die eingetragene Fortsetzung auf. Bei einem Feld über MQTT verwirft die Operation die
+Werte vor dem Beginn des neuen Sensors ebenso; die eingetragene Fortsetzung bleibt dort stehen — sie sorgt dafür, dass der
+letzte Stand des bisherigen Sensors und der erste des neuen keine Menge ergeben.
 
 Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 

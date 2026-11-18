@@ -18,11 +18,12 @@ from backend.tests.werkzeug_daten_checker_stellen import erzeuger_dateien, stell
 
 #: Erzeuger-Stellen seit E5: 194 (Erhebung Teil A/B) − 6 Restzeilen (V2, entfallen) − 6 Partner-Erzeuger der
 #: Zusammenlegungen (V3: Nr 116, 93, 94, 133, 34, 123 gehen in die Zeile ihres Ziel-Codes auf). Ein neuer Erzeuger ⇒
-#: Zahl anheben UND Katalog-Zeile. 16.11.2026: + `zaehler_versatz` (Verdacht N-803) ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184.
-STELLEN = 184
+#: Zahl anheben UND Katalog-Zeile. 16.11.2026: + `zaehler_versatz` (Verdacht N-803) ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184;
+#: + `zuordnung_grund_fehlt` (Sensorwechsel S4) ⇒ 185.
+STELLEN = 185
 #: Distinkte Codes seit E5 (Konzept §3.1 R1): 194 − 6 Zusammenlegungen − 6 Restzeilen = 182; jeder Code an genau einer Stelle.
-#: 16.11.2026: + `zaehler_versatz` ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184.
-CODES = 184
+#: 16.11.2026: + `zaehler_versatz` ⇒ 183; + `erfassung_stillstand` (N-799 S3) ⇒ 184; + `zuordnung_grund_fehlt` ⇒ 185.
+CODES = 185
 ALTFELDER = ("link", "action_kind", "action_params", "action_label")
 
 
@@ -52,7 +53,7 @@ def test_zusammenlegungen_sind_vollzogen():
 
 def test_katalog_klassen_sind_bekannt():
     assert {h.klasse for h in HANDGRIFFE.values()} <= set(KLASSEN)
-    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 117, "aktion": 19, "auskunft": 18, "ok": 30}
+    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 118, "aktion": 19, "auskunft": 18, "ok": 30}
 
 
 def test_w3_kein_erzeuger_setzt_altfelder():

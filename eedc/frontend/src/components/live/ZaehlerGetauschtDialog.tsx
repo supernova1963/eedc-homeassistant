@@ -6,6 +6,7 @@
  * gilt (`…/zaehler-getauscht/pruefen`): in der Spiegel-Zeit eines Zählers aus Home Assistant der Weg in Home Assistant
  * («Wert anpassen», eedc trägt nichts ein); bei MQTT «Eigene Summe» und ohne Spiegel trägt «Eintragen» die Fortsetzung ein
  * (`…/zaehler-getauscht`); vor dem ersten eigenen Wert und in verworfener Zeit nennt ein Satz, warum nichts einzutragen ist.
+ * Vor dem Eintragen sagt der Dialog, dass ein Eintrag sich nicht zurücknehmen lässt (Bauplan §12 Nr. 62).
  * Sätze kommen aus dem Backend; der Client rechnet nichts.
  */
 import { useEffect, useState } from 'react'
@@ -16,6 +17,8 @@ export const ZG_TITEL = 'Zähler getauscht (gleiche Quelle)'
 export const ZG_ZEIT_LABEL = 'Getauscht am'
 export const ZG_ZEIT_HINWEIS = 'Wann der neue Zähler zu zählen begann.'
 export const ZG_EINGETRAGEN = 'Eingetragen.'
+/** Vor dem Eintragen (Bauplan §12 Nr. 62, Entscheid Gernot 18.11.2026: kein Rückweg). */
+export const ZG_ENDGUELTIG = 'Ein Eintrag lässt sich nicht zurücknehmen.'
 
 /** Jetzt als Wert eines `datetime-local`-Felds (örtlich). */
 function jetztLokal(): string {
@@ -66,6 +69,9 @@ export default function ZaehlerGetauschtDialog({ anlageId, feldId, feldLabel, on
           <div className="space-y-1 text-sm text-gray-700 dark:text-gray-200" data-zg-weg={antwort.weg}>
             {antwort.saetze.map((s, i) => <p key={i}>{s}</p>)}
           </div>
+        )}
+        {antwort?.eintragen && !antwort.eingetragen && (
+          <p className="text-xs text-gray-500 dark:text-gray-400" data-zg-endgueltig>{ZG_ENDGUELTIG}</p>
         )}
         {antwort?.eingetragen && <Alert type="success">{ZG_EINGETRAGEN}</Alert>}
         {fehler && <Alert type="error">{fehler}</Alert>}

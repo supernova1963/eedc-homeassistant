@@ -319,6 +319,7 @@ async def finde_zaehler_ruecksprunge(
     von: datetime,
     bis: datetime,
     toleranz_kwh: float = TAGESRESET_TOLERANZ_KWH,
+    naehte: tuple = (),
 ) -> list[tuple[datetime, float, float]]:
     """**Wo** die Standreihe fällt — paarweise, mit Zeitpunkt und beiden Ständen.
 
@@ -332,15 +333,21 @@ async def finde_zaehler_ruecksprunge(
     fenster, sondern über die aufgezeichnete Reihe selbst; die Ränder kämen aus
     der Self-Healing-Kaskade und gehören einer anderen Frage an.
 
+    ⭐ **Sensorwechsel S4:** ein Paar über eine Fortsetzungs-Naht (``naehte``, ``ab_ts`` der verzeichneten Wechsel mit
+    Grund «Fortsetzung», ``core/berechnungen/zaehler_naht.ueber_naht``) ist kein Rücksprung — der Wechsel ist erklärt,
+    und die Leser der Reihe bilden über ihn keine Differenz.
+
     Returns:
         ``[(zeitpunkt_des_falls, stand_vorher, stand_nachher), …]`` in
         zeitlicher Reihenfolge; leer, wenn die Reihe monoton ist.
     """
+    from backend.core.berechnungen.zaehler_naht import ueber_naht
+
     reihe = await reihe_im_fenster(db, anlage_id, sensor_key, von, bis)
     return [
         (ts_b, a, b)
-        for (_ts_a, a), (ts_b, b) in zip(reihe, reihe[1:])
-        if _ist_ruecksprung(a, b, toleranz_kwh)
+        for (ts_a, a), (ts_b, b) in zip(reihe, reihe[1:])
+        if _ist_ruecksprung(a, b, toleranz_kwh) and not ueber_naht(ts_a, ts_b, naehte)
     ]
 
 

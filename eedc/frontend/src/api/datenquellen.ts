@@ -338,6 +338,23 @@ export interface KorrekturLaufLaufend {
   beginn: string | null
 }
 
+/** «Grund nachtragen» an einem verzeichneten Wechsel (`…/zuordnung-wechsel/{id}/grund/pruefen`, Sitzung 4): dieselben
+ *  Angaben wie die Prüf-Route der Quelle, dazu der Wechsel als Satz und die zulässigen Gründe. */
+export interface GrundNachtragPruefung extends QuellePruefung {
+  wechsel_id: number
+  feld_id: string | null
+  grund: WechselGrund | null
+  wechsel_satz: string
+  gruende: WechselGrund[]
+  korrektur_nicht: string | null
+}
+
+/** Antwort nach dem Eintragen: `korrektur` = die gestarteten Läufe (Fortschritt an der Fläche). */
+export type GrundNachtragErgebnis = Omit<GrundNachtragPruefung, 'korrektur'> & {
+  eingetragen: boolean
+  korrektur: KorrekturLaufStart[]
+}
+
 /** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
 export interface ZaehlerGetauschtAntwort {
   weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich'
@@ -462,6 +479,14 @@ export const datenquellenApi = {
     api.get<KorrekturLaufStand>(`/datenquellen/${anlageId}/korrektur-lauf/${encodeURIComponent(lauf)}`),
 
   /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
+  /** «Grund nachtragen»: prüfen (schreibt nichts; mit Grund «korrektur» und «falsch seit» die Vorschau des Diensts). */
+  pruefeGrundNachtragen: (anlageId: number, wechselId: number, grund?: GrundAngabe) =>
+    api.post<GrundNachtragPruefung>(`/datenquellen/${anlageId}/zuordnung-wechsel/${wechselId}/grund/pruefen`, grund ?? {}),
+
+  /** «Grund nachtragen»: eintragen (Fortsetzung) bzw. die Korrektur ausführen. */
+  grundNachtragen: (anlageId: number, wechselId: number, grund: GrundAngabe) =>
+    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zuordnung-wechsel/${wechselId}/grund`, grund),
+
   korrekturLaeufe: (anlageId: number) =>
     api.get<KorrekturLaufLaufend[]>(`/datenquellen/${anlageId}/korrektur-laeufe`),
 

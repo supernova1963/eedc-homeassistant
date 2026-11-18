@@ -136,13 +136,14 @@ def ziel_komponente(inv_id: Optional[int] = None, feld: Optional[str] = None, ne
     return Ziel("komponenten", None, _ohne_none(bearbeiten=inv_id, feld=parameter or feld, neu=neu), anker=name)
 
 
-def ziel_datenquelle(feld: Optional[str] = None, geraet: Optional[int] = None) -> Ziel:
-    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (gelesen seit E4)."""
+def ziel_datenquelle(feld: Optional[str] = None, geraet: Optional[int] = None, nachtrag: Optional[int] = None) -> Ziel:
+    """Datenquellen-Zuordnung, optional das Gerät aufgeklappt und das Feld markiert (gelesen seit E4); `nachtrag=<id>`
+    öffnet dort den Dialog «Grund nachtragen» für den verzeichneten Wechsel `id` (Sensorwechsel Sitzung 4, B-7)."""
     _monatsfeld(feld)
-    return Ziel("datenquellen", None, _ohne_none(geraet=geraet, feld=feld), anker=feld)
+    return Ziel("datenquellen", None, _ohne_none(geraet=geraet, feld=feld, nachtrag=nachtrag), anker=feld)
 
 
-def ziel_datenquelle_schluessel(schluessel: str) -> Ziel:
+def ziel_datenquelle_schluessel(schluessel: str, nachtrag: Optional[int] = None) -> Ziel:
     """Wie `ziel_datenquelle`, aus einem gespeicherten Sensor-Schlüssel `inv:<id>:<feld>` bzw. `<präfix>:<feld>`
     (Laufzeit-Rohwert, H-E2-1). Ein Basis-Zähler heißt im Mapping `pv_gesamt`/`einspeisung`/`netzbezug`, auf der
     Datenquellen-Fläche `pv_gesamt_kwh` … (`datenquellen_mapping_sync.BASIS_ENERGY_FELD`, E4: der Anker der Fläche).
@@ -154,9 +155,9 @@ def ziel_datenquelle_schluessel(schluessel: str) -> Ziel:
     if geraet is None and feld is not None:
         feld = {basis: fid for fid, basis in BASIS_ENERGY_FELD.items()}.get(feld, feld)
     try:
-        return ziel_datenquelle(feld=feld, geraet=geraet)
+        return ziel_datenquelle(feld=feld, geraet=geraet, nachtrag=nachtrag)
     except ValueError:
-        return ziel_datenquelle(geraet=geraet)
+        return ziel_datenquelle(geraet=geraet, nachtrag=nachtrag)
 
 
 def ziel_tarif(id: Optional[int] = None, feld: Optional[str] = None, neu_art: Optional[str] = None,

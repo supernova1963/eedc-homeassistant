@@ -447,7 +447,9 @@ async def test_zaehler_getauscht_mqtt_eigene_summe_traegt_fortsetzung_mit_nachtr
     await db.commit()
     getauscht = t0 + timedelta(hours=2, minutes=15)
     r = await zaehler_getauscht(aid, NETZ, ZaehlerGetauschtRequest(getauscht_am=getauscht), db)
-    assert (r["weg"], r["eingetragen"]) == ("fortsetzung", True) and len(r["saetze"]) == 3
+    assert (r["weg"], r["eingetragen"]) == ("fortsetzung", True) and len(r["saetze"]) == 4
+    from backend.services.zuordnung_wechsel.zaehler_getauscht import SATZ_TAG_FEST
+    assert r["saetze"][3] == SATZ_TAG_FEST                             # 4-K, «Zu §13» Nr. 87: Tausch vor dem laufenden Tag
     assert r["saetze"][2] == "Bisher zählt sie 2.000,50 kWh."           # §11 Nr. 49: der bisherige Zuwachs der Stunde
     (w,) = await _zeilen(db, aid)
     assert (w.grund, w.erklaert_ts, w.ab_ts, w.vorher == w.nachher) == ("fortsetzung", getauscht, t0 + timedelta(hours=3), True)

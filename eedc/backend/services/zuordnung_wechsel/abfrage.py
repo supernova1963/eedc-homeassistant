@@ -74,18 +74,54 @@ def _gleich(a: Optional[dict], b: Optional[dict]) -> bool:
     return (a or {}) == (b or {})
 
 
-async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell: Optional[dict]) -> Optional[dict]:
+def _davor(w, vor: Optional[datetime], vor_id: Optional[int]) -> bool:
+    """Lag der verzeichnete Wechsel ``w`` vor der gefragten Zeile? Reihenfolge ``ab_ts``, dann Zeilen-Nummer — zwei Wechsel
+    in derselben Stunde (Fehlklick «Keine» und sofort zurück) tragen dasselbe ``ab_ts`` (Bauplan §13 Nr. 66)."""
+    if vor is None:
+        return True
+    if w.ab_ts != vor:
+        return w.ab_ts < vor
+    return vor_id is not None and w.id is not None and w.id < vor_id
+
+
+async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell: Optional[dict],
+                                   vor: Optional[datetime] = None, vor_id: Optional[int] = None) -> Optional[dict]:
     """Die Quelle, gegen die verglichen wird: die heutige, wenn sie Werte liefern kann, sonst die letzte verzeichnete mit
-    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt)."""
+    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt). ``vor``/``vor_id``: nur verzeichnete
+    Wechsel vor der Zeile mit diesem ``ab_ts`` und dieser Nummer (gleiches ``ab_ts``, kleinere Nummer zählt mit) — dieselbe
+    Frage zum Zeitpunkt eines früheren Wechsels, wie ``pruefe`` sie im Augenblick des Wechsels stellte (``haette_gefragt``,
+    Sitzung 4)."""
     if kann_werte_liefern(aktuell):
         return aktuell
-    zeilen = sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ()) if w.aufgehoben_durch is None),
-                    key=lambda w: w.ab_ts, reverse=True)
+    zeilen = sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ())
+                     if w.aufgehoben_durch is None and _davor(w, vor, vor_id)),
+                    key=lambda w: (w.ab_ts, w.id or 0), reverse=True)
     for w in zeilen:
         for q in (w.nachher, w.vorher):
             if kann_werte_liefern(q):
                 return q
     return None
+
+
+def frage_noetig(nachher: Optional[dict], letzte: Optional[dict]) -> bool:
+    """Die Regel «wann wird gefragt» bei eigenen Werten: die neue Quelle kann Werte liefern und ist nicht die letzte Quelle
+    mit Werten (unbekannt ⇒ gefragt)."""
+    return kann_werte_liefern(nachher) and (letzte is None or not _gleich(letzte, nachher))
+
+
+async def haette_gefragt(db, anlage_id: int, w) -> bool:
+    """Hätte die Abfrage (B-2) bei diesem verzeichneten Wechsel nach dem Grund gefragt? (Sitzung 4, B-7: der Befund «Zuordnung
+    geändert, Grund fehlt» und «Grund nachtragen» fragen hier, nicht nachgebaut.) Dieselbe Regel wie ``pruefe`` zum Zeitpunkt
+    des Wechsels: eigene Werte vor ``ab_ts``, die neue Quelle kann Werte liefern und ist nicht die letzte Quelle mit Werten
+    davor. Ein «Zähler getauscht» (``vorher = nachher``) ist kein Wechsel der Quelle."""
+    from backend.services.zuordnung_wechsel.quelle import hat_eigene_werte
+
+    if _gleich(w.vorher, w.nachher):
+        return False
+    if not await hat_eigene_werte(db, anlage_id, w.sensor_key, vor=w.ab_ts):
+        return False
+    letzte = await letzte_quelle_mit_werten(db, anlage_id, w.sensor_key, w.vorher, vor=w.ab_ts, vor_id=w.id)
+    return frage_noetig(w.nachher, letzte)
 
 
 async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], *, details: bool = True,
@@ -97,7 +133,7 @@ async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], 
         if not a.eigene_werte:
             continue
         letzte = await letzte_quelle_mit_werten(db, anlage.id, a.sensor_key, a.vorher)
-        noetig = kann_werte_liefern(a.nachher) and (letzte is None or not _gleich(letzte, a.nachher))
+        noetig = frage_noetig(a.nachher, letzte)
         f = Frage(a.sensor_key, a.vorher, a.nachher, noetig)
         if noetig and details:
             await _details(db, anlage.id, f, ha_svc)
@@ -224,19 +260,25 @@ def _pruefe_falsch_seit(f: Frage, falsch_seit: Optional[datetime], jetzt: dateti
 
 async def korrektur_vorschau(db, anlage_id: int, f: Frage, falsch_seit: datetime, jetzt: datetime) -> dict[str, Any]:
     """Die Vorschau des Dienstes für den Dialog (lesend; derselbe Auftrag wie der Lauf, ``korrektur.lage``)."""
+    _pruefe_falsch_seit(f, falsch_seit, jetzt, f.sensor_key)
+    return await vorschau_des_auftrags(db, korrektur_auftrag(anlage_id, f, falsch_seit, jetzt))
+
+
+async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[str, Any]:
+    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes (Dialog beim Wechsel und «Grund nachtragen», Sitzung 4;
+    ``nachtrag``: das Intervall endet am Wechsel, Bauplan §13 Nr. 69)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
 
-    _pruefe_falsch_seit(f, falsch_seit, jetzt, f.sensor_key)
     nicht = None
     try:
         svc = kr.ha_dienst(None)
     except kr.KorrekturNichtStartbar as e:
         svc, nicht = None, str(e)
-    la = await kr.lage(db, korrektur_auftrag(anlage_id, f, falsch_seit, jetzt), ha_svc=svc)
+    la = await kr.lage(db, auftrag, ha_svc=svc)
     la.nicht_startbar = nicht
     saetze = kr.saetze(la)
     if nicht is None:            # der Kanal (§11 Nr. 48) vor dem Satz zum Rückweg
-        saetze[-1:-1] = await kr.kanal_saetze(la, svc)
+        saetze[-1:-1] = await kr.kanal_saetze(la, svc, bis_zum_wechsel=nachtrag)
     return {"saetze": saetze, **kr.vorschau_daten(la)}
 
 

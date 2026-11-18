@@ -20,6 +20,8 @@ ersten Sprungs, Tag des letzten Rückgangs) die Gruppe des Felds nicht aus den K
 (``kanal_stunden.kanal_schluessel_des_tages``, dieselbe Wahl wie ``tages_eingaenge``) **und** der eigene Kanal des Felds den Tag
 nicht trägt (Sensorwechsel B-5 «Kanal vor Reihe»: dieselbe Feld-Auskunft wie die Tagesansicht,
 ``kanal/feld_leser.feld_aus_kanal_am_tag``). Liest die Tagesansicht beide Rand-Tage aus Kanälen, schweigt die Prüfung.
+Ein Rand an einer verzeichneten Fortsetzung (Sensorwechsel mit Grund) ist ohne Wirkung — dort bilden die Leser keine
+Differenz über die Naht (Bauplan §13 Nr. 71); sind beide Ränder so erklärt, schweigt die Prüfung ebenso.
 
 **Zwei Lagen, ein Code:**
 
@@ -198,12 +200,17 @@ class ZaehlerVersatzChecks:
     async def _versatz_wirkt(self, anlage, key: str, lauf: VersatzLauf, invs: dict) -> bool:
         """Rechnet der Tageswert des Felds an mindestens einem Rand-Tag über die Standreihe — weder kommt seine Gruppe
         aus den Kanälen, noch trägt sein eigener Kanal den Tag (Sensorwechsel B-5: dieselbe Feld-Auskunft wie die
-        Tagesansicht, ``kanal/feld_leser.feld_aus_kanal_am_tag``)?"""
+        Tagesansicht, ``kanal/feld_leser.feld_aus_kanal_am_tag``)? Ein Rand an einer verzeichneten Fortsetzung ist ohne
+        Wirkung: dort bilden die Leser der Reihe keine Differenz über die Naht (Bauplan §13 Nr. 71, ``zaehler_naht.ueber_naht``)."""
+        from backend.core.berechnungen.zaehler_naht import ueber_naht
         from backend.services.energie_profil.kanal_stunden import kanal_schluessel_des_tages
         from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
+        from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
         typ = getattr(invs.get(key.split(":")[1]), "typ", None)
-        for tag in sorted(set(lauf.rand_tage)):
+        naehte = await fortsetzungs_naehte(self.db, anlage.id, key)
+        tage = {r.tag for r in (lauf.beginn, lauf.ende) if not ueber_naht(r.von, r.bis, naehte)}
+        for tag in sorted(tage):
             if key in await kanal_schluessel_des_tages(self.db, anlage.id, tag):
                 continue
             if not await feld_aus_kanal_am_tag(self.db, anlage, typ, key, tag):

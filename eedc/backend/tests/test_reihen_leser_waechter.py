@@ -16,10 +16,14 @@ Wer einen neuen Leser schreibt, entscheidet damit sichtbar, wie er mit einer Nah
 * ``primitiv`` — Lese-Baustein: liefert Stände, bildet selbst keine Menge (die Einstufung trägt sein Aufrufer).
 * ``schreiber`` — füllt oder schreibt die Reihe, bildet keine Menge (Zuordnung zum Zeitpunkt: B-0).
 * ``stand`` — zeigt einen Stand, keine Differenz.
+* ``anzeige`` — stellt gespeicherte Stände oder Zeilen gegenüber bzw. zählt sie (Werkbank-Vorschau alt/neu, Diagnose); bildet
+  keine Menge, die eine Sicht als Wert zeigt (Sitzung 4, Bauplan §12 Nr. 61).
 
 ``ha_spiegel``: die Stelle liest Felder, die einen HA-Spiegel haben können (HA-Zuordnung). **B-8** (Befund «Naht ohne
-verzeichneten Wechsel», Sitzung 4) entfällt genau dann, wenn kein Eintrag ``bewusst`` mit ``ha_spiegel`` bleibt —
-``test_b8_liste_ohne_naht_schutz_mit_ha_spiegel`` hält die heutige Liste fest (Gleichheit, damit jede Änderung sichtbar wird).
+verzeichneten Wechsel») entfällt genau dann, wenn kein Eintrag ``bewusst`` mit ``ha_spiegel`` bleibt — **entfallen (Entscheid
+Gernot 18.11.2026, Bauplan §12 Nr. 61)**: seit Sitzung 4 ist die Liste aus der Struktur leer (die zwei Stellen ohne Menge stehen
+als ``anzeige``, der Stände-Nachbau ``kanal/nachfuellen._rohstaende`` als ``naht``), und
+``test_b8_liste_ohne_naht_schutz_mit_ha_spiegel`` hält sie leer — ein neuer Eintrag ``bewusst`` mit ``ha_spiegel`` ist rot.
 
 **Was er erkennt (AST, Produktivbaum ohne ``tests/``):** einen Aufruf eines Lese-Bausteins (``PRIMITIVE``, Name oder
 Attribut), einen Zugriff auf die Wertspalte ``SensorSnapshot.wert_kwh`` / ``MqttEnergySnapshot.value_kwh`` und SQL-Text
@@ -41,8 +45,8 @@ import re
 from backend.tests.quellbaum import produktivbaum
 
 NAHT, KANAL, BEWUSST, OHNE_AUFRUFER = "naht", "kanal", "bewusst", "ohne_aufrufer"
-PRIMITIV, SCHREIBER, STAND = "primitiv", "schreiber", "stand"
-EINSTUFUNGEN = {NAHT, KANAL, BEWUSST, OHNE_AUFRUFER, PRIMITIV, SCHREIBER, STAND}
+PRIMITIV, SCHREIBER, STAND, ANZEIGE = "primitiv", "schreiber", "stand", "anzeige"
+EINSTUFUNGEN = {NAHT, KANAL, BEWUSST, OHNE_AUFRUFER, PRIMITIV, SCHREIBER, STAND, ANZEIGE}
 
 #: Lese-Bausteine der Reihe — ihr Aufruf macht die umschließende Funktion zu einer Lesestelle.
 PRIMITIVE = frozenset({
@@ -88,25 +92,28 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "L10", NAHT, True, "Bruch über eine Naht ist kein Bruch (finde_reihen_brueche mit Nähten)"),
     "services/daten_checker/datenquelle/versatz.py::<modul>": (
         "L12", KANAL, True, "Wirkungs-Prüfung über die Feld-Auskunft (feld_leser.feld_aus_kanal_am_tag); die Erkennung selbst "
-        "sucht genau die Niveau-Sprünge der Reihe (sie ist der Befund, keine Menge)"),
+        "sucht genau die Niveau-Sprünge der Reihe (sie ist der Befund, keine Menge); ein Rand an einer Fortsetzungs-Naht ist "
+        "ohne Wirkung (zaehler_naht.ueber_naht, Sitzung 4-K)"),
     "services/kanal/schreiber.py::_eigene_summe": (
         "L16", NAHT, False, "MQTT «Eigene Summe»: eine Fortsetzung teilt die Periode (kanal/naht.zeilen_mit_naehten, B-4)"),
-    # ── bewusst nicht ──
     "services/snapshot/reader.py::finde_zaehler_ruecksprunge": (
-        "L11", BEWUSST, False, "Befund zaehler_ruecksprung — nur MQTT-Reihen; ob ein verzeichneter Wechsel ihn stillt, "
-        "entscheidet Sitzung 4 (B-7, Text-GM)"),
+        "L11", NAHT, False, "Befund zaehler_ruecksprung — nur MQTT-Reihen; ein Paar über eine Fortsetzungs-Naht ist kein "
+        "Rücksprung (zaehler_naht.ueber_naht, Sitzung 4)"),
     "services/kanal/nachfuellen.py::_rohstaende": (
-        "L15", BEWUSST, True, "Stände-Nachbau nur vor der ersten Kanalzeile eines Schlüssels, je Kanal einmal; ein "
-        "verzeichneter Wechsel liegt nach der ersten Kanalzeile (Kanäle seit HA-Bauform E2) — eine Naht davor kopiert er wörtlich"),
+        "L15", NAHT, True, "Stände-Nachbau (Familie Mitschrift, HA-Stände wörtlich) vor der ersten Kanalzeile: _laeufe teilt an "
+        "jeder verzeichneten Fortsetzung (neue Quelle ohne Zuwachs, Sitzung 4); eine später nachgetragene trägt "
+        "kanal/naht.nachtrag_fortsetzung (Einstieg «Zähler getauscht», «Grund nachtragen»)"),
+    # ── zeigen oder zählen, keine Menge einer Sicht (Sitzung 4, Bauplan §12 Nr. 61) ──
     "services/snapshot/reaggregator.py::_counter_delta_alt": (
-        "L14", BEWUSST, True, "Werkbank-Vorschau: Gegenüberstellung alt/neu der gespeicherten Stände, keine Anzeige-Menge"),
+        "L14", ANZEIGE, True, "Werkbank-Vorschau: Gegenüberstellung alt/neu der gespeicherten Stände, keine Anzeige-Menge"),
+    "api/routes/diagnostics.py::live_snapshot_5min_diagnostics": (
+        "—", ANZEIGE, True, "Diagnose-Route: zählt und zeigt Fünf-Minuten-Zeilen, keine Menge"),
+    # ── bewusst nicht ──
     "services/mqtt_energy_history_service.py::get_tages_kwh": (
         "L17", BEWUSST, False, "MQTT-Live heute/gestern (Rückgang: der neue Stand zählt als Tageswert) — Live-Wert, nach zwei "
         "Tagen vorbei; die Menge der Tage trägt der Kanal (B-4)"),
     "services/live_verbrauchsprofil_service.py::_profil_from_mqtt": (
         "L18", BEWUSST, False, "Verbrauchsprofil aus 7 Tagen MQTT-Stichproben (Form, keine Menge); eine Naht-Stunde fällt aus"),
-    "api/routes/diagnostics.py::live_snapshot_5min_diagnostics": (
-        "—", BEWUSST, True, "Diagnose-Route: zählt und zeigt Fünf-Minuten-Zeilen, keine Menge"),
     # ── Bausteine, Schreiber, Stand ──
     "services/snapshot/reader.py::get_snapshot": ("—", PRIMITIV, True, "ein Stand zum Zeitpunkt, heilt nach B-0"),
     "services/snapshot/reader.py::reihe_im_fenster": ("—", PRIMITIV, True, "die Stände zwischen zwei Rändern"),
@@ -128,13 +135,9 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/fallback.py::live_snapshot_if_missing": ("—", SCHREIBER, True, "Live-Rückfall der laufenden Stunde (B-0)"),
 }
 
-#: Die Einträge «liest die Reihe ohne Naht-Schutz» für Felder mit HA-Spiegel — die Liste, an der B-8 entscheidet
-#: (Bauplan §2 B-8: der Bau legt sie Gernot vor). Gleichheit, damit jede Änderung im Diff steht.
-OHNE_NAHT_SCHUTZ_MIT_HA_SPIEGEL = {
-    "services/kanal/nachfuellen.py::_rohstaende",
-    "services/snapshot/reaggregator.py::_counter_delta_alt",
-    "api/routes/diagnostics.py::live_snapshot_5min_diagnostics",
-}
+#: Die Einträge «liest die Reihe ohne Naht-Schutz» für Felder mit HA-Spiegel — die Liste, an der B-8 entschied. Seit Sitzung 4
+#: leer (B-8 entfällt, Entscheid Gernot 18.11.2026); Gleichheit, damit ein neuer Eintrag im Diff steht und rot ist.
+OHNE_NAHT_SCHUTZ_MIT_HA_SPIEGEL: set[str] = set()
 
 
 def _funktion_von(knoten: ast.AST, eltern: dict) -> str:

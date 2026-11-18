@@ -31,7 +31,7 @@ idempotent (Sitzung 2, §9 Nr. 25).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from sqlalchemy import func, select
@@ -58,6 +58,10 @@ SATZ_FORTSETZUNG = ("eedc überbrückt den Tausch am {zeit}: der Unterschied zwi
 SATZ_NACHTRAG = ("Die Stunde ab {stunde} Uhr ist schon gespeichert; sie zählt danach keinen Zuwachs — auch nicht, was in "
                  "dieser Stunde vor dem Tausch verbraucht wurde.")
 SATZ_NACHTRAG_BISHER = "Bisher zählt sie {zuwachs} {einheit}."
+#: Benannte Grenze «Zu §13» Nr. 87: ein fest gespeicherter Tageswert vom Tag des Tauschs bleibt (nur, wenn der Tausch nicht am
+#: laufenden Tag liegt — der laufende Tag wird alle 15 Minuten neu gebildet).
+SATZ_TAG_FEST = ("Hat eedc für den Tag des Tauschs schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den "
+                 "Unterschied weiter enthalten.")
 SATZ_OHNE_WERTE = "Dieses Feld hat noch keine eigenen Werte — es gibt keinen Sprung zu überbrücken."
 SATZ_KEINE_QUELLE = "Dieses Feld hat keine Quelle — ordne zuerst eine zu."
 SATZ_SCHON = "Dieser Tausch ist schon eingetragen."
@@ -82,6 +86,8 @@ class Lage:
     #: Was die Stunde ``nachtrag_ts`` bisher zählt (Kanal-Leser) und die Einheit des Kanals.
     zuwachs: Optional[float] = None
     einheit: Optional[str] = None
+    #: Der Tausch liegt vor dem laufenden Tag (dann nennt die Antwort ``SATZ_TAG_FEST``).
+    vor_heute: bool = False
 
 
 def _zeit(dt: Optional[datetime]) -> str:
@@ -128,9 +134,28 @@ async def _weg(db, key: str, q: dict, kanal, stunde: int) -> str:
     return WEG_FORTSETZUNG if kq.familie == FAMILIE_MITSCHRIFT else WEG_NICHT_MOEGLICH
 
 
+async def naht_stunde(db, kanal, zeitpunkt: datetime) -> int:
+    """Die Stunde, deren Zuwachs ein Wechsel um ``zeitpunkt`` trägt (Bauplan §13 Nr. 68) — eine Regel für Nachtrag, Einstieg
+    und Vorschau. Im Stundenlauf der Mitschrift (MQTT) gehört ein Rohstand zur Stunde, in der er eintraf, und die Stände ab
+    ``zeitpunkt`` beginnen die neue Periode: die Stunde, in der ``zeitpunkt`` liegt. Im **Nachbau-Abschnitt aus Home
+    Assistants Ständen** (``nachfuellen._rohstaende``, Kennung ``sensor_snapshots:…``) trägt die Zeile ``Z − 1 h`` den Stand
+    zur vollen Stunde ``Z``, und ein Stand ab ``ab_ts`` gehört zur neuen Quelle (wie ``nachfuellen._laeufe`` und die Leser der
+    Reihe): die Stunde vor ``ab_ts``. Beide stimmen überein, außer bei einem Wechsel genau zur vollen Stunde."""
+    from backend.services.kanal.angaben import quelle_zur_stunde
+    from backend.services.kanal.nachfuellen import STAENDE_HA_PRAEFIX
+
+    stunde = int(zeitpunkt.replace(minute=0, second=0, microsecond=0).timestamp())
+    vor_ab = int(ab_ts_aus(zeitpunkt).timestamp()) - 3600
+    if kanal is None or vor_ab == stunde:
+        return stunde
+    kq = await quelle_zur_stunde(db, kanal.id, vor_ab)
+    nachbau = kq is not None and (kq.statistic_id or "").startswith(STAENDE_HA_PRAEFIX)
+    return vor_ab if nachbau else stunde
+
+
 async def _nachtrag_stunde(db, kanal, stunde: int) -> Optional[int]:
-    """Die erste schon geschriebene Stunde ab der Stunde des Tauschs, wenn dort die Mitschrift (MQTT) gilt — nur sie trägt
-    den Nachtrag (``kanal/naht.nachtrag_fortsetzung``)."""
+    """Die erste schon geschriebene Stunde ab ``stunde`` (``naht_stunde``), wenn dort die Mitschrift (MQTT oder der
+    Nachbau-Abschnitt) gilt — nur sie trägt den Nachtrag (``kanal/naht.nachtrag_fortsetzung``)."""
     from backend.models.kanal import FAMILIE_MITSCHRIFT
     from backend.services.kanal.angaben import erste_zeile_ab, quelle_zur_stunde
 
@@ -146,8 +171,8 @@ async def _nachtrag_stunde(db, kanal, stunde: int) -> Optional[int]:
     return ts if dort is not None and dort.familie == FAMILIE_MITSCHRIFT and dort.verworfen_ts is None else None
 
 
-async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime) -> Lage:
-    """Welcher Weg gilt für dieses Feld zu diesem Zeitpunkt (lesend)."""
+async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *, heute: Optional[date] = None) -> Lage:
+    """Welcher Weg gilt für dieses Feld zu diesem Zeitpunkt (lesend). ``heute``: der laufende Tag (Proben; sonst die Uhr)."""
     from backend.services.kanal.angaben import kanal_des_schluessels, zuwachs_der_stunde
 
     if sensor_key is None or not await hat_eigene_werte(db, anlage.id, sensor_key):
@@ -160,7 +185,7 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime) ->
     erster = await _erster_wert(db, anlage.id, sensor_key, kanal)
     if erster is None or erster >= ab:
         return Lage(sensor_key, WEG_VOR_ERSTEM_WERT, q, getauscht_am, erster_wert=erster)
-    stunde = int(getauscht_am.replace(minute=0, second=0, microsecond=0).timestamp())
+    stunde = await naht_stunde(db, kanal, getauscht_am)
     weg = await _weg(db, sensor_key, q, kanal, stunde)
     if weg != WEG_FORTSETZUNG:
         return Lage(sensor_key, weg, q, getauscht_am)
@@ -169,7 +194,8 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime) ->
     nachtrag = await _nachtrag_stunde(db, kanal, stunde)
     zuwachs = await zuwachs_der_stunde(db, kanal, nachtrag) if nachtrag is not None else None
     return Lage(sensor_key, WEG_FORTSETZUNG, q, getauscht_am, kanal.id if kanal is not None else None, nachtrag, schon,
-                zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None)
+                zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None,
+                vor_heute=getauscht_am.date() < (heute or date.today()))
 
 
 def _saetze_fortsetzung(la: Lage) -> list[str]:
@@ -180,6 +206,8 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
         s.append(SATZ_NACHTRAG.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts))))
         if la.zuwachs is not None:
             s.append(SATZ_NACHTRAG_BISHER.format(zuwachs=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
+    if la.vor_heute:
+        s.append(SATZ_TAG_FEST)
     return s
 
 

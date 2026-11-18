@@ -232,6 +232,8 @@ POST /api/datenquellen/{anlage_id}/felder/{field_id}/zaehler-getauscht/pruefen
 POST /api/datenquellen/{anlage_id}/ha/takt-check
 POST /api/datenquellen/{anlage_id}/themen
 POST /api/datenquellen/{anlage_id}/themen/{t_id}/eintraege
+POST /api/datenquellen/{anlage_id}/zuordnung-wechsel/{wechsel_id}/grund
+POST /api/datenquellen/{anlage_id}/zuordnung-wechsel/{wechsel_id}/grund/pruefen
 POST /api/diagnostics/resnap-snapshots
 POST /api/energie-profil/reaggregate-heute
 POST /api/energie-profil/{anlage_id}/kanal-abgleich

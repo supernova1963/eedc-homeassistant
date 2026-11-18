@@ -68,6 +68,7 @@ import {
 import KorrekturFortschritt from './KorrekturFortschritt'
 import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
 import { useQuellenWechsel } from './useQuellenWechsel'
+import { useGrundNachtragen } from './useGrundNachtragen'
 
 const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quelle: null, mqtt: false }
 
@@ -193,10 +194,12 @@ interface TypCluster {
   geraete: DatenquelleGruppe[]
 }
 
-/** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`). */
+/** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`); Sensorwechsel S4:
+ *  `nachtrag=<id>` öffnet «Grund nachtragen» für einen verzeichneten Wechsel (`useGrundNachtragen`). */
 export interface DatenquellenSprung {
   geraet?: string
   feld?: string
+  nachtrag?: string
 }
 
 /**
@@ -358,6 +361,10 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   // Dialog nach dem Grund, bevor etwas gesendet wird (`useQuellenWechsel`, `SensorwechselDialog`).
   const wechsel = useQuellenWechsel(selectedAnlageId ?? null, setzeFeld, neuLaden)
   const aendereQuelle = wechsel.aendere
+  // Sensorwechsel S4 (B-7): «Grund nachtragen» aus dem Daten-Checker (`?nachtrag=<id>`) — gemerkt, bevor der Sprung endet.
+  const [nachtragId, setNachtragId] = useState<string | undefined>(undefined)
+  useEffect(() => { if (sprung?.nachtrag) setNachtragId(sprung.nachtrag) }, [sprung?.nachtrag])
+  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, nachtragId, wechsel.merkeLaeufe, neuLaden)
 
   // Direkte Quelle ohne Modal (Inbound / keine).
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {
@@ -912,6 +919,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
       )}
 
       {wechsel.dialog}
+
+      {nachtragDialog}
 
       {getauschtFeld && selectedAnlageId != null && (
         <ZaehlerGetauschtDialog

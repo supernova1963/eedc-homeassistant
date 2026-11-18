@@ -1515,6 +1515,18 @@ async def _run_data_migrations() -> None:
         from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_altbestand
         await _apply_once("sensorwechsel_s1_altbestand_aus_protokoll", ueberfuehre_altbestand)
 
+        # Sensorwechsel mit Grund (Sitzung 4, B-7, Konzept S-10 c): die Alt-Vermerke `historie_hinweis` im Mapping werden zu
+        # Wechsel-Zeilen (nur, wo die Abfrage gefragt hätte; sonst verfallen sie) und entfernt. Kein `_apply_once` — ein
+        # importiertes Mapping kann den Vermerk wieder mitbringen; ohne Vermerk tut der Schritt nichts. Nach der Überführung
+        # aus dem Protokoll (keine Doppelzeilen). Kein HTTP.
+        try:
+            from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_vermerke
+            await ueberfuehre_vermerke(session)
+            await session.commit()
+        except Exception as e:
+            logger.error(f"Sensorwechsel: Überführung der Alt-Vermerke fehlgeschlagen: {type(e).__name__}: {e}")
+            await session.rollback()
+
         # N-545: Die Sensor-Definitionen eines NEUEN Pakets starten bei einer
         # BESTANDSinstallation abgewaehlt (Entscheid Gernot 22.09.2026). Kein
         # `_apply_once` — der Name einer Migration gilt einmal je Installation,

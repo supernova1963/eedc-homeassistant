@@ -498,10 +498,16 @@ class _StaendeAbschnitt:
     an_quelle: Optional[int] = None
 
 
-def _laeufe(staende: list[tuple[datetime, float, str]], ziel: _ZielES) -> list[_StaendeAbschnitt]:
+def _laeufe(staende: list[tuple[datetime, float, str]], ziel: _ZielES, naehte=()) -> list[_StaendeAbschnitt]:
+    """Läufe gleicher Herkunft; an einer verzeichneten Fortsetzung (``naehte``: ``ab_ts``, Sensorwechsel S4) beginnt ein neuer
+    Lauf — er wird eine eigene Quelle, die am Kanalwert des vorigen ansetzt (``_offsets_rueckwaerts``), die Naht zählt nicht
+    als Zuwachs. Ein Stand trägt den Beginn seiner Stunde (``_rohstaende``), sein Zeitpunkt ist eine Stunde später."""
+    from backend.core.berechnungen.zaehler_naht import ueber_naht
+
     out: list[_StaendeAbschnitt] = []
+    stunde = timedelta(hours=1)
     for t, w, h in staende:
-        if not out or out[-1].herkunft != h:
+        if not out or out[-1].herkunft != h or ueber_naht(out[-1].staende[-1][0] + stunde, t + stunde, naehte):
             out.append(_StaendeAbschnitt(h, [], ziel.kennung(h)))
         out[-1].staende.append((t, w))
     return out
@@ -596,7 +602,9 @@ async def _plan_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES
         k = await sch._kontext(db, anlage, jetzt)
         anker = None if erste_ts is None else (await db.execute(select(KanalStatistik).where(and_(
             KanalStatistik.kanal_id == kanal.id, KanalStatistik.start_ts == erste_ts)))).scalar_one()
-        abschnitte = _laeufe(staende, ziel)
+        from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
+
+        abschnitte = _laeufe(staende, ziel, await fortsetzungs_naehte(db, anlage_id, ziel.key))
         letzter = abschnitte[-1]
         gleich = (anker is not None and erste_q is not None and erste_q.familie == FAMILIE_MITSCHRIFT
                   and erste_q.statistic_id == letzter.kennung)

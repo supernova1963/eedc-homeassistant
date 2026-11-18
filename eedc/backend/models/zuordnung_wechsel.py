@@ -3,8 +3,10 @@
 Eine Zeile = die **wirksame** Quelle eines Zählerschlüssels (``basis:<feld>`` / ``inv:<id>:<feld>``, dasselbe Schema wie
 ``sensor_snapshots.sensor_key``) hat sich geändert. Die Tabelle ist die fehlende Auskunft «welcher Sensor galt wann»:
 
-* ``erklaert_ts`` — Sekunde der Änderung (bzw. des Nachtrags; Altbestand: Zeit des Protokoll-Eintrags), örtliche Zeit ohne
-  Zone wie ``sensor_snapshots.zeitpunkt`` und ``activity_log.timestamp``.
+* ``erklaert_ts`` — Sekunde der Änderung (Altbestand: Zeit des Protokoll-Eintrags; eine nachgetragene «Fortsetzung» trägt die
+  Sekunde des Wechsels, den sie erklärt, eine nachgetragene «Korrektur» die Sekunde des Nachtrags — Bauplan §13 Nr. 75; der
+  Einstieg «Zähler getauscht» den Zeitpunkt des Tauschs), örtliche Zeit ohne Zone wie ``sensor_snapshots.zeitpunkt`` und
+  ``activity_log.timestamp``.
 * ``ab_ts`` — erste volle Stunde **ab** ``erklaert_ts`` (10:47:42 → 11:00; genau 11:00:00 → 11:00). Regel: ein Stand mit
   ``zeitpunkt ≥ ab_ts`` gehört zur neuen Quelle, einer davor zur alten (Lesestelle ``services/zuordnung_wechsel/zeitpunkt.py``).
 * ``vorher`` / ``nachher`` — die wirksame Quelle als kleines JSON (``art`` ha · mqtt · keine; Entität bzw. MQTT-Schlüssel mit

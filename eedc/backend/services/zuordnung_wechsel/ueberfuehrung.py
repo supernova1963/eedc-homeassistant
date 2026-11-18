@@ -14,6 +14,14 @@ deshalb am Kanal aufgelöst (``kanal_quelle``, die vor der Stunde des Eintrags g
 
 Idempotent zweifach: als Start-Migration läuft sie einmal je Installation (``core/database.py::_run_data_migrations``), und sie
 legt keine zweite Zeile mit gleicher Anlage, gleichem Schlüssel und gleicher Zeit an.
+
+**Alt-Vermerke** (``ueberfuehre_vermerke``, Sitzung 4, Bauplan B-7, Konzept S-10 c): der Vermerk ``historie_hinweis`` im
+gespeicherten Mapping (bis Sitzung 3b vom Hinweis-Block «Zuordnung geändert» gelesen und quittiert; seither schreibt ihn
+niemand) wird je Feld zu einer Zeile — aus dem **jüngsten** Protokoll-Eintrag des Felds (``vorher``, ``nachher``, Zeit, bewertet
+wie oben) und nur, wenn die Abfrage nach dem Grund gefragt hätte (``abfrage.haette_gefragt``); sonst verfällt er. Eine Zeile
+zum selben Eintrag (aus der Überführung oben) wird nicht doppelt angelegt; der Befund «Zuordnung geändert, Grund fehlt» nennt
+sie. Danach trägt kein Mapping den Schlüssel mehr. Läuft **bei jedem Start** (ein importiertes Mapping kann den Schlüssel
+wieder mitbringen) und tut ohne Vermerk nichts.
 """
 
 from __future__ import annotations
@@ -24,6 +32,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from backend.models.zuordnung_wechsel import HERKUNFT_ALTBESTAND, ZuordnungWechsel
 from backend.services.snapshot.keys import (
@@ -44,6 +53,10 @@ GRUND_UNVERAENDERT = "wirksam_unveraendert"
 GRUND_UNSICHER = "vorher_unbekannt"
 GRUND_OHNE_WERTE = "ohne_eigene_werte"
 GRUND_SCHON_DA = "schon_ueberfuehrt"
+GRUND_OHNE_PROTOKOLL = "ohne_protokoll"
+GRUND_NICHT_GEFRAGT = "nicht_gefragt"
+#: Schlüssel des Alt-Vermerks im Mapping (bis Sitzung 3b ``services/datenquellen_historie.HISTORIE_HINWEIS_KEY``).
+HISTORIE_HINWEIS_KEY = "historie_hinweis"
 UEBERFUEHRT = "ueberfuehrt"
 
 
@@ -184,6 +197,80 @@ async def ueberfuehre(db) -> Counter:
         await db.flush()
     vergiss(db)
     logger.info("Sensorwechsel: Überführung aus dem Protokoll — %s", dict(sorted(zaehlung.items())))
+    return zaehlung
+
+
+async def _juengster_eintrag(db, anlage_id: int, field_id: str):
+    """Der jüngste Protokoll-Eintrag der Feld-Route für ``field_id`` (mit ``vorher``/``nachher``), sonst ``None``."""
+    from backend.models.activity_log import ActivityLog
+
+    eintraege = (await db.execute(
+        select(ActivityLog).where(ActivityLog.kategorie == "sensor_mapping", ActivityLog.anlage_id == anlage_id)
+        .order_by(ActivityLog.timestamp.desc(), ActivityLog.id.desc())
+    )).scalars().all()
+    for e in eintraege:
+        dj = e.details_json if isinstance(e.details_json, dict) else {}
+        if dj.get("field_id") == field_id and "vorher" in dj and not isinstance(dj.get("vorher"), bool) \
+                and not isinstance(dj.get("nachher"), bool):
+            return e
+    return None
+
+
+async def _vermerk_feld(db, anlage_id: int, field_id) -> str:
+    """Ein Feld des Vermerks: Zeile anlegen (``UEBERFUEHRT``) oder der Grund, warum es verfällt."""
+    from backend.services.zuordnung_wechsel.abfrage import haette_gefragt
+
+    sensor_key = _energy_field_id_to_sensor_key(field_id) if isinstance(field_id, str) else None
+    if sensor_key is None:
+        return GRUND_KEIN_ZAEHLER
+    if not await _geraet_da(db, anlage_id, sensor_key):
+        return GRUND_GERAET_FEHLT
+    e = await _juengster_eintrag(db, anlage_id, field_id)
+    if e is None:
+        return GRUND_OHNE_PROTOKOLL
+    ergebnis, alt, neu = await _bewerte(db, e, sensor_key)
+    if ergebnis != UEBERFUEHRT:
+        return ergebnis
+    erklaert = e.timestamp.replace(microsecond=0)
+    row = ZuordnungWechsel(anlage_id=anlage_id, sensor_key=sensor_key, erklaert_ts=erklaert, ab_ts=ab_ts_aus(erklaert),
+                           vorher=alt, nachher=neu, grund=None, herkunft=HERKUNFT_ALTBESTAND)
+    if not await haette_gefragt(db, anlage_id, row):
+        return GRUND_NICHT_GEFRAGT
+    if (await db.execute(select(ZuordnungWechsel.id).where(
+            ZuordnungWechsel.anlage_id == anlage_id, ZuordnungWechsel.sensor_key == sensor_key,
+            ZuordnungWechsel.erklaert_ts == erklaert))).first() is not None:
+        return GRUND_SCHON_DA
+    db.add(row)
+    await db.flush()
+    return UEBERFUEHRT
+
+
+async def ueberfuehre_vermerke(db) -> Counter:
+    """Die Alt-Vermerke ``historie_hinweis`` überführen und entfernen (``flush``, kein Commit). Rückgabe: Zählung je
+    Ergebnis (``ueberfuehrt`` oder der Grund, aus dem der Vermerk eines Felds verfällt)."""
+    from backend.models.anlage import Anlage
+
+    zaehlung: Counter = Counter()
+    vergiss(db)
+    for anlage in (await db.execute(select(Anlage).order_by(Anlage.id))).scalars().all():
+        mapping = anlage.sensor_mapping
+        if not isinstance(mapping, dict) or HISTORIE_HINWEIS_KEY not in mapping:
+            continue
+        vermerk = mapping.get(HISTORIE_HINWEIS_KEY)
+        felder = vermerk.get("felder") if isinstance(vermerk, dict) else None
+        for f in felder if isinstance(felder, list) else ():
+            ergebnis = await _vermerk_feld(db, anlage.id, f.get("id") if isinstance(f, dict) else None)
+            zaehlung[ergebnis] += 1
+            vergiss(db, anlage.id)
+        neu = dict(mapping)
+        neu.pop(HISTORIE_HINWEIS_KEY, None)
+        anlage.sensor_mapping = neu
+        flag_modified(anlage, "sensor_mapping")
+        zaehlung["vermerke_entfernt"] += 1
+    await db.flush()
+    vergiss(db)
+    if zaehlung:
+        logger.info("Sensorwechsel: Alt-Vermerke überführt — %s", dict(sorted(zaehlung.items())))
     return zaehlung
 
 

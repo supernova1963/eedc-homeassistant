@@ -27,6 +27,7 @@
    8d. [PV – Messpunkt (Anlagenzähler und Strings)](#48d-pv--messpunkt)
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
    8f. [Zählerstände – versetzter Abschnitt](#48f-zaehlerstaende--versetzter-abschnitt)
+   8g. [Zählerstände – Zuordnung geändert, Grund fehlt](#48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -195,7 +196,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **39 Kategorien** mit **184 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **40 Kategorien** mit **185 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -225,6 +226,7 @@ eedc prüft **39 Kategorien** mit **184 Befunden** (gezählt an `CheckKategorie`
 | [Ein Gerät weicht an Tagen von Home Assistant ab](#drift_komponente) `drift_komponente` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung) `zaehler_ruecksprung` | §4.8a | Sprung | Sensor wechseln |
 | [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Aktion | Tage neu aufbauen |
+| [Zuordnung eines Zählers geändert, Grund fehlt](#zuordnung_grund_fehlt) `zuordnung_grund_fehlt` | §4.8g | Sprung | Grund nachtragen |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
 | [Ein Tag mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tag) `batterie_vorzeichen_tag` | §4.21 | Aktion | Tag neu aufbauen |
@@ -3065,7 +3067,8 @@ Ein Zählerstand muss fortlaufend steigen. Bei den genannten Feldern fällt der 
 30 Tagen mindestens einmal auf einen niedrigeren Wert zurück — typisch für ein Feld, das „heute“ oder „diesen Monat“
 meint statt des Gesamtstands. eedc bildet eine Menge aus zwei Ständen; liegt dazwischen ein Neubeginn, ist ihre
 Differenz keine Menge. Die Meldung nennt die Felder, wie oft es passiert ist, und belegt den jüngsten Fall mit beiden
-Ständen.
+Ständen. Ein Rückgang an einem Wechsel, den eedc als Fortsetzung kennt (Zähler getauscht oder neuer Sensor für dasselbe
+Gerät, Handbuch Einstellungen §7.7), zählt nicht — dort ist der neue Stand der Beginn des neuen Zählers.
 
 **Lösungsweg**
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Feld. Dort siehst
@@ -3461,6 +3464,60 @@ Was dieser Befund nicht erkennt oder nicht abdeckt:
   den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
 - Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
   gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch.
+
+### 4.8g Zählerstände – Zuordnung geändert, Grund fehlt <a name="48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt"></a>
+
+Wechselst du die Quelle eines Zählers, der schon eigene Werte hat, fragt eedc, warum: der neue Sensor misst dasselbe weiter
+(Fortsetzung), oder bisher war der falsche Sensor zugeordnet (Korrektur) — Handbuch Einstellungen §7.7. Danach rechnet
+eedc entsprechend. Ein Wechsel aus der Zeit vor dieser Frage, oder einer, zu dem noch ein Hinweis „Zuordnung geändert“
+offen war, ist ohne Grund verzeichnet; über ihn rechnet eedc wie früher. Diese Kategorie nennt jeden solchen Wechsel, nach
+dem eedc heute fragen würde, mit dem Handgriff **«Grund nachtragen»** — derselbe Dialog wie beim Wechsel, mit dem
+Zeitpunkt und beiden Quellen vorbelegt. Ohne einen solchen Wechsel bleibt die Kategorie leer.
+
+---
+
+#### Zuordnung eines Zählers geändert, Grund fehlt <a name="zuordnung_grund_fehlt"></a>
+
+**Was eedc sieht**
+Die Quelle eines Zählerfelds wurde gewechselt, als das Feld schon eigene Werte hatte — aber nicht verzeichnet ist, warum:
+der Wechsel stammt aus der Zeit, bevor eedc beim Wechsel nach dem Grund gefragt hat, oder aus einem Hinweis
+„Zuordnung geändert“, der noch offen war. eedc weiß deshalb nicht, ob der neue Sensor dasselbe weiter misst (etwa nach
+einem Zählertausch) oder ob bisher der falsche Sensor zugeordnet war. Die Meldung nennt Gerät, Feld und den Tag des
+Wechsels; Uhrzeit und beide Quellen stehen in den Details. Gemeldet wird nur ein Wechsel, nach dem eedc heute fragen
+würde — nicht ein Wechsel auf „Keine“, nicht die Rückkehr von „Keine“ zur letzten Quelle mit Werten und nicht ein Feld,
+das vorher noch keine Werte hatte.
+
+**Lösungsweg**
+1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
+   **„Warum wechselte die Quelle?"**; der Zeitpunkt und beide Quellen stehen oben.
+2. Messen beide Sensoren dasselbe: **„Der neue Sensor misst dasselbe weiter (Zähler getauscht, anderer Sensor für
+   dasselbe Gerät)"** wählen. Die bisherigen Werte bleiben, und der Unterschied zwischen altem und neuem Zählerstand zählt
+   nicht als Menge; wo eedc aus den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.
+   Für den Tag des Wechsels gilt: bildet eedc ihn aus seinen gespeicherten Stundenwerten, zählt der Unterschied danach
+   nicht mehr; hat eedc für diesen Tag schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den
+   Unterschied weiter enthalten.
+3. Waren die Werte vor dem Wechsel falsch: **„Bisher war der falsche Sensor zugeordnet"** wählen, unter
+   **„Falsch seit"** angeben, ab wann (vorbelegt ist der Beginn der Quelle vor dem Wechsel), und die Vorschau unter
+   **„Was danach geschieht"** lesen. eedc verwirft die Werte dieses Felds von „Falsch seit“ bis zum Wechsel und baut sie,
+   soweit Home Assistant die Geschichte des richtigen Sensors führt, aus ihm neu auf. Das geht für den jüngsten Wechsel
+   eines Felds, solange seine neue Quelle noch zugeordnet ist; die Korrektur lässt sich in eedc nicht rückgängig machen.
+4. **„Übernehmen"** klicken. Bei einer Korrektur zeigt die Datenquellen-Fläche oben, wie weit die Tage neu gebildet
+   sind.
+5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund verschwindet, sobald der Grund eingetragen ist.
+
+Nennt der Daten-Checker **zwei Wechsel desselben Felds** (etwa vom richtigen Sensor zu einem falschen und wieder zurück),
+beginne beim jüngeren. Wählst du dort **„Bisher war der falsche Sensor zugeordnet"**, ist **„Falsch seit"** mit dem älteren
+Wechsel vorbelegt. War vor dem älteren Wechsel schon der richtige Sensor zugeordnet, oder legst du „Falsch seit“ vor den
+älteren Wechsel, erledigt die Korrektur den älteren mit — der Daten-Checker nennt danach keinen der beiden mehr.
+
+**Was ohne Handlung gilt**
+eedc rechnet über den Wechsel hinweg wie bisher: wo ein Wert aus den gespeicherten Zählerständen entsteht (etwa ein
+Tageswert, der nicht aus der Statistik von Home Assistant kommt), kann der Unterschied zwischen altem und neuem
+Zählerstand als Menge zählen, und Werte des falschen Sensors bleiben stehen. Tage, die eedc aus der Statistik von Home
+Assistant rechnet, sind davon nicht betroffen. Gespeicherte Monatswerte ändern sich weder durch den Wechsel noch durch einen
+nachgetragenen Grund; nach einer Korrektur folgt, was eedc im Monat aus den Tagen rechnet (etwa der PV-Anteil einer Ladung),
+den neu gebildeten Tagen — die Vorschau nennt die Monate. Ein schon fest gespeicherter Tageswert vom Tag des Wechsels bleibt
+auch bei einer nachgetragenen Fortsetzung, wie er ist.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 

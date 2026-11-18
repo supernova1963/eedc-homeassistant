@@ -11,7 +11,7 @@
 import type { CheckZiel } from '../api/datenChecker'
 
 /** Reihenfolge der Parameter im Pfad (`kategorien.ZIEL_PARAMETER`). */
-export const ZIEL_PARAMETER = ['erfassen', 'bearbeiten', 'neu', 'tarif', 'art', 'ab', 'geraet', 'feld', 'karte', 'plan', 'wizard', 'befund']
+export const ZIEL_PARAMETER = ['erfassen', 'bearbeiten', 'neu', 'tarif', 'art', 'ab', 'geraet', 'feld', 'karte', 'plan', 'wizard', 'befund', 'nachtrag']
 
 export function zielPfad(ziel: CheckZiel | null | undefined): string | null {
   if (!ziel) return null

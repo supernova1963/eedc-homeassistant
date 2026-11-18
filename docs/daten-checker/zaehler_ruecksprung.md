@@ -5,7 +5,8 @@ Ein Zählerstand muss fortlaufend steigen. Bei den genannten Feldern fällt der 
 30 Tagen mindestens einmal auf einen niedrigeren Wert zurück — typisch für ein Feld, das „heute“ oder „diesen Monat“
 meint statt des Gesamtstands. eedc bildet eine Menge aus zwei Ständen; liegt dazwischen ein Neubeginn, ist ihre
 Differenz keine Menge. Die Meldung nennt die Felder, wie oft es passiert ist, und belegt den jüngsten Fall mit beiden
-Ständen.
+Ständen. Ein Rückgang an einem Wechsel, den eedc als Fortsetzung kennt (Zähler getauscht oder neuer Sensor für dasselbe
+Gerät, Handbuch Einstellungen §7.7), zählt nicht — dort ist der neue Stand der Beginn des neuen Zählers.
 
 ## Lösungsweg
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich beim betroffenen Feld. Dort siehst

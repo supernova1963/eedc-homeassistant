@@ -6,7 +6,9 @@ die Geschichte des richtigen Sensors führt — aus ihr neu gefüllt. Fünf Schr
 
 1. **Wechsel-Zeile** (``zuordnung_wechsel``: ``grund = korrektur``, ``falsch_seit_ts``, ``ab_ts``) — mit ihr liefert
    ``zeitpunkt.quelle_am`` im Intervall ``nachher`` (B-0). Eine frühere Zeile ohne Grund, die denselben Wechsel beschreibt
-   (gleiche neue Quelle, ``ab_ts`` im Intervall oder höchstens eine Stunde danach), wird aufgehoben (``aufgehoben_durch``).
+   (gleiche neue Quelle, ``ab_ts`` im Intervall oder höchstens eine Stunde danach), wird aufgehoben (``aufgehoben_durch``),
+   ebenso jede Zeile ohne Grund oder mit «Fortsetzung», deren ``ab_ts`` im Intervall liegt, und die Zeile am Rand
+   «falsch seit», deren ``vorher`` die richtige Quelle ist (Bauplan §13 Nr. 67; ``_im_intervall``). Korrektur-Zeilen bleiben.
 2. **Im Intervall verwerfen:** Kanalzeilen nur in Abschnitten, deren Quelle nicht die richtige ist (``kanal/korrektur.py``) ·
    Zählerstände (``sensor_snapshots`` des Schlüssels) · MQTT-Rohstände des Schlüssels · Feldschlüssel der Tageszeilen nach den
    Regeln der Werkbank (``verwerfen_vor_quellbeginn.leere_bestand``; Tage, deren Fenster ganz im Intervall liegt; Monate mit
@@ -257,20 +259,25 @@ SATZ_KANAL_OHNE_GESCHICHTE = ("Home Assistant führt für den richtigen Sensor i
                               "dort danach keinen Wert.")
 SATZ_KANAL_MQTT = ("Eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte — von «Falsch seit» bis jetzt hat das Feld "
                    "danach keinen Wert.")
+#: Dasselbe im Nachtrag (Bauplan §13 Nr. 69): dort endet das verworfene Intervall am Wechsel, nicht jetzt.
+SATZ_KANAL_MQTT_NACHTRAG = ("Eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte — von «Falsch seit» bis zum "
+                            "Wechsel hat das Feld danach keinen Wert.")
 
 
-async def kanal_saetze(la: Lage, ha_svc) -> list[str]:
+async def kanal_saetze(la: Lage, ha_svc, *, bis_zum_wechsel: bool = False) -> list[str]:
     """Die Dialog-Vorschau nennt den Kanal (Bauplan §11 Nr. 48): ab wann Home Assistant die Geschichte des richtigen Sensors
     führt, wenn das nach dem Beginn des verworfenen Teils (``w0``) liegt, und dass eine MQTT-Quelle keine Geschichte
     nachholt. Derselbe Beginn ``h0`` wie im Lauf (``kanal/korrektur.erste_ha_zeile`` ab ``w0`` bis zum Soll-Ende) —
-    Vorschau = Lauf. Ohne Home Assistant sagt ``SATZ_OHNE_HA`` genug."""
+    Vorschau = Lauf. Ohne Home Assistant sagt ``SATZ_OHNE_HA`` genug. ``bis_zum_wechsel``: «Grund nachtragen» — das
+    Intervall endet am Wechsel (``SATZ_KANAL_MQTT_NACHTRAG``)."""
     from backend.services.kanal.korrektur import erste_ha_zeile, fuell_ende
 
     if la.nicht_startbar:
         return []
     eid = richtige_entitaet(la.auftrag.nachher)
     if eid is None:
-        return [SATZ_KANAL_MQTT] if (la.kanal.zeilen or la.zaehlerstaende or la.rohstaende) else []
+        satz = SATZ_KANAL_MQTT_NACHTRAG if bis_zum_wechsel else SATZ_KANAL_MQTT
+        return [satz] if (la.kanal.zeilen or la.zaehlerstaende or la.rohstaende) else []
     if ha_svc is None or la.kanal.w0 is None:
         return []
     h0 = await erste_ha_zeile(ha_svc, eid, la.kanal.w0, fuell_ende(int(datetime.now().timestamp())))
@@ -295,13 +302,28 @@ def _beginn(a: Auftrag, w0: Optional[int]) -> datetime:
     return a.falsch_seit or (datetime.fromtimestamp(w0) if w0 is not None else a.ab)
 
 
+def _im_intervall(a: Auftrag, w: ZuordnungWechsel) -> bool:
+    """Bauplan §13 Nr. 67: eine Zeile, die die Korrektur gegenstandslos macht — ``ab_ts`` **im** verworfenen Intervall
+    (``falsch_seit < ab_ts < ab``; ohne ``falsch_seit`` von Beginn an), oder am Rand ``ab_ts = falsch_seit``, wenn ihr
+    ``vorher`` die richtige Quelle ist (der Wechsel ist rückgängig gemacht; mit anderem ``vorher`` wechselt dort weiter etwas)."""
+    if not w.ab_ts < a.ab:
+        return False
+    if a.falsch_seit is None or w.ab_ts > a.falsch_seit:
+        return True
+    return w.ab_ts == a.falsch_seit and (w.vorher or {}) == (a.nachher or {})
+
+
 async def _ersetzte(db: AsyncSession, a: Auftrag, f: datetime) -> list[ZuordnungWechsel]:
-    """Frühere Zeilen ohne Grund für denselben Wechsel (gleiche neue Quelle, ``ab_ts`` in ``[f, ab + 1 h]``)."""
-    alte = (await db.execute(select(ZuordnungWechsel).where(and_(
+    """Die Zeilen, die die Korrektur aufhebt (nie eine Korrektur-Zeile): frühere Zeilen ohne Grund oder mit «Fortsetzung»
+    für denselben Wechsel (gleiche neue Quelle, ``ab_ts`` in ``[f, ab + 1 h]``) und — Bauplan §13 Nr. 67 — jede Zeile ihres
+    Intervalls (``_im_intervall``: beide Seiten oder ihre neue Quelle sind verworfen). Ein Dienst für Dialog, Nachtrag und
+    Werkbank; Vorschau und Lauf zählen über dieselbe Liste (``wirksames_ab``)."""
+    alle = (await db.execute(select(ZuordnungWechsel).where(and_(
         ZuordnungWechsel.anlage_id == a.anlage_id, ZuordnungWechsel.sensor_key == a.sensor_key,
-        ZuordnungWechsel.aufgehoben_durch.is_(None), ZuordnungWechsel.ab_ts >= f,
-        ZuordnungWechsel.ab_ts <= a.ab + timedelta(hours=1))))).scalars().all()
-    return [w for w in alte if w.grund != GRUND_KORREKTUR and (w.nachher or {}) == (a.nachher or {})]
+        ZuordnungWechsel.aufgehoben_durch.is_(None), ZuordnungWechsel.ab_ts <= a.ab + timedelta(hours=1),
+    )).order_by(ZuordnungWechsel.id))).scalars().all()
+    return [w for w in alle if w.grund != GRUND_KORREKTUR and (
+        (w.ab_ts >= f and (w.nachher or {}) == (a.nachher or {})) or _im_intervall(a, w))]
 
 
 async def wirksames_ab(db: AsyncSession, a: Auftrag, w0: Optional[int]) -> datetime:

@@ -4,7 +4,7 @@ Daten-Checker — Provenance-Konflikte, Datenquelle-Status & -Drift
 
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 
-Seit 18.09.2026 ein Unterpaket (Vorlage 9 des Refactorings grosser Dateien, reiner Umzug): ``quellen`` · ``tage`` · ``speicher`` · ``klima`` · ``connector`` · ``zeitzone`` · ``ruecksprung`` · ``ha_sprung`` · ``ha_rueckgang`` · ``messpunkt`` · ``zaehler_steht`` (N-662) · ``versatz`` (Verdacht N-803) — je Prüf-Familie eine Mixin-Klasse. Diese Fassade trägt ``DatenquelleChecks`` als Verbund weiter; ``DatenChecker`` (``daten_checker/__init__.py``)
+Seit 18.09.2026 ein Unterpaket (Vorlage 9 des Refactorings grosser Dateien, reiner Umzug): ``quellen`` · ``tage`` · ``speicher`` · ``klima`` · ``connector`` · ``zeitzone`` · ``ruecksprung`` · ``ha_sprung`` · ``ha_rueckgang`` · ``messpunkt`` · ``zaehler_steht`` (N-662) · ``versatz`` (Verdacht N-803) · ``grund_fehlt`` (Sensorwechsel S4) — je Prüf-Familie eine Mixin-Klasse. Diese Fassade trägt ``DatenquelleChecks`` als Verbund weiter; ``DatenChecker`` (``daten_checker/__init__.py``)
 komponiert wie bisher. Die Helfer und Konstanten liegen bei ihren Prüfungen (Patch-Ziel der Tests ist das jeweilige Modul).
 """
 
@@ -20,6 +20,7 @@ from .ha_rueckgang import HaRueckgangChecks
 from .messpunkt import MesspunktChecks
 from .zaehler_steht import ZaehlerStehtChecks
 from .versatz import ZaehlerVersatzChecks
+from .grund_fehlt import GrundFehltChecks
 
 
 class DatenquelleChecks(
@@ -35,6 +36,7 @@ class DatenquelleChecks(
     MesspunktChecks,
     ZaehlerStehtChecks,
     ZaehlerVersatzChecks,
+    GrundFehltChecks,
 ):
     """Prüfungen zu Quellen-Konflikten und HA-LTS-Datenquellen-Pfad."""
 

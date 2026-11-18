@@ -5084,7 +5084,8 @@ einer davor zur alten.
 
 ```
 Quelle(Schlüssel, z) = vorher des frühesten nicht aufgehobenen Wechsels mit ab_ts > z,
-                       bei einer Korrektur in [falsch_seit_ts, ab_ts) deren nachher,
+                       bei einer Korrektur in [falsch_seit_ts, ab_ts) deren nachher; vor falsch_seit_ts zählen die
+                       Zeilen, die sie aufgehoben hat, weiter (dort gilt, was ohne die Korrektur galt — Sitzung 4-K),
                        sonst die heutige Zuordnung                       (zuordnung_wechsel/zeitpunkt.py::quelle_am)
 Schreiben für z      = gilt um z die heutige Quelle ⇒ wie bisher (auch das Löschen einer Stunden-Zeile ohne HA-Wert, #184);
                        sonst füllt der Schreiber NUR fehlende Zeilen aus der Quelle zum Zeitpunkt — eine vorhandene
@@ -5134,8 +5135,24 @@ Nachtrag      = für schon geschriebene Zeilen: Quellzeile gueltig_ab = H,
                 offset = offset_alt − (Wert der Naht-Zeile − Wert der vorigen Zeile) — die Naht-Stunde ohne Zuwachs,
                 keine Kanalzeile umgeschrieben; spätere Quellzeilen rücken um dieselbe Verschiebung mit (ihr Versatz ist der
                 Kanalwert am Schluss der Vorgängerin — sonst käme der Sprung an ihrer Grenze zurück; bestätigt Master 17.11.); beginnt zwischen voriger Zeile und Naht-Zeile schon eine Quelle
-                (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal
-                (kanal/naht.py::nachtrag_fortsetzung; Oberfläche seit Sitzung 3b nur über «Zähler getauscht», unten)
+                (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal; verworfen werden
+                ab H nur die abgeleiteten Kanäle, die aus dem Feld rechnen (dieselbe Auskunft wie die Korrektur unten,
+                Sitzung 4 — §10 Nr. 34) (kanal/naht.py::nachtrag_fortsetzung; Oberfläche: «Zähler getauscht» und
+                «Grund nachtragen», unten)
+Nachbau       = der Stände-Nachbau vor der ersten Kanalzeile (nachfuellen._rohstaende, Familie Mitschrift, HA-Stände
+                wörtlich) beginnt an einer verzeichneten Fortsetzung einen neuen Lauf (_laeufe) — eine eigene Quelle,
+                die am Kanalwert des vorigen ansetzt; eine später nachgetragene Fortsetzung trägt der Nachtrag (Sitzung 4)
+Naht-Stunde   = die Stunde, die der Nachtrag (Einstieg und «Grund nachtragen») ohne Zuwachs lässt
+                (zaehler_getauscht.naht_stunde, Sitzung 4-K): im Stundenlauf der Mitschrift die Stunde, in der erklaert_ts
+                liegt (ein Rohstand gehört zur Stunde, in der er eintraf); im Nachbau-Abschnitt aus HA-Ständen
+                (Kennung sensor_snapshots:…) die Stunde vor ab_ts (die Zeile Z − 1 h trägt den Stand zur vollen Stunde Z,
+                ein Stand ab ab_ts gehört zur neuen Quelle — wie _laeufe). Beide stimmen überein außer bei einem Wechsel
+                genau zur vollen Stunde. Benannte Grenze: ein Nachbau-Abschnitt aus MQTT-Ständen trägt dieselbe Kennung
+                wie der Stundenlauf und ist von ihm nicht zu unterscheiden — dort gilt die Stunde des Zeitpunkts
+Rücksprung    = ein Paar über eine Fortsetzungs-Naht ist kein Rücksprung (reader.finde_zaehler_ruecksprunge,
+                Befund zaehler_ruecksprung, Sitzung 4)
+Versatz       = ein Rand eines versetzten Abschnitts an einer Fortsetzungs-Naht ist ohne Wirkung — der Befund
+                zaehler_versatz meldet nur, solange ein Rand-Tag über die Reihe ohne Naht rechnet (Sitzung 4-K)
 ```
 
 **Benannte Grenze:** die Menge zwischen dem letzten Stand vor und dem ersten Stand ab `ab_ts` zählt nicht (stündliche Stände bis
@@ -5212,6 +5229,44 @@ Stände sind Zählerstände (Spalte `state` der Kanalzeile bzw. der HA-Stundenze
 letzte Quelle mit Werten, kein → «Keine», kein «Zähler getauscht»), sonst der Beginn ihres Abschnitts im Kanal. Proben:
 `test_sensorwechsel_s3b_abfrage.py`, `test_sensorwechsel_s3bk_proben.py`.
 
+#### Grund nachtragen (B-7, Sitzung 4)
+
+```
+offen         = Wechsel-Zeile nicht aufgehoben, Grund leer, und die Abfrage hätte gefragt — dieselbe Regel zum Zeitpunkt
+                des Wechsels: eigene Werte vor ab_ts, nachher kann Werte liefern, nachher ≠ letzte Quelle mit Werten
+                davor (abfrage.haette_gefragt; «davor» = kleineres ab_ts oder gleiches ab_ts und kleinere Zeilen-Nummer —
+                «Keine» und zurück in derselben Stunde ist kein Befund, Sitzung 4-K); kein «Zähler getauscht» (vorher = nachher)
+                                                  ⇒ Befund «Zuordnung geändert, Grund fehlt» (daten_checker/datenquelle/grund_fehlt.py)
+Fortsetzung   = neue Zeile herkunft = nachtrag, grund = fortsetzung, erklaert_ts und ab_ts des Wechsels (erklaert_ts NICHT
+                die Sekunde des Nachtrags — an ihr teilt der MQTT-Stundenlauf die Periode), vorher/nachher wie die Zeile;
+                die Zeile selbst: aufgehoben_durch = neue Zeile. Reihe: die Naht oben. Kanal: gilt zur Naht-Stunde (oben)
+                die Mitschrift (MQTT oder Nachbau-Abschnitt), der Nachtrag oben an der ersten geschriebenen Stunde ab ihr;
+                ein Spiegel-Abschnitt folgt HAs Summe (ein Wechsel der Entität hat dort seine eigene Kanal-Quelle)
+Korrektur     = der Lauf unten mit falsch in [falsch_seit, ab_ts des Wechsels), richtig = nachher, herkunft = nachtrag; nur
+                für den jüngsten nicht aufgehobenen Wechsel des Schlüssels, dessen nachher die heutige wirksame Quelle ist
+                (der Lauf füllt aus der heutigen Quelle); falsch_seit vor ab_ts; Vorschau = Lauf; startet nicht, solange
+                für das Feld ein Korrektur-Lauf offen ist (wie die Werkbank); die Korrektur hebt die Wechsel-Zeilen
+                ihres Intervalls auf (Schritt 1 unten) — bei A → X → A erledigt die Korrektur am zweiten Wechsel mit
+                «falsch seit» = erster Wechsel (die Vorgabe) den ersten mit
+Übergänge     = leer → Fortsetzung | Korrektur; Fortsetzung → Korrektur (die Korrektur-Zeile hebt sie auf); Korrektur → nichts
+Grenze Tag    = benannte Grenze (Sitzung 4-K, Bauplan «Zu §13» Nr. 87): eine nachgetragene Fortsetzung (auch der Einstieg
+                «Zähler getauscht» vor dem laufenden Tag) bildet keinen Tag neu. Liest die Sicht den Tag aus den Kanälen,
+                zählt der Unterschied danach nicht (gemessen MQTT-Netzbezug, Kanal-Tag: tage-werte 2 024,0 → 23,0); ein
+                Bestandstag behält seinen gespeicherten Tageswert (gemessen 2 024,0 → 2 024,0, auch defizit_kwh und
+                gesamtverbrauch; Befund «Grund fehlt» 1 → 0). «Tag neu aggregieren» bildet einen MQTT-Bestandstag ohne
+                Leistungsverlauf des Tages nicht neu (_reparatur_aggregat → unveraendert:keine_live_zuordnung; der MQTT-
+                Live-Verlauf reicht 15 Tage). Der laufende Tag wird alle 15 Minuten neu gebildet. Dialog und Einstieg
+                nennen die Grenze (NACHTRAG_FORTSETZUNG_ZUSATZ, zaehler_getauscht.SATZ_TAG_FEST)
+Alt-Vermerke  = historie_hinweis im Mapping je Feld: der jüngste Protokoll-Eintrag (vorher, nachher, Zeit; bewertet wie die
+                Überführung aus dem Protokoll) wird eine Zeile, wenn die Abfrage gefragt hätte und keine Zeile zum selben
+                Eintrag besteht — sonst verfällt er; danach ist der Vermerk entfernt (bei jedem Start, ohne Vermerk nichts;
+                zuordnung_wechsel/ueberfuehrung.py::ueberfuehre_vermerke)
+```
+
+Routen: `POST /api/datenquellen/{anlage}/zuordnung-wechsel/{wechsel}/grund/pruefen` (schreibt nichts; mit `grund = korrektur` und
+`falsch_seit` die Vorschau) und `…/grund`. Der Handgriff des Befunds springt mit `nachtrag=<id>` in die Datenquellen; dort öffnet
+derselbe Dialog als «Warum wechselte die Quelle?». Proben: `test_sensorwechsel_s4_nachtrag.py`, `test_sensorwechsel_s4k_proben.py`.
+
 #### Korrektur (B-6, Sitzung 3)
 
 «Bisher war der falsche Sensor zugeordnet, seit `falsch_seit`»: für `[falsch_seit, ab)` gilt danach die richtige (heutige) Quelle.
@@ -5219,7 +5274,12 @@ Ein Lauf (`zuordnung_wechsel/korrektur.py`), aufgerufen von der Abfrage (oben) u
 verwerfen» (`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Sensors):
 
 ```
-1  Wechsel-Zeile        grund = korrektur, falsch_seit_ts, ab_ts; eine Zeile ohne Grund für denselben Wechsel wird aufgehoben
+1  Wechsel-Zeile        grund = korrektur, falsch_seit_ts, ab_ts; aufgehoben werden: eine Zeile ohne Grund für denselben
+                        Wechsel (gleiche neue Quelle, ab_ts in [f, ab + 1 h]) und jede Zeile ohne Grund oder mit
+                        «Fortsetzung» des Intervalls — ab_ts in (falsch_seit, ab) (ohne falsch_seit: vor ab), am Rand
+                        ab_ts = falsch_seit nur, wenn ihr vorher die richtige Quelle ist (Sitzung 4-K, korrektur._im_intervall);
+                        Korrektur-Zeilen bleiben. Vor falsch_seit zählen die aufgehobenen Zeilen für B-0 weiter (oben):
+                        bei A → X → A mit Korrektur am zweiten Wechsel gilt vor dem ersten weiter A, nicht X
 2  verwerfen in [f, ab) Kanalzeilen nur der Abschnitte, deren Quelle nicht die richtige ist · Zählerstände · MQTT-Rohstände
                         · Feldschlüssel der Tageszeilen (Tage, deren Fenster ganz im Intervall liegt; Monate mit Abschluss bleiben)
 3  Kanal                w0  = Beginn des falschen Teils, h0 = erste HA-Zeile der richtigen Entität ab w0

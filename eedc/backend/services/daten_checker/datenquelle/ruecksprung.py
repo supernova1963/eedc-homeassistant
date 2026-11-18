@@ -123,6 +123,7 @@ class RuecksprungChecks:
         from backend.services.snapshot.reader import (
             MQTT_AKTIV_TAGE, finde_zaehler_ruecksprunge, mqtt_zaehler_keys,
         )
+        from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
         kat = CheckKategorie.ZAEHLER_RUECKSPRUNG.value
 
@@ -163,8 +164,10 @@ class RuecksprungChecks:
 
         betroffen: list[tuple[str, int, datetime, float, float, str]] = []
         for sensor_key in sorted(keys):
+            # Sensorwechsel S4: ein Rücksprung an einer verzeichneten Fortsetzung ist erklärt (die Leser überbrücken ihn).
             spruenge = await finde_zaehler_ruecksprunge(
                 self.db, anlage.id, sensor_key, von, bis,
+                naehte=tuple(await fortsetzungs_naehte(self.db, anlage.id, sensor_key)),
             )
             if spruenge:
                 zeitpunkt, vorher, nachher = spruenge[-1]  # der jüngste

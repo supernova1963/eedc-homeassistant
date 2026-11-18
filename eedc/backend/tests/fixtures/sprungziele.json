@@ -11,7 +11,8 @@
   ],
   "einstellungen/datenquellen": [
    "feld",
-   "geraet"
+   "geraet",
+   "nachtrag"
   ],
   "einstellungen/integration#import-buendel": [
    "block",
@@ -415,6 +416,18 @@
     "anker": "zaehlerstand"
    },
    "pfad": "/einstellungen/datenquellen?geraet=1&feld=zaehlerstand"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "nachtrag": 1
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&nachtrag=1"
   },
   {
    "ziel": {

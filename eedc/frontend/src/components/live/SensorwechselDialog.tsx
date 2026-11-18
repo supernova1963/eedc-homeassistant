@@ -8,6 +8,11 @@
  * «Korrektur» das Feld «falsch seit» (vorbelegt: Beginn der bisherigen Quelle) und die Vorschau des Korrektur-Dienstes
  * (`onVorschau` — dieselbe Prüf-Route mit Grund, Vorschau = Lauf), **bevor** etwas geändert wird. «Abbrechen» lässt die
  * bisherige Zuordnung stehen. Der Client rechnet nichts: Zahlen und Sätze kommen aus dem Backend.
+ *
+ * **Grund nachtragen** (Sitzung 4, Bauplan B-7): derselbe Dialog für einen schon verzeichneten Wechsel ohne Grund (`nachtrag`):
+ * Titel in der Vergangenheit, der Wechsel als Satz oben, nur die zulässigen Gründe (`…/grund/pruefen`: Fortsetzung → Korrektur
+ * ja, Korrektur nie mehr; Korrektur nur am jüngsten Wechsel, sonst ein Satz warum), «Falsch seit» vorbelegt mit dem Beginn der
+ * Quelle vor dem Wechsel.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, RadioGroup } from '../ui'
@@ -24,11 +29,31 @@ export const GRUND_KORREKTUR = 'Bisher war der falsche Sensor zugeordnet'
 export const GRUND_KORREKTUR_FOLGE =
   'Die Werte dieses Felds seit «falsch seit» werden verworfen und — soweit Home Assistant die Geschichte des richtigen ' +
   'Sensors führt — aus ihm neu aufgebaut. Die Vorschau unten sagt, was genau geschieht.'
+/** Im Nachtrag liegt der Wechsel in der Vergangenheit: ein fest gespeicherter Tageswert vom Tag des Wechsels bleibt (benannte
+ * Grenze, Bauplan «Zu §13» Nr. 87) — neben dem freigegebenen Satz `GRUND_FORTSETZUNG_FOLGE`, der wörtlich bleibt. */
+export const NACHTRAG_FORTSETZUNG_ZUSATZ =
+  'Hat eedc für den Tag des Wechsels schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den ' +
+  'Unterschied weiter enthalten.'
+/** Im Nachtrag endet das verworfene Intervall am Wechsel (Bauplan §13 Nr. 69). */
+export const NACHTRAG_GRUND_KORREKTUR_FOLGE =
+  'Die Werte dieses Felds von «falsch seit» bis zum Wechsel werden verworfen und — soweit Home Assistant die Geschichte ' +
+  'des richtigen Sensors führt — aus ihm neu aufgebaut. Die Vorschau unten sagt, was genau geschieht.'
 export const FALSCH_SEIT_LABEL = 'Falsch seit'
 export const FALSCH_SEIT_HINWEIS = 'Vorbelegt ist der Beginn der bisherigen Quelle; gezählt wird ab der vollen Stunde.'
 export const ABBRECHEN_HINWEIS = '«Abbrechen» lässt die bisherige Zuordnung unverändert.'
 export const VORSCHAU_TITEL = 'Was danach geschieht'
 export const VORSCHAU_LAEDT = 'Vorschau wird geladen …'
+export const NACHTRAG_TITEL = 'Warum wechselte die Quelle?'
+export const NACHTRAG_FALSCH_SEIT_HINWEIS = 'Vorbelegt ist der Beginn der Quelle vor dem Wechsel; gezählt wird ab der vollen Stunde.'
+export const NACHTRAG_ABBRECHEN_HINWEIS = '«Abbrechen» trägt nichts ein.'
+export const NACHTRAG_NICHTS = 'Für diesen Wechsel ist kein Grund nachzutragen.'
+
+/** «Grund nachtragen»: der Wechsel als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom Backend). */
+export interface NachtragAngaben {
+  wechselSatz: string
+  gruende: WechselGrund[]
+  korrekturNicht?: string | null
+}
 
 /** «hat eigene Werte seit … (n Tage)» und die Stände — nur Anzeige der Backend-Zahlen. */
 export function werteSatz(f: QuellePruefung): string {
@@ -60,9 +85,13 @@ interface Props {
   onAbbrechen: () => void
   laeuft?: boolean
   fehler?: string | null
+  /** Grund nachtragen an einem verzeichneten Wechsel (eine Zeile); ohne: die Abfrage beim Wechsel. */
+  nachtrag?: NachtragAngaben
 }
 
-export default function SensorwechselDialog({ isOpen, fragen, onVorschau, onBestaetigen, onAbbrechen, laeuft, fehler }: Props) {
+export default function SensorwechselDialog({
+  isOpen, fragen, onVorschau, onBestaetigen, onAbbrechen, laeuft, fehler, nachtrag,
+}: Props) {
   const [wahl, setWahl] = useState<Record<string, Wahl>>({})
 
   useEffect(() => {
@@ -107,13 +136,24 @@ export default function SensorwechselDialog({ isOpen, fragen, onVorschau, onBest
     onBestaetigen(gruende)
   }
 
+  const optionen = [
+    { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG,
+      description: nachtrag ? `${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : GRUND_FORTSETZUNG_FOLGE },
+    { value: 'korrektur' as const, label: GRUND_KORREKTUR, description: nachtrag ? NACHTRAG_GRUND_KORREKTUR_FOLGE : GRUND_KORREKTUR_FOLGE },
+  ].filter((o) => !nachtrag || nachtrag.gruende.includes(o.value))
+  const nichts = !!nachtrag && nachtrag.gruende.length === 0
+
   return (
-    <Modal isOpen={isOpen} onClose={onAbbrechen} title={DIALOG_TITEL} size="lg">
+    <Modal isOpen={isOpen} onClose={onAbbrechen} title={nachtrag ? NACHTRAG_TITEL : DIALOG_TITEL} size="lg">
       <div className="space-y-5" data-sensorwechsel-dialog>
+        {nachtrag && (
+          <p className="text-sm text-gray-700 dark:text-gray-200" data-nachtrag-wechsel>{nachtrag.wechselSatz}</p>
+        )}
+        {nichts && <Alert type="info">{NACHTRAG_NICHTS}</Alert>}
         {fragen.map((f) => {
           const key = f.sensor_key ?? ''
           const w = wahl[key]
-          if (!w) return null
+          if (!w || nichts) return null
           return (
             <div key={key} className="space-y-3" data-sensorwechsel-feld={key}>
               <p className="text-sm text-gray-700 dark:text-gray-200">
@@ -127,17 +167,17 @@ export default function SensorwechselDialog({ isOpen, fragen, onVorschau, onBest
                   setze(key, { grund: g })
                   if (g === 'korrektur') ladeVorschau(key, w.falschSeit)
                 }}
-                options={[
-                  { value: 'fortsetzung', label: GRUND_FORTSETZUNG, description: GRUND_FORTSETZUNG_FOLGE },
-                  { value: 'korrektur', label: GRUND_KORREKTUR, description: GRUND_KORREKTUR_FOLGE },
-                ]}
+                options={optionen}
               />
+              {nachtrag?.korrekturNicht && (
+                <p className="text-xs text-gray-500 dark:text-gray-400" data-korrektur-nicht>{nachtrag.korrekturNicht}</p>
+              )}
               {w.grund === 'korrektur' && (
                 <div className="space-y-2 pl-6">
                   <Input
                     type="datetime-local"
                     label={FALSCH_SEIT_LABEL}
-                    hint={FALSCH_SEIT_HINWEIS}
+                    hint={nachtrag ? NACHTRAG_FALSCH_SEIT_HINWEIS : FALSCH_SEIT_HINWEIS}
                     value={w.falschSeit}
                     onChange={(e) => { setze(key, { falschSeit: e.target.value }); ladeVorschau(key, e.target.value) }}
                     data-falsch-seit={key}
@@ -157,13 +197,17 @@ export default function SensorwechselDialog({ isOpen, fragen, onVorschau, onBest
             </div>
           )
         })}
-        <p className="text-xs text-gray-500 dark:text-gray-400">{ABBRECHEN_HINWEIS}</p>
+        {!nichts && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">{nachtrag ? NACHTRAG_ABBRECHEN_HINWEIS : ABBRECHEN_HINWEIS}</p>
+        )}
         {fehler && <Alert type="error">{fehler}</Alert>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onAbbrechen}>Abbrechen</Button>
-          <Button type="button" onClick={bestaetigen} disabled={!bereit || laeuft} loading={laeuft} data-sensorwechsel-ok>
-            Übernehmen
-          </Button>
+          {!nichts && (
+            <Button type="button" onClick={bestaetigen} disabled={!bereit || laeuft} loading={laeuft} data-sensorwechsel-ok>
+              Übernehmen
+            </Button>
+          )}
         </div>
       </div>
     </Modal>
