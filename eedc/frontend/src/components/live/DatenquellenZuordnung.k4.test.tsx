@@ -35,6 +35,7 @@ vi.mock('../../api/datenquellen', () => {
       })),
       pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
       korrekturLaeufe: vi.fn(() => Promise.resolve([])),
+      wartendeWechsel: vi.fn(() => Promise.resolve([])),
       korrekturLauf: vi.fn(() => Promise.resolve({
         lauf: 'L7', sensor_key: 'inv:4:ladung_kwh', status: 'laeuft', tage: 9, erledigt: 2, fehler: [], beginn: null,
         ende: null, fuellen_offen: false })),

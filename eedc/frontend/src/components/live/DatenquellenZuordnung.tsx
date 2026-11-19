@@ -65,7 +65,7 @@ import {
   type DatenquellenVerfuegbarkeit,
   type GatewayQuelleConfig,
 } from '../../api/datenquellen'
-import KorrekturFortschritt from './KorrekturFortschritt'
+import KorrekturFortschritt, { WartendeWechsel } from './KorrekturFortschritt'
 import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
 import { useQuellenWechsel } from './useQuellenWechsel'
 import { useGrundNachtragen } from './useGrundNachtragen'
@@ -369,7 +369,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   // Sitzung 4b-1: «Grund nachtragen» am versetzten Abschnitt (`?stueck=…`) — derselbe Dialog, nur «Korrektur».
   const [stueck, setStueck] = useState<string | undefined>(undefined)
   useEffect(() => { if (sprung?.stueck) setStueck(sprung.stueck) }, [sprung?.stueck])
-  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, nachtragId, wechsel.merkeLaeufe, neuLaden, stueck)
+  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, nachtragId, wechsel.merkeLaeufe, neuLaden, stueck,
+    wechsel.merkeWartende)
 
   // Direkte Quelle ohne Modal (Inbound / keine).
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {
@@ -881,6 +882,7 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
       {wechsel.laeufe.map((l) => (
         <KorrekturFortschritt key={l.lauf} anlageId={selectedAnlageId} lauf={l.lauf} label={l.label} />
       ))}
+      <WartendeWechsel liste={wechsel.wartende} />
 
       <BlockShell persistKey="v4-einst-datenquellen" bloecke={[...bloecke, topicBlock]}
         oeffneBeimMount={oeffneBlock ?? (sprungZiel ? `dq-${sprungZiel.gruppe.typ}` : undefined)} oeffnenAnlass={oeffnenAnlass} />

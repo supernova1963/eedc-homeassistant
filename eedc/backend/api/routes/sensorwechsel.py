@@ -8,6 +8,8 @@
 * ``POST /api/datenquellen/{anlage}/zuordnung-wechsel/{wechsel}/grund/pruefen`` und ``…/grund`` — «Grund nachtragen» an einem
   verzeichneten Wechsel (Sitzung 4, Bauplan B-7; ``services/zuordnung_wechsel/nachtrag.py``): die Prüfung schreibt nichts und
   liefert mit ``grund = korrektur`` und ``falsch_seit`` die Vorschau des Korrektur-Dienstes (Vorschau = Lauf).
+* ``GET /api/datenquellen/{anlage}/wartende-wechsel`` — die Wechsel «bleiben» zwischen zwei HA-Sensoren, die eedc noch nicht
+  wie Home Assistant rechnet, je mit dem Grund (U2 Lauf b; lesend — die Fläche zeigt sie, auch nach dem Neuladen).
 * ``POST /api/datenquellen/{anlage}/zaehler-versatz/pruefen`` und ``…/zaehler-versatz`` — «Grund nachtragen» am Befund
   «Zählerstände – versetzter Abschnitt» (Sitzung 4b-1, Bauplan «Zu §14» Nr. 98; ``services/zuordnung_wechsel/stueck.py``):
   Schlüssel, Sprung und Rückgang aus ``werte`` des Befunds, serverseitig gegen die Erkennung geprüft (kein frei wählbares
@@ -104,6 +106,9 @@ async def korrektur_lauf_stand(anlage_id: int, lauf: str, db: AsyncSession = Dep
         "lauf": lauf, "sensor_key": z.get("sensor_key"), "status": z.get("status"), "tage": len(z.get("tage") or []),
         "erledigt": int(z.get("erledigt") or 0), "fehler": list(z.get("fehler") or []), "beginn": z.get("beginn"),
         "ende": z.get("ende"), "fuellen_offen": korrektur_lauf.fuellen_offen(z),
+        # Sensorwechsel U2 Lauf b (a2 E-2): ``ansetzen`` = der Nachlauf eines Wechsels «bleiben» — die Fläche nennt ihn nicht
+        # «Korrektur».
+        "art": korrektur_lauf.art(z),
     }
 
 
@@ -124,11 +129,27 @@ async def korrektur_laeufe(anlage_id: int, db: AsyncSession = Depends(get_db)):
     return [{**e, "label": labels.get(e["sensor_key"], e["sensor_key"])} for e in laeufe]
 
 
+@router.get("/{anlage_id}/wartende-wechsel")
+async def wartende_wechsel(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """Die Wechsel «bleiben» zwischen zwei HA-Sensoren, die eedc noch nicht wie Home Assistant rechnet (``ansatz`` offen):
+    ``[{wechsel_id, sensor_key, label, wartet, satz}]`` — dieselbe ``ansatz.lage`` wie der Stundenlauf (lesend)."""
+    from backend.api.routes.datenquellen import _anlage_oder_404
+    from backend.services.zuordnung_wechsel.bleiben import wartende
+
+    anlage = await _anlage_oder_404(db, anlage_id)
+    out = await wartende(db, anlage_id)
+    for e in out:
+        e["label"] = await _label(db, anlage, e["sensor_key"])
+    return out
+
+
 class GrundNachtragRequest(BaseModel):
     #: ``fortsetzung`` | ``korrektur``; leer = nur prüfen, was nachzutragen ist.
     grund: Optional[str] = None
     #: Nur bei «Korrektur»: erste falsche Stunde (örtliche Zeit).
     falsch_seit: Optional[datetime] = None
+    #: Nur bei «Fortsetzung» zwischen zwei HA-Sensoren mit Überlappung: «Der neue Sensor zählt ab» (U2 Lauf b, F10).
+    zaehlt_ab: Optional[datetime] = None
 
 
 async def _nachtrag_lage(db: AsyncSession, anlage_id: int, wechsel_id: int):
@@ -175,8 +196,16 @@ async def pruefe_grund_nachtragen(
     from backend.services.zuordnung_wechsel import nachtrag as nt
     from backend.services.zuordnung_wechsel.abfrage import vorschau_des_auftrags
 
+    from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN, ZaehltAbAbgelehnt
+
     grund = _grund(body)
     anlage, la = await _nachtrag_lage(db, anlage_id, wechsel_id)
+    try:
+        if body.zaehlt_ab is not None and grund == GRUND_KORREKTUR:
+            raise ZaehltAbAbgelehnt(SATZ_NUR_BLEIBEN)
+        la.bleiben = await nt.bleiben_angaben(db, la, _ortszeit(body.zaehlt_ab) if body.zaehlt_ab else None)
+    except ZaehltAbAbgelehnt as e:
+        raise HTTPException(status_code=422, detail=str(e))
     korrektur = None
     falsch_seit = _falsch_seit(body)
     if grund == GRUND_KORREKTUR and (falsch_seit is not None or la.stueck) and GRUND_KORREKTUR in la.gruende:
@@ -208,10 +237,15 @@ async def grund_nachtragen(
     try:
         nt.pruefe_grund(la, grund)
         if grund == GRUND_FORTSETZUNG:
-            neu = await nt.trage_fortsetzung_ein(db, anlage, la.row)
+            neu = await nt.trage_fortsetzung_ein(db, anlage, la.row,
+                                                 _ortszeit(body.zaehlt_ab) if body.zaehlt_ab else None)
             ansetzen = neu.id if neu.ansatz is not None else None
-            ergebnis, text = None, f"{anlage.anlagenname} · {label}: Fortsetzung (Wechsel vom {zeit})"
+            ergebnis, text = None, f"{anlage.anlagenname} · {label}: bisherige Werte bleiben (Wechsel vom {zeit})"
         else:
+            if body.zaehlt_ab is not None:
+                from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN
+
+                raise ValueError(SATZ_NUR_BLEIBEN)
             falsch_seit = la.stueck[0] if la.stueck else _falsch_seit(body)
             if falsch_seit is None:
                 raise nt.NachtragAbgelehnt(SATZ_FALSCH_SEIT_FEHLT.format(feld=label))
@@ -228,19 +262,21 @@ async def grund_nachtragen(
         raise HTTPException(status_code=422, detail=str(e))
     await log_activity(kategorie="sensor_mapping", aktion="Grund nachgetragen", details=text, anlage_id=anlage_id, db=db)
     await db.commit()
-    laeufe = []
+    laeufe, wartet = [], []
     if ergebnis is None and ansetzen is not None:          # U2 a2 (F10): «bleiben» zwischen zwei HA-Sensoren ansetzen
         from backend.core.database import get_session
         from backend.services.zuordnung_wechsel.ansatz import setze_an
+        from backend.services.zuordnung_wechsel.bleiben import ergebnis_der_route
 
-        await setze_an(kr.sitzungen_wie(db, get_session), ansetzen)
+        e = await setze_an(kr.sitzungen_wie(db, get_session), ansetzen)
+        laeufe, wartet = ergebnis_der_route(e, key, label, la.row.vorher, la.row.nachher)
     if ergebnis is not None:
         await kr.nach_dem_commit(ergebnis, ha_svc=svc)
         s = ergebnis["summary"]
         laeufe = [{"lauf": s["lauf"], "sensor_key": key, "label": label, "tage_neu": s["tage_neu"],
                    "zaehlerstaende_geloescht": s["zaehlerstaende_geloescht"]}]
     _anlage, neu = await _nachtrag_lage(db, anlage_id, wechsel_id)
-    return {**nt.antwort(neu, label), "eingetragen": True, "korrektur": laeufe}
+    return {**nt.antwort(neu, label), "eingetragen": True, "korrektur": laeufe, "wartet": wartet}
 
 
 class StueckRequest(BaseModel):

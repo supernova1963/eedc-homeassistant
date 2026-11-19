@@ -317,7 +317,9 @@ async def test_lab_umstellung_jede_sicht_wie_ha(db, monkeypatch, fall):
 
 
 ZEITEN = {
-    "herbst_doppelt": datetime(2026, 10, 25, 2),          # Berlin: erste der doppelten Stunden
+    "herbst_doppelt": datetime(2026, 10, 25, 2),          # Berlin: «02:00» — ``mktime`` wählt die zweite der doppelten Stunden
+                                                          # (die erste: test_sensorwechsel_u2b_proben, Korrekturrunde a-K N5)
+    "fruehjahr_davor": datetime(2026, 3, 29, 1),          # Berlin: Tausch 01:00–02:00, die Stunde vor der fehlenden (a-K N5)
     "fruehjahr_fehlt": datetime(2026, 3, 29, 3),          # Berlin: 02:00 fehlt, die Tausch-Stunde ist 03:00
     "mitternacht": datetime(2026, 11, 9, 23),             # der erste Stand des neuen ist 00:00 des Folgetags
     "monatsgrenze": datetime(2026, 10, 31, 23),           # … und des Folgemonats
@@ -346,11 +348,13 @@ async def test_zeit_proben_umstellung_0740(db, monkeypatch, zeit):
 #: **Benannte Grenze (Bestand, nicht U2):** der Schreiber der Reihe liest den Stand um ``t`` mit ``get_value_at(t)`` aus der
 #: Zeile ``t − 1 h`` in Wand-Uhr-Zeit. In der doppelten Herbststunde trifft «02:00» die erste (Sommerzeit-)Stunde — beginnt die
 #: Statistik des neuen erst in der zweiten, schreibt eedc um 03:00 keinen Stand (gemessen: ``get_value_at(03:00)`` = None);
-#: in der Stunde nach der fehlenden Frühjahrsstunde steht der Stand 03:00 eine Stunde zu spät (Slot verschoben, Tag gleich).
-#: Kanal, Tagesabschluss aus HA-Slots und Monat treffen das Soll; nur die Sichten aus der Reihe weichen ab.
+#: in der Stunde nach der fehlenden Frühjahrsstunde steht der Stand 03:00 eine Stunde zu spät. Seit der Korrekturrunde a-K (N5)
+#: liest das Ansetzen den Rand-Stand epoch-genau aus der Zeile — bei Umstellung am Tag des Tauschs **treffen Tag und Monat
+#: das Soll in jeder Sicht**; es bleibt die Verschiebung der Stunde in der Reihe (der Naht-Slot zeigt einen Teil, der Rest steht
+#: im Slot daneben). Bei Umstellung nach dem Tag liest der Schreiber die Stände neu (dort bleibt sein Bestand, BERECHNUNGEN
+#: Grenze (4)). Kanal, Tagesabschluss aus HA-Slots und Monat treffen das Soll.
 DST_GRENZE = {
-    "herbst_doppelt": {"reihe_slot": (pytest.approx(0.6), 1.3), "reihe_tag": (pytest.approx(13.7), 14.3),
-                       "bereichs_leser": (pytest.approx(13.7), 14.3)},
+    "herbst_doppelt": {"reihe_slot": (pytest.approx(0.9), 1.3)},
     "fruehjahr_fehlt": {"reihe_slot": (pytest.approx(0.7), 1.3)},
 }
 

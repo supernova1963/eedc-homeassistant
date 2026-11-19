@@ -55,19 +55,28 @@ STUNDE_ABRUF = ("temperatur_c", "globalstrahlung_wm2", "bewoelkung_prozent", "ni
 _AUFGABEN: dict[str, asyncio.Task] = {}
 #: Kopf des einen Fehler-Eintrags je Lauf, wenn der Nachlauf (Füllen) scheitert.
 FUELLEN_PRAEFIX = "Füllen: "
+#: Wer den Lauf angelegt hat (Zustand ``art``; Sensorwechsel U2 Lauf b, a2 E-2): fehlt das Feld, ist es eine Korrektur; das
+#: Ansetzen eines Wechsels «bleiben» (``ansatz.py``) trägt ``ansetzen`` — die Fläche nennt seinen Nachlauf nicht «Korrektur».
+ART_KORREKTUR, ART_ANSETZEN = "korrektur", "ansetzen"
 
 
 async def anlegen(db: AsyncSession, lauf: str, anlage_id: int, sensor_key: str, tage: list[date],
-                  fuellen: Optional[dict] = None) -> None:
-    """Den Zustand anlegen (in der Transaktion der Wechsel-Zeile); ``fuellen`` = der Nachlauf (``korrektur.nachlauf_auftrag``)."""
+                  fuellen: Optional[dict] = None, art: Optional[str] = None) -> None:
+    """Den Zustand anlegen (in der Transaktion der Wechsel-Zeile); ``fuellen`` = der Nachlauf (``korrektur.nachlauf_auftrag``),
+    ``art`` = ``ART_ANSETZEN`` für den Lauf eines Wechsels «bleiben» (ohne: eine Korrektur, der Zustand bleibt wie vorher)."""
     from backend.models.settings import Settings
 
     await aufraeumen(db)
     db.add(Settings(key=PRAEFIX + lauf, value={
         "anlage_id": anlage_id, "sensor_key": sensor_key, "tage": [d.isoformat() for d in tage], "erledigt": 0,
         "status": LAEUFT, "fehler": [], "behalten": 0, "beginn": datetime.now().replace(microsecond=0).isoformat(),
-        "ende": None, "fuellen": fuellen}))
+        "ende": None, "fuellen": fuellen, **({"art": art} if art else {})}))
     await db.flush()
+
+
+def art(z: Optional[dict]) -> str:
+    """``ART_ANSETZEN`` oder ``ART_KORREKTUR`` (ein Zustand ohne Feld ``art``)."""
+    return (z or {}).get("art") or ART_KORREKTUR
 
 
 async def aufraeumen(db: AsyncSession, jetzt: Optional[datetime] = None) -> int:
@@ -318,7 +327,8 @@ async def laufende_der_anlage(db: AsyncSession, anlage_id: int) -> list[dict[str
     for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
         z = row.value if isinstance(row.value, dict) else {}
         if z.get("status") == LAEUFT and z.get("anlage_id") == anlage_id:
-            out.append({"lauf": row.key[len(PRAEFIX):], "sensor_key": z.get("sensor_key"), "beginn": z.get("beginn")})
+            out.append({"lauf": row.key[len(PRAEFIX):], "sensor_key": z.get("sensor_key"), "beginn": z.get("beginn"),
+                        "art": art(z)})
     return sorted(out, key=lambda e: (str(e["beginn"] or ""), e["lauf"]))
 
 

@@ -7,10 +7,13 @@
  * nach «Übernehmen» mit Grund senden. Kein Fehlerstatus als Ablauf: die 422 der Route sieht nur ein Aufruf an der
  * Prüfung vorbei. Gestartete Korrektur-Läufe sammelt `laeufe` (Fortschritt an der Fläche) — dazu beim Laden die laufenden
  * Läufe der Anlage (`korrekturLaeufe`, Bauplan §11 Nr. 50: der Fortschritt übersteht das Neuladen der Seite); je Lauf einmal.
+ * U2 Lauf b: die Wechsel «bleiben», die eedc noch nicht wie Home Assistant rechnet (`wartende`, je Feld ein Satz vom Backend:
+ * beim Laden `wartendeWechsel`, nach dem Senden `wartet` der Antwort); ein Feld, dessen Lauf startet, wartet nicht mehr.
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   datenquellenApi, type DatenquelleFeld, type GatewayQuelleConfig, type GrundAngabe, type QuellePruefung,
+  type WartenderWechsel,
 } from '../../api/datenquellen'
 import SensorwechselDialog from './SensorwechselDialog'
 
@@ -27,38 +30,55 @@ export interface QuellenAnfrage {
 export interface LaufAnzeige {
   lauf: string
   label?: string
+  sensor_key?: string | null
 }
 
 export function useQuellenWechsel(anlageId: number | null, setzeFeld: (id: string, p: Partial<DatenquelleFeld>) => void,
   neuLaden: () => void): { aendere: (a: QuellenAnfrage) => void; dialog: ReactNode; laeufe: LaufAnzeige[];
-  merkeLaeufe: (l?: LaufAnzeige[]) => void } {
+  merkeLaeufe: (l?: LaufAnzeige[]) => void; wartende: WartenderWechsel[]; merkeWartende: (w?: WartenderWechsel[]) => void } {
   const [offen, setOffen] = useState<{ anfrage: QuellenAnfrage; fragen: QuellePruefung[] } | null>(null)
   const [laeuft, setLaeuft] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)
   const [laeufe, setLaeufe] = useState<LaufAnzeige[]>([])
+  const [wartende, setWartende] = useState<WartenderWechsel[]>([])
 
   const merkeLaeufe = useCallback((l?: LaufAnzeige[]) => {
     if (l && l.length > 0) {
       setLaeufe((alt) => [...alt, ...l.filter((n) => !alt.some((a) => a.lauf === n.lauf))])
+      setWartende((alt) => alt.filter((w) => !l.some((n) => n.sensor_key === w.sensor_key)))
     }
   }, [])
 
-  // Die laufenden Läufe der Anlage beim Laden (und beim Wechsel der Anlage) — sonst zeigte die Fläche nach dem Neuladen nichts.
+  // Je Feld der jüngste Wartegrund (eine Antwort ersetzt den älteren Satz desselben Felds).
+  const merkeWartende = useCallback((w?: WartenderWechsel[]) => {
+    if (w && w.length > 0) {
+      setWartende((alt) => [...alt.filter((a) => !w.some((n) => n.sensor_key === a.sensor_key)), ...w])
+    }
+  }, [])
+
+  // Die laufenden Läufe und die wartenden Wechsel der Anlage beim Laden (und beim Wechsel der Anlage) — sonst zeigte die
+  // Fläche nach dem Neuladen nichts.
   useEffect(() => {
     setLaeufe([])
+    setWartende([])
     if (anlageId == null) return
     let aus = false
     datenquellenApi.korrekturLaeufe(anlageId)
       .then((l) => { if (!aus) merkeLaeufe(l) })
       .catch(() => { /* ohne Liste zeigt die Fläche nur die Läufe dieser Sitzung */ })
+    datenquellenApi.wartendeWechsel(anlageId)
+      .then((w) => { if (!aus) merkeWartende(w) })
+      .catch(() => { /* ohne Liste zeigt die Fläche nur, was diese Sitzung gemeldet bekam */ })
     return () => { aus = true }
-  }, [anlageId, merkeLaeufe])
+  }, [anlageId, merkeLaeufe, merkeWartende])
 
   const senden = useCallback((a: QuellenAnfrage, grund?: GrundAngabe) => {
     if (anlageId == null) return Promise.resolve()
     return datenquellenApi.setQuelle(anlageId, a.feld.id, a.quelle, a.gateway, a.entityId, grund)
-      .then((r) => { setzeFeld(a.feld.id, a.patch); merkeLaeufe(r.korrektur); if (grund) neuLaden() })
-  }, [anlageId, setzeFeld, neuLaden, merkeLaeufe])
+      .then((r) => {
+        setzeFeld(a.feld.id, a.patch); merkeLaeufe(r.korrektur); merkeWartende(r.wartet); if (grund) neuLaden()
+      })
+  }, [anlageId, setzeFeld, neuLaden, merkeLaeufe, merkeWartende])
 
   const aendere = useCallback((a: QuellenAnfrage) => {
     if (anlageId == null) return
@@ -77,6 +97,14 @@ export function useQuellenWechsel(anlageId: number | null, setzeFeld: (id: strin
       { grund: 'korrektur', falsch_seit: falschSeit }).then((p) => p.korrektur)
   }, [anlageId, offen])
 
+  // U2 Lauf b: «Der neue Sensor zählt ab» geändert — die Angaben zu «bleiben» an dieser Stunde (dieselbe Prüf-Route).
+  const bleibenVorschau = useCallback((_key: string, zaehltAb: string) => {
+    if (anlageId == null || !offen) return Promise.resolve(null)
+    const a = offen.anfrage
+    return datenquellenApi.pruefeQuelle(anlageId, a.feld.id, a.quelle, a.gateway, a.entityId,
+      { grund: 'fortsetzung', zaehlt_ab: zaehltAb }).then((p) => p.bleiben ?? null)
+  }, [anlageId, offen])
+
   const bestaetigen = useCallback((gruende: Record<string, GrundAngabe>) => {
     if (!offen) return
     const key = offen.fragen[0]?.sensor_key ?? ''
@@ -88,8 +116,8 @@ export function useQuellenWechsel(anlageId: number | null, setzeFeld: (id: strin
   }, [offen, senden])
 
   const dialog = offen && (
-    <SensorwechselDialog isOpen fragen={offen.fragen} onVorschau={vorschau} onBestaetigen={bestaetigen}
-      onAbbrechen={() => setOffen(null)} laeuft={laeuft} fehler={fehler} />
+    <SensorwechselDialog isOpen fragen={offen.fragen} onVorschau={vorschau} onBleibenVorschau={bleibenVorschau}
+      onBestaetigen={bestaetigen} onAbbrechen={() => setOffen(null)} laeuft={laeuft} fehler={fehler} />
   )
-  return { aendere, dialog, laeufe, merkeLaeufe }
+  return { aendere, dialog, laeufe, merkeLaeufe, wartende, merkeWartende }
 }

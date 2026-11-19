@@ -38,6 +38,7 @@ vi.mock('../../api/datenquellen', () => ({
     })),
     pruefeQuelle: vi.fn(() => Promise.resolve({ grund_erforderlich: false })),
     korrekturLaeufe: vi.fn(() => Promise.resolve([])),
+    wartendeWechsel: vi.fn(() => Promise.resolve([])),
     setQuelle: vi.fn(() => Promise.resolve({})),
     getHaSensoren: vi.fn(() => Promise.resolve({ sensoren: [] })),
     scanGatewayTopics: vi.fn(() => Promise.resolve({ topics: [] })),

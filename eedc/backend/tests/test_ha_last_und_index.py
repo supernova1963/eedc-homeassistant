@@ -321,14 +321,14 @@ _NOCH_NICHT_ENTKOPPELT = {
     ("api/routes/ha_statistics.py", "count_statistics_sensors"),
     ("api/routes/ha_statistics.py", "get_monatswerte"),
     ("api/routes/ha_statistics.py", "get_verfuegbare_monate"),
-    ("api/routes/ha_statistics.py", "get_alle_monatswerte"),
     ("api/routes/ha_statistics.py", "get_monatsanfang_wert"),
     # Zählerlücken wie HA (26.09.2026): `lts_aggregator` liest die Slot-Tabelle
     # jetzt über `asyncio.to_thread` — der Eintrag ist getilgt, die Liste schrumpft.
     ("services/snapshot/reader.py", "get_value_at"),
     ("services/snapshot/reaggregator.py", "get_value_at"),
 }
-_RESTSCHULD_OBERGRENZE = 11   # 26.09.2026: 14 → 11 (lts_aggregator entkoppelt)
+_RESTSCHULD_OBERGRENZE = 9    # 26.09.2026: 14 → 11 (lts_aggregator entkoppelt); 19.11.2026: 11 → 9 (Sensorwechsel U2 a2:
+                              # «Alle Monatswerte» über monat.alle_monatswerte im Thread; Korrekturrunde a-K N6)
 
 
 def _blockierende_aufrufe() -> list[tuple[str, int, str, str]]:

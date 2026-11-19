@@ -17,19 +17,32 @@
  * **Stück** (Sitzung 4b-1, Bauplan «Zu §14» Nr. 96/98/101): am Befund «Zählerstände – versetzter Abschnitt» gibt es nur
  * «Korrektur» über ein festes Stück, am Rückkehr-Wechsel X → A eines Stücks A → X → A «Korrektur» über die Zeit davor — statt
  * des Felds «Falsch seit» steht die Zeit des Stücks.
+ *
+ * **Eine Frage: bleiben oder verwerfen** (Sensorwechsel U2 Lauf b, Bauplan Nr. 132/138): die zwei Gründe heißen «Bisherige
+ * Werte bleiben» (intern `fortsetzung`) und «Bisherige Werte verwerfen» (`korrektur`). Zwischen zwei HA-Sensoren trägt die
+ * Prüf-Antwort `bleiben` (`BleibenAngaben`): bei «bleiben» zeigt der Dialog unter «Was danach geschieht» ihre Sätze; nur bei
+ * Überlappung erscheint das Feld «Der neue Sensor zählt ab» (vorbelegt und begrenzt mit den Stunden aus der Antwort) — eine
+ * andere Stunde holt die Vorschau neu (`onBleibenVorschau`, dieselbe Prüf-Route, Vorschau = Lauf). Ohne `bleiben` (jede andere
+ * Quelle) bleibt der bisherige Satz zu «bleiben».
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, RadioGroup } from '../ui'
-import type { GrundAngabe, KorrekturVorschau, QuellePruefung, WechselGrund } from '../../api/datenquellen'
+import type { BleibenAngaben, GrundAngabe, KorrekturVorschau, QuellePruefung, WechselGrund } from '../../api/datenquellen'
 import { formatDatum } from '../../lib/datum'
 import { fmtZahl } from '../../lib/einheiten'
 
 export const DIALOG_TITEL = 'Warum wechselt die Quelle?'
-export const GRUND_FORTSETZUNG = 'Der neue Sensor misst dasselbe weiter (Zähler getauscht, anderer Sensor für dasselbe Gerät)'
+export const GRUND_FORTSETZUNG =
+  'Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe Gerät)'
+/** Zwischen zwei HA-Sensoren (U2 Lauf b): eedc rechnet wie Home Assistant mit beiden Sensoren. */
+export const GRUND_BLEIBEN_HA_FOLGE =
+  'Die bisherigen Werte bleiben. eedc rechnet wie Home Assistant mit beiden Sensoren: den bisherigen bis zu seinem letzten ' +
+  'Wert, den neuen ab seinem ersten. Die Vorschau unten sagt, was genau geschieht.'
+/** Jede andere Quelle (MQTT, Gateway): «bleiben» wie bisher. */
 export const GRUND_FORTSETZUNG_FOLGE =
   'Die bisherigen Werte bleiben, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge. Wo eedc ' +
   'aus den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.'
-export const GRUND_KORREKTUR = 'Bisher war der falsche Sensor zugeordnet'
+export const GRUND_KORREKTUR = 'Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet'
 export const GRUND_KORREKTUR_FOLGE =
   'Die Werte dieses Felds seit «falsch seit» werden verworfen und — soweit Home Assistant die Geschichte des richtigen ' +
   'Sensors führt — aus ihm neu aufgebaut. Die Vorschau unten sagt, was genau geschieht.'
@@ -58,6 +71,11 @@ export const STUECK_GRUND_KORREKTUR_FOLGE =
   'danach führt — neu gelesen; sonst bleibt die Zeit ohne Zählerstände. Die Vorschau unten sagt, was das für die ' +
   'Tageswerte heißt.'
 export const STUECK_ZEIT = (von: string, bis: string) => `Die Korrektur gilt für die Zeit vom ${von} bis ${bis} Uhr.`
+/** U2 Lauf b: das Feld bei Überlappung (Backend `bleiben.FELD` — die Ablehnungen nennen es wörtlich). */
+export const ZAEHLT_AB_LABEL = 'Der neue Sensor zählt ab'
+export const ZAEHLT_AB_HINWEIS =
+  'Beide Sensoren haben eine Zeit lang gleichzeitig gezählt. Vorbelegt ist die Stunde des Wechsels; eine frühere Stunde ' +
+  'nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat.'
 
 /** «Grund nachtragen»: der Wechsel als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom Backend). */
 export interface NachtragAngaben {
@@ -89,6 +107,9 @@ interface Wahl {
   vorschau: KorrekturVorschau | null
   laedt: boolean
   fehler: string | null
+  /** U2 Lauf b: «Der neue Sensor zählt ab» und die Angaben zu «bleiben» an dieser Stunde (anfangs die der Prüfung). */
+  zaehltAb: string
+  bleiben: BleibenAngaben | null
 }
 
 interface Props {
@@ -97,6 +118,8 @@ interface Props {
   fragen: QuellePruefung[]
   /** Vorschau der Korrektur für einen Schlüssel (Prüf-Route mit Grund «korrektur» und «falsch seit»). */
   onVorschau: (sensorKey: string, falschSeit: string) => Promise<KorrekturVorschau | null>
+  /** U2 Lauf b: die Angaben zu «bleiben» an einer anderen Stunde «Der neue Sensor zählt ab» (Prüf-Route mit `zaehlt_ab`). */
+  onBleibenVorschau?: (sensorKey: string, zaehltAb: string) => Promise<BleibenAngaben | null>
   onBestaetigen: (gruende: Record<string, GrundAngabe>) => void
   onAbbrechen: () => void
   laeuft?: boolean
@@ -106,13 +129,14 @@ interface Props {
 }
 
 export default function SensorwechselDialog({
-  isOpen, fragen, onVorschau, onBestaetigen, onAbbrechen, laeuft, fehler, nachtrag,
+  isOpen, fragen, onVorschau, onBleibenVorschau, onBestaetigen, onAbbrechen, laeuft, fehler, nachtrag,
 }: Props) {
   const [wahl, setWahl] = useState<Record<string, Wahl>>({})
 
   useEffect(() => {
     setWahl(Object.fromEntries(fragen.map((f) => [f.sensor_key ?? '', {
       grund: '' as const, falschSeit: lokal(f.vorgabe_falsch_seit), vorschau: null, laedt: false, fehler: null,
+      zaehltAb: lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null), bleiben: f.bleiben ?? null,
     }])))
   }, [fragen])
 
@@ -136,10 +160,25 @@ export default function SensorwechselDialog({
       })
   }
 
+  // «Der neue Sensor zählt ab» geändert: die Angaben zu «bleiben» an dieser Stunde neu (dieselbe Prüf-Route).
+  const ladeBleiben = (key: string, zaehltAb: string) => {
+    const nr = (anfrage.current[key] ?? 0) + 1
+    anfrage.current[key] = nr
+    if (!zaehltAb || !onBleibenVorschau) return
+    setze(key, { laedt: true, fehler: null })
+    const aktuell = () => anfrage.current[key] === nr
+    onBleibenVorschau(key, zaehltAb)
+      .then((b) => { if (aktuell()) setze(key, { bleiben: b, laedt: false }) })
+      .catch((e) => {
+        if (aktuell()) setze(key, { laedt: false, fehler: e instanceof Error ? e.message : 'Vorschau fehlgeschlagen' })
+      })
+  }
+
   const bereit = useMemo(() => fragen.length > 0 && fragen.every((f) => {
     const w = wahl[f.sensor_key ?? '']
     if (!w || !w.grund) return false
-    return w.grund === 'fortsetzung' || (!!w.falschSeit && !w.laedt && !!w.vorschau?.startbar)
+    if (w.grund === 'fortsetzung') return !w.laedt && !w.fehler
+    return !!w.falschSeit && !w.laedt && !!w.vorschau?.startbar
   }), [fragen, wahl])
 
   const bestaetigen = () => {
@@ -147,14 +186,17 @@ export default function SensorwechselDialog({
     for (const f of fragen) {
       const key = f.sensor_key ?? ''
       const w = wahl[key]
-      gruende[key] = w.grund === 'korrektur' ? { grund: 'korrektur', falsch_seit: w.falschSeit } : { grund: 'fortsetzung' }
+      const anders = !!w.zaehltAb && w.zaehltAb !== lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null)
+      gruende[key] = w.grund === 'korrektur' ? { grund: 'korrektur', falsch_seit: w.falschSeit }
+        : { grund: 'fortsetzung', ...(anders ? { zaehlt_ab: w.zaehltAb } : {}) }
     }
     onBestaetigen(gruende)
   }
 
-  const optionen = [
-    { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG,
-      description: nachtrag ? `${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : GRUND_FORTSETZUNG_FOLGE },
+  const bleibenFolge = (f: QuellePruefung) =>
+    f.bleiben ? GRUND_BLEIBEN_HA_FOLGE : nachtrag ? `${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : GRUND_FORTSETZUNG_FOLGE
+  const optionen = (f: QuellePruefung) => [
+    { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
     { value: 'korrektur' as const, label: GRUND_KORREKTUR,
       description: nachtrag?.stueck ? STUECK_GRUND_KORREKTUR_FOLGE : nachtrag ? NACHTRAG_GRUND_KORREKTUR_FOLGE : GRUND_KORREKTUR_FOLGE },
   ].filter((o) => !nachtrag || nachtrag.gruende.includes(o.value))
@@ -181,13 +223,16 @@ export default function SensorwechselDialog({
                 name={`grund-${key}`}
                 value={w.grund}
                 onChange={(g) => {
-                  setze(key, { grund: g })
+                  setze(key, { grund: g, fehler: null })
                   if (g === 'korrektur') ladeVorschau(key, w.falschSeit)
                 }}
-                options={optionen}
+                options={optionen(f)}
               />
               {nachtrag?.korrekturNicht && (
                 <p className="text-xs text-gray-500 dark:text-gray-400" data-korrektur-nicht>{nachtrag.korrekturNicht}</p>
+              )}
+              {w.grund === 'fortsetzung' && w.bleiben && (
+                <BleibenTeil sensorKey={key} w={w} onZaehltAb={(v) => { setze(key, { zaehltAb: v }); ladeBleiben(key, v) }} />
               )}
               {w.grund === 'korrektur' && (
                 <div className="space-y-2 pl-6">
@@ -232,5 +277,40 @@ export default function SensorwechselDialog({
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** U2 Lauf b: «bleiben» zwischen zwei HA-Sensoren — bei Überlappung das Feld «Der neue Sensor zählt ab» (Grenzen aus der
+ *  Antwort), darunter die Sätze der Vorschau. Nur Anzeige der Backend-Angaben. */
+function BleibenTeil({ sensorKey, w, onZaehltAb }: { sensorKey: string; w: Wahl; onZaehltAb: (v: string) => void }) {
+  const b = w.bleiben
+  if (!b) return null
+  return (
+    <div className="space-y-2 pl-6">
+      {b.ueberlappung && b.zaehlt_ab_frueheste && (
+        <Input
+          type="datetime-local"
+          id={`zaehlt-ab-${sensorKey}`}
+          label={ZAEHLT_AB_LABEL}
+          hint={ZAEHLT_AB_HINWEIS}
+          value={w.zaehltAb}
+          min={lokal(b.zaehlt_ab_frueheste)}
+          max={lokal(b.zaehlt_ab_spaeteste)}
+          step={3600}
+          onChange={(e) => onZaehltAb(e.target.value)}
+          data-zaehlt-ab={sensorKey}
+        />
+      )}
+      <div className="text-xs" data-bleiben-vorschau={sensorKey}>
+        <p className="font-medium text-gray-700 dark:text-gray-200">{VORSCHAU_TITEL}</p>
+        {w.laedt && <p className="text-gray-500 dark:text-gray-400">{VORSCHAU_LAEDT}</p>}
+        {w.fehler && <Alert type="error">{w.fehler}</Alert>}
+        {!w.laedt && !w.fehler && (
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-600 dark:text-gray-300">
+            {b.saetze.map((s, i) => <li key={i}>{s}</li>)}
+          </ul>
+        )}
+      </div>
+    </div>
   )
 }

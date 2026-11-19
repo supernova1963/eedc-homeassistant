@@ -41,8 +41,8 @@ GRUENDE = (GRUND_FORTSETZUNG, GRUND_KORREKTUR)
 ALLE = "*"
 
 #: Wortlaute der Ablehnung (422) — die Oberfläche fragt vorher, diese Sätze sieht nur ein Aufruf an ihr vorbei.
-SATZ_GRUND_FEHLT = ("Die Zuordnung von {felder} hat eigene Werte. Sag eedc, warum die Quelle wechselt: Fortsetzung (der neue "
-                    "Sensor misst dasselbe weiter) oder Korrektur (bisher war der falsche Sensor zugeordnet).")
+SATZ_GRUND_FEHLT = ("Die Zuordnung von {felder} hat eigene Werte. Sag eedc, ob die bisherigen Werte bleiben (der neue Sensor "
+                    "setzt fort) oder verworfen werden (bisher war der falsche Sensor zugeordnet).")
 SATZ_FALSCH_SEIT_FEHLT = "Für eine Korrektur fehlt «falsch seit» ({feld})."
 SATZ_FALSCH_SEIT_ZUKUNFT = "«Falsch seit» muss vor der nächsten vollen Stunde liegen ({feld})."
 
@@ -64,6 +64,8 @@ class Frage:
     stand_alt: Optional[float] = None
     stand_neu: Optional[float] = None
     vorgabe_falsch_seit: Optional[datetime] = None
+    #: U2 Lauf b (F9): was «bleiben» zwischen zwei HA-Sensoren tut (``bleiben.angaben``; ``None`` bei jeder anderen Quelle).
+    bleiben: Optional[dict] = None
 
 
 def kann_werte_liefern(q: Optional[dict]) -> bool:
@@ -125,9 +127,12 @@ async def haette_gefragt(db, anlage_id: int, w) -> bool:
 
 
 async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], *, details: bool = True,
-                 ha_svc=None) -> list[Frage]:
+                 ha_svc=None, jetzt: Optional[datetime] = None,
+                 zaehlt_ab: Optional[dict[str, datetime]] = None) -> list[Frage]:
     """Die Prüf-Funktion aller Wege: je Schlüssel mit eigenen Werten, dessen wirksame Quelle sich ändert, eine ``Frage``
-    (``grund_erforderlich`` nach dem Modul-Docstring). Ein Schlüssel ohne eigene Werte fehlt (nicht gefragt, nicht verzeichnet)."""
+    (``grund_erforderlich`` nach dem Modul-Docstring). Ein Schlüssel ohne eigene Werte fehlt (nicht gefragt, nicht verzeichnet).
+    ``zaehlt_ab`` (je Schlüssel oder ``ALLE``): «Der neue Sensor zählt ab» für die Angaben zu «bleiben» — ein Wert, den eedc
+    nicht annimmt, wirft ``bleiben.ZaehltAbAbgelehnt``."""
     aus: list[Frage] = []
     for a in await aenderungen(db, anlage, vorher, nachher):
         if not a.eigene_werte:
@@ -136,9 +141,32 @@ async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], 
         noetig = frage_noetig(a.nachher, letzte)
         f = Frage(a.sensor_key, a.vorher, a.nachher, noetig)
         if noetig and details:
-            await _details(db, anlage.id, f, ha_svc)
+            await _details(db, anlage.id, f, ha_svc, jetzt or datetime.now(), _je_key(zaehlt_ab or {}, f.sensor_key))
         aus.append(f)
+    _zaehlt_ab_ohne_frage(aus, zaehlt_ab)
     return aus
+
+
+def _zaehlt_ab_nur_bleiben(fragen: list[Frage], grund: dict, zaehlt_ab: Optional[dict[str, datetime]]) -> None:
+    """«Der neue Sensor zählt ab» gehört zu «bleiben» — mit «verwerfen» ⇒ 422."""
+    from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN, ZaehltAbAbgelehnt
+
+    for f in fragen:
+        if (f.grund_erforderlich and _je_key(zaehlt_ab or {}, f.sensor_key) is not None
+                and grund[f.sensor_key][0] != GRUND_FORTSETZUNG):
+            raise ZaehltAbAbgelehnt(SATZ_NUR_BLEIBEN)
+
+
+def _zaehlt_ab_ohne_frage(fragen: list[Frage], zaehlt_ab: Optional[dict[str, datetime]]) -> None:
+    """«Der neue Sensor zählt ab» für einen Schlüssel ohne Wechsel «bleiben» zwischen zwei HA-Sensoren ⇒ 422."""
+    from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_HA, ZaehltAbAbgelehnt, ist_ha_zu_ha
+
+    for key, wert in (zaehlt_ab or {}).items():
+        if wert is None:
+            continue
+        treffer = [f for f in fragen if f.grund_erforderlich and (key == ALLE or f.sensor_key == key)]
+        if not treffer or not all(ist_ha_zu_ha(f.vorher, f.nachher) for f in treffer):
+            raise ZaehltAbAbgelehnt(SATZ_NUR_HA)
 
 
 # ── Angaben für den Dialog (lesend) ─────────────────────────────────────────────────────────────────────────
@@ -203,11 +231,12 @@ def _dienst(ha_svc):
     return get_ha_statistics_service()
 
 
-async def _details(db, anlage_id: int, f: Frage, ha_svc) -> None:
+async def _details(db, anlage_id: int, f: Frage, ha_svc, jetzt: datetime, zaehlt_ab: Optional[datetime] = None) -> None:
     """Die Angaben des Dialogs: erster eigener Wert und Tage (Reihe, sonst Kanal), der letzte Zählerstand (``state``) des
     bisherigen Sensors aus dem Kanal (ein Schlüssel ohne Kanal hat hier keinen), der Zählerstand der neuen HA-Entität jetzt,
-    die Vorgabe für «falsch seit»."""
+    die Vorgabe für «falsch seit»; zwischen zwei HA-Sensoren die Angaben zu «bleiben» (``bleiben.angaben``, U2 Lauf b)."""
     from backend.services.kanal.angaben import angaben, kanal_des_schluessels
+    from backend.services.zuordnung_wechsel import bleiben
 
     kanal = await kanal_des_schluessels(db, anlage_id, f.sensor_key)
     erster, tage = await _reihe(db, anlage_id, f.sensor_key)
@@ -217,6 +246,8 @@ async def _details(db, anlage_id: int, f: Frage, ha_svc) -> None:
     f.erster_wert, f.tage, f.stand_alt = erster, tage, stand
     f.stand_neu = await _stand_neu(_dienst(ha_svc), kanal, f.sensor_key, f.nachher)
     f.vorgabe_falsch_seit = await _beginn_bisherige_quelle(db, anlage_id, f, kanal, erster)
+    f.bleiben = await bleiben.angaben(db, anlage_id, f.sensor_key, f.vorher, f.nachher, ab_ts=ab_ts_aus(jetzt),
+                                      erklaert_ts=jetzt, jetzt=jetzt, zaehlt_ab=zaehlt_ab, ha_svc=ha_svc)
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
@@ -227,10 +258,10 @@ def antwort(f: Optional[Frage], label: Optional[str] = None) -> dict[str, Any]:
     """Die Antwort der Prüf-Route je Schlüssel (Bauplan B-2: ``grund_erforderlich, erster_wert, tage, stand_alt, stand_neu``)."""
     if f is None:
         return {"grund_erforderlich": False, "erster_wert": None, "tage": 0, "stand_alt": None, "stand_neu": None,
-                "sensor_key": None, "label": label, "verzeichnet": False, "vorgabe_falsch_seit": None}
+                "sensor_key": None, "label": label, "verzeichnet": False, "vorgabe_falsch_seit": None, "bleiben": None}
     return {"grund_erforderlich": f.grund_erforderlich, "erster_wert": _iso(f.erster_wert), "tage": f.tage,
             "stand_alt": f.stand_alt, "stand_neu": f.stand_neu, "sensor_key": f.sensor_key, "label": label,
-            "verzeichnet": True, "vorgabe_falsch_seit": _iso(f.vorgabe_falsch_seit)}
+            "verzeichnet": True, "vorgabe_falsch_seit": _iso(f.vorgabe_falsch_seit), "bleiben": f.bleiben}
 
 
 # ── Korrektur über den Dienst aus Sitzung 3a ─────────────────────────────────────────────────────────────────
@@ -296,13 +327,28 @@ class Vollzug:
     ansaetze: list[int] = field(default_factory=list)
     jetzt: Optional[datetime] = None
     sitzungen: Any = None
+    #: Je Wechsel «bleiben» das Ergebnis von ``ansatz.setze_an`` nach dem Commit (U2 Lauf b: Lauf bzw. Wartegrund).
+    angesetzt: list[dict] = field(default_factory=list)
 
     def zusammenfassung(self, labels: Optional[dict[str, str]] = None) -> list[dict]:
-        """Je Korrektur der Lauf für die Antwort der Route (Fortschritt an der Fläche)."""
-        return [{"lauf": e["summary"]["lauf"], "sensor_key": e["lage"].auftrag.sensor_key,
-                 "label": _je_key(labels or {}, e["lage"].auftrag.sensor_key, e["lage"].auftrag.sensor_key),
-                 "tage_neu": e["summary"]["tage_neu"], "zaehlerstaende_geloescht": e["summary"]["zaehlerstaende_geloescht"]}
-                for e in self.korrekturen]
+        """Je Korrektur der Lauf für die Antwort der Route (Fortschritt an der Fläche); dazu je angesetztem Wechsel «bleiben»
+        sein Lauf mit ``art = ansetzen`` (U2 Lauf b)."""
+        laeufe = [{"lauf": e["summary"]["lauf"], "sensor_key": e["lage"].auftrag.sensor_key,
+                   "label": _je_key(labels or {}, e["lage"].auftrag.sensor_key, e["lage"].auftrag.sensor_key),
+                   "tage_neu": e["summary"]["tage_neu"], "zaehlerstaende_geloescht": e["summary"]["zaehlerstaende_geloescht"]}
+                  for e in self.korrekturen]
+        return laeufe + [z for e in self.angesetzt for z in self._ergebnis(e, labels)[0]]
+
+    def wartet(self, labels: Optional[dict[str, str]] = None) -> list[dict]:
+        """Je Wechsel «bleiben», der noch nicht wie Home Assistant gerechnet wird, der Grund in Anwender-Sprache."""
+        return [z for e in self.angesetzt for z in self._ergebnis(e, labels)[1]]
+
+    @staticmethod
+    def _ergebnis(e: dict, labels: Optional[dict[str, str]]) -> tuple[list[dict], list[dict]]:
+        from backend.services.zuordnung_wechsel.bleiben import ergebnis_der_route
+
+        key = e["sensor_key"]
+        return ergebnis_der_route(e, key, _je_key(labels or {}, key, key), e.get("vorher"), e.get("nachher"))
 
 
 def _je_key(d: dict, key: str, sonst=None):
@@ -314,44 +360,55 @@ def offene_fragen(fragen: list[Frage], gruende: dict[str, tuple[str, Optional[da
 
 
 async def vollziehe(db, anlage, vorher: dict[str, dict], gruende: dict[str, tuple[str, Optional[datetime]]], *,
-                    labels: Optional[dict[str, str]] = None, jetzt: Optional[datetime] = None) -> Vollzug:
+                    labels: Optional[dict[str, str]] = None, jetzt: Optional[datetime] = None,
+                    zaehlt_ab: Optional[dict[str, datetime]] = None) -> Vollzug:
     """Nach der Änderung (in der Sitzung des Aufrufers, vor seinem Commit): prüfen, verzeichnen, Korrektur ausführen.
 
     ``gruende``: je Schlüssel ``(grund, falsch_seit)``. Fehlt für eine fragepflichtige Änderung der Grund ⇒ ``GrundFehlt``;
-    HA eingerichtet und nicht erreichbar bei einer Korrektur ⇒ ``korrektur.KorrekturNichtStartbar``."""
+    HA eingerichtet und nicht erreichbar bei einer Korrektur ⇒ ``korrektur.KorrekturNichtStartbar``. ``zaehlt_ab`` (je
+    Schlüssel oder ``ALLE``): «Der neue Sensor zählt ab» an einem Wechsel «bleiben» zwischen zwei HA-Sensoren mit Überlappung
+    (``bleiben.setze_zaehlt_ab``); sonst ``bleiben.ZaehltAbAbgelehnt`` (ein ``GrundFehlt`` — die Route antwortet 422)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
     from backend.services.zuordnung_wechsel.verzeichnen import verzeichne
 
     labels = labels or {}
     jetzt = (jetzt or datetime.now()).replace(microsecond=0)
-    fragen = await pruefe(db, anlage, vorher, await lade_wirksame_quellen(db, anlage), details=False)
+    fragen = await pruefe(db, anlage, vorher, await lade_wirksame_quellen(db, anlage), details=False, zaehlt_ab=zaehlt_ab)
     offen = offene_fragen(fragen, gruende)
     if offen:
         raise GrundFehlt(SATZ_GRUND_FEHLT.format(felder=" · ".join(_je_key(labels, f.sensor_key, f.sensor_key) for f in offen)))
     grund = {f.sensor_key: _je_key(gruende, f.sensor_key) for f in fragen if f.grund_erforderlich}
     korr = [f for f in fragen if f.grund_erforderlich and grund[f.sensor_key][0] == GRUND_KORREKTUR]
+    _zaehlt_ab_nur_bleiben(fragen, grund, zaehlt_ab)
     for f in korr:
         _pruefe_falsch_seit(f, grund[f.sensor_key][1], jetzt, _je_key(labels, f.sensor_key, f.sensor_key))
     v = Vollzug(fragen, ha_svc=kr.ha_dienst(None) if korr else None)
     fort = {k: GRUND_FORTSETZUNG for k, (g, _f) in grund.items() if g == GRUND_FORTSETZUNG}
     zeilen = await verzeichne(db, anlage, vorher, jetzt=jetzt, gruende=fort, auslassen={f.sensor_key for f in korr})
-    await _ansatz_offen(db, v, zeilen, jetzt)
+    await _ansatz_offen(db, v, zeilen, jetzt, zaehlt_ab or {})
     for f in korr:
         v.korrekturen.append(await kr.fuehre_aus(db, korrektur_auftrag(anlage.id, f, grund[f.sensor_key][1], jetzt),
                                                   ha_svc=v.ha_svc, jetzt=jetzt))
     return v
 
 
-async def _ansatz_offen(db, v: Vollzug, zeilen, jetzt: datetime) -> None:
+async def _ansatz_offen(db, v: Vollzug, zeilen, jetzt: datetime, zaehlt_ab: dict[str, datetime]) -> None:
     """Sensorwechsel U2 a2 (Rechenweg F3): eine Fortsetzung zwischen zwei HA-Sensoren bekommt ``ansatz = offen`` — nach dem
-    Commit setzt der Dienst sie an, wenn HA den neuen schon führt, sonst der nächste Stundenlauf."""
+    Commit setzt der Dienst sie an, wenn HA den neuen schon führt, sonst der nächste Stundenlauf. Mit «Der neue Sensor zählt
+    ab» (U2 Lauf b, F9) ``offen_schnitt`` an der gewählten Stunde (``bleiben.setze_zaehlt_ab``)."""
     from backend.models.zuordnung_wechsel import ANSATZ_OFFEN
     from backend.services.zuordnung_wechsel.ansatz import wird_angesetzt
+    from backend.services.zuordnung_wechsel.bleiben import setze_zaehlt_ab
     from backend.services.zuordnung_wechsel.korrektur import sitzungen_wie
+    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
 
     for row in zeilen:
         if wird_angesetzt(row):
             row.ansatz = ANSATZ_OFFEN
+            wert = _je_key(zaehlt_ab, row.sensor_key)
+            if wert is not None:
+                await setze_zaehlt_ab(db, row, wert, jetzt=jetzt)
+                vergiss(db, row.anlage_id)
             v.ansaetze.append(row.id)
     if v.ansaetze:
         from backend.core.database import get_session
@@ -368,8 +425,14 @@ async def nach_dem_commit(v: Vollzug) -> None:
 
     for erg in v.korrekturen:
         await kr.nach_dem_commit(erg, ha_svc=v.ha_svc)
+    quellen = {f.sensor_key: (f.vorher, f.nachher) for f in v.fragen}
     for wechsel_id in v.ansaetze:
-        await setze_an(v.sitzungen, wechsel_id, jetzt=v.jetzt)
+        e = await setze_an(v.sitzungen, wechsel_id, jetzt=v.jetzt)
+        key = (e.get("lage") or {}).get("sensor_key") or e.get("sensor_key")
+        if key is None:
+            continue
+        vorher, nachher = quellen.get(key, (None, None))
+        v.angesetzt.append({**e, "sensor_key": key, "vorher": vorher, "nachher": nachher})
 
 
 def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
@@ -387,6 +450,6 @@ def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:
             teile.append(f"{name}: Korrektur ({fmt_zahl(s['zaehlerstaende_geloescht'])} Zählerstände verworfen, "
                          f"{fmt_zahl(s['tage_neu'])} Tage werden neu gebildet)")
         else:
-            teile.append(f"{name}: Fortsetzung")
+            teile.append(f"{name}: bisherige Werte bleiben")
     return " · ".join(teile)
 

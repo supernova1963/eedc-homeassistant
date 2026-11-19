@@ -186,4 +186,18 @@ def _monate_lesen(svc, sensor_ids: list, alte: list, ab_datum) -> list:
     return out
 
 
-__all__ = ["abschnitte_des_fensters", "alle_monatswerte", "monatswerte_je_abschnitt", "sensorwerte_des_monats"]
+async def live_zeilen(db, anlage_id: int) -> dict[str, list]:
+    """Live heute/gestern (U2 Lauf b, F8): je heutiger Entität die angesetzten Wechsel «bleiben» ihres Schlüssels — dieselben
+    Zeilen wie die Hülle des Monats (``_angesetzte``), für ``abschnitte_des_fensters`` über das Tagesfenster."""
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
+
+    return {zeilen[-1].nachher["entity_id"]: zeilen for zeilen in _angesetzte(await lade_wechsel(db, anlage_id)).values()}
+
+
+def unix(t: datetime) -> float:
+    """Örtliche Wand-Uhr ⇒ Epoch, wie die Abschnitte des Fensters rechnen."""
+    return _unix(t)
+
+
+__all__ = ["abschnitte_des_fensters", "alle_monatswerte", "live_zeilen", "monatswerte_je_abschnitt", "sensorwerte_des_monats",
+           "unix"]

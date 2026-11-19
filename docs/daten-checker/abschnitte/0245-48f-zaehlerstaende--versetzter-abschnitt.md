@@ -22,7 +22,7 @@ ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Da
 nach dem der neue Sensor einfach weiterläuft.
 
 **Ein Handgriff: «Grund nachtragen».** Er öffnet in den Datenquellen denselben Dialog wie beim Wechsel einer Quelle — nur
-mit „Bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
+mit „Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
 Abschnitts. Stimmen die Stände davor und danach mit dem überein, was Home Assistant für die Quelle davor und danach führt,
 liest eedc den Abschnitt aus Home Assistant neu — auf derselben Höhe — und speichert ihn; die Tageswerte stimmen dann an jedem
 Tag (bis das Neulesen gelungen ist, zeigen die Rand-Tage nur ihren Teil; eedc holt es jede Stunde und nach jedem Start nach).

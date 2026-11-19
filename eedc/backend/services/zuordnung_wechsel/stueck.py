@@ -177,14 +177,11 @@ class StueckLage:
 async def _sperre(db, anlage_id: int, key: str, vor: Optional[dict], ab: Optional[dict]) -> Optional[str]:
     """Die Sperren der Korrektur über ein Stück: verschiedene Quellen an den Rändern (A → X → C, Bauplan Nr. 96) und ein
     offener Korrektur-Lauf des Felds (wie die Werkbank und der Nachtrag, «Zu §13» Nr. 86)."""
-    from backend.services.zuordnung_wechsel import korrektur_lauf
-    from backend.services.zuordnung_wechsel.nachtrag import SATZ_LAUF_OFFEN, quelle_text
+    from backend.services.zuordnung_wechsel.nachtrag import quelle_text, satz_lauf_offen
 
     if not _gleiche_quelle(vor, ab):
         return SATZ_VERSCHIEDENE_QUELLEN.format(vorher=quelle_text(vor), nachher=quelle_text(ab))
-    if await korrektur_lauf.offener_lauf(db, anlage_id, key) is not None:
-        return SATZ_LAUF_OFFEN
-    return None
+    return await satz_lauf_offen(db, anlage_id, key)
 
 
 async def lage_am_befund(db, anlage, key: str, sprung: datetime, rueckgang: datetime) -> Optional[StueckLage]:
@@ -273,7 +270,7 @@ def antwort(la: StueckLage, label: Optional[str], feld_id: Optional[str], korrek
         "korrektur_nicht": la.korrektur_nicht, "grund_erforderlich": la.korrektur_nicht is None, "verzeichnet": False,
         "erster_wert": None, "tage": 0, "stand_alt": None, "stand_neu": None,
         "vorgabe_falsch_seit": la.sprung.isoformat(), "stueck": {"sprung": la.sprung.isoformat(), "rueckgang": la.rueckgang.isoformat()},
-        "korrektur": korrektur,
+        "korrektur": korrektur, "bleiben": None,
     }
 
 

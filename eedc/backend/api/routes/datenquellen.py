@@ -854,6 +854,9 @@ class QuelleSetRequest(BaseModel):
     # `korrektur` (dann mit `falsch_seit`, örtliche Zeit; volle Stunde). Ohne Grund lehnt die Route sie mit 422 ab.
     grund: str | None = None
     falsch_seit: datetime | None = None
+    # U2 Lauf b (F9): «Der neue Sensor zählt ab» bei «bleiben» zwischen zwei HA-Sensoren mit Überlappung (örtliche Zeit; volle
+    # Stunde). Außerhalb des zulässigen Bereichs oder ohne Überlappung lehnt die Route mit 422 ab.
+    zaehlt_ab: datetime | None = None
 
 
 class InvertSetRequest(BaseModel):
@@ -939,6 +942,10 @@ async def _quelle_zulaessig(db: AsyncSession, anlage: Anlage, field_id: str, bod
         )
     if body.grund is not None and body.grund not in abfrage.GRUENDE:
         raise HTTPException(status_code=400, detail=f"Unbekannter Grund: {body.grund}")
+    if body.zaehlt_ab is not None and body.grund == abfrage.GRUND_KORREKTUR:
+        from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_BLEIBEN
+
+        raise HTTPException(status_code=422, detail=SATZ_NUR_BLEIBEN)
     return quelle
 
 
@@ -1031,6 +1038,11 @@ def _grund_des_felds(body: QuelleSetRequest) -> dict:
     return {abfrage.ALLE: (body.grund, body.falsch_seit)} if body.grund else {}
 
 
+def _zaehlt_ab_des_felds(body: QuelleSetRequest) -> dict | None:
+    """«Der neue Sensor zählt ab» der Feld-Route gilt wie der Grund für die fragepflichtige Änderung dieses Felds."""
+    return {abfrage.ALLE: body.zaehlt_ab} if body.zaehlt_ab is not None else None
+
+
 @router.post("/{anlage_id}/felder/{field_id}/quelle/pruefen")
 async def pruefe_feld_quelle(
     anlage_id: int, field_id: str, body: QuelleSetRequest, db: AsyncSession = Depends(get_db, scope="function")
@@ -1040,7 +1052,9 @@ async def pruefe_feld_quelle(
     Derselbe Body wie `…/quelle`. Die Route macht dieselbe Änderung in der Sitzung, fragt die eine Prüf-Funktion
     (`zuordnung_wechsel/abfrage.pruefe`) und rollt zurück. Antwort: `grund_erforderlich`, `erster_wert`, `tage`,
     `stand_alt`, `stand_neu` (dazu `sensor_key`, `label`, `verzeichnet`, `vorgabe_falsch_seit`); mit `grund = korrektur`
-    und `falsch_seit` zusätzlich `korrektur` = die Vorschau des Dienstes (Vorschau = Lauf).
+    und `falsch_seit` zusätzlich `korrektur` = die Vorschau des Dienstes (Vorschau = Lauf). Zwischen zwei HA-Sensoren
+    `bleiben` = was «Bisherige Werte bleiben» tut (`zuordnung_wechsel/bleiben.angaben`; mit `zaehlt_ab` an dieser Stunde,
+    außerhalb des zulässigen Bereichs **422**).
     """
     anlage = await _anlage_oder_404(db, anlage_id)
     quelle = await _quelle_zulaessig(db, anlage, field_id, body)
@@ -1048,7 +1062,11 @@ async def pruefe_feld_quelle(
     wirksam_vorher = await momentaufnahme(db, anlage)
     try:
         await _wende_quelle_an(db, anlage, field_id, quelle, body)
-        fragen = await abfrage.pruefe(db, anlage, wirksam_vorher, await abfrage.lade_wirksame_quellen(db, anlage))
+        try:
+            fragen = await abfrage.pruefe(db, anlage, wirksam_vorher, await abfrage.lade_wirksame_quellen(db, anlage),
+                                          zaehlt_ab=_zaehlt_ab_des_felds(body))
+        except abfrage.GrundFehlt as e:
+            raise HTTPException(status_code=422, detail=str(e))
         f = fragen[0] if fragen else None
         out = abfrage.antwort(f, label)
         out["korrektur"] = None
@@ -1087,7 +1105,8 @@ async def set_feld_quelle(
         await _thema_label_aus_ha(db, anlage.sensor_mapping, field_id, (body.entity_id or "").strip())
         flag_modified(anlage, "sensor_mapping")
     try:
-        vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, _grund_des_felds(body), labels={abfrage.ALLE: label})
+        vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, _grund_des_felds(body), labels={abfrage.ALLE: label},
+                                          zaehlt_ab=_zaehlt_ab_des_felds(body))
     except (abfrage.GrundFehlt, KorrekturNichtStartbar) as e:
         raise HTTPException(status_code=422, detail=str(e))
     quellen = (anlage.sensor_mapping or {}).get(QUELLEN_KEY) or {}
@@ -1125,6 +1144,8 @@ async def set_feld_quelle(
         "field_id": field_id,
         "quelle": quelle,
         "korrektur": vollzug.zusammenfassung({abfrage.ALLE: label}),
+        # U2 Lauf b: je Wechsel «bleiben», den eedc noch nicht wie Home Assistant rechnet, der Grund (Satz).
+        "wartet": vollzug.wartet({abfrage.ALLE: label}),
     }
 
 

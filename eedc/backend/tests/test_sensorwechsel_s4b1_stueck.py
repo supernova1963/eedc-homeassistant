@@ -549,9 +549,9 @@ async def test_route_kein_frei_waehlbares_stueck_und_nur_korrektur(db, ha, einge
     e = await _abgelehnt(sw.pruefe_stueck(aid, _body(key.replace("ladung_pv_kwh", "ladung_kwh")), db))
     assert e.status_code == 404
     e = await _abgelehnt(sw.stueck_korrigieren(aid, _body(key, grund="fortsetzung"), db))
-    assert (e.status_code, e.detail) == (422, "Für einen versetzten Abschnitt lässt sich nur «Korrektur» eintragen.")
+    assert (e.status_code, e.detail) == (422, "Für einen versetzten Abschnitt lässt sich nur «Bisherige Werte verwerfen» eintragen.")
     e = await _abgelehnt(sw.stueck_korrigieren(aid, _body(key, grund=None), db))
-    assert (e.status_code, e.detail) == (422, "Wähle einen Grund: Fortsetzung oder Korrektur.")
+    assert (e.status_code, e.detail) == (422, "Wähle, ob die bisherigen Werte bleiben oder verworfen werden.")
     assert (await _abgelehnt(sw.pruefe_stueck(aid, _body(key, grund="weiss_nicht"), db))).status_code == 400
     assert await db.scalar(select(func.count()).select_from(ZuordnungWechsel)) == 0
 

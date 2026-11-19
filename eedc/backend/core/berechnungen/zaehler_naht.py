@@ -101,6 +101,16 @@ def monat_aus_abschnitten(werte: Sequence[tuple[float, float, float, int]]) -> t
     return start, round(start + differenz - verworfen, 3), differenz, verworfen, sum(i for *_r, i in werte)
 
 
+def tagesmenge_aus_abschnitten(paare: Sequence[tuple[Optional[float], Optional[float]]]) -> Optional[float]:
+    """Live heute/gestern je Geltungsabschnitt (``live_history_service._energy_delta_via_statistics``, U2 Lauf b F8): je
+    Abschnitt ``(Stand am Anfang, Stand am Ende)`` aus HAs Statistik desselben Sensors (Anfang 0 ab der ersten Zeile eines
+    neuen Sensors, der einen anderen ablöst) ⇒ die Summe der Zuwächse, je Abschnitt nicht unter 0 (wie bisher für einen
+    Sensor); ``None``, wenn ein Stand fehlt. Zwischen den Ständen zweier Sensoren entsteht keine Differenz."""
+    if not paare or any(a is None or e is None for a, e in paare):
+        return None
+    return sum(max(0.0, e - a) for a, e in paare)
+
+
 def versatz_der_naht(n) -> Optional[float]:
     """Der Versatz einer Naht mit Rand-Ständen, sonst ``None`` (die Naht teilt)."""
     return n.versatz if isinstance(n, Naht) else None
@@ -255,5 +265,5 @@ def verschiebung(wert_nachher: Optional[float], wert_vorher: Optional[float]) ->
 
 __all__ = ["Naht", "UEBERLAPPUNG_TOL", "abschnitte", "ende_der_luecke_davor", "endet_in_luecke", "gehoben", "gehobene_staende",
            "hebung_am", "kanal_ende_alt", "kanal_versatz_neu", "monat_aus_abschnitten", "nullpunkt_neu", "offset_vor_naht",
-           "rand_versatz", "slot_beider", "stand_differenz", "traegt_messung", "trennende", "ueber_naht", "ueberlappt",
+           "rand_versatz", "slot_beider", "stand_differenz", "tagesmenge_aus_abschnitten", "traegt_messung", "trennende", "ueber_naht", "ueberlappt",
            "verschiebung", "versatz_der_naht", "zaehlwerk_menge"]

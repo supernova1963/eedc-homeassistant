@@ -40,20 +40,35 @@ from backend.services.zuordnung_wechsel.abfrage import _gleich, haette_gefragt, 
 
 #: Wortlaute (Sitzung 4; gehen vor dem Commit an Gernot).
 SATZ_WECHSEL = "Am {zeit} Uhr wechselte die Quelle von {vorher} zu {nachher}."
-SATZ_KORREKTUR_NUR_JUENGSTER = ("«Bisher war der falsche Sensor zugeordnet» lässt sich hier nicht nachtragen: das geht am jüngsten "
+SATZ_KORREKTUR_NUR_JUENGSTER = ("«Bisherige Werte verwerfen» lässt sich hier nicht nachtragen: das geht am jüngsten "
                                 "Wechsel dieses Felds, solange seine neue Quelle noch zugeordnet ist, und an einem Wechsel, mit "
                                 "dem die Quelle zur vorigen zurückkehrte — dann gilt die Korrektur für die Zeit seit dem Wechsel "
                                 "davor.")
 SATZ_FALSCH_SEIT_NACH_WECHSEL = "«Falsch seit» muss vor dem Wechsel liegen ({zeit} Uhr)."
 SATZ_NICHT_OFFEN = "Für diesen Wechsel ist kein Grund nachzutragen."
 SATZ_KORREKTUR_ENDGUELTIG = "Eine Korrektur lässt sich nicht mehr ändern."
-SATZ_GRUND_FEHLT = "Wähle einen Grund: Fortsetzung oder Korrektur."
-SATZ_NUR_KORREKTUR = "Für diesen Wechsel ist «Fortsetzung» schon eingetragen; ändern lässt er sich nur zu «Korrektur»."
+SATZ_GRUND_FEHLT = "Wähle, ob die bisherigen Werte bleiben oder verworfen werden."
+SATZ_NUR_KORREKTUR = ("Für diesen Wechsel ist «Bisherige Werte bleiben» schon eingetragen; ändern lässt er sich nur zu "
+                      "«Bisherige Werte verwerfen».")
 #: Am versetzten Abschnitt (Befund ``zaehler_versatz``) gibt es nur «Korrektur» (Bauplan «Zu §14» Nr. 96).
-SATZ_NUR_KORREKTUR_STUECK = "Für einen versetzten Abschnitt lässt sich nur «Korrektur» eintragen."
+SATZ_NUR_KORREKTUR_STUECK = "Für einen versetzten Abschnitt lässt sich nur «Bisherige Werte verwerfen» eintragen."
 #: Offener Korrektur-Lauf des Felds («Zu §13» Nr. 86 — eigener Satz ohne den Werkbank-Knopf).
 SATZ_LAUF_OFFEN = ("Für dieses Feld steht aus einer früheren Korrektur noch das Füllen aus Home Assistant aus — eedc holt es "
                    "jede Stunde von selbst nach. Eine weitere Korrektur lässt sich erst danach eintragen.")
+#: Dasselbe, wenn der offene Lauf der eines Wechsels «bleiben» ist (U2 Lauf b, a2 E-2) — er ist keine Korrektur.
+SATZ_LAUF_OFFEN_ANSETZEN = ("Für dieses Feld liest eedc nach dem Wechsel des Sensors noch Werte aus Home Assistant neu — eedc "
+                            "holt das jede Stunde von selbst nach. Eine Korrektur lässt sich erst danach eintragen.")
+
+
+async def satz_lauf_offen(db, anlage_id: int, sensor_key: str) -> Optional[str]:
+    """Der Satz zu einem offenen Lauf des Felds (``korrektur_lauf.offener_lauf``) je nach seiner Art; ``None`` = keiner offen."""
+    from backend.services.zuordnung_wechsel import korrektur_lauf
+
+    lauf = await korrektur_lauf.offener_lauf(db, anlage_id, sensor_key)
+    if lauf is None:
+        return None
+    ansetzen = korrektur_lauf.art(await korrektur_lauf.stand(db, lauf)) == korrektur_lauf.ART_ANSETZEN
+    return SATZ_LAUF_OFFEN_ANSETZEN if ansetzen else SATZ_LAUF_OFFEN
 
 QUELLE_UNBEKANNT = "einer unbekannten Quelle"
 
@@ -102,6 +117,8 @@ class NachtragLage:
     #: «Korrektur im Nachhinein» am Rückkehr-Wechsel über das Stück A → X → A davor (``stueck_des_wechsels``, Bauplan «Zu §14»
     #: Nr. 96): ``(Sprung, Rückgang, Quelle davor und danach)`` — «Falsch seit» steht dann fest.
     stueck: Optional[tuple[datetime, datetime, dict]] = None
+    #: U2 Lauf b (F10): was «bleiben» zwischen zwei HA-Sensoren tut (``bleiben.angaben``; ``bleiben_angaben``).
+    bleiben: Optional[dict] = None
 
 
 async def _zeile(db, anlage_id: int, wechsel_id: int) -> Optional[ZuordnungWechsel]:
@@ -182,7 +199,6 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
     """Was an dieser Zeile nachzutragen ist (lesend); ``None`` = keine Zeile dieser Anlage, oder eine Lücken-Zeile (kein
     Wechsel, ``zeitpunkt.ist_luecken_zeile`` — die Routen antworten 404, Bauplan «Zu §14» Nr. 105, F7 c)."""
     from backend.services.kanal.angaben import angaben, kanal_des_schluessels
-    from backend.services.zuordnung_wechsel import korrektur_lauf
     from backend.services.zuordnung_wechsel.abfrage import _reihe
     from backend.services.zuordnung_wechsel.zeitpunkt import ist_luecken_zeile
 
@@ -199,10 +215,10 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
         la.stueck = await stueck_des_wechsels(db, anlage.id, row)
     if not (moeglich or la.stueck):
         la.korrektur_nicht = SATZ_KORREKTUR_NUR_JUENGSTER
-    elif await korrektur_lauf.offener_lauf(db, anlage.id, row.sensor_key) is not None:
+    elif (offen_satz := await satz_lauf_offen(db, anlage.id, row.sensor_key)) is not None:
         # Bauplan §13 Nr. 73: wie die Werkbank (§11 Nr. 46) — ein offener Korrektur-Lauf desselben Felds wird zuerst
         # nachgeholt; Prüfung und Schreiben nennen denselben Satz (eigener Satz ohne Werkbank-Knopf, «Zu §13» Nr. 86).
-        la.korrektur_nicht = SATZ_LAUF_OFFEN
+        la.korrektur_nicht = offen_satz
     else:
         la.gruende.append(GRUND_KORREKTUR)
     kanal = await kanal_des_schluessels(db, anlage.id, row.sensor_key)
@@ -211,6 +227,23 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
         la.erster_wert, la.tage, _stand = await angaben(db, kanal)
     la.vorgabe_falsch_seit = la.stueck[0] if la.stueck else await _vorgabe(db, anlage.id, row, kanal, la.erster_wert)
     return la
+
+
+async def bleiben_angaben(db, la: NachtragLage, zaehlt_ab: Optional[datetime] = None,
+                          jetzt: Optional[datetime] = None) -> Optional[dict[str, Any]]:
+    """Die Angaben zu «bleiben» am verzeichneten Wechsel (F10; Vorgabe für den Schnitt ist die Stunde des Wechsels) — nur,
+    wenn «bleiben» nachzutragen ist und der Wechsel zwischen zwei HA-Sensoren liegt."""
+    from backend.services.zuordnung_wechsel import bleiben
+
+    r = la.row
+    if GRUND_FORTSETZUNG not in la.gruende:
+        if zaehlt_ab is not None:
+            raise bleiben.ZaehltAbAbgelehnt(bleiben.SATZ_NUR_BLEIBEN)
+        return None
+    if zaehlt_ab is not None and not bleiben.ist_ha_zu_ha(r.vorher, r.nachher):
+        raise bleiben.ZaehltAbAbgelehnt(bleiben.SATZ_NUR_HA)
+    return await bleiben.angaben(db, r.anlage_id, r.sensor_key, r.vorher, r.nachher, ab_ts=r.ab_ts, erklaert_ts=r.erklaert_ts,
+                                 jetzt=jetzt or datetime.now().replace(microsecond=0), zaehlt_ab=zaehlt_ab)
 
 
 def wechsel_satz(row) -> str:
@@ -250,9 +283,12 @@ def pruefe_grund(la: NachtragLage, grund: Optional[str]) -> None:
         raise NachtragAbgelehnt(SATZ_NUR_KORREKTUR)
 
 
-async def trage_fortsetzung_ein(db, anlage, row) -> ZuordnungWechsel:
+async def trage_fortsetzung_ein(db, anlage, row, zaehlt_ab: Optional[datetime] = None,
+                                jetzt: Optional[datetime] = None) -> ZuordnungWechsel:
     """Fortsetzung nachtragen (in der Sitzung des Aufrufers, kein Commit). Ein Nachtrag im Kanal, den er nicht tragen kann,
-    wirft ``ValueError`` (die Route antwortet 422 und rollt zurück)."""
+    wirft ``ValueError`` (die Route antwortet 422 und rollt zurück); ebenso ein «Der neue Sensor zählt ab», das eedc nicht
+    annimmt (``bleiben.setze_zaehlt_ab``, U2 Lauf b F10)."""
+    from backend.services.zuordnung_wechsel.bleiben import SATZ_NUR_HA, ZaehltAbAbgelehnt, setze_zaehlt_ab
     from backend.services.kanal import merken
     from backend.services.kanal.angaben import kanal_des_schluessels
     from backend.services.kanal.naht import nachtrag_fortsetzung
@@ -265,6 +301,10 @@ async def trage_fortsetzung_ein(db, anlage, row) -> ZuordnungWechsel:
                            vorher=row.vorher, nachher=row.nachher, grund=GRUND_FORTSETZUNG, herkunft=HERKUNFT_NACHTRAG)
     if wird_angesetzt(neu):                     # U2 a2 (F10): «bleiben» zwischen zwei HA-Sensoren — nach dem Commit ansetzen
         neu.ansatz = ANSATZ_OFFEN
+        if zaehlt_ab is not None:
+            await setze_zaehlt_ab(db, neu, zaehlt_ab, jetzt=jetzt or datetime.now().replace(microsecond=0))
+    elif zaehlt_ab is not None:
+        raise ZaehltAbAbgelehnt(SATZ_NUR_HA)
     db.add(neu)
     await db.flush()
     row.aufgehoben_durch = neu.id
@@ -290,5 +330,5 @@ def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str
         "tage": la.tage, "stand_alt": None, "stand_neu": None,
         "vorgabe_falsch_seit": None if la.vorgabe_falsch_seit is None else la.vorgabe_falsch_seit.isoformat(),
         "stueck": None if la.stueck is None else {"sprung": la.stueck[0].isoformat(), "rueckgang": la.stueck[1].isoformat()},
-        "korrektur": korrektur,
+        "korrektur": korrektur, "bleiben": la.bleiben,
     }

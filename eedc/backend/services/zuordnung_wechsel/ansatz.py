@@ -35,9 +35,15 @@ der alte nach T1 weiterzählte (``zaehler_naht.ueberlappt``: heutiger letzter St
 
 **Auslöser:** nach dem Commit der Route (Feld-Route, Preset, «Grund nachtragen»), wenn HA die neue Statistik schon führt; sonst
 nach jedem Stundenlauf für offene Zeilen (``offene_ansetzen``). ``kanal/schreiber._spiegel`` lässt einen Schlüssel mit offener
-Zeile aus. HA nicht erreichbar, noch keine Zeile des neuen, ein offener Korrektur-Lauf am Schlüssel oder ein Kanal, der an G
-keinen Spiegel der alten Entität trägt ⇒ die Zeile bleibt ``offen`` (``Lage.wartet``) und liest so lange wie eine Naht ohne
-Rand-Werte. Nur Home Assistant → Home Assistant (MQTT und Felder ohne Spiegel lesen bei «bleiben» wie bisher, U3).
+Zeile aus. HA nicht erreichbar, noch keine Zeile des neuen oder ein offener Lauf am Schlüssel ⇒ die Zeile bleibt ``offen``
+(``Lage.wartet``) und liest so lange wie eine Naht ohne Rand-Werte. Trägt der Kanal an G keinen Spiegel der alten oder der
+neuen Entität (``WARTET_KANAL``), verliert die Zeile ``offen`` und rechnet wie bisher (Korrekturrunde a-K: sonst bliebe sie für
+immer offen, und der Stundenlauf spiegelte den Schlüssel nie wieder).
+
+**Korrekturrunde a-K** (Nachmessung a1 + a2): Stand-Felder am Schlüssel erkannt (N1); Grenze im Kanal und Ende des «heutigen»
+Stands am nächsten verzeichneten Wechsel (N2, ``_nachbarn``); Mitrücken im Auftrag des Laufs, wiederholbar (N3,
+``mitruecken``); zurück in derselben Stunde ohne eigenen Stand dazwischen ⇒ beide Zeilen heben sich auf (N4); Rand-Stand
+epoch-genau aus der Zeile (N5, ``_ha_stand``). Nur Home Assistant → Home Assistant (MQTT und Felder ohne Spiegel lesen bei «bleiben» wie bisher, U3).
 """
 
 from __future__ import annotations
@@ -65,7 +71,7 @@ logger = logging.getLogger(__name__)
 _STUNDE = 3600
 ANSATZ_WARTET = frozenset({ANSATZ_OFFEN, ANSATZ_OFFEN_SCHNITT})
 
-#: Warum eine Zeile offen bleibt (Vorschau-Feld ``wartet``; Gerüst, keine Wortlaute — Lauf b).
+#: Warum eine Zeile offen bleibt (Vorschau-Feld ``wartet``; die Sätze stehen in ``bleiben.SATZ_WARTET``).
 WARTET_HA = "ha_nicht_erreichbar"
 WARTET_ZEILE = "noch_keine_zeile"
 WARTET_LAUF = "korrektur_lauf_offen"
@@ -130,6 +136,12 @@ class Lage:
     staende_weg: Optional[tuple[datetime, datetime]] = None
     staende_neu: Optional[tuple[datetime, datetime]] = None
     tage: list[date] = field(default_factory=list)
+    #: a-K N2: G des nächsten verzeichneten Wechsels des Schlüssels (``None`` = keiner) — dort endet, was dieser Wechsel
+    #: im Kanal neu schreibt, und der «heutige» Stand des alten für die Überlappung.
+    grenze_g: Optional[datetime] = None
+    #: a-K N4: ein Wechsel zurück in derselben Stunde, bevor die Quelle dazwischen einen eigenen Stand hatte — die Zeile,
+    #: mit der sich diese aufhebt.
+    aufheben_mit: Optional[int] = None
 
     @property
     def ab_neu(self) -> Optional[datetime]:
@@ -171,7 +183,9 @@ async def _letzter_stand(db, anlage_id: int, key: str, vor: datetime, *, genau: 
 
 
 async def _art_und_g(la: Lage, row, svc, bis_ts: int, stand: bool) -> Optional[dict]:
-    """F2: T1, Überlappung, Art und G. Returns die erste Zeile des neuen (``None`` = HA führt ihn noch nicht)."""
+    """F2: T1, Überlappung, Art und G. Returns die erste Zeile des neuen (``None`` = HA führt ihn noch nicht). Der «heutige»
+    Stand des alten endet am nächsten verzeichneten Wechsel des Schlüssels (``la.grenze_g``, a-K N2): zählt der alte erst
+    danach wieder, ist das keine Überlappung mit dem neuen."""
     from backend.core.berechnungen.zaehler_naht import ueberlappt
     from backend.services.ha_statistik_rand import erste_zeile
 
@@ -181,7 +195,8 @@ async def _art_und_g(la: Lage, row, svc, bis_ts: int, stand: bool) -> Optional[d
     t1 = int(round(erste["start_ts"]))
     la.t1 = datetime.fromtimestamp(t1)
     spalte = "state" if stand else "sum"
-    heute, bei_t1 = await _zeile_bis(svc, la.alt, bis_ts), await _zeile_bis(svc, la.alt, t1)
+    ende = bis_ts if la.grenze_g is None else min(bis_ts, _ts(la.grenze_g) - _STUNDE)
+    heute, bei_t1 = await _zeile_bis(svc, la.alt, ende), await _zeile_bis(svc, la.alt, t1)
     la.alt_von_ha = heute is not None
     la.ueberlappung = ueberlappt(None if heute is None else heute.get(spalte), None if bei_t1 is None else bei_t1.get(spalte))
     if row.ansatz == ANSATZ_OFFEN_SCHNITT or la.ueberlappung:
@@ -193,12 +208,16 @@ async def _art_und_g(la: Lage, row, svc, bis_ts: int, stand: bool) -> Optional[d
 
 
 async def _ha_stand(svc, eid: str, zeile: Optional[dict], key: str) -> Optional[float]:
-    """Der Wert, den der Schreiber der Reihe aus dieser HA-Zeile speichern würde (``get_value_at`` um ihr Ende)."""
+    """Der Wert, den der Schreiber der Reihe aus dieser HA-Zeile speichern würde (``get_value_at`` um ihr Ende) — **genau
+    diese Zeile**: das Ende als Zeitpunkt mit Zone (``get_value_at`` rechnet ihn über ``timestamp()`` epoch-genau), nicht über
+    die Wand-Uhr, die in der doppelten Herbststunde die erste der beiden Zeilen träfe (Korrekturrunde a-K, N5)."""
+    from datetime import timezone
+
     from backend.services.snapshot.keys import ist_stand_sensor_key
 
     if zeile is None:
         return None
-    ende = datetime.fromtimestamp(int(round(zeile["start_ts"])) + _STUNDE)
+    ende = datetime.fromtimestamp(int(round(zeile["start_ts"])) + _STUNDE, tz=timezone.utc)
     return await _ha(svc.get_value_at, eid, ende, 10, False, ist_stand_sensor_key(key))
 
 
@@ -271,7 +290,7 @@ async def _ergaenzen(db, la: Lage, kanal, svc, basis_ts: int, quelle) -> tuple[i
 
 async def _rand_kanal(db, la: Lage, svc, erste: dict) -> Optional[str]:
     """Der Versatz der Quellzeile des neuen bei G (Kanal aus HAs Zeilen). Returns ``WARTET_KANAL``, wenn der Kanal an G
-    keinen Spiegel der alten Entität trägt (eine Mitschrift oder eine andere Quelle davor — U3)."""
+    keinen Spiegel der alten oder der neuen Entität trägt (eine Mitschrift oder eine andere Quelle davor — U3)."""
     from backend.core.berechnungen.zaehler_naht import kanal_ende_alt, kanal_versatz_neu, nullpunkt_neu
     from backend.models.kanal import FAMILIE_SPIEGEL
     from backend.services.kanal.angaben import kanal_des_schluessels
@@ -322,23 +341,73 @@ async def _tage(db, row, la: Lage, jetzt: datetime) -> list[date]:
     return await tage_neu_bilden_liste(db, a, ziele)
 
 
+async def _nachbarn(db, row, la: Lage) -> None:
+    """a-K N2/N4: der nächste verzeichnete Wechsel des Schlüssels nach dieser Zeile (``la.grenze_g`` = sein G) und — am
+    Wechsel zurück in derselben Stunde — die vorige Zeile, mit der sich diese aufhebt (``la.aufheben_mit``): sie ging von
+    der neuen Quelle dieser Zeile zur alten, und die alte hat dazwischen keinen eigenen Stand geschrieben."""
+    from backend.services.zuordnung_wechsel.abfrage import _gleich
+    from backend.services.zuordnung_wechsel.nachtrag import ist_quellenwechsel
+    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, lade_wechsel
+
+    erklaert = getattr(row, "erklaert_ts", None)
+    if erklaert is None:
+        return
+    andere = [w for w in (await lade_wechsel(db, row.anlage_id)).get(row.sensor_key, ())
+              if w.id != row.id and ist_quellenwechsel(w)]
+    spaeter = [w.ab_ts for w in andere if w.erklaert_ts > erklaert]
+    if spaeter:
+        la.grenze_g = min(spaeter) - timedelta(hours=1)
+    frueher = sorted((w for w in andere if w.erklaert_ts < erklaert), key=lambda w: (w.erklaert_ts, w.id or 0))
+    if row.id is None or not frueher:
+        return
+    p = frueher[-1]
+    if (p.grund == GRUND_FORTSETZUNG and _gleich(p.vorher, row.nachher) and _gleich(p.nachher, row.vorher)
+            and not await _hat_staende(db, row, p.ab_ts, ab_ts_aus(erklaert))):
+        la.aufheben_mit = p.id
+
+
+async def _hat_staende(db, row, von: datetime, bis: datetime) -> bool:
+    from backend.models.sensor_snapshot import SensorSnapshot
+
+    if von >= bis:
+        return False
+    return (await db.execute(select(SensorSnapshot.id).where(and_(
+        SensorSnapshot.anlage_id == row.anlage_id, SensorSnapshot.sensor_key == row.sensor_key,
+        SensorSnapshot.zeitpunkt >= von, SensorSnapshot.zeitpunkt < bis)).limit(1))).first() is not None
+
+
+def _ab_alt(row) -> datetime:
+    """Bis wann die Reihe die Stände der alten Quelle trägt: ``ab_ts`` — bei «Der neue Sensor zählt ab» (``offen_schnitt``,
+    Lauf b: ``ab_ts`` = gewählte Stunde + 1 h, früher als der Wechsel) die erste volle Stunde des Wechsels; bis dorthin
+    schrieb eedc die Stände aus dem alten Sensor, und Schritt 3 verwirft sie ab dem neuen ``ab_ts``."""
+    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
+
+    erklaert = getattr(row, "erklaert_ts", None)
+    if row.ansatz != ANSATZ_OFFEN_SCHNITT or erklaert is None:
+        return row.ab_ts
+    return max(row.ab_ts, ab_ts_aus(erklaert))
+
+
 async def lage(db, row, *, ha_svc, jetzt: Optional[datetime] = None) -> Lage:
     """Was ``setze_an`` an dieser Zeile täte (lesend; Vorschau = Lauf). ``ha_svc`` ``None`` ⇒ ``wartet = WARTET_HA``.
     HA-Abrufe sehen nur Zeilen bis zur letzten vollen Stunde vor ``jetzt``."""
     from backend.services.kanal.katalog import zaehler_art
+    from backend.services.snapshot.keys import ist_stand_sensor_key
     from backend.services.zuordnung_wechsel import korrektur_lauf
     from backend.services.zuordnung_wechsel.korrektur import KorrekturNichtStartbar
 
     jetzt = jetzt or datetime.now()
-    la = Lage(row.id, row.anlage_id, row.sensor_key, _eid(row.vorher), _eid(row.nachher), row.ab_ts)
+    la = Lage(row.id, row.anlage_id, row.sensor_key, _eid(row.vorher), _eid(row.nachher), _ab_alt(row))
     if await korrektur_lauf.offener_lauf(db, row.anlage_id, row.sensor_key) is not None:
         la.wartet = WARTET_LAUF
         return la
     if ha_svc is None or not ha_svc.is_available:
         la.wartet = WARTET_HA
         return la
+    await _nachbarn(db, row, la)
     bis_ts = _ts(_stunde(jetzt)) - _STUNDE
-    stand = zaehler_art(row.sensor_key, None) == "stand"
+    # a-K N1: ein Stand-Feld (Gas, Wasser, Öl) am Schlüssel erkennen — ``zaehler_art`` kennt es ohne Kanal nicht.
+    stand = ist_stand_sensor_key(row.sensor_key) or zaehler_art(row.sensor_key, None) == "stand"
     try:
         erste = await _art_und_g(la, row, ha_svc, bis_ts, stand)
         if erste is None:
@@ -368,8 +437,10 @@ def vorschau(la: Lage) -> dict[str, Any]:
 # ── Ausführung ────────────────────────────────────────────────────────────────
 
 
-async def _kanal_umschreiben(db, la: Lage) -> tuple[Optional[int], Optional[float]]:
-    """Schritte 1 und 2 im Kanal (ohne Füllen). Returns ``(Grenze der nächsten fremden Quelle, Kanalwert davor)``."""
+async def _kanal_umschreiben(db, la: Lage) -> Optional[dict]:
+    """Schritte 1 und 2 im Kanal (ohne Füllen). Returns das Mitrücken (F4) — ``{grenze, vorher, offsets}``: die Grenze der
+    nächsten fremden Quelle, der Kanalwert davor und die Versätze der Quellen ab ihr vor dem Ansetzen (``None`` = keine
+    Grenze). Es steht im Auftrag des Laufs, damit der Nachlauf es nachholt (a-K N3)."""
     from backend.models.kanal import FAMILIE_SPIEGEL, KanalQuelle
     from backend.services.kanal.korrektur import _referenz
     from backend.services.kanal.nachfuellen import _einfuegen
@@ -380,7 +451,11 @@ async def _kanal_umschreiben(db, la: Lage) -> tuple[Optional[int], Optional[floa
         await _einfuegen(db, la.kanal_ergaenzen)
     quellen = list((await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == la.kanal_id)
                                      .order_by(KanalQuelle.gueltig_ab))).scalars().all())
-    fremd = next((q for q in quellen if q.gueltig_ab > g and q.statistic_id not in (la.alt, la.neu)), None)
+    # a-K N2: Grenze ist die nächste Quelle, die nicht die neue Entität dieses Wechsels ist (auch eine spätere Quelle der
+    # alten: die Rückkehr eines späteren Wechsels), oder eine Quelle ab dem nächsten verzeichneten Wechsel.
+    nxt = None if la.grenze_g is None else _ts(la.grenze_g)
+    fremd = next((q for q in quellen if q.gueltig_ab > g and (q.statistic_id != la.neu or (nxt is not None and q.gueltig_ab >= nxt))),
+                 None)
     x = None if fremd is None else fremd.gueltig_ab
     vorher = None
     if x is not None:
@@ -395,7 +470,10 @@ async def _kanal_umschreiben(db, la: Lage) -> tuple[Optional[int], Optional[floa
     db.add(KanalQuelle(kanal_id=la.kanal_id, gueltig_ab=g, familie=FAMILIE_SPIEGEL, statistic_id=la.neu,
                        offset=float(la.kanal_versatz)))
     await db.flush()
-    return x, vorher
+    if x is None:
+        return None
+    return {"grenze": x, "vorher": vorher,
+            "offsets": {str(q.gueltig_ab): float(q.offset) for q in quellen if q.gueltig_ab >= x}}
 
 
 async def _kanal(db, kanal_id: int):
@@ -426,12 +504,15 @@ async def _schreiben(db, row, la: Lage, lauf: str, jetzt: datetime, svc) -> dict
     from backend.services.zuordnung_wechsel.korrektur import nachlauf_auftrag
     from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
 
-    x = vorher = None
+    mit = None
     if la.kanal_id is not None:
-        x, vorher = await _kanal_umschreiben(db, la)
+        mit = await _kanal_umschreiben(db, la)
     geloescht = await _staende_verwerfen(db, row, la)
     row.ansatz, row.ab_ts = la.art, la.ab_neu
     row.stand_alt_ende, row.stand_neu_null = la.stand_alt_ende, la.stand_neu_null
+    if la.aufheben_mit is not None:          # a-K N4: zurück in derselben Stunde — beide Zeilen heben sich auf (keine Naht)
+        vorige = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.id == la.aufheben_mit))).scalar_one()
+        vorige.aufgehoben_durch, row.aufgehoben_durch = row.id, vorige.id
     kk = KanalKorrektur(la.sensor_key, kanal_id=la.kanal_id, w0=_ts(la.g), h0=_ts(la.g) if la.kanal_id else None,
                         versatz=la.kanal_versatz)
     kk.abgeleitet_familien = await abhaengige_abgeleitete(db, row.anlage_id, la.sensor_key)
@@ -441,31 +522,37 @@ async def _schreiben(db, row, la: Lage, lauf: str, jetzt: datetime, svc) -> dict
     staende = None if la.staende_neu is None else {"key": la.sensor_key, "von": la.staende_neu[0].isoformat(),
                                                    "bis": la.staende_neu[1].isoformat()}
     nach = nachlauf_auftrag(kk, svc, bis_ts, jetzt, staende=staende)
+    if nach is not None and mit is not None:
+        nach["mitruecken"] = mit
     if la.tage or nach is not None:
-        await korrektur_lauf.anlegen(db, lauf, row.anlage_id, la.sensor_key, la.tage, fuellen=nach)
+        await korrektur_lauf.anlegen(db, lauf, row.anlage_id, la.sensor_key, la.tage, fuellen=nach,
+                                     art=korrektur_lauf.ART_ANSETZEN)
     await db.flush()
     vergiss(db, row.anlage_id)
     merken.invalidiere(row.anlage_id, db=db)
-    return {"lauf": lauf, "kk": kk, "bis_ts": bis_ts, "nachlauf": nach, "grenze": x, "vorher": vorher,
+    return {"lauf": lauf, "kk": kk, "bis_ts": bis_ts, "nachlauf": nach, "mitruecken": mit,
             "staende_geloescht": geloescht}
 
 
-async def _mitruecken(sitzungen, la: Lage, x: Optional[int], vorher: Optional[float]) -> float:
-    """Spätere Quellen einer anderen Entität rücken um die Änderung des Kanalwerts an ihrer Grenze mit (F4)."""
-    from sqlalchemy import update
-
+async def mitruecken(sitzungen, kanal_id: Optional[int], m: Optional[dict]) -> float:
+    """Spätere Quellen einer anderen Entität rücken um die Änderung des Kanalwerts an ihrer Grenze mit (F4). Setzt die
+    Versätze aus ``m["offsets"]`` + Verschiebung (nicht dazu addiert) — wiederholbar: der Nachlauf des Laufs holt es nach,
+    wenn das Füllen nach dem Commit scheitert oder der Prozess neu startet (a-K N3)."""
     from backend.core.berechnungen.zaehler_naht import verschiebung
     from backend.models.kanal import KanalQuelle
     from backend.services.kanal.korrektur import _referenz
 
-    if x is None or la.kanal_id is None:
+    if not m or kanal_id is None:
         return 0.0
+    x = int(m["grenze"])
     async with sitzungen() as db:
-        ref = await _referenz(db, await _kanal(db, la.kanal_id), x)
-        d = verschiebung(None if ref is None else ref[1], vorher)
-        if d:
-            await db.execute(update(KanalQuelle).where(and_(KanalQuelle.kanal_id == la.kanal_id, KanalQuelle.gueltig_ab >= x))
-                             .values(offset=KanalQuelle.offset + d))
+        ref = await _referenz(db, await _kanal(db, kanal_id), x)
+        d = verschiebung(None if ref is None else ref[1], m.get("vorher"))
+        for q in (await db.execute(select(KanalQuelle).where(and_(KanalQuelle.kanal_id == kanal_id,
+                                                                  KanalQuelle.gueltig_ab >= x)))).scalars().all():
+            alt = (m.get("offsets") or {}).get(str(q.gueltig_ab))
+            if alt is not None:
+                q.offset = float(alt) + d
     return d
 
 
@@ -480,7 +567,7 @@ async def _nach_dem_commit(sitzungen, anlage_id: int, la: Lage, erg: dict, svc, 
     staende = nach is not None and isinstance(nach.get("staende"), dict)
     try:
         s["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, kk, ha_svc=svc, bis_ts=erg["bis_ts"])
-        s["verschiebung"] = await _mitruecken(sitzungen, la, erg["grenze"], erg["vorher"])
+        s["verschiebung"] = await mitruecken(sitzungen, la.kanal_id, erg["mitruecken"])
         s["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromtimestamp(erg["bis_ts"]))
     except Exception as e:  # noqa: BLE001 — der Lauf holt den Nachlauf nach (Zustand ``fuellen``)
         logger.warning("Ansetzen %s: Füllen nach dem Commit gescheitert, der Lauf holt es nach: %s: %s",
@@ -510,10 +597,16 @@ async def setze_an(sitzungen, wechsel_id: int, *, ha_svc=None, jetzt: Optional[d
         async with sitzungen() as db:
             row = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.id == wechsel_id))).scalar_one_or_none()
             if row is None or not ist_offen(row) or not ist_ha_wechsel(row):
-                return {"angesetzt": False, "lage": None}
+                return {"angesetzt": False, "lage": None, "sensor_key": None if row is None else row.sensor_key}
             la = await lage(db, row, ha_svc=svc, jetzt=jetzt)
+            if la.wartet == WARTET_KANAL:
+                # a-K «Ungeprüft» (a): trägt der Kanal vor G keinen Spiegel der alten oder neuen Entität, kann eedc den
+                # Wechsel nie wie Home Assistant ansetzen — die Zeile bliebe für immer offen und der Stundenlauf spiegelte den
+                # Schlüssel nie wieder. Sie rechnet stattdessen wie bisher (Naht ohne Rand-Stände, wie MQTT bei «bleiben»).
+                row.ansatz = None
+                return {"angesetzt": False, "lage": vorschau(la), "sensor_key": la.sensor_key, "aufgegeben": True}
             if la.wartet is not None:
-                return {"angesetzt": False, "lage": vorschau(la)}
+                return {"angesetzt": False, "lage": vorschau(la), "sensor_key": la.sensor_key}
             anlage_id = row.anlage_id
             erg = await _schreiben(db, row, la, uuid.uuid4().hex[:12], jetzt, svc)
         s = await _nach_dem_commit(sitzungen, anlage_id, la, erg, svc, starten=starten)
@@ -541,5 +634,5 @@ async def offene_ansetzen(sitzungen=None, *, ha_svc=None, jetzt: Optional[dateti
     return [await setze_an(sitzungen, i, ha_svc=ha_svc, jetzt=jetzt, starten=starten) for i in ids]
 
 
-__all__ = ["ANSATZ_WARTET", "Lage", "ist_ha_wechsel", "ist_offen", "lage", "offene_ansetzen", "offene_schluessel",
+__all__ = ["ANSATZ_WARTET", "Lage", "ist_ha_wechsel", "ist_offen", "lage", "mitruecken", "offene_ansetzen", "offene_schluessel",
            "setze_an", "vorschau", "wird_angesetzt"]

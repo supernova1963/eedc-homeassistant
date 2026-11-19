@@ -231,12 +231,12 @@ async def test_fortsetzung_nachtragen_hebt_auf_und_setzt_die_naht(db):
     assert await fortsetzungs_naehte(db, aid, NETZ_KEY) == [AB]
     assert await _befunde(db, a) == []
     log = (await db.execute(select(ActivityLog).where(ActivityLog.aktion == "Grund nachgetragen"))).scalars().all()
-    assert [x.details for x in log] == ["Wechsel · Netzbezug Zählerstand (kWh): Fortsetzung (Wechsel vom 10.09.2026 10:47)"]
+    assert [x.details for x in log] == ["Wechsel · Netzbezug Zählerstand (kWh): bisherige Werte bleiben (Wechsel vom 10.09.2026 10:47)"]
     # die aufgehobene Zeile: nichts mehr nachzutragen; die neue: nur noch «Korrektur» (S-10 d)
     assert (await _pruefen(db, aid, alt.id))["gruende"] == []
     assert (await _pruefen(db, aid, neu.id))["gruende"] == ["korrektur"]
     e = await _abgelehnt(_nachtragen(db, aid, neu.id, grund="fortsetzung"))
-    assert e.status_code == 422 and "nur zu «Korrektur»" in e.detail
+    assert e.status_code == 422 and "nur zu «Bisherige Werte verwerfen»" in e.detail
 
 
 async def test_korrektur_nachtragen_ohne_home_assistant_verwirft_im_intervall(db):

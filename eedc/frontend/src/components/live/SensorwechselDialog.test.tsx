@@ -42,6 +42,7 @@ vi.mock('../../api/datenquellen', () => {
       })),
       pruefeQuelle: vi.fn(),
       korrekturLaeufe: vi.fn(() => Promise.resolve([])),
+      wartendeWechsel: vi.fn(() => Promise.resolve([])),
       setQuelle: vi.fn(() => Promise.resolve({ korrektur: [] })),
       setInvert: vi.fn(() => Promise.resolve({})),
       korrekturLauf: vi.fn(),

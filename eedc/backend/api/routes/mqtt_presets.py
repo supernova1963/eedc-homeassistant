@@ -59,6 +59,9 @@ class GrundRequest(BaseModel):
     """Sensorwechsel mit Grund (Bauplan B-2, Sitzung 3b): der Grund einer fragepflichtigen Änderung je Zählerschlüssel."""
     grund: str
     falsch_seit: Optional[datetime] = None
+    #: U2 Lauf b (F9): «Der neue Sensor zählt ab» je Schlüssel — gilt nur bei «bleiben» zwischen zwei HA-Sensoren mit
+    #: Überlappung; ein Preset setzt MQTT-Quellen, eine Angabe hier lehnt die Route deshalb mit 422 ab.
+    zaehlt_ab: Optional[datetime] = None
 
 
 class ApplyPresetRequest(BaseModel):
@@ -173,6 +176,12 @@ def _gruende_zulaessig(req: ApplyPresetRequest) -> None:
             raise HTTPException(status_code=400, detail=f"Unbekannter Grund: {g.grund}")
 
 
+def _zaehlt_ab(req: ApplyPresetRequest) -> Optional[dict[str, datetime]]:
+    """«Der neue Sensor zählt ab» je Schlüssel (Preset je Schlüssel, U2 Lauf b) — nur die angegebenen."""
+    werte = {k: g.zaehlt_ab for k, g in req.gruende.items() if g.zaehlt_ab is not None}
+    return werte or None
+
+
 async def _labels_der_schluessel(db: AsyncSession, anlage) -> dict[str, str]:
     """Anwender-Bezeichnung je Zählerschlüssel (über die Feld-Labels der Fläche)."""
     from backend.api.routes.datenquellen import _feld_labels
@@ -195,7 +204,11 @@ async def pruefe_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_
     _gruende_zulaessig(req)
     try:
         anlage, vorher, *_ = await _wende_preset_an(db, req)
-        fragen = await abfrage.pruefe(db, anlage, vorher, await abfrage.lade_wirksame_quellen(db, anlage))
+        try:
+            fragen = await abfrage.pruefe(db, anlage, vorher, await abfrage.lade_wirksame_quellen(db, anlage),
+                                          zaehlt_ab=_zaehlt_ab(req))
+        except abfrage.GrundFehlt as e:
+            raise HTTPException(status_code=422, detail=str(e))
         labels = await _labels_der_schluessel(db, anlage)
         felder = []
         for f in fragen:
@@ -229,7 +242,7 @@ async def apply_preset(req: ApplyPresetRequest, db: AsyncSession = Depends(get_d
     labels = await _labels_der_schluessel(db, anlage)
     gruende = {k: (g.grund, g.falsch_seit) for k, g in req.gruende.items()}
     try:
-        vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, gruende, labels=labels)
+        vollzug = await abfrage.vollziehe(db, anlage, wirksam_vorher, gruende, labels=labels, zaehlt_ab=_zaehlt_ab(req))
     except (abfrage.GrundFehlt, KorrekturNichtStartbar) as e:
         raise HTTPException(status_code=422, detail=str(e))
     zusatz = abfrage.aktivitaet_text(vollzug, labels)

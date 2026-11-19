@@ -76,6 +76,7 @@ GET /api/datenquellen/{anlage_id}/felder
 GET /api/datenquellen/{anlage_id}/ha/sensoren
 GET /api/datenquellen/{anlage_id}/korrektur-laeufe
 GET /api/datenquellen/{anlage_id}/korrektur-lauf/{lauf}
+GET /api/datenquellen/{anlage_id}/wartende-wechsel
 GET /api/diagnostics/live-snapshot-5min
 GET /api/docs
 GET /api/dokumentation/_selftest

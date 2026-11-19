@@ -11,7 +11,7 @@ Enthält:
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -100,7 +100,7 @@ def _is_energy_sensor(eid: str, sensor_units: dict[str, str]) -> bool:
 
 
 def _energy_delta_via_statistics(
-    eid: str, start: datetime, end: datetime,
+    eid: str, start: datetime, end: datetime, zeilen: Optional[list] = None,
 ) -> Optional[float]:
     """Tages-kWh aus HA-Statistics `sum`-Spalte (reset-bereinigt).
 
@@ -111,11 +111,21 @@ def _energy_delta_via_statistics(
     oder Sensor kein has_sum-Sensor ist.
 
     Fix für #200 — analog zu #131 (Monatswert) und #184 (Snapshot).
+
+    Sensorwechsel U2 Lauf b (F8): ``zeilen`` = die angesetzten Wechsel «bleiben» des Schlüssels dieser Entität
+    (``zuordnung_wechsel/monat.live_zeilen``) — liegt einer im Fenster, zählt jeder Sensor in seinem Abschnitt
+    (``_delta_je_abschnitt``, derselbe Abschnitts-Helfer wie der Monat), sonst wie bisher nur ``eid``.
     """
     from backend.services.ha_statistics_service import get_ha_statistics_service
     stats = get_ha_statistics_service()
     if not stats.is_available:
         return None
+    if zeilen:
+        from backend.services.zuordnung_wechsel.monat import abschnitte_des_fensters, unix
+
+        teile = abschnitte_des_fensters(zeilen, unix(start), unix(end))
+        if teile:
+            return _delta_je_abschnitt(stats, teile, end)
     val_start = stats.get_value_at(eid, start, toleranz_minuten=120)
     if val_start is None:
         return None
@@ -129,12 +139,35 @@ def _energy_delta_via_statistics(
     return max(0.0, val_end - val_start)
 
 
+def _ende_des_fensters(stats, eid: str, end: datetime) -> Optional[float]:
+    """Stand am Fensterende: zuerst short_term (5-Min-Slots, bis Minute genau), sonst hourly — wie für einen Sensor."""
+    v = stats.get_value_at(eid, end, toleranz_minuten=15, short_term=True)
+    return v if v is not None else stats.get_value_at(eid, end, toleranz_minuten=120)
+
+
+def _delta_je_abschnitt(stats, teile: list, end: datetime) -> Optional[float]:
+    """Die Abschnitte ``(Entität, von, bis, anker_null)`` des Tagesfensters (``monat.abschnitte_des_fensters``): je Abschnitt
+    Stand am Anfang (0 ab der ersten Zeile eines neuen Sensors, der einen anderen ablöst) und am Ende aus HAs Statistik
+    derselben Entität ⇒ ``zaehler_naht.tagesmenge_aus_abschnitten``."""
+    from backend.core.berechnungen.zaehler_naht import tagesmenge_aus_abschnitten
+    from backend.services.zuordnung_wechsel.monat import unix
+
+    paare = []
+    for eid, von, bis, null in teile:
+        anfang = 0.0 if null else stats.get_value_at(eid, datetime.fromtimestamp(von), toleranz_minuten=120)
+        ende = (_ende_des_fensters(stats, eid, end) if bis >= unix(end)
+                else stats.get_value_at(eid, datetime.fromtimestamp(bis), toleranz_minuten=120))
+        paare.append((anfang, ende))
+    return tagesmenge_aus_abschnitten(paare)
+
+
 def _energy_delta(
     eid: str,
     history: dict[str, list[tuple[datetime, float]]],
     sensor_units: dict[str, str],
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
+    zeilen: Optional[list] = None,
 ) -> Optional[float]:
     """Tages-kWh aus kumulativem Energie-Sensor.
 
@@ -157,7 +190,7 @@ def _energy_delta(
     # 2026-05-16: 8.11 kWh wurden als 8097 kWh angezeigt).
     scale = _KWH_SCALE.get(sensor_units.get(eid, "kWh"), 1.0)
     if start is not None and end is not None:
-        delta = _energy_delta_via_statistics(eid, start, end)
+        delta = _energy_delta_via_statistics(eid, start, end, zeilen)
         if delta is not None:
             return delta  # bereits in kWh aus get_value_at
     pts = history.get(eid)
@@ -592,10 +625,12 @@ class _Tagesmessung:
     sensor_units: dict[str, str]
     start: datetime
     end: datetime
+    #: Sensorwechsel U2 Lauf b (F8): je heutiger Entität die angesetzten Wechsel «bleiben» (``monat.live_zeilen``).
+    wechsel: dict = field(default_factory=dict)
 
     def delta(self, eid: str) -> Optional[float]:
-        """`_energy_delta` im Tagesfenster (Statistics `sum`, sonst State-History)."""
-        return _energy_delta(eid, self.history, self.sensor_units, self.start, self.end)
+        """`_energy_delta` im Tagesfenster (Statistics `sum`, sonst State-History; je Geltungsabschnitt bei einem Wechsel)."""
+        return _energy_delta(eid, self.history, self.sensor_units, self.start, self.end, self.wechsel.get(eid))
 
     def ist_energie(self, eid: str) -> bool:
         """kWh/Wh/MWh-Sensor?"""
@@ -919,6 +954,18 @@ def _komponenten_kwh(
                 result[comp_key] = round(abs(kwh), 1)
 
 
+async def _wechsel_der_anlage(db: AsyncSession, anlage: Anlage) -> dict:
+    """Die angesetzten Wechsel «bleiben» je heutiger Entität (U2 Lauf b, F8); ohne lesbare Zeilen keine (die Live-Kachel
+    rechnet dann wie bisher nur mit der heutigen Entität)."""
+    from backend.services.zuordnung_wechsel.monat import live_zeilen
+
+    try:
+        return await live_zeilen(db, anlage.id)
+    except Exception as e:  # noqa: BLE001 — eine Live-Kachel darf daran nicht scheitern
+        logger.debug("Live: Wechsel der Anlage nicht lesbar: %s: %s", type(e).__name__, e)
+        return {}
+
+
 async def get_tages_kwh(
     anlage: Anlage, db: AsyncSession, tage_zurueck: int = 0,
     inv_types: dict[str, str] | None = None,
@@ -971,7 +1018,7 @@ async def get_tages_kwh(
         history, basis_live, basis_invert, inv_live_map, inv_invert_map
     )
 
-    mess = _Tagesmessung(history, sensor_units, start, end)
+    mess = _Tagesmessung(history, sensor_units, start, end, await _wechsel_der_anlage(db, anlage))
     result: dict[str, Optional[float]] = {}
     _kategorien_kwh(result, quellen, mess, erzeuger)
     _komponenten_kwh(result, quellen, mess)

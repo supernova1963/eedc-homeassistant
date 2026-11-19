@@ -13,7 +13,8 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
    **„Warum wechselte die Quelle?"**; oben stehen der Abschnitt mit Beginn und Ende und die Quelle, die davor und danach
    gilt.
-2. **„Bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der Abschnitt.
+2. **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der
+   Abschnitt.
 3. Die Vorschau unter **„Was danach geschieht"** lesen. eedc verwirft die Zählerstände des Abschnitts. Passen die Stände
    davor und danach zu dem, was Home Assistant für diese Quelle führt, liest eedc die Zählerstände des Abschnitts danach aus
    Home Assistant neu und speichert sie — die Tageswerte stimmen dann an jedem Tag; bis das gelungen ist (etwa weil Home
@@ -23,7 +24,8 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
    Zählerlücke (davor und danach gilt dieselbe Quelle): die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage
    davor zeigen für diese Zeit keinen Wert; ist zwischen den Ständen davor und danach ein Zählertausch eingetragen, bildet
    eedc über den Abschnitt keine Differenz — die Tage darin zeigen keinen Wert, die Tage an seinem Rand nur ihren Teil (der
-   Befund sagt es). Die Vorschau nennt die Tage.
+   Befund sagt es). Führt Home Assistant die Quelle erst ab einer Zeit im Abschnitt, liest eedc ab dort neu; für die Zeit
+   davor gilt dasselbe wie für einen leeren Abschnitt — Befund und Vorschau nennen die Zeit. Die Vorschau nennt die Tage.
 4. **„Übernehmen"** klicken. Die Korrektur lässt sich in eedc nicht rückgängig machen.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).

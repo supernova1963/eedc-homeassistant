@@ -3415,7 +3415,7 @@ ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Da
 nach dem der neue Sensor einfach weiterläuft.
 
 **Ein Handgriff: «Grund nachtragen».** Er öffnet in den Datenquellen denselben Dialog wie beim Wechsel einer Quelle — nur
-mit „Bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
+mit „Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
 Abschnitts. Stimmen die Stände davor und danach mit dem überein, was Home Assistant für die Quelle davor und danach führt,
 liest eedc den Abschnitt aus Home Assistant neu — auf derselben Höhe — und speichert ihn; die Tageswerte stimmen dann an jedem
 Tag (bis das Neulesen gelungen ist, zeigen die Rand-Tage nur ihren Teil; eedc holt es jede Stunde und nach jedem Start nach).
@@ -3446,7 +3446,8 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
    **„Warum wechselte die Quelle?"**; oben stehen der Abschnitt mit Beginn und Ende und die Quelle, die davor und danach
    gilt.
-2. **„Bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der Abschnitt.
+2. **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der
+   Abschnitt.
 3. Die Vorschau unter **„Was danach geschieht"** lesen. eedc verwirft die Zählerstände des Abschnitts. Passen die Stände
    davor und danach zu dem, was Home Assistant für diese Quelle führt, liest eedc die Zählerstände des Abschnitts danach aus
    Home Assistant neu und speichert sie — die Tageswerte stimmen dann an jedem Tag; bis das gelungen ist (etwa weil Home
@@ -3456,7 +3457,8 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
    Zählerlücke (davor und danach gilt dieselbe Quelle): die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage
    davor zeigen für diese Zeit keinen Wert; ist zwischen den Ständen davor und danach ein Zählertausch eingetragen, bildet
    eedc über den Abschnitt keine Differenz — die Tage darin zeigen keinen Wert, die Tage an seinem Rand nur ihren Teil (der
-   Befund sagt es). Die Vorschau nennt die Tage.
+   Befund sagt es). Führt Home Assistant die Quelle erst ab einer Zeit im Abschnitt, liest eedc ab dort neu; für die Zeit
+   davor gilt dasselbe wie für einen leeren Abschnitt — Befund und Vorschau nennen die Zeit. Die Vorschau nennt die Tage.
 4. **„Übernehmen"** klicken. Die Korrektur lässt sich in eedc nicht rückgängig machen.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
@@ -3485,9 +3487,9 @@ Was dieser Befund nicht erkennt oder nicht abdeckt:
 
 ### 4.8g Zählerstände – Zuordnung geändert, Grund fehlt <a name="48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt"></a>
 
-Wechselst du die Quelle eines Zählers, der schon eigene Werte hat, fragt eedc, warum: der neue Sensor misst dasselbe weiter
-(Fortsetzung), oder bisher war der falsche Sensor zugeordnet (Korrektur) — Handbuch Einstellungen §7.7. Danach rechnet
-eedc entsprechend. Ein Wechsel aus der Zeit vor dieser Frage, oder einer, zu dem noch ein Hinweis „Zuordnung geändert“
+Wechselst du die Quelle eines Zählers, der schon eigene Werte hat, fragt eedc, ob die bisherigen Werte bleiben (der neue
+Sensor setzt fort) oder verworfen werden (bisher war der falsche Sensor zugeordnet) — Handbuch Einstellungen §7.7. Danach
+rechnet eedc entsprechend. Ein Wechsel aus der Zeit vor dieser Frage, oder einer, zu dem noch ein Hinweis „Zuordnung geändert“
 offen war, ist ohne Grund verzeichnet; über ihn rechnet eedc wie früher. Diese Kategorie nennt jeden solchen Wechsel, nach
 dem eedc heute fragen würde, mit dem Handgriff **«Grund nachtragen»** — derselbe Dialog wie beim Wechsel, mit dem
 Zeitpunkt und beiden Quellen vorbelegt. Ohne einen solchen Wechsel bleibt die Kategorie leer.
@@ -3499,8 +3501,8 @@ Zeitpunkt und beiden Quellen vorbelegt. Ohne einen solchen Wechsel bleibt die Ka
 **Was eedc sieht**
 Die Quelle eines Zählerfelds wurde gewechselt, als das Feld schon eigene Werte hatte — aber nicht verzeichnet ist, warum:
 der Wechsel stammt aus der Zeit, bevor eedc beim Wechsel nach dem Grund gefragt hat, oder aus einem Hinweis
-„Zuordnung geändert“, der noch offen war. eedc weiß deshalb nicht, ob der neue Sensor dasselbe weiter misst (etwa nach
-einem Zählertausch) oder ob bisher der falsche Sensor zugeordnet war. Die Meldung nennt Gerät, Feld und den Tag des
+„Zuordnung geändert“, der noch offen war. eedc weiß deshalb nicht, ob die bisherigen Werte bleiben (der neue Sensor setzt
+fort, etwa nach einem Zählertausch) oder verworfen werden (bisher war der falsche Sensor zugeordnet). Die Meldung nennt Gerät, Feld und den Tag des
 Wechsels; Uhrzeit und beide Quellen stehen in den Details. Gemeldet wird nur ein Wechsel, nach dem eedc heute fragen
 würde — nicht ein Wechsel auf „Keine“, nicht die Rückkehr von „Keine“ zur letzten Quelle mit Werten und nicht ein Feld,
 das vorher noch keine Werte hatte.
@@ -3508,13 +3510,17 @@ das vorher noch keine Werte hatte.
 **Lösungsweg**
 1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
    **„Warum wechselte die Quelle?"**; der Zeitpunkt und beide Quellen stehen oben.
-2. Messen beide Sensoren dasselbe: **„Der neue Sensor misst dasselbe weiter (Zähler getauscht, anderer Sensor für
-   dasselbe Gerät)"** wählen. Die bisherigen Werte bleiben, und der Unterschied zwischen altem und neuem Zählerstand zählt
-   nicht als Menge; wo eedc aus den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.
-   Für den Tag des Wechsels gilt: bildet eedc ihn aus seinen gespeicherten Stundenwerten, zählt der Unterschied danach
-   nicht mehr; hat eedc für diesen Tag schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den
-   Unterschied weiter enthalten.
-3. Waren die Werte vor dem Wechsel falsch: **„Bisher war der falsche Sensor zugeordnet"** wählen, unter
+2. Misst der neue Sensor dasselbe Gerät weiter: **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe Gerät)"** wählen. Sind beide Quellen Sensoren
+   aus Home Assistant, rechnet eedc wie Home Assistant mit beiden: den bisherigen bis zu seinem letzten Wert, den neuen ab
+   seinem ersten. Unter **„Was danach geschieht"** steht, seit wann Home Assistant den neuen Sensor führt und wie viele
+   Stunden eedc neu liest und Tage neu bildet — auch den Tag des Wechsels. Haben beide Sensoren eine Zeit lang gleichzeitig
+   gezählt, erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels; eine frühere Stunde
+   nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat. Bei jeder anderen Quelle (etwa MQTT)
+   bleiben die bisherigen Werte, und der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; wo eedc aus
+   den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs. Für den Tag des Wechsels gilt
+   dort: bildet eedc ihn aus seinen gespeicherten Stundenwerten, zählt der Unterschied danach nicht mehr; hat eedc für diesen
+   Tag schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
+3. Waren die Werte vor dem Wechsel falsch: **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** wählen, unter
    **„Falsch seit"** angeben, ab wann (vorbelegt ist der Beginn der Quelle vor dem Wechsel), und die Vorschau unter
    **„Was danach geschieht"** lesen. eedc verwirft die Werte dieses Felds von „Falsch seit“ bis zum Wechsel und baut sie,
    soweit Home Assistant die Geschichte des richtigen Sensors führt und die Zählerstände davor und danach zu ihr passen, aus
@@ -3524,12 +3530,13 @@ das vorher noch keine Werte hatte.
    neue Quelle noch zugeordnet ist — auch, wenn mit ihm die Quelle zur vorigen zurückkehrte —, und für einen früheren
    Wechsel, mit dem die Quelle zur vorigen zurückkehrte: dort steht die Zeit fest — vom Wechsel davor bis zu diesem; der
    Dialog nennt sie. Die Korrektur lässt sich in eedc nicht rückgängig machen.
-4. **„Übernehmen"** klicken. Bei einer Korrektur zeigt die Datenquellen-Fläche oben, wie weit die Tage neu gebildet
-   sind.
+4. **„Übernehmen"** klicken. Die Datenquellen-Fläche zeigt oben, wie weit eedc die Tage neu bildet. Kann eedc einen
+   Wechsel zwischen zwei Sensoren aus Home Assistant noch nicht wie Home Assistant rechnen (etwa weil Home Assistant den
+   neuen Sensor noch nicht mit Stundenwerten führt), steht dort der Grund; eedc holt es jede Stunde von selbst nach.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund verschwindet, sobald der Grund eingetragen ist.
 
 Nennt der Daten-Checker **zwei Wechsel desselben Felds** (etwa vom richtigen Sensor zu einem falschen und wieder zurück),
-beginne beim jüngeren. Wählst du dort **„Bisher war der falsche Sensor zugeordnet"**, ist **„Falsch seit"** mit dem älteren
+beginne beim jüngeren. Wählst du dort **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"**, ist **„Falsch seit"** mit dem älteren
 Wechsel vorbelegt. War vor dem älteren Wechsel schon der richtige Sensor zugeordnet, oder legst du „Falsch seit“ vor den
 älteren Wechsel, erledigt die Korrektur den älteren mit — der Daten-Checker nennt danach keinen der beiden mehr.
 
@@ -3540,7 +3547,8 @@ Zählerstand als Menge zählen, und Werte des falschen Sensors bleiben stehen. T
 Assistant rechnet, sind davon nicht betroffen. Gespeicherte Monatswerte ändern sich weder durch den Wechsel noch durch einen
 nachgetragenen Grund; nach einer Korrektur folgt, was eedc im Monat aus den Tagen rechnet (etwa der PV-Anteil einer Ladung),
 den neu gebildeten Tagen — die Vorschau nennt die Monate. Ein schon fest gespeicherter Tageswert vom Tag des Wechsels bleibt
-auch bei einer nachgetragenen Fortsetzung, wie er ist.
+auch nach „Bisherige Werte bleiben“, wie er ist — außer zwischen zwei Sensoren aus Home Assistant: dort bildet eedc die Tage
+ab dem Wechsel neu.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
@@ -4148,7 +4156,7 @@ und anfällig für Lücken. Die Meldung nennt das Feld, die Details die zugeordn
 **Lösungsweg**
 1. Am Befund **«Sensor wechseln»** klicken — die Datenquellen-Zuordnung öffnet sich an diesem Feld.
 2. Dort einen fortlaufenden kWh-Zähler wählen. Hat das Feld schon eigene Werte, fragt eedc vor dem Speichern
-   **„Warum wechselt die Quelle?"** — hier ist es **„Bisher war der falsche Sensor zugeordnet"**: die Vorschau sagt, welche
+   **„Warum wechselt die Quelle?"** — hier ist es **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"**: die Vorschau sagt, welche
    Werte verworfen und, soweit Home Assistant die Geschichte des Zählers führt, aus ihm neu aufgebaut werden.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile ist verschwunden.
 

@@ -33,7 +33,9 @@ Stück ``[Sprung, Rückgang)`` (``services/zuordnung_wechsel/stueck.py``, Vorsch
 Korrektur tun wird — mit derselben Prüfung wie der Dienst (``stueck.ist_fuellbar``):
 
 * ``fuellbar`` — Home Assistant erreichbar, beide Rand-Stände sind HAs Rohsumme der Quelle davor und danach: die Stände des
-  Stücks werden verworfen und aus dieser Quelle neu gelesen.
+  Stücks werden verworfen und aus dieser Quelle neu gelesen. Führt Home Assistant die Quelle erst ab einer Zeit im Stück, nennt
+  der Satz diese Zeit und was für die Zeit davor gilt (``_SATZ_FUELLBAR_AB``; dieselbe Vorschau wie der Dialog,
+  ``korrektur.lage`` — U2 Lauf b).
 * ``ohne_home_assistant`` · ``staende_passen_nicht`` (die Rand-Stände passen zu keiner Summe, die Home Assistant für die Quelle
   führt) — die Stände werden verworfen und nicht neu gelesen; da davor und danach dieselbe Quelle gilt, rechnen die Leser über
   die leere Zeit wie über jede Zählerlücke (Sensorwechsel U1, ``zeitpunkt.ohne_hoehenwechsel``): die Menge steht am Tag, an dem
@@ -102,6 +104,16 @@ _SATZ_LAGE = {
         "jetzt nicht prüfen, und eine Korrektur startet erst, wenn eedc die Langzeitstatistik wieder lesen kann. Dann steht "
         "hier der Knopf „Grund nachtragen“."),
 }
+#: ``fuellbar``, wenn Home Assistant die Quelle erst ab einer Zeit im Abschnitt führt (U2 Lauf b; dieselbe Zeit wie
+#: ``korrektur.SATZ_STAENDE_AB`` in der Vorschau des Dialogs).
+_SATZ_FUELLBAR_AB = (
+    "Die Stände davor und danach sind die, die Home Assistant für {quelle} führt. „Grund nachtragen“ verwirft die "
+    "Zählerstände des Abschnitts; Home Assistant führt {quelle} aber erst ab {ab} Uhr — von dort an liest eedc sie neu, auf "
+    "derselben Höhe wie davor und danach. ")
+_SATZ_FUELLBAR_AB_LUECKE = ("Über die Zeit davor rechnet eedc wie über jede Zählerlücke: ihre Menge steht an dem Tag, an dem "
+                            "sie endet.")
+_SATZ_FUELLBAR_AB_KEINE = ("Über die Zeit davor bildet eedc keine Differenz zweier Zählerstände: die Tage darin zeigen keinen "
+                           "Wert, die Tage an ihrem Rand nur ihren Teil.")
 #: Dieselben Lagen, wenn zwischen den Ständen davor und danach ein Zählertausch eingetragen ist (Korrekturrunde U1-K S2: der
 #: Befund fragt dieselbe Regel wie die Leser, ``zeitpunkt.ohne_hoehenwechsel`` über die Vorschau der Korrektur).
 _SATZ_TAUSCH = ("„Grund nachtragen“ verwirft sie; da zwischen den Ständen davor und danach ein Zählertausch eingetragen ist, "
@@ -127,7 +139,7 @@ def _tage_text(tage: list[date]) -> str:
 
 
 def _texte(name: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str, quellen: tuple[str, str],
-           tausch: bool = False) -> tuple[str, str]:
+           tausch: bool = False, fuellbar_ab: Optional[tuple[datetime, bool]] = None) -> tuple[str, str]:
     """Meldung und Details in Anwender-Sprache (keine Mechanik-Wörter, kein Menüweg — der Handgriff ist der Weg); genannt
     werden nur die Tage der Schritte mit Wirkung (Bauplan «Zu §14» Nr. 91 b)."""
     # Die Tage des ersten und des letzten versetzten Stands (Bauplan «Zu §14» Nr. 108, S11: ein Sprung mit der Zeile 00:00
@@ -147,6 +159,11 @@ def _texte(name: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str, quellen:
         f"etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus zwei Zählerständen: {', '.join(folgen)}. "
         "Gespeicherte Monatswerte ändert das nicht. "
     )
+    if lage == LAGE_FUELLBAR and fuellbar_ab is not None:
+        ab, wie_luecke = fuellbar_ab
+        satz = _SATZ_FUELLBAR_AB.format(quelle=quellen[0], ab=ab.strftime("%d.%m.%Y %H:%M")) + (
+            _SATZ_FUELLBAR_AB_LUECKE if wie_luecke else _SATZ_FUELLBAR_AB_KEINE)
+        return meldung, details + satz
     satz = _SATZ_LAGE_TAUSCH[lage] if tausch and lage in _SATZ_LAGE_TAUSCH else _SATZ_LAGE[lage]
     return meldung, details + satz.format(quelle=quellen[0], quelle_nach=quellen[1])
 
@@ -195,7 +212,8 @@ class ZaehlerVersatzChecks:
                 continue
             lage, quellen = await self._versatz_lage(anlage, key, lauf)
             tausch = lage in _SATZ_LAGE_TAUSCH and await self._versatz_tausch(anlage, key, lauf, quellen)
-            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch))
+            ab = await self._versatz_fuellbar_ab(anlage, key, lauf) if lage == LAGE_FUELLBAR else None
+            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch, ab))
         return out or [_versatz_ok()]
 
     async def _versatz_funde(self, anlage_id: int, invs: dict) -> list[tuple[str, VersatzLauf]]:
@@ -304,6 +322,24 @@ class ZaehlerVersatzChecks:
         a = StueckLage(key, lauf.beginn.bis, lauf.ende.bis, "", quelle=vor).auftrag(anlage.id, lauf.ende.bis)
         return not await _wie_zaehlerluecke(self.db, a, a.falsch_seit, a.ab, a.ab)
 
+    async def _versatz_fuellbar_ab(self, anlage, key: str, lauf: VersatzLauf) -> Optional[tuple[datetime, bool]]:
+        """Führt Home Assistant die Quelle erst ab einer Zeit im Abschnitt? ``(Zeit, wie eine Zählerlücke?)`` aus derselben
+        Vorschau wie der Dialog (``korrektur.lage`` am Auftrag über das Stück, ``SATZ_STAENDE_AB``) — sonst ``None``."""
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.zuordnung_wechsel import korrektur as kr
+        from backend.services.zuordnung_wechsel.stueck import StueckLage, quelle_am_rand
+
+        vor = await quelle_am_rand(self.db, anlage, key, lauf.beginn.von)
+        a = StueckLage(key, lauf.beginn.bis, lauf.ende.bis, "", quelle=vor).auftrag(anlage.id, lauf.ende.bis)
+        try:
+            la = await kr.lage(self.db, a, ha_svc=get_ha_statistics_service())
+        except Exception as e:  # noqa: BLE001 — der Befund nennt dann den gewöhnlichen Satz
+            logger.warning("zaehler_versatz %s: Vorschau nicht lesbar: %s: %s", key, type(e).__name__, e)
+            return None
+        if not kr._staende_ab(la):
+            return None
+        return kr._staende_ab_zeit(la), bool(la.zaehlerluecke)
+
     async def _versatz_geraete(self, anlage_id: int) -> dict:
         """Die Geräte der Anlage je Id (Text) — für Namen und die Frage, welches Feld die Tagesansicht zeigt."""
         from backend.models.investition import Investition
@@ -312,10 +348,11 @@ class ZaehlerVersatzChecks:
             select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all()}
 
     def _versatz_befund(self, name: str, key: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str,
-                        quellen: tuple[str, str], tausch: bool = False) -> CheckErgebnis:
+                        quellen: tuple[str, str], tausch: bool = False,
+                        fuellbar_ab: Optional[tuple[datetime, bool]] = None) -> CheckErgebnis:
         from backend.services.daten_checker.ziele import stueck_parameter
 
-        meldung, details = _texte(name, lauf, wirkung, lage, quellen, tausch)
+        meldung, details = _texte(name, lauf, wirkung, lage, quellen, tausch, fuellbar_ab)
         sprung, rueckgang = lauf.beginn.bis.isoformat(timespec="minutes"), lauf.ende.bis.isoformat(timespec="minutes")
         ohne_handgriff = lage in LAGEN_OHNE_HANDGRIFF
         # E1 (Diagnose-Paket): die Zahlen der Meldung strukturiert, ohne neue Rechnung.

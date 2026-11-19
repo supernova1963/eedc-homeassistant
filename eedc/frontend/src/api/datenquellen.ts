@@ -273,8 +273,11 @@ export interface QuelleSaveResult {
   gespeichert: boolean
   field_id: string
   quelle: string
-  /** Sensorwechsel mit Grund: je Korrektur der Hintergrund-Lauf (leer ohne Korrektur). */
+  /** Sensorwechsel mit Grund: je Korrektur der Hintergrund-Lauf (leer ohne Korrektur); U2 Lauf b: auch der Lauf eines
+   *  Wechsels «bleiben» (`art: 'ansetzen'`). */
   korrektur: KorrekturLaufStart[]
+  /** U2 Lauf b: je Wechsel «bleiben», den eedc noch nicht wie Home Assistant rechnet, der Grund als Satz. */
+  wartet?: WartenderWechsel[]
 }
 
 /** Grund einer fragepflichtigen Quellen-Änderung (Sensorwechsel mit Grund, Bauplan B-2). */
@@ -284,6 +287,36 @@ export interface GrundAngabe {
   grund: WechselGrund
   /** Nur bei Korrektur: erste falsche Stunde (örtlich, ISO ohne Zone). */
   falsch_seit?: string
+  /** Nur bei «bleiben» zwischen zwei HA-Sensoren mit Überlappung: «Der neue Sensor zählt ab» (örtlich, ISO ohne Zone). */
+  zaehlt_ab?: string
+}
+
+/** U2 Lauf b: was «Bisherige Werte bleiben» zwischen zwei HA-Sensoren tut (Backend `zuordnung_wechsel/bleiben.angaben`) —
+ *  jede Zahl, Stunde und jeder Satz kommt vom Backend, der Client rechnet nichts. */
+export interface BleibenAngaben {
+  /** Warum eedc den Wechsel noch nicht wie Home Assistant rechnet (`null` = es rechnet ihn). */
+  wartet: string | null
+  /** Beginn der ersten Stundenzeile des neuen Sensors in Home Assistant. */
+  seit: string | null
+  ueberlappung: boolean | null
+  /** Die Stunde, ab der der neue Sensor zählt. */
+  zaehlt_ab: string | null
+  /** Nur bei Überlappung: Vorgabe und zulässiger Bereich für «Der neue Sensor zählt ab». */
+  zaehlt_ab_vorgabe: string | null
+  zaehlt_ab_frueheste: string | null
+  zaehlt_ab_spaeteste: string | null
+  stunden: number | null
+  tage: number | null
+  monate: string[]
+  saetze: string[]
+}
+
+/** U2 Lauf b: ein Wechsel «bleiben», den eedc noch nicht wie Home Assistant rechnet (`GET …/wartende-wechsel`). */
+export interface WartenderWechsel {
+  sensor_key: string
+  label: string
+  wartet: string
+  satz: string
 }
 
 /** Vorschau des Korrektur-Dienstes (Sätze und Zahlen kommen aus dem Backend — der Client rechnet nichts). */
@@ -307,6 +340,8 @@ export interface QuellePruefung {
   verzeichnet: boolean
   vorgabe_falsch_seit: string | null
   korrektur: KorrekturVorschau | null
+  /** U2 Lauf b: nur zwischen zwei HA-Sensoren — was «Bisherige Werte bleiben» tut. */
+  bleiben?: BleibenAngaben | null
 }
 
 export interface KorrekturLaufStart {
@@ -315,7 +350,12 @@ export interface KorrekturLaufStart {
   label: string
   tage_neu: number
   zaehlerstaende_geloescht: number
+  /** `ansetzen` = der Lauf eines Wechsels «bleiben» (U2 Lauf b); fehlt bei einer Korrektur. */
+  art?: LaufArt
 }
+
+/** Wer einen Lauf angelegt hat: eine Korrektur oder das Ansetzen eines Wechsels «bleiben» (U2 Lauf b). */
+export type LaufArt = 'korrektur' | 'ansetzen'
 
 /** Fortschritt eines Korrektur-Laufs (`GET …/korrektur-lauf/{lauf}`). */
 export interface KorrekturLaufStand {
@@ -328,6 +368,8 @@ export interface KorrekturLaufStand {
   beginn: string | null
   ende: string | null
   fuellen_offen: boolean
+  /** U2 Lauf b: `ansetzen` = der Nachlauf eines Wechsels «bleiben» (kein «Korrektur»-Text). */
+  art?: LaufArt
 }
 
 /** Ein laufender Korrektur-Lauf der Anlage (`GET …/korrektur-laeufe`) — die Fläche zeigt beim Laden seinen Fortschritt. */
@@ -364,6 +406,7 @@ export interface StueckAngabe {
 export type GrundNachtragErgebnis = Omit<GrundNachtragPruefung, 'korrektur'> & {
   eingetragen: boolean
   korrektur: KorrekturLaufStart[]
+  wartet?: WartenderWechsel[]
 }
 
 /** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
@@ -442,7 +485,10 @@ function quelleBody(quelle: string, gateway?: GatewayQuelleConfig, entityId?: st
   return {
     quelle, ...(gateway ?? {}),
     ...(entityId ? { entity_id: entityId } : {}),
-    ...(grund ? { grund: grund.grund, ...(grund.falsch_seit ? { falsch_seit: grund.falsch_seit } : {}) } : {}),
+    ...(grund ? {
+      grund: grund.grund, ...(grund.falsch_seit ? { falsch_seit: grund.falsch_seit } : {}),
+      ...(grund.zaehlt_ab ? { zaehlt_ab: grund.zaehlt_ab } : {}),
+    } : {}),
   }
 }
 
@@ -488,6 +534,10 @@ export const datenquellenApi = {
   /** Fortschritt eines Korrektur-Laufs (Dialog und Werkbank). */
   korrekturLauf: (anlageId: number, lauf: string) =>
     api.get<KorrekturLaufStand>(`/datenquellen/${anlageId}/korrektur-lauf/${encodeURIComponent(lauf)}`),
+
+  /** U2 Lauf b: die Wechsel «bleiben», die eedc noch nicht wie Home Assistant rechnet, je mit dem Grund (Fläche). */
+  wartendeWechsel: (anlageId: number) =>
+    api.get<WartenderWechsel[]>(`/datenquellen/${anlageId}/wartende-wechsel`),
 
   /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
   /** «Grund nachtragen»: prüfen (schreibt nichts; mit Grund «korrektur» und «falsch seit» die Vorschau des Diensts). */

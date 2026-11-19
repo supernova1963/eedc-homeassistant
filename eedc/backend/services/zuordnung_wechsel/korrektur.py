@@ -509,10 +509,14 @@ SATZ_LUECKE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zählerst�
                "eingetragen — wo eedc einen Wert aus den gespeicherten Zählerständen bildet, bildet es über diese Zeit keine "
                "Differenz: die Menge dieser Zeit, gerechnet ab dem letzten Zählerstand davor, fehlt dort.")
 #: Pflichtpunkt P-2 (Halt H-1 aus U1-K, Option A): dieselbe Quelle, aber das Gefüllte nach der Zeit liegt auf ungeprüfter Höhe.
-SATZ_LUECKE_HOEHE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zählerstände wieder auf. Ob die Zählerstände, die "
-                     "eedc danach aus Home Assistant liest, auf der Höhe der gespeicherten liegen, lässt sich nicht prüfen — "
-                     "wo eedc einen Wert aus den gespeicherten Zählerständen bildet, bildet es über diese Zeit keine Differenz: "
-                     "die Menge dieser Zeit, gerechnet ab dem letzten Zählerstand davor, fehlt dort.")
+#: U2 Lauf b (Punkt 5): wahr gefasst — Home Assistant führt den richtigen Sensor erst nach der Zeit (``_hoehe_ungeprueft``:
+#: die Lücke endet vor ``ab``, weil HAs Geschichte dort beginnt), dazu der Handgriff, wo «Falsch seit» wählbar ist.
+SATZ_LUECKE_HOEHE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zählerstände wieder auf: Home Assistant führt den "
+                     "richtigen Sensor erst ab dann. Ob seine Zählerstände auf der Höhe der gespeicherten davor liegen, lässt "
+                     "sich nicht prüfen — wo eedc einen Wert aus den gespeicherten Zählerständen bildet, bildet es über diese "
+                     "Zeit keine Differenz: die Menge dieser Zeit, gerechnet ab dem letzten Zählerstand davor, fehlt dort.")
+SATZ_LUECKE_HOEHE_HANDGRIFF = ("Sollen die bisherigen Werte dieser Zeit lieber bleiben, setze «Falsch seit» auf {bis} Uhr — "
+                               "dann verwirft eedc erst ab dort.")
 SATZ_LUECKE_TAGE = "Wo die Tagesansicht den Wert aus den gespeicherten Zählerständen bildet, zeigt sie {teile}."
 SATZ_LUECKE_INNEN = "{tage} keinen Wert"
 SATZ_LUECKE_RAND = "{tage} nur den Teil außerhalb dieser Zeit"
@@ -545,6 +549,8 @@ def saetze_luecke(la: Lage) -> list[str]:
     von, bis = la.luecke
     satz = SATZ_ZAEHLERLUECKE if la.zaehlerluecke else (SATZ_LUECKE_HOEHE if la.hoehe_ungeprueft else SATZ_LUECKE)
     s = [satz.format(von=von.strftime("%d.%m.%Y %H:%M"), bis=bis.strftime("%d.%m.%Y %H:%M"))]
+    if satz is SATZ_LUECKE_HOEHE and la.auftrag.falsch_seit is not None and not getattr(la.auftrag, "stueck", False):
+        s.append(SATZ_LUECKE_HOEHE_HANDGRIFF.format(bis=bis.strftime("%d.%m.%Y %H:%M")))
     teile = []
     if la.luecke_tage:
         teile.append(SATZ_LUECKE_INNEN.format(tage=_tage_bereich(la.luecke_tage)))
@@ -922,6 +928,10 @@ async def nachlauf_aus_auftrag(sitzungen, anlage_id: int, f: dict, *, ha_svc=Non
         svc = (ha_svc or ha_dienst(None)) if kk.h0 is not None else None
         if svc is not None:
             n["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, kk, ha_svc=svc, bis_ts=int(f["bis_ts"]))
+            if isinstance(f.get("mitruecken"), dict):       # Ansetzen eines Wechsels «bleiben» (a-K N3): F4 nachholen
+                from backend.services.zuordnung_wechsel.ansatz import mitruecken
+
+                n["verschiebung"] = await mitruecken(sitzungen, kk.kanal_id, f["mitruecken"])
         n["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromisoformat(f["jetzt"])) or 0
     if isinstance(f.get("staende"), dict):
         n["staende_neu"] = await fuelle_staende(sitzungen, anlage_id, f["staende"], ha_svc=ha_svc)

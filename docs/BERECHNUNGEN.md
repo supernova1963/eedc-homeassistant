@@ -5223,24 +5223,39 @@ Wann            = Feld-Route / Preset (abfrage.vollziehe) und «Grund nachtragen
                   HA-Entitäten mit ansatz = offen an; nach dem Commit setzt der Dienst an, wenn HA den neuen Sensor schon
                   führt, sonst der nächste Stundenlauf (scheduler.sensor_snapshot_job → offene_ansetzen). Solange offen:
                   der Stundenlauf spiegelt den Schlüssel nicht (kanal/schreiber._spiegel), die Leser lesen eine Naht ohne
-                  Rand-Stände. Offen bleibt die Zeile auch, solange HA nicht erreichbar ist, ein Korrektur-Lauf des
-                  Schlüssels das Füllen schuldet oder der Kanal vor G keinen Spiegel der alten Entität trägt
+                  Rand-Stände. Offen bleibt die Zeile auch, solange HA nicht erreichbar ist oder ein Lauf des Schlüssels das
+                  Füllen schuldet. Trägt der Kanal vor G keinen Spiegel der alten oder der neuen Entität, verliert die Zeile
+                  ``offen`` und rechnet wie bisher — Naht ohne Rand-Stände (a-K; sonst bliebe sie für immer offen und der
+                  Stundenlauf spiegelte den Schlüssel nie wieder)
 T1              = die erste Stundenzeile des neuen Sensors (ha_statistik_rand.erste_zeile; WebSocket gestuft month → day →
                   hour, nie «alles bis t»; get_stundenzeile_bis: 24-h-Fenster, sonst dieselbe Stufung)
-Überlappung     = heutiger letzter Stand des alten ≠ sein Stand in der Zeile ≤ T1 (zaehler_naht.ueberlappt)
+Überlappung     = heutiger letzter Stand des alten ≠ sein Stand in der Zeile ≤ T1 (zaehler_naht.ueberlappt); «heute» endet
+                  am nächsten verzeichneten Wechsel des Schlüssels (a-K N2). Stand-Felder (Gas, Wasser, Öl, am Schlüssel
+                  erkannt — a-K N1) vergleichen ``state``
 Art und G       = ohne Überlappung: beide, G = T1;  mit Überlappung: schnitt, G = Stunde des verzeichneten Wechsels
                   (ab_ts − 1 h), frühestens T1 + 1 h;  danach ab_ts = G + 1 h
+«zählt ab»      = (U2 Lauf b, F9/F10) nur mit Überlappung wählbar: T1 + 1 h ≤ G ≤ Stunde des Wechsels
+                  (zuordnung_wechsel/bleiben.setze_zaehlt_ab; sonst 422); die Zeile trägt dann ansatz = offen_schnitt und
+                  ab_ts = G + 1 h; bis zum Ansetzen gilt als altes ab_ts die erste volle Stunde des Wechsels
+                  (ansatz._ab_alt — die Stände des alten dazwischen verwirft Schritt «Reihe»)
 Rand alt        = in der Höhe der gespeicherten Reihe: der gespeicherte Stand des alten am Rand (beide: um G + 1 h,
                   schnitt: um G), sonst HAs Wert aus der letzten Stundenzeile des alten (auch einer gelöschten Entität;
                   das in HA fehlende angebrochene 5-Minuten-Stück wird nicht ergänzt), wenn der letzte gespeicherte Stand
                   des alten HAs Summe dort ist; sonst der letzte gespeicherte. Führt HA den alten nicht mehr: der letzte
                   gespeicherte Stand aus HAs Statistik (nie ein Live- oder Zustands-Wert)
 Rand neu        = beide: 0 (Stand-Feld: state − sum der ersten Zeile);  schnitt: HAs Stand des neuen um G
-Kanal           = Zeilen des Schlüssels ab G gelöscht, Quellzeile des neuen bei G mit
+Kanal           = Zeilen des Schlüssels ab G bis zur Grenze gelöscht (Grenze = die nächste Quelle, die nicht die neue
+                  Entität ist — auch eine spätere Rückkehr zur alten —, oder eine ab dem nächsten verzeichneten Wechsel;
+                  a-K N2), Quellzeile des neuen bei G mit
                   Versatz = Kanalwert der letzten Zeile vor G + Zuwachs des alten in HA bis zur Rand-Zeile − Rand neu
                   (zaehler_naht.kanal_ende_alt, kanal_versatz_neu); fehlende Zeilen des alten bis G − 1 h vorher aus HA
-                  ergänzt; gefüllt mit neu_spiegeln ab G; spätere Quellen anderer Entitäten rücken um die Änderung des
-                  Kanalwerts an ihrer Grenze mit (zaehler_naht.verschiebung)
+                  ergänzt; gefüllt mit neu_spiegeln ab G; die Quellen ab der Grenze rücken um die Änderung des
+                  Kanalwerts an ihr mit (zaehler_naht.verschiebung) — gesetzt aus den Versätzen vor dem Ansetzen, also
+                  wiederholbar; Grenze, Kanalwert davor und Versätze stehen im Auftrag des Laufs, der Nachlauf holt das
+                  Mitrücken nach, wenn das Füllen nach dem Commit scheitert oder der Prozess neu startet (a-K N3)
+Zurück          = ein Wechsel zurück zur Quelle vor dem vorigen Wechsel, bevor die Quelle dazwischen einen eigenen Stand
+                  geschrieben hat (etwa A → B 10:20, B → A 10:40): beide Zeilen heben sich auf (aufgehoben_durch
+                  gegenseitig) — keine Naht in der Reihe, der Kanal setzt die alte Quelle fort (a-K N4)
 Reihe           = die Stände zwischen altem und neuem ab_ts verworfen (auch Unterstunden-Stände), im Hintergrund neu gelesen
                   (korrektur.fuelle_staende: ab ab_ts aus dem neuen; davor nur fehlende Stände des alten, und nur auf
                   passender Höhe)
@@ -5262,10 +5277,14 @@ unterscheiden. (2) Mit Überlappung stundengenau (G ist eine volle Stunde). (3) 
 HA, ist der Rand der letzte gespeicherte Stand — die Reihe zählt die Stunde vor dem Rand dann nur mit dem neuen (der Kanal mit
 beiden). (4) Zeitumstellung (Bestand des Schreibers der Reihe, nicht U2): in der doppelten Herbststunde liest
 `get_value_at(03:00)` die erste der beiden 02:00-Zeilen — beginnt die Statistik des neuen in der zweiten, schreibt eedc um
-03:00 keinen Stand (Reihe-Tag 13,7 statt 14,3, Naht-Slot 0,6); in der Stunde nach der fehlenden Frühjahrsstunde steht der
-Stand 03:00 eine Stunde zu spät (Slot 0,7 statt 1,3, Tag gleich). Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das
-Soll. (5) Live heute/gestern liest weiter nur die heutige Entität (Lauf b). (6) Andere Kombinationen als Home Assistant → Home
-Assistant lesen bei «bleiben» wie bisher (U3).
+03:00 keinen Stand; in der Stunde nach der fehlenden Frühjahrsstunde steht der Stand 03:00 eine Stunde zu spät. Seit der
+Korrekturrunde a-K liest das Ansetzen den Rand-Stand epoch-genau aus der Zeile (`ansatz._ha_stand`): bei einer Umstellung am
+Tag des Tauschs treffen Tag und Monat in jeder Sicht das Soll (Herbst 14,3, Tausch 01:00–02:00 vor der fehlenden Frühjahrsstunde
+12,3, auch Auckland); es bleibt die Verschiebung der Stunde in der Reihe (Herbst Naht-Slot 0,9 statt 1,3, Frühjahr 0,7 statt 1,3 —
+der Rest steht im Slot daneben). Wird erst nach dem Tag umgestellt, liest der Schreiber die Stände der Zeit neu — mit Tausch in der
+ersten doppelten Herbststunde zeigt die Reihe dann am Tag 13,7 statt 14,3 (gemessen, wie vor a-K; der Schreiber bleibt
+unberührt, Option A).
+Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das Soll. (5) Andere Kombinationen als Home Assistant → Home Assistant lesen bei «bleiben» wie bisher (U3).
 
 **Jede Darstellung nimmt die Rand-Werte aus derselben Quelle wie ihre übrigen Werte:** die Reihe ihre gespeicherten Rand-Stände
 (`stand_alt_ende`/`stand_neu_null` in der Höhe der Reihe), der Kanal den Versatz seiner Quellzeile, die Leser direkt an Home
@@ -5280,6 +5299,31 @@ Kanal-Deckung wie HA. Die Wechselstelle «Falsch seit» einer Korrektur zwischen
 Rand-Stände) → 12,0 (a2, mit Rand-Ständen) in Tagesansicht, Bereichs-Leser und Tagesabschluss. Proben:
 `test_sensorwechsel_u2a1_proben.py` (die Leser mit von Hand gesetzten Zeilen), `test_sensorwechsel_u2a2_proben.py` (das Ansetzen
 über Route und Stundenlauf, Zeit-Proben, Nachtrag, Abgleiche).
+
+#### Fragen und Live (U2 Lauf b, Rechenweg F8–F10)
+
+```
+Frage           = eine: «Bisherige Werte bleiben» (grund = fortsetzung) oder «Bisherige Werte verwerfen» (korrektur)
+Prüf-Antwort    = …/quelle/pruefen, Preset-Prüfung, …/grund/pruefen: bleiben = zuordnung_wechsel/bleiben.angaben —
+                  dieselbe ansatz.lage an einer gedachten Zeile (Vorschau = Lauf): seit = T1, ueberlappung, zaehlt_ab = G,
+                  bei Überlappung Vorgabe (Stunde des Wechsels) und Bereich [T1 + 1 h, Stunde des Wechsels], stunden = Zahl
+                  der Stundenzeilen ab G bis zur laufenden Stunde (Zähler), tage = die neu zu bildenden Tage, monate = deren
+                  Monate mit gespeichertem Monatsabschluss; nur HA → HA, sonst null
+Wartegrund      = ansatz.WARTET_* als Satz (bleiben.SATZ_WARTET) in der Antwort der Schreib-Routen («wartet») und an der Fläche
+                  (GET …/wartende-wechsel, dieselbe lage wie der Stundenlauf)
+Lauf            = der Nachlauf des Ansetzens trägt im Zustand art = ansetzen (korrektur_lauf.ART_ANSETZEN); die Fläche nennt
+                  ihn «Werte nach dem Sensorwechsel …», nicht «Korrektur»
+Live            = live_history_service._energy_delta_via_statistics je Abschnitt des Tagesfensters mit demselben Helfer
+                  wie der Monat (zuordnung_wechsel/monat.abschnitte_des_fensters): je Abschnitt Stand am Ende − Stand am
+                  Anfang derselben Entität aus HAs Statistik (Anfang 0, wo der neue Sensor an G beginnt; Ende des letzten
+                  Abschnitts wie bisher short_term, sonst stündlich), je Abschnitt nicht unter 0, summiert
+                  (zaehler_naht.tagesmenge_aus_abschnitten); ohne angesetzten Wechsel im Fenster wie bisher
+```
+
+**Gemessen (Proben `test_sensorwechsel_u2b_proben.py`, Lab-Zeilen, Umstellung 10:30):** Live «gestern» am Folgetag = Tausch-Tag
+**15,3** (ohne Abschnitte 8,0 — die Zahl am HEAD), «heute» am Tausch-Tag um 12:00 = HAs Summe beider bis dahin, am Folgetag
+nur der neue. Prüf-Antwort ohne Überlappung: seit 07:00, zählt ab 07:00, 3 Stunden, kein Feld; die Route setzt an derselben
+Stunde an. Mit Überlappung und «zählt ab» 07:00: `schnitt` an 07:00, jede Sicht = HAs Zeilen «alt bis 07:00, neu ab 07:00».
 
 #### Kanal vor Reihe (B-5)
 
@@ -5590,8 +5634,10 @@ beginnt das Gefüllte erst nach einer leeren Zeit derselben Quelle, ist die Höh
 `ansatz = hoehe_ungeprueft` (Sensorwechsel U2 a1, Pflichtpunkt P-2; Halt H-1 der Korrekturrunde U1-K, Option A), und ihr Rand
 gilt als Höhenwechsel (`zeitpunkt.ohne_hoehenwechsel`) — keine Differenz über die leere Zeit. Gemessen mit HAs Summe 1 906,5
 höher und Geschichte erst ab 12.06.: 12.06. **11,5** (vorher 1 942,0); so zeigt es auch Home Assistant, dessen Statistik dort
-beginnt. Die Vorschau sagt es (`SATZ_LUECKE_HOEHE`), eine Lücke, die der Lauf erst beim Lesen findet, trägt das Merkmal ebenso;
-die Erkennung «Lücken-Zeile» (`nachher` leer) bleibt.
+beginnt. Die Vorschau sagt es (`SATZ_LUECKE_HOEHE`; seit U2 Lauf b mit dem Grund «Home Assistant führt den richtigen Sensor
+erst ab dann» und, wo «Falsch seit» wählbar ist, dem Handgriff `SATZ_LUECKE_HOEHE_HANDGRIFF`: «Falsch seit» auf das Ende der
+leeren Zeit setzen, dann bleiben die bisherigen Werte davor), eine Lücke, die der Lauf erst beim Lesen findet, trägt das
+Merkmal ebenso; die Erkennung «Lücken-Zeile» (`nachher` leer) bleibt.
 
 #### Korrektur über ein abgeschlossenes Stück (Sitzung 4b-1, Bauplan «Zu §14» Nr. 93–98)
 
