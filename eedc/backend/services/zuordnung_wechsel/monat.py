@@ -154,4 +154,36 @@ async def sensorwerte_des_monats(anlage, antwort, jahr: int, monat: int):
     return aus
 
 
-__all__ = ["abschnitte_des_fensters", "monatswerte_je_abschnitt", "sensorwerte_des_monats"]
+async def alle_monatswerte(db, anlage_id: int, svc, sensor_ids: list, ab_datum=None) -> list:
+    """«Alle Monatswerte» und Import-Vorschau (U2 a2, Messfrage M8a): die Monate der heutigen Entitäten **und** der alten
+    Sensoren ihrer angesetzten Wechsel — ein Monat, in dem nur der alte Werte hat, steht in der Liste (die Hülle vor
+    ``kanal/bilanz_leser.monatswerte_mit_kanaelen`` setzt seinen Wert unter die heutige Entität). Ohne angesetzten Wechsel
+    wörtlich ``svc.get_alle_monatswerte``. Ein hinzugenommener Monat ohne Wert nach der Hülle fällt heraus."""
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
+
+    alte = sorted({w.vorher["entity_id"] for zeilen in _angesetzte(await lade_wechsel(db, anlage_id)).values()
+                   if zeilen[-1].nachher["entity_id"] in sensor_ids for w in zeilen} - set(sensor_ids))
+    antworten = await asyncio.to_thread(_monate_lesen, svc, list(sensor_ids), alte, ab_datum)
+    if not alte:
+        return antworten
+    # Ein Monat nur des alten Sensors trägt hier noch keinen Wert der heutigen Entität: die Hülle setzt ihn (dieselbe, die
+    # ``monatswerte_mit_kanaelen`` danach noch einmal anwendet — sie ist idempotent); ein Monat ohne jeden Wert fällt heraus.
+    antworten = await monatswerte_je_abschnitt(db, anlage_id, antworten, [(a.jahr, a.monat) for a in antworten])
+    return [a for a in antworten if a.sensoren]
+
+
+def _monate_lesen(svc, sensor_ids: list, alte: list, ab_datum) -> list:
+    """Der Recorder-Teil von ``alle_monatswerte`` (synchron, im Thread): ohne alte Sensoren wörtlich
+    ``get_alle_monatswerte``; sonst die Monate beider und je Monat die Werte der heutigen Entitäten."""
+    from datetime import date
+
+    if not alte:
+        return svc.get_alle_monatswerte(sensor_ids, ab_datum)
+    out = []
+    for m in svc.get_verfuegbare_monate(sensor_ids + alte).monate:
+        if ab_datum is None or date(m.jahr, m.monat, 1) >= ab_datum:
+            out.append(svc.get_monatswerte(sensor_ids, m.jahr, m.monat))
+    return out
+
+
+__all__ = ["abschnitte_des_fensters", "alle_monatswerte", "monatswerte_je_abschnitt", "sensorwerte_des_monats"]

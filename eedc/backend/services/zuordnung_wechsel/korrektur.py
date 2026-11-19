@@ -816,6 +816,8 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
                                 richtige_entitaet(a.nachher), ha_svc=ha_svc, jetzt_ts=int(jetzt.timestamp()), bis_ts=bis_ts)
     row = await _wechsel_zeile(db, a, jetzt, lauf, kk.w0)
     luecke = await _luecken_zeile(db, a, row, la.luecke, lauf, la.intervall, hoehe_ungeprueft=la.hoehe_ungeprueft)
+    if ha_svc is not None and la.luecke is None:
+        await _rand_an_falsch_seit(db, row, ha_svc)
     zs, rs = await _verwerfe_staende(db, a, row.ab_ts)
     bestand = {"stundenzeilen_geleert": 0, "tageszeilen_geleert": 0, "felder_geleert": 0}
     if bestand_leeren and (la.von2 is None or la.von2 <= la.bis2):
@@ -832,6 +834,31 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
                "luecke_id": None if luecke is None else luecke.id, **bestand}
     return {"summary": summary, "kanal": kk, "lage": la, "bis_ts": bis_ts, "jetzt": jetzt, "nachlauf": nach,
             "sitzungen": sitzungen_wie(db, get_session)}
+
+
+async def _rand_an_falsch_seit(db: AsyncSession, row: ZuordnungWechsel, ha_svc) -> None:
+    """P-1 mit Rand-Ständen (U2 a2): wechselt an «Falsch seit» die Entität (Home Assistant → Home Assistant) und füllt die
+    Korrektur die Zeit ganz aus Home Assistant, trägt ihre Zeile die Rand-Stände nach der Regel eines Wechsels «bleiben» mit
+    Schnitt an ``G = falsch_seit − 1 h``: der gespeicherte Stand des bisherigen Sensors um G und der Stand des richtigen dort
+    aus Home Assistant (``ansatz = schnitt``). Dann zählt die Reihe die Stunde vor «Falsch seit» mit dem richtigen Sensor wie
+    der Kanal. Fehlt einer der beiden Stände, bleibt die Naht ohne Rand-Stände (sie teilt)."""
+    from backend.models.zuordnung_wechsel import ANSATZ_SCHNITT
+    from backend.services.zuordnung_wechsel.stueck import _ha_rohsumme, _rand_vor
+    from backend.services.zuordnung_wechsel.zeitpunkt import _falsch_seit_zwischen_zwei_sensoren, _als_wechsel, lade_wechsel
+
+    eid, fs = richtige_entitaet(row.nachher), row.falsch_seit_ts
+    if eid is None or fs is None:
+        return
+    zeilen = (await lade_wechsel(db, row.anlage_id)).get(row.sensor_key) or [_als_wechsel(row)]
+    if not any(w.id == row.id for w in _falsch_seit_zwischen_zwei_sensoren(zeilen)):
+        return
+    g = fs - timedelta(hours=1)
+    alt = await _rand_vor(db, row.anlage_id, row.sensor_key, fs)
+    neu = await _ha_rohsumme(ha_svc, eid, row.sensor_key, g)
+    if alt is None or alt.zeitpunkt != g or neu is None:
+        return
+    row.ansatz, row.stand_alt_ende, row.stand_neu_null = ANSATZ_SCHNITT, alt.stand, neu
+    await db.flush()
 
 
 def _staende_auftrag(a: Auftrag, la: Lage, ha_svc) -> Optional[dict]:

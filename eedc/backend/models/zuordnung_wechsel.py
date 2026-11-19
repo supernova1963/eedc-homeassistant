@@ -26,7 +26,10 @@ Eine Zeile = die **wirksame** Quelle eines Zählerschlüssels (``basis:<feld>`` 
   An einer **Lücken-Zeile** trägt ``ansatz`` den Wert ``hoehe_ungeprueft`` (Halt H-1 aus U1-K, Option A): die Korrektur füllt
   erst nach dieser leeren Zeit derselben Quelle, und kein Rand-Stand war prüfbar — der Rand gilt als Höhenwechsel
   (``zeitpunkt.ohne_hoehenwechsel``). ``nachher`` bleibt dort leer (die Erkennung «Lücken-Zeile» ändert sich nicht).
-  In a1 setzt kein Produktivweg ``beide``/``schnitt``/``offen*`` (das «Ansetzen» kommt in U2 a2).
+  Seit U2 a2 legen Feld-Route, Preset und «Grund nachtragen» eine Fortsetzung zwischen zwei HA-Entitäten mit ``offen`` an; der
+  Dienst ``services/zuordnung_wechsel/ansatz.py`` setzt sie an (``beide``/``schnitt``, ``ab_ts`` = G + 1 h). An einer
+  **Korrektur-Zeile** zwischen zwei HA-Entitäten trägt ``ansatz = schnitt`` die Rand-Stände an «Falsch seit»
+  (``korrektur._rand_an_falsch_seit``; G = ``falsch_seit_ts − 1 h``).
 
 ``kanal_quelle`` bleibt der Vollzug im Kanal; diese Zeile ist die Erklärung — kein Leser vergleicht beide Zeitpunkte.
 Löschen: ``ON DELETE CASCADE`` an der Anlage; Gerät und Innengerät räumen ausdrücklich

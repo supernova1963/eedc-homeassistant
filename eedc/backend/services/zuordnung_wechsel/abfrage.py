@@ -291,6 +291,11 @@ class Vollzug:
     fragen: list[Frage]
     korrekturen: list[dict] = field(default_factory=list)
     ha_svc: Any = None
+    #: Sensorwechsel U2 a2: die Wechsel-Zeilen «bleiben» zwischen zwei HA-Sensoren (``ansatz = offen``), die nach dem Commit
+    #: angesetzt werden (``ansatz.setze_an``), mit der Uhr der Erklärung und Sitzungen an derselben Datenbank.
+    ansaetze: list[int] = field(default_factory=list)
+    jetzt: Optional[datetime] = None
+    sitzungen: Any = None
 
     def zusammenfassung(self, labels: Optional[dict[str, str]] = None) -> list[dict]:
         """Je Korrektur der Lauf für die Antwort der Route (Fortschritt an der Fläche)."""
@@ -329,19 +334,42 @@ async def vollziehe(db, anlage, vorher: dict[str, dict], gruende: dict[str, tupl
         _pruefe_falsch_seit(f, grund[f.sensor_key][1], jetzt, _je_key(labels, f.sensor_key, f.sensor_key))
     v = Vollzug(fragen, ha_svc=kr.ha_dienst(None) if korr else None)
     fort = {k: GRUND_FORTSETZUNG for k, (g, _f) in grund.items() if g == GRUND_FORTSETZUNG}
-    await verzeichne(db, anlage, vorher, jetzt=jetzt, gruende=fort, auslassen={f.sensor_key for f in korr})
+    zeilen = await verzeichne(db, anlage, vorher, jetzt=jetzt, gruende=fort, auslassen={f.sensor_key for f in korr})
+    await _ansatz_offen(db, v, zeilen, jetzt)
     for f in korr:
         v.korrekturen.append(await kr.fuehre_aus(db, korrektur_auftrag(anlage.id, f, grund[f.sensor_key][1], jetzt),
                                                   ha_svc=v.ha_svc, jetzt=jetzt))
     return v
 
 
+async def _ansatz_offen(db, v: Vollzug, zeilen, jetzt: datetime) -> None:
+    """Sensorwechsel U2 a2 (Rechenweg F3): eine Fortsetzung zwischen zwei HA-Sensoren bekommt ``ansatz = offen`` — nach dem
+    Commit setzt der Dienst sie an, wenn HA den neuen schon führt, sonst der nächste Stundenlauf."""
+    from backend.models.zuordnung_wechsel import ANSATZ_OFFEN
+    from backend.services.zuordnung_wechsel.ansatz import wird_angesetzt
+    from backend.services.zuordnung_wechsel.korrektur import sitzungen_wie
+
+    for row in zeilen:
+        if wird_angesetzt(row):
+            row.ansatz = ANSATZ_OFFEN
+            v.ansaetze.append(row.id)
+    if v.ansaetze:
+        from backend.core.database import get_session
+
+        await db.flush()
+        v.jetzt, v.sitzungen = jetzt, sitzungen_wie(db, get_session)
+
+
 async def nach_dem_commit(v: Vollzug) -> None:
-    """Nach dem Commit des Aufrufers: je Korrektur Kanal füllen und den Hintergrund-Lauf der Tage starten."""
+    """Nach dem Commit des Aufrufers: je Korrektur Kanal füllen und den Hintergrund-Lauf der Tage starten; je Wechsel
+    «bleiben» ansetzen (U2 a2)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel.ansatz import setze_an
 
     for erg in v.korrekturen:
         await kr.nach_dem_commit(erg, ha_svc=v.ha_svc)
+    for wechsel_id in v.ansaetze:
+        await setze_an(v.sitzungen, wechsel_id, jetzt=v.jetzt)
 
 
 def aktivitaet_text(v: Vollzug, labels: dict[str, str]) -> str:

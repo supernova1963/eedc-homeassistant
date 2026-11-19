@@ -207,5 +207,53 @@ def traegt_messung(folge: Sequence[tuple[T, float]], naehte: Iterable[T]) -> boo
     return any(len(teil) > 1 for teil in abschnitte(folge, naehte))
 
 
-__all__ = ["Naht", "abschnitte", "ende_der_luecke_davor", "endet_in_luecke", "gehoben", "gehobene_staende", "hebung_am",
-           "monat_aus_abschnitten", "offset_vor_naht", "rand_versatz", "slot_beider", "stand_differenz", "traegt_messung", "trennende", "ueber_naht", "versatz_der_naht", "zaehlwerk_menge"]
+# ── Ansetzen eines Wechsels «bleiben» (Sensorwechsel U2 a2, Rechenweg F2/F3; ``services/zuordnung_wechsel/ansatz.py``) ──
+
+#: Ein Zuwachs des alten Sensors nach der ersten Zeile des neuen, der kleiner ist, zählt nicht als Überlappung (Rundung).
+UEBERLAPPUNG_TOL = 1e-6
+
+
+def ueberlappt(alt_heute: Optional[float], alt_bei_t1: Optional[float]) -> bool:
+    """F2: **Überlappung**, wenn der heutige letzte Stand des alten Sensors von seinem Stand in der Zeile ≤ T1 (erste Zeile des
+    neuen) abweicht — der alte zählte nach dem Beginn des neuen weiter. Führt HA den alten nicht mehr (``alt_heute`` leer): nein
+    (der Rand kommt aus dem bei eedc gespeicherten Stand); beginnt er erst nach T1 (``alt_bei_t1`` leer): ja."""
+    if alt_heute is None:
+        return False
+    return alt_bei_t1 is None or abs(alt_heute - alt_bei_t1) > UEBERLAPPUNG_TOL
+
+
+def nullpunkt_neu(state: Optional[float], summe: Optional[float]) -> float:
+    """F2 ohne Überlappung: der Nullpunkt des neuen Sensors — 0 für eine Menge (HAs Summe beginnt bei 0); für ein Stand-Feld
+    (``state`` gelesen) ``state − sum`` der ersten Zeile, ohne ``sum`` ihr ``state``."""
+    if state is None:
+        return 0.0
+    return float(state) - float(summe) if summe is not None else float(state)
+
+
+def kanal_ende_alt(kanalwert_basis: float, ha_alt_ziel: Optional[float], ha_alt_basis: Optional[float]) -> float:
+    """F3 Schritt 2: der Kanalwert des alten Sensors am Rand — der Kanalwert seiner letzten Zeile vor G (``kanalwert_basis``,
+    mit dem Versatz ihres Abschnitts) zuzüglich des Zuwachses, den HA für ihn bis zur Rand-Zeile führt (``ha_alt_ziel −
+    ha_alt_basis``; ohne beide Zeilen 0 — Rückfall «letzter bei eedc gespeicherter Stand», Bauplan Nr. 143 (2))."""
+    if ha_alt_ziel is None or ha_alt_basis is None:
+        return kanalwert_basis
+    return kanalwert_basis + (ha_alt_ziel - ha_alt_basis)
+
+
+def kanal_versatz_neu(kanal_alt_ende: float, neu_null: float) -> float:
+    """F3 Schritt 2: der Versatz der Quellzeile des neuen Sensors bei G — sein Rohwert plus dieser Versatz setzt den Kanal am
+    Rand des alten fort (``kanal_alt_ende − neu_null``; die Zeile G zählt bei ``beide`` beide Sensoren)."""
+    return kanal_alt_ende - neu_null
+
+
+def verschiebung(wert_nachher: Optional[float], wert_vorher: Optional[float]) -> float:
+    """Wie weit eine spätere Quelle mitrückt, wenn sich der Kanalwert am Ende des Abschnitts davor ändert (der Zuwachs an ihrer
+    Grenze bleibt)."""
+    if wert_nachher is None or wert_vorher is None:
+        return 0.0
+    return wert_nachher - wert_vorher
+
+
+__all__ = ["Naht", "UEBERLAPPUNG_TOL", "abschnitte", "ende_der_luecke_davor", "endet_in_luecke", "gehoben", "gehobene_staende",
+           "hebung_am", "kanal_ende_alt", "kanal_versatz_neu", "monat_aus_abschnitten", "nullpunkt_neu", "offset_vor_naht",
+           "rand_versatz", "slot_beider", "stand_differenz", "traegt_messung", "trennende", "ueber_naht", "ueberlappt",
+           "verschiebung", "versatz_der_naht", "zaehlwerk_menge"]

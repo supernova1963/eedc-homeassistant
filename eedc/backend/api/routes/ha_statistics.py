@@ -486,7 +486,8 @@ async def get_alle_monatswerte(
 
     try:
         # Kein Deckel (HA-Bauform S4-R-5): der Monat nennt HAs Zahl; R4 (Rücksprung) rechnet der Leser.
-        raw_responses = service.get_alle_monatswerte(sensor_ids, ab_datum)
+        from backend.services.zuordnung_wechsel import monat as wechsel_monat
+        raw_responses = await wechsel_monat.alle_monatswerte(db, anlage_id, service, sensor_ids, ab_datum)
         # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
         # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
         from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen
@@ -999,7 +1000,8 @@ async def get_import_vorschau(
     # Alle HA-Monatswerte holen — Zählerlücken wie HA (Vorlage §10): der Monat
     # verwirft einen Rücksprung des HA-`sum` (R4); kein Deckel (HA-Bauform S4-R-5).
     try:
-        ha_monate = service.get_alle_monatswerte(sensor_ids)
+        from backend.services.zuordnung_wechsel import monat as wechsel_monat
+        ha_monate = await wechsel_monat.alle_monatswerte(db, anlage_id, service, sensor_ids)
         # HA-Bauform E4a-2 (Umschaltstelle 3, B-2): Kanal-Δ der Bilanz-Sensoren, wenn ihre Spiegel den
         # Kalendermonat alle voll decken (ohne Deckel); sonst bleibt der HA-Leser.
         from backend.services.kanal.bilanz_leser import monatswerte_mit_kanaelen

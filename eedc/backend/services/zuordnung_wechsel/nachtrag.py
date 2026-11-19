@@ -256,11 +256,15 @@ async def trage_fortsetzung_ein(db, anlage, row) -> ZuordnungWechsel:
     from backend.services.kanal import merken
     from backend.services.kanal.angaben import kanal_des_schluessels
     from backend.services.kanal.naht import nachtrag_fortsetzung
+    from backend.models.zuordnung_wechsel import ANSATZ_OFFEN
+    from backend.services.zuordnung_wechsel.ansatz import wird_angesetzt
     from backend.services.zuordnung_wechsel.zaehler_getauscht import _nachtrag_stunde, naht_stunde
     from backend.services.zuordnung_wechsel.zeitpunkt import merke_neu, rand_versatz, vergiss
 
     neu = ZuordnungWechsel(anlage_id=row.anlage_id, sensor_key=row.sensor_key, erklaert_ts=row.erklaert_ts, ab_ts=row.ab_ts,
                            vorher=row.vorher, nachher=row.nachher, grund=GRUND_FORTSETZUNG, herkunft=HERKUNFT_NACHTRAG)
+    if wird_angesetzt(neu):                     # U2 a2 (F10): «bleiben» zwischen zwei HA-Sensoren — nach dem Commit ansetzen
+        neu.ansatz = ANSATZ_OFFEN
     db.add(neu)
     await db.flush()
     row.aufgehoben_durch = neu.id

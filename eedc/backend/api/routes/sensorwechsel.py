@@ -208,7 +208,8 @@ async def grund_nachtragen(
     try:
         nt.pruefe_grund(la, grund)
         if grund == GRUND_FORTSETZUNG:
-            await nt.trage_fortsetzung_ein(db, anlage, la.row)
+            neu = await nt.trage_fortsetzung_ein(db, anlage, la.row)
+            ansetzen = neu.id if neu.ansatz is not None else None
             ergebnis, text = None, f"{anlage.anlagenname} · {label}: Fortsetzung (Wechsel vom {zeit})"
         else:
             falsch_seit = la.stueck[0] if la.stueck else _falsch_seit(body)
@@ -228,6 +229,11 @@ async def grund_nachtragen(
     await log_activity(kategorie="sensor_mapping", aktion="Grund nachgetragen", details=text, anlage_id=anlage_id, db=db)
     await db.commit()
     laeufe = []
+    if ergebnis is None and ansetzen is not None:          # U2 a2 (F10): «bleiben» zwischen zwei HA-Sensoren ansetzen
+        from backend.core.database import get_session
+        from backend.services.zuordnung_wechsel.ansatz import setze_an
+
+        await setze_an(kr.sitzungen_wie(db, get_session), ansetzen)
     if ergebnis is not None:
         await kr.nach_dem_commit(ergebnis, ha_svc=svc)
         s = ergebnis["summary"]

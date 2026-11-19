@@ -5207,9 +5207,65 @@ Monat aus HA(F7)= je Geltungsabschnitt die Zeilenregel des Monatslesers (get_sen
                   Sensors (zaehler_naht.monat_aus_abschnitten; zuordnung_wechsel/monat.py) — vor dem Kanal-Ersatz der fünf
                   Kalendermonats-Wege (bilanz_leser.monatswerte_mit_kanaelen) und am laufenden Monat
 Falsch seit     = Pflichtpunkt P-1: erklärt eine Korrektur für ihre Zeit eine andere Home-Assistant-Entität als richtig als
-                  die davor geltende, ist falsch_seit_ts eine Naht ohne Rand-Stände — keine Differenz zweier Sensoren
-                  (zeitpunkt._falsch_seit_zwischen_zwei_sensoren); nur Home Assistant → Home Assistant
+                  die davor geltende, ist falsch_seit_ts eine Naht — keine Differenz zweier Sensoren
+                  (zeitpunkt._falsch_seit_zwischen_zwei_sensoren); nur Home Assistant → Home Assistant. Seit a2 trägt die
+                  Korrektur-Zeile dort Rand-Stände nach derselben Regel wie «bleiben» mit Schnitt an G = falsch_seit − 1 h
+                  (ansatz = schnitt; gespeicherter Stand des bisherigen Sensors um G, Stand des richtigen dort aus HA;
+                  korrektur._rand_an_falsch_seit, zeitpunkt.korrektur_rand_versatz), wenn die Korrektur die Zeit ganz aus HA
+                  füllt — die Stunde vor «falsch seit» zählt dann in der Reihe den richtigen Sensor wie im Kanal
 ```
+
+#### Ansetzen eines Wechsels «bleiben» (U2 a2, Rechenweg F2, F3; Bauplan Nr. 143, 144)
+
+```
+Wer             = ein Dienst: services/zuordnung_wechsel/ansatz.py (lage lesend = Vorschau, setze_an idempotent)
+Wann            = Feld-Route / Preset (abfrage.vollziehe) und «Grund nachtragen» → Fortsetzung legen eine Zeile zwischen zwei
+                  HA-Entitäten mit ansatz = offen an; nach dem Commit setzt der Dienst an, wenn HA den neuen Sensor schon
+                  führt, sonst der nächste Stundenlauf (scheduler.sensor_snapshot_job → offene_ansetzen). Solange offen:
+                  der Stundenlauf spiegelt den Schlüssel nicht (kanal/schreiber._spiegel), die Leser lesen eine Naht ohne
+                  Rand-Stände. Offen bleibt die Zeile auch, solange HA nicht erreichbar ist, ein Korrektur-Lauf des
+                  Schlüssels das Füllen schuldet oder der Kanal vor G keinen Spiegel der alten Entität trägt
+T1              = die erste Stundenzeile des neuen Sensors (ha_statistik_rand.erste_zeile; WebSocket gestuft month → day →
+                  hour, nie «alles bis t»; get_stundenzeile_bis: 24-h-Fenster, sonst dieselbe Stufung)
+Überlappung     = heutiger letzter Stand des alten ≠ sein Stand in der Zeile ≤ T1 (zaehler_naht.ueberlappt)
+Art und G       = ohne Überlappung: beide, G = T1;  mit Überlappung: schnitt, G = Stunde des verzeichneten Wechsels
+                  (ab_ts − 1 h), frühestens T1 + 1 h;  danach ab_ts = G + 1 h
+Rand alt        = in der Höhe der gespeicherten Reihe: der gespeicherte Stand des alten am Rand (beide: um G + 1 h,
+                  schnitt: um G), sonst HAs Wert aus der letzten Stundenzeile des alten (auch einer gelöschten Entität;
+                  das in HA fehlende angebrochene 5-Minuten-Stück wird nicht ergänzt), wenn der letzte gespeicherte Stand
+                  des alten HAs Summe dort ist; sonst der letzte gespeicherte. Führt HA den alten nicht mehr: der letzte
+                  gespeicherte Stand aus HAs Statistik (nie ein Live- oder Zustands-Wert)
+Rand neu        = beide: 0 (Stand-Feld: state − sum der ersten Zeile);  schnitt: HAs Stand des neuen um G
+Kanal           = Zeilen des Schlüssels ab G gelöscht, Quellzeile des neuen bei G mit
+                  Versatz = Kanalwert der letzten Zeile vor G + Zuwachs des alten in HA bis zur Rand-Zeile − Rand neu
+                  (zaehler_naht.kanal_ende_alt, kanal_versatz_neu); fehlende Zeilen des alten bis G − 1 h vorher aus HA
+                  ergänzt; gefüllt mit neu_spiegeln ab G; spätere Quellen anderer Entitäten rücken um die Änderung des
+                  Kanalwerts an ihrer Grenze mit (zaehler_naht.verschiebung)
+Reihe           = die Stände zwischen altem und neuem ab_ts verworfen (auch Unterstunden-Stände), im Hintergrund neu gelesen
+                  (korrektur.fuelle_staende: ab ab_ts aus dem neuen; davor nur fehlende Stände des alten, und nur auf
+                  passender Höhe)
+Tage            = die abgeschlossenen Tage ab dem Tag von G, deren Tageszeile einen Schlüssel des Felds trägt, im
+                  Hintergrund neu gebildet (korrektur_lauf, ohne Sperre); abhängige abgeleitete Kanäle ab G neu geschrieben
+Monate (Liste)  = «Alle Monatswerte» und Import-Vorschau listen auch Monate, in denen nur der alte Sensor Werte hat
+                  (zuordnung_wechsel/monat.alle_monatswerte; Messfrage M8a)
+```
+
+**Gemessen (Saat `s4c1`, Lab-Zeilen, Umstellung über die Feld-Route 07:40 / 08:20 / 10:30 / zwei Tage später):** in jeder
+Sicht Stunde 1,3, Tag 15,3, Folgetag 12,0, Monat wie HA (Kanal, Stundenwerte, Tageswerte, Tagestabelle aus HA-Slots und aus
+der Reihe 1,3 / 15,8 im Rückwärts-Raster, Monats-Fakten, laufender Monat, «Aus HA laden», Monatsabschluss-Vorschlag); ein zweiter
+Aufruf ändert nichts, der Konsistenzlauf korrigiert 0 Zeilen. Produktiv-Kopie (Wechsel der Wallbox 18.10. mit Überlappung,
+«Grund nachtragen» → Fortsetzung): `schnitt` an 10:00 mit 1 646,014 / 3 760,728 (Hebung −2 114,714), Kanal Zeile für Zeile
+unverändert (Versatz −208,214, Oktober 242,871), Reihe über den Oktober 242,871 (vorher 2 357,585), kein Stand dazu.
+
+**Benannte Grenzen:** (1) Ein paralleler neuer Sensor, in seiner ersten Stunde zugeordnet, ist von einem Gerätetausch nicht zu
+unterscheiden. (2) Mit Überlappung stundengenau (G ist eine volle Stunde). (3) Passt die Höhe der gespeicherten Reihe nicht zu
+HA, ist der Rand der letzte gespeicherte Stand — die Reihe zählt die Stunde vor dem Rand dann nur mit dem neuen (der Kanal mit
+beiden). (4) Zeitumstellung (Bestand des Schreibers der Reihe, nicht U2): in der doppelten Herbststunde liest
+`get_value_at(03:00)` die erste der beiden 02:00-Zeilen — beginnt die Statistik des neuen in der zweiten, schreibt eedc um
+03:00 keinen Stand (Reihe-Tag 13,7 statt 14,3, Naht-Slot 0,6); in der Stunde nach der fehlenden Frühjahrsstunde steht der
+Stand 03:00 eine Stunde zu spät (Slot 0,7 statt 1,3, Tag gleich). Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das
+Soll. (5) Live heute/gestern liest weiter nur die heutige Entität (Lauf b). (6) Andere Kombinationen als Home Assistant → Home
+Assistant lesen bei «bleiben» wie bisher (U3).
 
 **Jede Darstellung nimmt die Rand-Werte aus derselben Quelle wie ihre übrigen Werte:** die Reihe ihre gespeicherten Rand-Stände
 (`stand_alt_ende`/`stand_neu_null` in der Höhe der Reihe), der Kanal den Versatz seiner Quellzeile, die Leser direkt an Home
@@ -5220,13 +5276,10 @@ mit HAs Rand-Ständen wäre es 2 149,371.
 
 Gemessen an der Saat (Lab-Zeilen 19.11.: alter Zähler bis 07:12 +0,6 in der Stunde 07, neuer ab 07:27 0,7 in derselben Stunde):
 Naht-Slot 1,3 in Reihe, Tagesabschluss aus HA-Slots und Kanal; Tag im Rückwärts-Raster 15,8; Monat aus HA mit und ohne
-Kanal-Deckung wie HA. **Was a1 noch nicht kann (a2 «Ansetzen»):** kein Produktivweg setzt `ansatz` — die Abfrage verzeichnet
-«bleiben» wie bisher ohne Rand-Werte, der Kanal setzt die neue Quelle wie bisher an (die Stunde des Wechsels verliert dort einen
-Teil), gespeicherte Tage werden nicht neu gebildet. Die Wechselstelle «Falsch seit» einer Korrektur zwischen zwei Sensoren ist in
-a1 eine Naht ohne Rand-Stände: die Stunde davor zählt in der Reihe nicht (gemessen 10.06. 11,5 statt 512,0; der Tagesabschluss
-aus HA-Slots zählt sie, 12,0); ihre Rand-Stände kommen mit a2. «Alle Monatswerte» und Import-Vorschau listen nur Monate, in
-denen die heutige Entität Zeilen hat — ein Monat nur mit dem alten Sensor erscheint dort erst mit a2/b (über «Aus HA laden» für
-den einen Monat und im laufenden Monat erscheint er). Proben: `test_sensorwechsel_u2a1_proben.py`.
+Kanal-Deckung wie HA. Die Wechselstelle «Falsch seit» einer Korrektur zwischen zwei Sensoren: 10.06. 11,5 (a1, Naht ohne
+Rand-Stände) → 12,0 (a2, mit Rand-Ständen) in Tagesansicht, Bereichs-Leser und Tagesabschluss. Proben:
+`test_sensorwechsel_u2a1_proben.py` (die Leser mit von Hand gesetzten Zeilen), `test_sensorwechsel_u2a2_proben.py` (das Ansetzen
+über Route und Stundenlauf, Zeit-Proben, Nachtrag, Abgleiche).
 
 #### Kanal vor Reihe (B-5)
 

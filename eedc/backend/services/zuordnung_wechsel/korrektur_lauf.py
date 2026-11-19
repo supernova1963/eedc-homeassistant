@@ -136,10 +136,15 @@ async def _tag_vorher(db: AsyncSession, anlage_id: int, tag: date) -> tuple[Opti
 
     tz = (await db.execute(select(TagesZusammenfassung).where(
         TagesZusammenfassung.anlage_id == anlage_id, TagesZusammenfassung.datum == tag))).scalar_one_or_none()
-    stunden = {r.stunde: {k: getattr(r, k) for k in STUNDE_ABRUF} for r in (await db.execute(
-        select(TagesEnergieProfil).where(TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum == tag)
-    )).scalars().all()}
-    return ({k: getattr(tz, k) for k in TAG_ABRUF} if tz is not None else None), stunden
+    zeilen = (await db.execute(select(TagesEnergieProfil).where(
+        TagesEnergieProfil.anlage_id == anlage_id, TagesEnergieProfil.datum == tag))).scalars().all()
+    stunden = {r.stunde: {k: getattr(r, k) for k in STUNDE_ABRUF} for r in zeilen}
+    alt = {k: getattr(tz, k) for k in TAG_ABRUF} if tz is not None else None
+    # Die Werte sind kopiert: die geladenen Zeilen verlassen die Sitzung, bevor der Neubau sie löscht und neu schreibt (sonst
+    # trüge die Sitzung ein altes Objekt unter der Nummer einer neuen Zeile — SQLAlchemy warnt «Identity map already had …»).
+    for r in (*zeilen, *((tz,) if tz is not None else ())):
+        db.expunge(r)
+    return alt, stunden
 
 
 def _wie_vorher(row, alt: dict, spalten) -> int:

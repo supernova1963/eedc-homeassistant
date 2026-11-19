@@ -265,27 +265,46 @@ def naehte_der_fortsetzung(wechsel: Optional[list[Wechsel]], offene_laeufe: froz
             hebend.append(Naht(w.ab_ts, v))
     for s, r in gesperrte_stuecke(wechsel, offene_laeufe, ausgenommen):
         teilend |= {s, r}
-    teilend |= _falsch_seit_zwischen_zwei_sensoren(wechsel)
+    for w in _falsch_seit_zwischen_zwei_sensoren(wechsel):
+        v = korrektur_rand_versatz(w)
+        if v is None:
+            teilend.add(w.falsch_seit_ts)
+        else:
+            hebend.append(Naht(w.falsch_seit_ts, v))
     if not hebend:
         return sorted(teilend)
     return sorted([*teilend, *hebend], key=lambda n: (n, isinstance(n, Naht)))
 
 
-def _falsch_seit_zwischen_zwei_sensoren(wechsel: Optional[list[Wechsel]]) -> set[datetime]:
-    """Pflichtpunkt P-1 (Nachmessung U1 «F7»): ``falsch_seit_ts`` jeder gültigen Korrektur-Zeile (keine Lücken-Zeile), die eine
-    Home-Assistant-Entität als richtig erklärt, wenn davor eine **andere** Home-Assistant-Entität galt (``quelle_aufgeloest``
-    eine Sekunde vor «Falsch seit»). Nur Home Assistant → Home Assistant; andere Kombinationen lesen wie vor U2."""
+def _falsch_seit_zwischen_zwei_sensoren(wechsel: Optional[list[Wechsel]]) -> list[Wechsel]:
+    """Pflichtpunkt P-1 (Nachmessung U1 «F7»): jede gültige Korrektur-Zeile (keine Lücken-Zeile), die eine Home-Assistant-Entität
+    als richtig erklärt, wenn davor eine **andere** Home-Assistant-Entität galt (``quelle_aufgeloest`` eine Sekunde vor «Falsch
+    seit») — ihr ``falsch_seit_ts`` ist eine Naht. Nur Home Assistant → Home Assistant; andere Kombinationen lesen wie vor U2.
+    **Rand-Stände** (U2 a2): hat die Korrektur sie gesetzt (``korrektur_rand_versatz``), hebt die Naht wie ein Wechsel
+    «bleiben» mit Schnitt an ``falsch_seit − 1 h`` (die Stunde vor «Falsch seit» zählt den richtigen Sensor, wie der Kanal)."""
     from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
 
-    aus: set[datetime] = set()
+    aus: list[Wechsel] = []
     for w in wechsel or ():
         if (w.grund != GRUND_KORREKTUR or w.aufgehoben_durch is not None or w.falsch_seit_ts is None
                 or ist_luecken_zeile(w) or (w.nachher or {}).get("art") != "ha"):
             continue
         davor = quelle_aufgeloest(wechsel, w.falsch_seit_ts - timedelta(seconds=1))
         if davor is not None and davor.get("art") == "ha" and not gleiche_quelle(davor, w.nachher):
-            aus.add(w.falsch_seit_ts)
+            aus.append(w)
     return aus
+
+
+def korrektur_rand_versatz(w) -> Optional[float]:
+    """Der Versatz an «Falsch seit» einer Korrektur zwischen zwei HA-Sensoren (U2 a2, P-1): ``stand_alt_ende`` (gespeicherter
+    Stand des bisherigen Sensors um ``falsch_seit − 1 h``) − ``stand_neu_null`` (Stand des richtigen dort aus HA), nur mit
+    ``ansatz = schnitt`` und beiden Rand-Ständen; sonst ``None`` (die Naht teilt wie in a1)."""
+    from backend.core.berechnungen.zaehler_naht import rand_versatz as _rechne
+    from backend.models.zuordnung_wechsel import ANSATZ_SCHNITT, GRUND_KORREKTUR
+
+    if w.grund != GRUND_KORREKTUR or w.aufgehoben_durch is not None or getattr(w, "ansatz", None) != ANSATZ_SCHNITT:
+        return None
+    return _rechne(w.stand_alt_ende, w.stand_neu_null)
 
 
 # ── Lücke ohne Höhenwechsel (Sensorwechsel U1, Bauplan Nr. 127 Option A, Zielbild Nr. 133 (4)) ─────────────────────────

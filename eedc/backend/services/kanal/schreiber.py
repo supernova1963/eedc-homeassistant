@@ -313,6 +313,11 @@ async def _spiegel(db: AsyncSession, k: _Kontext, ha_svc) -> int:
                 logger.warning("Kanal-Spiegel: %s hat keine Kanal-Art im Katalog — übersprungen", sensor_key)
             continue
         gewuenscht[sensor_key] = (art, einheit)
+    from backend.services.zuordnung_wechsel.ansatz import offene_schluessel
+    from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
+
+    for key in offene_schluessel(await lade_wechsel(db, k.anlage.id)):   # U2 a2 (F3): erst der Dienst setzt die neue Quelle an
+        gewuenscht.pop(key, None)
     if not gewuenscht:
         return 0
     # ⭐ **Nur die Kanäle, die es schon gibt** (Lab-Durchlauf 4.1.3-rc1, 07.10.2026). Ein fehlender Kanal entsteht

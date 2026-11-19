@@ -643,6 +643,9 @@ async def sensor_snapshot_job() -> None:
                 # SAVEPOINT, Fehler werden dort geloggt und vermerkt, nie hierher durchgereicht.
                 await schreibe_kanaele_im_stundenlauf(db, anlage, zeitpunkt)
 
+        # Sensorwechsel U2 a2 (Rechenweg F3): offene Wechsel «bleiben» ansetzen, sobald HA den neuen Sensor führt (wirft nie).
+        from backend.services.zuordnung_wechsel.ansatz import offene_ansetzen
+        await offene_ansetzen(jetzt=now)
         # HA-Bauform E2: Kanäle ohne Nachfüll-Marke (eben angelegt oder neue Entity) im Hintergrund nachfüllen —
         # NACH der Sitzung oben, damit kein HA-Abruf in ihrer Schreib-Transaktion liegt. Kanäle mit Marke
         # kosten dort keine HA-Abfrage.

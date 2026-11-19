@@ -148,6 +148,9 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/zuordnung_wechsel/zeitpunkt.py::staende_um": (
         "—", STAND, True, "Sensorwechsel U1: nur die Zeitpunkte des letzten Stands vor und des ersten Stands nach einer Lücke "
         "(Frage «Höhenwechsel dazwischen?») — kein Wert, keine Menge"),
+    "services/zuordnung_wechsel/ansatz.py::_letzter_stand": (
+        "—", STAND, True, "Sensorwechsel U2 a2: der gespeicherte Stand des alten Sensors am Rand eines Wechsels «bleiben» "
+        "(Rand-Stand in der Höhe der Reihe, Rückfall nur aus HAs Statistik) — ein Stand, keine Menge"),
     "services/zuordnung_wechsel/korrektur.py::_erster_stand_da": (
         "—", STAND, True, "Sensorwechsel U1: der Zeitpunkt des ersten gespeicherten Stands nach dem Neulesen (führt Home "
         "Assistant dort etwas?) — kein Wert, keine Menge"),

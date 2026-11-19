@@ -1683,8 +1683,8 @@ class HAStatisticsService:
     def get_stundenzeile_bis(self, sensor_id: str, ts: float) -> Optional[dict]:
         """Letzte Stundenzeile eines Sensors mit ``start_ts <= ts`` (Anker beim Sensortausch), roh.
 
-        SQL: eine Zeile über den Index ``(metadata_id, start_ts)``. WS: wachsende Fenster wie
-        ``_letzter_sum_vor`` (1 · 8 · 32 · 128 · 1024 Tage), Abbruch beim ersten Treffer.
+        SQL: eine Zeile über den Index ``(metadata_id, start_ts)``. WS: das 24-h-Fenster vor ``ts`` (Lab M2: der billigste
+        Weg, solange dort eine Zeile liegt), sonst gestuft month → day → hour (``ha_statistik_rand``, Bauplan Nr. 143 (3)).
         """
         if not self.is_available:
             return None
@@ -1693,17 +1693,13 @@ class HAStatisticsService:
             if not meta:
                 return None
             if conn is None:
-                for tage in _WS_ANKER_FENSTER_TAGE:
-                    zeilen = [
-                        z for z in self._ws_zeilen(
-                            [sensor_id], ts - tage * 86400, ts, types=list(self._ROH_SPALTEN),
-                        ).get(sensor_id, [])
-                        if z["start_ts"] <= ts
-                    ]
-                    if zeilen:
-                        z = max(zeilen, key=lambda z: z["start_ts"])
-                        return {"start_ts": float(z["start_ts"]), **{s: z.get(s) for s in self._ROH_SPALTEN}}
-                return None
+                zeilen = [z for z in self._ws_zeilen([sensor_id], ts - 86400, ts, types=list(self._ROH_SPALTEN))
+                          .get(sensor_id, []) if z["start_ts"] <= ts]
+                if not zeilen:
+                    from backend.services.ha_statistik_rand import letzte_zeile_bis
+                    return letzte_zeile_bis(self, sensor_id, ts)
+                z = max(zeilen, key=lambda z: z["start_ts"])
+                return {"start_ts": float(z["start_ts"]), **{s: z.get(s) for s in self._ROH_SPALTEN}}
             r = conn.execute(
                 text(
                     "SELECT start_ts, state, sum, mean, min, max FROM statistics "
