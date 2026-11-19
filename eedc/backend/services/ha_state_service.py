@@ -212,6 +212,8 @@ class HAStateService:
         # entity_id → (zeitpunkt, einheit). Die Einheit ist bewusst auch dann
         # gemerkt, wenn sie leer ist — siehe get_sensor_units().
         self._unit_cache: dict[str, tuple[float, str]] = {}
+        # True, solange die Verbindung über `setze_ha_verbindung` kam (B-1: ihr Ende räumt sie).
+        self._ueber_setter = False
 
     def setze_ha_verbindung(self, api_url: Optional[str], token: Optional[str]) -> None:
         """Übernimmt die aktive HA-Verbindung (Supervisor oder Remote).
@@ -219,9 +221,19 @@ class HAStateService:
         Gerufen aus `ha_connection.aktualisiere_ha_verbindung` — beim Start und
         bei jeder Änderung. Ohne Verbindung bleibt der Supervisor-Stand aus
         `__init__` stehen, damit der Add-on-Betrieb unberührt ist.
+
+        ⚠ **B-1 (19.11.2026):** endet eine Verbindung, die über diesen Setter kam
+        (Remote-Verbindung abgeschaltet: ``(None, None)``), kehrt der Dienst zum
+        Stand von `__init__` zurück (Supervisor-Token bzw. ohne Token) — bis dahin
+        behielt er Adresse und Token und fragte HA bis zum Neustart weiter.
         """
         if not (api_url and token):
+            if self._ueber_setter:
+                self._unit_cache.clear()
+                self.api_url, self.token = settings.ha_api_url, settings.supervisor_token
+                self._ueber_setter = False
             return
+        self._ueber_setter = True
         if token != self.token or api_url != self.api_url:
             # Zwischen zwei Verbindungen sagt dieselbe Entity nicht dasselbe.
             self._unit_cache.clear()
