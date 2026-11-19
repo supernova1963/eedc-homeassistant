@@ -53,6 +53,10 @@ class CheckKategorie(str, Enum):
     # mit negativem Delta). eedc rechnet wie das HA-Energie-Dashboard ohne Rücksprung-Verwurf — die Stunde steht negativ
     # in Tag und Monat; diese Kategorie benennt sie über den ganzen Spiegel und den Reparaturweg in HA.
     HA_ZAEHLER_RUECKGANG = "ha_zaehler_rueckgang"
+    # Sensorwechsel U2 Lauf c (Rechenweg F12, Leitlinie Gernot 19.11.2026): HA führt nach einem Gerätetausch dieselbe Entität
+    # weiter und zählt den Sprung des Zählerstands (nach oben, oder ein Neubeginn nicht bei 0) als Menge der Stunde. eedc rechnet
+    # wie HA und berichtigt nichts; Erzeuger `datenquelle/standsprung.py`, Regel `core/berechnungen/zaehlerstand_sprung.py`.
+    HA_ZAEHLERSTAND_SPRINGT = "ha_zaehlerstand_springt"
     # Verdacht N-803 (Go Gernot 16.11.2026): in eedcs eigener Standreihe (`sensor_snapshots`) liegt ein Abschnitt um +X
     # versetzt — Sprung, Weiterlauf auf anderer Höhe, Rückgang um ≈ −X (die Stände eines anderen Sensors, etwa nach einem
     # Wechsel der Zuordnung). Die Tageswerte an den Rändern sind falsch, wo der Tag über die Standreihe rechnet. Erzeuger

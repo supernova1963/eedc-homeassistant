@@ -966,7 +966,12 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
   berichtigst du dort (Entwicklerwerkzeuge → Statistik, beim Symbol „Wert anpassen" die Stunde des Tauschs wählen und den
   Zuwachs auf die echte Menge setzen); eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich und trägt selbst
   nichts ein. Das gilt auch, wenn das Feld heute über MQTT kommt, der Tausch aber in die Zeit fällt, in der es aus Home
-  Assistant kam.
+  Assistant kam. Springt der Stand dabei deutlich, nennt der Daten-Checker die Stunde (Handbuch Daten-Checker §4.8h).
+- **Ein Zählerstand aus Home Assistant** (Gas, Wasser, Öl): eedc rechnet mit dem Stand, den der Sensor anzeigt; „Wert
+  anpassen" ändert in Home Assistant nur die Summe und wirkt hier nicht. eedc trägt nichts ein und nennt zwei Wege: in Home
+  Assistant für den neuen Zähler einen eigenen Sensor oder Helfer anlegen, ihn dem Feld zuordnen und im Dialog **„Bisherige
+  Werte bleiben"** wählen; oder den neuen Zähler als eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen
+  (§3.4a).
 - **Ein Zähler über MQTT** (und ein Feld ohne Spiegel aus Home Assistant): du klickst **„Eintragen"** — eedc überbrückt
   den Tausch; der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge, und wo eedc aus den gespeicherten
   Zählerständen rechnet, zählt die Stunde des Tauschs keinen Zuwachs. Ist die Stunde des Tauschs schon gespeichert, nennt

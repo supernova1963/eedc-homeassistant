@@ -80,6 +80,8 @@ WIRKUNG_JE_CODE: dict[str, str] = {
     # E5.4 — Szenarien auf der Achsen-Matrix (``kg.datenstand``), Abschnitt «je Aktions-Code» unten.
     "ha_zaehler_rueckgang": "test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehler_rueckgang_wirkt",
     "ha_zaehlersprung": "test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlersprung_wirkt",
+    # Sensorwechsel U2 Lauf c (F12): derselbe Sensor springt nach einem Gerätetausch; der Abgleich übernimmt HAs Berichtigung.
+    "ha_zaehlerstand_springt": "test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt",
     "drift_tag": "test_daten_checker_handgriff_wirkt.py::test_w11_drift_tag_wirkt",
     "datenquelle_aggregate_aeltere_quelle": "test_daten_checker_handgriff_wirkt.py::test_w11_aeltere_quelle_wirkt",
     "batterie_vorzeichen_tage": "test_daten_checker_handgriff_wirkt.py::test_w11_batterie_vorzeichen_tage_wirkt",
@@ -101,9 +103,10 @@ def _aktions_codes() -> set[str]:
 
 
 def test_w11_je_aktions_code_ein_wirkungs_beleg():
-    """E5.4: jeder Aktions-Code des Katalogs (18 seit Sensorwechsel 4b-1: `zaehler_versatz` ist ein Sprung) hat einen Wirkungs-Test; jeder Beleg existiert."""
+    """E5.4: jeder Aktions-Code des Katalogs (18 seit Sensorwechsel 4b-1: `zaehler_versatz` ist ein Sprung; 19 seit U2 Lauf c:
+    `ha_zaehlerstand_springt`) hat einen Wirkungs-Test; jeder Beleg existiert."""
     codes = _aktions_codes()
-    assert len(codes) == 18
+    assert len(codes) == 19
     fehlt = sorted(codes - set(WIRKUNG_JE_CODE))
     assert not fehlt, f"Aktions-Code ohne Wirkungs-Test je Code (W-11, H-E5-3): {fehlt}"
     assert not set(WIRKUNG_JE_CODE) - codes, f"verwaiste Einträge: {sorted(set(WIRKUNG_JE_CODE) - codes)}"
@@ -397,6 +400,32 @@ async def test_w11_ha_zaehlersprung_wirkt(uhr, monkeypatch):
         await _spiegel_veraltet(ds, "basis:netzbezug", _e54_spiegel_ts(E54_TAG, 13), stand)
         nachher = await _e54_wirkung(ds, "_check_ha_zaehlersprung", "ha_zaehlersprung", AKTION_SPIEGEL_ABGLEICH_TAG,
                                      {"datum": E54_TAG.isoformat()}, jetzt=mx.JETZT)
+    assert nachher == []
+
+
+async def test_w11_ha_zaehlerstand_springt_wirkt(uhr, monkeypatch):
+    """Sensorwechsel U2 Lauf c: der Spiegel trägt ab 02.07. 12:00 einen Sprung des Netzbezugs um +5 000 kWh in Stand und
+    Summe (Gerätetausch, derselbe Sensor), HA nach «Wert anpassen» nicht ⇒ «Zählerstand springt»; der Abgleich übernimmt HAs
+    Statistik ⇒ kein Befund. (Der 02.07., nicht E54_TAG: das Bezugsfenster braucht 14 Tage mit Zuwachs ab dem 01.06.)"""
+    from datetime import date
+
+    from sqlalchemy import select, update
+
+    from backend.models.kanal import FAMILIE_SPIEGEL, Kanal, KanalStatistik
+    from backend.services.kanal import merken
+
+    tag = date(2026, 7, 2)
+    async with _e54_lage("M01", monkeypatch, spiegel=True) as ds:
+        kid = (await ds.db.execute(select(Kanal.id).where(Kanal.anlage_id == ds.aid,
+                                                          Kanal.key == "basis:netzbezug"))).scalar_one()
+        await ds.db.execute(update(KanalStatistik).where(
+            KanalStatistik.kanal_id == kid, KanalStatistik.familie == FAMILIE_SPIEGEL,
+            KanalStatistik.start_ts >= _e54_spiegel_ts(tag, 12),
+        ).values(sum=KanalStatistik.sum + 5000.0, state=KanalStatistik.state + 5000.0))
+        await ds.db.commit()
+        merken.invalidiere(ds.aid)
+        nachher = await _e54_wirkung(ds, "_check_ha_zaehlerstand_springt", "ha_zaehlerstand_springt",
+                                     AKTION_SPIEGEL_ABGLEICH_TAG, {"datum": tag.isoformat()})
     assert nachher == []
 
 

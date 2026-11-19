@@ -85,7 +85,8 @@ async def zaehler_getauscht(
     if row is not None:
         await log_activity(
             kategorie="sensor_mapping", aktion="Zähler getauscht (gleiche Quelle)",
-            details=(f"{anlage.anlagenname} · {await _feld_label(db, anlage, field_id)}: Fortsetzung ab "
+            # Sensorwechsel U2 Lauf c (offener Punkt aus Lauf b, E-13): dieselbe Sprache wie der Dialog («bisherige Werte bleiben»).
+            details=(f"{anlage.anlagenname} · {await _feld_label(db, anlage, field_id)}: bisherige Werte bleiben, Tausch am "
                      f"{la.getauscht_am.strftime('%d.%m.%Y %H:%M')}"),
             anlage_id=anlage_id, db=db,
         )

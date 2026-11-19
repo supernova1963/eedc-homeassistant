@@ -15,7 +15,8 @@ Aktion 19; ohne Heilweg zur Laufzeit eine Auskunft mit INFO); **seit N-799 S3 18
 Fund eine OK-Zeile desselben Codes, damit der Link `befund=` aus der Tagestabelle immer einen Lösungsweg öffnet); **seit Sensorwechsel
 S4 185** (`zuordnung_grund_fehlt`, Sprung 118: «Grund nachtragen» öffnet den Dialog in den Datenquellen); **seit Sensorwechsel 4b-1**
 ist `zaehler_versatz` ein Sprung (Sprung 119, Aktion 18): «Grund nachtragen» öffnet denselben Dialog für das versetzte Stück und
-ersetzt «Tage neu aufbauen».
+ersetzt «Tage neu aufbauen». **Seit Sensorwechsel U2 Lauf c 186** (`ha_zaehlerstand_springt`, Aktion 19; nur an Stand-Zählern zur
+Laufzeit eine Auskunft mit INFO).
 
 `knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
 Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
@@ -51,6 +52,7 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'connector_monatswert_fehlt': Handgriff(SPRUNG, 'Zum Connector', '411-geraete-connector-ohne-monatswert'),  # Nr 1
     'ha_zaehler_rueckgang': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '48c-zaehlerstaende--rueckgang-in-home-assistant'),  # Nr 2
     'ha_zaehlersprung': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '48b-zaehlerstaende--sprung-in-home-assistant'),  # Nr 3
+    'ha_zaehlerstand_springt': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '48h-zaehlerstaende--zaehlerstand-springt'),  # Sensorwechsel U2 Lauf c (F12); nur Stand-Zähler ⇒ Auskunft (INFO)
     'klima_modus_wert_unbekannt': Handgriff(AUSKUNFT, 'Was gilt', '414a-betriebsmodus--unbekannter-wert'),  # Nr 4
     'klima_kuehlanteil_geschaetzt': Handgriff(SPRUNG, 'Sensor zuordnen', '414-klimaanlage--betriebsmodus'),  # Nr 5
     'klima_modus_ok': Handgriff(OK, None, '414-klimaanlage--betriebsmodus'),  # Nr 6

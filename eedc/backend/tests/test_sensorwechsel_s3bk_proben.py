@@ -171,7 +171,7 @@ async def test_einstieg_ohne_quelle_und_schon_eingetragen(db):
     (w,) = await _zeilen(db, aid)
     assert (w.erklaert_ts, w.ab_ts) == (t, datetime(2026, 10, 15, 10))
     log = (await db.execute(select(ActivityLog).where(ActivityLog.anlage_id == aid))).scalars().all()
-    assert [x.aktion for x in log] == ["Zähler getauscht (gleiche Quelle)"] and "Fortsetzung ab 15.10.2026 09:30" in log[0].details
+    assert [x.aktion for x in log] == ["Zähler getauscht (gleiche Quelle)"] and "bisherige Werte bleiben, Tausch am 15.10.2026 09:30" in log[0].details
     nochmal = await _getauscht(db, aid, t)
     assert (nochmal["eintragen"], nochmal["saetze"]) == (False, [zg.SATZ_SCHON])
 

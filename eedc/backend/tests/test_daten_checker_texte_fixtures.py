@@ -199,6 +199,17 @@ async def _batterie_konflikt(db, mp):
     return await _batterie(40, -4.0, 4.0, mp)
 
 
+async def _standsprung_menge(db, mp):
+    from backend.tests.test_sensorwechsel_u2c_proben import TAUSCH, _anlage_mit, _pruefe, _reihe, _sprung
+    return await _pruefe(db, await _anlage_mit(db, [("sensor.netz_bezug", _sprung(_reihe(1.8), TAUSCH, 2001.0))]))
+
+
+async def _standsprung_stand(db, mp):
+    from backend.tests.test_sensorwechsel_u2c_proben import TAUSCH, _anlage_mit, _pruefe, _reihe, _sprung
+    return await _pruefe(db, await _anlage_mit(db, [("sensor.gas", _sprung(_reihe(0.12), TAUSCH, 2001.0))],
+                                               key="inv:9:zaehlerstand", art="stand", einheit="m³"))
+
+
 #: (Nr Teil B, Code, Szenario) — die Erzeuger der 12 HA-gebundenen Kategorien (E0 (2)). E5: die Restzeilen Nr 23, 30, 37
 #: (V2) und die übersprungene LTS-Prüfung Nr 116 (V3 ⇒ Kopfzeile «nicht ausführbar», V4) sind entfallen, Nr 123 ist in
 #: Nr 122 aufgegangen (eine OK-Zeile mit beiden Zahlen). 33/34 bleiben zwei Wortlaute EINER Stelle.
@@ -217,6 +228,8 @@ FAELLE = [
     (27, "batterie_vorzeichen_ok", _batterie_ok),
     (28, "batterie_vorzeichen_tage", _batterie_konflikt), (29, "batterie_vorzeichen_tag", _batterie_konflikt),
     (51, "emob_kennung_unbekannt", _emob_kennung),
+    # Sensorwechsel U2 Lauf c (F12): ein Code, zwei Wortlaute (Mengen-Zähler mit Aktion · Stand-Zähler als Auskunft).
+    (195, "ha_zaehlerstand_springt", _standsprung_menge), (196, "ha_zaehlerstand_springt", _standsprung_stand),
 ]
 #: Je Code mit mehreren Erzeugern: welcher Treffer des Szenarios zu welcher Nr gehört (Reihenfolge der Ausgabe).
 _INDEX: dict = {}
@@ -231,9 +244,10 @@ def _eintrag(e) -> dict:
 
 
 def test_fuenfundzwanzig_faelle_vierundzwanzig_codes():
-    """E5: 30 − 3 Restzeilen − Nr 116 − Nr 123 = 25 Fälle, 28 − 4 = 24 Codes (12 Kategorien unverändert)."""
-    assert len(FAELLE) == 25 and len({nr for nr, _c, _s in FAELLE}) == 25
-    assert len({c for _n, c, _s in FAELLE}) == 24
+    """E5: 30 − 3 Restzeilen − Nr 116 − Nr 123 = 25 Fälle, 28 − 4 = 24 Codes (12 Kategorien unverändert); Sensorwechsel U2
+    Lauf c: + `ha_zaehlerstand_springt` mit zwei Wortlauten ⇒ 27 Fälle, 25 Codes."""
+    assert len(FAELLE) == 27 and len({nr for nr, _c, _s in FAELLE}) == 27
+    assert len({c for _n, c, _s in FAELLE}) == 25
 
 
 async def test_lts_ohne_ha_ohne_eigene_zeile(db, monkeypatch):

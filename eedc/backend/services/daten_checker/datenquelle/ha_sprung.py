@@ -130,6 +130,13 @@ def _kandidaten(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) 
     return out
 
 
+def rueckkehr_stunden(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]]) -> frozenset[int]:
+    """``start_ts`` jeder Rückkehr-Zeile des Musters «kurz 0 und zurück» (``_kandidaten``, ohne die Tageszähler-Ausnahme) —
+    die Stunden, die der Befund «Zählerstand springt» (``standsprung.py``) dieser Prüfung überlässt. Ohne die Ausnahme, damit
+    auch eine Rückkehr, die diese Prüfung als Zyklus eines Tageszählers schweigt, dort nicht als Sprung erscheint."""
+    return frozenset(int(zeilen[j][0]) for _i, j, _m in _kandidaten(zeilen))
+
+
 def _groesster_tageszuwachs(zeilen: Sequence[tuple[int, Optional[float], Optional[float]]], ohne: set) -> float:
     """Größter Zuwachs des Stands (``state``) je lokalem Kalendertag — ohne die Rückkehr-Zeilen ``ohne`` (Indizes),
     deren Zuwachs beim Gesamtzähler das Phantom selbst wäre. Rückgänge (Resets) zählen nicht."""
@@ -250,4 +257,4 @@ class HaZaehlersprungChecks:
 
 
 __all__ = ["BEISPIELE", "FENSTER_TAGE", "TAGESZAEHLER_FAKTOR", "TAGESZAEHLER_MIN_TAGE", "HaZaehlersprungChecks",
-           "Sprung", "finde_spruenge"]
+           "Sprung", "finde_spruenge", "rueckkehr_stunden"]

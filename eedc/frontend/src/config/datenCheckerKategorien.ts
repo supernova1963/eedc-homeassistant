@@ -46,6 +46,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   ha_zaehlersprung: 'Zählerstände – Sprung in Home Assistant',
   // N-639: HAs Summe fällt (Anpassung nach unten) — eedc zeigt die negative Menge wie HA und nennt den Weg.
   ha_zaehler_rueckgang: 'Zählerstände – Rückgang in Home Assistant',
+  // Sensorwechsel U2 Lauf c (F12): derselbe Sensor springt (Gerätetausch) — HA zählt den Sprung, eedc nennt Stunde und Weg.
+  ha_zaehlerstand_springt: 'Zählerstände – Zählerstand springt',
   // Verdacht N-803: ein Abschnitt der eigenen Standreihe liegt um +X versetzt (Stände eines anderen Sensors).
   zaehler_versatz: 'Zählerstände – versetzter Abschnitt',
   // Sensorwechsel S4 (B-7): verzeichneter Wechsel der Quelle eines Zählers ohne Grund — «Grund nachtragen».
@@ -113,6 +115,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'zaehler_ruecksprung',
   'ha_zaehlersprung',
   'ha_zaehler_rueckgang',
+  'ha_zaehlerstand_springt',
   'zaehler_versatz',
   'zuordnung_grund_fehlt',
   'sensor_mapping_lts',
@@ -163,6 +166,7 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   zaehler_ruecksprung: '48a-zaehlerstaende--ruecksprung',
   ha_zaehlersprung: '48b-zaehlerstaende--sprung-in-home-assistant',
   ha_zaehler_rueckgang: '48c-zaehlerstaende--rueckgang-in-home-assistant',
+  ha_zaehlerstand_springt: '48h-zaehlerstaende--zaehlerstand-springt',
   zaehler_versatz: '48f-zaehlerstaende--versetzter-abschnitt',
   zuordnung_grund_fehlt: '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt',
   sensor_mapping_lts: '49-sensor-mapping--ha-statistics',

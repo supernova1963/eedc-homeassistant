@@ -19,7 +19,7 @@ alte Stand in der unmittelbar nächsten Stunde zurückkommt — dann hat Home As
 **Grenzen:** Ein Gesamtzähler mit weniger als drei Tagen eigener Historie und ein Monatszähler in seinen ersten drei
 Tagen gelten als Tageszähler (ihr Sprung wäre entsprechend klein); ein Aussetzer über zwei oder mehr Stunden am
 Tageszähler ist von einem Tagesbeginn nach einer Lücke nicht zu trennen und wird nicht gemeldet. Die Prüfung erkennt nur
-dieses Muster (Rücksetzen und Rückkehr). Springt die Summe in Home Assistant ohne Rücksetzen, meldet weder sie noch die
-Prüfung auf unmögliche Stundenwerte ([§4.7](#47-energieprofil--plausibilitaet)) an einem solchen Tag etwas.
+dieses Muster (Rücksetzen und Rückkehr). Springt der Zählerstand ohne Rücksetzen (etwa nach einem Gerätetausch bei
+gleichem Sensor), nennt ihn [§4.8h](#48h-zaehlerstaende--zaehlerstand-springt).
 
 ---

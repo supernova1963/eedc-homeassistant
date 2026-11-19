@@ -4961,6 +4961,38 @@ wirksamen Handgriff** (Nr. 104) ist der Befund eine Auskunft (INFO, ohne Sprung)
 (`verschiedene_quellen`, die Meldung nennt beide) und Home Assistant eingerichtet, aber gerade nicht erreichbar, oder sein
 Abruf scheitert (`ha_nicht_erreichbar`). Home Assistant wird nur für einen gefundenen Abschnitt mit Wirkung gefragt.
 
+**Zählerstand springt** (Daten-Checker `ha_zaehlerstand_springt`, Regel `core/berechnungen/zaehlerstand_sprung.py`, Erzeuger
+`datenquelle/standsprung.py`; Sensorwechsel U2 Lauf c, Rechenweg F12, Leitlinie Gernot 19.11.2026): führt Home Assistant nach einem
+Gerätetausch dieselbe Entität weiter, zählt es den Sprung des Zählerstands als Menge der Stunde — einen Sprung nach oben ganz, einen
+Neubeginn, der nicht bei 0 liegt, mit dem ganzen neuen Stand. eedc rechnet wie HA und berichtigt nichts; der Befund nennt Feld,
+Sensor, Stunde und Menge.
+
+```
+je Zeilenpaar (r0, r1) EINES Spiegel-Abschnitts (dieselbe Statistik; ein Paar über eine Wechselstelle ist nie ein Sprung):
+z      = Zuwachs, den eedc zählt: Mengen-Zähler Δ sum, Stand-Zähler Δ state
+ref    = größter Tageszuwachs (Σ positiver z je lokalem Kalendertag) in [Tag − 365, Tag); < 14 Tage mit Zuwachs ⇒ jung, kein Befund
+ruhe   = Tage seit der letzten Zeile mit z > 0, mindestens 1
+Maß    = z / (ref × ruhe)                                                       (zaehlerstand_sprung.mass)
+Neubeginn nicht bei 0 = state1 < 0,9 · state0 (state0 ≥ 1) und Maß > 3
+Sprung nach oben      = |Δ sum − Δ state| ≤ 0,01 + 0,01 · |Δ sum| und Maß > 10
+ausgenommen           = Rückkehr-Zeilen des Musters «kurz 0 und zurück» (ha_sprung.rueckkehr_stunden — ha_zaehlersprung)
+```
+
+**Schwellen aus Messfrage M4** (19.11.2026, Produktiv-Kopie 12 Spiegel-Abschnitte, 137 450 Paare 31.10.2024–15.11.2026; Saat-Satz
+26 Abschnitte; die Text-GM-Sätze haben keinen Spiegel): größtes Maß 1,32 (ein Ladevorgang), Neubeginn-Arm bei keinem Paar über 0;
+Saat 0,79. Mit 30 statt 365 Bezugstagen erreichte ein Frühjahrstag mit 13,3 kWh Netzbezug in einer Stunde nach einem Monat mit
+höchstens 0,4 kWh am Tag das Maß 32, mit 3 statt 14 Tagen mit Zuwachs der erste Sonnentag eines jungen Einspeisezählers 44.
+Lab-Soll: +2 001 auf Zählern mit 6,85 / 24 / 160 kWh am Tag ⇒ 292 / 83 / 12,5; Rate 1,8 kWh je Stunde ⇒ 46; Neubeginn bei 300 mit
+Rate 2,04 ⇒ 6,2. Eine Nachholstunde nach einer Lücke und ein großer Verbrauch nach langer Ruhe teilen sich durch ihre Ruhezeit
+(Wallbox 11 kWh nach 30 Tagen: 0,4). **Wirkung des Handgriffs:** «Wert anpassen» in HA senkt die Summe ab der Stunde; nach
+«Aus Home Assistant neu übernehmen» ist Δ sum der Stunde klein bzw. ungleich Δ state — kein Befund. **Stand-Zähler** (Gas, Wasser,
+Öl, Kilometerstand): eedc rechnet mit `state`, «Wert anpassen» ändert nur `sum`; der Befund ist dort eine Auskunft (INFO) und nennt
+die Wege nach Entscheid E2 (Bauplan Nr. 139); ein fallender Stand ist dort nie ein Fund (eedc zählt keinen negativen Zuwachs als
+Sprung; den Bruch nennt `zaehlerstand_reihe_bruch`). **Benannte Grenzen:** (a) ein Sprung in einem Zähler, der im Jahr davor an
+weniger als 14 Tagen gezählt hat, bleibt still; (b) mehrere Sprünge desselben Zählers im Bezugsfenster heben die Vergleichsgröße —
+ein zweiter Sprung erscheint nach der Berichtigung des ersten; (c) die erste Zeile einer neuen Statistik (oben, Grenze (6)).
+Proben: `test_sensorwechsel_u2c_proben.py`; Wirkung `test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt`.
+
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).
@@ -5284,7 +5316,9 @@ Tag des Tauschs treffen Tag und Monat in jeder Sicht das Soll (Herbst 14,3, Taus
 der Rest steht im Slot daneben). Wird erst nach dem Tag umgestellt, liest der Schreiber die Stände der Zeit neu — mit Tausch in der
 ersten doppelten Herbststunde zeigt die Reihe dann am Tag 13,7 statt 14,3 (gemessen, wie vor a-K; der Schreiber bleibt
 unberührt, Option A).
-Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das Soll. (5) Andere Kombinationen als Home Assistant → Home Assistant lesen bei «bleiben» wie bisher (U3).
+Kanal, Tagesabschluss aus HA-Slots und Monat treffen dort das Soll. (5) Andere Kombinationen als Home Assistant → Home Assistant lesen bei «bleiben» wie bisher (U3). (6) Trägt die erste Zeile des neuen Sensors
+eine große Summe (eine importierte Statistik, ein Neubeginn in der ersten Stunde), zählt eedc sie wie Home Assistant; der Befund
+«Zählerstand springt» (unten) nennt sie nicht — er vergleicht nur Stunden desselben Sensors (Lauf c, gemessen in Lauf b «Ungeprüft c»).
 
 **Jede Darstellung nimmt die Rand-Werte aus derselben Quelle wie ihre übrigen Werte:** die Reihe ihre gespeicherten Rand-Stände
 (`stand_alt_ende`/`stand_neu_null` in der Höhe der Reihe), der Kanal den Versatz seiner Quellzeile, die Leser direkt an Home

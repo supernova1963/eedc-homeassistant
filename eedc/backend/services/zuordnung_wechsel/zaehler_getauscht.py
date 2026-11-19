@@ -24,6 +24,16 @@ MQTT gewechselt hat und einen früheren Tausch meldet, trifft die Spiegel-Zeit):
 * **Vor dem ersten eigenen Wert** (``vor_erstem_wert``, §11 Nr. 45): kein Stand davor, kein Sprung — nicht eingetragen, die
   Antwort nennt den ersten Wert. Ohne eigene Werte bzw. ohne Quelle gibt es ebenfalls nichts zu überbrücken.
 
+**Sensorwechsel U2 Lauf c (Rechenweg F13, Entscheid E2, Bauplan Nr. 139):** der Weg hängt an der **wirksamen Quelle zur Zeit
+des Tauschs** (``zeitpunkt.quelle_am``; ohne späteren Wechsel die heutige). Führt zu der Zeit Home Assistant den Zähler und
+spiegelt eedc ihn (Spiegel-Abschnitt; noch ohne Kanal: der Katalog führt eine Art), trägt eedc nie etwas ein — eine Quelle aus
+Home Assistant wird nicht überbrückt (Grundregel «Quellentreue»). Ein **Stand-Zähler** (Gas, Wasser, Öl; Kanal-Art ``stand``)
+bekommt einen eigenen Satz (``SATZ_HA_STAND``): eedc liest dort den Stand, «Wert anpassen» ändert in HA nur die Summe und wirkte
+nicht; genannt werden die zwei Wege nach E2 — in Home Assistant einen neuen Sensor oder Helfer für den neuen Zähler anlegen und
+ihn mit «Bisherige Werte bleiben» zuordnen, oder den neuen Zähler als eigenes Gerät führen (Handbuch Einstellungen §3.4a). Für
+MQTT und für Zeiten ohne Spiegel (vor dem Kanal, Nachbau-Abschnitt, Feld ohne Kanal-Art) bleibt alles wie zuvor (Auftrag Lauf c;
+die Abweichung vom Rechenweg «Übersehen Nr. 6» steht im Bericht).
+
 Zweimal dasselbe ist einmal: eine Fortsetzungs-Zeile mit gleichem ``ab_ts`` wird nicht doppelt angelegt; der Nachtrag ist
 idempotent (Sitzung 2, §9 Nr. 25).
 """
@@ -38,7 +48,7 @@ from sqlalchemy import func, select
 
 from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, HERKUNFT_WECHSEL, ZuordnungWechsel
 from backend.services.zuordnung_wechsel.quelle import ART_HA, ART_KEINE, hat_eigene_werte, lade_wirksame_quellen, standard_quelle
-from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, lade_wechsel, merke_neu
+from backend.services.zuordnung_wechsel.zeitpunkt import HEUTE, ab_ts_aus, lade_wechsel, merke_neu, quelle_am
 
 WEG_HOME_ASSISTANT = "home_assistant"
 WEG_FORTSETZUNG = "fortsetzung"
@@ -52,6 +62,12 @@ SATZ_HA = ("Dieser Zähler kommt aus Home Assistant, und eedc übernimmt seine S
            "Sprung beim Tausch berichtigst du dort: unter Entwicklerwerkzeuge → Statistik den Sensor suchen, beim Symbol "
            "„Wert anpassen“ die Stunde des Tauschs wählen und den Zuwachs auf die echte Menge setzen. eedc übernimmt die "
            "berichtigte Statistik beim nächtlichen Abgleich; hier wird nichts eingetragen.")
+#: Sensorwechsel U2 Lauf c (F13, E2): ein Stand-Zähler aus Home Assistant — eedc liest den Stand, «Wert anpassen» wirkt dort nicht.
+SATZ_HA_STAND = ("Dieser Zähler kommt aus Home Assistant, und eedc rechnet mit dem Zählerstand, den der Sensor anzeigt — „Wert "
+                 "anpassen“ in Home Assistant ändert daran nichts; hier wird nichts eingetragen. Damit der Tausch nicht als "
+                 "Verbrauch zählt, gibt es zwei Wege: in Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer "
+                 "anlegen, ihn diesem Feld zuordnen und im Dialog „Bisherige Werte bleiben“ wählen; oder den neuen Zähler als "
+                 "eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen (Handbuch Einstellungen, Verbrauchszähler).")
 SATZ_FORTSETZUNG = ("eedc überbrückt den Tausch am {zeit}: der Unterschied zwischen altem und neuem Zählerstand zählt nicht "
                     "als Menge. Die Werte vor und nach dem Tausch bleiben; wo eedc aus den gespeicherten Zählerständen rechnet, "
                     "zählt die Stunde des Tauschs keinen Zuwachs.")
@@ -88,14 +104,16 @@ class Lage:
     einheit: Optional[str] = None
     #: Der Tausch liegt vor dem laufenden Tag (dann nennt die Antwort ``SATZ_TAG_FEST``).
     vor_heute: bool = False
+    #: Sensorwechsel U2 Lauf c (F13): ein Stand-Zähler (Kanal-Art ``stand``) — der Weg ``home_assistant`` nennt dann E2.
+    stand: bool = False
 
 
 def _zeit(dt: Optional[datetime]) -> str:
     return dt.strftime("%d.%m.%Y %H:%M") if dt is not None else ""
 
 
-async def _katalog_spiegelt(db, key: str) -> bool:
-    """Noch kein Kanal: spiegelt der nächste Stundenlauf diesen Zähler aus Home Assistant (der Katalog führt eine Art)?"""
+async def _katalog_art(db, key: str) -> Optional[str]:
+    """Die Kanal-Art des Katalogs für diesen Zähler (``sum``/``stand``; ``None`` = kein Kanal)."""
     from backend.models.investition import Investition
     from backend.services.kanal.katalog import zaehler_art
 
@@ -103,7 +121,25 @@ async def _katalog_spiegelt(db, key: str) -> bool:
     if key.startswith("inv:"):
         inv = await db.get(Investition, int(key.split(":")[1]))
         typ = inv.typ if inv is not None else None
-    return zaehler_art(key, typ) is not None
+    return zaehler_art(key, typ)
+
+
+async def _katalog_spiegelt(db, key: str) -> bool:
+    """Noch kein Kanal: spiegelt der nächste Stundenlauf diesen Zähler aus Home Assistant (der Katalog führt eine Art)?"""
+    return await _katalog_art(db, key) is not None
+
+
+async def _ist_stand(db, key: str, kanal) -> bool:
+    """Stand-Zähler (Kanal-Art ``stand``; ohne Kanal die Art des Katalogs)."""
+    from backend.models.kanal import ART_STAND
+
+    return (kanal.art if kanal is not None else await _katalog_art(db, key)) == ART_STAND
+
+
+def _quelle_zur_zeit(wechsel, q: dict, zeitpunkt: datetime) -> dict:
+    """Die wirksame Quelle zur Zeit des Tauschs (F13): ``quelle_am``; gilt die heutige oder ist sie unbekannt, die heutige."""
+    am = quelle_am(wechsel, zeitpunkt)
+    return am if am is not HEUTE and isinstance(am, dict) else q
 
 
 async def _erster_wert(db, anlage_id: int, key: str, kanal) -> Optional[datetime]:
@@ -186,11 +222,12 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
     if erster is None or erster >= ab:
         return Lage(sensor_key, WEG_VOR_ERSTEM_WERT, q, getauscht_am, erster_wert=erster)
     stunde = await naht_stunde(db, kanal, getauscht_am)
-    weg = await _weg(db, sensor_key, q, kanal, stunde)
+    wechsel = (await lade_wechsel(db, anlage.id)).get(sensor_key, ())
+    weg = await _weg(db, sensor_key, _quelle_zur_zeit(wechsel, q, getauscht_am), kanal, stunde)
     if weg != WEG_FORTSETZUNG:
-        return Lage(sensor_key, weg, q, getauscht_am)
-    schon = any(w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None and w.ab_ts == ab
-                for w in (await lade_wechsel(db, anlage.id)).get(sensor_key, ()))
+        stand = weg == WEG_HOME_ASSISTANT and await _ist_stand(db, sensor_key, kanal)
+        return Lage(sensor_key, weg, q, getauscht_am, stand=stand)
+    schon = any(w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None and w.ab_ts == ab for w in wechsel)
     nachtrag = await _nachtrag_stunde(db, kanal, stunde)
     zuwachs = await zuwachs_der_stunde(db, kanal, nachtrag) if nachtrag is not None else None
     return Lage(sensor_key, WEG_FORTSETZUNG, q, getauscht_am, kanal.id if kanal is not None else None, nachtrag, schon,
@@ -212,7 +249,8 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
 
 
 def saetze(la: Lage) -> list[str]:
-    feste = {WEG_HOME_ASSISTANT: SATZ_HA, WEG_OHNE_WERTE: SATZ_OHNE_WERTE, WEG_KEINE_QUELLE: SATZ_KEINE_QUELLE}
+    feste = {WEG_HOME_ASSISTANT: SATZ_HA_STAND if la.stand else SATZ_HA, WEG_OHNE_WERTE: SATZ_OHNE_WERTE,
+             WEG_KEINE_QUELLE: SATZ_KEINE_QUELLE}
     if la.weg in feste:
         return [feste[la.weg]]
     if la.weg == WEG_VOR_ERSTEM_WERT:

@@ -28,6 +28,7 @@
    8e. [PV – Zähler steht](#48e-pv--zaehler-steht)
    8f. [Zählerstände – versetzter Abschnitt](#48f-zaehlerstaende--versetzter-abschnitt)
    8g. [Zählerstände – Zuordnung geändert, Grund fehlt](#48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt)
+   8h. [Zählerstände – Zählerstand springt](#48h-zaehlerstaende--zaehlerstand-springt)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -196,13 +197,14 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **40 Kategorien** mit **185 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **41 Kategorien** mit **186 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
 | [Geräte-Connector liefert für den laufenden Monat keinen Wert](#connector_monatswert_fehlt) `connector_monatswert_fehlt` | §4.11 | Sprung | Zum Connector |
 | [Zählerstand in der Statistik von Home Assistant gefallen](#ha_zaehler_rueckgang) `ha_zaehler_rueckgang` | §4.8c | Aktion | Aus Home Assistant neu übernehmen |
 | [Zählersprung in der Statistik von Home Assistant](#ha_zaehlersprung) `ha_zaehlersprung` | §4.8b | Aktion | Aus Home Assistant neu übernehmen |
+| [Zählerstand springt in der Statistik von Home Assistant](#ha_zaehlerstand_springt) `ha_zaehlerstand_springt` | §4.8h | Aktion | Aus Home Assistant neu übernehmen |
 | [Betriebsmodus-Sensor liefert einen Wert, den eedc nicht kennt](#klima_modus_wert_unbekannt) `klima_modus_wert_unbekannt` | §4.14a | Auskunft | Was gilt |
 | [Kühlanteil wird geschätzt — Stromzähler für den Kühlbetrieb fehlt](#klima_kuehlanteil_geschaetzt) `klima_kuehlanteil_geschaetzt` | §4.14 | Sprung | Sensor zuordnen |
 | [Heiz- und Kühlstrom werden aufgeteilt](#klima_modus_ok) `klima_modus_ok` | §4.14 | bestanden | — |
@@ -3107,8 +3109,8 @@ alte Stand in der unmittelbar nächsten Stunde zurückkommt — dann hat Home As
 **Grenzen:** Ein Gesamtzähler mit weniger als drei Tagen eigener Historie und ein Monatszähler in seinen ersten drei
 Tagen gelten als Tageszähler (ihr Sprung wäre entsprechend klein); ein Aussetzer über zwei oder mehr Stunden am
 Tageszähler ist von einem Tagesbeginn nach einer Lücke nicht zu trennen und wird nicht gemeldet. Die Prüfung erkennt nur
-dieses Muster (Rücksetzen und Rückkehr). Springt die Summe in Home Assistant ohne Rücksetzen, meldet weder sie noch die
-Prüfung auf unmögliche Stundenwerte ([§4.7](#47-energieprofil--plausibilitaet)) an einem solchen Tag etwas.
+dieses Muster (Rücksetzen und Rückkehr). Springt der Zählerstand ohne Rücksetzen (etwa nach einem Gerätetausch bei
+gleichem Sensor), nennt ihn [§4.8h](#48h-zaehlerstaende--zaehlerstand-springt).
 
 ---
 
@@ -3549,6 +3551,68 @@ nachgetragenen Grund; nach einer Korrektur folgt, was eedc im Monat aus den Tage
 den neu gebildeten Tagen — die Vorschau nennt die Monate. Ein schon fest gespeicherter Tageswert vom Tag des Wechsels bleibt
 auch nach „Bisherige Werte bleiben“, wie er ist — außer zwischen zwei Sensoren aus Home Assistant: dort bildet eedc die Tage
 ab dem Wechsel neu.
+
+### 4.8h Zählerstände – Zählerstand springt <a name="48h-zaehlerstaende--zaehlerstand-springt"></a>
+
+Wird das Gerät hinter einem Zähler getauscht und Home Assistant führt **denselben Sensor** weiter, springt sein Stand: Zeigt
+der neue Zähler mehr als der alte, zählt Home Assistant den Unterschied als Verbrauch bzw. Erzeugung der Stunde des Tauschs;
+beginnt der neue Zähler nicht bei 0, hält Home Assistant das für einen neuen Zählerlauf und zählt seinen ganzen Stand. eedc
+übernimmt die Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht in
+Tag, Monat und Jahr. Diese Kategorie nennt jede solche Stunde mit Feld, Sensor, Stunde und Menge. Geprüft wird die ganze
+übernommene Statistik.
+
+**Woran eedc einen Sprung erkennt.** Die Menge der Stunde wird mit dem größten Tagesverbrauch des Zählers im Jahr davor
+verglichen und durch die Tage seit seinem letzten Zuwachs geteilt (mindestens 1). Ein Sprung nach oben ist ein Befund ab dem
+Zehnfachen, ein Neubeginn, der nicht bei 0 liegt, ab dem Dreifachen. Verglichen werden nur Stunden desselben Sensors.
+
+**Was kein Befund ist.** Eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt; ein großer Verbrauch nach
+langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); ein Zähler, der in den Tagen davor an
+weniger als 14 Tagen etwas gezählt hat; ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
+zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
+([Handbuch Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md)). Ein gefallener Zählerstand steht in
+[§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
+
+**Zählerstände** (Gas, Wasser, Öl, Kilometerstand): eedc rechnet dort mit dem Stand, den der Sensor anzeigt, nicht mit der
+Summe der Statistik — „Wert anpassen“ in Home Assistant ändert dort nichts. Der Befund ist dann eine Auskunft: er nennt den
+Weg, den getauschten Zähler als eigenes Gerät zu führen, und wie ein späterer Tausch ohne Sprung bleibt.
+
+---
+
+#### Zählerstand springt in der Statistik von Home Assistant <a name="ha_zaehlerstand_springt"></a>
+
+**Was eedc sieht**
+In einer Stunde ist der Zählerstand eines Sensors gesprungen — meist, weil das Gerät dahinter getauscht wurde und Home
+Assistant denselben Sensor weiterführt. Zeigt der neue Zähler mehr als der alte, zählt Home Assistant den Unterschied als
+Verbrauch bzw. Erzeugung dieser Stunde; beginnt der neue Zähler nicht bei 0, zählt es seinen ganzen Stand. eedc übernimmt die
+Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht deshalb in Tag,
+Monat und Jahr. Die Meldung nennt je Fund Feld, Sensor, Tag, Stunde und die Menge, die eedc wie Home Assistant dafür zählt.
+
+**Lösungsweg**
+1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
+   die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen.
+2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»** —
+   eedc holt die berichtigte Statistik und baut den Tag des größten Funds neu auf. Ohne Klick gleicht eedc die
+   Statistik beim nächtlichen Abgleich von selbst ab.
+3. Hast du einen betroffenen Monat schon gespeichert (mit «Aus HA laden» oder per Import), den Monat unter
+   [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein
+   gespeicherter Monat ändert sich nicht von allein.
+4. **Zählerstand** (Gas, Wasser, Öl, Kilometerstand; die Meldung sagt es): hier rechnet eedc mit dem Stand, den der Sensor
+   anzeigt, und „Wert anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
+   *Einstellungen → Komponenten* am alten Gerät ein «Stilllegungsdatum (optional)» setzen, den Haken «Aktiv (in
+   Berechnungen berücksichtigen)» stehen lassen und den neuen Zähler als eigenes Gerät anlegen (Handbuch Einstellungen,
+   Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
+   Sensor oder Helfer anlegst, ihn in eedc unter [Datenquellen](eedc:/einstellungen/datenquellen) dem Feld zuordnest
+   und im Dialog «Bisherige Werte bleiben» wählst.
+5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach den Schritten 1 und 2 ist der Sprung aus der Liste
+   verschwunden. Ein Sprung an einem Zählerstand bleibt stehen; die Zeile erklärt ihn weiterhin.
+
+Bleibt der Befund danach: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das Diagnose-Paket:
+im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei
+an die Adresse aus unserer Antwort schicken.
+
+**Was ohne Handlung gilt**
+Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet ihn
+nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 
