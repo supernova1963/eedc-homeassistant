@@ -334,7 +334,7 @@ class Aktion:
 #: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
 #: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
 ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard",
-                  "befund", "nachtrag")
+                  "befund", "nachtrag", "stueck")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:

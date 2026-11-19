@@ -21,10 +21,19 @@ an dem alle Zähler seiner Gruppe dort lückenlos vorliegen), schweigt die Prüf
 ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Datenlücke von Tagen oder ein Sensorwechsel,
 nach dem der neue Sensor einfach weiterläuft.
 
-**Zwei Lagen.** Stimmen die Stände vor und nach dem Abschnitt mit dem überein, was Home Assistant für den heute
-zugeordneten Sensor führt, holt «Tage neu aufbauen» die Stände des Abschnitts neu und baut die Tage neu auf — höchstens
-31 Tage je Lauf; ein längerer Abschnitt braucht mehrere Klicks. Sonst — ohne Home Assistant, oder wenn auch die Stände
-außerhalb nicht zum heutigen Sensor passen — nennt der Befund nur die betroffenen Tage: neu geholt, entstünde der
-Versatz an anderer Stelle.
+**Ein Handgriff: «Grund nachtragen».** Er öffnet in den Datenquellen denselben Dialog wie beim Wechsel einer Quelle — nur
+mit „Bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
+Abschnitts. Stimmen die Stände davor und danach mit dem überein, was Home Assistant für die Quelle davor und danach führt,
+liest eedc den Abschnitt aus Home Assistant neu — auf derselben Höhe — und speichert ihn; die Tageswerte stimmen dann an jedem
+Tag (bis das Neulesen gelungen ist, zeigen die Rand-Tage nur ihren Teil; eedc holt es jede Stunde und nach jedem Start nach).
+Ohne Home Assistant, oder führt Home Assistant die Quelle auf einer anderen Höhe oder für diese Zeit nichts, bleibt der
+Abschnitt leer, und eedc rechnet über ihn wie über jede Zählerlücke — davor und danach gilt dieselbe Quelle: die Menge des
+Abschnitts steht an dem Tag, an dem er endet, die Tage davor zeigen für diese Zeit keinen Wert. Ist zwischen den Ständen
+davor und danach ein Zählertausch eingetragen, bildet eedc über den Abschnitt keine Differenz: die Tage darin zeigen keinen
+Wert, die Tage an seinem Rand nur ihren Teil — der Befund sagt es. Das geht auch, wenn der
+Abschnitt heute endet. Gelten vor und nach dem Abschnitt verschiedene Quellen,
+oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der Befund statt «Grund nachtragen» den Knopf
+«Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
+Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
 
 ---

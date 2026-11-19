@@ -195,11 +195,13 @@ interface TypCluster {
 }
 
 /** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`); Sensorwechsel S4:
- *  `nachtrag=<id>` öffnet «Grund nachtragen» für einen verzeichneten Wechsel (`useGrundNachtragen`). */
+ *  `nachtrag=<id>` öffnet «Grund nachtragen» für einen verzeichneten Wechsel (`useGrundNachtragen`); Sitzung 4b-1:
+ *  `stueck=<schlüssel>~<sprung>~<rückgang>` denselben Dialog für ein versetztes Stück (Befund `zaehler_versatz`). */
 export interface DatenquellenSprung {
   geraet?: string
   feld?: string
   nachtrag?: string
+  stueck?: string
 }
 
 /**
@@ -364,7 +366,10 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   // Sensorwechsel S4 (B-7): «Grund nachtragen» aus dem Daten-Checker (`?nachtrag=<id>`) — gemerkt, bevor der Sprung endet.
   const [nachtragId, setNachtragId] = useState<string | undefined>(undefined)
   useEffect(() => { if (sprung?.nachtrag) setNachtragId(sprung.nachtrag) }, [sprung?.nachtrag])
-  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, nachtragId, wechsel.merkeLaeufe, neuLaden)
+  // Sitzung 4b-1: «Grund nachtragen» am versetzten Abschnitt (`?stueck=…`) — derselbe Dialog, nur «Korrektur».
+  const [stueck, setStueck] = useState<string | undefined>(undefined)
+  useEffect(() => { if (sprung?.stueck) setStueck(sprung.stueck) }, [sprung?.stueck])
+  const nachtragDialog = useGrundNachtragen(selectedAnlageId ?? null, nachtragId, wechsel.merkeLaeufe, neuLaden, stueck)
 
   // Direkte Quelle ohne Modal (Inbound / keine).
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {

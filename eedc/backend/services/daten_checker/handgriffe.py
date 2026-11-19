@@ -13,7 +13,9 @@ steht in der Zeile des Ziel-Codes) − 6 Restzeilen «… plus n weitere» (V2: 
 Gruppenzeile, `GRUPPEN`). Je Klasse: Sprung 117 · Aktion 18 · Auskunft 17 · OK 30. **Seit 16.11.2026 183** (`zaehler_versatz`,
 Aktion 19; ohne Heilweg zur Laufzeit eine Auskunft mit INFO); **seit N-799 S3 184** (`erfassung_stillstand`, Auskunft 18; ohne
 Fund eine OK-Zeile desselben Codes, damit der Link `befund=` aus der Tagestabelle immer einen Lösungsweg öffnet); **seit Sensorwechsel
-S4 185** (`zuordnung_grund_fehlt`, Sprung 118: «Grund nachtragen» öffnet den Dialog in den Datenquellen).
+S4 185** (`zuordnung_grund_fehlt`, Sprung 118: «Grund nachtragen» öffnet den Dialog in den Datenquellen); **seit Sensorwechsel 4b-1**
+ist `zaehler_versatz` ein Sprung (Sprung 119, Aktion 18): «Grund nachtragen» öffnet denselben Dialog für das versetzte Stück und
+ersetzt «Tage neu aufbauen».
 
 `knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
 Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
@@ -71,7 +73,7 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'drift_tag': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '417-datenquellen-drift'),  # Nr 24
     'drift_komponente': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '417-datenquellen-drift'),  # Nr 25
     'zaehler_ruecksprung': Handgriff(SPRUNG, 'Sensor wechseln', '48a-zaehlerstaende--ruecksprung'),  # Nr 26
-    'zaehler_versatz': Handgriff(AKTION, 'Tage neu aufbauen', '48f-zaehlerstaende--versetzter-abschnitt'),  # Verdacht N-803 (16.11.2026); ohne Heilweg Auskunft (INFO)
+    'zaehler_versatz': Handgriff(SPRUNG, 'Grund nachtragen', '48f-zaehlerstaende--versetzter-abschnitt'),  # Verdacht N-803 (16.11.2026); Sensorwechsel 4b-1: Korrektur über das Stück
     'zuordnung_grund_fehlt': Handgriff(SPRUNG, 'Grund nachtragen', '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt'),  # Sensorwechsel S4 (B-7)
     'batterie_vorzeichen_ok': Handgriff(OK, None, '421-batterie-vorzeichen-historie'),  # Nr 27
     'batterie_vorzeichen_tage': Handgriff(AKTION, 'Tage neu aufbauen', '421-batterie-vorzeichen-historie'),  # Nr 28

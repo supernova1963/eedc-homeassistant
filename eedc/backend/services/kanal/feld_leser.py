@@ -109,14 +109,23 @@ async def feld_aus_kanal_am_tag(db: AsyncSession, anlage, typ: Optional[str], ke
     """Liest die Tagesansicht den Tageswert von ``key`` am Tag ``datum`` aus dem Kanal statt aus der Reihe? — dieselbe
     Auskunft wie ``get_tagesdetail_kwh`` (Fenster wie ``tages_eingaenge``: Kanal-Tag der Bilanz ⇒ Kalendertag, sonst
     ``tagesfenster_fuer`` mit dem Fenster der Tageszeile). Für die Wirkungs-Prüfung des Befunds ``zaehler_versatz``."""
+    a, b = await tagesfenster_am_tag(db, anlage.id, typ, datum)
+    return key in await kanal_feldwerte(db, anlage.id, [key], a, b)
+
+
+async def tagesfenster_am_tag(db: AsyncSession, anlage_id: int, typ: Optional[str], datum: date) -> tuple[datetime, datetime]:
+    """Die beiden Ränder ``[a, b]`` des Tagesfensters, in dem die Tagesansicht ein Feld dieses Gerätetyps am Tag ``datum``
+    liest (Kanal-Tag der Bilanz ⇒ Kalendertag, sonst ``tagesfenster_fuer`` mit dem Fenster der Tageszeile — ein Bestandstag
+    rückwärts beginnt um 23:00 des Vortags). Eine Stelle für die Feld-Auskunft und für die Tage, die ein Schritt oder ein
+    verworfenes Stück der Reihe trifft (Befund ``zaehler_versatz``, Vorschau der Korrektur, Bauplan «Zu §14» Nr. 91 b)."""
     from backend.services.kanal.bilanz_leser import kanal_tage
     from backend.services.snapshot.boundary_range import tagesfenster_fuer, tageszeile_des_tages_ist_rueckwaerts
 
-    kanal_tag = (await kanal_tage(db, anlage.id, datum, datum)).get(datum) is not None
+    kanal_tag = (await kanal_tage(db, anlage_id, datum, datum)).get(datum) is not None
     rng = tagesfenster_fuer(typ, datum, tageszeile_rueckwaerts=await tageszeile_des_tages_ist_rueckwaerts(
-        db, anlage.id, datum), kanal_tag=kanal_tag)
-    a, b = rng.boundary_offsets[0], rng.boundary_offsets[-1]
-    return key in await kanal_feldwerte(db, anlage.id, [key], rng.boundary_at(a), rng.boundary_at(b))
+        db, anlage_id, datum), kanal_tag=kanal_tag)
+    return rng.boundary_at(rng.boundary_offsets[0]), rng.boundary_at(rng.boundary_offsets[-1])
 
 
-__all__ = ["feld_aus_kanal_am_tag", "kanal_feldwerte", "kanal_feldwerte_je_fenster", "kanal_feldzeitraeume"]
+__all__ = ["feld_aus_kanal_am_tag", "kanal_feldwerte", "kanal_feldwerte_je_fenster", "kanal_feldzeitraeume",
+           "tagesfenster_am_tag"]

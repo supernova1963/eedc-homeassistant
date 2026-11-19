@@ -12,7 +12,8 @@
   "einstellungen/datenquellen": [
    "feld",
    "geraet",
-   "nachtrag"
+   "nachtrag",
+   "stueck"
   ],
   "einstellungen/integration#import-buendel": [
    "block",
@@ -428,6 +429,18 @@
     "anker": null
    },
    "pfad": "/einstellungen/datenquellen?geraet=1&nachtrag=1"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "stueck": "inv:1:aktiv~2026-01-01T00:00~2026-01-02T00:00"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&stueck=inv:1:aktiv~2026-01-01T00:00~2026-01-02T00:00"
   },
   {
    "ziel": {

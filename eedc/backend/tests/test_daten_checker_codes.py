@@ -53,7 +53,7 @@ def test_zusammenlegungen_sind_vollzogen():
 
 def test_katalog_klassen_sind_bekannt():
     assert {h.klasse for h in HANDGRIFFE.values()} <= set(KLASSEN)
-    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 118, "aktion": 19, "auskunft": 18, "ok": 30}
+    assert Counter(h.klasse for h in HANDGRIFFE.values()) == {"sprung": 119, "aktion": 18, "auskunft": 18, "ok": 30}
 
 
 def test_w3_kein_erzeuger_setzt_altfelder():

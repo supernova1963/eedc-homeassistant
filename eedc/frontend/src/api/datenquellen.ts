@@ -341,12 +341,23 @@ export interface KorrekturLaufLaufend {
 /** «Grund nachtragen» an einem verzeichneten Wechsel (`…/zuordnung-wechsel/{id}/grund/pruefen`, Sitzung 4): dieselben
  *  Angaben wie die Prüf-Route der Quelle, dazu der Wechsel als Satz und die zulässigen Gründe. */
 export interface GrundNachtragPruefung extends QuellePruefung {
-  wechsel_id: number
+  /** `null` am versetzten Abschnitt (Befund `zaehler_versatz`, Sitzung 4b-1 — dort gibt es keine Wechsel-Zeile). */
+  wechsel_id: number | null
   feld_id: string | null
   grund: WechselGrund | null
   wechsel_satz: string
   gruende: WechselGrund[]
   korrektur_nicht: string | null
+  /** Korrektur über ein festes Stück (Befund `zaehler_versatz` bzw. A → X → A an einem früheren Wechsel): «Falsch seit»
+   *  steht fest (Sprung), die Korrektur endet am Rückgang. */
+  stueck?: { sprung: string; rueckgang: string } | null
+}
+
+/** Das Stück des Befunds `zaehler_versatz` (aus `stueck=<schlüssel>~<sprung>~<rückgang>`). */
+export interface StueckAngabe {
+  sensor_key: string
+  sprung: string
+  rueckgang: string
 }
 
 /** Antwort nach dem Eintragen: `korrektur` = die gestarteten Läufe (Fortschritt an der Fläche). */
@@ -486,6 +497,15 @@ export const datenquellenApi = {
   /** «Grund nachtragen»: eintragen (Fortsetzung) bzw. die Korrektur ausführen. */
   grundNachtragen: (anlageId: number, wechselId: number, grund: GrundAngabe) =>
     api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zuordnung-wechsel/${wechselId}/grund`, grund),
+
+  /** «Grund nachtragen» am versetzten Abschnitt (Befund `zaehler_versatz`): prüfen — schreibt nichts; mit `grund:
+   *  'korrektur'` die Vorschau der Korrektur über das Stück (Vorschau = Lauf). */
+  pruefeStueck: (anlageId: number, stueck: StueckAngabe, grund?: WechselGrund) =>
+    api.post<GrundNachtragPruefung>(`/datenquellen/${anlageId}/zaehler-versatz/pruefen`, { ...stueck, grund: grund ?? null }),
+
+  /** «Grund nachtragen» am versetzten Abschnitt: die Korrektur über das Stück ausführen. */
+  stueckKorrigieren: (anlageId: number, stueck: StueckAngabe) =>
+    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zaehler-versatz`, { ...stueck, grund: 'korrektur' }),
 
   korrekturLaeufe: (anlageId: number) =>
     api.get<KorrekturLaufLaufend[]>(`/datenquellen/${anlageId}/korrektur-laeufe`),

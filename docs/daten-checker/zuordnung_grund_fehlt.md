@@ -21,8 +21,13 @@ das vorher noch keine Werte hatte.
 3. Waren die Werte vor dem Wechsel falsch: **„Bisher war der falsche Sensor zugeordnet"** wählen, unter
    **„Falsch seit"** angeben, ab wann (vorbelegt ist der Beginn der Quelle vor dem Wechsel), und die Vorschau unter
    **„Was danach geschieht"** lesen. eedc verwirft die Werte dieses Felds von „Falsch seit“ bis zum Wechsel und baut sie,
-   soweit Home Assistant die Geschichte des richtigen Sensors führt, aus ihm neu auf. Das geht für den jüngsten Wechsel
-   eines Felds, solange seine neue Quelle noch zugeordnet ist; die Korrektur lässt sich in eedc nicht rückgängig machen.
+   soweit Home Assistant die Geschichte des richtigen Sensors führt und die Zählerstände davor und danach zu ihr passen, aus
+   ihm neu auf; wo nichts sie füllt, rechnet eedc über die leere Zeit wie über jede Zählerlücke, wenn davor, in dieser Zeit
+   und danach dieselbe Quelle gilt und kein Zählertausch dazwischen eingetragen ist (die Höhe der Zählerstände prüft eedc
+   dabei nicht), sonst bildet eedc über sie keine Differenz und die Zeit bleibt ohne Wert. Das geht für den jüngsten Wechsel eines Felds, solange seine
+   neue Quelle noch zugeordnet ist — auch, wenn mit ihm die Quelle zur vorigen zurückkehrte —, und für einen früheren
+   Wechsel, mit dem die Quelle zur vorigen zurückkehrte: dort steht die Zeit fest — vom Wechsel davor bis zu diesem; der
+   Dialog nennt sie. Die Korrektur lässt sich in eedc nicht rückgängig machen.
 4. **„Übernehmen"** klicken. Bei einer Korrektur zeigt die Datenquellen-Fläche oben, wie weit die Tage neu gebildet
    sind.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund verschwindet, sobald der Grund eingetragen ist.

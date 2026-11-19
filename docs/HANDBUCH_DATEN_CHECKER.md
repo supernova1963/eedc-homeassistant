@@ -225,7 +225,7 @@ eedc prüft **40 Kategorien** mit **185 Befunden** (gezählt an `CheckKategorie`
 | [Abweichung zu Home Assistant an einem Tag (PV)](#drift_tag) `drift_tag` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Ein Gerät weicht an Tagen von Home Assistant ab](#drift_komponente) `drift_komponente` | §4.17 | Aktion | Aus Home Assistant neu übernehmen |
 | [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung) `zaehler_ruecksprung` | §4.8a | Sprung | Sensor wechseln |
-| [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Aktion | Tage neu aufbauen |
+| [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Sprung | Grund nachtragen |
 | [Zuordnung eines Zählers geändert, Grund fehlt](#zuordnung_grund_fehlt) `zuordnung_grund_fehlt` | §4.8g | Sprung | Grund nachtragen |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
@@ -408,7 +408,7 @@ Die meisten Kategorien greifen in jeder Installation identisch; **vierzehn** hä
 | 9c | **Zählerstände – Rückgang in Home Assistant** (§4.8c) | greift | **wird übersprungen** (keine HA-Statistik) |
 | 9d | **PV – Messpunkt** (§4.8d) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik); der Hinweis zu „PV gesamt“ neben einem Balkonkraftwerk greift aus der Zuordnung | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** (außer dem Zuordnungs-Hinweis) |
 | 9e | **PV – Zähler steht** (§4.8e) | greift, sobald die PV-Zähler Kanäle haben (Spiegel der HA-Statistik) | greift mit MQTT-Zählern (eigene Summe); ohne Zähler-Kanäle **wird übersprungen** |
-| 9f | **Zählerstände – versetzter Abschnitt** (§4.8f) | greift für die Zählerstände, die eedc aus der HA-Statistik gespeichert hat; den Knopf «Tage neu aufbauen» gibt es nur mit erreichbarem Home Assistant | **wird übersprungen** (keine Stände aus HA); Stände aus einer früheren Add-on-Zeit werden geprüft, ohne Knopf |
+| 9f | **Zählerstände – versetzter Abschnitt** (§4.8f) | greift für die Zählerstände, die eedc aus der HA-Statistik gespeichert hat; ist Home Assistant gerade nicht erreichbar, trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt», bis eedc die Langzeitstatistik wieder lesen kann | **wird übersprungen** (keine Stände aus HA); Stände aus einer früheren Add-on-Zeit werden geprüft — «Grund nachtragen» verwirft sie dann ohne Neulesen, eedc rechnet über den leeren Abschnitt wie über jede Zählerlücke |
 | 10 | **Datenquellen – HA-Statistics** (§4.9) | greift | **wird übersprungen** (keine HA-LTS verfügbar) |
 | 11 | Energieprofil – fehlende Tageswerte (§4.10) | greift | greift |
 | 12 | Geräte-Connector ohne Monatswert (§4.11) | greift | greift |
@@ -3414,11 +3414,20 @@ an dem alle Zähler seiner Gruppe dort lückenlos vorliegen), schweigt die Prüf
 ein großer Zuwachs ohne späteren Rückgang — ein langer Ladevorgang, eine Datenlücke von Tagen oder ein Sensorwechsel,
 nach dem der neue Sensor einfach weiterläuft.
 
-**Zwei Lagen.** Stimmen die Stände vor und nach dem Abschnitt mit dem überein, was Home Assistant für den heute
-zugeordneten Sensor führt, holt «Tage neu aufbauen» die Stände des Abschnitts neu und baut die Tage neu auf — höchstens
-31 Tage je Lauf; ein längerer Abschnitt braucht mehrere Klicks. Sonst — ohne Home Assistant, oder wenn auch die Stände
-außerhalb nicht zum heutigen Sensor passen — nennt der Befund nur die betroffenen Tage: neu geholt, entstünde der
-Versatz an anderer Stelle.
+**Ein Handgriff: «Grund nachtragen».** Er öffnet in den Datenquellen denselben Dialog wie beim Wechsel einer Quelle — nur
+mit „Bisher war der falsche Sensor zugeordnet“ und mit der festen Zeit des Abschnitts. eedc verwirft die Zählerstände des
+Abschnitts. Stimmen die Stände davor und danach mit dem überein, was Home Assistant für die Quelle davor und danach führt,
+liest eedc den Abschnitt aus Home Assistant neu — auf derselben Höhe — und speichert ihn; die Tageswerte stimmen dann an jedem
+Tag (bis das Neulesen gelungen ist, zeigen die Rand-Tage nur ihren Teil; eedc holt es jede Stunde und nach jedem Start nach).
+Ohne Home Assistant, oder führt Home Assistant die Quelle auf einer anderen Höhe oder für diese Zeit nichts, bleibt der
+Abschnitt leer, und eedc rechnet über ihn wie über jede Zählerlücke — davor und danach gilt dieselbe Quelle: die Menge des
+Abschnitts steht an dem Tag, an dem er endet, die Tage davor zeigen für diese Zeit keinen Wert. Ist zwischen den Ständen
+davor und danach ein Zählertausch eingetragen, bildet eedc über den Abschnitt keine Differenz: die Tage darin zeigen keinen
+Wert, die Tage an seinem Rand nur ihren Teil — der Befund sagt es. Das geht auch, wenn der
+Abschnitt heute endet. Gelten vor und nach dem Abschnitt verschiedene Quellen,
+oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der Befund statt «Grund nachtragen» den Knopf
+«Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
+Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
 
 ---
 
@@ -3429,24 +3438,33 @@ In den gespeicherten Zählerständen eines Felds springt der Stand an einem Tag 
 auf dieser Höhe weiter und fällt später um etwa denselben Betrag zurück — so sieht es aus, wenn eine Zeit lang die
 Stände eines anderen Sensors gespeichert wurden, etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus
 zwei Zählerständen; an den Rändern des Abschnitts ist er deshalb falsch: am Sprung zu hoch, am Rückgang fehlt er
-(„Zähler zurückgesprungen“). Die Meldung nennt Gerät und Feld, den Abschnitt von bis, die Höhe des Versatzes und die
-Tage, die zu hoch sind oder fehlen. Gespeicherte Monatswerte ändert das nicht.
+(„Zähler zurückgesprungen“) — auch an einem Tag, an dem im selben Tagesfenster ein Sprung liegt. Die Meldung nennt Gerät
+und Feld, den Abschnitt von bis und die Höhe des Versatzes; die Details nennen die Tage, deren Wert zu hoch ist oder
+fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Gespeicherte Monatswerte ändert das nicht.
 
 **Lösungsweg**
-1. Steht am Befund **«Tage neu aufbauen»**: klicken, die Vorschau lesen und **«Anwenden»** — eedc holt die Zählerstände
-   der genannten Tage neu aus Home Assistant und baut diese Tage neu auf, höchstens 31 Tage je Lauf. Den Knopf gibt es
-   nur, wenn die Stände vor und nach dem Abschnitt mit dem übereinstimmen, was Home Assistant für den heute zugeordneten
-   Sensor führt — dann heilt der Lauf den Abschnitt. Der Lauf übernimmt für diese Tage die Stände **aller** Zähler der
-   Anlage neu aus Home Assistant und holt Wetter- und Börsenpreis-Werte der Tage neu ab; dafür braucht eedc eine
-   Internetverbindung.
-2. Ist der Abschnitt länger als 31 Tage, nennt der Befund nach dem ersten Lauf den Rest: noch einmal
-   **«Tage neu aufbauen»** und **«Anwenden»**.
-3. Steht am Befund nur **«Was gilt»**: eedc kann den Abschnitt nicht selbst richtigstellen — ohne Verbindung zu Home
-   Assistant nicht, und wenn die Stände vor oder nach dem Abschnitt nicht zum heute zugeordneten Sensor passen, auch
-   nicht, weil neu geholte Stände den Versatz nur an eine andere Stelle schöben. Endet der Abschnitt heute, steht der
-   Knopf ab morgen da.
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem letzten Lauf steht der Befund unter den bestandenen
-   Prüfungen («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
+1. Am Befund **«Grund nachtragen»** klicken — die Datenquellen-Zuordnung öffnet sich beim Feld mit der Frage
+   **„Warum wechselte die Quelle?"**; oben stehen der Abschnitt mit Beginn und Ende und die Quelle, die davor und danach
+   gilt.
+2. **„Bisher war der falsche Sensor zugeordnet"** wählen. Die Zeit der Korrektur steht fest: genau der Abschnitt.
+3. Die Vorschau unter **„Was danach geschieht"** lesen. eedc verwirft die Zählerstände des Abschnitts. Passen die Stände
+   davor und danach zu dem, was Home Assistant für diese Quelle führt, liest eedc die Zählerstände des Abschnitts danach aus
+   Home Assistant neu und speichert sie — die Tageswerte stimmen dann an jedem Tag; bis das gelungen ist (etwa weil Home
+   Assistant zwischendurch nicht erreichbar ist), zeigen die Tage am Rand des Abschnitts nur ihren Teil, und eedc holt das
+   Lesen jede Stunde und nach jedem Start nach. Ohne Verbindung zu Home Assistant, oder führt Home Assistant die Quelle auf
+   einer anderen Höhe oder für diese Zeit nichts, bleibt der Abschnitt leer, und eedc rechnet über ihn wie über jede
+   Zählerlücke (davor und danach gilt dieselbe Quelle): die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage
+   davor zeigen für diese Zeit keinen Wert; ist zwischen den Ständen davor und danach ein Zählertausch eingetragen, bildet
+   eedc über den Abschnitt keine Differenz — die Tage darin zeigen keinen Wert, die Tage an seinem Rand nur ihren Teil (der
+   Befund sagt es). Die Vorschau nennt die Tage.
+4. **„Übernehmen"** klicken. Die Korrektur lässt sich in eedc nicht rückgängig machen.
+5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
+   («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
+
+In zwei Lagen trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt»: Gelten vor und nach dem Abschnitt
+verschiedene Quellen, nennt er beide — eedc weiß dann nicht, welche die richtige ist, und korrigiert den Abschnitt nicht. Ist Home Assistant
+eingerichtet, aber gerade nicht erreichbar, sagt er es; sobald eedc die Langzeitstatistik wieder lesen kann, steht beim
+nächsten **«Aktualisieren»** wieder **«Grund nachtragen»** am Befund.
 
 Bleibt der Befund nach dem Klick stehen: stell deine Frage im Forum oder auf GitHub. Bitten wir dich dort um das
 Diagnose-Paket: im Kopf des Daten-Checkers **«Diagnose-Paket»** öffnen, **«Herunterladen»** und die Datei an die Adresse
@@ -3499,8 +3517,13 @@ das vorher noch keine Werte hatte.
 3. Waren die Werte vor dem Wechsel falsch: **„Bisher war der falsche Sensor zugeordnet"** wählen, unter
    **„Falsch seit"** angeben, ab wann (vorbelegt ist der Beginn der Quelle vor dem Wechsel), und die Vorschau unter
    **„Was danach geschieht"** lesen. eedc verwirft die Werte dieses Felds von „Falsch seit“ bis zum Wechsel und baut sie,
-   soweit Home Assistant die Geschichte des richtigen Sensors führt, aus ihm neu auf. Das geht für den jüngsten Wechsel
-   eines Felds, solange seine neue Quelle noch zugeordnet ist; die Korrektur lässt sich in eedc nicht rückgängig machen.
+   soweit Home Assistant die Geschichte des richtigen Sensors führt und die Zählerstände davor und danach zu ihr passen, aus
+   ihm neu auf; wo nichts sie füllt, rechnet eedc über die leere Zeit wie über jede Zählerlücke, wenn davor, in dieser Zeit
+   und danach dieselbe Quelle gilt und kein Zählertausch dazwischen eingetragen ist (die Höhe der Zählerstände prüft eedc
+   dabei nicht), sonst bildet eedc über sie keine Differenz und die Zeit bleibt ohne Wert. Das geht für den jüngsten Wechsel eines Felds, solange seine
+   neue Quelle noch zugeordnet ist — auch, wenn mit ihm die Quelle zur vorigen zurückkehrte —, und für einen früheren
+   Wechsel, mit dem die Quelle zur vorigen zurückkehrte: dort steht die Zeit fest — vom Wechsel davor bis zu diesem; der
+   Dialog nennt sie. Die Korrektur lässt sich in eedc nicht rückgängig machen.
 4. **„Übernehmen"** klicken. Bei einer Korrektur zeigt die Datenquellen-Fläche oben, wie weit die Tage neu gebildet
    sind.
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund verschwindet, sobald der Grund eingetragen ist.

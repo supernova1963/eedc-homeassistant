@@ -15,65 +15,104 @@ eine Reihe (``_reihe``), nie die ganze Tabelle auf einmal.
 
 **Nur bei Wirkung:** geprüft werden nur Felder, deren Tageswert die Tagesansicht aus der Standreihe zeigt
 (``in_tagesansicht`` = ``TAGESDETAIL_AUSGABE``, Entscheid Master 16.11.2026 — «Ladung gesamt» der Wallbox liest die Tagesansicht
-aus der Tageszeile, dort stimmte «zu hoch / fehlt» nicht). Ein Befund entsteht nur, wenn an mindestens einem Rand-Tag (Tag des
-ersten Sprungs, Tag des letzten Rückgangs) die Gruppe des Felds nicht aus den Kanälen kommt
-(``kanal_stunden.kanal_schluessel_des_tages``, dieselbe Wahl wie ``tages_eingaenge``) **und** der eigene Kanal des Felds den Tag
-nicht trägt (Sensorwechsel B-5 «Kanal vor Reihe»: dieselbe Feld-Auskunft wie die Tagesansicht,
-``kanal/feld_leser.feld_aus_kanal_am_tag``). Liest die Tagesansicht beide Rand-Tage aus Kanälen, schweigt die Prüfung.
-Ein Rand an einer verzeichneten Fortsetzung (Sensorwechsel mit Grund) ist ohne Wirkung — dort bilden die Leser keine
-Differenz über die Naht (Bauplan §13 Nr. 71); sind beide Ränder so erklärt, schweigt die Prüfung ebenso.
+aus der Tageszeile, dort stimmte «zu hoch / fehlt» nicht). Je Sprung und je Rückgang des Abschnitts (auch die inneren Schritte
+eines zerteilten Laufs, Bauplan «Zu §14» Nr. 91 b) wird geprüft, ob er den Tageswert eines Tages trifft: der Tag ist der, dessen
+Tagesfenster ``(a, b]`` den späteren Stand des Schritts enthält (``kanal/feld_leser.tagesfenster_am_tag`` — ein Bestandstag
+rückwärts beginnt um 23:00 des Vortags, ein Kanal-Tag um Mitternacht; liegt der frühere Stand hinter einer Datenlücke vor dem
+Fenster, rückt der Rand der Tagesansicht auf ihn zurück — der Schritt gehört trotzdem diesem Tag), und an diesem Tag kommt die
+Gruppe des Felds nicht aus den Kanälen (``kanal_stunden.kanal_schluessel_des_tages``) und trägt der eigene Kanal des Felds den
+Tag nicht (Sensorwechsel B-5 «Kanal vor Reihe», ``kanal/feld_leser.feld_aus_kanal_am_tag``). Ein Schritt an einer verzeichneten
+Fortsetzung oder am Rand einer Lücke ist ohne Wirkung — dort bilden die Leser keine Differenz (Bauplan §13 Nr. 71). **Kein
+Saldo** (Bauplan «Zu §14» Nr. 100): ein Tag mit einem Rückgang im Fenster hat in der Tagesansicht keinen Wert («Zähler
+zurückgesprungen»), auch wenn im selben Fenster ein Sprung liegt; ein Tag nur mit Sprüngen ist zu hoch. Ein Befund entsteht,
+wenn mindestens ein Schritt wirkt; Meldung, Details und ``werte`` nennen die Tage der wirkenden Schritte.
 
-**Zwei Lagen, ein Code:**
+**Ein Handgriff, «Grund nachtragen»** (Bauplan «Zu §14» Nr. 95 (2), Nr. 98; WARNING): ein Sprung in die Datenquellen
+(``stueck=<schlüssel>~<sprung>~<rückgang>``), dort derselbe Dialog wie beim Wechsel der Quelle, nur mit «Korrektur» über das
+Stück ``[Sprung, Rückgang)`` (``services/zuordnung_wechsel/stueck.py``, Vorschau = Lauf). ``werte.lage`` sagt, was die
+Korrektur tun wird — mit derselben Prüfung wie der Dienst (``stueck.ist_fuellbar``):
 
-* **heilbar** (WARNING, Aktion «Tage neu aufbauen» = ``reaggregate_range`` über ``Tag des Sprungs … Tag des Rückgangs``,
-  höchstens ``REAGGREGATE_RANGE_MAX_DAYS`` Tage ab dem Sprung, höchstens bis gestern): Home Assistant ist erreichbar, das
-  Feld hat einen Spiegel, und die Stände **außerhalb** des Abschnitts (die Zeile vor dem ersten Sprung, die Zeile nach dem
-  letzten Rückgang) stimmen mit ihm überein — ``summe + offset`` der zum Zeitpunkt gültigen Quelle. ⚑ Enger als der
-  Auftrag: die gültige Quelle muss die **heute zugeordnete** Entität sein und ihr ``offset`` 0 — denn der Lauf holt die
-  Stände mit der heutigen Zuordnung ohne Versatz neu (``writer.snapshot_anlage``); stünde dort eine ältere Entität oder ein
-  Versatz, entstünde der Sprung nur an anderer Stelle (gemessen an ``inv:2:ladung_kwh``, Bericht N803-HANDGRIFF).
-  Ein Abschnitt über 31 Tage braucht mehrere Klicks: nach dem ersten Lauf nennt der Befund den Rest.
-* **sonst** (INFO, Auskunft «Was gilt», kein Knopf, der etwas schreibt): ohne Home Assistant, Stände außerhalb passen
-  nicht, oder der Abschnitt endet heute.
+* ``fuellbar`` — Home Assistant erreichbar, beide Rand-Stände sind HAs Rohsumme der Quelle davor und danach: die Stände des
+  Stücks werden verworfen und aus dieser Quelle neu gelesen.
+* ``ohne_home_assistant`` · ``staende_passen_nicht`` (die Rand-Stände passen zu keiner Summe, die Home Assistant für die Quelle
+  führt) — die Stände werden verworfen und nicht neu gelesen; da davor und danach dieselbe Quelle gilt, rechnen die Leser über
+  die leere Zeit wie über jede Zählerlücke (Sensorwechsel U1, ``zeitpunkt.ohne_hoehenwechsel``): die Menge steht am Tag, an dem
+  das Stück endet. Liegt zwischen den Ständen davor und danach ein eingetragener Zählertausch, bilden die Leser über die leere
+  Zeit keine Differenz — der Befund fragt dieselbe Regel wie die Vorschau (``_versatz_tausch``, Korrekturrunde U1-K S2) und
+  sagt es (``_SATZ_LAGE_TAUSCH``).
+* ``verschiedene_quellen`` — vor und nach dem Abschnitt gelten verschiedene Quellen; die Korrektur ist gesperrt: eine Auskunft
+  ohne Knopf (INFO, Bauplan «Zu §14» Nr. 104).
+* ``ha_nicht_erreichbar`` — Home Assistant ist eingerichtet, aber gerade nicht erreichbar (oder sein Abruf scheitert): die
+  Korrektur startet in diesem Augenblick nicht — eine Auskunft ohne Knopf (INFO, Nr. 104); beim nächsten Lauf mit erreichbarem
+  Home Assistant steht wieder der Handgriff.
+
+Home Assistant wird nur für einen gefundenen Abschnitt mit Wirkung gefragt, nie für die OK-Zeile.
 
 Schwesterdateien: ``ruecksprung.py``, ``ha_sprung.py``, ``ha_rueckgang.py``; Proben ``tests/test_daten_checker_zaehler_versatz.py``.
 """
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import select, text
 
-from backend.core.berechnungen.zaehler_versatz import (
-    SPIEGEL_TOLERANZ_KWH, VersatzLauf, finde_versatz_laeufe, stand_passt_zum_spiegel,
-)
+from backend.core.berechnungen.zaehler_versatz import VersatzLauf, finde_versatz_laeufe
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
-from backend.services.daten_checker.kategorien import Aktion, CheckErgebnis, CheckKategorie, CheckSeverity
+from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
-#: Lage des Befunds (``werte.lage``) und der Grund, warum es keinen Knopf gibt.
-LAGE_HEILBAR = "heilbar"
+logger = logging.getLogger(__name__)
+
+#: Lage des Befunds (``werte.lage``): was «Grund nachtragen → Korrektur» tun wird.
+LAGE_FUELLBAR = "fuellbar"
 GRUND_OHNE_HA = "ohne_home_assistant"
 GRUND_STAENDE_PASSEN_NICHT = "staende_passen_nicht"
-GRUND_ENDET_HEUTE = "endet_heute"
+GRUND_VERSCHIEDENE_QUELLEN = "verschiedene_quellen"
+GRUND_HA_NICHT_ERREICHBAR = "ha_nicht_erreichbar"
+#: Lagen ohne wirksamen Handgriff in diesem Augenblick — Auskunft (INFO, ohne Sprung), Bauplan «Zu §14» Nr. 104.
+LAGEN_OHNE_HANDGRIFF = frozenset({GRUND_VERSCHIEDENE_QUELLEN, GRUND_HA_NICHT_ERREICHBAR})
 
 _SQL_SCHLUESSEL = "SELECT DISTINCT sensor_key FROM sensor_snapshots WHERE anlage_id = :a AND quelle = :q"
 _SQL_REIHE = ("SELECT zeitpunkt, wert_kwh FROM sensor_snapshots WHERE anlage_id = :a AND sensor_key = :k AND quelle = :q "
               "ORDER BY zeitpunkt")
 
-_SATZ_OHNE_KNOPF = {
+#: Was «Grund nachtragen» je Lage tut (Wortlaute Sitzung 4b-1; gehen vor dem Commit an Gernot).
+_SATZ_LAGE = {
+    LAGE_FUELLBAR: (
+        "Die Stände davor und danach sind die, die Home Assistant für {quelle} führt. „Grund nachtragen“ verwirft die "
+        "Zählerstände des Abschnitts; eedc liest sie danach aus Home Assistant neu, auf derselben Höhe wie davor und danach."),
     GRUND_OHNE_HA: (
-        "Ohne Verbindung zu Home Assistant kann eedc die Zählerstände dieses Abschnitts nicht neu holen; die Tageswerte "
-        "bleiben, wie sie sind."),
+        "Ohne Verbindung zu Home Assistant kann eedc die Zählerstände dieses Abschnitts nicht neu holen. „Grund nachtragen“ "
+        "verwirft sie; da davor und danach dieselbe Quelle gilt, rechnet eedc über die leere Zeit wie über jede Zählerlücke: "
+        "die Menge des Abschnitts steht an dem Tag, an dem er endet, die Tage davor zeigen für diese Zeit keinen Wert."),
     GRUND_STAENDE_PASSEN_NICHT: (
-        "Die Stände vor oder nach dem Abschnitt passen nicht zu dem, was Home Assistant für den heute zugeordneten Sensor "
-        "führt — neu geholt, entstünde der Versatz nur an anderer Stelle. eedc stellt diese Tageswerte deshalb nicht selbst "
-        "richtig; sie bleiben, wie sie sind."),
-    GRUND_ENDET_HEUTE: (
-        "Der Abschnitt endet heute; neu aufbauen lässt sich ein Tag erst, wenn er vorbei ist. Ab morgen steht hier der Knopf "
-        "„Tage neu aufbauen“."),
+        "Die Stände davor oder danach passen zu keiner Summe, die Home Assistant für {quelle} führt — neu holen lassen sich "
+        "die Zählerstände des Abschnitts nicht. „Grund nachtragen“ verwirft sie; da davor und danach dieselbe Quelle gilt, "
+        "rechnet eedc über die leere Zeit wie über jede Zählerlücke: die Menge des Abschnitts steht an dem Tag, an dem er "
+        "endet, die Tage davor zeigen für diese Zeit keinen Wert."),
+    GRUND_VERSCHIEDENE_QUELLEN: (
+        "Vor und nach dem Abschnitt gelten verschiedene Quellen ({quelle} und {quelle_nach}) — eedc weiß nicht, welche hier "
+        "die richtige ist, und korrigiert ihn deshalb nicht; die Tageswerte bleiben, wie sie sind."),
+    GRUND_HA_NICHT_ERREICHBAR: (
+        "Home Assistant ist gerade nicht erreichbar — ob eedc die Zählerstände dieses Abschnitts neu holen kann, lässt sich "
+        "jetzt nicht prüfen, und eine Korrektur startet erst, wenn eedc die Langzeitstatistik wieder lesen kann. Dann steht "
+        "hier der Knopf „Grund nachtragen“."),
+}
+#: Dieselben Lagen, wenn zwischen den Ständen davor und danach ein Zählertausch eingetragen ist (Korrekturrunde U1-K S2: der
+#: Befund fragt dieselbe Regel wie die Leser, ``zeitpunkt.ohne_hoehenwechsel`` über die Vorschau der Korrektur).
+_SATZ_TAUSCH = ("„Grund nachtragen“ verwirft sie; da zwischen den Ständen davor und danach ein Zählertausch eingetragen ist, "
+                "bildet eedc über die leere Zeit keine Differenz zweier Zählerstände: die Tage darin zeigen keinen Wert, die "
+                "Tage an ihrem Rand nur ihren Teil.")
+_SATZ_LAGE_TAUSCH = {
+    GRUND_OHNE_HA: ("Ohne Verbindung zu Home Assistant kann eedc die Zählerstände dieses Abschnitts nicht neu holen. "
+                    + _SATZ_TAUSCH),
+    GRUND_STAENDE_PASSEN_NICHT: (
+        "Die Stände davor oder danach passen zu keiner Summe, die Home Assistant für {quelle} führt — neu holen lassen sich "
+        "die Zählerstände des Abschnitts nicht. " + _SATZ_TAUSCH),
 }
 
 
@@ -87,41 +126,29 @@ def _tage_text(tage: list[date]) -> str:
     return teile[0] if len(teile) == 1 else f"{', '.join(teile[:-1])} und {teile[-1]}"
 
 
-def aktions_bereich(lauf: VersatzLauf, heute: date) -> tuple[date, date]:
-    """Der Bereich des Knopfs: vom Tag des Sprungs bis zum Tag des Rückgangs, höchstens ``REAGGREGATE_RANGE_MAX_DAYS``
-    Tage und höchstens bis gestern (der laufende Tag lässt sich nicht neu aufbauen, ``_plan_reaggregate_range``)."""
-    from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
-
-    von = lauf.beginn.tag
-    return von, min(lauf.ende.tag, von + timedelta(days=REAGGREGATE_RANGE_MAX_DAYS - 1), heute - timedelta(days=1))
-
-
-def _texte(name: str, lauf: VersatzLauf, aktion: Optional[Aktion], grund: str) -> tuple[str, str]:
-    """Meldung und Details in Anwender-Sprache (keine Mechanik-Wörter, kein Menüweg — der Knopf ist der Weg)."""
-    von, bis = lauf.rand_tage
+def _texte(name: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str, quellen: tuple[str, str],
+           tausch: bool = False) -> tuple[str, str]:
+    """Meldung und Details in Anwender-Sprache (keine Mechanik-Wörter, kein Menüweg — der Handgriff ist der Weg); genannt
+    werden nur die Tage der Schritte mit Wirkung (Bauplan «Zu §14» Nr. 91 b)."""
+    # Die Tage des ersten und des letzten versetzten Stands (Bauplan «Zu §14» Nr. 108, S11: ein Sprung mit der Zeile 00:00
+    # gehört zum Abschnitt dieses Tages, nicht zum Vortag); welcher Tageswert falsch ist, sagen die Details.
+    von, bis = lauf.beginn.bis.date(), lauf.ende.von.date()
     versatz = fmt_zahl(lauf.versatz_kwh, 1)
     meldung = (f"{name}: Zählerstände vom {_datum(von)} bis {_datum(bis)} um {versatz} kWh versetzt — "
                "Tageswerte an den Rändern falsch")
+    folgen = []
+    if wirkung.tage_zu_hoch:
+        folgen.append(f"am {_tage_text(wirkung.tage_zu_hoch)} ist er deshalb zu hoch")
+    if wirkung.tage_ohne_wert:
+        folgen.append(f"am {_tage_text(wirkung.tage_ohne_wert)} fehlt er („Zähler zurückgesprungen“)")
     details = (
         f"Vom {_datum(von)} bis {_datum(bis)} liegen die gespeicherten Zählerstände dieses Felds um {versatz} kWh neben "
         "denen davor und danach — so sieht es aus, wenn eine Zeit lang die Stände eines anderen Sensors gespeichert wurden, "
-        "etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus zwei Zählerständen: am "
-        f"{_tage_text(lauf.tage_zu_hoch)} ist er deshalb zu hoch, am {_tage_text(lauf.tage_ohne_wert)} fehlt er "
-        "(„Zähler zurückgesprungen“). Gespeicherte Monatswerte ändert das nicht. "
+        f"etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus zwei Zählerständen: {', '.join(folgen)}. "
+        "Gespeicherte Monatswerte ändert das nicht. "
     )
-    if aktion is None:
-        return meldung, details + _SATZ_OHNE_KNOPF[grund]
-    from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
-
-    a, b = (date.fromisoformat(aktion.params[k]) for k in ("von", "bis"))
-    details += (
-        "Die Stände vor und nach dem Abschnitt stimmen mit Home Assistant überein. „Tage neu aufbauen“ holt die "
-        f"Zählerstände vom {_datum(a)} bis {_datum(b)} neu aus Home Assistant und baut diese Tage neu auf (höchstens "
-        f"{REAGGREGATE_RANGE_MAX_DAYS} Tage je Lauf)."
-    )
-    if b < bis:
-        details += f" Danach nennt dieser Befund den Rest bis {_datum(bis)} — dann noch einmal klicken."
-    return meldung, details
+    satz = _SATZ_LAGE_TAUSCH[lage] if tausch and lage in _SATZ_LAGE_TAUSCH else _SATZ_LAGE[lage]
+    return meldung, details + satz.format(quelle=quellen[0], quelle_nach=quellen[1])
 
 
 def in_tagesansicht(invs: dict, key: str) -> bool:
@@ -151,28 +178,24 @@ class ZaehlerVersatzChecks:
     """Prüfung: versetzter Abschnitt in der Standreihe eines Zählerfelds (Sprung um +X, später Rückgang um ≈ −X)."""
 
     async def _check_zaehler_versatz(self, anlage: Anlage, jetzt: Optional[datetime] = None) -> list[CheckErgebnis]:
-        """Je versetztem Abschnitt mit Wirkung ein Befund — mit «Tage neu aufbauen», wo der Lauf ihn heilt.
+        """Je versetztem Abschnitt mit Wirkung ein Befund mit dem Handgriff «Grund nachtragen» (Sprung in die Datenquellen).
 
         Args:
-            jetzt: Uhr der Prüfung (nur «bis gestern» des Knopfs); eine Naht für die Proben (keine Prozessuhr im Rumpf, N-167).
+            jetzt: bleibt für die Aufrufer (bis Sitzung 4b-1 die Uhr des Knopfs «Tage neu aufbauen»); die Prüfung braucht
+                keine Uhr mehr — das Stück endet mit dem Rückgang, auch am laufenden Tag.
         """
         invs = await self._versatz_geraete(anlage.id)
         funde = await self._versatz_funde(anlage.id, invs)
         if not funde:
             return [_versatz_ok()]
-        from backend.services.ha_statistics_service import get_ha_statistics_service
-        from backend.services.snapshot.writer import _build_counter_map, _stillgelegte_inv_ids
-
-        heute = (jetzt or datetime.now()).date()
-        ha_da = get_ha_statistics_service().is_available
-        zuordnung = _build_counter_map(anlage, await _stillgelegte_inv_ids(self.db, anlage.id)) if ha_da else {}
         out: list[CheckErgebnis] = []
         for key, lauf in funde:
-            if not await self._versatz_wirkt(anlage, key, lauf, invs):
+            wirkung = await self._versatz_wirkt(anlage, key, lauf, invs)
+            if not wirkung:
                 continue
-            aktion, grund = await self._versatz_lage(anlage.id, key, lauf, heute, zuordnung.get(key) if ha_da else None,
-                                                     ha_da)
-            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, aktion, grund))
+            lage, quellen = await self._versatz_lage(anlage, key, lauf)
+            tausch = lage in _SATZ_LAGE_TAUSCH and await self._versatz_tausch(anlage, key, lauf, quellen)
+            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch))
         return out or [_versatz_ok()]
 
     async def _versatz_funde(self, anlage_id: int, invs: dict) -> list[tuple[str, VersatzLauf]]:
@@ -190,78 +213,96 @@ class ZaehlerVersatzChecks:
         return funde
 
     async def _reihe(self, anlage_id: int, key: str) -> list[tuple[datetime, float]]:
-        """Die Standreihe eines Schlüssels (nur HA-Stände), aufsteigend. Roh gelesen und mit ``fromisoformat`` gewandelt —
-        halb so lang wie die ORM-Spalte (gemessen 0,22 statt 0,42 s über die Produktiv-Sicherung)."""
-        from backend.services.snapshot.source import SnapshotSource
+        return await lade_reihe(self.db, anlage_id, key)
 
-        return [(datetime.fromisoformat(z), w) for z, w in (await self.db.execute(text(_SQL_REIHE), {
-            "a": anlage_id, "k": key, "q": SnapshotSource.HA_STATISTICS})).all()]
-
-    async def _versatz_wirkt(self, anlage, key: str, lauf: VersatzLauf, invs: dict) -> bool:
-        """Rechnet der Tageswert des Felds an mindestens einem Rand-Tag über die Standreihe — weder kommt seine Gruppe
-        aus den Kanälen, noch trägt sein eigener Kanal den Tag (Sensorwechsel B-5: dieselbe Feld-Auskunft wie die
-        Tagesansicht, ``kanal/feld_leser.feld_aus_kanal_am_tag``)? Ein Rand an einer verzeichneten Fortsetzung ist ohne
-        Wirkung: dort bilden die Leser der Reihe keine Differenz über die Naht (Bauplan §13 Nr. 71, ``zaehler_naht.ueber_naht``)."""
+    async def _versatz_wirkt(self, anlage, key: str, lauf: VersatzLauf, invs: dict) -> "Wirkung":
+        """Die Schritte des Abschnitts (jeder Sprung, jeder Rückgang — auch innen in einem zerteilten Lauf), deren Tageswert
+        die Tagesansicht über die Standreihe bildet, je mit seinem Tag (Bauplan «Zu §14» Nr. 91 b). Ohne Wirkung: ein
+        Schritt an einer verzeichneten Fortsetzung oder am Rand einer Lücke (``zaehler_naht.ueber_naht``), ein Schritt, den
+        kein Tagesfenster ganz enthält, und ein Tag, den die Tagesansicht aus den Kanälen liest (Gruppe aus den Kanälen oder
+        eigener Kanal, Sensorwechsel B-5)."""
         from backend.core.berechnungen.zaehler_naht import ueber_naht
-        from backend.services.energie_profil.kanal_stunden import kanal_schluessel_des_tages
-        from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
         from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
         typ = getattr(invs.get(key.split(":")[1]), "typ", None)
         naehte = await fortsetzungs_naehte(self.db, anlage.id, key)
-        tage = {r.tag for r in (lauf.beginn, lauf.ende) if not ueber_naht(r.von, r.bis, naehte)}
-        for tag in sorted(tage):
-            if key in await kanal_schluessel_des_tages(self.db, anlage.id, tag):
+        hoch: set[date] = set()
+        ohne: set[date] = set()
+        for schritt, tage, rueck in [(s, hoch, False) for s in lauf.spruenge] + [(r, ohne, True) for r in lauf.rueckgaenge]:
+            if ueber_naht(schritt.von, schritt.bis, naehte):
                 continue
-            if not await feld_aus_kanal_am_tag(self.db, anlage, typ, key, tag):
-                return True
-        return False
+            tag = await self._tag_des_schritts(anlage, typ, key, schritt, rueck)
+            if tag is not None:
+                tage.add(tag)
+        # Kein Saldo (Nr. 100): ein Rückgang im Fenster nimmt dem Tag den Wert, auch neben einem Sprung.
+        return Wirkung(sorted(hoch - ohne), sorted(ohne))
 
-    async def _versatz_lage(self, anlage_id: int, key: str, lauf: VersatzLauf, heute: date, entitaet: Optional[str],
-                            ha_da: bool) -> tuple[Optional[Aktion], str]:
-        """Die Aktion der heilbaren Lage oder der Grund, warum es keine gibt."""
-        if not ha_da:
-            return None, GRUND_OHNE_HA
-        if entitaet is None or not await self._raender_passen(anlage_id, key, lauf, entitaet):
-            return None, GRUND_STAENDE_PASSEN_NICHT
-        von, bis = aktions_bereich(lauf, heute)
-        if bis < von:
-            return None, GRUND_ENDET_HEUTE
-        return Aktion("reaggregate_range", {"von": von.isoformat(), "bis": bis.isoformat()}), LAGE_HEILBAR
+    async def _tag_des_schritts(self, anlage, typ: Optional[str], key: str, schritt, rueckgang: bool) -> Optional[date]:
+        """Der Tag, dessen Tageswert der Schritt trifft und den die Tagesansicht aus der Reihe bildet — ``None``, wenn der Tag
+        aus den Kanälen kommt. In der Regel der Tag, dessen Tagesfenster ``(a, b]`` den späteren Stand enthält (Kalendertag
+        oder, im Fenster ab 23:00 des Vortags, der Folgetag; Messblatt 4b-0 h). Liegt der frühere Stand hinter einer
+        Datenlücke in einem früheren Fenster, rückt ohne Home Assistant der Rand der Tagesansicht auf ihn zurück (Lückenanker)
+        — derselbe Tag; mit Home Assistant heilt sie den Rand dazwischen auf das Niveau außerhalb des Abschnitts, und ein
+        Rückgang trifft dann den Tag des früheren Stands (Bauplan «Zu §14» Nr. 100, Probe «Rückgang hinter einer Datenlücke»)."""
+        from backend.services.energie_profil.kanal_stunden import kanal_schluessel_des_tages
+        from backend.services.kanal.feld_leser import feld_aus_kanal_am_tag
 
-    async def _raender_passen(self, anlage_id: int, key: str, lauf: VersatzLauf, entitaet: str) -> bool:
-        """Stimmen die Stände außerhalb des Abschnitts mit dem Spiegel der heute zugeordneten Entität überein?"""
-        from backend.models.kanal import ART_SUM, FAMILIE_SPIEGEL, Kanal, KanalQuelle
+        tag = await self._tag_im_fenster(anlage.id, typ, schritt.bis, links_offen=True)
+        if rueckgang and tag is not None:
+            vorher = await self._tag_im_fenster(anlage.id, typ, schritt.von, links_offen=False)
+            if vorher is not None and vorher != tag and _heilt_raender():
+                tag = vorher
+        if tag is None or key in await kanal_schluessel_des_tages(self.db, anlage.id, tag):
+            return None
+        return None if await feld_aus_kanal_am_tag(self.db, anlage, typ, key, tag) else tag
 
-        quellen = (await self.db.execute(
-            select(KanalQuelle.kanal_id, KanalQuelle.gueltig_ab, KanalQuelle.statistic_id, KanalQuelle.offset)
-            .join(Kanal, Kanal.id == KanalQuelle.kanal_id).where(
-                Kanal.anlage_id == anlage_id, Kanal.key == key, Kanal.art == ART_SUM,
-                KanalQuelle.familie == FAMILIE_SPIEGEL,
-            ).order_by(KanalQuelle.gueltig_ab))).all()
-        raender = ((lauf.beginn.von, lauf.beginn.stand_vorher), (lauf.ende.bis, lauf.ende.stand_nachher))
-        for zeitpunkt, stand in raender:
-            if not await self._rand_passt(quellen, zeitpunkt, stand, entitaet):
-                return False
-        return True
+    async def _tag_im_fenster(self, anlage_id: int, typ: Optional[str], t: datetime, *, links_offen: bool) -> Optional[date]:
+        """Der Tag, dessen Tagesfenster ``t`` enthält — ``(a, b]`` für den späteren Stand eines Schritts, ``[a, b)`` für den
+        früheren."""
+        from backend.services.kanal.feld_leser import tagesfenster_am_tag
 
-    async def _rand_passt(self, quellen, zeitpunkt: datetime, stand: float, entitaet: str) -> bool:
-        """Ein Stand zur vollen Stunde ``zeitpunkt`` gegen die Spiegelzeile der Stunde davor (HA: ``start_ts`` trägt den
-        Stand am Ende der Stunde) der dann gültigen Quelle."""
-        from backend.models.kanal import FAMILIE_SPIEGEL, KanalStatistik
+        for tag in (t.date() - timedelta(days=1), t.date(), t.date() + timedelta(days=1)):
+            a, b = await tagesfenster_am_tag(self.db, anlage_id, typ, tag)
+            if (a < t <= b) if links_offen else (a <= t < b):
+                return tag
+        return None
 
-        if zeitpunkt.minute or zeitpunkt.second:
-            return False
-        start_ts = int(zeitpunkt.timestamp()) - 3600
-        gueltig = [q for q in quellen if q.gueltig_ab <= start_ts]
-        if not gueltig or gueltig[-1].statistic_id != entitaet or abs(gueltig[-1].offset) > SPIEGEL_TOLERANZ_KWH:
-            return False
-        q = gueltig[-1]
-        summe = (await self.db.execute(select(KanalStatistik.sum).where(
-            KanalStatistik.kanal_id == q.kanal_id, KanalStatistik.start_ts == start_ts,
-            KanalStatistik.familie == FAMILIE_SPIEGEL,
-        ))).scalar_one_or_none()
-        return stand_passt_zum_spiegel(stand, summe, q.offset)
+    async def _versatz_lage(self, anlage, key: str, lauf: VersatzLauf) -> tuple[str, tuple[str, str]]:
+        """Was «Grund nachtragen → Korrektur» tun wird — dieselbe Prüfung wie der Dienst (``stueck.ist_fuellbar``) — und die
+        Quellen davor und danach (Text). Home Assistant eingerichtet, aber nicht erreichbar, oder sein Abruf scheitert ⇒
+        ``ha_nicht_erreichbar`` (der Daten-Checker antwortet trotzdem, Bauplan «Zu §14» Nr. 104)."""
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.zuordnung_wechsel.korrektur import ha_eingerichtet
+        from backend.services.zuordnung_wechsel.nachtrag import quelle_text
+        from backend.services.zuordnung_wechsel.stueck import StueckLage, ist_fuellbar, quelle_am_rand
+        from backend.services.zuordnung_wechsel.stueck import _gleiche_quelle
+
+        vor = await quelle_am_rand(self.db, anlage, key, lauf.beginn.von)
+        nach = await quelle_am_rand(self.db, anlage, key, lauf.ende.bis)
+        quellen = (quelle_text(vor), quelle_text(nach))
+        if not _gleiche_quelle(vor, nach):
+            return GRUND_VERSCHIEDENE_QUELLEN, quellen
+        svc = get_ha_statistics_service()
+        if not svc.is_available:
+            return (GRUND_HA_NICHT_ERREICHBAR if ha_eingerichtet() else GRUND_OHNE_HA), quellen
+        a = StueckLage(key, lauf.beginn.bis, lauf.ende.bis, "", quelle=vor).auftrag(anlage.id, lauf.ende.bis)
+        try:
+            fuellbar = await ist_fuellbar(self.db, a, svc)
+        except Exception as e:  # noqa: BLE001 — ein Abruf-Fehler von Home Assistant ist keine Antwort des Befunds
+            logger.warning("zaehler_versatz %s: Abruf aus Home Assistant gescheitert: %s: %s", key, type(e).__name__, e)
+            return GRUND_HA_NICHT_ERREICHBAR, quellen
+        return (LAGE_FUELLBAR if fuellbar else GRUND_STAENDE_PASSEN_NICHT), quellen
+
+    async def _versatz_tausch(self, anlage, key: str, lauf: VersatzLauf, quellen) -> bool:
+        """Liegt zwischen den Ständen davor und danach ein Höhenwechsel (Zählertausch), über den die Leser nach der Korrektur
+        keine Differenz bilden? Dieselbe Frage wie die Vorschau der Korrektur (``korrektur._wie_zaehlerluecke`` an den Zeilen,
+        wie sie danach stehen) — Korrekturrunde U1-K S2."""
+        from backend.services.zuordnung_wechsel.korrektur import _wie_zaehlerluecke
+        from backend.services.zuordnung_wechsel.stueck import StueckLage, quelle_am_rand
+
+        vor = await quelle_am_rand(self.db, anlage, key, lauf.beginn.von)
+        a = StueckLage(key, lauf.beginn.bis, lauf.ende.bis, "", quelle=vor).auftrag(anlage.id, lauf.ende.bis)
+        return not await _wie_zaehlerluecke(self.db, a, a.falsch_seit, a.ab, a.ab)
 
     async def _versatz_geraete(self, anlage_id: int) -> dict:
         """Die Geräte der Anlage je Id (Text) — für Namen und die Frage, welches Feld die Tagesansicht zeigt."""
@@ -270,18 +311,48 @@ class ZaehlerVersatzChecks:
         return {str(i.id): i for i in (await self.db.execute(
             select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all()}
 
-    def _versatz_befund(self, name: str, key: str, lauf: VersatzLauf, aktion: Optional[Aktion],
-                        grund: str) -> CheckErgebnis:
-        meldung, details = _texte(name, lauf, aktion, grund)
+    def _versatz_befund(self, name: str, key: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str,
+                        quellen: tuple[str, str], tausch: bool = False) -> CheckErgebnis:
+        from backend.services.daten_checker.ziele import stueck_parameter
+
+        meldung, details = _texte(name, lauf, wirkung, lage, quellen, tausch)
+        sprung, rueckgang = lauf.beginn.bis.isoformat(timespec="minutes"), lauf.ende.bis.isoformat(timespec="minutes")
+        ohne_handgriff = lage in LAGEN_OHNE_HANDGRIFF
         # E1 (Diagnose-Paket): die Zahlen der Meldung strukturiert, ohne neue Rechnung.
-        return _versatz_zeile(CheckSeverity.WARNING if aktion is not None else CheckSeverity.INFO, meldung, details,
-                              aktion, {
-                                  "schluessel": key, "lage": grund, "versatz_kwh": round(lauf.versatz_kwh, 3),
-                                  "sprung": lauf.beginn.bis.isoformat(timespec="minutes"),
-                                  "rueckgang": lauf.ende.bis.isoformat(timespec="minutes"),
-                                  "tage_zu_hoch": [d.isoformat() for d in lauf.tage_zu_hoch],
-                                  "tage_ohne_wert": [d.isoformat() for d in lauf.tage_ohne_wert],
-                              })
+        return _versatz_zeile(CheckSeverity.INFO if ohne_handgriff else CheckSeverity.WARNING, meldung, details, {
+            "schluessel": key, "lage": lage, "versatz_kwh": round(lauf.versatz_kwh, 3),
+            "sprung": sprung, "rueckgang": rueckgang,
+            "tage_zu_hoch": [d.isoformat() for d in wirkung.tage_zu_hoch],
+            "tage_ohne_wert": [d.isoformat() for d in wirkung.tage_ohne_wert],
+        }, stueck=None if ohne_handgriff else stueck_parameter(key, sprung, rueckgang))
+
+
+def _heilt_raender() -> bool:
+    """Heilt die Tagesansicht einen fehlenden Fensterrand aus Home Assistant? (``snapshot/reader.get_snapshot``: nur mit
+    erreichbarer Langzeitstatistik.) Kein Abruf — nur die Erreichbarkeit."""
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+
+    return bool(get_ha_statistics_service().is_available)
+
+
+@dataclass
+class Wirkung:
+    """Die Tage, deren Tageswert ein Schritt des Abschnitts trifft (nur Schritte mit Wirkung, ``_versatz_wirkt``)."""
+    tage_zu_hoch: list[date] = field(default_factory=list)
+    tage_ohne_wert: list[date] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return bool(self.tage_zu_hoch or self.tage_ohne_wert)
+
+
+async def lade_reihe(db, anlage_id: int, key: str) -> list[tuple[datetime, float]]:
+    """Die Standreihe eines Schlüssels (nur HA-Stände), aufsteigend — die Reihe der Erkennung (Befund und Routen am Befund,
+    ``zuordnung_wechsel/stueck.finde_lauf``). Roh gelesen und mit ``fromisoformat`` gewandelt — halb so lang wie die
+    ORM-Spalte (gemessen 0,22 statt 0,42 s über die Produktiv-Sicherung)."""
+    from backend.services.snapshot.source import SnapshotSource
+
+    return [(datetime.fromisoformat(z), w) for z, w in (await db.execute(text(_SQL_REIHE), {
+        "a": anlage_id, "k": key, "q": SnapshotSource.HA_STATISTICS})).all()]
 
 
 #: OK-Zeile (N-799 S3, K7 — Entscheid Master 16.11.2026): ohne Fund steht der Befund unter den bestandenen Prüfungen, damit
@@ -293,21 +364,24 @@ OK_DETAILS = ("eedc prüft die gespeicherten Zählerstände der Felder, deren Ta
 
 
 def _versatz_ok() -> CheckErgebnis:
-    return _versatz_zeile(CheckSeverity.OK, OK_MELDUNG, OK_DETAILS, None, {"funde": 0})
+    return _versatz_zeile(CheckSeverity.OK, OK_MELDUNG, OK_DETAILS, {"funde": 0})
 
 
-def _versatz_zeile(schwere: str, meldung: str, details: str, aktion: Optional[Aktion], werte: dict) -> CheckErgebnis:
-    """Die eine Erzeuger-Stelle des Codes (W-1) — Fund (WARNING mit Knopf, INFO ohne) oder OK-Zeile."""
+def _versatz_zeile(schwere: str, meldung: str, details: str, werte: dict, stueck: Optional[str] = None) -> CheckErgebnis:
+    """Die eine Erzeuger-Stelle des Codes (W-1) — Fund (WARNING mit dem Sprung «Grund nachtragen» an das Stück
+    ``stueck=<schlüssel>~<sprung>~<rückgang>``; in einer Lage ohne wirksamen Handgriff INFO ohne Sprung) oder OK-Zeile."""
+    from backend.services.daten_checker.ziele import ziel_datenquelle_schluessel
+
     return CheckErgebnis(
         kategorie=CheckKategorie.ZAEHLER_VERSATZ.value,
         schwere=schwere,
         meldung=meldung,
         details=details,
-        action=aktion,
         code="zaehler_versatz",
         werte=werte,
+        ziel=ziel_datenquelle_schluessel(werte["schluessel"], stueck=stueck) if stueck else None,
     )
 
 
-__all__ = ["GRUND_ENDET_HEUTE", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "LAGE_HEILBAR", "OK_MELDUNG", "ZaehlerVersatzChecks",
-           "aktions_bereich", "in_tagesansicht"]
+__all__ = ["GRUND_HA_NICHT_ERREICHBAR", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "GRUND_VERSCHIEDENE_QUELLEN", "LAGE_FUELLBAR", "OK_MELDUNG",
+           "Wirkung", "ZaehlerVersatzChecks", "in_tagesansicht", "lade_reihe"]

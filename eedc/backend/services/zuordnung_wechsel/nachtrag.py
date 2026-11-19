@@ -19,9 +19,12 @@ Stunde nach (wie der Einstieg «Zähler getauscht», ``zaehler_getauscht._nachtr
 Summe, und ein Wechsel der Entität hat dort schon seine eigene Kanal-Quelle mit Versatz — nichts zu tun.
 
 **Korrektur** (``korrektur_auftrag``): derselbe Dienst wie beim Wechsel (``korrektur.py``, Vorschau = Lauf), falsch in
-``[falsch_seit, ab_ts)``, richtig ist ``nachher``. Der Dienst rechnet mit der **heutigen** Quelle als richtiger (Füllen aus ihrer
-Geschichte, Schritt 3); deshalb nur für den **jüngsten** nicht aufgehobenen Wechsel des Schlüssels, dessen ``nachher`` die
-heutige wirksame Quelle ist. Für einen früheren Wechsel nennt die Prüfung den Grund (Bauplan §10 Nr. 39 — kein neuer Rechenweg).
+``[falsch_seit, ab_ts)``, richtig ist ``nachher`` — für den **jüngsten** nicht aufgehobenen Wechsel der Quelle (ein «Zähler
+getauscht», Korrektur- und Lücken-Zeilen sind keiner, ``spaetere_wechsel``), dessen ``nachher`` die heutige wirksame Quelle
+ist. Seit Sitzung 4b-1 (Bauplan «Zu §14» Nr. 96, Nr. 101) zusätzlich am **Rückkehr-Wechsel** X → A eines Stücks A → X → A
+(``stueck_des_wechsels``): falsch ist die Zeit **vor** diesem Wechsel, vom vorigen Wechsel A → X bis zu diesem, richtig A —
+«Falsch seit» steht fest (``stueck.py``); nie die Zeit danach, und am ersten Wechsel A → X keine Korrektur über das Stück.
+Bei verschiedenen Quellen (A → X → C) gibt es kein Stück; die Prüfung nennt den Grund.
 """
 
 from __future__ import annotations
@@ -37,14 +40,17 @@ from backend.services.zuordnung_wechsel.abfrage import _gleich, haette_gefragt, 
 
 #: Wortlaute (Sitzung 4; gehen vor dem Commit an Gernot).
 SATZ_WECHSEL = "Am {zeit} Uhr wechselte die Quelle von {vorher} zu {nachher}."
-SATZ_KORREKTUR_NUR_JUENGSTER = ("«Bisher war der falsche Sensor zugeordnet» lässt sich hier nur für den jüngsten Wechsel dieses "
-                                "Felds nachtragen, solange seine neue Quelle noch zugeordnet ist und danach nichts weiter "
-                                "verzeichnet ist (auch kein Zählertausch).")
+SATZ_KORREKTUR_NUR_JUENGSTER = ("«Bisher war der falsche Sensor zugeordnet» lässt sich hier nicht nachtragen: das geht am jüngsten "
+                                "Wechsel dieses Felds, solange seine neue Quelle noch zugeordnet ist, und an einem Wechsel, mit "
+                                "dem die Quelle zur vorigen zurückkehrte — dann gilt die Korrektur für die Zeit seit dem Wechsel "
+                                "davor.")
 SATZ_FALSCH_SEIT_NACH_WECHSEL = "«Falsch seit» muss vor dem Wechsel liegen ({zeit} Uhr)."
 SATZ_NICHT_OFFEN = "Für diesen Wechsel ist kein Grund nachzutragen."
 SATZ_KORREKTUR_ENDGUELTIG = "Eine Korrektur lässt sich nicht mehr ändern."
 SATZ_GRUND_FEHLT = "Wähle einen Grund: Fortsetzung oder Korrektur."
 SATZ_NUR_KORREKTUR = "Für diesen Wechsel ist «Fortsetzung» schon eingetragen; ändern lässt er sich nur zu «Korrektur»."
+#: Am versetzten Abschnitt (Befund ``zaehler_versatz``) gibt es nur «Korrektur» (Bauplan «Zu §14» Nr. 96).
+SATZ_NUR_KORREKTUR_STUECK = "Für einen versetzten Abschnitt lässt sich nur «Korrektur» eintragen."
 #: Offener Korrektur-Lauf des Felds («Zu §13» Nr. 86 — eigener Satz ohne den Werkbank-Knopf).
 SATZ_LAUF_OFFEN = ("Für dieses Feld steht aus einer früheren Korrektur noch das Füllen aus Home Assistant aus — eedc holt es "
                    "jede Stunde von selbst nach. Eine weitere Korrektur lässt sich erst danach eintragen.")
@@ -93,6 +99,9 @@ class NachtragLage:
     erster_wert: Optional[datetime] = None
     tage: int = 0
     vorgabe_falsch_seit: Optional[datetime] = None
+    #: «Korrektur im Nachhinein» am Rückkehr-Wechsel über das Stück A → X → A davor (``stueck_des_wechsels``, Bauplan «Zu §14»
+    #: Nr. 96): ``(Sprung, Rückgang, Quelle davor und danach)`` — «Falsch seit» steht dann fest.
+    stueck: Optional[tuple[datetime, datetime, dict]] = None
 
 
 async def _zeile(db, anlage_id: int, wechsel_id: int) -> Optional[ZuordnungWechsel]:
@@ -105,17 +114,46 @@ async def offen(db, anlage_id: int, row) -> bool:
     return row.aufgehoben_durch is None and row.grund is None and await haette_gefragt(db, anlage_id, row)
 
 
-async def korrektur_moeglich(db, anlage, row) -> bool:
-    """Der jüngste nicht aufgehobene Wechsel des Schlüssels, und sein ``nachher`` ist die heutige wirksame Quelle."""
-    from backend.services.zuordnung_wechsel.quelle import lade_wirksame_quellen, standard_quelle
+def ist_quellenwechsel(w) -> bool:
+    """Ein Wechsel der Quelle im Sinn der Korrektur im Nachhinein: nicht aufgehoben, kein «Zähler getauscht» (``vorher =
+    nachher``), keine Korrektur-Zeile (auch keine Lücken-Zeile, ``zeitpunkt.ist_luecken_zeile``) — Bauplan «Zu §14» Nr. 103."""
+    return w.aufgehoben_durch is None and w.grund != GRUND_KORREKTUR and not _gleich(w.vorher, w.nachher)
+
+
+async def _quellenwechsel(db, anlage_id: int, sensor_key: str) -> list:
+    """Die Quellenwechsel des Schlüssels (``ist_quellenwechsel``), Reihenfolge ``ab_ts``, dann Zeilen-Nummer."""
     from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
 
-    spaetere = [w for w in (await lade_wechsel(db, anlage.id)).get(row.sensor_key, ())
-                if w.aufgehoben_durch is None and w.ab_ts > row.ab_ts]
-    if spaetere:
+    return sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ()) if ist_quellenwechsel(w)),
+                  key=lambda w: (w.ab_ts, w.id or 0))
+
+
+async def korrektur_moeglich(db, anlage, row) -> bool:
+    """Der jüngste Quellenwechsel des Schlüssels (``ist_quellenwechsel`` — ein späterer «Zähler getauscht», eine Korrektur
+    oder eine Lücke zählt nicht, Bauplan «Zu §14» Nr. 103), und sein ``nachher`` ist die heutige wirksame Quelle."""
+    from backend.services.zuordnung_wechsel.quelle import lade_wirksame_quellen, standard_quelle
+
+    if any(w.ab_ts > row.ab_ts for w in await _quellenwechsel(db, anlage.id, row.sensor_key)):
         return False
     heute = (await lade_wirksame_quellen(db, anlage)).get(row.sensor_key) or standard_quelle(row.sensor_key)
     return _gleich(heute, row.nachher)
+
+
+async def stueck_des_wechsels(db, anlage_id: int, row) -> Optional[tuple[datetime, datetime, dict]]:
+    """Bauplan «Zu §14» Nr. 96, Nr. 101: ist ``row`` der **Rückkehr-Wechsel** X → A eines Stücks A → X → A (der vorige
+    Quellenwechsel ging von A nach X), ist das Stück die Zeit **vor** ``row``: ``[A → X, X → A)``, richtig A (die Quelle nach
+    diesem Wechsel, die zugleich vor dem vorigen galt). Nie die Zeit danach; am ersten Wechsel A → X gibt es kein Stück (der
+    Grund-Text «Bisher war der falsche Sensor zugeordnet» meinte dort das Gegenteil). Ein «Zähler getauscht», Korrektur- und
+    Lücken-Zeilen sind kein Wechsel der Quelle (``ist_quellenwechsel``); ein späterer Wechsel ändert am Stück nichts. Bei
+    verschiedenen Quellen (A → X → C) gibt es kein Stück."""
+    zeilen = await _quellenwechsel(db, anlage_id, row.sensor_key)
+    i = next((k for k, w in enumerate(zeilen) if w.id == row.id), None)
+    if i is None or i == 0:
+        return None
+    w, v = zeilen[i], zeilen[i - 1]
+    if w.nachher and _gleich(v.nachher, w.vorher) and _gleich(v.vorher, w.nachher):
+        return v.ab_ts, w.ab_ts, w.nachher
+    return None
 
 
 async def _vorgabe(db, anlage_id: int, row, kanal, erster: Optional[datetime]) -> Optional[datetime]:
@@ -141,20 +179,25 @@ async def _vorgabe(db, anlage_id: int, row, kanal, erster: Optional[datetime]) -
 
 
 async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
-    """Was an dieser Zeile nachzutragen ist (lesend); ``None`` = keine Zeile dieser Anlage."""
+    """Was an dieser Zeile nachzutragen ist (lesend); ``None`` = keine Zeile dieser Anlage, oder eine Lücken-Zeile (kein
+    Wechsel, ``zeitpunkt.ist_luecken_zeile`` — die Routen antworten 404, Bauplan «Zu §14» Nr. 105, F7 c)."""
     from backend.services.kanal.angaben import angaben, kanal_des_schluessels
     from backend.services.zuordnung_wechsel import korrektur_lauf
     from backend.services.zuordnung_wechsel.abfrage import _reihe
+    from backend.services.zuordnung_wechsel.zeitpunkt import ist_luecken_zeile
 
     row = await _zeile(db, anlage.id, wechsel_id)
-    if row is None:
+    if row is None or ist_luecken_zeile(row):
         return None
     la = NachtragLage(row)
     if row.aufgehoben_durch is not None or row.grund == GRUND_KORREKTUR or not await haette_gefragt(db, anlage.id, row):
         return la
     if row.grund is None:
         la.gruende.append(GRUND_FORTSETZUNG)
-    if not await korrektur_moeglich(db, anlage, row):
+    moeglich = await korrektur_moeglich(db, anlage, row)
+    if not moeglich:
+        la.stueck = await stueck_des_wechsels(db, anlage.id, row)
+    if not (moeglich or la.stueck):
         la.korrektur_nicht = SATZ_KORREKTUR_NUR_JUENGSTER
     elif await korrektur_lauf.offener_lauf(db, anlage.id, row.sensor_key) is not None:
         # Bauplan §13 Nr. 73: wie die Werkbank (§11 Nr. 46) — ein offener Korrektur-Lauf desselben Felds wird zuerst
@@ -166,7 +209,7 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
     la.erster_wert, la.tage = await _reihe(db, anlage.id, row.sensor_key)
     if la.erster_wert is None and kanal is not None:
         la.erster_wert, la.tage, _stand = await angaben(db, kanal)
-    la.vorgabe_falsch_seit = await _vorgabe(db, anlage.id, row, kanal, la.erster_wert)
+    la.vorgabe_falsch_seit = la.stueck[0] if la.stueck else await _vorgabe(db, anlage.id, row, kanal, la.erster_wert)
     return la
 
 
@@ -175,11 +218,17 @@ def wechsel_satz(row) -> str:
                                nachher=quelle_text(row.nachher))
 
 
-def korrektur_auftrag(row, falsch_seit: datetime, jetzt: datetime):
+def korrektur_auftrag(row, falsch_seit: Optional[datetime], jetzt: datetime,
+                      stueck: Optional[tuple[datetime, datetime, dict]] = None):
     """Der Auftrag des Korrektur-Dienstes für einen nachgetragenen Grund «Korrektur»: falsch in ``[falsch_seit, ab_ts)``,
-    richtig ist ``nachher`` (die heutige Quelle, ``korrektur_moeglich``)."""
+    richtig ist ``nachher`` (die heutige Quelle, ``korrektur_moeglich``). Mit ``stueck`` (am Rückkehr-Wechsel X → A eines
+    Stücks A → X → A) das Stück selbst: falsch in ``[A → X, X → A)``, richtig A; ``falsch_seit`` zählt nicht."""
     from backend.services.zuordnung_wechsel.korrektur import Auftrag
 
+    if stueck is not None:
+        s, r, quelle = stueck
+        return Auftrag(anlage_id=row.anlage_id, sensor_key=row.sensor_key, falsch_seit=s, ab=r, vorher=quelle,
+                       nachher=quelle, herkunft=HERKUNFT_NACHTRAG, erklaert=jetzt, stueck=True)
     f = volle_stunde(falsch_seit)
     if f >= row.ab_ts:
         raise NachtragAbgelehnt(SATZ_FALSCH_SEIT_NACH_WECHSEL.format(zeit=row.ab_ts.strftime("%d.%m.%Y %H:%M")))
@@ -236,5 +285,6 @@ def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str
         "erster_wert": None if la.erster_wert is None else la.erster_wert.replace(microsecond=0).isoformat(),
         "tage": la.tage, "stand_alt": None, "stand_neu": None,
         "vorgabe_falsch_seit": None if la.vorgabe_falsch_seit is None else la.vorgabe_falsch_seit.isoformat(),
+        "stueck": None if la.stueck is None else {"sprung": la.stueck[0].isoformat(), "rueckgang": la.stueck[1].isoformat()},
         "korrektur": korrektur,
     }

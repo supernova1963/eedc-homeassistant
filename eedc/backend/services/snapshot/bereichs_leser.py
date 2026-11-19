@@ -62,6 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.betriebsart_gemessen import (
     geraetefeld_oder_innengeraete,
 )
+from backend.core.berechnungen.zaehler_naht import ende_der_luecke_davor, endet_in_luecke, traegt_messung
 from backend.models.sensor_snapshot import SensorSnapshot
 from backend.services.snapshot.keys import (
     extract_quellen_energy,
@@ -75,7 +76,8 @@ from backend.services.snapshot.reader import (
     mqtt_zaehler_keys,
     tageswert_ueber_abschnitte,
 )
-from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
+from backend.services.snapshot.luecken_rand import rand_nach_luecke
+from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte, luecken_des_schluessels
 
 logger = logging.getLogger(__name__)
 
@@ -306,11 +308,14 @@ async def _tageswerte_des_feldes(
         )
         stand_am = dict(zip(ctx.grenzen, staende))
         naehte = await fortsetzungs_naehte(ctx.db, ctx.anlage.id, sensor_key)
+        # Sensorwechsel 4b-1-K2 (Bauplan «Zu §14» Nr. 112): die gesperrten Stücke — dieselbe Lücken-Regel wie die Tagesansicht;
+        # im Normalbetrieb leer, dann liest dieser Leser wörtlich wie vorher.
+        luecken = await luecken_des_schluessels(ctx.db, ctx.anlage.id, sensor_key)
 
         for tag, fenster in ctx.fenster_je_tag.items():
             if tag in kanal:
                 continue
-            wert = await _randstaende(ctx, sensor_key, sensor_id, reihe, stand_am, tag, fenster, naehte)
+            wert = await _randstaende(ctx, sensor_key, sensor_id, reihe, stand_am, tag, fenster, naehte, luecken)
             if wert is not None:
                 je_tag_je_key.setdefault(k, {})[tag] = wert
     return je_tag_je_key
@@ -332,36 +337,34 @@ async def _randstaende(
     tag: date,
     fenster: tuple[datetime, datetime],
     naehte: list[datetime],
+    luecken: list[tuple[datetime, datetime]] = (),
 ) -> Optional[float]:
     """Ein Tag eines Zählers (RF-57): Randstand-Differenz über das Fenster samt Zwischenständen
     (``tageswert_aus_reihe``); fehlt der Anfangsstand, trägt der Lückenanker R1 (letzter Stand davor, aus der Reihe
-    oder beliebig weit zurück) — ``None`` ohne Anfangs- oder Endstand und bei Rücksprung (kein Tag)."""
+    oder beliebig weit zurück) — ``None`` ohne Anfangs- oder Endstand und bei Rücksprung (kein Tag).
+
+    An einem gesperrten Stück (``luecken``, Sensorwechsel 4b-1-K2 Nr. 112) dieselbe Regel wie die Tagesansicht
+    (``core/berechnungen/zaehler_naht``): der Anker rückt nicht über das Stück, ein Fensterende im Stück rückt auf den letzten
+    Stand im Fenster, und ohne Messung außerhalb des Stücks hat der Tag keinen Wert (statt 0,0)."""
     tages_start, tages_ende = fenster
     s0, s1 = stand_am[tages_start], stand_am[tages_ende]
-    anker_ts = tages_start
+    anker_ts, ende_ts = tages_start, tages_ende
     if s0 is None and s1 is not None:
-        # ⭐ Zählerlücken wie HA (R1): fehlt der Stand am
-        # Tagesbeginn, trägt der letzte Stand davor — zuerst aus
-        # der geladenen Reihe, sonst beliebig weit zurück. Die
-        # Energie einer Lücke über Mitternacht gehört zu diesem
-        # Tag (wie im HA-Dashboard, wie Cockpit → Tag).
-        vorher = [(ts, w) for ts, w in reihe if ts < tages_start]
-        if vorher:
-            anker_ts, s0 = vorher[-1]
-        else:
-            anker = await letzter_stand_vor(
-                ctx.db, ctx.anlage.id, sensor_key, tages_start,
-                sensor_id=sensor_id, quellen_energy=ctx.quellen_energy,
-            )
-            if anker is not None:
-                anker_ts, s0 = anker
+        anker_ts, s0 = await _anker(ctx, sensor_key, sensor_id, reihe, fenster, luecken)
+    if s1 is None and s0 is not None and endet_in_luecke(tages_ende, luecken):
+        letzte = [(ts, w) for ts, w in reihe if anker_ts < ts <= tages_ende]
+        if letzte:
+            ende_ts, s1 = letzte[-1]
     if s0 is None or s1 is None:
         return None
     zwischen = [
-        (ts, w) for ts, w in reihe if anker_ts < ts < tages_ende
+        (ts, w) for ts, w in reihe if anker_ts < ts < ende_ts
     ]
+    folge = [(anker_ts, s0), *zwischen, (ende_ts, s1)]
+    if luecken and not traegt_messung(folge, naehte):
+        return None
     # Sensorwechsel B-3: über eine Fortsetzungs-Naht keine Differenz (ohne Naht wörtlich `tageswert_aus_reihe`).
-    wert = tageswert_ueber_abschnitte([(anker_ts, s0), *zwischen, (tages_ende, s1)], naehte)
+    wert = tageswert_ueber_abschnitte(folge, naehte)
     if wert is None:
         logger.debug(
             "Zähler-Rücksprung im Tagesfenster für anlage=%s key=%s "
@@ -369,6 +372,31 @@ async def _randstaende(
             ctx.anlage.id, sensor_key, tag,
         )
     return wert
+
+
+async def _anker(
+    ctx: _BereichKontext,
+    sensor_key: str,
+    sensor_id: Optional[str],
+    reihe: list[tuple[datetime, float]],
+    fenster: tuple[datetime, datetime],
+    luecken: list[tuple[datetime, datetime]],
+) -> tuple[datetime, Optional[float]]:
+    """Der linke Rand, wenn der Stand am Tagesbeginn fehlt.
+
+    ⭐ Zählerlücken wie HA (R1): fehlt der Stand am Tagesbeginn, trägt der letzte Stand davor — zuerst aus der geladenen
+    Reihe, sonst beliebig weit zurück. Die Energie einer Lücke über Mitternacht gehört zu diesem Tag (wie im HA-Dashboard,
+    wie Cockpit → Tag). Läge er vor einem gesperrten Stück, beginnt der Rand an dessen Ende (Nr. 112, wie die Tagesansicht)."""
+    tages_start, tages_ende = fenster
+    vorher = [(ts, w) for ts, w in reihe if ts < tages_start]
+    anker = vorher[-1] if vorher else await letzter_stand_vor(
+        ctx.db, ctx.anlage.id, sensor_key, tages_start, sensor_id=sensor_id, quellen_energy=ctx.quellen_energy,
+    )
+    luecke_ende = ende_der_luecke_davor(None if anker is None else anker[0], tages_start, luecken)
+    if luecke_ende is not None:
+        return await rand_nach_luecke(ctx.db, ctx.anlage.id, sensor_key, sensor_id, ctx.quellen_energy,
+                                      max(luecke_ende, tages_start), tages_ende)
+    return anker if anker is not None else (tages_start, None)
 
 
 def _auffalten(

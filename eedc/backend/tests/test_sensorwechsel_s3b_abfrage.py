@@ -170,8 +170,9 @@ async def test_korrektur_vorschau_gleich_lauf_ohne_home_assistant(db):
     assert p["korrektur"]["zaehlerstaende"] == r["korrektur"][0]["zaehlerstaende_geloescht"] == 2
     staende = (await db.execute(select(SensorSnapshot.zeitpunkt).where(SensorSnapshot.anlage_id == aid))).scalars().all()
     assert sorted(staende) == [datetime(2026, 9, 1, 12), datetime(2026, 10, 1, 3)]
-    (w,) = await _zeilen(db, aid)
+    w, luecke = await _zeilen(db, aid)
     assert (w.grund, w.falsch_seit_ts, w.nachher) == ("korrektur", datetime(2026, 10, 2, 7), {"art": "ha", "entity_id": "sensor.b"})
+    assert (luecke.grund, luecke.falsch_seit_ts, luecke.ab_ts, luecke.nachher) == ("korrektur", w.falsch_seit_ts, w.ab_ts, None)
 
 
 async def test_korrektur_ha_nicht_erreichbar_lehnt_ab(db, monkeypatch):
@@ -351,12 +352,12 @@ async def test_gleiche_korrektur_zweimal_eine_zeile(db):
                          vorher={"art": "ha", "entity_id": "sensor.a"}, nachher={"art": "ha", "entity_id": "sensor.b"})
     eins = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 30))
     zwei = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 40))
-    zeilen = [w for w in await _zeilen(db, aid) if w.grund == "korrektur"]
+    zeilen = [w for w in await _zeilen(db, aid) if w.grund == "korrektur" and w.nachher is not None]
     assert len(zeilen) == 1 and zeilen[0].lauf == zwei["summary"]["lauf"] != eins["summary"]["lauf"]
     # Gegenprobe: eine frühere «falsch seit» ist eine andere Korrektur
     await kr.fuehre_aus(db, kr.Auftrag(**{**auftrag.__dict__, "falsch_seit": datetime(2026, 7, 1)}), ha_svc=None,
                         jetzt=datetime(2026, 10, 1, 0, 50))
-    assert len([w for w in await _zeilen(db, aid) if w.grund == "korrektur"]) == 2
+    assert len([w for w in await _zeilen(db, aid) if w.grund == "korrektur" and w.nachher is not None]) == 2
 
 
 async def test_aufraeumen_und_diagnose_paket_und_fortschritt(db):

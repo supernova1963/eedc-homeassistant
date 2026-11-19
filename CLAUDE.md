@@ -89,6 +89,10 @@ Produktiv-Box `10.100.1.13:8099` **nur lesen**; `eedc/data/eedc.db` nie anfassen
 
 ## Code-Regeln, die bleiben (kurz; Begründung im Archiv)
 
+- **Quellentreue (Grundregel, Gernot 19.11.2026):** eedc zeigt und rechnet nur mit Werten, die in Home Assistant bzw. der Quelle
+  nachvollziehbar sind. Quellwerte werden nicht überbrückt, verteilt, geschätzt oder berichtigt; ein Fehler der Quelle ist ein
+  Befund im Daten-Checker mit Lösungsweg an der Quelle. Vor jedem Konzept wird zuerst gemessen, was Home Assistant bzw. die
+  Quelle kann.
 - **Übersicht zuerst, dann Code-Ort:** eine Größe zuerst in `docs/UEBERSICHT-GROESSEN.md` nachschlagen (Bedeutung, Herkunft,
   Code-Ort, Regel-Anker, Test). Die drei erzeugten Referenzen (`UEBERSICHT-GROESSEN.md`, `SENSOR-REFERENZ.md`, `MQTT_INBOUND.md`) nie
   von Hand ändern; nach Änderungen an ihren Quellen (u. a. Feld-Registry, `feld_auswertungen.py`, Kanal-Katalog, `monats_fakten/fakten*.py`,

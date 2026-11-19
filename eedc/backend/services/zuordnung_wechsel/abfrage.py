@@ -32,7 +32,7 @@ from sqlalchemy import and_, distinct, func, select
 
 from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR, HERKUNFT_WECHSEL
 from backend.services.zuordnung_wechsel.quelle import ART_HA, ART_KEINE, aenderungen, lade_wirksame_quellen
-from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, lade_wechsel
+from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus, ist_luecken_zeile, lade_wechsel
 
 logger = logging.getLogger(__name__)
 
@@ -90,11 +90,11 @@ async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell:
     Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt). ``vor``/``vor_id``: nur verzeichnete
     Wechsel vor der Zeile mit diesem ``ab_ts`` und dieser Nummer (gleiches ``ab_ts``, kleinere Nummer zählt mit) — dieselbe
     Frage zum Zeitpunkt eines früheren Wechsels, wie ``pruefe`` sie im Augenblick des Wechsels stellte (``haette_gefragt``,
-    Sitzung 4)."""
+    Sitzung 4). Eine Lücken-Zeile ist kein Wechsel (``zeitpunkt.ist_luecken_zeile``, Bauplan «Zu §14» Nr. 105)."""
     if kann_werte_liefern(aktuell):
         return aktuell
     zeilen = sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ())
-                     if w.aufgehoben_durch is None and _davor(w, vor, vor_id)),
+                     if w.aufgehoben_durch is None and not ist_luecken_zeile(w) and _davor(w, vor, vor_id)),
                     key=lambda w: (w.ab_ts, w.id or 0), reverse=True)
     for w in zeilen:
         for q in (w.nachher, w.vorher):
@@ -274,7 +274,11 @@ async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[
         svc = kr.ha_dienst(None)
     except kr.KorrekturNichtStartbar as e:
         svc, nicht = None, str(e)
-    la = await kr.lage(db, auftrag, ha_svc=svc)
+    try:
+        la = await kr.lage(db, auftrag, ha_svc=svc)
+    except kr.KorrekturNichtStartbar as e:      # ein Abruf aus Home Assistant scheitert (Bauplan «Zu §14» Nr. 116 E-K6)
+        svc, nicht = None, str(e)
+        la = await kr.lage(db, auftrag, ha_svc=None)
     la.nicht_startbar = nicht
     saetze = kr.saetze(la)
     if nicht is None:            # der Kanal (§11 Nr. 48) vor dem Satz zum Rückweg

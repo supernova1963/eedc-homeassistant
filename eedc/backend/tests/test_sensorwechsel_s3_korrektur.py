@@ -464,7 +464,9 @@ async def test_offene_laeufe_nach_dem_start(datei, monkeypatch):
 
 async def test_neue_entitaet_ohne_geschichte_beginnt_mit_ihrer_ersten_zeile(ha, datei):
     """Die richtige Entität hat in HA erst ab dem Wechsel Zeilen (fabrikneu): verworfen bleibt [F, AB), die richtige Quelle
-    beginnt an AB (ihre spätere Quellzeile des Stundenlaufs geht darin auf), Δ über AB = ihr eigener Zuwachs (+2,0 je Stunde)."""
+    beginnt an AB (ihre spätere Quellzeile des Stundenlaufs geht darin auf), Δ über AB = ihr eigener Zuwachs (+2,0 je Stunde).
+    U1 Punkt 4: im Kanal beginnt das Intervall an der Zeile ``F − 1 h`` (sie trägt den Stand um F, den ersten falschen) — die
+    Quelle davor (hier nicht die richtige) ist dort mit verworfen."""
     svc, reihen = ha
     sitzungen, _p, aid, _g = datei
     _falscher_sensor(svc)
@@ -483,7 +485,8 @@ async def test_neue_entitaet_ohne_geschichte_beginnt_mit_ihrer_ersten_zeile(ha, 
     s = await _korrigieren(sitzungen, _auftrag(aid, nachher={"art": "ha", "entity_id": "sensor.neu"}), svc)
     assert s["kanal_beginn"] == _ts(AB)
     qs = [(q.gueltig_ab, q.statistic_id, q.verworfen_ts is not None) for q in await _quellen(sitzungen, k.id)]
-    assert qs == [(_ts(ZEIT), "sensor.einsp", False), (_ts(F), "sensor.falsch", True), (_ts(AB), "sensor.neu", False)]
+    assert qs == [(_ts(ZEIT), "sensor.einsp", False), (_ts(F) - H, "sensor.einsp", True), (_ts(F), "sensor.falsch", True),
+                  (_ts(AB), "sensor.neu", False)]
     async with sitzungen() as ss:
         n = (await ss.execute(select(func.count()).select_from(KanalStatistik).where(and_(
             KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(F), KanalStatistik.start_ts < _ts(AB))))).scalar_one()

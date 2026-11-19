@@ -201,10 +201,12 @@ async def _versatz(db, kanal: Kanal, ref: Optional[tuple[int, float]], ha_svc, e
 
 
 def _spaetere_richtige(quellen: list[KanalQuelle], ab: int, richtig: Optional[str]) -> list[KanalQuelle]:
-    """Die Quellzeilen ab ``ab``, die die richtige Entität ohne Unterbrechung fortsetzen (sie gehen im neuen Abschnitt auf)."""
+    """Die Quellzeilen ab ``ab − 1 h``, die die richtige Entität ohne Unterbrechung fortsetzen (sie gehen im neuen Abschnitt
+    auf). Ab ``ab − 1 h``, weil eine Kanal-Quelle eine Stunde vor dem Stand der Reihe beginnt (die Zeile ``ab − 1 h`` trägt den
+    Stand um ``ab``; Bauplan «Zu §14» Nr. 97, Messblatt 4b-0 e) — sonst rückte eine spätere Quelle nicht mit (A → X → A → C)."""
     out = []
     for q in sorted(quellen, key=lambda q: q.gueltig_ab):
-        if q.gueltig_ab < ab:
+        if q.gueltig_ab < ab - _STUNDE:
             continue
         if not ist_richtig(q, richtig):
             break

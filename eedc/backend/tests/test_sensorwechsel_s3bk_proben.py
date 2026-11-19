@@ -520,7 +520,7 @@ async def test_gleiche_korrektur_mit_anderer_richtiger_quelle_ist_eine_neue(db):
     await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 30))
     await kr.fuehre_aus(db, kr.Auftrag(**{**auftrag.__dict__, "nachher": {"art": "ha", "entity_id": "sensor.c"}}),
                         ha_svc=None, jetzt=datetime(2026, 10, 1, 0, 40))
-    assert len([w for w in await _zeilen(db, a.id) if w.grund == "korrektur"]) == 2
+    assert len([w for w in await _zeilen(db, a.id) if w.grund == "korrektur" and w.nachher is not None]) == 2
 
 
 # ═══ Nr. 46 — stündlicher Anstoß, ein Fehler-Eintrag, Werkbank bei offenem Lauf ════════════════════════════════════════

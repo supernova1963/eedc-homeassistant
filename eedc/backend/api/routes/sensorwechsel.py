@@ -8,6 +8,10 @@
 * ``POST /api/datenquellen/{anlage}/zuordnung-wechsel/{wechsel}/grund/pruefen`` und ``…/grund`` — «Grund nachtragen» an einem
   verzeichneten Wechsel (Sitzung 4, Bauplan B-7; ``services/zuordnung_wechsel/nachtrag.py``): die Prüfung schreibt nichts und
   liefert mit ``grund = korrektur`` und ``falsch_seit`` die Vorschau des Korrektur-Dienstes (Vorschau = Lauf).
+* ``POST /api/datenquellen/{anlage}/zaehler-versatz/pruefen`` und ``…/zaehler-versatz`` — «Grund nachtragen» am Befund
+  «Zählerstände – versetzter Abschnitt» (Sitzung 4b-1, Bauplan «Zu §14» Nr. 98; ``services/zuordnung_wechsel/stueck.py``):
+  Schlüssel, Sprung und Rückgang aus ``werte`` des Befunds, serverseitig gegen die Erkennung geprüft (kein frei wählbares
+  Stück); nur «Korrektur» über das Stück. Die Prüfung schreibt nichts (Vorschau = Lauf).
 
 Die Quellen-Wahl selbst samt Prüf-Route steht in ``datenquellen.py`` (``…/quelle``, ``…/quelle/pruefen``).
 """
@@ -99,7 +103,7 @@ async def korrektur_lauf_stand(anlage_id: int, lauf: str, db: AsyncSession = Dep
     return {
         "lauf": lauf, "sensor_key": z.get("sensor_key"), "status": z.get("status"), "tage": len(z.get("tage") or []),
         "erledigt": int(z.get("erledigt") or 0), "fehler": list(z.get("fehler") or []), "beginn": z.get("beginn"),
-        "ende": z.get("ende"), "fuellen_offen": bool(f is not None and not f.get("erledigt")),
+        "ende": z.get("ende"), "fuellen_offen": korrektur_lauf.fuellen_offen(z),
     }
 
 
@@ -175,10 +179,10 @@ async def pruefe_grund_nachtragen(
     anlage, la = await _nachtrag_lage(db, anlage_id, wechsel_id)
     korrektur = None
     falsch_seit = _falsch_seit(body)
-    if grund == GRUND_KORREKTUR and falsch_seit is not None and GRUND_KORREKTUR in la.gruende:
+    if grund == GRUND_KORREKTUR and (falsch_seit is not None or la.stueck) and GRUND_KORREKTUR in la.gruende:
         try:
-            korrektur = await vorschau_des_auftrags(db, nt.korrektur_auftrag(la.row, falsch_seit, datetime.now()),
-                                                    nachtrag=True)
+            korrektur = await vorschau_des_auftrags(
+                db, nt.korrektur_auftrag(la.row, falsch_seit, datetime.now(), la.stueck), nachtrag=True)
         except nt.NachtragAbgelehnt as e:
             raise HTTPException(status_code=422, detail=str(e))
     return nt.antwort(la, await _label(db, anlage, la.row.sensor_key), korrektur)
@@ -207,12 +211,13 @@ async def grund_nachtragen(
             await nt.trage_fortsetzung_ein(db, anlage, la.row)
             ergebnis, text = None, f"{anlage.anlagenname} · {label}: Fortsetzung (Wechsel vom {zeit})"
         else:
-            falsch_seit = _falsch_seit(body)
+            falsch_seit = la.stueck[0] if la.stueck else _falsch_seit(body)
             if falsch_seit is None:
                 raise nt.NachtragAbgelehnt(SATZ_FALSCH_SEIT_FEHLT.format(feld=label))
             jetzt = datetime.now().replace(microsecond=0)
             svc = kr.ha_dienst(None)
-            ergebnis = await kr.fuehre_aus(db, nt.korrektur_auftrag(la.row, falsch_seit, jetzt), ha_svc=svc, jetzt=jetzt)
+            ergebnis = await kr.fuehre_aus(db, nt.korrektur_auftrag(la.row, falsch_seit, jetzt, la.stueck), ha_svc=svc,
+                                           jetzt=jetzt)
             s = ergebnis["summary"]
             text = (f"{anlage.anlagenname} · {label}: Korrektur seit {falsch_seit.strftime('%d.%m.%Y %H:%M')} "
                     f"(Wechsel vom {zeit}; {s['zaehlerstaende_geloescht']} Zählerstände verworfen, {s['tage_neu']} Tage "
@@ -230,3 +235,87 @@ async def grund_nachtragen(
                    "zaehlerstaende_geloescht": s["zaehlerstaende_geloescht"]}]
     _anlage, neu = await _nachtrag_lage(db, anlage_id, wechsel_id)
     return {**nt.antwort(neu, label), "eingetragen": True, "korrektur": laeufe}
+
+
+class StueckRequest(BaseModel):
+    #: Schlüssel, Sprung und Rückgang aus ``werte`` des Befunds ``zaehler_versatz`` (örtliche Zeit, auf die Minute).
+    sensor_key: str
+    sprung: datetime
+    rueckgang: datetime
+    #: ``korrektur``; leer = nur prüfen, was nachzutragen ist.
+    grund: Optional[str] = None
+
+
+def _ortszeit(t: datetime) -> datetime:
+    return t.astimezone().replace(tzinfo=None) if t.tzinfo is not None else t
+
+
+async def _stueck_lage(db: AsyncSession, anlage_id: int, body: StueckRequest):
+    from backend.api.routes.datenquellen import _anlage_oder_404
+    from backend.services.zuordnung_wechsel import stueck as st
+
+    anlage = await _anlage_oder_404(db, anlage_id)
+    la = await st.lage_am_befund(db, anlage, body.sensor_key, _ortszeit(body.sprung), _ortszeit(body.rueckgang))
+    if la is None:
+        raise HTTPException(status_code=404, detail=st.SATZ_NICHT_GEMELDET)
+    return anlage, la
+
+
+def _feld_id(sensor_key: str):
+    from backend.services.zuordnung_wechsel.nachtrag import feld_id_aus_schluessel
+
+    return feld_id_aus_schluessel(sensor_key)
+
+
+@router.post("/{anlage_id}/zaehler-versatz/pruefen")
+async def pruefe_stueck(anlage_id: int, body: StueckRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """Was «Grund nachtragen» an diesem Stück täte (schreibt nichts): die Angaben des Dialogs und — mit ``grund =
+    korrektur`` — die Vorschau des Korrektur-Dienstes über das Stück (Vorschau = Lauf)."""
+    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    from backend.services.zuordnung_wechsel import stueck as st
+    from backend.services.zuordnung_wechsel.abfrage import vorschau_des_auftrags
+
+    grund = _grund(GrundNachtragRequest(grund=body.grund))
+    anlage, la = await _stueck_lage(db, anlage_id, body)
+    korrektur = None
+    if grund == GRUND_KORREKTUR and la.korrektur_nicht is None:
+        korrektur = await vorschau_des_auftrags(db, la.auftrag(anlage_id, datetime.now()), nachtrag=True)
+    return st.antwort(la, await _label(db, anlage, la.sensor_key), _feld_id(la.sensor_key), korrektur)
+
+
+@router.post("/{anlage_id}/zaehler-versatz")
+async def stueck_korrigieren(anlage_id: int, body: StueckRequest, db: AsyncSession = Depends(get_db, scope="function")):
+    """Trägt «Korrektur» über das Stück ein (Korrektur-Dienst mit ``stueck``: füllbar ⇒ aus der Quelle davor und danach neu
+    gelesen, sonst eine Lücke). Antwort wie die Prüfung, dazu ``korrektur`` = der gestartete Lauf (Fortschritt an der Fläche)."""
+    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    from backend.services.zuordnung_wechsel import korrektur as kr
+    from backend.services.zuordnung_wechsel import stueck as st
+    from backend.services.zuordnung_wechsel.nachtrag import SATZ_GRUND_FEHLT, SATZ_NUR_KORREKTUR_STUECK
+
+    grund = _grund(GrundNachtragRequest(grund=body.grund))
+    anlage, la = await _stueck_lage(db, anlage_id, body)
+    label = await _label(db, anlage, la.sensor_key)
+    try:
+        if la.korrektur_nicht:
+            raise ValueError(la.korrektur_nicht)
+        if grund != GRUND_KORREKTUR:
+            raise ValueError(SATZ_GRUND_FEHLT if grund is None else SATZ_NUR_KORREKTUR_STUECK)
+        jetzt = datetime.now().replace(microsecond=0)
+        svc = kr.ha_dienst(None)
+        ergebnis = await kr.fuehre_aus(db, la.auftrag(anlage_id, jetzt), ha_svc=svc, jetzt=jetzt)
+    except (kr.KorrekturNichtStartbar, ValueError) as e:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    s = ergebnis["summary"]
+    await log_activity(
+        kategorie="sensor_mapping", aktion="Grund nachgetragen",
+        details=(f"{anlage.anlagenname} · {label}: Korrektur des versetzten Abschnitts vom "
+                 f"{la.sprung.strftime('%d.%m.%Y %H:%M')} bis {la.rueckgang.strftime('%d.%m.%Y %H:%M')} "
+                 f"({s['zaehlerstaende_geloescht']} Zählerstände verworfen, {s['tage_neu']} Tage werden neu gebildet)"),
+        anlage_id=anlage_id, db=db,
+    )
+    await db.commit()
+    await kr.nach_dem_commit(ergebnis, ha_svc=svc)
+    laeufe = [{"lauf": s["lauf"], "sensor_key": la.sensor_key, "label": label, "tage_neu": s["tage_neu"],
+               "zaehlerstaende_geloescht": s["zaehlerstaende_geloescht"]}]
+    return {**st.antwort(la, label, _feld_id(la.sensor_key)), "eingetragen": True, "korrektur": laeufe}

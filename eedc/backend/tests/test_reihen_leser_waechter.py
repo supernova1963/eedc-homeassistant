@@ -65,6 +65,13 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/aggregator.py::_tagesdetail_boundary_diff_mit_grund": (
         "L2", NAHT, True, "Ränder und Rückfall; die Menge über _tageswert_aus_raendern. In get_tagesdetail_kwh gilt davor "
         "Kanal vor Reihe je Zähler (_typ_summe → kanal/feld_leser.kanal_feldwerte) — die 15 Tage der Produktiv-Anlage"),
+    "services/snapshot/luecken_rand.py::rand_nach_luecke": (
+        "L2/L3", PRIMITIV, True, "Sensorwechsel 4b-1-K (Nr. 102), seit 4b-1-K2 für Tagesansicht und Bereichs-Leser (Nr. 112): "
+        "der linke Rand hinter einem gesperrten Stück (Stand an seinem Ende oder erster Stand danach) — die Menge bildet der "
+        "Aufrufer"),
+    "services/snapshot/luecken_rand.py::gemessen_ausserhalb_der_luecken": (
+        "L2", NAHT, True, "Sensorwechsel 4b-1-K (Nr. 102): trägt das Fenster außerhalb der gesperrten Stücke zwei Stände ohne "
+        "Naht dazwischen (zaehler_naht.traegt_messung)? — sonst kein Wert statt 0,0"),
     "services/snapshot/aggregator.py::snapshot_tagestabelle": (
         "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); "
         "die Heimlade-Slots (zusatz_slots) für die Ladeblöcke (L13) gehen durch dieselbe Schleife"),
@@ -78,8 +85,10 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "—", OHNE_AUFRUFER, True, "Closure von get_komponenten_tageskwh — ohne Produktiv-Aufrufer (Messblatt S0 M-A)"),
     "services/snapshot/bereichs_leser.py::_tageswerte_des_feldes": (
         "L3", KANAL, True, "kanal_zuerst=True (Speicher-Netzladung der Monats-Fakten, §7 Nr. 12) — sonst Reihe mit Naht"),
-    "services/snapshot/bereichs_leser.py::_randstaende": (
-        "L3", NAHT, True, "Tageswert je Abschnitt (reader.tageswert_ueber_abschnitte); Wärme-Verlauf (a) liest so"),
+    "services/snapshot/bereichs_leser.py::_anker": (
+        "L3", NAHT, True, "Lückenanker R1 des Bereichs-Lesers (seit 4b-1-K2 aus _randstaende herausgelöst; an einem gesperrten "
+        "Stück dessen Ende, Nr. 112); die Menge bildet _randstaende je Abschnitt (reader.tageswert_ueber_abschnitte, "
+        "Lücken-Regel zaehler_naht); Wärme-Verlauf (a) liest so"),
     "services/snapshot/stunden_leser.py::lade_stundenformen": (
         "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, keine Gerade über eine Naht"),
     "services/snapshot/reader.py::delta": (
@@ -128,6 +137,17 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/snapshot/bereichs_leser.py::_raender_mit_heilung": ("L3", PRIMITIV, True, "Ränder mit Heilung"),
     "services/snapshot/reaggregator.py::_db_snap_at": ("L14", PRIMITIV, True, "gespeicherter Stand der Vorschau"),
     "services/snapshot/reaggregator.py::_boundaries": ("L14", STAND, True, "Vorschau: Grenzstände alt/neu nebeneinander"),
+    "services/zuordnung_wechsel/stueck.py::_rand_vor": (
+        "—", STAND, True, "Korrektur über ein Stück (4b-1): der letzte Stand vor dem Sprung, verglichen mit HAs Rohsumme "
+        "(Füllbarkeit) — keine Menge"),
+    "services/zuordnung_wechsel/stueck.py::_rand_ab": (
+        "—", STAND, True, "Korrektur über ein Stück (4b-1): der Stand am Rückgang, verglichen mit HAs Rohsumme — keine Menge"),
+    "services/zuordnung_wechsel/zeitpunkt.py::staende_um": (
+        "—", STAND, True, "Sensorwechsel U1: nur die Zeitpunkte des letzten Stands vor und des ersten Stands nach einer Lücke "
+        "(Frage «Höhenwechsel dazwischen?») — kein Wert, keine Menge"),
+    "services/zuordnung_wechsel/korrektur.py::_erster_stand_da": (
+        "—", STAND, True, "Sensorwechsel U1: der Zeitpunkt des ersten gespeicherten Stands nach dem Neulesen (führt Home "
+        "Assistant dort etwas?) — kein Wert, keine Menge"),
     "services/zaehlerstaende.py::lade_zaehler_verlaeufe": ("L9", PRIMITIV, True, "Punktreihe Snapshots + gepflegte Stände"),
     "services/mqtt_energy_history_service.py::_get_closest_snapshot": ("L17", PRIMITIV, False, "MQTT-Stand"),
     "services/mqtt_energy_history_service.py::_get_earliest_snapshot_after": ("L17", PRIMITIV, False, "MQTT-Stand"),

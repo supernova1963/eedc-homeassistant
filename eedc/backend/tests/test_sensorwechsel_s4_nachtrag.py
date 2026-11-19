@@ -13,7 +13,7 @@
   Fortsetzung den Lauf (``nachfuellen._laeufe``), ein Nachtrag im Nachbau-Abschnitt (HA-Stände wörtlich, Familie Mitschrift)
   erreicht die Kanal-Sicht (§12 Nr. 61).
 * **Rücksprung** an einer Fortsetzungs-Naht ist keiner (``reader.finde_zaehler_ruecksprunge``).
-* **Probe heilbare Lage** des Befunds ``zaehler_versatz`` nach «Kanal vor Reihe»: wirkt noch, wo der eigene Kanal am Rand-Tag
+* **Probe füllbare Lage** (bis 4b-1 «heilbar») des Befunds ``zaehler_versatz`` nach «Kanal vor Reihe»: wirkt noch, wo der eigene Kanal am Rand-Tag
   eine Lücke hat.
 
 Die Sprengsätze (bewusst falsche Bausteine, gegen die je Probe rot gemessen) stehen im Bericht der Sitzung
@@ -252,9 +252,12 @@ async def test_korrektur_nachtragen_ohne_home_assistant_verwirft_im_intervall(db
     staende = sorted(t for (t,) in (await db.execute(select(SensorSnapshot.zeitpunkt).where(
         SensorSnapshot.anlage_id == aid, SensorSnapshot.sensor_key == NETZ_KEY))).all())
     assert staende == [datetime(2026, 9, 1, 12), datetime(2026, 9, 12, 12)]
-    alt, korr = await _zeilen(db, aid)
+    alt, korr, luecke = await _zeilen(db, aid)
     assert (alt.aufgehoben_durch, korr.grund, korr.falsch_seit_ts, korr.ab_ts, korr.herkunft) == (
         korr.id, "korrektur", datetime(2026, 9, 3), AB, "nachtrag")
+    # Sitzung 4b-1 (Bauplan «Zu §14» Nr. 95 (1)): ohne Home Assistant füllt nichts — die Lücke steht als eigene Zeile.
+    assert (luecke.grund, luecke.falsch_seit_ts, luecke.ab_ts, luecke.nachher, luecke.aufgehoben_durch) == (
+        "korrektur", datetime(2026, 9, 3), AB, None, None)
     assert await _befunde(db, a) == []
     e = await _abgelehnt(_nachtragen(db, aid, korr.id, grund="fortsetzung"))
     assert e.status_code == 422 and e.detail == "Eine Korrektur lässt sich nicht mehr ändern."
@@ -268,8 +271,8 @@ async def test_fortsetzung_dann_korrektur(db):
     await _nachtragen(db, aid, row.id, grund="fortsetzung")
     _alt, fort = await _zeilen(db, aid)
     await _nachtragen(db, aid, fort.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    _a, fort, korr = await _zeilen(db, aid)
-    assert (fort.aufgehoben_durch, korr.grund) == (korr.id, "korrektur")
+    _a, fort, korr, luecke = await _zeilen(db, aid)
+    assert (fort.aufgehoben_durch, korr.grund, luecke.nachher) == (korr.id, "korrektur", None)
 
 
 async def test_ohne_grund_und_korrektur_ohne_falsch_seit_abgelehnt(db):
@@ -476,13 +479,14 @@ async def test_befund_ruecksprung_schweigt_an_einer_verzeichneten_fortsetzung(db
     assert await DatenChecker(db)._check_zaehler_ruecksprung(a, jetzt=jetzt) == []
 
 
-# ═══ Probe: heilbare Lage des Befunds zaehler_versatz nach «Kanal vor Reihe» (B-7) ══════════════════════════════════════
+# ═══ Probe: füllbare Lage des Befunds zaehler_versatz nach «Kanal vor Reihe» (B-7; seit 4b-1 «fuellbar») ════════════════
 
-async def test_heilbare_lage_wirkt_nur_bei_einer_luecke_im_eigenen_kanal(db, ha, monkeypatch):  # noqa: F811
+async def test_fuellbare_lage_wirkt_nur_bei_einer_luecke_im_eigenen_kanal(db, ha, monkeypatch):  # noqa: F811
     """Mit der echten Feld-Auskunft (B-5): trägt der eigene Spiegel die Rand-Tage, schweigt der Befund (die Tagesansicht zeigt
     dort den Kanal) — auch mit einer einzelnen fehlenden Stunde (``voll`` ist eine Auflösungsregel). Reicht eine Lücke im
     Spiegel von mehr als einem Tag über den Rand des Tagesfensters (hier vom 14.06. 19:00 bis 16.06.), liest die
-    Tagesansicht den Rand-Tag aus der Reihe — dann steht die heilbare Lage mit «Tage neu aufbauen» (sichtbare Wirkung)."""
+    Tagesansicht den Rand-Tag aus der Reihe — dann steht der Befund mit «Grund nachtragen» (sichtbare Wirkung; bis 4b-1 die
+    heilbare Lage mit «Tage neu aufbauen»)."""
     import backend.services.energie_profil.kanal_stunden as ks
     from backend.services.kanal import merken
 
@@ -503,4 +507,4 @@ async def test_heilbare_lage_wirkt_nur_bei_einer_luecke_im_eigenen_kanal(db, ha,
     assert await _versatz_pruefe(db, a) == []
     await loesche(datetime(2026, 6, 14, 19), datetime(2026, 6, 16, 0))
     (e,) = await _versatz_pruefe(db, a)
-    assert (e.code, e.werte["lage"], e.knopf) == ("zaehler_versatz", "heilbar", "Tage neu aufbauen")
+    assert (e.code, e.werte["lage"], e.knopf) == ("zaehler_versatz", "fuellbar", "Grund nachtragen")

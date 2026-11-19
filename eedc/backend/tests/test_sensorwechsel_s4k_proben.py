@@ -186,8 +186,11 @@ async def test_f8_werkbank_ueber_eine_fortsetzung_mit_anderer_quelle(db):
     erg = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 11, 18, 8))
     await db.commit()
     zw.vergiss(db)
-    assert await zw.fortsetzungs_naehte(db, aid, NETZ_KEY) == []
-    alt, b_c, fort, korr = await _zeilen(db, aid)
+    alt, b_c, fort, korr, luecke = await _zeilen(db, aid)
+    # Keine Fortsetzungs-Naht bleibt im Intervall; ohne Home Assistant füllt nichts — seit 4b-1 (Bauplan «Zu §14» Nr. 95 (1))
+    # sind die Ränder der Lücke die einzigen Nähte.
+    assert luecke.nachher is None and luecke.ab_ts == korr.ab_ts
+    assert await zw.fortsetzungs_naehte(db, aid, NETZ_KEY) == [luecke.falsch_seit_ts, luecke.ab_ts]
     assert korr.grund == "korrektur" and korr.ab_ts == vorschau_ab == ab + timedelta(hours=1)   # §10 Nr. 36 unverändert
     assert (alt.aufgehoben_durch, b_c.aufgehoben_durch, fort.aufgehoben_durch) == (fort.id, korr.id, korr.id)
     assert erg["summary"]["wechsel_id"] == korr.id
@@ -214,7 +217,7 @@ async def test_nr67_rand_mit_anderem_vorher_bleibt_eine_zeile_davor_wird_aufgeho
     await db.commit()
     for r in (vor_f, rand, innen, alt_korr):
         await db.refresh(r)
-    neu = (await _zeilen(db, aid))[-1]
+    neu = [z for z in await _zeilen(db, aid) if z.grund == "korrektur" and z.nachher == B][-1]
     assert (vor_f.aufgehoben_durch, rand.aufgehoben_durch, innen.aufgehoben_durch, alt_korr.aufgehoben_durch) == (
         None, None, neu.id, None)
     # Rand mit vorher = richtige Quelle ⇒ aufgehoben
@@ -225,7 +228,7 @@ async def test_nr67_rand_mit_anderem_vorher_bleibt_eine_zeile_davor_wird_aufgeho
                                        vorher=X, nachher=B), ha_svc=None, jetzt=datetime(2026, 11, 18, 8))
     await db.commit()
     await db.refresh(rand2)
-    assert rand2.aufgehoben_durch == (await _zeilen(db, b2.id))[-1].id
+    assert rand2.aufgehoben_durch == [z for z in await _zeilen(db, b2.id) if z.grund == "korrektur" and z.nachher == B][-1].id
 
 
 async def test_nr71_falsch_seit_vor_dem_aelteren_wechsel_erledigt_ihn_mit(db):

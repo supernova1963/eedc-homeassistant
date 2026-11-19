@@ -2,12 +2,13 @@
 
 Die Regel (``core/berechnungen/zaehler_versatz.py``): Sprung um +X, später Rückgang um ≈ −X in eedcs Standreihe; zwei Läufe
 mit einem Loch ≤ 24 h sind einer. Der Erzeuger (``services/daten_checker/datenquelle/versatz.py``) meldet nur bei Wirkung
-(ein Rand-Tag rechnet das Feld über die Standreihe) und kennt zwei Lagen: heilbar (WARNING, «Tage neu aufbauen»
-= ``reaggregate_range``) und sonst (INFO, «Was gilt»). Keine Probe liest die Uhr (Naht ``jetzt``); die Zeitpunkte liegen
-im Juni, fern jeder Umstellung (die Suite fährt auch in ``Pacific/Auckland`` und ``UTC``).
+(ein Schritt trifft einen Tageswert, den die Tagesansicht über die Standreihe bildet) mit einem Handgriff, «Grund
+nachtragen» (seit Sitzung 4b-1 ein Sprung in die Datenquellen, Lagen ``fuellbar`` · ``ohne_home_assistant`` ·
+``staende_passen_nicht`` · ``verschiedene_quellen``). Keine Probe liest die Uhr; die Zeitpunkte liegen im Juni, fern jeder
+Umstellung (die Suite fährt auch in ``Pacific/Auckland`` und ``UTC``).
 
 Schwesterdateien: test_daten_checker_codes.py (W-1), test_daten_checker_loesungswege.py (W-13),
-test_daten_checker_handgriff_wirkt.py (W-11, Beleg ``test_w11_zaehler_versatz_wirkt``), test_n586_checker_ha_zaehlersprung.py.
+test_sensorwechsel_s4b1_stueck.py (die Korrektur über das Stück, Routen am Befund), test_n586_checker_ha_zaehlersprung.py.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from backend.core.berechnungen.zaehler_versatz import finde_versatz_laeufe, stand_passt_zum_spiegel
+from backend.models import activity_log, mqtt_gateway_mapping  # noqa: F401 — Tabellen der Quellen-Auskunft (Teil-Schema der Fixture)
 from backend.services.daten_checker.datenquelle.versatz import (
-    GRUND_ENDET_HEUTE, GRUND_OHNE_HA, GRUND_STAENDE_PASSEN_NICHT, LAGE_HEILBAR, ZaehlerVersatzChecks, aktions_bereich,
+    GRUND_OHNE_HA, GRUND_STAENDE_PASSEN_NICHT, LAGE_FUELLBAR, ZaehlerVersatzChecks,
 )
 from backend.services.daten_checker.handgriffe import MECHANIK_WOERTER
 
@@ -109,12 +111,6 @@ def test_stand_und_spiegel():
     assert stand_passt_zum_spiegel(303.0, 511.0, -208.0)
     assert not stand_passt_zum_spiegel(1415.586, 3322.086, 0.0)
     assert not stand_passt_zum_spiegel(1.0, None, 0.0)
-
-
-def test_bereich_hoechstens_31_tage_und_bis_gestern():
-    (lauf,) = finde_versatz_laeufe(_reihe(stunden=60 * 24, rueck=50 * 24 + 5))
-    assert aktions_bereich(lauf, date(2026, 9, 1)) == (date(2026, 6, 10), date(2026, 7, 10))
-    assert aktions_bereich(lauf, date(2026, 6, 20)) == (date(2026, 6, 10), date(2026, 6, 19))
 
 
 # ── Erzeuger (Wegwerf-Datenbank) ─────────────────────────────────────────────────────────────────────────────────────
@@ -217,58 +213,81 @@ async def test_ohne_fund_eine_ok_zeile(db, ha, monkeypatch):
     assert [x.schwere for x in alle] == ["warning"]
 
 
-async def test_lage_heilbar_traegt_tage_neu_aufbauen(db, ha, monkeypatch):
+def _ha_verschoben(monkeypatch, plus: float):
+    """HA erreichbar, aber seine Summe ist verschoben (Produktiv ``ladung_kwh``: 1 906,5 kWh seit 16.11.2025) — die Reihe
+    außerhalb des Abschnitts passt zu keiner Summe, die HA führt."""
+    from sqlalchemy import text
+
+    import backend.services.ha_statistics_service as hss
+    from backend.tests import ha_lts_helfer as h
+
+    svc = h.mach_service(thread_sicher=True)
+    mid = h.sensor(svc, SENSOR, "kWh", has_sum=True)
+    ab = int(T0.timestamp()) - 3600
+    with svc._engine.begin() as conn:
+        conn.execute(text("INSERT INTO statistics (metadata_id, start_ts, state, sum) VALUES (:m, :t, :w, :w)"),
+                     [{"m": mid, "t": ab + 3600 * i, "w": _ha(i) + plus} for i in range(29 * 24)])
+    monkeypatch.setattr(hss, "_ha_statistics_service", svc)
+    return svc
+
+
+async def test_lage_fuellbar_traegt_grund_nachtragen(db, ha, monkeypatch):
+    """Sitzung 4b-1 (Bauplan «Zu §14» Nr. 95 (2), Nr. 98): ein Handgriff «Grund nachtragen» als Sprung in die Datenquellen
+    (``stueck=<schlüssel>~<sprung>~<rückgang>``) statt «Tage neu aufbauen»; WARNING in jeder Lage."""
     _kanal_tage(monkeypatch, {})
     a, wb, key = await _anlage(db)
     (e,) = await _pruefe(db, a)
-    assert (e.code, e.kategorie, e.schwere, e.klasse, e.knopf) == (
-        "zaehler_versatz", "zaehler_versatz", "warning", "aktion", "Tage neu aufbauen")
-    assert (e.action.operation, e.action.params) == ("reaggregate_range", {"von": "2026-06-10", "bis": "2026-06-14"})
-    assert e.werte["lage"] == LAGE_HEILBAR and e.werte["schluessel"] == key
+    assert (e.code, e.kategorie, e.schwere, e.klasse, e.knopf, e.action) == (
+        "zaehler_versatz", "zaehler_versatz", "warning", "sprung", "Grund nachtragen", None)
+    assert e.werte["lage"] == LAGE_FUELLBAR and e.werte["schluessel"] == key
+    assert (e.werte["sprung"], e.werte["rueckgang"]) == ("2026-06-10T01:00", "2026-06-14T19:00")
+    assert e.ziel.params["stueck"] == f"{key}~2026-06-10T01:00~2026-06-14T19:00"
     assert e.meldung == ("Ladepunkt – Ladung PV: Zählerstände vom 10.06.2026 bis 14.06.2026 um 80,5 kWh versetzt — "
                          "Tageswerte an den Rändern falsch")
     assert "am 10.06.2026 ist er deshalb zu hoch, am 14.06.2026 fehlt er" in e.details
-    assert "„Tage neu aufbauen“ holt die Zählerstände vom 10.06.2026 bis 14.06.2026" in e.details
-    assert "Rest" not in e.details
+    assert "„Grund nachtragen“ verwirft die Zählerstände des Abschnitts; eedc liest sie danach aus Home Assistant neu" in e.details
+    assert "Tage neu aufbauen" not in e.details
 
 
-async def test_staende_passen_nicht_ist_auskunft(db, ha, monkeypatch):
-    """Der Spiegel trägt andere Stände als die Reihe außerhalb des Abschnitts (Wallbox-Ladung der Produktiv-Anlage:
-    1 415,586 gegen 3 322,086) ⇒ INFO ohne Knopf, der schreibt."""
+async def test_staende_passen_nicht_wenn_ha_summe_verschoben(db, monkeypatch):
+    """Die Rand-Stände passen zu keiner Summe, die HA führt ⇒ Lage ``staende_passen_nicht`` mit demselben Handgriff (die
+    Korrektur verwirft, das Stück bleibt eine Lücke)."""
+    _ha_verschoben(monkeypatch, 1906.5)
     _kanal_tage(monkeypatch, {})
-    a, *_ = await _anlage(db, spiegel_plus=1906.5)
+    a, *_ = await _anlage(db)
     (e,) = await _pruefe(db, a)
-    assert (e.schwere, e.klasse, e.knopf, e.action) == ("info", "auskunft", "Was gilt", None)
-    assert e.werte["lage"] == GRUND_STAENDE_PASSEN_NICHT
-    assert "nicht selbst richtig" in e.details
+    assert (e.schwere, e.klasse, e.knopf, e.werte["lage"]) == ("warning", "sprung", "Grund nachtragen", GRUND_STAENDE_PASSEN_NICHT)
+    assert "passen zu keiner Summe, die Home Assistant für sensor.pv_ladung führt" in e.details
 
 
-async def test_andere_entitaet_oder_versatz_der_quelle_ist_auskunft(db, ha, monkeypatch):
-    """⚑ Der Lauf holt mit der heutigen Zuordnung ohne Versatz — gilt am Rand eine andere Entität oder ein Versatz, heilt er
-    nicht (der Sprung wanderte nur, gemessen an ``inv:2:ladung_kwh``)."""
+async def test_andere_entitaet_ohne_geschichte_passt_nicht(db, ha, monkeypatch):
+    """Die Reihe trägt am Rand eine Entität, die HA nicht kennt ⇒ nicht füllbar."""
     _kanal_tage(monkeypatch, {})
     a, *_ = await _anlage(db, quelle_sensor="sensor.alter_zaehler")
     assert [e.werte["lage"] for e in await _pruefe(db, a)] == [GRUND_STAENDE_PASSEN_NICHT]
 
 
-async def test_offset_der_quelle_ist_auskunft(db, ha, monkeypatch):
+async def test_offset_der_quelle_ist_fuellbar(db, ha, monkeypatch):
+    """Messblatt 4b-0 c: die Reihe trägt HAs Rohsumme, der Versatz des Kanals spielt keine Rolle — die Enge «Versatz 0» der
+    alten Lage «heilbar» ist entfallen."""
     _kanal_tage(monkeypatch, {})
     a, *_ = await _anlage(db, offset=-208.214)
-    assert [e.werte["lage"] for e in await _pruefe(db, a)] == [GRUND_STAENDE_PASSEN_NICHT]
+    assert [e.werte["lage"] for e in await _pruefe(db, a)] == [LAGE_FUELLBAR]
 
 
-async def test_ohne_kanal_ist_auskunft(db, ha, monkeypatch):
+async def test_ohne_kanal_fuellt_aus_der_heutigen_quelle(db, ha, monkeypatch):
     _kanal_tage(monkeypatch, {})
     a, *_ = await _anlage(db, spiegel=False)
-    assert [e.werte["lage"] for e in await _pruefe(db, a)] == [GRUND_STAENDE_PASSEN_NICHT]
+    assert [e.werte["lage"] for e in await _pruefe(db, a)] == [LAGE_FUELLBAR]
 
 
-async def test_standalone_ohne_ha_ist_auskunft(db, ohne_ha, monkeypatch):
+async def test_standalone_ohne_ha(db, ohne_ha, monkeypatch):
     _kanal_tage(monkeypatch, {})
     a, *_ = await _anlage(db)
     (e,) = await _pruefe(db, a)
-    assert (e.schwere, e.action, e.werte["lage"]) == ("info", None, GRUND_OHNE_HA)
-    assert "Ohne Verbindung zu Home Assistant" in e.details
+    assert (e.schwere, e.knopf, e.werte["lage"]) == ("warning", "Grund nachtragen", GRUND_OHNE_HA)
+    # Bauplan «Zu §14» Nr. 119/120 (4b-1-K2): davor und danach dieselbe Quelle ⇒ wie jede Zählerlücke
+    assert "Ohne Verbindung zu Home Assistant" in e.details and "wie über jede Zählerlücke" in e.details
 
 
 async def test_rand_tage_aus_den_kanaelen_ohne_befund(db, ha, monkeypatch):
@@ -280,24 +299,121 @@ async def test_rand_tage_aus_den_kanaelen_ohne_befund(db, ha, monkeypatch):
     assert len(await _pruefe(db, a)) == 1
 
 
-async def test_abschnitt_endet_heute_ohne_knopf(db, ha, monkeypatch):
+async def test_abschnitt_endet_heute_hat_denselben_handgriff(db, ha, monkeypatch):
+    """Bis 4b-1 die Lage «endet_heute» ohne Knopf (der laufende Tag ließ sich nicht neu aufbauen); die Korrektur über das
+    Stück braucht keinen vergangenen Tag — dieselbe Lage wie an jedem anderen Tag."""
     _kanal_tage(monkeypatch, {})
-    a, *_ = await _anlage(db, staende=_reihe(sprung=20 * 24 + 3, rueck=20 * 24 + 9))
+    a, *_ = await _anlage(db, staende=_reihe(sprung=19 * 24 + 3, rueck=20 * 24 + 9))      # 20.06. 03:00 … 21.06. 09:00
     (e,) = await _P(db)._check_zaehler_versatz(a, jetzt=datetime(2026, 6, 21, 12))
-    assert (e.action, e.werte["lage"]) == (None, GRUND_ENDET_HEUTE)
+    assert (e.knopf, e.werte["lage"]) == ("Grund nachtragen", LAGE_FUELLBAR)
 
 
-async def test_langer_abschnitt_nennt_den_rest(db, ha, monkeypatch):
+async def test_zerteilter_lauf_nennt_nur_die_schritte_mit_wirkung(db, ha, monkeypatch):
+    """Nr. 91 b: jeder Sprung und jeder Rückgang eines zerteilten Laufs wird geprüft (12.06. zu hoch, 11.06. ohne Wert);
+    ein Tag aus den Kanälen fällt aus Text und ``werte``."""
+    loch = range(10 * 24 + 20, 11 * 24 + 2)                     # 11.06. 20:00 … 12.06. 01:00 richtig
+    a, wb, key = await _anlage(db, staende=_reihe(loch=loch))
     _kanal_tage(monkeypatch, {})
-    a, *_ = await _anlage(db, staende=_reihe(sprung=2, rueck=28 * 24 + 2) + [])
     (e,) = await _pruefe(db, a)
-    assert e.action.params == {"von": "2026-06-01", "bis": "2026-06-29"}
-    lang, *_ = finde_versatz_laeufe(_reihe(stunden=60 * 24, rueck=50 * 24 + 5))
-    from backend.services.daten_checker.datenquelle.versatz import _texte
-    from backend.services.daten_checker.kategorien import Aktion
+    assert (e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == (["2026-06-10", "2026-06-12"], ["2026-06-11", "2026-06-14"])
+    _kanal_tage(monkeypatch, {date(2026, 6, 10): {key}, date(2026, 6, 11): {key}})
+    (e,) = await _pruefe(db, a)
+    assert (e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == (["2026-06-12"], ["2026-06-14"])
+    assert "am 12.06.2026 ist er deshalb zu hoch, am 14.06.2026 fehlt er" in e.details
 
-    _, details = _texte("X", lang, Aktion("reaggregate_range", {"von": "2026-06-10", "bis": "2026-07-10"}), LAGE_HEILBAR)
-    assert "Danach nennt dieser Befund den Rest bis 21.07.2026 — dann noch einmal klicken." in details
+
+# ── Kein Saldo je Tag (Bauplan «Zu §14» Nr. 100; Nachmessung 4b-1 F1) ───────────────────────────────────────────────
+
+async def _tagesansicht(db, a, wb, tage) -> dict[int, object]:
+    """«Ladung PV» der Tagesansicht je Tag (Wert oder der Grund ohne Wert) — dieselbe Sicht, an der der Befund misst (die
+    Proben ohne Spiegel: die Tagesansicht liest die Reihe)."""
+    from backend.services.snapshot.aggregator import get_tagesdetail_kwh
+    from backend.services.zuordnung_wechsel import zeitpunkt as zw
+
+    zw.vergiss(db)
+    out = {}
+    for d in tage:
+        e = await get_tagesdetail_kwh(db, a, {str(wb.id): wb}, date(2026, 6, d), tageszeile_rueckwaerts=True)
+        w = e.werte.get("emob_ladung_pv_kwh")
+        out[d] = round(w, 2) if w is not None else e.grund_je_feld.get("emob_ladung_pv_kwh")
+    return out
+
+
+async def test_rueckgang_und_sprung_im_selben_fenster_der_tag_hat_keinen_wert(db, ha, monkeypatch):
+    """Zerteilter Lauf, 12.06. 05–10 Uhr richtig: Rückgang und Sprung im Fenster des 12.06. — die Tagesansicht zeigt dort
+    keinen Wert («Zähler zurückgesprungen»), der Befund nennt den Tag (am HEAD ebenso; ein Saldo nannte ihn nicht)."""
+    _kanal_tage(monkeypatch, {})
+    a, wb, _key = await _anlage(db, staende=_reihe(loch=range(11 * 24 + 5, 11 * 24 + 11)), spiegel=False)
+    sicht = await _tagesansicht(db, a, wb, (10, 11, 12, 13, 14))
+    assert sicht == {10: 92.0, 11: 12.0, 12: "zaehler_ruecksprung", 13: 12.0, 14: "zaehler_ruecksprung"}
+    (e,) = await _pruefe(db, a)
+    assert (e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == (["2026-06-10"], ["2026-06-12", "2026-06-14"])
+    assert "am 10.06.2026 ist er deshalb zu hoch, am 12.06.2026 und 14.06.2026 fehlt er" in e.details
+
+
+async def test_abschnitt_innerhalb_eines_tages_wird_gemeldet(db, ha, monkeypatch):
+    """Sprung und Rückgang im Fenster des 10.06. (03:00 … 20:00): die Tagesansicht zeigt am 10.06. keinen Wert — der
+    Befund meldet ihn (keine OK-Zeile), der Tag gilt als «fehlt», nicht als «zu hoch»."""
+    _kanal_tage(monkeypatch, {})
+    a, wb, _key = await _anlage(db, staende=_reihe(sprung=9 * 24 + 3, rueck=9 * 24 + 20), spiegel=False)
+    assert (await _tagesansicht(db, a, wb, (9, 10, 11)))[10] == "zaehler_ruecksprung"
+    (e,) = await _pruefe(db, a)
+    assert (e.schwere, e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == ("warning", [], ["2026-06-10"])
+    assert e.meldung.startswith("Ladepunkt – Ladung PV: Zählerstände vom 10.06.2026 bis 10.06.2026 um")
+    assert "Zählerständen: am 10.06.2026 fehlt er" in e.details
+
+
+async def test_sprung_hinter_einer_datenluecke_trifft_den_tag_danach(db, ha, monkeypatch):
+    """Stände 09.06. 12:00 … 10.06. 00:00 fehlen: der Sprung reicht von 09.06. 11:00 bis 10.06. 01:00 über die Fenstergrenze —
+    die Tagesansicht zeigt am 10.06. 92,0 (zu hoch), der Befund nennt den Tag (am HEAD ebenso)."""
+    _kanal_tage(monkeypatch, {})
+    weg = {T0 + timedelta(hours=h) for h in range(8 * 24 + 12, 9 * 24 + 1)}
+    a, wb, _key = await _anlage(db, staende=[s for s in _reihe() if s[0] not in weg], spiegel=False)
+    assert (await _tagesansicht(db, a, wb, (9, 10)))[10] == 92.0
+    (e,) = await _pruefe(db, a)
+    assert (e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == (["2026-06-10"], ["2026-06-14"])
+
+
+@pytest.mark.parametrize("mit_ha", [True, False])
+async def test_rueckgang_hinter_einer_datenluecke_ueber_23_uhr(db, monkeypatch, mit_ha, request):
+    """Stände 13.06. 20:00 … 14.06. 18:00 fehlen, der Rückgang reicht von 13.06. 19:00 bis 14.06. 19:00. Mit Home Assistant
+    heilt die Tagesansicht den Rand 13.06. 23:00 auf das Niveau außerhalb — der 13.06. hat keinen Wert; ohne rückt der Rand
+    des 14.06. auf den Stand 13.06. 19:00 zurück — dann der 14.06. Der Befund nennt jeweils den Tag ohne Wert."""
+    request.getfixturevalue("ha" if mit_ha else "ohne_ha")
+    _kanal_tage(monkeypatch, {})
+    weg = {T0 + timedelta(hours=h) for h in range(12 * 24 + 20, 13 * 24 + 19)}
+    a, wb, _key = await _anlage(db, staende=[s for s in _reihe() if s[0] not in weg], spiegel=False)
+    (e,) = await _pruefe(db, a)                     # vor der Tagesansicht: sie heilt den Rand und schriebe ihn in die Reihe
+    sicht = await _tagesansicht(db, a, wb, (13, 14))
+    tag = 13 if mit_ha else 14
+    assert sicht[tag] == "zaehler_ruecksprung"
+    assert e.werte["tage_ohne_wert"] == [f"2026-06-{tag}"]
+
+
+async def test_rand_um_mitternacht_trifft_im_fenster_ab_23_uhr_den_folgetag(db, ha, monkeypatch):
+    """Messblatt 4b-0 h: ein Bestandstag der Wallbox liest rückwärts (Fenster ab 23:00 des Vortags) — ein Rückgang mit der
+    Zeile 15.06. 00:00 trifft den Tageswert des 15.06., nicht den des 14.06. (Kalendertag des Schritts)."""
+    _kanal_tage(monkeypatch, {})
+    a, *_ = await _anlage(db, staende=_reihe(rueck=14 * 24))
+    (e,) = await _pruefe(db, a)
+    assert e.werte["tage_ohne_wert"] == ["2026-06-15"]
+    assert "am 15.06.2026 fehlt er" in e.details
+
+
+async def test_nur_ein_rand_an_einer_naht_nennt_nur_den_anderen(db, ha, monkeypatch):
+    """Nr. 91 b: ein Rand an einer verzeichneten Fortsetzung ist ohne Wirkung — Text und ``werte`` nennen nur den anderen."""
+    from backend.models.zuordnung_wechsel import ZuordnungWechsel
+
+    _kanal_tage(monkeypatch, {})
+    a, wb, key = await _anlage(db)
+    q = {"art": "ha", "entity_id": SENSOR}
+    db.add(ZuordnungWechsel(anlage_id=a.id, sensor_key=key, erklaert_ts=T0 + timedelta(hours=SPRUNG_H),
+                            ab_ts=T0 + timedelta(hours=SPRUNG_H), vorher=q, nachher={"art": "ha", "entity_id": "sensor.x"},
+                            grund="fortsetzung", herkunft="nachtrag"))
+    await db.commit()
+    (e,) = await _pruefe(db, a)
+    assert (e.werte["tage_zu_hoch"], e.werte["tage_ohne_wert"]) == ([], ["2026-06-14"])
+    assert "eedc bildet einen Tageswert aus zwei Zählerständen: am 14.06.2026 fehlt er" in e.details
 
 
 async def test_feld_nicht_in_der_tagesansicht_ohne_befund(db, ha, monkeypatch):
@@ -327,42 +443,3 @@ async def test_texte_ohne_mechanik(db, ha, monkeypatch):
         for e in await _pruefe(db, a):
             text = (e.meldung + " " + e.details).lower()
             assert not [w for w in (*MECHANIK_WOERTER, "schlüssel") if w in text], text
-
-
-# ── W-11: der Knopf wirkt (plan → execute mit den Parametern des Befunds) ────────────────────────────────────────────
-
-async def test_w11_zaehler_versatz_wirkt(db, ha, monkeypatch):
-    """Der Abschnitt 10.–14.06. trägt die Stände eines anderen Sensors (+80 kWh) ⇒ Befund mit «Tage neu aufbauen»;
-    der Lauf holt die Stände der Tage neu aus Home Assistant ⇒ die Reihe ist stetig, der Befund weg."""
-    from sqlalchemy import select
-
-    import backend.services.live_power_service as lps
-    from backend.models.sensor_snapshot import SensorSnapshot
-    from backend.services.repair_orchestrator import (
-        RepairOperationRequest, RepairOperationType, _reset_state_for_tests, execute, plan,
-    )
-    from backend.tests.werkzeug_befund import befund_op, befund_params
-
-    class _OhneVerlauf:
-        async def get_tagesverlauf(self, *_a, **_k):
-            return {"serien": [], "punkte": []}
-
-    monkeypatch.setattr(lps, "get_live_power_service", lambda: _OhneVerlauf())
-    _reset_state_for_tests()
-    _kanal_tage(monkeypatch, {})
-    a, wb, key = await _anlage(db)
-    aid = a.id
-    (e,) = await _pruefe(db, a)
-    p = await plan(RepairOperationRequest(anlage_id=aid, operation=RepairOperationType(befund_op(e)),
-                                          params=befund_params(e)), db)
-    r = await execute(p.plan_id, db)
-    assert r.operation_summary["verarbeitet"] == 5 and r.operation_summary["fehlgeschlagen"] == 0, r.operation_summary
-    db.expire_all()
-    staende = (await db.execute(select(SensorSnapshot.zeitpunkt, SensorSnapshot.wert_kwh).where(
-        SensorSnapshot.sensor_key == key).order_by(SensorSnapshot.zeitpunkt))).all()
-    falsch = [t for t, w in staende if t.minute == 0 and abs(w - _ha(int((t - T0).total_seconds() // 3600))) > 1e-6]
-    assert falsch == []
-    from backend.models.anlage import Anlage
-
-    a = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
-    assert await _pruefe(db, a) == []

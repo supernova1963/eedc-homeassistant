@@ -30,7 +30,7 @@ BAUER = {n for n in ziele.__all__ if n.startswith("ziel_")}
 #: Platzhalter für Laufzeit-Argumente, deren Wert der Bauer nicht prüft (Ids, Monate, Datum).
 _PLATZHALTER = {("ziel_monat", 0): 2026, ("ziel_monat", 1): 1, ("ziel_monat_label", 0): "01/2026",
                 ("ziel_komponente", 0): 1, ("ziel_tarif", 0): 1, ("ziel_datenquelle_schluessel", 0): "inv:1:aktiv"}
-_UNGEPRUEFTE_KW = {"geraet": 1, "ab": "2026-01-01", "nachtrag": 1}
+_UNGEPRUEFTE_KW = {"geraet": 1, "ab": "2026-01-01", "nachtrag": 1, "stueck": "inv:1:aktiv~2026-01-01T00:00~2026-01-02T00:00"}
 #: Feld-Ausdrücke, die zur Laufzeit entstehen und anderswo geprüft werden (Name → Grund).
 DYNAMISCH = {"pflicht_feld": "Aufrufer übergeben Literale — test_pflichtfeld_der_aufrufer_in_der_registry"}
 

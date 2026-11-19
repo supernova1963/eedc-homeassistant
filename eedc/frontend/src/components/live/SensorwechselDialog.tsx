@@ -13,6 +13,10 @@
  * Titel in der Vergangenheit, der Wechsel als Satz oben, nur die zulässigen Gründe (`…/grund/pruefen`: Fortsetzung → Korrektur
  * ja, Korrektur nie mehr; Korrektur nur am jüngsten Wechsel, sonst ein Satz warum), «Falsch seit» vorbelegt mit dem Beginn der
  * Quelle vor dem Wechsel.
+ *
+ * **Stück** (Sitzung 4b-1, Bauplan «Zu §14» Nr. 96/98/101): am Befund «Zählerstände – versetzter Abschnitt» gibt es nur
+ * «Korrektur» über ein festes Stück, am Rückkehr-Wechsel X → A eines Stücks A → X → A «Korrektur» über die Zeit davor — statt
+ * des Felds «Falsch seit» steht die Zeit des Stücks.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, RadioGroup } from '../ui'
@@ -47,13 +51,25 @@ export const NACHTRAG_TITEL = 'Warum wechselte die Quelle?'
 export const NACHTRAG_FALSCH_SEIT_HINWEIS = 'Vorbelegt ist der Beginn der Quelle vor dem Wechsel; gezählt wird ab der vollen Stunde.'
 export const NACHTRAG_ABBRECHEN_HINWEIS = '«Abbrechen» trägt nichts ein.'
 export const NACHTRAG_NICHTS = 'Für diesen Wechsel ist kein Grund nachzutragen.'
+/** Sitzung 4b-1: Korrektur über ein festes Stück (Befund «Zählerstände – versetzter Abschnitt»; am Rückkehr-Wechsel X → A
+ *  eines Stücks A → X → A die Zeit davor) — «Falsch seit» steht fest, die Korrektur endet am Rückgang. */
+export const STUECK_GRUND_KORREKTUR_FOLGE =
+  'Die Zählerstände dieses Felds aus dieser Zeit werden verworfen und — wo Home Assistant sie für die Quelle davor und ' +
+  'danach führt — neu gelesen; sonst bleibt die Zeit ohne Zählerstände. Die Vorschau unten sagt, was das für die ' +
+  'Tageswerte heißt.'
+export const STUECK_ZEIT = (von: string, bis: string) => `Die Korrektur gilt für die Zeit vom ${von} bis ${bis} Uhr.`
 
 /** «Grund nachtragen»: der Wechsel als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom Backend). */
 export interface NachtragAngaben {
   wechselSatz: string
   gruende: WechselGrund[]
   korrekturNicht?: string | null
+  /** Korrektur über ein festes Stück (ISO-Zeiten vom Backend): kein Feld «Falsch seit». */
+  stueck?: { sprung: string; rueckgang: string } | null
 }
+
+/** `YYYY-MM-DDTHH:MM[:SS]` → «TT.MM.JJJJ HH:MM» (nur Anzeige). */
+const zeitText = (iso: string): string => `${formatDatum(iso.slice(0, 10))} ${iso.slice(11, 16)}`
 
 /** «hat eigene Werte seit … (n Tage)» und die Stände — nur Anzeige der Backend-Zahlen. */
 export function werteSatz(f: QuellePruefung): string {
@@ -139,7 +155,8 @@ export default function SensorwechselDialog({
   const optionen = [
     { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG,
       description: nachtrag ? `${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : GRUND_FORTSETZUNG_FOLGE },
-    { value: 'korrektur' as const, label: GRUND_KORREKTUR, description: nachtrag ? NACHTRAG_GRUND_KORREKTUR_FOLGE : GRUND_KORREKTUR_FOLGE },
+    { value: 'korrektur' as const, label: GRUND_KORREKTUR,
+      description: nachtrag?.stueck ? STUECK_GRUND_KORREKTUR_FOLGE : nachtrag ? NACHTRAG_GRUND_KORREKTUR_FOLGE : GRUND_KORREKTUR_FOLGE },
   ].filter((o) => !nachtrag || nachtrag.gruende.includes(o.value))
   const nichts = !!nachtrag && nachtrag.gruende.length === 0
 
@@ -149,7 +166,7 @@ export default function SensorwechselDialog({
         {nachtrag && (
           <p className="text-sm text-gray-700 dark:text-gray-200" data-nachtrag-wechsel>{nachtrag.wechselSatz}</p>
         )}
-        {nichts && <Alert type="info">{NACHTRAG_NICHTS}</Alert>}
+        {nichts && <Alert type="info">{nachtrag?.stueck && nachtrag.korrekturNicht ? nachtrag.korrekturNicht : NACHTRAG_NICHTS}</Alert>}
         {fragen.map((f) => {
           const key = f.sensor_key ?? ''
           const w = wahl[key]
@@ -174,14 +191,18 @@ export default function SensorwechselDialog({
               )}
               {w.grund === 'korrektur' && (
                 <div className="space-y-2 pl-6">
-                  <Input
+                  {nachtrag?.stueck ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-200" data-stueck-zeit={key}>
+                      {STUECK_ZEIT(zeitText(nachtrag.stueck.sprung), zeitText(nachtrag.stueck.rueckgang))}
+                    </p>
+                  ) : <Input
                     type="datetime-local"
                     label={FALSCH_SEIT_LABEL}
                     hint={nachtrag ? NACHTRAG_FALSCH_SEIT_HINWEIS : FALSCH_SEIT_HINWEIS}
                     value={w.falschSeit}
                     onChange={(e) => { setze(key, { falschSeit: e.target.value }); ladeVorschau(key, e.target.value) }}
                     data-falsch-seit={key}
-                  />
+                  />}
                   <div className="text-xs" data-korrektur-vorschau={key}>
                     <p className="font-medium text-gray-700 dark:text-gray-200">{VORSCHAU_TITEL}</p>
                     {w.laedt && <p className="text-gray-500 dark:text-gray-400">{VORSCHAU_LAEDT}</p>}

@@ -18,7 +18,8 @@ falschen Sensor Gerechnetes stehen (§10 Nr. 31).
 
 **Robustheit (Sitzung 3b, Bauplan §10 Nr. 40):** höchstens **eine** Aufgabe je Lauf — auch das Fortsetzen nach dem Start geht
 über ``starten`` (``_AUFGABEN``). Der **Nachlauf** der Korrektur (Kanal aus Home Assistant füllen, abhängige abgeleitete Kanäle
-neu schreiben) steht als ``fuellen`` im Zustand; scheitert er nach dem Commit, holt ihn der Lauf vor den Tagen nach — bis
+neu schreiben, seit 4b-1-K2 die Zählerstände der gefüllten Zeit neu lesen und speichern — Bauplan «Zu §14» Nr. 111) steht als
+``fuellen`` im Zustand; solange er offen ist, gilt das Intervall der Korrektur für die Leser als Lücke (Nr. 106); scheitert er nach dem Commit, holt ihn der Lauf vor den Tagen nach — bis
 dahin bleibt der Lauf ``laeuft``. Angestoßen wird ein offener Lauf **stündlich** (``offene_anstossen`` aus dem Stundenlauf,
 Bauplan §11 Nr. 46), nach dem Start und wenn die Werkbank denselben Schlüssel noch einmal ausführt; der Fehler «Füllen: …»
 steht je Lauf einmal (der letzte Versuch).
@@ -96,6 +97,30 @@ async def offener_lauf(db: AsyncSession, anlage_id: int, sensor_key: str) -> Opt
                 and isinstance(z.get("fuellen"), dict) and not z["fuellen"].get("erledigt")):
             return row.key[len(PRAEFIX):]
     return None
+
+
+async def offene_fuell_laeufe(db: AsyncSession, anlage_id: int) -> frozenset[str]:
+    """Die Läufe der Anlage, deren Nachlauf (Füllen) noch aussteht — dieselbe Bedingung wie ``offener_lauf``. Solange gilt das
+    Intervall ihrer Korrektur-Zeile für die Leser als Lücke (Bauplan «Zu §14» Nr. 106, ``zeitpunkt.gesperrte_stuecke``)."""
+    from backend.models.settings import Settings
+
+    aus = set()
+    for row in (await db.execute(select(Settings).where(Settings.key.like(PRAEFIX + "%")))).scalars().all():
+        z = row.value if isinstance(row.value, dict) else {}
+        if (z.get("status") == LAEUFT and z.get("anlage_id") == anlage_id and isinstance(z.get("fuellen"), dict)
+                and not z["fuellen"].get("erledigt")):
+            aus.add(row.key[len(PRAEFIX):])
+    return frozenset(aus)
+
+
+def fuellen_offen(z: dict) -> bool:
+    """Steht das Füllen aus, weil es **gescheitert** ist (die Fläche sagt «eedc versucht es jede Stunde …»)? Ein Nachlauf, dessen
+    Kanal-Teil nach dem Commit gelaufen ist und der nur noch die Stände speichert (Bauplan «Zu §14» Nr. 111), ist ohne
+    Fehler-Eintrag kein ausstehendes Füllen — er läuft («Korrektur läuft …»)."""
+    f = z.get("fuellen") if isinstance(z.get("fuellen"), dict) else None
+    if f is None or f.get("erledigt"):
+        return False
+    return not f.get("kanal_erledigt") or any(_ist_fuellen_fehler(x) for x in z.get("fehler") or [])
 
 
 async def stand(db: AsyncSession, lauf: str) -> Optional[dict[str, Any]]:
@@ -212,15 +237,19 @@ async def _nachlauf(sitzungen, lauf: str, z: dict) -> tuple[dict, bool]:
     return await _schreibe(sitzungen, lauf, fuellen={**f, "erledigt": True, **n}), True
 
 
-async def nachlauf_erledigt(sitzungen, lauf: str, kanal_neu_gespiegelt: int, abgeleitet_neu: int) -> None:
-    """Der Nachlauf ist gelaufen (direkt nach dem Commit); ohne Tage ist der Lauf damit fertig."""
+async def nachlauf_erledigt(sitzungen, lauf: str, kanal_neu_gespiegelt: int, abgeleitet_neu: int, *,
+                            staende_offen: bool = False) -> None:
+    """Der Nachlauf ist gelaufen (direkt nach dem Commit); ohne Tage ist der Lauf damit fertig. ``staende_offen``: nur der
+    Kanal-Teil ist gelaufen (``kanal_erledigt``), das Speichern der Stände (Bauplan «Zu §14» Nr. 111) macht der
+    Hintergrund-Lauf — bis dahin bleibt der Auftrag offen und das Intervall eine Lücke (Nr. 106)."""
     async with sitzungen() as db:
         z = await stand(db, lauf)
     if z is None or not isinstance(z.get("fuellen"), dict):
         return
-    werte: dict[str, Any] = {"fuellen": {**z["fuellen"], "erledigt": True, "kanal_neu_gespiegelt": kanal_neu_gespiegelt,
-                                         "abgeleitet_neu": abgeleitet_neu}}
-    if not z.get("tage"):
+    werte: dict[str, Any] = {"fuellen": {**z["fuellen"], "kanal_neu_gespiegelt": kanal_neu_gespiegelt,
+                                         "abgeleitet_neu": abgeleitet_neu,
+                                         **({"kanal_erledigt": True} if staende_offen else {"erledigt": True})}}
+    if not z.get("tage") and not staende_offen:
         werte.update(status=FERTIG, ende=datetime.now().replace(microsecond=0).isoformat())
     await _schreibe(sitzungen, lauf, **werte)
 

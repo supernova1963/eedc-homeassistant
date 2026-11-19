@@ -30,6 +30,7 @@ from backend.core.betriebsmodus import BETRIEBSART_NUTZENERGIE_FELD, HEIZEN, KUE
 from backend.core.field_definitions import FEINE_STROM_FELDER, WP_GESAMT_STROM_FELDER
 from backend.core.tageswert_grund import (
     GRUND_KEINE_ZAEHLERSTAENDE,
+    GRUND_LUECKE_VERWORFEN,
     GRUND_NICHT_ZUGEORDNET,
     GRUND_RANG,
     GRUND_ZAEHLER_RUECKSPRUNG,
@@ -813,6 +814,10 @@ async def _tagesdetail_boundary_diff_mit_grund(
             dieselbe Klasse wie F-66 eine Zeitebene höher. Nur die **Anzeige**
             bekommt den Rückfall, weil sie ihn beschriften kann.
     """
+    from backend.core.berechnungen.zaehler_naht import ende_der_luecke_davor
+    from backend.services.snapshot.luecken_rand import gemessen_ausserhalb_der_luecken, rand_nach_luecke
+    from backend.services.zuordnung_wechsel.zeitpunkt import luecken_des_schluessels, verworfen_ohne_fuellen
+
     s0 = await get_snapshot(
         db, anlage.id, sensor_key, sensor_id, ts_start,
         quellen_energy=quellen_energy,
@@ -822,6 +827,10 @@ async def _tagesdetail_boundary_diff_mit_grund(
         quellen_energy=quellen_energy,
     )
     von, bis = ts_start, ts_ende
+    hinter_luecke = False
+    # Sensorwechsel 4b-1-K (Bauplan «Zu §14» Nr. 102): die gesperrten Stücke des Schlüssels (Lücke, Füllen offen) — im
+    # Normalbetrieb ohne Korrektur-Zeile leer, dann liest diese Funktion wörtlich wie vorher.
+    luecken = await luecken_des_schluessels(db, anlage.id, sensor_key)
     if rueckfall_tagesrand and (s0 is None or s1 is None):
         if s0 is None:
             # ⭐ Zählerlücken wie HA (R1, §2 Wärme/Klima-Tagesleser): fehlt der
@@ -835,7 +844,15 @@ async def _tagesdetail_boundary_diff_mit_grund(
                 db, anlage.id, sensor_key, ts_start,
                 sensor_id=sensor_id, quellen_energy=quellen_energy,
             )
-            if anker is not None:
+            luecke_ende = ende_der_luecke_davor(None if anker is None else anker[0], ts_start, luecken)
+            if luecke_ende is not None:
+                # Nr. 102: der Anker läge vor einem gesperrten Stück — über ein verworfenes, nicht gefülltes Stück rückt der
+                # Rand nicht; er beginnt frühestens am Ende des Stücks (dort geheilt, sonst am ersten Stand danach), und
+                # die Marke sagt «ab». Liegt das ganze Fenster im Stück, hat der Tag keinen Wert.
+                von, s0 = await rand_nach_luecke(db, anlage.id, sensor_key, sensor_id, quellen_energy,
+                                                 max(luecke_ende, ts_start), ts_ende)
+                hinter_luecke = True
+            elif anker is not None:
                 von, s0 = anker
             else:
                 von_neu = await erster_stand_im_fenster(
@@ -868,7 +885,11 @@ async def _tagesdetail_boundary_diff_mit_grund(
     # kein Sprengsatz treffen kann, ist keine Absicherung, sondern Rauschen;
     # die echte Kante bewacht die Zeile ``bis_neu > von`` oben.
     if s0 is None or s1 is None:
-        return None, GRUND_KEINE_ZAEHLERSTAENDE
+        return None, _grund_ohne_staende(await verworfen_ohne_fuellen(db, anlage.id, sensor_key), ts_start, ts_ende)
+    if luecken and not await gemessen_ausserhalb_der_luecken(db, anlage.id, sensor_key, (von, s0), (bis, s1)):
+        # Nr. 102: im Fenster ist außerhalb der gesperrten Stücke nichts messbar (etwa ein Rückgang genau am Fensterende) —
+        # kein Wert statt einer gemessenen 0,0.
+        return None, GRUND_LUECKE_VERWORFEN
     wert = await _tageswert_aus_raendern(
         db, anlage.id, sensor_key, s0, s1, von, bis, datum,
     )
@@ -881,8 +902,18 @@ async def _tagesdetail_boundary_diff_mit_grund(
         wert_kwh=wert, seit=von, bis=bis,
         # Ein Anker VOR dem Fenster deckt den Tagesbeginn (R1) — keine
         # Einschränkung auszuweisen (G3: eedc markiert nicht mehr als HA).
-        ab_tagesbeginn=von <= ts_start, bis_tagesende=bis == ts_ende,
+        # Sensorwechsel U1 (Bauplan Nr. 136 (3), F5): ein Rand, der hinter
+        # einem gesperrten Stück beginnt, setzt keine Marke «ab» — sie stünde
+        # an der Wärmepumpen-Kachel auch für die Lücke eines anderen Geräts;
+        # wie vor Nr. 102 (i). Der Wert bleibt der Teilwert.
+        ab_tagesbeginn=von <= ts_start or hinter_luecke, bis_tagesende=bis == ts_ende,
     ), None
+
+
+def _grund_ohne_staende(luecken: list[tuple[datetime, datetime]], ts_start: datetime, ts_ende: datetime) -> str:
+    """Warum ein Tag ohne Randstand keinen Wert hat: schneidet sein Fenster ein gesperrtes Stück (Lücke), sind die Stände
+    verworfen (``GRUND_LUECKE_VERWORFEN``, Bauplan «Zu §14» Nr. 116 S4), sonst fehlen sie (``GRUND_KEINE_ZAEHLERSTAENDE``)."""
+    return GRUND_LUECKE_VERWORFEN if any(s < ts_ende and r > ts_start for s, r in luecken) else GRUND_KEINE_ZAEHLERSTAENDE
 
 
 async def _tagesdetail_boundary_diff(

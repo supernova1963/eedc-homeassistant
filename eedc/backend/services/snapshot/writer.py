@@ -255,6 +255,9 @@ async def snapshot_anlage(
     anlage,
     zeitpunkt: Optional[datetime] = None,
     force_resnap: bool = False,
+    *,
+    nur_schluessel: Optional[frozenset] = None,
+    ha_svc=None,
 ) -> int:
     """
     Schreibt Snapshots aller verfügbaren kumulativen Zähler einer Anlage.
@@ -277,6 +280,10 @@ async def snapshot_anlage(
             Pfad (`resnap_anlage_range`) aktiv — der reguläre :05-hourly-
             Job behält das alte Verhalten (skip), damit ein temporäres
             HA-Hänger keinen frisch geschriebenen Slot wegnimmt.
+        nur_schluessel: Nur diese Zählerschlüssel (``None`` = alle). Der Korrektur-Lauf liest damit die Stände eines
+            verworfenen Intervalls neu (Sensorwechsel 4b-1-K2, ``zuordnung_wechsel.korrektur.fuelle_staende``) — die
+            übrigen Schlüssel der Stunde bleiben unberührt.
+        ha_svc: Der HA-Dienst des Laufs (``None`` = der des Prozesses).
 
     Returns:
         Anzahl geschriebener Snapshots.
@@ -309,7 +316,9 @@ async def snapshot_anlage(
     wechsel = await lade_wechsel(db, anlage.id)
     counter_map = _build_counter_map(
         anlage, await _stillgelegte_inv_ids(db, anlage.id), zeitpunkt=zeitpunkt, wechsel=wechsel)
-    ha_svc = get_ha_statistics_service()
+    if nur_schluessel is not None:
+        counter_map = {k: e for k, e in counter_map.items() if k in nur_schluessel}
+    ha_svc = ha_svc or get_ha_statistics_service()
     if counter_map and ha_svc.is_available:
         for sensor_key, entity_id in counter_map.items():
             heute = quelle_am(wechsel.get(sensor_key), zeitpunkt) is HEUTE
@@ -363,7 +372,7 @@ async def snapshot_anlage(
     quellen_energy = extract_quellen_energy(anlage)
     for (mqtt_key,) in mqtt_keys_result.all():
         sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
-        if not sensor_key:
+        if not sensor_key or (nur_schluessel is not None and sensor_key not in nur_schluessel):
             continue
         # C2b: HA- oder keine-zugeordnetes Feld → MQTT-Backup schreibt es nicht.
         # B-0: galt um `zeitpunkt` eine andere Quelle, entscheidet sie (MQTT ⇒ schreiben, sonst nicht).

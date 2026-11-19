@@ -95,6 +95,21 @@ def _wetter_cache_ohne_l2_persist(monkeypatch):
 
     monkeypatch.setattr(cache, "_loop_running", False)
 
+
+@pytest.fixture(autouse=True)
+def _ha_dienste_je_test_frisch(monkeypatch):
+    """Die beiden HA-Dienste sind Prozess-Singletons; eine Route, die eine HA-Verbindung setzt
+    (`ha_connection.aktualisiere_ha_verbindung`, etwa `save_ha_remote_settings`), ließ am
+    Singleton `_ws_client` bzw. Token stehen — im selben Worker galt Home Assistant danach in
+    jedem Test als eingerichtet (`korrektur.ha_eingerichtet`; Nachmessung U1 19.11.2026: zehn
+    Opfer, Verursacher `test_ha_aktivierung_mqtt_default_b7_5c.py`). Modulzustand darf einen
+    Test nicht überleben: jeder Test beginnt mit frischen Diensten."""
+    import backend.services.ha_state_service as hst
+    import backend.services.ha_statistics_service as hss
+
+    monkeypatch.setattr(hss, "_ha_statistics_service", None)
+    monkeypatch.setattr(hst, "_ha_state_service", None)
+
 # ── Kein echtes Netz im Testlauf (N-232, Entscheid Gernot 2026-08-11) ────────
 #
 # **Ein Test, der ans Netz geht, ist kein Test, sondern eine Wette.** Zweimal

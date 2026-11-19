@@ -78,17 +78,19 @@ async def _anlage(s, aid) -> Anlage:
     return (await s.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
 
 
-async def _snapshots(sitzungen, aid, key, zeiten) -> None:
+async def _snapshots(sitzungen, aid, key, zeiten, werte=None) -> None:
     async with sitzungen() as s:
         await s.execute(insert(SensorSnapshot), [
-            {"anlage_id": aid, "sensor_key": key, "zeitpunkt": z, "wert_kwh": 1.0 + i, "quelle": "probe"}
+            {"anlage_id": aid, "sensor_key": key, "zeitpunkt": z, "wert_kwh": (werte or {}).get(z, 1.0 + i), "quelle": "probe"}
             for i, z in enumerate(zeiten)])
 
 
-async def _zeitpunkte(sitzungen, aid, key) -> set:
+async def _zeitpunkte(sitzungen, aid, key, quelle: str = "probe") -> set:
+    """Die Zeitpunkte der Stände mit dieser Quelle — seit 4b-1-K2 (Bauplan «Zu §14» Nr. 111) liest die Korrektur die Stände der
+    gefüllten Zeit aus Home Assistant neu und speichert sie (``ha_statistics``); verworfen ist, was als ``probe`` fehlt."""
     async with sitzungen() as s:
         return set((await s.execute(select(SensorSnapshot.zeitpunkt).where(and_(
-            SensorSnapshot.anlage_id == aid, SensorSnapshot.sensor_key == key)))).scalars().all())
+            SensorSnapshot.anlage_id == aid, SensorSnapshot.sensor_key == key, SensorSnapshot.quelle == quelle)))).scalars().all())
 
 
 def _staende_mutant(art: str):
@@ -111,12 +113,19 @@ def _staende_mutant(art: str):
 async def test_zaehlerstaende_im_intervall_verworfen_grenzen(ha, datei, monkeypatch, sprengsatz):
     svc, reihen, sitzungen, aid, k = await _aba(ha, datei)
     zeiten = [F - timedelta(hours=1), F, AB - timedelta(hours=1), AB, AB + timedelta(hours=1)]
-    await _snapshots(sitzungen, aid, EINSP, zeiten)
+    # die Stände ab AB stammen aus der richtigen Quelle — auf HAs Höhe (U1-K (d): gefüllt wird nur auf geprüfter Höhe)
+    await _snapshots(sitzungen, aid, EINSP, zeiten, {z: svc.get_value_at("sensor.einsp", z) for z in zeiten[3:]})
     if sprengsatz:
         monkeypatch.setattr(kr, "_verwerfe_staende", _staende_mutant(sprengsatz))
-    await _korrigieren(sitzungen, _auftrag(aid), svc)
+    erg = await _korrigieren(sitzungen, _auftrag(aid), svc)
     soll = {F - timedelta(hours=1), AB, AB + timedelta(hours=1)}
     assert (await _zeitpunkte(sitzungen, aid, EINSP) == soll) is (sprengsatz is None)
+    if sprengsatz is None:      # Nr. 111: der Lauf liest die verworfenen Stände aus Home Assistant neu und speichert sie
+        monkeypatch.setattr(kr, "ha_eingerichtet", lambda: True)
+        import backend.services.ha_statistics_service as hss
+        monkeypatch.setattr(hss, "_ha_statistics_service", svc)
+        await kl.tage_neu_bilden(sitzungen, erg["lauf"])
+        assert {F, AB - timedelta(hours=1)} <= await _zeitpunkte(sitzungen, aid, EINSP, "ha_statistics")
 
 
 @pytest.mark.parametrize("sprengsatz", [None, "ab_inklusiv"])
@@ -199,10 +208,15 @@ async def test_tage_liste_kriterium_grenzen_ohne_herkunft(datei, monkeypatch, sp
         monkeypatch.setattr(kr, "lage", lage_immer)
     a = _auftrag(aid)
     async with sitzungen() as s:
-        mit = await kr.lage(s, a, ha_svc=SimpleNamespace(is_available=True))
+        mit = await kr.lage(s, a, ha_svc=SimpleNamespace(is_available=True, get_stundenzeilen_kennzahlen=_GANZE_GESCHICHTE))
         ohne = await kr.lage(s, a, ha_svc=None)
     gut = mit.tage_neu == soll and kr.vorschau_daten(ohne)["tage_neu"] == [] and not ohne.tage_neu
     assert gut is (sprengsatz is None), (mit.tage_neu, ohne.tage_neu)
+
+
+def _GANZE_GESCHICHTE(*_a):
+    """Attrappe: HA führt den richtigen Sensor seit jeher (keine Lücke, Sitzung 4b-1 ``korrektur._luecke``)."""
+    return {"anzahl": 1, "erste_ts": 0}
 
 
 def kl_tag(dt: datetime) -> date:
@@ -221,7 +235,7 @@ async def test_tage_liste_findet_einen_schon_neu_gebildeten_tag_wieder(datei):
 
             row.source_provenance = {f"komponenten_kwh.{x}": {"source": TZ_QUELLE_KANAL} for x in row.komponenten_kwh}
     async with sitzungen() as s:
-        assert (await kr.lage(s, _auftrag(aid), ha_svc=SimpleNamespace(is_available=True))).tage_neu == soll
+        assert (await kr.lage(s, _auftrag(aid), ha_svc=SimpleNamespace(is_available=True, get_stundenzeilen_kennzahlen=_GANZE_GESCHICHTE))).tage_neu == soll
 
 
 # ── Bestand: nur Tage, deren Fenster ganz im Intervall liegt (von_tag) ──────
@@ -505,18 +519,23 @@ async def test_nur_falsche_abschnitte_und_w0(ha, datei, monkeypatch, sprengsatz)
 
 @pytest.mark.parametrize("sprengsatz", [False, True])
 async def test_teil_des_falschen_abschnitts_vor_falsch_seit_bleibt(ha, datei, monkeypatch, sprengsatz):
-    """``falsch_seit`` mitten im falschen Abschnitt: dessen Zeilen davor bleiben (``_teil``)."""
+    """``falsch_seit`` mitten im falschen Abschnitt: dessen Zeilen davor bleiben (``_teil``) — bis auf die Zeile ``f − 1 h``,
+    die den Stand um ``f`` trägt (U1 Punkt 4: dieselbe Rand-Regel wie am Ende)."""
     svc, reihen, sitzungen, aid, k = await _aba(ha, datei)
     f = F + timedelta(days=1)
     if sprengsatz:
         monkeypatch.setattr(kk, "_teil", lambda a, f_, ab: (a.von, ab if a.bis is None else min(ab, a.bis)))
     async with sitzungen() as s:
-        bed = and_(KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(F), KanalStatistik.start_ts < _ts(f))
+        bed = and_(KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(F), KanalStatistik.start_ts < _ts(f) - 3600)
         vor = (await s.execute(select(func.count()).select_from(KanalStatistik).where(bed))).scalar_one()
+        rand = and_(KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts == _ts(f) - 3600)
+        rand_vor = (await s.execute(select(func.count()).select_from(KanalStatistik).where(rand))).scalar_one()
     await _korrigieren(sitzungen, _auftrag(aid, f=f), svc)
     async with sitzungen() as s:
         nach = (await s.execute(select(func.count()).select_from(KanalStatistik).where(bed))).scalar_one()
-    assert vor == 24 and (nach == vor) is (not sprengsatz)
+        rand_nach = (await s.execute(select(func.count()).select_from(KanalStatistik).where(rand))).scalar_one()
+    assert vor == 23 and (nach == vor) is (not sprengsatz)
+    assert (rand_vor, rand_nach) == (1, 0)
 
 
 # ── Füllen bis zum Soll-Ende (bis_ts), auch ohne Spiegelzeile danach ───────
@@ -576,7 +595,8 @@ async def test_merkliste_der_sitzung_kennt_die_neue_zeile(ha, datei, monkeypatch
         await zeitpunkt.lade_wechsel(s, aid)                     # die Sitzung hat die (leere) Liste gemerkt
         await kr.fuehre_aus(s, _auftrag(aid), ha_svc=None, jetzt=LAUF_JETZT)
         antwort = zeitpunkt.quelle_am((await zeitpunkt.lade_wechsel(s, aid)).get(EINSP), F + timedelta(hours=5))
-    assert (antwort == {"art": "ha", "entity_id": "sensor.einsp"}) is (not sprengsatz), antwort
+    # Ohne Home Assistant füllt nichts: seit 4b-1 gilt dort die Lücken-Zeile (jünger) — die Quelle ist unbekannt.
+    assert (antwort is zeitpunkt.UNBEKANNT) is (not sprengsatz), antwort
 
 
 # ── Leser: «gilt hier» und die Grenze bis ──────────────────────────────────
