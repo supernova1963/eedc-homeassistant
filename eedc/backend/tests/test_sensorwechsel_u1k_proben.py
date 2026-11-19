@@ -132,7 +132,8 @@ async def test_f4_wiederholte_korrektur_ueber_einen_teil_behaelt_den_rest(db, ei
     a, wb, key = await v._anlage(db, spiegel=False)
     if sprengsatz:
         echt = kr._luecken_zeile
-        monkeypatch.setattr(kr, "_luecken_zeile", lambda db_, a_, row, lu, lauf, intervall=None: echt(db_, a_, row, lu, lauf))
+        monkeypatch.setattr(kr, "_luecken_zeile", lambda db_, a_, row, lu, lauf, intervall=None, **k: echt(db_, a_, row, lu, lauf,
+                                                                                                         **k))
     for f, ab in ((SPRUNG, RUECK), (datetime(2026, 6, 11), ZWOELF)):
         await _korrektur(db, kr.Auftrag(anlage_id=a.id, sensor_key=key, falsch_seit=f, ab=ab, vorher=QA, nachher=QA, stueck=True),
                          svc)

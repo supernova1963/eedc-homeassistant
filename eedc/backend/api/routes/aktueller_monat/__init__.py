@@ -194,6 +194,8 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
         result = await asyncio.to_thread(
             ha_stats.get_monatswerte, sensor_ids, jahr, monat,
         )
+        from backend.services.zuordnung_wechsel.monat import sensorwerte_des_monats
+        result = await sensorwerte_des_monats(anlage, result, jahr, monat)   # Sensorwechsel U2 a1 (F7)
     except Exception:
         logger.warning("HA Statistics DB nicht erreichbar")
         return {}
@@ -256,6 +258,8 @@ async def _ha_heimlade_felder_mit_daten(anlage: Anlage, investitionen, jahr: int
         result = await asyncio.to_thread(
             ha_stats.get_monatswerte, list(sensor_to_feld), jahr, monat,
         )
+        from backend.services.zuordnung_wechsel.monat import sensorwerte_des_monats
+        result = await sensorwerte_des_monats(anlage, result, jahr, monat)   # Sensorwechsel U2 a1 (F7)
     except Exception:
         logger.warning("HA Statistics DB nicht erreichbar (Heimlade-Felder)")
         return set()

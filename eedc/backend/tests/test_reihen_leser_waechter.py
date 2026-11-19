@@ -73,14 +73,15 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "L2", NAHT, True, "Sensorwechsel 4b-1-K (Nr. 102): trägt das Fenster außerhalb der gesperrten Stücke zwei Stände ohne "
         "Naht dazwischen (zaehler_naht.traegt_messung)? — sonst kein Wert statt 0,0"),
     "services/snapshot/aggregator.py::snapshot_tagestabelle": (
-        "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); "
+        "L5", NAHT, True, "Naht-Slot zählt nur den neuen Abschnitt, keine Gerade über eine Naht (_naht_trenner); eine Naht "
+        "mit Rand-Ständen (U2 a1, F5) hebt die Stände beim Laden (zaehler_naht.gehobene_staende) und teilt nicht; "
         "die Heimlade-Slots (zusatz_slots) für die Ladeblöcke (L13) gehen durch dieselbe Schleife"),
     "services/snapshot/aggregator.py::get_daily_counter_deltas_by_inv": (
         "L7", NAHT, True, "Zählwerk Tag über _zaehlwerk_tag (zaehler_naht.zaehlwerk_menge)"),
     "services/snapshot/aggregator.py::_zaehlwerk_tag": (
         "L7", NAHT, True, "die Abschnitts-Form der Zählwerke (Starts, Betriebsstunden)"),
     "services/snapshot/aggregator.py::get_hourly_counter_sum_by_feld": (
-        "L8", NAHT, True, "Naht-Slot zählt 0"),
+        "L8", NAHT, True, "Naht-Slot zählt 0; mit Rand-Ständen (U2 a1) gehoben beim Laden, der Slot zählt seine Menge"),
     "services/snapshot/aggregator.py::_diff": (
         "—", OHNE_AUFRUFER, True, "Closure von get_komponenten_tageskwh — ohne Produktiv-Aufrufer (Messblatt S0 M-A)"),
     "services/snapshot/bereichs_leser.py::_tageswerte_des_feldes": (
@@ -90,7 +91,8 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "Stück dessen Ende, Nr. 112); die Menge bildet _randstaende je Abschnitt (reader.tageswert_ueber_abschnitte, "
         "Lücken-Regel zaehler_naht); Wärme-Verlauf (a) liest so"),
     "services/snapshot/stunden_leser.py::lade_stundenformen": (
-        "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, keine Gerade über eine Naht"),
+        "L6", NAHT, True, "Stundenform der WP-Zähler ohne WP-Kanal: Naht-Slot 0, keine Gerade über eine Naht; mit "
+        "Rand-Ständen (U2 a1) gehoben beim Laden"),
     "services/snapshot/reader.py::delta": (
         "L4", NAHT, True, "Menge über ein Fenster je Abschnitt (MQTT-Monat, Cockpit → Monat)"),
     "services/snapshot/reader.py::delta_mit_rand": (
@@ -111,7 +113,8 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
     "services/kanal/nachfuellen.py::_rohstaende": (
         "L15", NAHT, True, "Stände-Nachbau (Familie Mitschrift, HA-Stände wörtlich) vor der ersten Kanalzeile: _laeufe teilt an "
         "jeder verzeichneten Fortsetzung (neue Quelle ohne Zuwachs, Sitzung 4); eine später nachgetragene trägt "
-        "kanal/naht.nachtrag_fortsetzung (Einstieg «Zähler getauscht», «Grund nachtragen»)"),
+        "kanal/naht.nachtrag_fortsetzung (Einstieg «Zähler getauscht», «Grund nachtragen»); an einer Naht mit Rand-Ständen "
+        "setzen beide denselben Versatz wie die gehobene Reihe (U2 a1, F5)"),
     # ── zeigen oder zählen, keine Menge einer Sicht (Sitzung 4, Bauplan §12 Nr. 61) ──
     "services/snapshot/reaggregator.py::_counter_delta_alt": (
         "L14", ANZEIGE, True, "Werkbank-Vorschau: Gegenüberstellung alt/neu der gespeicherten Stände, keine Anzeige-Menge"),

@@ -707,6 +707,23 @@ def _migrate_kanal_quelle_verworfen_ts(connection) -> None:
     connection.execute(_text('ALTER TABLE kanal_quelle ADD COLUMN verworfen_ts INTEGER'))
 
 
+def _migrate_zuordnung_wechsel_rand(connection) -> None:
+    """Sensorwechsel U2 a1 (Rechenweg F1): Spalten ``ansatz``, ``stand_alt_ende``, ``stand_neu_null`` an
+    ``zuordnung_wechsel`` — die Rand-Werte eines Wechsels «bleiben» zwischen zwei Sensoren. Nullable, ohne Default: eine
+    Bestandszeile trägt ``NULL`` und liest wörtlich wie vorher. Eine frische Installation bekommt die Spalten über
+    ``create_all``. Jede Spalte einzeln geprüft, idempotent; Muster ``_migrate_mqtt_live_snapshot_min_max``."""
+    from sqlalchemy import inspect as _inspect
+    from sqlalchemy import text as _text
+
+    inspector = _inspect(connection)
+    if 'zuordnung_wechsel' not in inspector.get_table_names():
+        return
+    da = {col['name'] for col in inspector.get_columns('zuordnung_wechsel')}
+    for name, typ in (('ansatz', 'VARCHAR(20)'), ('stand_alt_ende', 'FLOAT'), ('stand_neu_null', 'FLOAT')):
+        if name not in da:
+            connection.execute(_text(f'ALTER TABLE zuordnung_wechsel ADD COLUMN {name} {typ}'))
+
+
 def _migrate_mqtt_live_snapshot_ts_unix(connection) -> None:
     """HA-Bauform §9, E-SG-8 (Standalone-Gleichstand S1): Spalte ``ts_unix`` an ``mqtt_live_snapshots``.
 
@@ -1341,6 +1358,9 @@ async def run_migrations(conn):
         # HA-Bauform §9, E-SG-8: `mqtt_live_snapshots.ts_unix` (Zeitachse der MQTT-Mitschrift).
         _migrate_mqtt_live_snapshot_ts_unix(connection)
         _migrate_mqtt_live_snapshot_min_max(connection)
+
+        # Sensorwechsel U2 a1 (F1): Rand-Werte an `zuordnung_wechsel` (ansatz, stand_alt_ende, stand_neu_null).
+        _migrate_zuordnung_wechsel_rand(connection)
 
     await conn.run_sync(_run_migrations)
 

@@ -16,6 +16,17 @@ Eine Zeile = die **wirksame** Quelle eines Zählerschlüssels (``basis:<feld>`` 
 * ``herkunft`` — ``wechsel`` (eine Route hat die Quelle geändert) · ``nachtrag`` · ``altbestand`` (aus dem Aktivitäts-Protokoll
   überführt, ``services/zuordnung_wechsel/ueberfuehrung.py``).
 * ``aufgehoben_durch`` — ID einer späteren Zeile, die diese aufhebt (Sitzung 4); ``lauf`` — Kennung eines Korrektur-Laufs.
+* ``ansatz``, ``stand_alt_ende``, ``stand_neu_null`` — **die Rand-Werte eines Wechsels «bleiben» zwischen zwei Sensoren**
+  (Sensorwechsel U2 a1, Rechenweg F1, Bauplan Nr. 138/139): ``ansatz`` leer (wie vor U2: die Zeile liest wörtlich wie am
+  ``665fa8d3b``) · ``offen`` / ``offen_schnitt`` (noch nicht angesetzt — liest wie eine Naht ohne Rand-Werte) · ``beide`` (ohne
+  Überlappung: die Stunde vor ``ab_ts`` zählt den alten und den neuen Sensor) · ``schnitt`` (mit Überlappung: Schnitt an
+  ``ab_ts − 1 h``). ``stand_alt_ende`` / ``stand_neu_null``: letzter Stand des alten Sensors und Nullpunkt des neuen (bei
+  ``beide`` 0) **in der Höhe der gespeicherten Zählerstand-Reihe** — die Reihe hebt ihre Stände ab ``ab_ts`` um die Differenz
+  (``core/berechnungen/zaehler_naht.py``); Kanal und HA-Leser nehmen ihre Rand-Werte aus HA selbst (Messfrage M3).
+  An einer **Lücken-Zeile** trägt ``ansatz`` den Wert ``hoehe_ungeprueft`` (Halt H-1 aus U1-K, Option A): die Korrektur füllt
+  erst nach dieser leeren Zeit derselben Quelle, und kein Rand-Stand war prüfbar — der Rand gilt als Höhenwechsel
+  (``zeitpunkt.ohne_hoehenwechsel``). ``nachher`` bleibt dort leer (die Erkennung «Lücken-Zeile» ändert sich nicht).
+  In a1 setzt kein Produktivweg ``beide``/``schnitt``/``offen*`` (das «Ansetzen» kommt in U2 a2).
 
 ``kanal_quelle`` bleibt der Vollzug im Kanal; diese Zeile ist die Erklärung — kein Leser vergleicht beide Zeitpunkte.
 Löschen: ``ON DELETE CASCADE`` an der Anlage; Gerät und Innengerät räumen ausdrücklich
@@ -25,7 +36,7 @@ Löschen: ``ON DELETE CASCADE`` an der Anlage; Gerät und Innengerät räumen au
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -35,6 +46,15 @@ GRUND_KORREKTUR = "korrektur"
 HERKUNFT_WECHSEL = "wechsel"
 HERKUNFT_NACHTRAG = "nachtrag"
 HERKUNFT_ALTBESTAND = "altbestand"
+#: Ansatz eines Wechsels «bleiben» (U2 a1, F1). Ohne Wert: wie vor U2.
+ANSATZ_OFFEN = "offen"
+ANSATZ_OFFEN_SCHNITT = "offen_schnitt"
+ANSATZ_BEIDE = "beide"
+ANSATZ_SCHNITT = "schnitt"
+#: Lücken-Zeile, deren Ende (Beginn des Gefüllten) auf ungeprüfter Höhe liegt (H-1 aus U1-K, Option A).
+ANSATZ_HOEHE_UNGEPRUEFT = "hoehe_ungeprueft"
+#: Angesetzt: die Zeile trägt Rand-Stände.
+ANSATZ_MIT_RAND = frozenset({ANSATZ_BEIDE, ANSATZ_SCHNITT})
 
 
 class ZuordnungWechsel(Base):
@@ -54,6 +74,9 @@ class ZuordnungWechsel(Base):
     herkunft: Mapped[str] = mapped_column(String(20), nullable=False)
     aufgehoben_durch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     lauf: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ansatz: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    stand_alt_ende: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stand_neu_null: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
         Index("ix_zuordnung_wechsel_anlage_key", "anlage_id", "sensor_key", "ab_ts"),

@@ -54,7 +54,12 @@ from typing import Any, Optional
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.zuordnung_wechsel import GRUND_KORREKTUR, HERKUNFT_NACHTRAG, ZuordnungWechsel
+from backend.models.zuordnung_wechsel import (
+    ANSATZ_HOEHE_UNGEPRUEFT,
+    GRUND_KORREKTUR,
+    HERKUNFT_NACHTRAG,
+    ZuordnungWechsel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +189,10 @@ class Lage:
     #: Das Intervall ``[falsch_seit, ab)`` dieses Auftrags (Vorschau und Lauf; Korrekturrunde U1-K (e): eine wiederholte
     #: Korrektur über einen Teil nimmt ihre Zeile wieder, kürzt ältere Lücken aber nur um diesen Teil).
     intervall: Optional[tuple[datetime, datetime]] = None
+    #: Pflichtpunkt P-2 (Halt H-1 aus U1-K, Option A): die Korrektur füllt erst nach der Lücke aus Home Assistant, und kein
+    #: Rand-Stand war prüfbar — die Lücken-Zeile trägt das Merkmal «Höhe ungeprüft» (``ANSATZ_HOEHE_UNGEPRUEFT``), ihr Rand ist
+    #: ein Höhenwechsel (``zeitpunkt.ohne_hoehenwechsel``).
+    hoehe_ungeprueft: bool = False
 
     @property
     def nichts_zu_tun(self) -> bool:
@@ -262,7 +271,8 @@ async def lage(db: AsyncSession, a: Auftrag, *, ha_svc=None) -> Lage:
         from backend.services.zuordnung_wechsel.stueck import tage_der_luecke, tragtag_der_luecke
 
         la.luecke_tage, la.luecke_rand = await tage_der_luecke(db, anlage, a.sensor_key, *la.luecke)
-        la.zaehlerluecke = await _wie_zaehlerluecke(db, a, *la.luecke, ab_staende)
+        la.hoehe_ungeprueft = await _hoehe_ungeprueft(db, a, la.luecke, ab_staende, ha_svc)
+        la.zaehlerluecke = await _wie_zaehlerluecke(db, a, *la.luecke, ab_staende, hoehe_ungeprueft=la.hoehe_ungeprueft)
         if la.zaehlerluecke:
             la.zaehlerluecke_tag = await tragtag_der_luecke(db, anlage, a.sensor_key, la.luecke[1])
             la.luecke_tage = [d for d in la.luecke_tage if d != la.zaehlerluecke_tag]
@@ -288,11 +298,13 @@ async def _fuellt_aus_ha(db: AsyncSession, la: Lage, f: datetime, ab: datetime) 
 _GEDACHT = 10 ** 12
 
 
-async def _zeilen_danach(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, luecke: tuple[datetime, datetime]) -> list:
+async def _zeilen_danach(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, luecke: tuple[datetime, datetime], *,
+                         hoehe_ungeprueft: bool = False) -> list:
     """Die Wechsel-Zeilen des Schlüssels, wie sie **nach** dieser Korrektur stehen werden (``zeitpunkt.Wechsel``, nichts
     geschrieben): die Zeilen, die sie aufhebt (``_ersetzte``) und die älteren Lücken, die sie überdeckt
     (``_aeltere_luecken``), als aufgehoben; dazu die Korrektur-Zeile und — bei einer Home-Assistant-Entität — die
-    Lücken-Zeile (``_luecken_zeile``). Eine wiederholte gleiche Korrektur legt keine neue Zeile an (``_gleiche_korrektur``)."""
+    Lücken-Zeile (``_luecken_zeile``, mit dem Merkmal «Höhe ungeprüft», wenn der Lauf es setzt — P-2). Eine wiederholte
+    gleiche Korrektur legt keine neue Zeile an (``_gleiche_korrektur``)."""
     from dataclasses import replace
 
     from backend.services.zuordnung_wechsel.zeitpunkt import Wechsel, lade_wechsel
@@ -305,11 +317,13 @@ async def _zeilen_danach(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime
     if gleich is None:
         zeilen.append(Wechsel(a.sensor_key, ab, a.vorher, a.nachher, GRUND_KORREKTUR, f, None, None, _GEDACHT))
     if richtige_entitaet(a.nachher) is not None:
-        zeilen.append(Wechsel(a.sensor_key, luecke[1], a.vorher, None, GRUND_KORREKTUR, luecke[0], None, None, _GEDACHT + 1))
+        zeilen.append(Wechsel(a.sensor_key, luecke[1], a.vorher, None, GRUND_KORREKTUR, luecke[0], None, None, _GEDACHT + 1,
+                              ansatz=ANSATZ_HOEHE_UNGEPRUEFT if hoehe_ungeprueft else None))
     return zeilen
 
 
-async def _wie_zaehlerluecke(db: AsyncSession, a: Auftrag, f: datetime, bis: datetime, ab: datetime) -> bool:
+async def _wie_zaehlerluecke(db: AsyncSession, a: Auftrag, f: datetime, bis: datetime, ab: datetime, *,
+                             hoehe_ungeprueft: bool = False) -> bool:
     """**Wie jede Zählerlücke** (Entscheid Gernot 19.11.2026, Bauplan Nr. 119; Halt H-K2-1 Option A, Nr. 127; Zielbild Nr. 133
     (4)): die verworfene, nicht gefüllte Zeit ``[f, bis)`` bekommt eine Lücken-Zeile (Merkmal «hier nicht aus Home Assistant
     heilen und nicht füllen»), und ihre Ränder sind **keine Nähte**, wenn zwischen dem letzten Stand davor und dem ersten Stand
@@ -324,7 +338,8 @@ async def _wie_zaehlerluecke(db: AsyncSession, a: Auftrag, f: datetime, bis: dat
         # Der Stand danach ist der, den der Lauf um ``bis`` speichert, bzw. — endet die Zeit jetzt (Dialog: ``ab`` = nächste
         # volle Stunde) — der erste, den eedc danach schreibt; dort gilt die richtige Quelle der Korrektur.
         nach = bis
-    return ohne_hoehenwechsel(await _zeilen_danach(db, a, f, ab, (f, bis)), vor, nach, (f, bis))
+    return ohne_hoehenwechsel(await _zeilen_danach(db, a, f, ab, (f, bis), hoehe_ungeprueft=hoehe_ungeprueft), vor, nach,
+                              (f, bis))
 
 
 async def _aeltere_luecken(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, ohne_id: Optional[int] = None
@@ -380,17 +395,32 @@ async def _luecke(db: AsyncSession, a: Auftrag, w0: Optional[int], ab: datetime,
 
 
 async def _hoehe_passt(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, ha_svc) -> bool:
+    """``_hoehe_pruefung`` ohne «nicht prüfbar»: füllen, außer ein prüfbarer Rand passt nicht."""
+    return await _hoehe_pruefung(db, a, f, ab, ha_svc) is not False
+
+
+async def _hoehe_ungeprueft(db: AsyncSession, a: Auftrag, luecke: tuple[datetime, datetime], ab: datetime, ha_svc) -> bool:
+    """Pflichtpunkt P-2 (Halt H-1 aus U1-K, Option A): füllt die Korrektur aus Home Assistant erst **nach** der Lücke
+    (``luecke`` endet vor ``ab``) und ist kein Rand-Stand prüfbar (``_hoehe_pruefung`` ⇒ ``None``)? Nicht am Stück-Weg (dort
+    prüft ``stueck.ist_fuellbar`` beide Ränder)."""
+    if a.stueck or ha_svc is None or luecke[1] >= ab:
+        return False
+    return await _hoehe_pruefung(db, a, luecke[0], ab, ha_svc) is None      # dieselben Ränder wie ``_luecke``
+
+
+async def _hoehe_pruefung(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, ha_svc) -> Optional[bool]:
     """**Füllen aus Home Assistant nur auf geprüfter Höhe** (Korrekturrunde U1-K (d), Bauplan Nr. 141; dieselbe Prüfung wie am
     Stück, ``stueck.ist_fuellbar``): ein prüfbarer Rand-Stand — der letzte gespeicherte Stand vor ``f`` bzw. der erste ab ``ab``,
     gespeichert aus der richtigen Quelle, und Home Assistant führt sie dort — muss HAs heutige Summe der richtigen Quelle sein
     (``SPIEGEL_TOLERANZ_KWH``). Passt einer nicht (etwa: die Summe wurde in Home Assistant seither berichtigt), füllt eedc nicht;
     die Zeit bleibt leer und folgt der Regel der Zählerlücke. Ein Rand aus einer anderen Quelle prüft die Höhe der richtigen
-    nicht (Wechsel A → C)."""
+    nicht (Wechsel A → C). ``None``: kein Rand-Stand prüfbar (P-2), ``True``: alle prüfbaren passen."""
     from backend.core.berechnungen.zaehler_versatz import stand_passt_zum_spiegel
     from backend.services.zuordnung_wechsel.stueck import _ha_rohsumme, _rand_ab, _rand_vor
     from backend.services.zuordnung_wechsel.zeitpunkt import HEUTE, gleiche_quelle, lade_wechsel, quelle_am
 
     zeilen = (await lade_wechsel(db, a.anlage_id)).get(a.sensor_key)
+    geprueft: Optional[bool] = None
     for rand in (await _rand_vor(db, a.anlage_id, a.sensor_key, f), await _rand_ab(db, a.anlage_id, a.sensor_key, ab)):
         if rand is None:
             continue
@@ -400,9 +430,12 @@ async def _hoehe_passt(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, 
         if not (isinstance(q, dict) and gleiche_quelle(q, a.nachher)):
             continue
         summe = await _ha_rohsumme(ha_svc, richtige_entitaet(a.nachher), a.sensor_key, rand.zeitpunkt)
-        if summe is not None and not stand_passt_zum_spiegel(rand.stand, summe, 0.0):
+        if summe is None:
+            continue
+        if not stand_passt_zum_spiegel(rand.stand, summe, 0.0):
             return False
-    return True
+        geprueft = True
+    return geprueft
 
 
 async def _erster_stand(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime) -> Optional[datetime]:
@@ -475,6 +508,11 @@ SATZ_LUECKE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zählerst�
                "gilt nicht erkennbar dieselbe Quelle (eine andere oder unbekannte Quelle), oder dazwischen ist ein Zählertausch "
                "eingetragen — wo eedc einen Wert aus den gespeicherten Zählerständen bildet, bildet es über diese Zeit keine "
                "Differenz: die Menge dieser Zeit, gerechnet ab dem letzten Zählerstand davor, fehlt dort.")
+#: Pflichtpunkt P-2 (Halt H-1 aus U1-K, Option A): dieselbe Quelle, aber das Gefüllte nach der Zeit liegt auf ungeprüfter Höhe.
+SATZ_LUECKE_HOEHE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zählerstände wieder auf. Ob die Zählerstände, die "
+                     "eedc danach aus Home Assistant liest, auf der Höhe der gespeicherten liegen, lässt sich nicht prüfen — "
+                     "wo eedc einen Wert aus den gespeicherten Zählerständen bildet, bildet es über diese Zeit keine Differenz: "
+                     "die Menge dieser Zeit, gerechnet ab dem letzten Zählerstand davor, fehlt dort.")
 SATZ_LUECKE_TAGE = "Wo die Tagesansicht den Wert aus den gespeicherten Zählerständen bildet, zeigt sie {teile}."
 SATZ_LUECKE_INNEN = "{tage} keinen Wert"
 SATZ_LUECKE_RAND = "{tage} nur den Teil außerhalb dieser Zeit"
@@ -505,7 +543,7 @@ def saetze_luecke(la: Lage) -> list[str]:
     if la.luecke is None:
         return []
     von, bis = la.luecke
-    satz = SATZ_ZAEHLERLUECKE if la.zaehlerluecke else SATZ_LUECKE
+    satz = SATZ_ZAEHLERLUECKE if la.zaehlerluecke else (SATZ_LUECKE_HOEHE if la.hoehe_ungeprueft else SATZ_LUECKE)
     s = [satz.format(von=von.strftime("%d.%m.%Y %H:%M"), bis=bis.strftime("%d.%m.%Y %H:%M"))]
     teile = []
     if la.luecke_tage:
@@ -689,7 +727,8 @@ async def _wechsel_zeile(db: AsyncSession, a: Auftrag, jetzt: datetime, lauf: st
 
 
 async def _luecken_zeile(db: AsyncSession, a: Auftrag, row: ZuordnungWechsel, luecke: Optional[tuple[datetime, datetime]],
-                         lauf: str, intervall: Optional[tuple[datetime, datetime]] = None) -> Optional[ZuordnungWechsel]:
+                         lauf: str, intervall: Optional[tuple[datetime, datetime]] = None, *,
+                         hoehe_ungeprueft: bool = False) -> Optional[ZuordnungWechsel]:
     """Die Lücken-Zeile (Bauplan «Zu §14» Nr. 95 (1), Nr. 97; seit U1 in jeder Lage): bleibt ein Teil des Intervalls ungefüllt,
     obwohl die Korrektur-Zeile eine Home-Assistant-Entität nennt (ohne Home Assistant, ohne Geschichte, ein Stück, dessen Ränder
     nicht zu HAs Rohsumme passen), steht für diesen Teil eine zweite Korrektur-Zeile mit ``nachher`` leer — sie ist jünger,
@@ -716,7 +755,8 @@ async def _luecken_zeile(db: AsyncSession, a: Auftrag, row: ZuordnungWechsel, lu
     for w, von, bis in reste:
         db.add(ZuordnungWechsel(anlage_id=w.anlage_id, sensor_key=w.sensor_key, erklaert_ts=w.erklaert_ts, ab_ts=bis,
                                 vorher=w.vorher, nachher=None, grund=GRUND_KORREKTUR, falsch_seit_ts=von,
-                                herkunft=w.herkunft, lauf=w.lauf))
+                                herkunft=w.herkunft, lauf=w.lauf,
+                                ansatz=w.ansatz if bis == w.ab_ts else None))     # P-2: der Rest mit dem alten Ende
     if reste:
         await db.flush()
     vergiss(db, a.anlage_id)
@@ -724,7 +764,7 @@ async def _luecken_zeile(db: AsyncSession, a: Auftrag, row: ZuordnungWechsel, lu
         return gleich
     neu = ZuordnungWechsel(anlage_id=a.anlage_id, sensor_key=a.sensor_key, erklaert_ts=row.erklaert_ts, ab_ts=soll[1],
                            vorher=row.vorher, nachher=None, grund=GRUND_KORREKTUR, falsch_seit_ts=soll[0],
-                           herkunft=row.herkunft, lauf=lauf)
+                           herkunft=row.herkunft, lauf=lauf, ansatz=ANSATZ_HOEHE_UNGEPRUEFT if hoehe_ungeprueft else None)
     db.add(neu)
     await db.flush()
     vergiss(db, a.anlage_id)
@@ -775,7 +815,7 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
     kk = await korrigiere_kanal(db, a.anlage_id, a.sensor_key, _kanal_beginn(a), int(a.ab.timestamp()),
                                 richtige_entitaet(a.nachher), ha_svc=ha_svc, jetzt_ts=int(jetzt.timestamp()), bis_ts=bis_ts)
     row = await _wechsel_zeile(db, a, jetzt, lauf, kk.w0)
-    luecke = await _luecken_zeile(db, a, row, la.luecke, lauf, la.intervall)
+    luecke = await _luecken_zeile(db, a, row, la.luecke, lauf, la.intervall, hoehe_ungeprueft=la.hoehe_ungeprueft)
     zs, rs = await _verwerfe_staende(db, a, row.ab_ts)
     bestand = {"stundenzeilen_geleert": 0, "tageszeilen_geleert": 0, "felder_geleert": 0}
     if bestand_leeren and (la.von2 is None or la.von2 <= la.bis2):
@@ -800,7 +840,10 @@ def _staende_auftrag(a: Auftrag, la: Lage, ha_svc) -> Optional[dict]:
     if ha_svc is None or la.staende_neu is None:
         return None
     von, bis = la.staende_neu
-    return {"key": a.sensor_key, "von": von.isoformat(), "bis": bis.isoformat()}
+    auftrag = {"key": a.sensor_key, "von": von.isoformat(), "bis": bis.isoformat()}
+    if la.hoehe_ungeprueft:                         # P-2: eine Lücke, die der Lauf erst beim Lesen findet, trägt es auch
+        auftrag["hoehe_ungeprueft"] = True
+    return auftrag
 
 
 def sitzungen_wie(db: AsyncSession, rueckfall):
@@ -899,13 +942,15 @@ async def fuelle_staende(sitzungen, anlage_id: int, auftrag: dict, *, ha_svc=Non
     _erreichbar(svc)
     erster = await _erster_stand_da(sitzungen, anlage_id, auftrag["key"], von, bis)
     if erster is None or erster > von:
-        await _luecke_nach_dem_lesen(sitzungen, anlage_id, auftrag["key"], von, bis if erster is None else erster)
+        await _luecke_nach_dem_lesen(sitzungen, anlage_id, auftrag["key"], von, bis if erster is None else erster,
+                                     ansatz=ANSATZ_HOEHE_UNGEPRUEFT if erster is not None and auftrag.get("hoehe_ungeprueft")
+                                     else None)
     merken.invalidiere(anlage_id)
     return n
 
 
 async def _luecke_nach_dem_lesen(sitzungen, anlage_id: int, key: str, von: datetime, bis: datetime,
-                                 anlass: str = "Home Assistant führt nichts") -> None:
+                                 anlass: str = "Home Assistant führt nichts", *, ansatz: Optional[str] = None) -> None:
     """Home Assistant ist erreichbar und führt für ``[von, bis)`` nichts (U1 Punkt 2): eine Lücken-Zeile zur Korrektur-Zeile,
     deren Zeit das Füllen trägt (gleiche Felder wie ``_luecken_zeile``, ihr Lauf) — sonst heilte «Zuordnung zum Zeitpunkt» dort
     aus Home Assistant. Ihre Ränder sind Nähte nur bei Höhenwechsel (``zeitpunkt.ohne_hoehenwechsel``)."""
@@ -922,7 +967,8 @@ async def _luecke_nach_dem_lesen(sitzungen, anlage_id: int, key: str, von: datet
         if k is None:
             return
         db.add(ZuordnungWechsel(anlage_id=anlage_id, sensor_key=key, erklaert_ts=k.erklaert_ts, ab_ts=bis, vorher=k.vorher,
-                                nachher=None, grund=GRUND_KORREKTUR, falsch_seit_ts=von, herkunft=k.herkunft, lauf=k.lauf))
+                                nachher=None, grund=GRUND_KORREKTUR, falsch_seit_ts=von, herkunft=k.herkunft, lauf=k.lauf,
+                                ansatz=ansatz))
     logger.info("Korrektur: %s für %s vom %s bis %s — die Zeit bleibt leer", anlass, key, von, bis)
 
 

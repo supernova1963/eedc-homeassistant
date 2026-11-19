@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.berechnungen.betriebsart_gemessen import (
     geraetefeld_oder_innengeraete,
 )
-from backend.core.berechnungen.zaehler_naht import ueber_naht
+from backend.core.berechnungen.zaehler_naht import gehobene_staende, hebung_am, trennende, ueber_naht
 from backend.core.betriebsmodus import BETRIEBSART_NUTZENERGIE_FELD, HEIZEN, KUEHLEN
 from backend.core.field_definitions import FEINE_STROM_FELDER, WP_GESAMT_STROM_FELDER
 from backend.core.tageswert_grund import (
@@ -457,7 +457,10 @@ async def snapshot_tagestabelle(
                 db, anlage.id, sk, entity_id, rng.boundary_at(offset),
                 quellen_energy=quellen_energy,
             )
-        naehte = await fortsetzungs_naehte(db, anlage.id, sk)          # B-3
+        alle_naehte = await fortsetzungs_naehte(db, anlage.id, sk)     # B-3
+        # U2 a1 (F5): eine Naht mit Rand-Ständen hebt die Stände beim Laden und teilt nicht; geteilt wird nur an den übrigen.
+        staende = gehobene_staende(staende, rng.boundary_at, alle_naehte)
+        naehte = trennende(alle_naehte)
         _fill_gaps_linear(staende, _naht_trenner(rng, naehte))         # E1: nur innen, nicht über eine Naht
 
         vorher: Optional[tuple[datetime, float]] = None
@@ -468,6 +471,8 @@ async def snapshot_tagestabelle(
                 db, anlage.id, sk, rng.boundary_at(-1),
                 sensor_id=entity_id, quellen_energy=quellen_energy,
             )
+            if vorher is not None and len(naehte) != len(alle_naehte):
+                vorher = (vorher[0], vorher[1] + hebung_am(vorher[0], alle_naehte))
         slots: dict[int, tuple[float, int]] = {}
         for h in range(24):
             stand = staende.get(h)
@@ -1570,7 +1575,8 @@ async def get_hourly_counter_sum_by_feld(
 
     rng = BoundaryRange.for_hourly_slots(datum)
     snaps_per_inv: dict[str, dict[int, Optional[float]]] = {}
-    naehte_je = {sk: await fortsetzungs_naehte(db, anlage.id, sk) for sk, _ in relevant_invs}   # B-3
+    alle_je = {sk: await fortsetzungs_naehte(db, anlage.id, sk) for sk, _ in relevant_invs}   # B-3
+    naehte_je = {sk: trennende(n) for sk, n in alle_je.items()}       # U2 a1 (F5): Nähte mit Rand-Ständen heben beim Laden
     for sensor_key, entity_id in relevant_invs:
         snaps: dict[int, Optional[float]] = {}
         for offset in rng.boundary_offsets:
@@ -1579,7 +1585,7 @@ async def get_hourly_counter_sum_by_feld(
                 db, anlage.id, sensor_key, entity_id, ts,
                 quellen_energy=quellen_energy,
             )
-        snaps_per_inv[sensor_key] = snaps
+        snaps_per_inv[sensor_key] = gehobene_staende(snaps, rng.boundary_at, alle_je[sensor_key])
 
     # Plausibilitäts-Cap pro Stunde: Counter wie WP-Kompressor-Starts haben
     # physikalische Obergrenzen (Mindeststillstand-/-laufzeit), realistisch

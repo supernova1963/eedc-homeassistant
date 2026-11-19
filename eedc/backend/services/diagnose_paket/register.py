@@ -285,7 +285,8 @@ REGISTER: dict[str, Tabelle] = {
     # Sensorwechsel mit Grund (B-1): `vorher`/`nachher` sind wirksame Quellen — dieselbe Klasse wie `anlagen.sensor_mapping`
     # (Entität und MQTT-Topic als Text, keine Zugangsdaten; Form `services/zuordnung_wechsel/quelle.py`).
     "zuordnung_wechsel": _tab(
-        "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund falsch_seit_ts herkunft aufgehoben_durch lauf",
+        "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund falsch_seit_ts herkunft aufgehoben_durch lauf "
+        "ansatz stand_alt_ende stand_neu_null",
         vorher=_ZUORDNUNG, nachher=_ZUORDNUNG),
 }
 

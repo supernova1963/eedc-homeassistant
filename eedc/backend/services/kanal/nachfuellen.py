@@ -496,19 +496,26 @@ class _StaendeAbschnitt:
     zeilen: list = field(default_factory=list)
     offset: float = 0.0
     an_quelle: Optional[int] = None
+    #: U2 a1 (F5): beginnt der Abschnitt an einer Naht mit Rand-Ständen, ihr Versatz — die erste Stunde trägt dann den
+    #: Zuwachs beider Sensoren (wie die Reihe), nicht «keinen Zuwachs».
+    versatz_davor: Optional[float] = None
 
 
 def _laeufe(staende: list[tuple[datetime, float, str]], ziel: _ZielES, naehte=()) -> list[_StaendeAbschnitt]:
     """Läufe gleicher Herkunft; an einer verzeichneten Fortsetzung (``naehte``: ``ab_ts``, Sensorwechsel S4) beginnt ein neuer
     Lauf — er wird eine eigene Quelle, die am Kanalwert des vorigen ansetzt (``_offsets_rueckwaerts``), die Naht zählt nicht
-    als Zuwachs. Ein Stand trägt den Beginn seiner Stunde (``_rohstaende``), sein Zeitpunkt ist eine Stunde später."""
-    from backend.core.berechnungen.zaehler_naht import ueber_naht
+    als Zuwachs. Ein Stand trägt den Beginn seiner Stunde (``_rohstaende``), sein Zeitpunkt ist eine Stunde später.
+    **U2 a1 (F5):** an einer Naht mit Rand-Ständen beginnt ebenso ein neuer Lauf (eine eigene Quelle), er trägt aber ihren
+    Versatz (``versatz_davor``) — ``_offsets_rueckwaerts`` setzt dann denselben Versatz wie die Reihe statt «ohne Zuwachs»."""
+    from backend.core.berechnungen.zaehler_naht import hebung_am, ueber_naht
 
     out: list[_StaendeAbschnitt] = []
     stunde = timedelta(hours=1)
     for t, w, h in staende:
-        if not out or out[-1].herkunft != h or ueber_naht(out[-1].staende[-1][0] + stunde, t + stunde, naehte):
-            out.append(_StaendeAbschnitt(h, [], ziel.kennung(h)))
+        vor = out[-1].staende[-1][0] + stunde if out else None
+        if not out or out[-1].herkunft != h or ueber_naht(vor, t + stunde, naehte):
+            v = None if vor is None else hebung_am(t + stunde, naehte) - hebung_am(vor, naehte)
+            out.append(_StaendeAbschnitt(h, [], ziel.kennung(h), versatz_davor=v or None))
         out[-1].staende.append((t, w))
     return out
 
@@ -561,19 +568,30 @@ async def _naht_gleiche_quelle(db, k, kanal: Kanal, ziel: _ZielES, ab: _StaendeA
     return None
 
 
-def _offsets_rueckwaerts(abschnitte: list[_StaendeAbschnitt], art: str, ende_wert: Optional[float]) -> None:
+def _offsets_rueckwaerts(abschnitte: list[_StaendeAbschnitt], art: str, ende_wert: Optional[float],
+                         ende_roh: Optional[float] = None, ende_versatz: Optional[float] = None) -> None:
     """Die ``offset`` der Abschnitte von hinten: der letzte endet bei ``ende_wert`` (Kanalwert der ersten Kanal-Zeile
     einer ANDEREN Quelle) bzw. beginnt ohne Anker bei 0; jeder frühere endet beim Kanalwert der ersten Zeile seines
     Nachfolgers. An jeder Quellgrenze trägt die erste Stunde der späteren Quelle damit keinen Zuwachs — wie ein
     Quellwechsel im Stundenlauf, dessen neue Quelle am Kanalwert der alten ansetzt (zwei Summen-Systeme haben keinen
     gemeinsamen Anker; HA beginnt eine neue Statistik ebenso ohne Zuwachs). Ein Abschnitt, der an seine Quelle anschließt
-    (``an_quelle``), behält deren ``offset``."""
-    nach: Optional[float] = ende_wert
+    (``an_quelle``), behält deren ``offset``. **U2 a1 (F5):** liegt zwischen einem Abschnitt und seinem Nachfolger (bzw. der
+    ersten Kanal-Zeile, ``ende_roh``/``ende_versatz``) eine Naht mit Rand-Ständen, ist sein ``offset`` der des Nachfolgers
+    minus ihr Versatz — die erste Stunde danach trägt den Zuwachs beider Sensoren wie die gehobene Reihe."""
+    from backend.core.berechnungen.zaehler_naht import offset_vor_naht
+
+    nach, erster_nach, v_nach = ende_wert, ende_roh, ende_versatz
     for ab in reversed(abschnitte):
         letzter, erster = _wert(ab.zeilen[-1], art), _wert(ab.zeilen[0], art)
         if ab.an_quelle is None:
-            ab.offset = (nach - letzter) if (nach is not None and letzter is not None) else 0.0
+            if nach is None or letzter is None:
+                ab.offset = 0.0
+            elif v_nach is None or erster_nach is None:
+                ab.offset = nach - letzter
+            else:
+                ab.offset = offset_vor_naht(nach, erster_nach, v_nach)
         nach = None if erster is None else erster + ab.offset
+        erster_nach, v_nach = erster, ab.versatz_davor
 
 
 async def _plan_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES, jetzt: datetime,
@@ -604,7 +622,8 @@ async def _plan_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES
             KanalStatistik.kanal_id == kanal.id, KanalStatistik.start_ts == erste_ts)))).scalar_one()
         from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 
-        abschnitte = _laeufe(staende, ziel, await fortsetzungs_naehte(db, anlage_id, ziel.key))
+        naehte = await fortsetzungs_naehte(db, anlage_id, ziel.key)
+        abschnitte = _laeufe(staende, ziel, naehte)
         letzter = abschnitte[-1]
         gleich = (anker is not None and erste_q is not None and erste_q.familie == FAMILIE_MITSCHRIFT
                   and erste_q.statistic_id == letzter.kennung)
@@ -618,14 +637,28 @@ async def _plan_eigene_summe(sitzungen: Sitzungen, anlage_id: int, ziel: _ZielES
                 return kanal.id, grund, []
             letzter.an_quelle, letzter.offset = erste_q.gueltig_ab, float(erste_q.offset)
         abschnitte = [ab for ab in abschnitte if ab.zeilen]
-        ende = None
+        ende, roh, v_ende = None, None, None
         if anker is not None and not gleich:
             roh = _wert({"sum": anker.sum, "state": anker.state}, kanal.art)
             ende = None if roh is None else roh + float(erste_q.offset if erste_q is not None else 0.0)
+            v_ende = _versatz_bis_anker(abschnitte, anker.start_ts, naehte)
         if abschnitte:
-            _offsets_rueckwaerts(abschnitte, kanal.art, ende)
+            _offsets_rueckwaerts(abschnitte, kanal.art, ende, roh, v_ende)
             erg.tagesstand_reihen += _grober_als_stuendlich(staende)
         return kanal.id, None, abschnitte
+
+
+def _versatz_bis_anker(abschnitte: list[_StaendeAbschnitt], anker_start_ts: int, naehte) -> Optional[float]:
+    """U2 a1 (F5): der Versatz der Nähte mit Rand-Ständen zwischen dem letzten Stand des Nachbaus und der ersten Kanal-Zeile
+    (Stand-Zeitpunkte: Stundenbeginn + 1 h) — ``None`` ohne solche Naht."""
+    from backend.core.berechnungen.zaehler_naht import hebung_am
+
+    if not abschnitte or not abschnitte[-1].staende:
+        return None
+    stunde = timedelta(hours=1)
+    v = hebung_am(datetime.fromtimestamp(anker_start_ts) + stunde, naehte) - hebung_am(abschnitte[-1].staende[-1][0] + stunde,
+                                                                                       naehte)
+    return v or None
 
 
 async def _quellen_im_block(db: AsyncSession, kanal_id: int, abschnitte: list[_StaendeAbschnitt], beginn: list[int],

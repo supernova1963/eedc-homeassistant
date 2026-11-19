@@ -5168,9 +5168,65 @@ Versatz       = ein Rand eines versetzten Abschnitts an einer Fortsetzungs-Naht 
 ```
 
 **Benannte Grenze:** die Menge zwischen dem letzten Stand vor und dem ersten Stand ab `ab_ts` zählt nicht (stündliche Stände bis
-1 h, Tagesstände bis 1 Tag je Seite; MQTT: Stände der Naht-Stunde vor dem ersten neuen Stand gehen in den Versatz). Welcher Leser
-die Naht beachtet, wer «Kanal zuerst» liest und wer bewusst nicht, steht im Wächter «Reihen-Leser»
-(`tests/test_reihen_leser_waechter.py`, Einstufung je Lesestelle). Proben: `test_sensorwechsel_s2_naht.py`.
+1 h, Tagesstände bis 1 Tag je Seite; MQTT: Stände der Naht-Stunde vor dem ersten neuen Stand gehen in den Versatz) — für eine
+Naht **ohne** Rand-Stände; mit Rand-Ständen gilt der nächste Abschnitt. Welcher Leser die Naht beachtet, wer «Kanal zuerst»
+liest und wer bewusst nicht, steht im Wächter «Reihen-Leser» (`tests/test_reihen_leser_waechter.py`, Einstufung je Lesestelle).
+Proben: `test_sensorwechsel_s2_naht.py`.
+
+#### Wechsel «bleiben» zwischen zwei Sensoren: Rand-Werte (U2 a1, Rechenweg F1, F5–F7)
+
+**Regel (Entscheid Gernot 19.11.2026, Bauplan Nr. 129, 138, 139):** die Menge eines Zählerfelds über ein Fenster ist die Summe
+der Zuwächse jeder Quelle in ihrer Geltungszeit — wie Home Assistant mit zwei Sensoren. Der alte Sensor zählt bis zu seinem
+letzten Wert, der neue ab seinem ersten; zwischen zwei Sensoren wird nie eine Differenz gebildet, und keine Stunde fällt weg.
+
+```
+Wechsel-Zeile   = zuordnung_wechsel mit grund = fortsetzung (intern; für Anwender «bleiben»), dazu
+                  ansatz ∈ { leer · offen · offen_schnitt · beide · schnitt },  stand_alt_ende,  stand_neu_null
+                  leer               ⇒ die Zeile liest wörtlich wie vor U2 (Naht ohne Rand-Stände, oben)
+                  offen/offen_schnitt ⇒ noch nicht angesetzt: liest wie eine Naht ohne Rand-Stände
+                  beide              ⇒ ohne Überlappung: die Stunde vor ab_ts zählt den alten UND den neuen Sensor;
+                                       stand_neu_null = 0 (HAs Regel: die erste Zeile einer neuen Statistik ab 0 — nur
+                                       hier am Wechsel, Bauplan Nr. 139)
+                  schnitt            ⇒ mit Überlappung: Schnitt an G; beide Rand-Stände aus der Zeile vor G
+G («zählt ab»)  = ab_ts − 1 h = kanal_quelle.gueltig_ab der neuen Quelle (keine eigene Spalte)
+Versatz         = stand_alt_ende − stand_neu_null                   (core/berechnungen/zaehler_naht.rand_versatz)
+Reihe (F5)      = eine Naht mit Rand-Ständen teilt nicht: jeder Stand ab ab_ts steigt um den Versatz (mehrere Nähte: die
+                  Summe ihrer Versätze) — zaehler_naht.Naht, abschnitte, gehoben; die Slot-Leser (Tagestabelle aus der
+                  Reihe, Stundenform, Zählwerk-Stunde) heben beim Laden und teilen nur an den übrigen Nähten; Zählwerke
+                  und Stand-Felder (Gas, Wasser, Öl: Rand-Stände auf state) ebenso
+Nachbau (L15)   = der Stände-Nachbau aus HA-Ständen und der Nachtrag (kanal/naht.nachtrag_fortsetzung) setzen an einer
+                  Naht mit Rand-Ständen denselben Versatz: Versatz der Quelle davor = Versatz der Quelle danach − Versatz
+                  der Naht (zaehler_naht.offset_vor_naht) — die erste Stunde danach trägt den Zuwachs beider Sensoren
+Tag aus HA (F6) = am Naht-Slot (Stand um ab_ts) gilt der Slot der neuen Entität, bei beide zuzüglich des Slots der alten
+                  (zaehler_naht.slot_beider); die neue Entität einer beide-Zeile zählt ihre erste Zeile ab 0, wenn HA
+                  vor dem Fenster keine Zeile führt (get_hourly_slots_for_day(anker_null=…); lts_aggregator._naht_plan)
+Monat aus HA(F7)= je Geltungsabschnitt die Zeilenregel des Monatslesers (get_sensor_fensterwert, R4 und Anker wie
+                  get_sensor_monatswert): alte Quelle ihre Zeilen vor G, bei beide einschließlich G; neue Quelle ab G,
+                  Anker die Zeile vor G, bei beide 0; Summe unter der heutigen Entität (auch wenn der Leser sie für den
+                  Monat nicht nennt); start_wert/end_wert sind dann ein durchlaufender Stand, keine Zählerstände eines
+                  Sensors (zaehler_naht.monat_aus_abschnitten; zuordnung_wechsel/monat.py) — vor dem Kanal-Ersatz der fünf
+                  Kalendermonats-Wege (bilanz_leser.monatswerte_mit_kanaelen) und am laufenden Monat
+Falsch seit     = Pflichtpunkt P-1: erklärt eine Korrektur für ihre Zeit eine andere Home-Assistant-Entität als richtig als
+                  die davor geltende, ist falsch_seit_ts eine Naht ohne Rand-Stände — keine Differenz zweier Sensoren
+                  (zeitpunkt._falsch_seit_zwischen_zwei_sensoren); nur Home Assistant → Home Assistant
+```
+
+**Jede Darstellung nimmt die Rand-Werte aus derselben Quelle wie ihre übrigen Werte:** die Reihe ihre gespeicherten Rand-Stände
+(`stand_alt_ende`/`stand_neu_null` in der Höhe der Reihe), der Kanal den Versatz seiner Quellzeile, die Leser direkt an Home
+Assistant (Tag aus HA, Monat aus HA) die Zeilen von Home Assistant. Gemessen (Messfrage M3, Produktiv-Kopie 15.11., Wechsel der
+Wallbox 18.10. mit Überlappung): Kanal-Versatz aus HAs Zeilen −208,214 = heute; die gespeicherte Reihe des alten Sensors liegt
+1 906,5 unter HAs heutiger Summe — mit ihren eigenen Rand-Ständen (Hebung −2 114,714) ergibt sie den Oktober des Kanals 242,871,
+mit HAs Rand-Ständen wäre es 2 149,371.
+
+Gemessen an der Saat (Lab-Zeilen 19.11.: alter Zähler bis 07:12 +0,6 in der Stunde 07, neuer ab 07:27 0,7 in derselben Stunde):
+Naht-Slot 1,3 in Reihe, Tagesabschluss aus HA-Slots und Kanal; Tag im Rückwärts-Raster 15,8; Monat aus HA mit und ohne
+Kanal-Deckung wie HA. **Was a1 noch nicht kann (a2 «Ansetzen»):** kein Produktivweg setzt `ansatz` — die Abfrage verzeichnet
+«bleiben» wie bisher ohne Rand-Werte, der Kanal setzt die neue Quelle wie bisher an (die Stunde des Wechsels verliert dort einen
+Teil), gespeicherte Tage werden nicht neu gebildet. Die Wechselstelle «Falsch seit» einer Korrektur zwischen zwei Sensoren ist in
+a1 eine Naht ohne Rand-Stände: die Stunde davor zählt in der Reihe nicht (gemessen 10.06. 11,5 statt 512,0; der Tagesabschluss
+aus HA-Slots zählt sie, 12,0); ihre Rand-Stände kommen mit a2. «Alle Monatswerte» und Import-Vorschau listen nur Monate, in
+denen die heutige Entität Zeilen hat — ein Monat nur mit dem alten Sensor erscheint dort erst mit a2/b (über «Aus HA laden» für
+den einen Monat und im laufenden Monat erscheint er). Proben: `test_sensorwechsel_u2a1_proben.py`.
 
 #### Kanal vor Reihe (B-5)
 
@@ -5477,8 +5533,12 @@ trägt die Menge an den Tag, an dem sie endet; die Tagesansicht nennt dort keine
 Stand). (5) «Dieselbe Quelle» heißt dieselbe Entität bzw. MQTT-Beschreibung; die Höhe prüft die Regel der Zählerlücke nicht. Ob gelesene
 Stände auf der Höhe der gespeicherten liegen, prüft das Füllen an den Rand-Ständen (oben). Ist **kein** Rand prüfbar (Home
 Assistant führt die Quelle weder am letzten Stand davor noch am ersten danach, etwa im Dialog «bis jetzt» ohne Stand danach) und
-beginnt das Gefüllte erst nach einer leeren Zeit derselben Quelle, prüft niemand die Höhe — gemessen mit HAs Summe 1 906,5 höher
-und Geschichte erst ab 12.06.: 12.06. 1 942,0 (Halt H-1 der Korrekturrunde U1-K, Entscheid offen).
+beginnt das Gefüllte erst nach einer leeren Zeit derselben Quelle, ist die Höhe ungeprüft: die Lücken-Zeile trägt das Merkmal
+`ansatz = hoehe_ungeprueft` (Sensorwechsel U2 a1, Pflichtpunkt P-2; Halt H-1 der Korrekturrunde U1-K, Option A), und ihr Rand
+gilt als Höhenwechsel (`zeitpunkt.ohne_hoehenwechsel`) — keine Differenz über die leere Zeit. Gemessen mit HAs Summe 1 906,5
+höher und Geschichte erst ab 12.06.: 12.06. **11,5** (vorher 1 942,0); so zeigt es auch Home Assistant, dessen Statistik dort
+beginnt. Die Vorschau sagt es (`SATZ_LUECKE_HOEHE`), eine Lücke, die der Lauf erst beim Lesen findet, trägt das Merkmal ebenso;
+die Erkennung «Lücken-Zeile» (`nachher` leer) bleibt.
 
 #### Korrektur über ein abgeschlossenes Stück (Sitzung 4b-1, Bauplan «Zu §14» Nr. 93–98)
 

@@ -611,13 +611,17 @@ async def monatswerte_mit_kanaelen(
     Damit gilt die Wahl für alle fünf Kalendermonats-Wege („Aus HA laden", alle Monatswerte, Import-Vorschau,
     Sammelimport, Monatsabschluss-Vorschlag); einen gespeicherten Vorbestand ersetzt der Sammelimport weiter nur mit
     ``ueberschreiben``. ``monate``: der Monat je Antwort (sonst ``antwort.jahr/monat``). Rückgabe in derselben
-    Reihenfolge."""
+    Reihenfolge. **Sensorwechsel U2 a1 (F7):** davor die Hülle ``zuordnung_wechsel/monat.monatswerte_je_abschnitt`` — ein
+    Schlüssel mit angesetztem Wechsel «bleiben» zählt im Monat jede Quelle in ihrer Geltungszeit (auch ohne Kanal-Deckung)."""
     from backend.services.kanal.geraete_leser import geraete_sensorwerte_kalendermonate
+    from backend.services.zuordnung_wechsel.monat import monatswerte_je_abschnitt
 
     antworten = list(antworten)
     if monate is None:
         monate = [(getattr(a, "jahr", None), getattr(a, "monat", None)) for a in antworten]
     monate = list(monate)
+    # Sensorwechsel U2 a1 (F7): zuerst der Monat je Geltungsabschnitt (alte + neue Entität), dann der Kanal-Ersatz.
+    antworten = await monatswerte_je_abschnitt(db, anlage_id, antworten, monate)
     gueltig = [m for m in monate if None not in m]
     ersatz = await kanal_kalendermonate(db, anlage_id, gueltig, jetzt=jetzt)
     for m, werte in (await geraete_sensorwerte_kalendermonate(db, anlage_id, gueltig, jetzt=jetzt)).items():

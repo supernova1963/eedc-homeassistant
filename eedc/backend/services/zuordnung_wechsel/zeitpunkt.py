@@ -61,6 +61,22 @@ class Wechsel:
     #: Kennung des Korrektur-Laufs (``korrektur_lauf``) — solange er das Füllen schuldet, gilt das Intervall als Lücke
     #: (Bauplan «Zu §14» Nr. 106, ``gesperrte_stuecke``).
     lauf: Optional[str] = None
+    #: Rand-Werte eines Wechsels «bleiben» (U2 a1, F1; ``models/zuordnung_wechsel.py``). Ohne ``ansatz``: wie vor U2.
+    ansatz: Optional[str] = None
+    stand_alt_ende: Optional[float] = None
+    stand_neu_null: Optional[float] = None
+
+
+def rand_versatz(w) -> Optional[float]:
+    """Der Versatz der Reihe an einem angesetzten Wechsel «bleiben» (``stand_alt_ende − stand_neu_null``, Rechenweg F5):
+    nur für eine gültige Fortsetzung mit ``ansatz`` ``beide``/``schnitt`` und beiden Rand-Ständen — sonst ``None`` (die Naht
+    teilt wie vor U2; ``offen``/``offen_schnitt`` lesen so). Für ORM-Zeilen und ``Wechsel``."""
+    from backend.core.berechnungen.zaehler_naht import rand_versatz as _rechne
+    from backend.models.zuordnung_wechsel import ANSATZ_MIT_RAND, GRUND_FORTSETZUNG
+
+    if w.grund != GRUND_FORTSETZUNG or w.aufgehoben_durch is not None or getattr(w, "ansatz", None) not in ANSATZ_MIT_RAND:
+        return None
+    return _rechne(w.stand_alt_ende, w.stand_neu_null)
 
 
 def ab_ts_aus(erklaert_ts: datetime) -> datetime:
@@ -119,7 +135,8 @@ def zuordnung_am(wechsel_je_key: Optional[dict[str, list[Wechsel]]], z: datetime
 
 def _als_wechsel(row) -> Wechsel:
     return Wechsel(row.sensor_key, row.ab_ts, row.vorher, row.nachher, row.grund, row.falsch_seit_ts,
-                   row.aufgehoben_durch, row.erklaert_ts, row.id, getattr(row, "lauf", None))
+                   row.aufgehoben_durch, row.erklaert_ts, row.id, getattr(row, "lauf", None), getattr(row, "ansatz", None),
+                   getattr(row, "stand_alt_ende", None), getattr(row, "stand_neu_null", None))
 
 
 async def lade_wechsel(db, anlage_id: int) -> dict[str, list[Wechsel]]:
@@ -226,13 +243,49 @@ def naehte_der_fortsetzung(wechsel: Optional[list[Wechsel]], offene_laeufe: froz
     (4)): dazu beide Ränder jedes gesperrten Stücks (``gesperrte_stuecke``: jede Lücke mit Höhenwechsel, und eine Korrektur,
     deren Füllen aussteht) — kein Leser bildet eine Differenz zweier Stände über ein verworfenes, nicht gefülltes Stück, wenn
     davor und danach verschiedene Zählerhöhen gelten. Ohne Höhenwechsel (``ausgenommen``) ist ein Rand keine Naht: die Menge
-    der Zeit steht am ersten Stand danach, wie an jeder Zählerlücke."""
+    der Zeit steht am ersten Stand danach, wie an jeder Zählerlücke.
+
+    **Naht mit Rand-Ständen** (U2 a1, Rechenweg F5): ein angesetzter Wechsel «bleiben» (``rand_versatz``) liefert seine
+    Naht als ``zaehler_naht.Naht`` mit Versatz — sie teilt nicht, sie hebt. Ein Zeitpunkt, an dem zugleich eine teilende Naht
+    liegt, bleibt beides (die teilende gewinnt beim Teilen). **Wechselstelle «Falsch seit»** (Pflichtpunkt P-1): erklärt eine
+    Korrektur für ihre Zeit eine andere Home-Assistant-Entität als richtig als die, die davor galt, ist ``falsch_seit_ts`` eine
+    Naht ohne Rand-Stände (``_falsch_seit_zwischen_zwei_sensoren``) — keine Differenz zweier Sensoren."""
+    from backend.core.berechnungen.zaehler_naht import Naht
     from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG
 
-    naehte = {w.ab_ts for w in (wechsel or ()) if w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None}
+    teilend: set[datetime] = set()
+    hebend: list[Naht] = []
+    for w in wechsel or ():
+        if w.grund != GRUND_FORTSETZUNG or w.aufgehoben_durch is not None:
+            continue
+        v = rand_versatz(w)
+        if v is None:
+            teilend.add(w.ab_ts)
+        else:
+            hebend.append(Naht(w.ab_ts, v))
     for s, r in gesperrte_stuecke(wechsel, offene_laeufe, ausgenommen):
-        naehte |= {s, r}
-    return sorted(naehte)
+        teilend |= {s, r}
+    teilend |= _falsch_seit_zwischen_zwei_sensoren(wechsel)
+    if not hebend:
+        return sorted(teilend)
+    return sorted([*teilend, *hebend], key=lambda n: (n, isinstance(n, Naht)))
+
+
+def _falsch_seit_zwischen_zwei_sensoren(wechsel: Optional[list[Wechsel]]) -> set[datetime]:
+    """Pflichtpunkt P-1 (Nachmessung U1 «F7»): ``falsch_seit_ts`` jeder gültigen Korrektur-Zeile (keine Lücken-Zeile), die eine
+    Home-Assistant-Entität als richtig erklärt, wenn davor eine **andere** Home-Assistant-Entität galt (``quelle_aufgeloest``
+    eine Sekunde vor «Falsch seit»). Nur Home Assistant → Home Assistant; andere Kombinationen lesen wie vor U2."""
+    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+
+    aus: set[datetime] = set()
+    for w in wechsel or ():
+        if (w.grund != GRUND_KORREKTUR or w.aufgehoben_durch is not None or w.falsch_seit_ts is None
+                or ist_luecken_zeile(w) or (w.nachher or {}).get("art") != "ha"):
+            continue
+        davor = quelle_aufgeloest(wechsel, w.falsch_seit_ts - timedelta(seconds=1))
+        if davor is not None and davor.get("art") == "ha" and not gleiche_quelle(davor, w.nachher):
+            aus.add(w.falsch_seit_ts)
+    return aus
 
 
 # ── Lücke ohne Höhenwechsel (Sensorwechsel U1, Bauplan Nr. 127 Option A, Zielbild Nr. 133 (4)) ─────────────────────────
@@ -311,10 +364,15 @@ def ohne_hoehenwechsel(wechsel: Optional[list[Wechsel]], vor: Optional[datetime]
     Korrektur-Grenze darin) — und kein Zählertausch dieser Quelle dazwischen eingetragen ist (``_zaehlertausch_dazwischen``;
     Korrekturrunde U1-K, Bauplan Nr. 141 (c)). Dann ist ``Stand(nach) − Stand(vor)`` die Menge der Zeit, und sie steht am
     ersten Stand danach — wie an jeder Zählerlücke (Grundsatz «Zählerlücken wie HA», Regel Q1). Die Höhe selbst prüft eedc
-    nicht. Ohne Stand davor oder danach gibt es keine Differenz: nein."""
-    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    nicht. Ohne Stand davor oder danach gibt es keine Differenz: nein. **Merkmal «Höhe ungeprüft»** (Pflichtpunkt P-2, Halt H-1
+    aus U1-K, Option A): trägt die Lücken-Zeile dieser Zeit ``ansatz = hoehe_ungeprueft`` (die Korrektur füllt erst nach ihr
+    aus Home Assistant, und kein Rand-Stand war prüfbar), ist ihr Rand ein Höhenwechsel: nein."""
+    from backend.models.zuordnung_wechsel import ANSATZ_HOEHE_UNGEPRUEFT, GRUND_KORREKTUR
 
     if vor is None or nach is None:
+        return False
+    if any(w.aufgehoben_durch is None and ist_luecken_zeile(w) and w.ansatz == ANSATZ_HOEHE_UNGEPRUEFT
+           and (w.falsch_seit_ts, w.ab_ts) == tuple(luecke) for w in wechsel or ()):
         return False
     q = quelle_aufgeloest(wechsel, vor)
     if q is None or not gleiche_quelle(q, quelle_aufgeloest(wechsel, nach)):

@@ -216,18 +216,25 @@ def _slot_kwh_faktor(meta_by_id: dict[str, SensorMeta], sid: str) -> float:
 def _slot_werte(
     per_sensor: dict[str, dict[int, tuple[float, float]]],
     anker: dict[str, tuple[float, float]],
+    anker_null: frozenset = frozenset(),
 ) -> dict[str, SensorSlotReihe]:
     """Phase 3 von `HAStatisticsService.get_hourly_slots_for_day` (RF-55): die Slot-Tabelle aus den gelesenen Ständen.
 
     Anker für Slot h = höchster belegter Index < h (W1), sonst Index −1 bzw. die Anker-Zeile vor dem Fenster;
     ``delta = round(Stand(h) − Stand(Anker), 3)``, ``n = 1`` bei Delta 0 (R2), sonst reale Stunden aus ``start_ts``;
     ohne Anker bleibt der erste belegte Slot leer (benannte Abweichung zu HA). Reine Rechnung, liest nichts.
+    ``anker_null`` (Sensorwechsel U2 a1, F6): Zähler, deren erste Zeile ab 0 zählt, wenn HA vor ihr keine führt — nur die neue
+    Entität eines Wechsels «bleiben» ohne Überlappung (HAs Regel an der Wechselstelle, ``lts_aggregator``); der erste Slot
+    ist dann ``Stand − 0`` über eine Stunde.
     """
     result: dict[str, SensorSlotReihe] = {}
     for sid, boundaries in per_sensor.items():
         if not boundaries:
             continue  # Sensor hatte im Fenster keine Zeile — seine Energie trägt der Folgetag
         vorher: Optional[tuple[float, float]] = boundaries.get(-1) or anker.get(sid)
+        if vorher is None and sid in anker_null:
+            erste = min(boundaries)
+            vorher = (0.0, boundaries[erste][1] - 3600)          # HAs Regel: die erste Zeile zählt ab 0
         erster_anker_ts: Optional[float] = vorher[1] if vorher else None
         erster = True
         slots: dict[int, StundenSlot] = {}
@@ -827,7 +834,14 @@ class HAStatisticsService:
         viele Stützstellen-Paare ``differenz`` gebildet ist — 0 bei einer einzigen Zeile ohne Anker: dann ist
         ``differenz`` 0,0 keine Messung.
         """
-        ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
+        return self.get_sensor_fensterwert(conn, meta, sensor_id, *_monatsgrenzen_ts(jahr, monat),
+                                           kennung=f"{jahr}-{monat:02d}")
+
+    def get_sensor_fensterwert(self, conn, meta: SensorMeta, sensor_id: str, ts_start: float, ts_ende: float, *,
+                               anker_null: bool = False, kennung: str = "") -> Optional[SensorMonatswert]:
+        """Die Zeilenregel von ``get_sensor_monatswert`` über ein beliebiges Fenster ``[ts_start, ts_ende)`` (Zeilen nach
+        ``start_ts``). ``anker_null`` (Sensorwechsel U2 a1, F7): statt der letzten Zeile vor dem Fenster zählt die erste
+        Zeile ab 0 — die neue Entität eines Wechsels «bleiben» ohne Überlappung (HAs Regel an der Wechselstelle)."""
         faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
 
         if conn is None:
@@ -852,7 +866,7 @@ class HAStatisticsService:
             return None
 
         verworfen = 0.0
-        anker = self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
+        anker = (ts_start - 3600, 0.0) if anker_null else self._letzter_sum_vor(conn, meta, sensor_id, ts_start)
         reihe = ([anker] if anker is not None else []) + sum_zeilen
         start_wert = reihe[0][1] * faktor
         end_wert = reihe[-1][1] * faktor
@@ -867,7 +881,7 @@ class HAStatisticsService:
             differenz += delta
         if verworfen:
             logger.info(
-                f"Sensor {sensor_id} {jahr}-{monat:02d}: {verworfen:.3f} kWh verworfen "
+                f"Sensor {sensor_id} {kennung}: {verworfen:.3f} kWh verworfen "
                 f"(Rücksprung, wie am Tag)"
             )
 
@@ -879,6 +893,19 @@ class HAStatisticsService:
             verworfen_kwh=round(verworfen, 3),
             intervalle=len(reihe) - 1,
         )
+
+    def get_fensterwerte(self, abschnitte: list[tuple[str, float, float, bool]]) -> list[Optional[SensorMonatswert]]:
+        """``get_sensor_fensterwert`` je ``(sensor_id, ts_start, ts_ende, anker_null)`` in einer Verbindung (U2 a1, F7:
+        die Abschnitte eines Monats mit Wechsel, ``zuordnung_wechsel/monat.py``). ``None`` = HA kennt den Sensor nicht
+        oder führt im Fenster keine ``sum``-Zeile."""
+        if not self.is_available:
+            raise RuntimeError("HA-Datenbank nicht verfügbar")
+        with self._verbindung() as conn:
+            out: list[Optional[SensorMonatswert]] = []
+            for sid, von, bis, null in abschnitte:
+                meta = self.get_metadata(conn, sid)
+                out.append(None if meta is None else self.get_sensor_fensterwert(conn, meta, sid, von, bis, anker_null=null))
+            return out
 
     def get_monatswerte(
         self,
@@ -1762,6 +1789,7 @@ class HAStatisticsService:
         self,
         sensor_ids: list[str],
         datum: date,
+        anker_null: frozenset = frozenset(),
     ) -> dict[str, SensorSlotReihe]:
         """Slot-Tabelle je Zähler für einen Tag — **was HA für jede Stunde zeigt**.
 
@@ -1789,6 +1817,8 @@ class HAStatisticsService:
           und Folgeslot n = 1. Ein Delta von 0 hat n = 1 (R2).
         * **Kein Anker** (die Reihe beginnt im Fenster): der erste Slot bleibt
           leer. Benannte Abweichung — HA nimmt dort 0 und zeigt die erste Stunde.
+          Ausnahme ``anker_null`` (U2 a1, F6): die neue Entität eines Wechsels
+          «bleiben» ohne Überlappung zählt ihre erste Zeile ab 0 wie HA.
 
         Transport: SQL (Recorder-Datei/-URL) liest den Anker mit
         ``start_ts < ts_von AND sum IS NOT NULL ORDER BY start_ts DESC LIMIT 1``
@@ -1845,7 +1875,7 @@ class HAStatisticsService:
             logger.warning(f"get_hourly_slots_for_day Fehler: {type(e).__name__}: {e}")
             return {}
 
-        return _slot_werte(per_sensor, anker)
+        return _slot_werte(per_sensor, anker, anker_null)
 
     def _slot_fenster(self, conn, lesen: "_SlotLesen") -> None:
         """Phase 1 von `get_hourly_slots_for_day` (RF-55): die Zeilen des Fensters ``[ts_von, ts_bis]`` je Zähler auf den

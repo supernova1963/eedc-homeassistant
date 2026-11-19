@@ -29,7 +29,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.berechnungen.zaehler_naht import ueber_naht
+from backend.core.berechnungen.zaehler_naht import gehobene_staende, trennende, ueber_naht
 from backend.services.snapshot.aggregator import _fill_gaps_linear, _naht_trenner, stunden_slot_delta
 from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte
 from backend.services.snapshot.boundary_range import BoundaryRange
@@ -70,7 +70,9 @@ async def lade_stundenformen(
             )
         if all(v is None for v in staende.values()):
             continue
-        naehte = await fortsetzungs_naehte(db, anlage.id, sensor_key)          # Sensorwechsel B-3
+        alle_naehte = await fortsetzungs_naehte(db, anlage.id, sensor_key)     # Sensorwechsel B-3
+        staende = gehobene_staende(staende, rng.boundary_at, alle_naehte)      # U2 a1 (F5): Rand-Stände heben beim Laden
+        naehte = trennende(alle_naehte)
         _fill_gaps_linear(staende, _naht_trenner(rng, naehte))
         slots: list[Optional[float]] = [None] * 24
         for slot_idx, prev_off, curr_off in rng.slot_pairs:

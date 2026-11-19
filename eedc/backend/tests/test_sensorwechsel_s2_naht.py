@@ -623,8 +623,11 @@ async def test_b3_nur_eine_nicht_aufgehobene_fortsetzung_ist_naht(db, grund, auf
                             falsch_seit_ts=TAG0 if grund == "korrektur" else None))
     await db.flush()
     zw.vergiss(db)
-    assert (await zw.fortsetzungs_naehte(db, a.id, "inv:2:ladung_pv_kwh")) == ([NAHT] if naht else [])
-    assert await _tagesdetail(db, a) == pytest.approx(TAGESWERT if naht else TAGESWERT + 1.0 + SPRUNG)
+    # U2 a1 (P-1): eine Korrektur, die für ihre Zeit eine andere HA-Entität als richtig erklärt als die davor geltende, macht
+    # «Falsch seit» zur Naht ohne Rand-Stände (keine Differenz zweier Sensoren); ihr ``ab_ts`` bleibt keine Naht.
+    falsch_seit = [TAG0] if grund == "korrektur" else []
+    assert (await zw.fortsetzungs_naehte(db, a.id, "inv:2:ladung_pv_kwh")) == ([NAHT] if naht else falsch_seit)
+    assert await _tagesdetail(db, a) == pytest.approx(TAGESWERT if naht else TAGESWERT + 1.0 + SPRUNG - len(falsch_seit))
 
 
 async def test_b3_stundenform_keine_gerade_ueber_die_naht(db, monkeypatch):

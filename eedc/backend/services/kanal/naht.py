@@ -100,7 +100,8 @@ async def zeilen_mit_naehten(db: AsyncSession, k, st, sensor_key: str, mqtt_key:
     return out
 
 
-async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) -> Optional[float]:
+async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int, versatz: Optional[float] = None
+                               ) -> Optional[float]:
     """Nachtrag einer Fortsetzung für schon geschriebene Zeilen eines MQTT-Kanals (B-4): eine Quellzeile ab ``stunde_ts`` mit
     dem Versatz, der die Naht-Stunde ohne Zuwachs lässt (Kanalwert der Naht-Zeile = Kanalwert der vorigen Zeile). Keine
     Kanalzeile wird geändert; die abgeleiteten Kanäle, die aus dem Feld rechnen, werden ab der Stunde verworfen (der nächste
@@ -112,6 +113,10 @@ async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) 
     überbrückt — nichts zu tun, der geltende Versatz bleibt. Spätere Quellzeilen tragen als Versatz den Kanalwert am Schluss
     ihrer Vorgängerin (``schreiber._eigene_summe_zeilen``); sie rücken um dieselbe Verschiebung mit, sonst käme der Sprung
     an ihrer Grenze zurück.
+
+    **U2 a1 (F5):** ``versatz`` = der Versatz einer Naht mit Rand-Ständen (``stand_alt_ende − stand_neu_null``, Nachbau aus
+    HA-Ständen): die neue Quellzeile hebt die Naht-Stunde dann um ihn statt sie ohne Zuwachs zu lassen — dieselbe Stunde wie
+    die gehobene Reihe (die Naht-Zeile trägt den Stand des neuen, die vorige den des alten Sensors).
 
     Returns: der Versatz der Naht-Stunde (``None``: keine Zeile in der Stunde oder keine davor — nichts zu tun)."""
     from backend.models.kanal import FAMILIE_MITSCHRIFT, Kanal, KanalQuelle, KanalStatistik
@@ -135,7 +140,7 @@ async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int) 
         return None
     if quelle.gueltig_ab > zeilen[1].start_ts:
         return float(quelle.offset)          # an der Naht beginnt schon eine Quelle: der Sprung ist überbrückt
-    verschiebung = -(naht - davor)
+    verschiebung = -(naht - davor) if versatz is None else float(versatz)
     for q in quellen:
         if q.gueltig_ab > stunde_ts:
             q.offset = float(q.offset) + verschiebung

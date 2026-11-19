@@ -257,7 +257,7 @@ async def trage_fortsetzung_ein(db, anlage, row) -> ZuordnungWechsel:
     from backend.services.kanal.angaben import kanal_des_schluessels
     from backend.services.kanal.naht import nachtrag_fortsetzung
     from backend.services.zuordnung_wechsel.zaehler_getauscht import _nachtrag_stunde, naht_stunde
-    from backend.services.zuordnung_wechsel.zeitpunkt import merke_neu, vergiss
+    from backend.services.zuordnung_wechsel.zeitpunkt import merke_neu, rand_versatz, vergiss
 
     neu = ZuordnungWechsel(anlage_id=row.anlage_id, sensor_key=row.sensor_key, erklaert_ts=row.erklaert_ts, ab_ts=row.ab_ts,
                            vorher=row.vorher, nachher=row.nachher, grund=GRUND_FORTSETZUNG, herkunft=HERKUNFT_NACHTRAG)
@@ -270,7 +270,7 @@ async def trage_fortsetzung_ein(db, anlage, row) -> ZuordnungWechsel:
     kanal = await kanal_des_schluessels(db, anlage.id, row.sensor_key)
     nachtrag = await _nachtrag_stunde(db, kanal, await naht_stunde(db, kanal, row.erklaert_ts))
     if nachtrag is not None:
-        await nachtrag_fortsetzung(db, kanal.id, nachtrag)
+        await nachtrag_fortsetzung(db, kanal.id, nachtrag, rand_versatz(neu))       # U2 a1: ohne Rand-Stände None
     merken.invalidiere(anlage.id, db=db)
     return neu
 

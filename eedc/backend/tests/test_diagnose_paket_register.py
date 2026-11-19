@@ -72,8 +72,9 @@ def test_w7a_jede_tabelle_und_spalte_hat_eine_klasse():
     assert _abweichungen(_tabellen_der_metadata(), reg.REGISTER) == []
     assert len(reg.REGISTER) == 24 and len(reg.NIE) == 6
     gesamt = sum(len(c) for c in _tabellen_der_metadata().values()) + 2
-    # 28 Modell-Tabellen, 373 Spalten + migrations (Bauplan §3.2); + `zuordnung_wechsel` (12 Spalten, Sensorwechsel B-1)
-    assert gesamt == 387, gesamt
+    # 28 Modell-Tabellen, 373 Spalten + migrations (Bauplan §3.2); + `zuordnung_wechsel` (12 Spalten, Sensorwechsel B-1;
+    # + 3 Rand-Werte ansatz, stand_alt_ende, stand_neu_null, Sensorwechsel U2 a1 F1)
+    assert gesamt == 390, gesamt
 
 
 def test_w7a_sprengsatz_neue_spalte():

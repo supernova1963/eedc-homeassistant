@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -188,12 +188,14 @@ async def lts_tagestabelle(
     zplan = _zusatz_plan(anlage, investitionen_by_id, datum, zusatz, wechsel) if (wechsel and zusatz) else {}
     zusatz = [z for z in zusatz if zplan.get(z, {}) is not None]
     frueher = {eid for je_slot in (*plan.values(), *(p for p in zplan.values() if p)) for eid in je_slot.values()}
-    sensor_ids = sorted(eigene | set(zusatz) | frueher)
-    reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum)
+    dazu, null_ab = _naht_plan(eintraege, zusatz, anlage, investitionen_by_id, wechsel, datum) if wechsel else ({}, frozenset())
+    sensor_ids = sorted(eigene | set(zusatz) | frueher | {eid for p in dazu.values() for eid in p.values()})
+    reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum, *((null_ab,) if null_ab else ()))
     if plan and not _plan_anwenden(reihen, plan):
         return None
     _plan_anwenden(reihen, {z: p for z, p in zplan.items() if p and (z in reihen or set(p.values()) & set(reihen))},
                    streng=False)
+    _dazu_anwenden(reihen, dazu)
     # Nur die eigenen Zähler entscheiden, ob HA den Tag trägt — ein Zusatz-Zähler
     # allein darf den Rückfall auf den Snapshot-Pfad nicht verhindern.
     if not reihen or not any(eid in eigene for eid in reihen):
@@ -248,6 +250,69 @@ def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]], *, streng: boo
                 slots.pop(h, None)
         reihen[eid] = reihe._replace(slots=slots)
     return True
+
+
+def _naht_je_slot(liste, datum: date) -> tuple[dict[int, str], set[str]]:
+    """U2 a1 (F6): ein angesetzter Wechsel «bleiben» **ohne Überlappung** (``ansatz = beide``, ``zeitpunkt.rand_versatz``)
+    am Tag: ``{Naht-Slot: alte Entität}`` (der Slot mit dem Stand um ``ab_ts`` zählt den alten Sensor dazu) und die neue
+    Entität (ihre erste Zeile zählt ab 0, wenn HA davor keine führt — ``get_hourly_slots_for_day(anker_null=…)``). Mit
+    Überlappung (``schnitt``) gilt am Naht-Slot allein die neue Entität mit ihrem Anker (``_slot_plan``)."""
+    from backend.models.zuordnung_wechsel import ANSATZ_BEIDE
+    from backend.services.zuordnung_wechsel.zeitpunkt import rand_versatz
+
+    null = datetime.combine(datum, datetime.min.time())
+    dazu: dict[int, str] = {}
+    neue: set[str] = set()
+    for w in liste or ():
+        if w.ansatz != ANSATZ_BEIDE or rand_versatz(w) is None:
+            continue
+        alt, neu = (w.vorher or {}).get("entity_id"), (w.nachher or {}).get("entity_id")
+        h = next((h for h in _SLOTS if null + timedelta(hours=h) == w.ab_ts), None)
+        if h is None or not alt or not neu:
+            continue
+        dazu[h] = alt
+        neue.add(neu)
+    return dazu, neue
+
+
+def _naht_plan(eintraege: list[TabellenEintrag], zusatz: list[str], anlage, investitionen_by_id: dict, wechsel: dict,
+               datum: date) -> tuple[dict[str, dict[int, str]], frozenset]:
+    """``_naht_je_slot`` je Zähler des Tages (eigene und Heimlade-Zähler): ``{heutige Entität: {Naht-Slot: alte Entität}}``
+    und die Entitäten mit Anker 0. Ohne angesetzten Wechsel leer — der Lesezugriff bleibt wörtlich der alte."""
+    from backend.services.emob_ladebloecke_speicher import HEIM_GESAMT_FELD, fahrzeug_zaehler_lts
+
+    schluessel = [(e.schluessel, e.sensor_key) for e in eintraege]
+    if zusatz:
+        inv_je_eid = fahrzeug_zaehler_lts(anlage, investitionen_by_id, datum)
+        schluessel += [(eid, f"inv:{inv_je_eid[eid]}:{HEIM_GESAMT_FELD}") for eid in zusatz if eid in inv_je_eid]
+    dazu: dict[str, dict[int, str]] = {}
+    null_ab: set[str] = set()
+    for eid, key in schluessel:
+        je_slot, neue = _naht_je_slot(wechsel.get(key), datum)
+        if je_slot:
+            dazu[eid] = je_slot
+            null_ab |= neue
+    return dazu, frozenset(null_ab)
+
+
+def _dazu_anwenden(reihen: dict, dazu: dict[str, dict[int, str]]) -> None:
+    """U2 a1 (F6): am Naht-Slot zum Slot der neuen Entität den der alten (in-place) — die Stunde des Wechsels zählt beide
+    Sensoren wie HA (``ha_statistics_service.StundenSlot``; die Summe über ``zaehler_naht.slot_beider``). Führt HA die alte
+    im Fenster nicht, zählt nur die neue."""
+    from backend.core.berechnungen.zaehler_naht import slot_beider
+    from backend.services.ha_statistics_service import StundenSlot
+
+    for eid, je_slot in dazu.items():
+        if eid not in reihen:
+            continue
+        slots = dict(reihen[eid].slots)
+        for h, alt in je_slot.items():
+            alt_slot = reihen[alt].slots.get(h) if alt in reihen else None
+            if alt_slot is None:
+                continue
+            neu = slots.get(h)
+            slots[h] = alt_slot if neu is None else StundenSlot(*slot_beider(neu.delta, neu.n, alt_slot.delta, alt_slot.n))
+        reihen[eid] = reihen[eid]._replace(slots=slots)
 
 
 def _zusatz_plan(anlage, investitionen_by_id: dict, datum: date, zusatz: list[str],
