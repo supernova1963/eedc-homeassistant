@@ -67,6 +67,14 @@ class CheckKategorie(str, Enum):
     # überführte Alt-Hinweise). Ohne Grund rechnet eedc über den Wechsel hinweg wie vorher. Erzeuger
     # `datenquelle/grund_fehlt.py`; Handgriff «Grund nachtragen» (Sprung in die Datenquellen, derselbe Dialog).
     ZUORDNUNG_GRUND_FEHLT = "zuordnung_grund_fehlt"
+    # Sensorwechsel U3 a (Rechenweg G1): eine Korrektur hat die Zählerstände einer Zeit verworfen, und nichts füllt sie wieder
+    # (Lücke, `zeitpunkt.ist_luecke`) — Auskunft je Lücke: Zeit, Tag der Menge bzw. «keine Differenz», betroffene Monate.
+    # Erzeuger `datenquelle/verworfen.py`.
+    ZAEHLER_ZEIT_VERWORFEN = "zaehler_zeit_verworfen"
+    # Sensorwechsel U3 a (Rechenweg G2): ein gespeicherter Monatswert eines Monats, den ein Wechsel bzw. eine Korrektur
+    # berührt, weicht um mindestens 1 kWh von dem ab, was die Quelle heute für den Monat ergibt. Erzeuger
+    # `datenquelle/monatswert.py`, Vergleich `core/berechnungen/monatswert_vergleich.py`.
+    MONATSWERT_UEBERHOLT = "monatswert_ueberholt"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,

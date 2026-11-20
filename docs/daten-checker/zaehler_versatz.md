@@ -30,6 +30,10 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
+Ist der Abschnitt der **Rest einer früheren Korrektur** — die Stände des anderen Sensors begannen schon einige Stunden vor
+dem «Falsch seit» jener Korrektur, und ihr Ende liegt am Ende der damals verworfenen Zeit —, nennt der Befund diese Zeit.
+«Grund nachtragen» verwirft dann auch den Rest; die Vorschau sagt, was danach gilt.
+
 In zwei Lagen trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt»: Gelten vor und nach dem Abschnitt
 verschiedene Quellen, nennt er beide — eedc weiß dann nicht, welche die richtige ist, und korrigiert den Abschnitt nicht. Ist Home Assistant
 eingerichtet, aber gerade nicht erreichbar, sagt er es; sobald eedc die Langzeitstatistik wieder lesen kann, steht beim

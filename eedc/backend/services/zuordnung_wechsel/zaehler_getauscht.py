@@ -75,9 +75,10 @@ SATZ_NACHTRAG = ("Die Stunde ab {stunde} Uhr ist schon gespeichert; sie zählt d
                  "dieser Stunde vor dem Tausch verbraucht wurde.")
 SATZ_NACHTRAG_BISHER = "Bisher zählt sie {zuwachs} {einheit}."
 #: Benannte Grenze «Zu §13» Nr. 87: ein fest gespeicherter Tageswert vom Tag des Tauschs bleibt (nur, wenn der Tausch nicht am
-#: laufenden Tag liegt — der laufende Tag wird alle 15 Minuten neu gebildet).
-SATZ_TAG_FEST = ("Hat eedc für den Tag des Tauschs schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den "
-                 "Unterschied weiter enthalten.")
+#: laufenden Tag liegt — der laufende Tag wird alle 15 Minuten neu gebildet). Sensorwechsel U3 a (Rechenweg G3, Bauplan «Zu
+#: §14» Nr. 95 (4)): nur, wenn die Tageszeile dieses Tages den Wert des Felds wirklich trägt — dann mit Tag und Wert.
+SATZ_TAG_FEST = ("Für den {tag} hat eedc schon einen festen Tageswert dieses Felds gespeichert ({wert} {einheit}); er bleibt, "
+                 "wie er ist, und kann den Unterschied weiter enthalten.")
 SATZ_OHNE_WERTE = "Dieses Feld hat noch keine eigenen Werte — es gibt keinen Sprung zu überbrücken."
 SATZ_KEINE_QUELLE = "Dieses Feld hat keine Quelle — ordne zuerst eine zu."
 SATZ_SCHON = "Dieser Tausch ist schon eingetragen."
@@ -102,8 +103,10 @@ class Lage:
     #: Was die Stunde ``nachtrag_ts`` bisher zählt (Kanal-Leser) und die Einheit des Kanals.
     zuwachs: Optional[float] = None
     einheit: Optional[str] = None
-    #: Der Tausch liegt vor dem laufenden Tag (dann nennt die Antwort ``SATZ_TAG_FEST``).
+    #: Der Tausch liegt vor dem laufenden Tag (dann nennt die Antwort ``SATZ_TAG_FEST``, wenn ``tag_fest`` gesetzt ist).
     vor_heute: bool = False
+    #: U3 a (G3): der fest gespeicherte Tageswert des Felds am Tag des Tauschs ``(Tag, Wert)`` — ``None`` = keiner.
+    tag_fest: Optional[tuple[date, float]] = None
     #: Sensorwechsel U2 Lauf c (F13): ein Stand-Zähler (Kanal-Art ``stand``) — der Weg ``home_assistant`` nennt dann E2.
     stand: bool = False
 
@@ -230,9 +233,26 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
     schon = any(w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None and w.ab_ts == ab for w in wechsel)
     nachtrag = await _nachtrag_stunde(db, kanal, stunde)
     zuwachs = await zuwachs_der_stunde(db, kanal, nachtrag) if nachtrag is not None else None
+    vor_heute = getauscht_am.date() < (heute or date.today())
     return Lage(sensor_key, WEG_FORTSETZUNG, q, getauscht_am, kanal.id if kanal is not None else None, nachtrag, schon,
-                zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None,
-                vor_heute=getauscht_am.date() < (heute or date.today()))
+                zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None, vor_heute=vor_heute,
+                tag_fest=await tag_fest(db, anlage, sensor_key, ab) if vor_heute else None)
+
+
+async def tag_fest(db, anlage, sensor_key: str, ab: datetime) -> Optional[tuple[date, float]]:
+    """U3 a (Rechenweg G3): der Tageswert, den eedc für den Tag der Stunde des Tauschs schon fest gespeichert hat — nur, wenn
+    die Tageszeile den Schlüssel des Felds trägt (``verwerfen_vor_quellbeginn.tz_keys_der_zeile``, dieselbe Frage wie die
+    Vorschau der Korrektur). Der Tag ist der Bestandstag der Stunde vor ``ab`` (``kanal/abgeleitet.tag_der_stunde``)."""
+    from backend.services import verwerfen_vor_quellbeginn as vq
+    from backend.services.kanal.abgeleitet import tag_der_stunde
+
+    tag = tag_der_stunde(int(ab.timestamp()) - 3600)
+    ziele = await vq.bestand_ziele(db, anlage, sensor_key)
+    for row in await vq._tz_zeilen(db, anlage.id, tag, ziele, tag):
+        werte = [w for k in vq.tz_keys_der_zeile(row, ziele) if (w := (row.komponenten_kwh or {}).get(k)) is not None]
+        if werte:
+            return tag, sum(float(w) for w in werte)
+    return None
 
 
 def _saetze_fortsetzung(la: Lage) -> list[str]:
@@ -243,8 +263,9 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
         s.append(SATZ_NACHTRAG.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts))))
         if la.zuwachs is not None:
             s.append(SATZ_NACHTRAG_BISHER.format(zuwachs=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
-    if la.vor_heute:
-        s.append(SATZ_TAG_FEST)
+    if la.vor_heute and la.tag_fest is not None:
+        s.append(SATZ_TAG_FEST.format(tag=la.tag_fest[0].strftime("%d.%m.%Y"), wert=fmt_zahl(la.tag_fest[1], 2),
+                                      einheit=la.einheit or "kWh"))
     return s
 
 

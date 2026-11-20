@@ -2244,6 +2244,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Wallbox-Tarif», das unter dem gemeinsamen Tarif nicht zählt — die Schicht trägt es dann nicht in die Stromrechnung
     # (`wallbox_eigener_tarif` ist falsch), sie kann es also nicht melden; dieselbe Begründung wie die Zeile darüber.
     "backend/services/daten_checker/wp_tarif.py::_feld_an_wallbox_unter_gemeinsam",
+    # Sensorwechsel U3 a (Rechenweg G2, neuer Befund `monatswert_ueberholt`, 20.11.2026): der Checker liest je vom Wechsel
+    # berührtem Monat den GESPEICHERTEN Wert eines Geräte-Felds (eine Zeile, ein Schlüssel) und vergleicht ihn mit dem Kanal;
+    # keine Monatsgröße wird gebildet — die Schicht gäbe das Ergebnis ihrer Regeln, nicht den gespeicherten Rohwert.
+    "backend/services/daten_checker/datenquelle/monatswert.py::_gespeichert",
     # Stufe 2 derselben Auflösung (N-266): die Monatswerte der Balkonkraftwerke,
     # unter denen `pv-module` hängen. Sie werden hier ausdrücklich **nicht**
     # summiert, sondern je Elternteil vorgehalten, damit `lade_pv_je_monat`

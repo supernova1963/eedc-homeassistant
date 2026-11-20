@@ -167,6 +167,31 @@ def finde_versatz_laeufe(staende: Sequence[tuple[datetime, float]]) -> list[Vers
     return laeufe
 
 
+#: Sensorwechsel U3 a (Rechenweg G8): so weit vor «Falsch seit» sucht ``rest_schritt`` den Beginn fremder Stände.
+REST_FENSTER_STUNDEN = 24
+
+
+def rest_schritt(staende: Sequence[tuple[datetime, float]], falsch_seit: datetime, ende: datetime,
+                 fenster_stunden: int = REST_FENSTER_STUNDEN) -> Optional[Schritt]:
+    """**Rest fremder Stände** (Sensorwechsel U3 a, Rechenweg G8, «verankert»): trägt die Reihe die Stände eines anderen
+    Sensors schon **vor** «Falsch seit», liegt in den ``fenster_stunden`` davor ein Schritt über der Sprung-Schwelle der
+    Reihe (``sprung_schwelle``), der zum Schritt am Ende passt — entgegengesetzt und ähnlich groß (``aehnlich``, ±20 %). Der
+    Schritt am Ende führt vom letzten Stand vor ``ende`` zum ersten ab ``ende``. Reine Funktion: ``staende`` aufsteigend;
+    ``None`` = kein solcher Schritt (dann bleibt «Falsch seit», wie es ist). Mehrere ⇒ der jüngste. Benannt: ein Abschnitt,
+    der vor «Falsch seit» beginnt und keinen Schritt am Ende hat, wird nicht erkannt."""
+    schritte = _schritte(staende)
+    am_ende = next((s for s in schritte if s.von < ende <= s.bis), None)
+    if am_ende is None:
+        return None
+    schwelle = sprung_schwelle(schritte)
+    if abs(am_ende.delta_kwh) <= schwelle:
+        return None
+    unten = falsch_seit - timedelta(hours=fenster_stunden)
+    kandidaten = [s for s in schritte if unten <= s.bis < falsch_seit and abs(s.delta_kwh) > schwelle
+                  and (s.delta_kwh > 0) != (am_ende.delta_kwh > 0) and aehnlich(abs(s.delta_kwh), abs(am_ende.delta_kwh))]
+    return max(kandidaten, key=lambda s: s.bis) if kandidaten else None
+
+
 def stand_passt_zum_spiegel(stand: float, summe: Optional[float], offset: float) -> bool:
     """Stimmt ein Stand der Reihe mit dem HA-Spiegel überein (``summe + offset`` der zum Zeitpunkt gültigen Quelle,
     Toleranz ``SPIEGEL_TOLERANZ_KWH``)? Ohne Spiegelzeile nein."""
@@ -174,7 +199,7 @@ def stand_passt_zum_spiegel(stand: float, summe: Optional[float], offset: float)
 
 
 __all__ = [
-    "AEHNLICH_ANTEIL", "NAHT_STUNDEN", "RESET_ANTEIL", "RESET_MIN_STAND", "RUECKGANG_MIN_KWH", "SPIEGEL_TOLERANZ_KWH",
-    "SPRUNG_FAKTOR", "SPRUNG_MIN_KWH", "Schritt", "VersatzLauf", "aehnlich", "finde_versatz_laeufe",
-    "ist_stufen_rueckgang", "sprung_schwelle", "stand_passt_zum_spiegel",
+    "AEHNLICH_ANTEIL", "NAHT_STUNDEN", "RESET_ANTEIL", "RESET_MIN_STAND", "REST_FENSTER_STUNDEN", "RUECKGANG_MIN_KWH",
+    "SPIEGEL_TOLERANZ_KWH", "SPRUNG_FAKTOR", "SPRUNG_MIN_KWH", "Schritt", "VersatzLauf", "aehnlich", "finde_versatz_laeufe",
+    "ist_stufen_rueckgang", "rest_schritt", "sprung_schwelle", "stand_passt_zum_spiegel",
 ]

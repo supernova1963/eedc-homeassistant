@@ -119,6 +119,8 @@ class NachtragLage:
     stueck: Optional[tuple[datetime, datetime, dict]] = None
     #: U2 Lauf b (F10): was «bleiben» zwischen zwei HA-Sensoren tut (``bleiben.angaben``; ``bleiben_angaben``).
     bleiben: Optional[dict] = None
+    #: U3 a (Rechenweg G8): «Falsch seit» ist auf den früheren Schritt fremder Stände vorbelegt — der Satz dazu.
+    rest_satz: Optional[str] = None
 
 
 async def _zeile(db, anlage_id: int, wechsel_id: int) -> Optional[ZuordnungWechsel]:
@@ -226,7 +228,25 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
     if la.erster_wert is None and kanal is not None:
         la.erster_wert, la.tage, _stand = await angaben(db, kanal)
     la.vorgabe_falsch_seit = la.stueck[0] if la.stueck else await _vorgabe(db, anlage.id, row, kanal, la.erster_wert)
+    if GRUND_KORREKTUR in la.gruende and la.vorgabe_falsch_seit is not None:
+        await _rest_fremder_staende(db, anlage.id, la)
     return la
+
+
+async def _rest_fremder_staende(db, anlage_id: int, la: NachtragLage) -> None:
+    """Sensorwechsel U3 a (Rechenweg G8): tragen die gespeicherten Zählerstände die Stände des anderen Sensors schon vor der
+    Vorgabe «Falsch seit» (ein passender Schritt in den 24 Stunden davor, ``stueck.rest_vor``), beginnt die Vorgabe dort —
+    beim Stück am Rückkehr-Wechsel ebenso dessen Beginn — und die Prüfung nennt es (``rest_satz``)."""
+    from backend.services.zuordnung_wechsel.stueck import rest_vor, satz_rest_vorgabe
+
+    ende = la.stueck[1] if la.stueck else la.row.ab_ts
+    rest = await rest_vor(db, anlage_id, la.row.sensor_key, la.vorgabe_falsch_seit, ende)
+    if rest is None:
+        return
+    la.vorgabe_falsch_seit = volle_stunde(rest.bis)
+    if la.stueck:
+        la.stueck = (la.vorgabe_falsch_seit, la.stueck[1], la.stueck[2])
+    la.rest_satz = satz_rest_vorgabe(rest)
 
 
 async def bleiben_angaben(db, la: NachtragLage, zaehlt_ab: Optional[datetime] = None,
@@ -324,7 +344,8 @@ def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str
     r = la.row
     return {
         "wechsel_id": r.id, "sensor_key": r.sensor_key, "label": label, "feld_id": feld_id_aus_schluessel(r.sensor_key),
-        "grund": r.grund, "wechsel_satz": wechsel_satz(r), "gruende": la.gruende, "korrektur_nicht": la.korrektur_nicht,
+        "grund": r.grund, "wechsel_satz": wechsel_satz(r) + (f" {la.rest_satz}" if la.rest_satz else ""),
+        "gruende": la.gruende, "korrektur_nicht": la.korrektur_nicht,
         "grund_erforderlich": bool(la.gruende), "verzeichnet": True,
         "erster_wert": None if la.erster_wert is None else la.erster_wert.replace(microsecond=0).isoformat(),
         "tage": la.tage, "stand_alt": None, "stand_neu": None,

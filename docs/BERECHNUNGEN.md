@@ -4993,6 +4993,59 @@ weniger als 14 Tagen gezählt hat, bleibt still; (b) mehrere Sprünge desselben 
 ein zweiter Sprung erscheint nach der Berichtigung des ersten; (c) die erste Zeile einer neuen Statistik (oben, Grenze (6)).
 Proben: `test_sensorwechsel_u2c_proben.py`; Wirkung `test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt`.
 
+**Zählerstände verworfen** (Daten-Checker `zaehler_zeit_verworfen`, Erzeuger `datenquelle/verworfen.py`; Sensorwechsel U3 a,
+Rechenweg G1): je nicht aufgehobener Lücke (`zeitpunkt.ist_luecke`) eine Auskunft (INFO). Die Lage kommt aus denselben
+Funktionen wie Vorschau und Leser:
+
+```
+wie Zählerlücke  = Kanal führt die Zeit nicht als verworfen  UND  zeitpunkt.ohne_hoehenwechsel(Zeilen, Stand vor, Stand nach, Lücke)
+                   ⇒ Menge am stueck.tragtag_der_luecke(bis); Tage darin ohne Wert (stueck.tage_der_luecke)
+keine Differenz  = sonst; Grund: «Höhe ungeprüft» (Lücken-Zeile mit ansatz = hoehe_ungeprueft) · Kanal (kanal_quelle.verworfen_ts
+                   ab einer Stunde vor der Lücke — die Stundenwerte zählen dort 0 und setzen ohne Zuwachs an) · Höhenwechsel
+                   ⇒ Tage darin ohne Wert, Rand-Tage nur ihr Teil, die Menge fehlt in Tag, Monat und Jahr
+Monate           = Kalendermonate der Lücke; genannt nur die mit Monatsdaten-Zeile (verwerfen_vor_quellbeginn.abschluss_monate)
+```
+
+**Ein Befund je Ursache:** `erfassung_stillstand` lässt eine Stelle aus, wenn jede Achse, deren Menge sie über mehr als eine Stunde
+nachträgt (`spannen` n > 1), zu einem Bilanz-Zähler gehört, dessen Lücke die Stelle mit einer Stunde Rand umfasst
+(`verworfen.stelle_erklaert`). Ausgelassen wird nur im Text des Befunds; die Lesestelle der Fenster (`kanal/stillstand.py`) und
+die Kennzeichen der Tagesbilanz bleiben (Messfrage M5: die Stelle der Saat «Topic verwerfen» ist eine Lücke der Tagesbilanz,
+kein Stillstands-Fenster). **Eigener Entscheid U3 a:** führt der Kanal die Zeit als verworfen, gilt «keine Differenz», auch wenn
+die Reihe wie eine Zählerlücke rechnen würde — die Tagesansicht liest den Kanal vor der Reihe (Rechenweg «Widerlegt» 3: 6,0
+statt der Menge); Lauf b (G7) ändert den Kanal und damit diese Lage.
+
+**Gespeicherter Monatswert passt nicht mehr** (Daten-Checker `monatswert_ueberholt`, Erzeuger `datenquelle/monatswert.py`, Vergleich
+`core/berechnungen/monatswert_vergleich.py`; Rechenweg G2): Warnung mit «Monat öffnen».
+
+```
+berührt      = Monate von [falsch_seit, ab) jeder gültigen Korrektur-Zeile (keine Lücken-Zeile)
+               ∪ Monate ab ab_ts jeder gültigen Fortsetzung («bleiben», «Zähler getauscht») bis zum letzten abgeschlossenen Monat
+gespeichert  = Monatsdaten.einspeisung_kwh / netzbezug_kwh (Regel N-739 «erfasst») bzw. InvestitionMonatsdaten.verbrauch_daten[feld]
+Quelle       = Kanal-Δ über den Kalendermonat, nur bei echter Deckung (kanal/feld_leser.kanal_feldwerte_je_fenster)
+Zeile        ⇔ berührt ∧ gespeichert ∧ Quelle ∧ |Quelle − gespeichert| ≥ 1 kWh (MONATSWERT_TOLERANZ_KWH = Import-Vorschau)
+               ∧ nicht geprueft_gegen[feld].wert = gespeichert («gespeicherten behalten»)
+```
+
+Ein Wechsel ohne Grund berührt nichts (dort rechnet eedc wie vorher); an der Produktiv-Kopie (eine Wechsel-Zeile ohne Grund) 0
+Zeilen, ohne Berührt-Filter und Vergleich wären es die 41 gespeicherten Monate des Schlüssels. «Bis zum Monat des Eintrags» (Rechenweg)
+ist ohne Zeitpunkt des Eintrags an der Zeile nicht bestimmbar — eedc nimmt jeden abgeschlossenen Monat ab dem Wechsel; der Vergleich
+lässt die unveränderten aus. **Benannt:** der Anlagen-PV-Zähler (`basis:pv_gesamt`, P7) und Felder ohne Kanal werden nicht geprüft;
+am Gerät springt «Monat öffnen» zum Gerät, nicht zum Feld.
+
+**Rest fremder Stände vor «Falsch seit»** (Rechenweg G8, `core/berechnungen/zaehler_versatz.rest_schritt`): der Schritt am Ende
+(vom letzten Stand vor `ende` zum ersten ab `ende`) muss über der Sprung-Schwelle der Reihe liegen; gesucht wird in
+`[falsch_seit − 24 h, falsch_seit)` ein Schritt über derselben Schwelle mit entgegengesetztem Vorzeichen und ähnlicher Größe
+(±20 %, `aehnlich`), der jüngste. Gefunden ⇒ die Vorgabe «Falsch seit» im Nachtrag (`nachtrag._rest_fremder_staende`, auch der
+Beginn eines Stücks am Rückkehr-Wechsel) ist seine Stunde, die Prüf-Antwort nennt es; an einer bestehenden Lücke ergibt dieselbe
+Prüfung die Lage «Rest» des Befunds `zaehler_versatz`. Saat (A = 100 + 0,5 kWh/h, fremd ab 09.06. 22:00, Rückkehr 14.06. 19:00):
+14.06. = 0,5 × (335 − 213) = 61,0 statt 3 059,5 (fremd 3 000 darunter) bzw. 119,5 (60 darunter) bzw. «—» (3 000 darüber).
+**Benannt:** nur die Reihe der Erkennung (HA-Stände); ein Abschnitt unter dem Niveau ohne Wechsel-Zeile wird weiter nicht erkannt.
+
+**Fester Tageswert am Tag des Tauschs** (Rechenweg G3): «Zähler getauscht» nennt den Satz nur, wenn die Tageszeile des Bestandstags
+der Stunde vor `ab_ts` den Schlüssel trägt (`verwerfen_vor_quellbeginn.tz_keys_der_zeile`), mit Tag und Wert. **Benannt:** eine
+zweite Lage von G2 «Tag neu aufbauen» braucht eine neue Rechnung (was der Tag neu gebildet ergäbe) und ist nicht gebaut.
+Proben: `test_sensorwechsel_u3a_proben.py`.
+
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
 - **Monat** (R8, `monatsbilanz_aus_tagen`): faltet Tagesbilanzen; ein Total-Fall-Tag propagiert nicht; EV mit derselben Formel aus den Summen der Tage (Rest-Abweichung an Tagen mit Netzladung, §3.1).

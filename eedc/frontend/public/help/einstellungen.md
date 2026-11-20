@@ -951,7 +951,10 @@ Werte bleiben oder verworfen werden:
   eedc-Datenbank. Ist Home Assistant eingerichtet, aber gerade nicht erreichbar, startet sie nicht. Solange die Tage neu
   gebildet werden, zeigt die Fläche oben den Fortschritt — auch nach dem Neuladen der Seite; bei „Bisherige Werte bleiben"
   zwischen zwei Sensoren aus Home Assistant heißt er „Werte nach dem Sensorwechsel …“. Scheitert das Füllen aus Home
-  Assistant, versucht eedc es jede Stunde und nach jedem Start von selbst wieder.
+  Assistant, versucht eedc es jede Stunde und nach jedem Start von selbst wieder. Eine Zeit, die nichts wieder füllt, nennt
+  danach der Daten-Checker mit dem, was für sie gilt ([Daten-Checker §4.8i](HANDBUCH_DATEN_CHECKER.md#48i-zaehlerstaende--zeit-verworfen));
+  einen gespeicherten Monatswert, der danach — oder nach „Bisherige Werte bleiben“ — nicht mehr zur Quelle passt, nennt er
+  ebenfalls ([§4.8j](HANDBUCH_DATEN_CHECKER.md#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)).
 
 **„Abbrechen"** lässt die bisherige Zuordnung stehen. Nicht gefragt wird bei einem Feld ohne eigene Werte (etwa der ersten
 Zuordnung), beim Wechsel auf **„Keine"** und bei der Rückkehr zur letzten Quelle mit Werten (Sensor A → „Keine" → wieder A).
@@ -976,8 +979,8 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
   den Tausch; der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge, und wo eedc aus den gespeicherten
   Zählerständen rechnet, zählt die Stunde des Tauschs keinen Zuwachs. Ist die Stunde des Tauschs schon gespeichert, nennt
   eedc, was sie bisher zählt; danach zählt sie keinen Zuwachs — auch nicht, was in dieser Stunde vor dem Tausch verbraucht
-  wurde. Liegt der Tausch vor dem heutigen Tag und hat eedc für jenen Tag schon einen festen Tageswert gespeichert, bleibt
-  der, wie er ist, und kann den Unterschied weiter enthalten. Ein Eintrag lässt sich nicht zurücknehmen — der Dialog sagt
+  wurde. Liegt der Tausch vor dem heutigen Tag und hat eedc für jenen Tag schon einen festen Tageswert dieses Felds
+  gespeichert, nennt der Dialog Tag und Wert: er bleibt, wie er ist, und kann den Unterschied weiter enthalten. Ein Eintrag lässt sich nicht zurücknehmen — der Dialog sagt
   beides vor dem Eintragen. Sendet ein anderer Publisher
   auf **demselben** Topic (etwa ein neues Gerät mit eigenem Zählerstand), bemerkt eedc das nicht von selbst — dieses Symbol
   ist dann der Weg.
@@ -993,7 +996,9 @@ Quellen. „Falsch seit" ist dort mit dem Beginn der Quelle vor dem Wechsel vorb
 zwei Sensoren aus Home Assistant, die eine Zeit lang gleichzeitig gezählt haben) mit der Stunde des Wechsels. Eine Korrektur lässt sich für den
 jüngsten Wechsel eines Felds nachtragen, solange seine neue Quelle noch zugeordnet ist (ein späterer „Zähler getauscht“
 zählt nicht als Wechsel) — auch, wenn mit ihm die Quelle zur vorigen zurückkehrte; „Falsch seit" ist dann mit dem Wechsel
-davor vorbelegt. Für einen **früheren** Wechsel, mit dem die Quelle zur vorigen zurückkehrte (der Wechsel X → A in
+davor vorbelegt. Tragen die gespeicherten Zählerstände die Stände der anderen Quelle schon einige Stunden vor diesem Wechsel
+(ein Sprung in den 24 Stunden davor, etwa so groß wie der Rücksprung am Ende), ist „Falsch seit" auf diesen Sprung vorbelegt,
+und der Dialog sagt es — sonst blieben die Stände ab dort stehen. Für einen **früheren** Wechsel, mit dem die Quelle zur vorigen zurückkehrte (der Wechsel X → A in
 A → X → A, nach dem noch ein Wechsel der Quelle verzeichnet ist), steht die Zeit fest: vom Wechsel davor bis zu diesem, ein
 „Falsch seit" gibt es dort nicht. Am Wechsel A → X selbst lässt sich keine Korrektur nachtragen. Ist der Grund eingetragen, nennt
 der Daten-Checker den Wechsel nicht mehr. Nach „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bildet

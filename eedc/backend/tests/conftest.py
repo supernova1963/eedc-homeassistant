@@ -103,12 +103,28 @@ def _ha_dienste_je_test_frisch(monkeypatch):
     Singleton `_ws_client` bzw. Token stehen — im selben Worker galt Home Assistant danach in
     jedem Test als eingerichtet (`korrektur.ha_eingerichtet`; Nachmessung U1 19.11.2026: zehn
     Opfer, Verursacher `test_ha_aktivierung_mqtt_default_b7_5c.py`). Modulzustand darf einen
-    Test nicht überleben: jeder Test beginnt mit frischen Diensten."""
+    Test nicht überleben: jeder Test beginnt mit frischen Diensten.
+
+    **Auch die Zugriffsfunktion** (Sensorwechsel U3 a, Bauplan Nr. 151 O-2): ein Modul, das
+    `get_ha_statistics_service` bzw. `get_ha_state_service` auf Modulebene importiert (etwa
+    `snapshot/lts_aggregator.py`), und das ein Test zum ersten Mal lädt, während er die Funktion
+    mit `patch(...)` ersetzt, behält die Attrappe nach dem Test (gemessen: `test_rf64_daten_checker_phasen._drift`
+    vor `test_daten_checker_handgriff_wirkt.py` im selben Prozess ⇒ 8 W-11-Proben rot). Jeder Test
+    beginnt deshalb mit der echten Funktion in jedem geladenen `backend`-Modul."""
+    import sys
+
     import backend.services.ha_state_service as hst
     import backend.services.ha_statistics_service as hss
 
     monkeypatch.setattr(hss, "_ha_statistics_service", None)
     monkeypatch.setattr(hst, "_ha_state_service", None)
+    echt = {"get_ha_statistics_service": hss.get_ha_statistics_service, "get_ha_state_service": hst.get_ha_state_service}
+    for name, mod in list(sys.modules.items()):
+        if mod is None or not name.startswith(("backend.services.", "backend.api.", "backend.core.")):
+            continue
+        for attr, funktion in echt.items():
+            if getattr(mod, attr, funktion) is not funktion:
+                monkeypatch.setattr(mod, attr, funktion)
 
 # ── Kein echtes Netz im Testlauf (N-232, Entscheid Gernot 2026-08-11) ────────
 #

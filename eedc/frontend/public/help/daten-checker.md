@@ -29,6 +29,8 @@
    8f. [Zählerstände – versetzter Abschnitt](#48f-zaehlerstaende--versetzter-abschnitt)
    8g. [Zählerstände – Zuordnung geändert, Grund fehlt](#48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt)
    8h. [Zählerstände – Zählerstand springt](#48h-zaehlerstaende--zaehlerstand-springt)
+   8i. [Zählerstände – Zeit verworfen](#48i-zaehlerstaende--zeit-verworfen)
+   8j. [Zählerstände – Gespeicherter Monatswert passt nicht mehr](#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -197,7 +199,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **41 Kategorien** mit **186 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **43 Kategorien** mit **188 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -229,6 +231,8 @@ eedc prüft **41 Kategorien** mit **186 Befunden** (gezählt an `CheckKategorie`
 | [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung) `zaehler_ruecksprung` | §4.8a | Sprung | Sensor wechseln |
 | [Zählerstände liegen für einen Abschnitt versetzt](#zaehler_versatz) `zaehler_versatz` | §4.8f | Sprung | Grund nachtragen |
 | [Zuordnung eines Zählers geändert, Grund fehlt](#zuordnung_grund_fehlt) `zuordnung_grund_fehlt` | §4.8g | Sprung | Grund nachtragen |
+| [Zählerstände einer Zeit verworfen](#zaehler_zeit_verworfen) `zaehler_zeit_verworfen` | §4.8i | Auskunft | Was gilt |
+| [Gespeicherter Monatswert passt nicht mehr zur Quelle](#monatswert_ueberholt) `monatswert_ueberholt` | §4.8j | Sprung | Monat öffnen |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
 | [Ein Tag mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tag) `batterie_vorzeichen_tag` | §4.21 | Aktion | Tag neu aufbauen |
@@ -2875,6 +2879,8 @@ Was eedc nicht erkennt oder nicht kennzeichnet:
   eedc bewertet die Menge mit dem Preis dieser einen Stunde.
 - Ein Ausfall, der länger als 90 Tage dauert, wird nur in seinen letzten 90 Tagen erkannt.
 - Im Diagnose-Paket steht die Kennzeichnung nicht; sie entsteht beim Lesen und lässt sich aus den Daten nachrechnen.
+- Eine Zeit, deren Zählerstände eine Korrektur verworfen hat und die nichts wieder füllt, nennt dieser Befund nicht; sie
+  steht unter «Zählerstände – Zeit verworfen».
 
 #### Keine unmöglichen Stundenwerte <a name="counter_spikes_ok"></a>
 
@@ -3465,6 +3471,10 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
+Ist der Abschnitt der **Rest einer früheren Korrektur** — die Stände des anderen Sensors begannen schon einige Stunden vor
+dem «Falsch seit» jener Korrektur, und ihr Ende liegt am Ende der damals verworfenen Zeit —, nennt der Befund diese Zeit.
+«Grund nachtragen» verwirft dann auch den Rest; die Vorschau sagt, was danach gilt.
+
 In zwei Lagen trägt der Befund statt «Grund nachtragen» den Knopf «Was gilt»: Gelten vor und nach dem Abschnitt
 verschiedene Quellen, nennt er beide — eedc weiß dann nicht, welche die richtige ist, und korrigiert den Abschnitt nicht. Ist Home Assistant
 eingerichtet, aber gerade nicht erreichbar, sagt er es; sobald eedc die Langzeitstatistik wieder lesen kann, steht beim
@@ -3613,6 +3623,87 @@ an die Adresse aus unserer Antwort schicken.
 **Was ohne Handlung gilt**
 Der Sprung bleibt in Tag, Monat und Jahr stehen — in eedc wie im Energie-Dashboard von Home Assistant. eedc schneidet ihn
 nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
+
+### 4.8i Zählerstände – Zeit verworfen <a name="48i-zaehlerstaende--zeit-verworfen"></a>
+
+Hat eine Korrektur («Bisherige Werte verwerfen» im Dialog der Datenquellen, «Grund nachtragen» mit dieser Antwort oder die
+Korrektur über einen versetzten Abschnitt) die Zählerstände einer Zeit verworfen und füllt nichts sie wieder auf — ohne
+Verbindung zu Home Assistant, bei einer MQTT-Quelle, oder weil Home Assistant für diese Zeit keine Geschichte des richtigen
+Sensors führt —, bleibt diese Zeit endgültig leer. Diese Kategorie nennt je solcher Zeit eine Auskunft: Feld, Beginn und Ende,
+und was dafür gilt — dieselbe Angabe, die die Vorschau beim Eintragen gemacht hat.
+
+**Zwei Lagen.** Gilt davor, in dieser Zeit und danach dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, rechnet
+eedc über die Zeit wie über jede Zählerlücke: die Menge der ganzen Zeit steht am Tag des ersten Zählerstands danach. Sonst
+bildet eedc über die Zeit keine Differenz: die Tage darin zeigen für dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren
+Teil, und die Menge fehlt in Tag, Monat und Jahr. Dazu nennt die Auskunft die betroffenen Monate, für die ein Monatswert
+gespeichert ist — er bleibt, wie er ist.
+
+Eine solche Zeit nennt die Kategorie «Stunden ohne Stundenwerte» ([§4.7](#47-energieprofil--plausibilitaet)) nicht noch
+einmal. Die Zeile verschwindet erst, wenn eine spätere Korrektur die ganze Zeit aus Home Assistant füllt.
+
+---
+
+#### Zählerstände einer Zeit verworfen <a name="zaehler_zeit_verworfen"></a>
+
+**Was eedc sieht**
+Eine Korrektur hat für dieses Feld die Zählerstände einer Zeit verworfen, und nichts füllt sie wieder auf: Home Assistant war
+nicht verbunden, die Quelle ist MQTT (sie hat keine Geschichte, die eedc nachholen könnte), oder Home Assistant führt für diese
+Zeit keine Werte des richtigen Sensors. Das bleibt so — eedc liest diese Zeit auch später nicht noch einmal aus Home Assistant.
+Die Meldung nennt das Feld, Beginn und Ende der Zeit. Die Details sagen, was dafür gilt: Gilt davor, in dieser Zeit und danach
+dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, steht die Menge der ganzen Zeit am Tag des ersten
+Zählerstands danach (wie bei jeder Zählerlücke). Sonst bildet eedc über diese Zeit keine Differenz — die Tage darin zeigen für
+dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Dazu nennen die
+Details die Monate mit gespeichertem Monatswert, die die Zeit berührt.
+
+**Lösungsweg**
+1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was die Korrektur festgelegt hat.
+2. Soll ein gespeicherter Monatswert eines genannten Monats geändert werden: unter
+   [«Monatsdaten»](eedc:/einstellungen/daten?block=monatsdaten) den Monat öffnen, den Wert des Felds eintragen und
+   **«Speichern & abschließen»** klicken.
+3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange die Zeit verworfen ist.
+
+**Was ohne Handlung gilt**
+Die verworfene Zeit bleibt leer. eedc schätzt, verteilt und überbrückt nichts: Steht die Menge an einem Tag danach, ist es die
+Differenz der Zählerstände, die die Quelle geliefert hat; sonst fehlt sie. Gespeicherte Monatswerte bleiben, wie sie sind.
+Die Kategorie «Stunden ohne Stundenwerte» nennt diese Zeit nicht noch einmal. Die Zeile verschwindet, wenn eine spätere
+Korrektur dieselbe Zeit ganz aus Home Assistant füllt.
+
+### 4.8j Zählerstände – Gespeicherter Monatswert passt nicht mehr <a name="48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr"></a>
+
+Ein Wechsel der Quelle mit «Bisherige Werte bleiben», ein eingetragener Zählertausch oder eine Korrektur ändert, was eedc für
+einen Monat aus der Quelle bildet. Ein Monatswert, den du vorher gespeichert hast (Monatsabschluss, «Aus HA laden», Import),
+bleibt dabei, wie er ist — und alles, was eedc für diesen Monat zeigt, rechnet mit ihm. Diese Kategorie nennt einen solchen
+Monat, wenn der gespeicherte Wert und der Wert, den die Quelle heute für den ganzen Monat ergibt, um mindestens 1 kWh
+auseinanderliegen (dieselbe Schwelle wie die Vorschau von «Monatsdaten aus HA-Statistik laden»).
+
+**Was kein Befund ist.** Ein Monat, den kein Wechsel berührt; ein Monat ohne gespeicherten Wert; ein Monat, für den eedc heute
+keinen vollen Wert hat (etwa über eine verworfene Zeit, [§4.8i](#48i-zaehlerstaende--zeit-verworfen)); der laufende Monat; ein
+Wert, den du im Monatsabschluss mit «gespeicherten behalten» bewusst behalten hast. Nicht geprüft werden der
+Anlagen-PV-Zähler (sein Monatswert ist die Summe je Modul) und Felder, deren Werte eedc nicht stündlich mitschreibt.
+
+---
+
+#### Gespeicherter Monatswert passt nicht mehr zur Quelle <a name="monatswert_ueberholt"></a>
+
+**Was eedc sieht**
+Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben»), ein eingetragener
+Zählertausch oder eine Korrektur hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. Die
+Meldung nennt Feld und Monat, die Details den gespeicherten Wert, den Wert der Quelle und seit wann er gilt. Alles, was eedc für
+diesen Monat zeigt, rechnet mit dem gespeicherten Wert.
+
+**Lösungsweg**
+1. Am Befund **«Monat öffnen»** klicken — das Formular des Monats öffnet sich beim Feld.
+2. Den Wert der Quelle aus den Details in das Feld eintragen. Steht unter dem Feld «Sensor meldet …», genügt
+   **«Sensorwert übernehmen»**, wenn dort derselbe Wert steht.
+3. **«Speichern & abschließen»** klicken.
+4. Soll der gespeicherte Wert bleiben (etwa, weil er von einem geeichten Zähler abgelesen ist): im Formular beim Feld
+   **«gespeicherten behalten»** wählen und speichern — dann nennt eedc den Monat nicht mehr.
+5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Monat ist aus der Liste verschwunden.
+
+**Was ohne Handlung gilt**
+Der gespeicherte Monatswert bleibt, und eedc rechnet den Monat weiter mit ihm. Tageswerte und die Tagesansicht folgen der
+Quelle; Monat und Tage dieses Monats passen dann um die genannte Abweichung nicht zueinander. eedc ändert keinen gespeicherten
+Wert von selbst.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 

@@ -321,8 +321,8 @@ async def test_f3_einstieg_zur_vollen_stunde_nennt_den_zuwachs_der_stunde_die_nu
     assert p["weg"] == "fortsetzung"
     assert "Die Stunde ab 10.06.2026 02:00 Uhr ist schon gespeichert" in p["saetze"][1]
     assert p["saetze"][2] == "Bisher zählt sie 2.001,00 kWh."
-    from backend.services.zuordnung_wechsel.zaehler_getauscht import SATZ_TAG_FEST, lage as zg_lage
-    assert p["saetze"][3] == SATZ_TAG_FEST                               # «Zu §13» Nr. 87: Tausch vor dem laufenden Tag
+    from backend.services.zuordnung_wechsel.zaehler_getauscht import lage as zg_lage
+    assert len(p["saetze"]) == 3                                         # U3 a (G3): ohne festen Tageswert kein Satz dazu
     async with sitzungen() as s:
         from backend.models.anlage import Anlage
         an = await s.get(Anlage, aid)

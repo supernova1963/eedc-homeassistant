@@ -107,16 +107,16 @@ async def test_einstieg_frueherer_spiegel_abschnitt_weg_home_assistant_kein_500(
     assert r["eingetragen"] is False and await _zeilen(db, aid) == []
     # Gegenprobe: in der Mitschrift-Zeit trägt derselbe Einstieg ein, mit Nachtrag an der Stunde des Tauschs
     p = await _getauscht(db, aid, T0 + timedelta(hours=8, minutes=5))
-    assert (p["weg"], p["eintragen"]) == ("fortsetzung", True) and len(p["saetze"]) == 4
-    assert p["saetze"][-1] == zg.SATZ_TAG_FEST                            # 4-K, «Zu §13» Nr. 87: Tausch vor dem laufenden Tag
+    assert (p["weg"], p["eintragen"]) == ("fortsetzung", True) and len(p["saetze"]) == 3
+    # 4-K, «Zu §13» Nr. 87; U3 a (G3): ohne festen Tageswert des Felds am Tag des Tauschs kein Satz dazu
+    assert not any("festen Tageswert" in s for s in p["saetze"])
 
 
 async def test_einstieg_vor_dem_kanal_fortsetzung_ohne_nachtrag(db):
     """Vor der ersten Quelle des Kanals lesen die Leser die Reihe — Fortsetzung ohne Nachtrag (kein Satz zur Stunde)."""
     aid = await _mqtt_heute_spiegel_frueher(db)
     p = await _getauscht(db, aid, datetime(2026, 10, 15, 9, 30))
-    assert (p["weg"], p["eintragen"], len(p["saetze"])) == ("fortsetzung", True, 2)
-    assert p["saetze"][-1] == zg.SATZ_TAG_FEST                            # 4-K, «Zu §13» Nr. 87
+    assert (p["weg"], p["eintragen"], len(p["saetze"])) == ("fortsetzung", True, 1)    # U3 a (G3): kein fester Tageswert
 
 
 async def test_einstieg_verworfene_zeit_nichts_einzutragen(db):

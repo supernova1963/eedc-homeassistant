@@ -47,6 +47,10 @@ Korrektur tun wird — mit derselben Prüfung wie der Dienst (``stueck.ist_fuell
 * ``ha_nicht_erreichbar`` — Home Assistant ist eingerichtet, aber gerade nicht erreichbar (oder sein Abruf scheitert): die
   Korrektur startet in diesem Augenblick nicht — eine Auskunft ohne Knopf (INFO, Nr. 104); beim nächsten Lauf mit erreichbarem
   Home Assistant steht wieder der Handgriff.
+* ``rest`` (Sensorwechsel U3 a, Rechenweg G8) — der Abschnitt ist der Rest fremder Stände vor einer früheren Korrektur: sein
+  Rückgang führt über das Ende einer Lücke, und sein Sprung ist der Schritt, den die Vorgabe «Falsch seit» vor ihr findet
+  (``stueck.rest_vor``). Der Satz nennt die Lücke; was «Grund nachtragen» tut, sagt ``werte.lage_korrektur`` (eine der Lagen
+  oben) mit ihrem Satz.
 
 Home Assistant wird nur für einen gefundenen Abschnitt mit Wirkung gefragt, nie für die OK-Zeile.
 
@@ -77,6 +81,10 @@ GRUND_VERSCHIEDENE_QUELLEN = "verschiedene_quellen"
 GRUND_HA_NICHT_ERREICHBAR = "ha_nicht_erreichbar"
 #: Lagen ohne wirksamen Handgriff in diesem Augenblick — Auskunft (INFO, ohne Sprung), Bauplan «Zu §14» Nr. 104.
 LAGEN_OHNE_HANDGRIFF = frozenset({GRUND_VERSCHIEDENE_QUELLEN, GRUND_HA_NICHT_ERREICHBAR})
+#: Sensorwechsel U3 a (Rechenweg G8): der Abschnitt ist der **Rest** fremder Stände vor einer früheren Korrektur — sein Sprung
+#: liegt in den 24 Stunden vor einer Lücke und passt zum Schritt über ihr Ende (``stueck.rest_vor``). ``werte.lage_korrektur``
+#: sagt dann, was «Grund nachtragen» tut (eine der Lagen oben).
+LAGE_REST = "rest"
 
 _SQL_SCHLUESSEL = "SELECT DISTINCT sensor_key FROM sensor_snapshots WHERE anlage_id = :a AND quelle = :q"
 _SQL_REIHE = ("SELECT zeitpunkt, wert_kwh FROM sensor_snapshots WHERE anlage_id = :a AND sensor_key = :k AND quelle = :q "
@@ -114,6 +122,9 @@ _SATZ_FUELLBAR_AB_LUECKE = ("Über die Zeit davor rechnet eedc wie über jede Z�
                             "sie endet.")
 _SATZ_FUELLBAR_AB_KEINE = ("Über die Zeit davor bildet eedc keine Differenz zweier Zählerstände: die Tage darin zeigen keinen "
                            "Wert, die Tage an ihrem Rand nur ihren Teil.")
+#: Lage «Rest» (U3 a, G8): vor dem Satz der Lage, die «Grund nachtragen» tut.
+_SATZ_REST = ("Diese Zählerstände sind der Rest einer früheren Korrektur: sie hat die Zeit vom {von} bis {bis} Uhr verworfen, die "
+              "Stände des anderen Sensors begannen aber schon am {sprung} Uhr. ")
 #: Dieselben Lagen, wenn zwischen den Ständen davor und danach ein Zählertausch eingetragen ist (Korrekturrunde U1-K S2: der
 #: Befund fragt dieselbe Regel wie die Leser, ``zeitpunkt.ohne_hoehenwechsel`` über die Vorschau der Korrektur).
 _SATZ_TAUSCH = ("„Grund nachtragen“ verwirft sie; da zwischen den Ständen davor und danach ein Zählertausch eingetragen ist, "
@@ -139,7 +150,8 @@ def _tage_text(tage: list[date]) -> str:
 
 
 def _texte(name: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str, quellen: tuple[str, str],
-           tausch: bool = False, fuellbar_ab: Optional[tuple[datetime, bool]] = None) -> tuple[str, str]:
+           tausch: bool = False, fuellbar_ab: Optional[tuple[datetime, bool]] = None,
+           rest: Optional[tuple[datetime, datetime]] = None) -> tuple[str, str]:
     """Meldung und Details in Anwender-Sprache (keine Mechanik-Wörter, kein Menüweg — der Handgriff ist der Weg); genannt
     werden nur die Tage der Schritte mit Wirkung (Bauplan «Zu §14» Nr. 91 b)."""
     # Die Tage des ersten und des letzten versetzten Stands (Bauplan «Zu §14» Nr. 108, S11: ein Sprung mit der Zeile 00:00
@@ -159,6 +171,9 @@ def _texte(name: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str, quellen:
         f"etwa nach einem Wechsel der Zuordnung. eedc bildet einen Tageswert aus zwei Zählerständen: {', '.join(folgen)}. "
         "Gespeicherte Monatswerte ändert das nicht. "
     )
+    if rest is not None:
+        details += _SATZ_REST.format(von=rest[0].strftime("%d.%m.%Y %H:%M"), bis=rest[1].strftime("%d.%m.%Y %H:%M"),
+                                     sprung=lauf.beginn.bis.strftime("%d.%m.%Y %H:%M"))
     if lage == LAGE_FUELLBAR and fuellbar_ab is not None:
         ab, wie_luecke = fuellbar_ab
         satz = _SATZ_FUELLBAR_AB.format(quelle=quellen[0], ab=ab.strftime("%d.%m.%Y %H:%M")) + (
@@ -213,7 +228,8 @@ class ZaehlerVersatzChecks:
             lage, quellen = await self._versatz_lage(anlage, key, lauf)
             tausch = lage in _SATZ_LAGE_TAUSCH and await self._versatz_tausch(anlage, key, lauf, quellen)
             ab = await self._versatz_fuellbar_ab(anlage, key, lauf) if lage == LAGE_FUELLBAR else None
-            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch, ab))
+            rest = None if lage in LAGEN_OHNE_HANDGRIFF else await self._versatz_rest(anlage.id, key, lauf)
+            out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch, ab, rest))
         return out or [_versatz_ok()]
 
     async def _versatz_funde(self, anlage_id: int, invs: dict) -> list[tuple[str, VersatzLauf]]:
@@ -340,6 +356,20 @@ class ZaehlerVersatzChecks:
             return None
         return kr._staende_ab_zeit(la), bool(la.zaehlerluecke)
 
+    async def _versatz_rest(self, anlage_id: int, key: str, lauf: VersatzLauf) -> Optional[tuple[datetime, datetime]]:
+        """Lage «Rest» (U3 a, Rechenweg G8): der Rückgang des Abschnitts führt über das Ende einer Lücke des Schlüssels, und
+        sein Sprung ist der Schritt, den dieselbe Prüfung wie die Vorgabe «Falsch seit» (``stueck.rest_vor``) vor dieser
+        Lücke findet — dann ist das die Lücke ``(von, bis)``; sonst ``None``."""
+        from backend.services.zuordnung_wechsel.stueck import rest_vor
+        from backend.services.zuordnung_wechsel.zeitpunkt import ist_luecke, lade_wechsel
+
+        for w in (await lade_wechsel(self.db, anlage_id)).get(key, ()):
+            if ist_luecke(w) and lauf.ende.von < w.ab_ts <= lauf.ende.bis:
+                schritt = await rest_vor(self.db, anlage_id, key, w.falsch_seit_ts, w.ab_ts)
+                if schritt is not None and schritt.bis == lauf.beginn.bis:
+                    return w.falsch_seit_ts, w.ab_ts
+        return None
+
     async def _versatz_geraete(self, anlage_id: int) -> dict:
         """Die Geräte der Anlage je Id (Text) — für Namen und die Frage, welches Feld die Tagesansicht zeigt."""
         from backend.models.investition import Investition
@@ -349,15 +379,18 @@ class ZaehlerVersatzChecks:
 
     def _versatz_befund(self, name: str, key: str, lauf: VersatzLauf, wirkung: "Wirkung", lage: str,
                         quellen: tuple[str, str], tausch: bool = False,
-                        fuellbar_ab: Optional[tuple[datetime, bool]] = None) -> CheckErgebnis:
+                        fuellbar_ab: Optional[tuple[datetime, bool]] = None,
+                        rest: Optional[tuple[datetime, datetime]] = None) -> CheckErgebnis:
         from backend.services.daten_checker.ziele import stueck_parameter
 
-        meldung, details = _texte(name, lauf, wirkung, lage, quellen, tausch, fuellbar_ab)
+        meldung, details = _texte(name, lauf, wirkung, lage, quellen, tausch, fuellbar_ab, rest)
         sprung, rueckgang = lauf.beginn.bis.isoformat(timespec="minutes"), lauf.ende.bis.isoformat(timespec="minutes")
         ohne_handgriff = lage in LAGEN_OHNE_HANDGRIFF
+        zusatz = {} if rest is None else {"lage_korrektur": lage, "rest_luecke": [t.isoformat(timespec="minutes") for t in rest]}
         # E1 (Diagnose-Paket): die Zahlen der Meldung strukturiert, ohne neue Rechnung.
         return _versatz_zeile(CheckSeverity.INFO if ohne_handgriff else CheckSeverity.WARNING, meldung, details, {
-            "schluessel": key, "lage": lage, "versatz_kwh": round(lauf.versatz_kwh, 3),
+            "schluessel": key, "lage": LAGE_REST if rest is not None else lage, **zusatz,
+            "versatz_kwh": round(lauf.versatz_kwh, 3),
             "sprung": sprung, "rueckgang": rueckgang,
             "tage_zu_hoch": [d.isoformat() for d in wirkung.tage_zu_hoch],
             "tage_ohne_wert": [d.isoformat() for d in wirkung.tage_ohne_wert],
@@ -420,5 +453,6 @@ def _versatz_zeile(schwere: str, meldung: str, details: str, werte: dict, stueck
     )
 
 
-__all__ = ["GRUND_HA_NICHT_ERREICHBAR", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "GRUND_VERSCHIEDENE_QUELLEN", "LAGE_FUELLBAR", "OK_MELDUNG",
+__all__ = ["GRUND_HA_NICHT_ERREICHBAR", "GRUND_OHNE_HA", "GRUND_STAENDE_PASSEN_NICHT", "GRUND_VERSCHIEDENE_QUELLEN", "LAGE_FUELLBAR",
+           "LAGE_REST", "OK_MELDUNG",
            "Wirkung", "ZaehlerVersatzChecks", "in_tagesansicht", "lade_reihe"]

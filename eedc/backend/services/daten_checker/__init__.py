@@ -163,6 +163,10 @@ class DatenChecker(
         ergebnisse.extend(await self._check_zaehler_versatz(anlage))
         # Sensorwechsel S4 (B-7): verzeichneter Wechsel ohne Grund, nach dem die Abfrage gefragt hätte — «Grund nachtragen».
         ergebnisse.extend(await self._check_zuordnung_grund_fehlt(anlage))
+        # Sensorwechsel U3 a (G1/G2): verworfene, nicht wieder gefüllte Zeit je Lücke — Auskunft; gespeicherter Monatswert eines
+        # vom Wechsel berührten Monats, der nicht mehr zur Quelle passt — «Monat öffnen».
+        ergebnisse.extend(await self._check_zaehler_zeit_verworfen(anlage))
+        ergebnisse.extend(await self._check_monatswert_ueberholt(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         # P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.

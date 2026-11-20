@@ -26,6 +26,10 @@ Nachtragsmenge über der mit dem Fenster skalierten Schwelle (``_verwerfe``, die
 die Tagesbilanz kein Kennzeichen, an dem ein Satz hängen könnte. Für Bestandstage bleibt deshalb N-567 (``nachtrag_nach_eingefrorenem_zaehler``) der Befund; dieser hier nennt dort
 nur Lücken-Bündel mit Kennzeichen. Nennt er einen Tag, lässt N-567 ihn aus (``_erfassung_stillstand_tage``).
 
+**Verworfene Zeit (Sensorwechsel U3 a, Rechenweg G1):** eine Stelle, die allein eine bei einer Korrektur verworfene, nicht
+gefüllte Zeit eines Bilanz-Zählers erklärt, nennt ``zaehler_zeit_verworfen`` (``_ohne_verworfene_zeit``) — hier fällt sie aus,
+die Kennzeichen der Tagesbilanz bleiben.
+
 Schwesterdateien: ``energieprofil.py`` (N-567), ``services/kanal/stillstand.py`` (die Fenster),
 ``services/energie_profil/stundenpaarung.py`` (die Zeiträume in Worten, der Grund der Tagestabelle).
 """
@@ -266,6 +270,35 @@ async def tage_ohne_stundenwerte(db, anlage_id: int, von: date, bis: date) -> tu
     return tage, gesperrt
 
 
+def _achsen_mit_nachtrag(zeile: Any) -> set[str]:
+    """Die Achsen, deren Menge die Zeile über mehr als eine Stunde trägt (``spannen`` n > 1, wie ``_mengen``)."""
+    from backend.core.berechnungen.spannen import spanne_roh
+
+    spannen = getattr(zeile, "spannen", None)
+    return {_ACHSE_JE_FELD[attr] for attr, _n in _MENGEN
+            if getattr(zeile, attr, None) is not None and spanne_roh(spannen, _ACHSE_JE_FELD[attr]) > 1}
+
+
+async def _ohne_verworfene_zeit(db, anlage: Anlage, tage: list[_Tag]) -> list[_Tag]:
+    """**Ein Befund je Ursache** (Sensorwechsel U3 a, Rechenweg G1, Messfrage M5): eine Stelle, die allein eine bei einer
+    Korrektur verworfene, nicht gefüllte Zeit eines Bilanz-Zählers erklärt (``datenquelle/verworfen.stelle_erklaert``), nennt
+    der Befund ``zaehler_zeit_verworfen`` — hier fällt sie aus; ein Tag ohne übrige Stelle fällt ganz aus. Die Zahlen und
+    Kennzeichen der Tagesbilanz (N-799) bleiben, wie sie sind: ausgelassen wird nur im Text, nicht in der Lesestelle der
+    Fenster (``kanal/stillstand.fenster_im_bereich`` trägt die Marken der Tagesbilanz). Ohne Lücke keine Abfrage."""
+    from backend.services.daten_checker.datenquelle.verworfen import achsen_der_verworfenen_zeiten, stelle_erklaert
+
+    verworfen = await achsen_der_verworfenen_zeiten(db, anlage) if tage else []
+    if not verworfen:
+        return tage
+    aus = []
+    for t in tage:
+        t.stellen = [s for s in t.stellen if s.zeile is None
+                     or not stelle_erklaert(s.von, s.bis, _achsen_mit_nachtrag(s.zeile), verworfen)]
+        if t.stellen:
+            aus.append(t)
+    return aus
+
+
 class ErfassungStillstandChecks:
     """Mixin des ``DatenChecker`` — der Befund ``erfassung_stillstand``."""
 
@@ -273,7 +306,8 @@ class ErfassungStillstandChecks:
         heute = heute or date.today()
         von = heute - timedelta(days=FENSTER_TAGE - 1)
         tage, gesperrt = await tage_ohne_stundenwerte(self.db, anlage.id, von, heute)
-        self._erfassung_stillstand_tage = {t.datum for t in tage}
+        self._erfassung_stillstand_tage = {t.datum for t in tage}       # auch die ausgelassenen: N-567 nennt sie nicht
+        tage = await _ohne_verworfene_zeit(self.db, anlage, tage)
         if not tage and not gesperrt:
             return [_zeile(False, OK_MELDUNG, OK_DETAILS, {"tage": 0})]
         return [_ergebnis(tage, gesperrt)]

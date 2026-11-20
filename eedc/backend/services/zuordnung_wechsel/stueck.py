@@ -210,6 +210,32 @@ async def lage_am_befund(db, anlage, key: str, sprung: datetime, rueckgang: date
     return la
 
 
+# ── Rest fremder Stände vor «Falsch seit» (Sensorwechsel U3 a, Rechenweg G8) ───
+
+
+#: Was die Prüfung nennt, wenn «Falsch seit» auf den früheren Schritt vorbelegt ist (U3 a, G8).
+SATZ_REST_VORGABE = ("Die gespeicherten Zählerstände dieses Felds springen schon am {zeit} Uhr um {betrag} kWh {richtung} — "
+                     "etwa so weit, wie sie am Ende zurückspringen. «Falsch seit» ist deshalb auf {zeit} Uhr vorbelegt; sonst "
+                     "blieben die Stände ab dort stehen.")
+
+
+async def rest_vor(db, anlage_id: int, key: str, falsch_seit: datetime, ende: datetime):
+    """Der Schritt, mit dem die fremden Stände schon vor ``falsch_seit`` beginnen (``core/berechnungen/zaehler_versatz.rest_schritt``
+    über die Reihe der Erkennung, ``versatz.lade_reihe``) — ``None`` = keiner. Eine Stelle für die Vorgabe «Falsch seit»
+    (``nachtrag.lage``) und die Lage «Rest» am Versatz-Befund (``daten_checker/datenquelle/versatz.py``)."""
+    from backend.core.berechnungen.zaehler_versatz import rest_schritt
+    from backend.services.daten_checker.datenquelle.versatz import lade_reihe
+
+    return rest_schritt(await lade_reihe(db, anlage_id, key), falsch_seit, ende)
+
+
+def satz_rest_vorgabe(schritt) -> str:
+    from backend.core.zahlenformat import fmt_zahl
+
+    return SATZ_REST_VORGABE.format(zeit=schritt.bis.strftime("%d.%m.%Y %H:%M"), betrag=fmt_zahl(abs(schritt.delta_kwh), 1),
+                                    richtung="nach oben" if schritt.delta_kwh > 0 else "nach unten")
+
+
 # ── Tage, die eine Lücke trifft (Vorschau) ───────────────────────────────────
 
 
@@ -274,5 +300,6 @@ def antwort(la: StueckLage, label: Optional[str], feld_id: Optional[str], korrek
     }
 
 
-__all__ = ["SATZ_NICHT_GEMELDET", "SATZ_STUECK", "SATZ_STUECK_ZWEI_QUELLEN", "SATZ_VERSCHIEDENE_QUELLEN", "StueckLage", "antwort",
-           "finde_lauf", "ist_fuellbar", "lage_am_befund", "quelle_am_rand", "tage_der_luecke", "tragtag_der_luecke"]
+__all__ = ["SATZ_NICHT_GEMELDET", "SATZ_REST_VORGABE", "SATZ_STUECK", "SATZ_STUECK_ZWEI_QUELLEN", "SATZ_VERSCHIEDENE_QUELLEN",
+           "StueckLage", "antwort", "finde_lauf", "ist_fuellbar", "lage_am_befund", "quelle_am_rand", "rest_vor", "satz_rest_vorgabe",
+           "tage_der_luecke", "tragtag_der_luecke"]
