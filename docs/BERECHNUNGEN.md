@@ -5082,9 +5082,16 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
   Kanal:  Naht-Stunde = (stand_alt_ende − Stand der Zeile davor) + (Stand der Naht-Zeile − stand_neu_null)
           Quellzeile ab der Naht-Stunde, Versatz-Verschiebung = Menge − (Wert Naht − Wert davor)  (naht.nachtrag_fortsetzung)
   «Zähler getauscht» MQTT: in der Stunde von «Getauscht am» alle Paare aufeinanderfolgender Rohstände mit Höhenwechsel
-          (rohstand_rand.hoehenwechsel; U3-K B7: Rückgang < −0,01; nach oben, wenn die Leistung = Schritt ÷ Zeit zwischen den
-          zwei Rohständen größer ist als 10 × die größte Leistung der 24 h davor UND als die Grenze max(100 kWh, 1,5 × kWp) je
-          Stunde — dieselbe wie «Zählerstand springt»; andere Einheit: 10 × davor und Schritt > 1);
+          (rohstand_rand.hoehenwechsel; U3-K B7: Rückgang < −0,01; nach oben, wenn die Leistung größer ist als 10 × die größte
+          Leistung der 24 h davor UND als die Grenze max(100 kWh, 1,5 × kWp) je Stunde — dieselbe wie «Zählerstand springt»;
+          andere Einheit: 10 × davor und Schritt > 1; U3-K2 P-2: Leistung = Schritt ÷ Zeit seit der Stand zuletzt anders war —
+          vom ersten Rohstand mit dem Wert vor dem Schritt bis zum Rohstand danach, höchstens bis 24 h vor der Stunde
+          (rohstand_rand.seit_dem_letzten_anderen); ein gewöhnlicher Schritt behält seine fünf Minuten, eine Nachholmenge nach
+          Stille teilt sich durch die stille Zeit);
+          U3-K2 P-3 — eine Entscheidung, zwei Verbraucher: nennt «Zählerstand springt (MQTT)» die Stunde (Kern
+          zaehlerstand_sprung.finde_standspruenge am Kanal, rohstand.stunde_benannt) und sieht die Leistung keinen
+          Höhenwechsel, ist der größte Schritt nach oben der Stunde der Höhenwechsel (sprung_der_stunde(…, benannt=True));
+          der Befund nennt dieselbe Zeit (mqtt_standsprung.zeit_des_sprungs);
           Rand-Stände = letzter Stand vor dem ERSTEN, erster Stand nach dem LETZTEN Höhenwechsel der Stunde (U3-K B1,
           sprung_der_stunde; die Stände dazwischen gehören keinem der zwei Zähler); der Tausch wird am ersten Stand danach
           eingetragen; ohne Höhenwechsel: abgelehnt (kein_sprung); ergäbe die Naht-Stunde eine negative Menge: abgelehnt
@@ -5131,18 +5138,24 @@ doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide
 vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
 Kanal); (e) Mischform HA/MQTT in der Bilanz (`kanal/bilanz_adapter.zaehler_eintraege`, Bestandsmessung); (f) die Reihen-Leser
 (`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal);
-(g) U3-K B7: ein kleiner Versatz nach oben (unter der Grenze je Stunde in fünf Minuten, bei bis zu 66 kWp etwa 8,3 kWh) ist kein
+(g) U3-K B7, U3-K2: ein kleiner Versatz nach oben, den kein Befund nennt (unter dem, was die Anlage seit dem letzten anderen
+Stand leisten kann — bei bis zu 66 kWp in fünf Minuten etwa 8,3 kWh, nach einer Stunde Stillstand 100 kWh), ist kein
 Höhenwechsel — er lässt sich über MQTT nicht als Tausch eintragen und zählt als Menge der Stunde; der Dialog sagt es
-(`zaehler_getauscht.SATZ_KEIN_SPRUNG`); nennt G4 eine solche Stunde (reifer Bezug, Maß > 10), lehnt der Dialog trotzdem ab
-(nicht gemessen); (h) U3-K: eine Nachholmenge nach langer Stille über der Grenze (30 h stumm, dann 15 kWh in
-fünf Minuten = 180 kW) gilt als Höhenwechsel — die Leistung rechnet zwischen zwei Rohständen, und der Scheduler wiederholt in der
-Stille den letzten Stand; ein bewusster Eintrag nimmt sie an (offener Punkt U3-K); (i) die Spanne gilt je Stunde — ein fremder
+(`zaehler_getauscht.SATZ_KEIN_SPRUNG`). Nennt G4 die Stunde (reifer Bezug, Maß > 10), nimmt der Dialog seit U3-K2 (P-3) den
+größten Schritt der Stunde an; (h) entfällt seit U3-K2 (P-2): eine Nachholmenge nach langer Stille (30 h stumm, dann 15 kWh)
+ist kein Höhenwechsel mehr (0,62 kW über die gelesenen 24 h; U3-K: 180 kW in fünf Minuten, angenommen); (i) die Spanne gilt je Stunde — ein fremder
 Stand über die volle Stunde hinweg (10:55 bis 11:05) braucht zwei Einträge (nicht gemessen).
 **Gemessen U3-K** (`golden-master/sensorwechsel-saat/u3k/`, 20 Tage Vorlauf, Netzbezug 0,5 kWh je Stunde, Ereignis 10:20): Gerät
 meldet fünf Minuten 0 · anderes Gerät zehn Minuten 300 · neues Gerät erst 0, dann 300 ⇒ nach dem Eintrag 11,917 · 11,875 · 11,917
 in Kanal, Reihe und Tagesansicht (U3 b: −5 005,208 · −4 705,25 · 311,958); Wallbox 22 kW nach 20 Tagen Standby: G4 still, der
 Dialog lehnt ab (U3 b: 1,833 kWh echter Verbrauch gestrichen); ein Gerät sendet eine Stunde den halben Stand: G4 nennt Neubeginn
 und Sprung (U3 b: still, Tag 5 257,1).
+**Gemessen U3-K2** (`golden-master/sensorwechsel-saat/u3k2/test_p3_mess.py`, MQTT-Kanal mit 400 Tagen Geschichte, Rohstände der
+letzten zwei Tage, Schritt um 10:20): reifer Zähler 1,5 kWh am Tag, 200 kWp (Grenze 300 kW), +20 kWh in fünf Minuten (240 kW) —
+G4 nennt die Stunde (Maß 13,4), am HEAD öffnete der Knopf den Dialog mit 10:00 und der Dialog lehnte ab, jetzt nennt G4 10:20 und
+der Dialog trägt ein; reifer Zähler 1,2 kWh am Tag, Stand nur zur vollen Stunde, +15 kWh nach 20 Minuten Stand (45 kW, Maß 12,6)
+ebenso; Wallbox 22 kW nach Standby und Nachholmenge nach 1 h · 3 h · 30 h Stille: kein Befund, der Dialog lehnt ab (am HEAD nahm
+er die Nachholmenge nach 30 h an).
 Proben: `test_sensorwechsel_u3b_proben.py`, `test_sensorwechsel_u3k_proben.py`; Vitest `F/components/live/SensorwechselMqttSprung.test.tsx`.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.

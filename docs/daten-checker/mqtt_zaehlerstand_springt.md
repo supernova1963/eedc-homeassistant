@@ -19,10 +19,9 @@ die eedc für die Stunde zählt.
    Dialog statt **«Eintragen»** ein Satz, dass dort kein Sprung zu sehen ist oder die Stunde danach weniger als nichts zählte,
    ist nichts eingetragen: die Zeit unter **«Getauscht am»** prüfen.
 
-Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Ein kleiner Sprung nach oben — weniger, als die
-Anlage in den fünf Minuten zwischen zwei Zählerständen leisten kann, bei bis zu 66 kWp etwa 8 kWh — sieht aus wie Verbrauch:
-der Dialog lehnt einen Eintrag dort ab, und er zählt als Menge der Stunde. Sendet der Publisher den Tageswert statt des
-fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
+Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Auch einen kleinen Sprung nach oben, der wie
+Verbrauch aussehen könnte, trägt der Dialog in der genannten Stunde ein: eedc nimmt dort den größten Schritt des Zählerstands.
+Sendet der Publisher den Tageswert statt des fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
 
 ## Was ohne Handlung gilt
 Die Stunde zählt den Unterschied der Zählerstände als Menge, und Tag, Monat und Jahr enthalten ihn. Nach dem Eintrag zählt die

@@ -337,11 +337,12 @@ async def test_b7_ladung_nach_standby_ist_kein_hoehenwechsel(db, monkeypatch, sp
     assert await kanal_tag(db, aid, TAG_E) == pytest.approx(vorher)
 
 
-@pytest.mark.parametrize("stumm_h,weg", [(3, "kein_sprung"), (30, "fortsetzung")])
+@pytest.mark.parametrize("stumm_h,weg", [(3, "kein_sprung"), (30, "kein_sprung")])
 async def test_b7_nachholmenge_nach_stille(db, stumm_h, weg):
-    """Publisher stumm, der Scheduler wiederholt den letzten Stand; um 10:20 kommt der wahre Stand. 3 h: 1,5 kWh in fünf Minuten
-    (18 kW) — kein Höhenwechsel. **Benannte Grenze** (offener Punkt im Bericht): nach 30 h sind es 15 kWh in fünf Minuten
-    (180 kW) — die Leistung zwischen zwei Rohständen hält sie für einen Höhenwechsel; ein bewusster Eintrag nimmt sie an."""
+    """Publisher stumm, der Scheduler wiederholt den letzten Stand; um 10:20 kommt der wahre Stand. 3 h: 1,5 kWh — kein
+    Höhenwechsel. Nach 30 h sind es 15 kWh; U3-K2 (P-2): die Leistung gilt über die Zeit seit dem letzten anderen Stand (0,5 kW,
+    nicht 180 kW in fünf Minuten) — auch das ist kein Höhenwechsel (bis U3-K benannte Grenze; Probe der Regel in
+    ``test_sensorwechsel_u3k2_proben.py``)."""
     def stand(t):
         return w(E - timedelta(hours=stumm_h)) if E - timedelta(hours=stumm_h) <= t < E else w(t)
     aid = (await _anlage(db)).id

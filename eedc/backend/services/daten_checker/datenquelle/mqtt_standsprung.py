@@ -211,12 +211,14 @@ async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
 
 
 async def zeit_des_sprungs(db, anlage_id: int, f: Fund) -> datetime:
-    """Der erste Rohstand nach dem Höhenwechsel in der Stunde des Funds (``rohstand.sprung_um``); ohne Rohstände (älter als
-    31 Tage) der Beginn der Stunde."""
+    """Der erste Rohstand nach dem Höhenwechsel in der Stunde des Funds (``rohstand.sprung_um``; U3-K2, P-3: der Befund nennt
+    die Stunde — sieht die Leistung keinen Höhenwechsel, gilt der größte Schritt nach oben); ohne Rohstände (älter als 31 Tage)
+    der Beginn der Stunde."""
     from backend.services.zuordnung_wechsel.rohstand import sprung_um
 
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
-    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
+    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh",
+                                benannt=True)
     return paar[1][0].replace(microsecond=0) if art == "sprung" and paar is not None else stunde
 
 

@@ -73,21 +73,35 @@ async def grenze_kw(db, anlage_id: int, kwh: bool = True) -> Optional[float]:
     return grenze_unmoeglich(await schwelle_der_anlage_stunde_kwh(db, anlage_id)) if kwh else None
 
 
-async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime, *,
-                    kwh: bool = True) -> tuple[str, Optional[tuple[Roh, Roh]]]:
+async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime, *, kwh: bool = True,
+                    benannt: Optional[bool] = None) -> tuple[str, Optional[tuple[Roh, Roh]]]:
     """Wo der Zähler um ``t`` die Höhe wechselt (``rohstand_rand.sprung_der_stunde`` in der Stunde von ``t``):
     ``("sprung", (a, b))`` — die Spanne der Höhenwechsel der Stunde (U3-K, B1: letzter Stand vor dem ersten, erster nach dem
     letzten) · ``("kein_sprung", None)`` (Rohstände in der Stunde, aber kein Höhenwechsel) · ``("noch_kein_stand", None)`` (nach
     ``t`` ist noch kein Rohstand gespeichert — der Stundenlauf setzt die Rand-Stände später) · ``("ohne", None)`` (keine
-    Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3). ``kwh``: der Zähler zählt kWh (Grenze B7)."""
+    Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3). ``kwh``: der Zähler zählt kWh (Grenze B7).
+    ``benannt`` (U3-K2, P-3): nennt der Befund «Zählerstand springt (MQTT)» die Stunde? ``None`` = erst fragen, wenn die
+    Leistung keinen Höhenwechsel sieht (``stunde_benannt``) — dann ist der größte Schritt nach oben der Stunde der Höhenwechsel."""
     stunde = t.replace(minute=0, second=0, microsecond=0)
     roh = await _rohstaende(db, anlage_id, mqtt_key, stunde - BEZUG, stunde + _STUNDE)
     if not roh:
         return "ohne", None
     if roh[-1][0] < t and await rand_um(db, anlage_id, mqtt_key, t) is None:
         return "noch_kein_stand", None
-    paar = sprung_der_stunde(roh, stunde, await grenze_kw(db, anlage_id, kwh))
+    grenze = await grenze_kw(db, anlage_id, kwh)
+    paar = sprung_der_stunde(roh, stunde, grenze)
+    if paar is None and (benannt if benannt is not None else await stunde_benannt(db, anlage_id, mqtt_key, stunde)):
+        paar = sprung_der_stunde(roh, stunde, grenze, benannt=True)
     return ("sprung", paar) if paar is not None else ("kein_sprung", None)
+
+
+async def stunde_benannt(db, anlage_id: int, mqtt_key: str, stunde: datetime) -> bool:
+    """U3-K2 (P-3): nennt der Befund «Zählerstand springt (MQTT)» (``mqtt_standsprung.mqtt_spruenge``, Kern
+    ``zaehlerstand_sprung.finde_standspruenge``) die Kanal-Stunde ``stunde`` dieses MQTT-Schlüssels?"""
+    from backend.services.daten_checker.datenquelle.mqtt_standsprung import mqtt_spruenge
+
+    ts = int(stunde.timestamp())
+    return any(f.mqtt_key == mqtt_key and f.sprung.start_ts == ts for f in await mqtt_spruenge(db, anlage_id))
 
 
 async def rand_der_naht(db, anlage_id: int, mqtt_key: str, e: datetime) -> Optional[tuple[Roh, Roh]]:
@@ -154,4 +168,4 @@ def bleiben_satz(vorher: Optional[dict], nachher: Optional[dict], sensor_key: st
 
 
 __all__ = ["SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "bleiben_satz", "grenze_kw", "mqtt_key_der_quelle", "mqtt_paar",
-           "rand_der_naht", "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um"]
+           "rand_der_naht", "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um", "stunde_benannt"]
