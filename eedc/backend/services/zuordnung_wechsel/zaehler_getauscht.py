@@ -34,6 +34,10 @@ ihn mit «Bisherige Werte bleiben» zuordnen, oder den neuen Zähler als eigenes
 MQTT und für Zeiten ohne Spiegel (vor dem Kanal, Nachbau-Abschnitt, Feld ohne Kanal-Art) bleibt alles wie zuvor (Auftrag Lauf c;
 die Abweichung vom Rechenweg «Übersehen Nr. 6» steht im Bericht).
 
+**Sensorwechsel U3-K (B1):** trägt die Stunde mehrere Höhenwechsel, sind die Rand-Stände der letzte Stand vor dem ersten und der
+erste nach dem letzten (``rohstand_rand.sprung_der_stunde``); ergäbe der Eintrag trotzdem eine negative Menge der Stunde, lehnt
+die Prüfung ab (``negative_menge``) — eine negative Menge wird nie geschrieben.
+
 **Sensorwechsel U3 Lauf b (Rechenweg G5, Regel «Rohstand ist die Quelle»):** gilt zur Zeit des Tauschs MQTT, sucht eedc in
 den Rohständen der Stunde (``rohstand.sprung_um``) den Schritt, an dem der Zählerstand die Höhe wechselt, und trägt den Tausch
 genau dort ein — mit dem letzten Rohstand davor und dem ersten danach als Rand-Ständen (``ansatz = schnitt``). Die Stunde des
@@ -66,6 +70,8 @@ WEG_VOR_ERSTEM_WERT = "vor_erstem_wert"
 WEG_NICHT_MOEGLICH = "nicht_moeglich"
 #: U3 b (G5): MQTT, Rohstände in der Stunde, aber kein Höhenwechsel — nicht eingetragen.
 WEG_KEIN_SPRUNG = "kein_sprung"
+#: U3-K (B1): die Stunde des Tauschs zählte nach dem Eintrag eine negative Menge — nicht eingetragen.
+WEG_NEGATIV = "negative_menge"
 
 #: Wortlaute (Sitzung 3b, Korrekturrunde 3b-K; Gernot liest sie vor dem Commit).
 SATZ_HA = ("Dieser Zähler kommt aus Home Assistant, und eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen "
@@ -105,7 +111,13 @@ SATZ_NACHTRAG_ROH = ("Die Stunde ab {stunde} Uhr ist schon gespeichert; eedc rec
                      "dem Tausch: {neu} statt {bisher} {einheit}.")
 SATZ_KEIN_SPRUNG = ("Zwischen {von} und {bis} Uhr ändern sich die Zählerstände dieses Felds wie gewohnt — dort ist kein Sprung "
                     "zu sehen, und ein Eintrag bewirkte nichts. Wähle unter „Getauscht am“ die Zeit, zu der der Stand springt; "
-                    "der Daten-Checker nennt sie unter „Zählerstand springt (MQTT)“.")
+                    "der Daten-Checker nennt sie unter „Zählerstand springt (MQTT)“. Einen kleinen Sprung nach oben, der wie "
+                    "Verbrauch aussieht, kann eedc nicht von Verbrauch unterscheiden; er zählt als Menge dieser Stunde.")
+#: U3-K (B1): eine negative Menge der Naht wird nie geschrieben.
+SATZ_NEGATIV = ("Nach einem Eintrag um {zeit} Uhr zählte die Stunde ab {stunde} Uhr {neu} {einheit} — weniger als nichts. Die "
+                "Zählerstände dieser Stunde passen nicht zu einem Tausch um diese Zeit, eedc trägt nichts ein. Wähle unter "
+                "„Getauscht am“ die Zeit, zu der der Stand springt; der Daten-Checker nennt sie unter „Zählerstand springt "
+                "(MQTT)“.")
 SATZ_NOCH_KEIN_STAND = ("Nach {zeit} Uhr ist noch kein Zählerstand gespeichert. eedc trägt den Tausch ein und nimmt den letzten "
                         "Stand davor und den ersten danach, sobald er gespeichert ist.")
 #: U3 b (Entscheid E4): Live rechnet bei MQTT aus den Rohständen selbst (``mqtt_energy_history_service``) — der Eintrag ändert
@@ -266,7 +278,8 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
     if weg != WEG_FORTSETZUNG:
         stand = weg == WEG_HOME_ASSISTANT and await _ist_stand(db, sensor_key, kanal)
         return Lage(sensor_key, weg, q, getauscht_am, stand=stand)
-    rohstand, rand = await _rohstand(db, anlage.id, sensor_key, q_zeit, getauscht_am)
+    rohstand, rand = await _rohstand(db, anlage.id, sensor_key, q_zeit, getauscht_am,
+                                     kwh=kanal is None or kanal.einheit in (None, "", "kWh"))
     if rohstand == "kein_sprung":
         return Lage(sensor_key, WEG_KEIN_SPRUNG, q, getauscht_am, rohstand=rohstand)
     if rand is not None:                       # U3 b (G5): der Tausch liegt am Höhenwechsel der Rohstände
@@ -285,17 +298,20 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
         from backend.services.kanal.naht import menge_mit_rand
 
         la.neu = await menge_mit_rand(db, kanal.id, nachtrag, (rand[0][1], rand[1][1]))
+        if la.neu is not None and la.neu < 0:            # U3-K (B1): nie eine negative Stunde schreiben
+            la.weg = WEG_NEGATIV
     return la
 
 
-async def _rohstand(db, anlage_id: int, sensor_key: str, quelle, t: datetime) -> tuple[Optional[str], Optional[tuple]]:
+async def _rohstand(db, anlage_id: int, sensor_key: str, quelle, t: datetime, *,
+                   kwh: bool = True) -> tuple[Optional[str], Optional[tuple]]:
     """U3 b (G5): gilt zur Zeit des Tauschs MQTT, der Befund der Rohstände um ``t`` (``rohstand.sprung_um``)."""
     from backend.services.zuordnung_wechsel.rohstand import mqtt_key_der_quelle, sprung_um
 
     mk = mqtt_key_der_quelle(quelle, sensor_key)
     if mk is None:
         return None, None
-    return await sprung_um(db, anlage_id, mk, t)
+    return await sprung_um(db, anlage_id, mk, t, kwh=kwh)
 
 
 async def tag_fest(db, anlage, sensor_key: str, ab: datetime) -> Optional[tuple[date, float]]:
@@ -340,6 +356,8 @@ def _saetze_fortsetzung(la: Lage) -> list[str]:
 
 
 def saetze(la: Lage) -> list[str]:
+    from backend.core.zahlenformat import fmt_zahl
+
     feste = {WEG_HOME_ASSISTANT: SATZ_HA_STAND if la.stand else SATZ_HA, WEG_OHNE_WERTE: SATZ_OHNE_WERTE,
              WEG_KEINE_QUELLE: SATZ_KEINE_QUELLE}
     if la.weg in feste:
@@ -348,6 +366,9 @@ def saetze(la: Lage) -> list[str]:
         return [SATZ_VOR_ERSTEM_WERT.format(zeit=_zeit(la.erster_wert))]
     if la.weg == WEG_NICHT_MOEGLICH:
         return [satz_nicht_moeglich(la)]
+    if la.weg == WEG_NEGATIV:
+        return [SATZ_NEGATIV.format(zeit=_zeit(la.getauscht_am), stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts)),
+                                    neu=fmt_zahl(la.neu, 2), einheit=la.einheit or "kWh")]
     if la.weg == WEG_KEIN_SPRUNG:
         von = la.getauscht_am.replace(minute=0, second=0, microsecond=0)
         return [SATZ_KEIN_SPRUNG.format(von=_zeit(von), bis=_zeit(von + timedelta(hours=1)))]

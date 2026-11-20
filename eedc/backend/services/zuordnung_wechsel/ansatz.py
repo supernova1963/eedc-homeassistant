@@ -213,6 +213,8 @@ async def _art_und_g(la: Lage, row, svc, bis_ts: int, stand: bool) -> Optional[d
     if row.ansatz == ANSATZ_OFFEN_SCHNITT or la.ueberlappung:
         la.art = ANSATZ_SCHNITT
         la.g = max(row.ab_ts - timedelta(hours=1), la.t1 + timedelta(hours=1))      # zulässig: T1 < G
+        if la.vorige_grenze is not None:     # U3-K (LK-B3): nie vor dem vorigen Wechsel, auch nicht die Vorgabe
+            la.g = max(la.g, _stunde(la.vorige_grenze))
     else:
         la.art, la.g = ANSATZ_BEIDE, la.t1
         # Lab-K W3: führt HA für den alten in der Stunde G eine Zeile? (Sonst zählt die Stunde nur den neuen.)

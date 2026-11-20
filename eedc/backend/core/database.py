@@ -711,7 +711,8 @@ def _migrate_zuordnung_wechsel_rand(connection) -> None:
     """Sensorwechsel U2 a1 (Rechenweg F1): Spalten ``ansatz``, ``stand_alt_ende``, ``stand_neu_null`` an
     ``zuordnung_wechsel`` — die Rand-Werte eines Wechsels «bleiben» zwischen zwei Sensoren. Nullable, ohne Default: eine
     Bestandszeile trägt ``NULL`` und liest wörtlich wie vorher. Eine frische Installation bekommt die Spalten über
-    ``create_all``. Jede Spalte einzeln geprüft, idempotent; Muster ``_migrate_mqtt_live_snapshot_min_max``."""
+    ``create_all``. Jede Spalte einzeln geprüft, idempotent; Muster ``_migrate_mqtt_live_snapshot_min_max``.
+    Sensorwechsel U3-K (B5): dazu ``eingetragen_ts`` (wann eedc die Zeile eingetragen hat; Bestandszeilen ``NULL``)."""
     from sqlalchemy import inspect as _inspect
     from sqlalchemy import text as _text
 
@@ -719,7 +720,8 @@ def _migrate_zuordnung_wechsel_rand(connection) -> None:
     if 'zuordnung_wechsel' not in inspector.get_table_names():
         return
     da = {col['name'] for col in inspector.get_columns('zuordnung_wechsel')}
-    for name, typ in (('ansatz', 'VARCHAR(20)'), ('stand_alt_ende', 'FLOAT'), ('stand_neu_null', 'FLOAT')):
+    for name, typ in (('ansatz', 'VARCHAR(20)'), ('stand_alt_ende', 'FLOAT'), ('stand_neu_null', 'FLOAT'),
+                      ('eingetragen_ts', 'DATETIME')):
         if name not in da:
             connection.execute(_text(f'ALTER TABLE zuordnung_wechsel ADD COLUMN {name} {typ}'))
 
@@ -1359,7 +1361,8 @@ async def run_migrations(conn):
         _migrate_mqtt_live_snapshot_ts_unix(connection)
         _migrate_mqtt_live_snapshot_min_max(connection)
 
-        # Sensorwechsel U2 a1 (F1): Rand-Werte an `zuordnung_wechsel` (ansatz, stand_alt_ende, stand_neu_null).
+        # Sensorwechsel U2 a1 (F1): Rand-Werte an `zuordnung_wechsel` (ansatz, stand_alt_ende, stand_neu_null);
+        # U3-K (B5): `eingetragen_ts`.
         _migrate_zuordnung_wechsel_rand(connection)
 
     await conn.run_sync(_run_migrations)

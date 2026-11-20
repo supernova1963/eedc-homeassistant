@@ -10,11 +10,15 @@ Tag, Monat und Jahr. Diese Kategorie nennt jede solche Stunde mit Feld, Sensor, 
 
 **Woran eedc einen Sprung erkennt.** Die Menge der Stunde wird mit dem größten Tagesverbrauch des Zählers im Jahr davor
 verglichen und durch die Tage seit seinem letzten Zuwachs geteilt (mindestens 1). Ein Sprung nach oben ist ein Befund ab dem
-Zehnfachen, ein Neubeginn, der nicht bei 0 liegt, ab dem Dreifachen. Verglichen werden nur Stunden desselben Sensors.
+Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt (ein Jahr Statistik, an mindestens 14 Tagen etwas
+gezählt, an einem davon mindestens 1 kWh) oder die Menge mehr ist, als eine Anlage in einer Stunde leisten kann (100 kWh oder
+1,5 × die Anlagenleistung in kWp, was größer ist; nur bei kWh). Ein Neubeginn, der nicht bei 0 liegt, ist ein Befund ab dem
+Dreifachen. Verglichen werden nur Stunden desselben Sensors.
 
 **Was kein Befund ist.** Eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt; ein großer Verbrauch nach
-langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); ein Zähler, der in den Tagen davor an
-weniger als 14 Tagen etwas gezählt hat; ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
+langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); die erste gewöhnliche Stunde eines
+Zählers, der bisher nur Standby kannte; ein Zähler, der in den Tagen davor an weniger als 14 Tagen etwas gezählt hat
+(Neubeginn); ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
 zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
 ([Handbuch Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md)). Ein gefallener Zählerstand steht in
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).

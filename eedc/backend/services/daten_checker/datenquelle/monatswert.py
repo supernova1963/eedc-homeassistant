@@ -8,8 +8,10 @@ Monatsdaten-Zeile ist abgeschlossen). Ohne Vergleich wäre eine Auskunft je gesp
 Produktiv-Kopie 41 Monate am Schlüssel mit Wechsel, im Monat des Wechsels 242,9 gegen 242,871 — kein Unterschied).
 
 **Regel.** Nur Monate, die ein verzeichneter Wechsel berührt — das Intervall ``[falsch_seit, ab)`` einer Korrektur und die
-Monate ab einem Wechsel «bleiben» (Grund «Fortsetzung», auch «Zähler getauscht») bis zum letzten abgeschlossenen Monat —, nur
-abgeschlossene Monate vor dem laufenden, und nur, wenn
+Monate ab einem Wechsel «bleiben» (Grund «Fortsetzung», auch «Zähler getauscht») **bis zum Monat, in dem eedc die Zeile
+eingetragen hat** (``eingetragen_ts``, Sensorwechsel U3-K, Nachmessung B5: einen später gespeicherten Monat hat der Anwender
+schon mit dem Wechsel gesehen — ohne die Grenze kam jeden Monat ein neuer Befund; ``NULL`` an einer Bestandszeile: bis zum
+letzten abgeschlossenen Monat) —, nur abgeschlossene Monate vor dem laufenden, und nur, wenn
 
 * ein Wert gespeichert ist (Anlage: ``Monatsdaten.einspeisung_kwh``/``netzbezug_kwh`` nach der Regel N-739 «erfasst»;
   Gerät: ``InvestitionMonatsdaten.verbrauch_daten[feld]``),
@@ -74,8 +76,9 @@ def _monate(von: tuple[int, int], bis: tuple[int, int]) -> list[tuple[int, int]]
 
 def beruehrte_monate(wechsel, heute: date) -> dict[tuple[int, int], Anlass]:
     """Die abgeschlossenen Monate (vor dem laufenden), die die nicht aufgehobenen Zeilen eines Schlüssels berühren, je mit dem
-    jüngsten Anlass: das Intervall einer Korrektur; ab einem Wechsel «bleiben» jeder Monat bis zum letzten abgeschlossenen.
-    Lücken-Zeilen gehören zu ihrer Korrektur; ein Wechsel ohne Grund berührt nichts (dort rechnet eedc wie vorher)."""
+    jüngsten Anlass: das Intervall einer Korrektur; ab einem Wechsel «bleiben» jeder Monat bis zum Monat des Eintrags (U3-K,
+    ``eingetragen_ts``; ohne ihn bis zum letzten abgeschlossenen). Lücken-Zeilen gehören zu ihrer Korrektur; ein Wechsel ohne
+    Grund berührt nichts (dort rechnet eedc wie vorher)."""
     from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR
     from backend.services.zuordnung_wechsel.zeitpunkt import gleiche_quelle, ist_luecken_zeile
 
@@ -85,13 +88,15 @@ def beruehrte_monate(wechsel, heute: date) -> dict[tuple[int, int], Anlass]:
         if w.aufgehoben_durch is not None or ist_luecken_zeile(w):
             continue
         zeit = w.erklaert_ts or w.ab_ts
+        eingetragen = getattr(w, "eingetragen_ts", None)
+        bis = letzter if eingetragen is None else min(letzter, (eingetragen.year, eingetragen.month))
         if w.grund == GRUND_KORREKTUR and w.falsch_seit_ts is not None:
             letzte = w.ab_ts - timedelta(seconds=1)
             monate, anlass = _monate((w.falsch_seit_ts.year, w.falsch_seit_ts.month),
-                                     min((letzte.year, letzte.month), letzter)), Anlass(GRUND_KORREKTUR, zeit)
+                                     min((letzte.year, letzte.month), bis)), Anlass(GRUND_KORREKTUR, zeit)
         elif w.grund == GRUND_FORTSETZUNG:
             art = "tausch" if gleiche_quelle(w.vorher, w.nachher) else GRUND_FORTSETZUNG
-            monate, anlass = _monate((w.ab_ts.year, w.ab_ts.month), letzter), Anlass(art, zeit)
+            monate, anlass = _monate((w.ab_ts.year, w.ab_ts.month), bis), Anlass(art, zeit)
         else:
             continue
         for m in monate:

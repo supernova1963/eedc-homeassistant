@@ -3,19 +3,25 @@
 ## Was eedc sieht
 Bei MQTT ist der Zählerstand, den der Publisher sendet, die Quelle; eedc bildet daraus je Stunde die Menge nach der Regel von
 Home Assistant. In der genannten Stunde wechselt der Stand die Höhe: er springt nach oben, beginnt neu, aber nicht bei 0, oder
-fällt um weniger als ein Zehntel. eedc zählt den Unterschied als Menge dieser Stunde — in Tag, Monat und Jahr. So sieht es aus,
-wenn der Zähler oder das Gerät getauscht wurde oder ein anderes Gerät auf demselben Topic sendet. Die Meldung nennt Feld, Tag
-und Uhrzeit, die Details den Stand davor und danach und die Menge, die eedc für die Stunde zählt.
+fällt um weniger als ein Zehntel — oder er zeigt innerhalb der Stunde kurz eine andere Höhe (etwa 0 oder den Stand eines anderen
+Geräts) und steht danach wieder auf dem alten Zähler. eedc zählt den Unterschied bzw. den ganzen Stand als Menge dieser Stunde —
+in Tag, Monat und Jahr. So sieht es aus, wenn der Zähler oder das Gerät getauscht wurde, das Gerät kurz 0 meldet oder ein anderes
+Gerät auf demselben Topic sendet. Die Meldung nennt Feld, Tag und Uhrzeit, die Details den Stand davor und danach und die Menge,
+die eedc für die Stunde zählt.
 
 ## Lösungsweg
 1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
-   Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt.
+   Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt bzw. zurückkehrt.
 2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach und — ist die Stunde schon
    gespeichert — was sie danach zählt.
 3. **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.»
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Stunde ist aus der Liste verschwunden.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem Eintrag ist die Stunde aus der Liste verschwunden. Steht im
+   Dialog statt **«Eintragen»** ein Satz, dass dort kein Sprung zu sehen ist oder die Stunde danach weniger als nichts zählte,
+   ist nichts eingetragen: die Zeit unter **«Getauscht am»** prüfen.
 
-Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Sendet der Publisher den Tageswert statt des
+Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Ein kleiner Sprung nach oben — weniger, als die
+Anlage in den fünf Minuten zwischen zwei Zählerständen leisten kann, bei bis zu 66 kWp etwa 8 kWh — sieht aus wie Verbrauch:
+der Dialog lehnt einen Eintrag dort ab, und er zählt als Menge der Stunde. Sendet der Publisher den Tageswert statt des
 fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
 
 ## Was ohne Handlung gilt

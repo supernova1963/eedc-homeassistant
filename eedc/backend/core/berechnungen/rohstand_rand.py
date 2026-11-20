@@ -10,10 +10,20 @@ dem Wechsel um ``stand_alt_ende − stand_neu_null`` (``zaehler_naht.rand_versat
 die Naht-Stunde diese Menge trägt (``verschiebung_der_naht``) — Kanal und Reihe nennen für den Tag dieselbe Zahl.
 
 **Wo der Zähler springt** (``sprung_der_stunde``): ein Eintrag «Zähler getauscht» sagt, dass der Stand an diesem Zeitpunkt die
-Höhe wechselt. Gesucht wird im Paar aufeinanderfolgender Rohstände, dessen späterer Stand in der Stunde des Zeitpunkts liegt, der
-Schritt mit dem größten Betrag, der ein **Höhenwechsel** ist (``hoehenwechsel``): ein Rückgang (ein Zähler fällt nie) oder ein
-Sprung über ``SPRUNG_FAKTOR`` × den größten Schritt der Rohstände des Tages davor (mindestens ``SPRUNG_MIN``). Gibt es keinen,
-ist zu dieser Zeit kein Sprung zu sehen — die Vorschau lehnt den Zeitpunkt ab, statt still nichts zu bewirken.
+Höhe wechselt. Gesucht werden in den Paaren aufeinanderfolgender Rohstände, deren späterer Stand in der Stunde des Zeitpunkts
+liegt, die Schritte, die ein **Höhenwechsel** sind (``hoehenwechsel``): ein Rückgang (ein Zähler fällt nie) oder ein Schritt nach
+oben, dessen **Leistung** (Schritt ÷ Zeit zwischen den zwei Rohständen) über ``SPRUNG_FAKTOR`` × der größten Leistung der Rohstände
+der ``BEZUG`` davor **und** über der Grenze «mehr, als eine Anlage in einer Stunde leisten kann» liegt (``grenze_kw``, Befund
+«Zählerstand springt» B2 (b): max(100, 1,5 × kWp) kWh je Stunde, als kW; ohne Grenze — andere Einheit — mindestens ``SPRUNG_MIN``).
+Nachholmengen nach Stille und gewöhnliche Ladungen nach Stillstand sind damit keine Höhenwechsel (U3-K, B7: am HEAD galt nach 24 h
+Stillstand jeder Schritt über 1 kWh als Sprung). **Benannte Grenze:** ein kleiner Versatz nach oben (unter etwa 8 kWh in fünf
+Minuten bei der Grenze 100) ist kein Höhenwechsel und lässt sich über MQTT nicht als Tausch eintragen.
+
+**Die Spanne der Stunde** (U3-K, B1): trägt die Stunde mehrere Höhenwechsel (ein Gerät meldet fünf Minuten 0 und dann wieder
+seinen Stand; ein anderes Gerät sendet zehn Minuten seinen Stand; ein neues Gerät meldet erst 0, dann 300), sind die Rand-Stände
+der **letzte Stand vor dem ersten** und der **erste Stand nach dem letzten** Höhenwechsel. Die Stände dazwischen gehören keinem
+der zwei Zähler und zählen nicht. Ein einzelnes Paar am größten Schritt (U3 b) nahm in diesen Lagen einen fremden Stand als
+Rand und schrieb eine negative Stunde (−5 016,708).
 
 **Brücke über eine verworfene Zeit ohne Höhenwechsel** (G7 «verwerfen», ``bruecke``): dieselbe Quelle davor und danach, kein
 Zählertausch dazwischen — dann ist ``Stand(danach) − Stand(davor)`` die Menge der Zeit (wie an jeder Zählerlücke, Grundsatz
@@ -29,38 +39,65 @@ from typing import Optional, Sequence
 
 #: Ein Rückgang zwischen zwei Rohständen ist ein Höhenwechsel ab diesem Betrag (wie der Arm «Rückgang» von G4).
 RUECKGANG_MIN = 0.01
-#: Ein Sprung ist ein Höhenwechsel, wenn er größer ist als dieses Vielfache des größten Schritts des Tages davor …
+#: Ein Schritt nach oben ist ein Höhenwechsel, wenn seine Leistung größer ist als dieses Vielfache der größten Leistung davor …
 SPRUNG_FAKTOR = 10.0
-#: … und größer als diese Menge (kWh) — eine fast stehende Reihe macht sonst jeden Verbrauch zum Sprung.
+#: … und, ohne Grenze der Anlage (andere Einheit als kWh), größer als diese Menge — eine fast stehende Reihe macht sonst jeden
+#: Verbrauch zum Sprung.
 SPRUNG_MIN = 1.0
 #: So weit vor dem Schritt liest ``sprung_der_stunde`` die Schritte für den Vergleich.
 BEZUG = timedelta(hours=24)
+_H = 3600.0
 
 Roh = tuple[datetime, float]
 
 
-def hoehenwechsel(delta: float, groesster_schritt_davor: float) -> bool:
+def leistung(delta: float, sekunden: float) -> float:
+    """Die Leistung eines Schritts (Menge je Stunde): ``delta`` ÷ Zeit zwischen den zwei Rohständen; ohne Zeit unendlich."""
+    return delta / (sekunden / _H) if sekunden > 0 else float("inf")
+
+
+def hoehenwechsel(delta: float, sekunden: float, groesste_leistung_davor: float, grenze_kw: Optional[float]) -> bool:
     """Ist ein Schritt zwischen zwei Rohständen ein Höhenwechsel (kein Verbrauch)? Ein Rückgang unter −``RUECKGANG_MIN`` immer;
-    ein Sprung, wenn er ``SPRUNG_FAKTOR`` × den größten Schritt davor und ``SPRUNG_MIN`` übersteigt."""
+    ein Schritt nach oben, wenn seine Leistung ``SPRUNG_FAKTOR`` × die größte Leistung davor und die Grenze der Anlage
+    (``grenze_kw``) übersteigt; ohne Grenze muss der Schritt dazu größer als ``SPRUNG_MIN`` sein."""
     if delta < -RUECKGANG_MIN:
         return True
-    return delta > max(SPRUNG_FAKTOR * max(groesster_schritt_davor, 0.0), SPRUNG_MIN)
+    if delta <= 0:
+        return False
+    ueber_davor = leistung(delta, sekunden) > SPRUNG_FAKTOR * max(groesste_leistung_davor, 0.0)
+    if grenze_kw is None:
+        return ueber_davor and delta > SPRUNG_MIN
+    return ueber_davor and leistung(delta, sekunden) > grenze_kw
 
 
-def sprung_der_stunde(rohstaende: Sequence[Roh], stunde: datetime) -> Optional[tuple[Roh, Roh]]:
-    """Das Paar ``(letzter Rohstand vor dem Höhenwechsel, erster ab ihm)``, dessen späterer Stand in ``[stunde, stunde + 1 h)``
-    liegt und dessen Schritt ein Höhenwechsel ist — der mit dem größten Betrag; ``None``, wenn es keinen gibt.
-    ``rohstaende`` aufsteigend, mindestens ab ``BEZUG`` vor der Stunde."""
-    beste: Optional[tuple[Roh, Roh]] = None
+def _groesste_leistung(rohstaende: Sequence[Roh], i: int) -> float:
+    """Die größte Leistung der Schritte nach oben, die vor dem Paar ``(i − 1, i)`` enden und in die ``BEZUG`` davor fallen."""
+    a = rohstaende[i - 1]
+    return max((leistung(y[1] - x[1], (y[0] - x[0]).total_seconds())
+                for x, y in zip(rohstaende[:i - 1], rohstaende[1:i])
+                if y[0] >= a[0] - BEZUG and y[1] > x[1] and y[0] > x[0]), default=0.0)
+
+
+def hoehenwechsel_der_stunde(rohstaende: Sequence[Roh], stunde: datetime, grenze_kw: Optional[float]) -> list[int]:
+    """Die Indizes ``i`` der Paare ``(i − 1, i)``, deren späterer Stand in ``[stunde, stunde + 1 h)`` liegt und deren Schritt ein
+    Höhenwechsel ist — in Zeitfolge."""
+    out = []
     for i in range(1, len(rohstaende)):
         a, b = rohstaende[i - 1], rohstaende[i]
-        if not stunde <= b[0] < stunde + timedelta(hours=1):
-            continue
-        davor = [y[1] - x[1] for x, y in zip(rohstaende[:i - 1], rohstaende[1:i]) if y[0] >= a[0] - BEZUG and y[1] > x[1]]
-        if hoehenwechsel(b[1] - a[1], max(davor, default=0.0)) and (
-                beste is None or abs(b[1] - a[1]) > abs(beste[1][1] - beste[0][1])):
-            beste = (a, b)
-    return beste
+        if stunde <= b[0] < stunde + timedelta(hours=1) and hoehenwechsel(
+                b[1] - a[1], (b[0] - a[0]).total_seconds(), _groesste_leistung(rohstaende, i), grenze_kw):
+            out.append(i)
+    return out
+
+
+def sprung_der_stunde(rohstaende: Sequence[Roh], stunde: datetime,
+                      grenze_kw: Optional[float] = None) -> Optional[tuple[Roh, Roh]]:
+    """Die Spanne der Höhenwechsel in ``[stunde, stunde + 1 h)``: ``(letzter Rohstand vor dem ersten, erster Rohstand nach dem
+    letzten)``; ``None``, wenn es keinen gibt. ``rohstaende`` aufsteigend, mindestens ab ``BEZUG`` vor der Stunde."""
+    idx = hoehenwechsel_der_stunde(rohstaende, stunde, grenze_kw)
+    if not idx:
+        return None
+    return rohstaende[idx[0] - 1], rohstaende[idx[-1]]
 
 
 def menge_der_naht(stand_alt_ende: float, stand_davor: float, stand_naht: float, stand_neu_null: float) -> float:
@@ -81,5 +118,5 @@ def bruecke(kanalwert_davor: float, stand_davor: float, stand_danach: float, wer
     return kanalwert_davor + (stand_danach - stand_davor) - wert_danach
 
 
-__all__ = ["BEZUG", "RUECKGANG_MIN", "SPRUNG_FAKTOR", "SPRUNG_MIN", "bruecke", "hoehenwechsel", "menge_der_naht",
-           "sprung_der_stunde", "verschiebung_der_naht"]
+__all__ = ["BEZUG", "RUECKGANG_MIN", "SPRUNG_FAKTOR", "SPRUNG_MIN", "bruecke", "hoehenwechsel", "hoehenwechsel_der_stunde",
+           "leistung", "menge_der_naht", "sprung_der_stunde", "verschiebung_der_naht"]

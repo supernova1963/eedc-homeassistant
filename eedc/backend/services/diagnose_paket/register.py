@@ -286,7 +286,7 @@ REGISTER: dict[str, Tabelle] = {
     # (Entität und MQTT-Topic als Text, keine Zugangsdaten; Form `services/zuordnung_wechsel/quelle.py`).
     "zuordnung_wechsel": _tab(
         "anlage", "id anlage_id sensor_key erklaert_ts ab_ts vorher nachher grund falsch_seit_ts herkunft aufgehoben_durch lauf "
-        "ansatz stand_alt_ende stand_neu_null",
+        "ansatz stand_alt_ende stand_neu_null eingetragen_ts",
         vorher=_ZUORDNUNG, nachher=_ZUORDNUNG),
 }
 

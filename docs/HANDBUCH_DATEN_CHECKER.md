@@ -93,7 +93,7 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
   Knopf, der sagt, was er tut <a name="sprung-aufs-feld"></a>:
   - **Ändert eedc etwas** (z. B. „Temperatur aus Messung übernehmen“, „Wert entfernen“, „Benzinpreise nachtragen“, „Wetterreihe nachziehen“, „Tag neu aufbauen“, „Tage neu aufbauen“, „Aus Home Assistant neu übernehmen“), zeigt der erste Klick eine **Vorschau** unter der Zeile: eine Zeile, was sich ändert (etwa „Monate erhalten eine Ø Temperatur: 7 (09/2025, …)“), darunter die Hinweise der Reparatur-Werkbank. Erst **„Anwenden“** führt aus; **„Abbrechen“** verwirft die Vorschau. Danach steht über der Liste ein Satz, was geschehen ist, und der Daten-Checker prüft neu. Lösch-Aktionen tragen in der Vorschau das Wort **„endgültig“** und einen roten Knopf; eine zusätzliche Rückfrage gibt es nicht. Ist nichts zu tun (etwa weil das Feld am Gerät vorgesehen ist), sagt die Vorschau das und bietet kein „Anwenden“. „Aus Home Assistant neu übernehmen“ nennt dazu die Bedingung: wirksam, wenn du in Home Assistant korrigiert hast. Die Vorschau gilt eine Stunde („gültig bis …“); **„Details in der Werkbank“** öffnet sie in der Reparatur-Werkbank. Es läuft immer nur ein Vorgang.
   - **Musst du etwas eintragen oder auswählen**, führt der Knopf auf das betroffene **Feld** — er heißt nach dem Ziel, etwa „Gerät bearbeiten“, „Monat erfassen“, „Monat öffnen“, „Sensor zuordnen“, „Tarif bearbeiten“, „Anlage bearbeiten“: in der **Datenquellen-Zuordnung** klappen Block und Gerät auf, die Feldzeile ist markiert (auch in „Weitere Größen erfassen“); im **Komponenten-Formular** steht der Cursor im Feld — liegt es in einem zugeklappten Abschnitt (etwa „Weitere Angaben & Kosten“ oder „Netzladung & Arbitrage“), öffnet er sich; beim Sprung sind alle zugeklappten Abschnitte dieses Formulars offen. Unter **Strompreise** öffnet sich der betroffene Tarif am Feld oder „Neuen Tarif anlegen“ mit Verwendung und Beginn vorbelegt (etwa für eine Lücke); unter **Anlage** die gewählte Anlage am Feld (z. B. Inbetriebnahme), unter **Solarprognose** „Neue Prognose abrufen“ an den Systemverlusten; im **Monatsabschluss** der Monat am Feld des Geräts. Der Geräte-Connector öffnet direkt. Kennt der Befund das Gerät nicht (etwa eine Summe über alle Autos), landet der Knopf beim ersten passenden Gerät bzw. auf der Seite. Fehlt einem Reparatur-Befund die Quelle (keine Leistungs-Zuordnung), heißt sein Knopf „Sensor zuordnen“ und führt zur fehlenden Zuordnung.
-  - **Ist nichts zu tun oder liegt der Weg außerhalb von eedc**, öffnet **„Was gilt“** den Lösungsweg. Ein Weg in **Home Assistant** (Entwicklerwerkzeuge, Statistik, „Wert anpassen“; Helfer; `state_class`) steht im Text des Befunds; Wege in eedc nennt der Text nicht — der Knopf ist der Weg.
+  - **Ist nichts zu tun oder liegt der Weg außerhalb von eedc**, öffnet **„Was gilt“** den Lösungsweg. Ein Weg in **Home Assistant** (Einstellungen → Werkzeuge → Statistik, in älteren Home-Assistant-Versionen Entwicklerwerkzeuge → Statistik, „Summe anpassen“; Helfer; `state_class`) steht im Text des Befunds; Wege in eedc nennt der Text nicht — der Knopf ist der Weg.
 - **Lösungsweg:** Der Link öffnet **den Abschnitt dieses Befunds** ([alle Befunde](#alle-befunde)) **neben der Liste** (auf dem Handy als Fenster): *Was eedc sieht* · *Lösungsweg* in nummerierten Schritten — Schritte in eedc sind anklickbar, Schritte in Home Assistant stehen als Text, der letzte ist *Erneut prüfen* — · *Was ohne Handlung gilt*. Bei Abweichungen zu Home Assistant ist der letzte Schritt, deine Frage im Forum oder auf GitHub zu stellen — um das Diagnose-Paket bitten wir dich dort, wenn wir es brauchen. Das Fenster bleibt beim Scrollen neben der Liste stehen und holt sich ins Bild, auch wenn du es aus der letzten Kategorie öffnest. Im Browser öffnet **„In eigenem Fenster öffnen“** den Abschnitt in einem eigenen Tab; innerhalb von Home Assistant (Seitenmenü oder App) fehlt dieser Knopf, weil ein eigenes Fenster dort keine Anmeldung hätte — direkt geöffnet (Port 8099) gibt es ihn.
 
 Die Komponenten-Seiten (Block **Daten-Qualität**) zeigen die Befunde ihres Geräts mit denselben Knöpfen.
@@ -459,7 +459,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 > **Wo die Zuordnung entsteht:** Welche Quelle (HA-Sensor / MQTT / Connector) welches Feld speist, legst du zentral unter [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) fest — die feld-zentrische Zuordnungs-Fläche hat die früheren getrennten Assistenten „Sensor-Mapping" und „MQTT-Inbound" abgelöst. Die Verbindungen (HA-Token, MQTT-Broker) richtest du unter [Einstellungen → Integration](HANDBUCH_EINSTELLUNGEN.md#6-integration) ein.
 >
-> **Vom Befund zur Zuordnung:** Der Sprung-Knopf an einem Befund der Kategorien 7, 9, 10 oder 16 (etwa „Sensor zuordnen“) öffnet die Datenquellen-Zuordnung beim betroffenen Gerät mit markiertem Feld ([Sprung aufs Feld](#sprung-aufs-feld)); in Home Assistant liegt der Weg (Helfer, `state_class`, „Wert anpassen“) im Text des Befunds.
+> **Vom Befund zur Zuordnung:** Der Sprung-Knopf an einem Befund der Kategorien 7, 9, 10 oder 16 (etwa „Sensor zuordnen“) öffnet die Datenquellen-Zuordnung beim betroffenen Gerät mit markiertem Feld ([Sprung aufs Feld](#sprung-aufs-feld)); in Home Assistant liegt der Weg (Helfer, `state_class`, „Summe anpassen“) im Text des Befunds.
 
 ---
 
@@ -3601,11 +3601,15 @@ Tag, Monat und Jahr. Diese Kategorie nennt jede solche Stunde mit Feld, Sensor, 
 
 **Woran eedc einen Sprung erkennt.** Die Menge der Stunde wird mit dem größten Tagesverbrauch des Zählers im Jahr davor
 verglichen und durch die Tage seit seinem letzten Zuwachs geteilt (mindestens 1). Ein Sprung nach oben ist ein Befund ab dem
-Zehnfachen, ein Neubeginn, der nicht bei 0 liegt, ab dem Dreifachen. Verglichen werden nur Stunden desselben Sensors.
+Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt (ein Jahr Statistik, an mindestens 14 Tagen etwas
+gezählt, an einem davon mindestens 1 kWh) oder die Menge mehr ist, als eine Anlage in einer Stunde leisten kann (100 kWh oder
+1,5 × die Anlagenleistung in kWp, was größer ist; nur bei kWh). Ein Neubeginn, der nicht bei 0 liegt, ist ein Befund ab dem
+Dreifachen. Verglichen werden nur Stunden desselben Sensors.
 
 **Was kein Befund ist.** Eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt; ein großer Verbrauch nach
-langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); ein Zähler, der in den Tagen davor an
-weniger als 14 Tagen etwas gezählt hat; ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
+langer Ruhe (Wallbox nach Wochen, Wärmepumpe im ersten kalten Monat, PV nach Schnee); die erste gewöhnliche Stunde eines
+Zählers, der bisher nur Standby kannte; ein Zähler, der in den Tagen davor an weniger als 14 Tagen etwas gezählt hat
+(Neubeginn); ein Zähler, der bei 0 neu beginnt; ein Sensor, der kurz 0 gemeldet hat und
 zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wechsel zwischen zwei Sensoren
 ([Handbuch Einstellungen §7.7](HANDBUCH_EINSTELLUNGEN.md)). Ein gefallener Zählerstand steht in
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
@@ -3705,7 +3709,8 @@ bleibt dabei, wie er ist — und alles, was eedc für diesen Monat zeigt, rechne
 Monat, wenn der gespeicherte Wert und der Wert, den die Quelle heute für den ganzen Monat ergibt, um mindestens 1 kWh
 auseinanderliegen (dieselbe Schwelle wie die Vorschau von «Monatsdaten aus HA-Statistik laden»).
 
-**Was kein Befund ist.** Ein Monat, den kein Wechsel berührt; ein Monat ohne gespeicherten Wert; ein Monat, für den eedc heute
+**Was kein Befund ist.** Ein Monat, den kein Wechsel berührt; ein Monat nach dem Monat, in dem der Wechsel eingetragen wurde
+(diesen Wert hast du schon mit dem Wechsel gespeichert); ein Monat ohne gespeicherten Wert; ein Monat, für den eedc heute
 keinen vollen Wert hat (etwa über eine verworfene Zeit, [§4.8i](#48i-zaehlerstaende--zeit-verworfen)); der laufende Monat; ein
 Wert, den du im Monatsabschluss mit «gespeicherten behalten» bewusst behalten hast. Nicht geprüft werden der
 Anlagen-PV-Zähler (sein Monatswert ist die Summe je Modul) und Felder, deren Werte eedc nicht stündlich mitschreibt.
@@ -3716,12 +3721,14 @@ Anlagen-PV-Zähler (sein Monatswert ist die Summe je Modul) und Felder, deren We
 
 **Was eedc sieht**
 Für diesen Monat ist ein Monatswert gespeichert, und ein Wechsel der Quelle («Bisherige Werte bleiben»), ein eingetragener
-Zählertausch oder eine Korrektur hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. Die
+Zählertausch oder eine Korrektur hat seither geändert, was die Quelle für diesen Monat ergibt — um mindestens 1 kWh. eedc prüft
+nur Monate bis zu dem Monat, in dem der Wechsel eingetragen wurde; einen späteren Monat hast du schon mit dem Wechsel gespeichert. Die
 Meldung nennt Feld und Monat, die Details den gespeicherten Wert, den Wert der Quelle und seit wann er gilt. Alles, was eedc für
 diesen Monat zeigt, rechnet mit dem gespeicherten Wert.
 
 **Lösungsweg**
-1. Am Befund **«Monat öffnen»** klicken — das Formular des Monats öffnet sich beim Feld.
+1. Am Befund **«Monat öffnen»** klicken — das Formular des Monats öffnet sich: bei Einspeisung oder Netzbezug der Anlage beim
+   Feld, bei einem Gerät beim Gerät; dort das Feld aus der Meldung suchen.
 2. Den Wert der Quelle aus den Details in das Feld eintragen. Steht unter dem Feld «Sensor meldet …», genügt
    **«Sensorwert übernehmen»**, wenn dort derselbe Wert steht.
 3. **«Speichern & abschließen»** klicken.
@@ -3739,18 +3746,24 @@ Wert von selbst.
 Bei MQTT ist der Zählerstand, den der Publisher sendet, die Quelle; eedc bildet daraus je Stunde die Menge nach der Regel von
 Home Assistant und berichtigt nichts. Wechselt der Stand die Höhe — der Zähler oder das Gerät wurde getauscht, oder ein anderes
 Gerät sendet auf demselben Topic —, zählt diese Regel den Unterschied als Menge der Stunde: einen Sprung nach oben ganz, einen
-Neubeginn, der nicht bei 0 liegt, mit dem ganzen neuen Stand, einen Fall um weniger als ein Zehntel als negative Menge. Diese
+Neubeginn, der nicht bei 0 liegt, mit dem ganzen neuen Stand, einen Fall um weniger als ein Zehntel als negative Menge. Meldet
+das Gerät innerhalb einer Stunde kurz 0 oder sendet ein anderes Gerät kurz seinen Stand, zählt sie den ganzen Stand, obwohl am
+Ende der Stunde wieder der alte Zähler steht. Diese
 Kategorie nennt jede solche Stunde mit Feld, Zeit und Menge; der Knopf «Zähler getauscht» öffnet in den Datenquellen den Dialog
 mit der Zeit des Sprungs. Geprüft werden alle Stunden, die eedc für das Feld aus MQTT führt.
 
 **Woran eedc einen Sprung erkennt.** Wie in [§4.8h](#48h-zaehlerstaende--zaehlerstand-springt): die Menge der Stunde wird mit
 dem größten Tagesverbrauch des Zählers im Jahr davor verglichen und durch die Tage seit seinem letzten Zuwachs geteilt; ein
-Sprung nach oben ist ein Befund ab dem Zehnfachen, ein Neubeginn ab dem Dreifachen. Ein Rückgang (die Stunde zählt weniger als
-−0,01 kWh) ist immer ein Befund.
+Sprung nach oben ist ein Befund ab dem Zehnfachen — wenn der Zähler schon ein Jahr mit gewöhnlichem Betrieb kennt oder die Menge
+mehr ist, als eine Anlage in einer Stunde leisten kann —, ein Neubeginn ab dem Dreifachen. Ein Rückgang (die Stunde zählt weniger
+als −0,01 kWh) ist immer ein Befund, ebenso eine Stunde, deren Menge um mindestens neun Zehntel des Stands davor über dem liegt,
+was der Zählerstand selbst gewachsen ist (kurz eine andere Höhe).
 
 **Was kein Befund ist.** Ein Zähler, der täglich oder monatlich bei 0 neu beginnt
 ([§4.8a](#48a-zaehlerstaende--ruecksprung)); eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt;
-ein Zähler mit weniger als 14 Tagen mit Zuwachs (Sprung und Neubeginn); eine Stunde, an der ein Zählertausch schon eingetragen
+ein Zähler mit weniger als 14 Tagen mit Zuwachs (Neubeginn); die erste gewöhnliche Stunde nach Wochen mit nur Standby (eine
+Wallbox vor dem ersten Auto, eine Wärmepumpe nach dem Sommer); ein Stand, der um weniger als ein Zehntel fällt und in der
+nächsten Stunde zurückkehrt; eine Stunde, an der ein Zählertausch schon eingetragen
 ist; Sprung und Rückgang eines versetzten Abschnitts ([§4.8f](#48f-zaehlerstaende--versetzter-abschnitt)).
 
 ---
@@ -3760,19 +3773,25 @@ ist; Sprung und Rückgang eines versetzten Abschnitts ([§4.8f](#48f-zaehlerstae
 **Was eedc sieht**
 Bei MQTT ist der Zählerstand, den der Publisher sendet, die Quelle; eedc bildet daraus je Stunde die Menge nach der Regel von
 Home Assistant. In der genannten Stunde wechselt der Stand die Höhe: er springt nach oben, beginnt neu, aber nicht bei 0, oder
-fällt um weniger als ein Zehntel. eedc zählt den Unterschied als Menge dieser Stunde — in Tag, Monat und Jahr. So sieht es aus,
-wenn der Zähler oder das Gerät getauscht wurde oder ein anderes Gerät auf demselben Topic sendet. Die Meldung nennt Feld, Tag
-und Uhrzeit, die Details den Stand davor und danach und die Menge, die eedc für die Stunde zählt.
+fällt um weniger als ein Zehntel — oder er zeigt innerhalb der Stunde kurz eine andere Höhe (etwa 0 oder den Stand eines anderen
+Geräts) und steht danach wieder auf dem alten Zähler. eedc zählt den Unterschied bzw. den ganzen Stand als Menge dieser Stunde —
+in Tag, Monat und Jahr. So sieht es aus, wenn der Zähler oder das Gerät getauscht wurde, das Gerät kurz 0 meldet oder ein anderes
+Gerät auf demselben Topic sendet. Die Meldung nennt Feld, Tag und Uhrzeit, die Details den Stand davor und danach und die Menge,
+die eedc für die Stunde zählt.
 
 **Lösungsweg**
 1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
-   Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt.
+   Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt bzw. zurückkehrt.
 2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach und — ist die Stunde schon
    gespeichert — was sie danach zählt.
 3. **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.»
-4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Stunde ist aus der Liste verschwunden.
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem Eintrag ist die Stunde aus der Liste verschwunden. Steht im
+   Dialog statt **«Eintragen»** ein Satz, dass dort kein Sprung zu sehen ist oder die Stunde danach weniger als nichts zählte,
+   ist nichts eingetragen: die Zeit unter **«Getauscht am»** prüfen.
 
-Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Sendet der Publisher den Tageswert statt des
+Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Ein kleiner Sprung nach oben — weniger, als die
+Anlage in den fünf Minuten zwischen zwei Zählerständen leisten kann, bei bis zu 66 kWp etwa 8 kWh — sieht aus wie Verbrauch:
+der Dialog lehnt einen Eintrag dort ab, und er zählt als Menge der Stunde. Sendet der Publisher den Tageswert statt des
 fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
 
 **Was ohne Handlung gilt**

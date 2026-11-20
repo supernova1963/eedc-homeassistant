@@ -15,7 +15,9 @@ deshalb am Kanal aufgelöst (``kanal_quelle``, die vor der Stunde des Eintrags g
 **Nachgefüllte Geschichte ist keine Vor-Quelle** (Korrekturrunde Lab-K, F2): das Nachfüllen von v4.3.1 legte die Geschichte
 der heute zugeordneten Entität vor den ersten Eintrag des Kanals. Eine am Kanal aufgelöste Vor-Quelle gilt deshalb nur, wenn
 der Kanal den Wechsel selbst zeigt (``_kanal_zeigt_wechsel``: die erste Quellzeile ab ``Stunde − 1 h`` ist der Spiegel der
-neuen Entität), und «eigene Werte davor» zählen nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle
+neuen Entität) — **nur, wenn vor der Stunde keine Stände der Reihe liegen** (``_staende_davor``, Korrekturrunde U3-K,
+Nachmessung Lab-K LK-B1: mit eigenen Ständen davor ist die Vor-Quelle echt, und Teil 1 verwarf echte Wechsel HA → MQTT, eine
+entfernte Zuordnung oder die erste Zeile von «Fehlgriff, dann zurück») —, und «eigene Werte davor» zählen nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle
 davor der Spiegel der neuen Entität ist (``_nur_geschichte_des_neuen``). ``Stunde − 1 h``: eine Änderung zwischen H:00 und
 H:05 beginnt im Kanal schon mit der Zeile ``H − 1`` (der Stundenlauf um :05 schreibt sie aus der neuen Entität).
 
@@ -173,12 +175,25 @@ async def _bewerte(db, eintrag, sensor_key: str) -> tuple[str, Optional[dict], O
         return GRUND_UNVERAENDERT, alt, neu
     stunde = eintrag.timestamp.replace(minute=0, second=0, microsecond=0)
     quellen = await _kanal_quellen(db, eintrag.anlage_id, sensor_key)
-    if aus_kanal and not _kanal_zeigt_wechsel(quellen, stunde, neu):
+    if aus_kanal and not await _staende_davor(db, eintrag.anlage_id, sensor_key, stunde) \
+            and not _kanal_zeigt_wechsel(quellen, stunde, neu):
         return GRUND_UNSICHER, None, neu
     if not await hat_eigene_werte(db, eintrag.anlage_id, sensor_key, vor=stunde) \
             or await _nur_geschichte_des_neuen(db, eintrag.anlage_id, sensor_key, quellen, stunde, neu):
         return GRUND_OHNE_WERTE, alt, neu
     return UEBERFUEHRT, alt, neu
+
+
+async def _staende_davor(db, anlage_id: int, sensor_key: str, stunde: datetime) -> bool:
+    """Liegen vor der Stunde Stände der Reihe (Korrekturrunde U3-K, Nachmessung Lab-K LK-B1)? Dann hatte das Feld vor dem
+    Eintrag eigene Werte aus der am Kanal aufgelösten Quelle — Teil 1 (``_kanal_zeigt_wechsel``) gilt nur ohne sie: sonst
+    verwarf er echte Wechsel im Altbestand (HA → MQTT, Zuordnung entfernt) oder ließ von «Fehlgriff, dann zurück» nur die
+    zweite Zeile stehen (HA-Tag der Wallbox 9,0 statt 27,0)."""
+    from backend.models.sensor_snapshot import SensorSnapshot
+
+    return (await db.execute(select(SensorSnapshot.id).where(
+        SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == sensor_key,
+        SensorSnapshot.zeitpunkt < stunde).limit(1))).scalar_one_or_none() is not None
 
 
 def _kanal_zeigt_wechsel(quellen: list, stunde: datetime, neu: Optional[dict]) -> bool:
@@ -196,14 +211,10 @@ async def _nur_geschichte_des_neuen(db, anlage_id: int, sensor_key: str, quellen
     """Lab-K F2 Teil 2: die «eigenen Werte davor» sind nur die nachgefüllte Geschichte des neuen Sensors — vor der Stunde
     liegen keine Stände der Reihe, und jede Kanal-Quelle davor ist der Spiegel der Entität des ``nachher`` (Lab R: Fehlgriff
     10:10, berichtigt 10:20 vor dem nächsten Stundenlauf). Dann hatte das Feld beim Wechsel keine eigenen Werte."""
-    from backend.models.sensor_snapshot import SensorSnapshot
-
     davor = [q for q in quellen if q[0] < int(stunde.timestamp())]
     if not davor or not all(_ist_spiegel_von(q, neu) for q in davor):
         return False
-    return (await db.execute(select(SensorSnapshot.id).where(
-        SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == sensor_key,
-        SensorSnapshot.zeitpunkt < stunde).limit(1))).scalar_one_or_none() is None
+    return not await _staende_davor(db, anlage_id, sensor_key, stunde)
 
 
 async def _geraet_da(db, anlage_id: int, sensor_key: str) -> bool:

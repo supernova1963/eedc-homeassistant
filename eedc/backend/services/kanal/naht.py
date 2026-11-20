@@ -15,7 +15,9 @@ Stundenende wieder sendet, bekommt die Naht im nächsten Lauf. Gesucht wird ab e
 schon geschrieben, trägt der Kanal den Sprung — dann gilt der Nachtrag. **U3 b (G5):** wendet der Lauf eine Naht an, bekommt
 die Wechsel-Zeile (MQTT davor und danach, noch ohne Rand-Stände) ``stand_alt_ende``/``stand_neu_null`` aus denselben
 Rohständen (``zuordnung_wechsel/rohstand.rand_im_stundenlauf``) — die Reihe hebt dann um denselben Unterschied, den der Kanal
-mit der Teilung schon zählt.
+mit der Teilung schon zählt. **U3-K (B1):** endet an der Naht die Spanne mehrerer Höhenwechsel der Stunde
+(``rohstand.rand_der_naht``), endet die alte Periode am letzten Stand vor dem ersten Höhenwechsel; die Stände dazwischen zählen
+nicht (Kanal = Reihe).
 
 **Nachtrag** (``nachtrag_fortsetzung``; Aufrufer: Einstieg «Zähler getauscht» und «Grund nachtragen», Sitzung 4 — auch im
 Nachbau-Abschnitt vor der HA-Statistik, Familie Mitschrift, ``nachfuellen._rohstaende``): für schon geschriebene
@@ -81,12 +83,16 @@ async def zeilen_mit_naehten(db: AsyncSession, k, st, sensor_key: str, mqtt_key:
     naehte = await offene_naehte(db, k.anlage.id, sensor_key, mqtt_key, von, staende[-1][0])
     if not naehte:
         return await zeilen_der_periode(db, k, st, sensor_key, mqtt_key, staende)
-    from backend.services.zuordnung_wechsel.rohstand import rand_im_stundenlauf
+    from backend.services.zuordnung_wechsel.rohstand import rand_der_naht, rand_im_stundenlauf
 
     art, out = st.kanal.art, []
     for e in naehte:
-        await rand_im_stundenlauf(db, k.anlage.id, sensor_key, mqtt_key, e)     # U3 b (G5): die Rand-Stände dieser Naht
-        alt, staende = [x for x in staende if x[0] < e], [x for x in staende if x[0] >= e]
+        paar = await rand_der_naht(db, k.anlage.id, mqtt_key, e)
+        await rand_im_stundenlauf(db, k.anlage.id, sensor_key, mqtt_key, e, paar)     # U3 b (G5): die Rand-Stände der Naht
+        # U3-K (B1): Stände zwischen den Rand-Ständen (mehrere Höhenwechsel in der Stunde) gehören keinem der zwei Zähler.
+        bis_alt = paar[0][0] if paar is not None else None
+        alt = [x for x in staende if x[0] < e and (bis_alt is None or x[0] <= bis_alt)]
+        staende = [x for x in staende if x[0] >= e]
         zeilen = await zeilen_der_periode(db, k, st, sensor_key, mqtt_key, alt) if alt else []
         quelle = (await aktuelle_quellen(db, [st.kanal.id])).get(st.kanal.id)
         letzte = SimpleNamespace(**zeilen[-1]) if zeilen else st.letzte
@@ -175,6 +181,9 @@ async def nachtrag_fortsetzung(db: AsyncSession, kanal_id: int, stunde_ts: int, 
         return float(quelle.offset)          # an der Naht beginnt schon eine Quelle: der Sprung ist überbrückt
     verschiebung = -(naht - davor) if versatz is None else float(versatz)
     menge = _menge(zeilen[0], zeilen[1], rand)
+    if menge is not None and menge < 0:
+        # U3-K (B1): eine negative Menge der Naht wird nie geschrieben (die Prüfung lehnt sie vorher ab, ``negative_menge``).
+        raise ValueError("Die Stunde des Tauschs zählte danach eine negative Menge — nicht eingetragen")
     if menge is not None:
         from backend.core.berechnungen.rohstand_rand import verschiebung_der_naht
 

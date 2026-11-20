@@ -82,6 +82,32 @@ async def _ha_rohsumme(ha_svc, eid: str, key: str, z: datetime) -> Optional[floa
     return await ha_abruf(asyncio.to_thread(ha_svc.get_value_at, eid, z, als_stand=ist_stand_sensor_key(key)))
 
 
+async def _volle_stunde(db, anlage_id: int, key: str, z: datetime, vor: bool) -> Optional[Rand]:
+    """Der letzte Stand der Reihe zur vollen Stunde vor ``z`` (``vor``) bzw. der erste ab ``z``."""
+    from sqlalchemy import func
+
+    from backend.models.sensor_snapshot import SensorSnapshot
+
+    zeit = SensorSnapshot.zeitpunkt
+    q = select(zeit, SensorSnapshot.wert_kwh).where(
+        SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == key, SensorSnapshot.wert_kwh.is_not(None),
+        func.strftime("%M:%S", zeit) == "00:00", zeit < z if vor else zeit >= z)
+    z_ = (await db.execute(q.order_by(zeit.desc() if vor else zeit).limit(1))).one_or_none()
+    return None if z_ is None else Rand(z_[0], float(z_[1]))
+
+
+async def _pruefbarer_rand(db, a, rand: Rand, eid: str, ha_svc, vor: bool) -> Optional[Rand]:
+    """Korrekturrunde U3-K (Nachmessung Lab-K LK-B2): ein Rand-Stand zwischen zwei vollen Stunden, den HAs Kurzzeitstatistik
+    nicht (mehr) führt — sie reicht nur Tage zurück —, ist nicht prüfbar; geprüft wird dann der Stand der Reihe zur vollen
+    Stunde davor (am Rückgang: ab ihm) gegen HAs Stundenzeile. Lab-K W9 gilt weiter, wo die Kurzzeitzeile da ist. Nur am Stück
+    (``ist_fuellbar``); die Höhenprüfung der Korrektur füllt bei «nicht prüfbar» ohnehin."""
+    if not (rand.zeitpunkt.minute or rand.zeitpunkt.second):
+        return rand
+    if await _ha_rohsumme(ha_svc, eid, a.sensor_key, rand.zeitpunkt) is not None:
+        return rand
+    return await _volle_stunde(db, a.anlage_id, a.sensor_key, rand.zeitpunkt, vor)
+
+
 async def ist_fuellbar(db, a, ha_svc) -> bool:
     """Füllt «Zuordnung zum Zeitpunkt» das Stück ``[a.falsch_seit, a.ab)`` aus E (``a.nachher``) auf dem Niveau der Reihe?
     Ja, wenn HA erreichbar ist, E am Sprung führt und beide Rand-Stände (der letzte Stand vor dem Sprung, der Stand am
@@ -97,6 +123,10 @@ async def ist_fuellbar(db, a, ha_svc) -> bool:
         return False
     vor = await _rand_vor(db, a.anlage_id, a.sensor_key, a.falsch_seit)
     ab = await _rand_ab(db, a.anlage_id, a.sensor_key, a.ab)
+    if vor is None or ab is None:
+        return False
+    vor = await _pruefbarer_rand(db, a, vor, eid, ha_svc, True)
+    ab = await _pruefbarer_rand(db, a, ab, eid, ha_svc, False)
     if vor is None or ab is None:
         return False
     for rand in (vor, ab):

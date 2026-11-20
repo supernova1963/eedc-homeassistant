@@ -41,9 +41,10 @@ SATZ_BEIDE = ("eedc rechnet wie Home Assistant mit beiden Sensoren: {alt} bis zu
               "die Stunde ab {g} Uhr zählt beide. Zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.")
 #: Korrekturrunde Lab-K W3: führt Home Assistant für den alten Sensor in der Stunde G keine Zeile (er endete vorher), zählt
 #: die Stunde nur den neuen — dann nicht «zählt beide».
+#: U3-K (Nachmessung Lab-K LK-B7): «führt ab G keine Stunde mehr» war falsch, wenn dem alten nur die Zeile in G fehlt.
 SATZ_BEIDE_NUR_NEU = ("eedc rechnet wie Home Assistant mit beiden Sensoren: {alt} bis zu seinem letzten Wert, {neu} ab seinem "
-                      "ersten. Für {alt} führt Home Assistant ab {g} Uhr keine Stunde mehr — die Stunde ab {g} Uhr zählt nur "
-                      "{neu}. Zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.")
+                      "ersten. Für die Stunde ab {g} Uhr führt Home Assistant von {alt} keinen Wert — sie zählt nur {neu}. "
+                      "Zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.")
 SATZ_SCHNITT = ("Beide Sensoren haben eine Zeit lang gleichzeitig gezählt. eedc zählt {alt} bis {g} Uhr und {neu} ab {g} Uhr; "
                 "eine frühere Stunde wählst du unter «" + FELD + "».")
 #: Lab-K W4: nach der Wahl einer Stunde unter «Der neue Sensor zählt ab» ohne den Hinweis auf das Feld.
@@ -87,6 +88,9 @@ SATZ_OHNE_UEBERLAPPUNG = ("«" + FELD + "» gibt es nur, wenn beide Sensoren ein
 SATZ_NICHT_PRUEFBAR = ("«" + FELD + "» lässt sich gerade nicht prüfen (Home Assistant ist nicht erreichbar oder führt den neuen "
                        "Sensor noch nicht). Ohne diese Angabe zählt der neue Sensor ab der Stunde des Wechsels.")
 SATZ_BEREICH = "«" + FELD + "» muss zwischen {von} und {bis} Uhr liegen."
+#: Korrekturrunde U3-K (Nachmessung Lab-K LK-B3): besteht der Bereich aus einer einzigen Stunde (der vorige Wechsel liegt in
+#: der Stunde davor), gibt es nichts zu wählen — der Dialog bietet kein Feld an, der Satz nennt die Stunde.
+SATZ_BEREICH_EINE = "«" + FELD + "» kann hier nur {von} Uhr sein."
 
 
 class ZaehltAbAbgelehnt(GrundFehlt):
@@ -157,7 +161,8 @@ def _pruefe(la, row, zaehlt_ab: datetime) -> datetime:
         raise ZaehltAbAbgelehnt(SATZ_OHNE_UEBERLAPPUNG)
     g = volle_stunde(zaehlt_ab)
     if not b[0] <= g <= b[1]:
-        raise ZaehltAbAbgelehnt(SATZ_BEREICH.format(von=_uhr(b[0]), bis=_uhr(b[1])))
+        raise ZaehltAbAbgelehnt(SATZ_BEREICH_EINE.format(von=_uhr(b[0])) if b[0] == b[1]
+                                else SATZ_BEREICH.format(von=_uhr(b[0]), bis=_uhr(b[1])))
     return g
 
 
@@ -298,13 +303,16 @@ async def angaben(db, anlage_id: int, sensor_key: str, vorher: Optional[dict], n
     if la_g.wartet is not None:
         return _leer(la_g.wartet, wartet_satz(la_g.wartet, vorher, nachher))
     b = bereich(la, zeile)
+    if b is not None and b[0] == b[1]:
+        b = None                             # U3-K (LK-B3): eine einzige Stunde — kein Wahlfeld, der Satz nennt sie
     umfang = {"stunden": _stunden(la_g.g, jetzt), "tage": len(la_g.tage)}
     monate = await _monate(db, anlage_id, la_g)
     return {
         "wartet": None, "seit": _iso(la_g.t1), "ueberlappung": la_g.ueberlappung, "zaehlt_ab": _iso(la_g.g),
         "zaehlt_ab_vorgabe": _iso(la.g) if b else None, "zaehlt_ab_frueheste": _iso(b[0]) if b else None,
         "zaehlt_ab_spaeteste": _iso(b[1]) if b else None, **umfang, "monate": [f"{j}-{m:02d}" for j, m in monate],
-        "saetze": _saetze(la_g, quelle_text(vorher), quelle_text(nachher), umfang, monate, gewaehlt=zaehlt_ab is not None),
+        "saetze": _saetze(la_g, quelle_text(vorher), quelle_text(nachher), umfang, monate,
+                          gewaehlt=zaehlt_ab is not None or (la_g.ueberlappung and b is None)),
     }
 
 

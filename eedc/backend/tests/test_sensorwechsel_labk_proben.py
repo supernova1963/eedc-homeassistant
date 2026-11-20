@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timedelta
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -742,11 +743,15 @@ def _h1_verstoesse(texte: list[tuple[str, str]]) -> list[str]:
 
 
 def _h1_texte() -> list[tuple[str, str]]:
+    """Dazu die Handbücher als ganze Dateien (Korrekturrunde U3-K, Nachmessung Lab-K LK-B4: der Handteil des Daten-Checker-
+    Handbuchs außerhalb der erzeugten Abschnitte trug noch «Wert anpassen»), Zeilenumbrüche wie Leerzeichen."""
     out = []
     for ort in _ORTE:
         for p in ort.rglob("*"):
             if p.suffix in (".py", ".ts", ".tsx", ".md") and "test" not in p.name and p.is_file():
                 out.append((p.name, p.read_text(encoding="utf-8").replace("*", "")))
+    for p in (REPO / "docs").glob("HANDBUCH_*.md"):
+        out.append((p.name, re.sub(r"\s+", " ", p.read_text(encoding="utf-8").replace("*", ""))))
     return out
 
 

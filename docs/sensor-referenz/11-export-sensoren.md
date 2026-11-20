@@ -230,7 +230,7 @@ bisher nicht, **wie**. Das hat gefehlt: Wer nur die Sensorliste durchsieht, find
 `eedc_preis_*`-Sensoren und darunter **keinen Höchstpreis** und **keine Rang-Preise**, und
 schließt daraus, dass eedc sie nicht liefert. Sie sind da — als Attribut, nicht als Sensor.
 
-Die drei Vorlagen lassen sich unverändert in *Entwicklerwerkzeuge → Vorlage* kopieren. Wer eine
+Die drei Vorlagen lassen sich unverändert in *Einstellungen → Werkzeuge → Template* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Vorlage*) kopieren. Wer eine
 davon als Sensor haben will, setzt sie in `configuration.yaml` unter `template: - sensor:` mit
 `state: >`. **Sie nehmen eine Anlage namens „Haus" an:** Home Assistant bildet die Entity-ID aus dem
 Gerätenamen `eedc - <Anlage>` und dem Anzeigenamen des Sensors („Börsenpreis-Rang", Umlaut ohne

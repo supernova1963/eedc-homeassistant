@@ -36,13 +36,41 @@ Kanal «Eigene Summe» nur, wenn ein Stand um weniger als 10 % fällt (HAs Regel
 ein neuer Zähler, der etwas unter dem alten beginnt. Gewöhnlicher Betrieb hat diese Form nicht; der Arm braucht kein Maß und
 gilt auch an einem jungen Zähler. Im HA-Spiegel nennt einen fallenden Zähler ``ha_zaehler_rueckgang`` (dort bleibt der Arm aus).
 
+**Sensorwechsel U3-K (Nachmessung B2, Bauplan Nr. 158): wann der Arm «Sprung» melden darf.** Ein gewöhnlicher Verbrauch
+hat dieselbe Form wie ein Sprung; das Maß allein trennt sie nur, wenn der Bezug den gewöhnlichen Betrieb kennt. Eine junge
+Statistik oder ein neuer Abschnitt in einer ruhigen Jahreszeit kennt oft nur Standby (Wallbox vor dem ersten Auto, Klima im
+Winter, Wärmepumpe im Sommer, PV unter Schnee) — dort erreichte die erste gewöhnliche Stunde Maße bis 92. Ein Fehlalarm, dessen
+Handgriff richtige Quellwerte ändern lässt, wiegt schwerer als ein nicht gemeldeter mittlerer Sprung (Grundregel
+«Quellentreue»). Der Arm meldet deshalb nur, wenn das Maß ``SCHWELLE_SPRUNG`` überschreitet **und**
+
+* (a) der Bezug **reif** ist (``reif``): der Abschnitt reicht ``BEZUG_TAGE`` zurück, das Fenster hat mindestens ``BEZUG_MIN_TAGE``
+  Tage mit Zuwachs, und sein größter Tag zählt mindestens ``REIF_MIN_TAG`` — oder
+* (b) die Menge der Stunde über dem liegt, was eine Anlage in einer Stunde leisten kann (``grenze``; nur kWh-Felder, der
+  Erzeuger gibt ``grenze_unmoeglich(schwelle_pv_einspeisung_stunde_kwh(kWp))`` = max(``MENGE_UNMOEGLICH_MIN``, 1,5 × kWp)).
+  Trägt eine Zeile nach einer Zählerlücke ``n`` Stunden, gilt ``n`` × die Grenze (``grenze_der_zeile``, wie die Spanne in
+  ``schwelle_pv_einspeisung_stunde_kwh``; gemessen: Produktiv-Kopie, PV 05.11.2025 18:00 nach 129 Stunden ohne Zeile 134,3 kWh —
+  mit der Grenze je Zeile ein Fund am Stichtag 31.10.2025, mit der Spanne keiner).
+  (b) gilt auch an einem jungen Zähler, sobald der Bezug einen Tag mit Zuwachs hat. Stand-Zähler in anderen Einheiten
+  (m³, l, km) haben kein (b).
+
+Der Arm «Neubeginn» bleibt, wie er war (Bezug mit ``BEZUG_MIN_TAGE`` Tagen, Maß über ``SCHWELLE_NEUBEGINN``).
+
+**Vierter Arm «Zwischenstand»** (``ZWISCHENSTAND``, U3-K B4; nur mit ``zwischenstand=True``, den der MQTT-Erzeuger setzt): ein
+Gerät meldet innerhalb einer Stunde kurz 0 oder ein anderes Gerät sendet kurz seinen Stand — am Stundenende steht der alte
+Zähler wieder, HAs Summenregel hat dazwischen aber einen Neubeginn gezählt. Die Zeile zeigt dann Δ ``sum`` − Δ ``state``
+≥ ``ZWISCHEN_ANTEIL`` × Stand davor bei einem Stand, der nicht gefallen ist (der Stand davor mindestens ``MIN_STAND``). Kein
+Maß, auch an einem jungen Zähler; ein Tageszähler fällt in der Stunde seines Neubeginns und trifft den Arm nie.
+
 **Schwellen aus M4** (Messung 19.11.2026, ``~/.claude/plans/golden-master/sensorwechsel-saat/u2c/m4_verteilung.py``): über die
 Produktiv-Kopie (12 Spiegel-Abschnitte, 137 450 Paare, 31.10.2024–15.11.2026) liegt das größte Maß bei 1,32 (Arm B, ein
 Ladevorgang), Arm A bei keinem Paar über 0; im Saat-Satz (26 Abschnitte) bei 0,79. Mit einem Bezugsfenster von 30 Tagen statt
 eines Jahres hätte ein Frühlingstag mit Netzbezug 13,3 kWh in einer Stunde nach einem Monat mit höchstens 0,4 kWh am Tag das
 Maß 32 erreicht, mit 3 statt 14 Bezugstagen der erste Sonnentag eines jungen Einspeisezählers 44 — beides gewöhnlicher Betrieb.
 Die Lab-Sprünge liegen bei +2 001 auf Zählern mit 6,9 bis 160 kWh am Tag zwischen 12,5 und 292 (Rechenweg F12) und beim
-Lab-Neubeginn bei 300 (Rate 2,04 kWh je Stunde) bei ≈ 6.
+Lab-Neubeginn bei 300 (Rate 2,04 kWh je Stunde) bei ≈ 6. **U3-K (M4 erweitert, Stichtag-Probe):** dieselbe Produktiv-Kopie, als
+hätte die Statistik an einem von 362 Stichtagen (alle zwei Tagen, 01.11.2024–24.10.2026) erst begonnen: mit der Regel vor U3-K 10
+Fund-Stunden aus gewöhnlichem Betrieb bei 19 Stichtagen (Einspeisung im Winter bis 7,99 kWh, Netzbezug 13,31 kWh; Maß bis 51,5),
+mit (a)/(b) **0**; die größte Stundenmenge der Kopie liegt weit unter ``MENGE_UNMOEGLICH_MIN`` (Anlage 12,3 kWp ⇒ Grenze 100).
 
 Die Funktionen sind rein (keine Datenbank, keine Uhr; der Kalendertag ist der lokale der Prozesszone = HA, wie
 ``ha_sprung``). Welche Stunden ausgenommen sind (das Muster «kurz 0 und zurück», ``ha_zaehlersprung``), sagt der Aufrufer.
@@ -74,6 +102,16 @@ SCHWELLE_SPRUNG = 10.0
 BEZUG_TAGE = 365
 #: So viele Tage mit Zuwachs braucht das Bezugsfenster; darunter ist der Zähler jung (kein Befund).
 BEZUG_MIN_TAGE = 14
+#: U3-K (B2 (a)): so viel muss der größte Tag im Bezug zählen, damit der Bezug reif ist (eine Reihe aus Standby kennt den Betrieb
+#: noch nicht).
+REIF_MIN_TAG = 1.0
+#: U3-K (B2 (b)): eine Stundenmenge über dieser Menge (kWh) — oder über 1,5 × Anlagenleistung, wenn das mehr ist — kann keine
+#: Anlage in einer Stunde verbrauchen oder erzeugen.
+MENGE_UNMOEGLICH_MIN = 100.0
+#: Arm D (U3-K, B4): innerhalb der Stunde hat der Stand kurz eine andere Höhe gezeigt und ist zurückgekehrt.
+ZWISCHENSTAND = "zwischenstand"
+#: Arm D: Δ sum − Δ state ab diesem Anteil des Stands davor.
+ZWISCHEN_ANTEIL = 0.9
 #: Neubeginn: der Stand fällt unter diesen Anteil des vorigen.
 NEUBEGINN_ANTEIL = 0.9
 #: Unter diesem vorigen Stand ist ein Fallen kein Neubeginn (wie ``ha_sprung.MIN_STAND_KWH``).
@@ -140,20 +178,60 @@ def _neubeginn(z0: tuple, z1: tuple) -> bool:
     return st0 is not None and st1 is not None and st0 >= MIN_STAND and st1 < NEUBEGINN_ANTEIL * st0
 
 
-def _arm(z0: tuple, z1: tuple, m: float) -> Optional[str]:
+def grenze_unmoeglich(schwelle_anlage: Optional[float]) -> float:
+    """B2 (b): die Stundenmenge, über der eine Anlage nicht liegen kann — ``MENGE_UNMOEGLICH_MIN`` oder die Schwelle der Anlage
+    (``snapshot/plausibility.schwelle_pv_einspeisung_stunde_kwh``, 1,5 × kWp), was größer ist."""
+    return max(MENGE_UNMOEGLICH_MIN, schwelle_anlage or 0.0)
+
+
+def grenze_der_zeile(grenze: float, z0: tuple, z1: tuple) -> float:
+    """Die Grenze B2 (b) für eine Zeile, die ``n`` Stunden trägt (Zählerlücke: HA führt die Menge der Lücke in der ersten Zeile
+    danach) — ``grenze × n`` wie ``snapshot/plausibility.schwelle_pv_einspeisung_stunde_kwh(…, spanne=n)``."""
+    return grenze * max(1.0, (z1[0] - z0[0]) / 3600.0)
+
+
+def reif(n_tage: int, groesster_tag: float, erste: date, tag: date) -> bool:
+    """B2 (a): der Bezug kennt den gewöhnlichen Betrieb — der Abschnitt reicht ``BEZUG_TAGE`` zurück, das Fenster hat
+    ``BEZUG_MIN_TAGE`` Tage mit Zuwachs, und sein größter Tag zählt mindestens ``REIF_MIN_TAG``."""
+    return (erste.toordinal() <= tag.toordinal() - BEZUG_TAGE and n_tage >= BEZUG_MIN_TAGE
+            and groesster_tag >= REIF_MIN_TAG)
+
+
+def _zwischenstand(z0: tuple, z1: tuple) -> bool:
+    """Arm D: der Stand ist nicht gefallen, die Summe aber um mindestens ``ZWISCHEN_ANTEIL`` × Stand davor mehr gewachsen."""
+    d_sum, d_state = _zuwachs(z0, z1, 2), _zuwachs(z0, z1, 1)
+    return (d_sum is not None and d_state is not None and z0[1] >= MIN_STAND and d_state >= 0
+            and d_sum - d_state >= ZWISCHEN_ANTEIL * z0[1])
+
+
+def _arm(z0: tuple, z1: tuple, m: float, jung: bool, darf_springen: bool) -> Optional[str]:
     if _neubeginn(z0, z1):
-        return NEUBEGINN if m > SCHWELLE_NEUBEGINN else None
-    return SPRUNG if m > SCHWELLE_SPRUNG and _gleich(z0, z1) else None
+        return NEUBEGINN if not jung and m > SCHWELLE_NEUBEGINN else None
+    return SPRUNG if darf_springen and m > SCHWELLE_SPRUNG and _gleich(z0, z1) else None
+
+
+def _ohne_mass(z0: tuple, z1: tuple, menge: float, rueckgang: bool, zwischenstand: bool) -> Optional[str]:
+    """Die Arme ohne Maß (nur MQTT): «Rückgang» und «Zwischenstand»."""
+    if rueckgang and menge < -RUECKGANG_SCHWELLE:
+        return RUECKGANG
+    if zwischenstand and _zwischenstand(z0, z1):
+        return ZWISCHENSTAND
+    return None
 
 
 def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
-                        ausgenommen: frozenset[int] | set[int] = frozenset(), rueckgang: bool = False) -> list[Standsprung]:
+                        ausgenommen: frozenset[int] | set[int] = frozenset(), rueckgang: bool = False,
+                        grenze: Optional[float] = None, zwischenstand: bool = False) -> list[Standsprung]:
     """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` EINES Quell-Abschnitts, aufsteigend. ``stand``: der Zähler ist
     ein Stand (eedc zählt Δ ``state``), sonst eine Menge (Δ ``sum``). ``ausgenommen``: ``start_ts`` der Zeilen, die eine
-    andere Prüfung schon nennt. ``rueckgang``: dazu der Arm «Rückgang» (U3 b; Maß 0). Je Stunde mit Sprung ein
-    ``Standsprung`` in Zeitfolge."""
+    andere Prüfung schon nennt. ``rueckgang``/``zwischenstand``: dazu die Arme ohne Maß (U3 b, U3-K; nur MQTT). ``grenze``:
+    B2 (b), die Stundenmenge, über der der Arm «Sprung» auch ohne reifen Bezug meldet (``None`` = kein (b)). Je Stunde mit
+    Sprung ein ``Standsprung`` in Zeitfolge."""
+    if not zeilen:
+        return []
     spalte = 1 if stand else 2
     je_tag = tageszuwachs(zeilen, spalte)
+    erste = _tag(zeilen[0][0])
     bezug_je_tag: dict[date, tuple[int, float]] = {}
     out: list[Standsprung] = []
     letzter_zuwachs: Optional[int] = None
@@ -164,22 +242,26 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
         ruhe = (z1[0] - letzter_zuwachs) / _TAG_S if letzter_zuwachs is not None else 1.0
         if menge > 0:
             letzter_zuwachs = z1[0]
-        if rueckgang and menge < -RUECKGANG_SCHWELLE and z1[0] not in ausgenommen:
-            out.append(Standsprung(int(z1[0]), RUECKGANG, menge, z0[1], z1[1], 0.0))
+        if z1[0] in ausgenommen:
+            continue
+        ohne = _ohne_mass(z0, z1, menge, rueckgang, zwischenstand)
+        if ohne is not None:
+            out.append(Standsprung(int(z1[0]), ohne, menge, z0[1], z1[1], 0.0))
             continue
         tag = _tag(z1[0])
         if tag not in bezug_je_tag:
             bezug_je_tag[tag] = bezug(je_tag, tag)
         n_tage, groesster = bezug_je_tag[tag]
-        if menge <= 0 or n_tage < BEZUG_MIN_TAGE or z1[0] in ausgenommen:
+        if menge <= 0 or n_tage < 1:
             continue
         m = mass(menge, groesster, ruhe)
-        art = _arm(z0, z1, m)
+        darf = reif(n_tage, groesster, erste, tag) or (grenze is not None and menge > grenze_der_zeile(grenze, z0, z1))
+        art = _arm(z0, z1, m, n_tage < BEZUG_MIN_TAGE, darf)
         if art is not None:
             out.append(Standsprung(int(z1[0]), art, menge, z0[1], z1[1], m))
     return out
 
 
-__all__ = ["BEZUG_MIN_TAGE", "BEZUG_TAGE", "NEUBEGINN", "RUECKGANG", "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN",
-           "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung",
-           "bezug", "finde_standspruenge", "mass", "tageszuwachs"]
+__all__ = ["BEZUG_MIN_TAGE", "BEZUG_TAGE", "MENGE_UNMOEGLICH_MIN", "NEUBEGINN", "REIF_MIN_TAG", "RUECKGANG",
+           "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN", "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung", "ZWISCHENSTAND",
+           "ZWISCHEN_ANTEIL", "bezug", "finde_standspruenge", "grenze_der_zeile", "grenze_unmoeglich", "mass", "reif", "tageszuwachs"]

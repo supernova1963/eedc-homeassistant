@@ -205,8 +205,13 @@ async def _standsprung_menge(db, mp):
 
 
 async def _standsprung_stand(db, mp):
-    from backend.tests.test_sensorwechsel_u2c_proben import TAUSCH, _anlage_mit, _pruefe, _reihe, _sprung
-    return await _pruefe(db, await _anlage_mit(db, [("sensor.gas", _sprung(_reihe(0.12), TAUSCH, 2001.0))],
+    from datetime import timedelta
+
+    from backend.tests.test_sensorwechsel_u2c_proben import JAHR, T0, TAUSCH, _anlage_mit, _pruefe, _reihe, _sprung
+    # U3-K (B2): ein Stand-Zähler in m³ hat keine Grenze «mehr, als eine Anlage leisten kann» — der Bezug reicht ein Jahr
+    # zurück (reif); derselbe Stand an T0 wie zuvor, damit der Wortlaut gleich bleibt.
+    z = _sprung(_reihe(0.12, ab=JAHR, start=1000.0 - 0.12 * ((T0 - JAHR) / timedelta(hours=1))), TAUSCH, 2001.0)
+    return await _pruefe(db, await _anlage_mit(db, [("sensor.gas", list({r[0]: r for r in z}.values()))],
                                                key="inv:9:zaehlerstand", art="stand", einheit="m³"))
 
 

@@ -64,19 +64,40 @@ async def rand_um(db, anlage_id: int, mqtt_key: str, t: datetime) -> Optional[tu
     return (a[0], float(a[1])), (b[0], float(b[1]))
 
 
-async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime) -> tuple[str, Optional[tuple[Roh, Roh]]]:
+async def grenze_kw(db, anlage_id: int, kwh: bool = True) -> Optional[float]:
+    """Die Grenze «mehr, als eine Anlage in einer Stunde leisten kann» als Leistung (U3-K, B7; dieselbe Grenze wie der Befund
+    «Zählerstand springt» B2 (b)); ``None`` für einen Zähler in einer anderen Einheit als kWh."""
+    from backend.core.berechnungen.zaehlerstand_sprung import grenze_unmoeglich
+    from backend.services.snapshot.plausibility import schwelle_der_anlage_stunde_kwh
+
+    return grenze_unmoeglich(await schwelle_der_anlage_stunde_kwh(db, anlage_id)) if kwh else None
+
+
+async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime, *,
+                    kwh: bool = True) -> tuple[str, Optional[tuple[Roh, Roh]]]:
     """Wo der Zähler um ``t`` die Höhe wechselt (``rohstand_rand.sprung_der_stunde`` in der Stunde von ``t``):
-    ``("sprung", (a, b))`` · ``("kein_sprung", None)`` (Rohstände in der Stunde, aber kein Höhenwechsel) · ``("noch_kein_stand",
-    None)`` (nach ``t`` ist noch kein Rohstand gespeichert — der Stundenlauf setzt die Rand-Stände später) · ``("ohne", None)``
-    (keine Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3)."""
+    ``("sprung", (a, b))`` — die Spanne der Höhenwechsel der Stunde (U3-K, B1: letzter Stand vor dem ersten, erster nach dem
+    letzten) · ``("kein_sprung", None)`` (Rohstände in der Stunde, aber kein Höhenwechsel) · ``("noch_kein_stand", None)`` (nach
+    ``t`` ist noch kein Rohstand gespeichert — der Stundenlauf setzt die Rand-Stände später) · ``("ohne", None)`` (keine
+    Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3). ``kwh``: der Zähler zählt kWh (Grenze B7)."""
     stunde = t.replace(minute=0, second=0, microsecond=0)
     roh = await _rohstaende(db, anlage_id, mqtt_key, stunde - BEZUG, stunde + _STUNDE)
     if not roh:
         return "ohne", None
     if roh[-1][0] < t and await rand_um(db, anlage_id, mqtt_key, t) is None:
         return "noch_kein_stand", None
-    paar = sprung_der_stunde(roh, stunde)
+    paar = sprung_der_stunde(roh, stunde, await grenze_kw(db, anlage_id, kwh))
     return ("sprung", paar) if paar is not None else ("kein_sprung", None)
+
+
+async def rand_der_naht(db, anlage_id: int, mqtt_key: str, e: datetime) -> Optional[tuple[Roh, Roh]]:
+    """Die Rand-Stände einer Naht an ``e`` für den Stundenlauf (U3-K, B1): endet an ``e`` die Spanne der Höhenwechsel der Stunde
+    (``sprung_um``: ihr erster Stand danach liegt genau an ``e``), deren zwei Rand-Stände — die Stände dazwischen zählen nicht;
+    sonst der letzte Stand vor ``e`` und der erste ab ``e`` (``rand_um``)."""
+    art, paar = await sprung_um(db, anlage_id, mqtt_key, e)
+    if art == "sprung" and paar is not None and paar[1][0].replace(microsecond=0) == e:
+        return paar
+    return await rand_um(db, anlage_id, mqtt_key, e)
 
 
 def setze_rand(row, paar: tuple[Roh, Roh]) -> None:
@@ -86,9 +107,11 @@ def setze_rand(row, paar: tuple[Roh, Roh]) -> None:
     row.ansatz, row.stand_alt_ende, row.stand_neu_null = ANSATZ_SCHNITT, paar[0][1], paar[1][1]
 
 
-async def rand_im_stundenlauf(db, anlage_id: int, sensor_key: str, mqtt_key: str, erklaert: datetime) -> None:
+async def rand_im_stundenlauf(db, anlage_id: int, sensor_key: str, mqtt_key: str, erklaert: datetime,
+                              paar: Optional[tuple[Roh, Roh]]) -> None:
     """Der Stundenlauf wendet die Naht an ``erklaert`` an: jede gültige Fortsetzung des Schlüssels mit dieser Sekunde, beiden
-    Quellen auf diesem MQTT-Schlüssel und noch ohne Rand-Stände bekommt sie aus denselben Rohständen (``rand_um``)."""
+    Quellen auf diesem MQTT-Schlüssel und noch ohne Rand-Stände bekommt ``paar`` — die Rand-Stände, an denen der Lauf teilt
+    (``rand_der_naht``)."""
     from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, ZuordnungWechsel
     from backend.services.kanal import merken
     from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
@@ -101,7 +124,6 @@ async def rand_im_stundenlauf(db, anlage_id: int, sensor_key: str, mqtt_key: str
     zeilen = [z for z in zeilen if mqtt_paar(z.vorher, z.nachher, sensor_key) == mqtt_key]
     if not zeilen:
         return
-    paar = await rand_um(db, anlage_id, mqtt_key, erklaert)
     if paar is None:
         return
     for z in zeilen:
@@ -131,5 +153,5 @@ def bleiben_satz(vorher: Optional[dict], nachher: Optional[dict], sensor_key: st
     return SATZ_BLEIBEN_HA_MQTT if arten == {"ha", "mqtt"} else None
 
 
-__all__ = ["SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "bleiben_satz", "mqtt_key_der_quelle", "mqtt_paar",
-           "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um"]
+__all__ = ["SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "bleiben_satz", "grenze_kw", "mqtt_key_der_quelle", "mqtt_paar",
+           "rand_der_naht", "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um"]

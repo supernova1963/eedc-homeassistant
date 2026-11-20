@@ -65,6 +65,8 @@ class Wechsel:
     ansatz: Optional[str] = None
     stand_alt_ende: Optional[float] = None
     stand_neu_null: Optional[float] = None
+    #: Wann eedc die Zeile eingetragen hat (U3-K, B5; ``monatswert_ueberholt``). ``None`` an Bestandszeilen.
+    eingetragen_ts: Optional[datetime] = None
 
 
 def rand_versatz(w) -> Optional[float]:
@@ -136,7 +138,8 @@ def zuordnung_am(wechsel_je_key: Optional[dict[str, list[Wechsel]]], z: datetime
 def _als_wechsel(row) -> Wechsel:
     return Wechsel(row.sensor_key, row.ab_ts, row.vorher, row.nachher, row.grund, row.falsch_seit_ts,
                    row.aufgehoben_durch, row.erklaert_ts, row.id, getattr(row, "lauf", None), getattr(row, "ansatz", None),
-                   getattr(row, "stand_alt_ende", None), getattr(row, "stand_neu_null", None))
+                   getattr(row, "stand_alt_ende", None), getattr(row, "stand_neu_null", None),
+                   getattr(row, "eingetragen_ts", None))
 
 
 async def lade_wechsel(db, anlage_id: int) -> dict[str, list[Wechsel]]:

@@ -4975,6 +4975,12 @@ ruhe   = Tage seit der letzten Zeile mit z > 0, mindestens 1
 Maß    = z / (ref × ruhe)                                                       (zaehlerstand_sprung.mass)
 Neubeginn nicht bei 0 = state1 < 0,9 · state0 (state0 ≥ 1) und Maß > 3
 Sprung nach oben      = |Δ sum − Δ state| ≤ 0,01 + 0,01 · |Δ sum| und Maß > 10
+                        und (reif ODER z > Grenze × Stunden der Zeile)                 (U3-K, Nachmessung B2, Bauplan Nr. 158)
+reif                  = der Abschnitt reicht 365 Tage zurück ∧ ≥ 14 Tage mit Zuwachs ∧ ref ≥ 1   (zaehlerstand_sprung.reif)
+Grenze                = max(100 kWh, 1,5 × kWp) — nur kWh-Felder; dieselbe Schwelle wie der Deckel
+                        (snapshot/plausibility.schwelle_pv_einspeisung_stunde_kwh, heutige kWp; zaehlerstand_sprung.grenze_unmoeglich);
+                        eine Zeile nach einer Zählerlücke trägt n Stunden ⇒ n × Grenze (grenze_der_zeile, wie die Spanne dort);
+                        gilt auch am jungen Zähler, sobald der Bezug einen Tag mit Zuwachs hat
 ausgenommen           = Rückkehr-Zeilen des Musters «kurz 0 und zurück» (ha_sprung.rueckkehr_stunden — ha_zaehlersprung)
 ```
 
@@ -4984,12 +4990,21 @@ Saat 0,79. Mit 30 statt 365 Bezugstagen erreichte ein Frühjahrstag mit 13,3 kWh
 höchstens 0,4 kWh am Tag das Maß 32, mit 3 statt 14 Tagen mit Zuwachs der erste Sonnentag eines jungen Einspeisezählers 44.
 Lab-Soll: +2 001 auf Zählern mit 6,85 / 24 / 160 kWh am Tag ⇒ 292 / 83 / 12,5; Rate 1,8 kWh je Stunde ⇒ 46; Neubeginn bei 300 mit
 Rate 2,04 ⇒ 6,2. Eine Nachholstunde nach einer Lücke und ein großer Verbrauch nach langer Ruhe teilen sich durch ihre Ruhezeit
-(Wallbox 11 kWh nach 30 Tagen: 0,4). **Wirkung des Handgriffs:** «Summe anpassen» in HA senkt die Summe ab der Stunde; nach
+(Wallbox 11 kWh nach 30 Tagen: 0,4). **M4 erweitert (U3-K, Nachmessung B2):** ein Bezug aus Standby macht die erste gewöhnliche
+Stunde zum Sprung — fünf Gegenfälle (Wallbox 39 Tage Standby 5 W, dann 4 × 11 kWh: Maß 91,7; Klima, Wärmepumpe, PV nach Schnee,
+Messsteckdose: 16,7 · 13,0 · 33,3 · 37,5) und an der Produktiv-Kopie, als hätte die Statistik an einem von 362 Stichtagen
+(01.11.2024–24.10.2026, alle zwei Tage) erst begonnen, 10 Fund-Stunden bei 19 Stichtagen (Einspeisung im Winter bis 7,99 kWh,
+Netzbezug 13,31 kWh; `golden-master/sensorwechsel-saat/nm-u3/prod_jung.py`). Mit «reif ODER Grenze» schweigen alle fünf und die
+Stichtag-Probe zeigt **0** Fund-Stunden (Anlage 12,3 kWp ⇒ Grenze 100); mit der Grenze je Zeile ohne die Stunden der Zeile bliebe
+eine: PV 05.11.2025 18:00, 134,3 kWh nach 129 Stunden ohne Zeile (die Menge der Zählerlücke). Die Lab-Sprünge (+2 001) melden über
+die Grenze weiter, auch am jungen Zähler. **Wirkung des Handgriffs:** «Summe anpassen» in HA senkt die Summe ab der Stunde; nach
 «Aus Home Assistant neu übernehmen» ist Δ sum der Stunde klein bzw. ungleich Δ state — kein Befund. **Stand-Zähler** (Gas, Wasser,
 Öl, Kilometerstand): eedc rechnet mit `state`, «Summe anpassen» ändert nur `sum`; der Befund ist dort eine Auskunft (INFO) und nennt
 die Wege nach Entscheid E2 (Bauplan Nr. 139); ein fallender Stand ist dort nie ein Fund (eedc zählt keinen negativen Zuwachs als
-Sprung; den Bruch nennt `zaehlerstand_reihe_bruch`). **Benannte Grenzen:** (a) ein Sprung in einem Zähler, der im Jahr davor an
-weniger als 14 Tagen gezählt hat, bleibt still; (b) mehrere Sprünge desselben Zählers im Bezugsfenster heben die Vergleichsgröße —
+Sprung; den Bruch nennt `zaehlerstand_reihe_bruch`). **Benannte Grenzen:** (a) ein Sprung unter der Grenze (100 kWh bzw. 1,5 × kWp)
+in einem Zähler, dessen Statistik kein Jahr zurückreicht oder der dort keinen Tag mit 1 kWh hatte, bleibt still — ebenso jeder
+Sprung eines solchen Stand-Zählers in m³, l oder km (dort gibt es keine Grenze); ein Neubeginn in einem Zähler, der im Jahr davor
+an weniger als 14 Tagen gezählt hat; (b) mehrere Sprünge desselben Zählers im Bezugsfenster heben die Vergleichsgröße —
 ein zweiter Sprung erscheint nach der Berichtigung des ersten; (c) die erste Zeile einer neuen Statistik (oben, Grenze (6)).
 Proben: `test_sensorwechsel_u2c_proben.py`; Wirkung `test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt`.
 
@@ -5022,7 +5037,8 @@ liest die Auskunft dieselbe Regel (`kanal/korrektur.ist_ueberbrueckt` vergleicht
 
 ```
 berührt      = Monate von [falsch_seit, ab) jeder gültigen Korrektur-Zeile (keine Lücken-Zeile)
-               ∪ Monate ab ab_ts jeder gültigen Fortsetzung («bleiben», «Zähler getauscht») bis zum letzten abgeschlossenen Monat
+               ∪ Monate ab ab_ts jeder gültigen Fortsetzung («bleiben», «Zähler getauscht»)
+               je bis min(letzter abgeschlossener Monat, Monat von eingetragen_ts)                    (U3-K, B5)
 gespeichert  = Monatsdaten.einspeisung_kwh / netzbezug_kwh (Regel N-739 «erfasst») bzw. InvestitionMonatsdaten.verbrauch_daten[feld]
 Quelle       = Kanal-Δ über den Kalendermonat, nur bei echter Deckung (kanal/feld_leser.kanal_feldwerte_je_fenster)
 Zeile        ⇔ berührt ∧ gespeichert ∧ Quelle ∧ |Quelle − gespeichert| ≥ 1 kWh (MONATSWERT_TOLERANZ_KWH = Import-Vorschau)
@@ -5031,8 +5047,10 @@ Zeile        ⇔ berührt ∧ gespeichert ∧ Quelle ∧ |Quelle − gespeichert
 
 Ein Wechsel ohne Grund berührt nichts (dort rechnet eedc wie vorher); an der Produktiv-Kopie (eine Wechsel-Zeile ohne Grund) 0
 Zeilen, ohne Berührt-Filter und Vergleich wären es die 41 gespeicherten Monate des Schlüssels. «Bis zum Monat des Eintrags» (Rechenweg)
-ist ohne Zeitpunkt des Eintrags an der Zeile nicht bestimmbar — eedc nimmt jeden abgeschlossenen Monat ab dem Wechsel; der Vergleich
-lässt die unveränderten aus. **Benannt:** der Anlagen-PV-Zähler (`basis:pv_gesamt`, P7) und Felder ohne Kanal werden nicht geprüft;
+gilt seit U3-K (Nachmessung B5) über `zuordnung_wechsel.eingetragen_ts` (wann eedc die Zeile eingetragen hat; Vorgabe der Spalte,
+ein Nachtrag legt eine neue Zeile an): berührt sind die Monate bis zu diesem Monat — einen späteren Monat hat der Anwender schon
+mit dem Wechsel gespeichert; ohne die Grenze kam jeden Monat ein neuer Befund (Tausch 10.01.2025 ⇒ 22 Monate am 20.11.2026). Eine
+Bestandszeile ohne Zeitpunkt (`NULL`) berührt wie vorher jeden abgeschlossenen Monat ab dem Wechsel. **Benannt:** der Anlagen-PV-Zähler (`basis:pv_gesamt`, P7) und Felder ohne Kanal werden nicht geprüft;
 am Gerät springt «Monat öffnen» zum Gerät, nicht zum Feld.
 
 **Rest fremder Stände vor «Falsch seit»** (Rechenweg G8, `core/berechnungen/zaehler_versatz.rest_schritt`): der Schritt am Ende
@@ -5063,19 +5081,28 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
   Reihe:  Stände ab ab_ts + (stand_alt_ende − stand_neu_null)                                  (zeitpunkt.rand_versatz)
   Kanal:  Naht-Stunde = (stand_alt_ende − Stand der Zeile davor) + (Stand der Naht-Zeile − stand_neu_null)
           Quellzeile ab der Naht-Stunde, Versatz-Verschiebung = Menge − (Wert Naht − Wert davor)  (naht.nachtrag_fortsetzung)
-  «Zähler getauscht» MQTT: in der Stunde von «Getauscht am» das Paar aufeinanderfolgender Rohstände mit dem größten
-          Höhenwechsel (Rückgang < −0,01; Sprung > max(10 × größter Schritt der 24 h davor, 1 kWh)); der Tausch wird am
-          ersten Stand danach eingetragen; ohne Höhenwechsel: abgelehnt (kein_sprung); nach «Getauscht am» noch kein Stand:
-          eingetragen, die Rand-Stände setzt der Stundenlauf, der die Naht anwendet (rohstand.rand_im_stundenlauf)
+  «Zähler getauscht» MQTT: in der Stunde von «Getauscht am» alle Paare aufeinanderfolgender Rohstände mit Höhenwechsel
+          (rohstand_rand.hoehenwechsel; U3-K B7: Rückgang < −0,01; nach oben, wenn die Leistung = Schritt ÷ Zeit zwischen den
+          zwei Rohständen größer ist als 10 × die größte Leistung der 24 h davor UND als die Grenze max(100 kWh, 1,5 × kWp) je
+          Stunde — dieselbe wie «Zählerstand springt»; andere Einheit: 10 × davor und Schritt > 1);
+          Rand-Stände = letzter Stand vor dem ERSTEN, erster Stand nach dem LETZTEN Höhenwechsel der Stunde (U3-K B1,
+          sprung_der_stunde; die Stände dazwischen gehören keinem der zwei Zähler); der Tausch wird am ersten Stand danach
+          eingetragen; ohne Höhenwechsel: abgelehnt (kein_sprung); ergäbe die Naht-Stunde eine negative Menge: abgelehnt
+          (negative_menge; naht.nachtrag_fortsetzung schreibt sie nie); nach «Getauscht am» noch kein Stand: eingetragen, die
+          Rand-Stände setzt der Stundenlauf, der die Naht anwendet (rohstand.rand_im_stundenlauf mit rohstand.rand_der_naht:
+          endet an der Naht die Spanne, endet die alte Periode am letzten Stand vor dem ersten Höhenwechsel)
   «bleiben» zwischen zwei MQTT-Quellen: im Stundenlauf aus denselben zwei Rohständen, an denen er teilt; im Nachtrag am
           Höhenwechsel der Stunde des Wechsels, sonst um den verzeichneten Zeitpunkt
   ohne Rohstände (älter als 31 Tage): wie vor U3 (die Naht-Stunde zählt keinen Zuwachs)
 
 Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqtt_standsprung.py):
   je Quell-Abschnitt eines MQTT-Kanals (Familie Mitschrift, statistic_id = MQTT-Schlüssel, nicht der Nachbau aus HA-Ständen)
-  der Kern zaehlerstand_sprung (Neubeginn > 3, Sprung > 10) + Arm «Rückgang» (Zuwachs < −0,01, ohne Maß); am Stand-Kanal
-  Δ state, ohne Rückgang-Arm; ausgenommen «kurz 0 und zurück» (ha_sprung.rueckkehr_stunden), «kurz tiefer und zurück»
-  (_kurz_tiefer: der Stand fällt und ist in der nächsten Zeile wieder mindestens auf der Höhe davor) und die Kanal-Stunden der
+  der Kern zaehlerstand_sprung (Neubeginn > 3, Sprung > 10 mit «reif ODER Grenze», oben) + Arm «Rückgang» (Zuwachs < −0,01,
+  ohne Maß) + Arm «Zwischenstand» (U3-K B4: Δ sum − Δ state ≥ 0,9 × Stand davor, Δ state ≥ 0, Stand davor ≥ 1, ohne Maß —
+  kurz 0 oder ein fremder Stand in der Stunde; ein Tageszähler fällt in seiner Neubeginn-Stunde und trifft ihn nie); am
+  Stand-Kanal Δ state, ohne Rückgang- und Zwischenstand-Arm; ausgenommen «kurz 0 und zurück» (ha_sprung.rueckkehr_stunden),
+  «kurz tiefer und zurück» (_kurz_tiefer: der Stand fällt um weniger als 10 % — U3-K B3, tiefer zählt HAs Regel als
+  Neubeginn — und ist in der nächsten Zeile wieder mindestens auf der Höhe davor) und die Kanal-Stunden der
   Schritte eines versetzten Abschnitts (versatz_mqtt.mqtt_versatz_stunden); Fenster: der ganze Kanal (E2)
   zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang oder G7 nennt
 
@@ -5103,8 +5130,20 @@ doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide
 7 025,9, am HEAD 7 025,5; am selben Tag außerhalb der Stunde 12,458 = 25 Stunden); (d) «bleiben» sofort, wenn die neue Quelle schon
 vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
 Kanal); (e) Mischform HA/MQTT in der Bilanz (`kanal/bilanz_adapter.zaehler_eintraege`, Bestandsmessung); (f) die Reihen-Leser
-(`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal).
-Proben: `test_sensorwechsel_u3b_proben.py`; Vitest `F/components/live/SensorwechselMqttSprung.test.tsx`.
+(`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal);
+(g) U3-K B7: ein kleiner Versatz nach oben (unter der Grenze je Stunde in fünf Minuten, bei bis zu 66 kWp etwa 8,3 kWh) ist kein
+Höhenwechsel — er lässt sich über MQTT nicht als Tausch eintragen und zählt als Menge der Stunde; der Dialog sagt es
+(`zaehler_getauscht.SATZ_KEIN_SPRUNG`); nennt G4 eine solche Stunde (reifer Bezug, Maß > 10), lehnt der Dialog trotzdem ab
+(nicht gemessen); (h) U3-K: eine Nachholmenge nach langer Stille über der Grenze (30 h stumm, dann 15 kWh in
+fünf Minuten = 180 kW) gilt als Höhenwechsel — die Leistung rechnet zwischen zwei Rohständen, und der Scheduler wiederholt in der
+Stille den letzten Stand; ein bewusster Eintrag nimmt sie an (offener Punkt U3-K); (i) die Spanne gilt je Stunde — ein fremder
+Stand über die volle Stunde hinweg (10:55 bis 11:05) braucht zwei Einträge (nicht gemessen).
+**Gemessen U3-K** (`golden-master/sensorwechsel-saat/u3k/`, 20 Tage Vorlauf, Netzbezug 0,5 kWh je Stunde, Ereignis 10:20): Gerät
+meldet fünf Minuten 0 · anderes Gerät zehn Minuten 300 · neues Gerät erst 0, dann 300 ⇒ nach dem Eintrag 11,917 · 11,875 · 11,917
+in Kanal, Reihe und Tagesansicht (U3 b: −5 005,208 · −4 705,25 · 311,958); Wallbox 22 kW nach 20 Tagen Standby: G4 still, der
+Dialog lehnt ab (U3 b: 1,833 kWh echter Verbrauch gestrichen); ein Gerät sendet eine Stunde den halben Stand: G4 nennt Neubeginn
+und Sprung (U3 b: still, Tag 5 257,1).
+Proben: `test_sensorwechsel_u3b_proben.py`, `test_sensorwechsel_u3k_proben.py`; Vitest `F/components/live/SensorwechselMqttSprung.test.tsx`.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.
@@ -5384,7 +5423,8 @@ Art und G       = ohne Überlappung: beide, G = T1;  mit Überlappung: schnitt, 
                   (ab_ts − 1 h), frühestens T1 + 1 h;  danach ab_ts = G + 1 h
 «zählt ab»      = (U2 Lauf b, F9/F10) nur mit Überlappung wählbar: T1 + 1 h ≤ G ≤ Stunde des Wechsels und — Lab-K F5 — G nie
                   vor dem vorigen verzeichneten Wechsel des Felds (dessen ab_ts, bei einer Korrektur «Falsch seit»;
-                  ansatz._vorige_grenze): sonst überschriebe das Ansetzen die Zeit der Quelle davor
+                  ansatz._vorige_grenze): sonst überschriebe das Ansetzen die Zeit der Quelle davor; die Vorgabe G liegt
+                  nie davor (U3-K, LK-B3), und lässt der vorige Wechsel nur eine Stunde zu, bietet der Dialog kein Feld an
                   (zuordnung_wechsel/bleiben.setze_zaehlt_ab; sonst 422); die Zeile trägt dann ansatz = offen_schnitt und
                   ab_ts = G + 1 h; bis zum Ansetzen gilt als altes ab_ts die erste volle Stunde des Wechsels
                   (ansatz._ab_alt — die Stände des alten dazwischen verwirft Schritt «Reihe»)
@@ -5585,7 +5625,10 @@ Alt-Vermerke  = historie_hinweis im Mapping je Feld: der jüngste Protokoll-Eint
                 Überführung aus dem Protokoll) wird eine Zeile, wenn die Abfrage gefragt hätte und keine Zeile zum selben
                 Eintrag besteht — sonst verfällt er; danach ist der Vermerk entfernt (bei jedem Start, ohne Vermerk nichts;
                 zuordnung_wechsel/ueberfuehrung.py::ueberfuehre_vermerke)
-Überführung   = (Lab-K F2) eine am Kanal aufgelöste Vor-Quelle (Protokoll-vorher leer) gilt nur, wenn der Kanal den Wechsel
+Überführung   = (Lab-K F2) eine am Kanal aufgelöste Vor-Quelle (Protokoll-vorher leer) gilt — liegen vor der Stunde keine
+                Stände der Reihe (U3-K, Nachmessung Lab-K LK-B1: mit Ständen ist sie echt; sonst verwarf die Regel K1 HA → MQTT
+                und K3 «Zuordnung entfernt» und ließ von «Fehlgriff, dann zurück» K9 nur B → A stehen: HA-Tag der Wallbox
+                9,0 statt 27,0) — nur, wenn der Kanal den Wechsel
                 selbst zeigt (erste Quellzeile ab Stunde − 1 h = Spiegel der neuen Entität); «eigene Werte davor» zählen
                 nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle davor der Spiegel der neuen
                 Entität ist (vom Nachfüllen von v4.3.1 vor den Eintrag gelegt); eine Quelle der neuen Entität ab Stunde − 1 h
@@ -5749,7 +5792,11 @@ Gemessen (Wechsel A → C am Ende, C in HA ab 12.06. 00:00): 10.06. 0,5 · 11.06
 prüfbare Rand-Stand — der letzte gespeicherte vor `falsch_seit`, der erste ab `ab`, gespeichert aus der richtigen Quelle, und
 Home Assistant führt sie dort — HAs heutige Summe der richtigen Quelle ist (`SPIEGEL_TOLERANZ_KWH`; ein Fünf-Minuten-Stand gegen HAs
 Kurzzeitstatistik, so wie er geschrieben wurde — Lab-K W9: gegen die Stundenzeile lag er nie auf der Höhe, und die Korrektur füllte
-eine Zeit nicht, die Home Assistant führt; ohne Kurzzeitzeile ist der Rand nicht prüfbar). Passt einer nicht, bleibt die
+eine Zeit nicht, die Home Assistant führt; ohne Kurzzeitzeile ist der Rand nicht prüfbar — **am Stück** (`ist_fuellbar`, U3-K,
+Nachmessung Lab-K LK-B2) gilt dann der Stand der Reihe zur vollen Stunde davor bzw. am Rückgang ab ihm gegen HAs Stundenzeile
+(`stueck._pruefbarer_rand`): HAs Kurzzeitstatistik reicht nur Tage zurück, und an der Produktiv-Kopie machten 23 von 30 alten
+Unterstunden-Rändern ein Stück «nicht füllbar», das an 7311ad345 füllbar war; mit dem Rückgriff 27 von 30 füllbar, die 10
+Kontrollfälle zur vollen Stunde und der Korrektur-Weg unverändert). Passt einer nicht, bleibt die
 Zeit leer und folgt der Regel oben; die Vorschau sagt `SATZ_ZAEHLERLUECKE` bzw. `SATZ_LUECKE` («füllt nichts …»; liegt das Ende
 der Zeit noch vor uns — Dialog, `ab` = nächste volle Stunde —, «Vom … Uhr bis jetzt», Lab-K W5; kein
 `SATZ_KEIN_TAG`). Ein Rand aus einer anderen Quelle prüft die Höhe der richtigen nicht (Wechsel A → C). Gemessen (A → X → A,

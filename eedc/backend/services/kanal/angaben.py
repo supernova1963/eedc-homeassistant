@@ -61,9 +61,13 @@ def _stand_kurzzeit(ha_svc, eid: str, art: str, jetzt: datetime) -> Optional[flo
         meta = ha_svc.get_metadata(conn, eid)
     if meta is None:
         return None
-    stand = ha_svc.get_value_at(eid, jetzt, 60, True, True)
     faktor = 1.0 if art == ART_STAND else _mengen_faktor(meta)
-    return None if stand is None or faktor is None else round(float(stand) * faktor, 3)
+    if faktor is None:
+        return None
+    # U3-K (Nachmessung Lab-K LK-B5): erst umrechnen, dann runden — ein MWh-Stand auf drei Stellen gerundet verlor 0,167 kWh.
+    stand = (ha_svc.get_value_at(eid, jetzt, 60, True, True) if faktor == 1.0
+             else ha_svc.get_value_at(eid, jetzt, 60, True, True, roh=True))
+    return None if stand is None else round(float(stand) * faktor, 3)
 
 
 async def zaehlerstand_ha_jetzt(ha_svc, kanal_id: int, art: str, eid: str) -> Optional[float]:

@@ -80,6 +80,10 @@ class ZuordnungWechsel(Base):
     ansatz: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     stand_alt_ende: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     stand_neu_null: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    #: Sensorwechsel U3-K (Nachmessung B5): wann eedc die Zeile eingetragen hat (Ansetzen, «Zähler getauscht», «Grund nachtragen»,
+    #: Korrektur — den Grund trägt eine Zeile ab ihrer Anlage; ein Nachtrag legt eine neue an). ``monatswert_ueberholt`` nennt nur
+    #: Monate bis zu diesem Monat; ``NULL`` an einer Bestandszeile = unbekannt (dann wie vorher bis zum letzten Monat).
+    eingetragen_ts: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.now)
 
     __table_args__ = (
         Index("ix_zuordnung_wechsel_anlage_key", "anlage_id", "sensor_key", "ab_ts"),

@@ -149,6 +149,9 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "(Füllbarkeit) — keine Menge"),
     "services/zuordnung_wechsel/stueck.py::_rand_ab": (
         "—", STAND, True, "Korrektur über ein Stück (4b-1): der Stand am Rückgang, verglichen mit HAs Rohsumme — keine Menge"),
+    "services/zuordnung_wechsel/stueck.py::_volle_stunde": (
+        "—", STAND, True, "Korrektur über ein Stück (U3-K, Nachmessung Lab-K LK-B2): der Stand zur vollen Stunde neben einem "
+        "Unterstunden-Rand, den HAs Kurzzeitstatistik nicht mehr führt, verglichen mit HAs Stundenzeile — keine Menge"),
     "services/zuordnung_wechsel/zeitpunkt.py::staende_um": (
         "—", STAND, True, "Sensorwechsel U1: nur die Zeitpunkte des letzten Stands vor und des ersten Stands nach einer Lücke "
         "(Frage «Höhenwechsel dazwischen?») — kein Wert, keine Menge"),

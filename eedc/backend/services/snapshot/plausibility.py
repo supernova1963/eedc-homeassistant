@@ -56,6 +56,25 @@ def schwelle_pv_einspeisung_stunde_kwh(
     return float(kwp) * SPIKE_FAKTOR_STUNDE * n
 
 
+async def schwelle_der_anlage_stunde_kwh(db, anlage_id: int) -> Optional[float]:
+    """``schwelle_pv_einspeisung_stunde_kwh`` für die heutige Anlagenleistung (``anlagen_kwp`` wie Aggregator und Archiv-Nachzug,
+    mit Balkonkraftwerk, Referenzwert ``Anlage.leistung_kwp``) — für die Grenze «mehr, als eine Anlage in einer Stunde leisten
+    kann» der Befunde «Zählerstand springt» und der Rohstand-Prüfung (Sensorwechsel U3-K, B2 (b)/B7). ``None`` ohne kWp."""
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from backend.core.berechnungen.anlagen_kwp import anlagen_kwp
+    from backend.models.anlage import Anlage
+    from backend.models.investition import Investition
+
+    anlage = await db.get(Anlage, anlage_id)
+    if anlage is None:
+        return None
+    invs = list((await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))).scalars().all())
+    return schwelle_pv_einspeisung_stunde_kwh(anlagen_kwp(invs, date.today(), mit_bkw=True, referenzwert=anlage.leistung_kwp))
+
+
 def cap_pv_einspeisung_stunde(
     wert_kwh: Optional[float],
     schwelle_kwh: Optional[float],

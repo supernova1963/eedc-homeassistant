@@ -13,6 +13,13 @@ getauscht» beginnt an der Stunde eine Quellzeile und der Befund verschwindet. F
 für jede Zeit). Ausgenommen: die Rückkehr-Stunden «kurz 0 und zurück» (``ha_sprung.rueckkehr_stunden``) und die Schritte eines
 versetzten Abschnitts, den ``zaehler_versatz`` nennt (G7: Sprung und Rückgang gehören dort zusammen).
 
+**Korrekturrunde U3-K (Nachmessung B2–B4):** der Arm «Sprung» meldet nur bei reifem Bezug oder über der Grenze «mehr, als eine
+Anlage in einer Stunde leisten kann» (``standsprung.grenze_der_einheit``, nur kWh) — die erste Ladung einer Wallbox nach Wochen
+Standby ist kein Befund; «kurz tiefer und zurück» gilt nur bis 10 % (tiefer zählt HAs Regel einen Neubeginn, die Prüfung nennt
+beide Stunden); der vierte Arm «Zwischenstand» nennt eine Stunde, in der das Gerät kurz 0 meldet oder ein anderes Gerät kurz
+seinen Stand sendet (die Summe wächst um mindestens 0,9 × den Stand davor, der Stand nicht) — «Zähler getauscht» nimmt dort die
+Spanne der Höhenwechsel (``rohstand_rand.sprung_der_stunde``).
+
 **Eine Zeile je Stunde** (W-1: diese Datei ist die Erzeuger-Stelle), Schwere Warnung (E6), Sprung «Zähler getauscht» in die
 Datenquellen (``ziel_datenquelle_schluessel(…, getauscht=<Zeit>)``): der Dialog «Zähler getauscht (gleiche Quelle)» öffnet mit
 «Getauscht am» auf dem ersten Rohstand nach dem Höhenwechsel (``rohstand_rand.sprung_der_stunde``; ohne Rohstände der Beginn der
@@ -25,13 +32,22 @@ Prüfung nennt), ``versatz.py`` (versetzter Abschnitt).
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy import text
 
-from backend.core.berechnungen.zaehlerstand_sprung import NEUBEGINN, RUECKGANG, Standsprung, finde_standspruenge
+from backend.core.berechnungen.zaehlerstand_sprung import (
+    NEUBEGINN,
+    RUECKGANG,
+    ZWISCHENSTAND,
+    ZWISCHEN_ANTEIL,
+    Standsprung,
+    finde_standspruenge,
+)
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.datenquelle.ha_sprung import rueckkehr_stunden
+from backend.services.daten_checker.datenquelle.standsprung import grenze_der_einheit
 from backend.services.daten_checker.kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
 #: So viele Stunden nennt die Prüfung je Anlage einzeln; darüber hinaus nennt die letzte Zeile die Zahl der weiteren.
@@ -63,20 +79,25 @@ class Fund:
 
 
 def _kurz_tiefer(z: list[tuple]) -> set[int]:
-    """Die Stunden des Musters «kurz tiefer und zurück»: der Stand fällt in einer Zeile und erreicht in der nächsten wieder
-    mindestens den Stand davor — beide Stunden (der Tag zählt den Fall und die Rückkehr, in Summe nichts; ``zaehler_ruecksprung``
-    nennt das Zurückfallen wie bisher). Wie «kurz 0 und zurück» (``ha_sprung.rueckkehr_stunden``) kein Wechsel der Höhe."""
+    """Die Stunden des Musters «kurz tiefer und zurück»: der Stand fällt in einer Zeile um weniger als 10 % und erreicht in der
+    nächsten wieder mindestens den Stand davor — beide Stunden (HAs Summenregel zählt einen solchen Fall als negative Menge und
+    die Rückkehr als Zuwachs, in Summe nichts; ``zaehler_ruecksprung`` nennt das Zurückfallen wie bisher). Wie «kurz 0 und
+    zurück» (``ha_sprung.rueckkehr_stunden``) kein Wechsel der Höhe. **U3-K (B3):** fällt der Stand tiefer (unter
+    ``ZWISCHEN_ANTEIL`` × vorher), zählt HAs Regel den Fall als Neubeginn mit dem ganzen tiefen Stand und die Rückkehr als
+    Sprung — dann ist es keine Ausnahme, die Prüfung nennt beide Stunden."""
     aus: set[int] = set()
     for i in range(1, len(z) - 1):
         vorher, tief, danach = z[i - 1][1], z[i][1], z[i + 1][1]
-        if vorher is not None and tief is not None and danach is not None and tief < vorher and danach >= vorher:
+        if (vorher is not None and tief is not None and danach is not None and ZWISCHEN_ANTEIL * vorher <= tief < vorher
+                and danach >= vorher):
             aus |= {int(z[i][0]), int(z[i + 1][0])}
     return aus
 
 
-def finde(zeilen, ausgenommen: dict[str, set[int]] | None = None) -> list[Fund]:
+def finde(zeilen, ausgenommen: dict[str, set[int]] | None = None, schwelle_anlage: Optional[float] = None) -> list[Fund]:
     """Reine Funktion über die Zeilen der Abfrage: je Sprung ein Fund in Zeitfolge. Am Stand-Kanal zählt Δ ``state`` (die
-    Zeile trägt keine Summe; der Arm «Rückgang» bleibt dort aus — einen fallenden Stand nennt ``zaehlerstand_reihe_bruch``)."""
+    Zeile trägt keine Summe; die Arme «Rückgang» und «Zwischenstand» bleiben dort aus — einen fallenden Stand nennt
+    ``zaehlerstand_reihe_bruch``). ``schwelle_anlage``: 1,5 × kWp für die Grenze B2 (b) (U3-K)."""
     abschnitte: dict[tuple, list[tuple]] = {}
     for _kid, key, art, einheit, ab, sid, ts, st, su in zeilen:
         abschnitte.setdefault((key, art, einheit or "", sid, ab), []).append((int(ts), st, st if art == "stand" else su))
@@ -84,7 +105,8 @@ def finde(zeilen, ausgenommen: dict[str, set[int]] | None = None) -> list[Fund]:
     for (key, art, einheit, sid, _ab), z in abschnitte.items():
         aus = set(rueckkehr_stunden(z)) | _kurz_tiefer(z) | set((ausgenommen or {}).get(key, ()))
         stand = art == "stand"
-        for sp in finde_standspruenge(z, stand=stand, ausgenommen=aus, rueckgang=not stand):
+        for sp in finde_standspruenge(z, stand=stand, ausgenommen=aus, rueckgang=not stand, zwischenstand=not stand,
+                                      grenze=grenze_der_einheit(einheit, schwelle_anlage)):
             funde.append(Fund(key, stand, einheit, sid, sp))
     funde.sort(key=lambda f: (f.sprung.start_ts, f.key))
     return funde
@@ -98,6 +120,14 @@ SATZ_NEUBEGINN = ("Der Zählerstand beginnt neu bei {nachher} statt bei 0 (vorhe
                   "Stand als Menge dieser Stunde ({menge} {einheit}) — in Tag, Monat und Jahr.")
 SATZ_RUECKGANG = ("Der Zählerstand fällt von {vorher} auf {nachher} {einheit}. eedc zählt den Rückgang als negative Menge dieser "
                   "Stunde ({menge} {einheit}) — in Tag, Monat und Jahr.")
+#: U3-K (B4): Arm «Zwischenstand» — innerhalb der Stunde kurz eine andere Höhe, am Stundenende wieder der alte Zähler.
+SATZ_ZWISCHENSTAND = ("In dieser Stunde zeigt der Zählerstand kurz eine andere Höhe (etwa 0 oder den Stand eines anderen Geräts) "
+                      "und steht danach wieder bei {nachher} {einheit} (vorher {vorher} {einheit}). eedc zählt dabei den ganzen "
+                      "Stand als Menge dieser Stunde ({menge} {einheit}) — in Tag, Monat und Jahr.")
+SATZ_WARUM_ZWISCHENSTAND = ("So sieht es aus, wenn das Gerät kurz 0 meldet oder ein anderes Gerät kurz auf demselben Topic "
+                            "sendet. Trag es ein: „Zähler getauscht“ öffnet in den Datenquellen den Dialog „Zähler getauscht "
+                            "(gleiche Quelle)“ mit der Zeit, zu der der Stand zurückkehrt. Danach zählt die Stunde nur, was der "
+                            "Zähler davor und danach gezählt hat; die Minuten mit der anderen Höhe zählen nicht.")
 SATZ_WARUM = ("So sieht es aus, wenn der Zähler oder das Gerät getauscht wurde oder ein anderes Gerät auf demselben Topic "
               "sendet. Trag den Tausch ein: „Zähler getauscht“ öffnet in den Datenquellen den Dialog „Zähler getauscht (gleiche "
               "Quelle)“ mit der Zeit des Sprungs. Danach zählt die Stunde nur, was der alte Zähler bis zu seinem letzten und der "
@@ -110,7 +140,8 @@ SATZ_WEITERE = ("Dazu {n} weitere Stunde(n) mit einem Sprung — sie erscheinen 
 
 
 def _satz(f: Fund) -> str:
-    vorlage = {NEUBEGINN: SATZ_NEUBEGINN, RUECKGANG: SATZ_RUECKGANG}.get(f.sprung.art, SATZ_SPRUNG)
+    vorlage = {NEUBEGINN: SATZ_NEUBEGINN, RUECKGANG: SATZ_RUECKGANG,
+               ZWISCHENSTAND: SATZ_ZWISCHENSTAND}.get(f.sprung.art, SATZ_SPRUNG)
     return vorlage.format(vorher=fmt_zahl(f.sprung.stand_vorher, 1), nachher=fmt_zahl(f.sprung.stand_nachher, 1),
                           menge=fmt_zahl(f.sprung.menge, 1), einheit=f.einheit or "kWh")
 
@@ -128,7 +159,7 @@ class MqttZaehlerstandSpringtChecks:
         out = []
         for i, f in enumerate(funde[:BEISPIELE]):
             zeit = await zeit_des_sprungs(self.db, anlage.id, f)
-            teile = [_satz(f), SATZ_WARUM, SATZ_LIVE]
+            teile = [_satz(f), SATZ_WARUM_ZWISCHENSTAND if f.sprung.art == ZWISCHENSTAND else SATZ_WARUM, SATZ_LIVE]
             if i == BEISPIELE - 1 and len(funde) > BEISPIELE:
                 teile.append(SATZ_WEITERE.format(n=len(funde) - BEISPIELE))
             out.append(_zeile(namen.get(f.key, f.key), f, zeit, " ".join(teile)))
@@ -158,11 +189,12 @@ async def mqtt_spruenge(db, anlage_id: int) -> list[Fund]:
     """Die Funde der Anlage (eine Abfrage über alle MQTT-Abschnitte), ohne die Schritte versetzter Abschnitte (G7) — auch
     für ``zaehler_ruecksprung`` (ein Rückgang, den diese Prüfung nennt, steht dort nicht noch einmal)."""
     from backend.services.daten_checker.datenquelle.versatz_mqtt import mqtt_versatz_stunden
+    from backend.services.snapshot.plausibility import schwelle_der_anlage_stunde_kwh
 
     zeilen = (await db.execute(text(_SQL), {"a": anlage_id})).all()
     if not zeilen:
         return []
-    return finde(zeilen, await mqtt_versatz_stunden(db, anlage_id))
+    return finde(zeilen, await mqtt_versatz_stunden(db, anlage_id), await schwelle_der_anlage_stunde_kwh(db, anlage_id))
 
 
 async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
@@ -184,7 +216,7 @@ async def zeit_des_sprungs(db, anlage_id: int, f: Fund) -> datetime:
     from backend.services.zuordnung_wechsel.rohstand import sprung_um
 
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
-    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59))
+    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
     return paar[1][0].replace(microsecond=0) if art == "sprung" and paar is not None else stunde
 
 

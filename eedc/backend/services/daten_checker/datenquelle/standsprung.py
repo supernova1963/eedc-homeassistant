@@ -11,7 +11,9 @@ das keine Prüfung: ``ha_zaehlersprung`` kennt nur «kurz 0 und zurück», ``ha_
 Mengen- oder Stand-Kanals mit Familie Spiegel — ein Zeilenpaar über eine Wechselstelle (zwei Statistiken) ist nie ein Sprung.
 Gelesen wird der ganze Spiegel (wie ``ha_rueckgang``): ein Sprung steht in jedem Zeitraum, der ihn enthält, auch in einem alten
 Monat, den «Aus HA laden» oder der Sammelimport holt. Die Rückkehr-Stunden des Musters «kurz 0 und zurück» überlässt die Prüfung
-``ha_zaehlersprung`` (``ha_sprung.rueckkehr_stunden``).
+``ha_zaehlersprung`` (``ha_sprung.rueckkehr_stunden``). **U3-K (B2):** der Arm «Sprung» meldet nur bei reifem Bezug oder über der
+Grenze «mehr, als eine Anlage in einer Stunde leisten kann» (``grenze_der_einheit``, nur kWh) — die erste gewöhnliche Stunde
+nach Wochen mit Standby ist kein Befund.
 
 **Zwei Lagen, eine Zeile:**
 
@@ -31,9 +33,11 @@ liest ``sum`` und ``state`` wörtlich.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
+
 from sqlalchemy import select, text
 
-from backend.core.berechnungen.zaehlerstand_sprung import NEUBEGINN, Standsprung, finde_standspruenge
+from backend.core.berechnungen.zaehlerstand_sprung import NEUBEGINN, Standsprung, finde_standspruenge, grenze_unmoeglich
 from backend.core.zahlenformat import fmt_zahl
 from backend.models.anlage import Anlage
 from backend.services.daten_checker.datenquelle.ha_sprung import rueckkehr_stunden
@@ -83,12 +87,20 @@ def _abschnitte(zeilen) -> list[tuple[tuple, list[tuple]]]:
     return out
 
 
-def finde(zeilen) -> list[_Fund]:
-    """Reine Funktion über die Zeilen der Abfrage: je Sprung ein Fund, größte Menge zuerst."""
+def grenze_der_einheit(einheit: Optional[str], schwelle_anlage: Optional[float]) -> Optional[float]:
+    """B2 (b) (U3-K): die Grenze «mehr, als eine Anlage in einer Stunde leisten kann» — nur an kWh-Feldern; ein Stand-Zähler in
+    einer anderen Einheit (m³, l, km) hat keine."""
+    return grenze_unmoeglich(schwelle_anlage) if einheit == "kWh" else None
+
+
+def finde(zeilen, schwelle_anlage: Optional[float] = None) -> list[_Fund]:
+    """Reine Funktion über die Zeilen der Abfrage: je Sprung ein Fund, größte Menge zuerst. ``schwelle_anlage``: 1,5 × kWp der
+    Anlage (``snapshot/plausibility``), für die Grenze B2 (b)."""
     funde: list[_Fund] = []
     for (key, art, einheit, sid), z in _abschnitte(zeilen):
         stand = art == "stand"
-        for sp in finde_standspruenge(z, stand=stand, ausgenommen=rueckkehr_stunden(z)):
+        for sp in finde_standspruenge(z, stand=stand, ausgenommen=rueckkehr_stunden(z),
+                                      grenze=grenze_der_einheit(einheit, schwelle_anlage)):
             funde.append(_Fund(key, stand, einheit, sid, sp))
     funde.sort(key=lambda f: (-f.sprung.menge, f.sprung.start_ts))
     return funde
@@ -134,7 +146,10 @@ class ZaehlerstandSpringtChecks:
     async def _check_ha_zaehlerstand_springt(self, anlage: Anlage) -> list[CheckErgebnis]:
         """Benennt Stunden, in denen HAs Statistik einen Zählerstand-Sprung als Menge zählt — Feld, Sensor, Stunde, Menge —
         mit dem Weg in Home Assistant. Ohne Spiegel (Standalone) kein Befund."""
-        funde = finde((await self.db.execute(text(_SQL), {"a": anlage.id})).all())
+        from backend.services.snapshot.plausibility import schwelle_der_anlage_stunde_kwh
+
+        zeilen = (await self.db.execute(text(_SQL), {"a": anlage.id})).all()
+        funde = finde(zeilen, await schwelle_der_anlage_stunde_kwh(self.db, anlage.id)) if zeilen else []
         if not funde:
             return []
         namen = await self._standsprung_namen(anlage.id, {f.key for f in funde})
@@ -174,5 +189,5 @@ class ZaehlerstandSpringtChecks:
         return {k: feld_label(k, invs) for k in keys}
 
 
-__all__ = ["BEISPIELE", "ZaehlerstandSpringtChecks", "finde"]
+__all__ = ["BEISPIELE", "ZaehlerstandSpringtChecks", "finde", "grenze_der_einheit"]
 

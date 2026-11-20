@@ -1455,9 +1455,12 @@ class HAStatisticsService:
         toleranz_minuten: int = 120,
         short_term: bool = False,
         als_stand: bool = False,
+        *,
+        roh: bool = False,
     ) -> Optional[float]:
         """
-        Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
+        Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt. ``roh`` (Sensorwechsel U3-K, LK-B5): ein Stand
+        (``als_stand``) ungerundet — für einen Aufrufer, der ihn danach umrechnet (MWh → kWh) und erst dann rundet.
 
         HA-Statistics-Konvention: Eine Zeile bei `start_ts=X` enthält state und
         sum AM ENDE der Periode (X+period_length). Beispiel für hourly:
@@ -1536,7 +1539,7 @@ class HAStatisticsService:
                     return None
                 naechste = min(kandidaten, key=lambda z: abs(z["start_ts"] - ts_target))
                 row = (naechste["sum"], naechste["state"])
-                return self._value_at_wert(row, meta, als_stand=als_stand)
+                return self._value_at_wert(row, meta, als_stand=als_stand, roh=roh)
 
             # Filter UND Sortierung auf dem rohen `start_ts`: beides lief vorher
             # über `FROM_UNIXTIME`/`datetime(...)` und schloss damit den Index
@@ -1565,10 +1568,10 @@ class HAStatisticsService:
             row = result.fetchone()
             if not row:
                 return None
-            return self._value_at_wert(row, meta, als_stand=als_stand)
+            return self._value_at_wert(row, meta, als_stand=als_stand, roh=roh)
 
     def _value_at_wert(
-        self, row, meta: SensorMeta, als_stand: bool = False
+        self, row, meta: SensorMeta, als_stand: bool = False, roh: bool = False
     ) -> Optional[float]:
         """Wählt aus `(sum, state)` den gültigen Wert.
 
@@ -1592,7 +1595,7 @@ class HAStatisticsService:
             # verwerfen: ohne `has_sum` verlangt er eine Einheit aus
             # `_ENERGY_UNIT_TO_KWH`, und „m³" steht dort nicht.
             wert = row[1]
-            return None if wert is None else round(wert, 3)
+            return None if wert is None else (float(wert) if roh else round(wert, 3))
         # Bei kumulativen Energiezählern (has_sum=True) ausschließlich
         # `sum` verwenden — niemals auf `state` zurückfallen.
         # `sum` ist HAs reset-bereinigte Lifetime-Summe; `state` kann

@@ -24,6 +24,11 @@ from backend.core.berechnungen.zaehlerstand_sprung import NEUBEGINN, SPRUNG, fin
 
 T0 = datetime(2026, 10, 8, 0)
 TAUSCH = datetime(2026, 11, 19, 10)
+#: U3-K (B2): der Arm «Sprung» meldet am jungen Abschnitt (unter einem Jahr) nur über der Grenze «mehr, als eine Anlage in einer
+#: Stunde leisten kann» — die Kern-Proben eines kWh-Felds geben sie mit, wie der Erzeuger (ohne kWp: 100 kWh).
+G = zs.MENGE_UNMOEGLICH_MIN
+#: … oder mit reifem Bezug: ein Abschnitt, der über ein Jahr zurückreicht.
+JAHR = TAUSCH - timedelta(days=400)
 
 
 def _ts(dt: datetime) -> int:
@@ -62,7 +67,7 @@ def _wert_angepasst(z, wo: datetime, minus: float):
 
 def test_lab_plus_2001_springt_nach_oben():
     z = _sprung(_reihe(1.8), TAUSCH, 2001.0)
-    (f,) = finde_standspruenge(z)
+    (f,) = finde_standspruenge(z, grenze=G)
     assert (f.start_ts, f.art) == (_ts(TAUSCH), SPRUNG)
     assert f.menge == pytest.approx(2002.8)
     assert f.mass == pytest.approx(2002.8 / (1.8 * 24), rel=1e-6)          # ≈ 46
@@ -81,13 +86,13 @@ def test_lab_neubeginn_300_beginnt_nicht_bei_0():
 @pytest.mark.parametrize("tag_kwh,soll", [(160.0, 12.5), (24.0, 83.4), (6.85, 292.1)])
 def test_rechenweg_f12_lab_masse(tag_kwh, soll):
     z = _sprung(_reihe(tag_kwh / 24), TAUSCH, 2001.0 - tag_kwh / 24)
-    (f,) = finde_standspruenge(z)
+    (f,) = finde_standspruenge(z, grenze=G)
     assert f.mass == pytest.approx(soll, abs=0.1)
 
 
 def test_nach_wert_anpassen_kein_befund():
     z = _wert_angepasst(_sprung(_reihe(1.8), TAUSCH, 2001.0), TAUSCH, 2001.0)
-    assert finde_standspruenge(z) == []
+    assert finde_standspruenge(z, grenze=G) == []
     z = _wert_angepasst(_reihe(2.04, start=5000.0, stand_ab={TAUSCH: 300.0}), TAUSCH, 300.5)
     assert finde_standspruenge(z) == []
 
@@ -103,37 +108,41 @@ def test_schwelle_je_arm(arm, schwelle):
         menge = schwelle * faktor * tag
         z = (_sprung(_reihe(1.0), TAUSCH, menge - 1.0) if arm == SPRUNG
              else _reihe(1.0, start=5000.0, stand_ab={TAUSCH: menge - 1.0}))
-        assert [f.art for f in finde_standspruenge(z)] == soll, (faktor, menge)
+        assert [f.art for f in finde_standspruenge(z, grenze=G)] == soll, (faktor, menge)
 
 
 def test_sprung_form_unter_der_sprung_schwelle_ist_kein_neubeginn():
     """Ein Sprung nach oben mit dem Maß 5 (über der Schwelle des Neubeginns, unter der des Sprungs) bleibt still — nur ein
     fallender Stand macht die niedrigere Schwelle gültig."""
-    assert finde_standspruenge(_sprung(_reihe(1.0), TAUSCH, 5 * 24.0)) == []
+    assert finde_standspruenge(_sprung(_reihe(1.0), TAUSCH, 5 * 24.0), grenze=G) == []
 
 
 def test_ungleiche_zuwaechse_sind_kein_sprung():
     """Δ sum ≠ Δ state (etwa ein Zähler, dessen Summe HA anders führt): kein Sprung, auch bei großer Menge."""
     z = _sprung(_reihe(1.8), TAUSCH, 2001.0)
     z = [(ts, st - (500.0 if ts >= _ts(TAUSCH) else 0.0), su) for ts, st, su in z]
-    assert finde_standspruenge(z) == []
+    assert finde_standspruenge(z, grenze=G) == []
 
 
 # ─── Kern: still bleiben ───────────────────────────────────────────────────────────────────────────────────────────
 
 
-def test_junger_zaehler_ohne_bezugstage_still():
+def test_junger_zaehler_meldet_nur_ueber_der_grenze():
+    """U3-K (B2, Bauplan Nr. 158): am jungen Abschnitt meldet der Arm «Sprung» nur über der Grenze (b) — +2 001 ja, ohne Grenze
+    (Stand-Zähler in m³) oder mit +50 nein; ohne einen Tag mit Zuwachs im Bezug nie."""
     jung = [z for z in _sprung(_reihe(1.8), TAUSCH, 2001.0) if z[0] >= _ts(TAUSCH - timedelta(days=10))]
+    assert [f.art for f in finde_standspruenge(jung, grenze=G)] == [SPRUNG]
     assert finde_standspruenge(jung) == []
-    # 14 Tage mit Zuwachs genügen (Grenze).
-    ab14 = [z for z in _sprung(_reihe(1.8), TAUSCH, 2001.0) if z[0] >= _ts(TAUSCH - timedelta(days=14, hours=10))]
-    assert [f.art for f in finde_standspruenge(ab14)] == [SPRUNG]
+    klein = [z for z in _sprung(_reihe(1.8), TAUSCH, 50.0) if z[0] >= _ts(TAUSCH - timedelta(days=10))]
+    assert finde_standspruenge(klein, grenze=G) == []
+    ohne_bezug = [z for z in _sprung(_reihe(1.8), TAUSCH, 2001.0) if z[0] >= _ts(TAUSCH - timedelta(hours=3))]
+    assert finde_standspruenge(ohne_bezug, grenze=G) == []
 
 
 def test_wallbox_11_kwh_nach_30_tagen_ruhe_still():
     """30 Tage lang täglich 1 kWh um 18 Uhr, dann 30 Tage Ruhe, dann 11 kWh in einer Stunde: das Maß teilt sich durch die
     Ruhe (11 / (1 × 30) ≈ 0,4). Gegenprobe: dieselbe Stunde ohne Ruhe (ein Rinnsal hält den Zähler wach) wäre ein Fund."""
-    ab = TAUSCH - timedelta(days=60)
+    ab = JAHR                                   # U3-K: ein Jahr Bezug, damit die Gegenprobe ohne Grenze meldet (reif)
 
     def raten(rinnsal):
         def r(t):
@@ -184,10 +193,10 @@ def test_waermepumpe_im_winter_und_pv_nach_schnee_still():
 def test_stand_zaehler_zaehlt_den_stand():
     """Stand-Zähler (Gas): eedc zählt Δ ``state`` — ein Sprung nach oben ist ein Fund, ein fallender Stand nie (dort zählt eedc
     keinen Zuwachs; den Bruch nennt ``zaehlerstand_reihe_bruch``)."""
-    z = _sprung(_reihe(0.12), TAUSCH, 2001.0)
+    z = _sprung(_reihe(0.12, ab=JAHR), TAUSCH, 2001.0)            # U3-K: Stand-Zähler ohne (b) — reifer Bezug
     (f,) = finde_standspruenge(z, stand=True)
     assert f.art == SPRUNG and f.menge == pytest.approx(2001.12)
-    assert finde_standspruenge(_reihe(0.12, start=5000.0, stand_ab={TAUSCH: 300.0}), stand=True) == []
+    assert finde_standspruenge(_reihe(0.12, start=5000.0, stand_ab={TAUSCH: 300.0}, ab=JAHR), stand=True) == []
 
 
 def test_ausgenommen_bleibt_still():
@@ -273,7 +282,8 @@ async def test_befund_mengen_zaehler_nennt_feld_sensor_stunde_menge_und_aktion(d
 
 
 async def test_befund_stand_zaehler_auskunft_mit_den_wegen_nach_e2(db):
-    a = await _anlage_mit(db, [("sensor.gas", _sprung(_reihe(0.12), TAUSCH, 2001.0))], key="inv:9:zaehlerstand",
+    jahr = list({ts: (ts, st, su) for ts, st, su in _sprung(_reihe(0.12, ab=JAHR), TAUSCH, 2001.0)}.values())  # Frühjahr: 02:00 = 03:00
+    a = await _anlage_mit(db, [("sensor.gas", jahr)], key="inv:9:zaehlerstand",
                           art="stand", einheit="m³")
     (e,) = await _pruefe(db, a)
     assert (e.schwere.value if hasattr(e.schwere, "value") else e.schwere) == "info"

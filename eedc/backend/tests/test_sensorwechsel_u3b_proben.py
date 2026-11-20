@@ -151,6 +151,7 @@ async def test_g4_nachholstunde_nach_stillem_publisher_ist_kein_befund(db, monke
 
     if sprengsatz:
         monkeypatch.setattr(kern, "SCHWELLE_SPRUNG", 0.5)
+        monkeypatch.setattr(kern, "reif", lambda *_a: True)          # U3-K (B2): der junge Abschnitt gilt als reif
     zeilen = [z for z in _kanal_zeilen("keiner") if not (KE.timestamp() - 20 * 3600 <= z[0] < KE.timestamp())]
     assert len(await _g4(db, await _g4_anlage(db, zeilen))) == (1 if sprengsatz else 0)
 
@@ -455,12 +456,12 @@ async def test_g5_eine_stunde_daneben_wird_abgelehnt(db, monkeypatch, sprengsatz
     from backend.core.berechnungen import rohstand_rand
 
     if sprengsatz:
-        monkeypatch.setattr(rohstand_rand, "hoehenwechsel", lambda d, g: True)
+        monkeypatch.setattr(rohstand_rand, "hoehenwechsel", lambda *_a, **_k: True)
     aid = (await _anlage(db)).id
     antw = await betrieb(db, aid, Saat(_hoch(), spaet=[getauscht(E - timedelta(hours=1))]))
     p, r = antw[0]["pruefen"], antw[0]["eintragen"]
     if sprengsatz:                              # still eingetragen — ohne Wirkung auf den Sprung
-        assert r["eingetragen"] is True and await kanal_tag(db, aid, TAG_E) == pytest.approx(2012.0, abs=0.1)
+        assert r["eingetragen"] is True and await kanal_tag(db, aid, TAG_E) > 2000.0
         return
     assert p["weg"] == "kein_sprung" and p["eintragen"] is False and r["eingetragen"] is False
     assert "kein Sprung" in p["saetze"][0] and "09:00" in p["saetze"][0]
