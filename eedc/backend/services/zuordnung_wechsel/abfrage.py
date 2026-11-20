@@ -258,10 +258,15 @@ def antwort(f: Optional[Frage], label: Optional[str] = None) -> dict[str, Any]:
     """Die Antwort der Prüf-Route je Schlüssel (Bauplan B-2: ``grund_erforderlich, erster_wert, tage, stand_alt, stand_neu``)."""
     if f is None:
         return {"grund_erforderlich": False, "erster_wert": None, "tage": 0, "stand_alt": None, "stand_neu": None,
-                "sensor_key": None, "label": label, "verzeichnet": False, "vorgabe_falsch_seit": None, "bleiben": None}
+                "sensor_key": None, "label": label, "verzeichnet": False, "vorgabe_falsch_seit": None, "bleiben": None,
+                "bleiben_satz": None}
+    from backend.services.zuordnung_wechsel.rohstand import bleiben_satz
+
     return {"grund_erforderlich": f.grund_erforderlich, "erster_wert": _iso(f.erster_wert), "tage": f.tage,
             "stand_alt": f.stand_alt, "stand_neu": f.stand_neu, "sensor_key": f.sensor_key, "label": label,
-            "verzeichnet": True, "vorgabe_falsch_seit": _iso(f.vorgabe_falsch_seit), "bleiben": f.bleiben}
+            "verzeichnet": True, "vorgabe_falsch_seit": _iso(f.vorgabe_falsch_seit), "bleiben": f.bleiben,
+            # U3 b (G5, E5): was «bleiben» bei MQTT bzw. zwischen Home Assistant und MQTT tut.
+            "bleiben_satz": None if f.bleiben else bleiben_satz(f.vorher, f.nachher, f.sensor_key)}
 
 
 # ── Korrektur über den Dienst aus Sitzung 3a ─────────────────────────────────────────────────────────────────

@@ -56,6 +56,8 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   zaehler_zeit_verworfen: 'Zählerstände – Zeit verworfen',
   // Sensorwechsel U3 a (G2): ein gespeicherter Monatswert passt nach Wechsel oder Korrektur nicht mehr zur Quelle.
   monatswert_ueberholt: 'Zählerstände – Gespeicherter Monatswert passt nicht mehr',
+  // Sensorwechsel U3 b (G4): der Zählerstand einer MQTT-Reihe springt — «Zähler getauscht» öffnet den Dialog mit der Zeit.
+  mqtt_zaehlerstand_springt: 'Zählerstände – Zählerstand springt (MQTT)',
   sensor_mapping_lts: 'Datenquellen – HA-Statistics',
   sensor_mapping_einheit: 'Datenquellen – Einheiten (Leistung/Energie)',
   // P-433-3 S1: Vorlauf/Rücklauf/Zusatzheizung ohne `state_class: measurement` — Live ja, Tagesverlauf nein.
@@ -120,6 +122,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'ha_zaehlersprung',
   'ha_zaehler_rueckgang',
   'ha_zaehlerstand_springt',
+  'mqtt_zaehlerstand_springt',
   'zaehler_versatz',
   'zuordnung_grund_fehlt',
   'zaehler_zeit_verworfen',
@@ -177,6 +180,7 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   zuordnung_grund_fehlt: '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt',
   zaehler_zeit_verworfen: '48i-zaehlerstaende--zeit-verworfen',
   monatswert_ueberholt: '48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr',
+  mqtt_zaehlerstand_springt: '48k-zaehlerstaende--zaehlerstand-springt-mqtt',
   sensor_mapping_lts: '49-sensor-mapping--ha-statistics',
   energieprofil_plausibilitaet: '47-energieprofil--plausibilitaet',
   provenance_conflict: '416-quellen-konflikte',

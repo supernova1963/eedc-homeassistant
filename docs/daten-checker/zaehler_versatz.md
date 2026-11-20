@@ -30,6 +30,16 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
+**Bei einem Zähler über MQTT** (der Abschnitt liegt in den Zählerständen, die der Publisher gesendet hat — etwa, weil eine
+Zeit lang ein anderes Gerät auf demselben Topic gesendet hat): eedc zählt den Sprung und den Rückgang als Menge der Stunde,
+die Tageswerte an beiden Tagen sind falsch. Der Dialog bietet in Schritt 2 beide Antworten:
+- **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe
+  Gerät)"** — eedc trägt am Sprung und am Rückgang je einen Zählertausch ein; die Werte des Abschnitts zählen, die zwei
+  Sprünge nicht. Das passt, wenn die Stände des Abschnitts echte Werte desselben Zählers sind (getauscht und zurückgetauscht).
+- **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** — eedc verwirft die Zählerstände des Abschnitts
+  und rechnet über die leere Zeit wie über jede Zählerlücke: die Menge des Abschnitts steht an dem Tag, an dem er endet; im
+  Monat fehlt nichts.
+
 Ist der Abschnitt der **Rest einer früheren Korrektur** — die Stände des anderen Sensors begannen schon einige Stunden vor
 dem «Falsch seit» jener Korrektur, und ihr Ende liegt am Ende der damals verworfenen Zeit —, nennt der Befund diese Zeit.
 «Grund nachtragen» verwirft dann auch den Rest; die Vorschau sagt, was danach gilt.
@@ -54,4 +64,5 @@ Was dieser Befund nicht erkennt oder nicht abdeckt:
 - Die Netzladung des Speichers liest eedc für jeden Monat, für den keine Monatswerte des Speichers gespeichert sind, aus
   den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
 - Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
-  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch.
+  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch. Geprüft wird
+  eine MQTT-Reihe, wenn eedc für das Feld eine eigene Summe aus den MQTT-Ständen führt.

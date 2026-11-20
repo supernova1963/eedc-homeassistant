@@ -75,6 +75,9 @@ class CheckKategorie(str, Enum):
     # berührt, weicht um mindestens 1 kWh von dem ab, was die Quelle heute für den Monat ergibt. Erzeuger
     # `datenquelle/monatswert.py`, Vergleich `core/berechnungen/monatswert_vergleich.py`.
     MONATSWERT_UEBERHOLT = "monatswert_ueberholt"
+    # Sensorwechsel U3 b (Rechenweg G4): der Zählerstand einer MQTT-Reihe springt (Sprung, Neubeginn nicht bei 0, Rückgang) —
+    # eedc zählt den Unterschied als Menge der Stunde. Erzeuger `datenquelle/mqtt_standsprung.py`; Sprung «Zähler getauscht».
+    MQTT_ZAEHLERSTAND_SPRINGT = "mqtt_zaehlerstand_springt"
     # v3.24.1: Sensoren im Mapping, die nicht in HA-Long-Term-Statistics landen
     # (kein state_class) — Korrektur-Werkzeuge in der Datenverwaltung wirken
     # auf solche Sensoren nicht (Vollbackfill, Verlauf nachrechnen,
@@ -346,7 +349,7 @@ class Aktion:
 #: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
 #: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
 ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard",
-                  "befund", "nachtrag", "stueck")
+                  "befund", "nachtrag", "stueck", "getauscht")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:

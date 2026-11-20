@@ -1173,6 +1173,7 @@ _ERZEUGER = {
     "datenquelle/standsprung.py": ["ha_zaehlerstand_springt"],
     "datenquelle/verworfen.py": ["zaehler_zeit_verworfen"],
     "datenquelle/monatswert.py": ["monatswert_ueberholt"],
+    "datenquelle/mqtt_standsprung.py": ["mqtt_zaehlerstand_springt"],
     # E5: die Drift-Zeilen stehen in `drift_zeilen.py`, die Restzeile `drift_weitere_tage` ist entfallen (V2).
     "datenquelle/drift_zeilen.py": ["drift_tag", "drift_komponente"],
     "datenquelle/speicher.py": ["batterie_vorzeichen_tage", "batterie_vorzeichen_tag"],

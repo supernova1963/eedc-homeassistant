@@ -31,6 +31,7 @@
    8h. [Zählerstände – Zählerstand springt](#48h-zaehlerstaende--zaehlerstand-springt)
    8i. [Zählerstände – Zeit verworfen](#48i-zaehlerstaende--zeit-verworfen)
    8j. [Zählerstände – Gespeicherter Monatswert passt nicht mehr](#48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr)
+   8k. [Zählerstände – Zählerstand springt (MQTT)](#48k-zaehlerstaende--zaehlerstand-springt-mqtt)
    9. [Datenquellen – HA-Statistics](#49-sensor-mapping--ha-statistics)
    9a. [Datenquellen – Status](#49a-datenquellen--status)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
@@ -199,7 +200,7 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 ### 3.1 Alle Befunde <a name="alle-befunde"></a>
 
 <!-- erzeugt: scripts/daten-checker-handbuch.py §3 Anfang — nicht von Hand ändern -->
-eedc prüft **43 Kategorien** mit **188 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
+eedc prüft **44 Kategorien** mit **189 Befunden** (gezählt an `CheckKategorie` und am Katalog der Handgriffe). Jeder Befund trägt genau einen Handgriff: eine **Aktion** mit Vorschau, einen **Sprung** an die Stelle, wo du ihn behebst, oder die **Auskunft** «Was gilt»; bestandene Prüfungen stehen gefaltet im Kopf ihrer Kategorie.
 
 | Befund | Abschnitt | Klasse | Knopf |
 | --- | --- | --- | --- |
@@ -233,6 +234,7 @@ eedc prüft **43 Kategorien** mit **188 Befunden** (gezählt an `CheckKategorie`
 | [Zuordnung eines Zählers geändert, Grund fehlt](#zuordnung_grund_fehlt) `zuordnung_grund_fehlt` | §4.8g | Sprung | Grund nachtragen |
 | [Zählerstände einer Zeit verworfen](#zaehler_zeit_verworfen) `zaehler_zeit_verworfen` | §4.8i | Auskunft | Was gilt |
 | [Gespeicherter Monatswert passt nicht mehr zur Quelle](#monatswert_ueberholt) `monatswert_ueberholt` | §4.8j | Sprung | Monat öffnen |
+| [Zählerstand springt in einer MQTT-Reihe](#mqtt_zaehlerstand_springt) `mqtt_zaehlerstand_springt` | §4.8k | Sprung | Zähler getauscht |
 | [Batterie-Richtung in der Historie stimmt](#batterie_vorzeichen_ok) `batterie_vorzeichen_ok` | §4.21 | bestanden | — |
 | [Tage mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tage) `batterie_vorzeichen_tage` | §4.21 | Aktion | Tage neu aufbauen |
 | [Ein Tag mit vertauschtem Batterie-Vorzeichen](#batterie_vorzeichen_tag) `batterie_vorzeichen_tag` | §4.21 | Aktion | Tag neu aufbauen |
@@ -3066,6 +3068,12 @@ den fortlaufenden Stand schicken.
 > systematisch zu niedrig und im Monatsabschluss per Knopfdruck ein gespeicherter Wert. Die Reparatur liegt beim Absender;
 > sobald die Reihe wieder fortlaufend ist, verschwindet der Befund von selbst.
 
+**Ein Befund je Ursache** (seit Sensorwechsel U3): wechselt der Stand dauerhaft die Höhe — er beginnt neu, aber nicht bei 0,
+oder fällt um weniger als ein Zehntel und bleibt dort —, nennt [§4.8k](#48k-zaehlerstaende--zaehlerstand-springt-mqtt) die
+Stunde mit dem Weg «Zähler getauscht»; den Rückgang eines versetzten Abschnitts nennt
+[§4.8f](#48f-zaehlerstaende--versetzter-abschnitt). Diese Prüfung lässt solche Rückgänge aus. Ein Zähler, der täglich oder
+monatlich auf null geht, und ein Stand, der kurz fällt und gleich wieder auf der alten Höhe ist, bleiben hier.
+
 ---
 
 #### Zählerstand springt zwischendurch zurück <a name="zaehler_ruecksprung"></a>
@@ -3437,6 +3445,13 @@ oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der B
 «Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
 Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
 
+**In einer MQTT-Reihe** (seit Sensorwechsel U3): führt eedc für ein Feld eine eigene Summe aus den Zählerständen, die der
+Publisher sendet, prüft es auch diese Stände. Dort zählt eedc den Sprung und den Rückgang als Menge der Stunde — die
+Tageswerte an beiden Tagen sind falsch. «Grund nachtragen» bietet dann beide Antworten: „Bisherige Werte bleiben“ trägt am
+Sprung und am Rückgang je einen Zählertausch ein (die Werte des Abschnitts zählen, die zwei Sprünge nicht); „Bisherige Werte
+verwerfen“ verwirft die Zählerstände des Abschnitts, und eedc rechnet über die leere Zeit wie über jede Zählerlücke. Sprung
+und Rückgang eines solchen Abschnitts nennen §4.8k und §4.8a nicht noch einmal.
+
 ---
 
 #### Zählerstände liegen für einen Abschnitt versetzt <a name="zaehler_versatz"></a>
@@ -3471,6 +3486,16 @@ fehlt — nur die Tage, die eedc wirklich aus diesen Zählerständen bildet. Ges
 5. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — der Befund steht danach unter den bestandenen Prüfungen
    («Kein versetzter Abschnitt in den gespeicherten Zählerständen»).
 
+**Bei einem Zähler über MQTT** (der Abschnitt liegt in den Zählerständen, die der Publisher gesendet hat — etwa, weil eine
+Zeit lang ein anderes Gerät auf demselben Topic gesendet hat): eedc zählt den Sprung und den Rückgang als Menge der Stunde,
+die Tageswerte an beiden Tagen sind falsch. Der Dialog bietet in Schritt 2 beide Antworten:
+- **„Bisherige Werte bleiben — der neue Sensor setzt fort (Zähler oder Gerät getauscht, anderer Sensor für dasselbe
+  Gerät)"** — eedc trägt am Sprung und am Rückgang je einen Zählertausch ein; die Werte des Abschnitts zählen, die zwei
+  Sprünge nicht. Das passt, wenn die Stände des Abschnitts echte Werte desselben Zählers sind (getauscht und zurückgetauscht).
+- **„Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet"** — eedc verwirft die Zählerstände des Abschnitts
+  und rechnet über die leere Zeit wie über jede Zählerlücke: die Menge des Abschnitts steht an dem Tag, an dem er endet; im
+  Monat fehlt nichts.
+
 Ist der Abschnitt der **Rest einer früheren Korrektur** — die Stände des anderen Sensors begannen schon einige Stunden vor
 dem «Falsch seit» jener Korrektur, und ihr Ende liegt am Ende der damals verworfenen Zeit —, nennt der Befund diese Zeit.
 «Grund nachtragen» verwirft dann auch den Rest; die Vorschau sagt, was danach gilt.
@@ -3495,7 +3520,8 @@ Was dieser Befund nicht erkennt oder nicht abdeckt:
 - Die Netzladung des Speichers liest eedc für jeden Monat, für den keine Monatswerte des Speichers gespeichert sind, aus
   den gespeicherten Zählerständen; ein versetzter Abschnitt geht dort ungekürzt in den Monatswert ein.
 - Ohne Stundenwerte aus Home Assistant (eedc ohne Home Assistant, Werte über MQTT) rechnet eedc jeden Tag aus den
-  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch.
+  gespeicherten Zählerständen — dort sind an beiden Rändern des Abschnitts die Tageswerte dieses Felds falsch. Geprüft wird
+  eine MQTT-Reihe, wenn eedc für das Feld eine eigene Summe aus den MQTT-Ständen führt.
 
 ### 4.8g Zählerstände – Zuordnung geändert, Grund fehlt <a name="48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt"></a>
 
@@ -3704,6 +3730,54 @@ diesen Monat zeigt, rechnet mit dem gespeicherten Wert.
 Der gespeicherte Monatswert bleibt, und eedc rechnet den Monat weiter mit ihm. Tageswerte und die Tagesansicht folgen der
 Quelle; Monat und Tage dieses Monats passen dann um die genannte Abweichung nicht zueinander. eedc ändert keinen gespeicherten
 Wert von selbst.
+
+### 4.8k Zählerstände – Zählerstand springt (MQTT) <a name="48k-zaehlerstaende--zaehlerstand-springt-mqtt"></a>
+
+Bei MQTT ist der Zählerstand, den der Publisher sendet, die Quelle; eedc bildet daraus je Stunde die Menge nach der Regel von
+Home Assistant und berichtigt nichts. Wechselt der Stand die Höhe — der Zähler oder das Gerät wurde getauscht, oder ein anderes
+Gerät sendet auf demselben Topic —, zählt diese Regel den Unterschied als Menge der Stunde: einen Sprung nach oben ganz, einen
+Neubeginn, der nicht bei 0 liegt, mit dem ganzen neuen Stand, einen Fall um weniger als ein Zehntel als negative Menge. Diese
+Kategorie nennt jede solche Stunde mit Feld, Zeit und Menge; der Knopf «Zähler getauscht» öffnet in den Datenquellen den Dialog
+mit der Zeit des Sprungs. Geprüft werden alle Stunden, die eedc für das Feld aus MQTT führt.
+
+**Woran eedc einen Sprung erkennt.** Wie in [§4.8h](#48h-zaehlerstaende--zaehlerstand-springt): die Menge der Stunde wird mit
+dem größten Tagesverbrauch des Zählers im Jahr davor verglichen und durch die Tage seit seinem letzten Zuwachs geteilt; ein
+Sprung nach oben ist ein Befund ab dem Zehnfachen, ein Neubeginn ab dem Dreifachen. Ein Rückgang (die Stunde zählt weniger als
+−0,01 kWh) ist immer ein Befund.
+
+**Was kein Befund ist.** Ein Zähler, der täglich oder monatlich bei 0 neu beginnt
+([§4.8a](#48a-zaehlerstaende--ruecksprung)); eine Stunde, die nach einer Lücke die Menge mehrerer Stunden nachträgt;
+ein Zähler mit weniger als 14 Tagen mit Zuwachs (Sprung und Neubeginn); eine Stunde, an der ein Zählertausch schon eingetragen
+ist; Sprung und Rückgang eines versetzten Abschnitts ([§4.8f](#48f-zaehlerstaende--versetzter-abschnitt)).
+
+---
+
+#### Zählerstand springt in einer MQTT-Reihe <a name="mqtt_zaehlerstand_springt"></a>
+
+**Was eedc sieht**
+Bei MQTT ist der Zählerstand, den der Publisher sendet, die Quelle; eedc bildet daraus je Stunde die Menge nach der Regel von
+Home Assistant. In der genannten Stunde wechselt der Stand die Höhe: er springt nach oben, beginnt neu, aber nicht bei 0, oder
+fällt um weniger als ein Zehntel. eedc zählt den Unterschied als Menge dieser Stunde — in Tag, Monat und Jahr. So sieht es aus,
+wenn der Zähler oder das Gerät getauscht wurde oder ein anderes Gerät auf demselben Topic sendet. Die Meldung nennt Feld, Tag
+und Uhrzeit, die Details den Stand davor und danach und die Menge, die eedc für die Stunde zählt.
+
+**Lösungsweg**
+1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
+   Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt.
+2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach und — ist die Stunde schon
+   gespeichert — was sie danach zählt.
+3. **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.»
+4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Stunde ist aus der Liste verschwunden.
+
+Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Sendet der Publisher den Tageswert statt des
+fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
+
+**Was ohne Handlung gilt**
+Die Stunde zählt den Unterschied der Zählerstände als Menge, und Tag, Monat und Jahr enthalten ihn. Nach dem Eintrag zählt die
+Stunde nur, was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand gezählt hat (aus den gespeicherten
+Zählerständen der letzten 31 Tage; ältere sind nicht mehr gespeichert — dann zählt die Stunde des Tauschs keinen Zuwachs). Die
+Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Sprungs unter „heute“ und am Tag danach
+unter „gestern“, auch nach dem Eintrag.
 
 ### 4.9 Datenquellen – HA-Statistics <a name="49-sensor-mapping--ha-statistics"></a>
 

@@ -12,6 +12,7 @@
   "einstellungen/datenquellen": [
    "feld",
    "geraet",
+   "getauscht",
    "nachtrag",
    "stueck"
   ],
@@ -417,6 +418,18 @@
     "anker": "zaehlerstand"
    },
    "pfad": "/einstellungen/datenquellen?geraet=1&feld=zaehlerstand"
+  },
+  {
+   "ziel": {
+    "bereich": "datenquellen",
+    "block": null,
+    "params": {
+     "geraet": 1,
+     "getauscht": "2026-01-01T10:20"
+    },
+    "anker": null
+   },
+   "pfad": "/einstellungen/datenquellen?geraet=1&getauscht=2026-01-01T10:20"
   },
   {
    "ziel": {

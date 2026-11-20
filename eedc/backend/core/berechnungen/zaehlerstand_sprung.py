@@ -30,6 +30,12 @@ zählt den ganzen neuen Stand. eedc übernimmt HAs Werte wie das Energie-Dashboa
   überschreitet ``SCHWELLE_SPRUNG``. Diese Form hat auch jeder gewöhnliche Verbrauch — hier trennt allein das Maß, deshalb die
   höhere Schwelle.
 
+**Dritter Arm «Rückgang»** (``RUECKGANG``, Sensorwechsel U3 Lauf b, Rechenweg G4; nur mit ``rueckgang=True``, den der
+Erzeuger für MQTT ``mqtt_standsprung.py`` setzt): der Zuwachs der Stunde liegt unter −``RUECKGANG_SCHWELLE``. Das geschieht im
+Kanal «Eigene Summe» nur, wenn ein Stand um weniger als 10 % fällt (HAs Regel zählt einen tieferen Fall als Neubeginn) — etwa
+ein neuer Zähler, der etwas unter dem alten beginnt. Gewöhnlicher Betrieb hat diese Form nicht; der Arm braucht kein Maß und
+gilt auch an einem jungen Zähler. Im HA-Spiegel nennt einen fallenden Zähler ``ha_zaehler_rueckgang`` (dort bleibt der Arm aus).
+
 **Schwellen aus M4** (Messung 19.11.2026, ``~/.claude/plans/golden-master/sensorwechsel-saat/u2c/m4_verteilung.py``): über die
 Produktiv-Kopie (12 Spiegel-Abschnitte, 137 450 Paare, 31.10.2024–15.11.2026) liegt das größte Maß bei 1,32 (Arm B, ein
 Ladevorgang), Arm A bei keinem Paar über 0; im Saat-Satz (26 Abschnitte) bei 0,79. Mit einem Bezugsfenster von 30 Tagen statt
@@ -55,6 +61,10 @@ from typing import Optional, Sequence
 NEUBEGINN = "neubeginn"
 #: Arm B: der Stand springt nach oben (Δ sum = Δ state).
 SPRUNG = "sprung"
+#: Arm C (U3 b, G4): die Stunde zählt einen Rückgang (Zuwachs unter −``RUECKGANG_SCHWELLE``) — nur mit ``rueckgang=True``.
+RUECKGANG = "rueckgang"
+#: Rückgang-Arm: ein Zuwachs unter −diesem Wert (Rechenweg G4; M2 an MQTT-Bestand: kein Paar darunter).
+RUECKGANG_SCHWELLE = 0.01
 
 #: Schwelle des Maßes im Arm «Neubeginn» (M4: Produktiv und Saat 0 Paare über 0; Lab-Neubeginn bei 300 ≈ 6).
 SCHWELLE_NEUBEGINN = 3.0
@@ -137,10 +147,11 @@ def _arm(z0: tuple, z1: tuple, m: float) -> Optional[str]:
 
 
 def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
-                        ausgenommen: frozenset[int] | set[int] = frozenset()) -> list[Standsprung]:
+                        ausgenommen: frozenset[int] | set[int] = frozenset(), rueckgang: bool = False) -> list[Standsprung]:
     """Reine Funktion: ``zeilen`` = ``(start_ts, state, sum)`` EINES Quell-Abschnitts, aufsteigend. ``stand``: der Zähler ist
     ein Stand (eedc zählt Δ ``state``), sonst eine Menge (Δ ``sum``). ``ausgenommen``: ``start_ts`` der Zeilen, die eine
-    andere Prüfung schon nennt. Je Stunde mit Sprung ein ``Standsprung`` in Zeitfolge."""
+    andere Prüfung schon nennt. ``rueckgang``: dazu der Arm «Rückgang» (U3 b; Maß 0). Je Stunde mit Sprung ein
+    ``Standsprung`` in Zeitfolge."""
     spalte = 1 if stand else 2
     je_tag = tageszuwachs(zeilen, spalte)
     bezug_je_tag: dict[date, tuple[int, float]] = {}
@@ -153,6 +164,9 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
         ruhe = (z1[0] - letzter_zuwachs) / _TAG_S if letzter_zuwachs is not None else 1.0
         if menge > 0:
             letzter_zuwachs = z1[0]
+        if rueckgang and menge < -RUECKGANG_SCHWELLE and z1[0] not in ausgenommen:
+            out.append(Standsprung(int(z1[0]), RUECKGANG, menge, z0[1], z1[1], 0.0))
+            continue
         tag = _tag(z1[0])
         if tag not in bezug_je_tag:
             bezug_je_tag[tag] = bezug(je_tag, tag)
@@ -166,5 +180,6 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
     return out
 
 
-__all__ = ["BEZUG_MIN_TAGE", "BEZUG_TAGE", "NEUBEGINN", "SCHWELLE_NEUBEGINN", "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung",
+__all__ = ["BEZUG_MIN_TAGE", "BEZUG_TAGE", "NEUBEGINN", "RUECKGANG", "RUECKGANG_SCHWELLE", "SCHWELLE_NEUBEGINN",
+           "SCHWELLE_SPRUNG", "SPRUNG", "Standsprung",
            "bezug", "finde_standspruenge", "mass", "tageszuwachs"]

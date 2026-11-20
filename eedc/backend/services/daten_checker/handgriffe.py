@@ -17,7 +17,8 @@ S4 185** (`zuordnung_grund_fehlt`, Sprung 118: «Grund nachtragen» öffnet den 
 ist `zaehler_versatz` ein Sprung (Sprung 119, Aktion 18): «Grund nachtragen» öffnet denselben Dialog für das versetzte Stück und
 ersetzt «Tage neu aufbauen». **Seit Sensorwechsel U2 Lauf c 186** (`ha_zaehlerstand_springt`, Aktion 19; nur an Stand-Zählern zur
 Laufzeit eine Auskunft mit INFO). **Seit Sensorwechsel U3 a 188** (`zaehler_zeit_verworfen`, Auskunft 19; `monatswert_ueberholt`,
-Sprung 120 «Monat öffnen»).
+Sprung 120 «Monat öffnen»). **Seit Sensorwechsel U3 b 189** (`mqtt_zaehlerstand_springt`, Sprung 121 «Zähler getauscht»: öffnet in
+den Datenquellen den Dialog «Zähler getauscht (gleiche Quelle)» mit vorbelegter Zeit).
 
 `knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
 Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
@@ -80,6 +81,7 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'zuordnung_grund_fehlt': Handgriff(SPRUNG, 'Grund nachtragen', '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt'),  # Sensorwechsel S4 (B-7)
     'zaehler_zeit_verworfen': Handgriff(AUSKUNFT, 'Was gilt', '48i-zaehlerstaende--zeit-verworfen'),  # Sensorwechsel U3 a (G1)
     'monatswert_ueberholt': Handgriff(SPRUNG, 'Monat öffnen', '48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr'),  # Sensorwechsel U3 a (G2)
+    'mqtt_zaehlerstand_springt': Handgriff(SPRUNG, 'Zähler getauscht', '48k-zaehlerstaende--zaehlerstand-springt-mqtt'),  # Sensorwechsel U3 b (G4)
     'batterie_vorzeichen_ok': Handgriff(OK, None, '421-batterie-vorzeichen-historie'),  # Nr 27
     'batterie_vorzeichen_tage': Handgriff(AKTION, 'Tage neu aufbauen', '421-batterie-vorzeichen-historie'),  # Nr 28
     'batterie_vorzeichen_tag': Handgriff(AKTION, 'Tag neu aufbauen', '421-batterie-vorzeichen-historie'),  # Nr 29

@@ -6,7 +6,9 @@
  * gilt (`…/zaehler-getauscht/pruefen`): in der Spiegel-Zeit eines Zählers aus Home Assistant der Weg in Home Assistant
  * («Wert anpassen», eedc trägt nichts ein); bei MQTT «Eigene Summe» und ohne Spiegel trägt «Eintragen» die Fortsetzung ein
  * (`…/zaehler-getauscht`); vor dem ersten eigenen Wert und in verworfener Zeit nennt ein Satz, warum nichts einzutragen ist.
- * Vor dem Eintragen sagt der Dialog, dass ein Eintrag sich nicht zurücknehmen lässt (Bauplan §12 Nr. 62).
+ * Vor dem Eintragen sagt der Dialog, dass ein Eintrag sich nicht zurücknehmen lässt (Bauplan §12 Nr. 62). U3 b: aus dem Befund
+ * «Zählerstand springt» (`getauscht=`) kommt «Getauscht am» vorbelegt; bei MQTT nennt die Antwort die Zeit, zu der die
+ * Zählerstände springen, oder lehnt eine Zeit ohne Sprung ab (`kein_sprung`).
  * Sätze kommen aus dem Backend; der Client rechnet nichts.
  */
 import { useEffect, useState } from 'react'
@@ -27,13 +29,15 @@ function jetztLokal(): string {
   return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}T${zwei(d.getHours())}:${zwei(d.getMinutes())}`
 }
 
-export default function ZaehlerGetauschtDialog({ anlageId, feldId, feldLabel, onClose }: {
+export default function ZaehlerGetauschtDialog({ anlageId, feldId, feldLabel, getauschtAm, onClose }: {
   anlageId: number
   feldId: string
   feldLabel: string
+  /** U3 b: vorbelegtes «Getauscht am» (örtlich, ISO auf die Minute) aus dem Sprung des Daten-Checkers. */
+  getauschtAm?: string
   onClose: () => void
 }) {
-  const [zeit, setZeit] = useState(jetztLokal)
+  const [zeit, setZeit] = useState(() => (getauschtAm ? getauschtAm.slice(0, 16) : jetztLokal()))
   const [antwort, setAntwort] = useState<ZaehlerGetauschtAntwort | null>(null)
   const [laeuft, setLaeuft] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)

@@ -325,6 +325,7 @@ async def trage_fortsetzung_ein(db, anlage, row, zaehlt_ab: Optional[datetime] =
             await setze_zaehlt_ab(db, neu, zaehlt_ab, jetzt=jetzt or datetime.now().replace(microsecond=0))
     elif zaehlt_ab is not None:
         raise ZaehltAbAbgelehnt(SATZ_NUR_HA)
+    rand = await _rand_aus_rohstaenden(db, neu)
     db.add(neu)
     await db.flush()
     row.aufgehoben_durch = neu.id
@@ -334,13 +335,35 @@ async def trage_fortsetzung_ein(db, anlage, row, zaehlt_ab: Optional[datetime] =
     kanal = await kanal_des_schluessels(db, anlage.id, row.sensor_key)
     nachtrag = await _nachtrag_stunde(db, kanal, await naht_stunde(db, kanal, row.erklaert_ts))
     if nachtrag is not None:
-        await nachtrag_fortsetzung(db, kanal.id, nachtrag, rand_versatz(neu))       # U2 a1: ohne Rand-Stände None
+        await nachtrag_fortsetzung(db, kanal.id, nachtrag, None if rand is not None else rand_versatz(neu), rand=rand)
     merken.invalidiere(anlage.id, db=db)
     return neu
 
 
+async def _rand_aus_rohstaenden(db, neu: ZuordnungWechsel) -> Optional[tuple[float, float]]:
+    """U3 b (G5): «bleiben» zwischen zwei MQTT-Quellen auf demselben Schlüssel — Rand-Stände aus den Rohständen um den Wechsel
+    an die neue Zeile (``ansatz = schnitt``) und für den Nachtrag im Kanal; ohne Rohstände ``None`` (wie bisher). Wechselt der
+    Stand in der Stunde des Wechsels die Höhe (``rohstand.sprung_um``), sind die Rand-Stände die zwei Stände an diesem Schritt —
+    ein verzeichneter Zeitpunkt (etwa ein Altbestand ohne Grund) kann um Minuten neben dem ersten Stand der neuen Quelle liegen;
+    sonst die zwei Stände um den Zeitpunkt (``rand_um``)."""
+    from backend.services.zuordnung_wechsel.rohstand import mqtt_paar, rand_um, setze_rand, sprung_um
+
+    mk = mqtt_paar(neu.vorher, neu.nachher, neu.sensor_key)
+    if mk is None or not neu.erklaert_ts:
+        return None
+    art, paar = await sprung_um(db, neu.anlage_id, mk, neu.erklaert_ts)
+    if art != "sprung":
+        paar = await rand_um(db, neu.anlage_id, mk, neu.erklaert_ts)
+    if paar is None:
+        return None
+    setze_rand(neu, paar)
+    return paar[0][1], paar[1][1]
+
+
 def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Antwort der Prüf-Route — dieselben Felder wie ``…/quelle/pruefen`` (der Dialog ist derselbe), dazu der Wechsel."""
+    from backend.services.zuordnung_wechsel.rohstand import bleiben_satz
+
     r = la.row
     return {
         "wechsel_id": r.id, "sensor_key": r.sensor_key, "label": label, "feld_id": feld_id_aus_schluessel(r.sensor_key),
@@ -352,4 +375,5 @@ def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str
         "vorgabe_falsch_seit": None if la.vorgabe_falsch_seit is None else la.vorgabe_falsch_seit.isoformat(),
         "stueck": None if la.stueck is None else {"sprung": la.stueck[0].isoformat(), "rueckgang": la.stueck[1].isoformat()},
         "korrektur": korrektur, "bleiben": la.bleiben,
+        "bleiben_satz": None if la.bleiben else bleiben_satz(r.vorher, r.nachher, r.sensor_key),
     }

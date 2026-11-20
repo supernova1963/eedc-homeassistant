@@ -34,6 +34,14 @@ ihn mit «Bisherige Werte bleiben» zuordnen, oder den neuen Zähler als eigenes
 MQTT und für Zeiten ohne Spiegel (vor dem Kanal, Nachbau-Abschnitt, Feld ohne Kanal-Art) bleibt alles wie zuvor (Auftrag Lauf c;
 die Abweichung vom Rechenweg «Übersehen Nr. 6» steht im Bericht).
 
+**Sensorwechsel U3 Lauf b (Rechenweg G5, Regel «Rohstand ist die Quelle»):** gilt zur Zeit des Tauschs MQTT, sucht eedc in
+den Rohständen der Stunde (``rohstand.sprung_um``) den Schritt, an dem der Zählerstand die Höhe wechselt, und trägt den Tausch
+genau dort ein — mit dem letzten Rohstand davor und dem ersten danach als Rand-Ständen (``ansatz = schnitt``). Die Stunde des
+Tauschs zählt dann, was in den Rohständen steht (Kanal: ``naht.nachtrag_fortsetzung`` mit ``rand``; Reihe: ``rand_versatz``),
+statt keinen Zuwachs. Ist in der Stunde kein Höhenwechsel zu sehen, lehnt die Prüfung den Zeitpunkt ab (``kein_sprung``) —
+statt still nichts zu bewirken; ist nach dem Zeitpunkt noch kein Rohstand gespeichert, wird eingetragen und der Stundenlauf
+setzt die Rand-Stände; ohne Rohstände (älter als 31 Tage) wie bisher.
+
 Zweimal dasselbe ist einmal: eine Fortsetzungs-Zeile mit gleichem ``ab_ts`` wird nicht doppelt angelegt; der Nachtrag ist
 idempotent (Sitzung 2, §9 Nr. 25).
 """
@@ -41,7 +49,7 @@ idempotent (Sitzung 2, §9 Nr. 25).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import func, select
@@ -56,6 +64,8 @@ WEG_OHNE_WERTE = "ohne_werte"
 WEG_KEINE_QUELLE = "keine_quelle"
 WEG_VOR_ERSTEM_WERT = "vor_erstem_wert"
 WEG_NICHT_MOEGLICH = "nicht_moeglich"
+#: U3 b (G5): MQTT, Rohstände in der Stunde, aber kein Höhenwechsel — nicht eingetragen.
+WEG_KEIN_SPRUNG = "kein_sprung"
 
 #: Wortlaute (Sitzung 3b, Korrekturrunde 3b-K; Gernot liest sie vor dem Commit).
 SATZ_HA = ("Dieser Zähler kommt aus Home Assistant, und eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen "
@@ -84,6 +94,22 @@ SATZ_KEINE_QUELLE = "Dieses Feld hat keine Quelle — ordne zuerst eine zu."
 SATZ_SCHON = "Dieser Tausch ist schon eingetragen."
 SATZ_VOR_ERSTEM_WERT = ("Dieses Feld hat erst ab {zeit} Uhr eigene Werte — vor dem ersten Wert gibt es keinen Sprung zu "
                         "überbrücken; hier wird nichts eingetragen.")
+#: U3 b (G5): die Rand-Stände aus den Rohständen.
+SATZ_FORTSETZUNG_ROH = ("eedc trägt den Tausch am {zeit} Uhr ein: dort springt der Zählerstand von {alt} auf {neu} {einheit}. "
+                        "Dieser Unterschied zählt nicht als Menge; die Stunde des Tauschs zählt, was der alte Zähler bis zu "
+                        "seinem letzten Stand und der neue ab seinem ersten gezählt hat. Die Werte vor und nach dem Tausch "
+                        "bleiben.")
+SATZ_NACHTRAG_ROH = ("Die Stunde ab {stunde} Uhr ist schon gespeichert; eedc rechnet sie neu aus den Zählerständen vor und nach "
+                     "dem Tausch: {neu} statt {bisher} {einheit}.")
+SATZ_KEIN_SPRUNG = ("Zwischen {von} und {bis} Uhr ändern sich die Zählerstände dieses Felds wie gewohnt — dort ist kein Sprung "
+                    "zu sehen, und ein Eintrag bewirkte nichts. Wähle unter „Getauscht am“ die Zeit, zu der der Stand springt; "
+                    "der Daten-Checker nennt sie unter „Zählerstand springt (MQTT)“.")
+SATZ_NOCH_KEIN_STAND = ("Nach {zeit} Uhr ist noch kein Zählerstand gespeichert. eedc trägt den Tausch ein und nimmt den letzten "
+                        "Stand davor und den ersten danach, sobald er gespeichert ist.")
+#: U3 b (Entscheid E4): Live rechnet bei MQTT aus den Rohständen selbst (``mqtt_energy_history_service``) — der Eintrag ändert
+#: daran nichts; nur genannt, wenn der Tausch heute oder gestern liegt.
+SATZ_LIVE = ("Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Tauschs unter „heute“ "
+             "und am Tag danach unter „gestern“ weiter; Tag, Monat und Jahr zählen ihn nach dem Eintrag nicht.")
 SATZ_NICHT_MOEGLICH = ("Für die Zeit des Tauschs ({zeit}) kann eedc hier nichts eintragen: für diese Zeit hat eedc keine Werte "
                        "dieses Zählers, die sich überbrücken lassen (etwa weil eine Korrektur sie verworfen hat).")
 
@@ -109,6 +135,13 @@ class Lage:
     tag_fest: Optional[tuple[date, float]] = None
     #: Sensorwechsel U2 Lauf c (F13): ein Stand-Zähler (Kanal-Art ``stand``) — der Weg ``home_assistant`` nennt dann E2.
     stand: bool = False
+    #: U3 b (G5): die Rand-Stände aus den Rohständen ``((zeit, stand) vor, (zeit, stand) ab)`` und was die Stunde danach zählt.
+    rand: Optional[tuple] = None
+    neu: Optional[float] = None
+    #: U3 b (G5): ``sprung_um`` ohne Paar — ``noch_kein_stand`` (eintragen, der Stundenlauf setzt die Rand-Stände) bzw. die
+    #: Stunde ohne Höhenwechsel (``kein_sprung``, nicht eingetragen).
+    rohstand: Optional[str] = None
+    heute: Optional[date] = None
 
 
 def _zeit(dt: Optional[datetime]) -> str:
@@ -226,17 +259,41 @@ async def lage(db, anlage, sensor_key: Optional[str], getauscht_am: datetime, *,
         return Lage(sensor_key, WEG_VOR_ERSTEM_WERT, q, getauscht_am, erster_wert=erster)
     stunde = await naht_stunde(db, kanal, getauscht_am)
     wechsel = (await lade_wechsel(db, anlage.id)).get(sensor_key, ())
-    weg = await _weg(db, sensor_key, _quelle_zur_zeit(wechsel, q, getauscht_am), kanal, stunde)
+    q_zeit = _quelle_zur_zeit(wechsel, q, getauscht_am)
+    weg = await _weg(db, sensor_key, q_zeit, kanal, stunde)
     if weg != WEG_FORTSETZUNG:
         stand = weg == WEG_HOME_ASSISTANT and await _ist_stand(db, sensor_key, kanal)
         return Lage(sensor_key, weg, q, getauscht_am, stand=stand)
+    rohstand, rand = await _rohstand(db, anlage.id, sensor_key, q_zeit, getauscht_am)
+    if rohstand == "kein_sprung":
+        return Lage(sensor_key, WEG_KEIN_SPRUNG, q, getauscht_am, rohstand=rohstand)
+    if rand is not None:                       # U3 b (G5): der Tausch liegt am Höhenwechsel der Rohstände
+        getauscht_am = rand[1][0].replace(microsecond=0)
+        ab = ab_ts_aus(getauscht_am)
     schon = any(w.grund == GRUND_FORTSETZUNG and w.aufgehoben_durch is None and w.ab_ts == ab for w in wechsel)
     nachtrag = await _nachtrag_stunde(db, kanal, stunde)
     zuwachs = await zuwachs_der_stunde(db, kanal, nachtrag) if nachtrag is not None else None
-    vor_heute = getauscht_am.date() < (heute or date.today())
-    return Lage(sensor_key, WEG_FORTSETZUNG, q, getauscht_am, kanal.id if kanal is not None else None, nachtrag, schon,
-                zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None, vor_heute=vor_heute,
-                tag_fest=await tag_fest(db, anlage, sensor_key, ab) if vor_heute else None)
+    heute = heute or date.today()
+    vor_heute = getauscht_am.date() < heute
+    la = Lage(sensor_key, WEG_FORTSETZUNG, q, getauscht_am, kanal.id if kanal is not None else None, nachtrag, schon,
+              zuwachs=zuwachs, einheit=kanal.einheit if kanal is not None else None, vor_heute=vor_heute,
+              tag_fest=await tag_fest(db, anlage, sensor_key, ab) if vor_heute else None, rand=rand, rohstand=rohstand,
+              heute=heute)
+    if rand is not None and nachtrag is not None:
+        from backend.services.kanal.naht import menge_mit_rand
+
+        la.neu = await menge_mit_rand(db, kanal.id, nachtrag, (rand[0][1], rand[1][1]))
+    return la
+
+
+async def _rohstand(db, anlage_id: int, sensor_key: str, quelle, t: datetime) -> tuple[Optional[str], Optional[tuple]]:
+    """U3 b (G5): gilt zur Zeit des Tauschs MQTT, der Befund der Rohstände um ``t`` (``rohstand.sprung_um``)."""
+    from backend.services.zuordnung_wechsel.rohstand import mqtt_key_der_quelle, sprung_um
+
+    mk = mqtt_key_der_quelle(quelle, sensor_key)
+    if mk is None:
+        return None, None
+    return await sprung_um(db, anlage_id, mk, t)
 
 
 async def tag_fest(db, anlage, sensor_key: str, ab: datetime) -> Optional[tuple[date, float]]:
@@ -258,11 +315,22 @@ async def tag_fest(db, anlage, sensor_key: str, ab: datetime) -> Optional[tuple[
 def _saetze_fortsetzung(la: Lage) -> list[str]:
     from backend.core.zahlenformat import fmt_zahl
 
-    s = [SATZ_FORTSETZUNG.format(zeit=_zeit(la.getauscht_am))]
-    if la.nachtrag_ts is not None:
+    if la.rand is not None:
+        s = [SATZ_FORTSETZUNG_ROH.format(zeit=_zeit(la.getauscht_am), alt=fmt_zahl(la.rand[0][1], 1),
+                                         neu=fmt_zahl(la.rand[1][1], 1), einheit=la.einheit or "kWh")]
+    else:
+        s = [SATZ_FORTSETZUNG.format(zeit=_zeit(la.getauscht_am))]
+        if la.rohstand == "noch_kein_stand":
+            s.append(SATZ_NOCH_KEIN_STAND.format(zeit=_zeit(la.getauscht_am)))
+    if la.nachtrag_ts is not None and la.rand is not None and la.neu is not None and la.zuwachs is not None:
+        s.append(SATZ_NACHTRAG_ROH.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts)), neu=fmt_zahl(la.neu, 2),
+                                          bisher=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
+    elif la.nachtrag_ts is not None:
         s.append(SATZ_NACHTRAG.format(stunde=_zeit(datetime.fromtimestamp(la.nachtrag_ts))))
         if la.zuwachs is not None:
             s.append(SATZ_NACHTRAG_BISHER.format(zuwachs=fmt_zahl(la.zuwachs, 2), einheit=la.einheit or "kWh"))
+    if la.rohstand is not None and la.heute is not None and (la.heute - la.getauscht_am.date()).days <= 1:
+        s.append(SATZ_LIVE)
     if la.vor_heute and la.tag_fest is not None:
         s.append(SATZ_TAG_FEST.format(tag=la.tag_fest[0].strftime("%d.%m.%Y"), wert=fmt_zahl(la.tag_fest[1], 2),
                                       einheit=la.einheit or "kWh"))
@@ -278,6 +346,9 @@ def saetze(la: Lage) -> list[str]:
         return [SATZ_VOR_ERSTEM_WERT.format(zeit=_zeit(la.erster_wert))]
     if la.weg == WEG_NICHT_MOEGLICH:
         return [satz_nicht_moeglich(la)]
+    if la.weg == WEG_KEIN_SPRUNG:
+        von = la.getauscht_am.replace(minute=0, second=0, microsecond=0)
+        return [SATZ_KEIN_SPRUNG.format(von=_zeit(von), bis=_zeit(von + timedelta(hours=1)))]
     return [SATZ_SCHON] if la.schon else _saetze_fortsetzung(la)
 
 
@@ -299,13 +370,18 @@ async def trage_ein(db, anlage, la: Lage) -> Optional[ZuordnungWechsel]:
 
     if la.weg != WEG_FORTSETZUNG or la.schon:
         return None
+    from backend.services.zuordnung_wechsel.rohstand import setze_rand
+
     t = la.getauscht_am.replace(microsecond=0)
     row = ZuordnungWechsel(anlage_id=anlage.id, sensor_key=la.sensor_key, erklaert_ts=t, ab_ts=ab_ts_aus(t),
                            vorher=la.quelle, nachher=la.quelle, grund=GRUND_FORTSETZUNG, herkunft=HERKUNFT_WECHSEL)
+    if la.rand is not None:                    # U3 b (G5): Rand-Stände aus den Rohständen
+        setze_rand(row, la.rand)
     db.add(row)
     await db.flush()
     merke_neu(db, row)
     if la.nachtrag_ts is not None:
-        await nachtrag_fortsetzung(db, la.kanal_id, la.nachtrag_ts)
+        await nachtrag_fortsetzung(db, la.kanal_id, la.nachtrag_ts,
+                                   rand=None if la.rand is None else (la.rand[0][1], la.rand[1][1]))
     merken.invalidiere(anlage.id, db=db)
     return row

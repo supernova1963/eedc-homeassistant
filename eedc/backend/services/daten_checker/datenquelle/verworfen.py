@@ -105,13 +105,17 @@ class Lage:
 
 async def kanal_verwirft(db, anlage_id: int, key: str, v: VerworfeneZeit) -> bool:
     """Führt der Kanal des Felds diese Zeit als verworfen (eine Quellzeile mit ``verworfen_ts`` ab einer Stunde vor der Lücke
-    bis zu ihrem Ende — ``kanal/korrektur.py`` setzt sie an ``w0``, frühestens eine Stunde vor «Falsch seit»)?"""
+    bis zu ihrem Ende — ``kanal/korrektur.py`` setzt sie an ``w0``, frühestens eine Stunde vor «Falsch seit») **und** setzt er
+    danach ohne Zuwachs an? Setzt er mit der Menge der Zeit an (U3 b, G7 (b): MQTT ohne Höhenwechsel,
+    ``kanal/korrektur.ist_ueberbrueckt`` — dieselbe Regel wie der Schreiber), rechnet er wie eine Zählerlücke: nein (P-1)."""
     from backend.models.kanal import Kanal, KanalQuelle
+    from backend.services.kanal.korrektur import ist_ueberbrueckt
 
     von, bis = int(v.von.timestamp()) - 3600, int(v.bis.timestamp())
-    return (await db.execute(select(KanalQuelle.gueltig_ab).join(Kanal, Kanal.id == KanalQuelle.kanal_id).where(
+    verwirft = (await db.execute(select(KanalQuelle.gueltig_ab).join(Kanal, Kanal.id == KanalQuelle.kanal_id).where(
         Kanal.anlage_id == anlage_id, Kanal.key == key, KanalQuelle.verworfen_ts.is_not(None),
         KanalQuelle.gueltig_ab >= von, KanalQuelle.gueltig_ab < bis).limit(1))).first() is not None
+    return verwirft and not await ist_ueberbrueckt(db, anlage_id, key, von + 3600, bis)
 
 
 def _monate(von: datetime, bis: datetime) -> list[tuple[int, int]]:

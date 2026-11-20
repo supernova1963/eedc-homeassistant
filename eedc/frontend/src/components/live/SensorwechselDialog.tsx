@@ -193,8 +193,11 @@ export default function SensorwechselDialog({
     onBestaetigen(gruende)
   }
 
+  // U3 b: bei MQTT bzw. zwischen Home Assistant und MQTT sagt die Prüf-Antwort, was «bleiben» tut (`bleiben_satz`).
+  const allgemein = (f: QuellePruefung) => f.bleiben_satz ?? GRUND_FORTSETZUNG_FOLGE
   const bleibenFolge = (f: QuellePruefung) =>
-    f.bleiben ? GRUND_BLEIBEN_HA_FOLGE : nachtrag ? `${GRUND_FORTSETZUNG_FOLGE} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : GRUND_FORTSETZUNG_FOLGE
+    f.bleiben ? GRUND_BLEIBEN_HA_FOLGE
+      : nachtrag && !nachtrag.stueck ? `${allgemein(f)} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : allgemein(f)
   const optionen = (f: QuellePruefung) => [
     { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
     { value: 'korrektur' as const, label: GRUND_KORREKTUR,

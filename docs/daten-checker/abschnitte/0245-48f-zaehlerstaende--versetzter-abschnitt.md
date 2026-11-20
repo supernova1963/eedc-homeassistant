@@ -36,4 +36,11 @@ oder ist Home Assistant eingerichtet, aber gerade nicht erreichbar, trägt der B
 «Was gilt». Der Befund nennt nur die Tage, deren Wert eedc wirklich aus diesen Ständen bildet — liegt ein
 Rückgang im Fenster eines Tages, fehlt dessen Wert, auch wenn im selben Fenster ein Sprung liegt.
 
+**In einer MQTT-Reihe** (seit Sensorwechsel U3): führt eedc für ein Feld eine eigene Summe aus den Zählerständen, die der
+Publisher sendet, prüft es auch diese Stände. Dort zählt eedc den Sprung und den Rückgang als Menge der Stunde — die
+Tageswerte an beiden Tagen sind falsch. «Grund nachtragen» bietet dann beide Antworten: „Bisherige Werte bleiben“ trägt am
+Sprung und am Rückgang je einen Zählertausch ein (die Werte des Abschnitts zählen, die zwei Sprünge nicht); „Bisherige Werte
+verwerfen“ verwirft die Zählerstände des Abschnitts, und eedc rechnet über die leere Zeit wie über jede Zählerlücke. Sprung
+und Rückgang eines solchen Abschnitts nennen §4.8k und §4.8a nicht noch einmal.
+
 ---

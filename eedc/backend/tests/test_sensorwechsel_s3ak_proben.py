@@ -364,8 +364,8 @@ async def test_fortsetzung_nach_ab_mit_zeilen_danach(ha, datei, monkeypatch, spr
     elif sprengsatz == "ohne_bruecke":
         echt = kk._fortsetzung_nach_ab
 
-        async def ohne(db, kanal, ab, leer_bis, ref, o_ref):
-            return await echt(db, kanal, ab, leer_bis, None, 0.0)
+        async def ohne(db, kanal, ab, leer_bis, ref, o_ref, *rest):      # U3 b: ``bruecke`` (G7 (b)) geht mit
+            return await echt(db, kanal, ab, leer_bis, None, 0.0, *rest)
         monkeypatch.setattr(kk, "_fortsetzung_nach_ab", ohne)
     await _korrigieren(sitzungen, _mqtt_auftrag(aid), None, jetzt=MAB + timedelta(hours=4, minutes=5))
     async with sitzungen() as s:
@@ -453,10 +453,10 @@ async def test_spaetere_andere_quelle_rueckt_mit(ha, datei, monkeypatch, sprengs
     von, bis = datetime.fromtimestamp(c0 - H), datetime.fromtimestamp(c0 + 2 * H)
     vorher = (await _zr(sitzungen, k, von, bis)).delta
     if sprengsatz:
-        async def ohne_verschiebung(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts):
+        async def ohne_verschiebung(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts, *rest):
             spaeter = kk._spaetere_richtige(list(lage.quellen), ab, richtig)
             fest = {q.gueltig_ab: q.offset for q in lage.quellen if q.gueltig_ab > (spaeter[-1].gueltig_ab if spaeter else ab)}
-            n = await echt_umschreiben(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts)
+            n = await echt_umschreiben(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts, *rest)
             for q in (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id))).scalars().all():
                 if q.gueltig_ab in fest:
                     q.offset = fest[q.gueltig_ab]

@@ -196,12 +196,15 @@ interface TypCluster {
 
 /** E4 (Daten-Checker «Sprung aufs Feld»): Gerät und Feld aus `?geraet=&feld=` (gelesen in `EinstellungenV4`); Sensorwechsel S4:
  *  `nachtrag=<id>` öffnet «Grund nachtragen» für einen verzeichneten Wechsel (`useGrundNachtragen`); Sitzung 4b-1:
- *  `stueck=<schlüssel>~<sprung>~<rückgang>` denselben Dialog für ein versetztes Stück (Befund `zaehler_versatz`). */
+ *  `stueck=<schlüssel>~<sprung>~<rückgang>` denselben Dialog für ein versetztes Stück (Befund `zaehler_versatz`); U3 b:
+ *  `getauscht=<Zeit>` öffnet am Feld (`geraet`/`feld`) «Zähler getauscht (gleiche Quelle)» mit vorbelegtem «Getauscht am»
+ *  (Befund `mqtt_zaehlerstand_springt`). */
 export interface DatenquellenSprung {
   geraet?: string
   feld?: string
   nachtrag?: string
   stueck?: string
+  getauscht?: string
 }
 
 /**
@@ -243,8 +246,10 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
   const [gatewayFeld, setGatewayFeld] = useState<DatenquelleFeld | null>(null)
   // Offener HA-Sensor-Picker (Feld, für das gerade eine HA-Entity gewählt wird).
   const [haFeld, setHaFeld] = useState<DatenquelleFeld | null>(null)
-  // Sensorwechsel mit Grund (Sitzung 3b): offener Einstieg «Zähler getauscht (gleiche Quelle)» an einem Feld.
+  // Sensorwechsel mit Grund (Sitzung 3b): offener Einstieg «Zähler getauscht (gleiche Quelle)» an einem Feld; U3 b: mit der
+  // Zeit aus dem Sprung `getauscht=` (Befund «Zählerstand springt») vorbelegt.
   const [getauschtFeld, setGetauschtFeld] = useState<DatenquelleFeld | null>(null)
+  const [getauschtAm, setGetauschtAm] = useState<string | undefined>(undefined)
   // P-433-2b K4 (K4-7): die Geräte-Presets des Gateways (nur mit MQTT) und der offene «Preset anwenden…»-Dialog.
   const [presets, setPresets] = useState<MqttPreset[]>([])
   const [presetZiel, setPresetZiel] = useState<{ investitionId: number | null; titel: string; liste: MqttPreset[] } | null>(null)
@@ -317,6 +322,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
     if (!sprungZiel) return
     setSprungGruppe(sprungZiel.gruppe.id)
     if (sprungZiel.feld?.erweitert) setOffeneErweiterung((prev) => new Set(prev).add(sprungZiel.gruppe.id))
+    // U3 b: `getauscht=<Zeit>` öffnet am Feld «Zähler getauscht (gleiche Quelle)» mit dieser Zeit.
+    if (sprung?.getauscht && sprungZiel.feld) { setGetauschtAm(sprung.getauscht); setGetauschtFeld(sprungZiel.feld) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sprungZiel, sprung, loading])
   const sprungInv = sprungZiel ? investitionIdDerGruppe(sprungZiel.gruppe) : null
@@ -934,7 +941,8 @@ export default function DatenquellenZuordnung({ sprung = null, onSprungFertig, o
           anlageId={selectedAnlageId}
           feldId={getauschtFeld.id}
           feldLabel={getauschtFeld.einheit ? `${getauschtFeld.label} (${getauschtFeld.einheit})` : getauschtFeld.label}
-          onClose={() => { setGetauschtFeld(null); neuLaden() }}
+          getauschtAm={getauschtAm}
+          onClose={() => { setGetauschtFeld(null); setGetauschtAm(undefined); neuLaden() }}
         />
       )}
     </div>

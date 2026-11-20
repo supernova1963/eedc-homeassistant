@@ -144,16 +144,16 @@ def _minute(t: datetime) -> datetime:
     return t.replace(second=0, microsecond=0)
 
 
-async def finde_lauf(db, anlage_id: int, key: str, sprung: datetime, rueckgang: datetime):
+async def finde_lauf(db, anlage_id: int, key: str, sprung: datetime, rueckgang: datetime, *, mqtt: bool = False):
     """Der versetzte Abschnitt der Erkennung (``core/berechnungen/zaehler_versatz.finde_versatz_laeufe`` über die Reihe des
-    Befunds) mit genau diesem Sprung und Rückgang — sonst ``None`` (kein frei wählbares Stück)."""
+    Befunds; ``mqtt``: über die MQTT-Stände, U3 b G7) mit genau diesem Sprung und Rückgang — sonst ``None`` (kein frei
+    wählbares Stück)."""
     from backend.core.berechnungen.zaehler_versatz import finde_versatz_laeufe
     from backend.services.daten_checker.datenquelle.versatz import lade_reihe
+    from backend.services.daten_checker.datenquelle.versatz_mqtt import lade_mqtt_reihe, lauf_zum_stueck
 
-    for lauf in finde_versatz_laeufe(await lade_reihe(db, anlage_id, key)):
-        if _minute(lauf.beginn.bis) == _minute(sprung) and _minute(lauf.ende.bis) == _minute(rueckgang):
-            return lauf
-    return None
+    reihe = await (lade_mqtt_reihe if mqtt else lade_reihe)(db, anlage_id, key)
+    return lauf_zum_stueck(finde_versatz_laeufe(reihe), sprung, rueckgang)
 
 
 @dataclass
@@ -166,6 +166,9 @@ class StueckLage:
     quelle: Optional[dict] = None
     #: Warum keine Korrektur angeboten wird (Sperre mit Satz); ``None`` = sie wird angeboten.
     korrektur_nicht: Optional[str] = None
+    #: U3 b (G7): das Stück einer MQTT-Reihe — dann gibt es auch «Bisherige Werte bleiben» (zwei Einträge «Zähler getauscht»).
+    lauf: Any = None
+    mqtt: bool = False
 
     def auftrag(self, anlage_id: int, jetzt: datetime):
         from backend.services.zuordnung_wechsel.korrektur import Auftrag
@@ -193,10 +196,13 @@ async def lage_am_befund(db, anlage, key: str, sprung: datetime, rueckgang: date
     from backend.models.investition import Investition
     from backend.services.daten_checker.datenquelle.versatz import in_tagesansicht
 
+    from backend.services.daten_checker.datenquelle.versatz_mqtt import ist_mqtt_stueck
+
     invs = {str(i.id): i for i in (await db.execute(select(Investition).where(Investition.anlage_id == anlage.id))).scalars()}
-    if not in_tagesansicht(invs, key):          # dieselben Felder wie der Befund (sonst wäre das Stück frei wählbar)
+    mqtt = await ist_mqtt_stueck(db, anlage.id, key)
+    if not mqtt and not in_tagesansicht(invs, key):     # dieselben Felder wie der Befund (sonst wäre das Stück frei wählbar)
         return None
-    lauf = await finde_lauf(db, anlage.id, key, sprung, rueckgang)
+    lauf = await finde_lauf(db, anlage.id, key, sprung, rueckgang, mqtt=mqtt)
     if lauf is None:
         return None
     s, r = lauf.beginn.bis, lauf.ende.bis
@@ -205,9 +211,32 @@ async def lage_am_befund(db, anlage, key: str, sprung: datetime, rueckgang: date
     zeiten = dict(sprung=s.strftime("%d.%m.%Y %H:%M"), rueckgang=r.strftime("%d.%m.%Y %H:%M"), versatz=fmt_zahl(lauf.versatz_kwh, 1))
     satz = (SATZ_STUECK.format(**zeiten, quelle=quelle_text(vor)) if _gleiche_quelle(vor, ab)
             else SATZ_STUECK_ZWEI_QUELLEN.format(**zeiten, vorher=quelle_text(vor), nachher=quelle_text(ab)))
-    la = StueckLage(key, s, r, satz, quelle=vor)
+    la = StueckLage(key, s, r, satz, quelle=vor, lauf=lauf, mqtt=mqtt)
     la.korrektur_nicht = await _sperre(db, anlage.id, key, vor, ab)
     return la
+
+
+# ── «Bisherige Werte bleiben» an einem Stück einer MQTT-Reihe (U3 b, Rechenweg G7, Entscheid E1 = A) ──────────────────
+
+#: Was «bleiben» am Stück tut (die Prüf-Antwort zeigt es unter der Wahl).
+SATZ_STUECK_BLEIBEN = ("Die Werte des Abschnitts bleiben: eedc trägt am Sprung und am Rückgang je einen Zählertausch ein. Die zwei "
+                       "Sprünge zählen nicht als Menge; die Stunden des Tauschs zählen, was die Zählerstände davor und danach "
+                       "zeigen.")
+
+
+async def tausch_lagen(db, anlage, la: StueckLage) -> list:
+    """Je Schritt des Stücks (Sprung, Rückgang) die Lage «Zähler getauscht» (``zaehler_getauscht.lage``) an der Stunde, in der
+    die Rohstände die Höhe wechseln: zuerst die Stunde des Stands davor, dann die des Stands danach (die Reihe hält stündliche
+    Stände; ein Tausch genau zur vollen Stunde liegt in der zweiten). Ohne Rohstände die erste (wie bisher, ohne Rand-Stände)."""
+    from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
+
+    out = []
+    for s in (*la.lauf.spruenge, *la.lauf.rueckgaenge):
+        kandidaten = [s.von.replace(minute=59, second=59, microsecond=0), s.bis.replace(minute=59, second=59, microsecond=0)]
+        lagen = [await zg.lage(db, anlage, la.sensor_key, t) for t in kandidaten]
+        out.append(next((x for x in lagen if x.rand is not None), None)
+                   or next((x for x in lagen if x.weg == zg.WEG_FORTSETZUNG), lagen[0]))
+    return out
 
 
 # ── Rest fremder Stände vor «Falsch seit» (Sensorwechsel U3 a, Rechenweg G8) ───
@@ -288,11 +317,12 @@ async def tragtag_der_luecke(db, anlage, key: str, bis: datetime) -> Optional[da
 def antwort(la: StueckLage, label: Optional[str], feld_id: Optional[str], korrektur: Optional[dict[str, Any]] = None
             ) -> dict[str, Any]:
     """Antwort der Prüf-Route am Befund — dieselben Felder wie ``nachtrag.antwort`` (derselbe Dialog), nur «Korrektur»."""
-    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR
 
+    gruende = [] if la.korrektur_nicht else ([GRUND_FORTSETZUNG, GRUND_KORREKTUR] if la.mqtt else [GRUND_KORREKTUR])
     return {
         "wechsel_id": None, "sensor_key": la.sensor_key, "label": label, "feld_id": feld_id, "grund": None,
-        "wechsel_satz": la.satz, "gruende": [] if la.korrektur_nicht else [GRUND_KORREKTUR],
+        "wechsel_satz": la.satz, "gruende": gruende, "bleiben_satz": SATZ_STUECK_BLEIBEN if la.mqtt else None,
         "korrektur_nicht": la.korrektur_nicht, "grund_erforderlich": la.korrektur_nicht is None, "verzeichnet": False,
         "erster_wert": None, "tage": 0, "stand_alt": None, "stand_neu": None,
         "vorgabe_falsch_seit": la.sprung.isoformat(), "stueck": {"sprung": la.sprung.isoformat(), "rueckgang": la.rueckgang.isoformat()},
@@ -300,6 +330,6 @@ def antwort(la: StueckLage, label: Optional[str], feld_id: Optional[str], korrek
     }
 
 
-__all__ = ["SATZ_NICHT_GEMELDET", "SATZ_REST_VORGABE", "SATZ_STUECK", "SATZ_STUECK_ZWEI_QUELLEN", "SATZ_VERSCHIEDENE_QUELLEN",
+__all__ = ["SATZ_NICHT_GEMELDET", "SATZ_STUECK_BLEIBEN", "tausch_lagen", "SATZ_REST_VORGABE", "SATZ_STUECK", "SATZ_STUECK_ZWEI_QUELLEN", "SATZ_VERSCHIEDENE_QUELLEN",
            "StueckLage", "antwort", "finde_lauf", "ist_fuellbar", "lage_am_befund", "quelle_am_rand", "rest_vor", "satz_rest_vorgabe",
            "tage_der_luecke", "tragtag_der_luecke"]

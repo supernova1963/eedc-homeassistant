@@ -18,7 +18,10 @@ es keine richtige Geschichte (dieselbe ``mqtt_key`` trägt beide Publisher) — 
 3. **Die falsche Quelle bleibt mit** ``verworfen_ts`` **genau über die Zeit, die leer bleibt** (``[w0, h0)``, ohne ``h0`` bis
    zur nächsten Quelle): an ``w0`` eine Quellzeile mit Marke (die vorhandene wird markiert, sonst eine neue mit der Herkunft der
    dort geltenden Quelle), weitere falsche Quellzeilen in der leeren Zeit werden markiert. Trägt der Kanal nach ``ab`` Zeilen
-   ohne eigene Quellgrenze (MQTT: derselbe Schlüssel), beginnt an der ersten eine Quellzeile, die dort ohne Zuwachs ansetzt.
+   ohne eigene Quellgrenze (MQTT: derselbe Schlüssel), beginnt an der ersten eine Quellzeile, die dort ohne Zuwachs ansetzt —
+   **U3 b (Rechenweg G7 (b)):** ist die leere Zeit eine Lücke ohne Höhenwechsel (``bruecke``; dieselbe Regel wie die Leser der
+   Reihe, ``zeitpunkt.ohne_hoehenwechsel``) und die Quelle MQTT, setzt sie stattdessen mit der Menge der Zeit an
+   (``core/berechnungen/rohstand_rand.bruecke``: Stand danach − Stand davor, wie an jeder Zählerlücke).
 4. **Füllen** mit dem Blockleser des Konsistenzlaufs (``nachfuellen.neu_spiegeln`` ab ``h0`` bis zum Soll-Ende), gemerkte
    Tage der Anlage verworfen. **Abgeleitete Kanäle** (Bauplan §10 Nr. 34): nur die vom Feld abhängigen
    (``abhaengige_abgeleitete``) ab ``w0`` bis zum Ende verworfen und im selben Lauf nach dem Füllen neu geschrieben
@@ -216,7 +219,7 @@ def _spaetere_richtige(quellen: list[KanalQuelle], ab: int, richtig: Optional[st
 
 async def _quellen_umschreiben(db: AsyncSession, kanal: Kanal, lage: KanalLage, ab: int, h0: Optional[int],
                                versatz: Optional[float], ref: Optional[tuple[int, float]], richtig: Optional[str],
-                               jetzt_ts: int) -> int:
+                               jetzt_ts: int, bruecke: bool = False) -> int:
     """Quellzeilen nach Schritt 2/3 (Modul-Docstring). Returns: Zahl der neu markierten bzw. angelegten verworfenen Quellen."""
     w0 = lage.w0
     quellen = list(lage.quellen)
@@ -259,13 +262,15 @@ async def _quellen_umschreiben(db: AsyncSession, kanal: Kanal, lage: KanalLage, 
             db.add(KanalQuelle(kanal_id=kanal.id, gueltig_ab=h0, familie=FAMILIE_SPIEGEL, statistic_id=richtig,
                                offset=float(versatz)))
     await db.flush()
-    await _fortsetzung_nach_ab(db, kanal, ab, leer_bis, ref, o_ref)
+    await _fortsetzung_nach_ab(db, kanal, ab, leer_bis, ref, o_ref, bruecke)
     return markiert
 
 
-async def _fortsetzung_nach_ab(db: AsyncSession, kanal: Kanal, ab: int, leer_bis: int, ref, o_ref) -> None:
+async def _fortsetzung_nach_ab(db: AsyncSession, kanal: Kanal, ab: int, leer_bis: int, ref, o_ref,
+                               bruecke: bool = False) -> None:
     """Trägt der Kanal ab ``ab`` Zeilen ohne eigene Quellgrenze (MQTT: derselbe Schlüssel über den Wechsel), gälte der
-    verworfene Abschnitt auch für sie — dann beginnt an der ersten eine Quellzeile, die ohne Zuwachs ansetzt."""
+    verworfene Abschnitt auch für sie — dann beginnt an der ersten eine Quellzeile, die ohne Zuwachs ansetzt; mit ``bruecke``
+    an einer MQTT-Quelle mit der Menge der leeren Zeit (``bruecken_versatz``, U3 b G7 (b))."""
     if leer_bis < ab:
         return
     spalte = getattr(KanalStatistik, _wertspalte(kanal.art))
@@ -280,13 +285,52 @@ async def _fortsetzung_nach_ab(db: AsyncSession, kanal: Kanal, ab: int, leer_bis
     if geltend is None or geltend.verworfen_ts is None:
         return
     offset = (ref[1] - float(erste[1])) if ref is not None else float(o_ref or 0.0)
+    if bruecke and ref is not None:
+        offset = await bruecken_versatz(db, kanal, geltend, ref, int(erste[0])) or offset
     db.add(KanalQuelle(kanal_id=kanal.id, gueltig_ab=int(erste[0]), familie=geltend.familie,
                        statistic_id=geltend.statistic_id, offset=offset))
     await db.flush()
 
 
+async def bruecken_versatz(db: AsyncSession, kanal: Kanal, quelle: KanalQuelle, ref: tuple[int, float],
+                           erste_ts: int) -> Optional[float]:
+    """U3 b (G7 (b)): der Versatz der ersten Quellzeile nach einer leeren Zeit ohne Höhenwechsel einer MQTT-Quelle — die Zeile
+    ``erste_ts`` trägt den Kanalwert davor (``ref``) plus ``Stand(erste) − Stand(ref)`` (``rohstand_rand.bruecke``). ``None``,
+    wenn die Quelle keine MQTT-Mitschrift ist oder ein Stand fehlt (dann ohne Zuwachs wie bisher). Dieselbe Regel liest
+    ``ist_ueberbrueckt`` (die Auskunft «Zeit verworfen» muss wahr bleiben, P-1 aus U3 a)."""
+    from backend.core.berechnungen.rohstand_rand import bruecke
+    from backend.models.kanal import FAMILIE_MITSCHRIFT
+    from backend.services.kanal.nachfuellen import STAENDE_HA_PRAEFIX
+
+    if quelle.familie != FAMILIE_MITSCHRIFT or (quelle.statistic_id or "").startswith(STAENDE_HA_PRAEFIX):
+        return None
+    zeilen = {int(t): (st, w) for t, st, w in (await db.execute(select(
+        KanalStatistik.start_ts, KanalStatistik.state, getattr(KanalStatistik, _wertspalte(kanal.art))).where(and_(
+            KanalStatistik.kanal_id == kanal.id, KanalStatistik.start_ts.in_((ref[0], erste_ts)))))).all()}
+    (st_ref, _w0), (st_erste, w_erste) = zeilen.get(ref[0], (None, None)), zeilen.get(erste_ts, (None, None))
+    if st_ref is None or st_erste is None or w_erste is None:
+        return None
+    return bruecke(ref[1], float(st_ref), float(st_erste), float(w_erste))
+
+
+async def ist_ueberbrueckt(db: AsyncSession, anlage_id: int, key: str, von_ts: int, bis_ts: int) -> bool:
+    """Setzt der Kanal des Schlüssels nach der verworfenen Zeit ``[von_ts, bis_ts)`` mit ihrer Menge an (``bruecken_versatz``)?
+    Ja, wenn die erste Quellzeile ab ``bis_ts`` (nach der verworfenen) genau diesen Versatz trägt."""
+    kanal = (await db.execute(select(Kanal).where(and_(Kanal.anlage_id == anlage_id, Kanal.key == key)))).scalar_one_or_none()
+    if kanal is None:
+        return False
+    quellen = (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id)
+                                .order_by(KanalQuelle.gueltig_ab))).scalars().all()
+    nach = next((q for q in quellen if q.gueltig_ab >= bis_ts and q.verworfen_ts is None), None)
+    if nach is None or not any(von_ts - _STUNDE <= q.gueltig_ab < bis_ts and q.verworfen_ts for q in quellen):
+        return False
+    ref = await _referenz(db, kanal, min(q.gueltig_ab for q in quellen if q.verworfen_ts and q.gueltig_ab >= von_ts - _STUNDE))
+    erwartet = await bruecken_versatz(db, kanal, nach, ref, nach.gueltig_ab) if ref is not None else None
+    return erwartet is not None and abs(erwartet - float(nach.offset)) < 1e-6
+
+
 async def korrigiere_kanal(db: AsyncSession, anlage_id: int, key: str, f: Optional[int], ab: int, richtig: Optional[str],
-                           *, ha_svc=None, jetzt_ts: int, bis_ts: int) -> KanalKorrektur:
+                           *, ha_svc=None, jetzt_ts: int, bis_ts: int, bruecke: bool = False) -> KanalKorrektur:
     """Schritte 1–3 in der Sitzung des Aufrufers (kein Commit): löschen, Quellen umschreiben, abgeleitete Kanäle und gemerkte
     Tage verwerfen. ``richtig`` = heutige HA-Entität oder ``None`` (MQTT/ohne HA — nichts wird gefüllt); ``ha_svc`` ``None``
     ⇒ ebenfalls ohne Füllen. Das Füllen (Schritt 4) macht ``fuelle_kanal`` nach dem Commit."""
@@ -308,7 +352,7 @@ async def korrigiere_kanal(db: AsyncSession, anlage_id: int, key: str, f: Option
     if h0 is not None:
         versatz = await _versatz(db, kanal, ref, ha_svc, richtig, h0,
                                  next(iter(_spaetere_richtige(list(lage.quellen), ab, richtig)), None))
-    erg.markiert = await _quellen_umschreiben(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts)
+    erg.markiert = await _quellen_umschreiben(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts, bruecke)
     erg.abgeleitet_familien = await abhaengige_abgeleitete(db, anlage_id, key)
     erg.abgeleitet_verworfen = await verwerfe_ab(db, anlage_id, lage.w0,
                                                  nur=lambda k: gehoert_zu(erg.abgeleitet_familien, k))

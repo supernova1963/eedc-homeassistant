@@ -159,6 +159,8 @@ class DatenChecker(
         ergebnisse.extend(await self._check_ha_rueckgang(anlage))
         # Sensorwechsel U2 Lauf c (F12): HA zählt einen Zählerstand-Sprung derselben Entität als Menge — benannt, nicht berichtigt.
         ergebnisse.extend(await self._check_ha_zaehlerstand_springt(anlage))
+        # Sensorwechsel U3 b (G4): der Zählerstand einer MQTT-Reihe springt — Stunde, Menge und «Zähler getauscht».
+        ergebnisse.extend(await self._check_mqtt_zaehlerstand_springt(anlage))
         # Verdacht N-803: ein versetzter Abschnitt in eedcs Standreihe (Stände eines anderen Sensors) — Tageswerte an den Rändern.
         ergebnisse.extend(await self._check_zaehler_versatz(anlage))
         # Sensorwechsel S4 (B-7): verzeichneter Wechsel ohne Grund, nach dem die Abfrage gefragt hätte — «Grund nachtragen».

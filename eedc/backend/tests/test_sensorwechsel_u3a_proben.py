@@ -216,7 +216,9 @@ async def test_g1_hoehe_ungeprueft_keine_differenz(db, ohne_ha, monkeypatch):  #
 
 async def test_g1_kanal_fuehrt_die_zeit_als_verworfen_keine_differenz_und_monat_gespeichert(db, ohne_ha, monkeypatch):  # noqa: F811
     """Eigener Entscheid U3 a: führt der Kanal die Zeit als verworfen (Stundenwerte zählen dort 0, danach ohne Zuwachs), nennt
-    die Auskunft «keine Differenz», auch wenn die Reihe wie eine Zählerlücke rechnen würde; ein gespeicherter Monat steht."""
+    die Auskunft «keine Differenz», auch wenn die Reihe wie eine Zählerlücke rechnen würde; ein gespeicherter Monat steht.
+    U3 b (P-1): hier ein Spiegel ohne Brücke; setzt ein MQTT-Kanal ohne Höhenwechsel mit der Menge der Zeit an, sagt die
+    Auskunft «wie eine Zählerlücke» (``test_sensorwechsel_u3b_proben.py::test_g7_p1_auskunft_zeit_verworfen_wie_zaehlerluecke``)."""
     from backend.models.kanal import ART_SUM, FAMILIE_SPIEGEL, Kanal, KanalQuelle
     from backend.models.monatsdaten import Monatsdaten
 

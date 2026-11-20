@@ -104,11 +104,13 @@ def _kanal_beginn(a: Auftrag) -> Optional[int]:
     """Der Beginn des Intervalls im Kanal: **die Zeile ``t − 1 h`` trägt den Stand um ``t``** — der erste falsche Stand
     (``falsch_seit``) steht in der Kanalzeile eine Stunde davor (U1 Punkt 4, Gegenprüfung Zeile 10; dieselbe Regel wie am Ende,
     ``kanal/korrektur._spaetere_richtige``). Sonst bliebe die Stunde vor ``falsch_seit`` mit dem Stand des fremden Zählers im
-    Kanal (gemessen 4b-1-K, Fall ``h4``: 10.06. 12,05 statt 12,0). ``None`` = von Beginn an (Werkbank). Nur mit einer
-    Home-Assistant-Entität als richtiger Quelle (Spiegel); der MQTT-Kanal bleibt, wie er ist (nicht Teil von U1)."""
+    Kanal (gemessen 4b-1-K, Fall ``h4``: 10.06. 12,05 statt 12,0). ``None`` = von Beginn an (Werkbank). Mit einer
+    Home-Assistant-Entität als richtiger Quelle (Spiegel) und — U3 b, G7 (a) — am Stück einer MQTT-Reihe: dessen «Falsch seit»
+    ist der erste versetzte Stand der Reihe, der Sprung liegt in der Kanal-Stunde davor."""
     if a.falsch_seit is None:
         return None
-    return int(a.falsch_seit.timestamp()) - (_STUNDE if richtige_entitaet(a.nachher) is not None else 0)
+    mqtt_stueck = a.stueck and (a.nachher or {}).get("art") == "mqtt"
+    return int(a.falsch_seit.timestamp()) - (_STUNDE if richtige_entitaet(a.nachher) is not None or mqtt_stueck else 0)
 
 
 # ── Home Assistant ──────────────────────────────────────────────────────────
@@ -819,7 +821,8 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
     lauf = uuid.uuid4().hex[:12]
     bis_ts = fuell_ende(int(jetzt.timestamp()))
     kk = await korrigiere_kanal(db, a.anlage_id, a.sensor_key, _kanal_beginn(a), int(a.ab.timestamp()),
-                                richtige_entitaet(a.nachher), ha_svc=ha_svc, jetzt_ts=int(jetzt.timestamp()), bis_ts=bis_ts)
+                                richtige_entitaet(a.nachher), ha_svc=ha_svc, jetzt_ts=int(jetzt.timestamp()), bis_ts=bis_ts,
+                                bruecke=la.zaehlerluecke)
     row = await _wechsel_zeile(db, a, jetzt, lauf, kk.w0)
     luecke = await _luecken_zeile(db, a, row, la.luecke, lauf, la.intervall, hoehe_ungeprueft=la.hoehe_ungeprueft)
     if ha_svc is not None and la.luecke is None:

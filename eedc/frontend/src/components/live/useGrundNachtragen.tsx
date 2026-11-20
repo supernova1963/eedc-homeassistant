@@ -9,7 +9,8 @@
  * «falsch seit», wo es wählbar ist — am Stück steht es fest; Vorschau = Lauf), «Übernehmen» trägt ein (`…/grund` bzw.
  * `…/zaehler-versatz`). Gestartete Korrektur-Läufe gehen an `merkeLaeufe` (Fortschritt an der Fläche). Der Client rechnet
  * nichts. U2 Lauf b (F10): «bleiben» zwischen zwei HA-Sensoren mit derselben Frage — «Der neue Sensor zählt ab» holt die
- * Vorschau über dieselbe Prüf-Route (`zaehlt_ab`); ein Wartegrund aus der Antwort geht an `merkeWartende`.
+ * Vorschau über dieselbe Prüf-Route (`zaehlt_ab`); ein Wartegrund aus der Antwort geht an `merkeWartende`. U3 b (G7): am Stück
+ * einer MQTT-Reihe bietet die Antwort auch «Bisherige Werte bleiben» — «Übernehmen» sendet dann diesen Grund.
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
@@ -74,7 +75,7 @@ export function useGrundNachtragen(anlageId: number | null, wechselId: string | 
     setFehler(null)
     const eintragen = id != null
       ? datenquellenApi.grundNachtragen(anlageId, id, gruende[pruefung.sensor_key ?? ''])
-      : datenquellenApi.stueckKorrigieren(anlageId, stueck!)
+      : datenquellenApi.stueckKorrigieren(anlageId, stueck!, gruende[pruefung.sensor_key ?? '']?.grund)
     eintragen
       .then((r) => { merkeLaeufe(r.korrektur); merkeWartende?.(r.wartet); setPruefung(null); neuLaden() })
       .catch((e) => setFehler(e instanceof Error ? e.message : 'Speichern fehlgeschlagen'))

@@ -218,9 +218,9 @@ class ZaehlerVersatzChecks:
         """
         invs = await self._versatz_geraete(anlage.id)
         funde = await self._versatz_funde(anlage.id, invs)
+        out: list[CheckErgebnis] = await self._versatz_mqtt(anlage, invs)
         if not funde:
-            return [_versatz_ok()]
-        out: list[CheckErgebnis] = []
+            return out or [_versatz_ok()]
         for key, lauf in funde:
             wirkung = await self._versatz_wirkt(anlage, key, lauf, invs)
             if not wirkung:
@@ -231,6 +231,29 @@ class ZaehlerVersatzChecks:
             rest = None if lage in LAGEN_OHNE_HANDGRIFF else await self._versatz_rest(anlage.id, key, lauf)
             out.append(self._versatz_befund(_feld_name(invs, key), key, lauf, wirkung, lage, quellen, tausch, ab, rest))
         return out or [_versatz_ok()]
+
+    async def _versatz_mqtt(self, anlage, invs: dict) -> list[CheckErgebnis]:
+        """U3 b (Rechenweg G7): versetzte Abschnitte in MQTT-Reihen mit MQTT-Kanal (``versatz_mqtt.py``) — Warnung mit
+        «Grund nachtragen» (beide Antworten); vor und nach dem Abschnitt verschiedene Quellen ⇒ Auskunft ohne Knopf."""
+        from backend.services.daten_checker.datenquelle import versatz_mqtt as vm
+        from backend.services.daten_checker.ziele import stueck_parameter
+        from backend.services.zuordnung_wechsel.stueck import _gleiche_quelle, quelle_am_rand
+        from backend.services.zuordnung_wechsel.nachtrag import quelle_text
+
+        out = []
+        for key, lauf, schritte in await vm.mqtt_laeufe(self.db, anlage.id):
+            meldung, details, tage = vm.texte(vm.feld_name(invs, key), lauf, schritte)
+            vor = await quelle_am_rand(self.db, anlage, key, lauf.beginn.von)
+            nach = await quelle_am_rand(self.db, anlage, key, lauf.ende.bis)
+            gleich = _gleiche_quelle(vor, nach)
+            details += vm.SATZ_LAGE if gleich else _SATZ_LAGE[GRUND_VERSCHIEDENE_QUELLEN].format(
+                quelle=quelle_text(vor), quelle_nach=quelle_text(nach))
+            sprung, rueckgang = lauf.beginn.bis.isoformat(timespec="minutes"), lauf.ende.bis.isoformat(timespec="minutes")
+            out.append(_versatz_zeile(CheckSeverity.WARNING if gleich else CheckSeverity.INFO, meldung, details, {
+                "schluessel": key, "lage": vm.LAGE_MQTT if gleich else GRUND_VERSCHIEDENE_QUELLEN,
+                "versatz_kwh": round(lauf.versatz_kwh, 3), "sprung": sprung, "rueckgang": rueckgang,
+                "tage_falsch": [d.isoformat() for d in tage]}, stueck=stueck_parameter(key, sprung, rueckgang) if gleich else None))
+        return out
 
     async def _versatz_funde(self, anlage_id: int, invs: dict) -> list[tuple[str, VersatzLauf]]:
         """Je Schlüssel mit HA-Ständen, dessen Tageswert die Tagesansicht aus der Standreihe zeigt
@@ -415,14 +438,14 @@ class Wirkung:
         return bool(self.tage_zu_hoch or self.tage_ohne_wert)
 
 
-async def lade_reihe(db, anlage_id: int, key: str) -> list[tuple[datetime, float]]:
-    """Die Standreihe eines Schlüssels (nur HA-Stände), aufsteigend — die Reihe der Erkennung (Befund und Routen am Befund,
-    ``zuordnung_wechsel/stueck.finde_lauf``). Roh gelesen und mit ``fromisoformat`` gewandelt — halb so lang wie die
-    ORM-Spalte (gemessen 0,22 statt 0,42 s über die Produktiv-Sicherung)."""
+async def lade_reihe(db, anlage_id: int, key: str, quelle: Optional[str] = None) -> list[tuple[datetime, float]]:
+    """Die Standreihe eines Schlüssels (nur HA-Stände; U3 b: mit ``quelle = mqtt_inbound`` die MQTT-Stände), aufsteigend — die
+    Reihe der Erkennung (Befund und Routen am Befund, ``zuordnung_wechsel/stueck.finde_lauf``). Roh gelesen und mit
+    ``fromisoformat`` gewandelt — halb so lang wie die ORM-Spalte (gemessen 0,22 statt 0,42 s über die Produktiv-Sicherung)."""
     from backend.services.snapshot.source import SnapshotSource
 
     return [(datetime.fromisoformat(z), w) for z, w in (await db.execute(text(_SQL_REIHE), {
-        "a": anlage_id, "k": key, "q": SnapshotSource.HA_STATISTICS})).all()]
+        "a": anlage_id, "k": key, "q": quelle or SnapshotSource.HA_STATISTICS})).all()]
 
 
 #: OK-Zeile (N-799 S3, K7 — Entscheid Master 16.11.2026): ohne Fund steht der Befund unter den bestandenen Prüfungen, damit

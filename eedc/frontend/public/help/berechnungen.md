@@ -4998,7 +4998,8 @@ Rechenweg G1): je nicht aufgehobener Lücke (`zeitpunkt.ist_luecke`) eine Auskun
 Funktionen wie Vorschau und Leser:
 
 ```
-wie Zählerlücke  = Kanal führt die Zeit nicht als verworfen  UND  zeitpunkt.ohne_hoehenwechsel(Zeilen, Stand vor, Stand nach, Lücke)
+wie Zählerlücke  = Kanal führt die Zeit nicht als verworfen ohne Brücke (U3 b, kanal/korrektur.ist_ueberbrueckt)
+                   UND  zeitpunkt.ohne_hoehenwechsel(Zeilen, Stand vor, Stand nach, Lücke)
                    ⇒ Menge am stueck.tragtag_der_luecke(bis); Tage darin ohne Wert (stueck.tage_der_luecke)
 keine Differenz  = sonst; Grund: «Höhe ungeprüft» (Lücken-Zeile mit ansatz = hoehe_ungeprueft) · Kanal (kanal_quelle.verworfen_ts
                    ab einer Stunde vor der Lücke — die Stundenwerte zählen dort 0 und setzen ohne Zuwachs an) · Höhenwechsel
@@ -5012,7 +5013,9 @@ nachträgt (`spannen` n > 1), zu einem Bilanz-Zähler gehört, dessen Lücke die
 die Kennzeichen der Tagesbilanz bleiben (Messfrage M5: die Stelle der Saat «Topic verwerfen» ist eine Lücke der Tagesbilanz,
 kein Stillstands-Fenster). **Eigener Entscheid U3 a:** führt der Kanal die Zeit als verworfen, gilt «keine Differenz», auch wenn
 die Reihe wie eine Zählerlücke rechnen würde — die Tagesansicht liest den Kanal vor der Reihe (Rechenweg «Widerlegt» 3: 6,0
-statt der Menge); Lauf b (G7) ändert den Kanal und damit diese Lage.
+statt der Menge). **U3 b (P-1):** setzt der Kanal nach der Zeit mit ihrer Menge an (MQTT ohne Höhenwechsel, unten «Brücke»),
+liest die Auskunft dieselbe Regel (`kanal/korrektur.ist_ueberbrueckt` vergleicht den Versatz der Quellzeile danach mit dem, den
+`bruecken_versatz` setzen würde) und sagt «wie eine Zählerlücke».
 
 **Gespeicherter Monatswert passt nicht mehr** (Daten-Checker `monatswert_ueberholt`, Erzeuger `datenquelle/monatswert.py`, Vergleich
 `core/berechnungen/monatswert_vergleich.py`; Rechenweg G2): Warnung mit «Monat öffnen».
@@ -5045,6 +5048,63 @@ Prüfung die Lage «Rest» des Befunds `zaehler_versatz`. Saat (A = 100 + 0,5 kW
 der Stunde vor `ab_ts` den Schlüssel trägt (`verwerfen_vor_quellbeginn.tz_keys_der_zeile`), mit Tag und Wert. **Benannt:** eine
 zweite Lage von G2 «Tag neu aufbauen» braucht eine neue Rechnung (was der Tag neu gebildet ergäbe) und ist nicht gebaut.
 Proben: `test_sensorwechsel_u3a_proben.py`.
+
+**Sensorwechsel bei MQTT — Rohstand ist die Quelle** (Sensorwechsel U3 b, Rechenweg G4/G5/G7, Bauplan Nr. 150, Entscheide E1–E6).
+Bei MQTT ist der Rohstand (`mqtt_energy_snapshots`, alle fünf Minuten der zuletzt gemeldete Stand, 31 Tage) die Quelle; eedc führt
+daraus je Stunde die Summe nach Home Assistants Regel (Kanal «Eigene Summe»). Eine Periode endet an einem Eintrag mit dem letzten
+Rohstand davor und beginnt mit dem ersten ab dem Eintrag; zwischen zwei Perioden entsteht keine Differenz, und solange Rohstände
+vorliegen, fällt keine Stunde weg. Ohne Eintrag zählt der Niveauwechsel nach der Summenregel, und der Daten-Checker nennt Stunde,
+Menge und Handgriff.
+
+```
+Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_wechsel/rohstand.py):
+  stand_alt_ende = letzter Rohstand vor erklaert_ts, stand_neu_null = erster ab erklaert_ts (wörtlich, nie interpoliert),
+  ansatz = schnitt an der Wechsel-Zeile (Grund «Fortsetzung», davor und danach MQTT auf demselben Schlüssel)
+  Reihe:  Stände ab ab_ts + (stand_alt_ende − stand_neu_null)                                  (zeitpunkt.rand_versatz)
+  Kanal:  Naht-Stunde = (stand_alt_ende − Stand der Zeile davor) + (Stand der Naht-Zeile − stand_neu_null)
+          Quellzeile ab der Naht-Stunde, Versatz-Verschiebung = Menge − (Wert Naht − Wert davor)  (naht.nachtrag_fortsetzung)
+  «Zähler getauscht» MQTT: in der Stunde von «Getauscht am» das Paar aufeinanderfolgender Rohstände mit dem größten
+          Höhenwechsel (Rückgang < −0,01; Sprung > max(10 × größter Schritt der 24 h davor, 1 kWh)); der Tausch wird am
+          ersten Stand danach eingetragen; ohne Höhenwechsel: abgelehnt (kein_sprung); nach «Getauscht am» noch kein Stand:
+          eingetragen, die Rand-Stände setzt der Stundenlauf, der die Naht anwendet (rohstand.rand_im_stundenlauf)
+  «bleiben» zwischen zwei MQTT-Quellen: im Stundenlauf aus denselben zwei Rohständen, an denen er teilt; im Nachtrag am
+          Höhenwechsel der Stunde des Wechsels, sonst um den verzeichneten Zeitpunkt
+  ohne Rohstände (älter als 31 Tage): wie vor U3 (die Naht-Stunde zählt keinen Zuwachs)
+
+Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqtt_standsprung.py):
+  je Quell-Abschnitt eines MQTT-Kanals (Familie Mitschrift, statistic_id = MQTT-Schlüssel, nicht der Nachbau aus HA-Ständen)
+  der Kern zaehlerstand_sprung (Neubeginn > 3, Sprung > 10) + Arm «Rückgang» (Zuwachs < −0,01, ohne Maß); am Stand-Kanal
+  Δ state, ohne Rückgang-Arm; ausgenommen «kurz 0 und zurück» (ha_sprung.rueckkehr_stunden), «kurz tiefer und zurück»
+  (_kurz_tiefer: der Stand fällt und ist in der nächsten Zeile wieder mindestens auf der Höhe davor) und die Kanal-Stunden der
+  Schritte eines versetzten Abschnitts (versatz_mqtt.mqtt_versatz_stunden); Fenster: der ganze Kanal (E2)
+  zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang oder G7 nennt
+
+Versetzter Abschnitt einer MQTT-Reihe (G7; versatz_mqtt.py): dieselbe Erkennung über quelle = mqtt_inbound für Schlüssel mit
+  MQTT-Kanal; Wirkung = jeder Schritt, über den keine Fortsetzungs-Naht führt (der Kanal zählt ihn)
+  «bleiben»  = je Schritt ein Eintrag «Zähler getauscht» (stueck.tausch_lagen: Stunde des Stands davor, sonst danach)
+  «verwerfen» = Korrektur über das Stück; Kanal-Beginn eine Stunde vor «Falsch seit» (korrektur._kanal_beginn, der Sprung liegt in
+             der Kanal-Stunde vor dem ersten versetzten Stand der Reihe); ohne Höhenwechsel (korrektur._wie_zaehlerluecke) setzt
+             die Quellzeile danach mit der Menge der Zeit an: Versatz = Kanalwert davor + (Stand danach − Stand davor) − Wert
+             danach (kanal/korrektur.bruecken_versatz, rohstand_rand.bruecke)
+```
+
+**Gemessen** (Saat des Rechenwegs, `golden-master/sensorwechsel-saat/u3b/`; Netzbezug 12,0 je Tag, Ereignis 10:20): «Zähler
+getauscht» sofort wie später und für Sprung +2 000, Neubeginn bei 300 und −4 %: Naht-Stunde 0,458, Tag 11,958 in Kanal, Reihe und
+Tagesansicht (vorher 11,5 bzw. Reihe 11,5 bei sofort); Topic-Wechsel «bleiben» sofort und nachgetragen 11,958 (vorher 11,958/11,5
+bzw. 11,5); Stück +2 000 über zwei Tage verworfen: Tagesansicht 5,0 · «—» · 31,0, Monat gleich dem Fall ohne Stück (Saat vom 20.11.: 229,0; vorher
+2 005,5 · «—» · 6,0, Monat 2 203,5); «bleiben» am Stück 11,958 · 12,0 · 11,958. M1: Kern an der Saat +2 000,5 (Maß 166,7), Neubeginn 300,458
+(25,0), Rückgang −206,9 (Arm C). M2: Stundenlauf «Eigene Summe» über die MQTT-Rohstände der GM-Sätze r27, r28, kanal, pruef
+(28–33 MQTT-Abschnitte, ≈ 1 150 Paare): 0 Funde, 0 Rückgänge unter −0,01. **E5:** Home Assistant ↔ MQTT bekommt keine
+Rand-Stände (wie bisher, die Prüf-Antwort sagt es: `rohstand.SATZ_BLEIBEN_HA_MQTT`). **E4:** Live «heute/gestern» rechnet bei MQTT
+aus den Rohständen (`mqtt_energy_history_service._compute_deltas`, negative Differenz = Zählerstand) und zeigt den Sprung für
+den Tag des Sprungs («heute», am Tag danach «gestern») weiter (Saat: 2 012,0 bzw. 306,8 bzw. 4 984,6 vor und nach dem Eintrag) — Befund und Dialog sagen es; nicht gebaut (benannte Grenze G6). **Benannte Grenzen:** (a) G6 Live (oben);
+(b) G10 der MQTT-Monatsabschluss-Vorschlag liest die Reihe (ein Sprung erscheint dort als Vorschlag); (c) ein Tausch in der
+doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide Durchläufe der Stunde mischen sich (Saat: Kanal
+7 025,9, am HEAD 7 025,5; am selben Tag außerhalb der Stunde 12,458 = 25 Stunden); (d) «bleiben» sofort, wenn die neue Quelle schon
+vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
+Kanal); (e) Mischform HA/MQTT in der Bilanz (`kanal/bilanz_adapter.zaehler_eintraege`, Bestandsmessung); (f) die Reihen-Leser
+(`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal).
+Proben: `test_sensorwechsel_u3b_proben.py`; Vitest `F/components/live/SensorwechselMqttSprung.test.tsx`.
 
 - **Stundenverbrauch** (R6) nur, wenn PV, Netzbezug und Einspeisung **dieselbe** Spanne tragen; eine fehlende Batterie zählt 0, eine Batterie mit anderer Spanne ⇒ `None`.
 - **Tagesverbrauch** (R7) nach der HA-Formel über den Tag; `None` nur im Total-Fall. **Eigenverbrauch** = max(0, ΣPV − ΣEinsp − ΣLadung) + ΣEntladung (N-635, §3.1). Eine fehlende Batterie zählt 0, `verworfen` auf der Batterie sperrt den Eigenverbrauch nicht (wie beim Gesamtverbrauch). Autarkie = (GV − Netzbezug) / GV. Unterdrückt werden EV/EV-Quote bei `verworfen` auf PV oder Einspeisung, die Autarkie bei `verworfen` auf PV, Netzbezug, Einspeisung oder Batterie.

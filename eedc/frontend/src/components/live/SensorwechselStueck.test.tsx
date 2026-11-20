@@ -100,7 +100,7 @@ describe('Sensorwechsel 4b-1 — Grund nachtragen am versetzten Abschnitt', () =
     expect(document.querySelector('[data-falsch-seit]')).toBeNull()
     expect(datenquellenApi.stueckKorrigieren).not.toHaveBeenCalled()
     fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
-    await waitFor(() => expect(datenquellenApi.stueckKorrigieren).toHaveBeenCalledWith(1, ANGABE))
+    await waitFor(() => expect(datenquellenApi.stueckKorrigieren).toHaveBeenCalledWith(1, ANGABE, 'korrektur'))
     await waitFor(() => expect(document.querySelector('[data-sensorwechsel-dialog]')).toBeNull())
     await waitFor(() => expect(datenquellenApi.korrekturLauf).toHaveBeenCalledWith(1, 'L7'))
   })

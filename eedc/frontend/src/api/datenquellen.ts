@@ -342,6 +342,8 @@ export interface QuellePruefung {
   korrektur: KorrekturVorschau | null
   /** U2 Lauf b: nur zwischen zwei HA-Sensoren — was «Bisherige Werte bleiben» tut. */
   bleiben?: BleibenAngaben | null
+  /** U3 b: bei MQTT bzw. zwischen Home Assistant und MQTT der Satz zu «Bisherige Werte bleiben» (sonst der allgemeine). */
+  bleiben_satz?: string | null
 }
 
 export interface KorrekturLaufStart {
@@ -411,7 +413,7 @@ export type GrundNachtragErgebnis = Omit<GrundNachtragPruefung, 'korrektur'> & {
 
 /** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
 export interface ZaehlerGetauschtAntwort {
-  weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich'
+  weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich' | 'kein_sprung'
   sensor_key: string | null
   saetze: string[]
   eintragen: boolean
@@ -554,8 +556,8 @@ export const datenquellenApi = {
     api.post<GrundNachtragPruefung>(`/datenquellen/${anlageId}/zaehler-versatz/pruefen`, { ...stueck, grund: grund ?? null }),
 
   /** «Grund nachtragen» am versetzten Abschnitt: die Korrektur über das Stück ausführen. */
-  stueckKorrigieren: (anlageId: number, stueck: StueckAngabe) =>
-    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zaehler-versatz`, { ...stueck, grund: 'korrektur' }),
+  stueckKorrigieren: (anlageId: number, stueck: StueckAngabe, grund: WechselGrund = 'korrektur') =>
+    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zaehler-versatz`, { ...stueck, grund }),
 
   korrekturLaeufe: (anlageId: number) =>
     api.get<KorrekturLaufLaufend[]>(`/datenquellen/${anlageId}/korrektur-laeufe`),

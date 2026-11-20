@@ -28,4 +28,10 @@ den fortlaufenden Stand schicken.
 > systematisch zu niedrig und im Monatsabschluss per Knopfdruck ein gespeicherter Wert. Die Reparatur liegt beim Absender;
 > sobald die Reihe wieder fortlaufend ist, verschwindet der Befund von selbst.
 
+**Ein Befund je Ursache** (seit Sensorwechsel U3): wechselt der Stand dauerhaft die Höhe — er beginnt neu, aber nicht bei 0,
+oder fällt um weniger als ein Zehntel und bleibt dort —, nennt [§4.8k](#48k-zaehlerstaende--zaehlerstand-springt-mqtt) die
+Stunde mit dem Weg «Zähler getauscht»; den Rückgang eines versetzten Abschnitts nennt
+[§4.8f](#48f-zaehlerstaende--versetzter-abschnitt). Diese Prüfung lässt solche Rückgänge aus. Ein Zähler, der täglich oder
+monatlich auf null geht, und ein Stand, der kurz fällt und gleich wieder auf der alten Höhe ist, bleiben hier.
+
 ---

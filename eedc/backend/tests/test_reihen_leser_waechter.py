@@ -105,6 +105,10 @@ REIHEN_LESER: dict[str, tuple[str, str, bool, str]] = {
         "L12", KANAL, True, "Wirkungs-Prüfung über die Feld-Auskunft (feld_leser.feld_aus_kanal_am_tag); die Erkennung selbst "
         "sucht genau die Niveau-Sprünge der Reihe (sie ist der Befund, keine Menge); ein Rand an einer Fortsetzungs-Naht ist "
         "ohne Wirkung (zaehler_naht.ueber_naht, Sitzung 4-K)"),
+    "services/daten_checker/datenquelle/versatz_mqtt.py::<modul>": (
+        "L12", NAHT, False, "Sensorwechsel U3 b (G7): dieselbe Erkennung über die MQTT-Stände (quelle = mqtt_inbound) eines "
+        "Schlüssels mit MQTT-Kanal — sie sucht genau die Niveau-Sprünge (Befund, keine Menge); ein Schritt an einer "
+        "Fortsetzungs-Naht ist ohne Wirkung (zaehler_naht.ueber_naht)"),
     "services/kanal/schreiber.py::_eigene_summe": (
         "L16", NAHT, False, "MQTT «Eigene Summe»: eine Fortsetzung teilt die Periode (kanal/naht.zeilen_mit_naehten, B-4)"),
     "services/snapshot/reader.py::finde_zaehler_ruecksprunge": (

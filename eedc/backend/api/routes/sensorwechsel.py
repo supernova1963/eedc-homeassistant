@@ -13,7 +13,8 @@
 * ``POST /api/datenquellen/{anlage}/zaehler-versatz/pruefen`` und ``…/zaehler-versatz`` — «Grund nachtragen» am Befund
   «Zählerstände – versetzter Abschnitt» (Sitzung 4b-1, Bauplan «Zu §14» Nr. 98; ``services/zuordnung_wechsel/stueck.py``):
   Schlüssel, Sprung und Rückgang aus ``werte`` des Befunds, serverseitig gegen die Erkennung geprüft (kein frei wählbares
-  Stück); nur «Korrektur» über das Stück. Die Prüfung schreibt nichts (Vorschau = Lauf).
+  Stück); «Korrektur» über das Stück, an einer MQTT-Reihe auch «Bisherige Werte bleiben» = je ein Eintrag «Zähler getauscht»
+  am Sprung und am Rückgang (U3 b, Rechenweg G7). Die Prüfung schreibt nichts (Vorschau = Lauf).
 
 Die Quellen-Wahl selbst samt Prüf-Route steht in ``datenquellen.py`` (``…/quelle``, ``…/quelle/pruefen``).
 """
@@ -285,7 +286,7 @@ class StueckRequest(BaseModel):
     sensor_key: str
     sprung: datetime
     rueckgang: datetime
-    #: ``korrektur``; leer = nur prüfen, was nachzutragen ist.
+    #: ``korrektur`` (an einer MQTT-Reihe auch ``fortsetzung``); leer = nur prüfen, was nachzutragen ist.
     grund: Optional[str] = None
 
 
@@ -330,7 +331,7 @@ async def pruefe_stueck(anlage_id: int, body: StueckRequest, db: AsyncSession = 
 async def stueck_korrigieren(anlage_id: int, body: StueckRequest, db: AsyncSession = Depends(get_db, scope="function")):
     """Trägt «Korrektur» über das Stück ein (Korrektur-Dienst mit ``stueck``: füllbar ⇒ aus der Quelle davor und danach neu
     gelesen, sonst eine Lücke). Antwort wie die Prüfung, dazu ``korrektur`` = der gestartete Lauf (Fortschritt an der Fläche)."""
-    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    from backend.models.zuordnung_wechsel import GRUND_FORTSETZUNG, GRUND_KORREKTUR
     from backend.services.zuordnung_wechsel import korrektur as kr
     from backend.services.zuordnung_wechsel import stueck as st
     from backend.services.zuordnung_wechsel.nachtrag import SATZ_GRUND_FEHLT, SATZ_NUR_KORREKTUR_STUECK
@@ -338,6 +339,8 @@ async def stueck_korrigieren(anlage_id: int, body: StueckRequest, db: AsyncSessi
     grund = _grund(GrundNachtragRequest(grund=body.grund))
     anlage, la = await _stueck_lage(db, anlage_id, body)
     label = await _label(db, anlage, la.sensor_key)
+    if la.mqtt and grund == GRUND_FORTSETZUNG and not la.korrektur_nicht:
+        return await _stueck_bleiben(db, anlage, la, label)
     try:
         if la.korrektur_nicht:
             raise ValueError(la.korrektur_nicht)
@@ -362,3 +365,31 @@ async def stueck_korrigieren(anlage_id: int, body: StueckRequest, db: AsyncSessi
     laeufe = [{"lauf": s["lauf"], "sensor_key": la.sensor_key, "label": label, "tage_neu": s["tage_neu"],
                "zaehlerstaende_geloescht": s["zaehlerstaende_geloescht"]}]
     return {**st.antwort(la, label, _feld_id(la.sensor_key)), "eingetragen": True, "korrektur": laeufe}
+
+
+async def _stueck_bleiben(db: AsyncSession, anlage, la, label: str) -> dict:
+    """U3 b (G7, E1 = A): «Bisherige Werte bleiben» am Stück einer MQTT-Reihe — je ein Eintrag «Zähler getauscht» am Sprung
+    und am Rückgang (``zaehler_getauscht.trage_ein`` mit den Rand-Ständen der Rohstände, G5). Lässt sich einer nicht eintragen,
+    wird keiner eingetragen (422 mit dem Satz der Lage)."""
+    from backend.services.zuordnung_wechsel import stueck as st
+    from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
+
+    lagen = await st.tausch_lagen(db, anlage, la)
+    gesperrt = next((x for x in lagen if x.weg != zg.WEG_FORTSETZUNG and not x.schon), None)
+    if gesperrt is not None:
+        raise HTTPException(status_code=422, detail=" ".join(zg.saetze(gesperrt)))
+    try:
+        for x in lagen:
+            await zg.trage_ein(db, anlage, x)
+    except ValueError:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=zg.satz_nicht_moeglich(lagen[0]))
+    zeiten = " und ".join(x.getauscht_am.strftime("%d.%m.%Y %H:%M") for x in lagen)
+    await log_activity(
+        kategorie="sensor_mapping", aktion="Grund nachgetragen",
+        details=(f"{anlage.anlagenname} · {label}: versetzter Abschnitt vom {la.sprung.strftime('%d.%m.%Y %H:%M')} bis "
+                 f"{la.rueckgang.strftime('%d.%m.%Y %H:%M')} — bisherige Werte bleiben, Tausch am {zeiten}"),
+        anlage_id=anlage.id, db=db,
+    )
+    await db.commit()
+    return {**st.antwort(la, label, _feld_id(la.sensor_key)), "eingetragen": True, "korrektur": []}
