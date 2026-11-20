@@ -7,7 +7,7 @@ die größten Abweichungen vorn.
 
 ## Lösungsweg
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
-   *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ für diesen Tag berichtigen.
+   *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ für diesen Tag berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken (ohne Spiegel heißt der Knopf «Tag neu
    aufbauen»), die Vorschau lesen und **«Anwenden»**. Für viele Tage auf einmal: in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».

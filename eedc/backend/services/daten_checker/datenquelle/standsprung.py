@@ -15,11 +15,11 @@ Monat, den «Aus HA laden» oder der Sammelimport holt. Die Rückkehr-Stunden de
 
 **Zwei Lagen, eine Zeile:**
 
-* **Mengen-Zähler** (Kanal-Art ``sum``): «Wert anpassen» in HA berichtigt die Summe; eedc übernimmt sie beim nächtlichen
+* **Mengen-Zähler** (Kanal-Art ``sum``): «Summe anpassen» in HA berichtigt die Summe; eedc übernimmt sie beim nächtlichen
   Abgleich oder sofort mit «Aus Home Assistant neu übernehmen» (``SPIEGEL_ABGLEICH_TAG``, danach der Tag des größten Funds neu
   aufgebaut). Danach ist Δ ``sum`` der Stunde klein (das Maß fällt unter die Schwelle) bzw. ungleich Δ ``state`` — der Befund ist
   weg. Schwere Warnung, Aktion.
-* **Stand-Zähler** (Kanal-Art ``stand``: Gas, Wasser, Öl, Kilometerstand): eedc rechnet mit ``state``; «Wert anpassen» ändert nur
+* **Stand-Zähler** (Kanal-Art ``stand``: Gas, Wasser, Öl, Kilometerstand): eedc rechnet mit ``state``; «Summe anpassen» ändert nur
   ``sum`` und wirkte hier nicht (Lab, Messblatt 4c-0 §10). Der Text nennt deshalb die Wege nach Entscheid E2 (Bauplan Nr. 139):
   den getauschten Zähler als eigenes Gerät führen (Handbuch Einstellungen §3.4a) und beim nächsten Tausch einen neuen Sensor
   zuordnen und «Bisherige Werte bleiben» wählen. Ohne Mengen-Fund ist die Zeile eine Auskunft mit Schwere Info (W-6).
@@ -113,13 +113,15 @@ SATZ_WAS = ("In diesen Stunden ist der Zählerstand eines Sensors gesprungen —
             "Stunde; beginnt ein neuer Zähler nicht bei 0, zählt es seinen ganzen Stand. eedc übernimmt die Statistik so, wie "
             "das Energie-Dashboard von Home Assistant sie zeigt, und berichtigt nichts — der Sprung steht deshalb in Tag, Monat "
             "und Jahr.")
-SATZ_MENGE = ("Gefunden: {namen}. Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
-              "„Wert anpassen“ die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen. eedc gleicht die "
+SATZ_MENGE = ("Gefunden: {namen}. Lösung in Home Assistant: Einstellungen → Werkzeuge → Statistik (in älteren "
+              "Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik) → den Sensor suchen → beim Symbol „Summe anpassen“ "
+              "unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei „Neuer Wert“ die echte "
+              "Menge eintragen und „Anpassen“ drücken. eedc gleicht die "
               "korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus Home "
               "Assistant neu übernehmen“. Hast du den Monat schon mit dem Sprung gespeichert („Aus HA laden“ oder Import), "
               "übernimm ihn danach im Monatsabschluss neu.")
 SATZ_STAND = ("Bei Zählerständen (Gas, Wasser, Öl, Kilometerstand) rechnet eedc mit dem Stand, den der Sensor anzeigt, nicht mit "
-              "der Summe der Statistik — „Wert anpassen“ in Home Assistant ändert dort nichts. Gefunden: {namen}. Wurde der "
+              "der Summe der Statistik — „Summe anpassen“ in Home Assistant ändert dort nichts. Gefunden: {namen}. Wurde der "
               "Zähler getauscht, führe den neuen als eigenes Gerät: am alten Gerät ein Stilllegungsdatum setzen und den neuen "
               "Zähler anlegen (Handbuch Einstellungen, Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in "
               "Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer anlegst, ihn in eedc unter Datenquellen "

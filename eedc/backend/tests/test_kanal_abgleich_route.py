@@ -1,6 +1,6 @@
 """Knopf „HA-Spiegel jetzt abgleichen" (MartyBr, simon42 #429) — die Route ruft den Lauf des Nachtjobs.
 
-Nach einer Korrektur in Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen") zeigten die
+Nach einer Korrektur in Home Assistant (Einstellungen → Werkzeuge → Statistik → „Summe anpassen") zeigten die
 Tages-Kennzahlen bis zum nächsten Konsistenzlauf (02:45) den alten Spiegel. Die Route
 ``POST /api/energie-profil/{anlage_id}/kanal-abgleich`` ruft dieselbe Funktion wie der Nachtjob
 (``kanal/konsistenz.konsistenz_anlage``, über ``konsistenz_alle`` je Anlage), mit ``get_session`` als Sitzungsquelle.

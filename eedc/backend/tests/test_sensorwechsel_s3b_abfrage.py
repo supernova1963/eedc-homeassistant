@@ -428,7 +428,7 @@ async def test_zaehler_getauscht_ha_mit_spiegel_nur_weg_in_home_assistant(db):
     aid = a.id
     await db.commit()
     p = await pruefe_zaehler_getauscht(aid, NETZ, ZaehlerGetauschtRequest(), db)
-    assert (p["weg"], p["eintragen"]) == ("home_assistant", False) and "Wert anpassen" in p["saetze"][0]
+    assert (p["weg"], p["eintragen"]) == ("home_assistant", False) and "Summe anpassen" in p["saetze"][0]
     r = await zaehler_getauscht(aid, NETZ, ZaehlerGetauschtRequest(), db)
     assert r["eingetragen"] is False and await _zeilen(db, aid) == []
 

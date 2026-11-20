@@ -405,7 +405,7 @@ async def test_w11_ha_zaehlersprung_wirkt(uhr, monkeypatch):
 
 async def test_w11_ha_zaehlerstand_springt_wirkt(uhr, monkeypatch):
     """Sensorwechsel U2 Lauf c: der Spiegel trägt ab 02.07. 12:00 einen Sprung des Netzbezugs um +5 000 kWh in Stand und
-    Summe (Gerätetausch, derselbe Sensor), HA nach «Wert anpassen» nicht ⇒ «Zählerstand springt»; der Abgleich übernimmt HAs
+    Summe (Gerätetausch, derselbe Sensor), HA nach «Summe anpassen» nicht ⇒ «Zählerstand springt»; der Abgleich übernimmt HAs
     Statistik ⇒ kein Befund. (Der 02.07., nicht E54_TAG: das Bezugsfenster braucht 14 Tage mit Zuwachs ab dem 01.06.)"""
     from datetime import date
 

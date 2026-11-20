@@ -175,7 +175,7 @@ async def test_b_zaehlersprung_traegt_den_handgriff(db):
     assert befund_params(e) == {"datum": rueckkehr.isoformat()}
     assert "„Aus Home Assistant neu übernehmen“" in e.details
     assert "Reparatur-Werkbank" not in e.details
-    assert "Wert anpassen" in e.details and "Monatsabschluss neu" in e.details
+    assert "Summe anpassen" in e.details and "Monatsabschluss neu" in e.details
 
 
 async def test_b_rueckgang_traegt_den_handgriff(db):

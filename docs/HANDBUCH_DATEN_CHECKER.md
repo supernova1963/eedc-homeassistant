@@ -2766,8 +2766,8 @@ Nachtrag als unmöglicher Wert gemeldet. Dieselbe Regel entscheidet beim Rechnen
 > einem Tag, dessen Mengen aus der Langzeitstatistik kommen, ist eine hohe Stunde die Zahl von Home Assistant, wie im
 > Energie-Dashboard; ein Sprung mit dem typischen Muster (Sensor fällt kurz auf 0 und kehrt zurück) meldet
 > [§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant). **Ein reiner Sprung ohne dieses Muster** bekommt an einem
-> solchen Tag **keinen** Befund: prüfe ihn in Home Assistant unter *Entwicklerwerkzeuge → Statistik* und berichtige ihn
-> dort.
+> solchen Tag **keinen** Befund: prüfe ihn in Home Assistant unter
+> *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) und berichtige ihn dort.
 
 > **Ältere Tage** (über 30 Tage) prüft die Stundenwert-Prüfung nicht — die beiden Tagesprüfungen (Einspeisung über
 > Erzeugung, Nachtrag) sehen alle gespeicherten Tage: dort stehen meist schon berichtigte Werte, und für den aktuellen
@@ -2791,7 +2791,7 @@ vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist umgekehrt.
 2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc baut die Tage aus
    eigenen Stundenwerten neu (höchstens 31 Tage je Lauf). Kommen alle Tage aus der Statistik von Home Assistant, heißt
    der Knopf **«Aus Home Assistant neu übernehmen»** und übernimmt nur den jüngsten Tag — dann vorher die Statistik in
-   Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen; nach dem erneuten Prüfen steht der Knopf am
+   Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) berichtigen; nach dem erneuten Prüfen steht der Knopf am
    nächsten Tag. Steht am Befund nur
    **«Was gilt»**, kommen die Mengen aus eedcs eigenen Zählerständen; dann wirkt die berichtigte Zuordnung auf die
    folgenden Tage.
@@ -2812,7 +2812,7 @@ aus Zählerständen gerechnet ist. Dieselbe Form hat ein Zählersprung nach eine
 **Lösungsweg**
 1. Die genannten Mengen prüfen (der Knopf **«Was gilt»** am Befund öffnet diesen Text). Stimmen sie, ist nichts zu tun.
 2. Stimmt eine nicht, liegt der Fehler in der Zähler-Historie der Quelle: in Home Assistant unter
-   *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ berichtigen. Danach den Tag in der
+   *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ berichtigen. Danach den Tag in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) neu holen: «Aus Home Assistant
    neu übernehmen» für einen Tag aus der Statistik von Home Assistant, sonst «Tag neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein solcher Nachtrag in den Tagen steht.
@@ -3138,8 +3138,9 @@ von Home Assistant sie zeigt — der Sprung steht deshalb in Tag, Monat und Jahr
 30 Tage Sensor, Tag, Stunde und die Menge des Sprungs.
 
 **Lösungsweg**
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei
+   „Neuer Wert“ die echte Menge eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»** —
    eedc holt die berichtigte Statistik und baut den Tag des ersten Funds neu auf. Ohne Klick gleicht eedc die
    Statistik beim nächtlichen Abgleich von selbst ab.
@@ -3160,7 +3161,7 @@ ihn nicht selbst ab: die Quelle ist die Statistik in Home Assistant.
 
 Das Gegenstück zum Sprung: Die Summe eines Sensors in der Langzeitstatistik von Home Assistant **fällt** in einer
 Stunde, statt zu steigen. Meist wurde der Wert in Home Assistant nachträglich nach unten angepasst (unter
-*Entwicklerwerkzeuge → Statistik* mit „Wert anpassen“, mit einer zu großen Korrektur oder an der falschen Stunde), oder
+*Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) mit „Summe anpassen“, mit einer zu großen Korrektur oder an der falschen Stunde), oder
 ein Sensor hat einen kleineren Zählerstand gemeldet. Home Assistant bucht das als negative Menge, und eedc übernimmt die
 Statistik so, wie das Energie-Dashboard sie zeigt — der Rückgang steht als Abzug in Tag, Monat und Jahr, und
 «Aus HA laden» schlägt für den Monat einen zu kleinen oder negativen Wert vor.
@@ -3200,8 +3201,9 @@ Einspeisen — jede Richtung hat ihr eigenes Feld. Die Meldung nennt je Sensor u
 wird die ganze übernommene Statistik, nicht nur die letzten 30 Tage.
 
 **Lösungsweg**
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und die Menge auf den echten Wert setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Rückgangs in der genannten Stunde wählen,
+   bei „Neuer Wert“ den echten Wert eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»**. Ohne
    Klick gleicht eedc die berichtigte Statistik beim nächtlichen Abgleich von selbst ab.
 3. Stammt der Rückgang von einem Sensor, den du inzwischen ersetzt hast (die Meldung sagt „Vorgänger-Sensor, zugeordnet
@@ -3399,7 +3401,7 @@ zurückgesetzt). Geprüft werden die letzten 31 abgeschlossenen Tage.
 1. Den Sensor in Home Assistant prüfen (im Standalone-Betrieb das MQTT-Topic): Hängt die Integration, ist das Gerät
    erreichbar, wurde der Zähler zurückgesetzt? Der Knopf **«Was gilt»** am Befund öffnet diesen Text.
 2. Liefert der Sensor wieder Werte, zählen die folgenden Tage richtig. Die Tage, an denen er stand, berichtigst du bei
-   Bedarf in Home Assistant unter *Entwicklerwerkzeuge → Statistik* mit „Wert anpassen“.
+   Bedarf in Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) mit „Summe anpassen“.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange der Stillstand in den geprüften
    31 Tagen liegt.
 
@@ -3609,7 +3611,7 @@ zurückkehrt ([§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant)); der Wech
 [§4.8c](#48c-zaehlerstaende--rueckgang-in-home-assistant) bzw. bei Verbrauchszählern in [§4.23](#423-verbrauchszaehler-zaehlerstaende).
 
 **Zählerstände** (Gas, Wasser, Öl, Kilometerstand): eedc rechnet dort mit dem Stand, den der Sensor anzeigt, nicht mit der
-Summe der Statistik — „Wert anpassen“ in Home Assistant ändert dort nichts. Der Befund ist dann eine Auskunft: er nennt den
+Summe der Statistik — „Summe anpassen“ in Home Assistant ändert dort nichts. Der Befund ist dann eine Auskunft: er nennt den
 Weg, den getauschten Zähler als eigenes Gerät zu führen, und wie ein späterer Tausch ohne Sprung bleibt.
 
 ---
@@ -3624,8 +3626,9 @@ Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berich
 Monat und Jahr. Die Meldung nennt je Fund Feld, Sensor, Tag, Stunde und die Menge, die eedc wie Home Assistant dafür zählt.
 
 **Lösungsweg**
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei
+   „Neuer Wert“ die echte Menge eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»** —
    eedc holt die berichtigte Statistik und baut den Tag des größten Funds neu auf. Ohne Klick gleicht eedc die
    Statistik beim nächtlichen Abgleich von selbst ab.
@@ -3633,7 +3636,7 @@ Monat und Jahr. Die Meldung nennt je Fund Feld, Sensor, Tag, Stunde und die Meng
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein
    gespeicherter Monat ändert sich nicht von allein.
 4. **Zählerstand** (Gas, Wasser, Öl, Kilometerstand; die Meldung sagt es): hier rechnet eedc mit dem Stand, den der Sensor
-   anzeigt, und „Wert anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
+   anzeigt, und „Summe anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
    *Einstellungen → Komponenten* am alten Gerät ein «Stilllegungsdatum (optional)» setzen, den Haken «Aktiv (in
    Berechnungen berücksichtigen)» stehen lassen und den neuen Zähler als eigenes Gerät anlegen (Handbuch Einstellungen,
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen
@@ -4480,7 +4483,7 @@ Der angezeigte Wert kommt weiter aus der höchstprioren Quelle. Der Hinweis ist 
 
 > **Liest eedc deine Anlage aus der Statistik von Home Assistant,** nimmt es PV, Einspeisung, Netzbezug und Speicher an solchen Tagen direkt von dort — die eedc-Seite des Vergleichs *ist* dann die Zahl von Home Assistant, und eine Abweichung der alten gespeicherten Tageszeile wird nicht mehr gemeldet (die Tagesansicht im Cockpit zeigt sie ohnehin nicht). Wallbox, E-Auto, Wärmepumpe und sonstige Geräte kommen an einem solchen Tag ebenfalls von dort, wenn sie zugeordnet sind; nur ein Gerät ohne solchen Wert liest die Prüfung aus der gespeicherten Tageszeile. Ein bloßes Neuberechnen des Tages ändert daran nichts — deshalb trägt die Zeile an einer solchen Anlage **«Aus Home Assistant neu übernehmen»** (zuerst der Abgleich mit Home Assistant, dann der Tag); ohne diese Verbindung heißt der Knopf **«Tag neu aufbauen»**. Massen-Reparaturen gibt es bewusst nur in der Reparatur-Werkbank, damit sie aktiv gewählt werden.
 >
-> **Nach einer Korrektur in Home Assistant** (etwa unter *Entwicklerwerkzeuge → Statistik*) trägt eedc bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Ob der Abgleich gelaufen ist, steht unter *Einstellungen → System → Protokolle* (Reiter **Aktivitäten**, Kategorie **„Scheduler-Jobs"**): eine Zeile je Nacht und Anlage, auch wenn nichts abweicht. Sofort geht es mit **«Aus Home Assistant neu übernehmen»** an der Zeile.
+> **Nach einer Korrektur in Home Assistant** (etwa unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*)) trägt eedc bis zum nächtlichen Abgleich um 02:45 noch den alten Stand. So lange bleibt der Drift-Eintrag stehen; danach verschwindet er von selbst. Ob der Abgleich gelaufen ist, steht unter *Einstellungen → System → Protokolle* (Reiter **Aktivitäten**, Kategorie **„Scheduler-Jobs"**): eine Zeile je Nacht und Anlage, auch wenn nichts abweicht. Sofort geht es mit **«Aus Home Assistant neu übernehmen»** an der Zeile.
 >
 > **Verglichen wird nur, was Home Assistant für den Tag auch liefern konnte.** Ein Zähler ohne Summen-Spalte (§4.9) taucht hier nicht als Lücke auf — sonst meldete der Vergleich Phantom-Drift und böte einen Knopf an, der korrekte Werte mit 0 überschreibt.
 >
@@ -4514,7 +4517,7 @@ die größten Abweichungen vorn.
 
 **Lösungsweg**
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
-   *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ für diesen Tag berichtigen.
+   *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ für diesen Tag berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken (ohne Spiegel heißt der Knopf «Tag neu
    aufbauen»), die Vorschau lesen und **«Anwenden»**. Für viele Tage auf einmal: in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) «Mehrere Tage neu aggregieren».
@@ -4538,7 +4541,7 @@ tragen Wirtschaftlichkeit und CO₂-Bilanz mit — eine Abweichung an der Wallbo
 
 **Lösungsweg**
 1. In Home Assistant prüfen, welcher Wert stimmt. Ist die Statistik dort falsch (etwa ein Zählersprung), sie unter
-   *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ berichtigen.
+   *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ berichtigen.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»**.
    Liest eedc deine Anlage aus der Statistik von Home Assistant, übernimmt der Knopf die Statistik aller gespiegelten
    Zähler der Anlage neu (ab der ersten abweichenden Stunde) und baut den genannten Tag danach auf. Sonst heißt er «Tag neu aufbauen» und baut nur

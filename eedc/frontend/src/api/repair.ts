@@ -220,7 +220,8 @@ export interface KanalAbgleichErgebnis {
 
 /** MartyBr (simon42 #429): ein Satz, wann man den Abgleich braucht. */
 export const KANAL_ABGLEICH_BESCHREIBUNG =
-  'Nach einer Korrektur in Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): ' +
+  'Nach einer Korrektur in Home Assistant (Einstellungen → Werkzeuge → Statistik → „Summe anpassen“; in älteren ' +
+  'Home-Assistant-Versionen unter Entwicklerwerkzeuge → Statistik): ' +
   'übernimmt sie sofort in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen — ' +
   'derselbe Abgleich wie nachts um 02:45. Stundenwerte baut er nicht neu.'
 

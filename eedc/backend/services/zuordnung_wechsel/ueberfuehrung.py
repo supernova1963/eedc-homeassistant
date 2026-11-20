@@ -12,6 +12,13 @@ deshalb am Kanal aufgelöst (``kanal_quelle``, die vor der Stunde des Eintrags g
 = MQTT) und sonst an der letzten Zeile der Reihe davor (``sensor_snapshots.quelle``). Was danach nicht sicher eine wirksame
 Änderung war, wird **nicht** überführt; ``ueberfuehre`` zählt je Grund (Rückgabe, Log).
 
+**Nachgefüllte Geschichte ist keine Vor-Quelle** (Korrekturrunde Lab-K, F2): das Nachfüllen von v4.3.1 legte die Geschichte
+der heute zugeordneten Entität vor den ersten Eintrag des Kanals. Eine am Kanal aufgelöste Vor-Quelle gilt deshalb nur, wenn
+der Kanal den Wechsel selbst zeigt (``_kanal_zeigt_wechsel``: die erste Quellzeile ab ``Stunde − 1 h`` ist der Spiegel der
+neuen Entität), und «eigene Werte davor» zählen nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle
+davor der Spiegel der neuen Entität ist (``_nur_geschichte_des_neuen``). ``Stunde − 1 h``: eine Änderung zwischen H:00 und
+H:05 beginnt im Kanal schon mit der Zeile ``H − 1`` (der Stundenlauf um :05 schreibt sie aus der neuen Entität).
+
 Idempotent zweifach: als Start-Migration läuft sie einmal je Installation (``core/database.py::_run_data_migrations``), und sie
 legt keine zweite Zeile mit gleicher Anlage, gleichem Schlüssel und gleicher Zeit an.
 
@@ -58,6 +65,8 @@ GRUND_NICHT_GEFRAGT = "nicht_gefragt"
 #: Schlüssel des Alt-Vermerks im Mapping (bis Sitzung 3b ``services/datenquellen_historie.HISTORIE_HINWEIS_KEY``).
 HISTORIE_HINWEIS_KEY = "historie_hinweis"
 UEBERFUEHRT = "ueberfuehrt"
+#: Lab-K F2: eine Änderung zwischen H:00 und H:05 beginnt im Kanal schon mit der Zeile ``H − 1`` (Stundenlauf um :05).
+VORLAUF_S = 3600
 
 
 def _aus_eintrag(sensor_key: str, eintrag) -> Optional[dict]:
@@ -75,21 +84,38 @@ def _aus_eintrag(sensor_key: str, eintrag) -> Optional[dict]:
     return standard_quelle(sensor_key)  # mqtt_inbound_standard (Stempel der Materialisierung)
 
 
-async def _vorher_aus_kanal(db, anlage_id: int, sensor_key: str, ts: datetime) -> Optional[dict]:
-    """Die Quelle des Kanals **vor** dem Eintrag: größtes ``gueltig_ab`` vor der Stunde von ``ts`` (Bauplan §8 Nr. 21 — die
-    neue Quelle trägt die Stunde des Wechsels selbst: Änderung 10:47 ⇒ ``gueltig_ab`` 10:00)."""
-    from backend.models.kanal import FAMILIE_MITSCHRIFT, FAMILIE_SPIEGEL, Kanal, KanalQuelle
+async def _kanal_quellen(db, anlage_id: int, sensor_key: str) -> list[tuple[int, str, Optional[str]]]:
+    """Die Quellzeilen des Kanals ``(gueltig_ab, familie, statistic_id)``, aufsteigend."""
+    from backend.models.kanal import Kanal, KanalQuelle
 
-    stunde = ts.replace(minute=0, second=0, microsecond=0)
-    row = (await db.execute(
-        select(KanalQuelle.familie, KanalQuelle.statistic_id)
+    return [tuple(r) for r in (await db.execute(
+        select(KanalQuelle.gueltig_ab, KanalQuelle.familie, KanalQuelle.statistic_id)
         .join(Kanal, Kanal.id == KanalQuelle.kanal_id)
-        .where(Kanal.anlage_id == anlage_id, Kanal.key == sensor_key, KanalQuelle.gueltig_ab < int(stunde.timestamp()))
-        .order_by(KanalQuelle.gueltig_ab.desc()).limit(1)
-    )).first()
-    if row is None:
+        .where(Kanal.anlage_id == anlage_id, Kanal.key == sensor_key).order_by(KanalQuelle.gueltig_ab))).all()]
+
+
+def _ist_spiegel_von(q, neu: Optional[dict]) -> bool:
+    from backend.models.kanal import FAMILIE_SPIEGEL
+
+    return (isinstance(neu, dict) and neu.get("art") == ART_HA and bool(neu.get("entity_id"))
+            and q[1] == FAMILIE_SPIEGEL and q[2] == neu["entity_id"])
+
+
+async def _vorher_aus_kanal(db, anlage_id: int, sensor_key: str, ts: datetime,
+                            neu: Optional[dict] = None) -> Optional[dict]:
+    """Die Quelle des Kanals **vor** dem Eintrag: größtes ``gueltig_ab`` vor der Stunde von ``ts`` (Bauplan §8 Nr. 21 — die
+    neue Quelle trägt die Stunde des Wechsels selbst: Änderung 10:47 ⇒ ``gueltig_ab`` 10:00). Korrekturrunde Lab-K (F2,
+    «ab Stunde − 1 h»): eine Quelle der neuen Entität ab ``Stunde − 1 h`` ist die neue selbst (Änderung zwischen H:00 und H:05
+    — der Stundenlauf um :05 schreibt die Stunde davor schon aus ihr) und keine Vor-Quelle."""
+    from backend.models.kanal import FAMILIE_MITSCHRIFT, FAMILIE_SPIEGEL
+
+    stunde = int(ts.replace(minute=0, second=0, microsecond=0).timestamp())
+    davor = [q for q in await _kanal_quellen(db, anlage_id, sensor_key) if q[0] < stunde]
+    if davor and davor[-1][0] >= stunde - VORLAUF_S and _ist_spiegel_von(davor[-1], neu):
+        davor = davor[:-1]
+    if not davor:
         return None
-    familie, statistic_id = row
+    _gueltig_ab, familie, statistic_id = davor[-1]
     if familie == FAMILIE_SPIEGEL and statistic_id:
         return {"art": ART_HA, "entity_id": statistic_id}
     if familie == FAMILIE_MITSCHRIFT:
@@ -133,9 +159,11 @@ async def _bewerte(db, eintrag, sensor_key: str) -> tuple[str, Optional[dict], O
     dj = eintrag.details_json
     neu = _aus_eintrag(sensor_key, dj.get("nachher")) or standard_quelle(sensor_key)
     alt = _aus_eintrag(sensor_key, dj.get("vorher"))
+    aus_kanal = False
     if alt is None:  # kein `quellen`-Eintrag vorher: am Kanal bzw. an der Reihe auflösen
-        alt = (await _vorher_aus_kanal(db, eintrag.anlage_id, sensor_key, eintrag.timestamp)
-               or await _vorher_aus_reihe(db, eintrag.anlage_id, sensor_key, eintrag.timestamp))
+        alt = await _vorher_aus_kanal(db, eintrag.anlage_id, sensor_key, eintrag.timestamp, neu)
+        aus_kanal = alt is not None
+        alt = alt or await _vorher_aus_reihe(db, eintrag.anlage_id, sensor_key, eintrag.timestamp)
     if alt is None:
         return GRUND_UNSICHER, None, neu
     verschieden = _sicher_verschieden(alt, neu)
@@ -144,9 +172,38 @@ async def _bewerte(db, eintrag, sensor_key: str) -> tuple[str, Optional[dict], O
     if not verschieden:
         return GRUND_UNVERAENDERT, alt, neu
     stunde = eintrag.timestamp.replace(minute=0, second=0, microsecond=0)
-    if not await hat_eigene_werte(db, eintrag.anlage_id, sensor_key, vor=stunde):
+    quellen = await _kanal_quellen(db, eintrag.anlage_id, sensor_key)
+    if aus_kanal and not _kanal_zeigt_wechsel(quellen, stunde, neu):
+        return GRUND_UNSICHER, None, neu
+    if not await hat_eigene_werte(db, eintrag.anlage_id, sensor_key, vor=stunde) \
+            or await _nur_geschichte_des_neuen(db, eintrag.anlage_id, sensor_key, quellen, stunde, neu):
         return GRUND_OHNE_WERTE, alt, neu
     return UEBERFUEHRT, alt, neu
+
+
+def _kanal_zeigt_wechsel(quellen: list, stunde: datetime, neu: Optional[dict]) -> bool:
+    """Korrekturrunde Lab-K F2 Teil 1: eine am Kanal aufgelöste Vor-Quelle (leeres ``vorher``) gilt nur, wenn der Kanal den
+    Wechsel selbst zeigt — die erste Quellzeile ab ``Stunde − 1 h`` ist der Spiegel der Entität des ``nachher``. Sonst hat das
+    Nachfüllen die Geschichte der heute zugeordneten Entität vor den Eintrag gelegt (Lab P9: aus der Erst-Zuordnung wurde der
+    Wechsel «p9_neu → p9_alt»)."""
+    ab = int(stunde.timestamp()) - VORLAUF_S
+    danach = next((q for q in quellen if q[0] >= ab), None)
+    return danach is not None and _ist_spiegel_von(danach, neu)
+
+
+async def _nur_geschichte_des_neuen(db, anlage_id: int, sensor_key: str, quellen: list, stunde: datetime,
+                                    neu: Optional[dict]) -> bool:
+    """Lab-K F2 Teil 2: die «eigenen Werte davor» sind nur die nachgefüllte Geschichte des neuen Sensors — vor der Stunde
+    liegen keine Stände der Reihe, und jede Kanal-Quelle davor ist der Spiegel der Entität des ``nachher`` (Lab R: Fehlgriff
+    10:10, berichtigt 10:20 vor dem nächsten Stundenlauf). Dann hatte das Feld beim Wechsel keine eigenen Werte."""
+    from backend.models.sensor_snapshot import SensorSnapshot
+
+    davor = [q for q in quellen if q[0] < int(stunde.timestamp())]
+    if not davor or not all(_ist_spiegel_von(q, neu) for q in davor):
+        return False
+    return (await db.execute(select(SensorSnapshot.id).where(
+        SensorSnapshot.anlage_id == anlage_id, SensorSnapshot.sensor_key == sensor_key,
+        SensorSnapshot.zeitpunkt < stunde).limit(1))).scalar_one_or_none() is None
 
 
 async def _geraet_da(db, anlage_id: int, sensor_key: str) -> bool:

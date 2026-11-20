@@ -10,8 +10,9 @@ Einspeisen — jede Richtung hat ihr eigenes Feld. Die Meldung nennt je Sensor u
 wird die ganze übernommene Statistik, nicht nur die letzten 30 Tage.
 
 ## Lösungsweg
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und die Menge auf den echten Wert setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Rückgangs in der genannten Stunde wählen,
+   bei „Neuer Wert“ den echten Wert eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»**. Ohne
    Klick gleicht eedc die berichtigte Statistik beim nächtlichen Abgleich von selbst ab.
 3. Stammt der Rückgang von einem Sensor, den du inzwischen ersetzt hast (die Meldung sagt „Vorgänger-Sensor, zugeordnet

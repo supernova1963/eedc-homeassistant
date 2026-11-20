@@ -50,11 +50,32 @@ async def angaben(db: AsyncSession, kanal: Kanal) -> tuple[Optional[datetime], i
             None if letzter is None else float(letzter))
 
 
+def _stand_kurzzeit(ha_svc, eid: str, art: str, jetzt: datetime) -> Optional[float]:
+    """Korrekturrunde Lab-K W6: der jüngste Stand (``state``) aus HAs Kurzzeitstatistik (5-Minuten-Zeilen der letzten Stunde)
+    in der Einheit des Kanals (dieselbe Umrechnung wie der Spiegel, ``schreiber._mengen_faktor``; ein Stand nie umgerechnet).
+    ``None``, wenn HA dort keine Zeile führt (dann die jüngste Stundenzeile)."""
+    from backend.models.kanal import ART_STAND
+    from backend.services.kanal.schreiber import _mengen_faktor
+
+    with ha_svc._verbindung() as conn:
+        meta = ha_svc.get_metadata(conn, eid)
+    if meta is None:
+        return None
+    stand = ha_svc.get_value_at(eid, jetzt, 60, True, True)
+    faktor = 1.0 if art == ART_STAND else _mengen_faktor(meta)
+    return None if stand is None or faktor is None else round(float(stand) * faktor, 3)
+
+
 async def zaehlerstand_ha_jetzt(ha_svc, kanal_id: int, art: str, eid: str) -> Optional[float]:
-    """Der Zählerstand (``state``) der jüngsten HA-Stundenzeile von ``eid`` in der Einheit des Kanals (dieselbe Umrechnung
-    wie der Spiegel); ``None``, wenn HA keine Zeile oder keinen Stand führt."""
+    """Der Zählerstand (``state``) von ``eid`` jetzt in der Einheit des Kanals: der jüngste aus HAs Kurzzeitstatistik
+    (Lab-K W6 — in der Stunde des Tauschs führt HA für den neuen Sensor noch keine Stundenzeile, und der letzte Stand des
+    alten liegt nach seiner letzten Stundenzeile), sonst der der jüngsten Stundenzeile (dieselbe Umrechnung wie der Spiegel);
+    ``None``, wenn HA keine Zeile oder keinen Stand führt."""
     from backend.services.kanal.nachfuellen import _zeilen_aus_ha
 
+    kurz = await asyncio.to_thread(_stand_kurzzeit, ha_svc, eid, art, datetime.now())
+    if kurz is not None:
+        return kurz
     zeile = await asyncio.to_thread(ha_svc.get_stundenzeile_bis, eid, datetime.now().timestamp())
     if zeile is None:
         return None

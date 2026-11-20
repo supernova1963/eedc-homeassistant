@@ -44,7 +44,7 @@ def _ts(t: datetime) -> int:
 def _reihe(*, rueckgaenge: dict | None = None, rate: float = 0.4, start: float = 1000.0, stunden: int = STUNDEN,
            t0: datetime = T0):
     """``(start_ts, state, sum)`` je Stunde wie HA für einen fortlaufenden Zähler. ``rueckgaenge``: ``{Stunde: kWh}``
-    — HA bucht in dieser Stunde eine Abnahme (``sum`` und ``state`` fallen um die Menge, z. B. „Wert anpassen" mit
+    — HA bucht in dieser Stunde eine Abnahme (``sum`` und ``state`` fallen um die Menge, z. B. „Summe anpassen" mit
     falschem Vorzeichen)."""
     out, stand, summe = [], start, 0.0
     for h in range(stunden):
@@ -85,7 +85,7 @@ async def test_ein_rueckgang_vor_16_monaten_ist_genau_eine_meldung_mit_menge_und
     assert e.schwere == CheckSeverity.WARNING
     assert e.meldung.startswith("1 Tag(e), an denen ein Zählerstand")   # N-646: Überschrift nennt den Zählerstand, nicht die „negative Menge"
     assert "sensor.netzbezug am 05.06.2025: −540,0 kWh (Stunde ab 14:00)" in e.details
-    assert "Wert anpassen" in e.details and "nächtlichen Abgleich" in e.details
+    assert "Summe anpassen" in e.details and "nächtlichen Abgleich" in e.details
     assert "Monatsabschluss neu" in e.details
     # Kein „Beheben"-Knopf: die Korrektur liegt in HA (wie N-586, Lab 4.1.3-rc1).
     assert befund_link(e) is None

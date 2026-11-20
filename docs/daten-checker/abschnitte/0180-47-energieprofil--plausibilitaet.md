@@ -25,8 +25,8 @@ Nachtrag als unmöglicher Wert gemeldet. Dieselbe Regel entscheidet beim Rechnen
 > einem Tag, dessen Mengen aus der Langzeitstatistik kommen, ist eine hohe Stunde die Zahl von Home Assistant, wie im
 > Energie-Dashboard; ein Sprung mit dem typischen Muster (Sensor fällt kurz auf 0 und kehrt zurück) meldet
 > [§4.8b](#48b-zaehlerstaende--sprung-in-home-assistant). **Ein reiner Sprung ohne dieses Muster** bekommt an einem
-> solchen Tag **keinen** Befund: prüfe ihn in Home Assistant unter *Entwicklerwerkzeuge → Statistik* und berichtige ihn
-> dort.
+> solchen Tag **keinen** Befund: prüfe ihn in Home Assistant unter
+> *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) und berichtige ihn dort.
 
 > **Ältere Tage** (über 30 Tage) prüft die Stundenwert-Prüfung nicht — die beiden Tagesprüfungen (Einspeisung über
 > Erzeugung, Nachtrag) sehen alle gespeicherten Tage: dort stehen meist schon berichtigte Werte, und für den aktuellen

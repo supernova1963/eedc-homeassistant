@@ -12,7 +12,7 @@ vertauscht, oder das Vorzeichen eines kombinierten Netz-Sensors ist umgekehrt.
 2. Danach am Befund **«Tage neu aufbauen»** klicken, die Vorschau lesen und **«Anwenden»** — eedc baut die Tage aus
    eigenen Stundenwerten neu (höchstens 31 Tage je Lauf). Kommen alle Tage aus der Statistik von Home Assistant, heißt
    der Knopf **«Aus Home Assistant neu übernehmen»** und übernimmt nur den jüngsten Tag — dann vorher die Statistik in
-   Home Assistant unter *Entwicklerwerkzeuge → Statistik* berichtigen; nach dem erneuten Prüfen steht der Knopf am
+   Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) berichtigen; nach dem erneuten Prüfen steht der Knopf am
    nächsten Tag. Steht am Befund nur
    **«Was gilt»**, kommen die Mengen aus eedcs eigenen Zählerständen; dann wirkt die berichtigte Zuordnung auf die
    folgenden Tage.

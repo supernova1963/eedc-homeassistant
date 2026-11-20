@@ -1151,7 +1151,8 @@ class EnergieprofilChecks:
                 + " ".join(teile) + " "
                 "Dieselbe Form hat ein Zählersprung nach einer Nacht ohne Erzeugung; stimmt eine "
                 "dieser Mengen nicht, liegt der Fehler in der Zähler-Historie der Quelle — in Home Assistant "
-                "korrigierst du sie in den Entwicklerwerkzeugen unter „Statistik“ mit „Wert anpassen“."
+                "korrigierst du sie unter Einstellungen → Werkzeuge → Statistik (in älteren Home-Assistant-Versionen: "
+                "Entwicklerwerkzeuge → Statistik) mit „Summe anpassen“."
             ),
             code="nachtrag_nach_eingefrorenem_zaehler", werte={"tage": len(befunde), "von": aeltester.isoformat(), "bis": neuester.isoformat(), "nach_lts": len(lts), "nach_zaehler": len(zaehler)},  # E1: angehängt (Dateilänge)
         )]

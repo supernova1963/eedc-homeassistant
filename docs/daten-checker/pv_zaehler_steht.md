@@ -11,7 +11,7 @@ zurückgesetzt). Geprüft werden die letzten 31 abgeschlossenen Tage.
 1. Den Sensor in Home Assistant prüfen (im Standalone-Betrieb das MQTT-Topic): Hängt die Integration, ist das Gerät
    erreichbar, wurde der Zähler zurückgesetzt? Der Knopf **«Was gilt»** am Befund öffnet diesen Text.
 2. Liefert der Sensor wieder Werte, zählen die folgenden Tage richtig. Die Tage, an denen er stand, berichtigst du bei
-   Bedarf in Home Assistant unter *Entwicklerwerkzeuge → Statistik* mit „Wert anpassen“.
+   Bedarf in Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) mit „Summe anpassen“.
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange der Stillstand in den geprüften
    31 Tagen liegt.
 

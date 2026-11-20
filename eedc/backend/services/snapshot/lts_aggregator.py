@@ -191,11 +191,15 @@ async def lts_tagestabelle(
     dazu, null_ab = _naht_plan(eintraege, zusatz, anlage, investitionen_by_id, wechsel, datum) if wechsel else ({}, frozenset())
     sensor_ids = sorted(eigene | set(zusatz) | frueher | {eid for p in dazu.values() for eid in p.values()})
     reihen = await asyncio.to_thread(ha_svc.get_hourly_slots_for_day, sensor_ids, datum, *((null_ab,) if null_ab else ()))
-    if plan and not _plan_anwenden(reihen, plan):
+    # Korrekturrunde Lab-K (F4): jede Ersetzung liest die Slots, wie HA sie führt — nie eine schon ersetzte Reihe. Ist die
+    # frühere Entität eines Zählers die heutige eines anderen (Lab: P1b irrtümlich auf p3_alt, der frühere Sensor der
+    # Wallbox), las die Wallbox sonst die Geschichte des PV-Felds (25.10. 9,0 statt 27,0).
+    orig = dict(reihen)
+    if plan and not _plan_anwenden(reihen, plan, orig=orig):
         return None
     _plan_anwenden(reihen, {z: p for z, p in zplan.items() if p and (z in reihen or set(p.values()) & set(reihen))},
-                   streng=False)
-    _dazu_anwenden(reihen, dazu)
+                   streng=False, orig=orig)
+    _dazu_anwenden(reihen, dazu, orig=orig)
     # Nur die eigenen Zähler entscheiden, ob HA den Tag trägt — ein Zusatz-Zähler
     # allein darf den Rückfall auf den Snapshot-Pfad nicht verhindern.
     if not reihen or not any(eid in eigene for eid in reihen):
@@ -225,27 +229,35 @@ def _slot_plan(eintraege: list[TabellenEintrag], wechsel: Optional[dict], datum:
     from backend.services.zuordnung_wechsel.anwenden import entitaet_je_slot
 
     plan: dict[str, dict[int, str]] = {}
+    je_entitaet: dict[str, dict[int, str]] = {}
     for e in eintraege:
         je_slot = entitaet_je_slot((wechsel or {}).get(e.sensor_key), e.schluessel, datum, _SLOTS)
         if je_slot is None:
+            return None
+        # Lab-K F4: zwei Zähler mit derselben heutigen Entität, aber verschiedener Geschichte am Tag — die Tabelle führt je
+        # Entität eine Reihe; der Tag liest dann nicht aus HA (wie bei einer Quelle außerhalb von HA).
+        if je_entitaet.setdefault(e.schluessel, je_slot) != je_slot:
             return None
         if je_slot:
             plan[e.schluessel] = je_slot
     return plan
 
 
-def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]], *, streng: bool = True) -> bool:
+def _plan_anwenden(reihen: dict, plan: dict[str, dict[int, str]], *, streng: bool = True,
+                   orig: Optional[dict] = None) -> bool:
     """Setzt je Slot das Delta der früheren Entität in die Reihe der heutigen (in-place). ``False`` ⇒ HA führt eine
     frühere Entität nicht (dann bleibt der Tag beim Snapshot-Pfad). ``streng=False`` (Heimlade-Zähler, §8 Nr. 22 b): ein
-    Slot einer früheren Entität, die HA nicht führt, fällt weg — nie das Delta der heutigen Entität für ihn."""
+    Slot einer früheren Entität, die HA nicht führt, fällt weg — nie das Delta der heutigen Entität für ihn. ``orig``
+    (Lab-K F4): die Reihen, wie HA sie führt — gelesen wird nur aus ihnen, geschrieben in ``reihen``."""
+    quelle = reihen if orig is None else orig
     for eid, je_slot in plan.items():
-        if streng and any(alt not in reihen for alt in set(je_slot.values())):
+        if streng and any(alt not in quelle for alt in set(je_slot.values())):
             return False
-        reihe = reihen.get(eid) or reihen[next(alt for alt in je_slot.values() if alt in reihen)]
-        slots = dict(reihen[eid].slots) if eid in reihen else {}
+        reihe = quelle.get(eid) or quelle[next(alt for alt in je_slot.values() if alt in quelle)]
+        slots = dict(quelle[eid].slots) if eid in quelle else {}
         for h, alt in je_slot.items():
-            if alt in reihen and h in reihen[alt].slots:
-                slots[h] = reihen[alt].slots[h]
+            if alt in quelle and h in quelle[alt].slots:
+                slots[h] = quelle[alt].slots[h]
             else:
                 slots.pop(h, None)
         reihen[eid] = reihe._replace(slots=slots)
@@ -295,7 +307,7 @@ def _naht_plan(eintraege: list[TabellenEintrag], zusatz: list[str], anlage, inve
     return dazu, frozenset(null_ab)
 
 
-def _dazu_anwenden(reihen: dict, dazu: dict[str, dict[int, str]]) -> None:
+def _dazu_anwenden(reihen: dict, dazu: dict[str, dict[int, str]], *, orig: Optional[dict] = None) -> None:
     """U2 a1 (F6): am Naht-Slot zum Slot der neuen Entität den der alten (in-place) — die Stunde des Wechsels zählt beide
     Sensoren wie HA (``ha_statistics_service.StundenSlot``; die Summe über ``zaehler_naht.slot_beider``). Führt HA die alte
     im Fenster nicht, zählt nur die neue."""
@@ -307,7 +319,8 @@ def _dazu_anwenden(reihen: dict, dazu: dict[str, dict[int, str]]) -> None:
             continue
         slots = dict(reihen[eid].slots)
         for h, alt in je_slot.items():
-            alt_slot = reihen[alt].slots.get(h) if alt in reihen else None
+            quelle = reihen if orig is None else orig            # Lab-K F4: der alte Sensor, wie HA ihn führt
+            alt_slot = quelle[alt].slots.get(h) if alt in quelle else None
             if alt_slot is None:
                 continue
             neu = slots.get(h)

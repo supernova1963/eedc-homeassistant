@@ -4984,9 +4984,9 @@ Saat 0,79. Mit 30 statt 365 Bezugstagen erreichte ein Frühjahrstag mit 13,3 kWh
 höchstens 0,4 kWh am Tag das Maß 32, mit 3 statt 14 Tagen mit Zuwachs der erste Sonnentag eines jungen Einspeisezählers 44.
 Lab-Soll: +2 001 auf Zählern mit 6,85 / 24 / 160 kWh am Tag ⇒ 292 / 83 / 12,5; Rate 1,8 kWh je Stunde ⇒ 46; Neubeginn bei 300 mit
 Rate 2,04 ⇒ 6,2. Eine Nachholstunde nach einer Lücke und ein großer Verbrauch nach langer Ruhe teilen sich durch ihre Ruhezeit
-(Wallbox 11 kWh nach 30 Tagen: 0,4). **Wirkung des Handgriffs:** «Wert anpassen» in HA senkt die Summe ab der Stunde; nach
+(Wallbox 11 kWh nach 30 Tagen: 0,4). **Wirkung des Handgriffs:** «Summe anpassen» in HA senkt die Summe ab der Stunde; nach
 «Aus Home Assistant neu übernehmen» ist Δ sum der Stunde klein bzw. ungleich Δ state — kein Befund. **Stand-Zähler** (Gas, Wasser,
-Öl, Kilometerstand): eedc rechnet mit `state`, «Wert anpassen» ändert nur `sum`; der Befund ist dort eine Auskunft (INFO) und nennt
+Öl, Kilometerstand): eedc rechnet mit `state`, «Summe anpassen» ändert nur `sum`; der Befund ist dort eine Auskunft (INFO) und nennt
 die Wege nach Entscheid E2 (Bauplan Nr. 139); ein fallender Stand ist dort nie ein Fund (eedc zählt keinen negativen Zuwachs als
 Sprung; den Bruch nennt `zaehlerstand_reihe_bruch`). **Benannte Grenzen:** (a) ein Sprung in einem Zähler, der im Jahr davor an
 weniger als 14 Tagen gezählt hat, bleibt still; (b) mehrere Sprünge desselben Zählers im Bezugsfenster heben die Vergleichsgröße —
@@ -5250,7 +5250,10 @@ Schreiben für z      = gilt um z die heutige Quelle ⇒ wie bisher (auch das L�
                        Quelle unbekannt, «keine» oder außerhalb von HA ⇒ nichts geschrieben, nichts gelöscht
 Fünf-Minuten-Zeile   = gelöscht nur, wo HAs Kurzzeitstatistik die Stunde führt (Probe je Entität und Stunde, §8 Nr. 20)
 LTS-Tag              = je Slot das Delta der Entität, die zum Stand des Slots galt; galt eine Quelle außerhalb von HA ⇒ der
-                       Tag liest den Snapshot-Pfad; Tag-Status und Daten-Checker reichen die Wechsel durch (§8 Nr. 22)
+                       Tag liest den Snapshot-Pfad; Tag-Status und Daten-Checker reichen die Wechsel durch (§8 Nr. 22);
+                       jede Ersetzung liest HAs eigene Reihe der früheren Entität, nie eine schon ersetzte (Lab-K F4: trug
+                       ein anderer Zähler sie heute, las er sonst dessen Geschichte — Drift-Hinweis «27,0 → 9,0»); tragen
+                       zwei Zähler heute dieselbe Entität mit verschiedener Geschichte am Tag ⇒ Snapshot-Pfad
 Heimlade-Zähler      = je Auto und Slot die Entität zum Stand (lts_aggregator._zusatz_plan); galt in einem Slot eine Quelle
                        außerhalb von HA, wird der Zähler an diesem Tag nicht gelesen (kein Pfadwechsel — der Tag bleibt beim
                        LTS-Pfad); führt HA eine frühere Entität nicht, fällt ihr Slot weg, nie das Delta der heutigen
@@ -5379,7 +5382,9 @@ T1              = die erste Stundenzeile des neuen Sensors (ha_statistik_rand.er
                   erkannt — a-K N1) vergleichen ``state``
 Art und G       = ohne Überlappung: beide, G = T1;  mit Überlappung: schnitt, G = Stunde des verzeichneten Wechsels
                   (ab_ts − 1 h), frühestens T1 + 1 h;  danach ab_ts = G + 1 h
-«zählt ab»      = (U2 Lauf b, F9/F10) nur mit Überlappung wählbar: T1 + 1 h ≤ G ≤ Stunde des Wechsels
+«zählt ab»      = (U2 Lauf b, F9/F10) nur mit Überlappung wählbar: T1 + 1 h ≤ G ≤ Stunde des Wechsels und — Lab-K F5 — G nie
+                  vor dem vorigen verzeichneten Wechsel des Felds (dessen ab_ts, bei einer Korrektur «Falsch seit»;
+                  ansatz._vorige_grenze): sonst überschriebe das Ansetzen die Zeit der Quelle davor
                   (zuordnung_wechsel/bleiben.setze_zaehlt_ab; sonst 422); die Zeile trägt dann ansatz = offen_schnitt und
                   ab_ts = G + 1 h; bis zum Ansetzen gilt als altes ab_ts die erste volle Stunde des Wechsels
                   (ansatz._ab_alt — die Stände des alten dazwischen verwirft Schritt «Reihe»)
@@ -5395,7 +5400,8 @@ Kanal           = Zeilen des Schlüssels ab G bis zur Grenze gelöscht (Grenze =
                   Versatz = Kanalwert der letzten Zeile vor G + Zuwachs des alten in HA bis zur Rand-Zeile − Rand neu
                   (zaehler_naht.kanal_ende_alt, kanal_versatz_neu); fehlende Zeilen des alten bis G − 1 h vorher aus HA
                   ergänzt; gefüllt mit neu_spiegeln ab G; die Quellen ab der Grenze rücken um die Änderung des
-                  Kanalwerts an ihr mit (zaehler_naht.verschiebung) — gesetzt aus den Versätzen vor dem Ansetzen, also
+                  Kanalwerts an ihr mit (zaehler_naht.verschiebung) — gefüllt bis zur Stunde, bis zu der die Lage liest
+                  (der letzten vollen vor jetzt, kanal/korrektur.fuell_ende; Lab-K F1) — gesetzt aus den Versätzen vor dem Ansetzen, also
                   wiederholbar; Grenze, Kanalwert davor und Versätze stehen im Auftrag des Laufs, der Nachlauf holt das
                   Mitrücken nach, wenn das Füllen nach dem Commit scheitert oder der Prozess neu startet (a-K N3)
 Zurück          = ein Wechsel zurück zur Quelle vor dem vorigen Wechsel, bevor die Quelle dazwischen einen eigenen Stand
@@ -5405,7 +5411,10 @@ Reihe           = die Stände zwischen altem und neuem ab_ts verworfen (auch Unt
                   (korrektur.fuelle_staende: ab ab_ts aus dem neuen; davor nur fehlende Stände des alten, und nur auf
                   passender Höhe)
 Tage            = die abgeschlossenen Tage ab dem Tag von G, deren Tageszeile einen Schlüssel des Felds trägt, im
-                  Hintergrund neu gebildet (korrektur_lauf, ohne Sperre); abhängige abgeleitete Kanäle ab G neu geschrieben
+                  Hintergrund neu gebildet (korrektur_lauf, ohne Sperre); abhängige abgeleitete Kanäle ab G neu geschrieben,
+                  bis jetzt und auch ohne verworfene Zeile (Lab-K F1: der Stundenlauf hat den offenen Schlüssel ausgelassen)
+Sätze           = «zählt beide» nur, wenn HA für den alten in der Stunde G eine Zeile führt; endete er vorher, «zählt nur …»
+                  (Lab-K W3, bleiben.SATZ_BEIDE_NUR_NEU)
 Monate (Liste)  = «Alle Monatswerte» und Import-Vorschau listen auch Monate, in denen nur der alte Sensor Werte hat
                   (zuordnung_wechsel/monat.alle_monatswerte; Messfrage M8a)
 ```
@@ -5526,7 +5535,7 @@ MQTT-Quelle keine Geschichte nachholt, §11 Nr. 48). Energie-Vorschläge und Gat
 Gateway-Zeile anlegen/löschen lehnt ab (422). Das Festschreiben beim Lesen (`/felder`, W7), die Stilllegung und Innengeräte (W9)
 sind kein Wechsel. **«Zähler getauscht (gleiche Quelle)»** (`zuordnung_wechsel/zaehler_getauscht.py`) — der Weg folgt der
 **Quelle des Kanals zur Stunde des Tauschs** (größtes `gueltig_ab ≤ Stunde`, §11 Nr. 44): ein (nicht verworfener)
-Spiegel-Abschnitt ⇒ nichts verzeichnet, der Weg ist «Wert anpassen» in Home Assistant (der Spiegel trägt HAs Summe wörtlich, die
+Spiegel-Abschnitt ⇒ nichts verzeichnet, der Weg ist «Summe anpassen» in Home Assistant (der Spiegel trägt HAs Summe wörtlich, die
 Feld-Auskunft liest ihn — eine Naht nur in der Reihe machte beide uneins, §9 Nr. 26; auch ein **früherer** Spiegel-Abschnitt
 eines heute anders zugeordneten Felds, denn der Konsistenzlauf gleicht jeden nicht verworfenen Spiegel-Abschnitt gegen HA ab);
 Mitschrift (MQTT «Eigene Summe»), die Zeit vor der ersten Quelle des Kanals und ein Feld ohne Kanal, das der Stundenlauf nicht
@@ -5576,6 +5585,11 @@ Alt-Vermerke  = historie_hinweis im Mapping je Feld: der jüngste Protokoll-Eint
                 Überführung aus dem Protokoll) wird eine Zeile, wenn die Abfrage gefragt hätte und keine Zeile zum selben
                 Eintrag besteht — sonst verfällt er; danach ist der Vermerk entfernt (bei jedem Start, ohne Vermerk nichts;
                 zuordnung_wechsel/ueberfuehrung.py::ueberfuehre_vermerke)
+Überführung   = (Lab-K F2) eine am Kanal aufgelöste Vor-Quelle (Protokoll-vorher leer) gilt nur, wenn der Kanal den Wechsel
+                selbst zeigt (erste Quellzeile ab Stunde − 1 h = Spiegel der neuen Entität); «eigene Werte davor» zählen
+                nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle davor der Spiegel der neuen
+                Entität ist (vom Nachfüllen von v4.3.1 vor den Eintrag gelegt); eine Quelle der neuen Entität ab Stunde − 1 h
+                ist keine Vor-Quelle (Änderung zwischen H:00 und H:05)
 ```
 
 Routen: `POST /api/datenquellen/{anlage}/zuordnung-wechsel/{wechsel}/grund/pruefen` (schreibt nichts; mit `grund = korrektur` und
@@ -5603,7 +5617,9 @@ verwerfen» (`falsch_seit` offen = von Beginn an, `ab` = Beginn des jüngsten Se
                                        (führt HA ihn nicht: an h0 — die erste Stunde zählt dann 0); die leere Zeit [w0, h0) zählt 0
                         eine Quelle [h0, …) mit diesem Versatz; spätere Quellzeilen derselben Entität entfallen, spätere andere
                         rücken um die Änderung mit; die falsche Quelle bleibt mit verworfen_ts genau über [w0, h0);
-                        gefüllt mit neu_spiegeln ab h0 bis zum Soll-Ende
+                        gefüllt mit neu_spiegeln ab h0 bis zur letzten vollen Stunde vor jetzt (kanal/korrektur.fuell_ende —
+                        Lab-K: dieselbe Stunde, bis zu der der Stundenlauf um :05 spiegelt; bis dahin das Soll-Ende der Leser,
+                        und zwischen H:05 und H:10 fehlte die Stunde H − 1 bis zum nächsten Lauf)
    abgeleitete Kanäle   nur die vom Feld abhängigen (Ladezähler der Wallbox-Achse, Netzbezug, Einspeisung ⇒ PV-Anteil der
                         Heimladung · Strom einer Wärmepumpe ⇒ deren Strom je Betriebsart · Bilanz-/PV-Zähler, Preis ⇒ Kosten ·
                         Feld ohne bekannte Kategorie ⇒ alle) ab w0 bis zum Ende verworfen und nach dem Füllen im selben Lauf
@@ -5731,8 +5747,11 @@ Gemessen (Wechsel A → C am Ende, C in HA ab 12.06. 00:00): 10.06. 0,5 · 11.06
 **Füllen nur auf geprüfter Höhe** (U1-K (d), Bauplan Nr. 141; `korrektur._hoehe_passt`, dieselbe Prüfung wie am Stück
 `stueck.ist_fuellbar`): auch die gewöhnliche Korrektur (Dialog, Nachtrag, Werkbank) liest die Stände nur neu, wenn jeder
 prüfbare Rand-Stand — der letzte gespeicherte vor `falsch_seit`, der erste ab `ab`, gespeichert aus der richtigen Quelle, und
-Home Assistant führt sie dort — HAs heutige Summe der richtigen Quelle ist (`SPIEGEL_TOLERANZ_KWH`). Passt einer nicht, bleibt die
-Zeit leer und folgt der Regel oben; die Vorschau sagt `SATZ_ZAEHLERLUECKE` bzw. `SATZ_LUECKE` («füllt nichts …», kein
+Home Assistant führt sie dort — HAs heutige Summe der richtigen Quelle ist (`SPIEGEL_TOLERANZ_KWH`; ein Fünf-Minuten-Stand gegen HAs
+Kurzzeitstatistik, so wie er geschrieben wurde — Lab-K W9: gegen die Stundenzeile lag er nie auf der Höhe, und die Korrektur füllte
+eine Zeit nicht, die Home Assistant führt; ohne Kurzzeitzeile ist der Rand nicht prüfbar). Passt einer nicht, bleibt die
+Zeit leer und folgt der Regel oben; die Vorschau sagt `SATZ_ZAEHLERLUECKE` bzw. `SATZ_LUECKE` («füllt nichts …»; liegt das Ende
+der Zeit noch vor uns — Dialog, `ab` = nächste volle Stunde —, «Vom … Uhr bis jetzt», Lab-K W5; kein
 `SATZ_KEIN_TAG`). Ein Rand aus einer anderen Quelle prüft die Höhe der richtigen nicht (Wechsel A → C). Gemessen (A → X → A,
 HAs Summe von A 1 906,5 über den Ständen): 0,5 · — · — · — · 59,5, 84,0, 336,0 statt 10.06. 1 918,5; dazu HA erst ab 12.06.: ebenso
 statt 12.06. 1 942,0; gleiche Höhe, HA ab 12.06.: 12.06. 35,5, 84,0, 336,0 (unverändert). Mit Kanal widersprechen sich Tagesansicht

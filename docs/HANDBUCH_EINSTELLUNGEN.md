@@ -912,9 +912,11 @@ Werte bleiben oder verworfen werden:
   welcher Stunde er zählt und wie viele Stunden eedc dafür neu liest und Tage im Hintergrund neu bildet (Wetter und
   Börsenpreis bleiben); gespeicherte Monatsabschlüsse bleiben, wie sie sind — angleichen lässt sich ein solcher Monat unter
   „Monatsdaten“ mit „Aus HA laden“. Haben beide Sensoren nicht gleichzeitig gezählt, bestimmt Home Assistant die Stunde
-  selbst: die Stunde, in der der neue Sensor seinen ersten Wert hat, zählt beide. Haben sie eine Zeit lang gleichzeitig
+  selbst: die Stunde, in der der neue Sensor seinen ersten Wert hat, zählt beide (endete der bisherige schon vorher, zählt
+  sie nur den neuen — die Vorschau sagt es). Haben sie eine Zeit lang gleichzeitig
   gezählt, erscheint das Feld **„Der neue Sensor zählt ab"**, vorbelegt mit der Stunde des Wechsels; eine frühere Stunde
-  (nicht vor der ersten Stunde, die Home Assistant vom neuen Sensor führt) nimmst du, wenn der neue Sensor schon ab dann die
+  (nicht vor der ersten Stunde, die Home Assistant vom neuen Sensor führt, und nicht vor dem vorigen Wechsel dieses Felds —
+  der Hinweis am Feld nennt den Bereich, „Wählbar von … bis … Uhr") nimmst du, wenn der neue Sensor schon ab dann die
   Werte des Geräts gemessen hat. Führt Home Assistant den neuen Sensor noch nicht mit Stundenwerten (etwa bei einem Wechsel
   in der Stunde des Tauschs) oder ist Home Assistant gerade nicht erreichbar, rechnet eedc den Wechsel, sobald es geht — es
   prüft das jede Stunde; bis dahin nennt die Fläche oben den Grund. Den bisherigen Sensor kannst du in
@@ -970,8 +972,9 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
 (gleiche Quelle)"**. Du gibst **„Getauscht am"** an; was eedc dann tut, hängt an der Quelle, die zu dieser Zeit galt:
 
 - **Ein Zähler aus Home Assistant:** eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen Sprung beim Tausch
-  berichtigst du dort (Entwicklerwerkzeuge → Statistik, beim Symbol „Wert anpassen" die Stunde des Tauschs wählen und den
-  Zuwachs auf die echte Menge setzen); eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich und trägt selbst
+  berichtigst du dort (Einstellungen → Werkzeuge → Statistik — in älteren Home-Assistant-Versionen Entwicklerwerkzeuge →
+  Statistik —, beim Symbol „Summe anpassen" unter „Zeitpunkt auswählen" die Zeit des Tauschs wählen, bei „Neuer Wert" die
+  echte Menge eintragen und „Anpassen" drücken); eedc übernimmt die berichtigte Statistik beim nächtlichen Abgleich und trägt selbst
   nichts ein. Das gilt auch, wenn das Feld heute über MQTT kommt, der Tausch aber in die Zeit fällt, in der es aus Home
   Assistant kam. Springt der Stand dabei deutlich, nennt der Daten-Checker die Stunde (Handbuch Daten-Checker §4.8h).
 - **Ein Zählerstand aus Home Assistant** (Gas, Wasser, Öl): eedc rechnet mit dem Stand, den der Sensor anzeigt; „Wert
@@ -1052,7 +1055,7 @@ seit" gibt es dort nicht — und hebt das eingetragene „Bisherige Werte bleibe
 Operation die Werte vor dem Beginn des neuen Sensors ebenso; das eingetragene „Bisherige Werte bleiben" bleibt dort stehen — sie sorgt dafür, dass der
 letzte Stand des bisherigen Sensors und der erste des neuen keine Menge ergeben.
 
-Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Entwicklerwerkzeuge → Statistik → „Wert anpassen"): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
+Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Einstellungen → Werkzeuge → Statistik → „Summe anpassen"; in älteren Home-Assistant-Versionen unter Entwicklerwerkzeuge → Statistik): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 
 > **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Bisherige Werte verwerfen" und „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bilden die betroffenen Tage neu.
 

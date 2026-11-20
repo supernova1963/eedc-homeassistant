@@ -73,6 +73,7 @@ export function haNegativeFelder(werte: {
 export const HA_RUECKGANG_HINWEIS =
   'Home Assistant liefert hier einen negativen Wert: Die Summe des Sensors ist in der Langzeitstatistik von Home ' +
   'Assistant in diesem Monat gefallen, statt zu steigen — meist nach einer Anpassung nach unten. Korrigieren kannst ' +
-  'du das in Home Assistant unter Entwicklerwerkzeuge → Statistik → beim Sensor „Wert anpassen“; eedc gleicht die ' +
+  'du das in Home Assistant unter Einstellungen → Werkzeuge → Statistik (in älteren Home-Assistant-Versionen: ' +
+  'Entwicklerwerkzeuge → Statistik) → beim Sensor „Summe anpassen“; eedc gleicht die ' +
   'korrigierte Statistik nachts von selbst ab, danach lädst du den Monat neu. Tag und Stunde nennt der Daten-Checker ' +
   '(„Zählerstände – Rückgang in Home Assistant“).'

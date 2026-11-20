@@ -22,7 +22,8 @@ es keine richtige Geschichte (dieselbe ``mqtt_key`` trägt beide Publisher) — 
    **U3 b (Rechenweg G7 (b)):** ist die leere Zeit eine Lücke ohne Höhenwechsel (``bruecke``; dieselbe Regel wie die Leser der
    Reihe, ``zeitpunkt.ohne_hoehenwechsel``) und die Quelle MQTT, setzt sie stattdessen mit der Menge der Zeit an
    (``core/berechnungen/rohstand_rand.bruecke``: Stand danach − Stand davor, wie an jeder Zählerlücke).
-4. **Füllen** mit dem Blockleser des Konsistenzlaufs (``nachfuellen.neu_spiegeln`` ab ``h0`` bis zum Soll-Ende), gemerkte
+4. **Füllen** mit dem Blockleser des Konsistenzlaufs (``nachfuellen.neu_spiegeln`` ab ``h0`` bis zur letzten vollen Stunde
+   vor jetzt, ``fuell_ende`` — Lab-K F1), gemerkte
    Tage der Anlage verworfen. **Abgeleitete Kanäle** (Bauplan §10 Nr. 34): nur die vom Feld abhängigen
    (``abhaengige_abgeleitete``) ab ``w0`` bis zum Ende verworfen und im selben Lauf nach dem Füllen neu geschrieben
    (``schreibe_abgeleitete_nach``: dieselben drei Schreiber wie der Stundenlauf) — kein Sichtfenster mit fehlenden Zeilen.
@@ -438,17 +439,20 @@ def gehoert_zu(familien: Optional[frozenset], kanal_key: str) -> bool:
     return any(f.startswith(MODUS_STROM) and kanal_key in alle_keys(f[len(MODUS_STROM):]) for f in familien)
 
 
-async def schreibe_abgeleitete_nach(sitzungen, anlage_id: int, erg: KanalKorrektur, zeitpunkt) -> int:
+async def schreibe_abgeleitete_nach(sitzungen, anlage_id: int, erg: KanalKorrektur, zeitpunkt, *,
+                                    immer: bool = False) -> int:
     """Nach dem Füllen: die verworfenen abhängigen Kanäle im selben Lauf neu schreiben — dieselben drei Schreiber wie der
     Stundenlauf (``schreiber.schreibe_kanaele_im_stundenlauf``), jeder ab seiner letzten Zeile bis zur Stunde vor
-    ``zeitpunkt``; der Strom je Betriebsart nur für die betroffenen Wärmepumpen."""
+    ``zeitpunkt``; der Strom je Betriebsart nur für die betroffenen Wärmepumpen. ``immer`` (Ansetzen eines Wechsels,
+    Korrekturrunde Lab-K F1): auch ohne verworfene Zeile fortschreiben — der Stundenlauf hat den Schlüssel mit offener
+    Wechsel-Zeile ausgelassen, und die Stunde des Wechsels fehlte sonst bis zum nächsten Lauf."""
     from backend.models.anlage import Anlage
     from backend.models.investition import Investition
     from backend.services.kanal.abgeleitet import schreibe_abgeleitete
     from backend.services.kanal.kosten import schreibe_kosten
     from backend.services.kanal.modus_strom import schreibe_modus_strom
 
-    if not erg.abgeleitet_verworfen:
+    if not erg.abgeleitet_verworfen and not immer:
         return 0
     f = erg.abgeleitet_familien
     async with sitzungen() as db:
@@ -468,7 +472,11 @@ async def schreibe_abgeleitete_nach(sitzungen, anlage_id: int, erg: KanalKorrekt
 
 
 def fuell_ende(jetzt_ts: int) -> int:
-    """Obergrenze des Füllens: das Soll-Ende des Stundenlaufs (``lesen.soll_ende``) — danach schreibt er selbst."""
-    from backend.services.kanal.lesen import soll_ende
-
-    return soll_ende(jetzt_ts)
+    """Obergrenze des Füllens und Lesens einer Korrektur bzw. eines Ansetzens: **die letzte volle Stunde vor jetzt** (Beginn
+    der Zeile, die zur vollen Stunde endet) — dieselbe Stunde, bis zu der der Stundenlauf um :05 spiegelt
+    (``schreiber._spiegel``) und bis zu der das Ansetzen seine Lage liest (``zuordnung_wechsel/ansatz.lage``). Korrekturrunde
+    Lab-K (F1): bis dahin galt das Soll-Ende der Leser (``lesen.soll_ende``, 70 Minuten Verzug) — zwischen H:05 und H:10
+    löschte eine Korrektur bzw. ein Ansetzen die vom Stundenlauf geschriebene Zeile ``H − 1`` und füllte nur bis ``H − 2``;
+    die Stunde fehlte bis zum nächsten Stundenlauf. Führt Home Assistant die Zeile noch nicht (H:00–H:01), schreibt sie der
+    Stundenlauf um :05."""
+    return (int(jetzt_ts) // _STUNDE) * _STUNDE - _STUNDE

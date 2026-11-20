@@ -11,11 +11,17 @@
 import type { RepairPlan, RepairResult } from '../../api/repair'
 import { REPARATUR_AENDERUNG_LABELS } from '../../lib/constants'
 import { fmtZahl } from '../../lib'
+import { plural } from '../../lib/plural'
 import { baueFeldwertMeldung, baueSpiegelAbgleichMeldung, type ReparaturMeldung, type SpiegelAbgleichTagErgebnis } from '../../pages/datenCheckerMeldungen'
 
 /** Vorbedingung von «Aus Home Assistant neu übernehmen» (Ü8): der Knopf übernimmt, was Home Assistant hat. */
 export const VORBEDINGUNG_HA = 'wirksam, wenn du in Home Assistant korrigiert hast'
 export const ENDGUELTIG = 'endgültig'
+/** Korrekturrunde Lab-K W8: «Aus Home Assistant neu übernehmen» in Klartext statt «Zähler aus Home Assistant: 13 ·
+ *  Zeitabschnitte: 23 · Tag neu aufgebaut: 1» (die Zeitabschnitte nennt die Werkbank). */
+export const SPIEGEL_SATZ = (zaehler: number, tage: number) =>
+  `eedc übernimmt die Statistik von ${fmtZahl(zaehler, 0)} ${plural(zaehler, 'Zähler', 'Zählern')} neu aus Home Assistant`
+  + (tage > 0 ? ` und baut ${fmtZahl(tage, 0)} ${plural(tage, 'Tag', 'Tage')} neu auf` : '')
 
 export interface VorschauAussage {
   /** Die eine Zeile in Anwender-Sprache (bei «nichts zu tun» der Satz des Plans). */
@@ -41,9 +47,12 @@ export function vorschauAussage(plan: RepairPlan): VorschauAussage {
   const teile = Object.entries(plan.estimated_changes)
     .map(([k, v]) => `${REPARATUR_AENDERUNG_LABELS[k] ?? k}: ${fmtZahl(v, 0)}`)
   const monate = Array.isArray(vorschau.monate) ? (vorschau.monate as unknown[]).map(String) : []
-  let satz = teile.join(' · ') || 'Keine Änderung angekündigt'
-  if (monate.length > 0) satz += ` (${monate.join(', ')})`
   const vorbedingung = plan.operation === 'spiegel_abgleich_tag'
+  const ec = plan.estimated_changes
+  let satz = vorbedingung && ec.spiegel_kanaele != null
+    ? SPIEGEL_SATZ(Number(ec.spiegel_kanaele), Number(ec.tage_neu_aufgebaut ?? 0))
+    : teile.join(' · ') || 'Keine Änderung angekündigt'
+  if (monate.length > 0) satz += ` (${monate.join(', ')})`
   const endgueltig = vorschau.endgueltig === true
   if (vorbedingung) satz += ` — ${VORBEDINGUNG_HA}`
   if (endgueltig) satz += ` — ${ENDGUELTIG}`

@@ -8,8 +8,9 @@ von Home Assistant sie zeigt — der Sprung steht deshalb in Tag, Monat und Jahr
 30 Tage Sensor, Tag, Stunde und die Menge des Sprungs.
 
 ## Lösungsweg
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei
+   „Neuer Wert“ die echte Menge eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»** —
    eedc holt die berichtigte Statistik und baut den Tag des ersten Funds neu auf. Ohne Klick gleicht eedc die
    Statistik beim nächtlichen Abgleich von selbst ab.

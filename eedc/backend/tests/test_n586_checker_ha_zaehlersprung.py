@@ -398,7 +398,7 @@ async def test_checker_nennt_stunde_sensor_menge_und_den_weg_in_ha(db):
     assert e.meldung == "1 Zählersprung/-sprünge in der Home-Assistant-Statistik — Tag und Monat zeigen sie mit"
     assert e.code == "ha_zaehlersprung" and e.werte["spruenge"] == 1 and e.werte["funde"][0]["sensor"] == "sensor.pv_gesamt"
     assert "sensor.pv_gesamt" in e.details and "Stunde ab 23:00" in e.details
-    assert "Wert anpassen" in e.details and "Monatsabschluss neu" in e.details
+    assert "Summe anpassen" in e.details and "Monatsabschluss neu" in e.details
     # Der Link zeigt nicht auf eedcs Datenquellen (Lab 4.1.3-rc1: dort ist nichts falsch), sondern auf die
     # Energieprofil-Pflege. Der Schritt nach der Korrektur in HA (#429, „HA-Spiegel jetzt abgleichen") ist seit N-790
     # der Knopf der Meldung selbst: «Aus Home Assistant neu übernehmen» (Abgleich + Tag neu aufgebaut).

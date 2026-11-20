@@ -70,10 +70,15 @@ async def _rand_ab(db, anlage_id: int, key: str, rueckgang: datetime) -> Optiona
 
 async def _ha_rohsumme(ha_svc, eid: str, key: str, z: datetime) -> Optional[float]:
     """HAs Rohsumme (bei Stand-Feldern ``state``) von ``eid`` um ``z`` — derselbe Abruf wie das Heilen eines Randes
-    (``snapshot/reader.py``: ``get_value_at`` mit ``als_stand``), also der Wert, den B-0 ins Stück schreiben wird."""
+    (``snapshot/reader.py``: ``get_value_at`` mit ``als_stand``), also der Wert, den B-0 ins Stück schreiben wird. Ein Stand
+    zwischen zwei vollen Stunden (Fünf-Minuten-Stand, ``snapshot/writer.snapshot_anlage_5min``) wird mit HAs
+    Kurzzeitstatistik verglichen wie er geschrieben wurde (Korrekturrunde Lab-K W9: gegen die Stundenzeile lag er nie auf
+    der Höhe, und die Korrektur füllte die Zeit nicht, obwohl Home Assistant sie führt)."""
     from backend.services.snapshot.keys import ist_stand_sensor_key
     from backend.services.zuordnung_wechsel.korrektur import ha_abruf
 
+    if z.minute or z.second:
+        return await ha_abruf(asyncio.to_thread(ha_svc.get_value_at, eid, z, 3, True, ist_stand_sensor_key(key)))
     return await ha_abruf(asyncio.to_thread(ha_svc.get_value_at, eid, z, als_stand=ist_stand_sensor_key(key)))
 
 

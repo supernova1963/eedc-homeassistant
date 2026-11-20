@@ -39,11 +39,23 @@ FELD = "Der neue Sensor zählt ab"
 SATZ_SEIT = "Home Assistant führt {neu} seit {seit} Uhr."
 SATZ_BEIDE = ("eedc rechnet wie Home Assistant mit beiden Sensoren: {alt} bis zu seinem letzten Wert, {neu} ab seinem ersten — "
               "die Stunde ab {g} Uhr zählt beide. Zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.")
+#: Korrekturrunde Lab-K W3: führt Home Assistant für den alten Sensor in der Stunde G keine Zeile (er endete vorher), zählt
+#: die Stunde nur den neuen — dann nicht «zählt beide».
+SATZ_BEIDE_NUR_NEU = ("eedc rechnet wie Home Assistant mit beiden Sensoren: {alt} bis zu seinem letzten Wert, {neu} ab seinem "
+                      "ersten. Für {alt} führt Home Assistant ab {g} Uhr keine Stunde mehr — die Stunde ab {g} Uhr zählt nur "
+                      "{neu}. Zwischen den Zählerständen der zwei Sensoren rechnet eedc keine Menge.")
 SATZ_SCHNITT = ("Beide Sensoren haben eine Zeit lang gleichzeitig gezählt. eedc zählt {alt} bis {g} Uhr und {neu} ab {g} Uhr; "
                 "eine frühere Stunde wählst du unter «" + FELD + "».")
-SATZ_UMFANG = "Dafür liest eedc die Werte dieses Felds ab {g} Uhr neu aus Home Assistant ({stunden} Stunden)"
-SATZ_UMFANG_TAGE = " und bildet {tage} Tage im Hintergrund neu; Wetter und Börsenpreis bleiben."
+#: Lab-K W4: nach der Wahl einer Stunde unter «Der neue Sensor zählt ab» ohne den Hinweis auf das Feld.
+SATZ_SCHNITT_GEWAEHLT = ("Beide Sensoren haben eine Zeit lang gleichzeitig gezählt. eedc zählt {alt} bis {g} Uhr und {neu} ab "
+                         "{g} Uhr.")
+#: Lab-K W1: «({stunden})» und «{tage}» tragen die Anzahl mit Ein- oder Mehrzahl (``zahlenformat.fmt_anzahl``).
+SATZ_UMFANG = "Dafür liest eedc die Werte dieses Felds ab {g} Uhr neu aus Home Assistant ({stunden})"
+SATZ_UMFANG_TAGE = " und bildet {tage} im Hintergrund neu; Wetter und Börsenpreis bleiben."
 SATZ_UMFANG_KEIN_TAG = "; kein abgeschlossener Tag muss neu gebildet werden."
+#: Lab-K W1: zählt der neue Sensor ab der laufenden Stunde, gibt es noch nichts neu zu lesen (statt «(0 Stunden)»).
+SATZ_UMFANG_LAUFEND = ("Neu zu lesen ist noch nichts: die Stunde ab {g} Uhr läuft noch, und eedc liest sie mit dem nächsten "
+                       "Stundenlauf.")
 SATZ_MONATE = ("Gespeicherte Monatsabschlüsse ({liste}) bleiben, wie sie sind; was eedc im Monat aus den Tagen rechnet, folgt den "
                "neu gebildeten Tagen. Angleichen lässt sich ein solcher Monat unter «Monatsdaten» mit «Aus HA laden».")
 SATZ_LOESCHEN = ("Den bisherigen Sensor kannst du in Home Assistant löschen: seine Statistik bleibt dort lesbar, und eedc rechnet "
@@ -117,12 +129,16 @@ def pruef_zeile(anlage_id: int, sensor_key: str, vorher: Optional[dict], nachher
 
 def bereich(la, row) -> Optional[tuple[datetime, datetime]]:
     """Zulässig für «Der neue Sensor zählt ab» (nur bei Überlappung): von der Stunde nach der ersten Zeile des neuen bis zur
-    Stunde des Wechsels (Rechenweg F2 «T1 < G ≤ laufende Stunde», E-1 aus a2)."""
+    Stunde des Wechsels (Rechenweg F2 «T1 < G ≤ laufende Stunde», E-1 aus a2) — und nie vor dem vorigen Wechsel des Felds
+    (Korrekturrunde Lab-K F5, ``ansatz.Lage.vorige_grenze``: sonst überschriebe das Ansetzen die Zeit der Quelle davor)."""
     from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
 
     if not la.ueberlappung or la.t1 is None:
         return None
     von = la.t1 + _STUNDE
+    vorige = getattr(la, "vorige_grenze", None)
+    if vorige is not None:
+        von = max(von, volle_stunde(vorige))
     return von, max(von, ab_ts_aus(row.erklaert_ts) - _STUNDE)
 
 
@@ -221,16 +237,27 @@ async def _monate(db, anlage_id: int, la) -> list[tuple[int, int]]:
     return sorted({(d.year, d.month) for d in la.tage if (d.year, d.month) in abschluss})
 
 
-def _saetze(la, alt: str, neu: str, umfang: dict[str, Any], monate: list[tuple[int, int]]) -> list[str]:
-    from backend.core.zahlenformat import fmt_zahl
+def _satz_art(la, gewaehlt: bool) -> str:
+    """Der Satz zur Art des Ansatzes: «zählt beide» nur, wenn HA für den alten Sensor in der Stunde G eine Zeile führt (W3);
+    nach der Wahl einer Stunde «Der neue Sensor zählt ab» ohne den Hinweis auf das Feld (W4)."""
+    if la.art == ANSATZ_BEIDE:
+        return SATZ_BEIDE if getattr(la, "alt_in_g", True) is not False else SATZ_BEIDE_NUR_NEU
+    return SATZ_SCHNITT_GEWAEHLT if gewaehlt else SATZ_SCHNITT
+
+
+def _saetze(la, alt: str, neu: str, umfang: dict[str, Any], monate: list[tuple[int, int]], *,
+            gewaehlt: bool = False) -> list[str]:
+    from backend.core.zahlenformat import fmt_anzahl
     from backend.services.zuordnung_wechsel.korrektur import _monate
 
     s = [SATZ_SEIT.format(neu=neu, seit=_uhr(la.t1))]
-    satz = SATZ_BEIDE if la.art == ANSATZ_BEIDE else SATZ_SCHNITT
-    s.append(satz.format(alt=alt, neu=neu, g=_uhr(la.g)))
+    s.append(_satz_art(la, gewaehlt).format(alt=alt, neu=neu, g=_uhr(la.g)))
     tage = umfang["tage"]
-    s.append(SATZ_UMFANG.format(g=_uhr(la.g), stunden=fmt_zahl(umfang["stunden"]))
-             + (SATZ_UMFANG_TAGE.format(tage=fmt_zahl(tage)) if tage else SATZ_UMFANG_KEIN_TAG))
+    if umfang["stunden"] or tage:
+        s.append(SATZ_UMFANG.format(g=_uhr(la.g), stunden=fmt_anzahl(umfang["stunden"], "Stunde", "Stunden"))
+                 + (SATZ_UMFANG_TAGE.format(tage=fmt_anzahl(tage, "Tag", "Tage")) if tage else SATZ_UMFANG_KEIN_TAG))
+    else:
+        s.append(SATZ_UMFANG_LAUFEND.format(g=_uhr(la.g)))
     if monate:
         s.append(SATZ_MONATE.format(liste=_monate(monate)))
     s.append(SATZ_LOESCHEN if la.alt_von_ha else SATZ_ALT_NICHT_IN_HA.format(alt=alt))
@@ -277,7 +304,7 @@ async def angaben(db, anlage_id: int, sensor_key: str, vorher: Optional[dict], n
         "wartet": None, "seit": _iso(la_g.t1), "ueberlappung": la_g.ueberlappung, "zaehlt_ab": _iso(la_g.g),
         "zaehlt_ab_vorgabe": _iso(la.g) if b else None, "zaehlt_ab_frueheste": _iso(b[0]) if b else None,
         "zaehlt_ab_spaeteste": _iso(b[1]) if b else None, **umfang, "monate": [f"{j}-{m:02d}" for j, m in monate],
-        "saetze": _saetze(la_g, quelle_text(vorher), quelle_text(nachher), umfang, monate),
+        "saetze": _saetze(la_g, quelle_text(vorher), quelle_text(nachher), umfang, monate, gewaehlt=zaehlt_ab is not None),
     }
 
 

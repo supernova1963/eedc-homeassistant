@@ -30,6 +30,7 @@ import { Alert, Button, Input, Modal, RadioGroup } from '../ui'
 import type { BleibenAngaben, GrundAngabe, KorrekturVorschau, QuellePruefung, WechselGrund } from '../../api/datenquellen'
 import { formatDatum } from '../../lib/datum'
 import { fmtZahl } from '../../lib/einheiten'
+import { plural } from '../../lib/plural'
 
 export const DIALOG_TITEL = 'Warum wechselt die Quelle?'
 export const GRUND_FORTSETZUNG =
@@ -76,6 +77,9 @@ export const ZAEHLT_AB_LABEL = 'Der neue Sensor zählt ab'
 export const ZAEHLT_AB_HINWEIS =
   'Beide Sensoren haben eine Zeit lang gleichzeitig gezählt. Vorbelegt ist die Stunde des Wechsels; eine frühere Stunde ' +
   'nimmst du, wenn der neue Sensor schon ab dann die Werte des Geräts gemessen hat.'
+/** Lab-K F5: der zulässige Bereich (Backend: nach der ersten Stunde des neuen Sensors und nicht vor dem vorigen Wechsel des
+ *  Felds, bis zur Stunde des Wechsels). */
+export const ZAEHLT_AB_BEREICH = (von: string, bis: string) => `Wählbar von ${von} bis ${bis} Uhr.`
 
 /** «Grund nachtragen»: der Wechsel als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom Backend). */
 export interface NachtragAngaben {
@@ -92,7 +96,10 @@ const zeitText = (iso: string): string => `${formatDatum(iso.slice(0, 10))} ${is
 /** «hat eigene Werte seit … (n Tage)» und die Stände — nur Anzeige der Backend-Zahlen. */
 export function werteSatz(f: QuellePruefung): string {
   const teile: string[] = []
-  if (f.erster_wert) teile.push(`Eigene Werte seit ${formatDatum(f.erster_wert)} (${fmtZahl(f.tage)} Tage).`)
+  // Lab-K W1/W2: der früheste eigene Wert (Kanal oder Reihe, Backend) und die Tage mit Ein- oder Mehrzahl.
+  if (f.erster_wert) {
+    teile.push(`Eigene Werte seit ${formatDatum(f.erster_wert)} (${fmtZahl(f.tage)} ${plural(f.tage, 'Tag', 'Tage')}).`)
+  }
   if (f.stand_alt != null) teile.push(`Letzter Stand der bisherigen Quelle: ${fmtZahl(f.stand_alt, 1)}.`)
   if (f.stand_neu != null) teile.push(`Stand der neuen Quelle jetzt: ${fmtZahl(f.stand_neu, 1)}.`)
   return teile.join(' ')
@@ -295,7 +302,8 @@ function BleibenTeil({ sensorKey, w, onZaehltAb }: { sensorKey: string; w: Wahl;
           type="datetime-local"
           id={`zaehlt-ab-${sensorKey}`}
           label={ZAEHLT_AB_LABEL}
-          hint={ZAEHLT_AB_HINWEIS}
+          hint={`${ZAEHLT_AB_HINWEIS} ${ZAEHLT_AB_BEREICH(zeitText(b.zaehlt_ab_frueheste),
+            zeitText(b.zaehlt_ab_spaeteste ?? b.zaehlt_ab_frueheste))}`}
           value={w.zaehltAb}
           min={lokal(b.zaehlt_ab_frueheste)}
           max={lokal(b.zaehlt_ab_spaeteste)}

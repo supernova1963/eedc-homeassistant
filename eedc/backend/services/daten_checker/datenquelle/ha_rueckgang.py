@@ -3,7 +3,7 @@
 **Warum es das gibt.** Seit HA-Bauform E4a-2 liest eedc die Bilanz-Gruppe aus dem Spiegel der HA-Statistik
 (``kanal_statistik``, Familie ``spiegel``, Art ``sum``) wie das HA-Energie-Dashboard — ohne Deckel und **ohne
 Rücksprung-Verwurf** (R-5, HA-Teil; ``services/kanal/lesen.py``: Δ = Σ HA-``change``). Fällt HAs ``sum`` in einer
-Stunde — der Wert wurde in HA nachträglich nach unten angepasst („Wert anpassen" mit einer zu großen Korrektur oder
+Stunde — der Wert wurde in HA nachträglich nach unten angepasst („Summe anpassen" mit einer zu großen Korrektur oder
 an der falschen Stunde), oder ein Sensor mit ``state_class: total`` meldet ein negatives Delta —, dann steht diese
 Stunde als **negative Menge** in Tag, Monat und Jahr, in eedc wie in HA. Vor 4.1.3 verschluckte die Regel R4 den
 Rückgang still; jetzt ist eedc HA-konform, aber ohne diese Prüfung stumm (Frank85: Netzbezug 05.06.2025 −540 kWh,
@@ -35,11 +35,11 @@ wie das HA-Energie-Dashboard): eine Zeile ``start_ts = H`` gehört zum Tag ihres
 Stunde ab 23:00. Bis E-S4-4 nannte der Checker den Tag des Bestandsfensters ``[Vortag 23:00, 23:00)`` (``H + 1 h``) —
 Cockpit → Tag zeigte die Zeile 23:00 dann am Tag D, die Meldung am Tag D+1 (Nachmessung E-S4-1 M-3). Die Rechnung steht
 hier selbst (gleich ``fenster.kalendertag_der_stunde``; ``fenster`` gehört zur Lese-Schicht, deren Importeure
-``test_kanal_lesen_waechter`` festhält — die Probe vergleicht beide). Die Stunde für HAs „Wert anpassen" ist der Beginn
+``test_kanal_lesen_waechter`` festhält — die Probe vergleicht beide). Die Stunde für HAs „Summe anpassen" ist der Beginn
 der Zeile, ``H``.
 
 ⛔ **Kein Reparatur-Knopf, kein Verwerfen in eedc.** Die Quelle ist HAs Statistik; korrigiert wird dort
-(Entwicklerwerkzeuge → Statistik → „Wert anpassen"), und eedc zieht über den nächtlichen Konsistenzlauf
+(Einstellungen → Werkzeuge → Statistik → „Summe anpassen"; vor HA 2026.11 unter Entwicklerwerkzeuge), und eedc zieht über den nächtlichen Konsistenzlauf
 (``kanal/konsistenz.py``, 02:45) selbst nach — oder sofort über den Knopf der Meldung «Aus Home Assistant neu
 übernehmen» (N-790: derselbe Lauf, von Hand, danach der Tag des ersten Funds neu aufgebaut; er übernimmt HAs
 Korrektur) — seine Prüfstelle vergleicht ab dem Abschnittsbeginn und halbiert
@@ -180,8 +180,10 @@ class HaRueckgangChecks:
                 "Energie-Dashboard von Home Assistant sie zeigt — der Rückgang steht deshalb als Abzug (negative Menge) in "
                 "Tag, Monat und Jahr. Das ist kein Vorzeichen für Entladen oder Einspeisen: Lade-, Entlade- und "
                 f"Einspeisezähler laufen nur nach oben, jede Richtung hat ihr eigenes Feld. Gefunden: {namen}. "
-                "Lösung in Home Assistant: Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol "
-                "„Wert anpassen“ die genannte Stunde wählen und die Menge auf den echten Wert setzen. eedc gleicht "
+                "Lösung in Home Assistant: Einstellungen → Werkzeuge → Statistik (in älteren Home-Assistant-Versionen: "
+                "Entwicklerwerkzeuge → Statistik) → den Sensor suchen → beim Symbol „Summe anpassen“ unter „Zeitpunkt "
+                "auswählen“ die Zeit des Rückgangs in der genannten Stunde wählen, bei „Neuer Wert“ den echten Wert "
+                "eintragen und „Anpassen“ drücken. eedc gleicht "
                 "die korrigierte Statistik beim nächsten nächtlichen Abgleich von selbst ab — oder sofort hier mit „Aus "
                 "Home Assistant neu übernehmen“. Hast du den Monat schon "
                 "mit dem Rückgang gespeichert („Aus HA laden“ oder Import), übernimm ihn danach im Monatsabschluss neu."

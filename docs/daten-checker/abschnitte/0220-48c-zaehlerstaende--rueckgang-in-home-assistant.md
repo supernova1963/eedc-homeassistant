@@ -3,7 +3,7 @@
 
 Das Gegenstück zum Sprung: Die Summe eines Sensors in der Langzeitstatistik von Home Assistant **fällt** in einer
 Stunde, statt zu steigen. Meist wurde der Wert in Home Assistant nachträglich nach unten angepasst (unter
-*Entwicklerwerkzeuge → Statistik* mit „Wert anpassen“, mit einer zu großen Korrektur oder an der falschen Stunde), oder
+*Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) mit „Summe anpassen“, mit einer zu großen Korrektur oder an der falschen Stunde), oder
 ein Sensor hat einen kleineren Zählerstand gemeldet. Home Assistant bucht das als negative Menge, und eedc übernimmt die
 Statistik so, wie das Energie-Dashboard sie zeigt — der Rückgang steht als Abzug in Tag, Monat und Jahr, und
 «Aus HA laden» schlägt für den Monat einen zu kleinen oder negativen Wert vor.

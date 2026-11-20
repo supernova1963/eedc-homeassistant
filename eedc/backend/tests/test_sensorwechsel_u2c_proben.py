@@ -3,7 +3,7 @@
 
 Lab-Soll (Lab-Liste Nr. 5, ``lab-werkzeug/geraetetausch-rc/ABLAUF.md``): Zähler mit Rate 1,8 kWh je Stunde seit 08.10., Sprung
 +2 001 ⇒ Befund «springt nach oben» (Maß ≈ 46); Rate 2,04, Neubeginn bei 300 ⇒ Befund «beginnt nicht bei 0» (Maß ≈ 6);
-Rechenweg F12: +2 001 an Zählern mit 160 / 24 / 6,85 kWh am Tag ⇒ Maß 12,5 / 83 / 292. Nach «Wert anpassen» in HA (die Summe ab
+Rechenweg F12: +2 001 an Zählern mit 160 / 24 / 6,85 kWh am Tag ⇒ Maß 12,5 / 83 / 292. Nach «Summe anpassen» in HA (die Summe ab
 der Stunde um den Sprung gesenkt) ist der Befund weg. Still bleiben: Nachholstunde nach einer Lücke, großer Verbrauch nach
 langer Ruhe, junger Zähler, Wärmepumpe im Winter, PV nach Schnee, Rückkehr nach «kurz 0», Paare über eine Wechselstelle.
 Keine Probe liest die Uhr.
@@ -53,7 +53,7 @@ def _sprung(z, wo: datetime, plus: float):
 
 
 def _wert_angepasst(z, wo: datetime, minus: float):
-    """«Wert anpassen» in HA: die Summe ab der Zeile ``wo`` um ``minus`` gesenkt; der Stand bleibt."""
+    """«Summe anpassen» in HA: die Summe ab der Zeile ``wo`` um ``minus`` gesenkt; der Stand bleibt."""
     return [(ts, st, su - minus) if ts >= _ts(wo) else (ts, st, su) for ts, st, su in z]
 
 
@@ -267,7 +267,7 @@ async def test_befund_mengen_zaehler_nennt_feld_sensor_stunde_menge_und_aktion(d
     (e,) = await _pruefe(db, a)
     assert (e.code, e.schwere.value if hasattr(e.schwere, "value") else e.schwere) == ("ha_zaehlerstand_springt", "warning")
     assert "Anlage · Netzbezug (sensor.netz_bezug) am 19.11.2026, Stunde ab 10:00: +2.002,8 kWh" in e.details
-    assert "der Stand springt nach oben" in e.details and "„Wert anpassen“" in e.details
+    assert "der Stand springt nach oben" in e.details and "„Summe anpassen“" in e.details
     assert (befund_op(e), befund_params(e)) == ("spiegel_abgleich_tag", {"datum": "2026-11-19"})
     assert e.werte["funde"][0]["sensor"] == "sensor.netz_bezug" and e.werte["funde"][0]["art"] == SPRUNG
 
@@ -279,7 +279,7 @@ async def test_befund_stand_zaehler_auskunft_mit_den_wegen_nach_e2(db):
     assert (e.schwere.value if hasattr(e.schwere, "value") else e.schwere) == "info"
     assert e.action is None and e.klasse == "auskunft"
     assert "+2.001,1 m³" in e.details and "„Bisherige Werte bleiben“" in e.details
-    assert "Stilllegungsdatum" in e.details and "Wert anpassen“ in Home Assistant ändert dort nichts" in e.details
+    assert "Stilllegungsdatum" in e.details and "Summe anpassen“ in Home Assistant ändert dort nichts" in e.details
 
 
 async def test_nach_wert_anpassen_und_uebernahme_kein_befund(db):

@@ -37,7 +37,8 @@ KATALOG_TS = REPO / "eedc" / "frontend" / "src" / "config" / "einstellungenKatal
 KONSTANTEN_TS = REPO / "eedc" / "frontend" / "src" / "lib" / "constants.ts"
 TEILE = ("Was eedc sieht", "Lösungsweg", "Was ohne Handlung gilt")
 #: Die drei Wege in Home Assistant (Erhebung Teil A M10, M23, M24) — Anfang eines kursiven Wegs.
-HA_WEGE = (("Einstellungen", "Geräte & Dienste", "Helfer"), ("Entwicklerwerkzeuge", "Statistik"), ("Helfer",))
+HA_WEGE = (("Einstellungen", "Geräte & Dienste", "Helfer"), ("Entwicklerwerkzeuge", "Statistik"), ("Helfer",),
+           ("Einstellungen", "Werkzeuge", "Statistik"))   # Lab-K H1: der Weg seit Home Assistant 2026.11
 MELDE_CODES = tuple(c for c in HANDGRIFFE if c.startswith(("drift_", "tageswerte_fehlen_"))
                     and HANDGRIFFE[c].klasse != "ok") + ("ha_zaehlersprung", "ha_zaehler_rueckgang",
                                                                       "ha_zaehlerstand_springt")
@@ -166,7 +167,9 @@ def test_sprengsatz_menuweg_und_link():
     assert not _weg_gueltig(_segmente("Cockpit → Tag"), katalog)
     assert _weg_gueltig(_segmente("Einstellungen → Daten → Energieprofil-Pflege"), katalog)
     assert _weg_gueltig(_segmente("Einstellungen → Komponenten → Wärmepumpe"), katalog)
-    assert _weg_gueltig(_segmente("Entwicklerwerkzeuge → Statistik → „Wert anpassen“"), katalog)
+    assert _weg_gueltig(_segmente("Entwicklerwerkzeuge → Statistik → „Summe anpassen“"), katalog)
+    assert _weg_gueltig(_segmente("Einstellungen → Werkzeuge → Statistik → „Summe anpassen“"), katalog)
+    assert not _weg_gueltig(_segmente("Einstellungen → Werkzeuge → Zustände"), katalog)
     with pytest.raises(ValueError):
         _ziel_aus_pfad("/einstellungen/datenquellen?feld=gibt_es_nicht")
 

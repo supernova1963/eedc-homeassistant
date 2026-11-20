@@ -8,8 +8,9 @@ Statistik so, wie das Energie-Dashboard von Home Assistant sie zeigt, und berich
 Monat und Jahr. Die Meldung nennt je Fund Feld, Sensor, Tag, Stunde und die Menge, die eedc wie Home Assistant dafür zählt.
 
 ## Lösungsweg
-1. In Home Assistant unter *Entwicklerwerkzeuge → Statistik* den genannten Sensor suchen, beim Symbol „Wert anpassen“
-   die genannte Stunde wählen und den Zuwachs auf die echte Menge setzen.
+1. In Home Assistant unter *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) den genannten Sensor suchen und beim Symbol „Summe anpassen“ den Dialog
+   „Eine Statistik anpassen“ öffnen: unter „Zeitpunkt auswählen“ die Zeit des Sprungs in der genannten Stunde wählen, bei
+   „Neuer Wert“ die echte Menge eintragen und „Anpassen“ drücken.
 2. Zurück in eedc am Befund **«Aus Home Assistant neu übernehmen»** klicken, die Vorschau lesen und **«Anwenden»** —
    eedc holt die berichtigte Statistik und baut den Tag des größten Funds neu auf. Ohne Klick gleicht eedc die
    Statistik beim nächtlichen Abgleich von selbst ab.
@@ -17,7 +18,7 @@ Monat und Jahr. Die Meldung nennt je Fund Feld, Sensor, Tag, Stunde und die Meng
    [Monatsdaten](eedc:/einstellungen/daten?block=monatsdaten) öffnen und mit «Aus HA laden» neu übernehmen — ein
    gespeicherter Monat ändert sich nicht von allein.
 4. **Zählerstand** (Gas, Wasser, Öl, Kilometerstand; die Meldung sagt es): hier rechnet eedc mit dem Stand, den der Sensor
-   anzeigt, und „Wert anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
+   anzeigt, und „Summe anpassen“ wirkt nicht. Wurde der Zähler getauscht, führe den neuen als eigenes Gerät: unter
    *Einstellungen → Komponenten* am alten Gerät ein «Stilllegungsdatum (optional)» setzen, den Haken «Aktiv (in
    Berechnungen berücksichtigen)» stehen lassen und den neuen Zähler als eigenes Gerät anlegen (Handbuch Einstellungen,
    Verbrauchszähler). Beim nächsten Tausch zählt kein Sprung, wenn du in Home Assistant für den neuen Zähler einen eigenen

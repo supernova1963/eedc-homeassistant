@@ -122,3 +122,9 @@ def fmt_datum(wert: Optional[date], leer: str = LEER) -> str:
     if wert is None:
         return leer
     return wert.strftime("%d.%m.%Y")
+
+
+def fmt_anzahl(anzahl: int, einzahl: str, mehrzahl: str) -> str:
+    """``1 Tag`` · ``2 Tage`` · ``0 Tage`` — eine Anzahl mit dem Substantiv in Ein- oder Mehrzahl (im Deutschen ist 0 Mehrzahl).
+    Der Zwilling im Client ist ``frontend/src/lib/plural.ts`` (``mitAnzahl``); Korrekturrunde Lab-K W1 («1 Tage»)."""
+    return f"{fmt_zahl(anzahl)} {einzahl if anzahl == 1 else mehrzahl}"

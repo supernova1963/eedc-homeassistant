@@ -139,7 +139,7 @@ describe('Fortschritt und Einstieg «Zähler getauscht»', () => {
       lauf: 'abc', sensor_key: 'inv:2:ladung_kwh', status: 'fertig', tage: 649, erledigt: 649,
       fehler: [{ tag: '2026-10-05', grund: 'x' }], beginn: null, ende: null, fuellen_offen: false })
     render(<KorrekturFortschritt anlageId={1} lauf="abc" />)
-    expect(await screen.findByText(/Korrektur abgeschlossen, 649 Tage bearbeitet\. 1 Tage konnten nicht neu gebildet werden\./))
+    expect(await screen.findByText(/Korrektur abgeschlossen, 649 Tage bearbeitet\. 1 Tag konnte nicht neu gebildet werden\./))
       .toBeInTheDocument()
     expect(datenquellenApi.korrekturLauf).toHaveBeenCalledTimes(1)
     expect(fortschrittSatz({ lauf: 'x', sensor_key: null, status: 'laeuft', tage: 10, erledigt: 3, fehler: [], beginn: null,

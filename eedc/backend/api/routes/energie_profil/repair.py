@@ -655,7 +655,7 @@ async def kanal_abgleich(
     Der Nachtjob (``scheduler.kanal_konsistenz_job`` → ``kanal/konsistenz.konsistenz_alle``) ruft je Anlage
     ``konsistenz_anlage``; diese Route ruft genau sie (``_kanal_abgleich_lauf``), mit denselben kurzen eigenen Sitzungen
     (``get_session``), damit kein HA-Abruf in einer offenen Schreib-Transaktion liegt. Wozu: nach einer Korrektur in
-    Home Assistant (Entwicklerwerkzeuge → Statistik → „Wert anpassen") zeigten die Tages-Kennzahlen bis zum nächsten
+    Home Assistant (Einstellungen → Werkzeuge → Statistik → „Summe anpassen") zeigten die Tages-Kennzahlen bis zum nächsten
     Morgen den alten Spiegel.
 
     Antwort: die Zähler des Laufs (``kanaele``, ``abschnitte``, ``gleich``, ``korrigiert`` je Kanal mit erster

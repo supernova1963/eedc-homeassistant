@@ -9,7 +9,7 @@ aus Zählerständen gerechnet ist. Dieselbe Form hat ein Zählersprung nach eine
 ## Lösungsweg
 1. Die genannten Mengen prüfen (der Knopf **«Was gilt»** am Befund öffnet diesen Text). Stimmen sie, ist nichts zu tun.
 2. Stimmt eine nicht, liegt der Fehler in der Zähler-Historie der Quelle: in Home Assistant unter
-   *Entwicklerwerkzeuge → Statistik* beim Sensor mit „Wert anpassen“ berichtigen. Danach den Tag in der
+   *Einstellungen → Werkzeuge → Statistik* (in älteren Home-Assistant-Versionen: *Entwicklerwerkzeuge → Statistik*) beim Sensor mit „Summe anpassen“ berichtigen. Danach den Tag in der
    [Reparatur-Werkbank](eedc:/einstellungen/daten?block=energieprofil&karte=werkbank) neu holen: «Aus Home Assistant
    neu übernehmen» für einen Tag aus der Statistik von Home Assistant, sonst «Tag neu aggregieren».
 3. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — die Zeile bleibt, solange ein solcher Nachtrag in den Tagen steht.

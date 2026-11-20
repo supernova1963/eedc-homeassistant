@@ -17,6 +17,7 @@ import { Alert } from '../ui'
 import { ApiError } from '../../api/client'
 import { datenquellenApi, type KorrekturLaufStand, type WartenderWechsel } from '../../api/datenquellen'
 import { fmtZahl } from '../../lib/einheiten'
+import { plural } from '../../lib/plural'
 
 export const FORTSCHRITT_INTERVALL_MS = 3000
 /** Höchstens so viele Abruf-Fehler hintereinander, dann hört der Fortschritt auf zu fragen. */
@@ -27,19 +28,22 @@ export const SATZ_FUELLEN_OFFEN =
 
 export const ANSETZEN_LAEUFT = 'eedc liest die Werte nach dem Sensorwechsel aus Home Assistant neu …'
 export const ANSETZEN_FERTIG = 'Werte nach dem Sensorwechsel neu gelesen.'
-export const ANSETZEN_FERTIG_TAGE = (n: string) => `Werte nach dem Sensorwechsel neu gelesen, ${n} Tage neu gebildet.`
+/** Lab-K W1: «1 Tag» / «2 Tage» — die Anzahl mit Ein- oder Mehrzahl (`lib/plural.ts`). */
+export const tageText = (n: number) => `${fmtZahl(n)} ${plural(n, 'Tag', 'Tage')}`
+export const ANSETZEN_FERTIG_TAGE = (tage: string) => `Werte nach dem Sensorwechsel neu gelesen, ${tage} neu gebildet.`
 
 /** Der Satz zum Stand — nur Anzeige der Backend-Zahlen. */
 export function fortschrittSatz(z: KorrekturLaufStand): string {
   const fehler = z.fehler.filter((f) => f.tag != null).length
-  const mitFehler = fehler > 0 ? ` ${fmtZahl(fehler)} Tage konnten nicht neu gebildet werden.` : ''
+  const mitFehler = fehler > 0
+    ? ` ${tageText(fehler)} ${plural(fehler, 'konnte', 'konnten')} nicht neu gebildet werden.` : ''
   if (z.art === 'ansetzen') {
-    if (z.status === 'fertig') return (z.tage > 0 ? ANSETZEN_FERTIG_TAGE(fmtZahl(z.tage)) : ANSETZEN_FERTIG) + mitFehler
+    if (z.status === 'fertig') return (z.tage > 0 ? ANSETZEN_FERTIG_TAGE(tageText(z.tage)) : ANSETZEN_FERTIG) + mitFehler
     if (z.tage === 0) return ANSETZEN_LAEUFT
     return `Tage werden im Hintergrund neu gebildet: ${fmtZahl(z.erledigt)} von ${fmtZahl(z.tage)}.${mitFehler}`
   }
   if (z.status === 'fertig') {
-    return z.tage > 0 ? `Korrektur abgeschlossen, ${fmtZahl(z.tage)} Tage bearbeitet.${mitFehler}` : 'Korrektur abgeschlossen.'
+    return z.tage > 0 ? `Korrektur abgeschlossen, ${tageText(z.tage)} bearbeitet.${mitFehler}` : 'Korrektur abgeschlossen.'
   }
   if (z.tage === 0) return 'Korrektur läuft …'
   return `Tage werden im Hintergrund neu gebildet: ${fmtZahl(z.erledigt)} von ${fmtZahl(z.tage)}.${mitFehler}`

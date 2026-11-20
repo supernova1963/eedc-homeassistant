@@ -116,7 +116,7 @@ describe('Sensorwechsel U2 Lauf b — Nachlauf und Wartegründe an der Fläche',
 
   it('(5) der Lauf des Ansetzens heißt nicht «Korrektur»', () => {
     expect(fortschrittSatz(stand({ art: 'ansetzen' }))).toBe(ANSETZEN_LAEUFT)
-    expect(fortschrittSatz(stand({ art: 'ansetzen', status: 'fertig', tage: 4, erledigt: 4 }))).toBe(ANSETZEN_FERTIG_TAGE('4'))
+    expect(fortschrittSatz(stand({ art: 'ansetzen', status: 'fertig', tage: 4, erledigt: 4 }))).toBe(ANSETZEN_FERTIG_TAGE('4 Tage'))
     expect(fortschrittSatz(stand({ art: 'ansetzen', tage: 4, erledigt: 1 }))).toBe('Tage werden im Hintergrund neu gebildet: 1 von 4.')
     for (const z of [stand({ art: 'ansetzen' }), stand({ art: 'ansetzen', status: 'fertig' })]) {
       expect(fortschrittSatz(z)).not.toMatch(/Korrektur/)

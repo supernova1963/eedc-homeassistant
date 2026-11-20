@@ -183,8 +183,8 @@ async def _reihe(db, anlage_id: int, key: str) -> tuple[Optional[datetime], int]
 
 
 async def _stand_neu(ha_svc, kanal, key: str, nachher: Optional[dict]) -> Optional[float]:
-    """Der Zählerstand (``state``) der neuen HA-Entität jetzt, in der Einheit des Kanals (Bauplan §11 Nr. 47; MQTT:
-    unbekannt, bis Werte kommen; ohne ``state`` keine Angabe)."""
+    """Der Zählerstand (``state``) einer HA-Entität jetzt (der neuen, Lab-K W6 auch der bisherigen), in der Einheit des
+    Kanals (Bauplan §11 Nr. 47; MQTT: unbekannt, bis Werte kommen; ohne ``state`` keine Angabe)."""
     from backend.services.kanal.angaben import zaehlerstand_ha_jetzt
     from backend.services.kanal.katalog import zaehler_art
 
@@ -241,10 +241,16 @@ async def _details(db, anlage_id: int, f: Frage, ha_svc, jetzt: datetime, zaehlt
     kanal = await kanal_des_schluessels(db, anlage_id, f.sensor_key)
     erster, tage = await _reihe(db, anlage_id, f.sensor_key)
     k_erster, k_tage, stand = await angaben(db, kanal) if kanal is not None else (None, 0, None)
-    if erster is None:
-        erster, tage = k_erster, k_tage
+    if erster is None or (k_erster is not None and k_erster < erster):
+        erster, tage = k_erster, k_tage        # Lab-K W2: der früheste eigene Wert (Kanal oder Reihe)
     f.erster_wert, f.tage, f.stand_alt = erster, tage, stand
-    f.stand_neu = await _stand_neu(_dienst(ha_svc), kanal, f.sensor_key, f.nachher)
+    svc = _dienst(ha_svc)
+    f.stand_neu = await _stand_neu(svc, kanal, f.sensor_key, f.nachher)
+    # Lab-K W6: der letzte Stand der bisherigen HA-Quelle aus HA (Kurzzeitstatistik) — die letzte Kanalzeile endet bis zu
+    # einer Stunde früher; ohne Angabe aus HA bleibt die der Kanalzeile.
+    alt_jetzt = await _stand_neu(svc, kanal, f.sensor_key, f.vorher)
+    if alt_jetzt is not None:
+        f.stand_alt = alt_jetzt
     f.vorgabe_falsch_seit = await _beginn_bisherige_quelle(db, anlage_id, f, kanal, erster)
     f.bleiben = await bleiben.angaben(db, anlage_id, f.sensor_key, f.vorher, f.nachher, ab_ts=ab_ts_aus(jetzt),
                                       erklaert_ts=jetzt, jetzt=jetzt, zaehlt_ab=zaehlt_ab, ha_svc=ha_svc)

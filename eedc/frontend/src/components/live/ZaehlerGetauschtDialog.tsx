@@ -4,7 +4,7 @@
  *
  * Die Quelle bleibt, der Zähler dahinter wurde getauscht. Der Dialog fragt das Backend, welcher Weg zur Stunde des Tauschs
  * gilt (`…/zaehler-getauscht/pruefen`): in der Spiegel-Zeit eines Zählers aus Home Assistant der Weg in Home Assistant
- * («Wert anpassen», eedc trägt nichts ein); bei MQTT «Eigene Summe» und ohne Spiegel trägt «Eintragen» die Fortsetzung ein
+ * («Summe anpassen», eedc trägt nichts ein); bei MQTT «Eigene Summe» und ohne Spiegel trägt «Eintragen» die Fortsetzung ein
  * (`…/zaehler-getauscht`); vor dem ersten eigenen Wert und in verworfener Zeit nennt ein Satz, warum nichts einzutragen ist.
  * Vor dem Eintragen sagt der Dialog, dass ein Eintrag sich nicht zurücknehmen lässt (Bauplan §12 Nr. 62). U3 b: aus dem Befund
  * «Zählerstand springt» (`getauscht=`) kommt «Getauscht am» vorbelegt; bei MQTT nennt die Antwort die Zeit, zu der die

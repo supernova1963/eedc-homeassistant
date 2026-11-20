@@ -95,7 +95,8 @@ CHECKER = Path(__file__).resolve().parents[1] / "services" / "daten_checker"
 #: Wege in der Oberfläche von Home Assistant — eedc kann dorthin nicht springen, der Text ist der Weg (M10, M23, M24).
 HA_WEGE = (
     "Einstellungen → Geräte & Dienste → Helfer",
-    "Entwicklerwerkzeuge → Statistik → den Sensor suchen → beim Symbol",
+    # Korrekturrunde Lab-K H1: der Weg seit Home Assistant 2026.11, der ältere in Klammern.
+    "Einstellungen → Werkzeuge → Statistik (in älteren Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik)",
     "Helfer → „Integral-Sensor“",
 )
 #: Ein Bereich bzw. Block der eedc-Oberfläche vor einem Pfeil = Menüweg.

@@ -520,6 +520,8 @@ SATZ_LUECKE_HOEHE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zäh
 SATZ_LUECKE_HOEHE_HANDGRIFF = ("Sollen die bisherigen Werte dieser Zeit lieber bleiben, setze «Falsch seit» auf {bis} Uhr — "
                                "dann verwirft eedc erst ab dort.")
 SATZ_LUECKE_TAGE = "Wo die Tagesansicht den Wert aus den gespeicherten Zählerständen bildet, zeigt sie {teile}."
+#: Lab-K W5/W9: der Beginn der Lücken-Sätze, wenn ihr Ende noch nicht erreicht ist.
+SATZ_BIS_JETZT = "Vom {von} Uhr bis jetzt"
 SATZ_LUECKE_INNEN = "{tage} keinen Wert"
 SATZ_LUECKE_RAND = "{tage} nur den Teil außerhalb dieser Zeit"
 
@@ -550,6 +552,9 @@ def saetze_luecke(la: Lage) -> list[str]:
         return []
     von, bis = la.luecke
     satz = SATZ_ZAEHLERLUECKE if la.zaehlerluecke else (SATZ_LUECKE_HOEHE if la.hoehe_ungeprueft else SATZ_LUECKE)
+    if bis > (getattr(la.auftrag, "erklaert", None) or datetime.now()):
+        # Lab-K W5/W9: das Ende der Zeit liegt noch vor uns (``ab`` = nächste volle Stunde) — die Vorschau nennt «jetzt».
+        satz = satz.replace("Vom {von} bis {bis} Uhr", SATZ_BIS_JETZT)
     s = [satz.format(von=von.strftime("%d.%m.%Y %H:%M"), bis=bis.strftime("%d.%m.%Y %H:%M"))]
     if satz is SATZ_LUECKE_HOEHE and la.auftrag.falsch_seit is not None and not getattr(la.auftrag, "stueck", False):
         s.append(SATZ_LUECKE_HOEHE_HANDGRIFF.format(bis=bis.strftime("%d.%m.%Y %H:%M")))
@@ -610,8 +615,8 @@ def saetze_ueberdeckt(la: Lage) -> list[str]:
 #: nur, was eedc nicht neu liest (wahr mit und ohne Höhenwechsel).
 SATZ_KANAL_AB = ("Home Assistant führt die Geschichte des richtigen Sensors erst ab {zeit} Uhr — für die Zeit davor liest eedc "
                  "nichts neu.")
-SATZ_KANAL_OHNE_GESCHICHTE = ("Home Assistant führt für den richtigen Sensor in diesem Zeitraum keine Geschichte — eedc liest "
-                              "dort nichts neu.")
+SATZ_KANAL_OHNE_GESCHICHTE = ("Home Assistant führt für den richtigen Sensor in diesem Zeitraum noch keine Stundenwerte — eedc "
+                              "liest dort nichts neu.")
 SATZ_KANAL_MQTT = ("Eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte — für die Zeit von «Falsch seit» bis jetzt "
                    "liest eedc nichts neu.")
 #: Dasselbe im Nachtrag (Bauplan §13 Nr. 69): dort endet das verworfene Intervall am Wechsel, nicht jetzt.
@@ -935,7 +940,8 @@ async def nachlauf_aus_auftrag(sitzungen, anlage_id: int, f: dict, *, ha_svc=Non
                 from backend.services.zuordnung_wechsel.ansatz import mitruecken
 
                 n["verschiebung"] = await mitruecken(sitzungen, kk.kanal_id, f["mitruecken"])
-        n["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromisoformat(f["jetzt"])) or 0
+        n["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromisoformat(f["jetzt"]),
+                                                              immer=bool(f.get("abgeleitet_immer"))) or 0
     if isinstance(f.get("staende"), dict):
         n["staende_neu"] = await fuelle_staende(sitzungen, anlage_id, f["staende"], ha_svc=ha_svc)
     return n

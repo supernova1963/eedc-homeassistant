@@ -29,7 +29,13 @@ der alte nach T1 weiterzählte (``zaehler_naht.ueberlappt``: heutiger letzter St
 3. Reihe: die Stände zwischen altem und neuem ``ab_ts`` verworfen (auch die Unterstunden-Stände) und im Hintergrund neu gelesen
    (``korrektur.fuelle_staende`` über den Lauf: ab ``ab_ts`` aus der neuen Quelle, davor nur fehlende Stände der alten).
 4. ``ab_ts``, Rand-Stände und Art in die Wechsel-Zeile.
-5. abhängige abgeleitete Kanäle ab G verwerfen und nach dem Füllen neu schreiben, gemerkte Tage verwerfen.
+5. abhängige abgeleitete Kanäle ab G verwerfen und nach dem Füllen bis jetzt neu schreiben (auch ohne verworfene Zeile —
+   Korrekturrunde Lab-K F1), gemerkte Tage verwerfen.
+
+**Grenze (Lab-K F1):** die Lage liest und das Füllen schreibt bis zur selben Stunde — der letzten vollen vor ``jetzt``
+(``kanal/korrektur.fuell_ende``, ein Ort). Bis dahin endete das Füllen am Soll-Ende der Leser (70 Minuten Verzug): im
+Stundenlauf um :05 fehlte die Stunde des Wechsels bis zum nächsten Lauf, und im Dialog zwischen H:05 und H:10 löschte das
+Ansetzen die schon geschriebene Zeile ``H − 1`` ohne sie wieder zu füllen.
 6. abgeschlossene Tage ab dem Tag von G, die einen Schlüssel des Felds tragen, im Hintergrund neu bilden (``korrektur_lauf``,
    ohne Sperre: die Zeile trägt keinen Lauf).
 
@@ -142,6 +148,11 @@ class Lage:
     #: a-K N4: ein Wechsel zurück in derselben Stunde, bevor die Quelle dazwischen einen eigenen Stand hatte — die Zeile,
     #: mit der sich diese aufhebt.
     aufheben_mit: Optional[int] = None
+    #: Lab-K F5: ab wann die bisherige Quelle gilt (der vorige verzeichnete Wechsel des Felds) — die früheste Stunde für
+    #: «Der neue Sensor zählt ab» (``bleiben.bereich``); ``None`` = kein voriger Wechsel.
+    vorige_grenze: Optional[datetime] = None
+    #: Lab-K W3: ``beide`` — führt HA für den alten Sensor in der Stunde G eine Zeile (``None`` = nicht geprüft)?
+    alt_in_g: Optional[bool] = None
 
     @property
     def ab_neu(self) -> Optional[datetime]:
@@ -204,6 +215,8 @@ async def _art_und_g(la: Lage, row, svc, bis_ts: int, stand: bool) -> Optional[d
         la.g = max(row.ab_ts - timedelta(hours=1), la.t1 + timedelta(hours=1))      # zulässig: T1 < G
     else:
         la.art, la.g = ANSATZ_BEIDE, la.t1
+        # Lab-K W3: führt HA für den alten in der Stunde G eine Zeile? (Sonst zählt die Stunde nur den neuen.)
+        la.alt_in_g = bei_t1 is not None and int(round(bei_t1["start_ts"])) == t1
     return erste
 
 
@@ -352,8 +365,9 @@ async def _nachbarn(db, row, la: Lage) -> None:
     erklaert = getattr(row, "erklaert_ts", None)
     if erklaert is None:
         return
-    andere = [w for w in (await lade_wechsel(db, row.anlage_id)).get(row.sensor_key, ())
-              if w.id != row.id and ist_quellenwechsel(w)]
+    alle = (await lade_wechsel(db, row.anlage_id)).get(row.sensor_key, ())
+    la.vorige_grenze = _vorige_grenze(alle, row, erklaert)
+    andere = [w for w in alle if w.id != row.id and ist_quellenwechsel(w)]
     spaeter = [w.ab_ts for w in andere if w.erklaert_ts > erklaert]
     if spaeter:
         la.grenze_g = min(spaeter) - timedelta(hours=1)
@@ -364,6 +378,21 @@ async def _nachbarn(db, row, la: Lage) -> None:
     if (p.grund == GRUND_FORTSETZUNG and _gleich(p.vorher, row.nachher) and _gleich(p.nachher, row.vorher)
             and not await _hat_staende(db, row, p.ab_ts, ab_ts_aus(erklaert))):
         la.aufheben_mit = p.id
+
+
+def _vorige_grenze(alle, row, erklaert: datetime) -> Optional[datetime]:
+    """Lab-K F5: ab wann die bisherige Quelle gilt — der jüngste verzeichnete Wechsel des Felds vor dieser Zeile (nicht
+    aufgehoben, keine Lücken-Zeile): eine Korrektur ab «Falsch seit», jeder andere ab seinem ``ab_ts`` (G + 1 h). Früher darf
+    «Der neue Sensor zählt ab» nicht liegen, sonst überschriebe das Ansetzen die Zeit der Quelle davor."""
+    from backend.models.zuordnung_wechsel import GRUND_KORREKTUR
+    from backend.services.zuordnung_wechsel.zeitpunkt import ist_luecken_zeile
+
+    frueher = sorted((w for w in alle if w.id != row.id and w.aufgehoben_durch is None and not ist_luecken_zeile(w)
+                      and w.erklaert_ts is not None and w.erklaert_ts < erklaert), key=lambda w: (w.erklaert_ts, w.id or 0))
+    if not frueher:
+        return None
+    p = frueher[-1]
+    return p.falsch_seit_ts if (p.grund == GRUND_KORREKTUR and p.falsch_seit_ts is not None) else p.ab_ts
 
 
 async def _hat_staende(db, row, von: datetime, bis: datetime) -> bool:
@@ -404,8 +433,10 @@ async def lage(db, row, *, ha_svc, jetzt: Optional[datetime] = None) -> Lage:
     if ha_svc is None or not ha_svc.is_available:
         la.wartet = WARTET_HA
         return la
+    from backend.services.kanal.korrektur import fuell_ende
+
     await _nachbarn(db, row, la)
-    bis_ts = _ts(_stunde(jetzt)) - _STUNDE
+    bis_ts = fuell_ende(_ts(jetzt))          # Lab-K F1: dieselbe Stunde, bis zu der ``_schreiben`` füllt
     # a-K N1: ein Stand-Feld (Gas, Wasser, Öl) am Schlüssel erkennen — ``zaehler_art`` kennt es ohne Kanal nicht.
     stand = ist_stand_sensor_key(row.sensor_key) or zaehler_art(row.sensor_key, None) == "stand"
     try:
@@ -522,15 +553,17 @@ async def _schreiben(db, row, la: Lage, lauf: str, jetzt: datetime, svc) -> dict
     staende = None if la.staende_neu is None else {"key": la.sensor_key, "von": la.staende_neu[0].isoformat(),
                                                    "bis": la.staende_neu[1].isoformat()}
     nach = nachlauf_auftrag(kk, svc, bis_ts, jetzt, staende=staende)
-    if nach is not None and mit is not None:
-        nach["mitruecken"] = mit
+    if nach is not None:
+        nach["abgeleitet_immer"] = True     # Lab-K F1: die abhängigen abgeleiteten Kanäle bis jetzt fortschreiben
+        if mit is not None:
+            nach["mitruecken"] = mit
     if la.tage or nach is not None:
         await korrektur_lauf.anlegen(db, lauf, row.anlage_id, la.sensor_key, la.tage, fuellen=nach,
                                      art=korrektur_lauf.ART_ANSETZEN)
     await db.flush()
     vergiss(db, row.anlage_id)
     merken.invalidiere(row.anlage_id, db=db)
-    return {"lauf": lauf, "kk": kk, "bis_ts": bis_ts, "nachlauf": nach, "mitruecken": mit,
+    return {"lauf": lauf, "kk": kk, "bis_ts": bis_ts, "jetzt": jetzt, "nachlauf": nach, "mitruecken": mit,
             "staende_geloescht": geloescht}
 
 
@@ -568,7 +601,8 @@ async def _nach_dem_commit(sitzungen, anlage_id: int, la: Lage, erg: dict, svc, 
     try:
         s["kanal_neu_gespiegelt"] = await fuelle_kanal(sitzungen, anlage_id, kk, ha_svc=svc, bis_ts=erg["bis_ts"])
         s["verschiebung"] = await mitruecken(sitzungen, la.kanal_id, erg["mitruecken"])
-        s["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, datetime.fromtimestamp(erg["bis_ts"]))
+        # Lab-K F1: bis jetzt und auch ohne verworfene Zeile — der Stundenlauf hat den Schlüssel mit offener Zeile ausgelassen.
+        s["abgeleitet_neu"] = await schreibe_abgeleitete_nach(sitzungen, anlage_id, kk, erg["jetzt"], immer=True)
     except Exception as e:  # noqa: BLE001 — der Lauf holt den Nachlauf nach (Zustand ``fuellen``)
         logger.warning("Ansetzen %s: Füllen nach dem Commit gescheitert, der Lauf holt es nach: %s: %s",
                        la.sensor_key, type(e).__name__, e)

@@ -8,7 +8,7 @@ MQTT gewechselt hat und einen früheren Tausch meldet, trifft die Spiegel-Zeit):
 * **Spiegel aus Home Assistant** (``home_assistant``): der Kanal spiegelt HAs Summe wörtlich; die Tagesansicht liest ihn
   (Feld-Auskunft «Kanal vor Reihe», Sitzung 2). Eine hier verzeichnete Fortsetzung wirkte nur auf die Leser der Reihe und
   machte Tagesansicht und Reihe uneins (gemessen §9 Nr. 26: 2 024,0 ↔ 23,0). eedc verzeichnet deshalb **nichts** und nennt den
-  Weg in Home Assistant («Wert anpassen»). Das gilt auch für einen **früheren** Spiegel-Abschnitt eines heute anders
+  Weg in Home Assistant («Summe anpassen», Lab-K H1). Das gilt auch für einen **früheren** Spiegel-Abschnitt eines heute anders
   zugeordneten Felds: der Konsistenzlauf gleicht jeden nicht verworfenen Spiegel-Abschnitt des Kanals gegen HA ab
   (``nachfuellen.abschnitte`` → ``konsistenz.konsistenz_anlage``) und übernimmt die berichtigte Statistik dort ebenso.
   Hat der Kanal noch keine Zeile, entscheidet der Katalog: führt er eine Kanal-Art für ein HA-Feld, spiegelt der nächste
@@ -28,7 +28,7 @@ MQTT gewechselt hat und einen früheren Tausch meldet, trifft die Spiegel-Zeit):
 des Tauschs** (``zeitpunkt.quelle_am``; ohne späteren Wechsel die heutige). Führt zu der Zeit Home Assistant den Zähler und
 spiegelt eedc ihn (Spiegel-Abschnitt; noch ohne Kanal: der Katalog führt eine Art), trägt eedc nie etwas ein — eine Quelle aus
 Home Assistant wird nicht überbrückt (Grundregel «Quellentreue»). Ein **Stand-Zähler** (Gas, Wasser, Öl; Kanal-Art ``stand``)
-bekommt einen eigenen Satz (``SATZ_HA_STAND``): eedc liest dort den Stand, «Wert anpassen» ändert in HA nur die Summe und wirkte
+bekommt einen eigenen Satz (``SATZ_HA_STAND``): eedc liest dort den Stand, «Summe anpassen» ändert in HA nur die Summe und wirkte
 nicht; genannt werden die zwei Wege nach E2 — in Home Assistant einen neuen Sensor oder Helfer für den neuen Zähler anlegen und
 ihn mit «Bisherige Werte bleiben» zuordnen, oder den neuen Zähler als eigenes Gerät führen (Handbuch Einstellungen §3.4a). Für
 MQTT und für Zeiten ohne Spiegel (vor dem Kanal, Nachbau-Abschnitt, Feld ohne Kanal-Art) bleibt alles wie zuvor (Auftrag Lauf c;
@@ -69,12 +69,14 @@ WEG_KEIN_SPRUNG = "kein_sprung"
 
 #: Wortlaute (Sitzung 3b, Korrekturrunde 3b-K; Gernot liest sie vor dem Commit).
 SATZ_HA = ("Dieser Zähler kommt aus Home Assistant, und eedc übernimmt seine Summe so, wie Home Assistant sie führt. Einen "
-           "Sprung beim Tausch berichtigst du dort: unter Entwicklerwerkzeuge → Statistik den Sensor suchen, beim Symbol "
-           "„Wert anpassen“ die Stunde des Tauschs wählen und den Zuwachs auf die echte Menge setzen. eedc übernimmt die "
+           "Sprung beim Tausch berichtigst du dort: unter Einstellungen → Werkzeuge → Statistik (in älteren "
+           "Home-Assistant-Versionen: Entwicklerwerkzeuge → Statistik) den Sensor suchen, beim Symbol „Summe anpassen“ "
+           "unter „Zeitpunkt auswählen“ die Zeit des Tauschs wählen, bei „Neuer Wert“ die echte Menge eintragen und "
+           "„Anpassen“ drücken. eedc übernimmt die "
            "berichtigte Statistik beim nächtlichen Abgleich; hier wird nichts eingetragen.")
-#: Sensorwechsel U2 Lauf c (F13, E2): ein Stand-Zähler aus Home Assistant — eedc liest den Stand, «Wert anpassen» wirkt dort nicht.
-SATZ_HA_STAND = ("Dieser Zähler kommt aus Home Assistant, und eedc rechnet mit dem Zählerstand, den der Sensor anzeigt — „Wert "
-                 "anpassen“ in Home Assistant ändert daran nichts; hier wird nichts eingetragen. Damit der Tausch nicht als "
+#: Sensorwechsel U2 Lauf c (F13, E2): ein Stand-Zähler aus Home Assistant — eedc liest den Stand, «Summe anpassen» wirkt dort nicht.
+SATZ_HA_STAND = ("Dieser Zähler kommt aus Home Assistant, und eedc rechnet mit dem Zählerstand, den der Sensor anzeigt — "
+                 "„Summe anpassen“ in Home Assistant ändert daran nichts; hier wird nichts eingetragen. Damit der Tausch nicht als "
                  "Verbrauch zählt, gibt es zwei Wege: in Home Assistant für den neuen Zähler einen eigenen Sensor oder Helfer "
                  "anlegen, ihn diesem Feld zuordnen und im Dialog „Bisherige Werte bleiben“ wählen; oder den neuen Zähler als "
                  "eigenes Gerät anlegen und am alten ein Stilllegungsdatum setzen (Handbuch Einstellungen, Verbrauchszähler).")
