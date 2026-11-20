@@ -20,16 +20,18 @@ beide Stunden); der vierte Arm «Zwischenstand» nennt eine Stunde, in der das G
 seinen Stand sendet (die Summe wächst um mindestens 0,9 × den Stand davor, der Stand nicht) — «Zähler getauscht» nimmt dort die
 Spanne der Höhenwechsel (``rohstand_rand.sprung_der_stunde``).
 
-**Korrekturrunde U3-K3 (Bauplan Nr. 163):** der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn
-die Regel der Rohstände dort einen Höhenwechsel nach Leistung oder einen Einzelschritt sieht (``_bestaetigt``,
-``rohstand_rand.einordnung_der_stunde``) — dieselbe Regel, nach der der Dialog «Zähler getauscht» einträgt; ein Fehlalarm (Ladung
-mit 22 kW an einem reifen Zähler mit kleinem Tageswert) entfällt, statt dass sein Knopf echte Menge streicht. Die übrigen Arme
-bleiben, wie sie sind.
+**Bauplan Nr. 163/166:** der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn der Stand dort
+eindeutig die Höhe wechselt (R1) oder ein Schritt der Stunde sich abhebt (``_bestaetigt``, ``rohstand.abgehoben_in_der_stunde``:
+er trägt mindestens 90 % des Zuwachses der Stunde und mehr als das Zehnfache des größten gewöhnlichen Schritts der 24 Stunden
+davor) — eine Ladung über die Stunde an einem reifen Zähler ist kein Befund. Steht der Fund nur auf einem solchen Schritt, sagen
+die Details, dass eedc Tausch und gezählte Menge nicht unterscheidet (``SATZ_SPRUNG_EINZELSCHRITT``,
+``SATZ_WARUM_EINZELSCHRITT``). Die Erkennung zeigt nur; ob eingetragen wird, entscheidet der Anwender im Dialog. Die übrigen
+Arme bleiben, wie sie sind.
 
 **Eine Zeile je Stunde** (W-1: diese Datei ist die Erzeuger-Stelle), Schwere Warnung (E6), Sprung «Zähler getauscht» in die
 Datenquellen (``ziel_datenquelle_schluessel(…, getauscht=<Zeit>)``): der Dialog «Zähler getauscht (gleiche Quelle)» öffnet mit
-«Getauscht am» auf dem ersten Rohstand nach dem Höhenwechsel bzw. am Einzelschritt (``rohstand.sprung_um``; ohne Rohstände der
-Beginn der Stunde).
+«Getauscht am» auf dem ersten Rohstand nach dem Höhenwechsel bzw. am Schritt, der sich abhebt (``zeit_des_sprungs``; ohne
+Rohstände der Beginn der Stunde).
 
 Schwesterdateien: ``standsprung.py`` (dieselbe Frage an der HA-Statistik), ``ruecksprung.py`` (lässt einen Rückgang aus, den diese
 Prüfung nennt), ``versatz.py`` (versetzter Abschnitt).
@@ -79,12 +81,15 @@ ORDER BY k.id, q.gueltig_ab, s.start_ts
 
 
 class Fund:
-    __slots__ = ("key", "stand", "einheit", "mqtt_key", "sprung", "zeit")
+    __slots__ = ("key", "stand", "einheit", "mqtt_key", "sprung", "zeit", "einzel")
 
     def __init__(self, key: str, stand: bool, einheit: str, mqtt_key: str, sprung: Standsprung):
         self.key, self.stand, self.einheit, self.mqtt_key, self.sprung = key, stand, einheit, mqtt_key, sprung
         #: Die Zeit des Schritts aus den Rohständen (``rohstand.sprung_um``), sobald gelesen; ``None`` = noch nicht gelesen.
         self.zeit: Optional[datetime] = None
+        #: U3-K4 (K3-B2): der Fund steht nur auf einem Einzelschritt der Rohstände (kein eindeutiger Höhenwechsel) — die zwei
+        #: Stände am Schritt; ``None`` = eindeutig oder ohne Rohstände.
+        self.einzel: Optional[tuple] = None
 
 
 def _kurz_tiefer(z: list[tuple]) -> set[int]:
@@ -141,6 +146,18 @@ SATZ_WARUM = ("So sieht es aus, wenn der Zähler oder das Gerät getauscht wurde
               "sendet. Trag den Tausch ein: „Zähler getauscht“ öffnet in den Datenquellen den Dialog „Zähler getauscht (gleiche "
               "Quelle)“ mit der Zeit des Sprungs. Danach zählt die Stunde nur, was der alte Zähler bis zu seinem letzten und der "
               "neue ab seinem ersten Stand gezählt hat.")
+#: U3-K4 (Bauplan Nr. 165, K3-B2; Wortlaut des Masters): steht der Fund nur auf einem Einzelschritt (kein eindeutiger
+#: Höhenwechsel — etwa eine Ladung, wenn das Gerät seinen Stand nur stündlich sendet), sagt der Befund wie der Dialog, dass eedc
+#: Tausch und gezählte Menge nicht unterscheidet.
+SATZ_SPRUNG_EINZELSCHRITT = ("Der Zählerstand ändert sich um {uhr} Uhr von {vorher} auf {nachher} {einheit} – viel mehr als in "
+                             "den Stunden davor. eedc zählt den Unterschied als Menge dieser Stunde ({menge} {einheit}) — in "
+                             "Tag, Monat und Jahr.")
+SATZ_WARUM_EINZELSCHRITT = ("So sieht es aus, wenn der Zähler oder das Gerät getauscht wurde – oder wenn in kurzer Zeit "
+                            "ungewöhnlich viel gezählt wurde (etwa eine Ladung, wenn das Gerät seinen Stand nur selten sendet). "
+                            "eedc erkennt den Unterschied nicht. War es ein Tausch, trag ihn ein: „Zähler getauscht“ öffnet in "
+                            "den Datenquellen den Dialog „Zähler getauscht (gleiche Quelle)“ mit der Zeit des Sprungs. Danach "
+                            "zählt die Stunde nur, was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand "
+                            "gezählt hat. War es gezählte Menge, stimmt der Wert, und es ist nichts zu tun.")
 #: Entscheid E4 (Bauplan Nr. 150): Live rechnet bei MQTT aus den Rohständen selbst und zeigt den Sprung weiter.
 SATZ_LIVE = ("Die Live-Anzeige rechnet direkt aus den Zählerständen: sie zeigt den Sprung am Tag des Sprungs unter „heute“ und "
              "am Tag danach unter „gestern“, auch nach dem Eintrag.")
@@ -149,6 +166,13 @@ SATZ_WEITERE = ("Dazu {n} weitere Stunde(n) mit einem Sprung — sie erscheinen 
 
 
 def _satz(f: Fund) -> str:
+    if f.einzel is not None:                    # U3-K4: Einzelschritt — Stände am Schritt, zwei Nachkommastellen
+        from backend.core.berechnungen.rohstand_rand import menge_des_schritts
+
+        return SATZ_SPRUNG_EINZELSCHRITT.format(uhr=f.einzel[1][0].strftime("%H:%M"), vorher=fmt_zahl(f.einzel[0][1], 2),
+                                                nachher=fmt_zahl(f.einzel[1][1], 2),
+                                                menge=fmt_zahl(menge_des_schritts(f.einzel), 2),
+                                                einheit=f.einheit or "kWh")
     vorlage = {NEUBEGINN: SATZ_NEUBEGINN, RUECKGANG: SATZ_RUECKGANG,
                ZWISCHENSTAND: SATZ_ZWISCHENSTAND}.get(f.sprung.art, SATZ_SPRUNG)
     return vorlage.format(vorher=fmt_zahl(f.sprung.stand_vorher, 1), nachher=fmt_zahl(f.sprung.stand_nachher, 1),
@@ -168,7 +192,8 @@ class MqttZaehlerstandSpringtChecks:
         out = []
         for i, f in enumerate(funde[:BEISPIELE]):
             zeit = await zeit_des_sprungs(self.db, anlage.id, f)
-            teile = [_satz(f), SATZ_WARUM_ZWISCHENSTAND if f.sprung.art == ZWISCHENSTAND else SATZ_WARUM, SATZ_LIVE]
+            warum = SATZ_WARUM_ZWISCHENSTAND if f.sprung.art == ZWISCHENSTAND else SATZ_WARUM
+            teile = [_satz(f), SATZ_WARUM_EINZELSCHRITT if f.einzel is not None else warum, SATZ_LIVE]
             if i == BEISPIELE - 1 and len(funde) > BEISPIELE:
                 teile.append(SATZ_WEITERE.format(n=len(funde) - BEISPIELE))
             out.append(_zeile(namen.get(f.key, f.key), f, zeit, " ".join(teile)))
@@ -208,20 +233,30 @@ async def mqtt_spruenge(db, anlage_id: int) -> list[Fund]:
 
 
 async def _bestaetigt(db, anlage_id: int, f: Fund) -> bool:
-    """U3-K3 (Bauplan Nr. 163): der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn die Regel
-    der Rohstände dort einen Höhenwechsel oder einen Einzelschritt sieht (``rohstand.sprung_um`` — dieselbe Regel wie der
-    Dialog «Zähler getauscht»); sieht sie keins von beidem (eine Ladung über die Stunde an einem reifen Zähler), ist es kein
-    Befund. Ohne Rohstände (älter als 31 Tage) entscheidet der Kern. Die Zeit des Schritts merkt sich der Fund
-    (``zeit_des_sprungs``)."""
-    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, sprung_um
+    """Bauplan Nr. 163/166: der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn der Stand dort
+    eindeutig die Höhe wechselt (R1, ``rohstand.sprung_um``) oder ein Schritt der Stunde sich abhebt
+    (``rohstand.abgehoben_in_der_stunde`` — dann mit dem Wortlaut, dass eedc Tausch und gezählte Menge nicht unterscheidet,
+    ``f.einzel``); sonst ist es kein Befund (eine Ladung über die Stunde an einem reifen Zähler). Ohne Rohstände (älter als 31
+    Tage) entscheidet der Kern. Die Zeit des Schritts merkt sich der Fund (``zeit_des_sprungs``, der Knopf «Zähler
+    getauscht»)."""
+    from backend.services.zuordnung_wechsel.rohstand import OHNE, abgehoben_in_der_stunde, sprung_um
+    from backend.services.zuordnung_wechsel.rohstand import SPRUNG as R1
 
     if f.sprung.art != SPRUNG:
         return True
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
-    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
-    if art in MIT_PAAR and paar is not None:
+    kwh = f.einheit == "kWh"
+    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=kwh)
+    if art == R1 and paar is not None:
         f.zeit = paar[1][0].replace(microsecond=0)
-    return art != "kein_sprung"
+        return True
+    if art == OHNE:
+        return True
+    schritt = await abgehoben_in_der_stunde(db, anlage_id, f.mqtt_key, stunde, kwh=kwh)
+    if schritt is None:
+        return False
+    f.zeit, f.einzel = schritt[1][0].replace(microsecond=0), schritt
+    return True
 
 
 async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
@@ -238,17 +273,19 @@ async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
 
 
 async def zeit_des_sprungs(db, anlage_id: int, f: Fund) -> datetime:
-    """Der erste Rohstand nach dem Höhenwechsel bzw. am Einzelschritt in der Stunde des Funds (``rohstand.sprung_um``, dieselbe
-    Regel wie der Dialog — U3-K3: der Befund fragt nicht mehr sich selbst); ohne Rohstände (älter als 31 Tage) der Beginn der
-    Stunde."""
-    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, sprung_um
-
+    """Der erste Rohstand nach dem Höhenwechsel bzw. am Schritt, der sich abhebt, in der Stunde des Funds (dieselbe Regel wie
+    ``_bestaetigt``); ohne Rohstände (älter als 31 Tage) der Beginn der Stunde."""
     if f.zeit is not None:
         return f.zeit
+    if f.sprung.art == SPRUNG and await _bestaetigt(db, anlage_id, f) and f.zeit is not None:
+        return f.zeit
+    from backend.services.zuordnung_wechsel.rohstand import SPRUNG as R1
+    from backend.services.zuordnung_wechsel.rohstand import sprung_um
+
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
     art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
-    return paar[1][0].replace(microsecond=0) if art in MIT_PAAR and paar is not None else stunde
+    return paar[1][0].replace(microsecond=0) if art == R1 and paar is not None else stunde
 
 
-__all__ = ["BEISPIELE", "Fund", "MqttZaehlerstandSpringtChecks", "benannte_stunden", "finde", "mqtt_spruenge",
+__all__ = ["BEISPIELE", "SATZ_SPRUNG_EINZELSCHRITT", "SATZ_WARUM_EINZELSCHRITT", "Fund", "MqttZaehlerstandSpringtChecks", "benannte_stunden", "finde", "mqtt_spruenge",
            "zeit_des_sprungs"]

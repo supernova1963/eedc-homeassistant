@@ -307,8 +307,10 @@ def test_b7_regel_leistung():
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_schritt_statt_leistung"])
 async def test_b7_ladung_nach_standby_ist_kein_hoehenwechsel(db, monkeypatch, sprengsatz):
-    """Wallbox über MQTT, 20 Tage Standby 5 W, dann 22 kW: G4 schweigt, und «Zähler getauscht» um 18:05 lehnt ab — vorher
-    strich der Eintrag 1,833 kWh echten Verbrauch (66,105 → 64,272). Sprengsatz: die Regel von U3 b (Schritt über 1 kWh)."""
+    """Wallbox über MQTT, 20 Tage Standby 5 W, dann 22 kW: G4 schweigt (kein Höhenwechsel nach Leistung). U3-K4 (Bauplan
+    Nr. 166, neue Erwartung — U3-K bis U3-K3 lehnte der Dialog ab): «Zähler getauscht» um 18:05 zeigt den Schritt, die Menge und
+    «Einen Sprung sieht eedc an dieser Zeit nicht.» und trägt auf das Wort des Anwenders ein — dann zählen die 1,83 kWh nicht.
+    Sprengsatz: die Regel von U3 b (Schritt über 1 kWh) ⇒ ein Höhenwechsel, Satz «springt» ohne Hinweis."""
     from backend.core.berechnungen import rohstand_rand
 
     if sprengsatz:
@@ -327,33 +329,38 @@ async def test_b7_ladung_nach_standby_ist_kein_hoehenwechsel(db, monkeypatch, sp
     assert await _g4(db, await _a(db, aid)) == []
     antw = await getauscht(l0 + timedelta(minutes=5))(db, aid)
     if sprengsatz:
-        assert antw["eintragen"]["eingetragen"] is True and await kanal_tag(db, aid, TAG_E) < vorher - 1.0
+        assert antw["pruefen"]["saetze"][0].startswith("eedc trägt den Tausch am ")
         return
-    assert antw["pruefen"]["weg"] == "kein_sprung" and antw["eintragen"]["eingetragen"] is False
-    assert antw["pruefen"]["saetze"][0].endswith("Einen kleinen Sprung nach oben, der wie Verbrauch aussieht, kann eedc nicht "
-                                                 "von Verbrauch unterscheiden; er zählt als Menge dieser Stunde.")
-    assert await kanal_tag(db, aid, TAG_E) == pytest.approx(vorher)
+    assert antw["pruefen"]["weg"] == "fortsetzung" and antw["eintragen"]["eingetragen"] is True
+    assert antw["pruefen"]["saetze"][0].startswith("Der Zählerstand ändert sich zwischen 08.06.2026 18:00 und 08.06.2026 18:05 Uhr")
+    assert antw["pruefen"]["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
+    assert await kanal_tag(db, aid, TAG_E) == pytest.approx(vorher - 1.833, abs=0.001)
 
 
-@pytest.mark.parametrize("stumm_h,weg", [(3, "kein_sprung"), (30, "fortsetzung")])
+@pytest.mark.parametrize("stumm_h,weg", [(3, "fortsetzung"), (30, "fortsetzung")])
 async def test_b7_nachholmenge_nach_stille(db, stumm_h, weg):
     """Publisher stumm, der Scheduler wiederholt den letzten Stand; um 10:20 kommt der wahre Stand. 3 h: 1,5 kWh — kein
     Höhenwechsel. Nach 30 h sind es 15 kWh; U3-K2 (P-2): die Leistung gilt über die Zeit seit dem letzten anderen Stand (0,5 kW,
     nicht 180 kW in fünf Minuten) — auch das ist kein Höhenwechsel. **U3-K3 (Bauplan Nr. 163, neue Erwartung für 30 h):** der
     Schritt trägt mehr als 90 % des Zuwachses der Stunde — ein Einzelschritt, eintragbar auf das Wort des Anwenders; der Satz
-    nennt die stille Zeit und die Menge, die dann nicht zählt. 3 h: 1,5 kWh neben 0,29 kWh gewöhnlichen Schritten der Stunde
-    (84 %) — kein Einzelschritt, abgelehnt."""
+    nennt die stille Zeit und die Menge, die dann nicht zählt. **U3-K4 (Bauplan Nr. 166):** beide eintragbar; der Hinweis
+    sagt, ob sich der Schritt abhebt — 30 h: «Ob das ein Tausch ist …»; 3 h: 1,5 kWh neben 0,29 kWh gewöhnlichen Schritten der
+    Stunde (84 %) — «Einen Sprung sieht eedc an dieser Zeit nicht.» (bis U3-K3 abgelehnt)."""
     def stand(t):
         return w(E - timedelta(hours=stumm_h)) if E - timedelta(hours=stumm_h) <= t < E else w(t)
     aid = (await _anlage(db)).id
     await betrieb(db, aid, Saat(stand, start=FRUEH))
     p = await _pruefe(db, aid, E)
     assert p["weg"] == weg
-    if weg == "fortsetzung":
-        assert p["eintragen"] is True and p["saetze"][0] == (
-            "Der Zählerstand steht von 07.06.2026 04:20 bis 08.06.2026 10:20 Uhr still und ändert sich dann von 5.230,2 auf "
-            "5.245,2 kWh. Ob das ein Tausch ist oder die gezählte Menge der stillen Zeit, erkennt eedc nicht. Trägst du den "
-            "Tausch ein, zählt eedc diese 15,00 kWh nicht.")
+    if stumm_h == 30:
+        assert p["eintragen"] is True and p["saetze"][:2] == [
+            "Der Zählerstand steht von 07.06.2026 04:20 bis 08.06.2026 10:20 Uhr still und ändert sich dann von 5.230,17 auf "
+            "5.245,17 kWh. Trägst du den Tausch ein, zählt eedc diese 15,00 kWh nicht.",
+            "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht."]
+    else:                                   # U3-K4 (Bauplan Nr. 166, neue Erwartung — bis U3-K3 abgelehnt)
+        assert p["eintragen"] is True and p["saetze"][0].startswith("Der Zählerstand steht von 08.06.2026 07:20 bis 08.06.2026 "
+                                                                    "10:20 Uhr still")
+        assert p["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
 
 
 async def _a(db, aid):

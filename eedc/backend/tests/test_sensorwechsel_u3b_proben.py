@@ -451,21 +451,24 @@ async def test_g5_getauscht_am_rueckt_auf_den_sprung_der_stunde(db, monkeypatch,
     assert await reihe_tag(db, aid, TAG_E) == pytest.approx(11.958, abs=0.001)
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jeder_schritt_ein_sprung"])
-async def test_g5_eine_stunde_daneben_wird_abgelehnt(db, monkeypatch, sprengsatz):
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jeder_schritt_hebt_sich_ab"])
+async def test_g5_eine_stunde_daneben_mit_hinweis(db, monkeypatch, sprengsatz):
+    """«Getauscht am» eine Stunde vor dem Sprung (09:20): U3-K4 (Bauplan Nr. 166, neue Erwartung — bis U3-K3 abgelehnt) — der
+    Dialog nimmt den nächsten anderen Stand (der Stand um 09:20 selbst), sagt «Einen Sprung sieht eedc an dieser Zeit nicht.» und trägt auf das Wort
+    des Anwenders ein; der Sprung um 10:20 zählt weiter (der Anwender hat die falsche Zeit gewählt). Sprengsatz: jeder Schritt
+    höbe sich ab ⇒ der Hinweis «Ob das ein Tausch ist …»."""
     from backend.core.berechnungen import rohstand_rand
 
     if sprengsatz:
-        monkeypatch.setattr(rohstand_rand, "hoehenwechsel", lambda *_a, **_k: True)
+        monkeypatch.setattr(rohstand_rand, "abgehoben", lambda *_a, **_k: True)
     aid = (await _anlage(db)).id
     antw = await betrieb(db, aid, Saat(_hoch(), spaet=[getauscht(E - timedelta(hours=1))]))
     p, r = antw[0]["pruefen"], antw[0]["eintragen"]
-    if sprengsatz:                              # still eingetragen — ohne Wirkung auf den Sprung
-        assert r["eingetragen"] is True and await kanal_tag(db, aid, TAG_E) > 2000.0
-        return
-    assert p["weg"] == "kein_sprung" and p["eintragen"] is False and r["eingetragen"] is False
-    assert "kein Sprung" in p["saetze"][0] and "09:00" in p["saetze"][0]
-    assert await _wechsel_zeilen(db, aid) == []
+    assert p["weg"] == "fortsetzung" and p["eintragen"] is True and r["eingetragen"] is True
+    assert p["getauscht_am"] == "2026-06-08T09:20:00"
+    assert p["saetze"][1] == ("Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht." if sprengsatz
+                              else "Einen Sprung sieht eedc an dieser Zeit nicht.")
+    assert await kanal_tag(db, aid, TAG_E) > 2000.0
 
 
 async def test_g5_ohne_rohstaende_wie_bisher(db):

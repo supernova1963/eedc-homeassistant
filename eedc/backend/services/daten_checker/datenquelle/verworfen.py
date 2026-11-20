@@ -105,6 +105,10 @@ class Lage:
     tage_rand: list[date] = field(default_factory=list)
     monate: list[tuple[int, int]] = field(default_factory=list)
     monate_gespeichert: list[tuple[int, int]] = field(default_factory=list)
+    #: U3-K4 (K3-B7 Nr. 3): zählt der Kanal schon vor dem Ende der Zeit die erste Stunde des richtigen Sensors (der
+    #: Stundenlauf übernahm sie, die Zeit endete erst mit der laufenden Stunde), nennt die Auskunft die Zeit bis dorthin —
+    #: nur der Satz; die Zeit selbst (``zeit``) und die Leser bleiben.
+    bis_anzeige: Optional[datetime] = None
 
 
 async def kanal_verwirft(db, anlage_id: int, key: str, v: VerworfeneZeit) -> bool:
@@ -170,6 +174,8 @@ async def lage_der_zeit(db, anlage, v: VerworfeneZeit) -> Lage:
         la.tage_rand = [d for d in rand if d != la.tag]
     else:
         la.grund = (GRUND_KANAL_ERSTE if raender is not None and raender[2] else GRUND_KANAL) if kanal else _grund(wechsel, v)
+        if la.grund == GRUND_KANAL_ERSTE and raender[1] < int(v.bis.timestamp()):
+            la.bis_anzeige = datetime.fromtimestamp(raender[1])
     return la
 
 
@@ -196,7 +202,7 @@ def texte(name: str, la: Lage) -> tuple[str, str]:
     """Meldung und Details in Anwender-Sprache (kein Menüweg — «Was gilt» öffnet den Lösungsweg)."""
     from backend.services.verwerfen_vor_quellbeginn import _monate_text
 
-    meldung = SATZ_MELDUNG.format(name=name, von=_uhr(la.zeit.von), bis=_uhr(la.zeit.bis))
+    meldung = SATZ_MELDUNG.format(name=name, von=_uhr(la.zeit.von), bis=_uhr(la.bis_anzeige or la.zeit.bis))
     teile = [SATZ_VERWORFEN]
     if la.lage == LAGE_ZAEHLERLUECKE:
         teile.append(SATZ_WIE_LUECKE.format(tag=_datum(la.tag) if la.tag else _uhr(la.zeit.bis)))

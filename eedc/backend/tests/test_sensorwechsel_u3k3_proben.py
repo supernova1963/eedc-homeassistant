@@ -187,30 +187,31 @@ def _stunde(schritte: list[float], beginn=datetime(2026, 6, 8, 10)) -> list:
     return roh
 
 
-@pytest.mark.parametrize("schritte,art", [
-    ([0.0, 0.0, 0.0, 9.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1], rr.EINZELSCHRITT),     # 9,0 von 9,8 = 92 %
-    ([0.0, 0.0, 0.0, 9.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], rr.EINZELSCHRITT),    # 90,02 %
-    ([0.0, 0.0, 0.0, 8.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.1], rr.KEIN_SPRUNG),      # 89 %
-    ([0.0] * 11 + [0.3], rr.EINZELSCHRITT),                                               # ein einziger Schritt
-    ([1.8333] * 12, rr.KEIN_SPRUNG),                                                       # Ladung über die Stunde
-    ([0.0, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 7.9, 0.0, 0.0, 0.0, 0.0], rr.KEIN_SPRUNG),      # zwei vergleichbare Schritte
-], ids=["92_prozent", "90_02_prozent", "89_prozent", "ein_schritt", "ladung", "zwei_schritte"])
-def test_a2_einordnung_rein(schritte, art):
+@pytest.mark.parametrize("schritte,abgehoben", [
+    ([0.0, 0.0, 0.0, 9.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1], True),     # 9,0 von 9,8 = 92 %
+    ([0.0, 0.0, 0.0, 9.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], True),    # 90,02 %
+    ([0.0, 0.0, 0.0, 8.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.1], False),    # 89 %
+    ([0.0] * 11 + [0.6], True),                        # ein einziger Schritt, 12 × die 0,05 davor
+    ([0.0] * 11 + [0.3], False),                       # U3-K4: 6 × die 0,05 davor hebt sich nicht ab (K3-B3)
+    ([1.8333] * 12, False),                                                   # Ladung über die Stunde
+    ([0.0, 0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 7.9, 0.0, 0.0, 0.0, 0.0], False),    # zwei vergleichbare Schritte
+], ids=["92_prozent", "90_02_prozent", "89_prozent", "ein_schritt", "ein_schritt_ohne_abstand", "ladung", "zwei_schritte"])
+def test_a2_abgehoben_rein(schritte, abgehoben):
+    """U3-K4 (Bauplan Nr. 166, neue Fassung von ``test_a2_einordnung_rein``): «hebt sich ab» zeigt nur (Hinweis und Befund) —
+    ≥ 90 % der Stunde und mehr als das Zehnfache des größten gewöhnlichen Schritts der 24 h davor."""
     roh = _stunde(schritte)
-    erg, paar = rr.einordnung_der_stunde(roh, datetime(2026, 6, 8, 10), 100.0)
-    assert erg == art
-    if art == rr.EINZELSCHRITT:
-        assert paar[1][1] - paar[0][1] == pytest.approx(max(schritte))
-        assert rr.menge_des_schritts(paar) == pytest.approx(max(schritte))
-    else:
-        assert paar is None
+    g = rr.abgehobener_schritt_der_stunde(roh, datetime(2026, 6, 8, 10), 100.0)
+    assert (g is not None) is abgehoben
+    if abgehoben:
+        assert rr.menge_des_schritts((roh[g - 1], roh[g])) == pytest.approx(max(schritte))
 
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_befund_ohne_rohstand_regel"])
 async def test_a2_reifer_zaehler_ladung_kein_befund(db, monkeypatch, sprengsatz):
     """Reifer Zähler (400 Tage, 1,2 kWh am Tag), am 08.06. von 10 bis 13 Uhr eine Ladung mit 22 kW: kein Befund (die Rohstände
-    zeigen zwölf gleiche Schritte je Stunde), der Dialog lehnt ab, Tag 67,05 in allen drei Lesern. Sprengsatz: der Befund ohne die
-    Regel der Rohstände ⇒ drei Fehlalarme (10, 11, 12 Uhr)."""
+    zeigen zwölf gleiche Schritte je Stunde), Tag 67,05 in allen drei Lesern. U3-K4 (Bauplan Nr. 166, neue Erwartung — bis U3-K3
+    lehnte der Dialog ab): der Dialog ist eintragbar und sagt «Einen Sprung sieht eedc an dieser Zeit nicht.». Sprengsatz: der
+    Befund ohne die Regel der Rohstände ⇒ drei Fehlalarme (10, 11, 12 Uhr)."""
     from backend.services.daten_checker.datenquelle import mqtt_standsprung as ms
 
     if sprengsatz:
@@ -233,17 +234,19 @@ async def test_a2_reifer_zaehler_ladung_kein_befund(db, monkeypatch, sprengsatz)
         return
     assert befunde == []
     p = await _dialog(db, aid, T)
-    assert (p["weg"], p["eintragen"]) == ("kein_sprung", False)
+    assert (p["weg"], p["eintragen"]) == ("fortsetzung", True)
+    assert p["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
     assert await _drei(db, aid, [TAG]) == [[67.05], [67.05], [67.05]]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_einzelschritt"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_hebt_sich_nie_ab"])
 async def test_a2_tausch_nach_pause_eintragbar_mit_satz(db, monkeypatch, sprengsatz):
     """Junger Zähler, Publisher 2 h stumm, um 10:20 meldet ein neues Gerät +90 (Leistung 45 kW über die stille Zeit — kein
     Höhenwechsel): kein Befund; der Dialog trägt auf das Wort des Anwenders ein und nennt die stille Zeit und die Menge, die dann
-    nicht zählt; danach Tag 13,2 in Kanal, Reihe und Tagesansicht. Sprengsatz: ohne Einzelschritt ⇒ abgelehnt, Tag 104,4."""
+    nicht zählt, dazu (U3-K4, Bauplan Nr. 166) den Hinweis «Ob das ein Tausch ist …»; danach Tag 13,2 in Kanal, Reihe und
+    Tagesansicht. Sprengsatz: der Schritt höbe sich nie ab ⇒ der Hinweis «Einen Sprung sieht eedc …» (eintragbar bleibt er)."""
     if sprengsatz:
-        monkeypatch.setattr(rr, "EINZELSCHRITT_ANTEIL", 1.01)
+        monkeypatch.setattr(rr, "abgehoben", lambda *_a, **_k: False)
 
     def stand(t):
         if T - timedelta(hours=2) <= t < T:
@@ -253,25 +256,24 @@ async def test_a2_tausch_nach_pause_eintragbar_mit_satz(db, monkeypatch, sprengs
     await betrieb(db, aid, Saat(stand, start=ST, ende=EN))
     assert await _befund(db, aid) == []
     p = await _dialog(db, aid, T)
-    if sprengsatz:
-        assert (p["weg"], p["eintragen"]) == ("kein_sprung", False)
-        assert (await _drei(db, aid, [TAG]))[0] == [104.4]
-        return
     assert (p["weg"], p["eintragen"], p["getauscht_am"]) == ("fortsetzung", True, "2026-06-08T10:20:00")
     assert p["saetze"][0] == ("Der Zählerstand steht von 08.06.2026 08:20 bis 08.06.2026 10:20 Uhr still und ändert sich dann "
-                              "von 5.048,2 auf 5.139,4 kWh. Ob das ein Tausch ist oder die gezählte Menge der stillen Zeit, "
-                              "erkennt eedc nicht. Trägst du den Tausch ein, zählt eedc diese 91,20 kWh nicht.")
+                              "von 5.048,20 auf 5.139,40 kWh. Trägst du den Tausch ein, zählt eedc diese 91,20 kWh nicht.")
+    if sprengsatz:
+        assert p["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
+        return
+    assert p["saetze"][1] == "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht."
     assert (await _dialog(db, aid, T, eintragen=True))["eingetragen"] is True
     assert await _drei(db, aid, [TAG]) == [[13.2], [13.2], [13.2]]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_einzelschritt"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_naechsten_anderen"])
 async def test_a2_neues_geraet_erst_null_zweiter_eintrag(db, monkeypatch, sprengsatz):
     """Neues Gerät meldet ab 10:20 drei Stunden 0, ab 13:20 seinen Stand 300: der Anwender trägt zuerst 10:20 ein (Höhenwechsel
-    nach Leistung), dann 13:20 (Einzelschritt nach drei Stunden 0) — Tag 12,55. Sprengsatz: ohne Einzelschritt ⇒ der zweite
-    Eintrag wird abgelehnt, 312,55 bleibt."""
+    nach Leistung), dann 13:20 (der nächste andere Stand nach drei Stunden 0) — Tag 12,55. Sprengsatz: ohne den nächsten anderen
+    Stand (R2) ⇒ der zweite Eintrag ohne Rand-Stände, 312,55 bleibt nicht 12,55."""
     if sprengsatz:
-        monkeypatch.setattr(rr, "EINZELSCHRITT_ANTEIL", 1.01)
+        monkeypatch.setattr(rr, "naechster_anderer", lambda *_a, **_k: None)
     t2 = T + timedelta(hours=3)
 
     def stand(t):
@@ -283,24 +285,29 @@ async def test_a2_neues_geraet_erst_null_zweiter_eintrag(db, monkeypatch, spreng
     assert (await _dialog(db, aid, T, eintragen=True))["eingetragen"] is True
     p = await _dialog(db, aid, t2)
     if sprengsatz:
-        assert p["weg"] == "kein_sprung" and (await _drei(db, aid, [TAG]))[0] == [312.55]
+        assert (await _dialog(db, aid, t2, eintragen=True))["eingetragen"] is True
+        assert (await _drei(db, aid, [TAG]))[0] != [12.55]
         return
     assert p["saetze"][0].startswith("Der Zählerstand steht von 08.06.2026 10:20 bis 08.06.2026 13:20 Uhr still und ändert "
-                                     "sich dann von 0,0 auf 300,0 kWh.")
+                                     "sich dann von 0,00 auf 300,00 kWh.")  # U3-K4: zwei Nachkommastellen
     assert (await _dialog(db, aid, t2, eintragen=True))["eingetragen"] is True
     assert await _drei(db, aid, [TAG]) == [[12.55], [12.55], [12.55]]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_nachtrag_nur_hoehenwechsel"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_hinweis"])
 async def test_a2_bestehender_wechsel_bleiben_am_einzelschritt(db, monkeypatch, sprengsatz):
     """Ein Wechsel des Topics um 10:22 ohne Grund (der neue Publisher meldet ab 10:20 +90 nach 2 h Stille), um 11:10 «bleiben»
-    nachgetragen: der Wechsel ist das Wort des Anwenders — die Rand-Stände sind der Einzelschritt 10:15 → 10:20, Tag 13,2.
-    Sprengsatz: der Nachtrag nimmt nur einen Höhenwechsel nach Leistung ⇒ Rand-Stände um 10:22 (10:20 → 10:25), der Schritt
-    zählt."""
+    nachgetragen. U3-K4 (Bauplan Nr. 166 R3, neue Erwartung — U3-K3 nahm den Einzelschritt als Rand, 13,2): «bleiben» nimmt die
+    zwei Stände um 10:22, der Schritt 10:15 → 10:20 zählt (104,35 — der Auftrag nannte 104,4; die fünf Minuten zwischen den
+    Rand-Ständen 10:20/10:25 zählen nicht, wie «bleiben» Takt 5: 14,35); die Prüf-Antwort nennt ihn (``SATZ_BLEIBEN_SCHRITT``).
+    Danach «Zähler getauscht» um 10:20 — gemessen, ob der zweite Eintrag geht. Sprengsatz: ohne den Hinweis."""
+    from backend.core.zahlenformat import fmt_zahl
     from backend.services.zuordnung_wechsel import rohstand
 
     if sprengsatz:
-        monkeypatch.setattr(rohstand, "MIT_PAAR", frozenset({rr.EINDEUTIG}))
+        async def nichts(*_a, **_k):
+            return None
+        monkeypatch.setattr(rohstand, "satz_bleiben_schritt", nichts)
 
     def stand(t):
         if T - timedelta(hours=2) <= t < T:
@@ -308,18 +315,34 @@ async def test_a2_bestehender_wechsel_bleiben_am_einzelschritt(db, monkeypatch, 
         return w(t) + (90.0 if t >= T else 0.0)
     aid = (await _anlage(db)).id
     u = T + timedelta(minutes=2)
+    satz = []
+
+    async def pruefen_und_bleiben(db_, aid_):
+        from backend.services.zuordnung_wechsel import nachtrag as nt
+
+        zw.vergiss(db_)
+        row = (await _wechsel_zeilen(db_, aid_))[0]
+        satz.append(nt.antwort(await nt.lage(db_, await _anlage_frisch(db_, aid_), row.id), "Netzbezug")["bleiben_satz"])
+        await _nachtrag_bleiben(db_, aid_)
     await betrieb(db, aid, Saat(stand, start=ST, ende=EN, handlungen=[(u, _wechsel_topic(u, None)),
-                                                                       (T + timedelta(minutes=50), _nachtrag_bleiben)]))
-    k, r, t = await _drei(db, aid, [TAG])
+                                                                       (T + timedelta(minutes=50), pruefen_und_bleiben)]))
+    alt, neu = w(T - timedelta(hours=2)), w(T) + 90.0
+    hinweis = rohstand.SATZ_BLEIBEN_SCHRITT.format(zeit="08.06.2026 10:20", alt=fmt_zahl(alt, 2), neu=fmt_zahl(neu, 2),
+                                                   menge=fmt_zahl(neu - alt, 2), einheit="kWh")
+    assert (hinweis in satz[0]) is not sprengsatz
+    assert await _drei(db, aid, [TAG]) == [[104.35], [104.35], [104.35]]   # die fünf Minuten 10:20–10:25 liegen in der Naht
     if sprengsatz:
-        assert k[0] > 100.0
         return
-    assert k == r == t == [13.2]
+    # Gemessen (Bericht U3-K4, Halt H-2): der zweite Eintrag geht NICHT — «Dieser Tausch ist schon eingetragen.», weil die
+    # Zeile «bleiben» dasselbe ``ab_ts`` (11:00) trägt wie ein Tausch um 10:20 (``zaehler_getauscht._schon``).
+    p = await _dialog(db, aid, T)
+    assert (p["weg"], p["eintragen"], p["saetze"]) == ("fortsetzung", False, ["Dieser Tausch ist schon eingetragen."])
 
 
 async def test_a2_zwei_vergleichbare_schritte_benannte_grenze(db):
-    """Benannte Grenze: ein Sprung in zwei Schritten (+8,0 um 10:20, +7,9 um 10:40) an einem reifen Zähler — kein Befund, der
-    Dialog lehnt beide Zeiten ab; der Tag zählt beide Schritte (17,34)."""
+    """Ein Sprung in zwei Schritten (+8,0 um 10:20, +7,9 um 10:40) an einem reifen Zähler — kein Befund; U3-K4 (Bauplan
+    Nr. 166, neue Erwartung — bis U3-K3 abgelehnt, die benannte Grenze entfällt): der Dialog ist an beiden Zeiten eintragbar und
+    sagt «Einen Sprung sieht eedc an dieser Zeit nicht.»; ohne Eintrag zählt der Tag beide Schritte (17,34)."""
     r = 0.06
 
     def stand(t):
@@ -329,7 +352,9 @@ async def test_a2_zwei_vergleichbare_schritte_benannte_grenze(db):
     await betrieb(db, aid, Saat(stand, start=ST, ende=EN))
     assert await _befund(db, aid) == []
     for zeit in (T, T + timedelta(minutes=20)):
-        assert (await _dialog(db, aid, zeit))["weg"] == "kein_sprung"
+        p = await _dialog(db, aid, zeit)
+        assert p["weg"] == "fortsetzung" and p["getauscht_am"] == zeit.isoformat()
+        assert p["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
     assert (await _drei(db, aid, [TAG]))[0] == [17.34]
 
 
@@ -369,10 +394,11 @@ def test_a3_kern_ueber_der_grenze_ohne_bezug(monkeypatch, sprengsatz):
 
 # ═══ A4 — «schon eingetragen» vor «kein Sprung» ═══════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_kein_sprung_zuerst"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_schon"])
 async def test_a4_schon_eingetragen_geht_vor(db, monkeypatch, sprengsatz):
     """Eingetragen um 10:18, bevor ein Stand danach gespeichert war; die Rohstände zeigen danach keinen Sprung. Das zweite
-    Öffnen zur selben Zeit sagt «Dieser Tausch ist schon eingetragen.». Sprengsatz: die Ablehnung zuerst (bis U3-K2)."""
+    Öffnen zur selben Zeit sagt «Dieser Tausch ist schon eingetragen.». Sprengsatz: ohne die Sperre ⇒ ein zweiter Eintrag
+    angeboten (U3-K4: die Ablehnung «kein Sprung» gibt es nicht mehr)."""
     from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
 
     if sprengsatz:
@@ -384,10 +410,10 @@ async def test_a4_schon_eingetragen_geht_vor(db, monkeypatch, sprengsatz):
     aid = (await _anlage(db)).id
     await betrieb(db, aid, Saat(w, start=ST, ende=EN, handlungen=[(t, eintrag)]))
     p = await _dialog(db, aid, t)
-    assert p["eintragen"] is False
     if sprengsatz:
-        assert p["weg"] == "kein_sprung"
+        assert p["eintragen"] is True
         return
+    assert p["eintragen"] is False
     assert p["saetze"] == ["Dieser Tausch ist schon eingetragen."]
 
 
@@ -433,11 +459,15 @@ async def test_a5_zwei_mqtt_zaehler_nicht_verwechselt(db, monkeypatch, sprengsat
     from backend.services.zuordnung_wechsel import rohstand
 
     if sprengsatz:
-        echt = rohstand.sprung_um
+        echt, echt_ab = rohstand.sprung_um, rohstand.abgehoben_in_der_stunde
 
         async def falsch(db_, aid_, _mk, t, **k):
             return await echt(db_, aid_, MK, t, **k)
+
+        async def falsch_ab(db_, aid_, _mk, t, **k):          # U3-K4: der Befund liest auch «hebt sich ab» je Schlüssel
+            return await echt_ab(db_, aid_, MK, t, **k)
         monkeypatch.setattr(rohstand, "sprung_um", falsch)
+        monkeypatch.setattr(rohstand, "abgehoben_in_der_stunde", falsch_ab)
     l0 = datetime(2026, 6, 8, 10)
 
     def netz(t):
@@ -454,20 +484,13 @@ async def test_a5_zwei_mqtt_zaehler_nicht_verwechselt(db, monkeypatch, sprengsat
     assert erg == [("basis:netzbezug", "2026-06-08T10:00", "2026-06-08T10:20")]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_einzelschritt_vor_spanne"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_spanne"])
 async def test_a5_getauscht_am_eines_rueckgangs(db, monkeypatch, sprengsatz):
     """Ein Zähler mit Stand nur zur vollen Stunde fällt um 10:20 um 4 % (neuer Zähler etwas unter dem alten): Arm «Rückgang»,
-    «Getauscht am» ist der Rohstand des Rückgangs (10:20) — nicht der einzige Schritt nach oben der Stunde (10:00). Sprengsatz:
-    der Einzelschritt ginge der Spanne nach Leistung vor ⇒ 10:00."""
+    «Getauscht am» ist der Rohstand des Rückgangs (10:20, die Spanne R1) — nicht der Beginn der Stunde. Sprengsatz (U3-K4): ohne
+    die Spanne ⇒ 10:00."""
     if sprengsatz:
-        echt = rr.einordnung_der_stunde
-
-        def zuerst_einzel(roh, stunde, grenze_kw=None):
-            g = rr.einzelschritt_der_stunde(roh, stunde)
-            return (rr.EINZELSCHRITT, (roh[g - 1], roh[g])) if g is not None else echt(roh, stunde, grenze_kw)
-        monkeypatch.setattr(rr, "einordnung_der_stunde", zuerst_einzel)
-        from backend.services.zuordnung_wechsel import rohstand
-        monkeypatch.setattr(rohstand, "einordnung_der_stunde", zuerst_einzel)
+        monkeypatch.setattr(rr, "sprung_der_stunde", lambda *_a, **_k: None)
 
     def f(t):
         g = t.replace(minute=0, second=0)

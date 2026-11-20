@@ -121,6 +121,9 @@ class NachtragLage:
     bleiben: Optional[dict] = None
     #: U3 a (Rechenweg G8): «Falsch seit» ist auf den früheren Schritt fremder Stände vorbelegt — der Satz dazu.
     rest_satz: Optional[str] = None
+    #: Bauplan Nr. 166: in der Stunde des Wechsels hebt sich ein Schritt ab, der nicht am Zeitpunkt liegt — der Hinweis dazu
+    #: (``rohstand.satz_bleiben_schritt``).
+    bleiben_schritt: Optional[str] = None
 
 
 async def _zeile(db, anlage_id: int, wechsel_id: int) -> Optional[ZuordnungWechsel]:
@@ -212,6 +215,10 @@ async def lage(db, anlage, wechsel_id: int) -> Optional[NachtragLage]:
         return la
     if row.grund is None:
         la.gruende.append(GRUND_FORTSETZUNG)
+        from backend.services.zuordnung_wechsel.rohstand import satz_bleiben_schritt
+
+        la.bleiben_schritt = await satz_bleiben_schritt(db, anlage.id, row.vorher, row.nachher, row.sensor_key,
+                                                        row.erklaert_ts)
     moeglich = await korrektur_moeglich(db, anlage, row)
     if not moeglich:
         la.stueck = await stueck_des_wechsels(db, anlage.id, row)
@@ -343,18 +350,15 @@ async def trage_fortsetzung_ein(db, anlage, row, zaehlt_ab: Optional[datetime] =
 async def _rand_aus_rohstaenden(db, neu: ZuordnungWechsel) -> Optional[tuple[float, float]]:
     """U3 b (G5): «bleiben» zwischen zwei MQTT-Quellen auf demselben Schlüssel — Rand-Stände aus den Rohständen um den Wechsel
     an die neue Zeile (``ansatz = schnitt``) und für den Nachtrag im Kanal; ohne Rohstände ``None`` (wie bisher). Wechselt der
-    Stand in der Stunde des Wechsels die Höhe oder trägt ein Einzelschritt die Stunde (``rohstand.sprung_um``, ``MIT_PAAR`` —
-    der Wechsel ist das Wort des Anwenders, U3-K3), sind die Rand-Stände die zwei Stände an diesem Schritt —
-    ein verzeichneter Zeitpunkt (etwa ein Altbestand ohne Grund) kann um Minuten neben dem ersten Stand der neuen Quelle liegen;
-    sonst die zwei Stände um den Zeitpunkt (``rand_um``)."""
-    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, mqtt_paar, rand_um, setze_rand, sprung_um
+    Stand in der Stunde des Wechsels eindeutig die Höhe (R1, ``rohstand.paar_des_wechsels``), sind die Rand-Stände die Spanne
+    — ein verzeichneter Zeitpunkt (etwa ein Altbestand ohne Grund) kann um Minuten neben dem ersten Stand der neuen Quelle liegen;
+    sonst die zwei Stände um den Zeitpunkt (``rand_um``, R3, Bauplan Nr. 166: nachgetragen = sofort)."""
+    from backend.services.zuordnung_wechsel.rohstand import mqtt_paar, paar_des_wechsels, setze_rand
 
     mk = mqtt_paar(neu.vorher, neu.nachher, neu.sensor_key)
     if mk is None or not neu.erklaert_ts:
         return None
-    art, paar = await sprung_um(db, neu.anlage_id, mk, neu.erklaert_ts)
-    if art not in MIT_PAAR:
-        paar = await rand_um(db, neu.anlage_id, mk, neu.erklaert_ts)
+    paar = await paar_des_wechsels(db, neu.anlage_id, mk, neu.erklaert_ts)
     if paar is None:
         return None
     setze_rand(neu, paar)
@@ -376,5 +380,6 @@ def antwort(la: NachtragLage, label: Optional[str], korrektur: Optional[dict[str
         "vorgabe_falsch_seit": None if la.vorgabe_falsch_seit is None else la.vorgabe_falsch_seit.isoformat(),
         "stueck": None if la.stueck is None else {"sprung": la.stueck[0].isoformat(), "rueckgang": la.stueck[1].isoformat()},
         "korrektur": korrektur, "bleiben": la.bleiben,
-        "bleiben_satz": None if la.bleiben else bleiben_satz(r.vorher, r.nachher, r.sensor_key),
+        "bleiben_satz": None if la.bleiben else " ".join(x for x in (bleiben_satz(r.vorher, r.nachher, r.sensor_key),
+                                                                    la.bleiben_schritt) if x) or None,
     }

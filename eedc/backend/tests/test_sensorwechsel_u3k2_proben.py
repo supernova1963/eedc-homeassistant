@@ -158,20 +158,22 @@ async def _kanal_tag(db, kid: int, d: datetime) -> float:
     return round(z.delta, 3)
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_einzelschritt"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_abheben"])
 @pytest.mark.parametrize("name,schritt", [("reif_200kwp", 20.0), ("reif_stufig", 15.0)])
 async def test_p3_befund_und_dialog_eine_entscheidung(db, monkeypatch, name, schritt, sprengsatz):
     """Der Befund nennt die Stunde 10:00 (reifer Bezug, Maß über 10) und die Zeit des Schritts 10:20; der Dialog nimmt ihn als
     Einzelschritt an und trägt ein; danach zählt der Tag den Schritt nicht mehr, und der Befund ist weg. U3-K3: der Satz sagt,
-    dass eedc Tausch und Menge nicht unterscheidet (am stufigen Zähler mit der stillen Zeit). Sprengsatz: ohne Einzelschritt
-    (nur die Leistung, wie U3-K) ⇒ kein Befund (die Regel der Rohstände sieht keinen Sprung), der Dialog lehnt ab."""
+    dass eedc Tausch und Menge nicht unterscheidet (am stufigen Zähler mit der stillen Zeit). U3-K4 (Bauplan Nr. 166, neue
+    Erwartung): Satz «zwischen … und …» mit dem Hinweis «Ob das ein Tausch ist …»; eine Stunde ohne Sprung ist eintragbar mit
+    «Einen Sprung sieht eedc an dieser Zeit nicht.». Sprengsatz: ohne «hebt sich ab» (nur die Leistung, wie U3-K) ⇒ kein
+    Befund, der Dialog trägt mit dem Hinweis «kein Sprung» ein."""
     if sprengsatz:
-        monkeypatch.setattr(rr, "einzelschritt_der_stunde", lambda roh, stunde: None)
+        monkeypatch.setattr(rr, "abgehoben", lambda *_a, **_k: False)
     a, kid = await _welt(db, name)
     befunde = await _befund(db, a)
     if sprengsatz:
         p = await _dialog(db, a.id, T)
-        assert befunde == [] and p["weg"] == "kein_sprung" and p["eintragen"] is False
+        assert befunde == [] and p["weg"] == "fortsetzung" and "Einen Sprung sieht eedc an dieser Zeit nicht." in p["saetze"]
         return
     (e,) = befunde
     assert e.werte["art"] == "sprung" and e.werte["stunde"] == "2026-06-17T10:00"
@@ -184,10 +186,12 @@ async def test_p3_befund_und_dialog_eine_entscheidung(db, monkeypatch, name, sch
         assert p["saetze"][0].startswith("Der Zählerstand steht von 17.06.2026 10:00 bis 17.06.2026 10:20 Uhr still und ändert "
                                          "sich dann von ")
     else:
-        assert p["saetze"][0].startswith("Der Zählerstand ändert sich um 17.06.2026 10:20 Uhr von ")
-    assert "erkennt eedc nicht. Trägst du den Tausch ein, zählt eedc diese " in p["saetze"][0]
-    # eine andere Stunde desselben Zählers trägt keinen Einzelschritt (zwölf gleiche Schritte) — dort bleibt die Ablehnung
-    assert (await _dialog(db, a.id, datetime(2026, 6, 17, 14, 20)))["weg"] == "kein_sprung"
+        assert p["saetze"][0].startswith("Der Zählerstand ändert sich zwischen 17.06.2026 10:15 und 17.06.2026 10:20 Uhr von ")
+    assert "Trägst du den Tausch ein, zählt eedc diese " in p["saetze"][0]
+    assert p["saetze"][1] == "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht."
+    # eine andere Stunde desselben Zählers (zwölf gleiche Schritte): U3-K4 eintragbar, mit dem Hinweis «kein Sprung»
+    p14 = await _dialog(db, a.id, datetime(2026, 6, 17, 14, 20))
+    assert p14["weg"] == "fortsetzung" and p14["saetze"][1] == "Einen Sprung sieht eedc an dieser Zeit nicht."
     r = await _dialog(db, a.id, T, eintragen=True)
     assert r["eingetragen"] is True
     w = (await db.execute(text("SELECT stand_alt_ende, stand_neu_null FROM zuordnung_wechsel"))).one()
@@ -201,21 +205,24 @@ async def test_p3_befund_und_dialog_eine_entscheidung(db, monkeypatch, name, sch
 
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jeder_groesste_schritt"])
-@pytest.mark.parametrize("name,zeit,weg", [("wallbox_22kw", datetime(2026, 6, 17, 18, 5), "kein_sprung"),
-                                           ("nachhol_30h", T, "fortsetzung")])
-async def test_p3_ohne_befund_einzelschritt_oder_ablehnung(db, monkeypatch, name, zeit, weg, sprengsatz):
-    """Ladung nach Standby (B7): kein Befund, der Dialog lehnt ab (zwölf gleiche Schritte, kein Einzelschritt). Nachholmenge nach
-    30 h Stille (P-2): kein Befund (junger Zähler), der Dialog trägt auf das Wort des Anwenders ein — U3-K3, neue Erwartung (bis
-    U3-K2 abgelehnt). Sprengsatz: jeder größte Schritt gälte als Einzelschritt (Anteil 0) ⇒ der Dialog nähme an der Ladung den
-    größten Schritt und strich echten Verbrauch."""
+@pytest.mark.parametrize("name,zeit,hinweis", [("wallbox_22kw", datetime(2026, 6, 17, 18, 5), "Einen Sprung sieht eedc an dieser Zeit nicht."),
+                                               ("nachhol_30h", T, "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht.")])
+async def test_p3_ohne_befund_einzelschritt_oder_ablehnung(db, monkeypatch, name, zeit, hinweis, sprengsatz):
+    """Ladung nach Standby (B7): kein Befund; Nachholmenge nach 30 h Stille (P-2): kein Befund (junger Zähler). U3-K4 (Bauplan
+    Nr. 166, neue Erwartung — bis U3-K3 lehnte der Dialog die Ladung ab): beide sind eintragbar, der Hinweis sagt, ob eedc einen
+    Sprung sieht (Ladung: nein; Nachholmenge: unklar). Sprengsatz: jeder größte Schritt höbe sich ab (Anteil 0) ⇒ an der Ladung
+    stünde «Ob das ein Tausch ist …»."""
     if sprengsatz:
         monkeypatch.setattr(rr, "EINZELSCHRITT_ANTEIL", 0.0)
+        monkeypatch.setattr(rr, "hebt_sich_ab", lambda *_a, **_k: True)
     a, _kid = await _welt(db, name)
     assert await _befund(db, a) == []
     p = await _dialog(db, a.id, zeit)
+    assert (p["weg"], p["eintragen"]) == ("fortsetzung", True)
     if sprengsatz:
-        assert (p["weg"], p["eintragen"]) == ("fortsetzung", True)
+        assert p["saetze"][1] == "Ob das ein Tausch ist oder eine gezählte Menge, erkennt eedc nicht."
         return
-    assert (p["weg"], p["eintragen"]) == (weg, weg == "fortsetzung")
+    assert p["saetze"][1] == hinweis
+    weg = "fortsetzung" if name == "nachhol_30h" else "ladung"
     if weg == "fortsetzung":
         assert p["saetze"][0].startswith("Der Zählerstand steht von 16.06.2026 04:20 bis 17.06.2026 10:20 Uhr still")

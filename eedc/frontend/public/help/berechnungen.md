@@ -5005,7 +5005,14 @@ Sprung; den Bruch nennt `zaehlerstand_reihe_bruch`). **Benannte Grenzen:** (a) e
 in einem Zähler, dessen Statistik kein Jahr zurückreicht oder der dort keinen Tag mit 1 kWh hatte, bleibt still — ebenso jeder
 Sprung eines solchen Stand-Zählers in m³, l oder km (dort gibt es keine Grenze); ein Neubeginn in einem Zähler, der im Jahr davor
 an weniger als 14 Tagen gezählt hat; (b) mehrere Sprünge desselben Zählers im Bezugsfenster heben die Vergleichsgröße —
-ein zweiter Sprung erscheint nach der Berichtigung des ersten; (c) die erste Zeile einer neuen Statistik (oben, Grenze (6)).
+ein zweiter Sprung erscheint nach der Berichtigung des ersten; (c) die erste Zeile einer neuen Statistik (oben, Grenze (6));
+(d) seit U3-K3 (K2-B5) **ohne Bezug meldet der Arm über der Grenze am ersten Tag eines Abschnitts jede Stunde über max(100 kWh,
+1,5 × kWp)** — ein Großverbraucher, dessen Zähler in eedc neu beginnt, erscheint dort je Stunde, ab dem zweiten Tag nicht mehr
+(gemessen am reinen Kern, `golden-master/sensorwechsel-saat/nm-u3k3/kern_a3_nm.py`, U3-K4 am Arbeitsbaum wiederholt: frisch
+150 kWh je Stunde bei 30 kWp 0 → 23 Fund-Stunden; Gewerbe 120 kWh je Stunde 8–18 Uhr 0 → 10; ein Jahr Stillstand, dann 150 kWh
+je Stunde 0 → 23; Haushalt, 500 kWp mit 400 kWh je Stunde und +480 nach 5 Stunden Lücke 0 → 0; echte Sprünge +2 000 bzw.
++150 am ersten Tag jetzt gemeldet, wie gewollt). Gilt auch für den Befund aus Home Assistant (dort filtert keine Regel der
+Rohstände); nicht gebaut (Bauplan Nr. 165, P7).
 Proben: `test_sensorwechsel_u2c_proben.py`; Wirkung `test_daten_checker_handgriff_wirkt.py::test_w11_ha_zaehlerstand_springt_wirkt`.
 
 **Zählerstände verworfen** (Daten-Checker `zaehler_zeit_verworfen`, Erzeuger `datenquelle/verworfen.py`; Sensorwechsel U3 a,
@@ -5094,29 +5101,41 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
           Minuten, eine Nachholmenge nach Stille teilt sich durch die stille Zeit; U3-K3 K2-B1: «gewöhnlich» = selbst kein
           Höhenwechsel, in Zeitfolge — rohstand_rand._hoehenwechsel_alle; die Rückkehr eines ersten kurzen Nullstands hebt
           den Vergleich nicht, ein zweiter binnen 24 h bleibt ein Höhenwechsel; mit und ohne Grenze dieselbe Regel)
-          U3-K3 (Bauplan Nr. 163) — eine Regel, drei Ergebnisse (rohstand_rand.einordnung_der_stunde, rohstand.sprung_um):
-            eindeutig      = Höhenwechsel nach Leistung (oben); Rand-Stände = letzter Stand vor dem ERSTEN, erster Stand nach
-                             dem LETZTEN Höhenwechsel der Stunde (U3-K B1, sprung_der_stunde; die Stände dazwischen gehören
-                             keinem der zwei Zähler)
-            Einzelschritt  = kein Höhenwechsel nach Leistung, aber der größte Schritt nach oben der Stunde trägt
-                             ≥ EINZELSCHRITT_ANTEIL (0,9) × Σ der Schritte nach oben der Stunde (ein einziger Schritt immer);
-                             Rand-Stände = die zwei Stände an diesem Schritt; eingetragen auf das Wort des Anwenders — die
-                             Prüf-Antwort sagt statt «springt von … auf …», dass eedc Tausch und gezählte Menge nicht
-                             unterscheidet, und nennt die Menge (Stand danach − Stand davor, rohstand_rand.menge_des_schritts),
-                             die dann nicht zählt; stand der Stand davor still (rohstand.still_seit: der Scheduler hat ihn
-                             wiederholt, über alle gespeicherten Rohstände), mit der stillen Zeit
-            kein Sprung    = alles andere (fortlaufende Schritte, Ladung über die Stunde, zwei vergleichbare Schritte):
-                             abgelehnt (kein_sprung) — außer an ab_ts ist schon ein Tausch eingetragen (dann «schon
-                             eingetragen», U3-K3 K2-B4)
-          der Dialog fragt den Befund nicht (U3-K2 P-3 mit rohstand.stunde_benannt entfällt); der Tausch wird am ersten Stand
-          nach dem Höhenwechsel bzw. am Einzelschritt eingetragen; ergäbe die Naht-Stunde eine negative Menge: abgelehnt
-          (negative_menge; naht.nachtrag_fortsetzung schreibt sie nie); nach «Getauscht am» noch kein Stand: eingetragen, die
-          Rand-Stände setzt der Stundenlauf, der die Naht anwendet (rohstand.rand_im_stundenlauf mit rohstand.rand_der_naht:
-          endet an der Naht die Spanne bzw. der Einzelschritt — rohstand.MIT_PAAR —, endet die alte Periode am letzten Stand
-          vor dem ersten Höhenwechsel)
-  «bleiben» zwischen zwei MQTT-Quellen: im Stundenlauf aus denselben zwei Rohständen, an denen er teilt; im Nachtrag am
-          Höhenwechsel bzw. Einzelschritt der Stunde des Wechsels (der Wechsel ist das Wort des Anwenders, MIT_PAAR), sonst
-          um den verzeichneten Zeitpunkt
+          Bauplan Nr. 166 (Entscheid Gernot 20.11.2026, ersetzt Nr. 163 A2 und Nr. 165 (1)–(3)): die Erkennung zeigt, sie
+          entscheidet nicht — bei MQTT entscheidet der Anwender, ob an einer Zeit ein Tausch eingetragen wird:
+            R1 (alle Wege)  = Höhenwechsel nach Leistung in der Stunde (oben): Rand-Stände = letzter Stand vor dem ERSTEN, erster
+                              Stand nach dem LETZTEN Höhenwechsel der Stunde (U3-K B1, sprung_der_stunde, rohstand.sprung_um;
+                              die Stände dazwischen gehören keinem der zwei Zähler); Satz SATZ_FORTSETZUNG_ROH
+            R2 (Dialog)     = sonst: letzter Rohstand vor «Getauscht am» und der NÄCHSTE Rohstand danach mit ANDEREM Wert
+                              (rohstand.naechster_anderer_um, rohstand_rand.naechster_anderer; ein still wiederholter Stand ist
+                              kein Stand des neuen Zählers; höchstens 24 h); «Getauscht am» rückt auf den anderen Stand; Paar =
+                              (Stand unmittelbar davor, anderer Stand); Satz SATZ_SCHRITT («ändert sich zwischen … und … Uhr von
+                              … auf …») bzw. SATZ_SCHRITT_STILL (der Stand davor wurde mindestens einmal wiederholt, still_seit)
+                              mit der Menge, die nach dem Eintrag nicht zählt (menge_des_schritts, zwei Nachkommastellen), dazu
+                              GENAU EIN Hinweis: hebt sich der Schritt ab (rohstand.abgehoben_am) «Ob das ein Tausch ist oder
+                              eine gezählte Menge, erkennt eedc nicht.», sonst «Einen Sprung sieht eedc an dieser Zeit nicht.»
+            hebt sich ab    = (nur Hinweis und Befund, nie Sperre; rohstand_rand.abgehoben) ein Schritt nach oben trägt
+                              ≥ EINZELSCHRITT_ANTEIL (0,9) × Σ der Schritte nach oben seiner Stunde UND seine MENGE >
+                              SPRUNG_FAKTOR (10) × die größte Menge der gewöhnlichen Schritte nach oben (selbst kein
+                              Höhenwechsel) der 24 h davor (hebt_sich_ab; ohne solchen Schritt ja)
+          gesperrt bleiben nur: eine negative Menge der Naht-Stunde (negative_menge; naht.nachtrag_fortsetzung schreibt sie nie)
+          und «Dieser Tausch ist schon eingetragen.»; die Ablehnung «kein Sprung zu sehen» (kein_sprung, U3 b bis U3-K4)
+          entfällt. Nach «Getauscht am» noch kein (anderer) Stand: eingetragen, die Rand-Stände setzt der Stundenlauf, der die
+          Naht anwendet (rohstand.rand_im_stundenlauf mit rohstand.rand_der_naht: R1, endet die Spanne an der Naht; an einem
+          Eintrag «Zähler getauscht» — dieselbe Quelle davor und danach, rohstand.ist_getauscht_an — R2, dieselbe
+          Paar-Funktion wie der Dialog; sonst rand_um).
+          Gemessen (Welten der Nachmessung U3-K3, 0,6 kWh je Stunde, Takt = Minuten zwischen zwei gemeldeten Ständen):
+          Takt 60 gewöhnlich, «Getauscht am» 10:20 ⇒ eintragbar am Schritt 11:00 (0,60 kWh, «Einen Sprung sieht eedc …»),
+          danach 13,8; Takt 60 Tausch +2 000 bzw. +90 um 10:20 (sichtbar 11:00) ⇒ ein Eintrag am Schritt 11:00, 13,8;
+          Takt 30/15 ⇒ eintragbar am nächsten anderen Stand (10:30; 14,1 bzw. 14,25); ganzzahliger Stand ⇒ 11:20 bzw. 13:00
+          mit «Einen Sprung sieht eedc …»; Stunde mit zwei Rohständen ⇒ «zwischen 10:00 und 10:55», 0,55 kWh, «Ob das ein
+          Tausch ist …», 13,85; kleiner Versatz +3 ⇒ eintragbar, 3,05 kWh, «Einen Sprung sieht eedc …», 14,35
+  «bleiben» zwischen zwei MQTT-Quellen (R3, Bauplan Nr. 166): sofort, nachgetragen und im Stundenlauf an dieser Naht R1, sonst
+          die zwei Stände um den verzeichneten Zeitpunkt (rohstand.paar_des_wechsels → rand_um, wie vor U3-K3); nachgetragen =
+          sofort (gemessen: Takt 60 14,4 · ganzzahlig 15,0 · Last 6 kWh im Takt 15 20,4 · Takt 5 14,35; U3-K3 nachgetragen
+          13,8 · 14,0 · 14,25 · 14,35). Hebt sich in der Stunde ein Schritt ab, der nicht im Paar um den Zeitpunkt liegt,
+          nennt die Prüf-Antwort des Nachtrags ihn (rohstand.SATZ_BLEIBEN_SCHRITT: «Mit „Bisherige Werte bleiben“ zählt eedc
+          diese … kWh mit. War das ein Tausch, trag ihn danach unter „Zähler getauscht“ ein.»)
   ohne Rohstände (älter als 31 Tage): wie vor U3 (die Naht-Stunde zählt keinen Zuwachs)
 
 Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqtt_standsprung.py):
@@ -5129,9 +5148,13 @@ Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqt
   «kurz tiefer und zurück» (_kurz_tiefer: der Stand fällt um weniger als 10 % — U3-K B3, tiefer zählt HAs Regel als
   Neubeginn — und ist in der nächsten Zeile wieder mindestens auf der Höhe davor) und die Kanal-Stunden der
   Schritte eines versetzten Abschnitts (versatz_mqtt.mqtt_versatz_stunden); Fenster: der ganze Kanal (E2)
-  U3-K3 (Bauplan Nr. 163): den Arm «Sprung» bestätigt für eine Stunde mit Rohständen die Regel der Rohstände
-  (mqtt_standsprung._bestaetigt mit rohstand.sprung_um): nur eindeutig oder Einzelschritt ist ein Befund; ohne Rohstände
-  (älter als 31 Tage) entscheidet der Kern; «Getauscht am» = erster Stand nach dem Höhenwechsel bzw. am Einzelschritt
+  Bauplan Nr. 163/166: den Arm «Sprung» bestätigt für eine Stunde mit Rohständen die Regel der Rohstände
+  (mqtt_standsprung._bestaetigt): R1 (rohstand.sprung_um) oder ein Schritt der Stunde hebt sich ab
+  (rohstand.abgehoben_in_der_stunde); sonst kein Befund (Ladung über die Stunde); ohne Rohstände (älter als 31 Tage)
+  entscheidet der Kern; «Getauscht am» des Knopfs = erster Stand nach dem Höhenwechsel bzw. am Schritt, der sich abhebt;
+  U3-K4 (K3-B2): steht der Fund nur auf einem solchen Schritt, sagen die Details, dass eedc Tausch und gezählte Menge nicht
+  unterscheidet (SATZ_SPRUNG_EINZELSCHRITT mit Zeit, Ständen und Menge des Schritts, zwei Nachkommastellen;
+  SATZ_WARUM_EINZELSCHRITT: «War es gezählte Menge, stimmt der Wert, und es ist nichts zu tun.»); Schwere, Code, Knopf gleich
   zaehler_ruecksprung lässt einen Rücksprung aus, dessen Kanal-Stunde (Stand − 1 h … Stand) G4 als Neubeginn/Rückgang oder G7 nennt
 
 Versetzter Abschnitt einer MQTT-Reihe (G7; versatz_mqtt.py): dieselbe Erkennung über quelle = mqtt_inbound für Schlüssel mit
@@ -5159,14 +5182,13 @@ doppelten Herbststunde — die Rohstände tragen örtliche Zeit ohne Zone, beide
 vor dem verzeichneten Zeitpunkt sendet: der Stundenlauf teilt am Zeitpunkt, Kanal und Reihe zählen den Sprung (wie vor U3 der
 Kanal); (e) Mischform HA/MQTT in der Bilanz (`kanal/bilanz_adapter.zaehler_eintraege`, Bestandsmessung); (f) die Reihen-Leser
 (`reader.delta`) zeigen an den Tagen einer verworfenen Zeit keinen Wert (wie am HEAD; die Tagesansicht liest den Kanal);
-(g) seit U3-K3 (Bauplan Nr. 163) **zwei vergleichbare Schritte in einer Stunde** (ein Sprung in zwei Schritten +8,0 und +7,9;
-eine Nachholmenge 8,2 neben einem fremden Versatz +8,0): kein Höhenwechsel nach Leistung und kein Einzelschritt — G4 nennt die
-Stunde nicht, der Dialog lehnt ab (`zaehler_getauscht.SATZ_KEIN_SPRUNG`), beide Schritte zählen als Menge. Die frühere Grenze
-«ein kleiner Sprung nach oben ist nicht eintragbar» (U3-K B7, U3-K2) entfällt: ein einzelner Schritt ist eintragbar, mit dem
-Satz, dass eedc ihn nicht von Verbrauch unterscheidet; (h) entfällt seit U3-K2 (P-2) — eine Nachholmenge nach langer Stille ist
-kein Höhenwechsel; seit U3-K3 ist sie ein Einzelschritt, wenn sie mindestens neun Zehntel des Zuwachses ihrer Stunde trägt
-(30 h stumm, dann 15 bzw. 18 kWh: eintragbar mit dem Satz zur stillen Zeit; 1 h bzw. 3 h stumm bei 0,6 kWh je Stunde: 0,6 bzw.
-1,8 kWh neben 0,35 kWh gewöhnlicher Schritte der Stunde — kein Einzelschritt, abgelehnt); (i) die Spanne gilt je Stunde — ein
+(g) entfällt seit U3-K4 (Bauplan Nr. 166) — «zwei vergleichbare Schritte in einer Stunde» und «ein kleiner Sprung nach oben ist
+nicht eintragbar» (U3-K B7 bis U3-K4): der Dialog trägt auf das Wort des Anwenders ein und sagt, ob er einen Sprung sieht. Neu
+benannt: **ein kleiner Sprung an einem jungen Zähler hat keinen Befund, ist aber eintragbar** (+3 kWh bei 0,6 kWh je Stunde: kein
+Befund, der Dialog trägt mit «Einen Sprung sieht eedc an dieser Zeit nicht.» ein, 14,35); ebenso hebt sich am stündlich
+sendenden Publisher bei einer Ladung über mehrere Stunden (22 kWh je Stunde, 10–13 Uhr, reifer Zähler) nur die erste Stunde ab —
+der Befund nennt 11:00, nicht 12:00 und 13:00 (Bericht U3-K4 H-1); (h) entfällt seit U3-K2 (P-2) — eine Nachholmenge nach langer
+Stille ist kein Höhenwechsel; seit U3-K4 ist sie im Dialog eintragbar mit dem Satz zur stillen Zeit und der Menge; (i) die Spanne gilt je Stunde — ein
 fremder Stand über die volle Stunde hinweg (10:50 bis 11:10) braucht zwei Einträge, G4 nennt nach dem ersten die zweite Stunde
 (U3-K3 K2-B5, gemessen: 14,15).
 **Gemessen U3-K** (`golden-master/sensorwechsel-saat/u3k/`, 20 Tage Vorlauf, Netzbezug 0,5 kWh je Stunde, Ereignis 10:20): Gerät
@@ -5852,6 +5874,23 @@ der Rand-Tage (`rand_1000` 7,2 → 7,6) und zeigte mit Vorlauf bis zum Self-Heal
 in den Kanal, «Aus HA laden» und Monatsabschluss zählen sie nicht (1,2 statt 1,6) — die Vorschau sagt es
 (`SATZ_KANAL_ERSTE_STUNDE_OFFEN`); (d) Stand-Felder und eine erste Zeile über der Grenze (importierte Statistik, gelöschte
 Geschichte): keine «Regel 2».
+**U3-K4 (K3-B4) «Falsch seit» auf der ersten Zeile** (`f = h`): dieselbe Regel ohne Lücke — `_luecke` gibt `(None, Nullpunkt)`, der
+Kanal setzt am Nullpunkt an, die **Korrektur-Zeile** trägt den Nullpunkt als `stand_neu_null` (ohne `ansatz`; die Rand-Stände an
+«Falsch seit», `_rand_an_falsch_seit`, entfallen dort — HA führt davor keine Zeile), `nullpunkt.abschnitte` liest sie (G =
+`falsch_seit_ts`), die Stände liest der Lauf ab `h + 1 h` (`_erster_neuer_stand`, ohne Lücke ab «Falsch seit»). Ohne Werte davor
+nennt die Vorschau `SATZ_STAENDE_AB_MONAT`. Gemessen (`handgriff_d`, «Falsch seit» 03.11. 23:00): Kanal-Stunde 23 Uhr 0,4 · Tag
+03.11. Kanal = Tagesansicht 14,2 · November 44,2 in Monatssicht, «Aus HA laden», Monatsabschluss und Kanal (U3-K3: Lücke 23–00 Uhr,
+0,0 · 13,8 · 43,8); die Vorschau nennt weder Lücke noch Handgriff D; `handgriff_d_0000`, `handgriff_d_2200`, `vorlauf`,
+`geschichte` unverändert. **U3-K4 (K3-B5):** führt später ein angesetzter Wechsel «bleiben» vom richtigen Sensor weiter, gilt der
+Nullpunkt-Abschnitt weiter (`nullpunkt.abschnitte`: die Entität ist die heutige oder ein angesetzter Wechsel führt von ihr weg;
+`monat._mit_nullpunkt` setzt ihren Abschnitt an G mit Anker 0) — gemessen `danach_bleiben_neu2`: November 3,8 in Monatssicht,
+«Aus HA laden» und Monatsabschluss (U3-K3: 3,8 · 3,4 · 3,4).
+**U3-K4 (K3-B7) Sätze:** `SATZ_STAENDE_AB` nennt, ab wann eedc neu liest («Ab … Uhr liest eedc die Zählerstände des richtigen
+Sensors neu und speichert sie.» — HA kann den Sensor eine Stunde früher führen, `SATZ_KANAL_AB` nennt das); die Vorschau teilt die
+Tage an Kanal-Tagen an der ersten Zeile, die HA für den richtigen Sensor führt (`erste_ha_zeile`, dieselbe Grenze wie die Auskunft
+im Kanal, `raender_der_verworfenen_zeit`; `erste_101`: 01.–02.11. ohne Wert, 03.11. Teil, wie die Auskunft); die Auskunft «Zeit
+verworfen» nennt die Zeit bis zur ersten zählenden Kanal-Zeile, wenn sie vor dem Ende der Zeit liegt (`verworfen.Lage.bis_anzeige`;
+`vorlauf_2344`: «bis 03.11.2026 23:00 Uhr» statt 04.11. 00:00 — nur der Satz, Zeit und Leser bleiben).
 Gemessen (Wechsel A → C am Ende, C in HA ab 12.06. 00:00): 10.06. 0,5 · 11.06. — · 12.06. 11,5 · 13.06. 12,0 · 14.06. 12,0 (bis
 4b-1-K2 12.–14.06. ohne Wert bzw. 2,0). Dieselbe Regel gilt am Stück (U1-K S3: führt Home Assistant die Quelle im Stück erst ab
 12.06., nennt die Vorschau die Lücke [10.06. 01:00, 12.06.) und den Tag der Menge — wie der Lauf, 12.06. 35,5).

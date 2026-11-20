@@ -413,7 +413,7 @@ export type GrundNachtragErgebnis = Omit<GrundNachtragPruefung, 'korrektur'> & {
 
 /** Einstieg «Zähler getauscht (gleiche Quelle)»: Weg je Quelle zur Stunde des Tauschs (Backend `zaehler_getauscht.py`). */
 export interface ZaehlerGetauschtAntwort {
-  weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich' | 'kein_sprung' | 'negative_menge'
+  weg: 'home_assistant' | 'fortsetzung' | 'ohne_werte' | 'keine_quelle' | 'vor_erstem_wert' | 'nicht_moeglich' | 'negative_menge'
   sensor_key: string | null
   saetze: string[]
   eintragen: boolean

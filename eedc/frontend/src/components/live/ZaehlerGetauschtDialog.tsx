@@ -8,7 +8,8 @@
  * (`…/zaehler-getauscht`); vor dem ersten eigenen Wert und in verworfener Zeit nennt ein Satz, warum nichts einzutragen ist.
  * Vor dem Eintragen sagt der Dialog, dass ein Eintrag sich nicht zurücknehmen lässt (Bauplan §12 Nr. 62). U3 b: aus dem Befund
  * «Zählerstand springt» (`getauscht=`) kommt «Getauscht am» vorbelegt; bei MQTT nennt die Antwort die Zeit, zu der die
- * Zählerstände springen, oder lehnt eine Zeit ohne Sprung ab (`kein_sprung`).
+ * Zählerstände springen, bzw. den nächsten anderen Stand und die Menge, die nach dem Eintrag nicht zählt — der Anwender
+ * entscheidet (Bauplan Nr. 166; keine Ablehnung «kein Sprung» mehr).
  * Sätze kommen aus dem Backend; der Client rechnet nichts.
  */
 import { useEffect, useState } from 'react'

@@ -17,8 +17,10 @@ Zeilen ohne ``ansatz`` lesen wie vor U2. **Wo:** vor dem Kanal-Ersatz der fünf 
 (``kanal/bilanz_leser.monatswerte_mit_kanaelen``) und am laufenden Monat (``api/routes/aktueller_monat``).
 
 **U3-K3 «Regel 2»** (``nullpunkt.py``, Bauplan Nr. 163): endet eine verworfene Zeit an der ersten Zeile ``G`` einer neuen
-Statistik der heutigen Entität (die Lücken-Zeile trägt ``stand_neu_null``), setzt die Hülle im Monat von ``G`` Anker 0 an
-``G`` — die erste Zeile zählt ab HAs Nullpunkt wie bei «beide» (``_nullpunkt_teile``).
+Statistik der heutigen Entität (die Lücken-Zeile trägt ``stand_neu_null``; U3-K4: oder «Falsch seit» liegt auf ``G``, dann
+trägt die Korrektur-Zeile es), setzt die Hülle im Monat von ``G`` Anker 0 an ``G`` — die erste Zeile zählt ab HAs Nullpunkt
+wie bei «beide» (``_nullpunkt_teile``). U3-K4 (K3-B5): führt ein späterer angesetzter Wechsel «bleiben» von dieser Entität
+weiter, beginnt ihr Abschnitt an ``G`` mit Anker 0 (``_mit_nullpunkt``).
 
 **Grenze (a1):** nur, wenn der jüngste angesetzte Wechsel des Schlüssels zur heutigen Entität führt; ein späterer Wechsel
 ohne ``ansatz`` lässt den Schlüssel wie vor U2. Zwei Schlüssel mit derselben heutigen Entität sind nicht unterschieden.
@@ -97,7 +99,8 @@ async def monatswerte_je_abschnitt(db, anlage_id: int, antworten: Sequence, mona
     antworten = list(antworten)
     wechsel = await lade_wechsel(db, anlage_id)
     je_key = _angesetzte(wechsel)
-    null = {k: v for k, v in nullpunkt_abschnitte(wechsel).items() if k not in je_key}
+    null_alle = nullpunkt_abschnitte(wechsel)
+    null = {k: v for k, v in null_alle.items() if k not in je_key and _heute_ist(wechsel[k], v[0])}
     if not je_key and not null:
         return antworten
     from backend.services.ha_statistics_service import _monatsgrenzen_ts, get_ha_statistics_service
@@ -110,7 +113,8 @@ async def monatswerte_je_abschnitt(db, anlage_id: int, antworten: Sequence, mona
             continue
         ts_start, ts_ende = _monatsgrenzen_ts(*m)
         ersatz = {}
-        for eid, teile in [(z[-1].nachher["entity_id"], abschnitte_des_fensters(z, ts_start, ts_ende)) for z in je_key.values()] \
+        for eid, teile in [(z[-1].nachher["entity_id"], _mit_nullpunkt(abschnitte_des_fensters(z, ts_start, ts_ende),
+                                                                       null_alle.get(k))) for k, z in je_key.items()] \
                 + [(eid, _nullpunkt_teile(eid, g, ts_start, ts_ende)) for eid, g in null.values()]:
             if teile:
                 wert = await _summe(svc, eid, teile)
@@ -125,6 +129,24 @@ def _nullpunkt_teile(eid: str, g: datetime, ts_start: float, ts_ende: float) -> 
     Anker 0 — davor führt HA für ``eid`` keine Zeile; sonst keiner (der HA-Leser liest wie bisher)."""
     g_ts = _unix(g)
     return [(eid, g_ts, ts_ende, True)] if ts_start <= g_ts < ts_ende else []
+
+
+def _heute_ist(liste, eid: str) -> bool:
+    from backend.services.zuordnung_wechsel.zeitpunkt import quelle_aufgeloest
+
+    heute = quelle_aufgeloest(liste, datetime.max - timedelta(days=1))
+    return isinstance(heute, dict) and heute.get("entity_id") == eid
+
+
+def _mit_nullpunkt(teile: list[tuple[str, float, float, bool]], null) -> list[tuple[str, float, float, bool]]:
+    """U3-K4 (K3-B5): beginnt die Statistik einer Quelle der angesetzten Wechsel in ihrem Abschnitt neu (``null`` =
+    ``(Entität, G)`` aus ``nullpunkt.abschnitte``), beginnt ihr Abschnitt an ``G`` mit Anker 0 — davor führt HA für sie keine
+    Zeile. Sonst ``teile`` unverändert."""
+    if null is None:
+        return teile
+    eid, g = null
+    g_ts = _unix(g)
+    return [(e, g_ts, b, True) if e == eid and a <= g_ts < b else (e, a, b, n) for e, a, b, n in teile]
 
 
 async def _summe(svc, eid: str, teile: list[tuple[str, float, float, bool]]):
