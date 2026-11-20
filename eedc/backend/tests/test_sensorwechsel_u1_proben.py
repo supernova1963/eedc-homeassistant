@@ -245,8 +245,8 @@ async def test_p5_geschichte_ab_zwoelften_nur_die_zeit_davor_bleibt_leer(db, ha,
         echt = kr._luecke
 
         async def bis_ab(db_, a_, w0, ab, svc):
-            lu = await echt(db_, a_, w0, ab, svc)
-            return None if lu is None else (lu[0], ab)
+            lu, null = await echt(db_, a_, w0, ab, svc)                       # U3-K3: (Lücke, Nullpunkt)
+            return (None, None) if lu is None else ((lu[0], ab), null)
         monkeypatch.setattr(kr, "_luecke", bis_ab)
     au = kr.Auftrag(anlage_id=a.id, sensor_key=key, falsch_seit=SPRUNG, ab=RUECK, vorher=QA, nachher=QC)
     la = await kr.lage(db, au, ha_svc=ha)

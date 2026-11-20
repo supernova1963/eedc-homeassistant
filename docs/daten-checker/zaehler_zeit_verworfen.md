@@ -7,8 +7,10 @@ Zeit keine Werte des richtigen Sensors. Das bleibt so — eedc liest diese Zeit 
 Die Meldung nennt das Feld, Beginn und Ende der Zeit. Die Details sagen, was dafür gilt: Gilt davor, in dieser Zeit und danach
 dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, steht die Menge der ganzen Zeit am Tag des ersten
 Zählerstands danach (wie bei jeder Zählerlücke). Sonst bildet eedc über diese Zeit keine Differenz — die Tage darin zeigen für
-dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Dazu nennen die
-Details die Monate mit gespeichertem Monatswert, die die Zeit berührt.
+dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Beginnt danach ein
+neuer Sensor, dessen erste Stunde Home Assistant ab 0 zählt, und hat das Feld davor Werte, zählen die Stundenwerte diese erste
+Stunde wie Home Assistant; die Details sagen es. Dazu nennen die Details die Monate mit gespeichertem Monatswert, die die Zeit
+berührt.
 
 ## Lösungsweg
 1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was die Korrektur festgelegt hat.

@@ -4,11 +4,11 @@ Proben mit Sprengsatz.
 * **P-2** Höhenwechsel nach Leistung über die Zeit **seit der Stand zuletzt anders war** (``rohstand_rand.seit_dem_letzten_anderen``):
   eine Nachholmenge nach 1 h, 3 h, 30 h Stille ist kein Höhenwechsel (0,5 kW statt 6 · 18 · 180 kW in fünf Minuten); ein echter
   Tausch nach einer Pause von 2 h (+2 000 kWh) bleibt einer; ein gewöhnlicher Schritt behält seine fünf Minuten.
-* **P-3** eine Entscheidung, zwei Verbraucher: nennt der Befund «Zählerstand springt (MQTT)» die Stunde (Kern
-  ``zaehlerstand_sprung.finde_standspruenge``), nimmt der Dialog «Zähler getauscht» den größten Schritt nach oben der Stunde als
-  Höhenwechsel an (``rohstand_rand.sprung_der_stunde(…, benannt=True)``, ``rohstand.stunde_benannt``) — ein reifer Zähler mit
-  kleinem Tageszuwachs, Schritt unter der Grenze; der Befund nennt die Zeit des Schritts. Wo kein Befund die Stunde nennt (Ladung
-  nach Standby, Nachholmenge), bleibt die Ablehnung.
+* **P-3** eine Entscheidung, zwei Verbraucher — seit U3-K3 (Bauplan Nr. 163) **eine Regel in ``rohstand_rand``**, der Dialog
+  fragt den Befund nicht mehr (``einordnung_der_stunde``): ein reifer Zähler mit kleinem Tageszuwachs und einem Schritt unter der
+  Grenze trägt einen **Einzelschritt** — der Befund nennt die Zeit des Schritts, der Dialog trägt mit dem Satz ein, welche Menge
+  dann nicht zählt. Eine Ladung über die Stunde ist keiner (abgelehnt); eine Nachholmenge nach 30 h Stille ist einer (neue
+  Erwartung U3-K3: eintragbar mit dem Satz zur stillen Zeit, kein Befund).
 
 Zeitpunkte im Juni (fern jeder Umstellung; die Stundenzeilen des Jahres davor über die Epoche); die Datei liest keine Uhr und läuft
 auch mit ``TZ=Pacific/Auckland`` und ``TZ=UTC``. Schwesterdateien: test_sensorwechsel_u3k_proben.py (B1–B7), test_sensorwechsel_u3b_proben.py.
@@ -158,26 +158,35 @@ async def _kanal_tag(db, kid: int, d: datetime) -> float:
     return round(z.delta, 3)
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_groessten_schritt"])
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_einzelschritt"])
 @pytest.mark.parametrize("name,schritt", [("reif_200kwp", 20.0), ("reif_stufig", 15.0)])
 async def test_p3_befund_und_dialog_eine_entscheidung(db, monkeypatch, name, schritt, sprengsatz):
-    """Der Befund nennt die Stunde 10:00 (reifer Bezug, Maß über 10) und die Zeit des Schritts 10:20; der Dialog nimmt ihn an und
-    trägt ein; danach zählt der Tag den Schritt nicht mehr, und der Befund ist weg. Sprengsatz: der Dialog wie U3-K (nur die
-    Leistung) ⇒ der Befund nennt den Beginn der Stunde, der Dialog lehnt ab."""
+    """Der Befund nennt die Stunde 10:00 (reifer Bezug, Maß über 10) und die Zeit des Schritts 10:20; der Dialog nimmt ihn als
+    Einzelschritt an und trägt ein; danach zählt der Tag den Schritt nicht mehr, und der Befund ist weg. U3-K3: der Satz sagt,
+    dass eedc Tausch und Menge nicht unterscheidet (am stufigen Zähler mit der stillen Zeit). Sprengsatz: ohne Einzelschritt
+    (nur die Leistung, wie U3-K) ⇒ kein Befund (die Regel der Rohstände sieht keinen Sprung), der Dialog lehnt ab."""
     if sprengsatz:
-        monkeypatch.setattr(rr, "groesster_schritt_der_stunde", lambda roh, stunde: None)
+        monkeypatch.setattr(rr, "einzelschritt_der_stunde", lambda roh, stunde: None)
     a, kid = await _welt(db, name)
-    (e,) = await _befund(db, a)
+    befunde = await _befund(db, a)
+    if sprengsatz:
+        p = await _dialog(db, a.id, T)
+        assert befunde == [] and p["weg"] == "kein_sprung" and p["eintragen"] is False
+        return
+    (e,) = befunde
     assert e.werte["art"] == "sprung" and e.werte["stunde"] == "2026-06-17T10:00"
     tag = datetime(2026, 6, 17)
     vorher = await _kanal_tag(db, kid, tag)
     p = await _dialog(db, a.id, datetime.fromisoformat(e.werte["getauscht"]))
-    if sprengsatz:
-        assert e.werte["getauscht"] == "2026-06-17T10:00" and p["weg"] == "kein_sprung" and p["eintragen"] is False
-        return
     assert e.werte["getauscht"] == "2026-06-17T10:20" and e.ziel.params["getauscht"] == "2026-06-17T10:20"
     assert p["weg"] == "fortsetzung" and p["eintragen"] is True and p["getauscht_am"] == "2026-06-17T10:20:00"
-    # eine andere Stunde desselben Zählers nennt der Befund nicht — dort bleibt die Ablehnung
+    if name == "reif_stufig":
+        assert p["saetze"][0].startswith("Der Zählerstand steht von 17.06.2026 10:00 bis 17.06.2026 10:20 Uhr still und ändert "
+                                         "sich dann von ")
+    else:
+        assert p["saetze"][0].startswith("Der Zählerstand ändert sich um 17.06.2026 10:20 Uhr von ")
+    assert "erkennt eedc nicht. Trägst du den Tausch ein, zählt eedc diese " in p["saetze"][0]
+    # eine andere Stunde desselben Zählers trägt keinen Einzelschritt (zwölf gleiche Schritte) — dort bleibt die Ablehnung
     assert (await _dialog(db, a.id, datetime(2026, 6, 17, 14, 20)))["weg"] == "kein_sprung"
     r = await _dialog(db, a.id, T, eintragen=True)
     assert r["eingetragen"] is True
@@ -187,20 +196,26 @@ async def test_p3_befund_und_dialog_eine_entscheidung(db, monkeypatch, name, sch
     assert w[1] - w[0] == pytest.approx(schritt, abs=0.02)
     assert await _kanal_tag(db, kid, tag) == pytest.approx(vorher - (w[1] - w[0]), abs=0.001)
     assert await _befund(db, a) == []
+    # K2-B4: das zweite Öffnen zur selben Zeit sagt «schon eingetragen»
+    assert (await _dialog(db, a.id, T))["saetze"] == ["Dieser Tausch ist schon eingetragen."]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jede_stunde_benannt"])
-@pytest.mark.parametrize("name,zeit", [("wallbox_22kw", datetime(2026, 6, 17, 18, 5)), ("nachhol_30h", T)])
-async def test_p3_ohne_befund_bleibt_die_ablehnung(db, monkeypatch, name, zeit, sprengsatz):
-    """Ladung nach Standby (B7) und Nachholmenge nach 30 h Stille (P-2): kein Befund, der Dialog lehnt ab. Sprengsatz: jede Stunde
-    gälte als vom Befund genannt ⇒ der Dialog nähme den größten Schritt und strich echten Verbrauch."""
-    from backend.services.zuordnung_wechsel import rohstand
-
+@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jeder_groesste_schritt"])
+@pytest.mark.parametrize("name,zeit,weg", [("wallbox_22kw", datetime(2026, 6, 17, 18, 5), "kein_sprung"),
+                                           ("nachhol_30h", T, "fortsetzung")])
+async def test_p3_ohne_befund_einzelschritt_oder_ablehnung(db, monkeypatch, name, zeit, weg, sprengsatz):
+    """Ladung nach Standby (B7): kein Befund, der Dialog lehnt ab (zwölf gleiche Schritte, kein Einzelschritt). Nachholmenge nach
+    30 h Stille (P-2): kein Befund (junger Zähler), der Dialog trägt auf das Wort des Anwenders ein — U3-K3, neue Erwartung (bis
+    U3-K2 abgelehnt). Sprengsatz: jeder größte Schritt gälte als Einzelschritt (Anteil 0) ⇒ der Dialog nähme an der Ladung den
+    größten Schritt und strich echten Verbrauch."""
     if sprengsatz:
-        async def immer(*_a, **_k):
-            return True
-        monkeypatch.setattr(rohstand, "stunde_benannt", immer)
+        monkeypatch.setattr(rr, "EINZELSCHRITT_ANTEIL", 0.0)
     a, _kid = await _welt(db, name)
     assert await _befund(db, a) == []
     p = await _dialog(db, a.id, zeit)
-    assert (p["weg"], p["eintragen"]) == (("fortsetzung", True) if sprengsatz else ("kein_sprung", False))
+    if sprengsatz:
+        assert (p["weg"], p["eintragen"]) == ("fortsetzung", True)
+        return
+    assert (p["weg"], p["eintragen"]) == (weg, weg == "fortsetzung")
+    if weg == "fortsetzung":
+        assert p["saetze"][0].startswith("Der Zählerstand steht von 16.06.2026 04:20 bis 17.06.2026 10:20 Uhr still")

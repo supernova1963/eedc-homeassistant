@@ -953,7 +953,11 @@ Werte bleiben oder verworfen werden:
   Zeit, gerechnet ab dem letzten Zählerstand davor. Die Vorschau nennt die Tage. Führt Home Assistant den richtigen Sensor
   erst nach einem Teil dieser Zeit und lässt sich nicht prüfen, ob seine Zählerstände auf der Höhe der gespeicherten davor
   liegen, bildet eedc über den Teil davor keine Differenz; willst du die bisherigen Werte dieses Teils lieber behalten,
-  setze „Falsch seit" auf die Stunde, die die Vorschau nennt. Die Korrektur lässt sich in eedc nicht
+  setze „Falsch seit" auf die Stunde, die die Vorschau nennt. Beginnt die Statistik des richtigen Sensors in Home Assistant
+  erst in dieser Zeit (ein neuer Sensor, dessen erste Stunde Home Assistant ab 0 zählt), zählt eedc diese erste Stunde so wie
+  Home Assistant — in Tagesansicht und Stundenwerten, wenn das Feld vor „Falsch seit" Werte hat, sonst nur im Monatsabschluss
+  und bei „Aus HA laden“; die Vorschau sagt es. Die Stunde vor „Falsch seit" zählt weiter der bisherige Sensor, wenn Home
+  Assistant den richtigen dort noch nicht führt. Die Korrektur lässt sich in eedc nicht
   rückgängig machen — der Rückweg ist eine Sicherung von Home Assistant bzw. ohne Home Assistant eine Sicherung der
   eedc-Datenbank. Ist Home Assistant eingerichtet, aber gerade nicht erreichbar, startet sie nicht. Solange die Tage neu
   gebildet werden, zeigt die Fläche oben den Fortschritt — auch nach dem Neuladen der Seite; bei „Bisherige Werte bleiben"
@@ -985,16 +989,19 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
 - **Ein Zähler über MQTT:** du klickst **„Eintragen"**. eedc sucht in den gespeicherten Zählerständen der Stunde von
   „Getauscht am“ den Schritt, an dem der Stand die Höhe wechselt, und trägt den Tausch genau dort ein — der Dialog nennt die
   Zeit und den Stand davor und danach. Wechselt der Stand in der Stunde mehrmals die Höhe (das Gerät meldet kurz 0, ein anderes
-  Gerät sendet kurz seinen Stand), nimmt eedc den letzten Stand vor dem ersten und den ersten nach dem letzten Wechsel; die
-  Minuten dazwischen zählen nicht. Der Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde
+  Gerät sendet kurz seinen Stand), nimmt eedc den letzten Stand vor dem ersten und den ersten nach dem letzten Wechsel dieser
+  Stunde; die Minuten dazwischen zählen nicht. Geschieht das an einem Tag zweimal, trägst du jedes für sich ein. Der
+  Unterschied zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde
   des Tauschs zählt, was der alte Zähler bis zu seinem letzten und der neue ab seinem ersten Stand gezählt hat. Ist die Stunde
   schon gespeichert, nennt der Dialog, was sie danach statt bisher zählt; zählte sie danach weniger als nichts, trägt eedc nichts
-  ein und sagt es. Ist in dieser Stunde kein Sprung zu sehen, trägt eedc nichts ein und sagt es — ein kleiner Sprung nach oben, der
-  wie Verbrauch aussieht (weniger, als die Anlage seit der letzten Änderung des Stands leisten kann), lässt sich so nur
-  eintragen, wenn der Daten-Checker die Stunde unter „Zählerstand springt (MQTT)“ nennt
-  ([Daten-Checker §4.8k](HANDBUCH_DATEN_CHECKER.md#48k-zaehlerstaende--zaehlerstand-springt-mqtt)); dann nimmt eedc den
-  größten Schritt der Stunde, und der Knopf **„Zähler getauscht“** am Befund öffnet diesen Dialog mit dessen Zeit. Meldet
-  das Gerät eine Zeit lang nichts und dann seinen neuen Stand, ist das kein Sprung: die Menge der stillen Zeit zählt. Ist nach „Getauscht am“ noch kein Stand gespeichert, trägt eedc
+  ein und sagt es. Ändert sich der Stand in der Stunde mit **einem** Schritt nach oben, der fast die ganze Menge der Stunde
+  trägt, aber nicht schneller, als die Anlage zählen kann (der Stand stand eine Zeit lang still und kommt mit einer großen Menge
+  zurück, oder ein kleiner Sprung an einem Zähler mit wenig Verbrauch), kann eedc nicht erkennen, ob das ein Tausch ist oder
+  gezählte Menge: der Dialog nennt den Schritt und die Menge, die nach dem Eintrag nicht zählt, und trägt auf dein Wort ein.
+  Ändert sich der Stand gleichmäßig (etwa beim Laden) oder in zwei ähnlich großen Schritten, ist kein Sprung zu sehen — eedc
+  trägt nichts ein und sagt es; die Menge zählt. Der Knopf **„Zähler getauscht“** am Befund „Zählerstand springt (MQTT)“
+  ([Daten-Checker §4.8k](HANDBUCH_DATEN_CHECKER.md#48k-zaehlerstaende--zaehlerstand-springt-mqtt)) öffnet diesen Dialog mit der
+  Zeit des Schritts. Ist nach „Getauscht am“ noch kein Stand gespeichert, trägt eedc
   den Tausch ein und nimmt die zwei Stände, sobald der neue gespeichert ist. Gespeicherte Zählerstände reichen 31 Tage zurück;
   für einen älteren Tausch zählt die Stunde des Tauschs keinen Zuwachs. Die Live-Anzeige rechnet direkt aus den
   Zählerständen und zeigt den Sprung am Tag des Tauschs unter „heute“ und am Tag danach unter „gestern“ weiter.

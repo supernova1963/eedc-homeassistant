@@ -22,7 +22,7 @@ from typing import Optional
 
 from sqlalchemy import and_, select
 
-from backend.core.berechnungen.rohstand_rand import BEZUG, Roh, sprung_der_stunde
+from backend.core.berechnungen.rohstand_rand import BEZUG, EINDEUTIG, EINZELSCHRITT, Roh, einordnung_der_stunde
 
 _STUNDE = timedelta(hours=1)
 
@@ -73,43 +73,52 @@ async def grenze_kw(db, anlage_id: int, kwh: bool = True) -> Optional[float]:
     return grenze_unmoeglich(await schwelle_der_anlage_stunde_kwh(db, anlage_id)) if kwh else None
 
 
-async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime, *, kwh: bool = True,
-                    benannt: Optional[bool] = None) -> tuple[str, Optional[tuple[Roh, Roh]]]:
-    """Wo der Zähler um ``t`` die Höhe wechselt (``rohstand_rand.sprung_der_stunde`` in der Stunde von ``t``):
-    ``("sprung", (a, b))`` — die Spanne der Höhenwechsel der Stunde (U3-K, B1: letzter Stand vor dem ersten, erster nach dem
-    letzten) · ``("kein_sprung", None)`` (Rohstände in der Stunde, aber kein Höhenwechsel) · ``("noch_kein_stand", None)`` (nach
-    ``t`` ist noch kein Rohstand gespeichert — der Stundenlauf setzt die Rand-Stände später) · ``("ohne", None)`` (keine
-    Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3). ``kwh``: der Zähler zählt kWh (Grenze B7).
-    ``benannt`` (U3-K2, P-3): nennt der Befund «Zählerstand springt (MQTT)» die Stunde? ``None`` = erst fragen, wenn die
-    Leistung keinen Höhenwechsel sieht (``stunde_benannt``) — dann ist der größte Schritt nach oben der Stunde der Höhenwechsel."""
+#: Die Arten von ``sprung_um``, an denen ein Paar steht — ein Höhenwechsel nach Leistung oder ein Einzelschritt (U3-K3): an
+#: beiden trägt ein Eintrag ein, und ein bestehender Eintrag gilt dort als Höhenwechsel (Stundenlauf, Nachtrag «bleiben»).
+MIT_PAAR = frozenset({EINDEUTIG, EINZELSCHRITT})
+
+
+async def sprung_um(db, anlage_id: int, mqtt_key: str, t: datetime, *, kwh: bool = True
+                    ) -> tuple[str, Optional[tuple[Roh, Roh]]]:
+    """Wo der Zähler um ``t`` die Höhe wechselt (``rohstand_rand.einordnung_der_stunde`` in der Stunde von ``t`` — eine Regel für
+    Dialog, Befund, Nachtrag und Stundenlauf, U3-K3): ``("sprung", (a, b))`` — die Spanne der Höhenwechsel der Stunde (U3-K, B1:
+    letzter Stand vor dem ersten, erster nach dem letzten) · ``("einzelschritt", (a, b))`` — kein Höhenwechsel nach Leistung,
+    aber ein Schritt trägt den Zuwachs der Stunde (die zwei Stände an ihm) · ``("kein_sprung", None)`` (Rohstände in der Stunde,
+    aber keins von beidem) · ``("noch_kein_stand", None)`` (nach ``t`` ist noch kein Rohstand gespeichert — der Stundenlauf setzt
+    die Rand-Stände später) · ``("ohne", None)`` (keine Rohstände um ``t``: älter als 31 Tage oder nie gespeichert — wie vor U3).
+    ``kwh``: der Zähler zählt kWh (Grenze B7)."""
     stunde = t.replace(minute=0, second=0, microsecond=0)
     roh = await _rohstaende(db, anlage_id, mqtt_key, stunde - BEZUG, stunde + _STUNDE)
     if not roh:
         return "ohne", None
     if roh[-1][0] < t and await rand_um(db, anlage_id, mqtt_key, t) is None:
         return "noch_kein_stand", None
-    grenze = await grenze_kw(db, anlage_id, kwh)
-    paar = sprung_der_stunde(roh, stunde, grenze)
-    if paar is None and (benannt if benannt is not None else await stunde_benannt(db, anlage_id, mqtt_key, stunde)):
-        paar = sprung_der_stunde(roh, stunde, grenze, benannt=True)
-    return ("sprung", paar) if paar is not None else ("kein_sprung", None)
+    return einordnung_der_stunde(roh, stunde, await grenze_kw(db, anlage_id, kwh))
 
 
-async def stunde_benannt(db, anlage_id: int, mqtt_key: str, stunde: datetime) -> bool:
-    """U3-K2 (P-3): nennt der Befund «Zählerstand springt (MQTT)» (``mqtt_standsprung.mqtt_spruenge``, Kern
-    ``zaehlerstand_sprung.finde_standspruenge``) die Kanal-Stunde ``stunde`` dieses MQTT-Schlüssels?"""
-    from backend.services.daten_checker.datenquelle.mqtt_standsprung import mqtt_spruenge
+async def still_seit(db, anlage_id: int, mqtt_key: str, vor: Roh) -> datetime:
+    """U3-K3: seit wann der Stand ``vor`` (der letzte Rohstand vor einem Schritt) unverändert gespeichert ist — der erste
+    Rohstand nach dem letzten mit einem anderen Wert (über alle gespeicherten, nicht nur die ``BEZUG``). Liegt er vor ``vor``,
+    stand der Stand länger als ein Raster still (der Scheduler hat ihn wiederholt); sonst ist es ``vor`` selbst."""
+    from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot as S
 
-    ts = int(stunde.timestamp())
-    return any(f.mqtt_key == mqtt_key and f.sprung.start_ts == ts for f in await mqtt_spruenge(db, anlage_id))
+    basis = and_(S.anlage_id == anlage_id, S.energy_key == mqtt_key, S.timestamp < vor[0])
+    anders = (await db.execute(select(S.timestamp).where(basis, S.value_kwh != vor[1])
+                               .order_by(S.timestamp.desc()).limit(1))).scalar_one_or_none()
+    erst = select(S.timestamp).where(basis)
+    if anders is not None:
+        erst = erst.where(S.timestamp > anders)
+    seit = (await db.execute(erst.order_by(S.timestamp).limit(1))).scalar_one_or_none()
+    return vor[0] if seit is None else seit
 
 
 async def rand_der_naht(db, anlage_id: int, mqtt_key: str, e: datetime) -> Optional[tuple[Roh, Roh]]:
     """Die Rand-Stände einer Naht an ``e`` für den Stundenlauf (U3-K, B1): endet an ``e`` die Spanne der Höhenwechsel der Stunde
-    (``sprung_um``: ihr erster Stand danach liegt genau an ``e``), deren zwei Rand-Stände — die Stände dazwischen zählen nicht;
-    sonst der letzte Stand vor ``e`` und der erste ab ``e`` (``rand_um``)."""
+    bzw. ein Einzelschritt (``sprung_um``, ``MIT_PAAR`` — der Eintrag ist das Wort des Anwenders, U3-K3: ihr erster Stand danach
+    liegt genau an ``e``), deren zwei Rand-Stände — die Stände dazwischen zählen nicht; sonst der letzte Stand vor ``e`` und der
+    erste ab ``e`` (``rand_um``)."""
     art, paar = await sprung_um(db, anlage_id, mqtt_key, e)
-    if art == "sprung" and paar is not None and paar[1][0].replace(microsecond=0) == e:
+    if art in MIT_PAAR and paar is not None and paar[1][0].replace(microsecond=0) == e:
         return paar
     return await rand_um(db, anlage_id, mqtt_key, e)
 
@@ -167,5 +176,5 @@ def bleiben_satz(vorher: Optional[dict], nachher: Optional[dict], sensor_key: st
     return SATZ_BLEIBEN_HA_MQTT if arten == {"ha", "mqtt"} else None
 
 
-__all__ = ["SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "bleiben_satz", "grenze_kw", "mqtt_key_der_quelle", "mqtt_paar",
-           "rand_der_naht", "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um", "stunde_benannt"]
+__all__ = ["MIT_PAAR", "SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "bleiben_satz", "grenze_kw", "mqtt_key_der_quelle",
+           "mqtt_paar", "rand_der_naht", "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um", "still_seit"]

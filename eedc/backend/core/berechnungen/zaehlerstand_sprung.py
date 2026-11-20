@@ -50,8 +50,9 @@ Handgriff richtige Quellwerte ändern lässt, wiegt schwerer als ein nicht gemel
   Trägt eine Zeile nach einer Zählerlücke ``n`` Stunden, gilt ``n`` × die Grenze (``grenze_der_zeile``, wie die Spanne in
   ``schwelle_pv_einspeisung_stunde_kwh``; gemessen: Produktiv-Kopie, PV 05.11.2025 18:00 nach 129 Stunden ohne Zeile 134,3 kWh —
   mit der Grenze je Zeile ein Fund am Stichtag 31.10.2025, mit der Spanne keiner).
-  (b) gilt auch an einem jungen Zähler, sobald der Bezug einen Tag mit Zuwachs hat. Stand-Zähler in anderen Einheiten
-  (m³, l, km) haben kein (b).
+  (b) gilt auch an einem jungen Zähler — seit U3-K3 (Nachmessung K2-B5) auch ohne Tag mit Zuwachs im Bezug (ein neuer
+  Abschnitt nach einem eingetragenen Tausch: die zweite Stunde eines kurzen Fremdstands blieb sonst ungenannt); dort ohne Maß
+  (``mass`` = 0). Stand-Zähler in anderen Einheiten (m³, l, km) haben kein (b).
 
 Der Arm «Neubeginn» bleibt, wie er war (Bezug mit ``BEZUG_MIN_TAGE`` Tagen, Maß über ``SCHWELLE_NEUBEGINN``).
 
@@ -252,11 +253,17 @@ def finde_standspruenge(zeilen: Sequence[tuple], *, stand: bool = False,
         if tag not in bezug_je_tag:
             bezug_je_tag[tag] = bezug(je_tag, tag)
         n_tage, groesster = bezug_je_tag[tag]
-        if menge <= 0 or n_tage < 1:
+        if menge <= 0:
+            continue
+        ueber = grenze is not None and menge > grenze_der_zeile(grenze, z0, z1)
+        if n_tage < 1:
+            # U3-K3 (K2-B5): ohne Tag mit Zuwachs im Bezug (ein neuer Abschnitt, etwa nach einem eingetragenen Tausch) kein Maß —
+            # über der Grenze meldet der Arm «Sprung» trotzdem (B2 (b) braucht keinen Bezug); Maß 0 wie die Arme ohne Maß.
+            if ueber and not _neubeginn(z0, z1) and _gleich(z0, z1):
+                out.append(Standsprung(int(z1[0]), SPRUNG, menge, z0[1], z1[1], 0.0))
             continue
         m = mass(menge, groesster, ruhe)
-        darf = reif(n_tage, groesster, erste, tag) or (grenze is not None and menge > grenze_der_zeile(grenze, z0, z1))
-        art = _arm(z0, z1, m, n_tage < BEZUG_MIN_TAGE, darf)
+        art = _arm(z0, z1, m, n_tage < BEZUG_MIN_TAGE, reif(n_tage, groesster, erste, tag) or ueber)
         if art is not None:
             out.append(Standsprung(int(z1[0]), art, menge, z0[1], z1[1], m))
     return out

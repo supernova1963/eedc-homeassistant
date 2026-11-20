@@ -519,8 +519,9 @@ async def test_nur_falsche_abschnitte_und_w0(ha, datei, monkeypatch, sprengsatz)
 
 @pytest.mark.parametrize("sprengsatz", [False, True])
 async def test_teil_des_falschen_abschnitts_vor_falsch_seit_bleibt(ha, datei, monkeypatch, sprengsatz):
-    """``falsch_seit`` mitten im falschen Abschnitt: dessen Zeilen davor bleiben (``_teil``) — bis auf die Zeile ``f − 1 h``,
-    die den Stand um ``f`` trägt (U1 Punkt 4: dieselbe Rand-Regel wie am Ende)."""
+    """``falsch_seit`` mitten im falschen Abschnitt: dessen Zeilen davor bleiben (``_teil``). U3-K3 (B2, Bauplan Nr. 163, neue
+    Erwartung): auch die Zeile ``f − 1 h`` bleibt — Home Assistant führt dort keine Zeile des richtigen Sensors (seine Lücke
+    beginnt an F), die Stunde zählt der bis dahin geltende (``korrektur.kanal_beginn``); bis U3-K2 (U1 Punkt 4) fiel sie weg."""
     svc, reihen, sitzungen, aid, k = await _aba(ha, datei)
     f = F + timedelta(days=1)
     if sprengsatz:
@@ -535,7 +536,7 @@ async def test_teil_des_falschen_abschnitts_vor_falsch_seit_bleibt(ha, datei, mo
         nach = (await s.execute(select(func.count()).select_from(KanalStatistik).where(bed))).scalar_one()
         rand_nach = (await s.execute(select(func.count()).select_from(KanalStatistik).where(rand))).scalar_one()
     assert vor == 23 and (nach == vor) is (not sprengsatz)
-    assert (rand_vor, rand_nach) == (1, 0)
+    assert (rand_vor, rand_nach) == (1, 0 if sprengsatz else 1)       # Sprengsatz: der ganze Abschnitt fällt, auch f − 1 h
 
 
 # ── Füllen bis zum Soll-Ende (bis_ts), auch ohne Spiegelzeile danach ───────

@@ -343,16 +343,17 @@ async def trage_fortsetzung_ein(db, anlage, row, zaehlt_ab: Optional[datetime] =
 async def _rand_aus_rohstaenden(db, neu: ZuordnungWechsel) -> Optional[tuple[float, float]]:
     """U3 b (G5): «bleiben» zwischen zwei MQTT-Quellen auf demselben Schlüssel — Rand-Stände aus den Rohständen um den Wechsel
     an die neue Zeile (``ansatz = schnitt``) und für den Nachtrag im Kanal; ohne Rohstände ``None`` (wie bisher). Wechselt der
-    Stand in der Stunde des Wechsels die Höhe (``rohstand.sprung_um``), sind die Rand-Stände die zwei Stände an diesem Schritt —
+    Stand in der Stunde des Wechsels die Höhe oder trägt ein Einzelschritt die Stunde (``rohstand.sprung_um``, ``MIT_PAAR`` —
+    der Wechsel ist das Wort des Anwenders, U3-K3), sind die Rand-Stände die zwei Stände an diesem Schritt —
     ein verzeichneter Zeitpunkt (etwa ein Altbestand ohne Grund) kann um Minuten neben dem ersten Stand der neuen Quelle liegen;
     sonst die zwei Stände um den Zeitpunkt (``rand_um``)."""
-    from backend.services.zuordnung_wechsel.rohstand import mqtt_paar, rand_um, setze_rand, sprung_um
+    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, mqtt_paar, rand_um, setze_rand, sprung_um
 
     mk = mqtt_paar(neu.vorher, neu.nachher, neu.sensor_key)
     if mk is None or not neu.erklaert_ts:
         return None
     art, paar = await sprung_um(db, neu.anlage_id, mk, neu.erklaert_ts)
-    if art != "sprung":
+    if art not in MIT_PAAR:
         paar = await rand_um(db, neu.anlage_id, mk, neu.erklaert_ts)
     if paar is None:
         return None

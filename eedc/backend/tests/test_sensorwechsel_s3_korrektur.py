@@ -150,7 +150,7 @@ async def test_sprengsatz_versatz_der_spaeteren_quelle_bleibt_stehen(ha, datei, 
     y = (await _quellen(sitzungen, k.id))[-1].offset
     assert abs(y) > 1.0
 
-    async def r1(db, kanal, ref, ha_svc, eid, h0, spaeter):
+    async def r1(db, kanal, ref, ha_svc, eid, h0, spaeter, nullpunkt=False):     # U3-K3: Parameter «nullpunkt»
         return float(spaeter.offset)
 
     monkeypatch.setattr(kk, "_versatz", r1)
@@ -465,8 +465,9 @@ async def test_offene_laeufe_nach_dem_start(datei, monkeypatch):
 async def test_neue_entitaet_ohne_geschichte_beginnt_mit_ihrer_ersten_zeile(ha, datei):
     """Die richtige Entität hat in HA erst ab dem Wechsel Zeilen (fabrikneu): verworfen bleibt [F, AB), die richtige Quelle
     beginnt an AB (ihre spätere Quellzeile des Stundenlaufs geht darin auf), Δ über AB = ihr eigener Zuwachs (+2,0 je Stunde).
-    U1 Punkt 4: im Kanal beginnt das Intervall an der Zeile ``F − 1 h`` (sie trägt den Stand um F, den ersten falschen) — die
-    Quelle davor (hier nicht die richtige) ist dort mit verworfen."""
+    U1 Punkt 4 / U3-K3 (B2, Bauplan Nr. 163, neue Erwartung): Home Assistant führt den richtigen Sensor an ``F − 1 h`` nicht —
+    die Zeile ``F − 1 h`` bleibt (die Stunde zählt der bis dahin geltende Sensor), das Intervall beginnt im Kanal an F; bis
+    U3-K2 begann es eine Stunde davor, und die Quelle davor war dort mit verworfen."""
     svc, reihen = ha
     sitzungen, _p, aid, _g = datei
     _falscher_sensor(svc)
@@ -485,8 +486,7 @@ async def test_neue_entitaet_ohne_geschichte_beginnt_mit_ihrer_ersten_zeile(ha, 
     s = await _korrigieren(sitzungen, _auftrag(aid, nachher={"art": "ha", "entity_id": "sensor.neu"}), svc)
     assert s["kanal_beginn"] == _ts(AB)
     qs = [(q.gueltig_ab, q.statistic_id, q.verworfen_ts is not None) for q in await _quellen(sitzungen, k.id)]
-    assert qs == [(_ts(ZEIT), "sensor.einsp", False), (_ts(F) - H, "sensor.einsp", True), (_ts(F), "sensor.falsch", True),
-                  (_ts(AB), "sensor.neu", False)]
+    assert qs == [(_ts(ZEIT), "sensor.einsp", False), (_ts(F), "sensor.falsch", True), (_ts(AB), "sensor.neu", False)]
     async with sitzungen() as ss:
         n = (await ss.execute(select(func.count()).select_from(KanalStatistik).where(and_(
             KanalStatistik.kanal_id == k.id, KanalStatistik.start_ts >= _ts(F), KanalStatistik.start_ts < _ts(AB))))).scalar_one()

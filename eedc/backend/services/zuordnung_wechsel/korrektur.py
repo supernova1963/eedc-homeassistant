@@ -113,6 +113,31 @@ def _kanal_beginn(a: Auftrag) -> Optional[int]:
     return int(a.falsch_seit.timestamp()) - (_STUNDE if richtige_entitaet(a.nachher) is not None or mqtt_stueck else 0)
 
 
+async def kanal_beginn(db: AsyncSession, a: Auftrag, ha_svc=None) -> Optional[int]:
+    """``_kanal_beginn`` mit dem **linken Rand** (U3-K3, B2): auf einer vollen Stunde «Falsch seit» trägt die Zeile
+    ``Falsch seit − 1 h`` die Stunde davor. Führt Home Assistant für sie **keine** Zeile des richtigen Sensors (er beginnt erst
+    später), zählt sie der bis dahin geltende Sensor, dessen Zeile der Kanal trägt — sie bleibt stehen (der Tag davor zählt
+    seine letzte Stunde). Sonst wie bisher eine Stunde davor: führt HA den richtigen Sensor dort, zählt die Stunde mit ihm
+    (U2 a2, P-1: Schnitt an «Falsch seit − 1 h»); beginnt an der Zeile eine Quelle des Kanals (die falsche wurde zu «Falsch
+    seit» zugeordnet — gemessen 4b-1-K, Fall ``h4``); ein Stück (dessen Sprung liegt in der Kanal-Stunde davor); ohne Home
+    Assistant."""
+    k = _kanal_beginn(a)
+    eid = richtige_entitaet(a.nachher)
+    if (k is None or a.stueck or eid is None or ha_svc is None or a.falsch_seit.minute or a.falsch_seit.second
+            or k + _STUNDE != int(a.falsch_seit.timestamp())):
+        return k
+    from backend.services.kanal.korrektur import erste_ha_zeile
+
+    if await ha_abruf(erste_ha_zeile(ha_svc, eid, k, k)) is not None:
+        return k                                # HA führt den richtigen Sensor in dieser Stunde (P-1)
+    from backend.models.kanal import Kanal, KanalQuelle
+
+    beginnt = (await db.execute(select(func.count()).select_from(KanalQuelle).join(Kanal, Kanal.id == KanalQuelle.kanal_id)
+                                .where(and_(Kanal.anlage_id == a.anlage_id, Kanal.key == a.sensor_key,
+                                            KanalQuelle.gueltig_ab == k)))).scalar_one()
+    return k if beginnt else k + _STUNDE
+
+
 # ── Home Assistant ──────────────────────────────────────────────────────────
 
 
@@ -195,6 +220,12 @@ class Lage:
     #: Rand-Stand war prüfbar — die Lücken-Zeile trägt das Merkmal «Höhe ungeprüft» (``ANSATZ_HOEHE_UNGEPRUEFT``), ihr Rand ist
     #: ein Höhenwechsel (``zeitpunkt.ohne_hoehenwechsel``).
     hoehe_ungeprueft: bool = False
+    #: U3-K3 «Regel 2» (``nullpunkt.py``): die Lücke endet an der ersten Zeile einer neuen Statistik des richtigen Sensors
+    #: (HA führt davor keine) — ihr Rand-Stand dort ist HAs Nullpunkt (``None`` = nicht so).
+    nullpunkt: Optional[float] = None
+    #: U3-K3: der Kanal des Felds trägt vor der verworfenen Zeit Werte (und die richtige Quelle aus Home Assistant setzt danach
+    #: an) — die Tagesansicht liest dort den Kanal; die Tage der Lücke nennt die Vorschau nach seinen Rändern (``_tage``).
+    kanal_traegt: bool = False
 
     @property
     def nichts_zu_tun(self) -> bool:
@@ -250,7 +281,7 @@ async def lage(db: AsyncSession, a: Auftrag, *, ha_svc=None) -> Lage:
     anlage = (await db.execute(select(Anlage).where(Anlage.id == a.anlage_id))).scalar_one_or_none()
     if anlage is None:
         raise LookupError(f"Anlage {a.anlage_id} nicht gefunden")
-    k = await kanal_lage(db, a.anlage_id, a.sensor_key, _kanal_beginn(a), int(a.ab.timestamp()),
+    k = await kanal_lage(db, a.anlage_id, a.sensor_key, await kanal_beginn(db, a, ha_svc), int(a.ab.timestamp()),
                          richtige_entitaet(a.nachher))
     ab_staende = await wirksames_ab(db, a, k.w0)
     zs = await _zaehle(db, SensorSnapshot, SensorSnapshot.sensor_key, a.sensor_key, SensorSnapshot.zeitpunkt,
@@ -268,13 +299,13 @@ async def lage(db: AsyncSession, a: Auftrag, *, ha_svc=None) -> Lage:
     if ha_svc is not None:
         la.tage_neu = await tage_neu_bilden_liste(db, a, ziele)
     la.intervall = (_beginn(a, k.w0), ab_staende)
-    la.luecke = await _luecke(db, a, k.w0, ab_staende, ha_svc)
+    la.luecke, la.nullpunkt = await _luecke(db, a, k.w0, ab_staende, ha_svc)
     if la.luecke is not None:
-        from backend.services.zuordnung_wechsel.stueck import tage_der_luecke, tragtag_der_luecke
+        from backend.services.zuordnung_wechsel.stueck import tragtag_der_luecke
 
-        la.luecke_tage, la.luecke_rand = await tage_der_luecke(db, anlage, a.sensor_key, *la.luecke)
         la.hoehe_ungeprueft = await _hoehe_ungeprueft(db, a, la.luecke, ab_staende, ha_svc)
         la.zaehlerluecke = await _wie_zaehlerluecke(db, a, *la.luecke, ab_staende, hoehe_ungeprueft=la.hoehe_ungeprueft)
+        la.luecke_tage, la.luecke_rand = await _tage(db, anlage, a, k, la)
         if la.zaehlerluecke:
             la.zaehlerluecke_tag = await tragtag_der_luecke(db, anlage, a.sensor_key, la.luecke[1])
             la.luecke_tage = [d for d in la.luecke_tage if d != la.zaehlerluecke_tag]
@@ -282,8 +313,36 @@ async def lage(db: AsyncSession, a: Auftrag, *, ha_svc=None) -> Lage:
     if ha_svc is not None and richtige_entitaet(a.nachher) is not None and (la.luecke is None or la.luecke[1] < ab_staende):
         # U1 Punkt 3 (Gegenprüfung Zeile 5): führt Home Assistant den richtigen Sensor erst ab einem späteren Zeitpunkt, bleibt
         # nur die Zeit davor leer — ab dort liest der Lauf die Stände neu und speichert sie.
-        await _fuellt_aus_ha(db, la, _beginn(a, k.w0) if la.luecke is None else la.luecke[1], ab_staende)
+        await _fuellt_aus_ha(db, la, _beginn(a, k.w0) if la.luecke is None else _erster_neuer_stand(la), ab_staende)
     return la
+
+
+async def _tage(db: AsyncSession, anlage, a: Auftrag, k, la: Lage) -> tuple[list[date], list[date]]:
+    """Die Tage der Lücke (Vorschau): nach den gespeicherten Zählerständen (``stueck.tage_der_luecke``) — oder, trägt der Kanal
+    des Felds davor Werte und setzt die richtige Quelle aus Home Assistant danach an, nach den Rändern des Kanals
+    (``stueck.tage_im_kanal``, U3-K3) an Kanal-Tagen: verworfen ab ``w0``; mit «Regel 2» zählt er ab dem Ende der Lücke, liegt
+    es noch vor uns (der Dialog), ab der Stunde davor — der Stundenlauf übernimmt die erste Zeile des richtigen Sensors ab HAs
+    Nullpunkt; an den übrigen Tagen nach der Reihe."""
+    from backend.services.kanal.korrektur import _referenz
+    from backend.services.zuordnung_wechsel.stueck import reihe_raender, tage_der_luecke, tage_im_kanal
+
+    la.kanal_traegt = bool(richtige_entitaet(a.nachher) and k.kanal is not None and k.w0 is not None and not la.zaehlerluecke
+                           and await _referenz(db, k.kanal, k.w0) is not None)
+    if not la.kanal_traegt:
+        # bis zum ersten Stand, den der Lauf hinter der Lücke speichert (die Stände davor verwirft er)
+        return await tage_der_luecke(db, anlage, a.sensor_key, la.luecke[0], _erster_neuer_stand(la))
+    ende = la.luecke[1]
+    if la.nullpunkt is None and ende > (a.erklaert or datetime.now()):
+        ende -= timedelta(hours=1)
+    return await tage_im_kanal(db, anlage, a.sensor_key, datetime.fromtimestamp(k.w0), ende,
+                               reihe=await reihe_raender(db, a.anlage_id, a.sensor_key, la.luecke[0], _erster_neuer_stand(la)))
+
+
+def _erster_neuer_stand(la: Lage) -> datetime:
+    """Ab wann der Lauf die Stände hinter der Lücke neu liest: ihr Ende — mit «Regel 2» (U3-K3, ``la.nullpunkt``) eine Stunde
+    später, am Stand nach HAs erster Zeile (vor ihr führt HA keinen Stand; der Leser fände um das Ende der Lücke mit seiner
+    Toleranz den Stand eine Stunde später)."""
+    return la.luecke[1] + (timedelta(hours=1) if la.nullpunkt is not None else timedelta(0))
 
 
 async def _fuellt_aus_ha(db: AsyncSession, la: Lage, f: datetime, ab: datetime) -> None:
@@ -359,41 +418,52 @@ async def _aeltere_luecken(db: AsyncSession, a: Auftrag, f: datetime, ab: dateti
 
 
 async def _luecke(db: AsyncSession, a: Auftrag, w0: Optional[int], ab: datetime,
-                  ha_svc) -> Optional[tuple[datetime, datetime]]:
+                  ha_svc) -> tuple[Optional[tuple[datetime, datetime]], Optional[float]]:
     """Der Teil von ``[falsch_seit, ab)``, den nichts füllt (Bauplan «Zu §14» Nr. 97): «Zuordnung zum Zeitpunkt» (B-0) füllt
     die Reihe nur aus einer Home-Assistant-Entität mit Geschichte — ohne Home Assistant oder mit einer MQTT-Quelle bleibt das
     ganze Intervall leer (``None`` = gefüllt); ein Stück füllt nur, wenn beide Rand-Stände HAs Rohsumme der Quelle sind
     (``stueck.ist_fuellbar``). **Leer bleibt nur die Zeit, für die Home Assistant nichts führt** (U1 Punkt 3, Gegenprüfung
     Zeile 5): beginnt HAs Geschichte des richtigen Sensors erst im Intervall, ist die Lücke ``[falsch_seit, erster Stand aus
-    HA)``; ab dort liest der Lauf die Stände neu und speichert sie (``_fuellt_aus_ha``, ``fuelle_staende``)."""
-    from backend.services.kanal.korrektur import erste_ha_zeile
+    HA)``; ab dort liest der Lauf die Stände neu und speichert sie (``_fuellt_aus_ha``, ``fuelle_staende``). **U3-K3 «Regel 2»**
+    (``nullpunkt.py``): ist HAs erste Zeile ``h`` die erste ihrer Statistik überhaupt, endet die Lücke an ``h`` (statt am Stand
+    ``h + 1 h``) — die erste Zeile zählt ab HAs Nullpunkt; Rückgabe ``(Lücke, Nullpunkt der Reihe)``."""
+    from backend.services.kanal.korrektur import erste_ha_zeile, ha_beginnt_bei
 
     f = _beginn(a, w0)
     if f >= ab:
-        return None
+        return None, None
     eid = richtige_entitaet(a.nachher)
     if eid is None or ha_svc is None:
-        return f, ab
+        return (f, ab), None
     if a.stueck:
         from backend.services.zuordnung_wechsel.stueck import ist_fuellbar
 
         if not await ist_fuellbar(db, a, ha_svc):
-            return f, ab
+            return (f, ab), None
     # Der Stand um ``z`` steht in HAs Zeile ``z − 1 h`` (``get_value_at``). Gemessen wird ab dem ersten Stand, den die
     # Korrektur in der Reihe verwirft (davor gibt es nichts zu füllen — Werkbank «von Beginn an»: «falsch seit» liegt eine
     # Stunde vor dem ersten Wert). Beginnt HAs Geschichte später, ist ihr erster Stand ``h + 1 h`` — die Zeit davor bleibt
     # eine Lücke (ihre Ränder sind Nähte nur bei Höhenwechsel, ``_wie_zaehlerluecke``).
     z1 = await _erster_stand(db, a, f, ab)
     if z1 is None:
-        return None
+        return None, None
     if not a.stueck and not await _hoehe_passt(db, a, f, ab, ha_svc):
-        return f, ab                        # U1-K (d): Füllen nur auf geprüfter Höhe
+        return (f, ab), None                # U1-K (d): Füllen nur auf geprüfter Höhe
     h = await ha_abruf(erste_ha_zeile(ha_svc, eid, int(z1.timestamp()) - _STUNDE, int(ab.timestamp())))
     if h is not None and h <= int(z1.timestamp()) - _STUNDE:
-        return None
+        return None, None
+    # «Regel 2» nur, wo kein Rand-Stand die Höhe prüft: liegt HAs Statistik auf der Höhe der gespeicherten Stände (geprüft), beginnt
+    # sie dort nicht am Nullpunkt (U1-K (d), Fall «gleiche Höhe, ab später»).
+    if (h is not None and not a.stueck and f < datetime.fromtimestamp(h) < ab and await ha_abruf(ha_beginnt_bei(ha_svc, eid, h))
+            and await _hoehe_pruefung(db, a, f, ab, ha_svc) is None):
+        from backend.services.zuordnung_wechsel.nullpunkt import nullpunkt_der_reihe
+
+        null = await nullpunkt_der_reihe(db, a.anlage_id, ha_svc, eid, a.sensor_key, datetime.fromtimestamp(h))
+        if null is not None:
+            return (f, datetime.fromtimestamp(h)), null
     if h is None or datetime.fromtimestamp(h + _STUNDE) >= ab:
-        return f, ab
-    return f, datetime.fromtimestamp(h + _STUNDE)
+        return (f, ab), None
+    return (f, datetime.fromtimestamp(h + _STUNDE)), None
 
 
 async def _hoehe_passt(db: AsyncSession, a: Auftrag, f: datetime, ab: datetime, ha_svc) -> bool:
@@ -520,8 +590,11 @@ SATZ_LUECKE_HOEHE = ("Vom {von} bis {bis} Uhr füllt nichts die verworfenen Zäh
 SATZ_LUECKE_HOEHE_HANDGRIFF = ("Sollen die bisherigen Werte dieser Zeit lieber bleiben, setze «Falsch seit» auf {bis} Uhr — "
                                "dann verwirft eedc erst ab dort.")
 SATZ_LUECKE_TAGE = "Wo die Tagesansicht den Wert aus den gespeicherten Zählerständen bildet, zeigt sie {teile}."
-#: Lab-K W5/W9: der Beginn der Lücken-Sätze, wenn ihr Ende noch nicht erreicht ist.
-SATZ_BIS_JETZT = "Vom {von} Uhr bis jetzt"
+#: U3-K3: trägt der Kanal des Felds davor Werte, liest die Tagesansicht ihn — die Tage nach seinen Rändern (``_tage``).
+SATZ_LUECKE_TAGE_KANAL = "Die Tagesansicht zeigt {teile}."
+#: Lab-K W5/W9, U3-K3 (Nachmessung Satz B: «bis jetzt», die Zeit reichte bis zur nächsten vollen Stunde): der Beginn der
+#: Lücken-Sätze, wenn ihr Ende noch nicht erreicht ist.
+SATZ_BIS_JETZT = "Vom {von} Uhr bis zum Ende der laufenden Stunde"
 SATZ_LUECKE_INNEN = "{tage} keinen Wert"
 SATZ_LUECKE_RAND = "{tage} nur den Teil außerhalb dieser Zeit"
 
@@ -543,6 +616,15 @@ SATZ_ZAEHLERLUECKE_TAG = "am {tag} die Menge seit dem letzten Zählerstand davor
 #: U1 Punkt 3: führt Home Assistant den richtigen Sensor ab einem Zeitpunkt in der Zeit, liest eedc ab dort neu.
 SATZ_STAENDE_AB = ("Ab {zeit} Uhr führt Home Assistant den richtigen Sensor — von dort an liest eedc die Zählerstände neu und "
                    "speichert sie.")
+#: U3-K3 «Regel 2» (``la.nullpunkt``): die erste Zeile einer neuen Statistik zählt ab HAs Nullpunkt — im Kanal, wenn er davor
+#: Werte trägt (``la.kanal_traegt``), sonst nur im Monat (Leseregel (a) in ``kanal/lesen.py``: ein Zeitraum, dessen erste Zeile
+#: nach seinem Beginn liegt, ist nie voll).
+SATZ_STAENDE_AB_KANAL = ("Ab {zeit} Uhr führt Home Assistant den richtigen Sensor; von dort an zählt eedc ihn wie Home "
+                         "Assistant und liest seine Zählerstände neu.")
+SATZ_STAENDE_AB_MONAT = ("Ab {zeit} Uhr führt Home Assistant den richtigen Sensor; eedc liest seine Zählerstände neu. Diese "
+                         "erste Stunde zählt eedc im Monatsabschluss und bei „Aus HA laden“ wie Home Assistant, in "
+                         "Tagesansicht, Stundenwerten und Monatsübersicht des Energieprofils nicht — dieses Feld hat davor "
+                         "keinen Wert.")
 
 
 def saetze_luecke(la: Lage) -> list[str]:
@@ -566,27 +648,28 @@ def saetze_luecke(la: Lage) -> list[str]:
     if la.zaehlerluecke_tag is not None:
         teile.append(SATZ_ZAEHLERLUECKE_TAG.format(tag=la.zaehlerluecke_tag.strftime("%d.%m.%Y")))
     if teile:
-        s.append(SATZ_LUECKE_TAGE.format(teile=" und ".join(teile)))
+        s.append((SATZ_LUECKE_TAGE_KANAL if getattr(la, "kanal_traegt", False) else SATZ_LUECKE_TAGE).format(
+            teile=" und ".join(teile)))
     if _staende_ab(la):
-        s.append(SATZ_STAENDE_AB.format(zeit=_staende_ab_zeit(la).strftime("%d.%m.%Y %H:%M")))
+        satz = SATZ_STAENDE_AB
+        if getattr(la, "nullpunkt", None) is not None:
+            satz = SATZ_STAENDE_AB_KANAL if getattr(la, "kanal_traegt", False) else SATZ_STAENDE_AB_MONAT
+        s.append(satz.format(zeit=_staende_ab_zeit(la).strftime("%d.%m.%Y %H:%M")))
     return s
 
 
 def _staende_ab(la: Lage) -> bool:
     """Liest der Lauf die Stände ab dem Ende der Lücke neu (Home Assistant führt den richtigen Sensor erst ab dort)?"""
     luecke, neu = getattr(la, "luecke", None), getattr(la, "staende_neu", None)
-    return luecke is not None and neu is not None and neu[0] == luecke[1]
+    return luecke is not None and neu is not None and neu[0] == _erster_neuer_stand(la)
 
 
 def _staende_ab_zeit(la: Lage) -> datetime:
-    """Ab wann Home Assistant den richtigen Sensor führt — **eine** Zeit für ``SATZ_STAENDE_AB`` und den Kanal
-    (Korrekturrunde U1-K S5): die erste Stunde, die die Sicht danach zählt. Ohne Kanal ist das der erste neu gelesene Stand
-    (das Ende der Lücke); wird der Kanal des Felds aus Home Assistant neu gefüllt, zählt die Tagesansicht schon dessen erste
-    Zeile — die Stunde davor (die Zeile ``t − 1 h`` trägt den Stand um ``t``)."""
-    bis = la.luecke[1]
-    if la.kanal.kanal is not None and la.kanal.w0 is not None and richtige_entitaet(la.auftrag.nachher) is not None:
-        return bis - timedelta(hours=1)
-    return bis
+    """Ab wann eedc den richtigen Sensor zählt — **eine** Zeit für ``SATZ_STAENDE_AB`` und den Lücken-Satz (Korrekturrunde
+    U1-K S5; U3-K3: dieselbe Zeit wie «bis» der Lücke): das Ende der Lücke. Mit «Regel 2» (``la.nullpunkt``) ist das HAs erste
+    Zeile, und der Kanal zählt sie ab HAs Nullpunkt; sonst der erste neu gelesene Stand (gemessen U3-K2-Nachmessung: die
+    Stunde davor zählte kein Leser)."""
+    return la.luecke[1]
 
 
 #: Eine Korrektur, die eine ältere Lücke überdeckt (Bauplan «Zu §14» Nr. 113): die Vorschau nennt, was mit ihr geschieht.
@@ -617,6 +700,11 @@ SATZ_KANAL_AB = ("Home Assistant führt die Geschichte des richtigen Sensors ers
                  "nichts neu.")
 SATZ_KANAL_OHNE_GESCHICHTE = ("Home Assistant führt für den richtigen Sensor in diesem Zeitraum noch keine Stundenwerte — eedc "
                               "liest dort nichts neu.")
+#: U3-K3 (Regel 1 nicht gebaut, gemessen ``vorlauf_2344``/``w5_2344``): endet die Zeit erst mit der laufenden Stunde, und Home
+#: Assistant beginnt den richtigen Sensor in ihr, übernimmt der Stundenlauf seine erste Zeile; die Monatswerte aus Home
+#: Assistant zählen sie nicht (Anker = erste Zeile).
+SATZ_KANAL_ERSTE_STUNDE_OFFEN = ("Beginnt Home Assistant den richtigen Sensor in der laufenden Stunde, zählen Monatsabschluss und "
+                                 "„Aus HA laden“ diese erste Stunde nicht; Home Assistant zählt sie.")
 SATZ_KANAL_MQTT = ("Eine MQTT-Quelle hat keine Geschichte, die eedc nachholen könnte — für die Zeit von «Falsch seit» bis jetzt "
                    "liest eedc nichts neu.")
 #: Dasselbe im Nachtrag (Bauplan §13 Nr. 69): dort endet das verworfene Intervall am Wechsel, nicht jetzt.
@@ -644,7 +732,9 @@ async def kanal_saetze(la: Lage, ha_svc, *, bis_zum_wechsel: bool = False) -> li
         return []
     h0 = await erste_ha_zeile(ha_svc, eid, la.kanal.w0, fuell_ende(int(datetime.now().timestamp())))
     if h0 is None:
-        return [SATZ_KANAL_OHNE_GESCHICHTE]
+        luecke = getattr(la, "luecke", None)
+        offen = luecke is not None and luecke[1] > (getattr(la.auftrag, "erklaert", None) or datetime.now())
+        return [SATZ_KANAL_OHNE_GESCHICHTE] + ([SATZ_KANAL_ERSTE_STUNDE_OFFEN] if offen else [])
     if _staende_ab(la) and datetime.fromtimestamp(h0) == _staende_ab_zeit(la):
         return []                           # derselbe Sachverhalt steht schon in ``SATZ_STAENDE_AB`` (U1-K S5)
     return [SATZ_KANAL_AB.format(zeit=datetime.fromtimestamp(h0).strftime("%d.%m.%Y %H:%M"))] if h0 > la.kanal.w0 else []
@@ -825,11 +915,13 @@ async def fuehre_aus(db: AsyncSession, a: Auftrag, *, ha_svc=None, jetzt: Option
     la = await lage(db, a, ha_svc=ha_svc)
     lauf = uuid.uuid4().hex[:12]
     bis_ts = fuell_ende(int(jetzt.timestamp()))
-    kk = await korrigiere_kanal(db, a.anlage_id, a.sensor_key, _kanal_beginn(a), int(a.ab.timestamp()),
+    kk = await korrigiere_kanal(db, a.anlage_id, a.sensor_key, await kanal_beginn(db, a, ha_svc), int(a.ab.timestamp()),
                                 richtige_entitaet(a.nachher), ha_svc=ha_svc, jetzt_ts=int(jetzt.timestamp()), bis_ts=bis_ts,
-                                bruecke=la.zaehlerluecke)
+                                bruecke=la.zaehlerluecke, nullpunkt=la.nullpunkt is not None)
     row = await _wechsel_zeile(db, a, jetzt, lauf, kk.w0)
     luecke = await _luecken_zeile(db, a, row, la.luecke, lauf, la.intervall, hoehe_ungeprueft=la.hoehe_ungeprueft)
+    if luecke is not None and la.nullpunkt is not None and luecke.ab_ts == la.luecke[1]:
+        luecke.stand_neu_null = la.nullpunkt            # U3-K3 «Regel 2»: das Merkmal für die Hülle des Monats
     if ha_svc is not None and la.luecke is None:
         await _rand_an_falsch_seit(db, row, ha_svc)
     zs, rs = await _verwerfe_staende(db, a, row.ab_ts)

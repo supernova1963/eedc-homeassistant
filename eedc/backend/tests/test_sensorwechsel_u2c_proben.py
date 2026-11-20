@@ -136,7 +136,9 @@ def test_junger_zaehler_meldet_nur_ueber_der_grenze():
     klein = [z for z in _sprung(_reihe(1.8), TAUSCH, 50.0) if z[0] >= _ts(TAUSCH - timedelta(days=10))]
     assert finde_standspruenge(klein, grenze=G) == []
     ohne_bezug = [z for z in _sprung(_reihe(1.8), TAUSCH, 2001.0) if z[0] >= _ts(TAUSCH - timedelta(hours=3))]
-    assert finde_standspruenge(ohne_bezug, grenze=G) == []
+    # U3-K3 (K2-B5, Bauplan Nr. 163, neue Erwartung): über der Grenze meldet der Arm «Sprung» auch ohne Tag mit Zuwachs im
+    # Bezug (bis U3-K2: still) — Maß 0
+    assert [(f.art, f.mass) for f in finde_standspruenge(ohne_bezug, grenze=G)] == [(SPRUNG, 0.0)]
 
 
 def test_wallbox_11_kwh_nach_30_tagen_ruhe_still():

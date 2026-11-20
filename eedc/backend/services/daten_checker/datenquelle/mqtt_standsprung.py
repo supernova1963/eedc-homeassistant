@@ -20,10 +20,16 @@ beide Stunden); der vierte Arm «Zwischenstand» nennt eine Stunde, in der das G
 seinen Stand sendet (die Summe wächst um mindestens 0,9 × den Stand davor, der Stand nicht) — «Zähler getauscht» nimmt dort die
 Spanne der Höhenwechsel (``rohstand_rand.sprung_der_stunde``).
 
+**Korrekturrunde U3-K3 (Bauplan Nr. 163):** der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn
+die Regel der Rohstände dort einen Höhenwechsel nach Leistung oder einen Einzelschritt sieht (``_bestaetigt``,
+``rohstand_rand.einordnung_der_stunde``) — dieselbe Regel, nach der der Dialog «Zähler getauscht» einträgt; ein Fehlalarm (Ladung
+mit 22 kW an einem reifen Zähler mit kleinem Tageswert) entfällt, statt dass sein Knopf echte Menge streicht. Die übrigen Arme
+bleiben, wie sie sind.
+
 **Eine Zeile je Stunde** (W-1: diese Datei ist die Erzeuger-Stelle), Schwere Warnung (E6), Sprung «Zähler getauscht» in die
 Datenquellen (``ziel_datenquelle_schluessel(…, getauscht=<Zeit>)``): der Dialog «Zähler getauscht (gleiche Quelle)» öffnet mit
-«Getauscht am» auf dem ersten Rohstand nach dem Höhenwechsel (``rohstand_rand.sprung_der_stunde``; ohne Rohstände der Beginn der
-Stunde).
+«Getauscht am» auf dem ersten Rohstand nach dem Höhenwechsel bzw. am Einzelschritt (``rohstand.sprung_um``; ohne Rohstände der
+Beginn der Stunde).
 
 Schwesterdateien: ``standsprung.py`` (dieselbe Frage an der HA-Statistik), ``ruecksprung.py`` (lässt einen Rückgang aus, den diese
 Prüfung nennt), ``versatz.py`` (versetzter Abschnitt).
@@ -39,6 +45,7 @@ from sqlalchemy import text
 from backend.core.berechnungen.zaehlerstand_sprung import (
     NEUBEGINN,
     RUECKGANG,
+    SPRUNG,
     ZWISCHENSTAND,
     ZWISCHEN_ANTEIL,
     Standsprung,
@@ -72,10 +79,12 @@ ORDER BY k.id, q.gueltig_ab, s.start_ts
 
 
 class Fund:
-    __slots__ = ("key", "stand", "einheit", "mqtt_key", "sprung")
+    __slots__ = ("key", "stand", "einheit", "mqtt_key", "sprung", "zeit")
 
     def __init__(self, key: str, stand: bool, einheit: str, mqtt_key: str, sprung: Standsprung):
         self.key, self.stand, self.einheit, self.mqtt_key, self.sprung = key, stand, einheit, mqtt_key, sprung
+        #: Die Zeit des Schritts aus den Rohständen (``rohstand.sprung_um``), sobald gelesen; ``None`` = noch nicht gelesen.
+        self.zeit: Optional[datetime] = None
 
 
 def _kurz_tiefer(z: list[tuple]) -> set[int]:
@@ -194,7 +203,25 @@ async def mqtt_spruenge(db, anlage_id: int) -> list[Fund]:
     zeilen = (await db.execute(text(_SQL), {"a": anlage_id})).all()
     if not zeilen:
         return []
-    return finde(zeilen, await mqtt_versatz_stunden(db, anlage_id), await schwelle_der_anlage_stunde_kwh(db, anlage_id))
+    funde = finde(zeilen, await mqtt_versatz_stunden(db, anlage_id), await schwelle_der_anlage_stunde_kwh(db, anlage_id))
+    return [f for f in funde if await _bestaetigt(db, anlage_id, f)]
+
+
+async def _bestaetigt(db, anlage_id: int, f: Fund) -> bool:
+    """U3-K3 (Bauplan Nr. 163): der Arm «Sprung» nennt eine Stunde, für die Rohstände gespeichert sind, nur, wenn die Regel
+    der Rohstände dort einen Höhenwechsel oder einen Einzelschritt sieht (``rohstand.sprung_um`` — dieselbe Regel wie der
+    Dialog «Zähler getauscht»); sieht sie keins von beidem (eine Ladung über die Stunde an einem reifen Zähler), ist es kein
+    Befund. Ohne Rohstände (älter als 31 Tage) entscheidet der Kern. Die Zeit des Schritts merkt sich der Fund
+    (``zeit_des_sprungs``)."""
+    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, sprung_um
+
+    if f.sprung.art != SPRUNG:
+        return True
+    stunde = datetime.fromtimestamp(f.sprung.start_ts)
+    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
+    if art in MIT_PAAR and paar is not None:
+        f.zeit = paar[1][0].replace(microsecond=0)
+    return art != "kein_sprung"
 
 
 async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
@@ -211,15 +238,16 @@ async def benannte_stunden(db, anlage_id: int) -> dict[str, set[int]]:
 
 
 async def zeit_des_sprungs(db, anlage_id: int, f: Fund) -> datetime:
-    """Der erste Rohstand nach dem Höhenwechsel in der Stunde des Funds (``rohstand.sprung_um``; U3-K2, P-3: der Befund nennt
-    die Stunde — sieht die Leistung keinen Höhenwechsel, gilt der größte Schritt nach oben); ohne Rohstände (älter als 31 Tage)
-    der Beginn der Stunde."""
-    from backend.services.zuordnung_wechsel.rohstand import sprung_um
+    """Der erste Rohstand nach dem Höhenwechsel bzw. am Einzelschritt in der Stunde des Funds (``rohstand.sprung_um``, dieselbe
+    Regel wie der Dialog — U3-K3: der Befund fragt nicht mehr sich selbst); ohne Rohstände (älter als 31 Tage) der Beginn der
+    Stunde."""
+    from backend.services.zuordnung_wechsel.rohstand import MIT_PAAR, sprung_um
 
+    if f.zeit is not None:
+        return f.zeit
     stunde = datetime.fromtimestamp(f.sprung.start_ts)
-    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh",
-                                benannt=True)
-    return paar[1][0].replace(microsecond=0) if art == "sprung" and paar is not None else stunde
+    art, paar = await sprung_um(db, anlage_id, f.mqtt_key, stunde + timedelta(minutes=59, seconds=59), kwh=f.einheit == "kWh")
+    return paar[1][0].replace(microsecond=0) if art in MIT_PAAR and paar is not None else stunde
 
 
 __all__ = ["BEISPIELE", "Fund", "MqttZaehlerstandSpringtChecks", "benannte_stunden", "finde", "mqtt_spruenge",

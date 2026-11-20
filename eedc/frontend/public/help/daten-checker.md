@@ -3685,8 +3685,10 @@ Zeit keine Werte des richtigen Sensors. Das bleibt so — eedc liest diese Zeit 
 Die Meldung nennt das Feld, Beginn und Ende der Zeit. Die Details sagen, was dafür gilt: Gilt davor, in dieser Zeit und danach
 dieselbe Quelle und ist dazwischen kein Zählertausch eingetragen, steht die Menge der ganzen Zeit am Tag des ersten
 Zählerstands danach (wie bei jeder Zählerlücke). Sonst bildet eedc über diese Zeit keine Differenz — die Tage darin zeigen für
-dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Dazu nennen die
-Details die Monate mit gespeichertem Monatswert, die die Zeit berührt.
+dieses Feld keinen Wert, die Tage an ihrem Rand nur ihren Teil, und die Menge fehlt in Tag, Monat und Jahr. Beginnt danach ein
+neuer Sensor, dessen erste Stunde Home Assistant ab 0 zählt, und hat das Feld davor Werte, zählen die Stundenwerte diese erste
+Stunde wie Home Assistant; die Details sagen es. Dazu nennen die Details die Monate mit gespeichertem Monatswert, die die Zeit
+berührt.
 
 **Lösungsweg**
 1. Die Angabe lesen. Stimmt sie, ist nichts zu tun: die Auskunft beschreibt, was die Korrektur festgelegt hat.
@@ -3783,14 +3785,18 @@ die eedc für die Stunde zählt.
 1. Am Befund **«Zähler getauscht»** klicken — in den Datenquellen öffnet sich beim Feld der Dialog **«Zähler getauscht (gleiche
    Quelle)»**; **«Getauscht am»** steht auf der Zeit, zu der der Zählerstand springt bzw. zurückkehrt.
 2. Die Sätze im Dialog lesen: Sie nennen die Zeit des Sprungs, den Stand davor und danach und — ist die Stunde schon
-   gespeichert — was sie danach zählt.
+   gespeichert — was sie danach zählt. Ändert sich der Stand dort mit einem einzelnen Schritt, den eedc nicht von gezähltem
+   Verbrauch unterscheiden kann (etwa nachdem er eine Zeit lang still stand), sagt der Dialog das und nennt die Menge, die nach
+   dem Eintrag nicht zählt.
 3. **«Eintragen»** klicken. Darunter steht «Ein Eintrag lässt sich nicht zurücknehmen.»
 4. Erneut prüfen: im Daten-Checker **«Aktualisieren»** — nach dem Eintrag ist die Stunde aus der Liste verschwunden. Steht im
    Dialog statt **«Eintragen»** ein Satz, dass dort kein Sprung zu sehen ist oder die Stunde danach weniger als nichts zählte,
    ist nichts eingetragen: die Zeit unter **«Getauscht am»** prüfen.
 
-Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Auch einen kleinen Sprung nach oben, der wie
-Verbrauch aussehen könnte, trägt der Dialog in der genannten Stunde ein: eedc nimmt dort den größten Schritt des Zählerstands.
+Stimmt der Sprung (der Zähler hat wirklich so viel gezählt), ist nichts zu tun. Für die letzten 31 Tage prüft eedc dazu die
+gespeicherten Zählerstände: die Prüfung nennt eine Stunde nur, wenn der Stand dort die Höhe wechselt oder sich mit einem
+einzelnen Schritt ändert, der fast die ganze Menge der Stunde trägt. Ändert er sich gleichmäßig (etwa beim Laden) oder in zwei
+ähnlich großen Schritten, nennt sie die Stunde nicht, und der Dialog trägt dort nichts ein — die Menge zählt.
 Sendet der Publisher den Tageswert statt des fortlaufenden Stands, gilt [Zählerstand springt zwischendurch zurück](#zaehler_ruecksprung).
 
 **Was ohne Handlung gilt**

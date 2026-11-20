@@ -309,23 +309,42 @@ async def tage_der_luecke(db, anlage, key: str, von: datetime, bis: datetime) ->
     trifft (Rand-Tage: nur der Teil außerhalb). Ungemessen ist die Lücke ``[von, bis)`` samt der Zeit vom letzten Stand davor
     bis zu ihr und von ihrem Ende bis zum ersten Stand danach — dort bildet kein Leser eine Differenz (Bauplan «Zu §14»
     Nr. 102, S7: ein Rückgang genau am Fensterende ⇒ der Tag hat keinen Wert)."""
+    return await tage_im_kanal(db, anlage, key, *await reihe_raender(db, anlage.id, key, von, bis))
+
+
+async def reihe_raender(db, anlage_id: int, key: str, von: datetime, bis: datetime) -> tuple[datetime, datetime]:
+    """Die ungemessene Zeit der Reihe um die Lücke ``[von, bis)``: vom letzten Stand davor bis zum ersten Stand ab ihrem Ende."""
+    davor, danach = await _rand_vor(db, anlage_id, key, von), await _rand_ab(db, anlage_id, key, bis)
+    return davor.zeitpunkt if davor is not None else von, danach.zeitpunkt if danach is not None else bis
+
+
+async def tage_im_kanal(db, anlage, key: str, von: datetime, bis: datetime, *,
+                        reihe: Optional[tuple[datetime, datetime]] = None) -> tuple[list[date], list[date]]:
+    """Die Tage, die eine ungemessene Zeit ``[von, bis)`` trifft — ganz (dort kein Wert) bzw. nur teilweise (Rand-Tage) —, je
+    im Tagesfenster der Tagesansicht (``kanal/feld_leser.tagesfenster_am_tag``). **U3-K3:** mit ``reihe`` ist ``[von, bis)``
+    die verworfene Zeit **im Kanal** (er trägt davor Werte und setzt danach mit dem richtigen Sensor an): an einem Kanal-Tag
+    der Bilanz liest die Tagesansicht den Kanal und dessen Ränder gelten, an jedem anderen Tag die der Reihe (``reihe``,
+    ``reihe_raender``)."""
     from backend.models.investition import Investition
+    from backend.services.kanal.bilanz_leser import kanal_tage
     from backend.services.kanal.feld_leser import tagesfenster_am_tag
 
-    davor, danach = await _rand_vor(db, anlage.id, key, von), await _rand_ab(db, anlage.id, key, bis)
-    von = davor.zeitpunkt if davor is not None else von
-    bis = danach.zeitpunkt if danach is not None else bis
     typ = None
     teile = key.split(":")
     if len(teile) == 3 and teile[0] == "inv" and teile[1].isdigit():
         typ = (await db.execute(select(Investition.typ).where(Investition.id == int(teile[1])))).scalar_one_or_none()
     ganz: list[date] = []
     rand: list[date] = []
-    d = von.date() - timedelta(days=1)
-    while d <= bis.date() + timedelta(days=1):
+    erster = min(von, reihe[0]) if reihe is not None else von
+    letzter = max(bis, reihe[1]) if reihe is not None else bis
+    d = erster.date() - timedelta(days=1)
+    while d <= letzter.date() + timedelta(days=1):
         a, b = await tagesfenster_am_tag(db, anlage.id, typ, d)
-        if b > von and a < bis:
-            (ganz if (a >= von and b <= bis) else rand).append(d)
+        v, w = von, bis
+        if reihe is not None and (await kanal_tage(db, anlage.id, d, d)).get(d) is None:
+            v, w = reihe
+        if b > v and a < w:
+            (ganz if (a >= v and b <= w) else rand).append(d)
         d += timedelta(days=1)
     return ganz, rand
 

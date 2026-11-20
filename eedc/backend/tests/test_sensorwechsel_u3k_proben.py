@@ -83,11 +83,9 @@ def _einzelpaar(roh, stunde, grenze_kw=None):
                          ids=["null_5min", "fremd_10min", "null_dann_300"])
 async def test_b1_spanne_der_hoehenwechsel_kanal_reihe_tagesansicht(db, monkeypatch, stand, soll, zeit, sprengsatz):
     from backend.core.berechnungen import rohstand_rand
-    from backend.services.zuordnung_wechsel import rohstand
 
     if sprengsatz:
-        monkeypatch.setattr(rohstand, "sprung_der_stunde", _einzelpaar)
-        monkeypatch.setattr(rohstand_rand, "sprung_der_stunde", _einzelpaar)
+        monkeypatch.setattr(rohstand_rand, "sprung_der_stunde", _einzelpaar)   # U3-K3: rohstand liest über einordnung_der_stunde
     aid = (await _anlage(db)).id
     antw = await betrieb(db, aid, Saat(stand, start=FRUEH, spaet=[getauscht(E)]))
     p = antw[0]["pruefen"]
@@ -126,12 +124,12 @@ async def test_b1_negative_menge_wird_abgelehnt(db, monkeypatch, sprengsatz):
     """Ergäbe ein Eintrag eine negative Stunde (hier mit dem Einzelpaar von U3 b nachgestellt), lehnt die Prüfung ab: kein
     Eintrag, der Satz nennt die Zahl und den Weg. Sprengsatz: ohne die Ablehnung in der Prüfung ⇒ «Eintragen» angeboten (der
     Nachtrag selbst schreibt die negative Stunde trotzdem nicht: ``naht.nachtrag_fortsetzung`` wirft)."""
-    from backend.services.zuordnung_wechsel import rohstand
+    from backend.core.berechnungen import rohstand_rand
     from backend.services.zuordnung_wechsel import zaehler_getauscht as zg
 
     from fastapi import HTTPException
 
-    monkeypatch.setattr(rohstand, "sprung_der_stunde", _einzelpaar)
+    monkeypatch.setattr(rohstand_rand, "sprung_der_stunde", _einzelpaar)      # U3-K3: über einordnung_der_stunde
     if sprengsatz:
         monkeypatch.setattr(zg, "WEG_NEGATIV", zg.WEG_FORTSETZUNG)
     aid = (await _anlage(db)).id
@@ -337,17 +335,25 @@ async def test_b7_ladung_nach_standby_ist_kein_hoehenwechsel(db, monkeypatch, sp
     assert await kanal_tag(db, aid, TAG_E) == pytest.approx(vorher)
 
 
-@pytest.mark.parametrize("stumm_h,weg", [(3, "kein_sprung"), (30, "kein_sprung")])
+@pytest.mark.parametrize("stumm_h,weg", [(3, "kein_sprung"), (30, "fortsetzung")])
 async def test_b7_nachholmenge_nach_stille(db, stumm_h, weg):
     """Publisher stumm, der Scheduler wiederholt den letzten Stand; um 10:20 kommt der wahre Stand. 3 h: 1,5 kWh — kein
     Höhenwechsel. Nach 30 h sind es 15 kWh; U3-K2 (P-2): die Leistung gilt über die Zeit seit dem letzten anderen Stand (0,5 kW,
-    nicht 180 kW in fünf Minuten) — auch das ist kein Höhenwechsel (bis U3-K benannte Grenze; Probe der Regel in
-    ``test_sensorwechsel_u3k2_proben.py``)."""
+    nicht 180 kW in fünf Minuten) — auch das ist kein Höhenwechsel. **U3-K3 (Bauplan Nr. 163, neue Erwartung für 30 h):** der
+    Schritt trägt mehr als 90 % des Zuwachses der Stunde — ein Einzelschritt, eintragbar auf das Wort des Anwenders; der Satz
+    nennt die stille Zeit und die Menge, die dann nicht zählt. 3 h: 1,5 kWh neben 0,29 kWh gewöhnlichen Schritten der Stunde
+    (84 %) — kein Einzelschritt, abgelehnt."""
     def stand(t):
         return w(E - timedelta(hours=stumm_h)) if E - timedelta(hours=stumm_h) <= t < E else w(t)
     aid = (await _anlage(db)).id
     await betrieb(db, aid, Saat(stand, start=FRUEH))
-    assert (await _pruefe(db, aid, E))["weg"] == weg
+    p = await _pruefe(db, aid, E)
+    assert p["weg"] == weg
+    if weg == "fortsetzung":
+        assert p["eintragen"] is True and p["saetze"][0] == (
+            "Der Zählerstand steht von 07.06.2026 04:20 bis 08.06.2026 10:20 Uhr still und ändert sich dann von 5.230,2 auf "
+            "5.245,2 kWh. Ob das ein Tausch ist oder die gezählte Menge der stillen Zeit, erkennt eedc nicht. Trägst du den "
+            "Tausch ein, zählt eedc diese 15,00 kWh nicht.")
 
 
 async def _a(db, aid):

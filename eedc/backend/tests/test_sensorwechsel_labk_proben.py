@@ -401,7 +401,9 @@ async def test_w5_vorschau_in_der_tauschstunde_nennt_keine_zukunft(db, monkeypat
     zukunft = any("04.11.2026 00:00" in x for x in s)
     assert zukunft is (variante == "ende_in_der_zukunft"), s
     if variante == "gebaut":
-        assert any(x.startswith(f"Vom {START:%d.%m.%Y %H:%M} Uhr bis jetzt füllt nichts") for x in s), s
+        # U3-K3 (Nachmessung U3-K2, Satz B): «bis jetzt» → «bis zum Ende der laufenden Stunde» (die Zeit reicht bis zur
+        # nächsten vollen Stunde; weiterhin kein Zeitpunkt nach jetzt)
+        assert any(x.startswith(f"Vom {START:%d.%m.%Y %H:%M} Uhr bis zum Ende der laufenden Stunde füllt nichts") for x in s), s
         assert kr.SATZ_KANAL_OHNE_GESCHICHTE in s and "noch keine Stundenwerte" in kr.SATZ_KANAL_OHNE_GESCHICHTE
 
 

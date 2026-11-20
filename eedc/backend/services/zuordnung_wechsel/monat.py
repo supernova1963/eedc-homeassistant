@@ -16,6 +16,10 @@ durchlaufender Stand (wie beim Kanal-Ersatz). Ohne angesetzten Wechsel bleibt je
 Zeilen ohne ``ansatz`` lesen wie vor U2. **Wo:** vor dem Kanal-Ersatz der fünf Kalendermonats-Wege
 (``kanal/bilanz_leser.monatswerte_mit_kanaelen``) und am laufenden Monat (``api/routes/aktueller_monat``).
 
+**U3-K3 «Regel 2»** (``nullpunkt.py``, Bauplan Nr. 163): endet eine verworfene Zeit an der ersten Zeile ``G`` einer neuen
+Statistik der heutigen Entität (die Lücken-Zeile trägt ``stand_neu_null``), setzt die Hülle im Monat von ``G`` Anker 0 an
+``G`` — die erste Zeile zählt ab HAs Nullpunkt wie bei «beide» (``_nullpunkt_teile``).
+
 **Grenze (a1):** nur, wenn der jüngste angesetzte Wechsel des Schlüssels zur heutigen Entität führt; ein späterer Wechsel
 ohne ``ansatz`` lässt den Schlüssel wie vor U2. Zwei Schlüssel mit derselben heutigen Entität sind nicht unterschieden.
 """
@@ -88,9 +92,13 @@ async def monatswerte_je_abschnitt(db, anlage_id: int, antworten: Sequence, mona
     angesetzten Wechsel die Antworten selbst (bitgleich)."""
     from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
 
+    from backend.services.zuordnung_wechsel.nullpunkt import abschnitte as nullpunkt_abschnitte
+
     antworten = list(antworten)
-    je_key = _angesetzte(await lade_wechsel(db, anlage_id))
-    if not je_key:
+    wechsel = await lade_wechsel(db, anlage_id)
+    je_key = _angesetzte(wechsel)
+    null = {k: v for k, v in nullpunkt_abschnitte(wechsel).items() if k not in je_key}
+    if not je_key and not null:
         return antworten
     from backend.services.ha_statistics_service import _monatsgrenzen_ts, get_ha_statistics_service
 
@@ -102,14 +110,21 @@ async def monatswerte_je_abschnitt(db, anlage_id: int, antworten: Sequence, mona
             continue
         ts_start, ts_ende = _monatsgrenzen_ts(*m)
         ersatz = {}
-        for zeilen in je_key.values():
-            teile = abschnitte_des_fensters(zeilen, ts_start, ts_ende)
+        for eid, teile in [(z[-1].nachher["entity_id"], abschnitte_des_fensters(z, ts_start, ts_ende)) for z in je_key.values()] \
+                + [(eid, _nullpunkt_teile(eid, g, ts_start, ts_ende)) for eid, g in null.values()]:
             if teile:
-                wert = await _summe(svc, zeilen[-1].nachher["entity_id"], teile)
+                wert = await _summe(svc, eid, teile)
                 if wert is not None:
                     ersatz[wert.sensor_id] = wert
         out.append(a if not ersatz else _ersetze(a, ersatz))
     return out
+
+
+def _nullpunkt_teile(eid: str, g: datetime, ts_start: float, ts_ende: float) -> list[tuple[str, float, float, bool]]:
+    """U3-K3 «Regel 2»: im Fenster, in dem die neue Statistik beginnt (``ts_start ≤ G < ts_ende``), ein Abschnitt ab ``G`` mit
+    Anker 0 — davor führt HA für ``eid`` keine Zeile; sonst keiner (der HA-Leser liest wie bisher)."""
+    g_ts = _unix(g)
+    return [(eid, g_ts, ts_ende, True)] if ts_start <= g_ts < ts_ende else []
 
 
 async def _summe(svc, eid: str, teile: list[tuple[str, float, float, bool]]):

@@ -50,6 +50,8 @@ LAGE_KEINE_DIFFERENZ = "keine_differenz"
 GRUND_HOEHE_UNGEPRUEFT = "hoehe_ungeprueft"
 GRUND_KANAL = "kanal"
 GRUND_HOEHENWECHSEL = "hoehenwechsel"
+#: U3-K3: der Kanal setzt nach der Zeit mit der ersten Stunde des richtigen Sensors an (``kanal/korrektur.raender_…``).
+GRUND_KANAL_ERSTE = "kanal_erste"
 
 #: Wortlaute (U3 a; Vorschlag des Rechenwegs G1, festgelegt von der Bau-Sitzung — Liste im Bericht).
 SATZ_MELDUNG = "{name}: Zählerstände vom {von} bis {bis} Uhr verworfen"
@@ -69,6 +71,8 @@ SATZ_GRUND = {
     GRUND_HOEHE_UNGEPRUEFT: ("Home Assistant führt den richtigen Sensor erst ab dem Ende dieser Zeit; ob seine Zählerstände "
                              "auf der Höhe der gespeicherten davor liegen, lässt sich nicht prüfen."),
     GRUND_KANAL: "Die Stundenwerte dieses Felds zählen in dieser Zeit nichts und setzen danach ohne Zuwachs neu an.",
+    GRUND_KANAL_ERSTE: ("Die Stundenwerte dieses Felds zählen in dieser Zeit nichts; danach zählen sie ab der ersten Stunde des "
+                        "richtigen Sensors, was Home Assistant für ihn führt."),
 }
 SATZ_MONATE_GESPEICHERT = "Für {monate} ist ein Monatswert gespeichert; er bleibt, wie er ist."
 
@@ -143,10 +147,19 @@ async def lage_der_zeit(db, anlage, v: VerworfeneZeit) -> Lage:
     from backend.services.zuordnung_wechsel.stueck import tage_der_luecke, tragtag_der_luecke
     from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel, ohne_hoehenwechsel, staende_um
 
+    from backend.services.kanal.korrektur import raender_der_verworfenen_zeit
+    from backend.services.zuordnung_wechsel.stueck import reihe_raender, tage_im_kanal
+
     wechsel = (await lade_wechsel(db, anlage.id)).get(v.sensor_key)
     vor, nach = await staende_um(db, anlage.id, v.sensor_key, v.von, v.bis)
     kanal = await kanal_verwirft(db, anlage.id, v.sensor_key, v)
-    ohne, rand = await tage_der_luecke(db, anlage, v.sensor_key, v.von, v.bis)
+    # U3-K3: trägt der Kanal davor Werte, liest die Tagesansicht ihn — die Tage nach seinen Rändern.
+    raender = await raender_der_verworfenen_zeit(db, anlage.id, v.sensor_key, int(v.von.timestamp()),
+                                                 int(v.bis.timestamp())) if kanal else None
+    ohne, rand = (await tage_im_kanal(db, anlage, v.sensor_key, datetime.fromtimestamp(raender[0]),
+                                      datetime.fromtimestamp(raender[1]),
+                                      reihe=await reihe_raender(db, anlage.id, v.sensor_key, v.von, v.bis))
+                  if raender is not None else await tage_der_luecke(db, anlage, v.sensor_key, v.von, v.bis))
     monate = _monate(v.von, v.bis)
     gespeichert = await vq.abschluss_monate(db, anlage.id)
     la = Lage(v, LAGE_KEINE_DIFFERENZ, tage_ohne=ohne, tage_rand=rand, monate=monate,
@@ -156,7 +169,7 @@ async def lage_der_zeit(db, anlage, v: VerworfeneZeit) -> Lage:
         la.tage_ohne = [d for d in ohne if d != la.tag]
         la.tage_rand = [d for d in rand if d != la.tag]
     else:
-        la.grund = GRUND_KANAL if kanal else _grund(wechsel, v)
+        la.grund = (GRUND_KANAL_ERSTE if raender is not None and raender[2] else GRUND_KANAL) if kanal else _grund(wechsel, v)
     return la
 
 

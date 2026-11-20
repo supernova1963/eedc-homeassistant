@@ -12,10 +12,13 @@ die Naht-Stunde diese Menge trägt (``verschiebung_der_naht``) — Kanal und Rei
 **Wo der Zähler springt** (``sprung_der_stunde``): ein Eintrag «Zähler getauscht» sagt, dass der Stand an diesem Zeitpunkt die
 Höhe wechselt. Gesucht werden in den Paaren aufeinanderfolgender Rohstände, deren späterer Stand in der Stunde des Zeitpunkts
 liegt, die Schritte, die ein **Höhenwechsel** sind (``hoehenwechsel``): ein Rückgang (ein Zähler fällt nie) oder ein Schritt nach
-oben, dessen **Leistung** über ``SPRUNG_FAKTOR`` × der größten Leistung der Rohstände der ``BEZUG`` davor **und** über der Grenze
+oben, dessen **Leistung** über ``SPRUNG_FAKTOR`` × der größten Leistung der gewöhnlichen Schritte der ``BEZUG`` davor **und** über der Grenze
 «mehr, als eine Anlage in einer Stunde leisten kann» liegt (``grenze_kw``, Befund «Zählerstand springt» B2 (b): max(100,
 1,5 × kWp) kWh je Stunde, als kW; ohne Grenze — andere Einheit — mindestens ``SPRUNG_MIN``). Gewöhnliche Ladungen nach Stillstand
-sind damit keine Höhenwechsel (U3-K, B7: am HEAD galt nach 24 h Stillstand jeder Schritt über 1 kWh als Sprung).
+sind damit keine Höhenwechsel (U3-K, B7: am HEAD galt nach 24 h Stillstand jeder Schritt über 1 kWh als Sprung). **Gewöhnlich**
+heißt (U3-K3, K2-B1): ein Schritt, der selbst kein Höhenwechsel ist — die Rückkehr eines ersten kurzen Null- oder Fremdstands
+hebt den Vergleich nicht, ein zweiter binnen 24 Stunden bleibt ein Höhenwechsel (``_hoehenwechsel_alle``, in Zeitfolge; mit und
+ohne Grenze dieselbe Regel).
 
 **Die Leistung eines Schritts** (U3-K2, P-2, Bauplan Nr. 161) ist der Schritt ÷ die Zeit **seit der Stand zuletzt anders war**
 (``seit_dem_letzten_anderen``: vom ersten Rohstand mit dem Wert vor dem Schritt bis zum Rohstand danach) — nicht ÷ die fünf
@@ -24,14 +27,19 @@ Stand, ist der Schritt die Menge der ganzen stillen Zeit (Nachholmenge: 15 kWh n
 Höhenwechsel. Ein gewöhnlicher Schritt (der Stand davor hat sich im Schritt davor geändert) behält die fünf Minuten. Die Zeit reicht
 höchstens bis zum ersten gelesenen Rohstand (``BEZUG`` vor der Stunde) zurück. Ein echter Tausch nach einer Pause bleibt ein
 Höhenwechsel, wenn sein Schritt über der Grenze dieser Zeit liegt (+2 000 kWh nach 2 h: 1 000 kW).
-**Benannte Grenze:** ein kleiner Versatz nach oben — unter dem, was die Anlage seit dem letzten anderen Stand leisten kann (bei der
-Grenze 100 in fünf Minuten etwa 8 kWh, nach einer Stunde Stillstand 100 kWh) — ist nach dieser Regel kein Höhenwechsel.
 
-**Der Befund entscheidet mit** (U3-K2, P-3): nennt der Daten-Checker «Zählerstand springt (MQTT)» die Stunde
-(``zaehlerstand_sprung.finde_standspruenge`` am Kanal), sieht aber die Leistung keinen Höhenwechsel (ein reifer Zähler mit
-kleinem Tageszuwachs, ein Schritt unter der Grenze), ist der **größte Schritt nach oben** der Stunde der Höhenwechsel
-(``sprung_der_stunde(…, benannt=True)``) — eine Entscheidung, zwei Verbraucher: kein Befund, dessen Knopf «Zähler getauscht»
-ablehnt. Nennt kein Befund die Stunde, bleibt es bei der Leistung (Ladung nach Standby, Nachholmenge).
+**Drei Ergebnisse je Stunde** (U3-K3, Bauplan Nr. 163, ``einordnung_der_stunde`` — eine Regel für Dialog, Befund, Nachtrag und
+Stundenlauf; der Dialog fragt den Befund nicht mehr):
+
+1. ``EINDEUTIG`` — ein Höhenwechsel nach Leistung (oben); die Spanne der Stunde (unten).
+2. ``EINZELSCHRITT`` — kein Höhenwechsel nach Leistung, aber ein Schritt nach oben trägt mindestens ``EINZELSCHRITT_ANTEIL`` des
+   Zuwachses nach oben der Stunde (ein einziger Schritt nach oben ist immer einer): ein Tausch nach einer Pause, ein kleiner
+   Versatz an einem reifen Zähler — oder die Nachholmenge einer stillen Zeit. Ob Tausch oder gezählte Menge, erkennt eedc
+   nicht; eingetragen wird er auf das Wort des Anwenders (der Dialog sagt, welche Menge dann nicht zählt), und ein bestehender
+   Eintrag gilt dort als Höhenwechsel. Der Befund «Zählerstand springt (MQTT)» nennt eine solche Stunde nur, wenn sein Kern sie
+   nennt.
+3. ``KEIN_SPRUNG`` — alles andere (fortlaufende Schritte, Ladung über die Stunde). **Benannte Grenze:** zwei vergleichbare
+   Schritte in einer Stunde (ein Sprung in zwei Schritten, eine Nachholmenge neben einem fremden Versatz) sind kein Sprung.
 
 **Die Spanne der Stunde** (U3-K, B1): trägt die Stunde mehrere Höhenwechsel (ein Gerät meldet fünf Minuten 0 und dann wieder
 seinen Stand; ein anderes Gerät sendet zehn Minuten seinen Stand; ein neues Gerät meldet erst 0, dann 300), sind die Rand-Stände
@@ -48,6 +56,7 @@ Rein (ADR-001): Zeitpunkte und Stände rein, Zahlen raus. Das Laden steht in ``s
 
 from __future__ import annotations
 
+from collections import deque
 from datetime import datetime, timedelta
 from typing import Optional, Sequence
 
@@ -60,6 +69,13 @@ SPRUNG_FAKTOR = 10.0
 SPRUNG_MIN = 1.0
 #: So weit vor dem Schritt liest ``sprung_der_stunde`` die Schritte für den Vergleich.
 BEZUG = timedelta(hours=24)
+#: U3-K3 (Bauplan Nr. 163): ohne Höhenwechsel nach Leistung ist der größte Schritt nach oben der Stunde ein **Einzelschritt**,
+#: wenn er mindestens diesen Anteil des Zuwachses nach oben der Stunde trägt.
+EINZELSCHRITT_ANTEIL = 0.9
+#: Die drei Ergebnisse von ``einordnung_der_stunde``.
+EINDEUTIG = "sprung"
+EINZELSCHRITT = "einzelschritt"
+KEIN_SPRUNG = "kein_sprung"
 _H = 3600.0
 
 Roh = tuple[datetime, float]
@@ -84,60 +100,104 @@ def hoehenwechsel(delta: float, sekunden: float, groesste_leistung_davor: float,
     return ueber_davor and leistung(delta, sekunden) > grenze_kw
 
 
-def _groesste_leistung(rohstaende: Sequence[Roh], i: int) -> float:
-    """Die größte Leistung der Schritte nach oben, die vor dem Paar ``(i − 1, i)`` enden und in die ``BEZUG`` davor fallen."""
-    a = rohstaende[i - 1]
-    return max((leistung(y[1] - x[1], (y[0] - x[0]).total_seconds())
-                for x, y in zip(rohstaende[:i - 1], rohstaende[1:i])
-                if y[0] >= a[0] - BEZUG and y[1] > x[1] and y[0] > x[0]), default=0.0)
-
-
 def seit_dem_letzten_anderen(rohstaende: Sequence[Roh], i: int) -> float:
     """P-2: die Zeit (Sekunden) des Schritts ``(i − 1, i)`` — vom ersten Rohstand mit dem Wert von ``i − 1`` (seit der Stand
     zuletzt anders war; ohne Wiederholung ist das ``i − 1`` selbst) bis ``i``."""
+    return (rohstaende[i][0] - rohstaende[_erster_gleicher(rohstaende, i)][0]).total_seconds()
+
+
+def _erster_gleicher(rohstaende: Sequence[Roh], i: int) -> int:
     j = i - 1
     while j > 0 and rohstaende[j - 1][1] == rohstaende[i - 1][1]:
         j -= 1
-    return (rohstaende[i][0] - rohstaende[j][0]).total_seconds()
+    return j
+
+
+def _hoehenwechsel_alle(rohstaende: Sequence[Roh], grenze_kw: Optional[float]) -> list[bool]:
+    """Je Paar ``(i − 1, i)``, in Zeitfolge: ist der Schritt ein Höhenwechsel? Die Vergleichsleistung eines Schritts ist die
+    größte Leistung der Schritte nach oben, die vor ihm enden und in die ``BEZUG`` davor fallen — **ohne die Schritte, die selbst
+    Höhenwechsel sind** (U3-K3, K2-B1: die Rückkehr eines ersten kurzen Null- oder Fremdstands stünde sonst 24 Stunden im
+    Vergleich, und der zweite binnen 24 Stunden wäre keiner mehr). Dieselbe Regel mit und ohne Grenze der Anlage."""
+    out = [False] * len(rohstaende)
+    gewoehnlich: deque[tuple[datetime, float]] = deque()      # (Ende, Leistung), Leistung fallend — das Maximum vorn
+    for i in range(1, len(rohstaende)):
+        a, b = rohstaende[i - 1], rohstaende[i]
+        while gewoehnlich and gewoehnlich[0][0] < a[0] - BEZUG:
+            gewoehnlich.popleft()
+        out[i] = hoehenwechsel(b[1] - a[1], seit_dem_letzten_anderen(rohstaende, i),
+                               gewoehnlich[0][1] if gewoehnlich else 0.0, grenze_kw)
+        if not out[i] and b[1] > a[1] and b[0] > a[0]:
+            lst = leistung(b[1] - a[1], (b[0] - a[0]).total_seconds())
+            while gewoehnlich and gewoehnlich[-1][1] <= lst:
+                gewoehnlich.pop()
+            gewoehnlich.append((b[0], lst))
+    return out
+
+
+def _in_der_stunde(rohstaende: Sequence[Roh], stunde: datetime) -> range:
+    """Die Indizes ``i`` der Paare ``(i − 1, i)``, deren späterer Stand in ``[stunde, stunde + 1 h)`` liegt."""
+    ende = stunde + timedelta(hours=1)
+    idx = [i for i in range(1, len(rohstaende)) if stunde <= rohstaende[i][0] < ende]
+    return range(idx[0], idx[-1] + 1) if idx else range(0)
 
 
 def hoehenwechsel_der_stunde(rohstaende: Sequence[Roh], stunde: datetime, grenze_kw: Optional[float]) -> list[int]:
     """Die Indizes ``i`` der Paare ``(i − 1, i)``, deren späterer Stand in ``[stunde, stunde + 1 h)`` liegt und deren Schritt ein
-    Höhenwechsel ist — in Zeitfolge. Die Leistung des Schritts gilt über ``seit_dem_letzten_anderen`` (P-2)."""
-    out = []
-    for i in range(1, len(rohstaende)):
-        a, b = rohstaende[i - 1], rohstaende[i]
-        if stunde <= b[0] < stunde + timedelta(hours=1) and hoehenwechsel(
-                b[1] - a[1], seit_dem_letzten_anderen(rohstaende, i), _groesste_leistung(rohstaende, i), grenze_kw):
-            out.append(i)
-    return out
+    Höhenwechsel ist — in Zeitfolge. Die Leistung des Schritts gilt über ``seit_dem_letzten_anderen`` (P-2), die
+    Vergleichsleistung ohne frühere Höhenwechsel (U3-K3)."""
+    alle = _hoehenwechsel_alle(rohstaende, grenze_kw)
+    return [i for i in _in_der_stunde(rohstaende, stunde) if alle[i]]
 
 
 def groesster_schritt_der_stunde(rohstaende: Sequence[Roh], stunde: datetime) -> Optional[int]:
-    """P-3: der Index ``i`` des größten Schritts nach oben ``(i − 1, i)`` mit späterem Stand in ``[stunde, stunde + 1 h)``
-    (bei gleichen Schritten der erste); ``None``, wenn die Stunde keinen Schritt nach oben trägt."""
+    """Der Index ``i`` des größten Schritts nach oben ``(i − 1, i)`` mit späterem Stand in ``[stunde, stunde + 1 h)`` (bei
+    gleichen Schritten der erste); ``None``, wenn die Stunde keinen Schritt nach oben trägt."""
     beste: Optional[int] = None
-    for i in range(1, len(rohstaende)):
+    for i in _in_der_stunde(rohstaende, stunde):
         d = rohstaende[i][1] - rohstaende[i - 1][1]
-        if stunde <= rohstaende[i][0] < stunde + timedelta(hours=1) and d > 0 and (
-                beste is None or d > rohstaende[beste][1] - rohstaende[beste - 1][1]):
+        if d > 0 and (beste is None or d > rohstaende[beste][1] - rohstaende[beste - 1][1]):
             beste = i
     return beste
 
 
+def einzelschritt_der_stunde(rohstaende: Sequence[Roh], stunde: datetime) -> Optional[int]:
+    """U3-K3 (Bauplan Nr. 163): der Index des **Einzelschritts** der Stunde — des größten Schritts nach oben, wenn er mindestens
+    ``EINZELSCHRITT_ANTEIL`` des Zuwachses nach oben der Stunde trägt (ein einziger Schritt nach oben ist immer einer); sonst
+    ``None`` (fortlaufende Schritte, Ladung über die Stunde, zwei vergleichbare Schritte)."""
+    g = groesster_schritt_der_stunde(rohstaende, stunde)
+    if g is None:
+        return None
+    zuwachs = sum(max(0.0, rohstaende[i][1] - rohstaende[i - 1][1]) for i in _in_der_stunde(rohstaende, stunde))
+    return g if rohstaende[g][1] - rohstaende[g - 1][1] >= EINZELSCHRITT_ANTEIL * zuwachs else None
+
+
 def sprung_der_stunde(rohstaende: Sequence[Roh], stunde: datetime,
-                      grenze_kw: Optional[float] = None, *, benannt: bool = False) -> Optional[tuple[Roh, Roh]]:
+                      grenze_kw: Optional[float] = None) -> Optional[tuple[Roh, Roh]]:
     """Die Spanne der Höhenwechsel in ``[stunde, stunde + 1 h)``: ``(letzter Rohstand vor dem ersten, erster Rohstand nach dem
-    letzten)``; ``None``, wenn es keinen gibt. ``rohstaende`` aufsteigend, mindestens ab ``BEZUG`` vor der Stunde. ``benannt``
-    (P-3): der Befund «Zählerstand springt (MQTT)» nennt die Stunde — ohne Höhenwechsel nach der Leistung ist dann der größte
-    Schritt nach oben der Stunde der Höhenwechsel."""
+    letzten)``; ``None``, wenn es keinen gibt. ``rohstaende`` aufsteigend, mindestens ab ``BEZUG`` vor der Stunde."""
     idx = hoehenwechsel_der_stunde(rohstaende, stunde, grenze_kw)
-    if not idx and benannt:
-        g = groesster_schritt_der_stunde(rohstaende, stunde)
-        idx = [] if g is None else [g]
     if not idx:
         return None
     return rohstaende[idx[0] - 1], rohstaende[idx[-1]]
+
+
+def einordnung_der_stunde(rohstaende: Sequence[Roh], stunde: datetime,
+                          grenze_kw: Optional[float] = None) -> tuple[str, Optional[tuple[Roh, Roh]]]:
+    """**Eine Regel** für Dialog, Befund, Nachtrag und Stundenlauf (U3-K3, Bauplan Nr. 163): ``(Art, Paar)`` — ``EINDEUTIG``
+    mit der Spanne der Höhenwechsel (``sprung_der_stunde``) · ``EINZELSCHRITT`` mit den zwei Ständen am Schritt
+    (``einzelschritt_der_stunde``) · ``KEIN_SPRUNG`` ohne Paar."""
+    paar = sprung_der_stunde(rohstaende, stunde, grenze_kw)
+    if paar is not None:
+        return EINDEUTIG, paar
+    g = einzelschritt_der_stunde(rohstaende, stunde)
+    if g is not None:
+        return EINZELSCHRITT, (rohstaende[g - 1], rohstaende[g])
+    return KEIN_SPRUNG, None
+
+
+def menge_des_schritts(paar: tuple[Roh, Roh]) -> float:
+    """Was ein eingetragener Tausch an ``paar`` nicht zählt: Stand danach − Stand davor."""
+    return paar[1][1] - paar[0][1]
 
 
 def menge_der_naht(stand_alt_ende: float, stand_davor: float, stand_naht: float, stand_neu_null: float) -> float:
@@ -158,6 +218,7 @@ def bruecke(kanalwert_davor: float, stand_davor: float, stand_danach: float, wer
     return kanalwert_davor + (stand_danach - stand_davor) - wert_danach
 
 
-__all__ = ["BEZUG", "RUECKGANG_MIN", "SPRUNG_FAKTOR", "SPRUNG_MIN", "bruecke", "groesster_schritt_der_stunde", "hoehenwechsel",
-           "hoehenwechsel_der_stunde", "leistung", "menge_der_naht", "seit_dem_letzten_anderen", "sprung_der_stunde",
-           "verschiebung_der_naht"]
+__all__ = ["BEZUG", "EINDEUTIG", "EINZELSCHRITT", "EINZELSCHRITT_ANTEIL", "KEIN_SPRUNG", "RUECKGANG_MIN", "SPRUNG_FAKTOR",
+           "SPRUNG_MIN", "bruecke", "einordnung_der_stunde", "einzelschritt_der_stunde", "groesster_schritt_der_stunde",
+           "hoehenwechsel", "hoehenwechsel_der_stunde", "leistung", "menge_der_naht", "menge_des_schritts",
+           "seit_dem_letzten_anderen", "sprung_der_stunde", "verschiebung_der_naht"]

@@ -235,7 +235,7 @@ async def test_s3_stueck_mit_spaeter_ha_geschichte_vorschau_gleich_lauf(db, eing
         echt = kr._luecke
 
         async def ganz(db_, a_, w0, ab, ha_svc):
-            return None if a_.stueck else await echt(db_, a_, w0, ab, ha_svc)
+            return (None, None) if a_.stueck else await echt(db_, a_, w0, ab, ha_svc)     # U3-K3: (Lücke, Nullpunkt)
         monkeypatch.setattr(kr, "_luecke", ganz)
     a, wb, key = await v._anlage(db, spiegel=False)
     k = (await sw.pruefe_stueck(a.id, _body(key), db))["korrektur"]

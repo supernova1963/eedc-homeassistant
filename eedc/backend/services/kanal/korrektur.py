@@ -12,8 +12,9 @@ es keine richtige Geschichte (dieselbe ``mqtt_key`` trägt beide Publisher) — 
    Gelöscht werden **nur** deren Zeilen im Intervall — Zeilen eines Abschnitts der richtigen Quelle bleiben.
 2. **Die richtige Quelle beginnt mit ihrer ersten Zeile** ``h0`` (erste HA-Zeile ab ``w0``) und trägt **einen** Versatz nach
    **R2** (§7 Nr. 6): ``Versatz = Kanalwert am letzten Stand vor w0 − Stand der richtigen Quelle`` — am selben Zeitpunkt, wenn HA
-   ihn führt (die Stunden danach zählen ihren eigenen Zuwachs), sonst an ``h0`` (die erste Stunde zählt 0). Die leere Zeit
-   zählt 0. Eine spätere Quellzeile derselben Entität entfällt (ihr Abschnitt geht in den neuen auf); spätere Quellen anderer
+   ihn führt (die Stunden danach zählen ihren eigenen Zuwachs); beginnt HAs Statistik erst an ``h0`` (keine Zeile davor —
+   U3-K3 «Regel 2»), an ihrem Nullpunkt (die erste Stunde zählt, was HA für sie führt); sonst an ``h0`` (die erste Stunde zählt
+   0). Die leere Zeit zählt 0. Eine spätere Quellzeile derselben Entität entfällt (ihr Abschnitt geht in den neuen auf); spätere Quellen anderer
    Entitäten rücken um die Änderung des Versatzes mit (sonst sprünge der Kanal an ihrer Grenze).
 3. **Die falsche Quelle bleibt mit** ``verworfen_ts`` **genau über die Zeit, die leer bleibt** (``[w0, h0)``, ohne ``h0`` bis
    zur nächsten Quelle): an ``w0`` eine Quellzeile mit Marke (die vorhandene wird markiert, sonst eine neue mit der Herkunft der
@@ -193,12 +194,41 @@ async def erste_ha_zeile(ha_svc, eid: str, w0: int, bis_ts: int) -> Optional[int
     return int(round(kz["erste_ts"]))
 
 
+async def ha_beginnt_bei(ha_svc, eid: str, h0: int) -> bool:
+    """U3-K3 (Bauplan Nr. 163, «Regel 2»): ist ``h0`` die erste Zeile, die Home Assistant für ``eid`` überhaupt führt (keine
+    Zeile davor)? Dann beginnt dort eine neue Statistik, und HA zählt ihre erste Zeile ab ihrem Nullpunkt."""
+    kz = await asyncio.to_thread(ha_svc.get_stundenzeilen_kennzahlen, eid, 0, h0 - 1)
+    return kz is not None and not kz.get("anzahl")
+
+
+async def _nullpunkt(ha_svc, kanal: Kanal, eid: str, h0: int) -> Optional[float]:
+    """Der Nullpunkt einer neuen Statistik an ihrer ersten Zeile ``h0`` in der Wertspalte des Kanals: 0 für eine Menge (HAs
+    Summe beginnt bei 0), für einen Stand ``state − sum`` der ersten Zeile (``zaehler_naht.nullpunkt_neu``, wie «beide»)."""
+    from backend.core.berechnungen.zaehler_naht import nullpunkt_neu
+    from backend.services.kanal.nachfuellen import _zeilen_aus_ha
+
+    if kanal.art != ART_STAND:
+        return 0.0
+    gelesen = await asyncio.to_thread(ha_svc.get_stundenzeilen_mehrere, {eid: h0 - 1}, h0)
+    if eid not in gelesen:
+        return None
+    meta, roh = gelesen[eid]
+    zeilen = _zeilen_aus_ha(kanal.id, kanal.art, meta, [z for z in roh if int(round(z["start_ts"])) == h0]) or []
+    return nullpunkt_neu(zeilen[0].get("state"), zeilen[0].get("sum")) if zeilen else None
+
+
 async def _versatz(db, kanal: Kanal, ref: Optional[tuple[int, float]], ha_svc, eid: str, h0: int,
-                   spaeter: Optional[KanalQuelle]) -> float:
-    """R2 (§7 Nr. 6)."""
+                   spaeter: Optional[KanalQuelle], nullpunkt: bool = False) -> float:
+    """R2 (§7 Nr. 6). **U3-K3 «Regel 2»:** führt Home Assistant den richtigen Sensor erst ab ``h0`` (keine Zeile davor — eine
+    neue Statistik), setzt der Versatz an ihrem Nullpunkt an (``_nullpunkt``, dieselbe Regel wie Ansatz «beide»): die erste
+    Zeile zählt, was HA für sie führt, statt 0 — nur, wenn die Korrektur es so entschieden hat (``nullpunkt``: kein Rand-Stand
+    prüft die Höhe, ``zuordnung_wechsel/korrektur._luecke``). Führt HA davor Zeilen, nur nicht am Stand ``ref``, wie bisher an
+    ``h0``."""
     if ref is None:
         return float(spaeter.offset) if spaeter is not None else 0.0
     wert = await _ha_wert(ha_svc, kanal, eid, ref[0])
+    if wert is None and nullpunkt and await ha_beginnt_bei(ha_svc, eid, h0):
+        wert = await _nullpunkt(ha_svc, kanal, eid, h0)
     if wert is None:
         wert = await _ha_wert(ha_svc, kanal, eid, h0)
     return ref[1] - (wert or 0.0)
@@ -330,8 +360,37 @@ async def ist_ueberbrueckt(db: AsyncSession, anlage_id: int, key: str, von_ts: i
     return erwartet is not None and abs(erwartet - float(nach.offset)) < 1e-6
 
 
+async def raender_der_verworfenen_zeit(db: AsyncSession, anlage_id: int, key: str, von_ts: int,
+                                       bis_ts: int) -> Optional[tuple[int, int, bool]]:
+    """U3-K3: die Ränder einer verworfenen Zeit ``[von_ts, bis_ts)`` **im Kanal** — ``(w0, h0, zählt)``: die verworfene
+    Quellzeile ab einer Stunde vor ``von_ts`` (``w0``), die nächste nicht verworfene danach (``h0``) und ob deren erste Zeile über
+    dem letzten Stand vor ``w0`` liegt (die erste Stunde des richtigen Sensors zählt, «Regel 2» bzw. der Stundenlauf an einer
+    neuen Statistik). ``None``, wenn der Kanal die Zeit nicht als verworfen führt, davor keinen Stand trägt oder danach nicht die
+    richtige Quelle aus Home Assistant ansetzt (MQTT: wie bisher nach den gespeicherten Zählerständen, benannte Grenze)."""
+    kanal = (await db.execute(select(Kanal).where(and_(Kanal.anlage_id == anlage_id, Kanal.key == key)))).scalar_one_or_none()
+    if kanal is None:
+        return None
+    quellen = (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == kanal.id)
+                                .order_by(KanalQuelle.gueltig_ab))).scalars().all()
+    verworfen = next((q for q in quellen if q.verworfen_ts and von_ts - _STUNDE <= q.gueltig_ab < bis_ts), None)
+    if verworfen is None:
+        return None
+    nach = next((q for q in quellen if q.gueltig_ab > verworfen.gueltig_ab and q.verworfen_ts is None), None)
+    if nach is None or nach.familie != FAMILIE_SPIEGEL:
+        return None                     # nur, wo danach die richtige Quelle aus Home Assistant ansetzt (wie die Vorschau)
+    ref = await _referenz(db, kanal, verworfen.gueltig_ab)
+    if ref is None:
+        return None
+    spalte = getattr(KanalStatistik, _wertspalte(kanal.art))
+    erste = (await db.execute(select(spalte).where(and_(KanalStatistik.kanal_id == kanal.id,
+                                                        KanalStatistik.start_ts == nach.gueltig_ab)))).scalar_one_or_none()
+    zaehlt = erste is not None and float(erste) + float(nach.offset) - ref[1] > 1e-9
+    return verworfen.gueltig_ab, nach.gueltig_ab, zaehlt
+
+
 async def korrigiere_kanal(db: AsyncSession, anlage_id: int, key: str, f: Optional[int], ab: int, richtig: Optional[str],
-                           *, ha_svc=None, jetzt_ts: int, bis_ts: int, bruecke: bool = False) -> KanalKorrektur:
+                           *, ha_svc=None, jetzt_ts: int, bis_ts: int, bruecke: bool = False,
+                           nullpunkt: bool = False) -> KanalKorrektur:
     """Schritte 1–3 in der Sitzung des Aufrufers (kein Commit): löschen, Quellen umschreiben, abgeleitete Kanäle und gemerkte
     Tage verwerfen. ``richtig`` = heutige HA-Entität oder ``None`` (MQTT/ohne HA — nichts wird gefüllt); ``ha_svc`` ``None``
     ⇒ ebenfalls ohne Füllen. Das Füllen (Schritt 4) macht ``fuelle_kanal`` nach dem Commit."""
@@ -352,7 +411,7 @@ async def korrigiere_kanal(db: AsyncSession, anlage_id: int, key: str, f: Option
     versatz = None
     if h0 is not None:
         versatz = await _versatz(db, kanal, ref, ha_svc, richtig, h0,
-                                 next(iter(_spaetere_richtige(list(lage.quellen), ab, richtig)), None))
+                                 next(iter(_spaetere_richtige(list(lage.quellen), ab, richtig)), None), nullpunkt)
     erg.markiert = await _quellen_umschreiben(db, kanal, lage, ab, h0, versatz, ref, richtig, jetzt_ts, bruecke)
     erg.abgeleitet_familien = await abhaengige_abgeleitete(db, anlage_id, key)
     erg.abgeleitet_verworfen = await verwerfe_ab(db, anlage_id, lage.w0,
