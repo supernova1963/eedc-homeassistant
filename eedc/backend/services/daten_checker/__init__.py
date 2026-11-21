@@ -163,8 +163,6 @@ class DatenChecker(
         ergebnisse.extend(await self._check_mqtt_zaehlerstand_springt(anlage))
         # Verdacht N-803: ein versetzter Abschnitt in eedcs Standreihe (Stände eines anderen Sensors) — Tageswerte an den Rändern.
         ergebnisse.extend(await self._check_zaehler_versatz(anlage))
-        # Sensorwechsel S4 (B-7): verzeichneter Wechsel ohne Grund, nach dem die Abfrage gefragt hätte — «Grund nachtragen».
-        ergebnisse.extend(await self._check_zuordnung_grund_fehlt(anlage))
         # Sensorwechsel U3 a (G1/G2): verworfene, nicht wieder gefüllte Zeit je Lücke — Auskunft; gespeicherter Monatswert eines
         # vom Wechsel berührten Monats, der nicht mehr zur Quelle passt — «Monat öffnen».
         ergebnisse.extend(await self._check_zaehler_zeit_verworfen(anlage))

@@ -37,7 +37,7 @@ describe('Lab-K W1 — Ein- und Mehrzahl', () => {
 
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2026-10-08T00:00:00', tage: 1, stand_alt: 6117.8, stand_neu: 1.8,
-  sensor_key: 'inv:42:pv_erzeugung_kwh', label: 'P1b – PV-Erzeugung', verzeichnet: true, vorgabe_falsch_seit: null,
+  sensor_key: 'inv:42:pv_erzeugung_kwh', label: 'P1b – PV-Erzeugung', verzeichnet: true,
   korrektur: null, bleiben: null,
 }
 

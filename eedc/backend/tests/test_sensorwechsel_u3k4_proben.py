@@ -33,7 +33,7 @@ from backend.models.zuordnung_wechsel import ZuordnungWechsel
 from backend.tests import test_daten_checker_zaehler_versatz as zv
 from backend.tests.test_daten_checker_zaehler_versatz import ha  # noqa: F401 — Fixture
 from backend.tests.test_sensorwechsel_u3b_proben import (  # noqa: F401
-    NETZ, Saat, _anlage_frisch, _nachtrag_bleiben, _wechsel_topic, _wechsel_zeilen, betrieb, kanal_stunde, zw,
+    NETZ, Saat, _anlage_frisch, _wechsel_topic, _wechsel_zeilen, betrieb, kanal_stunde, zw,
 )
 from backend.tests.test_sensorwechsel_u3k3_proben import (  # noqa: F401
     AB_B, EN, FS_B, H0_B, JETZT_B, QA_B, QC_B, R, ST, T, TAGE, _anlage, _befund, _dialog, _drei, _kanal, _vorlauf, w,
@@ -255,95 +255,19 @@ def _bleiben_stand(welt: str):
     return stand
 
 
-def _paar_wie_u3k3(rohstand):
-    """Sprengsatz: wie U3-K3 — der Nachtrag nähme den Schritt der Stunde, der sich abhebt, als Rand."""
-    echt = rohstand.paar_des_wechsels
-
-    async def jedes(db_, aid_, mk_, t_, **kw):
-        schritt = await rohstand.abgehoben_in_der_stunde(db_, aid_, mk_, t_.replace(minute=0, second=0, microsecond=0))
-        return schritt if schritt is not None else await echt(db_, aid_, mk_, t_, **kw)
-    return jedes
-
-
-@pytest.mark.parametrize("welt,takt,soll,weg,sprengsatz", [
-    *[(welt, takt, soll, weg, False) for welt, takt, soll in (("takt60", 60, 14.4), ("ganzzahl", 5, 15.0),
-                                                             ("takt15_last", 15, 20.4), ("takt5", 5, 14.35))
-      for weg in ("nachtrag", "sofort")],
-    ("takt15_last", 15, 14.25, "nachtrag", True),
-], ids=["takt60-nachtrag", "takt60-sofort", "ganzzahl-nachtrag", "ganzzahl-sofort", "takt15_last-nachtrag", "takt15_last-sofort",
-        "takt5-nachtrag", "takt5-sofort", "takt15_last-nachtrag-sprengsatz_abgehobener_schritt_als_rand"])
-async def test_p3_bleiben_ohne_hoehenwechsel_nachtrag_gleich_sofort(db, monkeypatch, welt, takt, soll, weg, sprengsatz):
-    """K3-B1, R3: Topic-Wechsel um 10:22, dasselbe Gerät zählt weiter; «bleiben» sofort oder um 11:10 nachgetragen — beide Wege
-    zählen den Tag gleich (14,4 · 15,0 · 20,4 · 14,35). Sprengsatz: der Schritt der Stunde, der sich abhebt, gälte als Rand (wie
-    U3-K3) ⇒ die Last 10:30–10:45 fiele weg (14,25)."""
-    from backend.services.zuordnung_wechsel import rohstand
-
-    if sprengsatz:
-        monkeypatch.setattr(rohstand, "paar_des_wechsels", _paar_wie_u3k3(rohstand))
+@pytest.mark.parametrize("welt,takt,soll", [("takt60", 60, 14.4), ("ganzzahl", 5, 15.0), ("takt15_last", 15, 20.4),
+                                             ("takt5", 5, 14.35)],
+                         ids=["takt60-sofort", "ganzzahl-sofort", "takt15_last-sofort", "takt5-sofort"])
+async def test_p3_bleiben_ohne_hoehenwechsel_nachtrag_gleich_sofort(db, monkeypatch, welt, takt, soll):
+    """K3-B1, R3: Topic-Wechsel um 10:22, dasselbe Gerät zählt weiter; «bleiben» sofort — der Tag zählt 14,4 · 15,0 · 20,4 ·
+    14,35. Der Weg «um 11:10 nachgetragen» und sein Sprengsatz (der Schritt der Stunde als Rand des Nachtrags) sind mit «Grund
+    nachtragen» entfernt (Weg B, Sitzung B2); der Testname bleibt."""
     u = T + timedelta(minutes=2)
-    hand = ([(u, _wechsel_topic(u, None)), (T + timedelta(minutes=50), _nachtrag_bleiben)] if weg == "nachtrag"
-            else [(u, _wechsel_topic(u, "fortsetzung"))])
     aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(_bleiben_stand(welt), start=ST, ende=EN, takt=takt, handlungen=hand))
+    await betrieb(db, aid, Saat(_bleiben_stand(welt), start=ST, ende=EN, takt=takt,
+                                handlungen=[(u, _wechsel_topic(u, "fortsetzung"))]))
     k, r, t = await _drei(db, aid)
     assert k[0] == r[0] == t[0] == soll
-
-
-async def _pruef_antwort_nachtrag(db, aid) -> dict:
-    from backend.services.zuordnung_wechsel import nachtrag as nt
-
-    zw.vergiss(db)
-    row = (await _wechsel_zeilen(db, aid))[0]
-    la = await nt.lage(db, await _anlage_frisch(db, aid), row.id)
-    return nt.antwort(la, "Netzbezug")
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_satz"])
-async def test_p3_pruef_antwort_nennt_den_schritt_der_stunde(db, monkeypatch, sprengsatz):
-    """Die Last 10:30–10:45 (Takt 15) hebt sich ab und liegt nicht im Paar um den Wechsel 10:22: die Prüf-Antwort von «bleiben»
-    nennt sie (``SATZ_BLEIBEN_SCHRITT``) neben ``SATZ_BLEIBEN_MQTT``. Sprengsatz: ohne den Satz."""
-    from backend.core.zahlenformat import fmt_zahl
-    from backend.services.zuordnung_wechsel import rohstand
-
-    if sprengsatz:
-        async def nichts(*_a, **_k):
-            return None
-        monkeypatch.setattr(rohstand, "satz_bleiben_schritt", nichts)
-    aid = (await _anlage(db)).id
-    u = T + timedelta(minutes=2)
-    stand = _bleiben_stand("takt15_last")
-    await betrieb(db, aid, Saat(stand, start=ST, ende=EN, takt=15, handlungen=[(u, _wechsel_topic(u, None))]))
-    satz = (await _pruef_antwort_nachtrag(db, aid))["bleiben_satz"]
-    alt, neu = stand(H10 + timedelta(minutes=30)), stand(H10 + timedelta(minutes=45))
-    erwartet = rohstand.SATZ_BLEIBEN_SCHRITT.format(zeit="08.06.2026 10:45", alt=fmt_zahl(alt, 2), neu=fmt_zahl(neu, 2),
-                                                    menge=fmt_zahl(neu - alt, 2), einheit="kWh")
-    assert satz.startswith(rohstand.SATZ_BLEIBEN_MQTT)
-    assert (erwartet in satz) is not sprengsatz
-
-
-async def test_p3_pruef_antwort_schritt_im_paar_ohne_hinweis(db):
-    """Der neue Publisher meldet nach 2 h Stille um 10:20 +90, der Wechsel steht genau um 10:20: der Schritt, der sich abhebt,
-    IST das Paar um den Zeitpunkt (10:15 → 10:20) — «bleiben» zählt ihn nicht, also kein Hinweis «… zählt eedc diese … mit»
-    (eigener Mutant K16)."""
-    from backend.services.zuordnung_wechsel import rohstand
-
-    def stand(t):
-        if T - timedelta(hours=2) <= t < T:
-            return w(T - timedelta(hours=2))
-        return w(t) + (90.0 if t >= T else 0.0)
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(stand, start=ST, ende=EN, handlungen=[(T, _wechsel_topic(T, None))]))
-    assert (await _pruef_antwort_nachtrag(db, aid))["bleiben_satz"] == rohstand.SATZ_BLEIBEN_MQTT
-
-
-async def test_p3_pruef_antwort_ohne_schritt(db):
-    """Gleichmäßiger Betrieb (Takt 5): kein Schritt hebt sich ab — nur ``SATZ_BLEIBEN_MQTT``."""
-    from backend.services.zuordnung_wechsel import rohstand
-
-    aid = (await _anlage(db)).id
-    u = T + timedelta(minutes=2)
-    await betrieb(db, aid, Saat(w, start=ST, ende=EN, handlungen=[(u, _wechsel_topic(u, None))]))
-    assert (await _pruef_antwort_nachtrag(db, aid))["bleiben_satz"] == rohstand.SATZ_BLEIBEN_MQTT
 
 
 # ═══ P4/P5 — «Regel 2» (Teil-B-Welt der U3-K3-Proben) ══════════════════════════════════════════════════════════════════

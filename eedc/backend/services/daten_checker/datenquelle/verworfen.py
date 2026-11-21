@@ -29,7 +29,7 @@ ist. Eine spätere Korrektur, die die Lücke ganz überdeckt, hebt sie auf; dann
 **Ein Befund je Ursache:** ``erfassung_stillstand`` lässt die Stellen aus, die allein eine verworfene Zeit eines Bilanz-Zählers
 erklärt (``achsen_der_verworfenen_zeiten``).
 
-Schwesterdateien: ``grund_fehlt.py`` (Wechsel ohne Grund), ``versatz.py`` (versetzter Abschnitt), ``monatswert.py``
+Schwesterdateien: ``versatz.py`` (versetzter Abschnitt), ``monatswert.py``
 (``monatswert_ueberholt``), ``services/daten_checker/erfassung_stillstand.py``.
 """
 
@@ -220,7 +220,7 @@ class ZaehlerZeitVerworfenChecks:
 
     async def _check_zaehler_zeit_verworfen(self, anlage: Anlage) -> list[CheckErgebnis]:
         from backend.models.investition import Investition
-        from backend.services.daten_checker.datenquelle.grund_fehlt import feld_name
+        from backend.services.daten_checker.datenquelle.geloescht import feld_name
 
         zeiten = await verworfene_zeiten(self.db, anlage.id)
         if not zeiten:

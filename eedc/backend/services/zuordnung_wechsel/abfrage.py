@@ -13,8 +13,8 @@ der ``quellen``-Eintrag). Gefragt wird, wenn
 bleiben»: die Wechsel-Zeile trägt den Grund, die Leser überbrücken die Naht (Sitzung 2); ``loeschen`` — «Daten vor der Änderung
 löschen»: die Daten dieses Felds vor der Änderung gehen weg (``services/feld_loeschen.py``), das Feld verhält sich danach, als
 wäre der neue Sensor von Anfang an zugeordnet; gespeicherte Monatswerte bleiben, die Prüf-Antwort nennt sie (``loeschen``).
-Die frühere Wahl «verwerfen» mit «Falsch seit» bietet der Dialog nicht mehr an (der Korrektur-Dienst dahinter bleibt bis zum
-Rückbau für «Grund nachtragen» und die Werkbank).
+Die frühere Wahl «verwerfen» mit «Falsch seit» und «Grund nachtragen» an einem verzeichneten Wechsel sind entfernt (Weg B,
+Sitzung B2); der Korrektur-Dienst dahinter trägt bis zu seinem Rückbau noch die Werkbank und die Korrektur am versetzten Abschnitt.
 
 **Ablauf in einer Schreib-Route** (Feld-Route, Preset): vor der Änderung ``verzeichnen.momentaufnahme``, danach die Änderung,
 dann ``vollziehe`` — fehlt für eine fragepflichtige Änderung der Grund, wirft sie ``GrundFehlt`` (die Route antwortet 422, der
@@ -78,27 +78,14 @@ def _gleich(a: Optional[dict], b: Optional[dict]) -> bool:
     return (a or {}) == (b or {})
 
 
-def _davor(w, vor: Optional[datetime], vor_id: Optional[int]) -> bool:
-    """Lag der verzeichnete Wechsel ``w`` vor der gefragten Zeile? Reihenfolge ``ab_ts``, dann Zeilen-Nummer — zwei Wechsel
-    in derselben Stunde (Fehlklick «Keine» und sofort zurück) tragen dasselbe ``ab_ts`` (Bauplan §13 Nr. 66)."""
-    if vor is None:
-        return True
-    if w.ab_ts != vor:
-        return w.ab_ts < vor
-    return vor_id is not None and w.id is not None and w.id < vor_id
-
-
-async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell: Optional[dict],
-                                   vor: Optional[datetime] = None, vor_id: Optional[int] = None) -> Optional[dict]:
+async def letzte_quelle_mit_werten(db, anlage_id: int, sensor_key: str, aktuell: Optional[dict]) -> Optional[dict]:
     """Die Quelle, gegen die verglichen wird: die heutige, wenn sie Werte liefern kann, sonst die letzte verzeichnete mit
-    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt). ``vor``/``vor_id``: nur verzeichnete
-    Wechsel vor der Zeile mit diesem ``ab_ts`` und dieser Nummer (gleiches ``ab_ts``, kleinere Nummer zählt mit) — dieselbe
-    Frage zum Zeitpunkt eines früheren Wechsels, wie ``pruefe`` sie im Augenblick des Wechsels stellte (``haette_gefragt``,
-    Sitzung 4). Eine Lücken-Zeile ist kein Wechsel (``zeitpunkt.ist_luecken_zeile``, Bauplan «Zu §14» Nr. 105)."""
+    Werten (A → «Keine» → B fragt bei B). ``None`` = unbekannt (dann wird gefragt). Eine Lücken-Zeile ist kein Wechsel
+    (``zeitpunkt.ist_luecken_zeile``, Bauplan «Zu §14» Nr. 105)."""
     if kann_werte_liefern(aktuell):
         return aktuell
     zeilen = sorted((w for w in (await lade_wechsel(db, anlage_id)).get(sensor_key, ())
-                     if w.aufgehoben_durch is None and not ist_luecken_zeile(w) and _davor(w, vor, vor_id)),
+                     if w.aufgehoben_durch is None and not ist_luecken_zeile(w)),
                     key=lambda w: (w.ab_ts, w.id or 0), reverse=True)
     for w in zeilen:
         for q in (w.nachher, w.vorher):
@@ -111,21 +98,6 @@ def frage_noetig(nachher: Optional[dict], letzte: Optional[dict]) -> bool:
     """Die Regel «wann wird gefragt» bei eigenen Werten: die neue Quelle kann Werte liefern und ist nicht die letzte Quelle
     mit Werten (unbekannt ⇒ gefragt)."""
     return kann_werte_liefern(nachher) and (letzte is None or not _gleich(letzte, nachher))
-
-
-async def haette_gefragt(db, anlage_id: int, w) -> bool:
-    """Hätte die Abfrage (B-2) bei diesem verzeichneten Wechsel nach dem Grund gefragt? (Sitzung 4, B-7: der Befund «Zuordnung
-    geändert, Grund fehlt» und «Grund nachtragen» fragen hier, nicht nachgebaut.) Dieselbe Regel wie ``pruefe`` zum Zeitpunkt
-    des Wechsels: eigene Werte vor ``ab_ts``, die neue Quelle kann Werte liefern und ist nicht die letzte Quelle mit Werten
-    davor. Ein «Zähler getauscht» (``vorher = nachher``) ist kein Wechsel der Quelle."""
-    from backend.services.zuordnung_wechsel.quelle import hat_eigene_werte
-
-    if _gleich(w.vorher, w.nachher):
-        return False
-    if not await hat_eigene_werte(db, anlage_id, w.sensor_key, vor=w.ab_ts):
-        return False
-    letzte = await letzte_quelle_mit_werten(db, anlage_id, w.sensor_key, w.vorher, vor=w.ab_ts, vor_id=w.id)
-    return frage_noetig(w.nachher, letzte)
 
 
 async def pruefe(db, anlage, vorher: dict[str, dict], nachher: dict[str, dict], *, details: bool = True,
@@ -267,7 +239,7 @@ def antwort(f: Optional[Frage], label: Optional[str] = None) -> dict[str, Any]:
             "bleiben_satz": None if f.bleiben else bleiben_satz(f.vorher, f.nachher, f.sensor_key)}
 
 
-# ── Vorschau des Korrektur-Dienstes («Grund nachtragen») ─────────────────────────────────────────────────────────────────
+# ── Vorschau des Korrektur-Dienstes (versetzter Abschnitt) ─────────────────────────────────────────────────────────────────
 
 
 def volle_stunde(dt: datetime) -> datetime:
@@ -278,8 +250,8 @@ def volle_stunde(dt: datetime) -> datetime:
 
 
 async def vorschau_des_auftrags(db, auftrag, *, nachtrag: bool = False) -> dict[str, Any]:
-    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes («Grund nachtragen», Sitzung 4; seit Weg B nicht mehr im
-    Dialog beim Wechsel; ``nachtrag``: das Intervall endet am Wechsel, Bauplan §13 Nr. 69)."""
+    """Vorschau = Lauf für einen Auftrag des Korrektur-Dienstes (nur noch die Korrektur am versetzten Abschnitt, Routen
+    ``…/zaehler-versatz``; ``nachtrag``: das Intervall endet am Rückgang, Bauplan §13 Nr. 69)."""
     from backend.services.zuordnung_wechsel import korrektur as kr
 
     nicht = None

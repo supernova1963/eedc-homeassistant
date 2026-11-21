@@ -497,47 +497,18 @@ def _wechsel_topic(zeit: datetime, grund):
     return f
 
 
-async def _nachtrag_bleiben(db, aid):
-    from backend.services.zuordnung_wechsel import nachtrag as nt
-
-    row = (await _wechsel_zeilen(db, aid))[0]
-    await nt.trage_fortsetzung_ein(db, await _anlage_frisch(db, aid), row)
-    await db.commit()
-
-
-@pytest.mark.parametrize("weg", ["stundenlauf", "nachtrag"])
+@pytest.mark.parametrize("weg", ["stundenlauf"])
 async def test_g5_bleiben_zwischen_zwei_mqtt_quellen(db, weg):
     """Topic-Wechsel um 10:22 (der neue Publisher beginn um 10:20 mit +2 000): «bleiben» sofort (der Stundenlauf setzt die
-    Rand-Stände) bzw. ohne Grund und später nachgetragen — Kanal und Reihe 11,958 (Rechenweg: 11,958/11,5 bzw. 11,5)."""
+    Rand-Stände) — Kanal und Reihe 11,958 (Rechenweg: 11,958/11,5). Der Weg «ohne Grund und später nachgetragen» ist mit
+    «Grund nachtragen» entfernt (Weg B, Sitzung B2)."""
     u = E + timedelta(minutes=2)
     aid = (await _anlage(db)).id
-    if weg == "stundenlauf":
-        await betrieb(db, aid, Saat(_hoch(ab=u), handlungen=[(u, _wechsel_topic(u, "fortsetzung"))]))
-    else:
-        await betrieb(db, aid, Saat(_hoch(ab=u), handlungen=[(u, _wechsel_topic(u, None))], spaet=[_nachtrag_bleiben]))
+    await betrieb(db, aid, Saat(_hoch(ab=u), handlungen=[(u, _wechsel_topic(u, "fortsetzung"))]))
     w = [z for z in await _wechsel_zeilen(db, aid) if z.aufgehoben_durch is None][0]
     assert w.ansatz == "schnitt" and w.stand_neu_null == pytest.approx(wahr(E + timedelta(minutes=5)) + 2000.0)
     assert await kanal_tag(db, aid, TAG_E) == pytest.approx(11.958, abs=0.001)
     assert await reihe_tag(db, aid, TAG_E) == pytest.approx(11.958, abs=0.001)
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_rand_woertlich_am_zeitpunkt"])
-async def test_g5_nachtrag_bleiben_der_stand_springt_minuten_vor_dem_verzeichneten_wechsel(db, monkeypatch, sprengsatz):
-    """Ein Wechsel ohne Grund ist um 10:22 verzeichnet, die neue Quelle meldet schon ab 10:20 (Rechenweg-Fall
-    «Topic-Wechsel ohne Grund, Nachtrag bleiben»): die Rand-Stände sind die zwei Stände am Höhenwechsel der Stunde — 11,958
-    (HEAD 11,5); wörtlich am verzeichneten Zeitpunkt zählte die Stunde den Sprung (2 011,958)."""
-    from backend.services.zuordnung_wechsel import rohstand
-
-    if sprengsatz:
-        async def kein(*a, **k):
-            return "kein_sprung", None
-        monkeypatch.setattr(rohstand, "sprung_um", kein)
-    u = E + timedelta(minutes=2)
-    aid = (await _anlage(db)).id
-    await betrieb(db, aid, Saat(_hoch(), handlungen=[(u, _wechsel_topic(u, None))], spaet=[_nachtrag_bleiben]))
-    soll = 2011.958 if sprengsatz else 11.958
-    assert await kanal_tag(db, aid, TAG_E) == pytest.approx(soll, abs=0.001)
-    assert await reihe_tag(db, aid, TAG_E) == pytest.approx(soll, abs=0.001)
 
 
 def test_g5_e5_satz_zu_bleiben_je_quellenpaar():

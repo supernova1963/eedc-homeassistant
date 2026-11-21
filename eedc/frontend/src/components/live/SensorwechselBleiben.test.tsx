@@ -11,8 +11,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SensorwechselDialog, {
-  GRUND_BLEIBEN_HA_FOLGE, GRUND_FORTSETZUNG, GRUND_FORTSETZUNG_FOLGE, GRUND_LOESCHEN, NACHTRAG_FORTSETZUNG_ZUSATZ,
-  ZAEHLT_AB_LABEL,
+  GRUND_BLEIBEN_HA_FOLGE, GRUND_FORTSETZUNG, GRUND_FORTSETZUNG_FOLGE, GRUND_LOESCHEN, ZAEHLT_AB_LABEL,
 } from './SensorwechselDialog'
 import { ANSETZEN_FERTIG_TAGE, ANSETZEN_LAEUFT, WartendeWechsel, fortschrittSatz } from './KorrekturFortschritt'
 import type { BleibenAngaben, KorrekturLaufStand, QuellePruefung } from '../../api/datenquellen'
@@ -29,8 +28,8 @@ const UEBERLAPPUNG: BleibenAngaben = {
 }
 const FRAGE: QuellePruefung = {
   grund_erforderlich: true, erster_wert: '2025-11-01T02:00:00', tage: 649, stand_alt: null, stand_neu: null,
-  sensor_key: 'inv:2:ladung_kwh', label: 'Wallbox – Ladung', verzeichnet: true, vorgabe_falsch_seit: '2026-10-18T11:00:00',
-  korrektur: null, bleiben: BLEIBEN,
+  sensor_key: 'inv:2:ladung_kwh', label: 'Wallbox – Ladung', verzeichnet: true, korrektur: null,
+  bleiben: BLEIBEN,
 }
 
 // Feste Uhr (Wächter N7): die Fixtures tragen Datums-Literale.
@@ -96,16 +95,10 @@ describe('Sensorwechsel U2 Lauf b — eine Frage: bleiben oder verwerfen', () =>
     expect(screen.queryByLabelText(ZAEHLT_AB_LABEL)).toBeNull()
   })
 
-  it('(4) ohne bleiben (andere Quelle): der bisherige Satz; im Nachtrag mit dem Zusatz, mit bleiben ohne ihn', () => {
-    const { unmount } = render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, bleiben: null }]}
-      onVorschau={vi.fn()} onBestaetigen={vi.fn()} onAbbrechen={vi.fn()} />)
+  it('(4) ohne bleiben (andere Quelle): der bisherige Satz', () => {
+    render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, bleiben: null }]}
+      onBestaetigen={vi.fn()} onAbbrechen={vi.fn()} />)
     expect(screen.getByText(GRUND_FORTSETZUNG_FOLGE)).toBeInTheDocument()
-    unmount()
-    const nachtrag = { wechselSatz: 'Am …', gruende: ['fortsetzung' as const, 'korrektur' as const] }
-    render(<SensorwechselDialog isOpen fragen={[FRAGE]} onVorschau={vi.fn()} onBestaetigen={vi.fn()} onAbbrechen={vi.fn()}
-      nachtrag={nachtrag} />)
-    expect(screen.getByText(GRUND_BLEIBEN_HA_FOLGE)).toBeInTheDocument()
-    expect(document.body.textContent).not.toContain(NACHTRAG_FORTSETZUNG_ZUSATZ)
   })
 })
 

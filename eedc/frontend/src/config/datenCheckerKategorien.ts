@@ -50,8 +50,6 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   ha_zaehlerstand_springt: 'Zählerstände – Zählerstand springt',
   // Verdacht N-803: ein Abschnitt der eigenen Standreihe liegt um +X versetzt (Stände eines anderen Sensors).
   zaehler_versatz: 'Zählerstände – versetzter Abschnitt',
-  // Sensorwechsel S4 (B-7): verzeichneter Wechsel der Quelle eines Zählers ohne Grund — «Grund nachtragen».
-  zuordnung_grund_fehlt: 'Zählerstände – Zuordnung geändert, Grund fehlt',
   // Sensorwechsel U3 a (G1): eine Korrektur hat die Zählerstände einer Zeit verworfen, nichts füllt sie — Auskunft je Zeit.
   zaehler_zeit_verworfen: 'Zählerstände – Zeit verworfen',
   // Sensorwechsel U3 a (G2): ein gespeicherter Monatswert passt nach Wechsel oder Korrektur nicht mehr zur Quelle.
@@ -126,7 +124,6 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'mqtt_zaehlerstand_springt',
   'daten_vor_aenderung_geloescht',
   'zaehler_versatz',
-  'zuordnung_grund_fehlt',
   'zaehler_zeit_verworfen',
   'monatswert_ueberholt',
   'sensor_mapping_lts',
@@ -179,7 +176,6 @@ export const KATEGORIE_ANKER: Record<string, string> = {
   ha_zaehler_rueckgang: '48c-zaehlerstaende--rueckgang-in-home-assistant',
   ha_zaehlerstand_springt: '48h-zaehlerstaende--zaehlerstand-springt',
   zaehler_versatz: '48f-zaehlerstaende--versetzter-abschnitt',
-  zuordnung_grund_fehlt: '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt',
   zaehler_zeit_verworfen: '48i-zaehlerstaende--zeit-verworfen',
   monatswert_ueberholt: '48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr',
   mqtt_zaehlerstand_springt: '48k-zaehlerstaende--zaehlerstand-springt-mqtt',

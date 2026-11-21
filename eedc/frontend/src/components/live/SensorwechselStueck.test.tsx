@@ -7,11 +7,11 @@
  * mit Grund «korrektur»; nichts wird gesendet, bevor «Übernehmen» geklickt ist; «Übernehmen» sendet das Stück an
  * `…/zaehler-versatz`, gestartete Läufe zeigt die Fläche. (2) Ein unvollständiger Parameter fragt nichts. (3) Gesperrt (etwa
  * verschiedene Quellen) ⇒ kein «Übernehmen». (4) Korrekturrunde 4b-1-K: ein Ladefehler im Stück-Modus steht an der Fläche
- * (kein Dialog), ein Speicherfehler im Dialog und nach «Abbrechen» nirgends; der Weg H-4 (am Rückkehr-Wechsel über
- * `?nachtrag=<id>` mit `stueck` in der Antwort) zeigt die feste Zeit statt «Falsch seit» und trägt über `…/grund` ein. Der
- * Client rechnet nichts.
+ * (kein Dialog), ein Speicherfehler im Dialog und nach «Abbrechen» nirgends. Der Weg H-4 (am Rückkehr-Wechsel über
+ * `?nachtrag=<id>`) ist mit «Grund nachtragen» an einem verzeichneten Wechsel entfernt (Weg B, Sitzung B2). Der Client rechnet
+ * nichts.
  *
- * Schwesterdateien: SensorwechselNachtrag.test.tsx (Grund nachtragen am Wechsel), SensorwechselDialog.test.tsx.
+ * Schwesterdateien: SensorwechselNachtrag.test.tsx, SensorwechselDialog.test.tsx.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -24,7 +24,7 @@ const STUECK = { sprung: '2026-07-01T01:00:00', rueckgang: '2026-08-10T19:00:00'
 const PRUEFUNG: GrundNachtragPruefung = {
   grund_erforderlich: true, erster_wert: null, tage: 0, stand_alt: null, stand_neu: null,
   sensor_key: 'inv:2:ladung_pv_kwh', label: 'Wallbox – Ladung PV (kWh)', verzeichnet: false,
-  vorgabe_falsch_seit: STUECK.sprung, korrektur: null, wechsel_id: null, feld_id: 'inv_energy_2_ladung_pv_kwh', grund: null,
+  korrektur: null, wechsel_id: null, feld_id: 'inv_energy_2_ladung_pv_kwh', grund: null,
   wechsel_satz: 'Vom 01.07.2026 01:00 bis 10.08.2026 19:00 Uhr liegen die gespeicherten Zählerstände dieses Felds um 103,1 kWh '
     + 'neben denen davor und danach; davor und danach gilt sensor.a.',
   gruende: ['korrektur'], korrektur_nicht: null, stueck: STUECK,
@@ -52,8 +52,6 @@ vi.mock('../../api/datenquellen', () => {
       wartendeWechsel: vi.fn(() => Promise.resolve([])),
       korrekturLauf: vi.fn(() => new Promise(() => {})),
       setQuelle: vi.fn(),
-      pruefeGrundNachtragen: vi.fn(),
-      grundNachtragen: vi.fn(),
       pruefeStueck: vi.fn(),
       stueckKorrigieren: vi.fn(),
       pruefeZaehlerGetauscht: vi.fn(),
@@ -86,7 +84,6 @@ describe('Sensorwechsel 4b-1 — Grund nachtragen am versetzten Abschnitt', () =
     render(<DatenquellenZuordnung sprung={{ geraet: '2', feld: 'ladung_pv_kwh', stueck: PARAM }} />)
     await waitFor(() => expect(document.querySelector('[data-sensorwechsel-dialog]')).not.toBeNull())
     expect(datenquellenApi.pruefeStueck).toHaveBeenCalledWith(1, ANGABE)
-    expect(datenquellenApi.pruefeGrundNachtragen).not.toHaveBeenCalled()
     expect(screen.getByText(NACHTRAG_TITEL)).toBeInTheDocument()
     expect(screen.getByText(PRUEFUNG.wechsel_satz)).toBeInTheDocument()
     await waitFor(() => expect(radio('korrektur')).not.toBeNull())
@@ -145,31 +142,5 @@ describe('Sensorwechsel 4b-1 — Grund nachtragen am versetzten Abschnitt', () =
     await waitFor(() => expect(document.querySelector('[data-sensorwechsel-dialog]')).toBeNull())
     expect(document.body.textContent).not.toContain(satz)
     expect(document.body.textContent).not.toContain(STUECK_LADEFEHLER)
-  })
-
-  it('H-4 am Rückkehr-Wechsel (nachtrag mit stueck): feste Zeit statt «Falsch seit», Eintrag über «Grund nachtragen»', async () => {
-    const h4: GrundNachtragPruefung = {
-      ...PRUEFUNG, wechsel_id: 5, verzeichnet: true, gruende: ['fortsetzung', 'korrektur'],
-      wechsel_satz: 'Am 10.08.2026 19:00 Uhr wechselte die Quelle von sensor.x zu sensor.a.',
-    }
-    vi.mocked(datenquellenApi.pruefeGrundNachtragen).mockResolvedValue(h4)
-    vi.mocked(datenquellenApi.grundNachtragen).mockResolvedValue({ ...h4, eingetragen: true, korrektur: [] })
-    render(<DatenquellenZuordnung sprung={{ geraet: '2', feld: 'ladung_pv_kwh', nachtrag: '5' }} />)
-    await waitFor(() => expect(radio('korrektur')).not.toBeNull())
-    expect(datenquellenApi.pruefeStueck).not.toHaveBeenCalled()
-    expect(radio('fortsetzung')).not.toBeNull()
-    vi.mocked(datenquellenApi.pruefeGrundNachtragen).mockResolvedValue({ ...h4, korrektur: { saetze: ['H4-Satz.'], startbar: true } })
-    fireEvent.click(radio('korrektur') as HTMLElement)
-    await waitFor(() => expect(datenquellenApi.pruefeGrundNachtragen).toHaveBeenLastCalledWith(
-      1, 5, expect.objectContaining({ grund: 'korrektur' })))
-    expect(await screen.findByText('H4-Satz.')).toBeInTheDocument()
-    expect(screen.getByText(STUECK_ZEIT('01.07.2026 01:00', '10.08.2026 19:00'))).toBeInTheDocument()
-    expect(screen.getByText(STUECK_GRUND_KORREKTUR_FOLGE)).toBeInTheDocument()
-    expect(document.querySelector('[data-falsch-seit]')).toBeNull()
-    expect(datenquellenApi.grundNachtragen).not.toHaveBeenCalled()
-    fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
-    await waitFor(() => expect(datenquellenApi.grundNachtragen).toHaveBeenCalledWith(
-      1, 5, expect.objectContaining({ grund: 'korrektur' })))
-    expect(datenquellenApi.stueckKorrigieren).not.toHaveBeenCalled()
   })
 })

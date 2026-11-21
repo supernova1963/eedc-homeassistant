@@ -6,7 +6,7 @@ Zeilen, HA-Attrappe, Stundenlauf «:05»).
   führt, Überlappung, «Der neue Sensor zählt ab» (Vorgabe und Bereich nur bei Überlappung), Umfang des Neulesens — **Vorschau =
   Lauf** (dieselbe ``ansatz.lage``); ``zaehlt_ab`` außerhalb des Bereichs, ohne Überlappung, bei «verwerfen» oder bei einer
   anderen Kombination ⇒ 422.
-* F10 — «Grund nachtragen» mit derselben Frage; Vorgabe für den Schnitt ist die Stunde des verzeichneten Wechsels.
+* F10 — «Grund nachtragen» mit derselben Frage: entfernt mit «Grund nachtragen» (Weg B, Sitzung B2), ebenso a-K N2/N3.
 * Nachlauf sichtbar — der Lauf des Ansetzens trägt ``art = ansetzen``; die Wartegründe als Sätze (Antwort der Route, Lese-Route
   ``wartende-wechsel``); der Satz zu einem offenen Lauf des Ansetzens nennt keine Korrektur.
 * F8 — Live heute/gestern je Geltungsabschnitt: gestern (Tausch-Tag) 15,3, heute am Tausch-Tag wie HA.
@@ -29,7 +29,7 @@ from backend.models.zuordnung_wechsel import ZuordnungWechsel
 from backend.services.zuordnung_wechsel import zeitpunkt as zw
 from backend.tests.test_sensorwechsel_u2a1_proben import ALT, NEU, Lab
 from backend.tests.test_sensorwechsel_u2a2_proben import (
-    FID, KEY, STUNDE, T1, Welt, _ep, _frisch, _ha_bis, _laeufe, _stunde, _wechsel, _wechsel_ohne_grund, _welt, _ws_dienst, ende,
+    FID, KEY, STUNDE, T1, Welt, _ep, _frisch, _ha_bis, _laeufe, _stunde, _wechsel, _welt, _ws_dienst, ende,
     sichten, soll, _vergleich,
 )
 
@@ -206,68 +206,6 @@ async def test_f9_zaehlt_ab_ohne_ueberlappung_abgelehnt(db, monkeypatch):
     assert (e.status_code, e.detail) == (422, bl.SATZ_OHNE_UEBERLAPPUNG)
 
 
-# ═══ F10 — «Grund nachtragen» mit derselben Frage ═══════════════════════════════════════════════════════════════════════
-
-async def _nachtrag_pruefen(w: Welt, **k) -> dict:
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, pruefe_grund_nachtragen
-
-    zw.vergiss(w.db)
-    row = (await w.db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == KEY,
-                                                             ZuordnungWechsel.aufgehoben_durch.is_(None))
-                              .order_by(ZuordnungWechsel.id.desc()))).scalars().first()
-    return await pruefe_grund_nachtragen(w.a.id, row.id, GrundNachtragRequest(**k), w.db)
-
-
-async def _nachtragen(w: Welt, **k) -> dict:
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, grund_nachtragen
-
-    out = {}
-    for key in (KEY, "inv:2:ladung_pv_kwh"):
-        zw.vergiss(w.db)
-        row = (await w.db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == key,
-                                                                 ZuordnungWechsel.aufgehoben_durch.is_(None))
-                                  .order_by(ZuordnungWechsel.id.desc()))).scalars().first()
-        out[key] = await grund_nachtragen(w.a.id, row.id, GrundNachtragRequest(grund="fortsetzung", **k), w.db)
-        await _laeufe()
-        _frisch(w)
-    return out
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True])
-async def test_f10_nachtrag_mit_zaehlt_ab(db, monkeypatch, sprengsatz):
-    """Wechsel ohne Grund um 10:47 (Überlappung): die Prüfung nennt Vorgabe = Stunde des verzeichneten Wechsels (10:00) und den
-    Bereich; «bleiben» mit «zählt ab» 07:00 ⇒ ``nachtrag`` ``schnitt`` an 07:00, jede Sicht = HA. Sprengsatz: «zählt ab» nicht
-    durchgereicht ⇒ G bleibt 10:00."""
-    import backend.services.zuordnung_wechsel.nachtrag as nt
-
-    if sprengsatz:
-        alt = nt.trage_fortsetzung_ein
-
-        async def ohne(db_, anlage, row, zaehlt_ab=None, jetzt=None):
-            return await alt(db_, anlage, row)
-        monkeypatch.setattr(nt, "trage_fortsetzung_ein", ohne)
-    lab = Lab(T1, vorgeschichte=True, schnitt=T1)
-    w = await _welt(db, monkeypatch, lab)
-    U = T1 + timedelta(hours=3, minutes=47)
-    await _betrieb(w, T1 - timedelta(hours=30), U.replace(minute=0))
-    await _wechsel_ohne_grund(w, U)
-    await _betrieb(w, U.replace(minute=0) + timedelta(hours=1), ende(U))
-    b = (await _nachtrag_pruefen(w))["bleiben"]
-    assert (b["ueberlappung"], b["zaehlt_ab_vorgabe"], b["zaehlt_ab_spaeteste"]) == (
-        True, (T1 + timedelta(hours=3)).isoformat(), (T1 + timedelta(hours=3)).isoformat())
-    assert (await _nachtrag_pruefen(w, grund="fortsetzung", zaehlt_ab=T1))["bleiben"]["zaehlt_ab"] == T1.isoformat()
-    e = await _abgelehnt(_nachtrag_pruefen(w, grund="korrektur", falsch_seit=T1 - timedelta(hours=5), zaehlt_ab=T1))
-    assert e.status_code == 422
-    await _nachtragen(w, zaehlt_ab=T1)
-    row = await _wechsel(db)
-    if sprengsatz:
-        assert (row.ansatz, row.ab_ts) == ("schnitt", T1 + timedelta(hours=4))
-        return
-    assert (row.herkunft, row.ansatz, row.ab_ts) == ("nachtrag", "schnitt", T1 + timedelta(hours=1))
-    ist, s = await sichten(w), soll(w)
-    assert _vergleich(ist, s) == {}, (ist, s)
-
-
 # ═══ Nachlauf sichtbar ══════════════════════════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("sprengsatz", [False, True])
@@ -402,7 +340,6 @@ def test_tagesmenge_aus_abschnitten():
     assert tagesmenge_aus_abschnitten([(10.0, 16.6), (0.0, 8.7)]) == pytest.approx(15.3)
     assert tagesmenge_aus_abschnitten([(10.0, None)]) is None and tagesmenge_aus_abschnitten([]) is None
     assert tagesmenge_aus_abschnitten([(5.0, 4.0), (0.0, 1.0)]) == 1.0
-
 
 
 # ═══ Texte aus den Vorläufen (Punkt 5) ══════════════════════════════════════════════════════════════════════════════════
@@ -686,105 +623,6 @@ async def _quellen(db) -> list:
     k = (await db.execute(select(Kanal).where(Kanal.key == KEY))).scalar_one()
     return [(q.gueltig_ab, q.statistic_id, round(q.offset, 3)) for q in
             (await db.execute(select(KanalQuelle).where(KanalQuelle.kanal_id == k.id).order_by(KanalQuelle.gueltig_ab))).scalars()]
-
-
-async def test_ak_n2_nachtrag_an_aelterem_wechsel_laesst_die_spaetere_quelle(db, monkeypatch):
-    """a-K N2: A → B ohne Grund, später B → A «bleiben»; danach «Grund nachtragen → bleiben» an A → B. Die Kanal-Quelle des
-    späteren Wechsels (A) bleibt stehen und rückt um die Änderung des Kanalwerts mit; die Tage nach dem späteren Wechsel
-    zeigen dieselben Zahlen wie vorher; der Konsistenzlauf korrigiert 0 (Mutanten E4/E5)."""
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, grund_nachtragen
-    from backend.services.kanal import lesen
-    from backend.services.kanal.konsistenz import konsistenz_anlage
-    from backend.models.kanal import Kanal
-
-    U1, U2 = T1 + timedelta(hours=3, minutes=20), T1 + timedelta(days=1, hours=8, minutes=20)
-    lab = Lab(T1)
-    _alt_zaehlt_wieder_ab(lab, U2.replace(minute=0))          # A zählt nach dem späteren Wechsel wieder (wie in aba_nachtrag)
-    w = await _welt(db, monkeypatch, lab)
-    await _betrieb(w, T1 - timedelta(hours=30), U1.replace(minute=0))
-    await _wechsel_ohne_grund(w, U1)
-    await _betrieb(w, U1.replace(minute=0) + timedelta(hours=1), U2.replace(minute=0))
-    _ha_bis(w, _ep(U2.replace(minute=0)) - STUNDE)
-    await _umstellen_auf(w, monkeypatch, U2, ALT)
-    await _betrieb(w, U2.replace(minute=0) + timedelta(hours=1), U2.replace(minute=0) + timedelta(hours=6))
-    k = (await db.execute(select(Kanal).where(Kanal.key == KEY))).scalar_one()
-    tag2 = (T1 + timedelta(days=1)).replace(hour=0)
-    vorher_q = await _quellen(db)
-    vorher_tag = (await lesen.zeitraum(db, k, _ep(U2.replace(minute=0)) - STUNDE, _ep(tag2 + timedelta(days=1)))).delta
-    row = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == KEY,
-                                                           ZuordnungWechsel.grund.is_(None)))).scalar_one()
-    await grund_nachtragen(w.a.id, row.id, GrundNachtragRequest(grund="fortsetzung"), db)
-    await _laeufe()
-    _frisch(w)
-    nachher_q = await _quellen(db)
-    spaet = [q for q in vorher_q if q[1] == ALT and q[0] >= _ep(U2.replace(minute=0)) - 2 * STUNDE]
-    assert spaet and [q[:2] for q in nachher_q if q[:2] == spaet[0][:2]] == [spaet[0][:2]]
-    k = (await db.execute(select(Kanal).where(Kanal.key == KEY))).scalar_one()
-    nachher_tag = (await lesen.zeitraum(db, k, _ep(U2.replace(minute=0)) - STUNDE, _ep(tag2 + timedelta(days=1)))).delta
-    assert nachher_tag == pytest.approx(vorher_tag)
-    assert (await konsistenz_anlage(w.sitzungen, w.a.id, ha_svc=w.svc)).korrigiert == []
-    nachtrag = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == KEY,
-                                                                ZuordnungWechsel.herkunft == "nachtrag"))).scalar_one()
-    assert nachtrag.ansatz == "beide"           # A zählt erst ab dem späteren Wechsel wieder: keine Überlappung mit B (Mutante D15)
-
-
-def _alt_zaehlt_wieder_ab(lab: Lab, ab: datetime) -> None:
-    """Der alte Sensor (A) zählt ab ``ab`` wieder 1,0 kWh/h (die Zeilen der Attrappe ab dort neu)."""
-    s, neu = 0.0, {}
-    for e, (z, _s) in sorted(lab.alt.items()):
-        z = 1.0 if e >= _ep(ab) else z
-        s += z
-        neu[e] = (z, round(s, 6))
-    lab.alt = neu
-
-
-@pytest.mark.parametrize("stoerung", [None, "fuellen_scheitert"])
-async def test_ak_n3_mitruecken_auch_wenn_das_fuellen_scheitert(db, monkeypatch, stoerung):
-    """a-K N3: wie N2; scheitert das Füllen nach dem Commit des Nachtrags, holt der Lauf es nach — und rückt die spätere
-    Quelle mit (Grenze, Kanalwert davor und Versätze stehen im Auftrag). In beiden Wegen zeigt der Kanal über die Grenze
-    dieselbe Menge wie vor dem Nachtrag (Mutante E3)."""
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, grund_nachtragen
-    from backend.models.kanal import Kanal
-    from backend.services.kanal import lesen
-    from backend.services.zuordnung_wechsel import korrektur_lauf
-    import backend.services.kanal.korrektur as kk
-
-    w = await _welt(db, monkeypatch, Lab(T1))
-    U1, U2 = T1 + timedelta(hours=3, minutes=20), T1 + timedelta(days=1, hours=8, minutes=20)
-    await _betrieb(w, T1 - timedelta(hours=30), U1.replace(minute=0))
-    await _wechsel_ohne_grund(w, U1)
-    await _betrieb(w, U1.replace(minute=0) + timedelta(hours=1), U2.replace(minute=0))
-    _ha_bis(w, _ep(U2.replace(minute=0)) - STUNDE)
-    await _umstellen_auf(w, monkeypatch, U2, ALT)
-    await _betrieb(w, U2.replace(minute=0) + timedelta(hours=1), U2.replace(minute=0) + timedelta(hours=4))
-    fenster = (_ep(U2.replace(minute=0)) - 2 * STUNDE, _ep(U2.replace(minute=0)) + 3 * STUNDE)
-
-    async def ueber_die_grenze():
-        k = (await db.execute(select(Kanal).where(Kanal.key == KEY))).scalar_one()
-        return (await lesen.zeitraum(db, k, *fenster)).delta
-    vorher = await ueber_die_grenze()
-    n = {"x": 0}
-    if stoerung:
-        echt = kk.fuelle_kanal
-
-        async def einmal_nicht(*a, **k):
-            n["x"] += 1
-            if n["x"] == 1:
-                raise RuntimeError("HA weg")
-            return await echt(*a, **k)
-        monkeypatch.setattr(kk, "fuelle_kanal", einmal_nicht)
-    row = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == KEY,
-                                                           ZuordnungWechsel.grund.is_(None)))).scalar_one()
-    await grund_nachtragen(w.a.id, row.id, GrundNachtragRequest(grund="fortsetzung"), db)
-    await _laeufe()
-    _frisch(w)
-    for lauf in await korrektur_lauf.offene_laeufe(db):           # der stündliche Anstoß
-        t = korrektur_lauf.starten(lauf, sitzungen=w.sitzungen)
-        if t is not None:
-            await t
-    _frisch(w)
-    assert vorher is not None and await ueber_die_grenze() == pytest.approx(vorher)
-    assert n["x"] >= (2 if stoerung else 0)
 
 
 async def test_ak_n4_zurueck_in_derselben_stunde_heben_sich_auf(db, monkeypatch):

@@ -108,12 +108,25 @@ def texte(name: str, g: Geloescht) -> tuple[str, str]:
     return SATZ_MELDUNG.format(name=name, zeit=_uhr(g.geloescht_am)), " ".join(teile)
 
 
+def feld_name(invs: dict, key: str) -> str:
+    """``inv:2:ladung_kwh`` → «<Gerät> – Ladung gesamt»; ``basis:netzbezug`` → «Netzbezug» (Namen der Oberfläche). Seit Weg B
+    (Sitzung B2) hier — vorher in ``grund_fehlt.py`` (entfernt); auch für ``monatswert.py`` und ``verworfen.py``."""
+    from backend.core.field_definitions import FELD_LABELS, feld_label_fuer_investition
+
+    if key.startswith("inv:"):
+        _, inv_id, feld = key.split(":", 2)
+        inv = invs.get(inv_id)
+        label = feld_label_fuer_investition(inv, feld)
+        return f"{inv.bezeichnung} – {label}" if inv is not None else label
+    feld = key.split(":", 1)[-1]
+    return FELD_LABELS.get(feld, FELD_LABELS.get(f"{feld}_kwh", feld))
+
+
 class DatenGeloeschtChecks:
     """Auskunft je Feld, dessen Daten vor einer Änderung der Quelle gelöscht wurden."""
 
     async def _check_daten_vor_aenderung_geloescht(self, anlage: Anlage) -> list[CheckErgebnis]:
         from backend.models.investition import Investition
-        from backend.services.daten_checker.datenquelle.grund_fehlt import feld_name
 
         felder = await geloeschte_felder(self.db, anlage.id)
         if not felder:
@@ -142,4 +155,4 @@ def _befund(name: str, g: Geloescht) -> CheckErgebnis:
     )
 
 
-__all__ = ["CODE", "DatenGeloeschtChecks", "Geloescht", "geloeschte_felder", "texte"]
+__all__ = ["CODE", "DatenGeloeschtChecks", "Geloescht", "feld_name", "geloeschte_felder", "texte"]

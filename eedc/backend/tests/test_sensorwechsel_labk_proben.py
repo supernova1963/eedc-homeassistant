@@ -8,15 +8,14 @@ Reparatur (``monkeypatch`` im Prozess), die rot sein muss; dazu der Mutanten-Lau
   Dieselbe Grenze trägt die Korrektur «Bisherige Werte verwerfen» (Messung M-V: dieselbe Klasse).
 * **W9/W5** Verwerfen-Vorschau: ein Fünf-Minuten-Stand vor «Falsch seit» prüft die Höhe gegen HAs Kurzzeitstatistik
   (``stueck._ha_rohsumme``); eine Lücke, deren Ende noch vor uns liegt, endet «jetzt».
-* **F2** Überführung des Altbestands: nachgefüllte Geschichte der heutigen Entität ist keine Vor-Quelle und keine «eigenen
-  Werte davor»; eine Änderung zwischen H:00 und H:05 bleibt ein Wechsel (``VORLAUF_S``).
+* **F2** Überführung des Altbestands: entfernt mit der Überführung (Weg B, Sitzung B2).
 * **F4** HA-Tag mit B-0: die frühere Entität eines Zählers, die heute ein anderer Zähler trägt, liest HAs eigene Reihe
   (``lts_aggregator._plan_anwenden(orig=…)``).
 * **F5** «Der neue Sensor zählt ab» nicht vor dem vorigen Wechsel des Felds (``ansatz._vorige_grenze``).
 * **W1/W3/W4/W6/W2** Wortlaute der Prüf-Antwort; **H1** Bezeichnungen von Home Assistant 2026.11 in Texten und Lösungswegen.
 
 Schwesterdateien: test_sensorwechsel_u2a2_proben.py (Ansetzen), test_sensorwechsel_u2b_proben.py (Fragen, «zählt ab»),
-test_sensorwechsel_s3_korrektur.py (Korrektur), test_sensorwechsel_s1_verzeichnen.py (Überführung), test_sensorwechsel_u3b_proben.py.
+test_sensorwechsel_s3_korrektur.py (Korrektur), test_sensorwechsel_s1_verzeichnen.py, test_sensorwechsel_u3b_proben.py.
 """
 
 from __future__ import annotations
@@ -440,96 +439,6 @@ async def test_w5_vorschau_in_der_tauschstunde_nennt_keine_zukunft(db, monkeypat
         # nächsten vollen Stunde; weiterhin kein Zeitpunkt nach jetzt)
         assert any(x.startswith(f"Vom {START:%d.%m.%Y %H:%M} Uhr bis zum Ende der laufenden Stunde füllt nichts") for x in s), s
         assert kr.SATZ_KANAL_OHNE_GESCHICHTE in s and "noch keine Stundenwerte" in kr.SATZ_KANAL_OHNE_GESCHICHTE
-
-
-# ── F2: Überführung des Altbestands ────────────────────────────────────────────────────────────────────────────────
-
-async def _f2_anlage(db, quellen: list[tuple[datetime, str]], staende: tuple[datetime, ...] = ()) -> Anlage:
-    """Anlage mit Wallbox, Kanal ``inv:2:ladung_kwh`` mit den Quellzeilen ``(gültig ab, Entität)`` (so legt das Nachfüllen
-    von v4.3.1 die Geschichte der heutigen Entität vor den ersten Eintrag) und Ständen der Reihe zu ``staende``."""
-    a = Anlage(anlagenname="Altbestand", leistung_kwp=10.0, sensor_mapping={})
-    db.add(a)
-    await db.flush()
-    db.add(Investition(id=2, anlage_id=a.id, typ="wallbox", bezeichnung="WB", anschaffungsdatum=date(2024, 1, 1)))
-    k = Kanal(anlage_id=a.id, key="inv:2:ladung_kwh", einheit="kWh", art="sum")
-    db.add(k)
-    await db.flush()
-    for ab, eid in quellen:
-        db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=int(ab.timestamp()), familie="spiegel", statistic_id=eid, offset=0.0))
-        db.add(KanalStatistik(kanal_id=k.id, start_ts=int(ab.timestamp()), sum=1.0, familie="spiegel"))
-    for t in staende:
-        db.add(SensorSnapshot(anlage_id=a.id, sensor_key="inv:2:ladung_kwh", zeitpunkt=t, wert_kwh=10.0, quelle="ha_statistics"))
-    await db.flush()
-    return a
-
-
-async def _protokoll(db, aid: int, ts: datetime, vorher, nachher) -> None:
-    from backend.models.activity_log import ActivityLog
-
-    db.add(ActivityLog(timestamp=ts, kategorie="sensor_mapping", aktion="Datenquelle zugeordnet", anlage_id=aid,
-                       details_json={"field_id": "inv_energy_2_ladung_kwh", "vorher": vorher, "nachher": nachher}))
-    await db.flush()
-
-
-def _ha(eid: str) -> dict:
-    return {"quelle": "ha_app", "entity_id": eid}
-
-
-async def _ueberfuehrt(db, aid: int) -> list[tuple]:
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre
-
-    zaehlung = await ueberfuehre(db)
-    rows = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.anlage_id == aid)
-                             .order_by(ZuordnungWechsel.erklaert_ts))).scalars().all()
-    return [((r.vorher or {}).get("entity_id"), (r.nachher or {}).get("entity_id")) for r in rows], dict(zaehlung)
-
-
-@pytest.mark.parametrize("variante", ["gebaut", "ohne_teil1", "ohne_teil2"])
-async def test_f2_nachgefuellte_geschichte_ist_kein_wechsel(db, monkeypatch, variante):
-    """Lab P9 / Fall R der Diagnose: Erst-Zuordnung 10:10 auf A (Protokoll ``vorher`` leer), 10:20 auf B; das Nachfüllen von
-    v4.3.1 hat B's Geschichte vor beide Einträge gelegt, die Reihe hat davor keine Stände ⇒ **keine** Zeile. Sprengsätze:
-    «ohne_teil1» ⇒ die Erst-Zuordnung wird «B → A»; «ohne_teil2» ⇒ «A → B» mit «eigenen Werten» aus B's Geschichte."""
-    import backend.services.zuordnung_wechsel.ueberfuehrung as ue
-
-    if variante == "ohne_teil1":
-        monkeypatch.setattr(ue, "_kanal_zeigt_wechsel", lambda *a: True)
-    if variante == "ohne_teil2":
-        async def nie(*a):
-            return False
-        monkeypatch.setattr(ue, "_nur_geschichte_des_neuen", nie)
-    a = await _f2_anlage(db, [(datetime(2026, 11, 1), "sensor.b")])
-    await _protokoll(db, a.id, datetime(2026, 11, 10, 10, 10), None, _ha("sensor.a"))
-    await _protokoll(db, a.id, datetime(2026, 11, 10, 10, 20), _ha("sensor.a"), _ha("sensor.b"))
-    zeilen, zaehlung = await _ueberfuehrt(db, a.id)
-    soll = {"gebaut": [], "ohne_teil1": [("sensor.b", "sensor.a")], "ohne_teil2": [("sensor.a", "sensor.b")]}[variante]
-    assert zeilen == soll, (zeilen, zaehlung)
-    if variante == "gebaut":
-        assert zaehlung == {"vorher_unbekannt": 1, "ohne_eigene_werte": 1}
-
-
-async def test_f2_spaet_berichtigt_und_mit_staenden_bleibt_ein_wechsel(db):
-    """Fall R2 bzw. N der Diagnose (Gegenprobe zu Teil 2): mit einem Stand der Reihe vor dem Eintrag sind die Werte davor
-    eigene ⇒ die Zeile «A → B» entsteht (Produktiv-Kopie: genau eine Zeile)."""
-    a = await _f2_anlage(db, [(datetime(2026, 11, 1), "sensor.b")], staende=(datetime(2026, 11, 9, 12),))
-    await _protokoll(db, a.id, datetime(2026, 11, 10, 10, 20), _ha("sensor.a"), _ha("sensor.b"))
-    zeilen, _z = await _ueberfuehrt(db, a.id)
-    assert zeilen == [("sensor.a", "sensor.b")]
-
-
-@pytest.mark.parametrize("variante", ["gebaut", "ohne_vorlauf"])
-async def test_f2_wechsel_zwischen_h00_und_h05_bleibt_ein_wechsel(db, monkeypatch, variante):
-    """«ab Stunde − 1 h»: Änderung 10:02 mit leerem ``vorher`` — der Stundenlauf um 10:05 hat die Zeile 09:00 schon aus B
-    geschrieben (Quelle B ab 09:00), davor A. ⇒ «A → B». Sprengsatz «ohne_vorlauf» (``VORLAUF_S = 0``) ⇒ B gilt als
-    Vor-Quelle, «wirksam unverändert», keine Zeile."""
-    import backend.services.zuordnung_wechsel.ueberfuehrung as ue
-
-    if variante == "ohne_vorlauf":
-        monkeypatch.setattr(ue, "VORLAUF_S", 0)
-    a = await _f2_anlage(db, [(datetime(2026, 10, 1), "sensor.a"), (datetime(2026, 11, 10, 9), "sensor.b")],
-                         staende=(datetime(2026, 11, 9, 12),))
-    await _protokoll(db, a.id, datetime(2026, 11, 10, 10, 2), None, _ha("sensor.b"))
-    zeilen, zaehlung = await _ueberfuehrt(db, a.id)
-    assert zeilen == ([("sensor.a", "sensor.b")] if variante == "gebaut" else []), zaehlung
 
 
 # ── F4: HA-Tag mit B-0, eine Entität in zwei Zählern ───────────────────────────────────────────────────────────────

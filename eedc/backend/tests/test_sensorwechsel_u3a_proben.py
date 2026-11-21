@@ -93,44 +93,14 @@ def test_g8_rest_schritt_grenzen():
     assert rest_schritt(_f8_reihe(3000.0), SPRUNG + timedelta(days=2), RUECK) is None         # Schritt älter als 24 h
 
 
-# ═══ G8 — Vorgabe «Falsch seit» im Nachtrag ═══════════════════════════════════════════════════════════════════════════
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_fenster_0"])
-@pytest.mark.parametrize("versatz,alt", [(3000.0, None), (-60.0, 119.5), (-3000.0, 3059.5)],
-                         ids=["f8_oben", "f8_unten", "u2_staende_frueher_fremd"])
-async def test_g8_vorgabe_falsch_seit_am_frueheren_schritt(db, ohne_ha, monkeypatch, versatz, alt, sprengsatz):  # noqa: F811
-    """A → X am Sprung, X → A am Rückgang (ohne Grund); die Reihe trägt X schon drei Stunden vorher. «Grund nachtragen →
-    Korrektur» mit der Vorgabe ⇒ 14.06. 61,0 (Rechenweg G8, gerechnet); mit Suchfenster 0 das alte Soll."""
-    import backend.core.berechnungen.zaehler_versatz as zv
-    from backend.api.routes import sensorwechsel as sw
-
-    if sprengsatz:
-        echt = zv.rest_schritt
-        monkeypatch.setattr(zv, "rest_schritt", lambda st, f, e, fenster_stunden=0: echt(st, f, e, 0))
-    v._kanal_tage(monkeypatch, {})
-    a, wb, key = await v._anlage(db, staende=_f8_reihe(versatz), spiegel=False)
-    aid, wid = a.id, wb.id
-    await _wechsel(db, aid, key, SPRUNG, QA, QX)
-    await _wechsel(db, aid, key, RUECK, QX, QA)
-    await db.commit()
-    rid = (await db.execute(select(ZuordnungWechsel.id).where(ZuordnungWechsel.ab_ts == RUECK))).scalar_one()
-    p = await sw.pruefe_grund_nachtragen(aid, rid, sw.GrundNachtragRequest(), db)
-    vorgabe = datetime.fromisoformat(p["vorgabe_falsch_seit"])
-    assert vorgabe == (SPRUNG if sprengsatz else FREMD_AB)
-    assert ("schon am 09.06.2026 22:00 Uhr" in p["wechsel_satz"]) is not sprengsatz
-    await sw.grund_nachtragen(aid, rid, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=vorgabe), db)
-    await _laeufe()
-    tag14 = (await _tagesansicht(db, a, wid))[14]
-    assert tag14 == (alt if sprengsatz else 61.0)
-
-
 # ═══ G8 — Lage «Rest» am Versatz-Befund (bestehende Lücke) ════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_rest"])
 async def test_g8_rest_am_versatz_befund_und_grund_nachtragen(db, ohne_ha, monkeypatch, sprengsatz):  # noqa: F811
     """Die Korrektur mit der alten Vorgabe (am Sprung) ließ drei Stunden fremder Stände stehen; der Versatz-Befund nennt sie
-    als Rest dieser Korrektur, «Grund nachtragen» über das Stück verwirft sie ⇒ 14.06. 61,0, kein Befund mehr."""
-    from backend.api.routes import sensorwechsel as sw
+    als Rest dieser Korrektur, «Grund nachtragen» über das Stück verwirft sie ⇒ 14.06. 61,0, kein Befund mehr. Seit Weg B
+    (Sitzung B2) entsteht die frühere Korrektur direkt über den Dienst (der Auftrag, den «Grund nachtragen» am Wechsel baute)."""
+    from backend.services.zuordnung_wechsel import korrektur as kr
     from backend.services.zuordnung_wechsel import stueck
 
     if sprengsatz:
@@ -143,8 +113,10 @@ async def test_g8_rest_am_versatz_befund_und_grund_nachtragen(db, ohne_ha, monke
     await _wechsel(db, aid, key, SPRUNG, QA, QX)
     await _wechsel(db, aid, key, RUECK, QX, QA)
     await db.commit()
-    rid = (await db.execute(select(ZuordnungWechsel.id).where(ZuordnungWechsel.ab_ts == RUECK))).scalar_one()
-    await sw.grund_nachtragen(aid, rid, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=SPRUNG), db)
+    jetzt = datetime(2026, 11, 18, 8)                       # feste Uhr (Wächter «echte Uhr in Proben»)
+    await kr.fuehre_aus(db, kr.Auftrag(anlage_id=aid, sensor_key=key, falsch_seit=SPRUNG, ab=RUECK, vorher=QX, nachher=QA,
+                                       herkunft="nachtrag", erklaert=jetzt), ha_svc=kr.ha_dienst(None), jetzt=jetzt)
+    await db.commit()
     await _laeufe()
     zw.vergiss(db)
     (e,) = await v._pruefe(db, a)
@@ -166,7 +138,7 @@ async def test_g8_rest_am_versatz_befund_und_grund_nachtragen(db, ohne_ha, monke
 
 @pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_ist_luecke"])
 async def test_g1_p1_ohne_ha_wie_zaehlerluecke_mit_tag(db, ohne_ha, monkeypatch, sprengsatz):  # noqa: F811
-    """Versetztes Stück ohne Home Assistant über «Grund nachtragen» korrigiert (``p1_ohne_ha``) ⇒ eine Zeile, Lage
+    """Versetztes Stück ohne Home Assistant über «Grund nachtragen» am Befund korrigiert (``p1_ohne_ha``) ⇒ eine Zeile, Lage
     Zählerlücke, Tag der Menge 14.06., 11.–13.06. ohne Wert. Sprengsatz: ``ist_luecke`` weggelassen ⇒ keine Zeile."""
     v._kanal_tage(monkeypatch, {})
     a, wb, key = await v._anlage(db, spiegel=False)

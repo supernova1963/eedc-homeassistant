@@ -103,7 +103,7 @@ describe('P-433-2b K4 — Preset anwenden', () => {
   it('Sensorwechsel S3b: fragt das Preset einen Grund, öffnet der Dialog — angewendet wird erst mit dem Grund', async () => {
     const frage = {
       grund_erforderlich: true, erster_wert: null, tage: 649, stand_alt: 1.0, stand_neu: null,
-      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, vorgabe_falsch_seit: null, korrektur: null,
+      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, korrektur: null,
     }
     vi.spyOn(liveDashboardApi, 'pruefeGatewayPreset').mockResolvedValue({ grund_erforderlich: true, felder: [frage] })
     const apply = vi.spyOn(liveDashboardApi, 'applyGatewayPreset').mockResolvedValue(
@@ -125,7 +125,7 @@ describe('P-433-2b K4 — Preset anwenden', () => {
   it('Sensorwechsel 3b-K (Mutanten F13, F18): der Dialog fragt nur die fragepflichtigen Felder; die Läufe der Antwort zeigen ihren Fortschritt', async () => {
     const frage = {
       grund_erforderlich: true, erster_wert: null, tage: 649, stand_alt: 1.0, stand_neu: null,
-      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, vorgabe_falsch_seit: null, korrektur: null,
+      sensor_key: 'inv:4:ladung_kwh', label: 'Ladung', verzeichnet: true, korrektur: null,
     }
     const ohneFrage = { ...frage, grund_erforderlich: false, sensor_key: 'inv:4:ladung_pv_kwh', label: 'Ladung PV' }
     vi.spyOn(liveDashboardApi, 'pruefeGatewayPreset').mockResolvedValue({ grund_erforderlich: true, felder: [frage, ohneFrage] })

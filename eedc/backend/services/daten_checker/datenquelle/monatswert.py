@@ -25,7 +25,7 @@ letzten abgeschlossenen Monat) —, nur abgeschlossene Monate vor dem laufenden,
 Handgriff «Monat öffnen» (Sprung ins Formular des Monats beim Feld). **Benannt:** der Anlagen-PV-Zähler (``basis:pv_gesamt``,
 ADR-002/P7 — der gespeicherte Wert ist die Summe je Modul) und Felder ohne Kanal werden nicht geprüft.
 
-Schwesterdateien: ``verworfen.py`` (``zaehler_zeit_verworfen``), ``grund_fehlt.py``, ``versatz.py``.
+Schwesterdateien: ``verworfen.py`` (``zaehler_zeit_verworfen``), ``versatz.py``, ``geloescht.py``.
 """
 
 from __future__ import annotations
@@ -166,7 +166,7 @@ class MonatswertUeberholtChecks:
 
     async def _check_monatswert_ueberholt(self, anlage: Anlage, heute: Optional[date] = None) -> list[CheckErgebnis]:
         from backend.models.investition import Investition
-        from backend.services.daten_checker.datenquelle.grund_fehlt import feld_name
+        from backend.services.daten_checker.datenquelle.geloescht import feld_name
         from backend.services.zuordnung_wechsel.zeitpunkt import lade_wechsel
 
         je_key = await lade_wechsel(self.db, anlage.id)

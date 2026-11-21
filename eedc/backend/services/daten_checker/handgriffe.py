@@ -19,7 +19,8 @@ ersetzt «Tage neu aufbauen». **Seit Sensorwechsel U2 Lauf c 186** (`ha_zaehler
 Laufzeit eine Auskunft mit INFO). **Seit Sensorwechsel U3 a 188** (`zaehler_zeit_verworfen`, Auskunft 19; `monatswert_ueberholt`,
 Sprung 120 «Monat öffnen»). **Seit Sensorwechsel U3 b 189** (`mqtt_zaehlerstand_springt`, Sprung 121 «Zähler getauscht»: öffnet in
 den Datenquellen den Dialog «Zähler getauscht (gleiche Quelle)» mit vorbelegter Zeit). **Seit Sensorwechsel Weg B 190**
-(`daten_vor_aenderung_geloescht`, Auskunft 20: «Daten vor der Änderung löschen» je Feld).
+(`daten_vor_aenderung_geloescht`, Auskunft 20: «Daten vor der Änderung löschen» je Feld); **seit Weg B, Sitzung B2 189**
+(`zuordnung_grund_fehlt` entfernt mit «Grund nachtragen» an einem verzeichneten Wechsel, Sprung 120).
 
 `knopf_fuer` liefert den Knopf-Text der **Laufzeit**-Klasse (E5.7 L1): Aktion aus der Operation (`KNOPF_JE_OPERATION`),
 Sprung aus dem Katalog (`knopf`, bei einem Aktion-Code im Zweig ohne Reparaturweg `knopf_sprung`), Auskunft «Was gilt».
@@ -79,7 +80,6 @@ HANDGRIFFE: dict[str, Handgriff] = {
     'drift_komponente': Handgriff(AKTION, 'Aus Home Assistant neu übernehmen', '417-datenquellen-drift'),  # Nr 25
     'zaehler_ruecksprung': Handgriff(SPRUNG, 'Sensor wechseln', '48a-zaehlerstaende--ruecksprung'),  # Nr 26
     'zaehler_versatz': Handgriff(SPRUNG, 'Grund nachtragen', '48f-zaehlerstaende--versetzter-abschnitt'),  # Verdacht N-803 (16.11.2026); Sensorwechsel 4b-1: Korrektur über das Stück
-    'zuordnung_grund_fehlt': Handgriff(SPRUNG, 'Grund nachtragen', '48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt'),  # Sensorwechsel S4 (B-7)
     'zaehler_zeit_verworfen': Handgriff(AUSKUNFT, 'Was gilt', '48i-zaehlerstaende--zeit-verworfen'),  # Sensorwechsel U3 a (G1)
     'monatswert_ueberholt': Handgriff(SPRUNG, 'Monat öffnen', '48j-zaehlerstaende--gespeicherter-monatswert-passt-nicht-mehr'),  # Sensorwechsel U3 a (G2)
     'mqtt_zaehlerstand_springt': Handgriff(SPRUNG, 'Zähler getauscht', '48k-zaehlerstaende--zaehlerstand-springt-mqtt'),  # Sensorwechsel U3 b (G4)

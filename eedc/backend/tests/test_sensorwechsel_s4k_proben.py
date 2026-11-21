@@ -31,7 +31,7 @@ from backend.tests import test_daten_checker_zaehler_versatz as v
 from backend.tests.test_daten_checker_zaehler_versatz import ha  # noqa: F401 — Fixture
 from backend.tests.test_sensorwechsel_s1_verzeichnen import NETZ, NETZ_KEY, _anlage, _quelle, _zeilen
 from backend.tests.test_sensorwechsel_s4_nachtrag import (
-    A, B, KEINE, T, _abgelehnt, _befunde, _mit_b, _nachtragen, _pruefen, _wechsel,
+    A, B, T, _mit_b, _wechsel,
 )
 
 X = {"art": "ha", "entity_id": "sensor.fremd"}
@@ -41,68 +41,7 @@ T2 = v.T0 + timedelta(hours=v.RUECK_H) - timedelta(minutes=40)         # 14.06. 
 AB1 = v.T0 + timedelta(hours=v.SPRUNG_H)
 
 
-# ═══ F1 — «Keine» und zurück in derselben Stunde ═════════════════════════════════════════════════════════════════════
-
-async def test_f1_keine_und_zurueck_in_derselben_stunde_ist_kein_befund(db):
-    """Über die echte Feld-Route: A → «Keine» (ohne Frage) und sofort zurück zu A (B-2 fragt nicht). Beide Zeilen tragen
-    dasselbe ``ab_ts``; der Befund fragt dieselbe Regel zum Zeitpunkt — die Zeile davor zählt mit (Nachmessung F1)."""
-    from backend.services.zuordnung_wechsel.abfrage import haette_gefragt
-
-    a = await _anlage(db, {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.a"}}})
-    aid = a.id
-    await db.commit()
-    await _quelle(db, aid, quelle="keine")
-    await _quelle(db, aid, quelle="ha_app", entity_id="sensor.a")
-    zw.vergiss(db)
-    hin, zurueck = await _zeilen(db, aid)
-    assert hin.ab_ts == zurueck.ab_ts and (hin.nachher, zurueck.vorher) == (KEINE, KEINE)
-    assert not await haette_gefragt(db, aid, zurueck)
-    await db.refresh(a)
-    assert await _befunde(db, a) == []
-
-
-async def test_f1_reihenfolge_in_derselben_stunde(db):
-    """A → «Keine» → B in derselben Stunde fragt weiter (B ist nicht die letzte Quelle mit Werten); die spätere Zeile zählt
-    für die frühere nicht mit (Reihenfolge ``ab_ts``, dann Nummer)."""
-    from backend.services.zuordnung_wechsel.abfrage import haette_gefragt
-
-    a = await _mit_b(db)
-    aid = a.id
-    erst = await _wechsel(db, aid, A, KEINE, erklaert=T)
-    dann = await _wechsel(db, aid, KEINE, B, erklaert=T + timedelta(minutes=5))
-    await db.commit()
-    zw.vergiss(db)
-    assert await haette_gefragt(db, aid, dann)
-    assert not await haette_gefragt(db, aid, erst)             # → «Keine» fragt nie
-
-
 # ═══ F2/F8 — die Korrektur hebt die Wechsel-Zeilen ihres Intervalls auf ═══════════════════════════════════════════════
-
-async def _a_x_a(db, monkeypatch, *, ersten_fortsetzen: bool = False):
-    """A → X → A an der Saat des Befunds ``zaehler_versatz`` (Reihe um 80 kWh versetzt vom 10.06. 01:00 bis 14.06. 19:00),
-    beide Wechsel ohne Grund; HA führt A durchgehend; der eigene Spiegel fehlt über beide Rand-Tage (die Tagesansicht liest
-    dort die Reihe, Nachmessung H1)."""
-    import backend.services.energie_profil.kanal_stunden as ks
-    from backend.services.zuordnung_wechsel import korrektur as kr
-
-    async def keine_gruppe(*_a):
-        return frozenset()
-    monkeypatch.setattr(ks, "kanal_schluessel_des_tages", keine_gruppe)
-    monkeypatch.setattr(kr, "ha_eingerichtet", lambda: True)
-    a, wb, key = await v._anlage(db)
-    kid = (await db.execute(select(Kanal.id).where(Kanal.key == key))).scalar_one()
-    for von, bis in ((datetime(2026, 6, 8, 22), datetime(2026, 6, 10, 6)), (datetime(2026, 6, 14, 19), datetime(2026, 6, 16, 0))):
-        await db.execute(KanalStatistik.__table__.delete().where(and_(
-            KanalStatistik.kanal_id == kid, KanalStatistik.start_ts >= int(von.timestamp()),
-            KanalStatistik.start_ts < int(bis.timestamp()))))
-    r1 = await _wechsel(db, a.id, HEUTE, X, erklaert=T1, key=key)
-    r2 = await _wechsel(db, a.id, X, HEUTE, erklaert=T2, key=key)
-    await db.commit()
-    id1, id2 = r1.id, r2.id
-    if ersten_fortsetzen:
-        await _nachtragen(db, a.id, id1, grund="fortsetzung")
-        zw.vergiss(db)
-    return a, wb.id, key, id1, id2
 
 
 async def _tagesansicht(db, a, wid) -> dict[int, float | None]:
@@ -120,64 +59,19 @@ async def _tagesansicht(db, a, wid) -> dict[int, float | None]:
     return out
 
 
-async def _korrektur_am_zweiten(db, aid, id2):
-    from backend.services.zuordnung_wechsel import korrektur_lauf as kl
-
-    fs = datetime.fromisoformat((await _pruefen(db, aid, id2))["vorgabe_falsch_seit"])
-    assert fs == AB1                                                # Vorgabe = Beginn von X = ab_ts des ersten Wechsels
-    await _nachtragen(db, aid, id2, grund="korrektur", falsch_seit=fs)
-    for t in list(kl._AUFGABEN.values()):
-        await t
-    zw.vergiss(db)
-
-
-async def test_f2a_korrektur_am_zweiten_wechsel_erledigt_den_ersten(db, ha, monkeypatch):  # noqa: F811
-    """Nachmessung F2: «Korrektur» am zweiten Wechsel mit der Vorgabe — der erste Wechsel (Rand «falsch seit», ``vorher`` =
-    die richtige Quelle) ist danach aufgehoben, kein Befund «Grund fehlt» bleibt, die Tagesansicht ist an allen Tagen richtig."""
-    a, wid, key, id1, id2 = await _a_x_a(db, monkeypatch)
-    assert await _tagesansicht(db, a, wid) == {9: 12.0, 10: 92.0, 11: 12.0, 13: 12.0, 14: None, 15: 12.0}
-    assert len(await _befunde(db, a)) == 2
-    await _korrektur_am_zweiten(db, a.id, id2)
-    r1, r2, korr = await _zeilen(db, a.id)
-    assert (r1.aufgehoben_durch, r2.aufgehoben_durch, korr.grund, korr.falsch_seit_ts) == (korr.id, korr.id, "korrektur", AB1)
-    assert await _befunde(db, a) == []
-    assert await v._pruefe(db, a) == []
-    assert await _tagesansicht(db, a, wid) == {9: 12.0, 10: 12.0, 11: 12.0, 13: 12.0, 14: 12.0, 15: 12.0}
-    aid = a.id
-    assert (await _abgelehnt(_nachtragen(db, aid, id1, grund="fortsetzung"))).status_code == 422
-    # B-0 danach: im Intervall immer die richtige Quelle (nie die verworfene X) …
-    wl = (await zw.lade_wechsel(db, aid))[key]
-    for z in (AB1, datetime(2026, 6, 12, 7), T2 - timedelta(minutes=1)):
-        assert zw.quelle_am(wl, z) == HEUTE
-    # … und davor die Quelle, die ohne die Korrektur dort galt (A), nicht das ``vorher`` X der Korrektur-Zeile («Zu §13» Nr. 84)
-    assert zw.quelle_am(wl, AB1 - timedelta(hours=2)) == HEUTE
-
-
-async def test_f2b_erst_fortsetzung_am_ersten_dann_korrektur_am_zweiten(db, ha, monkeypatch):  # noqa: F811
-    """Dieselbe Lage, der Anwender trägt erst am ersten Wechsel «Fortsetzung» ein: die Korrektur am zweiten hebt auch diese
-    Fortsetzung auf — keine Naht bleibt in Daten, die danach durchgehend aus einem Sensor stammen."""
-    a, wid, key, _id1, id2 = await _a_x_a(db, monkeypatch, ersten_fortsetzen=True)
-    assert await zw.fortsetzungs_naehte(db, a.id, key) == [AB1]
-    await _korrektur_am_zweiten(db, a.id, id2)
-    assert await zw.fortsetzungs_naehte(db, a.id, key) == []
-    assert all(r.aufgehoben_durch is not None for r in (await _zeilen(db, a.id)) if r.grund != "korrektur")
-    assert await _befunde(db, a) == []
-    assert await _tagesansicht(db, a, wid) == {9: 12.0, 10: 12.0, 11: 12.0, 13: 12.0, 14: 12.0, 15: 12.0}
-
-
 async def test_f8_werkbank_ueber_eine_fortsetzung_mit_anderer_quelle(db):
-    """Nachmessung F8: A → B (Fortsetzung nachgetragen), später B → C; der Dienst in der Werkbank-Form (von Beginn an bis zum
-    Beginn von C, richtig = C) lässt keine Fortsetzungs-Naht im Intervall stehen."""
+    """Nachmessung F8: A → B (Fortsetzung), später B → C; der Dienst in der Werkbank-Form (von Beginn an bis zum Beginn von C,
+    richtig = C) lässt keine Fortsetzungs-Naht im Intervall stehen. Seit Weg B (Sitzung B2, «Grund nachtragen» entfernt) ist
+    die Fortsetzung A → B gleich verzeichnet statt nachgetragen."""
     from backend.services.zuordnung_wechsel import korrektur as kr
 
     C = {"art": "ha", "entity_id": "sensor.c"}
     a = await _mit_b(db)
     aid = a.id
     a.sensor_mapping = {"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.c"}}}
-    r1 = await _wechsel(db, aid, A, B)
+    await _wechsel(db, aid, A, B, grund="fortsetzung", herkunft="wechsel")
     await _wechsel(db, aid, B, C, erklaert=T + timedelta(days=5), grund="fortsetzung", herkunft="wechsel")
     await db.commit()
-    await _nachtragen(db, aid, r1.id, grund="fortsetzung")
     zw.vergiss(db)
     assert len(await zw.fortsetzungs_naehte(db, aid, NETZ_KEY)) == 2
     ab = (T + timedelta(days=5)).replace(minute=0, second=0)
@@ -186,13 +80,13 @@ async def test_f8_werkbank_ueber_eine_fortsetzung_mit_anderer_quelle(db):
     erg = await kr.fuehre_aus(db, auftrag, ha_svc=None, jetzt=datetime(2026, 11, 18, 8))
     await db.commit()
     zw.vergiss(db)
-    alt, b_c, fort, korr, luecke = await _zeilen(db, aid)
+    fort, b_c, korr, luecke = await _zeilen(db, aid)
     # Keine Fortsetzungs-Naht bleibt im Intervall; ohne Home Assistant füllt nichts — seit 4b-1 (Bauplan «Zu §14» Nr. 95 (1))
     # sind die Ränder der Lücke die einzigen Nähte.
     assert luecke.nachher is None and luecke.ab_ts == korr.ab_ts
     assert await zw.fortsetzungs_naehte(db, aid, NETZ_KEY) == [luecke.falsch_seit_ts, luecke.ab_ts]
     assert korr.grund == "korrektur" and korr.ab_ts == vorschau_ab == ab + timedelta(hours=1)   # §10 Nr. 36 unverändert
-    assert (alt.aufgehoben_durch, b_c.aufgehoben_durch, fort.aufgehoben_durch) == (fort.id, korr.id, korr.id)
+    assert (b_c.aufgehoben_durch, fort.aufgehoben_durch) == (korr.id, korr.id)
     assert erg["summary"]["wechsel_id"] == korr.id
 
 
@@ -231,22 +125,6 @@ async def test_nr67_rand_mit_anderem_vorher_bleibt_eine_zeile_davor_wird_aufgeho
     assert rand2.aufgehoben_durch == [z for z in await _zeilen(db, b2.id) if z.grund == "korrektur" and z.nachher == B][-1].id
 
 
-async def test_nr71_falsch_seit_vor_dem_aelteren_wechsel_erledigt_ihn_mit(db):
-    """Zwei gemeldete Wechsel desselben Felds (A → X, X → B), Korrektur am jüngeren mit «Falsch seit» **vor** dem älteren: der
-    ältere liegt im Intervall und ist danach aufgehoben, gleich welches ``vorher`` er trägt (Lösungsweg, Bauplan §13 Nr. 71)."""
-    a = await _mit_b(db)
-    aid = a.id
-    alt = await _wechsel(db, aid, A, X, erklaert=datetime(2026, 9, 6, 8, 10))
-    jung = await _wechsel(db, aid, X, B)
-    await db.commit()
-    assert len(await _befunde(db, a)) == 2
-    await _nachtragen(db, aid, jung.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    zw.vergiss(db)
-    await db.refresh(alt)
-    assert alt.aufgehoben_durch is not None
-    assert await _befunde(db, a) == []
-
-
 # ═══ F3 — volle Stunde im Nachbau-Abschnitt ══════════════════════════════════════════════════════════════════════════
 
 FOLGE = {0: 100.0, 1: 101.0, 2: 102.0, 3: 2103.0, 4: 2104.0, 5: 2105.0}    # der Stand zur Stunde 03:00 ist der erste neue
@@ -274,36 +152,29 @@ async def _nachbau(datei, *, quelle: str, mapping: dict, name: str = "x"):
     return sitzungen, aid, zuw
 
 
-async def test_f3_nachtrag_zur_vollen_stunde_trifft_die_stunde_des_nachbaus(datei):
-    """Nachbau aus HA-Ständen (Kennung ``sensor_snapshots:…``): der Wechsel genau um 03:00:00 — der Stand 03:00 ist neu, er
-    steht in der Zeile 02:00. «Fortsetzung nachtragen» nullt die Zeile 02:00 (wie ``_laeufe``), die Stunde 03:00 zählt 1,0."""
+async def test_f3_fortsetzung_zur_vollen_stunde_teilt_den_nachbau(datei):
+    """Nachbau aus HA-Ständen (Kennung ``sensor_snapshots:…``): ohne Wechsel zählt die Zeile 02:00 den Sprung (2 001); mit einer
+    verzeichneten Fortsetzung genau um 03:00:00 — der Stand 03:00 ist neu, er steht in der Zeile 02:00 — teilt der
+    Stände-Nachbau dort (``_laeufe``): die Zeile 02:00 zählt 0, die Stunde 03:00 zählt 1,0. (Bis Weg B prüfte die Probe auch
+    «Fortsetzung nachtragen» gegen diesen Schnitt; der Nachtrag ist in Sitzung B2 entfernt.)"""
+    from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe
     from backend.tests import test_kanal_eigene_summe_nachfuellen as e
 
-    sitzungen, aid, zuw = await _nachbau(datei, quelle="ha_statistics",
-                                         mapping={"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.b"}},
-                                                  "investitionen": {}})
+    _sitzungen, _aid, zuw = await _nachbau(datei, quelle="ha_statistics",
+                                           mapping={"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.b"}},
+                                                    "investitionen": {}})
     assert (await zuw())["02:00"] == 2001.0
     wechsel = e.T0 + timedelta(hours=3)
-    async with sitzungen() as s:
-        s.add(ZuordnungWechsel(anlage_id=aid, sensor_key=NETZ_KEY, erklaert_ts=wechsel, ab_ts=wechsel, vorher=A, nachher=B,
-                               grund=None, herkunft="altbestand"))
-    async with sitzungen() as s:
-        (row,) = await _zeilen(s, aid)
-        await _nachtragen(s, aid, row.id, grund="fortsetzung")
-    nach = await zuw()
-    assert (nach["02:00"], nach["03:00"]) == (0.0, 1.0)
-    # derselbe Schnitt, den der Stände-Nachbau bei schon verzeichneter Fortsetzung macht
     s2, aid2 = await datei("teilt", mapping={"basis": {"netzbezug": {"strategie": "sensor", "sensor_id": "sensor.b"}},
                                              "investitionen": {}})
     async with s2() as s:
         s.add(ZuordnungWechsel(anlage_id=aid2, sensor_key=NETZ_KEY, erklaert_ts=wechsel, ab_ts=wechsel, vorher=A, nachher=B,
-                               grund="fortsetzung", herkunft="nachtrag"))
-    from backend.services.kanal.nachfuellen import nachfuellen_eigene_summe
+                               grund="fortsetzung", herkunft="wechsel"))
     await e._staende(s2, aid2, NETZ_KEY, FOLGE, quelle="ha_statistics")
     await nachfuellen_eigene_summe(s2, aid2, jetzt=e.JETZT)
     _k, zeilen, quellen = await e._kanal(s2, aid2, NETZ_KEY)
     geteilt = {datetime.fromtimestamp(t).strftime("%H:%M"): round(w, 3) for t, w in e._zuwaechse(zeilen, quellen).items()}
-    assert geteilt == nach
+    assert (geteilt["02:00"], geteilt["03:00"]) == (0.0, 1.0)
 
 
 async def test_f3_einstieg_zur_vollen_stunde_nennt_den_zuwachs_der_stunde_die_null_zaehlt(datei):
@@ -363,24 +234,15 @@ async def test_f3_mitschrift_des_stundenlaufs_bleibt_bei_der_stunde_des_zeitpunk
     assert await naht_stunde(db, k, n.T0 + timedelta(hours=2)) == n._h(2)
 
 
-# ═══ F4 — MQTT-Vorschau im Nachtrag ══════════════════════════════════════════════════════════════════════════════════
-
-async def test_f4_mqtt_vorschau_im_nachtrag_sagt_bis_zum_wechsel(db):
-    from backend.services.zuordnung_wechsel.korrektur import SATZ_KANAL_MQTT, SATZ_KANAL_MQTT_NACHTRAG
-    from backend.services.zuordnung_wechsel.quelle import standard_quelle
-
-    a = await _mit_b(db)
-    aid = a.id
-    a.sensor_mapping = {"basis": {}}
-    row = await _wechsel(db, aid, A, standard_quelle(NETZ_KEY))
-    await db.commit()
-    p = await _pruefen(db, aid, row.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    assert SATZ_KANAL_MQTT_NACHTRAG in p["korrektur"]["saetze"]
-    assert SATZ_KANAL_MQTT not in p["korrektur"]["saetze"]
-    assert "bis zum Wechsel" in SATZ_KANAL_MQTT_NACHTRAG and "bis jetzt" in SATZ_KANAL_MQTT
-
-
 # ═══ H-2 (a) — Rand an einer Fortsetzungs-Naht ohne Wirkung ═══════════════════════════════════════════════════════════
+
+async def _fortsetzung(db, wid: int) -> None:
+    """Die Zeile ``wid`` trägt den Grund «Fortsetzung» (wie ein Wechsel, nach dem der Dialog mit «bleiben» beantwortet wurde)."""
+    row = await db.get(ZuordnungWechsel, wid)
+    row.grund = "fortsetzung"
+    await db.commit()
+    zw.vergiss(db)
+
 
 async def test_h2_rand_an_einer_fortsetzung_hat_keine_wirkung(db, monkeypatch):
     """A → X → A ohne Grund: beide Befunde stehen (Wirkung und Ursache). «Fortsetzung» am Sprung: der Rand 10.06. rechnet
@@ -407,43 +269,17 @@ async def test_h2_rand_an_einer_fortsetzung_hat_keine_wirkung(db, monkeypatch):
     await db.commit()
     id1, id2 = r1.id, r2.id
     assert [e.code for e in await v._pruefe(db, a)] == ["zaehler_versatz"]
-    await _nachtragen(db, a.id, id1, grund="fortsetzung")
+    await _fortsetzung(db, id1)
     t = await _tagesansicht(db, a, wb.id)
     assert (t[10], t[14]) == (11.5, None)
     assert [e.code for e in await v._pruefe(db, a)] == ["zaehler_versatz"]
-    await _nachtragen(db, a.id, id2, grund="fortsetzung")
+    await _fortsetzung(db, id2)
     t = await _tagesansicht(db, a, wb.id)
     assert (t[10], t[14]) == (11.5, 11.5)
     assert await v._pruefe(db, a) == []
     (ok,) = await DatenChecker(db)._check_zaehler_versatz(a, jetzt=v.JETZT)
     assert (ok.schwere, ok.werte) == (CheckSeverity.OK, {"funde": 0})
-    assert await _befunde(db, a) == []
 
-
-# ═══ Nr. 73 — offener Korrektur-Lauf ═════════════════════════════════════════════════════════════════════════════════
-
-async def test_nr73_offener_lauf_sperrt_die_korrektur_im_nachtrag(db):
-    from backend.services.zuordnung_wechsel import korrektur_lauf as kl
-    from backend.services.zuordnung_wechsel.nachtrag import SATZ_LAUF_OFFEN
-
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await db.commit()
-    rid = row.id
-    assert (await _pruefen(db, aid, rid))["gruende"] == ["fortsetzung", "korrektur"]
-    await kl.anlegen(db, "offen0000001", aid, NETZ_KEY, [], fuellen={"erledigt": False, "kanal_id": None, "key": NETZ_KEY})
-    await db.commit()
-    p = await _pruefen(db, aid, rid)
-    assert (p["gruende"], p["korrektur_nicht"]) == (["fortsetzung"], SATZ_LAUF_OFFEN)
-    e = await _abgelehnt(_nachtragen(db, aid, rid, grund="korrektur", falsch_seit=datetime(2026, 9, 3)))
-    assert (e.status_code, e.detail) == (422, SATZ_LAUF_OFFEN)
-    assert len(await _zeilen(db, aid)) == 1
-    # Fortsetzung → Korrektur bei offenem Lauf: derselbe Satz (nicht «kein Grund nachzutragen»)
-    await _nachtragen(db, aid, rid, grund="fortsetzung")
-    fort = (await _zeilen(db, aid))[-1]
-    e = await _abgelehnt(_nachtragen(db, aid, fort.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3)))
-    assert (e.status_code, e.detail) == (422, SATZ_LAUF_OFFEN)
 
 
 # ═══ «Zu §13» Nr. 84 — vor «falsch seit» gilt, was ohne die Korrektur galt ═════════════════════════════════════════════

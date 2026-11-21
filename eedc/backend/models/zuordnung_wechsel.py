@@ -14,7 +14,7 @@ Eine Zeile = die **wirksame** Quelle eines Zählerschlüssels (``basis:<feld>`` 
 * ``grund`` — ``fortsetzung`` · ``korrektur`` · leer (Sitzung 1 schreibt nur leer; der Dialog kommt in Sitzung 3).
 * ``falsch_seit_ts`` — nur bei ``korrektur``: ab wann die vorige Quelle falsch war.
 * ``herkunft`` — ``wechsel`` (eine Route hat die Quelle geändert) · ``nachtrag`` · ``altbestand`` (aus dem Aktivitäts-Protokoll
-  überführt, ``services/zuordnung_wechsel/ueberfuehrung.py``).
+  überführt; die Überführung ist seit Weg B, Sitzung B2, entfernt — vorhandene Zeilen bleiben und lesen wie jede andere).
 * ``aufgehoben_durch`` — ID einer späteren Zeile, die diese aufhebt (Sitzung 4); ``lauf`` — Kennung eines Korrektur-Laufs.
 * ``ansatz``, ``stand_alt_ende``, ``stand_neu_null`` — **die Rand-Werte eines Wechsels «bleiben» zwischen zwei Sensoren**
   (Sensorwechsel U2 a1, Rechenweg F1, Bauplan Nr. 138/139): ``ansatz`` leer (wie vor U2: die Zeile liest wörtlich wie am

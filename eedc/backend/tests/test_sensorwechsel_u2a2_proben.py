@@ -8,8 +8,7 @@ Zeile erst, wenn ihre Stunde vorbei ist (``_ha_bis``); eedc läuft je Stunde wie
 «Fortsetzung» (die Uhr der Abfrage auf die Umstellzeit gestellt). Lab-Soll: Stunde 1,3 · Tag 15,3 · Folgetage 12,0 — in
 jeder Sicht, bei Umstellung 07:40, 08:20, 10:30 und zwei Tage später.
 
-Schwesterdateien: test_sensorwechsel_u2a1_proben.py (die Leser mit von Hand gesetzten Zeilen), test_sensorwechsel_s4_nachtrag.py
-(«Grund nachtragen»), test_sensorwechsel_s3_korrektur.py (der Dienst, dessen Lauf das Ansetzen mitbenutzt).
+Schwesterdateien: test_sensorwechsel_u2a1_proben.py (die Leser mit von Hand gesetzten Zeilen), test_sensorwechsel_s3_korrektur.py (der Dienst, dessen Lauf das Ansetzen mitbenutzt).
 """
 
 from __future__ import annotations
@@ -116,7 +115,7 @@ async def _umstellen(w: Welt, U: datetime, monkeypatch, *, grund: str = "fortset
 
 async def _korrektur_wie_bis_b1(w: Welt, U: datetime, falsch_seit: datetime) -> None:
     """Weg B (Sitzung B1): der Dialog beim Wechsel bietet «verwerfen» nicht mehr an; der Korrektur-Dienst bleibt bis zum Rückbau
-    (Grund nachtragen, Stück, Werkbank). Die Probe ruft ihn mit dem Auftrag, den bis B1 die Abfrage baute: Zuordnung umstellen,
+    (Stück, Werkbank). Die Probe ruft ihn mit dem Auftrag, den bis B1 die Abfrage baute: Zuordnung umstellen,
     je Schlüssel der Lauf (``ab`` = volle Stunde nach der Änderung, Herkunft «wechsel»), Commit, Nachlauf."""
     from sqlalchemy.orm.attributes import flag_modified
 
@@ -538,39 +537,7 @@ def test_nur_home_assistant_zu_home_assistant():
                                                z(qa, qn, None), z(qa, qn, aufgehoben=3), z(None, qn)))
 
 
-# ═══ F10 — «Grund nachtragen» mit «bleiben» ═════════════════════════════════════════════════════════════════════════════
-
-async def _wechsel_ohne_grund(w: Welt, U: datetime) -> None:
-    """Ein Wechsel aus der Zeit vor der Abfrage (``altbestand``, Grund leer): Zuordnung auf den neuen Sensor, Zeile ohne Grund."""
-    from sqlalchemy.orm.attributes import flag_modified
-
-    from backend.services.zuordnung_wechsel.zeitpunkt import ab_ts_aus
-
-    a = (await w.db.execute(select(Anlage).where(Anlage.id == w.a.id))).scalar_one()
-    for f in ("ladung_kwh", "ladung_pv_kwh"):
-        a.sensor_mapping["investitionen"]["2"]["felder"][f]["sensor_id"] = NEU
-    flag_modified(a, "sensor_mapping")
-    for key in (KEY, "inv:2:ladung_pv_kwh"):
-        w.db.add(ZuordnungWechsel(anlage_id=a.id, sensor_key=key, erklaert_ts=U, ab_ts=ab_ts_aus(U),
-                                  vorher={"art": "ha", "entity_id": ALT}, nachher={"art": "ha", "entity_id": NEU},
-                                  grund=None, herkunft="altbestand"))
-    await w.db.commit()
-    zw.vergiss(w.db)
-
-
-async def _nachtragen(w: Welt, grund: str = "fortsetzung", falsch_seit=None) -> dict:
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, grund_nachtragen
-
-    out = {}
-    for key in (KEY, "inv:2:ladung_pv_kwh"):
-        zw.vergiss(w.db)
-        row = (await w.db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.sensor_key == key,
-                                                                 ZuordnungWechsel.aufgehoben_durch.is_(None))
-                                  .order_by(ZuordnungWechsel.id.desc()))).scalars().first()
-        out[key] = await grund_nachtragen(w.a.id, row.id, GrundNachtragRequest(grund=grund, falsch_seit=falsch_seit), w.db)
-        await _laeufe()
-        _frisch(w)
-    return out
+# ═══ F11 — Abgleiche (F10 «Grund nachtragen» mit «bleiben» ist seit Weg B, Sitzung B2, entfernt) ═════════════════════════════════════════════════════════════════════════════
 
 
 async def _kanal_inhalt(db) -> tuple:
@@ -581,30 +548,6 @@ async def _kanal_inhalt(db) -> tuple:
         "SELECT s.start_ts, s.sum, s.state FROM kanal_statistik s JOIN kanal k ON k.id = s.kanal_id WHERE k.key = :k "
         "ORDER BY 1"), {"k": KEY})).all()]
     return q, z
-
-
-@pytest.mark.parametrize("ueberlappung", [False, True], ids=["beide", "schnitt"])
-async def test_f10_nachtrag_bleiben(db, monkeypatch, ueberlappung):
-    """«Grund nachtragen» → «bleiben» (Fortsetzung) an einem Wechsel ohne Grund: die Zeile ``nachtrag`` wird ``offen`` angelegt
-    und gleich angesetzt; Vorgabe für den Schnitt ist die Stunde des verzeichneten Wechsels. Ohne Überlappung (Lab-Zeilen)
-    zeigt danach jede Sicht HAs Zahl; mit Überlappung (wie die Produktiv-Kopie) bleibt der Kanal Zeile für Zeile, wie der
-    Stundenlauf ihn an der Stunde des Wechsels angesetzt hat, und die Reihe zeigt dieselbe Menge."""
-    lab = Lab(T1, vorgeschichte=ueberlappung, schnitt=(T1 + timedelta(hours=3)) if ueberlappung else None)
-    w = await _welt(db, monkeypatch, lab)
-    U = T1 + timedelta(hours=3, minutes=47)
-    await betrieb(w, monkeypatch, T1 - timedelta(hours=30), U.replace(minute=0), None)
-    await _wechsel_ohne_grund(w, U)
-    await betrieb(w, monkeypatch, U.replace(minute=0) + timedelta(hours=1), ende(U), None)
-    kanal_vorher = await _kanal_inhalt(db)
-    erg = await _nachtragen(w)
-    assert all(e["eingetragen"] for e in erg.values())
-    row = await _wechsel(db)
-    assert (row.herkunft, row.ansatz) == ("nachtrag", "schnitt" if ueberlappung else "beide")
-    ist, s = await sichten(w), soll(w)
-    assert _vergleich(ist, s) == {}, (ist, s)
-    if ueberlappung:
-        assert await _kanal_inhalt(db) == kanal_vorher
-    assert await zweiter_aufruf_und_konsistenz(w, ende(U) + timedelta(minutes=10)) == ({}, [], 0)
 
 
 # ═══ F11 — Abgleiche, die den Ansatz nicht brechen dürfen ═══════════════════════════════════════════════════════════════
@@ -643,25 +586,6 @@ async def test_f11_abgleiche_aendern_nichts(db, monkeypatch):
 async def _reihe(db) -> list:
     return [tuple(r) for r in (await db.execute(text(
         "SELECT zeitpunkt, wert_kwh FROM sensor_snapshots WHERE sensor_key = :k ORDER BY 1"), {"k": KEY})).all()]
-
-
-async def test_f11_spaetere_korrektur_hebt_die_zeile_samt_rand_auf(db, monkeypatch):
-    """Eine spätere Korrektur («Grund nachtragen»: Fortsetzung → Korrektur) hebt die angesetzte Zeile auf — ihre Rand-Stände
-    zählen nicht mehr (keine Naht mit Versatz), es gilt die Korrektur."""
-    lab = Lab(T1)
-    w = await _welt(db, monkeypatch, lab)
-    U = T1 + timedelta(hours=3, minutes=30)
-    await betrieb(w, monkeypatch, T1 - timedelta(hours=30), ende(U), U)
-    angesetzt = await _wechsel(db)
-    assert angesetzt.ansatz == "beide"
-    assert any(zw.rand_versatz(x) is not None for x in (await zw.lade_wechsel(db, w.a.id))[KEY])
-    await _nachtragen(w, "korrektur", T1 - timedelta(hours=5))
-    zw.vergiss(db)
-    zeilen = (await zw.lade_wechsel(db, w.a.id))[KEY]
-    alt = next(x for x in zeilen if x.id == angesetzt.id)
-    assert alt.aufgehoben_durch is not None and zw.rand_versatz(alt) is None
-    assert not any(zw.rand_versatz(x) is not None for x in zeilen)
-    assert not any(getattr(n, "versatz", None) for n in await zw.fortsetzungs_naehte(db, w.a.id, KEY))
 
 
 # ═══ F2 — Höhe der Reihe und Rückfall (Bauplan Nr. 143 (2), Nr. 144) ════════════════════════════════════════════════════

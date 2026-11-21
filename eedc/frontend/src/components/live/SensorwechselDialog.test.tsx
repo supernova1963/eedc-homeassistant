@@ -12,12 +12,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import DatenquellenZuordnung from './DatenquellenZuordnung'
-import SensorwechselDialog, { FALSCH_SEIT_LABEL, GRUND_FORTSETZUNG, GRUND_LOESCHEN, werteSatz } from './SensorwechselDialog'
+import SensorwechselDialog, { GRUND_FORTSETZUNG, GRUND_LOESCHEN, werteSatz } from './SensorwechselDialog'
 import KorrekturFortschritt, {
   FORTSCHRITT_INTERVALL_MS, LOESCHEN_FERTIG_TAGE, LOESCHEN_LAEUFT, SATZ_FUELLEN_OFFEN, fortschrittSatz, tageText,
 } from './KorrekturFortschritt'
 import ZaehlerGetauschtDialog, { ZG_TITEL } from './ZaehlerGetauschtDialog'
-import { datenquellenApi, type KorrekturLaufStand, type KorrekturVorschau, type QuellePruefung } from '../../api/datenquellen'
+import { datenquellenApi, type KorrekturLaufStand, type QuellePruefung } from '../../api/datenquellen'
 import { ApiError } from '../../api/client'
 
 const FRAGE: QuellePruefung = {
@@ -114,7 +114,7 @@ describe('Sensorwechsel S3b — Abfrage an der Fläche', () => {
     fireEvent.click(radio('loeschen'))
     expect(screen.getByText(FRAGE.loeschen!.saetze[0])).toBeInTheDocument()
     expect(screen.getByText(FRAGE.loeschen!.saetze[1])).toBeInTheDocument()
-    expect(screen.queryByLabelText(FALSCH_SEIT_LABEL)).toBeNull()
+    expect(document.body.textContent).not.toContain('Falsch seit')
     expect(datenquellenApi.pruefeQuelle).toHaveBeenCalledTimes(1)          // keine Vorschau-Anfrage: die Sätze kamen mit der Prüfung
     expect(datenquellenApi.setQuelle).not.toHaveBeenCalled()
     fireEvent.click(document.querySelector('[data-sensorwechsel-ok]') as HTMLElement)
@@ -253,25 +253,6 @@ describe('Korrekturrunde 3b-K — Fortschritt übersteht das Neuladen, Proben de
     render(<DatenquellenZuordnung />)
     await screen.findByRole('button', { name: /Inbound/i })
     expect(screen.queryByRole('button', { name: ZG_TITEL })).toBeNull()
-  })
-
-  it('F17: ein geändertes «Falsch seit» lädt eine neue Vorschau; eine überholte Antwort wird verworfen', async () => {
-    let erste: (v: KorrekturVorschau) => void = () => {}
-    const onVorschau = vi.fn((_k: string, f: string) => (f === '2026-10-18T11:00'
-      ? new Promise<KorrekturVorschau>((r) => { erste = r })
-      : Promise.resolve({ saetze: [`Vorschau ab ${f}`], startbar: true })))
-    // Weg B (B1): «Falsch seit» gibt es nur noch beim Nachtrag eines Grunds (Rückbau B2) — die Probe läuft dort.
-    render(<SensorwechselDialog isOpen fragen={[{ ...FRAGE, vorgabe_falsch_seit: '2026-10-18T11:00:00' }]} onVorschau={onVorschau}
-      onBestaetigen={() => {}} onAbbrechen={() => {}}
-      nachtrag={{ wechselSatz: 'Am …', gruende: ['fortsetzung', 'korrektur'] }} />)
-    fireEvent.click(document.querySelector('input[type="radio"][value="korrektur"]') as HTMLElement)
-    fireEvent.change(document.querySelector('[data-falsch-seit]') as HTMLElement, { target: { value: '2026-09-01T07:00' } })
-    expect(onVorschau).toHaveBeenLastCalledWith('basis:pv_gesamt', '2026-09-01T07:00')
-    expect(await screen.findByText('Vorschau ab 2026-09-01T07:00')).toBeInTheDocument()
-    erste({ saetze: ['ÜBERHOLT'], startbar: true })
-    await new Promise((r) => setTimeout(r, 0))
-    expect(screen.queryByText('ÜBERHOLT')).toBeNull()
-    expect(screen.getByText('Vorschau ab 2026-09-01T07:00')).toBeInTheDocument()
   })
 
   it('F14: «Getauscht am» wird beim Eintragen gesendet; vor dem ersten Wert bleibt die Zeit wählbar, ohne «Eintragen»', async () => {

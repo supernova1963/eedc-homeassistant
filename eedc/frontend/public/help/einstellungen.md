@@ -926,11 +926,8 @@ Werte bleiben, oder die Daten dieses Felds vor der Änderung werden gelöscht:
   zwei MQTT-Quellen** (anderes Gateway-Topic, Gateway statt Inbound) bleiben die bisherigen Werte, und der Unterschied
   zwischen altem und neuem Zählerstand zählt nicht als Menge; die Stunde des Wechsels zählt, was die bisherige Quelle bis zu
   ihrem letzten Zählerstand und die neue ab ihrem ersten gemeldet hat — aus den gespeicherten Zählerständen der letzten 31
-  Tage, sonst zählt sie keinen Zuwachs. Sofort gewählt oder später nachgetragen („Grund nachtragen“), nimmt eedc dieselben
-  zwei Stände um die Zeit des Wechsels — außer der Stand wechselt in dieser Stunde eindeutig die Höhe, dann dort. Ändert sich
-  der Stand in dieser Stunde zu einer anderen Zeit mit einem einzelnen großen Schritt, nennt der Dialog des Nachtrags ihn:
-  „Bisherige Werte bleiben“ zählt ihn mit. Sendet der neue Zähler schon vor der verzeichneten Zeit des Wechsels und springt
-  dabei, können „sofort“ und „später nachgetragen“ die Stunde verschieden zählen. **Zwischen einem Sensor aus Home Assistant und MQTT** rechnet eedc den Wechsel wie
+  Tage, sonst zählt sie keinen Zuwachs. eedc nimmt die zwei Stände um die Zeit des Wechsels — außer der Stand wechselt in
+  dieser Stunde eindeutig die Höhe, dann dort. **Zwischen einem Sensor aus Home Assistant und MQTT** rechnet eedc den Wechsel wie
   bisher: der Unterschied zählt nicht als Menge, und wo eedc aus den gespeicherten Zählerständen rechnet, zählt die Stunde des
   Wechsels keinen Zuwachs; der Dialog sagt es unter „Bisherige Werte bleiben“.
 - **„Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu"** — gelöscht werden **nur die Daten dieses
@@ -999,28 +996,6 @@ eigenen Werten nicht, sondern nennen es; seine Quelle wechselst du hier am Feld.
 - **Vor dem ersten eigenen Wert** des Felds gibt es keinen Sprung zu überbrücken — eedc nennt den ersten Wert und trägt
   nichts ein; ebenso in einer Zeit, deren Werte eine Korrektur verworfen hat.
 
-**Grund nachtragen.** Ein Wechsel eines Zählers mit eigenen Werten aus der Zeit, bevor eedc nach dem Grund fragte (oder einer,
-zu dem noch ein Hinweis „Zuordnung geändert" offen war), steht ohne Grund — eedc rechnet über ihn wie früher. Der
-Daten-Checker nennt jeden solchen Wechsel, nach dem eedc heute fragen würde (Befund „Zuordnung geändert, Grund fehlt",
-[Daten-Checker §4.8g](HANDBUCH_DATEN_CHECKER.md#48g-zaehlerstaende--zuordnung-geaendert-grund-fehlt)); sein Knopf
-**„Grund nachtragen"** öffnet hier am Feld den Dialog **„Warum wechselte die Quelle?"** mit dem Zeitpunkt und beiden
-Quellen — die Antworten sind dort „Bisherige Werte bleiben“ und „Bisherige Werte verwerfen — bisher war der falsche Sensor
-zugeordnet“ („Daten vor der Änderung löschen“ gibt es nur beim Wechsel selbst). „Falsch seit" ist dort mit dem Beginn der Quelle vor dem Wechsel vorbelegt; „Der neue Sensor zählt ab" (nur zwischen
-zwei Sensoren aus Home Assistant, die eine Zeit lang gleichzeitig gezählt haben) mit der Stunde des Wechsels. Eine Korrektur lässt sich für den
-jüngsten Wechsel eines Felds nachtragen, solange seine neue Quelle noch zugeordnet ist (ein späterer „Zähler getauscht“
-zählt nicht als Wechsel) — auch, wenn mit ihm die Quelle zur vorigen zurückkehrte; „Falsch seit" ist dann mit dem Wechsel
-davor vorbelegt. Tragen die gespeicherten Zählerstände die Stände der anderen Quelle schon einige Stunden vor diesem Wechsel
-(ein Sprung in den 24 Stunden davor, etwa so groß wie der Rücksprung am Ende), ist „Falsch seit" auf diesen Sprung vorbelegt,
-und der Dialog sagt es — sonst blieben die Stände ab dort stehen. Für einen **früheren** Wechsel, mit dem die Quelle zur vorigen zurückkehrte (der Wechsel X → A in
-A → X → A, nach dem noch ein Wechsel der Quelle verzeichnet ist), steht die Zeit fest: vom Wechsel davor bis zu diesem, ein
-„Falsch seit" gibt es dort nicht. Am Wechsel A → X selbst lässt sich keine Korrektur nachtragen. Ist der Grund eingetragen, nennt
-der Daten-Checker den Wechsel nicht mehr. Nach „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant bildet
-eedc die Tage ab dem Wechsel neu, wie oben. Zwischen zwei MQTT-Quellen zählt die Stunde des Wechsels danach, was die
-bisherige Quelle bis zu ihrem letzten und die neue ab ihrem ersten Zählerstand gemeldet hat — wechselt der Stand in dieser
-Stunde eindeutig die Höhe, nimmt eedc die zwei Stände an diesem Wechsel, sonst die zwei um die Zeit des Wechsels (wie oben). Bei jeder anderen Quelle zählt der Unterschied am Tag des
-Wechsels nicht mehr, wo eedc diesen Tag aus seinen gespeicherten Stundenwerten bildet; hat eedc für ihn schon einen festen
-Tageswert gespeichert, bleibt der, wie er ist, und kann den Unterschied weiter enthalten.
-
 **Ein versetzter Abschnitt in den gespeicherten Zählerständen.** Hat eedc eine Zeit lang die Stände eines anderen Sensors
 gespeichert, ohne dass ein Wechsel verzeichnet ist, meldet der Daten-Checker den Abschnitt (Befund „Zählerstände liegen für
 einen Abschnitt versetzt", [Daten-Checker §4.8f](HANDBUCH_DATEN_CHECKER.md#48f-zaehlerstaende--versetzter-abschnitt)). Sein
@@ -1052,7 +1027,7 @@ letzte Stand des bisherigen Sensors und der erste des neuen keine Menge ergeben.
 
 Davon zu unterscheiden ist eine Korrektur **in Home Assistant** (Einstellungen → Werkzeuge → Statistik → „Summe anpassen"; in älteren Home-Assistant-Versionen unter Entwicklerwerkzeuge → Statistik): Sie übernimmt eedc in den HA-Spiegel, aus dem die Tages- und Monats-Kennzahlen kommen, beim nächtlichen Abgleich um 02:45 — oder sofort über **„HA-Spiegel jetzt abgleichen"** in der Reparatur-Werkbank.
 
-> **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Daten vor der Änderung löschen“, „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant und die Korrektur bei „Grund nachtragen“ bilden die betroffenen Tage neu.
+> **Ohne Antwort im Dialog passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — nur „Daten vor der Änderung löschen“, „Bisherige Werte bleiben" zwischen zwei Sensoren aus Home Assistant und die Korrektur am versetzten Abschnitt bilden die betroffenen Tage neu.
 
 > ⚑ **Eine Ausnahme, und die ist gewollt: der laufende Tag.** Er wird alle 15 Minuten vollständig neu gerechnet — eine Zuordnung, die du um 22 Uhr anlegst, wirkt dort also binnen einer Viertelstunde für **den ganzen Tag** zurück, nicht erst ab 22 Uhr. Das ist der Grund, warum dieser Abschnitt „nicht rückwirkend" heißt und für heute trotzdem etwas anderes gilt.
 

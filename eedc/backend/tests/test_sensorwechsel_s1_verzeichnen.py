@@ -1,4 +1,4 @@
-"""Sensorwechsel mit Grund, Sitzung 1 — Tabelle ``zuordnung_wechsel`` (B-1), wirksame Quelle, Verzeichnen, Überführung, Räumen.
+"""Sensorwechsel mit Grund, Sitzung 1 — Tabelle ``zuordnung_wechsel`` (B-1), wirksame Quelle, Verzeichnen, Räumen.
 
 **Verzeichnet** wird jede Änderung der **wirksamen** Quelle eines Zählerschlüssels (``services/zuordnung_wechsel/quelle.py``:
 HA-Entität · MQTT-Schlüssel mit Topic, Pfad, Faktor, Offset der Gateway-Zeile · «keine»), mit ``herkunft = wechsel`` — in
@@ -8,8 +8,8 @@ Quelle, die klassische Zuordnung, die ``quellen`` nur nachträgt. **Seit Sitzung
 Werten nach dem Grund (``test_sensorwechsel_s3b_abfrage.py``): die Feld-Route und das Preset tragen hier ``fortsetzung`` (die
 Zeile führt ihn), Energie-Vorschläge und Gateway-``PUT`` überspringen, Gateway-Zeile anlegen/löschen lehnt ab.
 
-**Überführung** aus dem Aktivitäts-Protokoll (``herkunft = altbestand``): nur sicher wirksame Änderungen mit eigenen Werten;
-zweimal = einmal. **Räumen**: Gerät, Innengerät, Anlage (``ON DELETE CASCADE``).
+**Räumen**: Gerät, Innengerät, Anlage (``ON DELETE CASCADE``). Die Überführung aus dem Aktivitäts-Protokoll
+(``herkunft = altbestand``) ist seit Weg B (Sitzung B2) entfernt, ihre Proben mit ihr.
 
 Schwesterdateien: test_sensorwechsel_s1_zeitpunkt.py (B-0 an den Schreibern), test_n556_datenquellen_protokoll.py (Protokoll
 derselben Schreibwege), test_p433_2b_k4_fahrt_pvanteil.py (Preset), test_diagnose_paket_register.py (W-7).
@@ -228,70 +228,6 @@ async def test_w4_w5_w6_gateway_zeile_anlegen_aendern_loeschen(db):
     assert await _zeilen(db, a.id) == []
 
 
-# ═══ Überführung aus dem Protokoll ═════════════════════════════════════════════════════════════════════════════════════
-
-async def _protokoll(db, aid, ts, field_id, vorher, nachher):
-    db.add(ActivityLog(timestamp=ts, kategorie="sensor_mapping", aktion="Datenquelle zugeordnet", anlage_id=aid,
-                       details_json={"field_id": field_id, "vorher": vorher, "nachher": nachher}))
-    await db.flush()
-
-
-async def test_ueberfuehrung_nur_sichere_wirksame_aenderungen_zweimal_gleich_einmal(db):
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre
-
-    a = await _anlage(db, werte=("inv:2:ladung_kwh", NETZ_KEY))
-    ha = lambda e: {"quelle": "ha_app", "entity_id": e}                   # noqa: E731
-    t = datetime(2026, 10, 18, 10, 47, 42, 123456)
-    await _protokoll(db, a.id, t, "inv_energy_2_ladung_kwh", ha("sensor.evcc"), ha("sensor.wb"))      # überführt
-    # null → X mit Kanal-Quelle X: wirksam unverändert (klassische Zuordnung, Messblatt M-H)
-    k = Kanal(anlage_id=a.id, key=NETZ_KEY, einheit="kWh", art="sum")
-    db.add(k)
-    await db.flush()
-    db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=int(datetime(2026, 3, 27).timestamp()), familie="spiegel",
-                       statistic_id="sensor.x", offset=0.0))
-    db.add(KanalStatistik(kanal_id=k.id, start_ts=int(datetime(2026, 3, 27, 5).timestamp()), sum=1.0, familie="spiegel"))
-    await _protokoll(db, a.id, datetime(2026, 9, 27, 10, 33, 31), NETZ, None, ha("sensor.x"))
-    # «keine» → HA ohne eigene Werte davor: erste Zuordnung
-    await _protokoll(db, a.id, datetime(2026, 9, 27, 10, 32, 13), "inv_energy_2_verbrauch_kwh", {"quelle": "keine"},
-                     ha("sensor.fahrt"))
-    # null ohne Kanal und ohne Reihe: nicht entscheidbar
-    await _protokoll(db, a.id, datetime(2026, 9, 28, 9), "basis_energy_einspeisung_kwh", None, ha("sensor.e"))
-    # Vorzeichen und ein gelöschtes Gerät
-    await _protokoll(db, a.id, datetime(2026, 9, 29, 9), NETZ, False, True)
-    await _protokoll(db, a.id, datetime(2026, 9, 30, 9), "inv_energy_9_ladung_kwh", ha("s.1"), ha("s.2"))
-    erste = await ueberfuehre(db)
-    zweite = await ueberfuehre(db)
-    z = await _zeilen(db, a.id)
-    assert [(w.sensor_key, w.erklaert_ts, w.ab_ts, w.herkunft, w.grund) for w in z] == [
-        ("inv:2:ladung_kwh", datetime(2026, 10, 18, 10, 47, 42), datetime(2026, 10, 18, 11), "altbestand", None)]
-    assert dict(erste) == {"ueberfuehrt": 1, "wirksam_unveraendert": 1, "ohne_eigene_werte": 1, "vorher_unbekannt": 1,
-                           "geraet_geloescht": 1}
-    assert dict(zweite) == {"schon_ueberfuehrt": 1, "wirksam_unveraendert": 1, "ohne_eigene_werte": 1,
-                            "vorher_unbekannt": 1, "geraet_geloescht": 1}
-
-
-async def test_ueberfuehrung_als_start_migration_einmal(tmp_path, monkeypatch):
-    """Der Startpfad (`init_db` → `_run_data_migrations`) legt die Tabelle an und überführt genau einmal."""
-    import backend.core.database as dbmod
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'm.db'}")
-    async with engine.begin() as conn:
-        await conn.run_sync(dbmod.Base.metadata.create_all)
-    macher = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with macher() as s:
-        a = await _anlage(s, werte=("inv:2:ladung_kwh",))
-        await _protokoll(s, a.id, datetime(2026, 10, 18, 10, 47, 42), "inv_energy_2_ladung_kwh",
-                         {"quelle": "ha_app", "entity_id": "s.a"}, {"quelle": "ha_app", "entity_id": "s.b"})
-        await s.commit()
-    monkeypatch.setattr(dbmod, "async_session_maker", macher)
-    for _ in range(2):
-        await dbmod._run_data_migrations()
-    async with macher() as s:
-        assert len(await _zeilen(s, a.id)) == 1
-    await engine.dispose()
-
-
 # ═══ Räumen ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 async def test_loeschen_eines_geraets_raeumt_seine_zeilen(db):
@@ -382,32 +318,6 @@ async def test_raeumen_verwirft_die_merkliste(db, monkeypatch):
         assert "inv:3:ladung_kwh" in await lade_wechsel(db, a.id)                     # Gegenprobe: veraltet
     await delete_investition(2, db)
     assert await lade_wechsel(db, a.id) == {}
-
-
-async def test_ueberfuehrung_leeres_vorher_nimmt_die_kanal_quelle_vor_der_stunde(db):
-    """§8 Nr. 21 (Nachmessung §9): neue Kanal-Quelle ab 10:00, Eintrag 10:47 mit leerem ``vorher`` ⇒ überführt, ``vorher`` =
-    die Quelle davor. Gegenprobe im selben Test: ohne Quelle davor ⇒ nicht entscheidbar über den Kanal."""
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre
-
-    a = await _anlage(db, werte=(NETZ_KEY, "basis:einspeisung"))
-    for key, alt in ((NETZ_KEY, "sensor.alt"), ("basis:einspeisung", None)):
-        k = Kanal(anlage_id=a.id, key=key, einheit="kWh", art="sum")
-        db.add(k)
-        await db.flush()
-        if alt:
-            db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=int(datetime(2026, 3, 27).timestamp()), familie="spiegel",
-                               statistic_id=alt, offset=0.0))
-        db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=int(datetime(2026, 10, 18, 10).timestamp()), familie="spiegel",
-                           statistic_id="sensor.neu", offset=-208.214))
-    await db.flush()
-    ha = {"quelle": "ha_app", "entity_id": "sensor.neu"}
-    await _protokoll(db, a.id, datetime(2026, 10, 18, 10, 47, 42), NETZ, None, ha)
-    await _protokoll(db, a.id, datetime(2026, 10, 18, 10, 47, 43), "basis_energy_einspeisung_kwh", None, ha)
-    zaehlung = await ueberfuehre(db)
-    assert [(w.sensor_key, w.vorher, w.nachher) for w in await _zeilen(db, a.id)] == [
-        (NETZ_KEY, {"art": "ha", "entity_id": "sensor.alt"}, {"art": "ha", "entity_id": "sensor.neu"})]
-    # Einspeisung: keine Kanal-Quelle davor ⇒ Rückfall auf die Reihe (Art «ha» ohne Entität) ⇒ nicht entscheidbar
-    assert dict(zaehlung) == {"ueberfuehrt": 1, "vorher_unbekannt": 1}
 
 
 async def test_w7_w8_w9_verzeichnen_nicht(db):

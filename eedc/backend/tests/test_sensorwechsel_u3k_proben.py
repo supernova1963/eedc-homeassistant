@@ -613,42 +613,6 @@ def _lk_ha(eid):
     return {"quelle": "ha_app", "entity_id": eid}
 
 
-async def _lk_altbestand(db, quellen, eintraege, *, staende=(datetime(2026, 11, 9, 12),)):
-    """Altbestand vor der Überführung: Kanal-Quellen ``(ab, Entität | None = MQTT)``, Stände der Reihe, Protokoll-Einträge
-    ``(Zeit, vorher, nachher)`` (vorher leer = klassische Zuordnung). Danach ``ueberfuehre``; die Zeilen als (vorher, nachher)."""
-    from backend.models.activity_log import ActivityLog
-    from backend.models.anlage import Anlage
-    from backend.models.investition import Investition
-    from backend.models.kanal import Kanal, KanalQuelle, KanalStatistik
-    from backend.models.sensor_snapshot import SensorSnapshot
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre
-
-    a = Anlage(anlagenname="Altbestand", leistung_kwp=10.0, sensor_mapping={})
-    db.add(a)
-    await db.flush()
-    db.add(Investition(id=2, anlage_id=a.id, typ="wallbox", bezeichnung="WB", anschaffungsdatum=date(2024, 1, 1)))
-    k = Kanal(anlage_id=a.id, key=LK_KEY, einheit="kWh", art="sum")
-    db.add(k)
-    await db.flush()
-    for ab, eid in quellen:
-        fam = "spiegel" if eid else "mitschrift"
-        db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=int(ab.timestamp()), familie=fam, statistic_id=eid, offset=0.0))
-        db.add(KanalStatistik(kanal_id=k.id, start_ts=int(ab.timestamp()), sum=1.0, familie=fam))
-    for t in staende:
-        db.add(SensorSnapshot(anlage_id=a.id, sensor_key=LK_KEY, zeitpunkt=t, wert_kwh=10.0, quelle="ha_statistics"))
-    for ts, v, n in eintraege:
-        db.add(ActivityLog(timestamp=ts, kategorie="sensor_mapping", aktion="Datenquelle zugeordnet", anlage_id=a.id,
-                           details_json={"field_id": "inv_energy_2_ladung_kwh", "vorher": v, "nachher": n}))
-    await db.flush()
-    await ueberfuehre(db)
-    rows = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.anlage_id == a.id)
-                             .order_by(ZuordnungWechsel.erklaert_ts))).scalars().all()
-
-    def q(x):
-        return None if x is None else (x.get("entity_id") or x.get("mqtt_key") or x.get("art"))
-    return [(q(r.vorher), q(r.nachher)) for r in rows]
-
-
 LK_B1 = {
     "k1_ha_zu_mqtt": ([(LK_T0, "sensor.a"), (_lk_t(10, 0), None)], [(_lk_t(10, 20), None, {"quelle": "mqtt", "topic": "wb/e"})],
                       [("sensor.a", "inv/2/ladung_kwh")]),
@@ -660,35 +624,6 @@ LK_B1 = {
                                  [(_lk_t(10, 10), None, _lk_ha("sensor.b")), (_lk_t(10, 20), _lk_ha("sensor.b"), _lk_ha("sensor.a"))],
                                  [("sensor.a", "sensor.b"), ("sensor.b", "sensor.a")]),
 }
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_teil1_auch_mit_staenden"])
-@pytest.mark.parametrize("fall", sorted(LK_B1))
-async def test_lk_b1_echte_wechsel_im_altbestand(db, monkeypatch, fall, sprengsatz):
-    """LK-B1: liegen vor der Stunde Stände der Reihe, gilt die am Kanal aufgelöste Vor-Quelle — Teil 1 aus Lab-K F2 verwarf
-    sonst K1/K3 ganz und ließ von K2/K9 nur die zweite Zeile. Sprengsatz: Teil 1 wie in Lab-K (ohne die Bedingung)."""
-    from backend.services.zuordnung_wechsel import ueberfuehrung as ue
-
-    if sprengsatz:
-        async def nie(*_a):
-            return False
-        monkeypatch.setattr(ue, "_staende_davor", nie)
-    quellen, eintraege, soll = LK_B1[fall]
-    zeilen = await _lk_altbestand(db, quellen, eintraege)
-    assert (zeilen == soll) != sprengsatz
-
-
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_jede_quelle_zeigt_den_wechsel"])
-async def test_lk_b6_n05_teil1_ohne_staende_prueft_den_spiegel(db, monkeypatch, sprengsatz):
-    """N05: ohne Stände davor gilt Teil 1 — die erste Quellzeile ab Stunde − 1 h muss der Spiegel der neuen Entität sein. Hier
-    ist es ``sensor.c`` (nicht B) ⇒ keine Zeile. Sprengsatz: jede Quellzeile «zeigt» den Wechsel ⇒ eine Zeile A → B."""
-    from backend.services.zuordnung_wechsel import ueberfuehrung as ue
-
-    if sprengsatz:
-        monkeypatch.setattr(ue, "_kanal_zeigt_wechsel", lambda *_a: True)
-    zeilen = await _lk_altbestand(db, [(LK_T0, "sensor.a"), (_lk_t(10, 0), "sensor.c")],
-                                  [(_lk_t(10, 20), None, _lk_ha("sensor.b"))], staende=())
-    assert zeilen == ([("sensor.a", "sensor.b")] if sprengsatz else [])
 
 
 def _w9_ep(t):

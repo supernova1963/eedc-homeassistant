@@ -1,23 +1,15 @@
-"""Sensorwechsel mit Grund, Sitzung 4 «Nachtrag» (Bauplan B-7, §10 Nr. 34, §12 Nr. 61–64; Konzept S-6, S-10 a/c/d).
+"""Sensorwechsel mit Grund, Sitzung 4 «Nachtrag» — der Rest nach Weg B (Sitzung B2).
 
-* **Befund «Zuordnung geändert, Grund fehlt»** (``daten_checker/datenquelle/grund_fehlt.py``): nur für verzeichnete Wechsel
-  ohne Grund, nach denen die Abfrage gefragt hätte (``abfrage.haette_gefragt`` — die eine Prüf-Funktion), Handgriff
-  «Grund nachtragen» als Sprung in die Datenquellen mit ``nachtrag=<id>``.
-* **Grund nachtragen** (``zuordnung_wechsel/nachtrag.py``, Routen ``…/zuordnung-wechsel/{id}/grund[/pruefen]``): Fortsetzung als
-  Zeile ``herkunft = nachtrag`` (die alte wird aufgehoben, ``erklaert_ts`` bleibt der Wechsel), im Kanal der Nachtrag der
-  Mitschrift; Korrektur über den Dienst (Vorschau = Lauf), nur am jüngsten Wechsel mit heutiger Quelle; Fortsetzung → Korrektur
-  ja, Korrektur → nichts.
-* **Überführung der Alt-Vermerke** ``historie_hinweis`` (``ueberfuehrung.ueberfuehre_vermerke``): je Feld der jüngste
-  Protokoll-Eintrag, nur was die Abfrage gefragt hätte, keine Doppelzeile; danach kein Vermerk; zweimal = einmal.
-* **Kanal:** der Nachtrag verwirft nur die abhängigen abgeleiteten Kanäle (§10 Nr. 34); im Stände-Nachbau teilt eine
-  Fortsetzung den Lauf (``nachfuellen._laeufe``), ein Nachtrag im Nachbau-Abschnitt (HA-Stände wörtlich, Familie Mitschrift)
-  erreicht die Kanal-Sicht (§12 Nr. 61).
+«Grund nachtragen» an einem verzeichneten Wechsel, der Befund «Zuordnung geändert, Grund fehlt» und die Überführung der
+Alt-Vermerke ``historie_hinweis`` sind entfernt (Entscheid Gernot 21.11.2026); ihre Proben sind mit ihnen gegangen. Geblieben:
+
+* **Kanal:** ``kanal/naht.nachtrag_fortsetzung`` (der Weg von «Zähler getauscht») verwirft nur die abhängigen abgeleiteten
+  Kanäle (§10 Nr. 34); im Stände-Nachbau teilt eine Fortsetzung den Lauf (``nachfuellen._laeufe``).
 * **Rücksprung** an einer Fortsetzungs-Naht ist keiner (``reader.finde_zaehler_ruecksprunge``).
-* **Probe füllbare Lage** (bis 4b-1 «heilbar») des Befunds ``zaehler_versatz`` nach «Kanal vor Reihe»: wirkt noch, wo der eigene Kanal am Rand-Tag
+* **Probe füllbare Lage** des Befunds ``zaehler_versatz`` nach «Kanal vor Reihe»: wirkt noch, wo der eigene Kanal am Rand-Tag
   eine Lücke hat.
 
-Die Sprengsätze (bewusst falsche Bausteine, gegen die je Probe rot gemessen) stehen im Bericht der Sitzung
-(``opus-berichte/SENSORWECHSEL-S4-2026-11-18.md``).
+Die Helfer ``A``, ``B``, ``KEINE``, ``T``, ``_mit_b``, ``_wechsel``, ``_abgelehnt`` nutzen die Schwesterdateien.
 
 Schwesterdateien: test_sensorwechsel_s3b_abfrage.py (Abfrage, Einstieg), test_sensorwechsel_s3_korrektur.py (Dienst der
 Korrektur), test_sensorwechsel_s2_naht.py (Naht und Nachtrag bei MQTT), test_daten_checker_zaehler_versatz.py.
@@ -68,222 +60,10 @@ async def _wechsel(db, aid, vorher=A, nachher=B, *, erklaert=T, grund=None, herk
     return row
 
 
-async def _befunde(db, a):
-    from backend.services.daten_checker import DatenChecker
-
-    return await DatenChecker(db)._check_zuordnung_grund_fehlt(a)
-
-
-async def _pruefen(db, aid, wid, **kw):
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, pruefe_grund_nachtragen
-
-    return await pruefe_grund_nachtragen(aid, wid, GrundNachtragRequest(**kw), db)
-
-
-async def _nachtragen(db, aid, wid, **kw):
-    from backend.api.routes.sensorwechsel import GrundNachtragRequest, grund_nachtragen
-
-    return await grund_nachtragen(aid, wid, GrundNachtragRequest(**kw), db)
-
-
 async def _abgelehnt(coro) -> HTTPException:
     with pytest.raises(HTTPException) as e:
         await coro
     return e.value
-
-
-# ═══ Wann der Befund kommt (über die Abfrage, B-2) ══════════════════════════════════════════════════════════════════════
-
-async def test_haette_gefragt_wie_die_abfrage(db):
-    from backend.services.zuordnung_wechsel.abfrage import haette_gefragt
-
-    a = await _mit_b(db)
-    aid = a.id
-    assert await haette_gefragt(db, aid, await _wechsel(db, aid, A, B))                       # A → B, eigene Werte
-    assert not await haette_gefragt(db, aid, await _wechsel(db, aid, A, KEINE, erklaert=T + timedelta(days=1)))  # → «Keine»
-    assert not await haette_gefragt(db, aid, await _wechsel(db, aid, B, B, erklaert=T + timedelta(days=2)))      # getauscht
-    ohne = await _wechsel(db, aid, A, B, erklaert=datetime(2026, 8, 1, 10, 5))                 # vor dem ersten Wert
-    assert not await haette_gefragt(db, aid, ohne)
-
-
-async def test_a_keine_a_nicht_a_keine_b_schon(db):
-    from backend.services.zuordnung_wechsel.abfrage import haette_gefragt
-    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
-
-    a = await _mit_b(db)
-    aid = a.id
-    await _wechsel(db, aid, A, KEINE, erklaert=datetime(2026, 9, 6, 9, 30))
-    zurueck = await _wechsel(db, aid, KEINE, A)
-    vergiss(db)
-    assert not await haette_gefragt(db, aid, zurueck)                   # A → «Keine» → A: die letzte Quelle mit Werten
-    anders = await _wechsel(db, aid, KEINE, B, erklaert=T + timedelta(days=1))
-    vergiss(db)
-    assert await haette_gefragt(db, aid, anders)                        # A → «Keine» → B
-
-
-async def test_befund_grund_fehlt_nur_fuer_gefragte_wechsel_ohne_grund(db):
-    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
-
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await _wechsel(db, aid, B, KEINE, erklaert=T + timedelta(days=1))            # → «Keine»: kein Befund
-    await _wechsel(db, aid, A, B, erklaert=T + timedelta(days=2), grund="fortsetzung")
-    weg = await _wechsel(db, aid, A, B, erklaert=T + timedelta(days=3))
-    weg.aufgehoben_durch = row.id
-    await db.commit()
-    vergiss(db)
-    (e,) = await _befunde(db, a)
-    assert (e.code, e.kategorie, e.schwere, e.klasse, e.knopf) == (
-        "zuordnung_grund_fehlt", "zuordnung_grund_fehlt", "warning", "sprung", "Grund nachtragen")
-    assert (e.ziel.bereich, e.ziel.params) == ("datenquellen", {"feld": "netzbezug_kwh", "nachtrag": row.id})
-    assert e.meldung == "Netzbezug: Zuordnung am 10.09.2026 geändert — Grund fehlt"
-    assert "Am 10.09.2026 10:47 Uhr wechselte die Quelle dieses Felds von sensor.a zu sensor.b" in e.details
-    assert e.werte == {"schluessel": NETZ_KEY, "wechsel_id": row.id, "herkunft": "altbestand", "wechsel": "2026-09-10T10:47"}
-
-
-async def test_ohne_wechsel_keine_zeile(db):
-    a = await _mit_b(db)
-    assert await _befunde(db, a) == []
-
-
-# ═══ Grund nachtragen: Prüfen ═══════════════════════════════════════════════════════════════════════════════════════════
-
-async def test_pruefen_nennt_gruende_und_schreibt_nichts(db):
-    from backend.tests.test_sensorwechsel_s3b_abfrage import _zaehlung
-
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await db.commit()
-    vorher = await _zaehlung(db)
-    p = await _pruefen(db, aid, row.id)
-    assert (p["gruende"], p["korrektur_nicht"], p["grund_erforderlich"], p["sensor_key"]) == (
-        ["fortsetzung", "korrektur"], None, True, NETZ_KEY)
-    assert p["wechsel_satz"] == "Am 10.09.2026 10:47 Uhr wechselte die Quelle von sensor.a zu sensor.b."
-    assert (p["erster_wert"], p["vorgabe_falsch_seit"], p["feld_id"]) == ("2026-09-01T12:00:00", "2026-09-01T12:00:00", NETZ)
-    k = await _pruefen(db, aid, row.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    assert k["korrektur"]["zaehlerstaende"] == 1 and k["korrektur"]["startbar"] is True    # der Stand vom 5.9.
-    assert await _zaehlung(db) == vorher
-    e = await _abgelehnt(_pruefen(db, aid, row.id, grund="korrektur", falsch_seit=AB))
-    assert e.status_code == 422 and "vor dem Wechsel" in e.detail
-    assert (await _abgelehnt(_pruefen(db, aid, 9999))).status_code == 404
-    assert (await _abgelehnt(_pruefen(db, aid, row.id, grund="weiss_nicht"))).status_code == 400
-
-
-async def test_vorgabe_falsch_seit_ist_der_beginn_der_quelle_vor_dem_wechsel(db):
-    """Ohne früheren Wechsel: der Beginn des Kanal-Abschnitts, der vor der Stunde des Wechsels galt (nicht der jüngste —
-    die neue Quelle trägt die Stunde des Wechsels selbst); mit einem früheren Wechsel, der die Quelle brachte, dessen ab_ts."""
-    a = await _mit_b(db)
-    aid = a.id
-    k = Kanal(anlage_id=aid, key=NETZ_KEY, einheit="kWh", art="sum")
-    db.add(k)
-    await db.flush()
-    db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=_ts(datetime(2026, 8, 20, 5)), familie="spiegel", statistic_id="sensor.a",
-                       offset=0.0))
-    db.add(KanalQuelle(kanal_id=k.id, gueltig_ab=_ts(datetime(2026, 9, 10, 10)), familie="spiegel", statistic_id="sensor.b",
-                       offset=-50.0))
-    row = await _wechsel(db, aid)
-    await db.commit()
-    # die Quellzeile ist älter als jeder eigene Wert (erster Wert 1.9. 12:00) ⇒ die Stunde vor dem ersten Wert (E-6)
-    assert (await _pruefen(db, aid, row.id))["vorgabe_falsch_seit"] == "2026-09-01T11:00:00"
-    db.add(SensorSnapshot(anlage_id=aid, sensor_key=NETZ_KEY, zeitpunkt=datetime(2026, 8, 20, 6), wert_kwh=1.0,
-                          quelle="ha_statistics"))
-    await db.commit()
-    assert (await _pruefen(db, aid, row.id))["vorgabe_falsch_seit"] == "2026-08-20T05:00:00"
-    await _wechsel(db, aid, {"art": "ha", "entity_id": "sensor.z"}, A, erklaert=datetime(2026, 9, 4, 7, 30), grund="fortsetzung")
-    await db.commit()
-    from backend.services.zuordnung_wechsel.zeitpunkt import vergiss
-    vergiss(db)
-    assert (await _pruefen(db, aid, row.id))["vorgabe_falsch_seit"] == "2026-09-04T08:00:00"
-
-
-async def test_korrektur_nur_am_juengsten_wechsel_mit_heutiger_quelle(db):
-    a = await _mit_b(db)
-    aid = a.id
-    alt = await _wechsel(db, aid, A, B)
-    await _wechsel(db, aid, B, {"art": "ha", "entity_id": "sensor.c"}, erklaert=T + timedelta(days=1))
-    await db.commit()
-    p = await _pruefen(db, aid, alt.id)
-    assert p["gruende"] == ["fortsetzung"] and "jüngsten Wechsel" in p["korrektur_nicht"]
-    # der jüngste Wechsel, aber seine neue Quelle (sensor.c) ist heute nicht zugeordnet (heute: sensor.b) ⇒ keine Korrektur
-    (_a, juengster) = await _zeilen(db, aid)
-    assert (await _pruefen(db, aid, juengster.id))["gruende"] == ["fortsetzung"]
-    e = await _abgelehnt(_nachtragen(db, aid, alt.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3)))
-    assert e.status_code == 422 and "jüngsten Wechsel" in e.detail
-
-
-# ═══ Grund nachtragen: Fortsetzung, Korrektur, Übergänge ════════════════════════════════════════════════════════════════
-
-async def test_fortsetzung_nachtragen_hebt_auf_und_setzt_die_naht(db):
-    from backend.services.zuordnung_wechsel.zeitpunkt import fortsetzungs_naehte, vergiss
-
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await db.commit()
-    r = await _nachtragen(db, aid, row.id, grund="fortsetzung")
-    assert r["eingetragen"] is True and r["korrektur"] == []
-    alt, neu = await _zeilen(db, aid)
-    assert (alt.aufgehoben_durch, neu.grund, neu.herkunft) == (neu.id, "fortsetzung", "nachtrag")
-    assert (neu.erklaert_ts, neu.ab_ts, neu.vorher, neu.nachher) == (T, AB, A, B)    # erklaert_ts = der Wechsel (E-1)
-    vergiss(db)
-    assert await fortsetzungs_naehte(db, aid, NETZ_KEY) == [AB]
-    assert await _befunde(db, a) == []
-    log = (await db.execute(select(ActivityLog).where(ActivityLog.aktion == "Grund nachgetragen"))).scalars().all()
-    assert [x.details for x in log] == ["Wechsel · Netzbezug Zählerstand (kWh): bisherige Werte bleiben (Wechsel vom 10.09.2026 10:47)"]
-    # die aufgehobene Zeile: nichts mehr nachzutragen; die neue: nur noch «Korrektur» (S-10 d)
-    assert (await _pruefen(db, aid, alt.id))["gruende"] == []
-    assert (await _pruefen(db, aid, neu.id))["gruende"] == ["korrektur"]
-    e = await _abgelehnt(_nachtragen(db, aid, neu.id, grund="fortsetzung"))
-    assert e.status_code == 422 and "nur zu «Bisherige Werte verwerfen»" in e.detail
-
-
-async def test_korrektur_nachtragen_ohne_home_assistant_verwirft_im_intervall(db):
-    """Ohne Home Assistant (Standalone): der Dienst verwirft die Zählerstände in ``[falsch_seit, Wechsel)``; davor und danach
-    bleibt alles. Vorschau = Lauf; die Zeile ohne Grund wird von der Korrektur-Zeile aufgehoben."""
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await db.commit()
-    v = await _pruefen(db, aid, row.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    r = await _nachtragen(db, aid, row.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    assert r["korrektur"][0]["zaehlerstaende_geloescht"] == v["korrektur"]["zaehlerstaende"] == 1
-    staende = sorted(t for (t,) in (await db.execute(select(SensorSnapshot.zeitpunkt).where(
-        SensorSnapshot.anlage_id == aid, SensorSnapshot.sensor_key == NETZ_KEY))).all())
-    assert staende == [datetime(2026, 9, 1, 12), datetime(2026, 9, 12, 12)]
-    alt, korr, luecke = await _zeilen(db, aid)
-    assert (alt.aufgehoben_durch, korr.grund, korr.falsch_seit_ts, korr.ab_ts, korr.herkunft) == (
-        korr.id, "korrektur", datetime(2026, 9, 3), AB, "nachtrag")
-    # Sitzung 4b-1 (Bauplan «Zu §14» Nr. 95 (1)): ohne Home Assistant füllt nichts — die Lücke steht als eigene Zeile.
-    assert (luecke.grund, luecke.falsch_seit_ts, luecke.ab_ts, luecke.nachher, luecke.aufgehoben_durch) == (
-        "korrektur", datetime(2026, 9, 3), AB, None, None)
-    assert await _befunde(db, a) == []
-    e = await _abgelehnt(_nachtragen(db, aid, korr.id, grund="fortsetzung"))
-    assert e.status_code == 422 and e.detail == "Eine Korrektur lässt sich nicht mehr ändern."
-
-
-async def test_fortsetzung_dann_korrektur(db):
-    a = await _mit_b(db)
-    aid = a.id
-    row = await _wechsel(db, aid)
-    await db.commit()
-    await _nachtragen(db, aid, row.id, grund="fortsetzung")
-    _alt, fort = await _zeilen(db, aid)
-    await _nachtragen(db, aid, fort.id, grund="korrektur", falsch_seit=datetime(2026, 9, 3))
-    _a, fort, korr, luecke = await _zeilen(db, aid)
-    assert (fort.aufgehoben_durch, korr.grund, luecke.nachher) == (korr.id, "korrektur", None)
-
-
-async def test_ohne_grund_und_korrektur_ohne_falsch_seit_abgelehnt(db):
-    a = await _mit_b(db)
-    aid = a.id
-    rid = (await _wechsel(db, aid)).id
-    await db.commit()
-    assert (await _abgelehnt(_nachtragen(db, aid, rid))).status_code == 422
-    e = await _abgelehnt(_nachtragen(db, aid, rid, grund="korrektur"))
-    assert e.status_code == 422 and "falsch seit" in e.detail
-    assert len(await _zeilen(db, aid)) == 1
 
 
 # ═══ Kanal: Mitschrift, Nachbau-Abschnitt, abhängige abgeleitete Kanäle ═════════════════════════════════════════════════
@@ -297,29 +77,6 @@ async def _mitschrift(db, aid, key, werte, *, t0, statistic_id="netzbezug_kwh"):
         db.add(KanalStatistik(kanal_id=k.id, start_ts=_ts(t0 + timedelta(hours=i)), sum=w, state=w, familie="mitschrift"))
     await db.flush()
     return k
-
-
-async def test_fortsetzung_im_nachbau_abschnitt_erreicht_die_kanal_sicht(db):
-    """§12 Nr. 61: ein Nachbau-Abschnitt (HA-Stände wörtlich, Familie Mitschrift, ``_rohstaende``) trägt den Sprung eines
-    alten Wechsels; der nachgetragene Grund «Fortsetzung» setzt dort über ``kanal/naht.nachtrag_fortsetzung`` eine Quelle,
-    die Stunde des Wechsels zählt in der Kanal-Sicht (``lesen.stunden``) keinen Zuwachs mehr."""
-    from backend.services.kanal.lesen import stunden
-
-    a = await _mit_b(db)
-    aid = a.id
-    t0 = datetime(2026, 9, 10, 8)
-    k = await _mitschrift(db, aid, NETZ_KEY, (100.0, 101.0, 2101.5, 2102.5), t0=t0, statistic_id="ha")
-    row = await _wechsel(db, aid, erklaert=datetime(2026, 9, 10, 10, 15))
-    await db.commit()
-    vorher = {w.start_ts: w.change for w in (await stunden(db, k, _ts(t0), _ts(t0) + 4 * 3600)).werte}
-    assert vorher[_ts(t0 + timedelta(hours=2))] == pytest.approx(2000.5)
-    await _nachtragen(db, aid, row.id, grund="fortsetzung")
-    nachher = {w.start_ts: w.change for w in (await stunden(db, k, _ts(t0), _ts(t0) + 4 * 3600)).werte}
-    assert nachher[_ts(t0 + timedelta(hours=2))] == pytest.approx(0.0)
-    assert nachher[_ts(t0 + timedelta(hours=3))] == pytest.approx(1.0)
-    q = (await db.execute(select(KanalQuelle).where(and_(
-        KanalQuelle.kanal_id == k.id, KanalQuelle.gueltig_ab == _ts(t0 + timedelta(hours=2)))))).scalar_one()
-    assert q.offset == pytest.approx(-2000.5)
 
 
 def test_nachbau_teilt_an_einer_fortsetzung():
@@ -374,70 +131,6 @@ async def test_nachtrag_verwirft_nur_abhaengige_abgeleitete(db):
     assert await zeilen() == {abgeleitet_key(2): 4, "abgeleitet:basis:kosten_netzbezug": 4}
     await nachtrag_fortsetzung(db, netz.id, _ts(t0 + timedelta(hours=2)))
     assert await zeilen() == {abgeleitet_key(2): 2, "abgeleitet:basis:kosten_netzbezug": 2}
-
-
-# ═══ Überführung der Alt-Vermerke (S-10 c) ═════════════════════════════════════════════════════════════════════════════
-
-async def _vermerk_lage(db, *, mit_zeile: bool):
-    """Wie die Produktiv-Anlage: drei Vermerk-Felder — erste Zuordnung (keine Werte davor), zwei Einträge mit unverändertem
-    Stand, ein echter Wechsel A → B."""
-    a = await _mit_b(db)
-    aid = a.id
-    a.sensor_mapping = {**a.sensor_mapping, "historie_hinweis": {"felder": [
-        {"id": "basis_energy_einspeisung_kwh", "label": "Einspeisung"}, {"id": "inv_energy_2_ladung_kwh", "label": "WB"},
-        {"id": NETZ, "label": "Netzbezug"}], "seit": "2026-09-01T10:00:00+02:00"}}
-    ein = {"quelle": "ha_app", "entity_id": "sensor.wb"}
-    for t, fid, vorher, nachher in (
-            (datetime(2026, 9, 1, 9), "basis_energy_einspeisung_kwh", {"quelle": "keine"}, {"quelle": "ha_app", "entity_id": "sensor.e"}),
-            (datetime(2026, 9, 2, 9), "inv_energy_2_ladung_kwh", None, ein),
-            (datetime(2026, 9, 2, 9, 1), "inv_energy_2_ladung_kwh", ein, ein),
-            (T, NETZ, {"quelle": "ha_app", "entity_id": "sensor.a"}, {"quelle": "ha_app", "entity_id": "sensor.b"})):
-        db.add(ActivityLog(timestamp=t, kategorie="sensor_mapping", aktion="Datenquelle zugeordnet", anlage_id=aid,
-                           details_json={"field_id": fid, "vorher": vorher, "nachher": nachher}))
-    if mit_zeile:
-        await _wechsel(db, aid)
-    await db.commit()
-    return a
-
-
-async def test_vermerke_eine_zeile_statt_drei_und_der_schluessel_verschwindet(db):
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_vermerke
-
-    a = await _vermerk_lage(db, mit_zeile=False)
-    z = await ueberfuehre_vermerke(db)
-    await db.commit()
-    assert dict(z) == {"ohne_eigene_werte": 1, "wirksam_unveraendert": 1, "ueberfuehrt": 1, "vermerke_entfernt": 1}
-    (w,) = await _zeilen(db, a.id)
-    assert (w.sensor_key, w.vorher, w.nachher, w.grund, w.herkunft, w.erklaert_ts) == (NETZ_KEY, A, B, None, "altbestand", T)
-    await db.refresh(a)
-    assert "historie_hinweis" not in a.sensor_mapping and a.sensor_mapping["basis"]
-    assert dict(await ueberfuehre_vermerke(db)) == {}                        # zweimal = einmal
-    assert len(await _zeilen(db, a.id)) == 1
-    assert [e.code for e in await _befunde(db, a)] == ["zuordnung_grund_fehlt"]
-
-
-async def test_vermerke_keine_doppelzeile_zur_ueberfuehrung_aus_sitzung_1(db):
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_vermerke
-
-    a = await _vermerk_lage(db, mit_zeile=True)
-    z = await ueberfuehre_vermerke(db)
-    await db.commit()
-    assert z["schon_ueberfuehrt"] == 1 and z["ueberfuehrt"] == 0
-    assert len(await _zeilen(db, a.id)) == 1
-
-
-async def test_vermerk_nach_keine_verfaellt(db):
-    from backend.services.zuordnung_wechsel.ueberfuehrung import ueberfuehre_vermerke
-
-    a = await _mit_b(db)
-    aid = a.id
-    a.sensor_mapping = {**a.sensor_mapping, "historie_hinweis": {"felder": [{"id": NETZ, "label": "N"}], "seit": "x"}}
-    db.add(ActivityLog(timestamp=T, kategorie="sensor_mapping", aktion="x", anlage_id=aid,
-                       details_json={"field_id": NETZ, "vorher": {"quelle": "ha_app", "entity_id": "sensor.a"},
-                                     "nachher": {"quelle": "keine"}}))
-    await db.commit()
-    z = await ueberfuehre_vermerke(db)
-    assert z["nicht_gefragt"] == 1 and await _zeilen(db, aid) == []
 
 
 # ═══ Rücksprung an einer Fortsetzungs-Naht ═══════════════════════════════════════════════════════════════════════════

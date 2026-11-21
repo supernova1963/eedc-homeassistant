@@ -93,26 +93,6 @@ async def zaehlerstand_ha_jetzt(ha_svc, kanal_id: int, art: str, eid: str) -> Op
     return None if wert is None else float(wert)
 
 
-async def beginn_quelle_vor(db: AsyncSession, kanal_id: int, ts: int) -> Optional[datetime]:
-    """Beginn der Quelle, die **vor** ``ts`` galt (größtes nicht verworfenes ``gueltig_ab < ts``), über die Quellzeilen
-    derselben Kennung zurück (Naht des Stundenlaufs, Nachtrag eines «Zähler getauscht») — die Vorgabe «falsch seit» beim
-    Nachtragen eines Grunds (Sitzung 4): die bisherige Quelle ist die vor dem Wechsel, nicht die jüngste. ``None`` = vor
-    ``ts`` keine Quelle."""
-    quellen = list((await db.execute(select(KanalQuelle).where(and_(KanalQuelle.kanal_id == kanal_id,
-                                                                    KanalQuelle.gueltig_ab < ts))
-                                     .order_by(KanalQuelle.gueltig_ab.desc()))).scalars().all())
-    folge = [q for q in quellen if q.verworfen_ts is None]
-    if not folge:
-        return None
-    letzte = folge[0]
-    beginn = letzte.gueltig_ab
-    for q in quellen[quellen.index(letzte) + 1:]:
-        if q.verworfen_ts is not None or (q.familie, q.statistic_id) != (letzte.familie, letzte.statistic_id):
-            break
-        beginn = q.gueltig_ab
-    return datetime.fromtimestamp(int(beginn))
-
-
 async def erste_zeile_ab(db: AsyncSession, kanal_id: int, ts: int) -> Optional[int]:
     """``start_ts`` der ersten geschriebenen Stunde ab ``ts`` (``None`` = noch keine)."""
     return (await db.execute(select(KanalStatistik.start_ts).where(and_(

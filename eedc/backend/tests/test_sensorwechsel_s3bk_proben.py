@@ -208,7 +208,7 @@ async def test_stand_neu_ist_der_zaehlerstand_in_der_einheit_des_kanals(ha):
 
 
 # Weg B (Sitzung B1): die Proben zur Vorgabe «Falsch seit» beim Wechsel entfallen mit der Wahl (``abfrage._beginn_bisherige_
-# quelle``, ``kanal/angaben.beginn_juengste_quelle`` gelöscht); die Vorgabe im Nachtrag prüft test_sensorwechsel_s4_nachtrag.py.
+# quelle``, ``kanal/angaben.beginn_juengste_quelle`` gelöscht); die Vorgabe im Nachtrag ist in Sitzung B2 mit «Grund nachtragen» entfernt.
 
 
 # ═══ Wann gefragt wird — die letzte Quelle mit Werten (Mutanten A02, A04, A05, A06) ════════════════════════════════════

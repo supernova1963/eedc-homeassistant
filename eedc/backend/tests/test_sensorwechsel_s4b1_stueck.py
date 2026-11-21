@@ -404,135 +404,11 @@ def test_nr97_spaetere_richtige_nimmt_die_quelle_eine_stunde_vor_ab_mit():
     assert _spaetere_richtige([q(ab - 2 * 3600, "sensor.a"), c], ab, "sensor.a") == []
 
 
-# ═══ H-4 (Nr. 96, Nr. 91 c): früherer Wechsel über das Stück ═════════════════════════════════════════════════════════
+# ═══ Hilfe: ein verzeichneter Wechsel ohne Grund (H-4 «am Rückkehr-Wechsel» ist mit «Grund nachtragen» entfernt, Weg B) ═════════════════════════════════════════════════════════
 
 async def _wechsel(db, aid, key, ab, vorher, nachher):
     db.add(ZuordnungWechsel(anlage_id=aid, sensor_key=key, erklaert_ts=ab, ab_ts=ab, vorher=vorher, nachher=nachher,
                             grund=None, herkunft="altbestand"))
-
-
-async def _lagen(db, aid) -> list[tuple]:
-    """Je Zeile: angebotene Gründe, Stück ``(Sprung, Rückgang, Quelle)`` und der Sperrsatz."""
-    from backend.models.anlage import Anlage
-    from backend.services.zuordnung_wechsel import nachtrag
-
-    a = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
-    zw.vergiss(db)
-    out = []
-    for row in (await db.execute(select(ZuordnungWechsel).order_by(ZuordnungWechsel.id))).scalars().all():
-        la = await nachtrag.lage(db, a, row.id)
-        out.append((la.gruende, la.stueck, la.korrektur_nicht))
-    return out
-
-
-async def test_h4_nur_am_rueckkehr_wechsel_ueber_die_zeit_davor(db, ha, eingerichtet, monkeypatch):  # noqa: F811
-    """Bauplan «Zu §14» Nr. 101 (F2): A → X → A → C — am ersten Wechsel (A → X) keine Korrektur über das Stück (der Grund-Text
-    meinte dort das Gegenteil), am Rückkehr-Wechsel (X → A) das Stück **vor** ihm, ``[A → X, X → A)``, richtig A; «Falsch seit»
-    zählt dort nicht."""
-    from backend.api.routes import sensorwechsel as sw
-    from backend.services.zuordnung_wechsel import korrektur_lauf, nachtrag
-
-    v._kanal_tage(monkeypatch, {})
-    a, wb, key = await v._anlage(db, spiegel=False)
-    aid, wid = a.id, wb.id
-    QX = {"art": "ha", "entity_id": "sensor.x"}
-    await _wechsel(db, aid, key, SPRUNG, QA, QX)
-    await _wechsel(db, aid, key, RUECK, QX, QA)
-    await _wechsel(db, aid, key, datetime(2026, 6, 20, 10), QA, {"art": "ha", "entity_id": "sensor.c"})
-    await db.commit()
-    (g1, s1, n1), (g2, s2, n2), _r3 = await _lagen(db, aid)
-    assert (g1, s1, n1) == (["fortsetzung"], None, nachtrag.SATZ_KORREKTUR_NUR_JUENGSTER)
-    assert (g2, s2, n2) == (["fortsetzung", "korrektur"], (SPRUNG, RUECK, QA), None)
-    r1, r2, _ = [r.id for r in (await db.execute(select(ZuordnungWechsel).order_by(ZuordnungWechsel.id))).scalars().all()]
-    e = await _abgelehnt(sw.grund_nachtragen(aid, r1, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=SPRUNG), db))
-    assert (e.status_code, e.detail) == (422, nachtrag.SATZ_KORREKTUR_NUR_JUENGSTER)
-    await sw.grund_nachtragen(aid, r2, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=datetime(2026, 6, 1)), db)
-    for t in list(korrektur_lauf._AUFGABEN.values()):
-        await t
-    korr = (await db.execute(select(ZuordnungWechsel).where(ZuordnungWechsel.grund == "korrektur"))).scalars().all()
-    assert [(k.falsch_seit_ts, k.ab_ts, k.nachher) for k in korr] == [(SPRUNG, RUECK, QA)]
-    assert await _tagesansicht(db, a, wid) == {d: 12.0 for d in TAGE}
-
-
-async def test_h4_a_x_a_x_jede_zeile_die_zeit_vor_ihr(db, ha, eingerichtet, monkeypatch):  # noqa: F811
-    """Nachmessung 4b-1 F2 (``test_p9_h4_a_x_a_x``): A → X → A → X. Am HEAD der Runde bot der Wechsel X → A die Zeit **nach**
-    ihm mit X an. Jetzt: A → X nichts; X → A das Stück davor mit A; A → X (zurück zu X) das Stück davor mit X."""
-    from backend.services.zuordnung_wechsel import nachtrag
-
-    v._kanal_tage(monkeypatch, {})
-    a, _wb, key = await v._anlage(db, spiegel=False)
-    aid = a.id
-    QX = {"art": "ha", "entity_id": "sensor.x"}
-    t3 = datetime(2026, 6, 20, 10)
-    await _wechsel(db, aid, key, SPRUNG, QA, QX)
-    await _wechsel(db, aid, key, RUECK, QX, QA)
-    await _wechsel(db, aid, key, t3, QA, QX)
-    await db.commit()
-    assert await _lagen(db, aid) == [
-        (["fortsetzung"], None, nachtrag.SATZ_KORREKTUR_NUR_JUENGSTER),
-        (["fortsetzung", "korrektur"], (SPRUNG, RUECK, QA), None),
-        (["fortsetzung", "korrektur"], (RUECK, t3, QX), None),
-    ]
-
-
-@pytest.mark.parametrize("spiegel", [False, True])
-async def test_h4_a_x_a_mit_spaeterem_zaehlertausch_heilt(db, ha, eingerichtet, monkeypatch, spiegel):  # noqa: F811
-    """Nr. 103 (F4): A → X → A, danach «Zähler getauscht» (A → A). Der Zählertausch zählt nicht als späterer Wechsel — der
-    Rückkehr-Wechsel ist der jüngste, die gewöhnliche Korrektur mit «Falsch seit» ist frei (Vorgabe: der Wechsel davor). Sie
-    heilt Reihe und Kanal: 12,0 an jedem Tag (Stellung Reihe ohne Spiegel, echt mit Spiegel), Bereich 84,0."""
-    from backend.api.routes import sensorwechsel as sw
-    from backend.services.zuordnung_wechsel import korrektur_lauf
-
-    v._kanal_tage(monkeypatch, {})
-    a, wb, key = await v._anlage(db, spiegel=spiegel)
-    aid, wid = a.id, wb.id
-    QX = {"art": "ha", "entity_id": "sensor.x"}
-    await _wechsel(db, aid, key, SPRUNG, QA, QX)
-    await _wechsel(db, aid, key, RUECK, QX, QA)
-    db.add(ZuordnungWechsel(anlage_id=aid, sensor_key=key, erklaert_ts=datetime(2026, 6, 20, 10), ab_ts=datetime(2026, 6, 20, 10),
-                            vorher=QA, nachher=QA, grund="fortsetzung", herkunft="wechsel"))
-    await db.commit()
-    (g1, _s1, _n1), (g2, s2, n2), (g3, _s3, _n3) = await _lagen(db, aid)
-    assert (g2, s2, n2, g3) == (["fortsetzung", "korrektur"], None, None, [])
-    r2 = (await db.execute(select(ZuordnungWechsel).order_by(ZuordnungWechsel.id))).scalars().all()[1]
-    await sw.grund_nachtragen(aid, r2.id, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=SPRUNG), db)
-    for t in list(korrektur_lauf._AUFGABEN.values()):
-        await t
-    assert await _tagesansicht(db, a, wid) == {d: 12.0 for d in TAGE}
-    assert (await _mengen(db, aid, key))[0] == pytest.approx(84.0)
-
-
-async def test_nr103_spaetere_korrektur_und_luecke_zaehlen_nicht(db, ha, eingerichtet, monkeypatch):  # noqa: F811
-    """Nr. 103 (Nachmessung F4 b, ``test_p3``): ein älterer offener Wechsel, danach eine Korrektur über ein Stück am Befund —
-    der Wechsel bleibt der jüngste Quellenwechsel, «Korrektur» bleibt angeboten."""
-    v._kanal_tage(monkeypatch, {})
-    a, _wb, key = await v._anlage(db, spiegel=False)
-    aid = a.id
-    await _wechsel(db, aid, key, datetime(2026, 6, 5, 10), {"art": "ha", "entity_id": "sensor.ganz_alt"}, QA)
-    await db.commit()
-    ((gruende, _s, nicht),) = await _lagen(db, aid)
-    assert (gruende, nicht) == (["fortsetzung", "korrektur"], None)
-    await _stueck(db, aid, key)
-    (gruende, _s, nicht), _stueck_zeile = await _lagen(db, aid)
-    assert (gruende, nicht) == (["fortsetzung", "korrektur"], None)
-
-
-async def test_h4_verschiedene_quellen_bleibt_gesperrt(db, ha, monkeypatch):  # noqa: F811
-    from backend.models.anlage import Anlage
-    from backend.services.zuordnung_wechsel import nachtrag
-
-    a, wb, key = await v._anlage(db, spiegel=False)
-    aid = a.id
-    QX, QC = {"art": "ha", "entity_id": "sensor.x"}, {"art": "ha", "entity_id": "sensor.c"}
-    await _wechsel(db, aid, key, SPRUNG, QA, QX)
-    await _wechsel(db, aid, key, RUECK, QX, QC)
-    await _wechsel(db, aid, key, datetime(2026, 6, 20, 10), QC, {"art": "ha", "entity_id": "sensor.d"})
-    await db.commit()
-    a = (await db.execute(select(Anlage).where(Anlage.id == aid))).scalar_one()
-    r1, r2, _ = (await db.execute(select(ZuordnungWechsel).order_by(ZuordnungWechsel.id))).scalars().all()
-    for row in (r1, r2):
-        la = await nachtrag.lage(db, a, row.id)
-        assert la.stueck is None and la.korrektur_nicht == nachtrag.SATZ_KORREKTUR_NUR_JUENGSTER
 
 
 # ═══ Routen am Befund ═════════════════════════════════════════════════════════════════════════════════════════════════
@@ -832,10 +708,11 @@ async def test_nr104_verschiedene_quellen_auskunft_und_kopfsatz_mit_beiden(db, h
 
 async def test_nr105_luecken_zeile_ist_kein_wechsel(db, ohne_ha, monkeypatch):  # noqa: F811
     """Nachmessung F7 a/c (``test_p2``): nach einer Korrektur ohne Füllen am Wechsel X → A liefert ``letzte_quelle_mit_werten``
-    die richtige Quelle A (vorher die verworfene X aus der Lücken-Zeile); die Routen kennen die Nummer der Lücken-Zeile nicht
-    (404); ``quelle_am`` vor dem Intervall bleibt X (die Lücken-Zeile zählt nicht als Wechsel)."""
-    from backend.api.routes import sensorwechsel as sw
+    die richtige Quelle A (vorher die verworfene X aus der Lücken-Zeile); ``quelle_am`` vor dem Intervall bleibt X (die Lücken-Zeile zählt nicht als Wechsel). Seit Weg B (Sitzung B2) läuft
+    die Korrektur direkt über den Dienst (``korrektur.fuehre_aus`` mit dem Auftrag, den «Grund nachtragen» baute); die Routen
+    von «Grund nachtragen» gibt es nicht mehr."""
     from backend.services.zuordnung_wechsel import abfrage
+    from backend.services.zuordnung_wechsel import korrektur as kr
 
     v._kanal_tage(monkeypatch, {})
     reihe = [(v.T0 + timedelta(hours=h), (7000.0 if h >= v.RUECK_H else 1000.0) + 0.5 * h) for h in range(29 * 24)]
@@ -844,18 +721,17 @@ async def test_nr105_luecken_zeile_ist_kein_wechsel(db, ohne_ha, monkeypatch):  
     QX = {"art": "ha", "entity_id": "sensor.x"}
     await _wechsel(db, aid, key, RUECK, QX, QA)
     await db.commit()
-    w_id = (await db.execute(select(ZuordnungWechsel.id))).scalar_one()
-    await sw.grund_nachtragen(aid, w_id, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=SPRUNG), db)
+    row = (await db.execute(select(ZuordnungWechsel))).scalar_one()
+    await kr.fuehre_aus(db, kr.Auftrag(anlage_id=aid, sensor_key=key, falsch_seit=SPRUNG, ab=row.ab_ts, vorher=QX, nachher=QA,
+                                       herkunft="nachtrag", erklaert=datetime(2026, 11, 18, 8)),
+                        ha_svc=kr.ha_dienst(None), jetzt=datetime(2026, 11, 18, 8))
+    await db.commit()
     zeilen = (await db.execute(select(ZuordnungWechsel).order_by(ZuordnungWechsel.id))).scalars().all()
     luecke = [w for w in zeilen if zw.ist_luecken_zeile(w)]
     assert len(luecke) == 1 and luecke[0].vorher == QX
-    luecke_id = luecke[0].id
     zw.vergiss(db)
     assert await abfrage.letzte_quelle_mit_werten(db, aid, key, {"art": "keine"}) == QA
     assert zw.quelle_am((await zw.lade_wechsel(db, aid)).get(key), datetime(2026, 6, 5)) == QX
-    for route in (sw.pruefe_grund_nachtragen, sw.grund_nachtragen):
-        e = await _abgelehnt(route(aid, luecke_id, sw.GrundNachtragRequest(grund="korrektur", falsch_seit=SPRUNG), db))
-        assert e.status_code == 404
 
 
 # ═══ Nr. 106: solange das Füllen aussteht, gilt das Stück als Lücke ═══════════════════════════════════════════════════

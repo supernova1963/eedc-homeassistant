@@ -10,15 +10,11 @@
  * Handkorrektur, nicht rücknehmbar). «Abbrechen» lässt die bisherige Zuordnung stehen. Der Client rechnet nichts: Zahlen und
  * Sätze kommen aus dem Backend.
  *
- * **Grund nachtragen** (Sitzung 4, Bauplan B-7; Rückbau in Weg B, Sitzung B2): derselbe Dialog für einen schon verzeichneten
- * Wechsel ohne Grund (`nachtrag`) — nur dort noch «verwerfen» mit «Falsch seit» und der Vorschau (`onVorschau`):
- * Titel in der Vergangenheit, der Wechsel als Satz oben, nur die zulässigen Gründe (`…/grund/pruefen`: Fortsetzung → Korrektur
- * ja, Korrektur nie mehr; Korrektur nur am jüngsten Wechsel, sonst ein Satz warum), «Falsch seit» vorbelegt mit dem Beginn der
- * Quelle vor dem Wechsel.
- *
- * **Stück** (Sitzung 4b-1, Bauplan «Zu §14» Nr. 96/98/101): am Befund «Zählerstände – versetzter Abschnitt» gibt es nur
- * «Korrektur» über ein festes Stück, am Rückkehr-Wechsel X → A eines Stücks A → X → A «Korrektur» über die Zeit davor — statt
- * des Felds «Falsch seit» steht die Zeit des Stücks.
+ * **Stück** (Sitzung 4b-1, Bauplan «Zu §14» Nr. 96/98): am Befund «Zählerstände – versetzter Abschnitt» derselbe Dialog im
+ * Nachtrag-Modus (`nachtrag`): Titel in der Vergangenheit, der Abschnitt als Satz oben, nur die zulässigen Gründe, «Korrektur»
+ * über das feste Stück (seine Zeit statt eines Felds «Falsch seit») mit der Vorschau (`onVorschau`); an einer MQTT-Reihe auch
+ * «bleiben». «Grund nachtragen» an einem verzeichneten Wechsel (Sitzung 4) samt Feld «Falsch seit» ist seit Weg B entfernt
+ * (Sitzung B2).
  *
  * **«bleiben»** (Sensorwechsel U2 Lauf b, Bauplan Nr. 132/138; intern `fortsetzung`). Zwischen zwei HA-Sensoren trägt die
  * Prüf-Antwort `bleiben` (`BleibenAngaben`): bei «bleiben» zeigt der Dialog unter «Was danach geschieht» ihre Sätze; nur bei
@@ -48,28 +44,16 @@ export const GRUND_FORTSETZUNG_FOLGE =
 export const GRUND_LOESCHEN = 'Daten vor der Änderung löschen — das Feld beginnt mit dem neuen Sensor neu'
 export const GRUND_LOESCHEN_FOLGE =
   'Nur die Daten dieses Felds vor der Änderung werden gelöscht. Was das heißt, steht unten.'
-/** Nur noch «Grund nachtragen» (Rückbau in Sitzung B2). */
+/** Nur noch am versetzten Abschnitt (Stück). */
 export const GRUND_KORREKTUR = 'Bisherige Werte verwerfen — bisher war der falsche Sensor zugeordnet'
-/** Im Nachtrag liegt der Wechsel in der Vergangenheit: ein fest gespeicherter Tageswert vom Tag des Wechsels bleibt (benannte
- * Grenze, Bauplan «Zu §13» Nr. 87) — neben dem freigegebenen Satz `GRUND_FORTSETZUNG_FOLGE`, der wörtlich bleibt. */
-export const NACHTRAG_FORTSETZUNG_ZUSATZ =
-  'Hat eedc für den Tag des Wechsels schon einen festen Tageswert gespeichert, bleibt der, wie er ist, und kann den ' +
-  'Unterschied weiter enthalten.'
-/** Im Nachtrag endet das verworfene Intervall am Wechsel (Bauplan §13 Nr. 69). */
-export const NACHTRAG_GRUND_KORREKTUR_FOLGE =
-  'Die Werte dieses Felds von «falsch seit» bis zum Wechsel werden verworfen und — soweit Home Assistant die Geschichte ' +
-  'des richtigen Sensors führt — aus ihm neu aufgebaut. Die Vorschau unten sagt, was genau geschieht.'
-export const FALSCH_SEIT_LABEL = 'Falsch seit'
-export const FALSCH_SEIT_HINWEIS = 'Vorbelegt ist der Beginn der bisherigen Quelle; gezählt wird ab der vollen Stunde.'
 export const ABBRECHEN_HINWEIS = '«Abbrechen» lässt die bisherige Zuordnung unverändert.'
 export const VORSCHAU_TITEL = 'Was danach geschieht'
 export const VORSCHAU_LAEDT = 'Vorschau wird geladen …'
 export const NACHTRAG_TITEL = 'Warum wechselte die Quelle?'
-export const NACHTRAG_FALSCH_SEIT_HINWEIS = 'Vorbelegt ist der Beginn der Quelle vor dem Wechsel; gezählt wird ab der vollen Stunde.'
 export const NACHTRAG_ABBRECHEN_HINWEIS = '«Abbrechen» trägt nichts ein.'
 export const NACHTRAG_NICHTS = 'Für diesen Wechsel ist kein Grund nachzutragen.'
-/** Sitzung 4b-1: Korrektur über ein festes Stück (Befund «Zählerstände – versetzter Abschnitt»; am Rückkehr-Wechsel X → A
- *  eines Stücks A → X → A die Zeit davor) — «Falsch seit» steht fest, die Korrektur endet am Rückgang. */
+/** Sitzung 4b-1: Korrektur über ein festes Stück (Befund «Zählerstände – versetzter Abschnitt») — der Beginn steht fest, die
+ *  Korrektur endet am Rückgang. */
 export const STUECK_GRUND_KORREKTUR_FOLGE =
   'Die Zählerstände dieses Felds aus dieser Zeit werden verworfen und — wo Home Assistant sie für die Quelle davor und ' +
   'danach führt — neu gelesen; sonst bleibt die Zeit ohne Zählerstände. Die Vorschau unten sagt, was das für die ' +
@@ -84,13 +68,14 @@ export const ZAEHLT_AB_HINWEIS =
  *  Felds, bis zur Stunde des Wechsels). */
 export const ZAEHLT_AB_BEREICH = (von: string, bis: string) => `Wählbar von ${von} bis ${bis} Uhr.`
 
-/** «Grund nachtragen»: der Wechsel als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom Backend). */
+/** Am versetzten Abschnitt: der Abschnitt als Satz, die zulässigen Gründe und — wo «Korrektur» fehlt — warum (alles vom
+ *  Backend). */
 export interface NachtragAngaben {
   wechselSatz: string
   gruende: WechselGrund[]
   korrekturNicht?: string | null
-  /** Korrektur über ein festes Stück (ISO-Zeiten vom Backend): kein Feld «Falsch seit». */
-  stueck?: { sprung: string; rueckgang: string } | null
+  /** Das feste Stück (ISO-Zeiten vom Backend). */
+  stueck: { sprung: string; rueckgang: string } | null
 }
 
 /** `YYYY-MM-DDTHH:MM[:SS]` → «TT.MM.JJJJ HH:MM» (nur Anzeige). */
@@ -113,7 +98,6 @@ const lokal = (iso: string | null): string => (iso ? iso.slice(0, 16) : '')
 
 interface Wahl {
   grund: WechselGrund | ''
-  falschSeit: string
   vorschau: KorrekturVorschau | null
   laedt: boolean
   fehler: string | null
@@ -126,15 +110,15 @@ interface Props {
   isOpen: boolean
   /** Die Zeilen der Prüf-Route mit `grund_erforderlich` (Feld: eine, Preset: je Feld eine). */
   fragen: QuellePruefung[]
-  /** Nur «Grund nachtragen»: Vorschau der Korrektur für einen Schlüssel (Prüf-Route mit Grund «korrektur» und «falsch seit»). */
-  onVorschau?: (sensorKey: string, falschSeit: string) => Promise<KorrekturVorschau | null>
+  /** Nur am versetzten Abschnitt: Vorschau der Korrektur über das Stück (Prüf-Route mit Grund «korrektur»). */
+  onVorschau?: (sensorKey: string) => Promise<KorrekturVorschau | null>
   /** U2 Lauf b: die Angaben zu «bleiben» an einer anderen Stunde «Der neue Sensor zählt ab» (Prüf-Route mit `zaehlt_ab`). */
   onBleibenVorschau?: (sensorKey: string, zaehltAb: string) => Promise<BleibenAngaben | null>
   onBestaetigen: (gruende: Record<string, GrundAngabe>) => void
   onAbbrechen: () => void
   laeuft?: boolean
   fehler?: string | null
-  /** Grund nachtragen an einem verzeichneten Wechsel (eine Zeile); ohne: die Abfrage beim Wechsel. */
+  /** Am versetzten Abschnitt (eine Zeile); ohne: die Abfrage beim Wechsel. */
   nachtrag?: NachtragAngaben
 }
 
@@ -145,7 +129,7 @@ export default function SensorwechselDialog({
 
   useEffect(() => {
     setWahl(Object.fromEntries(fragen.map((f) => [f.sensor_key ?? '', {
-      grund: '' as const, falschSeit: lokal(f.vorgabe_falsch_seit ?? null), vorschau: null, laedt: false, fehler: null,
+      grund: '' as const, vorschau: null, laedt: false, fehler: null,
       zaehltAb: lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null), bleiben: f.bleiben ?? null,
     }])))
   }, [fragen])
@@ -153,17 +137,17 @@ export default function SensorwechselDialog({
   const setze = (key: string, patch: Partial<Wahl>) =>
     setWahl((w) => ({ ...w, [key]: { ...w[key], ...patch } }))
 
-  // Je Feld die Nummer der jüngsten Anfrage: eine überholte Antwort (früheres «falsch seit») wird verworfen.
+  // Je Feld die Nummer der jüngsten Anfrage: eine überholte Antwort wird verworfen.
   const anfrage = useRef<Record<string, number>>({})
 
-  // Vorschau der Korrektur laden, sobald «Korrektur» gewählt ist und «falsch seit» steht.
-  const ladeVorschau = (key: string, falschSeit: string) => {
+  // Vorschau der Korrektur über das Stück laden, sobald «Korrektur» gewählt ist.
+  const ladeVorschau = (key: string) => {
     const nr = (anfrage.current[key] ?? 0) + 1
     anfrage.current[key] = nr
-    if (!falschSeit || !onVorschau) { setze(key, { vorschau: null, laedt: false }); return }
+    if (!onVorschau) { setze(key, { vorschau: null, laedt: false }); return }
     setze(key, { laedt: true, fehler: null })
     const aktuell = () => anfrage.current[key] === nr
-    onVorschau(key, falschSeit)
+    onVorschau(key)
       .then((v) => { if (aktuell()) setze(key, { vorschau: v, laedt: false }) })
       .catch((e) => {
         if (aktuell()) setze(key, { vorschau: null, laedt: false, fehler: e instanceof Error ? e.message : 'Vorschau fehlgeschlagen' })
@@ -189,7 +173,7 @@ export default function SensorwechselDialog({
     if (!w || !w.grund) return false
     if (w.grund === 'fortsetzung') return !w.laedt && !w.fehler
     if (w.grund === 'loeschen') return true
-    return !!w.falschSeit && !w.laedt && !!w.vorschau?.startbar
+    return !w.laedt && !!w.vorschau?.startbar
   }), [fragen, wahl])
 
   const bestaetigen = () => {
@@ -198,7 +182,7 @@ export default function SensorwechselDialog({
       const key = f.sensor_key ?? ''
       const w = wahl[key]
       const anders = !!w.zaehltAb && w.zaehltAb !== lokal(f.bleiben?.zaehlt_ab_vorgabe ?? null)
-      gruende[key] = w.grund === 'korrektur' ? { grund: 'korrektur', falsch_seit: w.falschSeit }
+      gruende[key] = w.grund === 'korrektur' ? { grund: 'korrektur' }
         : w.grund === 'loeschen' ? { grund: 'loeschen' }
           : { grund: 'fortsetzung', ...(anders ? { zaehlt_ab: w.zaehltAb } : {}) }
     }
@@ -207,13 +191,10 @@ export default function SensorwechselDialog({
 
   // U3 b: bei MQTT bzw. zwischen Home Assistant und MQTT sagt die Prüf-Antwort, was «bleiben» tut (`bleiben_satz`).
   const allgemein = (f: QuellePruefung) => f.bleiben_satz ?? GRUND_FORTSETZUNG_FOLGE
-  const bleibenFolge = (f: QuellePruefung) =>
-    f.bleiben ? GRUND_BLEIBEN_HA_FOLGE
-      : nachtrag && !nachtrag.stueck ? `${allgemein(f)} ${NACHTRAG_FORTSETZUNG_ZUSATZ}` : allgemein(f)
+  const bleibenFolge = (f: QuellePruefung) => f.bleiben ? GRUND_BLEIBEN_HA_FOLGE : allgemein(f)
   const optionen = (f: QuellePruefung) => nachtrag ? [
     { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
-    { value: 'korrektur' as const, label: GRUND_KORREKTUR,
-      description: nachtrag.stueck ? STUECK_GRUND_KORREKTUR_FOLGE : NACHTRAG_GRUND_KORREKTUR_FOLGE },
+    { value: 'korrektur' as const, label: GRUND_KORREKTUR, description: STUECK_GRUND_KORREKTUR_FOLGE },
   ].filter((o) => nachtrag.gruende.includes(o.value)) : [
     { value: 'fortsetzung' as const, label: GRUND_FORTSETZUNG, description: bleibenFolge(f) },
     { value: 'loeschen' as const, label: GRUND_LOESCHEN, description: GRUND_LOESCHEN_FOLGE },
@@ -242,7 +223,7 @@ export default function SensorwechselDialog({
                 value={w.grund}
                 onChange={(g) => {
                   setze(key, { grund: g, fehler: null })
-                  if (g === 'korrektur') ladeVorschau(key, w.falschSeit)
+                  if (g === 'korrektur') ladeVorschau(key)
                 }}
                 options={optionen(f)}
               />
@@ -262,18 +243,11 @@ export default function SensorwechselDialog({
               )}
               {w.grund === 'korrektur' && (
                 <div className="space-y-2 pl-6">
-                  {nachtrag?.stueck ? (
+                  {nachtrag?.stueck && (
                     <p className="text-sm text-gray-700 dark:text-gray-200" data-stueck-zeit={key}>
                       {STUECK_ZEIT(zeitText(nachtrag.stueck.sprung), zeitText(nachtrag.stueck.rueckgang))}
                     </p>
-                  ) : <Input
-                    type="datetime-local"
-                    label={FALSCH_SEIT_LABEL}
-                    hint={nachtrag ? NACHTRAG_FALSCH_SEIT_HINWEIS : FALSCH_SEIT_HINWEIS}
-                    value={w.falschSeit}
-                    onChange={(e) => { setze(key, { falschSeit: e.target.value }); ladeVorschau(key, e.target.value) }}
-                    data-falsch-seit={key}
-                  />}
+                  )}
                   <div className="text-xs" data-korrektur-vorschau={key}>
                     <p className="font-medium text-gray-700 dark:text-gray-200">{VORSCHAU_TITEL}</p>
                     {w.laedt && <p className="text-gray-500 dark:text-gray-400">{VORSCHAU_LAEDT}</p>}

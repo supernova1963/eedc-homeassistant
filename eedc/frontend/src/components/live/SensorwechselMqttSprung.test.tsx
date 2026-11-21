@@ -35,8 +35,6 @@ vi.mock('../../api/datenquellen', () => {
       wartendeWechsel: vi.fn(() => Promise.resolve([])),
       korrekturLauf: vi.fn(() => new Promise(() => {})),
       setQuelle: vi.fn(),
-      pruefeGrundNachtragen: vi.fn(),
-      grundNachtragen: vi.fn(),
       pruefeStueck: vi.fn(),
       stueckKorrigieren: vi.fn(),
       pruefeZaehlerGetauscht: vi.fn(),
@@ -88,7 +86,7 @@ const STUECK = { sprung: '2026-06-08T11:00:00', rueckgang: '2026-06-10T11:00:00'
 const PRUEFUNG: GrundNachtragPruefung = {
   grund_erforderlich: true, erster_wert: null, tage: 0, stand_alt: null, stand_neu: null,
   sensor_key: 'basis:netzbezug', label: 'Netzbezug (kWh)', verzeichnet: false,
-  vorgabe_falsch_seit: STUECK.sprung, korrektur: null, wechsel_id: null, feld_id: 'basis_energy_netzbezug_kwh', grund: null,
+  korrektur: null, wechsel_id: null, feld_id: 'basis_energy_netzbezug_kwh', grund: null,
   wechsel_satz: 'Vom 08.06.2026 11:00 bis 10.06.2026 11:00 Uhr liegen die gespeicherten Zählerstände dieses Felds um 2.000,5 '
     + 'kWh neben denen davor und danach; davor und danach gilt MQTT.',
   gruende: ['fortsetzung', 'korrektur'], korrektur_nicht: null, stueck: STUECK,

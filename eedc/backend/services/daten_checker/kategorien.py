@@ -62,11 +62,6 @@ class CheckKategorie(str, Enum):
     # Wechsel der Zuordnung). Die Tageswerte an den Rändern sind falsch, wo der Tag über die Standreihe rechnet. Erzeuger
     # `datenquelle/versatz.py`, Regel `core/berechnungen/zaehler_versatz.py`.
     ZAEHLER_VERSATZ = "zaehler_versatz"
-    # Sensorwechsel mit Grund (Sitzung 4, Bauplan B-7, Konzept S-10 c): ein verzeichneter Wechsel der Quelle eines Zählers
-    # mit eigenen Werten trägt keinen Grund, obwohl die Abfrage beim Wechsel danach gefragt hätte (Wechsel vor der Abfrage,
-    # überführte Alt-Hinweise). Ohne Grund rechnet eedc über den Wechsel hinweg wie vorher. Erzeuger
-    # `datenquelle/grund_fehlt.py`; Handgriff «Grund nachtragen» (Sprung in die Datenquellen, derselbe Dialog).
-    ZUORDNUNG_GRUND_FEHLT = "zuordnung_grund_fehlt"
     # Sensorwechsel U3 a (Rechenweg G1): eine Korrektur hat die Zählerstände einer Zeit verworfen, und nichts füllt sie wieder
     # (Lücke, `zeitpunkt.ist_luecke`) — Auskunft je Lücke: Zeit, Tag der Menge bzw. «keine Differenz», betroffene Monate.
     # Erzeuger `datenquelle/verworfen.py`.
@@ -329,8 +324,8 @@ class Ziel:
 
     `bereich` = Einstellungs-Kategorie (`einstellungenKatalog.tsx`) bzw. `komponenten-hub`; `block` = Block-Id im Bereich;
     `params` = Deep-Link-Parameter (Schema Konzept §3.3: `erfassen`, `bearbeiten`, `neu`, `tarif`, `art`, `ab`, `geraet`,
-    `feld`, `karte`, `plan`, `wizard`, seit N-799 S2 `befund` — der Sprung auf einen Befund des Checkers, seit Sensorwechsel S4
-    `nachtrag` — der Dialog «Grund nachtragen» an einem verzeichneten Wechsel; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
+    `feld`, `karte`, `plan`, `wizard`, seit N-799 S2 `befund` — der Sprung auf einen Befund des Checkers, seit Sensorwechsel 4b-1
+    `stueck` — der Dialog am versetzten Abschnitt, seit U3 b `getauscht` — «Zähler getauscht»; seit E4 liest jede Zielseite jeden davon — Wächter W-5 `src/test/sprungziele.test.ts`);
     `anker` = das Element, auf dem der Sprung landen soll (Formular-Name, Feld-Schlüssel oder `data-karte`).
     """
     bereich: str
@@ -353,7 +348,7 @@ class Aktion:
 #: liest jeden Parameter, den ein Ziel-Bauer für sie erzeugt (W-5: `frontend/src/test/sprungziele.test.ts` liest
 #: `tests/fixtures/sprungziele.json`, erzeugt aus den Ziel-Bauern).
 ZIEL_PARAMETER = ("erfassen", "bearbeiten", "neu", "tarif", "art", "ab", "geraet", "feld", "karte", "plan", "wizard",
-                  "befund", "nachtrag", "stueck", "getauscht")
+                  "befund", "stueck", "getauscht")
 
 
 def link_aus_ziel(ziel: Optional[Ziel]) -> Optional[str]:

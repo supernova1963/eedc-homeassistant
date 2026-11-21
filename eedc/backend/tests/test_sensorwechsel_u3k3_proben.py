@@ -33,7 +33,7 @@ from backend.models.zuordnung_wechsel import ZuordnungWechsel
 from backend.core.berechnungen import zaehlerstand_sprung as zs
 from backend.tests import factories
 from backend.tests.test_sensorwechsel_u3b_proben import (  # noqa: F401 — Saat, Leser, Schlüssel der U3b-Proben
-    MK, NETZ, NETZ_FID, Kanal, KanalQuelle, KanalStatistik, MqttEnergySnapshot, Saat, _anlage_frisch, _nachtrag_bleiben,
+    MK, NETZ, NETZ_FID, Kanal, KanalQuelle, KanalStatistik, MqttEnergySnapshot, Saat, _anlage_frisch,
     _wechsel_topic, _wechsel_zeilen, betrieb, kanal_tag, reihe_tag, tagesansicht, zw,
 )
 
@@ -297,51 +297,6 @@ async def test_a2_neues_geraet_erst_null_zweiter_eintrag(db, monkeypatch, spreng
     assert await _drei(db, aid, [TAG]) == [[12.55], [12.55], [12.55]]
 
 
-@pytest.mark.parametrize("sprengsatz", [False, True], ids=["gebaut", "sprengsatz_ohne_hinweis"])
-async def test_a2_bestehender_wechsel_bleiben_am_einzelschritt(db, monkeypatch, sprengsatz):
-    """Ein Wechsel des Topics um 10:22 ohne Grund (der neue Publisher meldet ab 10:20 +90 nach 2 h Stille), um 11:10 «bleiben»
-    nachgetragen. U3-K4 (Bauplan Nr. 166 R3, neue Erwartung — U3-K3 nahm den Einzelschritt als Rand, 13,2): «bleiben» nimmt die
-    zwei Stände um 10:22, der Schritt 10:15 → 10:20 zählt (104,35 — der Auftrag nannte 104,4; die fünf Minuten zwischen den
-    Rand-Ständen 10:20/10:25 zählen nicht, wie «bleiben» Takt 5: 14,35); die Prüf-Antwort nennt ihn (``SATZ_BLEIBEN_SCHRITT``).
-    Danach «Zähler getauscht» um 10:20 — gemessen, ob der zweite Eintrag geht. Sprengsatz: ohne den Hinweis."""
-    from backend.core.zahlenformat import fmt_zahl
-    from backend.services.zuordnung_wechsel import rohstand
-
-    if sprengsatz:
-        async def nichts(*_a, **_k):
-            return None
-        monkeypatch.setattr(rohstand, "satz_bleiben_schritt", nichts)
-
-    def stand(t):
-        if T - timedelta(hours=2) <= t < T:
-            return w(T - timedelta(hours=2))
-        return w(t) + (90.0 if t >= T else 0.0)
-    aid = (await _anlage(db)).id
-    u = T + timedelta(minutes=2)
-    satz = []
-
-    async def pruefen_und_bleiben(db_, aid_):
-        from backend.services.zuordnung_wechsel import nachtrag as nt
-
-        zw.vergiss(db_)
-        row = (await _wechsel_zeilen(db_, aid_))[0]
-        satz.append(nt.antwort(await nt.lage(db_, await _anlage_frisch(db_, aid_), row.id), "Netzbezug")["bleiben_satz"])
-        await _nachtrag_bleiben(db_, aid_)
-    await betrieb(db, aid, Saat(stand, start=ST, ende=EN, handlungen=[(u, _wechsel_topic(u, None)),
-                                                                       (T + timedelta(minutes=50), pruefen_und_bleiben)]))
-    alt, neu = w(T - timedelta(hours=2)), w(T) + 90.0
-    hinweis = rohstand.SATZ_BLEIBEN_SCHRITT.format(zeit="08.06.2026 10:20", alt=fmt_zahl(alt, 2), neu=fmt_zahl(neu, 2),
-                                                   menge=fmt_zahl(neu - alt, 2), einheit="kWh")
-    assert (hinweis in satz[0]) is not sprengsatz
-    assert await _drei(db, aid, [TAG]) == [[104.35], [104.35], [104.35]]   # die fünf Minuten 10:20–10:25 liegen in der Naht
-    if sprengsatz:
-        return
-    # Gemessen (Bericht U3-K4, Halt H-2): der zweite Eintrag geht NICHT — «Dieser Tausch ist schon eingetragen.», weil die
-    # Zeile «bleiben» dasselbe ``ab_ts`` (11:00) trägt wie ein Tausch um 10:20 (``zaehler_getauscht._schon``).
-    p = await _dialog(db, aid, T)
-    assert (p["weg"], p["eintragen"], p["saetze"]) == ("fortsetzung", False, ["Dieser Tausch ist schon eingetragen."])
-
-
 async def test_a2_zwei_vergleichbare_schritte_benannte_grenze(db):
     """Ein Sprung in zwei Schritten (+8,0 um 10:20, +7,9 um 10:40) an einem reifen Zähler — kein Befund; U3-K4 (Bauplan
     Nr. 166, neue Erwartung — bis U3-K3 abgelehnt, die benannte Grenze entfällt): der Dialog ist an beiden Zeiten eintragbar und
@@ -504,7 +459,6 @@ async def test_a5_getauscht_am_eines_rueckgangs(db, monkeypatch, sprengsatz):
     aid = await _welt_roh(db, 10.0, [(NETZ, MK, f)])
     erg = [(e.werte["art"], e.werte["stunde"], e.werte["getauscht"]) for e in await _befund(db, aid)]
     assert erg == [("rueckgang", "2026-06-08T10:00", "2026-06-08T10:00" if sprengsatz else "2026-06-08T10:20")]
-
 
 
 # ═══ Teil B — Ränder der verworfenen Zeit («Bisherige Werte verwerfen») ═══════════════════════════════════════════════

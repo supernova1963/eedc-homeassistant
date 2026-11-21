@@ -281,13 +281,11 @@ export interface QuelleSaveResult {
 }
 
 /** Antwort auf eine fragepflichtige Quellen-Änderung: beim Wechsel `fortsetzung` («Bisherige Werte bleiben») oder `loeschen`
- *  («Daten vor der Änderung löschen», Weg B); `korrektur` nur noch an «Grund nachtragen» und am versetzten Abschnitt. */
+ *  («Daten vor der Änderung löschen», Weg B); `korrektur` nur noch am versetzten Abschnitt (Stück). */
 export type WechselGrund = 'fortsetzung' | 'loeschen' | 'korrektur'
 
 export interface GrundAngabe {
   grund: WechselGrund
-  /** Nur bei Korrektur («Grund nachtragen», Stück): erste falsche Stunde (örtlich, ISO ohne Zone). */
-  falsch_seit?: string
   /** Nur bei «bleiben» zwischen zwei HA-Sensoren mit Überlappung: «Der neue Sensor zählt ab» (örtlich, ISO ohne Zone). */
   zaehlt_ab?: string
 }
@@ -346,8 +344,7 @@ export interface QuellePruefung {
   label: string | null
   /** Die Änderung wird verzeichnet (eigene Werte, die wirksame Quelle wechselt). */
   verzeichnet: boolean
-  /** Nur «Grund nachtragen» (Vorgabe «Falsch seit», Vorschau der Korrektur). */
-  vorgabe_falsch_seit?: string | null
+  /** Nur am versetzten Abschnitt: Vorschau der Korrektur über das Stück. */
   korrektur?: KorrekturVorschau | null
   /** Weg B: was «Daten vor der Änderung löschen» tut (nur an der Prüfung beim Wechsel). */
   loeschen?: LoeschenAngaben | null
@@ -394,18 +391,18 @@ export interface KorrekturLaufLaufend {
   beginn: string | null
 }
 
-/** «Grund nachtragen» an einem verzeichneten Wechsel (`…/zuordnung-wechsel/{id}/grund/pruefen`, Sitzung 4): dieselben
- *  Angaben wie die Prüf-Route der Quelle, dazu der Wechsel als Satz und die zulässigen Gründe. */
+/** «Grund nachtragen» am versetzten Abschnitt (`…/zaehler-versatz/pruefen`, Sitzung 4b-1): dieselben Angaben wie die
+ *  Prüf-Route der Quelle, dazu der Abschnitt als Satz und die zulässigen Gründe. */
 export interface GrundNachtragPruefung extends QuellePruefung {
-  /** `null` am versetzten Abschnitt (Befund `zaehler_versatz`, Sitzung 4b-1 — dort gibt es keine Wechsel-Zeile). */
+  /** Immer `null` (am versetzten Abschnitt gibt es keine Wechsel-Zeile). */
   wechsel_id: number | null
   feld_id: string | null
   grund: WechselGrund | null
   wechsel_satz: string
   gruende: WechselGrund[]
   korrektur_nicht: string | null
-  /** Korrektur über ein festes Stück (Befund `zaehler_versatz` bzw. A → X → A an einem früheren Wechsel): «Falsch seit»
-   *  steht fest (Sprung), die Korrektur endet am Rückgang. */
+  /** Korrektur über ein festes Stück (Befund `zaehler_versatz`): der Beginn steht fest (Sprung), die Korrektur endet am
+   *  Rückgang. */
   stueck?: { sprung: string; rueckgang: string } | null
 }
 
@@ -500,8 +497,7 @@ function quelleBody(quelle: string, gateway?: GatewayQuelleConfig, entityId?: st
     quelle, ...(gateway ?? {}),
     ...(entityId ? { entity_id: entityId } : {}),
     ...(grund ? {
-      grund: grund.grund, ...(grund.falsch_seit ? { falsch_seit: grund.falsch_seit } : {}),
-      ...(grund.zaehlt_ab ? { zaehlt_ab: grund.zaehlt_ab } : {}),
+      grund: grund.grund, ...(grund.zaehlt_ab ? { zaehlt_ab: grund.zaehlt_ab } : {}),
     } : {}),
   }
 }
@@ -553,15 +549,6 @@ export const datenquellenApi = {
   wartendeWechsel: (anlageId: number) =>
     api.get<WartenderWechsel[]>(`/datenquellen/${anlageId}/wartende-wechsel`),
 
-  /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
-  /** «Grund nachtragen»: prüfen (schreibt nichts; mit Grund «korrektur» und «falsch seit» die Vorschau des Diensts). */
-  pruefeGrundNachtragen: (anlageId: number, wechselId: number, grund?: GrundAngabe) =>
-    api.post<GrundNachtragPruefung>(`/datenquellen/${anlageId}/zuordnung-wechsel/${wechselId}/grund/pruefen`, grund ?? {}),
-
-  /** «Grund nachtragen»: eintragen (Fortsetzung) bzw. die Korrektur ausführen. */
-  grundNachtragen: (anlageId: number, wechselId: number, grund: GrundAngabe) =>
-    api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zuordnung-wechsel/${wechselId}/grund`, grund),
-
   /** «Grund nachtragen» am versetzten Abschnitt (Befund `zaehler_versatz`): prüfen — schreibt nichts; mit `grund:
    *  'korrektur'` die Vorschau der Korrektur über das Stück (Vorschau = Lauf). */
   pruefeStueck: (anlageId: number, stueck: StueckAngabe, grund?: WechselGrund) =>
@@ -571,6 +558,7 @@ export const datenquellenApi = {
   stueckKorrigieren: (anlageId: number, stueck: StueckAngabe, grund: WechselGrund = 'korrektur') =>
     api.post<GrundNachtragErgebnis>(`/datenquellen/${anlageId}/zaehler-versatz`, { ...stueck, grund }),
 
+  /** Die laufenden Korrektur-Läufe der Anlage (die Fläche zeigt sie beim Laden, auch nach dem Neuladen der Seite). */
   korrekturLaeufe: (anlageId: number) =>
     api.get<KorrekturLaufLaufend[]>(`/datenquellen/${anlageId}/korrektur-laeufe`),
 

@@ -5092,9 +5092,8 @@ am Gerät springt «Monat öffnen» zum Gerät, nicht zum Feld.
 **Rest fremder Stände vor «Falsch seit»** (Rechenweg G8, `core/berechnungen/zaehler_versatz.rest_schritt`): der Schritt am Ende
 (vom letzten Stand vor `ende` zum ersten ab `ende`) muss über der Sprung-Schwelle der Reihe liegen; gesucht wird in
 `[falsch_seit − 24 h, falsch_seit)` ein Schritt über derselben Schwelle mit entgegengesetztem Vorzeichen und ähnlicher Größe
-(±20 %, `aehnlich`), der jüngste. Gefunden ⇒ die Vorgabe «Falsch seit» im Nachtrag (`nachtrag._rest_fremder_staende`, auch der
-Beginn eines Stücks am Rückkehr-Wechsel) ist seine Stunde, die Prüf-Antwort nennt es; an einer bestehenden Lücke ergibt dieselbe
-Prüfung die Lage «Rest» des Befunds `zaehler_versatz`. Saat (A = 100 + 0,5 kWh/h, fremd ab 09.06. 22:00, Rückkehr 14.06. 19:00):
+(±20 %, `aehnlich`), der jüngste. An einer bestehenden Lücke ergibt diese Prüfung die Lage «Rest» des Befunds `zaehler_versatz`
+(die Vorgabe «Falsch seit» im Nachtrag ist mit «Grund nachtragen» entfernt, Weg B, Sitzung B2). Saat (A = 100 + 0,5 kWh/h, fremd ab 09.06. 22:00, Rückkehr 14.06. 19:00):
 14.06. = 0,5 × (335 − 213) = 61,0 statt 3 059,5 (fremd 3 000 darunter) bzw. 119,5 (60 darunter) bzw. «—» (3 000 darüber).
 **Benannt:** nur die Reihe der Erkennung (HA-Stände); ein Abschnitt unter dem Niveau ohne Wechsel-Zeile wird weiter nicht erkannt.
 
@@ -5161,13 +5160,11 @@ Rand-Stände (G5; core/berechnungen/rohstand_rand.py, Laden services/zuordnung_w
           Takt 30/15 ⇒ eintragbar am nächsten anderen Stand (10:30; 14,1 bzw. 14,25); ganzzahliger Stand ⇒ 11:20 bzw. 13:00
           mit «Einen Sprung sieht eedc …»; Stunde mit zwei Rohständen ⇒ «zwischen 10:00 und 10:55», 0,55 kWh, «Ob das ein
           Tausch ist …», 13,85; kleiner Versatz +3 ⇒ eintragbar, 3,05 kWh, «Einen Sprung sieht eedc …», 14,35
-  «bleiben» zwischen zwei MQTT-Quellen (R3, Bauplan Nr. 166): sofort, nachgetragen und im Stundenlauf an dieser Naht R1, sonst
-          die zwei Stände um den verzeichneten Zeitpunkt (rohstand.paar_des_wechsels → rand_um, wie vor U3-K3); nachgetragen =
-          sofort (gemessen: Takt 60 14,4 · ganzzahlig 15,0 · Last 6 kWh im Takt 15 20,4 · Takt 5 14,35; U3-K3 nachgetragen
-          13,8 · 14,0 · 14,25 · 14,35). Hebt sich in der Stunde ein Schritt ab, der nicht im Paar um den Zeitpunkt liegt,
-          nennt die Prüf-Antwort des Nachtrags ihn (rohstand.SATZ_BLEIBEN_SCHRITT: «Mit „Bisherige Werte bleiben“ zählt eedc
-          diese … mit.», Einheit des Felds; Sitzung 5: ohne den Satz «trag ihn danach unter „Zähler getauscht“ ein» — nach
-          «bleiben» ist in derselben Stunde kein Tausch eintragbar, benannte Grenze (j))
+  «bleiben» zwischen zwei MQTT-Quellen (R3, Bauplan Nr. 166): im Stundenlauf an dieser Naht R1, sonst die zwei Stände um
+          den verzeichneten Zeitpunkt (rohstand.rand_der_naht → rand_um) (gemessen sofort: Takt 60 14,4 · ganzzahlig 15,0 ·
+          Last 6 kWh im Takt 15 20,4 · Takt 5 14,35); nach «bleiben» ist in derselben Stunde kein Tausch eintragbar, benannte
+          Grenze (j). «bleiben» nachgetragen (samt Hinweis auf einen Schritt der Stunde) ist mit «Grund nachtragen» entfernt
+          (Weg B, Sitzung B2)
   ohne Rohstände (älter als 31 Tage): wie vor U3 (die Naht-Stunde zählt keinen Zuwachs)
 
 Zählerstand springt (MQTT) (G4; Erzeuger services/daten_checker/datenquelle/mqtt_standsprung.py):
@@ -5200,8 +5197,7 @@ Versetzter Abschnitt einer MQTT-Reihe (G7; versatz_mqtt.py): dieselbe Erkennung 
 
 **Gemessen** (Saat des Rechenwegs, `golden-master/sensorwechsel-saat/u3b/`; Netzbezug 12,0 je Tag, Ereignis 10:20): «Zähler
 getauscht» sofort wie später und für Sprung +2 000, Neubeginn bei 300 und −4 %: Naht-Stunde 0,458, Tag 11,958 in Kanal, Reihe und
-Tagesansicht (vorher 11,5 bzw. Reihe 11,5 bei sofort); Topic-Wechsel «bleiben» sofort und nachgetragen 11,958 (vorher 11,958/11,5
-bzw. 11,5); Stück +2 000 über zwei Tage verworfen: Tagesansicht 5,0 · «—» · 31,0, Monat gleich dem Fall ohne Stück (Saat vom 20.11.: 229,0; vorher
+Tagesansicht (vorher 11,5 bzw. Reihe 11,5 bei sofort); Topic-Wechsel «bleiben» sofort 11,958 (vorher 11,958/11,5); Stück +2 000 über zwei Tage verworfen: Tagesansicht 5,0 · «—» · 31,0, Monat gleich dem Fall ohne Stück (Saat vom 20.11.: 229,0; vorher
 2 005,5 · «—» · 6,0, Monat 2 203,5); «bleiben» am Stück 11,958 · 12,0 · 11,958. M1: Kern an der Saat +2 000,5 (Maß 166,7), Neubeginn 300,458
 (25,0), Rückgang −206,9 (Arm C). M2: Stundenlauf «Eigene Summe» über die MQTT-Rohstände der GM-Sätze r27, r28, kanal, pruef
 (28–33 MQTT-Abschnitte, ≈ 1 150 Paare): 0 Funde, 0 Rückgänge unter −0,01. **E5:** Home Assistant ↔ MQTT bekommt keine
@@ -5224,10 +5220,11 @@ Stille ist kein Höhenwechsel; seit U3-K4 ist sie im Dialog eintragbar mit dem S
 fremder Stand über die volle Stunde hinweg (10:50 bis 11:10) braucht zwei Einträge, G4 nennt nach dem ersten die zweite Stunde
 (U3-K3 K2-B5, gemessen: 14,15); (j) seit Sitzung 5 benannt: **je Stunde und Feld ein Eintrag** — ein zweiter «Zähler getauscht»
 in derselben Stunde und «Zähler getauscht» nach «Bisherige Werte bleiben» in derselben Stunde sagen «Dieser Tausch ist schon
-eingetragen.» (zaehler_getauscht._schon vergleicht ab_ts; zwei Nähte je Stunde sind nicht gemessen); (k) «bleiben» sofort ≠
-nachgetragen, wenn der neue Zähler schon vor dem verzeichneten Wechsel auf demselben Schlüssel sendet (Nachmessung U3-K4, K4-B3:
-neuer Publisher ab 10:20, Wechsel 10:22 verzeichnet; +2 000: nachgetragen 14,35, sofort 2 014,35, kein Befund; ab 0: nachgetragen
-14,35, sofort Kanal 14,3, Reihe «—» — der Stundenlauf nimmt die Spanne nur, wenn sie genau am Zeitpunkt endet); (l) der Eintrag
+eingetragen.» (zaehler_getauscht._schon vergleicht ab_ts; zwei Nähte je Stunde sind nicht gemessen); (k) «bleiben» sofort,
+wenn der neue Zähler schon vor dem verzeichneten Wechsel auf demselben Schlüssel sendet (Nachmessung U3-K4, K4-B3: neuer
+Publisher ab 10:20, Wechsel 10:22 verzeichnet; +2 000: 2 014,35, kein Befund; ab 0: Kanal 14,3, Reihe «—» — der Stundenlauf
+nimmt die Spanne nur, wenn sie genau am Zeitpunkt endet; der damalige Vergleichsweg «nachgetragen», 14,35, ist seit Sitzung B2
+entfernt); (l) der Eintrag
 «Zähler getauscht» geht erst, wenn der neue Zähler gemeldet hat (Sitzung 5) — davor sagt der Dialog es und trägt nichts ein.
 **Gemessen U3-K** (`golden-master/sensorwechsel-saat/u3k/`, 20 Tage Vorlauf, Netzbezug 0,5 kWh je Stunde, Ereignis 10:20): Gerät
 meldet fünf Minuten 0 · anderes Gerät zehn Minuten 300 · neues Gerät erst 0, dann 300 ⇒ nach dem Eintrag 11,917 · 11,875 · 11,917
@@ -5442,12 +5439,11 @@ Nachtrag      = für schon geschriebene Zeilen: Quellzeile gueltig_ab = H,
                 Kanalwert am Schluss der Vorgängerin — sonst käme der Sprung an ihrer Grenze zurück; bestätigt Master 17.11.); beginnt zwischen voriger Zeile und Naht-Zeile schon eine Quelle
                 (Naht des Laufs, früherer Nachtrag, Quellwechsel), tut er nichts — zweimal = einmal; verworfen werden
                 ab H nur die abgeleiteten Kanäle, die aus dem Feld rechnen (dieselbe Auskunft wie die Korrektur unten,
-                Sitzung 4 — §10 Nr. 34) (kanal/naht.py::nachtrag_fortsetzung; Oberfläche: «Zähler getauscht» und
-                «Grund nachtragen», unten)
+                Sitzung 4 — §10 Nr. 34) (kanal/naht.py::nachtrag_fortsetzung; Oberfläche: «Zähler getauscht»)
 Nachbau       = der Stände-Nachbau vor der ersten Kanalzeile (nachfuellen._rohstaende, Familie Mitschrift, HA-Stände
                 wörtlich) beginnt an einer verzeichneten Fortsetzung einen neuen Lauf (_laeufe) — eine eigene Quelle,
-                die am Kanalwert des vorigen ansetzt; eine später nachgetragene Fortsetzung trägt der Nachtrag (Sitzung 4)
-Naht-Stunde   = die Stunde, die der Nachtrag (Einstieg und «Grund nachtragen») ohne Zuwachs lässt
+                die am Kanalwert des vorigen ansetzt
+Naht-Stunde   = die Stunde, die der Nachtrag (Einstieg «Zähler getauscht») ohne Zuwachs lässt
                 (zaehler_getauscht.naht_stunde, Sitzung 4-K): im Stundenlauf der Mitschrift die Stunde, in der erklaert_ts
                 liegt (ein Rohstand gehört zur Stunde, in der er eintraf); im Nachbau-Abschnitt aus HA-Ständen
                 (Kennung sensor_snapshots:…) die Stunde vor ab_ts (die Zeile Z − 1 h trägt den Stand zur vollen Stunde Z,
@@ -5512,7 +5508,7 @@ Falsch seit     = Pflichtpunkt P-1: erklärt eine Korrektur für ihre Zeit eine 
 
 ```
 Wer             = ein Dienst: services/zuordnung_wechsel/ansatz.py (lage lesend = Vorschau, setze_an idempotent)
-Wann            = Feld-Route / Preset (abfrage.vollziehe) und «Grund nachtragen» → Fortsetzung legen eine Zeile zwischen zwei
+Wann            = Feld-Route / Preset (abfrage.vollziehe) legen eine Zeile zwischen zwei
                   HA-Entitäten mit ansatz = offen an; nach dem Commit setzt der Dienst an, wenn HA den neuen Sensor schon
                   führt, sonst der nächste Stundenlauf (scheduler.sensor_snapshot_job → offene_ansetzen). Solange offen:
                   der Stundenlauf spiegelt den Schlüssel nicht (kanal/schreiber._spiegel), die Leser lesen eine Naht ohne
@@ -5569,7 +5565,7 @@ Monate (Liste)  = «Alle Monatswerte» und Import-Vorschau listen auch Monate, i
 Sicht Stunde 1,3, Tag 15,3, Folgetag 12,0, Monat wie HA (Kanal, Stundenwerte, Tageswerte, Tagestabelle aus HA-Slots und aus
 der Reihe 1,3 / 15,8 im Rückwärts-Raster, Monats-Fakten, laufender Monat, «Aus HA laden», Monatsabschluss-Vorschlag); ein zweiter
 Aufruf ändert nichts, der Konsistenzlauf korrigiert 0 Zeilen. Produktiv-Kopie (Wechsel der Wallbox 18.10. mit Überlappung,
-«Grund nachtragen» → Fortsetzung): `schnitt` an 10:00 mit 1 646,014 / 3 760,728 (Hebung −2 114,714), Kanal Zeile für Zeile
+damals «Grund nachtragen» → Fortsetzung, seit Weg B entfernt): `schnitt` an 10:00 mit 1 646,014 / 3 760,728 (Hebung −2 114,714), Kanal Zeile für Zeile
 unverändert (Versatz −208,214, Oktober 242,871), Reihe über den Oktober 242,871 (vorher 2 357,585), kein Stand dazu.
 
 **Benannte Grenzen:** (1) Ein paralleler neuer Sensor, in seiner ersten Stunde zugeordnet, ist von einem Gerätetausch nicht zu
@@ -5676,7 +5672,7 @@ ohne Werte    = weder gefragt noch verzeichnet (§8 Nr. 17)
 fragt vor dem Senden. **Zwei Antworten** (Weg B, Entscheid Gernot 21.11.2026): `fortsetzung` («Bisherige Werte bleiben») ⇒
 Wechsel-Zeile mit Grund (die Naht oben); `loeschen` («Daten vor der Änderung löschen») ⇒ der Abschnitt «Daten vor der Änderung
 löschen» unten. «Verwerfen» mit «Falsch seit» bietet der Dialog nicht mehr an (`grund = korrektur` an Feld-Route und Preset: 400);
-der Korrektur-Lauf unten bleibt bis zum Rückbau für «Grund nachtragen», das Stück und die Werkbank. Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
+der Korrektur-Lauf unten bleibt bis zum Rückbau für das Stück und die Werkbank («Grund nachtragen» ist seit Sitzung B2 entfernt). Energie-Vorschläge und Gateway-`PUT` ändern ein gefragtes Feld nicht (überspringen, nennen);
 Gateway-Zeile anlegen/löschen lehnt ab (422). Das Festschreiben beim Lesen (`/felder`, W7), die Stilllegung und Innengeräte (W9)
 sind kein Wechsel. **«Zähler getauscht (gleiche Quelle)»** (`zuordnung_wechsel/zaehler_getauscht.py`) — der Weg folgt der
 **Quelle des Kanals zur Stunde des Tauschs** (größtes `gueltig_ab ≤ Stunde`, §11 Nr. 44): ein (nicht verworfener)
@@ -5719,54 +5715,23 @@ gespeichertem Monatswert vom ersten eigenen Wert bis zur Änderung (benannte Gre
 trägt) und den Weg zur Handkorrektur; Auskunft danach: `daten_vor_aenderung_geloescht`. Die Werkbank «Werte vor dem Sensorbeginn
 verwerfen» markiert reale Quellen (kein Platzhalter) — für sie holt kein Lauf etwas vor `t` zurück.
 
-#### Grund nachtragen (B-7, Sitzung 4)
+#### Grund nachtragen (B-7, Sitzung 4) — entfernt (Weg B, Sitzung B2)
+
+«Grund nachtragen» an einem verzeichneten Wechsel, der Befund «Zuordnung geändert, Grund fehlt» (`zuordnung_grund_fehlt`) und
+die Überführung des Altbestands aus dem Aktivitäts-Protokoll (samt der Alt-Vermerke `historie_hinweis`) sind entfernt
+(Entscheid Gernot 21.11.2026). Eine Wechsel-Zeile ohne Grund bleibt, wie sie ist: über sie rechnen die Leser wie über jeden
+Wechsel ohne Fortsetzung. Zeilen, die ein früherer Stand angelegt hat (`herkunft = nachtrag` bzw. `altbestand`), lesen wie jede
+andere Zeile. Was bleibt, ist die Grenze am Einstieg «Zähler getauscht»:
 
 ```
-offen         = Wechsel-Zeile nicht aufgehoben, Grund leer, und die Abfrage hätte gefragt — dieselbe Regel zum Zeitpunkt
-                des Wechsels: eigene Werte vor ab_ts, nachher kann Werte liefern, nachher ≠ letzte Quelle mit Werten
-                davor (abfrage.haette_gefragt; «davor» = kleineres ab_ts oder gleiches ab_ts und kleinere Zeilen-Nummer —
-                «Keine» und zurück in derselben Stunde ist kein Befund, Sitzung 4-K); kein «Zähler getauscht» (vorher = nachher)
-                                                  ⇒ Befund «Zuordnung geändert, Grund fehlt» (daten_checker/datenquelle/grund_fehlt.py)
-Fortsetzung   = neue Zeile herkunft = nachtrag, grund = fortsetzung, erklaert_ts und ab_ts des Wechsels (erklaert_ts NICHT
-                die Sekunde des Nachtrags — an ihr teilt der MQTT-Stundenlauf die Periode), vorher/nachher wie die Zeile;
-                die Zeile selbst: aufgehoben_durch = neue Zeile. Reihe: die Naht oben. Kanal: gilt zur Naht-Stunde (oben)
-                die Mitschrift (MQTT oder Nachbau-Abschnitt), der Nachtrag oben an der ersten geschriebenen Stunde ab ihr;
-                ein Spiegel-Abschnitt folgt HAs Summe (ein Wechsel der Entität hat dort seine eigene Kanal-Quelle)
-Korrektur     = der Lauf unten mit falsch in [falsch_seit, ab_ts des Wechsels), richtig = nachher, herkunft = nachtrag; nur
-                für den jüngsten Quellenwechsel des Schlüssels (nachtrag.ist_quellenwechsel: nicht aufgehoben, kein «Zähler
-                getauscht», keine Korrektur- oder Lücken-Zeile — 4b-1-K, Nr. 103), dessen nachher die heutige wirksame
-                Quelle ist (der Lauf füllt aus der heutigen Quelle); dazu am Rückkehr-Wechsel X → A eines Stücks
-                A → X → A die Zeit davor [A → X, X → A) mit richtig A (Korrektur über das Stück unten, Nr. 101; am
-                Wechsel A → X keine); falsch_seit vor ab_ts; Vorschau = Lauf; startet nicht, solange
-                für das Feld ein Korrektur-Lauf offen ist (wie die Werkbank); die Korrektur hebt die Wechsel-Zeilen
-                ihres Intervalls auf (Schritt 1 unten) — bei A → X → A erledigt die Korrektur am zweiten Wechsel mit
-                «falsch seit» = erster Wechsel (die Vorgabe) den ersten mit
-Übergänge     = leer → Fortsetzung | Korrektur; Fortsetzung → Korrektur (die Korrektur-Zeile hebt sie auf); Korrektur → nichts
-Grenze Tag    = benannte Grenze (Sitzung 4-K, Bauplan «Zu §13» Nr. 87): eine nachgetragene Fortsetzung (auch der Einstieg
-                «Zähler getauscht» vor dem laufenden Tag) bildet keinen Tag neu. Liest die Sicht den Tag aus den Kanälen,
-                zählt der Unterschied danach nicht (gemessen MQTT-Netzbezug, Kanal-Tag: tage-werte 2 024,0 → 23,0); ein
-                Bestandstag behält seinen gespeicherten Tageswert (gemessen 2 024,0 → 2 024,0, auch defizit_kwh und
-                gesamtverbrauch; Befund «Grund fehlt» 1 → 0). «Tag neu aggregieren» bildet einen MQTT-Bestandstag ohne
-                Leistungsverlauf des Tages nicht neu (_reparatur_aggregat → unveraendert:keine_live_zuordnung; der MQTT-
-                Live-Verlauf reicht 15 Tage). Der laufende Tag wird alle 15 Minuten neu gebildet. Dialog und Einstieg
-                nennen die Grenze (NACHTRAG_FORTSETZUNG_ZUSATZ, zaehler_getauscht.SATZ_TAG_FEST)
-Alt-Vermerke  = historie_hinweis im Mapping je Feld: der jüngste Protokoll-Eintrag (vorher, nachher, Zeit; bewertet wie die
-                Überführung aus dem Protokoll) wird eine Zeile, wenn die Abfrage gefragt hätte und keine Zeile zum selben
-                Eintrag besteht — sonst verfällt er; danach ist der Vermerk entfernt (bei jedem Start, ohne Vermerk nichts;
-                zuordnung_wechsel/ueberfuehrung.py::ueberfuehre_vermerke)
-Überführung   = (Lab-K F2) eine am Kanal aufgelöste Vor-Quelle (Protokoll-vorher leer) gilt — liegen vor der Stunde keine
-                Stände der Reihe (U3-K, Nachmessung Lab-K LK-B1: mit Ständen ist sie echt; sonst verwarf die Regel K1 HA → MQTT
-                und K3 «Zuordnung entfernt» und ließ von «Fehlgriff, dann zurück» K9 nur B → A stehen: HA-Tag der Wallbox
-                9,0 statt 27,0) — nur, wenn der Kanal den Wechsel
-                selbst zeigt (erste Quellzeile ab Stunde − 1 h = Spiegel der neuen Entität); «eigene Werte davor» zählen
-                nicht, wenn vor der Stunde keine Stände der Reihe liegen und jede Kanal-Quelle davor der Spiegel der neuen
-                Entität ist (vom Nachfüllen von v4.3.1 vor den Eintrag gelegt); eine Quelle der neuen Entität ab Stunde − 1 h
-                ist keine Vor-Quelle (Änderung zwischen H:00 und H:05)
+Grenze Tag    = benannte Grenze (Sitzung 4-K, Bauplan «Zu §13» Nr. 87): ein Eintrag «Zähler getauscht» vor dem laufenden
+                Tag bildet keinen Tag neu. Liest die Sicht den Tag aus den Kanälen, zählt der Unterschied danach nicht
+                (gemessen MQTT-Netzbezug, Kanal-Tag: tage-werte 2 024,0 → 23,0); ein Bestandstag behält seinen
+                gespeicherten Tageswert (gemessen 2 024,0 → 2 024,0, auch defizit_kwh und gesamtverbrauch). «Tag neu
+                aggregieren» bildet einen MQTT-Bestandstag ohne Leistungsverlauf des Tages nicht neu
+                (_reparatur_aggregat → unveraendert:keine_live_zuordnung; der MQTT-Live-Verlauf reicht 15 Tage). Der
+                laufende Tag wird alle 15 Minuten neu gebildet. Der Einstieg nennt die Grenze (zaehler_getauscht.SATZ_TAG_FEST)
 ```
-
-Routen: `POST /api/datenquellen/{anlage}/zuordnung-wechsel/{wechsel}/grund/pruefen` (schreibt nichts; mit `grund = korrektur` und
-`falsch_seit` die Vorschau) und `…/grund`. Der Handgriff des Befunds springt mit `nachtrag=<id>` in die Datenquellen; dort öffnet
-derselbe Dialog als «Warum wechselte die Quelle?». Proben: `test_sensorwechsel_s4_nachtrag.py`, `test_sensorwechsel_s4k_proben.py`.
 
 #### Korrektur (B-6, Sitzung 3)
 
@@ -5884,7 +5849,7 @@ Zählertausch zwischen den Ständen davor und danach, dass eedc über die leere 
 Spalte; es gilt auch für schon eingetragene Korrekturen und Korrektur-Zeilen mit MQTT-Quelle.
 
 **Eine Lücken-Zeile ist kein Quellenwechsel** (Nr. 105, ein Prädikat `zeitpunkt.ist_luecken_zeile`): `quelle_am` vor ihr,
-`abfrage.letzte_quelle_mit_werten`, «Grund nachtragen» (ihre Nummer ⇒ 404) und die Sperre H-4 überspringen sie. Dazu gilt — Nr. 106
+`abfrage.letzte_quelle_mit_werten` überspringt sie (bis Sitzung B2 auch «Grund nachtragen» und die Sperre H-4). Dazu gilt — Nr. 106
 — das Intervall einer Korrektur als gesperrt (mit Nähten), solange ihr Lauf den Nachlauf (Füllen des Kanals, Speichern der Stände,
 unten) noch schuldet (`korrektur_lauf.offene_fuell_laeufe`; mit dem Nachlauf endet die Sperre). Die Ränder jedes gesperrten Stücks
 liefert die eine Ladestelle der Nähte (`zeitpunkt.fortsetzungs_naehte`) zusätzlich zu den Fortsetzungen — die Leser der Reihe
@@ -6028,9 +5993,9 @@ Merkmal ebenso; die Erkennung «Lücken-Zeile» (`nachher` leer) bleibt.
 #### Korrektur über ein abgeschlossenes Stück (Sitzung 4b-1, Bauplan «Zu §14» Nr. 93–98)
 
 Ein **Stück** `[S, R)` der Reihe trägt die Stände eines anderen Sensors; davor und danach gilt dieselbe Quelle **E** (der Befund
-`zaehler_versatz`, Sprung S und Rückgang R; oder am Rückkehr-Wechsel X → A verzeichneter Wechsel A → X → A die Zeit davor,
-H-4 — nie die Zeit danach, Nr. 101). «Grund nachtragen →
-Korrektur» ist ein Auftrag desselben Dienstes mit `falsch_seit` = S, `ab` = R, `vorher` = `nachher` = E und `stueck`
+`zaehler_versatz`, Sprung S und Rückgang R; der Weg am Rückkehr-Wechsel X → A, H-4, ist mit «Grund nachtragen» an einem
+Wechsel seit Sitzung B2 entfernt). «Grund nachtragen →
+Korrektur» am Befund ist ein Auftrag desselben Dienstes mit `falsch_seit` = S, `ab` = R, `vorher` = `nachher` = E und `stueck`
 (`zuordnung_wechsel/stueck.py`):
 
 ```

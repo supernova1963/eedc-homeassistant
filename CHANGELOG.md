@@ -26,9 +26,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   Assistant („Summe anpassen“) und trägt nichts ein. Bei MQTT entscheidest du, ob an einer Zeit ein Tausch eingetragen wird:
   eedc zeigt die Zählerstände vor und nach der gewählten Zeit und die Menge, die danach nicht zählt, und sagt, ob es dort einen
   Sprung sieht; eingetragen wird erst, wenn der neue Zähler einen Stand gemeldet hat. Je Stunde und Feld geht ein Eintrag.
-- **„Grund nachtragen“** für einen Wechsel, den eedc schon verzeichnet hat, aber ohne Grund.
-- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – Zuordnung geändert, Grund fehlt“ und
-  „Zählerstände – versetzter Abschnitt“ (Knopf „Grund nachtragen“), „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
+- **Neue Daten-Checker-Befunde** zur Herkunft der Zählerstände: „Zählerstände – versetzter Abschnitt“ (Knopf „Grund
+  nachtragen“), „Zählerstände – Zählerstand springt“ (Knopf „Aus Home
   Assistant neu übernehmen“), „Zählerstände – Zählerstand springt (MQTT)“ (Knopf „Zähler getauscht“), „Zählerstände – Zeit
   verworfen“ und „Zählerstände – Daten vor der Änderung gelöscht“ (Auskunft „Was gilt“) und „Zählerstände – Gespeicherter
   Monatswert passt nicht mehr“ (Knopf „Monat öffnen“).

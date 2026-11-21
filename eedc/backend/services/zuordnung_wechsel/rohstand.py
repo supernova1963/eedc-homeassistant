@@ -6,7 +6,7 @@ zwischen zwei MQTT-Quellen — Topic, Gateway-Zeile, Standard-Inbound), bekommt 
 Rohstand vor ``erklaert_ts``) und ``stand_neu_null`` (erster ab ``erklaert_ts``) — wörtlich aus ``mqtt_energy_snapshots``. Wer
 sie setzt, hängt davon ab, wann beide Stände vorliegen:
 
-* der Eintrag selbst (``zaehler_getauscht.trage_ein``, ``nachtrag.trage_fortsetzung_ein``), wenn der erste Stand ab dem Wechsel
+* der Eintrag selbst (``zaehler_getauscht.trage_ein``), wenn der erste Stand ab dem Wechsel
   schon gespeichert ist;
 * sonst der Stundenlauf, der die Naht anwendet (``kanal/naht.zeilen_mit_naehten`` → ``rand_im_stundenlauf``) — mit denselben zwei
   Rohständen, an denen er die Periode teilt; seit Sitzung 5 (Bauplan Nr. 168) nur noch für «bleiben»: «Zähler getauscht» trägt
@@ -152,16 +152,6 @@ async def still_seit(db, anlage_id: int, mqtt_key: str, vor: Roh) -> datetime:
     return vor[0] if seit is None else seit
 
 
-async def paar_des_wechsels(db, anlage_id: int, mqtt_key: str, t: datetime) -> Optional[tuple[Roh, Roh]]:
-    """Die Rand-Stände eines verzeichneten Wechsels «bleiben» an ``t`` (Nachtrag; Bauplan Nr. 166 R3): R1 — die Spanne der
-    Höhenwechsel der Stunde; sonst die zwei Stände um ``t`` (``rand_um``, wie vor U3-K3: ein Schritt anderswo in der Stunde ist
-    kein Rand)."""
-    art, paar = await sprung_um(db, anlage_id, mqtt_key, t)
-    if art == SPRUNG and paar is not None:
-        return paar
-    return await rand_um(db, anlage_id, mqtt_key, t)
-
-
 async def rand_der_naht(db, anlage_id: int, mqtt_key: str, e: datetime) -> Optional[tuple[Roh, Roh]]:
     """Die Rand-Stände einer Naht an ``e`` für den Stundenlauf (U3-K, B1; Bauplan Nr. 166/168): endet an ``e`` die Spanne der
     Höhenwechsel der Stunde, deren zwei Rand-Stände — die Stände dazwischen zählen nicht; sonst der letzte Stand vor ``e`` und
@@ -217,37 +207,6 @@ SATZ_BLEIBEN_HA_MQTT = ("Zwischen einem Sensor aus Home Assistant und MQTT rechn
                         "aus den gespeicherten Zählerständen rechnet, zählt die Stunde des Wechsels keinen Zuwachs.")
 
 
-#: Bauplan Nr. 166 (Wortlaut des Masters): liegt in der Stunde eines Wechsels «bleiben» zwischen zwei MQTT-Quellen ein Schritt,
-#: der sich abhebt, aber nicht im Paar um den Zeitpunkt, nennt die Prüf-Antwort des Nachtrags ihn.
-SATZ_BLEIBEN_SCHRITT = ("In dieser Stunde ändert sich der Zählerstand um {zeit} Uhr von {alt} auf {neu} {einheit}. Mit „Bisherige "
-                        "Werte bleiben“ zählt eedc diese {menge} {einheit} mit.")
-
-
-async def satz_bleiben_schritt(db, anlage_id: int, vorher: Optional[dict], nachher: Optional[dict], sensor_key: str,
-                               t: Optional[datetime]) -> Optional[str]:
-    """``SATZ_BLEIBEN_SCHRITT``, wenn «bleiben» zwischen zwei MQTT-Quellen an ``t`` keinen Höhenwechsel findet (R1) und in der
-    Stunde ein Schritt sich abhebt, der nicht im Paar um ``t`` liegt; sonst ``None``."""
-    from backend.core.berechnungen.rohstand_rand import menge_des_schritts
-    from backend.core.zahlenformat import fmt_zahl
-
-    mk = mqtt_paar(vorher, nachher, sensor_key)
-    if mk is None or t is None:
-        return None
-    art, _ = await sprung_um(db, anlage_id, mk, t)
-    if art != KEIN_HOEHENWECHSEL:
-        return None
-    schritt = await abgehoben_in_der_stunde(db, anlage_id, mk, t.replace(minute=0, second=0, microsecond=0))
-    um = await rand_um(db, anlage_id, mk, t)
-    if schritt is None or (um is not None and schritt[1][0] == um[1][0]):
-        return None
-    from backend.services.kanal.angaben import kanal_des_schluessels
-
-    kanal = await kanal_des_schluessels(db, anlage_id, sensor_key)          # Bauplan Nr. 167: die Einheit des Felds
-    return SATZ_BLEIBEN_SCHRITT.format(zeit=schritt[1][0].strftime("%d.%m.%Y %H:%M"), alt=fmt_zahl(schritt[0][1], 2),
-                                       neu=fmt_zahl(schritt[1][1], 2), menge=fmt_zahl(menge_des_schritts(schritt), 2),
-                                       einheit=(kanal.einheit if kanal is not None and kanal.einheit else "kWh"))
-
-
 def bleiben_satz(vorher: Optional[dict], nachher: Optional[dict], sensor_key: str) -> Optional[str]:
     """Der Satz zu «bleiben» für die Prüf-Antwort: MQTT → MQTT ``SATZ_BLEIBEN_MQTT``, Home Assistant ↔ MQTT
     ``SATZ_BLEIBEN_HA_MQTT``; sonst ``None`` (zwischen zwei HA-Sensoren sagt es ``bleiben``, ohne Quelle gibt es nichts)."""
@@ -257,7 +216,7 @@ def bleiben_satz(vorher: Optional[dict], nachher: Optional[dict], sensor_key: st
     return SATZ_BLEIBEN_HA_MQTT if arten == {"ha", "mqtt"} else None
 
 
-__all__ = ["KEIN_HOEHENWECHSEL", "NOCH_KEIN_STAND", "OHNE", "SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT", "SATZ_BLEIBEN_SCHRITT",
+__all__ = ["KEIN_HOEHENWECHSEL", "NOCH_KEIN_STAND", "OHNE", "SATZ_BLEIBEN_HA_MQTT", "SATZ_BLEIBEN_MQTT",
            "SPRUNG", "abgehoben_am", "abgehoben_in_der_stunde", "bleiben_satz", "grenze_kw",
-           "mqtt_key_der_quelle", "mqtt_paar", "naechster_anderer_um", "paar_des_wechsels", "rand_der_naht",
-           "rand_im_stundenlauf", "rand_um", "satz_bleiben_schritt", "setze_rand", "sprung_um", "still_seit"]
+           "mqtt_key_der_quelle", "mqtt_paar", "naechster_anderer_um", "rand_der_naht",
+           "rand_im_stundenlauf", "rand_um", "setze_rand", "sprung_um", "still_seit"]
